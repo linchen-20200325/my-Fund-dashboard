@@ -1,0 +1,79 @@
+name: "PR Check（pre-commit + AppTest）"
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 同一 PR 重複推 commit 時，取消前一輪未跑完的 runs
+concurrency:
+  group: pr-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ════════════════════════════════════════════════════════════
+  # Fast lane — pre-commit 全套（含 pytest -m "not slow"）
+  # 失敗即阻擋 merge
+  # ════════════════════════════════════════════════════════════
+  fast-checks:
+    name: "Fast checks (pre-commit + pytest, ~30s)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install runtime + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run pre-commit (含 pytest-smoke fast lane)
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  # ════════════════════════════════════════════════════════════
+  # Slow lane — AppTest（單測約 25s）
+  # 非阻擋（continue-on-error），僅作為 informational signal
+  # 原因：Streamlit AppTest 可能偶發 timeout / 外部資源故障
+  # ════════════════════════════════════════════════════════════
+  slow-tests:
+    name: "Slow tests (AppTest, informational)"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: fast-checks
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install runtime + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run AppTest (slow lane)
+        env:
+          # AppTest fixture 已在程式中設假 secret，這裡是雙保險
+          FRED_API_KEY: "ci-test-key"
+          GEMINI_API_KEY: "ci-test-key"
+        run: python -m pytest -v -m "slow" --tb=short

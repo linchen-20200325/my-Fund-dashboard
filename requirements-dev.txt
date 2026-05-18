@@ -1,0 +1,14 @@
+# Development / CI dependencies (separate from runtime requirements.txt).
+# Install: pip install -r requirements-dev.txt && pre-commit install
+pytest>=8.0
+pre-commit>=3.5
+# Phase B headless e2e（v18.99）— playwright pixel-diff baseline
+# 安裝後須執行 `playwright install chromium` 下載瀏覽器
+# 首次跑：streamlit run app.py & pytest -m playwright --update-snapshots
+playwright>=1.40
+pytest-playwright>=0.4
+pytest-playwright-snapshot>=1.0
+pillow>=10.0
+# pixelmatch: pin to 0.2.3（pytest-playwright-snapshot==1.0 hard depend）
+# 若需新版 → 升級 pytest-playwright-snapshot 或拿掉本顯式列項，讓 transitive 自動解
+pixelmatch==0.2.3

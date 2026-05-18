@@ -1,0 +1,22 @@
+# 安裝：pip install -r requirements-dev.txt && pre-commit install
+# 跳過：HOOK_SKIP=1 git commit ...（debug 用，正規 commit 不要）
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+  - repo: local
+    hooks:
+      - id: pytest-smoke
+        name: pytest (smoke + unit tests, slow markers excluded)
+        entry: python -m pytest -q -m "not slow"
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
