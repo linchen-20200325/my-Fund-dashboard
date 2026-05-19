@@ -122,6 +122,10 @@
 - [x] **v18.145** 總經指南針 UI 標籤誠實化（PR #3）
   - `app.py:349/363` 把「即時抓取（無快取）」「禁用快取」改成「**5min TTL 快取**」反映實際 `@_ttl_cache(ttl_sec=300)` 行為
   - 零行為變更；避免使用者誤以為時間戳代表即時抓取時刻
+- [x] **v18.146** 環境遷移防雷紀錄（docs only，無 code 變更）
+  - 事故：環境遷移後 Streamlit Cloud 換新子網域，secrets 寫死的舊 `redirect_uri` → Google OAuth `redirect_uri_mismatch`
+  - 修法：刪掉 secrets 裡寫死的 URL，讓 `ui/helpers/oauth_state.py` runtime 推導即可
+  - 防雷註記寫進 `ARCHITECTURE.md §5.4`：secrets 只放 client_id/client_secret，URL 不入庫
 
 ---
 
