@@ -905,5 +905,3 @@ def render_data_guard_tab() -> None:
             unsafe_allow_html=True,
         )
         st.caption("💡 建議：🔴 項目請優先重新抓取；🟡 為延遲，仍可使用但需注意時效。")
-
-

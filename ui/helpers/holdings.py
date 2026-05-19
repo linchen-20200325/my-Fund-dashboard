@@ -344,4 +344,3 @@ def _zh_holding(name: str) -> str:
     first = key.split()[0] if key.split() else ""
     if first and first in _HOLDING_ZH: return _HOLDING_ZH[first]
     return ""
-

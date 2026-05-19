@@ -58,7 +58,7 @@
 
 ---
 
-## 🚀 v11.1 後續優化（v18.117 → v18.143，2026-05-17）
+## 🚀 v11.1 後續優化（v18.117 → v18.144，2026-05-17 / 18）
 
 > v11.0 完工後同日累積 36 個 PR — 涵蓋 AI 強化、tab 拆檔完工、cloud crash hotfix、helper 收口、sys.modules hack 全清、AppTest 防退化網。
 > fast tier 359 → **460** passed（+101 新測試），app.py **9643 → 425 行（−95.6%）**。
@@ -112,6 +112,13 @@
 - 5 個 helper module（session / macro_helpers / holdings / data_registry / oauth_state）
 - fast tests：359 → **460**（+101 新測試）
 - AppTest 互動測試：12 cases（含 3 個 v18.141-143 防退化新增）
+
+### Polish 後續（v18.144，2026-05-18）
+- [x] **v18.144** Tab3 T7 抽檔 → `ui/tab3_t7_ledger.py`（1978 行，含 A/B/C 落帳 + 帳本面板 + MK AI 深度建議）
+  - `ui/tab3_portfolio.py`：3976 → **2001 行**（−49.7%）
+  - `render_t7_section()` 零閉包依賴，全部狀態走 `st.session_state`
+  - GEMINI_KEY 函式內部即時取，不靠 caller 注入
+  - fast tier 零回歸（456 passed + 4 個 pre-existing 路徑硬編碼 bug 不在本次 scope）
 
 ---
 

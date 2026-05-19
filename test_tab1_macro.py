@@ -49,6 +49,6 @@ def test_calc_data_health_wrapper():
 def test_app_py_shim_render_indicator_map_still_works():
     """app.py 保留 render_indicator_map shim（純 source 驗證避免觸發 streamlit）。"""
     from pathlib import Path
-    src = Path("/home/user/my-fund-dashboard/app.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parent / "app.py").read_text(encoding="utf-8")
     # B-C.5 後應該有 shim line
     assert "from ui.tab1_macro import render_indicator_map" in src

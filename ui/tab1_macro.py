@@ -1987,4 +1987,3 @@ def render_macro_tab() -> None:
                 st.caption("⚠️ 未設定 GEMINI_API_KEY，AI 分析功能關閉")
     else:
         st.info("👆 點擊「載入總經資料」開始分析")
-

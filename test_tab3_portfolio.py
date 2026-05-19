@@ -37,7 +37,7 @@ def test_is_core_fund_alias():
 def test_app_py_only_has_render_calls_for_all_6_tabs():
     """app.py 應該只剩 6 個 render_*_tab() 呼叫，沒有 inline tab block。"""
     from pathlib import Path
-    src = Path("/home/user/my-fund-dashboard/app.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parent / "app.py").read_text(encoding="utf-8")
     for fn in (
         "render_macro_tab",
         "render_single_fund_tab",

@@ -402,5 +402,3 @@ def _update_data_registry():
         _register_fund_subdata("組合", _pf, _raw, _pf.get("code","基金"))
 
     st.session_state["data_registry"] = reg
-
-

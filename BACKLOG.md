@@ -233,11 +233,11 @@
 
 ## 🚧 Next
 
-> v18.117 → v18.143（2026-05-17 衝刺 36 PR）後續可選優化：
+> v18.117 → v18.144（2026-05-17/18 衝刺 37 PR）後續可選優化：
 > - 🌐 **部署驗證**：6 tab cloud 互動全綠（user 需手動）
 > - 🌐 **streamlit-pages**：是否取代 `st.tabs`（影響 routing / URL share，user 決策）
 > - 🔧 polish：拆 `ui/helpers/session.py` 為 session 工具 vs UI 工具（low value）
-> - 🔧 polish：Tab3（3897 行 → 1 個 render fn）內部再拆 MK 戰情 / 加入基金 / T5T7 三 sub-render（medium effort）
+> - [x] **v18.144** Tab3 T7 抽檔 → `ui/tab3_t7_ledger.py`（tab3_portfolio.py 3976 → 2001 行 −49.7%）
 
 ---
 
