@@ -737,6 +737,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.149 / 2026-05-20 (PR A)** — Schema v2 後端 + migration 工具上線。新 schema 把舊三 tab（保單分頁 + `_T7_State` + `_Ledgers`）的「**目前持倉**」內聯到單張保單 worksheet，砍掉「同筆資料散三 tab」的舊架構。`repositories/policy_repository.py` 新增 `ALL_COLS_V2`（11 欄）+ `detect_sheet_schema_version` / `load_policy_v2` / `write_policy_v2` / `load_all_policies_v2` / `is_v2_worksheet` / `copy_sheet_as_backup`。`scripts/migrate_v149_schema.py` 提供 `migrate_sheet(with_backup=True)` 一次性升級工具：safety net 先 `client.copy(src_sheet_id, copy_permissions=False)` 備份整本 Sheet → 才轉換各保單分頁；冪等對已 v2 的 worksheet 自動跳過。Tab3 加偵測 + 升級按鈕；舊 v1 寫讀路徑完整保留，PR B 才接 v2 編輯 UI。
 
+> 🆕 **v18.150 / 2026-05-20 (PR B)** — v2 native 編輯 UI 上線。新模組 `ui/helpers/v2_editor.py` 提供 `render_v2_section(client, sheet_id)`：偵測 v2 schema 時自動接管編輯路徑；每張保單一個 expander 區塊內含 fund / cash 兩個 `st.data_editor`（dynamic rows）+ 個別 [💾 存到雲端] 按鈕（dirty tracking、推 `write_policy_v2`）。Empty sheet 顯示「🚀 第一次使用」按鈕跳 3-step wizard（保單名 + 第一檔基金 + 現金可跳過）。T7 模組 `tab3_t7_ledger.py` 開頭偵測 v2 → 紅字 banner 提示「T7 為純模擬器、真實加碼/贖回請至 v2 編輯介面或直接改 Sheet」。本 PR 不動 v1 路徑、不切換「📦 全部寫入/讀回」主路徑（留 PR C）。
+
 ---
 
 ## §6 Session State Schema（v10.0）

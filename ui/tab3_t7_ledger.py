@@ -87,6 +87,24 @@ def render_t7_section() -> None:
 
     # ── T7: 帳務與再平衡試算 (Universal Fund Ledger v1.0) ─────────────────────
     st.divider()
+
+    # v18.150 PR B：T7 改唯讀模擬器警告 — 偵測到 v2 schema 時提示 user
+    # 真實加碼/贖回請至 Tab3「保單管理」v2 編輯介面或直接改 Sheet
+    try:
+        from ui.helpers.oauth_state import _oauth_configured as _oc_v2
+        _sid_v2_chk = st.session_state.get("policy_sheet_id", "")
+        if _oc_v2 and _sid_v2_chk and \
+           st.session_state.get("_schema_ver") == "v2":
+            st.warning(
+                "⚠️ **T7 為純模擬器**：v18.149 起 schema v2 下 T7 不再寫回 Sheet。\n\n"
+                "下方贖回 / 轉換 / 加碼模擬**只算損益、不更新持倉**。"
+                "真實加碼/贖回請至 Tab3「📋 保單管理」**v2 編輯介面**"
+                "（in-line 改 units / avg_nav / avg_fx 後按「💾 存到雲端」）"
+                "或直接到 Google Sheet 內手動修改。"
+            )
+    except Exception:
+        pass   # noqa: smoke-allow-pass — UI 提示失敗不影響後續 T7 主邏輯
+
     st.markdown("### 💰 T7 帳務與再平衡試算（A / B / C）")
     st.caption(
         "v1.0 加權平均會計引擎。NAV / FX 一律由 yfinance 即時抓取，"

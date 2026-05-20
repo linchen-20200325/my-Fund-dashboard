@@ -164,8 +164,17 @@
     - v2 → `[👁️ 預覽 v2 schema 資料]` checkbox 顯示 read-only `st.dataframe`
   - 新增單元測試：`test_policy_store.py` +12 個 v2 測試 / `test_migrate_v149_schema.py` 12 個 fold + migration 測試（共 +24，總計 64/64 pass）
   - **本 PR 不動「一鍵存讀」與 T7 模組** — 既有 v1 路徑完整保留；user 跑完 migration 後可在 Google Sheet 上看到新 v2 schema，但日常存讀仍走 v1（PR B 才接 v2 編輯 UI）
-- [ ] **PR B**（下一輪）UI 重構：第一次使用 wizard / 雙 expander / in-line 編輯 / T7 唯讀化紅字
-- [ ] **PR C/D**（之後）「全部寫入/讀回」切換到 v2 主路徑 / 移除舊 _T7_State / _Ledgers tab + 文件 cleanup
+- [x] **PR B v18.150 v2 native 編輯 UI** — `ui/helpers/v2_editor.py`（373 行）：
+  - `render_v2_section(client, sheet_id)`：偵測到 v2 schema 時自動接管 UI（從 tab3_portfolio expander 內呼叫）
+  - 每張保單一個區塊，內含 fund 與 cash 兩個 `st.data_editor`（dynamic rows）+ [💾 存到雲端] / [📥 重新讀回] / [🗑️ 刪除]
+  - dirty tracking：本機編輯後標 `未存檔`，按存才推 `write_policy_v2`
+  - [➕ 新增保單] 一鍵建 worksheet + 寫 v2 header（讓下次 detect 一致回 v2）
+  - `render_first_use_wizard(client, sheet_id)`：empty sheet 顯示「🚀 第一次使用」按鈕 → 3-step wizard（保單名 + 第一檔基金 + 現金可跳過）
+  - T7 模組（`tab3_t7_ledger.py`）開頭加紅字 banner：v2 下 T7 為純模擬器，真實加碼/贖回請至 v2 編輯介面或直接改 Sheet
+  - 新增單元測試 `test_v2_editor.py`（split / merge / round-trip / drop empty rows，共 +8 測試，PR A 64 + PR B 8 = **72/72 pass**）
+  - 注：本 PR 不動 v1 路徑、不切換「📦 全部寫入/讀回」主路徑（留 PR C）
+- [ ] **PR C**（下一輪）「📦 全部寫入/讀回」切換到 v2 主路徑（v2 sheet 自動走 v2）
+- [ ] **PR D**（之後）移除舊 `_T7_State` / `_Ledgers` tab 寫入路徑 + 文件 cleanup
 
 ---
 

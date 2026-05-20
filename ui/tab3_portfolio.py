@@ -662,10 +662,20 @@ def render_portfolio_tab() -> None:
                                     f"共 {len(_df_v2)} 列；"
                                     f"fund={len(_df_v2[_df_v2['item_type']=='fund'])}、"
                                     f"cash={len(_df_v2[_df_v2['item_type']=='cash'])}。"
-                                    "PR B 將接編輯 UI 取代此 read-only 預覽。"
                                 )
                         except Exception as _epe:
                             st.error(f"❌ 讀 v2 失敗：[{type(_epe).__name__}] {_epe}")
+
+                # v18.150 PR B：v2 native 編輯 UI（保單區塊 + in-line data_editor +
+                # 新增保單 + 第一次使用 wizard）
+                if _ver_now == "v2":
+                    try:
+                        from ui.helpers.v2_editor import render_v2_section
+                        _cli_v2 = _get_oauth_client()
+                        render_v2_section(_cli_v2, _sheet_id)
+                    except Exception as _ev2:
+                        st.error(f"❌ v2 編輯 UI 載入失敗："
+                                  f"[{type(_ev2).__name__}] {_ev2}")
 
             # ── v18.50 一鍵存讀（解決「同一筆資料散在三個 tab，
             #          看不出全貌」的散亂感）；v18.147 把「保單清單」前移後此處只剩存讀
