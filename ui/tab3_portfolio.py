@@ -121,8 +121,14 @@ def render_portfolio_tab() -> None:
     GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 
     # v18.140: 全部 helper 改正規 import — 徹底脫離 v18.129 sys.modules['__main__'] hack
+    # v18.148: 先呼叫 refresh_oauth_state() 把 module-level snapshot 更新到 fresh，
+    #          再 local 重 import _oauth_configured / _oauth_cfg；
+    #          否則 wizard 寫 session_state 後 rerun，本檔仍拿 import 時的 False snapshot。
+    from ui.helpers.oauth_state import refresh_oauth_state as _refresh_oauth_state
+    _refresh_oauth_state()
     from ui.helpers.oauth_state import (
         _oauth_configured,
+        _oauth_cfg,
         _resolve_oauth_cfg,
         _get_oauth_client,
         _gsa_secret,

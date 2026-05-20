@@ -415,12 +415,17 @@ def test_tab3_oauth_configured_branch_renders_without_exception(
     - 不 seed gsheet_tokens → _get_oauth_client() 安全回 None、不打網路
     """
     import ui.helpers.oauth_state as _oauth_mod
-    monkeypatch.setattr(_oauth_mod, "_oauth_configured", True)
-    monkeypatch.setattr(_oauth_mod, "_oauth_cfg", {
+    # v18.148: tab3 / app.py 渲染前會呼叫 refresh_oauth_state() 重算 snapshot；
+    # 若只 monkeypatch _oauth_configured / _oauth_cfg，refresh 會把它們清回 False。
+    # 改 monkeypatch _resolve_oauth_cfg → refresh 自然把 module-level snapshot 設成 truthy。
+    _mock_cfg = {
         "client_id": "mock-client-id",
         "client_secret": "mock-client-secret",
         "redirect_uri": "http://localhost:8501/",
-    })
+    }
+    monkeypatch.setattr(_oauth_mod, "_resolve_oauth_cfg", lambda: _mock_cfg)
+    monkeypatch.setattr(_oauth_mod, "_oauth_configured", True)
+    monkeypatch.setattr(_oauth_mod, "_oauth_cfg", _mock_cfg)
     monkeypatch.setenv("FRED_API_KEY", "test-fred-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
 
@@ -443,6 +448,39 @@ def test_tab3_oauth_configured_branch_renders_without_exception(
         f"未偵測到 _oauth_configured=True 未登入分支提示；"
         f"infos 前 400 字: {info_blobs[:400]!r}"
     )
+
+
+# ════════════════════════════════════════════════════════════
+# v18.148 防退化：refresh_oauth_state() — wizard 套用設定 no-op bug 修補單元
+# ════════════════════════════════════════════════════════════
+def test_refresh_oauth_state_updates_module_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v18.148: refresh_oauth_state() 重算 module-level _oauth_cfg / _oauth_configured。
+
+    回歸目的：原本 `_oauth_cfg` 與 `_oauth_configured` 在 module import 時
+    snapshot 一次；使用者透過 in-app wizard 寫 session_state 後 `st.rerun()`，
+    snapshot 永遠 stale → 「💾 套用設定」按了沒反應、登入按鈕永遠不亮。
+    本函式由 tab3 render 開頭 / app.py sidebar 渲染前呼叫以強制 re-resolve。
+    """
+    import ui.helpers.oauth_state as _osm
+
+    # 1) 模擬 wizard 已寫入 session_state：refresh 後 _oauth_configured 應 True
+    _truthy = {
+        "client_id": "wizard-cid",
+        "client_secret": "wizard-csec",
+        "redirect_uri": "https://app.example.com/",
+    }
+    monkeypatch.setattr(_osm, "_resolve_oauth_cfg", lambda: _truthy)
+    assert _osm.refresh_oauth_state() is True
+    assert _osm._oauth_configured is True
+    assert _osm._oauth_cfg == _truthy
+
+    # 2) 模擬 secrets/session_state 都清空：refresh 應把 snapshot 回 False
+    monkeypatch.setattr(_osm, "_resolve_oauth_cfg", lambda: None)
+    assert _osm.refresh_oauth_state() is False
+    assert _osm._oauth_configured is False
+    assert _osm._oauth_cfg is None
 
 
 # ════════════════════════════════════════════════════════════

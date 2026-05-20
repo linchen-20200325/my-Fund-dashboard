@@ -733,6 +733,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.147 / 2026-05-19** — Tab3 expander「📋 保單管理（Google Sheets）」內部順序對齊標題承諾：`Sheet 設定 → 保單清單 → 多帳本管理 → 一鍵存讀 → 本機 JSON 備份`。新增 `list_user_folders()` 走 Drive v3 API（`client.http_client.request('get', ...)` 不依賴 googleapiclient），`list_user_sheets()` 加 `folder_id=''` kwarg（gspread 6.x 原生支援）。OAuth wizard 加 redirect_uri 自動正規化（缺 scheme 補 `https://`、缺 path 補 `/`）。
 
+> 🆕 **v18.148 / 2026-05-20** — `ui/helpers/oauth_state.py` 加 `refresh_oauth_state()`：把 `_oauth_cfg` / `_oauth_configured` 從 module-import-time snapshot 改成 per-render refresh。`render_portfolio_tab()` 開頭 + `app.py` sidebar 渲染前各呼叫一次，並 local 重 `from ... import` 拿 fresh 值。修補 wizard「💾 套用設定」按了沒反應的 bug（原本 session_state 寫入後 `st.rerun()` 不會重 run module body → snapshot 永遠 stale）。Streamlit Secrets `[google_oauth]` 永久設定路徑不受影響。
+
 ---
 
 ## §6 Session State Schema（v10.0）

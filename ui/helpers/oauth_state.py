@@ -60,6 +60,23 @@ _oauth_cfg = _resolve_oauth_cfg()
 _oauth_configured = _oauth_cfg is not None
 
 
+def refresh_oauth_state() -> bool:
+    """v18.148: 重算 module-level _oauth_cfg / _oauth_configured。
+
+    修 wizard 套用設定 no-op bug：原本兩者在 module import 時 snapshot 一次，
+    使用者透過 in-app wizard 寫 `st.session_state["custom_oauth_cfg"]` 後
+    `st.rerun()` 不會重 run module body → snapshot 永遠 stale → UI 永遠
+    走 wizard 分支、登入按鈕永遠不亮。Caller（tab3 render 開頭 / app.py
+    sidebar 渲染前）呼叫本函式可強制 re-resolve；之後 caller 自己
+    `from ui.helpers.oauth_state import _oauth_configured, _oauth_cfg`
+    重新拿 fresh 值即可。
+    """
+    global _oauth_cfg, _oauth_configured
+    _oauth_cfg = _resolve_oauth_cfg()
+    _oauth_configured = _oauth_cfg is not None
+    return _oauth_configured
+
+
 def _get_oauth_client():
     """從 session_state 的 tokens 建一個 gspread client，順便 ensure 過期前 refresh。"""
     toks = st.session_state.get("gsheet_tokens")

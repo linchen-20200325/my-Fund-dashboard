@@ -137,6 +137,14 @@
   - 新順序：`Sheet 設定 → 保單清單 → 多帳本管理 → 一鍵存讀 → 本機 JSON 備份`
   - 純 UI cut-paste；保單 worksheet 多 tab 資料模型完全不動
 
+### v18.148 OAuth wizard 套用設定 no-op bug 修補（2026-05-20）
+- [x] **PR #9** `_oauth_configured` / `_oauth_cfg` 由 module-import-time snapshot 改 per-render refresh
+  - 症狀：user 在 wizard 填 client_id/secret/redirect_uri + 按「💾 套用設定」沒反應，登入按鈕不亮
+  - 根因：兩個 module-level 變數在 `ui/helpers/oauth_state.py` import 時 cache，session_state 寫入後 `st.rerun()` 不會重 run module body → snapshot 永遠 stale
+  - 修法：新增 `refresh_oauth_state()` 公開函式；`render_portfolio_tab()` 開頭 + `app.py` sidebar 渲染前各呼叫一次，並 local 重 `from ... import` 拿 fresh 值
+  - 旁路：使用 Streamlit Secrets `[google_oauth]` 永久設定者 reboot app 即可（一直能用），bug 只影響 session-only wizard 路徑
+  - 新增單元測試 `test_refresh_oauth_state_updates_module_snapshot`；舊 `test_tab3_oauth_configured_branch_renders_without_exception` 改 monkeypatch `_resolve_oauth_cfg` 以相容 refresh
+
 ---
 
 ## 專案定位

@@ -201,6 +201,11 @@ def _calc_data_health(indicators=None):
 # 雙模式 — OAuth（每保單一 worksheet）優先 + 舊 SA（單表 Policies）相容
 # 配置來源：secrets.toml [google_oauth] 優先；缺則用 session_state in-app wizard
 # v18.136: OAuth chain 搬至 ui/helpers/oauth_state.py
+# v18.148: 先 refresh_oauth_state() 確保 module-level snapshot 是 fresh
+#          （wizard 寫 session_state 後 rerun，若不 refresh 則 _oauth_configured
+#          仍是 import 時的 False snapshot，sidebar 登入按鈕永遠不亮）。
+from ui.helpers.oauth_state import refresh_oauth_state as _refresh_oauth_state
+_refresh_oauth_state()
 from ui.helpers.oauth_state import (  # noqa: F401
     _gsa_secret,
     _sheet_id_secret,
