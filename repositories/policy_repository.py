@@ -752,34 +752,85 @@ def create_dashboard_sheet(client: Any,
 # 偵測方式：worksheet 第一列 header 含 `item_type` 即為 v2。
 ALL_COLS_V2: tuple[str, ...] = (
     "policy_id",
-    "item_type",     # "fund" | "cash"
+    "item_type",         # "fund" | "cash"
     "fund_code",
     "fund_name",
     "units",
     "avg_nav",
+    "avg_nav_with_div",  # v18.153: 平均買入「含息」單位成本（對帳單欄(10)）
     "avg_fx",
     "currency",
-    "tier",          # "core" | "satellite" | ""
-    "amount",        # cash 列才填（多幣別現金金額）
-    "invest_twd",    # fund 列保留：當初規劃投入 TWD
+    "tier",              # "core" | "satellite" | ""
+    "amount",            # cash 列才填（多幣別現金金額）
+    "invest_twd",        # 淨投資金額（對帳單欄(4)），= units × avg_nav × avg_fx
 )
 
 ITEM_TYPE_FUND = "fund"
 ITEM_TYPE_CASH = "cash"
 
+# v18.153：中文 header 雙向翻譯（Sheet 上顯示中文、程式內部仍用英文 col name）
+ZH_HEADERS_V2: dict[str, str] = {
+    "policy_id":         "保單編號",
+    "item_type":         "類型",
+    "fund_code":         "基金代號",
+    "fund_name":         "基金名稱",
+    "units":             "持有單位數",
+    "avg_nav":           "平均買入單位成本",
+    "avg_nav_with_div":  "平均買入含息單位成本",
+    "avg_fx":            "平均買入匯率",
+    "currency":          "幣別",
+    "tier":              "級別",
+    "amount":            "金額",
+    "invest_twd":        "淨投資金額",
+}
+EN_HEADERS_V2: dict[str, str] = {v: k for k, v in ZH_HEADERS_V2.items()}
+
+# v18.153：欄位填寫責任分類（給 UI + Sheet 配色用）
+# user 自行填寫（從對帳單抄）：黃底
+USER_INPUT_COLS: tuple[str, ...] = (
+    "policy_id", "fund_code", "avg_nav", "avg_nav_with_div",
+    "avg_fx", "amount", "invest_twd",
+)
+# 自動填寫（MoneyDJ 抓 / 系統算 / 系統定）：灰底（read-only signal）
+AUTO_COLS: tuple[str, ...] = (
+    "item_type", "fund_name", "units", "currency", "tier",
+)
+
+
+def _normalize_header_to_en(header_cell: str) -> str:
+    """收到一個 header cell（可能是中文或英文）→ 回對應的英文 col name。
+    認不出來就回原字串（向後相容 v1 schema 偵測）。"""
+    s = str(header_cell or "").strip()
+    return EN_HEADERS_V2.get(s, s)
+
+
+def compute_units(invest_twd: float, avg_nav: float, avg_fx: float) -> float:
+    """v18.153：對帳單算式 units = invest_twd / (avg_nav × avg_fx)。
+
+    任一分母為 0 或負 → 回 0（避除以 0）。
+    """
+    try:
+        denom = float(avg_nav) * float(avg_fx)
+        if denom <= 0:
+            return 0.0
+        return float(invest_twd) / denom
+    except (TypeError, ValueError):
+        return 0.0
+
 
 def is_v2_worksheet(ws: Any) -> bool:
-    """偵測單張 worksheet 是不是 v2 schema（header 含 item_type 即視為 v2）。
+    """偵測單張 worksheet 是不是 v2 schema：
 
-    duck-typed 對 ws：只要 `row_values(1)` 可呼叫即可，方便 MagicMock 測試。
-    讀檔失敗或無 header 列一律回 False（讓 caller 走 v1 路徑安全 fallback）。
-    v18.152：包 `_with_quota_retry` 因 429 不該誤判 v1。
+    - 含 `item_type` 英文 header → v2（v18.149 以來）
+    - 含 `類型` 中文 header → v2（v18.153 中文 schema）
+    讀檔失敗 / 無 header 一律回 False（caller 走 v1 fallback 安全）。
     """
     try:
         header = _with_quota_retry(ws.row_values, 1) or []
     except Exception:
         return False
-    return "item_type" in [str(c).strip() for c in header]
+    cells = [str(c).strip() for c in header]
+    return "item_type" in cells or "類型" in cells
 
 
 def detect_sheet_schema_version(client: Any, sheet_id: str) -> str:
@@ -839,15 +890,19 @@ def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
     if not rows:
         return empty
     df = pd.DataFrame(rows)
+    # v18.153：rename 中文 header → 英文 col name（向後相容雙語）
+    df = df.rename(columns={zh: en for zh, en in EN_HEADERS_V2.items()
+                              if zh in df.columns})
     for c in ALL_COLS_V2:
         if c not in df.columns:
             df[c] = ""
     df = df[list(ALL_COLS_V2)].copy()
-    df["units"]      = df["units"].map(_normalize_float)
-    df["avg_nav"]    = df["avg_nav"].map(_normalize_float)
-    df["avg_fx"]     = df["avg_fx"].map(_normalize_float)
-    df["amount"]     = df["amount"].map(_normalize_float)
-    df["invest_twd"] = df["invest_twd"].map(_normalize_invest_twd)
+    df["units"]            = df["units"].map(_normalize_float)
+    df["avg_nav"]          = df["avg_nav"].map(_normalize_float)
+    df["avg_nav_with_div"] = df["avg_nav_with_div"].map(_normalize_float)
+    df["avg_fx"]           = df["avg_fx"].map(_normalize_float)
+    df["amount"]           = df["amount"].map(_normalize_float)
+    df["invest_twd"]       = df["invest_twd"].map(_normalize_invest_twd)
     return df
 
 
@@ -886,27 +941,74 @@ def write_policy_v2(
         return str(v).strip() in ("", "nan", "NaN", "None")
     norm = norm[norm.apply(lambda r: not all(_cell_empty(v) for v in r), axis=1)]
 
-    rows_out: list[list] = [list(ALL_COLS_V2)]
+    # v18.153：fund 列 units 自動算（單純存便利、給 T7 模擬用；不依賴 user 手填）
+    rows_out: list[list] = [
+        [ZH_HEADERS_V2[c] for c in ALL_COLS_V2],   # 中文 header 列
+    ]
     for _, r in norm.iterrows():
+        is_fund = r.get("item_type") == ITEM_TYPE_FUND
+        is_cash = r.get("item_type") == ITEM_TYPE_CASH
+        # fund 列 units 用公式自動算（若 user override 過則優先用 user 給的非零值）
+        _u_user = _normalize_float(r.get("units", 0))
+        _avg_nav = _normalize_float(r.get("avg_nav", 0))
+        _avg_fx  = _normalize_float(r.get("avg_fx", 0))
+        _inv_twd = _normalize_invest_twd(r.get("invest_twd", 0))
+        _u_calc = compute_units(_inv_twd, _avg_nav, _avg_fx)
+        _u_final = _u_user if (_u_user > 0 and abs(_u_user - _u_calc) > 0.5) else _u_calc
         rows_out.append([
             str(r.get("policy_id", "") or ""),
             str(r.get("item_type", "") or ""),
             str(r.get("fund_code", "") or ""),
             str(r.get("fund_name", "") or ""),
-            r.get("units", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
-            r.get("avg_nav", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
-            r.get("avg_fx", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
+            _u_final if is_fund else "",
+            _avg_nav if is_fund else "",
+            _normalize_float(r.get("avg_nav_with_div", 0)) if is_fund else "",
+            _avg_fx if is_fund else "",
             str(r.get("currency", "") or ""),
-            str(r.get("tier", "") or ""),
-            r.get("amount", "") if r.get("item_type") == ITEM_TYPE_CASH else "",
-            r.get("invest_twd", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
+            str(r.get("tier", "") or "") if is_fund else "",
+            _normalize_float(r.get("amount", 0)) if is_cash else "",
+            _inv_twd if is_fund else "",
         ])
     try:
         _with_quota_retry(ws.clear)
         _with_quota_retry(ws.update, "A1", rows_out)
+        # v18.153：header 配色 — user-input 黃、auto 灰
+        _apply_v2_header_format(ws)
     except Exception as e:
         raise PolicySheetError(f"寫入 v2 保單分頁失敗：{e}") from e
     return len(rows_out) - 1
+
+
+def _apply_v2_header_format(ws: Any) -> None:
+    """v18.153：把 v2 worksheet 的 header 列依 user-input/auto 上色。
+
+    - USER_INPUT_COLS → 黃底 (#fff2cc)
+    - AUTO_COLS       → 灰底 (#e0e0e0)
+    全部 bold。配色失敗（gspread format API 例外）不拋，靜默放過。
+    """
+    user_bg = {"red": 1.0, "green": 0.949, "blue": 0.8}      # #fff2cc
+    auto_bg = {"red": 0.878, "green": 0.878, "blue": 0.878}  # #e0e0e0
+    bold = {"bold": True}
+    user_ranges: list[str] = []
+    auto_ranges: list[str] = []
+    for i, c in enumerate(ALL_COLS_V2):
+        col_letter = chr(ord("A") + i)
+        rng = f"{col_letter}1"
+        if c in USER_INPUT_COLS:
+            user_ranges.append(rng)
+        else:
+            auto_ranges.append(rng)
+    try:
+        if user_ranges:
+            _with_quota_retry(
+                ws.format, user_ranges,
+                {"backgroundColor": user_bg, "textFormat": bold})
+        if auto_ranges:
+            _with_quota_retry(
+                ws.format, auto_ranges,
+                {"backgroundColor": auto_bg, "textFormat": bold})
+    except Exception:
+        pass  # noqa: smoke-allow-pass — 配色失敗不影響資料正確性
 
 
 def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
@@ -932,15 +1034,19 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         if not rows:
             continue
         df_one = pd.DataFrame(rows)
+        # v18.153：中文 header → 英文 col name
+        df_one = df_one.rename(columns={zh: en for zh, en in EN_HEADERS_V2.items()
+                                          if zh in df_one.columns})
         for c in ALL_COLS_V2:
             if c not in df_one.columns:
                 df_one[c] = ""
         df_one = df_one[list(ALL_COLS_V2)].copy()
-        df_one["units"]      = df_one["units"].map(_normalize_float)
-        df_one["avg_nav"]    = df_one["avg_nav"].map(_normalize_float)
-        df_one["avg_fx"]     = df_one["avg_fx"].map(_normalize_float)
-        df_one["amount"]     = df_one["amount"].map(_normalize_float)
-        df_one["invest_twd"] = df_one["invest_twd"].map(_normalize_invest_twd)
+        df_one["units"]            = df_one["units"].map(_normalize_float)
+        df_one["avg_nav"]          = df_one["avg_nav"].map(_normalize_float)
+        df_one["avg_nav_with_div"] = df_one["avg_nav_with_div"].map(_normalize_float)
+        df_one["avg_fx"]           = df_one["avg_fx"].map(_normalize_float)
+        df_one["amount"]           = df_one["amount"].map(_normalize_float)
+        df_one["invest_twd"]       = df_one["invest_twd"].map(_normalize_invest_twd)
         frames.append(df_one)
     if not frames:
         return pd.DataFrame(columns=list(ALL_COLS_V2))

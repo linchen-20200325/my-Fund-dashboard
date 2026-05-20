@@ -173,6 +173,20 @@
   - T7 模組（`tab3_t7_ledger.py`）開頭加紅字 banner：v2 下 T7 為純模擬器，真實加碼/贖回請至 v2 編輯介面或直接改 Sheet
   - 新增單元測試 `test_v2_editor.py`（split / merge / round-trip / drop empty rows，共 +8 測試，PR A 64 + PR B 8 = **72/72 pass**）
   - 注：本 PR 不動 v1 路徑、不切換「📦 全部寫入/讀回」主路徑（留 PR C）
+- [x] **PR B.3 v18.153 12 欄 schema + 中文 header + UI 自動填寫分離** — 對齊真實對帳單欄位、UI 黃灰配色區分 user 填寫 vs 自動帶
+  - **Schema 12 欄**（加 `avg_nav_with_div` 平均買入含息單位成本，對帳單欄(10)）：`policy_id / item_type / fund_code / fund_name / units / avg_nav / avg_nav_with_div / avg_fx / currency / tier / amount / invest_twd`
+  - **欄位填寫責任分類**：
+    - 🟨 `USER_INPUT_COLS`：`policy_id / fund_code / avg_nav / avg_nav_with_div / avg_fx / amount / invest_twd`（從對帳單抄）
+    - ⬜ `AUTO_COLS`：`item_type / fund_name / units / currency / tier`（MoneyDJ / 公式 / 系統）
+  - **Sheet 中文 header 雙向翻譯層**：`ZH_HEADERS_V2` mapping，`load_policy_v2` 讀進來自動翻譯回英文 col name，`write_policy_v2` 寫中文 header；`is_v2_worksheet` 同時認 `item_type` 與 `類型`
+  - **Sheet header 配色** `_apply_v2_header_format()`：user-input 黃 (#fff2cc) / auto 灰 (#e0e0e0)，全部 bold
+  - **`compute_units()` 公式自動算**：`units = invest_twd / (avg_nav × avg_fx)`（對帳單公式 (4) 反推），對齊截圖實例 1781.025 ✓
+  - **Wizard 簡化**：只露 6 個 user-input 欄位（policy_id / fund_code / avg_nav / avg_nav_with_div / avg_fx / invest_twd + cash），fund_name / currency / units / tier 自動帶；`_autofill_from_moneydj()` 在存檔時自動抓 MoneyDJ
+  - **`st.data_editor` 加 `disabled=True` 與 🟨/⬜ icon hint**：user-input 黃 icon、auto 灰 icon read-only；user 編完按存到雲時對缺漏自動補 MoneyDJ
+  - **Migration 預設 `avg_nav_with_div=0`**（v1 → v2 沒這個值，user 之後到對帳單抄）
+  - 單元測試 +6 個（12 欄 schema / USER vs AUTO 互斥完整 / ZH-EN round-trip / compute_units 對齊截圖 / 零分母 / `_normalize_header_to_en`）+ 更新 v2_editor 測試 9 欄 fund 表 & 12 欄 merged & units 自動算優先
+  - 總計 **89/89 pass**（PR A 64 + PR B 8 + PR B.1 6 + PR B.2 4 + PR B.3 7）
+
 - [x] **PR B.2 v18.152 Google Sheets 429 quota 退避 + 60s cache + 友善訊息** — 修補 v2 編輯介面進場一次 1+2N reads 爆配額的 bug
   - `repositories/policy_repository.py` 加 `_QUOTA_BACKOFFS` + `_is_quota_error` + `_with_quota_retry`（與 `snapshot_repository` 一致，1s→2s→4s→8s 共 4 次）
   - `list_policy_worksheets` / `is_v2_worksheet` / `detect_sheet_schema_version` / `load_policy_v2` / `write_policy_v2` / `load_all_policies_v2` 全部包 `_with_quota_retry`

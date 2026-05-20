@@ -23,6 +23,7 @@ from repositories.policy_repository import (
     ITEM_TYPE_FUND,
     PolicySheetError,
     _sanitize_tab_name,
+    compute_units,
     delete_policy_worksheet,
     ensure_policy_worksheet,
     list_policy_worksheets,
@@ -46,9 +47,10 @@ def _ensure_buf() -> dict:
 
 
 def _empty_fund_df() -> pd.DataFrame:
+    # v18.153：fund 表 9 欄（含 avg_nav_with_div 含息成本）
     return pd.DataFrame(columns=[
-        "fund_code", "fund_name", "units", "avg_nav", "avg_fx",
-        "currency", "tier", "invest_twd",
+        "fund_code", "fund_name", "units", "avg_nav", "avg_nav_with_div",
+        "avg_fx", "currency", "tier", "invest_twd",
     ])
 
 
@@ -57,9 +59,9 @@ def _empty_cash_df() -> pd.DataFrame:
 
 
 def _split_policy_df(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """11 欄 df → (fund 8 欄, cash 2 欄) for st.data_editor 分區顯示。"""
-    fund_cols = ["fund_code", "fund_name", "units", "avg_nav", "avg_fx",
-                 "currency", "tier", "invest_twd"]
+    """12 欄 df → (fund 9 欄, cash 2 欄) for st.data_editor 分區顯示。"""
+    fund_cols = ["fund_code", "fund_name", "units", "avg_nav", "avg_nav_with_div",
+                 "avg_fx", "currency", "tier", "invest_twd"]
     cash_cols = ["currency", "amount"]
     fund_df = df[df["item_type"] == ITEM_TYPE_FUND][fund_cols].reset_index(drop=True) \
               if not df.empty else _empty_fund_df()
@@ -75,18 +77,23 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame, cash_df: pd.DataFram
         code = str(r.get("fund_code", "") or "").strip()
         if not code:
             continue
+        # v18.153：units 公式自動算（user 直接看到結果，存進去給 T7 用）
+        _inv = float(r.get("invest_twd", 0) or 0)
+        _nav = float(r.get("avg_nav", 0) or 0)
+        _fx  = float(r.get("avg_fx", 0) or 0)
         rows.append({
-            "policy_id":  policy_id,
-            "item_type":  ITEM_TYPE_FUND,
-            "fund_code":  code,
-            "fund_name":  str(r.get("fund_name", "") or ""),
-            "units":      r.get("units", 0) or 0,
-            "avg_nav":    r.get("avg_nav", 0) or 0,
-            "avg_fx":     r.get("avg_fx", 0) or 0,
-            "currency":   str(r.get("currency", "") or "USD"),
-            "tier":       str(r.get("tier", "") or ""),
-            "amount":     "",
-            "invest_twd": r.get("invest_twd", 0) or 0,
+            "policy_id":        policy_id,
+            "item_type":        ITEM_TYPE_FUND,
+            "fund_code":        code,
+            "fund_name":        str(r.get("fund_name", "") or ""),
+            "units":            compute_units(_inv, _nav, _fx),
+            "avg_nav":          _nav,
+            "avg_nav_with_div": float(r.get("avg_nav_with_div", 0) or 0),
+            "avg_fx":           _fx,
+            "currency":         str(r.get("currency", "") or "USD"),
+            "tier":             str(r.get("tier", "") or ""),
+            "amount":           "",
+            "invest_twd":       _inv,
         })
     for _, r in cash_df.iterrows():
         ccy = str(r.get("currency", "") or "").strip()
@@ -94,17 +101,18 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame, cash_df: pd.DataFram
         if not ccy or float(amt) == 0:
             continue
         rows.append({
-            "policy_id":  policy_id,
-            "item_type":  ITEM_TYPE_CASH,
-            "fund_code":  "",
-            "fund_name":  "",
-            "units":      "",
-            "avg_nav":    "",
-            "avg_fx":     "",
-            "currency":   ccy,
-            "tier":       "",
-            "amount":     amt,
-            "invest_twd": "",
+            "policy_id":        policy_id,
+            "item_type":        ITEM_TYPE_CASH,
+            "fund_code":        "",
+            "fund_name":        "",
+            "units":            "",
+            "avg_nav":          "",
+            "avg_nav_with_div": "",
+            "avg_fx":           "",
+            "currency":         ccy,
+            "tier":             "",
+            "amount":           amt,
+            "invest_twd":       "",
         })
     return pd.DataFrame(rows, columns=list(ALL_COLS_V2))
 
@@ -226,24 +234,56 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
     if dirty:
         _title += "  🔸 未存檔"
     with st.expander(_title, expanded=False):
-        # fund 編輯
+        # v18.153：色彩說明 + auto 欄位視覺區隔
+        st.caption(
+            "🟨 黃底：自己填（保單對帳單抄）　·　"
+            "⬜ 灰底：自動帶（MoneyDJ / 公式算）"
+        )
+        # fund 編輯 — 12 欄裡的 9 欄；auto cols 標 disabled、user cols 可編
         st.markdown("**💼 基金持有**")
+        # 在送 data_editor 前 inject units 計算結果（read-only 顯示）
+        if not fund_df.empty:
+            fund_df = fund_df.copy()
+            fund_df["units"] = fund_df.apply(
+                lambda r: compute_units(r.get("invest_twd", 0) or 0,
+                                          r.get("avg_nav", 0) or 0,
+                                          r.get("avg_fx", 0) or 0), axis=1)
         edited_fund = st.data_editor(
             fund_df,
             num_rows="dynamic",
             use_container_width=True,
             key=f"de_fund_{policy_id}",
             column_config={
-                "fund_code":  st.column_config.TextColumn("代號", required=True),
-                "fund_name":  st.column_config.TextColumn("名稱"),
-                "units":      st.column_config.NumberColumn("單位數", format="%.4f"),
-                "avg_nav":    st.column_config.NumberColumn("平均NAV", format="%.4f"),
-                "avg_fx":     st.column_config.NumberColumn("平均FX", format="%.4f"),
-                "currency":   st.column_config.SelectboxColumn(
-                                  "幣別", options=["USD", "TWD", "EUR", "GBP", "JPY", "AUD"]),
-                "tier":       st.column_config.SelectboxColumn(
-                                  "級別", options=["", "core", "satellite"]),
-                "invest_twd": st.column_config.NumberColumn("規劃 TWD", format="%d"),
+                # USER-input (yellow)
+                "fund_code":        st.column_config.TextColumn(
+                                        "🟨 基金代號", required=True,
+                                        help="到 MoneyDJ 抓 NAV 的代號"),
+                "avg_nav":          st.column_config.NumberColumn(
+                                        "🟨 平均買入單位成本", format="%.4f",
+                                        help="對帳單欄(1)"),
+                "avg_nav_with_div": st.column_config.NumberColumn(
+                                        "🟨 平均買入含息單位成本", format="%.4f",
+                                        help="對帳單欄(10) — 含息報酬率計算用，沒有填 0"),
+                "avg_fx":           st.column_config.NumberColumn(
+                                        "🟨 平均買入匯率", format="%.4f",
+                                        help="對帳單欄(3)"),
+                "invest_twd":       st.column_config.NumberColumn(
+                                        "🟨 淨投資金額 (TWD)", format="%d",
+                                        help="對帳單欄(4) = 平均單位成本 × 單位數 × 平均匯率"),
+                # AUTO (grey, disabled)
+                "fund_name":        st.column_config.TextColumn(
+                                        "⬜ 基金名稱（自動）", disabled=True,
+                                        help="存檔時用 fund_code 從 MoneyDJ 帶入"),
+                "units":            st.column_config.NumberColumn(
+                                        "⬜ 持有單位數（自動算）", format="%.4f",
+                                        disabled=True,
+                                        help="= 淨投資金額 / (平均單位成本 × 平均匯率)"),
+                "currency":         st.column_config.TextColumn(
+                                        "⬜ 幣別（自動）", disabled=True,
+                                        help="存檔時從 MoneyDJ 帶入"),
+                "tier":             st.column_config.SelectboxColumn(
+                                        "級別", options=["", "core", "satellite"],
+                                        help="存檔時自動判斷，可手動修正"),
             },
         )
 
@@ -275,11 +315,29 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
         if _bc1.button(f"💾 存到雲端", key=f"btn_save_{policy_id}",
                         type="primary", use_container_width=True):
             try:
-                merged = _merge_policy_df(policy_id, edited_fund, edited_cash)
+                # v18.153：存檔前對 fund_name/currency/tier 空的列 → MoneyDJ 自動帶
+                fund_df_v2 = edited_fund.copy() if not edited_fund.empty else edited_fund
+                if not fund_df_v2.empty:
+                    for _i, _r in fund_df_v2.iterrows():
+                        _fc = str(_r.get("fund_code", "") or "").strip()
+                        if not _fc:
+                            continue
+                        _need_fname = not str(_r.get("fund_name", "") or "").strip()
+                        _need_ccy = not str(_r.get("currency", "") or "").strip()
+                        _need_tier = not str(_r.get("tier", "") or "").strip()
+                        if _need_fname or _need_ccy or _need_tier:
+                            _afn, _accy, _atier = _autofill_from_moneydj(_fc)
+                            if _need_fname and _afn:
+                                fund_df_v2.at[_i, "fund_name"] = _afn
+                            if _need_ccy and _accy:
+                                fund_df_v2.at[_i, "currency"] = _accy
+                            if _need_tier and _atier:
+                                fund_df_v2.at[_i, "tier"] = _atier
+                merged = _merge_policy_df(policy_id, fund_df_v2, edited_cash)
                 n = write_policy_v2(client, sheet_id, policy_id, merged)
                 buf = _ensure_buf()
                 buf.setdefault(policy_id, {})["dirty"] = False
-                st.success(f"✅ 已存 {n} 列到雲端")
+                st.success(f"✅ 已存 {n} 列到雲端（自動帶 MoneyDJ 缺漏）")
                 # v18.152：寫入後清 cache，重讀拿雲端最新
                 _invalidate_cache(sheet_id, policy_id)
                 _load_policy_into_buf(client, sheet_id, policy_id)
@@ -362,82 +420,92 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
     st.caption("跟著 3 步走，建立你的第一張保單與第一檔基金（之後直接編輯即可）。")
 
     # Step 1：保單名
+    # v18.153：wizard 只露 user-input 欄位
+    # 自動帶：fund_name、currency（MoneyDJ）｜ units（公式算）｜ tier（_is_core_fund）
     st.markdown("**Step 1 / 3：保單名稱**")
-    pid = st.text_input("保單名稱", key="wiz_pid",
+    pid = st.text_input("🟨 保單名稱", key="wiz_pid",
                           placeholder="例：富邦人壽-001").strip()
 
-    # Step 2：基金
     st.markdown("**Step 2 / 3：第一檔基金（保險公司對帳單抄上來）**")
-    _f1, _f2 = st.columns(2)
-    fcode = _f1.text_input("基金代號", key="wiz_fcode",
-                              placeholder="例：FIDXEQI.LX").strip()
-    fname = _f2.text_input("基金名稱", key="wiz_fname",
-                              placeholder="例：富達世界基金").strip()
-    _f3, _f4, _f5 = st.columns(3)
-    units = _f3.number_input("持有單位數", key="wiz_units",
-                              min_value=0.0, step=0.01, format="%.4f")
-    avg_nav = _f4.number_input("平均 NAV", key="wiz_avg_nav",
+    _f1 = st.columns(1)[0]
+    fcode = _f1.text_input("🟨 基金代號", key="wiz_fcode",
+                              placeholder="例：FIDXEQI.LX",
+                              help="到 MoneyDJ 抓 NAV 的代號；存檔時自動帶基金名稱/幣別").strip()
+    _f3, _f4 = st.columns(2)
+    avg_nav = _f3.number_input("🟨 平均買入單位成本（對帳單欄(1)）", key="wiz_avg_nav",
                                 min_value=0.0, step=0.001, format="%.4f")
-    avg_fx = _f5.number_input("平均 FX (USD→TWD)", key="wiz_avg_fx",
-                               min_value=0.0, step=0.01, format="%.4f")
-    _f6, _f7 = st.columns(2)
-    currency = _f6.selectbox("幣別", ["USD", "TWD", "EUR", "GBP", "JPY", "AUD"],
-                              key="wiz_ccy")
-    tier = _f7.selectbox("級別", ["core", "satellite", ""], key="wiz_tier")
+    avg_nav_w = _f4.number_input("🟨 平均買入含息單位成本（欄(10)，沒有填 0）",
+                                   key="wiz_avg_nav_div",
+                                   min_value=0.0, step=0.001, format="%.4f")
+    _f5, _f6 = st.columns(2)
+    avg_fx = _f5.number_input("🟨 平均買入匯率（欄(3)）", key="wiz_avg_fx",
+                                min_value=0.0, step=0.01, format="%.4f")
+    inv_twd = _f6.number_input("🟨 淨投資金額 TWD（欄(4)）", key="wiz_inv_twd",
+                                 min_value=0, step=1000, format="%d")
 
-    # Step 3：現金（可跳過）
+    # 即時算 units 預覽
+    if avg_nav > 0 and avg_fx > 0 and inv_twd > 0:
+        _u_preview = compute_units(inv_twd, avg_nav, avg_fx)
+        st.info(f"🧮 自動算：持有單位數 ≈ **{_u_preview:.4f}**（= {inv_twd:,} / ({avg_nav:.4f} × {avg_fx:.4f}）")
+
     st.markdown("**Step 3 / 3：現金部位（沒有可跳過）**")
     _c1, _c2 = st.columns(2)
-    cash_ccy = _c1.selectbox("現金幣別", ["（無）", "TWD", "USD", "EUR", "GBP"],
+    cash_ccy = _c1.selectbox("🟨 現金幣別", ["（無）", "TWD", "USD", "EUR", "GBP"],
                               key="wiz_cash_ccy")
-    cash_amt = _c2.number_input("現金金額", key="wiz_cash_amt",
+    cash_amt = _c2.number_input("🟨 現金金額", key="wiz_cash_amt",
                                   min_value=0.0, step=1000.0, format="%.2f")
 
-    # 完成
     st.markdown("---")
     _ok1, _ok2 = st.columns([2, 3])
     if _ok1.button("✅ 建立並存檔", key="btn_wiz_finish",
                     type="primary", use_container_width=True,
-                    disabled=not (pid and fcode and units > 0)):
+                    disabled=not (pid and fcode and avg_nav > 0 and avg_fx > 0
+                                   and inv_twd > 0)):
         try:
             sanitized = _sanitize_tab_name(pid)
+            # 自動：MoneyDJ 抓 fund_name + currency；_is_core_fund 判 tier
+            _fname, _ccy, _tier = _autofill_from_moneydj(fcode)
+            _u_calc = compute_units(inv_twd, avg_nav, avg_fx)
             rows = [{
-                "policy_id":  sanitized,
-                "item_type":  ITEM_TYPE_FUND,
-                "fund_code":  fcode,
-                "fund_name":  fname,
-                "units":      units,
-                "avg_nav":    avg_nav,
-                "avg_fx":     avg_fx,
-                "currency":   currency,
-                "tier":       tier,
-                "amount":     "",
-                "invest_twd": "",
+                "policy_id":        sanitized,
+                "item_type":        ITEM_TYPE_FUND,
+                "fund_code":        fcode,
+                "fund_name":        _fname,
+                "units":            _u_calc,
+                "avg_nav":          avg_nav,
+                "avg_nav_with_div": avg_nav_w,
+                "avg_fx":           avg_fx,
+                "currency":         _ccy or "USD",
+                "tier":             _tier,
+                "amount":           "",
+                "invest_twd":       inv_twd,
             }]
             if cash_ccy != "（無）" and cash_amt > 0:
                 rows.append({
-                    "policy_id":  sanitized,
-                    "item_type":  ITEM_TYPE_CASH,
-                    "fund_code":  "",
-                    "fund_name":  "",
-                    "units":      "",
-                    "avg_nav":    "",
-                    "avg_fx":     "",
-                    "currency":   cash_ccy,
-                    "tier":       "",
-                    "amount":     cash_amt,
-                    "invest_twd": "",
+                    "policy_id":        sanitized,
+                    "item_type":        ITEM_TYPE_CASH,
+                    "fund_code":        "",
+                    "fund_name":        "",
+                    "units":            "",
+                    "avg_nav":          "",
+                    "avg_nav_with_div": "",
+                    "avg_fx":           "",
+                    "currency":         cash_ccy,
+                    "tier":             "",
+                    "amount":           cash_amt,
+                    "invest_twd":       "",
                 })
             df = pd.DataFrame(rows, columns=list(ALL_COLS_V2))
             write_policy_v2(client, sheet_id, sanitized, df)
-            st.success(f"✅ 已建立保單「{sanitized}」+ {len(rows)} 列資料")
+            st.success(
+                f"✅ 已建立保單「{sanitized}」+ {len(rows)} 列資料"
+                + (f"，自動帶入：{_fname} ({_ccy})" if _fname else "")
+            )
             _invalidate_cache(sheet_id)
             st.session_state.pop("_v2_show_wizard", None)
-            # 清 wizard inputs
-            for k in ("wiz_pid", "wiz_fcode", "wiz_fname", "wiz_units",
-                      "wiz_avg_nav", "wiz_avg_fx", "wiz_cash_amt"):
+            for k in ("wiz_pid", "wiz_fcode", "wiz_avg_nav", "wiz_avg_nav_div",
+                      "wiz_avg_fx", "wiz_inv_twd", "wiz_cash_amt"):
                 st.session_state.pop(k, None)
-            # 清 buf cache 觸發下次 render 重讀
             st.session_state.pop(_KEY_V2_LOADED, None)
             st.rerun()
         except PolicySheetError as e:
@@ -447,3 +515,27 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
                     use_container_width=True):
         st.session_state.pop("_v2_show_wizard", None)
         st.rerun()
+
+
+def _autofill_from_moneydj(fund_code: str) -> tuple[str, str, str]:
+    """v18.153：從 MoneyDJ 抓 fund_name / currency；用 _is_core_fund 判 tier。
+
+    抓失敗 → 回 ("", "", "")，caller 再 fallback default。
+    """
+    fname, ccy, tier = "", "", ""
+    if not fund_code:
+        return fname, ccy, tier
+    try:
+        from fund_fetcher import fetch_fund_from_moneydj_url
+        raw = fetch_fund_from_moneydj_url(fund_code)
+        fname = raw.get("fund_name", "") or ""
+        ccy = raw.get("currency", "") or raw.get("metrics", {}).get("currency", "")
+    except Exception:
+        pass   # noqa: smoke-allow-pass — MoneyDJ 抓失敗，user 之後可手動補
+    if fname:
+        try:
+            from ui.helpers.session import is_core_fund
+            tier = "core" if is_core_fund(fname) else "satellite"
+        except Exception:
+            pass   # noqa: smoke-allow-pass
+    return fname, ccy, tier

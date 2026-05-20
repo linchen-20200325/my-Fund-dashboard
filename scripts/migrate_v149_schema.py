@@ -143,18 +143,20 @@ def migrate_one_policy(
         folded = _fold_ledger_json(ledger_json)
 
         v2_rows.append({
-            "policy_id":  policy_id,
-            "item_type":  ITEM_TYPE_FUND,
-            "fund_code":  fund_url,
-            "fund_name":  fund_name,
-            "units":      folded["units"],
-            "avg_nav":    folded["avg_nav"],
-            "avg_fx":     folded["avg_fx"] if folded["avg_fx"] > 0 else _normalize_fx(
-                              r.get("fx_at_buy", 0)) or 0.0,
-            "currency":   currency,
-            "tier":       tier,
-            "amount":     "",
-            "invest_twd": invest_twd,
+            "policy_id":        policy_id,
+            "item_type":        ITEM_TYPE_FUND,
+            "fund_code":        fund_url,
+            "fund_name":        fund_name,
+            "units":            folded["units"],
+            "avg_nav":          folded["avg_nav"],
+            # v18.153：含息成本 user 後續到對帳單抄；migration 預設 0（v2 編輯介面醒目提示要補）
+            "avg_nav_with_div": 0.0,
+            "avg_fx":           folded["avg_fx"] if folded["avg_fx"] > 0 else _normalize_fx(
+                                    r.get("fx_at_buy", 0)) or 0.0,
+            "currency":         currency,
+            "tier":             tier,
+            "amount":           "",
+            "invest_twd":       invest_twd,
         })
         stat["funds"] += 1
 

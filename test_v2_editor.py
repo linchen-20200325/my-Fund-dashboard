@@ -20,11 +20,12 @@ from repositories.policy_repository import (
 )
 
 
-def test_empty_fund_df_has_8_cols():
+def test_empty_fund_df_has_9_cols():
+    """v18.153：fund 表加入 avg_nav_with_div（含息成本）。"""
     df = _empty_fund_df()
     assert list(df.columns) == [
-        "fund_code", "fund_name", "units", "avg_nav", "avg_fx",
-        "currency", "tier", "invest_twd",
+        "fund_code", "fund_name", "units", "avg_nav", "avg_nav_with_div",
+        "avg_fx", "currency", "tier", "invest_twd",
     ]
     assert df.empty
 
@@ -62,16 +63,17 @@ def test_split_policy_df_empty_input_returns_empty_df():
     assert fund_df.empty
     assert cash_df.empty
     assert list(fund_df.columns) == [
-        "fund_code", "fund_name", "units", "avg_nav", "avg_fx",
-        "currency", "tier", "invest_twd",
+        "fund_code", "fund_name", "units", "avg_nav", "avg_nav_with_div",
+        "avg_fx", "currency", "tier", "invest_twd",
     ]
 
 
-def test_merge_policy_df_produces_11_col_schema():
+def test_merge_policy_df_produces_12_col_schema_with_auto_units():
+    """v18.153：merged 是 12 欄；units **自動算**取代 user 給的（公式優先）。"""
     fund_df = pd.DataFrame([
-        {"fund_code": "FIDXEQI", "fund_name": "富達世界", "units": 1234.5,
-         "avg_nav": 12.345, "avg_fx": 31.2, "currency": "USD",
-         "tier": "core", "invest_twd": 475000},
+        {"fund_code": "FIDXEQI", "fund_name": "富達世界", "units": 9999.9,
+         "avg_nav": 12.345, "avg_nav_with_div": 10.5, "avg_fx": 31.2,
+         "currency": "USD", "tier": "core", "invest_twd": 475000},
     ])
     cash_df = pd.DataFrame([
         {"currency": "TWD", "amount": 500000},
@@ -80,10 +82,12 @@ def test_merge_policy_df_produces_11_col_schema():
     merged = _merge_policy_df("p1", fund_df, cash_df)
     assert list(merged.columns) == list(ALL_COLS_V2)
     assert len(merged) == 3
-    # fund 列
     assert merged.iloc[0]["item_type"] == ITEM_TYPE_FUND
     assert merged.iloc[0]["fund_code"] == "FIDXEQI"
-    assert merged.iloc[0]["units"] == 1234.5
+    # units 公式自動算 = 475000 / (12.345 × 31.2) ≈ 1232.66（不是 user 給的 9999.9）
+    _expected = 475000 / (12.345 * 31.2)
+    assert abs(merged.iloc[0]["units"] - _expected) < 0.5
+    assert merged.iloc[0]["avg_nav_with_div"] == 10.5
     # cash 列
     assert merged.iloc[1]["item_type"] == ITEM_TYPE_CASH
     assert merged.iloc[1]["currency"] == "TWD"

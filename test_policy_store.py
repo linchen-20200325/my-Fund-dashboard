@@ -616,15 +616,54 @@ def test_create_dashboard_sheet_raises_when_id_missing():
 # ══════════════════════════════════════════════════════════════════════
 # v18.149 Schema v2 — snapshot-only 11 欄 + 多幣別現金 + migration safety
 # ══════════════════════════════════════════════════════════════════════
-def test_v2_schema_has_11_cols_in_canonical_order():
-    """ALL_COLS_V2 是 11 欄、順序固定，避免 migration / write 對不齊。"""
+def test_v2_schema_has_12_cols_in_canonical_order():
+    """v18.153：ALL_COLS_V2 是 12 欄、加入 avg_nav_with_div（含息成本）。"""
     assert ALL_COLS_V2 == (
         "policy_id", "item_type", "fund_code", "fund_name",
-        "units", "avg_nav", "avg_fx", "currency", "tier",
-        "amount", "invest_twd",
+        "units", "avg_nav", "avg_nav_with_div", "avg_fx", "currency",
+        "tier", "amount", "invest_twd",
     )
     assert ITEM_TYPE_FUND == "fund"
     assert ITEM_TYPE_CASH == "cash"
+
+
+def test_v2_user_input_vs_auto_cols_disjoint_and_complete():
+    """v18.153：USER_INPUT_COLS + AUTO_COLS 應該覆蓋全 12 欄、互不重疊。"""
+    from repositories.policy_repository import USER_INPUT_COLS, AUTO_COLS
+    union = set(USER_INPUT_COLS) | set(AUTO_COLS)
+    intersection = set(USER_INPUT_COLS) & set(AUTO_COLS)
+    assert union == set(ALL_COLS_V2)
+    assert intersection == set()
+
+
+def test_v2_zh_headers_round_trip():
+    """v18.153：中英文 header 雙向 mapping 應一致。"""
+    from repositories.policy_repository import ZH_HEADERS_V2, EN_HEADERS_V2
+    assert set(ZH_HEADERS_V2.keys()) == set(ALL_COLS_V2)
+    for en, zh in ZH_HEADERS_V2.items():
+        assert EN_HEADERS_V2[zh] == en
+
+
+def test_compute_units_matches_official_formula():
+    """v18.153：units = invest_twd / (avg_nav × avg_fx) 對應對帳單公式(4)。"""
+    from repositories.policy_repository import compute_units
+    # 截圖實例：avg_nav=8.67, avg_fx=32.3485, invest_twd=499509 → units≈1781.025
+    u = compute_units(499509, 8.67, 32.3485)
+    assert abs(u - 1781.025) < 0.5
+
+
+def test_compute_units_zero_denominator_returns_zero():
+    from repositories.policy_repository import compute_units
+    assert compute_units(100000, 0, 30) == 0.0
+    assert compute_units(100000, 10, 0) == 0.0
+    assert compute_units(100000, -5, 30) == 0.0
+
+
+def test_normalize_header_to_en_translates_chinese():
+    from repositories.policy_repository import _normalize_header_to_en
+    assert _normalize_header_to_en("保單編號") == "policy_id"
+    assert _normalize_header_to_en("含息單位成本") == "含息單位成本"  # 認不出回原值
+    assert _normalize_header_to_en("policy_id") == "policy_id"
 
 
 def test_is_v2_worksheet_detects_item_type_header():
@@ -706,17 +745,18 @@ def test_load_policy_v2_returns_empty_when_v1_schema():
 
 
 def test_load_policy_v2_normalizes_numeric_fields():
-    """v2 worksheet → units/avg_nav/avg_fx/amount/invest_twd 都正規化。"""
+    """v2 worksheet (英文 header) → units/avg_nav/avg_fx/amount/invest_twd 都正規化。"""
     ws = MagicMock()
     ws.row_values.return_value = list(ALL_COLS_V2)
     ws.get_all_records.return_value = [
         {"policy_id": "p1", "item_type": "fund", "fund_code": "FIDXEQI",
          "fund_name": "富達世界", "units": "1234.5", "avg_nav": "12.345",
-         "avg_fx": "31.2", "currency": "USD", "tier": "core",
-         "amount": "", "invest_twd": "475,000"},
+         "avg_nav_with_div": "10.1", "avg_fx": "31.2", "currency": "USD",
+         "tier": "core", "amount": "", "invest_twd": "475,000"},
         {"policy_id": "p1", "item_type": "cash", "fund_code": "",
-         "fund_name": "", "units": "", "avg_nav": "", "avg_fx": "",
-         "currency": "TWD", "tier": "", "amount": "500000", "invest_twd": ""},
+         "fund_name": "", "units": "", "avg_nav": "", "avg_nav_with_div": "",
+         "avg_fx": "", "currency": "TWD", "tier": "", "amount": "500000",
+         "invest_twd": ""},
     ]
     sh = MagicMock(); sh.worksheet.return_value = ws
     client = MagicMock(); client.open_by_key.return_value = sh
@@ -724,13 +764,53 @@ def test_load_policy_v2_normalizes_numeric_fields():
     assert len(df) == 2
     assert df.iloc[0]["units"] == 1234.5
     assert df.iloc[0]["avg_nav"] == 12.345
+    assert df.iloc[0]["avg_nav_with_div"] == 10.1
     assert df.iloc[0]["invest_twd"] == 475000
     assert df.iloc[1]["item_type"] == "cash"
     assert df.iloc[1]["amount"] == 500000.0
 
 
-def test_write_policy_v2_writes_header_plus_rows_only_v2_cols():
-    """整 tab 覆寫：應寫 header + 兩列；多餘欄被丟、缺欄補空。"""
+def test_load_policy_v2_reads_chinese_headers():
+    """v18.153：worksheet 用中文 header 也要讀得進來、欄位名翻譯回英文。"""
+    from repositories.policy_repository import ZH_HEADERS_V2
+    ws = MagicMock()
+    ws.row_values.return_value = [ZH_HEADERS_V2[c] for c in ALL_COLS_V2]
+    # get_all_records 用中文 key
+    ws.get_all_records.return_value = [{
+        ZH_HEADERS_V2["policy_id"]: "p1",
+        ZH_HEADERS_V2["item_type"]: "fund",
+        ZH_HEADERS_V2["fund_code"]: "FIDXEQI",
+        ZH_HEADERS_V2["fund_name"]: "富達",
+        ZH_HEADERS_V2["units"]: "1781",
+        ZH_HEADERS_V2["avg_nav"]: "8.67",
+        ZH_HEADERS_V2["avg_nav_with_div"]: "6.97",
+        ZH_HEADERS_V2["avg_fx"]: "32.35",
+        ZH_HEADERS_V2["currency"]: "USD",
+        ZH_HEADERS_V2["tier"]: "core",
+        ZH_HEADERS_V2["amount"]: "",
+        ZH_HEADERS_V2["invest_twd"]: "499509",
+    }]
+    sh = MagicMock(); sh.worksheet.return_value = ws
+    client = MagicMock(); client.open_by_key.return_value = sh
+    df = load_policy_v2(client, "sid", "p1")
+    # df 欄位名應該被翻成英文
+    assert list(df.columns) == list(ALL_COLS_V2)
+    assert df.iloc[0]["policy_id"] == "p1"
+    assert df.iloc[0]["avg_nav_with_div"] == 6.97
+    assert df.iloc[0]["invest_twd"] == 499509
+
+
+def test_is_v2_worksheet_detects_zh_header():
+    """v18.153：含「類型」中文 header 也視為 v2。"""
+    from repositories.policy_repository import is_v2_worksheet, ZH_HEADERS_V2
+    ws = MagicMock()
+    ws.row_values.return_value = [ZH_HEADERS_V2[c] for c in ALL_COLS_V2]
+    assert is_v2_worksheet(ws) is True
+
+
+def test_write_policy_v2_writes_zh_header_plus_rows_only_v2_cols():
+    """v18.153：整 tab 覆寫 — header 列為 ZH 翻譯；fund + cash 各 1 列。"""
+    from repositories.policy_repository import ZH_HEADERS_V2
     ws = MagicMock()
     sh = MagicMock(); sh.worksheet.return_value = ws
     client = MagicMock(); client.open_by_key.return_value = sh
@@ -739,8 +819,9 @@ def test_write_policy_v2_writes_header_plus_rows_only_v2_cols():
     df = pd.DataFrame([
         {"policy_id": "p1", "item_type": ITEM_TYPE_FUND, "fund_code": "FIDXEQI",
          "fund_name": "富達世界", "units": 1234.5, "avg_nav": 12.345,
-         "avg_fx": 31.2, "currency": "USD", "tier": "core",
-         "amount": "", "invest_twd": 475000, "extra_garbage": "ignore me"},
+         "avg_nav_with_div": 10.1, "avg_fx": 31.2, "currency": "USD",
+         "tier": "core", "amount": "", "invest_twd": 475000,
+         "extra_garbage": "ignore me"},
         {"policy_id": "p1", "item_type": ITEM_TYPE_CASH, "currency": "TWD",
          "amount": 500000},
     ])
@@ -750,8 +831,8 @@ def test_write_policy_v2_writes_header_plus_rows_only_v2_cols():
     ws.update.assert_called_once()
     _addr, payload = ws.update.call_args.args
     assert _addr == "A1"
-    # header 是 ALL_COLS_V2
-    assert payload[0] == list(ALL_COLS_V2)
+    # header 是中文（雙向翻譯層）
+    assert payload[0] == [ZH_HEADERS_V2[c] for c in ALL_COLS_V2]
     # 兩列：fund + cash
     assert len(payload) == 3
     # extra_garbage 被丟掉
