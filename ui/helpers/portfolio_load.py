@@ -57,24 +57,26 @@ def batch_load_unloaded_funds() -> None:
         pass   # noqa: smoke-allow-pass — clear 失敗不擋 loading
 
     # Step 1: 抓每個 unique code
+    # v18.156: 不能用 st.status — 它本質是 expander，本 helper 會被
+    # tab3「🗂️ 保單分組視圖」expander 內按鈕呼叫，巢狀違規會 crash。
+    # 改用 st.empty placeholder（label）+ st.progress + st.write log 平面組合。
     from fund_fetcher import fetch_fund_from_moneydj_url
     code_cache: dict = {}
     n_uniq = len(uniq_codes_load)
-    with st.status(f"📡 開始載入 {n_uniq} 個 unique codes（每檔約 30s）...",
-                    expanded=True) as ld_status:
-        ld_prog = st.progress(0.0)
-        for cnt_c, code in enumerate(uniq_codes_load):
-            ld_status.update(label=f"📡 載入 {code} ({cnt_c+1}/{n_uniq})")
-            try:
-                code_cache[code] = fetch_fund_from_moneydj_url(code)
-                _nm_ok = (code_cache[code].get("fund_name") or "")[:18]
-                st.write(f"✅ `{code}` {_nm_ok}")
-            except Exception as _le:
-                code_cache[code] = {"error": str(_le)[:80]}
-                st.write(f"❌ `{code}` 失敗：{str(_le)[:80]}")
-            ld_prog.progress((cnt_c + 1) / n_uniq)
-        ld_status.update(label=f"✅ 完成 — 抓到 {n_uniq} 個 unique codes",
-                          state="complete", expanded=False)
+    ld_label = st.empty()
+    ld_label.info(f"📡 開始載入 {n_uniq} 個 unique codes（每檔約 30s）...")
+    ld_prog = st.progress(0.0)
+    for cnt_c, code in enumerate(uniq_codes_load):
+        ld_label.info(f"📡 載入 {code} ({cnt_c+1}/{n_uniq})")
+        try:
+            code_cache[code] = fetch_fund_from_moneydj_url(code)
+            _nm_ok = (code_cache[code].get("fund_name") or "")[:18]
+            st.write(f"✅ `{code}` {_nm_ok}")
+        except Exception as _le:
+            code_cache[code] = {"error": str(_le)[:80]}
+            st.write(f"❌ `{code}` 失敗：{str(_le)[:80]}")
+        ld_prog.progress((cnt_c + 1) / n_uniq)
+    ld_label.success(f"✅ 完成 — 抓到 {n_uniq} 個 unique codes")
 
     # Step 2: broadcast 給每個 pf entry
     from ui.helpers.session import is_core_fund as _is_core
