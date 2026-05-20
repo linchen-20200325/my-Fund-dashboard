@@ -173,6 +173,14 @@
   - T7 模組（`tab3_t7_ledger.py`）開頭加紅字 banner：v2 下 T7 為純模擬器，真實加碼/贖回請至 v2 編輯介面或直接改 Sheet
   - 新增單元測試 `test_v2_editor.py`（split / merge / round-trip / drop empty rows，共 +8 測試，PR A 64 + PR B 8 = **72/72 pass**）
   - 注：本 PR 不動 v1 路徑、不切換「📦 全部寫入/讀回」主路徑（留 PR C）
+- [x] **PR B.2 v18.152 Google Sheets 429 quota 退避 + 60s cache + 友善訊息** — 修補 v2 編輯介面進場一次 1+2N reads 爆配額的 bug
+  - `repositories/policy_repository.py` 加 `_QUOTA_BACKOFFS` + `_is_quota_error` + `_with_quota_retry`（與 `snapshot_repository` 一致，1s→2s→4s→8s 共 4 次）
+  - `list_policy_worksheets` / `is_v2_worksheet` / `detect_sheet_schema_version` / `load_policy_v2` / `write_policy_v2` / `load_all_policies_v2` 全部包 `_with_quota_retry`
+  - `ui/helpers/v2_editor.py` 加 `st.cache_data(ttl=60)` wrapper：`_cached_list_policies` / `_cached_load_policy_v2`（client 用 `_client` 底線前綴避 hash），寫入/刪除/重讀後 `_invalidate_cache(sheet_id)`
+  - 友善 429 訊息 `_show_quota_friendly()`：偵測「Quota exceeded / RATE_LIMIT / 429」→ 改顯示「⏳ Google Sheets API 配額暫時超載...請等 30-60 秒再點任何按鈕重整」，並加 `[🔄 重試（清快取）]` 按鈕
+  - 單元測試 +4 個：`test_is_quota_error_detects_common_signatures` / `test_with_quota_retry_eventually_succeeds` / `test_with_quota_retry_non_quota_error_raised_immediately` / `test_with_quota_retry_persistent_429_eventually_raises`
+  - 總計 PR A 64 + PR B 8 + PR B.1 6 + PR B.2 4 = **82/82 pass**
+
 - [x] **PR B.1 v18.151 載入按鈕上移 + 未綁基金快捷** — 反映「載入按鈕滾不到」與「未綁保單意思不清」用戶反饋
   - 抽 `ui/helpers/portfolio_load.py`：`count_unloaded_funds()` + `batch_load_unloaded_funds()`（從原 `tab3_portfolio.py:1656` ~70 行 fetch 邏輯整塊抽出）
   - 「🗂️ 保單分組視圖」expander 頂部加 prominent `[📡 載入未載入基金（N 條 / M unique code）]` 按鈕 — user 不用滾到底

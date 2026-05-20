@@ -58,6 +58,36 @@ class PolicySheetError(Exception):
     """所有 policy_store 對外丟出的錯誤都用這個 class。"""
 
 
+# v18.152：Google Sheets API 429 配額退避（與 snapshot_repository 一致）
+# 每 user 每分鐘 60 reads，v2 編輯介面進場一次就 1 + 2N reads（N=保單數），
+# 容易爆配額。本層所有 gspread 呼叫應走 _with_quota_retry。
+_QUOTA_BACKOFFS: tuple[float, ...] = (1.0, 2.0, 4.0, 8.0)
+
+
+def _is_quota_error(exc: BaseException) -> bool:
+    """偵測 gspread 429 / RESOURCE_EXHAUSTED；不依賴 gspread.exceptions 細節容版差。"""
+    msg = str(exc)
+    return ("429" in msg or "Quota exceeded" in msg or "RATE_LIMIT" in msg
+            or "RESOURCE_EXHAUSTED" in msg)
+
+
+def _with_quota_retry(call, *args, **kwargs):
+    """包裝 gspread 呼叫：遇 429 退避重試；非配額錯誤立即拋。"""
+    import time as _t
+    last_err: BaseException | None = None
+    for attempt, delay in enumerate(_QUOTA_BACKOFFS):
+        try:
+            return call(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001 — gspread 例外類型隨版本變
+            last_err = e
+            is_last = attempt == len(_QUOTA_BACKOFFS) - 1
+            if not _is_quota_error(e) or is_last:
+                raise
+            _t.sleep(delay)
+    if last_err is not None:
+        raise last_err
+
+
 # ──────────────────────────────────────────────────────────────────────
 # 連線：lazy import，避免測試環境/未安裝套件時 import 失敗
 # ──────────────────────────────────────────────────────────────────────
@@ -396,8 +426,8 @@ def _sanitize_tab_name(policy_id: str) -> str:
 def list_policy_worksheets(client: Any, sheet_id: str) -> list[str]:
     """回傳所有保單 tab 名（過濾掉 _ 開頭的系統 tab，如 _Ledgers）。"""
     try:
-        sh = client.open_by_key(sheet_id)
-        names = [ws.title for ws in sh.worksheets()]
+        sh = _with_quota_retry(client.open_by_key, sheet_id)
+        names = [ws.title for ws in _with_quota_retry(sh.worksheets)]
     except Exception as e:
         raise PolicySheetError(f"列 worksheets 失敗：{e}") from e
     return [n for n in names
@@ -743,9 +773,10 @@ def is_v2_worksheet(ws: Any) -> bool:
 
     duck-typed 對 ws：只要 `row_values(1)` 可呼叫即可，方便 MagicMock 測試。
     讀檔失敗或無 header 列一律回 False（讓 caller 走 v1 路徑安全 fallback）。
+    v18.152：包 `_with_quota_retry` 因 429 不該誤判 v1。
     """
     try:
-        header = ws.row_values(1) or []
+        header = _with_quota_retry(ws.row_values, 1) or []
     except Exception:
         return False
     return "item_type" in [str(c).strip() for c in header]
@@ -759,8 +790,8 @@ def detect_sheet_schema_version(client: Any, sheet_id: str) -> str:
     - 否則 → "v1"（舊 schema 待升級）
     """
     try:
-        sh = client.open_by_key(sheet_id)
-        tabs = [ws for ws in sh.worksheets()
+        sh = _with_quota_retry(client.open_by_key, sheet_id)
+        tabs = [ws for ws in _with_quota_retry(sh.worksheets)
                 if not ws.title.startswith("_") and ws.title != DEFAULT_WORKSHEET]
     except Exception as e:
         raise PolicySheetError(f"開啟 Sheet 失敗：{e}") from e
@@ -794,15 +825,15 @@ def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
     """
     empty = pd.DataFrame(columns=list(ALL_COLS_V2))
     try:
-        sh = client.open_by_key(sheet_id)
+        sh = _with_quota_retry(client.open_by_key, sheet_id)
         title = _sanitize_tab_name(policy_id)
         try:
-            ws = sh.worksheet(title)
+            ws = _with_quota_retry(sh.worksheet, title)
         except Exception:
             return empty
         if not is_v2_worksheet(ws):
             return empty
-        rows = ws.get_all_records() or []
+        rows = _with_quota_retry(ws.get_all_records) or []
     except Exception as e:
         raise PolicySheetError(f"讀取 v2 保單分頁失敗：{e}") from e
     if not rows:
@@ -829,13 +860,15 @@ def write_policy_v2(
     回傳寫入列數（不含 header）。
     """
     try:
-        sh = client.open_by_key(sheet_id)
+        sh = _with_quota_retry(client.open_by_key, sheet_id)
         title = _sanitize_tab_name(policy_id)
         try:
-            ws = sh.worksheet(title)
+            ws = _with_quota_retry(sh.worksheet, title)
         except Exception:
-            ws = sh.add_worksheet(title=title, rows=max(len(df) + 5, 20),
-                                  cols=len(ALL_COLS_V2) + 2)
+            ws = _with_quota_retry(
+                sh.add_worksheet, title=title,
+                rows=max(len(df) + 5, 20),
+                cols=len(ALL_COLS_V2) + 2)
     except Exception as e:
         raise PolicySheetError(f"開啟/建立保單分頁失敗：{e}") from e
 
@@ -869,8 +902,8 @@ def write_policy_v2(
             r.get("invest_twd", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
         ])
     try:
-        ws.clear()
-        ws.update("A1", rows_out)
+        _with_quota_retry(ws.clear)
+        _with_quota_retry(ws.update, "A1", rows_out)
     except Exception as e:
         raise PolicySheetError(f"寫入 v2 保單分頁失敗：{e}") from e
     return len(rows_out) - 1
@@ -883,8 +916,8 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
     判斷整本狀態並引導升級）。
     """
     try:
-        sh = client.open_by_key(sheet_id)
-        tabs = [ws for ws in sh.worksheets()
+        sh = _with_quota_retry(client.open_by_key, sheet_id)
+        tabs = [ws for ws in _with_quota_retry(sh.worksheets)
                 if not ws.title.startswith("_") and ws.title != DEFAULT_WORKSHEET]
     except Exception as e:
         raise PolicySheetError(f"列保單分頁失敗：{e}") from e
@@ -893,7 +926,7 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         if not is_v2_worksheet(ws):
             continue
         try:
-            rows = ws.get_all_records() or []
+            rows = _with_quota_retry(ws.get_all_records) or []
         except Exception:
             continue
         if not rows:
