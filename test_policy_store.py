@@ -572,25 +572,32 @@ def test_create_dashboard_sheet_raises_on_failure():
         create_dashboard_sheet(client, "x")
 
 
+def _mock_drive_v3_response(files: list[dict]):
+    """v18.155：mock Drive v3 list response（client.http_client.request 用）。"""
+    resp = MagicMock()
+    resp.json.return_value = {"files": files, "nextPageToken": None}
+    return resp
+
+
 def test_list_user_sheets_sorts_by_name():
     client = MagicMock()
-    client.list_spreadsheet_files.return_value = [
+    client.http_client.request.return_value = _mock_drive_v3_response([
         {"id": "ID_B", "name": "Zebra Sheet"},
         {"id": "ID_A", "name": "alpha Sheet"},
         {"id": "ID_C", "name": "Mid Sheet"},
-    ]
+    ])
     out = list_user_sheets(client)
     assert [f["id"] for f in out] == ["ID_A", "ID_C", "ID_B"]
 
 
 def test_list_user_sheets_handles_missing_fields():
     client = MagicMock()
-    client.list_spreadsheet_files.return_value = [
+    client.http_client.request.return_value = _mock_drive_v3_response([
         {"id": "OK", "name": "Valid"},
         {"id": "NoName"},        # 缺 name → 跳過
         {"name": "NoId"},         # 缺 id → 跳過
-        {},                        # 空 → 跳過
-    ]
+        {},                       # 空 → 跳過
+    ])
     out = list_user_sheets(client)
     assert len(out) == 1
     assert out[0]["id"] == "OK"
@@ -598,9 +605,33 @@ def test_list_user_sheets_handles_missing_fields():
 
 def test_list_user_sheets_raises_on_api_error():
     client = MagicMock()
-    client.list_spreadsheet_files.side_effect = Exception("403 insufficient scopes")
+    client.http_client.request.side_effect = Exception("403 insufficient scopes")
     with pytest.raises(PolicySheetError, match="列出 Drive Sheets 失敗"):
         list_user_sheets(client)
+
+
+def test_list_user_sheets_filters_trashed_via_query():
+    """v18.155：Drive v3 query 帶 `trashed=false` → 已刪除 sheets 不會出現。"""
+    client = MagicMock()
+    client.http_client.request.return_value = _mock_drive_v3_response([
+        {"id": "Live", "name": "Active sheet"},
+    ])
+    list_user_sheets(client)
+    # 檢查呼叫時 q 參數有 trashed=false
+    _call_args = client.http_client.request.call_args
+    q_param = _call_args.kwargs["params"]["q"]
+    assert "trashed=false" in q_param
+    assert 'mimeType="application/vnd.google-apps.spreadsheet"' in q_param
+
+
+def test_list_user_sheets_folder_id_adds_parents_filter():
+    """v18.155：folder_id 非空 → q 帶 `'FOLDER_ID' in parents`。"""
+    client = MagicMock()
+    client.http_client.request.return_value = _mock_drive_v3_response([])
+    list_user_sheets(client, folder_id="MY_FOLDER")
+    _call_args = client.http_client.request.call_args
+    q_param = _call_args.kwargs["params"]["q"]
+    assert '"MY_FOLDER" in parents' in q_param
 
 
 def test_create_dashboard_sheet_raises_when_id_missing():

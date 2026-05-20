@@ -173,6 +173,14 @@
   - T7 模組（`tab3_t7_ledger.py`）開頭加紅字 banner：v2 下 T7 為純模擬器，真實加碼/贖回請至 v2 編輯介面或直接改 Sheet
   - 新增單元測試 `test_v2_editor.py`（split / merge / round-trip / drop empty rows，共 +8 測試，PR A 64 + PR B 8 = **72/72 pass**）
   - 注：本 PR 不動 v1 路徑、不切換「📦 全部寫入/讀回」主路徑（留 PR C）
+- [x] **PR B.5 v18.155 Drive Sheets 列表過濾已刪除** — user 反饋下拉清單出現重複 / 殭屍項目（已刪除的、舊備份等都在）
+  - `list_user_sheets` 從 gspread `list_spreadsheet_files()` 改成自己打 Drive v3 API（mirror `list_user_folders` pattern）
+  - 加 `trashed=false` 過濾，再加 `mimeType="...spreadsheet"` 過濾
+  - 支援 paging（`nextPageToken`）與 shared drives（`supportsAllDrives` / `includeItemsFromAllDrives`）
+  - folder_id 非空 → 加 `'FOLDER_ID' in parents` 縮限
+  - 測試 +2（filter_trashed_via_query / folder_id_adds_parents_filter）+ 3 個 existing 改 mock `http_client.request`
+  - 91/91 pass
+
 - [x] **PR B.4 v18.154 T7「編輯持倉」對齊新 schema** — user 反饋這頁仍要 user 填 `持有單位數`，與「units 系統自動算」設計矛盾
   - `ui/tab3_t7_ledger.py:537` 表單欄位 4 → 5：
     - 砍 `持有單位數` 輸入 → 改 read-only `st.caption` 顯示 `compute_units` 自動算的結果
