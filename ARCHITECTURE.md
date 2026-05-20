@@ -741,6 +741,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.151 / 2026-05-20 (PR B.1)** — 載入按鈕上移 + 未綁基金快捷。`ui/helpers/portfolio_load.py` 把 `tab3_portfolio.py:1656` 原本散在 batch-add 表單下方的 ~70 行 fetch 邏輯抽出（含 cache clear / dedupe / status+progress / broadcast / errors），改為 `count_unloaded_funds()` + `batch_load_unloaded_funds()` 兩個 module-level helper。「🗂️ 保單分組視圖」expander 頂部加 prominent 載入按鈕（user 不用滾到底）；「📂 未分組基金」區塊加 inline `[📡 載入這 N 檔]` 與 v2 用戶獨享的 `[🔗 綁到保單 ▾]` selectbox（一鍵 set `policy_id`）。
 
+> 🆕 **v18.152 / 2026-05-20 (PR B.2)** — Google Sheets 429 quota 退避 + 60s cache + 友善訊息。`repositories/policy_repository.py` 加 `_QUOTA_BACKOFFS` / `_is_quota_error` / `_with_quota_retry`（與 `snapshot_repository` 一致，1s→2s→4s→8s 共 4 次），所有 v2 read/write 函式包進去。`ui/helpers/v2_editor.py` 加 `st.cache_data(ttl=60)` wrapper（`_cached_list_policies` / `_cached_load_policy_v2`），client 參數用 `_client` 底線前綴避 Streamlit hash；寫入/刪除/重讀後 `_invalidate_cache(sheet_id)`。`_show_quota_friendly()` 偵測 429 → 顯示「⏳ Google Sheets API 配額暫時超載...請等 30-60 秒」與重試按鈕，取代 raw stack trace。
+
 ---
 
 ## §6 Session State Schema（v10.0）

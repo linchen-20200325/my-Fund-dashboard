@@ -109,13 +109,52 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame, cash_df: pd.DataFram
     return pd.DataFrame(rows, columns=list(ALL_COLS_V2))
 
 
+def _is_quota_msg(e: Exception) -> bool:
+    """v18.152: 偵測 Google Sheets 429 quota，給 friendly UI 訊息用。"""
+    m = str(e)
+    return ("429" in m or "Quota exceeded" in m
+            or "RATE_LIMIT" in m or "RESOURCE_EXHAUSTED" in m)
+
+
+def _show_quota_friendly(prefix: str, e: Exception) -> None:
+    """v18.152: 把 raw API 例外換成中文友善訊息。"""
+    if _is_quota_msg(e):
+        st.warning(
+            f"⏳ {prefix}：Google Sheets API 配額暫時超載"
+            "（每 user 每分鐘 60 reads 上限）。"
+            "請等 30-60 秒再點頁面任何按鈕重整（已內建退避重試，仍可能需要稍候）。"
+        )
+    else:
+        st.error(f"❌ {prefix}：{e}")
+
+
+# v18.152：Streamlit cache wrapper — 同一 (sheet_id, policy_id) 60 秒內只打一次 API
+# 避免 Tab3 反覆 rerun（任何 button 點擊）都重新 list+load 整個帳本爆 quota。
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_load_policy_v2(_client: Any, sheet_id: str, policy_id: str):
+    """`_client` 前綴底線 → Streamlit 不對 client object 計 hash。"""
+    return load_policy_v2(_client, sheet_id, policy_id)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_list_policies(_client: Any, sheet_id: str):
+    from repositories.policy_repository import list_policy_worksheets as _lpw
+    return _lpw(_client, sheet_id)
+
+
+def _invalidate_cache(sheet_id: str, policy_id: str | None = None) -> None:
+    """寫入後 / user 主動 reload 時清快取。policy_id None → 清整本。"""
+    _cached_list_policies.clear()
+    _cached_load_policy_v2.clear()
+
+
 def _load_policy_into_buf(client: Any, sheet_id: str, policy_id: str) -> None:
-    """從雲端讀單張保單 v2 資料進 buf。"""
+    """從雲端讀單張保單 v2 資料進 buf；走 60s cache 避免 429。"""
     buf = _ensure_buf()
     try:
-        df = load_policy_v2(client, sheet_id, policy_id)
+        df = _cached_load_policy_v2(client, sheet_id, policy_id)
     except PolicySheetError as e:
-        st.error(f"❌ 讀「{policy_id}」失敗：{e}")
+        _show_quota_friendly(f"讀「{policy_id}」失敗", e)
         return
     fund_df, cash_df = _split_policy_df(df)
     buf[policy_id] = {"fund": fund_df, "cash": cash_df, "dirty": False}
@@ -137,11 +176,14 @@ def render_v2_section(client: Any, sheet_id: str) -> None:
         "T7 模擬器**不會寫回**，真實加碼/贖回請在此編輯或直接改 Sheet。"
     )
 
-    # 列保單
+    # 列保單（v18.152：走 60s cache）
     try:
-        policy_ids = list_policy_worksheets(client, sheet_id)
+        policy_ids = _cached_list_policies(client, sheet_id)
     except PolicySheetError as e:
-        st.error(f"❌ 列保單分頁失敗：{e}")
+        _show_quota_friendly("列保單分頁失敗", e)
+        if st.button("🔄 重試（清快取）", key="btn_retry_list_v2"):
+            _invalidate_cache(sheet_id)
+            st.rerun()
         return
 
     # session_state buf：新 sheet 或還沒讀過 → 全部 lazy load
@@ -238,15 +280,17 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
                 buf = _ensure_buf()
                 buf.setdefault(policy_id, {})["dirty"] = False
                 st.success(f"✅ 已存 {n} 列到雲端")
-                # 重讀以對齊雲端
+                # v18.152：寫入後清 cache，重讀拿雲端最新
+                _invalidate_cache(sheet_id, policy_id)
                 _load_policy_into_buf(client, sheet_id, policy_id)
                 st.rerun()
             except PolicySheetError as e:
-                st.error(f"❌ 存檔失敗：{e}")
+                _show_quota_friendly("存檔失敗", e)
 
         if _bc2.button(f"📥 重新讀回", key=f"btn_reload_{policy_id}",
                         use_container_width=True,
                         help="丟棄本地未存的改動，從雲端讀最新"):
+            _invalidate_cache(sheet_id, policy_id)
             _load_policy_into_buf(client, sheet_id, policy_id)
             st.rerun()
 
@@ -264,11 +308,12 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
                     delete_policy_worksheet(client, sheet_id, policy_id)
                     buf = _ensure_buf()
                     buf.pop(policy_id, None)
+                    _invalidate_cache(sheet_id)
                     st.session_state.pop(f"_confirm_del_{policy_id}", None)
                     st.success(f"✅ 已刪除「{policy_id}」")
                     st.rerun()
                 except PolicySheetError as e:
-                    st.error(f"❌ 刪除失敗：{e}")
+                    _show_quota_friendly("刪除失敗", e)
             if _dc2.button("取消", key=f"btn_del_no_{policy_id}",
                             use_container_width=True):
                 st.session_state.pop(f"_confirm_del_{policy_id}", None)
@@ -298,12 +343,13 @@ def _render_new_policy_section(client: Any, sheet_id: str) -> None:
             empty_df = pd.DataFrame(columns=list(ALL_COLS_V2))
             write_policy_v2(client, sheet_id, sanitized, empty_df)
             st.success(f"✅ 已建立保單「{sanitized}」")
+            _invalidate_cache(sheet_id)
             _load_policy_into_buf(client, sheet_id, sanitized)
             # 清掉 input
             st.session_state.pop("v2_new_policy_name", None)
             st.rerun()
         except PolicySheetError as e:
-            st.error(f"❌ 建立失敗：{e}")
+            _show_quota_friendly("建立失敗", e)
 
 
 # ════════════════════════════════════════════════════════════
@@ -385,6 +431,7 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
             df = pd.DataFrame(rows, columns=list(ALL_COLS_V2))
             write_policy_v2(client, sheet_id, sanitized, df)
             st.success(f"✅ 已建立保單「{sanitized}」+ {len(rows)} 列資料")
+            _invalidate_cache(sheet_id)
             st.session_state.pop("_v2_show_wizard", None)
             # 清 wizard inputs
             for k in ("wiz_pid", "wiz_fcode", "wiz_fname", "wiz_units",
@@ -394,7 +441,7 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
             st.session_state.pop(_KEY_V2_LOADED, None)
             st.rerun()
         except PolicySheetError as e:
-            st.error(f"❌ 建立失敗：{e}")
+            _show_quota_friendly("建立失敗", e)
 
     if _ok2.button("取消（回主畫面）", key="btn_wiz_cancel",
                     use_container_width=True):

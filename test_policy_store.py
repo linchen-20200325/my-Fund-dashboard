@@ -840,3 +840,59 @@ def test_copy_sheet_as_backup_raises_on_failure():
 
     with pytest.raises(PolicySheetError, match="備份 Sheet 失敗"):
         copy_sheet_as_backup(client, "any-id")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v18.152 — Quota 429 退避重試
+# ══════════════════════════════════════════════════════════════════════
+def test_is_quota_error_detects_common_signatures():
+    from repositories.policy_repository import _is_quota_error
+    assert _is_quota_error(Exception("APIError: [429]: Quota exceeded"))
+    assert _is_quota_error(Exception("RATE_LIMIT_EXCEEDED"))
+    assert _is_quota_error(Exception("RESOURCE_EXHAUSTED"))
+    assert not _is_quota_error(Exception("404 not found"))
+    assert not _is_quota_error(Exception("permission denied"))
+
+
+def test_with_quota_retry_eventually_succeeds(monkeypatch):
+    """429 失敗兩次後第三次成功 → 回 result，不拋。"""
+    import repositories.policy_repository as _pr
+    # 避開實際 sleep
+    monkeypatch.setattr("time.sleep", lambda *_a, **_k: None)
+
+    calls = {"n": 0}
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise Exception("APIError: [429] Quota exceeded")
+        return "OK"
+    assert _pr._with_quota_retry(flaky) == "OK"
+    assert calls["n"] == 3
+
+
+def test_with_quota_retry_non_quota_error_raised_immediately(monkeypatch):
+    """非 429 錯誤 → 不重試，立刻 raise。"""
+    import repositories.policy_repository as _pr
+    monkeypatch.setattr("time.sleep", lambda *_a, **_k: None)
+
+    calls = {"n": 0}
+    def boom():
+        calls["n"] += 1
+        raise ValueError("not quota")
+    with pytest.raises(ValueError, match="not quota"):
+        _pr._with_quota_retry(boom)
+    assert calls["n"] == 1   # 沒重試
+
+
+def test_with_quota_retry_persistent_429_eventually_raises(monkeypatch):
+    """連續 4 次都 429 → 最後一次拋出。"""
+    import repositories.policy_repository as _pr
+    monkeypatch.setattr("time.sleep", lambda *_a, **_k: None)
+
+    calls = {"n": 0}
+    def always_quota():
+        calls["n"] += 1
+        raise Exception("429 Quota exceeded")
+    with pytest.raises(Exception, match="Quota exceeded"):
+        _pr._with_quota_retry(always_quota)
+    assert calls["n"] == 4   # 4 次都試過
