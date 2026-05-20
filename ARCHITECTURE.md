@@ -739,6 +739,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.150 / 2026-05-20 (PR B)** — v2 native 編輯 UI 上線。新模組 `ui/helpers/v2_editor.py` 提供 `render_v2_section(client, sheet_id)`：偵測 v2 schema 時自動接管編輯路徑；每張保單一個 expander 區塊內含 fund / cash 兩個 `st.data_editor`（dynamic rows）+ 個別 [💾 存到雲端] 按鈕（dirty tracking、推 `write_policy_v2`）。Empty sheet 顯示「🚀 第一次使用」按鈕跳 3-step wizard（保單名 + 第一檔基金 + 現金可跳過）。T7 模組 `tab3_t7_ledger.py` 開頭偵測 v2 → 紅字 banner 提示「T7 為純模擬器、真實加碼/贖回請至 v2 編輯介面或直接改 Sheet」。本 PR 不動 v1 路徑、不切換「📦 全部寫入/讀回」主路徑（留 PR C）。
 
+> 🆕 **v18.151 / 2026-05-20 (PR B.1)** — 載入按鈕上移 + 未綁基金快捷。`ui/helpers/portfolio_load.py` 把 `tab3_portfolio.py:1656` 原本散在 batch-add 表單下方的 ~70 行 fetch 邏輯抽出（含 cache clear / dedupe / status+progress / broadcast / errors），改為 `count_unloaded_funds()` + `batch_load_unloaded_funds()` 兩個 module-level helper。「🗂️ 保單分組視圖」expander 頂部加 prominent 載入按鈕（user 不用滾到底）；「📂 未分組基金」區塊加 inline `[📡 載入這 N 檔]` 與 v2 用戶獨享的 `[🔗 綁到保單 ▾]` selectbox（一鍵 set `policy_id`）。
+
 ---
 
 ## §6 Session State Schema（v10.0）
