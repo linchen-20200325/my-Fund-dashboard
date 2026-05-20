@@ -173,6 +173,15 @@
   - T7 模組（`tab3_t7_ledger.py`）開頭加紅字 banner：v2 下 T7 為純模擬器，真實加碼/贖回請至 v2 編輯介面或直接改 Sheet
   - 新增單元測試 `test_v2_editor.py`（split / merge / round-trip / drop empty rows，共 +8 測試，PR A 64 + PR B 8 = **72/72 pass**）
   - 注：本 PR 不動 v1 路徑、不切換「📦 全部寫入/讀回」主路徑（留 PR C）
+- [x] **PR B.1 v18.151 載入按鈕上移 + 未綁基金快捷** — 反映「載入按鈕滾不到」與「未綁保單意思不清」用戶反饋
+  - 抽 `ui/helpers/portfolio_load.py`：`count_unloaded_funds()` + `batch_load_unloaded_funds()`（從原 `tab3_portfolio.py:1656` ~70 行 fetch 邏輯整塊抽出）
+  - 「🗂️ 保單分組視圖」expander 頂部加 prominent `[📡 載入未載入基金（N 條 / M unique code）]` 按鈕 — user 不用滾到底
+  - 「📂 未分組基金」區塊加 inline 提示「⚠️ 你有 N 檔未綁保單」+ 兩個快捷按鈕：
+    - `[📡 載入這 N 檔]`（同效，就近點）
+    - v2 用戶獨享：`[🔗 綁到保單 ▾]` selectbox → 一鍵把所有未綁基金 set `policy_id`
+  - 原 `tab3_portfolio.py:1656` 那段 fetch 邏輯改 1 行 call helper
+  - 單元測試 `test_portfolio_load.py` 6 個（empty / all loaded / mixed / dedupe / drop empty code / missing session_state）
+  - 總計 PR A 64 + PR B 8 + PR B.1 6 = **78/78 pass**
 - [ ] **PR C**（下一輪）「📦 全部寫入/讀回」切換到 v2 主路徑（v2 sheet 自動走 v2）
 - [ ] **PR D**（之後）移除舊 `_T7_State` / `_Ledgers` tab 寫入路徑 + 文件 cleanup
 

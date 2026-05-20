@@ -1037,6 +1037,23 @@ def render_portfolio_tab() -> None:
         _pol_funds = [f for f in st.session_state.portfolio_funds if f.get("policy_id")]
         _ungrouped = [f for f in st.session_state.portfolio_funds if not f.get("policy_id")]
 
+        # v18.151: 頂部捷徑 — 有未載入基金時直接顯示載入按鈕，避免使用者滾不下去找
+        from ui.helpers.portfolio_load import (
+            batch_load_unloaded_funds as _batch_load_top,
+            count_unloaded_funds as _count_unloaded_top,
+        )
+        _n_ent_top, _n_uniq_top = _count_unloaded_top()
+        if _n_ent_top > 0:
+            _top_label = (
+                f"📡 載入未載入基金（{_n_ent_top} 條"
+                + (f" / {_n_uniq_top} unique code" if _n_uniq_top != _n_ent_top else "")
+                + "）— 抓即時 NAV / 績效"
+            )
+            if st.button(_top_label, type="primary",
+                          key="btn_pf_load_all_top",
+                          use_container_width=True):
+                _batch_load_top()
+
         if not _pol_funds and not _ungrouped:
             st.info("尚未載入任何基金。設定 Google Sheets 後按「📡 從 Sheet 同步」即可帶入保單分組。")
         else:
@@ -1224,6 +1241,54 @@ def render_portfolio_tab() -> None:
                     unsafe_allow_html=True)
                 for _f in _ungrouped:
                     st.caption(f"• {_f.get('code','?')} — {_f.get('name','') or '尚未載入'}")
+                # v18.151: 「未綁保單」inline 快捷 — 載入這些 + 綁到保單下拉
+                st.caption(
+                    f"⚠️ 你有 **{len(_ungrouped)} 檔未綁保單**（這些基金不在任何保單分頁內）。"
+                )
+                _ug_c1, _ug_c2 = st.columns([2, 3])
+                # 載入這些（會等同上方主按鈕，只是顯眼快捷）
+                _ug_not_loaded = [_g for _g in _ungrouped if not _g.get("loaded")]
+                if _ug_not_loaded:
+                    if _ug_c1.button(f"📡 載入這 {len(_ug_not_loaded)} 檔",
+                                       key="btn_load_ungrouped",
+                                       use_container_width=True,
+                                       help="跟頂部「載入未載入基金」同效果，方便就近點"):
+                        from ui.helpers.portfolio_load import batch_load_unloaded_funds as _bl_ug
+                        _bl_ug()
+                # 綁到既有保單（OAuth + 已升 v2 時才顯示，避免複雜化）
+                if _oauth_configured and _sheet_id and \
+                   st.session_state.get("_schema_ver") == "v2":
+                    try:
+                        from repositories.policy_repository import list_policy_worksheets as _lpw
+                        _existing_pids = _lpw(_get_oauth_client(), _sheet_id)
+                    except Exception:
+                        _existing_pids = []
+                    if _existing_pids:
+                        with _ug_c2:
+                            _bind_pid = st.selectbox(
+                                "🔗 綁到保單", ["（先選保單）"] + list(_existing_pids),
+                                key="sel_bind_policy_ungrouped",
+                                label_visibility="collapsed")
+                            if _bind_pid and _bind_pid != "（先選保單）":
+                                if st.button(f"✅ 套用：把這 {len(_ungrouped)} 檔綁到「{_bind_pid}」",
+                                              key="btn_apply_bind_pid",
+                                              use_container_width=True):
+                                    # 把所有未綁基金都設 policy_id
+                                    _cnt = 0
+                                    for _idx, _ff in enumerate(st.session_state.portfolio_funds):
+                                        if not _ff.get("policy_id"):
+                                            st.session_state.portfolio_funds[_idx]["policy_id"] = _bind_pid
+                                            _cnt += 1
+                                    st.success(
+                                        f"✅ 已把 {_cnt} 檔綁到「{_bind_pid}」（仍須到「✨ v2 編輯介面」"
+                                        f"填 units/avg_nav/avg_fx 後 [💾 存到雲端] 才會推 Google Sheet）"
+                                    )
+                                    st.rerun()
+                else:
+                    _ug_c2.caption(
+                        "💡 升級到 v2 後可用「🔗 綁到保單」下拉，"
+                        "或到「✨ v2 編輯介面」手動加列。"
+                    )
 
     # ── v18.46 緊湊歡迎條（單列三步驟，不再佔大面積）────────────────────
     _pf_loaded = [f for f in st.session_state.portfolio_funds if f.get("loaded")]
@@ -1640,75 +1705,21 @@ def render_portfolio_tab() -> None:
     if not pf:
         st.info("💡 請在上方輸入基金代碼加入，支援多檔同時比較")
     else:
-        # 批次載入按鈕
+        # 批次載入按鈕（v18.151：邏輯抽到 ui/helpers/portfolio_load.py）
         not_loaded = [i for i, f in enumerate(pf) if not f.get("loaded")]
         if not_loaded:
-            # v18.58: 同 code 跨多保單只 fetch 一次 — 先 dedupe，再 broadcast 給 N 個 pf_item
-            _uniq_codes_load = sorted({
-                str(st.session_state.portfolio_funds[i].get("code","")).strip()
-                for i in not_loaded
-            } - {""})
+            from ui.helpers.portfolio_load import (
+                batch_load_unloaded_funds as _batch_load,
+                count_unloaded_funds as _count_unloaded,
+            )
+            _n_ent, _n_uniq = _count_unloaded()
             _btn_label = (
-                f"📡 載入所有未載入基金（{len(not_loaded)} 條 entry"
-                + (f" / {len(_uniq_codes_load)} unique" if len(_uniq_codes_load) != len(not_loaded) else "")
+                f"📡 載入所有未載入基金（{_n_ent} 條 entry"
+                + (f" / {_n_uniq} unique" if _n_uniq != _n_ent else "")
                 + "）"
             )
             if st.button(_btn_label, type="primary", key="btn_pf_load_all"):
-                # v18.60: 載入前先清 fetch 快取，確保用最新 calc_metrics 邏輯
-                # （避免 v18.58 cache hold 住 pre-fix 的結果，使用者抓到舊算法）
-                try:
-                    from fund_fetcher import clear_all_caches as _cac_btn
-                    import repositories.macro_repository  # noqa: F401 — 觸發 macro 快取註冊
-                    _cac_btn()
-                except Exception:
-                    pass   # noqa: smoke-allow-pass — clear 失敗不擋 loading
-                _errors = []
-                _code_cache_b: dict = {}
-                # v18.79: 用 st.status + progress bar 取代 per-iter st.spinner
-                #         每檔 30s+ × 7 unique = 3.5min，原本完全沒進度更新使用者
-                #         會誤判「沒有動作」；現在每抓完一檔即時 log + 進度條動。
-                _n_uniq = len(_uniq_codes_load)
-                with st.status(f"📡 開始載入 {_n_uniq} 個 unique codes（每檔約 30s）...",
-                                expanded=True) as _ld_status:
-                    _ld_prog = st.progress(0.0)
-                    for cnt_c, _code_b2 in enumerate(_uniq_codes_load):
-                        _ld_status.update(
-                            label=f"📡 載入 {_code_b2} ({cnt_c+1}/{_n_uniq})")
-                        try:
-                            _code_cache_b[_code_b2] = fetch_fund_from_moneydj_url(_code_b2)
-                            _nm_ok = (_code_cache_b[_code_b2].get("fund_name") or "")[:18]
-                            st.write(f"✅ `{_code_b2}` {_nm_ok}")
-                        except Exception as _le_c:
-                            _code_cache_b[_code_b2] = {"error": str(_le_c)[:80]}
-                            st.write(f"❌ `{_code_b2}` 失敗：{str(_le_c)[:80]}")
-                        _ld_prog.progress((cnt_c + 1) / _n_uniq)
-                    _ld_status.update(label=f"✅ 完成 — 抓到 {_n_uniq} 個 unique codes",
-                                       state="complete", expanded=False)
-                # Step 2: broadcast 到每個 pf_item（同 code 共用同一份 raw）
-                for i in not_loaded:
-                    pf_item = st.session_state.portfolio_funds[i]
-                    _c_pf = str(pf_item.get("code","")).strip()
-                    pf_raw = _code_cache_b.get(_c_pf, {"error": "no code"})
-                    if pf_raw.get("error"):
-                        _errors.append(f"{pf_item['code']}: {pf_raw['error']}")
-                        st.session_state.portfolio_funds[i].update({"loaded":True,"load_error":pf_raw["error"]})
-                    else:
-                        st.session_state.portfolio_funds[i].update({
-                            "name":       pf_raw.get("fund_name") or pf_item["code"],
-                            "series":     pf_raw.get("series"),
-                            "dividends":  pf_raw.get("dividends",[]),
-                            "metrics":    pf_raw.get("metrics",{}),
-                            "moneydj_raw":pf_raw,
-                            "risk_metrics":pf_raw.get("risk_metrics",{}),
-                            "is_core":    _is_core_fund(pf_raw.get("fund_name") or pf_item["code"]),
-                            # v18.18: 補 currency 讓 Tab5 footer 顯示
-                            "currency":   pf_raw.get("currency","") or pf_raw.get("metrics",{}).get("currency",""),
-                            "loaded":     True, "load_error": None,
-                        })
-                if _errors:
-                    st.warning("部分基金載入失敗：\n" + "\n".join(_errors))
-                _update_data_registry()
-                st.rerun()
+                _batch_load()
 
         # v18.30: 為主清單預計算 VIX（給每檔 advise_fund 用）
         _vix_t3_main = None
