@@ -173,6 +173,19 @@
   - T7 模組（`tab3_t7_ledger.py`）開頭加紅字 banner：v2 下 T7 為純模擬器，真實加碼/贖回請至 v2 編輯介面或直接改 Sheet
   - 新增單元測試 `test_v2_editor.py`（split / merge / round-trip / drop empty rows，共 +8 測試，PR A 64 + PR B 8 = **72/72 pass**）
   - 注：本 PR 不動 v1 路徑、不切換「📦 全部寫入/讀回」主路徑（留 PR C）
+- [x] **PR B.4 v18.154 T7「編輯持倉」對齊新 schema** — user 反饋這頁仍要 user 填 `持有單位數`，與「units 系統自動算」設計矛盾
+  - `ui/tab3_t7_ledger.py:537` 表單欄位 4 → 5：
+    - 砍 `持有單位數` 輸入 → 改 read-only `st.caption` 顯示 `compute_units` 自動算的結果
+    - 加 🟨 `淨投資金額 (NT)` 輸入（取代 持有單位數，成為 source of truth）
+    - 加 🟨 `平均買入含息單位成本 (10)` 輸入（對齊 v2 schema `avg_nav_with_div`）
+    - 5 個 user input 全部加 🟨 icon prefix（黃色對齊 v2 編輯介面）
+    - 即時顯示 `⬜ 持有單位數（自動算） ≈ X.XXXX · 公式：...`
+  - Submit handler：
+    - `if _inv <= 0` 取代 `if _u <= 0`（門檻改 invest_twd）
+    - `_amount_twd = float(_inv)` 不再 `_u × _cu × _fx`
+    - 把 `_inv` / `_anw` 也存進 `portfolio_funds[i]["invest_twd"]` / `["avg_nav_with_div"]`，給 v2 編輯介面同步使用
+  - 89/89 pass
+
 - [x] **PR B.3 v18.153 12 欄 schema + 中文 header + UI 自動填寫分離** — 對齊真實對帳單欄位、UI 黃灰配色區分 user 填寫 vs 自動帶
   - **Schema 12 欄**（加 `avg_nav_with_div` 平均買入含息單位成本，對帳單欄(10)）：`policy_id / item_type / fund_code / fund_name / units / avg_nav / avg_nav_with_div / avg_fx / currency / tier / amount / invest_twd`
   - **欄位填寫責任分類**：

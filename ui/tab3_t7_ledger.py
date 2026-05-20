@@ -434,12 +434,17 @@ def render_t7_section() -> None:
             # 此處 T7 區呼叫者透過 Python global scope 解析（NameError 修復）
 
             # ── v18.70: 「編輯持倉」改成預設展開的主視圖（不再藏 expander）
+            # ── v18.154：欄位對齊 v2 schema — 砍「持有單位數」輸入（自動算），
+            #             加「淨投資金額(NT)」+「平均買入含息單位成本(10)」。
+            #             units 從 invest_twd / (avg_nav × avg_fx) 公式算出。
             with st.expander("✏️ 編輯持倉（手動微調 — 從 CHUBB 對帳單抄入精確值）",
                              expanded=True):
                 st.caption(
-                    "📝 把帳單上「持有單位 / 平均買入淨值 NAV / 平均買入匯率」一次貼進來，"
-                    "並可在同一列指定保單號碼把該基金歸組（OAuth 已登入會同步寫進對應保單分頁）。"
-                    "**自動估算結果**也可在這裡微調精確值。"
+                    "📝 從對帳單抄 5 個欄位：**淨投資金額(NT) / 平均買入淨值 / "
+                    "平均買入匯率 / 平均買入含息單位成本(10) / 保單號碼**。"
+                    "**持有單位數系統自動算**（= 淨投資金額 ÷ (淨值 × 匯率)）。"
+                    "基金名稱/幣別/級別 從 MoneyDJ 自動帶。"
+                    "OAuth 已登入會同步寫進對應保單分頁。"
                 )
                 # v18.59: ledger ↔ fund 匹配診斷 — 救「重新 loading 後欄位變 0」困惑
                 # (v18.56 改用複合鍵 pk_str = "pid::code"；若 _T7_State 是 v18.56 前
@@ -534,6 +539,8 @@ def render_t7_section() -> None:
                             )
                             st.rerun()
 
+                # v18.154：import compute_units 給單位數即時預覽
+                from repositories.policy_repository import compute_units as _t7_compute_units
                 with st.form("t7_init_pos_form", clear_on_submit=False):
                     _init_inputs = {}
                     for _f in _pf_t7:
@@ -547,34 +554,57 @@ def render_t7_section() -> None:
                         _u_default = float(_exist.position.units) if _exist else 0.0
                         _cu_default = float(_exist.position.cost_unit) if _exist else 0.0
                         _fx_default = float(_exist.position.fx_avg) if _exist else 0.0
+                        # v18.154：invest_twd 優先從 portfolio_funds 取；缺則用 units × nav × fx 反算
+                        _inv_default = float(_f.get("invest_twd", 0) or 0)
+                        if _inv_default <= 0 and _u_default > 0 and _cu_default > 0 and _fx_default > 0:
+                            _inv_default = round(_u_default * _cu_default * _fx_default)
+                        # v18.154：avg_nav_with_div 從 portfolio_funds 取（與 v2 schema 同欄名）
+                        _anw_default = float(_f.get("avg_nav_with_div", 0) or 0)
                         st.markdown(f"**[{_pid_disp}] {_c} — {_name[:35]}**")
-                        ic1, ic2, ic3, ic4 = st.columns([1, 1, 1, 1])
-                        _u = ic1.number_input(
-                            "持有單位數", min_value=0.0, max_value=10_000_000.0,
-                            value=_u_default,
-                            step=100.0, format="%.4f", key=f"t7_init_u_{_pk_f}",
-                            help="從帳單『單位數』欄抄"
+                        ic1, ic2, ic3, ic4, ic5 = st.columns([1, 1, 1, 1, 1])
+                        _inv = ic1.number_input(
+                            "🟨 淨投資金額 (NT)", min_value=0, max_value=1_000_000_000,
+                            value=int(_inv_default), step=1000, format="%d",
+                            key=f"t7_init_inv_{_pk_f}",
+                            help="對帳單欄(4) — 系統會用此值自動算「持有單位數」"
                         )
                         _cu = ic2.number_input(
-                            f"平均買入淨值 NAV ({_ccy})", min_value=0.0, max_value=10000.0,
+                            f"🟨 平均買入淨值 ({_ccy})", min_value=0.0, max_value=10000.0,
                             value=_cu_default,
                             step=0.01, format="%.4f", key=f"t7_init_cu_{_pk_f}",
-                            help="= 你買進當下基金的單位淨值；NAV 通常 < 1000"
+                            help="對帳單欄(1) — 平均買入單位成本"
                         )
                         _fx = ic3.number_input(
-                            f"平均買入匯率 ({_ccy}→TWD)", min_value=0.0, max_value=200.0,
+                            f"🟨 平均買入匯率 ({_ccy}→TWD)", min_value=0.0, max_value=200.0,
                             value=_fx_default,
                             step=0.01, format="%.4f", key=f"t7_init_fx_{_pk_f}",
-                            help="= 買進當下原幣對 TWD 即期匯率，如 1 USD = 31.50 TWD"
+                            help="對帳單欄(3)"
                         )
-                        _pid_new = ic4.text_input(
-                            "保單號碼", value=_pid_cur,
+                        _anw = ic4.number_input(
+                            f"🟨 平均買入含息單位成本 ({_ccy})",
+                            min_value=0.0, max_value=10000.0,
+                            value=_anw_default,
+                            step=0.01, format="%.4f", key=f"t7_init_anw_{_pk_f}",
+                            help="對帳單欄(10) — 算「含息報酬率」用；沒有填 0"
+                        )
+                        _pid_new = ic5.text_input(
+                            "🟨 保單號碼", value=_pid_cur,
                             key=f"t7_init_pid_{_pk_f}",
                             placeholder="可選，e.g. PL-2024-001",
                             help="留空 = 不綁保單；若改變，會遷移 ledger 鍵與同步寫入新保單分頁"
                         )
-                        _init_inputs[_pk_f] = (_c, _u, _cu, _fx, _ccy,
-                                               _pid_cur, _pid_new.strip())
+                        # v18.154：read-only 自動算單位數預覽（公式 (4) 反推）
+                        if _inv > 0 and _cu > 0 and _fx > 0:
+                            _u_calc = _t7_compute_units(_inv, _cu, _fx)
+                            st.caption(
+                                f"⬜ 持有單位數（自動算）≈ **{_u_calc:.4f}**　"
+                                f"·　{_inv:,} / ({_cu:.4f} × {_fx:.4f})"
+                            )
+                        else:
+                            _u_calc = _u_default
+                        _init_inputs[_pk_f] = (_c, _u_calc, _cu, _fx, _ccy,
+                                               _pid_cur, _pid_new.strip(),
+                                               _inv, _anw)
                     _init_submit = st.form_submit_button(
                         "💾 套用為起始部位（覆蓋 T7 帳本）", type="primary"
                     )
@@ -583,8 +613,9 @@ def render_t7_section() -> None:
                     _per_policy_rows: dict[str, list[dict]] = {}
                     _pid_changes: list[tuple] = []   # v18.28: (old_pid, new_pid, code, fund)
                     for _pk_f, (_c, _u, _cu, _fx, _ccy,
-                                _pid_old, _pid_new) in _init_inputs.items():
-                        if _u <= 0 or _cu <= 0 or _fx <= 0:
+                                _pid_old, _pid_new, _inv, _anw) in _init_inputs.items():
+                        # v18.154：用 invest_twd 作為「有意義輸入」門檻；units 由公式算
+                        if _inv <= 0 or _cu <= 0 or _fx <= 0:
                             continue
                         # v18.28: pid 變更 → 更新 fund.policy_id + 紀錄遷移
                         _f_obj = _fund_by_pk.get(_pk_f) or {}
@@ -592,15 +623,20 @@ def render_t7_section() -> None:
                             _f_obj["policy_id"]   = _pid_new
                             _f_obj["policy_name"] = _pid_new or _f_obj.get("policy_name", "")
                             _pid_changes.append((_pid_old, _pid_new, _c, _f_obj))
-                            # ledger key 從 "old_pid::code" → "new_pid::code"
                             _new_pk = fund_pk_str(_f_obj)
                             if _new_pk != _pk_f:
                                 st.session_state.t7_ledgers.pop(_pk_f, None)
                                 _pk_f = _new_pk
+                        # v18.154：amount_twd 直接用 user 給的 invest_twd（不是 units × nav × fx
+                        # 反算 — 因為 user 給的 invest_twd 是 source of truth，units 是 derived）
+                        _amount_twd = float(_inv)
                         _new_led = _LedT7(fund_code=_c, currency=_ccy)
-                        _amount_twd = _u * _cu * _fx
                         _new_led.subscribe(_amount_twd, _fx, _cu, _d_t7.today())
                         st.session_state.t7_ledgers[_pk_f] = _new_led
+                        # v18.154：把 user 給的 invest_twd / avg_nav_with_div 也存進
+                        # portfolio_funds，給 v2 編輯介面同步使用
+                        _f_obj["invest_twd"]       = int(_inv)
+                        _f_obj["avg_nav_with_div"] = float(_anw)
                         _applied += 1
                         # 雙寫到 _Ledgers（用 new pid）
                         _pid_w = _pid_new

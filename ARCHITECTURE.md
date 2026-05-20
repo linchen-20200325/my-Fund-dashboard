@@ -743,6 +743,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.152 / 2026-05-20 (PR B.2)** — Google Sheets 429 quota 退避 + 60s cache + 友善訊息。`repositories/policy_repository.py` 加 `_QUOTA_BACKOFFS` / `_is_quota_error` / `_with_quota_retry`（與 `snapshot_repository` 一致，1s→2s→4s→8s 共 4 次），所有 v2 read/write 函式包進去。`ui/helpers/v2_editor.py` 加 `st.cache_data(ttl=60)` wrapper（`_cached_list_policies` / `_cached_load_policy_v2`），client 參數用 `_client` 底線前綴避 Streamlit hash；寫入/刪除/重讀後 `_invalidate_cache(sheet_id)`。`_show_quota_friendly()` 偵測 429 → 顯示「⏳ Google Sheets API 配額暫時超載...請等 30-60 秒」與重試按鈕，取代 raw stack trace。
 
+> 🆕 **v18.154 / 2026-05-20 (PR B.4)** — T7「編輯持倉」表單對齊 v2 schema。`ui/tab3_t7_ledger.py:537` 表單欄位 4→5：砍 `持有單位數` 輸入改 read-only 預覽（`compute_units` 自動算）、加 🟨 `淨投資金額(NT)` 與 🟨 `平均買入含息單位成本(10)`、所有 user input 加 🟨 黃色 icon。Submit 用 `_inv` 直接當 `amount_twd`（不再從 units × nav × fx 反算），同步把 `invest_twd` / `avg_nav_with_div` 寫進 `portfolio_funds[i]` 給 v2 編輯介面共用。
+
 > 🆕 **v18.153 / 2026-05-20 (PR B.3)** — Schema 升 12 欄（加 `avg_nav_with_div` 平均買入含息單位成本，對齊對帳單公式(10)+(11)）。新增 `ZH_HEADERS_V2` 雙向翻譯層：Sheet 上 row 1 寫中文 header（保單編號 / 類型 / 基金代號 / ...），`load_policy_v2` 讀進來 rename 中→英 col name；`is_v2_worksheet` 同時認 `item_type` 與 `類型`。`USER_INPUT_COLS`（7 欄 user 填）vs `AUTO_COLS`（5 欄 MoneyDJ/公式/系統）分類；`_apply_v2_header_format()` 用 `ws.format` API 把 header 列依責任上色（user 黃 / auto 灰）。`compute_units()` 公式自動算：`units = invest_twd / (avg_nav × avg_fx)`（對帳單欄(4) 反推，截圖驗證 1781.025 對齊保險公司 1,781.025375）。Wizard 砍掉 fund_name / currency / units 欄位，存檔時 `_autofill_from_moneydj()` 自動帶；`st.data_editor` 對 auto cols 加 `disabled=True` + 🟨/⬜ icon prefix；Migration 對 v1→v2 預設 `avg_nav_with_div=0`（user 後續到對帳單抄）。
 
 ---
