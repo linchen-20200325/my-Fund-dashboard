@@ -690,6 +690,36 @@ def test_compute_units_zero_denominator_returns_zero():
     assert compute_units(100000, -5, 30) == 0.0
 
 
+def test_avg_nav_with_div_from_cumul_div_twd_matches_user_screenshot():
+    """v18.157：對帳單 type B 反推實例（user 截圖 USDEQ6200）：
+    avg_nav=8.25, avg_fx=31.0885, invest_twd=1000285, cumul_div_twd=49913
+    → units=3900.05, avg_nav_with_div≈7.84
+    """
+    from repositories.policy_repository import (
+        avg_nav_with_div_from_cumul_div_twd, compute_units,
+    )
+    units = compute_units(1000285, 8.25, 31.0885)
+    anwd = avg_nav_with_div_from_cumul_div_twd(8.25, 31.0885, units, 49913)
+    assert abs(anwd - 7.838) < 0.01
+
+
+def test_avg_nav_with_div_from_cumul_div_twd_zero_cumul_returns_avg_nav():
+    """無配息 → 含息成本 = avg_nav（含息 = 不含息）。"""
+    from repositories.policy_repository import avg_nav_with_div_from_cumul_div_twd
+    anwd = avg_nav_with_div_from_cumul_div_twd(10.0, 30.0, 100.0, 0)
+    assert anwd == 10.0
+
+
+def test_avg_nav_with_div_from_cumul_div_twd_safe_on_bad_inputs():
+    """零分母 / 負值 → 回 0（不拋例外）。"""
+    from repositories.policy_repository import avg_nav_with_div_from_cumul_div_twd
+    assert avg_nav_with_div_from_cumul_div_twd(0, 30, 100, 5000) == 0.0
+    assert avg_nav_with_div_from_cumul_div_twd(10, 0, 100, 5000) == 0.0
+    assert avg_nav_with_div_from_cumul_div_twd(10, 30, 0, 5000) == 0.0
+    # 配息超過總成本 → clamp to 0（不會回負值）
+    assert avg_nav_with_div_from_cumul_div_twd(10, 30, 100, 10_000_000) == 0.0
+
+
 def test_normalize_header_to_en_translates_chinese():
     from repositories.policy_repository import _normalize_header_to_en
     assert _normalize_header_to_en("保單編號") == "policy_id"

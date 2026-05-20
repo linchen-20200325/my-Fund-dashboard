@@ -434,9 +434,27 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
     _f3, _f4 = st.columns(2)
     avg_nav = _f3.number_input("🟨 平均買入單位成本（對帳單欄(1)）", key="wiz_avg_nav",
                                 min_value=0.0, step=0.001, format="%.4f")
-    avg_nav_w = _f4.number_input("🟨 平均買入含息單位成本（欄(10)，沒有填 0）",
-                                   key="wiz_avg_nav_div",
-                                   min_value=0.0, step=0.001, format="%.4f")
+    # v18.157：對帳單兩種格式 — type A 有「平均買入含息單位成本」；
+    # type B 沒這欄，但有「累積現金配息金額 (NT)」可反推。
+    _div_mode = _f4.radio(
+        "📋 對帳單欄位（含息成本來源）",
+        ["A. 有「平均買入含息單位成本」", "B. 只有「累積現金配息金額 (NT)」"],
+        key="wiz_div_mode", horizontal=False,
+        help="A：直接抄欄(10)；B：用配息金額反推（公式：avg_nav − 累積配息NT / (avg_fx × units)）"
+    )
+    if _div_mode.startswith("A"):
+        avg_nav_w_input = _f4.number_input(
+            "🟨 平均買入含息單位成本（欄(10)，沒有填 0）",
+            key="wiz_avg_nav_div",
+            min_value=0.0, step=0.001, format="%.4f")
+        cumul_div_input = 0.0
+    else:
+        avg_nav_w_input = 0.0
+        cumul_div_input = _f4.number_input(
+            "🟨 累積現金配息金額 (NT) — 對帳單抄",
+            key="wiz_cumul_div_twd",
+            min_value=0.0, step=100.0, format="%.0f",
+            help="存檔時自動換算成含息成本存進去")
     _f5, _f6 = st.columns(2)
     avg_fx = _f5.number_input("🟨 平均買入匯率（欄(3)）", key="wiz_avg_fx",
                                 min_value=0.0, step=0.01, format="%.4f")
@@ -466,6 +484,15 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
             # 自動：MoneyDJ 抓 fund_name + currency；_is_core_fund 判 tier
             _fname, _ccy, _tier = _autofill_from_moneydj(fcode)
             _u_calc = compute_units(inv_twd, avg_nav, avg_fx)
+            # v18.157：type B 對帳單 → 從累積配息反推 avg_nav_with_div
+            if avg_nav_w_input > 0:
+                _anwd_final = avg_nav_w_input
+            elif cumul_div_input > 0 and _u_calc > 0:
+                from repositories.policy_repository import avg_nav_with_div_from_cumul_div_twd
+                _anwd_final = avg_nav_with_div_from_cumul_div_twd(
+                    avg_nav, avg_fx, _u_calc, cumul_div_input)
+            else:
+                _anwd_final = 0.0
             rows = [{
                 "policy_id":        sanitized,
                 "item_type":        ITEM_TYPE_FUND,
@@ -473,7 +500,7 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
                 "fund_name":        _fname,
                 "units":            _u_calc,
                 "avg_nav":          avg_nav,
-                "avg_nav_with_div": avg_nav_w,
+                "avg_nav_with_div": _anwd_final,
                 "avg_fx":           avg_fx,
                 "currency":         _ccy or "USD",
                 "tier":             _tier,
@@ -504,7 +531,8 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
             _invalidate_cache(sheet_id)
             st.session_state.pop("_v2_show_wizard", None)
             for k in ("wiz_pid", "wiz_fcode", "wiz_avg_nav", "wiz_avg_nav_div",
-                      "wiz_avg_fx", "wiz_inv_twd", "wiz_cash_amt"):
+                      "wiz_avg_fx", "wiz_inv_twd", "wiz_cash_amt",
+                      "wiz_cumul_div_twd", "wiz_div_mode"):
                 st.session_state.pop(k, None)
             st.session_state.pop(_KEY_V2_LOADED, None)
             st.rerun()

@@ -580,13 +580,33 @@ def render_t7_section() -> None:
                             step=0.01, format="%.4f", key=f"t7_init_fx_{_pk_f}",
                             help="對帳單欄(3)"
                         )
-                        _anw = ic4.number_input(
-                            f"🟨 平均買入含息單位成本 ({_ccy})",
-                            min_value=0.0, max_value=10000.0,
-                            value=_anw_default,
-                            step=0.01, format="%.4f", key=f"t7_init_anw_{_pk_f}",
-                            help="對帳單欄(10) — 算「含息報酬率」用；沒有填 0"
+                        # v18.157：對帳單兩種格式 — type A 有「平均買入含息單位成本」；
+                        # type B 沒此欄但有「累積現金配息金額 (NT)」可反推。
+                        _div_mode = ic4.radio(
+                            "📋 含息來源", ["A. 含息單位成本", "B. 累積配息(NT)"],
+                            key=f"t7_init_div_mode_{_pk_f}", horizontal=False,
+                            help="A：直接抄欄(10)；B：用配息金額反推"
                         )
+                        if _div_mode.startswith("A"):
+                            _anw = ic4.number_input(
+                                f"🟨 平均買入含息單位成本 ({_ccy})",
+                                min_value=0.0, max_value=10000.0,
+                                value=_anw_default,
+                                step=0.01, format="%.4f",
+                                key=f"t7_init_anw_{_pk_f}",
+                                help="對帳單欄(10) — 直接抄；沒有填 0"
+                            )
+                            _cumul_div = 0.0
+                        else:
+                            _anw = 0.0
+                            _cumul_div = ic4.number_input(
+                                "🟨 累積現金配息金額 (NT)",
+                                min_value=0.0, max_value=1_000_000_000.0,
+                                value=0.0,
+                                step=100.0, format="%.0f",
+                                key=f"t7_init_cumul_div_{_pk_f}",
+                                help="存檔時自動換算成含息成本存進去"
+                            )
                         _pid_new = ic5.text_input(
                             "🟨 保單號碼", value=_pid_cur,
                             key=f"t7_init_pid_{_pk_f}",
@@ -604,7 +624,7 @@ def render_t7_section() -> None:
                             _u_calc = _u_default
                         _init_inputs[_pk_f] = (_c, _u_calc, _cu, _fx, _ccy,
                                                _pid_cur, _pid_new.strip(),
-                                               _inv, _anw)
+                                               _inv, _anw, _cumul_div)
                     _init_submit = st.form_submit_button(
                         "💾 套用為起始部位（覆蓋 T7 帳本）", type="primary"
                     )
@@ -613,10 +633,16 @@ def render_t7_section() -> None:
                     _per_policy_rows: dict[str, list[dict]] = {}
                     _pid_changes: list[tuple] = []   # v18.28: (old_pid, new_pid, code, fund)
                     for _pk_f, (_c, _u, _cu, _fx, _ccy,
-                                _pid_old, _pid_new, _inv, _anw) in _init_inputs.items():
+                                _pid_old, _pid_new, _inv, _anw,
+                                _cumul_div) in _init_inputs.items():
                         # v18.154：用 invest_twd 作為「有意義輸入」門檻；units 由公式算
                         if _inv <= 0 or _cu <= 0 or _fx <= 0:
                             continue
+                        # v18.157：type B 對帳單 → 從累積配息反推 avg_nav_with_div
+                        if _anw <= 0 and _cumul_div > 0 and _u > 0:
+                            from repositories.policy_repository import (
+                                avg_nav_with_div_from_cumul_div_twd as _anwd_calc)
+                            _anw = _anwd_calc(_cu, _fx, _u, _cumul_div)
                         # v18.28: pid 變更 → 更新 fund.policy_id + 紀錄遷移
                         _f_obj = _fund_by_pk.get(_pk_f) or {}
                         if _pid_new != _pid_old:

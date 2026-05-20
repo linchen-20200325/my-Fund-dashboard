@@ -841,6 +841,35 @@ def compute_units(invest_twd: float, avg_nav: float, avg_fx: float) -> float:
         return 0.0
 
 
+def avg_nav_with_div_from_cumul_div_twd(
+    avg_nav: float, avg_fx: float, units: float, cumul_div_twd: float,
+) -> float:
+    """v18.157：從「累積現金配息金額 (TWD)」反推「平均買入含息單位成本」。
+
+    場景：對帳單沒列「平均買入含息單位成本」，但有「累積現金配息金額 (NT)」
+    與「累積含息回報率」（兩者擇一足夠）。
+
+    公式（local currency per unit）：
+        含息成本 per unit = avg_nav − (累積配息 local / units)
+                          = avg_nav − (cumul_div_twd / (avg_fx × units))
+
+    任一分母為 0/負 → 回 0（讓 caller 顯示「無含息成本資料」）。
+    """
+    try:
+        units_f = float(units)
+        fx_f = float(avg_fx)
+        nav_f = float(avg_nav)
+        div_twd = float(cumul_div_twd)
+        denom = fx_f * units_f
+        if denom <= 0 or nav_f <= 0:
+            return 0.0
+        per_unit_div_local = div_twd / denom
+        result = nav_f - per_unit_div_local
+        return max(0.0, result)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def is_v2_worksheet(ws: Any) -> bool:
     """偵測單張 worksheet 是不是 v2 schema：
 

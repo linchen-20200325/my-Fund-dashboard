@@ -228,6 +228,16 @@
 - [ ] **PR C**（下一輪）「📦 全部寫入/讀回」切換到 v2 主路徑（v2 sheet 自動走 v2）
 - [ ] **PR D**（之後）移除舊 `_T7_State` / `_Ledgers` tab 寫入路徑 + 文件 cleanup
 
+### v18.157 對帳單 type B 支援（累積配息反推含息成本）（2026-05-20）
+
+- [x] **背景** v18.153 加 `avg_nav_with_div`（平均買入含息單位成本）對齊 CHUBB 對帳單欄(10)。User 發現另一格式對帳單（例 USDEQ6200）**沒有此欄**，只有「**累積現金配息金額 (NT)**」+「累積含息回報率」
+- [x] **後端 helper** `repositories/policy_repository.py:avg_nav_with_div_from_cumul_div_twd(avg_nav, avg_fx, units, cumul_div_twd)` 公式：`avg_nav − (cumul_div_twd / (avg_fx × units))`，clamp ≥ 0；user 截圖實例驗證 8.25/31.0885/3900.05/49913 → 7.838 ✓
+- [x] **UI radio toggle** v2 編輯介面 wizard 與 T7「編輯持倉」表單兩處都加 `📋 對帳單格式` 選項：
+  - A. 有「平均買入含息單位成本」→ 直接抄欄(10)（既有行為）
+  - B. 只有「累積現金配息金額 (NT)」→ submit 時用 helper 換算成 `avg_nav_with_div` 存進去
+- [x] **Schema 不動** — 仍 12 欄，內部統一存 `avg_nav_with_div`；type B 對帳單只在 input UI 層多一個換算步驟
+- [x] 測試 +3（user 截圖實例 / 零配息 round-trip / 壞輸入 safe）= 94/94 pass
+
 ### v18.156 hotfix — Tab3「保單分組視圖」載入按鈕 nested expander crash（2026-05-20）
 
 - [x] **事故** v18.151 抽 `ui/helpers/portfolio_load.py` 後，`batch_load_unloaded_funds` 內用 `st.status` 包 progress / log。該 helper 被 tab3 `with st.expander("🗂️ 保單分組視圖")` 內的「📡 載入未載入基金」按鈕呼叫 → `st.status` 本質是 expander → `StreamlitAPIException: Expanders may not be nested inside other expanders`
