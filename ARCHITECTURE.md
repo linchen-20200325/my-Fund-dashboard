@@ -735,6 +735,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.148 / 2026-05-20** — `ui/helpers/oauth_state.py` 加 `refresh_oauth_state()`：把 `_oauth_cfg` / `_oauth_configured` 從 module-import-time snapshot 改成 per-render refresh。`render_portfolio_tab()` 開頭 + `app.py` sidebar 渲染前各呼叫一次，並 local 重 `from ... import` 拿 fresh 值。修補 wizard「💾 套用設定」按了沒反應的 bug（原本 session_state 寫入後 `st.rerun()` 不會重 run module body → snapshot 永遠 stale）。Streamlit Secrets `[google_oauth]` 永久設定路徑不受影響。
 
+> 🆕 **v18.149 / 2026-05-20 (PR A)** — Schema v2 後端 + migration 工具上線。新 schema 把舊三 tab（保單分頁 + `_T7_State` + `_Ledgers`）的「**目前持倉**」內聯到單張保單 worksheet，砍掉「同筆資料散三 tab」的舊架構。`repositories/policy_repository.py` 新增 `ALL_COLS_V2`（11 欄）+ `detect_sheet_schema_version` / `load_policy_v2` / `write_policy_v2` / `load_all_policies_v2` / `is_v2_worksheet` / `copy_sheet_as_backup`。`scripts/migrate_v149_schema.py` 提供 `migrate_sheet(with_backup=True)` 一次性升級工具：safety net 先 `client.copy(src_sheet_id, copy_permissions=False)` 備份整本 Sheet → 才轉換各保單分頁；冪等對已 v2 的 worksheet 自動跳過。Tab3 加偵測 + 升級按鈕；舊 v1 寫讀路徑完整保留，PR B 才接 v2 編輯 UI。
+
 ---
 
 ## §6 Session State Schema（v10.0）

@@ -704,3 +704,237 @@ def create_dashboard_sheet(client: Any,
     if not sheet_id:
         raise PolicySheetError("建立 Sheet 後未取得 ID（gspread 回傳異常）")
     return sheet_id, sheet_url
+
+
+# ════════════════════════════════════════════════════════════
+# v18.149 — Schema v2（snapshot-only，內聯 _T7_State 持倉 + 多幣別現金）
+# ════════════════════════════════════════════════════════════
+# 設計目的：把舊 3-tab（保單分頁 + _T7_State + _Ledgers）的「**目前持倉**」內聯
+# 到單張保單 worksheet。T7 變成純讀模擬器；user 真的加碼贖回時自己改 Sheet。
+#
+# 與 v1 的差異：
+# - v1：保單分頁只有「規劃投入」(invest_twd / fx_at_buy)，實際持倉在 _T7_State.ledger_json
+# - v2：保單分頁同時有「規劃投入」(invest_twd) + 「目前持倉」(units / avg_nav / avg_fx)
+#       + 「多幣別現金部位」（item_type=cash 列）
+# - v2 不需要 _Ledgers（T7 唯讀），不需要 _T7_State（資料內聯了）
+#
+# v1 → v2 migration 走 `scripts/migrate_v149_schema.py`。
+# 偵測方式：worksheet 第一列 header 含 `item_type` 即為 v2。
+ALL_COLS_V2: tuple[str, ...] = (
+    "policy_id",
+    "item_type",     # "fund" | "cash"
+    "fund_code",
+    "fund_name",
+    "units",
+    "avg_nav",
+    "avg_fx",
+    "currency",
+    "tier",          # "core" | "satellite" | ""
+    "amount",        # cash 列才填（多幣別現金金額）
+    "invest_twd",    # fund 列保留：當初規劃投入 TWD
+)
+
+ITEM_TYPE_FUND = "fund"
+ITEM_TYPE_CASH = "cash"
+
+
+def is_v2_worksheet(ws: Any) -> bool:
+    """偵測單張 worksheet 是不是 v2 schema（header 含 item_type 即視為 v2）。
+
+    duck-typed 對 ws：只要 `row_values(1)` 可呼叫即可，方便 MagicMock 測試。
+    讀檔失敗或無 header 列一律回 False（讓 caller 走 v1 路徑安全 fallback）。
+    """
+    try:
+        header = ws.row_values(1) or []
+    except Exception:
+        return False
+    return "item_type" in [str(c).strip() for c in header]
+
+
+def detect_sheet_schema_version(client: Any, sheet_id: str) -> str:
+    """偵測整本 Sheet 是 v1 還是 v2：
+
+    - 沒有任何保單 worksheet → "empty"（一張新 Sheet）
+    - 至少一張保單分頁 header 含 item_type → "v2"
+    - 否則 → "v1"（舊 schema 待升級）
+    """
+    try:
+        sh = client.open_by_key(sheet_id)
+        tabs = [ws for ws in sh.worksheets()
+                if not ws.title.startswith("_") and ws.title != DEFAULT_WORKSHEET]
+    except Exception as e:
+        raise PolicySheetError(f"開啟 Sheet 失敗：{e}") from e
+    if not tabs:
+        return "empty"
+    for ws in tabs:
+        if is_v2_worksheet(ws):
+            return "v2"
+    return "v1"
+
+
+def _normalize_float(v: Any, default: float = 0.0) -> float:
+    """容錯：'1,234.56' / '' / None → float（失敗回 default）。"""
+    if v is None or v == "":
+        return default
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).replace(",", "").strip()
+    if not s:
+        return default
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return default
+
+
+def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
+    """讀單張 v2 保單分頁，回 DataFrame（11 欄齊備）。
+
+    若該 worksheet 不存在或非 v2 schema → 回空 DataFrame（11 欄 header 齊）。
+    """
+    empty = pd.DataFrame(columns=list(ALL_COLS_V2))
+    try:
+        sh = client.open_by_key(sheet_id)
+        title = _sanitize_tab_name(policy_id)
+        try:
+            ws = sh.worksheet(title)
+        except Exception:
+            return empty
+        if not is_v2_worksheet(ws):
+            return empty
+        rows = ws.get_all_records() or []
+    except Exception as e:
+        raise PolicySheetError(f"讀取 v2 保單分頁失敗：{e}") from e
+    if not rows:
+        return empty
+    df = pd.DataFrame(rows)
+    for c in ALL_COLS_V2:
+        if c not in df.columns:
+            df[c] = ""
+    df = df[list(ALL_COLS_V2)].copy()
+    df["units"]      = df["units"].map(_normalize_float)
+    df["avg_nav"]    = df["avg_nav"].map(_normalize_float)
+    df["avg_fx"]     = df["avg_fx"].map(_normalize_float)
+    df["amount"]     = df["amount"].map(_normalize_float)
+    df["invest_twd"] = df["invest_twd"].map(_normalize_invest_twd)
+    return df
+
+
+def write_policy_v2(
+    client: Any, sheet_id: str, policy_id: str, df: pd.DataFrame,
+) -> int:
+    """整 tab 覆寫單張 v2 保單分頁（user 點「💾 存到雲端」時呼叫）。
+
+    df 缺欄會自動補空字串；多餘欄會被丟掉（只寫 ALL_COLS_V2 11 欄）。
+    回傳寫入列數（不含 header）。
+    """
+    try:
+        sh = client.open_by_key(sheet_id)
+        title = _sanitize_tab_name(policy_id)
+        try:
+            ws = sh.worksheet(title)
+        except Exception:
+            ws = sh.add_worksheet(title=title, rows=max(len(df) + 5, 20),
+                                  cols=len(ALL_COLS_V2) + 2)
+    except Exception as e:
+        raise PolicySheetError(f"開啟/建立保單分頁失敗：{e}") from e
+
+    norm = df.copy()
+    for c in ALL_COLS_V2:
+        if c not in norm.columns:
+            norm[c] = ""
+    norm = norm[list(ALL_COLS_V2)].copy()
+    # 整列空（全部欄都空白或 NaN）剔除；pandas NaN.str == 'nan' 要排除
+    def _cell_empty(v):
+        if v is None:
+            return True
+        if isinstance(v, float) and pd.isna(v):
+            return True
+        return str(v).strip() in ("", "nan", "NaN", "None")
+    norm = norm[norm.apply(lambda r: not all(_cell_empty(v) for v in r), axis=1)]
+
+    rows_out: list[list] = [list(ALL_COLS_V2)]
+    for _, r in norm.iterrows():
+        rows_out.append([
+            str(r.get("policy_id", "") or ""),
+            str(r.get("item_type", "") or ""),
+            str(r.get("fund_code", "") or ""),
+            str(r.get("fund_name", "") or ""),
+            r.get("units", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
+            r.get("avg_nav", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
+            r.get("avg_fx", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
+            str(r.get("currency", "") or ""),
+            str(r.get("tier", "") or ""),
+            r.get("amount", "") if r.get("item_type") == ITEM_TYPE_CASH else "",
+            r.get("invest_twd", "") if r.get("item_type") == ITEM_TYPE_FUND else "",
+        ])
+    try:
+        ws.clear()
+        ws.update("A1", rows_out)
+    except Exception as e:
+        raise PolicySheetError(f"寫入 v2 保單分頁失敗：{e}") from e
+    return len(rows_out) - 1
+
+
+def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
+    """讀整本 Sheet 內所有 v2 保單分頁，合併成一張 DataFrame。
+
+    非 v2 的 worksheet 自動跳過（caller 應先用 detect_sheet_schema_version
+    判斷整本狀態並引導升級）。
+    """
+    try:
+        sh = client.open_by_key(sheet_id)
+        tabs = [ws for ws in sh.worksheets()
+                if not ws.title.startswith("_") and ws.title != DEFAULT_WORKSHEET]
+    except Exception as e:
+        raise PolicySheetError(f"列保單分頁失敗：{e}") from e
+    frames: list[pd.DataFrame] = []
+    for ws in tabs:
+        if not is_v2_worksheet(ws):
+            continue
+        try:
+            rows = ws.get_all_records() or []
+        except Exception:
+            continue
+        if not rows:
+            continue
+        df_one = pd.DataFrame(rows)
+        for c in ALL_COLS_V2:
+            if c not in df_one.columns:
+                df_one[c] = ""
+        df_one = df_one[list(ALL_COLS_V2)].copy()
+        df_one["units"]      = df_one["units"].map(_normalize_float)
+        df_one["avg_nav"]    = df_one["avg_nav"].map(_normalize_float)
+        df_one["avg_fx"]     = df_one["avg_fx"].map(_normalize_float)
+        df_one["amount"]     = df_one["amount"].map(_normalize_float)
+        df_one["invest_twd"] = df_one["invest_twd"].map(_normalize_invest_twd)
+        frames.append(df_one)
+    if not frames:
+        return pd.DataFrame(columns=list(ALL_COLS_V2))
+    return pd.concat(frames, ignore_index=True)
+
+
+def copy_sheet_as_backup(
+    client: Any, src_sheet_id: str, backup_suffix: str = " - backup",
+) -> tuple[str, str]:
+    """v18.149 migration safety net：把整本 Sheet copy 一份做 backup。
+
+    gspread 6.x 用 `client.copy(file_id, title=..., copy_permissions=False)` 走 Drive API。
+    回傳 (backup_sheet_id, backup_sheet_url)。
+    """
+    try:
+        src_title = get_sheet_title(client, src_sheet_id) or "Fund Dashboard"
+    except Exception:
+        src_title = "Fund Dashboard"
+    import datetime as _dt
+    backup_title = f"{src_title}{backup_suffix} {_dt.datetime.now().strftime('%Y%m%d_%H%M')}"
+    try:
+        new_sh = client.copy(src_sheet_id, title=backup_title, copy_permissions=False)
+    except Exception as e:
+        raise PolicySheetError(f"備份 Sheet 失敗：{e}") from e
+    new_id = getattr(new_sh, "id", "") or ""
+    new_url = getattr(new_sh, "url", "") or (
+        f"https://docs.google.com/spreadsheets/d/{new_id}/edit" if new_id else "")
+    if not new_id:
+        raise PolicySheetError("備份成功但未取得新 Sheet ID")
+    return new_id, new_url

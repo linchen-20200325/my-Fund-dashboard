@@ -145,6 +145,28 @@
   - 旁路：使用 Streamlit Secrets `[google_oauth]` 永久設定者 reboot app 即可（一直能用），bug 只影響 session-only wizard 路徑
   - 新增單元測試 `test_refresh_oauth_state_updates_module_snapshot`；舊 `test_tab3_oauth_configured_branch_renders_without_exception` 改 monkeypatch `_resolve_oauth_cfg` 以相容 refresh
 
+### v18.149 Schema v2 — snapshot-only 11 欄 + 多幣別現金（2026-05-20）
+> 對齊使用者真實工作流程：「第一次輸入 → 日常編輯/存檔；真實加碼/贖回自己改 Sheet；T7 純模擬不寫資料」。
+> 砍掉舊三 tab 結構（保單分頁 v1 + `_T7_State` + `_Ledgers`）→ 只剩**每張保單一個 worksheet** + 內聯持倉。
+- [x] **PR A** Schema v2 後端 + migration 工具
+  - `repositories/policy_repository.py` 加 v2 API：`ALL_COLS_V2`（11 欄）/ `is_v2_worksheet` / `detect_sheet_schema_version` / `load_policy_v2` / `write_policy_v2` / `load_all_policies_v2` / `copy_sheet_as_backup`
+  - 新 schema 11 欄：`policy_id / item_type / fund_code / fund_name / units / avg_nav / avg_fx / currency / tier / amount / invest_twd`
+    - `item_type="fund"`：基金列，填 fund_code/units/avg_nav/avg_fx/tier/invest_twd
+    - `item_type="cash"`：現金列，填 currency/amount（支援多幣別現金部位）
+  - `scripts/migrate_v149_schema.py` 一次性升級腳本：
+    - `_fold_ledger_json` 把 `_T7_State.ledger_json` fold 算 weighted units/avg_nav/avg_fx
+    - `migrate_one_policy` 單張保單 v1 → v2
+    - `migrate_sheet(with_backup=True)` safety net：先 `copy_sheet_as_backup` 才動原本
+    - 冪等：已是 v2 的 worksheet 自動跳過
+  - `ui/tab3_portfolio.py` 加偵測 + 升級 UI（在「多帳本管理」與「一鍵存讀」之間）：
+    - `[🔍 偵測目前 Sheet 格式]` 按鈕 → 顯示 v1/v2/empty
+    - v1 → `[🚀 升級到 v2（先備份原 Sheet）]` 按鈕，跑完顯示備份連結 + 升級統計
+    - v2 → `[👁️ 預覽 v2 schema 資料]` checkbox 顯示 read-only `st.dataframe`
+  - 新增單元測試：`test_policy_store.py` +12 個 v2 測試 / `test_migrate_v149_schema.py` 12 個 fold + migration 測試（共 +24，總計 64/64 pass）
+  - **本 PR 不動「一鍵存讀」與 T7 模組** — 既有 v1 路徑完整保留；user 跑完 migration 後可在 Google Sheet 上看到新 v2 schema，但日常存讀仍走 v1（PR B 才接 v2 編輯 UI）
+- [ ] **PR B**（下一輪）UI 重構：第一次使用 wizard / 雙 expander / in-line 編輯 / T7 唯讀化紅字
+- [ ] **PR C/D**（之後）「全部寫入/讀回」切換到 v2 主路徑 / 移除舊 _T7_State / _Ledgers tab + 文件 cleanup
+
 ---
 
 ## 專案定位

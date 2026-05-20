@@ -48,12 +48,14 @@ from repositories.policy_repository import (
     PolicySheetError,
     create_dashboard_sheet,
     delete_policy_row,
+    detect_sheet_schema_version,
     get_gspread_client,
     get_gspread_client_from_oauth,
     get_sheet_title,
     list_policy_worksheets,
     list_user_folders,
     list_user_sheets,
+    load_all_policies_v2,
     load_all_policy_worksheets,
     load_policies,
     rename_sheet,
@@ -578,6 +580,92 @@ def render_portfolio_tab() -> None:
                                     del st.session_state["inp_sheet_id"]
                                 st.success(f"✅ 已切換到「{_target['name']}」")
                                 st.rerun()
+
+            # ── v18.149 schema v2 升級偵測（PR A — UI hook only）──
+            # v2 schema：每張保單分頁內聯 units / avg_nav / avg_fx + 多幣別現金。
+            # PR A 提供工具（detect / migrate / backup），PR B 才接 wizard / 編輯 UI。
+            # 這裡只放偵測 + 一鍵升級按鈕讓 user 自己決定何時轉。
+            if _oauth_configured and _sheet_id:
+                st.markdown("---")
+                st.markdown("##### 🆕 v18.149 新資料格式（snapshot-only）")
+                st.caption(
+                    "新格式：每張保單分頁直接存「持有單位、平均 NAV、平均 FX、多幣別現金」"
+                    "（11 欄）— 砍掉 `_T7_State` + `_Ledgers` 結構。"
+                    "T7 模組改成純讀模擬；真實加碼/贖回請自行在 Sheet 內修改。"
+                    "升級前會先**複製整本 Sheet 為備份**，確認新資料無誤再手動刪舊備份。"
+                )
+                _mig_c1, _mig_c2 = st.columns([2, 3])
+                if _mig_c1.button("🔍 偵測目前 Sheet 格式",
+                                    key="btn_detect_schema_v149",
+                                    use_container_width=True):
+                    try:
+                        _cli_d = _get_oauth_client()
+                        _ver = detect_sheet_schema_version(_cli_d, _sheet_id)
+                        st.session_state["_schema_ver"] = _ver
+                    except PolicySheetError as _ed:
+                        st.error(f"❌ 偵測失敗：{_ed}")
+                    except Exception as _ed2:
+                        st.error(f"❌ 未預期錯誤：[{type(_ed2).__name__}] {_ed2}")
+                _ver_now = st.session_state.get("_schema_ver", "")
+                if _ver_now == "v2":
+                    _mig_c2.success("✅ 已是 v2 新格式")
+                elif _ver_now == "v1":
+                    _mig_c2.warning("⚠️ 目前是 v1 舊格式，建議升級")
+                elif _ver_now == "empty":
+                    _mig_c2.info("ℹ️ 空 Sheet（無保單分頁）— 等加保單後再升級")
+
+                if _ver_now == "v1":
+                    if st.button("🚀 升級到 v2（先備份原 Sheet）",
+                                  key="btn_migrate_v149",
+                                  type="primary", use_container_width=True):
+                        try:
+                            from scripts.migrate_v149_schema import migrate_sheet as _mig
+                            _cli_m = _get_oauth_client()
+                            with st.spinner("⏳ 備份 + 升級中（視保單數約 10-60 秒）..."):
+                                _summary = _mig(_cli_m, _sheet_id, with_backup=True)
+                            if _summary.get("backup_sheet_url"):
+                                st.success(
+                                    f"✅ 已備份原 Sheet → "
+                                    f"[在 Drive 開啟備份]({_summary['backup_sheet_url']})"
+                                )
+                            _ok_n = sum(1 for m in _summary.get("migrated", [])
+                                         if not m.get("errors"))
+                            _err_n = sum(1 for m in _summary.get("migrated", [])
+                                          if m.get("errors"))
+                            st.success(
+                                f"✅ 已升級 {_ok_n}/{_summary.get('policies', 0)} 張保單到 v2"
+                                + (f"（{_err_n} 張有錯誤，見下方）" if _err_n else "")
+                            )
+                            if _err_n:
+                                st.warning("\n".join(
+                                    f"- {m['policy_id']}：{'; '.join(m['errors'])}"
+                                    for m in _summary["migrated"] if m.get("errors")
+                                ))
+                            st.session_state["_schema_ver"] = "v2"
+                            st.rerun()
+                        except Exception as _eme:
+                            st.error(f"❌ 升級失敗：[{type(_eme).__name__}] {_eme}")
+
+                # v2 預覽：讀新 schema 顯示給 user 對照
+                if _ver_now == "v2":
+                    if st.checkbox("👁️ 預覽 v2 schema 資料（read-only）",
+                                    key="cb_preview_v2", value=False):
+                        try:
+                            _cli_p = _get_oauth_client()
+                            _df_v2 = load_all_policies_v2(_cli_p, _sheet_id)
+                            if _df_v2.empty:
+                                st.caption("（v2 schema 沒有任何資料）")
+                            else:
+                                st.dataframe(_df_v2, use_container_width=True,
+                                              hide_index=True)
+                                st.caption(
+                                    f"共 {len(_df_v2)} 列；"
+                                    f"fund={len(_df_v2[_df_v2['item_type']=='fund'])}、"
+                                    f"cash={len(_df_v2[_df_v2['item_type']=='cash'])}。"
+                                    "PR B 將接編輯 UI 取代此 read-only 預覽。"
+                                )
+                        except Exception as _epe:
+                            st.error(f"❌ 讀 v2 失敗：[{type(_epe).__name__}] {_epe}")
 
             # ── v18.50 一鍵存讀（解決「同一筆資料散在三個 tab，
             #          看不出全貌」的散亂感）；v18.147 把「保單清單」前移後此處只剩存讀
