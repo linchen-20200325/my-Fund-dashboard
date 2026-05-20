@@ -228,6 +228,14 @@
 - [ ] **PR C**（下一輪）「📦 全部寫入/讀回」切換到 v2 主路徑（v2 sheet 自動走 v2）
 - [ ] **PR D**（之後）移除舊 `_T7_State` / `_Ledgers` tab 寫入路徑 + 文件 cleanup
 
+### v18.156 hotfix — Tab3「保單分組視圖」載入按鈕 nested expander crash（2026-05-20）
+
+- [x] **事故** v18.151 抽 `ui/helpers/portfolio_load.py` 後，`batch_load_unloaded_funds` 內用 `st.status` 包 progress / log。該 helper 被 tab3 `with st.expander("🗂️ 保單分組視圖")` 內的「📡 載入未載入基金」按鈕呼叫 → `st.status` 本質是 expander → `StreamlitAPIException: Expanders may not be nested inside other expanders`
+- [x] **修法** `ui/helpers/portfolio_load.py` Step 1 把 `st.status(...) as ld_status` 改成 `st.empty()` placeholder（動態 label）+ `st.progress` + `st.write` 平面組合；UX 保留（開始 / 載入中 / 完成皆有狀態提示 + 進度條 + 逐檔 ✅/❌ log）
+- [x] **影響範圍** 3 處 call sites（L1052 頂部捷徑 / L1252 未綁保單快捷 / L1721 主清單下方）一次修復，helper 從此 context-agnostic
+- [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
+- [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
+
 ---
 
 ## 專案定位
