@@ -246,6 +246,23 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.167 — 刪除「🧰 一鍵存讀」「📁 本機 JSON 備份」雙入口，瘦身成「🛠️ 進階工具」（2026-05-21）
+
+- [x] **問題場景**（user 截圖紅框 + 文字反饋）：頂部 5 顆按鈕已完整覆蓋全部存讀，但下方 expander 內仍有 v18.50「🧰 一鍵存讀（同步整本帳本）」（📦 全部寫入 + 📥 全部讀回 + 🔄 只重新整理 + 🗑️ 清空快取）與 v18.70「📁 本機 JSON 備份」（💾 下載 + 📂 上傳）兩個重複區段「占版面」
+- [x] **刪除「🧰 一鍵存讀」雙入口**（`ui/tab3_portfolio.py:895-1001`）：
+  - 移除 `btn_dump_all_v18_50` / `btn_load_all_v18_50` 兩顆按鈕 + 對應 `_dump_all_clicked` / `_load_all_clicked` 變數與 handler block（與頂部 📦 雲端存檔 / 📥 雲端讀取 完全重複）
+  - 重命名 header「⬇️ 🧰 一鍵存讀（同步整本帳本）」→「🛠️ 進階工具」
+  - 簡化 handler：只剩 `if _refresh_clicked:` 走 `load_all_from_sheet(refresh_only=True)`
+- [x] **保留頂部沒有的小工具**（同位置）：
+  - 🔄 只重新整理分頁清單（不動投組）— refresh_only 路徑
+  - 🗑️ 清空抓取快取 — fund_fetcher / macro 快取 TTL 清空
+  - 快取狀態 caption（hit-rate / entries / hits-misses）
+  - 兩按鈕改用 `st.columns(2)` 並列、`use_container_width=True`
+  - 加 `**📋 保單分頁清單**` 標題給原本無名的 `_pdf_cached` dataframe
+- [x] **刪除「📁 本機 JSON 備份」整段**（`ui/tab3_portfolio.py:1003-1050`）：與頂部 💾 下載 JSON / 📂 上傳 JSON 完全重複，47 行整段移除
+- [x] **更新引導文字**（`tab3_portfolio.py:653`）：「用下方「🧰 一鍵存讀」」→「用頂部「🚀 快速存讀面板」」對齊現況
+- [x] **驗證** fast tier `pytest -m "not slow"` **565 passed**，與 v18.166 baseline 一致零回歸；total Tab3 expander 內容瘦身 ~100 行
+
 ### v18.166 — 從 Drive 挑帳本移到「📥 雲端讀取」面板（職責分離）（2026-05-21）
 
 - [x] **問題場景**（user 截圖紅框 + 紅箭頭）：v18.165「✨ 新增帳本」面板上下並列「自動建立」+「從 Drive 挑」，user 反饋「下面的讀取檔案要放回第一個按鈕下」希望分流到「📥 雲端讀取」面板

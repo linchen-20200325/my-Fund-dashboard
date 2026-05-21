@@ -650,7 +650,7 @@ def render_portfolio_tab() -> None:
                     "同一張 Sheet 內 **3 種 tab**：保單分頁（基金清單與設定）／"
                     "`_T7_State`（部位快照）／`_Ledgers`（交易流水）。"
                     "平時下方各動作（批次加入、T7 套用）會自動同步到對應 tab；"
-                    "若不確定哪個按鈕同步什麼，用下方「🧰 一鍵存讀」。"
+                    "若不確定哪個按鈕同步什麼，用頂部「🚀 快速存讀面板」。"
                 )
                 _ss_stats = st.session_state.get("_sheet_stats") or {}
                 _sm1, _sm2, _sm3 = st.columns(3)
@@ -892,43 +892,29 @@ def render_portfolio_tab() -> None:
                         st.error(f"❌ v2 編輯 UI 載入失敗："
                                   f"[{type(_ev2).__name__}] {_ev2}")
 
-            # ── v18.50 一鍵存讀（v18.162 PR：與上方快捷面板共用 cloud_io.py helper）
-            #          v18.147 把「保單清單」前移後此處只剩存讀
+            # ── v18.167：原「🧰 一鍵存讀」（與頂部 📥/📦 重複）已刪除
+            #            此處只保留頂部沒有的小工具：refresh-only + 清空快取
             if _sheet_id:
                 st.markdown("---")
-                st.markdown("##### ⬇️ 🧰 一鍵存讀（同步整本帳本）")
-                st.caption("📌 主入口在頂部「🚀 快速存讀面板」；此處作雙入口備援 + 提供「只刷新分頁清單」與快取管理。")
-                _aa_c1, _aa_c2 = st.columns(2)
-                _dump_all_clicked = _aa_c1.button(
-                    "📦 全部寫入 Sheet（本地 → 雲端）",
-                    key="btn_dump_all_v18_50", type="primary",
-                    use_container_width=True,
-                    help=("本地 → 雲端：把 portfolio_funds 寫進各保單分頁、"
-                          "t7_ledgers 寫進 _T7_State。_Ledgers 為流水，"
-                          "於落帳時自動 append，此處不重寫。")
-                )
-                _load_all_clicked = _aa_c2.button(
-                    "📥 全部讀回（雲端 → 本地）",
-                    key="btn_load_all_v18_50",
-                    use_container_width=True,
-                    help=("雲端 → 本地：保單分頁載入投資組合 + _T7_State 載回 T7 持倉。"
-                          "_Ledgers 為流水備查，不覆蓋 t7_ledgers。")
-                )
-                _refresh_clicked = st.button(
+                st.markdown("##### 🛠️ 進階工具")
+                st.caption("📌 全部存讀請至頂部「🚀 快速存讀面板」；此處只放頂部沒有的小工具。")
+
+                _tool_c1, _tool_c2 = st.columns(2)
+                _refresh_clicked = _tool_c1.button(
                     "🔄 只重新整理分頁清單（不動投組）",
-                    key="btn_policy_refresh", use_container_width=False,
+                    key="btn_policy_refresh", use_container_width=True,
                     help="只重整下方「保單分頁」下拉選單，不動投資組合資料"
                 )
                 # v18.58: 一鍵清空 fetch TTL 快取（強制下次抓 fresh NAV/FX/Macro）
-                _cache_c1, _cache_c2 = st.columns([1, 3])
-                if _cache_c1.button(
+                _clear_cache_clicked = _tool_c2.button(
                     "🗑️ 清空抓取快取",
                     key="btn_clear_fetch_cache_v18_58",
                     use_container_width=True,
                     help=("清空 fund_fetcher / macro_core 的 TTL 快取，"
                           "下次抓取會走 fresh HTTP（盤中需要即時新值時用）。\n"
                           "預設 TTL：NAV/FX 5min、MoneyDJ 15min、Macro 5min、FRED 30min")
-                ):
+                )
+                if _clear_cache_clicked:
                     try:
                         from fund_fetcher import clear_all_caches as _cac
                         import repositories.macro_repository  # noqa: F401 — 觸發 macro 快取註冊
@@ -936,27 +922,26 @@ def render_portfolio_tab() -> None:
                         st.success(f"✅ 已清空 {_n} 個快取函式（下次抓取走 fresh HTTP）")
                     except Exception as _e_cc:
                         st.error(f"清空失敗：{str(_e_cc)[:120]}")
-                with _cache_c2:
-                    try:
-                        from fund_fetcher import get_all_cache_info as _gci
-                        import repositories.macro_repository  # noqa: F401 — 觸發 macro 快取註冊
-                        _info_rows = _gci()
-                        if _info_rows:
-                            _total_entries = sum(r["size"] for r in _info_rows)
-                            _total_hits = sum(r.get("hits", 0) for r in _info_rows)
-                            _total_misses = sum(r.get("misses", 0) for r in _info_rows)
-                            _total_calls = _total_hits + _total_misses
-                            _hit_rate = (
-                                f"{(_total_hits / _total_calls * 100):.1f}%"
-                                if _total_calls > 0 else "—"
-                            )
-                            st.caption(
-                                f"🔋 快取狀態：{len(_info_rows)} 個函式 / "
-                                f"{_total_entries} entries / hit-rate {_hit_rate}"
-                                f"（hits={_total_hits} / misses={_total_misses}）"
-                            )
-                    except Exception:
-                        pass   # noqa: smoke-allow-pass — 顯示性 caption 失敗不影響功能
+                try:
+                    from fund_fetcher import get_all_cache_info as _gci
+                    import repositories.macro_repository  # noqa: F401 — 觸發 macro 快取註冊
+                    _info_rows = _gci()
+                    if _info_rows:
+                        _total_entries = sum(r["size"] for r in _info_rows)
+                        _total_hits = sum(r.get("hits", 0) for r in _info_rows)
+                        _total_misses = sum(r.get("misses", 0) for r in _info_rows)
+                        _total_calls = _total_hits + _total_misses
+                        _hit_rate = (
+                            f"{(_total_hits / _total_calls * 100):.1f}%"
+                            if _total_calls > 0 else "—"
+                        )
+                        st.caption(
+                            f"🔋 快取狀態：{len(_info_rows)} 個函式 / "
+                            f"{_total_entries} entries / hit-rate {_hit_rate}"
+                            f"（hits={_total_hits} / misses={_total_misses}）"
+                        )
+                except Exception:
+                    pass   # noqa: smoke-allow-pass — 顯示性 caption 失敗不影響功能
 
                 # 共用：取統計與更新 _sheet_stats
                 def _refresh_sheet_stats(_cli: object) -> None:
@@ -977,39 +962,15 @@ def render_portfolio_tab() -> None:
                     except Exception:
                         pass   # noqa: smoke-allow-pass — 統計失敗不影響主流程
 
-                # v18.162 PR：dump / load 邏輯抽到 ui/helpers/cloud_io.py，
-                # 上下方快捷面板共用同一份序列化規則
-                if _dump_all_clicked:
-                    from ui.helpers.cloud_io import dump_all_to_sheet
-                    _client = _get_oauth_client() if _oauth_configured else \
-                              get_gspread_client(dict(_gsa_secret))
-                    _res_d = dump_all_to_sheet(_client, _sheet_id, st.session_state)
-                    if not _res_d["ok"]:
-                        st.error(f"❌ {_res_d['error']}")
-                    else:
-                        for _w in _res_d["warnings"]:
-                            st.warning(f"⚠️ {_w}")
-                        _refresh_sheet_stats(_client)
-                        _msg_dump = [f"保單分頁 +{_res_d['written']} 筆"]
-                        if _res_d["n_state"]:
-                            _msg_dump.append(f"_T7_State +{_res_d['n_state']} 筆")
-                        if _res_d["skipped_no_pid"]:
-                            _msg_dump.append(f"略過未綁保單 {_res_d['skipped_no_pid']} 檔")
-                        st.success("📦 已寫入 Sheet：" + "、".join(_msg_dump))
-                        import datetime as _dt_save
-                        st.session_state["t3_last_save_at"] = (
-                            _dt_save.datetime.now().strftime("%Y-%m-%d %H:%M")
-                        )
-                        st.rerun()
-
-                if _load_all_clicked or _refresh_clicked:
+                # v18.167：refresh_only 路徑（dump_all / load_all 已移到頂部快捷面板）
+                if _refresh_clicked:
                     from ui.helpers.cloud_io import load_all_from_sheet
                     _client = _get_oauth_client() if _oauth_configured else \
                               get_gspread_client(dict(_gsa_secret))
                     _res_l = load_all_from_sheet(
                         _client, _sheet_id, st.session_state,
                         oauth_mode=bool(_oauth_configured),
-                        refresh_only=bool(_refresh_clicked and not _load_all_clicked),
+                        refresh_only=True,
                     )
                     if not _res_l["ok"]:
                         st.error(f"❌ {_res_l['error']}")
@@ -1017,30 +978,12 @@ def render_portfolio_tab() -> None:
                         for _w in _res_l["warnings"]:
                             st.warning(f"⚠️ {_w}")
                         _refresh_sheet_stats(_client)
-                        if _res_l["refresh_only"]:
-                            st.success("✅ 保單列表已刷新")
-                        else:
-                            _msg_load = [
-                                f"新增 {len(_res_l['added'])} 檔",
-                                f"保留 {len(_res_l['kept'])} 檔",
-                                f"移除 {len(_res_l['removed'])} 檔",
-                            ]
-                            if _res_l["restored_ct"]:
-                                _msg_load.append(f"還原 T7 部位 {_res_l['restored_ct']} 筆")
-                            st.success("📥 全部讀回完成：" + " / ".join(_msg_load))
-                            import datetime as _dt_load
-                            st.session_state["t3_last_load_at"] = (
-                                _dt_load.datetime.now().strftime("%Y-%m-%d %H:%M")
-                            )
-                            if _res_l["added"]:
-                                st.caption(
-                                    f"新增待載入：{', '.join(_res_l['added'])}"
-                                    "（按下方批次載入）"
-                                )
+                        st.success("✅ 保單列表已刷新")
                         st.rerun()
 
                 _pdf_cached = st.session_state.get("policies_df")
                 if _pdf_cached is not None and not _pdf_cached.empty:
+                    st.markdown("**📋 保單分頁清單**")
                     # v18.64: column header 改顯繁中（schema 仍英文，僅 UI 改名）
                     st.dataframe(
                         _pdf_cached, use_container_width=True, hide_index=True,
@@ -1057,54 +1000,7 @@ def render_portfolio_tab() -> None:
                         },
                     )
 
-                # ── v18.70 本機 JSON 備份（v18.161 PR：抽 helper 與上方快捷面板共用）─────
-                st.markdown("---")
-                st.markdown("##### ⬇️ 📁 本機 JSON 備份（不依賴網路，可離線還原）")
-                st.caption("💡 也可從上方「🚀 快速存讀面板」的 💾 / 📂 直接使用。")
-                import json as _json_pm
-                import datetime as _dt_pm
-                from ui.helpers.json_backup import (
-                    build_export_payload as _pm_build_export_payload,
-                    restore_from_json_bytes as _pm_restore_from_json_bytes,
-                )
-
-                _pm_payload = _pm_build_export_payload(st.session_state)
-                _pm_payload_bytes = _json_pm.dumps(
-                    _pm_payload, ensure_ascii=False, indent=2
-                ).encode("utf-8")
-                _pm_ts = _dt_pm.datetime.now().strftime("%Y%m%d_%H%M%S")
-                _pm_filename = f"fund_dashboard_backup_{_pm_ts}.json"
-
-                _pm_c1, _pm_c2 = st.columns(2)
-                _pm_c1.download_button(
-                    "💾 下載 JSON 備份",
-                    data=_pm_payload_bytes,
-                    file_name=_pm_filename,
-                    mime="application/json",
-                    use_container_width=True,
-                    help=f"含 {len(_pm_payload['portfolio_funds'])} 檔基金 + "
-                         f"{len(_pm_payload['t7_ledgers'])} 筆 ledger + "
-                         f"{len(_pm_payload['t7_scenarios'])} 個方案",
-                )
-                _pm_uploaded = _pm_c2.file_uploader(
-                    "📂 上傳 JSON 還原",
-                    type=["json"], key="pm_upload_json_v18_70",
-                    label_visibility="visible",
-                )
-                if _pm_uploaded is not None:
-                    _pm_result = _pm_restore_from_json_bytes(
-                        _pm_uploaded.read(), st.session_state,
-                    )
-                    if not _pm_result["ok"]:
-                        st.error(f"❌ {_pm_result['error']}")
-                    else:
-                        st.session_state.pop("_t7_auto_estimate_done", None)
-                        st.success(
-                            f"✅ 已還原 {_pm_result['n_funds']} 檔基金 + "
-                            f"{_pm_result['n_ledgers']} 筆 ledger。"
-                            "請按「📡 載入所有未載入基金」重新抓取即時資料。"
-                        )
-                        st.rerun()
+                # v18.167：「📁 本機 JSON 備份」整段刪除（與頂部 💾/📂 重複）
 
                 # ── v18.63: 保單分頁管理區塊已移除（使用者反饋過度複雜）
                 #           保單分頁的建立 / 刪除改由「批次加入」自動處理：

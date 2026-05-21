@@ -430,6 +430,52 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-J 刪除雙入口、瘦身成「🛠️ 進階工具」（v18.167 新增）
+
+**問題場景**：頂部 5 顆按鈕已覆蓋全部存讀，但下方 expander 內仍有 v18.50「🧰 一鍵存讀」+ v18.70「📁 本機 JSON 備份」共 6 顆重複按鈕占版面。user 截圖紅框反饋「請保留單一上方五個按鈕的功能」。
+
+**設計**：刪除重複的 4 顆 button（全部寫入 / 全部讀回 / 下載 JSON / 上傳 JSON），保留 2 顆獨家功能，rename 區塊為「🛠️ 進階工具」。
+
+```python
+# tab3_portfolio.py:895+
+if _sheet_id:
+    st.markdown("---")
+    st.markdown("##### 🛠️ 進階工具")
+    st.caption("📌 全部存讀請至頂部「🚀 快速存讀面板」；此處只放頂部沒有的小工具。")
+
+    _tool_c1, _tool_c2 = st.columns(2)
+    _refresh_clicked = _tool_c1.button("🔄 只重新整理分頁清單（不動投組）", ...)
+    _clear_cache_clicked = _tool_c2.button("🗑️ 清空抓取快取", ...)
+    # 快取狀態 caption（hit-rate / entries / hits-misses）
+
+    # refresh handler 簡化：只剩 refresh_only=True
+    if _refresh_clicked:
+        from ui.helpers.cloud_io import load_all_from_sheet
+        _res_l = load_all_from_sheet(_client, _sheet_id, ss, refresh_only=True)
+        ...
+
+    # 保單分頁清單（dataframe display, 加 ** 標題）
+    _pdf_cached = st.session_state.get("policies_df")
+    if _pdf_cached is not None and not _pdf_cached.empty:
+        st.markdown("**📋 保單分頁清單**")
+        st.dataframe(...)
+
+# v18.167：「📁 本機 JSON 備份」整段刪除（與頂部 💾/📂 重複）
+```
+
+**移除清單**：
+- `btn_dump_all_v18_50`（📦 全部寫入 Sheet）— 與頂部 📦 雲端存檔 重複
+- `btn_load_all_v18_50`（📥 全部讀回）— 與頂部 📥 雲端讀取 重複
+- `pm_upload_json_v18_70` + 對應 download_button — 與頂部 💾/📂 重複
+- 對應 `_dump_all_clicked` / `_load_all_clicked` handler block
+
+**保留清單**：
+- `btn_policy_refresh`（🔄 只重新整理）— refresh_only=True 路徑，頂部無對應
+- `btn_clear_fetch_cache_v18_58`（🗑️ 清空快取）— fund_fetcher / macro TTL 清空，頂部無對應
+- `_pdf_cached` dataframe — 純顯示，加 `**📋 保單分頁清單**` 標題
+
+---
+
 ### §3-I 「從 Drive 挑帳本」移到「📥 雲端讀取」面板（v18.166 新增）
 
 **問題場景**：v18.165 把「自動建立」+「從 Drive 挑」上下並列在「✨ 新增帳本」面板，user 截圖紅框 + 紅箭頭反饋希望分流。
