@@ -331,34 +331,47 @@ new_units       = reinvest_twd / (avg_nav × avg_fx)    # denom ≤ 0 → 0
 
 ---
 
-### §3-E Tab3 IO toolbar 互動式快捷面板（v18.161 新增）
+### §3-E Tab3 IO toolbar 互動式快捷面板（v18.161 新增 / v18.162 雲端動作改真執行）
 
-**問題場景**：v18.159 把 4 顆 IO button 做成 toast 跳轉提示，但實際操作區（雲端讀寫 L711 / 本機 JSON 備份 L1008）中間隔了 OAuth / Sheet ID / 自動建立 / 資料夾載入 等大段，user 每次仍要狂滑找按鈕。
+**問題演進**：
+- v18.159 4 顆按鈕做成 toast 跳轉提示，user 仍要狂滑
+- v18.161 升級為 toggle + 雲端「狀態 + 請往下捲」提示牌；user 截圖反饋仍「不太順」
+- **v18.162 終態**：4 顆按鈕全部**真執行**，雲端讀寫一鍵到位
 
-**設計**：4 顆按鈕升級為 toggle（`session_state["t3_io_panel"]`，預設 `"load"`），點哪顆下方 placeholder 渲染哪顆動作面板：
+**設計**：
 
-| 按鈕 | 面板行為 | 真執行？ |
-|------|---------|---------|
-| 📥 雲端讀取 | 顯示「目前帳本 + 本地持倉檔數 + 上次讀回時間 + ⬇️ 完整面板提示」 | 否，導引到下方 L711 |
-| 📦 雲端存檔 | 顯示「目前帳本 + 待寫入持倉檔數 + 上次寫入時間 + ⬇️ 完整面板提示」 | 否，導引到下方 L711 |
-| 💾 下載 JSON | `download_button` 即時序列化 + 顯示『含 N 檔 + M ledger + K 方案』 | 是 |
-| 📂 上傳 JSON | `file_uploader` + `restore_from_json_bytes` 即時還原 | 是 |
+| 按鈕 | 面板顯示 | 動作 | 真執行？ |
+|------|---------|------|---------|
+| 📥 雲端讀取 | `📂 帳本：sheet name ｜ 本地持倉：N 檔 ｜ 上次讀回：時間` | 「📥 立即全部讀回」按鈕 → `load_all_from_sheet` | 是（v18.162） |
+| 📦 雲端存檔 | `📂 帳本：sheet name ｜ 待寫入持倉：N 檔 ｜ 上次寫入：時間` | 「📦 立即全部寫入」按鈕 → `dump_all_to_sheet`（無持倉時 disabled） | 是（v18.162） |
+| 💾 下載 JSON | `含 N 檔 + M ledger + K 方案` | `download_button` 即時序列化 | 是（v18.161） |
+| 📂 上傳 JSON | 檔案上傳區 | `restore_from_json_bytes` 即時還原 | 是（v18.161） |
 
-**為何雲端讀寫保留導引、JSON 直接執行**：雲端動作依賴 `_client / _sheet_id / _active_book_id` 在 expander 下方才解析（搬上來會觸發變數作用域風險，v18.159 已驗證過）；JSON 動作只動 `session_state`，無此風險。
+**未登入/無 sheet_id 時** 雲端 panel 顯示友善 warning：「⚠️ 尚未登入 Google 或未指定 Sheet ID。請先在下方『📂 從 Drive 列出 Sheets』挑一本」。
 
-**helper 抽離**（`ui/helpers/json_backup.py`）：
+**helper 抽離（雙 helper 上下方共用）**：
+
 ```python
-build_export_payload(ss: MutableMapping) -> dict
-# 剝掉 series / moneydj_raw 等大物件，回完整 schema_version="1.0" payload
+# ui/helpers/cloud_io.py（v18.162 新增）
+dump_all_to_sheet(client, sheet_id, ss) -> dict
+# {ok, written, skipped_no_pid, n_state, warnings, error}
 
-restore_from_json_bytes(raw: bytes, ss: MutableMapping) -> dict
-# 回 {ok: bool, n_funds: int, n_ledgers: int, error: str|None}
-# 自動 reset loaded flag、清 _t7_auto_restore_done、容錯壞 ledger entry
+load_all_from_sheet(client, sheet_id, ss, *, oauth_mode, refresh_only=False) -> dict
+# {ok, refresh_only, added, kept, removed, restored_ct, warnings, error}
+
+# ui/helpers/json_backup.py（v18.161 新增）
+build_export_payload(ss) -> dict
+restore_from_json_bytes(raw, ss) -> {ok, n_funds, n_ledgers, error}
 ```
 
-**timestamp 紀錄**：`tab3_portfolio.py` L791 / L860 雲端讀寫成功後寫入 `t3_last_save_at` / `t3_last_load_at`（`%Y-%m-%d %H:%M`），供上方快捷面板顯示。
+**設計原則**：
+- helper **streamlit-agnostic** ── warning / error 透過 return dict 帶出，由 caller 顯示
+- 致命錯誤（`error`）vs 非致命警告（`warnings`）分離 ── 例：`_T7_State` 寫入 quota error 走 warnings 不擋主流程
+- sheet name 快取 `session_state["_t3_cur_sheet_title"]` ── 避免每次 panel rerun 都打 `get_sheet_title` API
 
-**下方原段保留**：`L1008+` 本機 JSON 備份完整面板維持不動（作完整備援 + caption「也可從上方快捷面板使用」），改用 helper 重寫消除重複邏輯。
+**timestamp 紀錄**：上下方雙入口寫入成功後皆寫 `t3_last_save_at` / `t3_last_load_at`（`%Y-%m-%d %H:%M`），供上方快捷面板顯示。
+
+**下方 L863+「🧰 一鍵存讀」段瘦身**：呼叫同一 helper，移除 ~120 行重複邏輯，作雙入口備援 + 提供「只刷新分頁清單」與快取管理。
 
 ---
 

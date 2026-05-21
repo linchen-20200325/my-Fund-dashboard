@@ -173,11 +173,11 @@ def render_portfolio_tab() -> None:
     _gsheet_default_expand = not bool(st.session_state.get("gsheet_tokens"))
     with st.expander("📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單",
                      expanded=_gsheet_default_expand):
-        # v18.161：互動式快捷面板 — 4 顆按鈕升級為 toggle，點哪顆下方 placeholder
-        # 就渲染哪顆的動作面板。雲端讀寫因依賴 _client / _sheet_id / _active_book_id
-        # （皆在下方才解析）保留為「導引 + 上次狀態」；JSON 下載 / 上傳不依賴
-        # Google API，可在此真執行。下方 L711+（一鍵存讀）與 L920+（本機 JSON 備份）
-        # 完整面板維持不動作為進階備援。
+        # v18.162：互動式快捷面板 ── 4 顆按鈕全部「真執行」一鍵到位。
+        # 雲端讀寫抽 ui/helpers/cloud_io.py 純函式（dump_all_to_sheet /
+        # load_all_from_sheet），與下方 L880+ 完整面板共用同一份 IO 邏輯；
+        # JSON 下載/上傳沿用 v18.161 的 ui/helpers/json_backup.py。
+        # 未登入 OAuth 或無 sheet_id 時，雲端 panel 顯示友善提示 + 動作按鈕 disabled。
         st.markdown("##### 🚀 快速存讀面板")
         _io_panel = st.session_state.get("t3_io_panel", "load")
 
@@ -206,33 +206,111 @@ def render_portfolio_tab() -> None:
                       on_click=_t3_set_io_panel, args=("ul",),
                       help="從本機 JSON 還原整本帳本")
 
+        # 共用：雲端 panel 需要的快取狀態（避免重複打 API）
+        _sheet_id_q = (st.session_state.get("policy_sheet_id") or "").strip()
+        _logged_in_q = bool(st.session_state.get("gsheet_tokens"))
+        _can_cloud_q = bool(_sheet_id_q) and (
+            _logged_in_q or (_gsa_secret and _sheet_id_secret)
+        )
+        _sheet_title_q = ""
+        if _can_cloud_q and _oauth_configured and _logged_in_q:
+            _sheet_title_q = st.session_state.get("_t3_cur_sheet_title", "")
+            if not _sheet_title_q:
+                try:
+                    _sheet_title_q = (
+                        get_sheet_title(_get_oauth_client(), _sheet_id_q) or ""
+                    )
+                    if _sheet_title_q:
+                        st.session_state["_t3_cur_sheet_title"] = _sheet_title_q
+                except Exception:
+                    _sheet_title_q = ""
+
+        def _t3_cloud_client_q():
+            return (_get_oauth_client() if _oauth_configured
+                    else get_gspread_client(dict(_gsa_secret)))
+
         with st.container(border=True):
             if _io_panel == "load":
-                _book = st.session_state.get("active_policy_id") or "（未選定）"
-                _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
-                _last_load = st.session_state.get("t3_last_load_at", "—")
                 st.markdown("**📥 全部讀回（雲端 → 本地）**")
-                st.caption(
-                    f"📒 目前帳本：`{_book}` ｜ 本地持倉：{_fund_n} 檔 ｜ "
-                    f"上次讀回：{_last_load}"
-                )
-                st.info(
-                    "⬇️ 完整操作在下方「🧰 一鍵存讀」段的「📥 全部讀回（雲端 → 本地）」"
-                    "按鈕（需先選保單帳本）。"
-                )
+                if not _can_cloud_q:
+                    st.warning(
+                        "⚠️ 尚未登入 Google 或未指定 Sheet ID。請先在下方"
+                        "「📂 從 Drive 列出 Sheets」挑一本，或貼 Sheet ID。"
+                    )
+                else:
+                    _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
+                    _last_load = st.session_state.get("t3_last_load_at", "—")
+                    _book_disp = (f"**{_sheet_title_q}**" if _sheet_title_q
+                                  else f"`{_sheet_id_q[:14]}…`")
+                    st.caption(
+                        f"📂 帳本：{_book_disp} ｜ 本地持倉：{_fund_n} 檔 "
+                        f"｜ 上次讀回：{_last_load}"
+                    )
+                    if st.button("📥 立即全部讀回", type="primary",
+                                  use_container_width=True,
+                                  key="t3_io_panel_load_run"):
+                        from ui.helpers.cloud_io import load_all_from_sheet
+                        _res = load_all_from_sheet(
+                            _t3_cloud_client_q(), _sheet_id_q,
+                            st.session_state,
+                            oauth_mode=bool(_oauth_configured),
+                        )
+                        if not _res["ok"]:
+                            st.error(f"❌ {_res['error']}")
+                        else:
+                            import datetime as _dt_q
+                            st.session_state["t3_last_load_at"] = (
+                                _dt_q.datetime.now().strftime("%Y-%m-%d %H:%M")
+                            )
+                            _msg = [f"新增 {len(_res['added'])} 檔",
+                                    f"保留 {len(_res['kept'])} 檔",
+                                    f"移除 {len(_res['removed'])} 檔"]
+                            if _res["restored_ct"]:
+                                _msg.append(f"T7 部位 {_res['restored_ct']} 筆")
+                            st.success("📥 全部讀回完成：" + " / ".join(_msg))
+                            for _w in _res["warnings"]:
+                                st.warning(f"⚠️ {_w}")
+                            st.rerun()
             elif _io_panel == "save":
-                _book = st.session_state.get("active_policy_id") or "（未選定）"
-                _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
-                _last_save = st.session_state.get("t3_last_save_at", "—")
                 st.markdown("**📦 全部寫入 Sheet（本地 → 雲端）**")
-                st.caption(
-                    f"📒 目前帳本：`{_book}` ｜ 待寫入持倉：{_fund_n} 檔 ｜ "
-                    f"上次寫入：{_last_save}"
-                )
-                st.info(
-                    "⬇️ 完整操作在下方「🧰 一鍵存讀」段的「📦 全部寫入 Sheet」"
-                    "按鈕（需先選保單帳本）。"
-                )
+                if not _can_cloud_q:
+                    st.warning(
+                        "⚠️ 尚未登入 Google 或未指定 Sheet ID。請先在下方完成設定。"
+                    )
+                else:
+                    _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
+                    _last_save = st.session_state.get("t3_last_save_at", "—")
+                    _book_disp = (f"**{_sheet_title_q}**" if _sheet_title_q
+                                  else f"`{_sheet_id_q[:14]}…`")
+                    st.caption(
+                        f"📂 帳本：{_book_disp} ｜ 待寫入持倉：{_fund_n} 檔 "
+                        f"｜ 上次寫入：{_last_save}"
+                    )
+                    if st.button("📦 立即全部寫入", type="primary",
+                                  use_container_width=True,
+                                  key="t3_io_panel_save_run",
+                                  disabled=(_fund_n == 0),
+                                  help=("無持倉可寫入" if _fund_n == 0 else None)):
+                        from ui.helpers.cloud_io import dump_all_to_sheet
+                        _res = dump_all_to_sheet(
+                            _t3_cloud_client_q(), _sheet_id_q, st.session_state,
+                        )
+                        if not _res["ok"]:
+                            st.error(f"❌ {_res['error']}")
+                        else:
+                            import datetime as _dt_q
+                            st.session_state["t3_last_save_at"] = (
+                                _dt_q.datetime.now().strftime("%Y-%m-%d %H:%M")
+                            )
+                            _msg = [f"保單分頁 +{_res['written']} 筆"]
+                            if _res["n_state"]:
+                                _msg.append(f"_T7_State +{_res['n_state']} 筆")
+                            if _res["skipped_no_pid"]:
+                                _msg.append(f"略過未綁保單 {_res['skipped_no_pid']} 檔")
+                            st.success("📦 已寫入 Sheet：" + "、".join(_msg))
+                            for _w in _res["warnings"]:
+                                st.warning(f"⚠️ {_w}")
+                            st.rerun()
             elif _io_panel == "dl":
                 import datetime as _dt_top
                 import json as _json_top
@@ -782,11 +860,12 @@ def render_portfolio_tab() -> None:
                         st.error(f"❌ v2 編輯 UI 載入失敗："
                                   f"[{type(_ev2).__name__}] {_ev2}")
 
-            # ── v18.50 一鍵存讀（解決「同一筆資料散在三個 tab，
-            #          看不出全貌」的散亂感）；v18.147 把「保單清單」前移後此處只剩存讀
+            # ── v18.50 一鍵存讀（v18.162 PR：與上方快捷面板共用 cloud_io.py helper）
+            #          v18.147 把「保單清單」前移後此處只剩存讀
             if _sheet_id:
                 st.markdown("---")
                 st.markdown("##### ⬇️ 🧰 一鍵存讀（同步整本帳本）")
+                st.caption("📌 主入口在頂部「🚀 快速存讀面板」；此處作雙入口備援 + 提供「只刷新分頁清單」與快取管理。")
                 _aa_c1, _aa_c2 = st.columns(2)
                 _dump_all_clicked = _aa_c1.button(
                     "📦 全部寫入 Sheet（本地 → 雲端）",
@@ -866,126 +945,67 @@ def render_portfolio_tab() -> None:
                     except Exception:
                         pass   # noqa: smoke-allow-pass — 統計失敗不影響主流程
 
+                # v18.162 PR：dump / load 邏輯抽到 ui/helpers/cloud_io.py，
+                # 上下方快捷面板共用同一份序列化規則
                 if _dump_all_clicked:
-                    try:
-                        _client = _get_oauth_client() if _oauth_configured else \
-                                  get_gspread_client(dict(_gsa_secret))
-                        # 1) 把 portfolio_funds 寫回對應保單分頁
-                        _written = 0
-                        _skipped_no_pid = 0
-                        for _f_dump in st.session_state.get("portfolio_funds", []):
-                            _pid_d = str(_f_dump.get("policy_id", "") or "").strip()
-                            _code_d = str(_f_dump.get("code", "") or "").strip().upper()
-                            if not _pid_d:
-                                _skipped_no_pid += 1
-                                continue
-                            if not _code_d:
-                                continue
-                            try:
-                                upsert_fund_in_policy(_client, _sheet_id, _pid_d, {
-                                    "fund_url":     _code_d,
-                                    "policy_name":  _pid_d,
-                                    "invest_twd":   int(_f_dump.get("invest_twd", 0) or 0),
-                                    "invest_date":  "",
-                                    "currency":     str(_f_dump.get("currency", "")),
-                                    "fx_at_buy":    0.0,
-                                    "notes":        "v18.50 全部寫入",
-                                    "policy_tier":  ("core" if _f_dump.get("is_core")
-                                                     else "satellite"
-                                                     if _f_dump.get("is_core") is False
-                                                     else ""),
-                                })
-                                _written += 1
-                            except (PolicySheetError, OAuthError):
-                                continue
-                        # 2) _T7_State 快照
-                        _t7_dict = st.session_state.get("t7_ledgers", {}) or {}
-                        _funds_lookup = {fund_pk_str(_f): _f
-                                         for _f in st.session_state.get("portfolio_funds", [])}
-                        _n_state = 0
-                        if _t7_dict:
-                            try:
-                                _n_state = save_all_ledgers_snapshot(
-                                    _client, _sheet_id, _t7_dict, _funds_lookup)
-                            except (PolicySheetError, OAuthError) as _e_sn:
-                                st.warning(f"⚠️ _T7_State 寫入失敗：{str(_e_sn)[:120]}")
+                    from ui.helpers.cloud_io import dump_all_to_sheet
+                    _client = _get_oauth_client() if _oauth_configured else \
+                              get_gspread_client(dict(_gsa_secret))
+                    _res_d = dump_all_to_sheet(_client, _sheet_id, st.session_state)
+                    if not _res_d["ok"]:
+                        st.error(f"❌ {_res_d['error']}")
+                    else:
+                        for _w in _res_d["warnings"]:
+                            st.warning(f"⚠️ {_w}")
                         _refresh_sheet_stats(_client)
-                        _msg_dump = [f"保單分頁 +{_written} 筆"]
-                        if _n_state:
-                            _msg_dump.append(f"_T7_State +{_n_state} 筆")
-                        if _skipped_no_pid:
-                            _msg_dump.append(f"略過未綁保單 {_skipped_no_pid} 檔")
+                        _msg_dump = [f"保單分頁 +{_res_d['written']} 筆"]
+                        if _res_d["n_state"]:
+                            _msg_dump.append(f"_T7_State +{_res_d['n_state']} 筆")
+                        if _res_d["skipped_no_pid"]:
+                            _msg_dump.append(f"略過未綁保單 {_res_d['skipped_no_pid']} 檔")
                         st.success("📦 已寫入 Sheet：" + "、".join(_msg_dump))
-                        # v18.161 PR：紀錄上次寫入時間，供上方快捷面板顯示
                         import datetime as _dt_save
                         st.session_state["t3_last_save_at"] = (
                             _dt_save.datetime.now().strftime("%Y-%m-%d %H:%M")
                         )
                         st.rerun()
-                    except (PolicySheetError, OAuthError) as _pe:
-                        st.error(f"❌ Sheet 寫入失敗：{_pe}")
-                    except Exception as _e:
-                        st.error(f"❌ 未預期錯誤：[{type(_e).__name__}] {_e}")
 
                 if _load_all_clicked or _refresh_clicked:
-                    try:
-                        _client = _get_oauth_client() if _oauth_configured else \
-                                  get_gspread_client(dict(_gsa_secret))
-                        # OAuth 模式走新 per-policy schema；SA 模式走舊 Policies 表
-                        if _oauth_configured:
-                            _pdf = load_all_policy_worksheets(_client, _sheet_id)
-                            _tabs = list_policy_worksheets(_client, _sheet_id)
-                            st.session_state["policy_tabs"] = _tabs
+                    from ui.helpers.cloud_io import load_all_from_sheet
+                    _client = _get_oauth_client() if _oauth_configured else \
+                              get_gspread_client(dict(_gsa_secret))
+                    _res_l = load_all_from_sheet(
+                        _client, _sheet_id, st.session_state,
+                        oauth_mode=bool(_oauth_configured),
+                        refresh_only=bool(_refresh_clicked and not _load_all_clicked),
+                    )
+                    if not _res_l["ok"]:
+                        st.error(f"❌ {_res_l['error']}")
+                    else:
+                        for _w in _res_l["warnings"]:
+                            st.warning(f"⚠️ {_w}")
+                        _refresh_sheet_stats(_client)
+                        if _res_l["refresh_only"]:
+                            st.success("✅ 保單列表已刷新")
                         else:
-                            _pdf = load_policies(_client, _sheet_id)
-                        st.session_state["policies_df"] = _pdf
-
-                        if _load_all_clicked:
-                            _merged, _report = sync_policies_to_portfolio_funds(
-                                _pdf, st.session_state.portfolio_funds)
-                            st.session_state.portfolio_funds = _merged
-                            _restored_ct = 0
-                            try:
-                                from services.ledger_service import Ledger as _LedT7_load
-                                _restored = load_all_ledgers_snapshot(
-                                    _client, _sheet_id, _LedT7_load)
-                                if _restored:
-                                    st.session_state["t7_ledgers"] = _restored
-                                    _restored_ct = len(_restored)
-                                    # v18.52: 同步 invest_twd 灌回 portfolio_funds，
-                                    #         否則上方 KPI / 圓餅圖看不到單位數對應金額
-                                    _sync_invest_twd_from_ledgers()
-                                    # v18.52: 清除 auto-restore done flag，讓 T7 進入時
-                                    #         不會被既有 flag 擋掉重新還原（rerun 後再判斷）
-                                    st.session_state.pop("_t7_auto_restore_done", None)
-                                    # v18.68: 同步重設自動估算 flag，讓 T7 重新對齊 invest_twd
-                                    st.session_state.pop("_t7_auto_estimate_done", None)
-                            except (PolicySheetError, OAuthError) as _e_ld:
-                                st.warning(f"⚠️ _T7_State 讀回失敗：{str(_e_ld)[:120]}")
-                            _refresh_sheet_stats(_client)
                             _msg_load = [
-                                f"新增 {len(_report['added'])} 檔",
-                                f"保留 {len(_report['kept'])} 檔",
-                                f"移除 {len(_report['removed'])} 檔",
+                                f"新增 {len(_res_l['added'])} 檔",
+                                f"保留 {len(_res_l['kept'])} 檔",
+                                f"移除 {len(_res_l['removed'])} 檔",
                             ]
-                            if _restored_ct:
-                                _msg_load.append(f"還原 T7 部位 {_restored_ct} 筆")
+                            if _res_l["restored_ct"]:
+                                _msg_load.append(f"還原 T7 部位 {_res_l['restored_ct']} 筆")
                             st.success("📥 全部讀回完成：" + " / ".join(_msg_load))
-                            # v18.161 PR：紀錄上次讀取時間，供上方快捷面板顯示
                             import datetime as _dt_load
                             st.session_state["t3_last_load_at"] = (
                                 _dt_load.datetime.now().strftime("%Y-%m-%d %H:%M")
                             )
-                            if _report["added"]:
-                                st.caption(f"新增待載入：{', '.join(_report['added'])}（按下方批次載入）")
-                        else:
-                            _refresh_sheet_stats(_client)
-                            st.success("✅ 保單列表已刷新")
+                            if _res_l["added"]:
+                                st.caption(
+                                    f"新增待載入：{', '.join(_res_l['added'])}"
+                                    "（按下方批次載入）"
+                                )
                         st.rerun()
-                    except (PolicySheetError, OAuthError) as _pe:
-                        st.error(f"❌ Sheet 操作失敗：{_pe}")
-                    except Exception as _e:
-                        st.error(f"❌ 未預期錯誤：[{type(_e).__name__}] {_e}")
 
                 _pdf_cached = st.session_state.get("policies_df")
                 if _pdf_cached is not None and not _pdf_cached.empty:

@@ -246,6 +246,23 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.162 — Tab3 快捷面板雲端動作改真執行 + 抽 cloud_io helper（2026-05-21）
+
+- [x] **問題場景**（user 截圖三張）：v18.161 快捷面板的 📥/📦 panel 只是「狀態 + 請往下捲」提示牌，與 toast 等價；且「目前帳本」誤讀 `active_policy_id`（保單）而非 `policy_sheet_id`（帳本），顯示「(未選定)」與實際不符
+- [x] **設計**：4 顆按鈕全部**真執行**
+  - 📥/📦 panel 顯示「📂 帳本：**真實 sheet name** ｜ 持倉檔數 ｜ 上次讀寫時間」+ 一顆「立即執行」按鈕
+  - 未登入/無 sheet_id 時顯示友善 warning + 引導到下方完成設定
+  - 寫入 disabled 條件：無持倉
+- [x] **抽 helper** `ui/helpers/cloud_io.py`（純函式、streamlit-agnostic）
+  - `dump_all_to_sheet(client, sheet_id, ss) -> {ok, written, skipped_no_pid, n_state, warnings, error}`
+  - `load_all_from_sheet(client, sheet_id, ss, *, oauth_mode, refresh_only=False) -> {ok, refresh_only, added, kept, removed, restored_ct, warnings, error}`
+  - PolicySheetError / OAuthError / 未預期 exception 統一收進回傳 dict，warnings 與 error 分離（致命 vs 非致命）
+- [x] **sheet name 快取** `_t3_cur_sheet_title` session_state，避免每次 panel rerun 都打 `get_sheet_title` API
+- [x] **下方 L863+ 「🧰 一鍵存讀」段瘦身** ── 改呼叫同一 helper，移除 ~120 行重複邏輯；加 caption「📌 主入口在頂部『🚀 快速存讀面板』；此處作雙入口備援」
+- [x] **新測試** `test_cloud_io.py` 10 cases：dump 正常 / 無 policy_id skip / _T7_State 失敗變 warning / 未預期 exception 收口 / 空 portfolio / load refresh_only OAuth / SA 模式 / full load sync report / ledger 載入失敗 warning / RuntimeError 收口
+- [x] **驗證** fast tier `pytest -m "not slow"` **556 passed**（v18.161 baseline 546 + 10 新增），零回歸
+- [x] **CLAUDE.md §3 三步法**：Explore（grep 確認 L791-1066 邏輯 + 依賴 + 無 closure-bound 變數）→ Plan（3 句話獲准）→ Execute
+
 ### v18.161 — Tab3 IO toolbar 升級為互動式快捷面板（toggle + 真執行 JSON / 雲端導引）（2026-05-21）
 
 - [x] **問題場景**：v18.159 把 4 顆按鈕做成「toast 跳轉提示」，但實際操作區（一鍵存讀 L711 / 本機 JSON 備份 L920）中間隔了 OAuth / Sheet ID / 自動建立 / 資料夾載入 等大段，user 每次仍要狂滑找按鈕
