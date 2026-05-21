@@ -304,6 +304,33 @@ def calc_portfolio_reallocation(               # v10.1 新增（組合層級）
 
 ---
 
+### §3-D 保單基金配息現金/單位拆分（v18.160 新增）
+
+**規格背景**：保險公司 APP 允許 user 為每檔保單基金設定配息「現金給付% / 增加單位數%」（例：USDEQ5110 設 80% 現金 + 20% 新增單位）。Dashboard 須對應紀錄該設定並估算年化現金流。
+
+**Schema 規格**：v2 schema 第 13 欄 `div_cash_pct`（中文 header「現金給付%」）。
+- 型別：`float`，值域 `[0, 100]`，預設 `100`（全現金給付，符合多數保單預設行為）
+- 單位數% = `100 - div_cash_pct`（derived，不存）
+- `repositories.policy_repository._normalize_div_cash_pct`：缺值/空字串/garbage → 100；超界 clip；容錯帶 `%` 符號
+- **向後相容**：舊 12 欄 Sheet 載入時自動補欄、補預設 100；`is_v2_worksheet` 偵測不變
+
+**估算公式**（`policy_repository.estimate_dividend_split`）：
+```
+annual_div_twd  = invest_twd × annual_div_rate_pct / 100
+cash_twd        = annual_div_twd × div_cash_pct / 100
+reinvest_twd    = annual_div_twd − cash_twd
+new_units       = reinvest_twd / (avg_nav × avg_fx)    # denom ≤ 0 → 0
+```
+
+**UI 規格**（`ui/helpers/v2_editor.py`）：
+- data_editor 新增 NumberColumn「🟨 現金給付 %」(min 0 / max 100 / step 10 / format `%d`)
+- 下方 caption「💡 配息拆分均值：現金 X% / 新增單位 Y%」即時顯示
+- expander「📊 配息估算」：user 填年配息率假設 (預設 5%) → 表格列每檔基金的 `現金% / 單位% / 年配息(TWD) / 年現金(TWD) / 年再投入(TWD) / 年新增單位數` + 3 個彙總 metric
+
+**AI 整合**：Tab3 末「🤖 AI 白話文總結」snapshot 從 `_v2_buf` × `portfolio_funds.metrics.annual_div_rate` 算估算，加入「📊 年配息現金/單位拆分估算」段（總彙總 + 每檔細節）。
+
+---
+
 ## §4 核心需求五：機構級風險歸因與 σ 絕對位階策略
 
 ### 4-1 底層持股相關性矩陣
