@@ -246,6 +246,36 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.160 — 保單基金配息現金/單位拆分（div_cash_pct 0-100%）+ 估算 + AI 整合（2026-05-21）
+
+- [x] **問題場景**：保險公司 APP 可設定每檔基金的配息「現金給付 % / 增加單位數 %」拆分（user 截圖：USDEQ5110 設 80%/20%）；dashboard 需要對應功能讓 user 紀錄此設定並估算年化現金流
+- [x] **Schema 擴 v2 第 13 欄** `div_cash_pct` (0~100，預設 100=全現金；單位 % = 100 - 該值)
+  - `repositories/policy_repository.py:799` `ALL_COLS_V2` +1 欄
+  - 中英 header 雙向 map（`ZH_HEADERS_V2["div_cash_pct"] = "現金給付%"`）
+  - `USER_INPUT_COLS` 加入該欄（黃底，user 從保險公司 APP 抄）
+  - `_normalize_div_cash_pct()` 新 helper：缺值/解析失敗 → 100；超界 clip [0,100]；容錯帶 `%` 符號
+  - `load_policy_v2` / `load_all_policies_v2` 在 row normalize 階段套用
+  - 舊 12 欄 Sheet **向後相容**：缺欄補預設 100，`is_v2_worksheet` 仍認舊 sheet
+- [x] **編輯器 UI** `ui/helpers/v2_editor.py`
+  - `_empty_fund_df` / `_split_policy_df` / `_merge_policy_df` 全部跟著 +1 欄
+  - data_editor 新增 NumberColumn「🟨 現金給付 %」(0-100 step=10)
+  - data_editor 下方加 caption「💡 配息拆分均值：現金 X% / 新增單位 Y%」
+- [x] **配息估算 mini-section**（新 helper `_render_div_split_estimate`）
+  - expander「📊 配息現金/單位拆分估算」內：user 手填「年配息率假設 %」(預設 5) + 每檔基金的 fund_code/invest_twd/cash%/單位%/年現金/年再投入/年新增單位數 表格 + 3 個彙總 metric
+  - 純前端計算，不依賴 portfolio_funds metrics
+- [x] **estimate_dividend_split 純函式 helper**（`repositories/policy_repository.py`）
+  - 輸入：invest_twd / annual_div_rate_pct / div_cash_pct / avg_nav / avg_fx
+  - 輸出 dict：annual_div_twd / cash_twd / reinvest_twd / new_units / cash_pct / unit_pct
+  - avg_nav=0 等邊界安全（new_units 回 0，不爆 ZeroDivision）
+- [x] **AI snapshot 整合** `ui/tab3_portfolio.py:_render_tab3_ai_summary`
+  - 從 `st.session_state["_v2_buf"]` 撈 user 已編輯保單的 div_cash_pct
+  - 用 portfolio_funds metrics 的 `annual_div_rate` 估算
+  - snapshot 加「📊 年配息現金/單位拆分估算」段（彙總 + 每檔細節）
+- [x] **測試 +10**
+  - test_policy_store.py：schema 13 欄、normalize 預設/clip/garbage、estimate 5 種場景（100%/80%/0%/zero_nav/safe）、舊 Sheet 載入補預設
+  - test_v2_editor.py：empty_fund_df 10 欄、merge 保留 div_cash_pct/補預設/clip
+- [x] **驗證** fast tier **538 passed**（+10 新）零回歸
+
 ### v18.159 — Tab3 存讀工具列收口 + 保單清單 schema-leak 過濾 + 4 視角 AI 白話文總結（2026-05-21）
 
 - [x] **Task A：Tab3「📋 保單管理」expander 頂部加「🚀 快速跳轉」toolbar**

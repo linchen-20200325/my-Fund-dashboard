@@ -796,6 +796,7 @@ ALL_COLS_V2: tuple[str, ...] = (
     "tier",              # "core" | "satellite" | ""
     "amount",            # cash 列才填（多幣別現金金額）
     "invest_twd",        # 淨投資金額（對帳單欄(4)），= units × avg_nav × avg_fx
+    "div_cash_pct",      # v18.160: 配息「現金給付」百分比 (0~100)；單位數% = 100 - 該值
 )
 
 ITEM_TYPE_FUND = "fund"
@@ -815,6 +816,7 @@ ZH_HEADERS_V2: dict[str, str] = {
     "tier":              "級別",
     "amount":            "金額",
     "invest_twd":        "淨投資金額",
+    "div_cash_pct":      "現金給付%",   # v18.160
 }
 EN_HEADERS_V2: dict[str, str] = {v: k for k, v in ZH_HEADERS_V2.items()}
 
@@ -823,6 +825,7 @@ EN_HEADERS_V2: dict[str, str] = {v: k for k, v in ZH_HEADERS_V2.items()}
 USER_INPUT_COLS: tuple[str, ...] = (
     "policy_id", "fund_code", "avg_nav", "avg_nav_with_div",
     "avg_fx", "amount", "invest_twd",
+    "div_cash_pct",   # v18.160: user 從保險公司 APP 抄（如 80% 現金 / 20% 單位）
 )
 # 自動填寫（MoneyDJ 抓 / 系統算 / 系統定）：灰底（read-only signal）
 AUTO_COLS: tuple[str, ...] = (
@@ -931,6 +934,85 @@ def _normalize_float(v: Any, default: float = 0.0) -> float:
         return default
 
 
+def estimate_dividend_split(
+    invest_twd: float,
+    annual_div_rate_pct: float,
+    div_cash_pct: float,
+    avg_nav: float = 0.0,
+    avg_fx: float = 0.0,
+) -> dict[str, float]:
+    """v18.160：依 user 設定的「現金給付%」拆分年配息估算。
+
+    Args:
+        invest_twd: 淨投資金額 (TWD)
+        annual_div_rate_pct: 年配息率 (%)，如 6 表示 6%
+        div_cash_pct: 配息現金給付百分比 (0~100)
+        avg_nav: 平均買入單位成本（用來算「新增單位數」）；給 0 → new_units 回 0
+        avg_fx: 平均買入匯率（用來把 TWD 還原 local currency）；給 0 → new_units 回 0
+
+    Returns:
+        dict 含：
+        - annual_div_twd:  年配息總額 (TWD)
+        - cash_twd:        年現金給付部分 (TWD)
+        - reinvest_twd:    年再投入新單位部分 (TWD)
+        - new_units:       年新增單位數（local currency per unit 除回去）
+        - cash_pct / unit_pct: echo back for display
+    """
+    try:
+        inv = float(invest_twd or 0)
+        rate = float(annual_div_rate_pct or 0)
+        cash_pct = max(0.0, min(100.0, float(div_cash_pct or 0)))
+    except (TypeError, ValueError):
+        return {
+            "annual_div_twd": 0.0, "cash_twd": 0.0, "reinvest_twd": 0.0,
+            "new_units": 0.0, "cash_pct": 0.0, "unit_pct": 100.0,
+        }
+    annual_div_twd = inv * rate / 100.0
+    cash_twd = annual_div_twd * cash_pct / 100.0
+    reinvest_twd = annual_div_twd - cash_twd
+    new_units = 0.0
+    try:
+        nav = float(avg_nav or 0)
+        fx = float(avg_fx or 0)
+        denom = nav * fx
+        if denom > 0:
+            new_units = reinvest_twd / denom
+    except (TypeError, ValueError):
+        new_units = 0.0
+    return {
+        "annual_div_twd": annual_div_twd,
+        "cash_twd": cash_twd,
+        "reinvest_twd": reinvest_twd,
+        "new_units": new_units,
+        "cash_pct": cash_pct,
+        "unit_pct": 100.0 - cash_pct,
+    }
+
+
+def _normalize_div_cash_pct(v: Any) -> float:
+    """v18.160：配息現金給付百分比 (0~100)。
+    缺值/解析失敗 → 100（多數保單預設「全部現金給付」）。
+    超界 → clip 到 [0, 100]。
+    """
+    if v is None or v == "" or (isinstance(v, float) and pd.isna(v)):
+        return 100.0
+    if isinstance(v, (int, float)):
+        n = float(v)
+    else:
+        s = str(v).replace("%", "").replace(",", "").strip()
+        if not s:
+            return 100.0
+        try:
+            n = float(s)
+        except (TypeError, ValueError):
+            return 100.0
+    if n < 0:
+        return 0.0
+    if n > 100:
+        return 100.0
+    return n
+
+
 def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
     """讀單張 v2 保單分頁，回 DataFrame（11 欄齊備）。
 
@@ -965,6 +1047,8 @@ def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
     df["avg_fx"]           = df["avg_fx"].map(_normalize_float)
     df["amount"]           = df["amount"].map(_normalize_float)
     df["invest_twd"]       = df["invest_twd"].map(_normalize_invest_twd)
+    # v18.160：div_cash_pct 預設 100（全現金給付）；舊 Sheet 缺欄補 100；超界 clip
+    df["div_cash_pct"]     = df["div_cash_pct"].map(_normalize_div_cash_pct)
     return df
 
 
@@ -1109,6 +1193,7 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         df_one["avg_fx"]           = df_one["avg_fx"].map(_normalize_float)
         df_one["amount"]           = df_one["amount"].map(_normalize_float)
         df_one["invest_twd"]       = df_one["invest_twd"].map(_normalize_invest_twd)
+        df_one["div_cash_pct"]     = df_one["div_cash_pct"].map(_normalize_div_cash_pct)
         frames.append(df_one)
     if not frames:
         return pd.DataFrame(columns=list(ALL_COLS_V2))

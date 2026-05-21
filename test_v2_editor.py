@@ -20,12 +20,12 @@ from repositories.policy_repository import (
 )
 
 
-def test_empty_fund_df_has_9_cols():
-    """v18.153：fund 表加入 avg_nav_with_div（含息成本）。"""
+def test_empty_fund_df_has_10_cols():
+    """v18.160：fund 表 10 欄（v18.153 9 欄 + div_cash_pct 配息現金給付%）。"""
     df = _empty_fund_df()
     assert list(df.columns) == [
         "fund_code", "fund_name", "units", "avg_nav", "avg_nav_with_div",
-        "avg_fx", "currency", "tier", "invest_twd",
+        "avg_fx", "currency", "tier", "invest_twd", "div_cash_pct",
     ]
     assert df.empty
 
@@ -64,7 +64,7 @@ def test_split_policy_df_empty_input_returns_empty_df():
     assert cash_df.empty
     assert list(fund_df.columns) == [
         "fund_code", "fund_name", "units", "avg_nav", "avg_nav_with_div",
-        "avg_fx", "currency", "tier", "invest_twd",
+        "avg_fx", "currency", "tier", "invest_twd", "div_cash_pct",
     ]
 
 
@@ -93,6 +93,39 @@ def test_merge_policy_df_produces_12_col_schema_with_auto_units():
     assert merged.iloc[1]["currency"] == "TWD"
     assert merged.iloc[1]["amount"] == 500000
     assert merged.iloc[2]["currency"] == "USD"
+
+
+def test_merge_policy_df_preserves_div_cash_pct_with_default_100():
+    """v18.160：div_cash_pct 經 _merge_policy_df 保留；缺值 → 預設 100。"""
+    fund_df = pd.DataFrame([
+        {"fund_code": "USDEQ5110", "fund_name": "聯博多元",
+         "units": 0, "avg_nav": 10.0, "avg_nav_with_div": 9.0,
+         "avg_fx": 31.0, "currency": "USD", "tier": "core",
+         "invest_twd": 1_000_000, "div_cash_pct": 80},   # 截圖場景
+        {"fund_code": "FIDXEQI", "fund_name": "富達",
+         "units": 0, "avg_nav": 12.0, "avg_nav_with_div": 0,
+         "avg_fx": 31.0, "currency": "USD", "tier": "core",
+         "invest_twd": 500_000},   # 故意不放 div_cash_pct
+    ])
+    merged = _merge_policy_df("p1", fund_df, pd.DataFrame(columns=["currency", "amount"]))
+    assert len(merged) == 2
+    assert merged.iloc[0]["div_cash_pct"] == 80
+    assert merged.iloc[1]["div_cash_pct"] == 100   # 預設值
+
+
+def test_merge_policy_df_clips_div_cash_pct_to_0_100():
+    """v18.160：超界 div_cash_pct 應 clip 到 [0, 100]。"""
+    fund_df = pd.DataFrame([
+        {"fund_code": "A", "fund_name": "a", "units": 0, "avg_nav": 10,
+         "avg_nav_with_div": 0, "avg_fx": 30, "currency": "USD",
+         "tier": "", "invest_twd": 100_000, "div_cash_pct": 150},   # 超界
+        {"fund_code": "B", "fund_name": "b", "units": 0, "avg_nav": 10,
+         "avg_nav_with_div": 0, "avg_fx": 30, "currency": "USD",
+         "tier": "", "invest_twd": 100_000, "div_cash_pct": -20},   # 負值
+    ])
+    merged = _merge_policy_df("p1", fund_df, pd.DataFrame(columns=["currency", "amount"]))
+    assert merged.iloc[0]["div_cash_pct"] == 100
+    assert merged.iloc[1]["div_cash_pct"] == 0
 
 
 def test_merge_policy_df_drops_empty_fund_code_and_zero_cash():

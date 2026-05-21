@@ -2205,8 +2205,10 @@ def render_portfolio_tab() -> None:
 
 
 def _render_tab3_ai_summary(gemini_key: str) -> None:
-    """v18.159 Tab3 末端：4 視角 AI 白話文總結 widget。"""
+    """v18.159 Tab3 末端：4 視角 AI 白話文總結 widget。
+    v18.160：snapshot 加入「配息現金/單位拆分」估算（從 v2 編輯 buf 撈 div_cash_pct）。"""
     from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
+    from repositories.policy_repository import estimate_dividend_split  # noqa: PLC0415
     pf = st.session_state.get("portfolio_funds", []) or []
     loaded = [f for f in pf if f.get("loaded") and not f.get("load_error")]
     if not loaded:
@@ -2236,6 +2238,52 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
         _shown += 1
     if n_total > _shown:
         lines.append(f"- …（其餘 {n_total - _shown} 檔略）")
+
+    # v18.160：配息現金/單位拆分估算（從 _v2_buf 撈 user 已設定的 div_cash_pct）
+    _v2_buf = st.session_state.get("_v2_buf", {}) or {}
+    _div_lines: list[str] = []
+    _total_cash, _total_reinv, _total_div = 0.0, 0.0, 0.0
+    for _pid, _buf in _v2_buf.items():
+        _fdf = _buf.get("fund") if isinstance(_buf, dict) else None
+        if _fdf is None or _fdf.empty:
+            continue
+        for _, _r in _fdf.iterrows():
+            _code = str(_r.get("fund_code", "") or "").strip()
+            _inv = float(_r.get("invest_twd", 0) or 0)
+            if not _code or _inv <= 0:
+                continue
+            # annual_div_rate 來自 portfolio_funds metrics（fund_code → metric）
+            _adr = 0.0
+            for _pf in loaded:
+                if str(_pf.get("code", "") or "").upper() == _code.upper():
+                    _m = _pf.get("metrics") or {}
+                    _adr = float(_m.get("annual_div_rate") or 0)
+                    break
+            if _adr <= 0:
+                continue   # 無實際配息率 → 跳過估算
+            _est = estimate_dividend_split(
+                invest_twd=_inv, annual_div_rate_pct=_adr,
+                div_cash_pct=float(_r.get("div_cash_pct", 100) or 100),
+                avg_nav=float(_r.get("avg_nav", 0) or 0),
+                avg_fx=float(_r.get("avg_fx", 0) or 0),
+            )
+            _total_div += _est["annual_div_twd"]
+            _total_cash += _est["cash_twd"]
+            _total_reinv += _est["reinvest_twd"]
+            if len(_div_lines) < 6:
+                _div_lines.append(
+                    f"  - {_code}（{_pid}）：現金{int(_est['cash_pct'])}%/"
+                    f"單位{int(_est['unit_pct'])}%　年配息估{int(_est['annual_div_twd']):,} TWD"
+                    f"（現金{int(_est['cash_twd']):,} / 再投入{int(_est['reinvest_twd']):,}）"
+                )
+    if _total_div > 0:
+        lines.append("- **📊 年配息現金/單位拆分估算（v18.160 新增）**：")
+        lines.append(
+            f"  - 總計：年配息估 {int(_total_div):,} TWD"
+            f"｜現金 {int(_total_cash):,} ({_total_cash/_total_div*100:.0f}%)"
+            f"｜再投入 {int(_total_reinv):,} ({_total_reinv/_total_div*100:.0f}%)"
+        )
+        lines.extend(_div_lines)
 
     snapshot = "\n".join(lines)
     headlines = [str(n.get("title", "") or n.get("headline", ""))

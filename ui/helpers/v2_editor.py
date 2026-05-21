@@ -26,6 +26,7 @@ from repositories.policy_repository import (
     compute_units,
     delete_policy_worksheet,
     ensure_policy_worksheet,
+    estimate_dividend_split,
     list_policy_worksheets,
     load_all_policies_v2,
     load_policy_v2,
@@ -47,10 +48,10 @@ def _ensure_buf() -> dict:
 
 
 def _empty_fund_df() -> pd.DataFrame:
-    # v18.153：fund 表 9 欄（含 avg_nav_with_div 含息成本）
+    # v18.160：fund 表 10 欄（v18.153 9 欄 + div_cash_pct 配息現金給付%）
     return pd.DataFrame(columns=[
         "fund_code", "fund_name", "units", "avg_nav", "avg_nav_with_div",
-        "avg_fx", "currency", "tier", "invest_twd",
+        "avg_fx", "currency", "tier", "invest_twd", "div_cash_pct",
     ])
 
 
@@ -59,9 +60,10 @@ def _empty_cash_df() -> pd.DataFrame:
 
 
 def _split_policy_df(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """12 欄 df → (fund 9 欄, cash 2 欄) for st.data_editor 分區顯示。"""
+    """13 欄 df → (fund 10 欄, cash 2 欄) for st.data_editor 分區顯示。
+    v18.160: fund 加 div_cash_pct（配息現金給付%）。"""
     fund_cols = ["fund_code", "fund_name", "units", "avg_nav", "avg_nav_with_div",
-                 "avg_fx", "currency", "tier", "invest_twd"]
+                 "avg_fx", "currency", "tier", "invest_twd", "div_cash_pct"]
     cash_cols = ["currency", "amount"]
     fund_df = df[df["item_type"] == ITEM_TYPE_FUND][fund_cols].reset_index(drop=True) \
               if not df.empty else _empty_fund_df()
@@ -81,6 +83,13 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame, cash_df: pd.DataFram
         _inv = float(r.get("invest_twd", 0) or 0)
         _nav = float(r.get("avg_nav", 0) or 0)
         _fx  = float(r.get("avg_fx", 0) or 0)
+        # v18.160：div_cash_pct clip 至 [0,100]，缺值預設 100
+        _dcp = r.get("div_cash_pct", 100)
+        try:
+            _dcp = float(_dcp) if _dcp not in (None, "") else 100.0
+        except (TypeError, ValueError):
+            _dcp = 100.0
+        _dcp = max(0.0, min(100.0, _dcp))
         rows.append({
             "policy_id":        policy_id,
             "item_type":        ITEM_TYPE_FUND,
@@ -94,6 +103,7 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame, cash_df: pd.DataFram
             "tier":             str(r.get("tier", "") or ""),
             "amount":           "",
             "invest_twd":       _inv,
+            "div_cash_pct":     _dcp,
         })
     for _, r in cash_df.iterrows():
         ccy = str(r.get("currency", "") or "").strip()
@@ -113,8 +123,72 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame, cash_df: pd.DataFram
             "tier":             "",
             "amount":           amt,
             "invest_twd":       "",
+            "div_cash_pct":     "",   # cash 列無配息，留空
         })
     return pd.DataFrame(rows, columns=list(ALL_COLS_V2))
+
+
+def _render_div_split_estimate(policy_id: str, fund_df: pd.DataFrame) -> None:
+    """v18.160：在保單編輯區下方顯示「📊 配息估算」mini-section。
+
+    依 user 手填的年配息率假設 + 每檔基金的 div_cash_pct，估算
+    年現金流 / 年新增單位數。純前端計算（不依賴 portfolio_funds metrics），
+    user 即看即得。
+    """
+    if fund_df is None or fund_df.empty:
+        return
+    # 只算有 invest_twd 的列
+    rows = []
+    for _, r in fund_df.iterrows():
+        code = str(r.get("fund_code", "") or "").strip()
+        inv = float(r.get("invest_twd", 0) or 0)
+        if not code or inv <= 0:
+            continue
+        rows.append(r)
+    if not rows:
+        return
+
+    with st.expander("📊 配息現金/單位拆分估算（依 div_cash_pct）", expanded=False):
+        st.caption(
+            "ℹ️ 估算用 user 手填的「年配息率假設 %」乘上每檔基金的 invest_twd，"
+            "再依 `現金給付%` 拆分。實際配息以保險公司每月對帳單為準。"
+        )
+        rate_pct = st.number_input(
+            "年配息率假設 %", min_value=0.0, max_value=30.0, value=5.0, step=0.5,
+            key=f"div_est_rate_{policy_id}",
+            help="如不確定可填 5（市場平均月配息基金約 4-7%）。Tab2 載入該基金後可看到實際年化配息率。",
+        )
+        out_rows = []
+        total_cash, total_reinv, total_div = 0.0, 0.0, 0.0
+        for r in rows:
+            est = estimate_dividend_split(
+                invest_twd=float(r.get("invest_twd", 0) or 0),
+                annual_div_rate_pct=rate_pct,
+                div_cash_pct=float(r.get("div_cash_pct", 100) or 100),
+                avg_nav=float(r.get("avg_nav", 0) or 0),
+                avg_fx=float(r.get("avg_fx", 0) or 0),
+            )
+            out_rows.append({
+                "基金代號":       str(r.get("fund_code", "") or ""),
+                "投資金額(TWD)":  int(r.get("invest_twd", 0) or 0),
+                "現金%":          int(est["cash_pct"]),
+                "單位%":          int(est["unit_pct"]),
+                "年配息總額(TWD)": int(est["annual_div_twd"]),
+                "年現金流入(TWD)": int(est["cash_twd"]),
+                "年再投入(TWD)":   int(est["reinvest_twd"]),
+                "年新增單位數":    round(est["new_units"], 4),
+            })
+            total_div += est["annual_div_twd"]
+            total_cash += est["cash_twd"]
+            total_reinv += est["reinvest_twd"]
+        st.dataframe(pd.DataFrame(out_rows), use_container_width=True, hide_index=True)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("📦 年配息總額", f"NTD {int(total_div):,}")
+        c2.metric("💵 年現金流入", f"NTD {int(total_cash):,}",
+                  delta=f"{(total_cash/total_div*100 if total_div else 0):.0f}% 現金")
+        c3.metric("🪙 年再投入累積單位",
+                  f"NTD {int(total_reinv):,}",
+                  delta=f"{(total_reinv/total_div*100 if total_div else 0):.0f}% 單位")
 
 
 def _is_quota_msg(e: Exception) -> bool:
@@ -284,8 +358,30 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
                 "tier":             st.column_config.SelectboxColumn(
                                         "級別", options=["", "core", "satellite"],
                                         help="存檔時自動判斷，可手動修正"),
+                # v18.160：配息「現金給付 %」（單位數% = 100 - 該值）
+                "div_cash_pct":     st.column_config.NumberColumn(
+                                        "🟨 現金給付 %",
+                                        min_value=0, max_value=100, step=10,
+                                        format="%d",
+                                        help="保險公司 APP 設定的「配息現金給付%」。"
+                                             "100 = 全部現金、0 = 全部新增單位、"
+                                             "80 = 80% 現金 + 20% 新增單位（如 USDEQ5110）。"
+                                             "預設 100（多數保單預設行為）。"),
             },
         )
+        # v18.160：顯示「單位數%」derived caption + 配息估算 mini-section
+        try:
+            _dcps = [float(v) for v in edited_fund.get("div_cash_pct", []) if v not in (None, "")]
+            if _dcps:
+                _avg_cash = sum(_dcps) / len(_dcps)
+                st.caption(
+                    f"💡 配息拆分均值：**現金 {_avg_cash:.0f}%** / "
+                    f"**新增單位 {100 - _avg_cash:.0f}%**（保單內所有基金平均）。"
+                    "每檔基金可獨立設定，例如保險公司 APP 設「80% 現金、20% 單位」就填 80。"
+                )
+        except Exception:
+            pass
+        _render_div_split_estimate(policy_id, edited_fund)
 
         # cash 編輯
         st.markdown("**💵 現金部位（多幣別）**")

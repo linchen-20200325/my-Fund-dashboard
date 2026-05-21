@@ -677,19 +677,20 @@ def test_create_dashboard_sheet_raises_when_id_missing():
 # ══════════════════════════════════════════════════════════════════════
 # v18.149 Schema v2 — snapshot-only 11 欄 + 多幣別現金 + migration safety
 # ══════════════════════════════════════════════════════════════════════
-def test_v2_schema_has_12_cols_in_canonical_order():
-    """v18.153：ALL_COLS_V2 是 12 欄、加入 avg_nav_with_div（含息成本）。"""
+def test_v2_schema_has_13_cols_in_canonical_order():
+    """v18.160：ALL_COLS_V2 擴至 13 欄（v18.153 的 12 欄 + div_cash_pct）。"""
     assert ALL_COLS_V2 == (
         "policy_id", "item_type", "fund_code", "fund_name",
         "units", "avg_nav", "avg_nav_with_div", "avg_fx", "currency",
         "tier", "amount", "invest_twd",
+        "div_cash_pct",   # v18.160
     )
     assert ITEM_TYPE_FUND == "fund"
     assert ITEM_TYPE_CASH == "cash"
 
 
 def test_v2_user_input_vs_auto_cols_disjoint_and_complete():
-    """v18.153：USER_INPUT_COLS + AUTO_COLS 應該覆蓋全 12 欄、互不重疊。"""
+    """v18.160：USER_INPUT_COLS + AUTO_COLS 應覆蓋全 13 欄、互不重疊。"""
     from repositories.policy_repository import USER_INPUT_COLS, AUTO_COLS
     union = set(USER_INPUT_COLS) | set(AUTO_COLS)
     intersection = set(USER_INPUT_COLS) & set(AUTO_COLS)
@@ -731,6 +732,102 @@ def test_avg_nav_with_div_from_cumul_div_twd_matches_user_screenshot():
     units = compute_units(1000285, 8.25, 31.0885)
     anwd = avg_nav_with_div_from_cumul_div_twd(8.25, 31.0885, units, 49913)
     assert abs(anwd - 7.838) < 0.01
+
+
+# ──────────────────────────────────────────────────────────────────────
+# v18.160：div_cash_pct 配息現金/單位拆分
+# ──────────────────────────────────────────────────────────────────────
+def test_normalize_div_cash_pct_defaults_to_100_on_missing():
+    """缺值、空字串、None → 預設 100（全現金給付，符合多數保單預設行為）。"""
+    from repositories.policy_repository import _normalize_div_cash_pct
+    assert _normalize_div_cash_pct(None) == 100.0
+    assert _normalize_div_cash_pct("") == 100.0
+    assert _normalize_div_cash_pct("   ") == 100.0
+
+
+def test_normalize_div_cash_pct_clips_out_of_range():
+    """超界 → clip [0, 100]。"""
+    from repositories.policy_repository import _normalize_div_cash_pct
+    assert _normalize_div_cash_pct(-5) == 0.0
+    assert _normalize_div_cash_pct(150) == 100.0
+    assert _normalize_div_cash_pct("80%") == 80.0   # 容錯帶 % 符號
+    assert _normalize_div_cash_pct(50) == 50.0
+
+
+def test_normalize_div_cash_pct_garbage_returns_default():
+    from repositories.policy_repository import _normalize_div_cash_pct
+    assert _normalize_div_cash_pct("abc") == 100.0
+
+
+def test_estimate_dividend_split_full_cash_default():
+    """div_cash_pct=100：全現金、再投入 0、新單位 0。"""
+    from repositories.policy_repository import estimate_dividend_split
+    out = estimate_dividend_split(
+        invest_twd=1_000_000, annual_div_rate_pct=6.0,
+        div_cash_pct=100, avg_nav=10.0, avg_fx=31.0,
+    )
+    assert out["annual_div_twd"] == 60_000
+    assert out["cash_twd"] == 60_000
+    assert out["reinvest_twd"] == 0
+    assert out["new_units"] == 0
+    assert out["cash_pct"] == 100 and out["unit_pct"] == 0
+
+
+def test_estimate_dividend_split_80_20_matches_usdeq5110_screenshot():
+    """用戶截圖場景：80% 現金 / 20% 單位數。"""
+    from repositories.policy_repository import estimate_dividend_split
+    out = estimate_dividend_split(
+        invest_twd=1_000_000, annual_div_rate_pct=6.0,
+        div_cash_pct=80, avg_nav=10.0, avg_fx=31.0,
+    )
+    assert out["annual_div_twd"] == 60_000
+    assert out["cash_twd"] == 48_000   # 80%
+    assert out["reinvest_twd"] == 12_000   # 20%
+    # 新單位 = 12_000 TWD / (10 nav × 31 fx) = 38.7096...
+    assert abs(out["new_units"] - 12_000 / 310) < 1e-6
+
+
+def test_estimate_dividend_split_all_reinvest():
+    """0% 現金 → 全部再投入累積單位。"""
+    from repositories.policy_repository import estimate_dividend_split
+    out = estimate_dividend_split(
+        invest_twd=500_000, annual_div_rate_pct=4.0,
+        div_cash_pct=0, avg_nav=20.0, avg_fx=1.0,
+    )
+    assert out["annual_div_twd"] == 20_000
+    assert out["cash_twd"] == 0
+    assert out["reinvest_twd"] == 20_000
+    assert abs(out["new_units"] - 1000.0) < 1e-6   # 20000 / (20 × 1)
+
+
+def test_estimate_dividend_split_safe_on_zero_nav():
+    """avg_nav=0 → new_units 回 0，不爆 ZeroDivision。"""
+    from repositories.policy_repository import estimate_dividend_split
+    out = estimate_dividend_split(
+        invest_twd=100_000, annual_div_rate_pct=5.0,
+        div_cash_pct=50, avg_nav=0.0, avg_fx=31.0,
+    )
+    assert out["new_units"] == 0
+    assert out["reinvest_twd"] == 2_500   # cash 部分仍正確
+
+
+def test_load_policy_v2_div_cash_pct_default_for_old_sheet(monkeypatch):
+    """舊 12 欄 Sheet（無 div_cash_pct）載入後該欄應預設 100。"""
+    rows = [
+        {
+            "policy_id": "P1", "item_type": "fund", "fund_code": "ABC",
+            "fund_name": "聯博多元", "units": 100, "avg_nav": 10,
+            "avg_nav_with_div": 9.5, "avg_fx": 31, "currency": "USD",
+            "tier": "core", "amount": "", "invest_twd": 31000,
+            # ← 故意不放 div_cash_pct，模擬舊 sheet
+        },
+    ]
+    ws = _make_ws(records=rows)
+    ws.row_values = lambda *_a, **_kw: ["policy_id", "item_type", "fund_code"]
+    client = _make_client(ws)
+    df = load_policy_v2(client, "FAKE", "P1")
+    assert "div_cash_pct" in df.columns
+    assert df.loc[0, "div_cash_pct"] == 100.0   # 預設值
 
 
 def test_avg_nav_with_div_from_cumul_div_twd_zero_cumul_returns_avg_nav():
