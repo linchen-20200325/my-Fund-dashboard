@@ -430,6 +430,40 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-H 快捷面板加第 5 顆「✨ 新增帳本」button（v18.165 新增）
+
+**問題場景**：v18.164 把「✨ 新增帳本」做成 expander 內小標題，但功能（自動建立 + Drive 挑）仍埋在下方需要捲動。user 截圖紅框 + 紅箭頭明確要求：頂部「🚀 快速存讀面板」加第 5 顆 button，點下去直接顯示互動面板（與其他 4 顆 toggle 行為一致）。
+
+**設計**：
+
+```python
+# tab3_portfolio.py:212
+_io_c1, _io_c2, _io_c3, _io_c4, _io_c5 = st.columns(5)
+# 順序：📥 雲端讀取 / 📦 雲端存檔 / ✨ 新增帳本 / 💾 下載 JSON / 📂 上傳 JSON
+
+# tab3_portfolio.py:340  新增第 5 個 elif
+elif _io_panel == "new":
+    st.markdown("**✨ 新增帳本（建立新 Sheet 或從 Drive 挑一本）**")
+    if not _oauth_configured: <警告>
+    elif not _logged_in_q:    <警告>
+    else:
+        # 上半：自動建立 Sheet（無條件顯示，user 已點 button）
+        [新 Sheet 名稱] [🚀 自動建立 Sheet]
+        ---
+        # 下半：從 Drive 挑
+        [🔄 載入資料夾清單]
+        [📁 限定資料夾 下拉]
+        [📂 從 Drive 列出 Sheets]
+        [清單下拉] [✅ 使用此 Sheet]
+```
+
+**關鍵點**：
+- v18.164 hoist 到 expander 的「✨ 新增帳本」段已整段移除（L630-770），只留 `_sheet_id = session_state.get(...)` 一行，避免 widget key 衝突
+- 6 個 widget key（`btn_auto_create_sheet` / `btn_load_drive_folders` / `sel_drive_folder` / `btn_list_drive_sheets` / `sel_my_sheets` / `btn_pick_my_sheet`）唯一存在於 quick panel `elif new` 分支
+- 自動建立成功 / Drive 挑選成功 → `del session_state["inp_sheet_id"]` + `pop("_t3_cur_sheet_title")` 讓 rerun 從 `policy_sheet_id` 重新初始化 sidebar 顯示
+
+---
+
 ### §3-G Sheet ID 輸入 hoist sidebar +「✨ 新增帳本」面板（v18.164 新增）
 
 **問題場景**：user 截圖紅框反饋 — Tab3「📋 保單管理」expander 內，OAuth 登入狀態 + Sheet ID 輸入欄位並列在快捷面板下方占大半版面；底下「🆕 自動建立 Sheet」與「📂 從 Drive 挑」中間夾「**或者**」字眼、層次斷裂、且 Drive 挑那段被埋得很深要往下捲。

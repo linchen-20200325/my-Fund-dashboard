@@ -246,6 +246,17 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.165 — 快捷面板加第 5 顆「✨ 新增帳本」互動式 button（2026-05-21）
+
+- [x] **問題場景**（user 截圖紅框 + 紅箭頭）：v18.164 把「✨ 新增帳本」做成 expander 內的小標題，但功能仍埋在下方需捲動；user 要求頂部「🚀 快速存讀面板」加第 5 顆 button、點下去直接顯示互動面板（與其他 4 顆一致）
+- [x] **頂部 toolbar 由 4 顆改 5 顆**（`ui/tab3_portfolio.py:212-237`）：`st.columns(5)`，順序 `📥 讀 / 📦 存 / ✨ 新增帳本 / 💾 下載 / 📂 上傳`；`✨ 新增帳本` 對應 `_io_panel == "new"`
+- [x] **新增 `elif _io_panel == "new":` 面板**（`tab3_portfolio.py:340-486`）：
+  - 上半：「🚀 自動建立 Sheet」（無條件顯示，user 已點 button 表示想新增）— caption 改「讓 app 建一張全新的 Google Sheet 作為帳本」
+  - 下半：「📂 從 Drive 既有 Sheets 挑」（資料夾下拉 → 列 Sheets → 選用）
+  - 未配 OAuth / 未登入 → 顯示友善 warning
+- [x] **移除 expander 內 L630-770 重複區段**：v18.164 hoist 到 expander 的「✨ 新增帳本」段（自動建立 + Drive 挑）整段刪除，避免 widget key 衝突；只留下單行 `_sheet_id = session_state.get(...)` + 註解
+- [x] **驗證** fast tier `pytest -m "not slow"` **565 passed**，與 v18.164 baseline 一致零回歸；6 個 widget key (`btn_auto_create_sheet` / `btn_load_drive_folders` / `sel_drive_folder` / `btn_list_drive_sheets` / `sel_my_sheets` / `btn_pick_my_sheet`) 確認唯一
+
 ### v18.164 — Sheet ID hoist 到 sidebar +「✨ 新增帳本」互動式面板（2026-05-21）
 
 - [x] **問題場景**（user 截圖紅框）：Tab3「📋 保單管理」expander 內，OAuth 登入狀態與「Google Sheet ID 輸入」並列在快捷面板下方占大半版面；下方「自動建立 Sheet」與「從 Drive 挑」上下兩段被「或者」文字隔開、層次不一致
