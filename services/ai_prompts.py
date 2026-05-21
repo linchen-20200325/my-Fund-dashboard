@@ -17,6 +17,10 @@
 - build_mk_advisor_prompt       — analyze_portfolio_mk_advisor (策略3 組合 4 節)
 - build_event_impact_prompt     — event_impact_analysis (新聞衝擊評估)
 - build_macro_structured_prompt — analyze_macro_structured (總經六節)
+- build_trend_action_prompt        — v18.159 通用：趨勢+風險+行動（各 Tab 預設方向）
+- build_allocation_diagnosis_prompt — v18.159 通用：核心/衛星 + 集中度 + 現金水位
+- build_beginner_guide_prompt       — v18.159 通用：白話文逐項翻譯 KPI（給新手）
+- build_news_driven_prompt          — v18.159 通用：新聞 × 持有資產交叉解讀
 """
 from __future__ import annotations
 
@@ -362,3 +366,124 @@ def build_macro_structured_prompt(*, snapshot: str, stale_note: str) -> str:
 【必須輸出完整七節，不可提前結束，第七節必須含 Checkbox】
 【嚴格規則】只能引用快照內資料（含 7 子領域當下燈號、Phase 4 driver 排名、
             Phase 3-B 燈號回測、新聞）；禁止編造未提及的基金 / 數字 / 統計結論。"""
+
+
+# ════════════════════════════════════════════════════════════
+# v18.159 通用「Tab 白話文總結」4 視角 builder
+# - 共同介面：tab_label / snapshot / stale_note，外加 news_driven 多 headlines
+# - caller (ui/helpers/ai_summary.py) 依 user 選 perspective 派發
+# ════════════════════════════════════════════════════════════
+def build_trend_action_prompt(*, tab_label: str, snapshot: str,
+                              stale_note: str = "") -> str:
+    """通用『趨勢 + 風險 + 行動』三合一白話文總結（各 Tab 預設方向）。"""
+    return f"""你是一位精通「策略3 以息養股」的台灣財經分析師。
+⚠️ 嚴格規則：只能根據以下快照分析，禁止搜尋或編造任何外部資訊。
+
+[分析範圍] {tab_label}
+
+{snapshot}{stale_note}
+
+請用繁體中文輸出【三節】，每節用 ### 開頭：
+
+### 📈 一、近期趨勢解讀
+- 2-3 句總結快照中數字告訴我們什麼方向（漲/跌/震盪/轉折）
+- 點出至少 2 個有意義的訊號（突破/跌破/轉強/轉弱）
+
+### ⚠️ 二、風險警示
+- 列出 1-3 個「目前該注意的紅燈/黃燈」
+- 若一切健康，明確說「目前無系統性警示，可正常持有」
+
+### 🎯 三、行動建議
+- 1-3 個具體可執行的下一步（加碼/減碼/觀望/換股/再平衡）
+- 結尾一句話總結本次操作主基調
+
+【嚴格】只能引用快照數字，禁止編造未提及的基金代碼或數字。"""
+
+
+def build_allocation_diagnosis_prompt(*, tab_label: str, snapshot: str,
+                                      stale_note: str = "") -> str:
+    """配置診斷視角：核心衛星比例、地理/產業集中度、現金水位。"""
+    return f"""你是一位精通資產配置的台灣財經顧問（熟悉「策略3 核心衛星 80/20」）。
+⚠️ 嚴格規則：只能根據以下快照分析，禁止搜尋或編造任何外部資訊。
+
+[分析範圍] {tab_label}
+
+{snapshot}{stale_note}
+
+請用繁體中文輸出【四節】，每節用 ### 開頭：
+
+### ⚖️ 一、核心衛星比例診斷
+- 目前核心/衛星實際佔比
+- 對照 MK 建議 80/20，偏離方向與幅度
+- 是否需要再平衡
+
+### 🌐 二、地理 / 產業集中度
+- 持有資產的地理/產業是否過度重疊
+- 點出過度集中的風險（或說明分散度健康）
+
+### 💰 三、現金水位與彈性
+- 目前現金佔比是否足夠承接機會
+- 對照景氣位階給配置張力建議
+
+### 🔄 四、再平衡操作清單
+- 1-3 個具體調整建議（哪檔減、哪檔加、減多少 %）
+
+【嚴格】只能引用快照數字，禁止編造未提及的基金或百分比。"""
+
+
+def build_beginner_guide_prompt(*, tab_label: str, snapshot: str,
+                                stale_note: str = "") -> str:
+    """新手導讀視角：白話文逐項翻譯 KPI。"""
+    return f"""你是一位專為新手講解的台灣財經教學者。
+⚠️ 嚴格規則：只能根據以下快照分析，禁止編造任何數字。
+⚠️ 風格：禁止使用 Z-Score / σ / 標準差 / 布林帶 / Sharpe 等專業術語；
+        用天氣、溫度、體檢、紅綠燈、體重、血壓等生活比喻。
+
+[分析範圍] {tab_label}
+
+{snapshot}{stale_note}
+
+請用繁體中文輸出【三節】，每節用 ### 開頭：
+
+### 🧒 一、這頁在告訴我什麼？
+- 一句話總結這個 Tab 的核心訊息（用天氣或體檢比喻）
+
+### 📖 二、KPI 逐項白話文翻譯
+- 把快照中前 3-5 個關鍵數字逐項白話解釋
+- 格式：「**指標名（數字）** → 白話解釋（這數字代表什麼，現在算高還低）」
+
+### ✋ 三、新手該做什麼 / 該避免什麼
+- 1-2 個「該做」
+- 1 個「常見新手錯誤」提醒
+
+【嚴格】只能引用快照數字，禁止編造未提及的基金或事件。"""
+
+
+def build_news_driven_prompt(*, tab_label: str, snapshot: str,
+                             headlines: list[str], stale_note: str = "") -> str:
+    """新聞連動視角：新聞 × 持有資產交叉解讀。"""
+    h_block = "\n".join(f"- {h}" for h in headlines[:8]) if headlines else "（無新聞快照）"
+    return f"""你是一位精通總經與新聞影響的台灣財經分析師。
+⚠️ 嚴格規則：只能根據以下「資產快照」與「新聞快照」分析，禁止編造任何外部資訊。
+
+[分析範圍] {tab_label}
+
+[資產快照]
+{snapshot}{stale_note}
+
+[新聞快照（近期）]
+{h_block}
+
+請用繁體中文輸出【三節】，每節用 ### 開頭：
+
+### 📰 一、新聞重點摘要
+- 用 2-3 句話總結上述新聞的共同方向（升息/通膨/地緣/AI 題材...）
+
+### 🔗 二、新聞 × 持有資產的交叉影響
+- 列出 1-3 個「該新聞會直接影響本 Tab 哪些持有資產」
+- 標明影響方向（利多 / 利空 / 中性）
+
+### 🎯 三、行動建議
+- 1-3 個基於新聞訊號的下一步操作
+
+【嚴格】只能引用上方快照與新聞，禁止編造未提及的基金 / 數字 / 公司名。"""

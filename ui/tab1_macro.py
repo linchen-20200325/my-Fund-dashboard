@@ -1985,5 +1985,47 @@ def render_macro_tab() -> None:
                     st.markdown(st.session_state.macro_ai)
             else:
                 st.caption("⚠️ 未設定 GEMINI_API_KEY，AI 分析功能關閉")
+
+        # v18.159：通用 AI 白話文總結 widget（4 視角 selectbox）
+        _render_tab1_ai_summary(GEMINI_KEY)
     else:
         st.info("👆 點擊「載入總經資料」開始分析")
+
+
+def _render_tab1_ai_summary(gemini_key: str) -> None:
+    """v18.159 Tab1 末端：4 視角 AI 白話文總結 widget。"""
+    from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
+    ind = st.session_state.get("indicators", {}) or {}
+    phase = st.session_state.get("phase_info", {}) or {}
+    score = st.session_state.get("composite_score", {}) or {}
+    srd = st.session_state.get("systemic_risk_data") or {}
+    news = st.session_state.get("news_items", []) or []
+
+    lines = ["## 總經位階快照"]
+    if phase:
+        lines.append(
+            f"- 景氣位階：{phase.get('phase', '—')}"
+            f"　|　Score：{score.get('total', '—')}"
+        )
+    if srd:
+        lines.append(f"- 系統性風險評級：{srd.get('risk_level', 'LOW')}")
+    _shown = 0
+    for k, v in (ind.items() if isinstance(ind, dict) else []):
+        if _shown >= 8:
+            break
+        if isinstance(v, dict) and "value" in v:
+            lines.append(f"- {k}：{v.get('value')} {v.get('unit', '')}".rstrip())
+            _shown += 1
+        elif isinstance(v, (int, float, str)) and v not in (None, ""):
+            lines.append(f"- {k}：{v}")
+            _shown += 1
+    snapshot = "\n".join(lines) if len(lines) > 1 else ""
+    headlines = [str(n.get("title", "") or n.get("headline", ""))
+                 for n in news if isinstance(n, dict)][:8]
+    render_ai_summary_widget(
+        tab_key="tab1",
+        tab_label="總經位階",
+        snapshot=snapshot,
+        headlines=headlines,
+        gemini_api_key=gemini_key,
+    )

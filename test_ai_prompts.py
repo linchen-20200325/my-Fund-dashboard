@@ -5,11 +5,15 @@
 from __future__ import annotations
 
 from services.ai_prompts import (
+    build_allocation_diagnosis_prompt,
+    build_beginner_guide_prompt,
     build_event_impact_prompt,
     build_fund_json_prompt,
     build_global_prompt,
     build_macro_structured_prompt,
     build_mk_advisor_prompt,
+    build_news_driven_prompt,
+    build_trend_action_prompt,
 )
 
 
@@ -160,3 +164,56 @@ def test_build_macro_structured_prompt_stale_note_appended() -> None:
         stale_note="\n⚠️ 資料新鮮度警告 PMI:42d",
     )
     assert "⚠️ 資料新鮮度警告 PMI:42d" in out
+
+
+# ════════════════════════════════════════════════════════════
+# v18.159 新增 4 視角 builder smoke 測試
+# ════════════════════════════════════════════════════════════
+def test_build_trend_action_prompt_has_3_sections():
+    out = build_trend_action_prompt(
+        tab_label="總經位階", snapshot="- VIX: 18.5\n- PMI: 50.2",
+    )
+    assert "### 📈 一、近期趨勢解讀" in out
+    assert "### ⚠️ 二、風險警示" in out
+    assert "### 🎯 三、行動建議" in out
+    assert "總經位階" in out
+    assert "VIX: 18.5" in out
+
+
+def test_build_allocation_diagnosis_prompt_has_4_sections():
+    out = build_allocation_diagnosis_prompt(
+        tab_label="組合戰情室", snapshot="- 核心 8 檔 / 衛星 2 檔",
+    )
+    assert "### ⚖️ 一、核心衛星比例診斷" in out
+    assert "### 🌐 二、地理 / 產業集中度" in out
+    assert "### 💰 三、現金水位與彈性" in out
+    assert "### 🔄 四、再平衡操作清單" in out
+    assert "80/20" in out   # MK 建議錨點
+
+
+def test_build_beginner_guide_prompt_bans_jargon():
+    out = build_beginner_guide_prompt(
+        tab_label="單一基金", snapshot="- Sharpe: 1.2",
+    )
+    assert "### 🧒 一、這頁在告訴我什麼" in out
+    assert "### 📖 二、KPI 逐項白話文翻譯" in out
+    assert "禁止使用 Z-Score" in out   # 風格守則保留
+    assert "天氣" in out   # 比喻提示
+
+
+def test_build_news_driven_prompt_joins_headlines():
+    out = build_news_driven_prompt(
+        tab_label="總經位階", snapshot="- VIX: 28",
+        headlines=["Fed 鷹派發言", "中東情勢升溫", "AI 題材續熱"],
+    )
+    assert "Fed 鷹派發言" in out
+    assert "中東情勢升溫" in out
+    assert "### 📰 一、新聞重點摘要" in out
+    assert "### 🔗 二、新聞 × 持有資產的交叉影響" in out
+
+
+def test_build_news_driven_prompt_no_headlines_shows_placeholder():
+    out = build_news_driven_prompt(
+        tab_label="總經位階", snapshot="- VIX: 18", headlines=[],
+    )
+    assert "（無新聞快照）" in out

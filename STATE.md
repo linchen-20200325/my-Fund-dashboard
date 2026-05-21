@@ -246,6 +246,24 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.159 — Tab3 存讀工具列收口 + 保單清單 schema-leak 過濾 + 4 視角 AI 白話文總結（2026-05-21）
+
+- [x] **Task A：Tab3「📋 保單管理」expander 頂部加「🚀 快速跳轉」toolbar**
+  - 問題：4 顆讀寫按鈕（雲端寫入/讀回 L686-700、JSON 下載/上傳 L935-949）散在不同子段，中間夾保單清單 / 多帳本管理 / Sheet 設定等標題打斷流程
+  - 修法：expander L177 加 4-column toolbar（📥 雲端讀取 / 📦 雲端存檔 / 💾 下載 JSON / 📂 上傳 JSON），click 後 `st.toast()` 告知該往下找的段落；同步在「🧰 一鍵存讀」「📁 本機 JSON 備份」標題前加 ⬇️ 視覺錨點
+  - 折衷理由：4 個 section 內邏輯依賴前段 `_client/_sheet_id/_pdf` 等變數作用域，整段搬到開頭風險過高 → 採「指路 + 錨點」最低風險方案
+- [x] **Task B：`load_policies` 加 schema-leak 防護過濾**
+  - 問題（截圖實證）：保單清單 dataframe 列出現字串 `policy_name` / `fund_url` 當資料列（推測為 v1→v2 schema 遷移殘留，或 JSON 還原把 header dict 當 row 寫回）
+  - 修法：`repositories/policy_repository.py:211` `load_policies` 末加 defensive filter — `policy_name` 或 `fund_url` 任一欄值 == 欄名本身 → 過濾掉該列
+  - 新增測試 `test_load_policies_filters_schema_leak_rows`
+- [x] **Task C：4 個 Tab 加「AI 白話文總結」widget（4 視角 selectbox）**
+  - 新增 `services/ai_prompts.py` 4 個 builder：`build_trend_action_prompt` / `build_allocation_diagnosis_prompt` / `build_beginner_guide_prompt` / `build_news_driven_prompt`
+  - 新增 `ui/helpers/ai_summary.py` — 統一 `render_ai_summary_widget(tab_key, tab_label, snapshot, headlines, gemini_api_key)`，內含 selectbox（4 視角）+ 「▶️ 生成」按鈕 + 結果 markdown
+  - 集成位置：Tab1 (`_render_tab1_ai_summary`)、Tab2 (`_render_tab2_ai_summary`)、Tab3 (`_render_tab3_ai_summary`)、Tab4 (`_render_tab4_ai_summary`)；Tab4 需 cache `_bt_last_result` session_state 供 widget 取用
+  - Tab5（資料診斷）/ Tab6（說明書）跳過 — 純技術 / 純文檔，無分析價值
+  - 新增 5 個 prompt builder smoke tests
+- [x] **驗證** fast tier **528 passed**（+9 新：5 prompt + 1 schema-leak + 3 既有未動）零回歸
+
 ### v18.158 hotfix — 策略3 智能戰情室判斷修正（2026-05-20）
 
 - [x] **問題（1）「成立 > 3 年」近似太脆弱** 原以 `ret_3y` 是否存在近似，但 `_ret(756)` 要 NAV series ≥ 756 點才回值；低頻 NAV（週/雙週/月線）即使基金成立 5+ 年也回 None → 3-3-3 第一條誤判

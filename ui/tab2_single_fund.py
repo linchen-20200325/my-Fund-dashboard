@@ -1186,5 +1186,36 @@ def render_single_fund_tab() -> None:
                     if st.session_state.get("fund_ai_txt"):
                         st.markdown(st.session_state.fund_ai_txt)
 
+    # v18.159：通用 AI 白話文總結 widget（4 視角 selectbox）
+    _render_tab2_ai_summary(GEMINI_KEY)
+
+
+def _render_tab2_ai_summary(gemini_key: str) -> None:
+    """v18.159 Tab2 末端：4 視角 AI 白話文總結 widget。"""
+    from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
+    fd = st.session_state.get("fund_data") or {}
+    if not fd:
+        return  # 尚未載入基金，不顯示 widget
+    m = fd.get("metrics") or {}
+    name = fd.get("name", "") or fd.get("code", "") or "—"
+    lines = [f"## 單一基金快照：{name}"]
+    for k in ("nav", "ret_1m", "ret_3m", "ret_1y", "ret_1y_total",
+              "annual_div_rate", "sharpe", "std_1y", "buy1", "buy2",
+              "bb_upper", "ma60"):
+        if k in m and m[k] not in (None, ""):
+            lines.append(f"- {k}：{m[k]}")
+    snapshot = "\n".join(lines) if len(lines) > 1 else ""
+    headlines = [str(n.get("title", "") or n.get("headline", ""))
+                 for n in st.session_state.get("news_items", []) or []
+                 if isinstance(n, dict)][:8]
+    render_ai_summary_widget(
+        tab_key="tab2",
+        tab_label=f"單一基金（{name}）",
+        snapshot=snapshot,
+        headlines=headlines,
+        gemini_api_key=gemini_key,
+    )
+
+
 # ══════════════════════════════════════════════════════
 # TAB 3 — 組合基金

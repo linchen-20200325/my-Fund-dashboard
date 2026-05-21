@@ -208,6 +208,16 @@ def load_policies(client: Any, sheet_id: str, worksheet: str = DEFAULT_WORKSHEET
     df["policy_tier"] = df["policy_tier"].str.lower().where(
         df["policy_tier"].str.lower().isin(["core", "satellite"]), ""
     )
+    # v18.159：過濾「value 剛好等於 column 名」的 schema-leak 列。
+    # 已知 user 部署有 sheet 出現 policy_name="policy_name" / fund_url="fund_url"
+    # 這種 header 字串被誤寫成 data row 的情況（v1→v2 schema 遷移殘留 / JSON 還原
+    # 把 header dict 當資料寫回）。判斷準則：policy_name 或 fund_url 任一 == 欄名。
+    _schema_leak = (
+        (df["policy_name"].str.lower() == "policy_name")
+        | (df["fund_url"].str.lower() == "fund_url")
+    )
+    if _schema_leak.any():
+        df = df[~_schema_leak].copy().reset_index(drop=True)
     return df
 
 

@@ -173,6 +173,33 @@ def render_portfolio_tab() -> None:
     _gsheet_default_expand = not bool(st.session_state.get("gsheet_tokens"))
     with st.expander("📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單",
                      expanded=_gsheet_default_expand):
+        # v18.159：頂部「🚀 快速跳轉」toolbar — 解決「讀寫按鈕散在多個子段、中間夾
+        # 保單清單/多帳本管理標題打斷流程」的 UX 問題。click 後 toast 告知該往下找的
+        # 段落標題，並在標題上加 ⬇️ 視覺錨點。不抽搬實際邏輯避免破壞變數作用域。
+        st.markdown("##### 🚀 快速跳轉：存讀工具列")
+        _io_c1, _io_c2, _io_c3, _io_c4 = st.columns(4)
+        if _io_c1.button("📥 雲端讀取", use_container_width=True,
+                         key="t3_io_cloud_load", help="跳到「🧰 一鍵存讀」段"):
+            st.toast("⬇️ 請往下捲到「🧰 一鍵存讀」段的「📥 全部讀回（雲端 → 本地）」",
+                     icon="📥")
+        if _io_c2.button("📦 雲端存檔", use_container_width=True,
+                         key="t3_io_cloud_save", help="跳到「🧰 一鍵存讀」段"):
+            st.toast("⬇️ 請往下捲到「🧰 一鍵存讀」段的「📦 全部寫入 Sheet」",
+                     icon="📦")
+        if _io_c3.button("💾 下載 JSON", use_container_width=True,
+                         key="t3_io_json_dl", help="跳到「📁 本機 JSON 備份」段"):
+            st.toast("⬇️ 請往下捲到「📁 本機 JSON 備份」段的「💾 下載 JSON 備份」",
+                     icon="💾")
+        if _io_c4.button("📂 上傳 JSON", use_container_width=True,
+                         key="t3_io_json_ul", help="跳到「📁 本機 JSON 備份」段"):
+            st.toast("⬇️ 請往下捲到「📁 本機 JSON 備份」段的「📂 上傳 JSON 還原」",
+                     icon="📂")
+        st.caption(
+            "ℹ️ 4 顆按鈕對應的操作區在下方「🧰 一鍵存讀」（雲端）與「📁 本機 JSON 備份」"
+            "（本機），中間隔了保單清單 / 多帳本管理 等資訊區段。"
+        )
+        st.divider()
+
         # ── 認證區塊（v18.75 已搬到 sidebar，這裡只顯示狀態與連結）─────
         _logged_in = bool(st.session_state.get("gsheet_tokens"))
 
@@ -681,7 +708,7 @@ def render_portfolio_tab() -> None:
             #          看不出全貌」的散亂感）；v18.147 把「保單清單」前移後此處只剩存讀
             if _sheet_id:
                 st.markdown("---")
-                st.markdown("##### 🧰 一鍵存讀（同步整本帳本）")
+                st.markdown("##### ⬇️ 🧰 一鍵存讀（同步整本帳本）")
                 _aa_c1, _aa_c2 = st.columns(2)
                 _dump_all_clicked = _aa_c1.button(
                     "📦 全部寫入 Sheet（本地 → 雲端）",
@@ -892,7 +919,7 @@ def render_portfolio_tab() -> None:
 
                 # ── v18.70: 本機 JSON 備份（從 T7 區移上來，與雲端存讀同類整合）─────
                 st.markdown("---")
-                st.markdown("##### 📁 本機 JSON 備份（不依賴網路，可離線還原）")
+                st.markdown("##### ⬇️ 📁 本機 JSON 備份（不依賴網路，可離線還原）")
                 import json as _json_pm
                 import datetime as _dt_pm
 
@@ -2172,6 +2199,56 @@ def render_portfolio_tab() -> None:
 
     # ── T7 帳務 + AI 深度組合建議 ── (v18.144 抽至 ui/tab3_t7_ledger.py)
     render_t7_section()
+
+    # v18.159：通用 AI 白話文總結 widget（4 視角 selectbox）
+    _render_tab3_ai_summary(GEMINI_KEY)
+
+
+def _render_tab3_ai_summary(gemini_key: str) -> None:
+    """v18.159 Tab3 末端：4 視角 AI 白話文總結 widget。"""
+    from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
+    pf = st.session_state.get("portfolio_funds", []) or []
+    loaded = [f for f in pf if f.get("loaded") and not f.get("load_error")]
+    if not loaded:
+        return  # 組合空，不掛 widget
+
+    n_total = len(loaded)
+    n_core = sum(1 for f in loaded if f.get("is_core", True))
+    n_sat = n_total - n_core
+    core_pct = (n_core / n_total * 100) if n_total else 0
+
+    lines = [
+        f"## 組合快照（{n_total} 檔）",
+        f"- 核心 {n_core} 檔（{core_pct:.0f}%）｜衛星 {n_sat} 檔（{100 - core_pct:.0f}%）",
+        "- MK 建議：核心 80% / 衛星 20%",
+    ]
+    _shown = 0
+    for f in loaded[:8]:
+        m = f.get("metrics") or {}
+        name = f.get("name", "") or f.get("code", "") or "—"
+        ret_1y = m.get("ret_1y_total") or m.get("ret_1y", "—")
+        sharpe = m.get("sharpe", "—")
+        std_1y = m.get("std_1y", "—")
+        lines.append(
+            f"- {name}（{'核心' if f.get('is_core', True) else '衛星'}）："
+            f"1Y 報酬 {ret_1y}%　|　Sharpe {sharpe}　|　波動 {std_1y}%"
+        )
+        _shown += 1
+    if n_total > _shown:
+        lines.append(f"- …（其餘 {n_total - _shown} 檔略）")
+
+    snapshot = "\n".join(lines)
+    headlines = [str(n.get("title", "") or n.get("headline", ""))
+                 for n in st.session_state.get("news_items", []) or []
+                 if isinstance(n, dict)][:8]
+    render_ai_summary_widget(
+        tab_key="tab3",
+        tab_label="組合戰情室",
+        snapshot=snapshot,
+        headlines=headlines,
+        gemini_api_key=gemini_key,
+    )
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 4 — 回測

@@ -95,6 +95,36 @@ def test_load_policies_missing_columns_raises():
 # ──────────────────────────────────────────────────────────────────────
 # 4. load_policies：正常路徑 — invest_twd 字串→int、fx 容錯
 # ──────────────────────────────────────────────────────────────────────
+def test_load_policies_filters_schema_leak_rows():
+    """v18.159：sheet 內若混進 schema header 字串當資料列（policy_name='policy_name',
+    fund_url='fund_url'），load_policies 必須自動過濾掉，避免畫面顯示亂碼列。"""
+    rows = [
+        {
+            "policy_id": "P1", "policy_name": "正常保單", "fund_url": "ACTI71",
+            "invest_twd": 100000, "invest_date": "2024-01-01",
+            "currency": "USD", "fx_at_buy": "31.5", "notes": "",
+        },
+        {
+            # ← v1→v2 schema 遷移殘留 / JSON 還原把 header dict 當資料寫回
+            "policy_id": "X", "policy_name": "policy_name", "fund_url": "fund_url",
+            "invest_twd": 0, "invest_date": "", "currency": "", "fx_at_buy": "",
+            "notes": "",
+        },
+        {
+            "policy_id": "P2", "policy_name": "另一保單", "fund_url": "JFZN3",
+            "invest_twd": 50000, "invest_date": "2024-02-01",
+            "currency": "TWD", "fx_at_buy": "", "notes": "",
+        },
+    ]
+    ws = _make_ws(records=rows)
+    client = _make_client(ws)
+    df = load_policies(client, "FAKE_ID")
+    assert len(df) == 2   # schema-leak 列已過濾
+    assert "policy_name" not in df["policy_name"].values
+    assert "fund_url" not in df["fund_url"].values
+    assert set(df["policy_id"]) == {"P1", "P2"}
+
+
 def test_load_policies_happy_path_normalizes_types():
     rows = [
         {

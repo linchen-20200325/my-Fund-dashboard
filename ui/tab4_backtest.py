@@ -435,7 +435,53 @@ def render_backtest_tab() -> None:
                         })
                     st.dataframe(pd.DataFrame(single_rows), use_container_width=True)
 
+                    # v18.159: cache 回測結果供下方 AI summary widget 取用
+                    st.session_state["_bt_last_result"] = {
+                        **{k: metrics.get(k, "—") for k in
+                           ("total_return", "ann_return", "ann_vol", "sharpe",
+                            "sortino", "max_drawdown", "calmar")},
+                        "single_rows": single_rows,
+                    }
+
     elif not run_bt and bt_all_codes:
         st.info("設定完成後按「▶ 執行回測」開始分析。")
     else:
         st.info("請先在上方選取基金，再執行回測。")
+
+    # v18.159：通用 AI 白話文總結 widget（4 視角 selectbox）
+    _render_tab4_ai_summary()
+
+
+def _render_tab4_ai_summary() -> None:
+    """v18.159 Tab4 末端：4 視角 AI 白話文總結 widget。
+    snapshot 從上方 single_rows / 回測結果 session_state cache 取（若有）。"""
+    import os
+    from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+
+    bt_result = st.session_state.get("_bt_last_result")  # 由 run_bt 區塊填入（若有）
+    if not bt_result:
+        return  # 尚未跑過回測，不掛 widget
+
+    lines = ["## 回測結果快照"]
+    if "period" in bt_result:
+        lines.append(f"- 回測期間：{bt_result['period']}")
+    for k in ("total_return", "ann_return", "ann_vol", "sharpe",
+              "sortino", "max_drawdown", "calmar"):
+        if k in bt_result and bt_result[k] not in (None, "—"):
+            lines.append(f"- {k}：{bt_result[k]}")
+    single_rows = bt_result.get("single_rows", []) or []
+    for r in single_rows[:8]:
+        lines.append(
+            f"- 個別基金 {r.get('基金代碼', '—')}："
+            f"年化 {r.get('年化報酬(%)', '—')}%　|　Sharpe {r.get('Sharpe', '—')}"
+        )
+
+    snapshot = "\n".join(lines) if len(lines) > 1 else ""
+    render_ai_summary_widget(
+        tab_key="tab4",
+        tab_label="歷史回測",
+        snapshot=snapshot,
+        headlines=[],   # Tab4 不接新聞
+        gemini_api_key=gemini_key,
+    )
