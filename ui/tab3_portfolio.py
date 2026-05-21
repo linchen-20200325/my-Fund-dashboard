@@ -173,31 +173,109 @@ def render_portfolio_tab() -> None:
     _gsheet_default_expand = not bool(st.session_state.get("gsheet_tokens"))
     with st.expander("📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單",
                      expanded=_gsheet_default_expand):
-        # v18.159：頂部「🚀 快速跳轉」toolbar — 解決「讀寫按鈕散在多個子段、中間夾
-        # 保單清單/多帳本管理標題打斷流程」的 UX 問題。click 後 toast 告知該往下找的
-        # 段落標題，並在標題上加 ⬇️ 視覺錨點。不抽搬實際邏輯避免破壞變數作用域。
-        st.markdown("##### 🚀 快速跳轉：存讀工具列")
+        # v18.161：互動式快捷面板 — 4 顆按鈕升級為 toggle，點哪顆下方 placeholder
+        # 就渲染哪顆的動作面板。雲端讀寫因依賴 _client / _sheet_id / _active_book_id
+        # （皆在下方才解析）保留為「導引 + 上次狀態」；JSON 下載 / 上傳不依賴
+        # Google API，可在此真執行。下方 L711+（一鍵存讀）與 L920+（本機 JSON 備份）
+        # 完整面板維持不動作為進階備援。
+        st.markdown("##### 🚀 快速存讀面板")
+        _io_panel = st.session_state.get("t3_io_panel", "load")
+
+        def _t3_set_io_panel(_name: str) -> None:
+            st.session_state["t3_io_panel"] = _name
+
         _io_c1, _io_c2, _io_c3, _io_c4 = st.columns(4)
-        if _io_c1.button("📥 雲端讀取", use_container_width=True,
-                         key="t3_io_cloud_load", help="跳到「🧰 一鍵存讀」段"):
-            st.toast("⬇️ 請往下捲到「🧰 一鍵存讀」段的「📥 全部讀回（雲端 → 本地）」",
-                     icon="📥")
-        if _io_c2.button("📦 雲端存檔", use_container_width=True,
-                         key="t3_io_cloud_save", help="跳到「🧰 一鍵存讀」段"):
-            st.toast("⬇️ 請往下捲到「🧰 一鍵存讀」段的「📦 全部寫入 Sheet」",
-                     icon="📦")
-        if _io_c3.button("💾 下載 JSON", use_container_width=True,
-                         key="t3_io_json_dl", help="跳到「📁 本機 JSON 備份」段"):
-            st.toast("⬇️ 請往下捲到「📁 本機 JSON 備份」段的「💾 下載 JSON 備份」",
-                     icon="💾")
-        if _io_c4.button("📂 上傳 JSON", use_container_width=True,
-                         key="t3_io_json_ul", help="跳到「📁 本機 JSON 備份」段"):
-            st.toast("⬇️ 請往下捲到「📁 本機 JSON 備份」段的「📂 上傳 JSON 還原」",
-                     icon="📂")
-        st.caption(
-            "ℹ️ 4 顆按鈕對應的操作區在下方「🧰 一鍵存讀」（雲端）與「📁 本機 JSON 備份」"
-            "（本機），中間隔了保單清單 / 多帳本管理 等資訊區段。"
-        )
+        _io_c1.button("📥 雲端讀取", use_container_width=True,
+                      key="t3_io_btn_load",
+                      type=("primary" if _io_panel == "load" else "secondary"),
+                      on_click=_t3_set_io_panel, args=("load",),
+                      help="從 Google Sheet 把保單分頁 + _T7_State 讀回本地")
+        _io_c2.button("📦 雲端存檔", use_container_width=True,
+                      key="t3_io_btn_save",
+                      type=("primary" if _io_panel == "save" else "secondary"),
+                      on_click=_t3_set_io_panel, args=("save",),
+                      help="把目前持倉 + ledger 寫回 Google Sheet")
+        _io_c3.button("💾 下載 JSON", use_container_width=True,
+                      key="t3_io_btn_dl",
+                      type=("primary" if _io_panel == "dl" else "secondary"),
+                      on_click=_t3_set_io_panel, args=("dl",),
+                      help="把整本帳本下載為本機 JSON（不依賴網路）")
+        _io_c4.button("📂 上傳 JSON", use_container_width=True,
+                      key="t3_io_btn_ul",
+                      type=("primary" if _io_panel == "ul" else "secondary"),
+                      on_click=_t3_set_io_panel, args=("ul",),
+                      help="從本機 JSON 還原整本帳本")
+
+        with st.container(border=True):
+            if _io_panel == "load":
+                _book = st.session_state.get("active_policy_id") or "（未選定）"
+                _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
+                _last_load = st.session_state.get("t3_last_load_at", "—")
+                st.markdown("**📥 全部讀回（雲端 → 本地）**")
+                st.caption(
+                    f"📒 目前帳本：`{_book}` ｜ 本地持倉：{_fund_n} 檔 ｜ "
+                    f"上次讀回：{_last_load}"
+                )
+                st.info(
+                    "⬇️ 完整操作在下方「🧰 一鍵存讀」段的「📥 全部讀回（雲端 → 本地）」"
+                    "按鈕（需先選保單帳本）。"
+                )
+            elif _io_panel == "save":
+                _book = st.session_state.get("active_policy_id") or "（未選定）"
+                _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
+                _last_save = st.session_state.get("t3_last_save_at", "—")
+                st.markdown("**📦 全部寫入 Sheet（本地 → 雲端）**")
+                st.caption(
+                    f"📒 目前帳本：`{_book}` ｜ 待寫入持倉：{_fund_n} 檔 ｜ "
+                    f"上次寫入：{_last_save}"
+                )
+                st.info(
+                    "⬇️ 完整操作在下方「🧰 一鍵存讀」段的「📦 全部寫入 Sheet」"
+                    "按鈕（需先選保單帳本）。"
+                )
+            elif _io_panel == "dl":
+                import datetime as _dt_top
+                import json as _json_top
+                from ui.helpers.json_backup import build_export_payload
+                _payload = build_export_payload(st.session_state)
+                _bytes = _json_top.dumps(
+                    _payload, ensure_ascii=False, indent=2,
+                ).encode("utf-8")
+                _ts = _dt_top.datetime.now().strftime("%Y%m%d_%H%M%S")
+                st.markdown("**💾 下載完整 JSON 備份**")
+                st.caption(
+                    f"含 {len(_payload['portfolio_funds'])} 檔基金 + "
+                    f"{len(_payload['t7_ledgers'])} 筆 ledger + "
+                    f"{len(_payload['t7_scenarios'])} 個方案（離線可還原）"
+                )
+                st.download_button(
+                    "💾 立即下載 JSON 備份",
+                    data=_bytes,
+                    file_name=f"fund_dashboard_backup_{_ts}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                    key="t3_io_dl_btn_top",
+                )
+            elif _io_panel == "ul":
+                from ui.helpers.json_backup import restore_from_json_bytes
+                st.markdown("**📂 上傳 JSON 還原**")
+                st.caption("選擇先前下載的 `fund_dashboard_backup_*.json` 直接覆蓋本地帳本。")
+                _up = st.file_uploader(
+                    "選擇 JSON 備份檔", type=["json"],
+                    key="t3_io_ul_top", label_visibility="collapsed",
+                )
+                if _up is not None:
+                    _result = restore_from_json_bytes(_up.read(), st.session_state)
+                    if _result["ok"]:
+                        st.success(
+                            f"✅ 已還原 {_result['n_funds']} 檔基金 + "
+                            f"{_result['n_ledgers']} 筆 ledger。"
+                            "請按下方「📡 載入所有未載入基金」重新抓取即時資料。"
+                        )
+                        st.session_state.pop("_t7_auto_estimate_done", None)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {_result['error']}")
         st.divider()
 
         # ── 認證區塊（v18.75 已搬到 sidebar，這裡只顯示狀態與連結）─────
@@ -838,6 +916,11 @@ def render_portfolio_tab() -> None:
                         if _skipped_no_pid:
                             _msg_dump.append(f"略過未綁保單 {_skipped_no_pid} 檔")
                         st.success("📦 已寫入 Sheet：" + "、".join(_msg_dump))
+                        # v18.161 PR：紀錄上次寫入時間，供上方快捷面板顯示
+                        import datetime as _dt_save
+                        st.session_state["t3_last_save_at"] = (
+                            _dt_save.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        )
                         st.rerun()
                     except (PolicySheetError, OAuthError) as _pe:
                         st.error(f"❌ Sheet 寫入失敗：{_pe}")
@@ -888,6 +971,11 @@ def render_portfolio_tab() -> None:
                             if _restored_ct:
                                 _msg_load.append(f"還原 T7 部位 {_restored_ct} 筆")
                             st.success("📥 全部讀回完成：" + " / ".join(_msg_load))
+                            # v18.161 PR：紀錄上次讀取時間，供上方快捷面板顯示
+                            import datetime as _dt_load
+                            st.session_state["t3_last_load_at"] = (
+                                _dt_load.datetime.now().strftime("%Y-%m-%d %H:%M")
+                            )
                             if _report["added"]:
                                 st.caption(f"新增待載入：{', '.join(_report['added'])}（按下方批次載入）")
                         else:
@@ -917,41 +1005,18 @@ def render_portfolio_tab() -> None:
                         },
                     )
 
-                # ── v18.70: 本機 JSON 備份（從 T7 區移上來，與雲端存讀同類整合）─────
+                # ── v18.70 本機 JSON 備份（v18.161 PR：抽 helper 與上方快捷面板共用）─────
                 st.markdown("---")
                 st.markdown("##### ⬇️ 📁 本機 JSON 備份（不依賴網路，可離線還原）")
+                st.caption("💡 也可從上方「🚀 快速存讀面板」的 💾 / 📂 直接使用。")
                 import json as _json_pm
                 import datetime as _dt_pm
+                from ui.helpers.json_backup import (
+                    build_export_payload as _pm_build_export_payload,
+                    restore_from_json_bytes as _pm_restore_from_json_bytes,
+                )
 
-                def _pm_export_payload() -> dict:
-                    """v18.70: 統一存檔邏輯。剝掉 series / moneydj_raw 等大物件。"""
-                    _slim_funds = []
-                    for _f_e in st.session_state.get("portfolio_funds", []):
-                        _slim_funds.append({
-                            "code":         _f_e.get("code", ""),
-                            "name":         _f_e.get("name", ""),
-                            "invest_twd":   _f_e.get("invest_twd", 0),
-                            "policy_id":    _f_e.get("policy_id", ""),
-                            "policy_name":  _f_e.get("policy_name", ""),
-                            "policy_tier":  _f_e.get("policy_tier", ""),
-                            "currency":     _f_e.get("currency", ""),
-                            "is_core":      _f_e.get("is_core"),
-                            "invest_date":  _f_e.get("invest_date", ""),
-                            "fx_at_buy":    _f_e.get("fx_at_buy"),
-                        })
-                    _ledgers_dict = {pk: l.to_dict()
-                                     for pk, l in st.session_state.get("t7_ledgers", {}).items()}
-                    return {
-                        "schema_version":    "1.0",
-                        "exported_at":       _dt_pm.datetime.now().isoformat(timespec="seconds"),
-                        "portfolio_funds":   _slim_funds,
-                        "t7_ledgers":        _ledgers_dict,
-                        "t7_scenarios":      list(st.session_state.get("t7_scenarios", [])),
-                        "active_policy_id":  st.session_state.get("active_policy_id", ""),
-                        "policy_sheet_id":   st.session_state.get("policy_sheet_id", ""),
-                    }
-
-                _pm_payload = _pm_export_payload()
+                _pm_payload = _pm_build_export_payload(st.session_state)
                 _pm_payload_bytes = _json_pm.dumps(
                     _pm_payload, ensure_ascii=False, indent=2
                 ).encode("utf-8")
@@ -975,40 +1040,19 @@ def render_portfolio_tab() -> None:
                     label_visibility="visible",
                 )
                 if _pm_uploaded is not None:
-                    try:
-                        _pm_data_in = _json_pm.loads(_pm_uploaded.read().decode("utf-8"))
-                        if not isinstance(_pm_data_in, dict) or "portfolio_funds" not in _pm_data_in:
-                            st.error("❌ 檔案格式不正確（必須含 portfolio_funds 欄位）")
-                        else:
-                            from services.ledger_service import Ledger as _LedT7_pm
-                            _pm_restored_funds = []
-                            for _f_i in _pm_data_in.get("portfolio_funds", []):
-                                _f_i.update({"loaded": False, "load_error": None})
-                                _pm_restored_funds.append(_f_i)
-                            st.session_state.portfolio_funds = _pm_restored_funds
-                            _pm_restored_led = {}
-                            for _pk_i, _d_i in (_pm_data_in.get("t7_ledgers", {}) or {}).items():
-                                try:
-                                    _pm_restored_led[_pk_i] = _LedT7_pm.from_dict(_d_i)
-                                except Exception:
-                                    continue
-                            st.session_state.t7_ledgers = _pm_restored_led
-                            st.session_state.t7_scenarios = list(
-                                _pm_data_in.get("t7_scenarios", []) or [])
-                            if _pm_data_in.get("policy_sheet_id"):
-                                st.session_state["policy_sheet_id"] = _pm_data_in["policy_sheet_id"]
-                            if _pm_data_in.get("active_policy_id"):
-                                st.session_state["active_policy_id"] = _pm_data_in["active_policy_id"]
-                            # 清掉 auto-restore flag 讓 T7 重新對齊
-                            st.session_state.pop("_t7_auto_restore_done", None)
-                            st.success(
-                                f"✅ 已還原 {len(_pm_restored_funds)} 檔基金 + "
-                                f"{len(_pm_restored_led)} 筆 ledger。"
-                                "請按「📡 載入所有未載入基金」重新抓取即時資料。"
-                            )
-                            st.rerun()
-                    except Exception as _e_pm:
-                        st.error(f"❌ JSON 解析失敗：{str(_e_pm)[:120]}")
+                    _pm_result = _pm_restore_from_json_bytes(
+                        _pm_uploaded.read(), st.session_state,
+                    )
+                    if not _pm_result["ok"]:
+                        st.error(f"❌ {_pm_result['error']}")
+                    else:
+                        st.session_state.pop("_t7_auto_estimate_done", None)
+                        st.success(
+                            f"✅ 已還原 {_pm_result['n_funds']} 檔基金 + "
+                            f"{_pm_result['n_ledgers']} 筆 ledger。"
+                            "請按「📡 載入所有未載入基金」重新抓取即時資料。"
+                        )
+                        st.rerun()
 
                 # ── v18.63: 保單分頁管理區塊已移除（使用者反饋過度複雜）
                 #           保單分頁的建立 / 刪除改由「批次加入」自動處理：

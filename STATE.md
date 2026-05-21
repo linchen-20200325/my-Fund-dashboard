@@ -246,6 +246,27 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.161 — Tab3 IO toolbar 升級為互動式快捷面板（toggle + 真執行 JSON / 雲端導引）（2026-05-21）
+
+- [x] **問題場景**：v18.159 把 4 顆按鈕做成「toast 跳轉提示」，但實際操作區（一鍵存讀 L711 / 本機 JSON 備份 L920）中間隔了 OAuth / Sheet ID / 自動建立 / 資料夾載入 等大段，user 每次仍要狂滑找按鈕
+- [x] **設計**：4 顆按鈕升級為 **toggle**（`st.session_state["t3_io_panel"]`，預設 `"load"`），點哪顆下方 placeholder 渲染哪顆動作面板，**不再用 toast**
+  - 📥 雲端讀取 / 📦 雲端存檔 ── 顯示「目前帳本 + 本地持倉檔數 + 上次讀寫時間 + ⬇️ 完整面板提示」（依賴 `_client / _sheet_id / _active_book_id` 仍在下方解析，純導引）
+  - 💾 下載 JSON / 📂 上傳 JSON ── **直接在快捷面板真執行**（不依賴 Google API，只動 `session_state`）
+- [x] **抽 helper** `ui/helpers/json_backup.py`（純函式）
+  - `build_export_payload(ss)` ── 剝掉 series / moneydj_raw 等大物件
+  - `restore_from_json_bytes(raw, ss)` ── 回傳 `{ok, n_funds, n_ledgers, error}` 統一介面
+  - 上方快捷面板 + 下方 L1008 完整面板共用同一份序列化規則（避免雙寫）
+- [x] **timestamp 寫入點** `ui/tab3_portfolio.py`
+  - L791 寫入成功 → `st.session_state["t3_last_save_at"]`
+  - L860 讀取成功 → `st.session_state["t3_last_load_at"]`
+  - 格式 `"%Y-%m-%d %H:%M"`，上方面板讀來顯示
+- [x] **下方原段** L1008 加 caption「💡 也可從上方『🚀 快速存讀面板』的 💾 / 📂 直接使用」；改用 helper 重寫 → 移除 80 行重複邏輯
+- [x] **新測試** `test_json_backup.py` 8 個 cases：
+  - empty session_state / heavy field stripping / ledger.to_dict / 還原成功 / 壞 JSON / 缺 key / 壞 ledger entry skip / round-trip 不丟資料
+- [x] **驗證** fast tier `pytest -m "not slow"` **546 passed**（v18.160 baseline 538 + 8 新增），零回歸
+- [x] **CLAUDE.md §3 三步法**：Explore（grep + sed 確認 L920 不依賴 Google API、L791/L860 success path）→ Plan（3 句話獲准）→ Execute
+- [x] **零作用域風險**：上方面板的雲端動作純導引（不碰 `_client / _sheet_id`），JSON 動作只動 session_state，下方完整面板邏輯完全保留
+
 ### v18.160 — 保單基金配息現金/單位拆分（div_cash_pct 0-100%）+ 估算 + AI 整合（2026-05-21）
 
 - [x] **問題場景**：保險公司 APP 可設定每檔基金的配息「現金給付 % / 增加單位數 %」拆分（user 截圖：USDEQ5110 設 80%/20%）；dashboard 需要對應功能讓 user 紀錄此設定並估算年化現金流
