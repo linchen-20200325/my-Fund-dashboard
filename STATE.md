@@ -246,6 +246,20 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.164 — Sheet ID hoist 到 sidebar +「✨ 新增帳本」互動式面板（2026-05-21）
+
+- [x] **問題場景**（user 截圖紅框）：Tab3「📋 保單管理」expander 內，OAuth 登入狀態與「Google Sheet ID 輸入」並列在快捷面板下方占大半版面；下方「自動建立 Sheet」與「從 Drive 挑」上下兩段被「或者」文字隔開、層次不一致
+- [x] **Sidebar 加「📋 工作中帳本」區塊**（`app.py:280-310`）
+  - Sheet ID / URL 輸入（自動解析 `/spreadsheets/d/<id>/`）→ 寫回 `policy_sheet_id`
+  - 當前帳本標題顯示（`get_sheet_title` + `_t3_cur_sheet_title:<sid>` cache），登入但無 ID 顯示引導 caption
+- [x] **Tab3 重組「✨ 新增帳本」面板**（`ui/tab3_portfolio.py:485-544`）
+  - 移除 expander 內原 `text_input("Google Sheet ID 或完整 URL")` 區塊（已搬 sidebar），改為單行 `_sheet_id = session_state.get("policy_sheet_id") or _sheet_id_secret`
+  - 新增 `##### ✨ 新增帳本` header 統一兩個子區塊
+  - 上：自動建立 Sheet（保留條件 `not _sheet_id`，避免已選帳本時噪音）
+  - 下：從 Drive 挑既有 Sheets（移除「或者」字眼，與上半無縫銜接；只在兩者都顯示時加 `---` 分隔）
+- [x] **驗證** fast tier `pytest -m "not slow"` **565 passed**，與 v18.163 baseline 完全一致零回歸
+- [x] **CLAUDE.md §3 三步法**：Explore（grep `_sheet_id`/sidebar 結構）→ AskUserQuestion 確認面板版型（上下並列）+ sidebar 位置（Google 帳號區之下）→ Execute
+
 ### v18.163 — Tab3 KPI 合併 hero + sub-tab 改 segmented_control（消除上下兩段重複占版面）（2026-05-21）
 
 - [x] **問題場景**（user 截圖兩張）：Tab3 上下兩段 KPI 重複（上方 mk_war_room 4 卡 + 下方真實收益矩陣 4 卡）；三個 sub-tab（核心戰情室/波段觀測站/3-3-3 篩選器）視覺上像「同一份基金清單顯示三次」

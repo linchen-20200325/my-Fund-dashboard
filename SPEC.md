@@ -430,6 +430,49 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-G Sheet ID 輸入 hoist sidebar +「✨ 新增帳本」面板（v18.164 新增）
+
+**問題場景**：user 截圖紅框反饋 — Tab3「📋 保單管理」expander 內，OAuth 登入狀態 + Sheet ID 輸入欄位並列在快捷面板下方占大半版面；底下「🆕 自動建立 Sheet」與「📂 從 Drive 挑」中間夾「**或者**」字眼、層次斷裂、且 Drive 挑那段被埋得很深要往下捲。
+
+**設計**：把 Sheet ID 輸入搬到 sidebar 與「🔐 Google 帳號」並列；Tab3 expander 內把兩個「取得 / 切換 Sheet」入口合併為一個「✨ 新增帳本」互動式面板（上下並列）。
+
+**Sidebar 工作中帳本**（`app.py:280+`）：
+
+```python
+if _logged_in_sb or (_gsa_secret and _sheet_id_secret):
+    st.markdown("##### 📋 工作中帳本")
+    _sid_raw_sb = st.text_input("Sheet ID 或完整 URL", value=_sid_default_sb,
+                                  key="inp_sheet_id")
+    _m = re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", _sid_raw_sb)
+    _sid_sb = _m.group(1) if _m else _sid_raw_sb
+    if _sid_sb != _sid_default_sb:
+        st.session_state["policy_sheet_id"] = _sid_sb
+    # 顯示當前帳本標題（_t3_cur_sheet_title:<sid> 快取，避免重複 API call）
+```
+
+**Tab3「✨ 新增帳本」面板**（`ui/tab3_portfolio.py:485-544`）：
+
+```
+##### ✨ 新增帳本
+(if not _sheet_id)
+  💡 還沒有 Google Sheet？讓 app 幫你建一個
+  [新 Sheet 名稱]  [🚀 自動建立 Sheet]
+  ---
+📂 從你 Google Drive 內既有的 Sheets 挑一個（可選擇限定資料夾）：
+  [🔄 載入資料夾清單]
+  [📁 限定資料夾 下拉]
+  [📂 從 Drive 列出 Sheets]
+  [清單下拉] [✅ 使用此 Sheet 作為投組資料庫]
+```
+
+**關鍵設計理由**：
+- Sheet ID 屬於「全 app 共用設定」（Tab2 也讀），放 sidebar 合理且永久可見
+- 「自動建立」與「Drive 挑」對等並列，移除「或者」措辭表達兩個對等選項
+- `not _sheet_id` 條件仍套用在自動建立區（已有帳本時不顯示，避免噪音 / 引導使用者用下方多帳本管理建立另一本）
+- 兩者同時顯示時才插入 `---` 分隔，視覺一致
+
+---
+
 ## §4 核心需求五：機構級風險歸因與 σ 絕對位階策略
 
 ### 4-1 底層持股相關性矩陣

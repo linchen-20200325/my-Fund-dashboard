@@ -482,21 +482,16 @@ def render_portfolio_tab() -> None:
                 "若要永久生效，請把這三個值寫到 Streamlit Secrets `[google_oauth]` section。"
             )
 
-        # ── Sheet ID 輸入 ───────────────────────────────────────────
+        # ── v18.164：Sheet ID 輸入已 hoist 到 sidebar；此處只從 session_state 取值 ──
         if _logged_in:
-            _sheet_id_default = st.session_state.get("policy_sheet_id", _sheet_id_secret)
-            _sheet_id_raw = st.text_input(
-                "Google Sheet ID 或完整 URL（系統會自動解析 ID）",
-                value=_sheet_id_default, key="inp_sheet_id",
-            ).strip()
-            # v18.39：使用者貼整段 URL → 自動萃取 ID；否則視為已是 ID。
-            import re as _re_sid
-            _m_sid = _re_sid.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", _sheet_id_raw)
-            _sheet_id = _m_sid.group(1) if _m_sid else _sheet_id_raw
-            if _sheet_id and _sheet_id != _sheet_id_default:
-                st.session_state["policy_sheet_id"] = _sheet_id
-            if _sheet_id_raw and _m_sid:
-                st.caption(f"✅ 已從 URL 解析出 Sheet ID：`{_sheet_id}`")
+            _sheet_id = (st.session_state.get("policy_sheet_id")
+                          or _sheet_id_secret or "").strip()
+
+            # v18.164：「✨ 新增帳本」互動式面板 ── 上下並列
+            # 上：自動建立 Sheet（OAuth 模式且尚未填 ID 時顯示）
+            # 下：從 Drive 既有 Sheets 挑（OAuth 模式恆顯示）
+            if _oauth_configured:
+                st.markdown("##### ✨ 新增帳本")
 
             # v18.40 自動建立新 Sheet（OAuth 模式且尚未填 ID 時顯示）
             if _oauth_configured and not _sheet_id:
@@ -542,9 +537,11 @@ def render_portfolio_tab() -> None:
 
             # v18.45 從 Drive 既有 Sheets 挑（OAuth + Sheet ID 為空 OR 想換）
             # v18.146 加資料夾下拉過濾（移植自台股 PR #18）
+            # v18.164 從 expander 底部 hoist 到「新增帳本」面板下半部
             if _oauth_configured:
-                st.markdown("---")
-                st.caption("📂 **或者** — 從你 Google Drive 內既有的 Sheets 挑一個（可選擇限定資料夾）：")
+                if not _sheet_id:
+                    st.markdown("---")
+                st.caption("📂 從你 Google Drive 內既有的 Sheets 挑一個（可選擇限定資料夾）：")
 
                 # 資料夾下拉：先點按鈕抓所有資料夾，下方 selectbox 篩選 Sheets 列表
                 _fld_btn_c1, _fld_btn_c2 = st.columns([2, 3])

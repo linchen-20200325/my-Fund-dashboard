@@ -277,6 +277,37 @@ with st.sidebar:
         st.caption("⚙️ OAuth Client 尚未設定 — 請至 Tab3「📊 組合基金」"
                    "→ 展開「📋 保單管理」設定")
 
+    # ── v18.164：工作中帳本（Sheet ID 從 Tab3 expander hoist 到 sidebar）──
+    if _logged_in_sb or (_gsa_secret and _sheet_id_secret):
+        st.markdown("##### 📋 工作中帳本")
+        _sid_default_sb = (st.session_state.get("policy_sheet_id")
+                            or _sheet_id_secret or "")
+        _sid_raw_sb = st.text_input(
+            "Sheet ID 或完整 URL",
+            value=_sid_default_sb, key="inp_sheet_id",
+            help="貼 Google Sheet URL 會自動解析 ID",
+        ).strip()
+        _m_sb = re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", _sid_raw_sb)
+        _sid_sb = _m_sb.group(1) if _m_sb else _sid_raw_sb
+        if _sid_sb and _sid_sb != _sid_default_sb:
+            st.session_state["policy_sheet_id"] = _sid_sb
+        if _sid_sb and _logged_in_sb:
+            _title_cache_key = f"_t3_cur_sheet_title:{_sid_sb}"
+            _cur_title_sb = st.session_state.get(_title_cache_key)
+            if _cur_title_sb is None:
+                try:
+                    _cur_title_sb = get_sheet_title(
+                        _get_oauth_client(), _sid_sb)
+                    st.session_state[_title_cache_key] = _cur_title_sb
+                except Exception:
+                    _cur_title_sb = ""
+            if _cur_title_sb:
+                st.caption(f"📂 **{_cur_title_sb}**")
+            else:
+                st.caption(f"📂 ID `{_sid_sb[:14]}…`")
+        elif not _sid_sb and _logged_in_sb:
+            st.caption("⚠️ 尚未指定 — 至 Tab3「✨ 新增帳本」建立或挑一本")
+
 # ══════════════════════════════════════════════════════
 # HELPER: _is_core_fund
 # ══════════════════════════════════════════════════════
