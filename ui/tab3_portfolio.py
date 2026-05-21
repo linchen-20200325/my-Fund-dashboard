@@ -224,7 +224,7 @@ def render_portfolio_tab() -> None:
                       key="t3_io_btn_new",
                       type=("primary" if _io_panel == "new" else "secondary"),
                       on_click=_t3_set_io_panel, args=("new",),
-                      help="建立新 Sheet 或從 Drive 既有 Sheets 挑一本")
+                      help="建立全新的 Google Sheet 作為帳本")
         _io_c4.button("💾 下載 JSON", use_container_width=True,
                       key="t3_io_btn_dl",
                       type=("primary" if _io_panel == "dl" else "secondary"),
@@ -261,46 +261,139 @@ def render_portfolio_tab() -> None:
 
         with st.container(border=True):
             if _io_panel == "load":
-                st.markdown("**📥 全部讀回（雲端 → 本地）**")
-                if not _can_cloud_q:
+                # v18.166：📥 雲端讀取 = 讀取現有帳本 + 從 Drive 挑帳本（兩者皆在此面板）
+                st.markdown("**📥 雲端讀取（全部讀回 / 挑選帳本）**")
+                if not _logged_in_q and not (_gsa_secret and _sheet_id_secret):
                     st.warning(
-                        "⚠️ 尚未登入 Google 或未指定 Sheet ID。請先在下方"
-                        "「📂 從 Drive 列出 Sheets」挑一本，或貼 Sheet ID。"
+                        "⚠️ 尚未用 Google 登入。請至左側 sidebar 點「🔐 用 Google 登入」。"
                     )
                 else:
-                    _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
-                    _last_load = st.session_state.get("t3_last_load_at", "—")
-                    _book_disp = (f"**{_sheet_title_q}**" if _sheet_title_q
-                                  else f"`{_sheet_id_q[:14]}…`")
-                    st.caption(
-                        f"📂 帳本：{_book_disp} ｜ 本地持倉：{_fund_n} 檔 "
-                        f"｜ 上次讀回：{_last_load}"
-                    )
-                    if st.button("📥 立即全部讀回", type="primary",
-                                  use_container_width=True,
-                                  key="t3_io_panel_load_run"):
-                        from ui.helpers.cloud_io import load_all_from_sheet
-                        _res = load_all_from_sheet(
-                            _t3_cloud_client_q(), _sheet_id_q,
-                            st.session_state,
-                            oauth_mode=bool(_oauth_configured),
+                    # 上半 ── 全部讀回（需有 _sheet_id_q）
+                    if _sheet_id_q:
+                        _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
+                        _last_load = st.session_state.get("t3_last_load_at", "—")
+                        _book_disp = (f"**{_sheet_title_q}**" if _sheet_title_q
+                                      else f"`{_sheet_id_q[:14]}…`")
+                        st.caption(
+                            f"📂 帳本：{_book_disp} ｜ 本地持倉：{_fund_n} 檔 "
+                            f"｜ 上次讀回：{_last_load}"
                         )
-                        if not _res["ok"]:
-                            st.error(f"❌ {_res['error']}")
-                        else:
-                            import datetime as _dt_q
-                            st.session_state["t3_last_load_at"] = (
-                                _dt_q.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        if st.button("📥 立即全部讀回", type="primary",
+                                      use_container_width=True,
+                                      key="t3_io_panel_load_run"):
+                            from ui.helpers.cloud_io import load_all_from_sheet
+                            _res = load_all_from_sheet(
+                                _t3_cloud_client_q(), _sheet_id_q,
+                                st.session_state,
+                                oauth_mode=bool(_oauth_configured),
                             )
-                            _msg = [f"新增 {len(_res['added'])} 檔",
-                                    f"保留 {len(_res['kept'])} 檔",
-                                    f"移除 {len(_res['removed'])} 檔"]
-                            if _res["restored_ct"]:
-                                _msg.append(f"T7 部位 {_res['restored_ct']} 筆")
-                            st.success("📥 全部讀回完成：" + " / ".join(_msg))
-                            for _w in _res["warnings"]:
-                                st.warning(f"⚠️ {_w}")
-                            st.rerun()
+                            if not _res["ok"]:
+                                st.error(f"❌ {_res['error']}")
+                            else:
+                                import datetime as _dt_q
+                                st.session_state["t3_last_load_at"] = (
+                                    _dt_q.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                )
+                                _msg = [f"新增 {len(_res['added'])} 檔",
+                                        f"保留 {len(_res['kept'])} 檔",
+                                        f"移除 {len(_res['removed'])} 檔"]
+                                if _res["restored_ct"]:
+                                    _msg.append(f"T7 部位 {_res['restored_ct']} 筆")
+                                st.success("📥 全部讀回完成：" + " / ".join(_msg))
+                                for _w in _res["warnings"]:
+                                    st.warning(f"⚠️ {_w}")
+                                st.rerun()
+                    else:
+                        st.info(
+                            "ℹ️ 尚未指定 Sheet ID。請從下方「📂 從 Drive 挑一本」，"
+                            "或至「✨ 新增帳本」建立新帳本。"
+                        )
+
+                    # 下半 ── 從 Drive 挑帳本（OAuth + 已登入時顯示）
+                    if _oauth_configured and _logged_in_q:
+                        st.markdown("---")
+                        st.markdown("**📂 從 Drive 挑帳本（切換 / 首次選用）**")
+                        _fld_btn_c1, _fld_btn_c2 = st.columns([2, 3])
+                        if _fld_btn_c1.button("🔄 載入資料夾清單",
+                                               key="btn_load_drive_folders",
+                                               use_container_width=True,
+                                               help="點一次抓 Drive 內所有資料夾；之後下方下拉就能選"):
+                            try:
+                                _folders_ls = list_user_folders(_get_oauth_client())
+                                st.session_state["_my_folders"] = _folders_ls
+                                if not _folders_ls:
+                                    st.info("ℹ️ Drive 內沒有資料夾，或 token 缺 `drive.metadata.readonly` 權限")
+                            except (PolicySheetError, OAuthError) as _fle:
+                                _err_text_f = str(_fle)
+                                if "insufficient" in _err_text_f.lower() or "403" in _err_text_f:
+                                    st.error("❌ 列資料夾失敗：OAuth token 缺中繼權限。左 sidebar「🚪 登出」→ 重新登入即可。")
+                                else:
+                                    st.error(f"❌ 列資料夾失敗：{_fle}")
+                            except Exception as _fle2:
+                                st.error(f"❌ 未預期錯誤：[{type(_fle2).__name__}] {_fle2}")
+
+                        _my_folders = st.session_state.get("_my_folders") or []
+                        _folder_options = [("", "🌐 整個帳號（不限資料夾）")] + [
+                            (f["id"], f"📁 {f['name']}  (`{f['id'][:10]}…`)") for f in _my_folders]
+                        _cur_folder_id = str(st.session_state.get("_drive_folder_id", "") or "")
+                        try:
+                            _cur_fld_idx = next(i for i, (fid, _) in enumerate(_folder_options) if fid == _cur_folder_id)
+                        except StopIteration:
+                            _cur_fld_idx = 0
+                        _sel_fld_idx = st.selectbox(
+                            "📁 限定資料夾（可選）",
+                            range(len(_folder_options)),
+                            index=_cur_fld_idx,
+                            format_func=lambda i: _folder_options[i][1],
+                            key="sel_drive_folder",
+                            help="留空 = 列整個帳號；或先點「🔄 載入資料夾清單」抓 Drive 資料夾後挑一個")
+                        _folder_id = _folder_options[_sel_fld_idx][0]
+                        st.session_state["_drive_folder_id"] = _folder_id
+
+                        if st.button("📂 從 Drive 列出 Sheets",
+                                      key="btn_list_drive_sheets",
+                                      use_container_width=True,
+                                      help="需要 OAuth `drive.metadata.readonly` 權限；若尚未授權請先登出再登入"):
+                            try:
+                                _files_ls = list_user_sheets(_get_oauth_client(), folder_id=_folder_id)
+                                st.session_state["_my_sheets"] = _files_ls
+                                _scope_name = _folder_options[_sel_fld_idx][1].lstrip("📁🌐 ").split("  (")[0]
+                                st.session_state["_my_sheets_scope"] = _scope_name
+                                if not _files_ls:
+                                    st.info("ℹ️ Drive 內沒有 Google Sheets，或目前 token 只能看 app 建立的檔。")
+                            except (PolicySheetError, OAuthError) as _lse:
+                                _err_text = str(_lse)
+                                if "insufficient" in _err_text.lower() or "403" in _err_text:
+                                    st.error(
+                                        "❌ 列檔失敗：OAuth token 缺 `drive.metadata.readonly` 權限。"
+                                        "請至 sidebar「🚪 登出」→ 重新「🔐 用 Google 登入」。"
+                                    )
+                                else:
+                                    st.error(f"❌ 列檔失敗：{_lse}")
+                            except Exception as _lse2:
+                                st.error(f"❌ 未預期錯誤：[{type(_lse2).__name__}] {_lse2}")
+
+                        _my_sheets = st.session_state.get("_my_sheets") or []
+                        _scope_hint = st.session_state.get("_my_sheets_scope", "")
+                        if _my_sheets:
+                            _opt_labels = [f"📄 {f['name']}  (`{f['id'][:14]}…`)" for f in _my_sheets]
+                            _scope_label = f"（來源：{_scope_hint}）" if _scope_hint else ""
+                            _sel_idx = st.selectbox(
+                                f"清單共 {len(_my_sheets)} 個 Sheets — 選一本 {_scope_label}",
+                                range(len(_opt_labels)),
+                                format_func=lambda i: _opt_labels[i],
+                                key="sel_my_sheets",
+                            )
+                            if st.button("✅ 使用此 Sheet 作為投組資料庫",
+                                          key="btn_pick_my_sheet",
+                                          type="primary", use_container_width=True):
+                                _picked = _my_sheets[_sel_idx]
+                                st.session_state["policy_sheet_id"] = _picked["id"]
+                                if "inp_sheet_id" in st.session_state:
+                                    del st.session_state["inp_sheet_id"]
+                                st.session_state.pop("_t3_cur_sheet_title", None)
+                                st.success(f"✅ 已選用 `{_picked['name']}`（ID `{_picked['id']}`）")
+                                st.rerun()
             elif _io_panel == "save":
                 st.markdown("**📦 全部寫入 Sheet（本地 → 雲端）**")
                 if not _can_cloud_q:
@@ -342,12 +435,12 @@ def render_portfolio_tab() -> None:
                                 st.warning(f"⚠️ {_w}")
                             st.rerun()
             elif _io_panel == "new":
-                # v18.165：「✨ 新增帳本」互動式面板 ── 從 expander 底部 hoist 到頂部快捷面板
-                # 上：自動建立新 Sheet　／　下：從 Drive 既有 Sheets 挑一本
-                st.markdown("**✨ 新增帳本（建立新 Sheet 或從 Drive 挑一本）**")
+                # v18.166：「✨ 新增帳本」只剩「自動建立新 Sheet」；
+                # 「從 Drive 挑」已移到「📥 雲端讀取」面板（user 截圖反饋）
+                st.markdown("**✨ 新增帳本（建立全新 Google Sheet）**")
                 if not _oauth_configured:
                     st.warning(
-                        "⚠️ 需先設定 OAuth Client 才能建立 / 列出 Google Sheets。"
+                        "⚠️ 需先設定 OAuth Client 才能建立 Google Sheet。"
                         "請至下方 expander 設定。"
                     )
                 elif not _logged_in_q:
@@ -355,8 +448,10 @@ def render_portfolio_tab() -> None:
                         "⚠️ 尚未用 Google 登入。請至左側 sidebar 點「🔐 用 Google 登入」。"
                     )
                 else:
-                    # 上半 ── 自動建立新 Sheet（user 已點按鈕表示想新增，無條件顯示）
-                    st.caption("💡 讓 app 建一張全新的 Google Sheet 作為帳本（不必先到 Drive 開檔）")
+                    st.caption(
+                        "💡 讓 app 建一張全新的 Google Sheet 作為帳本（不必先到 Drive 開檔）。"
+                        "想挑 Drive 內既有的 Sheet 請改點「📥 雲端讀取」。"
+                    )
                     _ac_c1, _ac_c2 = st.columns([3, 2])
                     _ac_title = _ac_c1.text_input(
                         "新 Sheet 名稱", value="Fund Dashboard - 投資組合",
@@ -390,92 +485,6 @@ def render_portfolio_tab() -> None:
                                 st.error(f"❌ 建立失敗：{_ace}")
                         except Exception as _ace2:
                             st.error(f"❌ 未預期錯誤：[{type(_ace2).__name__}] {_ace2}")
-
-                    st.markdown("---")
-
-                    # 下半 ── 從 Drive 既有 Sheets 挑一本（含資料夾下拉）
-                    st.caption("📂 或者 — 從你 Google Drive 內既有的 Sheets 挑一本：")
-                    _fld_btn_c1, _fld_btn_c2 = st.columns([2, 3])
-                    if _fld_btn_c1.button("🔄 載入資料夾清單",
-                                           key="btn_load_drive_folders",
-                                           use_container_width=True,
-                                           help="點一次抓 Drive 內所有資料夾；之後下方下拉就能選"):
-                        try:
-                            _folders_ls = list_user_folders(_get_oauth_client())
-                            st.session_state["_my_folders"] = _folders_ls
-                            if not _folders_ls:
-                                st.info("ℹ️ Drive 內沒有資料夾，或 token 缺 `drive.metadata.readonly` 權限")
-                        except (PolicySheetError, OAuthError) as _fle:
-                            _err_text_f = str(_fle)
-                            if "insufficient" in _err_text_f.lower() or "403" in _err_text_f:
-                                st.error("❌ 列資料夾失敗：OAuth token 缺中繼權限。左 sidebar「🚪 登出」→ 重新登入即可。")
-                            else:
-                                st.error(f"❌ 列資料夾失敗：{_fle}")
-                        except Exception as _fle2:
-                            st.error(f"❌ 未預期錯誤：[{type(_fle2).__name__}] {_fle2}")
-
-                    _my_folders = st.session_state.get("_my_folders") or []
-                    _folder_options = [("", "🌐 整個帳號（不限資料夾）")] + [
-                        (f["id"], f"📁 {f['name']}  (`{f['id'][:10]}…`)") for f in _my_folders]
-                    _cur_folder_id = str(st.session_state.get("_drive_folder_id", "") or "")
-                    try:
-                        _cur_fld_idx = next(i for i, (fid, _) in enumerate(_folder_options) if fid == _cur_folder_id)
-                    except StopIteration:
-                        _cur_fld_idx = 0
-                    _sel_fld_idx = st.selectbox(
-                        "📁 限定資料夾（可選）",
-                        range(len(_folder_options)),
-                        index=_cur_fld_idx,
-                        format_func=lambda i: _folder_options[i][1],
-                        key="sel_drive_folder",
-                        help="留空 = 列整個帳號；或先點「🔄 載入資料夾清單」抓 Drive 資料夾後挑一個")
-                    _folder_id = _folder_options[_sel_fld_idx][0]
-                    st.session_state["_drive_folder_id"] = _folder_id
-
-                    if st.button("📂 從 Drive 列出 Sheets",
-                                  key="btn_list_drive_sheets",
-                                  use_container_width=True,
-                                  help="需要 OAuth `drive.metadata.readonly` 權限；若尚未授權請先登出再登入"):
-                        try:
-                            _files_ls = list_user_sheets(_get_oauth_client(), folder_id=_folder_id)
-                            st.session_state["_my_sheets"] = _files_ls
-                            _scope_name = _folder_options[_sel_fld_idx][1].lstrip("📁🌐 ").split("  (")[0]
-                            st.session_state["_my_sheets_scope"] = _scope_name
-                            if not _files_ls:
-                                st.info("ℹ️ Drive 內沒有 Google Sheets，或目前 token 只能看 app 建立的檔。")
-                        except (PolicySheetError, OAuthError) as _lse:
-                            _err_text = str(_lse)
-                            if "insufficient" in _err_text.lower() or "403" in _err_text:
-                                st.error(
-                                    "❌ 列檔失敗：OAuth token 缺 `drive.metadata.readonly` 權限。"
-                                    "請至 sidebar「🚪 登出」→ 重新「🔐 用 Google 登入」。"
-                                )
-                            else:
-                                st.error(f"❌ 列檔失敗：{_lse}")
-                        except Exception as _lse2:
-                            st.error(f"❌ 未預期錯誤：[{type(_lse2).__name__}] {_lse2}")
-
-                    _my_sheets = st.session_state.get("_my_sheets") or []
-                    _scope_hint = st.session_state.get("_my_sheets_scope", "")
-                    if _my_sheets:
-                        _opt_labels = [f"📄 {f['name']}  (`{f['id'][:14]}…`)" for f in _my_sheets]
-                        _scope_label = f"（來源：{_scope_hint}）" if _scope_hint else ""
-                        _sel_idx = st.selectbox(
-                            f"清單共 {len(_my_sheets)} 個 Sheets — 選一本 {_scope_label}",
-                            range(len(_opt_labels)),
-                            format_func=lambda i: _opt_labels[i],
-                            key="sel_my_sheets",
-                        )
-                        if st.button("✅ 使用此 Sheet 作為投組資料庫",
-                                      key="btn_pick_my_sheet",
-                                      type="primary", use_container_width=True):
-                            _picked = _my_sheets[_sel_idx]
-                            st.session_state["policy_sheet_id"] = _picked["id"]
-                            if "inp_sheet_id" in st.session_state:
-                                del st.session_state["inp_sheet_id"]
-                            st.session_state.pop("_t3_cur_sheet_title", None)
-                            st.success(f"✅ 已選用 `{_picked['name']}`（ID `{_picked['id']}`）")
-                            st.rerun()
             elif _io_panel == "dl":
                 import datetime as _dt_top
                 import json as _json_top

@@ -246,6 +246,16 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.166 — 從 Drive 挑帳本移到「📥 雲端讀取」面板（職責分離）（2026-05-21）
+
+- [x] **問題場景**（user 截圖紅框 + 紅箭頭）：v18.165「✨ 新增帳本」面板上下並列「自動建立」+「從 Drive 挑」，user 反饋「下面的讀取檔案要放回第一個按鈕下」希望分流到「📥 雲端讀取」面板
+- [x] **「📥 雲端讀取」面板擴充**（`ui/tab3_portfolio.py:263-405`）：
+  - 上半：原「全部讀回」邏輯（需有 `_sheet_id_q`）；無 ID 時改顯示 info 引導去下方挑
+  - 下半（v18.166 新增）：「📂 從 Drive 挑帳本」整段 hoist 過來 — 載入資料夾清單 / 限定資料夾 / 從 Drive 列出 Sheets / 選用 Sheet，OAuth 登入時恆顯示
+- [x] **「✨ 新增帳本」面板瘦身**（`ui/tab3_portfolio.py:432-490`）：只剩「自動建立新 Sheet」（caption 加註「想挑 Drive 內既有的 Sheet 請改點 📥 雲端讀取」引導 user），button help 改為「建立全新的 Google Sheet 作為帳本」
+- [x] **職責分離 UX**：「✨ 新增 = create new」「📥 雲端讀取 = pick existing + load」字面語義對齊
+- [x] **驗證** fast tier `pytest -m "not slow"` **565 passed**，與 v18.165 baseline 一致零回歸；6 個 widget key 仍唯一（移動而非複製）
+
 ### v18.165 — 快捷面板加第 5 顆「✨ 新增帳本」互動式 button（2026-05-21）
 
 - [x] **問題場景**（user 截圖紅框 + 紅箭頭）：v18.164 把「✨ 新增帳本」做成 expander 內的小標題，但功能仍埋在下方需捲動；user 要求頂部「🚀 快速存讀面板」加第 5 顆 button、點下去直接顯示互動面板（與其他 4 顆一致）

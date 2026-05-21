@@ -430,6 +430,39 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-I 「從 Drive 挑帳本」移到「📥 雲端讀取」面板（v18.166 新增）
+
+**問題場景**：v18.165 把「自動建立」+「從 Drive 挑」上下並列在「✨ 新增帳本」面板，user 截圖紅框 + 紅箭頭反饋希望分流。
+
+**設計**：依字面語意分流到對應 button：
+- **✨ 新增 = create new** → 只放「自動建立新 Sheet」
+- **📥 雲端讀取 = pick existing + load** → 同時包含「全部讀回」與「從 Drive 挑帳本」
+
+```python
+# tab3_portfolio.py:263+
+if _io_panel == "load":
+    st.markdown("**📥 雲端讀取（全部讀回 / 挑選帳本）**")
+    # 上半：全部讀回（需 _sheet_id_q）
+    if _sheet_id_q:
+        [📂 帳本: 名稱 ｜ 持倉檔數 ｜ 上次讀回] + [📥 立即全部讀回]
+    else:
+        st.info("尚未指定 Sheet ID。請從下方挑一本，或至「✨ 新增帳本」建立")
+
+    # 下半：從 Drive 挑帳本（OAuth + 已登入恆顯示）
+    if _oauth_configured and _logged_in_q:
+        st.markdown("---")
+        st.markdown("**📂 從 Drive 挑帳本（切換 / 首次選用）**")
+        [🔄 載入資料夾清單] [📁 限定資料夾] [📂 列 Sheets] [✅ 使用此 Sheet]
+
+# tab3_portfolio.py:432+
+elif _io_panel == "new":
+    st.markdown("**✨ 新增帳本（建立全新 Google Sheet）**")
+    st.caption("...想挑 Drive 內既有的 Sheet 請改點「📥 雲端讀取」")
+    [新 Sheet 名稱] [🚀 自動建立 Sheet]
+```
+
+---
+
 ### §3-H 快捷面板加第 5 顆「✨ 新增帳本」button（v18.165 新增）
 
 **問題場景**：v18.164 把「✨ 新增帳本」做成 expander 內小標題，但功能（自動建立 + Drive 挑）仍埋在下方需要捲動。user 截圖紅框 + 紅箭頭明確要求：頂部「🚀 快速存讀面板」加第 5 顆 button，點下去直接顯示互動面板（與其他 4 顆 toggle 行為一致）。
