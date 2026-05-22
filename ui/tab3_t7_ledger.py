@@ -1860,6 +1860,9 @@ def render_t7_section() -> None:
                     _snap_rows = []
                     _v_total_twd = 0.0
                     _ann_total_twd = 0.0
+                    # v18.172：依各檔 div_cash_pct 拆「現金 / 配股(再投入)」兩個累計
+                    _cash_total_twd = 0.0
+                    _reinvest_total_twd = 0.0
                     _cost_total_twd = 0.0
                     # v18.31: 追蹤未計入的基金，給 KPI 卡顯示差額來源
                     _uncounted_funds: list[str] = []
@@ -1887,6 +1890,8 @@ def render_t7_section() -> None:
                                 "未實現損益 %": "—",
                                 "配息率": f"{_dy:.2f}%" if _dy else "—",
                                 "預估月配息 (TWD)": "—",
+                                # v18.172：與 normal branch 對齊欄位
+                                "預估月配股 (TWD)": "—",
                             })
                             continue
                         _v = _l.position.value_twd(_nav, _fx) if (_nav and _fx) else 0
@@ -1897,6 +1902,12 @@ def render_t7_section() -> None:
                         _cost_total_twd += _cost
                         _ann = _v * _dy / 100.0
                         _ann_total_twd += _ann
+                        # v18.172：依該檔 div_cash_pct 拆現金 / 配股，預設 100=全現金
+                        _dcp_f = max(0.0, min(100.0, float(_f.get("div_cash_pct", 100) or 100)))
+                        _ann_cash = _ann * _dcp_f / 100.0
+                        _ann_reinv = _ann - _ann_cash
+                        _cash_total_twd += _ann_cash
+                        _reinvest_total_twd += _ann_reinv
                         _pl_str = f"NT${_pl_twd:+,.0f}"
                         _pl_pct_str = f"{_pl_pct:+.2f}%"
                         _snap_rows.append({
@@ -1913,7 +1924,9 @@ def render_t7_section() -> None:
                             "未實現損益 (TWD)": _pl_str,
                             "未實現損益 %": _pl_pct_str,
                             "配息率": f"{_dy:.2f}%",
-                            "預估月配息 (TWD)": f"NT${_ann/12:,.0f}",
+                            # v18.172：拆「月現金 / 月配股」兩欄；舊「預估月配息」改用現金部分
+                            "預估月配息 (TWD)": f"NT${_ann_cash/12:,.0f}",
+                            "預估月配股 (TWD)": f"NT${_ann_reinv/12:,.0f}",
                         })
                     if _snap_rows:
                         # 紅虧綠賺：用 pandas Styler 著色（純 CSS 不依賴 matplotlib）
@@ -1948,7 +1961,8 @@ def render_t7_section() -> None:
                         float(_f.get("invest_twd", 0) or 0)
                         for _f in _pf_t7
                     )
-                    _pc1, _pc2, _pc3, _pc4, _pc5 = st.columns([2, 2, 2, 2, 1])
+                    # v18.172：5→6 cols；新增「年配股 (TWD)」KPI，預估年配息改現金部分
+                    _pc1, _pc2, _pc3, _pc4, _pc5, _pc6 = st.columns([2, 2, 2, 2, 2, 1])
                     if _v_total_twd > 0:
                         _pc1.metric("組合當前市值 (TWD)", f"NT${_v_total_twd:,.0f}")
                     elif _invest_total_twd > 0:
@@ -1968,16 +1982,27 @@ def render_t7_section() -> None:
                         delta=f"{_pl_total_pct:+.2f}% 報酬率",
                         delta_color="normal",   # v18.26: 損益恆用 normal（虧損紅、賺綠）
                     )
+                    # v18.172：年配息拆「現金」+「配股」兩格；每月現金流改 cash-only
                     _pc3.metric(
-                        "💵 預估年配息（TWD）",
-                        f"NT${_ann_total_twd:,.0f}",
-                        help="= Σ 各檔 市值 × 配息率"
+                        "💵 預估年現金配息 (TWD)",
+                        f"NT${_cash_total_twd:,.0f}",
+                        help=f"年總配息 NT${_ann_total_twd:,.0f} 中**現金給付**部分。\n"
+                             f"= Σ 各檔 市值 × 配息率 × (div_cash_pct/100)。\n"
+                             f"div_cash_pct=100 → 全現金；<100 → 部分轉新單位（配股）。"
                     )
                     _pc4.metric(
                         "📅 每月被動現金流",
-                        f"NT${_ann_total_twd/12:,.0f}"
+                        f"NT${_cash_total_twd/12:,.0f}",
+                        help="只算現金、不含再投入配股；= 預估年現金配息 / 12"
                     )
-                    if _pc5.button("🗑️ 重置帳本", key="t7_reset"):
+                    _pc5.metric(
+                        "🪙 預估年配股 (TWD)",
+                        f"NT${_reinvest_total_twd:,.0f}",
+                        help=f"年總配息 NT${_ann_total_twd:,.0f} 中**再投入轉新單位**部分。\n"
+                             "= Σ 各檔 市值 × 配息率 × ((100-div_cash_pct)/100)。\n"
+                             "此金額不會進現金流、會以新單位累加進部位（提升未來市值）。"
+                    )
+                    if _pc6.button("🗑️ 重置帳本", key="t7_reset"):
                         st.session_state.t7_ledgers = {}
                         st.rerun()
                     # v18.31: KPI vs 表格差額來源說明

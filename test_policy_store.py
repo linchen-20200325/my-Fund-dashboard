@@ -482,6 +482,28 @@ def test_ensure_policy_worksheet_existing_with_empty_row1_writes_header_to_A1_no
     existing_ws.update.assert_called_once_with("A1", [list(ALL_COLS)])
 
 
+def test_load_policy_worksheet_filters_uppercase_ghost_rows():
+    """v18.172 regression — dump_all_to_sheet 會 .upper() code，鬼列回寫 Sheet
+    變 "FUND_URL"（大寫）。filter 必須 case-insensitive 才擋得住。"""
+    real_record = {
+        "policy_id": "QL19676552", "policy_name": "QL19676552",
+        "fund_url": "ACTI71", "invest_twd": "500143", "invest_date": "",
+        "currency": "USD", "fx_at_buy": "0", "notes": "n", "policy_tier": "core",
+    }
+    ghost_upper = {
+        "policy_id": "QL19676552", "policy_name": "POLICY_NAME",
+        "fund_url": "FUND_URL", "invest_twd": "0", "invest_date": "INVEST_DATE",
+        "currency": "CURRENCY", "fx_at_buy": "0", "notes": "NOTES",
+        "policy_tier": "",
+    }
+    ws = _make_ws(records=[real_record, ghost_upper])
+    sh = _make_sh_with_worksheets({"QL19676552": ws})
+    client = _make_client_with_sh(sh)
+    df = load_policy_worksheet(client, "FAKE_ID", "QL19676552")
+    assert len(df) == 1                          # 大寫鬼列被濾掉
+    assert df.iloc[0]["fund_url"] == "ACTI71"
+
+
 def test_load_policy_worksheet_filters_schema_ghost_rows():
     """v18.171 regression — 舊版 bug 留下的「schema 鬼列」必須在 load 時被過濾。
     Sheet 中 fund_url='fund_url' & invest_date='invest_date' & currency='currency'

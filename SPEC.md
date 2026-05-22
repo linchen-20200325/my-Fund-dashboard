@@ -430,6 +430,32 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-O T7 KPI 拆「現金配息 / 配股」+ 鬼列 filter 補修大寫（v18.172 新增）
+
+**問題場景**：User 截圖反饋 T7 帳本下方 KPI 卡「💵 預估年配息 NT$1,250,792 / 📅 每月被動現金流 NT$104,233」**沒套用 `div_cash_pct`** — 即使在 T7「📝 編輯持倉」設定部分配股（如現金給付% = 60），KPI 仍顯示全額年配息，配股估算也沒分開呈現。
+
+**根因**：`ui/tab3_t7_ledger.py:1898` 只算 `_ann = 市值 × 配息率`，沒乘 `div_cash_pct/100`；KPI3/KPI4 直接用 `_ann_total_twd` 顯示。
+
+**Fix A — 算式拆分**（`ui/tab3_t7_ledger.py`）：
+- L1860-1865 新增 `_cash_total_twd = 0.0` / `_reinvest_total_twd = 0.0`
+- L1898 起：取 `_dcp_f = clip(div_cash_pct, 0, 100)`，算 `_ann_cash = _ann × _dcp_f/100` 與 `_ann_reinv = _ann - _ann_cash` 累加
+- per-row 加「預估月配股 (TWD)」欄（normal + no-ledger 兩 branch 同步）
+
+**Fix B — KPI 卡 6 columns**（`ui/tab3_t7_ledger.py:1951+`）：
+```
+st.columns([2,2,2,2,1])  →  st.columns([2,2,2,2,2,1])
+```
+- KPI3「💵 預估年現金配息 (TWD)」= `_cash_total_twd`
+- KPI4「📅 每月被動現金流」= `_cash_total_twd / 12`（cash-only）
+- KPI5「🪙 預估年配股 (TWD)」= `_reinvest_total_twd`
+- 重置按鈕移到 `_pc6`
+
+**Fix C — 鬼列 filter 補修 case-insensitive**（`repositories/policy_repository.py:516-528`）：v18.171 filter `fund_url=='fund_url'` 只擋小寫，但 `cloud_io.dump_all_to_sheet:47` 把 `code .upper()` 後鬼列回寫變 `FUND_URL`（大寫）繞過 filter。改 `df["fund_url"].astype(str).str.lower() == "fund_url"` 三欄全 case-insensitive。
+
+**Test 變更**：新增 `test_load_policy_worksheet_filters_uppercase_ghost_rows` regression case 用 `FUND_URL/INVEST_DATE/CURRENCY` 全大寫 record 斷言被過濾掉。
+
+---
+
 ### §3-N 保單分頁「schema 鬼列」append_row bug fix（v18.171 修補）
 
 **問題場景**：User 截圖「📋 保單分頁清單」存檔後 `QL19676552` tab 出現 3 列 `policy_name / fund_url / invest_date / currency / notes` 等 schema 英文 key 字串當資料值的鬼列。

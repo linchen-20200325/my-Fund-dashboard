@@ -526,10 +526,15 @@ def load_policy_worksheet(client: Any, sheet_id: str, policy_id: str) -> pd.Data
     # 最末列（rows 1 空但 rows 2+ 有資料時），這些列被 get_all_records 解析後
     # `fund_url == "fund_url"`（字面值）。連帶過濾 invest_date / currency 等
     # 三欄都是字面 schema key 的明顯鬼列，避免誤刪只是基金代碼剛好命名怪的真資料。
+    # v18.172：dump_all_to_sheet 會把 code 強制 .upper()，所以鬼列再寫回 Sheet
+    # 會變 "FUND_URL"（大寫）— filter 改 case-insensitive 擋大小寫兩種。
+    _fu_low = df["fund_url"].astype(str).str.lower()
+    _id_low = df["invest_date"].astype(str).str.lower()
+    _cc_low = df["currency"].astype(str).str.lower()
     _ghost_mask = (
-        (df["fund_url"] == "fund_url")
-        & (df["invest_date"] == "invest_date")
-        & (df["currency"] == "currency")
+        (_fu_low == "fund_url")
+        & (_id_low == "invest_date")
+        & (_cc_low == "currency")
     )
     if _ghost_mask.any():
         df = df[~_ghost_mask].copy()

@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.172 — T7 KPI 拆「現金配息 / 配股」+ 鬼列 filter 補修大寫（2026-05-22）
+
+- [x] **問題場景**（user 截圖反饋）：T7 帳本 KPI「💵 預估年配息 NT$1,250,792 / 📅 每月被動現金流 NT$104,233」**沒套用 `div_cash_pct`** — 即使設部分配股（如 60% 現金），現金流仍顯示全額；配股估算也沒分開呈現
+- [x] **算式拆分**（`ui/tab3_t7_ledger.py:1860-1908`）：新增 `_cash_total_twd / _reinvest_total_twd` 累計；per-row 加「預估月配股 (TWD)」欄；no-ledger branch 同步補 `—`
+- [x] **KPI 6 columns 重排**（L1951-1992）：`st.columns([2,2,2,2,1])` → `st.columns([2,2,2,2,2,1])`；KPI3 改「💵 預估年**現金**配息 (TWD)」、KPI4「📅 每月被動現金流」用 cash-only / 12、新增 KPI5「🪙 預估年配股 (TWD)」、重置按鈕移到 _pc6
+- [x] **鬼列 filter 補修**（`repositories/policy_repository.py:516-528`）：v18.171 filter 只擋小寫 `fund_url` — `dump_all_to_sheet` 把 `code .upper()` 後鬼列回寫變 `FUND_URL` 大寫繞過。改 `.str.lower()` case-insensitive；新增 `test_load_policy_worksheet_filters_uppercase_ghost_rows` regression
+- [x] **驗證** AST × 2 PASS；smoke test 6 + policy_store 鬼列 test 4 = 10 PASSED 零回歸
+
 ### v18.171 — 修保單分頁「schema 鬼列」append_row bug + 自動過濾髒資料（2026-05-22）
 
 - [x] **問題場景**（user 截圖反饋）：「📋 保單分頁清單」存檔後 `QL19676552` tab 出現 3 列 `policy_name / fund_url / invest_date / currency / notes` 等**schema 英文 key 字串當成資料值**的鬼列
