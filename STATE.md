@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.169 — 「📋 保單清單」說明區塊搬到 Tab6 說明書（§9 Sheet 資料結構）（2026-05-22）
+
+- [x] **問題場景**（user 截圖反饋）：Tab3 expander 內「📋 保單清單（這本 Sheet 內的保單分頁與輔助 tab）」說明區塊（3 行說明文 + 3 個動態 metric）屬於「使用說明」性質，user 認為不該占 Tab3 動作面板版面，要求移到「📖 說明書」tab
+- [x] **刪除 Tab3 區塊**（`ui/tab3_portfolio.py:644-675`）：32 行整個 `if _sheet_id:` 區塊（包含 markdown 標題、caption 說明、3 個 `st.metric` 卡片、可選的 `last_sync` caption）→ 改成 1 行註解；動態 metric 數字（`_sheet_stats` 的 tabs / t7_state / ledgers）依 user 決定捨棄不重現
+- [x] **新增 Tab6 第 9 個 sub-tab**（`ui/tab6_manual.py`）：`_t6 = st.tabs([...])` 從 8 個加到 9 個，新增「📋 9. Sheet 資料結構」；內容為純靜態 markdown 表格（3 種 tab 類型 × 命名規則 × 用途 × 同步來源）+ 4 個重點觀念 bullet + 多帳本管理引導
+- [x] **module docstring** 同步「8 個 sub-tab」→「9 個 sub-tab」標註 v18.169 新增來源
+- [x] **驗證** 結構 smoke test（AST parse / no_direct_expander_nesting / no_silent_except_pass / no_crossfile_expander_nesting）全綠；test 環境缺 pandas/numpy 為 pre-existing env issue 不影響 markdown 改動
+
 ### v18.168 — 📥 雲端讀取面板：上下半對調（從 Drive 挑帳本 → 全部讀回）（2026-05-22）
 
 - [x] **問題場景**（user 截圖紅框 + 紅箭頭）：v18.166 面板上半「全部讀回」、下半「從 Drive 挑帳本」，user 反饋要對調 — 先挑帳本（前置動作）再讀回（後續動作）符合操作順序
