@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.170 — T7 編輯持倉表單暴露 div_cash_pct + 月配息估算（部分配股新功能）（2026-05-22）
+
+- [x] **問題場景**（user 截圖反饋）：T7「📝 編輯持倉（手動微調 — 從 CHUBB 對帳單抄入精確值）」表單只有 5 欄（淨投資金額／淨值／匯率／含息來源／保單號碼）；user 反映保單實際支援「部分配息+部分配股（單位）」，希望用「資金的百分比」算每月配息與配股
+- [x] **既有 v18.160 基礎**：`div_cash_pct`（0-100）已有 schema、estimate_dividend_split 函式、v2 編輯表格欄位、年度估算 expander；T7 編輯持倉表單未暴露此欄位
+- [x] **T7 表單第 6 欄**（`ui/tab3_t7_ledger.py:564, 615-628, 627, 646, 689`）：`st.columns([1,1,1,1,1])` → `st.columns([1,1,1,1,1,1])`，最末加 `ic6.number_input("🟨 現金給付 %", 0-100, step=5, default=100)`；`_init_inputs` tuple 加 `_dcp`；submit handler 寫入 `_f_obj["div_cash_pct"] = max(0, min(100, float(_dcp)))`
+- [x] **月配息估算 toggle**（`ui/helpers/v2_editor.py:151-204`）：`_render_div_split_estimate` 加 `st.segmented_control(["📅 年估算", "📆 月估算"])`；月模式下 `annual_div_rate_pct / 12` 傳給 `estimate_dividend_split`，表格欄與 metric 標題隨 `_label = "月"/"年"` 動態切換
+- [x] **驗證** 結構 smoke test（AST × 2 + no_direct_expander_nesting × 2 + no_silent_except_pass + no_crossfile_expander_nesting）6 個 PASSED；既有 `test_estimate_dividend_split_*` 4 個 case 函式簽名未變不受影響
+
 ### v18.169 — 「📋 保單清單」說明區塊搬到 Tab6 說明書（§9 Sheet 資料結構）（2026-05-22）
 
 - [x] **問題場景**（user 截圖反饋）：Tab3 expander 內「📋 保單清單（這本 Sheet 內的保單分頁與輔助 tab）」說明區塊（3 行說明文 + 3 個動態 metric）屬於「使用說明」性質，user 認為不該占 Tab3 動作面板版面，要求移到「📖 說明書」tab
