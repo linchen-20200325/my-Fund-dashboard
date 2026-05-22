@@ -268,50 +268,9 @@ def render_portfolio_tab() -> None:
                         "⚠️ 尚未用 Google 登入。請至左側 sidebar 點「🔐 用 Google 登入」。"
                     )
                 else:
-                    # 上半 ── 全部讀回（需有 _sheet_id_q）
-                    if _sheet_id_q:
-                        _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
-                        _last_load = st.session_state.get("t3_last_load_at", "—")
-                        _book_disp = (f"**{_sheet_title_q}**" if _sheet_title_q
-                                      else f"`{_sheet_id_q[:14]}…`")
-                        st.caption(
-                            f"📂 帳本：{_book_disp} ｜ 本地持倉：{_fund_n} 檔 "
-                            f"｜ 上次讀回：{_last_load}"
-                        )
-                        if st.button("📥 立即全部讀回", type="primary",
-                                      use_container_width=True,
-                                      key="t3_io_panel_load_run"):
-                            from ui.helpers.cloud_io import load_all_from_sheet
-                            _res = load_all_from_sheet(
-                                _t3_cloud_client_q(), _sheet_id_q,
-                                st.session_state,
-                                oauth_mode=bool(_oauth_configured),
-                            )
-                            if not _res["ok"]:
-                                st.error(f"❌ {_res['error']}")
-                            else:
-                                import datetime as _dt_q
-                                st.session_state["t3_last_load_at"] = (
-                                    _dt_q.datetime.now().strftime("%Y-%m-%d %H:%M")
-                                )
-                                _msg = [f"新增 {len(_res['added'])} 檔",
-                                        f"保留 {len(_res['kept'])} 檔",
-                                        f"移除 {len(_res['removed'])} 檔"]
-                                if _res["restored_ct"]:
-                                    _msg.append(f"T7 部位 {_res['restored_ct']} 筆")
-                                st.success("📥 全部讀回完成：" + " / ".join(_msg))
-                                for _w in _res["warnings"]:
-                                    st.warning(f"⚠️ {_w}")
-                                st.rerun()
-                    else:
-                        st.info(
-                            "ℹ️ 尚未指定 Sheet ID。請從下方「📂 從 Drive 挑一本」，"
-                            "或至「✨ 新增帳本」建立新帳本。"
-                        )
-
-                    # 下半 ── 從 Drive 挑帳本（OAuth + 已登入時顯示）
+                    # v18.168：對調 — 上半「📂 從 Drive 挑帳本」，下半「📥 立即全部讀回」
+                    # 上半 ── 從 Drive 挑帳本（OAuth + 已登入時顯示）
                     if _oauth_configured and _logged_in_q:
-                        st.markdown("---")
                         st.markdown("**📂 從 Drive 挑帳本（切換 / 首次選用）**")
                         _fld_btn_c1, _fld_btn_c2 = st.columns([2, 3])
                         if _fld_btn_c1.button("🔄 載入資料夾清單",
@@ -394,6 +353,49 @@ def render_portfolio_tab() -> None:
                                 st.session_state.pop("_t3_cur_sheet_title", None)
                                 st.success(f"✅ 已選用 `{_picked['name']}`（ID `{_picked['id']}`）")
                                 st.rerun()
+                        st.markdown("---")
+
+                    # 下半 ── 全部讀回（需有 _sheet_id_q）
+                    if _sheet_id_q:
+                        st.markdown("**📥 全部讀回（雲端 → 本地）**")
+                        _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
+                        _last_load = st.session_state.get("t3_last_load_at", "—")
+                        _book_disp = (f"**{_sheet_title_q}**" if _sheet_title_q
+                                      else f"`{_sheet_id_q[:14]}…`")
+                        st.caption(
+                            f"📂 帳本：{_book_disp} ｜ 本地持倉：{_fund_n} 檔 "
+                            f"｜ 上次讀回：{_last_load}"
+                        )
+                        if st.button("📥 立即全部讀回", type="primary",
+                                      use_container_width=True,
+                                      key="t3_io_panel_load_run"):
+                            from ui.helpers.cloud_io import load_all_from_sheet
+                            _res = load_all_from_sheet(
+                                _t3_cloud_client_q(), _sheet_id_q,
+                                st.session_state,
+                                oauth_mode=bool(_oauth_configured),
+                            )
+                            if not _res["ok"]:
+                                st.error(f"❌ {_res['error']}")
+                            else:
+                                import datetime as _dt_q
+                                st.session_state["t3_last_load_at"] = (
+                                    _dt_q.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                )
+                                _msg = [f"新增 {len(_res['added'])} 檔",
+                                        f"保留 {len(_res['kept'])} 檔",
+                                        f"移除 {len(_res['removed'])} 檔"]
+                                if _res["restored_ct"]:
+                                    _msg.append(f"T7 部位 {_res['restored_ct']} 筆")
+                                st.success("📥 全部讀回完成：" + " / ".join(_msg))
+                                for _w in _res["warnings"]:
+                                    st.warning(f"⚠️ {_w}")
+                                st.rerun()
+                    else:
+                        st.info(
+                            "ℹ️ 尚未指定 Sheet ID。請從上方「📂 從 Drive 挑一本」，"
+                            "或至「✨ 新增帳本」建立新帳本。"
+                        )
             elif _io_panel == "save":
                 st.markdown("**📦 全部寫入 Sheet（本地 → 雲端）**")
                 if not _can_cloud_q:
