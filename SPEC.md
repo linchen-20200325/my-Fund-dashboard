@@ -430,6 +430,28 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-M T7 編輯持倉表單暴露 div_cash_pct + 月配息估算（v18.170 新增）
+
+**問題場景**：T7「📝 編輯持倉（手動微調 — 從 CHUBB 對帳單抄入精確值）」表單僅 5 欄（淨投資金額／淨值／匯率／含息來源／保單號碼）。User 反映保單實際支援「部分配息+部分配股」，希望用「資金的百分比」算每月配息與配股。
+
+**既有 v18.160 基礎**：`div_cash_pct`（0-100）已有 schema、`estimate_dividend_split` 函式、v2 編輯表格欄位、**年度**估算 expander；T7 編輯持倉表單**未暴露此欄位**，估算函式只有年度模式。
+
+**設計**：
+1. **T7 表單第 6 欄**（`ui/tab3_t7_ledger.py:564, 615-628`）：`st.columns([1,1,1,1,1])` → 6 個 columns；最末加 `ic6.number_input("🟨 現金給付 %", 0-100, step=5, default=100)`。
+2. **submit handler 同步寫回**（`ui/tab3_t7_ledger.py:627, 646, 689`）：`_init_inputs` tuple 加 `_dcp`；`_f_obj["div_cash_pct"] = max(0, min(100, float(_dcp)))` 寫入 portfolio_funds → 後續存回 Sheet。
+3. **月配息估算 toggle**（`ui/helpers/v2_editor.py:151-204`）：`_render_div_split_estimate` 加 `st.segmented_control(["📅 年估算", "📆 月估算"])`；月模式下 `annual_div_rate_pct / 12` 傳給既有 `estimate_dividend_split`（函式簽名不變），表格欄位與 3 個 metric 標題隨 `_label="月"/"年"` 動態切換。
+
+```
+| 模式  | rate 傳入                  | 表格欄位                       | metric 標題     |
+|------|--------------------------|--------------------------------|----------------|
+| 年估算 | `rate_pct`                | 年配息總額 / 年現金 / 年再投入 | 📦 年配息總額   |
+| 月估算 | `rate_pct / 12`           | 月配息總額 / 月現金 / 月再投入 | 📦 月配息總額   |
+```
+
+**語意定義（div_cash_pct）**：100 = 全現金給付；0 = 全部轉單位（配股）；介於兩者 = 部分配股（如 80=80% 現金 + 20% 單位）。
+
+---
+
 ### §3-L 「📋 保單清單」說明區塊搬到說明書 §9（v18.169 新增）
 
 **問題場景**：Tab3「📋 保單管理」expander 內「📋 保單清單（這本 Sheet 內的保單分頁與輔助 tab）」區塊（3 行說明 + 3 個動態 metric）屬於「使用說明」性質，user 截圖反饋不該占 Tab3 動作面板版面，要求搬到「📖 說明書」tab。

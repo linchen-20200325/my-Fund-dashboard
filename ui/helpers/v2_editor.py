@@ -153,40 +153,52 @@ def _render_div_split_estimate(policy_id: str, fund_df: pd.DataFrame) -> None:
             "ℹ️ 估算用 user 手填的「年配息率假設 %」乘上每檔基金的 invest_twd，"
             "再依 `現金給付%` 拆分。實際配息以保險公司每月對帳單為準。"
         )
-        rate_pct = st.number_input(
+        # v18.170：年/月切換 — 月模式下年率÷12 顯示月配息/月現金/月新增單位
+        _est_c1, _est_c2 = st.columns([1, 2])
+        rate_pct = _est_c1.number_input(
             "年配息率假設 %", min_value=0.0, max_value=30.0, value=5.0, step=0.5,
             key=f"div_est_rate_{policy_id}",
             help="如不確定可填 5（市場平均月配息基金約 4-7%）。Tab2 載入該基金後可看到實際年化配息率。",
         )
+        _period = _est_c2.segmented_control(
+            "估算週期",
+            ["📅 年估算", "📆 月估算"],
+            default="📅 年估算",
+            key=f"div_est_period_{policy_id}",
+            help="年估算：rate × invest；月估算：rate/12 × invest（對保險公司月對帳單用）",
+        ) or "📅 年估算"
+        _is_monthly = _period.startswith("📆")
+        _div = 12.0 if _is_monthly else 1.0
+        _label = "月" if _is_monthly else "年"
         out_rows = []
         total_cash, total_reinv, total_div = 0.0, 0.0, 0.0
         for r in rows:
             est = estimate_dividend_split(
                 invest_twd=float(r.get("invest_twd", 0) or 0),
-                annual_div_rate_pct=rate_pct,
+                annual_div_rate_pct=rate_pct / _div,
                 div_cash_pct=float(r.get("div_cash_pct", 100) or 100),
                 avg_nav=float(r.get("avg_nav", 0) or 0),
                 avg_fx=float(r.get("avg_fx", 0) or 0),
             )
             out_rows.append({
-                "基金代號":       str(r.get("fund_code", "") or ""),
-                "投資金額(TWD)":  int(r.get("invest_twd", 0) or 0),
-                "現金%":          int(est["cash_pct"]),
-                "單位%":          int(est["unit_pct"]),
-                "年配息總額(TWD)": int(est["annual_div_twd"]),
-                "年現金流入(TWD)": int(est["cash_twd"]),
-                "年再投入(TWD)":   int(est["reinvest_twd"]),
-                "年新增單位數":    round(est["new_units"], 4),
+                "基金代號":                str(r.get("fund_code", "") or ""),
+                "投資金額(TWD)":           int(r.get("invest_twd", 0) or 0),
+                "現金%":                   int(est["cash_pct"]),
+                "單位%":                   int(est["unit_pct"]),
+                f"{_label}配息總額(TWD)":  int(est["annual_div_twd"]),
+                f"{_label}現金流入(TWD)":  int(est["cash_twd"]),
+                f"{_label}再投入(TWD)":    int(est["reinvest_twd"]),
+                f"{_label}新增單位數":      round(est["new_units"], 4),
             })
             total_div += est["annual_div_twd"]
             total_cash += est["cash_twd"]
             total_reinv += est["reinvest_twd"]
         st.dataframe(pd.DataFrame(out_rows), use_container_width=True, hide_index=True)
         c1, c2, c3 = st.columns(3)
-        c1.metric("📦 年配息總額", f"NTD {int(total_div):,}")
-        c2.metric("💵 年現金流入", f"NTD {int(total_cash):,}",
+        c1.metric(f"📦 {_label}配息總額", f"NTD {int(total_div):,}")
+        c2.metric(f"💵 {_label}現金流入", f"NTD {int(total_cash):,}",
                   delta=f"{(total_cash/total_div*100 if total_div else 0):.0f}% 現金")
-        c3.metric("🪙 年再投入累積單位",
+        c3.metric(f"🪙 {_label}再投入累積單位",
                   f"NTD {int(total_reinv):,}",
                   delta=f"{(total_reinv/total_div*100 if total_div else 0):.0f}% 單位")
 

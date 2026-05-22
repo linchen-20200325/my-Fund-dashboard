@@ -561,7 +561,7 @@ def render_t7_section() -> None:
                         # v18.154：avg_nav_with_div 從 portfolio_funds 取（與 v2 schema 同欄名）
                         _anw_default = float(_f.get("avg_nav_with_div", 0) or 0)
                         st.markdown(f"**[{_pid_disp}] {_c} — {_name[:35]}**")
-                        ic1, ic2, ic3, ic4, ic5 = st.columns([1, 1, 1, 1, 1])
+                        ic1, ic2, ic3, ic4, ic5, ic6 = st.columns([1, 1, 1, 1, 1, 1])
                         _inv = ic1.number_input(
                             "🟨 淨投資金額 (NT)", min_value=0, max_value=1_000_000_000,
                             value=int(_inv_default), step=1000, format="%d",
@@ -613,6 +613,19 @@ def render_t7_section() -> None:
                             placeholder="可選，e.g. PL-2024-001",
                             help="留空 = 不綁保單；若改變，會遷移 ledger 鍵與同步寫入新保單分頁"
                         )
+                        # v18.170：T7 表單暴露 div_cash_pct（配息現金給付%）
+                        # 0 = 全部轉換單位數（配股）／100 = 全部現金給付；介於兩者 = 部分配股
+                        _dcp_default = float(_f.get("div_cash_pct", 100) or 100)
+                        _dcp = ic6.number_input(
+                            "🟨 現金給付 %",
+                            min_value=0.0, max_value=100.0,
+                            value=_dcp_default,
+                            step=5.0, format="%.0f",
+                            key=f"t7_init_dcp_{_pk_f}",
+                            help="保險公司 APP 設定的「配息現金給付%」。"
+                                 "100=全現金、0=全部轉單位（配股）、介於兩者=部分配股。"
+                                 "存檔後同步寫回保單分頁；月配息估算依此拆分。",
+                        )
                         # v18.154：read-only 自動算單位數預覽（公式 (4) 反推）
                         if _inv > 0 and _cu > 0 and _fx > 0:
                             _u_calc = _t7_compute_units(_inv, _cu, _fx)
@@ -624,7 +637,7 @@ def render_t7_section() -> None:
                             _u_calc = _u_default
                         _init_inputs[_pk_f] = (_c, _u_calc, _cu, _fx, _ccy,
                                                _pid_cur, _pid_new.strip(),
-                                               _inv, _anw, _cumul_div)
+                                               _inv, _anw, _cumul_div, _dcp)
                     _init_submit = st.form_submit_button(
                         "💾 套用為起始部位（覆蓋 T7 帳本）", type="primary"
                     )
@@ -634,7 +647,7 @@ def render_t7_section() -> None:
                     _pid_changes: list[tuple] = []   # v18.28: (old_pid, new_pid, code, fund)
                     for _pk_f, (_c, _u, _cu, _fx, _ccy,
                                 _pid_old, _pid_new, _inv, _anw,
-                                _cumul_div) in _init_inputs.items():
+                                _cumul_div, _dcp) in _init_inputs.items():
                         # v18.154：用 invest_twd 作為「有意義輸入」門檻；units 由公式算
                         if _inv <= 0 or _cu <= 0 or _fx <= 0:
                             continue
@@ -661,8 +674,10 @@ def render_t7_section() -> None:
                         st.session_state.t7_ledgers[_pk_f] = _new_led
                         # v18.154：把 user 給的 invest_twd / avg_nav_with_div 也存進
                         # portfolio_funds，給 v2 編輯介面同步使用
+                        # v18.170：div_cash_pct 也同步寫回（配息現金給付%）
                         _f_obj["invest_twd"]       = int(_inv)
                         _f_obj["avg_nav_with_div"] = float(_anw)
+                        _f_obj["div_cash_pct"]     = max(0.0, min(100.0, float(_dcp)))
                         _applied += 1
                         # 雙寫到 _Ledgers（用 new pid）
                         _pid_w = _pid_new
