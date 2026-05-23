@@ -246,6 +246,13 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.173 — T7「預估月配股 (TWD)」欄附顯「可換單位數」（2026-05-23）
+
+- [x] **問題場景**（user 截圖反饋）：v18.172 已把月配股 TWD 拆出來，但只看到金額不知對應幾單位 — 配股 = 把現金部位再投入基金，需直接呈現「能換到的單位數」才好對應到帳本 units
+- [x] **算式**（`ui/tab3_t7_ledger.py:1929-1934`）：`units = (月配股 TWD) / FX / NAV`；只在 `_ann_reinv > 0 and _nav and _fx` 才附顯，否則維持單純 `NT$0`
+- [x] **顯示格式**：`"NT$2,802 (32.8762 單位)"`；no-ledger 與 0 配股列照舊 `—` / `NT$0`
+- [x] **驗證** AST PASS；`python -m pytest test_policy_store.py -q` 80 PASSED 零回歸
+
 ### v18.172 — T7 KPI 拆「現金配息 / 配股」+ 鬼列 filter 補修大寫（2026-05-22）
 
 - [x] **問題場景**（user 截圖反饋）：T7 帳本 KPI「💵 預估年配息 NT$1,250,792 / 📅 每月被動現金流 NT$104,233」**沒套用 `div_cash_pct`** — 即使設部分配股（如 60% 現金），現金流仍顯示全額；配股估算也沒分開呈現

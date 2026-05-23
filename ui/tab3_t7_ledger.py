@@ -1925,8 +1925,13 @@ def render_t7_section() -> None:
                             "未實現損益 %": _pl_pct_str,
                             "配息率": f"{_dy:.2f}%",
                             # v18.172：拆「月現金 / 月配股」兩欄；舊「預估月配息」改用現金部分
+                            # v18.173：配股欄位再加「可換單位數」= TWD ÷ FX ÷ NAV
                             "預估月配息 (TWD)": f"NT${_ann_cash/12:,.0f}",
-                            "預估月配股 (TWD)": f"NT${_ann_reinv/12:,.0f}",
+                            "預估月配股 (TWD)": (
+                                f"NT${_ann_reinv/12:,.0f} ({(_ann_reinv/12)/(_fx*_nav):,.4f} 單位)"
+                                if (_ann_reinv > 0 and _nav and _fx) else
+                                f"NT${_ann_reinv/12:,.0f}"
+                            ),
                         })
                     if _snap_rows:
                         # 紅虧綠賺：用 pandas Styler 著色（純 CSS 不依賴 matplotlib）
