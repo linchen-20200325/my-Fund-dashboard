@@ -233,8 +233,31 @@
 
 ## 🚧 Next
 
-> v18.117 → v18.145（2026-05-17/18/19 衝刺 38 PR）後續可選優化：
-> - 🌐 **部署驗證**：6 tab cloud 互動全綠（user 需手動）
+### PR C/D — Sheet v2 主路徑收口（v18.178 審計 #3/#4，**延後 / 需 Sheet 憑證 session**）
+
+> ⚠️ **為何延後**：觸及 user 真實財務資料（Google Sheet 持倉），沙箱無憑證 + 網路被擋無法 round-trip 驗證；
+> mock 測試只驗呼叫參數、不驗 Sheet 實際正確性；#4 為破壞性（刪 ledger 寫入路徑）。
+> **執行前置**：必須有 live Sheet 存取，且**先在 Sheet 副本驗證**「全部寫入→全部讀回」無誤再碰真實資料。
+
+**PR C（#3）讓「全部寫入/讀回」自動走 v2**：
+1. `ui/helpers/cloud_io.py:dump_all_to_sheet` 開頭加 `_ver = detect_sheet_schema_version(client, sheet_id)`；
+   `_ver == "v2"` → 改呼叫新 helper `_dump_all_to_sheet_v2`（把 `portfolio_funds` + `t7_ledgers` 序列化成
+   `ALL_COLS_V2` 12 欄：units/avg_nav/avg_nav_with_div/avg_fx/div_cash_pct 全帶上，經 `write_policy_v2` 寫各保單分頁）；
+   `_ver != "v2"` → 維持現有 v1 `upsert_fund_in_policy` 路徑（**不動 v1，保留向後相容**）。
+2. `load_all_from_sheet` 同樣 detect → v2 走 `load_all_policies_v2` + 從 12 欄還原 units/nav/fx（含 ledger 重建），
+   v1 維持 `load_policies` / `load_all_policy_worksheets`。
+3. 測試（mock client）：`test_cloud_io.py` 加 `test_dump_routes_to_v2_when_detected` /
+   `test_load_routes_to_v2_when_detected` / `test_v1_path_unchanged_when_not_v2`；
+   驗 round-trip 欄位映射（units/avg_nav/div_cash_pct 不漏）。
+
+**PR D（#4，PR C 上線且真實資料驗證 OK 後才做，破壞性）**：
+- 移除 `_T7_State` / `_Ledgers` 寫入路徑（`snapshot_repository.save_all_ledgers_snapshot` 等），
+  前提是 v2 12 欄已完整接手部位 + ledger 還原；移除前先確認 v2 讀回能 100% 重建 T7 部位。
+- 文件 cleanup：說明書 §9 Sheet 資料結構、ARCHITECTURE 對應段落改成單一 v2 schema 敘述。
+
+### 其他可選
+
+> - 🌐 **部署驗證**：tab cloud 互動全綠（user 需手動）
 > - 🌐 **streamlit-pages**：是否取代 `st.tabs`（影響 routing / URL share，user 決策）
 > - 🔧 polish：拆 `ui/helpers/session.py` 為 session 工具 vs UI 工具（low value）
 > - [x] **v18.144** Tab3 T7 抽檔 → `ui/tab3_t7_ledger.py`（tab3_portfolio.py 3976 → 2001 行 −49.7%）

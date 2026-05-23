@@ -225,8 +225,8 @@
   - 原 `tab3_portfolio.py:1656` 那段 fetch 邏輯改 1 行 call helper
   - 單元測試 `test_portfolio_load.py` 6 個（empty / all loaded / mixed / dedupe / drop empty code / missing session_state）
   - 總計 PR A 64 + PR B 8 + PR B.1 6 = **78/78 pass**
-- [ ] **PR C**（下一輪）「📦 全部寫入/讀回」切換到 v2 主路徑（v2 sheet 自動走 v2）
-- [ ] **PR D**（之後）移除舊 `_T7_State` / `_Ledgers` tab 寫入路徑 + 文件 cleanup
+- [ ] **PR C**（#3，**v18.178 延後**）「📦 全部寫入/讀回」切換到 v2 主路徑 — 觸及真實 Sheet 持倉、沙箱無法 round-trip 驗證，**詳細實作計畫見 `BACKLOG.md` 🚧 Next**，需有 Sheet 憑證 + 副本驗證的 session 執行
+- [ ] **PR D**（#4，**v18.178 延後**）移除舊 `_T7_State` / `_Ledgers` 寫入路徑 + 文件 cleanup — 破壞性，須 PR C 上線且真實資料驗證 OK 後才做（計畫見 `BACKLOG.md`）
 
 ### v18.157 對帳單 type B 支援（累積配息反推含息成本）（2026-05-20）
 
