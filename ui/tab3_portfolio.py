@@ -425,6 +425,8 @@ def render_portfolio_tab() -> None:
                             _msg = [f"保單分頁 +{_res['written']} 筆"]
                             if _res["n_state"]:
                                 _msg.append(f"_T7_State +{_res['n_state']} 筆")
+                            if _res.get("n_overview"):
+                                _msg.append(f"_持倉總覽 +{_res['n_overview']} 筆")
                             if _res["skipped_no_pid"]:
                                 _msg.append(f"略過未綁保單 {_res['skipped_no_pid']} 檔")
                             st.success("📦 已寫入 Sheet：" + "、".join(_msg))

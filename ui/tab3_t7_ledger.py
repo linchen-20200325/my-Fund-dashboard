@@ -46,6 +46,7 @@ from repositories.policy_repository import (
 from repositories.snapshot_repository import (
     load_all_ledgers_snapshot,
     save_all_ledgers_snapshot,
+    save_holdings_overview,
 )
 from services.ai_service import analyze_portfolio_mk_advisor
 from services.macro_service import (
@@ -170,7 +171,11 @@ def render_t7_section() -> None:
                     _n = save_all_ledgers_snapshot(
                         _c_s, _sid_s,
                         st.session_state.t7_ledgers, _funds_lookup)
-                    return f" + _T7_State 寫 {_n} 筆"
+                    # v18.182：同步寫人看得懂的完整成本帳本 _持倉總覽
+                    _n_ov = save_holdings_overview(
+                        _c_s, _sid_s,
+                        st.session_state.t7_ledgers, _funds_lookup)
+                    return f" + _T7_State 寫 {_n} 筆 + _持倉總覽 {_n_ov} 筆"
                 except (PolicySheetError, OAuthError) as _e_ss:
                     return f" ⚠️ _T7_State 同步失敗：{str(_e_ss)[:200]}"
                 except Exception as _e_ss:

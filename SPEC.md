@@ -430,6 +430,21 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-S 新增「人看得懂的完整成本帳本」分頁 _持倉總覽（v18.182 新增）
+
+**問題場景**（user 截圖 + JSON 備份）：v18.180/181 驗證 OK，但 user 反映「看不到 T7、帳本資料沒在 Excel，JSON 也是」。釐清：
+1. user 開 Google Sheet 看到的是預設空白分頁 `工作表1`（資料其實在保單分頁 `00031611267318` 等，user 確認「有資料」）。
+2. 完整帳本（單位數/平均成本/含息成本…）只存在 `_T7_State`（一格 `Ledger.to_dict()` JSON blob、人看不懂），且 user 的 Sheet 連這分頁都沒有；保單分頁只有 `invest_twd`，沒有 position。
+
+**方案**（user 選「只存成本帳本」、暫不含市值）：新增 `repositories/snapshot_repository.py`：
+- `HOLDINGS_TAB = "_持倉總覽"`（`_` 開頭 → `list_policy_worksheets` / `detect_sheet_schema_version` 的 `startswith("_")` 過濾自動排除，不會被誤認成保單分頁）。
+- `HOLDINGS_COLS`（13 欄中文表頭）：保單號碼/基金代碼/基金名稱/幣別/級別/持有單位數/平均成本淨值/平均含息成本/平均匯率/投資金額(TWD)/現金給付%/累積已領配息(TWD)/更新時間。
+- `save_holdings_overview(client, sheet_id, ledgers_dict, funds_lookup)`：t7_ledgers（position：units/cost_unit/cost_unit_with_div/fx_avg/dividends）⨝ portfolio_funds（name/is_core/div_cash_pct/invest_twd），每檔一列；clear + 1 batch update（同 `_T7_State` 防 429 模式）。更新時間用固定 UTC+8（repo 層不依賴 `ui.helpers.tw_time`，避免 repo→ui 反向依賴）。**只存成本面、不存市值**（市值隨 NAV 過時，由 app 即時算）。
+
+**接線**：`_t7_save_snapshot_to_sheets()`（所有 T7 落帳的共同出口）與 `dump_all_to_sheet()`（全部寫入）寫完 `_T7_State` 後一併呼叫；後者 `out` 加 `n_overview`、Tab3 成功訊息加「_持倉總覽 +N 筆」。`test_ledger_snapshot_store` 新增 3 test（空/可讀列驗證/級別+pid fallback），共 236 PASSED 零回歸。
+
+---
+
 ### §3-R 「上次寫入/讀回」時間戳顯示 UTC → 統一台灣時間 UTC+8（v18.181 修補）
 
 **問題場景**（user 截圖）：「📦 全部寫入 Sheet」面板「上次寫入：2026-05-23 13:26」看起來「不會動」，且對不上 Google Drive 的「晚上9:25」。

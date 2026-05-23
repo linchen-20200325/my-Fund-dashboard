@@ -30,6 +30,21 @@ from repositories.policy_repository import PolicySheetError
 
 T7_STATE_TAB = "_T7_State"
 
+# v18.182：人看得懂的「完整成本帳本」分頁。`_` 開頭 → 不會被 list_policy_worksheets /
+# detect_sheet_schema_version 誤認成保單分頁。每檔基金一列、成本面（不含市值，
+# 市值會隨 NAV 過時）。給使用者打開 Sheet 直接看，不像 _T7_State 是 JSON blob。
+HOLDINGS_TAB = "_持倉總覽"
+
+HOLDINGS_COLS: tuple[str, ...] = (
+    "保單號碼", "基金代碼", "基金名稱", "幣別", "級別",
+    "持有單位數", "平均成本淨值", "平均含息成本", "平均匯率",
+    "投資金額(TWD)", "現金給付%", "累積已領配息(TWD)", "更新時間",
+)
+
+# 台灣時間 (UTC+8)：repo 層不依賴 ui.helpers.tw_time（避免 repo→ui 反向依賴），
+# 固定 offset 即可（台灣無 DST）。
+_TW_TZ = _dt.timezone(_dt.timedelta(hours=8))
+
 SNAPSHOT_COLS: tuple[str, ...] = (
     "pk_str",
     "fund_code",
@@ -183,6 +198,110 @@ def save_all_ledgers_snapshot(
                           value_input_option="RAW")
     except Exception as e:
         raise PolicySheetError(f"寫 _T7_State 失敗：{e}") from e
+    return len(rows)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# v18.182：人看得懂的「完整成本帳本」分頁 _持倉總覽
+# ──────────────────────────────────────────────────────────────────────
+def _ensure_overview_worksheet(client: Any, sheet_id: str, rows: int = 200) -> Any:
+    """確保 _持倉總覽 tab 存在；不存在則建立並寫表頭。"""
+    if not sheet_id:
+        raise PolicySheetError("開啟 Sheet 失敗：sheet_id 為空")
+    try:
+        sh = _with_quota_retry(client.open_by_key, sheet_id)
+    except Exception as e:
+        _hint = f"[{type(e).__name__}] {e}" if str(e) else type(e).__name__
+        raise PolicySheetError(f"開啟 Sheet 失敗：{_hint}") from e
+    try:
+        ws = _with_quota_retry(sh.worksheet, HOLDINGS_TAB)
+        try:
+            header = _with_quota_retry(ws.row_values, 1)
+        except Exception:
+            header = []
+        if not header:
+            _with_quota_retry(ws.append_row, list(HOLDINGS_COLS))
+        return ws
+    except Exception:
+        try:
+            ws = _with_quota_retry(
+                sh.add_worksheet,
+                title=HOLDINGS_TAB, rows=rows, cols=len(HOLDINGS_COLS) + 2,
+            )
+            _with_quota_retry(ws.append_row, list(HOLDINGS_COLS))
+            return ws
+        except Exception as e:
+            raise PolicySheetError(f"建立 _持倉總覽 worksheet 失敗：{e}") from e
+
+
+def save_holdings_overview(
+    client: Any, sheet_id: str,
+    ledgers_dict: dict, funds_lookup: dict | None = None,
+) -> int:
+    """把 t7_ledgers ⨝ portfolio_funds 組成「每檔基金一列」的可讀成本帳本，
+    寫進 _持倉總覽（clear + 1 batch，與 _T7_State 同模式）。回傳寫入列數。
+
+    ledgers_dict: {pk_str: Ledger}；funds_lookup: {pk_str: fund_dict}（取名稱/級別/
+    現金給付%/投資金額）。只存成本面，不存市值（市值隨 NAV 過時，由 app 即時算）。
+    """
+    if ledgers_dict is None:
+        return 0
+    ws = _ensure_overview_worksheet(client, sheet_id)
+    now = _dt.datetime.now(_TW_TZ).strftime("%Y-%m-%d %H:%M")
+    lookup = funds_lookup or {}
+    rows: list[list[Any]] = []
+    for pk_str, led in ledgers_dict.items():
+        if led is None:
+            continue
+        try:
+            d = led.to_dict()
+        except Exception:
+            continue
+        pos = d.get("position", {}) or {}
+        f = lookup.get(pk_str, {}) or {}
+        pid = str(f.get("policy_id", "") or "")
+        if not pid and "::" in pk_str:
+            pid = pk_str.split("::", 1)[0]
+        tier = ("核心" if f.get("is_core")
+                else "衛星" if f.get("is_core") is False else "")
+        rows.append([
+            pid,
+            d.get("fund_code", ""),
+            str(f.get("name", "")),
+            d.get("currency", ""),
+            tier,
+            round(float(pos.get("units", 0) or 0), 4),
+            round(float(pos.get("cost_unit", 0) or 0), 4),
+            round(float(pos.get("cost_unit_with_div", 0) or 0), 4),
+            round(float(pos.get("fx_avg", 0) or 0), 4),
+            int(f.get("invest_twd", 0) or 0),
+            float(f.get("div_cash_pct", 100) or 0),
+            round(float(pos.get("dividends_received_twd", 0) or 0), 0),
+            now,
+        ])
+
+    try:
+        _with_quota_retry(ws.clear)
+    except Exception as e:
+        raise PolicySheetError(f"清空 _持倉總覽 失敗：{e}") from e
+
+    if not rows:
+        try:
+            _with_quota_retry(ws.update, range_name="A1",
+                              values=[list(HOLDINGS_COLS)],
+                              value_input_option="RAW")
+        except Exception as e:
+            raise PolicySheetError(f"寫 _持倉總覽 表頭失敗：{e}") from e
+        return 0
+
+    all_values = [list(HOLDINGS_COLS)] + rows
+    end_col = chr(ord("A") + len(HOLDINGS_COLS) - 1)
+    rng = f"A1:{end_col}{len(all_values)}"
+    try:
+        _with_quota_retry(ws.update, range_name=rng,
+                          values=all_values, value_input_option="RAW")
+    except Exception as e:
+        raise PolicySheetError(f"寫 _持倉總覽 失敗：{e}") from e
     return len(rows)
 
 

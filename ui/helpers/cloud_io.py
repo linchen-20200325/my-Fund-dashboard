@@ -20,6 +20,7 @@ from repositories.policy_repository import (
 from repositories.snapshot_repository import (
     load_all_ledgers_snapshot,
     save_all_ledgers_snapshot,
+    save_holdings_overview,
 )
 from infra.oauth import OAuthError
 
@@ -38,7 +39,7 @@ def dump_all_to_sheet(client: object,
       - error:            str|None  — 致命錯誤訊息（PolicySheetError / OAuthError）
     """
     out = {"ok": False, "written": 0, "skipped_no_pid": 0,
-           "n_state": 0, "warnings": [], "error": None}
+           "n_state": 0, "n_overview": 0, "warnings": [], "error": None}
     try:
         _written = 0
         _skipped_no_pid = 0
@@ -80,6 +81,13 @@ def dump_all_to_sheet(client: object,
             except (PolicySheetError, OAuthError) as _e_sn:
                 out["warnings"].append(
                     f"_T7_State 寫入失敗：{str(_e_sn)[:120]}")
+            # v18.182：人看得懂的完整成本帳本 → _持倉總覽
+            try:
+                out["n_overview"] = save_holdings_overview(
+                    client, sheet_id, _t7_dict, _funds_lookup)
+            except (PolicySheetError, OAuthError) as _e_ov:
+                out["warnings"].append(
+                    f"_持倉總覽 寫入失敗：{str(_e_ov)[:120]}")
         out["ok"] = True
     except (PolicySheetError, OAuthError) as _pe:
         out["error"] = f"Sheet 寫入失敗：{_pe}"

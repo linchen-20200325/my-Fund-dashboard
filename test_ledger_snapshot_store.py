@@ -10,12 +10,15 @@ import pytest
 
 from services.ledger_service import Ledger
 from repositories.snapshot_repository import (
+    HOLDINGS_COLS,
+    HOLDINGS_TAB,
     SNAPSHOT_COLS,
     T7_STATE_TAB,
     ensure_state_worksheet,
     get_state_metadata,
     load_all_ledgers_snapshot,
     save_all_ledgers_snapshot,
+    save_holdings_overview,
 )
 from repositories.policy_repository import PolicySheetError
 
@@ -126,6 +129,64 @@ def test_save_falls_back_pid_from_pk_when_no_lookup():
     values = update_call.kwargs.get("values") or update_call.args[1]
     appended = values[1]   # values[0] 是表頭
     assert appended[3] == "PID-X"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# v18.182 save_holdings_overview（人看得懂的成本帳本 _持倉總覽）
+# ──────────────────────────────────────────────────────────────────────
+def test_overview_empty_returns_zero():
+    sh = _make_sh({})
+    assert save_holdings_overview(_make_client(sh), "FAKE", {}) == 0
+
+
+def test_overview_writes_readable_row():
+    led = Ledger(fund_code="TLZF9", currency="USD")
+    led.subscribe(100_000.0, 31.5, 9.5, date(2024, 1, 15))
+    # v18.180：含息成本若有設，position.cost_unit_with_div 反映之
+    led.position.cost_unit_with_div = 8.0
+    ledgers = {"PL-001::TLZF9": led}
+    funds = {"PL-001::TLZF9": {
+        "policy_id": "PL-001", "name": "安聯收益成長", "is_core": True,
+        "invest_twd": 100_000, "div_cash_pct": 80.0,
+    }}
+
+    ws = _make_ws(all_values=[list(HOLDINGS_COLS)])
+    ws.row_values.return_value = list(HOLDINGS_COLS)
+    sh = _make_sh({HOLDINGS_TAB: ws})
+    count = save_holdings_overview(_make_client(sh), "FAKE", ledgers, funds)
+
+    assert count == 1
+    ws.clear.assert_called_once()
+    values = ws.update.call_args.kwargs.get("values") or ws.update.call_args.args[1]
+    assert values[0] == list(HOLDINGS_COLS)
+    row = values[1]
+    assert row[0] == "PL-001"            # 保單號碼
+    assert row[1] == "TLZF9"             # 基金代碼
+    assert row[2] == "安聯收益成長"        # 基金名稱（來自 funds_lookup）
+    assert row[3] == "USD"               # 幣別
+    assert row[4] == "核心"               # 級別（is_core True）
+    assert row[6] == 9.5                 # 平均成本淨值
+    assert row[7] == 8.0                 # 平均含息成本（v18.180 設定值）
+    assert row[8] == 31.5                # 平均匯率
+    assert row[9] == 100_000             # 投資金額(TWD)
+    assert row[10] == 80.0               # 現金給付%
+    assert row[12]                       # 更新時間非空
+
+
+def test_overview_tier_satellite_and_pid_fallback():
+    led = Ledger(fund_code="ACDD01", currency="TWD")
+    led.subscribe(50_000.0, 1.0, 100.0, date(2024, 2, 1))
+    ledgers = {"PID-Z::ACDD01": led}
+    funds = {"PID-Z::ACDD01": {"is_core": False}}   # 無 policy_id → 由 pk 解析
+
+    ws = _make_ws(all_values=[list(HOLDINGS_COLS)])
+    ws.row_values.return_value = list(HOLDINGS_COLS)
+    sh = _make_sh({HOLDINGS_TAB: ws})
+    save_holdings_overview(_make_client(sh), "FAKE", ledgers, funds)
+    row = (ws.update.call_args.kwargs.get("values")
+           or ws.update.call_args.args[1])[1]
+    assert row[0] == "PID-Z"   # pid 從 pk_str fallback
+    assert row[4] == "衛星"     # is_core False
 
 
 def test_save_clears_old_rows_before_writing():

@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.182 — 新增「人看得懂的完整成本帳本」分頁 _持倉總覽（2026-05-23）
+
+- [x] **問題場景**（user 截圖 + JSON）：v18.180/181 已驗證 OK（JSON 有含息/現金給付%、exported_at 台灣時間）。但 user「看不到 T7、帳本資料沒在 Excel」。釐清：①user 在看 Google 預設空白的 `工作表1`（資料其實在保單分頁，user 確認「有資料」）②完整帳本（單位數/含息成本…）只存在 `_T7_State`（JSON blob、人看不懂）且 user 的 Sheet 沒這分頁；保單分頁只有 invest_twd
+- [x] **方案**（user 選「只存成本帳本」）：新增 `repositories/snapshot_repository.py` `save_holdings_overview()` — t7_ledgers ⨝ portfolio_funds 組「每檔基金一列」可讀表格，寫進 `_持倉總覽`（`_` 開頭→不被 `list_policy_worksheets`/`detect_sheet_schema_version` 誤認成保單分頁；clear+batch 同 `_T7_State` 模式）
+- [x] **欄位**：保單號碼/基金代碼/基金名稱/幣別/級別/持有單位數/平均成本淨值/平均含息成本/平均匯率/投資金額(TWD)/現金給付%/累積已領配息(TWD)/更新時間（台灣時間）。只存成本面，不存市值（市值隨 NAV 過時，由 app 即時算）
+- [x] **接線**：`_t7_save_snapshot_to_sheets()`（所有 T7 落帳共同出口）與 `dump_all_to_sheet()`（全部寫入）寫完 `_T7_State` 後一併呼叫；成功訊息加「_持倉總覽 +N 筆」。repo 層用固定 UTC+8（不 import ui.helpers.tw_time，避免反向依賴）
+- [x] **驗證** AST PASS；新增 3 個 test（空/可讀列/級別+pid fallback）；`test_ledger_snapshot_store + test_cloud_io + test_app_smoke + test_policy_store + test_fund_ledger + test_json_backup` 共 **236 PASSED** 零回歸（修 2 個 test_cloud_io 斷言：新 overview 寫入）
+
 ### v18.181 — 修「上次寫入/讀回」時間戳顯示 UTC（應為台灣 UTC+8）（2026-05-23）
 
 - [x] **問題場景**（user 截圖）：雲端存檔面板「上次寫入：2026-05-23 13:26」看起來「不會動」，且對不上 Google Drive 顯示的「晚上9:25」。實為時區 bug — 13:26 UTC = 21:26 台灣，同一刻只是差 8 小時

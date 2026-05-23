@@ -25,6 +25,8 @@ def test_dump_all_to_sheet_success(monkeypatch):
     monkeypatch.setattr(cloud_io, "upsert_fund_in_policy", _fake_upsert)
     monkeypatch.setattr(cloud_io, "save_all_ledgers_snapshot",
                          lambda c, s, t, f: 7)
+    monkeypatch.setattr(cloud_io, "save_holdings_overview",
+                         lambda c, s, t, f: 5)
 
     ss = {
         "portfolio_funds": [
@@ -39,6 +41,7 @@ def test_dump_all_to_sheet_success(monkeypatch):
     assert out["written"] == 2
     assert out["skipped_no_pid"] == 0
     assert out["n_state"] == 7
+    assert out["n_overview"] == 5
     assert out["warnings"] == []
     # 確認 code 大寫化
     assert _calls[1][1] == "F2"
@@ -75,6 +78,9 @@ def test_dump_all_to_sheet_t7_state_failure_is_warning_not_error(monkeypatch):
     def _fail_save(*a, **kw):
         raise PolicySheetError("quota exceeded")
     monkeypatch.setattr(cloud_io, "save_all_ledgers_snapshot", _fail_save)
+    # v18.182：隔離 _T7_State 失敗的斷言，把 _持倉總覽 寫入 patch 成功
+    monkeypatch.setattr(cloud_io, "save_holdings_overview",
+                         lambda *a, **kw: 1)
 
     ss = {
         "portfolio_funds": [{"code": "F1", "policy_id": "P1", "invest_twd": 1}],
