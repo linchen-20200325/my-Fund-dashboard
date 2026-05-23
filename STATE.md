@@ -246,6 +246,16 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.174 — 全局指標關聯地圖搬到說明書 + 總經因果鏈 Sankey 動態詳細說明（2026-05-23）
+
+- [x] **問題場景**（user 截圖反饋）：Tab1「🗺️ 全局指標關聯地圖」純靜態教學圖長期占首屏；下方「🔗 總經因果鏈 Sankey」動態圖看不懂節點/邊代表什麼
+- [x] **Move 教學圖**（`ui/tab1_macro.py:126-133` 整塊移除 / `ui/tab6_manual.py` 新增第 10 sub-tab）：靜態地圖 + 升息/降息劇本 + 投資應用 3 點搬到說明書，避免占首屏；`render_indicator_map()` 函數保留在 tab1，tab6 cross-import 復用避免重複定義
+- [x] **動態詳細說明**（`ui/tab1_macro.py:1763+` Sankey 圖下方新 expander）：
+  - 🔍 8 節點現況：依 node_colors 映射 🔴 壓力高 / 🟠 偏離均值 / 🟡 略偏負面 / 🟢 健康 / 🌫️ 無 z-score
+  - 🔗 9 條因果鏈強弱分級：依 |corr| 三檔（🔥≥0.5 強 / 🌤️ 0.3-0.5 中等 / ❄️ <0.3 弱 / 🌫️ <12 期共同期無法計算），每條附 `source → target：edu_note (corr=±0.XX, 強/中/弱 正/負相關)`
+  - 若 Phase 2（非動態）→ 引導 user 打開「🆕 動態權重」checkbox 才看得到分級
+- [x] **驗證** AST × 2 PASS；`test_policy_store + test_app_smoke + test_macro_core` 共 **217 PASSED** 零回歸
+
 ### v18.173 — T7「預估月配股 (TWD)」欄附顯「可換單位數」（2026-05-23）
 
 - [x] **問題場景**（user 截圖反饋）：v18.172 已把月配股 TWD 拆出來，但只看到金額不知對應幾單位 — 配股 = 把現金部位再投入基金，需直接呈現「能換到的單位數」才好對應到帳本 units

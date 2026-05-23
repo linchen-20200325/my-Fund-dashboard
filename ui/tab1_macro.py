@@ -123,14 +123,8 @@ def render_macro_tab() -> None:
     st.markdown("## 🌐 總經位階評估 ＆ 拐點偵測")
     st.caption("策略3 三層指標加權方法論 v7 — 領先×2 | 中級×1 | 次級×0.5")
 
-    # ── v15.2 全局指標關聯地圖（新人友善：一眼看懂大環境如何影響基金）──
-    with st.expander("🗺️ 全局指標關聯地圖（一眼看懂大環境如何影響基金）", expanded=True):
-        st.caption(
-            "📖 **怎麼讀**：跟著箭頭從**左→右**讀。冷色（藍/橘）=源頭指標，暖色（紅）=承壓資產。"
-            "例：PMI 強勁 → 通膨升溫 → 央行維持高利率 → 殖利率飆升 → ⓐ 借貸成本增 → 科技/成長股承壓；ⓑ 債券下跌。"
-        )
-        render_indicator_map()
-        st.caption("💡 想反向看「降息劇本」？逆轉每個節點即可：PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、科技股回神。")
+    # v18.174：「🗺️ 全局指標關聯地圖」整塊搬到「說明書 §10」（純教學圖，無動態資料）
+    # 函數 render_indicator_map() 保留在本檔頂層供 tab6 import 復用
 
     if not FRED_KEY:
         st.warning("⚠️ 請在 Streamlit Cloud Secrets 填入 FRED_API_KEY")
@@ -1769,9 +1763,86 @@ def render_macro_tab() -> None:
                         st.plotly_chart(_sk_fig, use_container_width=True)
                         st.caption(
                             f"節點色＝z-score 健康度（🟢 z<-1 / 🟡 -1≤z<0 / 🟠 0≤z<1 / 🔴 z≥1，"
-                            f"已依 high_is_bad 翻轉）；邊粗細＝起點 |z|（越偏離均值越粗）。"
+                            f"已依 high_is_bad 翻轉）；邊粗細＝起點 |z| 或動態 |corr|。"
                             f"hover 邊可看因果關係教學。{_sk['note']}。"
                         )
+                        # v18.174：動態詳細說明 — 逐節點健康度 + 逐邊強弱分級，讓新人秒懂
+                        with st.expander(
+                            "📖 動態詳細說明（看不懂這張圖？點開逐節點 + 逐邊白話）",
+                            expanded=True,
+                        ):
+                            _color_to_state = {
+                                "#f44336": "🔴 壓力高 / 極端偏離（z≥+1σ）",
+                                "#ff9800": "🟠 偏離均值（0≤z<+1σ）",
+                                "#ffeb3b": "🟡 略偏負面（−1σ≤z<0）",
+                                "#4caf50": "🟢 健康（z<−1σ）",
+                                "#666":    "🌫️ 無 z-score（資料不足）",
+                            }
+                            _node_lines = ["**🔍 8 節點現況**（顏色 = 健康度）"]
+                            for _i_n, _lbl_n in enumerate(_sk["labels"]):
+                                _c_n = _sk["node_colors"][_i_n]
+                                _state_n = _color_to_state.get(_c_n, "—")
+                                _node_lines.append(f"- {_lbl_n} → {_state_n}")
+                            st.markdown("\n".join(_node_lines))
+
+                            st.markdown("")
+                            if "link_corrs" not in _sk or not _sk_dynamic:
+                                st.info(
+                                    "💡 **啟用「🆕 動態權重」**（上方 checkbox 打勾）可看每條邊"
+                                    "實際 Pearson 相關係數，並依強弱分為「🔥 強 / 🌤️ 中等 / ❄️ 弱」三組。"
+                                    "目前 Phase 2 模式僅用起點 z-score 決定粗細。"
+                                )
+                            else:
+                                _link_corrs = _sk["link_corrs"]
+                                def _strip_corr_tag(_s: str) -> str:
+                                    _idx = _s.find("（corr=")
+                                    return _s[:_idx] if _idx >= 0 else _s
+                                _strong: list[str] = []
+                                _mid:    list[str] = []
+                                _weak:   list[str] = []
+                                _na:     list[str] = []
+                                for _i_l, _corr_l in enumerate(_link_corrs):
+                                    _edu_l = _strip_corr_tag(_sk["link_labels"][_i_l])
+                                    _src_lbl = _sk["labels"][_sk["sources"][_i_l]].split(" (z=")[0]
+                                    _tgt_lbl = _sk["labels"][_sk["targets"][_i_l]].split(" (z=")[0]
+                                    _head = f"{_src_lbl} → {_tgt_lbl}：{_edu_l}"
+                                    if _corr_l is None:
+                                        _na.append(f"- {_head}（共同期 <12 個月，無法計算）")
+                                    else:
+                                        _dir_word = "正" if _corr_l > 0 else "負"
+                                        _abs_c = abs(_corr_l)
+                                        if _abs_c >= 0.5:
+                                            _strong.append(
+                                                f"- **{_head}**（corr={_corr_l:+.2f}，強{_dir_word}相關）"
+                                            )
+                                        elif _abs_c >= 0.3:
+                                            _mid.append(
+                                                f"- {_head}（corr={_corr_l:+.2f}，中等{_dir_word}相關）"
+                                            )
+                                        else:
+                                            _weak.append(
+                                                f"- {_head}（corr={_corr_l:+.2f}，相關性微弱）"
+                                            )
+                                _link_lines = ["**🔗 9 條因果鏈強弱分級**"]
+                                if _strong:
+                                    _link_lines.append("🔥 **強相關（|corr|≥0.5，傳導明顯）：**")
+                                    _link_lines.extend(_strong)
+                                if _mid:
+                                    _link_lines.append("🌤️ **中等相關（0.3≤|corr|<0.5）：**")
+                                    _link_lines.extend(_mid)
+                                if _weak:
+                                    _link_lines.append("❄️ **弱相關（|corr|<0.3，近期不明顯）：**")
+                                    _link_lines.extend(_weak)
+                                if _na:
+                                    _link_lines.append("🌫️ **資料不足：**")
+                                    _link_lines.extend(_na)
+                                st.markdown("\n".join(_link_lines))
+
+                                st.caption(
+                                    "💡 **怎麼用這張圖？** 先看「🔥 強相關」那組邊 = 目前傳導最明顯的因果鏈；"
+                                    "再對照源頭節點的健康度 — 若源頭🔴（極端偏離）+ 邊 🔥 強相關，"
+                                    "代表這條傳導路徑正在發揮作用，需要關注終點節點後續變化。"
+                                )
                 except Exception as _e_sk:
                     st.caption(f"⚠️ Sankey 因果鏈渲染失敗：{str(_e_sk)[:80]}")
 
