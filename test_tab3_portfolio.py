@@ -34,17 +34,20 @@ def test_is_core_fund_alias():
     assert _is_core_fund is is_core_fund
 
 
-def test_app_py_only_has_render_calls_for_all_6_tabs():
-    """app.py 應該只剩 6 個 render_*_tab() 呼叫，沒有 inline tab block。"""
+def test_app_py_only_has_render_calls_for_all_5_tabs():
+    """app.py 應該只剩 5 個 render_*_tab() 呼叫，沒有 inline tab block。
+
+    v18.176：移除回測 Tab → render_backtest_tab 不再出現於 app.py。
+    """
     from pathlib import Path
     src = (Path(__file__).parent / "app.py").read_text(encoding="utf-8")
     for fn in (
         "render_macro_tab",
         "render_single_fund_tab",
         "render_portfolio_tab",
-        "render_backtest_tab",
         "render_data_guard_tab",
         "render_manual_tab",
     ):
         assert f"from ui.tab" in src   # 至少有一個 ui.tab import
         assert fn in src, f"{fn} not found in app.py"
+    assert "render_backtest_tab" not in src, "回測 Tab 應已移除，app.py 不該再引用 render_backtest_tab"

@@ -497,7 +497,6 @@ def test_tab_modules_import_without_error() -> None:
         ("ui.tab1_macro", "render_macro_tab"),
         ("ui.tab2_single_fund", "render_single_fund_tab"),
         ("ui.tab3_portfolio", "render_portfolio_tab"),
-        ("ui.tab4_backtest", "render_backtest_tab"),
         ("ui.tab5_data_guard", "render_data_guard_tab"),
         ("ui.tab6_manual", "render_manual_tab"),
     ]

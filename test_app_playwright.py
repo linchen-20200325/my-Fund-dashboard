@@ -156,22 +156,6 @@ def test_tab3_screenshot_baseline(browser_context, request,
     page.close()
 
 
-def test_tab4_screenshot_baseline(browser_context, request,
-                                  tmp_path_factory) -> None:
-    """Tab4（回測）切換後 pixel-diff baseline。"""
-    assert_snapshot = request.getfixturevalue("assert_snapshot") \
-        if _HAS_SNAPSHOT_PLUGIN else None
-
-    page = browser_context.new_page()
-    _goto_or_skip(page)
-    page.wait_for_selector("[role='tab']", timeout=10_000)
-    _click_tab_by_label(page, "回測")
-    page.wait_for_timeout(800)
-    _snapshot_or_baseline(page, assert_snapshot, "tab4_load.png",
-                          tmp_path_factory)
-    page.close()
-
-
 # ════════════════════════════════════════════════════════════
 # Phase B-3：跨 viewport 響應式 pixel-diff（v18.103）
 # desktop(1440) / tablet(768) / mobile(375) 各自 snapshot

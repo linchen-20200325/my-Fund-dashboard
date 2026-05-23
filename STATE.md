@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.176 — 移除回測 Tab（user 只需汰弱留強判斷換基金）（2026-05-23）
+
+- [x] **決策**（user 明確要求）：「直接移除回測這功能，不想他拖累整個系統速度」— 真實需求是「判斷未來要不要換基金」，由組合基金的戰情室（Sharpe<0 / 配息覆蓋率<1 汰換訊號）+ 汰弱留強評分 + 同類排名滿足，回測（歷史組合模擬）非必要且 NAV 歷史抓不全
+- [x] **app.py**：`st.tabs` 6→5（拿掉「🔬 回測」），刪 `with tab4:` block、`render_backtest_tab` import、死的 `backtest_service` import（calc_performance_metrics/quick_backtest/backtest_portfolio 在 app.py body 從未使用）、更新 docstring
+- [x] **刪 `ui/tab4_backtest.py`**；**保留 `services/backtest_service.py`**（純計算零 IO，不影響速度，留供未來重啟回測；`test_backtest_engine.py` 14 項照留）
+- [x] **測試對齊**：刪 `test_tab4_backtest.py`、刪 apptest `test_tab4_backtest_button...`、smoke tab 清單 6→5、`test_app_py_only_has_render_calls_for_all_5_tabs`（改名 + 斷言 `render_backtest_tab not in src`）、刪 playwright `test_tab4_screenshot_baseline`
+- [x] **文件同步** SPEC.md Tab4 列刪除線標註、STATE 五大模組描述更新、ARCHITECTURE 提及回測處更新
+- [x] **驗證** AST × 5 PASS；`test_app_smoke + test_tab3_portfolio + test_backtest_engine` 115 PASSED；AppTest 啟動 2 passed app 正常開（`test_tab3_kpi` 1 失敗為 sandbox yfinance 403 環境問題，非本次）
+
 ### v18.175 — 修 Tab4 回測「月底剛好 2 點」off-by-one 矛盾 + 補日頻 fallback（2026-05-23）
 
 - [x] **問題場景**（user 截圖反饋）：4 檔基金回測，補抓全歷史 timeout 退 cache → 月底 resample 剛好 2 點（2026-04-30 ~ 05-31）→ 綠字「回測完成 2 期」**同時**紅字「樣本不足 returns<2」自相矛盾、績效全 —%
@@ -480,7 +489,7 @@
 ---
 
 ## 專案定位
-Streamlit Cloud 部署的境外共同基金監控儀表板。整合總經位階、單一基金診斷、組合再平衡試算、歷史回測、資料診斷五大模組。
+Streamlit Cloud 部署的境外共同基金監控儀表板。整合總經位階、單一基金診斷、組合再平衡試算、資料診斷五大 Tab（v18.176 移除回測 Tab，換基金判斷改用組合基金的汰弱留強/戰情室）。
 
 ## 模組地圖
 | 檔案 | 職責 |

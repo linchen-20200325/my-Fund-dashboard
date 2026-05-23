@@ -743,7 +743,7 @@ if _logged_in_sb or (_gsa_secret and _sheet_id_secret):
 | Tab1 | 🌐 總經儀表板 | 14 指標 + 景氣位階 + 美林時鐘 | 事件驅動警報卡、OAS 即時信用壓力 |
 | Tab2 | 🔍 單一基金深度診斷 | NAV/配息/風險/持股 | σ 絕對位階卡、新手/老手雙軌輸出、影響事件標注 |
 | Tab3 | 📊 組合基金 | 六因子評分、再平衡 | 持股相關性矩陣、影子基金警告、轉申購試算 |
-| Tab4 | 🔬 回測 | CAGR/Sharpe/MDD | — |
+| ~~Tab4~~ | ~~🔬 回測~~ | ~~CAGR/Sharpe/MDD~~ | **v18.176 移除**（換基金判斷改用組合基金的汰弱留強/戰情室；回測拖速度且 NAV 歷史抓不全）。`services/backtest_service.py` 純計算保留供未來 |
 | Tab5 | 🛡️ 資料診斷中控台 | Data Guard 3.0 | 持倉完整度、更新頻率檢核、STALE 標記 |
 | Tab6 | 📖 說明書 | 靜態說明 | 新增轉申購公式說明 |
 

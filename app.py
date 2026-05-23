@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """app.py — 基金戰情室 v18.0（重構版）
-四模組架構：總經 / 單一基金 / 組合基金 / 回測
+模組架構：總經 / 單一基金 / 組合基金 / 資料診斷 / 說明書
 零快取：每次操作皆即時抓取，確保資料絕對最新
+v18.176：移除回測 Tab（user 只需汰弱留強判斷換基金，回測拖速度且 NAV 歷史抓不全）
 """
 import streamlit as st
 
@@ -33,7 +34,6 @@ from ui.components.mk_dashboard import render_mk_war_room
 from ui.tab1_macro import render_macro_tab
 from ui.tab2_single_fund import render_single_fund_tab
 from ui.tab3_portfolio import render_portfolio_tab
-from ui.tab4_backtest import render_backtest_tab
 from ui.tab5_data_guard import render_data_guard_tab
 from ui.tab6_manual import render_manual_tab
 from fund_fetcher  import (
@@ -49,7 +49,6 @@ from services.ai_service import (
     analyze_portfolio_mk_advisor,
     event_impact_analysis, build_stale_flags,
 )
-from services.backtest_service import calc_performance_metrics, quick_backtest, backtest_portfolio
 from services.portfolio_service import (
     calc_fund_factor_score,
     dividend_safety as div_safety_check,
@@ -430,7 +429,7 @@ render_macro_compass()
 # ══════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌐 總經","🔍 單一基金","📊 組合基金","🔬 回測","🔬 資料診斷","📖 說明書"])
+tab1, tab2, tab3, tab5, tab6 = st.tabs(["🌐 總經","🔍 單一基金","📊 組合基金","🔬 資料診斷","📖 說明書"])
 
 # ══════════════════════════════════════════════════════
 # TAB 1 — 總經
@@ -448,12 +447,6 @@ with tab2:
 with tab3:
     # v18.128 B-C.6: 組合 Tab 內容（含 T5/T6/T7 子區）已搬到 ui/tab3_portfolio.py
     render_portfolio_tab()
-
-# ══════════════════════════════════════════════════════════════════════════════
-with tab4:
-    # v18.124 B-C.2: 回測 Tab 內容已搬到 ui/tab4_backtest.py
-    render_backtest_tab()
-
 
 # ══════════════════════════════════════════════════════
 # TAB 5 — 資料診斷
