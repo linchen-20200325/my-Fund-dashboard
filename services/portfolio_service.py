@@ -455,8 +455,13 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
     """
     T5 fallback：NAV Pearson 相關係數矩陣（持股資料不可得時備用）。
     輸入: [{"code": str, "series": pd.Series}, ...]
-    回傳: {"matrix": pd.DataFrame, "shadow_pairs": [(nameA, nameB, corr), ...]}
+    回傳: {"matrix": pd.DataFrame, "shadow_pairs": [(codeA, codeB, corr), ...], "freq": str}
     相關係數 > 0.85 → 影子基金警告
+
+    v18.177: 自適應頻率 — 短 NAV（卡 ~30 天 fallback）月底 resample 只剩 1-2 點
+             → pct_change 僅 1 個 return → 相關係數退化成 NaN（顯示成 0），
+             造成「同台股基金相關係數=0」假象。改月→週→日逐級降頻，挑第一個
+             return 列數 ≥6 的最粗頻率；都不足時退到日頻（點數最多）。
     """
     try:
         import numpy as np
@@ -465,12 +470,26 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
         if len(valid) < 2:
             return None
 
-        df = pd.concat(
-            {code: s.resample("ME").last() for code, s in valid},
-            axis=1
-        ).dropna(how="all")
+        def _returns_at(freq):
+            if freq is None:
+                cols = {code: s.sort_index() for code, s in valid}
+            else:
+                cols = {code: s.sort_index().resample(freq).last() for code, s in valid}
+            df = pd.concat(cols, axis=1).dropna(how="all")
+            return df.pct_change().dropna(how="all")
 
-        corr = df.pct_change().dropna(how="all").corr()
+        # 月→週→日：挑第一個 return 列數 ≥6 的最粗頻率；都 <6 則用日頻（最 granular）
+        _MIN_ROWS = 6
+        rets, freq_label = None, "日頻"
+        for _freq, _lbl in (("ME", "月底"), ("W-FRI", "週末"), (None, "日頻")):
+            rets, freq_label = _returns_at(_freq), _lbl
+            if len(rets) >= _MIN_ROWS:
+                break
+
+        if rets is None or len(rets) < 2:
+            return None
+
+        corr = rets.corr()
         shadow_pairs = []
         codes = list(corr.columns)
         for i in range(len(codes)):
@@ -479,7 +498,7 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
                 if not np.isnan(v) and abs(v) >= 0.85:
                     shadow_pairs.append((codes[i], codes[j], round(float(v), 4)))
         shadow_pairs.sort(key=lambda x: -abs(x[2]))
-        return {"matrix": corr, "shadow_pairs": shadow_pairs}
+        return {"matrix": corr, "shadow_pairs": shadow_pairs, "freq": freq_label}
     except Exception:
         return None
 

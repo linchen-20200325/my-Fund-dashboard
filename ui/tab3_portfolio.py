@@ -2077,8 +2077,10 @@ def render_portfolio_tab() -> None:
                         _hov_result = calc_correlation_matrix(_corr_input)
                         if _hov_result is not None:
                             _hov_result.setdefault("method", "nav_fallback")
+                            _freq_used = _hov_result.get("freq", "?")
                             _hov_result.setdefault("notes",
-                                "持股 / 產業資料皆缺，降級為 NAV Pearson 相關（>= 0.85 為 shadow）")
+                                f"持股 / 產業資料皆缺，降級為 NAV Pearson 相關"
+                                f"（{_freq_used}頻；>= 0.85 為 shadow）")
                     st.session_state[_ss_key] = _hov_result
                 _cr = st.session_state.get(_ss_key)
                 if _cr and _cr.get("matrix") is not None:

@@ -246,6 +246,16 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.177 — 修 T5 相關係數矩陣「短 NAV → 相關係數=0」假象（自適應頻率）（2026-05-23）
+
+- [x] **問題場景**（user 反饋）：ACDD19 安聯台灣智慧 vs ACDD01 安聯台灣大壩，同為台股基金，T5 矩陣相關係數卻顯示 0，不合直覺
+- [x] **根因**（`services/portfolio_service.py:454` `calc_correlation_matrix`）：寫死 `s.resample("ME")` 月底重採樣 — 這幾檔卡 ~30 天 fallback NAV，月底只剩 1-2 點 → `pct_change` 僅 1 個 return → `corr` 退化成 NaN（顯示成 0）。模擬證實：月底→NaN；日頻→真實 0.96
+- [x] **Fix**：改自適應頻率，月→週→日逐級降頻，挑第一個 return 列數 ≥6 的最粗頻率，都不足退日頻；回傳新增 `freq` 欄位
+- [x] **UI**（`ui/tab3_portfolio.py:2080`）：notes 顯示實際採用頻率（如「日頻」「週末」），讓 user 知道是降頻算的
+- [x] **新增測試**（`test_holdings_overlap.py`）：`test_corr_short_nav_not_zero`（短 NAV 降頻後相關 >0.8 非 0）、`test_corr_long_nav_keeps_monthly`（長歷史維持月底）、`test_corr_too_few_funds_returns_none`
+- [x] **驗證** AST PASS；`test_holdings_overlap`(8) + `test_tab3_portfolio` + `test_app_smoke` 共 **107 PASSED** 零回歸
+- [ ] **殘留**：根本上 NAV 歷史太短仍是 #2 NAV cache 問題；此 fix 讓「有資料時算對」，但若兩檔完全無重疊期仍會 NaN
+
 ### v18.176 — 移除回測 Tab（user 只需汰弱留強判斷換基金）（2026-05-23）
 
 - [x] **決策**（user 明確要求）：「直接移除回測這功能，不想他拖累整個系統速度」— 真實需求是「判斷未來要不要換基金」，由組合基金的戰情室（Sharpe<0 / 配息覆蓋率<1 汰換訊號）+ 汰弱留強評分 + 同類排名滿足，回測（歷史組合模擬）非必要且 NAV 歷史抓不全
