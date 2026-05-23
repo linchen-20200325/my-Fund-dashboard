@@ -645,6 +645,9 @@ def render_t7_section() -> None:
                     _applied = 0
                     _per_policy_rows: dict[str, list[dict]] = {}
                     _pid_changes: list[tuple] = []   # v18.28: (old_pid, new_pid, code, fund)
+                    # v18.179：每一檔已套用且有保單號碼的基金 (pid, code, fund_obj)，
+                    # 存檔時全量 upsert 回保單分頁（不再只寫 pid 變更的）
+                    _funds_to_sheet: list[tuple] = []
                     for _pk_f, (_c, _u, _cu, _fx, _ccy,
                                 _pid_old, _pid_new, _inv, _anw,
                                 _cumul_div, _dcp) in _init_inputs.items():
@@ -679,6 +682,9 @@ def render_t7_section() -> None:
                         _f_obj["avg_nav_with_div"] = float(_anw)
                         _f_obj["div_cash_pct"]     = max(0.0, min(100.0, float(_dcp)))
                         _applied += 1
+                        # v18.179：記下有保單號碼的基金，存檔時全量回寫保單分頁
+                        if _pid_new:
+                            _funds_to_sheet.append((_pid_new, _c, _f_obj))
                         # 雙寫到 _Ledgers（用 new pid）
                         _pid_w = _pid_new
                         if _pid_w:
@@ -697,7 +703,8 @@ def render_t7_section() -> None:
                     # P4 D2: dual-write to Google Sheets `_Ledgers` tab（OAuth 模式）
                     _gsheet_sync_msg = ""
                     _pid_migrate_msg = ""
-                    if _per_policy_rows or _pid_changes:
+                    _sheet_upsert_msg = ""
+                    if _per_policy_rows or _pid_changes or _funds_to_sheet:
                         _cfg = _resolve_oauth_cfg()
                         _tokens = st.session_state.get("gsheet_tokens")
                         _sid = st.session_state.get("policy_sheet_id")
@@ -715,28 +722,37 @@ def render_t7_section() -> None:
                                         _client, _sid, _pid_w2, _rows_w2)
                                 _gsheet_sync_msg = (
                                     f" + Sheets `_Ledgers` 寫入 {_total} 筆")
-                                # v18.28: pid 變更 → 寫 fund row 進新保單 worksheet
-                                for _po, _pn, _code, _fobj in _pid_changes:
-                                    if not _pn:
-                                        continue
+                                # v18.179：全量回寫 — 每一檔有保單號碼的基金都 upsert 進
+                                # 保單分頁。原本只寫 pid 變更的（_pid_changes），導致同保單內
+                                # 編輯/新增的淨投資金額不會回寫到使用者實際讀寫的分頁，被迫每次
+                                # 下載手改。改成寫 _funds_to_sheet（涵蓋新增 + 同保單編輯）。
+                                _changed_codes = {
+                                    (_pn, _code) for _po, _pn, _code, _fobj in _pid_changes}
+                                _upserted = 0
+                                for _pid_w3, _code_w3, _fobj_w3 in _funds_to_sheet:
                                     try:
-                                        upsert_fund_in_policy(_client, _sid, _pn, {
-                                            "fund_url":     _code,
-                                            "policy_name":  _pn,
-                                            "invest_twd":   int(_fobj.get("invest_twd", 0) or 0),
+                                        upsert_fund_in_policy(_client, _sid, _pid_w3, {
+                                            "fund_url":     _code_w3,
+                                            "policy_name":  _pid_w3,
+                                            "invest_twd":   int(_fobj_w3.get("invest_twd", 0) or 0),
                                             "invest_date":  "",
-                                            "currency":     str(_fobj.get("currency", "")),
+                                            "currency":     str(_fobj_w3.get("currency", "")),
                                             "fx_at_buy":    0.0,
-                                            "notes":        f"T7 pid migrate from '{_po or '(none)'}'",
-                                            "policy_tier":  ("core" if _fobj.get("is_core")
+                                            "notes":        ("T7 pid migrate"
+                                                             if (_pid_w3, _code_w3) in _changed_codes
+                                                             else "T7 套用起始部位"),
+                                            "policy_tier":  ("core" if _fobj_w3.get("is_core")
                                                              else "satellite"
-                                                             if _fobj.get("is_core") is False
+                                                             if _fobj_w3.get("is_core") is False
                                                              else ""),
                                         })
+                                        _upserted += 1
                                     except (PolicySheetError, OAuthError) as _e_mi:
                                         _pid_migrate_msg = f" ⚠️ 保單分頁同步失敗：{str(_e_mi)[:60]}"
-                                if _pid_changes:
-                                    # 刷新 policy_tabs cache
+                                if _upserted:
+                                    _sheet_upsert_msg = f" + 保單分頁回寫 {_upserted} 檔"
+                                if _funds_to_sheet:
+                                    # 刷新 policy_tabs cache（可能新建分頁）
                                     try:
                                         st.session_state["policy_tabs"] = (
                                             list_policy_worksheets(_client, _sid))
@@ -757,7 +773,7 @@ def render_t7_section() -> None:
                         _msg_init_state = _t7_save_snapshot_to_sheets()
                         st.success(
                             f"✅ 已套用 {_applied} 檔起始部位{_pid_chg_summary}，T7 帳本已更新。"
-                            f"{_gsheet_sync_msg}{_pid_migrate_msg}{_msg_init_state}"
+                            f"{_gsheet_sync_msg}{_sheet_upsert_msg}{_pid_migrate_msg}{_msg_init_state}"
                         )
                         st.rerun()
                     else:

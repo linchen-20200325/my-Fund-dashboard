@@ -430,6 +430,22 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-P T7「套用為起始部位」存檔全量回寫保單分頁（v18.179 修補）
+
+**問題場景**：User 截圖反饋 — 在 T7「✏️ 編輯持倉」表單輸入各基金淨投資金額後按「💾 套用為起始部位（覆蓋 T7 帳本）」存檔，新增/編輯的項目不會回寫到使用者實際讀寫的保單分頁（如 `QL19676552`），只能每次下載手改。
+
+**根因**（`ui/tab3_t7_ledger.py` submit handler）：存檔寫四處中只缺最關鍵的一處 —
+①本地 `t7_ledgers`（session）✅　②`_T7_State` 快照分頁 ✅　③`_Ledgers` 交易分頁 ✅（有 pid 才寫）　④**保單分頁基金列（含 invest_twd）只在 `_pid_changes`（保單號碼改變）時才 `upsert_fund_in_policy`** ❌。同保單內編輯金額（pid 未變）的基金列永遠不更新。
+
+**Fix（全量同步保單分頁，user 選定）**：
+1. 新增 `_funds_to_sheet: list[tuple]` 收集每一檔已套用且 `_pid_new` 非空的基金 `(pid, code, fund_obj)`。
+2. OAuth 區塊條件改 `if _per_policy_rows or _pid_changes or _funds_to_sheet:`；把原本只跑 `_pid_changes` 的 upsert 迴圈改成跑 `_funds_to_sheet`，全量 `upsert_fund_in_policy`（帶 `invest_twd` / `currency` / `policy_tier`）。
+3. notes 區分：pid 變更標 `T7 pid migrate`、其餘標 `T7 套用起始部位`；成功訊息加「+ 保單分頁回寫 N 檔」；`policy_tabs` cache 改在 `_funds_to_sheet` 非空時刷新。
+
+**邊界**：無 pid 基金（未綁保單）仍不寫（無分頁可寫，正確）；未登入 OAuth / 無 sheet_id 時整段略過僅更新本地；`_f_obj` 為 `{}` 時 upsert 用 `.get` 預設值安全。`test_app_smoke + test_policy_store + test_cloud_io` 185 PASSED 零回歸。
+
+---
+
 ### §3-O T7 KPI 拆「現金配息 / 配股」+ 鬼列 filter 補修大寫（v18.172 新增）
 
 **問題場景**：User 截圖反饋 T7 帳本下方 KPI 卡「💵 預估年配息 NT$1,250,792 / 📅 每月被動現金流 NT$104,233」**沒套用 `div_cash_pct`** — 即使在 T7「📝 編輯持倉」設定部分配股（如現金給付% = 60），KPI 仍顯示全額年配息，配股估算也沒分開呈現。

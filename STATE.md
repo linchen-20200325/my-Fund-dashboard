@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.179 — 修 T7「套用為起始部位」存檔不回寫保單分頁（被迫每次下載手改）（2026-05-23）
+
+- [x] **問題場景**（user 截圖反饋）：在 T7「✏️ 編輯持倉」表單輸入各基金的淨投資金額後按「💾 套用為起始部位（覆蓋 T7 帳本）」存檔，新增/編輯的項目**不會回寫到使用者實際讀寫的保單分頁**（如 QL19676552），只能每次下載手改
+- [x] **根因**（`ui/tab3_t7_ledger.py` submit handler）：存檔只寫 ①本地 `t7_ledgers` ②`_T7_State` 快照 ③`_Ledgers` 交易分頁；保單分頁的 `upsert_fund_in_policy` **只在「保單號碼改變」（`_pid_changes`）時觸發** → 同保單內編輯金額（無 pid 變更）的基金列永遠不更新
+- [x] **Fix（全量同步保單分頁）**：新增 `_funds_to_sheet` 收集每一檔已套用且有保單號碼的基金 `(pid, code, fund_obj)`；OAuth 區塊改成全量 `upsert_fund_in_policy`（帶 invest_twd / currency / policy_tier），涵蓋「新增 + 同保單編輯」；notes 對 pid 變更標 `T7 pid migrate`、其餘 `T7 套用起始部位`；成功訊息加「+ 保單分頁回寫 N 檔」；`policy_tabs` cache 改在 `_funds_to_sheet` 非空時刷新
+- [x] **邊界**：無 pid 的基金（未綁保單）仍不寫（無分頁可寫，正確）；`_f_obj` 為 `{}` 時 upsert 用 `.get` 預設值安全；未登入 OAuth / 無 sheet_id 時整段略過只更新本地
+- [x] **驗證** AST PASS；`test_app_smoke + test_policy_store + test_cloud_io` 共 **185 PASSED** 零回歸
+
 ### v18.178 — 審計 punch-list 清理 #2/#5/#6（2026-05-23）
 
 - [x] **#5 expander 偵測擴及 `st.status`**（`test_app_smoke.py:33`）：`_is_expander_call` 從只認 `st.expander` 改認 `_EXPANDER_LIKE_ATTRS=("expander","status")` — v18.156 crash 元凶正是 `st.status` 巢狀在 expander 內，偵測網現在涵蓋兩者。95 PASSED（無現存違規）
