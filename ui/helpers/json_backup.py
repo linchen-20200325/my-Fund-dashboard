@@ -31,6 +31,10 @@ def build_export_payload(ss: MutableMapping[str, Any]) -> dict:
             "is_core":      _f.get("is_core"),
             "invest_date":  _f.get("invest_date", ""),
             "fx_at_buy":    _f.get("fx_at_buy"),
+            # v18.180：含息成本 + 現金給付% 一併備份。v1 保單分頁 schema 無此兩欄，
+            # 只有 JSON 備份能讓它們離線還原（否則重整 Sheet 後歸零）。
+            "avg_nav_with_div": _f.get("avg_nav_with_div", 0),
+            "div_cash_pct":     _f.get("div_cash_pct", 100),
         })
     _ledgers_dict = {}
     for _pk, _l in (ss.get("t7_ledgers", {}) or {}).items():

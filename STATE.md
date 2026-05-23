@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.180 — 修 T7 含息成本不生效 + JSON 備份漏存含息/現金給付%（2026-05-23）
+
+- [x] **問題場景**（user 反饋）：T7 套用起始部位後 ①ledger「看起來沒變」（`cost_unit_with_div` 永遠 = `cost_unit`）②下載的 JSON 備份檔沒有「🟨 現金給付 %」與「📋 含息來源（含息成本）」
+- [x] **Bug A — 含息成本不生效**（`ui/tab3_t7_ledger.py:676`）：建 ledger 時 `subscribe(_amount_twd, _fx, _cu, …)` 傳的是 `_cu`（淨值）非 `_anw`（含息成本）；`subscribe()` 首買把 `cost_unit_with_div = nav` → user 抄入的對帳單欄(10) 含息成本被覆蓋。Fix：subscribe 後 `if _anw > 0: _new_led.position.cost_unit_with_div = float(_anw)` 校正
+- [x] **Bug B — JSON 備份漏欄**（`ui/helpers/json_backup.py:23-34`）：`build_export_payload` 的 slim fund 固定欄位漏掉 `avg_nav_with_div` + `div_cash_pct`。Fix：補這兩欄；restore 沿用「保留 JSON 全部 key」邏輯自動還原，T7 表單 `_f.get("avg_nav_with_div"/"div_cash_pct")` 重新讀回
+- [x] **Constraint C**（背景）：v1 保單分頁 `ALL_COLS` 無含息成本/現金給付% 欄位 → 這兩欄唯一持久化途徑是 JSON 備份（本次 Bug B 修好）。user 選「含息+JSON 兩修」、暫不擴充 v1 schema
+- [x] **驗證** AST PASS；`test_json_backup + test_fund_ledger + test_app_smoke + test_policy_store + test_cloud_io` 共 **222 PASSED** 零回歸
+
 ### v18.179 — 修 T7「套用為起始部位」存檔不回寫保單分頁（被迫每次下載手改）（2026-05-23）
 
 - [x] **問題場景**（user 截圖反饋）：在 T7「✏️ 編輯持倉」表單輸入各基金的淨投資金額後按「💾 套用為起始部位（覆蓋 T7 帳本）」存檔，新增/編輯的項目**不會回寫到使用者實際讀寫的保單分頁**（如 QL19676552），只能每次下載手改

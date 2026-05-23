@@ -430,6 +430,18 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-Q T7 含息成本不生效 + JSON 備份漏存含息/現金給付%（v18.180 修補）
+
+**問題場景**（user 反饋）：T7「💾 套用為起始部位」後 ①ledger「看起來沒變」 — `cost_unit_with_div` 永遠等於 `cost_unit`，對帳單欄(10) 含息成本沒生效；②下載的 JSON 備份檔沒有「🟨 現金給付 %」（`div_cash_pct`）與「📋 含息來源 / 含息成本」（`avg_nav_with_div`）。
+
+**Bug A — 含息成本不生效**（`ui/tab3_t7_ledger.py:676`）：建 ledger 時 `_new_led.subscribe(_amount_twd, _fx, _cu, …)` 傳的是 `_cu`（平均買入淨值）而非 `_anw`（含息成本）；`Ledger.subscribe()` 首買時把 `cost_unit_with_div = nav`，覆蓋掉 user 抄入的含息成本。**Fix**：subscribe 後加 `if _anw > 0: _new_led.position.cost_unit_with_div = float(_anw)` 校正（type A 直接抄、type B 由累積配息反推皆走 `_anw`）。
+
+**Bug B — JSON 備份漏欄**（`ui/helpers/json_backup.py` `build_export_payload`）：slim fund 序列化用固定欄位清單，漏掉 `avg_nav_with_div` + `div_cash_pct`。**Fix**：補這兩欄；`restore_from_json_bytes` 沿用「保留 JSON 全部 key」邏輯自動還原，T7 表單 `_f.get("avg_nav_with_div", 0)` / `_f.get("div_cash_pct", 100)` 重新讀回。
+
+**Constraint C**：v1 保單分頁 `ALL_COLS`（policy_id/policy_name/fund_url/invest_twd/invest_date/currency/fx_at_buy/notes/policy_tier）**無含息成本/現金給付% 欄位** → 這兩欄唯一持久化途徑是 JSON 備份（Bug B 修好）。user 選「含息+JSON 兩修」、暫不擴充 v1 schema。`test_json_backup + test_fund_ledger + test_app_smoke + test_policy_store + test_cloud_io` 共 222 PASSED 零回歸。
+
+---
+
 ### §3-P T7「套用為起始部位」存檔全量回寫保單分頁（v18.179 修補）
 
 **問題場景**：User 截圖反饋 — 在 T7「✏️ 編輯持倉」表單輸入各基金淨投資金額後按「💾 套用為起始部位（覆蓋 T7 帳本）」存檔，新增/編輯的項目不會回寫到使用者實際讀寫的保單分頁（如 `QL19676552`），只能每次下載手改。

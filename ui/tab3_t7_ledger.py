@@ -674,6 +674,12 @@ def render_t7_section() -> None:
                         _amount_twd = float(_inv)
                         _new_led = _LedT7(fund_code=_c, currency=_ccy)
                         _new_led.subscribe(_amount_twd, _fx, _cu, _d_t7.today())
+                        # v18.180：對帳單欄(10) 含息成本是「已歷經配息調整」的歷史成本，
+                        # subscribe() 首買會把 cost_unit_with_div 設成 = _cu（淨值），
+                        # 覆蓋掉 user 抄入的含息成本 → 含息成本永遠等於淨值、看起來沒變。
+                        # 這裡用 user 給的 _anw 校正讓含息成本真正生效（_anw<=0 維持預設）。
+                        if _anw > 0:
+                            _new_led.position.cost_unit_with_div = float(_anw)
                         st.session_state.t7_ledgers[_pk_f] = _new_led
                         # v18.154：把 user 給的 invest_twd / avg_nav_with_div 也存進
                         # portfolio_funds，給 v2 編輯介面同步使用
