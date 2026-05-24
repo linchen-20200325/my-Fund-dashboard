@@ -19,6 +19,10 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
             排序時 systemic 永遠在前；給 MK AI 判斷系統性風險用，
             目的：戰爭、雷曼兄弟級事件、銀行擠兌等重大利空不會被一般財經新聞淹沒。
     回傳: [{title, summary, source, published, url, is_systemic}]
+
+    v18.186：RSS 改走 NAS Proxy（infra.proxy.fetch_url，含 timeout + 自動降級直連），
+            不再用 feedparser 內建裸連 → 修 Streamlit Cloud IP 被封時新聞整條死。
+            抓取失敗不再靜默：累計失敗來源，結果為空時回友善提示（區分 Proxy 斷 vs 無命中）。
     """
     try:
         import feedparser as _fp
@@ -26,6 +30,13 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
         return [{"title": "feedparser 未安裝", "summary": "pip install feedparser",
                  "source": "system", "published": "", "url": "",
                  "is_systemic": False}]
+
+    # v18.186：透過 NAS Proxy 抓 RSS bytes（feedparser 解析 bytes，不自己連網）。
+    # 取不到（無 streamlit / infra 不可用）時退回 feedparser 直連，行為與舊版一致。
+    try:
+        from infra.proxy import fetch_url as _fetch_url
+    except Exception:
+        _fetch_url = None
 
     FEEDS = [
         # ── 美國 / 全球財經主流 ──
@@ -80,10 +91,19 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
 
     results = []
     seen_titles = set()
+    failed: list = []          # v18.186：抓取失敗的來源名（供空結果時友善提示）
+    _FEED_TIMEOUT = 12         # 秒：單一 feed 上限，避免某來源卡住拖垮整批
 
     for source_name, feed_url in FEEDS:
         try:
-            d = _fp.parse(feed_url)
+            if _fetch_url is not None:
+                _resp = _fetch_url(feed_url, timeout=_FEED_TIMEOUT, retries=2)
+                if _resp is None or not getattr(_resp, "content", b""):
+                    failed.append(source_name)   # Proxy/來源無回應 → 記下不靜默
+                    continue
+                d = _fp.parse(_resp.content)
+            else:
+                d = _fp.parse(feed_url)          # 無 proxy 模組 → 退回直連
             count = 0
             for entry in d.entries:
                 if count >= max_per_feed:
@@ -112,8 +132,26 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
                     "is_systemic": _is_sys,
                 })
                 count += 1
-        except Exception as _e:
-            pass  # skip failed feeds silently
+        except Exception:
+            failed.append(source_name)   # v18.186：不再靜默 — 累計失敗來源
+            continue
+
+    # v18.186：友善空狀態 — 區分「全失敗（可能 Proxy 斷）」vs「正常但無命中」
+    if not results:
+        if failed:
+            return [{
+                "title": "⚠️ 暫時無法取得財經新聞",
+                "summary": (f"已嘗試 {len(FEEDS)} 個來源、{len(failed)} 個無回應"
+                            "（可能 NAS Proxy 斷線或來源暫時不可用），稍後重試。"),
+                "source": "system", "published": "", "url": "",
+                "is_systemic": False,
+            }]
+        return [{
+            "title": "ℹ️ 目前沒有符合追蹤條件的財經新聞",
+            "summary": "RSS 來源正常，但近期標題未命中追蹤關鍵字。",
+            "source": "system", "published": "", "url": "",
+            "is_systemic": False,
+        }]
 
     # v18.86：systemic 永遠排前面（同類別內按日期新→舊）
     sys_news = sorted(
