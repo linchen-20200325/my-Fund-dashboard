@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.187 — 修「切換帳本後帳本無法更新」：load 一律覆蓋 t7_ledgers（空→清）（2026-05-24）
+
+- [x] **問題場景**（user）：①「存檔無含息來源」②「切換帳本後，帳本那些都無法更新」
+- [x] **#2 根因（v18.185 auto-load 放大）**：`load_all_from_sheet`（`ui/helpers/cloud_io.py`）只在 `_restored`（新帳本 `_T7_State` 快照）非空時才 `ss["t7_ledgers"]=_restored`；切換到「沒有 `_T7_State`」的帳本時 t7_ledgers **殘留前一本** → 持倉換了、T7 帳本面板卻還是舊本。v18.185 把切換改成自動讀回後，此 stale 每次切換都出現
+- [x] **#2 Fix**：改 `ss["t7_ledgers"] = _restored or {}`（空→清掉舊本）；`_t7_auto_restore_done`/`_t7_auto_estimate_done` 旗標**一律**清（移出 `if _restored`）→ 新本無快照時 T7 區塊重跑 auto-restore（`tab3_t7_ledger.py:200`）、t7_ledgers 維持空（正確）不再顯示舊本；`_sync_invest_twd_from_ledgers()` 仍只在有快照時呼叫（避免空帳本把 invest_twd 歸零）
+- [x] **#1 含息來源（§5 anti-loop，不盲改）**：完整追蹤寫+讀 round-trip 全正確 — T7 表單寫 `portfolio_funds["avg_nav_with_div"]`（`_fund_by_pk` 是 portfolio_funds 參照）+ `cost_unit_with_div` + 保單分頁；`dump_all_to_sheet` / `upsert_fund_in_policy`（ALL_COLS 含該欄 + 表頭自動升級）/ `load_policy_worksheet`（reindex ALL_COLS）/ `sync`（有值才帶）皆正確。已在 v18.180/183/184 修過 3 次仍報 → 依 §5 停止盲改，**待 user 給精確重現**（哪個存檔鈕 / 看哪裡為空）。v18.187 staleness 修復可能順帶修好「切換後含息成本顯示舊本」
+- [x] **驗證** AST PASS；ruff clean（順手刪 `test_cloud_io` dead import `pytest`）；新增 2 regression test（空快照清舊本+清旗標 / 有快照換新本）；`test_cloud_io + test_app_smoke + test_portfolio_load` 119 PASSED 零回歸
+
 ### v18.186 — 連線健檢 #1：RSS 新聞走 NAS Proxy + timeout + 友善空狀態（2026-05-24）
 
 - [x] **背景**（v5.0 Task1 連線健檢）：盤點互動元件與外部抓取流程的穩定度，目標所有抓取走 NAS Proxy + timeout + try-except + 友善降級

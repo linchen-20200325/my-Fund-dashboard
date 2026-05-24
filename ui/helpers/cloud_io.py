@@ -146,17 +146,22 @@ def load_all_from_sheet(client: object,
         try:
             from services.ledger_service import Ledger as _Ledger
             _restored = load_all_ledgers_snapshot(client, sheet_id, _Ledger)
+            # v18.187：一律覆蓋 t7_ledgers（含「空 → 清掉」）。否則切換到「沒有
+            # _T7_State 快照」的帳本時會殘留前一本的帳本，造成 user 反映的
+            # 「切換帳本後帳本無法更新」（持倉換了、T7 帳本面板卻還是舊本）。
+            ss["t7_ledgers"] = _restored or {}
+            out["restored_ct"] = len(_restored or {})
+            # 清自動還原旗標 → 換帳本後 T7 區塊會對「新帳本」重跑 auto-restore，
+            # 新本無快照時 t7_ledgers 維持空（正確），不再顯示舊本資料。
+            ss.pop("_t7_auto_restore_done", None)
+            ss.pop("_t7_auto_estimate_done", None)
             if _restored:
-                ss["t7_ledgers"] = _restored
-                out["restored_ct"] = len(_restored)
                 try:
                     from ui.tab3_t7_ledger import _sync_invest_twd_from_ledgers
                     _sync_invest_twd_from_ledgers()
                 except Exception as _e_sync:
                     out["warnings"].append(
                         f"invest_twd 同步失敗（不影響資料正確性）：{str(_e_sync)[:80]}")
-                ss.pop("_t7_auto_restore_done", None)
-                ss.pop("_t7_auto_estimate_done", None)
         except (PolicySheetError, OAuthError) as _e_ld:
             out["warnings"].append(f"_T7_State 讀回失敗：{str(_e_ld)[:120]}")
         out["ok"] = True

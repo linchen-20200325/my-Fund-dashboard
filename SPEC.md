@@ -430,6 +430,23 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-X 修「切換帳本後帳本無法更新」+ 含息來源 §5 anti-loop（v18.187 新增）
+
+**問題場景**（user）：①「存檔無含息來源」；②「切換帳本後，帳本那些都無法更新」。
+
+**#2 根因**：`load_all_from_sheet`（`ui/helpers/cloud_io.py`）原本只在新帳本的 `_T7_State` 快照非空時才覆蓋 `t7_ledgers`。切換到「沒有 `_T7_State`」的帳本時 `t7_ledgers` 殘留**前一本**——持倉（portfolio_funds）已換、T7 帳本面板卻顯示舊本。v18.185 把切換改成自動讀回後，此 stale 每次切換都暴露。
+
+**#2 修法**：
+- `ss["t7_ledgers"] = _restored or {}`：新本無快照時清空（不殘留舊本）。
+- `_t7_auto_restore_done` / `_t7_auto_estimate_done` 旗標**一律**清（移出 `if _restored`）→ 新本無快照時 T7 區塊（`tab3_t7_ledger.py:200`）對新本重跑 auto-restore，t7_ledgers 維持空（正確）。
+- `_sync_invest_twd_from_ledgers()` 仍只在有快照時呼叫（避免空帳本把 invest_twd 歸零）。
+
+**#1 含息來源（§5 anti-loop）**：完整追蹤寫+讀 round-trip（T7 表單→portfolio_funds 參照 + cost_unit_with_div + 保單分頁；`dump_all_to_sheet` / `upsert_fund_in_policy`（ALL_COLS 含欄 + 表頭自動升級）/ `load_policy_worksheet`（reindex ALL_COLS）/ `sync`（有值才帶））**全部正確**。此症狀已在 v18.180/183/184 修過 3 次仍被回報 → 依 CLAUDE.md §5「同錯 2 次即停機」**不再盲改**，待 user 給精確重現步驟（哪個存檔鈕、看哪裡為空：Google Sheet 欄位 / T7 顯示 / JSON）。v18.187 的 staleness 修復可能順帶修好「切換後含息成本顯示舊本」。
+
+**驗證**：AST PASS、ruff clean、新增 2 regression test、119 PASSED 零回歸。
+
+---
+
 ### §3-W 連線健檢 #1：RSS 新聞走 NAS Proxy + 友善空狀態（v18.186 新增）
 
 **背景**（v5.0 Task1）：Streamlit Cloud 易被來源 IP 封鎖，所有外部抓取需走 NAS Proxy 並具 timeout / try-except / 友善降級。

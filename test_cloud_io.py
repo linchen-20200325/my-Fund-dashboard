@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -204,6 +203,59 @@ def test_load_all_from_sheet_ledger_load_failure_is_warning(monkeypatch):
     assert out["restored_ct"] == 0
     assert len(out["warnings"]) == 1
     assert "snapshot 404" in out["warnings"][0]
+
+
+def test_load_all_from_sheet_clears_stale_ledgers_when_new_book_empty(monkeypatch):
+    """v18.187：切換到「無 _T7_State 快照」的帳本 → 清掉前一本殘留的 t7_ledgers。"""
+    from ui.helpers import cloud_io
+
+    monkeypatch.setattr(cloud_io, "load_all_policy_worksheets",
+                         lambda c, s: pd.DataFrame([{"policy_id": "P9"}]))
+    monkeypatch.setattr(cloud_io, "list_policy_worksheets", lambda c, s: [])
+    monkeypatch.setattr(cloud_io, "sync_policies_to_portfolio_funds",
+                         lambda pdf, funds: ([{"code": "NEW"}],
+                                             {"added": ["NEW"], "kept": [], "removed": []}))
+    monkeypatch.setattr(cloud_io, "load_all_ledgers_snapshot",
+                         lambda c, s, L: {})   # 新帳本沒有快照
+
+    ss = {
+        "portfolio_funds": [{"code": "OLD"}],
+        "t7_ledgers": {"PA::OLD": object()},      # 前一本殘留
+        "_t7_auto_restore_done": True,            # 前一本設過的旗標
+    }
+    out = cloud_io.load_all_from_sheet("c", "s", ss, oauth_mode=True)
+    assert out["ok"] is True
+    assert ss["t7_ledgers"] == {}                 # 已清空，不再殘留舊本
+    assert out["restored_ct"] == 0
+    assert "_t7_auto_restore_done" not in ss       # 旗標清掉 → 新本重跑 auto-restore
+
+
+def test_load_all_from_sheet_replaces_ledgers_when_new_book_has_snapshot(monkeypatch):
+    """v18.187：新帳本有快照 → t7_ledgers 換成新本的（非殘留舊本）。"""
+    import sys
+    import types
+
+    from ui.helpers import cloud_io
+
+    monkeypatch.setattr(cloud_io, "load_all_policy_worksheets",
+                         lambda c, s: pd.DataFrame([{"policy_id": "P9"}]))
+    monkeypatch.setattr(cloud_io, "list_policy_worksheets", lambda c, s: [])
+    monkeypatch.setattr(cloud_io, "sync_policies_to_portfolio_funds",
+                         lambda pdf, funds: ([{"code": "NEW"}],
+                                             {"added": [], "kept": [], "removed": []}))
+    _new_snap = {"P9::NEW": object()}
+    monkeypatch.setattr(cloud_io, "load_all_ledgers_snapshot",
+                         lambda c, s, L: _new_snap)
+    # 避免拉進真實 tab3_t7_ledger（重、需 streamlit session）→ 注入假模組
+    _fake = types.ModuleType("ui.tab3_t7_ledger")
+    _fake._sync_invest_twd_from_ledgers = lambda: None
+    monkeypatch.setitem(sys.modules, "ui.tab3_t7_ledger", _fake)
+
+    ss = {"portfolio_funds": [{"code": "OLD"}],
+          "t7_ledgers": {"PA::OLD": object()}}
+    out = cloud_io.load_all_from_sheet("c", "s", ss, oauth_mode=True)
+    assert ss["t7_ledgers"] is _new_snap
+    assert out["restored_ct"] == 1
 
 
 def test_load_all_from_sheet_unexpected_exception_caught(monkeypatch):
