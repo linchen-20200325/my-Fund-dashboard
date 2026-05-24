@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.212 — 故事化 Tab5/Tab6：補站序標題（呼應 Tab1-3，補完 v18.204「未做」）（2026-05-24）
+
+- [x] **動機**（user 選「輕量站序」）：v18.204 曾把 Tab5/Tab6 視為「工具/說明性質不在敘事主線」刻意跳過；user 拍板補完 → 採 v18.204 同款零風險做法（純 markdown 文字、不動邏輯）
+- [x] **Tab5「🔬 資料診斷」**（`ui/tab5_data_guard.py`，6 站）：頂部 caption 加敘事框定「📖 故事幕後站・資料守衛」+ 既有 6 個 `### header` prefix ①–⑥（原始資料源 / 健康總表 / NAS Proxy / API 金鑰 / 基金診斷 / 異常清單）
+- [x] **Tab6「📖 說明書」**（`ui/tab6_manual.py`，10 站）：頂部 caption 加敘事框定「📖 故事附錄・公式聖經」+ 10 個 sub-tab `### header` prefix ①–⑩（Macro Score / 天氣 / 六因子 / 吃本金 / 再平衡 / TPI / 核心衛星 / 汰弱留強 / Sheet 結構 / 關聯地圖）
+- [x] **未做/邊界**：純站序 + 敘事 caption，未做跨 tab「上一站/下一站」串接（user 選輕量）；沙箱無瀏覽器 → 視覺未親驗，僅 AppTest 渲染驗證
+- [x] **教訓記錄**：原想 bonus 清 tab5 兩個 F401（`_D5_KEYS`/`parse_indicator_date`），但 `test_tab5_data_guard.py::test_parse_indicator_date_reexport_works` 證實是**刻意 re-export**（ruff F401 為 re-export 偽陽性）→ 已還原，pre-existing F401 維持 baseline 不動
+- [x] **驗證** AST PASS（兩檔）；ruff 無**新增**問題（tab5 維持 2 個 pre-existing re-export F401）；`test_tab5_data_guard + test_tab6_manual + test_app_smoke` 103 passed；`pytest -m "not slow"` 零回歸
+
 ### v18.211 — 程式碼健康度：清除 dead `mk_dashboard._render_kpi_cards`（2026-05-24）
 
 - [x] **動機**（user 選「清 dead code」）：承 v18.210 查出 `_render_kpi_cards`（長標籤 4 卡）自 v18.163 hero 上線後 grep 確認零 live caller，僅函式定義 + docstring 殘留

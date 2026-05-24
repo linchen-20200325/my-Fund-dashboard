@@ -22,7 +22,7 @@ import streamlit as st
 def render_manual_tab() -> None:
     """渲染系統說明書 Tab — 9 sub-tab 公式與判斷標準完整說明。"""
     st.markdown("## 📖 系統說明書 — 公式與判斷標準完整說明")
-    st.caption("解釋所有評分模型、公式與指標的計算方式，方便進階使用者理解決策邏輯。")
+    st.caption("📖 故事附錄・公式聖經：拆解前 3 站每個評分模型、公式與指標的算法，讓進階使用者看懂決策邏輯。")
 
     _t6 = st.tabs([
         "🧮 1. Macro Score",
@@ -39,7 +39,7 @@ def render_manual_tab() -> None:
 
     # ── 1. Macro Score ────────────────────────────────────────────
     with _t6[0]:
-        st.markdown("### 🧮 AI Macro Score — 加權景氣評分")
+        st.markdown("### ① 🧮 AI Macro Score — 加權景氣評分")
         st.markdown("""
 **公式：**
 ```
@@ -77,7 +77,7 @@ score_normalized = (earned_score + total_weight) / (2 × total_weight) × 10
 
     # ── 2. 景氣天氣 ───────────────────────────────────────────────
     with _t6[1]:
-        st.markdown("### 🌤️ 總經天氣預報 — Score → 天氣映射")
+        st.markdown("### ② 🌤️ 總經天氣預報 — Score → 天氣映射")
         st.markdown("""
 **公式：**
 ```
@@ -95,7 +95,7 @@ Score < 4  → ⛈️ 暴雨（防禦為主）
 
     # ── 3. 六因子評分 ─────────────────────────────────────────────
     with _t6[2]:
-        st.markdown("### 🏆 基金六因子評分（Fund Factor Model）")
+        st.markdown("### ③ 🏆 基金六因子評分（Fund Factor Model）")
         st.markdown("""
 **公式：**
 ```
@@ -131,7 +131,7 @@ Fund_Score = Σ(因子得分ᵢ × 權重ᵢ) / Σ(權重ᵢ)    範圍：0~100
 
     # ── 4. 吃本金診斷 ─────────────────────────────────────────────
     with _t6[3]:
-        st.markdown("### 🔴 吃本金診斷（Capital Return Detection）")
+        st.markdown("### ④ 🔴 吃本金診斷（Capital Return Detection）")
         st.markdown("""
 **策略3 以息養股核心公式：**
 ```
@@ -159,7 +159,7 @@ Fund_Score = Σ(因子得分ᵢ × 權重ᵢ) / Σ(權重ᵢ)    範圍：0~100
 
     # ── 5. 再平衡公式 ─────────────────────────────────────────────
     with _t6[4]:
-        st.markdown("### ⚖️ 再平衡公式（One-Click Rebalance）")
+        st.markdown("### ⑤ ⚖️ 再平衡公式（One-Click Rebalance）")
         st.markdown("""
 **策略3 再平衡差額計算：**
 ```
@@ -185,7 +185,7 @@ Action_i = (Total_Portfolio × Target_Weight_i) - Current_Value_i
 
     # ── 6. 台股TPI ────────────────────────────────────────────────
     with _t6[5]:
-        st.markdown("### 🇹🇼 台灣市場轉折點指標（TPI v15.1）")
+        st.markdown("### ⑥ 🇹🇼 台灣市場轉折點指標（TPI v15.1）")
         st.markdown("""
 **公式：**
 ```
@@ -212,7 +212,7 @@ TPI = Z(Breadth) × 0.4 + Z(FII) × 0.3 + Z(M1B/M2) × 0.3
 
     # ── 7. 核心衛星分類 ──────────────────────────────────────────
     with _t6[6]:
-        st.markdown("### 🛡️⚡ 核心/衛星分類邏輯")
+        st.markdown("### ⑦ 🛡️⚡ 核心/衛星分類邏輯")
         st.markdown("**優先序：手動設定 > 關鍵字比對 > 預設（衛星）**")
         st.dataframe(pd.DataFrame([
             ["🛡️ 核心", "債、收益、配息、平衡、高息、公用、多元、income、bond、dividend、balanced"],
@@ -237,7 +237,7 @@ TPI = Z(Breadth) × 0.4 + Z(FII) × 0.3 + Z(M1B/M2) × 0.3
 
     # ── 8. 汰弱留強評分 ──────────────────────────────────────────
     with _t6[7]:
-        st.markdown("### 🔄 汰弱留強評分（Security Ranking）")
+        st.markdown("### ⑧ 🔄 汰弱留強評分（Security Ranking）")
         st.markdown("""
 **核心邏輯：定期汰換績效落後的基金，換入同類前段班**
 
@@ -275,7 +275,7 @@ TPI = Z(Breadth) × 0.4 + Z(FII) × 0.3 + Z(M1B/M2) × 0.3
 
     # ── 9. Sheet 資料結構（v18.169：從 Tab3 expander 搬移過來）─────────
     with _t6[8]:
-        st.markdown("### 📋 Sheet 資料結構（這本 Google Sheet 內的分頁長相）")
+        st.markdown("### ⑨ 📋 Sheet 資料結構（這本 Google Sheet 內的分頁長相）")
         st.markdown("""
 **同一張 Google Sheet 內共有 3 種 tab**，平時下方各動作（批次加入、T7 套用）會自動同步到對應 tab。
 若不確定哪個按鈕同步什麼，請改用 Tab3 頂部「🚀 快速存讀面板」。
@@ -298,7 +298,7 @@ TPI = Z(Breadth) × 0.4 + Z(FII) × 0.3 + Z(M1B/M2) × 0.3
 
     # ── 10. 全局指標關聯地圖（v18.174：從 Tab1 expander 搬移過來 — 純教學圖）──
     with _t6[9]:
-        st.markdown("### 🗺️ 全局指標關聯地圖 — 一眼看懂大環境如何影響基金")
+        st.markdown("### ⑩ 🗺️ 全局指標關聯地圖 — 一眼看懂大環境如何影響基金")
         st.markdown("""
 **📖 怎麼讀：** 跟著箭頭從**左→右**讀。冷色（藍/橘）= 源頭指標，暖色（紅）= 承壓資產。
 

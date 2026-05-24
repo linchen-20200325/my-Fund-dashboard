@@ -59,7 +59,7 @@ def render_data_guard_tab() -> None:
     _d5_hdr, _d5_btn = st.columns([3, 1])
     with _d5_hdr:
         st.markdown("## 🔬 資料診斷")
-        st.caption("確認所有數據來源是否成功下載，方便排查問題")
+        st.caption("📖 故事幕後站・資料守衛：投資決策背後的數據如何被抓取與守護 — 確認所有來源成功下載，方便排查問題")
     with _d5_btn:
         st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
         if st.button("🔄 重新載入總經", key="btn_d5_refresh"):
@@ -67,7 +67,7 @@ def render_data_guard_tab() -> None:
             st.rerun()
 
     # ── Section -1: 📥 第一手原始資料源總覽 ──
-    st.markdown("### 📥 第一手原始資料源總覽")
+    st.markdown("### ① 📥 第一手原始資料源總覽")
     st.caption("系統實際下載的所有原始資料端點（依 ARCHITECTURE §5）— 顏色與筆數動態反映 session_state")
 
     _src_ind  = st.session_state.get("indicators") or {}
@@ -190,7 +190,7 @@ def render_data_guard_tab() -> None:
     )
     st.divider()
 
-    st.markdown("### 📋 全域資料健康總表")
+    st.markdown("### ② 📋 全域資料健康總表")
 
     _FREQ_LABEL = {
         "daily":     ("日",    "#42a5f5"),
@@ -494,7 +494,7 @@ def render_data_guard_tab() -> None:
     st.divider()
 
     # ── v18.120 issue 4: NAS Proxy 狀態檢測 ───────────────────────
-    st.markdown("### 🌐 NAS Proxy 中繼站狀態")
+    st.markdown("### ③ 🌐 NAS Proxy 中繼站狀態")
     try:
         from infra.proxy import get_proxy_config as _gpc_d5
         _d5_pxy = _gpc_d5()
@@ -552,7 +552,7 @@ def render_data_guard_tab() -> None:
     st.divider()
 
     # ── Section 2: API Key 狀態 ───────────────────────────────────
-    st.markdown("### 🔑 API 金鑰狀態")
+    st.markdown("### ④ 🔑 API 金鑰狀態")
     _d5_k1, _d5_k2 = st.columns(2)
     with _d5_k1:
         _d5_fred_ok = bool(_FRED_KEY)
@@ -580,7 +580,7 @@ def render_data_guard_tab() -> None:
     st.divider()
 
     # ── Section 3: 基金逐筆診斷 ───────────────────────────────────
-    st.markdown("### 📊 基金資料診斷")
+    st.markdown("### ⑤ 📊 基金資料診斷")
     _d5_pf   = st.session_state.get("portfolio_funds", []) or []
     # v17.3：單一基金 Tab 寫入 fund_data，組合基金寫入 current_fund，兩者都要讀
     _d5_cf   = st.session_state.get("current_fund") or st.session_state.get("fund_data")
@@ -840,7 +840,7 @@ def render_data_guard_tab() -> None:
     # ⚠️ 資料異常清單（最下方一覽，獨立於上方總表/體檢區）
     # ══════════════════════════════════════════════════════
     st.divider()
-    st.markdown("### ⚠️ 資料異常清單")
+    st.markdown("### ⑥ ⚠️ 資料異常清單")
     st.caption(
         "💡 v18.3 起：月度 / 季度指標的 stale 判斷改依 **FRED `next_release_date`** 動態計算，"
         "today < next_release → 🟢；release 期已到 +5 天內 → 🟡（屬於正常 release window）；"
