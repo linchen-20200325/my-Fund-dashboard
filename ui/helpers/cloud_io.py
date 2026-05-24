@@ -43,6 +43,7 @@ def dump_all_to_sheet(client: object,
     try:
         _written = 0
         _skipped_no_pid = 0
+        _write_errors: list[str] = []   # v18.189：收集 per-fund 寫入失敗（原本靜默 continue）
         for _f in ss.get("portfolio_funds", []) or []:
             _pid = str(_f.get("policy_id", "") or "").strip()
             _code = str(_f.get("code", "") or "").strip().upper()
@@ -69,10 +70,18 @@ def dump_all_to_sheet(client: object,
                     "avg_nav_with_div": float(_f.get("avg_nav_with_div", 0) or 0),
                 })
                 _written += 1
-            except (PolicySheetError, OAuthError):
+            except (PolicySheetError, OAuthError) as _e_up:
+                # v18.189：不再靜默 — 收集失敗原因，讓「含息成本沒寫進去」這類
+                # 問題能在畫面上看到根因（配額/權限/表頭升級失敗…）而非默默漏寫。
+                _write_errors.append(f"{_pid}/{_code}：{str(_e_up)[:100]}")
                 continue
         out["written"] = _written
         out["skipped_no_pid"] = _skipped_no_pid
+        if _write_errors:
+            out["warnings"].append(
+                f"⚠️ {len(_write_errors)} 檔寫入保單分頁失敗（含息成本/欄位可能沒存進去）："
+                + "；".join(_write_errors[:5])
+                + ("…" if len(_write_errors) > 5 else ""))
 
         _t7_dict = ss.get("t7_ledgers", {}) or {}
         _funds_lookup = {fund_pk_str(_f): _f

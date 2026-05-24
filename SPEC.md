@@ -430,6 +430,22 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-Z 「存檔無含息來源」§5 除錯協議（v18.189 新增）
+
+**症狀①**（user 確認）：Google Sheet 保單分頁存完沒有「含息成本」欄。
+
+**完整追蹤（不盲改）**：user 走 per-policy 分頁路徑（tab 名 = policy_id，如 QL19676552）。寫：`upsert_fund_in_policy` 偵測表頭缺 ALL_COLS 任一欄 → `ws.update("A1:K1", [list(ALL_COLS)])` 升級成 11 欄、`_row_to_list(row, ALL_COLS)` 依序輸出 11 值（`avg_nav_with_div` = K 欄）。讀：`load_policy_worksheet` reindex ALL_COLS、`sync_policies_to_portfolio_funds` 有值才帶。**全鏈正確**；legacy 單表 `upsert_policy_row` 才不強制升表頭（非 user 路徑）。此症狀已修 3 次（v18.180/183/184）。
+
+**依 §5「同錯 2 次即停機」→ 改做除錯協議（instrument，不盲改邏輯）**：
+1. `dump_all_to_sheet` 原 `except (PolicySheetError, OAuthError): continue` **靜默吞**掉 per-fund 寫入失敗 → 改成收集 `(pid/code + 原因)` 進 `out["warnings"]`。下次「📦 全部寫入」若真有寫失敗（配額 429 / 權限 / 表頭升級失敗），畫面直接顯示根因，而非默默漏欄。
+2. **釐清關鍵盲點**：v1 保單分頁的表頭是**英文 key**（`avg_nav_with_div`、`div_cash_pct`），不是中文「平均買入含息單位成本」（中文欄名只存在於 v2 schema 的 `ZH_HEADERS_V2`）。user 若在 Sheet 找中文欄名，會誤判「沒有這欄位」。
+
+**待 user 驗證（§5 雙重確認）**：① 在保單分頁找**英文** `avg_nav_with_div`（K 欄）；② 確認部署的 Streamlit app 已更新到含 v18.183 的 main（必要時 reboot）；③ 重按「全部寫入」看是否冒出新的 ⚠️ 寫入失敗提示。
+
+**驗證**：AST PASS、ruff clean、新增 1 test、`test_cloud_io` 13 PASSED 零回歸。
+
+---
+
 ### §3-Y 移除「多帳本管理」區塊，改用存取/讀取管理多帳本（v18.188 新增）
 
 **決策**（user）：「取消多帳本管理，帳本管理改用存取、讀取的方式，就不用切換」。經歷切換帳本的 stale bug（v18.185 auto-load、v18.187 t7_ledgers 清空）後，user 決定不要獨立的「切換到此帳本」流程，改以「挑一本 Sheet → 讀回」的存取模式管理多帳本。

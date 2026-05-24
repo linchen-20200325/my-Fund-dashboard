@@ -120,6 +120,28 @@ def test_dump_all_to_sheet_empty_portfolio(monkeypatch):
     assert out["n_state"] == 0
 
 
+def test_dump_all_to_sheet_surfaces_per_fund_write_failure(monkeypatch):
+    """v18.189：upsert 失敗不再靜默 → 收進 warnings（含息成本沒寫進去能被看到）。"""
+    from ui.helpers import cloud_io
+    from repositories.policy_repository import PolicySheetError
+
+    def _fail_upsert(client, sid, pid, row):
+        raise PolicySheetError("header upgrade failed")
+    monkeypatch.setattr(cloud_io, "upsert_fund_in_policy", _fail_upsert)
+    monkeypatch.setattr(cloud_io, "save_all_ledgers_snapshot", lambda *a, **k: 0)
+    monkeypatch.setattr(cloud_io, "save_holdings_overview", lambda *a, **k: 0)
+
+    ss = {"portfolio_funds": [{"code": "F1", "policy_id": "P1", "invest_twd": 1,
+                               "avg_nav_with_div": 7.83}],
+          "t7_ledgers": {}}
+    out = cloud_io.dump_all_to_sheet("c", "s", ss)
+    assert out["ok"] is True          # 整體不致命
+    assert out["written"] == 0
+    assert len(out["warnings"]) == 1
+    assert "寫入保單分頁失敗" in out["warnings"][0]
+    assert "P1/F1" in out["warnings"][0]
+
+
 # ──────────────────────────────────────────────────────────────────
 # load_all_from_sheet
 # ──────────────────────────────────────────────────────────────────

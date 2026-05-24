@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.189 — 「存檔無含息來源」§5 除錯協議：全部寫入失敗不再靜默 + 釐清 v1 欄名為英文（2026-05-24）
+
+- [x] **user 回報症狀①**：「Google Sheet 保單分頁存完沒有『含息成本』這欄位」
+- [x] **完整追蹤（per-policy 寫+讀全正確、不盲改）**：user 走 per-policy 分頁路徑（如 QL19676552）→ `upsert_fund_in_policy` 表頭缺欄會自動升級成 ALL_COLS 11 欄（`A1:K1`）、`_row_to_list` 依序輸出 11 值含 `avg_nav_with_div`(K 欄)；legacy 單表 `upsert_policy_row` 才不強制升級（非 user 路徑）。`load_policy_worksheet` reindex ALL_COLS、sync 有值才帶 — 全對
+- [x] **§5 除錯協議（不再盲改第 4 次）**：(1) `dump_all_to_sheet` 原 `except (PolicySheetError, OAuthError): continue` **靜默吞** per-fund 寫入失敗 → 改收集失敗 (pid/code + 原因) 進 `out["warnings"]`，下次「全部寫入」若真的寫失敗（配額/權限/表頭升級失敗）畫面會顯示根因，而非默默漏欄；(2) 釐清 v1 保單分頁表頭是**英文 key**（`avg_nav_with_div` / `div_cash_pct`），非中文「平均買入含息單位成本」（後者只在 v2 schema）→ user 若找中文欄名會誤判「沒有」
+- [x] **待 user 驗證**：① 找英文欄 `avg_nav_with_div`（K 欄）；② 確認部署的 app 已更新到含 v18.183 的 main（Streamlit Cloud reboot）；③ 再按「全部寫入」看有無新 ⚠️ 寫入失敗提示
+- [x] **驗證** AST PASS；ruff clean；新增 1 test（per-fund 寫入失敗進 warnings）；`test_cloud_io` 13 PASSED 零回歸
+
 ### v18.188 — 移除「多帳本管理」區塊（改用存取/讀取管理多帳本）（2026-05-24）
 
 - [x] **決策**（user）：「取消多帳本管理，帳本管理改用存取、讀取的方式，就不用切換」——切換帳本一連串 stale bug（v18.185/187）後，user 決定不要獨立的「切換到此帳本」流程

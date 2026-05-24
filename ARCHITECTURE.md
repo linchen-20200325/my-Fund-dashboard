@@ -745,6 +745,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.155 / 2026-05-20 (PR B.5)** — `list_user_sheets` 過濾已刪除 Sheets。原本 gspread `list_spreadsheet_files()` 會回傳 trashed sheets（user 截圖出現重複 / 殭屍項目）。改成自己打 Drive v3 API（mirror `list_user_folders`）帶 `q='mimeType="...spreadsheet" and trashed=false'`，外加 `supportsAllDrives` / `includeItemsFromAllDrives` 與 paging。
 
+> 🆕 **v18.189 / 2026-05-24** — 「存檔無含息來源」§5 除錯協議。user 回報「保單分頁存完沒有含息成本欄」。完整追蹤 per-policy 寫+讀路徑（`upsert_fund_in_policy` 表頭自動升級成 ALL_COLS 11 欄 `A1:K1`、`_row_to_list` 含 `avg_nav_with_div`、`load_policy_worksheet` reindex、sync 有值才帶）**全部正確**，已修 3 次（v18.180/183/184）→ 依 §5 不盲改第 4 次。改做除錯協議：(1) `dump_all_to_sheet` 原 `except: continue` 靜默吞 per-fund 寫入失敗 → 改收集 (pid/code+原因) 進 `warnings`，根因可見；(2) 釐清 v1 保單分頁表頭是**英文 key**（`avg_nav_with_div`），非中文「平均買入含息單位成本」（只在 v2）→ user 找中文欄名會誤判「沒有」。待 user 驗證英文欄名 / 部署是否更新 / 重存看 ⚠️。新增 1 test，13 PASSED 零回歸。
+
 > 🆕 **v18.188 / 2026-05-24** — 移除「📁 多帳本管理」區塊（`ui/tab3_portfolio.py`，建立/改名/切換三 tab 共 123 行）。user 決定改用「📥 雲端讀取（從 Drive 挑帳本）」+「📦 雲端存檔」以存取/讀取方式管理多帳本，不再需要獨立「切換到此帳本」流程（建立新帳本見「✨ 新增帳本」、改名在 Drive 操作）。順手刪只此處用到的 `rename_sheet` import。v18.185 auto-load / v18.187 t7_ledgers 空→清 仍適用於挑帳本路徑（`policy_sheet_id` 改變即觸發）。99 PASSED 零回歸。
 
 > 🆕 **v18.187 / 2026-05-24** — 修「切換帳本後帳本無法更新」。`load_all_from_sheet`（`ui/helpers/cloud_io.py`）原只在新帳本有 `_T7_State` 快照時才覆蓋 `t7_ledgers`，切換到無快照的帳本時殘留前一本（v18.185 自動讀回放大此 stale）。改 `ss["t7_ledgers"] = _restored or {}`（空→清）+ 一律清 `_t7_auto_restore_done`/`_t7_auto_estimate_done` 旗標 → 新本無快照時 T7 重跑 auto-restore、維持空（正確）。`_sync_invest_twd_from_ledgers` 仍只在有快照時呼叫（避免空帳本歸零 invest_twd）。含息來源存檔（user 另一抱怨）經追蹤寫+讀全正確、已修 3 次，依 §5 不盲改待精確重現。新增 2 regression test，119 PASSED 零回歸。
