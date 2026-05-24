@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.208 — Tab2 唯一 AI 快照加料：σ絕對位階(HWM) / 賣點 / 吃本金 coverage / 經理費（2026-05-24）
+
+- [x] **承 v18.207**（user 選「強化 ④ AI 解盤內容」）：唯一 `render_ai_summary_widget` 的全章節快照補進 4 項 Tab 內已顯示但 AI 先前看不到的旗艦訊號
+- [x] **σ絕對位階(HWM)**：AI 區重算 `calc_hwm_sigma_levels(s, 252)` → 帶 label/距HWM%/σ_rank，讓 AI 知「現價 vs 歷史高點」絕對位階（`s` 為淨值序列、`if s is not None` 守門 + try）
+- [x] **賣點 sell1-3**：原買賣點快照只有 buy1-3/bb/ma60，補 sell1/2/3（皆讀 `m`、有值才帶）
+- [x] **吃本金 coverage**：配息行重算 `div_safety_check(total_return=ret_1y_total, dividend_yield=annual_div_rate, nav_change=ret_1y_total)` → 帶 coverage + alert_level（Core Protocol Ch.3.2 旗艦檢查；try 守 None/字串）
+- [x] **經理費**：基本行補 `mj_raw.mgmt_fee`
+- [x] **驗證** AST PASS；簽名核對（`calc_hwm_sigma_levels(series, lookback)` / `dividend_safety(total_return, dividend_yield, nav_change)` 皆相符）；`pytest -m "not slow"` 606 passed / 1 skipped；`test_tab2_single_fund.py` 5 passed；Tab2 AppTest 渲染。重算項以 try 守邊界（短序列/累積型不配息）
+
 ### v18.207 — Tab2 收斂：三個 AI 整併為唯一 `render_ai_summary_widget`（吃全章節快照）（2026-05-24）
 
 - [x] **痛點**（user 截圖回饋）：「單一基金深度分析有很多個 AI，請幫我只留一個，且該 AI 需要抓取這 Tab 所有章節的資料作資料分析與總結」——Tab2 原本散落 3 個 AI：① v18.135 `analyze_fund_json` 紅綠燈按鈕、② v18.205 個股新聞面 AI、③ v18.159 末端 `_render_tab2_ai_summary` widget

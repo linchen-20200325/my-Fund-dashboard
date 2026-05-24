@@ -430,6 +430,22 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AR Tab2 唯一 AI 快照加料：σ絕對位階 / 賣點 / 吃本金 / 經理費（v18.208 新增）
+
+**需求**（user 選「強化 ④ AI 解盤內容」）：v18.207 整併後的唯一 AI，快照再補進 Tab 內已顯示、但 AI 先前看不到的旗艦訊號。
+
+**新增 4 項（接在 v18.207 `_snap` 之上）**：
+- **σ絕對位階(HWM)**：AI 區重算 `calc_hwm_sigma_levels(s, lookback=252)`（`s`=淨值序列），帶 `label / dist_to_hwm_pct / sigma_rank` → AI 才知「現價相對歷史最高點的絕對位階」。
+- **賣點 sell1-3**：原快照只有 buy1-3/bb/ma60，補 sell1/2/3（停利點）。
+- **吃本金 coverage**：配息行重算 `dividend_safety(total_return=ret_1y_total, dividend_yield=annual_div_rate, nav_change=ret_1y_total)`，帶 `coverage + alert_level`（Core Protocol Ch.3.2 旗艦檢查：含息報酬 vs 配息率）。
+- **經理費**：基本行補 `mj_raw.mgmt_fee`（隱形成本）。
+
+**邊界**：σ位階以 `if s is not None` + try 守（短序列/`{"error":...}`）；吃本金以 try 守（累積型不配息 / dividend_yield 為字串時 `<=0` 比較例外）。皆「有值才帶」、空則省略。
+
+**驗證**：AST PASS、簽名核對相符、`pytest -m "not slow"` 606 passed / 1 skipped、`test_tab2_single_fund.py` 5 passed、Tab2 AppTest 渲染。
+
+---
+
 ### §3-AQ Tab2 三 AI 整併為唯一 `render_ai_summary_widget`（吃全章節快照）（v18.207 新增）
 
 **需求**（user 截圖）：「單一基金深度分析有很多個 AI，請幫我只留一個，且該 AI 需要抓取這 Tab 所有章節的資料作資料分析與總結」。

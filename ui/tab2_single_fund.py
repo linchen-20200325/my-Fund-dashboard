@@ -1219,7 +1219,8 @@ def render_single_fund_tab() -> None:
                     _snap = [f"## 單一基金全章節快照：{name or fk}"]
                     _snap.append(f"- 基本：類別={mj_raw.get('category','') or '—'}"
                                  f"｜幣別={mj_raw.get('currency','') or '—'}"
-                                 f"｜最新淨值={m.get('nav','—')}")
+                                 f"｜最新淨值={m.get('nav','—')}"
+                                 f"｜經理費={mj_raw.get('mgmt_fee','') or '—'}")
                     _perf_bits = [f"{_k}={m.get(_k)}" for _k in
                                   ("ret_1m", "ret_3m", "ret_6m", "ret_1y", "ret_1y_total", "ytd")
                                   if m.get(_k) not in (None, "")]
@@ -1232,12 +1233,37 @@ def render_single_fund_tab() -> None:
                     if _risk_bits:
                         _snap.append("- 風險(1Y)：" + "｜".join(_risk_bits))
                     if m.get("annual_div_rate"):
-                        _snap.append(f"- 配息：年化配息率≈{m.get('annual_div_rate')}%，近期 {len(divs)} 筆")
+                        _div_line = f"- 配息：年化配息率≈{m.get('annual_div_rate')}%，近期 {len(divs)} 筆"
+                        try:  # 吃本金檢查（含息總報酬 vs 配息率）— Core Protocol Ch.3.2
+                            _ds_ai = div_safety_check(
+                                total_return=m.get("ret_1y_total"),
+                                dividend_yield=m.get("annual_div_rate"),
+                                nav_change=m.get("ret_1y_total"),
+                            )
+                            _cov_ai = _ds_ai.get("coverage")
+                            if _cov_ai is not None:
+                                _div_line += (f"｜吃本金 coverage={_cov_ai:.2f}"
+                                              f"（{_ds_ai.get('alert_level','')}）")
+                        except Exception:
+                            pass
+                        _snap.append(_div_line)
                     _bs = [f"{_k}={m.get(_k)}" for _k in
-                           ("buy1", "buy2", "buy3", "bb_upper", "bb_lower", "ma60")
+                           ("buy1", "buy2", "buy3", "sell1", "sell2", "sell3",
+                            "bb_upper", "bb_lower", "ma60")
                            if m.get(_k) not in (None, "")]
                     if _bs:
                         _snap.append("- 買賣點/技術：" + "｜".join(_bs))
+                    # σ 絕對位階（HWM）— 由淨值序列重算，AI 才知「現價 vs 歷史高點」
+                    if s is not None:
+                        try:
+                            _hwm_ai = calc_hwm_sigma_levels(s, lookback=252)
+                            if isinstance(_hwm_ai, dict) and "error" not in _hwm_ai:
+                                _snap.append(
+                                    f"- σ絕對位階：{_hwm_ai.get('label','')}"
+                                    f"｜距HWM={_hwm_ai.get('dist_to_hwm_pct','')}%"
+                                    f"｜σ_rank={_hwm_ai.get('sigma_rank','')}")
+                        except Exception:
+                            pass
                     if _tops:
                         _snap.append("- 前10大持股：" + "、".join(
                             f"{_zh_holding(str(_t.get('name',''))) or str(_t.get('name',''))[:14]}"
