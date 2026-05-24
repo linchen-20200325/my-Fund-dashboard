@@ -430,6 +430,23 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-Y 移除「多帳本管理」區塊，改用存取/讀取管理多帳本（v18.188 新增）
+
+**決策**（user）：「取消多帳本管理，帳本管理改用存取、讀取的方式，就不用切換」。經歷切換帳本的 stale bug（v18.185 auto-load、v18.187 t7_ledgers 清空）後，user 決定不要獨立的「切換到此帳本」流程，改以「挑一本 Sheet → 讀回」的存取模式管理多帳本。
+
+**移除**：`ui/tab3_portfolio.py` 內整個「📁 多帳本管理（不同人/帳戶各自一本）」區塊（建立另一本 / 改名目前帳本 / 切換到別本三個 tab，共 123 行）+ 只此處用到的 `rename_sheet` import。
+
+**替代路徑**（皆既有，零新功能）：
+- 切換帳本 → 「📥 雲端讀取」面板的「📂 從 Drive 挑帳本」挑一本 → 自動讀回（v18.185 auto-load 觸發）。
+- 建立新帳本 → 頂部快捷面板「✨ 新增帳本」。
+- 改名 → 直接在 Google Drive 操作。
+
+**保留**：v18.185（挑帳本後自動讀回 + 同 code 共用基金資訊）、v18.187（t7_ledgers 空→清、清 auto-restore 旗標）對「挑帳本」路徑同樣生效，因為它們是綁在 `policy_sheet_id` 變動、而非綁在已移除的切換按鈕。
+
+**驗證**：AST PASS；ruff F821 無未定義名、無殘留變數、`rename_sheet` import 清除；`test_app_smoke + test_tab3_portfolio` 99 PASSED 零回歸；無 test 引用被移除的 widget key。
+
+---
+
 ### §3-X 修「切換帳本後帳本無法更新」+ 含息來源 §5 anti-loop（v18.187 新增）
 
 **問題場景**（user）：①「存檔無含息來源」；②「切換帳本後，帳本那些都無法更新」。
