@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.210 — 修 stale test：Tab3 KPI 卡 label 對齊 v18.163 hero 短標籤（2026-05-24）
+
+- [x] **動機**（user 選「修 stale test」）：`test_tab3_with_mock_fund_renders_kpi_cards` 自 v18.163 起紅燈、卡住整條 slow lane、§4 強制驗證能力失效
+- [x] **根因**：v18.163 頂部統一 hero KPI（`portfolio_health.render_hero_kpi_cards`）取代舊 `mk_dashboard._render_kpi_cards`，標籤縮短（`🔴 留校查看警示`→`🔴 留校查看`、`💰 停利提醒（衛星）`→`💰 停利提醒`）；測試 expected 仍是舊長標籤 → 2 卡判定缺失
+- [x] **修法** `test_app_apptest.py`：expected 4 標籤對齊 live hero（`🟢 撿便宜雷達`/`🔴 留校查看`/`💰 停利提醒`/`⚖️ 配置比例`）+ docstring 改指 `render_hero_kpi_cards`（保留原回歸意圖：防 KPI label silent UI 破壞）
+- [x] **驗證** 目標 test PASS；`test_app_apptest.py` 全檔 **15 passed**（267s）零回歸；ruff clean
+- [ ] **新發現／後續候選**：`mk_dashboard._render_kpi_cards`（長標籤 4 卡）自 v18.163 起 grep 確認**零 live caller = dead code**，僅 docstring 引用殘留 — 可連同清除（需 user 拍板，故未動）
+
 ### v18.209 — 程式碼健康度：清除 dead `analyze_fund_json` + 連帶孤兒（2026-05-24）
 
 - [x] **動機**（user 選「清 analyze_fund_json dead code」）：v18.207 Tab2 三 AI 整併後，`analyze_fund_json` 已無任何 live caller（僅函式定義 + app.py 未使用 import + prompt 註解殘留）
