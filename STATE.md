@@ -246,6 +246,13 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.190 — log 降噪：Styler.applymap→map（pandas 3.0）+ 精準引擎資料不足降 debug（2026-05-24）
+
+- [x] **問題場景**（user Cloud log）：① `tab3_t7_ledger.py:1995` + `tab3_portfolio.py:2053` `Styler.applymap` FutureWarning（pandas 2.1 deprecate、3.0 移除）② `precision_service` 每次 rerun 刷「對齊後資料筆數不足 20（實際 0）」「宏觀數據筆數不足」WARNING
+- [x] **Fix**：(1) 兩處 `.style.applymap(` → `.style.map(`（pandas≥2.1 API）；`requirements.txt` pandas floor 2.0.0→2.1.0（保證 `.map` 存在、`applymap` 在 3.0 已移除）(2) `precision_service.py` 兩處 `logger.warning`→`logger.debug`（資料不足→回中性 0.0/空 df 是預期降級、Tab1 UI 已另顯友善提示，不該每 rerun 刷 WARNING）
+- [x] **註**：宏觀資料實際 0 筆是部署端 FRED/yfinance 可用性問題（VIX/HY/殖利率對齊後 <20），非本次 scope；本次只降噪
+- [x] **驗證** AST PASS；ruff clean；`test_app_smoke + test_tab3_portfolio + test_engines` 126 PASSED 零回歸
+
 ### v18.189 — 「存檔無含息來源」§5 除錯協議：全部寫入失敗不再靜默 + 釐清 v1 欄名為英文（2026-05-24）
 
 - [x] **user 回報症狀①**：「Google Sheet 保單分頁存完沒有『含息成本』這欄位」

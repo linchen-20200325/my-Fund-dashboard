@@ -2050,7 +2050,7 @@ def render_portfolio_tab() -> None:
                         if f >= -0.20:   return "background-color:#2e7d32;color:#fff"
                         return "background-color:#1565c0;color:#fff"
                     try:
-                        _styled = _cr["matrix"].style.applymap(_color_overlap).format("{:.2f}")
+                        _styled = _cr["matrix"].style.map(_color_overlap).format("{:.2f}")
                         st.dataframe(_styled, use_container_width=True)
                     except Exception:
                         st.dataframe(_cr["matrix"].round(2), use_container_width=True)

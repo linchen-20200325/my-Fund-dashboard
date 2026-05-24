@@ -745,6 +745,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.155 / 2026-05-20 (PR B.5)** — `list_user_sheets` 過濾已刪除 Sheets。原本 gspread `list_spreadsheet_files()` 會回傳 trashed sheets（user 截圖出現重複 / 殭屍項目）。改成自己打 Drive v3 API（mirror `list_user_folders`）帶 `q='mimeType="...spreadsheet" and trashed=false'`，外加 `supportsAllDrives` / `includeItemsFromAllDrives` 與 paging。
 
+> 🆕 **v18.190 / 2026-05-24** — log 降噪。user Cloud log 兩類噪音：① `Styler.applymap` FutureWarning（`tab3_t7_ledger.py:1995` + `tab3_portfolio.py:2053`；pandas 2.1 deprecate、3.0 移除）→ 兩處改 `.style.map(`，`requirements.txt` pandas floor 2.0.0→2.1.0；② `precision_service.py` 兩處 `logger.warning`（宏觀資料對齊後 <20 → 回中性 0.0/空 df）每 rerun 刷屏 → 降為 `logger.debug`（Tab1 UI 已另顯友善提示）。宏觀資料實際 0 筆為部署端 FRED/yfinance 可用性問題、非本次 scope。126 PASSED 零回歸。
+
 > 🆕 **v18.189 / 2026-05-24** — 「存檔無含息來源」§5 除錯協議。user 回報「保單分頁存完沒有含息成本欄」。完整追蹤 per-policy 寫+讀路徑（`upsert_fund_in_policy` 表頭自動升級成 ALL_COLS 11 欄 `A1:K1`、`_row_to_list` 含 `avg_nav_with_div`、`load_policy_worksheet` reindex、sync 有值才帶）**全部正確**，已修 3 次（v18.180/183/184）→ 依 §5 不盲改第 4 次。改做除錯協議：(1) `dump_all_to_sheet` 原 `except: continue` 靜默吞 per-fund 寫入失敗 → 改收集 (pid/code+原因) 進 `warnings`，根因可見；(2) 釐清 v1 保單分頁表頭是**英文 key**（`avg_nav_with_div`），非中文「平均買入含息單位成本」（只在 v2）→ user 找中文欄名會誤判「沒有」。待 user 驗證英文欄名 / 部署是否更新 / 重存看 ⚠️。新增 1 test，13 PASSED 零回歸。
 
 > 🆕 **v18.188 / 2026-05-24** — 移除「📁 多帳本管理」區塊（`ui/tab3_portfolio.py`，建立/改名/切換三 tab 共 123 行）。user 決定改用「📥 雲端讀取（從 Drive 挑帳本）」+「📦 雲端存檔」以存取/讀取方式管理多帳本，不再需要獨立「切換到此帳本」流程（建立新帳本見「✨ 新增帳本」、改名在 Drive 操作）。順手刪只此處用到的 `rename_sheet` import。v18.185 auto-load / v18.187 t7_ledgers 空→清 仍適用於挑帳本路徑（`policy_sheet_id` 改變即觸發）。99 PASSED 零回歸。

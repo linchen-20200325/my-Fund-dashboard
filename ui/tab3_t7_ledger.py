@@ -1992,7 +1992,7 @@ def render_t7_section() -> None:
                                 return ""
                             return ""
                         try:
-                            _styled = _df_snap.style.applymap(
+                            _styled = _df_snap.style.map(
                                 _color_pl,
                                 subset=["未實現損益 (TWD)", "未實現損益 %",
                                         "累積已配息率"]

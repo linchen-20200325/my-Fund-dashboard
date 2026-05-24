@@ -45,7 +45,10 @@ class PrecisionStrategyEngine:
         > 1.5 且快速攀升 → 強制提高現金/短債部位，衛星嚴格停利
         """
         if df_macro is None or df_macro.empty or len(df_macro) < 20:
-            self.logger.warning("宏觀數據筆數不足（<%d），返回中性值 0.0", len(df_macro) if df_macro is not None else 0)
+            # v18.190：資料不足→回中性 0.0 是「預期降級」，UI 已另顯友善提示，
+            # 故降為 debug 避免每次 rerun 在 Cloud log 刷 WARNING。
+            self.logger.debug("宏觀數據筆數不足（實際 %d），返回中性值 0.0",
+                              len(df_macro) if df_macro is not None else 0)
             return 0.0
         try:
             latest = df_macro.iloc[-1]
@@ -125,7 +128,8 @@ class PrecisionStrategyEngine:
             ], axis=1).dropna()
 
             if len(df) < 20:
-                self.logger.warning("對齊後資料筆數不足 20（實際 %d）", len(df))
+                # v18.190：資料不足→回空 df 由 UI 友善降級，降為 debug 避免 log 刷屏
+                self.logger.debug("對齊後資料筆數不足 20（實際 %d）", len(df))
                 return pd.DataFrame()
             return df
         except Exception as e:
