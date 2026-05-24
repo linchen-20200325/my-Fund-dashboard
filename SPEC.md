@@ -430,6 +430,24 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AE Task2.2-step2b 組合 Tab 故事站標題（v18.195 新增）
+
+**發現（先讀 code，不盲搬）**：(1) 配置總覽核心（組合健康儀表 + 策略3 戰情室）**已在 Tab 頂部**（L154-193，loaded 時顯示）；(2) 自動讀回埋在頂部 Google-Sheets expander（L266），Streamlit 由上而下執行 → 中段顯示區塊**不能**搬到比該 expander 更高（否則首次 render 空白）；(3) 區段未乾淨切分（plumbing 與內容交錯）。故大區塊搬移風險高、報酬低、且沙箱無法驗證畫面。
+
+**方案（user 選「加故事站標題」）**：不搬大區塊，只在既有結構加 4 個 `###` 故事站標題，把「由上而下一條故事線」明確標示出來、呼應頂部 tab 麵包屑：
+- ① 📊 配置總覽 — 你的組合現況（KPI/成長/核心衛星圈之前，gated `if _pf_loaded`）
+- ② ➕ 加入與管理基金（手動加入 expander 之前）
+- ③ 💼 持倉戰情（T7 帳本）（`render_t7_section()` 之前）
+- ④ 🔬 持股重疊度診斷（T5）（沿用原 T5 header 改名）
+
+**安全**：純 markdown 加/改、**零區塊搬移、零變數變動**；各 header 縮排正確（① 在 `if _pf_loaded`、②③ base indent、④ 在 `if _t5_groups`）、非巢狀於 expander。**效能**：O(1)。
+
+**後續**：若 user 部署後想調整某區塊順序，指定「把 X 搬到 Y 之前」→ 做精確、可驗證的單一搬移（而非盲搬）。
+
+**驗證**：AST PASS、4 標題就位、99 PASSED（含 full app.py exec）+ AppTest。
+
+---
+
 ### §3-AD Task2.2-step2a 組合 Tab 內部故事線：T7 移到 T5 之前（v18.194 新增）
 
 **目標**：組合 Tab 內部由上而下理成「① 配置總覽 → ② 加入/載入 → ③ 持倉戰情(T7) → ④ 重疊診斷(T5)」。

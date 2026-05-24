@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.195 — Task2.2-step2b 組合 Tab 故事站標題（① 配置總覽 → ② 加入管理 → ③ 持倉戰情 → ④ 重疊診斷）（2026-05-24）
+
+- [x] **發現（先讀 code 不盲搬）**：配置總覽核心（組合健康儀表 + 戰情室）其實**已在 Tab 頂部**（L154-193，loaded 時顯示）；且自動讀回埋在頂部 expander（L266）、Streamlit 由上而下執行 → 中段顯示區塊**無法**搬到比 expander 更高（否則首次 render 空白）。故大區塊搬移風險高/報酬低/沙箱無法驗畫面
+- [x] **user 選「加故事站標題」**：不搬大區塊，只在既有結構上加 4 個 `###` 故事站標題標示由上而下動線，呼應頂部 tab 麵包屑：① 📊 配置總覽（L1221，gated `if _pf_loaded`）/ ② ➕ 加入與管理基金（L1429，加入基金 expander 前）/ ③ 💼 持倉戰情 T7（L1956，render_t7_section 前）/ ④ 🔬 持股重疊度診斷 T5（L1986，沿用原 T5 header 改名）
+- [x] **安全**：純 markdown 加/改、零區塊搬移、零變數變動；各 header 經查在正確縮排（① 在 `if _pf_loaded` 內、②③ base indent 4、④ 在 `if _t5_groups` 內 indent 8）、非巢狀於 expander
+- [x] **驗證** AST PASS；4 標題就位；`test_app_smoke + test_tab3_portfolio` 99 PASSED（含 full app.py exec）；AppTest 渲染驗證
+- [ ] **後續（非結構）**：若 user 部署後想調某區塊順序，指定「把 X 搬到 Y 前」我再做精確可驗證的單一搬移
+
 ### v18.194 — Task2.2-step2a 組合 Tab 內部故事線：T7 持倉戰情移到 T5 重疊診斷之前（2026-05-24）
 
 - [x] **目標**（v5.0 Task2.2 step2）：組合 Tab 內部由上而下理成故事線「① 配置總覽 → ② 加入/載入 → ③ 持倉戰情(T7) → ④ 重疊診斷(T5)」

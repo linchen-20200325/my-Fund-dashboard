@@ -1216,6 +1216,10 @@ def render_portfolio_tab() -> None:
             "💡 AI 分析按鈕觸發，不自動扣 API</span>"
             "</div>", unsafe_allow_html=True)
 
+    # ── 故事站 ① 配置總覽（v18.195 故事化 step2b：標示由上而下動線）──
+    if _pf_loaded:
+        st.markdown("### 📊 ① 配置總覽 — 你的組合現況")
+
     # ── v15.1 ② KPI 字卡列：總資產 / 累計報酬 / 核心% / 月配息（新手語言）──
     if _pf_loaded:
         _tot_kpi  = sum(f.get("invest_twd",0) or 0 for f in _pf_loaded)
@@ -1422,6 +1426,7 @@ def render_portfolio_tab() -> None:
         # v18.192：教學化 — 核心/衛星 + 配息覆蓋率白話文（收合、不藏數據）
         render_metric_explainer(["core_satellite", "div_coverage"])
 
+    st.markdown("### ➕ ② 加入與管理基金")
     with st.expander("➕ 手動加入基金（支援多檔批次）", expanded=False):
         st.caption(
             "**📋 2 步驟流程**　·　Step 1（這裡）：貼**代碼** → 按 **➕ 批次加入** → "
@@ -1948,6 +1953,7 @@ def render_portfolio_tab() -> None:
     # 符合「① 配置總覽 → ② 加入/載入 → ③ 持倉戰情 → ④ 重疊診斷」的由上而下敘事。
     # T7 為自含函式、讀 session_state，置於所有 載入/加入 區塊之後 → 資料齊全、零依賴風險。
     # ── T7 帳務 + AI 深度組合建議 ── (v18.144 抽至 ui/tab3_t7_ledger.py)
+    st.markdown("### 💼 ③ 持倉戰情（T7 帳本）")
     render_t7_section()
 
     # ── T5: 持股相關性矩陣（v18.36 按保單分組）──────────────────────────────
@@ -1977,7 +1983,7 @@ def render_portfolio_tab() -> None:
 
     if _t5_groups:
         st.divider()
-        st.markdown("### 📊 T5 底層持股 + 產業重疊度矩陣（按保單分組）")
+        st.markdown("### 🔬 ④ 持股重疊度診斷（T5 — 底層持股 + 產業重疊度，按保單分組）")
         st.caption("以「持股 Jaccard × 0.6 + 產業 cosine × 0.4」綜合分;資料不齊自動降級為 NAV 相關係數。"
                    "重疊度 大於等於 0.70 → 影子基金警告。已依保單號碼分群，組內基金互相比較。")
         for _pid_g, _group_funds in _t5_groups.items():
