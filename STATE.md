@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.186 — 連線健檢 #1：RSS 新聞走 NAS Proxy + timeout + 友善空狀態（2026-05-24）
+
+- [x] **背景**（v5.0 Task1 連線健檢）：盤點互動元件與外部抓取流程的穩定度，目標所有抓取走 NAS Proxy + timeout + try-except + 友善降級
+- [x] **稽核結果（互動元件全活）**：Explore 標的 8 個可疑 selectbox/slider/button 逐一實讀驗證 — 全 LIVE（值都有被消費）；特別 `tab5_data_guard.py:301 _snap_sel` 確認有用（L306-318 算 head5 表）且已有空狀態提示（L321-322），**非死按鍵**（防幻覺：未盲改）
+- [x] **真實 gap：news RSS 沒走 Proxy**（`repositories/news_repository.py`）：原 `feedparser.parse(feed_url)` 裸連、無 timeout、`except: pass` 靜默 → Streamlit Cloud IP 被封時新聞整條死且無提示（fund_fetcher / fund_repository 全局 urllib opener / macro_repository 早走 proxy，news 是最後一條裸連）
+- [x] **Fix**：(a) 改 `infra.proxy.fetch_url(url, timeout=12, retries=2)` 抓 bytes 再 `feedparser.parse(bytes)`（含 407/403×2 自動降級直連）；無 infra 時退回直連（行為相容）；(b) 抓取失敗累計 `failed` 來源不再靜默；(c) 結果為空回友善提示，區分「⚠️ 全失敗可能 Proxy 斷」vs「ℹ️ 正常但無命中關鍵字」。簽名 `fetch_market_news(max_per_feed)` 不變（callers 零修改）
+- [x] **驗證** AST PASS；ruff clean；新增 `test_news_repository.py` 4 test（全失敗/無命中/systemic 排前/確有走 fetch_url）；`test_app_smoke + test_proxy_infra` 109 PASSED 零回歸（沙箱無 feedparser，用假模組 + mock fetch_url 離線驗證）
+- [ ] **後續（Task3）**：`fetch_macro_news(asset_class)` 分類接口、AI 解盤 widget 推到 Tab5 — 待 user 指定該切片
+
 ### v18.185 — 切換帳本自動讀回 + 跨帳本共用基金資訊（同 code 免重抓）（2026-05-24）
 
 - [x] **問題場景**（user）：①切換帳本後「沒有載入鍵與計算」（只 set sheet_id + rerun，持倉/分析不動，要自己滾回頂部按「📥 雲端讀取」）②同一檔基金在不同帳本（不同人/保單）會被當全新重抓 MoneyDJ（~30s/檔）

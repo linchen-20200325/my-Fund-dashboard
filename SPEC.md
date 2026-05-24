@@ -430,6 +430,25 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-W 連線健檢 #1：RSS 新聞走 NAS Proxy + 友善空狀態（v18.186 新增）
+
+**背景**（v5.0 Task1）：Streamlit Cloud 易被來源 IP 封鎖，所有外部抓取需走 NAS Proxy 並具 timeout / try-except / 友善降級。
+
+**稽核**：互動元件（button/selectbox/slider）逐一驗證皆 LIVE，無幽靈按鍵；`tab5 _snap_sel`（`tab5_data_guard.py:301`）為誤報——實際有消費（算 head5 表）且已有空狀態提示。
+
+**唯一缺口**：`repositories/news_repository.py` 的 RSS 抓取（`feedparser.parse(url)`）沒走 proxy、無 timeout、`except: pass` 靜默——是 fund_fetcher / fund_repository（全局 urllib opener）/ macro_repository 之外最後一條裸連路徑，正中使用者擔心的 Cloud IP 封鎖風險。
+
+**修法**：
+- RSS 改用 `infra.proxy.fetch_url(url, timeout=12, retries=2)` 抓 bytes，再 `feedparser.parse(bytes)`（fetch_url 內含 407 立即停 / 403×2 降級直連 / ProxyError 降級）。無 `infra.proxy` 時退回 feedparser 直連（向後相容）。
+- 失敗來源累計 `failed`，不再靜默 pass。
+- 結果為空回友善提示：有失敗 → 「⚠️ 暫時無法取得財經新聞（可能 Proxy 斷）」；無失敗但無命中 → 「ℹ️ 目前沒有符合追蹤條件的財經新聞」。
+
+**未動**：`fetch_market_news(max_per_feed)` 簽名不變（callers Tab1/2/3 + data_registry 零修改）；`fetch_macro_news(asset_class)` 分類接口留待 Task3 AI 解盤補完。
+
+**驗證**：AST PASS、ruff clean、新增 4 test（全失敗 / 無命中 / systemic 排前 / 確有走 fetch_url）、109 PASSED 零回歸。
+
+---
+
 ### §3-V 切換帳本自動讀回 + 跨帳本共用基金資訊（v18.185 新增）
 
 **問題場景**（user）：①切換帳本（多帳本管理「🔁 切換到此帳本」）後「沒有載入鍵與計算」——持倉與分析都不更新，要自己滾回頂部按「📥 雲端讀取」；②同一檔基金在不同帳本（不同人/保單）會被當成全新標的，重抓 MoneyDJ（每檔約 30 秒）。
