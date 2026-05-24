@@ -11,7 +11,7 @@ from typing import Any, MutableMapping
 from models.policy import fund_pk_str
 from repositories.policy_repository import (
     PolicySheetError,
-    list_policy_worksheets,
+    _is_quota_error,
     load_all_policy_worksheets,
     load_policies,
     sync_policies_to_portfolio_funds,
@@ -146,8 +146,14 @@ def load_all_from_sheet(client: object,
     try:
         if oauth_mode:
             _pdf = load_all_policy_worksheets(client, sheet_id)
-            _tabs = list_policy_worksheets(client, sheet_id)
-            ss["policy_tabs"] = _tabs
+            # v18.199：policy_tabs 直接從已讀回的 DataFrame 推（policy_id 欄 = 分頁名），
+            # 不再額外呼叫 list_policy_worksheets → 省一次 open_by_key + worksheets 讀取
+            # （切換/重讀帳本時讀取配額吃緊、易觸發 429 Quota exceeded）。
+            if not _pdf.empty and "policy_id" in _pdf.columns:
+                ss["policy_tabs"] = sorted(
+                    {str(_t).strip() for _t in _pdf["policy_id"] if str(_t).strip()})
+            else:
+                ss["policy_tabs"] = []
         else:
             _pdf = load_policies(client, sheet_id)
         ss["policies_df"] = _pdf
@@ -203,7 +209,17 @@ def load_all_from_sheet(client: object,
 
         out["ok"] = True
     except (PolicySheetError, OAuthError) as _pe:
-        out["error"] = f"Sheet 操作失敗：{_pe}"
+        # v18.199：429 配額超載 → 友善訊息（切換/重讀太頻繁，等 30-60s 配額重置即可）
+        if _is_quota_error(_pe):
+            out["error"] = ("⏳ Google Sheets 讀取配額暫時超載（每分鐘上限）。"
+                            "剛切換 / 重讀帳本太頻繁——請等 30~60 秒，待配額重置後"
+                            "再按一次「📥 立即全部讀回」即可（資料沒壞）。")
+        else:
+            out["error"] = f"Sheet 操作失敗：{_pe}"
     except Exception as _e:
-        out["error"] = f"未預期錯誤：[{type(_e).__name__}] {_e}"
+        if _is_quota_error(_e):
+            out["error"] = ("⏳ Google Sheets 讀取配額暫時超載（每分鐘上限）。"
+                            "請等 30~60 秒再按「📥 立即全部讀回」。")
+        else:
+            out["error"] = f"未預期錯誤：[{type(_e).__name__}] {_e}"
     return out
