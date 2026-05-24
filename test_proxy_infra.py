@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 from infra import proxy as ip
 
 
@@ -170,3 +168,12 @@ def test_fetch_url_with_retry_custom_headers_merge():
     sent_headers = captured.get("headers", {})
     assert sent_headers.get("X-Custom") == "yes"
     assert "Referer" in sent_headers  # default 沒被蓋掉
+
+
+def test_fund_repository_fx_nav_use_chart_api_not_direct_yfinance():
+    """v18.201：fund_repository 的 FX/NAV 改走 Yahoo Chart API（fetch_yf_close +
+    NAS proxy），不再直連 yf.Ticker（避免 Cloud IP 403/限流）。整檔掃描，最穩。"""
+    import pathlib
+    src = pathlib.Path("repositories/fund_repository.py").read_text(encoding="utf-8")
+    assert "yf.Ticker" not in src, "fund_repository 不應再直連 yf.Ticker"
+    assert src.count("fetch_yf_close") >= 2, "FX + NAV 應都走 fetch_yf_close（Chart API）"

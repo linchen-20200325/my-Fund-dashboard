@@ -430,6 +430,20 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AK yfinance 走 proxy：FX/NAV 改打 Yahoo Chart API（v18.201 新增）
+
+**動機**（v5.0 spec Task1「所有對外 API 強制套用 nas_proxy」）：稽核發現 `repositories/fund_repository.py` 的 `get_latest_fx`（`USDTWD=X`）與 `get_latest_nav`（基金 NAV）**直連 `yf.Ticker`、未走 proxy** → Streamlit Cloud IP 被 Yahoo 擋（`403 Host not in allowlist`）/ 限流（AppTest `test_tab3_with_mock_fund_renders_kpi_cards` 的 0050/USDTWD=X 403 即此）。總經層（macro_repository / macro_service / tw_macro）早已避開 yfinance、改打 Yahoo Chart REST API 經 proxy。
+
+**修法（user 選「Chart API 走 proxy」）**：FX/NAV 的 `yf.Ticker` 區塊 → 改用既有且驗證可行的 `macro_repository.fetch_yf_close(ticker, range_, interval)`（Yahoo Chart REST API + `infra.proxy.fetch_url` + timeout + 10min TTL），取最後一筆收盤；**lazy import 避免循環依賴**；既有 Morningstar/Cnyes fallback 鏈完全保留。
+
+**未動**：`financial_repository.fetch_stock_three_ratios`（個股季財報）無 Chart API 對應，yfinance 失敗已回 None 優雅降級 → 維持。
+
+**邊界**：sandbox 無 proxy 設定 + Yahoo 全擋 → Chart API 仍 403（AppTest test_tab3_kpi 續紅、屬環境非程式）；真機有 NAS proxy → 走台灣 IP 出口穩定。FX/NAV 失敗仍 fallback/None 不崩。
+
+**驗證**：AST PASS、correct-order import 無循環、新增 guard test（fund_repository 無 `yf.Ticker`、FX/NAV 走 `fetch_yf_close`）、`pytest -m "not slow"` 596 passed / 1 skipped。
+
+---
+
 ### §3-AJ 429 治本：load_all_policy_worksheets open 一次（v18.200 新增）
 
 **承 v18.199**（429 緩解：友善訊息 + 砍 cloud_io 重複 list）。本次真正治本：減少讀取數。

@@ -4191,22 +4191,14 @@ def get_latest_fx(currency_pair: str) -> "float | None":
     pair = str(currency_pair).strip().upper()
     if not pair.endswith("=X"):
         pair = pair + "=X"
+    # [Auto-Fixed v18.201] 改走 Yahoo Chart REST API + NAS proxy（取代直連 yfinance），
+    # 避免 Streamlit Cloud IP 被 Yahoo 擋（403 Host not in allowlist）/ 限流。
+    # fetch_yf_close 內含 proxy + timeout + 10min TTL；lazy import 避免循環依賴。
     try:
-        import yfinance as yf  # 已在 requirements.txt
-        tkr = yf.Ticker(pair)
-        # 1) fast_info（無需下載歷史，最快）
-        try:
-            fi = getattr(tkr, "fast_info", None)
-            if fi is not None:
-                v = fi.get("last_price") if hasattr(fi, "get") else getattr(fi, "last_price", None)
-                if v and float(v) > 0:
-                    return float(v)
-        except Exception:
-            pass
-        # 2) 近 5 日 history（fast_info 不可用時）
-        h = tkr.history(period="5d", interval="1d", auto_adjust=False)
-        if h is not None and not h.empty and "Close" in h.columns:
-            v = float(h["Close"].dropna().iloc[-1])
+        from repositories.macro_repository import fetch_yf_close as _yf_close
+        _s = _yf_close(pair, range_="5d", interval="1d")
+        if _s is not None and not _s.empty:
+            v = float(_s.dropna().iloc[-1])
             if v > 0:
                 return v
     except Exception as _e:
@@ -4225,21 +4217,13 @@ def get_latest_nav(fund_ticker: str) -> "float | None":
         return None
     code = str(fund_ticker).strip().upper()
 
-    # 1) yfinance 直接抓
+    # 1) [Auto-Fixed v18.201] Yahoo Chart REST API + NAS proxy（取代直連 yfinance，
+    #    避免 Cloud IP 403/限流）；lazy import 避免循環依賴。
     try:
-        import yfinance as yf
-        tkr = yf.Ticker(code)
-        try:
-            fi = getattr(tkr, "fast_info", None)
-            if fi is not None:
-                v = fi.get("last_price") if hasattr(fi, "get") else getattr(fi, "last_price", None)
-                if v and float(v) > 0:
-                    return float(v)
-        except Exception:
-            pass
-        h = tkr.history(period="5d", interval="1d", auto_adjust=False)
-        if h is not None and not h.empty and "Close" in h.columns:
-            v = float(h["Close"].dropna().iloc[-1])
+        from repositories.macro_repository import fetch_yf_close as _yf_close
+        _s = _yf_close(code, range_="5d", interval="1d")
+        if _s is not None and not _s.empty:
+            v = float(_s.dropna().iloc[-1])
             if v > 0:
                 return v
     except Exception as _e:
