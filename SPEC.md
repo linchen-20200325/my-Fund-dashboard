@@ -430,6 +430,22 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AI 修「切換/重讀帳本」429 Quota exceeded（v18.199 新增）
+
+**問題場景**（user）：有資料後重新讀取另一個帳本 → `❌ Sheet 操作失敗：列 worksheets 失敗：APIError [429] Quota exceeded ... 'Read requests per minute per user'`。
+
+**根因**：Google Sheets 每 user 每分鐘 60 reads。切換帳本會觸發 v18.185 auto-load + 使用者手動「全部讀回」各跑一次 `load_all_from_sheet`，每次包含多次 `open_by_key` + `list worksheets` + per-policy `get_all_records` + `_T7_State` 讀取，短時間爆配額；`_with_quota_retry`（1+2+4+8=15s 退避）救不回硬性超額。
+
+**修法**：
+1. **砍重複讀取**：`load_all_from_sheet` 原本在 `load_all_policy_worksheets`（內部已 list worksheets）之外，又額外呼叫 `list_policy_worksheets` 一次設 `policy_tabs` → 改從已讀回的 DataFrame 的 `policy_id` 欄推導 `policy_tabs`，省一次 `open_by_key` + `worksheets`。
+2. **友善 429**：外層 except 偵測 `_is_quota_error` → 顯示「⏳ Google Sheets 讀取配額暫時超載（每分鐘上限），等 30~60 秒再按『立即全部讀回』（資料沒壞）」取代 raw APIError 紅字。
+
+**後續（真正治本，需真機驗）**：`load_all_policy_worksheets` 改「`open_by_key` 一次、重用 spreadsheet handle 讀各分頁」省掉 N 次 open（最大讀取來源）；或對讀取結果加短 TTL 快取。
+
+**驗證**：AST PASS、ruff clean、改 5 test（移除 cloud_io `list_policy_worksheets` mock、`policy_tabs` 改從 DataFrame 推）、`pytest -m "not slow"` 595 passed / 1 skipped。
+
+---
+
 ### §3-AH 保單分頁「存全」：avg_nav/fx_avg/units 加進 schema（v18.198 新增）
 
 **痛點**（user 反覆回報「存檔資料沒有全部」）：v1 保單分頁只存 invest_twd / 含息成本 / 現金給付%，**缺平均買入淨值（avg_nav）/ 平均買入匯率（fx_avg）/ 持有單位數（units）**——這三個成本基礎原本只在 `_T7_State`（機器 JSON blob）與 `_持倉總覽`。v18.191 只補了讀取端（用帳本回填記憶體），寫入端的保單分頁仍半套。

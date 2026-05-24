@@ -175,8 +175,6 @@ def test_load_all_from_sheet_refresh_only_oauth(monkeypatch):
     _pdf = pd.DataFrame([{"policy_id": "P1", "fund_url": "F1"}])
     monkeypatch.setattr(cloud_io, "load_all_policy_worksheets",
                          lambda c, s: _pdf)
-    monkeypatch.setattr(cloud_io, "list_policy_worksheets",
-                         lambda c, s: ["P1", "P2"])
 
     ss: dict = {}
     out = cloud_io.load_all_from_sheet("c", "s", ss,
@@ -184,7 +182,7 @@ def test_load_all_from_sheet_refresh_only_oauth(monkeypatch):
     assert out["ok"] is True
     assert out["refresh_only"] is True
     assert out["added"] == []   # refresh_only 不算 diff
-    assert ss["policy_tabs"] == ["P1", "P2"]
+    assert ss["policy_tabs"] == ["P1"]   # v18.199：從 DataFrame policy_id 推（非再列 worksheets）
     assert ss["policies_df"] is _pdf
     # 確認沒動 portfolio_funds
     assert "portfolio_funds" not in ss
@@ -209,8 +207,6 @@ def test_load_all_from_sheet_full_load_with_sync_report(monkeypatch):
     _pdf = pd.DataFrame([{"policy_id": "P1"}])
     monkeypatch.setattr(cloud_io, "load_all_policy_worksheets",
                          lambda c, s: _pdf)
-    monkeypatch.setattr(cloud_io, "list_policy_worksheets",
-                         lambda c, s: [])
     _report = {"added": ["FNEW"], "kept": ["F1"], "removed": ["FOLD"]}
     monkeypatch.setattr(cloud_io, "sync_policies_to_portfolio_funds",
                          lambda pdf, funds: ([{"code": "merged"}], _report))
@@ -233,7 +229,6 @@ def test_load_all_from_sheet_ledger_load_failure_is_warning(monkeypatch):
 
     monkeypatch.setattr(cloud_io, "load_all_policy_worksheets",
                          lambda c, s: pd.DataFrame())
-    monkeypatch.setattr(cloud_io, "list_policy_worksheets", lambda c, s: [])
     monkeypatch.setattr(cloud_io, "sync_policies_to_portfolio_funds",
                          lambda pdf, funds: ([], {"added": [], "kept": [], "removed": []}))
 
@@ -255,7 +250,6 @@ def test_load_all_from_sheet_clears_stale_ledgers_when_new_book_empty(monkeypatc
 
     monkeypatch.setattr(cloud_io, "load_all_policy_worksheets",
                          lambda c, s: pd.DataFrame([{"policy_id": "P9"}]))
-    monkeypatch.setattr(cloud_io, "list_policy_worksheets", lambda c, s: [])
     monkeypatch.setattr(cloud_io, "sync_policies_to_portfolio_funds",
                          lambda pdf, funds: ([{"code": "NEW"}],
                                              {"added": ["NEW"], "kept": [], "removed": []}))
@@ -283,7 +277,6 @@ def test_load_all_from_sheet_replaces_ledgers_when_new_book_has_snapshot(monkeyp
 
     monkeypatch.setattr(cloud_io, "load_all_policy_worksheets",
                          lambda c, s: pd.DataFrame([{"policy_id": "P9"}]))
-    monkeypatch.setattr(cloud_io, "list_policy_worksheets", lambda c, s: [])
     monkeypatch.setattr(cloud_io, "sync_policies_to_portfolio_funds",
                          lambda pdf, funds: ([{"code": "NEW"}],
                                              {"added": [], "kept": [], "removed": []}))
