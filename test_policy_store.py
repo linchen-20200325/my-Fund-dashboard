@@ -492,9 +492,11 @@ def test_sync_empty_optional_does_not_clobber_memory():
 def _make_sh_with_worksheets(tab_to_ws: dict):
     """sh 物件支援 .worksheets() / .worksheet(name) / .add_worksheet() / .del_worksheet()。"""
     sh = MagicMock()
-    sh.worksheets.return_value = [
-        MagicMock(title=t) for t in tab_to_ws.keys()
-    ]
+    # v18.200：worksheets() 回真正的 ws 物件（帶 title）——load_all_policy_worksheets
+    # 改成直接從 worksheets() 拿物件 get_all_records（不再每分頁 open_by_key）。
+    for _t, _w in tab_to_ws.items():
+        _w.title = _t
+    sh.worksheets.return_value = list(tab_to_ws.values())
 
     def _ws_by_name(name):
         if name not in tab_to_ws:
@@ -507,7 +509,9 @@ def _make_sh_with_worksheets(tab_to_ws: dict):
         new = _make_ws(all_values=[])
         new.title = title
         tab_to_ws[title] = new
-        sh.worksheets.return_value = [MagicMock(title=t) for t in tab_to_ws.keys()]
+        for _t, _w in tab_to_ws.items():
+            _w.title = _t
+        sh.worksheets.return_value = list(tab_to_ws.values())
         return new
 
     sh.add_worksheet.side_effect = _add

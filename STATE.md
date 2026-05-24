@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.200 — 429 治本：load_all_policy_worksheets open 一次、重用 worksheet 物件（讀取數 2+3N→2+N）（2026-05-24）
+
+- [x] **承 v18.199**（429 緩解）：真正治本——原 `load_all_policy_worksheets` 先 `list_policy_worksheets`（open+worksheets）再**逐分頁 `load_policy_worksheet`（每分頁又 open_by_key 一次）**，N 保單 ≈ 2+3N 次讀取（open_by_key 本身算一次讀，是配額大戶）
+- [x] **Fix**：抽 `_records_to_policy_df(records)`（正規化+鬼列過濾，load_policy_worksheet 與 load_all 共用）；`load_all_policy_worksheets` 改 **open 試算表一次 → `sh.worksheets()` 一次拿所有分頁物件（同時當清單+讀取 handle）→ 逐物件 `get_all_records`**，讀取數降到 ≈ 2+N。所有 gspread 呼叫包 `_with_quota_retry`
+- [x] **效果**：4 保單一次讀回 14→6；配合 v18.199（砍 cloud_io 重複 list）一次切換 load_all_from_sheet 約 18→8 讀，正常切換可穩在 60/min 配額內
+- [x] **驗證** AST PASS；ruff clean；改 `_make_sh_with_worksheets` mock（worksheets() 回真 ws 物件帶 title，非 title-only placeholder）；`test_policy_store` 85 + `pytest -m "not slow"` 595 passed / 1 skipped 零回歸
+- [ ] **真機驗收**：頻繁切換/讀回應大幅不再 429（仍超載時 v18.199 友善提示接手）
+
 ### v18.199 — 修「切換/重讀帳本」429 Quota exceeded：友善訊息 + 砍重複讀取（2026-05-24）
 
 - [x] **問題場景**（user 截圖）：有資料後重新讀取另一個帳本 → `❌ Sheet 操作失敗：列 worksheets 失敗：APIError [429] Quota exceeded ... 'Read requests per minute per user'`，讀取直接失敗（紅字）

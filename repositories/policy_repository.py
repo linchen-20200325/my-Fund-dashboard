@@ -515,23 +515,14 @@ def ensure_policy_worksheet(client: Any, sheet_id: str, policy_id: str,
             raise PolicySheetError(f"建立 worksheet '{tab}' 失敗：{e}") from e
 
 
-def load_policy_worksheet(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
-    """讀單一保單的所有基金列。tab 不存在回空 DataFrame（不丟錯）。"""
-    tab = _sanitize_tab_name(policy_id)
-    try:
-        sh = client.open_by_key(sheet_id)
-        ws = sh.worksheet(tab)
-    except Exception:
-        return pd.DataFrame(columns=list(ALL_COLS))
+def _records_to_policy_df(records: list) -> pd.DataFrame:
+    """gspread get_all_records → 正規化 + 過濾 schema 鬼列的保單 DataFrame。
 
-    try:
-        records = ws.get_all_records()
-    except Exception as e:
-        raise PolicySheetError(f"讀取 '{tab}' 失敗：{e}") from e
-
+    v18.200：從 load_policy_worksheet 抽出，讓 load_policy_worksheet（單分頁）與
+    load_all_policy_worksheets（open 一次、重用 worksheet 物件）共用同一份解析邏輯。
+    """
     if not records:
         return pd.DataFrame(columns=list(ALL_COLS))
-
     df = pd.DataFrame(records)
     for c in ALL_COLS:
         if c not in df.columns:
@@ -545,13 +536,8 @@ def load_policy_worksheet(client: Any, sheet_id: str, policy_id: str) -> pd.Data
     df["policy_tier"] = df["policy_tier"].str.lower().where(
         df["policy_tier"].str.lower().isin(["core", "satellite"]), ""
     )
-    # v18.171：防禦性過濾 schema 鬼列 — 舊版 ensure_policy_worksheet bug
-    # 會把 `["policy_id","policy_name","fund_url",...]` 用 append_row 塞到資料
-    # 最末列（rows 1 空但 rows 2+ 有資料時），這些列被 get_all_records 解析後
-    # `fund_url == "fund_url"`（字面值）。連帶過濾 invest_date / currency 等
-    # 三欄都是字面 schema key 的明顯鬼列，避免誤刪只是基金代碼剛好命名怪的真資料。
-    # v18.172：dump_all_to_sheet 會把 code 強制 .upper()，所以鬼列再寫回 Sheet
-    # 會變 "FUND_URL"（大寫）— filter 改 case-insensitive 擋大小寫兩種。
+    # v18.171/172：防禦性過濾 schema 鬼列（fund_url/invest_date/currency 三欄都是
+    # 字面 schema key 的明顯鬼列；case-insensitive 擋大小寫兩種）。
     _fu_low = df["fund_url"].astype(str).str.lower()
     _id_low = df["invest_date"].astype(str).str.lower()
     _cc_low = df["currency"].astype(str).str.lower()
@@ -565,21 +551,53 @@ def load_policy_worksheet(client: Any, sheet_id: str, policy_id: str) -> pd.Data
     return df
 
 
-def load_all_policy_worksheets(client: Any, sheet_id: str) -> pd.DataFrame:
-    """跨所有保單 tab 合併成一張 DataFrame（用於分組視圖、總配置統計）。"""
-    tabs = list_policy_worksheets(client, sheet_id)
-    if not tabs:
+def load_policy_worksheet(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
+    """讀單一保單的所有基金列。tab 不存在回空 DataFrame（不丟錯）。"""
+    tab = _sanitize_tab_name(policy_id)
+    try:
+        sh = _with_quota_retry(client.open_by_key, sheet_id)
+        ws = sh.worksheet(tab)
+    except Exception:
         return pd.DataFrame(columns=list(ALL_COLS))
+
+    try:
+        records = _with_quota_retry(ws.get_all_records)
+    except Exception as e:
+        raise PolicySheetError(f"讀取 '{tab}' 失敗：{e}") from e
+
+    return _records_to_policy_df(records)
+
+
+def load_all_policy_worksheets(client: Any, sheet_id: str) -> pd.DataFrame:
+    """跨所有保單 tab 合併成一張 DataFrame（用於分組視圖、總配置統計）。
+
+    v18.200（讀取治本）：open 試算表**一次**，`sh.worksheets()` 一次拿到所有分頁
+    物件（同時當清單 + 讀取 handle），再逐分頁 get_all_records — 省掉原本「每分頁
+    各 open_by_key 一次」的大量讀取（429 Quota 主因）。讀取數從 ~2+3N → ~2+N。
+    """
+    try:
+        sh = _with_quota_retry(client.open_by_key, sheet_id)
+        all_ws = _with_quota_retry(sh.worksheets)
+    except Exception as e:
+        raise PolicySheetError(f"列 worksheets 失敗：{e}") from e
+
+    # 過濾出保單分頁（排除 _ 開頭系統 tab 與 legacy 單表 DEFAULT_WORKSHEET）
+    policy_ws = [ws for ws in all_ws
+                 if not ws.title.startswith(_RESERVED_TAB_PREFIX)
+                 and ws.title != DEFAULT_WORKSHEET]
+    if not policy_ws:
+        return pd.DataFrame(columns=list(ALL_COLS))
+
     frames = []
-    for tab in tabs:
+    for ws in policy_ws:
         try:
-            df = load_policy_worksheet(client, sheet_id, tab)
-            if not df.empty:
-                # tab 名覆寫 policy_id（保證一致性）
-                df = df.assign(policy_id=tab)
-                frames.append(df)
-        except PolicySheetError:
-            continue  # 單一 tab 失敗不影響其他
+            records = _with_quota_retry(ws.get_all_records)
+        except Exception:
+            continue   # 單一分頁失敗不影響其他
+        df = _records_to_policy_df(records)
+        if not df.empty:
+            df = df.assign(policy_id=ws.title)   # tab 名覆寫 policy_id（保證一致）
+            frames.append(df)
     if not frames:
         return pd.DataFrame(columns=list(ALL_COLS))
     return pd.concat(frames, ignore_index=True)

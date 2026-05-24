@@ -430,6 +430,23 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AJ 429 治本：load_all_policy_worksheets open 一次（v18.200 新增）
+
+**承 v18.199**（429 緩解：友善訊息 + 砍 cloud_io 重複 list）。本次真正治本：減少讀取數。
+
+**舊讀取模式**：`load_all_policy_worksheets` 先 `list_policy_worksheets`（open_by_key + worksheets = 2 讀）→ 再對每個 tab 呼叫 `load_policy_worksheet`（**每分頁又 open_by_key + worksheet + get_all_records ≈ 3 讀**）→ N 保單 ≈ **2 + 3N** 讀。`open_by_key` 本身就是一次 read，是配額大戶。
+
+**重構**：
+1. 抽出 `_records_to_policy_df(records)`：gspread records → 正規化 + 鬼列過濾的 DataFrame，由 `load_policy_worksheet`（單分頁）與 `load_all_policy_worksheets` 共用（DRY）。
+2. `load_all_policy_worksheets` 改 **`open_by_key` 一次 → `sh.worksheets()` 一次拿到所有分頁物件**（同時當「清單」與「讀取 handle」）→ 逐物件 `get_all_records`。讀取數降到 ≈ **2 + N**（4 保單 14→6）。
+3. 所有 gspread 呼叫包 `_with_quota_retry`（open/worksheets/get_all_records）。
+
+**綜效**：配合 v18.199（砍 cloud_io 重複 `list_policy_worksheets`），一次切換的 `load_all_from_sheet` 讀取數約 **18 → 8**（4 保單），正常切換可穩在 60 reads/min 配額內；仍超載時 v18.199 友善提示接手。
+
+**驗證**：AST PASS、ruff clean、mock `_make_sh_with_worksheets` 改回真 ws 物件（worksheets() 帶 title）、`test_policy_store` 85 + `pytest -m "not slow"` 595 passed / 1 skipped 零回歸。
+
+---
+
 ### §3-AI 修「切換/重讀帳本」429 Quota exceeded（v18.199 新增）
 
 **問題場景**（user）：有資料後重新讀取另一個帳本 → `❌ Sheet 操作失敗：列 worksheets 失敗：APIError [429] Quota exceeded ... 'Read requests per minute per user'`。
