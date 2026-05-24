@@ -46,6 +46,7 @@ from ui.helpers.macro_helpers import (
     mk_fund_signal,
     quartile_check as _quartile_check,
 )
+from ui.helpers.metric_explainers import render_metric_explainer
 from ui.helpers.session import (
     friendly_error as _friendly_error,
     is_core_fund as _is_core_fund,
@@ -925,6 +926,8 @@ def render_single_fund_tab() -> None:
                             f"<div style='background:#1a1f2e;border-radius:8px;padding:8px 12px;margin-top:6px'>"
                             f"<span style='color:{_qr_color};font-weight:700'>{qr['label']}</span>"
                             + _qr_adv + "</div>", unsafe_allow_html=True)
+                    # v18.192：教學化 — 風險指標白話文（收合、不藏任何數據）
+                    render_metric_explainer(["sharpe", "sigma", "alpha", "beta"])
 
                 with col_b:
                     st.markdown("#### 💸 近期配息")

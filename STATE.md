@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.192 — Task2.1 教學化：量化指標加「💡 這代表什麼」白話文 expander（2026-05-24）
+
+- [x] **目標**（v5.0 Task2.1）：新手看得懂、老手有深度，**不藏任何專業數據**——複雜指標旁加收合 expander，白話解釋 + 資產配置實戰意義
+- [x] **集中收口**：新增 `ui/helpers/metric_explainers.py`——`METRIC_EXPLAINERS` dict（sharpe/sigma/alpha/beta/mdd/core_satellite/div_coverage/overlap 共 8 條，含實戰意義）+ 純函式 `explainer_markdown(keys)`（可測）+ `render_metric_explainer(keys)`（就近渲染 `st.expander`、無內容不渲染）。內容/渲染分離
+- [x] **接線**（不動任何既有數據顯示、純加法）：Tab2 風險指標 col_a（波動σ/Sharpe/Alpha/Beta）下方加 `["sharpe","sigma","alpha","beta"]`；Tab3 核心/衛星 Hero 下方加 `["core_satellite","div_coverage"]`
+- [x] **巢狀防呆**：兩處 call site 經查皆非在 `st.expander` 內（Tab2 在主視圖 col_a、Tab3 在函式體 indent4）→ 不觸發 v18.156 巢狀 expander crash
+- [x] **驗證** AST PASS；ruff clean；新增 `test_metric_explainers.py` 5 test（已知/未知 key/空輸入/欄位齊全/spec 點名指標）；`test_metric_explainers + test_app_smoke + test_tab2_single_fund + test_tab3_portfolio` 109 PASSED；AppTest 渲染驗證
+
 ### v18.191 — 讀取齊全：讀回/還原時用帳本補齊 portfolio_funds spine + 回填成本（2026-05-24）
 
 - [x] **問題場景**（user）：「讀取資料時帳本一直缺資料，只要讀取齊全就好」

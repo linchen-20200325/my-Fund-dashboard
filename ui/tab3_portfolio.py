@@ -36,6 +36,7 @@ from infra.oauth import (
     ensure_fresh_tokens,
 )
 from infra.proxy import get_proxy_config
+from ui.helpers.metric_explainers import render_metric_explainer
 from ui.helpers.tw_time import tw_now_str
 from models.policy import PK_SEP, fund_pk_str, make_pk, parse_pk, migrate_ledger_dict
 from repositories.fund_repository import fetch_fund_from_moneydj_url
@@ -1416,6 +1417,8 @@ def render_portfolio_tab() -> None:
                 f"✅ 配置健康（核心 {_core_pct}% / 衛星 {100-_core_pct:.1f}%，"
                 f"偏差 {_diff:+.1f}%，目標 {_target2}%±10%）"
             )
+        # v18.192：教學化 — 核心/衛星 + 配息覆蓋率白話文（收合、不藏數據）
+        render_metric_explainer(["core_satellite", "div_coverage"])
 
     with st.expander("➕ 手動加入基金（支援多檔批次）", expanded=False):
         st.caption(

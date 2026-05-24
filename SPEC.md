@@ -430,6 +430,25 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AB Task2.1 教學化：量化指標白話文 expander（v18.192 新增）
+
+**目標**（v5.0 Task2「新手視角，老手深度」）：複雜量化指標旁加 `st.expander("💡 這些數據代表什麼？")`，用白話文解釋指標 + 資產配置實戰意義；**不隱藏、不移動任何既有專業數據**（純加法、收合預設）。
+
+**集中收口**：新增 `ui/helpers/metric_explainers.py`：
+- `METRIC_EXPLAINERS` dict（8 條：`sharpe`/`sigma`/`alpha`/`beta`/`mdd`/`core_satellite`/`div_coverage`/`overlap`），每條含 title + body（白話 + 實戰怎麼用）。
+- `explainer_markdown(keys)` 純函式（組 markdown、未知 key 略過、空輸入回空）→ 可單元測試、不依賴 streamlit。
+- `render_metric_explainer(keys, title=...)` 渲染收合 `st.expander`；無內容不渲染、不佔版面。
+
+**接線點**：
+- Tab2 `風險指標` col_a（波動σ/Sharpe/Alpha/Beta）下方 → `["sharpe","sigma","alpha","beta"]`。
+- Tab3 `核心/衛星` Hero 下方 → `["core_satellite","div_coverage"]`。
+
+**邊界/防呆**：(1) keys 空或全未知 → 不渲染；(2) 指標值缺/"—" 不影響（explainer 只講概念、不吃實際值）；(3) 兩 call site 經查皆非在 `st.expander`/`st.status` 內 → 不觸發 v18.156 巢狀 crash。**效能**：純靜態文案、O(k) 組字串，無需快取。
+
+**驗證**：AST PASS、ruff clean、新增 5 test、109 PASSED（+ AppTest 渲染）。
+
+---
+
 ### §3-AA 讀取齊全：讀回/還原時用帳本補齊 portfolio_funds（v18.191 新增）
 
 **症狀**（user）：「讀取資料時帳本一直缺資料，只要讀取齊全就好」。

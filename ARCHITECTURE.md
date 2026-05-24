@@ -745,6 +745,8 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.155 / 2026-05-20 (PR B.5)** — `list_user_sheets` 過濾已刪除 Sheets。原本 gspread `list_spreadsheet_files()` 會回傳 trashed sheets（user 截圖出現重複 / 殭屍項目）。改成自己打 Drive v3 API（mirror `list_user_folders`）帶 `q='mimeType="...spreadsheet" and trashed=false'`，外加 `supportsAllDrives` / `includeItemsFromAllDrives` 與 paging。
 
+> 🆕 **v18.192 / 2026-05-24** — Task2.1 教學化 expander。新增 `ui/helpers/metric_explainers.py`（`METRIC_EXPLAINERS` 8 條指標白話文 + 實戰意義；純函式 `explainer_markdown` + `render_metric_explainer` 渲染 `st.expander`、內容/渲染分離）。Tab2 風險指標（σ/Sharpe/Alpha/Beta）與 Tab3 核心/衛星 Hero 下方就近加「💡 這些數據代表什麼？」收合說明，**不動既有數據顯示、純加法**。兩 call site 經查非在 expander 內（不觸發巢狀 crash）。新增 5 test，109 PASSED。
+
 > 🆕 **v18.191 / 2026-05-24** — 讀取齊全。user「讀取資料時帳本一直缺資料」。以 user 實際 JSON 備份驗證：portfolio_funds(19)⨝t7_ledgers(19) pk 100% 對得上、`Ledger.from_dict` 19/19 含完整成本 → JSON 還原本身齊全；缺料發生在 Sheet 讀回（表單/帳本表以 portfolio_funds 為 spine 迭代、用 `fund_pk_str` 取 t7_ledgers 成本，保單分頁與 `_T7_State` 漂移時只在快照的基金看不到）。Fix：新增純函式 `reconcile_funds_with_ledgers`（`ui/helpers/portfolio_load.py`）— 帳本有但 spine 缺的部位用 `parse_pk` 補成 portfolio_funds 條目 + 回填 avg_nav/fx_avg/units/avg_nav_with_div（缺值才補）。接 `load_all_from_sheet` 與 `restore_from_json_bytes` 兩讀取路徑。實證模擬漂移 5/19→補回 19。新增 4 test，132 PASSED 零回歸。
 
 > 🆕 **v18.190 / 2026-05-24** — log 降噪。user Cloud log 兩類噪音：① `Styler.applymap` FutureWarning（`tab3_t7_ledger.py:1995` + `tab3_portfolio.py:2053`；pandas 2.1 deprecate、3.0 移除）→ 兩處改 `.style.map(`，`requirements.txt` pandas floor 2.0.0→2.1.0；② `precision_service.py` 兩處 `logger.warning`（宏觀資料對齊後 <20 → 回中性 0.0/空 df）每 rerun 刷屏 → 降為 `logger.debug`（Tab1 UI 已另顯友善提示）。宏觀資料實際 0 筆為部署端 FRED/yfinance 可用性問題、非本次 scope。126 PASSED 零回歸。
