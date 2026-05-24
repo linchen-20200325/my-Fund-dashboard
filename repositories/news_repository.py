@@ -236,6 +236,23 @@ def filter_news_by_asset_class(news: list, asset_class: str) -> list:
     return out or items
 
 
+def filter_news_by_keywords(news: list, keywords) -> list:
+    """v18.205：純過濾既有新聞清單，回傳 title/summary 命中**任一**關鍵字者
+    （case-insensitive）。給「個股新聞面」用持股名匹配快取新聞；**無 fallback**
+    （不命中即回空），與 filter_news_by_asset_class（會回退全部）刻意不同。"""
+    kws = [str(k).strip().lower() for k in (keywords or []) if str(k).strip()]
+    if not kws:
+        return []
+    out = []
+    for n in (news or []):
+        if not isinstance(n, dict):
+            continue
+        _txt = (str(n.get("title", "")) + " " + str(n.get("summary", ""))).lower()
+        if any(k in _txt for k in kws):
+            out.append(n)
+    return out
+
+
 def fetch_macro_news(asset_class: str = "", max_per_feed: int = 5) -> list:
     """v5.0 Task3 接口：抓財經新聞並依資產類別過濾。
 

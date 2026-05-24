@@ -80,6 +80,7 @@ def test_news_routes_through_proxy_fetch_url():
 # ── v18.196 Task3：依資產類別過濾 ──
 from repositories.news_repository import (  # noqa: E402
     filter_news_by_asset_class,
+    filter_news_by_keywords,
     infer_asset_class,
 )
 
@@ -130,3 +131,29 @@ def test_fetch_macro_news_fetches_then_filters(monkeypatch):
     monkeypatch.setattr(nr, "fetch_market_news", lambda max_per_feed=5: fake)
     out = nr.fetch_macro_news("bond")
     assert [n["title"] for n in out] == ["Treasury yields"]
+
+
+# ── v18.205 個股新聞面：filter_news_by_keywords ──
+
+def test_filter_news_by_keywords_matches_any():
+    news = [
+        {"title": "Apple unveils new chip", "summary": "tech", "is_systemic": False},
+        {"title": "Fed holds rates steady", "summary": "macro", "is_systemic": False},
+        {"title": "台積電 法說會超預期", "summary": "半導體", "is_systemic": False},
+    ]
+    titles = [n["title"] for n in filter_news_by_keywords(news, ["Apple", "台積電"])]
+    assert "Apple unveils new chip" in titles
+    assert "台積電 法說會超預期" in titles
+    assert "Fed holds rates steady" not in titles
+
+
+def test_filter_news_by_keywords_empty_returns_empty():
+    news = [{"title": "x", "summary": "", "is_systemic": False}]
+    assert filter_news_by_keywords(news, []) == []
+    assert filter_news_by_keywords(news, None) == []
+
+
+def test_filter_news_by_keywords_no_match_no_fallback():
+    """個股無命中 → 回空（不像 asset_class 會 fallback 全部）。"""
+    news = [{"title": "Fed holds rates", "summary": "macro", "is_systemic": False}]
+    assert filter_news_by_keywords(news, ["NVIDIA"]) == []

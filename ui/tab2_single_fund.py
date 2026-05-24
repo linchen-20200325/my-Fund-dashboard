@@ -1084,6 +1084,65 @@ def render_single_fund_tab() -> None:
                                         f"<span style='color:#58a6ff;font-weight:700;font-size:11px;width:36px;text-align:right'>{_tp:.1f}%</span>"
                                         f"</div>", unsafe_allow_html=True)
 
+                # ── 📰 個股新聞面（v18.205）：前10大持股名匹配快取新聞 + AI 新聞面分析 ──
+                if _tops:
+                    from repositories.news_repository import (  # noqa: PLC0415
+                        filter_news_by_keywords as _filt_kw,
+                    )
+                    _news_all_sn = st.session_state.get("news_items", []) or []
+                    _stk_matches = []          # (持股顯示名, news dict)
+                    _seen_sn_titles: set = set()
+                    for _topn in _tops[:10]:
+                        _nm = str(_topn.get("name", "")).strip()
+                        if not _nm:
+                            continue
+                        _zh = _zh_holding(_nm)
+                        _kws = [k for k in (_nm, _zh) if k and len(str(k)) >= 2]
+                        _toks = _nm.replace(",", " ").split()
+                        if _toks and len(_toks[0]) >= 3:
+                            _kws.append(_toks[0])   # 英文公司名首段 token
+                        _disp_nm = _zh or _nm[:20]
+                        for _hit in _filt_kw(_news_all_sn, _kws):
+                            _ttl = _hit.get("title", "")
+                            if _ttl and _ttl not in _seen_sn_titles:
+                                _seen_sn_titles.add(_ttl)
+                                _stk_matches.append((_disp_nm, _hit))
+                    with st.expander(f"📰 個股新聞面（命中持股 {len(_stk_matches)} 則）",
+                                     expanded=bool(_stk_matches)):
+                        if not _stk_matches:
+                            st.caption("近期國際財經新聞暫無直接提及本基金前10大持股"
+                                       "（通常大型權值股才較常被 RSS 報導）。")
+                        for _disp_nm, _hit in _stk_matches[:12]:
+                            _sys_ic = "🚨 " if _hit.get("is_systemic") else ""
+                            _u = _hit.get("url", "")
+                            _ttl = _hit.get("title", "")
+                            _src = _hit.get("source", "")
+                            _ttl_html = (f"<a href='{_u}' target='_blank' "
+                                         f"style='color:#58a6ff;text-decoration:none'>{_ttl}</a>"
+                                         if _u else _ttl)
+                            st.markdown(
+                                f"<div style='padding:4px 8px;background:#161b22;border-radius:6px;"
+                                f"margin:2px 0;font-size:12px'>"
+                                f"<span style='color:#ffb74d;font-weight:700'>{_disp_nm}</span>　"
+                                f"{_sys_ic}{_ttl_html}"
+                                f"<span style='color:#666;font-size:10px;margin-left:6px'>{_src}</span>"
+                                f"</div>", unsafe_allow_html=True)
+                    # AI 新聞面分析（放 expander 外，避免巢狀 expander crash）
+                    if _stk_matches:
+                        from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
+                        _sn_snap = [f"## 個股新聞面快照：{name or fk}",
+                                    "- 前10大持股：" + "、".join(
+                                        str(_t.get('name', ''))[:18] for _t in _tops[:10])]
+                        for _disp_nm, _hit in _stk_matches[:12]:
+                            _sn_snap.append(f"- [{_disp_nm}] {_hit.get('title', '')}")
+                        render_ai_summary_widget(
+                            tab_key="tab2_stknews",
+                            tab_label=f"個股新聞面（{name or fk}）",
+                            snapshot="\n".join(_sn_snap),
+                            headlines=[_h.get("title", "") for _d, _h in _stk_matches[:12]],
+                            gemini_api_key=GEMINI_KEY,
+                        )
+
                 # ── V4: 微觀防護盾 — 前十大持倉三率檢核 ────────────────
                 _shield_tops = (_holdings.get("top_holdings") or []) if _holdings else []
                 if _shield_tops:

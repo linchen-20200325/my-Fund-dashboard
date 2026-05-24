@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.205 — 單一基金加「📰 個股新聞面」：持股名匹配新聞 + AI 新聞面分析（2026-05-24）
+
+- [x] **需求**（user）：單一基金想多加「個股新聞面分析」（針對基金持有的個股）
+- [x] **既有**：Tab2 AI 基金分析（v18.135）已做持股×新聞、AI summary widget（v18.196）依資產類別過濾——但都是**廣義財經新聞**，非聚焦前10大持股
+- [x] **新接口** `repositories/news_repository.py:filter_news_by_keywords(news, keywords)`：純過濾、命中 title/summary 任一關鍵字、**無 fallback**（不命中即空，與 asset_class 過濾刻意不同）
+- [x] **Tab2 新區塊**（持股分析 expander 後、indent16）：取前10大持股名（英文名 + `_zh_holding` 中文 + 英文首 token）→ 比對**快取** `news_items`（零額外網路）→「📰 個股新聞面」expander 列出命中的個股新聞（標注哪檔持股 + 來源 + 連結 + systemic 🚨）；命中時在 **expander 外**（避巢狀 crash）掛 `render_ai_summary_widget`（tab_key=tab2_stknews）做 AI 新聞面分析
+- [x] **邊界**：RSS 為廣義財經新聞 → 大型權值股（Apple/NVIDIA/台積電）命中率高、冷門/債券基金低 → 不命中顯示友善「暫無相關個股新聞」；AI widget 為 expander、確認置於 個股新聞面 expander **之外**（sibling 不巢狀）
+- [x] **驗證** AST PASS；ruff clean；新增 3 test（命中任一/空 kws/無命中不 fallback）；`pytest -m "not slow"` 602 passed / 1 skipped 零回歸；AppTest tab2 渲染驗證
+
 ### v18.204 — 故事化 Tab1/Tab2：補內部故事站標題（呼應 Tab3）（2026-05-24）
 
 - [x] **背景**（user 問「還有其他 tab 尚未故事化」）：先前只有 Tab3 做完整內部故事站（v18.195 ①②③④）；Tab1/Tab2 只有頂部敘事麵包屑（v18.193），缺內部站標題
