@@ -246,6 +246,17 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.185 — 切換帳本自動讀回 + 跨帳本共用基金資訊（同 code 免重抓）（2026-05-24）
+
+- [x] **問題場景**（user）：①切換帳本後「沒有載入鍵與計算」（只 set sheet_id + rerun，持倉/分析不動，要自己滾回頂部按「📥 雲端讀取」）②同一檔基金在不同帳本（不同人/保單）會被當全新重抓 MoneyDJ（~30s/檔）
+- [x] **根因**：①「🔁 切換到此帳本」(`tab3_portfolio.py:757`) 只 `policy_sheet_id=新id`+`st.rerun()`，無自動讀回 ②`sync_policies_to_portfolio_funds` 以 `(policy_id, fund_code)` 複合鍵 merge → 換帳本時 policy_id 不同，同 code 落在「added/loaded=False」骨架 → 全部重抓（但 NAV 歷史/指標只跟 fund_code 有關、與保單無關）
+- [x] **Fix（user 選「切換後自動載入」+「新標的用既有按鈕抓」）**：
+  - **共用基金資訊**：新增純函式 `ui/helpers/portfolio_load.py:reuse_fund_info_by_code(merged, previous_funds)` — 把上一本已 `loaded=True` 條目依 code 補回（series/dividends/metrics/moneydj_raw/risk_metrics/name/currency/is_core，set loaded=True；空值不覆蓋如保單帶來的 currency）。`load_all_from_sheet`（`cloud_io.py`）sync 後呼叫、report 加 `reused`
+  - **自動讀回**：`render_portfolio_tab` 早段（client closure 後）加 `_last_loaded_sheet_id` 追蹤 — id 變且雲端可達就自動跑一次 `load_all_from_sheet`（持倉切換+基金資訊沿用、零 MoneyDJ）、`st.toast` 報「持倉 N 檔／沿用 M 檔免重抓／K 檔新標的待載入」
+  - **新標的**：真正不同的 code 仍 `loaded=False`，留給既有「📡 載入未載入基金（N 檔）」一鍵抓（避免切換時卡 30s×N）
+- [x] **防呆**：本次 session「第一次進入」且已有本地持倉（如剛還原 JSON）→ 只記 sheet_id 不自動讀回，避免 sync 把本地狀態洗掉；真正切換 id 才讀。失敗也記 id 不重試迴圈，可手動再按「📥 雲端讀取」
+- [x] **驗證** AST PASS；ruff clean（順手刪 `test_portfolio_load` dead import `patch`）；新增 6 個 `reuse_fund_info_by_code` 單元測試；`test_portfolio_load + test_cloud_io + test_app_smoke + test_tab3_portfolio + test_policy_store + test_json_backup` 共 **212 PASSED** 零回歸
+
 ### v18.184 — T7 持倉明細表加「含息成本 + 累積已配息率」欄（dangling input 終於被用）（2026-05-23）
 
 - [x] **問題場景**（user）：①「含息來源沒在存檔（Sheet/JSON）」②「之前說含息來源有資料可算含息率，但分析資料沒看到」

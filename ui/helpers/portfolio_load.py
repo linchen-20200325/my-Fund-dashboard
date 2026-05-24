@@ -24,6 +24,52 @@ def count_unloaded_funds() -> tuple[int, int]:
     return len(not_loaded), len(uniq_codes)
 
 
+# fund-info 欄位：只跟 fund_code 有關（NAV 歷史/指標/名稱與保單無關），可跨帳本共用。
+# 與 batch_load_unloaded_funds() broadcast 寫入的鍵對齊（loaded/load_error 另外處理）。
+_FUND_INFO_KEYS = (
+    "name", "series", "dividends", "metrics", "moneydj_raw",
+    "risk_metrics", "is_core", "currency",
+)
+
+
+def reuse_fund_info_by_code(
+    merged: list[dict], previous_funds: list[dict] | None,
+) -> list[str]:
+    """跨帳本共用基金資訊：同 fund_code 上一本帳本已載入過 → 直接沿用、免重抓。
+
+    切換帳本後 sync 以 `(policy_id, fund_code)` 為鍵 → 換人/換保單時同一檔基金
+    被當成全新（loaded=False）。但 NAV 歷史/指標只跟 fund_code 有關、與保單無關，
+    故可從上一本帳本已 `loaded=True` 的條目依 code 補回，只剩真正新標的待抓。
+
+    就地修改 merged（持倉仍走新帳本的 policy/units/invest_twd，只補基金資訊）；
+    回傳被沿用（免重抓）的 code 清單（大寫去重排序）。
+    """
+    info_by_code: dict[str, dict] = {}
+    for _f in list(previous_funds or []):
+        if not _f.get("loaded") or _f.get("load_error"):
+            continue
+        _c = str(_f.get("code", "") or "").strip().upper()
+        if _c and _c not in info_by_code:
+            info_by_code[_c] = _f
+
+    reused: set[str] = set()
+    for entry in merged:
+        if entry.get("loaded"):
+            continue
+        _c = str(entry.get("code", "") or "").strip().upper()
+        src = info_by_code.get(_c)
+        if not src:
+            continue
+        for k in _FUND_INFO_KEYS:
+            v = src.get(k)
+            if v not in (None, ""):     # 不用空值覆蓋（如保單帶來的 currency）
+                entry[k] = v
+        entry["loaded"] = True
+        entry["load_error"] = None
+        reused.add(_c)
+    return sorted(reused)
+
+
 def batch_load_unloaded_funds() -> None:
     """v18.151：批次抓取所有 portfolio_funds 內 `loaded=False` 的基金。
 

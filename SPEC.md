@@ -430,6 +430,27 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-V 切換帳本自動讀回 + 跨帳本共用基金資訊（v18.185 新增）
+
+**問題場景**（user）：①切換帳本（多帳本管理「🔁 切換到此帳本」）後「沒有載入鍵與計算」——持倉與分析都不更新，要自己滾回頂部按「📥 雲端讀取」；②同一檔基金在不同帳本（不同人/保單）會被當成全新標的，重抓 MoneyDJ（每檔約 30 秒）。
+
+**根因**：
+- 切換按鈕（`tab3_portfolio.py:757`）只 `st.session_state["policy_sheet_id"]=新id` + `st.rerun()`，沒有任何自動讀回；既有讀回是手動按鈕（`load_all_from_sheet`）。
+- `sync_policies_to_portfolio_funds` 的 dedupe 鍵是 `(policy_id, fund_code)` 複合鍵。換帳本時 policy_id 幾乎都不同 → 同一檔 `fund_code` 落在「added / loaded=False」骨架 → 被當新標的重抓。但基金的 NAV 歷史與指標**只跟 `fund_code` 有關、與保單無關**，可跨帳本共用。
+
+**設計決策**（user 確認）：①切換後**自動讀回**（零按鈕）；②真正不同的新標的**用既有「📡 載入未載入基金」按鈕**抓（不在切換時卡 30s×N）。
+
+**實作**：
+- **共用基金資訊（依 code）**：新增純函式 `ui/helpers/portfolio_load.py:reuse_fund_info_by_code(merged, previous_funds)`。從上一本帳本已 `loaded=True`（且無 `load_error`）的條目建 `code → fund-info` 表，把 merged 內未載入、同 code 的條目補回 fund-info 欄（`name/series/dividends/metrics/moneydj_raw/risk_metrics/is_core/currency`，set `loaded=True`），**空值不覆蓋**（保住保單帶來的 currency）。持倉（policy_id/units/invest_twd/級別）仍走新帳本。`load_all_from_sheet`（`ui/helpers/cloud_io.py`）在 sync 後呼叫它、report 新增 `reused`（被沿用的 code 清單）。
+- **自動讀回**：`render_portfolio_tab` 早段（cloud client closure 之後）以 `st.session_state["_last_loaded_sheet_id"]` 追蹤。當 sheet id 改變且雲端可達 → 自動跑一次 `load_all_from_sheet`（持倉切換 + 基金資訊沿用、**零 MoneyDJ 呼叫**）並 `st.toast` 報告「持倉 N 檔／沿用 M 檔免重抓／K 檔新標的待載入」。
+- **新標的**：真正不同的 code 仍 `loaded=False`，由既有「📡 載入未載入基金（N 檔）」一鍵抓（v18.151 helper）。
+
+**防呆**：本次 session「第一次進入」（`_last_loaded_sheet_id` 還是 None）**且已有本地持倉**（如剛還原 JSON）→ 只記下 sheet id、**不自動讀回**，避免 sync 把本地狀態洗掉；只有真正切換 id 才自動讀回。自動讀回失敗也會記下 id（不重試迴圈），user 可手動再按「📥 雲端讀取」。
+
+**驗證**：AST PASS；ruff clean；新增 6 個 `reuse_fund_info_by_code` 單元測試；212 PASSED 零回歸。
+
+---
+
 ### §3-U T7 持倉明細表加「含息成本 + 累積已配息率」欄（v18.184 新增）
 
 **問題場景**（user）：①「含息來源沒在存檔（Google Sheet / JSON）」；②「之前說含息來源有資料就能算含息率，但分析資料沒看到」。

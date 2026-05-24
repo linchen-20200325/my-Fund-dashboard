@@ -118,7 +118,7 @@ def load_all_from_sheet(client: object,
       - error:        str|None
     """
     out = {"ok": False, "refresh_only": refresh_only,
-           "added": [], "kept": [], "removed": [],
+           "added": [], "kept": [], "removed": [], "reused": [],
            "restored_ct": 0, "warnings": [], "error": None}
     try:
         if oauth_mode:
@@ -133,8 +133,11 @@ def load_all_from_sheet(client: object,
             out["ok"] = True
             return out
 
-        _merged, _report = sync_policies_to_portfolio_funds(
-            _pdf, ss.get("portfolio_funds", []) or [])
+        _prev_funds = list(ss.get("portfolio_funds", []) or [])
+        _merged, _report = sync_policies_to_portfolio_funds(_pdf, _prev_funds)
+        # 跨帳本共用基金資訊：同 code 上一本已載入過 → 沿用免重抓（持倉仍走新帳本）
+        from ui.helpers.portfolio_load import reuse_fund_info_by_code
+        out["reused"] = reuse_fund_info_by_code(_merged, _prev_funds)
         ss["portfolio_funds"] = _merged
         out["added"]   = list(_report.get("added", []))
         out["kept"]    = list(_report.get("kept", []))

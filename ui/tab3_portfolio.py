@@ -260,6 +260,43 @@ def render_portfolio_tab() -> None:
             return (_get_oauth_client() if _oauth_configured
                     else get_gspread_client(dict(_gsa_secret)))
 
+        # ── 切換帳本後自動讀回：持倉切換 + 同 code 基金資訊沿用（免重抓）──
+        # 只在「帳本 ID 變了」且雲端可達時跑一次；真正不同的新標的留給既有
+        # 「📡 載入未載入基金」按鈕抓（避免切換時卡 30s×N）。失敗也記下 id，
+        # 不重試迴圈，user 可手動按「📥 雲端讀取」再試。
+        # 防呆：本次 session「第一次進入」且已有本地持倉（如剛還原 JSON）→
+        # 只記下帳本不自動讀回，避免 sync 把本地狀態洗掉；真正切換 id 時才讀。
+        _prev_loaded_id = st.session_state.get("_last_loaded_sheet_id")
+        if _sheet_id_q and _can_cloud_q and _prev_loaded_id != _sheet_id_q:
+            _skip_first = (_prev_loaded_id is None
+                           and bool(st.session_state.get("portfolio_funds")))
+            st.session_state["_last_loaded_sheet_id"] = _sheet_id_q
+            from ui.helpers.cloud_io import load_all_from_sheet as _auto_load
+            from ui.helpers.portfolio_load import count_unloaded_funds
+            _ares = ({"ok": False, "_skipped": True} if _skip_first else
+                     _auto_load(_t3_cloud_client_q(), _sheet_id_q,
+                                st.session_state,
+                                oauth_mode=bool(_oauth_configured)))
+            if _ares.get("_skipped"):
+                pass   # 首次進入保留本地持倉，不自動讀回
+            elif _ares.get("ok"):
+                st.session_state["t3_last_load_at"] = tw_now_str()
+                _reused_n = len(_ares.get("reused", []))
+                _, _new_codes = count_unloaded_funds()
+                _tot = len(st.session_state.get("portfolio_funds", []) or [])
+                st.toast(
+                    f"📥 已自動讀回此帳本：持倉 {_tot} 檔"
+                    + (f"／沿用 {_reused_n} 檔免重抓" if _reused_n else "")
+                    + (f"／{_new_codes} 檔新標的待載入" if _new_codes
+                       else "／全部已載入"),
+                    icon="📥",
+                )
+            else:
+                st.warning(
+                    "⚠️ 自動讀回失敗（可手動按上方「📥 雲端讀取」重試）："
+                    f"{_ares.get('error')}"
+                )
+
         with st.container(border=True):
             if _io_panel == "load":
                 # v18.166：📥 雲端讀取 = 讀取現有帳本 + 從 Drive 挑帳本（兩者皆在此面板）
@@ -383,6 +420,8 @@ def render_portfolio_tab() -> None:
                                 _msg = [f"新增 {len(_res['added'])} 檔",
                                         f"保留 {len(_res['kept'])} 檔",
                                         f"移除 {len(_res['removed'])} 檔"]
+                                if _res.get("reused"):
+                                    _msg.append(f"沿用 {len(_res['reused'])} 檔免重抓")
                                 if _res["restored_ct"]:
                                     _msg.append(f"T7 部位 {_res['restored_ct']} 筆")
                                 st.success("📥 全部讀回完成：" + " / ".join(_msg))
