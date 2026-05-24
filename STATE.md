@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.188 — 移除「多帳本管理」區塊（改用存取/讀取管理多帳本）（2026-05-24）
+
+- [x] **決策**（user）：「取消多帳本管理，帳本管理改用存取、讀取的方式，就不用切換」——切換帳本一連串 stale bug（v18.185/187）後，user 決定不要獨立的「切換到此帳本」流程
+- [x] **移除**（`ui/tab3_portfolio.py`）：整個「📁 多帳本管理（不同人/帳戶各自一本）」區塊（123 行）——含「🆕 建立另一本 / 📝 改名目前帳本 / 🔁 切換到別本」三個 tab；順手刪只此處用到的 `rename_sheet` import
+- [x] **替代路徑**（皆既有）：切換 → 「📥 雲端讀取（從 Drive 挑帳本）」挑一本即自動讀回（v18.185 auto-load）；建立 → 頂部「✨ 新增帳本」；改名 → 直接在 Google Drive 操作
+- [x] **保留**：v18.185 auto-load（挑帳本後自動讀回 + 共用基金資訊）、v18.187 t7_ledgers 空→清，仍適用於「挑帳本」路徑（`policy_sheet_id` 改變即觸發）
+- [x] **驗證** AST PASS；ruff F821 無未定義名、無殘留變數（`_cur_title`/`_ms2` 等隨區塊移除）、`rename_sheet` import 清除；`test_app_smoke + test_tab3_portfolio` 99 PASSED 零回歸；無 test 引用被移除的 widget key
+
 ### v18.187 — 修「切換帳本後帳本無法更新」：load 一律覆蓋 t7_ledgers（空→清）（2026-05-24）
 
 - [x] **問題場景**（user）：①「存檔無含息來源」②「切換帳本後，帳本那些都無法更新」

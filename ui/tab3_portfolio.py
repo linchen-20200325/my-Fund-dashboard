@@ -59,7 +59,6 @@ from repositories.policy_repository import (
     load_all_policies_v2,
     load_all_policy_worksheets,
     load_policies,
-    rename_sheet,
     sync_policies_to_portfolio_funds,
     upsert_fund_in_policy,
     upsert_policy_row,
@@ -679,129 +678,10 @@ def render_portfolio_tab() -> None:
             # ── v18.169：原「📋 保單清單」說明區塊已移至 Tab6 說明書（§9 Sheet 資料結構）──
             # 動態 metric（保單分頁 / _T7_State / _Ledgers 計數）已捨棄，避免 Tab3 雜訊
 
-            # ── v18.48 多帳本管理（明顯區塊：建立 / 切換 / 改名）──
-            # 用途：不同人 / 帳戶各自一本（例：本人 / 配偶 / 父母 / 退休帳戶）
-            if _oauth_configured and _sheet_id:
-                st.markdown("---")
-                st.markdown("##### 📁 多帳本管理（不同人 / 帳戶各自一本）")
-
-                # 顯示目前 Sheet 標題
-                _cur_title = ""
-                try:
-                    _cur_title = get_sheet_title(_get_oauth_client(), _sheet_id)
-                except Exception:
-                    _cur_title = ""   # noqa: smoke-allow-pass — 取不到不影響後續功能
-                if _cur_title:
-                    st.info(f"📂 目前工作中的帳本：**{_cur_title}**　·　ID `{_sheet_id[:14]}…`")
-                else:
-                    st.info(f"📂 目前工作中的帳本 ID：`{_sheet_id[:14]}…`（標題取不到）")
-
-                # 三個動作 tabs：建立另一本 / 改名 / 從 Drive 切換
-                _mb_t1, _mb_t2, _mb_t3 = st.tabs([
-                    "🆕 建立另一本", "📝 改名目前帳本", "🔁 切換到別本",
-                ])
-
-                with _mb_t1:
-                    st.caption("為新的人 / 帳戶建立一本獨立 Google Sheet（不會動到目前這本）")
-                    _another_name = st.text_input(
-                        "新帳本名稱",
-                        value="",
-                        key="inp_another_sheet_name",
-                        placeholder="例：Fund Dashboard - 配偶 / 退休帳戶 / 父母",
-                    ).strip()
-                    if st.button("🚀 建立並切換到新帳本",
-                                  key="btn_create_another_sheet",
-                                  type="primary", use_container_width=True,
-                                  disabled=not _another_name):
-                        try:
-                            _ca_sid, _ca_url = create_dashboard_sheet(
-                                _get_oauth_client(), _another_name)
-                            st.session_state["policy_sheet_id"] = _ca_sid
-                            if "inp_sheet_id" in st.session_state:
-                                del st.session_state["inp_sheet_id"]
-                            st.success(
-                                f"✅ 已建立並切換到新帳本「{_another_name}」"
-                                f"（原本的帳本仍在你的 Drive，可隨時切回去）"
-                            )
-                            st.markdown(f"📂 [在 Google Drive 開啟新帳本]({_ca_url})")
-                            st.rerun()
-                        except (PolicySheetError, OAuthError) as _cae:
-                            _err_text = str(_cae)
-                            if "insufficient" in _err_text.lower() or "403" in _err_text:
-                                st.error(
-                                    "❌ 建立失敗：OAuth token 缺少 `drive.file` 權限。"
-                                    "請先登出再登入重新授權。"
-                                )
-                            else:
-                                st.error(f"❌ 建立失敗：{_cae}")
-                        except Exception as _cae2:
-                            st.error(f"❌ 未預期錯誤：[{type(_cae2).__name__}] {_cae2}")
-
-                with _mb_t2:
-                    st.caption("把目前這本帳本改個更清楚的名字（不影響資料）")
-                    _new_name = st.text_input(
-                        "新名稱",
-                        value=_cur_title or "",
-                        key="inp_rename_sheet",
-                        placeholder="例：Fund Dashboard - 本人",
-                    ).strip()
-                    if st.button("✅ 套用新名稱",
-                                  key="btn_apply_rename",
-                                  type="primary", use_container_width=True,
-                                  disabled=not _new_name or _new_name == _cur_title):
-                        try:
-                            rename_sheet(_get_oauth_client(), _sheet_id, _new_name)
-                            st.success(f"✅ 已將帳本改名為「{_new_name}」")
-                            st.rerun()
-                        except (PolicySheetError, OAuthError) as _rne:
-                            st.error(f"❌ 改名失敗：{_rne}")
-                        except Exception as _rne2:
-                            st.error(f"❌ 未預期錯誤：[{type(_rne2).__name__}] {_rne2}")
-
-                with _mb_t3:
-                    st.caption("從你 Google Drive 內所有 Sheets 挑一本切換過去")
-                    if st.button("📂 重新列出 Drive 中的所有 Sheets",
-                                  key="btn_list_drive_sheets_t3",
-                                  use_container_width=True):
-                        try:
-                            _client_ls2 = _get_oauth_client()
-                            _files_ls2 = list_user_sheets(_client_ls2)
-                            st.session_state["_my_sheets"] = _files_ls2
-                            if not _files_ls2:
-                                st.info("ℹ️ Drive 內沒有任何 Sheet")
-                        except (PolicySheetError, OAuthError) as _lse2:
-                            _err_text2 = str(_lse2)
-                            if "insufficient" in _err_text2.lower() or "403" in _err_text2:
-                                st.error(
-                                    "❌ 列檔失敗：OAuth token 缺 `drive.metadata.readonly` 權限。"
-                                    "請先登出再登入。"
-                                )
-                            else:
-                                st.error(f"❌ 列檔失敗：{_lse2}")
-
-                    _ms2 = st.session_state.get("_my_sheets") or []
-                    if _ms2:
-                        # 過濾掉目前正在用的這本
-                        _ms2_others = [f for f in _ms2 if f.get("id") != _sheet_id]
-                        if not _ms2_others:
-                            st.caption("（目前 Drive 內只有這一本帳本）")
-                        else:
-                            _opts2 = [f"📄 {f['name']}  (ID `{f['id'][:12]}…`)" for f in _ms2_others]
-                            _pick_idx = st.selectbox(
-                                f"共 {len(_ms2_others)} 本可切換",
-                                range(len(_opts2)),
-                                format_func=lambda i: _opts2[i],
-                                key="sel_switch_sheet",
-                            )
-                            if st.button("🔁 切換到此帳本",
-                                          key="btn_switch_to_sheet",
-                                          type="primary", use_container_width=True):
-                                _target = _ms2_others[_pick_idx]
-                                st.session_state["policy_sheet_id"] = _target["id"]
-                                if "inp_sheet_id" in st.session_state:
-                                    del st.session_state["inp_sheet_id"]
-                                st.success(f"✅ 已切換到「{_target['name']}」")
-                                st.rerun()
+            # ── 多帳本管理已移除（v18.188，user 要求）──
+            # 改用「📥 雲端讀取（從 Drive 挑帳本）」+「📦 雲端存檔」以存取/讀取方式
+            # 管理多帳本，不再需要獨立的「切換到此帳本」流程；建立新帳本見頂部
+            # 「✨ 新增帳本」；改名請直接在 Google Drive 操作。
 
             # ── v18.149 schema v2 升級偵測（PR A — UI hook only）──
             # v2 schema：每張保單分頁內聯 units / avg_nav / avg_fx + 多幣別現金。
