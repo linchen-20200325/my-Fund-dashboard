@@ -430,6 +430,34 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AU 三 Tab AI 統一「白話總體檢」：吃全章節快照、逐章節結論+時事（v18.214 改版）
+
+**需求**（user）：Tab1/2/3 每個 Tab 的 AI 都要**讀該 Tab 全部資料**、**逐章節**給結論＋**時事**；不適用的就刪掉改成「結構化完整摘要」。追加：**很白話、盡量不用專業金融術語**。
+
+**拍板**（AskUserQuestion）：①「重寫通用 widget、保留專用 AI」（不動成熟的 macro / mk_advisor，只換掉不符需求的 4 視角散文 widget）；②「每 Tab 一個主 AI」。
+
+**改寫核心** `ui/helpers/ai_summary.py:render_ai_summary_widget`：
+- 介面新增 `sections: list[str]`（章節清單，依顯示順序）。
+- 移除 4 視角 selectbox / `PERSPECTIVES` / `_build_prompt`；改單一「🤖 AI 白話總體檢」按鈕。
+- 結果存 `session_state[f"{tab_key}_ai_struct"]`，重開 expander 顯示快取、不重打 API；「🔄 重新生成」可覆寫。max_tokens 3500。
+
+**新 prompt** `services/ai_prompts.py:build_structured_summary_prompt(tab_label, snapshot, sections, headlines, stale_note)`：
+- 強白話風格守則：像跟新手朋友聊天、術語用括號補生活化解釋、多用天氣/體檢/紅綠燈比喻。
+- 逐章節輸出 `### <章節>`，每節含【白話結論】+【最近新聞影響】；末段 `### ✅ 一句話總結 & 下一步`。
+- 嚴格只引用快照＋新聞、缺資料就老實說。
+- **刪除** v18.159 的 4 散文 builder（`build_trend_action_prompt` / `build_allocation_diagnosis_prompt` / `build_beginner_guide_prompt` / `build_news_driven_prompt`）。
+
+**各 Tab 接線**：
+- **Tab1**：保留 `analyze_macro_structured`（7 段結構化＋新聞，已吃全 macro 資料）；移除重複的散文 widget；macro prompt 補白話風格守則。
+- **Tab2**：沿用既有完整 10 段快照，傳 `sections`（基本/績效/風險/配息/買賣點/持股產業/總經/新聞）切結構化。
+- **Tab3**：`_render_tab3_ai_summary` 快照由稀疏 4 段擴成全章節 — 加組合健康度 KPI（`compute_health_kpis`）、各檔 MK 體檢結論（`build_mk_dataframe`）、同類 PK 優等生/汰弱（`build_checkup_dataframe`），續接配息現金流＋新聞。
+
+**未動**：LLM 仍走既有 Gemini（`_gemini`，未換供應商）；T7 `analyze_portfolio_mk_advisor` 保留為「深入版」。
+
+**測試/驗證**：`test_ai_prompts.py` 刪 5 個舊 builder 測試、加 3 個 `structured_summary` 測試；ruff 自控檔全綠、tab1/2/3 零新增錯誤；`pytest -m "not slow"` 604 passed/1 skipped。沙箱無瀏覽器+無 GEMINI_KEY → AI 實際文字未親驗，僅 prompt/流程/快照層驗證。
+
+---
+
 ### §3-AT 基金體檢表：郭老師「挑三揀四」PK 同類型（v18.213 新增）
 
 **需求**（user）：依郭老師「挑三揀四」法則，逐檔把基金含息報酬與**同類型平均** PK，打敗同類＝🏆 優等生（抱緊滾雪球）、明顯落後＝⚠️ 汰弱候選。

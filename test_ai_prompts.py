@@ -5,15 +5,12 @@
 from __future__ import annotations
 
 from services.ai_prompts import (
-    build_allocation_diagnosis_prompt,
-    build_beginner_guide_prompt,
     build_event_impact_prompt,
     build_fund_json_prompt,
     build_global_prompt,
     build_macro_structured_prompt,
     build_mk_advisor_prompt,
-    build_news_driven_prompt,
-    build_trend_action_prompt,
+    build_structured_summary_prompt,
 )
 
 
@@ -167,53 +164,42 @@ def test_build_macro_structured_prompt_stale_note_appended() -> None:
 
 
 # ════════════════════════════════════════════════════════════
-# v18.159 新增 4 視角 builder smoke 測試
+# v18.214 build_structured_summary_prompt — 逐章節白話結論 + 時事
 # ════════════════════════════════════════════════════════════
-def test_build_trend_action_prompt_has_3_sections():
-    out = build_trend_action_prompt(
-        tab_label="總經位階", snapshot="- VIX: 18.5\n- PMI: 50.2",
+def test_build_structured_summary_prompt_lists_sections_and_news():
+    out = build_structured_summary_prompt(
+        tab_label="組合戰情室",
+        snapshot="- 核心 8 檔 / 衛星 2 檔",
+        sections=["組合配置與健康度", "與同類比較"],
+        headlines=["Fed 維持利率", "台股創高"],
     )
-    assert "### 📈 一、近期趨勢解讀" in out
-    assert "### ⚠️ 二、風險警示" in out
-    assert "### 🎯 三、行動建議" in out
-    assert "總經位階" in out
-    assert "VIX: 18.5" in out
+    assert "組合戰情室" in out
+    assert "核心 8 檔 / 衛星 2 檔" in out
+    # 章節清單逐項列出
+    assert "組合配置與健康度" in out
+    assert "與同類比較" in out
+    # 新聞 headlines 帶入
+    assert "Fed 維持利率" in out
+    assert "台股創高" in out
+    # 逐節雙塊 + 末段一句話總結
+    assert "白話結論" in out
+    assert "最近新聞影響" in out
+    assert "一句話總結" in out
+    # 白話風格守則
+    assert "白話" in out
 
 
-def test_build_allocation_diagnosis_prompt_has_4_sections():
-    out = build_allocation_diagnosis_prompt(
-        tab_label="組合戰情室", snapshot="- 核心 8 檔 / 衛星 2 檔",
-    )
-    assert "### ⚖️ 一、核心衛星比例診斷" in out
-    assert "### 🌐 二、地理 / 產業集中度" in out
-    assert "### 💰 三、現金水位與彈性" in out
-    assert "### 🔄 四、再平衡操作清單" in out
-    assert "80/20" in out   # MK 建議錨點
-
-
-def test_build_beginner_guide_prompt_bans_jargon():
-    out = build_beginner_guide_prompt(
+def test_build_structured_summary_prompt_no_news_placeholder():
+    out = build_structured_summary_prompt(
         tab_label="單一基金", snapshot="- Sharpe: 1.2",
+        sections=["風險指標"], headlines=[],
     )
-    assert "### 🧒 一、這頁在告訴我什麼" in out
-    assert "### 📖 二、KPI 逐項白話文翻譯" in out
-    assert "禁止使用 Z-Score" in out   # 風格守則保留
-    assert "天氣" in out   # 比喻提示
+    assert "這次沒有抓到相關新聞" in out
+    assert "風險指標" in out
 
 
-def test_build_news_driven_prompt_joins_headlines():
-    out = build_news_driven_prompt(
-        tab_label="總經位階", snapshot="- VIX: 28",
-        headlines=["Fed 鷹派發言", "中東情勢升溫", "AI 題材續熱"],
+def test_build_structured_summary_prompt_empty_sections_safe():
+    out = build_structured_summary_prompt(
+        tab_label="X", snapshot="- a", sections=[],
     )
-    assert "Fed 鷹派發言" in out
-    assert "中東情勢升溫" in out
-    assert "### 📰 一、新聞重點摘要" in out
-    assert "### 🔗 二、新聞 × 持有資產的交叉影響" in out
-
-
-def test_build_news_driven_prompt_no_headlines_shows_placeholder():
-    out = build_news_driven_prompt(
-        tab_label="總經位階", snapshot="- VIX: 18", headlines=[],
-    )
-    assert "（無新聞快照）" in out
+    assert "請依快照自行分段" in out

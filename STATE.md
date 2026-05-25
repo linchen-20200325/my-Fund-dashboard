@@ -246,6 +246,19 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.214 — 三 Tab AI 改「白話總體檢」：吃全章節快照、逐章節結論+時事（2026-05-25）
+
+- [x] **需求**（user）：Tab1/2/3 的 AI 必須讀該 Tab 全部資料、逐章節給結論+時事；不適用就刪改成結構化完整摘要；且要「很白話、少專業術語」
+- [x] **拍板**（AskUserQuestion）：重寫通用 widget、保留專用 AI（低風險）；每 Tab 一個主 AI
+- [x] **核心改寫** `ui/helpers/ai_summary.py`：4 視角散文 selectbox → 單一「🤖 AI 白話總體檢」按鈕；逐章節【白話結論】+【最近新聞影響】+末段一句話總結；結果存 `session_state[{tab_key}_ai_struct]`（重開 expander 不重打 API），max_tokens 3500
+- [x] **新 prompt** `services/ai_prompts.py:build_structured_summary_prompt`（吃 tab_label/snapshot/sections/headlines）：強白話風格守則（術語用括號白話解釋、生活比喻）；**刪** 4 個舊散文 builder（trend/allocation/beginner/news，dead）
+- [x] **Tab1**：保留成熟 `analyze_macro_structured`（7 段+新聞），移除重複散文 widget（`_render_tab1_ai_summary`）；macro prompt 補白話風格守則
+- [x] **Tab2**：沿用既有完整 10 段快照，補 `sections` 清單切結構化輸出
+- [x] **Tab3**：快照從稀疏 4 段擴成全章節（組合健康度 KPI + 各檔 MK 體檢結論 + 同類 PK 優等生/汰弱 + 配息現金流 + 新聞）
+- [x] **測試** `test_ai_prompts.py`：刪 5 個舊 builder 測試、加 3 個 structured_summary 測試
+- [x] **驗證** AST/import/removal OK；ruff 自控檔 `All checks passed`、tab1/2/3 **零新增**錯誤（51/65/60 = baseline）；`pytest -m "not slow"` **604 passed**（606−5+3）/1 skipped；Tab3 快照加料以 mock 驗證確實產出內容
+- [x] **邊界**：LLM 仍用既有 Gemini（未換供應商）；T7 `analyze_portfolio_mk_advisor` 保留為深入版不動；沙箱無瀏覽器+無 GEMINI_KEY → AI 實際輸出未親驗，僅 prompt/流程/快照層驗證
+
 ### v18.213 — 新增「基金體檢表」：郭老師挑三揀四 PK 同類型（揪優等生 / 汰弱候選）（2026-05-25）
 
 - [x] **動機**（user 需求）：依郭老師「挑三揀四」法則，把每檔基金含息報酬與**同類型平均** PK，打敗同類＝🏆 優等生、明顯落後＝⚠️ 汰弱候選

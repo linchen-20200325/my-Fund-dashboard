@@ -2129,6 +2129,37 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     if n_total > _shown:
         lines.append(f"- …（其餘 {n_total - _shown} 檔略）")
 
+    # v18.214：吃「全章節」— 補組合健康度 KPI + 各檔 MK 體檢結論 + 同類 PK 體檢表
+    try:
+        from ui.components.mk_dashboard import build_mk_dataframe as _build_mk  # noqa: PLC0415
+        from ui.helpers.portfolio_health import compute_health_kpis as _kpis_fn  # noqa: PLC0415
+        from ui.helpers.fund_checkup import build_checkup_dataframe as _chk_fn  # noqa: PLC0415
+        _mk_df = _build_mk(loaded, bench_series=None)
+        _kpis = _kpis_fn(loaded, _mk_df)
+        _safe_tot = max(_kpis["n_funds"] - _kpis["n_na"], 0)
+        lines.append(
+            "- **🩺 組合健康度**："
+            f"現金流安全 {_kpis['n_cash_ok']}/{_safe_tot} 檔｜吃本金 {_kpis['n_eat']} 檔"
+            f"｜撿便宜 {_kpis['n_buy']} 檔｜留校查看 {_kpis['n_warn']} 檔"
+            f"｜停利提醒 {_kpis['n_take']} 檔")
+        if _mk_df is not None and not _mk_df.empty and "MK體檢結論" in _mk_df.columns:
+            lines.append("- **各檔 MK 體檢結論（前8）**：")
+            for _, _r in _mk_df.head(8).iterrows():
+                lines.append(f"  - {_r.get('代碼', '')} {_r.get('標的名稱', '')}："
+                             f"{_r.get('MK體檢結論', '')}")
+        _chk = _chk_fn(loaded)
+        if _chk is not None and not _chk.empty:
+            _v = _chk["體檢判定"]
+            _good = _chk.loc[_v.str.startswith("🏆"), "標的名稱"].tolist()
+            _lag = _chk.loc[_v.str.startswith("⚠️"), "標的名稱"].tolist()
+            _na_n = int(_v.str.startswith("⬜").sum())
+            lines.append(
+                f"- **🏆 同類 PK 體檢**：優等生 {len(_good)} 檔"
+                f"（{'、'.join(_good[:5]) or '—'}）｜汰弱候選 {len(_lag)} 檔"
+                f"（{'、'.join(_lag[:5]) or '—'}）｜同類資料不足 {_na_n} 檔")
+    except Exception:
+        pass   # noqa: smoke-allow-pass — AI 快照加料失敗不阻斷主流程
+
     # v18.160：配息現金/單位拆分估算（從 _v2_buf 撈 user 已設定的 div_cash_pct）
     _v2_buf = st.session_state.get("_v2_buf", {}) or {}
     _div_lines: list[str] = []
@@ -2196,6 +2227,13 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
         tab_key="tab3",
         tab_label="組合戰情室",
         snapshot=snapshot,
+        sections=[
+            "組合配置與健康度",
+            "各檔基金體檢（MK 戰情室）",
+            "與同類比較（優等生 / 汰弱候選）",
+            "配息現金流",
+            "新聞時事影響",
+        ],
         headlines=headlines,
         gemini_api_key=gemini_key,
     )

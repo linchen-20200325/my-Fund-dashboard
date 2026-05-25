@@ -1,18 +1,22 @@
-"""ai_summary.py — v18.159 各 Tab 通用「AI 白話文總結」widget。
+"""ai_summary.py — 各 Tab 通用「AI 白話總體檢」widget（v18.214 改版）。
 
 設計原則（呼應 CLAUDE.md §2 §4）：
-- 純 UI 層：呼叫 services/ai_prompts builder + services/ai_service._gemini
-- 統一 selectbox（4 個視角）+ 觸發按鈕 + 結果區
-- caller 只負責「組裝該 Tab 的 snapshot 字串」，不必碰 prompt / API 細節
-- key 命名空間隔離：caller 傳 tab_key（如 "tab1"），避免 6 個 Tab widget key 衝突
+- 純 UI 層：呼叫 services/ai_prompts.build_structured_summary_prompt
+  + services/ai_service._gemini
+- 單一「結構化完整摘要」：吃該 Tab 全章節快照，逐章節給白話結論 + 時事，
+  取代 v18.159 的「4 視角散文 selectbox」（已不符合「逐章節結論」需求）。
+- caller 只負責組裝 snapshot 字串 + 章節清單 + 新聞 headlines。
+- key 命名空間隔離：caller 傳 tab_key（如 "tab2"），避免多 Tab widget key 衝突。
+- 結果存 session_state[f"{tab_key}_ai_struct"]，重開 expander 不重打 API。
 
 使用範例：
     from ui.helpers.ai_summary import render_ai_summary_widget
     render_ai_summary_widget(
-        tab_key="tab1",
-        tab_label="總經位階",
-        snapshot=_build_macro_snapshot_for_ai(),
-        headlines=session_state.get("macro_news_headlines", []),
+        tab_key="tab2",
+        tab_label="單一基金（00878）",
+        snapshot=_snap_text,
+        sections=["基本資料", "績效表現", "風險指標", "配息", "新聞時事"],
+        headlines=session_state.get("news_titles", []),
         gemini_api_key=GEMINI_KEY,
     )
 """
@@ -21,19 +25,7 @@ from typing import Optional
 
 import streamlit as st
 
-from services.ai_prompts import (
-    build_trend_action_prompt,
-    build_allocation_diagnosis_prompt,
-    build_beginner_guide_prompt,
-    build_news_driven_prompt,
-)
-
-PERSPECTIVES: dict[str, str] = {
-    "trend_action": "📈 趨勢 + ⚠️ 風險 + 🎯 行動（推薦）",
-    "allocation":   "💰 配置診斷",
-    "beginner":     "🧠 新手導讀",
-    "news":         "📰 新聞連動",
-}
+from services.ai_prompts import build_structured_summary_prompt
 
 
 def render_ai_summary_widget(
@@ -41,97 +33,61 @@ def render_ai_summary_widget(
     tab_key: str,
     tab_label: str,
     snapshot: str,
+    sections: Optional[list[str]] = None,
     headlines: Optional[list[str]] = None,
     stale_note: str = "",
     gemini_api_key: str = "",
     expanded: bool = False,
 ) -> None:
-    """在 Tab 末尾掛一個 AI 白話文總結 widget。
+    """在 Tab 末尾掛一個「AI 白話總體檢」widget（逐章節結論 + 時事）。
 
-    tab_key:        widget key 命名空間（如 "tab1" / "tab3"）
+    tab_key:        widget key 命名空間（如 "tab2" / "tab3"）
     tab_label:      中文 label，傳給 AI 知道「在分析哪個 Tab」
-    snapshot:       已格式化的資料快照字串（KPI / 標籤 / 數字）
-    headlines:      新聞連動視角專用；其它視角忽略
-    stale_note:     資料新鮮度註記（如「資料最新更新：2026-05-20」），可空
+    snapshot:       已格式化的「全章節」資料快照字串
+    sections:       該 Tab 章節名稱清單（依顯示順序），AI 逐節各給一段
+    headlines:      近期新聞標題，用於每節「最近新聞影響」
+    stale_note:     資料新鮮度註記，可空
     gemini_api_key: secrets["GEMINI_KEY"]
-    expanded:       expander 是否預設展開（預設關，由 user 點開）
+    expanded:       expander 是否預設展開
     """
-    with st.expander(f"🤖 AI 白話文總結（{tab_label}）", expanded=expanded):
+    with st.expander(f"🤖 AI 白話總體檢（{tab_label}）", expanded=expanded):
         if not snapshot or not snapshot.strip():
             st.caption("⚠️ 本 Tab 暫無可分析的快照資料（資料尚未載入）。")
             return
 
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            perspective_key = st.selectbox(
-                "分析視角",
-                options=list(PERSPECTIVES.keys()),
-                format_func=lambda k: PERSPECTIVES[k],
-                key=f"{tab_key}_ai_perspective",
-                help="同一份資料，不同視角會講不同重點。",
-            )
-        with col2:
-            st.write("")  # vertical align hack
-            st.write("")
-            run = st.button(
-                "▶️ 生成", key=f"{tab_key}_ai_run",
-                use_container_width=True, type="primary",
-            )
+        st.caption("把這個 Tab 的所有資料交給 AI，逐段用白話講「現在是好是壞、跟最近新聞有沒有關係、下一步怎麼做」。")
+        _cache_key = f"{tab_key}_ai_struct"
+        _cached = st.session_state.get(_cache_key)
 
-        if perspective_key == "news" and not (headlines or []):
-            st.caption("ℹ️ 本 Tab 未提供新聞快照，「新聞連動」視角會回缺資料說明。")
+        _btn_label = "🔄 重新生成" if _cached else "▶️ 生成白話總體檢"
+        run = st.button(_btn_label, key=f"{tab_key}_ai_run",
+                        use_container_width=True, type="primary")
 
-        if not run:
-            return
-
-        if not gemini_api_key:
-            st.warning("❗ 未設定 Gemini API Key（secrets `GEMINI_KEY`）— 無法呼叫 AI。")
-            return
-
-        prompt = _build_prompt(
-            perspective_key=perspective_key,
-            tab_label=tab_label,
-            snapshot=snapshot,
-            stale_note=stale_note,
-            headlines=headlines or [],
-        )
-
-        # 延遲 import：ai_service 重，避免 module import 時拖慢 Streamlit cold start
-        from services.ai_service import _gemini  # noqa: PLC0415
-
-        with st.spinner("🤖 AI 思考中（約 5-15 秒）..."):
-            try:
-                resp = _gemini(gemini_api_key, prompt, max_tokens=2000)
-            except Exception as e:
-                st.error(f"❌ AI 呼叫失敗：[{type(e).__name__}] {e}")
+        if run:
+            if not gemini_api_key:
+                st.warning("❗ 未設定 Gemini API Key（secrets `GEMINI_KEY`）— 無法呼叫 AI。")
                 return
+            prompt = build_structured_summary_prompt(
+                tab_label=tab_label, snapshot=snapshot,
+                sections=sections or [], headlines=headlines or [],
+                stale_note=stale_note,
+            )
+            # 延遲 import：ai_service 重，避免 module import 時拖慢 Streamlit cold start
+            from services.ai_service import _gemini  # noqa: PLC0415
+            with st.spinner("🤖 AI 正在逐段體檢（約 10-20 秒）..."):
+                try:
+                    _cached = _gemini(gemini_api_key, prompt, max_tokens=3500)
+                except Exception as e:
+                    st.error(f"❌ AI 呼叫失敗：[{type(e).__name__}] {e}")
+                    return
+            st.session_state[_cache_key] = _cached
 
-        st.markdown(resp)
+        if not _cached:
+            return
+
+        st.markdown(_cached)
+        _n_sec = len([s for s in (sections or []) if str(s).strip()])
         st.caption(
-            f"💡 視角：{PERSPECTIVES[perspective_key]}　"
-            f"｜ 模型：Gemini　"
-            f"｜ 快照長度：{len(snapshot)} chars"
+            f"💡 模型：Gemini　｜ 章節：{_n_sec} 節　"
+            f"｜ 快照長度：{len(snapshot)} chars　｜ 結果已暫存，重開不會重打 API"
         )
-
-
-def _build_prompt(*, perspective_key: str, tab_label: str, snapshot: str,
-                  stale_note: str, headlines: list[str]) -> str:
-    """依 perspective 派發到對應 builder。"""
-    if perspective_key == "trend_action":
-        return build_trend_action_prompt(
-            tab_label=tab_label, snapshot=snapshot, stale_note=stale_note,
-        )
-    if perspective_key == "allocation":
-        return build_allocation_diagnosis_prompt(
-            tab_label=tab_label, snapshot=snapshot, stale_note=stale_note,
-        )
-    if perspective_key == "beginner":
-        return build_beginner_guide_prompt(
-            tab_label=tab_label, snapshot=snapshot, stale_note=stale_note,
-        )
-    if perspective_key == "news":
-        return build_news_driven_prompt(
-            tab_label=tab_label, snapshot=snapshot,
-            headlines=headlines, stale_note=stale_note,
-        )
-    raise ValueError(f"unknown perspective: {perspective_key}")

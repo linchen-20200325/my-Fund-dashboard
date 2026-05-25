@@ -1294,6 +1294,16 @@ def render_single_fund_tab() -> None:
                         tab_key="tab2",
                         tab_label=f"單一基金（{name or fk}）",
                         snapshot="\n".join(_snap),
+                        sections=[
+                            "基本資料（類別/幣別/淨值/費用）",
+                            "績效表現（近期報酬）",
+                            "風險指標（波動/夏普等）",
+                            "配息與吃本金檢查",
+                            "買賣點與價格位階",
+                            "持股與產業配置",
+                            "總經大環境背景",
+                            "新聞時事影響",
+                        ],
                         headlines=_hl,
                         gemini_api_key=GEMINI_KEY,
                     )
