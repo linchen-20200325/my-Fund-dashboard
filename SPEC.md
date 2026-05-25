@@ -430,6 +430,32 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AW 多 Gemini key 自動輪替：分散免費額度 + 防斷（v18.217 新增）
+
+**需求**（user）：手上有多個 Google 帳號的 Gemini API key，想分流 token / 免費額度。拍板「自動輪替」（撞配額自動換把）而非各 Tab 固定分配。
+
+**核心** `services/ai_service.py`：
+- `get_gemini_keys() -> list[str]`：從環境變數收齊所有 key，去重保序。來源 = `GEMINI_API_KEY`（主）＋ `GEMINI_API_KEYS`（逗號/分號分隔）＋ `GEMINI_API_KEY_1..10`（編號）。
+- `gemini_generate(prompt, max_tokens, keys, start)`：從 `start` 起 round-robin 試 key；撞 429（配額）就立刻換下一把（`retry=0` 不空等），全部撞配額才回 429 訊息；非配額錯誤（HTTP 5xx／逾時）不換 key 直接回傳；**單把 key 時退化成原 `_gemini`**（保留預設 retry 容錯）。
+- `_is_quota_error(text)`：以 `"429"` / `"配額已達上限"` 判定。
+
+**接線** `ui/helpers/ai_summary.py`（三 Tab 共用 widget）：傳入 key 優先、其餘從池補上；用跨 Tab 的 `st.session_state["_gemini_key_cursor"]` 當 round-robin 起點（即使沒撞 429 也輪流，平均分散負載）；footer caption 顯示「N 把 key 輪替」。
+
+**Secrets 寫法**（任一即可，可混用；單把 = 維持原樣）：
+```toml
+# .streamlit/secrets.toml（或 Streamlit Cloud → App settings → Secrets）
+GEMINI_API_KEY = "主帳號key"               # 主／向後相容
+GEMINI_API_KEYS = "帳號2key, 帳號3key"      # 逗號分隔多把
+# 或編號式：
+GEMINI_API_KEY_1 = "帳號2key"
+GEMINI_API_KEY_2 = "帳號3key"
+```
+`app.py:_load_keys` 會把上述全部從 secrets 鏡像到 env 供 `get_gemini_keys` 讀。
+
+**驗證**：`test_ai_service.py` 9 passed（解析/去重/輪替/全429/offset/單key/空池）；`pytest -m "not slow"` 611 passed/1 skipped；ruff 零新增；向後相容（單 key 行為不變）。
+
+---
+
 ### §3-AV Tab1 總經 AI 也改白話總體檢、刪舊七節 macro AI（v18.215 改版）
 
 **需求**（user 連兩次強調 + 附截圖）：每個 Tab 的 AI「不要選單、整合成單一結構化完整摘要、逐章節結論+時事、減少金融術語直接白話」。截圖證實線上仍是舊 4 視角 selectbox → 純屬**部署未更新**（看到的是 v18.208 舊 deploy，非程式碼問題）。

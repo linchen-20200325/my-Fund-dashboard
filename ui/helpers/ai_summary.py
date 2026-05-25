@@ -63,23 +63,35 @@ def render_ai_summary_widget(
         run = st.button(_btn_label, key=f"{tab_key}_ai_run",
                         use_container_width=True, type="primary")
 
+        # 延遲 import：ai_service 重，避免 module import 時拖慢 Streamlit cold start
+        from services.ai_service import gemini_generate, get_gemini_keys  # noqa: PLC0415
+        # v18.217：多 key 自動輪替 —— 傳入的 key 優先，其餘從 secrets/env 池補上
+        _pool = get_gemini_keys()
+        if gemini_api_key and gemini_api_key not in _pool:
+            _pool = [gemini_api_key, *_pool]
+        _n_keys = len(_pool)
+
         if run:
-            if not gemini_api_key:
-                st.warning("❗ 未設定 Gemini API Key（secrets `GEMINI_KEY`）— 無法呼叫 AI。")
+            if not _pool:
+                st.warning("❗ 未設定 Gemini API Key（secrets `GEMINI_API_KEY`）— 無法呼叫 AI。")
                 return
             prompt = build_structured_summary_prompt(
                 tab_label=tab_label, snapshot=snapshot,
                 sections=sections or [], headlines=headlines or [],
                 stale_note=stale_note,
             )
-            # 延遲 import：ai_service 重，避免 module import 時拖慢 Streamlit cold start
-            from services.ai_service import _gemini  # noqa: PLC0415
+            # round-robin 起點：跨 Tab 共用 cursor，分散多把 key 的負載（即使沒撞 429）
+            _cur = int(st.session_state.get("_gemini_key_cursor", 0))
             with st.spinner("🤖 AI 正在逐段體檢（約 10-20 秒）..."):
                 try:
-                    _cached = _gemini(gemini_api_key, prompt, max_tokens=3500)
+                    _cached = gemini_generate(
+                        prompt, max_tokens=3500,
+                        keys=_pool, start=_cur % _n_keys,
+                    )
                 except Exception as e:
                     st.error(f"❌ AI 呼叫失敗：[{type(e).__name__}] {e}")
                     return
+            st.session_state["_gemini_key_cursor"] = (_cur + 1) % _n_keys
             st.session_state[_cache_key] = _cached
 
         if not _cached:
@@ -87,7 +99,8 @@ def render_ai_summary_widget(
 
         st.markdown(_cached)
         _n_sec = len([s for s in (sections or []) if str(s).strip()])
+        _key_note = f"{_n_keys} 把 key 輪替" if _n_keys > 1 else "Gemini"
         st.caption(
-            f"💡 模型：Gemini　｜ 章節：{_n_sec} 節　"
+            f"💡 模型：{_key_note}　｜ 章節：{_n_sec} 節　"
             f"｜ 快照長度：{len(snapshot)} chars　｜ 結果已暫存，重開不會重打 API"
         )

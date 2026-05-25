@@ -12,6 +12,7 @@ AI 分析引擎 v13 — 單次呼叫 · 含風險預警快照 · 六因子評分
   - analyze_portfolio_mk_advisor   — MK 智能戰情室 AI 建議
   - build_stale_flags  — Data Guard STALE 旗標注入
   - event_impact_analysis — 持股 × 新聞交叉比對警報
+  - get_gemini_keys / gemini_generate — v18.217 多 key 自動輪替
 
 v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + Gemini API 呼叫。
 （Gemini HTTP 呼叫雖屬 I/O，但與 prompt 構造 / 輸出解析緊耦合，整檔保留服務層
@@ -620,3 +621,56 @@ def event_impact_analysis(
         return result
     except Exception:
         return ""
+
+
+# ── v18.217 多 Gemini key 自動輪替（分散免費額度 + 防斷）──────────
+def get_gemini_keys() -> list[str]:
+    """收集所有可用的 Gemini API key（多帳號輪替用），去重保序。
+
+    來源（皆從環境變數讀；app.py:_load_keys 會把 secrets 鏡像到 env）：
+    - GEMINI_API_KEY            主 key（向後相容）
+    - GEMINI_API_KEYS           逗號/分號分隔的多把
+    - GEMINI_API_KEY_1 .. _10   編號式多把
+    """
+    import os
+    keys: list[str] = []
+
+    def _add(raw: str) -> None:
+        for part in str(raw or "").replace(";", ",").split(","):
+            k = part.strip()
+            if k and k not in keys:
+                keys.append(k)
+
+    _add(os.environ.get("GEMINI_API_KEY", ""))
+    _add(os.environ.get("GEMINI_API_KEYS", ""))
+    for i in range(1, 11):
+        _add(os.environ.get(f"GEMINI_API_KEY_{i}", ""))
+    return keys
+
+
+def _is_quota_error(text: str) -> bool:
+    """判斷 _gemini 回傳是否為配額/速率上限（429）。"""
+    return isinstance(text, str) and ("429" in text or "配額已達上限" in text)
+
+
+def gemini_generate(prompt: str, max_tokens: int = 2000,
+                    keys: list[str] | None = None, start: int = 0) -> str:
+    """多 key 自動輪替版 Gemini 呼叫。
+
+    從 start 起以 round-robin 依序試 key；哪把撞配額(429)就立刻換下一把
+    （retry=0 不空等），全部撞配額才回傳 429 訊息。非配額錯誤（HTTP 5xx /
+    逾時）不換 key、直接回傳（換 key 無助於修復）。單把 key 時行為等同 _gemini。
+    """
+    pool = [k for k in (keys if keys is not None else get_gemini_keys()) if k]
+    if not pool:
+        return "⚠️ 未設定 Gemini API Key"
+    if len(pool) == 1:
+        return _gemini(pool[0], prompt, max_tokens=max_tokens)
+    n = len(pool)
+    last = ""
+    for off in range(n):
+        res = _gemini(pool[(start + off) % n], prompt, max_tokens=max_tokens, retry=0)
+        if not _is_quota_error(res):
+            return res
+        last = res
+    return last or "❌ 所有 Gemini key 配額皆已用盡，請稍後再試。"

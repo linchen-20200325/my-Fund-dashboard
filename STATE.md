@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.217 — 多 Gemini key 自動輪替（分散免費額度 + 防斷）（2026-05-25）
+
+- [x] **需求**（user）：想用多個帳號的 Gemini key 分流 token / 免費額度 → 選「自動輪替」方案
+- [x] **新 `services/ai_service.py`**：`get_gemini_keys()`（從 env 收 `GEMINI_API_KEY` + `GEMINI_API_KEYS`(逗號/分號) + `GEMINI_API_KEY_1..10`，去重保序）、`gemini_generate(keys, start)`（round-robin；撞 429 即換下一把、`retry=0` 不空等；非配額錯誤不換；單 key == 原 `_gemini`）、`_is_quota_error`
+- [x] **接線 `ui/helpers/ai_summary.py`**：三 Tab widget 改用 `gemini_generate` + 跨 Tab session cursor `_gemini_key_cursor`（即使沒撞 429 也輪流分散負載）；caption 顯示「N 把 key 輪替」
+- [x] **`app.py:_load_keys`**：把 `GEMINI_API_KEYS` / `GEMINI_API_KEY_1..10` 從 secrets 鏡像到 env（Streamlit Cloud 才讀得到）
+- [x] **測試** 新 `test_ai_service.py` 9 passed（解析/去重/輪替/全429/offset/單key保留retry/空池）；`pytest -m "not slow"` **611 passed**/1 skipped 零回歸；ruff 零新增
+- [x] **向後相容**：只設一把 `GEMINI_API_KEY` → 行為完全不變
+
 ### v18.216 — Tab3 AI 快照省 token：每檔上限 8→5（2026-05-25）
 
 - [x] **動機**（user）：Tab3 組合 AI 快照隨檔數膨脹、最吃 input token → 調小上限

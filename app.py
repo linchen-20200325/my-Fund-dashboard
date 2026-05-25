@@ -140,6 +140,11 @@ def _load_keys():
     gem  = st.secrets.get("GEMINI_API_KEY","") or os.environ.get("GEMINI_API_KEY","")
     if fred: os.environ["FRED_API_KEY"]   = fred
     if gem:  os.environ["GEMINI_API_KEY"] = gem
+    # v18.217: 多把 Gemini key（自動輪替）— 從 secrets 鏡像到 env 供 get_gemini_keys 讀
+    for _gk in (["GEMINI_API_KEYS"] + [f"GEMINI_API_KEY_{_i}" for _i in range(1, 11)]):
+        _gv = st.secrets.get(_gk, "") or os.environ.get(_gk, "")
+        if _gv:
+            os.environ[_gk] = _gv
     # v18.113 AI-3: 多 LLM provider fallback chain — 額外載 Anthropic / OpenAI keys
     # 有設就匯出到 env，infra/llm.py::call_llm 會自動讀；缺則該 provider 在 chain 中 skip
     for _llm_key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
