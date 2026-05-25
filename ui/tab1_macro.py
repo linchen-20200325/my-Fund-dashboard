@@ -30,7 +30,6 @@ from fund_fetcher import (
     set_risk_free_rate,
 )
 from services.ai_service import (
-    analyze_macro_structured,
     event_impact_analysis,
 )
 from services.macro_service import (
@@ -162,7 +161,6 @@ def render_macro_tab() -> None:
                 st.session_state.prev_phase        = old_phase
                 st.session_state.phase_info        = phase
                 st.session_state.macro_done        = True
-                st.session_state.macro_ai          = ""
                 st.session_state.macro_last_update = _now_tw()
                 if ind and "FED_RATE" in ind:
                     set_risk_free_rate(ind["FED_RATE"].get("value",4.0) / 100)
@@ -2016,50 +2014,83 @@ def render_macro_tab() -> None:
                 else:
                     if _ai_mac_pct < 80:
                         st.warning(f"🟡 資料完整率 **{_ai_mac_pct}%**（黃燈），AI 結果參考性降低。")
-                    if st.button("🤖 AI 結構化總經摘要", key="btn_macro_ai", type="primary"):
-                        with st.spinner("Gemini 生成【現狀解讀】【系統性風險】【觀察重點】中..."):
-                            try:
-                                # v18.119 issue 3: 預先計算 Phase 4 + Phase 3-B 餵 AI
-                                # v18.120 issue 1: 加當下 7 子領域燈號狀態
-                                _ai_drv = None
-                                _ai_sub = None
-                                _ai_now = None
-                                try:
-                                    _ai_drv = rank_macro_drivers(
-                                        ind, target_key="LEI", lag_months=3, min_overlap=24,
-                                    )
-                                except Exception:
-                                    pass   # noqa: smoke-allow-pass
-                                try:
-                                    _ai_sub = backtest_sub_cycle_lights(
-                                        ind, target_key="LEI", window=60, forward_months=3,
-                                    )
-                                except Exception:
-                                    pass   # noqa: smoke-allow-pass
-                                try:
-                                    _ai_now = calc_sub_cycle_lights(ind)
-                                except Exception:
-                                    pass   # noqa: smoke-allow-pass
-                                _ai_txt = analyze_macro_structured(
-                                    api_key         = GEMINI_KEY,
-                                    indicators      = ind,
-                                    phase_info      = phase,
-                                    news_items      = st.session_state.get("news_items",[]),
-                                    systemic_risk   = st.session_state.get("systemic_risk_data"),
-                                    data_registry   = st.session_state.get("data_registry",{}),
-                                    driver_ranking  = _ai_drv,   # v18.119
-                                    subcycle_lights = _ai_sub,   # v18.119
-                                    sub_cycle_now   = _ai_now,   # v18.120
-                                )
-                                st.session_state.macro_ai = _ai_txt
-                            except Exception as _e:
-                                _friendly_error("AI 總經摘要產生失敗", _e,
-                                    hint="可能是 API 額度用完或網路斷線，請稍後再點按鈕重試。")
-                if st.session_state.macro_ai:
-                    st.markdown(st.session_state.macro_ai)
+                    # v18.215：Tab1 改用通用「白話總體檢」widget（與 Tab2/3 一致），
+                    # 刪除舊七節 macro AI；吃全總經資料、逐章節白話結論 + 時事、無選單。
+                    from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
+                    _mac_snap, _mac_heads, _mac_secs = _build_macro_ai_snapshot(
+                        ind, phase,
+                        st.session_state.get("composite_score", {}),
+                        st.session_state.get("systemic_risk_data"),
+                        st.session_state.get("news_items", []),
+                    )
+                    render_ai_summary_widget(
+                        tab_key="tab1",
+                        tab_label="總經位階",
+                        snapshot=_mac_snap,
+                        sections=_mac_secs,
+                        headlines=_mac_heads,
+                        gemini_api_key=GEMINI_KEY,
+                        expanded=True,
+                    )
             else:
                 st.caption("⚠️ 未設定 GEMINI_API_KEY，AI 分析功能關閉")
     else:
         st.info("👆 點擊「載入總經資料」開始分析")
+
+
+def _build_macro_ai_snapshot(ind, phase, score, srd, news):
+    """v18.215：組 Tab1 總經「全資料」快照給通用白話摘要 widget。
+
+    回傳 (snapshot_str, headlines, sections)。吃齊 Tab1 已算好的資料：
+    景氣位階/分數、系統性風險、全部總經指標、領先指標排名、當下子領域燈號、新聞。
+    """
+    lines = ["## 總經全章節快照"]
+    if isinstance(phase, dict) and phase:
+        _sc = score.get("total", "—") if isinstance(score, dict) else (score or "—")
+        lines.append(f"- 景氣位階：{phase.get('phase', '—')}｜綜合分數：{_sc}")
+        _alloc = phase.get("allocation") or phase.get("alloc")
+        if isinstance(_alloc, dict) and _alloc:
+            lines.append("- 建議配置：" + "、".join(f"{k} {v}%" for k, v in _alloc.items()))
+        elif _alloc:
+            lines.append(f"- 建議配置：{_alloc}")
+    if isinstance(srd, dict) and srd:
+        lines.append(f"- 系統性風險評級：{srd.get('risk_level', 'LOW')}"
+                     f"（分數 {srd.get('risk_score', '—')}）")
+        _trig = srd.get("triggered") or srd.get("keywords")
+        if isinstance(_trig, (list, tuple)) and _trig:
+            lines.append("  - 觸發事件關鍵字：" + "、".join(str(t) for t in _trig[:5]))
+    if isinstance(ind, dict) and ind:
+        lines.append("- 關鍵總經指標：")
+        for k, v in ind.items():
+            if isinstance(v, dict) and "value" in v:
+                _sig = v.get("signal", "")
+                lines.append(f"  - {k}：{v.get('value')} {v.get('unit', '')}"
+                             f"{(' / ' + str(_sig)) if _sig else ''}".rstrip())
+            elif isinstance(v, (int, float, str)) and v not in (None, ""):
+                lines.append(f"  - {k}：{v}")
+    try:
+        from services.macro_service import (  # noqa: PLC0415
+            rank_macro_drivers as _rmd,
+            calc_sub_cycle_lights as _csl,
+        )
+        _drv = _rmd(ind, target_key="LEI", lag_months=3, min_overlap=24)
+        if isinstance(_drv, dict) and _drv.get("ok") and _drv.get("ranked"):
+            lines.append("- 領先指標排名（與景氣約 3 個月後的關聯強弱）：" + "、".join(
+                f"{r.get('name')}({'同向' if r.get('direction') == '+' else '反向'}"
+                f" {float(r.get('abs_corr', 0) or 0):.2f})"
+                for r in _drv["ranked"][:3]))
+        _lights = _csl(ind)
+        if isinstance(_lights, list) and _lights:
+            lines.append("- 各產業/子領域當下燈號：" + "、".join(
+                f"{x.get('name', '')}{x.get('icon', '')}"
+                f"{('(' + str(x.get('verdict')) + ')') if x.get('verdict') else ''}"
+                for x in _lights[:8]))
+    except Exception:
+        pass   # noqa: smoke-allow-pass — 進階分析缺失不阻斷 AI 摘要
+    headlines = [str(n.get("title", "") or n.get("headline", ""))
+                 for n in (news or []) if isinstance(n, dict)][:8]
+    sections = ["景氣位階與分數", "資產配置建議", "關鍵總經指標", "系統性風險",
+                "領先指標與產業燈號", "新聞時事"]
+    return "\n".join(lines), headlines, sections
 
 

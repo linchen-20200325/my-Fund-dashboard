@@ -8,7 +8,6 @@ from services.ai_prompts import (
     build_event_impact_prompt,
     build_fund_json_prompt,
     build_global_prompt,
-    build_macro_structured_prompt,
     build_mk_advisor_prompt,
     build_structured_summary_prompt,
 )
@@ -133,34 +132,6 @@ def test_build_event_impact_prompt_no_holdings() -> None:
         holdings_ctx="",
     )
     assert "• Single headline" in out
-
-
-# ════════════════════════════════════════════════════════════
-# build_macro_structured_prompt
-# ════════════════════════════════════════════════════════════
-def test_build_macro_structured_prompt_has_7_sections() -> None:
-    out = build_macro_structured_prompt(
-        snapshot="[macro snapshot]", stale_note="",
-    )
-    assert "[macro snapshot]" in out
-    # v18.120: 7 節（多了第六節「跨領域綜合判讀」）
-    for h in ("### 📍 一、", "### ⚖️ 二、", "### 🔴 三、",
-              "### 🟢 四、", "### 📐 五、", "### 🌐 六、", "### 🔄 七、"):
-        assert h in out
-    assert "- [ ]" in out   # checkbox 在第七節
-    # 綜合判讀第六節必須要求引用所有來源
-    assert "跨領域綜合判讀" in out
-    assert "7 子領域當下燈號" in out
-    assert "Phase 4 領先指標排名" in out
-    assert "Phase 3-B 子領域燈號歷史回測" in out
-
-
-def test_build_macro_structured_prompt_stale_note_appended() -> None:
-    out = build_macro_structured_prompt(
-        snapshot="[snap]",
-        stale_note="\n⚠️ 資料新鮮度警告 PMI:42d",
-    )
-    assert "⚠️ 資料新鮮度警告 PMI:42d" in out
 
 
 # ════════════════════════════════════════════════════════════

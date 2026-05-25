@@ -246,6 +246,16 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.215 — Tab1 總經 AI 也改白話總體檢、刪舊七節 macro AI（三 Tab 全一致）（2026-05-25）
+
+- [x] **需求**（user 連兩次強調 + 截圖）：每個 Tab 的 AI「不要選單、整合成單一結構化完整摘要、逐章節結論+時事、減少術語直接白話文」；截圖證實線上仍是舊「4 視角散文」selectbox widget → **部署未更新**（看到的是 v18.208 舊 deploy）
+- [x] **拍板**（AskUserQuestion）：Tab1 也改白話摘要、刪舊 AI
+- [x] **Tab1 接線** `ui/tab1_macro.py`：移除舊「🤖 AI 結構化總經摘要」按鈕 + `analyze_macro_structured` 呼叫；改用通用 `render_ai_summary_widget`（無選單、單鍵、逐章節、expanded）；新增 `_build_macro_ai_snapshot`（吃景氣位階/分數/配置/系統性風險/全指標/領先指標排名/當下子領域燈號/新聞）；6 章節
+- [x] **刪舊 AI**：`services/ai_service.py:analyze_macro_structured`（~184 行，最後一個函式）+ `services/ai_prompts.py:build_macro_structured_prompt`（七節 prompt，含 Z-Score/σ 老手術語）；清 import + docstring 引用；`test_ai_prompts.py` 刪 2 個 macro 測試
+- [x] **三 Tab 一致**：Tab1/2/3 現在都同一個「🤖 AI 白話總體檢」widget — 無選單、逐章節【白話結論】+【時事】、強白話
+- [x] **驗證** AST/import/dangling-ref 全清；ruff 自控檔 `All checks passed`、tab1 零新增（51=51）、ai_service −3；`pytest -m "not slow"` **602 passed**（604−2）/1 skipped；mock 驗 Tab1 快照確實產出完整內容
+- [x] **部署提醒**：須 merge → `main` + 重新部署/Reboot 才會在線上生效
+
 ### v18.214 — 三 Tab AI 改「白話總體檢」：吃全章節快照、逐章節結論+時事（2026-05-25）
 
 - [x] **需求**（user）：Tab1/2/3 的 AI 必須讀該 Tab 全部資料、逐章節給結論+時事；不適用就刪改成結構化完整摘要；且要「很白話、少專業術語」

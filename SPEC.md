@@ -430,6 +430,24 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AV Tab1 總經 AI 也改白話總體檢、刪舊七節 macro AI（v18.215 改版）
+
+**需求**（user 連兩次強調 + 附截圖）：每個 Tab 的 AI「不要選單、整合成單一結構化完整摘要、逐章節結論+時事、減少金融術語直接白話」。截圖證實線上仍是舊 4 視角 selectbox → 純屬**部署未更新**（看到的是 v18.208 舊 deploy，非程式碼問題）。
+
+**拍板**（AskUserQuestion）：Tab1 也改白話摘要、刪舊 AI（接受拿掉「老手量化推演」深度，換全白話 + 三 Tab 一致）。
+
+**改動**：
+- `ui/tab1_macro.py`：移除「🤖 AI 結構化總經摘要」按鈕 + `analyze_macro_structured` 呼叫；改掛通用 `render_ai_summary_widget`（無選單、單鍵、`expanded=True`）。新增 `_build_macro_ai_snapshot(ind, phase, score, srd, news)` → 組「全資料」快照（景氣位階/分數/配置/系統性風險+觸發字/全部總經指標/領先指標排名 top3/當下子領域燈號/新聞）+ 6 章節清單。
+- **刪除** `services/ai_service.py:analyze_macro_structured`（最後一個函式，~184 行）與 `services/ai_prompts.py:build_macro_structured_prompt`（七節、含 Z-Score/σ/乖離率 老手術語）；連帶清 import + docstring + `test_ai_prompts.py` 2 個 macro 測試。
+
+**結果**：Tab1/2/3 三個 Tab 現在都用同一個「🤖 AI 白話總體檢」widget（無選單、逐章節【白話結論】+【時事】、強白話風格）。
+
+**部署**：須 merge → `main` 並重新部署/Reboot 才會在線上生效。
+
+**驗證**：AST/import/dangling-ref 全清；ruff 自控檔全綠、tab1 零新增、ai_service −3；`pytest -m "not slow"` 602 passed/1 skipped；mock 驗 Tab1 快照產出完整。
+
+---
+
 ### §3-AU 三 Tab AI 統一「白話總體檢」：吃全章節快照、逐章節結論+時事（v18.214 改版）
 
 **需求**（user）：Tab1/2/3 每個 Tab 的 AI 都要**讀該 Tab 全部資料**、**逐章節**給結論＋**時事**；不適用的就刪掉改成「結構化完整摘要」。追加：**很白話、盡量不用專業金融術語**。
