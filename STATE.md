@@ -246,6 +246,12 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.216 — Tab3 AI 快照省 token：每檔上限 8→5（2026-05-25）
+
+- [x] **動機**（user）：Tab3 組合 AI 快照隨檔數膨脹、最吃 input token → 調小上限
+- [x] **改 `ui/tab3_portfolio.py`**：組合績效列 `loaded[:8]→[:5]`、MK 體檢結論 `head(8)→head(5)`（標題同步「前8→前5」）；其餘護欄（同類 PK 名單 `[:5]`、配息 `<6`）已小，不動
+- [x] **驗證** AST OK；ruff tab3 零新增（60=60）；`pytest -k "tab3 or portfolio or ai_summary"` 37 passed
+
 ### v18.215 — Tab1 總經 AI 也改白話總體檢、刪舊七節 macro AI（三 Tab 全一致）（2026-05-25）
 
 - [x] **需求**（user 連兩次強調 + 截圖）：每個 Tab 的 AI「不要選單、整合成單一結構化完整摘要、逐章節結論+時事、減少術語直接白話文」；截圖證實線上仍是舊「4 視角散文」selectbox widget → **部署未更新**（看到的是 v18.208 舊 deploy）

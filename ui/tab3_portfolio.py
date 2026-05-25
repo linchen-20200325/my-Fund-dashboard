@@ -2115,7 +2115,7 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
         "- MK 建議：核心 80% / 衛星 20%",
     ]
     _shown = 0
-    for f in loaded[:8]:
+    for f in loaded[:5]:
         m = f.get("metrics") or {}
         name = f.get("name", "") or f.get("code", "") or "—"
         ret_1y = m.get("ret_1y_total") or m.get("ret_1y", "—")
@@ -2143,8 +2143,8 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
             f"｜撿便宜 {_kpis['n_buy']} 檔｜留校查看 {_kpis['n_warn']} 檔"
             f"｜停利提醒 {_kpis['n_take']} 檔")
         if _mk_df is not None and not _mk_df.empty and "MK體檢結論" in _mk_df.columns:
-            lines.append("- **各檔 MK 體檢結論（前8）**：")
-            for _, _r in _mk_df.head(8).iterrows():
+            lines.append("- **各檔 MK 體檢結論（前5）**：")
+            for _, _r in _mk_df.head(5).iterrows():
                 lines.append(f"  - {_r.get('代碼', '')} {_r.get('標的名稱', '')}："
                              f"{_r.get('MK體檢結論', '')}")
         _chk = _chk_fn(loaded)
