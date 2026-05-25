@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.219 — 批次載入基金並行化：序列 → ThreadPoolExecutor(4)（2026-05-25）
+
+- [x] **症狀**（user）：基金儀表板「下載 + 生產資料」很慢
+- [x] **診斷**（Explore + 親驗）：主載入路徑 `ui/helpers/portfolio_load.py:batch_load_unloaded_funds` **一檔一檔序列** `fetch_fund_from_moneydj_url`（自註每檔約 30s）→ N 檔 = N×30s；同 codebase 的 tab3「新增基金」(`tab3_portfolio.py:1504`) 早已用 `ThreadPoolExecutor(4)` 並行，兩路徑不一致
+- [x] **排除假線索**（防幻覺）：①cache `fetch_all_indicators` — 它已被 button 閘 + 存 session（tab1:146/207），且 TTL 快取會破壞「🔄 更新」語意 → 不做；②cache `fetch_risk_metrics/perf_wb01` — 上層 `fetch_fund_from_moneydj_url` 已 `@_ttl_cache(900)`，且批次載入開頭會清快取 → 無效 → 不做
+- [x] **修法**：`batch_load_unloaded_funds` 序列迴圈改 `ThreadPoolExecutor(max_workers=4)` + `as_completed`；**只有 fetch 在 worker thread，所有 `st.*` 進度/log 留主執行緒**（避免 Streamlit 非執行緒安全）；dedupe／broadcast／清快取／新鮮度語意不動
+- [x] **效益**：N 檔由 `N×30s` → 約 `⌈N/4⌉×30s`（4 檔以上約 4 倍）
+- [x] **驗證** AST OK；ruff 0=0；`pytest -k "portfolio or load"` 70 passed；`pytest -m "not slow"` **611 passed**/1 skipped 零回歸
+
 ### v18.218 — 修：只設多把 key（沒設單把）導致 ❌ Gemini / 缺金鑰 banner（2026-05-25）
 
 - [x] **症狀**（user 截圖）：secrets 放了多把 key，但 sidebar 顯示 ❌ Gemini + 紅 banner「缺少必要金鑰：GEMINI_API_KEY」

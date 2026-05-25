@@ -170,21 +170,30 @@ def batch_load_unloaded_funds() -> None:
     # tab3「🗂️ 保單分組視圖」expander 內按鈕呼叫，巢狀違規會 crash。
     # 改用 st.empty placeholder（label）+ st.progress + st.write log 平面組合。
     from fund_fetcher import fetch_fund_from_moneydj_url
+    from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: PLC0415
     code_cache: dict = {}
     n_uniq = len(uniq_codes_load)
     ld_label = st.empty()
-    ld_label.info(f"📡 開始載入 {n_uniq} 個 unique codes（每檔約 30s）...")
+    ld_label.info(f"📡 開始並行載入 {n_uniq} 個 unique codes（4 路並行，每檔約 30s）...")
     ld_prog = st.progress(0.0)
-    for cnt_c, code in enumerate(uniq_codes_load):
-        ld_label.info(f"📡 載入 {code} ({cnt_c+1}/{n_uniq})")
-        try:
-            code_cache[code] = fetch_fund_from_moneydj_url(code)
-            _nm_ok = (code_cache[code].get("fund_name") or "")[:18]
-            st.write(f"✅ `{code}` {_nm_ok}")
-        except Exception as _le:
-            code_cache[code] = {"error": str(_le)[:80]}
-            st.write(f"❌ `{code}` 失敗：{str(_le)[:80]}")
-        ld_prog.progress((cnt_c + 1) / n_uniq)
+    # v18.219：序列 → ThreadPoolExecutor(4) 並行（比照 tab3 既有寫法）。
+    # 只有 fetch 跑在 worker thread；所有 st.* 進度/log 留在主執行緒（as_completed）。
+    _done = 0
+    with ThreadPoolExecutor(max_workers=4) as _ex:
+        _futs = {_ex.submit(fetch_fund_from_moneydj_url, code): code
+                 for code in uniq_codes_load}
+        for _fut in as_completed(_futs):
+            code = _futs[_fut]
+            try:
+                code_cache[code] = _fut.result()
+                _nm_ok = (code_cache[code].get("fund_name") or "")[:18]
+                st.write(f"✅ `{code}` {_nm_ok}")
+            except Exception as _le:
+                code_cache[code] = {"error": str(_le)[:80]}
+                st.write(f"❌ `{code}` 失敗：{str(_le)[:80]}")
+            _done += 1
+            ld_label.info(f"📡 並行載入中 {_done}/{n_uniq}（剛完成 {code}）")
+            ld_prog.progress(_done / n_uniq)
     ld_label.success(f"✅ 完成 — 抓到 {n_uniq} 個 unique codes")
 
     # Step 2: broadcast 給每個 pf entry
