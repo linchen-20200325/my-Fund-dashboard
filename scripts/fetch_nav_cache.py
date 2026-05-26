@@ -19,6 +19,10 @@ fetch_nav_cache.py — GitHub Actions 每日淨值快取抓取器 v1.0
 import json, time, datetime, re, os, sys
 from pathlib import Path
 
+# v18.222：把 repo root 加進 sys.path，讓「python scripts/fetch_nav_cache.py」
+# 也能 import repositories.*（Sheet 自動同步用）；否則 sys.path[0] 只有 scripts/。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 try:
     import requests
 except ImportError:
@@ -58,6 +62,7 @@ def _codes_from_sheet() -> set:
         _c = _extract_code_from_url(str(_u))
         if _c:
             out.add(_c.upper())
+    print(f"[codes] ✅ Sheet 同步取得 {len(out)} 檔持倉代碼")
     return out
 
 

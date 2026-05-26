@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.222 — NAV 預快取 Sheet 自動同步修復（CI 缺套件 + sys.path 靜默失效）（2026-05-25）
+
+- [x] **承 v18.221**（user 選「1：驗證 + 自動化 NAV 預快取」）
+- [x] **發現**：Sheet 自動同步（`_codes_from_sheet`）在 CI 會**靜默失效** — ①workflow 只裝 `requests`，缺 `pandas/gspread/google-auth`（在 requirements.txt 但 CI 沒裝）②`python scripts/x.py` 的 `sys.path[0]` 只有 `scripts/`，`from repositories.policy_repository import` 會 ModuleNotFoundError → 兩者都被 try/except 吞掉 → 退回硬編清單
+- [x] **修法**：①`fetch_nav_cache.py` 加 `sys.path.insert(0, repo_root)` 讓 `repositories.*` 可 import ②workflow 安裝補 `pandas gspread google-auth` ③`_codes_from_sheet` 成功時印取得筆數（可見性）
+- [x] **驗證** AST OK；從 scripts/ 跑能 import `repositories.policy_repository`；ruff 7=7 零新增；workflow YAML 合法
+- [x] **現況**：`cache/nav/` 仍僅 TLZF9（PROXY_URL secret 尚未設）→ 驗證待 user：設 `PROXY_URL`（+ 可選 Sheet 的 `GOOGLE_SERVICE_ACCOUNT_JSON`/`POLICY_SHEET_ID`）→ 手動跑一次 Action
+
 ### v18.221 — NAV 預快取走 proxy：解 GitHub Actions IP 被台灣站封鎖（覆蓋率 1/11→全部）（2026-05-25）
 
 - [x] **重大診斷**（git 史）：`cache/nav/` **史上只 commit 過 TLZF9.json 一檔**（FUND_CODES 列 11 檔），且 TLZF9 已剩 10 筆/`cache_only`/名稱空 → 排程雖天天跑，但 GitHub Actions 美國 IP 跟 Streamlit Cloud 一樣被台灣基金站擋 → 幾乎抓不到 → Cloud 端全走即時抓取 = **「下載很慢」最大主因**
