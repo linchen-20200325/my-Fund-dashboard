@@ -97,6 +97,23 @@ HEADERS = {
 SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
 
+# ── v18.221：NAS proxy 中繼（解 GitHub Actions 美國 IP 被台灣站點擋）──────
+#   與 app 同一把 secret 名稱（PROXY_URL = http://user:pwd@host:3128）。
+#   CI 由 GitHub secret 注入同名環境變數；未設 → 直連（維持原行為）。
+#   走 proxy 時 verify=False（Squid CONNECT 相容，比照 infra/proxy.py）。
+_PROXY_URL = os.environ.get("PROXY_URL", "").strip()
+if _PROXY_URL:
+    SESSION.proxies.update({"http": _PROXY_URL, "https": _PROXY_URL})
+    SESSION.verify = False
+    try:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    except Exception:
+        pass
+    print(f"[proxy] ✅ 啟用 NAS proxy 中繼（{_PROXY_URL.rsplit('@', 1)[-1]}）")
+else:
+    print("[proxy] ⚠️ 未設定 PROXY_URL — 直連（GitHub IP 可能被台灣站點擋，覆蓋率低）")
+
 
 # ══════════════════════════════════════════════════════════════════════
 # 資料來源 1：TDCC OpenAPI 3-4（政府開放 API，最穩）

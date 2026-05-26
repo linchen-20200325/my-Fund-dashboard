@@ -29,6 +29,13 @@ jobs:
         run: pip install requests
 
       - name: Fetch NAV cache
+        env:
+          # NAS proxy 中繼（台灣 IP）— 解 GitHub Actions 美國 IP 被台灣基金站封鎖。
+          # 在 repo → Settings → Secrets and variables → Actions 新增 PROXY_URL。
+          # 未設則直連（覆蓋率低）。可選：再加 Sheet 同步用的 SA / sheet id。
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          POLICY_SHEET_ID: ${{ secrets.POLICY_SHEET_ID }}
         run: python scripts/fetch_nav_cache.py
 
       - name: Commit and push cache

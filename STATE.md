@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.221 — NAV 預快取走 proxy：解 GitHub Actions IP 被台灣站封鎖（覆蓋率 1/11→全部）（2026-05-25）
+
+- [x] **重大診斷**（git 史）：`cache/nav/` **史上只 commit 過 TLZF9.json 一檔**（FUND_CODES 列 11 檔），且 TLZF9 已剩 10 筆/`cache_only`/名稱空 → 排程雖天天跑，但 GitHub Actions 美國 IP 跟 Streamlit Cloud 一樣被台灣基金站擋 → 幾乎抓不到 → Cloud 端全走即時抓取 = **「下載很慢」最大主因**
+- [x] **拍板**（AskUserQuestion）：讓排程腳本走 user 既有的 NAS proxy（台灣 IP）
+- [x] **改 `scripts/fetch_nav_cache.py`**：讀同名 `PROXY_URL` 環境變數（= app 的 `st.secrets["PROXY_URL"]` 格式 `http://user:pwd@host:3128`），套到全域 `requests.Session`（proxies + `verify=False` Squid 相容）；未設 → 直連（行為不變）；log 只露 host:port 不露帳密
+- [x] **改 `.github/workflows/fetch_nav_cache.yml`**：fetch step 注入 `PROXY_URL`（+ 可選 `GOOGLE_SERVICE_ACCOUNT_JSON`/`POLICY_SHEET_ID` 供 Sheet 自動同步持倉代碼）
+- [x] **驗證** AST OK；ruff 7=7 零新增（新增段乾淨）；proxy 兩態親驗（有設→套 proxy+verify False、未設→直連 verify True）；workflow YAML 合法
+- [ ] **待 user 動作**（沙箱無法代做）：① GitHub repo → Settings → Secrets → Actions 新增 `PROXY_URL`；② NAS 允許 GitHub Actions IP 連 proxy；③ 手動 Run workflow 驗證 11 檔都進 cache/nav/ → Cloud 端秒開
+
 ### v18.220 — 抓取 fail-fast：read-timeout 不在 urllib3 層重試（砍三層重試放大）（2026-05-25）
 
 - [x] **承 v18.219**（user：「下一輪」做 timeout/retry fail-fast）
