@@ -246,6 +246,13 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.228 — 修：AI 白話總體檢撞 Gemini 503 直接噴原始錯誤（多 key 路徑零重試）（2026-05-27）
+
+- [x] **症狀**（user 截圖）：「🤖 AI 白話總體檢」按重新生成 → `❌ HTTP 503：{...high demand...}` 原始 JSON，6 把 key 也救不回
+- [x] **根因**（親查 `services/ai_service.py`）：`gemini_generate` 多 key 路徑對每把 key 用 `_gemini(retry=0)`，且迴圈 `if not _is_quota_error: return res` → **非 429 的 503 第一把就 instant return**；503 是模型級忙線（換 key 無助），但程式連退避重試都沒做就噴原始 JSON
+- [x] **修法**（surgical，三處）：①`_gemini` 5xx 分支改 `5s,10s` 指數退避＋503 回友善訊息（單 key 路徑同步受惠）②加 `_is_transient_error`（5xx/逾時/忙線偵測）③`gemini_generate` 多 key 迴圈：429→換 key、**5xx/逾時→原 key 退避重試 `retry=2`**、其他錯誤→直接回
+- [x] **驗證** AST OK；ruff `ai_service` 10=10 零新增；`test_ai_service.py` 改 1 測（500/503 改判 transient→同 key 退避 `[(A,0),(A,2)]`）＋新增 2 測（其他錯誤不換 key／`_is_transient_error` 偵測）＝ **11 passed**
+
 ### v18.227 — 流動性預警引擎：合成歷史趨勢 + 宏觀研判（2026-05-26）
 
 - [x] **歷史序列**：`liquidity_engine.py` 加 `rolling_zscore_series`（整條滾動 z，末點與 `rolling_zscore` 一致）；四因子建構多存 `z_series`；`compute_liquidity_score` 對齊三因子 z_series→clip→加權加總出 `score_series`（合成分數歷史，末點≈當下純量）

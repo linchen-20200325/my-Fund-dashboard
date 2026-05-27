@@ -97,7 +97,13 @@ def _gemini(api_key: str, prompt: str, max_tokens: int = 2000,
                 )
             else:
                 if attempt < retry:
-                    time.sleep(5); continue
+                    time.sleep(5 * (attempt + 1)); continue   # 5s,10s 指數退避
+                if r.status_code == 503:
+                    return (
+                        "❌ **Gemini 模型暫時忙線（HTTP 503）**\n\n"
+                        "伺服器需求尖峰，通常數十秒內恢復；快照已暫存，"
+                        "請稍候再按「🔄 重新生成」即可，不會重複扣用額度。"
+                    )
                 return f"❌ HTTP {r.status_code}：{r.text[:150]}"
         except requests.exceptions.Timeout:
             if attempt < retry:
@@ -653,13 +659,21 @@ def _is_quota_error(text: str) -> bool:
     return isinstance(text, str) and ("429" in text or "配額已達上限" in text)
 
 
+def _is_transient_error(text: str) -> bool:
+    """5xx 忙線/逾時：換 key 無助於修復，應原 key 退避重試。"""
+    if not isinstance(text, str):
+        return False
+    return any(s in text for s in
+               ("HTTP 503", "HTTP 500", "HTTP 502", "HTTP 504", "逾時", "忙線"))
+
+
 def gemini_generate(prompt: str, max_tokens: int = 2000,
                     keys: list[str] | None = None, start: int = 0) -> str:
     """多 key 自動輪替版 Gemini 呼叫。
 
-    從 start 起以 round-robin 依序試 key；哪把撞配額(429)就立刻換下一把
-    （retry=0 不空等），全部撞配額才回傳 429 訊息。非配額錯誤（HTTP 5xx /
-    逾時）不換 key、直接回傳（換 key 無助於修復）。單把 key 時行為等同 _gemini。
+    從 start 起以 round-robin 依序試 key；撞配額(429)立刻換下一把（retry=0
+    不空等），全部撞配額才回傳 429 訊息。撞 5xx 忙線/逾時（換 key 無助於修復）
+    則改在原 key 指數退避重試；單把 key 時行為等同 _gemini。
     """
     pool = [k for k in (keys if keys is not None else get_gemini_keys()) if k]
     if not pool:
@@ -669,8 +683,13 @@ def gemini_generate(prompt: str, max_tokens: int = 2000,
     n = len(pool)
     last = ""
     for off in range(n):
-        res = _gemini(pool[(start + off) % n], prompt, max_tokens=max_tokens, retry=0)
-        if not _is_quota_error(res):
-            return res
-        last = res
+        key = pool[(start + off) % n]
+        res = _gemini(key, prompt, max_tokens=max_tokens, retry=0)
+        if _is_quota_error(res):
+            last = res
+            continue                       # 配額(429)：立刻換下一把 key
+        if _is_transient_error(res):
+            # 5xx/逾時：模型忙線，換 key 無助益 → 原 key 指數退避重試
+            return _gemini(key, prompt, max_tokens=max_tokens, retry=2)
+        return res                         # 成功或其他錯誤
     return last or "❌ 所有 Gemini key 配額皆已用盡，請稍後再試。"

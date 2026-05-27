@@ -60,18 +60,41 @@ def test_rotate_start_offset_round_robin(monkeypatch) -> None:
     assert ai.gemini_generate("p", keys=["A", "B", "C"], start=1) == "OK::B"
 
 
-def test_rotate_non_quota_error_no_switch(monkeypatch) -> None:
-    """非配額錯誤（HTTP 500）不換 key、直接回傳。"""
+def test_transient_error_retries_same_key(monkeypatch) -> None:
+    """5xx 忙線/逾時：不換 key，改在原 key 退避重試（retry=2）。"""
+    calls = []
+
+    def fake(key, prompt, max_tokens=2000, retry=2, force_json=False):
+        calls.append((key, retry))
+        return "❌ HTTP 503：high demand"
+
+    monkeypatch.setattr(ai, "_gemini", fake)
+    out = ai.gemini_generate("p", keys=["A", "B"], start=0)
+    assert "503" in out
+    assert calls == [("A", 0), ("A", 2)]   # 同把 key：先探測 retry=0，再退避 retry=2
+
+
+def test_other_error_no_switch(monkeypatch) -> None:
+    """非配額、非忙線的其他錯誤 → 直接回傳，不換 key、不重試。"""
     calls = []
 
     def fake(key, *a, **k):
         calls.append(key)
-        return "❌ HTTP 500：server error"
+        return "❌ Gemini 回傳空結果，請重試"
 
     monkeypatch.setattr(ai, "_gemini", fake)
     out = ai.gemini_generate("p", keys=["A", "B"], start=0)
-    assert "500" in out
+    assert "空結果" in out
     assert calls == ["A"]   # 只試第一把就回傳
+
+
+def test_is_transient_error_detection() -> None:
+    assert ai._is_transient_error("❌ HTTP 503：high demand")
+    assert ai._is_transient_error("❌ 請求逾時，請重試")
+    assert ai._is_transient_error("❌ **Gemini 模型暫時忙線（HTTP 503）**")
+    assert not ai._is_transient_error("❌ **Gemini 配額已達上限（HTTP 429）**")
+    assert not ai._is_transient_error("OK::A")
+    assert not ai._is_transient_error(None)
 
 
 def test_single_key_uses_default_retry(monkeypatch) -> None:
