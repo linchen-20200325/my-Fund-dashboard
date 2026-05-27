@@ -208,3 +208,56 @@ def test_score_tiers() -> None:
     assert le.compute_liquidity_score({"XCCY_PROXY": _fac(0.7)})["tier"] == "正常偏緊"
     assert le.compute_liquidity_score({"XCCY_PROXY": _fac(0.1)})["tier"] == "寬鬆充裕"
     assert le.compute_liquidity_score({"XCCY_PROXY": _fac(-2.0)})["tier"] == "寬鬆充裕"
+
+
+# ── rolling_zscore_series：整條序列 ─────────────────────────
+def test_zscore_series_last_matches_scalar() -> None:
+    s = pd.Series(np.random.RandomState(0).randn(300).cumsum(),
+                  index=_dates(300))
+    zs = le.rolling_zscore_series(s)
+    assert isinstance(zs, pd.Series) and len(zs) > 0
+    assert abs(float(zs.iloc[-1]) - le.rolling_zscore(s)) < 1e-9   # 末點一致
+
+
+def test_zscore_series_insufficient_empty() -> None:
+    assert le.rolling_zscore_series(pd.Series([1.0, 2.0])).empty
+    assert le.rolling_zscore_series(pd.Series([5.0] * 200)).empty   # 全平
+
+
+# ── 合成歷史序列 score_series ───────────────────────────────
+def _fac_z(z, name="f"):
+    """帶 z_series 的因子（末點=zscore，供合成序列）。"""
+    zs = pd.Series(np.linspace(z - 1, z, 120), index=_dates(120))
+    return {"zscore": z, "name": name, "value": z, "signal": "🟡", "z_series": zs}
+
+
+def test_score_series_built_and_consistent() -> None:
+    out = le.compute_liquidity_score({
+        "XCCY_PROXY": _fac_z(2.0), "CARRY_UNWIND": _fac_z(1.0),
+        "MOVE_VIX": _fac_z(0.0),
+    })
+    ss = out["score_series"]
+    assert isinstance(ss, pd.Series) and len(ss) > 0
+    # 末點 ≈ 純量 score（同 clip+權重）
+    assert abs(float(ss.iloc[-1]) - out["value"]) < 0.05
+
+
+def test_score_series_empty_when_no_zseries() -> None:
+    out = le.compute_liquidity_score({"XCCY_PROXY": _fac(1.0)})   # 無 z_series
+    assert out["score_series"].empty
+
+
+# ── liquidity_verdict：研判文字 ─────────────────────────────
+def test_verdict_none_safe() -> None:
+    assert "資料不足" in le.liquidity_verdict(None)
+
+
+def test_verdict_mentions_tier_and_driver() -> None:
+    out = le.compute_liquidity_score({
+        "XCCY_PROXY": _fac(2.5), "CARRY_UNWIND": _fac(0.0), "MOVE_VIX": _fac(0.0),
+        "SSR": _fac(-2.0, "ssr"),
+    })
+    txt = le.liquidity_verdict(out, {})
+    assert out["tier"] in txt                       # 含分級
+    assert "主導因子" in txt                          # 含主導因子
+    assert "子彈水位充裕" in txt                       # SSR Z<-1 → 充裕

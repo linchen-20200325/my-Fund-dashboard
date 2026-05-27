@@ -54,6 +54,22 @@ def rolling_zscore(series: pd.Series, window: int = WINDOW) -> "float | None":
     return float((float(w.iloc[-1]) - float(w.mean())) / sd)
 
 
+def rolling_zscore_series(series: pd.Series, window: int = WINDOW) -> pd.Series:
+    """整條滾動 Z-Score 序列（每點對其前 window 視窗標準化），供合成歷史趨勢。
+
+    最後一點與 rolling_zscore() 一致（同樣 window 視窗）。樣本不足 / 全平 → 空 Series。
+    """
+    if series is None:
+        return pd.Series(dtype=float)
+    s = series.replace([np.inf, -np.inf], np.nan).dropna()
+    if len(s) < _MIN_SAMPLES:
+        return pd.Series(dtype=float)
+    mu = s.rolling(window, min_periods=_MIN_SAMPLES).mean()
+    sd = s.rolling(window, min_periods=_MIN_SAMPLES).std()
+    z = (s - mu) / sd.replace(0.0, np.nan)
+    return z.replace([np.inf, -np.inf], np.nan).dropna()
+
+
 def _sig_color_score(z: "float | None", *, hi: float = 2.0, mid: float = 1.0,
                      invert: bool = False) -> tuple:
     """由 Z-Score 給 (signal, color, score)。
@@ -111,6 +127,7 @@ def build_xccy_proxy(fred_api_key: str) -> "dict | None":
         zscore=None if z is None else round(z, 2),
         signal=sig, color=color, score=score, weight=1,
         series=_weekly_tail(mom),
+        z_series=_weekly_tail(rolling_zscore_series(mom)),
     )
 
 
@@ -156,6 +173,7 @@ def build_carry_unwind(fred_api_key: str) -> "dict | None":
         zscore=None if z is None else round(z, 2),
         signal=sig, color=color, score=score, weight=1,
         series=_weekly_tail(combined),
+        z_series=_weekly_tail(rolling_zscore_series(combined)),
     )
 
 
@@ -200,6 +218,7 @@ def build_ssr() -> "dict | None":
         zscore=None if z is None else round(z, 2),
         signal=sig, color=color, score=score, weight=1,
         series=_weekly_tail(ssr),
+        z_series=_weekly_tail(rolling_zscore_series(ssr)),
     )
 
 
@@ -237,6 +256,7 @@ def build_move_vix() -> "dict | None":
         zscore=None if z is None else round(z, 2),
         signal=sig, color=color, score=score, weight=1,
         series=_weekly_tail(ratio),
+        z_series=_weekly_tail(rolling_zscore_series(ratio)),
     )
 
 
@@ -319,6 +339,19 @@ def compute_liquidity_score(factors: dict, weights: "dict | None" = None) -> "di
     score = round(score, 3)
     tier, sig, color, note = _tier(score)
 
+    # 合成分數「歷史序列」：對齊各因子 z_series → clip → 同權重加權加總
+    # （只取所有在線因子皆有值的日期，末點與上方純量 score 一致）
+    score_series = pd.Series(dtype=float)
+    _zs_cols = []
+    for k in present:
+        zs = present[k].get("z_series")
+        if zs is not None and len(zs):
+            _zs_cols.append((zs.clip(-_CLIP, _CLIP) * norm_w[k]).rename(k))
+    if _zs_cols:
+        sdf = pd.concat(_zs_cols, axis=1).sort_index().dropna()
+        if not sdf.empty:
+            score_series = sdf.sum(axis=1)
+
     ssr_e = factors.get("SSR")
     ssr_info = None
     if ssr_e:
@@ -331,4 +364,44 @@ def compute_liquidity_score(factors: dict, weights: "dict | None" = None) -> "di
         tier=tier, signal=sig, color=color,
         desc=f"{tier}：{note}（{len(present)}/{len(STRESS_FACTORS)} 壓力因子在線）",
         breakdown=breakdown, weights=norm_w, ssr=ssr_info,
+        score_series=score_series,
     )
+
+
+def liquidity_verdict(score_entry: "dict | None", factors: "dict | None" = None) -> str:
+    """由壓力分數 + 因子拆解產生一段白話研判（純函式，供 UI 直接顯示）。
+
+    內容：分級總評 → 主導因子（breakdown 最大絕對貢獻）→ SSR 子彈水位 →
+    A→B 傳導/操作註記。資料不足回提示字串。
+    """
+    if not score_entry:
+        return "（流動性因子資料不足，暫無法研判。）"
+    val = score_entry.get("value", 0.0)
+    parts = [f"目前流動性壓力分數 **{val:+.2f}**，分級「**{score_entry.get('tier', '—')}**」"
+             f"{score_entry.get('signal', '')}。"]
+
+    bd = score_entry.get("breakdown") or []
+    if bd:
+        top = max(bd, key=lambda b: abs(b.get("contrib", 0.0)))
+        direction = "推升壓力" if top.get("contrib", 0.0) > 0 else "壓低壓力"
+        parts.append(f"主導因子為「{top.get('name', '')}」"
+                     f"（{direction}，貢獻 {top.get('contrib', 0.0):+.2f}）。")
+
+    ssr = score_entry.get("ssr") or {}
+    sz = ssr.get("zscore")
+    if sz is not None:
+        if sz < -1:
+            parts.append(f"鏈上子彈水位充裕（SSR Z {sz:+.2f}，穩定幣相對 BTC 偏多），潛在買盤可期。")
+        elif sz > 1:
+            parts.append(f"鏈上子彈接近耗盡（SSR Z {sz:+.2f}），追價力道受限。")
+        else:
+            parts.append(f"鏈上子彈水位中性（SSR Z {sz:+.2f}）。")
+
+    if val >= 2.0:
+        parts.append("⚠️ 美元/避險/波動率多軌同時緊繃，留意 risk-off 去槓桿向風險資產傳導"
+                     "（時滯約數日至數週），宜降槓桿、備現金。")
+    elif val >= 1.0:
+        parts.append("壓力升溫但未失控，建議降低槓桿、提高現金緩衝並緊盯主導因子。")
+    else:
+        parts.append("流動性環境相對寬鬆，對風險資產偏友善；仍留意單一因子突發跳升。")
+    return " ".join(parts)

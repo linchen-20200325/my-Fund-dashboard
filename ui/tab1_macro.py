@@ -1280,7 +1280,9 @@ def render_macro_tab() -> None:
             if _liq_score and _show_l3:
                 with st.expander("🌊 流動性壓力預警引擎（深水區 4 因子）", expanded=False):
                     from ui.components.macro_card import make_sparkline as _mk_sl2
+                    from services.liquidity_engine import liquidity_verdict
                     st.caption("⚠️ 進階觀察｜XCCY 為代理指標、權重未經真值校準，僅供方向性參考")
+                    st.info(liquidity_verdict(_liq_score, _liq_facs))
 
                     # ── 壓力分數 + 分級 + 逐因子貢獻 ──────────────────
                     _cs_l, _cs_r = st.columns([1, 2])
@@ -1293,7 +1295,7 @@ def render_macro_tab() -> None:
                             f"{_liq_score['tier']}</b></div>",
                             unsafe_allow_html=True)
                     with _cs_r:
-                        st.markdown(f"**研判**　{_liq_score['desc']}")
+                        st.markdown("**逐因子貢獻**（紅=推升壓力／綠=壓低）")
                         _bd = _liq_score.get("breakdown") or []
                         if _bd:
                             _bfig = go.Figure(go.Bar(
@@ -1312,6 +1314,17 @@ def render_macro_tab() -> None:
                                 yaxis=dict(showgrid=False, zeroline=False,
                                            fixedrange=True))
                             st.plotly_chart(_bfig, use_container_width=True,
+                                            config={"displayModeBar": False})
+
+                    # ── 合成壓力分數歷史趨勢（警戒線 1／危機線 2）──────
+                    _scs = _safe_series(_liq_score.get("score_series"))
+                    if _scs is not None and len(_scs) >= 2:
+                        st.markdown("**📉 流動性壓力分數趨勢**")
+                        _trend = _mk_sl2(_scs, threshold_warn=1.0,
+                                         threshold_crit=2.0, high_is_bad=True,
+                                         lookback=120, height=160)
+                        if _trend is not None:
+                            st.plotly_chart(_trend, use_container_width=True,
                                             config={"displayModeBar": False})
                     st.divider()
 

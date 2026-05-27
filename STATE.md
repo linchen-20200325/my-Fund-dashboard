@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.227 — 流動性預警引擎：合成歷史趨勢 + 宏觀研判（2026-05-26）
+
+- [x] **歷史序列**：`liquidity_engine.py` 加 `rolling_zscore_series`（整條滾動 z，末點與 `rolling_zscore` 一致）；四因子建構多存 `z_series`；`compute_liquidity_score` 對齊三因子 z_series→clip→加權加總出 `score_series`（合成分數歷史，末點≈當下純量）
+- [x] **研判文字**：純函式 `liquidity_verdict(score_entry, factors)` → 分級總評＋主導因子（breakdown 最大絕對貢獻）＋SSR 子彈水位＋A→B 傳導/操作註記
+- [x] **UI**：Tab1 expander 頂部加 `st.info(研判)`；breakdown 後加合成分數**趨勢圖**（`make_sparkline` 警戒線 1／危機線 2）
+- [x] **驗證** ruff 全綠、tab1_macro 51=51；新增 6 測試（z序列末點一致/邊界空/合成序列一致/無z_series空/研判 None 安全/含分級主導因子）；`test_liquidity_engine` **27 passed**；`pytest -m "not slow"` **638 passed**/1 skipped 零回歸；apptest 完整模組執行（背景）
+- [ ] **真值待驗**：UI 數值需 proxy 環境；權重/門檻待真值校準
+- [x] **引擎四階段完成**：數據獲取(224)→因子融合(225)→UI接線(226)→歷史趨勢+研判(227)
+
 ### v18.226 — 流動性預警引擎：UI 接線（Tab1 戰情首頁壓力卡）（2026-05-26）
 
 - [x] **資料載入**：`ui/tab1_macro.py:render_macro_tab` 抓取成功分支加獨立 `try/except`，呼叫 `fetch_liquidity_factors`+`compute_liquidity_score` → 存 `session_state.liquidity_factors / liquidity_score`（失敗不拖垮總經載入）
