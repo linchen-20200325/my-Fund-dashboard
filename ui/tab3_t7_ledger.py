@@ -1629,46 +1629,16 @@ def render_t7_section() -> None:
                                     f"{_slabel}</span></div>",
                                     unsafe_allow_html=True,
                                 )
-                                # v18.230：賣方支援「賣出 %」或「賣出單位數」
-                                _sl_units = float(
-                                    getattr(
-                                        getattr(
-                                            st.session_state.t7_ledgers.get(_spk),
-                                            "position", None),
-                                        "units", 0.0) or 0.0
+                                # v18.232：純「賣出 %」（移除 v18.230 單位數模式 — user 反饋「非單位數，只留百分比」）
+                                _sp = st.number_input(
+                                    "賣出 % 部位（從此檔當前持有單位賣出多少）",
+                                    min_value=1.0, max_value=100.0,
+                                    value=10.0, step=5.0,
+                                    key=f"t7c2_sp_{_spk}",
+                                    help="此部位目前持有單位中賣出多少 %",
                                 )
-                                _sm_cols = st.columns([1, 3])
-                                _sell_mode_disp = _sm_cols[0].selectbox(
-                                    "賣方模式",
-                                    options=["💱 賣出 %", "🎯 賣出單位數"],
-                                    index=0,
-                                    key=f"t7c2_sm_{_spk}",
-                                    label_visibility="collapsed",
-                                )
-                                _sell_mode_key = ("units"
-                                    if _sell_mode_disp.startswith("🎯") else "pct")
-                                if _sell_mode_key == "pct":
-                                    _sp = _sm_cols[1].number_input(
-                                        "賣出 % 部位（從此檔當前持有單位賣出多少）",
-                                        min_value=1.0, max_value=100.0,
-                                        value=10.0, step=5.0,
-                                        key=f"t7c2_sp_{_spk}",
-                                        help="此部位目前持有單位中賣出多少 %",
-                                    )
-                                    _sp_units_val = 0.0
-                                else:
-                                    _max_u_s = max(_sl_units, 0.001)
-                                    _default_u_s = (round(_sl_units * 0.1, 4)
-                                                    if _sl_units > 0 else 1.0)
-                                    _sp_units_val = _sm_cols[1].number_input(
-                                        f"🎯 賣出單位數（最大 {_sl_units:,.4f}）",
-                                        min_value=0.0, max_value=_max_u_s,
-                                        value=min(_default_u_s, _max_u_s),
-                                        step=max(round(_sl_units * 0.05, 4), 0.01),
-                                        key=f"t7c2_spu_{_spk}",
-                                        help="從此部位贖回多少「單位」（U）",
-                                    )
-                                    _sp = 0.0   # 純單位模式：% 不參與計算
+                                _sell_mode_key = "pct"   # 下游兼容；恆為 pct
+                                _sp_units_val = 0.0
 
                                 st.markdown(
                                     "<div style='height:1px;background:linear-gradient(90deg,"
@@ -1699,75 +1669,95 @@ def render_t7_section() -> None:
                                     format_func=lambda p: _label_for_pk(p),
                                 )
                                 _bweights: dict = {}
-                                _buy_entries: dict = {}   # v18.230: pk -> ("pct"|"units", val)
+                                _buy_entries: dict = {}   # 下游兼容：pk -> ("pct", val)
+                                _buy_purposes: dict = {}  # v18.232: pk -> "stock"|"income"|"both"
+                                _buy_splits: dict = {}    # v18.232: pk -> (stock_pct, income_pct)
                                 if _bcs:
-                                    # v18.230：每個買方一行 mode selectbox（新標的自動帶單位）
+                                    # v18.232：純 % 權重 + 每檔加「目的」selectbox（配股/配息/同時）
+                                    # user 反饋「非單位數，只留百分比；但這百分比可選配股數或配現金」
                                     st.caption(
-                                        "**買方分配模式**（新標的自動帶單位；可與 % 混搭——"
-                                        "單位模式檔先吃固定金額，剩餘按 % 攤分）"
+                                        "**買方目的**（🌱 配股=累積、💰 配息=領現金；"
+                                        "⚖️ 同時 → 同一標的拆兩段 %）"
                                     )
-                                    _bmode_cols = st.columns(min(len(_bcs), 5))
-                                    _buy_modes: dict = {}
+                                    _purpose_cols = st.columns(min(len(_bcs), 5))
                                     for _j, _bpk in enumerate(_bcs):
-                                        _has_pos_b = _t7_has_position(_bpk)
-                                        _bmd = _bmode_cols[_j % len(_bmode_cols)].selectbox(
-                                            f"{_label_for_pk(_bpk)}",
-                                            options=["📊 % 權重", "🎯 目標單位"],
-                                            index=0 if _has_pos_b else 1,
-                                            key=f"t7c2_bm_{_spk}_{_bpk}",
-                                            help=("既有持倉" if _has_pos_b else "新標的"),
+                                        _Bf_p = _fund_by_pk.get(_bpk) or {}
+                                        _has_div = bool(_Bf_p.get("dividends"))
+                                        _default_p_idx = 1 if _has_div else 0
+                                        _pp_disp = _purpose_cols[_j % len(_purpose_cols)].selectbox(
+                                            f"{_label_for_pk(_bpk)} 目的",
+                                            options=["🌱 配股", "💰 配息", "⚖️ 同時"],
+                                            index=_default_p_idx,
+                                            key=f"t7c2_pp_{_spk}_{_bpk}",
+                                            help=("此基金有配息紀錄 → 預設 💰"
+                                                  if _has_div else
+                                                  "此基金無配息紀錄 → 預設 🌱"),
                                         )
-                                        _buy_modes[_bpk] = ("units"
-                                            if _bmd.startswith("🎯") else "pct")
+                                        _buy_purposes[_bpk] = (
+                                            "income" if _pp_disp.startswith("💰") else
+                                            "both" if _pp_disp.startswith("⚖️") else
+                                            "stock"
+                                        )
 
-                                    # 渲染 value widgets
-                                    _n_pct = sum(1 for m in _buy_modes.values() if m == "pct")
-                                    _wd = round(100.0 / max(_n_pct, 1), 2)
+                                    # 純 % 權重輸入
+                                    st.caption("**買方 % 權重**（總和需 ≈ 100%）")
+                                    _wd = round(100.0 / max(len(_bcs), 1), 2)
                                     _wcols = st.columns(min(len(_bcs), 5))
                                     for _j, _bpk in enumerate(_bcs):
-                                        _bm = _buy_modes[_bpk]
-                                        if _bm == "pct":
-                                            _w = _wcols[_j % len(_wcols)].number_input(
-                                                f"📊 {_label_for_pk(_bpk)} %",
+                                        _w = _wcols[_j % len(_wcols)].number_input(
+                                            f"{_label_for_pk(_bpk)} %",
+                                            min_value=0.0, max_value=100.0,
+                                            value=_wd, step=1.0,
+                                            key=f"t7c2_w_{_spk}_{_bpk}",
+                                        )
+                                        _bweights[_bpk] = float(_w)
+                                        _buy_entries[_bpk] = ("pct", float(_w))
+
+                                    # 「⚖️ 同時」展開該檔內部的「配股 % / 配息 %」拆分
+                                    _has_both_p = any(
+                                        p == "both" for p in _buy_purposes.values())
+                                    if _has_both_p:
+                                        st.caption(
+                                            "**「⚖️ 同時」拆分**（該檔內部 配股 % + 配息 % 應 = 100%）"
+                                        )
+                                        for _bpk_b in _bcs:
+                                            if _buy_purposes.get(_bpk_b) != "both":
+                                                continue
+                                            _split_cols = st.columns(2)
+                                            _s_pct_v = _split_cols[0].number_input(
+                                                f"🌱 {_label_for_pk(_bpk_b)} 配股 %",
                                                 min_value=0.0, max_value=100.0,
-                                                value=_wd, step=1.0,
-                                                key=f"t7c2_w_{_spk}_{_bpk}",
+                                                value=50.0, step=10.0,
+                                                key=f"t7c2_psp_{_spk}_{_bpk_b}",
                                             )
-                                            _bweights[_bpk] = float(_w)
-                                            _buy_entries[_bpk] = ("pct", float(_w))
-                                        else:
-                                            _u_b = _wcols[_j % len(_wcols)].number_input(
-                                                f"🎯 {_label_for_pk(_bpk)} 單位",
-                                                min_value=0.0, value=100.0, step=10.0,
-                                                key=f"t7c2_wu_{_spk}_{_bpk}",
-                                                help="按單位數買進；提交時換算 TWD 並從賣方贖回金額扣除",
+                                            _i_pct_v = _split_cols[1].number_input(
+                                                f"💰 {_label_for_pk(_bpk_b)} 配息 %",
+                                                min_value=0.0, max_value=100.0,
+                                                value=50.0, step=10.0,
+                                                key=f"t7c2_pip_{_spk}_{_bpk_b}",
                                             )
-                                            _buy_entries[_bpk] = ("units", float(_u_b))
-                                    # 顯示權重合計（只計 % 模式檔）
-                                    if _n_pct > 0:
-                                        _wsum_disp = sum(_bweights.values())
-                                        _wsum_color = ("#00c853"
-                                            if abs(_wsum_disp - 100.0) <= 0.5 else "#f44336")
-                                        st.markdown(
-                                            f"<div style='text-align:right;font-size:12px;"
-                                            f"color:{_wsum_color};margin-top:4px'>"
-                                            f"% 模式買方權重合計：<b>{_wsum_disp:.2f}%</b>"
-                                            f" / {_n_pct} 檔</div>",
-                                            unsafe_allow_html=True,
-                                        )
-                                    else:
-                                        st.markdown(
-                                            "<div style='text-align:right;font-size:12px;"
-                                            "color:#888;margin-top:4px'>"
-                                            "（全部買方使用 🎯 單位模式）</div>",
-                                            unsafe_allow_html=True,
-                                        )
+                                            _buy_splits[_bpk_b] = (
+                                                float(_s_pct_v), float(_i_pct_v))
+
+                                    # 權重合計顯示
+                                    _wsum_disp = sum(_bweights.values())
+                                    _wsum_color = ("#00c853"
+                                        if abs(_wsum_disp - 100.0) <= 0.5 else "#f44336")
+                                    st.markdown(
+                                        f"<div style='text-align:right;font-size:12px;"
+                                        f"color:{_wsum_color};margin-top:4px'>"
+                                        f"買方權重合計：<b>{_wsum_disp:.2f}%</b>"
+                                        f"（{len(_bcs)} 檔）</div>",
+                                        unsafe_allow_html=True,
+                                    )
                                 _sell_configs[_spk] = {
                                     "sell_mode": _sell_mode_key,
                                     "sell_pct": float(_sp),
                                     "sell_units": float(_sp_units_val),
                                     "buy_weights": _bweights,
                                     "buy_entries": _buy_entries,
+                                    "buy_purposes": _buy_purposes,    # v18.232
+                                    "buy_splits": _buy_splits,        # v18.232
                                 }
 
                         _c_commit_mode = st.radio(
@@ -1785,40 +1775,34 @@ def render_t7_section() -> None:
                                              key="t7c_submit_btn")
 
                         if _csubmit:
-                            # v18.230：混搭模式校驗 — % 模式檔權重和必須 ≈ 100%（如有）
-                            # 全部單位模式則略過 % 校驗
+                            # v18.232：純 % 模式校驗 — 每賣方買方權重總和 ≈ 100%
                             _bad_sells = []
                             for _spk, _cfg in _sell_configs.items():
-                                _bes = _cfg.get("buy_entries") or {}
-                                if not _bes:
+                                _bws = _cfg.get("buy_weights") or {}
+                                if not _bws:
                                     _bad_sells.append(f"{_label_for_pk(_spk)}（無買方）")
                                     continue
-                                _pct_only = [v for m, v in _bes.values() if m == "pct"]
-                                if _pct_only:
-                                    _wsum = sum(_pct_only)
-                                    if abs(_wsum - 100.0) > 0.5:
+                                _wsum = sum(_bws.values())
+                                if abs(_wsum - 100.0) > 0.5:
+                                    _bad_sells.append(
+                                        f"{_label_for_pk(_spk)}（買方權重 {_wsum:.2f}% ≠ 100%）"
+                                    )
+                                # 「⚖️ 同時」拆分必須 ≈ 100%
+                                for _bpk_x, _split_x in (
+                                        _cfg.get("buy_splits") or {}).items():
+                                    _s_x, _i_x = _split_x
+                                    if abs(_s_x + _i_x - 100.0) > 0.5:
                                         _bad_sells.append(
-                                            f"{_label_for_pk(_spk)}（% 模式檔權重 "
-                                            f"{_wsum:.2f}% ≠ 100%）"
+                                            f"{_label_for_pk(_spk)}|"
+                                            f"{_label_for_pk(_bpk_x)}"
+                                            f"（⚖️ 同時拆分 {_s_x:.0f}+{_i_x:.0f}"
+                                            f" ≠ 100%）"
                                         )
-                                # 賣方單位模式：校驗 ≤ 持倉
-                                if _cfg.get("sell_mode") == "units":
-                                    _u_in = float(_cfg.get("sell_units", 0.0))
-                                    _u_have = float(getattr(getattr(
-                                        st.session_state.t7_ledgers.get(_spk),
-                                        "position", None), "units", 0.0) or 0.0)
-                                    if _u_in <= 0:
-                                        _bad_sells.append(
-                                            f"{_label_for_pk(_spk)}（賣出單位 = 0）")
-                                    elif _u_in > _u_have + 1e-6:
-                                        _bad_sells.append(
-                                            f"{_label_for_pk(_spk)}（賣出單位 "
-                                            f"{_u_in:.4f} > 持倉 {_u_have:.4f}）")
                             if _bad_sells:
                                 st.error(
                                     "❌ 配置錯誤：" + "／".join(_bad_sells)
-                                    + "（混搭時 % 模式檔需 = 100% ± 0.5%；"
-                                    "單位模式需 ≤ 持倉）"
+                                    + "（每賣方買方權重需 = 100% ± 0.5%；"
+                                    "「⚖️ 同時」拆分也是 = 100% ± 0.5%）"
                                 )
                             else:
                                 _is_scenario_c = _c_commit_mode.startswith("💡")
@@ -1851,6 +1835,8 @@ def render_t7_section() -> None:
                                 _ann_gain_total = 0.0
                                 _ann_lost_total = 0.0
                                 _expected_total = 0.0
+                                _stock_total_twd = 0.0   # v18.232：配股總額累計
+                                _income_total_twd = 0.0  # v18.232：配息總額累計
                                 try:
                                     for _spk, _cfg in _sell_configs.items():
                                         _Sf = _fund_by_pk.get(_spk)
@@ -1863,14 +1849,11 @@ def render_t7_section() -> None:
                                                        ).upper(),
                                             "ledger": _ledger_for(_spk),
                                         }
-                                        # v18.230：賣方支援 pct/units 兩種模式
-                                        if _cfg.get("sell_mode") == "units":
-                                            _u_redeem_s = float(_cfg.get("sell_units", 0.0))
-                                        else:
-                                            _u_redeem_s = (
-                                                _baseline_costs[_spk]["units_total"]
-                                                * _cfg["sell_pct"] / 100.0
-                                            )
+                                        # v18.232：純 % — 賣方按 sell_pct 算贖回單位
+                                        _u_redeem_s = (
+                                            _baseline_costs[_spk]["units_total"]
+                                            * _cfg["sell_pct"] / 100.0
+                                        )
                                         _u_redeem_s = min(
                                             _u_redeem_s,
                                             _baseline_costs[_spk]["units_total"]
@@ -1890,69 +1873,21 @@ def render_t7_section() -> None:
                                             _u_redeem_s * _S["nav"] * _S["fx"]
                                             * _dy_S / 100.0
                                         )
-                                        # v18.230：混搭分配 — 先算每買方目標 TWD
-                                        _R_total = _u_redeem_s * _S["nav"] * _S["fx"]
+                                        # 兼容下游 _bes_c reference（result row purpose 查詢用）
                                         _bes_c = _cfg.get("buy_entries") or {}
-                                        _target_amt: dict = {}
-                                        _units_amt_sum = 0.0
-                                        for _bpk_x, (_bm_x, _bv_x) in _bes_c.items():
-                                            if _bm_x == "units":
-                                                _Bf_x = _fund_by_pk.get(_bpk_x)
-                                                _nb_x, _xb_x = _navfx_cache_c.get(
-                                                    _bpk_x,
-                                                    _latest_nav_fx_t7(_Bf_x)
-                                                )
-                                                if _nb_x <= 0 or _xb_x <= 0:
-                                                    raise ValueError(
-                                                        f"買方 {_label_for_pk(_bpk_x)} "
-                                                        "NAV/FX 抓不到"
-                                                    )
-                                                _amt_x = _t7_units_to_twd(
-                                                    _bv_x, _nb_x, _xb_x)
-                                                _target_amt[_bpk_x] = _amt_x
-                                                _units_amt_sum += _amt_x
-                                            else:
-                                                _target_amt[_bpk_x] = None  # 待分剩餘
-                                        _remaining = _R_total - _units_amt_sum
-                                        if _remaining < -1.0:   # 容忍 1 TWD 浮點
-                                            raise ValueError(
-                                                f"賣方 {_label_for_pk(_spk)}：買方單位"
-                                                f"模式總額 NT${_units_amt_sum:,.0f} "
-                                                f"> 贖回 NT${_R_total:,.0f}（多 "
-                                                f"NT${-_remaining:,.0f}）"
-                                            )
-                                        _remaining = max(_remaining, 0.0)
-                                        _pct_total = sum(
-                                            v for m, v in _bes_c.values() if m == "pct")
-                                        if _pct_total > 0:
-                                            for _bpk_p, (_bm_p, _bv_p) in _bes_c.items():
-                                                if _bm_p == "pct":
-                                                    _target_amt[_bpk_p] = (
-                                                        _remaining * _bv_p / _pct_total)
-                                        # 反推每買方賣方贖回單位 _u_chunk
-                                        # 用 list 保序，最後一檔吃殘量保證守恆
-                                        _bpk_list = list(_bes_c.keys())
-                                        _last_bpk = _bpk_list[-1]
+                                        # 對齊 100% 買方權重到最後一檔（純 % 邏輯）
+                                        _wn = dict(_cfg.get("buy_weights") or {})
+                                        if not _wn:
+                                            continue
+                                        _last_bpk = list(_wn.keys())[-1]
+                                        _wn[_last_bpk] += (100.0 - sum(_wn.values()))
                                         _used_units = 0.0
-                                        _u_chunk_map: dict = {}
-                                        for _bpk_o in _bpk_list:
-                                            if _bpk_o == _last_bpk:
-                                                _u_chunk_map[_bpk_o] = (
-                                                    _u_redeem_s - _used_units)
-                                            else:
-                                                _amt_o = float(
-                                                    _target_amt.get(_bpk_o, 0.0) or 0.0)
-                                                _u_chunk_o = (_amt_o
-                                                    / (_S["nav"] * _S["fx"])
-                                                    if (_S["nav"] > 0 and _S["fx"] > 0)
-                                                    else 0.0)
-                                                _u_chunk_map[_bpk_o] = _u_chunk_o
-                                                _used_units += _u_chunk_o
-                                        # 構建（_bpk, _w_or_units）迭代列表給下面 switch
-                                        _wn = {bpk: (_bes_c[bpk][1])
-                                               for bpk in _bpk_list}
                                         for _bpk, _w in _wn.items():
-                                            _u_chunk = _u_chunk_map[_bpk]
+                                            if _bpk == _last_bpk:
+                                                _u_chunk = _u_redeem_s - _used_units
+                                            else:
+                                                _u_chunk = _u_redeem_s * _w / 100.0
+                                                _used_units += _u_chunk
                                             _Bf = _fund_by_pk.get(_bpk)
                                             _nb, _xb = _navfx_cache_c.get(
                                                 _bpk, _latest_nav_fx_t7(_Bf)
@@ -2017,6 +1952,33 @@ def render_t7_section() -> None:
                                             _ann_gain_total += _ann_b
                                             _spid, _scode_disp = parse_pk(_spk)
                                             _bpid, _bcode_disp = parse_pk(_bpk)
+                                            # v18.232：目的（配股/配息/同時）— 先算好供 dual-write + result row
+                                            _purpose_x = (_cfg.get("buy_purposes")
+                                                          or {}).get(_bpk, "stock")
+                                            _split_x = (_cfg.get("buy_splits")
+                                                        or {}).get(_bpk)
+                                            if _purpose_x == "both" and _split_x:
+                                                _s_pp, _i_pp = _split_x
+                                                _purpose_disp = (
+                                                    f"⚖️ 股{_s_pp:.0f}/息{_i_pp:.0f}")
+                                                _stock_share = (
+                                                    _sr.twd_cost_basis_transferred
+                                                    * _s_pp / 100.0)
+                                                _income_share = (
+                                                    _sr.twd_cost_basis_transferred
+                                                    * _i_pp / 100.0)
+                                            elif _purpose_x == "income":
+                                                _purpose_disp = "💰 配息"
+                                                _stock_share = 0.0
+                                                _income_share = (
+                                                    _sr.twd_cost_basis_transferred)
+                                            else:
+                                                _purpose_disp = "🌱 配股"
+                                                _stock_share = (
+                                                    _sr.twd_cost_basis_transferred)
+                                                _income_share = 0.0
+                                            _stock_total_twd += _stock_share
+                                            _income_total_twd += _income_share
                                             # v18.27: dual-write 收集 (sell + buy 各一筆)
                                             _today_iso = _d_t7.today().isoformat()
                                             if _spid:
@@ -2028,7 +1990,7 @@ def render_t7_section() -> None:
                                                     "nav_at_action": float(_S["nav"]),
                                                     "twd":           float(_sr.twd_cost_basis_transferred),
                                                     "fee":           0.0,
-                                                    "note":          f"T7 C 轉換 → {_bcode_disp}",
+                                                    "note":          f"T7 C 轉換 → {_bcode_disp}（{_purpose_disp}）",
                                                 })
                                             if _bpid:
                                                 _c_rows_by_pid.setdefault(_bpid, []).append({
@@ -2039,30 +2001,21 @@ def render_t7_section() -> None:
                                                     "nav_at_action": float(_Bd["nav"]),
                                                     "twd":           float(_sr.twd_cost_basis_transferred),
                                                     "fee":           0.0,
-                                                    "note":          f"T7 C 轉換 ← {_scode_disp}",
+                                                    "note":          f"T7 C 轉換 ← {_scode_disp}（{_purpose_disp}）",
                                                 })
-                                            # v18.230：依模式顯示「賣端」「買端配置」
-                                            if _cfg.get("sell_mode") == "units":
-                                                _sell_disp = (
-                                                    f"🎯 {_cfg.get('sell_units', 0.0):,.2f} U"
-                                                )
-                                            else:
-                                                _sell_disp = f"{_cfg['sell_pct']:.1f}%"
-                                            _bm_disp = _bes_c.get(_bpk, ("pct", 0.0))[0]
-                                            if _bm_disp == "units":
-                                                _buy_alloc_disp = f"🎯 {_w:,.2f} U"
-                                            else:
-                                                _buy_alloc_disp = f"📊 {_w:.2f}%"
+                                            # v18.232：純 % — 賣端 & 買端配置都顯示 %
+                                            # _purpose_disp 與 _stock/income 累計已在 dual-write 前算
                                             _result_rows.append({
                                                 "賣方保單": _spid or "(未綁)",
                                                 "賣方": _scode_disp,
-                                                "賣端": _sell_disp,
+                                                "賣 %": f"{_cfg['sell_pct']:.1f}%",
                                                 "買方保單": _bpid or "(未綁)",
                                                 "買方": _bcode_disp,
                                                 "買方名稱": (
                                                     _name_lookup_t7.get(_bpk, _bcode_disp)[:18]
                                                 ),
-                                                "買端配置": _buy_alloc_disp,
+                                                "權重": f"{_w:.2f}%",
+                                                "目的": _purpose_disp,
                                                 "賣出單位": (
                                                     f"{_sr.units_redeemed_from:,.4f}"
                                                 ),
@@ -2108,6 +2061,35 @@ def render_t7_section() -> None:
                                         delta=f"NT${_ann_diff:+,.0f}/年",
                                         help="正值 = 換倉後現金流增加；負值 = 為了成長換取配息",
                                     )
+                                    # v18.232：配股 / 配息總額拆分
+                                    if _stock_total_twd > 0 or _income_total_twd > 0:
+                                        pp1, pp2, pp3 = st.columns(3)
+                                        _purpose_sum = (
+                                            _stock_total_twd + _income_total_twd)
+                                        _stock_pct_disp = (
+                                            _stock_total_twd / _purpose_sum * 100
+                                            if _purpose_sum > 0 else 0)
+                                        _income_pct_disp = (
+                                            _income_total_twd / _purpose_sum * 100
+                                            if _purpose_sum > 0 else 0)
+                                        pp1.metric(
+                                            "🌱 配股總額（累積型）",
+                                            f"NT${_stock_total_twd:,.0f}",
+                                            delta=f"{_stock_pct_disp:.1f}%",
+                                            help="Σ 買端配股部分 TWD 成本搬移（含⚖️同時拆分的配股段）",
+                                        )
+                                        pp2.metric(
+                                            "💰 配息總額（領現金型）",
+                                            f"NT${_income_total_twd:,.0f}",
+                                            delta=f"{_income_pct_disp:.1f}%",
+                                            help="Σ 買端配息部分 TWD 成本搬移（含⚖️同時拆分的配息段）",
+                                        )
+                                        pp3.metric(
+                                            "📐 配股/配息比",
+                                            (f"{_stock_pct_disp:.0f}:"
+                                             f"{_income_pct_disp:.0f}"),
+                                            help="買方目的拆分比例",
+                                        )
                                     tt1, tt2 = st.columns(2)
                                     tt1.metric(
                                         "TWD 成本基礎總搬移",

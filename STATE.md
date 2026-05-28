@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.232 — 改：C 區移除單位數模式、純 %；每檔 % 加「目的」維度（配股/配息/⚖️ 同時）（2026-05-28）
+
+- [x] **需求**（user 截圖 + 對話）：v18.230 把分配模式拆「% / 單位」反而複雜；user 真正要的是「**非單位數，只留百分比，但這百分比可以選擇配股數或是配現金**」——單位數模式拿掉、% 留下、% 標目的（配股=累積／配息=領現金）
+- [x] **設計**（C 區重做）：①移除 v18.230 賣方端 `sell_mode` selectbox（賣方恢復純「賣出 %」）；②移除買方端「分配模式（%/單位）」selectbox（買方恢復純「% 權重」+ ≈100% 校驗）；③**保留**每檔「目的」selectbox `🌱 配股` / `💰 配息` / `⚖️ 同時`，預設依基金 `dividends` 屬性帶（非空→💰、空→🌱）；④「⚖️ 同時」展開兩 % 欄（該檔內部 配股 % + 配息 % = 100%）；⑤試算結果加「目的」欄；⑥摘要新增 3 metric「🌱 配股總額 / 💰 配息總額 / 📐 配股/配息比」；⑦dual-write 的 sell/buy 兩筆 sheet note 標記「（{purpose_disp}）」
+- [x] **引擎不動**：仍呼叫 `Switch.switch_same/cross_currency`；配股/配息為**顯示與記帳標記**，「同時」拆兩段在「TWD 成本搬移」層級按 %_split 拆累計（_stock/income_total_twd），不分裂 transaction
+- [x] **A/B 暫不動**（待 user 確認範圍）：A 新投入仍保留「TWD 金額 / 目標單位數」（A 是金額/單位買進，非 %）；B 投入再平衡保留「% / 目標單位」
+- [x] **驗證** AST OK；`pytest -m "not slow"` **640 passed**/1 skipped；`test_app_smoke + apptest` 通過；ruff `tab3_t7_ledger` 零新增
+
 ### v18.231 — 修：「♻️ 強制同步 GitHub」按鈕只 `st.rerun()` → 改成比對 local/remote commit 並給 Cloud Reboot 連結（2026-05-28）
 
 - [x] **症狀**（user 截圖）：v18.230 已 merge 進 main、Cloud app 仍顯示舊版（C 頁無「分配模式」selectbox）；按側欄「♻️ 強制同步 GitHub 最新邏輯」沒效
