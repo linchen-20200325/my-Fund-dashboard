@@ -254,6 +254,7 @@
 - [x] **C 賣方端**（user 指定「賣方也要加賣出股數」）：賣方獨立 mode selectbox `💱 賣出 %` vs `🎯 賣出單位數`；單位模式上限 = 持倉 units，超出立報錯
 - [x] **位置** `ui/tab3_t7_ledger.py`：helper L69-83；A 既有 form 外 mode L943-961、form 內 widget L1008-1031；A 新增 form 外 mode L963-973、form 內 widget L1054-1068；B form 外 mode expander L1289-1308、form 內 widget L1322-1351、submit 拆分 L1389-1500；C 賣方 widget L1538-1577、買方 widget L1620-1689、校驗 L1714-1746、計算 L1797-1893、result row 顯示 L1980-1998
 - [x] **驗證** AST OK；`pytest -m "not slow"` 通過；`test_app_smoke + apptest` 通過；ruff `tab3_t7_ledger` 零新增（既有 12 errors 不變）
+- [x] **部署備註**（2026-05-28 12:35）user 回報 Streamlit Cloud 仍顯示舊版（按鈕「♻️ 強制同步 GitHub 最新邏輯」只 `st.rerun()`、不 git pull）→ 推 trigger commit 強制 webhook 重發，雲端應在 1-3 分鐘內重新部署 v18.230
 
 ### v18.229 — 修：流動性引擎拖垮總經主載入（卡 RUNNING…）→ 改按鈕觸發（2026-05-27）
 
