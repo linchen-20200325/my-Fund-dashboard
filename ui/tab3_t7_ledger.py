@@ -1618,8 +1618,9 @@ def render_t7_section() -> None:
                                 f"🔁 #{_idx_s+1}　賣方 {_slabel}",
                                 expanded=(_idx_s == 0),
                             ):
-                                # ─── 紅區：賣方設定 ───
-                                st.markdown(
+                                # ─── 紅區：賣方設定 + v18.232.2 快捷移除按鈕 ───
+                                _hd_cols = st.columns([5, 1])
+                                _hd_cols[0].markdown(
                                     "<div style='background:linear-gradient(90deg,#3a1a1a,#2a1010);"
                                     "border-left:4px solid #f44336;border-radius:0 6px 6px 0;"
                                     "padding:8px 14px;margin-bottom:8px'>"
@@ -1629,6 +1630,18 @@ def render_t7_section() -> None:
                                     f"{_slabel}</span></div>",
                                     unsafe_allow_html=True,
                                 )
+                                if _hd_cols[1].button(
+                                    "🗑️ 移除", key=f"t7c2_rm_{_spk}",
+                                    help="從賣方組移除此檔（等同於回頂部 multiselect 取消勾選）",
+                                    use_container_width=True,
+                                ):
+                                    _ms_key = f"t7c_sell_codes__{_sel_pid}"
+                                    st.session_state[_ms_key] = [
+                                        p for p in
+                                        st.session_state.get(_ms_key, [])
+                                        if p != _spk
+                                    ]
+                                    st.rerun()
                                 # v18.232：純「賣出 %」（移除 v18.230 單位數模式 — user 反饋「非單位數，只留百分比」）
                                 _sp = st.number_input(
                                     "賣出 % 部位（從此檔當前持有單位賣出多少）",
