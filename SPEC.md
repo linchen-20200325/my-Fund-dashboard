@@ -430,6 +430,37 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-AX A/B/C 試算支援「目標單位數」模式（新標的可配股數、舊持倉可混搭）（v18.230 新增）
+
+**痛點**：A/B/C 三組試算只能填 TWD 金額／% 權重——但「新標的」（例：安達）規格是直接配「股數（單位）」，無持倉時 % 算不出來；舊持倉（例：安聯）則該保留 %／TWD 直覺。
+
+**設計**（單一節點變更，引擎零動）：
+- UI 加「分配模式」selectbox 群：`📊 % / 💵 TWD` vs `🎯 目標單位數`
+- 新標的（`_t7_has_position(pk) == False`）→ 預設「🎯 目標單位數」；舊持倉 → 預設「📊 % / 💵 TWD」；皆可手動切換
+- mode selectbox 放 **form 外** 讓 widget 即時 reactive（form 內 selectbox 切換不會 rerun 重畫 widget）
+- submit 時用 helper `_t7_units_to_twd(units, nav, fx) → float` 換算 TWD，餵舊 `Ledger.subscribe(amt_twd, fx, nav, date)` / `Switch.switch_same_currency(units_to_redeem, ...)` / `Switch.switch_cross_currency(...)`，**引擎介面零變動**
+
+**混搭規則**（同一賣方 / 同一投入下，多檔可混 % 與單位）：
+1. 單位模式檔先吃固定金額：`fixed_amt_i = units_i × NAV_i × FX_i`
+2. 剩餘金額 = 總投入（B）／賣方贖回 TWD（C）− Σ fixed_amt
+3. % 模式檔按缺口比例分配剩餘金額（B 維持「投入後總市值 × Weight − 目前市值」缺口比例）；C 按「% 模式檔群」內權重攤分剩餘
+4. 校驗：若單位模式檔總額 > 投入／賣方贖回 → `❌` 並中止；% 模式檔仍需總和 ≈ 100% ± 0.5%（單獨群內，不含單位模式檔）
+
+**C 賣方端**：賣方獨立 mode selectbox `💱 賣出 %` vs `🎯 賣出單位數`；單位模式上限 = 持倉 units，超出立報錯。
+
+**理論銜接 §3-A**：原「Σ Weight_j = 100%」實體鎖在「全部 % 模式」場景下仍嚴格適用；混搭模式下退化為「**% 模式檔群內**的 Σ Weight = 100%」，單位模式檔不參與權重校驗（其目標單位直接給定）。Σ Net_Switch_Value = Σ fixed_amt + Σ pct_amt 守恆。
+
+**位置** `ui/tab3_t7_ledger.py`：
+- helper：`_t7_has_position` / `_t7_units_to_twd`（module-level，可單測）
+- A 既有：form 外 mode L943-961；form 內 widget L1008-1031；submit L1196-1217
+- A 新增：form 外 mode L963-973；form 內 widget L1054-1068；submit L1148-1162
+- B：form 外 mode（expander）L1289-1308；form 內 widget L1322-1351；submit 拆分 + 缺口分配 L1389-1500
+- C：賣方 widget L1538-1577；買方 widget L1620-1689；校驗 L1714-1746；計算 L1797-1893；result row 顯示 L1980-1998
+
+**驗證**：AST OK；`pytest -m "not slow"` **640 passed**；`test_app_smoke + apptest` 通過；ruff `tab3_t7_ledger` 零新增（既有 12 errors 不變）。
+
+---
+
 ### §3-AW 多 Gemini key 自動輪替：分散免費額度 + 防斷（v18.217 新增）
 
 **需求**（user）：手上有多個 Google 帳號的 Gemini API key，想分流 token / 免費額度。拍板「自動輪替」（撞配額自動換把）而非各 Tab 固定分配。

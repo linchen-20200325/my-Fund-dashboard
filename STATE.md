@@ -246,6 +246,15 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.230 — 新：A/B/C 試算支援「目標單位數」模式（新標的可配股數；舊持倉可混搭）（2026-05-28）
+
+- [x] **需求**（user 痛點）：A/B/C 三組試算只能填 TWD 金額／% 權重——但「**新標的**」（例：安達）規格是直接配「股數（單位）」，無持倉時 % 算不出來；舊持倉（例：安聯）則該保留 %／TWD 直覺
+- [x] **設計**（單一節點變更，引擎零動）：①UI 加「分配模式」selectbox 群——`📊 % / 💵 TWD` vs `🎯 目標單位數`，**新標的（`_t7_has_position == False`）預設單位、舊持倉預設 % / TWD**，可手動切換；②mode 放 **form 外**讓 widget 即時 reactive；③submit 時用 helper `_t7_units_to_twd(units, nav, fx)` 換算 TWD → 餵舊 `Ledger.subscribe()` / `Switch.switch_*()`，引擎介面零變動
+- [x] **混搭規則**（user 指定「允許 % 與單位混搭」）：單位模式檔先吃固定金額（`units × NAV × FX`），剩餘 TWD 給 % 模式檔按缺口比例分配；若單位模式檔總額 > 投入 / 賣方贖回 → `❌` 並中止；% 模式檔仍需總和 ≈ 100% ± 0.5%（單獨群內）
+- [x] **C 賣方端**（user 指定「賣方也要加賣出股數」）：賣方獨立 mode selectbox `💱 賣出 %` vs `🎯 賣出單位數`；單位模式上限 = 持倉 units，超出立報錯
+- [x] **位置** `ui/tab3_t7_ledger.py`：helper L69-83；A 既有 form 外 mode L943-961、form 內 widget L1008-1031；A 新增 form 外 mode L963-973、form 內 widget L1054-1068；B form 外 mode expander L1289-1308、form 內 widget L1322-1351、submit 拆分 L1389-1500；C 賣方 widget L1538-1577、買方 widget L1620-1689、校驗 L1714-1746、計算 L1797-1893、result row 顯示 L1980-1998
+- [x] **驗證** AST OK；`pytest -m "not slow"` 通過；`test_app_smoke + apptest` 通過；ruff `tab3_t7_ledger` 零新增（既有 12 errors 不變）
+
 ### v18.229 — 修：流動性引擎拖垮總經主載入（卡 RUNNING…）→ 改按鈕觸發（2026-05-27）
 
 - [x] **症狀**（user 截圖）：總經卡片全卡「待取得／載入中」、app 停在「RUNNING…」、像抓不到資料
