@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [x] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）→ **v18.238 收尾**：`_EXPANDER_LIKE_ATTRS` 已擴成 `(expander, status, popover, dialog)` 四件套
 
+### v18.241 — 改：D 模式抓取改用主流程 entry point（user 質疑「為何不重用」）（2026-05-29）
+
+- [x] **user 質疑**：「本來就有抓取的功能，不能套用本來的抓取嗎？」+ 截圖 v18.240 新 error 訊息（被截：「at fu...」，已確認指向 fund_repository / fund_fetcher 內某行）
+- [x] **Explore 報告**：主流程 `ui/helpers/portfolio_load.py:183` call `fetch_fund_from_moneydj_url(code)`（不是 `fetch_fund_multi_source`）— 後者只是內層 orchestrator。前者多兩層：(1) mapping 預查：ACCP138 → `page_type=yp010000`；(2) merge_non_empty + normalize_result_state 容錯後處理，保 meta、防 None 漏
+- [x] **修法**：`ui/helpers/d_mode.py:57` default fetcher 從 `fetch_fund_multi_source` 改為 `fetch_fund_from_moneydj_url`（一行）。schema 完全相容（兩者回同 key set：fund_name/currency/series/dividends/...）；DI 參數 `_fetch` 保留給單元測試
+- [x] **意義**：D 模式自動享有 user 主流程已驗證的所有保護，**ACCP138 在主流程 OK 就 D 模式 OK**。同需求不再維護兩條 fetch 路徑
+- [x] **驗證** `pytest test_t7d_fetch_meta.py` **18 passed**（DI 路徑不變）
+
 ### v18.240 — 改：D 模式抓取例外帶 traceback frame（debug ACCP138 NoneType 用）（2026-05-29）
 
 - [x] **症狀**（user 截圖）：v18.239 D 模式 / 路徑 B「全新基金」輸入 ACCP138 按自動抓取 → 「⚠️ 抓不到 ACCP138：抓取例外：'NoneType' object is not subscriptable」
