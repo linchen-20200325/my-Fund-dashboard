@@ -9,15 +9,17 @@
 分層歸位：
 - services/ai_service.py    — 資料 reshape + _gemini 呼叫
 - services/ai_prompts.py    — prompt 模板（本檔）
-- services/prompts.* 未來可進一步拆檔，但目前 5 個 builder 共 ~200 行單檔即可
+- services/prompts.* 未來可進一步拆檔，但目前 4 個 builder 共 ~200 行單檔即可
 
 公開 API：
 - build_global_prompt           — analyze_global (4 節結構)
-- build_fund_json_prompt        — analyze_fund_json (單檔基金 4 節)
 - build_mk_advisor_prompt       — analyze_portfolio_mk_advisor (策略3 組合 4 節)
 - build_event_impact_prompt     — event_impact_analysis (新聞衝擊評估)
 - build_structured_summary_prompt — v18.214 通用：吃該 Tab 全章節快照，逐章節
                                     白話結論 + 時事（取代舊 4 視角散文 builder）
+
+v18.238：移除 `build_fund_json_prompt` / `build_fund_json_structured_prompt`
+        + 整個 `services/ai_models.py`（dead code 自 v18.209 起 zero live caller）。
 """
 from __future__ import annotations
 
@@ -66,152 +68,6 @@ def build_global_prompt(snapshot: str, phase: str, alloc_str: str,
 - [ ] 每月定期扣款是否繼續執行？
 ═══════════════════════════════════════
 【必須輸出完整4節，不可提前結束。第四節必須使用 - [ ] checkbox 格式】"""
-
-
-# ════════════════════════════════════════════════════════════
-# 2. analyze_fund_json — 單檔基金 4 節（位階 × 類別 / 體質 / 買賣點 / 待辦）
-# ════════════════════════════════════════════════════════════
-def build_fund_json_prompt(*, fund_name: str, category: str, currency: str,
-                           nav, pos: str, sigma_alert: str,
-                           buy1, buy2, sell1,
-                           adr: float, tr1y, std, sharpe, sharpe_comment: str,
-                           maxdd, mgmt_fee, pf: dict,
-                           phase: str, score, alloc_s: str, phase_rec: str,
-                           eating: bool, tone_directive: str,
-                           holdings_text: str = "",
-                           news_text: str = "") -> str:
-    """組合「單檔基金深度分析」prompt（v18.135：4 節 → 5 節，新增「持股 × 新聞影響」）。
-
-    所有數值參數以 caller 預先 format 過的型態傳入（None → "N/A" 在此處 fallback）。
-    v18.135：holdings_text + news_text 可選；若都空則第五節要求 AI 標示「資料不足」。
-    """
-    _has_holdings = bool(holdings_text.strip())
-    _has_news = bool(news_text.strip())
-    _section5_block = ""
-    if _has_holdings or _has_news:
-        _section5_block = f"""
-【持股 × 新聞 (用於第四節交叉分析)】
-{(holdings_text or '  （無持股資料）')}
-
-{(news_text or '  （無近期新聞）')}"""
-    # 避免 f-string 內 backslash — 提前 build 第四節指令
-    if _has_holdings or _has_news:
-        _section4_directive = (
-            "**必須對上方【持股 × 新聞】資料逐條交叉**：\n"
-            "- 點名 2-3 檔具體持股（用持股名稱），分析該標的是否被近期新聞**直接衝擊**\n"
-            "  （例：Fed 升息利空科技股、地緣政治衝擊半導體供應鏈）\n"
-            "- 評估「如果繼續長期持有」這幾檔，未來 6-12 個月最大可能損益情境\n"
-            "- 給出「該標的減碼/觀察/持有」具體建議，並指明觸發條件"
-        )
-    else:
-        _section4_directive = "- ⚠️ 持股或新聞資料不足，本節暫無法分析。建議重新抓取基金資料 + 載入新聞後重試。"
-    return f"""你是整合「策略1 以息養股」與「策略2 基金績效評估」方法論的台灣基金教練。
-{tone_directive}
-⚠️ 嚴格規則：只能根據以下快照分析，禁止引用外部資訊，禁止杜撰數字。
-
-【基金快照】
-基金名稱：{fund_name}  類別：{category}  計價幣：{currency}
-目前 NAV：{nav}  位階：{pos}  {sigma_alert or '（NAV 在正常區間）'}
-買1（年低+σ）：{buy1}  買2（年低）：{buy2}  停利（年高-σ）：{sell1}
-配息年化率：{adr:.1f}%  含息 TR1Y：{tr1y if tr1y is not None else 'N/A'}%  {'🔴吃本金警報' if eating else '✅ 含息報酬健康'}
-標準差(1Y)：{std}%  Sharpe(1Y)：{sharpe}（{sharpe_comment}）
-最大回撤：{maxdd}%  管理費/內扣費：{mgmt_fee}
-績效：1M={pf.get('1M','N/A')}%  3M={pf.get('3M','N/A')}%  1Y={pf.get('1Y','N/A')}%  3Y={pf.get('3Y','N/A')}%  5Y={pf.get('5Y','N/A')}%
-
-【總經位階】{phase}（{score}/10）建議配置：{alloc_s}
-此階段適合基金類型：{phase_rec}
-{_section5_block}
-═══════════════════════════════════════════
-請用繁體中文完整輸出以下【五節】，每節用 ### 開頭標題：
-
-### 🌡️ 一、景氣位階 × 基金類別建議
-- 當前「{phase}」位階，最有利的基金類型為何？給出明確類別名稱
-- 這檔「{category}」基金在此位階的合理性：適合 / 偏多 / 偏保守？
-- 教練建議：維持持有 / 轉換類別 / 增加哪類補充標的（一句話結論）
-
-### 🩺 二、基金體質診斷
-{'- 🔴 **吃本金警報**：配息率（' + f'{adr:.1f}' + '%）高於含息 TR1Y（' + str(tr1y or 0) + '%）。策略1 警示：高配息不等於高報酬，本金失血要當心！' if eating else '- ✅ 配息安全：含息報酬高於配息率，資產未失血'}
-- Sharpe 持久性評語：{sharpe}（{sharpe_comment}）
-- 最大回撤 {maxdd}% 說明經理人抗跌能力評估
-- 費用率 {mgmt_fee}：與同類型基金相比是否具競爭力？（0.5%以下低成本）
-
-### 📍 三、量化買賣點分析
-{sigma_alert if sigma_alert else '- 目前 NAV 處於正常區間，非極端買賣點'}
-- 第一買點 {buy1}（年低+σ）：距離當前 NAV 尚有空間嗎？
-- 第二買點 {buy2}（年低，歷史超跌區）：觸及時建議單筆大買
-- 停利點 {sell1}（年高-σ）：是否接近，需要準備減碼？
-- 策略1 心法：依位置給出「定期定額持續」或「單筆等回調」具體建議
-
-### 💎 四、持股 × 新聞影響評估（v18.135 新增）
-{_section4_directive}
-
-### 🔄 五、本週操作待辦清單
-請輸出 3-5 個 Markdown Checkbox：
-- [ ] 具體行動（含觸發條件或目標數字）
-- [ ] 最後一項必須是「本週核心原則」一句話
-═══════════════════════════════════════════
-【必須完整輸出五節，每節至少 2 個要點，第五節必須含 Checkbox 格式】"""
-
-
-# ════════════════════════════════════════════════════════════
-# 2b. analyze_fund_json — JSON 結構化版本（AI-4 v18.114）
-# ════════════════════════════════════════════════════════════
-def build_fund_json_structured_prompt(*, fund_name: str, category: str, currency: str,
-                                       nav, pos: str, sigma_alert: str,
-                                       buy1, buy2, sell1,
-                                       adr: float, tr1y, std, sharpe, sharpe_comment: str,
-                                       maxdd, mgmt_fee, pf: dict,
-                                       phase: str, score, alloc_s: str, phase_rec: str,
-                                       eating: bool, tone_directive: str,
-                                       schema_hint: str,
-                                       holdings_text: str = "",
-                                       news_text: str = "") -> str:
-    """build_fund_json_prompt 的 JSON 結構化版本（v18.135：4→5 節）。
-
-    schema_hint: 由 caller 從 services.ai_models.FUND_JSON_SCHEMA_HINT 傳入。
-    holdings_text / news_text: 持股 + 新聞快照（v18.135 新增交叉分析用）
-    """
-    eating_msg = (
-        f"⚠️ 吃本金警報：配息率 {adr:.1f}% 高於含息 TR1Y {tr1y or 0}%（本金失血）"
-        if eating else
-        "✅ 配息安全：含息報酬高於配息率"
-    )
-    sigma_msg = sigma_alert or "目前 NAV 處於正常區間，非極端買賣點"
-    _has_data = bool(holdings_text.strip() or news_text.strip())
-    _section5_block = (f"""
-
-【持股 × 新聞 (供第四節交叉分析)】
-{(holdings_text or '  （無持股資料）')}
-
-{(news_text or '  （無近期新聞）')}""" if _has_data else "")
-    return f"""你是整合「策略1 以息養股」與「策略2 基金績效評估」方法論的台灣基金教練。
-{tone_directive}
-⚠️ 嚴格規則：只能根據以下快照分析，禁止引用外部資訊，禁止杜撰數字。
-
-【基金快照】
-基金名稱：{fund_name}  類別：{category}  計價幣：{currency}
-目前 NAV：{nav}  位階：{pos}  {sigma_msg}
-買1（年低+σ）：{buy1}  買2（年低）：{buy2}  停利（年高-σ）：{sell1}
-配息年化率：{adr:.1f}%  含息 TR1Y：{tr1y if tr1y is not None else 'N/A'}%
-{eating_msg}
-標準差(1Y)：{std}%  Sharpe(1Y)：{sharpe}（{sharpe_comment}）
-最大回撤：{maxdd}%  管理費/內扣費：{mgmt_fee}
-績效：1M={pf.get('1M','N/A')}%  3M={pf.get('3M','N/A')}%  1Y={pf.get('1Y','N/A')}%  3Y={pf.get('3Y','N/A')}%  5Y={pf.get('5Y','N/A')}%
-
-【總經位階】{phase}（{score}/10）建議配置：{alloc_s}
-此階段適合基金類型：{phase_rec}
-{_section5_block}
-═══════════════════════════════════════════
-{schema_hint}
-
-【內容指引】
-- 第一節「景氣位階 × 基金類別建議」：當前「{phase}」位階下這檔「{category}」是否合理 / 維持或轉換
-- 第二節「基金體質診斷」：{'吃本金警報、' if eating else ''}Sharpe 評語、最大回撤、費用率
-- 第三節「量化買賣點分析」：距離買1/買2/停利點的相對位置、策略1 心法
-- 第四節「持股 × 新聞影響評估」（v18.135 新增）：{(
-    "點名 2-3 檔具體持股 + 對應近期新聞 → 評估「繼續長期持有」未來 6-12 個月可能損益情境 → 給出減碼/觀察/持有建議"
-) if _has_data else "若持股或新聞資料不足，本節輸出「資料不足，建議重抓基金資料」"}
-- 第五節「本週操作待辦清單」：3-5 條具體行動，最後一條必須是本週核心原則總結"""
 
 
 # ════════════════════════════════════════════════════════════

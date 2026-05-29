@@ -30,9 +30,11 @@ def test_ast_parse_compiles(path: Path) -> None:
 # ════════════════════════════════════════════════════════════
 # T2. expander 巢狀偵測（同檔 + 跨檔 transitive）
 # ════════════════════════════════════════════════════════════
-# v18.178 (#5)：偵測 expander-like context — st.expander 與 st.status 都會渲染成
-# expander，Streamlit 禁止彼此巢狀（v18.156 正是 st.status 包在 expander 內 crash）。
-_EXPANDER_LIKE_ATTRS = ("expander", "status")
+# v18.178 (#5) / v18.238：偵測 expander-like context — 以下 Streamlit primitives
+# 均渲染成可摺疊容器，彼此巢狀會 crash（v18.156 正是 st.status 包在 expander 內爆）。
+# - expander / status：v18.156 已驗證實際會 crash
+# - popover / dialog：1.31+ 新 API，文件明示與 expander 共享 nesting 限制 → 預防性偵測
+_EXPANDER_LIKE_ATTRS = ("expander", "status", "popover", "dialog")
 
 
 def _is_expander_call(node: ast.AST) -> bool:

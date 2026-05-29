@@ -244,7 +244,20 @@
 - [x] **修法** `ui/helpers/portfolio_load.py` Step 1 把 `st.status(...) as ld_status` 改成 `st.empty()` placeholder（動態 label）+ `st.progress` + `st.write` 平面組合；UX 保留（開始 / 載入中 / 完成皆有狀態提示 + 進度條 + 逐檔 ✅/❌ log）
 - [x] **影響範圍** 3 處 call sites（L1052 頂部捷徑 / L1252 未綁保單快捷 / L1721 主清單下方）一次修復，helper 從此 context-agnostic
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
-- [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
+- [x] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）→ **v18.238 收尾**：`_EXPANDER_LIKE_ATTRS` 已擴成 `(expander, status, popover, dialog)` 四件套
+
+### v18.238 — 清：fund_json AI 工具組 + 舊 KPI 卡 docstring 殘留 + 擴 expander 偵測（2026-05-29）
+
+- [x] **清 dead code**（解 v18.209 / v18.210 backlog）：
+  - 砍 `services/ai_models.py` 整檔（`FUND_JSON_SCHEMA_HINT` / `parse_llm_json` / `fund_analysis_to_markdown`）— grep 確認 zero live caller
+  - 砍 `services/ai_prompts.py:74-216` 的 `build_fund_json_prompt` + `build_fund_json_structured_prompt`，整個 fund_json prompt 章節 + docstring 公開 API 條目連動清掉
+  - 砍 `test_ai_models.py` 整檔（11 個測試全部依賴 dead 模組）+ `test_ai_prompts.py` 內 2 個 `test_build_fund_json_prompt_*` + import
+  - 順手清 `test_app_apptest.py:96` docstring 對舊 `_render_kpi_cards`（v18.163 起 hero KPI 取代後該函式早已下架）的殘留引用
+  - 約 −600 行 dead code
+- [x] **擴 expander 巢狀偵測**（解 v18.156 後續觀察）：
+  - `test_app_smoke.py:_EXPANDER_LIKE_ATTRS` 從 `("expander", "status")` 擴成 `("expander", "status", "popover", "dialog")`
+  - 涵蓋 Streamlit 1.31+ 新 expander-like primitives（popover / dialog 與既有共享 nesting 限制）
+- [x] **驗證** `py_compile` ✅；`test_app_smoke + test_ai_prompts + test_hot_money + test_policy_store + test_v2_editor = 210 passed`（3 個 fund_fetcher 相關 sandbox 環境 ImportError 為 pre-existing，stash 驗證過）
 
 ### v18.237 — 修：T7 區塊 CachedWidgetWarning（PR #76 漏砍 dangling 裝飾子）（2026-05-29）
 
@@ -499,7 +512,7 @@
 - [x] **根因**：v18.163 頂部統一 hero KPI（`portfolio_health.render_hero_kpi_cards`）取代舊 `mk_dashboard._render_kpi_cards`，標籤縮短（`🔴 留校查看警示`→`🔴 留校查看`、`💰 停利提醒（衛星）`→`💰 停利提醒`）；測試 expected 仍是舊長標籤 → 2 卡判定缺失
 - [x] **修法** `test_app_apptest.py`：expected 4 標籤對齊 live hero（`🟢 撿便宜雷達`/`🔴 留校查看`/`💰 停利提醒`/`⚖️ 配置比例`）+ docstring 改指 `render_hero_kpi_cards`（保留原回歸意圖：防 KPI label silent UI 破壞）
 - [x] **驗證** 目標 test PASS；`test_app_apptest.py` 全檔 **15 passed**（267s）零回歸；ruff clean
-- [ ] **新發現／後續候選**：`mk_dashboard._render_kpi_cards`（長標籤 4 卡）自 v18.163 起 grep 確認**零 live caller = dead code**，僅 docstring 引用殘留 — 可連同清除（需 user 拍板，故未動）
+- [x] **新發現／後續候選**：`mk_dashboard._render_kpi_cards`（長標籤 4 卡）自 v18.163 起 grep 確認**零 live caller = dead code**，僅 docstring 引用殘留 → **v18.238 收尾**：清掉 `test_app_apptest.py:96` 殘留的 docstring 引用（函式本體早已下架，只剩文字痕跡）
 
 ### v18.209 — 程式碼健康度：清除 dead `analyze_fund_json` + 連帶孤兒（2026-05-24）
 
@@ -509,7 +522,7 @@
 - [x] **删孤兒 import**（ai_service.py）：`FUND_JSON_SCHEMA_HINT`/`fund_analysis_to_markdown`/`parse_llm_json`（整段 ai_models import）+ `build_fund_json_prompt`/`build_fund_json_structured_prompt` — 删 ai_service 引用即可；函式本體仍在 ai_models/ai_prompts 且 `test_ai_models.py`/`test_ai_prompts.py` 仍覆蓋（未動）
 - [x] **删 app.py 整段死 import**：`from services.ai_service import (analyze_fund_json, analyze_macro_structured, analyze_portfolio_mk_advisor, event_impact_analysis, build_stale_flags)` 五個在 app.py 全未使用（425 行收口後僅 tabX 模組直接 import 使用）、且無從 app re-export → 整塊移除（bonus 清理，同類 dead import）
 - [x] **驗證** AST PASS（ai_service.py / app.py）；ai_service.py 無 dangling ref；`pytest -m "not slow"` 606 passed / 1 skipped；slow AppTest 全綠（app.py 入口 + ai_service 核心）
-- [ ] **後續候選**：`build_fund_json_prompt`/`build_fund_json_structured_prompt` + `FUND_JSON_SCHEMA_HINT`/`fund_analysis_to_markdown`/`parse_llm_json` 現為「有 test 但無 live caller」的閒置工具組 — 若確定不重啟 fund JSON AI，可連同其 test 一併下架（需 user 拍板，故未動）
+- [x] **後續候選**：`build_fund_json_prompt`/`build_fund_json_structured_prompt` + `FUND_JSON_SCHEMA_HINT`/`fund_analysis_to_markdown`/`parse_llm_json` 現為「有 test 但無 live caller」的閒置工具組 → **v18.238 收尾**：整組（含 `services/ai_models.py` 整檔 + `services/ai_prompts.py` 兩個 fund_json 函式 + 對應測試）一併下架
 
 ### v18.208 — Tab2 唯一 AI 快照加料：σ絕對位階(HWM) / 賣點 / 吃本金 coverage / 經理費（2026-05-24）
 

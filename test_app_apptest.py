@@ -93,7 +93,8 @@ def test_tab3_with_mock_fund_renders_kpi_cards(monkeypatch: pytest.MonkeyPatch) 
     """注入一檔 loaded=True 的 mock 基金到 portfolio_funds → KPI 卡 label 應渲染。
 
     回歸目的：防止 portfolio_health.render_hero_kpi_cards 的 MK 標籤被誤改/誤刪 silent UI 破壞。
-    （v18.163 起頂部統一 hero KPI 取代舊 mk_dashboard._render_kpi_cards 的長標籤）
+    （v18.163 起頂部統一 hero KPI 取代舊長標籤 4 卡；舊版實作已於 v18.238 連同
+     fund_json AI 工具組一併下架）
     """
     monkeypatch.setenv("FRED_API_KEY", "test-fred-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")

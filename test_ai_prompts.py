@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from services.ai_prompts import (
     build_event_impact_prompt,
-    build_fund_json_prompt,
+
     build_global_prompt,
     build_mk_advisor_prompt,
     build_structured_summary_prompt,
@@ -34,45 +34,6 @@ def test_build_global_prompt_has_4_sections() -> None:
     assert "衛星20%" in out
     # checkbox 規範
     assert "- [ ]" in out
-
-
-# ════════════════════════════════════════════════════════════
-# build_fund_json_prompt
-# ════════════════════════════════════════════════════════════
-def test_build_fund_json_prompt_eating_warning() -> None:
-    """eating=True 時應顯示「🔴 吃本金警報」段，且引用 adr / tr1y 數字。"""
-    out = build_fund_json_prompt(
-        fund_name="JFZN3", category="高配息債券", currency="USD",
-        nav=75.33, pos="中位", sigma_alert="",
-        buy1=72.5, buy2=70.0, sell1=78.0,
-        adr=5.0, tr1y=3.5, std="12", sharpe="0.45",
-        sharpe_comment="普通", maxdd="-15", mgmt_fee="1.2%", pf={"1Y": 3.5},
-        phase="衰退", score=4, alloc_s="債70%", phase_rec="長天期美債",
-        eating=True, tone_directive="[L3 老手沙盤]",
-    )
-    assert "🔴 **吃本金警報**" in out
-    assert "5.0" in out  # adr
-    assert "3.5" in out  # tr1y
-    assert "JFZN3" in out
-    assert "[L3 老手沙盤]" in out
-    # v18.135 改為 5 節（新增「持股 × 新聞影響評估」）
-    for h in ("### 🌡️ 一、", "### 🩺 二、", "### 📍 三、", "### 💎 四、", "### 🔄 五、"):
-        assert h in out
-
-
-def test_build_fund_json_prompt_no_eating_safe_msg() -> None:
-    """eating=False → 顯示「✅ 配息安全」分支。"""
-    out = build_fund_json_prompt(
-        fund_name="ACDD", category="均衡型", currency="USD",
-        nav=12.0, pos="低位", sigma_alert="",
-        buy1=11.0, buy2=10.5, sell1=14.0,
-        adr=2.0, tr1y=8.0, std="8", sharpe="0.8",
-        sharpe_comment="優秀", maxdd="-10", mgmt_fee="0.5%", pf={},
-        phase="復甦", score=7, alloc_s="股60%", phase_rec="市值型 ETF",
-        eating=False, tone_directive="",
-    )
-    assert "✅ 配息安全" in out
-    assert "🔴 **吃本金警報**" not in out
 
 
 # ════════════════════════════════════════════════════════════
