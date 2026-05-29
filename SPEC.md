@@ -430,6 +430,46 @@ _view_pick = st.segmented_control("選擇分析視角", _view_options,
 
 ---
 
+### §3-BA D 模式「🔍 自動抓取」— 按代碼自動填基金 metadata（v18.234 新增）
+
+**痛點**：v18.233 的 D 模式要 user 手動填 6 個欄位（代碼/名稱/幣別/NAV/FX/有配息），實務上 user 通常只記得代碼。
+
+**設計**（user 拍板：保留微調 + cache 1 小時）：
+- expander 上排：`代碼` text_input + `🔍 自動抓取` button + 訊息區（3 欄）
+- 抓取流程：
+  - `_t7d_fetch_fund_meta(code)` (cache TTL=3600) → `repositories/fund_repository.py:fetch_fund_multi_source(code)`
+  - 回 `{fund_name, currency, series, dividends, metrics, ...}` 多源聚合（FundClear/TDCC/MoneyDJ/Cnyes/Morningstar）
+  - FX 用 `_fx_now(f"{ccy}TWD")` fallback，再不行 → 31.0 預設
+- expander 下排：5 個欄位（名稱/幣別/NAV/FX/有配息）value 從 staging 預填，user 可微調
+- staging 結構：`session_state["t7d_stage__{pid}"] = {name, ccy, nav, fx, has_div}`
+- **version 控制**：`session_state["t7d_ver__{pid}"]` 每次抓取/新增後 +1；widget key 含 `__v{ver}` 觸發 Streamlit widget 重置，讓 staging 預填生效（繞過 widget value 一旦初始化不會被 value= 覆蓋的限制）
+
+**失敗 fallback**：
+- 抓不到（meta error 或 series 為空）→ red error 訊息「⚠️ 抓不到 X，請手動填」+ widget 維持空白
+- 抓到部分（NAV 有 FX 沒）→ 已抓到的預填、缺的留 user 補
+
+**cache helper**（module-level）：
+```python
+@st.cache_data(ttl=3600, show_spinner=False)
+def _t7d_fetch_fund_meta(_code: str) -> dict:
+    try:
+        from repositories.fund_repository import fetch_fund_multi_source
+        return fetch_fund_multi_source(_code.strip().upper())
+    except Exception as e:
+        return {"error": str(e), ...}
+```
+
+**位置** `ui/tab3_t7_ledger.py`：
+- module-level cached helper `_t7d_fetch_fund_meta` L82-93
+- expander 上排（代碼 + 抓取 + 訊息）L1604-1672
+- expander 下排（預填 5 欄 + 新增按鈕）L1674-1740
+
+**引擎零變動**：自動抓取結果存進原本的 fund dict 結構（v18.233 設計），Switch 引擎完全感知不到差別。
+
+**驗證**：AST OK；`pytest -m "not slow"` **640 passed**；ruff 零新增。
+
+---
+
 ### §3-AZ C 區 D 模式（C 內 toggle）— 允許新增「自訂基金」作買方候選（v18.233 新增）
 
 **痛點**：投資型保單實務中偶爾會出現「**買方標的不在系統 portfolio_funds 內**」的情境（user 想試算「如果換成這檔新基金、其他配置不變的試算」、或者基金代碼系統還沒收錄）。

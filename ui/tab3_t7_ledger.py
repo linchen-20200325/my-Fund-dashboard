@@ -78,6 +78,19 @@ def _t7_units_to_twd(units: float, nav: float, fx: float) -> float:
     return float(units) * float(nav) * float(fx)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _t7d_fetch_fund_meta(_code: str) -> dict:
+    """v18.234: D 模式自動抓取基金 metadata（fund_name/currency/series/dividends）。
+    cache 1 小時（user 選擇）；失敗 → dict 含 error 鍵。"""
+    try:
+        from repositories.fund_repository import fetch_fund_multi_source
+        _r = fetch_fund_multi_source(str(_code).strip().upper())
+        return _r if isinstance(_r, dict) else {"error": "non-dict result"}
+    except Exception as _e:
+        return {"error": str(_e), "fund_name": "", "currency": "",
+                "series": None, "dividends": []}
+
+
 def render_t7_section() -> None:
     """渲染 T7 帳務試算 + MK 深度組合建議 AI 子區。
 
@@ -1589,39 +1602,114 @@ def render_t7_section() -> None:
                             f"➕ 新增自訂基金（保單 {_sel_pid} 已新增 {len(_cust_for_pid)} 檔）",
                             expanded=(len(_cust_for_pid) == 0),
                         ):
-                            _cd_cols = st.columns([1.2, 2, 1, 1.2, 1.2, 0.8])
-                            _cd_code = _cd_cols[0].text_input(
-                                "代碼", value="", placeholder="例：CUST-001",
+                            # v18.234: staging dict + version 控制 widget 預填
+                            _stage_key = f"t7d_stage__{_sel_pid}"
+                            _ver_key = f"t7d_ver__{_sel_pid}"
+                            _stage = st.session_state.setdefault(_stage_key, {
+                                "name": "", "ccy": "USD", "nav": 10.0,
+                                "fx": 31.0, "has_div": False,
+                            })
+                            _ver = st.session_state.setdefault(_ver_key, 0)
+
+                            # 第一排：代碼 + 🔍 自動抓取（多源聚合、cache 1 小時）
+                            _top_cols = st.columns([2, 1.2, 4])
+                            _cd_code = _top_cols[0].text_input(
+                                "代碼（輸入後按右側自動抓取，或直接填下方欄位）",
+                                value="", placeholder="例：JF016 / B07050 / 0050",
                                 key=f"t7d_cd_code__{_sel_pid}",
                             )
-                            _cd_name = _cd_cols[1].text_input(
-                                "名稱", value="", placeholder="例：自訂測試基金",
-                                key=f"t7d_cd_name__{_sel_pid}",
+                            _top_cols[1].write("")  # 對齊高度
+                            if _top_cols[1].button(
+                                "🔍 自動抓取",
+                                key=f"t7d_cd_fetch__{_sel_pid}",
+                                disabled=(not _cd_code.strip()),
+                                use_container_width=True,
+                                help="多源聚合 FundClear/TDCC/MoneyDJ/Cnyes；"
+                                     "結果 cache 1 小時",
+                            ):
+                                with _top_cols[2]:
+                                    with st.spinner(
+                                            f"🔍 抓取 `{_cd_code.strip()}` 中..."):
+                                        _meta = _t7d_fetch_fund_meta(
+                                            _cd_code.strip())
+                                _series = (_meta.get("series")
+                                           if isinstance(_meta, dict) else None)
+                                _has_nav = (_series is not None
+                                            and len(_series.dropna()) > 0)
+                                if not _has_nav:
+                                    _err = (_meta.get("error") or "找不到資料"
+                                            if isinstance(_meta, dict)
+                                            else "unknown")
+                                    _top_cols[2].error(
+                                        f"⚠️ 抓不到 `{_cd_code}`，"
+                                        f"請手動填下方欄位（{str(_err)[:50]}）")
+                                else:
+                                    _nm = (_meta.get("fund_name")
+                                           or _meta.get("name") or "")
+                                    _ccy_g = (_meta.get("currency")
+                                              or "USD").upper().strip()
+                                    _nv = float(_series.dropna().iloc[-1])
+                                    if _ccy_g == "TWD":
+                                        _fxv = 1.0
+                                    else:
+                                        try:
+                                            _fxv = _fx_now(f"{_ccy_g}TWD")
+                                        except Exception:
+                                            _fxv = None
+                                        _fxv = (float(_fxv)
+                                                if _fxv and _fxv > 0 else 31.0)
+                                    _stage.update({
+                                        "name": _nm, "ccy": _ccy_g, "nav": _nv,
+                                        "fx": _fxv,
+                                        "has_div": bool(_meta.get("dividends")),
+                                    })
+                                    st.session_state[_stage_key] = _stage
+                                    st.session_state[_ver_key] = _ver + 1
+                                    _top_cols[2].success(
+                                        f"✅ `{_nm}`　{_ccy_g}　"
+                                        f"NAV={_nv:.4f}　FX={_fxv:.4f}"
+                                        f"　{'💰' if _stage['has_div'] else '🌱'}")
+                                    st.rerun()
+
+                            # 第二排：預填 + 可微調（key 含 ver 觸發重置）
+                            _ver = st.session_state[_ver_key]
+                            _ccys = ["TWD", "USD", "EUR", "JPY", "HKD"]
+                            _cd_cols = st.columns([2, 1, 1.2, 1.2, 0.8])
+                            _cd_name = _cd_cols[0].text_input(
+                                "名稱", value=_stage["name"],
+                                placeholder="例：自訂測試基金",
+                                key=f"t7d_cd_name__{_sel_pid}__v{_ver}",
                             )
-                            _cd_ccy = _cd_cols[2].selectbox(
-                                "幣別", options=["TWD", "USD", "EUR", "JPY", "HKD"],
-                                index=1, key=f"t7d_cd_ccy__{_sel_pid}",
+                            _cd_ccy = _cd_cols[1].selectbox(
+                                "幣別", options=_ccys,
+                                index=(_ccys.index(_stage["ccy"])
+                                       if _stage["ccy"] in _ccys else 1),
+                                key=f"t7d_cd_ccy__{_sel_pid}__v{_ver}",
                             )
-                            _cd_nav = _cd_cols[3].number_input(
-                                "NAV", min_value=0.0001, value=10.0, step=0.5,
-                                format="%.4f", key=f"t7d_cd_nav__{_sel_pid}",
+                            _cd_nav = _cd_cols[2].number_input(
+                                "NAV", min_value=0.0001,
+                                value=float(_stage["nav"]), step=0.5,
+                                format="%.4f",
+                                key=f"t7d_cd_nav__{_sel_pid}__v{_ver}",
                             )
-                            _cd_fx = _cd_cols[4].number_input(
+                            _cd_fx = _cd_cols[3].number_input(
                                 "FX→TWD", min_value=0.0001,
-                                value=(1.0 if _cd_ccy == "TWD" else 31.0),
+                                value=(1.0 if _cd_ccy == "TWD"
+                                       else float(_stage["fx"])),
                                 step=0.5, format="%.4f",
-                                key=f"t7d_cd_fx__{_sel_pid}",
+                                key=f"t7d_cd_fx__{_sel_pid}__v{_ver}",
                                 help="TWD→1.0；USD→約 31；EUR→約 33",
                             )
-                            _cd_div = _cd_cols[5].checkbox(
-                                "有配息", value=False,
-                                key=f"t7d_cd_div__{_sel_pid}",
+                            _cd_div = _cd_cols[4].checkbox(
+                                "有配息", value=_stage["has_div"],
+                                key=f"t7d_cd_div__{_sel_pid}__v{_ver}",
                                 help="勾→預設「💰 配息」；不勾→預設「🌱 配股」",
                             )
                             if st.button(
                                 "➕ 新增到買方候選",
                                 key=f"t7d_cd_add__{_sel_pid}",
-                                disabled=(not _cd_code.strip() or not _cd_name.strip()),
+                                disabled=(not _cd_code.strip()
+                                          or not _cd_name.strip()),
                             ):
                                 _custom_pk = f"{_sel_pid}/{_cd_code.strip()}"
                                 if _custom_pk in _fund_by_pk:
@@ -1642,6 +1730,12 @@ def render_t7_section() -> None:
                                         "policy_id": _sel_pid,
                                         "_is_custom_d": True,
                                     }
+                                    # 加完清 staging 等下一檔
+                                    st.session_state[_stage_key] = {
+                                        "name": "", "ccy": "USD", "nav": 10.0,
+                                        "fx": 31.0, "has_div": False,
+                                    }
+                                    st.session_state[_ver_key] = _ver + 1
                                     st.success(f"✅ 已新增 `{_cd_code}` 到買方候選")
                                     st.rerun()
 

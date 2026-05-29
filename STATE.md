@@ -246,6 +246,16 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.234 — 改：D 模式加「🔍 自動抓取」（輸入代碼自動填名稱/幣別/NAV/FX/配息）（2026-05-29）
+
+- [x] **需求**（user，附 v18.233 截圖）：「這邊可以給出代碼並可以自動抓取基金資料，然後轉換依樣是賣出多少百分轉給買方」
+- [x] **Explore**：系統已有 `repositories/fund_repository.py:fetch_fund_multi_source(code)` 多源聚合門面（FundClear/TDCC/MoneyDJ/Cnyes/Morningstar），回 `{fund_name, currency, series, dividends, metrics, ...}`，天生支援「不在 portfolio_funds 內」的代碼
+- [x] **方案**（user 拍板：保留微調 + cache 1 小時）：D 模式 expander 上排留「代碼 + 🔍 自動抓取」按鈕；抓取後預填下排 5 個欄位（名稱/幣別/NAV/FX/配息 flag），user 可微調再按「➕ 新增到買方候選」
+- [x] **staging + version 控制 widget 預填**：抓取結果存 `session_state.t7d_stage__{pid}`，版本號 `t7d_ver__{pid}` 每次抓取/新增後 +1，widget key 含 ver 觸發 Streamlit 重置，讓 staging 預填生效（繞過 widget value 一旦初始化不會被 value= 覆蓋的限制）
+- [x] **cached helper**：module-level `_t7d_fetch_fund_meta(code)` 包 `fetch_fund_multi_source`，`@st.cache_data(ttl=3600)`，失敗回 `{error: ...}` dict
+- [x] **失敗 fallback**：抓不到 → red error 訊息 + widget 維持空白 user 手動填；抓到部分（NAV 有 FX 沒）→ FX 用 `_fx_now(ccy+TWD)` fallback，再不行 → 31.0 預設
+- [x] **驗證** AST OK；`pytest -m "not slow"` **640 passed**/1 skipped；ruff 零新增
+
 ### v18.233 — 新：C 區 D 模式（C 內 toggle）— 允許新增「自訂基金」作買方候選（2026-05-29）
 
 - [x] **需求**（user）：「請幫我增加 D，在原來 C 的架構（C 原來功能保留）上新增可新增其他標的」；釐清「其他標的 = 手動新增自訂基金」+「賣方不跨保單」
