@@ -246,6 +246,13 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [x] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）→ **v18.238 收尾**：`_EXPANDER_LIKE_ATTRS` 已擴成 `(expander, status, popover, dialog)` 四件套
 
+### v18.240 — 改：D 模式抓取例外帶 traceback frame（debug ACCP138 NoneType 用）（2026-05-29）
+
+- [x] **症狀**（user 截圖）：v18.239 D 模式 / 路徑 B「全新基金」輸入 ACCP138 按自動抓取 → 「⚠️ 抓不到 ACCP138：抓取例外：'NoneType' object is not subscriptable」
+- [x] **可疑點**：訊息 format 對應 `ui/helpers/d_mode.py:60` `out["error"] = f"抓取例外：{_e}"` — 意即 `fetch_fund_multi_source('ACCP138')` 內部某分支拋 NoneType subscript exception；但訊息沒帶 file:line 無法定位
+- [x] **修法**：error 訊息加 `traceback.extract_tb(_e.__traceback__)[-1]` 最內層 frame（file:line in func）+ 例外類型名。downstream 再次 reproduce 即可看到實際 root cause 位置
+- [x] **驗證** `pytest test_t7d_fetch_meta.py` **18 passed**（既有 assert 沒 hard-code error 字串，相容）
+
 ### v18.239 — 復：D 模式回來（修原 NoneType bug + 加跨保單借用第二路徑）（2026-05-29）
 
 - [x] **背景**：v18.235（PR #76）user 反饋 D 模式 bug 後砍掉整個 feature；本輪 user 反饋「轉換再平衡有時要投到不在此保單的標的」需求復活，故重建 D 模式但修原 bug + 擴設計

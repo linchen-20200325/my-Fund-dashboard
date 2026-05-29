@@ -57,7 +57,14 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None) -> dict:
             from repositories.fund_repository import fetch_fund_multi_source as _fetch
         _r = _fetch(_code)
     except Exception as _e:
-        out["error"] = f"抓取例外：{_e}"
+        # v18.240: 把 traceback 最內層 frame 帶到 error 訊息（root cause 定位用）
+        import traceback  # noqa: PLC0415
+        _frames = traceback.extract_tb(_e.__traceback__)
+        _last = _frames[-1] if _frames else None
+        _loc = (f"{_last.filename.rsplit('/', 1)[-1]}:{_last.lineno}"
+                f" in {_last.name}") if _last else ""
+        out["error"] = f"抓取例外：{type(_e).__name__}: {_e}" + (
+            f"（at {_loc}）" if _loc else "")
         return out
     if not isinstance(_r, dict):
         out["error"] = f"回傳非 dict（{type(_r).__name__}）"
