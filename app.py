@@ -97,7 +97,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.234_DAutoFetch"
+APP_VERSION = "v18.240_DDebugTb"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -239,7 +239,7 @@ with st.sidebar:
         "border-radius:8px;padding:10px 14px;margin-top:8px;"
         "font-size:13px;color:#fff;font-weight:700;text-align:center;"
         "box-shadow:0 2px 8px rgba(124,58,237,0.4)'>"
-        "✨ v18.234：D 模式按代碼 🔍 自動抓取（FundClear/MoneyDJ/Cnyes 多源、cache 1h）"
+        "✨ v18.240：D 模式抓取例外帶 traceback frame（root cause 定位用）"
         "</div>",
         unsafe_allow_html=True,
     )
