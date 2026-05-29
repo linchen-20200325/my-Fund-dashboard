@@ -54,7 +54,12 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None) -> dict:
         return out
     try:
         if _fetch is None:
-            from repositories.fund_repository import fetch_fund_multi_source as _fetch
+            # v18.241: 改用主流程 entry point fetch_fund_from_moneydj_url
+            # —— user 質疑「為什麼不重用本來就有的抓取」。原本直 call
+            # fetch_fund_multi_source 缺 mapping 預查 + normalize 容錯，
+            # ACCP138 走多源時某 fetcher 漏防護 None。改用 high-level entry
+            # 自動帶 mapping → page_type、保 meta、normalize_result_state。
+            from fund_fetcher import fetch_fund_from_moneydj_url as _fetch
         _r = _fetch(_code)
     except Exception as _e:
         # v18.240: 把 traceback 最內層 frame 帶到 error 訊息（root cause 定位用）
