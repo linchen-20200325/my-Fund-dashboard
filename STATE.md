@@ -246,6 +246,27 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [x] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）→ **v18.238 收尾**：`_EXPANDER_LIKE_ATTRS` 已擴成 `(expander, status, popover, dialog)` 四件套
 
+### v18.239 — 復：D 模式回來（修原 NoneType bug + 加跨保單借用第二路徑）（2026-05-29）
+
+- [x] **背景**：v18.235（PR #76）user 反饋 D 模式 bug 後砍掉整個 feature；本輪 user 反饋「轉換再平衡有時要投到不在此保單的標的」需求復活，故重建 D 模式但修原 bug + 擴設計
+- [x] **新模組** `ui/helpers/d_mode.py:fetch_fund_meta_safe(code, _fetch=None, _fx_lookup=None)`:
+  - 保證 dict schema 完整：永遠回 `{ok, fund_name, currency, nav, fx, series, dividends, error}`
+  - 任何 `fetch_fund_multi_source` 例外 / 非 dict / 缺欄 / series=None 都安全降級成 `ok=False` + error 訊息
+  - **修 v18.234 原 bug**「'NoneType' object is not subscriptable」（series=None 時做 dropna 拋例外）
+  - DI 參數（`_fetch` / `_fx_lookup`）給單元測試注入 fake，避免 sandbox 缺 bs4 卡 module load
+- [x] **`ui/tab3_t7_ledger.py` D 模式 UI 重建**（C 轉換再平衡內，~150 行）：
+  - 🆕 啟用 D 模式 checkbox（per 保單）+ 新增買方候選 expander
+  - **路徑 A（推薦）**：「從其他保單借（已有持倉資料）」selectbox 列其他保單的 fund_pk，借過來免抓 — 帶 `_borrowed_from` tag
+  - **路徑 B**：「全新基金（手動代碼 → MoneyDJ 自動抓）」走新 helper，error path 顯示友善訊息不再 crash
+  - 已新增清單顯示來源 tag（`(借自 P1)` / `(MoneyDJ 新建)`）
+  - merge 進 `_fund_by_pk` / `_name_lookup_t7` / `_dy_lookup_t7` / `_c_all_pks_pid`，下游買方 multiselect 自動顯示
+- [x] **`_d_tag` 回復** dual-write note 端：借用 → `[D 借自 P1]`；新建 → `[D 自訂]`；既有非自訂 → 空字串
+- [x] **單元測試** `test_t7d_fetch_meta.py` 18 個：
+  - 防呆 10 個（empty code / whitespace / None / fetch raises / 非 dict / 非預期型別 / series=None / 空 series / 全 NaN / list → Series）
+  - 全綠 6 個（USD 查 FX / TWD 跳過 FX / FX 拋例外 fallback / FX=0 fallback / fund_name fallback / currency 預設）
+  - 邊界 2 個（dividends missing → []; dividends=None → []）
+- [x] **驗證** `py_compile` ✅；`test_t7d_fetch_meta` 18/18 + 其他單元測試共 **245 passed**（3 個 fund_fetcher/bs4 sandbox 環境 ImportError 為 pre-existing）
+
 ### v18.238 — 清：fund_json AI 工具組 + 舊 KPI 卡 docstring 殘留 + 擴 expander 偵測（2026-05-29）
 
 - [x] **清 dead code**（解 v18.209 / v18.210 backlog）：

@@ -78,6 +78,16 @@ def _t7_units_to_twd(units: float, nav: float, fx: float) -> float:
     return float(units) * float(nav) * float(fx)
 
 
+def _t7d_fetch_fund_meta(code: str) -> dict:
+    """v18.239: 薄殼 delegate 到 `ui.helpers.d_mode.fetch_fund_meta_safe`。
+
+    搬移理由：let helper module 不拖 `bs4` / `fund_repository` 等重依賴，
+    讓單元測試在 minimal env 也能跑（避免 ImportError 卡住整套件 collection）。
+    """
+    from ui.helpers.d_mode import fetch_fund_meta_safe
+    return fetch_fund_meta_safe(code)
+
+
 def render_t7_section() -> None:
     """渲染 T7 帳務試算 + MK 深度組合建議 AI 子區。
 
@@ -1572,6 +1582,160 @@ def render_t7_section() -> None:
                     _c_cands_pid = [p for p in _c_candidates if _pid_of_pk(p) == _sel_pid]
                     _c_all_pks_pid = [p for p in _c_all_pks if _pid_of_pk(p) == _sel_pid]
 
+                    # v18.239：D 模式恢復（v18.235 砍掉後 user 反饋要回復，並加跨保單借用功能）
+                    # 兩條路徑：(A) 從其他保單借既有持倉  (B) 全新代碼從 MoneyDJ 抓
+                    # bug 修補：_t7d_fetch_fund_meta 重建版保證 dict schema 齊全，
+                    # 不再有「'NoneType' object is not subscriptable」(v18.234 原 bug)
+                    _d_mode = st.checkbox(
+                        "🆕 **啟用 D 模式**（加入不在此保單內的買方候選）",
+                        value=False, key=f"t7c_d_mode__{_sel_pid}",
+                        help="(A) 從其他保單借既有持倉資料 / (B) 全新代碼自動抓 MoneyDJ；"
+                             "落帳會建 ledger position，但不寫回主基金資料庫"
+                             "（避免汙染，需人工確認後正式建檔）。",
+                    )
+                    if _d_mode:
+                        _cust_store = st.session_state.setdefault("t7d_custom_funds", {})
+                        _cust_for_pid = _cust_store.setdefault(_sel_pid, {})
+
+                        with st.expander(
+                            f"➕ 新增買方候選（保單 {_sel_pid} 已新增 {len(_cust_for_pid)} 檔）",
+                            expanded=(len(_cust_for_pid) == 0),
+                        ):
+                            _src_mode = st.radio(
+                                "選來源",
+                                ["A. 從其他保單借（已有持倉資料，秒成）",
+                                 "B. 全新基金（手動代碼 → MoneyDJ 自動抓）"],
+                                key=f"t7d_src_mode__{_sel_pid}",
+                                horizontal=False,
+                                help="A 推薦：其他保單已有的基金直接借過來，免抓取；"
+                                     "B 用於：兩個保單都沒有的全新標的",
+                            )
+
+                            if _src_mode.startswith("A"):
+                                # 路徑 A：從其他保單借
+                                _other_pks = [p for p in _c_all_pks
+                                              if _pid_of_pk(p) != _sel_pid]
+                                if not _other_pks:
+                                    st.info("ℹ️ 其他保單沒有可借的基金。請改試 B 全新基金。")
+                                else:
+                                    _pick_pk = st.selectbox(
+                                        "選擇其他保單的基金",
+                                        _other_pks,
+                                        format_func=lambda p: (
+                                            f"[{_pid_of_pk(p)}] {p.split('::',1)[-1]}　"
+                                            f"{_name_lookup_t7.get(p, '?')[:28]}"
+                                        ),
+                                        key=f"t7d_borrow_pick__{_sel_pid}",
+                                    )
+                                    if st.button(
+                                        "➕ 加進此保單的買方候選",
+                                        key=f"t7d_borrow_add__{_sel_pid}",
+                                        type="primary",
+                                        use_container_width=True,
+                                    ):
+                                        _src_f = _fund_by_pk.get(_pick_pk) or {}
+                                        _src_code = str(_src_f.get("code", "") or "").strip()
+                                        _src_pid = _pid_of_pk(_pick_pk)
+                                        if not _src_code:
+                                            st.error("❌ 來源基金缺 code")
+                                        else:
+                                            _new_pk = f"{_sel_pid}::{_src_code}"
+                                            _exists = any(
+                                                fund_pk_str(_f) == _new_pk for _f in _pf_t7
+                                            ) or _new_pk in _cust_for_pid
+                                            if _exists:
+                                                st.warning(f"⚠️ `{_src_code}` 已在此保單內")
+                                            else:
+                                                _src_series = _src_f.get("series")
+                                                if _src_series is None:
+                                                    _src_series = pd.Series([
+                                                        float(_src_f.get("avg_nav") or 10.0)])
+                                                _cust_for_pid[_new_pk] = {
+                                                    "code":        _src_code,
+                                                    "name":        _src_f.get("name", _src_code),
+                                                    "currency":    _src_f.get("currency", "USD"),
+                                                    "fx_rate":     float(_src_f.get("fx_avg") or 31.0),
+                                                    "series":      _src_series,
+                                                    "dividends":   list(_src_f.get("dividends") or []),
+                                                    "policy_id":   _sel_pid,
+                                                    "_is_custom_d": True,
+                                                    "_borrowed_from": _src_pid,
+                                                }
+                                                st.success(
+                                                    f"✅ 已從 `{_src_pid}` 借 `{_src_code}` 進此保單"
+                                                )
+                                                st.rerun()
+                            else:
+                                # 路徑 B：全新代碼 → MoneyDJ 自動抓
+                                _top_cols = st.columns([2, 1.2, 3])
+                                _new_code = _top_cols[0].text_input(
+                                    "代碼",
+                                    value="", placeholder="例：JF016 / B07050 / 0050",
+                                    key=f"t7d_new_code__{_sel_pid}",
+                                ).strip()
+                                _top_cols[1].write("")
+                                if _top_cols[1].button(
+                                    "🔍 自動抓取",
+                                    key=f"t7d_new_fetch__{_sel_pid}",
+                                    disabled=(not _new_code),
+                                    use_container_width=True,
+                                ):
+                                    with _top_cols[2]:
+                                        with st.spinner(f"🔍 抓取 `{_new_code}` 中..."):
+                                            _meta = _t7d_fetch_fund_meta(_new_code)
+                                    if not _meta.get("ok"):
+                                        _top_cols[2].error(
+                                            f"⚠️ 抓不到 `{_new_code}`：{_meta.get('error', '未知')[:60]}"
+                                        )
+                                    else:
+                                        _new_pk = f"{_sel_pid}::{_new_code}"
+                                        _exists = any(
+                                            fund_pk_str(_f) == _new_pk for _f in _pf_t7
+                                        ) or _new_pk in _cust_for_pid
+                                        if _exists:
+                                            st.warning(f"⚠️ `{_new_code}` 已在此保單內")
+                                        else:
+                                            _cust_for_pid[_new_pk] = {
+                                                "code":      _new_code,
+                                                "name":      _meta["fund_name"],
+                                                "currency":  _meta["currency"],
+                                                "fx_rate":   float(_meta["fx"]),
+                                                "series":    _meta["series"],
+                                                "dividends": _meta["dividends"],
+                                                "policy_id": _sel_pid,
+                                                "_is_custom_d": True,
+                                            }
+                                            _top_cols[2].success(
+                                                f"✅ `{_meta['fund_name']}`　{_meta['currency']}　"
+                                                f"NAV={_meta['nav']:.4f}　FX={_meta['fx']:.4f}"
+                                            )
+                                            st.rerun()
+
+                            # 已加進的清單
+                            if _cust_for_pid:
+                                st.markdown("**已新增的自訂買方候選**：")
+                                for _cpk, _cf in list(_cust_for_pid.items()):
+                                    _rcols = st.columns([5, 1])
+                                    _src_tag = (f"（借自保單 {_cf.get('_borrowed_from')}）"
+                                                if _cf.get("_borrowed_from")
+                                                else "（MoneyDJ 新建）")
+                                    _rcols[0].caption(
+                                        f"`{_cf['code']}`　{_cf['name'][:25]}　"
+                                        f"{_cf['currency']}　FX={_cf['fx_rate']:.2f}　{_src_tag}"
+                                    )
+                                    if _rcols[1].button("🗑️", key=f"t7d_rm__{_cpk}"):
+                                        del _cust_for_pid[_cpk]
+                                        st.rerun()
+
+                        # merge custom 進 lookup dicts 讓買方 multiselect 顯示
+                        for _cpk, _cf in _cust_for_pid.items():
+                            if _cpk not in _fund_by_pk:
+                                _fund_by_pk[_cpk] = _cf
+                                _name_lookup_t7[_cpk] = _cf["name"]
+                                _dy_lookup_t7[_cpk] = 0.0
+                            if _cpk not in _c_all_pks_pid:
+                                _c_all_pks_pid.append(_cpk)
+
                     if len(_c_cands_pid) < 1:
                         st.warning(f"⚠️ 保單 `{_sel_pid}` 下無任何持倉部位，無法執行轉換。")
                         _sell_pks = []
@@ -1994,7 +2158,15 @@ def render_t7_section() -> None:
                                             _stock_total_twd += _stock_share
                                             _income_total_twd += _income_share
                                             # v18.27: dual-write 收集 (sell + buy 各一筆)
+                                            # v18.239：D 自訂 / 跨保單借用 → note 加標記方便 Sheet 端辨識
                                             _today_iso = _d_t7.today().isoformat()
+                                            _Bf_cust = _fund_by_pk.get(_bpk) or {}
+                                            if _Bf_cust.get("_borrowed_from"):
+                                                _d_tag = f" [D 借自 {_Bf_cust['_borrowed_from']}]"
+                                            elif _Bf_cust.get("_is_custom_d"):
+                                                _d_tag = " [D 自訂]"
+                                            else:
+                                                _d_tag = ""
                                             if _spid:
                                                 _c_rows_by_pid.setdefault(_spid, []).append({
                                                     "date":          _today_iso,
@@ -2004,7 +2176,7 @@ def render_t7_section() -> None:
                                                     "nav_at_action": float(_S["nav"]),
                                                     "twd":           float(_sr.twd_cost_basis_transferred),
                                                     "fee":           0.0,
-                                                    "note":          f"T7 C 轉換 → {_bcode_disp}（{_purpose_disp}）",
+                                                    "note":          f"T7 C 轉換 → {_bcode_disp}（{_purpose_disp}）{_d_tag}",
                                                 })
                                             if _bpid:
                                                 _c_rows_by_pid.setdefault(_bpid, []).append({
@@ -2015,7 +2187,7 @@ def render_t7_section() -> None:
                                                     "nav_at_action": float(_Bd["nav"]),
                                                     "twd":           float(_sr.twd_cost_basis_transferred),
                                                     "fee":           0.0,
-                                                    "note":          f"T7 C 轉換 ← {_scode_disp}（{_purpose_disp}）",
+                                                    "note":          f"T7 C 轉換 ← {_scode_disp}（{_purpose_disp}）{_d_tag}",
                                                 })
                                             # v18.232：純 % — 賣端 & 買端配置都顯示 %
                                             # _purpose_disp 與 _stock/income 累計已在 dual-write 前算
