@@ -246,6 +246,14 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [ ] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）
 
+### v18.237 — 修：T7 區塊 CachedWidgetWarning（PR #76 漏砍 dangling 裝飾子）（2026-05-29）
+
+- [x] **症狀**：使用者在 Tab3「C 轉換再平衡」選保單後 → 全頁 traceback `CachedWidgetWarning: Your script uses a widget command in a cached function` → `st.multiselect` 在 cached function 內被呼叫
+- [x] **根因**：PR #76 砍 D 模式 `_t7d_fetch_fund_meta` 時，刪函式 body 但**漏砍上方的 `@st.cache_data(ttl=3600)`** 裝飾子。原本裝飾的是 `_t7d_fetch_fund_meta`（cache 1 小時 fund 抓取 meta），刪掉後裝飾子飛黏到下一個 def — 也就是 **`render_t7_section`** → 整個 T7 render 被 cached → `st.multiselect` / 各 widget 都觸發警告
+- [x] **修法** `ui/tab3_t7_ledger.py:81`：直接砍 dangling `@st.cache_data(ttl=3600, show_spinner=False)` 裝飾子
+- [x] **防退化** `test_app_smoke.py::test_no_render_function_decorated_with_cache` regex 掃 `ui/` + 根目錄 *.py 確認沒有 `render_*` 函式被 `@st.cache_data/_resource` 裝飾
+- [x] **驗證** `py_compile` ✅；`test_hot_money + test_policy_store + test_v2_editor + test_portfolio_load + 新 regression = 128/128 pass`
+
 ### v18.236 — 新：熱錢監測（外資 × 匯率 × 背離偵測）整合進 Tab1 總經（2026-05-29）
 
 - [x] **背景**：user 上傳獨立 Streamlit demo `a731802d-app.py`，請求整合進兩倉。股票倉 PR #101 完成；本 PR 移植到基金倉

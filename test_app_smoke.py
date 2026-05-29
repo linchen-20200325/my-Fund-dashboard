@@ -515,3 +515,47 @@ def test_tab_modules_import_without_error() -> None:
             f"{mod_name}.{fn_name} 應為純無參數函式（B-C 設計準則），"
             f"目前 params={list(sig.parameters)}"
         )
+
+
+def test_no_render_function_decorated_with_cache() -> None:
+    """v18.237 防退化：UI render 函式不可被 @st.cache_data / @st.cache_resource 裝飾。
+
+    觸發點：PR #76 砍 D 模式 `_t7d_fetch_fund_meta` 時漏砍其上方的 `@st.cache_data`
+    裝飾子，導致裝飾子飛黏到下一個 `render_t7_section` → 整個 T7 區塊被 cached →
+    內部 `st.multiselect` 觸發 `CachedWidgetWarning`。這條測試把問題寫死，防再犯。
+
+    規則：tab*.py / ui/helpers/*.py / 根目錄 *.py 中 `^def render_*(` 上一行
+    不能是 `@st.cache_data` 或 `@st.cache_resource`（含 ttl/show_spinner 等參數變體）。
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).parent
+    scan_dirs = [root / "ui", root]
+    py_files: list[pathlib.Path] = []
+    for d in scan_dirs:
+        if not d.exists():
+            continue
+        py_files.extend([p for p in d.rglob("*.py")
+                         if "__pycache__" not in p.parts
+                         and not p.name.startswith("test_")
+                         and ".venv" not in p.parts])
+
+    bad_pattern = re.compile(
+        r"^@st\.cache_(?:data|resource)\b.*\n[\s]*def\s+render_\w+\(",
+        re.MULTILINE,
+    )
+    offenders: list[str] = []
+    for fp in py_files:
+        try:
+            text = fp.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for m in bad_pattern.finditer(text):
+            line_no = text[:m.start()].count("\n") + 1
+            offenders.append(f"{fp.relative_to(root)}:{line_no} → {m.group(0).strip()[:100]}")
+
+    assert not offenders, (
+        "render_* 函式被 @st.cache_data/_resource 裝飾，會觸發 CachedWidgetWarning。\n"
+        + "\n".join(f"  • {o}" for o in offenders)
+    )

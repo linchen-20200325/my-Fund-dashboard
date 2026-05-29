@@ -78,7 +78,6 @@ def _t7_units_to_twd(units: float, nav: float, fx: float) -> float:
     return float(units) * float(nav) * float(fx)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def render_t7_section() -> None:
     """渲染 T7 帳務試算 + MK 深度組合建議 AI 子區。
 
