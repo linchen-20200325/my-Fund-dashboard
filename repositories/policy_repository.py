@@ -574,7 +574,17 @@ def load_all_policy_worksheets(client: Any, sheet_id: str) -> pd.DataFrame:
     v18.200（讀取治本）：open 試算表**一次**，`sh.worksheets()` 一次拿到所有分頁
     物件（同時當清單 + 讀取 handle），再逐分頁 get_all_records — 省掉原本「每分頁
     各 open_by_key 一次」的大量讀取（429 Quota 主因）。讀取數從 ~2+3N → ~2+N。
+
+    v18.248（短 TTL 快取）：同 user session 反覆 rerun 仍會打 API 撞 429；加 60 秒
+    TTL 快取（key=sheet_id），同 sheet 60 秒內第二次呼叫直接回 cached DataFrame
+    `.copy()`（防外部 mutate）。`gspread.Client` 物件 unhashable，故走手動 dict
+    而非 `infra/cache.py:_ttl_cache`。
     """
+    import time as _t
+    _now = _t.time()
+    _hit = _LOAD_ALL_WS_CACHE.get(sheet_id)
+    if _hit is not None and (_now - _hit[0]) < _LOAD_ALL_WS_TTL:
+        return _hit[1].copy()
     try:
         sh = _with_quota_retry(client.open_by_key, sheet_id)
         all_ws = _with_quota_retry(sh.worksheets)
@@ -586,7 +596,9 @@ def load_all_policy_worksheets(client: Any, sheet_id: str) -> pd.DataFrame:
                  if not ws.title.startswith(_RESERVED_TAB_PREFIX)
                  and ws.title != DEFAULT_WORKSHEET]
     if not policy_ws:
-        return pd.DataFrame(columns=list(ALL_COLS))
+        _empty = pd.DataFrame(columns=list(ALL_COLS))
+        _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _empty)
+        return _empty.copy()
 
     frames = []
     for ws in policy_ws:
@@ -599,8 +611,22 @@ def load_all_policy_worksheets(client: Any, sheet_id: str) -> pd.DataFrame:
             df = df.assign(policy_id=ws.title)   # tab 名覆寫 policy_id（保證一致）
             frames.append(df)
     if not frames:
-        return pd.DataFrame(columns=list(ALL_COLS))
-    return pd.concat(frames, ignore_index=True)
+        _empty = pd.DataFrame(columns=list(ALL_COLS))
+        _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _empty)
+        return _empty.copy()
+    _result = pd.concat(frames, ignore_index=True)
+    _LOAD_ALL_WS_CACHE[sheet_id] = (_now, _result)
+    return _result.copy()
+
+
+# v18.248: 60 秒 TTL 快取（key=sheet_id）— 配合「🔄 清空快取」按鈕
+_LOAD_ALL_WS_CACHE: dict = {}
+_LOAD_ALL_WS_TTL = 60
+
+
+def clear_load_all_ws_cache() -> None:
+    """清空 load_all_policy_worksheets 的短 TTL 快取（手動失效用）。"""
+    _LOAD_ALL_WS_CACHE.clear()
 
 
 def upsert_fund_in_policy(

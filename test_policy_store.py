@@ -661,6 +661,8 @@ def test_load_policy_worksheet_normalizes():
 
 def test_load_all_policy_worksheets_concats_and_overrides_pid():
     """跨保單合併，且 tab 名強制覆寫 policy_id 欄。"""
+    from repositories.policy_repository import clear_load_all_ws_cache
+    clear_load_all_ws_cache()  # v18.248: 避免被別的 test cache 污染
     ws1 = _make_ws(records=[{
         "policy_id": "stale-001",  # 故意給髒值，下面確認被覆寫
         "policy_name": "A", "fund_url": "U1",
@@ -677,6 +679,62 @@ def test_load_all_policy_worksheets_concats_and_overrides_pid():
     df = load_all_policy_worksheets(client, "FAKE_ID")
     assert len(df) == 2
     assert sorted(df["policy_id"].tolist()) == ["PL-001", "PL-002"]
+
+
+# ════ v18.248: 短 TTL 快取（避免 user 反覆 rerun 撞 429）═════════════════
+def test_load_all_ws_cache_hit_skips_api():
+    """第二次同 sheet_id 走 cache，open_by_key 只被叫 1 次；cache_clear 後重打。"""
+    from repositories.policy_repository import (
+        load_all_policy_worksheets, clear_load_all_ws_cache,
+    )
+    clear_load_all_ws_cache()
+    ws1 = _make_ws(records=[{
+        "policy_id": "X", "policy_name": "A", "fund_url": "U1",
+        "invest_twd": 100, "invest_date": "", "currency": "",
+        "fx_at_buy": "", "notes": "", "policy_tier": "",
+    }])
+    sh = _make_sh_with_worksheets({"PL-CACHE": ws1})
+    client = _make_client_with_sh(sh)
+
+    df1 = load_all_policy_worksheets(client, "CACHE_SID")
+    df2 = load_all_policy_worksheets(client, "CACHE_SID")
+    assert len(df1) == 1 and len(df2) == 1
+    assert client.open_by_key.call_count == 1   # 第二次走 cache
+
+    # mutation safety：改 df1 不影響後續 cache 拿到的結果
+    df1.loc[0, "policy_name"] = "MUTATED"
+    df3 = load_all_policy_worksheets(client, "CACHE_SID")
+    assert df3.loc[0, "policy_name"] == "A"
+    assert client.open_by_key.call_count == 1   # 仍走 cache
+
+    # 清快取後重打 API
+    clear_load_all_ws_cache()
+    _ = load_all_policy_worksheets(client, "CACHE_SID")
+    assert client.open_by_key.call_count == 2
+
+
+def test_load_all_ws_cache_keyed_by_sheet_id():
+    """不同 sheet_id 各自 cache，互不影響。"""
+    from repositories.policy_repository import (
+        load_all_policy_worksheets, clear_load_all_ws_cache,
+    )
+    clear_load_all_ws_cache()
+    _row = lambda nm: {
+        "policy_id": "X", "policy_name": nm, "fund_url": "U",
+        "invest_twd": 1, "invest_date": "", "currency": "",
+        "fx_at_buy": "", "notes": "", "policy_tier": "",
+    }
+    sh_a = _make_sh_with_worksheets({"P-A": _make_ws(records=[_row("A")])})
+    sh_b = _make_sh_with_worksheets({"P-B": _make_ws(records=[_row("B")])})
+    client = MagicMock()
+    client.open_by_key.side_effect = lambda sid: {
+        "SHEET_A": sh_a, "SHEET_B": sh_b,
+    }[sid]
+    load_all_policy_worksheets(client, "SHEET_A")
+    load_all_policy_worksheets(client, "SHEET_B")
+    load_all_policy_worksheets(client, "SHEET_A")   # cache hit
+    load_all_policy_worksheets(client, "SHEET_B")   # cache hit
+    assert client.open_by_key.call_count == 2       # 各 1 次
 
 
 def test_upsert_fund_in_policy_inserts_then_updates():
