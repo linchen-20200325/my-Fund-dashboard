@@ -246,6 +246,13 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [x] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）→ **v18.238 收尾**：`_EXPANDER_LIKE_ATTRS` 已擴成 `(expander, status, popover, dialog)` 四件套
 
+### v18.244 — 修：v18.243 還是報「美元 → USD」— Switch 呼叫前雙重保險 hard-pin（2026-05-29）
+
+- [x] **症狀**（user 截圖二度回報）：v18.243 merge 後仍報「複合轉換失敗：switch_same_currency: 幣別不符 (美元 → USD)」
+- [x] **追加 root cause 假設**：`_ledger_for(pk)` 在 hydration timing / 某 corner case 沒覆蓋到 mutate normalize；或 `position.currency` 在 `__post_init__` 已捕捉舊值
+- [x] **修法**（surgical）：Switch 呼叫前一行強制 `_l.currency = _side_d["ccy"]` + `_l.position.currency = _side_d["ccy"]`，完全繞過任何漏網之魚
+- [x] **驗證** AST OK；`pytest -m "not slow"` **663 passed**
+
 ### v18.243 — 修：C 區複合轉換「美元 vs USD」誤判（_norm_ccy 沒套到 fund/ledger）（2026-05-29）
 
 - [x] **症狀**（user 截圖）：C 區同保單兩檔 USD 基金做複合轉換 → 「❌ 複合轉換失敗：switch_same_currency: 幣別不符 (美元 → USD)；請改用 switch_cross_currency()」

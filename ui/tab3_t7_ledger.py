@@ -2099,6 +2099,16 @@ def render_t7_section() -> None:
                                                     _Bf.get("currency", "USD")),
                                                 "ledger": _ledger_for(_bpk),
                                             }
+                                            # v18.244: Switch 引擎內部會 strict 比對
+                                            # ledger.currency。雙重保險 — 把已
+                                            # _norm_ccy 過的 _S/_Bd ccy 強寫進
+                                            # ledger.currency + position.currency，
+                                            # 繞過任何舊資料 / hydration 漏網之魚
+                                            for _side_d in (_S, _Bd):
+                                                _l = _side_d["ledger"]
+                                                _l.currency = _side_d["ccy"]
+                                                if getattr(_l, "position", None) is not None:
+                                                    _l.position.currency = _side_d["ccy"]
                                             if _S["ccy"] == _Bd["ccy"]:
                                                 _sr = _SwT7.switch_same_currency(
                                                     ledger_from=_S["ledger"],
