@@ -10,12 +10,17 @@ from typing import Any, MutableMapping
 
 from models.policy import fund_pk_str
 from repositories.policy_repository import (
+    ALL_COLS_V2,
+    ITEM_TYPE_FUND,
     PolicySheetError,
     _is_quota_error,
+    detect_sheet_schema_version,
+    load_all_policies_v2,
     load_all_policy_worksheets,
     load_policies,
     sync_policies_to_portfolio_funds,
     upsert_fund_in_policy,
+    write_policy_v2,
 )
 from repositories.snapshot_repository import (
     load_all_ledgers_snapshot,
@@ -25,19 +30,103 @@ from repositories.snapshot_repository import (
 from infra.oauth import OAuthError
 
 
+def _dump_all_to_sheet_v2(client: object,
+                            sheet_id: str,
+                            ss: MutableMapping[str, Any]) -> dict:
+    """v18.250 PR C：v2 schema 主寫入路徑（per-policy 整 tab 覆寫 13 欄）。
+
+    portfolio_funds + t7_ledgers groupby policy_id 後組成 v2 DataFrame，
+    per-policy call `write_policy_v2`。**不寫 `_T7_State` / `_持倉總覽`**
+    （v2 schema 13 欄已含 units/avg_nav/fx_avg，足以重建持倉）。
+
+    成本基礎來源 priority：t7_ledger.position（權威）→ fund dict 欄位（fallback）
+    """
+    import pandas as pd  # noqa: PLC0415
+    out = {"ok": False, "written": 0, "skipped_no_pid": 0,
+           "n_state": 0, "n_overview": 0, "warnings": [], "error": None}
+    try:
+        _t7 = ss.get("t7_ledgers", {}) or {}
+        _by_policy: dict[str, list[dict]] = {}
+        for _f in ss.get("portfolio_funds", []) or []:
+            _pid = str(_f.get("policy_id", "") or "").strip()
+            _code = str(_f.get("code", "") or "").strip().upper()
+            if not _pid:
+                out["skipped_no_pid"] += 1
+                continue
+            if not _code:
+                continue
+            _pos = getattr(_t7.get(fund_pk_str(_f)), "position", None)
+            _avg_nav = (float(getattr(_pos, "cost_unit", 0) or 0) if _pos
+                        else float(_f.get("avg_nav", 0) or 0))
+            _fx_avg = (float(getattr(_pos, "fx_avg", 0) or 0) if _pos
+                       else float(_f.get("fx_avg", 0) or 0))
+            _units = (float(getattr(_pos, "units", 0) or 0) if _pos
+                      else float(_f.get("units", 0) or 0))
+            _by_policy.setdefault(_pid, []).append({
+                "policy_id":        _pid,
+                "item_type":        ITEM_TYPE_FUND,
+                "fund_code":        _code,
+                "fund_name":        str(_f.get("name", "") or ""),
+                "units":            _units,
+                "avg_nav":          _avg_nav,
+                "avg_nav_with_div": float(_f.get("avg_nav_with_div", 0) or 0),
+                "avg_fx":           _fx_avg,
+                "currency":         str(_f.get("currency", "")),
+                "tier":             ("core" if _f.get("is_core") else
+                                     "satellite" if _f.get("is_core") is False
+                                     else ""),
+                "amount":           0,
+                "invest_twd":       int(_f.get("invest_twd", 0) or 0),
+                "div_cash_pct":     float(_f.get("div_cash_pct", 100) or 0),
+            })
+        _written = 0
+        _errors: list[str] = []
+        for _pid, _rows in _by_policy.items():
+            try:
+                _df = pd.DataFrame(_rows, columns=list(ALL_COLS_V2))
+                _n = write_policy_v2(client, sheet_id, _pid, _df)
+                _written += int(_n)
+            except (PolicySheetError, OAuthError) as _e:
+                _errors.append(f"{_pid}: {str(_e)[:80]}")
+        out["written"] = _written
+        if _errors:
+            out["warnings"].append(
+                f"⚠️ {len(_errors)} 個保單分頁寫入失敗："
+                + "；".join(_errors[:5])
+                + ("…" if len(_errors) > 5 else ""))
+        out["ok"] = True
+    except (PolicySheetError, OAuthError) as _pe:
+        out["error"] = f"v2 寫入失敗：{_pe}"
+    except Exception as _e:
+        out["error"] = f"未預期錯誤：[{type(_e).__name__}] {_e}"
+    return out
+
+
 def dump_all_to_sheet(client: object,
                       sheet_id: str,
                       ss: MutableMapping[str, Any]) -> dict:
     """全部寫入：portfolio_funds → 保單分頁 + t7_ledgers → _T7_State。
 
+    v18.250 PR C：開頭 detect schema 版本 — 已升級到 v2 (header 含 `item_type`)
+    → 自動走 `_dump_all_to_sheet_v2`（per-policy 整 tab 覆寫 13 欄 schema）；
+    v1 / empty / detect 失敗 → 維持下方既有 v1 path（向後相容、不破壞舊資料）。
+
     回傳 dict：
       - ok:               bool — 整體是否成功（True 即使有 warnings）
       - written:          int  — 寫進保單分頁的基金數
       - skipped_no_pid:   int  — 因無 policy_id 被略過的基金數
-      - n_state:          int  — 寫進 _T7_State 的快照列數
+      - n_state:          int  — 寫進 _T7_State 的快照列數（v2 path = 0）
       - warnings:         list[str] — 非致命警告（如 _T7_State 寫入失敗訊息）
       - error:            str|None  — 致命錯誤訊息（PolicySheetError / OAuthError）
     """
+    # v18.250: schema-aware routing
+    try:
+        _ver = detect_sheet_schema_version(client, sheet_id)
+    except Exception:
+        _ver = "v1"   # detect 失敗保險走舊路徑
+    if _ver == "v2":
+        return _dump_all_to_sheet_v2(client, sheet_id, ss)
+
     out = {"ok": False, "written": 0, "skipped_no_pid": 0,
            "n_state": 0, "n_overview": 0, "warnings": [], "error": None}
     try:
@@ -121,6 +210,117 @@ def dump_all_to_sheet(client: object,
     return out
 
 
+def _load_all_from_sheet_v2(client: object,
+                              sheet_id: str,
+                              ss: MutableMapping[str, Any],
+                              *,
+                              refresh_only: bool = False) -> dict:
+    """v18.250 PR C：v2 schema 主讀回路徑（13 欄 → portfolio_funds + ledger）。
+
+    從 v2 13 欄反推：
+    - portfolio_funds：保留 prev fund 的 metadata（name/series/dividends/metrics/
+      moneydj_raw），覆蓋 units/avg_nav/avg_fx/invest_twd/div_cash_pct/is_core 等
+      持倉欄位（13 欄帶來的最新值）
+    - t7_ledgers：對每檔 units>0 的基金，建空 Ledger + 一筆 subscribe 還原
+      position snapshot（units / cost_unit / fx_avg / TWD 成本）
+
+    **trade-off**：完整 transactions 歷史不從 v2 重建（13 欄沒這個資訊）；
+    若需歷史，仍需 `_T7_State` snapshot — 但 v2 主路徑設計上不依賴它。
+    """
+    from datetime import date as _date
+    out = {"ok": False, "refresh_only": refresh_only,
+           "added": [], "kept": [], "removed": [], "reused": [],
+           "restored_ct": 0, "reconciled_added": 0,
+           "warnings": [], "error": None}
+    try:
+        _df = load_all_policies_v2(client, sheet_id)
+        if not _df.empty and "policy_id" in _df.columns:
+            ss["policy_tabs"] = sorted(
+                {str(_t).strip() for _t in _df["policy_id"] if str(_t).strip()})
+        else:
+            ss["policy_tabs"] = []
+        ss["policies_df"] = _df
+
+        if refresh_only:
+            out["ok"] = True
+            return out
+
+        _prev_funds = list(ss.get("portfolio_funds", []) or [])
+        _prev_by_pk = {fund_pk_str(_f): _f for _f in _prev_funds}
+        _new_funds: list[dict] = []
+        _prev_codes = {fund_pk_str(_f) for _f in _prev_funds}
+        _new_codes = set()
+        for _, _row in _df.iterrows():
+            if str(_row.get("item_type", "")).strip() != ITEM_TYPE_FUND:
+                continue   # 跳過 cash 列（後續可擴）
+            _pid = str(_row.get("policy_id", "") or "").strip()
+            _code = str(_row.get("fund_code", "") or "").strip().upper()
+            if not _pid or not _code:
+                continue
+            _pk = f"{_pid}::{_code}"
+            _new_codes.add(_pk)
+            _prev = _prev_by_pk.get(_pk) or {}
+            _tier = str(_row.get("tier", "") or "").strip().lower()
+            _new_funds.append({
+                **_prev,   # 保留 name / series / dividends / metrics / moneydj_raw 等
+                "code":             _code,
+                "policy_id":        _pid,
+                "name":             (str(_row.get("fund_name", "") or "").strip()
+                                       or _prev.get("name", "") or _code),
+                "currency":         (str(_row.get("currency", "") or "").strip()
+                                       or _prev.get("currency", "USD")),
+                "units":            float(_row.get("units", 0) or 0),
+                "avg_nav":          float(_row.get("avg_nav", 0) or 0),
+                "avg_nav_with_div": float(_row.get("avg_nav_with_div", 0) or 0),
+                "fx_avg":           float(_row.get("avg_fx", 0) or 0),
+                "invest_twd":       int(_row.get("invest_twd", 0) or 0),
+                "div_cash_pct":     float(_row.get("div_cash_pct", 100) or 0),
+                "is_core":          (True if _tier == "core" else
+                                     False if _tier == "satellite" else None),
+            })
+        ss["portfolio_funds"] = _new_funds
+        out["added"]   = sorted(_new_codes - _prev_codes)
+        out["kept"]    = sorted(_new_codes & _prev_codes)
+        out["removed"] = sorted(_prev_codes - _new_codes)
+
+        # 從 13 欄重建 ledger snapshot
+        try:
+            from services.ledger_service import Ledger as _Ledger
+            _new_ledgers: dict = {}
+            for _f in _new_funds:
+                _u = float(_f.get("units") or 0)
+                _n = float(_f.get("avg_nav") or 0)
+                _fx = float(_f.get("fx_avg") or 0)
+                if _u > 0 and _n > 0 and _fx > 0:
+                    _led = _Ledger(fund_code=_f["code"],
+                                    currency=_f.get("currency", "USD"))
+                    try:
+                        _led.subscribe(amount_twd=_u * _n * _fx,
+                                        fx_rate=_fx, nav=_n,
+                                        txn_date=_date.today())
+                        _new_ledgers[fund_pk_str(_f)] = _led
+                    except Exception:
+                        continue
+            ss["t7_ledgers"] = _new_ledgers
+            out["restored_ct"] = len(_new_ledgers)
+            ss.pop("_t7_auto_restore_done", None)
+            ss.pop("_t7_auto_estimate_done", None)
+        except Exception as _e_ld:
+            out["warnings"].append(
+                f"v2 ledger 重建失敗（不影響 portfolio_funds）：{str(_e_ld)[:80]}")
+
+        out["ok"] = True
+    except (PolicySheetError, OAuthError) as _pe:
+        if _is_quota_error(_pe):
+            out["error"] = ("⏳ Google Sheets 讀取配額暫時超載（每分鐘上限）。"
+                             "請等 30~60 秒再按「📥 立即全部讀回」。")
+        else:
+            out["error"] = f"v2 讀取失敗：{_pe}"
+    except Exception as _e:
+        out["error"] = f"未預期錯誤：[{type(_e).__name__}] {_e}"
+    return out
+
+
 def load_all_from_sheet(client: object,
                         sheet_id: str,
                         ss: MutableMapping[str, Any],
@@ -139,6 +339,16 @@ def load_all_from_sheet(client: object,
       - warnings:     list[str]
       - error:        str|None
     """
+    # v18.250 PR C：schema-aware routing — v2 走專屬 helper
+    if oauth_mode:
+        try:
+            _ver = detect_sheet_schema_version(client, sheet_id)
+        except Exception:
+            _ver = "v1"
+        if _ver == "v2":
+            return _load_all_from_sheet_v2(
+                client, sheet_id, ss, refresh_only=refresh_only)
+
     out = {"ok": False, "refresh_only": refresh_only,
            "added": [], "kept": [], "removed": [], "reused": [],
            "restored_ct": 0, "reconciled_added": 0,
