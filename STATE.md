@@ -246,6 +246,19 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [x] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）→ **v18.238 收尾**：`_EXPANDER_LIKE_ATTRS` 已擴成 `(expander, status, popover, dialog)` 四件套
 
+### v18.243 — 修：C 區複合轉換「美元 vs USD」誤判（_norm_ccy 沒套到 fund/ledger）（2026-05-29）
+
+- [x] **症狀**（user 截圖）：C 區同保單兩檔 USD 基金做複合轉換 → 「❌ 複合轉換失敗：switch_same_currency: 幣別不符 (美元 → USD)；請改用 switch_cross_currency()」
+- [x] **root cause**：
+  - `_S["ccy"] / _Bd["ccy"]` 用 `.upper()` 而非 `_norm_ccy` → 中文「美元」.upper() 還是「美元」，跟英文「USD」字串不等
+  - 舊 ledger 殘留中文 currency「美元」（v18.80 前建立未 normalize），fund 端 metadata reload 後變「USD」 → fund/ledger 不一致
+  - UI 比對 + ledger 引擎 validation 任一條路 mismatch 都報錯
+- [x] **修法**（`ui/tab3_t7_ledger.py`）：
+  - `_ledger_for(pk)`：既有 ledger 取出時補 `_norm_ccy(led.currency)` 一次 mutate（修補歷史資料）
+  - `_S["ccy"] / _Bd["ccy"]`：`.upper()` → `_norm_ccy(...)`
+  - 自動估算新建 ledger 處（L557）同步 `_norm_ccy`
+- [x] **驗證** AST OK；`pytest -m "not slow"` **663 passed**（1 pre-existing fail in test_mk_dashboard 無關）
+
 ### v18.242 — 新：D 模式「已抓過不重複抓」— portfolio_funds in-session cache（2026-05-29）
 
 - [x] **user 反饋**：「如果曾經抓過的就不需要重複抓取」

@@ -303,6 +303,13 @@ def render_t7_section() -> None:
                     _ccy = _norm_ccy((_f or {}).get("currency", "USD"))
                     _led = _LedT7(fund_code=_code, currency=_ccy)
                     st.session_state.t7_ledgers[_pk] = _led
+                else:
+                    # v18.243: 舊 ledger 可能殘留中文幣別（「美元」），與 fund 端
+                    # normalize 後的「USD」不一致 → Switch 引擎 same/cross 兩條路
+                    # 都會誤判幣別不符。每次取 ledger 時補 normalize 一次（mutate）。
+                    _norm = _norm_ccy(getattr(_led, "currency", "") or "USD")
+                    if _led.currency != _norm:
+                        _led.currency = _norm
                 return _led
 
             # ── v18.68/v18.69: T7 entry 自動估算 — 進帳本就同步上方 invest_twd → 下方 ledger
@@ -547,7 +554,7 @@ def render_t7_section() -> None:
                                      use_container_width=True):
                             for _pk_e, _f_e, _u_e, _nav_e, _fx_e in _t7_can_estimate:
                                 _c_e = _f_e.get("code", "?")
-                                _ccy_e = str(_f_e.get("currency", "USD")).upper()
+                                _ccy_e = _norm_ccy(_f_e.get("currency", "USD"))
                                 _new_led_e = _LedT7(fund_code=_c_e, currency=_ccy_e)
                                 _amt_e = _u_e * _nav_e * _fx_e
                                 _new_led_e.subscribe(_amt_e, _fx_e, _nav_e, _d_t7.today())
@@ -2035,8 +2042,8 @@ def render_t7_section() -> None:
                                         )
                                         _S = {
                                             "nav": _na, "fx": _xa,
-                                            "ccy": str(_Sf.get("currency", "USD")
-                                                       ).upper(),
+                                            "ccy": _norm_ccy(
+                                                _Sf.get("currency", "USD")),
                                             "ledger": _ledger_for(_spk),
                                         }
                                         # v18.232：純 % — 賣方按 sell_pct 算贖回單位
@@ -2088,8 +2095,8 @@ def render_t7_section() -> None:
                                                 )
                                             _Bd = {
                                                 "nav": _nb, "fx": _xb,
-                                                "ccy": str(_Bf.get("currency", "USD")
-                                                           ).upper(),
+                                                "ccy": _norm_ccy(
+                                                    _Bf.get("currency", "USD")),
                                                 "ledger": _ledger_for(_bpk),
                                             }
                                             if _S["ccy"] == _Bd["ccy"]:
