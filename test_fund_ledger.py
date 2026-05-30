@@ -680,6 +680,47 @@ def test_switch_many_to_many_conservation() -> None:
     )
 
 
+# ═══ v18.245: 引擎層幣別正規化（防中文「美元」殘留 ledger） ════════════════
+def test_switch_same_currency_normalizes_chinese_to_iso() -> None:
+    """A 端 currency=「美元」（中文殘留）/ B 端 USD — same_currency 應視為同幣"""
+    led_a = Ledger(fund_code="A", currency="美元")
+    led_b = Ledger(fund_code="B", currency="USD")
+    led_a.subscribe(amount_twd=300000.0, fx_rate=30.0, nav=10.0,
+                    txn_date=date(2026, 1, 1))
+    # 不應拋 ValueError；走完 switch 後兩邊 ledger.currency 都被 normalize
+    res = Switch.switch_same_currency(
+        ledger_from=led_a, ledger_to=led_b,
+        units_to_redeem=1000.0,
+        nav_from_redeem=10.0, nav_to_buy=10.0,
+        fee_orig=0.0, txn_date=date(2026, 6, 1),
+    )
+    assert res is not None
+    assert led_a.currency == "USD"
+    assert led_b.currency == "USD"
+    assert led_a.position.currency == "USD"
+    assert led_b.position.currency == "USD"
+
+
+def test_switch_cross_currency_chinese_same_as_iso_blocked() -> None:
+    """A=「美元」B=USD — cross_currency 應該回拒（normalize 後相同）"""
+    led_a = Ledger(fund_code="A", currency="美元")
+    led_b = Ledger(fund_code="B", currency="USD")
+    led_a.subscribe(amount_twd=300000.0, fx_rate=30.0, nav=10.0,
+                    txn_date=date(2026, 1, 1))
+    try:
+        Switch.switch_cross_currency(
+            ledger_from=led_a, ledger_to=led_b,
+            units_to_redeem=1000.0,
+            nav_from_redeem=10.0, nav_to_buy=10.0,
+            cross_rate=1.0, fx_to_at_switch_twd=30.0,
+            fee_orig=0.0, txn_date=date(2026, 6, 1),
+        )
+        raise AssertionError("應該拋 ValueError")
+    except ValueError as _e:
+        assert "幣別相同" in str(_e), f"訊息應指出幣別相同，實際：{_e}"
+    print("✅ switch_*_currency: 中文「美元」與 ISO「USD」被視為同幣")
+
+
 if __name__ == "__main__":
     # Phase 1 — 引擎核心（13）
     test_chubb_11_fields_reproduction()

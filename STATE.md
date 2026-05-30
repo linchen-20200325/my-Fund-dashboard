@@ -246,6 +246,20 @@
 - [x] **驗證** smoke + portfolio_load test 共 **101 passed** 零回歸
 - [x] **後續觀察** `test_app_smoke.py` 的 expander 巢狀偵測只看 `st.expander` literal，未涵蓋 `st.status`／其它 expander-like API；下次踩到再補偵測（先記在 backlog）→ **v18.238 收尾**：`_EXPANDER_LIKE_ATTRS` 已擴成 `(expander, status, popover, dialog)` 四件套
 
+### v18.245 — 修：v18.244 還是報「美元 → USD」— 把 normalize 拉進 service layer（2026-05-29）
+
+- [x] **症狀**（user 三度回報）：v18.244 雙重保險仍報「switch_same_currency: 幣別不符 (美元 → USD)」
+- [x] **死心**：UI/caller layer 怎麼 patch 都可能被某 corner case 繞過。Defense in depth：把 normalize 拉進 `services/ledger_service.py` 引擎本身
+- [x] **修法**：
+  - `services/ledger_service.py` 加 module-level `_CCY_NORMALIZE` 表 + `_norm_ccy_pure()` 純函式（mirror UI 端的表）
+  - `switch_same_currency` / `switch_cross_currency` 進入時先 `_norm_ccy_pure(ledger.currency)` 再比對；正確分支會「**寫回**」normalized 值到 `ledger.currency + position.currency`，後續 transactions 不再殘留中文
+  - error 訊息加 `→ ISO` 對照（debug 友善）
+- [x] **新單元測試** test_fund_ledger.py 加 2 個（**165 passed → 167**）：
+  - `test_switch_same_currency_normalizes_chinese_to_iso`：A=「美元」+ B=USD → same_currency 順過、兩邊都被寫回「USD」
+  - `test_switch_cross_currency_chinese_same_as_iso_blocked`：A=「美元」+ B=USD → cross_currency 正確拒絕「normalize 後相同」
+- [x] **保險**：service-layer normalize 後，UI/caller 端 v18.243/v18.244 的 patch 變成「友善前置」而非「必要」，雙保險
+- [x] **驗證** AST OK；`pytest -m "not slow"` **665 passed**
+
 ### v18.244 — 修：v18.243 還是報「美元 → USD」— Switch 呼叫前雙重保險 hard-pin（2026-05-29）
 
 - [x] **症狀**（user 截圖二度回報）：v18.243 merge 後仍報「複合轉換失敗：switch_same_currency: 幣別不符 (美元 → USD)」

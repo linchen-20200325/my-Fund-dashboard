@@ -97,7 +97,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.244_CcyHardPin"
+APP_VERSION = "v18.245_CcyServiceLayer"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -239,7 +239,7 @@ with st.sidebar:
         "border-radius:8px;padding:10px 14px;margin-top:8px;"
         "font-size:13px;color:#fff;font-weight:700;text-align:center;"
         "box-shadow:0 2px 8px rgba(124,58,237,0.4)'>"
-        "✨ v18.244：C 區複合轉換 Switch 呼叫前雙重保險 — ledger + position currency 強制覆寫 normalize"
+        "✨ v18.245：Switch 引擎內建幣別 normalize（美元/USD 視為同幣）+ 引擎層 unit test 攔住"
         "</div>",
         unsafe_allow_html=True,
     )

@@ -38,6 +38,31 @@ from models.ledger import (  # noqa: F401  re-export so callers can `from servic
 )
 
 
+# v18.245: service-layer 幣別正規化 — UI/caller 任何漏網 fall through 到這裡
+# 都會被 normalize。同個表內容 mirror ui/tab3_t7_ledger 的 _CCY_NORMALIZE。
+_CCY_NORMALIZE: dict[str, str] = {
+    "美元": "USD", "美金": "USD",
+    "歐元": "EUR",
+    "港幣": "HKD", "港元": "HKD",
+    "日圓": "JPY", "日元": "JPY",
+    "澳幣": "AUD", "澳元": "AUD",
+    "英鎊": "GBP",
+    "人民幣": "CNY", "CNH": "CNY",
+    "台幣": "TWD", "新台幣": "TWD", "新臺幣": "TWD",
+    "瑞郎": "CHF", "瑞士法郎": "CHF",
+    "新幣": "SGD", "新加坡幣": "SGD", "星幣": "SGD",
+    "加幣": "CAD", "加元": "CAD",
+    "紐幣": "NZD", "紐元": "NZD",
+    "蘭特": "ZAR", "南非幣": "ZAR",
+}
+
+
+def _norm_ccy_pure(raw) -> str:
+    """幣別正規化：中文/ISO 都統一回 ISO 3 碼。未知則回原值大寫。"""
+    _u = str(raw or "USD").upper().strip()
+    return _CCY_NORMALIZE.get(_u, _u)
+
+
 @dataclass
 class Ledger:
     """事件流水帳：append-only Transaction list + 即時持倉快照。
@@ -281,11 +306,23 @@ class Switch:
         fee_orig: float,
         txn_date: _date,
     ) -> SwitchResult:
-        if ledger_from.currency != ledger_to.currency:
+        # v18.245: 引擎層自己 normalize 後比對，UI/caller 任何漏網（舊 ledger
+        # 殘留中文「美元」/ hydration 漏 mutate）到這裡都被攔住。同步寫回
+        # ledger.currency + position.currency 避免後續 transactions 殘留舊值。
+        _a = _norm_ccy_pure(ledger_from.currency)
+        _b = _norm_ccy_pure(ledger_to.currency)
+        if _a != _b:
             raise ValueError(
-                f"switch_same_currency: 幣別不符 ({ledger_from.currency} → {ledger_to.currency})；"
+                f"switch_same_currency: 幣別不符 "
+                f"({ledger_from.currency}→{_a} vs {ledger_to.currency}→{_b})；"
                 f"請改用 switch_cross_currency()"
             )
+        ledger_from.currency = _a
+        ledger_to.currency = _b
+        if getattr(ledger_from, "position", None) is not None:
+            ledger_from.position.currency = _a
+        if getattr(ledger_to, "position", None) is not None:
+            ledger_to.position.currency = _b
         return Switch._do_switch(
             ledger_from=ledger_from, ledger_to=ledger_to,
             units_to_redeem=units_to_redeem,
@@ -306,11 +343,21 @@ class Switch:
         fee_orig: float,
         txn_date: _date,
     ) -> SwitchResult:
-        if ledger_from.currency == ledger_to.currency:
+        # v18.245: 對稱對待 — normalize 後再比對 + 同步寫回
+        _a = _norm_ccy_pure(ledger_from.currency)
+        _b = _norm_ccy_pure(ledger_to.currency)
+        if _a == _b:
             raise ValueError(
-                f"switch_cross_currency: 幣別相同 ({ledger_from.currency})；"
+                f"switch_cross_currency: 幣別相同 "
+                f"({ledger_from.currency}→{_a})；"
                 f"請改用 switch_same_currency()"
             )
+        ledger_from.currency = _a
+        ledger_to.currency = _b
+        if getattr(ledger_from, "position", None) is not None:
+            ledger_from.position.currency = _a
+        if getattr(ledger_to, "position", None) is not None:
+            ledger_to.position.currency = _b
         if cross_rate <= 0 or fx_to_at_switch_twd <= 0:
             raise ValueError("switch_cross_currency: cross_rate / fx_to_at_switch_twd 必須為正")
         return Switch._do_switch(
