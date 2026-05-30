@@ -1264,6 +1264,56 @@ def render_macro_tab() -> None:
                             + "　暫不影響整體健康度評估，主源補齊 ≥20 筆後本卡會自動計算複合 Risk Score。"
                         )
 
+                    # ── 🎯 風險評分校準（v18.251，sandbox demo / live data 雙模式）──
+                    st.divider()
+                    with st.expander("🎯 風險評分校準（experimental）", expanded=False):
+                        from services.risk_calibration import (
+                            generate_synthetic_demo as _gen_demo,
+                            grid_search_threshold as _grid_thr,
+                            label_forward_drawdown as _lbl_dd,
+                            rolling_risk_score as _roll_rs,
+                        )
+                        st.caption(
+                            "**Ground truth**：未來 N 個月 SPX 最大回檔 < threshold ⇒ 標 1（命中）。"
+                            "校準器掃描 score 門檻，回報每門檻 precision / recall / F1，找出最佳停利警戒點。"
+                        )
+                        _cal_c1, _cal_c2, _cal_c3 = st.columns(3)
+                        with _cal_c1:
+                            _cal_horizon = st.slider("Forward horizon (月)", 1, 12, 3, key="_cal_h_v251")
+                        with _cal_c2:
+                            _cal_dd = st.slider("Drawdown 門檻 (%)", -30, -5, -10, key="_cal_dd_v251")
+                        with _cal_c3:
+                            _cal_win = st.slider("Rolling window (月)", 12, 48, 24, key="_cal_w_v251")
+                        _df_demo, _spx_demo = _gen_demo(n_months=60, seed=42)
+                        _score_demo = _roll_rs(_df_demo, window=_cal_win)
+                        _label_demo = _lbl_dd(_spx_demo, horizon_months=_cal_horizon,
+                                              threshold=_cal_dd / 100.0)
+                        _grid_df = _grid_thr(_score_demo, _label_demo)
+                        if _grid_df.empty or _grid_df["f1"].max() <= 0:
+                            st.warning("本組參數下校準器無法命中任何危機點（試試放寬 horizon / drawdown）")
+                        else:
+                            _best = _grid_df.iloc[0]
+                            _mc1, _mc2, _mc3, _mc4 = st.columns(4)
+                            _mc1.metric("最佳 F1 門檻", f"{_best['threshold']:.2f}")
+                            _mc2.metric("Precision", f"{_best['precision']:.1%}")
+                            _mc3.metric("Recall", f"{_best['recall']:.1%}")
+                            _mc4.metric("F1", f"{_best['f1']:.1%}")
+                            st.caption(
+                                f"📊 demo 資料：60 月合成 macro + SPX（內含 2 段壓力事件）；當前生產 risk_score={_risk_score:.2f}，"
+                                f"建議警戒門檻={_best['threshold']:.2f}。"
+                            )
+                            st.dataframe(
+                                _grid_df.head(10).style.format({
+                                    "threshold": "{:.2f}", "precision": "{:.1%}",
+                                    "recall": "{:.1%}", "f1": "{:.1%}", "accuracy": "{:.1%}",
+                                }),
+                                use_container_width=True, hide_index=True,
+                            )
+                        st.caption(
+                            "⚠️ 目前用 sandbox 合成資料驗證 pipeline；要套用真實歷史需在有 FRED + yfinance "
+                            "outbound 的環境餵入實際 (VIX, HY_Spread, Yield_Curve, SPX) 月序列。"
+                        )
+
             # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
             def _load_liquidity_factors() -> None:
                 with st.spinner("抓取 FRED / DefiLlama / Yahoo 流動性因子（約 10–30 秒）..."):
