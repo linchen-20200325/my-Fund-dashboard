@@ -10,6 +10,7 @@
 ### 2026-05-29（429 殘留 + D 模式 / Switch 引擎連環修：PR #74 → #94）
 
 - [x] **PR #95** `v18.249` UX — 相關性矩陣 `NaN`（兩檔 NAV 序列無重疊期）改顯示「—」+ 配色 `#888` 灰；矩陣下方加 caption 解釋「`—` ≠ 0 ≠ 無相關，純粹是無重疊期無法計算」；test_holdings_overlap +1 case（無重疊 → NaN）。**8 → 9 passed**
+- [x] **PR (next)** `v18.250` PR C — `cloud_io.dump_all_to_sheet / load_all_from_sheet` 開頭加 `detect_sheet_schema_version()` schema-aware routing；`v2` → 走新 helper `_dump_all_to_sheet_v2 / _load_all_from_sheet_v2`（per-policy 13 欄整 tab 覆寫 + 從 13 欄重建 portfolio_funds + ledger snapshot via Ledger.subscribe()）；`v1`/`empty`/detect 失敗 → 維持既有 v1 path 完全不動（向後相容）。test_cloud_io +4 case（routing v2 / v1 不變 / round-trip 13 欄 / load 13 欄反推 portfolio_funds + ledger）。**14 → 18 passed**。⚠️ **PR D 不做**（破壞性、需先在 Sheet 副本驗 v2 round-trip OK）。
 - [x] **任務 audit 對齊**（2026-05-30）— PM 盤點時誤標 「總經風險 UI 接線（壓力卡 / 趨勢圖 / 因子融合 / 宏觀研判）#2-#5 未做」實際 v18.228 已完整實現（`ui/tab1_macro.py:1267-1391`：壓力卡 `st.metric` + tier color + 因子貢獻 bar chart + `score_series` 歷史趨勢 sparkline + 3 risk-off 因子個別卡 + SSR 子彈水位 + `liquidity_verdict()` 白話研判）；計算層 `services/liquidity_engine.py:303 compute_liquidity_score()` production-ready。**無需再做任何 code 改動**，純 BACKLOG 對齊。
 - [x] **PR #94** `v18.248` perf(sheets) — `load_all_policy_worksheets` 加 60 秒 TTL 短快取（key=sheet_id，return `.copy()` 防 mutate，`gspread.Client` unhashable 走手動 dict 而非 `_ttl_cache` decorator）；export `clear_load_all_ws_cache()` 給「🔄 清空快取」按鈕；test_policy_store +2 case（cache hit / sheet_id 隔離）。**67 → 87 passed**
 

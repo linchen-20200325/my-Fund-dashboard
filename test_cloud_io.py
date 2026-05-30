@@ -300,9 +300,172 @@ def test_load_all_from_sheet_unexpected_exception_caught(monkeypatch):
 
     def _explode(c, s):
         raise RuntimeError("network down")
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version",
+                         lambda c, s: "v1")   # 走 v1 path 撞 _explode
     monkeypatch.setattr(cloud_io, "load_all_policy_worksheets", _explode)
 
     out = cloud_io.load_all_from_sheet("c", "s", {}, oauth_mode=True)
     assert out["ok"] is False
     assert "RuntimeError" in out["error"]
     assert "network down" in out["error"]
+
+
+# ══════════════════════════════════════════════════════════════════
+# v18.250 PR C：schema-aware routing — v2 走專屬 helper
+# ══════════════════════════════════════════════════════════════════
+def test_dump_routes_to_v2_when_detected(monkeypatch):
+    """detect=v2 → 呼叫 write_policy_v2，不呼叫 v1 helpers。"""
+    from ui.helpers import cloud_io
+
+    _v2_calls = []
+    _v1_calls = []
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version",
+                         lambda c, s: "v2")
+    monkeypatch.setattr(cloud_io, "write_policy_v2",
+                         lambda c, s, pid, df: (_v2_calls.append((pid, len(df))),
+                                                  len(df))[1])
+    monkeypatch.setattr(cloud_io, "upsert_fund_in_policy",
+                         lambda *a, **k: _v1_calls.append(a))
+    monkeypatch.setattr(cloud_io, "save_all_ledgers_snapshot",
+                         lambda *a, **k: _v1_calls.append("snapshot"))
+
+    ss = {
+        "portfolio_funds": [
+            {"code": "F1", "policy_id": "P1", "name": "Fund 1",
+              "invest_twd": 100000, "currency": "USD",
+              "units": 1000, "avg_nav": 10.0, "fx_avg": 30.0},
+            {"code": "F2", "policy_id": "P1", "name": "Fund 2",
+              "invest_twd": 50000, "currency": "TWD",
+              "units": 500, "avg_nav": 100.0, "fx_avg": 1.0},
+            {"code": "F3", "policy_id": "P2", "name": "Fund 3",
+              "invest_twd": 75000, "currency": "USD",
+              "units": 2500, "avg_nav": 12.5, "fx_avg": 30.0},
+        ],
+        "t7_ledgers": {},
+    }
+    out = cloud_io.dump_all_to_sheet("c", "s", ss)
+    assert out["ok"] is True
+    assert out["error"] is None
+    # v2 path 被呼叫，v1 完全沒
+    assert len(_v2_calls) == 2   # 2 policies (P1, P2)
+    assert _v1_calls == []
+    # P1 含 2 檔、P2 含 1 檔
+    _by_pid = dict(_v2_calls)
+    assert _by_pid == {"P1": 2, "P2": 1}
+    assert out["written"] == 3
+
+
+def test_load_routes_to_v2_when_detected(monkeypatch):
+    """detect=v2 → 呼叫 load_all_policies_v2 反推 portfolio_funds + ledger snapshot。"""
+    from ui.helpers import cloud_io
+
+    _v1_calls = []
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version",
+                         lambda c, s: "v2")
+    monkeypatch.setattr(cloud_io, "load_all_policy_worksheets",
+                         lambda c, s: _v1_calls.append("v1_load") or pd.DataFrame())
+    monkeypatch.setattr(cloud_io, "load_all_ledgers_snapshot",
+                         lambda c, s, L: _v1_calls.append("snapshot_load"))
+    # mock v2 load 回一張 13 欄 DataFrame
+    _df_v2 = pd.DataFrame([
+        {"policy_id": "P1", "item_type": "fund", "fund_code": "F1",
+          "fund_name": "Fund One", "units": 1000.0, "avg_nav": 10.0,
+          "avg_nav_with_div": 9.5, "avg_fx": 30.0, "currency": "USD",
+          "tier": "core", "amount": 0, "invest_twd": 300000,
+          "div_cash_pct": 100.0},
+        {"policy_id": "P1", "item_type": "fund", "fund_code": "F2",
+          "fund_name": "Fund Two", "units": 500.0, "avg_nav": 100.0,
+          "avg_nav_with_div": 95.0, "avg_fx": 1.0, "currency": "TWD",
+          "tier": "satellite", "amount": 0, "invest_twd": 50000,
+          "div_cash_pct": 50.0},
+    ])
+    monkeypatch.setattr(cloud_io, "load_all_policies_v2",
+                         lambda c, s: _df_v2)
+
+    ss = {}
+    out = cloud_io.load_all_from_sheet("c", "s", ss, oauth_mode=True)
+    assert out["ok"] is True
+    assert out["error"] is None
+    # v1 helpers 完全沒被呼叫
+    assert _v1_calls == []
+    # portfolio_funds 反推正確
+    assert len(ss["portfolio_funds"]) == 2
+    _f1 = ss["portfolio_funds"][0]
+    assert _f1["code"] == "F1" and _f1["policy_id"] == "P1"
+    assert _f1["units"] == 1000.0
+    assert _f1["avg_nav"] == 10.0
+    assert _f1["fx_avg"] == 30.0
+    assert _f1["div_cash_pct"] == 100.0
+    assert _f1["is_core"] is True
+    _f2 = ss["portfolio_funds"][1]
+    assert _f2["is_core"] is False   # tier=satellite
+    # ledger 重建（兩檔都 units>0）
+    assert out["restored_ct"] == 2
+    assert len(ss["t7_ledgers"]) == 2
+    # policy_tabs 由 policy_id 推
+    assert ss["policy_tabs"] == ["P1"]
+
+
+def test_v1_path_unchanged_when_v1(monkeypatch):
+    """detect=v1 → 走原 v1 path，v2 helper 不被呼叫（向後相容）。"""
+    from ui.helpers import cloud_io
+
+    _v2_calls = []
+    _v1_upserts = []
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version",
+                         lambda c, s: "v1")
+    monkeypatch.setattr(cloud_io, "write_policy_v2",
+                         lambda c, s, pid, df: _v2_calls.append(pid))
+    monkeypatch.setattr(cloud_io, "upsert_fund_in_policy",
+                         lambda c, s, pid, row: _v1_upserts.append(
+                             (pid, row["fund_url"])))
+    monkeypatch.setattr(cloud_io, "save_all_ledgers_snapshot",
+                         lambda c, s, t, f: 0)
+    monkeypatch.setattr(cloud_io, "save_holdings_overview",
+                         lambda c, s, t, f: 0)
+
+    ss = {"portfolio_funds": [
+        {"code": "F1", "policy_id": "P1", "invest_twd": 100000,
+          "currency": "USD"}], "t7_ledgers": {}}
+    out = cloud_io.dump_all_to_sheet("c", "s", ss)
+    assert out["ok"] is True
+    assert _v2_calls == []   # v2 沒被叫
+    assert _v1_upserts == [("P1", "F1")]
+
+
+def test_v2_round_trip_keeps_13_cols(monkeypatch):
+    """v2 dump 寫的 df 含 ALL_COLS_V2 全 13 欄；load 反推保留關鍵欄位。"""
+    from ui.helpers import cloud_io
+    from repositories.policy_repository import ALL_COLS_V2
+
+    _captured_df = {}
+    monkeypatch.setattr(cloud_io, "detect_sheet_schema_version",
+                         lambda c, s: "v2")
+    def _capture(c, s, pid, df):
+        _captured_df[pid] = df.copy()
+        return len(df)
+    monkeypatch.setattr(cloud_io, "write_policy_v2", _capture)
+
+    ss = {"portfolio_funds": [
+        {"code": "F1", "policy_id": "P1", "name": "Fund Alpha",
+          "invest_twd": 300000, "currency": "USD",
+          "units": 1000.0, "avg_nav": 10.0, "fx_avg": 30.0,
+          "avg_nav_with_div": 9.5, "div_cash_pct": 80.0,
+          "is_core": True}], "t7_ledgers": {}}
+    cloud_io.dump_all_to_sheet("c", "s", ss)
+
+    _df = _captured_df["P1"]
+    # 13 欄全在
+    assert set(_df.columns) == set(ALL_COLS_V2)
+    _r = _df.iloc[0]
+    assert _r["fund_code"] == "F1"
+    assert _r["fund_name"] == "Fund Alpha"
+    assert _r["units"] == 1000.0
+    assert _r["avg_nav"] == 10.0
+    assert _r["avg_nav_with_div"] == 9.5
+    assert _r["avg_fx"] == 30.0
+    assert _r["currency"] == "USD"
+    assert _r["tier"] == "core"
+    assert _r["invest_twd"] == 300000
+    assert _r["div_cash_pct"] == 80.0
+    assert _r["item_type"] == "fund"
