@@ -97,7 +97,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.248_SheetCache60s"
+APP_VERSION = "v18.249_CorrNaNFriendly"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -239,7 +239,7 @@ with st.sidebar:
         "border-radius:8px;padding:10px 14px;margin-top:8px;"
         "font-size:13px;color:#fff;font-weight:700;text-align:center;"
         "box-shadow:0 2px 8px rgba(124,58,237,0.4)'>"
-        "✨ v18.248：load_all_policy_worksheets 加 60 秒 TTL 快取（同 user 反覆 rerun 不再撞 429）"
+        "✨ v18.249：相關性矩陣 NaN → 「—」+ 友善 caption（無重疊期 ≠ 無相關）"
         "</div>",
         unsafe_allow_html=True,
     )

@@ -9,6 +9,7 @@
 
 ### 2026-05-29（429 殘留 + D 模式 / Switch 引擎連環修：PR #74 → #94）
 
+- [x] **PR (next)** `v18.249` UX — 相關性矩陣 `NaN`（兩檔 NAV 序列無重疊期）改顯示「—」+ 配色 `#888` 灰；矩陣下方加 caption 解釋「`—` ≠ 0 ≠ 無相關，純粹是無重疊期無法計算」；test_holdings_overlap +1 case（無重疊 → NaN）。**8 → 9 passed**
 - [x] **PR #94** `v18.248` perf(sheets) — `load_all_policy_worksheets` 加 60 秒 TTL 短快取（key=sheet_id，return `.copy()` 防 mutate，`gspread.Client` unhashable 走手動 dict 而非 `_ttl_cache` decorator）；export `clear_load_all_ws_cache()` 給「🔄 清空快取」按鈕；test_policy_store +2 case（cache hit / sheet_id 隔離）。**67 → 87 passed**
 
 ### 2026-05-17（v11.1 後續優化：PR #165 → #196，36 commits）
