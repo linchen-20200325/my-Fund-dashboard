@@ -252,17 +252,33 @@ def render_hot_money_section(token: str = "",
                 x="roll_flow:Q", y="roll_apprec:Q")
         st.altair_chart((pts + v + h + last).properties(height=360),
                           use_container_width=True)
-    except Exception:
-        st.scatter_chart(plot, x="roll_flow", y="roll_apprec", color="state", height=360)
+    except Exception as _ce:
+        # v18.240：altair 失敗（如 typing_extensions 太舊踩 TypedDict closed=）→
+        # 不再 fallback st.scatter_chart（底層仍是 altair 會再炸），改純表格降級
+        st.caption(f"⚠️ 象限圖渲染失敗（{type(_ce).__name__}），改顯示原始數據表：")
+        _t = plot.tail(20)[["date", "roll_flow", "roll_apprec", "state"]].copy()
+        _t["date"] = pd.to_datetime(_t["date"]).dt.date
+        st.dataframe(
+            _t.rename(columns={"date": "日期", "roll_flow": f"近{window}日外資(億)",
+                                  "roll_apprec": f"近{window}日升貶(%)", "state": "狀態"}),
+            use_container_width=True, hide_index=True, height=320)
 
-    # 時序圖
+    # 時序圖（雙保險：bar/line 也用 altair → 一併防呆）
     cc_a, cc_b = st.columns(2)
     with cc_a:
         st.markdown("**外資每日買賣超（億元）**")
-        st.bar_chart(sig.set_index("date")["foreign_net_yi"], height=220)
+        try:
+            st.bar_chart(sig.set_index("date")["foreign_net_yi"], height=220)
+        except Exception as _be:
+            st.caption(f"⚠️ bar chart 失敗（{type(_be).__name__}），改顯示尾段數據：")
+            st.dataframe(sig[["date", "foreign_net_yi"]].tail(10), use_container_width=True, hide_index=True)
     with cc_b:
         st.markdown("**美元/台幣（下降＝台幣升值）**")
-        st.line_chart(sig.set_index("date")["usdtwd"], height=220)
+        try:
+            st.line_chart(sig.set_index("date")["usdtwd"], height=220)
+        except Exception as _le:
+            st.caption(f"⚠️ line chart 失敗（{type(_le).__name__}），改顯示尾段數據：")
+            st.dataframe(sig[["date", "usdtwd"]].tail(10), use_container_width=True, hide_index=True)
 
     # 背離事件清單
     st.markdown("**⚠️ 近期背離事件**")

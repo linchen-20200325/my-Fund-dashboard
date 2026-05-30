@@ -170,3 +170,31 @@ def test_yf_series_to_df_handles_tz_aware_index():
     out = _yf_series_to_df(series)
     assert len(out) == 3
     assert out["date"].iloc[0].tz is None
+
+
+# ────────────────────────────────────────────────────────────────────────
+# v18.240 regression：altair / typing_extensions chain smoke import
+# ────────────────────────────────────────────────────────────────────────
+def test_hot_money_module_imports_cleanly():
+    """整個 hot_money + render 函式 import 不應炸 (TypedDict closed= 等)。"""
+    import importlib
+    import hot_money as _hm
+    importlib.reload(_hm)
+    assert callable(_hm.render_hot_money_section)
+    assert callable(_hm.build_signals)
+    assert callable(_hm._yf_series_to_df)
+
+
+def test_altair_import_chain_does_not_raise():
+    """altair / narwhals / typing_extensions 全鏈 import 不可拋 TypeError
+    (PR v18.240 修 _TypedDictMeta.__new__() got unexpected kwarg 'closed')。"""
+    try:
+        import altair  # noqa: F401
+        from altair.vegalite.v5.schema import _config  # noqa: F401
+    except TypeError as e:
+        if "closed" in str(e):
+            raise AssertionError(
+                "altair _config import 踩到 TypedDict closed= bug "
+                "(typing_extensions 太舊？)"
+            ) from e
+        raise
