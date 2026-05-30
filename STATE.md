@@ -6,7 +6,7 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.240（PR #90 — altair TypedDict closed= crash fix）
+- **目前版本**：v18.249（PR #95 — 相關性矩陣 NaN → 「—」友善顯示）
 
 ## 目錄結構（v11.0 分層架構）
 ```
