@@ -1691,6 +1691,75 @@ def render_macro_tab() -> None:
                     "⚠️ 10Y-2Y 倒掛翻正 = 衰退末期，歷史經驗為股市底部累積區（1990/2000/2008/2020）"
                 )
 
+                # ── v18.250 第二排：信用 / 衰退 / 領先 三組景氣反轉拐點 ─────
+                _tp_c3, _tp_c4, _tp_c5 = st.columns(3)
+                for _col, _key, _title in [
+                    (_tp_c3, "hy_spread", "💳 HY 信用利差"),
+                    (_tp_c4, "sahm_rule", "📉 薩姆規則（衰退警報）"),
+                    (_tp_c5, "lei_cfnai", "🔭 CFNAI 領先指標"),
+                ]:
+                    _d = _tp.get(_key)
+                    if not _d:
+                        continue
+                    _sig = _d.get("signal", "⬜")
+                    _col_c = _d.get("color", "#888")
+                    _val = _d.get("value")
+                    _prev = _d.get("prev")
+                    _trend = _d.get("trend") or []
+                    _note = _d.get("note", "")
+                    _label = _d.get("label", "")
+                    # 單位後綴隨指標調整
+                    _unit = "%" if _key == "hy_spread" else ""
+                    _val_txt = "—" if _val is None else f"{_val:+.2f}{_unit}"
+                    _prev_txt = "—" if _prev is None else f"{_prev:+.2f}{_unit}"
+                    with _col:
+                        st.markdown(
+                            f"<div style='background:#0d1117;border:2px solid {_col_c};"
+                            f"border-radius:12px;padding:14px 18px;margin:6px 0'>"
+                            f"<div style='color:#888;font-size:11px;letter-spacing:1px'>"
+                            f"{_title}</div>"
+                            f"<div style='color:{_col_c};font-size:18px;font-weight:800;"
+                            f"margin:6px 0 10px'>{_sig}</div>"
+                            f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px'>"
+                            f"<div><div style='color:#888;font-size:10px'>本期</div>"
+                            f"<div style='color:#fff;font-weight:700;font-size:16px'>{_val_txt}</div></div>"
+                            f"<div><div style='color:#888;font-size:10px'>前期</div>"
+                            f"<div style='color:#aaa;font-weight:700;font-size:16px'>{_prev_txt}</div></div>"
+                            f"</div>"
+                            f"<div style='color:#aaa;font-size:11px;border-top:1px solid #30363d;"
+                            f"padding-top:6px;margin-top:4px'>{_note}</div>"
+                            f"<div style='color:#555;font-size:10px;margin-top:4px'>{_label}</div>"
+                            f"</div>", unsafe_allow_html=True)
+                        if _trend and len(_trend) >= 2:
+                            try:
+                                import plotly.graph_objects as _go_tp
+                                _spfig = _go_tp.Figure()
+                                _spfig.add_trace(_go_tp.Scatter(
+                                    y=_trend, mode="lines+markers",
+                                    line=dict(color=_col_c, width=2),
+                                    marker=dict(size=5, color=_col_c),
+                                    showlegend=False,
+                                ))
+                                _spfig.add_hline(y=0, line_dash="dot",
+                                                 line_color="#888", line_width=1)
+                                _spfig.update_layout(
+                                    height=110, margin=dict(l=10, r=10, t=4, b=4),
+                                    plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
+                                    xaxis=dict(visible=False),
+                                    yaxis=dict(showgrid=False, color="#555",
+                                               tickfont=dict(size=9)),
+                                )
+                                st.plotly_chart(_spfig, use_container_width=True,
+                                                key=f"sp_tp_{_key}")
+                            except Exception:
+                                pass  # noqa: smoke-allow-pass
+                st.caption(
+                    "🎯 **景氣反轉三件套**："
+                    "💳 HY 利差高位回落 = 信用市場開始正常化｜"
+                    "📉 薩姆規則跌破 0.5 = 衰退警報解除（底部布局訊號）｜"
+                    "🔭 CFNAI 3M 均值由負轉正 = 85 指標領先翻揚（擴張確認）"
+                )
+
             # ── v18.21 📊 拐點訊號歷史回測（倒掛翻正 vs SPX）─────────────
             with st.expander(
                 "📊 歷史回測：倒掛翻正後 6/12/18M SPX 表現",

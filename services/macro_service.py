@@ -112,6 +112,30 @@ def _detect_inflection(indicators):
         if jb_v < jb_p and jb_v < 25: signals.append({"type":"bull","text":f"初領失業金 {jb_v:.1f} 萬 改善"}); score += 1
         elif jb_v > 30: signals.append({"type":"warn","text":f"初領失業金 {jb_v:.1f} 萬 高位"}); score -= 1
 
+    # v18.250 新增：HY Spread 由高位回落（信用拐點）
+    hy_v = _chk("HY_SPREAD"); hy_p = _chk("HY_SPREAD","prev")
+    if hy_v is not None and hy_p is not None:
+        if hy_p >= 6.0 and hy_v < hy_p:
+            signals.append({"type":"buy","text":f"⚡ HY 利差 {hy_p:.2f}%→{hy_v:.2f}% 高位首度回落 — 信用拐點"}); score += 3
+        elif hy_p >= 4.0 and hy_v < hy_p - 0.3:
+            signals.append({"type":"buy","text":f"HY 利差 {hy_v:.2f}% 明顯收斂（-{hy_p-hy_v:.2f}pp）— risk-on 醞釀"}); score += 1
+
+    # v18.250 新增：薩姆規則由觸發→解除（衰退結束拐點）
+    sahm_v = _chk("SAHM"); sahm_p = _chk("SAHM","prev")
+    if sahm_v is not None:
+        if sahm_p is not None and sahm_p >= 0.5 and sahm_v < 0.5:
+            signals.append({"type":"buy","text":f"⚡ 薩姆規則 {sahm_p:.2f}→{sahm_v:.2f} 跌破 0.5 — 衰退警報解除拐點"}); score += 4
+        elif sahm_v >= 0.5:
+            signals.append({"type":"warn","text":f"薩姆規則 {sahm_v:.2f} ≥0.5 衰退警報中"}); score -= 2
+
+    # v18.250 新增：CFNAI 領先指標由負轉正（領先翻揚拐點）
+    lei_v = _chk("LEI"); lei_p = _chk("LEI","prev")
+    if lei_v is not None and lei_p is not None:
+        if lei_v > 0 and lei_p <= 0:
+            signals.append({"type":"buy","text":f"⚡ CFNAI 領先 {lei_p:+.2f}→{lei_v:+.2f} 由負轉正 — 景氣翻揚拐點"}); score += 3
+        elif lei_v < -0.7:
+            signals.append({"type":"warn","text":f"CFNAI {lei_v:+.2f} < -0.7 強烈衰退"}); score -= 2
+
     if fed_v is not None and fed_p is not None and fed_v <= fed_p and fed_p > 0 and \
        cpi_v and cpi_v < 3.5 and "下降" in cpi_t:
         signals.append({"type":"buy","text":"⭐ MK黃金拐點：CPI+Fed Rate 雙雙見頂回落，勝率最高！"}); score += 5
@@ -1310,6 +1334,25 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             "label": "10Y − 2Y 利差 (T10Y2Y)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
         },
+        # v18.250 新增三組景氣反轉拐點
+        "hy_spread": {
+            "signal": "⬜ 資料不足", "color": "#888", "icon": "⬜",
+            "value": None, "prev": None, "trend": [],
+            "label": "HY 信用利差 (BAMLH0A0HYM2)",
+            "note": "FRED API 失敗或資料不足", "source_ok": False,
+        },
+        "sahm_rule": {
+            "signal": "⬜ 資料不足", "color": "#888", "icon": "⬜",
+            "value": None, "prev": None, "trend": [],
+            "label": "薩姆規則 (SAHMREALTIME)",
+            "note": "FRED API 失敗或資料不足", "source_ok": False,
+        },
+        "lei_cfnai": {
+            "signal": "⬜ 資料不足", "color": "#888", "icon": "⬜",
+            "value": None, "prev": None, "trend": [],
+            "label": "CFNAI 領先指標 3M MA",
+            "note": "FRED API 失敗或資料不足", "source_ok": False,
+        },
     }
 
     if not fred_api_key:
@@ -1383,6 +1426,97 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             })
     except Exception as e:
         out["yield_curve"]["note"] = f"T10Y2Y 抓取異常：{str(e)[:80]}"
+
+    # ── 指標三：HY 信用利差由高位回落（v18.250） ────────────────────
+    try:
+        df_hy = fetch_fred("BAMLH0A0HYM2", fred_api_key, n=400)
+        if not df_hy.empty and len(df_hy) >= 30:
+            s = df_hy.sort_values("date").set_index("date")["value"].astype(float).dropna()
+            cur = float(s.iloc[-1]); prev = float(s.iloc[-2])
+            max90 = float(s.tail(90).max())
+            trend = [round(v, 2) for v in s.tail(60).resample("W").last().dropna().tail(8).tolist()]
+            if max90 >= 6.0 and cur < max90 * 0.85 and cur < prev:
+                sig, col, ic = "🚀 信用拐點：高位回落", "#00c853", "🚀"
+                note = (f"90 日高點 {max90:.2f}% → 最新 {cur:.2f}%（-{max90-cur:.2f}pp）"
+                        f"｜信用風險溢價收斂，risk-on 醞釀")
+            elif cur >= 6:
+                sig, col, ic = "🔴 高風險區", "#f44336", "🔴"
+                note = f"{cur:.2f}% ≥ 6%，信用市場警戒中"
+            elif cur < 4:
+                sig, col, ic = "🟢 信用寬鬆", "#00c853", "🟢"
+                note = f"{cur:.2f}% < 4%，市場樂觀（尚無拐點）"
+            else:
+                sig, col, ic = "🟡 中性帶", "#ff9800", "🟡"
+                note = f"{cur:.2f}%，介於 4~6%（待觀察方向）"
+            out["hy_spread"].update({
+                "signal": sig, "color": col, "icon": ic,
+                "value": round(cur, 2), "prev": round(prev, 2),
+                "trend": trend, "note": note, "source_ok": True,
+            })
+    except Exception as e:
+        out["hy_spread"]["note"] = f"BAMLH0A0HYM2 抓取異常：{str(e)[:80]}"
+
+    # ── 指標四：薩姆規則由觸發→解除（v18.250） ──────────────────────
+    try:
+        df_sa = fetch_fred("SAHMREALTIME", fred_api_key, n=36)
+        if not df_sa.empty and len(df_sa) >= 6:
+            s = df_sa.sort_values("date").set_index("date")["value"].astype(float).dropna()
+            cur = float(s.iloc[-1]); prev = float(s.iloc[-2])
+            max12 = float(s.tail(12).max())
+            trend = [round(v, 2) for v in s.tail(8).tolist()]
+            if max12 >= 0.5 and cur < 0.5:
+                sig, col, ic = "🚀 衰退警報解除", "#00c853", "🚀"
+                note = (f"近 12 月高點 {max12:.2f}（觸發過 0.5）→ 最新 {cur:.2f}"
+                        f"｜歷史經驗：解除後 12 月內為股市底部布局期")
+            elif cur >= 0.5:
+                sig, col, ic = "🔴 衰退警報中", "#f44336", "🔴"
+                note = f"{cur:.2f} ≥ 0.5，失業率上升訊號"
+            elif cur < 0.3:
+                sig, col, ic = "🟢 安全區", "#00c853", "🟢"
+                note = f"{cur:.2f} < 0.3，無衰退訊號"
+            else:
+                sig, col, ic = "🟡 警戒中", "#ff9800", "🟡"
+                note = f"{cur:.2f}，介於 0.3~0.5（接近觸發）"
+            out["sahm_rule"].update({
+                "signal": sig, "color": col, "icon": ic,
+                "value": round(cur, 2), "prev": round(prev, 2),
+                "trend": trend, "note": note, "source_ok": True,
+            })
+    except Exception as e:
+        out["sahm_rule"]["note"] = f"SAHMREALTIME 抓取異常：{str(e)[:80]}"
+
+    # ── 指標五：CFNAI 領先指標 3M MA 翻揚（v18.250） ─────────────────
+    try:
+        df_lei = fetch_fred("CFNAI", fred_api_key, n=36)
+        if not df_lei.empty and len(df_lei) >= 6:
+            s = df_lei.sort_values("date").set_index("date")["value"].astype(float).dropna()
+            ma3 = s.rolling(3).mean().dropna()
+            if len(ma3) >= 2:
+                cur = float(ma3.iloc[-1]); prev = float(ma3.iloc[-2])
+                trend = [round(v, 2) for v in ma3.tail(8).tolist()]
+                if cur > 0 and prev <= 0:
+                    sig, col, ic = "🚀 領先指標翻揚", "#00c853", "🚀"
+                    note = (f"3M MA：前期 {prev:+.2f} → 本期 {cur:+.2f}（由負轉正）"
+                            f"｜85 指標 z-score 平均轉正，景氣進入擴張")
+                elif cur > 0:
+                    sig, col, ic = "🟢 擴張中", "#00c853", "🟢"
+                    note = f"3M MA {cur:+.2f}（正值），景氣正常擴張"
+                elif cur < -0.7:
+                    sig, col, ic = "🔴 衰退預警", "#f44336", "🔴"
+                    note = f"3M MA {cur:+.2f} < -0.7，強烈衰退訊號"
+                elif cur < 0:
+                    sig, col, ic = "🟡 動能轉弱", "#ff9800", "🟡"
+                    note = f"3M MA {cur:+.2f}（負值但 > -0.7），待觀察"
+                else:
+                    sig, col, ic = "📊 持平", "#888", "📊"
+                    note = f"3M MA {cur:+.2f}"
+                out["lei_cfnai"].update({
+                    "signal": sig, "color": col, "icon": ic,
+                    "value": round(cur, 2), "prev": round(prev, 2),
+                    "trend": trend, "note": note, "source_ok": True,
+                })
+    except Exception as e:
+        out["lei_cfnai"]["note"] = f"CFNAI 抓取異常：{str(e)[:80]}"
 
     return out
 
