@@ -2066,16 +2066,28 @@ def render_portfolio_tab() -> None:
                     def _color_overlap(v, _thr=_thr):
                         try: f = float(v)
                         except Exception: return ""
+                        # v18.249: NaN（兩檔 NAV 無重疊期）不上色，跟其他級別區分
+                        if pd.isna(f): return "color:#888"
                         if f >= _thr:    return "background-color:#b71c1c;color:#fff"
                         if f >= 0.50:    return "background-color:#ef6c00;color:#fff"
                         if f >= 0.20:    return "background-color:#558b2f;color:#fff"
                         if f >= -0.20:   return "background-color:#2e7d32;color:#fff"
                         return "background-color:#1565c0;color:#fff"
+                    # v18.249: NaN → 「—」（codebase 標準缺失符號），不再顯示 'nan'
+                    _fmt_corr = lambda v: "—" if pd.isna(v) else f"{v:.2f}"
                     try:
-                        _styled = _cr["matrix"].style.map(_color_overlap).format("{:.2f}")
+                        _styled = (_cr["matrix"].style
+                                   .map(_color_overlap)
+                                   .format(_fmt_corr))
                         st.dataframe(_styled, use_container_width=True)
                     except Exception:
                         st.dataframe(_cr["matrix"].round(2), use_container_width=True)
+                    # v18.249: 補一行說明 — 兩檔 NAV 序列無重疊期就無法算相關性
+                    if _cr["matrix"].isna().any().any():
+                        st.caption(
+                            "ℹ️ `—` 代表兩檔基金的 NAV 序列**無重疊期**（如新基金 vs 舊基金），"
+                            "Pearson 相關係數無法計算；不代表 0 也不代表無相關。"
+                        )
                     if _is_nav_fb:
                         st.caption(
                             "💡 NAV 相關法：1.0 = 漲跌完全一樣｜0.5~0.85 = 連動偏高｜0 = 無關｜負 = 反向。"

@@ -154,6 +154,31 @@ def test_corr_too_few_funds_returns_none() -> None:
     print("✅ corr_too_few_funds: None")
 
 
+def test_corr_no_overlap_returns_nan() -> None:
+    """v18.249: 兩檔 NAV 序列完全無重疊期 → corr 為 NaN（UI 端顯示 '—'）。"""
+    import numpy as np
+    import pandas as pd
+    # A: 2023 年；B: 2025 年 — 完全不重疊
+    _idx_a = pd.bdate_range("2023-01-01", "2023-12-31")
+    _idx_b = pd.bdate_range("2025-01-01", "2025-12-31")
+    s_a = _mk_series("2023-01-01", "2023-12-31", 100.0,
+                     np.random.RandomState(1).normal(0, 0.01, len(_idx_a)), 3)
+    s_b = _mk_series("2025-01-01", "2025-12-31", 50.0,
+                     np.random.RandomState(2).normal(0, 0.01, len(_idx_b)), 4)
+    res = calc_correlation_matrix([
+        {"code": "A", "series": s_a},
+        {"code": "B", "series": s_b},
+    ])
+    assert res is not None
+    _m = res["matrix"]
+    # 對角線 = 1.0（自己跟自己）；非對角線（A vs B）= NaN
+    assert _m.loc["A", "A"] == 1.0
+    assert _m.loc["B", "B"] == 1.0
+    assert pd.isna(_m.loc["A", "B"]), "無重疊期應為 NaN（UI 顯示 —）"
+    assert pd.isna(_m.loc["B", "A"])
+    print("✅ corr_no_overlap: NaN（對應 UI 端 '—' 顯示）")
+
+
 if __name__ == "__main__":
     test_overlap_identical()
     test_overlap_zero()
