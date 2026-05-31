@@ -1316,6 +1316,78 @@ def render_macro_tab() -> None:
                             "outbound 的環境餵入實際 (VIX, HY_Spread, Yield_Curve, SPX) 月序列。"
                         )
 
+                    # ── 🧮 景氣分數校準（v18.252，14-factor Macro_Score 真值校準）──
+                    # 註：父層已是 expander，這裡用 container（Streamlit 禁巢狀 expander）
+                    st.divider()
+                    st.markdown("##### 🧮 景氣分數校準（14-factor Macro_Score）")
+                    with st.container(border=True):
+                        from services.macro_score_calibration import (
+                            classify_phase as _cls_phs,
+                            compute_historical_score as _hist_sc,
+                            generate_synthetic_demo as _gen_msc,
+                            grid_search_phase_thresholds as _grid_phs,
+                            overall_accuracy as _ov_acc,
+                            phase_accuracy as _phs_acc,
+                        )
+                        st.caption(
+                            "**Ground truth**：每位階建議「正確」與否由後 N 月 SPX 表現驗證 — "
+                            "**高峰**應跌、**擴張**應漲、**復甦**應大漲(>10%)、**衰退**應跌。"
+                            "目前用 sandbox 合成 60 月（內含 2 段壓力事件）。"
+                        )
+                        _msc_c1, _msc_c2 = st.columns(2)
+                        with _msc_c1:
+                            _msc_h = st.slider("Forward horizon (月)", 3, 24, 12,
+                                               key="_msc_h_v252")
+                        with _msc_c2:
+                            _msc_n = st.slider("樣本長度 (月)", 36, 120, 60,
+                                               key="_msc_n_v252")
+                        _df_msc, _spx_msc = _gen_msc(n_months=_msc_n, seed=42)
+                        _score_msc = _hist_sc(_df_msc)
+                        _acc_df = _phs_acc(_score_msc, _spx_msc,
+                                            horizon_months=_msc_h)
+                        _ov = _ov_acc(_score_msc, _spx_msc, horizon_months=_msc_h)
+                        # 當前 score 對應位階
+                        _cur_score = float(_score_msc.iloc[-1])
+                        _cur_phase = _cls_phs(_cur_score)
+                        _mc1, _mc2, _mc3 = st.columns(3)
+                        _mc1.metric("最新合成 Macro_Score", f"{_cur_score:.2f}",
+                                     _cur_phase)
+                        _mc2.metric("總體命中率", f"{_ov:.1f}%",
+                                     f"horizon={_msc_h}M")
+                        _mc3.metric("樣本數", f"{len(_score_msc)}")
+                        st.markdown("**各位階命中率**：")
+                        st.dataframe(
+                            _acc_df.style.format({
+                                "hit_rate_pct": "{:.1f}%",
+                                "mean_fwd_pct": "{:+.1f}%",
+                                "median_fwd_pct": "{:+.1f}%",
+                            }, na_rep="—"),
+                            use_container_width=True, hide_index=True,
+                        )
+                        with st.expander("🔬 grid_search 門檻調整建議", expanded=False):
+                            _grid_msc = _grid_phs(
+                                _score_msc, _spx_msc,
+                                horizon_months=_msc_h)
+                            st.dataframe(
+                                _grid_msc.head(10).style.format({
+                                    "peak_thr": "{:.1f}",
+                                    "expansion_thr": "{:.1f}",
+                                    "recovery_thr": "{:.1f}",
+                                    "overall_acc_pct": "{:.1f}%",
+                                }),
+                                use_container_width=True, hide_index=True,
+                            )
+                            st.caption(
+                                "目前公式預設 (Peak/Exp/Rec)=(8.0/5.0/3.0)。"
+                                "若上表第一列門檻明顯不同 → 考慮調整 "
+                                "services/macro_service.py 的位階門檻。"
+                            )
+                        st.caption(
+                            "⚠️ 真實校準需餵 FRED 14-series 月度（10Y-2Y / 10Y-3M / PMI / "
+                            "HY / M2 / FedBS / DXY / VIX / CPI / FedRate / UNRATE / PPI / "
+                            "Copper）+ SPX，目前 sandbox 無 outbound。"
+                        )
+
             # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
             def _load_liquidity_factors() -> None:
                 with st.spinner("抓取 FRED / DefiLlama / Yahoo 流動性因子（約 10–30 秒）..."):
