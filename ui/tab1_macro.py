@@ -1364,7 +1364,9 @@ def render_macro_tab() -> None:
                             }, na_rep="—"),
                             use_container_width=True, hide_index=True,
                         )
-                        with st.expander("🔬 grid_search 門檻調整建議", expanded=False):
+                        # 父層已 expander，這裡再 expander 會炸 → 改 checkbox toggle
+                        if st.checkbox("🔬 顯示 grid_search 門檻調整建議",
+                                       value=False, key="_msc_grid_v252"):
                             _grid_msc = _grid_phs(
                                 _score_msc, _spx_msc,
                                 horizon_months=_msc_h)
