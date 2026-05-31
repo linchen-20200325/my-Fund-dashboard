@@ -1197,6 +1197,97 @@ def render_single_fund_tab() -> None:
                             else:
                                 st.warning("所有持倉均無法解析 Ticker 或 yfinance 暫無財報，請稍後再試。")
 
+                # v18.258：💰 投資試算 — 投入金額 → 單位數 / 年化配息 / 月配息
+                with st.container(border=True):
+                    st.markdown("#### 💰 投資試算 — 投入金額 → 單位數 / 配息估算")
+                    _ccy = (mj_raw.get("currency") or "TWD").strip() or "TWD"
+                    _nav_calc = m.get("nav")
+                    _yield_calc = m.get("annual_div_rate")
+                    try:
+                        _nav_calc = float(_nav_calc) if _nav_calc not in (None, "", "—") else None
+                    except (TypeError, ValueError):
+                        _nav_calc = None
+                    try:
+                        _yield_calc = float(_yield_calc) if _yield_calc not in (None, "", "—") else None
+                    except (TypeError, ValueError):
+                        _yield_calc = None
+                    _ic1, _ic2 = st.columns([2, 1])
+                    with _ic1:
+                        _amount = st.number_input(
+                            f"投入金額（基金原幣別：{_ccy}）",
+                            min_value=10_000, max_value=100_000_000,
+                            value=1_000_000, step=100_000,
+                            key=f"_calc_amt_{fk}",
+                            help="預設 100 萬，可調整。NAV 以基金原幣別計價，本試算金額亦以原幣別為單位。"
+                        )
+                    with _ic2:
+                        st.caption(f"NAV：{_nav_calc if _nav_calc is not None else '—'} {_ccy}")
+                        st.caption(f"年化配息率：{_yield_calc if _yield_calc is not None else '—'} %")
+                    if _nav_calc and _nav_calc > 0:
+                        _units = _amount / _nav_calc
+                        _mc1, _mc2, _mc3, _mc4 = st.columns(4)
+                        _mc1.metric("可申購單位數", f"{_units:,.2f}")
+                        if _yield_calc and _yield_calc > 0:
+                            _ann_div = _amount * _yield_calc / 100.0
+                            _mon_div = _ann_div / 12.0
+                            _mc2.metric(f"年化配息（{_ccy}）", f"{_ann_div:,.0f}")
+                            _mc3.metric(f"月配息估計（{_ccy}）", f"{_mon_div:,.0f}")
+                            _mc4.metric("覆蓋率參考", f"{_yield_calc:.2f}%",
+                                        help="年化配息率 = 年配息 / 投入本金")
+                            st.caption(
+                                f"📌 估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位"
+                                f"｜年息約 **{_ann_div:,.0f} {_ccy}**（每月 ≈ {_mon_div:,.0f}）"
+                                f"。實際配息視基金宣告與淨值變動。"
+                            )
+                            # Stash 給 AI snapshot
+                            try:
+                                st.session_state[f"_calc_invest_{fk}"] = {
+                                    "amount": float(_amount),
+                                    "currency": _ccy,
+                                    "nav": float(_nav_calc),
+                                    "units": float(_units),
+                                    "annual_div_rate": float(_yield_calc),
+                                    "annual_dividend": float(_ann_div),
+                                    "monthly_dividend": float(_mon_div),
+                                    "fund_type": "income",
+                                }
+                            except Exception:
+                                pass
+                        else:
+                            # 累積型基金 — 用 1Y total return 估市值
+                            _ret_1y = m.get("ret_1y_total") or m.get("ret_1y")
+                            try:
+                                _ret_1y = float(_ret_1y) if _ret_1y not in (None, "", "—") else None
+                            except (TypeError, ValueError):
+                                _ret_1y = None
+                            _mc2.metric("基金類型", "累積型（無配息）")
+                            if _ret_1y is not None:
+                                _proj_1y = _amount * (1 + _ret_1y / 100.0)
+                                _mc3.metric(f"1Y 後預估市值（{_ccy}）", f"{_proj_1y:,.0f}",
+                                            f"{_ret_1y:+.2f}%")
+                                _mc4.metric("1Y 預估損益", f"{(_proj_1y - _amount):+,.0f}")
+                                st.caption(
+                                    f"📌 估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位"
+                                    f"｜以近 1Y 含息報酬 {_ret_1y:+.2f}% 推估，"
+                                    f"1 年後市值約 **{_proj_1y:,.0f} {_ccy}**（過往不代表未來）。"
+                                )
+                            else:
+                                st.caption(f"📌 估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位")
+                            try:
+                                st.session_state[f"_calc_invest_{fk}"] = {
+                                    "amount": float(_amount),
+                                    "currency": _ccy,
+                                    "nav": float(_nav_calc),
+                                    "units": float(_units),
+                                    "annual_div_rate": None,
+                                    "ret_1y_total": _ret_1y,
+                                    "fund_type": "accumulation",
+                                }
+                            except Exception:
+                                pass
+                    else:
+                        st.info("⚠️ 此基金 NAV 未取得，無法試算單位數。請先確認基本資料區是否成功抓取淨值。")
+
                 st.markdown("### ④ AI 深度解盤")
                 st.divider()
                 # v18.207：Tab2「唯一」AI — 統一 render_ai_summary_widget（4 視角），
@@ -1278,6 +1369,26 @@ def render_single_fund_tab() -> None:
                     if phase_info_s:
                         _snap.append(f"- 總經背景：位階={phase_info_s.get('phase','')}"
                                      f"（分數 {phase_info_s.get('score','')}）")
+                    # v18.258：投資試算 stash → 讓 AI 解盤可引用每百萬投入估算
+                    _calc_stash = st.session_state.get(f"_calc_invest_{fk}") or {}
+                    if _calc_stash:
+                        _cs_ccy = _calc_stash.get("currency", "")
+                        _cs_amt = _calc_stash.get("amount", 0)
+                        _cs_units = _calc_stash.get("units", 0)
+                        if _calc_stash.get("fund_type") == "income":
+                            _snap.append(
+                                f"- 投資試算：{_cs_amt:,.0f} {_cs_ccy} → "
+                                f"{_cs_units:,.2f} 單位｜年息≈{_calc_stash.get('annual_dividend',0):,.0f} {_cs_ccy}"
+                                f"（月≈{_calc_stash.get('monthly_dividend',0):,.0f}）"
+                                f"｜年化配息率 {_calc_stash.get('annual_div_rate',0):.2f}%"
+                            )
+                        else:
+                            _ret = _calc_stash.get("ret_1y_total")
+                            _ret_str = f"｜1Y 含息報酬 {_ret:+.2f}%" if _ret is not None else ""
+                            _snap.append(
+                                f"- 投資試算：{_cs_amt:,.0f} {_cs_ccy} → "
+                                f"{_cs_units:,.2f} 單位（累積型，無配息）{_ret_str}"
+                            )
                     # 新聞：優先「已逐股抓的個股新聞」，否則退資產類別過濾的廣義新聞
                     _stk_news_ai = st.session_state.get(
                         f"_stknews_{str(fk or name or 'fund')[:40]}") or {}
@@ -1299,6 +1410,7 @@ def render_single_fund_tab() -> None:
                             "績效表現（近期報酬）",
                             "風險指標（波動/夏普等）",
                             "配息與吃本金檢查",
+                            "投資試算（每百萬可申購單位與配息估算）",
                             "買賣點與價格位階",
                             "持股與產業配置",
                             "總經大環境背景",

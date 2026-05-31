@@ -56,3 +56,38 @@ def test_app_py_shim_friendly_error():
     assert "from ui.helpers.session import friendly_error as _friendly_error" in src
     assert "from ui.helpers.session import (" in src   # is_core_fund block
     assert "is_core_fund as _is_core_fund" in src
+
+
+# ──────────────────────────────────────────────────────────────
+# v18.258：投資試算 section（每百萬投入 → 單位數 / 配息估算）
+# ──────────────────────────────────────────────────────────────
+def test_invest_calc_section_present():
+    """Tab2 應在 AI 上方多出「💰 投資試算」section（v18.258）。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    assert "#### 💰 投資試算" in src, "缺少投資試算 section 標題"
+    assert "可申購單位數" in src, "缺少『可申購單位數』指標"
+    # 應該支援配息型 + 累積型兩種分支
+    assert "年化配息" in src, "缺少年化配息計算"
+    assert "累積型" in src, "缺少累積型基金的 fallback 分支"
+
+
+def test_invest_calc_above_ai_section():
+    """投資試算 section 必須在『④ AI 深度解盤』上方（順序敏感）。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    _idx_calc = src.find("#### 💰 投資試算")
+    _idx_ai = src.find("### ④ AI 深度解盤")
+    assert _idx_calc > 0 and _idx_ai > 0
+    assert _idx_calc < _idx_ai, "投資試算必須在 AI 深度解盤上方"
+
+
+def test_invest_calc_stashed_to_ai_snapshot():
+    """試算結果應 stash 到 session_state 並進 AI snapshot。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    assert '_calc_invest_' in src, "缺少 session_state stash key"
+    # AI snapshot 段應讀取試算 stash
+    assert 'st.session_state.get(f"_calc_invest_' in src
+    assert "投資試算（每百萬可申購單位與配息估算）" in src, \
+        "sections 清單必須宣告投資試算章節"
