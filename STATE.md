@@ -6,7 +6,9 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.251_RiskCalibration（風險評分真值校準器 + Tab1 互動式儀表板；sandbox 用合成資料 demo、live data 由 user 餵入）
+- **目前版本**：v18.252_MacroScoreCalibration（14-factor 景氣分數校準器 + UI 真實/合成切換）
+  - 沿革：#98 風險評分校準（3-factor）→ #99 修巢狀 expander → #100 景氣分數校準（14-factor）→ #101 grid_search 改 checkbox 避巢狀 → #102 synth lead-lag 升級 + 真實 FRED+SPX 抓取
+  - 兩個校準並存：`services/risk_calibration.py`（3-factor SPX drawdown）+ `services/macro_score_calibration.py`（14-factor 景氣位階）
 
 ## 目錄結構（v11.0 分層架構）
 ```
