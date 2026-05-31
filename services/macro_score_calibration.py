@@ -226,7 +226,11 @@ def grid_search_phase_thresholds(score: pd.Series,
 # ════════════════════════════════════════════════════════════════
 def generate_synthetic_demo(n_months: int = 60, seed: int = 42
                             ) -> tuple[pd.DataFrame, pd.Series]:
-    """產 14-factor 月序列 + SPX 月序列，內嵌 2 段壓力事件供 demo。
+    """產 14-factor 月序列 + SPX 月序列，內嵌 4 段壓力 / 反彈事件供 demo。
+
+    v18.252 起調整：base_drift 0.005→0.003、σ 0.025→0.040，壓力事件
+    擴為 3 段下殺 + 1 段強反彈，逼近真實 SPX 月報酬分佈以提升校準
+    命中率（消除「合成資料只漲不跌」造成 Peak/Recession 永遠錯的假象）。
 
     Returns
     -------
@@ -255,35 +259,227 @@ def generate_synthetic_demo(n_months: int = 60, seed: int = 42
             "PPI":         float(rng.normal(2.5, 1.5)),
             "COPPER":      float(rng.normal(0.5, 3.0)),
         })
-    # 壓力事件 1：第 15-22 月（高峰→衰退）
-    for i in range(15, 23):
+    # 壓力事件 1：第 12-18 月（高峰→衰退，6M）
+    for i in range(12, 18):
         if i >= n_months: break
         rows[i].update({
             "YIELD_10Y2Y": -0.3, "YIELD_10Y3M": -0.4,
             "PMI": 44, "HY_SPREAD": 7.5, "VIX": 35,
             "M2": -1.0, "FED_BS": -8.0, "CPI": 5.5,
         })
-    # 壓力事件 2：第 42-48 月（衰退→復甦）
-    for i in range(42, 49):
+    # 反彈段：第 18-22 月（復甦，FED 注入流動性 + PMI 反彈）
+    for i in range(18, 22):
+        if i >= n_months: break
+        rows[i].update({
+            "PMI": 53, "HY_SPREAD": 3.8, "VIX": 16,
+            "M2": 8.0, "FED_BS": 12.0, "BREADTH": 1.5,
+        })
+    # 壓力事件 2：第 35-42 月（中段修正）
+    for i in range(35, 42):
         if i >= n_months: break
         rows[i].update({
             "YIELD_10Y2Y": -0.5, "PMI": 42, "VIX": 38,
             "HY_SPREAD": 8.0, "UNEMP": 6.5,
+            "CPI": 6.0, "M2": -2.0,
+        })
+    # 壓力事件 3：第 50-55 月（後期震盪）
+    for i in range(50, 55):
+        if i >= n_months: break
+        rows[i].update({
+            "PMI": 46, "VIX": 28, "HY_SPREAD": 6.5,
+            "DXY": 3.5, "BREADTH": -1.5,
         })
     df = pd.DataFrame(rows, index=dates)
 
-    # SPX：跟 Macro_Score 弱相關（讓校準有訊號）
+    # SPX：跟 Macro_Score 有訊號 + 加大噪音；關鍵是「score 先動、SPX 後動」（lead 3M）
+    # 真實 SPX 月報酬約 N(0.6%, 4.5%)，年化 ~7%, σ ~15%
+    # 領先機制：score 在 t 月觸發 → 影響 t+3 月起的 SPX 報酬
     score = compute_historical_score(df)
-    # SPX 月報酬 = base drift + score 偏離 5 (中性) 的線性效應 + noise
-    base_drift = 0.005
-    score_effect = (score - 5.0) * 0.012  # 1 分價值 1.2%
-    noise = rng.normal(0, 0.025, n_months)
-    monthly_rets = base_drift + score_effect.values + noise
-    # 壓力事件強制負報酬
-    for i in range(15, 23):
-        if i < n_months: monthly_rets[i] = rng.normal(-0.04, 0.02)
-    for i in range(42, 49):
-        if i < n_months: monthly_rets[i] = rng.normal(-0.03, 0.02)
+    base_drift = 0.003                        # 月 0.3% = 年 ~3.7%（保守）
+    noise = rng.normal(0, 0.040, n_months)    # σ=4% 接近真實
+    # score lead SPX by 3 months：用 shift(3) 把 score 影響推到未來
+    score_lead = pd.Series(score.values, index=score.index).shift(3).fillna(5.0)
+    score_effect = (score_lead.values - 5.0) * 0.012
+    monthly_rets = base_drift + score_effect + noise
+    # 壓力事件對 SPX 的衝擊延後 3 個月（讓 score 真的「領先」SPX 跌）
+    for i in range(15, 21):    # score 12-18 → SPX 15-21
+        if i < n_months: monthly_rets[i] = rng.normal(-0.05, 0.025)
+    for i in range(38, 45):    # score 35-42 → SPX 38-45
+        if i < n_months: monthly_rets[i] = rng.normal(-0.04, 0.025)
+    for i in range(53, 58):    # score 50-55 → SPX 53-58
+        if i < n_months: monthly_rets[i] = rng.normal(-0.03, 0.020)
     spx = pd.Series(4500.0 * np.exp(np.cumsum(monthly_rets)),
                     index=dates, name="SPX")
     return df, spx
+
+
+# ════════════════════════════════════════════════════════════════
+# 真實資料抓取（FRED 14-series + yfinance SPX）
+# ════════════════════════════════════════════════════════════════
+# FRED series_id 映射；無 FRED 對應的指標走 yfinance 或派生
+_FRED_SERIES_MAP = {
+    "YIELD_10Y2Y": "T10Y2Y",   # 10Y - 2Y treasury spread
+    "YIELD_10Y3M": "T10Y3M",   # 10Y - 3M treasury spread
+    "PMI":         "MANEMP",   # 無 PMI FRED → 用就業代理；真實 PMI 需第三方
+    "HY_SPREAD":   "BAMLH0A0HYM2",
+    "M2":          "M2SL",     # M2 月底，YoY% 在 calling 端算
+    "CPI":         "CPIAUCSL", # CPI 月底，YoY% 在 calling 端算
+    "FEDRATE":     "FEDFUNDS", # 月平均
+    "UNEMP":       "UNRATE",
+    "PPI":         "PPIACO",   # PPI YoY 在 calling 端算
+    "FED_BS":      "WALCL",    # Fed 資產負債表，YoY% 在 calling 端算
+}
+_YF_TICKERS = {
+    "VIX":     "^VIX",
+    "DXY":     "DX-Y.NYB",
+    "COPPER":  "HG=F",
+    "BREADTH_NUM": "RSP",  # 等權 S&P
+    "BREADTH_DEN": "SPY",  # 市值權 S&P
+}
+
+
+def _fred_monthly_yoy(series_df: pd.DataFrame) -> pd.Series:
+    """FRED 日 / 月序列 → 月底 YoY%（給 M2 / CPI / FED_BS / PPI 用）。"""
+    if series_df is None or series_df.empty:
+        return pd.Series(dtype=float)
+    s = (series_df.sort_values("date").set_index("date")["value"]
+         .astype(float).resample("ME").last())
+    return (s / s.shift(12) - 1.0) * 100.0
+
+
+def _fred_monthly_value(series_df: pd.DataFrame) -> pd.Series:
+    """FRED 日 / 月序列 → 月底原值（給 spread / FEDRATE / UNRATE 用）。"""
+    if series_df is None or series_df.empty:
+        return pd.Series(dtype=float)
+    return (series_df.sort_values("date").set_index("date")["value"]
+            .astype(float).resample("ME").last())
+
+
+def _yf_monthly_pct_change(series: pd.Series) -> pd.Series:
+    """yfinance 日序列 → 月底收盤的月變化%（給 DXY / COPPER 用）。"""
+    if series is None or series.empty:
+        return pd.Series(dtype=float)
+    m = series.resample("ME").last()
+    return (m / m.shift(1) - 1.0) * 100.0
+
+
+def _yf_monthly_level(series: pd.Series) -> pd.Series:
+    """yfinance 日序列 → 月底收盤（給 VIX 用）。"""
+    if series is None or series.empty:
+        return pd.Series(dtype=float)
+    return series.resample("ME").last()
+
+
+def fetch_real_macro_factors_monthly(
+    fred_api_key: str,
+    years: int = 10,
+) -> tuple[pd.DataFrame, pd.Series, dict]:
+    """抓 FRED 14-series + yfinance ^GSPC → 月度 DataFrame + SPX 月底收盤。
+
+    Parameters
+    ----------
+    fred_api_key : str
+        FRED API key（無則回空 DataFrame + 警告 dict）
+    years : int
+        歷史長度（年），預設 10 年
+
+    Returns
+    -------
+    (df, spx, notes)
+        df: DataFrame index=月底, 14 columns（缺欄留 NaN，計分器會跳過）
+        spx: ^GSPC 月底收盤 Series
+        notes: dict 含警告 / 失敗來源清單
+    """
+    notes: dict = {"missing_factors": [], "warnings": []}
+    if not fred_api_key:
+        notes["warnings"].append("FRED API key 未設置，無法抓真實資料")
+        return pd.DataFrame(), pd.Series(dtype=float), notes
+    try:
+        from repositories.macro_repository import fetch_fred, fetch_yf_close
+    except ImportError as e:
+        notes["warnings"].append(f"import 失敗：{e}")
+        return pd.DataFrame(), pd.Series(dtype=float), notes
+
+    n_obs = years * 12 + 36  # 多抓 3 年讓 YoY 對齊
+    series_map: dict[str, pd.Series] = {}
+
+    # ── 1. FRED 8 個 spread / level 指標 ─────────────────────
+    for factor, sid in _FRED_SERIES_MAP.items():
+        try:
+            df_f = fetch_fred(sid, fred_api_key, n=n_obs * 10)
+            if df_f is None or df_f.empty:
+                notes["missing_factors"].append(f"{factor}({sid})")
+                continue
+            if factor in ("M2", "CPI", "FED_BS", "PPI"):
+                series_map[factor] = _fred_monthly_yoy(df_f)
+            elif factor == "PMI":
+                # MANEMP 是就業人數，YoY 當 PMI 代理（非完美）
+                yoy = _fred_monthly_yoy(df_f)
+                series_map[factor] = 50 + yoy * 5  # 粗略映射到 PMI 量級
+                notes["warnings"].append("PMI 用就業人數 YoY 代理（FRED 無 PMI）")
+            else:
+                series_map[factor] = _fred_monthly_value(df_f)
+        except Exception as e:
+            notes["missing_factors"].append(f"{factor}: {type(e).__name__}")
+
+    # ── 2. yfinance VIX / DXY / Copper ─────────────────────────
+    yf_range = f"{years + 3}y" if years <= 10 else "max"
+    for factor, ticker in _YF_TICKERS.items():
+        if factor in ("BREADTH_NUM", "BREADTH_DEN"):
+            continue  # 等下合成 BREADTH
+        try:
+            s = fetch_yf_close(ticker, range_=yf_range, interval="1d")
+            if s is None or s.empty:
+                notes["missing_factors"].append(f"{factor}({ticker})")
+                continue
+            try:
+                s.index = s.index.tz_localize(None)
+            except (AttributeError, TypeError):
+                pass
+            if factor == "VIX":
+                series_map[factor] = _yf_monthly_level(s)
+            else:  # DXY / COPPER → 月變化%
+                series_map[factor] = _yf_monthly_pct_change(s)
+        except Exception as e:
+            notes["missing_factors"].append(f"{factor}: {type(e).__name__}")
+
+    # ── 3. BREADTH = RSP / SPY 月變化% ───────────────────────────
+    try:
+        rsp = fetch_yf_close(_YF_TICKERS["BREADTH_NUM"], range_=yf_range,
+                              interval="1d")
+        spy = fetch_yf_close(_YF_TICKERS["BREADTH_DEN"], range_=yf_range,
+                              interval="1d")
+        if rsp is not None and not rsp.empty and spy is not None and not spy.empty:
+            for s in (rsp, spy):
+                try: s.index = s.index.tz_localize(None)
+                except (AttributeError, TypeError): pass
+            ratio = (rsp.resample("ME").last()
+                     / spy.resample("ME").last())
+            series_map["BREADTH"] = ((ratio / ratio.shift(1) - 1.0) * 100.0)
+        else:
+            notes["missing_factors"].append("BREADTH(RSP/SPY)")
+    except Exception as e:
+        notes["missing_factors"].append(f"BREADTH: {type(e).__name__}")
+
+    if not series_map:
+        notes["warnings"].append("所有指標抓取失敗")
+        return pd.DataFrame(), pd.Series(dtype=float), notes
+
+    # ── 4. 合併為 DataFrame（共同月份，缺欄留 NaN）─────────────
+    df = pd.DataFrame(series_map)
+    df = df.tail(years * 12)  # 截最後 N 年
+
+    # ── 5. SPX 月底收盤 ───────────────────────────────────────
+    try:
+        spx_d = fetch_yf_close("^GSPC", range_=yf_range, interval="1d")
+        if spx_d is None or spx_d.empty:
+            notes["warnings"].append("SPX 抓取失敗")
+            return df, pd.Series(dtype=float), notes
+        try: spx_d.index = spx_d.index.tz_localize(None)
+        except (AttributeError, TypeError): pass
+        spx = spx_d.resample("ME").last().tail(years * 12 + 24)
+    except Exception as e:
+        notes["warnings"].append(f"SPX 異常：{type(e).__name__}: {e}")
+        spx = pd.Series(dtype=float)
+
+    return df, spx, notes
