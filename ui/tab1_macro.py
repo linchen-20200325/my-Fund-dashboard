@@ -1279,6 +1279,24 @@ def render_macro_tab() -> None:
                             "**Ground truth**：未來 N 個月 SPX 最大回檔 < threshold ⇒ 標 1（命中）。"
                             "校準器掃描 score 門檻，回報每門檻 precision / recall / F1，找出最佳停利警戒點。"
                         )
+                        with st.expander("📖 怎麼讀這張卡？（白話三段式）", expanded=False):
+                            st.markdown(
+                                "**① 這張卡在算什麼？**\n\n"
+                                "拿「3-factor 風險評分（10Y-2Y / HY 利差 / VIX）」歷史數據，"
+                                "**回測**：當 risk_score 高於某門檻時，未來 N 個月 SPX 是否真的會跌超過 X%。"
+                                "幫你校準「風險分多高才該真的減碼」。\n\n"
+                                "**② 三個調整鈕意義**\n\n"
+                                "- **Forward horizon**：往後看幾個月才算「真的應驗」。短 = 近端訊號、長 = 中期警戒。\n"
+                                "- **Drawdown 門檻**：跌多少才算「危機」。-10% 是回檔、-20% 是空頭、-30% 是金融海嘯級。\n"
+                                "- **Rolling window**：分數平滑窗口，月數越大越穩定但反應越慢。\n\n"
+                                "**③ 結果怎麼解讀？**\n\n"
+                                "- **最佳 F1 門檻** = 用這數字當警戒線、漏報跟誤報最平衡。"
+                                "**當前 risk_score 越接近或超過此值 → 該認真減碼**。\n"
+                                "- **Precision X%** = 警報拉起來時、真的會跌的機率。70%+ 算可靠。\n"
+                                "- **Recall X%** = 真危機發生時、這個門檻能事先抓到的比例。\n"
+                                "- **🟠 「本組參數無命中」** = 你選的 drawdown 太狠（-30%）或 horizon 太短，"
+                                "歷史上沒這麼慘的跌幅 → **放寬 drawdown 到 -15% 或 -10% 再試**。"
+                            )
                         _cal_c1, _cal_c2, _cal_c3 = st.columns(3)
                         with _cal_c1:
                             _cal_horizon = st.slider("Forward horizon (月)", 1, 12, 3, key="_cal_h_v251")
@@ -1377,6 +1395,24 @@ def render_macro_tab() -> None:
                             "**Ground truth**：每位階建議「正確」與否由後 N 月 SPX 表現驗證 — "
                             "**高峰**應跌、**擴張**應漲、**復甦**應大漲(>10%)、**衰退**應跌。"
                         )
+                        with st.expander("📖 怎麼讀這張卡？（白話三段式）", expanded=False):
+                            st.markdown(
+                                "**① 這張卡在算什麼？**\n\n"
+                                "拿「14-factor 景氣分數（FRED 利率、失業、PMI、信心、ADL…）」歷史走勢，"
+                                "**回測**每個月用當時資料分類成「高峰/擴張/復甦/衰退」後，"
+                                "未來 N 個月 SPX 是否真的照預期走（高峰→跌、擴張→漲、復甦→大漲、衰退→跌）。\n\n"
+                                "**② 三個關鍵讀數**\n\n"
+                                "- **最新真實 Macro_Score** = **今天**這個分數。配合下方位階標籤（Expansion/Recovery/…）。\n"
+                                "- **總體命中率 X%** = 過去 N 年裡、所有月份分類後的「事後驗證正確率」。"
+                                "**>70% 算可信、80%+ 算強訊號**。\n"
+                                "- **各位階命中率** = 拆開看哪個位階校準器最準。"
+                                "如果今天是「Expansion」且該位階歷史命中 81%（n=79）→ 可信度高。\n\n"
+                                "**③ 看到結果該怎麼用？**\n\n"
+                                "- 命中率高、樣本足 → **照位階建議做配置**（擴張多股、衰退多債）。\n"
+                                "- 某位階 n 很小（如 Peak n=1）→ **樣本不足、不能當依據**，要看其他指標佐證。\n"
+                                "- **🔬 grid_search** 勾起來會建議「換哪組門檻命中率更高」，"
+                                "若差異 >5% 才值得改 services/macro_service.py 的位階門檻。"
+                            )
 
                         _msc_c1, _msc_c2 = st.columns(2)
                         with _msc_c1:
@@ -1513,6 +1549,23 @@ def render_macro_tab() -> None:
                         st.rerun()
                     st.caption("⚠️ 進階觀察｜XCCY 為代理指標、權重未經真值校準，僅供方向性參考")
                     st.info(liquidity_verdict(_liq_score, _liq_facs))
+                    # v18.255 stash 給 AI 白話總體檢
+                    try:
+                        _liq_top_contrib = []
+                        for _b in (_liq_score.get("breakdown") or [])[:3]:
+                            _liq_top_contrib.append({
+                                "name": str(_b.get("name", ""))[:20],
+                                "contrib": float(_b.get("contrib", 0) or 0),
+                            })
+                        st.session_state["_macro_liquidity"] = {
+                            "value": float(_liq_score.get("value", 0) or 0),
+                            "tier": str(_liq_score.get("tier", "—")),
+                            "signal": str(_liq_score.get("signal", "")),
+                            "verdict": liquidity_verdict(_liq_score, _liq_facs),
+                            "top_contrib": _liq_top_contrib,
+                        }
+                    except Exception:
+                        pass
 
                     # ── 壓力分數 + 分級 + 逐因子貢獻 ──────────────────
                     _cs_l, _cs_r = st.columns([1, 2])
@@ -1681,6 +1734,15 @@ def render_macro_tab() -> None:
                         _compass_txt = ("🟡 **行情分化**：AI 板塊續強但廣度未跟上，"
                                         "衛星部位以三率正成長基金為主，避開製造業循環標的")
                     st.info(_compass_txt)
+                    # v18.255 stash 給 AI 白話總體檢
+                    try:
+                        st.session_state["_macro_compass"] = {
+                            "sahm_latest": float(_sahm_latest) if _sahm_latest is not None else None,
+                            "adl_latest": float(_adl_latest) if _adl_latest is not None else None,
+                            "verdict": _compass_txt,
+                        }
+                    except Exception:
+                        pass
 
             # ── 指標貢獻明細（折疊）── L3 only
             # v17.2：依 |score × weight| 排序 + 「💡 貢獻說明」欄（指標特定敘事）
@@ -1762,6 +1824,19 @@ def render_macro_tab() -> None:
                         })
                     if _rows:
                         _rows.sort(key=lambda r: r["_abs"], reverse=True)
+                        # v18.255 stash：取 Top3 正貢獻 + Top3 負貢獻給 AI 白話總體檢
+                        try:
+                            _pos = [r for r in _rows if r["貢獻分"] > 0][:3]
+                            _neg = [r for r in _rows if r["貢獻分"] < 0][:3]
+                            st.session_state["_macro_23items"] = {
+                                "n_total": len(_rows),
+                                "n_pos": len([r for r in _rows if r["貢獻分"] > 0]),
+                                "n_neg": len([r for r in _rows if r["貢獻分"] < 0]),
+                                "top_pos": [{"name": r["指標"], "verdict": r["💡 貢獻說明"]} for r in _pos],
+                                "top_neg": [{"name": r["指標"], "verdict": r["💡 貢獻說明"]} for r in _neg],
+                            }
+                        except Exception:
+                            pass
                         for r in _rows:
                             r.pop("_abs", None)
                         st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True,
@@ -1814,6 +1889,19 @@ def render_macro_tab() -> None:
                     )
                     st.plotly_chart(_def_fig, use_container_width=True)
                     st.caption("🟢 綠色 = TR1Y > 配息率（配息有保障）｜🔴 紅色 = TR1Y < 配息率（本金侵蝕警示）｜橙色橫線 = 配息年化率")
+                    # v18.255 stash 給 AI 白話總體檢
+                    try:
+                        _eroded = [(n, tr, adr) for n, tr, adr
+                                   in zip(_def_names, _def_tr1y, _def_adr)
+                                   if tr < adr]
+                        st.session_state["_macro_capital_line"] = {
+                            "n_funds": len(_def_names),
+                            "n_eroded": len(_eroded),
+                            "eroded_funds": [{"name": n[:20], "tr1y": float(tr),
+                                              "adr": float(adr)} for n, tr, adr in _eroded[:5]],
+                        }
+                    except Exception:
+                        pass
 
             # ── 市場新聞（折疊）── L3 only
             if _show_l3:
@@ -2019,6 +2107,17 @@ def render_macro_tab() -> None:
                     _bk5.metric(
                         "12M 勝率",
                         f"{_sm['win_rate_12m']:.0f}%" if _sm.get('win_rate_12m') is not None else "—")
+                    # v18.255 stash 給 AI 白話總體檢
+                    try:
+                        st.session_state["_macro_inv_backtest"] = {
+                            "n_events": int(_sm.get("n_events", 0)),
+                            "median_6m": _sm.get("median_6m"),
+                            "median_12m": _sm.get("median_12m"),
+                            "median_18m": _sm.get("median_18m"),
+                            "win_rate_12m": _sm.get("win_rate_12m"),
+                        }
+                    except Exception:
+                        pass
 
                     # ── 事件表 ──────────────────────────────────
                     _bt_df = pd.DataFrame([{
@@ -2275,6 +2374,28 @@ def render_macro_tab() -> None:
                                     "再對照源頭節點的健康度 — 若源頭🔴（極端偏離）+ 邊 🔥 強相關，"
                                     "代表這條傳導路徑正在發揮作用，需要關注終點節點後續變化。"
                                 )
+                            # v18.255 stash 給 AI 白話總體檢
+                            try:
+                                _strong_count = len(_strong) if _sk_dynamic and "link_corrs" in _sk else 0
+                                _strong_short = []
+                                if _sk_dynamic and "link_corrs" in _sk:
+                                    for _i_l, _corr_l in enumerate(_link_corrs):
+                                        if _corr_l is not None and abs(_corr_l) >= 0.5:
+                                            _s_lbl = _sk["labels"][_sk["sources"][_i_l]].split(" (z=")[0]
+                                            _t_lbl = _sk["labels"][_sk["targets"][_i_l]].split(" (z=")[0]
+                                            _strong_short.append({
+                                                "src": _s_lbl[:12], "tgt": _t_lbl[:12],
+                                                "corr": float(_corr_l),
+                                            })
+                                            if len(_strong_short) >= 3:
+                                                break
+                                st.session_state["_macro_sankey"] = {
+                                    "ok": bool(_sk.get("ok")),
+                                    "n_strong_links": _strong_count,
+                                    "top_strong": _strong_short,
+                                }
+                            except Exception:
+                                pass
                 except Exception as _e_sk:
                     st.caption(f"⚠️ Sankey 因果鏈渲染失敗：{str(_e_sk)[:80]}")
 
@@ -2345,6 +2466,15 @@ def render_macro_tab() -> None:
                             "💡 **歷史回測重點解讀**\n\n"
                             + "\n\n".join("- " + a for a in _bt_alerts)
                         )
+                    # v18.255 stash 給 AI 白話總體檢
+                    try:
+                        st.session_state["_macro_subsector_bt"] = {
+                            "target": _bt_target,
+                            "forward_months": int(_bt_fwd),
+                            "alerts": [a for a in _bt_alerts][:3],
+                        }
+                    except Exception:
+                        pass
                 except Exception as _e_bt:
                     st.caption(f"⚠️ 燈號歷史回測失敗：{str(_e_bt)[:80]}")
 
@@ -2421,6 +2551,20 @@ def render_macro_tab() -> None:
                                 + "\n\n".join("- " + l for l in _narrative_lines)
                                 + "\n\n" + _action_hint
                             )
+                        # v18.255 stash 給 AI 白話總體檢
+                        try:
+                            st.session_state["_macro_var_importance"] = {
+                                "target": _imp_target,
+                                "lag_months": int(_imp_lag),
+                                "top3": [{
+                                    "name": r.get("name", ""),
+                                    "abs_corr": float(r.get("abs_corr", 0) or 0),
+                                    "direction": r.get("direction", ""),
+                                    "n_overlap": int(r.get("n_overlap", 0) or 0),
+                                } for r in _top3],
+                            }
+                        except Exception:
+                            pass
                 except Exception as _e_imp:
                     st.caption(f"⚠️ 變數重要性計算失敗：{str(_e_imp)[:80]}")
 
@@ -2533,6 +2677,7 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
     except Exception:
         pass   # noqa: smoke-allow-pass — 進階分析缺失不阻斷 AI 摘要
     # v18.254：把兩個校準器最新結果寫進快照，供 AI 產出「校準健檢」段落
+    # v18.255：改三段式（這代表 / 為什麼 / 該怎麼做）
     try:
         import streamlit as _st  # noqa: PLC0415
         _cms = _st.session_state.get("_cal_macro_score")
@@ -2541,7 +2686,7 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
             lines.append("- 校準健檢（真實 FRED+SPX 回測）：")
             if isinstance(_cms, dict) and _cms:
                 lines.append(
-                    f"  - 14-factor 景氣分數：總體命中率 {_cms['overall_acc_pct']:.1f}%"
+                    f"  - 14-factor 景氣分數【代表】總體命中率 {_cms['overall_acc_pct']:.1f}%"
                     f"（horizon={_cms['horizon']}M、{_cms['src']}）；"
                     f"當前 Macro_Score={_cms['cur_score']:.2f} → {_cms['cur_phase']}")
                 _pa = _cms.get("phase_acc") or []
@@ -2549,32 +2694,167 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
                     _pa_str = "、".join(
                         f"{r.get('phase')} {r.get('hit_rate_pct', 0):.0f}%(n={r.get('n', 0)})"
                         for r in _pa)
-                    lines.append(f"    - 各位階命中：{_pa_str}")
+                    lines.append(f"    -【為什麼】各位階命中：{_pa_str}（n 越大越可信、<10 不能當主要依據）")
                 _gt = _cms.get("grid_top")
                 if isinstance(_gt, dict):
                     lines.append(
-                        f"    - grid_search 最佳門檻 (Peak/Exp/Rec)="
+                        f"    -【該怎麼做】grid_search 最佳門檻 (Peak/Exp/Rec)="
                         f"({_gt['peak_thr']:.1f}/{_gt['expansion_thr']:.1f}/{_gt['recovery_thr']:.1f})"
-                        f"→ {_gt['overall_acc_pct']:.1f}%")
+                        f"→ {_gt['overall_acc_pct']:.1f}%；"
+                        f"若比當前公式門檻 (8.0/5.0/3.0) 高 >5% 才值得改 macro_service.py")
+                else:
+                    lines.append(
+                        "    -【該怎麼做】命中率 ≥70% 可照位階建議配置；<70% 應搭配其他指標佐證")
             if isinstance(_crs, dict) and _crs:
                 if _crs.get("no_hit"):
                     lines.append(
-                        f"  - 3-factor 風險評分：horizon={_crs['horizon']}M、"
+                        f"  - 3-factor 風險評分【代表】horizon={_crs['horizon']}M、"
                         f"drawdown={_crs['drawdown_pct']}%、window={_crs['rolling_win']}M "
-                        f"參數下校準器無命中（該回看期內 SPX 未出現此規模回檔，"
-                        f"建議放寬 horizon 或 drawdown 才能評估）")
+                        f"參數下校準器無命中")
+                    lines.append(
+                        "    -【為什麼】該回看期內 SPX 未出現此規模回檔（樣本不足、不是規則 bug）")
+                    lines.append(
+                        "    -【該怎麼做】放寬 drawdown 到 -15% 或 -10% 重新校準才能讀")
                 else:
                     lines.append(
-                        f"  - 3-factor 風險評分：最佳 F1 門檻={_crs['best_threshold']:.2f}（"
+                        f"  - 3-factor 風險評分【代表】最佳 F1 門檻={_crs['best_threshold']:.2f}（"
                         f"P={_crs['precision']:.0%}、R={_crs['recall']:.0%}、"
-                        f"F1={_crs['f1']:.0%}）；"
-                        f"當前 risk_score={_crs['cur_risk_score']:.2f}")
+                        f"F1={_crs['f1']:.0%}）；當前 risk_score={_crs['cur_risk_score']:.2f}")
+                    if _crs['cur_risk_score'] >= _crs['best_threshold']:
+                        lines.append(
+                            "    -【為什麼】當前分數已 ≥ 警戒門檻 → 歷史上類似讀數有機率出現 drawdown")
+                        lines.append(
+                            "    -【該怎麼做】建議減持高 beta 部位、提高現金比、停止新加碼")
+                    else:
+                        lines.append(
+                            "    -【為什麼】當前分數低於警戒門檻 → 短期內出現該規模回檔機率較低")
+                        lines.append(
+                            "    -【該怎麼做】維持配置、追蹤 risk_score 月變化、突破門檻才動作")
     except Exception:
         pass   # noqa: smoke-allow-pass — 校準資料缺失不阻斷 AI 摘要
+    # v18.255：9 章節白話判讀
+    try:
+        import streamlit as _st  # noqa: PLC0415
+        _liq = _st.session_state.get("_macro_liquidity")
+        if isinstance(_liq, dict) and _liq:
+            lines.append(
+                f"- 流動性壓力：{_liq.get('signal', '')} {_liq.get('tier', '')}"
+                f"（分數 {_liq.get('value', 0):+.2f}）"
+            )
+            if _liq.get("top_contrib"):
+                _tc = "、".join(
+                    f"{b['name']}({b['contrib']:+.2f})" for b in _liq["top_contrib"])
+                lines.append(f"  - 主要推升/壓低因子：{_tc}")
+            if _liq.get("verdict"):
+                lines.append(f"  - 判讀：{str(_liq['verdict'])[:200]}")
+        _comp = _st.session_state.get("_macro_compass")
+        if isinstance(_comp, dict) and _comp:
+            _sahm_v = _comp.get("sahm_latest")
+            _adl_v = _comp.get("adl_latest")
+            lines.append(
+                f"- 景氣循環羅盤：薩姆規則={_sahm_v:+.2f}pp" if _sahm_v is not None
+                else "- 景氣循環羅盤：薩姆規則=—"
+            )
+            if _adl_v is not None:
+                lines[-1] += f"、RSP/SPY 廣度={_adl_v:+.2f}%MoM"
+            if _comp.get("verdict"):
+                lines.append(f"  - 研判：{_comp['verdict']}")
+        _items = _st.session_state.get("_macro_23items")
+        if isinstance(_items, dict) and _items:
+            lines.append(
+                f"- 23 項加扣分明細：{_items.get('n_pos', 0)} 項正貢獻 / "
+                f"{_items.get('n_neg', 0)} 項負貢獻（共 {_items.get('n_total', 0)}）"
+            )
+            if _items.get("top_pos"):
+                lines.append("  - 最強正貢獻 Top3：" + "；".join(
+                    str(r.get("verdict", ""))[:60] for r in _items["top_pos"]))
+            if _items.get("top_neg"):
+                lines.append("  - 最強負貢獻 Top3：" + "；".join(
+                    str(r.get("verdict", ""))[:60] for r in _items["top_neg"]))
+        _cap = _st.session_state.get("_macro_capital_line")
+        if isinstance(_cap, dict) and _cap:
+            _n_ero = _cap.get("n_eroded", 0)
+            _n_total_funds = _cap.get("n_funds", 0)
+            if _n_total_funds > 0:
+                if _n_ero == 0:
+                    lines.append(
+                        f"- 資本防線：{_n_total_funds} 檔基金全部 TR1Y ≥ 配息率（配息有保障）")
+                else:
+                    lines.append(
+                        f"- 資本防線：⚠️ {_n_ero}/{_n_total_funds} 檔本金侵蝕"
+                        f"（TR1Y < 配息率，配息來自本金）"
+                    )
+                    if _cap.get("eroded_funds"):
+                        _ef = "、".join(
+                            f"{f['name']}(TR1Y {f['tr1y']:.1f}% vs 配息率 {f['adr']:.1f}%)"
+                            for f in _cap["eroded_funds"][:3])
+                        lines.append(f"  - 受損基金：{_ef}")
+        _ibt = _st.session_state.get("_macro_inv_backtest")
+        if isinstance(_ibt, dict) and _ibt and _ibt.get("n_events", 0) > 0:
+            _m12 = _ibt.get("median_12m")
+            _wr12 = _ibt.get("win_rate_12m")
+            _m18 = _ibt.get("median_18m")
+            lines.append(
+                f"- 倒掛翻正歷史回測：近 30 年 {_ibt['n_events']} 個事件，"
+                f"翻正後 12M 中位 {_m12:+.2f}%（勝率 {_wr12:.0f}%）" if _m12 is not None
+                else f"- 倒掛翻正歷史回測：近 30 年 {_ibt['n_events']} 個事件"
+            )
+            if _m18 is not None:
+                lines.append(
+                    f"  - 18M 中位 {_m18:+.2f}%；歷史意義：翻正為衰退末期，"
+                    f"屬股市底部累積區（1990/2000/2008/2020）"
+                )
+        _sk = _st.session_state.get("_macro_sankey")
+        if isinstance(_sk, dict) and _sk and _sk.get("ok"):
+            lines.append(
+                f"- 總經因果鏈 Sankey：{_sk.get('n_strong_links', 0)} 條強相關因果路徑"
+                f"（|corr|≥0.5）"
+            )
+            if _sk.get("top_strong"):
+                _ts = "、".join(
+                    f"{s['src']}→{s['tgt']}({s['corr']:+.2f})"
+                    for s in _sk["top_strong"])
+                lines.append(f"  - 強傳導 Top3：{_ts}")
+        _sbt = _st.session_state.get("_macro_subsector_bt")
+        if isinstance(_sbt, dict) and _sbt and _sbt.get("alerts"):
+            lines.append(
+                f"- 細項燈號歷史回測（target={_sbt.get('target')}、"
+                f"forward={_sbt.get('forward_months')}M）："
+            )
+            for _a in _sbt["alerts"][:3]:
+                lines.append(f"  - {str(_a)[:120]}")
+        _vi = _st.session_state.get("_macro_var_importance")
+        if isinstance(_vi, dict) and _vi and _vi.get("top3"):
+            _top3_str = "、".join(
+                f"{r['name']}(|corr|={r['abs_corr']:.2f}, "
+                f"{'同向' if r.get('direction') == '+' else '反向'})"
+                for r in _vi["top3"])
+            lines.append(
+                f"- 變數重要性 Top3（預測 {_vi.get('target')} 在 {_vi.get('lag_months')}M 後變化）："
+                f"{_top3_str}"
+            )
+        _hm = _st.session_state.get("_macro_hot_money")
+        if isinstance(_hm, dict) and _hm:
+            lines.append(
+                f"- 台股熱錢三角交叉（{_hm.get('date', '')}）：{_hm.get('state', '')}"
+                f"{'（背離警示）' if _hm.get('is_divergence') else ''}"
+            )
+            lines.append(
+                f"  - 近 {_hm.get('window', 5)}日累計外資 {_hm.get('roll_flow', 0):+.0f} 億、"
+                f"台幣升貶 {_hm.get('roll_apprec_pct', 0):+.2f}%"
+            )
+            if _hm.get("interpretation"):
+                lines.append(f"  - 判讀：{_hm['interpretation']}")
+    except Exception:
+        pass   # noqa: smoke-allow-pass — 章節資料缺失不阻斷 AI 摘要
     headlines = [str(n.get("title", "") or n.get("headline", ""))
                  for n in (news or []) if isinstance(n, dict)][:8]
     sections = ["景氣位階與分數", "資產配置建議", "關鍵總經指標", "系統性風險",
-                "領先指標與產業燈號", "校準健檢", "新聞時事"]
+                "領先指標與產業燈號", "校準健檢",
+                "流動性壓力", "景氣循環羅盤", "23 項加扣分明細", "資本防線",
+                "倒掛翻正歷史回測", "總經因果鏈", "細項燈號回測",
+                "變數重要性", "台股熱錢三角交叉",
+                "新聞時事"]
     return "\n".join(lines), headlines, sections
 
 

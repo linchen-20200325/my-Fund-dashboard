@@ -210,6 +210,21 @@ def render_hot_money_section(token: str = "",
 
     latest = sig.iloc[-1]
 
+    # v18.255 stash 給 Tab1 AI 白話總體檢
+    try:
+        st.session_state["_macro_hot_money"] = {
+            "date": str(pd.Timestamp(latest["date"]).date()),
+            "state": str(latest.get("state", "")),
+            "is_divergence": bool(latest.get("is_divergence", False)),
+            "interpretation": str(latest.get("interpretation", ""))[:200],
+            "foreign_net_yi": float(latest.get("foreign_net_yi", 0) or 0),
+            "roll_flow": float(latest.get("roll_flow", 0) or 0),
+            "roll_apprec_pct": float(latest.get("roll_apprec", 0) or 0),
+            "window": int(window),
+        }
+    except Exception:
+        pass
+
     st.markdown(f"**📍 最新判讀（{pd.Timestamp(latest['date']).date()}）**")
     box = (st.warning if latest["is_divergence"]
            else (st.success if latest["state"] == "同步流入"
