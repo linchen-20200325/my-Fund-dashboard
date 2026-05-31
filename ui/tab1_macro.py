@@ -1264,14 +1264,13 @@ def render_macro_tab() -> None:
                             + "　暫不影響整體健康度評估，主源補齊 ≥20 筆後本卡會自動計算複合 Risk Score。"
                         )
 
-                    # ── 🎯 風險評分校準（v18.253，sandbox / 真實 FRED+SPX 雙模式）──
+                    # ── 🎯 風險評分校準（v18.254，僅真實 FRED+SPX；移除合成 demo）──
                     # 註：父層已是 expander，這裡改用 container（Streamlit 禁巢狀 expander）
                     st.divider()
-                    st.markdown("##### 🎯 風險評分校準（experimental）")
+                    st.markdown("##### 🎯 風險評分校準（真實 FRED + SPX）")
                     with st.container(border=True):
                         from services.risk_calibration import (
                             fetch_real_3factor_monthly as _fetch_real_3f,
-                            generate_synthetic_demo as _gen_demo,
                             grid_search_threshold as _grid_thr,
                             label_forward_drawdown as _lbl_dd,
                             rolling_risk_score as _roll_rs,
@@ -1280,12 +1279,6 @@ def render_macro_tab() -> None:
                             "**Ground truth**：未來 N 個月 SPX 最大回檔 < threshold ⇒ 標 1（命中）。"
                             "校準器掃描 score 門檻，回報每門檻 precision / recall / F1，找出最佳停利警戒點。"
                         )
-                        _rc_src = st.radio(
-                            "資料來源",
-                            options=["🧪 合成（sandbox demo）", "📊 真實 FRED + SPX"],
-                            horizontal=True, key="_rc_src_v253",
-                        )
-                        _rc_use_real = _rc_src.startswith("📊")
                         _cal_c1, _cal_c2, _cal_c3 = st.columns(3)
                         with _cal_c1:
                             _cal_horizon = st.slider("Forward horizon (月)", 1, 12, 3, key="_cal_h_v251")
@@ -1294,39 +1287,35 @@ def render_macro_tab() -> None:
                         with _cal_c3:
                             _cal_win = st.slider("Rolling window (月)", 12, 48, 24, key="_cal_w_v251")
                         _df_src, _spx_src, _src_label = None, None, ""
-                        if _rc_use_real:
-                            _rc_years = st.slider("歷史年數", 5, 20, 10, key="_rc_yrs_v253")
-                            _rc_key = f"_rc_real_{_rc_years}y"
-                            if _rc_key not in st.session_state:
-                                if st.button("📊 抓 FRED + SPX 真實月度資料",
-                                              type="primary", key="_rc_btn_v253"):
-                                    _fred_key = ""
-                                    try:
-                                        _fred_key = st.secrets.get("FRED_API_KEY", "")
-                                    except Exception:
-                                        pass
-                                    with st.spinner(f"抓 FRED 3-series + SPX × {_rc_years} 年..."):
-                                        _df_real, _spx_real, _rc_notes = _fetch_real_3f(
-                                            _fred_key, years=int(_rc_years)
-                                        )
-                                    st.session_state[_rc_key] = (_df_real, _spx_real, _rc_notes)
-                                    st.rerun()
-                                else:
-                                    st.info("👆 按上方按鈕抓真實 FRED + SPX（需 FRED_API_KEY in secrets）")
+                        _rc_years = st.slider("歷史年數", 5, 20, 10, key="_rc_yrs_v254")
+                        _rc_key = f"_rc_real_{_rc_years}y"
+                        if _rc_key not in st.session_state:
+                            if st.button("📊 抓 FRED + SPX 真實月度資料",
+                                          type="primary", key="_rc_btn_v254"):
+                                _fred_key = ""
+                                try:
+                                    _fred_key = st.secrets.get("FRED_API_KEY", "")
+                                except Exception:
+                                    pass
+                                with st.spinner(f"抓 FRED 3-series + SPX × {_rc_years} 年..."):
+                                    _df_real, _spx_real, _rc_notes = _fetch_real_3f(
+                                        _fred_key, years=int(_rc_years)
+                                    )
+                                st.session_state[_rc_key] = (_df_real, _spx_real, _rc_notes)
+                                st.rerun()
                             else:
-                                _df_real, _spx_real, _rc_notes = st.session_state[_rc_key]
-                                for _w in _rc_notes.get("warnings", []):
-                                    st.warning(f"⚠️ {_w}")
-                                if _rc_notes.get("missing_factors"):
-                                    st.caption("缺失：" + ", ".join(_rc_notes["missing_factors"]))
-                                _df_src, _spx_src = _df_real, _spx_real
-                                _src_label = f"真實 FRED + SPX × {_rc_years} 年（{len(_df_real)} 月）"
-                                if st.button("🔄 重抓真實資料", key="_rc_reload_v253"):
-                                    del st.session_state[_rc_key]
-                                    st.rerun()
+                                st.info("👆 按上方按鈕抓真實 FRED + SPX（需 FRED_API_KEY in secrets）")
                         else:
-                            _df_src, _spx_src = _gen_demo(n_months=60, seed=42)
-                            _src_label = "60 月合成 macro + SPX（內含 2 段壓力事件）"
+                            _df_real, _spx_real, _rc_notes = st.session_state[_rc_key]
+                            for _w in _rc_notes.get("warnings", []):
+                                st.warning(f"⚠️ {_w}")
+                            if _rc_notes.get("missing_factors"):
+                                st.caption("缺失：" + ", ".join(_rc_notes["missing_factors"]))
+                            _df_src, _spx_src = _df_real, _spx_real
+                            _src_label = f"真實 FRED + SPX × {_rc_years} 年（{len(_df_real)} 月）"
+                            if st.button("🔄 重抓真實資料", key="_rc_reload_v254"):
+                                del st.session_state[_rc_key]
+                                st.rerun()
                         if _df_src is not None and not _df_src.empty and not _spx_src.empty:
                             _score_demo = _roll_rs(_df_src, window=_cal_win)
                             _label_demo = _lbl_dd(_spx_src, horizon_months=_cal_horizon,
@@ -1334,6 +1323,13 @@ def render_macro_tab() -> None:
                             _grid_df = _grid_thr(_score_demo, _label_demo)
                             if _grid_df.empty or _grid_df["f1"].max() <= 0:
                                 st.warning("本組參數下校準器無法命中任何危機點（試試放寬 horizon / drawdown）")
+                                st.session_state["_cal_risk_score"] = {
+                                    "src": _src_label,
+                                    "horizon": _cal_horizon,
+                                    "drawdown_pct": _cal_dd,
+                                    "rolling_win": _cal_win,
+                                    "no_hit": True,
+                                }
                             else:
                                 _best = _grid_df.iloc[0]
                                 _mc1, _mc2, _mc3, _mc4 = st.columns(4)
@@ -1352,21 +1348,27 @@ def render_macro_tab() -> None:
                                     }),
                                     use_container_width=True, hide_index=True,
                                 )
-                        if not _rc_use_real:
-                            st.caption(
-                                "⚠️ 合成資料只用於驗證 pipeline；要看真實命中率切換上方「📊 真實 FRED + SPX」。"
-                            )
+                                st.session_state["_cal_risk_score"] = {
+                                    "src": _src_label,
+                                    "horizon": _cal_horizon,
+                                    "drawdown_pct": _cal_dd,
+                                    "rolling_win": _cal_win,
+                                    "best_threshold": float(_best["threshold"]),
+                                    "precision": float(_best["precision"]),
+                                    "recall": float(_best["recall"]),
+                                    "f1": float(_best["f1"]),
+                                    "cur_risk_score": float(_risk_score),
+                                }
 
-                    # ── 🧮 景氣分數校準（v18.252，14-factor Macro_Score 真值校準）──
+                    # ── 🧮 景氣分數校準（v18.254，僅真實 FRED+SPX；移除合成 demo）──
                     # 註：父層已是 expander，這裡用 container（Streamlit 禁巢狀 expander）
                     st.divider()
-                    st.markdown("##### 🧮 景氣分數校準（14-factor Macro_Score）")
+                    st.markdown("##### 🧮 景氣分數校準（14-factor Macro_Score／真實 FRED+SPX）")
                     with st.container(border=True):
                         from services.macro_score_calibration import (
                             classify_phase as _cls_phs,
                             compute_historical_score as _hist_sc,
                             fetch_real_macro_factors_monthly as _fetch_real,
-                            generate_synthetic_demo as _gen_msc,
                             grid_search_phase_thresholds as _grid_phs,
                             overall_accuracy as _ov_acc,
                             phase_accuracy as _phs_acc,
@@ -1376,57 +1378,43 @@ def render_macro_tab() -> None:
                             "**高峰**應跌、**擴張**應漲、**復甦**應大漲(>10%)、**衰退**應跌。"
                         )
 
-                        # ── 資料來源切換：合成 vs 真實 ───────────────
-                        _src_mode = st.radio(
-                            "資料來源",
-                            options=["🧪 合成（sandbox demo）", "📊 真實 FRED + SPX"],
-                            horizontal=True, key="_msc_src_v252",
-                            help="真實資料需 FRED_API_KEY + NAS proxy 可達；首次抓 30-60 秒。",
-                        )
-                        _use_real = _src_mode.startswith("📊")
-
                         _msc_c1, _msc_c2 = st.columns(2)
                         with _msc_c1:
                             _msc_h = st.slider("Forward horizon (月)", 3, 24, 12,
                                                key="_msc_h_v252")
                         with _msc_c2:
                             _msc_n = st.slider(
-                                "樣本長度（合成月 / 真實年）",
-                                3, 120, (10 if _use_real else 60),
-                                key="_msc_n_v252",
-                                help="真實模式單位為「年」（3-15 年）；合成模式單位為「月」")
+                                "歷史年數", 3, 20, 10,
+                                key="_msc_n_v254",
+                                help="真實 FRED+SPX 年數（3-20 年）")
 
-                        if _use_real:
-                            # 真實資料：cache 在 session_state，按鈕觸發才抓
-                            _real_key = f"_msc_real_{_msc_n}y"
-                            if _real_key not in st.session_state:
-                                if st.button("📊 抓 FRED + SPX 真實月度資料",
-                                             type="primary",
-                                             key=f"btn_msc_fetch_{_msc_n}"):
-                                    with st.spinner(
-                                            f"抓 FRED 14-series + SPX × {_msc_n} 年..."):
-                                        _df_real, _spx_real, _notes = _fetch_real(
-                                            FRED_KEY, years=int(_msc_n))
-                                        st.session_state[_real_key] = (
-                                            _df_real, _spx_real, _notes)
-                                    st.rerun()
-                                st.info("👆 按上方按鈕抓真實 FRED + SPX")
-                                st.stop()
-                            _df_msc, _spx_msc, _notes_real = (
-                                st.session_state[_real_key])
-                            if _df_msc.empty or _spx_msc.empty:
-                                st.error("❌ 真實資料抓取失敗，請看下方警告")
-                                st.json(_notes_real)
-                                st.stop()
-                            if _notes_real.get("missing_factors"):
-                                st.warning("⚠️ 部分指標缺失（已自動跳過計分）："
-                                           + " ｜ ".join(_notes_real["missing_factors"]))
-                            if _notes_real.get("warnings"):
-                                for _w in _notes_real["warnings"]:
-                                    st.caption(f"ℹ️ {_w}")
-                        else:
-                            _df_msc, _spx_msc = _gen_msc(
-                                n_months=int(_msc_n), seed=42)
+                        # 真實資料：cache 在 session_state，按鈕觸發才抓
+                        _real_key = f"_msc_real_{_msc_n}y"
+                        if _real_key not in st.session_state:
+                            if st.button("📊 抓 FRED + SPX 真實月度資料",
+                                         type="primary",
+                                         key=f"btn_msc_fetch_{_msc_n}"):
+                                with st.spinner(
+                                        f"抓 FRED 14-series + SPX × {_msc_n} 年..."):
+                                    _df_real, _spx_real, _notes = _fetch_real(
+                                        FRED_KEY, years=int(_msc_n))
+                                    st.session_state[_real_key] = (
+                                        _df_real, _spx_real, _notes)
+                                st.rerun()
+                            st.info("👆 按上方按鈕抓真實 FRED + SPX")
+                            st.stop()
+                        _df_msc, _spx_msc, _notes_real = (
+                            st.session_state[_real_key])
+                        if _df_msc.empty or _spx_msc.empty:
+                            st.error("❌ 真實資料抓取失敗，請看下方警告")
+                            st.json(_notes_real)
+                            st.stop()
+                        if _notes_real.get("missing_factors"):
+                            st.warning("⚠️ 部分指標缺失（已自動跳過計分）："
+                                       + " ｜ ".join(_notes_real["missing_factors"]))
+                        if _notes_real.get("warnings"):
+                            for _w in _notes_real["warnings"]:
+                                st.caption(f"ℹ️ {_w}")
 
                         _score_msc = _hist_sc(_df_msc)
                         _acc_df = _phs_acc(_score_msc, _spx_msc,
@@ -1436,8 +1424,7 @@ def render_macro_tab() -> None:
                         _cur_score = float(_score_msc.iloc[-1])
                         _cur_phase = _cls_phs(_cur_score)
                         _mc1, _mc2, _mc3 = st.columns(3)
-                        _label_prefix = "真實" if _use_real else "合成"
-                        _mc1.metric(f"最新{_label_prefix} Macro_Score",
+                        _mc1.metric("最新真實 Macro_Score",
                                      f"{_cur_score:.2f}", _cur_phase)
                         _mc2.metric("總體命中率", f"{_ov:.1f}%",
                                      f"horizon={_msc_h}M")
@@ -1451,6 +1438,7 @@ def render_macro_tab() -> None:
                             }, na_rep="—"),
                             use_container_width=True, hide_index=True,
                         )
+                        _grid_top = None
                         # 父層已 expander，這裡再 expander 會炸 → 改 checkbox toggle
                         if st.checkbox("🔬 顯示 grid_search 門檻調整建議",
                                        value=False, key="_msc_grid_v252"):
@@ -1471,18 +1459,28 @@ def render_macro_tab() -> None:
                                 "若上表第一列門檻明顯不同 → 考慮調整 "
                                 "services/macro_service.py 的位階門檻。"
                             )
-                        if _use_real:
-                            st.caption(
-                                "📊 真實資料：FRED + yfinance 月度（NAS proxy）。"
-                                "PMI 用就業 YoY 代理（FRED 無 PMI）。換 horizon / 年數會"
-                                "重新計算 cache 內資料；要重抓改按上方按鈕。"
-                            )
-                        else:
-                            st.caption(
-                                "🧪 合成資料：base_drift=+3.7%/年、σ=4%/月，含 3 段下殺 + "
-                                "1 段反彈。命中率 60-75% 屬正常（合成 self-consistent）。"
-                                "要看真實命中率切換上方「📊 真實 FRED + SPX」。"
-                            )
+                            if not _grid_msc.empty:
+                                _gt = _grid_msc.iloc[0]
+                                _grid_top = {
+                                    "peak_thr": float(_gt["peak_thr"]),
+                                    "expansion_thr": float(_gt["expansion_thr"]),
+                                    "recovery_thr": float(_gt["recovery_thr"]),
+                                    "overall_acc_pct": float(_gt["overall_acc_pct"]),
+                                }
+                        st.caption(
+                            "📊 真實資料：FRED + yfinance 月度（NAS proxy）。"
+                            "PMI 用就業 YoY 代理（FRED 無 PMI）。換 horizon / 年數會"
+                            "重新計算 cache 內資料；要重抓改按上方按鈕。"
+                        )
+                        st.session_state["_cal_macro_score"] = {
+                            "src": f"真實 FRED + SPX × {_msc_n} 年（{len(_score_msc)} 月）",
+                            "horizon": _msc_h,
+                            "cur_score": _cur_score,
+                            "cur_phase": _cur_phase,
+                            "overall_acc_pct": float(_ov),
+                            "phase_acc": _acc_df.to_dict("records"),
+                            "grid_top": _grid_top,
+                        }
 
             # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
             def _load_liquidity_factors() -> None:
@@ -2534,10 +2532,49 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
                 for x in _lights[:8]))
     except Exception:
         pass   # noqa: smoke-allow-pass — 進階分析缺失不阻斷 AI 摘要
+    # v18.254：把兩個校準器最新結果寫進快照，供 AI 產出「校準健檢」段落
+    try:
+        import streamlit as _st  # noqa: PLC0415
+        _cms = _st.session_state.get("_cal_macro_score")
+        _crs = _st.session_state.get("_cal_risk_score")
+        if _cms or _crs:
+            lines.append("- 校準健檢（真實 FRED+SPX 回測）：")
+            if isinstance(_cms, dict) and _cms:
+                lines.append(
+                    f"  - 14-factor 景氣分數：總體命中率 {_cms['overall_acc_pct']:.1f}%"
+                    f"（horizon={_cms['horizon']}M、{_cms['src']}）；"
+                    f"當前 Macro_Score={_cms['cur_score']:.2f} → {_cms['cur_phase']}")
+                _pa = _cms.get("phase_acc") or []
+                if _pa:
+                    _pa_str = "、".join(
+                        f"{r.get('phase')} {r.get('hit_rate_pct', 0):.0f}%(n={r.get('n', 0)})"
+                        for r in _pa)
+                    lines.append(f"    - 各位階命中：{_pa_str}")
+                _gt = _cms.get("grid_top")
+                if isinstance(_gt, dict):
+                    lines.append(
+                        f"    - grid_search 最佳門檻 (Peak/Exp/Rec)="
+                        f"({_gt['peak_thr']:.1f}/{_gt['expansion_thr']:.1f}/{_gt['recovery_thr']:.1f})"
+                        f"→ {_gt['overall_acc_pct']:.1f}%")
+            if isinstance(_crs, dict) and _crs:
+                if _crs.get("no_hit"):
+                    lines.append(
+                        f"  - 3-factor 風險評分：horizon={_crs['horizon']}M、"
+                        f"drawdown={_crs['drawdown_pct']}%、window={_crs['rolling_win']}M "
+                        f"參數下校準器無命中（該回看期內 SPX 未出現此規模回檔，"
+                        f"建議放寬 horizon 或 drawdown 才能評估）")
+                else:
+                    lines.append(
+                        f"  - 3-factor 風險評分：最佳 F1 門檻={_crs['best_threshold']:.2f}（"
+                        f"P={_crs['precision']:.0%}、R={_crs['recall']:.0%}、"
+                        f"F1={_crs['f1']:.0%}）；"
+                        f"當前 risk_score={_crs['cur_risk_score']:.2f}")
+    except Exception:
+        pass   # noqa: smoke-allow-pass — 校準資料缺失不阻斷 AI 摘要
     headlines = [str(n.get("title", "") or n.get("headline", ""))
                  for n in (news or []) if isinstance(n, dict)][:8]
     sections = ["景氣位階與分數", "資產配置建議", "關鍵總經指標", "系統性風險",
-                "領先指標與產業燈號", "新聞時事"]
+                "領先指標與產業燈號", "校準健檢", "新聞時事"]
     return "\n".join(lines), headlines, sections
 
 
