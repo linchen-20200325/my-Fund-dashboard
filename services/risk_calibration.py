@@ -1,4 +1,4 @@
-"""services/risk_calibration.py — v18.251 風險評分真值校準
+"""services/risk_calibration.py — v18.253 風險評分真值校準
 
 提供「composite_risk score」對歷史「forward SPX drawdown 標籤」的校準工具：
 - label_forward_drawdown: SPX 月序列 → t+1..t+H 期間最大跌幅 < threshold ⇒ 1
@@ -6,6 +6,7 @@
 - grid_search_threshold: 掃描門檻 → 各門檻 metrics 表（依 F1 排序）
 - rolling_risk_score: 對 (VIX, HY_Spread, Yield_Curve_10Y_2Y) 跑滑動 Z-score → 時序 risk_score
 - generate_synthetic_demo: 60 月合成資料（內嵌 2 段壓力事件）給 sandbox demo / 測試用
+- fetch_real_3factor_monthly: 真實 FRED + yfinance 抓 3-factor + SPX 月度（v18.253）
 
 Ground truth 預設：未來 3 個月 SPX 最大回檔 < -10% ⇒ 高風險命中。
 此模組純函式，沒有 I/O；要餵真實資料的 caller 自己抓 FRED + yfinance。
@@ -191,3 +192,87 @@ def generate_synthetic_demo(
     )
     spx_series = pd.Series(spx, index=idx, name="SPX")
     return df_macro, spx_series
+
+
+# ════════════════════════════════════════════════════════════════
+# 真實資料抓取（FRED + yfinance）v18.253
+# ════════════════════════════════════════════════════════════════
+def fetch_real_3factor_monthly(
+    fred_api_key: str,
+    years: int = 10,
+) -> tuple[pd.DataFrame, pd.Series, dict]:
+    """抓 3-factor (VIX/HY_Spread/Yield_Curve_10Y_2Y) + SPX 月度真實資料。
+
+    Parameters
+    ----------
+    fred_api_key : str
+        FRED API key（無則回空 + notes 警告）
+    years : int
+        歷史長度（年），預設 10 年
+
+    Returns
+    -------
+    (df_macro, spx, notes)
+        df_macro: DataFrame index=月底, 3 columns (VIX/HY_Spread/Yield_Curve_10Y_2Y)
+        spx: ^GSPC 月底收盤 Series
+        notes: dict 含 missing_factors / warnings 清單
+    """
+    notes: dict = {"missing_factors": [], "warnings": []}
+    if not fred_api_key:
+        notes["warnings"].append("FRED API key 未設置，無法抓真實資料")
+        return pd.DataFrame(), pd.Series(dtype=float), notes
+    try:
+        from repositories.macro_repository import fetch_fred, fetch_yf_close
+    except ImportError as e:
+        notes["warnings"].append(f"import 失敗：{e}")
+        return pd.DataFrame(), pd.Series(dtype=float), notes
+
+    n_obs = years * 12 + 24
+    series_map: dict[str, pd.Series] = {}
+
+    # ── FRED：HY_Spread (BAMLH0A0HYM2) + Yield_Curve_10Y_2Y (T10Y2Y) ──
+    _fred_map = {"HY_Spread": "BAMLH0A0HYM2", "Yield_Curve_10Y_2Y": "T10Y2Y"}
+    for col, sid in _fred_map.items():
+        try:
+            df_f = fetch_fred(sid, fred_api_key, n=n_obs * 10)
+            if df_f is None or df_f.empty:
+                notes["missing_factors"].append(f"{col}({sid})")
+                continue
+            series_map[col] = (df_f.sort_values("date").set_index("date")["value"]
+                               .astype(float).resample("ME").last())
+        except Exception as e:
+            notes["missing_factors"].append(f"{col}: {type(e).__name__}")
+
+    # ── yfinance：VIX 月底收盤 ────────────────────────────────────
+    yf_range = f"{years + 2}y" if years <= 10 else "max"
+    try:
+        s = fetch_yf_close("^VIX", range_=yf_range, interval="1d")
+        if s is None or s.empty:
+            notes["missing_factors"].append("VIX(^VIX)")
+        else:
+            try: s.index = s.index.tz_localize(None)
+            except (AttributeError, TypeError): pass
+            series_map["VIX"] = s.resample("ME").last()
+    except Exception as e:
+        notes["missing_factors"].append(f"VIX: {type(e).__name__}")
+
+    if not series_map:
+        notes["warnings"].append("所有指標抓取失敗")
+        return pd.DataFrame(), pd.Series(dtype=float), notes
+
+    df_macro = pd.DataFrame(series_map).tail(years * 12)
+
+    # ── SPX 月底收盤 ─────────────────────────────────────────────
+    try:
+        spx_d = fetch_yf_close("^GSPC", range_=yf_range, interval="1d")
+        if spx_d is None or spx_d.empty:
+            notes["warnings"].append("SPX 抓取失敗")
+            return df_macro, pd.Series(dtype=float), notes
+        try: spx_d.index = spx_d.index.tz_localize(None)
+        except (AttributeError, TypeError): pass
+        spx = spx_d.resample("ME").last().tail(years * 12 + 12)
+    except Exception as e:
+        notes["warnings"].append(f"SPX 異常：{type(e).__name__}: {e}")
+        spx = pd.Series(dtype=float)
+
+    return df_macro, spx, notes
