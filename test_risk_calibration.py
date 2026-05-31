@@ -97,3 +97,25 @@ def test_rolling_risk_score_missing_columns_returns_nan():
     )
     score = rolling_risk_score(df_macro, window=2)
     assert score.isna().all()
+
+
+# ════════════════════════════════════════════════════════════
+# fetch_real_3factor_monthly (v18.253) — 邊界 + import 防護
+# ════════════════════════════════════════════════════════════
+def test_fetch_real_3factor_monthly_no_api_key():
+    from services.risk_calibration import fetch_real_3factor_monthly
+
+    df, spx, notes = fetch_real_3factor_monthly("", years=10)
+    assert df.empty
+    assert spx.empty
+    assert any("FRED API key" in w for w in notes["warnings"])
+
+
+def test_fetch_real_3factor_monthly_returns_tuple_schema():
+    from services.risk_calibration import fetch_real_3factor_monthly
+
+    result = fetch_real_3factor_monthly("", years=5)
+    assert isinstance(result, tuple) and len(result) == 3
+    df, spx, notes = result
+    assert hasattr(df, "columns") and hasattr(spx, "index")
+    assert "missing_factors" in notes and "warnings" in notes
