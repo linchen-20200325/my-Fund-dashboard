@@ -1428,8 +1428,10 @@ def render_macro_tab() -> None:
                                 key="_msc_n_v254",
                                 help="真實 FRED+SPX 年數（3-20 年）")
 
-                        # 真實資料：cache 在 session_state，按鈕觸發才抓
+                        # v18.257：用 _msc_ready flag 取代 st.stop()，否則
+                        # 沒按抓資料按鈕時整個 Tab1 下方 sections 全被殺掉
                         _real_key = f"_msc_real_{_msc_n}y"
+                        _msc_ready = False
                         if _real_key not in st.session_state:
                             if st.button("📊 抓 FRED + SPX 真實月度資料",
                                          type="primary",
@@ -1441,86 +1443,89 @@ def render_macro_tab() -> None:
                                     st.session_state[_real_key] = (
                                         _df_real, _spx_real, _notes)
                                 st.rerun()
-                            st.info("👆 按上方按鈕抓真實 FRED + SPX")
-                            st.stop()
-                        _df_msc, _spx_msc, _notes_real = (
-                            st.session_state[_real_key])
-                        if _df_msc.empty or _spx_msc.empty:
-                            st.error("❌ 真實資料抓取失敗，請看下方警告")
-                            st.json(_notes_real)
-                            st.stop()
-                        if _notes_real.get("missing_factors"):
-                            st.warning("⚠️ 部分指標缺失（已自動跳過計分）："
-                                       + " ｜ ".join(_notes_real["missing_factors"]))
-                        if _notes_real.get("warnings"):
-                            for _w in _notes_real["warnings"]:
-                                st.caption(f"ℹ️ {_w}")
+                            else:
+                                st.info("👆 按上方按鈕抓真實 FRED + SPX")
+                        else:
+                            _df_msc, _spx_msc, _notes_real = (
+                                st.session_state[_real_key])
+                            if _df_msc.empty or _spx_msc.empty:
+                                st.error("❌ 真實資料抓取失敗，請看下方警告")
+                                st.json(_notes_real)
+                            else:
+                                _msc_ready = True
+                        if _msc_ready:
+                            if _notes_real.get("missing_factors"):
+                                st.warning("⚠️ 部分指標缺失（已自動跳過計分）："
+                                           + " ｜ ".join(_notes_real["missing_factors"]))
+                            if _notes_real.get("warnings"):
+                                for _w in _notes_real["warnings"]:
+                                    st.caption(f"ℹ️ {_w}")
 
-                        _score_msc = _hist_sc(_df_msc)
-                        _acc_df = _phs_acc(_score_msc, _spx_msc,
-                                            horizon_months=_msc_h)
-                        _ov = _ov_acc(_score_msc, _spx_msc, horizon_months=_msc_h)
-                        # 當前 score 對應位階
-                        _cur_score = float(_score_msc.iloc[-1])
-                        _cur_phase = _cls_phs(_cur_score)
-                        _mc1, _mc2, _mc3 = st.columns(3)
-                        _mc1.metric("最新真實 Macro_Score",
-                                     f"{_cur_score:.2f}", _cur_phase)
-                        _mc2.metric("總體命中率", f"{_ov:.1f}%",
-                                     f"horizon={_msc_h}M")
-                        _mc3.metric("樣本數", f"{len(_score_msc)}")
-                        st.markdown("**各位階命中率**：")
-                        st.dataframe(
-                            _acc_df.style.format({
-                                "hit_rate_pct": "{:.1f}%",
-                                "mean_fwd_pct": "{:+.1f}%",
-                                "median_fwd_pct": "{:+.1f}%",
-                            }, na_rep="—"),
-                            use_container_width=True, hide_index=True,
-                        )
-                        _grid_top = None
-                        # 父層已 expander，這裡再 expander 會炸 → 改 checkbox toggle
-                        if st.checkbox("🔬 顯示 grid_search 門檻調整建議",
-                                       value=False, key="_msc_grid_v252"):
-                            _grid_msc = _grid_phs(
-                                _score_msc, _spx_msc,
-                                horizon_months=_msc_h)
+                            _score_msc = _hist_sc(_df_msc)
+                            _acc_df = _phs_acc(_score_msc, _spx_msc,
+                                                horizon_months=_msc_h)
+                            _ov = _ov_acc(_score_msc, _spx_msc, horizon_months=_msc_h)
+                            # 當前 score 對應位階
+                            _cur_score = float(_score_msc.iloc[-1])
+                            _cur_phase = _cls_phs(_cur_score)
+                            _mc1, _mc2, _mc3 = st.columns(3)
+                            _mc1.metric("最新真實 Macro_Score",
+                                         f"{_cur_score:.2f}", _cur_phase)
+                            _mc2.metric("總體命中率", f"{_ov:.1f}%",
+                                         f"horizon={_msc_h}M")
+                            _mc3.metric("樣本數", f"{len(_score_msc)}")
+                            st.markdown("**各位階命中率**：")
                             st.dataframe(
-                                _grid_msc.head(10).style.format({
-                                    "peak_thr": "{:.1f}",
-                                    "expansion_thr": "{:.1f}",
-                                    "recovery_thr": "{:.1f}",
-                                    "overall_acc_pct": "{:.1f}%",
-                                }),
+                                _acc_df.style.format({
+                                    "hit_rate_pct": "{:.1f}%",
+                                    "mean_fwd_pct": "{:+.1f}%",
+                                    "median_fwd_pct": "{:+.1f}%",
+                                }, na_rep="—"),
                                 use_container_width=True, hide_index=True,
                             )
+                            _grid_top = None
+                            # 父層已 expander，這裡再 expander 會炸 → 改 checkbox toggle
+                            if st.checkbox("🔬 顯示 grid_search 門檻調整建議",
+                                           value=False, key="_msc_grid_v252"):
+                                _grid_msc = _grid_phs(
+                                    _score_msc, _spx_msc,
+                                    horizon_months=_msc_h)
+                                st.dataframe(
+                                    _grid_msc.head(10).style.format({
+                                        "peak_thr": "{:.1f}",
+                                        "expansion_thr": "{:.1f}",
+                                        "recovery_thr": "{:.1f}",
+                                        "overall_acc_pct": "{:.1f}%",
+                                    }),
+                                    use_container_width=True, hide_index=True,
+                                )
+                                st.caption(
+                                    "目前公式預設 (Peak/Exp/Rec)=(8.0/5.0/3.0)。"
+                                    "若上表第一列門檻明顯不同 → 考慮調整 "
+                                    "services/macro_service.py 的位階門檻。"
+                                )
+                                if not _grid_msc.empty:
+                                    _gt = _grid_msc.iloc[0]
+                                    _grid_top = {
+                                        "peak_thr": float(_gt["peak_thr"]),
+                                        "expansion_thr": float(_gt["expansion_thr"]),
+                                        "recovery_thr": float(_gt["recovery_thr"]),
+                                        "overall_acc_pct": float(_gt["overall_acc_pct"]),
+                                    }
                             st.caption(
-                                "目前公式預設 (Peak/Exp/Rec)=(8.0/5.0/3.0)。"
-                                "若上表第一列門檻明顯不同 → 考慮調整 "
-                                "services/macro_service.py 的位階門檻。"
+                                "📊 真實資料：FRED + yfinance 月度（NAS proxy）。"
+                                "PMI 用就業 YoY 代理（FRED 無 PMI）。換 horizon / 年數會"
+                                "重新計算 cache 內資料；要重抓改按上方按鈕。"
                             )
-                            if not _grid_msc.empty:
-                                _gt = _grid_msc.iloc[0]
-                                _grid_top = {
-                                    "peak_thr": float(_gt["peak_thr"]),
-                                    "expansion_thr": float(_gt["expansion_thr"]),
-                                    "recovery_thr": float(_gt["recovery_thr"]),
-                                    "overall_acc_pct": float(_gt["overall_acc_pct"]),
-                                }
-                        st.caption(
-                            "📊 真實資料：FRED + yfinance 月度（NAS proxy）。"
-                            "PMI 用就業 YoY 代理（FRED 無 PMI）。換 horizon / 年數會"
-                            "重新計算 cache 內資料；要重抓改按上方按鈕。"
-                        )
-                        st.session_state["_cal_macro_score"] = {
-                            "src": f"真實 FRED + SPX × {_msc_n} 年（{len(_score_msc)} 月）",
-                            "horizon": _msc_h,
-                            "cur_score": _cur_score,
-                            "cur_phase": _cur_phase,
-                            "overall_acc_pct": float(_ov),
-                            "phase_acc": _acc_df.to_dict("records"),
-                            "grid_top": _grid_top,
-                        }
+                            st.session_state["_cal_macro_score"] = {
+                                "src": f"真實 FRED + SPX × {_msc_n} 年（{len(_score_msc)} 月）",
+                                "horizon": _msc_h,
+                                "cur_score": _cur_score,
+                                "cur_phase": _cur_phase,
+                                "overall_acc_pct": float(_ov),
+                                "phase_acc": _acc_df.to_dict("records"),
+                                "grid_top": _grid_top,
+                            }
 
             # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
             def _load_liquidity_factors() -> None:

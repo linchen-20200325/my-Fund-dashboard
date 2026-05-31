@@ -228,3 +228,31 @@ def test_calibration_card_explainer_expanders_present():
     for m in matches:
         assert "st.checkbox" in m.group(0), \
             f"hotfix v18.256：必須用 st.checkbox 避免巢狀 expander，但找到 {m.group(0)[:60]}"
+
+
+def test_no_st_stop_in_render_macro_tab():
+    """v18.257：render_macro_tab 內禁用 st.stop()。
+
+    第二張校準卡（景氣分數校準）原本用兩個 st.stop() 在沒按抓資料按鈕時提早中斷。
+    但 st.stop() 會把整個 Streamlit script 殺掉，導致下方所有 sections
+    （流動性壓力 / 景氣循環羅盤 / 23 項加扣分 / 熱錢 / 新聞）全部不 render。
+    Hotfix 用 _msc_ready flag 取代 st.stop()。
+
+    這個測試鎖死：tab1_macro.py 不能再出現 st.stop()，防止下次再踩。
+    """
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab1_macro.py").read_text(encoding="utf-8")
+    import re
+    matches = re.findall(r'^\s*st\.stop\(\)', src, flags=re.MULTILINE)
+    assert len(matches) == 0, (
+        f"render_macro_tab 內仍有 {len(matches)} 處 st.stop()，"
+        f"會把下方所有 sections 殺光。請改用 if/else flag 模式。"
+    )
+
+
+def test_macro_ready_flag_pattern_used():
+    """v18.257：第二張校準卡用 _msc_ready flag（而非 st.stop）控制渲染。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab1_macro.py").read_text(encoding="utf-8")
+    assert "_msc_ready" in src, "第二張校準卡應該用 _msc_ready flag 模式"
+    assert "if _msc_ready:" in src, "後續計算應該包在 if _msc_ready: 條件下"
