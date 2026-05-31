@@ -1265,8 +1265,10 @@ def render_macro_tab() -> None:
                         )
 
                     # ── 🎯 風險評分校準（v18.251，sandbox demo / live data 雙模式）──
+                    # 註：父層已是 expander，這裡改用 container（Streamlit 禁巢狀 expander）
                     st.divider()
-                    with st.expander("🎯 風險評分校準（experimental）", expanded=False):
+                    st.markdown("##### 🎯 風險評分校準（experimental）")
+                    with st.container(border=True):
                         from services.risk_calibration import (
                             generate_synthetic_demo as _gen_demo,
                             grid_search_threshold as _grid_thr,
