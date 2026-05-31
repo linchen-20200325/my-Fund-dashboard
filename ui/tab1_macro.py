@@ -1279,7 +1279,9 @@ def render_macro_tab() -> None:
                             "**Ground truth**：未來 N 個月 SPX 最大回檔 < threshold ⇒ 標 1（命中）。"
                             "校準器掃描 score 門檻，回報每門檻 precision / recall / F1，找出最佳停利警戒點。"
                         )
-                        with st.expander("📖 怎麼讀這張卡？（白話三段式）", expanded=False):
+                        # v18.256 hotfix：父層已是 expander，禁巢狀 → 改 checkbox toggle
+                        if st.checkbox("📖 怎麼讀這張卡？（白話三段式）",
+                                       value=False, key="_rc_howto_v256"):
                             st.markdown(
                                 "**① 這張卡在算什麼？**\n\n"
                                 "拿「3-factor 風險評分（10Y-2Y / HY 利差 / VIX）」歷史數據，"
@@ -1395,7 +1397,9 @@ def render_macro_tab() -> None:
                             "**Ground truth**：每位階建議「正確」與否由後 N 月 SPX 表現驗證 — "
                             "**高峰**應跌、**擴張**應漲、**復甦**應大漲(>10%)、**衰退**應跌。"
                         )
-                        with st.expander("📖 怎麼讀這張卡？（白話三段式）", expanded=False):
+                        # v18.256 hotfix：父層已是 expander，禁巢狀 → 改 checkbox toggle
+                        if st.checkbox("📖 怎麼讀這張卡？（白話三段式）",
+                                       value=False, key="_msc_howto_v256"):
                             st.markdown(
                                 "**① 這張卡在算什麼？**\n\n"
                                 "拿「14-factor 景氣分數（FRED 利率、失業、PMI、信心、ADL…）」歷史走勢，"

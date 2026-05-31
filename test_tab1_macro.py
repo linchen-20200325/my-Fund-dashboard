@@ -212,12 +212,19 @@ def test_snapshot_reads_23items_top_contributors(monkeypatch):
 
 
 def test_calibration_card_explainer_expanders_present():
-    """v18.255：兩張校準卡都有 expander「📖 怎麼讀這張卡？」。"""
+    """v18.256：兩張校準卡都有 checkbox「📖 怎麼讀這張卡？」（hotfix：原 expander 巢狀 Streamlit 會炸）。"""
     from pathlib import Path
     src = (Path(__file__).parent / "ui" / "tab1_macro.py").read_text(encoding="utf-8")
-    # 兩處 expander
+    # 兩處 checkbox（hotfix v18.256：父層 expander 內禁巢狀 expander → 改 checkbox）
     assert src.count('📖 怎麼讀這張卡？（白話三段式）') == 2
     # 三段式關鍵字
     assert "① 這張卡在算什麼？" in src
     assert "② 三個調整鈕意義" in src or "② 三個關鍵讀數" in src
     assert "③ 結果怎麼解讀？" in src or "③ 看到結果該怎麼用？" in src
+    # v18.256：確保兩處不再用 st.expander（會炸） → 改 st.checkbox
+    import re
+    matches = list(re.finditer(r'(st\.expander|st\.checkbox).*?"📖 怎麼讀這張卡', src))
+    assert len(matches) == 2, "應有兩處『📖 怎麼讀這張卡』錨點"
+    for m in matches:
+        assert "st.checkbox" in m.group(0), \
+            f"hotfix v18.256：必須用 st.checkbox 避免巢狀 expander，但找到 {m.group(0)[:60]}"
