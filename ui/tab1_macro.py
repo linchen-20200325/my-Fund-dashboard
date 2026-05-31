@@ -1324,6 +1324,7 @@ def render_macro_tab() -> None:
                         from services.macro_score_calibration import (
                             classify_phase as _cls_phs,
                             compute_historical_score as _hist_sc,
+                            fetch_real_macro_factors_monthly as _fetch_real,
                             generate_synthetic_demo as _gen_msc,
                             grid_search_phase_thresholds as _grid_phs,
                             overall_accuracy as _ov_acc,
@@ -1332,16 +1333,60 @@ def render_macro_tab() -> None:
                         st.caption(
                             "**Ground truth**：每位階建議「正確」與否由後 N 月 SPX 表現驗證 — "
                             "**高峰**應跌、**擴張**應漲、**復甦**應大漲(>10%)、**衰退**應跌。"
-                            "目前用 sandbox 合成 60 月（內含 2 段壓力事件）。"
                         )
+
+                        # ── 資料來源切換：合成 vs 真實 ───────────────
+                        _src_mode = st.radio(
+                            "資料來源",
+                            options=["🧪 合成（sandbox demo）", "📊 真實 FRED + SPX"],
+                            horizontal=True, key="_msc_src_v252",
+                            help="真實資料需 FRED_API_KEY + NAS proxy 可達；首次抓 30-60 秒。",
+                        )
+                        _use_real = _src_mode.startswith("📊")
+
                         _msc_c1, _msc_c2 = st.columns(2)
                         with _msc_c1:
                             _msc_h = st.slider("Forward horizon (月)", 3, 24, 12,
                                                key="_msc_h_v252")
                         with _msc_c2:
-                            _msc_n = st.slider("樣本長度 (月)", 36, 120, 60,
-                                               key="_msc_n_v252")
-                        _df_msc, _spx_msc = _gen_msc(n_months=_msc_n, seed=42)
+                            _msc_n = st.slider(
+                                "樣本長度（合成月 / 真實年）",
+                                3, 120, (10 if _use_real else 60),
+                                key="_msc_n_v252",
+                                help="真實模式單位為「年」（3-15 年）；合成模式單位為「月」")
+
+                        if _use_real:
+                            # 真實資料：cache 在 session_state，按鈕觸發才抓
+                            _real_key = f"_msc_real_{_msc_n}y"
+                            if _real_key not in st.session_state:
+                                if st.button("📊 抓 FRED + SPX 真實月度資料",
+                                             type="primary",
+                                             key=f"btn_msc_fetch_{_msc_n}"):
+                                    with st.spinner(
+                                            f"抓 FRED 14-series + SPX × {_msc_n} 年..."):
+                                        _df_real, _spx_real, _notes = _fetch_real(
+                                            FRED_KEY, years=int(_msc_n))
+                                        st.session_state[_real_key] = (
+                                            _df_real, _spx_real, _notes)
+                                    st.rerun()
+                                st.info("👆 按上方按鈕抓真實 FRED + SPX")
+                                st.stop()
+                            _df_msc, _spx_msc, _notes_real = (
+                                st.session_state[_real_key])
+                            if _df_msc.empty or _spx_msc.empty:
+                                st.error("❌ 真實資料抓取失敗，請看下方警告")
+                                st.json(_notes_real)
+                                st.stop()
+                            if _notes_real.get("missing_factors"):
+                                st.warning("⚠️ 部分指標缺失（已自動跳過計分）："
+                                           + " ｜ ".join(_notes_real["missing_factors"]))
+                            if _notes_real.get("warnings"):
+                                for _w in _notes_real["warnings"]:
+                                    st.caption(f"ℹ️ {_w}")
+                        else:
+                            _df_msc, _spx_msc = _gen_msc(
+                                n_months=int(_msc_n), seed=42)
+
                         _score_msc = _hist_sc(_df_msc)
                         _acc_df = _phs_acc(_score_msc, _spx_msc,
                                             horizon_months=_msc_h)
@@ -1350,8 +1395,9 @@ def render_macro_tab() -> None:
                         _cur_score = float(_score_msc.iloc[-1])
                         _cur_phase = _cls_phs(_cur_score)
                         _mc1, _mc2, _mc3 = st.columns(3)
-                        _mc1.metric("最新合成 Macro_Score", f"{_cur_score:.2f}",
-                                     _cur_phase)
+                        _label_prefix = "真實" if _use_real else "合成"
+                        _mc1.metric(f"最新{_label_prefix} Macro_Score",
+                                     f"{_cur_score:.2f}", _cur_phase)
                         _mc2.metric("總體命中率", f"{_ov:.1f}%",
                                      f"horizon={_msc_h}M")
                         _mc3.metric("樣本數", f"{len(_score_msc)}")
@@ -1384,11 +1430,18 @@ def render_macro_tab() -> None:
                                 "若上表第一列門檻明顯不同 → 考慮調整 "
                                 "services/macro_service.py 的位階門檻。"
                             )
-                        st.caption(
-                            "⚠️ 真實校準需餵 FRED 14-series 月度（10Y-2Y / 10Y-3M / PMI / "
-                            "HY / M2 / FedBS / DXY / VIX / CPI / FedRate / UNRATE / PPI / "
-                            "Copper）+ SPX，目前 sandbox 無 outbound。"
-                        )
+                        if _use_real:
+                            st.caption(
+                                "📊 真實資料：FRED + yfinance 月度（NAS proxy）。"
+                                "PMI 用就業 YoY 代理（FRED 無 PMI）。換 horizon / 年數會"
+                                "重新計算 cache 內資料；要重抓改按上方按鈕。"
+                            )
+                        else:
+                            st.caption(
+                                "🧪 合成資料：base_drift=+3.7%/年、σ=4%/月，含 3 段下殺 + "
+                                "1 段反彈。命中率 60-75% 屬正常（合成 self-consistent）。"
+                                "要看真實命中率切換上方「📊 真實 FRED + SPX」。"
+                            )
 
             # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
             def _load_liquidity_factors() -> None:
