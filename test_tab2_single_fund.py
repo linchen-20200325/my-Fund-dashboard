@@ -138,3 +138,40 @@ def test_ai_snapshot_includes_twd_translation():
     assert "TWD 換算" in src, "snapshot 缺少 TWD 換算字串"
     assert "_cs_fx" in src, "snapshot 應讀 fx_to_twd"
     assert "_cs_amt_twd" in src, "snapshot 應讀 amount_twd"
+
+
+# ──────────────────────────────────────────────────────────────
+# v18.260p6：投入金額改為 TWD（換原幣算單位/月配息/月配股）
+# ──────────────────────────────────────────────────────────────
+def test_invest_calc_input_label_is_twd():
+    """投入金額 label 必須改為「新台幣 TWD」（不再用基金原幣）。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    assert "投入金額（新台幣 TWD）" in src, "label 應為「投入金額（新台幣 TWD）」"
+    # 舊 label 不應存在
+    assert "投入金額（基金原幣別：" not in src, "舊原幣 label 應移除"
+
+
+def test_invest_calc_stash_includes_amount_local_and_monthly_units():
+    """stash 應新增 amount_local（換原幣）+ monthly_dividend_units（月配股）。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    assert '"amount_local"' in src, "stash 缺 amount_local（換原幣後本金）"
+    assert '"monthly_dividend_units"' in src, "stash 缺 monthly_dividend_units（月配股）"
+
+
+def test_invest_calc_metric_cards_show_twd():
+    """metric 卡主秀「月配息（TWD）」+「月配股（單位）」。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    assert '"月配息（TWD）"' in src, "metric 應主秀「月配息（TWD）」"
+    assert '"月配股（單位）"' in src, "metric 應新增「月配股（單位）」"
+
+
+def test_invest_calc_manual_fx_fallback():
+    """FX 抓不到時應提供手動 number_input fallback（不擋流程）。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    assert "_fx_manual" in src, "缺少手動 FX 模式 flag"
+    assert "切換手動模式" in src, "缺少手動模式切換提示"
+    assert "手動填 1" in src, "缺少手動填匯率 input label"
