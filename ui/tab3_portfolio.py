@@ -2183,7 +2183,31 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
         pass   # noqa: smoke-allow-pass — AI 快照加料失敗不阻斷主流程
 
     # v18.160：配息現金/單位拆分估算（從 _v2_buf 撈 user 已設定的 div_cash_pct）
+    # v18.276：抓即時 FX 給配息折算用（成本基礎仍 avg_fx）— user 反饋
+    # 「將有換美元換台幣的匯率都改成即時匯率」
     _v2_buf = st.session_state.get("_v2_buf", {}) or {}
+    _current_fx_t3_cache: dict[str, float] = {}
+    def _get_current_fx_t3(_ccy: str) -> float:
+        _ccy = (_ccy or "").strip().upper()
+        if not _ccy or _ccy == "TWD":
+            return 0.0
+        if _ccy in _current_fx_t3_cache:
+            return _current_fx_t3_cache[_ccy]
+        try:
+            from repositories.fund_repository import get_latest_fx as _gf_t3
+            import os as _os_t3
+            _fk_t3 = ""
+            try:
+                _fk_t3 = st.secrets.get("FRED_API_KEY", "")
+            except Exception:
+                _fk_t3 = ""
+            _fk_t3 = _fk_t3 or _os_t3.environ.get("FRED_API_KEY", "")
+            _v_t3 = _gf_t3(f"{_ccy}TWD=X", fred_api_key=_fk_t3)
+            _current_fx_t3_cache[_ccy] = float(_v_t3) if _v_t3 else 0.0
+        except Exception:
+            _current_fx_t3_cache[_ccy] = 0.0
+        return _current_fx_t3_cache[_ccy]
+
     _div_lines: list[str] = []
     _total_cash, _total_reinv, _total_div = 0.0, 0.0, 0.0
     for _pid, _buf in _v2_buf.items():
@@ -2204,11 +2228,18 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
                     break
             if _adr <= 0:
                 continue   # 無實際配息率 → 跳過估算
+            # v18.276：配息折算用即時 FX（成本基礎 avg_fx 不變）
+            _ccy_est = ""
+            for _pf in loaded:
+                if str(_pf.get("code", "") or "").upper() == _code.upper():
+                    _ccy_est = str(_pf.get("currency", "") or "")
+                    break
             _est = estimate_dividend_split(
                 invest_twd=_inv, annual_div_rate_pct=_adr,
                 div_cash_pct=float(_r.get("div_cash_pct", 100) or 100),
                 avg_nav=float(_r.get("avg_nav", 0) or 0),
                 avg_fx=float(_r.get("avg_fx", 0) or 0),
+                current_fx=_get_current_fx_t3(_ccy_est),
             )
             _total_div += _est["annual_div_twd"]
             _total_cash += _est["cash_twd"]
