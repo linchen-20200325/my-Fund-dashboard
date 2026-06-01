@@ -486,3 +486,51 @@ def calc_dividend_estimate(nav, invest_amount, monthly_div, annual_div,
         monthly_twd=round(units*monthly_div*rate,0),
         annual_twd=round(units*annual_div*rate,0),
     )
+
+
+def calc_twd_investment(
+    twd_amount: float,
+    nav: float,
+    annual_div_rate_pct: float,
+    fx_ccy_to_twd: "float | None",
+) -> dict:
+    """v18.252 台幣輸入試算：TWD → 原幣 → 單位數 → 配息原幣 → 配息 TWD。
+
+    流程：
+        ccy_amount = TWD / FX
+        units      = ccy_amount / NAV
+        div_ccy_y  = units × NAV × ADR%        (= ccy_amount × ADR%)
+        div_twd_y  = div_ccy_y × FX            (= TWD × ADR%)  ← 含 FX 的實際年息
+        div_twd_m  = div_twd_y / 12
+        yield_twd  = div_twd_y / TWD × 100%    (FX 對沖完後等同 ADR%)
+
+    無 FX (None / 0) → 退回原幣模式：把輸入當原幣金額處理，div_twd_* = 0。
+    """
+    if nav is None or nav <= 0 or twd_amount is None or twd_amount <= 0:
+        return {
+            "units": 0.0, "ccy_amount": 0.0,
+            "div_ccy_year": 0.0, "div_twd_year": 0.0, "div_twd_month": 0.0,
+            "yield_twd_pct": 0.0, "has_fx": bool(fx_ccy_to_twd and fx_ccy_to_twd > 0),
+        }
+    adr_pct = max(float(annual_div_rate_pct or 0), 0.0)
+    has_fx = bool(fx_ccy_to_twd and fx_ccy_to_twd > 0)
+    if has_fx:
+        ccy_amount = twd_amount / fx_ccy_to_twd
+        units = ccy_amount / nav
+        div_ccy_year = units * nav * adr_pct / 100.0
+        div_twd_year = div_ccy_year * fx_ccy_to_twd
+        div_twd_month = div_twd_year / 12.0
+        yield_twd_pct = (div_twd_year / twd_amount * 100.0)
+    else:
+        ccy_amount = float(twd_amount)
+        units = ccy_amount / nav
+        div_ccy_year = units * nav * adr_pct / 100.0
+        div_twd_year = 0.0
+        div_twd_month = 0.0
+        yield_twd_pct = adr_pct
+    return {
+        "units": units, "ccy_amount": ccy_amount,
+        "div_ccy_year": div_ccy_year, "div_twd_year": div_twd_year,
+        "div_twd_month": div_twd_month, "yield_twd_pct": yield_twd_pct,
+        "has_fx": has_fx,
+    }

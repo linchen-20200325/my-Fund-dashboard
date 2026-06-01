@@ -1197,6 +1197,106 @@ def render_single_fund_tab() -> None:
                             else:
                                 st.warning("所有持倉均無法解析 Ticker 或 yfinance 暫無財報，請稍後再試。")
 
+                # ── 🪙 投資試算（v18.252） — 台幣輸入 → 原幣換匯 → 單位數 / 配息估算 → 台幣回估 ──
+                with st.expander("🪙 投資試算 — 投入台幣 → 單位數 / 配息估算（含 FX 雙向換算）",
+                                 expanded=False):
+                    _ccy_raw_calc = (m.get("currency") or mj_raw.get("currency") or "USD")
+                    _ccy_iso_calc = {
+                        "美元": "USD", "美金": "USD", "歐元": "EUR", "日圓": "JPY",
+                        "日幣": "JPY", "人民幣": "CNH", "人民幣(CNH)": "CNH",
+                        "台幣": "TWD", "新台幣": "TWD",
+                    }.get(str(_ccy_raw_calc).strip(),
+                          str(_ccy_raw_calc).strip().upper())
+                    _ccy_zh_calc = {
+                        "USD": "美元", "EUR": "歐元", "JPY": "日圓",
+                        "CNH": "人民幣", "TWD": "台幣",
+                    }.get(_ccy_iso_calc, _ccy_iso_calc)
+
+                    _nav_calc = m.get("nav") or mj_raw.get("nav_latest")
+                    try:
+                        _nav_calc = float(_nav_calc) if _nav_calc is not None else None
+                    except (TypeError, ValueError):
+                        _nav_calc = None
+
+                    _adr_calc_raw = (mj_raw.get("moneydj_div_yield")
+                                     or m.get("annual_div_rate") or 0)
+                    try:
+                        _adr_calc = float(_adr_calc_raw or 0)
+                    except (TypeError, ValueError):
+                        _adr_calc = 0.0
+
+                    _fx_rate_calc: "float | None" = None
+                    if _ccy_iso_calc and _ccy_iso_calc != "TWD":
+                        try:
+                            from repositories.fund_repository import get_latest_fx
+                            _fx_rate_calc = get_latest_fx(f"{_ccy_iso_calc}TWD")
+                        except Exception:
+                            _fx_rate_calc = None
+
+                    if _nav_calc is None or _nav_calc <= 0:
+                        st.warning("⚠️ 缺 NAV，無法試算（請先確認基金資料抓取成功）")
+                    elif _adr_calc <= 0:
+                        st.info("ℹ️ 本基金無年化配息率資料（可能為累積型），不適用配息試算")
+                    else:
+                        _ic1, _ic2 = st.columns([2, 1])
+                        with _ic1:
+                            _twd_amt = st.number_input(
+                                "投入金額（TWD 台幣）",
+                                min_value=10000, max_value=100_000_000,
+                                value=1_000_000, step=100_000,
+                                key=f"_inv_calc_twd_{fk}",
+                                help="輸入台幣 → 系統以即時匯率換成基金原幣 → 算單位數與配息 → 配息再換回台幣",
+                            )
+                        with _ic2:
+                            _fx_html = (f"<b style='color:#fff'>{_fx_rate_calc:.4f}</b>"
+                                        if _fx_rate_calc and _fx_rate_calc > 0
+                                        else "<b style='color:#f44336'>暫無</b>")
+                            st.markdown(
+                                f"<div style='padding:6px 10px;font-size:12px;color:#aaa;line-height:1.7'>"
+                                f"NAV: <b style='color:#fff'>{_nav_calc:.4f}</b> {_ccy_zh_calc}<br>"
+                                f"年化配息率: <b style='color:#ffb74d'>{_adr_calc:.2f}%</b><br>"
+                                f"匯率 {_ccy_iso_calc}/TWD: {_fx_html}</div>",
+                                unsafe_allow_html=True,
+                            )
+
+                        from services.fund_service import calc_twd_investment as _calc_twd_inv
+                        _r = _calc_twd_inv(_twd_amt, _nav_calc, _adr_calc, _fx_rate_calc)
+
+                        if _r["has_fx"]:
+                            _mm1, _mm2, _mm3, _mm4 = st.columns(4)
+                            _mm1.metric("可申購單位數", f"{_r['units']:,.2f}",
+                                        help=f"= {_twd_amt:,} TWD ÷ FX {_fx_rate_calc:.4f} ÷ NAV {_nav_calc:.4f}")
+                            _mm2.metric(f"年化配息（{_ccy_zh_calc}）",
+                                        f"{_r['div_ccy_year']:,.2f}",
+                                        help="= 單位數 × NAV × 配息率")
+                            _mm3.metric("月配息估計（TWD）",
+                                        f"NT$ {_r['div_twd_month']:,.0f}",
+                                        help=f"= {_r['div_ccy_year']:,.2f} {_ccy_zh_calc} × FX {_fx_rate_calc:.4f} ÷ 12")
+                            _mm4.metric("年化配息率（TWD 實際）",
+                                        f"{_r['yield_twd_pct']:.2f}%",
+                                        help="年配息 TWD ÷ 投入 TWD — 含匯率因素的實際殖利率")
+                            st.caption(
+                                f"📐 流程：NT$ {_twd_amt:,} ÷ {_fx_rate_calc:.4f} = "
+                                f"{_r['ccy_amount']:,.2f} {_ccy_zh_calc} ÷ NAV {_nav_calc:.4f} = "
+                                f"{_r['units']:,.2f} 單位 → 配息 {_r['div_ccy_year']:,.2f} {_ccy_zh_calc} × "
+                                f"{_fx_rate_calc:.4f} = NT$ {_r['div_twd_year']:,.0f}/年（NT$ {_r['div_twd_month']:,.0f}/月）"
+                            )
+                        else:
+                            st.warning(
+                                f"⚠️ 無法取得 {_ccy_iso_calc}/TWD 即時匯率，"
+                                f"以下試算把輸入值當作原幣 {_ccy_zh_calc} 金額處理"
+                            )
+                            _mm1, _mm2, _mm3 = st.columns(3)
+                            _mm1.metric("可申購單位數", f"{_r['units']:,.2f}")
+                            _mm2.metric(f"年化配息（{_ccy_zh_calc}）", f"{_r['div_ccy_year']:,.2f}")
+                            _mm3.metric(f"月配息估計（{_ccy_zh_calc}）",
+                                        f"{_r['div_ccy_year']/12.0:,.2f}")
+                            st.caption(
+                                f"📐 流程：{_twd_amt:,} {_ccy_zh_calc} ÷ NAV {_nav_calc:.4f} = "
+                                f"{_r['units']:,.2f} 單位 × 配息率 {_adr_calc:.2f}% = "
+                                f"年 {_r['div_ccy_year']:,.2f} {_ccy_zh_calc}"
+                            )
+
                 st.markdown("### ④ AI 深度解盤")
                 st.divider()
                 # v18.207：Tab2「唯一」AI — 統一 render_ai_summary_widget（4 視角），

@@ -6,7 +6,7 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.251_RiskCalibration（風險評分真值校準器 + Tab1 互動式儀表板；sandbox 用合成資料 demo、live data 由 user 餵入）
+- **目前版本**：v18.252_TwdInvestCalc（Tab2 新增「🪙 投資試算」widget — 投入 TWD → FX 換原幣 → 單位數 → 配息原幣 → 配息 TWD 雙向換算）
 
 ## 目錄結構（v11.0 分層架構）
 ```

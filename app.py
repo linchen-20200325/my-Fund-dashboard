@@ -97,7 +97,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.251_RiskCalibration"
+APP_VERSION = "v18.252_TwdInvestCalc"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）

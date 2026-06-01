@@ -447,6 +447,7 @@ from repositories.fund_repository import (  # noqa: F401  legacy re-export
 # v11.0 C-12：calc_dividend_estimate 已搬至 services/fund_service.py
 # ════════════════════════════════════════════════════════════
 from services.fund_service import calc_dividend_estimate  # noqa: F401
+from services.fund_service import calc_twd_investment  # noqa: F401  v18.252
 
 # ════════════════════════════════════════════════════════════
 # v11.0 B-10：fetch_market_news 已抽至 repositories/news_repository.py
