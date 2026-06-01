@@ -6,8 +6,9 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.260_CrisisBacktestEngine（危機回測引擎 Phase 1，純後端）
-  - **#110**：User 需求「回測大盤下跌時驗證總經訊號預測力 + 該基金跌幅 + 多策略比較」— Sprint 級功能分 5 個 PR 漸進交付。Phase 1（本 PR）只做純後端引擎 `services/crisis_backtest.py`：`CrisisEvent` dataclass + `detect_crisis_events`（MaxDD ≥ |threshold| 偵測 + recovery 追蹤 + 多事件分離）+ `attach_fund_drawdown`（補該基金當時跌幅 / 反彈）+ `fetch_market_series`（SPX `^GSPC` / TWII `^TWII` wrapper 走 NAS proxy）+ `summarize_events_with_fund` 一條龍函式。20 個單元測試覆蓋邊界（空序列、小於門檻、無 recovery、不涵蓋 NAV、多事件、to_dict 序列化）+ monkeypatch mock fetch。⚠️ **基金 NAV 只有 ~400 天**，舊事件只能對 SPX/TWII 跌幅；近 1 年事件才有該基金實際資料。Phase 2-5 後續展開：UI Tab 骨架 → 總經訊號歷史回看 → 4 策略 × 3 門檻 grid_search → AI 建議。
+- **目前版本**：v18.260p2_CrisisBacktestUI（危機回測室 Tab，Phase 2 UI）
+  - **#111**：上接 #110 引擎。新增 `ui/tab_crisis_backtest.py` 230 行 + `app.py` 註冊 Tab「📉 危機回測室」（插在「🔍 單一基金」與「🔬 資料診斷」之間，共 6 個 tab）。UI：3 inputs（market radio SPX/TWII、threshold slider -30%~-5%、年數 3-20）+ 基金 full_key 預設帶 `st.session_state.fund_data` + 「開始回測」按鈕。輸出：4 統計卡（事件數/平均跌幅/最深跌幅/平均回升天數）+ 該基金 3 卡（涵蓋事件數/平均跌/最深跌）+ plotly 走勢圖（紅色 shaded 危機區 + 跌幅 annotation）+ DataFrame 事件清單（10 欄含基金對照）+ CSV 下載。⚠️ 限制提示：基金 NAV ~400 天，舊事件僅大盤對照。
+  - **#110**：Phase 1 純後端引擎 `services/crisis_backtest.py`（247 行）+ 20 單元測試。`CrisisEvent` dataclass + `detect_crisis_events`（HWM walk-forward）+ `attach_fund_drawdown` + `fetch_market_series`（SPX/TWII wrapper）+ `summarize_events_with_fund` 一條龍。
 - **前版**：v18.259_InvestCalcTWD（投資試算加 TWD 即時匯率換算）
   - **#109**：v18.258「投資試算」原本只顯示基金原幣，user 反映「USD/EUR 看不直觀」→ 加 TWD 換算。非 TWD 基金用既有 `repositories.fund_repository.get_latest_fx("{CCY}TWD=X")`（5min TTL cache + NAS proxy 抓 Yahoo Chart REST API）取即時匯率，原幣 metrics 維持，下方加 `st.success` 顯示「💱 換算 TWD（1 USD = X.XXXX）：本金 / 年息 / 月息 TWD 金額」；累積型同理顯示本金 + 1Y 後預估 + 損益 TWD。Stash 加 `fx_to_twd / amount_twd / annual_dividend_twd / monthly_dividend_twd / proj_1y_twd` 欄位；AI snapshot 拼進 TWD 換算字串讓 AI 解盤可雙幣別參考。加 4 個 regression tests（FX import / TWD 顯示 / stash 欄位 / snapshot 翻譯）。test_tab2_single_fund.py **12 passed**（+4）。
 - **前二版**：v18.258_InvestCalc（單一基金加投入金額試算 → 單位數 / 配息）
