@@ -1293,6 +1293,69 @@ def render_single_fund_tab() -> None:
                                     f"（每月 ≈ **{_mon_div_twd:,.0f}** TWD"
                                     f" / 配股 ≈ **{_mon_units:,.2f}** 單位）"
                                 )
+
+                            # v18.263：完整計算公式（含數字代入）— user 反饋「我要有公式的」
+                            with st.expander("📐 完整計算公式（含數字代入）", expanded=False):
+                                if _ccy.upper() != "TWD" and _fx_to_twd:
+                                    _formula_text = (
+                                        f"# 投入本金 / 單位數\n"
+                                        f"原幣本金   = TWD ÷ FX\n"
+                                        f"           = {_amount_twd:,.0f} ÷ {_fx_to_twd:.4f}\n"
+                                        f"           = {_amt_local:,.2f} {_ccy}\n"
+                                        f"\n"
+                                        f"可申購單位 = 原幣本金 ÷ NAV\n"
+                                        f"           = {_amt_local:,.2f} ÷ {_nav_calc:.4f}\n"
+                                        f"           = {_units:,.2f} 單位\n"
+                                        f"\n"
+                                        f"# 配息（原幣）\n"
+                                        f"年配息(原幣) = 原幣本金 × ADR%\n"
+                                        f"             = {_amt_local:,.2f} × {_yield_calc:.2f}%\n"
+                                        f"             = {_ann_div:,.2f} {_ccy}\n"
+                                        f"\n"
+                                        f"月配息(原幣) = 年配息(原幣) ÷ 12\n"
+                                        f"             = {_ann_div:,.2f} ÷ 12\n"
+                                        f"             = {_mon_div:,.2f} {_ccy}\n"
+                                        f"\n"
+                                        f"# 配息（換回 TWD）\n"
+                                        f"年配息(TWD)  = 年配息(原幣) × FX\n"
+                                        f"             = {_ann_div:,.2f} × {_fx_to_twd:.4f}\n"
+                                        f"             = {_ann_div_twd:,.0f} TWD\n"
+                                        f"\n"
+                                        f"月配息(TWD)  = 年配息(TWD) ÷ 12\n"
+                                        f"             = {_ann_div_twd:,.0f} ÷ 12\n"
+                                        f"             = {_mon_div_twd:,.0f} TWD\n"
+                                        f"\n"
+                                        f"# 月配股（再投入單位）\n"
+                                        f"月配股(單位) = 月配息(原幣) ÷ NAV\n"
+                                        f"             = {_mon_div:,.2f} ÷ {_nav_calc:.4f}\n"
+                                        f"             = {_mon_units:,.2f} 單位\n"
+                                    )
+                                else:
+                                    _formula_text = (
+                                        f"# 投入本金 / 單位數（TWD 計價基金）\n"
+                                        f"可申購單位 = TWD ÷ NAV\n"
+                                        f"           = {_amount_twd:,.0f} ÷ {_nav_calc:.4f}\n"
+                                        f"           = {_units:,.2f} 單位\n"
+                                        f"\n"
+                                        f"# 配息\n"
+                                        f"年配息(TWD) = TWD × ADR%\n"
+                                        f"            = {_amount_twd:,.0f} × {_yield_calc:.2f}%\n"
+                                        f"            = {_ann_div_twd:,.0f} TWD\n"
+                                        f"\n"
+                                        f"月配息(TWD) = 年配息(TWD) ÷ 12\n"
+                                        f"            = {_ann_div_twd:,.0f} ÷ 12\n"
+                                        f"            = {_mon_div_twd:,.0f} TWD\n"
+                                        f"\n"
+                                        f"# 月配股（再投入單位）\n"
+                                        f"月配股(單位) = 月配息(TWD) ÷ NAV\n"
+                                        f"             = {_mon_div_twd:,.0f} ÷ {_nav_calc:.4f}\n"
+                                        f"             = {_mon_units:,.2f} 單位\n"
+                                    )
+                                st.code(_formula_text, language="text")
+                                st.caption(
+                                    "⚠️ 估算假設：(1) FX 全期不變 (2) NAV 全期不變 (3) ADR 等於宣告值 "
+                                    "(4) 配息 100% 用於再投入計算月配股單位。實際配息以保險公司每月對帳單為準。"
+                                )
                             try:
                                 st.session_state[f"_calc_invest_{fk}"] = {
                                     "amount": float(_amount_twd),
@@ -1358,6 +1421,65 @@ def render_single_fund_tab() -> None:
                                 st.caption(
                                     f"📌 本金 {_amount_twd:,.0f} TWD → "
                                     f"可買 **{_units:,.2f}** 單位{_proj_str}"
+                                )
+
+                            # v18.263：累積型計算公式
+                            with st.expander("📐 完整計算公式（含數字代入）", expanded=False):
+                                if _ccy.upper() != "TWD" and _fx_to_twd:
+                                    _formula_lines = [
+                                        "# 投入本金 / 單位數",
+                                        "原幣本金   = TWD ÷ FX",
+                                        f"           = {_amount_twd:,.0f} ÷ {_fx_to_twd:.4f}",
+                                        f"           = {_amt_local:,.2f} {_ccy}",
+                                        "",
+                                        "可申購單位 = 原幣本金 ÷ NAV",
+                                        f"           = {_amt_local:,.2f} ÷ {_nav_calc:.4f}",
+                                        f"           = {_units:,.2f} 單位",
+                                    ]
+                                    if _ret_1y is not None and _proj_1y is not None:
+                                        _formula_lines += [
+                                            "",
+                                            "# 1Y 預估市值（用近 1Y 含息報酬推算）",
+                                            "1Y 後原幣  = 原幣本金 × (1 + ret_1Y%)",
+                                            f"           = {_amt_local:,.2f} × (1 + {_ret_1y:.2f}%)",
+                                            f"           = {_proj_1y:,.2f} {_ccy}",
+                                            "",
+                                            "1Y 後 TWD  = 1Y 後原幣 × FX",
+                                            f"           = {_proj_1y:,.2f} × {_fx_to_twd:.4f}",
+                                            f"           = {_proj_1y_twd:,.0f} TWD",
+                                            "",
+                                            "1Y 預估損益 = 1Y 後 TWD − 本金",
+                                            f"            = {_proj_1y_twd:,.0f} − {_amount_twd:,.0f}",
+                                            f"            = {(_proj_1y_twd - _amount_twd):+,.0f} TWD",
+                                        ]
+                                    else:
+                                        _formula_lines += [
+                                            "",
+                                            "# 1Y 預估市值：缺 1Y 含息報酬資料，無法推算",
+                                        ]
+                                else:
+                                    _formula_lines = [
+                                        "# 投入本金 / 單位數（TWD 計價基金）",
+                                        "可申購單位 = TWD ÷ NAV",
+                                        f"           = {_amount_twd:,.0f} ÷ {_nav_calc:.4f}",
+                                        f"           = {_units:,.2f} 單位",
+                                    ]
+                                    if _ret_1y is not None and _proj_1y_twd is not None:
+                                        _formula_lines += [
+                                            "",
+                                            "# 1Y 預估市值",
+                                            "1Y 後 TWD  = TWD × (1 + ret_1Y%)",
+                                            f"           = {_amount_twd:,.0f} × (1 + {_ret_1y:.2f}%)",
+                                            f"           = {_proj_1y_twd:,.0f} TWD",
+                                            "",
+                                            "1Y 預估損益 = 1Y 後 TWD − 本金",
+                                            f"            = {_proj_1y_twd:,.0f} − {_amount_twd:,.0f}",
+                                            f"            = {(_proj_1y_twd - _amount_twd):+,.0f} TWD",
+                                        ]
+                                st.code("\n".join(_formula_lines), language="text")
+                                st.caption(
+                                    "⚠️ 估算假設：(1) FX 全期不變 (2) 未來報酬等於近 1Y 含息表現 "
+                                    "(3) 累積型基金不配息、收益反映在 NAV 上漲。實際結果視市場波動而定。"
                                 )
                             try:
                                 st.session_state[f"_calc_invest_{fk}"] = {
