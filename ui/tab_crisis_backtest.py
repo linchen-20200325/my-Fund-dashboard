@@ -3,6 +3,11 @@
 Phase 2：歷史危機事件清單 + 該基金當時跌幅對照（services/crisis_backtest.py）
 Phase 3：總經訊號歷史回看 — 驗證 Tab1 訊號預測力（services/macro_signal_lookback.py）
 Phase 4：策略網格搜尋（4 策略 × 3 門檻）+ heatmap（services/crisis_strategy_grid.py）
+
+v18.261 修：Phase 1 主按鈕原本是 click-only 一次性 gating（line 178~181），
+按 Phase 3「跑訊號回看」/ Phase 4「跑網格」會觸發 rerun，Phase 1 button → False
+→ 提前 return → Phase 3/4 sections 不再渲染 → button click 像沒反應。
+改為三段 session_state cache + 參數 hash invalidation。
 """
 from __future__ import annotations
 
@@ -10,6 +15,22 @@ import os
 
 import pandas as pd
 import streamlit as st
+
+
+# v18.261：三段 cache key + 參數 hash gate（避免 click-only 一次性 gating bug）
+_PHASE1_CACHE_KEY = "_crisis_phase1_cache"   # 主回測：events / mkt_series / labels
+_PHASE3_CACHE_KEY = "_crisis_phase3_cache"   # 訊號回看結果
+_GRID_CACHE_KEY = "_crisis_grid_cache"       # Phase 4 策略網格（既有，提到頂層管理）
+
+
+def _phase1_params_signature(market: str, threshold_pct: int, years: int, fund_key: str) -> str:
+    return f"{market}|{threshold_pct}|{years}|{(fund_key or '').strip()}"
+
+
+def _invalidate_phase1_chain() -> None:
+    """Phase 1 參數變動時，連帶清掉 Phase 3 / Phase 4 cache（避免顯示與當前 input 不符的舊結果）。"""
+    for _k in (_PHASE1_CACHE_KEY, _PHASE3_CACHE_KEY, _GRID_CACHE_KEY):
+        st.session_state.pop(_k, None)
 
 
 def _format_pct(x: float | None) -> str:
@@ -175,57 +196,85 @@ def render_crisis_backtest_tab() -> None:
         key="crisis_fund_key",
     )
 
+    # v18.261：參數 hash gating — 參數變動自動 invalidate 整條 cache（Phase 1/3/4）
+    _params_sig = _phase1_params_signature(market, threshold_pct, years, fund_key)
+    _cached_p1 = st.session_state.get(_PHASE1_CACHE_KEY)
+    if _cached_p1 and _cached_p1.get("params_sig") != _params_sig:
+        _invalidate_phase1_chain()
+        _cached_p1 = None
+
     run = st.button("🚀 開始回測", type="primary", use_container_width=True)
-    if not run:
+    if run:
+        # 點下按鈕 → 抓資料 + 算事件 + 寫 cache（後續 rerun 從 cache 渲染）
+        market_label = {"SPX": "S&P 500", "TWII": "台股加權"}[market]
+        with st.spinner(f"抓取 {market_label} {years} 年走勢..."):
+            from services.crisis_backtest import (
+                fetch_market_series,
+                summarize_events_with_fund,
+            )
+            mkt_series = fetch_market_series(market=market, years=years)
+        if mkt_series.empty:
+            st.error(f"❌ 無法取得 {market_label} 歷史資料（NAS proxy / Yahoo API 失敗）")
+            return
+
+        fund_nav: pd.Series | None = None
+        fund_display_name = default_name or "(未指定基金)"
+        if fund_key.strip():
+            with st.spinner(f"抓取基金 {fund_key} NAV..."):
+                try:
+                    from repositories.fund_repository import fetch_nav
+                    fund_nav = fetch_nav(fund_key.strip())
+                    if fund_nav is None or fund_nav.empty:
+                        st.warning(f"⚠️ 基金 `{fund_key}` 取不到 NAV，僅顯示大盤事件")
+                        fund_nav = None
+                    else:
+                        fund_display_name = default_name or fund_key
+                except Exception as e:
+                    st.warning(f"⚠️ 基金 NAV 抓取失敗：{e}")
+                    fund_nav = None
+
+        threshold = threshold_pct / 100.0
+        events = summarize_events_with_fund(
+            market_series=mkt_series,
+            fund_nav=fund_nav,
+            threshold=threshold,
+            market=market,
+        )
+        st.session_state[_PHASE1_CACHE_KEY] = {
+            "params_sig": _params_sig,
+            "mkt_series": mkt_series,
+            "events": events,
+            "market_label": market_label,
+            "market": market,
+            "threshold_pct": threshold_pct,
+            "years": years,
+            "fund_nav_available": fund_nav is not None,
+            "fund_display_name": fund_display_name,
+        }
+        # Phase 1 重跑時清掉 Phase 3/4 stale cache（避免事件清單變了但訊號回看還是舊的）
+        st.session_state.pop(_PHASE3_CACHE_KEY, None)
+        st.session_state.pop(_GRID_CACHE_KEY, None)
+        _cached_p1 = st.session_state[_PHASE1_CACHE_KEY]
+
+    if not _cached_p1:
         st.info("⬆️ 設定參數後按「開始回測」")
         return
 
-    # ── 抓資料 ─────────────────────────────────────
-    market_label = {"SPX": "S&P 500", "TWII": "台股加權"}[market]
+    # ── 從 cache 渲染（每次 rerun 都會經過這裡，所以 Phase 3/4 button 點下後也能再渲染）──
+    mkt_series = _cached_p1["mkt_series"]
+    events = _cached_p1["events"]
+    market_label = _cached_p1["market_label"]
+    market = _cached_p1["market"]
+    threshold_pct_disp = _cached_p1["threshold_pct"]
+    years_disp = _cached_p1["years"]
+    fund_display_name = _cached_p1["fund_display_name"]
+    fund_nav_available = _cached_p1["fund_nav_available"]
 
-    with st.spinner(f"抓取 {market_label} {years} 年走勢..."):
-        from services.crisis_backtest import (
-            fetch_market_series,
-            summarize_events_with_fund,
-        )
-        mkt_series = fetch_market_series(market=market, years=years)
-
-    if mkt_series.empty:
-        st.error(f"❌ 無法取得 {market_label} 歷史資料（NAS proxy / Yahoo API 失敗）")
-        return
-
-    # 抓基金 NAV（可選）
-    fund_nav: pd.Series | None = None
-    fund_display_name = default_name or "(未指定基金)"
-    if fund_key.strip():
-        with st.spinner(f"抓取基金 {fund_key} NAV..."):
-            try:
-                from repositories.fund_repository import fetch_nav
-                fund_nav = fetch_nav(fund_key.strip())
-                if fund_nav is None or fund_nav.empty:
-                    st.warning(f"⚠️ 基金 `{fund_key}` 取不到 NAV，僅顯示大盤事件")
-                    fund_nav = None
-                else:
-                    fund_display_name = default_name or fund_key
-            except Exception as e:
-                st.warning(f"⚠️ 基金 NAV 抓取失敗：{e}")
-                fund_nav = None
-
-    # ── 跑引擎 ─────────────────────────────────────
-    threshold = threshold_pct / 100.0
-    events = summarize_events_with_fund(
-        market_series=mkt_series,
-        fund_nav=fund_nav,
-        threshold=threshold,
-        market=market,
-    )
-
-    # ── 呈現 ───────────────────────────────────────
     st.divider()
-    st.markdown(f"### 📊 {market_label} 危機事件總覽（門檻 {threshold_pct}% / 回看 {years} 年）")
+    st.markdown(f"### 📊 {market_label} 危機事件總覽（門檻 {threshold_pct_disp}% / 回看 {years_disp} 年）")
     _render_summary_metrics(events)
 
-    if fund_nav is not None and events:
+    if fund_nav_available and events:
         st.markdown("---")
         _render_fund_dd_metrics(events, fund_display_name)
 
@@ -247,17 +296,17 @@ def render_crisis_backtest_tab() -> None:
             st.download_button(
                 "下載事件清單（CSV）",
                 csv,
-                file_name=f"crisis_events_{market}_{years}y.csv",
+                file_name=f"crisis_events_{market}_{years_disp}y.csv",
                 mime="text/csv",
             )
 
         # ── Phase 3：總經訊號預測力驗證 ───────────────────────
         st.markdown("---")
-        _render_signal_lookback_section(events, years)
+        _render_signal_lookback_section(events, years_disp)
 
         # ── Phase 4 + Phase 5：策略網格搜尋 + AI 策略建議 ─────
         st.markdown("---")
-        _render_strategy_grid_section(mkt_series, market_label, years, events)
+        _render_strategy_grid_section(mkt_series, market_label, years_disp, events)
 
     # 限制提示
     st.markdown("---")
@@ -295,34 +344,49 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
             key="crisis_signal_max_lookback",
         )
 
-    if not st.button("🚦 跑訊號回看", type="secondary", key="crisis_signal_run"):
+    # v18.261：button + cache 雙軌 — click 時抓資料寫 cache，rerun 時從 cache 渲染
+    _p3_sig = f"{lookback_days}|{max_lookback_days}|{len(events)}|{years}"
+    _cached_p3 = st.session_state.get(_PHASE3_CACHE_KEY)
+    if _cached_p3 and _cached_p3.get("sig") != _p3_sig:
+        # 參數改了 → 失效（user 拉滑桿後想重看，要重新按 button）
+        st.session_state.pop(_PHASE3_CACHE_KEY, None)
+        _cached_p3 = None
+
+    _btn_p3 = st.button("🚦 跑訊號回看", type="secondary", key="crisis_signal_run")
+    if _btn_p3:
+        fred_key = os.environ.get("FRED_API_KEY", "")
+        if not fred_key:
+            st.warning("⚠️ 未設定 FRED_API_KEY — 僅 VIX 可抓，T10Y2Y / HY / UNRATE 將跳過")
+
+        from services.macro_signal_lookback import (
+            DEFAULT_SIGNALS,
+            compute_signal_hit_rate,
+            fetch_signal_series,
+            lookback_all_signals,
+        )
+
+        series_by_key: dict[str, pd.Series] = {}
+        with st.spinner(f"抓取 {len(DEFAULT_SIGNALS)} 個訊號 {years} 年歷史..."):
+            for spec in DEFAULT_SIGNALS:
+                s = fetch_signal_series(spec, years=max(years, 10), fred_api_key=fred_key)
+                series_by_key[spec.key] = s
+
+        results = lookback_all_signals(
+            events, series_by_key,
+            specs=DEFAULT_SIGNALS,
+            lookback_days=lookback_days,
+            max_lookback_days=max_lookback_days,
+        )
+        st.session_state[_PHASE3_CACHE_KEY] = {"sig": _p3_sig, "results": results}
+        _cached_p3 = st.session_state[_PHASE3_CACHE_KEY]
+
+    if not _cached_p3:
         st.caption("⬆️ 按按鈕開始（會抓 FRED + Yahoo 多年歷史，需要 ~10 秒）")
         return
 
-    fred_key = os.environ.get("FRED_API_KEY", "")
-    if not fred_key:
-        st.warning("⚠️ 未設定 FRED_API_KEY — 僅 VIX 可抓，T10Y2Y / HY / UNRATE 將跳過")
-
-    from services.macro_signal_lookback import (
-        DEFAULT_SIGNALS,
-        compute_signal_hit_rate,
-        fetch_signal_series,
-        lookback_all_signals,
-    )
-
-    # 抓所有訊號序列（一次性，多訊號並列）
-    series_by_key: dict[str, pd.Series] = {}
-    with st.spinner(f"抓取 {len(DEFAULT_SIGNALS)} 個訊號 {years} 年歷史..."):
-        for spec in DEFAULT_SIGNALS:
-            s = fetch_signal_series(spec, years=max(years, 10), fred_api_key=fred_key)
-            series_by_key[spec.key] = s
-
-    results = lookback_all_signals(
-        events, series_by_key,
-        specs=DEFAULT_SIGNALS,
-        lookback_days=lookback_days,
-        max_lookback_days=max_lookback_days,
-    )
+    # ── 從 cache 渲染 ──
+    from services.macro_signal_lookback import DEFAULT_SIGNALS, compute_signal_hit_rate
+    results = _cached_p3["results"]
 
     # 命中率總覽
     st.markdown("#### 📊 訊號命中率總覽")
@@ -377,7 +441,6 @@ _SIGNAL_THRESHOLD_PRESETS: dict[str, list[float]] = {
 }
 
 
-_GRID_CACHE_KEY = "_crisis_grid_cache"
 
 
 def _render_strategy_grid_section(
