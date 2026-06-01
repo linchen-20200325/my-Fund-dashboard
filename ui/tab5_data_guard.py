@@ -577,16 +577,18 @@ def render_data_guard_tab() -> None:
                 with st.spinner(f"逐一檢測 {_fx_pair} 的 4 個來源..."):
                     _diag = diagnose_fx_sources(f"{_fx_pair}=X", fred_api_key=_fred_k_diag)
                 _rows = []
+                # v18.275：diag dict 動態欄位 — TWD pair 只有 yahoo/er_api（FRED/Frankfurter
+                # 對 TWD 不適用已移除），其他 pair 還有 fred + frankfurter
                 _source_zh = {
-                    "yahoo":       "1. Yahoo Chart API",
-                    "fred":        "2. FRED DEX* series",
-                    "er_api":      "3. open.er-api.com",
-                    "frankfurter": "4. Frankfurter (ECB)",
+                    "yahoo":       "Yahoo Chart API",
+                    "fred":        "FRED DEX* series",
+                    "er_api":      "open.er-api.com",
+                    "frankfurter": "Frankfurter (ECB)",
                 }
-                for _src_key, _src_label in _source_zh.items():
-                    _r = _diag.get(_src_key, {})
+                for _idx, _src_key in enumerate(_diag.keys(), start=1):
+                    _r = _diag[_src_key]
                     _rows.append({
-                        "順位": _src_label,
+                        "順位": f"{_idx}. {_source_zh.get(_src_key, _src_key)}",
                         "狀態": "✅ 通" if _r.get("ok") else "❌ 失敗",
                         "匯率": f"{_r['rate']:.4f}" if _r.get("rate") else "—",
                         "錯誤訊息": _r.get("error") or "—",
@@ -594,13 +596,14 @@ def render_data_guard_tab() -> None:
                     })
                 import pandas as _pd_fx
                 st.dataframe(_pd_fx.DataFrame(_rows), use_container_width=True, hide_index=True)
+                _n_total = len(_diag)
                 _n_ok = sum(1 for _r in _diag.values() if _r.get("ok"))
                 if _n_ok >= 1:
-                    st.success(f"✅ {_n_ok}/4 個來源可用 — Tab2 投資試算應能拿到即時匯率")
+                    st.success(f"✅ {_n_ok}/{_n_total} 個來源可用 — Tab2 投資試算應能拿到即時匯率")
                 else:
                     st.error(
-                        f"❌ 4 個來源全部失敗 — Tab2 將 fallback 到手動模式。"
-                        "可能是 NAS proxy 全域不通，或 FRED_API_KEY 未設"
+                        f"❌ {_n_total} 個來源全部失敗 — Tab2 將 fallback 到手動模式。"
+                        "可能是 NAS proxy 全域不通，或網路被擋"
                     )
             except Exception as _e_d5_fx:
                 st.error(f"⚠️ FX 診斷異常：{type(_e_d5_fx).__name__}: {str(_e_d5_fx)[:80]}")

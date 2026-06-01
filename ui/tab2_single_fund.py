@@ -1244,8 +1244,8 @@ def render_single_fund_tab() -> None:
                             from repositories.fund_repository import get_latest_fx
                             _fx_to_twd = get_latest_fx(f"{_ccy}TWD=X", fred_api_key=_fred_k)
                             if _fx_to_twd is None or _fx_to_twd <= 0:
-                                _fx_err = (f"Yahoo / FRED / er-api / Frankfurter 都暫無 {_ccy}TWD 報價（請至「資料診斷」→ FX 來源診斷查具體失敗源）"
-                                           if _fred_k else f"Yahoo / er-api / Frankfurter 暫無 {_ccy}TWD 報價（未設 FRED_API_KEY）")
+                                # v18.275：TWD pair 對應 chain 已精簡為 Yahoo + er-api（其他都已死掉）
+                                _fx_err = f"Yahoo / er-api 都暫無 {_ccy}TWD 報價（請至「資料診斷」→ FX 來源診斷查具體失敗源；可能 NAS proxy 暫時不通）"
                                 _fx_to_twd = None
                             else:
                                 _fx_source = "即時"
@@ -1284,7 +1284,7 @@ def render_single_fund_tab() -> None:
                         else:
                             _amt_local = float(_amount_twd)
                         _units = _amt_local / _nav_calc
-                        _fx_tag = "即時（4 來源 fallback）" if not _fx_manual else "手動"
+                        _fx_tag = "即時（Yahoo / er-api 雙來源）" if not _fx_manual else "手動"
                         _mc1, _mc2, _mc3, _mc4 = st.columns(4)
                         _mc1.metric("可申購單位數", f"{_units:,.2f}")
                         if _yield_calc and _yield_calc > 0:

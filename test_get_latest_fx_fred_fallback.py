@@ -11,10 +11,9 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clear_fx_cache():
-    """每個 test 前清掉 5min TTL cache，避免上個 test 污染。"""
-    from repositories.fund_repository import get_latest_fx
-    if hasattr(get_latest_fx, "cache_clear"):
-        get_latest_fx.cache_clear()
+    """每個 test 前清掉 positive-only manual cache（v18.275 改用 _FX_CACHE dict）。"""
+    from repositories.fund_repository import _clear_fx_cache as _clr
+    _clr()
     yield
 
 
@@ -39,22 +38,31 @@ def test_yahoo_success_returns_yahoo_value(monkeypatch):
     assert _fred_calls == []  # 沒打 FRED
 
 
-def test_yahoo_fails_fred_dextwus_fallback(monkeypatch):
-    """Yahoo 空 → FRED DEXTWUS 命中 → 回 FRED 值。"""
+def test_yahoo_fails_fred_skipped_for_twd_pair(monkeypatch):
+    """v18.275：TWD pair 不再走 FRED（DEXTWUS 已停發），Yahoo 失敗直接落 er-api。"""
     from repositories import fund_repository
 
     def _yf_empty(pair, range_="5d", interval="1d"):
         return pd.Series(dtype=float)
 
-    def _fred_dextwus(series_id, key, n=10):
-        assert series_id == "DEXTWUS"
-        return pd.DataFrame([{"date": pd.Timestamp("2026-05-30"), "value": 32.45}])
+    _fred_calls = []
+
+    def _fred_should_not_call(series_id, key, n=10):
+        _fred_calls.append(series_id)
+        return pd.DataFrame()
+
+    def _er_api_ok(url, params=None, proxies=None, timeout=10, verify=True, **kw):
+        if "er-api" in url:
+            return _FakeResp({"result": "success", "rates": {"TWD": 31.5}})
+        return _FakeResp({}, status_code=503)
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
-    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_dextwus)
+    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_should_not_call)
+    monkeypatch.setattr("requests.get", _er_api_ok)
 
     v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
-    assert v == pytest.approx(32.45)
+    assert v == pytest.approx(31.5)  # er-api 救場
+    assert _fred_calls == []  # FRED 不該被打（TWD pair 已 trim）
 
 
 def test_yahoo_fails_no_fred_key_skips_fred(monkeypatch):
@@ -85,49 +93,51 @@ def test_yahoo_fails_no_fred_key_skips_fred(monkeypatch):
     assert _fred_calls == []  # 沒 key 不打 FRED
 
 
-def test_yahoo_fails_fred_jpytwd_via_usd(monkeypatch):
-    """JPY/TWD：FRED 沒直接 series，要走 DEXJPUS (JPY per USD) → 反推 USD/JPY → × USDTWD。"""
+def test_yahoo_fails_jpytwd_skips_fred_uses_er_api(monkeypatch):
+    """v18.275: JPY/TWD 也是 TWD pair → 不打 FRED（即使 DEXJPUS 還活），落 er-api。"""
     from repositories import fund_repository
 
     def _yf_empty(pair, range_="5d", interval="1d"):
         return pd.Series(dtype=float)
 
-    def _fred_two_series(series_id, key, n=10):
-        if series_id == "DEXJPUS":
-            # 150 JPY per USD
-            return pd.DataFrame([{"date": pd.Timestamp("2026-05-30"), "value": 150.0}])
-        if series_id == "DEXTWUS":
-            return pd.DataFrame([{"date": pd.Timestamp("2026-05-30"), "value": 32.0}])
+    _fred_calls = []
+
+    def _fred_should_not_call(series_id, key, n=10):
+        _fred_calls.append(series_id)
         return pd.DataFrame()
 
+    def _er_api_ok(url, params=None, proxies=None, timeout=10, verify=True, **kw):
+        if "er-api" in url:
+            return _FakeResp({"result": "success", "rates": {"TWD": 0.213}})
+        return _FakeResp({}, status_code=503)
+
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
-    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_two_series)
+    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_should_not_call)
+    monkeypatch.setattr("requests.get", _er_api_ok)
 
     v = fund_repository.get_latest_fx("JPYTWD=X", fred_api_key="dummy")
-    # 1 JPY = (1/150) USD = 32/150 = 0.2133 TWD
-    assert v == pytest.approx(32.0 / 150.0)
+    assert v == pytest.approx(0.213)
+    assert _fred_calls == []  # FRED 對 TWD pair 全部跳過
 
 
-def test_yahoo_fails_fred_eurtwd_via_usd_inv(monkeypatch):
-    """EUR/TWD：FRED DEXUSEU 是 USD per EUR → × USDTWD。"""
+def test_yahoo_fails_eurusd_uses_fred_via_inv(monkeypatch):
+    """v18.275：EUR/USD 是非 TWD pair → 走 FRED DEXUSEU (USD per EUR) → 取倒數成 EUR per USD。"""
     from repositories import fund_repository
 
     def _yf_empty(pair, range_="5d", interval="1d"):
         return pd.Series(dtype=float)
 
-    def _fred_two_series(series_id, key, n=10):
+    def _fred(series_id, key, n=10):
         if series_id == "DEXUSEU":
             return pd.DataFrame([{"date": pd.Timestamp("2026-05-30"), "value": 1.08}])
-        if series_id == "DEXTWUS":
-            return pd.DataFrame([{"date": pd.Timestamp("2026-05-30"), "value": 32.0}])
         return pd.DataFrame()
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
-    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_two_series)
+    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred)
 
-    v = fund_repository.get_latest_fx("EURTWD=X", fred_api_key="dummy")
-    # 1 EUR = 1.08 USD = 1.08 × 32 = 34.56 TWD
-    assert v == pytest.approx(1.08 * 32.0)
+    v = fund_repository.get_latest_fx("EURUSD=X", fred_api_key="dummy")
+    # USD per EUR = 1.08 → inv = EUR per USD ≈ 0.9259
+    assert v == pytest.approx(1.0 / 1.08)
 
 
 def test_unknown_pair_returns_none(monkeypatch):
@@ -178,6 +188,7 @@ def test_signature_back_compat_without_fred_key(monkeypatch):
         return pd.Series([32.5], index=pd.date_range("2026-05-30", periods=1))
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf)
+    fund_repository._clear_fx_cache()
     # 不傳 fred_api_key（既有調用方式）
     v = fund_repository.get_latest_fx("USDTWD=X")
     assert v == pytest.approx(32.5)
@@ -420,8 +431,8 @@ def test_frankfurter_skipped_for_twd_pair(monkeypatch):
     assert not any("frankfurter" in u for u in _called)
 
 
-def test_diagnose_fx_sources_returns_4_keys(monkeypatch):
-    """diagnose_fx_sources 必須回 4 個 key 給 Tab5 渲染。"""
+def test_diagnose_fx_sources_twd_returns_2_keys(monkeypatch):
+    """v18.275：diagnose 對 TWD pair 只回 yahoo + er_api（FRED/Frankfurter 對 TWD 已 trim）。"""
     from repositories.fund_repository import diagnose_fx_sources
 
     monkeypatch.setattr(
@@ -432,12 +443,44 @@ def test_diagnose_fx_sources_returns_4_keys(monkeypatch):
         "repositories.macro_repository.fetch_fred",
         lambda series_id, key, n=10: pd.DataFrame(),
     )
-    monkeypatch.setattr("requests.get", lambda url, params=None, timeout=10, **kw: None)
+
+    def _no_resp(url, params=None, timeout=10, **kw):
+        class _R:
+            status_code = 503
+            def json(self): return {}
+        return _R()
+
+    monkeypatch.setattr("requests.get", _no_resp)
 
     out = diagnose_fx_sources("USDTWD=X", fred_api_key="dummy")
-    assert set(out.keys()) == {"yahoo", "fred", "er_api", "frankfurter"}
+    assert set(out.keys()) == {"yahoo", "er_api"}, "TWD pair 不再含 fred / frankfurter"
     for src in out.values():
         assert "ok" in src and "rate" in src and "error" in src and "note" in src
+
+
+def test_diagnose_fx_sources_non_twd_returns_4_keys(monkeypatch):
+    """非 TWD pair（如 EUR/USD）仍含 4 個來源。"""
+    from repositories.fund_repository import diagnose_fx_sources
+
+    monkeypatch.setattr(
+        "repositories.macro_repository.fetch_yf_close",
+        lambda pair, range_="5d", interval="1d": pd.Series(dtype=float),
+    )
+    monkeypatch.setattr(
+        "repositories.macro_repository.fetch_fred",
+        lambda series_id, key, n=10: pd.DataFrame(),
+    )
+
+    def _no_resp(url, params=None, timeout=10, **kw):
+        class _R:
+            status_code = 503
+            def json(self): return {}
+        return _R()
+
+    monkeypatch.setattr("requests.get", _no_resp)
+
+    out = diagnose_fx_sources("EURUSD=X", fred_api_key="dummy")
+    assert set(out.keys()) == {"yahoo", "fred", "er_api", "frankfurter"}
 
 
 def test_diagnose_fx_yahoo_success_marked(monkeypatch):
@@ -460,10 +503,23 @@ def test_diagnose_fx_yahoo_success_marked(monkeypatch):
     assert out["yahoo"]["rate"] == pytest.approx(32.1)
 
 
-def test_diagnose_fx_frankfurter_skipped_for_twd():
-    """TWD pair 的診斷必須把 Frankfurter 標為「不支援 TWD」而非「未嘗試」。"""
+def test_diagnose_fx_frankfurter_absent_for_twd():
+    """v18.275：TWD pair 的診斷不再回傳 frankfurter key（已從 dict 移除）。"""
     from repositories.fund_repository import diagnose_fx_sources
 
     out = diagnose_fx_sources("USDTWD=X", fred_api_key="")
-    assert out["frankfurter"]["ok"] is False
-    assert "TWD" in (out["frankfurter"]["error"] or "")
+    assert "frankfurter" not in out, "TWD pair Frankfurter 不該出現"
+    assert "fred" not in out, "TWD pair FRED 不該出現"
+
+
+def test_positive_only_cache_does_not_poison_none():
+    """v18.275 修真因：None 結果不入 cache，下次仍會 retry（防 5min poisoning）。"""
+    from repositories.fund_repository import _FX_CACHE, _clear_fx_cache, get_latest_fx
+    _clear_fx_cache()
+    # 第一次：什麼來源都失敗 → 回 None → 不該入 cache
+    import pytest as _pt
+    cache_before = dict(_FX_CACHE)
+    # 此 case 不 mock，sandbox 無 outbound → 必然 None
+    v = get_latest_fx("USDTWD=X", fred_api_key="")
+    assert v is None
+    assert dict(_FX_CACHE) == cache_before, "None 不該入 cache"
