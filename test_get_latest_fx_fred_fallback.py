@@ -73,12 +73,12 @@ def test_yahoo_fails_no_fred_key_skips_fred(monkeypatch):
         _fred_calls.append(series_id)
         return pd.DataFrame()
 
-    def _fetch_url_none(url, params=None, timeout=10):
+    def _fetch_url_none(url, params=None, timeout=10, **kw):
         return None  # Frankfurter 也擋掉
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_should_not_call)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fetch_url_none)
+    monkeypatch.setattr("requests.get", _fetch_url_none)
 
     v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="")
     assert v is None
@@ -188,11 +188,28 @@ def test_signature_back_compat_without_fred_key(monkeypatch):
 # 涵蓋 FRED DEXTWUS 在 2021-12-31 停發後的 USD/TWD 真實場景
 # ──────────────────────────────────────────────────────────────────────
 class _FakeResp:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self._payload = payload
+        self.status_code = status_code
 
     def json(self):
         return self._payload
+
+
+def _build_requests_get_mock(handlers: dict):
+    """傳 {url_substring: payload_or_callable} 建 requests.get mock。
+    payload_or_callable 可為 dict (回 200 _FakeResp(payload))、
+    或 callable (params, kwargs) → _FakeResp。
+    未命中任何 substring → status_code=503。
+    """
+    def _mock(url, params=None, proxies=None, timeout=10, verify=True, **kw):
+        for sub, handler in handlers.items():
+            if sub in url:
+                if callable(handler):
+                    return handler(params=params, **kw)
+                return _FakeResp(handler) if isinstance(handler, dict) else handler
+        return _FakeResp({}, status_code=503)
+    return _mock
 
 
 def test_yahoo_fails_fred_empty_frankfurter_succeeds(monkeypatch):
@@ -207,7 +224,7 @@ def test_yahoo_fails_fred_empty_frankfurter_succeeds(monkeypatch):
 
     _captured_url = []
 
-    def _fake_fetch_url(url, params=None, timeout=10):
+    def _fake_fetch_url(url, params=None, timeout=10, **kw):
         _captured_url.append(url)
         if "frankfurter" in url:
             assert params == {"from": "EUR", "to": "JPY"}
@@ -219,7 +236,7 @@ def test_yahoo_fails_fred_empty_frankfurter_succeeds(monkeypatch):
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+    monkeypatch.setattr("requests.get", _fake_fetch_url)
 
     v = fund_repository.get_latest_fx("EURJPY=X", fred_api_key="dummy")
     assert v == pytest.approx(165.5)
@@ -232,7 +249,7 @@ def test_er_api_no_fred_key_still_tries(monkeypatch):
     def _yf_empty(pair, range_="5d", interval="1d"):
         return pd.Series(dtype=float)
 
-    def _fake_fetch_url(url, params=None, timeout=10):
+    def _fake_fetch_url(url, params=None, timeout=10, **kw):
         if "er-api" in url:
             return _FakeResp({
                 "result": "success",
@@ -241,7 +258,7 @@ def test_er_api_no_fred_key_still_tries(monkeypatch):
         return None
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+    monkeypatch.setattr("requests.get", _fake_fetch_url)
 
     v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="")
     assert v == pytest.approx(32.55)
@@ -257,12 +274,12 @@ def test_frankfurter_all_fail_returns_none(monkeypatch):
     def _fred_empty(series_id, key, n=10):
         return pd.DataFrame()
 
-    def _fetch_none(url, params=None, timeout=10):
+    def _fetch_none(url, params=None, timeout=10, **kw):
         return None
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fetch_none)
+    monkeypatch.setattr("requests.get", _fetch_none)
 
     v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
     assert v is None
@@ -278,12 +295,12 @@ def test_frankfurter_zero_or_negative_rate_returns_none(monkeypatch):
     def _fred_empty(series_id, key, n=10):
         return pd.DataFrame()
 
-    def _fake_fetch_url(url, params=None, timeout=10):
+    def _fake_fetch_url(url, params=None, timeout=10, **kw):
         return _FakeResp({"rates": {"TWD": 0}})
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+    monkeypatch.setattr("requests.get", _fake_fetch_url)
 
     v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
     assert v is None
@@ -305,13 +322,13 @@ def test_frankfurter_jpy_twd_supported(monkeypatch):
 
     _calls = []
 
-    def _fake_fetch_url(url, params=None, timeout=10):
+    def _fake_fetch_url(url, params=None, timeout=10, **kw):
         _calls.append((url, params))
         return None  # er_api / Frankfurter 都失敗
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+    monkeypatch.setattr("requests.get", _fake_fetch_url)
 
     v = fund_repository.get_latest_fx("JPYTWD=X", fred_api_key="dummy")
     assert v is None
@@ -336,7 +353,7 @@ def test_er_api_succeeds_when_yahoo_fred_fail(monkeypatch):
 
     _called_urls = []
 
-    def _fake_fetch_url(url, params=None, timeout=10):
+    def _fake_fetch_url(url, params=None, timeout=10, **kw):
         _called_urls.append(url)
         if "er-api" in url:
             return _FakeResp({
@@ -348,7 +365,7 @@ def test_er_api_succeeds_when_yahoo_fred_fail(monkeypatch):
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+    monkeypatch.setattr("requests.get", _fake_fetch_url)
 
     v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
     assert v == pytest.approx(32.18)
@@ -365,14 +382,14 @@ def test_er_api_failure_result_field(monkeypatch):
     def _fred_empty(series_id, key, n=10):
         return pd.DataFrame()
 
-    def _fake_fetch_url(url, params=None, timeout=10):
+    def _fake_fetch_url(url, params=None, timeout=10, **kw):
         if "er-api" in url:
             return _FakeResp({"result": "error", "error-type": "unsupported-code"})
         return None
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+    monkeypatch.setattr("requests.get", _fake_fetch_url)
 
     v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
     assert v is None
@@ -390,13 +407,13 @@ def test_frankfurter_skipped_for_twd_pair(monkeypatch):
 
     _called = []
 
-    def _fake_fetch_url(url, params=None, timeout=10):
+    def _fake_fetch_url(url, params=None, timeout=10, **kw):
         _called.append(url)
         return None
 
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
-    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+    monkeypatch.setattr("requests.get", _fake_fetch_url)
 
     _ = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
     assert any("er-api" in u for u in _called)
@@ -415,7 +432,7 @@ def test_diagnose_fx_sources_returns_4_keys(monkeypatch):
         "repositories.macro_repository.fetch_fred",
         lambda series_id, key, n=10: pd.DataFrame(),
     )
-    monkeypatch.setattr("infra.proxy.fetch_url", lambda url, params=None, timeout=10: None)
+    monkeypatch.setattr("requests.get", lambda url, params=None, timeout=10, **kw: None)
 
     out = diagnose_fx_sources("USDTWD=X", fred_api_key="dummy")
     assert set(out.keys()) == {"yahoo", "fred", "er_api", "frankfurter"}
@@ -436,7 +453,7 @@ def test_diagnose_fx_yahoo_success_marked(monkeypatch):
         "repositories.macro_repository.fetch_fred",
         lambda series_id, key, n=10: pd.DataFrame(),
     )
-    monkeypatch.setattr("infra.proxy.fetch_url", lambda url, params=None, timeout=10: None)
+    monkeypatch.setattr("requests.get", lambda url, params=None, timeout=10, **kw: None)
 
     out = diagnose_fx_sources("USDTWD=X", fred_api_key="dummy")
     assert out["yahoo"]["ok"] is True
