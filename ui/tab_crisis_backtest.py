@@ -255,9 +255,9 @@ def render_crisis_backtest_tab() -> None:
         st.markdown("---")
         _render_signal_lookback_section(events, years)
 
-        # ── Phase 4：策略網格搜尋 ─────────────────────────────
+        # ── Phase 4 + Phase 5：策略網格搜尋 + AI 策略建議 ─────
         st.markdown("---")
-        _render_strategy_grid_section(mkt_series, market_label, years)
+        _render_strategy_grid_section(mkt_series, market_label, years, events)
 
     # 限制提示
     st.markdown("---")
@@ -265,7 +265,7 @@ def render_crisis_backtest_tab() -> None:
         "💡 **已知限制**：基金 NAV 來自 FundClear，通常只涵蓋近 ~400 天。"
         "舊事件（如 COVID、2018 升息、2008 海嘯）只能顯示大盤跌幅，"
         "該基金欄會顯示「—」。"
-        "Phase 5 將接 Gemini AI 策略建議。"
+        "Phase 5 已串 Gemini AI 策略建議（按「跑網格」後出現）。"
     )
 
 
@@ -377,12 +377,16 @@ _SIGNAL_THRESHOLD_PRESETS: dict[str, list[float]] = {
 }
 
 
+_GRID_CACHE_KEY = "_crisis_grid_cache"
+
+
 def _render_strategy_grid_section(
     market_series: pd.Series,
     market_label: str,
     years: int,
+    events: list,
 ) -> None:
-    """🧪 4 策略 × 3 門檻 grid search + heatmap。"""
+    """🧪 4 策略 × 3 門檻 grid search + heatmap + 🤖 AI 建議 (Phase 4+5)。"""
     st.markdown("### 🧪 策略網格搜尋（Phase 4）")
     st.caption(
         "用同一段大盤走勢回測 4 種策略 × 3 個訊號門檻 → 比較「期末資產 / 最大回撤 / Sharpe / 危機期報酬」。"
@@ -412,18 +416,7 @@ def _render_strategy_grid_section(
             key="crisis_grid_thresholds",
         )
 
-    if not st.button("🧪 跑網格", type="secondary", key="crisis_grid_run"):
-        st.caption("⬆️ 按按鈕開始（需先抓訊號序列，約 5 秒）")
-        return
-
-    try:
-        thresholds = [float(x.strip()) for x in thresholds_str.split(",") if x.strip()]
-    except ValueError:
-        st.error("❌ 門檻必須是數字（逗號分隔），例如 25, 30, 35")
-        return
-    if len(thresholds) < 1:
-        st.error("❌ 至少需要 1 個門檻")
-        return
+    button_clicked = st.button("🧪 跑網格", type="secondary", key="crisis_grid_run")
 
     from services.crisis_strategy_grid import (
         DEFAULT_STRATEGIES,
@@ -434,28 +427,58 @@ def _render_strategy_grid_section(
     )
     from services.macro_signal_lookback import DEFAULT_SIGNALS, fetch_signal_series
 
-    spec = next((s for s in DEFAULT_SIGNALS if s.key == signal_key), None)
-    if spec is None:
-        st.error(f"❌ 找不到訊號 spec：{signal_key}")
+    if button_clicked:
+        try:
+            thresholds = [float(x.strip()) for x in thresholds_str.split(",") if x.strip()]
+        except ValueError:
+            st.error("❌ 門檻必須是數字（逗號分隔），例如 25, 30, 35")
+            return
+        if len(thresholds) < 1:
+            st.error("❌ 至少需要 1 個門檻")
+            return
+
+        spec = next((s for s in DEFAULT_SIGNALS if s.key == signal_key), None)
+        if spec is None:
+            st.error(f"❌ 找不到訊號 spec：{signal_key}")
+            return
+
+        fred_key = os.environ.get("FRED_API_KEY", "")
+        if spec.source == "fred" and not fred_key:
+            st.warning(f"⚠️ {signal_key} 來自 FRED 但未設定 FRED_API_KEY — 無法跑")
+            return
+
+        with st.spinner(f"抓取 {signal_key} {years} 年歷史..."):
+            sig_series = fetch_signal_series(spec, years=max(years, 10), fred_api_key=fred_key)
+        if sig_series.empty:
+            st.error(f"❌ 訊號 {signal_key} 抓取失敗或無資料")
+            return
+
+        with st.spinner(f"跑 {len(DEFAULT_STRATEGIES)} 策略 × {len(thresholds)} 門檻 = {len(DEFAULT_STRATEGIES) * len(thresholds)} 組..."):
+            results = grid_search(
+                market_series, sig_series, thresholds,
+                specs=DEFAULT_STRATEGIES,
+                direction=spec.direction,
+            )
+
+        st.session_state[_GRID_CACHE_KEY] = {
+            "results": results,
+            "events": events,
+            "signal_key": signal_key,
+            "signal_label": spec.label,
+            "metric_label": metric_label,
+            "market_label": market_label,
+            "thresholds": thresholds,
+        }
+
+    cached = st.session_state.get(_GRID_CACHE_KEY)
+    if not cached:
+        st.caption("⬆️ 按按鈕開始（需先抓訊號序列，約 5 秒）")
         return
 
-    fred_key = os.environ.get("FRED_API_KEY", "")
-    if spec.source == "fred" and not fred_key:
-        st.warning(f"⚠️ {signal_key} 來自 FRED 但未設定 FRED_API_KEY — 無法跑")
-        return
-
-    with st.spinner(f"抓取 {signal_key} {years} 年歷史..."):
-        sig_series = fetch_signal_series(spec, years=max(years, 10), fred_api_key=fred_key)
-    if sig_series.empty:
-        st.error(f"❌ 訊號 {signal_key} 抓取失敗或無資料")
-        return
-
-    with st.spinner(f"跑 {len(DEFAULT_STRATEGIES)} 策略 × {len(thresholds)} 門檻 = {len(DEFAULT_STRATEGIES) * len(thresholds)} 組..."):
-        results = grid_search(
-            market_series, sig_series, thresholds,
-            specs=DEFAULT_STRATEGIES,
-            direction=spec.direction,
-        )
+    results = cached["results"]
+    metric_label = cached["metric_label"]
+    signal_key = cached["signal_key"]
+    market_label = cached["market_label"]
 
     metric_map = {
         "年化 Sharpe": ("sharpe_ratio", False, "%.2f"),
@@ -535,3 +558,49 @@ def _render_strategy_grid_section(
         f"signal_half = 訊號→半倉；buy_dip = 訊號 + 大盤跌 ≥5% → 1.5× 加碼。"
         f"|  起始資產 = 100；倉位 t = f(訊號 t-1) 避免前視偏誤。"
     )
+
+    # ── Phase 5: AI 策略建議 ────────────────────────────────
+    st.markdown("---")
+    _render_ai_advice_block(cached, top)
+
+
+def _render_ai_advice_block(cached: dict, top_df: pd.DataFrame) -> None:
+    """🤖 把 Phase 1 危機事件 + Phase 4 grid + Top-1 丟給 Gemini 解讀。"""
+    st.markdown("### 🤖 AI 策略建議（Phase 5）")
+    st.caption(
+        "把上面的歷史危機事件 + 4×N 網格結果 + Top-1 最佳 cell 丟給 Gemini，"
+        "請它用白話講「為什麼這策略勝出 / 風險盲點 / 怎麼做」。"
+    )
+
+    from services.ai_service import get_gemini_keys
+
+    keys = get_gemini_keys()
+    if not keys:
+        st.warning("⚠️ 未設定 Gemini API Key — 請設定環境變數 `GEMINI_API_KEY`（或 secrets）後再試。")
+        return
+
+    if not st.button("🤖 請 Gemini 解讀最佳策略", key="crisis_ai_advice_run"):
+        st.caption(f"⬆️ 按按鈕請 AI 解讀（可用 key 數：{len(keys)}）")
+        return
+
+    from services.crisis_ai_advisor import generate_strategy_advice
+    from services.crisis_strategy_grid import results_to_dataframe
+
+    results = cached["results"]
+    grid_df = results_to_dataframe(results)
+    top_result = None
+    if top_df is not None and not top_df.empty:
+        top_result = top_df.iloc[0].to_dict()
+
+    signal_label_full = f"{cached['signal_key']}（{cached.get('signal_label', '—')}）"
+
+    with st.spinner("Gemini 解讀中（約 10-20 秒）..."):
+        advice = generate_strategy_advice(
+            events=cached.get("events", []),
+            grid_df=grid_df,
+            top_result=top_result,
+            signal_label=signal_label_full,
+            market_label=cached.get("market_label", "—"),
+            metric_label=cached.get("metric_label", "Sharpe"),
+        )
+    st.markdown(advice)
