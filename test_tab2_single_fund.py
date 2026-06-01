@@ -91,3 +91,50 @@ def test_invest_calc_stashed_to_ai_snapshot():
     assert 'st.session_state.get(f"_calc_invest_' in src
     assert "投資試算（每百萬可申購單位與配息估算）" in src, \
         "sections 清單必須宣告投資試算章節"
+
+
+# ──────────────────────────────────────────────────────────────
+# v18.259：投資試算 TWD 換算（即時 FX rate 走 get_latest_fx）
+# ──────────────────────────────────────────────────────────────
+def test_invest_calc_fetches_fx_rate():
+    """非 TWD 基金應呼叫 get_latest_fx 抓 {CCY}TWD=X 即時匯率。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    assert "from repositories.fund_repository import get_latest_fx" in src, \
+        "必須 import get_latest_fx 抓即時匯率"
+    assert 'get_latest_fx(f"{_ccy}TWD=X")' in src, \
+        "應呼叫 get_latest_fx 用 {CCY}TWD=X pair"
+    # 應跳過 TWD 基金避免無謂呼叫
+    assert '_ccy.upper() != "TWD"' in src, "TWD 基金應跳過 FX 抓取"
+
+
+def test_invest_calc_twd_conversion_displayed():
+    """配息型 + 累積型分支都應顯示 TWD 換算結果。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    # 換算 TWD 提示文字
+    assert "💱 **換算 TWD**" in src, "缺少 TWD 換算的 success 提示"
+    # FX 抓取失敗的 fallback
+    assert "無法取得" in src and "即時匯率" in src, \
+        "FX 抓取失敗應顯示 fallback warning"
+
+
+def test_invest_calc_stash_includes_twd_fields():
+    """session_state stash 應包含 fx_to_twd / amount_twd 等 TWD 欄位。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    # 必須 stash 換算後 TWD 數字供 AI 使用
+    assert '"fx_to_twd"' in src
+    assert '"amount_twd"' in src
+    assert '"annual_dividend_twd"' in src, "配息型 stash 缺 annual_dividend_twd"
+    assert '"monthly_dividend_twd"' in src, "配息型 stash 缺 monthly_dividend_twd"
+    assert '"proj_1y_twd"' in src, "累積型 stash 缺 proj_1y_twd"
+
+
+def test_ai_snapshot_includes_twd_translation():
+    """AI snapshot 在有 FX 時應拼入 TWD 換算字串。"""
+    from pathlib import Path
+    src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    assert "TWD 換算" in src, "snapshot 缺少 TWD 換算字串"
+    assert "_cs_fx" in src, "snapshot 應讀 fx_to_twd"
+    assert "_cs_amt_twd" in src, "snapshot 應讀 amount_twd"

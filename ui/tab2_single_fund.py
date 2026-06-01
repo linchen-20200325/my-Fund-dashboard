@@ -1211,6 +1211,18 @@ def render_single_fund_tab() -> None:
                         _yield_calc = float(_yield_calc) if _yield_calc not in (None, "", "—") else None
                     except (TypeError, ValueError):
                         _yield_calc = None
+                    # v18.259：非 TWD 基金抓即時 FX rate（5min TTL，走 NAS proxy）
+                    _fx_to_twd = None
+                    _fx_err = ""
+                    if _ccy.upper() != "TWD":
+                        try:
+                            from repositories.fund_repository import get_latest_fx
+                            _fx_to_twd = get_latest_fx(f"{_ccy}TWD=X")
+                            if _fx_to_twd is None or _fx_to_twd <= 0:
+                                _fx_err = f"Yahoo 暫無 {_ccy}TWD 報價"
+                                _fx_to_twd = None
+                        except Exception as _e:
+                            _fx_err = f"FX 抓取失敗：{_e}"
                     _ic1, _ic2 = st.columns([2, 1])
                     with _ic1:
                         _amount = st.number_input(
@@ -1223,6 +1235,11 @@ def render_single_fund_tab() -> None:
                     with _ic2:
                         st.caption(f"NAV：{_nav_calc if _nav_calc is not None else '—'} {_ccy}")
                         st.caption(f"年化配息率：{_yield_calc if _yield_calc is not None else '—'} %")
+                        if _ccy.upper() != "TWD":
+                            if _fx_to_twd:
+                                st.caption(f"💱 1 {_ccy} = **{_fx_to_twd:.4f}** TWD（Yahoo 即時，5min cache）")
+                            else:
+                                st.caption(f"⚠️ {_fx_err or '無 FX 資料'}")
                     if _nav_calc and _nav_calc > 0:
                         _units = _amount / _nav_calc
                         _mc1, _mc2, _mc3, _mc4 = st.columns(4)
@@ -1235,10 +1252,24 @@ def render_single_fund_tab() -> None:
                             _mc4.metric("覆蓋率參考", f"{_yield_calc:.2f}%",
                                         help="年化配息率 = 年配息 / 投入本金")
                             st.caption(
-                                f"📌 估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位"
+                                f"📌 原幣估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位"
                                 f"｜年息約 **{_ann_div:,.0f} {_ccy}**（每月 ≈ {_mon_div:,.0f}）"
                                 f"。實際配息視基金宣告與淨值變動。"
                             )
+                            # v18.259：TWD 換算
+                            _amt_twd = _ann_div_twd = _mon_div_twd = None
+                            if _fx_to_twd:
+                                _amt_twd = _amount * _fx_to_twd
+                                _ann_div_twd = _ann_div * _fx_to_twd
+                                _mon_div_twd = _mon_div * _fx_to_twd
+                                st.success(
+                                    f"💱 **換算 TWD**（1 {_ccy} = {_fx_to_twd:.4f}）："
+                                    f"本金 **{_amt_twd:,.0f}** TWD"
+                                    f"｜年息 **{_ann_div_twd:,.0f}** TWD"
+                                    f"（每月 ≈ **{_mon_div_twd:,.0f}** TWD）"
+                                )
+                            elif _ccy.upper() != "TWD":
+                                st.warning(f"⚠️ 無法取得 {_ccy}/TWD 即時匯率，僅顯示原幣金額")
                             # Stash 給 AI snapshot
                             try:
                                 st.session_state[f"_calc_invest_{fk}"] = {
@@ -1249,6 +1280,10 @@ def render_single_fund_tab() -> None:
                                     "annual_div_rate": float(_yield_calc),
                                     "annual_dividend": float(_ann_div),
                                     "monthly_dividend": float(_mon_div),
+                                    "fx_to_twd": float(_fx_to_twd) if _fx_to_twd else None,
+                                    "amount_twd": float(_amt_twd) if _amt_twd else None,
+                                    "annual_dividend_twd": float(_ann_div_twd) if _ann_div_twd else None,
+                                    "monthly_dividend_twd": float(_mon_div_twd) if _mon_div_twd else None,
                                     "fund_type": "income",
                                 }
                             except Exception:
@@ -1261,18 +1296,38 @@ def render_single_fund_tab() -> None:
                             except (TypeError, ValueError):
                                 _ret_1y = None
                             _mc2.metric("基金類型", "累積型（無配息）")
+                            _proj_1y = None
                             if _ret_1y is not None:
                                 _proj_1y = _amount * (1 + _ret_1y / 100.0)
                                 _mc3.metric(f"1Y 後預估市值（{_ccy}）", f"{_proj_1y:,.0f}",
                                             f"{_ret_1y:+.2f}%")
                                 _mc4.metric("1Y 預估損益", f"{(_proj_1y - _amount):+,.0f}")
                                 st.caption(
-                                    f"📌 估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位"
+                                    f"📌 原幣估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位"
                                     f"｜以近 1Y 含息報酬 {_ret_1y:+.2f}% 推估，"
                                     f"1 年後市值約 **{_proj_1y:,.0f} {_ccy}**（過往不代表未來）。"
                                 )
                             else:
-                                st.caption(f"📌 估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位")
+                                st.caption(f"📌 原幣估算：{_amount:,.0f} {_ccy} → 約 **{_units:,.2f}** 單位")
+                            # v18.259：TWD 換算（累積型）
+                            _amt_twd = _proj_1y_twd = None
+                            if _fx_to_twd:
+                                _amt_twd = _amount * _fx_to_twd
+                                if _proj_1y is not None:
+                                    _proj_1y_twd = _proj_1y * _fx_to_twd
+                                    st.success(
+                                        f"💱 **換算 TWD**（1 {_ccy} = {_fx_to_twd:.4f}）："
+                                        f"本金 **{_amt_twd:,.0f}** TWD"
+                                        f"｜1Y 後預估 **{_proj_1y_twd:,.0f}** TWD"
+                                        f"（損益 **{(_proj_1y_twd - _amt_twd):+,.0f}** TWD）"
+                                    )
+                                else:
+                                    st.success(
+                                        f"💱 **換算 TWD**（1 {_ccy} = {_fx_to_twd:.4f}）："
+                                        f"本金 **{_amt_twd:,.0f}** TWD"
+                                    )
+                            elif _ccy.upper() != "TWD":
+                                st.warning(f"⚠️ 無法取得 {_ccy}/TWD 即時匯率，僅顯示原幣金額")
                             try:
                                 st.session_state[f"_calc_invest_{fk}"] = {
                                     "amount": float(_amount),
@@ -1281,6 +1336,9 @@ def render_single_fund_tab() -> None:
                                     "units": float(_units),
                                     "annual_div_rate": None,
                                     "ret_1y_total": _ret_1y,
+                                    "fx_to_twd": float(_fx_to_twd) if _fx_to_twd else None,
+                                    "amount_twd": float(_amt_twd) if _amt_twd else None,
+                                    "proj_1y_twd": float(_proj_1y_twd) if _proj_1y_twd else None,
                                     "fund_type": "accumulation",
                                 }
                             except Exception:
@@ -1375,20 +1433,43 @@ def render_single_fund_tab() -> None:
                         _cs_ccy = _calc_stash.get("currency", "")
                         _cs_amt = _calc_stash.get("amount", 0)
                         _cs_units = _calc_stash.get("units", 0)
+                        # v18.259：TWD 換算字串（若有 FX 報價）
+                        _cs_fx = _calc_stash.get("fx_to_twd")
+                        _cs_amt_twd = _calc_stash.get("amount_twd")
                         if _calc_stash.get("fund_type") == "income":
-                            _snap.append(
+                            _line = (
                                 f"- 投資試算：{_cs_amt:,.0f} {_cs_ccy} → "
                                 f"{_cs_units:,.2f} 單位｜年息≈{_calc_stash.get('annual_dividend',0):,.0f} {_cs_ccy}"
                                 f"（月≈{_calc_stash.get('monthly_dividend',0):,.0f}）"
                                 f"｜年化配息率 {_calc_stash.get('annual_div_rate',0):.2f}%"
                             )
+                            if _cs_fx and _cs_amt_twd:
+                                _cs_ann_twd = _calc_stash.get("annual_dividend_twd", 0) or 0
+                                _cs_mon_twd = _calc_stash.get("monthly_dividend_twd", 0) or 0
+                                _line += (
+                                    f"｜TWD 換算（1 {_cs_ccy}={_cs_fx:.4f}）："
+                                    f"本金 {_cs_amt_twd:,.0f} TWD、"
+                                    f"年息≈{_cs_ann_twd:,.0f} TWD（月≈{_cs_mon_twd:,.0f}）"
+                                )
+                            _snap.append(_line)
                         else:
                             _ret = _calc_stash.get("ret_1y_total")
                             _ret_str = f"｜1Y 含息報酬 {_ret:+.2f}%" if _ret is not None else ""
-                            _snap.append(
+                            _line = (
                                 f"- 投資試算：{_cs_amt:,.0f} {_cs_ccy} → "
                                 f"{_cs_units:,.2f} 單位（累積型，無配息）{_ret_str}"
                             )
+                            if _cs_fx and _cs_amt_twd:
+                                _cs_proj_twd = _calc_stash.get("proj_1y_twd")
+                                _twd_extra = (
+                                    f"、1Y 後預估 {_cs_proj_twd:,.0f} TWD"
+                                    if _cs_proj_twd else ""
+                                )
+                                _line += (
+                                    f"｜TWD 換算（1 {_cs_ccy}={_cs_fx:.4f}）："
+                                    f"本金 {_cs_amt_twd:,.0f} TWD{_twd_extra}"
+                                )
+                            _snap.append(_line)
                     # 新聞：優先「已逐股抓的個股新聞」，否則退資產類別過濾的廣義新聞
                     _stk_news_ai = st.session_state.get(
                         f"_stknews_{str(fk or name or 'fund')[:40]}") or {}
