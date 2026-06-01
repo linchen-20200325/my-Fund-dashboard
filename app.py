@@ -99,7 +99,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.269_AllocationSimulator"
+APP_VERSION = "v18.270_SidebarProxyTestFx"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -260,7 +260,17 @@ with st.sidebar:
         if not _pcfg:
             st.sidebar.error("Proxy 未設定")
         else:
-            for _nm, _url in [("MoneyDJ","https://www.moneydj.com/"),("TDCC","https://openapi.tdcc.com.tw/")]:
+            # v18.269：除了既有 2 個基金 source，加 4 個 FX source 一起測，讓 user 看出
+            # 「網路正常但 FX 抓不到」是 source 端問題還是 endpoint 個別擋。
+            _endpoints = [
+                ("MoneyDJ",     "https://www.moneydj.com/"),
+                ("TDCC",        "https://openapi.tdcc.com.tw/"),
+                ("Yahoo Chart", "https://query1.finance.yahoo.com/v8/finance/chart/USDTWD=X"),
+                ("FRED API",    "https://api.stlouisfed.org/fred/"),
+                ("er-api.com",  "https://open.er-api.com/v6/latest/USD"),
+                ("Frankfurter", "https://api.frankfurter.app/latest"),
+            ]
+            for _nm, _url in _endpoints:
                 try:
                     _r = _req.get(_url, proxies=_pcfg, timeout=25, allow_redirects=False, verify=False)
                     if _r.status_code in (200,301,302,403): st.sidebar.success(f"✅ {_nm} 可達！HTTP {_r.status_code}")
