@@ -1046,23 +1046,33 @@ def estimate_dividend_split(
     div_cash_pct: float,
     avg_nav: float = 0.0,
     avg_fx: float = 0.0,
+    current_fx: float = 0.0,
+    current_nav: float = 0.0,
 ) -> dict[str, float]:
     """v18.160：依 user 設定的「現金給付%」拆分年配息估算。
+
+    v18.273：分離「成本基礎 FX/NAV」與「配息折算 FX/NAV」 — user 反饋
+    「組合買入的匯率固定，但轉配息由美元轉台必須要即時匯率」。
+    - 成本基礎用 avg_* （買入時的歷史值，不變）
+    - 配息折算用 current_*（未傳則 fallback 到 avg_*，向後相容）
 
     Args:
         invest_twd: 淨投資金額 (TWD)
         annual_div_rate_pct: 年配息率 (%)，如 6 表示 6%
         div_cash_pct: 配息現金給付百分比 (0~100)
-        avg_nav: 平均買入單位成本（用來算「新增單位數」）；給 0 → new_units 回 0
-        avg_fx: 平均買入匯率（用來把 TWD 還原 local currency）；給 0 → new_units 回 0
+        avg_nav: 平均買入單位成本
+        avg_fx: 平均買入匯率
+        current_fx: 配息發放當下匯率（傳 0 視為「等同 avg_fx」）
+        current_nav: 配息發放當下 NAV（用於再投入新單位數，傳 0 → 用 avg_nav）
 
     Returns:
         dict 含：
-        - annual_div_twd:  年配息總額 (TWD)
-        - cash_twd:        年現金給付部分 (TWD)
-        - reinvest_twd:    年再投入新單位部分 (TWD)
-        - new_units:       年新增單位數（local currency per unit 除回去）
-        - cash_pct / unit_pct: echo back for display
+        - annual_div_twd:  年配息折算 TWD（用 current_fx）
+        - cash_twd:        年現金給付部分 TWD
+        - reinvest_twd:    年再投入部分 TWD
+        - new_units:       年新增單位數（用 current_nav × current_fx 還原）
+        - cash_pct / unit_pct: echo back
+        - fx_ratio:        current_fx / avg_fx（>1 為新台幣貶值對配息有利）
     """
     try:
         inv = float(invest_twd or 0)
@@ -1072,15 +1082,26 @@ def estimate_dividend_split(
         return {
             "annual_div_twd": 0.0, "cash_twd": 0.0, "reinvest_twd": 0.0,
             "new_units": 0.0, "cash_pct": 0.0, "unit_pct": 100.0,
+            "fx_ratio": 1.0,
         }
-    annual_div_twd = inv * rate / 100.0
+    try:
+        afx = float(avg_fx or 0)
+        cfx = float(current_fx or 0)
+    except (TypeError, ValueError):
+        afx = cfx = 0.0
+    # 配息折算 FX：current_fx 有給且 > 0 → 用 current；否則 fallback avg_fx
+    eff_fx = cfx if cfx > 0 else afx
+    fx_ratio = (eff_fx / afx) if (afx > 0 and eff_fx > 0) else 1.0
+    annual_div_twd = inv * rate / 100.0 * fx_ratio
     cash_twd = annual_div_twd * cash_pct / 100.0
     reinvest_twd = annual_div_twd - cash_twd
     new_units = 0.0
     try:
-        nav = float(avg_nav or 0)
-        fx = float(avg_fx or 0)
-        denom = nav * fx
+        # 再投入單位數：用「配息時的 NAV × FX」還原 local 後 ÷ NAV
+        anav = float(avg_nav or 0)
+        cnav = float(current_nav or 0)
+        eff_nav = cnav if cnav > 0 else anav
+        denom = eff_nav * eff_fx
         if denom > 0:
             new_units = reinvest_twd / denom
     except (TypeError, ValueError):
@@ -1090,6 +1111,7 @@ def estimate_dividend_split(
         "cash_twd": cash_twd,
         "reinvest_twd": reinvest_twd,
         "new_units": new_units,
+        "fx_ratio": fx_ratio,
         "cash_pct": cash_pct,
         "unit_pct": 100.0 - cash_pct,
     }
