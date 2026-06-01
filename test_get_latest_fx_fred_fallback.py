@@ -57,8 +57,11 @@ def test_yahoo_fails_fred_dextwus_fallback(monkeypatch):
     assert v == pytest.approx(32.45)
 
 
-def test_yahoo_fails_no_fred_key_returns_none(monkeypatch):
-    """Yahoo 空 + 沒給 FRED key → 不嘗試 FRED → None（讓 UI fallback 手動）。"""
+def test_yahoo_fails_no_fred_key_skips_fred(monkeypatch):
+    """Yahoo 空 + 沒給 FRED key → 跳過 FRED（v18.266 後仍會試 Frankfurter）。
+
+    本 case 把 Frankfurter 也擋掉確保 None。
+    """
     from repositories import fund_repository
 
     def _yf_empty(pair, range_="5d", interval="1d"):
@@ -70,12 +73,16 @@ def test_yahoo_fails_no_fred_key_returns_none(monkeypatch):
         _fred_calls.append(series_id)
         return pd.DataFrame()
 
+    def _fetch_url_none(url, params=None, timeout=10):
+        return None  # Frankfurter 也擋掉
+
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_should_not_call)
+    monkeypatch.setattr("infra.proxy.fetch_url", _fetch_url_none)
 
     v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="")
     assert v is None
-    assert _fred_calls == []
+    assert _fred_calls == []  # 沒 key 不打 FRED
 
 
 def test_yahoo_fails_fred_jpytwd_via_usd(monkeypatch):
@@ -174,3 +181,123 @@ def test_signature_back_compat_without_fred_key(monkeypatch):
     # 不傳 fred_api_key（既有調用方式）
     v = fund_repository.get_latest_fx("USDTWD=X")
     assert v == pytest.approx(32.5)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# v18.266 — Frankfurter (ECB) 第三來源 fallback
+# 涵蓋 FRED DEXTWUS 在 2021-12-31 停發後的 USD/TWD 真實場景
+# ──────────────────────────────────────────────────────────────────────
+class _FakeResp:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+def test_yahoo_fails_fred_empty_frankfurter_succeeds(monkeypatch):
+    """重現 user 場景：Yahoo 掛、FRED DEXTWUS 停發回空、Frankfurter 救場。"""
+    from repositories import fund_repository
+
+    def _yf_empty(pair, range_="5d", interval="1d"):
+        return pd.Series(dtype=float)
+
+    def _fred_empty(series_id, key, n=10):
+        return pd.DataFrame()  # 模擬 DEXTWUS 停發
+
+    _captured_url = []
+
+    def _fake_fetch_url(url, params=None, timeout=10):
+        _captured_url.append((url, params))
+        assert "frankfurter" in url
+        assert params == {"from": "USD", "to": "TWD"}
+        return _FakeResp({"rates": {"TWD": 32.48}, "base": "USD"})
+
+    monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
+    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
+    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+
+    v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
+    assert v == pytest.approx(32.48)
+    assert len(_captured_url) == 1  # 只打了一次 Frankfurter
+
+
+def test_frankfurter_no_fred_key_still_tries(monkeypatch):
+    """沒給 FRED key 也應該嘗試 Frankfurter（公開無 auth）。"""
+    from repositories import fund_repository
+
+    def _yf_empty(pair, range_="5d", interval="1d"):
+        return pd.Series(dtype=float)
+
+    def _fake_fetch_url(url, params=None, timeout=10):
+        return _FakeResp({"rates": {"TWD": 32.55}})
+
+    monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
+    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+
+    v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="")
+    assert v == pytest.approx(32.55)
+
+
+def test_frankfurter_all_fail_returns_none(monkeypatch):
+    """三層都掛 → None，UI 才能正確跳手動。"""
+    from repositories import fund_repository
+
+    def _yf_empty(pair, range_="5d", interval="1d"):
+        return pd.Series(dtype=float)
+
+    def _fred_empty(series_id, key, n=10):
+        return pd.DataFrame()
+
+    def _fetch_none(url, params=None, timeout=10):
+        return None
+
+    monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
+    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
+    monkeypatch.setattr("infra.proxy.fetch_url", _fetch_none)
+
+    v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
+    assert v is None
+
+
+def test_frankfurter_zero_or_negative_rate_returns_none(monkeypatch):
+    """Frankfurter 回 rate=0 應被當失敗。"""
+    from repositories import fund_repository
+
+    def _yf_empty(pair, range_="5d", interval="1d"):
+        return pd.Series(dtype=float)
+
+    def _fred_empty(series_id, key, n=10):
+        return pd.DataFrame()
+
+    def _fake_fetch_url(url, params=None, timeout=10):
+        return _FakeResp({"rates": {"TWD": 0}})
+
+    monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
+    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
+    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+
+    v = fund_repository.get_latest_fx("USDTWD=X", fred_api_key="dummy")
+    assert v is None
+
+
+def test_frankfurter_jpy_twd_supported(monkeypatch):
+    """JPY/TWD（Frankfurter 支援的對）— FRED 也命中時 FRED 優先，FRED 空才用 Frankfurter。"""
+    from repositories import fund_repository
+
+    def _yf_empty(pair, range_="5d", interval="1d"):
+        return pd.Series(dtype=float)
+
+    def _fred_empty(series_id, key, n=10):
+        return pd.DataFrame()  # 全空，落 Frankfurter
+
+    def _fake_fetch_url(url, params=None, timeout=10):
+        assert params == {"from": "JPY", "to": "TWD"}
+        return _FakeResp({"rates": {"TWD": 0.213}})
+
+    monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
+    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
+    monkeypatch.setattr("infra.proxy.fetch_url", _fake_fetch_url)
+
+    v = fund_repository.get_latest_fx("JPYTWD=X", fred_api_key="dummy")
+    assert v == pytest.approx(0.213)
