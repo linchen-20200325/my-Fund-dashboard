@@ -1,7 +1,8 @@
-"""tab_crisis_backtest.py — 📉 危機回測室 (v18.260, Phase 2 + Phase 3 UI)
+"""tab_crisis_backtest.py — 📉 危機回測室 (v18.260, Phase 2 + 3 + 4 UI)
 
 Phase 2：歷史危機事件清單 + 該基金當時跌幅對照（services/crisis_backtest.py）
 Phase 3：總經訊號歷史回看 — 驗證 Tab1 訊號預測力（services/macro_signal_lookback.py）
+Phase 4：策略網格搜尋（4 策略 × 3 門檻）+ heatmap（services/crisis_strategy_grid.py）
 """
 from __future__ import annotations
 
@@ -254,13 +255,17 @@ def render_crisis_backtest_tab() -> None:
         st.markdown("---")
         _render_signal_lookback_section(events, years)
 
+        # ── Phase 4：策略網格搜尋 ─────────────────────────────
+        st.markdown("---")
+        _render_strategy_grid_section(mkt_series, market_label, years)
+
     # 限制提示
     st.markdown("---")
     st.caption(
         "💡 **已知限制**：基金 NAV 來自 FundClear，通常只涵蓋近 ~400 天。"
         "舊事件（如 COVID、2018 升息、2008 海嘯）只能顯示大盤跌幅，"
         "該基金欄會顯示「—」。"
-        "Phase 4 將加策略 grid_search，Phase 5 接 AI 策略建議。"
+        "Phase 5 將接 Gemini AI 策略建議。"
     )
 
 
@@ -358,4 +363,175 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
         "✅ = 峰前搜尋上限區間內，訊號曾進入警戒區，並顯示提前天數；"
         "❌ = 訊號序列涵蓋但未警戒（顯示峰前 offset 觀測值）；"
         "— = 訊號歷史不涵蓋該事件（FRED key 缺漏 / 序列過短）。"
+    )
+
+
+# ──────────────────────────────────────────────────────────────
+# Phase 4：策略網格搜尋
+# ──────────────────────────────────────────────────────────────
+_SIGNAL_THRESHOLD_PRESETS: dict[str, list[float]] = {
+    "VIX": [25.0, 30.0, 35.0],
+    "HY_SPREAD": [5.0, 7.0, 9.0],
+    "T10Y2Y": [0.5, 0.0, -0.5],
+    "UNRATE": [4.5, 5.5, 6.5],
+}
+
+
+def _render_strategy_grid_section(
+    market_series: pd.Series,
+    market_label: str,
+    years: int,
+) -> None:
+    """🧪 4 策略 × 3 門檻 grid search + heatmap。"""
+    st.markdown("### 🧪 策略網格搜尋（Phase 4）")
+    st.caption(
+        "用同一段大盤走勢回測 4 種策略 × 3 個訊號門檻 → 比較「期末資產 / 最大回撤 / Sharpe / 危機期報酬」。"
+    )
+
+    col_a, col_b, col_c = st.columns([1, 1, 1.2])
+    with col_a:
+        signal_key = st.selectbox(
+            "訊號",
+            options=list(_SIGNAL_THRESHOLD_PRESETS.keys()),
+            index=0,
+            help="VIX/HY/T10Y2Y/UNRATE 任一",
+            key="crisis_grid_signal",
+        )
+    with col_b:
+        metric_label = st.selectbox(
+            "Heatmap metric",
+            options=["年化 Sharpe", "期末資產", "最大回撤", "危機期報酬"],
+            index=0,
+            key="crisis_grid_metric",
+        )
+    with col_c:
+        thresholds_str = st.text_input(
+            "門檻組合（逗號分隔）",
+            value=", ".join(str(x) for x in _SIGNAL_THRESHOLD_PRESETS[signal_key]),
+            help="3 個門檻值（會覆蓋預設）",
+            key="crisis_grid_thresholds",
+        )
+
+    if not st.button("🧪 跑網格", type="secondary", key="crisis_grid_run"):
+        st.caption("⬆️ 按按鈕開始（需先抓訊號序列，約 5 秒）")
+        return
+
+    try:
+        thresholds = [float(x.strip()) for x in thresholds_str.split(",") if x.strip()]
+    except ValueError:
+        st.error("❌ 門檻必須是數字（逗號分隔），例如 25, 30, 35")
+        return
+    if len(thresholds) < 1:
+        st.error("❌ 至少需要 1 個門檻")
+        return
+
+    from services.crisis_strategy_grid import (
+        DEFAULT_STRATEGIES,
+        build_heatmap_data,
+        grid_search,
+        rank_results,
+        results_to_dataframe,
+    )
+    from services.macro_signal_lookback import DEFAULT_SIGNALS, fetch_signal_series
+
+    spec = next((s for s in DEFAULT_SIGNALS if s.key == signal_key), None)
+    if spec is None:
+        st.error(f"❌ 找不到訊號 spec：{signal_key}")
+        return
+
+    fred_key = os.environ.get("FRED_API_KEY", "")
+    if spec.source == "fred" and not fred_key:
+        st.warning(f"⚠️ {signal_key} 來自 FRED 但未設定 FRED_API_KEY — 無法跑")
+        return
+
+    with st.spinner(f"抓取 {signal_key} {years} 年歷史..."):
+        sig_series = fetch_signal_series(spec, years=max(years, 10), fred_api_key=fred_key)
+    if sig_series.empty:
+        st.error(f"❌ 訊號 {signal_key} 抓取失敗或無資料")
+        return
+
+    with st.spinner(f"跑 {len(DEFAULT_STRATEGIES)} 策略 × {len(thresholds)} 門檻 = {len(DEFAULT_STRATEGIES) * len(thresholds)} 組..."):
+        results = grid_search(
+            market_series, sig_series, thresholds,
+            specs=DEFAULT_STRATEGIES,
+            direction=spec.direction,
+        )
+
+    metric_map = {
+        "年化 Sharpe": ("sharpe_ratio", False, "%.2f"),
+        "期末資產": ("final_value", False, "%.1f"),
+        "最大回撤": ("max_drawdown_pct", True, "%.2%%"),  # asc=True：越淺越好
+        "危機期報酬": ("crisis_return_pct", False, "%.2%%"),
+    }
+    metric_col, ascending, _fmt = metric_map[metric_label]
+
+    # Heatmap
+    st.markdown("#### 🔥 Heatmap")
+    hm = build_heatmap_data(results, metric=metric_col)
+
+    try:
+        import plotly.express as px
+        is_pct = metric_col in ("max_drawdown_pct", "crisis_return_pct")
+        text_template = "{:.1%}".format if is_pct else "{:.2f}".format
+        fig = px.imshow(
+            hm.values,
+            labels=dict(x=f"{signal_key} 門檻", y="策略", color=metric_label),
+            x=[str(c) for c in hm.columns],
+            y=list(hm.index),
+            text_auto=".2f" if not is_pct else ".1%",
+            color_continuous_scale="RdYlGn" if not ascending else "RdYlGn_r",
+            aspect="auto",
+        )
+        fig.update_layout(
+            title=f"{market_label} × {signal_key} × {metric_label}",
+            height=380,
+            margin=dict(l=40, r=20, t=50, b=40),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.warning(f"plotly heatmap 失敗：{e}，改用 DataFrame")
+        st.dataframe(hm, use_container_width=True)
+
+    # Top-N 排行
+    st.markdown(f"#### 🏆 Top 5 by {metric_label}")
+    top = rank_results(results, by=metric_col, top_n=5, ascending=ascending)
+    if not top.empty:
+        # 換算成人類可讀
+        top_view = top[[
+            "strategy_label", "threshold",
+            "final_value", "total_return_pct",
+            "max_drawdown_pct", "sharpe_ratio", "crisis_return_pct",
+            "n_trigger_days",
+        ]].copy()
+        top_view.columns = [
+            "策略", "門檻", "期末資產", "總報酬", "最大回撤", "年化 Sharpe", "危機期報酬", "觸發天數",
+        ]
+        for col, fmt in [
+            ("總報酬", "{:+.1%}"),
+            ("最大回撤", "{:.1%}"),
+            ("危機期報酬", "{:+.1%}"),
+            ("期末資產", "{:.1f}"),
+            ("年化 Sharpe", "{:.2f}"),
+        ]:
+            top_view[col] = top_view[col].apply(lambda v, _f=fmt: _f.format(v) if pd.notna(v) else "—")
+        st.dataframe(top_view, use_container_width=True, hide_index=True)
+
+    # 完整 grid
+    with st.expander("📋 完整網格（12 cells）"):
+        df_full = results_to_dataframe(results)
+        df_full_view = df_full[[
+            "strategy_label", "threshold",
+            "final_value", "total_return_pct",
+            "max_drawdown_pct", "sharpe_ratio", "crisis_return_pct",
+            "n_trigger_days", "n_total_days",
+        ]].copy()
+        df_full_view.columns = [
+            "策略", "門檻", "期末資產", "總報酬", "最大回撤", "年化 Sharpe", "危機期報酬", "觸發天數", "總天數",
+        ]
+        st.dataframe(df_full_view, use_container_width=True, hide_index=True)
+
+    st.caption(
+        f"📐 策略說明：buy_and_hold = baseline 滿倉；signal_exit = 訊號→全現金；"
+        f"signal_half = 訊號→半倉；buy_dip = 訊號 + 大盤跌 ≥5% → 1.5× 加碼。"
+        f"|  起始資產 = 100；倉位 t = f(訊號 t-1) 避免前視偏誤。"
     )
