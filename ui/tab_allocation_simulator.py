@@ -32,8 +32,15 @@ def render_allocation_simulator_tab() -> None:
             default_amount = float(calc.get("amount_twd") or default_amount)
             default_yield = float(calc.get("annual_div_rate") or default_yield)
             default_nav = float(calc.get("nav") or default_nav)
+            # v18.279: 過濾掉 TWD 基金 stash 的 fx=1.0（v18.278 後 TWD 基金 fx_to_twd=1.0
+            # 會被 stash，但 simulator 的 number_input min_value=10.0 → crash）
             _fx = calc.get("fx_to_twd")
-            default_fx = float(_fx) if _fx else default_fx
+            try:
+                _fx_f = float(_fx) if _fx else 0.0
+            except (TypeError, ValueError):
+                _fx_f = 0.0
+            if _fx_f >= 10.0:   # USD/EUR 等正常外幣
+                default_fx = _fx_f
             st.success(
                 f"✅ 已從 Tab2 投資試算 stash 帶入預設值"
                 f"（基金：{fund_data.get('fund_name') or fund_key}）"
