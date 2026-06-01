@@ -99,7 +99,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.270_SidebarProxyTestFx"
+APP_VERSION = "v18.271_FredProbeUrlFix"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -266,7 +266,7 @@ with st.sidebar:
                 ("MoneyDJ",     "https://www.moneydj.com/"),
                 ("TDCC",        "https://openapi.tdcc.com.tw/"),
                 ("Yahoo Chart", "https://query1.finance.yahoo.com/v8/finance/chart/USDTWD=X"),
-                ("FRED API",    "https://api.stlouisfed.org/fred/"),
+                ("FRED",        "https://fred.stlouisfed.org/"),
                 ("er-api.com",  "https://open.er-api.com/v6/latest/USD"),
                 ("Frankfurter", "https://api.frankfurter.app/latest"),
             ]
