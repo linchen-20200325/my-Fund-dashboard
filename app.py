@@ -99,7 +99,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.275_FxChainTrim_NoneCachePoisonFix"
+APP_VERSION = "v18.276_T3PortfolioLiveFxForDividend"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
