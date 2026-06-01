@@ -24,6 +24,41 @@ def render_manual_tab() -> None:
     st.markdown("## 📖 系統說明書 — 公式與判斷標準完整說明")
     st.caption("📖 故事附錄・公式聖經：拆解前 3 站每個評分模型、公式與指標的算法，讓進階使用者看懂決策邏輯。")
 
+    # ── v18.272: 📋 曾經查過的基金清單（Tab2 + Tab3 自動記錄）─────────
+    with st.expander("📋 曾經查過的基金標的清單（Tab2 / Tab3 自動記錄）", expanded=True):
+        from services.fund_history import (
+            clear_history as _clear_fh,
+            get_history_df as _hist_df,
+        )
+        _df_fh = _hist_df()
+        if _df_fh.empty:
+            st.info(
+                "尚未查過任何基金。在「🔍 單一基金」抓取後 / 「📦 組合基金」載入後，"
+                "代號與名稱會自動寫入此清單。"
+            )
+        else:
+            _fh_c1, _fh_c2, _fh_c3 = st.columns([2, 1, 1])
+            _fh_c1.caption(f"📊 共 **{len(_df_fh)}** 檔唯一基金（依最近查詢時間排序）")
+            _fh_csv = _df_fh.to_csv(index=False).encode("utf-8-sig")
+            _fh_c2.download_button(
+                "💾 下載 CSV",
+                _fh_csv,
+                file_name="fund_history.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="_fh_dl_csv",
+            )
+            if _fh_c3.button("🗑️ 清空紀錄", use_container_width=True, key="_fh_clear"):
+                _clear_fh()
+                st.rerun()
+            st.dataframe(_df_fh, use_container_width=True, hide_index=True)
+        st.caption(
+            "⚠️ 此清單儲存於容器內 `cache/fund_history.json`，**Streamlit Cloud 重啟容器時會清空**。"
+            "重要清單請按「💾 下載 CSV」備份。"
+        )
+
+    st.divider()
+
     _t6 = st.tabs([
         "🧮 1. Macro Score",
         "🌤️ 2. 景氣天氣",

@@ -1571,6 +1571,16 @@ def render_portfolio_tab() -> None:
                                             or _raw_b.get("metrics", {}).get("currency", ""),
                         })
                         _succ.append(_code_b)
+                        # v18.272：記錄到「曾經查過的基金清單」（Tab6 顯示）
+                        try:
+                            from services.fund_history import record_fund as _rec_fh3
+                            _rec_fh3(
+                                _code_b,
+                                _raw_b.get("fund_name", "") or _code_b,
+                                source="Tab3",
+                            )
+                        except Exception:
+                            pass
                         if _pid_b and _client_b:
                             try:
                                 upsert_fund_in_policy(_client_b, _sid_b, _pid_b, {

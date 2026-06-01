@@ -165,6 +165,16 @@ def render_single_fund_tab() -> None:
                 "is_core":     _is_core_fund(fd_raw.get("fund_name","") or fd_raw.get("full_key","")),
                 "currency":    fd_raw.get("currency","") or fd_raw.get("metrics",{}).get("currency",""),
             }
+            # v18.272：記錄到「曾經查過的基金清單」（Tab6 說明書顯示）
+            try:
+                from services.fund_history import record_fund as _rec_fh
+                _rec_fh(
+                    fd_raw.get("full_key", ""),
+                    fd_raw.get("fund_name", ""),
+                    source="Tab2",
+                )
+            except Exception:
+                pass  # 紀錄失敗不影響主流程
             _update_data_registry()
             if fd_raw.get("error"):
                 st.error(f"❌ {fd_raw['error']}")
