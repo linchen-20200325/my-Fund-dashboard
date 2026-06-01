@@ -304,6 +304,10 @@ def render_crisis_backtest_tab() -> None:
         st.markdown("---")
         _render_signal_lookback_section(events, years_disp)
 
+        # ── Phase 3.5：Tab1 Macro Score 預測力驗證 ────────────
+        st.markdown("---")
+        _render_score_validation_section(events, years_disp)
+
         # ── Phase 4 + Phase 5：策略網格搜尋 + AI 策略建議 ─────
         st.markdown("---")
         _render_strategy_grid_section(mkt_series, market_label, years_disp, events)
@@ -429,6 +433,182 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
         "— = 訊號歷史不涵蓋該事件（FRED key 缺漏 / 序列過短）。"
     )
 
+
+
+
+
+# ──────────────────────────────────────────────────────────────
+# Phase 3.5：Tab1 Macro Score 預測力驗證（v18.260 Phase 6a）
+# ──────────────────────────────────────────────────────────────
+def _render_score_validation_section(events: list, years: int) -> None:
+    """📊 重算歷史 Macro Score → 與崩盤事件對齊 → 量化 Tab1 預警命中率。"""
+    st.markdown("### 📊 Tab1 Macro Score 預測力驗證（Phase 3.5）")
+    st.caption(
+        "把 Tab1 那個 0-10 分用 9 個核心指標（PMI / 殖利率曲線 / HY / M2 / FED_BS / "
+        "VIX / CPI / 失業率）的歷史 series 逐月重算，跟既有崩盤事件對齊 → 看「景氣變差時 "
+        "Tab1 score 是否真的有下降」。"
+    )
+
+    indicators = st.session_state.get("indicators") or {}
+    if not indicators:
+        st.info(
+            "⬆️ 請先到「📊 總經 Dashboard」Tab 按抓資料按鈕載入 indicators，"
+            "此 section 重用其 .series 欄位免重抓"
+        )
+        return
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        lead_months = st.slider(
+            "預警觀測：峰前 N 月",
+            min_value=3, max_value=12, value=6, step=1,
+            help="比較 peak 月 score 與其前 N 個月 score 的降幅",
+            key="crisis_score_lead_months",
+        )
+    with col_b:
+        drop_pct = st.slider(
+            "命中門檻：score 降幅 ≥",
+            min_value=10, max_value=50, value=20, step=5,
+            help="峰前→峰時 score 降幅達此 % 才算「預警成功」",
+            key="crisis_score_drop_pct",
+        )
+    with col_c:
+        score_years = st.slider(
+            "重算年數",
+            min_value=5, max_value=20, value=max(years, 15), step=1,
+            help="重算 N 年每月 macro_score 序列（最大受限於各 series 涵蓋）",
+            key="crisis_score_years",
+        )
+
+    if not st.button("📊 跑 Score 驗證", type="secondary", key="crisis_score_run"):
+        st.caption("⬆️ 按按鈕開始（重算 ~180 個月，耗時 < 1 秒）")
+        return
+
+    from services.macro_validation import (
+        SCORE_RULES,
+        calc_macro_score_series,
+        compute_period_stats,
+        verify_score_vs_crises,
+    )
+
+    n_covered = sum(1 for k in SCORE_RULES if indicators.get(k, {}).get("series") is not None)
+    if n_covered < 3:
+        st.error(
+            f"❌ session_state['indicators'] 中只有 {n_covered}/{len(SCORE_RULES)} 個指標有 "
+            "series 欄位 — 請到 Tab1 確認已抓取 FRED 完整資料"
+        )
+        return
+
+    with st.spinner(f"重算 {score_years} 年 macro_score 月序列..."):
+        score_df = calc_macro_score_series(indicators, years=score_years, freq="ME")
+
+    if score_df.empty:
+        st.error("❌ 重算結果空 — indicators 缺 series 或日期範圍無交集")
+        return
+
+    st.caption(
+        f"✅ 重算 {len(score_df)} 個月，"
+        f"平均每月用 {score_df['n_indicators'].mean():.1f} 個指標打分"
+    )
+
+    # ── 走勢圖 + crisis vlines ─────────────────────────
+    try:
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=score_df.index, y=score_df["score"],
+            mode="lines", name="Macro Score",
+            line=dict(color="#1976d2", width=2),
+        ))
+        # 分數區間參考線
+        for y_val, label, color in [
+            (8, "高峰", "#f44336"),
+            (5, "擴張", "#00c853"),
+            (3, "復甦", "#64b5f6"),
+        ]:
+            fig.add_hline(y=y_val, line_dash="dash", line_color=color,
+                          opacity=0.3, annotation_text=label, annotation_position="right")
+        # crisis peak vlines
+        for ev in events:
+            if ev.peak_date is None:
+                continue
+            peak = pd.Timestamp(ev.peak_date)
+            if peak < score_df.index.min() or peak > score_df.index.max():
+                continue
+            fig.add_vline(x=peak, line_dash="dot", line_color="#d32f2f",
+                          opacity=0.5,
+                          annotation_text=str(peak.date())[:7],
+                          annotation_position="top")
+        fig.update_layout(
+            height=380,
+            yaxis=dict(title="Macro Score (0-10)", range=[0, 10]),
+            xaxis=dict(title=""),
+            margin=dict(l=20, r=20, t=20, b=20),
+            showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.warning(f"⚠️ 走勢圖繪製失敗：{e}")
+
+    # ── 命中表 ─────────────────────────────────────────
+    verify = verify_score_vs_crises(
+        score_df, events,
+        lead_months=lead_months,
+        drop_threshold=drop_pct / 100.0,
+    )
+    st.markdown("#### 🎯 事件命中表")
+    if not verify:
+        st.caption("（無事件落在重算範圍內）")
+    else:
+        rows = []
+        for r in verify:
+            rows.append({
+                "事件": _format_event_name(str(r.peak_date.date())),
+                "峰前 score": f"{r.score_lead:.1f}" if r.score_lead is not None else "—",
+                "峰時 score": f"{r.score_peak:.1f}" if r.score_peak is not None else "—",
+                "谷底 score": f"{r.score_trough:.1f}" if r.score_trough is not None else "—",
+                "降幅": f"{r.score_drop_pct:+.1%}" if r.score_drop_pct is not None else "—",
+                "預警": "✅" if r.hit else "❌",
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+        n_hit = sum(1 for r in verify if r.hit)
+        n_total = sum(1 for r in verify if r.score_drop_pct is not None)
+        if n_total > 0:
+            st.metric(
+                "Tab1 預警命中率",
+                f"{n_hit}/{n_total} = {n_hit / n_total:.0%}",
+                help=f"命中 = 峰前 {lead_months} 月 → 峰時 score 降幅 ≥ {drop_pct}%",
+            )
+
+    # ── 期間分佈統計 ───────────────────────────────────
+    stats = compute_period_stats(score_df, events)
+    st.markdown("#### 📊 危機期 vs 平時 score 分佈")
+    col_x, col_y, col_z = st.columns(3)
+    with col_x:
+        cm = stats["crisis_mean"]
+        st.metric("危機期平均", f"{cm:.2f}" if cm is not None else "—",
+                  help=f"n = {stats['n_crisis']} 月")
+    with col_y:
+        nm = stats["normal_mean"]
+        st.metric("平時平均", f"{nm:.2f}" if nm is not None else "—",
+                  help=f"n = {stats['n_normal']} 月")
+    with col_z:
+        pv = stats["p_value"]
+        if pv is not None:
+            label = "✅ 顯著" if pv < 0.05 else "⚠️ 不顯著"
+            st.metric("Welch t-test", f"p = {pv:.4f}", help=label)
+        else:
+            st.metric("Welch t-test", "—", help="樣本不足或 scipy 未裝")
+
+    st.caption(
+        f"📐 重算邏輯：對 {len(SCORE_RULES)} 個核心指標的歷史 series ffill 對齊月末 → "
+        "套用與 fetch_all_indicators() 一致的閾值規則打分 → 聚合公式同 calc_macro_phase。"
+        "不含 ADL/DXY/cross-rates（需 monthly change 計算，回測對齊複雜，留 6b）。"
+    )
+
+
+# ──────────────────────────────────────────────────────────────
 
 # ──────────────────────────────────────────────────────────────
 # Phase 4：策略網格搜尋
