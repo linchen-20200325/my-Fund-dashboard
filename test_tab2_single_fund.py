@@ -102,8 +102,9 @@ def test_invest_calc_fetches_fx_rate():
     src = (Path(__file__).parent / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
     assert "from repositories.fund_repository import get_latest_fx" in src, \
         "必須 import get_latest_fx 抓即時匯率"
-    assert 'get_latest_fx(f"{_ccy}TWD=X")' in src, \
-        "應呼叫 get_latest_fx 用 {CCY}TWD=X pair"
+    # v18.264：簽名加 fred_api_key 後位置/kwarg 均可，只驗 ticker pair 出現
+    assert 'get_latest_fx(f"{_ccy}TWD=X"' in src, \
+        "應呼叫 get_latest_fx 用 {CCY}TWD=X pair（簽名 v18.264 後可加 fred_api_key）"
     # 應跳過 TWD 基金避免無謂呼叫
     assert '_ccy.upper() != "TWD"' in src, "TWD 基金應跳過 FX 抓取"
 
