@@ -26,6 +26,17 @@ _CACHE_DIR = Path("cache")
 _HIST_FILE = _CACHE_DIR / "fund_history.json"
 
 
+# v18.282：預設常用基金清單（Streamlit Cloud reboot 不會消失）
+# 來源：user 之前截圖出現過的基金 — 即使 cache 被清空仍會顯示
+_DEFAULT_FUNDS: list[dict] = [
+    {"code": "ACCP138", "name": "聯博全球高收益債券基金 AT 級別 美元"},
+    {"code": "ACDD01",  "name": "安聯台灣大壩基金-A累積型(台幣)"},
+    {"code": "ACDD19",  "name": "安聯台灣智慧基金"},
+    {"code": "ACTI71",  "name": "聯博基金（ACTI71）"},
+    {"code": "ACTI94",  "name": "聯博基金（ACTI94）"},
+]
+
+
 def _load() -> dict[str, dict]:
     """讀 JSON → {code: entry}；缺檔/壞檔回空 dict。"""
     if not _HIST_FILE.exists():
@@ -84,10 +95,48 @@ def record_fund(code: str, name: str = "", source: str = "Tab2") -> None:
         pass  # 寫失敗不該擋住主流程
 
 
+def _load_with_defaults() -> dict[str, dict]:
+    """v18.282：讀 user JSON + merge 內建預設 = 永遠不會「全空」。
+
+    優先級：user 紀錄 > 預設（同 code 時保留 user count / timestamps，
+    但 name 缺漏時用預設補；sources 聯集）。
+    """
+    user_data = _load()
+    out: dict[str, dict] = {}
+    # 先塞預設（次數 0 / 時間「—」表示「from preset, 尚未實際查過」）
+    for d in _DEFAULT_FUNDS:
+        code = str(d.get("code", "") or "").strip().upper()
+        if not code:
+            continue
+        out[code] = {
+            "code": code,
+            "name": str(d.get("name", "") or ""),
+            "first_seen": "—",
+            "last_seen": "—",
+            "count": 0,
+            "sources": ["preset"],
+        }
+    # user 紀錄覆蓋（merge sources + name 缺漏補預設）
+    for code, ent in user_data.items():
+        code = str(code or "").strip().upper()
+        if not code:
+            continue
+        if code in out:
+            preset_ent = out[code]
+            # name：user 有設用 user 的，否則用 preset 的
+            if not ent.get("name") or ent.get("name") == code:
+                ent["name"] = preset_ent.get("name", "")
+            # sources 聯集 preset + user
+            srcs = set(ent.get("sources", []) or []) | set(preset_ent.get("sources", []) or [])
+            ent["sources"] = sorted(srcs)
+        out[code] = ent
+    return out
+
+
 def get_history_df() -> pd.DataFrame:
-    """回傳排序後 DataFrame（最近查詢在最上）。空則回空 DataFrame 含 6 欄。"""
+    """回傳排序後 DataFrame（最近查詢在最上、preset 排最下避免擠掉 user 紀錄）。"""
     cols = ["代號", "名稱", "來源", "查詢次數", "首次查詢", "最近查詢"]
-    data = _load()
+    data = _load_with_defaults()
     if not data:
         return pd.DataFrame(columns=cols)
     rows = []
@@ -101,7 +150,12 @@ def get_history_df() -> pd.DataFrame:
             "最近查詢": entry.get("last_seen", "") or "",
         })
     df = pd.DataFrame(rows, columns=cols)
-    return df.sort_values("最近查詢", ascending=False).reset_index(drop=True)
+    # 排序：count > 0 的 user 紀錄按最近查詢降序；count = 0 的 preset 排最後
+    df["_is_active"] = df["查詢次數"] > 0
+    df = df.sort_values(
+        ["_is_active", "最近查詢"], ascending=[False, False]
+    ).drop(columns=["_is_active"]).reset_index(drop=True)
+    return df
 
 
 def clear_history() -> None:

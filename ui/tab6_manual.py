@@ -26,12 +26,35 @@ def render_manual_tab() -> None:
 
     # ── v18.272: 📋 曾經查過的基金清單（Tab2 + Tab3 自動記錄）─
     # ── v18.280: 加 CSV 上傳還原（reboot 後從備份 CSV merge 回來）─
-    with st.expander("📋 曾經查過的基金標的清單（Tab2 / Tab3 自動記錄）", expanded=True):
+    # ── v18.282: 加預設常用基金 + 手動新增表單 ─
+    with st.expander("📋 曾經查過的基金標的清單（Tab2 / Tab3 自動記錄 + 預設）", expanded=True):
         from services.fund_history import (
             clear_history as _clear_fh,
             get_history_df as _hist_df,
             import_from_csv as _import_fh,
+            record_fund as _rec_fh_manual,
         )
+
+        # 手動新增表單
+        with st.form("_fh_add_form", clear_on_submit=True):
+            _add_c1, _add_c2, _add_c3 = st.columns([1, 2, 1])
+            _new_code = _add_c1.text_input(
+                "基金代號", placeholder="例：ACCP138",
+                key="_fh_new_code",
+            )
+            _new_name = _add_c2.text_input(
+                "基金名稱（可選）", placeholder="例：聯博全球高收益基金",
+                key="_fh_new_name",
+            )
+            _add_c3.markdown("&nbsp;", unsafe_allow_html=True)  # 對齊
+            _submitted = _add_c3.form_submit_button(
+                "➕ 加入清單", use_container_width=True,
+            )
+            if _submitted and _new_code.strip():
+                _rec_fh_manual(_new_code.strip(), _new_name.strip(), source="manual")
+                st.success(f"✅ 已加入 {_new_code.strip().upper()}")
+                st.rerun()
+
         _df_fh = _hist_df()
         _fh_up = st.file_uploader(
             "📥 上傳之前下載的 fund_history.csv 還原紀錄（reboot 後第一件事）",
@@ -70,8 +93,9 @@ def render_manual_tab() -> None:
                 st.rerun()
             st.dataframe(_df_fh, use_container_width=True, hide_index=True)
         st.caption(
-            "⚠️ 此清單儲存於容器內 `cache/fund_history.json`，**Streamlit Cloud 重啟容器時會清空**。"
-            "「💾 下載 CSV → reboot 後 📥 上傳 CSV 還原」雙保險：定期下載備份，重啟後上傳即 merge 回來。"
+            "💡 **內建預設常用基金永遠在**（即使 cache 被清空也會看到，來源標 `preset`）。"
+            "user 抓過 / 手動加的紀錄存於容器內 `cache/fund_history.json`，"
+            "**Streamlit Cloud 重啟容器時這部分會清空** → 用「下載 CSV → reboot 後上傳 CSV」雙保險。"
         )
 
     st.divider()
