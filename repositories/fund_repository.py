@@ -4190,9 +4190,11 @@ def fetch_fund_structure(full_key: str, portal: str = "") -> dict:
 def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     """抓最新匯率。傳入 yfinance 規格的 pair (例 'USDTWD=X')，回傳最新收盤。
 
-    Fallback chain（v18.264）：
+    Fallback chain（v18.266）：
         1. Yahoo Chart REST API + NAS proxy（既有路徑）
-        2. FRED DEX* series（新增第二來源）— 主要支援 USD/JPY/EUR/CNY/CHF 對 TWD/USD
+        2. FRED DEX* series（注意：DEXTWUS 已於 2021-12-31 discontinued，
+           USD/TWD 在此不會命中；但 DEXJPUS / DEXUSEU 等仍在）
+        3. Frankfurter (ECB) — 免 auth、支援 30+ 對含 TWD、ECB 官方日匯率
 
     失敗時回 None；呼叫端必須處理 None（例：UI 提示使用者手動輸入）。
 
@@ -4218,56 +4220,62 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     except Exception as _e:
         print(f"[get_latest_fx] Yahoo {pair}: {_e}")
 
-    # v18.264: FRED 第二來源 fallback —— Yahoo / NAS proxy 掛掉時的備援
-    if not fred_api_key:
-        return None
     # 解 ccy_base / ccy_quote：固定取前 3 / 後 3 碼（避免 rstrip 把 USD 的 D 吃掉）
     _stripped = pair.replace("=X", "")
     _ccy_base = _stripped[:3] if len(_stripped) >= 6 else _stripped
     _ccy_quote = _stripped[3:] if len(_stripped) >= 6 else ""
-    # FRED FX series 命名是 DEX{ForeignCcy}{BaseCcy}，例：
-    #   DEXTWUS = TWD per USD (我們要的就是這個 — 1 USD = X TWD)
-    #   DEXJPUS = JPY per USD
-    #   DEXSZUS = CHF per USD
-    #   DEXUSEU = USD per EUR (EUR base 反向)
-    _FRED_FX_MAP = {
-        ("USD", "TWD"): ("DEXTWUS", False),  # 直接給 TWD per USD ✓
-        ("JPY", "TWD"): ("DEXJPUS", "via_usd"),  # JPY/USD 再乘 USDTWD
-        ("EUR", "TWD"): ("DEXUSEU", "via_usd_inv"),  # USD/EUR 取倒數成 EUR/USD 再乘 USDTWD
-        ("CHF", "TWD"): ("DEXSZUS", "via_usd"),
-        ("CNH", "TWD"): ("DEXCHUS", "via_usd"),
-        ("CNY", "TWD"): ("DEXCHUS", "via_usd"),
-    }
-    _key = (_ccy_base, _ccy_quote)
-    _spec = _FRED_FX_MAP.get(_key)
-    if not _spec:
-        return None
-    _series_id, _mode = _spec
-    try:
-        from repositories.macro_repository import fetch_fred as _fred
-        _df = _fred(_series_id, fred_api_key, n=10)
-        if _df is None or _df.empty:
-            return None
-        _val = float(_df.iloc[-1]["value"])
-        if _val <= 0:
-            return None
-        if _mode is False:
-            return _val
-        # via_usd / via_usd_inv 兩段式：先得到 ccy↔USD，再 USD↔TWD
-        _usdtwd_df = _fred("DEXTWUS", fred_api_key, n=10)
-        if _usdtwd_df is None or _usdtwd_df.empty:
-            return None
-        _usdtwd = float(_usdtwd_df.iloc[-1]["value"])
-        if _usdtwd <= 0:
-            return None
-        if _mode == "via_usd":
-            # _val = ForeignCcy per USD → 1 ForeignCcy = (1 / _val) USD → × USDTWD = ForeignCcy per TWD
-            return _usdtwd / _val
-        if _mode == "via_usd_inv":
-            # _val = USD per EUR → 1 EUR = _val USD → × USDTWD = EUR per TWD
-            return _val * _usdtwd
-    except Exception as _e:
-        print(f"[get_latest_fx] FRED {_series_id}: {_e}")
+
+    # v18.264: FRED 第二來源 fallback —— Yahoo / NAS proxy 掛掉時的備援
+    # 注意 DEXTWUS 於 2021-12-31 已停發，USD/TWD 在此不會命中（會走第 3 來源）
+    if fred_api_key:
+        _FRED_FX_MAP = {
+            ("USD", "TWD"): ("DEXTWUS", False),   # 已停發，留著歷史資料 lookup 仍可
+            ("JPY", "TWD"): ("DEXJPUS", "via_usd"),
+            ("EUR", "TWD"): ("DEXUSEU", "via_usd_inv"),
+            ("CHF", "TWD"): ("DEXSZUS", "via_usd"),
+            ("CNH", "TWD"): ("DEXCHUS", "via_usd"),
+            ("CNY", "TWD"): ("DEXCHUS", "via_usd"),
+        }
+        _spec = _FRED_FX_MAP.get((_ccy_base, _ccy_quote))
+        if _spec:
+            _series_id, _mode = _spec
+            try:
+                from repositories.macro_repository import fetch_fred as _fred
+                _df = _fred(_series_id, fred_api_key, n=10)
+                if _df is not None and not _df.empty:
+                    _val = float(_df.iloc[-1]["value"])
+                    if _val > 0:
+                        if _mode is False:
+                            return _val
+                        # via_usd / via_usd_inv 兩段式
+                        _usdtwd_df = _fred("DEXTWUS", fred_api_key, n=10)
+                        if _usdtwd_df is not None and not _usdtwd_df.empty:
+                            _usdtwd = float(_usdtwd_df.iloc[-1]["value"])
+                            if _usdtwd > 0:
+                                if _mode == "via_usd":
+                                    return _usdtwd / _val
+                                if _mode == "via_usd_inv":
+                                    return _val * _usdtwd
+            except Exception as _e:
+                print(f"[get_latest_fx] FRED {_series_id}: {_e}")
+
+    # v18.266: Frankfurter (ECB) 第三來源 — 涵蓋 FRED DEXTWUS 停發後的 USD/TWD
+    # 免 auth，支援 30+ 對含 TWD/USD/EUR/JPY/CHF/CNY；走 NAS proxy
+    if _ccy_base and _ccy_quote and _ccy_base != _ccy_quote:
+        try:
+            from infra.proxy import fetch_url as _fetch_url
+            _r = _fetch_url(
+                "https://api.frankfurter.app/latest",
+                params={"from": _ccy_base, "to": _ccy_quote},
+                timeout=10,
+            )
+            if _r is not None:
+                _d = _r.json()
+                _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
+                if _v > 0:
+                    return _v
+        except Exception as _e:
+            print(f"[get_latest_fx] Frankfurter {_ccy_base}/{_ccy_quote}: {_e}")
     return None
 
 
