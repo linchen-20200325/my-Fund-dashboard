@@ -20,3 +20,7 @@ temp/
 # OS
 .DS_Store
 Thumbs.db
+
+# Debug protocol artifacts (Phase 1-4 generated, cleaned at Phase 4)
+*.bak
+debug.log
