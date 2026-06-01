@@ -4259,19 +4259,24 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
             except Exception as _e:
                 print(f"[get_latest_fx] FRED {_series_id}: {_e}")
 
-    # v18.268: open.er-api.com 第三來源 — 真正支援 TWD（150+ 幣別，免 auth）
-    # ⚠️ Frankfurter (ECB) 雖然在 v18.266 被列入但實際不支援 TWD（ECB reference
-    # rates 涵蓋 30+ 幣別但**沒有 TWD**），對 user 的 USD/TWD 場景無用 → 改用
-    # open.er-api.com 作為實質第三來源；Frankfurter 仍保留為第四（EU 對救援）。
+    # v18.273: er-api / Frankfurter 改用 requests.get 直連 proxy（跟 sidebar 測試同樣 path），
+    # 跳過 fetch_url 的複雜 retry session — 經 user 截圖證實 sidebar 測試 er-api ✓ HTTP 200
+    # 但 fetch_url 拿不到，疑為 retry session 的 user-agent / verify=False / 多 retry on 5xx
+    # 等行為差異導致。直接走 requests.get 與 sidebar 同樣機制保證一致性。
+    import requests as _req_fx
+    try:
+        from infra.proxy import get_proxy_config as _gp_fx
+        _proxies_fx = _gp_fx() or {}
+    except Exception:
+        _proxies_fx = {}
+
     if _ccy_base and _ccy_quote and _ccy_base != _ccy_quote:
         try:
-            from infra.proxy import fetch_url as _fetch_url
-            _r = _fetch_url(
+            _r = _req_fx.get(
                 f"https://open.er-api.com/v6/latest/{_ccy_base}",
-                params=None,
-                timeout=10,
+                proxies=_proxies_fx, timeout=15, verify=False,
             )
-            if _r is not None:
+            if _r.status_code == 200:
                 _d = _r.json()
                 if _d.get("result") == "success":
                     _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
@@ -4280,17 +4285,14 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
         except Exception as _e:
             print(f"[get_latest_fx] open.er-api {_ccy_base}: {_e}")
 
-    # v18.266: Frankfurter (ECB) 第四來源 — 對 EUR/USD/JPY/CHF/CNY 等 ECB 涵蓋幣別有效
-    # （TWD 不在 ECB 清單，本路徑對 USD/TWD 永遠失敗，純粹保留給其他歐系幣對）
     if _ccy_base and _ccy_quote and _ccy_base != _ccy_quote and "TWD" not in (_ccy_base, _ccy_quote):
         try:
-            from infra.proxy import fetch_url as _fetch_url
-            _r = _fetch_url(
+            _r = _req_fx.get(
                 "https://api.frankfurter.app/latest",
                 params={"from": _ccy_base, "to": _ccy_quote},
-                timeout=10,
+                proxies=_proxies_fx, timeout=15, verify=False,
             )
-            if _r is not None:
+            if _r.status_code == 200:
                 _d = _r.json()
                 _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
                 if _v > 0:
@@ -4366,18 +4368,25 @@ def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
             except Exception as e:
                 out["fred"]["error"] = str(e)[:80]
 
+    # v18.273: er-api / Frankfurter 改用 requests.get 直連 proxy（同 sidebar 測試 path）
+    import requests as _req_dx
+    try:
+        from infra.proxy import get_proxy_config as _gp_dx
+        _proxies_dx = _gp_dx() or {}
+    except Exception:
+        _proxies_dx = {}
+
     # 3. open.er-api.com
     if not _ccy_base or not _ccy_quote or _ccy_base == _ccy_quote:
         out["er_api"]["error"] = "pair 解析失敗"
     else:
         try:
-            from infra.proxy import fetch_url as _fetch_url
-            _r = _fetch_url(
+            _r = _req_dx.get(
                 f"https://open.er-api.com/v6/latest/{_ccy_base}",
-                params=None, timeout=10,
+                proxies=_proxies_dx, timeout=15, verify=False,
             )
-            if _r is None:
-                out["er_api"]["error"] = "HTTP 請求失敗"
+            if _r.status_code != 200:
+                out["er_api"]["error"] = f"HTTP {_r.status_code}"
             else:
                 _d = _r.json()
                 if _d.get("result") != "success":
@@ -4399,14 +4408,13 @@ def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
         out["frankfurter"]["error"] = "pair 解析失敗"
     else:
         try:
-            from infra.proxy import fetch_url as _fetch_url
-            _r = _fetch_url(
+            _r = _req_dx.get(
                 "https://api.frankfurter.app/latest",
                 params={"from": _ccy_base, "to": _ccy_quote},
-                timeout=10,
+                proxies=_proxies_dx, timeout=15, verify=False,
             )
-            if _r is None:
-                out["frankfurter"]["error"] = "HTTP 請求失敗"
+            if _r.status_code != 200:
+                out["frankfurter"]["error"] = f"HTTP {_r.status_code}"
             else:
                 _d = _r.json()
                 _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)

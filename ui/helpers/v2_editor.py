@@ -170,15 +170,43 @@ def _render_div_split_estimate(policy_id: str, fund_df: pd.DataFrame) -> None:
         _is_monthly = _period.startswith("📆")
         _div = 12.0 if _is_monthly else 1.0
         _label = "月" if _is_monthly else "年"
+
+        # v18.273：抓即時 FX 給「配息折算」用（成本基礎仍走 avg_fx）
+        # User 反饋「組合買入的匯率固定，但轉配息由美元轉台必須要即時匯率」
+        _current_fx_cache: dict[str, float] = {}
+        def _get_current_fx(_ccy: str) -> float:
+            _ccy = (_ccy or "").strip().upper()
+            if not _ccy or _ccy == "TWD":
+                return 0.0
+            if _ccy in _current_fx_cache:
+                return _current_fx_cache[_ccy]
+            try:
+                from repositories.fund_repository import get_latest_fx as _gf
+                import os as _os_dvs
+                _fk = ""
+                try:
+                    _fk = st.secrets.get("FRED_API_KEY", "")
+                except Exception:
+                    _fk = ""
+                _fk = _fk or _os_dvs.environ.get("FRED_API_KEY", "")
+                _v = _gf(f"{_ccy}TWD=X", fred_api_key=_fk)
+                _current_fx_cache[_ccy] = float(_v) if _v else 0.0
+            except Exception:
+                _current_fx_cache[_ccy] = 0.0
+            return _current_fx_cache[_ccy]
+
         out_rows = []
         total_cash, total_reinv, total_div = 0.0, 0.0, 0.0
         for r in rows:
+            _avg_fx_r = float(r.get("avg_fx", 0) or 0)
+            _cur_fx_r = _get_current_fx(str(r.get("currency", "") or ""))
             est = estimate_dividend_split(
                 invest_twd=float(r.get("invest_twd", 0) or 0),
                 annual_div_rate_pct=rate_pct / _div,
                 div_cash_pct=float(r.get("div_cash_pct", 100) or 100),
                 avg_nav=float(r.get("avg_nav", 0) or 0),
-                avg_fx=float(r.get("avg_fx", 0) or 0),
+                avg_fx=_avg_fx_r,
+                current_fx=_cur_fx_r,  # v18.273
             )
             out_rows.append({
                 "基金代號":                str(r.get("fund_code", "") or ""),
