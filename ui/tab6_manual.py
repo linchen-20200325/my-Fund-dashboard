@@ -24,13 +24,30 @@ def render_manual_tab() -> None:
     st.markdown("## 📖 系統說明書 — 公式與判斷標準完整說明")
     st.caption("📖 故事附錄・公式聖經：拆解前 3 站每個評分模型、公式與指標的算法，讓進階使用者看懂決策邏輯。")
 
-    # ── v18.272: 📋 曾經查過的基金清單（Tab2 + Tab3 自動記錄）─────────
+    # ── v18.272: 📋 曾經查過的基金清單（Tab2 + Tab3 自動記錄）─
+    # ── v18.280: 加 CSV 上傳還原（reboot 後從備份 CSV merge 回來）─
     with st.expander("📋 曾經查過的基金標的清單（Tab2 / Tab3 自動記錄）", expanded=True):
         from services.fund_history import (
             clear_history as _clear_fh,
             get_history_df as _hist_df,
+            import_from_csv as _import_fh,
         )
         _df_fh = _hist_df()
+        _fh_up = st.file_uploader(
+            "📥 上傳之前下載的 fund_history.csv 還原紀錄（reboot 後第一件事）",
+            type=["csv"],
+            key="_fh_upload",
+            help="紀錄會與當前清單 merge：同代號疊代次數 + 聯集來源 + 取較早 first / 較晚 last",
+        )
+        if _fh_up is not None:
+            _ret = _import_fh(_fh_up.getvalue())
+            if _ret["errors"]:
+                st.error("、".join(_ret["errors"]))
+            else:
+                st.success(
+                    f"✅ 還原成功：新增 {_ret['imported']} 檔、merge {_ret['merged']} 檔。"
+                )
+            _df_fh = _hist_df()
         if _df_fh.empty:
             st.info(
                 "尚未查過任何基金。在「🔍 單一基金」抓取後 / 「📦 組合基金」載入後，"
@@ -54,7 +71,7 @@ def render_manual_tab() -> None:
             st.dataframe(_df_fh, use_container_width=True, hide_index=True)
         st.caption(
             "⚠️ 此清單儲存於容器內 `cache/fund_history.json`，**Streamlit Cloud 重啟容器時會清空**。"
-            "重要清單請按「💾 下載 CSV」備份。"
+            "「💾 下載 CSV → reboot 後 📥 上傳 CSV 還原」雙保險：定期下載備份，重啟後上傳即 merge 回來。"
         )
 
     st.divider()

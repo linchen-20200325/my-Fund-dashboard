@@ -116,3 +116,85 @@ def clear_history() -> None:
 def history_size() -> int:
     """回傳當前已記錄的唯一基金數。"""
     return len(_load())
+
+
+def import_from_csv(csv_bytes: bytes) -> dict:
+    """v18.280：從 user 之前下載的 CSV 還原紀錄（merge，不覆蓋）。
+
+    Args:
+        csv_bytes: 上傳的 CSV 檔內容（utf-8 或 utf-8-sig BOM 都吃）
+
+    Returns:
+        dict with: imported (新增筆數) / merged (重複疊代次數) / errors (錯誤訊息 list)
+    """
+    import io
+    result = {"imported": 0, "merged": 0, "errors": []}
+    if not csv_bytes:
+        result["errors"].append("CSV 內容為空")
+        return result
+    try:
+        # utf-8-sig 處理 Excel 開過的 BOM
+        df = pd.read_csv(io.BytesIO(csv_bytes), encoding="utf-8-sig")
+    except Exception as e1:
+        try:
+            df = pd.read_csv(io.BytesIO(csv_bytes), encoding="utf-8")
+        except Exception as e2:
+            result["errors"].append(f"CSV 解析失敗：{e1} / {e2}")
+            return result
+    # 容錯：支援既有 download CSV 的欄位名（中文）
+    _col_map = {
+        "代號": "code", "code": "code",
+        "名稱": "name", "name": "name",
+        "來源": "sources", "sources": "sources",
+        "查詢次數": "count", "count": "count",
+        "首次查詢": "first_seen", "first_seen": "first_seen",
+        "最近查詢": "last_seen", "last_seen": "last_seen",
+    }
+    df = df.rename(columns=lambda c: _col_map.get(str(c).strip(), str(c).strip()))
+    if "code" not in df.columns:
+        result["errors"].append("CSV 缺「代號」欄（或 code）")
+        return result
+    data = _load()
+    for _, row in df.iterrows():
+        code = str(row.get("code", "") or "").strip().upper()
+        if not code:
+            continue
+        name = str(row.get("name", "") or "").strip()
+        # sources 欄位可能是 "Tab2 / Tab3" 格式，split 成 list
+        srcs_raw = str(row.get("sources", "") or "").strip()
+        srcs = [s.strip() for s in srcs_raw.replace("／", "/").split("/") if s.strip()] or ["imported"]
+        try:
+            count = int(row.get("count", 0) or 0)
+        except (TypeError, ValueError):
+            count = 0
+        first_seen = str(row.get("first_seen", "") or "").strip()
+        last_seen = str(row.get("last_seen", "") or "").strip()
+        if code in data:
+            # merge：取較舊 first_seen 與較新 last_seen + 累加 count + 聯集 sources
+            ent = data[code]
+            ent_first = ent.get("first_seen", "")
+            ent_last = ent.get("last_seen", "")
+            if first_seen and (not ent_first or first_seen < ent_first):
+                ent["first_seen"] = first_seen
+            if last_seen and (not ent_last or last_seen > ent_last):
+                ent["last_seen"] = last_seen
+            ent["count"] = int(ent.get("count", 0) or 0) + max(count, 0)
+            srcs_set = set(ent.get("sources", []) or []) | set(srcs)
+            ent["sources"] = sorted(srcs_set)
+            if name and (not ent.get("name") or ent.get("name") == code):
+                ent["name"] = name
+            result["merged"] += 1
+        else:
+            data[code] = {
+                "code": code, "name": name,
+                "first_seen": first_seen or last_seen or "",
+                "last_seen": last_seen or first_seen or "",
+                "count": max(count, 1),
+                "sources": sorted(set(srcs)) or ["imported"],
+            }
+            result["imported"] += 1
+    try:
+        _save(data)
+    except Exception as e:
+        result["errors"].append(f"寫回失敗：{e}")
+    return result
