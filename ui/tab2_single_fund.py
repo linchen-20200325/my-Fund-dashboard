@@ -1210,7 +1210,24 @@ def render_single_fund_tab() -> None:
                 # v18.260p6：💰 投資試算 — 投入 TWD → 換原幣 → 單位數 / 月配息 TWD / 月配股
                 with st.container(border=True):
                     st.markdown("#### 💰 投資試算 — 投入金額 → 單位數 / 配息估算")
-                    _ccy = (mj_raw.get("currency") or "TWD").strip() or "TWD"
+                    _ccy_raw = (mj_raw.get("currency") or "TWD").strip() or "TWD"
+                    # v18.278：中文幣別 → ISO normalize（user 截圖顯示「台幣」沒被識別為 TWD →
+                    # 跑去找台幣/TWD 匯率必失敗 → 跳手動模式 32.00 假象）
+                    _CCY_NORMALIZE = {
+                        "台幣": "TWD", "新台幣": "TWD", "台": "TWD",
+                        "美元": "USD", "美金": "USD",
+                        "歐元": "EUR", "歐": "EUR",
+                        "日圓": "JPY", "日幣": "JPY", "日元": "JPY",
+                        "人民幣": "CNH", "人民幣(CNH)": "CNH",
+                        "港幣": "HKD", "港元": "HKD",
+                        "英鎊": "GBP",
+                        "澳幣": "AUD", "澳元": "AUD",
+                        "瑞士法郎": "CHF",
+                        "新加坡幣": "SGD", "新元": "SGD",
+                        "加拿大幣": "CAD", "加元": "CAD",
+                        "南非幣": "ZAR",
+                    }
+                    _ccy = _CCY_NORMALIZE.get(_ccy_raw, _ccy_raw.upper())
                     _nav_calc = m.get("nav")
                     _yield_calc = m.get("annual_div_rate")
                     try:
@@ -1224,11 +1241,14 @@ def render_single_fund_tab() -> None:
                     # v18.259：非 TWD 基金抓即時 FX rate（5min TTL，走 NAS proxy）
                     # v18.264：Yahoo 失敗時走 FRED 第二來源（需 FRED_API_KEY）
                     # v18.265：secrets 讀取與 FX 抓取分開 try，避免 secrets 沒設時連 Yahoo 都沒試
+                    # v18.278：TWD 基金（不論是「台幣」中文還是「TWD」ISO）直接 fx=1.0 跳過所有 FX 邏輯
                     _fx_to_twd = None
                     _fx_err = ""
                     _fx_manual = False
                     _fx_source = ""  # "Yahoo" / "FRED" / "手動"
-                    if _ccy.upper() != "TWD":
+                    if _ccy == "TWD":
+                        _fx_to_twd = 1.0   # TWD 基金不需換匯
+                    elif _ccy != "TWD":
                         # 先讀 FRED key（讀失敗只是少了 fallback，不該擋 Yahoo）
                         import os as _os
                         _fred_k = ""
@@ -1263,23 +1283,27 @@ def render_single_fund_tab() -> None:
                     with _ic2:
                         st.caption(f"NAV：{_nav_calc if _nav_calc is not None else '—'} {_ccy}")
                         st.caption(f"年化配息率：{_yield_calc if _yield_calc is not None else '—'} %")
-                        if _ccy.upper() != "TWD":
-                            if _fx_to_twd:
-                                st.caption(f"💱 1 {_ccy} = **{_fx_to_twd:.4f}** TWD（Yahoo 即時，5min cache）")
-                            else:
-                                st.caption(f"⚠️ 無法取得 {_ccy}/TWD 即時匯率（{_fx_err}），切換手動模式：")
-                                _fx_manual_val = st.number_input(
-                                    f"手動填 1 {_ccy} = ? TWD",
-                                    min_value=0.01, max_value=1000.0,
-                                    value=32.0, step=0.1,
-                                    key=f"_calc_fx_{fk}",
-                                    help="Yahoo FX 抓取失敗時的 fallback；估算僅供參考",
-                                )
-                                _fx_to_twd = float(_fx_manual_val) if _fx_manual_val > 0 else None
-                                _fx_manual = True
+                        # v18.278：normalize 後 _ccy 已是 ISO，TWD 基金 _fx_to_twd=1.0 不顯示 FX caption
+                        if _ccy == "TWD":
+                            st.caption("💰 此基金以新台幣計價（FX = 1）")
+                        elif _fx_to_twd:
+                            # 自動換匯成功 — user 要求「移除設定匯率的按鈕」
+                            st.caption(f"💱 1 {_ccy} = **{_fx_to_twd:.4f}** TWD（即時匯率）")
+                        else:
+                            # 只有自動失敗才顯示手動 fallback
+                            st.caption(f"⚠️ 無法取得 {_ccy}/TWD 即時匯率（{_fx_err}），切換手動模式：")
+                            _fx_manual_val = st.number_input(
+                                f"手動填 1 {_ccy} = ? TWD",
+                                min_value=0.01, max_value=1000.0,
+                                value=32.0, step=0.1,
+                                key=f"_calc_fx_{fk}",
+                                help="自動 FX 抓取失敗時的 fallback；估算僅供參考",
+                            )
+                            _fx_to_twd = float(_fx_manual_val) if _fx_manual_val > 0 else None
+                            _fx_manual = True
                     if _nav_calc and _nav_calc > 0:
                         # TWD → 原幣本金（TWD 基金維持原值）
-                        if _ccy.upper() != "TWD" and _fx_to_twd:
+                        if _ccy != "TWD" and _fx_to_twd:
                             _amt_local = _amount_twd / _fx_to_twd
                         else:
                             _amt_local = float(_amount_twd)
@@ -1292,7 +1316,7 @@ def render_single_fund_tab() -> None:
                             _ann_div = _amt_local * _yield_calc / 100.0
                             _mon_div = _ann_div / 12.0
                             _mon_units = _mon_div / _nav_calc
-                            if _ccy.upper() != "TWD" and _fx_to_twd:
+                            if _ccy != "TWD" and _fx_to_twd:
                                 _ann_div_twd = _ann_div * _fx_to_twd
                                 _mon_div_twd = _mon_div * _fx_to_twd
                             else:
@@ -1303,7 +1327,7 @@ def render_single_fund_tab() -> None:
                                         help="月配息若再投入可換得的單位數（月配息 ÷ NAV）")
                             _mc4.metric("年化配息率", f"{_yield_calc:.2f}%",
                                         help="年化配息率 = 年配息 / 投入本金（原幣）")
-                            if _ccy.upper() != "TWD":
+                            if _ccy != "TWD":
                                 st.success(
                                     f"💱 **換算 TWD**（1 {_ccy} = {_fx_to_twd:.4f}，{_fx_tag}）："
                                     f"本金 {_amount_twd:,.0f} TWD → "
@@ -1323,7 +1347,7 @@ def render_single_fund_tab() -> None:
 
                             # v18.263：完整計算公式（含數字代入）— user 反饋「我要有公式的」
                             with st.expander("📐 完整計算公式（含數字代入）", expanded=False):
-                                if _ccy.upper() != "TWD" and _fx_to_twd:
+                                if _ccy != "TWD" and _fx_to_twd:
                                     _formula_text = (
                                         f"# 投入本金 / 單位數\n"
                                         f"原幣本金   = TWD ÷ FX\n"
@@ -1414,7 +1438,7 @@ def render_single_fund_tab() -> None:
                             _proj_1y_twd = None
                             if _ret_1y is not None:
                                 _proj_1y = _amt_local * (1 + _ret_1y / 100.0)
-                                if _ccy.upper() != "TWD" and _fx_to_twd:
+                                if _ccy != "TWD" and _fx_to_twd:
                                     _proj_1y_twd = _proj_1y * _fx_to_twd
                                 else:
                                     _proj_1y_twd = _proj_1y
@@ -1427,7 +1451,7 @@ def render_single_fund_tab() -> None:
                             else:
                                 _mc3.metric("1Y 後預估市值（TWD）", "—")
                                 _mc4.metric("1Y 預估損益（TWD）", "—")
-                            if _ccy.upper() != "TWD":
+                            if _ccy != "TWD":
                                 _proj_str = (
                                     f"｜1Y 後預估 **{_proj_1y_twd:,.0f}** TWD"
                                     f"（損益 **{(_proj_1y_twd - _amount_twd):+,.0f}** TWD）"
@@ -1452,7 +1476,7 @@ def render_single_fund_tab() -> None:
 
                             # v18.263：累積型計算公式
                             with st.expander("📐 完整計算公式（含數字代入）", expanded=False):
-                                if _ccy.upper() != "TWD" and _fx_to_twd:
+                                if _ccy != "TWD" and _fx_to_twd:
                                     _formula_lines = [
                                         "# 投入本金 / 單位數",
                                         "原幣本金   = TWD ÷ FX",
@@ -1630,7 +1654,7 @@ def render_single_fund_tab() -> None:
                                 f" / 月配股 ≈ {_cs_mon_units:,.2f} 單位）"
                                 f"｜年化配息率 {_calc_stash.get('annual_div_rate',0):.2f}%"
                             )
-                            if _cs_fx and _cs_ccy.upper() != "TWD":
+                            if _cs_fx and _cs_ccy != "TWD":
                                 _line += f"｜TWD 換算（1 {_cs_ccy}={_cs_fx:.4f}，{_cs_fx_tag}）"
                             _snap.append(_line)
                         else:
@@ -1647,7 +1671,7 @@ def render_single_fund_tab() -> None:
                                 f"{_cs_units:,.2f} 單位（累積型，無配息）"
                                 f"{_ret_str}{_proj_str}"
                             )
-                            if _cs_fx and _cs_ccy.upper() != "TWD":
+                            if _cs_fx and _cs_ccy != "TWD":
                                 _line += f"｜TWD 換算（1 {_cs_ccy}={_cs_fx:.4f}，{_cs_fx_tag}）"
                             _snap.append(_line)
                     # 新聞：優先「已逐股抓的個股新聞」，否則退資產類別過濾的廣義新聞
