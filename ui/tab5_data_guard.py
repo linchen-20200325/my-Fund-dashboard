@@ -551,6 +551,64 @@ def render_data_guard_tab() -> None:
 
     st.divider()
 
+    # ── v18.268: FX 即時匯率來源診斷 ─────────────────────────────
+    with st.expander("🌍 FX 即時匯率來源診斷 — 4 個來源逐一檢測", expanded=False):
+        st.caption(
+            "Tab2 投資試算的 FX 來源 chain（Yahoo → FRED → open.er-api → Frankfurter）。"
+            "全掛時會 fallback 到手動模式（預設 32.0）。"
+        )
+        _fx_pair = st.selectbox(
+            "幣別對",
+            options=["USDTWD", "EURTWD", "JPYTWD", "CHFTWD", "CNHTWD"],
+            index=0,
+            key="_d5_fx_pair",
+            help="跑診斷會逐一打 4 個 API（約 10-30 秒）",
+        )
+        if st.button("🔍 跑 FX 來源診斷", key="_d5_fx_btn"):
+            try:
+                from repositories.fund_repository import diagnose_fx_sources
+                import os as _os_fx
+                _fred_k_diag = ""
+                try:
+                    _fred_k_diag = st.secrets.get("FRED_API_KEY", "")
+                except Exception:
+                    pass
+                _fred_k_diag = _fred_k_diag or _os_fx.environ.get("FRED_API_KEY", "")
+                with st.spinner(f"逐一檢測 {_fx_pair} 的 4 個來源..."):
+                    _diag = diagnose_fx_sources(f"{_fx_pair}=X", fred_api_key=_fred_k_diag)
+                _rows = []
+                _source_zh = {
+                    "yahoo":       "1. Yahoo Chart API",
+                    "fred":        "2. FRED DEX* series",
+                    "er_api":      "3. open.er-api.com",
+                    "frankfurter": "4. Frankfurter (ECB)",
+                }
+                for _src_key, _src_label in _source_zh.items():
+                    _r = _diag.get(_src_key, {})
+                    _rows.append({
+                        "順位": _src_label,
+                        "狀態": "✅ 通" if _r.get("ok") else "❌ 失敗",
+                        "匯率": f"{_r['rate']:.4f}" if _r.get("rate") else "—",
+                        "錯誤訊息": _r.get("error") or "—",
+                        "說明": _r.get("note") or "—",
+                    })
+                import pandas as _pd_fx
+                st.dataframe(_pd_fx.DataFrame(_rows), use_container_width=True, hide_index=True)
+                _n_ok = sum(1 for _r in _diag.values() if _r.get("ok"))
+                if _n_ok >= 1:
+                    st.success(f"✅ {_n_ok}/4 個來源可用 — Tab2 投資試算應能拿到即時匯率")
+                else:
+                    st.error(
+                        f"❌ 4 個來源全部失敗 — Tab2 將 fallback 到手動模式。"
+                        "可能是 NAS proxy 全域不通，或 FRED_API_KEY 未設"
+                    )
+            except Exception as _e_d5_fx:
+                st.error(f"⚠️ FX 診斷異常：{type(_e_d5_fx).__name__}: {str(_e_d5_fx)[:80]}")
+        else:
+            st.caption("⬆️ 按按鈕開始（4 個來源各 1 個 HTTP call，總共 ~10-30 秒）")
+
+    st.divider()
+
     # ── Section 2: API Key 狀態 ───────────────────────────────────
     st.markdown("### ④ 🔑 API 金鑰狀態")
     _d5_k1, _d5_k2 = st.columns(2)

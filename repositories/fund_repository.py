@@ -4259,9 +4259,30 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
             except Exception as _e:
                 print(f"[get_latest_fx] FRED {_series_id}: {_e}")
 
-    # v18.266: Frankfurter (ECB) 第三來源 — 涵蓋 FRED DEXTWUS 停發後的 USD/TWD
-    # 免 auth，支援 30+ 對含 TWD/USD/EUR/JPY/CHF/CNY；走 NAS proxy
+    # v18.268: open.er-api.com 第三來源 — 真正支援 TWD（150+ 幣別，免 auth）
+    # ⚠️ Frankfurter (ECB) 雖然在 v18.266 被列入但實際不支援 TWD（ECB reference
+    # rates 涵蓋 30+ 幣別但**沒有 TWD**），對 user 的 USD/TWD 場景無用 → 改用
+    # open.er-api.com 作為實質第三來源；Frankfurter 仍保留為第四（EU 對救援）。
     if _ccy_base and _ccy_quote and _ccy_base != _ccy_quote:
+        try:
+            from infra.proxy import fetch_url as _fetch_url
+            _r = _fetch_url(
+                f"https://open.er-api.com/v6/latest/{_ccy_base}",
+                params=None,
+                timeout=10,
+            )
+            if _r is not None:
+                _d = _r.json()
+                if _d.get("result") == "success":
+                    _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
+                    if _v > 0:
+                        return _v
+        except Exception as _e:
+            print(f"[get_latest_fx] open.er-api {_ccy_base}: {_e}")
+
+    # v18.266: Frankfurter (ECB) 第四來源 — 對 EUR/USD/JPY/CHF/CNY 等 ECB 涵蓋幣別有效
+    # （TWD 不在 ECB 清單，本路徑對 USD/TWD 永遠失敗，純粹保留給其他歐系幣對）
+    if _ccy_base and _ccy_quote and _ccy_base != _ccy_quote and "TWD" not in (_ccy_base, _ccy_quote):
         try:
             from infra.proxy import fetch_url as _fetch_url
             _r = _fetch_url(
@@ -4277,6 +4298,127 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
         except Exception as _e:
             print(f"[get_latest_fx] Frankfurter {_ccy_base}/{_ccy_quote}: {_e}")
     return None
+
+
+def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
+    """逐一試 4 個 FX 來源，回傳每個來源的狀態（給 Tab5 資料診斷用）。
+
+    Returns:
+        dict 含 4 key: yahoo / fred / er_api / frankfurter
+        每個 value 為 dict: {ok: bool, rate: float|None, error: str|None, note: str}
+    """
+    out: dict = {
+        "yahoo":       {"ok": False, "rate": None, "error": None, "note": "Yahoo Chart API + NAS proxy"},
+        "fred":        {"ok": False, "rate": None, "error": None, "note": "FRED DEX* series (USD/TWD: DEXTWUS 2021 停發)"},
+        "er_api":      {"ok": False, "rate": None, "error": None, "note": "open.er-api.com（免 auth，支援 150+ 幣別含 TWD）"},
+        "frankfurter": {"ok": False, "rate": None, "error": None, "note": "Frankfurter ECB（不支援 TWD）"},
+    }
+    if not currency_pair:
+        return out
+    pair = str(currency_pair).strip().upper()
+    if not pair.endswith("=X"):
+        pair = pair + "=X"
+    _stripped = pair.replace("=X", "")
+    _ccy_base = _stripped[:3] if len(_stripped) >= 6 else _stripped
+    _ccy_quote = _stripped[3:] if len(_stripped) >= 6 else ""
+
+    # 1. Yahoo
+    try:
+        from repositories.macro_repository import fetch_yf_close as _yf_close
+        _s = _yf_close(pair, range_="5d", interval="1d")
+        if _s is not None and not _s.empty:
+            v = float(_s.dropna().iloc[-1])
+            if v > 0:
+                out["yahoo"]["ok"] = True
+                out["yahoo"]["rate"] = v
+            else:
+                out["yahoo"]["error"] = "series 空或值 ≤ 0"
+        else:
+            out["yahoo"]["error"] = "Yahoo Chart API 回空 series"
+    except Exception as e:
+        out["yahoo"]["error"] = str(e)[:80]
+
+    # 2. FRED
+    if not fred_api_key:
+        out["fred"]["error"] = "未設定 FRED_API_KEY"
+    else:
+        _FRED_FX_MAP = {
+            ("USD", "TWD"): ("DEXTWUS", False),
+            ("JPY", "TWD"): ("DEXJPUS", "via_usd"),
+            ("EUR", "TWD"): ("DEXUSEU", "via_usd_inv"),
+            ("CHF", "TWD"): ("DEXSZUS", "via_usd"),
+            ("CNH", "TWD"): ("DEXCHUS", "via_usd"),
+            ("CNY", "TWD"): ("DEXCHUS", "via_usd"),
+        }
+        _spec = _FRED_FX_MAP.get((_ccy_base, _ccy_quote))
+        if not _spec:
+            out["fred"]["error"] = f"{_ccy_base}/{_ccy_quote} 未在 FRED FX map"
+        else:
+            try:
+                from repositories.macro_repository import fetch_fred as _fred
+                _series_id, _ = _spec
+                _df = _fred(_series_id, fred_api_key, n=10)
+                if _df is None or _df.empty:
+                    out["fred"]["error"] = f"FRED {_series_id} 回空（series 可能已停發）"
+                else:
+                    out["fred"]["ok"] = True
+                    out["fred"]["rate"] = float(_df.iloc[-1]["value"])
+            except Exception as e:
+                out["fred"]["error"] = str(e)[:80]
+
+    # 3. open.er-api.com
+    if not _ccy_base or not _ccy_quote or _ccy_base == _ccy_quote:
+        out["er_api"]["error"] = "pair 解析失敗"
+    else:
+        try:
+            from infra.proxy import fetch_url as _fetch_url
+            _r = _fetch_url(
+                f"https://open.er-api.com/v6/latest/{_ccy_base}",
+                params=None, timeout=10,
+            )
+            if _r is None:
+                out["er_api"]["error"] = "HTTP 請求失敗"
+            else:
+                _d = _r.json()
+                if _d.get("result") != "success":
+                    out["er_api"]["error"] = f"API 回 result={_d.get('result')}"
+                else:
+                    _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
+                    if _v > 0:
+                        out["er_api"]["ok"] = True
+                        out["er_api"]["rate"] = _v
+                    else:
+                        out["er_api"]["error"] = f"{_ccy_quote} 不在 rates 或值為 0"
+        except Exception as e:
+            out["er_api"]["error"] = str(e)[:80]
+
+    # 4. Frankfurter
+    if "TWD" in (_ccy_base, _ccy_quote):
+        out["frankfurter"]["error"] = "ECB 不支援 TWD，跳過"
+    elif not _ccy_base or not _ccy_quote:
+        out["frankfurter"]["error"] = "pair 解析失敗"
+    else:
+        try:
+            from infra.proxy import fetch_url as _fetch_url
+            _r = _fetch_url(
+                "https://api.frankfurter.app/latest",
+                params={"from": _ccy_base, "to": _ccy_quote},
+                timeout=10,
+            )
+            if _r is None:
+                out["frankfurter"]["error"] = "HTTP 請求失敗"
+            else:
+                _d = _r.json()
+                _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
+                if _v > 0:
+                    out["frankfurter"]["ok"] = True
+                    out["frankfurter"]["rate"] = _v
+                else:
+                    out["frankfurter"]["error"] = f"{_ccy_quote} 不在 rates 或值為 0"
+        except Exception as e:
+            out["frankfurter"]["error"] = str(e)[:80]
+
+    return out
 
 
 @register_cache
