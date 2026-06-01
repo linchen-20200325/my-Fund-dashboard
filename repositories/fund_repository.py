@@ -4185,56 +4185,76 @@ def fetch_fund_structure(full_key: str, portal: str = "") -> dict:
 #   get_latest_nav("VWO")     -> float | None
 # ══════════════════════════════════════════════════════════════════════
 
-@register_cache
-@_ttl_cache(ttl_sec=300, maxsize=32)   # v18.58: FX 重複度極高（USDTWD 對每檔 USD 基金重抓），5min TTL
+# v18.275：手動 positive-only cache（避免 None 被 5min TTL 鎖住）
+# 經 user Tab5 診斷證實：Yahoo + er-api 都能拿到值（31.29 / 31.48），但 Tab2
+# widget 仍顯示「都暫無」是因為 @_ttl_cache 把更早一次失敗的 None 鎖了 5 分鐘。
+# 改為手動字典 cache：只快取正值，None 不入 cache → 下次仍重試。
+_FX_CACHE: dict[tuple[str, str], tuple[float, float]] = {}   # (pair, key_hash) -> (timestamp, rate)
+_FX_CACHE_TTL = 300.0
+
+
 def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
-    """抓最新匯率。傳入 yfinance 規格的 pair (例 'USDTWD=X')，回傳最新收盤。
+    """抓最新匯率（v18.275 精簡版）。
 
-    Fallback chain（v18.266）：
-        1. Yahoo Chart REST API + NAS proxy（既有路徑）
-        2. FRED DEX* series（注意：DEXTWUS 已於 2021-12-31 discontinued，
-           USD/TWD 在此不會命中；但 DEXJPUS / DEXUSEU 等仍在）
-        3. Frankfurter (ECB) — 免 auth、支援 30+ 對含 TWD、ECB 官方日匯率
+    Chain：
+        TWD pair (USDTWD / EURTWD / JPYTWD ...): Yahoo → open.er-api（兩個都實測可用）
+        非 TWD pair (EURUSD / JPYEUR ...): Yahoo → FRED DEX* → open.er-api → Frankfurter
 
-    失敗時回 None；呼叫端必須處理 None（例：UI 提示使用者手動輸入）。
+    User 反饋 v18.273 後 FRED DEXTWUS 已停發、Frankfurter ECB 無 TWD 報價，
+    對主流 USD/TWD 場景全是 dead path。本版本對 TWD pair 直接跳過 FRED / Frankfurter
+    （也呼應 user「移除無法用的連線，只保留能用的」）。
+
+    None poisoning 防護：positive-only 手動快取。
 
     Args:
         currency_pair: 例 "USDTWD=X" 或 "USDTWD"（補 =X）
-        fred_api_key: FRED API key（給 fallback 用，空字串則跳過 FRED）
+        fred_api_key: FRED API key（給非 TWD pair fallback 用）
+
+    Returns:
+        rate (float > 0) 或 None；None 不會被快取。
     """
+    import time as _t_fx
     if not currency_pair:
         return None
     pair = str(currency_pair).strip().upper()
     if not pair.endswith("=X"):
         pair = pair + "=X"
-    # [Auto-Fixed v18.201] 改走 Yahoo Chart REST API + NAS proxy（取代直連 yfinance），
-    # 避免 Streamlit Cloud IP 被 Yahoo 擋（403 Host not in allowlist）/ 限流。
-    # fetch_yf_close 內含 proxy + timeout + 10min TTL；lazy import 避免循環依賴。
+
+    # positive-only cache 查詢
+    _cache_key = (pair, fred_api_key or "")
+    _hit = _FX_CACHE.get(_cache_key)
+    if _hit and (_t_fx.time() - _hit[0]) < _FX_CACHE_TTL:
+        return _hit[1]
+
+    # 解 ccy_base / ccy_quote：前 3 / 後 3 碼
+    _stripped = pair.replace("=X", "")
+    _ccy_base = _stripped[:3] if len(_stripped) >= 6 else _stripped
+    _ccy_quote = _stripped[3:] if len(_stripped) >= 6 else ""
+    _is_twd = "TWD" in (_ccy_base, _ccy_quote)
+
+    def _store(rate: float) -> float:
+        _FX_CACHE[_cache_key] = (_t_fx.time(), rate)
+        return rate
+
+    # 1. Yahoo Chart API (走 NAS proxy via fetch_yf_close 既有路徑)
     try:
         from repositories.macro_repository import fetch_yf_close as _yf_close
         _s = _yf_close(pair, range_="5d", interval="1d")
         if _s is not None and not _s.empty:
             v = float(_s.dropna().iloc[-1])
             if v > 0:
-                return v
+                return _store(v)
     except Exception as _e:
         print(f"[get_latest_fx] Yahoo {pair}: {_e}")
 
-    # 解 ccy_base / ccy_quote：固定取前 3 / 後 3 碼（避免 rstrip 把 USD 的 D 吃掉）
-    _stripped = pair.replace("=X", "")
-    _ccy_base = _stripped[:3] if len(_stripped) >= 6 else _stripped
-    _ccy_quote = _stripped[3:] if len(_stripped) >= 6 else ""
-
-    # v18.264: FRED 第二來源 fallback —— Yahoo / NAS proxy 掛掉時的備援
-    # 注意 DEXTWUS 於 2021-12-31 已停發，USD/TWD 在此不會命中（會走第 3 來源）
-    if fred_api_key:
+    # 2. FRED DEX* — 只跑非 TWD pair（DEXTWUS 已停發，所有 TWD 終點都死了）
+    if (not _is_twd) and fred_api_key:
         _FRED_FX_MAP = {
-            ("USD", "TWD"): ("DEXTWUS", False),   # 已停發，留著歷史資料 lookup 仍可
-            ("JPY", "TWD"): ("DEXJPUS", "via_usd"),
-            ("EUR", "TWD"): ("DEXUSEU", "via_usd_inv"),
-            ("CHF", "TWD"): ("DEXSZUS", "via_usd"),
-            ("CNH", "TWD"): ("DEXCHUS", "via_usd"),
-            ("CNY", "TWD"): ("DEXCHUS", "via_usd"),
+            ("JPY", "USD"): ("DEXJPUS", False),
+            ("CHF", "USD"): ("DEXSZUS", False),
+            ("CNH", "USD"): ("DEXCHUS", False),
+            ("CNY", "USD"): ("DEXCHUS", False),
+            ("EUR", "USD"): ("DEXUSEU", "inv"),  # series 是 USD per EUR
         }
         _spec = _FRED_FX_MAP.get((_ccy_base, _ccy_quote))
         if _spec:
@@ -4245,24 +4265,13 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
                 if _df is not None and not _df.empty:
                     _val = float(_df.iloc[-1]["value"])
                     if _val > 0:
-                        if _mode is False:
-                            return _val
-                        # via_usd / via_usd_inv 兩段式
-                        _usdtwd_df = _fred("DEXTWUS", fred_api_key, n=10)
-                        if _usdtwd_df is not None and not _usdtwd_df.empty:
-                            _usdtwd = float(_usdtwd_df.iloc[-1]["value"])
-                            if _usdtwd > 0:
-                                if _mode == "via_usd":
-                                    return _usdtwd / _val
-                                if _mode == "via_usd_inv":
-                                    return _val * _usdtwd
+                        if _mode == "inv":
+                            return _store(1.0 / _val)
+                        return _store(_val)
             except Exception as _e:
                 print(f"[get_latest_fx] FRED {_series_id}: {_e}")
 
-    # v18.273: er-api / Frankfurter 改用 requests.get 直連 proxy（跟 sidebar 測試同樣 path），
-    # 跳過 fetch_url 的複雜 retry session — 經 user 截圖證實 sidebar 測試 er-api ✓ HTTP 200
-    # 但 fetch_url 拿不到，疑為 retry session 的 user-agent / verify=False / 多 retry on 5xx
-    # 等行為差異導致。直接走 requests.get 與 sidebar 同樣機制保證一致性。
+    # 3. open.er-api.com (TWD pair 與其他 pair 都支援，免 auth)
     import requests as _req_fx
     try:
         from infra.proxy import get_proxy_config as _gp_fx
@@ -4281,11 +4290,12 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
                 if _d.get("result") == "success":
                     _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
                     if _v > 0:
-                        return _v
+                        return _store(_v)
         except Exception as _e:
             print(f"[get_latest_fx] open.er-api {_ccy_base}: {_e}")
 
-    if _ccy_base and _ccy_quote and _ccy_base != _ccy_quote and "TWD" not in (_ccy_base, _ccy_quote):
+    # 4. Frankfurter (ECB) — 非 TWD pair 才用（ECB 沒有 TWD）
+    if (not _is_twd) and _ccy_base and _ccy_quote and _ccy_base != _ccy_quote:
         try:
             _r = _req_fx.get(
                 "https://api.frankfurter.app/latest",
@@ -4296,33 +4306,45 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
                 _d = _r.json()
                 _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
                 if _v > 0:
-                    return _v
+                    return _store(_v)
         except Exception as _e:
             print(f"[get_latest_fx] Frankfurter {_ccy_base}/{_ccy_quote}: {_e}")
+    # 注意：None 不入 cache → 下次仍會 retry
     return None
 
 
+def _clear_fx_cache() -> None:
+    """測試 / 強制刷新用：清空 positive-only cache。"""
+    _FX_CACHE.clear()
+
+
 def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
-    """逐一試 4 個 FX 來源，回傳每個來源的狀態（給 Tab5 資料診斷用）。
+    """逐一試 FX 來源，回傳每個 source 的狀態（給 Tab5 資料診斷用）。
+
+    v18.275 改動：對 TWD pair 只回傳 Yahoo + er_api（FRED DEXTWUS 停發 / ECB 無 TWD，
+    對 TWD pair 兩個都是 dead path）— user 反饋「移除無法用的連線，只保留能用的」。
 
     Returns:
-        dict 含 4 key: yahoo / fred / er_api / frankfurter
+        dict — 各 source 一個 key（TWD pair 只含 yahoo + er_api；其他 pair 含 4 個）。
         每個 value 為 dict: {ok: bool, rate: float|None, error: str|None, note: str}
     """
-    out: dict = {
-        "yahoo":       {"ok": False, "rate": None, "error": None, "note": "Yahoo Chart API + NAS proxy"},
-        "fred":        {"ok": False, "rate": None, "error": None, "note": "FRED DEX* series (USD/TWD: DEXTWUS 2021 停發)"},
-        "er_api":      {"ok": False, "rate": None, "error": None, "note": "open.er-api.com（免 auth，支援 150+ 幣別含 TWD）"},
-        "frankfurter": {"ok": False, "rate": None, "error": None, "note": "Frankfurter ECB（不支援 TWD）"},
-    }
     if not currency_pair:
-        return out
+        return {}
     pair = str(currency_pair).strip().upper()
     if not pair.endswith("=X"):
         pair = pair + "=X"
     _stripped = pair.replace("=X", "")
     _ccy_base = _stripped[:3] if len(_stripped) >= 6 else _stripped
     _ccy_quote = _stripped[3:] if len(_stripped) >= 6 else ""
+    _is_twd = "TWD" in (_ccy_base, _ccy_quote)
+
+    out: dict = {
+        "yahoo":       {"ok": False, "rate": None, "error": None, "note": "Yahoo Chart API + NAS proxy"},
+        "er_api":      {"ok": False, "rate": None, "error": None, "note": "open.er-api.com（免 auth，支援 150+ 幣別含 TWD）"},
+    }
+    if not _is_twd:
+        out["fred"] = {"ok": False, "rate": None, "error": None, "note": "FRED DEX* series"}
+        out["frankfurter"] = {"ok": False, "rate": None, "error": None, "note": "Frankfurter ECB"}
 
     # 1. Yahoo
     try:
@@ -4340,33 +4362,32 @@ def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
     except Exception as e:
         out["yahoo"]["error"] = str(e)[:80]
 
-    # 2. FRED
-    if not fred_api_key:
-        out["fred"]["error"] = "未設定 FRED_API_KEY"
-    else:
-        _FRED_FX_MAP = {
-            ("USD", "TWD"): ("DEXTWUS", False),
-            ("JPY", "TWD"): ("DEXJPUS", "via_usd"),
-            ("EUR", "TWD"): ("DEXUSEU", "via_usd_inv"),
-            ("CHF", "TWD"): ("DEXSZUS", "via_usd"),
-            ("CNH", "TWD"): ("DEXCHUS", "via_usd"),
-            ("CNY", "TWD"): ("DEXCHUS", "via_usd"),
-        }
-        _spec = _FRED_FX_MAP.get((_ccy_base, _ccy_quote))
-        if not _spec:
-            out["fred"]["error"] = f"{_ccy_base}/{_ccy_quote} 未在 FRED FX map"
+    # 2. FRED (僅非 TWD pair；TWD pair 不顯示此欄)
+    if "fred" in out:
+        if not fred_api_key:
+            out["fred"]["error"] = "未設定 FRED_API_KEY"
         else:
-            try:
-                from repositories.macro_repository import fetch_fred as _fred
-                _series_id, _ = _spec
-                _df = _fred(_series_id, fred_api_key, n=10)
-                if _df is None or _df.empty:
-                    out["fred"]["error"] = f"FRED {_series_id} 回空（series 可能已停發）"
-                else:
-                    out["fred"]["ok"] = True
-                    out["fred"]["rate"] = float(_df.iloc[-1]["value"])
-            except Exception as e:
-                out["fred"]["error"] = str(e)[:80]
+            _FRED_FX_MAP = {
+                ("JPY", "USD"): "DEXJPUS",
+                ("CHF", "USD"): "DEXSZUS",
+                ("CNH", "USD"): "DEXCHUS",
+                ("CNY", "USD"): "DEXCHUS",
+                ("EUR", "USD"): "DEXUSEU",
+            }
+            _series_id = _FRED_FX_MAP.get((_ccy_base, _ccy_quote))
+            if not _series_id:
+                out["fred"]["error"] = f"{_ccy_base}/{_ccy_quote} 未在 FRED FX map"
+            else:
+                try:
+                    from repositories.macro_repository import fetch_fred as _fred
+                    _df = _fred(_series_id, fred_api_key, n=10)
+                    if _df is None or _df.empty:
+                        out["fred"]["error"] = f"FRED {_series_id} 回空"
+                    else:
+                        out["fred"]["ok"] = True
+                        out["fred"]["rate"] = float(_df.iloc[-1]["value"])
+                except Exception as e:
+                    out["fred"]["error"] = str(e)[:80]
 
     # v18.273: er-api / Frankfurter 改用 requests.get 直連 proxy（同 sidebar 測試 path）
     import requests as _req_dx
@@ -4401,30 +4422,29 @@ def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
         except Exception as e:
             out["er_api"]["error"] = str(e)[:80]
 
-    # 4. Frankfurter
-    if "TWD" in (_ccy_base, _ccy_quote):
-        out["frankfurter"]["error"] = "ECB 不支援 TWD，跳過"
-    elif not _ccy_base or not _ccy_quote:
-        out["frankfurter"]["error"] = "pair 解析失敗"
-    else:
-        try:
-            _r = _req_dx.get(
-                "https://api.frankfurter.app/latest",
-                params={"from": _ccy_base, "to": _ccy_quote},
-                proxies=_proxies_dx, timeout=15, verify=False,
-            )
-            if _r.status_code != 200:
-                out["frankfurter"]["error"] = f"HTTP {_r.status_code}"
-            else:
-                _d = _r.json()
-                _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
-                if _v > 0:
-                    out["frankfurter"]["ok"] = True
-                    out["frankfurter"]["rate"] = _v
+    # 4. Frankfurter (僅非 TWD pair；TWD pair 不顯示此欄)
+    if "frankfurter" in out:
+        if not _ccy_base or not _ccy_quote:
+            out["frankfurter"]["error"] = "pair 解析失敗"
+        else:
+            try:
+                _r = _req_dx.get(
+                    "https://api.frankfurter.app/latest",
+                    params={"from": _ccy_base, "to": _ccy_quote},
+                    proxies=_proxies_dx, timeout=15, verify=False,
+                )
+                if _r.status_code != 200:
+                    out["frankfurter"]["error"] = f"HTTP {_r.status_code}"
                 else:
-                    out["frankfurter"]["error"] = f"{_ccy_quote} 不在 rates 或值為 0"
-        except Exception as e:
-            out["frankfurter"]["error"] = str(e)[:80]
+                    _d = _r.json()
+                    _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
+                    if _v > 0:
+                        out["frankfurter"]["ok"] = True
+                        out["frankfurter"]["rate"] = _v
+                    else:
+                        out["frankfurter"]["error"] = f"{_ccy_quote} 不在 rates 或值為 0"
+            except Exception as e:
+                out["frankfurter"]["error"] = str(e)[:80]
 
     return out
 
