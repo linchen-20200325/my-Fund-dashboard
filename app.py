@@ -99,7 +99,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.273_FxDirectRequests_DivLiveFx"
+APP_VERSION = "v18.274_PyArrowMixedTypeFix"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）

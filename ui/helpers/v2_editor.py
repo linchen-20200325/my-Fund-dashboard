@@ -101,7 +101,7 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame, cash_df: pd.DataFram
             "avg_fx":           _fx,
             "currency":         str(r.get("currency", "") or "USD"),
             "tier":             str(r.get("tier", "") or ""),
-            "amount":           "",
+            "amount":           None,  # v18.274: 改 None 而非 "" — fund 列不該有 amount，pyarrow 才不會 mixed-type crash
             "invest_twd":       _inv,
             "div_cash_pct":     _dcp,
         })
@@ -115,15 +115,17 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame, cash_df: pd.DataFram
             "item_type":        ITEM_TYPE_CASH,
             "fund_code":        "",
             "fund_name":        "",
-            "units":            "",
-            "avg_nav":          "",
-            "avg_nav_with_div": "",
-            "avg_fx":           "",
+            # v18.274: cash 列無基金欄位 → 改 None 而非 ""；pyarrow Arrow 表才能正確
+            # 推斷整欄為 nullable numeric（之前 mixed str/float 直接 ArrowInvalid crash）
+            "units":            None,
+            "avg_nav":          None,
+            "avg_nav_with_div": None,
+            "avg_fx":           None,
             "currency":         ccy,
             "tier":             "",
-            "amount":           amt,
-            "invest_twd":       "",
-            "div_cash_pct":     "",   # cash 列無配息，留空
+            "amount":           float(amt),
+            "invest_twd":       None,
+            "div_cash_pct":     None,   # cash 列無配息，留空
         })
     return pd.DataFrame(rows, columns=list(ALL_COLS_V2))
 
