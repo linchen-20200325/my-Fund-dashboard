@@ -1213,22 +1213,31 @@ def render_single_fund_tab() -> None:
                         _yield_calc = None
                     # v18.259：非 TWD 基金抓即時 FX rate（5min TTL，走 NAS proxy）
                     # v18.264：Yahoo 失敗時走 FRED 第二來源（需 FRED_API_KEY）
+                    # v18.265：secrets 讀取與 FX 抓取分開 try，避免 secrets 沒設時連 Yahoo 都沒試
                     _fx_to_twd = None
                     _fx_err = ""
                     _fx_manual = False
                     _fx_source = ""  # "Yahoo" / "FRED" / "手動"
                     if _ccy.upper() != "TWD":
+                        # 先讀 FRED key（讀失敗只是少了 fallback，不該擋 Yahoo）
+                        import os as _os
+                        _fred_k = ""
+                        try:
+                            _fred_k = st.secrets.get("FRED_API_KEY", "")
+                        except Exception:
+                            _fred_k = ""
+                        if not _fred_k:
+                            _fred_k = _os.environ.get("FRED_API_KEY", "")
+
+                        # 抓 FX（Yahoo → FRED fallback chain 內建於 get_latest_fx）
                         try:
                             from repositories.fund_repository import get_latest_fx
-                            import os as _os
-                            _fred_k = (st.secrets.get("FRED_API_KEY", "")
-                                       if hasattr(st, "secrets") else "") or _os.environ.get("FRED_API_KEY", "")
                             _fx_to_twd = get_latest_fx(f"{_ccy}TWD=X", fred_api_key=_fred_k)
                             if _fx_to_twd is None or _fx_to_twd <= 0:
-                                _fx_err = f"Yahoo + FRED 都暫無 {_ccy}TWD 報價"
+                                _fx_err = (f"Yahoo + FRED 都暫無 {_ccy}TWD 報價"
+                                           if _fred_k else f"Yahoo 暫無 {_ccy}TWD 報價（未設 FRED_API_KEY）")
                                 _fx_to_twd = None
                             else:
-                                # 兩來源都試了還拿到 → 不細分標 "即時"
                                 _fx_source = "即時"
                         except Exception as _e:
                             _fx_err = f"FX 抓取失敗：{_e}"
