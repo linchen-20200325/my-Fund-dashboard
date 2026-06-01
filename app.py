@@ -98,7 +98,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.266_FrankfurterFxFallback"
+APP_VERSION = "v18.267_Ship_FxAndMacroValidation"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
