@@ -1,15 +1,11 @@
-"""tab_crisis_backtest.py — 📉 危機回測室 (v18.260, Phase 2 UI)
+"""tab_crisis_backtest.py — 📉 危機回測室 (v18.260, Phase 2 + Phase 3 UI)
 
-User 需求第 2 階段：在新 Tab 顯示歷史危機事件清單 + 該基金當時跌幅對照。
-資料引擎在 services/crisis_backtest.py（Phase 1 已 merged）。
-
-本檔職能：純 UI/呈現層
-- 4 input：market / threshold / years / fund override
-- 跑 summarize_events_with_fund → 顯示
-- 大盤走勢 plotly 圖（紅色 shaded crisis 區）
-- 事件清單 DataFrame + 統計卡片
+Phase 2：歷史危機事件清單 + 該基金當時跌幅對照（services/crisis_backtest.py）
+Phase 3：總經訊號歷史回看 — 驗證 Tab1 訊號預測力（services/macro_signal_lookback.py）
 """
 from __future__ import annotations
+
+import os
 
 import pandas as pd
 import streamlit as st
@@ -254,11 +250,112 @@ def render_crisis_backtest_tab() -> None:
                 mime="text/csv",
             )
 
+        # ── Phase 3：總經訊號預測力驗證 ───────────────────────
+        st.markdown("---")
+        _render_signal_lookback_section(events, years)
+
     # 限制提示
     st.markdown("---")
     st.caption(
         "💡 **已知限制**：基金 NAV 來自 FundClear，通常只涵蓋近 ~400 天。"
         "舊事件（如 COVID、2018 升息、2008 海嘯）只能顯示大盤跌幅，"
-        "該基金欄會顯示「—」。Phase 3 將補上總經訊號歷史回看，"
-        "Phase 4 加策略 grid_search，Phase 5 接 AI 策略建議。"
+        "該基金欄會顯示「—」。"
+        "Phase 4 將加策略 grid_search，Phase 5 接 AI 策略建議。"
+    )
+
+
+# ──────────────────────────────────────────────────────────────
+# Phase 3：總經訊號預測力驗證
+# ──────────────────────────────────────────────────────────────
+def _render_signal_lookback_section(events: list, years: int) -> None:
+    """🚦 對每個歷史事件回看 VIX/HY/T10Y2Y/UNRATE 是否預先警戒。"""
+    st.markdown("### 🚦 總經訊號預測力驗證（Phase 3）")
+    st.caption(
+        "對每個歷史危機事件回看 N 天前的總經訊號 → 量化「Tab1 訊號是否真的有預警」。"
+    )
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        lookback_days = st.slider(
+            "點觀測 offset（峰前 N 天）",
+            min_value=30, max_value=180, value=90, step=15,
+            help="判斷峰日 N 天前訊號是否已在警戒區",
+            key="crisis_signal_lookback_days",
+        )
+    with col_b:
+        max_lookback_days = st.slider(
+            "提前預警搜尋上限（峰前 M 天）",
+            min_value=90, max_value=540, value=365, step=30,
+            help="在峰前 M 天區間內，找最早一次進入警戒的日期 → 算提前天數",
+            key="crisis_signal_max_lookback",
+        )
+
+    if not st.button("🚦 跑訊號回看", type="secondary", key="crisis_signal_run"):
+        st.caption("⬆️ 按按鈕開始（會抓 FRED + Yahoo 多年歷史，需要 ~10 秒）")
+        return
+
+    fred_key = os.environ.get("FRED_API_KEY", "")
+    if not fred_key:
+        st.warning("⚠️ 未設定 FRED_API_KEY — 僅 VIX 可抓，T10Y2Y / HY / UNRATE 將跳過")
+
+    from services.macro_signal_lookback import (
+        DEFAULT_SIGNALS,
+        compute_signal_hit_rate,
+        fetch_signal_series,
+        lookback_all_signals,
+    )
+
+    # 抓所有訊號序列（一次性，多訊號並列）
+    series_by_key: dict[str, pd.Series] = {}
+    with st.spinner(f"抓取 {len(DEFAULT_SIGNALS)} 個訊號 {years} 年歷史..."):
+        for spec in DEFAULT_SIGNALS:
+            s = fetch_signal_series(spec, years=max(years, 10), fred_api_key=fred_key)
+            series_by_key[spec.key] = s
+
+    results = lookback_all_signals(
+        events, series_by_key,
+        specs=DEFAULT_SIGNALS,
+        lookback_days=lookback_days,
+        max_lookback_days=max_lookback_days,
+    )
+
+    # 命中率總覽
+    st.markdown("#### 📊 訊號命中率總覽")
+    summary_rows = []
+    for spec in DEFAULT_SIGNALS:
+        lbs = results[spec.key]
+        stat = compute_signal_hit_rate(lbs)
+        summary_rows.append({
+            "訊號": spec.label,
+            "閾值": f"{spec.direction} {spec.threshold}{spec.unit}",
+            "涵蓋事件": stat["n_covered"],
+            "命中事件": stat["n_hit"],
+            "命中率": f"{stat['hit_rate']:.0%}" if stat["hit_rate"] is not None else "—",
+            "平均提前天數": f"{int(stat['avg_lead_days'])}" if stat["avg_lead_days"] is not None else "—",
+            "解讀": spec.note,
+        })
+    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+
+    # 逐事件 × 逐訊號明細
+    st.markdown("#### 🔬 逐事件明細")
+    detail_rows = []
+    for i, ev in enumerate(events):
+        peak_str = str(ev.peak_date.date()) if ev.peak_date is not None else "—"
+        row = {"事件": _format_event_name(peak_str), "高點日": peak_str}
+        for spec in DEFAULT_SIGNALS:
+            lb = results[spec.key][i]
+            if lb.value_at_lookback is None and lb.first_warning_date is None:
+                row[spec.label] = "—"
+            elif lb.lead_time_days is not None:
+                row[spec.label] = f"✅ 提前 {lb.lead_time_days}d"
+            else:
+                v = lb.value_at_lookback
+                row[spec.label] = f"❌ ({v:.2f}{spec.unit})" if v is not None else "❌"
+        detail_rows.append(row)
+    st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
+
+    st.caption(
+        "✅ = 峰前搜尋上限區間內，訊號曾進入警戒區，並顯示提前天數；"
+        "❌ = 訊號序列涵蓋但未警戒（顯示峰前 offset 觀測值）；"
+        "— = 訊號歷史不涵蓋該事件（FRED key 缺漏 / 序列過短）。"
     )
