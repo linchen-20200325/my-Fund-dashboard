@@ -105,8 +105,8 @@ def test_invest_calc_fetches_fx_rate():
     # v18.264：簽名加 fred_api_key 後位置/kwarg 均可，只驗 ticker pair 出現
     assert 'get_latest_fx(f"{_ccy}TWD=X"' in src, \
         "應呼叫 get_latest_fx 用 {CCY}TWD=X pair（簽名 v18.264 後可加 fred_api_key）"
-    # 應跳過 TWD 基金避免無謂呼叫
-    assert '_ccy.upper() != "TWD"' in src, "TWD 基金應跳過 FX 抓取"
+    # v18.278：normalize 後 _ccy 已是 ISO，改用 != "TWD"（不需 .upper()）
+    assert '_ccy != "TWD"' in src, "TWD 基金應跳過 FX 抓取（v18.278 後 normalize → 不需 .upper()）"
 
 
 def test_invest_calc_twd_conversion_displayed():
