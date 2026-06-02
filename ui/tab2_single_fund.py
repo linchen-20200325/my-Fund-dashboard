@@ -11,32 +11,19 @@
 """
 from __future__ import annotations
 
-import concurrent.futures as _bt_cf  # 未必用到但與 backtest 同 pattern
-import datetime
 import os
-import time as _time_mod
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from infra.proxy import get_proxy_config
-from models.policy import fund_pk_str, make_pk
 from repositories.fund_repository import (
     fetch_fund_from_moneydj_url,
     tdcc_search_fund,
 )
-from services.fund_service import (
-    calc_metrics,
-    calc_dividend_estimate,
-)
 from services.portfolio_service import dividend_safety as div_safety_check
 from services.precision_service import (
-    PrecisionStrategyEngine,
     calc_hwm_sigma_levels,
-    risk_score_gauge_html,
-    three_ratio_row_html,
 )
 from ui.helpers.macro_helpers import (
     mk_fund_signal,
@@ -44,7 +31,7 @@ from ui.helpers.macro_helpers import (
 )
 from ui.helpers.metric_explainers import render_metric_explainer
 from ui.helpers.session import (
-    friendly_error as _friendly_error,
+    friendly_error as _friendly_error,  # noqa: F401 — re-export for tests / external import
     is_core_fund as _is_core_fund,
     calc_data_health as _calc_data_health_pure,
 )
@@ -54,8 +41,6 @@ from ui.helpers.session import (
 from fund_fetcher import (
     classify_fetch_status,
     normalize_result_state,
-    clean_risk_table,
-    safe_float,
 )
 
 

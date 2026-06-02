@@ -27,7 +27,6 @@ from infra.oauth import (
 from models.policy import (
     PK_SEP,
     fund_pk_str,
-    make_pk,
     migrate_ledger_dict,
     parse_pk,
 )
@@ -94,16 +93,10 @@ def render_t7_section() -> None:
 
     # v18.140 同 render_portfolio_tab — helper 改正規 import，徹底脫離 sys.modules['__main__'] hack
     from ui.helpers.oauth_state import (
-        _gsa_secret,
-        _get_oauth_client,
-        _oauth_configured,
         _resolve_oauth_cfg,
-        _sheet_id_secret,
     )
-    from ui.helpers.holdings import _zh_holding
     from ui.helpers.data_registry import (
         _sync_invest_twd_from_ledgers,
-        _update_data_registry,
     )
 
     # ── T7: 帳務與再平衡試算 (Universal Fund Ledger v1.0) ─────────────────────

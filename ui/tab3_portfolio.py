@@ -18,14 +18,8 @@ block 累積在同一 tab slot（block 1: MK 戰情室+組合管理，block 2: T
 """
 from __future__ import annotations
 
-import copy
-import datetime
-import json
 import os
-import time as _time_mod
-from zoneinfo import ZoneInfo
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -35,17 +29,12 @@ from infra.oauth import (
     build_credentials_from_tokens,
     ensure_fresh_tokens,
 )
-from infra.proxy import get_proxy_config
 from ui.helpers.metric_explainers import render_metric_explainer
 from ui.helpers.tw_time import tw_now_str
-from models.policy import PK_SEP, fund_pk_str, make_pk, parse_pk, migrate_ledger_dict
 from repositories.fund_repository import fetch_fund_from_moneydj_url
 from repositories.ledger_repository import (
-    append_ledger_row,
     load_all_ledgers,
-    replace_ledgers_for_policy,
 )
-from repositories.news_repository import fetch_market_news
 from repositories.policy_repository import (
     PolicySheetError,
     create_dashboard_sheet,
@@ -58,26 +47,11 @@ from repositories.policy_repository import (
     list_user_folders,
     list_user_sheets,
     load_all_policies_v2,
-    load_all_policy_worksheets,
-    load_policies,
-    sync_policies_to_portfolio_funds,
     upsert_fund_in_policy,
     upsert_policy_row,
 )
 from repositories.snapshot_repository import (
     get_state_metadata,
-    load_all_ledgers_snapshot,
-    save_all_ledgers_snapshot,
-)
-from services.ai_service import (
-    analyze_portfolio_mk_advisor,
-    analyze_portfolio_correlation,
-)
-from services.fund_service import calc_metrics, calc_dividend_estimate
-from services.macro_service import (
-    backtest_sub_cycle_lights,
-    calc_macro_phase,
-    rank_macro_drivers,
 )
 from services.policy_advisor_service import (
     advise_fund,
@@ -85,12 +59,7 @@ from services.policy_advisor_service import (
 )
 from services.portfolio_service import (
     calc_correlation_matrix,
-    calc_holdings_overlap,
     dividend_safety as div_safety_check,
-)
-from services.precision_service import (
-    PrecisionStrategyEngine,
-    calc_hwm_sigma_levels,
 )
 from ui.components.mk_dashboard import render_mk_war_room
 from ui.helpers.session import (
@@ -101,13 +70,6 @@ from ui.helpers.session import (
 from ui.tab3_t7_ledger import render_t7_section
 
 # 其他 fund_fetcher utility
-from fund_fetcher import (
-    classify_fetch_status,
-    normalize_result_state,
-    clean_risk_table,
-    safe_float,
-    is_valid_moneydj_page,
-)
 
 
 def _calc_data_health(indicators=None):
@@ -131,7 +93,6 @@ def render_portfolio_tab() -> None:
     _refresh_oauth_state()
     from ui.helpers.oauth_state import (
         _oauth_configured,
-        _oauth_cfg,
         _resolve_oauth_cfg,
         _get_oauth_client,
         _gsa_secret,
@@ -140,7 +101,6 @@ def render_portfolio_tab() -> None:
     from ui.helpers.holdings import _zh_holding
     from ui.helpers.data_registry import (
         _update_data_registry,
-        _sync_invest_twd_from_ledgers,
     )
 
     st.markdown("## 📊 組合基金管理")
@@ -1293,7 +1253,6 @@ def render_portfolio_tab() -> None:
         # v18.43：同 code 跨多保單會讓 _value_series.name 重複，join 時欄名衝突拋例外。
         # 分析視圖按 code 去重（與 v18.34 MK 戰情室 / v18.38 真實收益矩陣策略一致）。
         try:
-            import pandas as _pd_curve
             _curve_df = None
             _seen_curve: set = set()
             for _f in _pf_loaded:
