@@ -98,6 +98,90 @@ def render_manual_tab() -> None:
             "**Streamlit Cloud 重啟容器時這部分會清空** → 用「下載 CSV → reboot 後上傳 CSV」雙保險。"
         )
 
+    # ── v18.288：🗄️ NAV 歷史資料管理（CSV 匯入 / 匯出 / 增量更新）─
+    with st.expander("🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）", expanded=False):
+        from services.nav_history_store import (
+            clear_cache as _nh_clear,
+            export_nav_csv as _nh_export,
+            get_cache_status as _nh_status,
+            import_nav_csv as _nh_import,
+            incremental_update as _nh_update,
+        )
+        st.caption(
+            "💡 **架構**：user 從 CnYES / MoneyDJ 手動下載完整歷史 CSV → 上傳這裡 → "
+            "系統存進 `cache/nav_history/{code}.json`。**之後危機回測等功能會優先讀 cache**，"
+            "確保歷史完整。後續按「🔄 增量更新」只抓最新幾天疊代上去（不重抓 5 年）。"
+        )
+        st.caption(
+            "⚠️ 不同網站基金代碼不同！MoneyDJ 用內部碼（ACTI94）、CnYES 可能用 ISIN（LU0xxx）。"
+            "上傳後此 cache 用你自己的 code 為 key，不依賴爬蟲。"
+        )
+
+        _nh_c1, _nh_c2 = st.columns([1, 2])
+        _nh_code = _nh_c1.text_input(
+            "基金代號", placeholder="ACTI94", key="_nh_code",
+            help="這個 code 同時是 cache key + 對應 fetch_nav 增量更新時的 MoneyDJ 代碼",
+        ).strip().upper()
+        _nh_file = _nh_c2.file_uploader(
+            "📥 上傳 NAV CSV（欄位：date + nav，支援西元/民國 + 中英文欄名）",
+            type=["csv"], key="_nh_upload_csv",
+        )
+
+        if _nh_code:
+            _status = _nh_status(_nh_code)
+            if _status["exists"]:
+                st.success(
+                    f"✅ Cache 已有 {_status['count']:,} 筆 "
+                    f"({_status['date_min']} ~ {_status['date_max']}，"
+                    f"涵蓋 {_status['years_covered']} 年)"
+                )
+            else:
+                st.info(f"ℹ️ {_nh_code} 尚無 cache，請上傳 CSV 建立基底")
+
+            if _nh_file is not None:
+                _r = _nh_import(_nh_code, _nh_file.getvalue())
+                if _r["errors"]:
+                    st.error("、".join(_r["errors"]))
+                else:
+                    st.success(
+                        f"✅ 匯入成功：新增 {_r['imported']:,} 筆、覆蓋 {_r['merged']:,} 筆 "
+                        f"→ 總 {_r['total']:,} 筆 ({_r['date_min']} ~ {_r['date_max']})"
+                    )
+                    st.rerun()
+
+            _act_c1, _act_c2, _act_c3 = st.columns(3)
+            if _act_c1.button("🔄 從 MoneyDJ 增量更新", use_container_width=True,
+                              key="_nh_update_btn", disabled=not _status["exists"]):
+                with st.spinner("抓最新幾天 NAV 疊代到 cache..."):
+                    _u = _nh_update(_nh_code)
+                if _u["errors"]:
+                    st.error("、".join(_u["errors"]))
+                else:
+                    st.success(
+                        f"✅ fetch_nav 抓 {_u['fetched']} 筆，"
+                        f"merge 新增 {_u['new_rows']} 筆，總 {_u['total']:,} 筆"
+                    )
+                    st.rerun()
+
+            if _status["exists"]:
+                _csv_bytes = _nh_export(_nh_code)
+                _act_c2.download_button(
+                    "📤 下載當前 cache 為 CSV", _csv_bytes,
+                    file_name=f"nav_{_nh_code}.csv", mime="text/csv",
+                    use_container_width=True, key="_nh_dl_btn",
+                )
+                if _act_c3.button("🗑️ 清除 cache", use_container_width=True,
+                                  key="_nh_clear_btn"):
+                    _nh_clear(_nh_code)
+                    st.rerun()
+
+        st.caption(
+            "🔧 **工作流程**：① 第一次去 [CnYES](https://fund.cnyes.com) 或 "
+            "[MoneyDJ](https://www.moneydj.com/funddj/) 找到該基金 → 下載完整歷史 CSV → "
+            "上傳到此 → ② 之後每週按「🔄 增量更新」自動抓最新疊代 → "
+            "③ reboot 前按「📤 下載」備份 → reboot 後重新上傳即還原。"
+        )
+
     st.divider()
 
     _t6 = st.tabs([
