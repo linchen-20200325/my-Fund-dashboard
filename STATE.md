@@ -6,7 +6,22 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.275_MacroHistoryCache（全球 FRED 8 序列 + VIX + SPX Parquet 快取 + 每週 cron）
+- **目前版本**：v18.276_MacroValidationReadsParquet（Phase 6a 驗證解綁 Tab1 — 改讀 Parquet + 加 CSV 下載）
+  - **User 需求**（接 Phase B v18.275）：「繼續 B.2」。把 PR #160 v18.275 鋪好的 `data_cache/*.parquet` 接到 Phase 6a 驗證流程 → user 不用先去 Tab1 抓 FRED 就能跑驗證；加 macro_score 月序列 CSV 下載讓 user 拿到原始資料二次分析
+  - **services/macro_validation.py**：新增 `load_indicators_from_parquet(cache_dir)` 把 `fred_indicators.parquet`（長格式 8 series）+ `vix_history.parquet` 重組成跟 `fetch_all_indicators` 同結構的 `{key: {"series": pd.Series}}` dict；轉換邏輯**完全鏡像 services/macro_service**：殖利率 spread（DGS10-DGS2 / DGS10-DGS3MO）+ M2 YoY%（shift 12）+ FED_BS YoY%（shift 52 週頻）+ CPI YoY%（shift 12）+ HY/UNRATE/VIX 直接 level。**PMI 不在 Parquet 內**（PR #160 暫不抓），留 indicators_now fallback。`calc_macro_score_series` 簽名擴 `prefer_parquet=True / cache_dir=DEFAULT_PARQUET_CACHE_DIR`，Parquet 優先、indicators_now 補洞 PMI
+  - **ui/tab_crisis_backtest.py Phase 3.5**：
+    - 偵測 `data_cache/fred_indicators.parquet` 存在 → 印「📦 資料源：Parquet（+Tab1 cache 補位 PMI）」caption，**不再強制 user 先進 Tab1**；缺 Parquet + 缺 session_state → 引導 user 等下次週日 cron 或手動觸發 workflow
+    - 覆蓋率檢查改算「Parquet ∪ indicators_now 合併後」`n_covered`
+    - `calc_macro_score_series` 帶入 `prefer_parquet=_has_parquet, cache_dir=...`
+    - 新增「📥 下載 macro_score 月序列 CSV」按鈕（utf-8-sig BOM 解 Excel 中文亂碼），檔名含 years + 日期
+  - **test_macro_validation.py**（+16 case = 35 全綠 + 1 skipped）：
+    - `_write_fred_parquet` / `_write_vix_parquet` 兩個 helper 寫合成 Parquet
+    - `load_indicators_from_parquet`：缺目錄 / 空目錄 / DGS10-DGS2 spread / DGS10-DGS3MO 倒掛 / HY 直 level / M2 YoY 計算（13 點線性升 10→ YoY=10%）/ M2 只有 10 點不足 13 → 不在 output / UNRATE 直 level / VIX 從獨立檔 / PMI 不在 output（PR #160 確認）/ 壞 Parquet graceful 不 raise
+    - `calc_macro_score_series`：prefer_parquet=True 預設用 Parquet / prefer_parquet=False 完全略過 Parquet / Parquet+indicators_now 合併共 3 個指標 / Parquet 覆蓋 indicators_now 同 key（VIX 50 vs 10 取 Parquet）
+    - UI source-level：CSV 下載按鈕存在 + key + to_csv 邏輯；`load_indicators_from_parquet` 與 `fred_indicators.parquet` 被 import
+  - **回歸**：test_macro_validation + signal_lookback + crisis_backtest + strategy_grid + update_macro_history + tab2_single_fund + app_smoke **231 passed + 1 skipped** 零回歸
+  - Roadmap：Phase C（stock-dashboard macro tab 加歷史驗證 UI 子區塊 — 讀 NDC + 領先指標 Parquet）→ Phase D（PMI 補抓進 Parquet）
+- **前一版**：v18.275_MacroHistoryCache（全球 FRED 8 序列 + VIX + SPX Parquet 快取 + 每週 cron）
   - **User 需求**：「兩邊都可以做回測來驗證台股的總經 tab 與基金（全球的）總經 tab」+「直接抓取資料放在資料庫，之後每周定期更新」。Sister repo `my-stock-dashboard` 已於 v18.149 用 Parquet 模式做台灣指標歷史 → 本 repo 鏡像對全球 FRED.
   - **scripts/update_macro_history.py**（~280 行）：純函式爬蟲、無 streamlit 相依、無 repo internal import；FRED 直連（全球可達不需 proxy）+ Yahoo VIX/SPX 走 `_fetch_url_via_proxy`（infra.proxy → repositories.macro_repository.fetch_url → 直連三層 fallback）；CLI `--bootstrap --years N --only NAME`。
   - **新增 Parquet 表**（3）：

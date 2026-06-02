@@ -479,13 +479,25 @@ def _render_score_validation_section(events: list, years: int) -> None:
         "Tab1 score 是否真的有下降」。"
     )
 
+    # v18.276 Phase B.2：優先讀 data_cache Parquet（PR #160 v18.275 weekly cron 維護），
+    # 不再強制要求 user 先進 Tab1 抓 FRED。Parquet 缺/壞才 fallback 到 session_state。
+    from pathlib import Path as _PathSv
+    _CACHE_DIR = _PathSv("data_cache")
+    _has_parquet = (_CACHE_DIR / "fred_indicators.parquet").exists()
     indicators = st.session_state.get("indicators") or {}
-    if not indicators:
+    if _has_parquet:
+        st.caption(
+            f"📦 資料源：`{_CACHE_DIR}/fred_indicators.parquet`"
+            + ("（Tab1 cache 補位 PMI）" if indicators else "（僅 Parquet，PMI 缺位）")
+        )
+    elif not indicators:
         st.info(
-            "⬆️ 請先到「📊 總經 Dashboard」Tab 按抓資料按鈕載入 indicators，"
-            "此 section 重用其 .series 欄位免重抓"
+            "⬆️ Parquet 快取尚未生成 — 請等下次週日 cron（或手動觸發 "
+            "`update_macro_history` workflow）；或先到「📊 總經 Dashboard」Tab 抓 FRED 後重試"
         )
         return
+    else:
+        st.caption("📦 資料源：Tab1 session_state（無 Parquet 快取）")
 
     col_a, col_b, col_c = st.columns(3)
     with col_a:
@@ -518,19 +530,30 @@ def _render_score_validation_section(events: list, years: int) -> None:
         SCORE_RULES,
         calc_macro_score_series,
         compute_period_stats,
+        load_indicators_from_parquet,
         verify_score_vs_crises,
     )
 
-    n_covered = sum(1 for k in SCORE_RULES if indicators.get(k, {}).get("series") is not None)
+    # 合併資料源覆蓋率（Parquet ∪ indicators_now）— Parquet 路徑也要驗
+    _from_parquet = load_indicators_from_parquet(_CACHE_DIR) if _has_parquet else {}
+    n_covered = sum(
+        1 for k in SCORE_RULES
+        if (_from_parquet.get(k, {}).get("series") is not None)
+        or (indicators.get(k, {}).get("series") is not None)
+    )
     if n_covered < 3:
         st.error(
-            f"❌ session_state['indicators'] 中只有 {n_covered}/{len(SCORE_RULES)} 個指標有 "
-            "series 欄位 — 請到 Tab1 確認已抓取 FRED 完整資料"
+            f"❌ 兩個資料源（Parquet + session_state）合計只覆蓋 "
+            f"{n_covered}/{len(SCORE_RULES)} 個指標 — "
+            "請等 cron bootstrap data_cache/，或到 Tab1 抓 FRED"
         )
         return
 
     with st.spinner(f"重算 {score_years} 年 macro_score 月序列..."):
-        score_df = calc_macro_score_series(indicators, years=score_years, freq="ME")
+        score_df = calc_macro_score_series(
+            indicators, years=score_years, freq="ME",
+            prefer_parquet=_has_parquet, cache_dir=_CACHE_DIR,
+        )
 
     if score_df.empty:
         st.error("❌ 重算結果空 — indicators 缺 series 或日期範圍無交集")
@@ -540,6 +563,20 @@ def _render_score_validation_section(events: list, years: int) -> None:
         f"✅ 重算 {len(score_df)} 個月，"
         f"平均每月用 {score_df['n_indicators'].mean():.1f} 個指標打分"
     )
+
+    # v18.276 Phase B.2：macro_score 時序 CSV 下載（含 BOM 解 Excel 中文亂碼）
+    try:
+        _csv_buf = score_df.reset_index().to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="📥 下載 macro_score 月序列 CSV",
+            data=_csv_buf,
+            file_name=f"macro_score_{score_years}y_{pd.Timestamp.today():%Y%m%d}.csv",
+            mime="text/csv",
+            key="crisis_score_csv_download",
+            help="格式：date, score (0-10), phase, n_indicators",
+        )
+    except Exception as _e:
+        st.caption(f"⚠️ CSV 匯出失敗：{_e}")
 
     # ── 走勢圖 + crisis vlines ─────────────────────────
     try:
