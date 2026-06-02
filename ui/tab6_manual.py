@@ -30,8 +30,11 @@ def render_manual_tab() -> None:
     with st.expander("📋 曾經查過的基金標的清單（Tab2 / Tab3 自動記錄 + 預設）", expanded=True):
         from services.fund_history import (
             clear_history as _clear_fh,
+            export_preset_funds_json as _export_preset_json,
             get_history_df as _hist_df,
             import_from_csv as _import_fh,
+            is_preset as _is_preset,
+            promote_to_preset as _promote_preset,
             record_fund as _rec_fh_manual,
         )
 
@@ -92,6 +95,73 @@ def render_manual_tab() -> None:
                 _clear_fh()
                 st.rerun()
             st.dataframe(_df_fh, use_container_width=True, hide_index=True)
+
+            # ── v18.290: 點代碼自動複製（手機 tap 即複製）─
+            st.markdown("**📋 點下方任一代號的右側 📋 icon 即可複製**")
+            _codes_list = _df_fh["code"].astype(str).str.upper().tolist()
+            # 多欄並排省空間（每 4 個一排）
+            _per_row = 4
+            for _i in range(0, len(_codes_list), _per_row):
+                _cols = st.columns(_per_row)
+                for _j, _code in enumerate(_codes_list[_i:_i + _per_row]):
+                    with _cols[_j]:
+                        st.code(_code, language=None)
+
+            # ── v18.290: ⭐ 升等為預設（寫回 config/preset_funds.json）─
+            st.markdown("---")
+            st.markdown("**⭐ 升等為預設清單**（reboot 後仍存在）")
+            _promo_c1, _promo_c2, _promo_c3 = st.columns([2, 2, 1])
+            _candidates = [c for c in _codes_list if not _is_preset(c)]
+            if not _candidates:
+                _promo_c1.caption("✅ 清單裡所有基金都已是預設了")
+            else:
+                _sel_code = _promo_c1.selectbox(
+                    "選一檔基金",
+                    options=_candidates,
+                    key="_fh_promote_sel",
+                    label_visibility="collapsed",
+                )
+                # 取對應 name（從 df 找最新一筆）
+                _row_match = _df_fh[_df_fh["code"].astype(str).str.upper() == _sel_code]
+                _sel_name = ""
+                if not _row_match.empty and "name" in _row_match.columns:
+                    _sel_name = str(_row_match.iloc[0].get("name", "") or "")
+                _promo_c2.text_input(
+                    "基金名稱（會寫進 JSON）",
+                    value=_sel_name,
+                    key="_fh_promote_name",
+                    label_visibility="collapsed",
+                )
+                if _promo_c3.button(
+                    "⭐ 升等", use_container_width=True, key="_fh_promote_btn",
+                ):
+                    _r = _promote_preset(
+                        _sel_code,
+                        st.session_state.get("_fh_promote_name", _sel_name),
+                    )
+                    if _r["errors"]:
+                        st.error("、".join(_r["errors"]))
+                    elif _r["already"]:
+                        st.info(f"ℹ️ {_sel_code} 已在預設清單，名稱已更新")
+                    else:
+                        st.success(
+                            f"✅ 已升等 {_sel_code} → 預設清單共 {_r['total']} 檔。"
+                            "**記得下方按「💾 下載 preset_funds.json」並 commit 回 repo，"
+                            "否則 Cloud reboot 後會消失！**"
+                        )
+                    st.rerun()
+
+            # 下載最新 preset_funds.json 給 user commit
+            _preset_json_bytes = _export_preset_json()
+            st.download_button(
+                "💾 下載 preset_funds.json（reboot 持久化必做）",
+                _preset_json_bytes,
+                file_name="preset_funds.json",
+                mime="application/json",
+                use_container_width=True,
+                key="_fh_dl_preset_json",
+                help="升等後務必下載此檔 → 取代 repo 的 config/preset_funds.json → git commit + push",
+            )
         st.caption(
             "💡 **內建預設常用基金永遠在**（即使 cache 被清空也會看到，來源標 `preset`）。"
             "user 抓過 / 手動加的紀錄存於容器內 `cache/fund_history.json`，"

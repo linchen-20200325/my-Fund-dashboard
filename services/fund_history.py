@@ -322,3 +322,83 @@ def import_from_csv(csv_bytes: bytes) -> dict:
     except Exception as e:
         result["errors"].append(f"寫回失敗：{e}")
     return result
+
+
+# ─── v18.290：UI 升等為預設 — 寫回 config/preset_funds.json ───────
+def promote_to_preset(code: str, name: str = "") -> dict:
+    """把 code 寫進 config/preset_funds.json（已存在則更新 name）。
+
+    Streamlit Cloud 容器寫檔在 reboot 後會消失 → user 必須用
+    export_preset_funds_json() 下載新 JSON、git commit 回 repo 才真正持久化。
+
+    Returns:
+        {ok, already, total, errors}
+    """
+    result = {"ok": False, "already": False, "total": 0, "errors": []}
+    code = str(code or "").strip().upper()
+    if not code:
+        result["errors"].append("基金代號不可空")
+        return result
+    name = str(name or "").strip()
+
+    funds = _load_default_funds()  # 已是 list[dict]
+    # 已存在則更新 name（不重複加）
+    found = False
+    for f in funds:
+        if f.get("code", "").upper() == code:
+            found = True
+            if name and (not f.get("name") or f["name"] == code):
+                f["name"] = name
+            break
+    if found:
+        result["already"] = True
+    else:
+        funds.append({"code": code, "name": name or f"基金（{code}）"})
+
+    # 寫回 JSON（保留 _comment）
+    try:
+        existing = {}
+        if _PRESET_FUNDS_JSON.exists():
+            try:
+                existing = json.loads(_PRESET_FUNDS_JSON.read_text(encoding="utf-8"))
+            except Exception:
+                existing = {}
+        existing["funds"] = funds
+        existing.setdefault(
+            "_comment",
+            "預設常用基金清單 — 直接編輯此檔即可新增/移除。"
+            "code 必填且大寫，name 可空。改完 git commit + push 即生效。",
+        )
+        _PRESET_FUNDS_JSON.parent.mkdir(parents=True, exist_ok=True)
+        _PRESET_FUNDS_JSON.write_text(
+            json.dumps(existing, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        # 重載快取的 _DEFAULT_FUNDS（同 module 內變數）
+        global _DEFAULT_FUNDS
+        _DEFAULT_FUNDS = _load_default_funds()
+        result["ok"] = True
+        result["total"] = len(funds)
+    except Exception as e:
+        result["errors"].append(f"寫回 JSON 失敗：{e}")
+    return result
+
+
+def export_preset_funds_json() -> bytes:
+    """匯出當前 config/preset_funds.json bytes 給 user 下載（commit 用）。"""
+    if _PRESET_FUNDS_JSON.exists():
+        return _PRESET_FUNDS_JSON.read_bytes()
+    # 缺檔：把當前 in-memory 構成 JSON 給下載
+    payload = {
+        "_comment": "預設常用基金清單 — 直接編輯此檔即可新增/移除。",
+        "funds": _load_default_funds(),
+    }
+    return (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+
+
+def is_preset(code: str) -> bool:
+    """判斷 code 是否已在預設清單。"""
+    code = str(code or "").strip().upper()
+    if not code:
+        return False
+    return any(f.get("code", "").upper() == code for f in _load_default_funds())
