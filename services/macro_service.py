@@ -2231,7 +2231,6 @@ def rank_macro_drivers(indicators: dict,
         }
     """
     import pandas as pd
-    import numpy as np
 
     out_empty = {
         "target": target_key, "lag_months": lag_months,

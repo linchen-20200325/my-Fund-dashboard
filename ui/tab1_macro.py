@@ -20,7 +20,6 @@ import os
 import time as _time_mod
 from zoneinfo import ZoneInfo
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -44,7 +43,6 @@ from services.macro_service import (
     fetch_all_indicators,
     rank_macro_drivers,
 )
-from ui.components.macro_card_edu import MACRO_EDU
 from ui.components.mk_clock import render_mk_clock_section
 from ui.helpers.macro_helpers import (
     _CATEGORY_MAP,

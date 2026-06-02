@@ -26,9 +26,8 @@ import streamlit as st
 
 from infra.proxy import get_proxy_config
 from ui.helpers.session import (
-    _D5_KEYS,
     calc_data_health as _calc_data_health_pure,
-    parse_indicator_date as _parse_indicator_date,
+    parse_indicator_date as _parse_indicator_date,  # noqa: F401 — re-export for tests
 )
 
 _TW_TZ = ZoneInfo("Asia/Taipei")
