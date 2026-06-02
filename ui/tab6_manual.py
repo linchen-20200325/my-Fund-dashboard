@@ -97,15 +97,27 @@ def render_manual_tab() -> None:
             st.dataframe(_df_fh, use_container_width=True, hide_index=True)
 
             # ── v18.290: 點代碼自動複製（手機 tap 即複製）─
-            st.markdown("**📋 點下方任一代號的右側 📋 icon 即可複製**")
-            _codes_list = _df_fh["code"].astype(str).str.upper().tolist()
-            # 多欄並排省空間（每 4 個一排）
-            _per_row = 4
-            for _i in range(0, len(_codes_list), _per_row):
-                _cols = st.columns(_per_row)
-                for _j, _code in enumerate(_codes_list[_i:_i + _per_row]):
-                    with _cols[_j]:
-                        st.code(_code, language=None)
+            # v18.293 hotfix: get_history_df() 欄名是中文「代號/名稱」非英文 code/name
+            # 容錯：兩個欄名都接受（避免未來改 schema 再炸）
+            _code_col = "代號" if "代號" in _df_fh.columns else (
+                "code" if "code" in _df_fh.columns else None
+            )
+            _name_col = "名稱" if "名稱" in _df_fh.columns else (
+                "name" if "name" in _df_fh.columns else None
+            )
+            if _code_col is None:
+                st.caption(f"⚠️ 找不到代號欄（df columns: {list(_df_fh.columns)}）")
+                _codes_list = []
+            else:
+                st.markdown("**📋 點下方任一代號的右側 📋 icon 即可複製**")
+                _codes_list = _df_fh[_code_col].astype(str).str.upper().tolist()
+                # 多欄並排省空間（每 4 個一排）
+                _per_row = 4
+                for _i in range(0, len(_codes_list), _per_row):
+                    _cols = st.columns(_per_row)
+                    for _j, _code in enumerate(_codes_list[_i:_i + _per_row]):
+                        with _cols[_j]:
+                            st.code(_code, language=None)
 
             # ── v18.290: ⭐ 升等為預設（寫回 config/preset_funds.json）─
             st.markdown("---")
@@ -122,10 +134,13 @@ def render_manual_tab() -> None:
                     label_visibility="collapsed",
                 )
                 # 取對應 name（從 df 找最新一筆）
-                _row_match = _df_fh[_df_fh["code"].astype(str).str.upper() == _sel_code]
                 _sel_name = ""
-                if not _row_match.empty and "name" in _row_match.columns:
-                    _sel_name = str(_row_match.iloc[0].get("name", "") or "")
+                if _code_col and _name_col:
+                    _row_match = _df_fh[
+                        _df_fh[_code_col].astype(str).str.upper() == _sel_code
+                    ]
+                    if not _row_match.empty:
+                        _sel_name = str(_row_match.iloc[0].get(_name_col, "") or "")
                 _promo_c2.text_input(
                     "基金名稱（會寫進 JSON）",
                     value=_sel_name,
