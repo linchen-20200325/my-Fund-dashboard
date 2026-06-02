@@ -4,10 +4,10 @@
     {"code": "ACCP138", "name": "聯博全球高收益債券基金 AT 級別 美元"},
     {"code": "ACDD01",  "name": "安聯台灣大壩基金-A累積型(台幣)"},
     {"code": "ACDD19",  "name": "安聯台灣智慧基金"},
-    {"code": "ACTI71",  "name": "聯博基金（ACTI71）"},
-    {"code": "ACTI94",  "name": "聯博基金（ACTI94）"},
-    {"code": "JFZN3",   "name": "摩根基金（JFZN3）"},
-    {"code": "TLZF9",   "name": "富蘭克林坦伯頓基金（TLZF9）"},
-    {"code": "ALBT8",   "name": "聯博基金（ALBT8）"}
+    {"code": "ACTI71",  "name": "聯博多元資產收益組合基金AI配息(美元)"},
+    {"code": "ACTI94",  "name": "聯博美國多重資產收益基金AI配息(美元)"},
+    {"code": "JFZN3",   "name": "摩根投資基金-多重收益基金A股(美元對沖)"},
+    {"code": "TLZF9",   "name": "安聯收益成長基金-AMg7月收總收益類股(美元)"},
+    {"code": "ALBT8",   "name": "聯博-美國成長基金AP(總報酬月配)級別美元"}
   ]
 }
