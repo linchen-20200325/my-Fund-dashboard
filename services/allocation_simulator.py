@@ -29,12 +29,21 @@ import pandas as pd
 
 # ────────────────────────────────────────────────────────────────────
 # 預設 4 段景氣劇本（User 指定：復甦 → 擴張 → 放緩 → 衰退，完整 4-phase cycle）
+# v18.286：每 phase 可有自己的 drip/cash/stay 比例；缺漏時用 params 全期值
 # ────────────────────────────────────────────────────────────────────
 DEFAULT_PHASE_SCRIPT: list[dict] = [
-    {"months": 12, "phase": "復甦", "monthly_nav_change_pct": 0.8},
-    {"months": 18, "phase": "擴張", "monthly_nav_change_pct": 0.5},
-    {"months": 12, "phase": "放緩", "monthly_nav_change_pct": 0.1},
-    {"months": 6,  "phase": "衰退", "monthly_nav_change_pct": -1.0},
+    # 復甦期：NAV 開始反彈 → DRIP 多買加速複利
+    {"months": 12, "phase": "復甦", "monthly_nav_change_pct": 0.8,
+     "drip_pct": 80, "cash_pct": 10, "stay_pct": 10},
+    # 擴張期：NAV 持續漲 → CASH 開始鎖利
+    {"months": 18, "phase": "擴張", "monthly_nav_change_pct": 0.5,
+     "drip_pct": 60, "cash_pct": 30, "stay_pct": 10},
+    # 放緩期：NAV 上升放緩 → CASH 多領防範
+    {"months": 12, "phase": "放緩", "monthly_nav_change_pct": 0.1,
+     "drip_pct": 30, "cash_pct": 50, "stay_pct": 20},
+    # 衰退期：NAV 下跌 → STAY 留原幣等回升
+    {"months": 6,  "phase": "衰退", "monthly_nav_change_pct": -1.0,
+     "drip_pct": 10, "cash_pct": 20, "stay_pct": 70},
 ]
 
 
@@ -90,9 +99,13 @@ def validate_and_normalize(params: SimulationParams) -> SimulationParams:
     )
 
 
-def _build_phase_timeline(phase_script: list[dict]) -> list[tuple[int, str, float]]:
-    """展開 phase_script 成逐月 [(month, phase_name, monthly_nav_change_pct)]."""
-    timeline: list[tuple[int, str, float]] = []
+def _build_phase_timeline(phase_script: list[dict]) -> list[tuple[int, str, float, dict]]:
+    """展開 phase_script 成逐月 [(month, phase_name, monthly_nav_change_pct, alloc_dict)].
+
+    v18.286：alloc_dict 內含該 phase 的 drip/cash/stay% 若 phase 有定義；
+    缺漏欄位由 caller 用 params 全期值補。
+    """
+    timeline: list[tuple[int, str, float, dict]] = []
     m = 0
     for seg in phase_script:
         n = int(seg.get("months", 0))
@@ -100,9 +113,17 @@ def _build_phase_timeline(phase_script: list[dict]) -> list[tuple[int, str, floa
             continue
         name = str(seg.get("phase", "—"))
         pct = float(seg.get("monthly_nav_change_pct", 0.0))
+        # v18.286: per-phase allocation（可選）
+        alloc: dict = {}
+        for k in ("drip_pct", "cash_pct", "stay_pct"):
+            if k in seg:
+                try:
+                    alloc[k] = float(seg.get(k, 0.0))
+                except (TypeError, ValueError):
+                    pass
         for _ in range(n):
             m += 1
-            timeline.append((m, name, pct))
+            timeline.append((m, name, pct, alloc))
     return timeline
 
 
@@ -170,15 +191,25 @@ def run_single_simulation(params: SimulationParams,
         "cum_div_twd": 0.0,
     })
 
-    for m, phase, monthly_nav_change_pct in timeline:
+    for m, phase, monthly_nav_change_pct, _phase_alloc in timeline:
         nav = nav * (1.0 + monthly_nav_change_pct / 100.0)
         fx = fx_path[m]
 
         div_local = units * nav * yield_monthly
 
-        drip_local = div_local * params.drip_pct / 100.0
-        cash_local_inc = div_local * params.cash_pct / 100.0
-        stay_local_inc = div_local * params.stay_pct / 100.0
+        # v18.286：per-phase allocation 優先；缺漏退回 params 全期值
+        _drip = _phase_alloc.get("drip_pct", params.drip_pct)
+        _cash = _phase_alloc.get("cash_pct", params.cash_pct)
+        _stay = _phase_alloc.get("stay_pct", params.stay_pct)
+        # phase-level normalize（避免 user 設 sum != 100% crash）
+        _sum_phase = _drip + _cash + _stay
+        if _sum_phase > 0:
+            _f = 100.0 / _sum_phase
+            _drip, _cash, _stay = _drip * _f, _cash * _f, _stay * _f
+
+        drip_local = div_local * _drip / 100.0
+        cash_local_inc = div_local * _cash / 100.0
+        stay_local_inc = div_local * _stay / 100.0
 
         if nav > 0:
             units += drip_local / nav

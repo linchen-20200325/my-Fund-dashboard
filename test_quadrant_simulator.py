@@ -126,3 +126,89 @@ def test_summarize_returns_4_rows():
 def test_summarize_empty_input_safe():
     s = summarize_best_per_quadrant(pd.DataFrame())
     assert s.empty
+
+
+# ──────────────────────────────────────────────────────────────
+# v18.286 Part B: 歷史四象限分類
+# ──────────────────────────────────────────────────────────────
+def test_classify_historical_quadrants_q1_double_negative():
+    """合成資料：NAV 跌 + FX 跌（TWD 升值）→ 應分到 Q1。"""
+    from services.quadrant_simulator import classify_historical_quadrants
+    idx = pd.date_range("2023-01-31", periods=12, freq="ME")
+    nav = pd.Series([10.0 - i * 0.1 for i in range(12)], index=idx)
+    fx = pd.Series([32.0 - i * 0.1 for i in range(12)], index=idx)
+    df = classify_historical_quadrants(nav, fx, window_months=3)
+    assert not df.empty
+    assert (df["quadrant"] == "Q1").all()
+
+
+def test_classify_historical_quadrants_q4_double_positive():
+    """NAV 漲 + FX 漲（TWD 貶值）→ 應分到 Q4。"""
+    from services.quadrant_simulator import classify_historical_quadrants
+    idx = pd.date_range("2023-01-31", periods=12, freq="ME")
+    nav = pd.Series([10.0 + i * 0.1 for i in range(12)], index=idx)
+    fx = pd.Series([32.0 + i * 0.1 for i in range(12)], index=idx)
+    df = classify_historical_quadrants(nav, fx, window_months=3)
+    assert not df.empty
+    assert (df["quadrant"] == "Q4").all()
+
+
+def test_classify_handles_empty_series():
+    from services.quadrant_simulator import classify_historical_quadrants
+    assert classify_historical_quadrants(pd.Series(dtype=float), pd.Series(dtype=float)).empty
+
+
+def test_summarize_historical_distribution_pct_sums_to_100():
+    from services.quadrant_simulator import (
+        classify_historical_quadrants,
+        summarize_historical_distribution,
+    )
+    idx = pd.date_range("2020-01-31", periods=48, freq="ME")
+    import numpy as np
+    rng = np.random.default_rng(0)
+    nav = pd.Series(10.0 * np.cumprod(1 + rng.normal(0, 0.02, 48)), index=idx)
+    fx = pd.Series(32.0 * np.cumprod(1 + rng.normal(0, 0.01, 48)), index=idx)
+    df = classify_historical_quadrants(nav, fx, window_months=3)
+    out = summarize_historical_distribution(df)
+    assert out["_total"] > 0
+    total_pct = sum(out[q]["pct"] for q in ("Q1", "Q2", "Q3", "Q4"))
+    assert abs(total_pct - 100.0) < 0.01
+
+
+# ──────────────────────────────────────────────────────────────
+# v18.286 Part A: per-phase strategy
+# ──────────────────────────────────────────────────────────────
+def test_default_phase_script_each_has_alloc():
+    """v18.286 後預設 4 phase 都應該帶 drip/cash/stay 欄位。"""
+    from services.allocation_simulator import DEFAULT_PHASE_SCRIPT
+    for seg in DEFAULT_PHASE_SCRIPT:
+        assert "drip_pct" in seg
+        assert "cash_pct" in seg
+        assert "stay_pct" in seg
+        # 三者總和應 = 100（normalize 前）
+        assert seg["drip_pct"] + seg["cash_pct"] + seg["stay_pct"] == 100
+
+
+def test_per_phase_allocation_used_in_timeline():
+    """phase_alloc dict 應被 timeline 帶出來。"""
+    from services.allocation_simulator import _build_phase_timeline
+    script = [
+        {"months": 2, "phase": "復甦", "monthly_nav_change_pct": 0.5,
+         "drip_pct": 80, "cash_pct": 10, "stay_pct": 10},
+    ]
+    tl = _build_phase_timeline(script)
+    assert len(tl) == 2
+    # 4-tuple format
+    _m, _ph, _navchg, _alloc = tl[0]
+    assert _ph == "復甦"
+    assert _alloc["drip_pct"] == 80
+    assert _alloc["cash_pct"] == 10
+
+
+def test_timeline_missing_alloc_returns_empty_dict():
+    """phase 沒帶 alloc 欄位時 alloc dict 應為空，由 caller fallback params 全期值。"""
+    from services.allocation_simulator import _build_phase_timeline
+    script = [{"months": 1, "phase": "復甦", "monthly_nav_change_pct": 0.5}]
+    tl = _build_phase_timeline(script)
+    _m, _ph, _navchg, _alloc = tl[0]
+    assert _alloc == {}

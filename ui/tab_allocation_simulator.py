@@ -81,6 +81,12 @@ def render_allocation_simulator_tab() -> None:
     if "_sim_phase_script_df" not in st.session_state:
         st.session_state["_sim_phase_script_df"] = pd.DataFrame(DEFAULT_PHASE_SCRIPT)
 
+    # v18.286：data_editor 加 DRIP%/CASH%/STAY% 三欄讓 user 各 phase 獨立調策略
+    st.caption(
+        "💡 **v18.286 新**：每階段可獨立設 DRIP/CASH/STAY 配息策略。"
+        "預設復甦多 DRIP、衰退多 STAY，user 可自由覆蓋。"
+        "Section 3 的全期預設只有當階段未填策略時才會 fallback。"
+    )
     edited = st.data_editor(
         st.session_state["_sim_phase_script_df"],
         num_rows="dynamic",
@@ -94,6 +100,18 @@ def render_allocation_simulator_tab() -> None:
             "monthly_nav_change_pct": st.column_config.NumberColumn(
                 "月 NAV 變化 %", min_value=-5.0, max_value=5.0,
                 step=0.1, format="%.2f",
+            ),
+            "drip_pct": st.column_config.NumberColumn(
+                "DRIP %", min_value=0, max_value=100, step=5, format="%d",
+                help="配股再投入百分比（該 phase 內）",
+            ),
+            "cash_pct": st.column_config.NumberColumn(
+                "CASH %", min_value=0, max_value=100, step=5, format="%d",
+                help="領現百分比（該 phase 內）",
+            ),
+            "stay_pct": st.column_config.NumberColumn(
+                "STAY %", min_value=0, max_value=100, step=5, format="%d",
+                help="停泊百分比（該 phase 內）",
             ),
         },
         hide_index=True,
@@ -324,6 +342,84 @@ def _render_quadrant_analysis(
             "配息 = units × NAV × (ADR%/12)。DRIP 加單位；CASH 立即換 TWD 累積；"
             "STAY 留原幣到期末才換。期末值 = units × 期末 NAV × 期末 FX + CASH 累計 + STAY × 期末 FX。"
         )
+
+    # ── v18.286 Part B：歷史四象限分佈（用實際 NAV + FX）─────────────
+    st.divider()
+    st.markdown("### 📈 歷史四象限分佈（用實際資料看過去落在哪些象限）")
+    st.caption(
+        "💡 **User 反饋「歷史資料上面已經有這資料」確實沒錯**。"
+        "拿某檔基金的歷史 NAV + USD/TWD 歷史匯率，按 rolling N 個月分類 → 看實際歷史上"
+        "落在 Q1/Q2/Q3/Q4 各多少時間，輔助你判斷未來機率。"
+    )
+
+    _hist_c1, _hist_c2, _hist_c3 = st.columns([2, 1, 1])
+    _hist_code = _hist_c1.text_input(
+        "基金代號", value="ACTI94", key="_quad_hist_code",
+        help="會用 fetch_nav_history_long 抓多年歷史",
+    )
+    _hist_window = _hist_c2.slider(
+        "判定 window (月)", min_value=1, max_value=12, value=3, step=1,
+        key="_quad_hist_window",
+    )
+    _hist_run = _hist_c3.button(
+        "📊 跑歷史分析", use_container_width=True, key="_quad_hist_run",
+    )
+
+    if _hist_run and _hist_code.strip():
+        with st.spinner(f"抓 {_hist_code} 歷史 NAV + USDTWD 匯率歷史..."):
+            try:
+                from repositories.fund_repository import fetch_nav_history_long
+                from repositories.macro_repository import fetch_yf_close
+                from services.quadrant_simulator import (
+                    classify_historical_quadrants,
+                    summarize_historical_distribution,
+                )
+                _nav_hist = fetch_nav_history_long(_hist_code.strip())
+                _fx_hist = fetch_yf_close("USDTWD=X", range_="10y", interval="1d")
+            except Exception as _e_h:
+                st.error(f"歷史抓取失敗：{_e_h}")
+                _nav_hist = pd.Series(dtype=float)
+                _fx_hist = pd.Series(dtype=float)
+
+        if _nav_hist.empty:
+            st.warning(f"⚠️ 抓不到 {_hist_code} 歷史 NAV — 無法做歷史四象限分析")
+        elif _fx_hist.empty:
+            st.warning("⚠️ 抓不到 USDTWD 歷史匯率")
+        else:
+            _classified = classify_historical_quadrants(
+                _nav_hist, _fx_hist, window_months=_hist_window,
+            )
+            if _classified.empty:
+                st.warning("⚠️ 歷史對齊後資料不足以分類")
+            else:
+                _summary = summarize_historical_distribution(_classified)
+                _total = _summary.get("_total", 0)
+                _span = (_classified["date"].max() - _classified["date"].min()).days / 365.25
+                st.success(
+                    f"✅ 分析 {_total} 個月（涵蓋 {_span:.1f} 年，"
+                    f"{_classified['date'].min().date()} ~ {_classified['date'].max().date()}）"
+                )
+                _hcs = st.columns(4)
+                _q_names_short = {"Q1": "🔴 TWD升+NAV跌", "Q2": "🟠 TWD貶+NAV跌",
+                                  "Q3": "🟢 TWD升+NAV漲", "Q4": "🟩 TWD貶+NAV漲"}
+                for _i, _q in enumerate(["Q1", "Q2", "Q3", "Q4"]):
+                    _s = _summary.get(_q, {})
+                    with _hcs[_i]:
+                        st.metric(
+                            _q_names_short[_q],
+                            f"{_s.get('pct', 0):.1f}%",
+                            help=(
+                                f"歷史 {int(_s.get('count', 0))} 個月落在此象限\n"
+                                f"平均 NAV 變化 {_s.get('avg_nav_chg', 0):+.2f}% / "
+                                f"FX {_s.get('avg_fx_chg', 0):+.2f}%"
+                            ),
+                        )
+                with st.expander("📋 月度分類明細", expanded=False):
+                    st.dataframe(_classified.tail(60), use_container_width=True, hide_index=True)
+                st.caption(
+                    "🎯 **怎麼用**：哪個象限歷史佔比最大，未來再次出現的可能性也較高 → "
+                    "Section 3 該 phase 的策略應傾向該象限的最佳（Q1→STAY/Q2→DRIP/Q4→CASH）。"
+                )
 
 
 def _render_simulation_results(result: dict, fx_model: str) -> None:
