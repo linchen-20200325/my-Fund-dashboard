@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-06-02T23:34:22.270333+00:00",
+  "updated_at": "2026-06-02T23:41:20.085406+00:00",
   "datasets": {
     "fred_indicators": {
       "name": "fred_indicators",
-      "last_updated": null,
-      "row_count": 0,
-      "last_error": "FRED_API_KEY 未設定"
+      "last_updated": "2026-06-01",
+      "row_count": 8457,
+      "last_error": null
     },
     "vix_history": {
       "name": "vix_history",
