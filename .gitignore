@@ -16,6 +16,9 @@ temp/
 *.cache
 *.csv
 *.xlsx
+# 例外：範本檔需要 commit 進 repo
+!templates/*.csv
+!templates/*.xlsx
 
 # OS
 .DS_Store
