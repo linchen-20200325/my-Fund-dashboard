@@ -18,6 +18,11 @@
 - **強制驗證機制**：不准說 Done 就跑。修改後必須通過 Type check 與 Lint。完成後輸出簡短報告：[邏輯]、[邊界]、[效能]、[Debug]。
 - **環境與效能**：限用 `.py` 腳本（禁 `.ipynb`），維護 `requirements.txt`。必須確保 `st.cache_data` 的正確使用以優化 Streamlit 效能。
 - **PR 規範**：使用 `gh pr create` 建立請求後**自動 squash-merge + delete branch**（執行 `gh pr merge <PR號碼> --squash --delete-branch`），不必每次徵求同意。
+- **跳 PR 直推例外**：以下情境免開 PR，直接執行 `./scripts/quick_merge.sh "msg"`（squash 進 main + push + 刪分支）：
+  1. STATE.md / CLAUDE.md / 註解 / typo
+  2. 版本字串 bump（不含程式邏輯）
+  3. 不影響功能行為的純文件改動
+  其他一律走 PR（保留 CI gate + 變更紀錄）。
 
 ## §5 卡關救援 (Anti-Loop Protocol)
 - 針對同一個報錯，若連續重試 2 次未果，**立即停機**。
