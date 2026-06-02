@@ -1,0 +1,23 @@
+{
+  "updated_at": "2026-06-02T23:34:22.270333+00:00",
+  "datasets": {
+    "fred_indicators": {
+      "name": "fred_indicators",
+      "last_updated": null,
+      "row_count": 0,
+      "last_error": "FRED_API_KEY 未設定"
+    },
+    "vix_history": {
+      "name": "vix_history",
+      "last_updated": "2026-06-02",
+      "row_count": 3771,
+      "last_error": null
+    },
+    "spx_history": {
+      "name": "spx_history",
+      "last_updated": "2026-06-02",
+      "row_count": 3770,
+      "last_error": null
+    }
+  }
+}
