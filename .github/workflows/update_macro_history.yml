@@ -1,0 +1,64 @@
+name: "全球總經歷史快取（每週）"
+
+on:
+  # 每週日 UTC 00:00（台灣時間 週日 08:00）— 與 fetch_nav_cache 每日 cron 錯開
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: '砍掉重抓全部 15 年歷史（初次部署用）'
+        required: false
+        default: 'false'
+      years:
+        description: 'bootstrap 歷史長度（年）'
+        required: false
+        default: '15'
+
+permissions:
+  contents: write
+
+jobs:
+  update-macro:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install minimal deps
+        # 純 fetch 腳本只需 pandas / pyarrow / requests — 不裝 streamlit 與其他重依賴
+        run: pip install pandas pyarrow requests urllib3
+
+      - name: Fetch macro history
+        env:
+          # FRED 全球可達不需 proxy；VIX/SPX 走 Yahoo（多數 IP 可達）；
+          # 若 PROXY_URL 有設則自動經 NAS 中繼以提升穩定度。
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+        run: |
+          if [ "${{ github.event.inputs.bootstrap }}" = "true" ]; then
+            python scripts/update_macro_history.py --bootstrap --years ${{ github.event.inputs.years || '15' }}
+          else
+            python scripts/update_macro_history.py
+          fi
+
+      - name: Commit and push cache
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data_cache/
+          if git diff --staged --quiet; then
+            echo "→ data_cache/ 無增量，跳過 commit"
+          else
+            DATE=$(date -u '+%Y-%m-%d')
+            git commit -m "🤖 每週全球總經歷史增量：${DATE} [skip ci]"
+            git push
+          fi
