@@ -221,59 +221,51 @@ def render_crisis_backtest_tab() -> None:
         fund_nav: pd.Series | None = None
         fund_display_name = default_name or "(未指定基金)"
         if fund_key.strip():
-            # v18.281：優先重用 Tab2 已抓的 series 避免重複打 MoneyDJ 被 rate-limit
-            # User 反饋 ACTI94 「取不到 NAV」— Tab2 明明抓過了但 crisis tab 又抓一次失敗
-            _reused_nav = None
-            _fd_stash = st.session_state.get("fund_data") or {}
-            if (_fd_stash.get("full_key", "").strip().upper() == fund_key.strip().upper()):
-                _stash_series = _fd_stash.get("series")
-                if _stash_series is not None and len(_stash_series.dropna()) >= 10:
-                    _reused_nav = _stash_series
-            # 也試 portfolio_funds（Tab3 抓過的）
-            if _reused_nav is None:
-                _pf_list = st.session_state.get("portfolio_funds", []) or []
-                for _pf in _pf_list:
-                    if (str(_pf.get("code", "") or "").strip().upper() == fund_key.strip().upper()
-                            or str(_pf.get("full_key", "") or "").strip().upper() == fund_key.strip().upper()):
-                        _pf_series = _pf.get("series")
-                        if _pf_series is not None and len(_pf_series.dropna()) >= 10:
-                            _reused_nav = _pf_series
-                            break
+            # v18.283：危機回測需要多年 NAV 歷史，不能用 Tab2 stash 的 ~30 筆短序列。
+            # 改走 fetch_nav_history_long(CnYES + MoneyDJ 歷史頁 + 24h disk cache)。
+            # User 反饋 ACTI94 30 筆 NAV 不涵蓋 2018/2020/2022 危機事件 → 完全看不出影響。
+            with st.spinner(f"抓取基金 {fund_key} 多年歷史 NAV（CnYES + MoneyDJ 歷史頁）..."):
+                try:
+                    from repositories.fund_repository import (
+                        fetch_fund_by_key,
+                        fetch_nav,
+                        fetch_nav_history_long,
+                    )
+                    fund_nav = fetch_nav_history_long(fund_key.strip(), min_years=years)
+                    # 雙重 fallback：fetch_fund_by_key（走完整 multi-source）
+                    if fund_nav is None or fund_nav.empty:
+                        try:
+                            _fd2 = fetch_fund_by_key(fund_key.strip())
+                            _s2 = (_fd2 or {}).get("series")
+                            if _s2 is not None and len(_s2.dropna()) >= 10:
+                                fund_nav = _s2
+                        except Exception as _e2:
+                            print(f"[crisis] fetch_fund_by_key fallback failed: {_e2}")
 
-            if _reused_nav is not None:
-                fund_nav = _reused_nav
-                fund_display_name = default_name or fund_key
-                st.caption(
-                    f"✅ 重用記憶體中已抓的 NAV（{len(fund_nav.dropna())} 筆，"
-                    f"避免重複打 MoneyDJ 被 rate-limit）"
-                )
-            else:
-                with st.spinner(f"抓取基金 {fund_key} NAV..."):
-                    try:
-                        from repositories.fund_repository import fetch_nav, fetch_fund_by_key
-                        fund_nav = fetch_nav(fund_key.strip())
-                        # v18.281 fallback：fetch_nav 直接打網頁失敗時改走 fetch_fund_by_key
-                        # （走完整 multi-source chain：MoneyDJ + Cnyes + Morningstar 等）
-                        if fund_nav is None or fund_nav.empty:
-                            try:
-                                _fd2 = fetch_fund_by_key(fund_key.strip())
-                                _s2 = (_fd2 or {}).get("series")
-                                if _s2 is not None and len(_s2.dropna()) >= 10:
-                                    fund_nav = _s2
-                            except Exception as _e2:
-                                print(f"[crisis] fetch_fund_by_key fallback failed: {_e2}")
-                        if fund_nav is None or fund_nav.empty:
-                            st.warning(
-                                f"⚠️ 基金 `{fund_key}` 取不到 NAV。\n\n"
-                                "💡 **建議**：先到「🔍 單一基金」Tab 抓一次該基金，"
-                                "再回此頁 → 會自動重用記憶體裡的 NAV。"
-                            )
-                            fund_nav = None
-                        else:
-                            fund_display_name = default_name or fund_key
-                    except Exception as e:
-                        st.warning(f"⚠️ 基金 NAV 抓取失敗：{e}")
+                    if fund_nav is None or fund_nav.empty:
+                        st.warning(
+                            f"⚠️ 基金 `{fund_key}` 取不到 NAV。已嘗試 CnYES + MoneyDJ 歷史頁 + 短期頁。"
+                        )
                         fund_nav = None
+                    else:
+                        fund_display_name = default_name or fund_key
+                        _n_days = len(fund_nav.dropna())
+                        _span_yrs = ((fund_nav.index.max() - fund_nav.index.min()).days / 365.25
+                                     if _n_days >= 2 else 0)
+                        if _span_yrs >= 5:
+                            st.success(
+                                f"✅ 抓到 {_n_days} 筆 NAV（涵蓋 {_span_yrs:.1f} 年，"
+                                f"{fund_nav.index.min().date()} ~ {fund_nav.index.max().date()}）"
+                            )
+                        else:
+                            st.warning(
+                                f"⚠️ 只抓到 {_n_days} 筆 NAV（涵蓋 {_span_yrs:.1f} 年）— "
+                                "舊年份的危機事件該基金將顯示「—」。"
+                                "如果 user 認為應該有更多歷史，請去 CnYES 或基金公司網站確認 / 回報。"
+                            )
+                except Exception as e:
+                    st.warning(f"⚠️ 基金 NAV 抓取失敗：{e}")
+                    fund_nav = None
 
         threshold = threshold_pct / 100.0
         events = summarize_events_with_fund(

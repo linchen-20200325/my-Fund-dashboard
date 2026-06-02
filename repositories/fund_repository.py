@@ -3457,6 +3457,297 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
             print(f"[fetch_nav] ERR: {e}")
     return pd.Series(dtype=float)
 
+
+# ══════════════════════════════════════════════════════════════════
+# v18.283: 長期 NAV 歷史抓取 — CnYES + MoneyDJ 歷史頁面
+# fetch_nav 只給 ~30-400 天，對危機回測（2018/2020/2022）資料不夠
+# ══════════════════════════════════════════════════════════════════
+
+_NAV_HISTORY_CACHE_DIR = Path("cache") / "nav_history" if False else None  # 延後 import path
+try:
+    from pathlib import Path as _Path_nh
+    _NAV_HISTORY_CACHE_DIR = _Path_nh("cache") / "nav_history"
+except Exception:
+    _NAV_HISTORY_CACHE_DIR = None
+
+_NAV_HISTORY_CACHE_TTL_SEC = 86400  # 24 小時（NAV 日頻）
+
+
+def _nav_history_cache_load(code: str) -> "pd.Series | None":
+    """從本地 JSON cache 讀取（24h TTL）。"""
+    if _NAV_HISTORY_CACHE_DIR is None:
+        return None
+    import json
+    import time
+    p = _NAV_HISTORY_CACHE_DIR / f"{code.upper()}.json"
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if (time.time() - float(data["timestamp"])) > _NAV_HISTORY_CACHE_TTL_SEC:
+            return None
+        dates = pd.to_datetime(data["dates"])
+        return pd.Series(data["values"], index=dates, dtype=float).sort_index()
+    except Exception:
+        return None
+
+
+def _nav_history_cache_save(code: str, s: "pd.Series") -> None:
+    """寫到本地 disk cache。"""
+    if s is None or s.empty or _NAV_HISTORY_CACHE_DIR is None:
+        return
+    import json
+    import time
+    try:
+        _NAV_HISTORY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        p = _NAV_HISTORY_CACHE_DIR / f"{code.upper()}.json"
+        s = s.dropna().sort_index()
+        p.write_text(json.dumps({
+            "timestamp": time.time(),
+            "dates": [str(d.date()) for d in s.index],
+            "values": [float(v) for v in s.values],
+        }, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _parse_nav_json_items(items: list) -> "pd.Series":
+    """從 JSON list of {date/value} dict 解析成 NAV Series。寬容多種欄位名。"""
+    if not items:
+        return pd.Series(dtype=float)
+    dates, values = [], []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        d = (item.get("date") or item.get("nav_date") or item.get("publishDate")
+             or item.get("trade_date") or item.get("d") or item.get("Date"))
+        v = (item.get("nav") or item.get("value") or item.get("price")
+             or item.get("close") or item.get("v") or item.get("Nav") or item.get("Price"))
+        if d is None or v is None:
+            continue
+        try:
+            dt = pd.to_datetime(d)
+            vf = float(v)
+            if vf > 0:
+                dates.append(dt)
+                values.append(vf)
+        except Exception:
+            continue
+    if not dates:
+        return pd.Series(dtype=float)
+    s = pd.Series(values, index=pd.DatetimeIndex(dates), dtype=float)
+    s = s[~s.index.duplicated(keep="last")]
+    return s.sort_index()
+
+
+def _walk_for_nav_items(obj, depth: int = 0, max_depth: int = 10) -> list:
+    """遞迴在 nested JSON 中找 NAV items list（含 date + nav 欄位的 dict 陣列）。"""
+    if depth > max_depth:
+        return []
+    if isinstance(obj, list) and obj and isinstance(obj[0], dict):
+        keys = set(obj[0].keys())
+        date_keys = {"date", "nav_date", "publishDate", "trade_date", "Date", "d"}
+        val_keys = {"nav", "value", "price", "close", "Nav", "Price", "v"}
+        if (keys & date_keys) and (keys & val_keys):
+            return obj
+    if isinstance(obj, dict):
+        for v in obj.values():
+            r = _walk_for_nav_items(v, depth + 1, max_depth)
+            if r:
+                return r
+    elif isinstance(obj, list):
+        for v in obj:
+            r = _walk_for_nav_items(v, depth + 1, max_depth)
+            if r:
+                return r
+    return []
+
+
+def _fetch_nav_cnyes(code: str) -> "pd.Series | None":
+    """CnYES（鉅亨網）NAV 歷史抓取。
+    多年歷史，台灣境外基金主要來源。
+
+    Tries (in order):
+      1. https://invest.cnyes.com/fund/api/v1/funds/{code}/nav-history （JSON API）
+      2. https://fund.cnyes.com/api/v1/funds/{code}/nav-history
+      3. https://fund.cnyes.com/detail/{code}/Nav （HTML，從 __NEXT_DATA__ 或 table 解析）
+    """
+    import json
+    import re
+    api_urls = [
+        f"https://invest.cnyes.com/fund/api/v1/funds/{code}/nav-history",
+        f"https://fund.cnyes.com/api/v1/funds/{code}/nav-history",
+        f"https://api.cnyes.com/fund/v1/funds/{code}/nav",
+    ]
+    for url in api_urls:
+        try:
+            r = requests.get(url, headers=HDR_JSON, timeout=20,
+                             proxies=_proxies(), verify=_ssl_verify())
+            print(f"[_fetch_nav_cnyes] {url[:80]} → {r.status_code}")
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            items = _walk_for_nav_items(data)
+            s = _parse_nav_json_items(items)
+            if not s.empty and len(s) >= 100:
+                return s
+        except Exception as e:
+            print(f"[_fetch_nav_cnyes] API {url[:60]} ERR: {e}")
+    # HTML fallback
+    try:
+        html_url = f"https://fund.cnyes.com/detail/{code}/Nav"
+        r = requests.get(html_url, headers=HDR, timeout=20,
+                         proxies=_proxies(), verify=_ssl_verify())
+        print(f"[_fetch_nav_cnyes] HTML {html_url[:80]} → {r.status_code}")
+        if r.status_code != 200:
+            return None
+        # 1. __NEXT_DATA__ embedded JSON
+        m = re.search(r'<script[^>]*id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+                      r.text, re.DOTALL)
+        if m:
+            try:
+                data = json.loads(m.group(1))
+                items = _walk_for_nav_items(data)
+                s = _parse_nav_json_items(items)
+                if not s.empty and len(s) >= 100:
+                    return s
+            except Exception as _e_j:
+                print(f"[_fetch_nav_cnyes] __NEXT_DATA__ JSON ERR: {_e_j}")
+        # 2. HTML table
+        return _parse_html_nav_table(r.text)
+    except Exception as e:
+        print(f"[_fetch_nav_cnyes] HTML ERR: {e}")
+    return None
+
+
+def _fetch_nav_moneydj_history(code: str) -> "pd.Series | None":
+    """MoneyDJ 多年歷史 NAV 頁面（不是 fetch_nav 用的短期頁）。
+
+    Tries:
+      1. yp012000 — 境外基金歷史淨值頁
+      2. yp008000 — 另一個歷史頁
+      3. wb04 — 基金詳情頁含歷史 chart
+    """
+    urls = [
+        f"https://www.moneydj.com/funddj/yp/yp012000.djhtm?a={code}",
+        f"https://www.moneydj.com/funddj/yp/yp008000.djhtm?a={code}",
+        f"https://tcbbankfund.moneydj.com/funddj/yp/yp012000.djhtm?a={code}",
+        f"https://www.moneydj.com/w/wb/wb04.djhtm?a={code}",
+        f"https://tcbbankfund.moneydj.com/w/wb/wb04.djhtm?a={code}",
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, headers=HDR, timeout=20,
+                             proxies=_proxies(), verify=_ssl_verify())
+            print(f"[_fetch_nav_moneydj_history] {url[:80]} → {r.status_code}")
+            if r.status_code != 200:
+                continue
+            r.encoding = "big5"
+            s = _parse_html_nav_table(r.text)
+            if s is not None and not s.empty and len(s) >= 100:
+                return s
+        except Exception as e:
+            print(f"[_fetch_nav_moneydj_history] {url[:60]} ERR: {e}")
+    return None
+
+
+def _parse_html_nav_table(html: str) -> "pd.Series | None":
+    """從 HTML 找含日期 + NAV 數字的 table。寬容多種欄位順序。"""
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return None
+    soup = BeautifulSoup(html, "lxml")
+    rows = []
+    for table in soup.find_all("table"):
+        for tr in table.find_all("tr"):
+            tds = tr.find_all(["td", "th"])
+            if len(tds) < 2:
+                continue
+            txt_list = [td.get_text(strip=True) for td in tds]
+            # 找第一個能解析成日期的 cell + 第一個能解析成 0.01-100000 數字的 cell
+            dt = None
+            for t in txt_list:
+                try:
+                    _dt = pd.to_datetime(t)
+                    if pd.Timestamp("1990-01-01") < _dt < pd.Timestamp("2100-01-01"):
+                        dt = _dt
+                        break
+                except Exception:
+                    continue
+            if dt is None:
+                continue
+            vf = None
+            for t in txt_list:
+                t2 = t.replace(",", "").replace("元", "").strip()
+                try:
+                    v = float(t2)
+                    if 0.01 < v < 100000:
+                        vf = v
+                        break
+                except Exception:
+                    continue
+            if vf is not None:
+                rows.append((dt, vf))
+    if not rows:
+        return None
+    s = pd.Series([v for _, v in rows], index=pd.DatetimeIndex([d for d, _ in rows]))
+    s = s[~s.index.duplicated(keep="last")]
+    return s.sort_index() if not s.empty else None
+
+
+def fetch_nav_history_long(code: str, min_years: int = 10) -> pd.Series:
+    """v18.283：抓取長期 NAV 歷史（多年）給危機回測等需要長序列的場景使用。
+
+    Fallback chain：
+      0. 本地 disk cache (cache/nav_history/{code}.json, 24h TTL)
+      1. CnYES（鉅亨網）— JSON API + HTML 解析
+      2. MoneyDJ 歷史頁（yp012000 / yp008000 / wb04）
+      3. 退回 fetch_nav（短期，~30-400 天）
+
+    Returns:
+        pd.Series with DatetimeIndex; 空 Series 表示全部來源失敗。
+        即使比 min_years 短也回傳（caller 自己判斷涵蓋率）。
+    """
+    code = str(code or "").strip().upper()
+    if not code:
+        return pd.Series(dtype=float)
+
+    # 0. Disk cache
+    cached = _nav_history_cache_load(code)
+    if cached is not None and len(cached) >= 100:
+        print(f"[fetch_nav_history_long] {code} cache hit ({len(cached)} 筆)")
+        return cached
+
+    # 1. CnYES
+    try:
+        s = _fetch_nav_cnyes(code)
+        if s is not None and not s.empty:
+            print(f"[fetch_nav_history_long] {code} CnYES → {len(s)} 筆")
+            if len(s) >= 100:
+                _nav_history_cache_save(code, s)
+                return s
+    except Exception as e:
+        print(f"[fetch_nav_history_long] CnYES ERR: {e}")
+
+    # 2. MoneyDJ 歷史頁
+    try:
+        s = _fetch_nav_moneydj_history(code)
+        if s is not None and not s.empty:
+            print(f"[fetch_nav_history_long] {code} MoneyDJ history → {len(s)} 筆")
+            if len(s) >= 100:
+                _nav_history_cache_save(code, s)
+                return s
+    except Exception as e:
+        print(f"[fetch_nav_history_long] MoneyDJ history ERR: {e}")
+
+    # 3. Fallback：既有 fetch_nav（短期）
+    print(f"[fetch_nav_history_long] {code} 長期來源都失敗，退回 fetch_nav 短期")
+    s = fetch_nav(code)
+    if not s.empty:
+        _nav_history_cache_save(code, s)
+    return s
+
 def fetch_div(full_key: str, portal: str = "") -> list:
     divs = []
     urls = []
