@@ -99,7 +99,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.286_PerPhaseStrategy_HistQuadrant"
+APP_VERSION = "v18.287_PhaseAllocWiringHotfix"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）

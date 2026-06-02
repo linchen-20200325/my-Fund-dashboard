@@ -80,6 +80,25 @@ def render_allocation_simulator_tab() -> None:
 
     if "_sim_phase_script_df" not in st.session_state:
         st.session_state["_sim_phase_script_df"] = pd.DataFrame(DEFAULT_PHASE_SCRIPT)
+    else:
+        # v18.287: session_state migration — 舊版本 cached 的 DataFrame 只有 3 欄
+        # （月數/phase/monthly_nav_change_pct），缺 drip_pct/cash_pct/stay_pct → user
+        # 即使升到 v18.286+ 也看不到新欄位，所有 phase 仍走 params 全期值（看起來都一樣）。
+        _existing_df = st.session_state["_sim_phase_script_df"]
+        _missing = [c for c in ("drip_pct", "cash_pct", "stay_pct")
+                    if c not in _existing_df.columns]
+        if _missing:
+            # 從 DEFAULT_PHASE_SCRIPT 對應 phase 補回預設值，user 已修改的月數/NAV 保留
+            _defaults_by_phase = {p["phase"]: p for p in DEFAULT_PHASE_SCRIPT}
+            for _col in _missing:
+                _existing_df[_col] = _existing_df.get("phase", pd.Series(dtype=object)).map(
+                    lambda _ph: _defaults_by_phase.get(str(_ph), {}).get(_col, 33)
+                ).fillna(33)
+            st.session_state["_sim_phase_script_df"] = _existing_df
+            st.info(
+                "🔄 v18.287 session_state migration：補上 DRIP/CASH/STAY 三欄到舊紀錄。"
+                "你的月數 / NAV 變化保留；策略欄已由預設值填入，可自由修改。"
+            )
 
     # v18.286：data_editor 加 DRIP%/CASH%/STAY% 三欄讓 user 各 phase 獨立調策略
     st.caption(
@@ -214,11 +233,20 @@ def render_allocation_simulator_tab() -> None:
             continue
         if n <= 0:
             continue
-        phase_script.append({
+        _seg = {
             "months": n,
             "phase": str(r["phase"]),
             "monthly_nav_change_pct": float(r["monthly_nav_change_pct"]),
-        })
+        }
+        # v18.287：把 user 在 data_editor 編輯的 DRIP/CASH/STAY 也帶進 phase_script
+        # 否則 simulator 看不到 per-phase 設定 → 所有 phase 用 params 全期值
+        for _c in ("drip_pct", "cash_pct", "stay_pct"):
+            if _c in r and pd.notna(r[_c]):
+                try:
+                    _seg[_c] = float(r[_c])
+                except (TypeError, ValueError):
+                    pass
+        phase_script.append(_seg)
     if not phase_script:
         st.error("⚠️ 景氣劇本為空，無法模擬")
         return
