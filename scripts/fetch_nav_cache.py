@@ -309,7 +309,6 @@ def fetch_yahoo_finance_history(code: str) -> list:
         "Accept": "application/json",
     }
     try:
-        import json
         r = SESSION.get(url, headers=hdrs, timeout=20)
         r.raise_for_status()
         data = r.json()

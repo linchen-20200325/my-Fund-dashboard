@@ -6,7 +6,6 @@ import pytest
 
 from services.quadrant_simulator import (
     DEFAULT_QUADRANTS,
-    QuadrantScenario,
     compare_strategies_per_quadrant,
     simulate_quadrant,
     summarize_best_per_quadrant,

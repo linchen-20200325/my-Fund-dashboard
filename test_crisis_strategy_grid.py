@@ -16,8 +16,6 @@ import pytest
 
 from services.crisis_strategy_grid import (
     DEFAULT_STRATEGIES,
-    StrategyResult,
-    StrategySpec,
     _is_triggered,
     _pos_buy_and_hold,
     _pos_buy_dip,

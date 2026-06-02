@@ -5,7 +5,6 @@ test_fund_url_canonicalize — v18.22 抓取規則 audit fix
 - canonicalize_moneydj_url 把 mobile / 平台 URL → www.moneydj.com canonical
 - is_valid_moneydj_page 第 3 條對 m.moneydj.com 子網域不再死碼
 """
-import pytest
 
 from fund_fetcher import (
     canonicalize_moneydj_url,

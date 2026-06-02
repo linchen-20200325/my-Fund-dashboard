@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from services.crisis_backtest import CrisisEvent
 from services.macro_signal_lookback import (

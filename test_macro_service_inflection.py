@@ -10,7 +10,6 @@ test_macro_service_inflection.py — v18.250 拐點偵測單元測試
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from services.macro_service import _detect_inflection, detect_turning_points
 

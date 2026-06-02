@@ -9,7 +9,6 @@ import pandas as pd
 import pytest
 
 from services.crisis_backtest import (
-    CrisisEvent,
     MARKET_TICKERS,
     attach_fund_drawdown,
     detect_crisis_events,

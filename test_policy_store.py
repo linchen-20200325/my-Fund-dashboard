@@ -14,7 +14,6 @@ from repositories.policy_repository import (
     ALL_COLS_V2,
     ITEM_TYPE_CASH,
     ITEM_TYPE_FUND,
-    OPTIONAL_COLS,
     REQUIRED_COLS,
     PolicySheetError,
     _sanitize_tab_name,

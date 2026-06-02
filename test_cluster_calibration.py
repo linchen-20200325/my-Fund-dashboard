@@ -1,7 +1,6 @@
 """test_cluster_calibration.py — v18.292 per-cluster F1 backtest"""
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest

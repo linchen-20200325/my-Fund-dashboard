@@ -2,7 +2,6 @@
 test_policy_keys — T7 複合鍵工具單元測試
 覆蓋 make_pk / pk_str / parse_pk / migrate_ledger_dict 的正常 + 邊界 + 跨保單同碼。
 """
-import pytest
 
 from models.policy import (
     PK_SEP,

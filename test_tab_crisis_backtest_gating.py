@@ -6,7 +6,6 @@ click-only 一次性 gating，按 Phase 3/4 button 觸發 rerun 後 Phase 1 butt
 """
 from __future__ import annotations
 
-import pytest
 
 # AppTest 不在這支，直接驗 helper purity + invalidation 副作用
 from ui.tab_crisis_backtest import (

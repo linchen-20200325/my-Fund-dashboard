@@ -1,7 +1,6 @@
 """test_cluster_signals.py — v18.291 7 維獨立合議 cluster signal"""
 from __future__ import annotations
 
-import pytest
 
 
 # ─── compute_cluster_signals ─────────────────────────
