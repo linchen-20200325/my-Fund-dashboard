@@ -36,6 +36,7 @@ _DEFAULT_FUNDS: list[dict] = [
     {"code": "ACTI94",  "name": "聯博基金（ACTI94）"},
     {"code": "JFZN3",   "name": "摩根基金（JFZN3）"},
     {"code": "TLZF9",   "name": "富蘭克林坦伯頓基金（TLZF9）"},
+    {"code": "ALBT8",   "name": "聯博基金（ALBT8）"},
 ]
 
 
