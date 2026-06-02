@@ -99,7 +99,7 @@ from models.policy import (
     parse_pk,
 )
 
-APP_VERSION = "v18.290_PromotePreset+CopyCodeUI"
+APP_VERSION = "v18.291_7DimIndependentConsensus"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）

@@ -319,6 +319,62 @@ def render_macro_tab() -> None:
                 unsafe_allow_html=True,
             )
 
+            # ══ v18.291「7 維獨立合議」cluster signal panel ════════════════
+            # 對應 user 反饋「多筆資料判斷會不准嗎」→ 23 個 factor 高度共線性
+            # 收斂成 7 個獨立 cluster（利率/風險/製造業/通膨/貨幣/匯率/就業）
+            # 避免「同一訊號穿 5 件衣服」的多數決幻覺
+            try:
+                from services.macro_service import (
+                    compute_cluster_signals,
+                    summarize_cluster_consensus,
+                )
+                _clusters = compute_cluster_signals(ind)
+                _cons = summarize_cluster_consensus(_clusters)
+
+                _hdr = (
+                    "<div style='background:#0d1117;border:1px solid #30363d;"
+                    "border-radius:12px;padding:14px 18px;margin:0 0 14px'>"
+                    "<div style='color:#888;font-size:11px;letter-spacing:2px;"
+                    "margin-bottom:8px'>📊 7 維獨立合議 — 把 23 個高度相關 factor "
+                    "收斂成 7 個獨立 cluster，避免多訊號幻覺</div>"
+                )
+                _rows = ""
+                for c in _clusters:
+                    _val_str = (
+                        f"<span style='color:#888;font-size:11px;flex:2;"
+                        f"text-align:right;overflow:hidden;text-overflow:ellipsis;"
+                        f"white-space:nowrap;padding-left:8px'>"
+                        f"{c.get('top_contributor', '')}</span>"
+                    )
+                    _rows += (
+                        f"<div style='display:flex;align-items:center;padding:6px 0;"
+                        f"border-top:1px solid #21262d'>"
+                        f"<div style='width:24px'>{c['icon']}</div>"
+                        f"<div style='flex:1;color:#e6edf3;font-weight:600'>{c['name']}</div>"
+                        f"<div style='color:{c['color']};font-weight:700;width:100px'>"
+                        f"{c['signal']}</div>"
+                        f"<div style='color:#666;font-size:11px;width:60px;text-align:right'>"
+                        f"({c['score_norm']:+.2f})</div>"
+                        f"{_val_str}</div>"
+                    )
+                st.markdown(_hdr + _rows + "</div>", unsafe_allow_html=True)
+
+                st.markdown(
+                    f"<div style='background:#0d1117;border:1px solid #30363d;"
+                    f"border-radius:8px;padding:10px 14px;margin:0 0 14px;"
+                    f"color:#e6edf3'>"
+                    f"<span style='color:#00c853;font-weight:700'>🟢 {_cons['n_green']}</span>"
+                    f" ／ "
+                    f"<span style='color:#ff9800;font-weight:700'>🟡 {_cons['n_yellow']}</span>"
+                    f" ／ "
+                    f"<span style='color:#f44336;font-weight:700'>🔴 {_cons['n_red']}</span>"
+                    f" <span style='color:#888'>（共 {_cons['total']} 維）</span><br>"
+                    f"<span style='font-size:13px'>{_cons['verdict']}</span></div>",
+                    unsafe_allow_html=True,
+                )
+            except Exception as _e_cluster:
+                st.caption(f"⚠️ 7 維合議顯示失敗：{_e_cluster}")
+
             # ══ v17.4「四大類別景氣健康度」分組總覽 + 24M 走勢 ═════════════
             # 把 23 項指標按類別匯總當期分數 + 月度 Z-Score 平均，
             # 讓使用者一眼看出哪個類別在改善 / 惡化，而非逐筆 raw data

@@ -2315,3 +2315,112 @@ def rank_macro_drivers(indicators: dict,
         "note": (f"共 {len(ranked)} 個 driver 達 ≥{min_overlap} 月共同期"
                  if ranked else "無 driver 達樣本門檻"),
     }
+
+
+# ─── v18.291: 7 維獨立合議（把 23 個相關 factor 收斂成 7 個獨立 cluster）─
+# 對應 user 反饋「多筆資料判斷會不准嗎」→ 14+ 個 factor 互相高度相關（共線性）
+# 把它們依「真實獨立資訊源」歸類成 7 個 cluster，看 cluster-level 合議
+# 避免「同一訊號穿 5 件衣服」的多數決幻覺
+INDEPENDENT_CLUSTERS: list[dict] = [
+    {"name": "利率曲線", "icon": "📐",
+     "keys": ["YIELD_10Y2Y", "YIELD_10Y3M", "FED_RATE"]},
+    {"name": "風險偏好", "icon": "🌡️",
+     "keys": ["HY_SPREAD", "VIX"]},
+    {"name": "製造業景氣", "icon": "🏭",
+     "keys": ["PMI", "COPPER", "ADL"]},
+    {"name": "通膨", "icon": "💸",
+     "keys": ["CPI", "PPI", "INFL_EXP_5Y"]},
+    {"name": "貨幣寬鬆", "icon": "💰",
+     "keys": ["M2", "FED_BS", "M2_WEEKLY"]},
+    {"name": "匯率", "icon": "💱",
+     "keys": ["DXY"]},
+    {"name": "就業", "icon": "💼",
+     "keys": ["UNEMPLOYMENT", "JOBLESS", "SAHM", "CONT_CLAIMS", "LEI"]},
+]
+
+
+def compute_cluster_signals(indicators: dict) -> list[dict]:
+    """v18.291: 把 23 factor 收斂成 7 個獨立 cluster signal。
+
+    每 cluster 取內部 weighted-avg normalized score（-1~+1）→ 紅黃綠三檔：
+      ≥ +0.3 → 🟢 安全
+      -0.3 ~ +0.3 → 🟡 警戒
+      ≤ -0.3 → 🔴 危險
+
+    Returns:
+        list of {name, icon, score_norm, signal, color, top_contributor, members}
+    """
+    out = []
+    for cluster in INDEPENDENT_CLUSTERS:
+        sum_w = 0.0
+        sum_ws = 0.0
+        members = []
+        for k in cluster["keys"]:
+            ind = indicators.get(k)
+            if not ind:
+                continue
+            try:
+                w = float(ind.get("weight", 1) or 1)
+                s = float(ind.get("score", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            s = max(-w, min(w, s))  # clamp 到 [-w, w]
+            sum_w += w
+            sum_ws += s
+            members.append({
+                "key": k,
+                "name": str(ind.get("name", k)),
+                "value": ind.get("value"),
+                "score": s,
+                "weight": w,
+            })
+        norm = (sum_ws / sum_w) if sum_w > 0 else 0.0
+
+        if norm >= 0.3:
+            signal, color = "🟢 安全", "#00c853"
+        elif norm <= -0.3:
+            signal, color = "🔴 危險", "#f44336"
+        else:
+            signal, color = "🟡 警戒", "#ff9800"
+
+        top = ""
+        if members:
+            top_m = max(members, key=lambda m: abs(m["score"]))
+            v = top_m.get("value")
+            v_str = f"{v}" if v is not None else "n/a"
+            top = f"{top_m['name']} = {v_str}"
+
+        out.append({
+            "name": cluster["name"],
+            "icon": cluster["icon"],
+            "score_norm": round(norm, 2),
+            "signal": signal,
+            "color": color,
+            "top_contributor": top,
+            "members": members,
+        })
+    return out
+
+
+def summarize_cluster_consensus(clusters: list[dict]) -> dict:
+    """整理 cluster 合議結果 → 紅黃綠統計 + 文字結論。"""
+    n_g = sum(1 for c in clusters if "🟢" in c.get("signal", ""))
+    n_y = sum(1 for c in clusters if "🟡" in c.get("signal", ""))
+    n_r = sum(1 for c in clusters if "🔴" in c.get("signal", ""))
+    total = max(1, n_g + n_y + n_r)
+
+    if n_r >= 4:
+        verdict = "🔴 多數紅燈 — 高度警戒，建議降低風險暴露"
+    elif n_r >= 2:
+        verdict = "🟡 多紅警示 — 注意風險，建議減碼至中性"
+    elif n_g >= 5:
+        verdict = "🟢 多數綠燈 — 環境偏好，可正常配置"
+    elif n_y >= 4:
+        verdict = "⚖️ 多數警戒 — 訊號分歧，保持彈性"
+    else:
+        verdict = "✅ 整體中性 — 維持現有配置"
+
+    return {
+        "n_green": n_g, "n_yellow": n_y, "n_red": n_r,
+        "total": total, "verdict": verdict,
+    }
