@@ -23,7 +23,6 @@ v6.2 修正:
   淨值：allianz/chubb子網域 → tcbbankfund.moneydj.com（公開可存取）
   結構：tcbbankfund.moneydj.com（持股/配置/績效）
 """
-import requests, re, time
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -274,10 +273,6 @@ from repositories.fund_repository import (  # noqa: F401  legacy re-export
     _tdcc_resolve_fund_name,
 )
 
-import pandas as pd
-import numpy as np
-import streamlit as st
-from bs4 import BeautifulSoup
 
 # ── v11.0 C-12：_RF_ANNUAL + set_risk_free_rate 已搬至 services/fund_service.py ──
 from services.fund_service import _RF_ANNUAL, set_risk_free_rate  # noqa: F401
