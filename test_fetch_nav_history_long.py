@@ -147,3 +147,48 @@ def test_fetch_long_normalizes_code_to_upper():
     _nav_history_cache_save("ACTI94", s)
     out = fetch_nav_history_long("  acti94  ")
     assert len(out) == 120
+
+
+# ─────────────────────────────────────────────────────────────────────
+# v18.284：user 提供正確資料源後新增的測試
+# ─────────────────────────────────────────────────────────────────────
+def test_parse_unix_timestamp_milliseconds():
+    """CnYES 等 API 可能用 13 位 ms epoch — 應正確轉日期。"""
+    from repositories.fund_repository import _parse_nav_json_items
+    items = [
+        {"date": 1704067200000, "nav": 10.5},  # 2024-01-01 00:00:00 UTC
+        {"date": 1704153600000, "nav": 10.6},  # 2024-01-02
+    ]
+    s = _parse_nav_json_items(items)
+    assert len(s) == 2
+    assert s.index[0] == pd.Timestamp("2024-01-01")
+
+
+def test_parse_unix_timestamp_seconds():
+    """10 位 sec epoch 也應正確處理。"""
+    from repositories.fund_repository import _parse_nav_json_items
+    items = [{"date": 1704067200, "nav": 10.5}]
+    s = _parse_nav_json_items(items)
+    assert len(s) == 1
+    assert s.index[0] == pd.Timestamp("2024-01-01")
+
+
+def test_parse_cnyes_native_field_name():
+    """CnYES 用 `netAssetValue` 作為淨值欄位 — 應被認得。"""
+    from repositories.fund_repository import _parse_nav_json_items, _walk_for_nav_items
+    data = {"data": {"items": [
+        {"date": "2024-01-01", "netAssetValue": 12.34},
+        {"date": "2024-01-02", "netAssetValue": 12.45},
+    ]}}
+    items = _walk_for_nav_items(data)
+    s = _parse_nav_json_items(items)
+    assert len(s) == 2
+    assert s.iloc[-1] == pytest.approx(12.45)
+
+
+def test_parse_time_field_name():
+    """有些 API 用 `time` 作為日期欄 — 應被 walk 認得。"""
+    from repositories.fund_repository import _walk_for_nav_items
+    data = [{"time": 1704067200000, "value": 10.5}]
+    items = _walk_for_nav_items(data)
+    assert len(items) == 1
