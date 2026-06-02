@@ -199,3 +199,84 @@ def summarize_best_per_quadrant(comparison_df: pd.DataFrame) -> pd.DataFrame:
     return best_rows[["象限", "策略", "期末 TWD", "報酬 %"]].rename(
         columns={"策略": "最佳策略"}
     ).reset_index(drop=True)
+
+
+# ──────────────────────────────────────────────────────────────────
+# v18.286 Part B：用歷史資料分類 4 象限（user 反饋「歷史資料上面已經有這資料了」）
+# ──────────────────────────────────────────────────────────────────
+def classify_historical_quadrants(
+    nav_series: pd.Series,
+    fx_series: pd.Series,
+    window_months: int = 3,
+) -> pd.DataFrame:
+    """把歷史 NAV + FX 月序列按象限分類（rolling window）。
+
+    Args:
+        nav_series: 基金 NAV（DatetimeIndex）
+        fx_series: 原幣對 TWD 匯率（DatetimeIndex）
+        window_months: 看多少個月內的變化判定象限（預設 3）
+
+    Returns:
+        DataFrame [date, nav, fx, nav_chg_pct, fx_chg_pct, quadrant]
+        quadrant: 'Q1' / 'Q2' / 'Q3' / 'Q4'
+        - Q1: TWD升 + NAV跌（fx_chg < 0, nav_chg < 0）
+        - Q2: TWD貶 + NAV跌（fx_chg > 0, nav_chg < 0）
+        - Q3: TWD升 + NAV漲（fx_chg < 0, nav_chg > 0）
+        - Q4: TWD貶 + NAV漲（fx_chg > 0, nav_chg > 0）
+    """
+    if nav_series is None or nav_series.empty:
+        return pd.DataFrame()
+    if fx_series is None or fx_series.empty:
+        return pd.DataFrame()
+    # 月末對齊
+    try:
+        nav_m = nav_series.resample("ME").last().dropna()
+        fx_m = fx_series.resample("ME").last().dropna()
+    except Exception:
+        nav_m = nav_series.resample("M").last().dropna()
+        fx_m = fx_series.resample("M").last().dropna()
+    df = pd.concat([nav_m.rename("nav"), fx_m.rename("fx")], axis=1).dropna()
+    if df.empty or len(df) <= window_months:
+        return pd.DataFrame()
+    df["nav_chg_pct"] = df["nav"].pct_change(window_months) * 100.0
+    df["fx_chg_pct"] = df["fx"].pct_change(window_months) * 100.0
+    df = df.dropna(subset=["nav_chg_pct", "fx_chg_pct"]).copy()
+
+    def _classify(row):
+        twd_down = row["fx_chg_pct"] > 0  # FX 漲 = TWD 貶
+        nav_up = row["nav_chg_pct"] > 0
+        if twd_down and nav_up:
+            return "Q4"
+        if twd_down and not nav_up:
+            return "Q2"
+        if (not twd_down) and nav_up:
+            return "Q3"
+        return "Q1"
+
+    df["quadrant"] = df.apply(_classify, axis=1)
+    df["date"] = df.index
+    return df[["date", "nav", "fx", "nav_chg_pct", "fx_chg_pct", "quadrant"]].reset_index(drop=True)
+
+
+def summarize_historical_distribution(classified_df: pd.DataFrame) -> dict:
+    """歷史落在各象限的時間分佈 + 平均 FX/NAV 變化。
+
+    Returns:
+        dict[quadrant_code] = {count, pct, avg_nav_chg, avg_fx_chg}
+        外加 total: 總月數
+    """
+    out: dict = {}
+    if classified_df is None or classified_df.empty:
+        return out
+    n_total = len(classified_df)
+    out["_total"] = n_total
+    for q in ["Q1", "Q2", "Q3", "Q4"]:
+        sub = classified_df[classified_df["quadrant"] == q]
+        n = len(sub)
+        out[q] = {
+            "count": n,
+            "pct": (n / n_total * 100.0) if n_total > 0 else 0.0,
+            "avg_nav_chg": float(sub["nav_chg_pct"].mean()) if n > 0 else 0.0,
+            "avg_fx_chg": float(sub["fx_chg_pct"].mean()) if n > 0 else 0.0,
+        }
+    return out
