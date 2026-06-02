@@ -2,7 +2,6 @@
 test_policy_advisor — 純規則建議引擎單元測試
 覆蓋 10 條規則 + 邊界條件（rank 邊界、None / 空 dict 容錯）。
 """
-import pytest
 
 from services.policy_advisor_service import (
     advise_fund,

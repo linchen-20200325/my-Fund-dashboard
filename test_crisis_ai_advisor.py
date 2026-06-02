@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
-import pytest
 
 from services.crisis_ai_advisor import (
     _summarize_events,

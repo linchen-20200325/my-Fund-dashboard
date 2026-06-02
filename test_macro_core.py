@@ -13,7 +13,6 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
-import pytest
 
 import repositories.macro_repository as macro_core
 

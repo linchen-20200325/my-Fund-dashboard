@@ -27,7 +27,6 @@ from repositories.policy_repository import (
     PolicySheetError,
     ALL_COLS_V2,
     ITEM_TYPE_FUND,
-    ITEM_TYPE_CASH,
     DEFAULT_WORKSHEET,
     is_v2_worksheet,
     write_policy_v2,
@@ -36,7 +35,7 @@ from repositories.policy_repository import (
     _normalize_invest_twd,
     _normalize_fx,
 )
-from repositories.snapshot_repository import T7_STATE_TAB, SNAPSHOT_COLS
+from repositories.snapshot_repository import T7_STATE_TAB
 
 log = logging.getLogger(__name__)
 

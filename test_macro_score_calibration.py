@@ -1,7 +1,6 @@
 """test_macro_score_calibration.py — 14-factor 景氣分數校準單元測試"""
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 

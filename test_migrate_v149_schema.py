@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-import pytest
 
 from scripts.migrate_v149_schema import (
     _fold_ledger_json,

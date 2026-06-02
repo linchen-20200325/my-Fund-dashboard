@@ -4,7 +4,6 @@ gspread / google-auth 不需安裝（duck-typed MagicMock）
 """
 from unittest.mock import MagicMock
 
-import pandas as pd
 import pytest
 
 from repositories.ledger_repository import (

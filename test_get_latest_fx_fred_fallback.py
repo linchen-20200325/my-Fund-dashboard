@@ -517,7 +517,6 @@ def test_positive_only_cache_does_not_poison_none():
     from repositories.fund_repository import _FX_CACHE, _clear_fx_cache, get_latest_fx
     _clear_fx_cache()
     # 第一次：什麼來源都失敗 → 回 None → 不該入 cache
-    import pytest as _pt
     cache_before = dict(_FX_CACHE)
     # 此 case 不 mock，sandbox 無 outbound → 必然 None
     v = get_latest_fx("USDTWD=X", fred_api_key="")
