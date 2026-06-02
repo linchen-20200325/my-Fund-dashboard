@@ -12,25 +12,16 @@ import streamlit as st
 st.set_page_config(page_title="基金戰情室", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
 
-import os, datetime, re, time as _time_mod
-import plotly.graph_objects as go
+import os, datetime, re
 import pandas as pd
-import numpy as np
 
 TW_TZ = datetime.timezone(datetime.timedelta(hours=8))
 def _now_tw():
     return datetime.datetime.now(TW_TZ)
 
 from services.macro_service import (
-    fetch_all_indicators, calc_macro_phase,
-    ENGINE_VERSION, detect_systemic_risk,
-    detect_turning_points, backtest_turning_points,
-    calc_sub_cycle_lights, build_macro_sankey_data,
-    build_macro_sankey_dynamic, backtest_sub_cycle_lights,
-    rank_macro_drivers,
+    ENGINE_VERSION,
 )
-from ui.components.mk_clock import render_mk_clock_section
-from ui.components.mk_dashboard import render_mk_war_room
 from ui.tab1_macro import render_macro_tab
 from ui.tab2_single_fund import render_single_fund_tab
 from ui.tab3_portfolio import render_portfolio_tab
@@ -39,64 +30,13 @@ from ui.tab6_manual import render_manual_tab
 from ui.tab_allocation_simulator import render_allocation_simulator_tab
 from ui.tab_crisis_backtest import render_crisis_backtest_tab
 from fund_fetcher  import (
-    fetch_fund_by_key, search_moneydj_by_name,
-    fetch_fund_structure, fetch_fund_from_moneydj_url,
-    tdcc_search_fund, get_proxy_config,
-    safe_float, classify_fetch_status, clean_risk_table,
-    normalize_result_state, merge_non_empty, set_risk_free_rate,
-    fetch_market_news,
+    get_proxy_config,
 )
-from services.portfolio_service import (
-    calc_fund_factor_score,
-    dividend_safety as div_safety_check,
-    risk_alert as portfolio_risk_alert,
-    calc_correlation_matrix,
-)
-from services.policy_advisor_service import advise_fund, recommend_policy
 from repositories.policy_repository import (
-    ALL_COLS as POLICY_ALL_COLS,
-    REQUIRED_COLS as POLICY_COLS,
-    PolicySheetError,
-    create_dashboard_sheet,
-    delete_policy_row,
-    get_gspread_client,
-    get_gspread_client_from_oauth,
     get_sheet_title,
-    list_policy_worksheets,
-    list_user_sheets,
-    rename_sheet,
-    load_all_policy_worksheets,
-    load_policies,
-    sync_policies_to_portfolio_funds,
-    upsert_fund_in_policy,
-    upsert_policy_row,
-)
-from repositories.ledger_repository import (
-    LEDGER_COLS,
-    append_ledger_row,
-    load_all_ledgers,
-    load_ledgers_for_policy,
-    replace_ledgers_for_policy,
-)
-from repositories.snapshot_repository import (
-    T7_STATE_TAB,
-    get_state_metadata,
-    load_all_ledgers_snapshot,
-    save_all_ledgers_snapshot,
 )
 from infra.oauth import (
-    OAuthError,
     build_authorize_url,
-    build_credentials_from_tokens,
-    ensure_fresh_tokens,
-    exchange_code_for_tokens,
-)
-from models.policy import (
-    PK_SEP,
-    fund_pk_str,
-    make_pk,
-    migrate_ledger_dict,
-    parse_pk,
 )
 
 APP_VERSION = "v18.293_HotfixTab6CodeColumnKeyError"
@@ -194,7 +134,7 @@ from ui.helpers.data_registry import _update_data_registry  # noqa: F401
 
 # ── Tab5 完整率所需的 16 個關鍵指標(SAHM/SLOOS/PMI/.../COPPER) ──
 # v11.0 D-20: _D5_KEYS / calc_data_health 已抽至 ui/helpers/session.py
-from ui.helpers.session import _D5_KEYS, calc_data_health as _calc_data_health_pure
+from ui.helpers.session import calc_data_health as _calc_data_health_pure
 
 
 def _calc_data_health(indicators=None):
