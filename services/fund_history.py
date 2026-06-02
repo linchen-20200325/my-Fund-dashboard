@@ -26,18 +26,33 @@ _CACHE_DIR = Path("cache")
 _HIST_FILE = _CACHE_DIR / "fund_history.json"
 
 
-# v18.282：預設常用基金清單（Streamlit Cloud reboot 不會消失）
-# 來源：user 之前截圖出現過的基金 — 即使 cache 被清空仍會顯示
-_DEFAULT_FUNDS: list[dict] = [
-    {"code": "ACCP138", "name": "聯博全球高收益債券基金 AT 級別 美元"},
-    {"code": "ACDD01",  "name": "安聯台灣大壩基金-A累積型(台幣)"},
-    {"code": "ACDD19",  "name": "安聯台灣智慧基金"},
-    {"code": "ACTI71",  "name": "聯博基金（ACTI71）"},
-    {"code": "ACTI94",  "name": "聯博基金（ACTI94）"},
-    {"code": "JFZN3",   "name": "摩根基金（JFZN3）"},
-    {"code": "TLZF9",   "name": "富蘭克林坦伯頓基金（TLZF9）"},
-    {"code": "ALBT8",   "name": "聯博基金（ALBT8）"},
+# v18.289：預設常用基金清單改讀 config/preset_funds.json，user 可直接編輯該檔
+# Streamlit Cloud reboot 後仍會生效；讀不到 JSON 時 fallback 到最小硬編碼避免壞 app
+_PRESET_FUNDS_JSON = Path("config") / "preset_funds.json"
+_FALLBACK_DEFAULT_FUNDS: list[dict] = [
+    {"code": "ACTI94", "name": "聯博基金（ACTI94）"},
 ]
+
+
+def _load_default_funds() -> list[dict]:
+    """讀 config/preset_funds.json → list[{code, name}]；壞檔/缺檔回 fallback。"""
+    if not _PRESET_FUNDS_JSON.exists():
+        return list(_FALLBACK_DEFAULT_FUNDS)
+    try:
+        data = json.loads(_PRESET_FUNDS_JSON.read_text(encoding="utf-8"))
+        funds = data.get("funds", []) if isinstance(data, dict) else []
+        out: list[dict] = []
+        for d in funds:
+            code = str(d.get("code", "") or "").strip().upper()
+            if not code:
+                continue
+            out.append({"code": code, "name": str(d.get("name", "") or "").strip()})
+        return out or list(_FALLBACK_DEFAULT_FUNDS)
+    except Exception:
+        return list(_FALLBACK_DEFAULT_FUNDS)
+
+
+_DEFAULT_FUNDS: list[dict] = _load_default_funds()
 
 
 def _load() -> dict[str, dict]:
