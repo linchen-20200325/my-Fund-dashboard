@@ -226,6 +226,105 @@ def render_allocation_simulator_tab() -> None:
 
     _render_simulation_results(result, fx_model)
 
+    # ── v18.285：FX × NAV 4 象限策略分析 ────────────────────────────
+    st.divider()
+    _render_quadrant_analysis(
+        initial_twd=float(amount_twd),
+        nav=float(initial_nav),
+        fx=float(initial_fx),
+        annual_div_rate_pct=float(annual_yield_pct),
+    )
+
+
+def _render_quadrant_analysis(
+    initial_twd: float, nav: float, fx: float, annual_div_rate_pct: float
+) -> None:
+    """v18.285：FX 升貶 × NAV 升降 4 象限分析。
+
+    User 反饋：「想知道 台幣升值/貶值 × NAV 升降 四種狀態下，基金要怎麼調整
+    才能得到最大效益」。對每象限模擬 DRIP/CASH/STAY 三策略，標出最佳。
+    """
+    st.markdown("### 🎯 FX × NAV 4 象限策略分析（user 反饋新加）")
+    st.caption(
+        "📐 對 **台幣升值/貶值 × NAV 升降** 4 種組合，分別模擬 **DRIP（配股再投入）/ "
+        "CASH（配息領現）/ STAY（停泊外幣）** 三策略，找出每象限最佳。"
+    )
+    from services.quadrant_simulator import (
+        DEFAULT_QUADRANTS,
+        compare_strategies_per_quadrant,
+        summarize_best_per_quadrant,
+    )
+
+    _qa_c1, _qa_c2 = st.columns(2)
+    with _qa_c1:
+        _fx_chg = st.slider(
+            "FX 升貶幅度 (年化 %)",
+            min_value=1, max_value=20, value=5, step=1,
+            key="_quad_fx_chg_pct",
+            help="設 5 = TWD 升 5% / 貶 5% 兩種對稱模擬",
+        )
+    with _qa_c2:
+        _nav_chg = st.slider(
+            "NAV 升降幅度 (年化 %)",
+            min_value=2, max_value=30, value=10, step=1,
+            key="_quad_nav_chg_pct",
+            help="設 10 = NAV 漲 10% / 跌 10% 兩種對稱模擬",
+        )
+    _horizon = st.slider(
+        "模擬期間 (月)", min_value=6, max_value=36, value=12, step=3,
+        key="_quad_horizon",
+    )
+
+    # 動態 quadrants（user 可調幅度）
+    _custom_quadrants = tuple([
+        type(DEFAULT_QUADRANTS[0])(
+            code=q.code, name=q.name,
+            fx_change_pct_year=(-_fx_chg if q.fx_change_pct_year < 0 else _fx_chg),
+            nav_change_pct_year=(-_nav_chg if q.nav_change_pct_year < 0 else _nav_chg),
+            color=q.color, insight=q.insight,
+        )
+        for q in DEFAULT_QUADRANTS
+    ])
+
+    df_long = compare_strategies_per_quadrant(
+        quadrants=_custom_quadrants,
+        initial_twd=initial_twd, nav=nav, fx=fx,
+        annual_div_rate_pct=annual_div_rate_pct,
+        horizon_months=_horizon,
+    )
+
+    # 4 象限 metric 卡（每象限最佳）
+    st.markdown(f"#### 🏆 每象限最佳策略（{_horizon} 個月後）")
+    _summary_df = summarize_best_per_quadrant(df_long)
+    _q_cols = st.columns(4)
+    for _idx, q in enumerate(_custom_quadrants):
+        with _q_cols[_idx]:
+            _row = _summary_df[_summary_df["象限"] == q.name]
+            if not _row.empty:
+                _r = _row.iloc[0]
+                st.metric(
+                    label=q.name,
+                    value=f"{_r['最佳策略']}",
+                    delta=f"{_r['報酬 %']:+.2f}%",
+                    help=q.insight,
+                )
+                st.caption(f"💰 期末 NT$ {int(_r['期末 TWD']):,}")
+
+    # 完整 12-cell 矩陣
+    st.markdown("#### 📋 完整矩陣（4 象限 × 3 策略 = 12 cells）")
+    st.dataframe(df_long, use_container_width=True, hide_index=True)
+
+    # 直覺解讀
+    with st.expander("📖 直覺解讀（每象限該怎麼想）", expanded=False):
+        for q in _custom_quadrants:
+            st.markdown(f"**{q.name}**：{q.insight}")
+        st.divider()
+        st.caption(
+            "💡 **公式**：每月更新 NAV (×(1+月化變化))、FX (×(1+月化變化))，"
+            "配息 = units × NAV × (ADR%/12)。DRIP 加單位；CASH 立即換 TWD 累積；"
+            "STAY 留原幣到期末才換。期末值 = units × 期末 NAV × 期末 FX + CASH 累計 + STAY × 期末 FX。"
+        )
+
 
 def _render_simulation_results(result: dict, fx_model: str) -> None:
     """模擬結果展示：終值卡 + 走勢圖 + MC quantile + 月度資料."""
