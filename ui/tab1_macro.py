@@ -322,24 +322,45 @@ def render_macro_tab() -> None:
             # ══ v18.291「7 維獨立合議」cluster signal panel ════════════════
             # 對應 user 反饋「多筆資料判斷會不准嗎」→ 23 個 factor 高度共線性
             # 收斂成 7 個獨立 cluster（利率/風險/製造業/通膨/貨幣/匯率/就業）
-            # 避免「同一訊號穿 5 件衣服」的多數決幻覺
+            # v18.292: + 每 cluster 過去 20 年歷史 F1 校準（讀 cache）
             try:
                 from services.macro_service import (
                     compute_cluster_signals,
                     summarize_cluster_consensus,
                 )
+                from services.cluster_calibration import (
+                    f1_to_grade,
+                    get_cached_calibration,
+                    run_cluster_calibration,
+                    save_calibration,
+                )
                 _clusters = compute_cluster_signals(ind)
                 _cons = summarize_cluster_consensus(_clusters)
+                _calib = get_cached_calibration()  # dict | None
+                _f1_map = {}
+                if _calib:
+                    _f1_map = {c["name"]: c for c in _calib.get("clusters", [])}
 
                 _hdr = (
                     "<div style='background:#0d1117;border:1px solid #30363d;"
                     "border-radius:12px;padding:14px 18px;margin:0 0 14px'>"
                     "<div style='color:#888;font-size:11px;letter-spacing:2px;"
                     "margin-bottom:8px'>📊 7 維獨立合議 — 把 23 個高度相關 factor "
-                    "收斂成 7 個獨立 cluster，避免多訊號幻覺</div>"
+                    "收斂成 7 個獨立 cluster；右側顯示「過去 20 年 F1」可信度</div>"
                 )
                 _rows = ""
                 for c in _clusters:
+                    _f1_info = _f1_map.get(c["name"], {})
+                    _f1 = _f1_info.get("f1")
+                    _grade, _grade_color = f1_to_grade(_f1)
+                    _f1_str = (
+                        f"F1 = {_f1:.2f}" if _f1 is not None else "F1 = n/a"
+                    )
+                    _f1_cell = (
+                        f"<div style='width:140px;text-align:right;font-size:11px;"
+                        f"color:{_grade_color}'><b>{_f1_str}</b> "
+                        f"<span style='color:#888'>({_grade})</span></div>"
+                    )
                     _val_str = (
                         f"<span style='color:#888;font-size:11px;flex:2;"
                         f"text-align:right;overflow:hidden;text-overflow:ellipsis;"
@@ -355,9 +376,39 @@ def render_macro_tab() -> None:
                         f"{c['signal']}</div>"
                         f"<div style='color:#666;font-size:11px;width:60px;text-align:right'>"
                         f"({c['score_norm']:+.2f})</div>"
+                        f"{_f1_cell}"
                         f"{_val_str}</div>"
                     )
                 st.markdown(_hdr + _rows + "</div>", unsafe_allow_html=True)
+
+                # Calibration 狀態欄 + 重跑按鈕
+                _calib_c1, _calib_c2 = st.columns([4, 1])
+                if _calib:
+                    import datetime as _dt
+                    _ts = _dt.datetime.fromtimestamp(_calib.get("timestamp", 0))
+                    _age_days = (_dt.datetime.now() - _ts).days
+                    _calib_c1.caption(
+                        f"🧪 校準快取：{_calib.get('years', '?')} 年回測 / "
+                        f"預警視窗 {_calib.get('horizon_months', '?')} 月 / "
+                        f"門檻 {_calib.get('dd_threshold', '?')} / "
+                        f"更新於 {_ts:%Y-%m-%d}（{_age_days} 天前）"
+                    )
+                else:
+                    _calib_c1.caption(
+                        "🧪 尚無校準資料 — 點右側「🔄 重跑校準」算每 cluster 過去 20 年 F1"
+                    )
+                if _calib_c2.button(
+                    "🔄 重跑校準", use_container_width=True,
+                    key="_btn_recalib_cluster",
+                ):
+                    with st.spinner("🧪 對齊 SPX 20 年資料，跑 per-cluster F1..."):
+                        _r = run_cluster_calibration(ind, years=20)
+                        if _r.get("errors"):
+                            st.error("、".join(_r["errors"]))
+                        else:
+                            save_calibration(_r)
+                            st.success("✅ 校準完成 — 重新整理頁面看新 F1")
+                            st.rerun()
 
                 st.markdown(
                     f"<div style='background:#0d1117;border:1px solid #30363d;"
@@ -371,6 +422,11 @@ def render_macro_tab() -> None:
                     f" <span style='color:#888'>（共 {_cons['total']} 維）</span><br>"
                     f"<span style='font-size:13px'>{_cons['verdict']}</span></div>",
                     unsafe_allow_html=True,
+                )
+                st.caption(
+                    "💡 **F1 怎麼讀**：≥0.7 可信 / 0.5~0.7 參考 / <0.5 雜訊。"
+                    "F1 是「該 cluster 紅燈時，未來 3 月 SPX 真的跌 -10% 以上」的命中率。"
+                    "**有些 cluster 因 SCORE_RULES 未涵蓋會顯示 n/a**（待補）。"
                 )
             except Exception as _e_cluster:
                 st.caption(f"⚠️ 7 維合議顯示失敗：{_e_cluster}")
