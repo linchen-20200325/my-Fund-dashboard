@@ -6,7 +6,20 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.274_PyArrowMixedTypeFix（**全域除錯協議揭露真因** — cash/fund 列空欄改 None 解 pyarrow ArrowInvalid → 連帶解開「Tab2 FX 都暫無」假象）
+- **目前版本**：v18.275_MacroHistoryCache（全球 FRED 8 序列 + VIX + SPX Parquet 快取 + 每週 cron）
+  - **User 需求**：「兩邊都可以做回測來驗證台股的總經 tab 與基金（全球的）總經 tab」+「直接抓取資料放在資料庫，之後每周定期更新」。Sister repo `my-stock-dashboard` 已於 v18.149 用 Parquet 模式做台灣指標歷史 → 本 repo 鏡像對全球 FRED.
+  - **scripts/update_macro_history.py**（~280 行）：純函式爬蟲、無 streamlit 相依、無 repo internal import；FRED 直連（全球可達不需 proxy）+ Yahoo VIX/SPX 走 `_fetch_url_via_proxy`（infra.proxy → repositories.macro_repository.fetch_url → 直連三層 fallback）；CLI `--bootstrap --years N --only NAME`。
+  - **新增 Parquet 表**（3）：
+    - `data_cache/fred_indicators.parquet` (date, series_id, value) ← **長格式** 8 series：DGS10 / DGS2 / DGS3MO（殖利率日頻）/ BAMLH0A0HYM2（HY 利差日頻）/ M2SL（M2 月頻）/ WALCL（Fed BS 週頻）/ CPIAUCSL（CPI 月頻）/ UNRATE（失業率月頻）。Spread/YoY 由分析端 on-the-fly 算
+    - `data_cache/vix_history.parquet` (date, close) ← ^VIX 日線
+    - `data_cache/spx_history.parquet` (date, close) ← ^GSPC 日線（crisis 偵測對齊）
+    - `data_cache/metadata.json` ← 各表 last_updated + row_count + last_error
+  - **`.github/workflows/update_macro_history.yml`**：**每週日 UTC 00:00**（TW 週日 08:00）+ workflow_dispatch（input bootstrap/years），需 Secrets `FRED_API_KEY`（+選配 `PROXY_URL`），跑完直接 commit `data_cache/` 到 main（純資料增量、無邏輯 → 不開 PR）
+  - **不抓 PMI**：services/macro_service 用 OECD/Phil Fed 多源 proxy 邏輯複雜（n_sources=9 並行），留 Phase B.2；當前 8 個 FRED 序列已覆蓋 SCORE_RULES 80%（PMI weight=2 缺位）
+  - **test_update_macro_history.py**（20 tests passed）：merge_dedupe 單欄/複合欄 / Parquet roundtrip 長格式 / load_existing 缺檔 / last_date 跨 series 取 max / DATASETS+FETCHERS 註冊 + FRED_SERIES_IDS 覆蓋 SCORE_RULES / update_one 已最新跳過 + 缺 key graceful + fetch 回空保留 existing / `_fred_get_single` 解 observations + `.` 剔除 + HTTP error + no api_key 短路 / `fetch_fred_indicators` 長格式 + 任一 series 失敗其他繼續 / `_yf_fetch_close` 解 Yahoo Chart JSON + None response graceful / fetch_vix/spx 簽名一致
+  - **回歸**：test_macro_validation + test_macro_signal_lookback + test_macro_score_calibration + test_update_macro_history **84 passed + 1 skipped** 零回歸
+  - Roadmap：Phase B.2（services/macro_validation `calc_macro_score_series` 改讀 Parquet，加 macro_score 時序 CSV 下載按鈕）→ Phase C（stock-dashboard 補 macro tab 歷史驗證 UI）
+- **前版**：v18.274_PyArrowMixedTypeFix（**全域除錯協議揭露真因** — cash/fund 列空欄改 None 解 pyarrow ArrowInvalid → 連帶解開「Tab2 FX 都暫無」假象）
 - **進度標記**：✅ 代碼淨化與收尾完成（2026-06-02）
   - **#140**：chore — Cleanup imports round 4。砍 `fund_fetcher.py` 7 個（module-level `requests, re, time, pd, np, st, BeautifulSoup` 確認全檔零引用；legacy re-export 區塊 `from infra.cache import ... # noqa: F401` 不動）+ `repositories/fund_repository.py` 6 個（皆為函數內 local `import re as _re` / `import urllib.parse as _up2` 等 alias 從未被 function body 使用；ruff F401 scope-aware 精準辨識）。合計 -10 行；test_app_smoke + 10 個 fetcher/repo 相關 test 共 **224 passed**。**業務代碼 F401 歸零**（10 檔累計 -148 行 imports）；剩 34 個全在 `test_*.py` + `scripts/migrate_v149_schema.py`（非 production code，留作未來個別處理）。
   - **#139**：chore — Cleanup imports round 3 (app.py)。砍 `app.py` 67 個 F401（-64 行；547→487 LOC）。事前驗證：（1）grep `from app import` 全 repo 無外部依賴；（2）`getattr/globals/eval` 動態查名為零；（3）`_friendly_error` / `_parse_indicator_date` re-export 已有 `# noqa: F401` 護身符；（4）`# noqa: smoke-allow-pass` 是 `test_app_smoke::test_no_silent_except_pass_in_app` 用的 custom marker（不是 ruff），保留。`test_app_smoke` **96 passed**（含 `test_module_level_imports_resolvable` + `test_app_full_module_execution_with_secrets`）；test_app_apptest 抽 5 case 17.6s 通過。剩 `fund_fetcher.py` (7) + `repositories/fund_repository.py` (6) 留 round 4。
