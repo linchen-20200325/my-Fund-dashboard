@@ -228,7 +228,6 @@ def render_crisis_backtest_tab() -> None:
                 try:
                     from repositories.fund_repository import (
                         fetch_fund_by_key,
-                        fetch_nav,
                         fetch_nav_history_long,
                     )
                     fund_nav = fetch_nav_history_long(fund_key.strip(), min_years=years)
