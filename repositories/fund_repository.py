@@ -207,7 +207,6 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
     Colab IP 對 allianzgi.com 無限制，是 ACTI 系列最可靠的來源。
     路徑：tw.allianzgi.com → ifund.allianzgi.com.tw
     """
-    import re as _re
     rows = {}
     # 優先從 ifund 平台抓淨值表（HTML 表格）
     for base_url in [
@@ -1242,8 +1241,7 @@ def _src_jpmorgan_nav(code: str) -> "pd.Series":
     v6.16: JP Morgan Asset Management TW 官網歷史淨值。
     JFZN3 等 JF 前綴代碼在 Streamlit Cloud 可存取。
     """
-    import urllib.request as _ur2, json as _j2, urllib.parse as _up2
-    import datetime as _dt2
+    import urllib.request as _ur2, json as _j2
     rows = {}
     _code = code.upper().strip()
 
@@ -3938,7 +3936,6 @@ def _fetch_domestic_perf(code: str) -> dict:
     若抓不到有效數字（N/A），則回傳空 dict（讓 calc_metrics 自己算）。
     """
     perf = {}
-    import re as _re_dp
     # 嘗試從 yp020000 抓績效（注意：需要公司代碼 BFxxxx 而非基金代碼）
     # 實際上境內基金的 Sharpe/含息報酬 在 MoneyDJ 顯示 N/A
     # 程式會從淨值序列自動計算，所以直接回傳空值即可
@@ -3988,7 +3985,6 @@ def fetch_performance_wb01(code: str) -> dict:
     if _is_domestic_code(code):
         return _fetch_domestic_perf(code)
     # 境外基金：正常走 wb01（含息報酬率）
-    import re as _re
     out = {}
     BASE = "https://www.moneydj.com/funddj"
     TCB  = "https://tcbbankfund.moneydj.com"
@@ -4076,7 +4072,6 @@ def fetch_risk_metrics(code: str) -> dict:
       "yearly_stats": {年份: {年化標準差, Beta, Sharpe Ratio, ...}}
     }
     """
-    import re as _re
     try:
         BASE = "https://www.moneydj.com/funddj"
         TCB  = "https://tcbbankfund.moneydj.com"
