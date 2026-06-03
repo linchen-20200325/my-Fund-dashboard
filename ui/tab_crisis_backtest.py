@@ -341,7 +341,7 @@ def render_crisis_backtest_tab() -> None:
         st.markdown("---")
         _render_score_validation_section(events, years_disp)
 
-        # ── Phase 4 + Phase 5：策略網格搜尋 + AI 策略建議 ─────
+        # ── Phase 4：策略網格搜尋（AI 區塊已剝離至最尾）─────
         st.markdown("---")
         _render_strategy_grid_section(mkt_series, market_label, years_disp, events)
 
@@ -349,14 +349,18 @@ def render_crisis_backtest_tab() -> None:
         st.markdown("---")
         _render_phase_e_cross_source_section(events, years_disp)
 
+        # ── Phase 5：AI 策略建議（固定壓底，綜覽前述所有結果）─
+        st.markdown("---")
+        _render_phase_5_ai_section()
+
     # 限制提示
     st.markdown("---")
     st.caption(
         "💡 **已知限制**：基金 NAV 來自 FundClear，通常只涵蓋近 ~400 天。"
         "舊事件（如 COVID、2018 升息、2008 海嘯）只能顯示大盤跌幅，"
         "該基金欄會顯示「—」。"
-        "Phase 5 已串 Gemini AI 策略建議（按「跑網格」後出現）。"
         "Phase E：全球 macro_score × 台股 TWII 對照（按「🌏 跑 Phase E」後出現）。"
+        "Phase 5：Gemini AI 策略解讀（壓底；需先跑網格產生資料）。"
     )
 
 
@@ -872,10 +876,6 @@ def _render_strategy_grid_section(
         f"|  起始資產 = 100；倉位 t = f(訊號 t-1) 避免前視偏誤。"
     )
 
-    # ── Phase 5: AI 策略建議 ────────────────────────────────
-    st.markdown("---")
-    _render_ai_advice_block(cached, top)
-
 
 # ──────────────────────────────────────────────────────────────
 # Phase E：全球 macro_score × 台股 TWII 對照
@@ -1059,6 +1059,36 @@ def _render_phase_e_cross_source_section(events: list, years: int) -> None:
         )
     except Exception as e:  # noqa: BLE001
         st.caption(f"⚠️ CSV 匯出失敗：{e}")
+
+
+# ──────────────────────────────────────────────────────────────
+# Phase 5：AI 策略建議（移至 Phase E 之後，確保 AI 能讀完上方所有結果）
+# ──────────────────────────────────────────────────────────────
+def _render_phase_5_ai_section() -> None:
+    """🤖 Phase 5 入口：從 session_state 取 grid cache、重算 top-5，餵給 AI 解讀。
+
+    為何放最後：AI prompt 需要綜合 Phase 4 grid + Phase E macro_score 對照結果，
+    所以 render 順序固定在最尾，避免 Gemini 看不到上半部 context。
+    """
+    cached = st.session_state.get(_GRID_CACHE_KEY)
+    if not cached:
+        st.markdown("### 🤖 AI 策略建議（Phase 5）")
+        st.caption("⬆️ 請先按上方「🧪 跑網格」產生策略結果，再回來請 AI 解讀。")
+        return
+
+    # 重算 top-5（鏡像 _render_strategy_grid_section 內的 metric_map / rank_results）
+    from services.crisis_strategy_grid import rank_results
+
+    metric_label = cached["metric_label"]
+    _metric_map = {
+        "年化 Sharpe":  ("sharpe_ratio",     False),
+        "期末資產":    ("final_value",      False),
+        "最大回撤":    ("max_drawdown_pct", True),
+        "危機期報酬":  ("crisis_return_pct", False),
+    }
+    metric_col, ascending = _metric_map.get(metric_label, ("sharpe_ratio", False))
+    top = rank_results(cached["results"], by=metric_col, top_n=5, ascending=ascending)
+    _render_ai_advice_block(cached, top)
 
 
 def _render_ai_advice_block(cached: dict, top_df: pd.DataFrame) -> None:
