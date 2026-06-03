@@ -345,6 +345,10 @@ def render_crisis_backtest_tab() -> None:
         st.markdown("---")
         _render_strategy_grid_section(mkt_series, market_label, years_disp, events)
 
+        # ── Phase E：全球 macro_score × 台股 TWII 對照 ─────────
+        st.markdown("---")
+        _render_phase_e_cross_source_section(events, years_disp)
+
     # 限制提示
     st.markdown("---")
     st.caption(
@@ -352,6 +356,7 @@ def render_crisis_backtest_tab() -> None:
         "舊事件（如 COVID、2018 升息、2008 海嘯）只能顯示大盤跌幅，"
         "該基金欄會顯示「—」。"
         "Phase 5 已串 Gemini AI 策略建議（按「跑網格」後出現）。"
+        "Phase E：全球 macro_score × 台股 TWII 對照（按「🌏 跑 Phase E」後出現）。"
     )
 
 
@@ -870,6 +875,190 @@ def _render_strategy_grid_section(
     # ── Phase 5: AI 策略建議 ────────────────────────────────
     st.markdown("---")
     _render_ai_advice_block(cached, top)
+
+
+# ──────────────────────────────────────────────────────────────
+# Phase E：全球 macro_score × 台股 TWII 對照
+# ──────────────────────────────────────────────────────────────
+def _render_phase_e_cross_source_section(events: list, years: int) -> None:
+    """🌏 fund FRED 合成 macro_score × stock TWII 同框比對 + lead-lag 分析."""
+    st.markdown("### 🌏 全球 macro_score × 台股 TWII 對照（Phase E）")
+    st.caption(
+        "把 fund 的全球 FRED 合成 0-10 macro_score 與台股 TWII 走勢同框 → "
+        "用 cross-correlation 找 macro_score 領先 TWII 月變化率最強相關的月數，"
+        "並列出每場 crisis 事件當下的 macro_score 平均。"
+        "資料源：`data_cache/fred_indicators.parquet` + `data_cache/twii_history.parquet`"
+        "（每週日 cron 更新）。"
+    )
+
+    from pathlib import Path
+    cache_dir = Path("data_cache")
+    twii_path = cache_dir / "twii_history.parquet"
+    fred_path = cache_dir / "fred_indicators.parquet"
+    if not twii_path.exists():
+        st.info(
+            "⏳ `data_cache/twii_history.parquet` 尚未生成。"
+            "等下次每週日 cron / 或手動觸發 `update_macro_history.yml` "
+            "workflow + bootstrap=true 即可填滿 15 年 TWII。"
+        )
+        return
+    if not fred_path.exists():
+        st.info(
+            "⏳ `data_cache/fred_indicators.parquet` 尚未生成。"
+            "等下次每週日 cron / 或手動觸發 workflow + bootstrap=true。"
+        )
+        return
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        max_lag = st.slider(
+            "Cross-correlation 最大 lag（±月）",
+            min_value=3, max_value=18, value=12, step=1,
+            help="正 lag = macro_score 領先 TWII；負 lag = 落後",
+            key="phase_e_max_lag",
+        )
+    with col_b:
+        lookback = st.slider(
+            "Crisis 前回看月數（peak 前 N 月平均 score）",
+            min_value=3, max_value=12, value=6, step=1,
+            key="phase_e_lookback",
+        )
+
+    if not st.button("🌏 跑 Phase E 對照分析", type="secondary",
+                     key="phase_e_run"):
+        st.caption("⬆️ 按按鈕開始（讀 Parquet → 對齊月末 → 算 cross-correlation）")
+        return
+
+    # ── 跑分析 ──
+    from services.cross_source_compare import (
+        align_score_with_twii,
+        compute_lead_lag_correlation,
+        find_best_lead_lag,
+        load_twii_from_parquet,
+        summarize_crisis_score_around_events,
+    )
+    from services.macro_validation import calc_macro_score_series
+
+    with st.spinner("讀 Parquet + 重算月度 macro_score ..."):
+        score_df = calc_macro_score_series(
+            indicators_now=None,
+            years=int(years),
+            freq="ME",
+            prefer_parquet=True,
+            cache_dir=cache_dir,
+        )
+        twii_s = load_twii_from_parquet(cache_dir)
+
+    if score_df.empty:
+        st.error("❌ macro_score series 為空 — 檢查 fred_indicators.parquet 是否完整")
+        return
+    if twii_s.empty:
+        st.error("❌ TWII series 為空 — 檢查 twii_history.parquet 是否完整")
+        return
+
+    aligned = align_score_with_twii(score_df, twii_s, freq="ME")
+    if aligned.empty:
+        st.warning("⚠️ macro_score 與 TWII 月末無重疊期間 — 確認兩 Parquet 時間區間")
+        return
+
+    st.caption(
+        f"📅 對齊區間：{aligned.index.min():%Y-%m} ~ {aligned.index.max():%Y-%m}"
+        f"（{len(aligned)} 月）｜📊 TWII 區間：{twii_s.index.min():%Y-%m-%d} ~ "
+        f"{twii_s.index.max():%Y-%m-%d}（{len(twii_s):,} 日）"
+    )
+
+    # ── Cross-correlation 統計 ──
+    corr_df = compute_lead_lag_correlation(aligned, max_lag_months=int(max_lag))
+    best_lag, best_corr = find_best_lead_lag(corr_df, prefer_positive=True)
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("最佳領先期（月）",
+                  f"{best_lag:+d}" if best_lag is not None else "—",
+                  help="正值 = macro_score 領先 TWII 月變化率")
+    with c2:
+        st.metric("該期相關係數",
+                  f"{best_corr:.3f}" if best_corr is not None else "—",
+                  help="Pearson correlation，越接近 1 越強正相關")
+    with c3:
+        st.metric("分析月數", f"{len(aligned)}",
+                  help="重疊月數（macro_score ∩ TWII 月末）")
+
+    # ── 雙軸圖 ──
+    try:
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        fig.add_trace(
+            go.Scatter(x=aligned.index, y=aligned["score"],
+                       mode="lines", name="macro_score",
+                       line=dict(color="#1976d2", width=2)),
+            secondary_y=False,
+        )
+        fig.add_trace(
+            go.Scatter(x=aligned.index, y=aligned["twii_close"],
+                       mode="lines", name="TWII 收盤",
+                       line=dict(color="#d32f2f", width=1.5)),
+            secondary_y=True,
+        )
+        # 加 crisis 紅區
+        for ev in events or []:
+            d = ev.to_dict() if hasattr(ev, "to_dict") else {}
+            x0 = d.get("peak_date")
+            x1 = d.get("recovery_date") or d.get("trough_date")
+            if x0 and x1:
+                fig.add_vrect(x0=x0, x1=x1,
+                              fillcolor="#9e9e9e", opacity=0.10,
+                              line_width=0)
+        fig.update_layout(
+            height=420,
+            margin=dict(l=20, r=20, t=20, b=20),
+            legend=dict(orientation="h", y=1.05),
+        )
+        fig.update_yaxes(title_text="macro_score (0-10)", secondary_y=False)
+        fig.update_yaxes(title_text="TWII 收盤", secondary_y=True)
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:  # noqa: BLE001
+        st.warning(f"⚠️ 雙軸圖繪製失敗：{e}")
+
+    # ── Lead-lag 表 ──
+    with st.expander("📐 Cross-correlation 完整表（lag → 相關係數）"):
+        if corr_df.empty:
+            st.caption("（無資料）")
+        else:
+            disp = corr_df.copy()
+            disp["correlation"] = disp["correlation"].round(4)
+            st.dataframe(disp, use_container_width=True, hide_index=True)
+
+    # ── Crisis 對應 macro_score 平均 ──
+    st.markdown("#### 🎯 每場 Crisis 事件對應的 macro_score")
+    summary = summarize_crisis_score_around_events(
+        events or [], score_df, lookback_months=int(lookback),
+    )
+    if not summary:
+        st.caption("（無 crisis 事件 / 缺 macro_score 對應期）")
+    else:
+        df_sum = pd.DataFrame(summary)
+        for col in ("score_lookback_avg", "score_at_peak",
+                    "score_at_trough", "score_drop_from_avg"):
+            if col in df_sum.columns:
+                df_sum[col] = df_sum[col].apply(
+                    lambda x: round(x, 2) if x is not None and pd.notna(x) else None)
+        st.dataframe(df_sum, use_container_width=True, hide_index=True)
+
+    # ── CSV 下載 ──
+    try:
+        ts = pd.Timestamp.today().strftime("%Y%m%d")
+        st.download_button(
+            "📥 對齊月資料 CSV（score × TWII × mom%）",
+            data=aligned.to_csv().encode("utf-8-sig"),
+            file_name=f"phase_e_aligned_{ts}.csv",
+            mime="text/csv",
+            key="phase_e_aligned_csv",
+        )
+    except Exception as e:  # noqa: BLE001
+        st.caption(f"⚠️ CSV 匯出失敗：{e}")
 
 
 def _render_ai_advice_block(cached: dict, top_df: pd.DataFrame) -> None:
