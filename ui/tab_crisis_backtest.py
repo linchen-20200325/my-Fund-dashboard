@@ -478,7 +478,48 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
 
 # ──────────────────────────────────────────────────────────────
 # Phase 3.5：Tab1 Macro Score 預測力驗證（v18.260 Phase 6a）
+# v18.279 D 案修正版：加 VIX 閾值校準狀態 banner
 # ──────────────────────────────────────────────────────────────
+def _render_calibration_banner(cache_dir) -> None:
+    """v18.279 D 案修正版：顯示 VIX 閾值校準狀態（5 重 anti-overfit gate）。"""
+    import json as _json
+    _path = cache_dir / "macro_thresholds_global.json"
+    if not _path.exists():
+        st.caption(
+            "🤖 **VIX 閾值校準**：危機 `>30` / 警戒 `<18`（教科書預設，尚未校準）　|　"
+            "下次季度校準：每季首日（1/4/7/10 月）"
+        )
+        return
+    try:
+        cfg = _json.loads(_path.read_text(encoding="utf-8"))
+    except Exception:
+        st.caption("🤖 **VIX 閾值校準**：JSON 解析失敗，使用教科書預設")
+        return
+    _c = cfg.get("VIX_CRISIS_THRESHOLD", 30.0)
+    _w = cfg.get("VIX_WARNING_THRESHOLD", 18.0)
+    _ts = cfg.get("last_calibrated", "—")
+    _status = cfg.get("status", "—")
+    _method = cfg.get("method", "")
+    _holdout_rec = cfg.get("holdout_rec_corr")
+    _holdout_def = cfg.get("holdout_default_corr")
+    _ci_low = cfg.get("bootstrap_ci_low")
+
+    _badge = "✅" if _status == "adopted" else "⚠️"
+    st.caption(
+        f"🤖 **VIX 閾值校準**：危機 `>{_c}` / 警戒 `<{_w}`　|　"
+        f"{_badge} 狀態 `{_status}`　|　最後校準 `{_ts}`"
+    )
+    _bits = []
+    if _method:
+        _bits.append(_method)
+    if _holdout_rec is not None and _holdout_def is not None:
+        _bits.append(f"holdout Spearman rec/def = {_holdout_rec}/{_holdout_def}")
+    if _ci_low is not None:
+        _bits.append(f"bootstrap CI ≥ {_ci_low}")
+    if _bits:
+        st.caption("　　　　　　　　" + " | ".join(_bits))
+
+
 def _render_score_validation_section(events: list, years: int) -> None:
     """📊 重算歷史 Macro Score → 與崩盤事件對齊 → 量化 Tab1 預警命中率。"""
     st.markdown("### 📊 Tab1 Macro Score 預測力驗證（Phase 3.5）")
@@ -487,6 +528,9 @@ def _render_score_validation_section(events: list, years: int) -> None:
         "VIX / CPI / 失業率）的歷史 series 逐月重算，跟既有崩盤事件對齊 → 看「景氣變差時 "
         "Tab1 score 是否真的有下降」。"
     )
+    # v18.279 D 案修正版：上方顯示校準狀態 banner
+    from pathlib import Path as _PathBanner
+    _render_calibration_banner(_PathBanner("data_cache"))
 
     # v18.276 Phase B.2：優先讀 data_cache Parquet（PR #160 v18.275 weekly cron 維護），
     # 不再強制要求 user 先進 Tab1 抓 FRED。Parquet 缺/壞才 fallback 到 session_state。

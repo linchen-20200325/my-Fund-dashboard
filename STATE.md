@@ -6,7 +6,17 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.278_PhaseECrossSource（Phase E 全球 macro_score × 台股 TWII 對照引擎）
+- **目前版本**：v18.279_MacroScoreCalibration（VIX 閾值 OOS 自動校正 — D 案修正版 5 重 anti-overfit gate）
+  - **User 需求**：「台股有 OOS 自動校正指標判斷，那基金的呢？」→「我要不會過度擬合誤判的」→「上 D 案修正版，請參考基金的時間以及方式」
+  - **設計**：鏡像 sister repo `my-stock-dashboard/calibrate_macro_traffic.py` 4 重保護（walk-forward + 正則項 + 票選 + drift 警語回退），fund 端再加 ⑤ **末段 36 月 holdout 完全凍結** + ④ **bootstrap 1000 次 95% CI 顯著性檢定**，共 **5 重 anti-overfit gate**。校準對象限縮為 **VIX 兩個 cut-point**（危機 30 / 警戒 18），其他指標凍結（金融教科書經典門檻不動）。Ground truth = `spx_history.parquet` 月末 close + 3M forward return（Spearman correlation）
+  - **scripts/calibrate_macro_score.py**（新檔 ~550 行純函式）：`CalibrationConfig` dataclass（n_folds=4 / holdout=36 月 / bootstrap=1000 / drift_warn=30%）+ `load_spx_from_parquet` + `_make_vix_score_fn` factory + `build_score_rules_with_overrides` 只動 VIX + `compute_score_series_with_overrides` 對任意閾值組合重算 score + `align_score_with_forward_return` + `compute_objective` Spearman − λ × deviation + `iter_valid_cells` grid 5×5 強制 warning<crisis + `walk_forward_calibrate` 5 重 gate 串接（holdout split → fold grid → drift 警語 → 票選 → bootstrap CI → cap 守門）→ status ∈ {adopted, fallback_overfit, fallback_bootstrap, fallback_capped, fallback_insufficient} + `emit_thresholds_json`（值未變不寫）+ `build_proposal_report`
+  - **services/macro_validation.py**（+45 行）：`DEFAULT_VIX_CRISIS=30 / DEFAULT_VIX_WARNING=18` 常數；`_load_vix_calibrated_thresholds(cache_dir)` 讀 `data_cache/macro_thresholds_global.json` 越界守門（crisis∈[25,35] / warning∈[14,22] / warning<crisis）；module-load 時自動讀，缺檔/越界 silently fallback；`SCORE_RULES["VIX"]` 改用 factory 包裝
+  - **.github/workflows/recalibrate_macro_score.yml**（新檔）：季度 cron `'0 0 1 1,4,7,10 *'` + workflow_dispatch（n_folds / holdout_months / n_bootstrap 三 input）→ 跑校準 → 開 PR 給人類審閱（**不自動 merge**，符合 §4 治理）
+  - **ui/tab_crisis_backtest.py**（+40 行）：`_render_calibration_banner(cache_dir)` 在 Phase 3.5 section 頂部 — 顯示「現行 VIX 閾值 + 狀態 ✅/⚠️ + 最後校準時間 + holdout Spearman + bootstrap CI」；缺 JSON 顯示「教科書預設，尚未校準」
+  - **test_calibrate_macro_score.py**（新檔 31 case）：load_spx 缺檔/正常/壞檔；_make_vix_score_fn 邊界；override 只動 VIX；spearman 完全±1/零方差/不足；objective penalty；iter_valid_cells warning<crisis；align 3M forward；bootstrap diff 結構；walk_forward 樣本不足/full pipeline/SPX空；emit_json 新檔/未變不寫；proposal report 含關鍵字/fallback 警語；macro_validation loader 正常/越界/warning≥crisis/缺檔/壞檔
+  - **回歸**：test_calibrate_macro_score + test_macro_validation + test_crisis_backtest + test_cross_source_compare + test_app_smoke 全綠零回歸
+  - **下一步**：merge 後 user 手動觸發 `recalibrate_macro_score.yml` workflow_dispatch 一次 → 看 PR 內 `MACRO_SCORE_CALIBRATION_PROPOSAL.md` 報告；若 status=`adopted` 人類審閱後 merge 即生效；下季（2026-10-01）cron 自動再跑一次驗證穩定性
+- **前一版**：v18.278_PhaseECrossSource（Phase E 全球 macro_score × 台股 TWII 對照引擎）
   - **User 需求**：「Phase E」— 把 fund repo 的「全球 FRED 合成 0-10 macro_score」與台股 TWII 同框比對，找 macro_score 領先 TWII 月變化率最強相關的月數
   - **方案 A 案**（單站式）：sister repo my-stock-dashboard v18.157 已降級為純 TWII drawdown 不再算 NDC 信號 → fund repo 直接抓 `^TWII` 進自家 `data_cache/twii_history.parquet`（鏡像現有 `^GSPC` `^VIX` 模式），避免跨倉資料流
   - **scripts/update_macro_history.py**（+~15 行）：新 `fetch_twii_history()` 委派 `_yf_fetch_close("%5ETWII", ...)`；`DATASETS` 從 3 表擴 4 表；`FETCHERS` 同步註冊 `twii_history`（needs_fred_key=False, dedupe_keys=["date"]）；workflow YAML **不動**（cron 自動迭代 `DATASETS`）

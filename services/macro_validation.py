@@ -30,6 +30,47 @@ DEFAULT_PARQUET_CACHE_DIR = Path("data_cache")
 # ────────────────────────────────────────────────────────────────────
 ScoreFn = Callable[[float], float]
 
+# v18.279 D 案修正版：VIX 閾值可由 data_cache/macro_thresholds_global.json 覆寫
+# 由 scripts/calibrate_macro_score.py 季度校準後人類審閱 PR merge 寫入
+DEFAULT_VIX_CRISIS = 30.0
+DEFAULT_VIX_WARNING = 18.0
+
+
+def _make_vix_score_fn(crisis_thr: float, warning_thr: float) -> ScoreFn:
+    """根據閾值產出 VIX score_fn。warning < v < crisis → 0.0；外側為 ±1.0。"""
+    def _fn(v: float) -> float:
+        if v < warning_thr:
+            return 1.0
+        if v > crisis_thr:
+            return -1.0
+        return 0.0
+    return _fn
+
+
+def _load_vix_calibrated_thresholds(
+    cache_dir: Path = DEFAULT_PARQUET_CACHE_DIR,
+) -> tuple[float, float]:
+    """讀 data_cache/macro_thresholds_global.json → (crisis, warning).
+
+    缺檔 / 解析失敗 / 值越界 → silently 回 module 預設，不噴錯。
+    越界守門：crisis ∈ [25, 35]、warning ∈ [14, 22]、warning < crisis。
+    """
+    import json as _json
+    path = cache_dir / "macro_thresholds_global.json"
+    try:
+        if path.exists():
+            cfg = _json.loads(path.read_text(encoding="utf-8"))
+            c = float(cfg.get("VIX_CRISIS_THRESHOLD", DEFAULT_VIX_CRISIS))
+            w = float(cfg.get("VIX_WARNING_THRESHOLD", DEFAULT_VIX_WARNING))
+            if 25.0 <= c <= 35.0 and 14.0 <= w <= 22.0 and w < c:
+                return c, w
+    except Exception:
+        pass
+    return DEFAULT_VIX_CRISIS, DEFAULT_VIX_WARNING
+
+
+_VIX_CRISIS, _VIX_WARNING = _load_vix_calibrated_thresholds()
+
 SCORE_RULES: dict[str, tuple[float, ScoreFn]] = {
     "PMI":          (2.0, lambda v: 2.0 if v >= 50 else (-2.0 if v < 45 else -1.0)),
     "YIELD_10Y2Y":  (2.0, lambda v: 2.0 if v > 0.5 else (-2.0 if v < 0 else 0.0)),
@@ -37,7 +78,7 @@ SCORE_RULES: dict[str, tuple[float, ScoreFn]] = {
     "HY_SPREAD":    (2.0, lambda v: 2.0 if v < 4 else (-2.0 if v > 6 else 0.0)),
     "M2":           (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < 0 else 0.0)),
     "FED_BS":       (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < -5 else 0.0)),
-    "VIX":          (1.0, lambda v: 1.0 if v < 18 else (-1.0 if v > 30 else 0.0)),
+    "VIX":          (1.0, _make_vix_score_fn(_VIX_CRISIS, _VIX_WARNING)),
     "CPI":          (0.5, lambda v: 1.0 if 1 < v < 2.5 else (-1.0 if v > 4 else 0.0)),
     "UNEMPLOYMENT": (0.5, lambda v: 1.0 if v < 4.5 else (-2.0 if v > 6 else 0.0)),
 }
