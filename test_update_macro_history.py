@@ -266,6 +266,50 @@ def test_fred_get_single_no_api_key():
     assert df.empty
 
 
+def test_fred_get_single_429_retry_then_success(monkeypatch):
+    """連 2 次 429 後第 3 次回 200 → 重試成功取到資料；time.sleep 應被呼叫 2 次。"""
+    import scripts.update_macro_history as umh
+    fake_429 = _make_fake_response({"error_code": 429}, status_code=429)
+    fake_200 = _make_fake_response({
+        "observations": [{"date": "2024-01-01", "value": "4.3"}],
+    })
+    seq = iter([fake_429, fake_429, fake_200])
+    monkeypatch.setattr(umh.requests, "get", lambda *a, **kw: next(seq))
+    sleeps: list[float] = []
+    monkeypatch.setattr(umh.time, "sleep", lambda s: sleeps.append(s))
+    df = umh._fred_get_single("DGS10", dt.date(2024, 1, 1),
+                              dt.date(2024, 1, 5), "fakekey")
+    assert len(df) == 1
+    assert sleeps == [2.0, 4.0]  # exp backoff 前 2 次
+
+
+def test_fred_get_single_429_exhausts_retries(monkeypatch):
+    """4 次 (1 初試 + 3 retry) 全 429 → 回空 DataFrame 不 raise；sleep 3 次。"""
+    import scripts.update_macro_history as umh
+    fake_429 = _make_fake_response({"error_code": 429}, status_code=429)
+    monkeypatch.setattr(umh.requests, "get", lambda *a, **kw: fake_429)
+    sleeps: list[float] = []
+    monkeypatch.setattr(umh.time, "sleep", lambda s: sleeps.append(s))
+    df = umh._fred_get_single("DGS10", dt.date(2024, 1, 1),
+                              dt.date(2024, 1, 5), "fakekey")
+    assert df.empty
+    assert sleeps == list(umh._FRED_429_BACKOFF_SEC)  # 2 + 4 + 8
+
+
+def test_fetch_fred_indicators_inserts_inter_call_sleep(monkeypatch):
+    """fetch_fred_indicators 在 series 間插 _FRED_INTER_CALL_SLEEP_SEC 秒 sleep。"""
+    import scripts.update_macro_history as umh
+    monkeypatch.setattr(
+        umh, "_fred_get_single",
+        lambda sid, s, e, k: pd.DataFrame({"date": [dt.date(2024, 1, 1)], "value": [1.0]}),
+    )
+    sleeps: list[float] = []
+    monkeypatch.setattr(umh.time, "sleep", lambda s: sleeps.append(s))
+    umh.fetch_fred_indicators(dt.date(2024, 1, 1), dt.date(2024, 1, 5), "fakekey")
+    # N series 之間應插 N-1 次 sleep
+    assert sleeps == [umh._FRED_INTER_CALL_SLEEP_SEC] * (len(umh.FRED_SERIES_IDS) - 1)
+
+
 def test_fetch_fred_indicators_long_format(monkeypatch):
     """fetch_fred_indicators 8 series 各回 1 列 → 8 列長格式 (date, series_id, value)."""
     import scripts.update_macro_history as umh
@@ -279,6 +323,7 @@ def test_fetch_fred_indicators_long_format(monkeypatch):
         })
 
     monkeypatch.setattr(umh, "_fred_get_single", _fake)
+    monkeypatch.setattr(umh.time, "sleep", lambda s: None)
     df = umh.fetch_fred_indicators(dt.date(2024, 1, 1), dt.date(2024, 1, 5),
                                     "fakekey")
     assert list(df.columns) == ["date", "series_id", "value"]
@@ -299,6 +344,7 @@ def test_fetch_fred_one_series_fails_others_continue(monkeypatch):
         })
 
     monkeypatch.setattr(umh, "_fred_get_single", _fake)
+    monkeypatch.setattr(umh.time, "sleep", lambda s: None)
     df = umh.fetch_fred_indicators(dt.date(2024, 1, 1), dt.date(2024, 1, 5),
                                     "fakekey")
     # 應有 7 列（缺 DGS10）

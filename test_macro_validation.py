@@ -104,7 +104,7 @@ def _make_synthetic_indicators(pmi_val: float, vix_val: float, hy_val: float) ->
 
 def test_calc_macro_score_series_returns_expected_columns():
     inds = _make_synthetic_indicators(pmi_val=55, vix_val=15, hy_val=3)
-    df = calc_macro_score_series(inds, years=5, freq="ME")
+    df = calc_macro_score_series(inds, years=5, freq="ME", prefer_parquet=False)
     assert not df.empty
     assert set(df.columns) == {"score", "phase", "n_indicators"}
     assert isinstance(df.index, pd.DatetimeIndex)
@@ -113,7 +113,7 @@ def test_calc_macro_score_series_returns_expected_columns():
 def test_calc_macro_score_series_expansion_phase():
     """好景氣指標全綠 → phase 應為高峰/擴張。"""
     inds = _make_synthetic_indicators(pmi_val=55, vix_val=15, hy_val=3)
-    df = calc_macro_score_series(inds, years=5)
+    df = calc_macro_score_series(inds, years=5, prefer_parquet=False)
     assert (df["score"] >= 8).all()
     assert df["phase"].iloc[-1] in ("高峰", "擴張")
 
@@ -121,7 +121,7 @@ def test_calc_macro_score_series_expansion_phase():
 def test_calc_macro_score_series_recession_phase():
     """壞景氣指標全紅 → phase 應為衰退。"""
     inds = _make_synthetic_indicators(pmi_val=40, vix_val=40, hy_val=7)
-    df = calc_macro_score_series(inds, years=5)
+    df = calc_macro_score_series(inds, years=5, prefer_parquet=False)
     assert (df["score"] <= 2).all()
     assert df["phase"].iloc[-1] == "衰退"
 
@@ -129,7 +129,7 @@ def test_calc_macro_score_series_recession_phase():
 def test_calc_macro_score_series_n_indicators_counts_coverage():
     """n_indicators 反映實際參與打分的指標數。"""
     inds = _make_synthetic_indicators(pmi_val=55, vix_val=15, hy_val=3)
-    df = calc_macro_score_series(inds, years=5)
+    df = calc_macro_score_series(inds, years=5, prefer_parquet=False)
     assert (df["n_indicators"] == 3).all()
 
 

@@ -40,6 +40,7 @@ import datetime as _dt
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 # v18.222 風格：scripts/ 下執行也能 import repositories.*
@@ -135,27 +136,37 @@ def _fetch_url_via_proxy(url: str, params: dict | None = None,
 # ════════════════════════════════════════════════════════════════
 # FRED 抓取
 # ════════════════════════════════════════════════════════════════
+_FRED_429_BACKOFF_SEC: tuple = (2.0, 4.0, 8.0)  # exponential backoff 重試延遲
+
+
 def _fred_get_single(series_id: str, start: _dt.date, end: _dt.date,
                      api_key: str) -> pd.DataFrame:
     """抓 FRED 單一 series，回 [date, value]；空資料/錯誤回空 DataFrame。
 
     FRED API 全球可達不需 proxy（直連）；印 HTTP status 方便 debug。
+    遇 HTTP 429 rate limit 按 _FRED_429_BACKOFF_SEC 重試 3 次。
     """
     if not api_key:
         return pd.DataFrame()
-    try:
-        r = requests.get(
-            FRED_URL,
-            params={
-                "series_id": series_id,
-                "api_key": api_key,
-                "file_type": "json",
-                "observation_start": start.strftime("%Y-%m-%d"),
-                "observation_end": end.strftime("%Y-%m-%d"),
-            },
-            timeout=30,
-            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-        )
+    params = {
+        "series_id": series_id,
+        "api_key": api_key,
+        "file_type": "json",
+        "observation_start": start.strftime("%Y-%m-%d"),
+        "observation_end": end.strftime("%Y-%m-%d"),
+    }
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    for attempt, sleep_sec in enumerate((0.0,) + _FRED_429_BACKOFF_SEC):
+        if sleep_sec > 0:
+            print(f"[FRED/{series_id}] 429 retry {attempt}/3 — sleep {sleep_sec}s")
+            time.sleep(sleep_sec)
+        try:
+            r = requests.get(FRED_URL, params=params, timeout=30, headers=headers)
+        except Exception as e:
+            print(f"[FRED/{series_id}] ❌ {type(e).__name__}: {e}")
+            return pd.DataFrame()
+        if r.status_code == 429:
+            continue  # 重試
         if r.status_code != 200:
             print(f"[FRED/{series_id}] HTTP={r.status_code} body={r.text[:200]}")
             return pd.DataFrame()
@@ -170,9 +181,11 @@ def _fred_get_single(series_id: str, start: _dt.date, end: _dt.date,
         df = df.dropna(subset=["value"]).reset_index(drop=True)
         print(f"[FRED/{series_id}] ✅ {len(df)} rows ({start}~{end})")
         return df[["date", "value"]]
-    except Exception as e:
-        print(f"[FRED/{series_id}] ❌ {type(e).__name__}: {e}")
-        return pd.DataFrame()
+    print(f"[FRED/{series_id}] ❌ 429 已重試 {len(_FRED_429_BACKOFF_SEC)} 次仍失敗")
+    return pd.DataFrame()
+
+
+_FRED_INTER_CALL_SLEEP_SEC: float = 1.0  # 順序呼叫間隔，避免觸發 rate limit
 
 
 def fetch_fred_indicators(start: _dt.date, end: _dt.date,
@@ -180,9 +193,13 @@ def fetch_fred_indicators(start: _dt.date, end: _dt.date,
     """抓所有 FRED series → 長格式 (date, series_id, value).
 
     任一 series 失敗：log 警告，跳過該 series 但不中止其他 series。
+    series 間插 _FRED_INTER_CALL_SLEEP_SEC 秒 sleep 避免 rate limit
+    （8 series × 1 秒 = +8 秒 cron 時間，可接受換抓滿全 8 series）。
     """
     frames = []
-    for sid in FRED_SERIES_IDS:
+    for i, sid in enumerate(FRED_SERIES_IDS):
+        if i > 0:
+            time.sleep(_FRED_INTER_CALL_SLEEP_SEC)
         df = _fred_get_single(sid, start, end, api_key)
         if df.empty:
             continue
