@@ -114,6 +114,12 @@ def install_global_urllib_proxy() -> None:
 install_global_urllib_proxy()
 
 
+# v18.278：429 rate-limit 重試間隔（鏡像 scripts/update_macro_history.py 的
+# `_FRED_429_BACKOFF_SEC`）。FRED / Yahoo / er-api 等公開 endpoint 在 burst
+# 後常回 429，舊版 fetch_url 沒處理 429 → 整 series 靜默掉資料。
+_RATE_LIMIT_BACKOFF_SEC: tuple = (2.0, 4.0, 8.0)
+
+
 def fetch_url(
     url:     str,
     headers: dict = None,
@@ -128,6 +134,7 @@ def fetch_url(
       Proxy 正常    → 走 NAS，SSL verify=False（Squid CONNECT 相容）
       407 Auth      → 立即回傳 None，不重試
       403 ×2        → 提前跳出，降級直連
+      429 Rate Limit→ exponential backoff sleep 2/4/8 秒後重試（最多 3 次）
       ProxyError    → 降級直連
       無 Proxy 設定 → 直連，SSL verify=True
     """
@@ -142,10 +149,11 @@ def fetch_url(
     if headers:
         _hdr.update(headers)
 
-    sess   = make_retry_session()
-    _perr  = 0
-    _block = 0
-    _tmo   = 0   # v18.223：累計 proxy 逾時次數 → 逾時也要降級直連
+    sess     = make_retry_session()
+    _perr    = 0
+    _block   = 0
+    _tmo     = 0   # v18.223：累計 proxy 逾時次數 → 逾時也要降級直連
+    _rl_atmp = 0   # v18.278：429 backoff 指針，最多走完 _RATE_LIMIT_BACKOFF_SEC 序列
 
     for attempt in range(retries):
         try:
@@ -160,6 +168,16 @@ def fetch_url(
                 if _block >= 2:
                     break
                 continue
+            if r.status_code == 429:
+                if _rl_atmp < len(_RATE_LIMIT_BACKOFF_SEC):
+                    _sleep_s = _RATE_LIMIT_BACKOFF_SEC[_rl_atmp]
+                    print(f"[proxy] 429 Rate Limit — sleep {_sleep_s}s before retry "
+                          f"({_rl_atmp + 1}/{len(_RATE_LIMIT_BACKOFF_SEC)}): {url[:80]}")
+                    _t.sleep(_sleep_s)
+                    _rl_atmp += 1
+                    continue
+                print(f"[proxy] 429 已重試 {_rl_atmp} 次仍 rate-limited，放棄：{url[:80]}")
+                return None
             if r.status_code == 200:
                 return r
         except requests.exceptions.ProxyError as e:
