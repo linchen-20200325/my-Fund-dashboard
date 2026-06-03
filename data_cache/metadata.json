@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-06-03T04:03:58.430328+00:00",
+  "updated_at": "2026-06-03T13:35:13.206672+00:00",
   "datasets": {
     "fred_indicators": {
       "name": "fred_indicators",
@@ -9,14 +9,20 @@
     },
     "vix_history": {
       "name": "vix_history",
-      "last_updated": "2026-06-02",
-      "row_count": 3770,
+      "last_updated": "2026-06-03",
+      "row_count": 3771,
       "last_error": null
     },
     "spx_history": {
       "name": "spx_history",
-      "last_updated": "2026-06-02",
-      "row_count": 3769,
+      "last_updated": "2026-06-03",
+      "row_count": 3770,
+      "last_error": null
+    },
+    "twii_history": {
+      "name": "twii_history",
+      "last_updated": "2026-06-03",
+      "row_count": 3656,
       "last_error": null
     }
   }
