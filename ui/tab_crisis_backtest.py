@@ -135,7 +135,7 @@ def _render_fund_dd_metrics(events: list, fund_name: str):
     """該基金統計卡片。"""
     fund_dds = [ev.fund_drawdown_pct for ev in events if ev.fund_drawdown_pct is not None]
     if not fund_dds:
-        st.caption(f"⚠️ 該基金 NAV 不涵蓋任何危機事件期間（基金 NAV 通常只有近 ~400 天）")
+        st.caption("⚠️ 該基金 NAV 不涵蓋任何危機事件期間（基金 NAV 通常只有近 ~400 天）")
         return
 
     fund_recs = [ev.fund_recovery_pct for ev in events if ev.fund_recovery_pct is not None]
@@ -856,7 +856,6 @@ def _render_strategy_grid_section(
     try:
         import plotly.express as px
         is_pct = metric_col in ("max_drawdown_pct", "crisis_return_pct")
-        text_template = "{:.1%}".format if is_pct else "{:.2f}".format
         fig = px.imshow(
             hm.values,
             labels=dict(x=f"{signal_key} 門檻", y="策略", color=metric_label),
@@ -915,9 +914,9 @@ def _render_strategy_grid_section(
         st.dataframe(df_full_view, use_container_width=True, hide_index=True)
 
     st.caption(
-        f"📐 策略說明：buy_and_hold = baseline 滿倉；signal_exit = 訊號→全現金；"
-        f"signal_half = 訊號→半倉；buy_dip = 訊號 + 大盤跌 ≥5% → 1.5× 加碼。"
-        f"|  起始資產 = 100；倉位 t = f(訊號 t-1) 避免前視偏誤。"
+        "📐 策略說明：buy_and_hold = baseline 滿倉；signal_exit = 訊號→全現金；"
+        "signal_half = 訊號→半倉；buy_dip = 訊號 + 大盤跌 ≥5% → 1.5× 加碼。"
+        "|  起始資產 = 100；倉位 t = f(訊號 t-1) 避免前視偏誤。"
     )
 
 

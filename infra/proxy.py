@@ -138,7 +138,8 @@ def fetch_url(
       ProxyError    → 降級直連
       無 Proxy 設定 → 直連，SSL verify=True
     """
-    import time as _t, random as _rnd
+    import time as _t
+    import random as _rnd
 
     _proxy  = get_proxy_config() or {}
     _verify = not bool(_proxy)
@@ -200,7 +201,7 @@ def fetch_url(
             r_dc = sess.get(url, headers=_hdr, params=params,
                             timeout=timeout, proxies={}, verify=True)
             if r_dc.status_code == 200:
-                print(f"[proxy] 直連成功")
+                print("[proxy] 直連成功")
                 return r_dc
         except Exception as e_dc:
             print(f"[proxy] 直連失敗：{e_dc}")

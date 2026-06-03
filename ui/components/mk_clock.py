@@ -60,8 +60,10 @@ _PHASE_META = {
 def _trend_int(trend_str: str) -> int:
     """trend 字串轉 +1 / 0 / -1。"""
     t = (trend_str or "").lower()
-    if t in ("up", "rising", "+", "↑"):   return 1
-    if t in ("down", "falling", "-", "↓"): return -1
+    if t in ("up", "rising", "+", "↑"):
+        return 1
+    if t in ("down", "falling", "-", "↓"):
+        return -1
     return 0
 
 

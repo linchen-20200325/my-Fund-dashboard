@@ -16,6 +16,8 @@ temp/
 *.cache
 *.csv
 *.xlsx
+# runtime cache（Streamlit 容器重啟即清空 / 測試可能寫入 → 不入 repo）
+cache/fund_history.json
 # 例外：範本檔需要 commit 進 repo
 !templates/*.csv
 !templates/*.xlsx
