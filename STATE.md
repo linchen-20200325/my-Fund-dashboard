@@ -6,7 +6,22 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.277_FredRateLimitRetry（FRED 429 rate-limit 修復 + bootstrap 失敗復原 + 測試隔離）
+- **目前版本**：v18.278_PhaseECrossSource（Phase E 全球 macro_score × 台股 TWII 對照引擎）
+  - **User 需求**：「Phase E」— 把 fund repo 的「全球 FRED 合成 0-10 macro_score」與台股 TWII 同框比對，找 macro_score 領先 TWII 月變化率最強相關的月數
+  - **方案 A 案**（單站式）：sister repo my-stock-dashboard v18.157 已降級為純 TWII drawdown 不再算 NDC 信號 → fund repo 直接抓 `^TWII` 進自家 `data_cache/twii_history.parquet`（鏡像現有 `^GSPC` `^VIX` 模式），避免跨倉資料流
+  - **scripts/update_macro_history.py**（+~15 行）：新 `fetch_twii_history()` 委派 `_yf_fetch_close("%5ETWII", ...)`；`DATASETS` 從 3 表擴 4 表；`FETCHERS` 同步註冊 `twii_history`（needs_fred_key=False, dedupe_keys=["date"]）；workflow YAML **不動**（cron 自動迭代 `DATASETS`）
+  - **services/cross_source_compare.py**（新檔 ~180 行，純函式零 I/O 除 Parquet 讀）：
+    - `load_twii_from_parquet(cache_dir)` → 日線 close Series
+    - `align_score_with_twii(score_df, twii_series, freq='ME')` → DataFrame[score, twii_close, twii_mom_pct]（月末對齊；twii resample(ME).last；inner join）
+    - `compute_lead_lag_correlation(aligned_df, max_lag_months=12)` → DataFrame[lag_months, correlation]，公式 `corr(score.shift(k), twii_mom_pct)`，k ∈ [-12, +12]
+    - `find_best_lead_lag(corr_df, prefer_positive=True)` → (best_lag, best_corr)；只挑正相關
+    - `summarize_crisis_score_around_events(events, score_series, lookback_months=6)` → list[dict]（每場 crisis：peak 前 N 月平均 score / peak score / trough score / 降幅）
+  - **ui/tab_crisis_backtest.py**（+~165 行）：新 `_render_phase_e_cross_source_section(events, years)` 插在 Phase 4+5 之後、限制提示之前。缺檔守門 + 2 sliders（max_lag 3-18 / lookback 3-12）+ 跑按鈕 → 3 metric 卡（最佳領先期 / 相關係數 / 分析月數）+ plotly 雙軸圖（macro_score 主軸藍 + TWII 副軸紅 + crisis 灰區）+ cross-correlation 完整表 expander + Crisis 事件 macro_score 統計表 + 對齊月資料 CSV 下載
+  - **test_cross_source_compare.py**（新檔 +15 case）：load 缺檔 / 排序 / 壞檔 graceful、align 三欄結構 / 第一列 NaN mom_pct 保留 / 空 score 或 twii、cross_corr 對稱範圍 / 空、find_best 正相關挑最大 / 全負回 None / 空 / 全 NaN、summarize crisis 平均/peak/trough 正確 / 空 events / 空 score / 無 trough graceful
+  - **test_update_macro_history.py**：DATASETS 集合從 3 擴 4；新增 `test_fetch_twii_history_calls_yf_chart`（驗證 ticker 為 `%5ETWII`）+ `fetch_twii_history` 簽名校驗
+  - **回歸**：test_cross_source_compare + test_update_macro_history + test_macro_validation + test_crisis_backtest + test_app_smoke **192 passed + 1 skipped** 零功能回歸
+  - **下一步**：merge 後手動觸發 `update_macro_history.yml` workflow_dispatch + bootstrap=true / years=15 → 應抓到 15 年 TWII 日線（~3,700 列）→ Tab4「📉 危機回測室」末段就能跑 Phase E
+- **前一版**：v18.277_FredRateLimitRetry（FRED 429 rate-limit 修復 + bootstrap 失敗復原 + 測試隔離）
   - **背景**：v18.275 在 15-year bootstrap 時 FRED 8 series 中 4 個（DGS3MO / BAMLH0A0HYM2 / CPIAUCSL / UNRATE）遭 HTTP 429 Too Many Requests，順序連打觸發 API rate limit → Parquet 只抓到 4 個 series。同時發現 v18.276 引入的 test isolation bug：bootstrap 後 cwd/data_cache/ 有真資料，3 個 synthetic indicator 測試讀到真 Parquet 蓋掉 fixture → 假陽性失敗
   - **scripts/update_macro_history.py**：
     - `_fred_get_single` 加 429 重試 3 次 exponential backoff (2/4/8 秒；模組常數 `_FRED_429_BACKOFF_SEC`)；連線異常維持原本 graceful 回空

@@ -139,19 +139,23 @@ def test_last_date_returns_max_across_series():
 # DATASETS / FETCHERS 註冊驗證
 # ════════════════════════════════════════════════════════════════
 def test_datasets_registered():
-    """3 dataset 都註冊在 DATASETS 與 FETCHERS。"""
+    """4 dataset 都註冊在 DATASETS 與 FETCHERS。"""
     import scripts.update_macro_history as umh
-    assert set(umh.DATASETS) == {"fred_indicators", "vix_history", "spx_history"}
+    assert set(umh.DATASETS) == {
+        "fred_indicators", "vix_history", "spx_history", "twii_history"}
     assert "fred_indicators" in umh.FETCHERS
     assert "vix_history" in umh.FETCHERS
     assert "spx_history" in umh.FETCHERS
-    # fred_indicators 需要 FRED_API_KEY，VIX/SPX 不需要
+    assert "twii_history" in umh.FETCHERS
+    # fred_indicators 需要 FRED_API_KEY，VIX/SPX/TWII 不需要
     assert umh.FETCHERS["fred_indicators"][1] is True
     assert umh.FETCHERS["vix_history"][1] is False
     assert umh.FETCHERS["spx_history"][1] is False
+    assert umh.FETCHERS["twii_history"][1] is False
     # dedupe_keys
     assert umh.FETCHERS["fred_indicators"][2] == ["date", "series_id"]
     assert umh.FETCHERS["vix_history"][2] == ["date"]
+    assert umh.FETCHERS["twii_history"][2] == ["date"]
 
 
 def test_fred_series_ids_match_score_rules():
@@ -386,14 +390,32 @@ def test_yf_fetch_close_handles_none_response(monkeypatch):
 
 
 def test_fetch_vix_and_spx_signatures():
-    """fetch_vix_history / fetch_spx_history 須接受 api_key 參數（一致性，不使用）."""
+    """fetch_vix_history / fetch_spx_history / fetch_twii_history 須接受 api_key 參數（一致性，不使用）."""
     import scripts.update_macro_history as umh
     # 簽名校驗：不會因有 api_key 參數而 raise
     import inspect
     sig_vix = inspect.signature(umh.fetch_vix_history)
     sig_spx = inspect.signature(umh.fetch_spx_history)
+    sig_twii = inspect.signature(umh.fetch_twii_history)
     assert "api_key" in sig_vix.parameters
     assert "api_key" in sig_spx.parameters
+    assert "api_key" in sig_twii.parameters
+
+
+def test_fetch_twii_history_calls_yf_chart(monkeypatch):
+    """fetch_twii_history 應委派給 _yf_fetch_close 帶 %5ETWII ticker。"""
+    import scripts.update_macro_history as umh
+    called = {"ticker": None}
+
+    def _fake_yf(ticker, start, end):
+        called["ticker"] = ticker
+        return pd.DataFrame({"date": [dt.date(2024, 1, 1)], "close": [17500.0]})
+
+    monkeypatch.setattr(umh, "_yf_fetch_close", _fake_yf)
+    df = umh.fetch_twii_history(dt.date(2024, 1, 1), dt.date(2024, 1, 5))
+    assert called["ticker"] == "%5ETWII"
+    assert len(df) == 1
+    assert float(df["close"].iloc[0]) == 17500.0
 
 
 if __name__ == "__main__":
