@@ -186,3 +186,90 @@ def test_fund_repository_has_re_and_requests_module_imported():
     import repositories.fund_repository as fr
     assert getattr(fr, "re", None) is not None, "fund_repository 缺 import re"
     assert getattr(fr, "requests", None) is not None, "fund_repository 缺 import requests"
+
+
+# ════════════════════════════════════════════════════════════
+# v18.278 — fetch_url 429 rate-limit exponential backoff
+# ════════════════════════════════════════════════════════════
+class _StatusResp:
+    """Mock requests.Response with controllable status_code only."""
+    def __init__(self, status):
+        self.status_code = status
+
+
+def test_fetch_url_429_then_200_succeeds_with_backoff_sleeps():
+    """429 → 200：第 1 次 429 sleep 2s，第 2 次 200 成功回傳，sleep 序列 = [2.0]。"""
+    responses = [_StatusResp(429), _StatusResp(200)]
+    sleeps = []
+
+    class _FakeSess:
+        def get(self, *a, **kw):
+            return responses.pop(0)
+
+    with patch.object(ip, "make_retry_session", return_value=_FakeSess()), \
+         patch.object(ip, "get_proxy_config", return_value=None), \
+         patch("time.sleep", side_effect=sleeps.append):
+        r = ip.fetch_url("https://example.com/x")
+
+    assert r is not None
+    assert r.status_code == 200
+    assert sleeps == [2.0]
+
+
+def test_fetch_url_429_exhausts_returns_none_with_full_backoff_sequence():
+    """連續 4 個 429：sleep 序列 = [2.0, 4.0, 8.0]，retries=3 額度耗盡 → None。"""
+    responses = [_StatusResp(429)] * 6   # 給足 4xx，跑滿外圈 retries 都還是 429
+    sleeps = []
+
+    class _FakeSess:
+        def get(self, *a, **kw):
+            return responses.pop(0)
+
+    with patch.object(ip, "make_retry_session", return_value=_FakeSess()), \
+         patch.object(ip, "get_proxy_config", return_value=None), \
+         patch("time.sleep", side_effect=sleeps.append):
+        r = ip.fetch_url("https://example.com/x", retries=3)
+
+    assert r is None
+    # 完整 backoff 序列 = (2.0, 4.0, 8.0)
+    assert sleeps == [2.0, 4.0, 8.0]
+
+
+def test_fetch_url_429_then_200_after_two_retries():
+    """三次 retry 才放行：sleep 序列 = [2.0, 4.0]，第 3 次 200。"""
+    responses = [_StatusResp(429), _StatusResp(429), _StatusResp(200)]
+    sleeps = []
+
+    class _FakeSess:
+        def get(self, *a, **kw):
+            return responses.pop(0)
+
+    with patch.object(ip, "make_retry_session", return_value=_FakeSess()), \
+         patch.object(ip, "get_proxy_config", return_value=None), \
+         patch("time.sleep", side_effect=sleeps.append):
+        r = ip.fetch_url("https://example.com/x")
+
+    assert r is not None and r.status_code == 200
+    assert sleeps == [2.0, 4.0]
+
+
+def test_fetch_url_429_backoff_constant_is_2_4_8():
+    """v18.277 cron job 鎖死的 backoff 序列：infra.proxy 與其對齊，避免漂移。"""
+    assert ip._RATE_LIMIT_BACKOFF_SEC == (2.0, 4.0, 8.0)
+
+
+def test_fetch_url_407_not_affected_by_429_branch():
+    """407 Auth 應立即回 None，不進 429 backoff 路徑。"""
+    sleeps = []
+
+    class _FakeSess:
+        def get(self, *a, **kw):
+            return _StatusResp(407)
+
+    with patch.object(ip, "make_retry_session", return_value=_FakeSess()), \
+         patch.object(ip, "get_proxy_config", return_value=None), \
+         patch("time.sleep", side_effect=sleeps.append):
+        r = ip.fetch_url("https://example.com/x")
+
+    assert r is None
+    assert sleeps == []   # 不該為 429 sleep
