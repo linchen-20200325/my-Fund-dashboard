@@ -9,18 +9,19 @@
 - **入口**：`app.py`（Streamlit Cloud 部署）
 
 ## 當前版本
-- **v18.279_Phase5StackOrder**：Phase 5 AI 區塊壓底，render 順序固定為 Phase 4 → Phase E → Phase 5（確保 AI prompt 能讀完上方所有結果）
+- **v18.279_MacroScoreCalibration**：VIX 閾值 OOS 自動校正（5 重 anti-overfit gate：walk-forward / 正則項 / 票選 / bootstrap CI / 末段 36 月 holdout）
+- **同期合入**：v18.279p_Phase5StackOrder — Phase 5 AI 區塊壓底，render 順序固定為 Phase 4 → Phase E → Phase 5
 
 ## 目錄結構
-- `services/` — 業務邏輯（macro / strategy / AI / cross-source / liquidity）
+- `services/` — 業務邏輯（macro / strategy / AI / cross-source / liquidity / calibration）
 - `repositories/` — 資料源抓取（FRED / Yahoo / FundClear / Macro）
 - `infra/proxy.py` — NAS Squid 中繼站；HTTP gateway（含 407 / 403 / 429 / timeout 完整 fallback）
 - `ui/` — Streamlit 分頁元件（tab1~tab6 + components）
-- `scripts/update_macro_history.py` — 每週 cron 抓 FRED + Yahoo Parquet 快取
+- `scripts/` — `update_macro_history.py`（每週 cron 抓 FRED + Yahoo Parquet）/ `calibrate_macro_score.py`（VIX OOS 自動校正）
 - `data_cache/*.parquet` — fred_indicators / spx_history / twii_history / vix_history（每週日 cron 更新）
-- `.github/workflows/` — update_macro_history / fetch_nav_cache / pr-check
+- `.github/workflows/` — update_macro_history / recalibrate_macro_score / fetch_nav_cache / pr-check
 
 ## 即時健康指標
-- **Test**：1096 passed / 1 skipped / 3 pre-existing failed（test_hot_money altair 版本 + test_tab6_manual mock spec）
-- **本日 PR**：#164 mk_clock 衰退誤判 / #165 Phase E 引擎 / #166 proxy 429 backoff / #167 Phase 5 壓底
-- **主分支**：commit `dc48e5e`
+- **Test**：~1098 passed / 2 skipped / 0 failed（PR #169 修掉 3 個 pre-existing fail）
+- **本日 PR**：#164 mk_clock 衰退誤判 / #165 Phase E 引擎 / #166 proxy 429 backoff / #167 Phase 5 壓底 / #170 VIX OOS 校正
+- **協議**：Core Protocol v2.0（PR #168，嚴禁自動 Merge）
