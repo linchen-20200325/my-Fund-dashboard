@@ -6,7 +6,21 @@
 - **產品**：境外共同基金（保險型保單）戰情室 — 對應台灣 user 的 USD/EUR 計價基金 TWD 換匯後績效分析
 - **技術棧**：Streamlit + pandas + plotly/altair + Google Sheets + FinMind/Yahoo
 - **核心禁令**：🚫 全面排除 ETF / 個股，本系統專注共同基金
-- **目前版本**：v18.276_MacroValidationReadsParquet（Phase 6a 驗證解綁 Tab1 — 改讀 Parquet + 加 CSV 下載）
+- **目前版本**：v18.277_FredRateLimitRetry（FRED 429 rate-limit 修復 + bootstrap 失敗復原 + 測試隔離）
+  - **背景**：v18.275 在 15-year bootstrap 時 FRED 8 series 中 4 個（DGS3MO / BAMLH0A0HYM2 / CPIAUCSL / UNRATE）遭 HTTP 429 Too Many Requests，順序連打觸發 API rate limit → Parquet 只抓到 4 個 series。同時發現 v18.276 引入的 test isolation bug：bootstrap 後 cwd/data_cache/ 有真資料，3 個 synthetic indicator 測試讀到真 Parquet 蓋掉 fixture → 假陽性失敗
+  - **scripts/update_macro_history.py**：
+    - `_fred_get_single` 加 429 重試 3 次 exponential backoff (2/4/8 秒；模組常數 `_FRED_429_BACKOFF_SEC`)；連線異常維持原本 graceful 回空
+    - `fetch_fred_indicators` 在 series 間插 `_FRED_INTER_CALL_SLEEP_SEC = 1.0` 秒間隔避免 burst（+8 秒 cron 時間換 8 series 全到）
+    - `import time` 新增
+  - **test_macro_validation.py**：4 個 synthetic indicator 測試明確帶 `prefer_parquet=False` 隔離 cwd data_cache 真資料
+  - **test_update_macro_history.py**：新增 3 case
+    - 429 → 200 重試成功：sleep 序列 `[2.0, 4.0]`
+    - 429 exhausts：4 次全 429 → sleep `[2.0, 4.0, 8.0]` 並回空
+    - inter-call sleep：N series 之間 N-1 次 `[1.0]`
+    - 既有 2 個 `fetch_fred_indicators` 測試補 monkeypatch `time.sleep` 避免 real-sleep 7 秒
+  - **回歸**：test_macro_validation + test_update_macro_history **58 passed + 1 skipped**（v18.276 35 → 58 含新 +23）；full suite 預期僅剩 `test_tab6_manual` 2 個 pre-existing mock-spec 失敗（與此 hotfix 完全無關，tab6 自身 issue）
+  - **下一步**：merge 後請手動觸發 `update_macro_history.yml` workflow_dispatch + bootstrap=true / years=15 → 應抓到全 8 FRED series；接 Phase E 跨來源比對工具
+- **前一版**：v18.276_MacroValidationReadsParquet（Phase 6a 驗證解綁 Tab1 — 改讀 Parquet + 加 CSV 下載）
   - **User 需求**（接 Phase B v18.275）：「繼續 B.2」。把 PR #160 v18.275 鋪好的 `data_cache/*.parquet` 接到 Phase 6a 驗證流程 → user 不用先去 Tab1 抓 FRED 就能跑驗證；加 macro_score 月序列 CSV 下載讓 user 拿到原始資料二次分析
   - **services/macro_validation.py**：新增 `load_indicators_from_parquet(cache_dir)` 把 `fred_indicators.parquet`（長格式 8 series）+ `vix_history.parquet` 重組成跟 `fetch_all_indicators` 同結構的 `{key: {"series": pd.Series}}` dict；轉換邏輯**完全鏡像 services/macro_service**：殖利率 spread（DGS10-DGS2 / DGS10-DGS3MO）+ M2 YoY%（shift 12）+ FED_BS YoY%（shift 52 週頻）+ CPI YoY%（shift 12）+ HY/UNRATE/VIX 直接 level。**PMI 不在 Parquet 內**（PR #160 暫不抓），留 indicators_now fallback。`calc_macro_score_series` 簽名擴 `prefer_parquet=True / cache_dir=DEFAULT_PARQUET_CACHE_DIR`，Parquet 優先、indicators_now 補洞 PMI
   - **ui/tab_crisis_backtest.py Phase 3.5**：
@@ -21,7 +35,7 @@
     - UI source-level：CSV 下載按鈕存在 + key + to_csv 邏輯；`load_indicators_from_parquet` 與 `fred_indicators.parquet` 被 import
   - **回歸**：test_macro_validation + signal_lookback + crisis_backtest + strategy_grid + update_macro_history + tab2_single_fund + app_smoke **231 passed + 1 skipped** 零回歸
   - Roadmap：Phase C（stock-dashboard macro tab 加歷史驗證 UI 子區塊 — 讀 NDC + 領先指標 Parquet）→ Phase D（PMI 補抓進 Parquet）
-- **前一版**：v18.275_MacroHistoryCache（全球 FRED 8 序列 + VIX + SPX Parquet 快取 + 每週 cron）
+- **前二版**：v18.275_MacroHistoryCache（全球 FRED 8 序列 + VIX + SPX Parquet 快取 + 每週 cron）
   - **User 需求**：「兩邊都可以做回測來驗證台股的總經 tab 與基金（全球的）總經 tab」+「直接抓取資料放在資料庫，之後每周定期更新」。Sister repo `my-stock-dashboard` 已於 v18.149 用 Parquet 模式做台灣指標歷史 → 本 repo 鏡像對全球 FRED.
   - **scripts/update_macro_history.py**（~280 行）：純函式爬蟲、無 streamlit 相依、無 repo internal import；FRED 直連（全球可達不需 proxy）+ Yahoo VIX/SPX 走 `_fetch_url_via_proxy`（infra.proxy → repositories.macro_repository.fetch_url → 直連三層 fallback）；CLI `--bootstrap --years N --only NAME`。
   - **新增 Parquet 表**（3）：
