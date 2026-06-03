@@ -187,10 +187,17 @@ def test_hot_money_module_imports_cleanly():
 
 def test_altair_import_chain_does_not_raise():
     """altair / narwhals / typing_extensions 全鏈 import 不可拋 TypeError
-    (PR v18.240 修 _TypedDictMeta.__new__() got unexpected kwarg 'closed')。"""
+    (PR v18.240 修 _TypedDictMeta.__new__() got unexpected kwarg 'closed')。
+
+    altair 6.x 重構移除 `altair.vegalite.v5.schema` 路徑 → 此情境直接 skip
+    （TypedDict bug 與 schema 載入路徑無關，僅鎖死「import 不爆」）。"""
+    import pytest
     try:
         import altair  # noqa: F401
-        from altair.vegalite.v5.schema import _config  # noqa: F401
+        try:
+            from altair.vegalite.v5.schema import _config  # noqa: F401
+        except ModuleNotFoundError:
+            pytest.skip("altair 6.x 已移除 vegalite.v5.schema 路徑")
     except TypeError as e:
         if "closed" in str(e):
             raise AssertionError(
