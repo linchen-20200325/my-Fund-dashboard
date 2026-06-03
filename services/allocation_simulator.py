@@ -47,6 +47,81 @@ DEFAULT_PHASE_SCRIPT: list[dict] = [
 ]
 
 
+# ────────────────────────────────────────────────────────────────────
+# v18.280：4 風格策略 preset × 4 階段配置矩陣
+# 每階段保留 DEFAULT_PHASE_SCRIPT 的「月數 + monthly_nav_change_pct」，
+# 只覆寫 drip_pct/cash_pct/stay_pct 三桶比例。
+# 每組 sum 必 = 100；UI 切 preset 一鍵套用 4 階段 12 個數字。
+# ────────────────────────────────────────────────────────────────────
+STRATEGY_PRESETS: dict[str, dict] = {
+    "balanced": {
+        "label": "⚖️ 穩健平衡",
+        "desc": "經典美林邏輯：復甦多 DRIP、衰退多 STAY，全期間平衡（= 系統預設）",
+        "allocations": {
+            "復甦": {"drip_pct": 80, "cash_pct": 10, "stay_pct": 10},
+            "擴張": {"drip_pct": 60, "cash_pct": 30, "stay_pct": 10},
+            "放緩": {"drip_pct": 30, "cash_pct": 50, "stay_pct": 20},
+            "衰退": {"drip_pct": 10, "cash_pct": 20, "stay_pct": 70},
+        },
+    },
+    "aggressive_growth": {
+        "label": "🚀 積極成長",
+        "desc": "全期 DRIP 為主極大化複利；衰退少量 STAY 緩衝，犧牲下檔換上檔",
+        "allocations": {
+            "復甦": {"drip_pct": 95, "cash_pct": 5,  "stay_pct": 0},
+            "擴張": {"drip_pct": 85, "cash_pct": 15, "stay_pct": 0},
+            "放緩": {"drip_pct": 60, "cash_pct": 40, "stay_pct": 0},
+            "衰退": {"drip_pct": 30, "cash_pct": 30, "stay_pct": 40},
+        },
+    },
+    "income_first": {
+        "label": "💰 收益優先",
+        "desc": "高 CASH 比例每月領穩定現金流，犧牲長期複利換可預測收入",
+        "allocations": {
+            "復甦": {"drip_pct": 50, "cash_pct": 40, "stay_pct": 10},
+            "擴張": {"drip_pct": 30, "cash_pct": 60, "stay_pct": 10},
+            "放緩": {"drip_pct": 20, "cash_pct": 70, "stay_pct": 10},
+            "衰退": {"drip_pct": 10, "cash_pct": 30, "stay_pct": 60},
+        },
+    },
+    "defensive": {
+        "label": "🛡️ 防禦保本",
+        "desc": "高 STAY 比例守 TWD 定存桶，最低波動，犧牲報酬換下檔保護",
+        "allocations": {
+            "復甦": {"drip_pct": 40, "cash_pct": 20, "stay_pct": 40},
+            "擴張": {"drip_pct": 30, "cash_pct": 30, "stay_pct": 40},
+            "放緩": {"drip_pct": 15, "cash_pct": 30, "stay_pct": 55},
+            "衰退": {"drip_pct": 5,  "cash_pct": 5,  "stay_pct": 90},
+        },
+    },
+}
+
+
+def get_preset_phase_script(preset_key: str) -> list[dict]:
+    """套 preset 的三桶比例到 DEFAULT_PHASE_SCRIPT，回傳完整 phase_script。
+
+    保留 DEFAULT_PHASE_SCRIPT 的 months / monthly_nav_change_pct，
+    只用 preset 覆寫 drip_pct/cash_pct/stay_pct。
+
+    Raises:
+        KeyError: preset_key 不在 STRATEGY_PRESETS
+    """
+    if preset_key not in STRATEGY_PRESETS:
+        raise KeyError(
+            f"未知 preset_key: {preset_key!r}（可選：{list(STRATEGY_PRESETS)}）"
+        )
+    allocations = STRATEGY_PRESETS[preset_key]["allocations"]
+    out = []
+    for seg in DEFAULT_PHASE_SCRIPT:
+        phase = seg["phase"]
+        alloc = allocations.get(phase)
+        if alloc is None:
+            out.append(dict(seg))
+            continue
+        out.append({**seg, **alloc})
+    return out
+
+
 @dataclass(frozen=True)
 class SimulationParams:
     amount_twd: float = 1_000_000.0

@@ -76,7 +76,35 @@ def render_allocation_simulator_tab() -> None:
         "預設 4 段：**復甦 → 擴張 → 放緩 → 衰退**（完整景氣週期）。"
         "可直接編輯月數、phase 與月 NAV 變化率。"
     )
-    from services.allocation_simulator import DEFAULT_PHASE_SCRIPT
+    from services.allocation_simulator import (
+        DEFAULT_PHASE_SCRIPT,
+        STRATEGY_PRESETS,
+        get_preset_phase_script,
+    )
+
+    # ── v18.280：4 風格策略 preset × 4 階段矩陣 ─────────────────
+    st.markdown("#### 🎯 策略 preset（4 風格 × 4 階段）")
+    _preset_keys = list(STRATEGY_PRESETS.keys())
+    _preset_labels = [STRATEGY_PRESETS[k]["label"] for k in _preset_keys]
+    col_preset, col_apply = st.columns([3, 1])
+    with col_preset:
+        _selected_label = st.selectbox(
+            "選擇策略風格",
+            options=_preset_labels,
+            index=0,
+            key="sim_preset_selectbox",
+            help="切換 preset 後按「套用」即覆寫下方 4 階段的 DRIP/CASH/STAY 三桶比例"
+                 "（月數 / 月 NAV 變化率保留）。",
+        )
+        _selected_key = _preset_keys[_preset_labels.index(_selected_label)]
+        st.caption(f"📖 {STRATEGY_PRESETS[_selected_key]['desc']}")
+    with col_apply:
+        st.write("")  # 對齊
+        if st.button("✨ 套用 preset", key="sim_preset_apply",
+                     use_container_width=True):
+            st.session_state["_sim_phase_script_df"] = pd.DataFrame(
+                get_preset_phase_script(_selected_key))
+            st.success(f"✅ 已套用 **{_selected_label}**：4 階段三桶比例已更新")
 
     if "_sim_phase_script_df" not in st.session_state:
         st.session_state["_sim_phase_script_df"] = pd.DataFrame(DEFAULT_PHASE_SCRIPT)
