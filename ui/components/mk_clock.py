@@ -49,6 +49,11 @@ _PHASE_META = {
                   "alloc_eq": 30, "alloc_bd": 70,
                   "color": "#42a5f5",
                   "advice": "債優於股（建議 股 3 : 債 7）｜核心加碼：美國公債 / 投資等級債"},
+    "unknown":   {"zh": "資料不足", "icon": "❓",
+                  "desc": "PMI / CPI 任一面向缺資料，無法定位四象限",
+                  "alloc_eq": 50, "alloc_bd": 50,
+                  "color": "#888888",
+                  "advice": "請至 Tab1 點「載入總經指標」抓取 FRED 最新資料後再回來查看；勿以此狀態作投資依據。"},
 }
 
 
@@ -75,19 +80,35 @@ def classify_phase(indicators: dict) -> tuple[str, dict]:
     -------
     (phase_key, meta_dict)  meta_dict 含 zh / icon / advice / alloc_eq / alloc_bd
     """
-    src = indicators or _MOCK_INDICATORS
-    pmi_v   = (src.get("PMI")      or {}).get("value")
-    pmi_t   = _trend_int((src.get("PMI") or {}).get("trend"))
-    cpi_t   = _trend_int((src.get("CPI") or {}).get("trend"))
-    fed_t   = _trend_int((src.get("FED_RATE") or {}).get("trend"))
+    src = indicators or {}
+    pmi_v = (src.get("PMI")      or {}).get("value")
+    cpi_v = (src.get("CPI")      or {}).get("value")
+    fed_v = (src.get("FED_RATE") or {}).get("value")
+    pmi_t = _trend_int((src.get("PMI")      or {}).get("trend"))
+    cpi_t = _trend_int((src.get("CPI")      or {}).get("trend"))
+    fed_t = _trend_int((src.get("FED_RATE") or {}).get("trend"))
 
-    # PMI 缺失 → 用 mock 值避免崩潰
-    if pmi_v is None:
-        pmi_v = _MOCK_INDICATORS["PMI"]["value"]
+    # 美林時鐘核心兩面向：PMI（經濟）與 CPI（通膨）。任一缺失就無法定位
+    # → 改回 "unknown" 而非默默落入 else 變衰退（這曾是長期誤判的根因）。
+    missing = [k for k, v in (("PMI", pmi_v), ("CPI", cpi_v)) if v is None]
+    if missing:
+        meta = dict(_PHASE_META["unknown"])
+        meta.update(pmi=pmi_v, cpi=cpi_v, fed=fed_v,
+                    pmi_t=pmi_t, cpi_t=cpi_t, fed_t=fed_t,
+                    rate_down=(fed_v is not None and fed_t < 0),
+                    missing=missing)
+        return "unknown", meta
 
-    econ_up   = pmi_v >= 50 or pmi_t > 0
+    # PMI 50 邊界 ±0.5 噪音容忍：49.5~50.5 視為臨界，配合 trend 才判方向
+    if pmi_v >= 50.5:
+        econ_up = True
+    elif pmi_v <= 49.5:
+        econ_up = pmi_t > 0   # 收縮區唯有趨勢上升才視為復甦動能
+    else:
+        econ_up = pmi_t >= 0  # 臨界區 trend 持平/上升 → 視為擴張側
+
     infl_up   = cpi_t > 0
-    rate_down = fed_t < 0
+    rate_down = fed_v is not None and fed_t < 0
 
     if econ_up and not infl_up:
         phase = "recovery"
@@ -99,11 +120,9 @@ def classify_phase(indicators: dict) -> tuple[str, dict]:
         phase = "recession"
 
     meta = dict(_PHASE_META[phase])
-    meta["pmi"]    = pmi_v
-    meta["pmi_t"]  = pmi_t
-    meta["cpi_t"]  = cpi_t
-    meta["fed_t"]  = fed_t
-    meta["rate_down"] = rate_down
+    meta.update(pmi=pmi_v, cpi=cpi_v, fed=fed_v,
+                pmi_t=pmi_t, cpi_t=cpi_t, fed_t=fed_t,
+                rate_down=rate_down, missing=[])
     return phase, meta
 
 
@@ -121,7 +140,8 @@ def _build_clock_figure(phase: str) -> go.Figure:
     ]
 
     fig = go.Figure()
-    # 四象限填色（barpolar）
+    # 四象限填色（barpolar）— unknown 時全部維持淡色，提示「未定位」
+    is_unknown = phase == "unknown"
     for key, theta_center, label in quadrants:
         meta = _PHASE_META[key]
         is_current = (key == phase)
@@ -131,7 +151,7 @@ def _build_clock_figure(phase: str) -> go.Figure:
             width=[90],
             marker=dict(
                 color=meta["color"],
-                opacity=1.0 if is_current else 0.30,
+                opacity=0.20 if is_unknown else (1.0 if is_current else 0.30),
                 line=dict(color="#fff" if is_current else "#444", width=2),
             ),
             name=f"{meta['icon']} {meta['zh']}",
@@ -139,18 +159,19 @@ def _build_clock_figure(phase: str) -> go.Figure:
             showlegend=True,
         ))
 
-    # 中心指針
-    cur_theta = next(t for k, t, _ in quadrants if k == phase)
-    fig.add_trace(go.Scatterpolar(
-        r=[0, 0.85],
-        theta=[0, cur_theta],
-        mode="lines+markers",
-        line=dict(color="#fff", width=4),
-        marker=dict(size=[8, 14], color="#fff", symbol=["circle", "arrow"]),
-        name="當前位置",
-        showlegend=False,
-        hoverinfo="skip",
-    ))
+    # 中心指針（unknown 時不畫，避免誤導使用者）
+    if not is_unknown:
+        cur_theta = next(t for k, t, _ in quadrants if k == phase)
+        fig.add_trace(go.Scatterpolar(
+            r=[0, 0.85],
+            theta=[0, cur_theta],
+            mode="lines+markers",
+            line=dict(color="#fff", width=4),
+            marker=dict(size=[8, 14], color="#fff", symbol=["circle", "arrow"]),
+            name="當前位置",
+            showlegend=False,
+            hoverinfo="skip",
+        ))
 
     fig.update_layout(
         polar=dict(
@@ -195,25 +216,38 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
             unsafe_allow_html=True,
         )
 
-        # 三面向指標摘要
-        pmi_arrow = "↑" if meta["pmi_t"] > 0 else ("↓" if meta["pmi_t"] < 0 else "→")
-        cpi_arrow = "↑" if meta["cpi_t"] > 0 else ("↓" if meta["cpi_t"] < 0 else "→")
-        fed_arrow = "↑" if meta["fed_t"] > 0 else ("↓" if meta["fed_t"] < 0 else "→")
+        # 三面向指標摘要 — 缺資料的欄位顯示「—」並標紅，避免假象
+        def _fmt_cell(label: str, val, t_int: int, unit: str = "", fmt: str = "{:.1f}"):
+            arrow = "↑" if t_int > 0 else ("↓" if t_int < 0 else "→")
+            if val is None:
+                num_html = "<span style='color:#ff7043'>—</span>"
+                tag = "<div style='font-size:10px;color:#ff7043;margin-top:2px'>未抓到</div>"
+            else:
+                num_html = f"{fmt.format(val)}{unit} {arrow}"
+                tag = ""
+            return (
+                f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px;text-align:center'>"
+                f"<div style='font-size:11px;color:#888'>{label}</div>"
+                f"<div style='font-size:18px;font-weight:600;color:#e0e0e0'>{num_html}</div>"
+                f"{tag}</div>"
+            )
+
         st.markdown(
             f"<div style='font-size:12px;color:#888;margin-bottom:6px'>三面向訊號</div>"
             f"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px'>"
-            f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px;text-align:center'>"
-            f"<div style='font-size:11px;color:#888'>基本面 PMI</div>"
-            f"<div style='font-size:18px;font-weight:600;color:#e0e0e0'>{meta['pmi']:.1f} {pmi_arrow}</div></div>"
-            f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px;text-align:center'>"
-            f"<div style='font-size:11px;color:#888'>通膨 CPI</div>"
-            f"<div style='font-size:18px;font-weight:600;color:#e0e0e0'>{cpi_arrow}</div></div>"
-            f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px;text-align:center'>"
-            f"<div style='font-size:11px;color:#888'>資金 利率</div>"
-            f"<div style='font-size:18px;font-weight:600;color:#e0e0e0'>{fed_arrow}</div></div>"
+            f"{_fmt_cell('基本面 PMI', meta.get('pmi'),  meta['pmi_t'], '',  '{:.1f}')}"
+            f"{_fmt_cell('通膨 CPI',   meta.get('cpi'),  meta['cpi_t'], '%', '{:.2f}')}"
+            f"{_fmt_cell('資金 利率',  meta.get('fed'),  meta['fed_t'], '%', '{:.2f}')}"
             f"</div>",
             unsafe_allow_html=True,
         )
+
+        if meta.get("missing"):
+            st.warning(
+                f"⚠️ 缺少 {' / '.join(meta['missing'])} 資料，目前**無法定位四象限**。"
+                "請至 Tab1 點「載入總經指標」抓取 FRED 最新資料後再回此區查看。",
+                icon="⚠️",
+            )
 
         # 配置條
         st.markdown(
