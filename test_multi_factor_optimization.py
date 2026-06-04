@@ -348,5 +348,83 @@ class TestFetchFactorSeries:
         assert s.empty
 
 
+# ════════════════════════════════════════════════════════════════
+# v19.2 hotfix：empty series 必須是 DatetimeIndex 避免 walk-forward TypeError
+# ════════════════════════════════════════════════════════════════
+class TestEmptyFactorSeriesIndexType:
+    """v18.296 引入的 bug：fetch 失敗時回 RangeIndex 空 Series，
+    下游 _slice_series 做 ``RangeIndex >= Timestamp`` 比較直接 TypeError 全爆。"""
+
+    def test_fetch_failure_returns_datetime_indexed_empty(self, monkeypatch):
+        """yahoo / fred / calculated 三條失敗 path 都要回 DatetimeIndex。"""
+        from services import multi_factor_optimization as mfo
+
+        # 模擬 fetch_yf_close 回 None（網路失敗）
+        def _yf_fail(*args, **kwargs):
+            return None
+        monkeypatch.setattr(
+            "repositories.macro_repository.fetch_yf_close", _yf_fail,
+        )
+
+        # yahoo 路徑
+        spec_y = mfo.FactorSpec("X", "X", "yahoo", "BAD", "above")
+        s_y = mfo.fetch_factor_series(spec_y, years=1)
+        assert s_y.empty
+        assert isinstance(s_y.index, pd.DatetimeIndex), \
+            f"yahoo empty 應為 DatetimeIndex，實際 {type(s_y.index).__name__}"
+
+        # calculated 路徑（依賴 yahoo）
+        spec_c = mfo.FactorSpec(
+            "COPPER_GOLD_RATIO", "銅金比", "calculated", "HG=F/GC=F", "below",
+        )
+        s_c = mfo.fetch_factor_series(spec_c, years=1)
+        assert s_c.empty
+        assert isinstance(s_c.index, pd.DatetimeIndex)
+
+    def test_slice_series_skips_non_datetime_indexed(self):
+        """``_slice_series`` 對誤入的 RangeIndex empty Series 必須回 empty DatetimeIndex，
+        不能爆 TypeError。"""
+        from services import multi_factor_optimization as mfo
+
+        # 一好一壞：good 是 DatetimeIndex，bad 是預設 RangeIndex
+        good = pd.Series(
+            [1.0, 2.0, 3.0],
+            index=pd.date_range("2020-01-01", periods=3, freq="D"),
+            name="GOOD",
+        )
+        bad = pd.Series(dtype=float, name="BAD")  # default RangeIndex
+        start = pd.Timestamp("2020-01-01")
+        end = pd.Timestamp("2020-01-05")
+
+        # 修補前這行會 TypeError
+        out = mfo._slice_series({"GOOD": good, "BAD": bad}, start, end)
+        assert len(out["GOOD"]) == 3
+        assert out["BAD"].empty
+        assert isinstance(out["BAD"].index, pd.DatetimeIndex)
+
+    def test_walk_forward_handles_mixed_empty_factors(self):
+        """walk_forward_validate 收到「部分因子抓失敗（空）」應正常跑完不爆。"""
+        from services import multi_factor_optimization as mfo
+
+        good = pd.Series(
+            np.random.RandomState(42).randn(500),
+            index=pd.date_range("2018-01-01", periods=500, freq="D"),
+            name="GOOD",
+        )
+        bad = pd.Series(dtype=float, name="BAD")
+        returns = pd.Series(
+            np.random.RandomState(7).randn(500) * 0.01,
+            index=good.index, name="ret",
+        )
+
+        # 應正常 return（可能 status 不 ok 但不爆 TypeError）
+        result = mfo.walk_forward_validate(
+            {"GOOD": good, "BAD": bad}, returns, [], ["GOOD", "BAD"],
+            train_months=6, test_months=3,
+        )
+        assert "folds" in result
+        assert "n_folds" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
