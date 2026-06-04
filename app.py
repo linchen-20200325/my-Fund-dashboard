@@ -39,7 +39,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v18.296_AdvancedFactorPool13"
+APP_VERSION = "v19.1_RouteC_C2_PanelLoadOverride"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
