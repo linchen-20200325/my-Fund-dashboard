@@ -918,6 +918,9 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
         # ── 📌 Route C-1：提交為待審權重（僅手動觸發）─────────────
         _render_pending_submit_section(cached)
 
+    # ── 🤖 v19.10：AutoSearch 自動搜尋因子組合（獨立 expander）────
+    _render_autosearch_section(events, series_by_key)
+
 
 def _render_ai_recommendation_section(cached: dict | None) -> None:
     """v19.9：在提交前讓 AI 比對 top-5 候選 → 建議提交哪組（含風險旗標）。
@@ -1017,6 +1020,226 @@ def _render_pending_submit_section(cached: dict | None) -> None:
         )
         st.markdown("**🤖 AI 解讀（提交內容預覽）**")
         st.markdown(ai_text)
+
+
+def _render_autosearch_section(events, series_by_key) -> None:
+    """v19.10：AutoSearch 自動搜尋因子組合 — 跨 session 可暫停 / 可續跑。"""
+    from services.auto_search import (
+        auto_search_iter,
+        get_default_store,
+        resume_or_create,
+    )
+    from services.multi_factor_optimization import (
+        FACTOR_POOL_BY_KEY,
+        fetch_factor_series,
+    )
+
+    with st.expander(
+        "🤖 v19.10 AutoSearch — 自動找最佳因子組合（跨 session 可續跑）",
+        expanded=False,
+    ):
+        st.caption(
+            "演算法：univariate 預篩 top-K → greedy forward selection → "
+            "best subset neighborhood swap refinement。"
+            "每次跑滿 N 分鐘自動暫停，狀態持久化到 Google Sheets / local JSON，"
+            "下次打開可從中斷處續跑。"
+        )
+
+        try:
+            store = get_default_store()
+        except Exception as e:
+            st.error(f"❌ Store 初始化失敗：{type(e).__name__}：{e}")
+            return
+
+        backend = getattr(store, "backend_name", "unknown")
+        if backend == "google-sheets":
+            st.success("💾 Backend：Google Sheets（跨 session 持久化 ✅）")
+        else:
+            st.warning(
+                "💾 Backend：local JSON（Streamlit Cloud reboot 後資料會掉）— "
+                "建議設定 v19.7 Google Sheets secrets 啟用跨 session resume。"
+            )
+
+        available = list(FACTOR_POOL_BY_KEY.keys())
+        col_a, col_b, col_c, col_d = st.columns(4)
+        with col_a:
+            top_k = st.slider("預篩 top-K", 4, 15, 10, key="as_top_k")
+        with col_b:
+            max_size = st.slider("最大子集", 2, 6, 5, key="as_max_size")
+        with col_c:
+            time_budget_min = st.slider(
+                "本次跑（分）", 1, 30, 5, key="as_time_budget",
+            )
+        with col_d:
+            st.metric("總 eval 估計", _estimate_total(top_k, max_size))
+
+        st.markdown("---")
+        st.markdown("**📋 既有 jobs**")
+        try:
+            jobs = store.list_jobs()
+        except Exception as e:
+            st.error(f"❌ list_jobs 失敗：{type(e).__name__}：{e}")
+            jobs = []
+
+        if not jobs:
+            st.info("（尚無 job — 按下方「🚀 新搜尋」開始）")
+        else:
+            _render_jobs_table(jobs, store)
+
+        st.markdown("---")
+        col_new, col_clear = st.columns([3, 1])
+        with col_new:
+            new_clicked = st.button(
+                "🚀 新搜尋 / 續跑（同 factor pool 自動續）",
+                type="primary",
+                key="as_run",
+            )
+        with col_clear:
+            if st.button("🗑️ 清除所有 jobs", key="as_clear_all"):
+                _clear_all_jobs(store, jobs)
+                st.rerun()
+
+        if not new_clicked:
+            return
+
+        try:
+            job = resume_or_create(
+                store, available, top_k=top_k, max_size=max_size,
+            )
+        except Exception as e:
+            st.error(f"❌ resume_or_create 失敗：{type(e).__name__}：{e}")
+            return
+
+        if job.status == "paused":
+            job.status = "running"
+            store.save_job(job)
+
+        # 預先確保所有因子 series 都有（lazy-fetch missing）
+        import os as _os
+        _fred = _os.environ.get("FRED_API_KEY", "")
+        all_series = dict(series_by_key) if series_by_key else {}
+        missing = [k for k in available if k not in all_series]
+        if missing:
+            with st.spinner(
+                f"lazy-fetch {len(missing)} 個因子 series（{', '.join(missing[:5])}...）",
+            ):
+                for k in missing:
+                    try:
+                        all_series[k] = fetch_factor_series(
+                            FACTOR_POOL_BY_KEY[k], years=20, fred_api_key=_fred,
+                        )
+                    except Exception:
+                        continue
+
+        returns = _load_spx_returns()
+        progress = st.progress(
+            min(job.done / max(job.total, 1), 1.0),
+            text=f"進度 {job.done}/{job.total}",
+        )
+        live_msg = st.empty()
+        winners_placeholder = st.empty()
+        _render_live_winners(store.list_results(job.run_id), winners_placeholder)
+
+        try:
+            gen = auto_search_iter(
+                job, store, all_series, returns, events,
+                time_budget_sec=time_budget_min * 60.0,
+            )
+            done_this_run = 0
+            for r in gen:
+                done_this_run += 1
+                progress.progress(
+                    min(job.done / max(job.total, 1), 1.0),
+                    text=f"進度 {job.done}/{job.total}（本次 +{done_this_run}）",
+                )
+                live_msg.info(
+                    f"剛跑完 [{r.phase}] **{', '.join(r.subset)}**："
+                    f"OOS F1=`{r.oos_f1:.3f}` plateau=`{r.plateau_score:.3f}` "
+                    f"n_cross=`{r.n_crossings}` composite=`{r.composite:.4f}` "
+                    f"({r.elapsed_sec:.1f}s)"
+                )
+                if done_this_run % 5 == 0:
+                    _render_live_winners(
+                        store.list_results(job.run_id), winners_placeholder,
+                    )
+        except Exception as e:
+            st.error(f"❌ Worker 例外：{type(e).__name__}：{e}")
+            return
+
+        reloaded = store.load_job(job.run_id) or job
+        if reloaded.status == "done":
+            st.success(f"✅ 全部跑完（{reloaded.done}/{reloaded.total}）— 看下方 winners")
+        elif reloaded.status == "paused":
+            st.info(
+                f"⏸ 時間到自動暫停（{reloaded.done}/{reloaded.total}）— "
+                "再按一次「🚀 新搜尋 / 續跑」繼續"
+            )
+        _render_live_winners(store.list_results(job.run_id), winners_placeholder)
+
+
+def _estimate_total(top_k: int, max_size: int) -> int:
+    from services.auto_search import estimate_total_evals
+    return estimate_total_evals(top_k, max_size)
+
+
+def _render_jobs_table(jobs: list, store) -> None:
+    rows = []
+    for j in jobs[:10]:
+        rows.append({
+            "run_id": j.run_id,
+            "factors": f"{len(j.factor_pool)} 個（hash={j.factor_pool_hash}）",
+            "top_K": j.top_k,
+            "max_size": j.max_size,
+            "進度": f"{j.done}/{j.total}",
+            "status": j.status,
+            "更新": j.last_update,
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def _render_live_winners(results: list, placeholder) -> None:
+    from services.auto_search import top_n_winners
+    if not results:
+        placeholder.empty()
+        return
+    winners = top_n_winners(results, n=10, by="composite")
+    rows = []
+    for i, w in enumerate(winners):
+        rows.append({
+            "排名": i + 1,
+            "phase": w.phase,
+            "subset": " + ".join(w.subset),
+            "OOS F1": f"{w.oos_f1:.3f}",
+            "OOS Sharpe": f"{w.oos_sharpe:.3f}",
+            "plateau": f"{w.plateau_score:.3f}",
+            "n_cross": w.n_crossings,
+            "composite": f"{w.composite:.4f}",
+        })
+    with placeholder.container():
+        st.markdown("**🏆 Top-10 winners（按 composite 排序）**")
+        st.dataframe(
+            pd.DataFrame(rows), use_container_width=True, hide_index=True,
+        )
+        # 「採用 top 1」按鈕 — 寫回 multiselect 的 session_state
+        if winners:
+            top = winners[0]
+            if st.button(
+                f"✅ 採用 Top 1：{' + '.join(top.subset)} 為當前因子選擇",
+                key=f"as_apply_{top.run_id}",
+            ):
+                st.session_state["multifactor_keys"] = list(top.subset)
+                st.success(
+                    f"已寫入 `multifactor_keys`：{top.subset}。"
+                    "請捲到上方手動跑「🚀 跑多因子高原 + walk-forward」。"
+                )
+
+
+def _clear_all_jobs(store, jobs: list) -> None:
+    for j in jobs:
+        try:
+            store.delete_job(j.run_id)
+        except Exception:
+            continue
 
 
 def _load_spx_returns() -> pd.Series:
