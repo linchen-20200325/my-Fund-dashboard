@@ -737,9 +737,10 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
         col_pick, col_metric = st.columns([2, 1])
         with col_pick:
             sel_keys = st.multiselect(
-                "選擇因子（建議 2–4 個避免 simplex 爆炸）",
+                "選擇因子（最多 6 個 — simplex 點數隨 n 指數成長）",
                 options=available_keys,
                 default=available_keys[:min(3, len(available_keys))],
+                max_selections=6,
                 key="multifactor_keys",
             )
         with col_metric:

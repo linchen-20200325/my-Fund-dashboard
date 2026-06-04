@@ -88,7 +88,7 @@ def explain_pending_weights(
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         prompt = _build_prompt(weights, oos_metrics, horizon_months, drawdown_threshold)
         resp = model.generate_content(prompt)
         text = (getattr(resp, "text", "") or "").strip()
