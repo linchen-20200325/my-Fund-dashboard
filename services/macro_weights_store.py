@@ -1,10 +1,13 @@
-"""services/macro_weights_store.py — Route C-1：總經權重 JSON 儲存層
+"""services/macro_weights_store.py — Route C-1/C-2：總經權重 JSON 儲存層 + 注入器
 
 雙檔設計：
 - ``config/macro_weights_active.json`` — 面板實際載入的權重（C-2 接管後生效）
 - ``config/macro_weights_pending.json`` — 回測室「提交為待審權重」寫入，user 在面板批准才升格 active
 
-C-1 範圍：純 I/O + schema 驗證，不動既有面板邏輯（fallback 至 macro_service.py 硬編碼）。
+C-1：純 I/O + schema 驗證。
+C-2：3 個 override helper（apply_weight_overrides / get_verdict_cutoffs / get_phase_thresholds）
+     讓面板下游函式從 active.json 注入 weight、verdict 五級分界、phase 三段門檻；
+     active.json 為空 / corrupt / 欄位 null → 全部回退至呼叫端原本硬編碼，**零回歸**。
 
 公開 API：
 - load_active() -> dict
@@ -14,6 +17,9 @@ C-1 範圍：純 I/O + schema 驗證，不動既有面板邏輯（fallback 至 m
 - reject_pending() -> bool
 - has_pending() -> bool
 - build_payload_from_multifactor(opt, wf, sel_keys, metric, ai_explanation) -> dict
+- apply_weight_overrides(ind) -> dict                                              (C-2)
+- get_verdict_cutoffs(fallback=...) -> tuple[float, float, float, float]           (C-2)
+- get_phase_thresholds(fallback=...) -> tuple[float, float, float]                 (C-2)
 """
 from __future__ import annotations
 
@@ -187,6 +193,108 @@ def build_payload_from_multifactor(
     }
 
 
+# ════════════════════════════════════════════════════════════════
+# C-2：面板下游 override 注入器
+# ════════════════════════════════════════════════════════════════
+_DEFAULT_VERDICT_CUTOFFS: tuple[float, float, float, float] = (10.0, 5.0, -5.0, -10.0)
+_DEFAULT_PHASE_THRESHOLDS: tuple[float, float, float] = (8.0, 5.0, 3.0)
+
+
+def apply_weight_overrides(ind: dict | None) -> dict:
+    """套用 active.json 對 indicator dict 的 weight override。
+
+    - ``ind`` 為 {key: {"score": ..., "weight": ..., ...}, ...}
+    - active.json.indicators[key].weight 存在 → 覆蓋；否則保留原值
+    - active 為空 / corrupt / indicators={} → 回傳原 ind（no-op）
+    - 不深拷貝 pandas Series（每個 indicator dict 只 shallow-copy 包一層）
+
+    Returns:
+        新 dict（不 mutate 輸入）；若無 override 則直接 return ind 同物件
+    """
+    if not isinstance(ind, dict) or not ind:
+        return ind if isinstance(ind, dict) else {}
+    active = load_active()
+    overrides = active.get("indicators") or {}
+    if not overrides:
+        return ind
+    out: dict = {}
+    for key, val in ind.items():
+        if not isinstance(val, dict):
+            out[key] = val
+            continue
+        ov = overrides.get(key)
+        if not isinstance(ov, dict) or "weight" not in ov:
+            out[key] = val
+            continue
+        try:
+            new_w = float(ov["weight"])
+        except (TypeError, ValueError):
+            out[key] = val
+            continue
+        new_val = dict(val)
+        new_val["weight"] = new_w
+        out[key] = new_val
+    return out
+
+
+def get_weight_override(key: str, fallback: float) -> float:
+    """單一 key 的 weight override 查詢（給 macro_score_calibration.compute_score_row 用）.
+
+    Returns:
+        active.json.indicators[key].weight（若存在且為 float）；否則 fallback。
+    """
+    active = load_active()
+    overrides = active.get("indicators") or {}
+    ov = overrides.get(key)
+    if not isinstance(ov, dict) or "weight" not in ov:
+        return fallback
+    try:
+        return float(ov["weight"])
+    except (TypeError, ValueError):
+        return fallback
+
+
+def get_verdict_cutoffs(
+    fallback: tuple[float, float, float, float] = _DEFAULT_VERDICT_CUTOFFS,
+) -> tuple[float, float, float, float]:
+    """讀 active.json.verdict_cutoffs（5 級分界 [極樂, 樂, 悲, 極悲]，降序）.
+
+    格式：[c1, c2, c3, c4]，要求 c1 > c2 > c3 > c4，否則回 fallback。
+    JSON null / 缺欄 / 格式錯 → fallback。
+    """
+    active = load_active()
+    raw = active.get("verdict_cutoffs")
+    if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+        return fallback
+    try:
+        cuts = tuple(float(x) for x in raw)
+    except (TypeError, ValueError):
+        return fallback
+    if not (cuts[0] > cuts[1] > cuts[2] > cuts[3]):
+        return fallback
+    return cuts  # type: ignore[return-value]
+
+
+def get_phase_thresholds(
+    fallback: tuple[float, float, float] = _DEFAULT_PHASE_THRESHOLDS,
+) -> tuple[float, float, float]:
+    """讀 active.json.phase_thresholds（[peak, expansion, recovery] 降序）.
+
+    格式：[p, e, r]，要求 p > e > r，否則回 fallback。
+    """
+    active = load_active()
+    raw = active.get("phase_thresholds")
+    if not isinstance(raw, (list, tuple)) or len(raw) != 3:
+        return fallback
+    try:
+        thr = tuple(float(x) for x in raw)
+    except (TypeError, ValueError):
+        return fallback
+    if not (thr[0] > thr[1] > thr[2]):
+        return fallback
+    return thr  # type: ignore[return-value]
+
+
 __all__ = [
     "load_active",
     "load_pending",
@@ -195,4 +303,8 @@ __all__ = [
     "approve_pending",
     "reject_pending",
     "build_payload_from_multifactor",
+    "apply_weight_overrides",
+    "get_weight_override",
+    "get_verdict_cutoffs",
+    "get_phase_thresholds",
 ]

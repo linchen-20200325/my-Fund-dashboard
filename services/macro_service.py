@@ -2346,9 +2346,17 @@ def compute_cluster_signals(indicators: dict) -> list[dict]:
       -0.3 ~ +0.3 → 🟡 警戒
       ≤ -0.3 → 🔴 危險
 
+    v19.1 (C-2)：入口呼叫 ``apply_weight_overrides`` — active.json 有 weight 就蓋；
+    active 空時行為跟 v18.291 完全一致。
+
     Returns:
         list of {name, icon, score_norm, signal, color, top_contributor, members}
     """
+    try:
+        from services.macro_weights_store import apply_weight_overrides
+        indicators = apply_weight_overrides(indicators or {})
+    except ImportError:
+        indicators = indicators or {}
     out = []
     for cluster in INDEPENDENT_CLUSTERS:
         sum_w = 0.0

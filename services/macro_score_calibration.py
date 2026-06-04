@@ -83,9 +83,21 @@ def compute_score_row(row: dict | pd.Series, prev: dict | None = None) -> float:
         當月 14 factor value（key 對齊 FACTORS）
     prev : dict / None
         上月 row（FEDRATE 需上月才能判斷「降息」）；None 則 FEDRATE 得 0
+
+    v19.1 (C-2)：每個 factor 的 weight 改走 ``get_weight_override(name, w)``；
+    active.json 有就蓋、沒有就用 FACTORS 表硬編碼；total_weight 用即時 sum 重算。
     """
+    try:
+        from services.macro_weights_store import get_weight_override
+    except ImportError:
+        get_weight_override = None  # type: ignore[assignment]
+
     earned = 0.0
-    for name, w, scorer, takes_prev in FACTORS:
+    total_w = 0.0
+    for name, w_default, scorer, takes_prev in FACTORS:
+        w = (get_weight_override(name, float(w_default))
+             if get_weight_override else float(w_default))
+        total_w += w
         v = row.get(name) if hasattr(row, "get") else (
             row[name] if name in row.index else None)
         if v is None or (isinstance(v, float) and np.isnan(v)):
@@ -98,12 +110,14 @@ def compute_score_row(row: dict | pd.Series, prev: dict | None = None) -> float:
                 s = scorer(float(v), float(p))
             else:
                 s = scorer(float(v))
-            # clamp to ±w
+            # clamp to ±w（依當前生效權重，不是 FACTORS 表 default）
             s = max(-w, min(w, s))
             earned += s
         except (ValueError, TypeError):
             continue
-    norm = (earned + TOTAL_WEIGHT) / (2 * TOTAL_WEIGHT) * 10
+    if total_w <= 0:
+        return 0.0
+    norm = (earned + total_w) / (2 * total_w) * 10
     return float(max(0.0, min(10.0, norm)))
 
 
@@ -126,11 +140,32 @@ def compute_historical_score(df: pd.DataFrame) -> pd.Series:
 PHASE_THRESHOLDS_DEFAULT = (8.0, 5.0, 3.0)  # peak / expansion / recovery 下界
 
 
+def _resolve_phase_thresholds(
+    thresholds: tuple[float, float, float] | None,
+) -> tuple[float, float, float]:
+    """C-2：thresholds=None 時走 active.json，否則照舊用 caller 傳入值。
+
+    Active.json 缺欄 / null / corrupt → 回退 ``PHASE_THRESHOLDS_DEFAULT``，
+    讓既有 caller 不傳 thresholds 也能拿到跟 v18.x 一樣的 (8, 5, 3)。
+    """
+    if thresholds is not None:
+        return thresholds
+    try:
+        from services.macro_weights_store import get_phase_thresholds
+        return get_phase_thresholds(PHASE_THRESHOLDS_DEFAULT)
+    except ImportError:
+        return PHASE_THRESHOLDS_DEFAULT
+
+
 def classify_phase(score: float,
-                   thresholds: tuple[float, float, float] = PHASE_THRESHOLDS_DEFAULT
+                   thresholds: tuple[float, float, float] | None = None,
                    ) -> str:
-    """0~10 → Peak / Expansion / Recovery / Recession。"""
-    p, e, r = thresholds
+    """0~10 → Peak / Expansion / Recovery / Recession。
+
+    v19.1 (C-2)：``thresholds=None`` 時自動從 active.json 載入；
+    傳入 tuple 則維持原行為（測試用 / overlay 用）。
+    """
+    p, e, r = _resolve_phase_thresholds(thresholds)
     if score >= p:
         return "Peak"
     if score >= e:
@@ -157,7 +192,7 @@ def forward_return(spx: pd.Series, horizon_months: int = 12) -> pd.Series:
 def phase_accuracy(score: pd.Series,
                    spx: pd.Series,
                    horizon_months: int = 12,
-                   thresholds: tuple[float, float, float] = PHASE_THRESHOLDS_DEFAULT
+                   thresholds: tuple[float, float, float] | None = None
                    ) -> pd.DataFrame:
     """每位階：n 個樣本、hit 個命中、命中率、平均/中位數後 horizon 月 SPX 報酬。"""
     fwd = forward_return(spx, horizon_months)
@@ -184,7 +219,7 @@ def phase_accuracy(score: pd.Series,
 def overall_accuracy(score: pd.Series,
                      spx: pd.Series,
                      horizon_months: int = 12,
-                     thresholds: tuple[float, float, float] = PHASE_THRESHOLDS_DEFAULT
+                     thresholds: tuple[float, float, float] | None = None
                      ) -> float:
     """加權平均命中率（按樣本數）。"""
     df = phase_accuracy(score, spx, horizon_months, thresholds)
