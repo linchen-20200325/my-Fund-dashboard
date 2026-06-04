@@ -385,3 +385,75 @@ class TestEvaluateEdgeMode:
             [event], {"VIX": series}, specs=[_spec_above(25.0)], mode="state")
         assert out_edge["VIX"][0].lead_time_days is None
         assert out_state["VIX"][0].lead_time_days is not None
+
+
+# ══════════════════════════════════════════════════════════════
+# v18.282：訊號精確率（forward-looking）測試
+# ══════════════════════════════════════════════════════════════
+from services.macro_signal_lookback import compute_signal_precision  # noqa: E402
+
+
+class TestComputeSignalPrecision:
+    def test_empty_series_returns_zero(self):
+        stat = compute_signal_precision(
+            pd.Series([], dtype=float),
+            [_event("2020-01-01", "2020-02-01")], _spec_above(25.0))
+        assert stat["n_crossings"] == 0
+        assert stat["precision_pct"] is None
+
+    def test_all_true_positives(self):
+        """每個 crossing 後 30 天就有 event 命中 → 100% precision。"""
+        idx = pd.date_range("2020-01-01", "2023-12-31", freq="MS")
+        values = [30.0 if i % 6 == 5 else 10.0 for i in range(len(idx))]
+        series = pd.Series(values, index=idx, name="VIX")
+        crossing_dates = [idx[i] for i in range(len(idx)) if i % 6 == 5]
+        events = [_event(str((d + pd.Timedelta(days=30)).date()),
+                         str((d + pd.Timedelta(days=60)).date()))
+                  for d in crossing_dates]
+        stat = compute_signal_precision(series, events, _spec_above(25.0),
+                                          max_forward_days=365)
+        assert stat["n_crossings"] == len(crossing_dates)
+        assert stat["n_true_positives"] == stat["n_crossings"]
+        assert stat["precision_pct"] == 100.0
+        assert stat["false_alert_rate_pct"] == 0.0
+
+    def test_all_false_positives(self):
+        """crossings 後 365 天內無 event → 全 FP。"""
+        idx = pd.date_range("2020-01-01", "2023-12-31", freq="MS")
+        values = [10.0] * 12 + [30.0] * (len(idx) - 12)
+        series = pd.Series(values, index=idx, name="VIX")
+        # event 在 series 起點之前 → 任何 crossing 後找不到 future event
+        events = [_event("2015-06-01", "2015-07-01")]
+        stat = compute_signal_precision(series, events, _spec_above(25.0),
+                                          max_forward_days=365)
+        assert stat["n_crossings"] == 1
+        assert stat["n_true_positives"] == 0
+        assert stat["n_false_positives"] == 1
+        assert stat["precision_pct"] == 0.0
+        assert stat["false_alert_rate_pct"] == 100.0
+
+    def test_mixed_tp_fp(self):
+        """2 crossings：第 1 個有 event 命中，第 2 個沒。"""
+        idx = pd.date_range("2020-01-01", periods=400, freq="D")
+        values = [10.0] * 50 + [30.0] * 100 + [10.0] * 100 + [30.0] * 150
+        series = pd.Series(values, index=idx, name="VIX")
+        events = [_event(str(idx[100].date()), str(idx[110].date()))]
+        stat = compute_signal_precision(series, events, _spec_above(25.0),
+                                          max_forward_days=365)
+        assert stat["n_crossings"] == 2
+        assert stat["n_true_positives"] == 1
+        assert stat["n_false_positives"] == 1
+        assert stat["precision_pct"] == 50.0
+
+    def test_window_boundary_inclusive(self):
+        """event 剛好在 crossing + max_forward_days 邊界 → 算 TP."""
+        idx = pd.date_range("2020-01-01", periods=400, freq="D")
+        values = [10.0] * 50 + [30.0] * 350
+        series = pd.Series(values, index=idx, name="VIX")
+        peak = idx[50] + pd.Timedelta(days=365)
+        events = [_event(str(peak.date()),
+                         str((peak + pd.Timedelta(days=30)).date()))]
+        stat = compute_signal_precision(series, events, _spec_above(25.0),
+                                          max_forward_days=365)
+        assert stat["n_true_positives"] == 1
+        assert stat["precision_pct"] == 100.0
