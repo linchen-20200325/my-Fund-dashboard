@@ -562,7 +562,7 @@ def _render_phase3_auto_calibration_fund(events, specs, series_by_key) -> None:
             "OOS 驗證 × 折間票選 × drift > 30% 自動回退預設。**採用建議僅本 "
             "session 生效**，cloud reboot 後回原值。"
         )
-        col_pick, col_grid = st.columns([2, 1])
+        col_pick, col_grid, col_drift = st.columns([2, 1, 1])
         with col_pick:
             spec_by_label = {s.label: s for s in specs}
             sel_label = st.selectbox(
@@ -574,6 +574,13 @@ def _render_phase3_auto_calibration_fund(events, specs, series_by_key) -> None:
                 "grid 步數", min_value=5, max_value=21, value=11, step=2,
                 key="crisis_calib_n_steps",
                 help="grid 範圍 = 預設 threshold ±50%；步數越多越細。",
+            )
+        with col_drift:
+            drift_pct = st.slider(
+                "過擬合 drift 門檻 %", min_value=10, max_value=50, value=30,
+                step=5, key="crisis_calib_drift_pct",
+                help="walk-forward 折間 drift > 此 % 算 overfit；過半折超過即守門啟動回退預設。"
+                     "越嚴格（值越小）越保守，越易回退。",
             )
 
         if not st.button("🚀 跑 walk-forward 回測", type="primary",
@@ -594,6 +601,7 @@ def _render_phase3_auto_calibration_fund(events, specs, series_by_key) -> None:
                 result = optimize_signal_threshold(
                     series, events, sel_spec, grid=grid,
                     n_folds=4, max_forward_days=365,
+                    drift_threshold_pct=float(drift_pct),
                 )
             st.session_state["_phase3_calib_result"] = {
                 "spec_key": sel_spec.key, "spec_label": sel_label,
