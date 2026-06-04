@@ -9,6 +9,7 @@
 - **入口**：`app.py`（Streamlit Cloud 部署）
 
 ## 當前版本
+- **v18.281_Phase3EdgeDetection**：Phase 3 訊號回看引擎 port stock v18.160 v2 edge detection（從非警戒「跨越到」警戒的轉折日），修「常態性已警戒 = 假預警」誤判；UI 加「v2 轉折偵測」標示
 - **v18.280_StrategyPresets**：配置模擬器加 4 風格 × 4 階段 preset 矩陣（積極成長 / 穩健平衡 / 收益優先 / 防禦保本），UI 一鍵套用 4 階段 DRIP/CASH/STAY 比例
 - **v18.279_MacroScoreCalibration**：VIX 閾值 OOS 自動校正（5 重 anti-overfit gate：walk-forward / 正則項 / 票選 / bootstrap CI / 末段 36 月 holdout）
 - **同期合入**：v18.279p_Phase5StackOrder — Phase 5 AI 區塊壓底，render 順序固定為 Phase 4 → Phase E → Phase 5

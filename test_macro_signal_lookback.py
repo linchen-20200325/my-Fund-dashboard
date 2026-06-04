@@ -290,3 +290,98 @@ class TestFetchSignalSeries:
         assert len(out) == 2
         assert out.name == "T10Y2Y"
         assert out.iloc[1] == -0.1
+
+
+# ══════════════════════════════════════════════════════════════
+# v18.281：edge mode (v2) 拐點偵測測試（鏡像 stock v18.160）
+# ══════════════════════════════════════════════════════════════
+
+class TestEvaluateEdgeMode:
+    """v18.281 v2 edge detection 拐點偵測測試。"""
+
+    def test_default_mode_is_edge(self):
+        """預設 mode='edge'，與顯式指定 edge 結果一致。"""
+        peak = pd.Timestamp("2024-06-01")
+        event = _event(peak=str(peak.date()), trough="2024-07-01")
+        # 在 window 內單一 transition：前 100 天 VIX=10，第 100 天起跳到 30
+        idx = pd.date_range("2024-01-01", "2024-06-01", freq="D")
+        values = [10.0] * 100 + [30.0] * (len(idx) - 100)
+        series = pd.Series(values, index=idx, name="VIX")
+        spec = _spec_above(25.0)
+        default = evaluate_signal_at_event(event, series, spec)
+        explicit = evaluate_signal_at_event(event, series, spec, mode="edge")
+        assert default.lead_time_days == explicit.lead_time_days
+        assert default.first_warning_date == explicit.first_warning_date
+
+    def test_edge_detects_real_crossing(self):
+        """v2 edge：series 從 10 → 30 的 transition 應被偵測為轉折日。"""
+        peak = pd.Timestamp("2024-06-01")
+        event = _event(peak=str(peak.date()), trough="2024-07-01")
+        idx = pd.date_range("2024-01-01", "2024-06-01", freq="D")
+        values = [10.0] * 100 + [30.0] * (len(idx) - 100)
+        series = pd.Series(values, index=idx, name="VIX")
+        lb = evaluate_signal_at_event(event, series, _spec_above(25.0), mode="edge")
+        assert lb.lead_time_days is not None
+        assert lb.first_warning_date == idx[100]
+
+    def test_edge_ignores_persistent_warning_from_start(self):
+        """v2 edge：全程在警戒（VIX 一直 ≥ 25）不算 crossing → 不命中。"""
+        peak = pd.Timestamp("2024-06-01")
+        event = _event(peak=str(peak.date()), trough="2024-07-01")
+        idx = pd.date_range("2024-01-01", "2024-06-01", freq="D")
+        series = pd.Series([30.0] * len(idx), index=idx, name="VIX")
+        lb = evaluate_signal_at_event(event, series, _spec_above(25.0), mode="edge")
+        assert lb.first_warning_date is None
+        assert lb.lead_time_days is None
+
+    def test_state_mode_legacy_v1_still_works(self):
+        """v1 state mode：全程警戒會命中第一筆（驗證 v1 仍可用）。"""
+        peak = pd.Timestamp("2024-06-01")
+        event = _event(peak=str(peak.date()), trough="2024-07-01")
+        idx = pd.date_range("2024-01-01", "2024-06-01", freq="D")
+        series = pd.Series([30.0] * len(idx), index=idx, name="VIX")
+        lb = evaluate_signal_at_event(event, series, _spec_above(25.0), mode="state")
+        # v1 會把第一筆當「警戒命中」→ 有 lead_time
+        assert lb.first_warning_date is not None
+        assert lb.lead_time_days is not None
+
+    def test_edge_vs_state_diverge_on_persistent_signal(self):
+        """同 series 全程警戒：v2 None vs v1 有命中 → 證明 v2 修掉假預警。"""
+        peak = pd.Timestamp("2024-06-01")
+        event = _event(peak=str(peak.date()), trough="2024-07-01")
+        idx = pd.date_range("2024-01-01", "2024-06-01", freq="D")
+        series = pd.Series([30.0] * len(idx), index=idx, name="VIX")
+        v2 = evaluate_signal_at_event(event, series, _spec_above(25.0), mode="edge")
+        v1 = evaluate_signal_at_event(event, series, _spec_above(25.0), mode="state")
+        assert v2.lead_time_days is None
+        assert v1.lead_time_days is not None
+
+    def test_edge_with_oscillation_picks_first_crossing(self):
+        """series 在警戒邊界震盪：v2 應取第一次 transition 而非最後一次。"""
+        peak = pd.Timestamp("2024-06-01")
+        event = _event(peak=str(peak.date()), trough="2024-07-01")
+        idx = pd.date_range("2024-01-01", "2024-06-01", freq="D")
+        # 0-49 天 VIX=10，50-99 天 VIX=30（第一個 crossing），100-149 天 VIX=10
+        # 150 天起又跳 30（第二個 crossing），到 peak
+        values = ([10.0] * 50 + [30.0] * 50 + [10.0] * 50
+                  + [30.0] * (len(idx) - 150))
+        series = pd.Series(values, index=idx, name="VIX")
+        lb = evaluate_signal_at_event(event, series, _spec_above(25.0),
+                                       mode="edge", max_lookback_days=365)
+        assert lb.first_warning_date == idx[50], \
+            f"應取第一次 crossing (idx[50])，得 {lb.first_warning_date}"
+
+    def test_lookback_all_signals_propagates_mode(self):
+        """lookback_all_signals 應正確透傳 mode 給 evaluate。"""
+        peak = pd.Timestamp("2024-06-01")
+        event = _event(peak=str(peak.date()), trough="2024-07-01")
+        idx = pd.date_range("2024-01-01", "2024-06-01", freq="D")
+        series = pd.Series([30.0] * len(idx), index=idx, name="VIX")
+        # 用 edge mode：全程警戒不應命中
+        out_edge = lookback_all_signals(
+            [event], {"VIX": series}, specs=[_spec_above(25.0)], mode="edge")
+        # 用 state mode：全程警戒會命中
+        out_state = lookback_all_signals(
+            [event], {"VIX": series}, specs=[_spec_above(25.0)], mode="state")
+        assert out_edge["VIX"][0].lead_time_days is None
+        assert out_state["VIX"][0].lead_time_days is not None
