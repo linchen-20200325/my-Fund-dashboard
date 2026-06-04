@@ -262,7 +262,8 @@ class TestPlotlyFigures:
 
 class TestFactorPool:
     def test_pool_size(self):
-        assert len(FACTOR_POOL) == 10
+        # v18.286: 10 → 13（+ MOVE / NFCI / COPPER_GOLD_RATIO）
+        assert len(FACTOR_POOL) == 13
 
     def test_keys_unique(self):
         keys = [f.key for f in FACTOR_POOL]
@@ -270,6 +271,81 @@ class TestFactorPool:
 
     def test_lookup_by_key(self):
         assert FACTOR_POOL_BY_KEY["VIX"].source == "yahoo"
+
+    def test_v18_286_new_factors_present(self):
+        assert "MOVE" in FACTOR_POOL_BY_KEY
+        assert "NFCI" in FACTOR_POOL_BY_KEY
+        assert "COPPER_GOLD_RATIO" in FACTOR_POOL_BY_KEY
+
+    def test_v18_286_factor_metadata(self):
+        move = FACTOR_POOL_BY_KEY["MOVE"]
+        assert move.source == "yahoo" and move.series_id == "^MOVE" and move.direction == "above"
+        nfci = FACTOR_POOL_BY_KEY["NFCI"]
+        assert nfci.source == "fred" and nfci.series_id == "NFCI" and nfci.direction == "above"
+        cg = FACTOR_POOL_BY_KEY["COPPER_GOLD_RATIO"]
+        assert cg.source == "calculated" and cg.direction == "below"
+
+
+class TestFetchFactorSeries:
+    """v18.286 lazy fetch helper — 3 source types。"""
+
+    def test_yahoo_source_calls_fetch_yf_close(self, monkeypatch):
+        from services import multi_factor_optimization as mfo
+        called = {}
+
+        def _fake(ticker, range_="2y", interval="1d"):
+            called["ticker"] = ticker
+            return pd.Series([10.0, 11.0, 12.0],
+                             index=pd.date_range("2024-01-01", periods=3))
+
+        monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _fake)
+        s = mfo.fetch_factor_series(mfo.FACTOR_POOL_BY_KEY["MOVE"], years=5)
+        assert called["ticker"] == "^MOVE"
+        assert len(s) == 3
+        assert s.name == "MOVE"
+
+    def test_fred_source_calls_fetch_fred(self, monkeypatch):
+        from services import multi_factor_optimization as mfo
+        called = {}
+
+        def _fake(sid, key, n=250):
+            called["sid"] = sid
+            return pd.DataFrame({
+                "date": pd.date_range("2024-01-01", periods=3),
+                "value": [0.1, 0.2, 0.3],
+            })
+
+        monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fake)
+        s = mfo.fetch_factor_series(mfo.FACTOR_POOL_BY_KEY["NFCI"],
+                                    years=3, fred_api_key="dummy")
+        assert called["sid"] == "NFCI"
+        assert len(s) == 3
+
+    def test_calculated_copper_gold(self, monkeypatch):
+        from services import multi_factor_optimization as mfo
+        seen = []
+
+        def _fake_yf(ticker, range_="2y", interval="1d"):
+            seen.append(ticker)
+            base = 4.0 if ticker == "HG=F" else 2000.0
+            return pd.Series([base, base + 0.1, base + 0.2],
+                             index=pd.date_range("2024-01-01", periods=3))
+
+        monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _fake_yf)
+        s = mfo.fetch_factor_series(mfo.FACTOR_POOL_BY_KEY["COPPER_GOLD_RATIO"],
+                                    years=5)
+        assert set(seen) == {"HG=F", "GC=F"}
+        assert len(s) == 3
+        assert s.iloc[0] == pytest.approx(4.0 / 2000.0)
+
+    def test_empty_on_fetcher_failure(self, monkeypatch):
+        from services import multi_factor_optimization as mfo
+        monkeypatch.setattr(
+            "repositories.macro_repository.fetch_yf_close",
+            lambda *a, **k: pd.Series(dtype=float),
+        )
+        s = mfo.fetch_factor_series(mfo.FACTOR_POOL_BY_KEY["MOVE"], years=1)
+        assert s.empty
 
 
 if __name__ == "__main__":

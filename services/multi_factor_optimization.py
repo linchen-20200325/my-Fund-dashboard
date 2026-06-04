@@ -29,7 +29,7 @@ class FactorSpec:
     """單一因子規格 — 用於 multi-factor weighted composite score."""
     key: str
     label: str
-    source: Literal["yahoo", "fred"]
+    source: Literal["yahoo", "fred", "calculated"]
     series_id: str
     direction: Direction         # above: 高於 mean 為風險 / below: 低於 mean 為風險
     normalize: NormalizeMethod = "zscore"
@@ -54,6 +54,13 @@ FACTOR_POOL: list[FactorSpec] = [
                note="強美元 = 風險資產壓力"),
     FactorSpec("T10Y3M", "10Y-3M 殖利率利差", "fred", "T10Y3M", "below",
                note="負值 = 短端倒掛"),
+    # v18.286 進階補強因子（債市流動性 + 高頻景氣 + 金融環境）
+    FactorSpec("MOVE", "MOVE 公債波動率", "yahoo", "^MOVE", "above",
+               note="債市 VIX；高 MOVE = 利率波動 = 流動性枯竭"),
+    FactorSpec("NFCI", "NFCI 全國金融狀況", "fred", "NFCI", "above",
+               note="芝加哥聯儲 105 項金融指標；>0 = 金融環境緊縮"),
+    FactorSpec("COPPER_GOLD_RATIO", "銅金比", "calculated", "HG=F/GC=F", "below",
+               note="銅/金期貨；下彎 = 景氣轉弱領先指標"),
 ]
 
 FACTOR_POOL_BY_KEY = {f.key: f for f in FACTOR_POOL}
@@ -65,6 +72,56 @@ DEFAULT_LAMBDA_STD = 0.5
 DEFAULT_PLATEAU_RADIUS = 1
 DEFAULT_THRESHOLD = 1.0
 DEFAULT_GRID_STEP = 0.2
+
+
+def fetch_factor_series(
+    spec: FactorSpec,
+    years: int = 20,
+    fred_api_key: str = "",
+) -> pd.Series:
+    """Lazy-fetch 任一 FACTOR_POOL 因子的歷史序列。
+
+    source:
+      - yahoo:      fetch_yf_close(series_id, range_=f"{years}y")
+      - fred:       fetch_fred(series_id, api_key, n=years*365)
+      - calculated: 目前僅支援 COPPER_GOLD_RATIO（HG=F / GC=F）
+
+    失敗一律回空 Series（不拋例外，由呼叫端決定 fallback）。
+    """
+    try:
+        if spec.source == "yahoo":
+            from repositories.macro_repository import fetch_yf_close
+            s = fetch_yf_close(spec.series_id, range_=f"{int(years)}y", interval="1d")
+            if s is None or s.empty:
+                return pd.Series(dtype=float, name=spec.key)
+            s = s.dropna()
+            s.name = spec.key
+            return s
+        if spec.source == "fred":
+            from repositories.macro_repository import fetch_fred
+            n = max(int(years) * 365, 250)
+            df = fetch_fred(spec.series_id, fred_api_key, n=n)
+            if df is None or df.empty:
+                return pd.Series(dtype=float, name=spec.key)
+            return pd.Series(
+                df["value"].values,
+                index=pd.to_datetime(df["date"]),
+                name=spec.key, dtype=float,
+            ).dropna()
+        if spec.source == "calculated" and spec.key == "COPPER_GOLD_RATIO":
+            from repositories.macro_repository import fetch_yf_close
+            copper = fetch_yf_close("HG=F", range_=f"{int(years)}y", interval="1d")
+            gold = fetch_yf_close("GC=F", range_=f"{int(years)}y", interval="1d")
+            if copper is None or copper.empty or gold is None or gold.empty:
+                return pd.Series(dtype=float, name=spec.key)
+            df = pd.concat([copper.rename("c"), gold.rename("g")], axis=1).ffill().dropna()
+            ratio = (df["c"] / df["g"]).dropna()
+            ratio.name = spec.key
+            return ratio
+        return pd.Series(dtype=float, name=spec.key)
+    except Exception as e:
+        print(f"[multi_factor_optimization.fetch_factor_series] {spec.key} 抓取失敗：{e}")
+        return pd.Series(dtype=float, name=spec.key)
 
 
 def _zscore(series: pd.Series) -> pd.Series:
