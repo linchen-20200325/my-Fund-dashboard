@@ -130,17 +130,32 @@ def get_default_store() -> SearchStore:
 # ════════════════════════════════════════════════════════════════
 # Scoring
 # ════════════════════════════════════════════════════════════════
+FREQ_BONUS: dict[str, float] = {"daily": 1.0, "weekly": 0.9, "monthly": 0.75}
+
+
 def composite_score(
     oos_f1: float, plateau_score: float, n_crossings: int,
+    freq_bonus: float = 1.0,
 ) -> float:
-    """綜合分數：OOS_F1 × max(plateau, 0) × log1p(n_crossings).
+    """綜合分數：OOS_F1 × max(plateau, 0) × log1p(n_crossings) × freq_bonus.
 
     - n_crossings=0 → log1p=0 → composite=0（懲罰沒訊號的）
     - plateau<0 → clip 0（高原退化解不該被選）
+    - freq_bonus：v19.11，子集最慢頻率因子的 bonus（daily 1.0 / weekly 0.9 / monthly 0.75）
     """
     p = max(float(plateau_score), 0.0)
     nc = max(int(n_crossings), 0)
-    return float(oos_f1) * p * math.log1p(nc)
+    return float(oos_f1) * p * math.log1p(nc) * float(freq_bonus)
+
+
+def freq_bonus_for_subset(subset: list[str]) -> float:
+    """子集中**最慢頻率**因子的 bonus — 一顆月頻就拉低整組（軟懲罰，不剔除）."""
+    bonuses = []
+    for k in subset:
+        spec = FACTOR_POOL_BY_KEY.get(k)
+        freq = getattr(spec, "frequency", "daily") if spec else "daily"
+        bonuses.append(FREQ_BONUS.get(freq, 1.0))
+    return min(bonuses) if bonuses else 1.0
 
 
 def factor_pool_hash(keys: list[str]) -> str:
@@ -169,6 +184,8 @@ def evaluate_subset(
     min_crossings: int = DEFAULT_MIN_CROSSINGS,
     train_months: int = DEFAULT_TRAIN_MONTHS,
     test_months: int = DEFAULT_TEST_MONTHS,
+    min_forward_days: int = 30,
+    max_forward_days: int = 90,
 ) -> SearchResult:
     """單一 subset 跑 grid+plateau+walk-forward → SearchResult."""
     start = time.perf_counter()
@@ -189,6 +206,8 @@ def evaluate_subset(
         grid = grid_search_performance(
             sel_series, returns, events, list(subset),
             threshold=threshold, step=step, specs_by_key=specs_by_key,
+            min_forward_days=min_forward_days,
+            max_forward_days=max_forward_days,
         )
         if not grid.get("combos"):
             return _empty_result(run_id, phase, subset, start)
@@ -212,12 +231,15 @@ def evaluate_subset(
         threshold=threshold, step=step, radius=radius,
         lambda_std=lambda_std, metric=metric,
         specs_by_key=specs_by_key,
+        min_forward_days=min_forward_days,
+        max_forward_days=max_forward_days,
     )
     oos_f1 = float(wf.get("oos_f1", 0.0))
     oos_sharpe = float(wf.get("oos_sharpe", 0.0))
     n_folds = int(wf.get("n_folds", 0))
 
     elapsed = time.perf_counter() - start
+    fb = freq_bonus_for_subset(list(subset))
     return SearchResult(
         run_id=run_id,
         phase=phase,
@@ -229,7 +251,7 @@ def evaluate_subset(
         train_f1=train_f1,
         n_crossings=n_cross,
         n_folds=n_folds,
-        composite=composite_score(oos_f1, plateau_val, n_cross),
+        composite=composite_score(oos_f1, plateau_val, n_cross, fb),
         elapsed_sec=elapsed,
         ts=datetime.utcnow().isoformat(timespec="seconds"),
     )
@@ -570,8 +592,10 @@ __all__ = [
     "SearchStore",
     "Phase",
     "JobStatus",
+    "FREQ_BONUS",
     "get_default_store",
     "composite_score",
+    "freq_bonus_for_subset",
     "factor_pool_hash",
     "evaluate_subset",
     "estimate_total_evals",

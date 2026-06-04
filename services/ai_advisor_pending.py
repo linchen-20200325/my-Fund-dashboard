@@ -13,6 +13,16 @@ import os
 
 _FALLBACK_HEADER = "🧮 數學摘要（AI 不可用）"
 
+# v19.11：user 對「預警」的口徑偏好 — 注入兩條 AI 線 prompt
+_USER_PREFERENCE_NOTE = (
+    "\n\n### 🎯 重要使用者偏好（預警 vs 同步）\n"
+    "- **目標**：預警系統性風險 / 回調 — 訊號要在 SPX peak **前 30-90 天** 觸發才算 TP\n"
+    "- **偏好**：日 / 週頻因子優先（VIX / HY_SPREAD / T10Y2Y / JOBLESS / NFCI 等）— 反應快、噪音可由 z-score 過濾\n"
+    "- **避免**：單一**月頻**因子權重 > 0.7（PMI / CPI / SAHM / LEI 等）— 月頻發佈滯後，當下警告等同已 peak\n"
+    "- 若候選都集中在月頻 → 給「再校準」建議；若日/週頻佔比 > 50% → 可採納\n"
+)
+
+
 
 def _format_weights_table(weights: dict[str, float]) -> str:
     """權重表 → markdown bullet list（按權重大小排序）。"""
@@ -59,10 +69,11 @@ def _build_prompt(
         f"- OOS F1：`{oos_metrics.get('oos_f1', 0.0):.3f}`\n"
         f"- OOS Sharpe：`{oos_metrics.get('oos_sharpe', 0.0):.3f}`\n"
         f"- 折數：`{oos_metrics.get('n_folds', 0)}`\n\n"
-        "請用繁中、最多 5 句話回答：\n"
-        "1. 這組權重的「故事」是什麼？（哪幾個因子主導？）\n"
-        "2. OOS 表現是否可信？（train/oos gap、Sharpe 合理性）\n"
-        "3. 建議 user 批准還是再校準？（給明確判斷）\n"
+        + _USER_PREFERENCE_NOTE +
+        "\n請用繁中、最多 5 句話回答：\n"
+        "1. 這組權重的「故事」是什麼？（哪幾個因子主導？頻率屬性如何？）\n"
+        "2. OOS 表現是否可信？（train/oos gap、Sharpe 合理性、是否能事前預警）\n"
+        "3. 建議 user 批准還是再校準？（給明確判斷，月頻佔比過高就建議重跑）\n"
         "不要客套話，直接給結論。"
     )
 
@@ -161,11 +172,12 @@ def _build_compare_prompt(
         f"- OOS F1：`{oos_metrics.get('oos_f1', 0.0):.3f}`\n"
         f"- OOS Sharpe：`{oos_metrics.get('oos_sharpe', 0.0):.3f}`\n"
         f"- 折數：`{oos_metrics.get('n_folds', 0)}`\n\n"
-        "請用繁中、最多 6 句話回答：\n"
+        + _USER_PREFERENCE_NOTE +
+        "\n請用繁中、最多 6 句話回答：\n"
         "1. **建議提交候選幾號**？（給明確數字，例如「候選 1」）\n"
-        "2. **為何選它**？（看權重分散度、F1、Sharpe、n_crossings）\n"
-        "3. **風險旗標**？（n_crossings<5 / OOS F1=0 / 單一因子權重 >0.7 任一觸發要點出）\n"
-        "4. **是否應該重跑校準**？（如果所有候選都有疑慮）\n"
+        "2. **為何選它**？（看權重分散度、F1、Sharpe、n_crossings、**頻率屬性**）\n"
+        "3. **風險旗標**？（n_crossings<5 / OOS F1=0 / 單一因子權重 >0.7 / **月頻占主導 >50%** 任一觸發要點出）\n"
+        "4. **是否應該重跑校準**？（如果所有候選月頻佔比都偏高，建議重跑）\n"
         "不要客套話，直接給結論。"
     )
 
