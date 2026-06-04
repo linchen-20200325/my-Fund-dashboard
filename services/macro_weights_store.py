@@ -35,6 +35,17 @@ _PENDING_PATH = _CONFIG_DIR / "macro_weights_pending.json"
 _SCHEMA_VERSION = "v19.0"
 _REQUIRED_KEYS = {"version", "indicators"}
 
+# v19.7：Google Sheets backend（治 Streamlit Cloud FS ephemeral）
+# Worksheet schema（單一 worksheet `_macro_weights`，2 列固定 slot）：
+#   A1: slot       B1: payload_json       C1: updated_at
+#   A2: pending    B2: <json or "">       C2: <iso ts or "">
+#   A3: active     B3: <json or "">       C3: <iso ts or "">
+# 偵測：st.secrets["google_service_account"].client_email + st.secrets["macro_weights_sheet_id"]
+# 兩者皆有 → 走 GS；否則 fallback 至 FS（本地開發友善）。
+_GS_WORKSHEET = "_macro_weights"
+_GS_PENDING_ROW = 2
+_GS_ACTIVE_ROW = 3
+
 
 def _empty_active() -> dict[str, Any]:
     """fallback active payload — C-2 之前面板回退硬編碼，這份是占位用。"""
@@ -53,6 +64,74 @@ def _empty_active() -> dict[str, Any]:
     }
 
 
+# ════════════════════════════════════════════════════════════════
+# Google Sheets backend (v19.7) — lazy import + 自動建立 worksheet
+# ════════════════════════════════════════════════════════════════
+def _gs_enabled() -> bool:
+    """偵測 Streamlit secrets 是否齊備（service account + sheet_id）。"""
+    try:
+        import streamlit as st
+        sa = st.secrets.get("google_service_account") or {}
+        sid = st.secrets.get("macro_weights_sheet_id")
+        return bool(sa.get("client_email") and sid)
+    except Exception:
+        return False
+
+
+def _gs_get_worksheet():
+    """開啟（或自動建立）`_macro_weights` worksheet — 重用 policy_repository 的認證流程。"""
+    import streamlit as st
+
+    from repositories.policy_repository import get_gspread_client
+
+    creds = dict(st.secrets["google_service_account"])
+    sheet_id = st.secrets["macro_weights_sheet_id"]
+    client = get_gspread_client(creds)
+    sh = client.open_by_key(sheet_id)
+    try:
+        return sh.worksheet(_GS_WORKSHEET)
+    except Exception:
+        ws = sh.add_worksheet(title=_GS_WORKSHEET, rows=5, cols=3)
+        ws.update("A1:C3", [
+            ["slot", "payload_json", "updated_at"],
+            ["pending", "", ""],
+            ["active", "", ""],
+        ])
+        return ws
+
+
+def _gs_load(slot: str) -> dict[str, Any] | None:
+    """讀 slot row（pending=row2 / active=row3）。空值 / 解析失敗 → None。"""
+    row = _GS_PENDING_ROW if slot == "pending" else _GS_ACTIVE_ROW
+    ws = _gs_get_worksheet()
+    cell = ws.acell(f"B{row}").value
+    if not cell:
+        return None
+    try:
+        data = json.loads(cell)
+        _validate(data)
+        return data
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+def _gs_save(slot: str, payload: dict[str, Any]) -> None:
+    """寫 slot row — payload_json + updated_at 同列更新。"""
+    row = _GS_PENDING_ROW if slot == "pending" else _GS_ACTIVE_ROW
+    ws = _gs_get_worksheet()
+    ws.update(f"B{row}:C{row}", [[
+        json.dumps(payload, ensure_ascii=False),
+        time.strftime("%Y-%m-%dT%H:%M:%S"),
+    ]])
+
+
+def _gs_delete(slot: str) -> None:
+    """清空 slot row 的 payload + ts（保留 schema 列）。"""
+    row = _GS_PENDING_ROW if slot == "pending" else _GS_ACTIVE_ROW
+    ws = _gs_get_worksheet()
+    ws.update(f"B{row}:C{row}", [["", ""]])
+
+
 def _validate(payload: dict) -> None:
     """最小 schema 驗證 — 不通過直接 raise，避免靜默 corrupt。"""
     if not isinstance(payload, dict):
@@ -65,7 +144,12 @@ def _validate(payload: dict) -> None:
 
 
 def load_active() -> dict[str, Any]:
-    """讀 active 檔。不存在 / 解析失敗 → 回 _empty_active()。"""
+    """讀 active。GS 後端 → row3；FS 後端 → ``macro_weights_active.json``。
+    不存在 / 解析失敗 → 回 _empty_active()。
+    """
+    if _gs_enabled():
+        data = _gs_load("active")
+        return data if data is not None else _empty_active()
     if not _ACTIVE_PATH.exists():
         return _empty_active()
     try:
@@ -77,7 +161,11 @@ def load_active() -> dict[str, Any]:
 
 
 def load_pending() -> dict[str, Any] | None:
-    """讀 pending 檔。不存在 → None。解析失敗 → None（避免 corrupt 卡死面板）。"""
+    """讀 pending。GS 後端 → row2；FS 後端 → ``macro_weights_pending.json``。
+    不存在 → None；解析失敗 → None（避免 corrupt 卡死面板）。
+    """
+    if _gs_enabled():
+        return _gs_load("pending")
     if not _PENDING_PATH.exists():
         return None
     try:
@@ -89,17 +177,27 @@ def load_pending() -> dict[str, Any] | None:
 
 
 def has_pending() -> bool:
-    """快速檢查 pending 是否存在（面板 banner 用，不解析內容）。"""
+    """快速檢查 pending 是否存在（面板 banner 用）。
+    GS 後端解析 row2；FS 後端純 Path.exists()。
+    """
+    if _gs_enabled():
+        return _gs_load("pending") is not None
     return _PENDING_PATH.exists()
 
 
-def save_pending(payload: dict[str, Any]) -> Path:
-    """寫 pending 檔。覆蓋舊 pending（單槽設計，新提交吃掉舊提交）。
+def save_pending(payload: dict[str, Any]) -> Path | str:
+    """寫 pending（覆蓋舊提交，單槽設計）。
+
+    Returns:
+        FS 模式回 Path；GS 模式回字串 "_macro_weights!B{row}"（給 UI 顯示用）。
 
     Raises:
         ValueError: payload schema 不合法
     """
     _validate(payload)
+    if _gs_enabled():
+        _gs_save("pending", payload)
+        return f"_macro_weights!B{_GS_PENDING_ROW}"
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     _PENDING_PATH.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
@@ -109,11 +207,18 @@ def save_pending(payload: dict[str, Any]) -> Path:
 
 
 def approve_pending() -> bool:
-    """升格 pending → active：覆蓋 active 檔，刪除 pending 檔。
+    """升格 pending → active；清空 pending 槽。
 
     Returns:
-        True 若有 pending 且成功升格；False 若無 pending。
+        True 若有 pending 且成功升格；False 若無 pending / corrupt。
     """
+    if _gs_enabled():
+        payload = _gs_load("pending")
+        if payload is None:
+            return False
+        _gs_save("active", payload)
+        _gs_delete("pending")
+        return True
     if not _PENDING_PATH.exists():
         return False
     try:
@@ -131,7 +236,12 @@ def approve_pending() -> bool:
 
 
 def reject_pending() -> bool:
-    """刪除 pending 檔。Returns True 若有檔可刪。"""
+    """清空 pending 槽。Returns True 若有東西可清。"""
+    if _gs_enabled():
+        if _gs_load("pending") is None:
+            return False
+        _gs_delete("pending")
+        return True
     if not _PENDING_PATH.exists():
         return False
     _PENDING_PATH.unlink(missing_ok=True)

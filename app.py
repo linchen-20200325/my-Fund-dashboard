@@ -40,7 +40,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.6_ParamFinderTabHoist"
+APP_VERSION = "v19.7_GoogleSheetsBackend"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）

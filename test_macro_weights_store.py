@@ -318,3 +318,103 @@ def test_corrupt_active_all_helpers_fallback():
     assert store.get_weight_override("VIX", fallback=1.5) == 1.5
     assert store.get_verdict_cutoffs() == (10.0, 5.0, -5.0, -10.0)
     assert store.get_phase_thresholds() == (8.0, 5.0, 3.0)
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.7：Google Sheets backend tests（MagicMock 模擬 worksheet）
+# ════════════════════════════════════════════════════════════════
+class _FakeWorksheet:
+    """In-memory worksheet — 模擬 gspread.Worksheet 的 acell + update。"""
+
+    def __init__(self):
+        # 預建 schema：A1/B1/C1 header, B2/C2=pending, B3/C3=active
+        self._cells: dict[str, str] = {
+            "A1": "slot", "B1": "payload_json", "C1": "updated_at",
+            "A2": "pending", "B2": "", "C2": "",
+            "A3": "active",  "B3": "", "C3": "",
+        }
+
+    def acell(self, ref: str):
+        class _V:
+            def __init__(self, v): self.value = v
+        return _V(self._cells.get(ref, ""))
+
+    def update(self, range_str: str, values):
+        # 解析 "B2:C2" → 寫入 values[0]
+        if ":" in range_str:
+            start, end = range_str.split(":")
+            self._cells[start] = values[0][0]
+            self._cells[end] = values[0][1]
+        else:
+            self._cells[range_str] = values[0][0]
+
+
+@pytest.fixture
+def _gs_backend(monkeypatch):
+    """模擬 GS 已啟用 — 用 FakeWorksheet 取代真實 gspread 呼叫。"""
+    fake_ws = _FakeWorksheet()
+    monkeypatch.setattr(store, "_gs_enabled", lambda: True)
+    monkeypatch.setattr(store, "_gs_get_worksheet", lambda: fake_ws)
+    return fake_ws
+
+
+def test_gs_save_and_load_pending_roundtrip(_gs_backend):
+    payload = {"version": "v19.0", "indicators": {"VIX": {"weight": 1.0}}}
+    ref = store.save_pending(payload)
+    assert "_macro_weights!B" in str(ref)
+    loaded = store.load_pending()
+    assert loaded is not None
+    assert loaded["indicators"]["VIX"]["weight"] == 1.0
+
+
+def test_gs_has_pending_reflects_state(_gs_backend):
+    assert store.has_pending() is False
+    store.save_pending({"version": "v19.0", "indicators": {}})
+    assert store.has_pending() is True
+
+
+def test_gs_approve_promotes_and_clears(_gs_backend):
+    payload = {"version": "v19.0", "indicators": {"VIX": {"weight": 1.0}}}
+    store.save_pending(payload)
+    assert store.approve_pending() is True
+    assert store.load_pending() is None
+    assert store.load_active()["indicators"]["VIX"]["weight"] == 1.0
+
+
+def test_gs_approve_no_pending_returns_false(_gs_backend):
+    assert store.approve_pending() is False
+
+
+def test_gs_reject_deletes(_gs_backend):
+    store.save_pending({"version": "v19.0", "indicators": {}})
+    assert store.reject_pending() is True
+    assert store.has_pending() is False
+    assert store.reject_pending() is False
+
+
+def test_gs_load_active_empty_returns_empty_fallback(_gs_backend):
+    out = store.load_active()
+    assert isinstance(out, dict)
+    assert out["indicators"] == {}
+
+
+def test_gs_save_pending_overwrites(_gs_backend):
+    store.save_pending({"version": "v19.0", "indicators": {"A": {"weight": 1}}})
+    store.save_pending({"version": "v19.0", "indicators": {"B": {"weight": 1}}})
+    loaded = store.load_pending()
+    assert loaded is not None
+    assert "B" in loaded["indicators"]
+    assert "A" not in loaded["indicators"]
+
+
+def test_gs_corrupt_payload_returns_none(_gs_backend):
+    # 直接寫進 fake worksheet 模擬 corrupt
+    _gs_backend._cells["B2"] = "{not valid json"
+    assert store.load_pending() is None
+    assert store.has_pending() is False
+
+
+def test_gs_enabled_false_falls_back_to_fs():
+    # _gs_enabled 預設 False（無 streamlit secrets）→ 走 FS path
+    # 既有 FS test 全部用此 path，這裡只確認偵測函式預設行為
+    assert store._gs_enabled() is False

@@ -965,8 +965,10 @@ def _render_pending_submit_section(cached: dict | None) -> None:
         except ValueError as e:
             st.error(f"❌ Schema 驗證失敗：{e}")
             return
+        # v19.7: save_pending 回 Path（FS）或 str（GS worksheet ref）
+        _loc = p.name if hasattr(p, "name") else str(p)
         st.success(
-            f"✅ 已提交至 `{p.name}` — 請至「🌐 總經」Tab 頂部 banner 批准 / 拒絕。"
+            f"✅ 已提交至 `{_loc}` — 請至「🌐 總經」Tab 頂部 banner 批准 / 拒絕。"
         )
         st.markdown("**🤖 AI 解讀（提交內容預覽）**")
         st.markdown(ai_text)
