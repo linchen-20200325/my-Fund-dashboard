@@ -742,6 +742,7 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
                 default=available_keys[:min(3, len(available_keys))],
                 max_selections=6,
                 key="multifactor_keys",
+                format_func=lambda k: f"{FACTOR_POOL_BY_KEY[k].label} ({k})",
             )
         with col_metric:
             metric = st.radio(
