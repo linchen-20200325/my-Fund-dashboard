@@ -9,6 +9,7 @@
 - **入口**：`app.py`（Streamlit Cloud 部署）
 
 ## 當前版本
+- **v18.284_PresetMatrixCompareTable**：配置模擬器 selectbox 上方加「📊 4 風格 × 4 階段 對照表（全展開）」expander — DataFrame 4 phases × 4 styles = 16 cells "D / C / S" 字串，read-only，方便 user 橫向比較再選 preset 套用；engine 加 `build_preset_matrix_df()` helper
 - **v18.283_MT5StyleAutoCalibration**：Phase 3 加「🎯 MT5-style 自動校準」expander — walk-forward 4 折 grid sweep × 3 重 anti-overfit gate（折間票選 + drift>30% 回退 + cap 守門）；session-only override 機制；對齊 stock v18.164；1205 passed
 - **v18.282_SignalPrecisionAnalysis**：Phase 3 加「📐 訊號精確率分析」forward-looking 區塊 — 解召回率單面向：遍歷歷史 crossings 算 TP/FP/精確率/誤報率/avg lead time；對齊 stock v18.163；1195 passed
 - **v18.281_Phase3EdgeDetection**：Phase 3 訊號回看引擎 port stock v18.160 v2 edge detection（從非警戒「跨越到」警戒的轉折日），修「常態性已警戒 = 假預警」誤判；UI 加「v2 轉折偵測」標示

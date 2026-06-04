@@ -6,6 +6,7 @@ import pytest
 from services.allocation_simulator import (
     DEFAULT_PHASE_SCRIPT,
     STRATEGY_PRESETS,
+    build_preset_matrix_df,
     get_preset_phase_script,
 )
 
@@ -120,3 +121,28 @@ class TestGetPresetPhaseScript:
         # DEFAULT_PHASE_SCRIPT 應原封不動
         for orig, expected in zip(DEFAULT_PHASE_SCRIPT, before):
             assert orig == expected
+
+
+class TestBuildPresetMatrixDf:
+    """v18.284 — 4 風格 × 4 階段 全展開對照表 helper."""
+
+    def test_shape_is_4x4(self):
+        df = build_preset_matrix_df()
+        assert df.shape == (4, 4)
+
+    def test_rows_are_4_phases_in_order(self):
+        df = build_preset_matrix_df()
+        assert list(df.index) == EXPECTED_PHASES
+
+    def test_cols_are_4_preset_labels(self):
+        df = build_preset_matrix_df()
+        expected_labels = [STRATEGY_PRESETS[k]["label"] for k in EXPECTED_PRESETS]
+        assert list(df.columns) == expected_labels
+
+    def test_each_cell_has_dcs_format(self):
+        df = build_preset_matrix_df()
+        for col in df.columns:
+            for cell in df[col]:
+                assert isinstance(cell, str)
+                assert "D" in cell and "C" in cell and "S" in cell
+                assert "/" in cell

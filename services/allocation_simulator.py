@@ -97,6 +97,27 @@ STRATEGY_PRESETS: dict[str, dict] = {
 }
 
 
+def build_preset_matrix_df():
+    """攤平 STRATEGY_PRESETS → 4 階段 × 4 風格 對照 DataFrame。
+
+    Rows: 復甦/擴張/放緩/衰退（取 DEFAULT_PHASE_SCRIPT 順序）。
+    Cols: 4 風格 label（取 STRATEGY_PRESETS 序）。
+    Cell: "D{drip} / C{cash} / S{stay}" 三桶字串，方便 user 橫向比較。
+    """
+    import pandas as pd
+    phases = [seg["phase"] for seg in DEFAULT_PHASE_SCRIPT]
+    cols: dict[str, list[str]] = {}
+    for _key, _cfg in STRATEGY_PRESETS.items():
+        _alloc = _cfg["allocations"]
+        cols[_cfg["label"]] = [
+            f"D{_alloc[ph]['drip_pct']} / "
+            f"C{_alloc[ph]['cash_pct']} / "
+            f"S{_alloc[ph]['stay_pct']}"
+            for ph in phases
+        ]
+    return pd.DataFrame(cols, index=phases)
+
+
 def get_preset_phase_script(preset_key: str) -> list[dict]:
     """套 preset 的三桶比例到 DEFAULT_PHASE_SCRIPT，回傳完整 phase_script。
 
