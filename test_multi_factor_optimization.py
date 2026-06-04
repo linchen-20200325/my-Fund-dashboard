@@ -249,6 +249,58 @@ class TestFindPlateauOptimum:
         assert opt["weights"] == {}
 
 
+class TestTopNPlateauCandidatesV19_9:
+    """v19.9：top_n_plateau_candidates — 事前 AI 建議用的 top-N 候選 list."""
+    def test_empty_returns_empty(self):
+        from services.multi_factor_optimization import top_n_plateau_candidates
+        assert top_n_plateau_candidates({}, np.array([])) == []
+        assert top_n_plateau_candidates(
+            {"combos": [], "f1": np.array([]), "sharpe": np.array([]),
+             "n_crossings": np.array([])}, np.array([]),
+        ) == []
+
+    def test_minus_inf_filtered(self):
+        from services.multi_factor_optimization import top_n_plateau_candidates
+        combos = [{"A": 1.0}, {"A": 0.5}, {"A": 0.0}]
+        result = {"combos": combos, "f1": np.array([0.9, 0.6, 0.4]),
+                  "sharpe": np.array([0.1, 0.2, 0.3]),
+                  "n_crossings": np.array([1, 5, 5])}
+        out = top_n_plateau_candidates(
+            result, np.array([-np.inf, 0.5, 0.3]), n=5,
+        )
+        assert len(out) == 2  # -inf 過濾掉
+        assert out[0]["weights"] == {"A": 0.5}  # 最高 plateau
+        assert out[1]["weights"] == {"A": 0.0}
+
+    def test_sorted_descending_by_plateau(self):
+        from services.multi_factor_optimization import top_n_plateau_candidates
+        combos = [{"A": 1.0}, {"A": 0.5}, {"A": 0.0}]
+        result = {"combos": combos, "f1": np.array([0.5, 0.5, 0.5]),
+                  "sharpe": np.array([0, 0, 0]),
+                  "n_crossings": np.array([5, 5, 5])}
+        out = top_n_plateau_candidates(result, np.array([0.2, 0.8, 0.5]), n=3)
+        assert [c["plateau_score"] for c in out] == [0.8, 0.5, 0.2]
+
+    def test_n_cap_works(self):
+        from services.multi_factor_optimization import top_n_plateau_candidates
+        combos = [{"A": 1.0}, {"A": 0.5}, {"A": 0.0}]
+        result = {"combos": combos, "f1": np.array([0.5, 0.5, 0.5]),
+                  "sharpe": np.array([0, 0, 0]),
+                  "n_crossings": np.array([5, 5, 5])}
+        out = top_n_plateau_candidates(result, np.array([0.2, 0.8, 0.5]), n=2)
+        assert len(out) == 2
+        assert out[0]["plateau_score"] == 0.8
+
+    def test_all_minus_inf_returns_empty(self):
+        from services.multi_factor_optimization import top_n_plateau_candidates
+        combos = [{"A": 1.0}, {"A": 0.5}]
+        result = {"combos": combos, "f1": np.array([0.5, 0.5]),
+                  "sharpe": np.array([0, 0]),
+                  "n_crossings": np.array([5, 5])}
+        out = top_n_plateau_candidates(result, np.array([-np.inf, -np.inf]))
+        assert out == []
+
+
 class TestWalkForwardValidate:
     def test_no_factors_returns_empty(self):
         result = walk_forward_validate({}, pd.Series(dtype=float), [], [])

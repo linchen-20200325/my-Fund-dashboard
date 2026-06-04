@@ -426,6 +426,40 @@ def find_plateau_optimum(
     }
 
 
+def top_n_plateau_candidates(
+    grid_result: dict,
+    plateau_scores: np.ndarray,
+    n: int = 5,
+) -> list[dict]:
+    """回 top-N plateau 候選（事前 AI 建議用）— 過濾 -inf / NaN，按 plateau 降序.
+
+    Returns:
+        list[{"weights", "f1", "sharpe", "n_crossings", "plateau_score"}]，
+        最多 n 筆；不足 n 個有限 plateau 則回實際筆數。
+    """
+    combos = grid_result.get("combos") or []
+    if not combos or len(plateau_scores) == 0:
+        return []
+    f1 = grid_result.get("f1", np.zeros(len(combos)))
+    sharpe = grid_result.get("sharpe", np.zeros(len(combos)))
+    n_cross = grid_result.get("n_crossings", np.zeros(len(combos), dtype=int))
+    finite_mask = np.isfinite(plateau_scores)
+    if not finite_mask.any():
+        return []
+    finite_idx = np.where(finite_mask)[0]
+    sorted_idx = finite_idx[np.argsort(-plateau_scores[finite_idx])][:n]
+    return [
+        {
+            "weights": combos[i],
+            "f1": float(f1[i]),
+            "sharpe": float(sharpe[i]),
+            "n_crossings": int(n_cross[i]),
+            "plateau_score": float(plateau_scores[i]),
+        }
+        for i in sorted_idx
+    ]
+
+
 def _filter_events_by_window(
     events: list[CrisisEvent], start: pd.Timestamp, end: pd.Timestamp,
 ) -> list[CrisisEvent]:

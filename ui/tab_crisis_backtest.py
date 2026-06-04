@@ -911,8 +911,52 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
             st.info(f"⚠️ Walk-forward 無有效折（status={wf.get('status')}）— "
                     "請調小 train/test 視窗或加長序列。")
 
+        # ── 🤖 事前 AI 建議（v19.9，按鈕觸發避免燒 quota）─────────────
+        _render_ai_recommendation_section(cached)
+
         # ── 📌 Route C-1：提交為待審權重（僅手動觸發）─────────────
         _render_pending_submit_section(cached)
+
+
+def _render_ai_recommendation_section(cached: dict | None) -> None:
+    """v19.9：在提交前讓 AI 比對 top-5 候選 → 建議提交哪組（含風險旗標）。
+
+    與 ``_render_pending_submit_section`` 內的「事後 AI 解讀」是獨立兩條 AI 線。
+    """
+    st.markdown("---")
+    st.markdown("### 🤖 事前 AI 建議參數")
+    st.caption(
+        "AI 比對 plateau top-5 候選 → 建議您提交哪一組（含 n_crossings / OOS F1 / "
+        "權重分散度風險旗標）。**按鈕觸發，避免燒 quota。**"
+    )
+
+    if not cached or not (cached.get("opt") or {}).get("weights"):
+        st.info("👆 請先跑完多因子高原 + walk-forward，才能取得 AI 建議。")
+        return
+
+    from services.ai_advisor_pending import recommend_weights
+    from services.multi_factor_optimization import top_n_plateau_candidates
+
+    advice_key = "_multifactor_ai_advice"
+    if st.button("🤖 取得 AI 建議", key="multifactor_ai_recommend"):
+        candidates = top_n_plateau_candidates(
+            cached.get("grid") or {},
+            cached.get("plateau"),
+            n=5,
+        )
+        wf = cached.get("wf") or {}
+        oos_metrics = {
+            "oos_f1": float(wf.get("oos_f1", 0.0)),
+            "oos_sharpe": float(wf.get("oos_sharpe", 0.0)),
+            "n_folds": int(wf.get("n_folds", 0)),
+        }
+        with st.spinner("🤖 呼叫 AI 比對候選..."):
+            advice = recommend_weights(candidates, oos_metrics)
+        st.session_state[advice_key] = advice
+
+    advice = st.session_state.get(advice_key)
+    if advice:
+        st.markdown(advice)
 
 
 def _render_pending_submit_section(cached: dict | None) -> None:
