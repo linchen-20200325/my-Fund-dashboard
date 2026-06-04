@@ -376,7 +376,7 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
         "排除「常態性已在警戒 → 假預警」誤判 → 量化「Tab1 訊號是否真的有預警」。"
     )
 
-    col_a, col_b = st.columns(2)
+    col_a, col_b, col_c = st.columns(3)
     with col_a:
         lookback_days = st.slider(
             "點觀測 offset（峰前 N 天）",
@@ -390,6 +390,15 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
             min_value=90, max_value=540, value=365, step=30,
             help="在峰前 M 天內搜尋訊號『從非警戒跨越到警戒』的最早轉折日（edge detection）",
             key="crisis_signal_max_lookback",
+        )
+    with col_c:
+        # v18.282：精確率追蹤期 — 訊號響起後 K 天內若有 crisis 算 TP
+        max_forward_days = st.slider(
+            "📐 精確率追蹤期（crossing 後 K 天）",
+            min_value=90, max_value=540, value=365, step=30,
+            help="訊號響起後 K 天內若有危機事件 → TP；無 → FP（誤報）"
+                 "。改此 slider 即時重算精確率，不需重按按鈕。",
+            key="crisis_signal_max_forward",
         )
 
     # v18.261：button + cache 雙軌 — click 時抓資料寫 cache，rerun 時從 cache 渲染
@@ -425,7 +434,9 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
             lookback_days=lookback_days,
             max_lookback_days=max_lookback_days,
         )
-        st.session_state[_PHASE3_CACHE_KEY] = {"sig": _p3_sig, "results": results}
+        st.session_state[_PHASE3_CACHE_KEY] = {
+            "sig": _p3_sig, "results": results, "series_by_key": series_by_key,
+        }
         _cached_p3 = st.session_state[_PHASE3_CACHE_KEY]
 
     if not _cached_p3:
@@ -475,6 +486,48 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
         "✅ = 峰前 M 天內偵測到訊號**從非警戒跨越到警戒**的轉折日，顯示提前天數；"
         "❌ = 訊號序列涵蓋但峰前未出現轉折（可能常態警戒 → 假預警 / 或全程平靜）；"
         "— = 訊號歷史不涵蓋該事件（FRED key 缺漏 / 序列過短）。"
+    )
+
+    # ── 📐 v18.282：訊號精確率分析（forward-looking）─────────────
+    series_by_key = _cached_p3.get("series_by_key")
+    if not series_by_key:
+        return  # 舊 cache 沒存 series，等下次按按鈕
+    from services.macro_signal_lookback import compute_signal_precision
+    st.markdown("---")
+    st.markdown("#### 📐 訊號精確率分析（forward-looking · v18.282）")
+    st.caption(
+        f"🔍 與上方「召回率」互補 — 遍歷歷史所有 crossings，檢查後 "
+        f"**{max_forward_days} 天**內是否真的爆危機。"
+        "**精確率高 = 訊號響起時相信它的勝率高**；**誤報率高 = 狼來了**。"
+    )
+    precision_rows = []
+    for spec in DEFAULT_SIGNALS:
+        series = series_by_key.get(spec.key)
+        if series is None or series.empty:
+            precision_rows.append({
+                "訊號": spec.label, "歷史 crossings": "—",
+                "真實預警 TP": "—", "假警報 FP": "—",
+                "精確率": "—", "誤報率": "—", "TP 平均提前天數": "—",
+            })
+            continue
+        stat = compute_signal_precision(series, events, spec, max_forward_days)
+        precision_rows.append({
+            "訊號": spec.label,
+            "歷史 crossings": stat["n_crossings"],
+            "真實預警 TP": stat["n_true_positives"],
+            "假警報 FP": stat["n_false_positives"],
+            "精確率": (f"{stat['precision_pct']:.1f}%"
+                       if stat["precision_pct"] is not None else "—"),
+            "誤報率": (f"{stat['false_alert_rate_pct']:.1f}%"
+                       if stat["false_alert_rate_pct"] is not None else "—"),
+            "TP 平均提前天數": (f"{stat['avg_lead_to_crisis_days']:.0f}"
+                                  if stat["avg_lead_to_crisis_days"] is not None else "—"),
+        })
+    st.dataframe(pd.DataFrame(precision_rows),
+                  use_container_width=True, hide_index=True)
+    st.caption(
+        "💡 解讀：召回率高 + 精確率高 = 神準預警；召回率高但精確率低 = 警鈴常響但只少數真的爆；"
+        "兩者皆低 = 訊號失效。理想 ≥ 50% 精確率代表「賭一半以上」。"
     )
 
 
