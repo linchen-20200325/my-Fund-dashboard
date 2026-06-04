@@ -544,8 +544,8 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
     # ── 🎯 v18.283：MT5-style 自動校準（walk-forward）────────────
     _render_phase3_auto_calibration_fund(events, cached_specs, series_by_key)
 
-    # ── 🔬 v18.285：多因子權重最佳化（高原區 + walk-forward OOS）─────
-    _render_phase3_multi_factor_optimization(events, series_by_key)
+    # v19.6：多因子權重最佳化 hoist 到「🔬 回測找參數」獨立 tab
+    # _render_phase3_multi_factor_optimization 仍定義在本檔（供新 tab import）
 
 
 def _render_phase3_auto_calibration_fund(events, specs, series_by_key) -> None:
