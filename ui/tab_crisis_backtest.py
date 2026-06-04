@@ -967,8 +967,8 @@ def _render_pending_submit_section(cached: dict | None) -> None:
         st.success(
             f"✅ 已提交至 `{p.name}` — 請至「🌐 總經」Tab 頂部 banner 批准 / 拒絕。"
         )
-        with st.expander("🤖 AI 解讀（提交內容預覽）", expanded=True):
-            st.markdown(ai_text)
+        st.markdown("**🤖 AI 解讀（提交內容預覽）**")
+        st.markdown(ai_text)
 
 
 def _load_spx_returns() -> pd.Series:
