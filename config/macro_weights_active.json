@@ -1,0 +1,13 @@
+{
+  "version": "v19.0_C1_seed",
+  "calibrated_at": null,
+  "calibration_method": null,
+  "horizon_months": 3,
+  "drawdown_threshold": -0.10,
+  "indicators": {},
+  "verdict_cutoffs": null,
+  "phase_thresholds": null,
+  "oos_metrics": null,
+  "ai_explanation": null,
+  "notes": "Route C-1 種子檔。indicators 為空時 calculate_composite_score / compute_score_row 回退至 macro_service.py 硬編碼（C-2 才接管面板載入）。"
+}

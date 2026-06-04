@@ -910,6 +910,66 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
             st.info(f"⚠️ Walk-forward 無有效折（status={wf.get('status')}）— "
                     "請調小 train/test 視窗或加長序列。")
 
+        # ── 📌 Route C-1：提交為待審權重（僅手動觸發）─────────────
+        _render_pending_submit_section(cached)
+
+
+def _render_pending_submit_section(cached: dict | None) -> None:
+    """🚀 Route C-1：把回測結果提交為「待審權重」，user 在總經面板批准才會生效。
+
+    僅手動觸發 — 無排程、無自動寫回 active。
+    """
+    st.markdown("---")
+    st.markdown("### 📌 提交為待審權重（Route C-1）")
+    st.caption(
+        "把上方最佳權重 + OOS 指標寫到 `config/macro_weights_pending.json`，"
+        "請至「🌐 總經」Tab 頂部 banner 批准。**僅手動觸發**，無排程。"
+    )
+
+    if not cached or not (cached.get("opt") or {}).get("weights"):
+        st.info("👆 請先按「🚀 跑多因子高原 + walk-forward」產出結果，才能提交。")
+        return
+
+    from services.ai_advisor_pending import explain_pending_weights
+    from services.macro_weights_store import (
+        build_payload_from_multifactor,
+        has_pending,
+        save_pending,
+    )
+
+    if has_pending():
+        st.warning(
+            "⚠️ 已有一筆待審權重在排隊。再次提交會**覆蓋**舊提交（單槽設計）。"
+        )
+
+    if st.button("📌 提交為待審權重", type="primary", key="multifactor_submit_pending"):
+        opt = cached.get("opt") or {}
+        wf = cached.get("wf") or {}
+        sel_keys = cached.get("sel_keys") or []
+        metric = cached.get("metric", "f1")
+        oos_metrics = {
+            "train_f1": float(opt.get("f1", 0.0)),
+            "train_sharpe": float(opt.get("sharpe", 0.0)),
+            "oos_f1": float(wf.get("oos_f1", 0.0)),
+            "oos_sharpe": float(wf.get("oos_sharpe", 0.0)),
+            "n_folds": int(wf.get("n_folds", 0)),
+        }
+        with st.spinner("🤖 呼叫 AI 解讀權重..."):
+            ai_text = explain_pending_weights(opt.get("weights") or {}, oos_metrics)
+        payload = build_payload_from_multifactor(
+            opt, wf, sel_keys, metric, ai_explanation=ai_text,
+        )
+        try:
+            p = save_pending(payload)
+        except ValueError as e:
+            st.error(f"❌ Schema 驗證失敗：{e}")
+            return
+        st.success(
+            f"✅ 已提交至 `{p.name}` — 請至「🌐 總經」Tab 頂部 banner 批准 / 拒絕。"
+        )
+        with st.expander("🤖 AI 解讀（提交內容預覽）", expanded=True):
+            st.markdown(ai_text)
+
 
 def _load_spx_returns() -> pd.Series:
     """讀 SPX parquet 回傳 close 序列（給 Sharpe 計算用）."""
