@@ -707,6 +707,7 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
         build_plateau_heatmap_2d,
         build_plateau_surface_3d,
         evaluate_plateau,
+        fetch_factor_series,
         find_plateau_optimum,
         grid_search_performance,
         walk_forward_validate,
@@ -721,13 +722,17 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
             "walk-forward 滾動 train/test 串 OOS 權益曲線確認 robust。"
         )
 
-        available_keys = [k for k in FACTOR_POOL_BY_KEY if k in series_by_key]
+        # v18.286: FACTOR_POOL 全 13 個都列出；Phase 1/2 已抓的標 ✓，缺的會在點 Run 時 lazy-fetch
+        available_keys = list(FACTOR_POOL_BY_KEY.keys())
+        ready_keys = {k for k in available_keys if k in series_by_key}
         if len(available_keys) < 2:
-            st.warning(
-                f"⚠️ 可用因子不足 2 個（目前 {len(available_keys)} 個）。"
-                "請先在 Phase 1/2 抓更多訊號或加 FRED 序列至 FACTOR_POOL。"
-            )
+            st.warning(f"⚠️ FACTOR_POOL 不足 2 個（目前 {len(available_keys)} 個）。")
             return
+        st.caption(
+            f"📌 FACTOR_POOL 共 {len(available_keys)} 因子；"
+            f"{len(ready_keys)} 個已在 Phase 1/2 cache，"
+            f"{len(available_keys) - len(ready_keys)} 個會在點 Run 時 lazy-fetch。"
+        )
 
         col_pick, col_metric = st.columns([2, 1])
         with col_pick:
@@ -792,7 +797,20 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
                 returns = _load_spx_returns()
             except FileNotFoundError:
                 returns = pd.Series(dtype=float)
-            sel_series = {k: series_by_key[k] for k in sel_keys}
+            # v18.286: lazy-fetch 不在 series_by_key cache 內的因子
+            import os as _os
+            _fred_key = _os.environ.get("FRED_API_KEY", "")
+            sel_series: dict[str, pd.Series] = {}
+            missing = [k for k in sel_keys if k not in series_by_key]
+            if missing:
+                with st.spinner(f"lazy-fetch {len(missing)} 個新因子（{', '.join(missing)}）..."):
+                    for k in missing:
+                        sel_series[k] = fetch_factor_series(
+                            FACTOR_POOL_BY_KEY[k], years=20, fred_api_key=_fred_key,
+                        )
+            for k in sel_keys:
+                if k not in sel_series:
+                    sel_series[k] = series_by_key[k]
             with st.spinner("跑 grid search + plateau + walk-forward 中..."):
                 grid_result = grid_search_performance(
                     sel_series, returns, events, sel_keys,

@@ -9,6 +9,7 @@
 - **入口**：`app.py`（Streamlit Cloud 部署）
 
 ## 當前版本
+- **v18.296_AdvancedFactorPool13**：多因子權重最佳化 FACTOR_POOL 10 → 13；補強「債市流動性 + 高頻景氣 + 金融環境」三類進階因子（MOVE 公債波動率 yahoo `^MOVE` / NFCI 全國金融狀況 fred `NFCI` / 銅金比 calculated `HG=F÷GC=F`）；FactorSpec.source Literal 擴 `"calculated"`；新增 `fetch_factor_series(spec, years, fred_api_key)` lazy fetcher 統一三 source；UI 不再過濾 series_by_key，Run 時自動 lazy-fetch 缺漏因子；34 cases passed
 - **v18.285_MultiFactorPlateauWalkForward**：Phase 3 加「🔬 多因子權重最佳化」expander — 綜合分數 S_t = Σ w_i × normalize(I_{i,t−1})（lag=1 防未來引用），simplex 權重 grid sweep 算 F1+Sharpe，**plateau 評分 = 鄰域 mean − λ × std**（不取單一最高 F1）；walk-forward 滾動 train/test 串 OOS 權益曲線；plotly 2D heatmap + 3D surface toggle；10 因子池（4 現有 + 6 raw FRED：PMI/CPI/FedFunds/M2/DXY/T10Y3M）；28 case 驗收
 - **v18.284_PresetMatrixCompareTable**：配置模擬器 selectbox 上方加「📊 4 風格 × 4 階段 對照表（全展開）」expander — DataFrame 4 phases × 4 styles = 16 cells "D / C / S" 字串，read-only，方便 user 橫向比較再選 preset 套用；engine 加 `build_preset_matrix_df()` helper
 - **v18.283_MT5StyleAutoCalibration**：Phase 3 加「🎯 MT5-style 自動校準」expander — walk-forward 4 折 grid sweep × 3 重 anti-overfit gate（折間票選 + drift>30% 回退 + cap 守門）；session-only override 機制；對齊 stock v18.164；1205 passed
