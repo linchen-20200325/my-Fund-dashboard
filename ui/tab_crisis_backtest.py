@@ -1073,6 +1073,23 @@ def _render_autosearch_section(events, series_by_key) -> None:
         with col_d:
             st.metric("總 eval 估計", _estimate_total(top_k, max_size))
 
+        # v19.11：預警 lead time 窗口 — 訊號必須在事件前 [min, max] 天內觸發
+        col_lt_min, col_lt_max, _ = st.columns([1, 1, 1])
+        with col_lt_min:
+            min_lead = st.slider(
+                "Lead time min（天）", 0, 60, 30, key="as_min_lead",
+                help="訊號至少要早於 SPX peak N 天才算 TP。0=只要早就行；30=前 1 個月才算",
+            )
+        with col_lt_max:
+            max_lead = st.slider(
+                "Lead time max（天）", 30, 365, 90, key="as_max_lead",
+                help="訊號太早也不算 TP（避免假領先）。預設 90=1-3 個月窗口",
+            )
+        st.caption(
+            f"🎯 訊號要在 SPX peak 前 **{min_lead}-{max_lead} 天** 觸發才算命中；"
+            "月頻因子套 freq_bonus 0.75 軟懲罰（不剔除）"
+        )
+
         st.markdown("---")
         st.markdown("**📋 既有 jobs**")
         try:
@@ -1144,6 +1161,10 @@ def _render_autosearch_section(events, series_by_key) -> None:
             gen = auto_search_iter(
                 job, store, all_series, returns, events,
                 time_budget_sec=time_budget_min * 60.0,
+                eval_kwargs={
+                    "min_forward_days": int(min_lead),
+                    "max_forward_days": int(max_lead),
+                },
             )
             done_this_run = 0
             for r in gen:

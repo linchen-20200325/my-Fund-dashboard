@@ -22,6 +22,7 @@ from services.crisis_backtest import CrisisEvent
 
 Direction = Literal["above", "below"]
 NormalizeMethod = Literal["zscore", "minmax"]
+Frequency = Literal["daily", "weekly", "monthly"]
 
 
 @dataclass(frozen=True)
@@ -34,54 +35,65 @@ class FactorSpec:
     direction: Direction         # above: 高於 mean 為風險 / below: 低於 mean 為風險
     normalize: NormalizeMethod = "zscore"
     note: str = ""
+    frequency: Frequency = "daily"  # v19.11：lead-time 與 freq-bonus 用
 
 
 FACTOR_POOL: list[FactorSpec] = [
-    FactorSpec("VIX", "VIX 恐慌指數", "yahoo", "^VIX", "above", note="高 VIX = 市場恐慌"),
+    FactorSpec("VIX", "VIX 恐慌指數", "yahoo", "^VIX", "above",
+               note="高 VIX = 市場恐慌", frequency="daily"),
     FactorSpec("HY_SPREAD", "HY 信用利差", "fred", "BAMLH0A0HYM2", "above",
-               note="高 HY OAS = 信用緊縮"),
+               note="高 HY OAS = 信用緊縮", frequency="daily"),
     FactorSpec("T10Y2Y", "10Y-2Y 殖利率利差", "fred", "T10Y2Y", "below",
-               note="負值 = 殖利率倒掛"),
-    FactorSpec("UNRATE", "美國失業率", "fred", "UNRATE", "above", note="高失業 = 就業惡化"),
-    FactorSpec("PMI", "ISM 製造業 PMI", "fred", "NAPM", "below", note="< 50 = 製造業萎縮"),
+               note="負值 = 殖利率倒掛", frequency="daily"),
+    FactorSpec("UNRATE", "美國失業率", "fred", "UNRATE", "above",
+               note="高失業 = 就業惡化", frequency="monthly"),
+    FactorSpec("PMI", "ISM 製造業 PMI", "fred", "NAPM", "below",
+               note="< 50 = 製造業萎縮", frequency="monthly"),
     FactorSpec("CPI_YOY", "CPI 年增率", "fred", "CPIAUCSL", "above",
-               note="高通膨 = Fed 緊縮壓力"),
+               note="高通膨 = Fed 緊縮壓力", frequency="monthly"),
     FactorSpec("FEDFUNDS", "Fed Funds Rate", "fred", "FEDFUNDS", "above",
-               note="高利率 = 緊縮環境"),
+               note="高利率 = 緊縮環境", frequency="monthly"),
     FactorSpec("M2_YOY", "M2 年增率", "fred", "M2SL", "below",
-               note="M2 收縮 = 流動性緊縮"),
+               note="M2 收縮 = 流動性緊縮", frequency="monthly"),
     FactorSpec("DXY", "美元指數", "fred", "DTWEXBGS", "above",
-               note="強美元 = 風險資產壓力"),
+               note="強美元 = 風險資產壓力", frequency="daily"),
     FactorSpec("T10Y3M", "10Y-3M 殖利率利差", "fred", "T10Y3M", "below",
-               note="負值 = 短端倒掛"),
+               note="負值 = 短端倒掛", frequency="daily"),
     # v18.286 進階補強因子（債市流動性 + 高頻景氣 + 金融環境）
     FactorSpec("MOVE", "MOVE 公債波動率", "yahoo", "^MOVE", "above",
-               note="債市 VIX；高 MOVE = 利率波動 = 流動性枯竭"),
+               note="債市 VIX；高 MOVE = 利率波動 = 流動性枯竭",
+               frequency="daily"),
     FactorSpec("NFCI", "NFCI 全國金融狀況", "fred", "NFCI", "above",
-               note="芝加哥聯儲 105 項金融指標；>0 = 金融環境緊縮"),
+               note="芝加哥聯儲 105 項金融指標；>0 = 金融環境緊縮",
+               frequency="weekly"),
     FactorSpec("COPPER_GOLD_RATIO", "銅金比", "calculated", "HG=F/GC=F", "below",
-               note="銅/金期貨；下彎 = 景氣轉弱領先指標"),
+               note="銅/金期貨；下彎 = 景氣轉弱領先指標", frequency="daily"),
     # v19.4 補齊 10 因子：景氣領先 + 勞動信用 + 通膨預期 + Fed BS
     FactorSpec("SAHM", "Sahm 法則衰退指標", "fred", "SAHMCURRENT", "above",
-               note="失業率 3MMA − 12M 低點 ≥ 0.5 = 衰退觸發"),
+               note="失業率 3MMA − 12M 低點 ≥ 0.5 = 衰退觸發",
+               frequency="monthly"),
     FactorSpec("SLOOS", "SLOOS 銀行信用緊縮", "fred", "DRTSCILM", "above",
-               note="商業放款標準淨緊縮百分比；>0 = 信貸收縮"),
+               note="商業放款標準淨緊縮百分比；>0 = 信貸收縮",
+               frequency="monthly"),
     FactorSpec("LEI", "Leading Economic Index", "fred", "USSLIND", "below",
-               note="St. Louis Fed 領先指標；下行 = 景氣轉弱"),
+               note="St. Louis Fed 領先指標；下行 = 景氣轉弱",
+               frequency="monthly"),
     FactorSpec("PPI", "PPI 全商品物價", "fred", "PPIACO", "above",
-               note="生產者物價；上行 = 成本通膨壓力"),
+               note="生產者物價；上行 = 成本通膨壓力", frequency="monthly"),
     FactorSpec("JOBLESS", "初領失業金人數", "fred", "ICSA", "above",
-               note="ICSA 週頻；高 = 裁員增加"),
+               note="ICSA 週頻；高 = 裁員增加", frequency="weekly"),
     FactorSpec("CONT_CLAIMS", "持續領失業金人數", "fred", "CCSA", "above",
-               note="CCSA 週頻；高 = 重新就業困難"),
+               note="CCSA 週頻；高 = 重新就業困難", frequency="weekly"),
     FactorSpec("CONSUMER_CONF", "密大消費者信心", "fred", "UMCSENT", "below",
-               note="Michigan Consumer Sentiment；低 = 消費萎縮"),
+               note="Michigan Consumer Sentiment；低 = 消費萎縮",
+               frequency="monthly"),
     FactorSpec("PERMIT_HOUSING", "新屋建照", "fred", "PERMIT", "below",
-               note="領先房市指標；低 = 房市轉弱"),
+               note="領先房市指標；低 = 房市轉弱", frequency="monthly"),
     FactorSpec("FED_BS", "Fed 資產負債表", "fred", "WALCL", "below",
-               note="WALCL 總資產；下行 = QT 流動性緊縮"),
+               note="WALCL 總資產；下行 = QT 流動性緊縮", frequency="weekly"),
     FactorSpec("INFL_EXP_5Y", "5Y 通膨預期", "fred", "T5YIE", "above",
-               note="5Y breakeven inflation；高 = 通膨預期升溫"),
+               note="5Y breakeven inflation；高 = 通膨預期升溫",
+               frequency="daily"),
 ]
 
 FACTOR_POOL_BY_KEY = {f.key: f for f in FACTOR_POOL}
@@ -221,11 +233,17 @@ def evaluate_f1(
     crossings: pd.Series,
     events: list[CrisisEvent],
     max_forward_days: int = 365,
+    min_forward_days: int = 0,
 ) -> dict[str, float]:
     """前向 precision × 後向 recall → F1 諧波平均.
 
-    precision: 每個 crossing 在 max_forward_days 內是否命中 peak_date
-    recall:    每個 peak_date 前 max_forward_days 內是否有 crossing
+    precision: 每個 crossing 後 ``min_forward_days ≤ lead_time ≤ max_forward_days``
+               範圍內是否命中 peak_date
+    recall:    每個 peak_date 前 ``min_forward_days ≤ lead_time ≤ max_forward_days``
+               範圍內是否有 crossing
+
+    v19.11：加 ``min_forward_days`` kw — 預設 0（保持既有 walk-forward 行為），
+    AutoSearch 設 30/90 強制 1-3 個月領先才算 TP。
     """
     if crossings.empty or not events:
         return {"precision": 0.0, "recall": 0.0, "f1": 0.0,
@@ -238,13 +256,15 @@ def evaluate_f1(
     peak_dates = [pd.Timestamp(e.peak_date) for e in events]
     tp = 0
     for cd in cross_dates:
-        window_end = cd + pd.Timedelta(days=max_forward_days)
-        if any(cd <= pk <= window_end for pk in peak_dates):
+        win_start = cd + pd.Timedelta(days=min_forward_days)
+        win_end = cd + pd.Timedelta(days=max_forward_days)
+        if any(win_start <= pk <= win_end for pk in peak_dates):
             tp += 1
     hit_events = 0
     for pk in peak_dates:
-        window_start = pk - pd.Timedelta(days=max_forward_days)
-        if any(window_start <= cd <= pk for cd in cross_dates):
+        win_start = pk - pd.Timedelta(days=max_forward_days)
+        win_end = pk - pd.Timedelta(days=min_forward_days)
+        if any(win_start <= cd <= win_end for cd in cross_dates):
             hit_events += 1
     precision = tp / n_cross if n_cross else 0.0
     recall = hit_events / len(peak_dates) if peak_dates else 0.0
@@ -320,6 +340,7 @@ def grid_search_performance(
     max_forward_days: int = 365,
     fwd_days: int = 60,
     specs_by_key: Optional[dict[str, FactorSpec]] = None,
+    min_forward_days: int = 0,
 ) -> dict:
     """遍歷 simplex 權重組合 → 計算每組 F1 + Sharpe → 回傳 grid.
 
@@ -343,7 +364,9 @@ def grid_search_performance(
         if score.empty:
             continue
         crossings = score_to_signal(score, threshold)
-        f1_stat = evaluate_f1(crossings, events, max_forward_days)
+        f1_stat = evaluate_f1(
+            crossings, events, max_forward_days, min_forward_days,
+        )
         f1_arr[i] = f1_stat["f1"]
         n_cross_arr[i] = f1_stat["n_crossings"]
         sh_stat = evaluate_sharpe(crossings, returns, fwd_days)
@@ -498,6 +521,7 @@ def walk_forward_validate(
     max_forward_days: int = 365,
     fwd_days: int = 60,
     specs_by_key: Optional[dict[str, FactorSpec]] = None,
+    min_forward_days: int = 0,
 ) -> dict:
     """滾動 walk-forward：每窗訓練找 plateau → test 套用 → 串 OOS curve.
 
@@ -541,6 +565,7 @@ def walk_forward_validate(
         train_grid = grid_search_performance(
             train_series, train_returns, train_events, factor_keys, threshold,
             step, max_forward_days, fwd_days, specs_by_key,
+            min_forward_days=min_forward_days,
         )
         plateau = evaluate_plateau(train_grid, factor_keys, step, radius,
                                    lambda_std, metric)
@@ -553,7 +578,9 @@ def walk_forward_validate(
         test_events = _filter_events_by_window(events, test_start, test_end)
         test_score = compute_composite_score(test_series, opt["weights"], specs_by_key)
         test_crossings = score_to_signal(test_score, threshold) if not test_score.empty else pd.Series(dtype=int)
-        test_f1_stat = evaluate_f1(test_crossings, test_events, max_forward_days)
+        test_f1_stat = evaluate_f1(
+            test_crossings, test_events, max_forward_days, min_forward_days,
+        )
         test_sharpe_stat = evaluate_sharpe(test_crossings, test_returns, fwd_days)
         folds.append({
             "fold": len(folds) + 1,
@@ -578,7 +605,9 @@ def walk_forward_validate(
         oos_crossings.index.min() if not oos_crossings.empty else start,
         oos_crossings.index.max() if not oos_crossings.empty else end,
     )
-    oos_f1_stat = evaluate_f1(oos_crossings, oos_events, max_forward_days)
+    oos_f1_stat = evaluate_f1(
+        oos_crossings, oos_events, max_forward_days, min_forward_days,
+    )
     oos_sharpe_stat = evaluate_sharpe(oos_crossings, returns, fwd_days)
     return {
         "folds": folds,

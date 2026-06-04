@@ -296,3 +296,124 @@ def test_search_result_roundtrip():
     assert r2.run_id == r.run_id
     assert r2.subset == r.subset
     assert r2.oos_f1 == r.oos_f1
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.11：Frequency-aware composite + freq_bonus_for_subset
+# ════════════════════════════════════════════════════════════════
+def test_composite_with_freq_bonus_multiplier():
+    """freq_bonus=0.75 → composite 應乘以 0.75."""
+    base = composite_score(0.5, 0.5, 10, freq_bonus=1.0)
+    discounted = composite_score(0.5, 0.5, 10, freq_bonus=0.75)
+    assert abs(discounted - base * 0.75) < 1e-9
+
+
+def test_composite_freq_bonus_default_one():
+    """不傳 freq_bonus → 預設 1.0，向後相容 v19.10 行為."""
+    s1 = composite_score(0.4, 0.3, 5)
+    s2 = composite_score(0.4, 0.3, 5, freq_bonus=1.0)
+    assert s1 == s2
+
+
+def test_freq_bonus_subset_all_daily_returns_one():
+    from services.auto_search import freq_bonus_for_subset
+    # VIX / HY_SPREAD / T10Y2Y 都是 daily
+    assert freq_bonus_for_subset(["VIX", "HY_SPREAD", "T10Y2Y"]) == 1.0
+
+
+def test_freq_bonus_subset_with_monthly_takes_slowest():
+    from services.auto_search import freq_bonus_for_subset
+    # VIX (daily) + PMI (monthly) → 最慢 = monthly = 0.75
+    assert freq_bonus_for_subset(["VIX", "PMI"]) == 0.75
+
+
+def test_freq_bonus_subset_with_weekly_returns_0_9():
+    from services.auto_search import freq_bonus_for_subset
+    # VIX (daily) + JOBLESS (weekly) → 最慢 = weekly = 0.9
+    assert freq_bonus_for_subset(["VIX", "JOBLESS"]) == 0.9
+
+
+def test_freq_bonus_unknown_factor_defaults_daily():
+    from services.auto_search import freq_bonus_for_subset
+    # 不在 FACTOR_POOL 的 key → fallback daily=1.0
+    assert freq_bonus_for_subset(["NOT_IN_POOL"]) == 1.0
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.11：evaluate_f1 加 min_forward_days
+# ════════════════════════════════════════════════════════════════
+def _mk_event(peak_date: str, drawdown: float = -0.20):
+    """Helper：build minimal CrisisEvent for evaluate_f1 tests."""
+    from services.multi_factor_optimization import CrisisEvent
+    pk = pd.Timestamp(peak_date)
+    return CrisisEvent(
+        market="SPX", peak_date=pk,
+        trough_date=pk + pd.Timedelta(days=30),
+        recovery_date=pk + pd.Timedelta(days=180),
+        peak_value=1.0, trough_value=1.0 + drawdown,
+        drawdown_pct=drawdown, duration_days=30, recovery_days=150,
+    )
+
+
+def test_evaluate_f1_default_min_zero_preserves_v19_10_behavior():
+    """min_forward_days 預設 0 → 既有 walk-forward 結果不變."""
+    from services.multi_factor_optimization import evaluate_f1
+    idx = pd.date_range("2020-01-01", periods=100, freq="D")
+    crossings = pd.Series([0] * 100, index=idx)
+    crossings.iloc[10] = 1  # cross 在 day 10
+    events = [_mk_event("2020-01-30")]  # peak 在 day 29，lead=19 天
+    out = evaluate_f1(crossings, events, max_forward_days=365)
+    assert out["f1"] > 0
+
+
+def test_evaluate_f1_min_30_filters_too_close_crossings():
+    """cross 距離 peak 只有 10 天（< 30 天 min）→ 不算 TP."""
+    from services.multi_factor_optimization import evaluate_f1
+    idx = pd.date_range("2020-01-01", periods=100, freq="D")
+    crossings = pd.Series([0] * 100, index=idx)
+    crossings.iloc[20] = 1  # day 20
+    events = [_mk_event("2020-01-30")]  # peak day 29，lead = 9 天 < 30
+    out = evaluate_f1(
+        crossings, events, max_forward_days=90, min_forward_days=30,
+    )
+    assert out["precision"] == 0.0
+    assert out["recall"] == 0.0
+
+
+def test_evaluate_f1_min_max_window_catches_sweet_spot():
+    """cross 距離 peak 60 天 → 在 [30, 90] 內 → 算 TP."""
+    from services.multi_factor_optimization import evaluate_f1
+    idx = pd.date_range("2020-01-01", periods=200, freq="D")
+    crossings = pd.Series([0] * 200, index=idx)
+    crossings.iloc[30] = 1  # day 30 in idx
+    peak_ts = idx[30] + pd.Timedelta(days=60)
+    events = [_mk_event(str(peak_ts.date()))]
+    out = evaluate_f1(
+        crossings, events, max_forward_days=90, min_forward_days=30,
+    )
+    assert out["precision"] == 1.0
+    assert out["recall"] == 1.0
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.11：FactorSpec.frequency 標記正確性
+# ════════════════════════════════════════════════════════════════
+def test_factor_spec_frequency_field_exists_and_default_daily():
+    from services.multi_factor_optimization import FactorSpec
+    spec = FactorSpec(
+        key="TEST", label="test", source="fred", series_id="X",
+        direction="above",
+    )
+    assert spec.frequency == "daily"
+
+
+def test_factor_pool_has_correct_frequencies_marked():
+    """確認 23 因子 frequency 分布：8 daily + 4 weekly + 11 monthly."""
+    from collections import Counter
+
+    from services.multi_factor_optimization import FACTOR_POOL
+    counts = Counter(f.frequency for f in FACTOR_POOL)
+    assert counts["daily"] == 8  # VIX/HY_SPREAD/T10Y2Y/T10Y3M/DXY/MOVE/COPPER_GOLD/INFL_EXP_5Y
+    assert counts["weekly"] == 4  # NFCI/JOBLESS/CONT_CLAIMS/FED_BS
+    assert counts["monthly"] == 11
+    assert sum(counts.values()) == 23
