@@ -39,7 +39,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.4_FactorPool23"
+APP_VERSION = "v19.5_GeminiFix_FactorPoolCap"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
