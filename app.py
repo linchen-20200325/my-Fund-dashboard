@@ -39,7 +39,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v18.294_PresetMatrixCompareTable"
+APP_VERSION = "v18.295_MultiFactorPlateauWalkForward"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）

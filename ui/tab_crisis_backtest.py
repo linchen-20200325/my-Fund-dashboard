@@ -544,10 +544,12 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
     # ── 🎯 v18.283：MT5-style 自動校準（walk-forward）────────────
     _render_phase3_auto_calibration_fund(events, cached_specs, series_by_key)
 
+    # ── 🔬 v18.285：多因子權重最佳化（高原區 + walk-forward OOS）─────
+    _render_phase3_multi_factor_optimization(events, series_by_key)
+
 
 def _render_phase3_auto_calibration_fund(events, specs, series_by_key) -> None:
     """🎯 MT5-style threshold 自動校準 — walk-forward + 3 重 anti-overfit gate."""
-    from dataclasses import replace
     from services.signal_threshold_optimization import (
         make_default_grid, optimize_signal_threshold,
     )
@@ -690,6 +692,216 @@ def _render_phase3_auto_calibration_fund(events, specs, series_by_key) -> None:
                 st.session_state.pop("_phase3_overrides", None)
                 st.session_state.pop(_PHASE3_CACHE_KEY, None)
                 st.rerun()
+
+
+# ──────────────────────────────────────────────────────────────
+# 🔬 v18.285：多因子權重最佳化 + 高原區 + Walk-Forward OOS
+# 不是找單一最高績效，而是找「參數高原區」+ 滾動前向 OOS 驗證穩定性
+# ──────────────────────────────────────────────────────────────
+def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
+    """🔬 多因子權重最佳化 — 高原評分 + walk-forward OOS 驗證."""
+
+
+    from services.multi_factor_optimization import (
+        FACTOR_POOL_BY_KEY,
+        build_plateau_heatmap_2d,
+        build_plateau_surface_3d,
+        evaluate_plateau,
+        find_plateau_optimum,
+        grid_search_performance,
+        walk_forward_validate,
+    )
+
+    with st.expander(
+            "🔬 多因子權重最佳化（高原區 + walk-forward OOS）",
+            expanded=False):
+        st.caption(
+            "🤖 多因子加權綜合分數 S_t = Σ w_i × normalize(I_{i,t−1}) → 拐點偵測 → "
+            "找**高原區**（不取單一最高 F1，而是鄰域 mean − λ × std 最大）→ "
+            "walk-forward 滾動 train/test 串 OOS 權益曲線確認 robust。"
+        )
+
+        available_keys = [k for k in FACTOR_POOL_BY_KEY if k in series_by_key]
+        if len(available_keys) < 2:
+            st.warning(
+                f"⚠️ 可用因子不足 2 個（目前 {len(available_keys)} 個）。"
+                "請先在 Phase 1/2 抓更多訊號或加 FRED 序列至 FACTOR_POOL。"
+            )
+            return
+
+        col_pick, col_metric = st.columns([2, 1])
+        with col_pick:
+            sel_keys = st.multiselect(
+                "選擇因子（建議 2–4 個避免 simplex 爆炸）",
+                options=available_keys,
+                default=available_keys[:min(3, len(available_keys))],
+                key="multifactor_keys",
+            )
+        with col_metric:
+            metric = st.radio(
+                "Plateau 目標", options=["f1", "sharpe"],
+                index=0, key="multifactor_metric",
+                horizontal=True,
+            )
+
+        col_step, col_radius, col_lambda = st.columns(3)
+        with col_step:
+            step = st.slider(
+                "Grid 步長", min_value=0.1, max_value=0.5, value=0.2, step=0.05,
+                key="multifactor_step",
+                help="權重 simplex 解析度；步長越小組合越多。",
+            )
+        with col_radius:
+            radius = st.slider(
+                "鄰域半徑", min_value=1, max_value=3, value=1, step=1,
+                key="multifactor_radius",
+                help="高原評分鄰域格數（chebyshev 距離）。",
+            )
+        with col_lambda:
+            lambda_std = st.slider(
+                "λ（std 懲罰係數）", min_value=0.0, max_value=2.0, value=0.5,
+                step=0.1, key="multifactor_lambda",
+                help="plateau_score = mean − λ × std；λ 越大越偏好平坦區。",
+            )
+
+        col_tr, col_te, col_th = st.columns(3)
+        with col_tr:
+            train_months = st.slider(
+                "Train window（月）", min_value=12, max_value=72, value=36,
+                step=6, key="multifactor_train_months",
+            )
+        with col_te:
+            test_months = st.slider(
+                "Test window（月）", min_value=3, max_value=24, value=12,
+                step=3, key="multifactor_test_months",
+            )
+        with col_th:
+            threshold = st.slider(
+                "綜合分數警戒線", min_value=0.0, max_value=3.0, value=1.0,
+                step=0.1, key="multifactor_threshold",
+                help="S_t ≥ 此值即視為警戒；轉折日 = 由 <threshold 跨到 ≥threshold。",
+            )
+
+        if len(sel_keys) < 2:
+            st.info("👆 請至少選 2 個因子才能跑最佳化。")
+            return
+
+        if st.button("🚀 跑多因子高原 + walk-forward",
+                      type="primary", key="multifactor_run"):
+            try:
+                returns = _load_spx_returns()
+            except FileNotFoundError:
+                returns = pd.Series(dtype=float)
+            sel_series = {k: series_by_key[k] for k in sel_keys}
+            with st.spinner("跑 grid search + plateau + walk-forward 中..."):
+                grid_result = grid_search_performance(
+                    sel_series, returns, events, sel_keys,
+                    threshold=threshold, step=step,
+                )
+                plateau_scores = evaluate_plateau(
+                    grid_result, sel_keys, step, radius, lambda_std, metric,
+                )
+                opt = find_plateau_optimum(grid_result, plateau_scores)
+                wf = walk_forward_validate(
+                    sel_series, returns, events, sel_keys,
+                    train_months=train_months, test_months=test_months,
+                    threshold=threshold, step=step, radius=radius,
+                    lambda_std=lambda_std, metric=metric,
+                )
+            st.session_state["_multifactor_result"] = {
+                "sel_keys": sel_keys,
+                "grid": grid_result,
+                "plateau": plateau_scores,
+                "opt": opt,
+                "wf": wf,
+                "metric": metric,
+                "step": step,
+            }
+            st.success(
+                f"✅ 完成 {len(grid_result['combos'])} 個權重組合 + "
+                f"{wf['n_folds']} 折 walk-forward"
+            )
+
+        cached = st.session_state.get("_multifactor_result")
+        if not cached:
+            return
+        sel_keys = cached["sel_keys"]
+        opt = cached["opt"]
+        wf = cached["wf"]
+        plateau_scores = cached["plateau"]
+        grid_result = cached["grid"]
+
+        st.markdown("### 🏆 高原最佳權重（train 全期間）")
+        opt_cols = st.columns(min(len(sel_keys), 4))
+        for i, (k, w) in enumerate(opt["weights"].items()):
+            with opt_cols[i % len(opt_cols)]:
+                st.metric(k, f"{w:.2f}")
+        c_f, c_s, c_p = st.columns(3)
+        c_f.metric("Train F1", f"{opt['f1']:.3f}")
+        c_s.metric("Train Sharpe", f"{opt['sharpe']:.3f}")
+        c_p.metric("Plateau Score", f"{opt['plateau_score']:.3f}")
+
+        st.markdown("### 📊 高原視覺化")
+        if len(sel_keys) >= 2:
+            col_x, col_y, col_viz = st.columns([1, 1, 1])
+            with col_x:
+                x_key = st.selectbox("X 軸因子", options=sel_keys,
+                                     index=0, key="multifactor_x")
+            with col_y:
+                remaining = [k for k in sel_keys if k != x_key]
+                y_key = st.selectbox("Y 軸因子", options=remaining,
+                                     index=0, key="multifactor_y")
+            with col_viz:
+                viz_kind = st.radio(
+                    "圖形類型", options=["2D heatmap", "3D surface"],
+                    index=0, horizontal=True, key="multifactor_viz_kind",
+                )
+            metric_label = f"{cached['metric'].upper()} plateau"
+            if viz_kind == "2D heatmap":
+                fig = build_plateau_heatmap_2d(
+                    grid_result, plateau_scores, sel_keys, (x_key, y_key),
+                    metric_label,
+                )
+            else:
+                fig = build_plateau_surface_3d(
+                    grid_result, plateau_scores, sel_keys, (x_key, y_key),
+                    metric_label,
+                )
+            st.plotly_chart(fig, use_container_width=True)
+
+        if wf["folds"]:
+            st.markdown("### 🚶 Walk-forward 各折（OOS 樣本外）")
+            fold_rows = []
+            for f in wf["folds"]:
+                fold_rows.append({
+                    "折": f["fold"],
+                    "Train": f"{f['train_range'][0]} → {f['train_range'][1]}",
+                    "Test": f"{f['test_range'][0]} → {f['test_range'][1]}",
+                    "權重": ", ".join(f"{k}={v:.2f}" for k, v in f["weights"].items()),
+                    "Train F1": f"{f['train_f1']:.3f}",
+                    "Test F1": f"{f['test_f1']:.3f}",
+                    "Train Sharpe": f"{f['train_sharpe']:.3f}",
+                    "Test Sharpe": f"{f['test_sharpe']:.3f}",
+                })
+            st.dataframe(pd.DataFrame(fold_rows), use_container_width=True,
+                         hide_index=True)
+            c1, c2 = st.columns(2)
+            c1.metric("OOS F1（全段）", f"{wf['oos_f1']:.3f}")
+            c2.metric("OOS Sharpe（全段）", f"{wf['oos_sharpe']:.3f}")
+        else:
+            st.info(f"⚠️ Walk-forward 無有效折（status={wf.get('status')}）— "
+                    "請調小 train/test 視窗或加長序列。")
+
+
+def _load_spx_returns() -> pd.Series:
+    """讀 SPX parquet 回傳 close 序列（給 Sharpe 計算用）."""
+    from pathlib import Path
+    p = Path(__file__).resolve().parent.parent / "data_cache" / "spx_history.parquet"
+    if not p.exists():
+        return pd.Series(dtype=float)
+    df = pd.read_parquet(p)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date")["close"]
 
 
 # ──────────────────────────────────────────────────────────────
