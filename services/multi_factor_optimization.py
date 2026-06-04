@@ -86,14 +86,19 @@ def fetch_factor_series(
       - fred:       fetch_fred(series_id, api_key, n=years*365)
       - calculated: 目前僅支援 COPPER_GOLD_RATIO（HG=F / GC=F）
 
-    失敗一律回空 Series（不拋例外，由呼叫端決定 fallback）。
+    失敗一律回**空 DatetimeIndex Series**（不拋例外，由呼叫端決定 fallback）。
+    v19.2 hotfix：empty return 改用 ``pd.DatetimeIndex([])`` 而非預設 RangeIndex，
+    避免下游 walk_forward_validate / _slice_series 做 ``index >= Timestamp`` 比較時 TypeError。
     """
+    _empty = lambda: pd.Series(  # noqa: E731
+        dtype=float, name=spec.key, index=pd.DatetimeIndex([]),
+    )
     try:
         if spec.source == "yahoo":
             from repositories.macro_repository import fetch_yf_close
             s = fetch_yf_close(spec.series_id, range_=f"{int(years)}y", interval="1d")
             if s is None or s.empty:
-                return pd.Series(dtype=float, name=spec.key)
+                return _empty()
             s = s.dropna()
             s.name = spec.key
             return s
@@ -102,7 +107,7 @@ def fetch_factor_series(
             n = max(int(years) * 365, 250)
             df = fetch_fred(spec.series_id, fred_api_key, n=n)
             if df is None or df.empty:
-                return pd.Series(dtype=float, name=spec.key)
+                return _empty()
             return pd.Series(
                 df["value"].values,
                 index=pd.to_datetime(df["date"]),
@@ -113,15 +118,15 @@ def fetch_factor_series(
             copper = fetch_yf_close("HG=F", range_=f"{int(years)}y", interval="1d")
             gold = fetch_yf_close("GC=F", range_=f"{int(years)}y", interval="1d")
             if copper is None or copper.empty or gold is None or gold.empty:
-                return pd.Series(dtype=float, name=spec.key)
+                return _empty()
             df = pd.concat([copper.rename("c"), gold.rename("g")], axis=1).ffill().dropna()
             ratio = (df["c"] / df["g"]).dropna()
             ratio.name = spec.key
             return ratio
-        return pd.Series(dtype=float, name=spec.key)
+        return _empty()
     except Exception as e:
         print(f"[multi_factor_optimization.fetch_factor_series] {spec.key} 抓取失敗：{e}")
-        return pd.Series(dtype=float, name=spec.key)
+        return _empty()
 
 
 def _zscore(series: pd.Series) -> pd.Series:
@@ -384,7 +389,18 @@ def _filter_events_by_window(
 def _slice_series(
     series_by_key: dict[str, pd.Series], start: pd.Timestamp, end: pd.Timestamp,
 ) -> dict[str, pd.Series]:
-    return {k: s[(s.index >= start) & (s.index <= end)] for k, s in series_by_key.items()}
+    """切片各因子序列至 [start, end]。
+
+    v19.2 hotfix：對非 DatetimeIndex 的空 Series（fetch 失敗時 default RangeIndex）做防禦，
+    回對應 key 的空 DatetimeIndex Series，避免 ``RangeIndex >= Timestamp`` 觸發 TypeError。
+    """
+    out: dict[str, pd.Series] = {}
+    for k, s in series_by_key.items():
+        if s is None or s.empty or not isinstance(s.index, pd.DatetimeIndex):
+            out[k] = pd.Series(dtype=float, name=k, index=pd.DatetimeIndex([]))
+            continue
+        out[k] = s[(s.index >= start) & (s.index <= end)]
+    return out
 
 
 def walk_forward_validate(
