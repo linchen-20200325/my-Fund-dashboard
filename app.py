@@ -29,6 +29,7 @@ from ui.tab5_data_guard import render_data_guard_tab
 from ui.tab6_manual import render_manual_tab
 from ui.tab_allocation_simulator import render_allocation_simulator_tab
 from ui.tab_crisis_backtest import render_crisis_backtest_tab
+from ui.tab_param_finder import render_param_finder_tab
 from fund_fetcher  import (
     get_proxy_config,
 )
@@ -39,7 +40,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.5_GeminiFix_FactorPoolCap"
+APP_VERSION = "v19.6_ParamFinderTabHoist"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -433,9 +434,9 @@ render_macro_compass()
 # ══════════════════════════════════════════════════════
 # 故事化動線（v18.193）：tab 順序依 spec 敘事 —
 # 🌐 總經環境 → 📊 核心/衛星配置 → 🔍 單一基金深掘（原本「單一基金」在「組合」前，違反敘事）
-tab_macro, tab_portfolio, tab_single, tab_crisis, tab_sim, tab5, tab6 = st.tabs(
+tab_macro, tab_portfolio, tab_single, tab_crisis, tab_param, tab_sim, tab5, tab6 = st.tabs(
     ["🌐 總經", "📊 組合基金", "🔍 單一基金", "📉 危機回測室",
-     "💼 配置模擬器", "🔬 資料診斷", "📖 說明書"])
+     "🔬 回測找參數", "💼 配置模擬器", "🔭 資料診斷", "📖 說明書"])
 
 # ══════════════════════════════════════════════════════
 # TAB 1 — 🌐 總經環境（故事第 1 站）
@@ -465,7 +466,13 @@ with tab_crisis:
     render_crisis_backtest_tab()
 
 # ══════════════════════════════════════════════════════
-# TAB 5 — 💼 配置模擬器（v18.260 Phase 6b）
+# TAB 5 — 🔬 回測找參數（v19.6 hoist 自危機回測室 Phase 3）
+# ══════════════════════════════════════════════════════
+with tab_param:
+    render_param_finder_tab()
+
+# ══════════════════════════════════════════════════════
+# TAB 6 — 💼 配置模擬器（v18.260 Phase 6b）
 # ══════════════════════════════════════════════════════
 with tab_sim:
     render_allocation_simulator_tab()
