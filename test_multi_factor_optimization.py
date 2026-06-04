@@ -175,7 +175,8 @@ class TestEvaluatePlateau:
         plateau = evaluate_plateau(result, [], 0.5)
         assert len(plateau) == 0
 
-    def test_flat_perf_gives_constant_plateau(self):
+    def test_flat_perf_interior_beats_corner_v19_8(self):
+        """v19.8 F4：即使績效全平，corner 點鄰居 < interior → plateau lower."""
         combos = [{"A": 1.0, "B": 0.0},
                   {"A": 0.5, "B": 0.5},
                   {"A": 0.0, "B": 1.0}]
@@ -184,7 +185,41 @@ class TestEvaluatePlateau:
                   "n_crossings": np.array([10, 10, 10])}
         plateau = evaluate_plateau(result, ["A", "B"], step=0.5, radius=1,
                                    lambda_std=0.5)
-        assert np.allclose(plateau, 0.6, atol=1e-9)
+        # interior (center) 鄰居=3=max；corner 鄰居=2 → sqrt(2/3)≈0.816
+        assert plateau[1] == pytest.approx(0.6, abs=1e-9)
+        assert plateau[0] == pytest.approx(0.6 * np.sqrt(2 / 3), abs=1e-9)
+        assert plateau[2] == pytest.approx(0.6 * np.sqrt(2 / 3), abs=1e-9)
+        assert plateau[0] < plateau[1]
+
+    def test_low_n_crossings_filtered_to_minus_inf_v19_8_F3(self):
+        """v19.8 F3：n_crossings < min_crossings → plateau = -inf."""
+        combos = [{"A": 1.0, "B": 0.0},
+                  {"A": 0.5, "B": 0.5},
+                  {"A": 0.0, "B": 1.0}]
+        f1 = np.array([0.9, 0.5, 0.5])  # corner 假高 F1
+        result = {"combos": combos, "f1": f1, "sharpe": f1.copy(),
+                  "n_crossings": np.array([1, 5, 5])}  # corner 只 1 次觸發
+        plateau = evaluate_plateau(result, ["A", "B"], step=0.5, radius=1,
+                                   lambda_std=0.5, min_crossings=2)
+        assert plateau[0] == -np.inf
+        assert np.isfinite(plateau[1])
+        assert np.isfinite(plateau[2])
+
+    def test_corner_vertex_loses_to_interior_v19_8(self):
+        """v19.8 整合 F3+F4：合理場景下 interior 應贏 corner。
+
+        Corner F1=0.9 但只 1 次觸發（偽贏家），interior F1=0.6 但 5 次觸發。
+        """
+        combos = [{"A": 1.0, "B": 0.0},
+                  {"A": 0.5, "B": 0.5},
+                  {"A": 0.0, "B": 1.0}]
+        f1 = np.array([0.9, 0.6, 0.5])
+        result = {"combos": combos, "f1": f1, "sharpe": f1.copy(),
+                  "n_crossings": np.array([1, 5, 5])}
+        plateau = evaluate_plateau(result, ["A", "B"], step=0.5, radius=1,
+                                   lambda_std=0.5)
+        winner = int(np.argmax(plateau))
+        assert winner == 1, f"interior 應贏，實際 winner={winner}, plateau={plateau}"
 
 
 class TestFindPlateauOptimum:
@@ -202,6 +237,16 @@ class TestFindPlateauOptimum:
         opt = find_plateau_optimum(result, np.array([0.1, 0.7, 0.2]))
         assert opt["argmax_idx"] == 1
         assert opt["weights"] == {"A": 0.5}
+
+    def test_all_minus_inf_returns_empty_v19_8(self):
+        """v19.8：F3 全濾掉 → find_plateau_optimum 回空 weights（不亂選 idx=0）。"""
+        combos = [{"A": 1.0}, {"A": 0.5}, {"A": 0.0}]
+        result = {"combos": combos, "f1": np.array([0.1, 0.5, 0.2]),
+                  "sharpe": np.array([0, 0, 0]),
+                  "n_crossings": np.array([1, 1, 1])}
+        opt = find_plateau_optimum(result, np.array([-np.inf, -np.inf, -np.inf]))
+        assert opt["argmax_idx"] == -1
+        assert opt["weights"] == {}
 
 
 class TestWalkForwardValidate:

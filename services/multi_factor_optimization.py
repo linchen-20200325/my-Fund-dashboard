@@ -93,6 +93,7 @@ DEFAULT_LAMBDA_STD = 0.5
 DEFAULT_PLATEAU_RADIUS = 1
 DEFAULT_THRESHOLD = 1.0
 DEFAULT_GRID_STEP = 0.2
+DEFAULT_MIN_CROSSINGS = 2  # v19.8 F3：稀疏訊號過濾下限（避免 corner 1 次幸運命中拿高 F1）
 
 
 def fetch_factor_series(
@@ -358,27 +359,43 @@ def evaluate_plateau(
     radius: int = DEFAULT_PLATEAU_RADIUS,
     lambda_std: float = DEFAULT_LAMBDA_STD,
     metric: Literal["f1", "sharpe"] = "f1",
+    min_crossings: int = DEFAULT_MIN_CROSSINGS,
 ) -> np.ndarray:
-    """高原評分 = 鄰域 mean − λ × std；高分代表「績效高且穩定」.
+    """高原評分 = (鄰域 mean − λ × std) × sqrt(n_neighbors / max_n_neighbors).
 
     為避免 N-D dense grid 記憶體爆炸，本實作用點對點距離（chebyshev）找鄰域：
     每點檢查所有其他點，距離 ≤ radius × step 視為鄰居。
+
+    v19.8 雙修（治 walk-forward train 找出 corner vertex 退化解，OOS F1=0）：
+    - **F3**：grid 點 ``n_crossings < min_crossings`` → ``plateau = -inf``，
+      剔除「整段只 1 次幸運命中」的偽贏家。
+    - **F4**：鄰居數懲罰 — 乘上 ``sqrt(n_neighbors / max_n_neighbors)``；
+      corner 點 simplex 鄰居 ≈ n+1，內部點 ≈ 2n+1，自然抑制角點 vertex。
     """
     combos = grid_result["combos"]
     if not combos:
         return np.array([])
     perf = grid_result[metric]
+    n_cross = grid_result.get(
+        "n_crossings", np.full(len(combos), min_crossings, dtype=int),
+    )
     coords = np.array([[w[k] for k in factor_keys] for w in combos])
     n = len(combos)
-    plateau = np.zeros(n)
     tol = radius * step + 1e-9
+    masks = [np.max(np.abs(coords - coords[i]), axis=1) <= tol for i in range(n)]
+    neighbor_counts = np.array([int(m.sum()) for m in masks], dtype=int)
+    max_n_neighbors = max(int(neighbor_counts.max()), 1)
+    plateau = np.zeros(n)
     for i in range(n):
-        d = np.max(np.abs(coords - coords[i]), axis=1)
-        neighbors = perf[d <= tol]
-        if len(neighbors) <= 1:
-            plateau[i] = perf[i]
+        if n_cross[i] < min_crossings:
+            plateau[i] = -np.inf
             continue
-        plateau[i] = neighbors.mean() - lambda_std * neighbors.std()
+        neighbors = perf[masks[i]]
+        if len(neighbors) <= 1:
+            base = perf[i]
+        else:
+            base = neighbors.mean() - lambda_std * neighbors.std()
+        plateau[i] = base * np.sqrt(neighbor_counts[i] / max_n_neighbors)
     return plateau
 
 
@@ -386,12 +403,20 @@ def find_plateau_optimum(
     grid_result: dict,
     plateau_scores: np.ndarray,
 ) -> dict:
-    """回傳 plateau argmax 對應的權重 + 該點原始績效."""
+    """回傳 plateau argmax 對應的權重 + 該點原始績效.
+
+    v19.8 守門：全 plateau 為 ``-inf`` / ``NaN``（F3 全濾掉，無有效解）
+    → return 空 weights；walk-forward L489 既有 ``if not opt["weights"]: continue``
+    自動 skip 該折，零回歸。
+    """
     combos = grid_result["combos"]
     if not combos or len(plateau_scores) == 0:
         return {"weights": {}, "f1": 0.0, "sharpe": 0.0, "plateau_score": 0.0,
                 "argmax_idx": -1}
     idx = int(np.argmax(plateau_scores))
+    if not np.isfinite(plateau_scores[idx]):
+        return {"weights": {}, "f1": 0.0, "sharpe": 0.0, "plateau_score": 0.0,
+                "argmax_idx": -1}
     return {
         "weights": combos[idx],
         "f1": float(grid_result["f1"][idx]),
