@@ -262,8 +262,9 @@ class TestPlotlyFigures:
 
 class TestFactorPool:
     def test_pool_size(self):
-        # v18.286: 10 → 13（+ MOVE / NFCI / COPPER_GOLD_RATIO）
-        assert len(FACTOR_POOL) == 13
+        # v19.4: 13 → 23（+ SAHM / SLOOS / LEI / PPI / JOBLESS / CONT_CLAIMS /
+        #                    CONSUMER_CONF / PERMIT_HOUSING / FED_BS / INFL_EXP_5Y）
+        assert len(FACTOR_POOL) == 23
 
     def test_keys_unique(self):
         keys = [f.key for f in FACTOR_POOL]
@@ -284,6 +285,50 @@ class TestFactorPool:
         assert nfci.source == "fred" and nfci.series_id == "NFCI" and nfci.direction == "above"
         cg = FACTOR_POOL_BY_KEY["COPPER_GOLD_RATIO"]
         assert cg.source == "calculated" and cg.direction == "below"
+
+
+class TestV19_4FactorPool:
+    """v19.4：FACTOR_POOL 13 → 23，補 10 個 FRED 因子。"""
+
+    _NEW_KEYS = [
+        "SAHM", "SLOOS", "LEI", "PPI", "JOBLESS", "CONT_CLAIMS",
+        "CONSUMER_CONF", "PERMIT_HOUSING", "FED_BS", "INFL_EXP_5Y",
+    ]
+    _EXPECTED = {
+        "SAHM":            ("SAHMCURRENT", "above"),
+        "SLOOS":           ("DRTSCILM",    "above"),
+        "LEI":             ("USSLIND",     "below"),
+        "PPI":             ("PPIACO",      "above"),
+        "JOBLESS":         ("ICSA",        "above"),
+        "CONT_CLAIMS":     ("CCSA",        "above"),
+        "CONSUMER_CONF":   ("UMCSENT",     "below"),
+        "PERMIT_HOUSING":  ("PERMIT",      "below"),
+        "FED_BS":          ("WALCL",       "below"),
+        "INFL_EXP_5Y":     ("T5YIE",       "above"),
+    }
+
+    def test_all_new_keys_present(self):
+        for k in self._NEW_KEYS:
+            assert k in FACTOR_POOL_BY_KEY, f"{k} 漏加進 FACTOR_POOL"
+
+    def test_all_new_are_fred_source(self):
+        for k in self._NEW_KEYS:
+            assert FACTOR_POOL_BY_KEY[k].source == "fred", f"{k} source 應為 fred"
+
+    def test_series_id_and_direction_correct(self):
+        for k, (sid, dirn) in self._EXPECTED.items():
+            spec = FACTOR_POOL_BY_KEY[k]
+            assert spec.series_id == sid, f"{k} series_id 應為 {sid}"
+            assert spec.direction == dirn, f"{k} direction 應為 {dirn}"
+
+    def test_series_ids_unique_across_pool(self):
+        # 不允許 series_id 重複（FRED ID 衝突會抓同一條 series）
+        sids = [f.series_id for f in FACTOR_POOL]
+        assert len(set(sids)) == len(sids), f"series_id 重複：{sids}"
+
+    def test_all_new_have_note(self):
+        for k in self._NEW_KEYS:
+            assert FACTOR_POOL_BY_KEY[k].note, f"{k} note 為空"
 
 
 class TestFetchFactorSeries:
