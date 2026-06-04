@@ -79,8 +79,20 @@ def render_allocation_simulator_tab() -> None:
     from services.allocation_simulator import (
         DEFAULT_PHASE_SCRIPT,
         STRATEGY_PRESETS,
+        build_preset_matrix_df,
         get_preset_phase_script,
     )
+
+    # ── v18.284：4 風格 × 4 階段 全展開對照表（橫向比較用，read-only）─────
+    with st.expander("📊 4 風格 × 4 階段 對照表（全展開）", expanded=False):
+        st.caption(
+            "格式：D = DRIP / C = CASH / S = STAY（單位：%）。看完比較再用下方"
+            "「策略 preset」selectbox 選一個 + ✨ 套用。"
+        )
+        st.dataframe(
+            build_preset_matrix_df(),
+            use_container_width=True,
+        )
 
     # ── v18.280：4 風格策略 preset × 4 階段矩陣 ─────────────────
     st.markdown("#### 🎯 策略 preset（4 風格 × 4 階段）")
