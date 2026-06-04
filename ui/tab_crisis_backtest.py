@@ -369,9 +369,11 @@ def render_crisis_backtest_tab() -> None:
 # ──────────────────────────────────────────────────────────────
 def _render_signal_lookback_section(events: list, years: int) -> None:
     """🚦 對每個歷史事件回看 VIX/HY/T10Y2Y/UNRATE 是否預先警戒。"""
-    st.markdown("### 🚦 總經訊號預測力驗證（Phase 3）")
+    st.markdown("### 🚦 總經訊號預測力驗證（Phase 3 · v2 轉折偵測）")
     st.caption(
-        "對每個歷史危機事件回看 N 天前的總經訊號 → 量化「Tab1 訊號是否真的有預警」。"
+        "🔄 **v2 edge detection**：對每個歷史危機事件，在峰前 M 天區間內搜尋訊號"
+        "**從非警戒跨越到警戒**的最早**轉折日**（不是「找最早一個觸發警戒的日子」），"
+        "排除「常態性已在警戒 → 假預警」誤判 → 量化「Tab1 訊號是否真的有預警」。"
     )
 
     col_a, col_b = st.columns(2)
@@ -386,7 +388,7 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
         max_lookback_days = st.slider(
             "提前預警搜尋上限（峰前 M 天）",
             min_value=90, max_value=540, value=365, step=30,
-            help="在峰前 M 天區間內，找最早一次進入警戒的日期 → 算提前天數",
+            help="在峰前 M 天內搜尋訊號『從非警戒跨越到警戒』的最早轉折日（edge detection）",
             key="crisis_signal_max_lookback",
         )
 
@@ -446,7 +448,7 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
             "涵蓋事件": stat["n_covered"],
             "命中事件": stat["n_hit"],
             "命中率": f"{stat['hit_rate']:.0%}" if stat["hit_rate"] is not None else "—",
-            "平均提前天數": f"{int(stat['avg_lead_days'])}" if stat["avg_lead_days"] is not None else "—",
+            "平均提前轉折天數": f"{int(stat['avg_lead_days'])}" if stat["avg_lead_days"] is not None else "—",
             "解讀": spec.note,
         })
     st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
@@ -462,7 +464,7 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
             if lb.value_at_lookback is None and lb.first_warning_date is None:
                 row[spec.label] = "—"
             elif lb.lead_time_days is not None:
-                row[spec.label] = f"✅ 提前 {lb.lead_time_days}d"
+                row[spec.label] = f"✅ 轉折提前 {lb.lead_time_days}d"
             else:
                 v = lb.value_at_lookback
                 row[spec.label] = f"❌ ({v:.2f}{spec.unit})" if v is not None else "❌"
@@ -470,8 +472,8 @@ def _render_signal_lookback_section(events: list, years: int) -> None:
     st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
 
     st.caption(
-        "✅ = 峰前搜尋上限區間內，訊號曾進入警戒區，並顯示提前天數；"
-        "❌ = 訊號序列涵蓋但未警戒（顯示峰前 offset 觀測值）；"
+        "✅ = 峰前 M 天內偵測到訊號**從非警戒跨越到警戒**的轉折日，顯示提前天數；"
+        "❌ = 訊號序列涵蓋但峰前未出現轉折（可能常態警戒 → 假預警 / 或全程平靜）；"
         "— = 訊號歷史不涵蓋該事件（FRED key 缺漏 / 序列過短）。"
     )
 
