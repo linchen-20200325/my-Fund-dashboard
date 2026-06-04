@@ -61,6 +61,27 @@ FACTOR_POOL: list[FactorSpec] = [
                note="芝加哥聯儲 105 項金融指標；>0 = 金融環境緊縮"),
     FactorSpec("COPPER_GOLD_RATIO", "銅金比", "calculated", "HG=F/GC=F", "below",
                note="銅/金期貨；下彎 = 景氣轉弱領先指標"),
+    # v19.4 補齊 10 因子：景氣領先 + 勞動信用 + 通膨預期 + Fed BS
+    FactorSpec("SAHM", "Sahm 法則衰退指標", "fred", "SAHMCURRENT", "above",
+               note="失業率 3MMA − 12M 低點 ≥ 0.5 = 衰退觸發"),
+    FactorSpec("SLOOS", "SLOOS 銀行信用緊縮", "fred", "DRTSCILM", "above",
+               note="商業放款標準淨緊縮百分比；>0 = 信貸收縮"),
+    FactorSpec("LEI", "Leading Economic Index", "fred", "USSLIND", "below",
+               note="St. Louis Fed 領先指標；下行 = 景氣轉弱"),
+    FactorSpec("PPI", "PPI 全商品物價", "fred", "PPIACO", "above",
+               note="生產者物價；上行 = 成本通膨壓力"),
+    FactorSpec("JOBLESS", "初領失業金人數", "fred", "ICSA", "above",
+               note="ICSA 週頻；高 = 裁員增加"),
+    FactorSpec("CONT_CLAIMS", "持續領失業金人數", "fred", "CCSA", "above",
+               note="CCSA 週頻；高 = 重新就業困難"),
+    FactorSpec("CONSUMER_CONF", "密大消費者信心", "fred", "UMCSENT", "below",
+               note="Michigan Consumer Sentiment；低 = 消費萎縮"),
+    FactorSpec("PERMIT_HOUSING", "新屋建照", "fred", "PERMIT", "below",
+               note="領先房市指標；低 = 房市轉弱"),
+    FactorSpec("FED_BS", "Fed 資產負債表", "fred", "WALCL", "below",
+               note="WALCL 總資產；下行 = QT 流動性緊縮"),
+    FactorSpec("INFL_EXP_5Y", "5Y 通膨預期", "fred", "T5YIE", "above",
+               note="5Y breakeven inflation；高 = 通膨預期升溫"),
 ]
 
 FACTOR_POOL_BY_KEY = {f.key: f for f in FACTOR_POOL}
