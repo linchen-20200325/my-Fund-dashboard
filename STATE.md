@@ -9,6 +9,7 @@
 - **入口**：`app.py`（Streamlit Cloud 部署）
 
 ## 當前版本
+- **v19.0_RouteC_C1_PendingReviewSchema**：Route C 第一階段「面板=回測 OOS 驗證結果」閉環落地 — 新增 `config/macro_weights_active.json` + `services/macro_weights_store.py`（5 個純函式：load_active / load_pending / save_pending / approve_pending / reject_pending + `build_payload_from_multifactor` 整理器）；新增 `services/ai_advisor_pending.py` 接 Gemini 產白話權重解讀（無 key fallback 純數學摘要）；危機回測室 Phase 3 多因子跑完顯示「📌 提交為待審權重」按鈕（**僅手動觸發**），呼叫 AI → save_pending；總經 Tab 頂部偵測 pending.json 顯示橘色 banner，user 點 ✅ 批准 → promote pending → active，或 ❌ 拒絕 → 刪 pending；面板載入邏輯不變（C-2 才接管 weight 來源）；**刪除 `.github/workflows/recalibrate_macro_score.yml`**（季頻自動寫權重 workflow 與 pending review 流程衝突，回測只能手動觸發）；18 cases passed
 - **v18.296_AdvancedFactorPool13**：多因子權重最佳化 FACTOR_POOL 10 → 13；補強「債市流動性 + 高頻景氣 + 金融環境」三類進階因子（MOVE 公債波動率 yahoo `^MOVE` / NFCI 全國金融狀況 fred `NFCI` / 銅金比 calculated `HG=F÷GC=F`）；FactorSpec.source Literal 擴 `"calculated"`；新增 `fetch_factor_series(spec, years, fred_api_key)` lazy fetcher 統一三 source；UI 不再過濾 series_by_key，Run 時自動 lazy-fetch 缺漏因子；34 cases passed
 - **v18.285_MultiFactorPlateauWalkForward**：Phase 3 加「🔬 多因子權重最佳化」expander — 綜合分數 S_t = Σ w_i × normalize(I_{i,t−1})（lag=1 防未來引用），simplex 權重 grid sweep 算 F1+Sharpe，**plateau 評分 = 鄰域 mean − λ × std**（不取單一最高 F1）；walk-forward 滾動 train/test 串 OOS 權益曲線；plotly 2D heatmap + 3D surface toggle；10 因子池（4 現有 + 6 raw FRED：PMI/CPI/FedFunds/M2/DXY/T10Y3M）；28 case 驗收
 - **v18.284_PresetMatrixCompareTable**：配置模擬器 selectbox 上方加「📊 4 風格 × 4 階段 對照表（全展開）」expander — DataFrame 4 phases × 4 styles = 16 cells "D / C / S" 字串，read-only，方便 user 橫向比較再選 preset 套用；engine 加 `build_preset_matrix_df()` helper
@@ -26,7 +27,8 @@
 - `ui/` — Streamlit 分頁元件（tab1~tab6 + components）
 - `scripts/` — `update_macro_history.py`（每週 cron 抓 FRED + Yahoo Parquet）/ `calibrate_macro_score.py`（VIX OOS 自動校正）
 - `data_cache/*.parquet` — fred_indicators / spx_history / twii_history / vix_history（每週日 cron 更新）
-- `.github/workflows/` — update_macro_history / recalibrate_macro_score / fetch_nav_cache / pr-check
+- `.github/workflows/` — update_macro_history / fetch_nav_cache / pr-check（v19.0_C1 移除 recalibrate_macro_score — 回測只能手動觸發）
+- `config/macro_weights_active.json` / `config/macro_weights_pending.json`（v19.0_C1）— Route C 權重雙檔（pending 僅在有待審時存在）
 
 ## 即時健康指標
 - **Test**：~1098 passed / 2 skipped / 0 failed（PR #169 修掉 3 個 pre-existing fail）
