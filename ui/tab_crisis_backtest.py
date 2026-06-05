@@ -23,6 +23,37 @@ _PHASE1_CACHE_KEY = "_crisis_phase1_cache"   # 主回測：events / mkt_series /
 _PHASE3_CACHE_KEY = "_crisis_phase3_cache"   # 訊號回看結果
 _GRID_CACHE_KEY = "_crisis_grid_cache"       # Phase 4 策略網格（既有，提到頂層管理）
 
+# v19.13：雙軌 mode — 多因子權重最佳化 + AutoSearch apply 路由
+MULTIFACTOR_MODES = ("macro", "pullback")
+MULTIFACTOR_MODE_LABELS = {
+    "macro": "🏔️ 總經長期 (lead 30-90d)",
+    "pullback": "⚡ 短期回檔 (lead 5-30d)",
+}
+
+
+def route_apply_key_by_lead(max_lead_days: int | float) -> str:
+    """v19.13：AutoSearch「採用 Top 1」依當前 lead time max 路由到對應 mode session_state.
+
+    max_lead ≤ 30 → 短期回檔；否則 → 長期總經。
+    回傳完整 session_state key（含 prefix）。
+    """
+    mode = "pullback" if float(max_lead_days) <= 30 else "macro"
+    return f"multifactor_keys_{mode}"
+
+
+def multifactor_keys_state_key(mode: str) -> str:
+    """v19.13：mode → multiselect 綁定的 session_state key."""
+    if mode not in MULTIFACTOR_MODES:
+        raise ValueError(f"unknown mode: {mode!r}")
+    return f"multifactor_keys_{mode}"
+
+
+def multifactor_result_state_key(mode: str) -> str:
+    """v19.13：mode → walk-forward 結果的 session_state cache key."""
+    if mode not in MULTIFACTOR_MODES:
+        raise ValueError(f"unknown mode: {mode!r}")
+    return f"_multifactor_result_{mode}"
+
 
 def _phase1_params_signature(market: str, threshold_pct: int, years: int, fund_key: str) -> str:
     return f"{market}|{threshold_pct}|{years}|{(fund_key or '').strip()}"
@@ -698,6 +729,43 @@ def _render_phase3_auto_calibration_fund(events, specs, series_by_key) -> None:
 # 🔬 v18.285：多因子權重最佳化 + 高原區 + Walk-Forward OOS
 # 不是找單一最高績效，而是找「參數高原區」+ 滾動前向 OOS 驗證穩定性
 # ──────────────────────────────────────────────────────────────
+def _render_dual_signal_summary_card() -> None:
+    """v19.13：讀兩 mode 的 walk-forward cache，顯示 OOS F1/Sharpe 並列摘要.
+
+    純歷史回測指標（v19.13 §3 選項 C）；即時訊號燈 + 決策矩陣留待 v19.14。
+    """
+    macro = st.session_state.get(multifactor_result_state_key("macro"))
+    pullback = st.session_state.get(multifactor_result_state_key("pullback"))
+    if not macro and not pullback:
+        return  # 還沒跑過任何 mode，不顯示空卡
+    st.markdown("### 📊 雙模型摘要卡（v19.13）")
+    st.caption(
+        "兩 mode 各自獨立的 walk-forward OOS 結果。即時訊號燈 + 決策矩陣為 v19.14 範圍。"
+    )
+    col_m, col_p = st.columns(2)
+    for col, key, label in (
+        (col_m, "macro", MULTIFACTOR_MODE_LABELS["macro"]),
+        (col_p, "pullback", MULTIFACTOR_MODE_LABELS["pullback"]),
+    ):
+        with col:
+            st.markdown(f"**{label}**")
+            cached = st.session_state.get(multifactor_result_state_key(key))
+            if not cached:
+                st.info("尚未訓練 — 請在下方切此 mode 跑 walk-forward")
+                continue
+            wf = cached.get("wf") or {}
+            f1 = float(wf.get("oos_f1", 0.0))
+            sharpe = float(wf.get("oos_sharpe", 0.0))
+            n_folds = int(wf.get("n_folds", 0))
+            m1, m2 = st.columns(2)
+            m1.metric("OOS F1", f"{f1:.3f}")
+            m2.metric("OOS Sharpe", f"{sharpe:.3f}")
+            st.caption(
+                f"因子：{', '.join(cached.get('sel_keys', []))}　|　folds={n_folds}",
+            )
+    st.markdown("---")
+
+
 def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
     """🔬 多因子權重最佳化 — 高原評分 + walk-forward OOS 驗證."""
 
@@ -713,6 +781,9 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
         walk_forward_validate,
     )
 
+    # v19.13：雙模型摘要卡（在 expander 上方，唯讀）
+    _render_dual_signal_summary_card()
+
     with st.expander(
             "🔬 多因子權重最佳化（高原區 + walk-forward OOS）",
             expanded=False):
@@ -721,6 +792,16 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
             "找**高原區**（不取單一最高 F1，而是鄰域 mean − λ × std 最大）→ "
             "walk-forward 滾動 train/test 串 OOS 權益曲線確認 robust。"
         )
+
+        # v19.13：mode radio — 切「🏔️ 總經長期 / ⚡ 短期回檔」，下游 key 全部動態切換
+        mode = st.radio(
+            "模型 mode（兩 mode 獨立 multiselect / walk-forward 結果，互不覆蓋）",
+            options=list(MULTIFACTOR_MODES),
+            format_func=lambda k: MULTIFACTOR_MODE_LABELS[k],
+            horizontal=True, key="multifactor_mode",
+        )
+        keys_state_key = multifactor_keys_state_key(mode)
+        result_state_key = multifactor_result_state_key(mode)
 
         # v18.286: FACTOR_POOL 全 13 個都列出；Phase 1/2 已抓的標 ✓，缺的會在點 Run 時 lazy-fetch
         available_keys = list(FACTOR_POOL_BY_KEY.keys())
@@ -734,14 +815,26 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
             f"{len(available_keys) - len(ready_keys)} 個會在點 Run 時 lazy-fetch。"
         )
 
+        # v19.13：依 mode 給不同預設因子（pullback 偏 5D delta；macro 走既有日頻）
+        if keys_state_key not in st.session_state:
+            if mode == "pullback":
+                preferred = [
+                    k for k in ("VIX", "VIX_DELTA_5D",
+                                "HY_SPREAD_DELTA_5D", "BREADTH_RSP_SPY_5D")
+                    if k in available_keys
+                ]
+                default_sel = preferred[:6] or available_keys[:3]
+            else:
+                default_sel = available_keys[:min(3, len(available_keys))]
+            st.session_state[keys_state_key] = default_sel
+
         col_pick, col_metric = st.columns([2, 1])
         with col_pick:
             sel_keys = st.multiselect(
                 "選擇因子（最多 6 個 — simplex 點數隨 n 指數成長）",
                 options=available_keys,
-                default=available_keys[:min(3, len(available_keys))],
                 max_selections=6,
-                key="multifactor_keys",
+                key=keys_state_key,
                 format_func=lambda k: f"{FACTOR_POOL_BY_KEY[k].label} ({k})",
             )
         with col_metric:
@@ -828,7 +921,7 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
                     threshold=threshold, step=step, radius=radius,
                     lambda_std=lambda_std, metric=metric,
                 )
-            st.session_state["_multifactor_result"] = {
+            st.session_state[result_state_key] = {
                 "sel_keys": sel_keys,
                 "grid": grid_result,
                 "plateau": plateau_scores,
@@ -836,13 +929,15 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
                 "wf": wf,
                 "metric": metric,
                 "step": step,
+                "mode": mode,
             }
             st.success(
-                f"✅ 完成 {len(grid_result['combos'])} 個權重組合 + "
+                f"✅ [{MULTIFACTOR_MODE_LABELS[mode]}] "
+                f"完成 {len(grid_result['combos'])} 個權重組合 + "
                 f"{wf['n_folds']} 折 walk-forward"
             )
 
-        cached = st.session_state.get("_multifactor_result")
+        cached = st.session_state.get(result_state_key)
         if not cached:
             return
         sel_keys = cached["sel_keys"]
@@ -1266,16 +1361,21 @@ def _render_live_winners(
         )
         # 「採用 top 1」按鈕 — 寫回 multiselect 的 session_state
         # 只在 final render 顯示，避免 widget key 重複註冊
+        # v19.13：依當前 AutoSearch lead time 自動路由到對應 mode 的 keys
         if show_apply_btn and winners:
             top = winners[0]
+            max_lead = st.session_state.get("as_max_lead", 90)
+            target_key = route_apply_key_by_lead(max_lead)
+            target_mode = "短期回檔" if target_key.endswith("_pullback") else "總經長期"
             if st.button(
-                f"✅ 採用 Top 1：{' + '.join(top.subset)} 為當前因子選擇",
+                f"✅ 採用 Top 1：{' + '.join(top.subset)} → {target_mode} mode",
                 key=f"as_apply_{top.run_id}",
             ):
-                st.session_state["multifactor_keys"] = list(top.subset)
+                st.session_state[target_key] = list(top.subset)
                 st.success(
-                    f"已寫入 `multifactor_keys`：{top.subset}。"
-                    "請捲到上方手動跑「🚀 跑多因子高原 + walk-forward」。"
+                    f"已寫入 `{target_key}`：{top.subset}。"
+                    f"請到「多因子權重最佳化」expander 切「{target_mode}」mode "
+                    "手動跑「🚀 跑多因子高原 + walk-forward」。"
                 )
 
 
