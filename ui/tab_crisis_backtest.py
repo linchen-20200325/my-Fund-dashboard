@@ -61,6 +61,17 @@ def multifactor_result_state_key(mode: str) -> str:
     return f"_multifactor_result_{mode}"
 
 
+def multifactor_ai_advice_state_key(mode: str) -> str:
+    """v19.13.10：mode → Phase 3「事前 AI 建議」cache key（per-mode 拆 slot）.
+
+    v19.9 原本用單一 ``_multifactor_ai_advice``；切 mode 跑 AI 會互覆蓋 → 切回
+    原 mode 看不到之前生成的 AI 建議（user 痛點：「總經沒有之前的核准回覆」）。
+    """
+    if mode not in MULTIFACTOR_MODES:
+        raise ValueError(f"unknown mode: {mode!r}")
+    return f"_multifactor_ai_advice_{mode}"
+
+
 def mode_forward_days(mode: str) -> tuple[int, int]:
     """v19.13.1：mode → (min_forward_days, max_forward_days) for walk-forward 評估."""
     if mode not in MULTIFACTOR_MODES:
@@ -1034,16 +1045,20 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
                     "請調小 train/test 視窗或加長序列。")
 
         # ── 🤖 事前 AI 建議（v19.9，按鈕觸發避免燒 quota）─────────────
-        _render_ai_recommendation_section(cached)
+        # v19.13.10：per-mode cache → 切 mode 不會互覆蓋之前生成的 AI 建議
+        _render_ai_recommendation_section(cached, mode)
 
         # ── 📌 Route C-1：提交為待審權重（僅手動觸發）─────────────
         _render_pending_submit_section(cached)
 
 
-def _render_ai_recommendation_section(cached: dict | None) -> None:
+def _render_ai_recommendation_section(
+    cached: dict | None, mode: str = "macro",
+) -> None:
     """v19.9：在提交前讓 AI 比對 top-5 候選 → 建議提交哪組（含風險旗標）。
 
     與 ``_render_pending_submit_section`` 內的「事後 AI 解讀」是獨立兩條 AI 線。
+    v19.13.10：mode 參數 → cache + button key 加 mode 後綴；切 mode 不會互覆蓋。
     """
     st.markdown("---")
     st.markdown("### 🤖 事前 AI 建議參數")
@@ -1059,8 +1074,8 @@ def _render_ai_recommendation_section(cached: dict | None) -> None:
     from services.ai_advisor_pending import recommend_weights
     from services.multi_factor_optimization import top_n_plateau_candidates
 
-    advice_key = "_multifactor_ai_advice"
-    if st.button("🤖 取得 AI 建議", key="multifactor_ai_recommend"):
+    advice_key = multifactor_ai_advice_state_key(mode)
+    if st.button("🤖 取得 AI 建議", key=f"multifactor_ai_recommend_{mode}"):
         candidates = top_n_plateau_candidates(
             cached.get("grid") or {},
             cached.get("plateau"),

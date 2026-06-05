@@ -9,6 +9,8 @@ v19.13.8：新增 _pick_latest_job_per_mode 測試（防 reboot / refresh 後 wi
 AI + Apply 按鈕集體消失 — session_state cache 失效時的 disk fallback）。
 v19.13.9：新增 pending_factor_apply_key 測試（防 Apply Top 1 → 直接寫 widget
 key 撞 StreamlitAPIException 整頁炸 — Phase 3 / AutoSearch 同 run render order）。
+v19.13.10：新增 multifactor_ai_advice_state_key 測試（防 v19.9 單一 slot 害
+切 mode 跑 AI 互覆蓋 →「總經沒有之前的核准回覆」根因）。
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ from ui.tab_crisis_backtest import (
     _pick_latest_job_per_mode,
     autosearch_cache_key_for_mode,
     mode_forward_days,
+    multifactor_ai_advice_state_key,
     multifactor_keys_state_key,
     multifactor_result_state_key,
     pending_factor_apply_key,
@@ -295,3 +298,44 @@ def test_pending_factor_apply_key_not_same_as_autosearch_cache():
     # pending slot 也必須 != autosearch cache key — 三類 key 都要分離
     for mode in MULTIFACTOR_MODES:
         assert pending_factor_apply_key(mode) != autosearch_cache_key_for_mode(mode)
+
+
+# ─── v19.13.10: multifactor_ai_advice_state_key (per-mode AI cache) ──
+def test_multifactor_ai_advice_key_distinct_per_mode():
+    # 兩 mode AI 建議 cache 必須不同 — 切 mode 不會互覆蓋
+    assert (
+        multifactor_ai_advice_state_key("pullback")
+        != multifactor_ai_advice_state_key("macro")
+    )
+
+
+def test_multifactor_ai_advice_key_covers_all_modes():
+    keys = {multifactor_ai_advice_state_key(m) for m in MULTIFACTOR_MODES}
+    assert len(keys) == len(MULTIFACTOR_MODES)
+
+
+def test_multifactor_ai_advice_key_rejects_unknown_mode():
+    with pytest.raises(ValueError, match="unknown mode"):
+        multifactor_ai_advice_state_key("daily")
+    with pytest.raises(ValueError, match="unknown mode"):
+        multifactor_ai_advice_state_key("")
+
+
+def test_multifactor_ai_advice_key_distinct_from_other_cache_categories():
+    # AI advice cache 必須跟其他四類 cache key 完全分離
+    # （widget key / result key / autosearch cache / pending slot）
+    for mode in MULTIFACTOR_MODES:
+        ai_key = multifactor_ai_advice_state_key(mode)
+        assert ai_key != multifactor_keys_state_key(mode)
+        assert ai_key != multifactor_result_state_key(mode)
+        assert ai_key != autosearch_cache_key_for_mode(mode)
+        assert ai_key != pending_factor_apply_key(mode)
+
+
+def test_multifactor_ai_advice_key_has_mode_suffix():
+    # 直接驗證 naming convention — 防 typo 害 cache 全跑同一槽
+    assert multifactor_ai_advice_state_key("macro") == "_multifactor_ai_advice_macro"
+    assert (
+        multifactor_ai_advice_state_key("pullback")
+        == "_multifactor_ai_advice_pullback"
+    )
