@@ -29,6 +29,12 @@ MULTIFACTOR_MODE_LABELS = {
     "macro": "🏔️ 總經長期 (lead 30-90d)",
     "pullback": "⚡ 短期回檔 (lead 5-30d)",
 }
+# v19.13.1：mode → walk-forward 評估窗口 (min, max) forward days
+# 修 v19.13 bug：原本兩 mode 都吃 default max=365 → F1 全部退化到 base-rate
+MULTIFACTOR_MODE_LEAD_DAYS: dict[str, tuple[int, int]] = {
+    "macro": (30, 90),
+    "pullback": (5, 30),
+}
 
 
 def route_apply_key_by_lead(max_lead_days: int | float) -> str:
@@ -53,6 +59,13 @@ def multifactor_result_state_key(mode: str) -> str:
     if mode not in MULTIFACTOR_MODES:
         raise ValueError(f"unknown mode: {mode!r}")
     return f"_multifactor_result_{mode}"
+
+
+def mode_forward_days(mode: str) -> tuple[int, int]:
+    """v19.13.1：mode → (min_forward_days, max_forward_days) for walk-forward 評估."""
+    if mode not in MULTIFACTOR_MODES:
+        raise ValueError(f"unknown mode: {mode!r}")
+    return MULTIFACTOR_MODE_LEAD_DAYS[mode]
 
 
 def _phase1_params_signature(market: str, threshold_pct: int, years: int, fund_key: str) -> str:
@@ -906,10 +919,14 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
             for k in sel_keys:
                 if k not in sel_series:
                     sel_series[k] = series_by_key[k]
+            # v19.13.1：依 mode 注入正確的 (min, max) forward days
+            # 修 v19.13 bug：原本沒傳 → 兩 mode 都用 default max=365 → F1 退化
+            min_fwd, max_fwd = mode_forward_days(mode)
             with st.spinner("跑 grid search + plateau + walk-forward 中..."):
                 grid_result = grid_search_performance(
                     sel_series, returns, events, sel_keys,
                     threshold=threshold, step=step,
+                    min_forward_days=min_fwd, max_forward_days=max_fwd,
                 )
                 plateau_scores = evaluate_plateau(
                     grid_result, sel_keys, step, radius, lambda_std, metric,
@@ -920,6 +937,7 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
                     train_months=train_months, test_months=test_months,
                     threshold=threshold, step=step, radius=radius,
                     lambda_std=lambda_std, metric=metric,
+                    min_forward_days=min_fwd, max_forward_days=max_fwd,
                 )
             st.session_state[result_state_key] = {
                 "sel_keys": sel_keys,
