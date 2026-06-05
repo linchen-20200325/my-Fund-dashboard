@@ -40,7 +40,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.13.7_DualModeAutoSearchPersist"
+APP_VERSION = "v19.13.8_DualModeRebootRecover"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
