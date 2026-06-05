@@ -1036,7 +1036,7 @@ def _render_autosearch_section(events, series_by_key) -> None:
 
     with st.expander(
         "🤖 v19.10 AutoSearch — 自動找最佳因子組合（跨 session 可續跑）",
-        expanded=False,
+        expanded=True,
     ):
         st.caption(
             "演算法：univariate 預篩 top-K → greedy forward selection → "
