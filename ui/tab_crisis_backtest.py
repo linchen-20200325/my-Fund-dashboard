@@ -918,9 +918,6 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
         # ── 📌 Route C-1：提交為待審權重（僅手動觸發）─────────────
         _render_pending_submit_section(cached)
 
-    # ── 🤖 v19.10：AutoSearch 自動搜尋因子組合（獨立 expander）────
-    _render_autosearch_section(events, series_by_key)
-
 
 def _render_ai_recommendation_section(cached: dict | None) -> None:
     """v19.9：在提交前讓 AI 比對 top-5 候選 → 建議提交哪組（含風險旗標）。

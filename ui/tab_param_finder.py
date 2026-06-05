@@ -17,6 +17,7 @@ import streamlit as st
 
 from ui.tab_crisis_backtest import (
     _PHASE1_CACHE_KEY,
+    _render_autosearch_section,
     _render_phase3_multi_factor_optimization,
 )
 
@@ -44,3 +45,7 @@ def render_param_finder_tab() -> None:
 
     # series_by_key 給空 dict 讓 multi-factor 走 lazy-fetch 抓所有 23 因子
     _render_phase3_multi_factor_optimization(events, {})
+
+    # v19.11.2：AutoSearch hoist 到外層，與多因子 expander 同一層級（兄弟），
+    # 不再巢在多因子函數內 — UI 順序：多因子 → AutoSearch
+    _render_autosearch_section(events, {})
