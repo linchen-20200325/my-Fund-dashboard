@@ -2,14 +2,18 @@
 
 只測純函式 routing helpers，不涉及 Streamlit session_state。
 v19.13.1：新增 mode_forward_days 測試（防 lead_days wiring 漏接退化 bug）。
+v19.13.5：新增 _autosearch_winners_to_candidates 測試（AI 高原 vs peak adapter）。
 """
 from __future__ import annotations
+
+from types import SimpleNamespace
 
 import pytest
 
 from ui.tab_crisis_backtest import (
     MULTIFACTOR_MODE_LEAD_DAYS,
     MULTIFACTOR_MODES,
+    _autosearch_winners_to_candidates,
     mode_forward_days,
     multifactor_keys_state_key,
     multifactor_result_state_key,
@@ -108,3 +112,55 @@ def test_mode_forward_days_min_lt_max():
 def test_mode_lead_days_dict_matches_modes():
     # MULTIFACTOR_MODE_LEAD_DAYS 必須涵蓋所有 MULTIFACTOR_MODES
     assert set(MULTIFACTOR_MODE_LEAD_DAYS.keys()) == set(MULTIFACTOR_MODES)
+
+
+# ─── v19.13.5: _autosearch_winners_to_candidates ──────────────────
+def _fake_winner(weights, plateau, f1, sharpe, n_cross):
+    return SimpleNamespace(
+        weights=weights, plateau_score=plateau,
+        oos_f1=f1, oos_sharpe=sharpe, n_crossings=n_cross,
+    )
+
+
+def test_winners_to_candidates_empty_input_returns_empty_list():
+    assert _autosearch_winners_to_candidates([]) == []
+
+
+def test_winners_to_candidates_maps_fields_one_to_one():
+    winners = [
+        _fake_winner({"VIX": 0.6, "DXY": 0.4}, 0.020, 0.727, 1.23, 43),
+    ]
+    out = _autosearch_winners_to_candidates(winners)
+    assert len(out) == 1
+    c = out[0]
+    assert c["weights"] == {"VIX": 0.6, "DXY": 0.4}
+    assert c["plateau_score"] == pytest.approx(0.020)
+    assert c["f1"] == pytest.approx(0.727)
+    assert c["sharpe"] == pytest.approx(1.23)
+    assert c["n_crossings"] == 43
+
+
+def test_winners_to_candidates_preserves_order():
+    winners = [
+        _fake_winner({"A": 1.0}, 0.05, 0.7, 1.0, 50),
+        _fake_winner({"B": 1.0}, 0.04, 0.6, 0.8, 40),
+        _fake_winner({"C": 1.0}, 0.03, 0.5, 0.6, 30),
+    ]
+    out = _autosearch_winners_to_candidates(winners)
+    assert [list(c["weights"].keys())[0] for c in out] == ["A", "B", "C"]
+
+
+def test_winners_to_candidates_defensive_copy_of_weights():
+    # 防止 caller mutate adapter 內部結果 → 影響原始 SearchResult.weights
+    original = {"VIX": 0.5, "DXY": 0.5}
+    winners = [_fake_winner(original, 0.01, 0.3, 0.0, 10)]
+    out = _autosearch_winners_to_candidates(winners)
+    out[0]["weights"]["VIX"] = 999.0
+    assert original == {"VIX": 0.5, "DXY": 0.5}, "adapter 應該深拷 weights"
+
+
+def test_winners_to_candidates_none_weights_falls_back_to_empty_dict():
+    # SearchResult.weights 可能為 None（極端 fallback case）
+    winners = [_fake_winner(None, 0.0, 0.0, 0.0, 0)]
+    out = _autosearch_winners_to_candidates(winners)
+    assert out[0]["weights"] == {}
