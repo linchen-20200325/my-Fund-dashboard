@@ -7,6 +7,8 @@ v19.13.7：新增 dual-mode cache key + _mode_from_max_lead 測試（防 single 
 覆蓋 bug —「只看得到一種 mode」根因）。
 v19.13.8：新增 _pick_latest_job_per_mode 測試（防 reboot / refresh 後 winners +
 AI + Apply 按鈕集體消失 — session_state cache 失效時的 disk fallback）。
+v19.13.9：新增 pending_factor_apply_key 測試（防 Apply Top 1 → 直接寫 widget
+key 撞 StreamlitAPIException 整頁炸 — Phase 3 / AutoSearch 同 run render order）。
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ from ui.tab_crisis_backtest import (
     mode_forward_days,
     multifactor_keys_state_key,
     multifactor_result_state_key,
+    pending_factor_apply_key,
     route_apply_key_by_lead,
 )
 
@@ -259,3 +262,36 @@ def test_pick_latest_job_per_mode_skips_missing_run_id():
     ]
     result = _pick_latest_job_per_mode(jobs)
     assert result == {"pullback": "p1"}
+
+
+# ─── v19.13.9: pending_factor_apply_key (widget collision fix) ─────
+def test_pending_factor_apply_key_distinct_per_mode():
+    # 雙 mode pending slot 必須不同 — 不會跨 mode 互覆蓋
+    assert (
+        pending_factor_apply_key("pullback")
+        != pending_factor_apply_key("macro")
+    )
+
+
+def test_pending_factor_apply_key_covers_all_modes():
+    keys = {pending_factor_apply_key(m) for m in MULTIFACTOR_MODES}
+    assert len(keys) == len(MULTIFACTOR_MODES)
+
+
+def test_pending_factor_apply_key_rejects_unknown_mode():
+    with pytest.raises(ValueError, match="unknown mode"):
+        pending_factor_apply_key("daily")
+    with pytest.raises(ValueError, match="unknown mode"):
+        pending_factor_apply_key("intraday")
+
+
+def test_pending_factor_apply_key_not_same_as_widget_key():
+    # pending slot 必須 != widget key — 否則回到撞 widget key 的原 bug
+    for mode in MULTIFACTOR_MODES:
+        assert pending_factor_apply_key(mode) != multifactor_keys_state_key(mode)
+
+
+def test_pending_factor_apply_key_not_same_as_autosearch_cache():
+    # pending slot 也必須 != autosearch cache key — 三類 key 都要分離
+    for mode in MULTIFACTOR_MODES:
+        assert pending_factor_apply_key(mode) != autosearch_cache_key_for_mode(mode)

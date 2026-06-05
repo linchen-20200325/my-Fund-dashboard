@@ -828,6 +828,14 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
             f"{len(available_keys) - len(ready_keys)} 個會在點 Run 時 lazy-fetch。"
         )
 
+        # v19.13.9：AutoSearch Apply 的 pending slot — 在 multiselect instantiate
+        # 之前處理，避免「widget key 已 bind → session_state API 寫該 key」
+        # 造成 StreamlitAPIException（render_param_finder_tab 順序是 Phase 3
+        # 先 → AutoSearch 後，Apply 按鈕在 AutoSearch 觸發時 multiselect 已 instantiate）
+        pending_key = pending_factor_apply_key(mode)
+        if pending_key in st.session_state:
+            st.session_state[keys_state_key] = st.session_state.pop(pending_key)
+
         # v19.13：依 mode 給不同預設因子（pullback 偏 5D delta；macro 走既有日頻）
         if keys_state_key not in st.session_state:
             if mode == "pullback":
@@ -1423,20 +1431,42 @@ def _render_live_winners(
             top = winners[0]
             if apply_mode in MULTIFACTOR_MODES:
                 target_key = multifactor_keys_state_key(apply_mode)
+                mode_for_apply = apply_mode
             else:
                 max_lead = st.session_state.get("as_max_lead", 90)
                 target_key = route_apply_key_by_lead(max_lead)
+                mode_for_apply = (
+                    "pullback" if target_key.endswith("_pullback") else "macro"
+                )
             target_mode = "短期回檔" if target_key.endswith("_pullback") else "總經長期"
             if st.button(
                 f"✅ 採用 Top 1：{' + '.join(top.subset)} → {target_mode} mode",
                 key=f"as_apply_{top.run_id}",
             ):
-                st.session_state[target_key] = list(top.subset)
-                st.success(
-                    f"已寫入 `{target_key}`：{top.subset}。"
-                    f"請到「多因子權重最佳化」expander 切「{target_mode}」mode "
-                    "手動跑「🚀 跑多因子高原 + walk-forward」。"
+                # v19.13.9：寫 pending slot（非 widget key）+ rerun，由 Phase 3
+                # 在 multiselect instantiate 之前 pop pending → 安全 set widget key。
+                # 直接寫 widget key 會在 Phase 3 已 render multiselect 後撞
+                # StreamlitAPIException（同 run、widget bound 後不能用 API 寫）。
+                st.session_state[pending_factor_apply_key(mode_for_apply)] = list(
+                    top.subset,
                 )
+                st.toast(
+                    f"✅ 已寫入「{target_mode}」mode：{', '.join(top.subset)}",
+                    icon="✅",
+                )
+                st.rerun()
+
+
+def pending_factor_apply_key(mode: str) -> str:
+    """v19.13.9：mode → AutoSearch Apply 按鈕的 pending slot key（非 widget key）。
+
+    Phase 3 multiselect 在 AutoSearch 之前 render → instantiate 後就不能用
+    session_state API 寫 widget key。改寫此 pending slot + rerun，由 Phase 3 在
+    multiselect render 之前 pop pending → 安全 set widget key（pre-widget OK）。
+    """
+    if mode not in MULTIFACTOR_MODES:
+        raise ValueError(f"unknown mode: {mode!r}")
+    return f"_pending_factor_apply_{mode}"
 
 
 def autosearch_cache_key_for_mode(mode: str) -> str:
