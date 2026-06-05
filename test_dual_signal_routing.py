@@ -5,6 +5,8 @@ v19.13.1：新增 mode_forward_days 測試（防 lead_days wiring 漏接退化 b
 v19.13.5：新增 _autosearch_winners_to_candidates 測試（AI 高原 vs peak adapter）。
 v19.13.7：新增 dual-mode cache key + _mode_from_max_lead 測試（防 single cache
 覆蓋 bug —「只看得到一種 mode」根因）。
+v19.13.8：新增 _pick_latest_job_per_mode 測試（防 reboot / refresh 後 winners +
+AI + Apply 按鈕集體消失 — session_state cache 失效時的 disk fallback）。
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ from ui.tab_crisis_backtest import (
     MULTIFACTOR_MODES,
     _autosearch_winners_to_candidates,
     _mode_from_max_lead,
+    _pick_latest_job_per_mode,
     autosearch_cache_key_for_mode,
     mode_forward_days,
     multifactor_keys_state_key,
@@ -205,3 +208,54 @@ def test_autosearch_cache_key_rejects_unknown_mode():
         autosearch_cache_key_for_mode("daily")
     with pytest.raises(ValueError, match="unknown mode"):
         autosearch_cache_key_for_mode("intraday")
+
+
+# ─── v19.13.8: _pick_latest_job_per_mode (reboot recovery) ─────────
+def _fake_job(run_id, lead_time_max, last_update):
+    return SimpleNamespace(
+        run_id=run_id, lead_time_max=lead_time_max, last_update=last_update,
+    )
+
+
+def test_pick_latest_job_per_mode_empty_returns_empty_dict():
+    assert _pick_latest_job_per_mode([]) == {}
+
+
+def test_pick_latest_job_per_mode_picks_latest_per_mode():
+    # 兩 mode 各 2 個 job，各挑 last_update 最新
+    jobs = [
+        _fake_job("p_old", 30, "2026-06-04T10:00:00"),
+        _fake_job("p_new", 30, "2026-06-05T13:15:00"),
+        _fake_job("m_old", 90, "2026-06-03T10:00:00"),
+        _fake_job("m_new", 90, "2026-06-05T13:16:00"),
+    ]
+    result = _pick_latest_job_per_mode(jobs)
+    assert result == {"pullback": "p_new", "macro": "m_new"}
+
+
+def test_pick_latest_job_per_mode_only_one_mode():
+    # 只 pullback 有 job → macro 不出現
+    jobs = [_fake_job("p1", 30, "2026-06-05")]
+    result = _pick_latest_job_per_mode(jobs)
+    assert result == {"pullback": "p1"}
+    assert "macro" not in result
+
+
+def test_pick_latest_job_per_mode_boundary_30_is_pullback():
+    # lead_time_max=30 → pullback；lead_time_max=31 → macro（與 _mode_from_max_lead 同步）
+    jobs = [
+        _fake_job("p30", 30, "2026-06-05"),
+        _fake_job("m31", 31, "2026-06-05"),
+    ]
+    result = _pick_latest_job_per_mode(jobs)
+    assert result == {"pullback": "p30", "macro": "m31"}
+
+
+def test_pick_latest_job_per_mode_skips_missing_run_id():
+    # run_id 空字串的 job 跳過（防呆）
+    jobs = [
+        _fake_job("", 30, "2026-06-05"),
+        _fake_job("p1", 30, "2026-06-04"),
+    ]
+    result = _pick_latest_job_per_mode(jobs)
+    assert result == {"pullback": "p1"}

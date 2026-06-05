@@ -1461,10 +1461,51 @@ def _cache_run_id_for_mode(max_lead: int | float, run_id: str) -> None:
     st.session_state[autosearch_cache_key_for_mode(mode)] = run_id
 
 
+def _pick_latest_job_per_mode(jobs: list) -> dict[str, str]:
+    """v19.13.8：依 job.lead_time_max 分桶，每 mode 挑 last_update 最新 → {mode: run_id}.
+
+    純函式 — 給 _render_persistent_dual_mode 在 session_state cache 失效時
+    （Streamlit Cloud reboot / browser refresh）從磁碟 jobs 回復雙 mode 顯示用。
+    """
+    latest: dict[str, tuple[str, str]] = {}  # mode → (last_update, run_id)
+    for j in jobs:
+        try:
+            mode = _mode_from_max_lead(int(getattr(j, "lead_time_max", 90)))
+        except Exception:
+            continue
+        last_update = getattr(j, "last_update", "") or ""
+        run_id = getattr(j, "run_id", "")
+        if not run_id:
+            continue
+        if mode not in latest or last_update > latest[mode][0]:
+            latest[mode] = (last_update, run_id)
+    return {mode: rid for mode, (_, rid) in latest.items()}
+
+
 def _render_persistent_dual_mode(store) -> None:
-    """v19.13.7：rerun（AI 按鈕等）時，並排重畫 pullback / macro 兩 mode winners + AI。"""
+    """v19.13.7：rerun（AI 按鈕等）時，並排重畫 pullback / macro 兩 mode winners + AI。
+
+    v19.13.8：session_state cache 失效（reboot / refresh）時 fallback 掃磁碟 jobs，
+    依 lead_time_max 推斷 mode，挑各 mode 最新 job 並回填 cache → winners/AI/Apply
+    不會因為 reboot 就消失。
+    """
     cache_pull = st.session_state.get(autosearch_cache_key_for_mode("pullback"))
     cache_macro = st.session_state.get(autosearch_cache_key_for_mode("macro"))
+
+    # v19.13.8：cache 空 → 從磁碟 jobs 回復
+    if not cache_pull or not cache_macro:
+        try:
+            disk_jobs = store.list_jobs()
+        except Exception:
+            disk_jobs = []
+        recovered = _pick_latest_job_per_mode(disk_jobs)
+        if not cache_pull and "pullback" in recovered:
+            cache_pull = recovered["pullback"]
+            st.session_state[autosearch_cache_key_for_mode("pullback")] = cache_pull
+        if not cache_macro and "macro" in recovered:
+            cache_macro = recovered["macro"]
+            st.session_state[autosearch_cache_key_for_mode("macro")] = cache_macro
+
     if not cache_pull and not cache_macro:
         return
 
