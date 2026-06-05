@@ -361,7 +361,8 @@ class TestFactorPool:
     def test_pool_size(self):
         # v19.4: 13 → 23（+ SAHM / SLOOS / LEI / PPI / JOBLESS / CONT_CLAIMS /
         #                    CONSUMER_CONF / PERMIT_HOUSING / FED_BS / INFL_EXP_5Y）
-        assert len(FACTOR_POOL) == 23
+        # v19.12: 23 → 26（+ VIX_DELTA_5D / HY_SPREAD_DELTA_5D / BREADTH_RSP_SPY_5D）
+        assert len(FACTOR_POOL) == 26
 
     def test_keys_unique(self):
         keys = [f.key for f in FACTOR_POOL]
