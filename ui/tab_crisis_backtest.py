@@ -1251,21 +1251,9 @@ def _render_autosearch_section(events, series_by_key) -> None:
                 st.rerun()
 
         if not new_clicked:
-            # v19.13.6：rerun（例如「🤖 取得 AI 建議」按鈕觸發）時，從 session_state
-            # cache 拿最近一次 run_id → 重畫 winners + AI 區塊，避免整段消失。
-            last_run_id = st.session_state.get("_autosearch_last_run_id")
-            if last_run_id:
-                try:
-                    results = store.list_results(last_run_id)
-                except Exception:
-                    results = []
-                if results:
-                    st.markdown("---")
-                    st.markdown("**📌 上次 run 結果（持續顯示，新跑會覆蓋）**")
-                    persistent_placeholder = st.empty()
-                    _render_live_winners(
-                        results, persistent_placeholder, show_apply_btn=True,
-                    )
+            # v19.13.7：dual-mode cache — pullback / macro 各自一槽，互不覆蓋。
+            # rerun（AI 按鈕觸發）時，兩槽各自重畫 winners + AI，並排顯示。
+            _render_persistent_dual_mode(store)
             return
 
         try:
@@ -1346,12 +1334,30 @@ def _render_autosearch_section(events, series_by_key) -> None:
                 f"⏸ 時間到自動暫停（{reloaded.done}/{reloaded.total}）— "
                 "再按一次「🚀 新搜尋 / 續跑」繼續"
             )
+        run_mode = _mode_from_max_lead(int(max_lead))
         _render_live_winners(
             store.list_results(job.run_id), winners_placeholder,
-            show_apply_btn=True,
+            show_apply_btn=True, apply_mode=run_mode,
         )
-        # v19.13.6：cache 最近 run_id → rerun（AI 按鈕觸發）時可重畫 winners
-        st.session_state["_autosearch_last_run_id"] = job.run_id
+        # v19.13.7：dual-mode cache — 依當前 max_lead 推斷 mode，只 update 對應槽，
+        # 不再覆蓋另一 mode 的 run_id（之前 single cache 是「只有一種參數」根因）
+        _cache_run_id_for_mode(int(max_lead), job.run_id)
+        # 跑完直接秀「另一 mode 上次 cache」（如果有），讓 user 一眼看到雙 mode 對比
+        other_mode = "macro" if run_mode == "pullback" else "pullback"
+        other_cache = st.session_state.get(autosearch_cache_key_for_mode(other_mode))
+        if other_cache:
+            try:
+                other_results = store.list_results(other_cache)
+            except Exception:
+                other_results = []
+            if other_results:
+                other_label = "🏔️ 長期 macro" if other_mode == "macro" else "⚡ 短期 pullback"
+                st.markdown("---")
+                st.markdown(f"**📎 另一 mode 上次結果：{other_label}（cached）**")
+                _render_live_winners(
+                    other_results, st.empty(), show_apply_btn=True,
+                    apply_mode=other_mode,
+                )
 
 
 def _estimate_total(top_k: int, max_size: int) -> int:
@@ -1376,10 +1382,13 @@ def _render_jobs_table(jobs: list, store) -> None:
 
 def _render_live_winners(
     results: list, placeholder, show_apply_btn: bool = False,
+    apply_mode: str | None = None,
 ) -> None:
     # v19.12.1：show_apply_btn 只在 final render 為 True，避免 pre/mid-loop
     # 多次呼叫造成 `as_apply_{run_id}` key duplicate（Streamlit widget key
     # registry 在同一 script run 內不會因 placeholder.container() 替換而清掉）
+    # v19.13.7：apply_mode 顯式指定本欄結果屬於哪個 mode（並排雙 mode 時用）；
+    # None=fallback 到舊行為（讀 as_max_lead slider 推斷）
     from services.auto_search import top_n_winners
     if not results:
         placeholder.empty()
@@ -1405,14 +1414,18 @@ def _render_live_winners(
         # v19.13.5：AI 高原 vs Peak 判斷 — 只在 final render 顯示避免 widget
         # key 重複註冊；按鈕觸發避免燒 Gemini quota
         if show_apply_btn and winners:
-            _render_autosearch_ai_section(winners)
+            _render_autosearch_ai_section(winners, mode=apply_mode)
         # 「採用 top 1」按鈕 — 寫回 multiselect 的 session_state
         # 只在 final render 顯示，避免 widget key 重複註冊
         # v19.13：依當前 AutoSearch lead time 自動路由到對應 mode 的 keys
+        # v19.13.7：並排雙 mode 時用顯式 apply_mode，避免兩邊都讀同一 slider 路錯
         if show_apply_btn and winners:
             top = winners[0]
-            max_lead = st.session_state.get("as_max_lead", 90)
-            target_key = route_apply_key_by_lead(max_lead)
+            if apply_mode in MULTIFACTOR_MODES:
+                target_key = multifactor_keys_state_key(apply_mode)
+            else:
+                max_lead = st.session_state.get("as_max_lead", 90)
+                target_key = route_apply_key_by_lead(max_lead)
             target_mode = "短期回檔" if target_key.endswith("_pullback") else "總經長期"
             if st.button(
                 f"✅ 採用 Top 1：{' + '.join(top.subset)} → {target_mode} mode",
@@ -1424,6 +1437,71 @@ def _render_live_winners(
                     f"請到「多因子權重最佳化」expander 切「{target_mode}」mode "
                     "手動跑「🚀 跑多因子高原 + walk-forward」。"
                 )
+
+
+def autosearch_cache_key_for_mode(mode: str) -> str:
+    """v19.13.7：mode → session_state cache key（存放最近一次 AutoSearch run_id）。
+
+    拆 cache：pullback / macro 各自一槽，避免新跑某 mode 覆蓋另一 mode 的 run_id
+    → 之前 single cache 害 UI「只看得到一種 mode 的 winners + AI」根因。
+    """
+    if mode not in MULTIFACTOR_MODES:
+        raise ValueError(f"unknown mode: {mode!r}")
+    return f"_autosearch_last_run_id_{mode}"
+
+
+def _mode_from_max_lead(max_lead: int | float) -> str:
+    """v19.13.7：max_lead → mode（與 route_apply_key_by_lead 同邏輯，回 raw mode 名）。"""
+    return "pullback" if float(max_lead) <= 30 else "macro"
+
+
+def _cache_run_id_for_mode(max_lead: int | float, run_id: str) -> None:
+    """v19.13.7：依 max_lead 推斷 mode → 寫對應 cache 槽（只動一邊）。"""
+    mode = _mode_from_max_lead(max_lead)
+    st.session_state[autosearch_cache_key_for_mode(mode)] = run_id
+
+
+def _render_persistent_dual_mode(store) -> None:
+    """v19.13.7：rerun（AI 按鈕等）時，並排重畫 pullback / macro 兩 mode winners + AI。"""
+    cache_pull = st.session_state.get(autosearch_cache_key_for_mode("pullback"))
+    cache_macro = st.session_state.get(autosearch_cache_key_for_mode("macro"))
+    if not cache_pull and not cache_macro:
+        return
+
+    def _safe_list(run_id):
+        if not run_id:
+            return []
+        try:
+            return store.list_results(run_id)
+        except Exception:
+            return []
+
+    pull_results = _safe_list(cache_pull)
+    macro_results = _safe_list(cache_macro)
+    if not pull_results and not macro_results:
+        return
+
+    st.markdown("---")
+    st.markdown("**📌 上次 run 結果（雙 mode 並列；各 mode 新跑只覆蓋自己）**")
+    col_l, col_r = st.columns(2)
+    with col_l:
+        st.markdown("#### ⚡ 短期 pullback（lead 5-30d）")
+        if pull_results:
+            _render_live_winners(
+                pull_results, st.empty(), show_apply_btn=True,
+                apply_mode="pullback",
+            )
+        else:
+            st.info("（尚未跑過短期 pullback — 上方按「⚡ 短期 pullback」preset → 新搜尋）")
+    with col_r:
+        st.markdown("#### 🏔️ 長期 macro（lead 30-90d）")
+        if macro_results:
+            _render_live_winners(
+                macro_results, st.empty(), show_apply_btn=True,
+                apply_mode="macro",
+            )
+        else:
+            st.info("（尚未跑過長期 macro — 上方按「🏔️ 長期 regime」preset → 新搜尋）")
 
 
 def _autosearch_winners_to_candidates(winners: list) -> list[dict]:
@@ -1441,11 +1519,12 @@ def _autosearch_winners_to_candidates(winners: list) -> list[dict]:
     return candidates
 
 
-def _render_autosearch_ai_section(winners: list) -> None:
+def _render_autosearch_ai_section(winners: list, mode: str | None = None) -> None:
     """v19.13.5：AutoSearch top-5 winners → AI 高原 vs peak 判斷。
 
     Reuse v19.9 `recommend_weights`（事前比對 prompt）— 把 SearchResult 轉成
     plateau candidate shape 即可吃同一條 AI 線。
+    v19.13.7：mode 標籤呈現在 header / button label，雙 mode 並排時讓使用者一眼分得出。
     """
     from services.ai_advisor_pending import recommend_weights
 
@@ -1456,14 +1535,26 @@ def _render_autosearch_ai_section(winners: list) -> None:
     top5 = winners[:5]
     advice_key = f"_autosearch_ai_advice_{top.run_id}"
 
+    mode_tag = ""
+    if mode == "pullback":
+        mode_tag = "⚡ 短期 pullback"
+    elif mode == "macro":
+        mode_tag = "🏔️ 長期 macro"
+
     st.markdown("---")
-    st.markdown("### 🤖 AI 高原 vs Peak 判斷（事前比對 Top-5）")
+    header = "### 🤖 AI 高原 vs Peak 判斷（事前比對 Top-5）"
+    if mode_tag:
+        header += f"　|　**{mode_tag}**"
+    st.markdown(header)
     st.caption(
         "AI 比對 top-5 winners → 建議採用哪組（看 plateau 穩定度 + 風險旗標）。"
         "**按鈕觸發避免燒 quota**；advice 依 run_id cache 不互覆蓋。"
     )
 
-    if st.button("🤖 取得 AI 建議", key=f"as_ai_recommend_{top.run_id}"):
+    btn_label = "🤖 取得 AI 建議"
+    if mode_tag:
+        btn_label = f"🤖 取得 {mode_tag} AI 建議"
+    if st.button(btn_label, key=f"as_ai_recommend_{top.run_id}"):
         candidates = _autosearch_winners_to_candidates(top5)
         oos_metrics = {
             "oos_f1": float(top.oos_f1),
