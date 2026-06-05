@@ -153,8 +153,14 @@ def test_unknown_pair_returns_none(monkeypatch):
         _fred_calls.append(series_id)
         return pd.DataFrame()
 
+    def _no_net(*args, **kwargs):
+        # v19.13.2：CI runner 有 outbound → er-api fallback 會拿到真實 FX；
+        # 攔 requests.get 模擬無外網，讓 test 跨環境穩定 None
+        raise ConnectionError("test: outbound blocked")
+
     monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
     monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred)
+    monkeypatch.setattr("requests.get", _no_net)
 
     v = fund_repository.get_latest_fx("NZDTWD=X", fred_api_key="dummy")
     assert v is None
@@ -512,13 +518,28 @@ def test_diagnose_fx_frankfurter_absent_for_twd():
     assert "fred" not in out, "TWD pair FRED 不該出現"
 
 
-def test_positive_only_cache_does_not_poison_none():
+def test_positive_only_cache_does_not_poison_none(monkeypatch):
     """v18.275 修真因：None 結果不入 cache，下次仍會 retry（防 5min poisoning）。"""
     from repositories.fund_repository import _FX_CACHE, _clear_fx_cache, get_latest_fx
     _clear_fx_cache()
-    # 第一次：什麼來源都失敗 → 回 None → 不該入 cache
+
+    # v19.13.2：CI runner 有 outbound → 必須 mock 全 3 source 才能保證 None
+    def _yf_empty(pair, range_="5d", interval="1d"):
+        return pd.Series(dtype=float)
+
+    def _fred_empty(series_id, key, n=10):
+        import pandas as _pd
+        return _pd.DataFrame()
+
+    def _no_net(*args, **kwargs):
+        raise ConnectionError("test: outbound blocked")
+
+    monkeypatch.setattr("repositories.macro_repository.fetch_yf_close", _yf_empty)
+    monkeypatch.setattr("repositories.macro_repository.fetch_fred", _fred_empty)
+    monkeypatch.setattr("requests.get", _no_net)
+
+    # 第一次：全來源都失敗 → 回 None → 不該入 cache
     cache_before = dict(_FX_CACHE)
-    # 此 case 不 mock，sandbox 無 outbound → 必然 None
     v = get_latest_fx("USDTWD=X", fred_api_key="")
     assert v is None
     assert dict(_FX_CACHE) == cache_before, "None 不該入 cache"

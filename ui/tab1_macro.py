@@ -3044,4 +3044,3 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
                 "新聞時事"]
     return "\n".join(lines), headlines, sections
 
-
