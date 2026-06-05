@@ -1251,6 +1251,21 @@ def _render_autosearch_section(events, series_by_key) -> None:
                 st.rerun()
 
         if not new_clicked:
+            # v19.13.6：rerun（例如「🤖 取得 AI 建議」按鈕觸發）時，從 session_state
+            # cache 拿最近一次 run_id → 重畫 winners + AI 區塊，避免整段消失。
+            last_run_id = st.session_state.get("_autosearch_last_run_id")
+            if last_run_id:
+                try:
+                    results = store.list_results(last_run_id)
+                except Exception:
+                    results = []
+                if results:
+                    st.markdown("---")
+                    st.markdown("**📌 上次 run 結果（持續顯示，新跑會覆蓋）**")
+                    persistent_placeholder = st.empty()
+                    _render_live_winners(
+                        results, persistent_placeholder, show_apply_btn=True,
+                    )
             return
 
         try:
@@ -1335,6 +1350,8 @@ def _render_autosearch_section(events, series_by_key) -> None:
             store.list_results(job.run_id), winners_placeholder,
             show_apply_btn=True,
         )
+        # v19.13.6：cache 最近 run_id → rerun（AI 按鈕觸發）時可重畫 winners
+        st.session_state["_autosearch_last_run_id"] = job.run_id
 
 
 def _estimate_total(top_k: int, max_size: int) -> int:
