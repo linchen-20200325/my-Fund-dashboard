@@ -1199,15 +1199,23 @@ def _render_autosearch_section(events, series_by_key) -> None:
                 st.session_state["as_max_lead"] = 90
                 st.rerun()
 
+        # v19.13.4：修「The widget with key X was created with a default value
+        # but also had its value set via the Session State API」— slider 不再
+        # 給 positional default（4th arg），改 session_state 預初始化 pattern
+        if "as_min_lead" not in st.session_state:
+            st.session_state["as_min_lead"] = 30
+        if "as_max_lead" not in st.session_state:
+            st.session_state["as_max_lead"] = 90
+
         col_lt_min, col_lt_max, _ = st.columns([1, 1, 1])
         with col_lt_min:
             min_lead = st.slider(
-                "Lead time min（天）", 0, 60, 30, key="as_min_lead",
+                "Lead time min（天）", 0, 60, key="as_min_lead",
                 help="訊號至少要早於 SPX peak N 天才算 TP。0=只要早就行；30=前 1 個月才算",
             )
         with col_lt_max:
             max_lead = st.slider(
-                "Lead time max（天）", 30, 365, 90, key="as_max_lead",
+                "Lead time max（天）", 30, 365, key="as_max_lead",
                 help="訊號太早也不算 TP（避免假領先）。預設 90=1-3 個月窗口",
             )
         st.caption(
