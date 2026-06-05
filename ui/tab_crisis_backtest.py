@@ -1199,15 +1199,23 @@ def _render_autosearch_section(events, series_by_key) -> None:
                 st.session_state["as_max_lead"] = 90
                 st.rerun()
 
+        # v19.13.4：修「The widget with key X was created with a default value
+        # but also had its value set via the Session State API」— slider 不再
+        # 給 positional default（4th arg），改 session_state 預初始化 pattern
+        if "as_min_lead" not in st.session_state:
+            st.session_state["as_min_lead"] = 30
+        if "as_max_lead" not in st.session_state:
+            st.session_state["as_max_lead"] = 90
+
         col_lt_min, col_lt_max, _ = st.columns([1, 1, 1])
         with col_lt_min:
             min_lead = st.slider(
-                "Lead time min（天）", 0, 60, 30, key="as_min_lead",
+                "Lead time min（天）", 0, 60, key="as_min_lead",
                 help="訊號至少要早於 SPX peak N 天才算 TP。0=只要早就行；30=前 1 個月才算",
             )
         with col_lt_max:
             max_lead = st.slider(
-                "Lead time max（天）", 30, 365, 90, key="as_max_lead",
+                "Lead time max（天）", 30, 365, key="as_max_lead",
                 help="訊號太早也不算 TP（避免假領先）。預設 90=1-3 個月窗口",
             )
         st.caption(
@@ -1377,6 +1385,10 @@ def _render_live_winners(
         st.dataframe(
             pd.DataFrame(rows), use_container_width=True, hide_index=True,
         )
+        # v19.13.5：AI 高原 vs Peak 判斷 — 只在 final render 顯示避免 widget
+        # key 重複註冊；按鈕觸發避免燒 Gemini quota
+        if show_apply_btn and winners:
+            _render_autosearch_ai_section(winners)
         # 「採用 top 1」按鈕 — 寫回 multiselect 的 session_state
         # 只在 final render 顯示，避免 widget key 重複註冊
         # v19.13：依當前 AutoSearch lead time 自動路由到對應 mode 的 keys
@@ -1395,6 +1407,59 @@ def _render_live_winners(
                     f"請到「多因子權重最佳化」expander 切「{target_mode}」mode "
                     "手動跑「🚀 跑多因子高原 + walk-forward」。"
                 )
+
+
+def _autosearch_winners_to_candidates(winners: list) -> list[dict]:
+    """v19.13.5：把 AutoSearch SearchResult list 轉成 recommend_weights 需要的
+    candidate dict shape（reuse v19.9 事前 AI advice prompt 機制）."""
+    candidates: list[dict] = []
+    for w in winners:
+        candidates.append({
+            "weights": dict(w.weights or {}),
+            "plateau_score": float(w.plateau_score),
+            "f1": float(w.oos_f1),
+            "sharpe": float(w.oos_sharpe),
+            "n_crossings": int(w.n_crossings),
+        })
+    return candidates
+
+
+def _render_autosearch_ai_section(winners: list) -> None:
+    """v19.13.5：AutoSearch top-5 winners → AI 高原 vs peak 判斷。
+
+    Reuse v19.9 `recommend_weights`（事前比對 prompt）— 把 SearchResult 轉成
+    plateau candidate shape 即可吃同一條 AI 線。
+    """
+    from services.ai_advisor_pending import recommend_weights
+
+    if not winners:
+        return
+
+    top = winners[0]
+    top5 = winners[:5]
+    advice_key = f"_autosearch_ai_advice_{top.run_id}"
+
+    st.markdown("---")
+    st.markdown("### 🤖 AI 高原 vs Peak 判斷（事前比對 Top-5）")
+    st.caption(
+        "AI 比對 top-5 winners → 建議採用哪組（看 plateau 穩定度 + 風險旗標）。"
+        "**按鈕觸發避免燒 quota**；advice 依 run_id cache 不互覆蓋。"
+    )
+
+    if st.button("🤖 取得 AI 建議", key=f"as_ai_recommend_{top.run_id}"):
+        candidates = _autosearch_winners_to_candidates(top5)
+        oos_metrics = {
+            "oos_f1": float(top.oos_f1),
+            "oos_sharpe": float(top.oos_sharpe),
+            "n_folds": int(top.n_folds),
+        }
+        with st.spinner("🤖 呼叫 AI 比對 top-5 候選..."):
+            advice = recommend_weights(candidates, oos_metrics)
+        st.session_state[advice_key] = advice
+
+    advice = st.session_state.get(advice_key)
+    if advice:
+        st.markdown(advice)
 
 
 def _clear_all_jobs(store, jobs: list) -> None:

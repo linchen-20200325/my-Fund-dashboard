@@ -693,16 +693,21 @@ def render_mk_war_room(portfolio_funds: Optional[list] = None) -> None:
     # v18.163：sub-tab 改用 segmented_control（解決 user「三個 tab 內容看起來
     # 一樣」的困惑）— 共用基金資料池，按鈕切換視角，下方一張表依選項換欄位/排序/標題。
     # KPI 卡片已上移到 Tab3 頂部 hero（避免上下兩段重複 KPI）。
+    # v19.13.3：改回 st.radio（horizontal）— streamlit 1.45 AppTest 的
+    # segmented_control Multiselect.indices 對 proto.Option 用 list.index 找
+    # string，必拋 ValueError("content_icon: ... is not in list")。radio 的
+    # selectbox path 不走 content_icon proto，AppTest 全版本兼容。
     _view_options = [
         f"🛡️ 核心戰情室（{int((df['MK_Class'] == 'Core').sum())} 檔）",
         f"⚡ 波段觀測站（{int((df['MK_Class'] == 'Satellite').sum())} 檔）",
         f"🔍 3-3-3 篩選器（{len(df)} 檔池）",
     ]
-    _view_pick = st.segmented_control(
+    _view_pick = st.radio(
         "選擇分析視角",
         _view_options,
-        default=_view_options[0],
+        index=0,
         key="mk_view_pick",
+        horizontal=True,
         help="三個視角共用同一份基金池：核心/衛星按 MK_Class 篩選；3-3-3 篩 3 年資 + 年化報酬 + 標準差。",
     )
     if _view_pick == _view_options[0]:
