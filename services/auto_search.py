@@ -61,13 +61,15 @@ class SearchJob:
     next_phase: Phase = "univariate"
     selected_seed: list[str] = field(default_factory=list)
     note: str = ""
+    lead_time_min: int = 30
+    lead_time_max: int = 90
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> SearchJob:
-        return cls(**{k: d.get(k) for k in cls.__dataclass_fields__})
+        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
 
 
 @dataclass
@@ -162,6 +164,16 @@ def factor_pool_hash(keys: list[str]) -> str:
     """sorted keys → SHA1 prefix，給 resume 判斷 factor pool 一致性."""
     h = hashlib.sha1(",".join(sorted(keys)).encode("utf-8")).hexdigest()
     return h[:12]
+
+
+def job_signature(
+    keys: list[str], min_forward_days: int, max_forward_days: int,
+) -> str:
+    """v19.12：含 lead time 的 job 簽章 — 不同 lead time → 不同 job，避免長/短期 pool 互污染。"""
+    payload = (
+        f"{factor_pool_hash(keys)}|lt={int(min_forward_days)}-{int(max_forward_days)}"
+    )
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
 
 
 # ════════════════════════════════════════════════════════════════
@@ -327,14 +339,17 @@ def create_job(
     top_k: int = 10,
     max_size: int = 5,
     note: str = "",
+    *,
+    min_forward_days: int = 30,
+    max_forward_days: int = 90,
 ) -> SearchJob:
-    """新建 job — run_id = 時間戳 + factor pool hash 短碼."""
+    """新建 job — run_id = 時間戳 + job_signature 短碼（含 lead time）."""
     now = datetime.utcnow().isoformat(timespec="seconds")
-    fp_hash = factor_pool_hash(factor_pool)
-    run_id = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}_{fp_hash[:6]}"
+    sig = job_signature(factor_pool, min_forward_days, max_forward_days)
+    run_id = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}_{sig[:6]}"
     return SearchJob(
         run_id=run_id,
-        factor_pool_hash=fp_hash,
+        factor_pool_hash=sig,
         factor_pool=list(factor_pool),
         top_k=int(top_k),
         max_size=int(max_size),
@@ -346,6 +361,8 @@ def create_job(
         next_phase="univariate",
         selected_seed=[],
         note=note,
+        lead_time_min=int(min_forward_days),
+        lead_time_max=int(max_forward_days),
     )
 
 
@@ -354,19 +371,29 @@ def resume_or_create(
     factor_pool: list[str],
     top_k: int = 10,
     max_size: int = 5,
+    *,
+    min_forward_days: int = 30,
+    max_forward_days: int = 90,
 ) -> SearchJob:
-    """若 store 內已有同 factor_pool_hash 的 paused/running job → resume，否則新建."""
-    fp_hash = factor_pool_hash(factor_pool)
+    """同 factor_pool + lead time + top_k + max_size 的 paused/running job → resume，否則新建。
+
+    v19.12：sig 改用 job_signature（含 lead time），避免短期 / 長期 pool 共用同 job。
+    """
+    sig = job_signature(factor_pool, min_forward_days, max_forward_days)
     jobs = store.list_jobs()
     for job in jobs:
         if (
-            job.factor_pool_hash == fp_hash
+            job.factor_pool_hash == sig
             and job.top_k == top_k
             and job.max_size == max_size
             and job.status in ("running", "paused")
         ):
             return job
-    job = create_job(factor_pool, top_k, max_size)
+    job = create_job(
+        factor_pool, top_k, max_size,
+        min_forward_days=min_forward_days,
+        max_forward_days=max_forward_days,
+    )
     store.save_job(job)
     return job
 

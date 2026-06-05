@@ -16,6 +16,7 @@ from services.auto_search import (
     create_job,
     estimate_total_evals,
     factor_pool_hash,
+    job_signature,
     resume_or_create,
     top_n_winners,
 )
@@ -189,6 +190,57 @@ def test_resume_or_create_creates_new_when_existing_is_done(tmp_path: Path):
     store.save_job(j1)
     j2 = resume_or_create(store, ["VIX"], top_k=1, max_size=1)
     assert j2.run_id != j1.run_id
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.12：job_signature 含 lead time + 不同 lead time 強制 fork
+# ════════════════════════════════════════════════════════════════
+def test_job_signature_same_pool_different_lead_time_differs():
+    """同 pool 但 lead time 不同 → signature 必須不同（避免短/長期 job 互污染）."""
+    s_short = job_signature(["VIX", "HY_SPREAD"], 5, 30)
+    s_long = job_signature(["VIX", "HY_SPREAD"], 30, 90)
+    assert s_short != s_long
+
+
+def test_job_signature_same_lead_time_same_pool_matches():
+    """同 pool 同 lead time → signature 一致，order-insensitive."""
+    s1 = job_signature(["VIX", "UNRATE"], 5, 30)
+    s2 = job_signature(["UNRATE", "VIX"], 5, 30)
+    assert s1 == s2
+
+
+def test_resume_or_create_different_lead_time_forks_new_job(tmp_path: Path):
+    """同 pool 不同 lead time → fork 新 job（blocker fix verification）."""
+    store = LocalJsonSearchStore(base_dir=tmp_path)
+    j_long = resume_or_create(
+        store, ["VIX", "UNRATE"], top_k=2, max_size=2,
+        min_forward_days=30, max_forward_days=90,
+    )
+    j_short = resume_or_create(
+        store, ["VIX", "UNRATE"], top_k=2, max_size=2,
+        min_forward_days=5, max_forward_days=30,
+    )
+    assert j_long.run_id != j_short.run_id
+    assert j_long.factor_pool_hash != j_short.factor_pool_hash
+    assert j_long.lead_time_min == 30 and j_long.lead_time_max == 90
+    assert j_short.lead_time_min == 5 and j_short.lead_time_max == 30
+
+
+def test_search_job_default_lead_time_30_90():
+    """SearchJob default lead time = 30/90（向後相容 v19.11 預設行為）."""
+    j = create_job(["VIX"], top_k=1, max_size=1)
+    assert j.lead_time_min == 30 and j.lead_time_max == 90
+
+
+def test_search_job_from_dict_missing_lead_time_uses_default():
+    """舊 JSON 缺 lead_time_* field → from_dict 走 dataclass default 不爆."""
+    old = {
+        "run_id": "old123", "factor_pool_hash": "abc", "factor_pool": ["VIX"],
+        "top_k": 1, "max_size": 1, "total": 1, "done": 0,
+        "status": "paused", "started_at": "2025-01-01", "last_update": "2025-01-01",
+    }
+    j = SearchJob.from_dict(old)
+    assert j.lead_time_min == 30 and j.lead_time_max == 90
 
 
 # ════════════════════════════════════════════════════════════════
@@ -408,12 +460,15 @@ def test_factor_spec_frequency_field_exists_and_default_daily():
 
 
 def test_factor_pool_has_correct_frequencies_marked():
-    """確認 23 因子 frequency 分布：8 daily + 4 weekly + 11 monthly."""
+    """v19.12 後 26 因子 frequency 分布：8 daily + 7 weekly + 11 monthly.
+
+    weekly 新增 3 個 v19.12 pullback 因子（VIX_DELTA_5D / HY_SPREAD_DELTA_5D / BREADTH_RSP_SPY_5D）。
+    """
     from collections import Counter
 
     from services.multi_factor_optimization import FACTOR_POOL
     counts = Counter(f.frequency for f in FACTOR_POOL)
     assert counts["daily"] == 8  # VIX/HY_SPREAD/T10Y2Y/T10Y3M/DXY/MOVE/COPPER_GOLD/INFL_EXP_5Y
-    assert counts["weekly"] == 4  # NFCI/JOBLESS/CONT_CLAIMS/FED_BS
+    assert counts["weekly"] == 7  # NFCI/JOBLESS/CONT_CLAIMS/FED_BS + v19.12 三因子
     assert counts["monthly"] == 11
-    assert sum(counts.values()) == 23
+    assert sum(counts.values()) == 26
