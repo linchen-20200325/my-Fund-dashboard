@@ -3,6 +3,8 @@
 只測純函式 routing helpers，不涉及 Streamlit session_state。
 v19.13.1：新增 mode_forward_days 測試（防 lead_days wiring 漏接退化 bug）。
 v19.13.5：新增 _autosearch_winners_to_candidates 測試（AI 高原 vs peak adapter）。
+v19.13.7：新增 dual-mode cache key + _mode_from_max_lead 測試（防 single cache
+覆蓋 bug —「只看得到一種 mode」根因）。
 """
 from __future__ import annotations
 
@@ -14,6 +16,8 @@ from ui.tab_crisis_backtest import (
     MULTIFACTOR_MODE_LEAD_DAYS,
     MULTIFACTOR_MODES,
     _autosearch_winners_to_candidates,
+    _mode_from_max_lead,
+    autosearch_cache_key_for_mode,
     mode_forward_days,
     multifactor_keys_state_key,
     multifactor_result_state_key,
@@ -164,3 +168,40 @@ def test_winners_to_candidates_none_weights_falls_back_to_empty_dict():
     winners = [_fake_winner(None, 0.0, 0.0, 0.0, 0)]
     out = _autosearch_winners_to_candidates(winners)
     assert out[0]["weights"] == {}
+
+
+# ─── v19.13.7: dual-mode cache + _mode_from_max_lead ──────────────
+def test_mode_from_max_lead_threshold_matches_route():
+    # _mode_from_max_lead 與 route_apply_key_by_lead 在 boundary 上必須同步
+    assert _mode_from_max_lead(5) == "pullback"
+    assert _mode_from_max_lead(30) == "pullback"
+    assert _mode_from_max_lead(31) == "macro"
+    assert _mode_from_max_lead(90) == "macro"
+    assert _mode_from_max_lead(365) == "macro"
+
+
+def test_mode_from_max_lead_accepts_float():
+    # slider 偶爾回 float — boundary 行為要一致
+    assert _mode_from_max_lead(30.0) == "pullback"
+    assert _mode_from_max_lead(30.5) == "macro"
+
+
+def test_autosearch_cache_key_distinct_per_mode():
+    # 雙 mode cache 槽必須不同，這是「不互相覆蓋」的根本保證
+    assert (
+        autosearch_cache_key_for_mode("pullback")
+        != autosearch_cache_key_for_mode("macro")
+    )
+
+
+def test_autosearch_cache_key_covers_all_modes():
+    # 所有 MULTIFACTOR_MODES 都要有對應 cache key
+    keys = {autosearch_cache_key_for_mode(m) for m in MULTIFACTOR_MODES}
+    assert len(keys) == len(MULTIFACTOR_MODES)
+
+
+def test_autosearch_cache_key_rejects_unknown_mode():
+    with pytest.raises(ValueError, match="unknown mode"):
+        autosearch_cache_key_for_mode("daily")
+    with pytest.raises(ValueError, match="unknown mode"):
+        autosearch_cache_key_for_mode("intraday")
