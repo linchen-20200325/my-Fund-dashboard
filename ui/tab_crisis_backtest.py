@@ -1210,7 +1210,10 @@ def _render_autosearch_section(events, series_by_key) -> None:
                 f"⏸ 時間到自動暫停（{reloaded.done}/{reloaded.total}）— "
                 "再按一次「🚀 新搜尋 / 續跑」繼續"
             )
-        _render_live_winners(store.list_results(job.run_id), winners_placeholder)
+        _render_live_winners(
+            store.list_results(job.run_id), winners_placeholder,
+            show_apply_btn=True,
+        )
 
 
 def _estimate_total(top_k: int, max_size: int) -> int:
@@ -1233,7 +1236,12 @@ def _render_jobs_table(jobs: list, store) -> None:
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
-def _render_live_winners(results: list, placeholder) -> None:
+def _render_live_winners(
+    results: list, placeholder, show_apply_btn: bool = False,
+) -> None:
+    # v19.12.1：show_apply_btn 只在 final render 為 True，避免 pre/mid-loop
+    # 多次呼叫造成 `as_apply_{run_id}` key duplicate（Streamlit widget key
+    # registry 在同一 script run 內不會因 placeholder.container() 替換而清掉）
     from services.auto_search import top_n_winners
     if not results:
         placeholder.empty()
@@ -1257,7 +1265,8 @@ def _render_live_winners(results: list, placeholder) -> None:
             pd.DataFrame(rows), use_container_width=True, hide_index=True,
         )
         # 「採用 top 1」按鈕 — 寫回 multiselect 的 session_state
-        if winners:
+        # 只在 final render 顯示，避免 widget key 重複註冊
+        if show_apply_btn and winners:
             top = winners[0]
             if st.button(
                 f"✅ 採用 Top 1：{' + '.join(top.subset)} 為當前因子選擇",
