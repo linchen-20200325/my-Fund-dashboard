@@ -3043,4 +3043,3 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
                 "變數重要性", "台股熱錢三角交叉",
                 "新聞時事"]
     return "\n".join(lines), headlines, sections
-
