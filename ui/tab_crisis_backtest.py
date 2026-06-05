@@ -1071,6 +1071,21 @@ def _render_autosearch_section(events, series_by_key) -> None:
             st.metric("總 eval 估計", _estimate_total(top_k, max_size))
 
         # v19.11：預警 lead time 窗口 — 訊號必須在事件前 [min, max] 天內觸發
+        # v19.12：加 mode preset，一鍵切「短期 pullback / 長期 regime」
+        col_short, col_long, _ = st.columns([1, 1, 2])
+        with col_short:
+            if st.button("⚡ 短期 pullback (5-30d)", key="as_preset_short",
+                         help="短週期：抓 1-4 週短回檔，搭配 VIX_DELTA_5D / HY_SPREAD_DELTA_5D / BREADTH_RSP_SPY_5D"):
+                st.session_state["as_min_lead"] = 5
+                st.session_state["as_max_lead"] = 30
+                st.rerun()
+        with col_long:
+            if st.button("🏔️ 長期 regime (30-90d)", key="as_preset_long",
+                         help="長週期：抓 1-3 個月景氣轉折，搭配既有 VIX / HY_SPREAD / T10Y2Y / SAHM 等"):
+                st.session_state["as_min_lead"] = 30
+                st.session_state["as_max_lead"] = 90
+                st.rerun()
+
         col_lt_min, col_lt_max, _ = st.columns([1, 1, 1])
         with col_lt_min:
             min_lead = st.slider(
@@ -1084,7 +1099,8 @@ def _render_autosearch_section(events, series_by_key) -> None:
             )
         st.caption(
             f"🎯 訊號要在 SPX peak 前 **{min_lead}-{max_lead} 天** 觸發才算命中；"
-            "月頻因子套 freq_bonus 0.75 軟懲罰（不剔除）"
+            "月頻因子套 freq_bonus 0.75 軟懲罰（不剔除）。"
+            "v19.12：短期 / 長期 mode 用獨立 job（hash 含 lead time），互不污染"
         )
 
         st.markdown("---")
@@ -1119,6 +1135,8 @@ def _render_autosearch_section(events, series_by_key) -> None:
         try:
             job = resume_or_create(
                 store, available, top_k=top_k, max_size=max_size,
+                min_forward_days=int(min_lead),
+                max_forward_days=int(max_lead),
             )
         except Exception as e:
             st.error(f"❌ resume_or_create 失敗：{type(e).__name__}：{e}")

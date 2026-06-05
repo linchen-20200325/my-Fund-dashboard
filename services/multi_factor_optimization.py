@@ -91,6 +91,16 @@ FACTOR_POOL: list[FactorSpec] = [
                note="領先房市指標；低 = 房市轉弱", frequency="monthly"),
     FactorSpec("FED_BS", "Fed 資產負債表", "fred", "WALCL", "below",
                note="WALCL 總資產；下行 = QT 流動性緊縮", frequency="weekly"),
+    # v19.12 短期 pullback 預警 — 既有因子的 5 日變化率版（calculated）
+    FactorSpec("VIX_DELTA_5D", "VIX 5日變化率", "calculated", "VIX_5D_PCT", "above",
+               note="VIX 5日% 變化；正向且大 = 短期波動率轉升，常見 pullback 前兆",
+               frequency="weekly"),
+    FactorSpec("HY_SPREAD_DELTA_5D", "HY 利差 5日變化", "calculated", "HY_SPREAD_5D_DIFF", "above",
+               note="HY OAS 5日絕對變化(bp)；走擴 = 信用條件短期惡化，法人撤退領先",
+               frequency="weekly"),
+    FactorSpec("BREADTH_RSP_SPY_5D", "RSP/SPY 5日斜率", "calculated", "RSP_SPY_5D_PCT", "below",
+               note="等權 / 市值權比率的 5日% 變化；下行 = breadth 衰退（僅七巨頭撐盤），pullback 領先",
+               frequency="weekly"),
     FactorSpec("INFL_EXP_5Y", "5Y 通膨預期", "fred", "T5YIE", "above",
                note="5Y breakeven inflation；高 = 通膨預期升溫",
                frequency="daily"),
@@ -157,6 +167,40 @@ def fetch_factor_series(
             ratio = (df["c"] / df["g"]).dropna()
             ratio.name = spec.key
             return ratio
+        # v19.12 短期 pullback 因子（既有 series 的 5 日變化率版）
+        if spec.source == "calculated" and spec.key == "VIX_DELTA_5D":
+            from repositories.macro_repository import fetch_yf_close
+            vix = fetch_yf_close("^VIX", range_=f"{int(years)}y", interval="1d")
+            if vix is None or vix.empty:
+                return _empty()
+            out = vix.dropna().pct_change(5).dropna()
+            out.name = spec.key
+            return out
+        if spec.source == "calculated" and spec.key == "HY_SPREAD_DELTA_5D":
+            from repositories.macro_repository import fetch_fred
+            n = max(int(years) * 365, 250)
+            df = fetch_fred("BAMLH0A0HYM2", fred_api_key, n=n)
+            if df is None or df.empty:
+                return _empty()
+            s = pd.Series(
+                df["value"].values,
+                index=pd.to_datetime(df["date"]),
+                dtype=float,
+            ).dropna()
+            out = s.diff(5).dropna()
+            out.name = spec.key
+            return out
+        if spec.source == "calculated" and spec.key == "BREADTH_RSP_SPY_5D":
+            from repositories.macro_repository import fetch_yf_close
+            spy = fetch_yf_close("SPY", range_=f"{int(years)}y", interval="1d")
+            rsp = fetch_yf_close("RSP", range_=f"{int(years)}y", interval="1d")
+            if spy is None or spy.empty or rsp is None or rsp.empty:
+                return _empty()
+            df = pd.concat([spy.rename("spy"), rsp.rename("rsp")], axis=1).ffill().dropna()
+            ratio = (df["rsp"] / df["spy"]).dropna()
+            out = ratio.pct_change(5).dropna()
+            out.name = spec.key
+            return out
         return _empty()
     except Exception as e:
         print(f"[multi_factor_optimization.fetch_factor_series] {spec.key} 抓取失敗：{e}")
