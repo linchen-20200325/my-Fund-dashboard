@@ -22,6 +22,11 @@ def _redirect_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "_CONFIG_DIR", tmp_path)
     monkeypatch.setattr(store, "_ACTIVE_PATH", tmp_path / "macro_weights_active.json")
     monkeypatch.setattr(store, "_PENDING_PATH", tmp_path / "macro_weights_pending.json")
+    # v19.14：雙軌 pending — pullback 槽
+    monkeypatch.setattr(
+        store, "_PENDING_PULLBACK_PATH",
+        tmp_path / "macro_weights_pending_pullback.json",
+    )
     yield
 
 
@@ -328,10 +333,12 @@ class _FakeWorksheet:
 
     def __init__(self):
         # 預建 schema：A1/B1/C1 header, B2/C2=pending, B3/C3=active
+        # v19.14：A4/B4/C4=pending_pullback（雙軌 mode）
         self._cells: dict[str, str] = {
             "A1": "slot", "B1": "payload_json", "C1": "updated_at",
             "A2": "pending", "B2": "", "C2": "",
             "A3": "active",  "B3": "", "C3": "",
+            "A4": "pending_pullback", "B4": "", "C4": "",
         }
 
     def acell(self, ref: str):
@@ -418,3 +425,163 @@ def test_gs_enabled_false_falls_back_to_fs():
     # _gs_enabled 預設 False（無 streamlit secrets）→ 走 FS path
     # 既有 FS test 全部用此 path，這裡只確認偵測函式預設行為
     assert store._gs_enabled() is False
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.14：雙軌 pending mode 路由測試
+# ════════════════════════════════════════════════════════════════
+_PAYLOAD_M = {"version": "v19.0", "indicators": {"VIX": {"weight": 0.6}}}
+_PAYLOAD_P = {"version": "v19.0", "indicators": {"VIX_DELTA_5D": {"weight": 0.8}}}
+
+
+def test_v19_14_pending_modes_constant_exposes_two_modes():
+    """PENDING_MODES 對外 expose 兩 mode，順序固定（macro, pullback）— banner 顯示用."""
+    assert store.PENDING_MODES == ("macro", "pullback")
+
+
+def test_v19_14_save_pending_mode_macro_writes_legacy_path():
+    """mode='macro' → 同 None，寫 legacy `_PENDING_PATH`（v19.0 向後相容）."""
+    p = store.save_pending(_PAYLOAD_M, mode="macro")
+    assert p == store._PENDING_PATH
+    assert store._PENDING_PATH.exists()
+    assert not store._PENDING_PULLBACK_PATH.exists()
+
+
+def test_v19_14_save_pending_mode_none_equivalent_to_macro():
+    """mode=None（legacy 簽名）→ 仍寫 legacy `_PENDING_PATH`."""
+    p = store.save_pending(_PAYLOAD_M)
+    assert p == store._PENDING_PATH
+
+
+def test_v19_14_save_pending_mode_pullback_writes_new_path():
+    """mode='pullback' → 寫獨立新檔，不污染 legacy 槽."""
+    p = store.save_pending(_PAYLOAD_P, mode="pullback")
+    assert p == store._PENDING_PULLBACK_PATH
+    assert store._PENDING_PULLBACK_PATH.exists()
+    assert not store._PENDING_PATH.exists()
+
+
+def test_v19_14_save_pending_mode_unknown_raises():
+    """mode 非 macro / pullback / None → ValueError，避免 typo 寫錯槽."""
+    with pytest.raises(ValueError):
+        store.save_pending(_PAYLOAD_M, mode="daily")
+    with pytest.raises(ValueError):
+        store.save_pending(_PAYLOAD_M, mode="")
+
+
+def test_v19_14_dual_pending_slots_coexist():
+    """雙 mode 各自寫入後同時存在 — 解 user 痛點「總經提交後 pullback 又提交把 macro 覆蓋」."""
+    store.save_pending(_PAYLOAD_M, mode="macro")
+    store.save_pending(_PAYLOAD_P, mode="pullback")
+    assert store.has_pending(mode="macro") is True
+    assert store.has_pending(mode="pullback") is True
+    m = store.load_pending(mode="macro")
+    p = store.load_pending(mode="pullback")
+    assert "VIX" in m["indicators"]
+    assert "VIX_DELTA_5D" in p["indicators"]
+
+
+def test_v19_14_has_pending_mode_only_sees_own_slot():
+    """has_pending(mode=A) 不會因 mode=B 槽存在而誤回 True."""
+    store.save_pending(_PAYLOAD_M, mode="macro")
+    assert store.has_pending(mode="macro") is True
+    assert store.has_pending(mode="pullback") is False
+
+
+def test_v19_14_load_pending_mode_only_sees_own_slot():
+    """load_pending(mode=A) 拿不到 mode=B 槽的 payload."""
+    store.save_pending(_PAYLOAD_P, mode="pullback")
+    assert store.load_pending(mode="macro") is None
+    out = store.load_pending(mode="pullback")
+    assert out is not None
+    assert "VIX_DELTA_5D" in out["indicators"]
+
+
+def test_v19_14_approve_pending_pullback_only_clears_pullback_slot():
+    """approve_pending(mode='pullback') 升格至共用 active，但不動 macro pending 槽."""
+    store.save_pending(_PAYLOAD_M, mode="macro")
+    store.save_pending(_PAYLOAD_P, mode="pullback")
+    ok = store.approve_pending(mode="pullback")
+    assert ok is True
+    assert store.has_pending(mode="pullback") is False
+    # macro 槽不受影響
+    assert store.has_pending(mode="macro") is True
+    # active 為 pullback payload（共用單槽）
+    active = store.load_active()
+    assert "VIX_DELTA_5D" in active["indicators"]
+
+
+def test_v19_14_reject_pending_pullback_only_clears_pullback_slot():
+    """reject_pending(mode='pullback') 不會誤刪 macro 槽."""
+    store.save_pending(_PAYLOAD_M, mode="macro")
+    store.save_pending(_PAYLOAD_P, mode="pullback")
+    ok = store.reject_pending(mode="pullback")
+    assert ok is True
+    assert store.has_pending(mode="pullback") is False
+    assert store.has_pending(mode="macro") is True
+
+
+def test_v19_14_approve_no_pending_in_mode_returns_false():
+    """指定 mode 槽空 → approve_pending 回 False，不動 active."""
+    assert store.approve_pending(mode="pullback") is False
+    active_path = store._ACTIVE_PATH
+    assert not active_path.exists()
+
+
+def test_v19_14_save_overwrite_within_same_mode():
+    """同 mode 重複 save → 覆蓋；不影響另一 mode."""
+    store.save_pending(_PAYLOAD_M, mode="macro")
+    store.save_pending(
+        {"version": "v19.0", "indicators": {"PMI": {"weight": 1.5}}},
+        mode="macro",
+    )
+    out = store.load_pending(mode="macro")
+    assert "VIX" not in out["indicators"]
+    assert "PMI" in out["indicators"]
+
+
+# ─── v19.14: GS backend mode routing ─────────────────────────────
+def test_v19_14_gs_pullback_uses_row4(_gs_backend):
+    """GS backend：pullback mode → 寫 row 4，不撞 row 2 (legacy/macro) / row 3 (active)."""
+    ref = store.save_pending(_PAYLOAD_P, mode="pullback")
+    assert "_macro_weights!B4" == ref
+    # row 2 (legacy/macro pending) 仍空
+    assert _gs_backend._cells.get("B2", "") == ""
+    # row 4 已寫入
+    assert _gs_backend._cells.get("B4")
+
+
+def test_v19_14_gs_dual_pending_coexist(_gs_backend):
+    """GS backend：macro 與 pullback 各自獨立 row，並存無覆蓋."""
+    store.save_pending(_PAYLOAD_M, mode="macro")
+    store.save_pending(_PAYLOAD_P, mode="pullback")
+    assert store.has_pending(mode="macro") is True
+    assert store.has_pending(mode="pullback") is True
+
+
+def test_v19_14_gs_approve_pullback_only_clears_row4(_gs_backend):
+    """GS backend：approve pullback 只清 row 4，row 2 (macro pending) 不動."""
+    store.save_pending(_PAYLOAD_M, mode="macro")
+    store.save_pending(_PAYLOAD_P, mode="pullback")
+    assert store.approve_pending(mode="pullback") is True
+    assert store.has_pending(mode="pullback") is False
+    assert store.has_pending(mode="macro") is True
+
+
+# ─── v19.14: pure helpers ─────────────────────────────────────────
+def test_v19_14_pending_slot_for_mode_routing():
+    """mode → GS slot key 路由助手（None / 'macro' 同槽 / 'pullback' 獨立槽）."""
+    assert store._pending_slot_for_mode(None) == "pending"
+    assert store._pending_slot_for_mode("macro") == "pending"
+    assert store._pending_slot_for_mode("pullback") == "pending_pullback"
+    with pytest.raises(ValueError):
+        store._pending_slot_for_mode("daily")
+
+
+def test_v19_14_pending_path_for_mode_routing():
+    """mode → FS 路徑路由助手."""
+    assert store._pending_path_for_mode(None) == store._PENDING_PATH
+    assert store._pending_path_for_mode("macro") == store._PENDING_PATH
+    assert store._pending_path_for_mode("pullback") == store._PENDING_PULLBACK_PATH
+    with pytest.raises(ValueError):
+        store._pending_path_for_mode("daily")
