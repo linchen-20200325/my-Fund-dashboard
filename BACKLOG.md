@@ -241,27 +241,12 @@
 
 ## 🚧 Next
 
-### PR C/D — Sheet v2 主路徑收口（v18.178 審計 #3/#4，**延後 / 需 Sheet 憑證 session**）
+> **目前 sandbox 可獨立推進項：0**（v19.15 已 ship，無 in-flight epic）。新需求隨時開新 epic 起新三步法。
 
-> ⚠️ **為何延後**：觸及 user 真實財務資料（Google Sheet 持倉），沙箱無憑證 + 網路被擋無法 round-trip 驗證；
-> mock 測試只驗呼叫參數、不驗 Sheet 實際正確性；#4 為破壞性（刪 ledger 寫入路徑）。
-> **執行前置**：必須有 live Sheet 存取，且**先在 Sheet 副本驗證**「全部寫入→全部讀回」無誤再碰真實資料。
+### ~~PR C/D — Sheet v2 主路徑收口~~ — 已結案，不再列為 Next
 
-**PR C（#3）讓「全部寫入/讀回」自動走 v2**：
-1. `ui/helpers/cloud_io.py:dump_all_to_sheet` 開頭加 `_ver = detect_sheet_schema_version(client, sheet_id)`；
-   `_ver == "v2"` → 改呼叫新 helper `_dump_all_to_sheet_v2`（把 `portfolio_funds` + `t7_ledgers` 序列化成
-   `ALL_COLS_V2` 12 欄：units/avg_nav/avg_nav_with_div/avg_fx/div_cash_pct 全帶上，經 `write_policy_v2` 寫各保單分頁）；
-   `_ver != "v2"` → 維持現有 v1 `upsert_fund_in_policy` 路徑（**不動 v1，保留向後相容**）。
-2. `load_all_from_sheet` 同樣 detect → v2 走 `load_all_policies_v2` + 從 12 欄還原 units/nav/fx（含 ledger 重建），
-   v1 維持 `load_policies` / `load_all_policy_worksheets`。
-3. 測試（mock client）：`test_cloud_io.py` 加 `test_dump_routes_to_v2_when_detected` /
-   `test_load_routes_to_v2_when_detected` / `test_v1_path_unchanged_when_not_v2`；
-   驗 round-trip 欄位映射（units/avg_nav/div_cash_pct 不漏）。
-
-**PR D（#4，PR C 上線且真實資料驗證 OK 後才做，破壞性）**：
-- 移除 `_T7_State` / `_Ledgers` 寫入路徑（`snapshot_repository.save_all_ledgers_snapshot` 等），
-  前提是 v2 12 欄已完整接手部位 + ledger 還原；移除前先確認 v2 讀回能 100% 重建 T7 部位。
-- 文件 cleanup：說明書 §9 Sheet 資料結構、ARCHITECTURE 對應段落改成單一 v2 schema 敘述。
+- **PR C（v18.250 已 ship）**：`cloud_io.dump_all_to_sheet / load_all_from_sheet` 開頭已加 `detect_sheet_schema_version` schema-aware routing，v2 走 `_dump/_load_all_to_sheet_v2`（13 欄整 tab 覆寫 + 反推 portfolio_funds + ledger snapshot via `Ledger.subscribe()`），v1 / empty / detect 失敗維持舊路徑向後相容。test_cloud_io 14 → 18 passed（4 case：`test_dump_routes_to_v2_when_detected` / `test_load_routes_to_v2_when_detected` / `test_v1_path_unchanged_when_v1` / `test_v2_round_trip_keeps_13_cols`）。詳見 `## ✅ Done` 區 2026-05-29 條目。
+- **PR D — 不做（已宣告拒做）**：破壞性移除 `_T7_State` / `_Ledgers` 寫入路徑需先在 Sheet 副本驗 v2 round-trip OK，且風險 / 收益不成比例（v1 + v2 雙寫即將上線多月已穩定 / 無人抱怨儲存空間或效能）。BACKLOG line 13 末尾已標註 `⚠️ PR D 不做`。若未來 user 改變主意要做，重新開新 epic 走三步法。
 
 ### 其他可選
 
