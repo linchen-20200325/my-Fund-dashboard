@@ -8,7 +8,6 @@ AI 分析引擎 v13 — 單次呼叫 · 含風險預警快照 · 六因子評分
   - _gemini           — Gemini API 單次呼叫（含 retry / 容錯降級）
   - _build_snapshot   — 整合 indicators + phase + 風險快照
   - analyze_global    — 全球總經分析
-  - analyze_portfolio_correlation — 組合相關性分析
   - analyze_portfolio_mk_advisor   — MK 智能戰情室 AI 建議
   - build_stale_flags  — Data Guard STALE 旗標注入
   - event_impact_analysis — 持股 × 新聞交叉比對警報
@@ -286,15 +285,6 @@ def _format_fund_holdings(holdings) -> str:
             _sw_s = f" {_sw}%" if _sw is not None else ""
             lines.append(f"    - {_sn}{_sw_s}")
     return "\n".join(lines)
-
-
-def analyze_portfolio_correlation(api_key, funds_list, phase_info, data_text=""):
-    try:
-        import streamlit as st
-        _ind = st.session_state.get("indicators", {})
-    except Exception:
-        _ind = {}
-    return analyze_global(api_key, _ind, phase_info, portfolio_funds=funds_list)
 
 
 # ══════════════════════════════════════════════════════════════════
