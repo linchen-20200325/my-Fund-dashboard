@@ -9,7 +9,6 @@
 """
 from __future__ import annotations
 
-import os
 
 _FALLBACK_HEADER = "🧮 數學摘要（AI 不可用）"
 
@@ -92,19 +91,19 @@ def explain_pending_weights(
     weights = weights or {}
     oos_metrics = oos_metrics or {}
 
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
+    from services.ai_service import gemini_generate, get_gemini_keys
+    if not get_gemini_keys():
         return _math_summary(weights, oos_metrics)
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
         prompt = _build_prompt(weights, oos_metrics, horizon_months, drawdown_threshold)
-        resp = model.generate_content(prompt)
-        text = (getattr(resp, "text", "") or "").strip()
-        if not text:
-            return _math_summary(weights, oos_metrics)
+        text = (gemini_generate(prompt) or "").strip()
+        if not text or text.startswith(("⚠️", "❌")):
+            tag = "AI 全部 key 配額用盡" if text.startswith("❌") else "AI 不可用"
+            return (
+                f"{_math_summary(weights, oos_metrics)}\n\n"
+                f"_（{tag}）_"
+            )
         return f"🤖 **AI 解讀**\n\n{text}\n\n---\n\n{_math_summary(weights, oos_metrics)}"
     except Exception as e:
         return (
@@ -192,6 +191,9 @@ def recommend_weights(
 
     與既有 ``explain_pending_weights``（事後解讀）獨立兩條 AI 線。
     AI 失敗或無 key → 回退規則摘要（取最高 plateau 並標稀疏度 / OOS 旗標）。
+    v19.13.11：改用 ``gemini_generate`` 多 key round-robin（v18.217） — 單把 key
+    撞 429 ResourceExhausted 時自動換下一把，不會再因「macro 用完同把 key 的配額
+    → pullback 整個崩到 fallback」。
 
     Returns:
         markdown 字串（直接餵 st.markdown）
@@ -199,21 +201,25 @@ def recommend_weights(
     candidates = candidates or []
     oos_metrics = oos_metrics or {}
 
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key or not candidates:
+    if not candidates:
+        return _recommend_fallback(candidates, oos_metrics)
+
+    from services.ai_service import gemini_generate, get_gemini_keys
+    if not get_gemini_keys():
         return _recommend_fallback(candidates, oos_metrics)
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
         prompt = _build_compare_prompt(
             candidates, oos_metrics, horizon_months, drawdown_threshold,
         )
-        resp = model.generate_content(prompt)
-        text = (getattr(resp, "text", "") or "").strip()
-        if not text:
-            return _recommend_fallback(candidates, oos_metrics)
+        text = (gemini_generate(prompt) or "").strip()
+        # gemini_generate 回 sentinel 錯誤字串（"⚠️"/"❌"）→ 視為失敗走 fallback
+        if not text or text.startswith(("⚠️", "❌")):
+            tag = "AI 全部 key 配額用盡" if text.startswith("❌") else "AI 不可用"
+            return (
+                f"{_recommend_fallback(candidates, oos_metrics)}\n\n"
+                f"_（{tag}）_"
+            )
         return (
             f"🤖 **AI 建議**（事前比對 top-{len(candidates)} 候選）\n\n{text}\n\n---\n\n"
             f"{_recommend_fallback(candidates, oos_metrics)}"
