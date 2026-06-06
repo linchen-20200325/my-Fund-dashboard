@@ -195,6 +195,194 @@ def _render_pending_weights_banner() -> None:
         _render_one_pending_banner(mode, payload)
 
 
+# ════════════════════════════════════════════════
+# v19.15：即時訊號燈 + 決策矩陣
+# ════════════════════════════════════════════════
+_ACTION_BADGE_BG = {
+    "持有": "#374151",
+    "加碼": "#7f1d1d",
+    "減倉": "#7c2d12",
+    "全撤": "#991b1b",
+}
+_ACTION_BADGE_FG = {
+    "持有": "#d1d5db",
+    "加碼": "#fecaca",
+    "減倉": "#fed7aa",
+    "全撤": "#fecaca",
+}
+
+
+def _enrich_fund_for_decision(_f: dict) -> dict:
+    """從 portfolio_funds 條目擷取 verdict_to_actions 需要的欄位（複用 tab3 邏輯）.
+
+    產出：{code, name, is_core, invest_twd, sigma_info, dividend_info}
+    σ 位階 / 配息覆蓋率算法與 tab3_portfolio.py 既有 `_compute_advice_for` 同步。
+    """
+    code = _f.get("code", "?") or "?"
+    name = (_f.get("name") or code)[:30]
+
+    # is_core 沿用 P3 邏輯：Sheet policy_tier 優先，缺則 fallback flag
+    _tier = (_f.get("policy_tier") or "").lower()
+    if _tier == "core":
+        is_core = True
+    elif _tier == "satellite":
+        is_core = False
+    else:
+        is_core = bool(_f.get("is_core"))
+
+    sigma_info = None
+    _series = _f.get("series")
+    if _series is not None and hasattr(_series, "dropna") and len(_series.dropna()) >= 30:
+        try:
+            from services.precision_service import calc_hwm_sigma_levels as _hwm_fn
+            sigma_info = _hwm_fn(_series, lookback=252)
+        except Exception as _se:  # noqa: BLE001
+            sigma_info = {"error": str(_se)[:60]}
+
+    div_info = None
+    try:
+        _mj = _f.get("moneydj_raw", {}) or {}
+        _metrics = _f.get("metrics", {}) or {}
+        _tret = float(_mj.get("perf", {}).get("1Y") or _metrics.get("ret_1y") or 0)
+        _dyld = float(_mj.get("moneydj_div_yield") or _metrics.get("annual_div_rate") or 0)
+        if _dyld > 0:
+            from fund_fetcher import div_safety_check
+            div_info = div_safety_check(_tret, _dyld)
+    except Exception:
+        div_info = None
+
+    return {
+        "code": code,
+        "name": name,
+        "is_core": is_core,
+        "invest_twd": float(_f.get("invest_twd", 0) or 0),
+        "sigma_info": sigma_info,
+        "dividend_info": div_info,
+    }
+
+
+def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
+    """🎯 v19.15：即時訊號燈 + 決策矩陣 — 接在 pending banner 後、tabs 前。
+
+    3 區塊：
+      1. 頂部即時 verdict 大卡（icon + level + 分數 + 配置建議）
+      2. 7 cluster 燈 quick view（reuse compute_cluster_signals）
+      3. 逐檔決策矩陣表（funds 為空 → 顯式提示）
+
+    indicators 為 None / macro_done=False → 完全不渲染（噪音零）。
+    """
+    if not indicators:
+        return
+    try:
+        from services.realtime_signal import compute_realtime_dashboard
+    except ImportError:
+        return
+
+    _pf_all = st.session_state.get("portfolio_funds", []) or []
+    _pf_loaded = [f for f in _pf_all if isinstance(f, dict) and f.get("loaded")]
+    _enriched = [_enrich_fund_for_decision(f) for f in _pf_loaded]
+
+    dash = compute_realtime_dashboard(indicators, _enriched)
+    if not dash.get("ready"):
+        return
+
+    st.markdown("### 🎯 即時訊號 + 決策矩陣（v19.15）")
+    st.caption("總經 verdict 套用 active 權重後 → 5 級分檔 × 個股 σ/配息訊號 → 逐檔持有/加碼/減倉/全撤")
+
+    # ── 區塊 1：頂部 verdict 大卡 ─────────────────────────────
+    icon = dash["verdict_icon"]
+    level = dash["verdict_level"]
+    color = dash["verdict_color"]
+    score = dash["score"]
+    action_text = dash["verdict_action_text"]
+
+    st.markdown(
+        f"<div style='background:linear-gradient(90deg,{color}22,{color}11);"
+        f"border-left:6px solid {color};border-radius:8px;padding:14px 18px;margin:8px 0 12px'>"
+        f"<div style='font-size:13px;color:#aaa;margin-bottom:4px'>📌 當前總經 verdict</div>"
+        f"<div style='font-size:24px;color:{color};font-weight:700;margin-bottom:6px'>"
+        f"{icon} {level}　<span style='font-size:18px;color:#e6edf3'>score = {score:+.2f}</span></div>"
+        f"<div style='font-size:14px;color:#e6edf3;line-height:1.55'>{action_text}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── 區塊 2：7 cluster 燈 quick view ─────────────────────
+    clusters = dash.get("cluster_signals") or []
+    if clusters:
+        consensus = dash.get("cluster_consensus") or {}
+        verdict_txt = consensus.get("verdict", "")
+        cols = st.columns(len(clusters))
+        for col, c in zip(cols, clusters):
+            sig = c.get("signal", "🟡")
+            icon_only = sig.split(" ", 1)[0] if " " in sig else sig
+            name = c.get("name", "—")
+            col.markdown(
+                f"<div style='text-align:center;font-size:13px'>"
+                f"<div style='font-size:22px'>{icon_only}</div>"
+                f"<div style='color:#aaa'>{name}</div></div>",
+                unsafe_allow_html=True,
+            )
+        if verdict_txt:
+            st.caption(f"📊 7 cluster 合議：{verdict_txt}")
+
+    # ── 區塊 3：逐檔決策矩陣表 ────────────────────────────────
+    actions = dash.get("fund_actions") or []
+    summary = dash.get("actions_summary") or {}
+    if not actions:
+        st.info("ℹ️ 尚無已載入基金 — 至「📦 投資組合」載入後本表會自動填入")
+        return
+
+    n_total = summary.get("n_total", 0)
+    n_add = summary.get("n_add", 0)
+    n_hold = summary.get("n_hold", 0)
+    n_reduce = summary.get("n_reduce", 0)
+    n_exit = summary.get("n_exit", 0)
+    st.caption(
+        f"📋 {n_total} 檔分析 → "
+        f"加碼 **{n_add}** / 持有 **{n_hold}** / 減倉 **{n_reduce}** / 全撤 **{n_exit}**"
+    )
+
+    # 用 DataFrame 渲染（無 plotly / 純 markdown 風險）
+    import pandas as _pd
+    df = _pd.DataFrame([
+        {
+            "代碼": a["code"],
+            "名稱": a["name"],
+            "角色": "🏛️ 核心" if a["is_core"] else "🚀 衛星",
+            "建議": a["action"],
+            "權重": f"{a['target_pct']}%",
+            "原因": a["reason"],
+        }
+        for a in actions
+    ])
+
+    def _row_style(row):
+        action = row["建議"]
+        bg = _ACTION_BADGE_BG.get(action, "#1f2937")
+        fg = _ACTION_BADGE_FG.get(action, "#e6edf3")
+        return [f"background-color: {bg}; color: {fg};" if c == "建議" else "" for c in row.index]
+
+    st.dataframe(
+        df.style.apply(_row_style, axis=1),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    with st.expander("💡 動作對照表 + 邊界規則", expanded=False):
+        st.markdown(
+            "- **持有 (100%)** — 維持原配置\n"
+            "- **加碼 (130%)** — 跌深 + 多頭環境 / 衛星在極度樂觀區\n"
+            "- **減倉 (50%)** — 衛星進入悲觀 / 核心進入極度悲觀 / 過熱停利 / 吃本金 1 級保守化\n"
+            "- **全撤 (0%)** — 衛星在極度悲觀 / 過熱 + 風險升 / 吃本金 2 級保守化\n\n"
+            "**個股訊號覆寫**：\n"
+            "- σ ≤ −2 + 樂觀/極度樂觀 → 升級加碼\n"
+            "- σ ≤ −2 + 悲觀/極度悲觀 → 不接刀，沿用 verdict 預設\n"
+            "- σ > +1 + 樂觀類 + 衛星 → 分批停利（減倉）\n"
+            "- 配息吃本金（含息 < 配息）→ 動作往保守方向 bump 一級"
+        )
+
+
 def render_macro_tab() -> None:
     """渲染總經位階評估 ＆ 拐點偵測 Tab（最大塊 ~1.8k 行）。
 
@@ -321,6 +509,9 @@ def render_macro_tab() -> None:
         sc    = phase["score"];  ph   = phase["phase"];  ph_c = phase["phase_color"]
         alloc = phase["alloc"];  advice = phase.get("advice","")
         rec_p = phase.get("rec_prob")
+
+        # ── 🎯 v19.15：即時訊號燈 + 決策矩陣（C-2 verdict → 逐檔行動）──
+        _render_realtime_decision_dashboard(ind)
 
         # ══ v17.3 內層 Tab：戰情首頁 + 指標教學手冊（§6-6 資訊不藏匿）═══
         tab_main, tab_edu = st.tabs(["📊 戰情首頁", "📖 指標教學手冊"])
