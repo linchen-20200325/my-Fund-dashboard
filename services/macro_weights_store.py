@@ -31,20 +31,50 @@ from typing import Any
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 _ACTIVE_PATH = _CONFIG_DIR / "macro_weights_active.json"
 _PENDING_PATH = _CONFIG_DIR / "macro_weights_pending.json"
+# v19.14：雙軌 pending — pullback mode 另開獨立槽，避免「macro 提交後被 pullback 覆蓋」
+_PENDING_PULLBACK_PATH = _CONFIG_DIR / "macro_weights_pending_pullback.json"
 
 _SCHEMA_VERSION = "v19.0"
 _REQUIRED_KEYS = {"version", "indicators"}
 
-# v19.7：Google Sheets backend（治 Streamlit Cloud FS ephemeral）
-# Worksheet schema（單一 worksheet `_macro_weights`，2 列固定 slot）：
-#   A1: slot       B1: payload_json       C1: updated_at
-#   A2: pending    B2: <json or "">       C2: <iso ts or "">
-#   A3: active     B3: <json or "">       C3: <iso ts or "">
+# v19.7 / v19.14：Google Sheets backend（治 Streamlit Cloud FS ephemeral）
+# Worksheet schema（單一 worksheet `_macro_weights`，4 列固定 slot）：
+#   A1: slot              B1: payload_json       C1: updated_at
+#   A2: pending           B2: <json or "">       C2: <iso ts or "">   (= macro / legacy)
+#   A3: active            B3: <json or "">       C3: <iso ts or "">
+#   A4: pending_pullback  B4: <json or "">       C4: <iso ts or "">   (v19.14 新增)
 # 偵測：st.secrets["google_service_account"].client_email + st.secrets["macro_weights_sheet_id"]
 # 兩者皆有 → 走 GS；否則 fallback 至 FS（本地開發友善）。
 _GS_WORKSHEET = "_macro_weights"
 _GS_PENDING_ROW = 2
 _GS_ACTIVE_ROW = 3
+_GS_PENDING_PULLBACK_ROW = 4
+_GS_SLOT_ROWS: dict[str, int] = {
+    "pending": _GS_PENDING_ROW,
+    "active": _GS_ACTIVE_ROW,
+    "pending_pullback": _GS_PENDING_PULLBACK_ROW,
+}
+
+# v19.14：mode 路由 — None / "macro" → 既有槽（legacy 相容）；"pullback" → 新槽
+PENDING_MODES = ("macro", "pullback")
+
+
+def _pending_slot_for_mode(mode: str | None) -> str:
+    """mode → GS slot key。None/'macro' → legacy 'pending'；'pullback' → 'pending_pullback'."""
+    if mode == "pullback":
+        return "pending_pullback"
+    if mode in (None, "macro"):
+        return "pending"
+    raise ValueError(f"unknown mode: {mode!r}")
+
+
+def _pending_path_for_mode(mode: str | None) -> Path:
+    """mode → FS 路徑。None/'macro' → legacy `_PENDING_PATH`；'pullback' → pullback path."""
+    if mode == "pullback":
+        return _PENDING_PULLBACK_PATH
+    if mode in (None, "macro"):
+        return _PENDING_PATH
+    raise ValueError(f"unknown mode: {mode!r}")
 
 
 def _empty_active() -> dict[str, Any]:
@@ -79,7 +109,7 @@ def _gs_enabled() -> bool:
 
 
 def _gs_get_worksheet():
-    """開啟（或自動建立）`_macro_weights` worksheet — 重用 policy_repository 的認證流程。"""
+    """開啟（或自動建立）`_macro_weights` worksheet — 重用 policy_repository 的認證流程."""
     import streamlit as st
 
     from repositories.policy_repository import get_gspread_client
@@ -91,18 +121,20 @@ def _gs_get_worksheet():
     try:
         return sh.worksheet(_GS_WORKSHEET)
     except Exception:
+        # v19.14：4 列 schema（A4 新增 pullback pending slot）
         ws = sh.add_worksheet(title=_GS_WORKSHEET, rows=5, cols=3)
-        ws.update("A1:C3", [
+        ws.update("A1:C4", [
             ["slot", "payload_json", "updated_at"],
             ["pending", "", ""],
             ["active", "", ""],
+            ["pending_pullback", "", ""],
         ])
         return ws
 
 
 def _gs_load(slot: str) -> dict[str, Any] | None:
-    """讀 slot row（pending=row2 / active=row3）。空值 / 解析失敗 → None。"""
-    row = _GS_PENDING_ROW if slot == "pending" else _GS_ACTIVE_ROW
+    """讀 slot row（pending=row2 / active=row3 / pending_pullback=row4）。空值 / 解析失敗 → None."""
+    row = _GS_SLOT_ROWS[slot]
     ws = _gs_get_worksheet()
     cell = ws.acell(f"B{row}").value
     if not cell:
@@ -116,8 +148,8 @@ def _gs_load(slot: str) -> dict[str, Any] | None:
 
 
 def _gs_save(slot: str, payload: dict[str, Any]) -> None:
-    """寫 slot row — payload_json + updated_at 同列更新。"""
-    row = _GS_PENDING_ROW if slot == "pending" else _GS_ACTIVE_ROW
+    """寫 slot row — payload_json + updated_at 同列更新."""
+    row = _GS_SLOT_ROWS[slot]
     ws = _gs_get_worksheet()
     ws.update(f"B{row}:C{row}", [[
         json.dumps(payload, ensure_ascii=False),
@@ -126,8 +158,8 @@ def _gs_save(slot: str, payload: dict[str, Any]) -> None:
 
 
 def _gs_delete(slot: str) -> None:
-    """清空 slot row 的 payload + ts（保留 schema 列）。"""
-    row = _GS_PENDING_ROW if slot == "pending" else _GS_ACTIVE_ROW
+    """清空 slot row 的 payload + ts（保留 schema 列）."""
+    row = _GS_SLOT_ROWS[slot]
     ws = _gs_get_worksheet()
     ws.update(f"B{row}:C{row}", [["", ""]])
 
@@ -160,69 +192,86 @@ def load_active() -> dict[str, Any]:
         return _empty_active()
 
 
-def load_pending() -> dict[str, Any] | None:
-    """讀 pending。GS 後端 → row2；FS 後端 → ``macro_weights_pending.json``。
+def load_pending(mode: str | None = None) -> dict[str, Any] | None:
+    """讀 pending。
+
+    v19.14：``mode`` 路由 — ``None``/``'macro'`` → legacy 槽（``macro_weights_pending.json`` /
+    GS row2）；``'pullback'`` → 新槽（``macro_weights_pending_pullback.json`` / GS row4）。
     不存在 → None；解析失敗 → None（避免 corrupt 卡死面板）。
     """
+    slot = _pending_slot_for_mode(mode)
     if _gs_enabled():
-        return _gs_load("pending")
-    if not _PENDING_PATH.exists():
+        return _gs_load(slot)
+    path = _pending_path_for_mode(mode)
+    if not path.exists():
         return None
     try:
-        data = json.loads(_PENDING_PATH.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         _validate(data)
         return data
     except (json.JSONDecodeError, ValueError):
         return None
 
 
-def has_pending() -> bool:
+def has_pending(mode: str | None = None) -> bool:
     """快速檢查 pending 是否存在（面板 banner 用）。
-    GS 後端解析 row2；FS 後端純 Path.exists()。
+
+    v19.14：``mode`` 路由 — 同 ``load_pending``。
+    GS 後端解析對應 row；FS 後端純 ``Path.exists()``。
     """
     if _gs_enabled():
-        return _gs_load("pending") is not None
-    return _PENDING_PATH.exists()
+        return _gs_load(_pending_slot_for_mode(mode)) is not None
+    return _pending_path_for_mode(mode).exists()
 
 
-def save_pending(payload: dict[str, Any]) -> Path | str:
-    """寫 pending（覆蓋舊提交，單槽設計）。
+def save_pending(payload: dict[str, Any], mode: str | None = None) -> Path | str:
+    """寫 pending（覆蓋同 mode 舊提交）。
+
+    v19.14：``mode`` 路由 — 不同 mode 寫不同槽，兩 mode 可獨立 pending 並存。
+    None/'macro' → legacy 槽（向後相容）；'pullback' → 新槽。
 
     Returns:
         FS 模式回 Path；GS 模式回字串 "_macro_weights!B{row}"（給 UI 顯示用）。
 
     Raises:
-        ValueError: payload schema 不合法
+        ValueError: payload schema 不合法 / mode 非法
     """
     _validate(payload)
+    slot = _pending_slot_for_mode(mode)
     if _gs_enabled():
-        _gs_save("pending", payload)
-        return f"_macro_weights!B{_GS_PENDING_ROW}"
+        _gs_save(slot, payload)
+        return f"_macro_weights!B{_GS_SLOT_ROWS[slot]}"
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    _PENDING_PATH.write_text(
+    path = _pending_path_for_mode(mode)
+    path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    return _PENDING_PATH
+    return path
 
 
-def approve_pending() -> bool:
-    """升格 pending → active；清空 pending 槽。
+def approve_pending(mode: str | None = None) -> bool:
+    """升格指定 mode 的 pending → active；清空該 mode pending 槽。
+
+    v19.14：``mode`` 路由 — 只動指定 mode 的 pending；active 為共用單槽（**最新 approve 的
+    那一 mode 會覆蓋 active**）。
 
     Returns:
-        True 若有 pending 且成功升格；False 若無 pending / corrupt。
+        True 若該 mode 有 pending 且成功升格；False 若無 pending / corrupt。
     """
+    slot = _pending_slot_for_mode(mode)
     if _gs_enabled():
-        payload = _gs_load("pending")
+        payload = _gs_load(slot)
         if payload is None:
             return False
         _gs_save("active", payload)
-        _gs_delete("pending")
+        _gs_delete(slot)
         return True
-    if not _PENDING_PATH.exists():
+    path = _pending_path_for_mode(mode)
+    if not path.exists():
         return False
     try:
-        payload = json.loads(_PENDING_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
         _validate(payload)
     except (json.JSONDecodeError, ValueError):
         return False
@@ -231,20 +280,25 @@ def approve_pending() -> bool:
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    _PENDING_PATH.unlink(missing_ok=True)
+    path.unlink(missing_ok=True)
     return True
 
 
-def reject_pending() -> bool:
-    """清空 pending 槽。Returns True 若有東西可清。"""
+def reject_pending(mode: str | None = None) -> bool:
+    """清空指定 mode pending 槽。Returns True 若有東西可清.
+
+    v19.14：``mode`` 路由 — 只動指定 mode 的 pending；不影響另一 mode 或 active。
+    """
+    slot = _pending_slot_for_mode(mode)
     if _gs_enabled():
-        if _gs_load("pending") is None:
+        if _gs_load(slot) is None:
             return False
-        _gs_delete("pending")
+        _gs_delete(slot)
         return True
-    if not _PENDING_PATH.exists():
+    path = _pending_path_for_mode(mode)
+    if not path.exists():
         return False
-    _PENDING_PATH.unlink(missing_ok=True)
+    path.unlink(missing_ok=True)
     return True
 
 
@@ -406,6 +460,7 @@ def get_phase_thresholds(
 
 
 __all__ = [
+    "PENDING_MODES",
     "load_active",
     "load_pending",
     "has_pending",

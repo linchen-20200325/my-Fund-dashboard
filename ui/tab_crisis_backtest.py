@@ -1049,7 +1049,8 @@ def _render_phase3_multi_factor_optimization(events, series_by_key) -> None:
         _render_ai_recommendation_section(cached, mode)
 
         # ── 📌 Route C-1：提交為待審權重（僅手動觸發）─────────────
-        _render_pending_submit_section(cached)
+        # v19.14：mode 路由 — macro / pullback 各自獨立 pending 槽，總經 banner 並排顯示
+        _render_pending_submit_section(cached, mode)
 
 
 def _render_ai_recommendation_section(
@@ -1096,16 +1097,25 @@ def _render_ai_recommendation_section(
         st.markdown(advice)
 
 
-def _render_pending_submit_section(cached: dict | None) -> None:
-    """🚀 Route C-1：把回測結果提交為「待審權重」，user 在總經面板批准才會生效。
+def _render_pending_submit_section(
+    cached: dict | None, mode: str = "macro",
+) -> None:
+    """🚀 Route C-1：把回測結果提交為「待審權重」，user 在總經面板批准才會生效.
 
     僅手動觸發 — 無排程、無自動寫回 active。
+    v19.14：``mode`` 路由 — macro / pullback 各自獨立 pending 槽，避免互相覆蓋；
+    button key 加 mode 後綴避免同頁兩 mode 並排時 widget key collision。
     """
+    if mode not in MULTIFACTOR_MODES:
+        raise ValueError(f"unknown mode: {mode!r}")
+
+    label = MULTIFACTOR_MODE_LABELS.get(mode, mode)
     st.markdown("---")
-    st.markdown("### 📌 提交為待審權重（Route C-1）")
+    st.markdown(f"### 📌 提交為待審權重 — {label}（Route C-1）")
     st.caption(
-        "把上方最佳權重 + OOS 指標寫到 `config/macro_weights_pending.json`，"
-        "請至「🌐 總經」Tab 頂部 banner 批准。**僅手動觸發**，無排程。"
+        f"把上方最佳權重 + OOS 指標寫到 **{mode} 槽** pending，"
+        "請至「🌐 總經」Tab 頂部 banner 批准。**僅手動觸發**，無排程；"
+        "兩 mode 槽獨立，提交 macro 不影響 pullback、反之亦然。"
     )
 
     if not cached or not (cached.get("opt") or {}).get("weights"):
@@ -1119,12 +1129,17 @@ def _render_pending_submit_section(cached: dict | None) -> None:
         save_pending,
     )
 
-    if has_pending():
+    if has_pending(mode=mode):
         st.warning(
-            "⚠️ 已有一筆待審權重在排隊。再次提交會**覆蓋**舊提交（單槽設計）。"
+            f"⚠️ 已有一筆 **{label}** 待審權重在排隊。"
+            f"再次提交會**覆蓋同 mode 舊提交**（不影響另一 mode）。"
         )
 
-    if st.button("📌 提交為待審權重", type="primary", key="multifactor_submit_pending"):
+    if st.button(
+        f"📌 提交 {label} 為待審權重",
+        type="primary",
+        key=f"multifactor_submit_pending_{mode}",
+    ):
         opt = cached.get("opt") or {}
         wf = cached.get("wf") or {}
         sel_keys = cached.get("sel_keys") or []
@@ -1142,14 +1157,15 @@ def _render_pending_submit_section(cached: dict | None) -> None:
             opt, wf, sel_keys, metric, ai_explanation=ai_text,
         )
         try:
-            p = save_pending(payload)
+            p = save_pending(payload, mode=mode)
         except ValueError as e:
             st.error(f"❌ Schema 驗證失敗：{e}")
             return
         # v19.7: save_pending 回 Path（FS）或 str（GS worksheet ref）
         _loc = p.name if hasattr(p, "name") else str(p)
         st.success(
-            f"✅ 已提交至 `{_loc}` — 請至「🌐 總經」Tab 頂部 banner 批准 / 拒絕。"
+            f"✅ 已提交至 `{_loc}`（**{label}** 槽）— "
+            f"請至「🌐 總經」Tab 頂部 banner 批准 / 拒絕。"
         )
         st.markdown("**🤖 AI 解讀（提交內容預覽）**")
         st.markdown(ai_text)
