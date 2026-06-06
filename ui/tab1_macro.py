@@ -46,11 +46,9 @@ from services.macro_service import (
 from ui.components.mk_clock import render_mk_clock_section
 from ui.helpers.macro_helpers import (
     _CATEGORY_MAP,
-    calculate_composite_score,
     category_history,
     category_score,
     category_verdict,
-    composite_verdict,
 )
 from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
@@ -427,24 +425,8 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
         unsafe_allow_html=True,
     )
 
-    # ── 區塊 2：7 cluster 燈 quick view ─────────────────────
-    clusters = dash.get("cluster_signals") or []
-    if clusters:
-        consensus = dash.get("cluster_consensus") or {}
-        verdict_txt = consensus.get("verdict", "")
-        cols = st.columns(len(clusters))
-        for col, c in zip(cols, clusters):
-            sig = c.get("signal", "🟡")
-            icon_only = sig.split(" ", 1)[0] if " " in sig else sig
-            name = c.get("name", "—")
-            col.markdown(
-                f"<div style='text-align:center;font-size:13px'>"
-                f"<div style='font-size:22px'>{icon_only}</div>"
-                f"<div style='color:#aaa'>{name}</div></div>",
-                unsafe_allow_html=True,
-            )
-        if verdict_txt:
-            st.caption(f"📊 7 cluster 合議：{verdict_txt}")
+    # v19.18: 7 cluster 燈 quick view 已移除（戰情首頁 ① 有完整 F1 校準版本，避免視覺重複）
+    # 此處只留 verdict 大卡（區塊 1）+ 決策矩陣（區塊 3）
 
     # ── 區塊 3：逐檔決策矩陣表 ────────────────────────────────
     actions = dash.get("fund_actions") or []
@@ -701,32 +683,12 @@ def render_macro_tab() -> None:
             except Exception as _exc:
                 st.warning(f"指標教學手冊載入失敗：{_exc}")
         with tab_main:
-            st.markdown("### ① 總經位階評估")
-            # ══ v17.3「宏觀健康度總分」字卡（首頁頂部，5 級白話評價）═══
-            # 計算：Σ (score × weight)，缺值/NaN 補 0；零快取（CLAUDE.md §4）
-            _macro_total = calculate_composite_score(ind)
-            _mc_icon, _mc_lvl, _mc_color, _mc_act = composite_verdict(_macro_total)
-            st.markdown(
-                f"<div style='background:linear-gradient(135deg,#0d1117 0%,#161b22 100%);"
-                f"border:2px solid {_mc_color};border-radius:14px;padding:20px 24px;margin:6px 0 14px'>"
-                f"<div style='display:flex;align-items:center;gap:18px;flex-wrap:wrap'>"
-                f"<div style='font-size:48px;line-height:1'>{_mc_icon}</div>"
-                f"<div style='flex:1;min-width:200px'>"
-                f"<div style='color:#888;font-size:11px;letter-spacing:2px'>"
-                f"宏觀健康度總分 ＝ Σ(指標得分 × 權重)，覆蓋 23 項領先/同時/落後指標</div>"
-                f"<div style='color:{_mc_color};font-weight:900;font-size:32px;margin-top:2px'>"
-                f"{_mc_lvl}</div></div>"
-                f"<div style='text-align:right'>"
-                f"<div style='color:#888;font-size:11px'>TOTAL SCORE</div>"
-                f"<div style='color:{_mc_color};font-weight:900;font-size:46px;line-height:1'>"
-                f"{_macro_total:+.1f}</div></div></div>"
-                f"<div style='color:#e6edf3;font-size:13px;line-height:1.6;margin-top:10px;"
-                f"padding-top:10px;border-top:1px solid #30363d'>"
-                f"📌 <strong>行動建議：</strong>{_mc_act}<br>"
-                f"<span style='color:#666;font-size:11px'>"
-                f"門檻參考：&gt;+10 極度樂觀 ｜ +5~+10 樂觀 ｜ -5~+5 中性 ｜ -10~-5 悲觀 ｜ &lt;-10 極度悲觀"
-                f"</span></div></div>",
-                unsafe_allow_html=True,
+            # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）
+            # 戰情首頁直接進 7-cluster 合議 + 細項燈號 → 健康度全景
+            st.markdown("### ① 7 維獨立合議 + 23 指標健康度")
+            st.caption(
+                "23 個高度相關 factor 收斂成 7 個獨立 cluster；下方搭配 7 子領域 z-score 細項燈號。"
+                "完整 verdict 大卡見頂部新手面板，逐檔行動建議見「🔬 進階檢視」expander。"
             )
 
             # ══ v18.291「7 維獨立合議」cluster signal panel ════════════════
@@ -840,6 +802,63 @@ def render_macro_tab() -> None:
                 )
             except Exception as _e_cluster:
                 st.caption(f"⚠️ 7 維合議顯示失敗：{_e_cluster}")
+
+            # ── v19.18: 7 子領域 Z-Score 健康度（從 ③ 拐點區搬上來，與 7-cluster 並列） ──
+            # 原位置 v18.100 區塊；放這裡讓「健康度面板」聚在一起，③ 區純做拐點
+            try:
+                _sub_lights = calc_sub_cycle_lights(ind)
+                if any(c.get("z_avg") is not None for c in _sub_lights):
+                    st.markdown("#### 🚦 景氣細項燈號（7 子領域 Z-Score 健康度）")
+                    st.caption(
+                        "依「越偏離歷史均值越紅」原則彙整 7 個子領域：🟢 健康（z<-1）｜"
+                        "🟡 中性偏好（-1≤z<0）｜🟠 中性偏弱（0≤z<1）｜🔴 警示（z≥1）。"
+                        "資料不足以 ⬜ 顯示。"
+                    )
+                    _cols = st.columns(4)
+                    for _i, _c in enumerate(_sub_lights):
+                        with _cols[_i % 4]:
+                            _z = _c.get("z_avg")
+                            _z_str = f"Z={_z:+.2f}" if _z is not None else "Z=—"
+                            _ind_str = " · ".join(
+                                f"{ix['key']} z{ix['z']:+.1f}"
+                                for ix in _c.get("indicators", [])
+                            ) or "—"
+                            st.markdown(
+                                f"<div style='background:#161b22;border:1px solid {_c['color']};"
+                                f"border-radius:8px;padding:10px 12px;margin:4px 0'>"
+                                f"<div style='font-size:13px;color:#aaa'>{_c['icon']} {_c['name']}</div>"
+                                f"<div style='font-size:22px;font-weight:700;color:{_c['color']};"
+                                f"margin:2px 0'>{_c['signal']} {_c['verdict']}</div>"
+                                f"<div style='font-size:11px;color:#888'>{_z_str}</div>"
+                                f"<div style='font-size:10px;color:#666;margin-top:4px'>{_ind_str}</div>"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
+                    _sl_alerts = []
+                    for _c in _sub_lights:
+                        _z = _c.get("z_avg")
+                        if _z is None:
+                            continue
+                        _icon = _c.get("icon", ""); _nm = _c.get("name", "?")
+                        _sig  = _c.get("signal", "")
+                        if _z < -1.5:
+                            _hint = "顯著低於歷史均值（>1.5σ）→ 此領域偏健康，可承擔較高風險"
+                        elif _z < -0.5:
+                            _hint = "低於歷史均值（0.5-1.5σ）→ 中性偏好，無立即壓力"
+                        elif _z < 0.5:
+                            _hint = "接近歷史均值 → 中性，需搭配其他指標研判"
+                        elif _z < 1.5:
+                            _hint = "高於歷史均值（0.5-1.5σ）→ 中性偏弱，啟動觀察"
+                        else:
+                            _hint = "⚠️ 顯著偏離歷史均值（>1.5σ）→ 警示等級，建議降低該領域曝險"
+                        _sl_alerts.append(
+                            f"{_icon} **{_nm}** {_sig} (z={_z:+.2f}) — {_hint}"
+                        )
+                    if _sl_alerts:
+                        with st.expander("💡 7 子領域 z-score 白話解讀", expanded=False):
+                            st.markdown("\n\n".join("- " + a for a in _sl_alerts))
+            except Exception as _e_sl:
+                st.caption(f"⚠️ 細項燈號計算失敗：{str(_e_sl)[:80]}")
 
             # ══ v17.4「四大類別景氣健康度」分組總覽 + 24M 走勢 ═════════════
             # 把 23 項指標按類別匯總當期分數 + 月度 Z-Score 平均，
@@ -2449,11 +2468,11 @@ def render_macro_tab() -> None:
                             else:
                                 st.markdown(f"**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
 
-            # ── v18.20 📡 景氣拐點監控 (Leading Indicator Tracker) ──
+            # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
             st.divider()
-            st.markdown("### ③ 📡 景氣拐點監控 (Leading Indicator Tracker)")
-            st.caption("即時偵測兩個歷史最關鍵的景氣翻轉訊號：製造業新訂單－庫存擴散、"
-                       "10Y-2Y 殖利率倒掛翻正")
+            st.markdown("### ③ 🎯 拐點偵測中心 (Inflection Point Center)")
+            st.caption("集中所有景氣翻轉訊號：製造業新訂單－庫存擴散 ｜ 10Y-2Y 殖利率倒掛翻正 ｜ "
+                       "HY 信用利差 ｜ 薩姆規則 ｜ CFNAI 領先指標 ｜ 歷史回測 ｜ 變數重要性")
             try:
                 _tp = detect_turning_points(FRED_KEY)
             except Exception as _tp_e:  # noqa: BLE001
@@ -2722,65 +2741,8 @@ def render_macro_tab() -> None:
                         f"窗口未到期事件以 ⏳ 標記且不納入中位數/勝率統計。"
                     )
 
-            # ── v18.100 景氣循環細項燈號（Phase 2）──────────────────────
-            # 7 個子領域（製造業/房市/就業/信貸/流動性/消費/通膨壓力）
-            # 各取 1-2 個既有指標 z-score 平均後 → 🟢🟡🟠🔴 四色燈號
-            try:
-                _sub_lights = calc_sub_cycle_lights(ind)
-                if any(c.get("z_avg") is not None for c in _sub_lights):
-                    st.divider()
-                    st.markdown("### 🚦 景氣細項燈號（7 子領域 Z-Score 健康度）")
-                    st.caption(
-                        "依「越偏離歷史均值越紅」原則彙整 7 個子領域：🟢 健康（z<-1）｜"
-                        "🟡 中性偏好（-1≤z<0）｜🟠 中性偏弱（0≤z<1）｜🔴 警示（z≥1）。"
-                        "資料不足以 ⬜ 顯示。"
-                    )
-                    _cols = st.columns(4)
-                    for _i, _c in enumerate(_sub_lights):
-                        with _cols[_i % 4]:
-                            _z = _c.get("z_avg")
-                            _z_str = f"Z={_z:+.2f}" if _z is not None else "Z=—"
-                            _ind_str = " · ".join(
-                                f"{ix['key']} z{ix['z']:+.1f}"
-                                for ix in _c.get("indicators", [])
-                            ) or "—"
-                            st.markdown(
-                                f"<div style='background:#161b22;border:1px solid {_c['color']};"
-                                f"border-radius:8px;padding:10px 12px;margin:4px 0'>"
-                                f"<div style='font-size:13px;color:#aaa'>{_c['icon']} {_c['name']}</div>"
-                                f"<div style='font-size:22px;font-weight:700;color:{_c['color']};"
-                                f"margin:2px 0'>{_c['signal']} {_c['verdict']}</div>"
-                                f"<div style='font-size:11px;color:#888'>{_z_str}</div>"
-                                f"<div style='font-size:10px;color:#666;margin-top:4px'>{_ind_str}</div>"
-                                f"</div>",
-                                unsafe_allow_html=True,
-                            )
-                    # v18.119 issue 2: 7 子領域白話解讀
-                    _sl_alerts = []
-                    for _c in _sub_lights:
-                        _z = _c.get("z_avg")
-                        if _z is None:
-                            continue
-                        _icon = _c.get("icon", ""); _nm = _c.get("name", "?")
-                        _sig  = _c.get("signal", "")
-                        if _z < -1.5:
-                            _hint = "顯著低於歷史均值（>1.5σ）→ 此領域偏健康，可承擔較高風險"
-                        elif _z < -0.5:
-                            _hint = "低於歷史均值（0.5-1.5σ）→ 中性偏好，無立即壓力"
-                        elif _z < 0.5:
-                            _hint = "接近歷史均值 → 中性，需搭配其他指標研判"
-                        elif _z < 1.5:
-                            _hint = "高於歷史均值（0.5-1.5σ）→ 中性偏弱，啟動觀察"
-                        else:
-                            _hint = "⚠️ 顯著偏離歷史均值（>1.5σ）→ 警示等級，建議降低該領域曝險"
-                        _sl_alerts.append(
-                            f"{_icon} **{_nm}** {_sig} (z={_z:+.2f}) — {_hint}"
-                        )
-                    if _sl_alerts:
-                        with st.expander("💡 7 子領域 z-score 白話解讀", expanded=False):
-                            st.markdown("\n\n".join("- " + a for a in _sl_alerts))
-            except Exception as _e_sl:
-                st.caption(f"⚠️ 細項燈號計算失敗：{str(_e_sl)[:80]}")
+            # ── v19.18: 7 子領域 Z-Score 健康度已搬到戰情首頁 ① 7-cluster 下方 ──
+            # 原 v18.100 區塊整段移除，避免與 7-cluster 視覺重複（user 反饋）
 
             # ── v18.101+v18.105 總經因果鏈 Sankey（Phase 2 + Phase 3 動態權重）─
             # 「政策 → 信貸 → 實體經濟 → 市場」三層 8 節點 9 邊，
