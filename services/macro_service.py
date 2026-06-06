@@ -9,7 +9,7 @@ v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + 編排。
 向後相容：根目錄 macro_engine.py 保留 `from services.macro_service import *` shim，
         E 階段收尾後 shim 刪除。
 """
-import pandas as pd, numpy as np, streamlit as st, math
+import pandas as pd, numpy as np, math
 from repositories.macro_repository import fetch_fred, fetch_yf_close, fetch_ism_pmi
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
@@ -691,39 +691,6 @@ def get_market_phase(indicators: dict) -> dict:
         "phase2d_votes":  dict(Counter(_phases)),
         "phase2d_conf":   round(_vote_ratio * 100),
     }
-
-
-def get_synced_dashboard_data(raw_data_dict: dict, lookback_days: int = 30) -> pd.DataFrame:
-    """
-    數據對齊補丁 v1：統一時間軸 + 假日前向填充（文件建議 §2）
-    1. 建立完整日曆時間索引
-    2. 自動填充假日空值（前向填充，上限 5 天）
-    3. 若仍有空值 → 資料嚴重斷連，透過 Streamlit 警告
-    """
-    full_idx = pd.date_range(
-        end=pd.Timestamp.now().normalize(), periods=lookback_days, freq='D'
-    )
-    main_df = pd.DataFrame(index=full_idx)
-
-    for name, data in raw_data_dict.items():
-        if isinstance(data, pd.Series):
-            s = data.copy()
-        elif isinstance(data, (list,)):
-            s = pd.Series(data)
-        else:
-            continue
-        s.index = pd.to_datetime(s.index).normalize()
-        main_df[name] = s
-
-    # 核心修正：前向填充假日數據，限制回溯 5 天
-    main_df = main_df.ffill(limit=5)
-
-    # 若仍有空值，代表數據嚴重斷連
-    if main_df.iloc[-1].isnull().any():
-        missing = main_df.columns[main_df.iloc[-1].isnull()].tolist()
-        st.warning(f"⚠️ 部分數據源連線不穩：{', '.join(missing)}，請檢查網路或 API 配額")
-
-    return main_df
 
 
 def calc_growth_inflation_axis(indicators: dict) -> dict:
