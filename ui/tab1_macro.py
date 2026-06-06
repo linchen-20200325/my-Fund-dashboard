@@ -1341,7 +1341,7 @@ def render_macro_tab() -> None:
             # L2 歷史危機對照圖（L2 + L3 顯示）
             # ══════════════════════════════════════════════════
             if _show_l2_plus:
-                with st.expander("📈 L2 景氣循環歷史對照圖（危機紅區 × 指標趨勢）", expanded=True):
+                with st.expander("📈 L2 景氣循環歷史對照圖（危機紅區 × 指標趨勢）", expanded=False):
                     _sahm_s  = (ind.get("SAHM")  or {}).get("series")
                     _sloos_s = (ind.get("SLOOS") or {}).get("series")
                     _adl_s   = (ind.get("ADL")   or {}).get("series")
@@ -1620,7 +1620,7 @@ def render_macro_tab() -> None:
                 for s in [_pmi_s, _spr_s, _vix_s])
             if _has_chart and _show_l3:
                 # v17.2：拆掉多軸複合圖 → 4 張「左 sparkline 右白話解說」獨立卡
-                with st.expander("🌡️ 宏觀風險溫度計（4 大關鍵指標分軌觀察）", expanded=True):
+                with st.expander("🌡️ 宏觀風險溫度計（4 大關鍵指標分軌觀察）", expanded=False):
                     from ui.components.macro_card import make_sparkline as _mk_sl
                     _score_val = sc
 
@@ -2324,7 +2324,7 @@ def render_macro_tab() -> None:
                     "COPPER":        ("銅價走強，全球景氣轉熱",     "銅價走弱，全球景氣轉冷"),
                     "PERMIT_HOUSING":("建照核發強，房市領先",       "建照核發弱，房市領先疲弱"),
                 }
-                with st.expander("👉 查看完整 23 項指標加扣分明細（依 |score × weight| 由大至小）", expanded=True):
+                with st.expander("👉 查看完整 23 項指標加扣分明細（依 |score × weight| 由大至小）", expanded=False):
                     st.caption(
                         "📖 **怎麼看這張表**：「💡 貢獻說明」直接告訴你這檔指標目前如何影響景氣總分。"
                         "排序依 |score × weight| ＝ 對總分實際影響力，最重要的指標在最上方。"
