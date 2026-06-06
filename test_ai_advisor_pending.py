@@ -52,4 +52,76 @@ def test_recommend_handles_api_failure_gracefully(monkeypatch):
     ]
     out = recommend_weights(candidates, {"oos_f1": 0.25})
     assert "候選 1" in out
-    assert "AI 呼叫失敗" in out or "🤖" in out  # 失敗註記 或 AI 成功
+    # 失敗註記（呼叫失敗 / 配額用盡 / 不可用）或 AI 成功
+    assert (
+        "AI 呼叫失敗" in out
+        or "AI 全部 key 配額用盡" in out
+        or "AI 不可用" in out
+        or "🤖" in out
+    )
+
+
+# ─── v19.13.11: gemini_generate multi-key rotation ────────────────
+def test_recommend_uses_gemini_generate_for_key_rotation(monkeypatch):
+    """v19.13.11：recommend_weights 必須走 gemini_generate（multi-key rotation），
+    不能像 v19.9-v19.13.10 那樣直接 genai.configure 單把 key — 否則 macro 用完
+    同把 key 配額 → pullback 撞 ResourceExhausted 直接掉 fallback。"""
+    import services.ai_advisor_pending as mod
+    called: dict[str, object] = {}
+
+    def _fake_gen(prompt: str, *args, **kwargs) -> str:
+        called["prompt"] = prompt
+        return "建議候選 1（mock AI 回應）"
+
+    monkeypatch.setattr("services.ai_service.get_gemini_keys",
+                        lambda: ["k1", "k2", "k3"])
+    monkeypatch.setattr("services.ai_service.gemini_generate", _fake_gen)
+    # 確保走 gemini_generate 而不是直接 genai.configure
+    monkeypatch.delattr(mod, "__name__", raising=False) if False else None
+
+    candidates = [
+        {"weights": {"VIX": 1.0}, "f1": 0.7, "sharpe": 0.4,
+         "n_crossings": 10, "plateau_score": 0.40},
+    ]
+    out = recommend_weights(candidates, {"oos_f1": 0.3})
+    assert "mock AI 回應" in out, "應該走 gemini_generate 拿到 mock 回應"
+    assert "prompt" in called, "gemini_generate 必須被呼叫"
+
+
+def test_recommend_handles_all_keys_quota_exhausted(monkeypatch):
+    """v19.13.11：所有 key 都撞配額 → gemini_generate 回 ❌ sentinel →
+    fallback 帶「全部 key 配額用盡」標籤（user 知道是 quota 而非 bug）."""
+    monkeypatch.setattr("services.ai_service.get_gemini_keys",
+                        lambda: ["k1", "k2"])
+    monkeypatch.setattr(
+        "services.ai_service.gemini_generate",
+        lambda *a, **kw: "❌ 所有 Gemini key 配額皆已用盡，請稍後再試。",
+    )
+    candidates = [
+        {"weights": {"VIX": 1.0}, "f1": 0.7, "sharpe": 0.4,
+         "n_crossings": 10, "plateau_score": 0.40},
+    ]
+    out = recommend_weights(candidates, {"oos_f1": 0.3})
+    assert "全部 key 配額用盡" in out, "user 看得到 quota 訊息"
+    assert "候選 1" in out, "fallback 仍要顯示"
+
+
+def test_recommend_handles_no_keys_at_all(monkeypatch):
+    """v19.13.11：沒設任何 Gemini key → 直接走 fallback 不嘗試呼叫."""
+    monkeypatch.setattr("services.ai_service.get_gemini_keys", lambda: [])
+    called: dict[str, bool] = {"gen": False}
+
+    def _should_not_be_called(*a, **kw):
+        called["gen"] = True
+        return ""
+    monkeypatch.setattr(
+        "services.ai_service.gemini_generate", _should_not_be_called,
+    )
+
+    candidates = [
+        {"weights": {"VIX": 1.0}, "f1": 0.7, "sharpe": 0.4,
+         "n_crossings": 10, "plateau_score": 0.40},
+    ]
+    out = recommend_weights(candidates, {"oos_f1": 0.3})
+    assert "候選 1" in out
+    assert not called["gen"], "無 key 時不該呼叫 gemini_generate"
