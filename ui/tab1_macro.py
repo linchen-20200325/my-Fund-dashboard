@@ -2468,6 +2468,80 @@ def render_macro_tab() -> None:
                             else:
                                 st.markdown(f"**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
 
+            # ── v19.20 ⚡ 短線風險雷達（10 燈 1-day 急殺早期警報）──
+            st.divider()
+            st.markdown("### ⚡ 短線風險雷達 (24H Risk-Off Velocity Radar)")
+            st.caption("10 個 1-day 動量／情緒／位階訊號 — 補拐點偵測中心（月～季級慢）之短缺，"
+                       "捕捉 1-day 急殺前的早期警報："
+                       "VIX 級距+期限結構 ｜ HY 信用日變化 ｜ 10Y 殖利率衝擊 ｜ MOVE 債券恐慌 ｜ "
+                       "SPX 均線破口 ｜ SOX 半導體 ｜ 防禦/攻擊輪動 ｜ Put/Call ｜ 亞洲夜盤")
+            # 真實 FRED API key 為 32 字元；短於 30 視為測試/未設定 → 跳過避免 16 次網路呼叫拖滿 AppTest budget
+            if not FRED_KEY or len(str(FRED_KEY).strip()) < 30:
+                _radar = None
+                _radar_sum = None
+            else:
+                try:
+                    from services.risk_radar import detect_risk_radar, summarize_radar
+                    _radar = detect_risk_radar(FRED_KEY)
+                    _radar_sum = summarize_radar(_radar)
+                except Exception as _radar_e:  # noqa: BLE001
+                    _radar = None
+                    _radar_sum = None
+                    st.warning(f"⚠️ 風險雷達失敗：{str(_radar_e)[:120]}")
+
+            if _radar and _radar_sum:
+                st.markdown(
+                    f"<div style='background:#0d1117;border:2px solid {_radar_sum['color']};"
+                    f"border-radius:10px;padding:10px 16px;margin:6px 0'>"
+                    f"<span style='color:{_radar_sum['color']};font-size:18px;font-weight:800'>"
+                    f"整體狀態：{_radar_sum['level']}</span>"
+                    f"<span style='color:#aaa;margin-left:20px;font-size:13px'>"
+                    f"🔴 {_radar_sum['red']} ｜ 🟡 {_radar_sum['yellow']} ｜ "
+                    f"🟢 {_radar_sum['green']} ｜ ⬜ {_radar_sum['gray']}</span>"
+                    f"</div>", unsafe_allow_html=True)
+
+                _radar_cards = [
+                    ("vix_level",       "🌪️ VIX 恐慌指數"),
+                    ("vix_term_struct", "📐 VIX 期限結構"),
+                    ("hy_oas_delta",    "💳 HY 信用日變化"),
+                    ("yield_10y_shock", "📈 10Y 殖利率衝擊"),
+                    ("move_level",      "🌊 MOVE 債市波動"),
+                    ("spx_trend_break", "📉 SPX 均線破口"),
+                    ("sox_drop",        "🔌 半導體單日跌幅"),
+                    ("sector_rotation", "🔄 防禦 vs 攻擊"),
+                    ("put_call_ratio",  "📊 Put/Call 比率"),
+                    ("asia_overnight",  "🌏 亞洲夜盤領先"),
+                ]
+                for _row in (_radar_cards[:5], _radar_cards[5:]):
+                    _cols_radar = st.columns(5)
+                    for _col_r, (_key_r, _title_r) in zip(_cols_radar, _row):
+                        _dr = _radar.get(_key_r) or {}
+                        _sig_r = _dr.get("signal", "⬜ 無資料")
+                        _col_c_r = _dr.get("color", "#888")
+                        _val_r = _dr.get("value")
+                        _note_r = _dr.get("note", "")
+                        _label_r = _dr.get("label", "")
+                        _val_txt_r = "—" if _val_r is None else f"{_val_r}"
+                        with _col_r:
+                            st.markdown(
+                                f"<div style='background:#0d1117;border:2px solid {_col_c_r};"
+                                f"border-radius:10px;padding:10px 12px;margin:4px 0;"
+                                f"min-height:165px;"
+                                f"display:flex;flex-direction:column;justify-content:space-between'>"
+                                f"<div>"
+                                f"<div style='color:#888;font-size:10px;letter-spacing:1px'>"
+                                f"{_title_r}</div>"
+                                f"<div style='color:{_col_c_r};font-size:15px;font-weight:800;"
+                                f"margin:4px 0 6px'>{_sig_r}</div>"
+                                f"<div style='color:#fff;font-weight:700;font-size:14px'>"
+                                f"值 {_val_txt_r}</div>"
+                                f"</div>"
+                                f"<div style='color:#aaa;font-size:9px;border-top:1px solid #30363d;"
+                                f"padding-top:4px;margin-top:4px;line-height:1.3'>{_note_r}"
+                                f"<br/><span style='color:#555'>{_label_r}</span></div>"
+                                f"</div>", unsafe_allow_html=True)
+                st.caption("📡 資料源：FRED + Yahoo Chart API（NAS proxy）｜閾值：🟢平靜 → 🟡警戒 → 🔴警報")
+
             # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
             st.divider()
             st.markdown("### ③ 🎯 拐點偵測中心 (Inflection Point Center)")
