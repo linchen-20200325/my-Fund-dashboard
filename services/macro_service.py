@@ -632,6 +632,42 @@ def fetch_all_indicators(fred_api_key):
             score=0.5 if v > 1500 else (-0.5 if v < 1200 else 0),
             weight=0.5, series=s)
 
+    # ── NFP 非農新增就業 v19.17 ─────────────────────────────────────
+    # PAYEMS 是「就業人口總數」，市場關注的「非農新增」是月變動量（千人）
+    # direction=below：高增量 = 景氣強 = score 偏負（low risk）
+    df = _fred("PAYEMS", fred_api_key, 144)
+    if len(df) >= 3:
+        s_full = df.set_index("date")["value"]
+        # 月變動（單位：千人，PAYEMS 原始單位就是千人）
+        s_delta = s_full.diff().dropna().tail(120)
+        cur_d = float(s_delta.iloc[-1])
+        prev_d = float(s_delta.iloc[-2])
+        # 檔次評分：< 0 衰退 / 0-100k 偏冷 / 100-250k 中性 / 250-500k 強勁 / > 500k 過熱
+        if cur_d < 0:
+            score_nfp = 1.5      # 衰退
+            sig_nfp, col_nfp = "🔴", "#f44336"
+        elif cur_d < 100:
+            score_nfp = 0.5      # 偏冷
+            sig_nfp, col_nfp = "🟠", "#ff8a80"
+        elif cur_d < 250:
+            score_nfp = 0.0      # 中性
+            sig_nfp, col_nfp = "🟡", "#ffd54f"
+        elif cur_d < 500:
+            score_nfp = -0.5     # 強勁
+            sig_nfp, col_nfp = "🟢", "#69f0ae"
+        else:
+            score_nfp = -1.0     # 過熱（也可能引發 Fed 緊縮）
+            sig_nfp, col_nfp = "🟢", "#00c853"
+        R["NFP"] = dict(
+            name="非農新增就業（月變動）", value=round(cur_d, 0), prev=round(prev_d, 0),
+            unit="千人", type="同時", date=str(df.iloc[-1]["date"])[:7],
+            desc=f"本月 {cur_d:+.0f}k | 上月 {prev_d:+.0f}k | <0 衰退 / <100k 偏冷 / 100-250k 中性 / >250k 強勁",
+            trend=_trend(s_delta.tolist()[-6:]),
+            signal=sig_nfp, color=col_nfp,
+            score=score_nfp, weight=1.0,
+            series=s_delta,
+        )
+
     return R
 def get_market_phase(indicators: dict) -> dict:
     """

@@ -261,6 +261,126 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     }
 
 
+def _render_beginner_dashboard(indicators: dict | None) -> None:
+    """✨ v19.17：新手友善總經面板 — 接在 pending banner 後、v19.15 進階區之前。
+
+    3 區塊：
+      1. ✨ 結論大卡（gradient banner，icon + level + score + action_text）
+      2. 🎯 為什麼是這位階？（top 3 driver bullet + 教學）
+      3. 📚 本期使用 N 個關鍵指標（每張卡 inline 教學 + how_to_read 表）
+
+    指標排序：按 |contribution|=|score×weight| 降序取 top_n=8 個。
+    weight 已由 calculate_composite_score 內部 apply_weight_overrides 套用 active.json
+    → 自然落實「動態：讀回測核可組合」需求。
+
+    indicators 為 None / 空 → 顯式 hint 提示按 sidebar 載入。
+    """
+    try:
+        from services.macro_explain import build_beginner_payload
+        from ui.components.macro_card_edu import MACRO_EDU
+    except ImportError:
+        return
+
+    payload = build_beginner_payload(indicators, MACRO_EDU, top_n=8)
+    if not payload["ready"]:
+        st.info("⏳ 尚未載入總經資料 — 請按 sidebar「📡 載入總經資料」後，本面板將自動帶入即時判讀與教學。")
+        return
+
+    # ════════════════════════════════════════════════
+    # 區塊 1：結論大卡（漸層 banner，配色對齊 verdict）
+    # ════════════════════════════════════════════════
+    _color = payload["verdict_color"]
+    _icon = payload["verdict_icon"]
+    _level = payload["verdict_level"]
+    _score = payload["score"]
+    _action = payload["verdict_action_text"]
+    st.markdown(
+        f"""
+        <div style="background: linear-gradient(90deg, {_color}22, {_color}11);
+                    border-left: 6px solid {_color}; border-radius: 8px;
+                    padding: 18px 22px; margin: 10px 0;">
+          <div style="font-size: 14px; color: #888; margin-bottom: 4px;">
+            ✨ 目前總經位階（綜合 {payload['n_total']} 項指標 score × 權重）
+          </div>
+          <div style="font-size: 30px; font-weight: 700; color: {_color}; line-height: 1.2;">
+            {_icon} {_level}
+            <span style="font-size: 20px; color: #aaa; margin-left: 14px;">score = {_score:+.2f}</span>
+          </div>
+          <div style="font-size: 15px; color: #ccc; margin-top: 8px;">
+            🎯 {_action}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ════════════════════════════════════════════════
+    # 區塊 2：為什麼是這位階？（top 3 driver 教學）
+    # ════════════════════════════════════════════════
+    st.markdown("### 🎯 為什麼是這位階？")
+    st.caption("綜合分數是「每個指標 score × 權重」加總；以下 3 個是本期貢獻最大的 driver：")
+    for bullet in payload["why_bullets"]:
+        st.markdown(f"- {bullet}")
+
+    # ════════════════════════════════════════════════
+    # 區塊 3：關鍵指標卡（top N，每張內含教學）
+    # ════════════════════════════════════════════════
+    st.markdown(
+        f"### 📚 本期使用 {payload['n_displayed']} 個關鍵指標"
+        f"（按 |score × 權重| 排序，權重來自回測核可組合）"
+    )
+    st.caption(
+        "點開任一指標看：當前數值 / 自動判讀 / 💡 這指標是什麼 / 📐 怎麼讀（閾值對照）/ "
+        "🔗 搭配誰看 / 📊 歷史錨點。"
+    )
+
+    for row in payload["active_factors"]:
+        _label = (
+            f"{row['name']}（{row['freq_label']}）"
+            f"｜貢獻 **{row['contribution']:+.2f}**"
+            f"｜score {row['score']:+.2f} × 權重 {row['weight']:.2f}"
+        )
+        with st.expander(_label, expanded=False):
+            # 當前值 + 自動判讀
+            _val = row["value"]
+            _unit = row["unit"] or ""
+            st.markdown(
+                f"**目前數值**：`{_val} {_unit}`　"
+                f"**類型**：{row['type'] or '—'}"
+            )
+            st.markdown(f"**自動判讀**：{row['interpretation']}")
+            st.divider()
+
+            # 教學區
+            st.markdown("**💡 這指標是什麼？**")
+            st.markdown(row["edu_meaning"])
+
+            if row["edu_how_to_read"]:
+                st.markdown("**📐 怎麼讀？（閾值對照表）**")
+                for _entry in row["edu_how_to_read"]:
+                    if isinstance(_entry, (list, tuple)) and len(_entry) >= 2:
+                        st.markdown(f"  - `{_entry[0]}` → {_entry[1]}")
+                    else:
+                        st.markdown(f"  - {_entry}")
+
+            if row["edu_pair_with"]:
+                st.markdown(f"**🔗 搭配誰看？** {row['edu_pair_with']}")
+
+            if row["edu_historical_anchor"]:
+                st.markdown(f"**📊 歷史錨點**：{row['edu_historical_anchor']}")
+
+            if row["edu_upstream"] or row["edu_downstream"]:
+                _cols = st.columns(2)
+                with _cols[0]:
+                    if row["edu_upstream"]:
+                        st.markdown(f"**⬆️ 上游因**：{row['edu_upstream']}")
+                with _cols[1]:
+                    if row["edu_downstream"]:
+                        st.markdown(f"**⬇️ 下游果**：{row['edu_downstream']}")
+
+    st.divider()
+
+
 def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
     """🎯 v19.15：即時訊號燈 + 決策矩陣 — 接在 pending banner 後、tabs 前。
 
@@ -510,11 +630,18 @@ def render_macro_tab() -> None:
         alloc = phase["alloc"];  advice = phase.get("advice","")
         rec_p = phase.get("rec_prob")
 
-        # ── 🎯 v19.15：即時訊號燈 + 決策矩陣（C-2 verdict → 逐檔行動）──
-        _render_realtime_decision_dashboard(ind)
+        # ── ✨ v19.17：新手友善面板（頂部 1 句結論 + 教學） ──
+        _render_beginner_dashboard(ind)
+
+        # ── 🔬 v19.17：進階檢視 expander（折疊 v19.15 即時訊號 + 決策矩陣） ──
+        with st.expander(
+            "🔬 進階檢視：v19.15 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
+            expanded=False,
+        ):
+            _render_realtime_decision_dashboard(ind)
 
         # ══ v17.3 內層 Tab：戰情首頁 + 指標教學手冊（§6-6 資訊不藏匿）═══
-        tab_main, tab_edu = st.tabs(["📊 戰情首頁", "📖 指標教學手冊"])
+        tab_main, tab_edu = st.tabs(["📊 戰情首頁（完整 23 指標）", "📖 指標教學手冊"])
 
         with tab_edu:
             # ══════════════════════════════════════════════════════════
