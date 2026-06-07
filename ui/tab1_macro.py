@@ -2644,6 +2644,100 @@ def render_macro_tab() -> None:
                                 f"</div>", unsafe_allow_html=True)
                 st.caption("📡 資料源：FRED + Yahoo Chart API（NAS proxy）｜閾值：🟢平靜 → 🟡警戒 → 🔴警報")
 
+            # ── v19.22 📅 Tier A 事件 + 估值（倒數日曆 + 估值動能）──
+            st.divider()
+            st.markdown("### 📅 Tier A 事件 + 估值 (Event Calendar + Valuation)")
+            st.caption("補慢總經 / 短線雷達之外的「時間軸 + 估值水位」維度："
+                       "FOMC / NFP / CPI 倒數日曆 ｜ S&P 500 Forward P/E ｜ Atlanta Fed GDPNow")
+            try:
+                from services.event_calendar import detect_event_calendar, summarize_calendar
+                from services.valuation import detect_valuation
+                _events = detect_event_calendar()
+                _ev_sum = summarize_calendar(_events)
+                # FRED key 短於 30 字元視為測試環境 → 跳過 GDPNow 抓取保護 AppTest budget
+                _val_fred_key = FRED_KEY if (FRED_KEY and len(str(FRED_KEY).strip()) >= 30) else None
+                _val = detect_valuation(_val_fred_key)
+            except Exception as _ev_e:  # noqa: BLE001
+                _events = None
+                _ev_sum = None
+                _val = None
+                st.warning(f"⚠️ 事件日曆/估值載入失敗：{str(_ev_e)[:120]}")
+
+            if _events and _ev_sum and _val:
+                _nearest_txt = _ev_sum.get("nearest") or "—"
+                _min_days = _ev_sum.get("min_days")
+                _min_days_txt = f"{_min_days} 天" if _min_days is not None else "—"
+                st.markdown(
+                    f"<div style='background:#0d1117;border:2px solid {_ev_sum['color']};"
+                    f"border-radius:10px;padding:10px 16px;margin:6px 0'>"
+                    f"<span style='color:{_ev_sum['color']};font-size:18px;font-weight:800'>"
+                    f"最近事件：{_ev_sum['level']}（{_nearest_txt} ｜ 距 {_min_days_txt}）</span>"
+                    f"</div>", unsafe_allow_html=True)
+
+                _ev_titles = {"FOMC": "🏛️ FOMC 利率決議",
+                              "NFP": "📊 NFP 非農就業",
+                              "CPI": "📈 CPI 通膨報告"}
+                _ev_cols = st.columns(3)
+                for _col_e, _ek in zip(_ev_cols, ("FOMC", "NFP", "CPI")):
+                    _ep = _events.get(_ek) or {}
+                    _esig = _ep.get("signal", "⬜")
+                    _ecol = _ep.get("color", "#888")
+                    _edate = _ep.get("date")
+                    _edays = _ep.get("days_until")
+                    _edays_txt = "—" if _edays is None else f"{_edays} 天"
+                    _edate_txt = _edate.isoformat() if _edate else "未維護"
+                    with _col_e:
+                        st.markdown(
+                            f"<div style='background:#0d1117;border:2px solid {_ecol};"
+                            f"border-radius:10px;padding:10px 12px;margin:4px 0;"
+                            f"min-height:132px;display:flex;flex-direction:column;"
+                            f"justify-content:space-between'>"
+                            f"<div><div style='color:#888;font-size:10px;letter-spacing:1px'>"
+                            f"{_ev_titles[_ek]}</div>"
+                            f"<div style='color:{_ecol};font-size:15px;font-weight:800;"
+                            f"margin:4px 0 6px'>{_esig}</div>"
+                            f"<div style='color:#fff;font-weight:700;font-size:14px'>"
+                            f"距：{_edays_txt}</div></div>"
+                            f"<div style='color:#aaa;font-size:9px;border-top:1px solid #30363d;"
+                            f"padding-top:4px;margin-top:4px'>下次：{_edate_txt}</div>"
+                            f"</div>", unsafe_allow_html=True)
+
+                _val_cols = st.columns(2)
+                _val_cards = [
+                    ("forward_pe", "💰 S&P 500 Forward P/E"),
+                    ("gdpnow",     "📐 Atlanta Fed GDPNow"),
+                ]
+                for _col_v, (_vk, _vtitle) in zip(_val_cols, _val_cards):
+                    _vd = _val.get(_vk) or {}
+                    _vsig = _vd.get("signal", "⬜")
+                    _vcol = _vd.get("color", "#888")
+                    _vval = _vd.get("value")
+                    _vsigma = _vd.get("sigma")
+                    _vverdict = _vd.get("verdict", "")
+                    _vnote = _vd.get("note", "")
+                    _vval_txt = "—" if _vval is None else f"{_vval}"
+                    _vsigma_txt = "" if _vsigma is None else f" ({_vsigma:+.2f}σ)"
+                    with _col_v:
+                        st.markdown(
+                            f"<div style='background:#0d1117;border:2px solid {_vcol};"
+                            f"border-radius:10px;padding:10px 12px;margin:4px 0;"
+                            f"min-height:132px;display:flex;flex-direction:column;"
+                            f"justify-content:space-between'>"
+                            f"<div><div style='color:#888;font-size:10px;letter-spacing:1px'>"
+                            f"{_vtitle}</div>"
+                            f"<div style='color:{_vcol};font-size:15px;font-weight:800;"
+                            f"margin:4px 0 6px'>{_vsig}</div>"
+                            f"<div style='color:#fff;font-weight:700;font-size:14px'>"
+                            f"{_vval_txt}{_vsigma_txt}</div></div>"
+                            f"<div style='color:#aaa;font-size:9px;border-top:1px solid #30363d;"
+                            f"padding-top:4px;margin-top:4px;line-height:1.3'>{_vverdict}"
+                            f"<br/><span style='color:#555'>{_vnote}</span></div>"
+                            f"</div>", unsafe_allow_html=True)
+
+                st.caption("💡 v19.22 暫不自動 wire 進 v19.21 合議卡：事件 ≤3 天紅燈可視為 +1 雷達警戒、"
+                           "Forward P/E >+2σ 可視為「減持注意」加註，由 user 自行人腦合議；"
+                           "EPS 上修-下修比 / Citi Surprise Index 需 FactSet/Bloomberg enterprise feed（deferred）")
+
             # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
             st.divider()
             st.markdown("### ③ 🎯 拐點偵測中心 (Inflection Point Center)")
