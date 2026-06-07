@@ -259,11 +259,14 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     }
 
 
-def _render_beginner_dashboard(indicators: dict | None) -> None:
+def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") -> None:
     """✨ v19.17：新手友善總經面板 — 接在 pending banner 後、v19.15 進階區之前。
 
+    v19.21：頂部結論大卡升級為「雙速合議」— 慢總經 ｜ 短線雷達 ｜ 合議行動。
+    fred_api_key 為空或 <30 字元時自動 fallback 回 v19.17 單頭 banner（AppTest 保護）。
+
     3 區塊：
-      1. ✨ 結論大卡（gradient banner，icon + level + score + action_text）
+      1. ✨ 結論大卡（v19.21 雙速合議三卡 | fallback v19.17 漸層 banner）
       2. 🎯 為什麼是這位階？（top 3 driver bullet + 教學）
       3. 📚 本期使用 N 個關鍵指標（每張卡 inline 教學 + how_to_read 表）
 
@@ -285,32 +288,125 @@ def _render_beginner_dashboard(indicators: dict | None) -> None:
         return
 
     # ════════════════════════════════════════════════
-    # 區塊 1：結論大卡（漸層 banner，配色對齊 verdict）
+    # 區塊 1：結論大卡 — v19.21 雙速合議（慢總經 ｜ 短線雷達 ｜ 合議行動）
     # ════════════════════════════════════════════════
     _color = payload["verdict_color"]
     _icon = payload["verdict_icon"]
     _level = payload["verdict_level"]
     _score = payload["score"]
     _action = payload["verdict_action_text"]
-    st.markdown(
-        f"""
-        <div style="background: linear-gradient(90deg, {_color}22, {_color}11);
-                    border-left: 6px solid {_color}; border-radius: 8px;
-                    padding: 18px 22px; margin: 10px 0;">
-          <div style="font-size: 14px; color: #888; margin-bottom: 4px;">
-            ✨ 目前總經位階（綜合 {payload['n_total']} 項指標 score × 權重）
-          </div>
-          <div style="font-size: 30px; font-weight: 700; color: {_color}; line-height: 1.2;">
-            {_icon} {_level}
-            <span style="font-size: 20px; color: #aaa; margin-left: 14px;">score = {_score:+.2f}</span>
-          </div>
-          <div style="font-size: 15px; color: #ccc; margin-top: 8px;">
-            🎯 {_action}
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    _n_total = payload["n_total"]
+
+    # 雷達計算 — 快取到 session_state，下方 ③ 拐點區的雷達 5×2 卡片區改讀快取（零新增網路呼叫）
+    _radar_top = None
+    _radar_sum_top = None
+    if fred_api_key and len(str(fred_api_key).strip()) >= 30:
+        _cache = st.session_state.get("_radar_v1921_top")
+        if _cache is None:
+            try:
+                from services.risk_radar import detect_risk_radar, summarize_radar
+                _r = detect_risk_radar(fred_api_key)
+                _rs = summarize_radar(_r)
+                st.session_state["_radar_v1921_top"] = (_r, _rs)
+                _radar_top, _radar_sum_top = _r, _rs
+            except Exception:  # noqa: BLE001
+                st.session_state["_radar_v1921_top"] = (None, None)
+        else:
+            _radar_top, _radar_sum_top = _cache
+
+    if _radar_sum_top is None:
+        # Fallback：雷達不可用（無 key / 抓取失敗）→ 退回 v19.17 單頭漸層 banner
+        st.markdown(
+            f"""
+            <div style="background: linear-gradient(90deg, {_color}22, {_color}11);
+                        border-left: 6px solid {_color}; border-radius: 8px;
+                        padding: 18px 22px; margin: 10px 0;">
+              <div style="font-size: 14px; color: #888; margin-bottom: 4px;">
+                ✨ 目前總經位階（綜合 {_n_total} 項指標 score × 權重）
+              </div>
+              <div style="font-size: 30px; font-weight: 700; color: {_color}; line-height: 1.2;">
+                {_icon} {_level}
+                <span style="font-size: 20px; color: #aaa; margin-left: 14px;">score = {_score:+.2f}</span>
+              </div>
+              <div style="font-size: 15px; color: #ccc; margin-top: 8px;">
+                🎯 {_action}
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        # v19.21 雙頭並列 + 全寬合議
+        from services.risk_radar import synthesize_dual_verdict
+        _r_level = _radar_sum_top["level"]
+        _r_color = _radar_sum_top["color"]
+        _r_icon = {"平靜": "🟢", "警戒": "🟡", "警報": "🔴", "極端警報": "🔴"}.get(_r_level, "⬜")
+        _r_red = _radar_sum_top["red"]
+        _r_yel = _radar_sum_top["yellow"]
+        _r_grn = _radar_sum_top["green"]
+        _r_gry = _radar_sum_top["gray"]
+        _syn = synthesize_dual_verdict(_level, _score, _color, _icon, _action, _r_level)
+
+        _col_slow, _col_radar = st.columns(2)
+        with _col_slow:
+            st.markdown(
+                f"""
+                <div style="background: linear-gradient(90deg, {_color}22, {_color}11);
+                            border-left: 6px solid {_color}; border-radius: 8px;
+                            padding: 14px 18px; margin: 6px 0; min-height: 132px;">
+                  <div style="font-size: 13px; color: #888; margin-bottom: 4px;">
+                    🐌 慢總經位階（{_n_total} 項指標 × 權重 ｜ 月～季級）
+                  </div>
+                  <div style="font-size: 26px; font-weight: 700; color: {_color}; line-height: 1.2;">
+                    {_icon} {_level}
+                    <span style="font-size: 17px; color: #aaa; margin-left: 12px;">score = {_score:+.2f}</span>
+                  </div>
+                  <div style="font-size: 13px; color: #aaa; margin-top: 6px;">
+                    📊 完整逐檔 driver 見下方「為什麼是這位階」
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with _col_radar:
+            st.markdown(
+                f"""
+                <div style="background: linear-gradient(90deg, {_r_color}22, {_r_color}11);
+                            border-left: 6px solid {_r_color}; border-radius: 8px;
+                            padding: 14px 18px; margin: 6px 0; min-height: 132px;">
+                  <div style="font-size: 13px; color: #888; margin-bottom: 4px;">
+                    ⚡ 短線雷達（10 燈 1-day 動量／情緒 ｜ 日級）
+                  </div>
+                  <div style="font-size: 26px; font-weight: 700; color: {_r_color}; line-height: 1.2;">
+                    {_r_icon} {_r_level}
+                  </div>
+                  <div style="font-size: 13px; color: #aaa; margin-top: 6px;">
+                    🔴 {_r_red} ｜ 🟡 {_r_yel} ｜ 🟢 {_r_grn} ｜ ⬜ {_r_gry} ｜ 詳見下方雷達卡片
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # 合議行動全寬卡
+        st.markdown(
+            f"""
+            <div style="background: linear-gradient(90deg, {_syn['color']}33, {_syn['color']}11);
+                        border: 2px solid {_syn['color']}; border-radius: 10px;
+                        padding: 16px 22px; margin: 6px 0 14px 0;">
+              <div style="font-size: 13px; color: #888; margin-bottom: 4px;">
+                🤝 雙速合議（mode={_syn['mode']}）
+              </div>
+              <div style="font-size: 24px; font-weight: 800; color: {_syn['color']}; line-height: 1.2;">
+                {_syn['icon']} {_syn['level']}
+              </div>
+              <div style="font-size: 14px; color: #ddd; margin-top: 8px; line-height: 1.5;">
+                🎯 {_syn['action']}
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # ════════════════════════════════════════════════
     # 區塊 2：為什麼是這位階？（top 3 driver 教學）
@@ -613,7 +709,8 @@ def render_macro_tab() -> None:
         rec_p = phase.get("rec_prob")
 
         # ── ✨ v19.17：新手友善面板（頂部 1 句結論 + 教學） ──
-        _render_beginner_dashboard(ind)
+        # v19.21：傳入 FRED_KEY 啟用雙速合議（慢總經 ｜ 短線雷達 ｜ 合議行動）
+        _render_beginner_dashboard(ind, FRED_KEY)
 
         # ── 🔬 v19.17：進階檢視 expander（折疊 v19.15 即時訊號 + 決策矩陣） ──
         with st.expander(
@@ -2476,7 +2573,11 @@ def render_macro_tab() -> None:
                        "VIX 級距+期限結構 ｜ HY 信用日變化 ｜ 10Y 殖利率衝擊 ｜ MOVE 債券恐慌 ｜ "
                        "SPX 均線破口 ｜ SOX 半導體 ｜ 防禦/攻擊輪動 ｜ Put/Call ｜ 亞洲夜盤")
             # 真實 FRED API key 為 32 字元；短於 30 視為測試/未設定 → 跳過避免 16 次網路呼叫拖滿 AppTest budget
-            if not FRED_KEY or len(str(FRED_KEY).strip()) < 30:
+            # v19.21：頂部雙速合議已抓過雷達並 cache 在 session_state，這裡直接讀避免重複網路呼叫
+            _top_cache = st.session_state.get("_radar_v1921_top")
+            if _top_cache is not None:
+                _radar, _radar_sum = _top_cache
+            elif not FRED_KEY or len(str(FRED_KEY).strip()) < 30:
                 _radar = None
                 _radar_sum = None
             else:
@@ -2484,6 +2585,7 @@ def render_macro_tab() -> None:
                     from services.risk_radar import detect_risk_radar, summarize_radar
                     _radar = detect_risk_radar(FRED_KEY)
                     _radar_sum = summarize_radar(_radar)
+                    st.session_state["_radar_v1921_top"] = (_radar, _radar_sum)
                 except Exception as _radar_e:  # noqa: BLE001
                     _radar = None
                     _radar_sum = None
