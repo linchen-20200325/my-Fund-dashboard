@@ -475,6 +475,145 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
     st.divider()
 
 
+def _render_tw_local_dashboard(indicators: dict | None,
+                                fred_api_key: str = "") -> None:
+    """📊 v19.25：台股本地視角 — 長期 12M ｜ 短期 1Q 雙判讀。
+
+    接在 `_render_beginner_dashboard`（雙速合議＝全球視角）之後、進階檢視之前，
+    補上台股獨有的 NDC 景氣燈號 / TW PMI / 出口 YoY / 外資連續日數判讀。
+
+    資料流：
+      v19.24 fetcher × 4  →  v19.23 純函式 (long/short regime)  →  雙欄渲染
+        (NDC / TW PMI / Export YoY / FII streak)
+
+    MK 黃金拐點走 indicators["CPI"]/["FED_RATE"] value+prev，全球與本地共用。
+    任一 fetcher 失敗會 graceful 在卡片上顯示 source/error，整段不爆。
+
+    AppTest 保護：fred_api_key < 30 字元視為測試環境 → 跳過 4 個 HTTP fetcher
+    （FinMind ~15s × 4 會撞破 AppTest 240s 預算）。真實 FRED key 為 32 字元。
+    """
+    if not indicators:
+        return
+    if not fred_api_key or len(str(fred_api_key).strip()) < 30:
+        return
+    try:
+        from services.macro_tw_local import (
+            classify_long_term_regime,
+            classify_short_term_regime,
+            detect_mk_golden_inflection,
+        )
+        from services.macro_tw_local_fetch import (
+            fetch_foreign_consecutive_days,
+            fetch_ndc_signal_history,
+            fetch_tw_export_yoy,
+            fetch_tw_pmi_local,
+        )
+    except ImportError:
+        return
+
+    cpi    = (indicators.get("CPI") or {})
+    fed    = (indicators.get("FED_RATE") or {})
+    vix    = (indicators.get("VIX") or {})
+    cpi_v  = cpi.get("value")
+    cpi_p  = cpi.get("prev")
+    fed_v  = fed.get("value")
+    fed_p  = fed.get("prev")
+    vix_v  = vix.get("value")
+
+    try:
+        ndc_d    = fetch_ndc_signal_history()
+        pmi_d    = fetch_tw_pmi_local()
+        export_d = fetch_tw_export_yoy()
+        fii_d    = fetch_foreign_consecutive_days()
+    except Exception as _e:  # noqa: BLE001
+        st.warning(f"📊 台股本地視角：fetcher 載入失敗（{_e}）— 跳過本區塊")
+        return
+
+    ndc_score   = ndc_d.get("score_latest")
+    tw_pmi      = pmi_d.get("value")
+    export_yoy  = export_d.get("value")
+    fi_streak   = fii_d.get("consec_days")
+
+    mk = detect_mk_golden_inflection(cpi_v, cpi_p, fed_v, fed_p)
+    long_v  = classify_long_term_regime(cpi_v, fed_v, fed_p, ndc_score, tw_pmi, mk)
+    short_v = classify_short_term_regime(export_yoy, tw_pmi, vix_v, fi_streak,
+                                         cpi_v, cpi_p)
+
+    st.markdown("### 📊 台股本地視角（12M 長期 ｜ 1Q 短期）")
+    st.caption(
+        "鏡像 stock dashboard 的 NDC 景氣燈號 / TW PMI / 出口 YoY / 外資連續日數判讀，"
+        "與上方「全球慢總經 × 短線雷達」互補。"
+    )
+
+    _c1, _c2 = st.columns(2)
+    with _c1:
+        with st.container(border=True):
+            st.markdown(
+                f"<div style='padding:8px 4px 4px;border-left:6px solid {long_v['color']};"
+                f"background:linear-gradient(90deg,{long_v['color']}22 0%,transparent 80%);'>"
+                f"<div style='font-size:12px;color:#8b949e'>🏔️ 長期 12M ｜ 景氣大循環</div>"
+                f"<div style='font-size:22px;font-weight:700;color:{long_v['color']}'>"
+                f"{long_v['regime']}</div>"
+                f"<div style='font-size:13px;color:#c9d1d9;margin-top:4px'>"
+                f"得分：<b>{long_v['score']:+.2f}</b> ｜ 建議持股：<b>{long_v['suggest_pct']}</b></div>"
+                f"<div style='font-size:12px;color:#8b949e;margin-top:6px'>{long_v['detail']}</div>"
+                "</div>", unsafe_allow_html=True)
+            with st.expander("📐 評分拆解（components）", expanded=False):
+                if long_v.get("components"):
+                    for _name, _pts, _wt in long_v["components"]:
+                        _emoji = "🟢" if _pts > 0 else ("🔴" if _pts < 0 else "⚪")
+                        st.markdown(f"- {_emoji} **{_name}**：{_pts:+d} 分（權重 {_wt}%）")
+                else:
+                    st.caption("⚪ 資料全空，無加權項")
+
+    with _c2:
+        with st.container(border=True):
+            st.markdown(
+                f"<div style='padding:8px 4px 4px;border-left:6px solid {short_v['color']};"
+                f"background:linear-gradient(90deg,{short_v['color']}22 0%,transparent 80%);'>"
+                f"<div style='font-size:12px;color:#8b949e'>⚡ 短期 1Q ｜ 財報季偏向</div>"
+                f"<div style='font-size:22px;font-weight:700;color:{short_v['color']}'>"
+                f"{short_v['regime']}</div>"
+                f"<div style='font-size:13px;color:#c9d1d9;margin-top:4px'>"
+                f"得分：<b>{short_v['score']:+.2f}</b> ｜ 建議行動：<b>{short_v.get('action','—')}</b></div>"
+                f"<div style='font-size:12px;color:#8b949e;margin-top:6px'>{short_v['detail']}</div>"
+                "</div>", unsafe_allow_html=True)
+            with st.expander("📐 評分拆解（components）", expanded=False):
+                if short_v.get("components"):
+                    for _name, _pts, _wt in short_v["components"]:
+                        _emoji = "🟢" if _pts > 0 else ("🔴" if _pts < 0 else "⚪")
+                        st.markdown(f"- {_emoji} **{_name}**：{_pts:+d} 分（權重 {_wt}%）")
+                else:
+                    st.caption("⚪ 資料全空，無加權項")
+
+    with st.expander("📡 資料來源 + 拐點訊號", expanded=False):
+        _rows = [
+            ("NDC 景氣對策信號",       ndc_d, ndc_d.get("score_latest"), "分"),
+            ("台 PMI",                  pmi_d, pmi_d.get("value"),         ""),
+            ("出口 YoY",                export_d, export_d.get("value"),   "%"),
+            ("外資連續日數",            fii_d, fii_d.get("consec_days"),   "日"),
+        ]
+        for _label, _d, _val, _unit in _rows:
+            _src = _d.get("source") or "—"
+            _dt  = _d.get("date_latest") or "—"
+            _err = _d.get("error")
+            _inf = _d.get("inflection") or "—"
+            if _err:
+                st.markdown(f"- **{_label}**：⚠️ {_err}")
+            else:
+                _vs = f"{_val}{_unit}" if _val is not None else "—"
+                st.markdown(
+                    f"- **{_label}**：{_vs} ｜ 拐點：{_inf} ｜ 來源：{_src} ｜ 最新：{_dt}"
+                )
+        if mk is not None:
+            st.markdown(
+                f"- **MK 黃金拐點**：{mk['icon']} {mk['label']}（{mk['strength']}）— {mk['detail']}"
+            )
+        else:
+            st.caption("MK 黃金拐點：無訊號或 CPI/Fed 資料不足")
+    st.divider()
+
+
 def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
     """🎯 v19.15：即時訊號燈 + 決策矩陣 — 接在 pending banner 後、tabs 前。
 
@@ -714,6 +853,9 @@ def render_macro_tab() -> None:
         # ── ✨ v19.17：新手友善面板（頂部 1 句結論 + 教學） ──
         # v19.21：傳入 FRED_KEY 啟用雙速合議（慢總經 ｜ 短線雷達 ｜ 合議行動）
         _render_beginner_dashboard(ind, FRED_KEY)
+
+        # ── 📊 v19.25：台股本地視角（NDC / TW PMI / 出口 / 外資連續日數）──
+        _render_tw_local_dashboard(ind, FRED_KEY)
 
         # ── 🔬 v19.17：進階檢視 expander（折疊 v19.15 即時訊號 + 決策矩陣） ──
         with st.expander(

@@ -40,7 +40,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.22.1_NestedExpanderHotfix"
+APP_VERSION = "v19.25_TwLocalUiSection"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
