@@ -567,7 +567,10 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
         hide_index=True,
     )
 
-    with st.expander("💡 動作對照表 + 邊界規則", expanded=False):
+    # v19.22.1 hotfix：本函式可能被外層 expander 包覆（render_macro_tab L716），
+    # Streamlit 禁止 nested expanders → 沿用 v17.2 慣例改用 st.container(border=True)
+    with st.container(border=True):
+        st.markdown("**💡 動作對照表 + 邊界規則**")
         st.markdown(
             "- **持有 (100%)** — 維持原配置\n"
             "- **加碼 (130%)** — 跌深 + 多頭環境 / 衛星在極度樂觀區\n"
