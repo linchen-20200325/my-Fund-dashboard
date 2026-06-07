@@ -415,3 +415,118 @@ def summarize_radar(radar: dict[str, dict]) -> dict:
     else:
         level, color = "平靜", GREEN
     return {**counts, "level": level, "color": color}
+
+
+def synthesize_dual_verdict(
+    slow_level: str,
+    slow_score: float,
+    slow_color: str,
+    slow_icon: str,
+    slow_action: str,
+    radar_level: str | None,
+) -> dict:
+    """v19.21 雙速合議 — 將慢總經 verdict 與短線雷達 level 整合為單一行動建議。
+
+    Returns
+    -------
+    {
+        "icon"   : str,    # 🟢🟡🟠🔴 之一
+        "level"  : str,    # 合議結論短語
+        "color"  : str,    # hex
+        "action" : str,    # 行動建議全文（內含分歧/降槓桿等明確指引）
+        "mode"   : str,    # "adopt_slow" / "downgrade_1" / "downgrade_2" / "override_defense"
+    }
+
+    決策表：
+      radar=None/平靜    → adopt_slow（採用慢總經）
+      radar=警戒          → downgrade_1（慢樂觀則維持觀察；慢中性/悲觀則降至中性）
+      radar=警報          → downgrade_2（慢樂觀→降槓桿；慢中性→偏空；慢悲觀→全面防守）
+      radar=極端警報      → override_defense（強制減倉，慢總經暫不採信）
+    """
+    if radar_level in (None, "平靜"):
+        suffix = "（短線雷達平靜確認）" if radar_level == "平靜" else ""
+        return {
+            "icon": slow_icon,
+            "level": f"{slow_level}{suffix}",
+            "color": slow_color,
+            "action": slow_action,
+            "mode": "adopt_slow",
+        }
+
+    if radar_level == "極端警報":
+        return {
+            "icon": "🔴",
+            "level": "立即減倉防守",
+            "color": "#d32f2f",
+            "action": (
+                f"短線急殺進行中（雷達 4+ 紅燈）→ 現金 30%+、核心轉投資等級債／防守型；"
+                f"慢總經 {slow_level}({slow_score:+.1f}) 暫不採信，待雷達回到警戒以下再恢復攻擊"
+            ),
+            "mode": "override_defense",
+        }
+
+    if radar_level == "警報":
+        if slow_score >= 5:
+            return {
+                "icon": "🟠",
+                "level": "雙速分歧：降槓桿",
+                "color": "#ef6c00",
+                "action": (
+                    f"慢總經 {slow_level}({slow_score:+.1f}) 仍多頭，但短線雷達警報 → "
+                    f"倉位降至 50-60%、暫緩定額、停利收緊；觀察 24-48h 雷達是否轉警戒"
+                ),
+                "mode": "downgrade_2",
+            }
+        if slow_score >= -5:
+            return {
+                "icon": "🔴",
+                "level": "雙線疲弱：偏空操作",
+                "color": "#d84315",
+                "action": (
+                    f"慢總經 {slow_level}({slow_score:+.1f}) 本已疲弱，疊加短線警報 → "
+                    f"現金 25-30%、停止加碼、衛星部位獲利了結"
+                ),
+                "mode": "downgrade_2",
+            }
+        return {
+            "icon": "🔴",
+            "level": "全面防守",
+            "color": "#b71c1c",
+            "action": (
+                f"慢總經 {slow_level}({slow_score:+.1f}) 已悲觀，疊加短線警報 → "
+                f"現金 35%+、核心轉投資等級債／全球均衡"
+            ),
+            "mode": "downgrade_2",
+        }
+
+    if radar_level == "警戒":
+        if slow_score >= 5:
+            return {
+                "icon": slow_icon,
+                "level": f"{slow_level}但警戒觀察",
+                "color": "#fbc02d",
+                "action": (
+                    f"慢總經 {slow_level}({slow_score:+.1f}) 仍主導，但雷達警戒（紅+黃 ≥4 燈）→ "
+                    f"維持持倉、暫緩單筆加碼，留意雷達是否升級至警報"
+                ),
+                "mode": "downgrade_1",
+            }
+        return {
+            "icon": "🟡",
+            "level": "中性觀察",
+            "color": "#f9a825",
+            "action": (
+                f"慢總經 {slow_level}({slow_score:+.1f}) 疊加雷達警戒 → "
+                f"分批進場、倉位 60-70%、定期定額減半"
+            ),
+            "mode": "downgrade_1",
+        }
+
+    # 未知雷達狀態 fallback
+    return {
+        "icon": slow_icon,
+        "level": slow_level,
+        "color": slow_color,
+        "action": slow_action,
+        "mode": "adopt_slow",
+    }

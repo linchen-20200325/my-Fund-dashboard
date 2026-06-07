@@ -463,3 +463,89 @@ class TestSummarizeRadar:
         s = rr.summarize_radar(radar)
         assert s["green"] == 1
         assert s["gray"] == 1
+
+
+# ════════════════════════════════════════════════════════════════════
+# v19.21 雙速合議 — synthesize_dual_verdict
+# ════════════════════════════════════════════════════════════════════
+class TestSynthesizeDualVerdict:
+    """雙速合議規則 — 慢總經 verdict × 短線雷達 level → 單一行動建議。"""
+
+    SLOW_BULL = ("極度樂觀", 10.5, "#00c853", "🟢", "多頭市場強勁：可滿倉持有")
+    SLOW_OK = ("樂觀", 6.0, "#69f0ae", "🟢", "景氣穩定擴張：核心持有不動")
+    SLOW_NEU = ("中性", 0.0, "#ffd54f", "🟡", "市場震盪整理：分批進場")
+    SLOW_BEAR = ("悲觀", -7.0, "#ff8a80", "🔴", "風險正在集結")
+    SLOW_VERY_BEAR = ("極度悲觀", -12.0, "#f44336", "🔴", "避險情緒高漲")
+
+    def test_radar_none_adopts_slow(self):
+        s = rr.synthesize_dual_verdict(*self.SLOW_BULL, None)
+        assert s["mode"] == "adopt_slow"
+        assert s["level"] == "極度樂觀"  # 無 suffix
+        assert s["icon"] == "🟢"
+        assert s["color"] == "#00c853"
+        assert s["action"] == "多頭市場強勁：可滿倉持有"
+
+    def test_radar_calm_adopts_slow_with_suffix(self):
+        s = rr.synthesize_dual_verdict(*self.SLOW_BULL, "平靜")
+        assert s["mode"] == "adopt_slow"
+        assert "平靜確認" in s["level"]
+        assert s["icon"] == "🟢"
+        assert s["action"] == "多頭市場強勁：可滿倉持有"
+
+    def test_radar_warning_with_bull_slow_observes(self):
+        s = rr.synthesize_dual_verdict(*self.SLOW_BULL, "警戒")
+        assert s["mode"] == "downgrade_1"
+        assert "警戒觀察" in s["level"]
+        assert "暫緩單筆加碼" in s["action"]
+        assert s["color"] == "#fbc02d"
+
+    def test_radar_warning_with_neutral_slow_goes_neutral(self):
+        s = rr.synthesize_dual_verdict(*self.SLOW_NEU, "警戒")
+        assert s["mode"] == "downgrade_1"
+        assert s["level"] == "中性觀察"
+        assert "定期定額減半" in s["action"]
+        assert s["icon"] == "🟡"
+
+    def test_radar_alert_with_bull_slow_diverges(self):
+        # 6/5/2026 真實情境：慢總經樂觀 +10.5 + 雷達警報 → 降槓桿
+        s = rr.synthesize_dual_verdict(*self.SLOW_BULL, "警報")
+        assert s["mode"] == "downgrade_2"
+        assert "雙速分歧" in s["level"]
+        assert "降槓桿" in s["level"]
+        assert "50-60%" in s["action"]
+        assert s["icon"] == "🟠"
+        assert s["color"] == "#ef6c00"
+
+    def test_radar_alert_with_neutral_slow_goes_short(self):
+        s = rr.synthesize_dual_verdict(*self.SLOW_NEU, "警報")
+        assert s["mode"] == "downgrade_2"
+        assert "偏空" in s["level"]
+        assert "25-30%" in s["action"]
+
+    def test_radar_alert_with_bear_slow_full_defense(self):
+        s = rr.synthesize_dual_verdict(*self.SLOW_BEAR, "警報")
+        assert s["mode"] == "downgrade_2"
+        assert s["level"] == "全面防守"
+        assert "35%+" in s["action"]
+        assert s["color"] == "#b71c1c"
+
+    def test_radar_extreme_overrides_any_slow(self):
+        # 即使慢總經極度樂觀，雷達極端警報直接覆蓋
+        s = rr.synthesize_dual_verdict(*self.SLOW_BULL, "極端警報")
+        assert s["mode"] == "override_defense"
+        assert s["level"] == "立即減倉防守"
+        assert "暫不採信" in s["action"]
+        assert s["icon"] == "🔴"
+        assert s["color"] == "#d32f2f"
+
+    def test_radar_extreme_with_already_bear_still_overrides(self):
+        s = rr.synthesize_dual_verdict(*self.SLOW_VERY_BEAR, "極端警報")
+        assert s["mode"] == "override_defense"
+        assert s["level"] == "立即減倉防守"
+
+    def test_unknown_radar_level_falls_back_to_slow(self):
+        # 防呆：未知 level 不爆，靜默 fallback
+        s = rr.synthesize_dual_verdict(*self.SLOW_OK, "外星訊號")
+        assert s["mode"] == "adopt_slow"
+        assert s["level"] == "樂觀"
+        assert s["icon"] == "🟢"
