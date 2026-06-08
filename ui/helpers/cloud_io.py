@@ -81,13 +81,19 @@ def _dump_all_to_sheet_v2(client: object,
             })
         _written = 0
         _errors: list[str] = []
-        for _pid, _rows in _by_policy.items():
+        # v18.253：節流 — 每保單寫入後 sleep 0.15s，13 檔 ≈ 2s 額外延遲，
+        # 避免短時間集中砲轟撞 Google Sheets 60 reads/min quota（每檔 4-6 個 API call）
+        import time as _time  # noqa: PLC0415
+        _pids = list(_by_policy.items())
+        for _i, (_pid, _rows) in enumerate(_pids):
             try:
                 _df = pd.DataFrame(_rows, columns=list(ALL_COLS_V2))
                 _n = write_policy_v2(client, sheet_id, _pid, _df)
                 _written += int(_n)
             except (PolicySheetError, OAuthError) as _e:
                 _errors.append(f"{_pid}: {str(_e)[:80]}")
+            if _i < len(_pids) - 1:
+                _time.sleep(0.15)
         out["written"] = _written
         if _errors:
             out["warnings"].append(
