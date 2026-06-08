@@ -41,7 +41,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.29_FredSeriesExtension"
+APP_VERSION = "v19.30_RadarCboeFallback"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
