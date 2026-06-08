@@ -112,16 +112,76 @@ def _signal_vix_level() -> dict:
         return _empty(f"VIX 抓取失敗：{str(e)[:60]}", "Yahoo ^VIX 日線")
 
 
+# ── 多源 fallback helper (v19.30 鏡像 stock v18.181) ─────────────
+def _fetch_cboe_csv(short_name: str) -> pd.Series:
+    """CBOE 官方每日 CSV → 收盤 Series（key: short_name 如 'VIX3M' / 'CPC' / 'CPCE'）。
+
+    URL pattern: https://cdn.cboe.com/api/global/us_indices/daily_prices/{short}_History.csv
+    對 ^VIX3M、^CPC、^CPCE 等 Yahoo 已停供 ticker 的官方替代源。
+
+    失敗回空 Series。
+    """
+    import io
+
+    from infra.proxy import fetch_url
+    try:
+        url = ("https://cdn.cboe.com/api/global/us_indices/"
+               f"daily_prices/{short_name}_History.csv")
+        r = fetch_url(url, timeout=15)
+        if r is None or getattr(r, "status_code", 0) != 200:
+            print(f"[risk_radar/cboe] {short_name} HTTP {getattr(r, 'status_code', None)}")
+            return pd.Series(dtype=float)
+        df = pd.read_csv(io.StringIO(r.text))
+        date_col = next((c for c in df.columns if "DATE" in c.upper()), None)
+        close_col = next((c for c in df.columns if "CLOSE" in c.upper()), None)
+        if not date_col or not close_col or df.empty:
+            print(f"[risk_radar/cboe] {short_name} 欄位不符: {list(df.columns)}")
+            return pd.Series(dtype=float)
+        idx = pd.to_datetime(df[date_col], errors="coerce")
+        vals = pd.to_numeric(df[close_col], errors="coerce")
+        s = pd.Series(vals.values, index=idx).dropna().sort_index()
+        return s.tail(180)  # 對齊 6mo
+    except Exception as e:  # noqa: BLE001
+        print(f"[risk_radar/cboe] {short_name} 失敗: {e}")
+        return pd.Series(dtype=float)
+
+
+def _resolve_vix3m() -> tuple[pd.Series, str]:
+    """VIX3M 多源 chain：Yahoo ^VIX3M → Yahoo ^VXV (legacy) → CBOE CSV。"""
+    for t in ("^VIX3M", "^VXV"):
+        s = fetch_yf_close(t, range_="6mo")
+        if not s.empty and len(s) >= 2:
+            return s, f"Yahoo {t}"
+    s = _fetch_cboe_csv("VIX3M")
+    if not s.empty and len(s) >= 2:
+        return s, "CBOE VIX3M_History.csv"
+    return pd.Series(dtype=float), ""
+
+
+def _resolve_put_call() -> tuple[pd.Series, str]:
+    """CBOE Put/Call 多源 chain：Yahoo ^CPC → ^CPCE → CBOE CSV CPC/CPCE。"""
+    for t in ("^CPC", "^CPCE"):
+        s = fetch_yf_close(t, range_="6mo")
+        if not s.empty and len(s) >= 2:
+            return s, f"Yahoo {t}"
+    for short in ("CPC", "CPCE"):
+        s = _fetch_cboe_csv(short)
+        if not s.empty and len(s) >= 2:
+            return s, f"CBOE {short}_History.csv"
+    return pd.Series(dtype=float), ""
+
+
 # ── 2. VIX 期限結構 (VIX / VIX3M) ────────────────────────────────
 def _signal_vix_term_struct() -> dict:
     try:
         sv = fetch_yf_close("^VIX", range_="6mo")
-        s3 = fetch_yf_close("^VIX3M", range_="6mo")
+        s3, src3 = _resolve_vix3m()
+        _label = f"Yahoo ^VIX / {src3}" if src3 else "Yahoo ^VIX / VIX3M（全源失敗）"
         if sv.empty or s3.empty:
-            return _empty("VIX/VIX3M 抓取失敗", "Yahoo ^VIX / ^VIX3M")
+            return _empty("VIX/VIX3M 抓取失敗（Yahoo + CBOE 全源失敗）", _label)
         df = pd.concat([sv.rename("vix"), s3.rename("v3m")], axis=1).dropna()
         if df.empty or len(df) < 2:
-            return _empty("VIX/VIX3M 對齊後不足 2 筆", "Yahoo ^VIX / ^VIX3M")
+            return _empty("VIX/VIX3M 對齊後不足 2 筆", _label)
         ratio = df["vix"] / df["v3m"]
         cur = float(ratio.iloc[-1])
         prev = float(ratio.iloc[-2])
@@ -133,11 +193,10 @@ def _signal_vix_term_struct() -> dict:
             lvl = 0
         note = f"VIX/VIX3M={cur:.3f}｜>1 = 後端逆轉（急殺前兆）｜>1.1 = 紅燈"
         trend = [round(x, 3) for x in ratio.tail(8).tolist()]
-        return _build(lvl, round(cur, 3), round(prev, 3), note,
-                      "Yahoo ^VIX / ^VIX3M", trend)
+        return _build(lvl, round(cur, 3), round(prev, 3), note, _label, trend)
     except Exception as e:  # noqa: BLE001
         return _empty(f"VIX 期限結構抓取失敗：{str(e)[:60]}",
-                      "Yahoo ^VIX / ^VIX3M")
+                      "Yahoo ^VIX / VIX3M chain")
 
 
 # ── 3. HY OAS 1-day 變化 ──────────────────────────────────────────
@@ -296,9 +355,13 @@ def _signal_sector_rotation() -> dict:
 # ── 9. CBOE Put/Call Ratio ───────────────────────────────────────
 def _signal_put_call_ratio() -> dict:
     try:
-        s = fetch_yf_close("^CPC", range_="6mo")
+        s, src = _resolve_put_call()
+        _label = src if src else "CBOE Put/Call chain（全源失敗）"
         if s.empty or len(s) < 2:
-            return _empty("Put/Call 抓取不足 2 筆", "Yahoo ^CPC 日線")
+            return _empty(
+                "Put/Call 抓取失敗（Yahoo ^CPC/^CPCE + CBOE CSV 全源失敗）",
+                _label,
+            )
         cur = float(s.iloc[-1])
         prev = float(s.iloc[-2])
         if cur >= 1.20:
@@ -309,10 +372,10 @@ def _signal_put_call_ratio() -> dict:
             lvl = 0
         note = f"Put/Call={cur:.2f}｜>1.2 = 紅燈（散戶恐慌極端）｜>1.0 = 黃燈"
         trend = [round(x, 2) for x in s.tail(8).tolist()]
-        return _build(lvl, round(cur, 2), round(prev, 2), note,
-                      "Yahoo ^CPC 日線", trend)
+        return _build(lvl, round(cur, 2), round(prev, 2), note, _label, trend)
     except Exception as e:  # noqa: BLE001
-        return _empty(f"Put/Call 抓取失敗：{str(e)[:60]}", "Yahoo ^CPC 日線")
+        return _empty(f"Put/Call 抓取失敗：{str(e)[:60]}",
+                      "CBOE Put/Call chain")
 
 
 # ── 10. 亞洲夜盤（Nikkei + HSI 平均單日跌幅）──────────────────────

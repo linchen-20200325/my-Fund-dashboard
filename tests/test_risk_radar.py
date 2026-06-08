@@ -320,6 +320,151 @@ class TestPutCallRatio:
 
 
 # ──────────────────────────────────────────────────────────────
+# 9b. v19.30 多源 fallback chain（VIX3M + Put/Call CBOE CSV 救援，
+#     鏡像 stock v18.181 PR #185）
+# ──────────────────────────────────────────────────────────────
+class TestCboeCsvHelper:
+    def _mk_resp(self, text: str, status: int = 200):
+        from unittest.mock import MagicMock
+        r = MagicMock()
+        r.status_code = status
+        r.text = text
+        return r
+
+    def test_parses_cboe_csv(self):
+        csv = "DATE,OPEN,HIGH,LOW,CLOSE\n2026-01-02,15.0,16.0,14.5,15.5\n2026-01-03,15.5,16.5,15.0,16.0\n"
+        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(csv)):
+            s = rr._fetch_cboe_csv("VIX3M")
+        assert len(s) == 2
+        assert abs(float(s.iloc[-1]) - 16.0) < 1e-6
+
+    def test_http_failure_returns_empty(self):
+        with patch("infra.proxy.fetch_url", return_value=None):
+            s = rr._fetch_cboe_csv("CPC")
+        assert s.empty
+
+    def test_status_500_returns_empty(self):
+        with patch("infra.proxy.fetch_url",
+                   return_value=self._mk_resp("Server Error", status=500)):
+            s = rr._fetch_cboe_csv("CPC")
+        assert s.empty
+
+    def test_missing_close_column_returns_empty(self):
+        with patch("infra.proxy.fetch_url",
+                   return_value=self._mk_resp("DATE,OPEN\n2026-01-02,15.0\n")):
+            s = rr._fetch_cboe_csv("VIX3M")
+        assert s.empty
+
+
+class TestResolveVix3m:
+    def test_yahoo_primary_wins(self):
+        with patch.object(rr, "fetch_yf_close", return_value=_yf([15.0] * 8)):
+            s, src = rr._resolve_vix3m()
+        assert "Yahoo ^VIX3M" in src
+        assert not s.empty
+
+    def test_falls_through_to_vxv(self):
+        def _mock(t, **kw):
+            if t == "^VIX3M":
+                return pd.Series(dtype=float)
+            return _yf([16.0] * 8)
+        with patch.object(rr, "fetch_yf_close", side_effect=_mock):
+            s, src = rr._resolve_vix3m()
+        assert "Yahoo ^VXV" in src
+
+    def test_falls_through_to_cboe(self):
+        from unittest.mock import MagicMock
+        csv = "DATE,CLOSE\n2026-01-02,15.0\n2026-01-03,16.0\n"
+        cboe_resp = MagicMock()
+        cboe_resp.status_code = 200
+        cboe_resp.text = csv
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=cboe_resp):
+            s, src = rr._resolve_vix3m()
+        assert "CBOE VIX3M_History.csv" in src
+        assert not s.empty
+
+    def test_all_sources_fail_returns_empty(self):
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=None):
+            s, src = rr._resolve_vix3m()
+        assert s.empty
+        assert src == ""
+
+
+class TestResolvePutCall:
+    def test_yahoo_cpc_primary_wins(self):
+        with patch.object(rr, "fetch_yf_close", return_value=_yf([0.8] * 8)):
+            s, src = rr._resolve_put_call()
+        assert "Yahoo ^CPC" in src
+        assert not s.empty
+
+    def test_falls_through_to_cpce(self):
+        def _mock(t, **kw):
+            if t == "^CPC":
+                return pd.Series(dtype=float)
+            return _yf([0.9] * 8)
+        with patch.object(rr, "fetch_yf_close", side_effect=_mock):
+            s, src = rr._resolve_put_call()
+        assert "Yahoo ^CPCE" in src
+
+    def test_falls_through_to_cboe_csv(self):
+        from unittest.mock import MagicMock
+        csv = "DATE,CLOSE\n2026-01-02,0.85\n2026-01-03,0.90\n"
+        cboe_resp = MagicMock()
+        cboe_resp.status_code = 200
+        cboe_resp.text = csv
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=cboe_resp):
+            s, src = rr._resolve_put_call()
+        assert "CBOE CPC_History.csv" in src
+        assert not s.empty
+
+    def test_all_sources_fail(self):
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=None):
+            s, src = rr._resolve_put_call()
+        assert s.empty
+        assert src == ""
+
+
+class TestVixTermStructCboeFallback:
+    def test_uses_cboe_label_when_yahoo_dead(self):
+        """v19.30 VIX3M Yahoo 全失敗 → CBOE CSV 救援 + label 反映實際源。"""
+        from unittest.mock import MagicMock
+        csv = "DATE,CLOSE\n2026-01-02,16.0\n2026-01-03,17.0\n"
+        cboe_resp = MagicMock()
+        cboe_resp.status_code = 200
+        cboe_resp.text = csv
+
+        def _yf_mock(t, **kw):
+            if t == "^VIX":
+                return pd.Series([15.0, 16.0],
+                                 index=pd.to_datetime(["2026-01-02", "2026-01-03"]))
+            return pd.Series(dtype=float)  # ^VIX3M / ^VXV 都空
+        with patch.object(rr, "fetch_yf_close", side_effect=_yf_mock), \
+             patch("infra.proxy.fetch_url", return_value=cboe_resp):
+            d = rr._signal_vix_term_struct()
+        assert "CBOE VIX3M_History.csv" in d["label"]
+        assert "🟢" in d["signal"]
+
+
+class TestPutCallCboeFallback:
+    def test_uses_cboe_label_when_yahoo_dead(self):
+        """v19.30 ^CPC/^CPCE Yahoo 全失敗 → CBOE CSV 救援。"""
+        from unittest.mock import MagicMock
+        csv = "DATE,CLOSE\n2026-01-02,0.85\n2026-01-03,1.25\n"
+        cboe_resp = MagicMock()
+        cboe_resp.status_code = 200
+        cboe_resp.text = csv
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=cboe_resp):
+            d = rr._signal_put_call_ratio()
+        assert "CBOE CPC_History.csv" in d["label"]
+        assert "🔴" in d["signal"]
+
+
+# ──────────────────────────────────────────────────────────────
 # 10. Asia overnight
 # ──────────────────────────────────────────────────────────────
 class TestAsiaOvernight:
