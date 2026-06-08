@@ -81,8 +81,71 @@ class TestBuildFactorPanel:
         assert "YIELD_10Y2Y" not in panel.columns
         assert "YIELD_10Y3M" not in panel.columns
         assert "FEDRATE" not in panel.columns
+        # 缺 v19.29 新 series → 無 DXY / PPI / COPPER columns（9-factor fallback）
+        assert "DXY" not in panel.columns
+        assert "PPI" not in panel.columns
+        assert "COPPER" not in panel.columns
         # VIX 仍出現
         assert "VIX" in panel.columns
+
+    def test_v1929_dxy_factor_computed(self):
+        """v19.29 補 DTWEXBGS → DXY 月變化 %."""
+        idx = pd.date_range("2020-01-31", periods=24, freq="ME")
+        # DTWEXBGS 月遞增 1%（每月 *1.01）
+        dxy_vals = [100.0]
+        for _ in range(23):
+            dxy_vals.append(dxy_vals[-1] * 1.01)
+        fred = pd.DataFrame({"DTWEXBGS": dxy_vals}, index=idx)
+        vix = pd.Series([18.0] * 24, index=idx)
+        panel = _mod.build_factor_panel(fred, vix)
+        assert "DXY" in panel.columns
+        # 每月 +1% → DXY 值應接近 1.0
+        assert abs(panel["DXY"].iloc[-1] - 1.0) < 0.01
+
+    def test_v1929_ppi_yoy_computed(self):
+        """v19.29 補 PPIACO → PPI YoY %."""
+        idx = pd.date_range("2020-01-31", periods=24, freq="ME")
+        # PPIACO 12 個月 +6%（月 +0.5）→ YoY ~6%
+        ppi_vals = [200.0 + 0.5 * i for i in range(24)]
+        fred = pd.DataFrame({"PPIACO": ppi_vals}, index=idx)
+        vix = pd.Series([18.0] * 24, index=idx)
+        panel = _mod.build_factor_panel(fred, vix)
+        assert "PPI" in panel.columns
+        # YoY = 6/200 ≈ 3%
+        ppi_yoy = panel["PPI"].iloc[-1]
+        assert pd.notna(ppi_yoy)
+        assert 2.5 < ppi_yoy < 3.5
+
+    def test_v1929_copper_month_change_computed(self):
+        """v19.29 補 PCOPPUSDM → Copper 月變化 %."""
+        idx = pd.date_range("2020-01-31", periods=12, freq="ME")
+        copper_vals = [7000.0 * (1.02 ** i) for i in range(12)]  # 月 +2%
+        fred = pd.DataFrame({"PCOPPUSDM": copper_vals}, index=idx)
+        vix = pd.Series([18.0] * 12, index=idx)
+        panel = _mod.build_factor_panel(fred, vix)
+        assert "COPPER" in panel.columns
+        assert abs(panel["COPPER"].iloc[-1] - 2.0) < 0.01
+
+    def test_v1929_full_12_factor_panel(self):
+        """v19.29 bootstrap 後 full 12-factor panel."""
+        idx = pd.date_range("2020-01-31", periods=24, freq="ME")
+        fred = pd.DataFrame({
+            "DGS10": [2.5] * 24, "DGS2": [1.0] * 24, "DGS3MO": [0.5] * 24,
+            "BAMLH0A0HYM2": [3.5] * 24,
+            "CPIAUCSL": [260.0 + 0.5 * i for i in range(24)],
+            "M2SL": [20000.0 + 100 * i for i in range(24)],
+            "UNRATE": [4.5] * 24,
+            "WALCL": [8e6 + 1000 * i for i in range(24)],
+            "DTWEXBGS": [100.0 + 0.5 * i for i in range(24)],
+            "PPIACO": [200.0 + 0.5 * i for i in range(24)],
+            "PCOPPUSDM": [7000.0 + 50 * i for i in range(24)],
+        }, index=idx)
+        vix = pd.Series([18.0] * 24, index=idx)
+        panel = _mod.build_factor_panel(fred, vix)
+        # 12 factor + VIX = 13 column（不含 BREADTH/PMI）
+        expected = {"YIELD_10Y2Y", "YIELD_10Y3M", "HY_SPREAD", "M2", "CPI",
+                    "FEDRATE", "UNEMP", "FED_BS", "DXY", "PPI", "COPPER", "VIX"}
+        assert expected.issubset(set(panel.columns))
 
 
 # ════════════════════════════════════════════════════════════════
