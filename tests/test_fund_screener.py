@@ -19,6 +19,7 @@ from services.fund_screener import (
     apply_filters,
     collect_distinct_values,
     div_health_light,
+    monthly_div_amount,
 )
 
 
@@ -27,7 +28,9 @@ from services.fund_screener import (
 # ════════════════════════════════════════════════════════════════
 class TestConstants:
     def test_filter_keys_count(self):
-        assert len(FILTER_KEYS) == 11
+        # v19.27: 11 → 12（新增 monthly_div_min）
+        assert len(FILTER_KEYS) == 12
+        assert "monthly_div_min" in FILTER_KEYS
 
     def test_div_health_lights(self):
         assert set(DIV_HEALTH_LIGHTS) == {"健康", "警示", "吃本金", "資料不足"}
@@ -348,6 +351,57 @@ class TestCollectDistinctValues:
             "currency",
         )
         assert vals == ["USD"]
+
+
+# ════════════════════════════════════════════════════════════════
+# §5 v19.27 monthly_div_amount + monthly_div_min filter
+# ════════════════════════════════════════════════════════════════
+class TestMonthlyDivAmount:
+    def test_extracts_latest(self):
+        fund = {"dividends": [
+            {"date": "2025/11/15", "amount": 0.0625, "currency": "USD"},
+            {"date": "2025/10/15", "amount": 0.0600, "currency": "USD"},
+        ]}
+        assert monthly_div_amount(fund) == pytest.approx(0.0625)
+
+    def test_no_dividends_returns_none(self):
+        assert monthly_div_amount({}) is None
+        assert monthly_div_amount({"dividends": []}) is None
+        assert monthly_div_amount({"dividends": None}) is None
+
+    def test_non_dict_returns_none(self):
+        assert monthly_div_amount("not a dict") is None  # type: ignore[arg-type]
+        assert monthly_div_amount(None) is None  # type: ignore[arg-type]
+
+    def test_malformed_amount_returns_none(self):
+        fund = {"dividends": [{"date": "2025/11/15", "amount": "N/A"}]}
+        assert monthly_div_amount(fund) is None
+
+    def test_zero_amount_returns_zero(self):
+        fund = {"dividends": [{"amount": 0.0}]}
+        assert monthly_div_amount(fund) == 0.0
+
+
+class TestMonthlyDivMinFilter:
+    def test_threshold_filters_below(self):
+        funds = [
+            _make_fund(fund_code="A", dividends=[{"amount": 0.05}]),
+            _make_fund(fund_code="B", dividends=[{"amount": 0.10}]),
+            _make_fund(fund_code="C", dividends=[{"amount": 0.15}]),
+        ]
+        filtered, _ = apply_filters(funds, {"monthly_div_min": 0.10})
+        assert {f["fund_code"] for f in filtered} == {"B", "C"}
+
+    def test_missing_dividends_graceful_pass(self):
+        # 缺 dividends 視為「資料不足」graceful pass（與其他 _num_min 一致）
+        funds = [_make_fund(fund_code="A")]  # 預設無 dividends 欄
+        filtered, _ = apply_filters(funds, {"monthly_div_min": 0.10})
+        assert len(filtered) == 1
+
+    def test_injects_monthly_div_amount_field(self):
+        funds = [_make_fund(dividends=[{"amount": 0.07}])]
+        filtered, _ = apply_filters(funds, {})
+        assert filtered[0]["_monthly_div_amount"] == pytest.approx(0.07)
 
 
 if __name__ == "__main__":
