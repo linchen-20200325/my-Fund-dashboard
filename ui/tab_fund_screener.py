@@ -1,15 +1,9 @@
-"""v19.27 Fund Screener UI — 基金篩選工具（+ 反向流健康基金榜）。
+"""v19.32 Fund Screener UI — 基金篩選工具（健康基金榜唯一來源 + 預設只看健康）。
 
 對齊鉅亨買基金 anuefund 篩選介面的 10 條件 + 自家第 11 條「💚 含息報酬率 ≥ 配息率」三色燈
-+ v19.27 第 12 條「每單位月配金額」門檻 + 第三來源池「💎 健康基金榜」（反向流）。
-
-來源池三選一
-================
-- 📊 我的組合：讀 ``st.session_state["portfolio_funds"]``（已 enrich 完整欄位）
-- 🔍 關鍵字搜尋：呼 fund_repository.search_moneydj_by_name → 列原始命中 +
-  可選「補抓詳情後套完整 12 篩選」按鈕（會對每檔跑 fetch_fund_multi_source，較慢）
-- 💎 健康基金榜（v19.27 反向流）：對白名單 KNOWN_OVERSEAS_FUNDS 批次抓詳情 → 直接秀
-  「🟢 健康 / 🟡 警示 / 🔴 吃本金 / ⚪ 資料不足」四桶排行榜
++ v19.27 第 12 條「每單位月配金額」門檻。v19.32 user 反饋簡化：移除「我的組合」+
+「關鍵字搜尋」兩來源，固定走「💎 健康基金榜」白名單批次抓 + 自動載入；
+「💚 只看含息≥配息」toggle 預設打開，第一眼即只秀 🟢 健康基金。
 """
 from __future__ import annotations
 
@@ -32,42 +26,8 @@ from services.fund_screener import (
 
 
 # ════════════════════════════════════════════════════════════════
-# §1 來源池 loader
+# §1 來源池 loader（v19.32 簡化：固定走健康基金榜）
 # ════════════════════════════════════════════════════════════════
-def _load_my_portfolio_funds() -> list[dict]:
-    """從 session_state 抓既有組合基金；按 fund_code 去重。"""
-    raw = st.session_state.get("portfolio_funds") or []
-    seen: set[str] = set()
-    out: list[dict] = []
-    for f in raw:
-        if not isinstance(f, dict):
-            continue
-        code = str(f.get("fund_code") or f.get("full_key") or "").strip()
-        if not code or code in seen:
-            continue
-        seen.add(code)
-        out.append(f)
-    return out
-
-
-def _search_pool_minimal(keyword: str) -> list[dict]:
-    """呼搜尋 API → 回 minimal dict list（只有 full_key/name/portal/nav/source）。"""
-    if not keyword.strip():
-        return []
-    try:
-        from repositories.fund_repository import search_moneydj_by_name
-    except ImportError:
-        try:
-            from fund_fetcher import search_moneydj_by_name  # type: ignore
-        except ImportError:
-            return []
-    try:
-        return search_moneydj_by_name(keyword) or []
-    except Exception as e:
-        st.warning(f"搜尋失敗：{e}")
-        return []
-
-
 def _load_discover_pool(force_refresh: bool = False) -> list[dict]:
     """v19.27 反向流：對 KNOWN_OVERSEAS_FUNDS 批次抓 enriched 詳情。
 
@@ -99,35 +59,6 @@ def _load_discover_pool(force_refresh: bool = False) -> list[dict]:
 
     st.session_state[cache_key] = out
     return out
-
-
-def _enrich_search_hits(hits: list[dict], max_n: int = 10) -> list[dict]:
-    """對 search 結果批次抓詳情（fetch_fund_multi_source），讓 11 條件 filter 能跑。
-
-    限制 max_n 避免暴量 HTTP；user 可手動加大但有 warning。
-    """
-    try:
-        from fund_fetcher import fetch_fund_multi_source
-    except ImportError:
-        st.error("找不到 fetch_fund_multi_source，無法補抓詳情。")
-        return []
-
-    enriched: list[dict] = []
-    progress = st.progress(0.0, text=f"補抓詳情 0/{min(len(hits), max_n)}…")
-    capped = hits[:max_n]
-    for i, h in enumerate(capped, 1):
-        code = h.get("full_key") or h.get("code") or ""
-        if not code:
-            continue
-        try:
-            d = fetch_fund_multi_source(code)
-            if isinstance(d, dict):
-                enriched.append(d)
-        except Exception as e:
-            st.caption(f"⚠️ {code} 抓取失敗：{e}")
-        progress.progress(i / len(capped), text=f"補抓詳情 {i}/{len(capped)}…")
-    progress.empty()
-    return enriched
 
 
 # ════════════════════════════════════════════════════════════════
@@ -188,12 +119,12 @@ def _render_filter_widgets(funds: list[dict]) -> dict[str, Any]:
     if mthly_div > 0:
         filters["monthly_div_min"] = mthly_div
 
-    # 第 11 條：自家新增含息健康度 toggle
+    # 第 11 條：自家新增含息健康度 toggle（v19.32 預設打開 → 第一眼即只看 🟢 健康）
     st.markdown("---")
     healthy_only = st.toggle(
-        "💚 只看「含息報酬率 ≥ 配息率」（健康）",
-        value=False,
-        help="圖二燈號邏輯：含息 ≥ 配息 = 🟢 有淨值成長支撐配息；差距 ≤ 2% = 🟡 警示；> 2% = 🔴 吃本金",
+        "💚 只看「含息報酬率 ≥ 配息率」（🟢 健康）",
+        value=True,
+        help="預設打開：圖二燈號邏輯 — 含息 ≥ 配息 = 🟢 有淨值成長支撐配息；差距 ≤ 2% = 🟡 警示；> 2% = 🔴 吃本金。關掉可看全部 4 桶分布。",
         key="_screener_healthy_only",
     )
     if healthy_only:
@@ -300,118 +231,41 @@ def _render_light_spec() -> None:
 def render_fund_screener_tab() -> None:
     st.markdown("## 🔎 基金篩選工具")
     st.caption(
-        "對齊鉅亨買基金 anuefund 篩選 + 新增「💚 含息報酬率 ≥ 配息率」三色燈"
-        "（圖二健康度判讀）"
+        f"💎 健康基金榜：對 KNOWN_OVERSEAS_FUNDS 白名單（{len(KNOWN_OVERSEAS_FUNDS)} 檔台灣可買境外基金）"
+        "批次抓詳情 → 套 12 條件篩選 + 「💚 含息報酬率 ≥ 配息率」三色燈（預設只看 🟢 健康）"
     )
 
-    source = st.radio(
-        "資料來源池",
-        ["📊 我的組合", "🔍 關鍵字搜尋", "💎 健康基金榜"],
-        horizontal=True,
-        key="_screener_source",
-        help=(
-            "我的組合：用已載入的基金（快、完整 12 條件）；"
-            "關鍵字搜尋：探索新基金（慢、需補抓詳情）；"
-            "💎 健康基金榜（v19.27 反向流）：對知名海外基金白名單批次跑健康度排行"
-        ),
+    # v19.32：固定走健康基金榜 + 首次進 Tab 自動載入
+    refresh_clicked = st.button(
+        "🔄 重抓健康基金榜（清快取）", use_container_width=False,
+        key="_screener_refresh_discover",
+        help="預設沿用 session 快取避免重抓；資料源更新或抓取失敗時按此鈕清快取重抓",
     )
 
-    funds: list[dict] = []
+    cache_key = "_screener_discover_pool"
+    needs_load = refresh_clicked or not st.session_state.get(cache_key)
+    if needs_load:
+        with st.spinner(f"批次抓取健康基金榜（{len(KNOWN_OVERSEAS_FUNDS)} 檔）詳情中… 首次約需 30-60 秒"):
+            funds = _load_discover_pool(force_refresh=refresh_clicked)
+    else:
+        funds = st.session_state.get(cache_key) or []
 
-    if source == "📊 我的組合":
-        funds = _load_my_portfolio_funds()
-        if not funds:
-            st.info(
-                "📭 還沒載入任何組合基金。請先到「📊 組合基金」Tab 載入保單/組合，"
-                "回來這裡就能套 11 條件篩選 + 三色燈評估。"
-            )
-            return
-        st.success(f"✅ 已從我的組合載入 {len(funds)} 檔基金")
+    if not funds:
+        st.warning("⚠️ 健康基金榜抓取失敗 — 可能是網路或來源 portal 暫時不穩，按上方「🔄 重抓」重試。")
+        _render_light_spec()
+        return
 
-    elif source == "💎 健康基金榜":
-        st.caption(
-            f"🌐 反向流：對 KNOWN_OVERSEAS_FUNDS 白名單（{len(KNOWN_OVERSEAS_FUNDS)} 檔台灣可買境外基金）"
-            "批次跑 fetch_fund_multi_source → 健康度排行榜。首次載入約需 30-60 秒。"
-        )
-        col_btn1, col_btn2 = st.columns([1, 1])
-        with col_btn1:
-            load_clicked = st.button(
-                "🌟 載入健康基金榜", type="primary", use_container_width=True,
-                key="_screener_load_discover",
-            )
-        with col_btn2:
-            refresh_clicked = st.button(
-                "🔄 重抓（清快取）", use_container_width=True,
-                key="_screener_refresh_discover",
-            )
+    # 渲染排行榜摘要（4 桶計數 + 健康占比）
+    buckets = rank_by_health(funds)
+    summary = summarize_ranking(buckets)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🟢 健康", f"{summary['counts']['健康']} 檔")
+    c2.metric("🟡 警示", f"{summary['counts']['警示']} 檔")
+    c3.metric("🔴 吃本金", f"{summary['counts']['吃本金']} 檔")
+    c4.metric("💎 健康占比", f"{summary['healthy_pct']}%")
+    st.success(f"✅ 已載入 {len(funds)} 檔健康基金榜")
 
-        if load_clicked or refresh_clicked:
-            with st.spinner("批次抓取健康基金榜中…"):
-                funds = _load_discover_pool(force_refresh=refresh_clicked)
-        else:
-            funds = st.session_state.get("_screener_discover_pool") or []
-
-        if not funds:
-            st.info("👆 按「🌟 載入健康基金榜」開始批次抓取詳情並排健康度。")
-            _render_light_spec()
-            return
-
-        # 渲染排行榜摘要（4 桶計數 + 健康占比）
-        buckets = rank_by_health(funds)
-        summary = summarize_ranking(buckets)
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("🟢 健康", f"{summary['counts']['健康']} 檔")
-        c2.metric("🟡 警示", f"{summary['counts']['警示']} 檔")
-        c3.metric("🔴 吃本金", f"{summary['counts']['吃本金']} 檔")
-        c4.metric("💎 健康占比", f"{summary['healthy_pct']}%")
-        st.success(f"✅ 已載入 {len(funds)} 檔健康基金榜，可繼續套 12 條件再篩")
-
-    else:  # 🔍 關鍵字搜尋
-        kw = st.text_input(
-            "輸入基金名稱關鍵字",
-            placeholder="例如：安聯、貝萊德、收益成長、5G、AI",
-            key="_screener_kw",
-        )
-        col_btn1, col_btn2 = st.columns([1, 1])
-        with col_btn1:
-            search_clicked = st.button("🔍 搜尋", type="primary", use_container_width=True)
-        with col_btn2:
-            max_n = st.number_input(
-                "補抓詳情上限",
-                min_value=1, max_value=30, value=10, step=1,
-                help="補抓詳情會對每檔跑 MoneyDJ/FundClear 抓取，每檔約 3-5 秒",
-                key="_screener_max_n",
-            )
-
-        # 維持搜尋結果在 session_state，避免按一下就消失
-        if search_clicked and kw.strip():
-            with st.spinner(f"搜尋「{kw}」中…"):
-                st.session_state["_screener_search_hits"] = _search_pool_minimal(kw)
-                st.session_state.pop("_screener_enriched", None)
-
-        hits = st.session_state.get("_screener_search_hits") or []
-        if not hits:
-            st.info("👆 輸入關鍵字後按「搜尋」")
-            _render_light_spec()
-            return
-
-        st.caption(f"📦 搜尋命中 {len(hits)} 筆（取前 {max_n} 檔補抓詳情）")
-        st.dataframe(
-            pd.DataFrame(hits)[["full_key", "name", "portal", "source"]].head(max_n),
-            use_container_width=True, hide_index=True,
-        )
-
-        if st.button(f"📥 補抓前 {max_n} 檔詳情並套完整 11 篩選", type="secondary"):
-            st.session_state["_screener_enriched"] = _enrich_search_hits(hits, max_n=int(max_n))
-
-        funds = st.session_state.get("_screener_enriched") or []
-        if not funds:
-            st.info("👆 補抓詳情後才能套完整 11 條件篩選與三色燈評估")
-            _render_light_spec()
-            return
-        st.success(f"✅ 已補抓 {len(funds)} 檔詳情")
-
-    # 兩路徑共用 — 渲染 filter + table
+    # 渲染 filter + table
     st.markdown("---")
     col_filter, col_result = st.columns([1, 2], gap="large")
     with col_filter:
