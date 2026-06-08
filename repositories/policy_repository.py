@@ -70,7 +70,8 @@ class PolicySheetError(Exception):
 # v18.152：Google Sheets API 429 配額退避（與 snapshot_repository 一致）
 # 每 user 每分鐘 60 reads，v2 編輯介面進場一次就 1 + 2N reads（N=保單數），
 # 容易爆配額。本層所有 gspread 呼叫應走 _with_quota_retry。
-_QUOTA_BACKOFFS: tuple[float, ...] = (1.0, 2.0, 4.0, 8.0)
+# v18.253：起點 1→2s（給 Google quota 視窗多一拍 reset 時間），總等待 15s→30s
+_QUOTA_BACKOFFS: tuple[float, ...] = (2.0, 4.0, 8.0, 16.0)
 
 
 def _is_quota_error(exc: BaseException) -> bool:
@@ -78,6 +79,18 @@ def _is_quota_error(exc: BaseException) -> bool:
     msg = str(exc)
     return ("429" in msg or "Quota exceeded" in msg or "RATE_LIMIT" in msg
             or "RESOURCE_EXHAUSTED" in msg)
+
+
+def _is_worksheet_not_found(exc: BaseException) -> bool:
+    """v18.253：偵測 gspread WorksheetNotFound（duck-typed，避免依賴
+    gspread.exceptions 容版差）。配合 write_policy_v2 區分「分頁不存在」與
+    「429 quota」: 後者重試，前者才 add_worksheet — 杜絕「429 誤判成不存在
+    → addSheet 撞 400 Invalid」連鎖崩潰。
+
+    同時吃 class name 與 message string，相容 gspread 真實例外與測試環境的
+    `Exception("WorksheetNotFound")` 模擬慣例。"""
+    return (type(exc).__name__ == "WorksheetNotFound"
+            or "WorksheetNotFound" in str(exc))
 
 
 def _with_quota_retry(call, *args, **kwargs):
@@ -1193,7 +1206,12 @@ def write_policy_v2(
         title = _sanitize_tab_name(policy_id)
         try:
             ws = _with_quota_retry(sh.worksheet, title)
-        except Exception:
+        except Exception as _e_ws:
+            # v18.253：只在「真的找不到分頁」時才 add_worksheet；
+            # 429 quota / 其他 API 錯誤一律 raise，避免誤判成「不存在」→
+            # 試圖建立 → 撞既存分頁拿 400 Invalid addSheet。
+            if not _is_worksheet_not_found(_e_ws):
+                raise
             ws = _with_quota_retry(
                 sh.add_worksheet, title=title,
                 rows=max(len(df) + 5, 20),
