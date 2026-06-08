@@ -28,9 +28,10 @@ from ui.tab3_portfolio import render_portfolio_tab
 from ui.tab5_data_guard import render_data_guard_tab
 from ui.tab6_manual import render_manual_tab
 from ui.tab_allocation_simulator import render_allocation_simulator_tab
-from ui.tab_crisis_backtest import render_crisis_backtest_tab
+# v19.31 ARCHIVED: 回測功能暫封存（📉 危機回測室 / 🔬 回測找參數），未來啟用時取消下兩行註解
+# from ui.tab_crisis_backtest import render_crisis_backtest_tab
 from ui.tab_fund_screener import render_fund_screener_tab  # noqa: E402
-from ui.tab_param_finder import render_param_finder_tab
+# from ui.tab_param_finder import render_param_finder_tab
 from fund_fetcher  import (
     get_proxy_config,
 )
@@ -41,7 +42,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.30_RadarCboeFallback"
+APP_VERSION = "v19.31_BacktestArchived"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -435,9 +436,12 @@ render_macro_compass()
 # ══════════════════════════════════════════════════════
 # 故事化動線（v18.193）：tab 順序依 spec 敘事 —
 # 🌐 總經環境 → 📊 核心/衛星配置 → 🔍 單一基金深掘（原本「單一基金」在「組合」前，違反敘事）
-tab_macro, tab_portfolio, tab_single, tab_crisis, tab_param, tab_sim, tab_screener, tab5, tab6 = st.tabs(
-    ["🌐 總經", "📊 組合基金", "🔍 單一基金", "📉 危機回測室",
-     "🔬 回測找參數", "💼 配置模擬器", "🔎 基金篩選", "🔭 資料診斷", "📖 說明書"])
+# v19.31 ARCHIVED: 回測 2 Tab 暫封存（📉 危機回測室 / 🔬 回測找參數）
+# 未來啟用步驟：(1) 取消上方 2 個 import 註解 (2) tuple 加回 tab_crisis, tab_param
+# (3) labels 加回 "📉 危機回測室" / "🔬 回測找參數" (4) 取消下方 TAB 4 / TAB 5 with-block 註解
+tab_macro, tab_portfolio, tab_single, tab_sim, tab_screener, tab5, tab6 = st.tabs(
+    ["🌐 總經", "📊 組合基金", "🔍 單一基金",
+     "💼 配置模擬器", "🔎 基金篩選", "🔭 資料診斷", "📖 說明書"])
 
 # ══════════════════════════════════════════════════════
 # TAB 1 — 🌐 總經環境（故事第 1 站）
@@ -461,16 +465,15 @@ with tab_single:
     render_single_fund_tab()
 
 # ══════════════════════════════════════════════════════
-# TAB 4 — 📉 危機回測室（v18.260 Phase 2）
+# v19.31 ARCHIVED: TAB 4 📉 危機回測室 + TAB 5 🔬 回測找參數
+# 模組檔 ui/tab_crisis_backtest.py + ui/tab_param_finder.py + services/crisis_backtest.py
+# 完整保留於磁碟，未來啟用：取消上方 import + tab tuple + 以下 2 block 註解即可
 # ══════════════════════════════════════════════════════
-with tab_crisis:
-    render_crisis_backtest_tab()
-
-# ══════════════════════════════════════════════════════
-# TAB 5 — 🔬 回測找參數（v19.6 hoist 自危機回測室 Phase 3）
-# ══════════════════════════════════════════════════════
-with tab_param:
-    render_param_finder_tab()
+# with tab_crisis:
+#     render_crisis_backtest_tab()
+#
+# with tab_param:
+#     render_param_finder_tab()
 
 # ══════════════════════════════════════════════════════
 # TAB 6 — 💼 配置模擬器（v18.260 Phase 6b）
