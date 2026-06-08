@@ -41,7 +41,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.28_MacroConsensusEval"
+APP_VERSION = "v19.29_FredSeriesExtension"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
