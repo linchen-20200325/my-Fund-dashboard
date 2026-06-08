@@ -1,12 +1,15 @@
-"""v19.26 Fund Screener UI — 基金篩選工具。
+"""v19.27 Fund Screener UI — 基金篩選工具（+ 反向流健康基金榜）。
 
-對齊鉅亨買基金 anuefund 篩選介面的 10 條件 + 新增「💚 含息報酬率 ≥ 配息率」三色燈。
+對齊鉅亨買基金 anuefund 篩選介面的 10 條件 + 自家第 11 條「💚 含息報酬率 ≥ 配息率」三色燈
++ v19.27 第 12 條「每單位月配金額」門檻 + 第三來源池「💎 健康基金榜」（反向流）。
 
-來源池二選一
+來源池三選一
 ================
 - 📊 我的組合：讀 ``st.session_state["portfolio_funds"]``（已 enrich 完整欄位）
 - 🔍 關鍵字搜尋：呼 fund_repository.search_moneydj_by_name → 列原始命中 +
-  可選「補抓詳情後套完整 11 篩選」按鈕（會對每檔跑 fetch_fund_multi_source，較慢）
+  可選「補抓詳情後套完整 12 篩選」按鈕（會對每檔跑 fetch_fund_multi_source，較慢）
+- 💎 健康基金榜（v19.27 反向流）：對白名單 KNOWN_OVERSEAS_FUNDS 批次抓詳情 → 直接秀
+  「🟢 健康 / 🟡 警示 / 🔴 吃本金 / ⚪ 資料不足」四桶排行榜
 """
 from __future__ import annotations
 
@@ -15,6 +18,12 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from services.dividend_health_discoverer import (
+    KNOWN_OVERSEAS_FUNDS,
+    known_fund_codes,
+    rank_by_health,
+    summarize_ranking,
+)
 from services.fund_screener import (
     DIV_HEALTH_LIGHTS,
     apply_filters,
@@ -57,6 +66,39 @@ def _search_pool_minimal(keyword: str) -> list[dict]:
     except Exception as e:
         st.warning(f"搜尋失敗：{e}")
         return []
+
+
+def _load_discover_pool(force_refresh: bool = False) -> list[dict]:
+    """v19.27 反向流：對 KNOWN_OVERSEAS_FUNDS 批次抓 enriched 詳情。
+
+    結果存 session_state["_screener_discover_pool"] 跨 rerun 持久（避免重抓）。
+    force_refresh=True 時清快取重抓。
+    """
+    cache_key = "_screener_discover_pool"
+    if not force_refresh and st.session_state.get(cache_key):
+        return st.session_state[cache_key]
+
+    try:
+        from fund_fetcher import fetch_fund_multi_source
+    except ImportError:
+        st.error("找不到 fetch_fund_multi_source，無法載入健康基金榜。")
+        return []
+
+    codes = known_fund_codes()
+    out: list[dict] = []
+    progress = st.progress(0.0, text=f"批次抓取健康基金榜 0/{len(codes)}…")
+    for i, code in enumerate(codes, 1):
+        try:
+            d = fetch_fund_multi_source(code)
+            if isinstance(d, dict):
+                out.append(d)
+        except Exception as e:
+            st.caption(f"⚠️ {code} 抓取失敗：{e}")
+        progress.progress(i / len(codes), text=f"批次抓取健康基金榜 {i}/{len(codes)}…")
+    progress.empty()
+
+    st.session_state[cache_key] = out
+    return out
 
 
 def _enrich_search_hits(hits: list[dict], max_n: int = 10) -> list[dict]:
@@ -137,6 +179,15 @@ def _render_filter_widgets(funds: list[dict]) -> dict[str, Any]:
         if esg > 0:
             filters["esg_min"] = esg
 
+    # v19.27 第 12 條：每單位月配金額門檻
+    mthly_div = st.slider(
+        "💰 每單位月配金額 ≥", 0.0, 1.0, 0.0, step=0.01,
+        help="0 = 不限；門檻單位依基金幣別（USD / TWD…）",
+        key="_screener_mthly_div_min",
+    )
+    if mthly_div > 0:
+        filters["monthly_div_min"] = mthly_div
+
     # 第 11 條：自家新增含息健康度 toggle
     st.markdown("---")
     healthy_only = st.toggle(
@@ -200,6 +251,10 @@ def _build_table(filtered: list[dict]) -> pd.DataFrame:
             "配息率%": (
                 round(float(div_rate), 2) if div_rate is not None else None
             ),
+            "月配/單位": (
+                round(float(f["_monthly_div_amount"]), 4)
+                if f.get("_monthly_div_amount") is not None else None
+            ),
         })
     return pd.DataFrame(rows)
 
@@ -251,10 +306,14 @@ def render_fund_screener_tab() -> None:
 
     source = st.radio(
         "資料來源池",
-        ["📊 我的組合", "🔍 關鍵字搜尋"],
+        ["📊 我的組合", "🔍 關鍵字搜尋", "💎 健康基金榜"],
         horizontal=True,
         key="_screener_source",
-        help="我的組合：用已載入的基金（快、完整 11 條件）；關鍵字搜尋：探索新基金（慢、需補抓詳情）",
+        help=(
+            "我的組合：用已載入的基金（快、完整 12 條件）；"
+            "關鍵字搜尋：探索新基金（慢、需補抓詳情）；"
+            "💎 健康基金榜（v19.27 反向流）：對知名海外基金白名單批次跑健康度排行"
+        ),
     )
 
     funds: list[dict] = []
@@ -268,6 +327,44 @@ def render_fund_screener_tab() -> None:
             )
             return
         st.success(f"✅ 已從我的組合載入 {len(funds)} 檔基金")
+
+    elif source == "💎 健康基金榜":
+        st.caption(
+            f"🌐 反向流：對 KNOWN_OVERSEAS_FUNDS 白名單（{len(KNOWN_OVERSEAS_FUNDS)} 檔台灣可買境外基金）"
+            "批次跑 fetch_fund_multi_source → 健康度排行榜。首次載入約需 30-60 秒。"
+        )
+        col_btn1, col_btn2 = st.columns([1, 1])
+        with col_btn1:
+            load_clicked = st.button(
+                "🌟 載入健康基金榜", type="primary", use_container_width=True,
+                key="_screener_load_discover",
+            )
+        with col_btn2:
+            refresh_clicked = st.button(
+                "🔄 重抓（清快取）", use_container_width=True,
+                key="_screener_refresh_discover",
+            )
+
+        if load_clicked or refresh_clicked:
+            with st.spinner("批次抓取健康基金榜中…"):
+                funds = _load_discover_pool(force_refresh=refresh_clicked)
+        else:
+            funds = st.session_state.get("_screener_discover_pool") or []
+
+        if not funds:
+            st.info("👆 按「🌟 載入健康基金榜」開始批次抓取詳情並排健康度。")
+            _render_light_spec()
+            return
+
+        # 渲染排行榜摘要（4 桶計數 + 健康占比）
+        buckets = rank_by_health(funds)
+        summary = summarize_ranking(buckets)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("🟢 健康", f"{summary['counts']['健康']} 檔")
+        c2.metric("🟡 警示", f"{summary['counts']['警示']} 檔")
+        c3.metric("🔴 吃本金", f"{summary['counts']['吃本金']} 檔")
+        c4.metric("💎 健康占比", f"{summary['healthy_pct']}%")
+        st.success(f"✅ 已載入 {len(funds)} 檔健康基金榜，可繼續套 12 條件再篩")
 
     else:  # 🔍 關鍵字搜尋
         kw = st.text_input(

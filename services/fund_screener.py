@@ -36,6 +36,7 @@ FILTER_KEYS: tuple[str, ...] = (
     "risk_level",         # RR1 / RR2 / RR3 / RR4 / RR5
     "esg_min",            # float 0-100（≥ 此分數通過）
     "div_health_healthy_only",  # bool，True = 只留 🟢 健康
+    "monthly_div_min",    # v19.27 float ≥ 0；最近一期每單位配息金額門檻
 )
 
 DIV_HEALTH_LIGHTS: tuple[str, ...] = ("健康", "警示", "吃本金", "資料不足")
@@ -124,6 +125,29 @@ def _num_min(field_val: Any, threshold: float | None) -> bool:
     if v is None:
         return True  # graceful
     return v >= threshold
+
+
+def monthly_div_amount(fund: dict) -> float | None:
+    """v19.27 取最近一期每單位配息金額（為「篩選每月配息金額」門檻服務）。
+
+    資料源：``fund["dividends"]`` 是依日期降序的 list[dict]，每筆含 ``amount`` 欄位。
+    `_src_tcb_div` / `_src_fundclear_div` / MoneyDJ wb05 三個 fetcher 統一寫入此 schema。
+
+    Returns
+    -------
+    float | None
+        最近一筆 amount（每單位面額計，幣別在 fund["currency"]）；
+        缺資料或非數值 → None（filter 端 graceful pass）。
+    """
+    if not isinstance(fund, dict):
+        return None
+    divs = fund.get("dividends")
+    if not isinstance(divs, list) or not divs:
+        return None
+    latest = divs[0]
+    if not isinstance(latest, dict):
+        return None
+    return _safe_float(latest.get("amount"))
 
 
 def _passes_div_health(fund: dict, healthy_only: bool, warn_gap: float) -> tuple[bool, str]:
@@ -233,15 +257,21 @@ def apply_filters(
         ):
             continue
 
+        # v19.27 第 12 條：最近一期每單位配息金額門檻
+        mthly_amt = monthly_div_amount(fund)
+        if not _num_min(mthly_amt, filters.get("monthly_div_min")):
+            continue
+
         # 第 11 條：自家含息健康度燈
         passes, light = _passes_div_health(fund, healthy_only, warn_gap)
         if not passes:
             continue
 
-        # 注入燈號欄位（淺拷貝避免 mutate caller 物件）
+        # 注入燈號 + 月配金額欄位（淺拷貝避免 mutate caller 物件）
         out_fund = dict(fund)
         out_fund["_div_health_light"] = light
         out_fund["_div_health_emoji"] = DIV_HEALTH_EMOJI[light]
+        out_fund["_monthly_div_amount"] = mthly_amt
         filtered.append(out_fund)
         stats["lights"][light] += 1
 
