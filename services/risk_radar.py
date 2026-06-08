@@ -146,8 +146,41 @@ def _fetch_cboe_csv(short_name: str) -> pd.Series:
         return pd.Series(dtype=float)
 
 
+def _fetch_stooq_csv(symbol: str) -> pd.Series:
+    """stooq.com 公開歷史 CSV → 收盤 Series（key: symbol e.g. '^vix3m' / '^vxv' / '^cpc'）。
+
+    URL pattern: https://stooq.com/q/d/l/?s={symbol}&i=d
+    對 CBOE 系列指數的第 4 層備援（公開 CDN 不需登入），多數 NAS Squid 環境可直連。
+    失敗或無此 symbol 回空 Series；console log 印出 root cause 助 debug。
+    """
+    import io
+
+    from infra.proxy import fetch_url
+    try:
+        url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
+        r = fetch_url(url, timeout=15)
+        if r is None or getattr(r, "status_code", 0) != 200:
+            print(f"[risk_radar/stooq] {symbol} HTTP {getattr(r, 'status_code', None)}")
+            return pd.Series(dtype=float)
+        text = r.text
+        if "No data" in text or len(text) < 50:
+            print(f"[risk_radar/stooq] {symbol} 無資料（stooq 回 'No data' 或 body 過短）")
+            return pd.Series(dtype=float)
+        df = pd.read_csv(io.StringIO(text))
+        if "Date" not in df.columns or "Close" not in df.columns or df.empty:
+            print(f"[risk_radar/stooq] {symbol} 欄位不符: {list(df.columns)}")
+            return pd.Series(dtype=float)
+        idx = pd.to_datetime(df["Date"], errors="coerce")
+        vals = pd.to_numeric(df["Close"], errors="coerce")
+        s = pd.Series(vals.values, index=idx).dropna().sort_index()
+        return s.tail(180)
+    except Exception as e:  # noqa: BLE001
+        print(f"[risk_radar/stooq] {symbol} 失敗: {e}")
+        return pd.Series(dtype=float)
+
+
 def _resolve_vix3m() -> tuple[pd.Series, str]:
-    """VIX3M 多源 chain：Yahoo ^VIX3M → Yahoo ^VXV (legacy) → CBOE CSV。"""
+    """VIX3M 多源 chain：Yahoo ^VIX3M → Yahoo ^VXV → CBOE CSV → stooq ^vix3m/^vxv。"""
     for t in ("^VIX3M", "^VXV"):
         s = fetch_yf_close(t, range_="6mo")
         if not s.empty and len(s) >= 2:
@@ -155,11 +188,15 @@ def _resolve_vix3m() -> tuple[pd.Series, str]:
     s = _fetch_cboe_csv("VIX3M")
     if not s.empty and len(s) >= 2:
         return s, "CBOE VIX3M_History.csv"
+    for sym in ("^vix3m", "^vxv"):
+        s = _fetch_stooq_csv(sym)
+        if not s.empty and len(s) >= 2:
+            return s, f"stooq {sym}"
     return pd.Series(dtype=float), ""
 
 
 def _resolve_put_call() -> tuple[pd.Series, str]:
-    """CBOE Put/Call 多源 chain：Yahoo ^CPC → ^CPCE → CBOE CSV CPC/CPCE。"""
+    """CBOE Put/Call 多源 chain：Yahoo ^CPC/^CPCE → CBOE CSV CPC/CPCE → stooq ^cpc/^cpce。"""
     for t in ("^CPC", "^CPCE"):
         s = fetch_yf_close(t, range_="6mo")
         if not s.empty and len(s) >= 2:
@@ -168,6 +205,10 @@ def _resolve_put_call() -> tuple[pd.Series, str]:
         s = _fetch_cboe_csv(short)
         if not s.empty and len(s) >= 2:
             return s, f"CBOE {short}_History.csv"
+    for sym in ("^cpc", "^cpce"):
+        s = _fetch_stooq_csv(sym)
+        if not s.empty and len(s) >= 2:
+            return s, f"stooq {sym}"
     return pd.Series(dtype=float), ""
 
 

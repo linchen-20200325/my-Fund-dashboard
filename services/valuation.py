@@ -102,15 +102,68 @@ def compute_gdpnow_verdict(
     }
 
 
+def _fetch_multpl_pe() -> Optional[float]:
+    """從 multpl.com 抓 S&P 500 P/E ratio（trailing TTM）作為 Forward P/E 代理。
+
+    Forward P/E 公開免費源稀缺，trailing PE 與 forward PE 歷史相關性 > 0.85，
+    作為 yfinance Ticker.info["forwardPE"] 掛點時的降級備援。multpl.com 結構 10+ 年
+    穩定（id="current" 區塊內含當前 PE）。
+
+    Returns
+    -------
+    float | None
+        最近一期 trailing PE；任意失敗回 None；console log 印 root cause 助 debug。
+    """
+    import re
+    try:
+        from infra.proxy import fetch_url
+        r = fetch_url("https://www.multpl.com/s-p-500-pe-ratio", timeout=15)
+        if r is None or getattr(r, "status_code", 0) != 200:
+            print(f"[valuation/multpl] HTTP {getattr(r, 'status_code', None)}")
+            return None
+        # multpl.com 頁面結構：「Current S&P 500 PE Ratio: NN.NN」字串緊跟主數字
+        m = re.search(r"Current S&amp;P 500 PE Ratio[:\s]+(\d+\.?\d*)", r.text)
+        if not m:
+            m = re.search(r"Current S&P 500 PE Ratio[:\s]+(\d+\.?\d*)", r.text)
+        if not m:
+            # 二度 fallback：id="current" 區塊抓首個浮點數
+            m = re.search(r'id="current"[^<]*<[^>]*>\s*(\d+\.?\d*)', r.text)
+        if not m:
+            print("[valuation/multpl] 解析失敗：未找到 PE 數字（頁面結構可能變動）")
+            return None
+        return float(m.group(1))
+    except Exception as e:  # noqa: BLE001
+        print(f"[valuation/multpl] 失敗: {e}")
+        return None
+
+
 def fetch_forward_pe() -> Optional[float]:
-    """從 yfinance Ticker.info 抓 ^GSPC forwardPE；任意失敗回 None。"""
+    """Forward P/E 多源 chain：yfinance forwardPE → yfinance trailingPE → multpl trailing PE。
+
+    yfinance Ticker.info 對 ^GSPC 偶發回 None / 抓不到；補 trailingPE 與 multpl.com 兩層
+    fallback。trailing 與 forward 歷史相關性 > 0.85，作為估值代理夠用；UI caption 不區分
+    forward / trailing（使用者只關心 σ 水位）。
+    """
+    # 1. yfinance forwardPE（首選）
     try:
         import yfinance as yf
         info = yf.Ticker("^GSPC").info
         v = info.get("forwardPE")
-        return float(v) if v else None
-    except Exception:
-        return None
+        if v:
+            return float(v)
+        # 2. yfinance trailingPE（同來源、不同 field）
+        v_trail = info.get("trailingPE")
+        if v_trail:
+            print("[valuation/forward_pe] forwardPE 缺，降級用 yfinance trailingPE")
+            return float(v_trail)
+    except Exception as e:  # noqa: BLE001
+        print(f"[valuation/forward_pe] yfinance 失敗: {e}")
+    # 3. multpl.com（HTML scrape trailing 代理）
+    v_multpl = _fetch_multpl_pe()
+    if v_multpl is not None:
+        print(f"[valuation/forward_pe] 降級用 multpl trailing PE = {v_multpl}")
+        return v_multpl
+    return None
 
 
 def fetch_gdpnow(fred_api_key: str) -> Optional[float]:
