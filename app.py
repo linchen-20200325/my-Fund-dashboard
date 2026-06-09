@@ -30,7 +30,8 @@ from ui.tab6_manual import render_manual_tab
 from ui.tab_allocation_simulator import render_allocation_simulator_tab
 # v19.31 ARCHIVED: 回測功能暫封存（📉 危機回測室 / 🔬 回測找參數），未來啟用時取消下兩行註解
 # from ui.tab_crisis_backtest import render_crisis_backtest_tab
-from ui.tab_fund_screener import render_fund_screener_tab  # noqa: E402
+# v19.36 ARCHIVED: 🔎 基金篩選 Tab 暫封存（user 反饋「這不是我要的」，改用 🔬 進階篩選 v19.35）
+# from ui.tab_fund_screener import render_fund_screener_tab  # noqa: E402
 from ui.tab_fund_screener_v2 import render_fund_screener_v2_tab  # noqa: E402
 # from ui.tab_param_finder import render_param_finder_tab
 from fund_fetcher  import (
@@ -440,9 +441,12 @@ render_macro_compass()
 # v19.31 ARCHIVED: 回測 2 Tab 暫封存（📉 危機回測室 / 🔬 回測找參數）
 # 未來啟用步驟：(1) 取消上方 2 個 import 註解 (2) tuple 加回 tab_crisis, tab_param
 # (3) labels 加回 "📉 危機回測室" / "🔬 回測找參數" (4) 取消下方 TAB 4 / TAB 5 with-block 註解
-tab_macro, tab_portfolio, tab_single, tab_sim, tab_screener, tab_screener_v2, tab5, tab6 = st.tabs(
+# v19.36 ARCHIVED: 🔎 基金篩選 (v19.26) Tab 暫封存（user 反饋「這不是我要的」）
+# 未來啟用：(1) 取消 L33 import 註解 (2) tuple 加回 tab_screener 在 tab_sim 之後
+# (3) labels 加回 "🔎 基金篩選" (4) 取消下方 TAB 7 with-block 註解
+tab_macro, tab_portfolio, tab_single, tab_sim, tab_screener_v2, tab5, tab6 = st.tabs(
     ["🌐 總經", "📊 組合基金", "🔍 單一基金",
-     "💼 配置模擬器", "🔎 基金篩選", "🔬 進階篩選", "🔭 資料診斷", "📖 說明書"])
+     "💼 配置模擬器", "🔬 進階篩選", "🔭 資料診斷", "📖 說明書"])
 
 # ══════════════════════════════════════════════════════
 # TAB 1 — 🌐 總經環境（故事第 1 站）
@@ -483,10 +487,12 @@ with tab_sim:
     render_allocation_simulator_tab()
 
 # ══════════════════════════════════════════════════════
-# TAB 7 — 🔎 基金篩選（v19.26）
+# TAB 7 — 🔎 基金篩選（v19.26） — v19.36 ARCHIVED
+# user 反饋「這不是我要的」，改用 🔬 進階篩選 (v19.35) 作為基金篩選主入口
+# 模組 ui/tab_fund_screener.py 保留磁碟，未來啟用：取消下方註解 + L33 import + tabs tuple/labels
 # ══════════════════════════════════════════════════════
-with tab_screener:
-    render_fund_screener_tab()
+# with tab_screener:
+#     render_fund_screener_tab()
 
 # ══════════════════════════════════════════════════════
 # TAB 7b — 🔬 進階篩選：基金 + ETF（v19.35）
