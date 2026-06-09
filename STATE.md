@@ -21,8 +21,9 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
-- **fix(fund-health) PR #241 @ f791ba2**：保單體系代碼仍抓不到 → 鏡像 Tab2「單一基金」`_auto_fetch_moneydj` 套路改用 `fetch_fund_from_moneydj_url(https://www.moneydj.com/funddj/ya/yp01000{0,1}.djhtm?a={code})` 一發拿 series + dividends + currency + fund_name；currency 自動偵測時直接用，無法偵測退回 fallback；表格加「基金名 / 幣別偵測」兩欄。
-- **fix(fund-health) PR #239 @ 32546a8**：cnyes 單源不收保單代碼 → 改 `fetch_nav / fetch_div` 多源 fallback（後被 PR #241 超越）。
+- **feat(macro) PR #243 @ 91da530 v19.38**：總經 Tab 矛盾修正 PR1 — archive 雙速合議 + 台股本地視角（user 抱怨的長期/短期矛盾源頭，sub-function 模組保留磁碟）；6 個 KEEP 面板按熊市驗證 ROI 重新編號 ①-⑥（① 戰情室 / ② 拐點 / ③ 即時決策 / ④ 短線雷達 / ⑤ 流動性 / ⑥ 台股熱錢）；AI 景氣判斷總結加 caption 明示涵蓋上方 6 KEEP 同源資料。PR1B 待續（archive 11+ 冗余 inline 面板），PR2 待續（教學面板搬遷至 📖 說明書 Tab）。
+- **fix(fund-health) PR #241 @ f791ba2**：保單體系代碼用 Tab2 同款 `fetch_fund_from_moneydj_url` 取 series + dividends + currency + fund_name；表格加「基金名 / 幣別偵測」。
+- **fix(fund-health) PR #239 @ 32546a8**：cnyes 單源 → `fetch_nav / fetch_div` 多源 fallback（後被 #241 超越）。
 - 初始化基準：協議 v2.0 Auto-Ship 套用，歷史版本紀錄詳見 `git log`。
 
 ## 下一步
