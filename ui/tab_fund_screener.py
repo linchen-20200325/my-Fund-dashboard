@@ -20,9 +20,22 @@ from services.dividend_health_discoverer import (
 )
 from services.fund_screener import (
     DIV_HEALTH_LIGHTS,
+    _get_field,
     apply_filters,
     collect_distinct_values,
 )
+
+_LIGHT_SORT_ORDER: dict[str, int] = {"🟢": 0, "🟡": 1, "🔴": 2, "⚪": 3}
+
+
+def _sort_health_table(df: pd.DataFrame) -> pd.DataFrame:
+    """依「燈號 → 含息 1Y%」雙鍵排序（健康在最上、組內含息降序）。"""
+    return df.sort_values(
+        by=["燈", "含息1Y%"],
+        key=lambda c: c.map(_LIGHT_SORT_ORDER) if c.name == "燈" else c,
+        ascending=[True, False],
+        na_position="last",
+    ).reset_index(drop=True)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -194,16 +207,63 @@ def _render_table(filtered: list[dict]) -> None:
     if not filtered:
         st.info("📭 沒有基金通過篩選條件 — 試著放寬幾條 multiselect 或關掉「💚 只看健康」toggle。")
         return
-    df = _build_table(filtered)
-    # 排序：燈號優先（健康在最上）、再按含息排
-    light_order = {"🟢": 0, "🟡": 1, "🔴": 2, "⚪": 3}
-    df = df.sort_values(
-        by=["燈", "含息1Y%"],
-        key=lambda c: c.map(light_order) if c.name == "燈" else c,
-        ascending=[True, False],
-        na_position="last",
-    ).reset_index(drop=True)
+    df = _sort_health_table(_build_table(filtered))
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+# ════════════════════════════════════════════════════════════════
+# §3.5 v19.34 分類分頁視角（依品牌 / 區域 / 類型 group）
+# ════════════════════════════════════════════════════════════════
+def _group_value(fund: dict, primary: str, *fallbacks: str) -> str:
+    """取分組 key 字串；缺值或空白歸到「未分類」，避免分組鍵爆炸成多個 None。"""
+    v = _get_field(fund, primary, *fallbacks)
+    if v is None:
+        return "未分類"
+    s = str(v).strip()
+    return s if s and s.lower() not in ("nan", "none") else "未分類"
+
+
+def _group_by_field(
+    funds: list[dict], primary: str, *fallbacks: str,
+) -> dict[str, list[dict]]:
+    """以 primary 欄位（含 fallback 鏈）分桶，回 group_name → fund list。"""
+    groups: dict[str, list[dict]] = {}
+    for fund in funds:
+        if not isinstance(fund, dict):
+            continue
+        key = _group_value(fund, primary, *fallbacks)
+        groups.setdefault(key, []).append(fund)
+    return groups
+
+
+def _render_grouped_view(
+    filtered: list[dict],
+    group_label: str,
+    primary: str,
+    *fallbacks: str,
+) -> None:
+    """渲染分組視角：每組 expander 內含迷你燈號分布 + 該組 sub-DataFrame。"""
+    if not filtered:
+        st.info("📭 沒有基金通過篩選條件 — 試著放寬幾條 multiselect 或關掉「💚 只看健康」toggle。")
+        return
+    groups = _group_by_field(filtered, primary, *fallbacks)
+    if not groups:
+        st.info("此分類維度無可分組資料。")
+        return
+    sorted_groups = sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    for idx, (name, items) in enumerate(sorted_groups):
+        df = _sort_health_table(_build_table(items))
+        light_counts = df["燈"].value_counts().to_dict() if "燈" in df.columns else {}
+        n_g = light_counts.get("🟢", 0)
+        n_y = light_counts.get("🟡", 0)
+        n_r = light_counts.get("🔴", 0)
+        n_w = light_counts.get("⚪", 0)
+        header = (
+            f"{group_label}：**{name}** — {len(items)} 檔 ｜ "
+            f"🟢 {n_g} ｜ 🟡 {n_y} ｜ 🔴 {n_r} ｜ ⚪ {n_w}"
+        )
+        with st.expander(header, expanded=(idx == 0)):
+            st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def _render_light_spec() -> None:
@@ -274,6 +334,14 @@ def render_fund_screener_tab() -> None:
         filtered, stats = apply_filters(funds, filters)
         _render_summary(stats)
         st.markdown("### 📋 篩選結果")
-        _render_table(filtered)
+        result_tabs = st.tabs(["📋 全部", "🏢 依品牌", "🌍 依區域", "🎯 依類型"])
+        with result_tabs[0]:
+            _render_table(filtered)
+        with result_tabs[1]:
+            _render_grouped_view(filtered, "🏢 品牌", "brand")
+        with result_tabs[2]:
+            _render_grouped_view(filtered, "🌍 區域", "fund_region", "region")
+        with result_tabs[3]:
+            _render_grouped_view(filtered, "🎯 類型", "fund_type", "category")
 
     _render_light_spec()
