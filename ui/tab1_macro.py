@@ -850,16 +850,15 @@ def render_macro_tab() -> None:
         alloc = phase["alloc"];  advice = phase.get("advice","")
         rec_p = phase.get("rec_prob")
 
-        # ── ✨ v19.17：新手友善面板（頂部 1 句結論 + 教學） ──
-        # v19.21：傳入 FRED_KEY 啟用雙速合議（慢總經 ｜ 短線雷達 ｜ 合議行動）
-        _render_beginner_dashboard(ind, FRED_KEY)
+        # v19.38 ARCHIVED: ✨ 新手友善面板（雙速合議）— 矛盾主因（月度合議 vs 日級雷達混在同卡）
+        # v19.38 ARCHIVED: 📊 台股本地視角（12M/1Q）— 與下方「💵 台股熱錢監測」重複且 12M 視窗無關熊市驗證
+        # 復活：恢復下兩行 import + sub-function 即可（_render_beginner_dashboard / _render_tw_local_dashboard 完整保留）
+        # _render_beginner_dashboard(ind, FRED_KEY)
+        # _render_tw_local_dashboard(ind, FRED_KEY)
 
-        # ── 📊 v19.25：台股本地視角（NDC / TW PMI / 出口 / 外資連續日數）──
-        _render_tw_local_dashboard(ind, FRED_KEY)
-
-        # ── 🔬 v19.17：進階檢視 expander（折疊 v19.15 即時訊號 + 決策矩陣） ──
+        # ── ③ 🔬 即時訊號決策矩陣（v19.15 verdict + 逐檔行動建議） ──
         with st.expander(
-            "🔬 進階檢視：v19.15 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
+            "③ 🔬 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
             expanded=False,
         ):
             _render_realtime_decision_dashboard(ind)
@@ -1242,7 +1241,7 @@ def render_macro_tab() -> None:
                 # ══════════════════════════════════════════════════
                 # V5 全域導航塔（War Room）── 三圓形氣象儀表
                 # ══════════════════════════════════════════════════
-                st.markdown("### ② 🎯 全域導航塔（戰情室）")
+                st.markdown("### ① 🎯 全域導航塔（戰情室三儀表：薩姆 + SLOOS + 廣度）")
                 _sahm_d  = ind.get("SAHM")  or {}
                 _sloos_d = ind.get("SLOOS") or {}
                 _adl_d   = ind.get("ADL")   or {}
@@ -2333,7 +2332,7 @@ def render_macro_tab() -> None:
                     _load_liquidity_factors()
                     st.rerun()
             if _liq_score and _show_l3:
-                with st.expander("🌊 流動性壓力預警引擎（深水區 4 因子）", expanded=False):
+                with st.expander("⑤ 🌊 流動性壓力預警引擎（深水區 4 因子 ｜ lead SPX 1-3 週）", expanded=False):
                     from ui.components.macro_card import make_sparkline as _mk_sl2
                     from services.liquidity_engine import liquidity_verdict
                     if st.button("🔄 重新抓取流動性因子", key="btn_reload_liquidity"):
@@ -2712,7 +2711,7 @@ def render_macro_tab() -> None:
 
             # ── v19.20 ⚡ 短線風險雷達（10 燈 1-day 急殺早期警報）──
             st.divider()
-            st.markdown("### ⚡ 短線風險雷達 (24H Risk-Off Velocity Radar)")
+            st.markdown("### ④ ⚡ 短線風險雷達（24H Risk-Off Velocity Radar ｜ 日級急殺確認）")
             st.caption("10 個 1-day 動量／情緒／位階訊號 — 補拐點偵測中心（月～季級慢）之短缺，"
                        "捕捉 1-day 急殺前的早期警報："
                        "VIX 級距+期限結構 ｜ HY 信用日變化 ｜ 10Y 殖利率衝擊 ｜ MOVE 債券恐慌 ｜ "
@@ -2885,7 +2884,7 @@ def render_macro_tab() -> None:
 
             # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
             st.divider()
-            st.markdown("### ③ 🎯 拐點偵測中心 (Inflection Point Center)")
+            st.markdown("### ② 🎯 拐點偵測中心（熊市預警主面板 ｜ 月級結構訊號）")
             st.caption("集中所有景氣翻轉訊號：製造業新訂單－庫存擴散 ｜ 10Y-2Y 殖利率倒掛翻正 ｜ "
                        "HY 信用利差 ｜ 薩姆規則 ｜ CFNAI 領先指標 ｜ 歷史回測 ｜ 變數重要性")
             try:
@@ -3479,7 +3478,7 @@ def render_macro_tab() -> None:
             # ── 熱錢監測（v18.236）— 三角交叉：外資 × 匯率 × 背離 ──
             # 境外基金 user 仍要看：台幣匯率變動 → 影響你 USD/EUR 計價基金 TWD 換算後報酬
             st.divider()
-            with st.expander("💵 台股熱錢監測 — 三角交叉（影響你境外基金 TWD 換匯）",
+            with st.expander("⑥ 💵 台股熱錢監測 — 三角交叉（本土訊號 ｜ FII 日級行為）",
                              expanded=False):
                 try:
                     from hot_money import render_hot_money_section
@@ -3513,6 +3512,13 @@ def render_macro_tab() -> None:
                         st.warning(f"🟡 資料完整率 **{_ai_mac_pct}%**（黃燈），AI 結果參考性降低。")
                     # v18.215：Tab1 改用通用「白話總體檢」widget（與 Tab2/3 一致），
                     # 刪除舊七節 macro AI；吃全總經資料、逐章節白話結論 + 時事、無選單。
+                    # v19.38：明示 AI 總結涵蓋上方 6 個 KEEP 面板的同源資料（FRED 23 指標 + phase + risk + news）
+                    st.markdown("### 🤖 AI 景氣判斷總結")
+                    st.caption(
+                        "本 AI 摘要吃齊上方 **① 戰情室三儀表 / ② 拐點偵測 / ③ 即時決策矩陣 / "
+                        "④ 短線雷達 / ⑤ 流動性壓力 / ⑥ 台股熱錢** 的同源資料"
+                        "（FRED 23 指標 + phase + 系統性風險 + 時事新聞），逐章節白話結論。"
+                    )
                     from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
                     _mac_snap, _mac_heads, _mac_secs = _build_macro_ai_snapshot(
                         ind, phase,
