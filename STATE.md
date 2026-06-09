@@ -21,9 +21,9 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
-- **feat(macro) PR #243 @ 91da530 v19.38**：總經 Tab 矛盾修正 PR1 — archive 雙速合議 + 台股本地視角（user 抱怨的長期/短期矛盾源頭，sub-function 模組保留磁碟）；6 個 KEEP 面板按熊市驗證 ROI 重新編號 ①-⑥（① 戰情室 / ② 拐點 / ③ 即時決策 / ④ 短線雷達 / ⑤ 流動性 / ⑥ 台股熱錢）；AI 景氣判斷總結加 caption 明示涵蓋上方 6 KEEP 同源資料。PR1B 待續（archive 11+ 冗余 inline 面板），PR2 待續（教學面板搬遷至 📖 說明書 Tab）。
-- **fix(fund-health) PR #241 @ f791ba2**：保單體系代碼用 Tab2 同款 `fetch_fund_from_moneydj_url` 取 series + dividends + currency + fund_name；表格加「基金名 / 幣別偵測」。
-- **fix(fund-health) PR #239 @ 32546a8**：cnyes 單源 → `fetch_nav / fetch_div` 多源 fallback（後被 #241 超越）。
+- **feat(macro) PR #245 @ a991f4f v19.38 PR1B**：archive 10+ inline 面板（−477 行 / 3772→3295）— 7 維獨立合議 / 7 子領域燈號 / 四大類別 / Hero 卡 / 景氣時鐘 / 天氣 / 風險警示 / 美林時鐘 / T1 事件衝擊。視覺降噪，phase / risk / news 資料層完整保留，AI 摘要 widget 繼續吃齊。剩 PR1C（風險溫度計 / 校準 / 景氣羅盤 / Tier A / 因果鏈 / 細項回測）+ PR2（教學搬遷 tab6）。
+- **feat(macro) PR #243 @ 91da530 v19.38 PR1**：總經 Tab 矛盾修正 — archive 雙速合議 + 台股本地視角；6 KEEP 面板按熊市驗證 ROI 重新編號（① 戰情室 / ② 拐點 / ③ 即時決策 / ④ 短線雷達 / ⑤ 流動性 / ⑥ 台股熱錢）；AI 景氣判斷總結加 caption 明示涵蓋同源資料。
+- **fix(fund-health) PR #241 @ f791ba2**：保單體系代碼用 Tab2 同款 `fetch_fund_from_moneydj_url` 取 series + dividends + currency + fund_name。
 - 初始化基準：協議 v2.0 Auto-Ship 套用，歷史版本紀錄詳見 `git log`。
 
 ## 下一步
