@@ -405,71 +405,13 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
             unsafe_allow_html=True,
         )
 
+    # v19.40 ARCHIVED PR2:
     # ════════════════════════════════════════════════
-    # 區塊 2：為什麼是這位階？（top 3 driver 教學）
-    # ════════════════════════════════════════════════
-    st.markdown("### 🎯 為什麼是這位階？")
-    st.caption("綜合分數是「每個指標 score × 權重」加總；以下 3 個是本期貢獻最大的 driver：")
-    for bullet in payload["why_bullets"]:
-        st.markdown(f"- {bullet}")
-
-    # ════════════════════════════════════════════════
-    # 區塊 3：關鍵指標卡（top N，每張內含教學）
-    # ════════════════════════════════════════════════
-    st.markdown(
-        f"### 📚 本期使用 {payload['n_displayed']} 個關鍵指標"
-        f"（按 |score × 權重| 排序，權重來自回測核可組合）"
-    )
-    st.caption(
-        "點開任一指標看：當前數值 / 自動判讀 / 💡 這指標是什麼 / 📐 怎麼讀（閾值對照）/ "
-        "🔗 搭配誰看 / 📊 歷史錨點。"
-    )
-
-    for row in payload["active_factors"]:
-        _label = (
-            f"{row['name']}（{row['freq_label']}）"
-            f"｜貢獻 **{row['contribution']:+.2f}**"
-            f"｜score {row['score']:+.2f} × 權重 {row['weight']:.2f}"
-        )
-        with st.expander(_label, expanded=False):
-            # 當前值 + 自動判讀
-            _val = row["value"]
-            _unit = row["unit"] or ""
-            st.markdown(
-                f"**目前數值**：`{_val} {_unit}`　"
-                f"**類型**：{row['type'] or '—'}"
-            )
-            st.markdown(f"**自動判讀**：{row['interpretation']}")
-            st.divider()
-
-            # 教學區
-            st.markdown("**💡 這指標是什麼？**")
-            st.markdown(row["edu_meaning"])
-
-            if row["edu_how_to_read"]:
-                st.markdown("**📐 怎麼讀？（閾值對照表）**")
-                for _entry in row["edu_how_to_read"]:
-                    if isinstance(_entry, (list, tuple)) and len(_entry) >= 2:
-                        st.markdown(f"  - `{_entry[0]}` → {_entry[1]}")
-                    else:
-                        st.markdown(f"  - {_entry}")
-
-            if row["edu_pair_with"]:
-                st.markdown(f"**🔗 搭配誰看？** {row['edu_pair_with']}")
-
-            if row["edu_historical_anchor"]:
-                st.markdown(f"**📊 歷史錨點**：{row['edu_historical_anchor']}")
-
-            if row["edu_upstream"] or row["edu_downstream"]:
-                _cols = st.columns(2)
-                with _cols[0]:
-                    if row["edu_upstream"]:
-                        st.markdown(f"**⬆️ 上游因**：{row['edu_upstream']}")
-                with _cols[1]:
-                    if row["edu_downstream"]:
-                        st.markdown(f"**⬇️ 下游果**：{row['edu_downstream']}")
-
-    st.divider()
+    # 區塊 2：🎯 為什麼是這位階？（top 3 driver 教學）
+    # 區塊 3：📚 本期使用 N 個關鍵指標（inline 教學 expanders）
+    # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
+    # ※ _render_beginner_dashboard() 已在 PR1B v19.38 停用（L853 已 comment out）
+    # 完整原始程式碼見 git log @ 13026cc 之前（L408-L472 ~65 行）
 
 
 def _render_tw_local_dashboard(indicators: dict | None,
@@ -842,6 +784,7 @@ def render_macro_tab() -> None:
 
     if st.session_state.macro_done:
         ind   = st.session_state.indicators
+        st.session_state["_macro_ind"] = ind
         phase = st.session_state.phase_info
         ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
         alloc = phase["alloc"];  advice = phase.get("advice","")
@@ -860,66 +803,14 @@ def render_macro_tab() -> None:
         ):
             _render_realtime_decision_dashboard(ind)
 
-        # ══ v17.3 內層 Tab：戰情首頁 + 指標教學手冊（§6-6 資訊不藏匿）═══
-        tab_main, tab_edu = st.tabs(["📊 戰情首頁（完整 23 指標）", "📖 指標教學手冊"])
+        # ══ v17.3 內層 Tab：戰情首頁（§6-6 資訊不藏匿）═══
+        # v19.40 PR2: 📖 指標教學手冊 已搬至 📖 說明書 Tab §11 宏觀教學文獻
+        (tab_main,) = st.tabs(["📊 戰情首頁（完整 23 指標）"])
 
-        with tab_edu:
-            # ══════════════════════════════════════════════════════════
-            # v17.0 ⭐ 16 指標教學手冊（含 24M 趨勢圖 + 完整白話教學）
-            # ══════════════════════════════════════════════════════════
-            # 每張卡：當前值 / Z-Score / 24 個月趨勢圖（含警戒/危險閾值線）
-            # 點開「📖 完整教學」可看：白話定義 / 怎麼判讀 / 搭配看誰 /
-            # 上游因 / 下游果 / 歷史錨點。AI Prompt 也吃同一份 EDU。
-            try:
-                from ui.components.macro_card import build_cards_from_indicators, render_macro_card_grid
-                from ui.components.macro_card_edu import MACRO_EDU
-                # v17.2：移除外層 expander（每張卡片內已有「📖 完整教學」expander，
-                # Streamlit 禁止 nested expanders）→ 改用 st.container(border=True) 視覺包覆
-                st.markdown("#### 📊 23 指標教學手冊（含趨勢圖 + 完整白話教學｜⭐ = v16.1 高頻替代源）")
-                st.caption("⚠️ 黃線=警戒閾值｜紅線=危險閾值｜黃點=當前值｜Z-Score：紅(極端壞)/綠(極端好)/橘(偏離 1.5σ)/藍(正常)")
-                # spec: (key, name, unit, decimals, high_is_bad, threshold_warn, threshold_crit)
-                _macro_card_spec = [
-                    # ① 領先指標
-                    ("SAHM",         "薩姆規則（衰退風險）",        "pp", 2,  True,   0.3,   0.5),
-                    ("SLOOS",        "SLOOS（銀行放貸意願）",       "%",  1,  True,   0,     20),
-                    ("PMI",          "ISM PMI（製造業景氣）",       "",   1,  False,  50,    45),
-                    ("LEI",          "⭐ CFNAI 領先指標（PMI 替代）", "",  2,  False,  0,    -0.7),
-                    ("YIELD_10Y2Y",  "殖利率利差 10Y-2Y",           "%",  3,  False,  0.5,   0),
-                    ("YIELD_10Y3M",  "殖利率利差 10Y-3M",           "%",  2,  False,  0.5,   0),
-                    ("PPI",          "PPI 生產者物價(YoY)",          "%",  2,  True,   3,     5),
-                    ("COPPER",       "銅博士月漲跌",                 "%",  2,  False,  0,     -5),
-                    ("ADL",          "RSP/SPY 市場廣度",             "",   4,  False,  None,  None),
-                    ("JOBLESS",      "初領失業金（裁員領先指標）",   "萬",  1,  True,   27,    30),
-                    ("CONT_CLAIMS",  "⭐ 持續失業金週頻（失業率替代）","萬",  0,  True,   180,   190),
-                    ("CONSUMER_CONF","消費者信心 (Michigan)",         "",   1,  False,  80,    60),
-                    ("PERMIT_HOUSING","⭐ 建照核發（房市領先）",       "千",  0,  False,  1500,  1200),
-                    # ② 同時 / 落後
-                    ("CPI",          "CPI 通膨率（YoY）",            "%",  2,  True,   2.5,   4),
-                    ("INFL_EXP_5Y",  "⭐ 5Y 通膨預期日頻（CPI 替代）","%",  2,  True,   2.8,   3.5),
-                    ("FED_RATE",     "聯準會利率",                    "%",  2,  True,   2.5,   5),
-                    ("UNEMPLOYMENT", "失業率",                         "%",  1,  True,   4.5,   6),
-                    # ③ 流動性
-                    ("M2",           "M2 貨幣供給（YoY）",            "%",  2,  False,  5,     0),
-                    ("M2_WEEKLY",    "⭐ M2 週頻 YoY（M2 替代）",      "%",  2,  False,  5,     0),
-                    ("FED_BS",       "Fed 資產負債表（YoY）",         "%",  2,  False,  0,     -5),
-                    ("DXY",          "美元指數",                       "",   2,  True,   105,   110),
-                    # ④ 金融壓力
-                    ("HY_SPREAD",    "HY 信用利差 (OAS)",             "%",  2,  True,   4,     6),
-                    ("VIX",          "VIX 恐慌指數",                   "",  1,  True,   22,    30),
-                ]
-                _cards = build_cards_from_indicators(ind, _macro_card_spec, edu_map=MACRO_EDU)
-                # v17.3：tab_edu 一律展開教學區（§6-6 資訊不藏匿）
-                for _c in _cards:
-                    _c["edu_default_open"] = True
-                with st.container(border=True):
-                    st.markdown(
-                        "<div style='color:#888;font-size:12px;margin:-4px 0 6px'>"
-                        "點開每張卡片下方「📖 完整教學」可看：白話定義 / 怎麼判讀 / 搭配看誰 / "
-                        "上游因 / 下游果 / 歷史錨點。"
-                        "</div>", unsafe_allow_html=True)
-                    render_macro_card_grid(_cards, columns=2)
-            except Exception as _exc:
-                st.warning(f"指標教學手冊載入失敗：{_exc}")
+        # v19.40 ARCHIVED PR2 (PR #TBD):
+        # with tab_edu: 📖 指標教學手冊（build_cards_from_indicators / MACRO_EDU）
+        # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
+        # 完整原始程式碼見 git log @ 13026cc 之前（L866-L922 ~57 行）
         with tab_main:
             # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）
             # v19.38 ARCHIVED PR1B (PR #245)：
@@ -1281,78 +1172,10 @@ def render_macro_tab() -> None:
                             unsafe_allow_html=True)
 
 
-            # ══════════════════════════════════════════════════
-            # L2 歷史危機對照圖（L2 + L3 顯示）
-            # ══════════════════════════════════════════════════
-            if _show_l2_plus:
-                with st.expander("📈 L2 景氣循環歷史對照圖（危機紅區 × 指標趨勢）", expanded=False):
-                    _sahm_s  = (ind.get("SAHM")  or {}).get("series")
-                    _sloos_s = (ind.get("SLOOS") or {}).get("series")
-                    _adl_s   = (ind.get("ADL")   or {}).get("series")
-                    _l2_has  = any(s is not None and len(s) >= 5
-                                   for s in [_sahm_s, _sloos_s, _adl_s])
-                    if _l2_has:
-                        import pandas as _pd_l2
-                        from plotly.subplots import make_subplots as _msp_l2
-                        _l2fig = _msp_l2(specs=[[{"secondary_y": True}]])
-
-                        # Sahm Rule 主線
-                        if _sahm_s is not None and len(_sahm_s) >= 5:
-                            _sh = _sahm_s if isinstance(_sahm_s, _pd_l2.Series) else _pd_l2.Series(_sahm_s)
-                            _sh = _sh.dropna().tail(120)
-                            _l2fig.add_trace(go.Scatter(
-                                x=_sh.index, y=_sh.values, name="薩姆規則 (pp)",
-                                line={"color": "#64b5f6", "width": 2},
-                                hovertemplate="Sahm: %{y:.2f}pp<extra></extra>"),
-                                secondary_y=False)
-                            # 0.5 觸發線
-                            _l2fig.add_hline(y=0.5, line_dash="dash",
-                                             line_color="#f44336", opacity=0.6,
-                                             annotation_text="衰退觸發線 0.5",
-                                             annotation_font_color="#f44336",
-                                             secondary_y=False)
-
-                        # SLOOS 副軸
-                        if _sloos_s is not None and len(_sloos_s) >= 5:
-                            _sl = _sloos_s if isinstance(_sloos_s, _pd_l2.Series) else _pd_l2.Series(_sloos_s)
-                            _sl = _sl.dropna().tail(120)
-                            _l2fig.add_trace(go.Scatter(
-                                x=_sl.index, y=_sl.values, name="SLOOS (%)",
-                                line={"color": "#ff9800", "width": 2, "dash": "dot"},
-                                hovertemplate="SLOOS: %{y:.1f}%<extra></extra>"),
-                                secondary_y=True)
-
-                        # 歷史危機紅色陰影
-                        _crises = [
-                            ("2007-12-01", "2009-06-01", "2008 金融海嘯"),
-                            ("2020-02-01", "2020-06-01", "2020 COVID"),
-                            ("2022-01-01", "2022-12-01", "2022 升息週期"),
-                        ]
-                        for _cs, _ce, _cn in _crises:
-                            _l2fig.add_vrect(
-                                x0=_cs, x1=_ce,
-                                fillcolor="rgba(244,67,54,0.12)",
-                                line_width=0,
-                                annotation_text=_cn,
-                                annotation_position="top left",
-                                annotation_font={"size": 9, "color": "#f44336"})
-
-                        _l2fig.update_layout(
-                            paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
-                            font_color="#e6edf3", height=320,
-                            margin=dict(t=30, b=20, l=50, r=50),
-                            legend=dict(orientation="h", y=-0.15,
-                                        font={"size": 10}),
-                            hovermode="x unified")
-                        _l2fig.update_yaxes(title_text="薩姆規則 (pp)",
-                                            gridcolor="#21262d", secondary_y=False)
-                        _l2fig.update_yaxes(title_text="SLOOS (%)",
-                                            gridcolor="#21262d", secondary_y=True)
-                        _l2fig.update_xaxes(gridcolor="#21262d")
-                        st.plotly_chart(_l2fig, use_container_width=True)
-                        st.caption("🔴 紅色陰影 = 歷史衰退/危機區間，藍線 = 薩姆規則，橘虛線 = SLOOS 銀行放貸標準")
-                    else:
-                        st.info("📡 請先載入總經資料以顯示歷史對照圖")
+            # v19.40 ARCHIVED PR2:
+            # ══ 📈 L2 景氣循環歷史對照圖（危機紅區 × 指標趨勢）expander
+            # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
+            # 完整原始程式碼見 git log @ 13026cc 之前（L1284-L1356 ~73 行）
 
             # ── L2 視角到此結束，L3 繼續顯示完整儀表板 ──────────────────
             if not _show_l2_plus:
@@ -1531,111 +1354,11 @@ def render_macro_tab() -> None:
             #   _macro_compass stash 仍保留（AI 摘要遞延使用 — _sahm_d 取自 ② 拐點 cache）
             # 完整原始程式碼見 git log @ 7244d5a 之前
 
-            # ── 指標貢獻明細（折疊）── L3 only
-            # v17.2：依 |score × weight| 排序 + 「💡 貢獻說明」欄（指標特定敘事）
-            if _show_l3:
-                # 指標特定的「現象 → 市場含義」對照表（Map）
-                # 每筆 = (key 子串匹配, score>0 敘事, score<0 敘事)
-                _CONTRIB_MAP = {
-                    "PMI":           ("製造業擴張，有利股市",       "製造業收縮，景氣動能放緩"),
-                    "LEI":           ("領先指標走升，景氣加速",     "領先指標走弱，景氣放緩"),
-                    "SAHM":          ("勞動市場惡化，衰退預警",     "勞動市場穩健"),
-                    "SLOOS":         ("銀行緊縮放貸，信用收斂",     "銀行寬鬆放貸，信用擴張"),
-                    "YIELD_10Y2Y":   ("利差走闊，殖利率正常化",     "利差倒掛，衰退預警"),
-                    "YIELD_10Y3M":   ("利差走闊，景氣健康",         "利差倒掛，紐約聯儲衰退模型啟動"),
-                    "HY_SPREAD":     ("信用利差走闊，避險升溫",     "信用利差收斂，風險偏好上升"),
-                    "VIX":           ("恐慌升溫，波動加大",          "市場平靜，風險偏好上升"),
-                    "CPI":           ("通膨壓力升溫，緊縮風險",     "通膨回落，貨幣政策放鬆空間"),
-                    "PPI":           ("上游成本升溫",                "上游成本回落"),
-                    "INFL_EXP_5Y":   ("通膨預期升溫，債市壓力",     "通膨預期降溫，利率下行空間"),
-                    "FED_RATE":      ("資金成本上升，估值承壓",     "資金成本下降，流動性寬鬆"),
-                    "UNEMPLOYMENT":  ("失業率上升，景氣承壓",       "失業率下降，景氣健康"),
-                    "JOBLESS":       ("初領失業金升溫，裁員壓力",   "初領失業金回落，就業改善"),
-                    "CONT_CLAIMS":   ("持續失業金升溫",              "持續失業金回落"),
-                    "CONSUMER_CONF": ("消費信心強，內需動能足",     "消費信心弱，內需放緩"),
-                    "M2":            ("M2 寬鬆，流動性充沛",        "M2 緊縮，流動性收斂"),
-                    "M2_WEEKLY":     ("M2 週頻寬鬆",                 "M2 週頻緊縮"),
-                    "FED_BS":        ("Fed 擴表（QE）",              "Fed 縮表（QT）"),
-                    "DXY":           ("美元走強，外幣資產承壓",     "美元走弱，外幣資產受益"),
-                    "ADL":           ("市場廣度健康",                "大型股獨撐，廣度疲弱"),
-                    "COPPER":        ("銅價走強，全球景氣轉熱",     "銅價走弱，全球景氣轉冷"),
-                    "PERMIT_HOUSING":("建照核發強，房市領先",       "建照核發弱，房市領先疲弱"),
-                }
-                with st.expander("👉 查看完整 23 項指標加扣分明細（依 |score × weight| 由大至小）", expanded=False):
-                    st.caption(
-                        "📖 **怎麼看這張表**：「💡 貢獻說明」直接告訴你這檔指標目前如何影響景氣總分。"
-                        "排序依 |score × weight| ＝ 對總分實際影響力，最重要的指標在最上方。"
-                    )
-                    _rows = []
-                    for _ik, _iv in ind.items():
-                        if not isinstance(_iv, dict): continue
-                        _w_raw = _iv.get("weight", 1) or 1
-                        try:
-                            _w = float(_w_raw)
-                        except (TypeError, ValueError):
-                            _w = 1.0
-                        _sc_raw = _iv.get("score", 0) or 0
-                        try:
-                            _sc_clamped = round(max(-_w, min(_w, float(_sc_raw))), 2)
-                        except (TypeError, ValueError):
-                            _sc_clamped = 0.0
-                        _val_raw = _iv.get("value")
-                        if isinstance(_val_raw, (int, float)):
-                            _val_str = f"{_val_raw:.2f}"
-                        else:
-                            _val_str = str(_val_raw or "")[:10]
-                        # 指標特定敘事：取對映 phrase；找不到就回退到通用語氣
-                        _phrases = _CONTRIB_MAP.get(_ik)
-                        if _phrases:
-                            _semantic = _phrases[0] if _sc_clamped > 0 else (_phrases[1] if _sc_clamped < 0 else "現況中性")
-                        else:
-                            _semantic = "正面訊號" if _sc_clamped > 0 else ("負面訊號" if _sc_clamped < 0 else "現況中性")
-                        # 組合貢獻說明：[指標 數值] ➡️ [現象+含義]，貢獻 ±X 分
-                        _name = _iv.get("name", _ik)[:18]
-                        if _sc_clamped > 0:
-                            _verdict = f"{_name} {_val_str} ➡️ {_semantic}，貢獻 +{_sc_clamped:.1f} 分"
-                        elif _sc_clamped < 0:
-                            _verdict = f"{_name} {_val_str} ➡️ {_semantic}，扣 {_sc_clamped:.1f} 分"
-                        else:
-                            _verdict = f"{_name} {_val_str} ➡️ {_semantic}（不加減分）"
-                        # 排序鍵：|score × weight|
-                        _abs_contrib = abs(_sc_clamped * _w)
-                        _rows.append({
-                            "_abs": _abs_contrib,
-                            "指標":      _name,
-                            "數值":      _val_str,
-                            "信號":      _iv.get("signal", "⬜"),
-                            "貢獻分":    _sc_clamped,
-                            "權重":      _w,
-                            "💡 貢獻說明": _verdict,
-                        })
-                    if _rows:
-                        _rows.sort(key=lambda r: r["_abs"], reverse=True)
-                        # v18.255 stash：取 Top3 正貢獻 + Top3 負貢獻給 AI 白話總體檢
-                        try:
-                            _pos = [r for r in _rows if r["貢獻分"] > 0][:3]
-                            _neg = [r for r in _rows if r["貢獻分"] < 0][:3]
-                            st.session_state["_macro_23items"] = {
-                                "n_total": len(_rows),
-                                "n_pos": len([r for r in _rows if r["貢獻分"] > 0]),
-                                "n_neg": len([r for r in _rows if r["貢獻分"] < 0]),
-                                "top_pos": [{"name": r["指標"], "verdict": r["💡 貢獻說明"]} for r in _pos],
-                                "top_neg": [{"name": r["指標"], "verdict": r["💡 貢獻說明"]} for r in _neg],
-                            }
-                        except Exception:
-                            pass
-                        for r in _rows:
-                            r.pop("_abs", None)
-                        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True,
-                                     column_config={
-                                         "指標":      st.column_config.TextColumn(width="small"),
-                                         "數值":      st.column_config.TextColumn(width="small"),
-                                         "信號":      st.column_config.TextColumn(width="small"),
-                                         "貢獻分":    st.column_config.NumberColumn(format="%.2f", width="small"),
-                                         "權重":      st.column_config.NumberColumn(format="%.0f", width="small"),
-                                         "💡 貢獻說明": st.column_config.TextColumn(width="large"),
-                                     })
-
+            # v19.40 ARCHIVED PR2:
+            # ── 指標貢獻明細 _CONTRIB_MAP + 👉 查看完整 23 項指標加扣分明細 expander
+            # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
+            # _macro_23items stash 已移至 tab6 render 時寫入（AI 摘要向後相容）
+            # 完整原始程式碼見 git log @ 13026cc 之前（L1534-L1637 ~104 行）
             # ══════════════════════════════════════════════════
             # L3 資本防線 — 含息報酬 vs 配息率（Bar Chart）
             # ══════════════════════════════════════════════════
@@ -2078,95 +1801,11 @@ def render_macro_tab() -> None:
             #   AI 摘要區仍可從 _macro_subsector_bt stash 讀（缺失自動回退「—」）
             # 完整原始程式碼見 git log @ 7244d5a 之前
 
-            # ── v18.108 變數重要性 Top-N（Phase 4）─────────────────────
-            # 對 Sankey 8 節點 series 算 lag-corr(driver_t, Δtarget_{t→t+lag})
-            # 排序回 driver 重要性 — 不引入 sklearn / shap 套件
-            with st.expander("📊 變數重要性 Top-N（哪個指標最能預測景氣變化？）",
-                             expanded=False):
-                _imp_c1, _imp_c2 = st.columns(2)
-                with _imp_c1:
-                    _imp_target = st.selectbox(
-                        "target 指標", options=["LEI", "PMI", "VIX", "PERMIT_HOUSING"],
-                        index=0, key="imp_target",
-                        help="計算各 driver 與 target lag 後變化的 lag-correlation",
-                    )
-                with _imp_c2:
-                    _imp_lag = st.slider("lag months",
-                                         min_value=1, max_value=12, value=3,
-                                         step=1, key="imp_lag")
-                try:
-                    _imp = rank_macro_drivers(ind, target_key=_imp_target,
-                                              lag_months=_imp_lag, min_overlap=24)
-                    if not _imp["ok"]:
-                        st.info(f"📡 {_imp['note']}")
-                    else:
-                        _imp_rows = []
-                        for r in _imp["ranked"]:
-                            _imp_rows.append({
-                                "排名": "🏅",
-                                "driver": r["name"],
-                                "lag-corr": f"{r['corr']:+.3f}",
-                                "|corr|": f"{r['abs_corr']:.3f}",
-                                "方向": ("📈 同向" if r["direction"] == "+"
-                                         else "📉 反向"),
-                                "權重": r["weight"],
-                                "共同期": r["n_overlap"],
-                            })
-                        # 標記前三名
-                        for i, row in enumerate(_imp_rows[:3]):
-                            row["排名"] = ["🥇", "🥈", "🥉"][i]
-                        st.dataframe(pd.DataFrame(_imp_rows),
-                                     use_container_width=True, hide_index=True)
-                        st.caption(
-                            f"📊 lag-corr 解讀：driver 在 t 月 vs target 在 t+{_imp_lag} 月變化的相關性；"
-                            f"|corr|≥0.5「高」/ 0.3-0.5「中」/ <0.3「低」。"
-                            f"正號 = 同向（driver 升→target 也升）；負號 = 反向。"
-                            f"{_imp['note']}。"
-                        )
-                        # v18.118 issue 2: 動態講解 — Top 3 driver 的具體意義
-                        _top3 = _imp["ranked"][:3]
-                        if _top3:
-                            _narrative_lines = []
-                            for i, r in enumerate(_top3):
-                                _medal = ["🥇", "🥈", "🥉"][i]
-                                _dir_word = "同向（一起升降）" if r["direction"] == "+" else "反向（升↔降）"
-                                _signal_word = (
-                                    "顯著" if r["abs_corr"] >= 0.5
-                                    else ("中等" if r["abs_corr"] >= 0.3 else "微弱")
-                                )
-                                _narrative_lines.append(
-                                    f"{_medal} **{r['name']}** "
-                                    f"與 {_imp_target} 未來 {_imp_lag} 個月變化呈 **{_dir_word}** "
-                                    f"相關（|corr|={r['abs_corr']:.2f}，{_signal_word}）"
-                                )
-                            _top1 = _top3[0]
-                            _action_hint = (
-                                f"→ **應用**：當 **{_top1['name']}** 出現明顯變化時，"
-                                f"預期 {_imp_lag} 個月後 {_imp_target} 將朝"
-                                f"{'同方向' if _top1['direction']=='+' else '反方向'}"
-                                f"移動（歷史資料 n={_top1['n_overlap']} 月）。"
-                            )
-                            st.info(
-                                "💡 **Top 3 driver 解讀**\n\n"
-                                + "\n\n".join("- " + l for l in _narrative_lines)
-                                + "\n\n" + _action_hint
-                            )
-                        # v18.255 stash 給 AI 白話總體檢
-                        try:
-                            st.session_state["_macro_var_importance"] = {
-                                "target": _imp_target,
-                                "lag_months": int(_imp_lag),
-                                "top3": [{
-                                    "name": r.get("name", ""),
-                                    "abs_corr": float(r.get("abs_corr", 0) or 0),
-                                    "direction": r.get("direction", ""),
-                                    "n_overlap": int(r.get("n_overlap", 0) or 0),
-                                } for r in _top3],
-                            }
-                        except Exception:
-                            pass
-                except Exception as _e_imp:
-                    st.caption(f"⚠️ 變數重要性計算失敗：{str(_e_imp)[:80]}")
+            # v19.40 ARCHIVED PR2:
+            # ── v18.108 📊 變數重要性 Top-N（Phase 4）
+            # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
+            # _macro_var_importance stash 已移至 tab6 render 時寫入
+            # 完整原始程式碼見 git log @ 13026cc 之前（L2084-L2169 ~86 行）
 
             # ── 熱錢監測（v18.236）— 三角交叉：外資 × 匯率 × 背離 ──
             # 境外基金 user 仍要看：台幣匯率變動 → 影響你 USD/EUR 計價基金 TWD 換算後報酬

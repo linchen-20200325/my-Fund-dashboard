@@ -46,7 +46,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.39_MacroPR1C"
+APP_VERSION = "v19.40_MacroPR2"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
