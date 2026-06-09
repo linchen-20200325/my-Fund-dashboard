@@ -14,10 +14,11 @@
 - **嚴格三步法**：Explore Agent（唯讀探索環境） -> 提出 Plan（3 句話藍圖）與我確認 -> 獲准後才 Execute（動手改 code）。
 - **並行處理**：若任務牽涉超過 5 個檔案，主動拆分成子任務並行處理，極致利用 API Context Cache 共享快取。
 
-## §4 鋼鐵自省與交付 (Audit & Delivery)
-- **強制驗證機制**：不准說 Done 就跑。修改後必須通過 Type check 與 Lint。完成後輸出簡短報告：[邏輯]、[邊界]、[效能]、[Debug]。
-- **環境與效能**：限用 `.py` 腳本（禁 `.ipynb`），維護 `requirements.txt`。必須確保 `st.cache_data` 的正確使用以優化 Streamlit 效能。
-- **PR 規範**：使用 `gh pr create` 建立請求，並隨附一鍵 Merge 指令：`gh pr merge <PR號碼> --merge --delete-branch`。嚴禁自動 Merge。
+## §4 鋼鐵自省與交付 (Audit & Auto-Delivery)
+- **強制驗證機制**：修改後必須通過 Type check 與 Lint，確認無誤後輸出簡短報告：[邏輯]、[邊界]、[效能]、[Debug]。
+- **環境與效能**：限用 `.py` 腳本（禁 `.ipynb`），維護 `requirements.txt`。確保 `st.cache_data` 的正確使用。
+- **自動交付與合併 (Auto-Ship)**：功能完成後，必須使用 `gh pr create --fill` 建立請求，並**主動執行** `gh pr merge <PR號碼> --merge --delete-branch`。
+- **合併後驗證與存檔**：合併後必須自動 `git checkout main && git pull`，使用 `git status` 與 `git log -1` 驗證合併成功，最後自動更新 `STATE.md` 的進度。嚴禁在未驗證成功的情況下回報完成。
 
 ## §5 卡關救援 (Anti-Loop Protocol)
 - 針對同一個報錯，若連續重試 2 次未果，**立即停機**。
