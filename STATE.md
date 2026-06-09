@@ -21,7 +21,7 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
-- 初始化（協議 v2.0 套用），歷史版本紀錄詳見 `git log`。
+- 初始化（協議 v2.0 Auto-Ship 套用），歷史版本紀錄詳見 `git log`。
 
 ## 下一步
 （待 user 指示）
