@@ -31,6 +31,7 @@ from ui.tab_allocation_simulator import render_allocation_simulator_tab
 # v19.31 ARCHIVED: 回測功能暫封存（📉 危機回測室 / 🔬 回測找參數），未來啟用時取消下兩行註解
 # from ui.tab_crisis_backtest import render_crisis_backtest_tab
 from ui.tab_fund_screener import render_fund_screener_tab  # noqa: E402
+from ui.tab_fund_screener_v2 import render_fund_screener_v2_tab  # noqa: E402
 # from ui.tab_param_finder import render_param_finder_tab
 from fund_fetcher  import (
     get_proxy_config,
@@ -42,7 +43,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.34_ScreenerCategoryTabs"
+APP_VERSION = "v19.35_ScreenerV2FundETF"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -439,9 +440,9 @@ render_macro_compass()
 # v19.31 ARCHIVED: 回測 2 Tab 暫封存（📉 危機回測室 / 🔬 回測找參數）
 # 未來啟用步驟：(1) 取消上方 2 個 import 註解 (2) tuple 加回 tab_crisis, tab_param
 # (3) labels 加回 "📉 危機回測室" / "🔬 回測找參數" (4) 取消下方 TAB 4 / TAB 5 with-block 註解
-tab_macro, tab_portfolio, tab_single, tab_sim, tab_screener, tab5, tab6 = st.tabs(
+tab_macro, tab_portfolio, tab_single, tab_sim, tab_screener, tab_screener_v2, tab5, tab6 = st.tabs(
     ["🌐 總經", "📊 組合基金", "🔍 單一基金",
-     "💼 配置模擬器", "🔎 基金篩選", "🔭 資料診斷", "📖 說明書"])
+     "💼 配置模擬器", "🔎 基金篩選", "🔬 進階篩選", "🔭 資料診斷", "📖 說明書"])
 
 # ══════════════════════════════════════════════════════
 # TAB 1 — 🌐 總經環境（故事第 1 站）
@@ -486,6 +487,14 @@ with tab_sim:
 # ══════════════════════════════════════════════════════
 with tab_screener:
     render_fund_screener_tab()
+
+# ══════════════════════════════════════════════════════
+# TAB 7b — 🔬 進階篩選：基金 + ETF（v19.35）
+# 3 軌資料：TWSE ETF + yfinance (US/境外) + SITCA stub
+# 與 v19.26-34 共同基金核心 tab 並存，實驗性 ETF 擴充
+# ══════════════════════════════════════════════════════
+with tab_screener_v2:
+    render_fund_screener_v2_tab()
 
 # ══════════════════════════════════════════════════════
 # TAB 8 — 資料診斷
