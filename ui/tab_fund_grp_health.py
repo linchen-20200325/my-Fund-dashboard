@@ -77,8 +77,8 @@ def _run_batch_health(
     warn_gap: float,
 ) -> list[dict]:
     from repositories.fund_repository import (
-        fetch_div_cnyes,
-        fetch_nav_cnyes,
+        fetch_div,
+        fetch_nav,
         get_latest_fx,
     )
     from services.fund_dividend_calculator import compute_dividend_twd_series
@@ -89,8 +89,8 @@ def _run_batch_health(
     for i, code in enumerate(codes):
         prog.progress((i) / n, text=f"📥 {code} ({i + 1}/{n})")
         try:
-            nav_s = fetch_nav_cnyes(code)
-            divs = fetch_div_cnyes(code) or []
+            nav_s = fetch_nav(code)
+            divs = fetch_div(code) or []
             if nav_s is None or len(nav_s) == 0:
                 rows.append({"code": code, "ok": False, "error": "NAV 抓不到"})
                 continue
