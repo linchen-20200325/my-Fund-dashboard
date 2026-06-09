@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 
 def test_module_imports_ok():
     """tab1_macro.py 可被 import；render_macro_tab 無位置 arg。"""
@@ -211,23 +213,12 @@ def test_snapshot_reads_23items_top_contributors(monkeypatch):
     assert "SAHM 0.6" in snap
 
 
+@pytest.mark.skip(reason="v19.39 PR1C: 風險評分校準 + 景氣分數校準 panels archived（UI 移除）；stash keys 仍存供 AI 摘要")
 def test_calibration_card_explainer_expanders_present():
-    """v18.256：兩張校準卡都有 checkbox「📖 怎麼讀這張卡？」（hotfix：原 expander 巢狀 Streamlit 會炸）。"""
-    from pathlib import Path
-    src = (Path(__file__).parent / "ui" / "tab1_macro.py").read_text(encoding="utf-8")
-    # 兩處 checkbox（hotfix v18.256：父層 expander 內禁巢狀 expander → 改 checkbox）
-    assert src.count('📖 怎麼讀這張卡？（白話三段式）') == 2
-    # 三段式關鍵字
-    assert "① 這張卡在算什麼？" in src
-    assert "② 三個調整鈕意義" in src or "② 三個關鍵讀數" in src
-    assert "③ 結果怎麼解讀？" in src or "③ 看到結果該怎麼用？" in src
-    # v18.256：確保兩處不再用 st.expander（會炸） → 改 st.checkbox
-    import re
-    matches = list(re.finditer(r'(st\.expander|st\.checkbox).*?"📖 怎麼讀這張卡', src))
-    assert len(matches) == 2, "應有兩處『📖 怎麼讀這張卡』錨點"
-    for m in matches:
-        assert "st.checkbox" in m.group(0), \
-            f"hotfix v18.256：必須用 st.checkbox 避免巢狀 expander，但找到 {m.group(0)[:60]}"
+    """v18.256：兩張校準卡都有 checkbox「📖 怎麼讀這張卡？」（hotfix：原 expander 巢狀 Streamlit 會炸）。
+
+    v19.39 PR1C：兩張校準卡已 archive（UI 視覺降噪）。stash 介面契約由 _build_macro_ai_snapshot 測試守住。
+    """
 
 
 def test_no_st_stop_in_render_macro_tab():
@@ -250,9 +241,9 @@ def test_no_st_stop_in_render_macro_tab():
     )
 
 
+@pytest.mark.skip(reason="v19.39 PR1C: 景氣分數校準 panel archived；_msc_ready flag 隨 panel 一併移除")
 def test_macro_ready_flag_pattern_used():
-    """v18.257：第二張校準卡用 _msc_ready flag（而非 st.stop）控制渲染。"""
-    from pathlib import Path
-    src = (Path(__file__).parent / "ui" / "tab1_macro.py").read_text(encoding="utf-8")
-    assert "_msc_ready" in src, "第二張校準卡應該用 _msc_ready flag 模式"
-    assert "if _msc_ready:" in src, "後續計算應該包在 if _msc_ready: 條件下"
+    """v18.257：第二張校準卡用 _msc_ready flag（而非 st.stop）控制渲染。
+
+    v19.39 PR1C：panel archived。test_no_st_stop_in_render_macro_tab 仍守住 st.stop 禁令。
+    """

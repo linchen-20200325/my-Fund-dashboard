@@ -46,7 +46,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.37_FundGrpHealth"
+APP_VERSION = "v19.39_MacroPR1C"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
