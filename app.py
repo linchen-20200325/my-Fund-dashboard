@@ -32,7 +32,9 @@ from ui.tab_allocation_simulator import render_allocation_simulator_tab
 # from ui.tab_crisis_backtest import render_crisis_backtest_tab
 # v19.36 ARCHIVED: 🔎 基金篩選 Tab 暫封存（user 反饋「這不是我要的」，改用 🔬 進階篩選 v19.35）
 # from ui.tab_fund_screener import render_fund_screener_tab  # noqa: E402
-from ui.tab_fund_screener_v2 import render_fund_screener_v2_tab  # noqa: E402
+# v19.37 ARCHIVED: 🔬 進階篩選 Tab 暫封存（user 反饋「這也不是我要的」，改用 💊 組合健診）
+# from ui.tab_fund_screener_v2 import render_fund_screener_v2_tab  # noqa: E402
+from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
 # from ui.tab_param_finder import render_param_finder_tab
 from fund_fetcher  import (
     get_proxy_config,
@@ -44,7 +46,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.35_ScreenerV2FundETF"
+APP_VERSION = "v19.37_FundGrpHealth"
 
 # ══════════════════════════════════════════════════════
 # 外國企業中文對照表（持股清單顯示用，零外呼）
@@ -444,9 +446,12 @@ render_macro_compass()
 # v19.36 ARCHIVED: 🔎 基金篩選 (v19.26) Tab 暫封存（user 反饋「這不是我要的」）
 # 未來啟用：(1) 取消 L33 import 註解 (2) tuple 加回 tab_screener 在 tab_sim 之後
 # (3) labels 加回 "🔎 基金篩選" (4) 取消下方 TAB 7 with-block 註解
-tab_macro, tab_portfolio, tab_single, tab_sim, tab_screener_v2, tab5, tab6 = st.tabs(
+# v19.37 ARCHIVED: 🔬 進階篩選 (v19.35) Tab 暫封存（user 反饋「這也不是我要的」）
+# 未來啟用：(1) 取消 L35 import 註解 (2) tuple 加回 tab_screener_v2 (3) labels 加回 "🔬 進階篩選"
+# (4) 取消下方 TAB 7b with-block 註解
+tab_macro, tab_portfolio, tab_single, tab_sim, tab_health, tab5, tab6 = st.tabs(
     ["🌐 總經", "📊 組合基金", "🔍 單一基金",
-     "💼 配置模擬器", "🔬 進階篩選", "🔭 資料診斷", "📖 說明書"])
+     "💼 配置模擬器", "💊 組合健診", "🔭 資料診斷", "📖 說明書"])
 
 # ══════════════════════════════════════════════════════
 # TAB 1 — 🌐 總經環境（故事第 1 站）
@@ -495,12 +500,20 @@ with tab_sim:
 #     render_fund_screener_tab()
 
 # ══════════════════════════════════════════════════════
-# TAB 7b — 🔬 進階篩選：基金 + ETF（v19.35）
-# 3 軌資料：TWSE ETF + yfinance (US/境外) + SITCA stub
-# 與 v19.26-34 共同基金核心 tab 並存，實驗性 ETF 擴充
+# TAB 7b — 🔬 進階篩選（v19.35） — v19.37 ARCHIVED
+# user 反饋「這也不是我要的」，改用 💊 組合健診 (v19.37) 為主入口
+# 模組 ui/tab_fund_screener_v2.py 保留磁碟，未來啟用：取消下方註解 + L35 import + tabs tuple/labels
 # ══════════════════════════════════════════════════════
-with tab_screener_v2:
-    render_fund_screener_v2_tab()
+# with tab_screener_v2:
+#     render_fund_screener_v2_tab()
+
+# ══════════════════════════════════════════════════════
+# TAB 7c — 💊 基金組合健診（v19.37）
+# 以 100 萬 TWD 為基準逐檔模擬：原幣本金 / 持有份額 / 逐期配息折算 TWD / 吃本金判定
+# 純函式核心 services/fund_dividend_calculator.py（zero-IO 可單測）
+# ══════════════════════════════════════════════════════
+with tab_health:
+    render_fund_grp_health_tab()
 
 # ══════════════════════════════════════════════════════
 # TAB 8 — 資料診斷
