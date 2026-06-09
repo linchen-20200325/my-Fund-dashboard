@@ -70,17 +70,47 @@ def render_fund_grp_health_tab() -> None:
     _render_health_table(rows)
 
 
+def _auto_fetch_moneydj(code: str) -> dict:
+    """鏡像 ui/tab2_single_fund._auto_fetch_moneydj：試 yp010000（境內）→ yp010001（境外）挑最佳結果。
+
+    回 fetch_fund_from_moneydj_url 的 dict（含 series / dividends / currency / status）。
+    支援保單體系內部代碼（如 ACCP138 / ALBT8）。
+    """
+    from fund_fetcher import classify_fetch_status, normalize_result_state
+    from repositories.fund_repository import fetch_fund_from_moneydj_url
+
+    raw = (code or "").strip().upper()
+    if not raw:
+        return {}
+    attempts: list = []
+    for page_type in ("yp010000", "yp010001"):
+        url = f"https://www.moneydj.com/funddj/ya/{page_type}.djhtm?a={raw}"
+        try:
+            res = normalize_result_state(fetch_fund_from_moneydj_url(url))
+        except Exception as e:
+            attempts.append(({"error": f"{type(e).__name__}: {e}"}, False, "failed"))
+            continue
+        status = res.get("status", classify_fetch_status(res))
+        ser = res.get("series")
+        has_series = (
+            ser is not None and hasattr(ser, "__len__") and len(ser) >= 10
+        )
+        if not res.get("error") and status == "complete":
+            return res
+        attempts.append((res, has_series, status))
+    with_series = [t for t in attempts if t[1]]
+    if with_series:
+        return with_series[0][0]
+    return attempts[-1][0] if attempts else {}
+
+
 def _run_batch_health(
     codes: list[str],
     principal_twd: float,
     ccy_hint: str,
     warn_gap: float,
 ) -> list[dict]:
-    from repositories.fund_repository import (
-        fetch_div,
-        fetch_nav,
-        get_latest_fx,
-    )
+    from repositories.fund_repository import get_latest_fx
     from services.fund_dividend_calculator import compute_dividend_twd_series
 
     rows: list[dict] = []
@@ -89,8 +119,14 @@ def _run_batch_health(
     for i, code in enumerate(codes):
         prog.progress((i) / n, text=f"📥 {code} ({i + 1}/{n})")
         try:
-            nav_s = fetch_nav(code)
-            divs = fetch_div(code) or []
+            fd = _auto_fetch_moneydj(code)
+            if fd.get("error") and not fd.get("series"):
+                rows.append({"code": code, "ok": False, "error": fd.get("error", "?")})
+                continue
+            nav_s = fd.get("series")
+            divs = fd.get("dividends") or []
+            ccy_auto = (fd.get("currency") or "").strip().upper()
+            fund_name = fd.get("fund_name", "") or fd.get("full_key", "")
             if nav_s is None or len(nav_s) == 0:
                 rows.append({"code": code, "ok": False, "error": "NAV 抓不到"})
                 continue
@@ -99,9 +135,10 @@ def _run_batch_health(
                 for idx, v in nav_s.items()
                 if v == v  # NaN guard
             }
-            fx = get_latest_fx(f"{ccy_hint}TWD=X") or 0.0
+            ccy = ccy_auto if ccy_auto else ccy_hint
+            fx = get_latest_fx(f"{ccy}TWD=X") or 0.0
             if fx <= 0:
-                rows.append({"code": code, "ok": False, "error": f"FX {ccy_hint}TWD 抓不到"})
+                rows.append({"code": code, "ok": False, "error": f"FX {ccy}TWD 抓不到"})
                 continue
             result = compute_dividend_twd_series(
                 nav_series=nav_dict,
@@ -117,7 +154,9 @@ def _run_batch_health(
                 rows.append({
                     "code": code,
                     "ok": True,
-                    "ccy": ccy_hint,
+                    "基金名": fund_name[:24],
+                    "幣別偵測": "自動" if ccy_auto else "fallback",
+                    "ccy": ccy,
                     "fx_spot": fx,
                     "principal_ccy 🧮": result["principal_ccy_🧮"],
                     "units 🧮": result["units_held_🧮"],
