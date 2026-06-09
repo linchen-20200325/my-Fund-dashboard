@@ -21,7 +21,8 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
-- **fix(fund-health) PR #239 @ 32546a8**：💊 基金組合健診 Tab 對保單體系代碼（ACCP138 / ALBT8 等安聯內部代碼）顯示「NAV 抓不到」→ `ui/tab_fund_grp_health.py` 從 `fetch_nav_cnyes / fetch_div_cnyes`（單一 cnyes source 不收錄保單代碼）改為 `fetch_nav / fetch_div`（多源 fallback aggregator：MoneyDJ TCB + yp004001 + yp004003）。Drop-in 同 shape，純函式層無動。
+- **fix(fund-health) PR #241 @ f791ba2**：保單體系代碼仍抓不到 → 鏡像 Tab2「單一基金」`_auto_fetch_moneydj` 套路改用 `fetch_fund_from_moneydj_url(https://www.moneydj.com/funddj/ya/yp01000{0,1}.djhtm?a={code})` 一發拿 series + dividends + currency + fund_name；currency 自動偵測時直接用，無法偵測退回 fallback；表格加「基金名 / 幣別偵測」兩欄。
+- **fix(fund-health) PR #239 @ 32546a8**：cnyes 單源不收保單代碼 → 改 `fetch_nav / fetch_div` 多源 fallback（後被 PR #241 超越）。
 - 初始化基準：協議 v2.0 Auto-Ship 套用，歷史版本紀錄詳見 `git log`。
 
 ## 下一步
