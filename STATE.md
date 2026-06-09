@@ -21,7 +21,8 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
-- 初始化（協議 v2.0 Auto-Ship 套用），歷史版本紀錄詳見 `git log`。
+- **fix(fund-health) PR #239 @ 32546a8**：💊 基金組合健診 Tab 對保單體系代碼（ACCP138 / ALBT8 等安聯內部代碼）顯示「NAV 抓不到」→ `ui/tab_fund_grp_health.py` 從 `fetch_nav_cnyes / fetch_div_cnyes`（單一 cnyes source 不收錄保單代碼）改為 `fetch_nav / fetch_div`（多源 fallback aggregator：MoneyDJ TCB + yp004001 + yp004003）。Drop-in 同 shape，純函式層無動。
+- 初始化基準：協議 v2.0 Auto-Ship 套用，歷史版本紀錄詳見 `git log`。
 
 ## 下一步
 （待 user 指示）
