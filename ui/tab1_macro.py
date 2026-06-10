@@ -256,6 +256,165 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     }
 
 
+def _render_macro_navigator(indicators: dict | None,
+                            phase_dict: dict | None,
+                            fred_api_key: str = "") -> None:
+    """v19.45 總經導航卡 — 上方 4 欄 verdict 摘要，對齊台股「震盪整理｜謹慎觀望」UX。
+
+    一眼看到 4 個面板結論（總經 / 短線 / 拐點 / 美林時鐘），下方 ①②④MK 完整面板
+    仍保留供細節查看。零 IO 衝擊（radar/inflection 重用 ttl cache）。
+    """
+    # ── 1. 🌍 總經 verdict（① 戰情室同源：phase + composite score）─────
+    _ph = phase_dict or {}
+    _ph_label = _ph.get("phase") or "資料不足"
+    _ph_score = _ph.get("score")
+    _ph_alloc = _ph.get("alloc") or _ph.get("allocation") or "—"
+    _ph_advice = _ph.get("advice") or ""
+    _ph_color = _ph.get("color") or "#888"
+    _ph_icon = _ph.get("icon") or "🌍"
+    if _ph_score is None:
+        _ph_metric = "等待 FRED 載入"
+    else:
+        _ph_metric = f"分數 {_ph_score:+.2f} ｜ 建議 {_ph_alloc}"
+
+    # ── 2. ⚡ 短線 verdict（④ 短線雷達同源：summarize_radar）──────────
+    _rd_level = "—"
+    _rd_metric = "等待 FRED 載入"
+    _rd_color = "#888"
+    _rd_icon = "⬜"
+    _rd_action = "FRED API key 未設或抓取失敗"
+    if fred_api_key and len(str(fred_api_key).strip()) >= 30:
+        try:
+            _cache = st.session_state.get("_radar_v1921_top")
+            if _cache is None:
+                from services.risk_radar import detect_risk_radar, summarize_radar
+                _r = detect_risk_radar(fred_api_key)
+                _rs = summarize_radar(_r)
+                st.session_state["_radar_v1921_top"] = (_r, _rs)
+            else:
+                _r, _rs = _cache
+            if _rs is not None:
+                _rd_level = _rs.get("level", "—")
+                _rd_color = _rs.get("color", "#888")
+                _rd_icon = {"平靜": "🟢", "警戒": "🟡",
+                            "警報": "🔴", "極端警報": "🔴"}.get(_rd_level, "⬜")
+                _rd_metric = (f"🔴 {_rs.get('red',0)} ｜ 🟡 {_rs.get('yellow',0)} "
+                              f"｜ 🟢 {_rs.get('green',0)} ｜ ⬜ {_rs.get('gray',0)}")
+                _rd_action = {
+                    "平靜": "10 燈無急殺訊號",
+                    "警戒": "短線轉緊，留意波動",
+                    "警報": "急殺進行中，降槓桿",
+                    "極端警報": "立即減倉防守",
+                }.get(_rd_level, "—")
+        except Exception as _re:  # noqa: BLE001
+            _rd_action = f"radar err: {type(_re).__name__}"
+
+    # ── 3. 🎯 拐點 verdict（② 拐點同源：detect_turning_points 計票）────
+    _tp_label = "—"
+    _tp_metric = "等待 FRED 載入"
+    _tp_color = "#888"
+    _tp_icon = "⬜"
+    _tp_detail = "FRED API key 未設或抓取失敗"
+    if fred_api_key and len(str(fred_api_key).strip()) >= 30:
+        try:
+            from services.macro_service import detect_turning_points
+            _tp = detect_turning_points(fred_api_key)
+            if _tp:
+                # 5 個拐點訊號計票（pmi_diff / yield_curve / hy_spread / sahm_rule / lei_cfnai）
+                _tp_hit = 0
+                _tp_total = 0
+                for _k in ("pmi_diff", "yield_curve", "hy_spread", "sahm_rule", "lei_cfnai"):
+                    _sig = (_tp.get(_k) or {}).get("signal", "")
+                    if not _sig or "⬜" in _sig or "資料不足" in _sig:
+                        continue
+                    _tp_total += 1
+                    # 命中：拐點訊號 emoji（🚀 / ⚠️ / 🌟 / 🔭 等非綠色狀態）
+                    if any(x in _sig for x in ("🚀", "⚠️", "🌟", "🔭", "拐點", "反彈", "翻揚")):
+                        _tp_hit += 1
+                _tp_metric = f"訊號命中 {_tp_hit} / {_tp_total}"
+                if _tp_total == 0:
+                    _tp_label = "資料不足"
+                    _tp_color = "#888"
+                    _tp_icon = "⬜"
+                    _tp_detail = "5 個拐點訊號全 ⬜"
+                elif _tp_hit >= 2:
+                    _tp_label = "拐點訊號"
+                    _tp_color = "#fbc02d"
+                    _tp_icon = "🎯"
+                    _tp_detail = "≥2 訊號同向，留意景氣翻轉"
+                elif _tp_hit == 1:
+                    _tp_label = "單一警示"
+                    _tp_color = "#69f0ae"
+                    _tp_icon = "🟢"
+                    _tp_detail = "僅 1 訊號，雜訊機率高"
+                else:
+                    _tp_label = "無拐點"
+                    _tp_color = "#69f0ae"
+                    _tp_icon = "🟢"
+                    _tp_detail = "5 訊號均無翻轉特徵"
+        except Exception as _te:  # noqa: BLE001
+            _tp_detail = f"inflection err: {type(_te).__name__}"
+
+    # ── 4. 🕐 美林時鐘 verdict（MK 時鐘同源：classify_phase 四象限）────
+    _mk_label = "資料不足"
+    _mk_metric = "—"
+    _mk_color = "#888"
+    _mk_icon = "❓"
+    _mk_advice = "PMI / CPI 缺資料"
+    try:
+        from ui.components.mk_clock import classify_phase
+        _mk_key, _mk_meta = classify_phase(indicators or {})
+        if _mk_key and _mk_meta:
+            _mk_label = _mk_meta.get("zh", "—")
+            _mk_color = _mk_meta.get("color", "#888")
+            _mk_icon = _mk_meta.get("icon", "❓")
+            _mk_metric = f"股 {_mk_meta.get('alloc_eq','—')}% ／ 債 {_mk_meta.get('alloc_bd','—')}%"
+            _mk_advice = _mk_meta.get("advice", "")[:50]  # 截斷避免卡片過長
+    except Exception as _me:  # noqa: BLE001
+        _mk_advice = f"mk err: {type(_me).__name__}"
+
+    # ── 渲染 4 欄 ──────────────────────────────────────────────────────
+    def _card(title: str, icon: str, label: str, color: str,
+              metric: str, detail: str) -> str:
+        return (
+            f'<div style="background:#0d1117;border:2px solid {color};'
+            f'border-radius:10px;padding:12px 14px;min-height:140px;'
+            f'box-shadow:0 1px 3px rgba(0,0,0,0.3);">'
+            f'<div style="color:#8b949e;font-size:12px;margin-bottom:4px;'
+            f'font-weight:600;">{icon} {title}</div>'
+            f'<div style="color:{color};font-size:20px;font-weight:800;'
+            f'line-height:1.2;margin:4px 0;">{label}</div>'
+            f'<div style="color:#c9d1d9;font-size:13px;margin-top:6px;">{metric}</div>'
+            f'<div style="color:#8b949e;font-size:11px;margin-top:6px;'
+            f'line-height:1.5;">{detail}</div>'
+            f'</div>'
+        )
+
+    st.markdown(
+        '<div style="font-size:13px;color:#8b949e;margin:8px 0 6px 0;'
+        'font-weight:600;">🧭 總經導航卡 — 上方 4 面板 verdict 速覽</div>',
+        unsafe_allow_html=True,
+    )
+    _nv1, _nv2, _nv3, _nv4 = st.columns(4)
+    with _nv1:
+        st.markdown(_card("總經", "🌍", _ph_label, _ph_color,
+                          _ph_metric, _ph_advice[:60]),
+                    unsafe_allow_html=True)
+    with _nv2:
+        st.markdown(_card("短線雷達", "⚡", _rd_level, _rd_color,
+                          _rd_metric, _rd_action),
+                    unsafe_allow_html=True)
+    with _nv3:
+        st.markdown(_card("拐點偵測", "🎯", _tp_label, _tp_color,
+                          _tp_metric, _tp_detail),
+                    unsafe_allow_html=True)
+    with _nv4:
+        st.markdown(_card("美林時鐘", _mk_icon, _mk_label, _mk_color,
+                          _mk_metric, _mk_advice),
+                    unsafe_allow_html=True)
+    st.caption("↓ 下方為 ① 戰情室 / ④ 短線雷達 / ② 拐點偵測 / MK 時鐘 完整面板")
+
+
 def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") -> None:
     """✨ v19.17：新手友善總經面板 — 接在 pending banner 後、v19.15 進階區之前。
 
@@ -789,6 +948,13 @@ def render_macro_tab() -> None:
         ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
         alloc = phase["alloc"];  advice = phase.get("advice","")
         rec_p = phase.get("rec_prob")
+
+        # ══ v19.45 總經導航卡（4 欄 verdict 摘要）═════════════════════
+        # 對齊台股「震盪整理｜謹慎觀望」UX — 上方一眼看 4 面板結論
+        try:
+            _render_macro_navigator(ind, phase, FRED_KEY)
+        except Exception as _nav_e:  # noqa: BLE001
+            print(f"[tab1/navigator] {type(_nav_e).__name__}: {_nav_e}")
 
         # v19.38 ARCHIVED: ✨ 新手友善面板（雙速合議）— 矛盾主因（月度合議 vs 日級雷達混在同卡）
         # v19.38 ARCHIVED: 📊 台股本地視角（12M/1Q）— 與下方「💵 台股熱錢監測」重複且 12M 視窗無關熊市驗證
