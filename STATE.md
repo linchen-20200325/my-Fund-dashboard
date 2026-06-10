@@ -21,6 +21,7 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **feat(macro) PR #251 @ fb4622d v19.42**：拆除單一 tab 包裝 → ① 戰情室（總經）成為頁面首屏。user v19.41 後仍反饋「上方仍沒有總經 短期 拐點面板」— 根因：Streamlit 單一 tab strip + roadmap caption 擋在 ① 戰情室上方。改動：`(tab_main,) = st.tabs([...])` 改用 `contextlib.nullcontext()`，所有 `with tab_main:` 區塊保持縮排不變（零功能變動）；roadmap caption 移除，由 ①②③④⑤⑥ 編號 heading 隱含順序。新視覺流：資料 banner → ① 戰情室（總經）→ ④ 短期 → ② 拐點 → ⑤⑥ → ③ → MK 時鐘。
 - **feat(macro) PR #250 @ 016dd63 v19.41**：總經面板上移至 tab 首屏 — ③ 🔬 即時訊號決策矩陣 從戰情首頁 tab 外（L799）下移至 tab 內結尾（MK 時鐘前），讓 ① 戰情室（總經）成為 tab 首屏。新順序：① 總經 → ④ 短期 → ② 拐點 → ⑤ 流動性 → ⑥ 台股熱錢 → ③ 即時決策。caption 同步更新；指標教學手冊指引改指 📖 說明書 Tab §11 宏觀教學文獻。
 - **feat(macro) PR #249 @ 8293d62 v19.40 PR2**：教學面板搬遷至 📖 說明書 Tab §11 宏觀教學文獻（tab1 −361 行 / 2465→2104；tab6 +381 行 / 578→959）— §A 🎯 為什麼是這位階 / §B 📊 23指標教學手冊 / §C 📈 歷史對照圖 / §D 👉 加扣分明細（_macro_23items stash）/ §E 📊 變數重要性（_macro_var_importance stash）。stash 契約：tab1 寫入 _macro_ind，tab6 讀取並重現面板；stash 空 → 友善提示。1826 passed / 5 skipped。roadmap PR1→PR2 全部完成。
 - **feat(macro) PR #247 @ 13026cc v19.39 PR1C**：archive 8 inline 面板（−830 行 / 3296→2466）— 🌡️ 風險溫度計 4 cards / V4 複合 / 🎯 風險評分校準 / 🧮 景氣分數校準 / 🧭 景氣羅盤 / 📅 Tier A / 🔗 因果鏈 Sankey / 📊 細項燈號回測。Stash 介面契約完整保留（_macro_compass / _macro_sankey / _macro_subsector_bt / _cal_*）— AI 摘要 widget 繼續吃齊。Cleanup：移除 3 個 unused imports + sc/ph_c 變數；2 個 archive-dependent tests 改 @pytest.mark.skip。
@@ -30,5 +31,6 @@
 - 初始化基準：協議 v2.0 Auto-Ship 套用，歷史版本紀錄詳見 `git log`。
 
 ## 下一步
-v19.41 總經面板上移完成。PR1B → PR1C → PR2 roadmap 完成。tab1_macro.py 從 3766→2104 行（−44%）。
-（待 user 指示下一階段任務）
+v19.42 拆除單一 tab 包裝完成 → ① 戰情室（總經）為頁面首屏。
+v19.41 + v19.42 雙重保險：③ 已在 tab 結尾 + tab strip 已消滅。
+（待 user 確認 Streamlit Cloud redeploy 完成 → 應顯示 v19.42_MacroNoTabStrip）
