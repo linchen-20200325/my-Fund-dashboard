@@ -113,28 +113,35 @@ def _signal_vix_level() -> dict:
 
 
 # ── 多源 fallback helper (v19.30 鏡像 stock v18.181) ─────────────
-def _fetch_cboe_csv(short_name: str) -> pd.Series:
+def _fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Series:
     """CBOE 官方每日 CSV → 收盤 Series（key: short_name 如 'VIX3M' / 'CPC' / 'CPCE'）。
 
     URL pattern: https://cdn.cboe.com/api/global/us_indices/daily_prices/{short}_History.csv
     對 ^VIX3M、^CPC、^CPCE 等 Yahoo 已停供 ticker 的官方替代源。
 
-    失敗回空 Series。
+    v19.43：可選 trace list 收集失敗原因供 UI 顯示。失敗回空 Series。
     """
     import io
 
     from infra.proxy import fetch_url
+
+    def _t(msg: str) -> None:
+        if trace is not None:
+            trace.append(f"CBOE {short_name}: {msg}")
     try:
         url = ("https://cdn.cboe.com/api/global/us_indices/"
                f"daily_prices/{short_name}_History.csv")
         r = fetch_url(url, timeout=15)
         if r is None or getattr(r, "status_code", 0) != 200:
-            print(f"[risk_radar/cboe] {short_name} HTTP {getattr(r, 'status_code', None)}")
+            code = getattr(r, "status_code", None)
+            _t(f"HTTP {code}")
+            print(f"[risk_radar/cboe] {short_name} HTTP {code}")
             return pd.Series(dtype=float)
         df = pd.read_csv(io.StringIO(r.text))
         date_col = next((c for c in df.columns if "DATE" in c.upper()), None)
         close_col = next((c for c in df.columns if "CLOSE" in c.upper()), None)
         if not date_col or not close_col or df.empty:
+            _t(f"欄位不符 {list(df.columns)[:3]}")
             print(f"[risk_radar/cboe] {short_name} 欄位不符: {list(df.columns)}")
             return pd.Series(dtype=float)
         idx = pd.to_datetime(df[date_col], errors="coerce")
@@ -142,32 +149,42 @@ def _fetch_cboe_csv(short_name: str) -> pd.Series:
         s = pd.Series(vals.values, index=idx).dropna().sort_index()
         return s.tail(180)  # 對齊 6mo
     except Exception as e:  # noqa: BLE001
+        _t(f"exception {str(e)[:40]}")
         print(f"[risk_radar/cboe] {short_name} 失敗: {e}")
         return pd.Series(dtype=float)
 
 
-def _fetch_stooq_csv(symbol: str) -> pd.Series:
+def _fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
     """stooq.com 公開歷史 CSV → 收盤 Series（key: symbol e.g. '^vix3m' / '^vxv' / '^cpc'）。
 
     URL pattern: https://stooq.com/q/d/l/?s={symbol}&i=d
     對 CBOE 系列指數的第 4 層備援（公開 CDN 不需登入），多數 NAS Squid 環境可直連。
-    失敗或無此 symbol 回空 Series；console log 印出 root cause 助 debug。
+
+    v19.43：可選 trace list 收集失敗原因供 UI 顯示。失敗或無此 symbol 回空 Series。
     """
     import io
 
     from infra.proxy import fetch_url
+
+    def _t(msg: str) -> None:
+        if trace is not None:
+            trace.append(f"stooq {symbol}: {msg}")
     try:
         url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
         r = fetch_url(url, timeout=15)
         if r is None or getattr(r, "status_code", 0) != 200:
-            print(f"[risk_radar/stooq] {symbol} HTTP {getattr(r, 'status_code', None)}")
+            code = getattr(r, "status_code", None)
+            _t(f"HTTP {code}")
+            print(f"[risk_radar/stooq] {symbol} HTTP {code}")
             return pd.Series(dtype=float)
         text = r.text
         if "No data" in text or len(text) < 50:
+            _t("No data / body 過短")
             print(f"[risk_radar/stooq] {symbol} 無資料（stooq 回 'No data' 或 body 過短）")
             return pd.Series(dtype=float)
         df = pd.read_csv(io.StringIO(text))
         if "Date" not in df.columns or "Close" not in df.columns or df.empty:
+            _t(f"欄位不符 {list(df.columns)[:3]}")
             print(f"[risk_radar/stooq] {symbol} 欄位不符: {list(df.columns)}")
             return pd.Series(dtype=float)
         idx = pd.to_datetime(df["Date"], errors="coerce")
@@ -175,51 +192,66 @@ def _fetch_stooq_csv(symbol: str) -> pd.Series:
         s = pd.Series(vals.values, index=idx).dropna().sort_index()
         return s.tail(180)
     except Exception as e:  # noqa: BLE001
+        _t(f"exception {str(e)[:40]}")
         print(f"[risk_radar/stooq] {symbol} 失敗: {e}")
         return pd.Series(dtype=float)
 
 
-def _resolve_vix3m() -> tuple[pd.Series, str]:
-    """VIX3M 多源 chain：Yahoo ^VIX3M → Yahoo ^VXV → CBOE CSV → stooq ^vix3m/^vxv。"""
+def _resolve_vix3m() -> tuple[pd.Series, str, list[str]]:
+    """VIX3M 多源 chain：Yahoo ^VIX3M → Yahoo ^VXV → CBOE CSV → stooq ^vix3m/^vxv。
+
+    v19.43：回傳 (series, src_label, fail_trace) — fail_trace 收集每層失敗原因供 UI 顯示。
+    """
+    trace: list[str] = []
     for t in ("^VIX3M", "^VXV"):
         s = fetch_yf_close(t, range_="6mo")
         if not s.empty and len(s) >= 2:
-            return s, f"Yahoo {t}"
-    s = _fetch_cboe_csv("VIX3M")
+            return s, f"Yahoo {t}", trace
+        trace.append(f"Yahoo {t}: empty (len={len(s)})")
+    s = _fetch_cboe_csv("VIX3M", trace=trace)
     if not s.empty and len(s) >= 2:
-        return s, "CBOE VIX3M_History.csv"
+        return s, "CBOE VIX3M_History.csv", trace
     for sym in ("^vix3m", "^vxv"):
-        s = _fetch_stooq_csv(sym)
+        s = _fetch_stooq_csv(sym, trace=trace)
         if not s.empty and len(s) >= 2:
-            return s, f"stooq {sym}"
-    return pd.Series(dtype=float), ""
+            return s, f"stooq {sym}", trace
+    return pd.Series(dtype=float), "", trace
 
 
-def _resolve_put_call() -> tuple[pd.Series, str]:
-    """CBOE Put/Call 多源 chain：Yahoo ^CPC/^CPCE → CBOE CSV CPC/CPCE → stooq ^cpc/^cpce。"""
+def _resolve_put_call() -> tuple[pd.Series, str, list[str]]:
+    """CBOE Put/Call 多源 chain：Yahoo ^CPC/^CPCE → CBOE CSV CPC/CPCE → stooq ^cpc/^cpce。
+
+    v19.43：回傳 (series, src_label, fail_trace) — fail_trace 收集每層失敗原因供 UI 顯示。
+    """
+    trace: list[str] = []
     for t in ("^CPC", "^CPCE"):
         s = fetch_yf_close(t, range_="6mo")
         if not s.empty and len(s) >= 2:
-            return s, f"Yahoo {t}"
+            return s, f"Yahoo {t}", trace
+        trace.append(f"Yahoo {t}: empty (len={len(s)})")
     for short in ("CPC", "CPCE"):
-        s = _fetch_cboe_csv(short)
+        s = _fetch_cboe_csv(short, trace=trace)
         if not s.empty and len(s) >= 2:
-            return s, f"CBOE {short}_History.csv"
+            return s, f"CBOE {short}_History.csv", trace
     for sym in ("^cpc", "^cpce"):
-        s = _fetch_stooq_csv(sym)
+        s = _fetch_stooq_csv(sym, trace=trace)
         if not s.empty and len(s) >= 2:
-            return s, f"stooq {sym}"
-    return pd.Series(dtype=float), ""
+            return s, f"stooq {sym}", trace
+    return pd.Series(dtype=float), "", trace
 
 
 # ── 2. VIX 期限結構 (VIX / VIX3M) ────────────────────────────────
 def _signal_vix_term_struct() -> dict:
     try:
         sv = fetch_yf_close("^VIX", range_="6mo")
-        s3, src3 = _resolve_vix3m()
+        s3, src3, trace = _resolve_vix3m()
         _label = f"Yahoo ^VIX / {src3}" if src3 else "Yahoo ^VIX / VIX3M（全源失敗）"
+        if sv.empty:
+            trace.insert(0, f"Yahoo ^VIX: empty (len={len(sv)})")
         if sv.empty or s3.empty:
-            return _empty("VIX/VIX3M 抓取失敗（Yahoo + CBOE 全源失敗）", _label)
+            note = ("VIX/VIX3M 全源失敗｜" + " ｜ ".join(trace)) if trace \
+                   else "VIX/VIX3M 抓取失敗（Yahoo + CBOE 全源失敗）"
+            return _empty(note, _label)
         df = pd.concat([sv.rename("vix"), s3.rename("v3m")], axis=1).dropna()
         if df.empty or len(df) < 2:
             return _empty("VIX/VIX3M 對齊後不足 2 筆", _label)
@@ -396,13 +428,12 @@ def _signal_sector_rotation() -> dict:
 # ── 9. CBOE Put/Call Ratio ───────────────────────────────────────
 def _signal_put_call_ratio() -> dict:
     try:
-        s, src = _resolve_put_call()
+        s, src, trace = _resolve_put_call()
         _label = src if src else "CBOE Put/Call chain（全源失敗）"
         if s.empty or len(s) < 2:
-            return _empty(
-                "Put/Call 抓取失敗（Yahoo ^CPC/^CPCE + CBOE CSV 全源失敗）",
-                _label,
-            )
+            note = ("Put/Call 全源失敗｜" + " ｜ ".join(trace)) if trace \
+                   else "Put/Call 抓取失敗（Yahoo ^CPC/^CPCE + CBOE CSV 全源失敗）"
+            return _empty(note, _label)
         cur = float(s.iloc[-1])
         prev = float(s.iloc[-2])
         if cur >= 1.20:
