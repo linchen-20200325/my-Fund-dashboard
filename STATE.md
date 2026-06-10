@@ -21,6 +21,7 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **feat(macro) PR #250 @ 016dd63 v19.41**：總經面板上移至 tab 首屏 — ③ 🔬 即時訊號決策矩陣 從戰情首頁 tab 外（L799）下移至 tab 內結尾（MK 時鐘前），讓 ① 戰情室（總經）成為 tab 首屏。新順序：① 總經 → ④ 短期 → ② 拐點 → ⑤ 流動性 → ⑥ 台股熱錢 → ③ 即時決策。caption 同步更新；指標教學手冊指引改指 📖 說明書 Tab §11 宏觀教學文獻。
 - **feat(macro) PR #249 @ 8293d62 v19.40 PR2**：教學面板搬遷至 📖 說明書 Tab §11 宏觀教學文獻（tab1 −361 行 / 2465→2104；tab6 +381 行 / 578→959）— §A 🎯 為什麼是這位階 / §B 📊 23指標教學手冊 / §C 📈 歷史對照圖 / §D 👉 加扣分明細（_macro_23items stash）/ §E 📊 變數重要性（_macro_var_importance stash）。stash 契約：tab1 寫入 _macro_ind，tab6 讀取並重現面板；stash 空 → 友善提示。1826 passed / 5 skipped。roadmap PR1→PR2 全部完成。
 - **feat(macro) PR #247 @ 13026cc v19.39 PR1C**：archive 8 inline 面板（−830 行 / 3296→2466）— 🌡️ 風險溫度計 4 cards / V4 複合 / 🎯 風險評分校準 / 🧮 景氣分數校準 / 🧭 景氣羅盤 / 📅 Tier A / 🔗 因果鏈 Sankey / 📊 細項燈號回測。Stash 介面契約完整保留（_macro_compass / _macro_sankey / _macro_subsector_bt / _cal_*）— AI 摘要 widget 繼續吃齊。Cleanup：移除 3 個 unused imports + sc/ph_c 變數；2 個 archive-dependent tests 改 @pytest.mark.skip。
 - **feat(macro) PR #245 @ a991f4f v19.38 PR1B**：archive 10+ inline 面板（−477 行 / 3772→3295）— 7 維獨立合議 / 7 子領域燈號 / 四大類別 / Hero 卡 / 景氣時鐘 / 天氣 / 風險警示 / 美林時鐘 / T1 事件衝擊。
@@ -29,5 +30,5 @@
 - 初始化基準：協議 v2.0 Auto-Ship 套用，歷史版本紀錄詳見 `git log`。
 
 ## 下一步
-PR1B → PR1C → PR2 roadmap 完成。tab1_macro.py 從 3766→2104 行（−44%）。
+v19.41 總經面板上移完成。PR1B → PR1C → PR2 roadmap 完成。tab1_macro.py 從 3766→2104 行（−44%）。
 （待 user 指示下一階段任務）
