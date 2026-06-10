@@ -359,9 +359,10 @@ class TestCboeCsvHelper:
 class TestResolveVix3m:
     def test_yahoo_primary_wins(self):
         with patch.object(rr, "fetch_yf_close", return_value=_yf([15.0] * 8)):
-            s, src = rr._resolve_vix3m()
+            s, src, trace = rr._resolve_vix3m()
         assert "Yahoo ^VIX3M" in src
         assert not s.empty
+        assert trace == []
 
     def test_falls_through_to_vxv(self):
         def _mock(t, **kw):
@@ -369,8 +370,9 @@ class TestResolveVix3m:
                 return pd.Series(dtype=float)
             return _yf([16.0] * 8)
         with patch.object(rr, "fetch_yf_close", side_effect=_mock):
-            s, src = rr._resolve_vix3m()
+            s, src, trace = rr._resolve_vix3m()
         assert "Yahoo ^VXV" in src
+        assert any("^VIX3M" in t for t in trace)
 
     def test_falls_through_to_cboe(self):
         from unittest.mock import MagicMock
@@ -380,24 +382,27 @@ class TestResolveVix3m:
         cboe_resp.text = csv
         with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
              patch("infra.proxy.fetch_url", return_value=cboe_resp):
-            s, src = rr._resolve_vix3m()
+            s, src, _ = rr._resolve_vix3m()
         assert "CBOE VIX3M_History.csv" in src
         assert not s.empty
 
     def test_all_sources_fail_returns_empty(self):
         with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
              patch("infra.proxy.fetch_url", return_value=None):
-            s, src = rr._resolve_vix3m()
+            s, src, trace = rr._resolve_vix3m()
         assert s.empty
         assert src == ""
+        # v19.43：應收集 4 層失敗（2 Yahoo + 1 CBOE + 2 stooq = 5 條）
+        assert len(trace) >= 4
 
 
 class TestResolvePutCall:
     def test_yahoo_cpc_primary_wins(self):
         with patch.object(rr, "fetch_yf_close", return_value=_yf([0.8] * 8)):
-            s, src = rr._resolve_put_call()
+            s, src, trace = rr._resolve_put_call()
         assert "Yahoo ^CPC" in src
         assert not s.empty
+        assert trace == []
 
     def test_falls_through_to_cpce(self):
         def _mock(t, **kw):
@@ -405,8 +410,9 @@ class TestResolvePutCall:
                 return pd.Series(dtype=float)
             return _yf([0.9] * 8)
         with patch.object(rr, "fetch_yf_close", side_effect=_mock):
-            s, src = rr._resolve_put_call()
+            s, src, trace = rr._resolve_put_call()
         assert "Yahoo ^CPCE" in src
+        assert any("^CPC" in t for t in trace)
 
     def test_falls_through_to_cboe_csv(self):
         from unittest.mock import MagicMock
@@ -416,16 +422,39 @@ class TestResolvePutCall:
         cboe_resp.text = csv
         with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
              patch("infra.proxy.fetch_url", return_value=cboe_resp):
-            s, src = rr._resolve_put_call()
+            s, src, _ = rr._resolve_put_call()
         assert "CBOE CPC_History.csv" in src
         assert not s.empty
 
     def test_all_sources_fail(self):
         with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
              patch("infra.proxy.fetch_url", return_value=None):
-            s, src = rr._resolve_put_call()
+            s, src, trace = rr._resolve_put_call()
         assert s.empty
         assert src == ""
+        assert len(trace) >= 4
+
+
+class TestFailTraceSurfacedInNote:
+    """v19.43：全源失敗時 note 應包含逐層失敗痕跡，user 可從 UI 直接看根因。"""
+
+    def test_vix_term_struct_note_contains_trace(self):
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=None):
+            d = rr._signal_vix_term_struct()
+        assert "⬜" in d["signal"]
+        assert "全源失敗" in d["note"]
+        assert ("Yahoo" in d["note"] or "CBOE" in d["note"]
+                or "stooq" in d["note"])
+
+    def test_put_call_note_contains_trace(self):
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=None):
+            d = rr._signal_put_call_ratio()
+        assert "⬜" in d["signal"]
+        assert "全源失敗" in d["note"]
+        assert ("Yahoo" in d["note"] or "CBOE" in d["note"]
+                or "stooq" in d["note"])
 
 
 class TestVixTermStructCboeFallback:
