@@ -802,7 +802,11 @@ def render_macro_tab() -> None:
 
         # ══ v17.3 內層 Tab：戰情首頁（§6-6 資訊不藏匿）═══
         # v19.40 PR2: 📖 指標教學手冊 已搬至 📖 說明書 Tab §11 宏觀教學文獻
-        (tab_main,) = st.tabs(["📊 戰情首頁（完整 23 指標）"])
+        # v19.42: 單一 tab 包裝拆除 — Streamlit tab strip 擋在 ① 戰情室（總經）前
+        #         user 反饋「總經放在最上方」三度仍不見效 → 直接消滅 tab strip
+        #         以 contextlib.nullcontext() 取代，所有 `with tab_main:` 區塊保持縮排不動
+        import contextlib as _cl_v1942
+        tab_main = _cl_v1942.nullcontext()
 
         # v19.40 ARCHIVED PR2 (PR #TBD):
         # with tab_edu: 📖 指標教學手冊（build_cards_from_indicators / MACRO_EDU）
@@ -816,9 +820,8 @@ def render_macro_tab() -> None:
             # 🗂️ 四大類別景氣健康度（含 24M 歷史趨勢）— 純加權分類無新訊號
             # ③ 今日市場結論 Hero 卡 — 重複 ① 戰情室三儀表 + ② 拐點偵測之綜合判讀
             # 完整原始程式碼見 git log @ 91da530 之前（L928-L1229）
-            st.caption("ℹ️ 戰情首頁：① 戰情室（總經）→ ④ 短線雷達（短期）→ ② 拐點偵測（拐點）→ "
-                       "⑤ 流動性 → ⑥ 台股熱錢 → ③ 即時決策矩陣。"
-                       "完整指標教學請切到 📖 說明書 Tab §11 宏觀教學文獻。")
+            # v19.42: roadmap caption 下移 — 原置於 ① 上方會擋路 → 改放 ① 之後
+            # （由 ① 戰情室直接渲染為頁面首屏，無 tab strip / 無 caption 干擾）
 
 
             # ══ L3 60/40 雙欄佈局（戰情室 × Z-Score 矩陣）══════════════
