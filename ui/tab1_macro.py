@@ -796,12 +796,9 @@ def render_macro_tab() -> None:
         # _render_beginner_dashboard(ind, FRED_KEY)
         # _render_tw_local_dashboard(ind, FRED_KEY)
 
-        # ── ③ 🔬 即時訊號決策矩陣（v19.15 verdict + 逐檔行動建議） ──
-        with st.expander(
-            "③ 🔬 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
-            expanded=False,
-        ):
-            _render_realtime_decision_dashboard(ind)
+        # v19.41 MOVED: ③ 🔬 即時訊號 + 決策矩陣 已移至 tab 內結尾（MK 時鐘前）
+        # 改動原因：user 反饋「總經、短期、拐點 三個面板 — 總經放在最上方」，
+        # ③ expander 原位於 tab 外擋在 ① 戰情室（總經）之前，下移後 tab 首屏即為總經面板
 
         # ══ v17.3 內層 Tab：戰情首頁（§6-6 資訊不藏匿）═══
         # v19.40 PR2: 📖 指標教學手冊 已搬至 📖 說明書 Tab §11 宏觀教學文獻
@@ -819,8 +816,9 @@ def render_macro_tab() -> None:
             # 🗂️ 四大類別景氣健康度（含 24M 歷史趨勢）— 純加權分類無新訊號
             # ③ 今日市場結論 Hero 卡 — 重複 ① 戰情室三儀表 + ② 拐點偵測之綜合判讀
             # 完整原始程式碼見 git log @ 91da530 之前（L928-L1229）
-            st.caption("ℹ️ 戰情首頁：① 戰情室 → ② 拐點偵測 → ④ 短線雷達 → ⑤ 流動性 → ⑥ 台股熱錢。"
-                       "完整指標教學請切到右側「📖 指標教學手冊」分頁。")
+            st.caption("ℹ️ 戰情首頁：① 戰情室（總經）→ ④ 短線雷達（短期）→ ② 拐點偵測（拐點）→ "
+                       "⑤ 流動性 → ⑥ 台股熱錢 → ③ 即時決策矩陣。"
+                       "完整指標教學請切到 📖 說明書 Tab §11 宏觀教學文獻。")
 
 
             # ══ L3 60/40 雙欄佈局（戰情室 × Z-Score 矩陣）══════════════
@@ -1820,6 +1818,15 @@ def render_macro_tab() -> None:
                                               key_prefix="tab1_hm")
                 except Exception as _hme:
                     st.error(f"熱錢監測渲染失敗：[{type(_hme).__name__}] {_hme}")
+
+            # ── v19.41 ③ 🔬 即時訊號決策矩陣（v19.15 verdict + 逐檔行動建議） ──
+            # 原位於 tab 外（L799），下移至 tab 內結尾 → 讓 ① 戰情室（總經）成為 tab 首屏
+            st.divider()
+            with st.expander(
+                "③ 🔬 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
+                expanded=False,
+            ):
+                _render_realtime_decision_dashboard(ind)
 
             # ── MK 景氣時鐘 ＆ 資產輪動（v18.8）── L2/L3 皆顯示
             st.divider()
