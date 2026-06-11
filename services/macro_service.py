@@ -1377,47 +1377,50 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
     if not fred_api_key:
         return out
 
-    # ── 指標一：新訂單 − 庫存 YoY 擴散 ──────────────────────────────
-    try:
-        df_new = fetch_fred("AMTMNO",     fred_api_key, n=60)
-        df_inv = fetch_fred("MNFCTRIRSA", fred_api_key, n=60)
-        ny = _yoy_pct(df_new)
-        iy = _yoy_pct(df_inv)
-        if not ny.empty and not iy.empty:
+    # v19.48 並行化：5 個拐點抽成 inner func + ThreadPoolExecutor，wallclock 2-4s → ~max 單拐點
+    def _calc_pmi_diff() -> tuple[str, dict]:
+        try:
+            df_new = fetch_fred("AMTMNO",     fred_api_key, n=60)
+            df_inv = fetch_fred("MNFCTRIRSA", fred_api_key, n=60)
+            ny = _yoy_pct(df_new)
+            iy = _yoy_pct(df_inv)
+            if ny.empty or iy.empty:
+                return "pmi_diff", {}
             joined = pd.concat([ny.rename("o"), iy.rename("i")], axis=1).dropna().tail(12)
-            if len(joined) >= 2:
-                diff = (joined["o"] - joined["i"]).tolist()
-                cur, prev = diff[-1], diff[-2]
-                trend = [round(v, 2) for v in diff[-6:]]
-                # 拐點：前期 ≤ 0 且本期 > 0
-                if prev <= 0 and cur > 0:
-                    sig, col, ic = "🚀 擴張拐點已現", "#00c853", "🚀"
-                    note = (f"前期 {prev:+.1f}pp → 本期 {cur:+.1f}pp（由負轉正）"
-                            f"｜製造業新訂單成長動能首度超越庫存補貨")
-                elif cur > 0 and prev > 0:
-                    sig, col, ic = "🟢 擴張延續", "#00c853", "🟢"
-                    note = f"連續正值 {cur:+.1f}pp，新訂單動能 > 庫存補貨"
-                elif cur < 0 and prev > 0:
-                    sig, col, ic = "🟡 動能轉弱", "#ff9800", "🟡"
-                    note = f"前期 {prev:+.1f}pp → 本期 {cur:+.1f}pp（由正轉負）需觀察"
-                elif cur < 0:
-                    sig, col, ic = "🔻 收縮中", "#f44336", "🔻"
-                    note = f"{cur:+.1f}pp，新訂單動能弱於庫存補貨"
-                else:
-                    sig, col, ic = "📊 持平", "#888", "📊"
-                    note = f"{cur:+.1f}pp，無明確方向"
-                out["pmi_diff"].update({
-                    "signal": sig, "color": col, "icon": ic,
-                    "value": round(cur, 2), "prev": round(prev, 2),
-                    "trend": trend, "note": note, "source_ok": True,
-                })
-    except Exception as e:
-        out["pmi_diff"]["note"] = f"AMTMNO/MNFCTRIRSA 抓取異常：{str(e)[:80]}"
+            if len(joined) < 2:
+                return "pmi_diff", {}
+            diff = (joined["o"] - joined["i"]).tolist()
+            cur, prev = diff[-1], diff[-2]
+            trend = [round(v, 2) for v in diff[-6:]]
+            if prev <= 0 and cur > 0:
+                sig, col, ic = "🚀 擴張拐點已現", "#00c853", "🚀"
+                note = (f"前期 {prev:+.1f}pp → 本期 {cur:+.1f}pp（由負轉正）"
+                        f"｜製造業新訂單成長動能首度超越庫存補貨")
+            elif cur > 0 and prev > 0:
+                sig, col, ic = "🟢 擴張延續", "#00c853", "🟢"
+                note = f"連續正值 {cur:+.1f}pp，新訂單動能 > 庫存補貨"
+            elif cur < 0 and prev > 0:
+                sig, col, ic = "🟡 動能轉弱", "#ff9800", "🟡"
+                note = f"前期 {prev:+.1f}pp → 本期 {cur:+.1f}pp（由正轉負）需觀察"
+            elif cur < 0:
+                sig, col, ic = "🔻 收縮中", "#f44336", "🔻"
+                note = f"{cur:+.1f}pp，新訂單動能弱於庫存補貨"
+            else:
+                sig, col, ic = "📊 持平", "#888", "📊"
+                note = f"{cur:+.1f}pp，無明確方向"
+            return "pmi_diff", {
+                "signal": sig, "color": col, "icon": ic,
+                "value": round(cur, 2), "prev": round(prev, 2),
+                "trend": trend, "note": note, "source_ok": True,
+            }
+        except Exception as e:
+            return "pmi_diff", {"note": f"AMTMNO/MNFCTRIRSA 抓取異常：{str(e)[:80]}"}
 
-    # ── 指標二：10Y − 2Y 殖利率利差倒掛翻正 ────────────────────────
-    try:
-        df_t = fetch_fred("T10Y2Y", fred_api_key, n=120)
-        if not df_t.empty and len(df_t) >= 30:
+    def _calc_yield_curve() -> tuple[str, dict]:
+        try:
+            df_t = fetch_fred("T10Y2Y", fred_api_key, n=120)
+            if df_t.empty or len(df_t) < 30:
+                return "yield_curve", {}
             s = df_t.sort_values("date").set_index("date")["value"].astype(float).dropna()
             window60 = s.tail(60)
             cur = float(s.iloc[-1])
@@ -1437,19 +1440,20 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             else:
                 sig, col, ic = "📊 持平", "#888", "📊"
                 note = f"{cur:+.2f}%"
-            out["yield_curve"].update({
+            return "yield_curve", {
                 "signal": sig, "color": col, "icon": ic,
                 "value": round(cur, 2),
                 "prev": round(prev, 2) if prev is not None else None,
                 "trend": trend, "note": note, "source_ok": True,
-            })
-    except Exception as e:
-        out["yield_curve"]["note"] = f"T10Y2Y 抓取異常：{str(e)[:80]}"
+            }
+        except Exception as e:
+            return "yield_curve", {"note": f"T10Y2Y 抓取異常：{str(e)[:80]}"}
 
-    # ── 指標三：HY 信用利差由高位回落（v18.250） ────────────────────
-    try:
-        df_hy = fetch_fred("BAMLH0A0HYM2", fred_api_key, n=400)
-        if not df_hy.empty and len(df_hy) >= 30:
+    def _calc_hy_spread() -> tuple[str, dict]:
+        try:
+            df_hy = fetch_fred("BAMLH0A0HYM2", fred_api_key, n=400)
+            if df_hy.empty or len(df_hy) < 30:
+                return "hy_spread", {}
             s = df_hy.sort_values("date").set_index("date")["value"].astype(float).dropna()
             cur = float(s.iloc[-1]); prev = float(s.iloc[-2])
             max90 = float(s.tail(90).max())
@@ -1467,18 +1471,19 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             else:
                 sig, col, ic = "🟡 中性帶", "#ff9800", "🟡"
                 note = f"{cur:.2f}%，介於 4~6%（待觀察方向）"
-            out["hy_spread"].update({
+            return "hy_spread", {
                 "signal": sig, "color": col, "icon": ic,
                 "value": round(cur, 2), "prev": round(prev, 2),
                 "trend": trend, "note": note, "source_ok": True,
-            })
-    except Exception as e:
-        out["hy_spread"]["note"] = f"BAMLH0A0HYM2 抓取異常：{str(e)[:80]}"
+            }
+        except Exception as e:
+            return "hy_spread", {"note": f"BAMLH0A0HYM2 抓取異常：{str(e)[:80]}"}
 
-    # ── 指標四：薩姆規則由觸發→解除（v18.250） ──────────────────────
-    try:
-        df_sa = fetch_fred("SAHMREALTIME", fred_api_key, n=36)
-        if not df_sa.empty and len(df_sa) >= 6:
+    def _calc_sahm() -> tuple[str, dict]:
+        try:
+            df_sa = fetch_fred("SAHMREALTIME", fred_api_key, n=36)
+            if df_sa.empty or len(df_sa) < 6:
+                return "sahm_rule", {}
             s = df_sa.sort_values("date").set_index("date")["value"].astype(float).dropna()
             cur = float(s.iloc[-1]); prev = float(s.iloc[-2])
             max12 = float(s.tail(12).max())
@@ -1496,47 +1501,61 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             else:
                 sig, col, ic = "🟡 警戒中", "#ff9800", "🟡"
                 note = f"{cur:.2f}，介於 0.3~0.5（接近觸發）"
-            out["sahm_rule"].update({
+            return "sahm_rule", {
                 "signal": sig, "color": col, "icon": ic,
                 "value": round(cur, 2), "prev": round(prev, 2),
                 "trend": trend, "note": note, "source_ok": True,
-            })
-    except Exception as e:
-        out["sahm_rule"]["note"] = f"SAHMREALTIME 抓取異常：{str(e)[:80]}"
+            }
+        except Exception as e:
+            return "sahm_rule", {"note": f"SAHMREALTIME 抓取異常：{str(e)[:80]}"}
 
-    # ── 指標五：CFNAI 領先指標 3M MA 翻揚（v18.250） ─────────────────
-    try:
-        df_lei = fetch_fred("CFNAI", fred_api_key, n=36)
-        if not df_lei.empty and len(df_lei) >= 6:
+    def _calc_lei() -> tuple[str, dict]:
+        try:
+            df_lei = fetch_fred("CFNAI", fred_api_key, n=36)
+            if df_lei.empty or len(df_lei) < 6:
+                return "lei_cfnai", {}
             s = df_lei.sort_values("date").set_index("date")["value"].astype(float).dropna()
             ma3 = s.rolling(3).mean().dropna()
-            if len(ma3) >= 2:
-                cur = float(ma3.iloc[-1]); prev = float(ma3.iloc[-2])
-                trend = [round(v, 2) for v in ma3.tail(8).tolist()]
-                if cur > 0 and prev <= 0:
-                    sig, col, ic = "🚀 領先指標翻揚", "#00c853", "🚀"
-                    note = (f"3M MA：前期 {prev:+.2f} → 本期 {cur:+.2f}（由負轉正）"
-                            f"｜85 指標 z-score 平均轉正，景氣進入擴張")
-                elif cur > 0:
-                    sig, col, ic = "🟢 擴張中", "#00c853", "🟢"
-                    note = f"3M MA {cur:+.2f}（正值），景氣正常擴張"
-                elif cur < -0.7:
-                    sig, col, ic = "🔴 衰退預警", "#f44336", "🔴"
-                    note = f"3M MA {cur:+.2f} < -0.7，強烈衰退訊號"
-                elif cur < 0:
-                    sig, col, ic = "🟡 動能轉弱", "#ff9800", "🟡"
-                    note = f"3M MA {cur:+.2f}（負值但 > -0.7），待觀察"
-                else:
-                    sig, col, ic = "📊 持平", "#888", "📊"
-                    note = f"3M MA {cur:+.2f}"
-                out["lei_cfnai"].update({
-                    "signal": sig, "color": col, "icon": ic,
-                    "value": round(cur, 2), "prev": round(prev, 2),
-                    "trend": trend, "note": note, "source_ok": True,
-                })
-    except Exception as e:
-        out["lei_cfnai"]["note"] = f"CFNAI 抓取異常：{str(e)[:80]}"
+            if len(ma3) < 2:
+                return "lei_cfnai", {}
+            cur = float(ma3.iloc[-1]); prev = float(ma3.iloc[-2])
+            trend = [round(v, 2) for v in ma3.tail(8).tolist()]
+            if cur > 0 and prev <= 0:
+                sig, col, ic = "🚀 領先指標翻揚", "#00c853", "🚀"
+                note = (f"3M MA：前期 {prev:+.2f} → 本期 {cur:+.2f}（由負轉正）"
+                        f"｜85 指標 z-score 平均轉正，景氣進入擴張")
+            elif cur > 0:
+                sig, col, ic = "🟢 擴張中", "#00c853", "🟢"
+                note = f"3M MA {cur:+.2f}（正值），景氣正常擴張"
+            elif cur < -0.7:
+                sig, col, ic = "🔴 衰退預警", "#f44336", "🔴"
+                note = f"3M MA {cur:+.2f} < -0.7，強烈衰退訊號"
+            elif cur < 0:
+                sig, col, ic = "🟡 動能轉弱", "#ff9800", "🟡"
+                note = f"3M MA {cur:+.2f}（負值但 > -0.7），待觀察"
+            else:
+                sig, col, ic = "📊 持平", "#888", "📊"
+                note = f"3M MA {cur:+.2f}"
+            return "lei_cfnai", {
+                "signal": sig, "color": col, "icon": ic,
+                "value": round(cur, 2), "prev": round(prev, 2),
+                "trend": trend, "note": note, "source_ok": True,
+            }
+        except Exception as e:
+            return "lei_cfnai", {"note": f"CFNAI 抓取異常：{str(e)[:80]}"}
 
+    from concurrent.futures import ThreadPoolExecutor as _TPE_tp
+    _jobs_tp = [_calc_pmi_diff, _calc_yield_curve, _calc_hy_spread, _calc_sahm, _calc_lei]
+    with _TPE_tp(max_workers=5) as _ex_tp:
+        _futs_tp = [_ex_tp.submit(_fn) for _fn in _jobs_tp]
+        for _fut_tp in _futs_tp:
+            try:
+                _key, _payload = _fut_tp.result(timeout=25)
+                if _payload:
+                    out[_key].update(_payload)
+            except Exception as e:
+                # 並行框架異常 — 不阻斷其他拐點
+                print(f"[detect_turning_points] parallel worker exception: {type(e).__name__}: {e}")
     return out
 
 
