@@ -284,15 +284,12 @@ def _render_macro_navigator(indicators: dict | None,
     _rd_icon = "⬜"
     _rd_action = "FRED API key 未設或抓取失敗"
     if fred_api_key and len(str(fred_api_key).strip()) >= 30:
-        try:
-            _cache = st.session_state.get("_radar_v1921_top")
-            if _cache is None:
-                from services.risk_radar import detect_risk_radar, summarize_radar
-                _r = detect_risk_radar(fred_api_key)
-                _rs = summarize_radar(_r)
-                st.session_state["_radar_v1921_top"] = (_r, _rs)
-            else:
-                _r, _rs = _cache
+        # v19.49：僅撈 session_state（由 spinner block 預先並行抓好），不重抓
+        _cache = st.session_state.get("_radar_v1921_top")
+        if _cache is None:
+            _rd_action = "等待上方「載入總經資料」按鈕完成"
+        else:
+            _r, _rs = _cache
             if _rs is not None:
                 _rd_level = _rs.get("level", "—")
                 _rd_color = _rs.get("color", "#888")
@@ -306,8 +303,6 @@ def _render_macro_navigator(indicators: dict | None,
                     "警報": "急殺進行中，降槓桿",
                     "極端警報": "立即減倉防守",
                 }.get(_rd_level, "—")
-        except Exception as _re:  # noqa: BLE001
-            _rd_action = f"radar err: {type(_re).__name__}"
 
     # ── 3. 🎯 拐點 verdict（② 拐點同源：detect_turning_points 計票）────
     _tp_label = "—"
@@ -317,8 +312,8 @@ def _render_macro_navigator(indicators: dict | None,
     _tp_detail = "FRED API key 未設或抓取失敗"
     if fred_api_key and len(str(fred_api_key).strip()) >= 30:
         try:
-            from services.macro_service import detect_turning_points
-            _tp = detect_turning_points(fred_api_key)
+            # v19.49：僅撈 session_state（由 spinner block 預先並行抓好），不重抓
+            _tp = st.session_state.get("_tp_v1948_top")
             if _tp:
                 # 5 個拐點訊號計票（pmi_diff / yield_curve / hy_spread / sahm_rule / lei_cfnai）
                 _tp_hit = 0
@@ -862,19 +857,54 @@ def render_macro_tab() -> None:
 
         _btn_label = "🔄 更新總經資料" if st.session_state.macro_done else "📡 載入總經資料"
         if st.button(_btn_label, type="primary", key="btn_macro_load"):
-            with st.spinner("📡 從 FRED / Yahoo Finance 抓取最新指標..."):
+            # v19.49：合併 2 spinner 為 1，並用 ThreadPoolExecutor(max_workers=4) 並行抓取
+            # indicators / news / radar / turning_points → wallclock = max(各 IO 時間)
+            # navigator + 下方面板共享 session_state cache，零重抓
+            with st.spinner("📡 並行抓取 總經指標 + 新聞 + 雷達 + 拐點..."):
                 _t0_macro = _time_mod.time()
-                # v18.223：包 try/except + 空結果偵測 — 原本無錯誤處理，抓取失敗會
-                # 無聲消失（spinner 沒了、沒資料、沒錯誤）。改成失敗顯示明確原因。
-                try:
-                    ind = fetch_all_indicators(FRED_KEY)
-                except Exception as _me:
-                    ind = {}
-                    _friendly_error(
-                        "總經指標載入失敗", _me,
-                        hint="多半是 NAS proxy 連線異常或來源暫時無回應；"
-                             "可按側欄「🔍 測試 Proxy 連線」確認，或稍後重試。",
-                        level="error")
+                from concurrent.futures import ThreadPoolExecutor as _TPE_ml
+                _has_fred = bool(FRED_KEY) and len(str(FRED_KEY).strip()) >= 30
+                with _TPE_ml(max_workers=4) as _ex_ml:
+                    _fu_ind  = _ex_ml.submit(fetch_all_indicators, FRED_KEY)
+                    _fu_news = _ex_ml.submit(fetch_market_news, max_per_feed=5)
+                    if _has_fred:
+                        from services.risk_radar import (
+                            detect_risk_radar, summarize_radar,
+                        )
+                        _fu_radar = _ex_ml.submit(detect_risk_radar, FRED_KEY)
+                        _fu_tp    = _ex_ml.submit(detect_turning_points, FRED_KEY)
+                    else:
+                        _fu_radar = None
+                        _fu_tp = None
+                    try:
+                        ind = _fu_ind.result()
+                    except Exception as _me:
+                        ind = {}
+                        _friendly_error(
+                            "總經指標載入失敗", _me,
+                            hint="多半是 NAS proxy 連線異常或來源暫時無回應；"
+                                 "可按側欄「🔍 測試 Proxy 連線」確認，或稍後重試。",
+                            level="error")
+                    try:
+                        _news = _fu_news.result()
+                    except Exception as _ne:
+                        _news = []
+                        _friendly_error(
+                            "新聞掃描暫時失敗", _ne,
+                            hint="不影響總經指標分析，可稍後重試；本次僅以指標面綜合判讀。",
+                            level="info")
+                    if _fu_radar is not None:
+                        try:
+                            _r_pre  = _fu_radar.result()
+                            _rs_pre = summarize_radar(_r_pre)
+                            st.session_state["_radar_v1921_top"] = (_r_pre, _rs_pre)
+                        except Exception:
+                            st.session_state["_radar_v1921_top"] = (None, None)
+                    if _fu_tp is not None:
+                        try:
+                            st.session_state["_tp_v1948_top"] = _fu_tp.result()
+                        except Exception:
+                            st.session_state["_tp_v1948_top"] = None
                 _macro_ms = round((_time_mod.time() - _t0_macro) * 1000)
                 if not ind:
                     st.error(
@@ -899,10 +929,6 @@ def render_macro_tab() -> None:
                     if "FED_RATE" in ind:
                         set_risk_free_rate(ind["FED_RATE"].get("value",4.0) / 100)
                     _update_data_registry()
-                    # v18.228：流動性引擎改按鈕觸發（見下方 expander），不再塞進
-                    # 總經主載入路徑 — 3×yfinance 5y + DefiLlama + 3×FRED 序列抓取
-                    # 最壞會疊上 ~2 分鐘阻塞，害總經卡在「RUNNING…」。
-                    # ── 記錄 API 延遲（供 Tab5 延遲趨勢圖）──
                     _lat_log = st.session_state.get("api_latency_log", [])
                     _lat_log.append({
                         "label":    _now_tw().strftime("%H:%M"),
@@ -911,26 +937,21 @@ def render_macro_tab() -> None:
                         "yf_ms":      None,
                     })
                     st.session_state["api_latency_log"] = _lat_log[-24:]
-                    st.success(f"✅ 已抓取 {len(ind)} 個指標！（{_now_tw().strftime('%H:%M')} TW｜{_macro_ms}ms）")
-            with st.spinner("📰 抓取市場新聞 + 系統性風險掃描..."):
-                try:
-                    _news = fetch_market_news(max_per_feed=5)
+                    # 系統性風險用已抓好的 _news（CPU 計算 <100ms，無需 spinner）
                     st.session_state.news_items = _news
-                    _srd = detect_systemic_risk(_news)
-                    st.session_state.systemic_risk_data = _srd
-                    _rl = _srd.get("risk_level","LOW")
-                    _rs = _srd.get("risk_score",0)
-                    st.info(f"📰 已掃描 {len(_news)} 則新聞｜系統性風險：{_srd.get('risk_icon','⬜')} {_rl}（評分 {_rs}）")
-                except Exception as _ne:
-                    st.session_state.news_items = []
-                    st.session_state.systemic_risk_data = None
-                    # v16.0 異常遮罩：用 _friendly_error 收進可展開的技術細節，不嚇到新手
-                    _friendly_error(
-                        "新聞掃描暫時失敗",
-                        _ne,
-                        hint="不影響總經指標分析，可稍後重試；本次僅以指標面綜合判讀。",
-                        level="info",
-                    )
+                    try:
+                        _srd = detect_systemic_risk(_news)
+                        st.session_state.systemic_risk_data = _srd
+                        _rl = _srd.get("risk_level","LOW")
+                        _rs_sc = _srd.get("risk_score",0)
+                        st.info(
+                            f"📰 已掃描 {len(_news)} 則新聞｜系統性風險："
+                            f"{_srd.get('risk_icon','⬜')} {_rl}（評分 {_rs_sc}）")
+                    except Exception:
+                        st.session_state.systemic_risk_data = None
+                    st.success(
+                        f"✅ 已抓取 {len(ind)} 個指標！"
+                        f"（{_now_tw().strftime('%H:%M')} TW｜{_macro_ms}ms）")
 
     # ── v17.0 移除新手/老手 toggle（單軌完整版）──────────────────
     # 設計原則：所有資訊一律展開，不藏；每個指標附完整教學（白話/判讀/搭配/上下游/歷史）
@@ -1438,11 +1459,15 @@ def render_macro_tab() -> None:
             st.markdown("### ② 🎯 拐點偵測中心（熊市預警主面板 ｜ 月級結構訊號）")
             st.caption("集中所有景氣翻轉訊號：製造業新訂單－庫存擴散 ｜ 10Y-2Y 殖利率倒掛翻正 ｜ "
                        "HY 信用利差 ｜ 薩姆規則 ｜ CFNAI 領先指標 ｜ 歷史回測 ｜ 變數重要性")
-            try:
-                _tp = detect_turning_points(FRED_KEY)
-            except Exception as _tp_e:  # noqa: BLE001
-                _tp = None
-                st.warning(f"⚠️ 拐點偵測失敗：{str(_tp_e)[:120]}")
+            # v19.49：spinner block 已預抓並 cache 在 session_state，直接撈避免重複網路呼叫
+            _tp = st.session_state.get("_tp_v1948_top")
+            if _tp is None:
+                try:
+                    _tp = detect_turning_points(FRED_KEY)
+                    st.session_state["_tp_v1948_top"] = _tp
+                except Exception as _tp_e:  # noqa: BLE001
+                    _tp = None
+                    st.warning(f"⚠️ 拐點偵測失敗：{str(_tp_e)[:120]}")
 
             if _tp:
                 _tp_c1, _tp_c2 = st.columns(2)

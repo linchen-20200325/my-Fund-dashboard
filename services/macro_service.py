@@ -218,16 +218,21 @@ def fetch_all_indicators(fred_api_key):
 
     # ── 殖利率利差 ──────────────────────────────────────────────────
     # n=2600 (≈10y daily) 才能 resample("ME") 後保留 120 月頻 spread → 餵 Phase 4/3-B
-    # v19.46 perf: DGS10/DGS2/DGS3MO 三條獨立 FRED 序列並行抓取（原 3× 序列 → max(t)）
+    # v19.49 perf: DGS10/DGS2/DGS3MO + HY (BAMLH0A0HYM2) + M2 (M2SL) 五條 FRED 並行
+    #   原序列 3-5s → max(t)。HY/M2 series 留待下方原本位置繼續算指標（不動邏輯）。
     # 必須用 DGS3MO（日頻 3M Treasury Constant Maturity）而非 TB3MS（月頻 T-Bill 平均），
     # 否則 spread 被 inner-join 降頻成月頻，daily threshold 會誤判 🔴 過舊。
-    with _TPE_macro(max_workers=3) as _pool_dgs:
+    with _TPE_macro(max_workers=5) as _pool_dgs:
         _f_d10 = _pool_dgs.submit(_fred, "DGS10",  fred_api_key, 2600)
         _f_d2  = _pool_dgs.submit(_fred, "DGS2",   fred_api_key, 2600)
         _f_d3m = _pool_dgs.submit(_fred, "DGS3MO", fred_api_key, 2600)
+        _f_hy  = _pool_dgs.submit(_fred, "BAMLH0A0HYM2", fred_api_key, 2500)
+        _f_m2  = _pool_dgs.submit(_fred, "M2SL",   fred_api_key, 144)
         df10 = _f_d10.result()
         df2  = _f_d2.result()
         df3m = _f_d3m.result()
+        _df_hy_pre = _f_hy.result()
+        _df_m2_pre = _f_m2.result()
 
     if not df10.empty and not df2.empty:
         sp22 = _spread_series(df10, df2, 120)
@@ -257,7 +262,8 @@ def fetch_all_indicators(fred_api_key):
 
     # ── HY 信用利差 ──────────────────────────────────────────────────
     # n=2500 + tail(2500) 確保 Phase 3-B 燈號回測有 ≥60 樣本（10y 日頻）
-    df = _fred("BAMLH0A0HYM2", fred_api_key, 2500)
+    # v19.49：已於上方 DGS pool 並行抓取（_df_hy_pre），免重複 IO
+    df = _df_hy_pre
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(2500)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -272,7 +278,8 @@ def fetch_all_indicators(fred_api_key):
             weight=2, series=s)
 
     # ── M2 ───────────────────────────────────────────────────────────
-    df = _fred("M2SL", fred_api_key, 144)
+    # v19.49：已於上方 DGS pool 並行抓取（_df_m2_pre），免重複 IO
+    df = _df_m2_pre
     if len(df) >= 13:
         s = df.set_index("date")["value"]
         yoy = (s / s.shift(12) - 1) * 100
@@ -288,9 +295,24 @@ def fetch_all_indicators(fred_api_key):
             score=1 if v>5 else (-1 if v<0 else 0),
             weight=1, series=s24)
 
+    # v19.49 perf: SPY / RSP / DXY 三條 yfinance 並行（原 3× 序列 → max(t)）
+    _yf_pre: dict = {}
+    with _TPE_macro(max_workers=3) as _pool_yf:
+        for _tk_pre in ("SPY", "RSP", "DX-Y.NYB"):
+            _yf_pre[_tk_pre] = _pool_yf.submit(_yf_s, _tk_pre, "5y")
+    # 即時 resolve（pool 結束時 future 已 done，.result() 直接拿）
+    try:
+        _yf_pre = {k: v.result() for k, v in _yf_pre.items()}
+    except Exception as _e_yf_pre:
+        print(f"[fetch_all_indicators yfinance pool] {_e_yf_pre}")
+        _yf_pre = {"SPY": pd.Series(dtype=float),
+                   "RSP": pd.Series(dtype=float),
+                   "DX-Y.NYB": pd.Series(dtype=float)}
+
     # ── 市場廣度 RSP/SPY ─────────────────────────────────────────────
     try:
-        s_spy = _yf_s("SPY","5y"); s_rsp = _yf_s("RSP","5y")
+        s_spy = _yf_pre.get("SPY", pd.Series(dtype=float))
+        s_rsp = _yf_pre.get("RSP", pd.Series(dtype=float))
         if len(s_spy)>=22 and len(s_rsp)>=22:
             ratio = (s_rsp / s_spy).dropna()
             ratio = ratio.reindex(s_spy.index, method="ffill").dropna()
@@ -311,7 +333,8 @@ def fetch_all_indicators(fred_api_key):
         print(f"[ADL] {e}")
 
     # ── DXY ──────────────────────────────────────────────────────────
-    s_dxy = _yf_s("DX-Y.NYB", "5y")
+    # v19.49：已於上方 yf pool 並行抓取
+    s_dxy = _yf_pre.get("DX-Y.NYB", pd.Series(dtype=float))
     if len(s_dxy) >= 22:
         v = round(float(s_dxy.iloc[-1]),2); m1 = round(float(s_dxy.iloc[-22]),2)
         chg_m = round((v-m1)/m1*100, 2)
