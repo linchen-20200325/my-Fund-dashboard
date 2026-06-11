@@ -855,8 +855,27 @@ def render_macro_tab() -> None:
         else:
             st.info("💡 尚未載入總經資料，點擊下方按鈕開始")
 
-        _btn_label = "🔄 更新總經資料" if st.session_state.macro_done else "📡 載入總經資料"
-        if st.button(_btn_label, type="primary", key="btn_macro_load"):
+        # v19.50：載入按鈕拆雙鈕 — 一般載入（吃既有 cache）／ 強制重抓（保證最新）
+        _btn_cols = st.columns([3, 2])
+        with _btn_cols[0]:
+            _btn_label = "🔄 更新總經資料" if st.session_state.macro_done else "📡 載入總經資料"
+            _do_load = st.button(_btn_label, type="primary", key="btn_macro_load")
+        with _btn_cols[1]:
+            _force_reload = st.button(
+                "🆕 強制重抓最新（清快取）",
+                key="btn_macro_force",
+                help="清除所有 @st.cache_data 快取 + radar/tp session 殘留，保證從上游抓最新")
+        if _force_reload:
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+            for _k in ("_radar_v1921_top", "_tp_v1948_top", "indicators",
+                       "phase_info", "news_items", "systemic_risk_data"):
+                st.session_state.pop(_k, None)
+            st.session_state.macro_done = False
+            _do_load = True  # 同流程跑下方 spinner block
+        if _do_load:
             # v19.49：合併 2 spinner 為 1，並用 ThreadPoolExecutor(max_workers=4) 並行抓取
             # indicators / news / radar / turning_points → wallclock = max(各 IO 時間)
             # navigator + 下方面板共享 session_state cache，零重抓
@@ -969,6 +988,44 @@ def render_macro_tab() -> None:
         ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
         alloc = phase["alloc"];  advice = phase.get("advice","")
         rec_p = phase.get("rec_prob")
+
+        # v19.50 ══ 📊 資料新鮮度條（總抓取時間 + age + 各區塊資料截止日）══
+        _ml_upd = st.session_state.get("macro_last_update")
+        if _ml_upd is not None:
+            _age_min_ml = (_now_tw() - _ml_upd).total_seconds() / 60
+            _age_color_ml = ('#3fb950' if _age_min_ml < 60
+                             else ('#d29922' if _age_min_ml < 240 else '#f85149'))
+            _age_label_ml = (f'{int(_age_min_ml)} 分鐘前' if _age_min_ml < 60
+                             else f'{_age_min_ml/60:.1f} 小時前')
+            # 各區塊資料截止日（從 ind 各 indicator 的 date 欄取）
+            _src_dates = []
+            for _k_src, _lbl_src in (("PMI", "PMI"), ("YIELD_10Y2Y", "10Y-2Y"),
+                                     ("HY_SPREAD", "HY"), ("CPI", "CPI"),
+                                     ("UNRATE", "UNRATE")):
+                _v_src = (ind or {}).get(_k_src) or {}
+                _d_src = str(_v_src.get("date", "")).strip()
+                if _d_src:
+                    _src_dates.append(f'{_lbl_src}:{_d_src}')
+            _src_str = ' ｜ '.join(_src_dates) if _src_dates else '—'
+            _radar_cache = st.session_state.get("_radar_v1921_top")
+            _radar_ready = bool(_radar_cache and _radar_cache[0])
+            _tp_ready = bool(st.session_state.get("_tp_v1948_top"))
+            st.markdown(
+                f'<div style="background:#0d1117;border-left:4px solid {_age_color_ml};'
+                f'border-radius:4px;padding:8px 14px;margin-bottom:8px;font-size:11px;'
+                f'color:#8b949e;line-height:1.6;">'
+                f'📊 <b>資料新鮮度</b>　'
+                f'🕐 抓取：<b style="color:#c9d1d9;">{_ml_upd.strftime("%Y-%m-%d %H:%M")}</b>　'
+                f'⏱️ <span style="color:{_age_color_ml};font-weight:700;">{_age_label_ml}</span>　'
+                f'📡 來源：FRED + Yahoo<br/>'
+                f'📅 月頻截止：<span style="color:#c9d1d9;">{_src_str}</span>　'
+                f'⚡ 雷達：{"🟢 已載入" if _radar_ready else "⬜ 未載入"}　'
+                f'🎯 拐點：{"🟢 已載入" if _tp_ready else "⬜ 未載入"}'
+                f'</div>', unsafe_allow_html=True)
+            if _age_min_ml > 240:
+                st.warning(
+                    f'⚠️ 總經資料已 {_age_label_ml} 未更新，FRED 月頻指標可能已過期，'
+                    f'建議按上方「🆕 強制重抓最新」清快取後重新載入。')
 
         # ══ v19.45 總經導航卡（4 欄 verdict 摘要）═════════════════════
         # 對齊台股「震盪整理｜謹慎觀望」UX — 上方一眼看 4 面板結論
