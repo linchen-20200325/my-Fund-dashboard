@@ -535,6 +535,8 @@ def render_portfolio_tab() -> None:
         st.divider()
 
         # ── 認證區塊（v18.75 已搬到 sidebar，這裡只顯示狀態與連結）─────
+        # v19.52: 函式級初值，避免未登入時 L1133「綁到既有保單」分支讀未綁變數
+        _sheet_id = ""
         _logged_in = bool(st.session_state.get("gsheet_tokens"))
 
         if _oauth_configured:
