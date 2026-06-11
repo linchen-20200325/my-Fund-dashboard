@@ -231,6 +231,31 @@ def render_hot_money_section(token: str = "",
                  else st.info))
     box(f"**{latest['state']}**　—　{latest['interpretation']}")
 
+    # v19.51 ══ 📊 資料新鮮度條 ══（traffic-light 掛「資料截止日距今天數」，不受快取影響 + 強制重抓）
+    _hm_cutoff = pd.Timestamp(latest["date"]).date()
+    _hm_today = pd.Timestamp.now(tz="Asia/Taipei").date()
+    _hm_days_old = (_hm_today - _hm_cutoff).days
+    _hm_color = "#3fb950" if _hm_days_old <= 1 else ("#d29922" if _hm_days_old <= 4 else "#f85149")
+    _hm_age_txt = "今日" if _hm_days_old <= 0 else f"{_hm_days_old} 天前"
+    _hm_load_txt = pd.Timestamp.now(tz="Asia/Taipei").strftime("%m-%d %H:%M")
+    _hcols = st.columns([5, 1])
+    with _hcols[0]:
+        st.markdown(
+            f'<div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;'
+            f'padding:8px 14px;margin:4px 0 10px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12px;">'
+            f'<span style="color:#8b949e;">📅 資料截止 <b style="color:{_hm_color};">{_hm_cutoff}（{_hm_age_txt}）</b></span>'
+            f'<span style="color:#8b949e;">🕐 本次載入 <b style="color:#c9d1d9;">{_hm_load_txt} TW</b></span>'
+            f'<span style="color:#8b949e;">📡 來源 <b style="color:#c9d1d9;">FinMind 外資（快取 30min）/ yfinance USDTWD（快取 10min）</b></span>'
+            f'</div>', unsafe_allow_html=True)
+    with _hcols[1]:
+        if st.button("🔄 強制重抓", key=f"{key_prefix}_force_refresh",
+                     help="清快取後重新抓取最新外資與匯率資料"):
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+            st.rerun()
+
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("最新外資買賣超", f"{latest['foreign_net_yi']:.1f} 億",
                 help="正＝買超(資金進股市)，負＝賣超。")
