@@ -495,18 +495,31 @@ def detect_risk_radar(fred_api_key: str) -> dict[str, dict]:
     每 value 為 dict (signal, color, value, prev, note, label, trend)。
     單一訊號抓取失敗 → 該 key 回傳 _empty() ⬜，其餘 9 燈不受影響。
     """
-    return {
-        "vix_level":       _signal_vix_level(),
-        "vix_term_struct": _signal_vix_term_struct(),
-        "hy_oas_delta":    _signal_hy_oas_delta(fred_api_key),
-        "yield_10y_shock": _signal_yield_10y_shock(fred_api_key),
-        "move_level":      _signal_move_level(),
-        "spx_trend_break": _signal_spx_trend_break(),
-        "sox_drop":        _signal_sox_drop(),
-        "sector_rotation": _signal_sector_rotation(),
-        "put_call_ratio":  _signal_put_call_ratio(),
-        "asia_overnight":  _signal_asia_overnight(),
+    # v19.48 並行化：10 燈從序列改 ThreadPoolExecutor → wallclock 從 4-8s 降至 ~max 單燈
+    from concurrent.futures import ThreadPoolExecutor as _TPE_radar
+    _jobs = {
+        "vix_level":       _signal_vix_level,
+        "vix_term_struct": _signal_vix_term_struct,
+        "hy_oas_delta":    lambda: _signal_hy_oas_delta(fred_api_key),
+        "yield_10y_shock": lambda: _signal_yield_10y_shock(fred_api_key),
+        "move_level":      _signal_move_level,
+        "spx_trend_break": _signal_spx_trend_break,
+        "sox_drop":        _signal_sox_drop,
+        "sector_rotation": _signal_sector_rotation,
+        "put_call_ratio":  _signal_put_call_ratio,
+        "asia_overnight":  _signal_asia_overnight,
     }
+    _out: dict[str, dict] = {}
+    with _TPE_radar(max_workers=10) as _ex_radar:
+        _futs = {_ex_radar.submit(_fn): _name for _name, _fn in _jobs.items()}
+        for _fut in _futs:
+            _name = _futs[_fut]
+            try:
+                _out[_name] = _fut.result(timeout=15)
+            except Exception as _e:
+                _out[_name] = _empty(f"並行抓取失敗：{type(_e).__name__}: {str(_e)[:60]}",
+                                     "ThreadPoolExecutor")
+    return _out
 
 
 def summarize_radar(radar: dict[str, dict]) -> dict:
