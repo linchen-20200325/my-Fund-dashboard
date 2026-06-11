@@ -10,6 +10,7 @@ v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + 編排。
         E 階段收尾後 shim 刪除。
 """
 import pandas as pd, numpy as np, math
+from concurrent.futures import ThreadPoolExecutor as _TPE_macro
 from repositories.macro_repository import fetch_fred, fetch_yf_close, fetch_ism_pmi
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
@@ -217,11 +218,16 @@ def fetch_all_indicators(fred_api_key):
 
     # ── 殖利率利差 ──────────────────────────────────────────────────
     # n=2600 (≈10y daily) 才能 resample("ME") 後保留 120 月頻 spread → 餵 Phase 4/3-B
-    df10 = _fred("DGS10", fred_api_key, 2600)
-    df2  = _fred("DGS2",  fred_api_key, 2600)
+    # v19.46 perf: DGS10/DGS2/DGS3MO 三條獨立 FRED 序列並行抓取（原 3× 序列 → max(t)）
     # 必須用 DGS3MO（日頻 3M Treasury Constant Maturity）而非 TB3MS（月頻 T-Bill 平均），
     # 否則 spread 被 inner-join 降頻成月頻，daily threshold 會誤判 🔴 過舊。
-    df3m = _fred("DGS3MO", fred_api_key, 2600)
+    with _TPE_macro(max_workers=3) as _pool_dgs:
+        _f_d10 = _pool_dgs.submit(_fred, "DGS10",  fred_api_key, 2600)
+        _f_d2  = _pool_dgs.submit(_fred, "DGS2",   fred_api_key, 2600)
+        _f_d3m = _pool_dgs.submit(_fred, "DGS3MO", fred_api_key, 2600)
+        df10 = _f_d10.result()
+        df2  = _f_d2.result()
+        df3m = _f_d3m.result()
 
     if not df10.empty and not df2.empty:
         sp22 = _spread_series(df10, df2, 120)
@@ -332,9 +338,19 @@ def fetch_all_indicators(fred_api_key):
         ("CNH=X",    "USDCNH", "美元/離岸人民幣 USD/CNH",
          "人民幣走強→新興市場利多", "人民幣貶值→中國壓力", 7.0, 7.3),
     ]
+    # v19.46 perf: 3 個 forex pair 並行抓取（原 3× 序列 → max(t)）
+    _fx_cache: dict = {}
+    with _TPE_macro(max_workers=3) as _pool_fx:
+        _fx_futs = {_pool_fx.submit(_yf_s, _c[0], "5y"): _c[0] for _c in _CROSS_RATES}
+        for _f_x in _fx_futs:
+            try:
+                _fx_cache[_fx_futs[_f_x]] = _f_x.result()
+            except Exception as _e_fx:
+                print(f"[FX/{_fx_futs[_f_x]}] {_e_fx}")
+                _fx_cache[_fx_futs[_f_x]] = pd.Series(dtype=float)
     for _tk, _key, _nm, _d_lo, _d_hi, _lo, _hi in _CROSS_RATES:
         try:
-            s_fx = _yf_s(_tk, "5y")
+            s_fx = _fx_cache.get(_tk, pd.Series(dtype=float))
             if len(s_fx) >= 22:
                 v = round(float(s_fx.iloc[-1]), 4)
                 m1 = float(s_fx.iloc[-22])
