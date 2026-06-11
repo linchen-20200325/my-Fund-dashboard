@@ -1979,11 +1979,78 @@ def render_macro_tab() -> None:
                             else:
                                 st.markdown(f"**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
 
-            # ── 熱錢監測（v18.236）— 三角交叉：外資 × 匯率 × 背離 ──
-            # 境外基金 user 仍要看：台幣匯率變動 → 影響你 USD/EUR 計價基金 TWD 換算後報酬
+            # ── v19.47 ⑥ 美股流動性 × 熱錢監測（user 反饋：基金 USD 計價，台股熱錢非主訊號） ──
+            # 6 指標三角：流動性 (M2/WALCL/RRP) × 信用 (HY OAS / HYG-LQD) × 情緒 (AAII)
             st.divider()
-            with st.expander("⑥ 💵 台股熱錢監測 — 三角交叉（本土訊號 ｜ FII 日級行為）",
+            with st.expander("⑥ 💵 美股流動性 × 熱錢監測 — 三角：流動性 × 信用 × 情緒",
                              expanded=False):
+                st.caption(
+                    "💡 **為何重要**：境外美股基金 NAV 主受 ① 美元流動性（M2/RRP/WALCL）+ "
+                    "② 信用偏好（HY/HYG-LQD）+ ③ 散戶情緒（AAII）三軸驅動。"
+                    "**FED 升降息只是源頭**，熱錢 = 流動性 + 信用 + 情緒 三者綜合結果。"
+                )
+                try:
+                    from services.us_liquidity_engine import fetch_us_liquidity_snapshot  # noqa: PLC0415
+                    _us_liq = fetch_us_liquidity_snapshot(FRED_KEY)
+
+                    # Row 1: 流動性 3 chips
+                    _r1 = st.columns(3)
+                    _row1 = [
+                        ("m2_yoy", "📊 M2 YoY", "廣義貨幣供給年增（FRED M2SL）"),
+                        ("walcl", "🏦 Fed 資產負債表", "QE/QT pace（FRED WALCL）"),
+                        ("rrp", "💧 隔夜逆回購 RRP", "流動性蓄水池（FRED RRPONTSYD）"),
+                    ]
+                    for _i, (_key, _title, _default_desc) in enumerate(_row1):
+                        with _r1[_i]:
+                            _d = _us_liq.get(_key, {})
+                            if "_err" in _d:
+                                st.metric(_title, "待取得", help=f"{_default_desc}｜❌ {_d['_err'][:50]}")
+                            else:
+                                _val = _d["value"]
+                                _unit = _d.get("unit", "")
+                                _delta = _d.get("delta")
+                                _delta_str = f"{_delta:+.2f}{_unit}" if _delta is not None else None
+                                st.metric(_title, f"{_val:+.2f}{_unit}", delta=_delta_str,
+                                          help=f"{_default_desc} ({_d.get('date','')})")
+                                st.caption(f"<span style='color:{_d.get('color','#888')}'>● {_d.get('label','')}</span>",
+                                           unsafe_allow_html=True)
+
+                    # Row 2: 信用 + 情緒 3 chips
+                    _r2 = st.columns(3)
+                    _row2 = [
+                        ("hy_oas", "⚠️ HY 信用利差", "FRED BAMLH0A0HYM2 (% OAS)"),
+                        ("hyg_lqd", "💰 HYG/LQD 比", "高收益債 vs 投等債 — 風險偏好"),
+                        ("aaii", "😱 AAII 情緒 spread", "Bull − Bear（反指標）"),
+                    ]
+                    for _i, (_key, _title, _default_desc) in enumerate(_row2):
+                        with _r2[_i]:
+                            _d = _us_liq.get(_key, {})
+                            if "_err" in _d:
+                                st.metric(_title, "待取得", help=f"{_default_desc}｜❌ {_d['_err'][:50]}")
+                            else:
+                                _val = _d["value"]
+                                _unit = _d.get("unit", "")
+                                st.metric(_title, f"{_val:+.2f}{_unit}",
+                                          help=f"{_default_desc} ({_d.get('date','')})")
+                                st.caption(f"<span style='color:{_d.get('color','#888')}'>● {_d.get('label','')}</span>",
+                                           unsafe_allow_html=True)
+
+                    # 失敗 fetcher 列表（仿 Stock v18.194 fail-trace）
+                    _errs = {k: v["_err"] for k, v in _us_liq.items() if "_err" in v}
+                    if _errs:
+                        with st.expander(f"🔍 載入失敗詳情（{len(_errs)} 項）", expanded=False):
+                            for _ek, _ev in _errs.items():
+                                st.markdown(f"- **{_ek}**：`{_ev}`")
+                            st.caption("💡 多半是 FRED key 未設 / AAII 頁面格式改版 / Yahoo timeout；非全部失敗不影響核心判讀")
+                except Exception as _us_e:
+                    st.error(f"美股流動性監測渲染失敗：[{type(_us_e).__name__}] {_us_e}")
+
+            # ── 台股熱錢監測（v19.47 ARCHIVED：境外美股基金可略過｜原 ⑥ KEEP，user 反饋本土訊號非主驅力）──
+            # 移除 ⑥ 編號 + 標題加 📦 ARCHIVED 前綴 + 模組保留磁碟便於日後復活
+            st.divider()
+            with st.expander("📦 ARCHIVED — 台股熱錢監測（境外美股基金可略過｜本土訊號）",
+                             expanded=False):
+                st.caption("⚠️ v19.47 降級為 archive：USD 計價境外美股基金，台幣升貶/外資台股淨買賣對 NAV 影響有限。如需此資料請點開。")
                 try:
                     from hot_money import render_hot_money_section
                     _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
@@ -2024,7 +2091,7 @@ def render_macro_tab() -> None:
                     st.markdown("### 🤖 AI 景氣判斷總結")
                     st.caption(
                         "本 AI 摘要吃齊上方 **① 戰情室三儀表 / ② 拐點偵測 / ③ 即時決策矩陣 / "
-                        "④ 短線雷達 / ⑤ 流動性壓力 / ⑥ 台股熱錢** 的同源資料"
+                        "④ 短線雷達 / ⑤ 流動性壓力 / ⑥ 美股流動性熱錢** 的同源資料"
                         "（FRED 23 指標 + phase + 系統性風險 + 時事新聞），逐章節白話結論。"
                     )
                     from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
