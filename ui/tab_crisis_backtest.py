@@ -207,6 +207,51 @@ def _render_fund_dd_metrics(events: list, fund_name: str):
         st.caption(f"📈 該基金在這些事件後平均反彈 {avg_rec:+.1%}")
 
 
+def _render_crisis_freshness_bar(mkt_series, market_label: str,
+                                 fund_nav_latest, fund_display_name: str,
+                                 st_mod) -> None:
+    """v19.55 ── 危機回測資料新鮮度條 ──
+    回測讀市場 / 基金 NAV 歷史時序，最容易「看到舊資料」的點＝序列截止日太舊。
+    顯示市場 + 基金 NAV 各自「資料截止日」+ traffic-light（距今天數）+ TW 載入時戳。
+    """
+    try:
+        if mkt_series is None or mkt_series.empty:
+            return
+        _now = pd.Timestamp.now(tz="Asia/Taipei")
+        _today = pd.Timestamp(_now.date())  # tz-naive 當日午夜（TW 日界）
+
+        def _light(latest, green: int, yellow: int):
+            """latest(Timestamp|None) → (emoji, 截止日字串, 距今天數|None)。"""
+            if latest is None:
+                return "⬜", "—", None
+            d = (_today - pd.Timestamp(latest).normalize()).days
+            icon = "🟢" if d <= green else ("🟡" if d <= yellow else "🔴")
+            return icon, pd.Timestamp(latest).strftime("%Y-%m-%d"), d
+
+        # 市場日頻：綠 ≤4 天（含週末）/ 黃 ≤10 / 紅 >10
+        m_icon, m_date, m_days = _light(mkt_series.index.max(), 4, 10)
+        # 基金 NAV：發布 T+1~2 + 假日，放寬 綠 ≤7 / 黃 ≤21 / 紅 >21
+        f_icon, f_date, f_days = _light(fund_nav_latest, 7, 21)
+
+        _m_age = f"{m_days} 天前" if m_days and m_days > 0 else "今日"
+        _parts = [f"{m_icon} **{market_label}**：{m_date}（{_m_age}）"]
+        if fund_nav_latest is not None:
+            _f_age = f"{f_days} 天前" if f_days and f_days > 0 else "今日"
+            _parts.append(f"{f_icon} **{fund_display_name} NAV**：{f_date}（{_f_age}）")
+        else:
+            _parts.append("⬜ **基金 NAV**：未選基金")
+
+        st_mod.markdown(
+            "📅 **資料截止日**　|　" + "　|　".join(_parts)
+            + f"　|　🕐 載入 {_now.strftime('%H:%M:%S')} (TW)"
+        )
+        _worst = max([x for x in (m_days, f_days) if x is not None], default=0)
+        if _worst > 30:
+            st_mod.caption("⚠️ 序列截止日偏舊 → 按上方「開始回測」會清快取重抓最新歷史時序。")
+    except Exception as _e:  # 新鮮度條純顯示，絕不擋回測主流程
+        st_mod.caption(f"（新鮮度條計算略過：{_e}）")
+
+
 def render_crisis_backtest_tab() -> None:
     """主入口：📉 危機回測室 Tab。"""
     st.markdown("## 📉 危機回測室")
@@ -337,6 +382,8 @@ def render_crisis_backtest_tab() -> None:
             "threshold_pct": threshold_pct,
             "years": years,
             "fund_nav_available": fund_nav is not None,
+            "fund_nav_latest": (fund_nav.index.max()
+                                if fund_nav is not None and not fund_nav.empty else None),
             "fund_display_name": fund_display_name,
         }
         # Phase 1 重跑時清掉 Phase 3/4 stale cache（避免事件清單變了但訊號回看還是舊的）
@@ -357,8 +404,10 @@ def render_crisis_backtest_tab() -> None:
     years_disp = _cached_p1["years"]
     fund_display_name = _cached_p1["fund_display_name"]
     fund_nav_available = _cached_p1["fund_nav_available"]
+    fund_nav_latest = _cached_p1.get("fund_nav_latest")  # .get 容舊 session cache 無此鍵
 
     st.divider()
+    _render_crisis_freshness_bar(mkt_series, market_label, fund_nav_latest, fund_display_name, st)
     st.markdown(f"### 📊 {market_label} 危機事件總覽（門檻 {threshold_pct_disp}% / 回看 {years_disp} 年）")
     _render_summary_metrics(events)
 
