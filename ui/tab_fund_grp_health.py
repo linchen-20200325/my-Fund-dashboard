@@ -69,6 +69,25 @@ def render_fund_grp_health_tab() -> None:
     rows = _run_batch_health(codes, principal_twd, ccy_hint, warn_gap)
     _render_health_table(rows)
 
+    # v19.58 — 5 大貼圖區塊（基金體檢 PK + 健診卡 + 真實收益矩陣 + 投資試算 + 持股分析）
+    try:
+        from ui.helpers.fund_grp_health_extras import (
+            _build_fund_dict,
+            render_fund_grp_health_extras,
+        )
+        _funds_extra = [
+            _build_fund_dict(r["_fund_raw"], r["code"], principal_twd)
+            for r in rows
+            if r.get("ok") and r.get("_fund_raw")
+        ]
+        if _funds_extra:
+            render_fund_grp_health_extras(_funds_extra, principal_twd)
+    except Exception as _e_extra:
+        st.caption(
+            f"⬜ 進階分析區塊渲染失敗：[{type(_e_extra).__name__}] "
+            f"{str(_e_extra)[:80]}"
+        )
+
 
 def _auto_fetch_moneydj(code: str) -> dict:
     """鏡像 ui/tab2_single_fund._auto_fetch_moneydj：試 yp010000（境內）→ yp010001（境外）挑最佳結果。
@@ -166,6 +185,7 @@ def _run_batch_health(
                     "含息年化% 🧮": s["ret_1y_total_pct_🧮"],
                     "燈號 🧮": f"{s['div_health_emoji_🧮']} {s['div_health_light_🧮']}",
                     "_detail": result,
+                    "_fund_raw": fd,  # v19.58：留給 render_fund_grp_health_extras
                 })
         except Exception as e:
             rows.append({"code": code, "ok": False, "error": f"{type(e).__name__}: {e}"})
