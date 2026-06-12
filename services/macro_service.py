@@ -17,6 +17,64 @@ FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 ENGINE_VERSION = "v18.2_tw_macro"
 _INDICATOR_SNAPSHOT: dict = {}
 
+# v19.57 C1：Tab1（總經 + 熱錢 + 流動性）獨占的 cached 函式名單
+# 不含 Tab2~Tab5 共用（fetch_fund_from_moneydj_url / get_latest_nav / Tab3 GSheet policy 等）
+_TAB1_TTL_CACHE_NAMES = frozenset({
+    "fetch_fred",                          # repositories/macro_repository.py
+    "fetch_yf_close",                      # repositories/macro_repository.py
+    "fetch_defillama_stablecoin_mcap",     # repositories/macro_repository.py
+    "fetch_macro_compass",                 # repositories/macro_repository.py
+    "fetch_ndc_signal_history",            # services/macro_tw_local_fetch.py
+    "fetch_tw_pmi_local",                  # services/macro_tw_local_fetch.py
+    "fetch_tw_export_yoy",                 # services/macro_tw_local_fetch.py
+    "fetch_foreign_consecutive_days",      # services/macro_tw_local_fetch.py
+})
+
+# v19.57 C1：Tab1 自有 session_state cache 鍵（強制重抓時連帶 pop）
+_TAB1_SESSION_KEYS = (
+    "_radar_v1921_top", "_tp_v1948_top", "indicators",
+    "phase_info", "news_items", "systemic_risk_data",
+    "_fred_sources",
+)
+
+
+def clear_tab1_macro_caches(session_state=None) -> dict:
+    """v19.57 C1：Tab1（總經）強制重抓專用 — 只清 Tab1 owned 快取，不誤殺 Tab2~Tab5。
+
+    清理範圍：
+      (1) infra/cache.py `_CACHE_REGISTRY` 中名稱屬於 `_TAB1_TTL_CACHE_NAMES` 的 TTL cache
+      (2) hot_money.py 兩個 `@st.cache_data` 函式 (fetch_foreign_flow_series / fetch_usdtwd_series)
+      (3) Tab1 session_state 殘留（_radar / _tp / indicators / phase_info ...）
+
+    參數 session_state: 通常傳 `st.session_state`；不傳則跳過 (3)。
+    回傳 dict {ttl_cleared, st_cache_cleared, session_keys_popped}。
+    """
+    _stat = {"ttl_cleared": 0, "st_cache_cleared": 0, "session_keys_popped": 0}
+    try:
+        from infra.cache import clear_caches_by_names
+        _stat["ttl_cleared"] = clear_caches_by_names(_TAB1_TTL_CACHE_NAMES)
+    except Exception:
+        pass
+    try:
+        from hot_money import fetch_foreign_flow_series, fetch_usdtwd_series
+        for _fn in (fetch_foreign_flow_series, fetch_usdtwd_series):
+            try:
+                _fn.clear()
+                _stat["st_cache_cleared"] += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if session_state is not None:
+        for _k in _TAB1_SESSION_KEYS:
+            try:
+                if _k in session_state:
+                    session_state.pop(_k, None)
+                    _stat["session_keys_popped"] += 1
+            except Exception:
+                pass
+    return _stat
+
 def _fred(sid, key, n=250):
     """[NAS Proxy 遷移] 薄殼委派給 macro_core.fetch_fred()。
     原 requests.get 直連已改為 proxy_helper.fetch_url,確保走 NAS 中繼站。

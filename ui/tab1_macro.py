@@ -864,15 +864,19 @@ def render_macro_tab() -> None:
             _force_reload = st.button(
                 "🆕 強制重抓最新（清快取）",
                 key="btn_macro_force",
-                help="清除所有 @st.cache_data 快取 + radar/tp session 殘留，保證從上游抓最新")
+                help="v19.57 C1：僅清 Tab1（總經）快取 + radar/tp session 殘留，"
+                     "其他 Tab（基金詳情/組合/模擬器）不受影響")
         if _force_reload:
             try:
-                st.cache_data.clear()
+                from services.macro_service import clear_tab1_macro_caches
+                _clr = clear_tab1_macro_caches(session_state=st.session_state)
+                st.toast(
+                    f"✅ Tab1 精準清快取：TTL {_clr['ttl_cleared']} 條 / "
+                    f"st_cache {_clr['st_cache_cleared']} 條 / "
+                    f"session {_clr['session_keys_popped']} 鍵",
+                    icon="🆕")
             except Exception:
                 pass
-            for _k in ("_radar_v1921_top", "_tp_v1948_top", "indicators",
-                       "phase_info", "news_items", "systemic_risk_data"):
-                st.session_state.pop(_k, None)
             st.session_state.macro_done = False
             _do_load = True  # 同流程跑下方 spinner block
         if _do_load:
@@ -2202,9 +2206,11 @@ def render_macro_tab() -> None:
                         )
                     with _ucols[1]:
                         if st.button("🔄 強制重抓", key="us_liq_force_refresh",
-                                     help="清 FRED/Yahoo/AAII 快取重抓（其他 tab 快取亦清）"):
+                                     help="v19.57 C1：僅清 Tab1（FRED/Yahoo/AAII/熱錢）快取，"
+                                          "Tab2~Tab5 基金/組合/政策快取不受影響"):
                             try:
-                                st.cache_data.clear()
+                                from services.macro_service import clear_tab1_macro_caches
+                                clear_tab1_macro_caches(session_state=st.session_state)
                             except Exception:
                                 pass
                             st.rerun()
