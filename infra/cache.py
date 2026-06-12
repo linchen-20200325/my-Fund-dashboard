@@ -95,6 +95,26 @@ def clear_all_caches() -> int:
     return len(_CACHE_REGISTRY)
 
 
+def clear_caches_by_names(names) -> int:
+    """v19.57 C1：精準清指定函式名稱的 TTL cache（不影響其他 Tab）。
+
+    參數 names: 可迭代的函式名稱集合 (e.g. {"fetch_fred", "fetch_yf_close"})。
+    回傳實際命中並清掉的函式數量。
+    """
+    _wanted = set(names or [])
+    if not _wanted:
+        return 0
+    _hit = 0
+    for fn in _CACHE_REGISTRY:
+        try:
+            if getattr(fn, "__name__", "") in _wanted:
+                fn.cache_clear()
+                _hit += 1
+        except Exception:
+            pass
+    return _hit
+
+
 def get_all_cache_info() -> list[dict]:
     """回傳所有註冊快取的狀態，給 UI 顯示「cache hit 率」/「entries」用。"""
     out = []

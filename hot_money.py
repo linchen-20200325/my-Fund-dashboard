@@ -249,9 +249,11 @@ def render_hot_money_section(token: str = "",
             f'</div>', unsafe_allow_html=True)
     with _hcols[1]:
         if st.button("🔄 強制重抓", key=f"{key_prefix}_force_refresh",
-                     help="清快取後重新抓取最新外資與匯率資料"):
+                     help="v19.57 C1：僅清外資 / USDTWD / FRED / Yahoo（Tab1 範圍）快取，"
+                          "Tab2~Tab5 基金/組合/政策快取不受影響"):
             try:
-                st.cache_data.clear()
+                from services.macro_service import clear_tab1_macro_caches
+                clear_tab1_macro_caches(session_state=st.session_state)
             except Exception:
                 pass
             st.rerun()
