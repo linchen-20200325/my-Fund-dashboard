@@ -2124,6 +2124,47 @@ def render_macro_tab() -> None:
                             for _ek, _ev in _errs.items():
                                 st.markdown(f"- **{_ek}**：`{_ev}`")
                             st.caption("💡 多半是 FRED key 未設 / AAII 頁面格式改版 / Yahoo timeout；非全部失敗不影響核心判讀")
+
+                    # v19.53 ══ 📊 資料新鮮度條 ══（traffic-light 掛「最舊指標 date 距今天數」，FRED 平日更新節奏 + 強制重抓）
+                    _us_today = pd.Timestamp.now(tz="Asia/Taipei").date()
+                    _us_dates = []
+                    for _v in _us_liq.values():
+                        _ds = _v.get("date") if isinstance(_v, dict) else None
+                        if _ds:
+                            try:
+                                _us_dates.append(pd.Timestamp(_ds).date())
+                            except Exception:
+                                pass
+                    if _us_dates:
+                        _us_cutoff = min(_us_dates)
+                        _us_days_old = (_us_today - _us_cutoff).days
+                        _us_color = "#3fb950" if _us_days_old <= 2 else ("#d29922" if _us_days_old <= 7 else "#f85149")
+                        _us_age_txt = "今日" if _us_days_old <= 0 else f"{_us_days_old} 天前"
+                    else:
+                        _us_cutoff = None
+                        _us_color = "#888"
+                        _us_age_txt = "—"
+                    _us_load_txt = pd.Timestamp.now(tz="Asia/Taipei").strftime("%m-%d %H:%M")
+                    _ucols = st.columns([5, 1])
+                    with _ucols[0]:
+                        st.markdown(
+                            f"<div style='background:#0d1117;border-left:3px solid {_us_color};"
+                            f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:8px;font-size:11px;color:#aaa'>"
+                            f"📅 最舊指標截止：<span style='color:{_us_color};font-weight:700'>{_us_cutoff or '—'}</span>"
+                            f" · <span style='color:{_us_color}'>{_us_age_txt}</span>"
+                            f"　|　🕐 本次載入：{_us_load_txt} (TW)"
+                            f"　|　📡 來源 FRED / Yahoo / AAII"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                    with _ucols[1]:
+                        if st.button("🔄 強制重抓", key="us_liq_force_refresh",
+                                     help="清 FRED/Yahoo/AAII 快取重抓（其他 tab 快取亦清）"):
+                            try:
+                                st.cache_data.clear()
+                            except Exception:
+                                pass
+                            st.rerun()
                 except Exception as _us_e:
                     st.error(f"美股流動性監測渲染失敗：[{type(_us_e).__name__}] {_us_e}")
 
