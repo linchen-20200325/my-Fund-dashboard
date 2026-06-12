@@ -1010,6 +1010,43 @@ def render_macro_tab() -> None:
             _radar_cache = st.session_state.get("_radar_v1921_top")
             _radar_ready = bool(_radar_cache and _radar_cache[0])
             _tp_ready = bool(st.session_state.get("_tp_v1948_top"))
+            # v19.56 B2: 5 條 FRED 個別命中狀態 chip（DGS10 / DGS2 / DGS3MO / HY OAS / M2SL）
+            _fred_srcs = (ind or {}).get("_fred_sources") or {}
+            _today_d = _now_tw().date()
+            def _fred_chip(_sid: str, _short: str, _daily: bool) -> str:
+                _meta = _fred_srcs.get(_sid) or {}
+                if not _meta.get("success"):
+                    return f'{_short}:🔴失敗'
+                _last = str(_meta.get("last_date", "")).strip()
+                if not _last:
+                    return f'{_short}:⬜未知'
+                try:
+                    _ld = pd.to_datetime(_last).date()
+                    _age_d = (_today_d - _ld).days
+                except Exception:
+                    return f'{_short}:⬜未知'
+                if _daily:
+                    _emoji = '🟢' if _age_d <= 4 else ('🟠' if _age_d <= 14 else '🔴')
+                else:
+                    _emoji = '🟢' if _age_d <= 40 else ('🟠' if _age_d <= 70 else '🔴')
+                return f'{_short}:{_emoji}{_age_d}d'
+            _chip_d10 = _fred_chip("DGS10", "DGS10", True)
+            _chip_d2  = _fred_chip("DGS2",  "DGS2",  True)
+            _chip_d3m = _fred_chip("DGS3MO", "DGS3MO", True)
+            _chip_hy  = _fred_chip("BAMLH0A0HYM2", "HY", True)
+            _chip_m2  = _fred_chip("M2SL", "M2", False)
+            _fred_chip_line = ' ｜ '.join([_chip_d10, _chip_d2, _chip_d3m, _chip_hy, _chip_m2])
+            _fred_degraded = (
+                bool(_fred_srcs) and any(
+                    (not (_fred_srcs.get(_sid) or {}).get("success"))
+                    or ('🔴' in _fred_chip(_sid, _s, _d))
+                    for _sid, _s, _d in (
+                        ("DGS10", "DGS10", True), ("DGS2", "DGS2", True),
+                        ("DGS3MO", "DGS3MO", True), ("BAMLH0A0HYM2", "HY", True),
+                        ("M2SL", "M2", False),
+                    )
+                )
+            )
             st.markdown(
                 f'<div style="background:#0d1117;border-left:4px solid {_age_color_ml};'
                 f'border-radius:4px;padding:8px 14px;margin-bottom:8px;font-size:11px;'
@@ -1020,12 +1057,18 @@ def render_macro_tab() -> None:
                 f'📡 來源：FRED + Yahoo<br/>'
                 f'📅 月頻截止：<span style="color:#c9d1d9;">{_src_str}</span>　'
                 f'⚡ 雷達：{"🟢 已載入" if _radar_ready else "⬜ 未載入"}　'
-                f'🎯 拐點：{"🟢 已載入" if _tp_ready else "⬜ 未載入"}'
+                f'🎯 拐點：{"🟢 已載入" if _tp_ready else "⬜ 未載入"}<br/>'
+                f'📡 <b>FRED 命中</b>：<span style="color:#c9d1d9;">{_fred_chip_line}</span>'
                 f'</div>', unsafe_allow_html=True)
             if _age_min_ml > 240:
                 st.warning(
                     f'⚠️ 總經資料已 {_age_label_ml} 未更新，FRED 月頻指標可能已過期，'
                     f'建議按上方「🆕 強制重抓最新」清快取後重新載入。')
+            if _fred_degraded:
+                st.caption(
+                    '🟠 部分 FRED 序列失敗或過期（🔴 = API miss 或太舊），對應指標 / 雷達燈 / 拐點可能缺失；'
+                    '建議按上方「🆕 強制重抓最新」清快取重試。'
+                )
 
         # ══ v19.45 總經導航卡（4 欄 verdict 摘要）═════════════════════
         # 對齊台股「震盪整理｜謹慎觀望」UX — 上方一眼看 4 面板結論

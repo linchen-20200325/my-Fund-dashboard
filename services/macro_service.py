@@ -234,6 +234,23 @@ def fetch_all_indicators(fred_api_key):
         _df_hy_pre = _f_hy.result()
         _df_m2_pre = _f_m2.result()
 
+    # v19.56 B2: 5 條 FRED 個別命中狀態（series_id → success/last_date/rows）
+    _fred_srcs: dict = {}
+    for _sid, _dfp in (("DGS10", df10), ("DGS2", df2), ("DGS3MO", df3m),
+                       ("BAMLH0A0HYM2", _df_hy_pre), ("M2SL", _df_m2_pre)):
+        try:
+            if _dfp is not None and not _dfp.empty:
+                _fred_srcs[_sid] = {
+                    "success": True,
+                    "last_date": str(_dfp.iloc[-1]["date"])[:10],
+                    "rows": int(len(_dfp)),
+                }
+            else:
+                _fred_srcs[_sid] = {"success": False, "last_date": "", "rows": 0}
+        except Exception:
+            _fred_srcs[_sid] = {"success": False, "last_date": "", "rows": 0}
+    R["_fred_sources"] = _fred_srcs
+
     if not df10.empty and not df2.empty:
         sp22 = _spread_series(df10, df2, 120)
         if len(sp22) >= 2:
