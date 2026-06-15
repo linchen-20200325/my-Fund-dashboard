@@ -2765,8 +2765,12 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     }
     """
     import re as _re
+    import datetime as _dt_mj   # v19.61 E1：抓取時戳
 
     # ── 1. 解析代碼 ──────────────────────────────────────
+    # v19.61 E1：_moneydj_fetched_at 記錄抓取當下 wallclock（YYYY-MM-DD HH:MM:SS），
+    # 給 Tab5 組合健檢「資料新鮮度」banner 顯示「抓取於 / NAV 日期 / 延遲 Nd」用。
+    # 純新增欄位，零影響既有 caller（讀不到的就跳過）。
     result = dict(fund_name="", full_key="", fund_code="", category="",
                   risk_level="", dividend_freq="", currency="USD",
                   fund_scale="", fund_region="", fund_type="",
@@ -2776,7 +2780,9 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                   nav_latest=None, nav_date="",
                   year_high_nav=None, year_low_nav=None,
                   series=None, dividends=[], perf={}, metrics={},
-                  risk_metrics={}, holdings={}, error=None)
+                  risk_metrics={}, holdings={}, error=None,
+                  _moneydj_fetched_at=_dt_mj.datetime.now().strftime(
+                      "%Y-%m-%d %H:%M:%S"))
 
     # ── v18.22: 先 canonicalize 非標準變體 URL（mobile / 平台子網域）──
     #           m.moneydj.com / chubb.moneydj.com /w/wr/ 等都轉成
