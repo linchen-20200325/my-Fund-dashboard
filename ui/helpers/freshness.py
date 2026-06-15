@@ -195,3 +195,42 @@ def render_sidebar_data_health(session_state, now_tw=None) -> None:
     )
     if _headline in ("🔴", "🟠"):
         st.caption("🟠 部分資料偏舊，可按下方「🧹 全域刷新」重抓最新")
+        _render_data_health_ai(session_state, _lines)
+
+
+def _render_data_health_ai(session_state, lines) -> None:
+    """v19.67 G：資料異常 AI 解讀（按需觸發，控制 API 成本）。
+
+    僅在 sidebar 資料健康偏舊（🔴/🟠）時提供按鈕；按下才呼叫 gemini_generate
+    （重用既有 services.ai_service 多 key 輪替），結果存 session_state 避免重複
+    呼叫。零自動 API 消耗 — 只有 user 主動點按鈕才打 Gemini。
+    """
+    _AI_KEY = "_data_health_ai_resp"
+    if st.button("🤖 AI 解讀資料異常", key="btn_data_health_ai",
+                 use_container_width=True,
+                 help="按需呼叫 Gemini 解釋哪些資料偏舊 / 失敗 + 建議動作"
+                      "（消耗 API 額度，點了才打）"):
+        _ctx = "；".join(str(x) for x in (lines or []))
+        _prompt = (
+            "你是基金戰情室的資料健康助理。以下是面板各資料源的新鮮度狀態：\n"
+            f"{_ctx}\n\n"
+            "請用繁體中文、3-4 句白話，說明：(1) 哪些資料可能偏舊或抓取失敗；"
+            "(2) 最可能原因（API 額度用盡 / 網路或 proxy 不通 / 上游官方發布本就有"
+            "延遲）；(3) 建議動作。直接講重點，不要客套或重複題目。"
+        )
+        try:
+            from services.ai_service import gemini_generate, get_gemini_keys
+            _pool = get_gemini_keys()
+            with st.spinner("🤖 AI 解讀中…"):
+                _resp = gemini_generate(_prompt, max_tokens=500, keys=_pool)
+        except Exception as _e:
+            _resp = f"⚠️ AI 解讀失敗：{type(_e).__name__}"
+        session_state[_AI_KEY] = _resp
+    _resp = session_state.get(_AI_KEY)
+    if _resp:
+        st.markdown(
+            f"<div style='background:#161b22;border:1px solid #30363d;"
+            f"border-radius:6px;padding:8px 10px;margin-top:4px;font-size:11px;"
+            f"color:#c9d1d9;line-height:1.6'>🤖 {_resp}</div>",
+            unsafe_allow_html=True,
+        )
