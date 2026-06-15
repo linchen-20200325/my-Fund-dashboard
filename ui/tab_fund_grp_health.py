@@ -92,38 +92,9 @@ def render_fund_grp_health_tab() -> None:
         )
 
 
-def _auto_fetch_moneydj(code: str) -> dict:
-    """鏡像 ui/tab2_single_fund._auto_fetch_moneydj：試 yp010000（境內）→ yp010001（境外）挑最佳結果。
-
-    回 fetch_fund_from_moneydj_url 的 dict（含 series / dividends / currency / status）。
-    支援保單體系內部代碼（如 ACCP138 / ALBT8）。
-    """
-    from fund_fetcher import classify_fetch_status, normalize_result_state
-    from repositories.fund_repository import fetch_fund_from_moneydj_url
-
-    raw = (code or "").strip().upper()
-    if not raw:
-        return {}
-    attempts: list = []
-    for page_type in ("yp010000", "yp010001"):
-        url = f"https://www.moneydj.com/funddj/ya/{page_type}.djhtm?a={raw}"
-        try:
-            res = normalize_result_state(fetch_fund_from_moneydj_url(url))
-        except Exception as e:
-            attempts.append(({"error": f"{type(e).__name__}: {e}"}, False, "failed"))
-            continue
-        status = res.get("status", classify_fetch_status(res))
-        ser = res.get("series")
-        has_series = (
-            ser is not None and hasattr(ser, "__len__") and len(ser) >= 10
-        )
-        if not res.get("error") and status == "complete":
-            return res
-        attempts.append((res, has_series, status))
-    with_series = [t for t in attempts if t[1]]
-    if with_series:
-        return with_series[0][0]
-    return attempts[-1][0] if attempts else {}
+# v19.76 K3：原 32 行 _auto_fetch_moneydj 已遷移至 services.moneydj_fetcher，
+# tab2/tab5 共用同一份 fallback chain（避免兩 Tab 對同檔基金路徑不一致）。
+from services.moneydj_fetcher import auto_fetch_moneydj as _auto_fetch_moneydj  # noqa: F401
 
 
 def _process_one_fund(

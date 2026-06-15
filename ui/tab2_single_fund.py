@@ -18,7 +18,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from repositories.fund_repository import (
-    fetch_fund_from_moneydj_url,
     tdcc_search_fund,
 )
 from services.portfolio_service import dividend_safety as div_safety_check
@@ -42,6 +41,8 @@ from fund_fetcher import (
     classify_fetch_status,
     normalize_result_state,
 )
+# v19.76 K3：MoneyDJ 自動偵測 SSOT（tab2 + tab5 共用）
+from services.moneydj_fetcher import auto_fetch_moneydj
 
 
 def _calc_data_health(indicators=None):
@@ -77,50 +78,8 @@ def render_single_fund_tab() -> None:
     with _t2_btn_col:
         do_load = st.button("🚀 分析", type="primary", use_container_width=True, key="btn_mj_load")
 
-    def _build_moneydj_url(raw_input: str, page_type: str) -> str:
-        _raw = raw_input.strip()
-        if _raw.startswith("http"):
-            return _raw
-        return f"https://www.moneydj.com/funddj/ya/{page_type}.djhtm?a={_raw.upper()}"
-
-    def _auto_fetch_moneydj(raw_input: str):
-        """自動偵測境內/境外：URL 明確指定時直接用；純代碼先試境內，失敗再試境外。
-
-        v18.120 issue 2 修法：原邏輯 partial 也立即 short-circuit return。
-        對境外基金 TLZF9 試 yp010000 → 拿到 nav_latest + fund_name 但 series=0
-        → 被當成 partial 直接 return → 不會試正確的 yp010001。
-        新邏輯：partial 但 series 完全空 → 繼續試下一個 page_type；
-        累計嘗試所有 page_type 後，選最佳結果（complete > partial-with-series > partial-empty）
-        """
-        _raw = raw_input.strip()
-        # URL 已含 page_type 資訊
-        if "yp010000" in _raw:
-            return fetch_fund_from_moneydj_url(_raw), "yp010000"
-        if "yp010001" in _raw:
-            return fetch_fund_from_moneydj_url(_raw), "yp010001"
-        # 純代碼：累計嘗試所有 page_type，挑最佳結果
-        _attempts: list = []
-        for _pt in ["yp010000", "yp010001"]:
-            _url = _build_moneydj_url(_raw, _pt)
-            _res = normalize_result_state(fetch_fund_from_moneydj_url(_url))
-            _st  = _res.get("status", classify_fetch_status(_res))
-            _ser = _res.get("series")
-            _has_series = (_ser is not None and hasattr(_ser, "__len__")
-                           and len(_ser) >= 10)
-            # complete 直接 return（最佳結果）
-            if not _res.get("error") and _st == "complete":
-                return _res, _pt
-            _attempts.append((_res, _pt, _has_series, _st))
-        # 沒有 complete → 偏好 has_series 的 partial（境外基金真實 case）
-        _with_series = [t for t in _attempts if t[2]]
-        if _with_series:
-            return _with_series[0][0], _with_series[0][1]
-        # 全部都 partial 但都沒 series → 回第一個 partial（至少有 metadata）
-        _partials = [t for t in _attempts if t[3] == "partial"]
-        if _partials:
-            return _partials[0][0], _partials[0][1]
-        # 全 failed → 回最後一個（境外結果）
-        return _attempts[-1][0], _attempts[-1][1]
+    # v19.76 K3：原 38 行 _auto_fetch_moneydj + 4 行 _build_moneydj_url 已遷移至
+    # services.moneydj_fetcher，tab2/tab5 共用同一份 fallback chain。
 
     if do_load and mj_url_input.strip():
         # v18.60: 載入前清 fetch 快取，確保用最新 calc_metrics 邏輯
@@ -131,7 +90,9 @@ def render_single_fund_tab() -> None:
         except Exception:
             pass   # noqa: smoke-allow-pass
         with st.spinner("📡 自動偵測基金類型並抓取資料..."):
-            fd_raw, _t2_page_type = _auto_fetch_moneydj(mj_url_input.strip())
+            fd_raw, _t2_page_type = auto_fetch_moneydj(
+                mj_url_input.strip(), return_page_type=True
+            )
             fd_raw  = normalize_result_state(fd_raw)
             _status = fd_raw.get("status", classify_fetch_status(fd_raw))
             st.session_state.fund_data = {
