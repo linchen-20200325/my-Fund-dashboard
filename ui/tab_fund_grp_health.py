@@ -172,6 +172,40 @@ def _process_one_fund(
         _p_ccy = result["principal_ccy_🧮"]
         _buy_fx = result["buy_fx"]
         _buy_fx_info = f"1M TWD→{_p_ccy:,.0f} {ccy} @ {_buy_fx:.2f}"
+
+        # v19.70 J2：MK 倉位（已有 fd.metrics）+ 1Y 快算吃本金（calc_health_from_manual）
+        _metrics = fd.get("metrics") or {}
+        _mk_pos = (_metrics.get("pos_label") or "—").strip() or "—"
+        _snap_health = "⚪ 資料不足"
+        try:
+            _items_sorted = sorted(nav_dict.items())  # iso 日期升冪
+            if len(_items_sorted) >= 2:
+                _last_d, _last_v = _items_sorted[-1]
+                _yr_ago = (_last_d[:4] + "-01-01") if len(_last_d) >= 10 else ""
+                _target_d = (
+                    f"{int(_last_d[:4]) - 1}{_last_d[4:10]}"
+                    if len(_last_d) >= 10 else ""
+                )
+                _below_1y = [
+                    v for d, v in _items_sorted if d <= _target_d
+                ] if _target_d else []
+                _nav_1y_ago = _below_1y[-1] if _below_1y else _items_sorted[0][1]
+                _freq_map = {"月配": 12, "季配": 4, "半年": 2, "年配": 1}
+                _freq_n = next(
+                    (n for k, n in _freq_map.items() if k in _div_freq), 12
+                )
+                _div_amt = float((divs[0] if divs else {}).get("amount") or 0)
+                if _last_v > 0 and _nav_1y_ago > 0 and _div_amt > 0:
+                    from services.fund_service import calc_health_from_manual
+                    _hm = calc_health_from_manual(
+                        nav_current=_last_v, nav_1y_ago=_nav_1y_ago,
+                        div_per_unit=_div_amt, div_freq=_freq_n,
+                    )
+                    if not _hm.get("error"):
+                        _snap_health = _hm.get("health", "⚪ 資料不足")
+        except Exception:
+            pass
+
         return {
             "code": code,
             "ok": True,
@@ -187,7 +221,9 @@ def _process_one_fund(
             "年化配息率% 🧮": s["annual_div_rate_pct_🧮"],
             "年化淨值% 🧮": s["annual_nav_return_pct_🧮"],
             "含息年化% 🧮": s["ret_1y_total_pct_🧮"],
-            "燈號 🧮": f"{s['div_health_emoji_🧮']} {s['div_health_light_🧮']}",
+            "燈號（全期 🧮）": f"{s['div_health_emoji_🧮']} {s['div_health_light_🧮']}",
+            "快算燈號（1Y）": _snap_health,
+            "MK 倉位": _mk_pos,
             "最高經理費%": _mgmt_fee,
             "配息頻率": _div_freq,
             "換匯資訊 🧮": _buy_fx_info,
@@ -270,9 +306,9 @@ def _render_health_table(rows: list[dict]) -> None:
         # 鏡像 Stock v18.201 D2 「FinMind last_update」設計，但 Fund 端用 banner 而非 hover
         _render_mj_freshness_banner(ok_rows)
 
-        n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get("燈號 🧮", "")))
-        n_warn = sum(1 for r in ok_rows if "警示" in str(r.get("燈號 🧮", "")))
-        n_good = sum(1 for r in ok_rows if "健康" in str(r.get("燈號 🧮", "")))
+        n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get("燈號（全期 🧮）", "")))
+        n_warn = sum(1 for r in ok_rows if "警示" in str(r.get("燈號（全期 🧮）", "")))
+        n_good = sum(1 for r in ok_rows if "健康" in str(r.get("燈號（全期 🧮）", "")))
         total_twd = sum(float(r.get("累積 TWD 配息 🧮", 0) or 0) for r in ok_rows)
 
         k1, k2, k3, k4, k5 = st.columns(5)
