@@ -1219,23 +1219,10 @@ def render_single_fund_tab() -> None:
                 with st.container(border=True):
                     st.markdown("#### 💰 投資試算 — 投入金額 → 單位數 / 配息估算")
                     _ccy_raw = (mj_raw.get("currency") or "TWD").strip() or "TWD"
-                    # v18.278：中文幣別 → ISO normalize（user 截圖顯示「台幣」沒被識別為 TWD →
-                    # 跑去找台幣/TWD 匯率必失敗 → 跳手動模式 32.00 假象）
-                    _CCY_NORMALIZE = {
-                        "台幣": "TWD", "新台幣": "TWD", "台": "TWD",
-                        "美元": "USD", "美金": "USD",
-                        "歐元": "EUR", "歐": "EUR",
-                        "日圓": "JPY", "日幣": "JPY", "日元": "JPY",
-                        "人民幣": "CNH", "人民幣(CNH)": "CNH",
-                        "港幣": "HKD", "港元": "HKD",
-                        "英鎊": "GBP",
-                        "澳幣": "AUD", "澳元": "AUD",
-                        "瑞士法郎": "CHF",
-                        "新加坡幣": "SGD", "新元": "SGD",
-                        "加拿大幣": "CAD", "加元": "CAD",
-                        "南非幣": "ZAR",
-                    }
-                    _ccy = _CCY_NORMALIZE.get(_ccy_raw, _ccy_raw.upper())
+                    # v19.75 K2：遷移到 services/currency SSOT（mode="yf" 保留 Tab2 既有
+                    # 行為：人民幣→CNH 以走 yfinance 較可靠的 CNHTWD=X 報價）。
+                    from services.currency import normalize_ccy as _norm_ccy
+                    _ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")
                     _nav_calc = m.get("nav")
                     _yield_calc = m.get("annual_div_rate")
                     try:
