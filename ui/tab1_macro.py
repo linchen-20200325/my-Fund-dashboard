@@ -988,7 +988,10 @@ def render_macro_tab() -> None:
     if st.session_state.macro_done:
         ind   = st.session_state.indicators
         st.session_state["_macro_ind"] = ind
-        phase = st.session_state.phase_info
+        phase = st.session_state.get("phase_info") or {}  # v19.69 J1：防 None→KeyError
+        if "phase" not in phase:
+            st.warning("⚠️ 市場相位資料缺失，請重新按「更新總經資料」")
+            return
         ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
         alloc = phase["alloc"];  advice = phase.get("advice","")
         rec_p = phase.get("rec_prob")
