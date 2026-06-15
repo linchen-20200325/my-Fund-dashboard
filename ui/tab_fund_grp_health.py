@@ -33,9 +33,10 @@ def render_fund_grp_health_tab() -> None:
         height=130,
         placeholder="ACCP138\nACUSI23\n...",
     )
-    # v19.71：移除「原幣別 fallback」selectbox（user 要求）+ FX 失敗根因（中文「美元」未 normalize）
-    # 已在 _process_one_fund 透過 services.currency.normalize_ccy 處理；fallback 永遠 USD（保單最常見）。
-    c1, c2 = st.columns(2)
+    # v19.72：恢復「原幣別 fallback」selectbox（user 反對 v19.71 寫死）。
+    # 真正的截圖 bug 修法在 _process_one_fund 走 normalize_ccy 處理中文 currency，
+    # 此 selectbox 僅在 MoneyDJ 完全無 currency 欄位時才 fallback；非 hardcode。
+    c1, c2, c3 = st.columns(3)
     with c1:
         principal_twd = st.number_input(
             "本金（TWD）",
@@ -44,6 +45,14 @@ def render_fund_grp_health_tab() -> None:
             key="fund_grp_health_principal",
         )
     with c2:
+        ccy_hint = st.selectbox(
+            "原幣別 fallback",
+            options=["USD", "EUR", "ZAR", "AUD", "JPY", "GBP", "CNY", "HKD", "TWD"],
+            index=0,
+            key="fund_grp_health_ccy",
+            help="僅在 MoneyDJ 完全無 currency 欄位時才用此值；中文 currency 會自動 normalize 不靠這。",
+        )
+    with c3:
         warn_gap = st.slider(
             "吃本金閾值 %",
             min_value=0.5, max_value=5.0, value=2.0, step=0.5,
@@ -60,7 +69,7 @@ def render_fund_grp_health_tab() -> None:
         st.warning("請至少輸入 1 個基金代號")
         return
 
-    rows = _run_batch_health(codes, principal_twd, _DEFAULT_CCY, warn_gap)
+    rows = _run_batch_health(codes, principal_twd, ccy_hint, warn_gap)
     _render_health_table(rows)
 
     # v19.58 — 5 大貼圖區塊（基金體檢 PK + 健診卡 + 真實收益矩陣 + 投資試算 + 持股分析）
