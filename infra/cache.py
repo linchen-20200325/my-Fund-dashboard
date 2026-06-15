@@ -129,6 +129,108 @@ def get_all_cache_info() -> list[dict]:
 
 
 # ════════════════════════════════════════════════════════════
+# v19.59 C2：Sidebar 全域刷新總開關 — disk cache + 統一入口
+# ════════════════════════════════════════════════════════════
+
+# 跨 Tab session_state 殘留 keys（保留 OAuth/sheet 核心，避免用戶被踢出）
+_GLOBAL_REFRESH_SESSION_KEYS = (
+    # Tab1 總經
+    "_radar_v1921_top", "_tp_v1948_top", "indicators",
+    "phase_info", "news_items", "systemic_risk_data",
+    "_fred_sources", "macro_done", "macro_last_update",
+    # Tab2 / Tab3 基金 / 組合
+    "_t3_cur_sheet_title", "_t3_groups_cache",
+    # Tab5 健診
+    "fund_grp_health_codes",
+)
+
+# 永遠保留的 session keys（OAuth/sheet 核心，砍了用戶要重登入）
+_GLOBAL_REFRESH_KEEP_KEYS = frozenset({
+    "gsheet_tokens", "policy_sheet_id", "active_policy_id",
+})
+
+
+def clear_disk_cache() -> dict:
+    """v19.59 C2：清 /tmp/fund_cache 落地檔（NAV/DIV/META CSV+JSON）+ 記憶體 snapshot。
+
+    嚴禁清 data_cache/ — 那是上游 cron 排程的歷史資料倉
+    （SPX/TWII/VIX/FRED 8 series parquet），砍了要等下個 cron 才補。
+
+    回傳 dict：files_removed / snapshot_cleared / dir_existed。
+    """
+    _stat = {"files_removed": 0, "snapshot_cleared": 0, "dir_existed": False}
+    if _os.path.isdir(_CACHE_DIR):
+        _stat["dir_existed"] = True
+        try:
+            for _fn in _os.listdir(_CACHE_DIR):
+                if not (_fn.endswith(".csv") or _fn.endswith(".json")):
+                    continue
+                try:
+                    _os.remove(_os.path.join(_CACHE_DIR, _fn))
+                    _stat["files_removed"] += 1
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    if _FUND_SNAPSHOT:
+        _stat["snapshot_cleared"] = len(_FUND_SNAPSHOT)
+        _FUND_SNAPSHOT.clear()
+    return _stat
+
+
+def global_refresh_all(session_state=None) -> dict:
+    """v19.59 C2：Sidebar 全域刷新總開關統一入口。
+
+    4 層清理：
+      ① TTL caches（_CACHE_REGISTRY 全部）
+      ② hot_money @st.cache_data（fetch_foreign_flow_series / fetch_usdtwd_series）
+      ③ Disk cache（/tmp/fund_cache 落地 + _FUND_SNAPSHOT 記憶體最後防線）
+      ④ Session state 跨 Tab 殘留（保留 OAuth/sheet 核心 keys）
+
+    嚴禁清 data_cache/ — 上游 cron 歷史資料倉。
+
+    回傳 dict：ttl_cleared / st_cache_cleared / disk_files_removed /
+              snapshot_cleared / session_keys_popped。
+    """
+    _stat = {
+        "ttl_cleared": 0, "st_cache_cleared": 0,
+        "disk_files_removed": 0, "snapshot_cleared": 0,
+        "session_keys_popped": 0,
+    }
+    try:
+        _stat["ttl_cleared"] = clear_all_caches()
+    except Exception:
+        pass
+    try:
+        from hot_money import fetch_foreign_flow_series, fetch_usdtwd_series
+        for _fn in (fetch_foreign_flow_series, fetch_usdtwd_series):
+            try:
+                _fn.clear()
+                _stat["st_cache_cleared"] += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        _disk = clear_disk_cache()
+        _stat["disk_files_removed"] = _disk.get("files_removed", 0)
+        _stat["snapshot_cleared"] = _disk.get("snapshot_cleared", 0)
+    except Exception:
+        pass
+    if session_state is not None:
+        for _k in _GLOBAL_REFRESH_SESSION_KEYS:
+            if _k in _GLOBAL_REFRESH_KEEP_KEYS:
+                continue
+            try:
+                if _k in session_state:
+                    session_state.pop(_k, None)
+                    _stat["session_keys_popped"] += 1
+            except Exception:
+                pass
+    return _stat
+
+
+# ════════════════════════════════════════════════════════════
 # v11.0 B-9b-1：Disk cache helpers（從 fund_fetcher.py 抽出）
 # 基金 NAV / 配息 / metadata 的本地 CSV+JSON 快取
 # 環境自適應路徑（Colab → /content/fund_cache; 其他 → /tmp/fund_cache）
