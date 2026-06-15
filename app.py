@@ -261,6 +261,14 @@ with st.sidebar:
             )
             st.sidebar.caption("本機請 Ctrl+C 後 `streamlit run app.py`")
 
+    # ── v19.63 F：全局資料健康總覽（聚合各 Tab 新鮮度 → 一眼看哪舊了）──
+    st.divider()
+    try:
+        from ui.helpers.freshness import render_sidebar_data_health
+        render_sidebar_data_health(st.session_state, now_tw=_now_tw)
+    except Exception:
+        pass  # noqa: smoke-allow-pass — sidebar 健康總覽純顯示，異常不擋主畫面
+
     # ── v19.59 C2：全域刷新總開關 — 清所有記憶體 + 落地快取 + 跨 Tab session 殘留 ──
     st.divider()
     st.markdown("##### 🧹 全域刷新")
