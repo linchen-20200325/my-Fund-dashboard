@@ -330,6 +330,18 @@ def render_single_fund_tab() -> None:
                 st.markdown("### ① 基本資料 & 淨值趨勢")
                 st.success(f"✅ **{name or fk}** ｜ 淨值 {len(s)} 筆 ‧ 配息 {len(divs)} 筆")
 
+                # v19.62 E3：MoneyDJ 資料新鮮度條（單檔，鏡像 Tab5 / Stock 個股）
+                try:
+                    from ui.helpers.freshness import render_mj_freshness_banner
+                    render_mj_freshness_banner([{
+                        "code": fk or fd.get("fund_code", "?"),
+                        "name": name or fk,
+                        "nav_date": fd.get("nav_date", ""),
+                        "fetched_at": fd.get("_moneydj_fetched_at", ""),
+                    }])
+                except Exception:
+                    pass
+
                 # MK 訊號卡片
                 phase_info_s = st.session_state.phase_info if st.session_state.macro_done else None
                 if phase_info_s:

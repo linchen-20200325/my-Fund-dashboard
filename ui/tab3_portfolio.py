@@ -1251,6 +1251,22 @@ def render_portfolio_tab() -> None:
             f"<div style='color:#888;font-size:10px;margin-top:2px'>依各基金配息率粗估</div></div>"
             "</div>", unsafe_allow_html=True)
 
+        # ── v19.62 E3：MoneyDJ 資料新鮮度條（組合層級，所有基金聯合統計）──
+        try:
+            from ui.helpers.freshness import render_mj_freshness_banner
+            _fresh_items = []
+            for _f in _pf_loaded:
+                _mj = _f.get("moneydj_raw") or {}
+                _fresh_items.append({
+                    "code": _f.get("code", "?"),
+                    "name": _f.get("name", "") or _f.get("code", "?"),
+                    "nav_date": _mj.get("nav_date", ""),
+                    "fetched_at": _mj.get("_moneydj_fetched_at", ""),
+                })
+            render_mj_freshness_banner(_fresh_items)
+        except Exception:
+            pass
+
         # ── v15.1 ③ 資產成長曲線（vs 2% 無風險基準，§0 禁 ETF）─────────
         # v18.43：同 code 跨多保單會讓 _value_series.name 重複，join 時欄名衝突拋例外。
         # 分析視圖按 code 去重（與 v18.34 MK 戰情室 / v18.38 真實收益矩陣策略一致）。
