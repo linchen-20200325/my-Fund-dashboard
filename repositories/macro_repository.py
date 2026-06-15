@@ -205,8 +205,11 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
 
     Returns
     -------
-    pd.DataFrame  欄位: ['date' (Timestamp), 'value' (float)],已排序去除空值。
-                  失敗時回傳空 DataFrame。
+    pd.DataFrame  欄位: ['date' (Timestamp), 'value' (float),
+                          'realtime_start' (Timestamp)],已排序去除空值。
+                  v19.60 D1：補上 realtime_start（FRED API 該筆觀測首次發布日，
+                  ≈ BLS/FED 真實 publish 時間），用於 UI chip 區分「資料月份」
+                  與「真實發布日」。失敗時回傳空 DataFrame。
     """
     if not api_key:
         return pd.DataFrame()
@@ -234,6 +237,12 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
     df = df[df["value"] != "."].copy()
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     df["date"]  = pd.to_datetime(df["date"])
+    # v19.60 D1：FRED API observations 已含 realtime_start 欄位（YYYY-MM-DD 字串）。
+    # 缺欄或解析失敗回 NaT，呼叫端用 .get/.dropna 容錯。
+    if "realtime_start" in df.columns:
+        df["realtime_start"] = pd.to_datetime(df["realtime_start"], errors="coerce")
+    else:
+        df["realtime_start"] = pd.NaT
     return df.dropna(subset=["value"]).sort_values("date").reset_index(drop=True)
 
 

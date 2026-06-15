@@ -293,20 +293,42 @@ def fetch_all_indicators(fred_api_key):
         _df_m2_pre = _f_m2.result()
 
     # v19.56 B2: 5 條 FRED 個別命中狀態（series_id → success/last_date/rows）
+    # v19.60 D1：補上 realtime_start（BLS/FED 真實發布日）+ publish_lag_days
     _fred_srcs: dict = {}
     for _sid, _dfp in (("DGS10", df10), ("DGS2", df2), ("DGS3MO", df3m),
                        ("BAMLH0A0HYM2", _df_hy_pre), ("M2SL", _df_m2_pre)):
         try:
             if _dfp is not None and not _dfp.empty:
+                _last_row = _dfp.iloc[-1]
+                _obs_date = str(_last_row["date"])[:10]
+                _rt = _last_row.get("realtime_start")
+                _rt_str = ""
+                _lag = None
+                try:
+                    if _rt is not None and pd.notna(_rt):
+                        _rt_str = str(_rt)[:10]
+                        _lag = int((pd.to_datetime(_rt_str)
+                                    - pd.to_datetime(_obs_date)).days)
+                except Exception:
+                    _rt_str = ""
+                    _lag = None
                 _fred_srcs[_sid] = {
                     "success": True,
-                    "last_date": str(_dfp.iloc[-1]["date"])[:10],
+                    "last_date": _obs_date,
+                    "realtime_start": _rt_str,
+                    "publish_lag_days": _lag,
                     "rows": int(len(_dfp)),
                 }
             else:
-                _fred_srcs[_sid] = {"success": False, "last_date": "", "rows": 0}
+                _fred_srcs[_sid] = {
+                    "success": False, "last_date": "",
+                    "realtime_start": "", "publish_lag_days": None, "rows": 0,
+                }
         except Exception:
-            _fred_srcs[_sid] = {"success": False, "last_date": "", "rows": 0}
+            _fred_srcs[_sid] = {
+                "success": False, "last_date": "",
+                "realtime_start": "", "publish_lag_days": None, "rows": 0,
+            }
     R["_fred_sources"] = _fred_srcs
 
     if not df10.empty and not df2.empty:
