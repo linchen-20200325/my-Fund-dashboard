@@ -1018,8 +1018,12 @@ def render_portfolio_tab() -> None:
                                 _sig_e = None  # noqa: smoke-allow-pass
                         _div_e = None
                         try:
-                            _tret = float(_mj_e.get("perf", {}).get("1Y")
-                                          or _m.get("ret_1y") or 0)
+                            # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
+                            from ui.helpers.macro_helpers import compute_1y_total_return
+                            _tret_v, _ = compute_1y_total_return({
+                                "metrics": _m, "moneydj_raw": _mj_e,
+                            })
+                            _tret = float(_tret_v or 0)
                             _dyld = float(_mj_e.get("moneydj_div_yield")
                                           or _m.get("annual_div_rate") or 0)
                             if _dyld > 0:
@@ -1067,7 +1071,12 @@ def render_portfolio_tab() -> None:
                     # 配息覆蓋率 / 吃本金
                     _div_info = None
                     try:
-                        _tret = float(_mj.get("perf", {}).get("1Y") or _metrics.get("ret_1y") or 0)
+                        # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
+                        from ui.helpers.macro_helpers import compute_1y_total_return
+                        _tret_v, _ = compute_1y_total_return({
+                            "metrics": _metrics, "moneydj_raw": _mj,
+                        })
+                        _tret = float(_tret_v or 0)
                         _dyld = float(_mj.get("moneydj_div_yield") or _metrics.get("annual_div_rate") or 0)
                         if _dyld > 0:
                             _div_info = div_safety_check(_tret, _dyld)
@@ -1667,8 +1676,12 @@ def render_portfolio_tab() -> None:
                         _sigma = {"error": str(_e_s)[:60]}
                 _div = None
                 try:
-                    _tret_l = float(_mj_local.get("perf", {}).get("1Y")
-                                     or _m_local.get("ret_1y") or 0)
+                    # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
+                    from ui.helpers.macro_helpers import compute_1y_total_return
+                    _tret_v, _ = compute_1y_total_return({
+                        "metrics": _m_local, "moneydj_raw": _mj_local,
+                    })
+                    _tret_l = float(_tret_v or 0)
                     _dyld_l = float(_mj_local.get("moneydj_div_yield")
                                      or _m_local.get("annual_div_rate") or 0)
                     if _dyld_l > 0:

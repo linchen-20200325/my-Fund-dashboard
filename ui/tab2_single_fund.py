@@ -1436,12 +1436,12 @@ def render_single_fund_tab() -> None:
                             except Exception:
                                 pass
                         else:
-                            # 累積型基金 — 用 1Y total return 估市值
-                            _ret_1y = m.get("ret_1y_total") or m.get("ret_1y")
-                            try:
-                                _ret_1y = float(_ret_1y) if _ret_1y not in (None, "", "—") else None
-                            except (TypeError, ValueError):
-                                _ret_1y = None
+                            # v19.73 K1：累積型用 1Y 總報酬估市值 — 改走 SSOT compute_1y_total_return
+                            # 修補 v18.134 漏接點（原本只用 ret_1y_total/ret_1y 跳過 perf["1Y"] 真 1Y）
+                            from ui.helpers.macro_helpers import compute_1y_total_return
+                            _ret_1y, _ = compute_1y_total_return({
+                                "metrics": m, "moneydj_raw": mj_raw,
+                            })
                             _proj_1y = None
                             _proj_1y_twd = None
                             if _ret_1y is not None:
