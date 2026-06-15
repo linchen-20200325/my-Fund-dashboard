@@ -164,6 +164,14 @@ def _process_one_fund(
         if not result.get("ok"):
             return {"code": code, "ok": False, "error": result.get("error", "?")}
         s = result["summary"]
+        # v19.69 J1：額外欄位（費用率 / 配息頻率 / 年均配息 / 換匯資訊）
+        _mgmt_fee = (fd.get("mgmt_fee") or "").strip() or "—"
+        _div_freq = (fd.get("dividend_freq") or "").strip() or "—"
+        _hold_yrs = max(float(s.get("holding_years_🧮") or 1), 0.01)
+        _ann_twd_div = round(s["total_twd_div_🧮"] / _hold_yrs, 0)
+        _p_ccy = result["principal_ccy_🧮"]
+        _buy_fx = result["buy_fx"]
+        _buy_fx_info = f"1M TWD→{_p_ccy:,.0f} {ccy} @ {_buy_fx:.2f}"
         return {
             "code": code,
             "ok": True,
@@ -175,9 +183,14 @@ def _process_one_fund(
             "units 🧮": result["units_held_🧮"],
             "配息次數": result["n_events"],
             "累積 TWD 配息 🧮": s["total_twd_div_🧮"],
+            "年均配息 TWD 🧮": _ann_twd_div,
             "年化配息率% 🧮": s["annual_div_rate_pct_🧮"],
+            "年化淨值% 🧮": s["annual_nav_return_pct_🧮"],
             "含息年化% 🧮": s["ret_1y_total_pct_🧮"],
             "燈號 🧮": f"{s['div_health_emoji_🧮']} {s['div_health_light_🧮']}",
+            "最高經理費%": _mgmt_fee,
+            "配息頻率": _div_freq,
+            "換匯資訊 🧮": _buy_fx_info,
             "_detail": result,
             "_fund_raw": fd,  # v19.58：留給 render_fund_grp_health_extras
             # v19.61 E1：MoneyDJ 資料新鮮度（_ 開頭自動排除表格）
@@ -275,6 +288,32 @@ def _render_health_table(rows: list[dict]) -> None:
         ])
         st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
         st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # v19.69 J1：多基金績效比較圖
+        if len(ok_rows) >= 2:
+            try:
+                import plotly.graph_objects as _go
+                _codes = [r["code"] for r in ok_rows]
+                _div_r  = [float(r.get("年化配息率% 🧮") or 0) for r in ok_rows]
+                _ret_r  = [float(r.get("含息年化% 🧮") or 0) for r in ok_rows]
+                _nav_r  = [float(r.get("年化淨值% 🧮") or 0) for r in ok_rows]
+                _fig = _go.Figure()
+                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name="年化配息率%🧮", marker_color="#f0883e"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name="含息年化%🧮",  marker_color="#3fb950"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name="年化淨值%🧮",  marker_color="#58a6ff"))
+                _fig.add_hline(y=0, line_dash="dot", line_color="#555")
+                _fig.update_layout(
+                    barmode="group",
+                    title="📊 多基金績效比較 🧮（配息率 / 含息報酬 / 淨值漲跌）",
+                    height=360,
+                    paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
+                    font=dict(color="#c9d1d9"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                    margin=dict(l=20, r=20, t=70, b=20),
+                )
+                st.plotly_chart(_fig, use_container_width=True)
+            except Exception as _e_chart:
+                st.caption(f"⬜ 比較圖渲染失敗：{type(_e_chart).__name__}")
 
         for r in ok_rows:
             with st.expander(f"📋 {r['code']} — 逐期配息明細 🧮"):
