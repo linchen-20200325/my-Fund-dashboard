@@ -1015,25 +1015,40 @@ def render_macro_tab() -> None:
             _radar_ready = bool(_radar_cache and _radar_cache[0])
             _tp_ready = bool(st.session_state.get("_tp_v1948_top"))
             # v19.56 B2: 5 條 FRED 個別命中狀態 chip（DGS10 / DGS2 / DGS3MO / HY OAS / M2SL）
+            # v19.60 D1: chip 改吃 realtime_start（BLS/FED 真實發布日）算新鮮度，
+            # fallback 回 observation date；hover tooltip 顯示「資料月份 / 發布日 / 延遲」
             _fred_srcs = (ind or {}).get("_fred_sources") or {}
             _today_d = _now_tw().date()
             def _fred_chip(_sid: str, _short: str, _daily: bool) -> str:
                 _meta = _fred_srcs.get(_sid) or {}
                 if not _meta.get("success"):
-                    return f'{_short}:🔴失敗'
-                _last = str(_meta.get("last_date", "")).strip()
-                if not _last:
-                    return f'{_short}:⬜未知'
+                    return f'<span title="{_sid} 抓取失敗">{_short}:🔴失敗</span>'
+                _obs = str(_meta.get("last_date", "")).strip()
+                _rt = str(_meta.get("realtime_start", "")).strip()
+                _lag = _meta.get("publish_lag_days")
+                _src_date = _rt if _rt else _obs   # 優先用發布日，fallback obs date
+                if not _src_date:
+                    return f'<span title="{_sid} 日期缺失">{_short}:⬜未知</span>'
                 try:
-                    _ld = pd.to_datetime(_last).date()
+                    _ld = pd.to_datetime(_src_date).date()
                     _age_d = (_today_d - _ld).days
                 except Exception:
-                    return f'{_short}:⬜未知'
+                    return f'<span title="{_sid} 日期解析失敗">{_short}:⬜未知</span>'
                 if _daily:
                     _emoji = '🟢' if _age_d <= 4 else ('🟠' if _age_d <= 14 else '🔴')
                 else:
                     _emoji = '🟢' if _age_d <= 40 else ('🟠' if _age_d <= 70 else '🔴')
-                return f'{_short}:{_emoji}{_age_d}d'
+                # hover tooltip：資料月份 / 發布日 / 延遲（HTML title attr）
+                _tip_parts = [f'{_sid}']
+                if _obs:
+                    _tip_parts.append(f'資料月份 {_obs}')
+                if _rt:
+                    _tip_parts.append(f'發布 {_rt}')
+                if _lag is not None:
+                    _tip_parts.append(f'延遲 {_lag}d')
+                _tip = ' ｜ '.join(_tip_parts)
+                _src_label = '發布' if _rt else 'obs'
+                return f'<span title="{_tip}">{_short}:{_emoji}{_age_d}d({_src_label})</span>'
             _chip_d10 = _fred_chip("DGS10", "DGS10", True)
             _chip_d2  = _fred_chip("DGS2",  "DGS2",  True)
             _chip_d3m = _fred_chip("DGS3MO", "DGS3MO", True)
