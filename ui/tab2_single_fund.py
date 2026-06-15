@@ -342,6 +342,17 @@ def render_single_fund_tab() -> None:
                 except Exception:
                     pass
 
+                # v19.65 I2：單檔 ↔ 組合持倉聯動（讀 Tab3 portfolio_funds，跨 Tab 訊號）
+                try:
+                    from ui.helpers.portfolio_linkage import render_fund_portfolio_membership
+                    render_fund_portfolio_membership(
+                        st.session_state,
+                        fund_codes=[fk, fd.get("fund_code", ""), fd.get("full_key", "")],
+                        fund_name=name,
+                    )
+                except Exception:
+                    pass
+
                 # MK 訊號卡片
                 phase_info_s = st.session_state.phase_info if st.session_state.macro_done else None
                 if phase_info_s:
