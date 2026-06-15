@@ -38,29 +38,9 @@ from models.ledger import (  # noqa: F401  re-export so callers can `from servic
 )
 
 
-# v18.245: service-layer 幣別正規化 — UI/caller 任何漏網 fall through 到這裡
-# 都會被 normalize。同個表內容 mirror ui/tab3_t7_ledger 的 _CCY_NORMALIZE。
-_CCY_NORMALIZE: dict[str, str] = {
-    "美元": "USD", "美金": "USD",
-    "歐元": "EUR",
-    "港幣": "HKD", "港元": "HKD",
-    "日圓": "JPY", "日元": "JPY",
-    "澳幣": "AUD", "澳元": "AUD",
-    "英鎊": "GBP",
-    "人民幣": "CNY", "CNH": "CNY",
-    "台幣": "TWD", "新台幣": "TWD", "新臺幣": "TWD",
-    "瑞郎": "CHF", "瑞士法郎": "CHF",
-    "新幣": "SGD", "新加坡幣": "SGD", "星幣": "SGD",
-    "加幣": "CAD", "加元": "CAD",
-    "紐幣": "NZD", "紐元": "NZD",
-    "蘭特": "ZAR", "南非幣": "ZAR",
-}
-
-
-def _norm_ccy_pure(raw) -> str:
-    """幣別正規化：中文/ISO 都統一回 ISO 3 碼。未知則回原值大寫。"""
-    _u = str(raw or "USD").upper().strip()
-    return _CCY_NORMALIZE.get(_u, _u)
+# v19.71: 抽到 services/currency 共用（user 反映「重複造輪子」實證 — 3 個 Tab 各寫一份
+# 同款字典導致組合健診漏接 → 截圖 bug「FX 美元TWD 抓不到」）。本檔保留向後相容 alias。
+from services.currency import CCY_NORMALIZE as _CCY_NORMALIZE, normalize_ccy as _norm_ccy_pure  # noqa: F401
 
 
 @dataclass

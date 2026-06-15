@@ -33,7 +33,9 @@ def render_fund_grp_health_tab() -> None:
         height=130,
         placeholder="ACCP138\nACUSI23\n...",
     )
-    c1, c2, c3 = st.columns(3)
+    # v19.71：移除「原幣別 fallback」selectbox（user 要求）+ FX 失敗根因（中文「美元」未 normalize）
+    # 已在 _process_one_fund 透過 services.currency.normalize_ccy 處理；fallback 永遠 USD（保單最常見）。
+    c1, c2 = st.columns(2)
     with c1:
         principal_twd = st.number_input(
             "本金（TWD）",
@@ -42,14 +44,6 @@ def render_fund_grp_health_tab() -> None:
             key="fund_grp_health_principal",
         )
     with c2:
-        ccy_hint = st.selectbox(
-            "原幣別 fallback",
-            options=["USD", "EUR", "ZAR", "AUD", "JPY", "GBP", "CNY", "HKD"],
-            index=0,
-            key="fund_grp_health_ccy",
-            help="若無法自動偵測基金幣別則用此 fallback；FX 抓 {CCY}TWD=X 即時",
-        )
-    with c3:
         warn_gap = st.slider(
             "吃本金閾值 %",
             min_value=0.5, max_value=5.0, value=2.0, step=0.5,
@@ -66,7 +60,7 @@ def render_fund_grp_health_tab() -> None:
         st.warning("請至少輸入 1 個基金代號")
         return
 
-    rows = _run_batch_health(codes, principal_twd, ccy_hint, warn_gap)
+    rows = _run_batch_health(codes, principal_twd, _DEFAULT_CCY, warn_gap)
     _render_health_table(rows)
 
     # v19.58 — 5 大貼圖區塊（基金體檢 PK + 健診卡 + 真實收益矩陣 + 投資試算 + 持股分析）
@@ -134,6 +128,7 @@ def _process_one_fund(
     回傳 row dict（與舊序列版完全一致）；任一步失敗回 {ok: False, error}。
     """
     from repositories.fund_repository import get_latest_fx
+    from services.currency import normalize_ccy  # v19.71：single source of truth
     from services.fund_dividend_calculator import compute_dividend_twd_series
     try:
         fd = _auto_fetch_moneydj(code)
@@ -141,7 +136,9 @@ def _process_one_fund(
             return {"code": code, "ok": False, "error": fd.get("error", "?")}
         nav_s = fd.get("series")
         divs = fd.get("dividends") or []
-        ccy_auto = (fd.get("currency") or "").strip().upper()
+        # v19.71 截圖 bug 修復：MoneyDJ 對部分基金（如 ACCP138）回傳中文「美元」而非 ISO「USD」，
+        # 導致 get_latest_fx("美元TWD=X") 全鏈失敗。normalize_ccy 中文→ISO 正規化。
+        ccy_auto = normalize_ccy(fd.get("currency"), default="")
         fund_name = fd.get("fund_name", "") or fd.get("full_key", "")
         if nav_s is None or len(nav_s) == 0:
             return {"code": code, "ok": False, "error": "NAV 抓不到"}
@@ -150,10 +147,14 @@ def _process_one_fund(
             for idx, v in nav_s.items()
             if v == v  # NaN guard
         }
-        ccy = ccy_auto if ccy_auto else ccy_hint
-        fx = get_latest_fx(f"{ccy}TWD=X") or 0.0
-        if fx <= 0:
-            return {"code": code, "ok": False, "error": f"FX {ccy}TWD 抓不到"}
+        ccy = ccy_auto if ccy_auto else normalize_ccy(ccy_hint)
+        # TWD 基金不打 FX API（鏡像 tab2 v18.278 短路）
+        if ccy == "TWD":
+            fx = 1.0
+        else:
+            fx = get_latest_fx(f"{ccy}TWD=X") or 0.0
+            if fx <= 0:
+                return {"code": code, "ok": False, "error": f"FX {ccy}TWD 抓不到"}
         result = compute_dividend_twd_series(
             nav_series=nav_dict,
             dividend_events=divs,
