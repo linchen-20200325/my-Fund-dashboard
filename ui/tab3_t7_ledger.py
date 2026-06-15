@@ -237,26 +237,8 @@ def render_t7_section() -> None:
             #         _FX_FALLBACK key 是 ISO，若不先正規化 .get("美元") 永遠回 None
             #         → 整批 fx=0 全部 skip auto-estimate。修正以後 USD/EUR/HKD/JPY 等
             #         中文名也能命中保底匯率。
-            _CCY_NORMALIZE = {
-                "美元": "USD", "美金": "USD",
-                "歐元": "EUR",
-                "港幣": "HKD", "港元": "HKD",
-                "日圓": "JPY", "日元": "JPY",
-                "澳幣": "AUD", "澳元": "AUD",
-                "英鎊": "GBP",
-                "人民幣": "CNY", "CNH": "CNY",
-                "台幣": "TWD", "新台幣": "TWD", "新臺幣": "TWD",
-                "瑞郎": "CHF", "瑞士法郎": "CHF",
-                "新幣": "SGD", "新加坡幣": "SGD", "星幣": "SGD",
-                "加幣": "CAD", "加元": "CAD",
-                "紐幣": "NZD", "紐元": "NZD",
-                "蘭特": "ZAR", "南非幣": "ZAR",
-            }
-
-            def _norm_ccy(_raw: str) -> str:
-                """幣別正規化：中文 / ISO 都統一回 ISO 3 碼。未知則回原值大寫。"""
-                _u = str(_raw or "USD").upper().strip()
-                return _CCY_NORMALIZE.get(_u, _u)
+            # v19.75 K2：遷移到 services/currency SSOT（mode="iso" 保留 T7 ledger 用 ISO 標準）。
+            from services.currency import normalize_ccy as _norm_ccy
 
             def _latest_nav_fx_t7(_fund: dict) -> tuple:
                 _code = str(_fund.get("code", "")).strip()

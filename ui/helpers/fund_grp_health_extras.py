@@ -201,21 +201,9 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
     _m = fund.get("metrics") or {}
     _code = fund.get("code", "—")
     _ccy_raw = (_mj.get("currency") or fund.get("currency") or "TWD").strip() or "TWD"
-    _CCY_NORMALIZE = {
-        "台幣": "TWD", "新台幣": "TWD", "台": "TWD",
-        "美元": "USD", "美金": "USD",
-        "歐元": "EUR", "歐": "EUR",
-        "日圓": "JPY", "日幣": "JPY", "日元": "JPY",
-        "人民幣": "CNH",
-        "港幣": "HKD", "港元": "HKD",
-        "英鎊": "GBP",
-        "澳幣": "AUD", "澳元": "AUD",
-        "瑞士法郎": "CHF",
-        "新加坡幣": "SGD", "新元": "SGD",
-        "加拿大幣": "CAD", "加元": "CAD",
-        "南非幣": "ZAR",
-    }
-    _ccy = _CCY_NORMALIZE.get(_ccy_raw, _ccy_raw.upper())
+    # v19.75 K2：遷移到 services/currency SSOT（mode="yf" 保留 health_extras 既有人民幣→CNH 行為）。
+    from services.currency import normalize_ccy as _norm_ccy
+    _ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")
     _nav = _safe_num(_m.get("nav") or _mj.get("nav_latest"))
     _adr = _safe_num(_mj.get("moneydj_div_yield") or _m.get("annual_div_rate"))
 
