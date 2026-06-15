@@ -261,6 +261,34 @@ with st.sidebar:
             )
             st.sidebar.caption("本機請 Ctrl+C 後 `streamlit run app.py`")
 
+    # ── v19.59 C2：全域刷新總開關 — 清所有記憶體 + 落地快取 + 跨 Tab session 殘留 ──
+    st.divider()
+    st.markdown("##### 🧹 全域刷新")
+    if st.button(
+        "🧹 全域刷新（清所有快取 + 落地檔）",
+        key="btn_global_refresh",
+        use_container_width=True,
+        help="v19.59 C2：清全部 TTL cache + hot_money @st.cache_data + "
+             "/tmp/fund_cache 落地檔 + 跨 Tab session 殘留。保留 OAuth/sheet "
+             "登入狀態。嚴禁清 data_cache/ 上游 cron 歷史資料倉。"
+             "清掉後下次載入各 Tab 會重打 API（請確認需要前再用）",
+    ):
+        try:
+            from infra.cache import global_refresh_all
+            _gr = global_refresh_all(session_state=st.session_state)
+            st.toast(
+                f"🧹 全域刷新：TTL {_gr['ttl_cleared']} 條 / "
+                f"st_cache {_gr['st_cache_cleared']} 條 / "
+                f"落地檔 {_gr['disk_files_removed']} 個 / "
+                f"snapshot {_gr['snapshot_cleared']} 筆 / "
+                f"session {_gr['session_keys_popped']} 鍵",
+                icon="🧹",
+            )
+        except Exception as _e_gr:
+            st.toast(f"⚠️ 全域刷新失敗：{type(_e_gr).__name__}", icon="⚠️")
+        st.rerun()
+    st.caption("⚠️ 會清掉所有快取，下次載入會重打 API；OAuth 登入保留")
+
     # ── v18.75 Google 帳號（從 Tab3 expander 搬上來，登入更顯眼）──
     st.divider()
     st.markdown("##### 🔐 Google 帳號")
