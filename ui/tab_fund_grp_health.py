@@ -186,12 +186,78 @@ def _run_batch_health(
                     "燈號 🧮": f"{s['div_health_emoji_🧮']} {s['div_health_light_🧮']}",
                     "_detail": result,
                     "_fund_raw": fd,  # v19.58：留給 render_fund_grp_health_extras
+                    # v19.61 E1：MoneyDJ 資料新鮮度（_ 開頭自動排除表格）
+                    "_nav_date": str(fd.get("nav_date") or "")[:10],
+                    "_fetched_at": str(fd.get("_moneydj_fetched_at") or ""),
                 })
         except Exception as e:
             rows.append({"code": code, "ok": False, "error": f"{type(e).__name__}: {e}"})
         prog.progress((i + 1) / n, text=f"✅ {code} 完成")
     prog.empty()
     return rows
+
+
+def _render_mj_freshness_banner(ok_rows: list[dict]) -> None:
+    """v19.61 E1：MoneyDJ 資料新鮮度 banner — 鏡像 Stock D2 同款設計。
+
+    對每檔基金顯示 NAV 日期 / 抓取於 / 延遲天數 / traffic-light：
+      🟢 ≤2d（含週末）/ 🟠 ≤7d（NAV 發布 T+1~2 + 假日放寬）/ 🔴 >7d
+    """
+    import datetime as _dt
+    _today = _dt.date.today()
+    _parts: list[str] = []
+    _stats = {"green": 0, "yellow": 0, "red": 0, "unknown": 0}
+    for _r in ok_rows:
+        _code = _r.get("code", "?")
+        _nm = str(_r.get("基金名", "") or _code)[:14]
+        _nav_d = str(_r.get("_nav_date", "") or "").strip()
+        _fetched = str(_r.get("_fetched_at", "") or "").strip()
+        _emoji = "⬜"
+        _age_txt = "—"
+        if _nav_d:
+            try:
+                _nd = _dt.datetime.strptime(_nav_d[:10], "%Y-%m-%d").date()
+                _age = (_today - _nd).days
+                if _age <= 2:
+                    _emoji = "🟢"
+                    _stats["green"] += 1
+                elif _age <= 7:
+                    _emoji = "🟠"
+                    _stats["yellow"] += 1
+                else:
+                    _emoji = "🔴"
+                    _stats["red"] += 1
+                _age_txt = f"{_age}d"
+            except (ValueError, TypeError):
+                _stats["unknown"] += 1
+        else:
+            _stats["unknown"] += 1
+        _fetch_short = _fetched[11:16] if len(_fetched) >= 16 else "—"
+        _nav_show = _nav_d if _nav_d else "未知"
+        _fetched_show = _fetched if _fetched else "—"
+        _nav_inline = _nav_d if _nav_d else "?"
+        _parts.append(
+            f"<span title='{_code} ｜ NAV {_nav_show} ｜ 抓取於 "
+            f"{_fetched_show} ｜ 延遲 {_age_txt}'>"
+            f"{_emoji} <b>{_nm}</b> "
+            f"<span style='color:#888'>{_nav_inline}/{_fetch_short}/{_age_txt}</span>"
+            f"</span>"
+        )
+    _summary = (
+        f"🟢 {_stats['green']} ｜ 🟠 {_stats['yellow']} ｜ "
+        f"🔴 {_stats['red']} ｜ ⬜ {_stats['unknown']}"
+    )
+    st.markdown(
+        f"<div style='background:#0d1117;border-left:4px solid #58a6ff;"
+        f"border-radius:4px;padding:6px 12px;margin-bottom:8px;"
+        f"font-size:11px;color:#8b949e;line-height:1.7'>"
+        f"📊 <b>MoneyDJ 資料新鮮度</b>　{_summary}　"
+        f"<span style='color:#666;font-size:10px'>"
+        f"（hover chip 看完整時戳 ｜ 規則：🟢 ≤2d / 🟠 ≤7d / 🔴 >7d）</span><br/>"
+        f"{' ｜ '.join(_parts)}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def _render_health_table(rows: list[dict]) -> None:
@@ -203,6 +269,10 @@ def _render_health_table(rows: list[dict]) -> None:
     err_rows = [r for r in rows if not r.get("ok")]
 
     if ok_rows:
+        # v19.61 E1：MoneyDJ 資料新鮮度 banner（NAV 日期 / 抓取於 / 延遲天數 / 燈號）
+        # 鏡像 Stock v18.201 D2 「FinMind last_update」設計，但 Fund 端用 banner 而非 hover
+        _render_mj_freshness_banner(ok_rows)
+
         n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get("燈號 🧮", "")))
         n_warn = sum(1 for r in ok_rows if "警示" in str(r.get("燈號 🧮", "")))
         n_good = sum(1 for r in ok_rows if "健康" in str(r.get("燈號 🧮", "")))
