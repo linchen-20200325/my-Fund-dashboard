@@ -1274,6 +1274,13 @@ def render_portfolio_tab() -> None:
         except Exception:
             pass
 
+        # ── v19.66 I3：穿透式持股集中度摘要（聚合各基金 top_holdings，跨區塊聯動 T5）──
+        try:
+            from ui.helpers.concentration import render_concentration_summary
+            render_concentration_summary(_pf_loaded)
+        except Exception:
+            pass
+
         # ── v15.1 ③ 資產成長曲線（vs 2% 無風險基準，§0 禁 ETF）─────────
         # v18.43：同 code 跨多保單會讓 _value_series.name 重複，join 時欄名衝突拋例外。
         # 分析視圖按 code 去重（與 v18.34 MK 戰情室 / v18.38 真實收益矩陣策略一致）。
