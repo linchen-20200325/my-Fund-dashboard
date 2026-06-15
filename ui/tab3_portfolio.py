@@ -1251,6 +1251,13 @@ def render_portfolio_tab() -> None:
             f"<div style='color:#888;font-size:10px;margin-top:2px'>依各基金配息率粗估</div></div>"
             "</div>", unsafe_allow_html=True)
 
+        # ── v19.64 I1：總經 → 組合曝險聯動 banner（讀 Tab1 phase_info，跨 Tab 訊號）──
+        try:
+            from ui.helpers.macro_linkage import render_macro_exposure_link
+            render_macro_exposure_link(st.session_state, core_pct=_core_pct_kpi)
+        except Exception:
+            pass
+
         # ── v19.62 E3：MoneyDJ 資料新鮮度條（組合層級，所有基金聯合統計）──
         try:
             from ui.helpers.freshness import render_mj_freshness_banner
