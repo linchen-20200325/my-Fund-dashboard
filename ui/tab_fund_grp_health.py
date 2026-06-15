@@ -123,78 +123,114 @@ def _auto_fetch_moneydj(code: str) -> dict:
     return attempts[-1][0] if attempts else {}
 
 
+def _process_one_fund(
+    code: str,
+    principal_twd: float,
+    ccy_hint: str,
+    warn_gap: float,
+) -> dict:
+    """v19.68 H：單檔健診 worker（純 IO + 計算，無 st 呼叫 → 可並行）。
+
+    回傳 row dict（與舊序列版完全一致）；任一步失敗回 {ok: False, error}。
+    """
+    from repositories.fund_repository import get_latest_fx
+    from services.fund_dividend_calculator import compute_dividend_twd_series
+    try:
+        fd = _auto_fetch_moneydj(code)
+        if fd.get("error") and not fd.get("series"):
+            return {"code": code, "ok": False, "error": fd.get("error", "?")}
+        nav_s = fd.get("series")
+        divs = fd.get("dividends") or []
+        ccy_auto = (fd.get("currency") or "").strip().upper()
+        fund_name = fd.get("fund_name", "") or fd.get("full_key", "")
+        if nav_s is None or len(nav_s) == 0:
+            return {"code": code, "ok": False, "error": "NAV 抓不到"}
+        nav_dict = {
+            str(idx)[:10]: float(v)
+            for idx, v in nav_s.items()
+            if v == v  # NaN guard
+        }
+        ccy = ccy_auto if ccy_auto else ccy_hint
+        fx = get_latest_fx(f"{ccy}TWD=X") or 0.0
+        if fx <= 0:
+            return {"code": code, "ok": False, "error": f"FX {ccy}TWD 抓不到"}
+        result = compute_dividend_twd_series(
+            nav_series=nav_dict,
+            dividend_events=divs,
+            fx_rate_default=fx,
+            principal_twd=principal_twd,
+            warn_gap_pct=warn_gap,
+        )
+        if not result.get("ok"):
+            return {"code": code, "ok": False, "error": result.get("error", "?")}
+        s = result["summary"]
+        return {
+            "code": code,
+            "ok": True,
+            "基金名": fund_name[:24],
+            "幣別偵測": "自動" if ccy_auto else "fallback",
+            "ccy": ccy,
+            "fx_spot": fx,
+            "principal_ccy 🧮": result["principal_ccy_🧮"],
+            "units 🧮": result["units_held_🧮"],
+            "配息次數": result["n_events"],
+            "累積 TWD 配息 🧮": s["total_twd_div_🧮"],
+            "年化配息率% 🧮": s["annual_div_rate_pct_🧮"],
+            "含息年化% 🧮": s["ret_1y_total_pct_🧮"],
+            "燈號 🧮": f"{s['div_health_emoji_🧮']} {s['div_health_light_🧮']}",
+            "_detail": result,
+            "_fund_raw": fd,  # v19.58：留給 render_fund_grp_health_extras
+            # v19.61 E1：MoneyDJ 資料新鮮度（_ 開頭自動排除表格）
+            "_nav_date": str(fd.get("nav_date") or "")[:10],
+            "_fetched_at": str(fd.get("_moneydj_fetched_at") or ""),
+        }
+    except Exception as e:
+        return {"code": code, "ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
 def _run_batch_health(
     codes: list[str],
     principal_twd: float,
     ccy_hint: str,
     warn_gap: float,
 ) -> list[dict]:
-    from repositories.fund_repository import get_latest_fx
-    from services.fund_dividend_calculator import compute_dividend_twd_series
+    """v19.68 H：N 檔基金並行健診（原逐檔序列 → ThreadPoolExecutor）。
 
-    rows: list[dict] = []
-    prog = st.progress(0.0, text="📥 抓取資料中…")
+    瓶頸：每檔序列 _auto_fetch_moneydj（MoneyDJ 2-30s）+ get_latest_fx 累加，
+    10 檔可達數十秒。改並行（max 4 worker，鏡像 Tab3 portfolio_load + macro
+    4-way）。worker 無 st 呼叫；進度條在主執行緒以 as_completed 更新；by-index
+    收集保留輸入順序與重複代碼。
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     n = len(codes)
-    for i, code in enumerate(codes):
-        prog.progress((i) / n, text=f"📥 {code} ({i + 1}/{n})")
-        try:
-            fd = _auto_fetch_moneydj(code)
-            if fd.get("error") and not fd.get("series"):
-                rows.append({"code": code, "ok": False, "error": fd.get("error", "?")})
-                continue
-            nav_s = fd.get("series")
-            divs = fd.get("dividends") or []
-            ccy_auto = (fd.get("currency") or "").strip().upper()
-            fund_name = fd.get("fund_name", "") or fd.get("full_key", "")
-            if nav_s is None or len(nav_s) == 0:
-                rows.append({"code": code, "ok": False, "error": "NAV 抓不到"})
-                continue
-            nav_dict = {
-                str(idx)[:10]: float(v)
-                for idx, v in nav_s.items()
-                if v == v  # NaN guard
+    if n == 0:
+        return []
+    prog = st.progress(0.0, text="📥 並行抓取資料中…")
+    _results: list = [None] * n
+    _workers = min(n, 4)
+    try:
+        with ThreadPoolExecutor(max_workers=_workers) as _ex:
+            _futs = {
+                _ex.submit(_process_one_fund, _c, principal_twd, ccy_hint, warn_gap): _i
+                for _i, _c in enumerate(codes)
             }
-            ccy = ccy_auto if ccy_auto else ccy_hint
-            fx = get_latest_fx(f"{ccy}TWD=X") or 0.0
-            if fx <= 0:
-                rows.append({"code": code, "ok": False, "error": f"FX {ccy}TWD 抓不到"})
-                continue
-            result = compute_dividend_twd_series(
-                nav_series=nav_dict,
-                dividend_events=divs,
-                fx_rate_default=fx,
-                principal_twd=principal_twd,
-                warn_gap_pct=warn_gap,
-            )
-            if not result.get("ok"):
-                rows.append({"code": code, "ok": False, "error": result.get("error", "?")})
-            else:
-                s = result["summary"]
-                rows.append({
-                    "code": code,
-                    "ok": True,
-                    "基金名": fund_name[:24],
-                    "幣別偵測": "自動" if ccy_auto else "fallback",
-                    "ccy": ccy,
-                    "fx_spot": fx,
-                    "principal_ccy 🧮": result["principal_ccy_🧮"],
-                    "units 🧮": result["units_held_🧮"],
-                    "配息次數": result["n_events"],
-                    "累積 TWD 配息 🧮": s["total_twd_div_🧮"],
-                    "年化配息率% 🧮": s["annual_div_rate_pct_🧮"],
-                    "含息年化% 🧮": s["ret_1y_total_pct_🧮"],
-                    "燈號 🧮": f"{s['div_health_emoji_🧮']} {s['div_health_light_🧮']}",
-                    "_detail": result,
-                    "_fund_raw": fd,  # v19.58：留給 render_fund_grp_health_extras
-                    # v19.61 E1：MoneyDJ 資料新鮮度（_ 開頭自動排除表格）
-                    "_nav_date": str(fd.get("nav_date") or "")[:10],
-                    "_fetched_at": str(fd.get("_moneydj_fetched_at") or ""),
-                })
-        except Exception as e:
-            rows.append({"code": code, "ok": False, "error": f"{type(e).__name__}: {e}"})
-        prog.progress((i + 1) / n, text=f"✅ {code} 完成")
-    prog.empty()
-    return rows
+            _done = 0
+            for _fut in as_completed(_futs):
+                _i = _futs[_fut]
+                try:
+                    _results[_i] = _fut.result()
+                except Exception as e:
+                    _results[_i] = {"code": codes[_i], "ok": False,
+                                    "error": f"{type(e).__name__}: {e}"}
+                _done += 1
+                prog.progress(_done / n, text=f"📥 已完成 {_done}/{n} 檔…")
+    finally:
+        prog.empty()
+    # 防呆：任一 slot 未填（理論上不會）→ 補錯誤列
+    return [(_r if _r is not None
+             else {"code": codes[_idx], "ok": False, "error": "未取得結果"})
+            for _idx, _r in enumerate(_results)]
 
 
 def _render_mj_freshness_banner(ok_rows: list[dict]) -> None:
