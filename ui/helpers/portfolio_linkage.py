@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from services.format_helpers import fmt_twd
+
 
 def _norm(s) -> str:
     return str(s or "").strip().upper()
@@ -48,7 +50,7 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
         if _total > 0 and _amt > 0:
             _w = _amt / _total * 100.0
             _msg = (f"✅ <b>此基金已在你的組合</b>：權重 <b style='color:#58a6ff'>"
-                    f"{_w:.1f}%</b>（NT$ {_amt:,.0f}）｜定位 {_tag}")
+                    f"{_w:.1f}%</b>（{fmt_twd(_amt)}）｜定位 {_tag}")
         else:
             _msg = (f"✅ <b>此基金已在你的組合</b>（共 {_n} 檔）｜定位 {_tag}"
                     f"<span style='color:#666'>（尚未填投資金額）</span>")
