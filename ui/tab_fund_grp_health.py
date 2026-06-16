@@ -304,7 +304,26 @@ def _render_health_table(rows: list[dict]) -> None:
             for r in ok_rows
         ])
         st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        # v19.77 L1：column_config 數值格式化（百分號 / 千分位）+ 欄寬調整
+        from streamlit import column_config as _cc
+        _col_cfg = {
+            "code": _cc.TextColumn("代號", width="small"),
+            "基金名": _cc.TextColumn("基金名", width="medium"),
+            "ccy": _cc.TextColumn("幣別", width="small"),
+            "fx_spot": _cc.NumberColumn("FX", format="%.4f", width="small"),
+            "principal_ccy 🧮": _cc.NumberColumn("原幣本金 🧮", format="%,.0f"),
+            "units 🧮": _cc.NumberColumn("單位 🧮", format="%,.2f"),
+            "配息次數": _cc.NumberColumn("配息次數", format="%d", width="small"),
+            "累積 TWD 配息 🧮": _cc.NumberColumn("累積 TWD 配息 🧮", format="%,.0f"),
+            "年均配息 TWD 🧮": _cc.NumberColumn("年均配息 TWD 🧮", format="%,.0f"),
+            "年化配息率% 🧮": _cc.NumberColumn("年化配息率% 🧮", format="%.2f %%"),
+            "年化淨值% 🧮": _cc.NumberColumn("年化淨值% 🧮", format="%.2f %%"),
+            "含息年化% 🧮": _cc.NumberColumn("含息年化% 🧮", format="%.2f %%"),
+        }
+        st.dataframe(
+            df, use_container_width=True, hide_index=True,
+            column_config={k: v for k, v in _col_cfg.items() if k in df.columns},
+        )
 
         # v19.69 J1：多基金績效比較圖
         if len(ok_rows) >= 2:
@@ -329,28 +348,77 @@ def _render_health_table(rows: list[dict]) -> None:
                     margin=dict(l=20, r=20, t=70, b=20),
                 )
                 st.plotly_chart(_fig, use_container_width=True)
+                # v19.77 L1：精簡比較表（對照圖看精確值）
+                _cmp_df = pd.DataFrame([
+                    {
+                        "代號": r["code"],
+                        "基金名": r.get("基金名", ""),
+                        "含息年化% 🧮": float(r.get("含息年化% 🧮") or 0),
+                        "年化配息率% 🧮": float(r.get("年化配息率% 🧮") or 0),
+                        "年化淨值% 🧮": float(r.get("年化淨值% 🧮") or 0),
+                    }
+                    for r in ok_rows
+                ])
+                st.dataframe(
+                    _cmp_df, use_container_width=True, hide_index=True,
+                    column_config={
+                        "代號": _cc.TextColumn("代號", width="small"),
+                        "基金名": _cc.TextColumn("基金名", width="medium"),
+                        "含息年化% 🧮": _cc.NumberColumn("含息年化% 🧮", format="%.2f %%"),
+                        "年化配息率% 🧮": _cc.NumberColumn("年化配息率% 🧮", format="%.2f %%"),
+                        "年化淨值% 🧮": _cc.NumberColumn("年化淨值% 🧮", format="%.2f %%"),
+                    },
+                )
             except Exception as _e_chart:
                 st.caption(f"⬜ 比較圖渲染失敗：{type(_e_chart).__name__}")
 
+        # v19.77 L1：逐檔 expander → 兩張多檔合併表（持有 meta + 配息事件）
+        st.markdown("#### 📋 逐檔配息明細 🧮")
+        _meta_rows = []
+        _ev_rows: list[dict] = []
         for r in ok_rows:
-            with st.expander(f"📋 {r['code']} — 逐期配息明細 🧮"):
-                detail = r.get("_detail", {})
-                meta = {
-                    "買進日": detail.get("buy_date"),
-                    "買進 NAV": detail.get("buy_nav"),
-                    "買進 FX": f"{detail.get('buy_fx')} ({detail.get('buy_fx_source')})",
-                    "原幣本金 🧮": detail.get("principal_ccy_🧮"),
-                    "持有單位 🧮": detail.get("units_held_🧮"),
-                    "末日": detail.get("summary", {}).get("last_date"),
-                    "末日 NAV": detail.get("summary", {}).get("last_nav"),
-                    "持有年數 🧮": detail.get("summary", {}).get("holding_years_🧮"),
-                }
-                st.json(meta, expanded=False)
-                ev = detail.get("events", [])
-                if ev:
-                    st.dataframe(pd.DataFrame(ev), use_container_width=True, hide_index=True)
-                else:
-                    st.info("此檔於買進日後無配息事件")
+            detail = r.get("_detail", {}) or {}
+            summary = detail.get("summary", {}) or {}
+            _meta_rows.append({
+                "代號": r["code"],
+                "基金名": r.get("基金名", ""),
+                "買進日": detail.get("buy_date"),
+                "買進 NAV": detail.get("buy_nav"),
+                "買進 FX": detail.get("buy_fx"),
+                "FX 源": detail.get("buy_fx_source"),
+                "原幣本金 🧮": detail.get("principal_ccy_🧮"),
+                "持有單位 🧮": detail.get("units_held_🧮"),
+                "末日": summary.get("last_date"),
+                "末日 NAV": summary.get("last_nav"),
+                "持有年數 🧮": summary.get("holding_years_🧮"),
+            })
+            for _ev in (detail.get("events") or []):
+                if isinstance(_ev, dict):
+                    _ev_rows.append({"代號": r["code"], **_ev})
+
+        _meta_df = pd.DataFrame(_meta_rows)
+        st.markdown("##### 持有 meta")
+        st.dataframe(
+            _meta_df, use_container_width=True, hide_index=True,
+            column_config={
+                "代號": _cc.TextColumn("代號", width="small"),
+                "基金名": _cc.TextColumn("基金名", width="medium"),
+                "買進 NAV": _cc.NumberColumn("買進 NAV", format="%.4f"),
+                "買進 FX": _cc.NumberColumn("買進 FX", format="%.4f"),
+                "原幣本金 🧮": _cc.NumberColumn("原幣本金 🧮", format="%,.0f"),
+                "持有單位 🧮": _cc.NumberColumn("持有單位 🧮", format="%,.2f"),
+                "末日 NAV": _cc.NumberColumn("末日 NAV", format="%.4f"),
+                "持有年數 🧮": _cc.NumberColumn("持有年數 🧮", format="%.2f"),
+            },
+        )
+        st.markdown("##### 配息事件（多檔合併）")
+        if _ev_rows:
+            st.dataframe(
+                pd.DataFrame(_ev_rows),
+                use_container_width=True, hide_index=True,
+            )
+        else:
+            st.info("所有檔於買進日後皆無配息事件")
 
     if err_rows:
         st.markdown("#### ❌ 抓取失敗")
