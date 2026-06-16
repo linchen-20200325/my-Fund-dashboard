@@ -4,8 +4,9 @@
 # ──────────────────────────────────────────────────────────────────────
 # 設計原則：
 #   - 單向同步：canonical source = fund/shared/，stock 端為唯讀副本
-#   - 只同步「render 共用模組」：macro_card.py + __init__.py
-#   - 不同步 macro_card_edu.py（EDU 內容是 fund-side keys，stock 用自己的 EDU_GUIDE）
+#   - 只同步「配色 SSOT」：colors.py + __init__.py（K4b-4b 起改為 colors-only）
+#   - macro_card.py 兩端各自演化（Fund canonical: ui/components/macro_card.py；
+#     Stock canonical: shared/macro_card.py），不再雙向同步
 #   - 同步前先 SHA256 比對；不同才複製，避免無謂的 git 噪音
 #   - 同步後在 stock 端的副本檔頭加上「DO NOT EDIT」警告
 # ──────────────────────────────────────────────────────────────────────
@@ -18,8 +19,8 @@ set -euo pipefail
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)/shared"
 DST_DIR="$(cd "$(dirname "$0")/../../my-stock-dashboard" && pwd)/shared"
 
-# 要同步的檔案清單（fund-side EDU 不同步）
-SYNC_FILES=("__init__.py" "macro_card.py")
+# 要同步的檔案清單（K4b-4b：colors.py SSOT only；macro_card.py 兩端各自維護）
+SYNC_FILES=("__init__.py" "colors.py")
 
 # 0. 健康檢查
 if [[ ! -d "$SRC_DIR" ]]; then
@@ -75,5 +76,5 @@ if [[ "$CHANGED" -eq 0 ]]; then
   echo "✅ Sync complete (no changes)."
 else
   echo "✅ Sync complete ($CHANGED file(s) updated). Now in stock repo:"
-  echo "   git add shared/  &&  git commit -m 'sync: pull shared/macro_card from fund'"
+  echo "   git add shared/  &&  git commit -m 'sync: pull shared/colors from fund'"
 fi
