@@ -48,6 +48,7 @@ from repositories.snapshot_repository import (
     save_holdings_overview,
 )
 from services.ai_service import analyze_portfolio_mk_advisor
+from services.format_helpers import fmt_twd
 from services.macro_service import (
     backtest_sub_cycle_lights,
     rank_macro_drivers,
@@ -1028,7 +1029,7 @@ def render_t7_section() -> None:
                             _a_total_units = sum(v for m, v in _a_amounts.values() if m == "units")
                             _summary_bits = []
                             if _a_total_twd > 0:
-                                _summary_bits.append(f"💵 NT${_a_total_twd:,.0f}")
+                                _summary_bits.append(f"💵 {fmt_twd(_a_total_twd)}")
                             if _a_total_units > 0:
                                 _summary_bits.append(f"🎯 {_a_total_units:,.2f} 單位（待 submit 換算 TWD）")
                             if _summary_bits:
@@ -1159,7 +1160,7 @@ def render_t7_section() -> None:
                             }]} if _pid_a_sync else {})
                             _msg_a_state = _t7_save_snapshot_to_sheets()
                             st.success(
-                                f"✅ {_acode} 已加碼 NT${_aamt_effective:,.0f} → "
+                                f"✅ {_acode} 已加碼 {fmt_twd(_aamt_effective)} → "
                                 f"+{_new_u:,.4f} 單位（{_mode_note_new}｜已套用主帳本）"
                                 f"{_msg_a}{_msg_a_state}"
                             )
@@ -1201,7 +1202,7 @@ def render_t7_section() -> None:
                                 _mode_tag = f"🎯 {_val_a:,.4f} 單位"
                             else:
                                 _amt_a = float(_val_a)
-                                _mode_tag = f"💵 NT${_amt_a:,.0f}"
+                                _mode_tag = f"💵 {fmt_twd(_amt_a)}"
                             _led_a = _ledger_for(_pk_a)
                             _new_u_a = _led_a.subscribe(
                                 _amt_a, _fx_a, _nav_a, _d_t7.today()
@@ -1212,7 +1213,7 @@ def render_t7_section() -> None:
                             _total_div_twd += _amt_a * _dy_pk_a / 100.0
                             _n_ok += 1
                             _bundled_lines.append(
-                                f"• `{_code_a}` {_mode_tag} → NT${_amt_a:,.0f} → "
+                                f"• `{_code_a}` {_mode_tag} → {fmt_twd(_amt_a)} → "
                                 f"+{_new_u_a:.4f} 單位 @ NAV {_nav_a:.4f} / FX {_fx_a:.4f}"
                             )
                             _pid_a = parse_pk(_pk_a)[0]
@@ -1235,7 +1236,7 @@ def render_t7_section() -> None:
                             if _is_scenario:
                                 _t7_save_scenario(
                                     name=_a_scenario_name or
-                                          f"A 加碼 {_n_ok} 檔 NT${_total_amt:,.0f}",
+                                          f"A 加碼 {_n_ok} 檔 {fmt_twd(_total_amt)}",
                                     action_type="A",
                                     details="\n".join(_bundled_lines),
                                     nav_fx_cache=_navfx_cache_a,
@@ -1252,17 +1253,17 @@ def render_t7_section() -> None:
                                 _msg_a_state = _t7_save_snapshot_to_sheets()
                                 st.success(
                                     f"✅ 已加碼 **{_n_ok} 檔**（合計 "
-                                    f"**NT${_total_amt:,.0f}**）— 已套用主帳本"
+                                    f"**{fmt_twd(_total_amt)}**）— 已套用主帳本"
                                     + _msg_a + _msg_a_state
                                 )
                             st.markdown("\n".join(_bundled_lines))
                             _c1, _c2, _c3 = st.columns(3)
                             _c1.metric("加碼檔數", f"{_n_ok}")
-                            _c2.metric("合計投入", f"NT${_total_amt:,.0f}")
+                            _c2.metric("合計投入", fmt_twd(_total_amt))
                             _c3.metric(
                                 "本次新增預估年配息",
-                                f"NT${_total_div_twd:,.0f}",
-                                help=f"≈ 月均 NT${_total_div_twd/12:,.0f}"
+                                fmt_twd(_total_div_twd),
+                                help=f"≈ 月均 {fmt_twd(_total_div_twd / 12)}"
                             )
 
             # ── B. 投入再平衡 ────────────────────────────────────────────────
@@ -1399,9 +1400,9 @@ def render_t7_section() -> None:
                         _remaining = float(_btot) - _units_amt_sum
                         if _remaining < -1.0:
                             st.error(
-                                f"❌ 單位模式檔總額 NT${_units_amt_sum:,.0f} > "
-                                f"投入 NT${float(_btot):,.0f}（多 "
-                                f"NT${-_remaining:,.0f}）"
+                                f"❌ 單位模式檔總額 {fmt_twd(_units_amt_sum)} > "
+                                f"投入 {fmt_twd(float(_btot))}（多 "
+                                f"{fmt_twd(-_remaining)}）"
                             )
                             st.stop()
                         _remaining = max(_remaining, 0.0)
@@ -1463,7 +1464,7 @@ def render_t7_section() -> None:
                                 f"應買 {_ccy}": f"{_orig:,.2f}",
                                 "預估單位": f"{_units:,.4f}",
                                 "配息率": f"{_dy_b:.2f}%",
-                                "本次加碼年配息(TWD)": f"NT${_ann_b:,.0f}",
+                                "本次加碼年配息(TWD)": fmt_twd(_ann_b),
                             })
 
                         _ann_acc = {"ann_total": 0.0}   # 解 nonlocal 限制
@@ -1483,15 +1484,15 @@ def render_t7_section() -> None:
                             use_container_width=True, hide_index=True
                         )
                         bh1, bh2, bh3 = st.columns(3)
-                        bh1.metric("本次投入 TWD", f"NT${float(_btot):,.0f}")
+                        bh1.metric("本次投入 TWD", fmt_twd(float(_btot)))
                         bh2.metric(
                             "💵 預估年配息（本次加碼）",
-                            f"NT${_b_ann_total:,.0f}",
+                            fmt_twd(_b_ann_total),
                             help="= Σ 各檔 應買 TWD × 配息率"
                         )
                         bh3.metric(
                             "📅 月均（÷12）",
-                            f"NT${_b_ann_total/12:,.0f}"
+                            fmt_twd(_b_ann_total / 12)
                         )
                         if _is_scenario_b:
                             # 從 _navfx 已收集的資料 build cache（_navfx[pk] = (n, x, ccy)）
@@ -1500,10 +1501,10 @@ def render_t7_section() -> None:
                                               if v[0] and v[1]}
                             _t7_save_scenario(
                                 name=_b_scenario_name or
-                                     f"B 投入再平衡 NT${float(_btot):,.0f}",
+                                     f"B 投入再平衡 {fmt_twd(float(_btot))}",
                                 action_type="B",
                                 details=(
-                                    f"投入 NT${float(_btot):,.0f} 攤至 "
+                                    f"投入 {fmt_twd(float(_btot))} 攤至 "
                                     f"{len(_wn)} 檔（總和 {sum(_wn.values()):.2f}%）"
                                 ),
                                 nav_fx_cache=_navfx_cache_b,
@@ -2242,7 +2243,7 @@ def render_t7_section() -> None:
                                                     f"{_sr.units_added_to:,.4f}"
                                                 ),
                                                 "TWD 成本搬移": (
-                                                    f"NT${_sr.twd_cost_basis_transferred:,.0f}"
+                                                    fmt_twd(_sr.twd_cost_basis_transferred)
                                                 ),
                                                 "B 新 NAV 成本": (
                                                     f"{_sr.cost_unit_to_basis:.4f}"
@@ -2251,7 +2252,7 @@ def render_t7_section() -> None:
                                                     f"{_sr.fx_avg_inherited:.4f}"
                                                 ),
                                                 "模式": _mode_b,
-                                                "預估年配息": f"NT${_ann_b:,.0f}",
+                                                "預估年配息": fmt_twd(_ann_b),
                                             })
                                     # 顯示結果
                                     st.success(
@@ -2268,16 +2269,16 @@ def render_t7_section() -> None:
                                     hh1, hh2, hh3 = st.columns(3)
                                     hh1.metric(
                                         "📉 失去年配息（賣方組合計）",
-                                        f"NT${_ann_lost_total:,.0f}/年",
+                                        f"{fmt_twd(_ann_lost_total)}/年",
                                     )
                                     hh2.metric(
                                         "📈 取得年配息（買方組合計）",
-                                        f"NT${_ann_gain_total:,.0f}/年",
+                                        f"{fmt_twd(_ann_gain_total)}/年",
                                     )
                                     hh3.metric(
                                         "🔁 換倉後月配息變化",
-                                        f"NT${_ann_diff/12:+,.0f}/月",
-                                        delta=f"NT${_ann_diff:+,.0f}/年",
+                                        f"{fmt_twd(_ann_diff / 12, sign=True)}/月",
+                                        delta=f"{fmt_twd(_ann_diff, sign=True)}/年",
                                         help="正值 = 換倉後現金流增加；負值 = 為了成長換取配息",
                                     )
                                     # v18.232：配股 / 配息總額拆分
@@ -2293,13 +2294,13 @@ def render_t7_section() -> None:
                                             if _purpose_sum > 0 else 0)
                                         pp1.metric(
                                             "🌱 配股總額（累積型）",
-                                            f"NT${_stock_total_twd:,.0f}",
+                                            fmt_twd(_stock_total_twd),
                                             delta=f"{_stock_pct_disp:.1f}%",
                                             help="Σ 買端配股部分 TWD 成本搬移（含⚖️同時拆分的配股段）",
                                         )
                                         pp2.metric(
                                             "💰 配息總額（領現金型）",
-                                            f"NT${_income_total_twd:,.0f}",
+                                            fmt_twd(_income_total_twd),
                                             delta=f"{_income_pct_disp:.1f}%",
                                             help="Σ 買端配息部分 TWD 成本搬移（含⚖️同時拆分的配息段）",
                                         )
@@ -2312,14 +2313,14 @@ def render_t7_section() -> None:
                                     tt1, tt2 = st.columns(2)
                                     tt1.metric(
                                         "TWD 成本基礎總搬移",
-                                        f"NT${_twd_total_moved:,.0f}",
+                                        fmt_twd(_twd_total_moved),
                                         help="Σ 各對 (sell_i, buy_j) 的 TWD 成本搬移",
                                     )
                                     _delta = _twd_total_moved - _expected_total
                                     tt2.metric(
                                         "守恆檢查（賣方組 baseline）",
-                                        f"NT${_expected_total:,.0f}",
-                                        delta=f"差 NT${_delta:+,.0f}",
+                                        fmt_twd(_expected_total),
+                                        delta=f"差 {fmt_twd(_delta, sign=True)}",
                                         help=(
                                             "Σ 各賣方 (units_redeemed × cost_unit × fx_avg)；"
                                             "與『TWD 總搬移』差距應 < N NTD（浮點累積）"
@@ -2333,7 +2334,7 @@ def render_t7_section() -> None:
                                             details=(
                                                 f"{len(_sell_pks)} 賣方 → "
                                                 f"{len(_result_rows)} 筆 switch；"
-                                                f"TWD 搬移 NT${_twd_total_moved:,.0f}"
+                                                f"TWD 搬移 {fmt_twd(_twd_total_moved)}"
                                             ),
                                             nav_fx_cache=_navfx_cache_c,
                                         )
@@ -2374,11 +2375,11 @@ def render_t7_section() -> None:
                             "方案": "🟢 主帳本 (Live)",
                             "類型": "—",
                             "建立時間": "—",
-                            "總市值 TWD": f"NT${_live_summary['total_value_twd']:,.0f}",
-                            "成本 TWD": f"NT${_live_summary['total_cost_twd']:,.0f}",
-                            "未實現損益 TWD": f"NT${_live_summary['unrealized_pl_twd']:+,.0f}",
+                            "總市值 TWD": fmt_twd(_live_summary['total_value_twd']),
+                            "成本 TWD": fmt_twd(_live_summary['total_cost_twd']),
+                            "未實現損益 TWD": fmt_twd(_live_summary['unrealized_pl_twd'], sign=True),
                             "報酬 %": f"{_live_summary['unrealized_pl_pct']:+.2f}%",
-                            "月配息 TWD": f"NT${_live_summary['monthly_cashflow_twd']:,.0f}",
+                            "月配息 TWD": fmt_twd(_live_summary['monthly_cashflow_twd']),
                             "說明": "目前實際帳本",
                         }]
                         for _sc in st.session_state.t7_scenarios:
@@ -2391,14 +2392,14 @@ def render_t7_section() -> None:
                                 "方案": f"💡 {_sc['name'][:24]}",
                                 "類型": _sc["action_type"],
                                 "建立時間": _sc["created_at"],
-                                "總市值 TWD": f"NT${_s['total_value_twd']:,.0f}",
-                                "成本 TWD": f"NT${_s['total_cost_twd']:,.0f}",
+                                "總市值 TWD": fmt_twd(_s['total_value_twd']),
+                                "成本 TWD": fmt_twd(_s['total_cost_twd']),
                                 "未實現損益 TWD": (
-                                    f"NT${_s['unrealized_pl_twd']:+,.0f}"
+                                    fmt_twd(_s['unrealized_pl_twd'], sign=True)
                                 ),
                                 "報酬 %": f"{_s['unrealized_pl_pct']:+.2f}%",
                                 "月配息 TWD": (
-                                    f"NT${_s['monthly_cashflow_twd']:,.0f} "
+                                    f"{fmt_twd(_s['monthly_cashflow_twd'])} "
                                     f"({_diff_cf:+,.0f})"
                                 ),
                                 "說明": _sc["details"][:60],
@@ -2499,7 +2500,7 @@ def render_t7_section() -> None:
                         _ann_reinv = _ann - _ann_cash
                         _cash_total_twd += _ann_cash
                         _reinvest_total_twd += _ann_reinv
-                        _pl_str = f"NT${_pl_twd:+,.0f}"
+                        _pl_str = fmt_twd(_pl_twd, sign=True)
                         _pl_pct_str = f"{_pl_pct:+.2f}%"
                         # v18.184：累積已配息率 = (平均買入淨值 − 含息成本)/平均買入淨值，
                         # 代表成本已透過配息回收幾%（含息成本 < 淨值成本時才有意義）。
@@ -2518,8 +2519,8 @@ def render_t7_section() -> None:
                             "平均買入匯率": f"{_l.position.fx_avg:.4f}",
                             "最新 NAV": f"{_nav:.4f}" if _nav else "—",
                             "最新 FX": f"{_fx:.4f}" if _fx else "—",
-                            "成本基礎 (TWD)": f"NT${_cost:,.0f}",
-                            "市值 (TWD)": f"NT${_v:,.0f}",
+                            "成本基礎 (TWD)": fmt_twd(_cost),
+                            "市值 (TWD)": fmt_twd(_v),
                             "未實現損益 (TWD)": _pl_str,
                             "未實現損益 %": _pl_pct_str,
                             "累積已配息率": (f"{_div_rec_pct:.2f}%"
@@ -2527,11 +2528,11 @@ def render_t7_section() -> None:
                             "配息率": f"{_dy:.2f}%",
                             # v18.172：拆「月現金 / 月配股」兩欄；舊「預估月配息」改用現金部分
                             # v18.173：配股欄位再加「可換單位數」= TWD ÷ FX ÷ NAV
-                            "預估月配息 (TWD)": f"NT${_ann_cash/12:,.0f}",
+                            "預估月配息 (TWD)": fmt_twd(_ann_cash / 12),
                             "預估月配股 (TWD)": (
-                                f"NT${_ann_reinv/12:,.0f} ({(_ann_reinv/12)/(_fx*_nav):,.4f} 單位)"
+                                f"{fmt_twd(_ann_reinv / 12)} ({(_ann_reinv/12)/(_fx*_nav):,.4f} 單位)"
                                 if (_ann_reinv > 0 and _nav and _fx) else
-                                f"NT${_ann_reinv/12:,.0f}"
+                                fmt_twd(_ann_reinv / 12)
                             ),
                         })
                     if _snap_rows:
@@ -2572,12 +2573,12 @@ def render_t7_section() -> None:
                     # v18.172：5→6 cols；新增「年配股 (TWD)」KPI，預估年配息改現金部分
                     _pc1, _pc2, _pc3, _pc4, _pc5, _pc6 = st.columns([2, 2, 2, 2, 2, 1])
                     if _v_total_twd > 0:
-                        _pc1.metric("組合當前市值 (TWD)", f"NT${_v_total_twd:,.0f}")
+                        _pc1.metric("組合當前市值 (TWD)", fmt_twd(_v_total_twd))
                     elif _invest_total_twd > 0:
                         # 沒 ledger 但有 invest_twd → 顯示投資金額作為近似
                         _pc1.metric(
                             "組合當前市值 (TWD) ⚠️ 近似",
-                            f"NT${_invest_total_twd:,.0f}",
+                            fmt_twd(_invest_total_twd),
                             help="目前帳本無持倉細節，以保單投資金額（invest_twd）作為近似。"
                                  "進「✏️ 編輯持倉」用「⚡ 自動估算」填入持倉，或手動輸入精確值。"
                         )
@@ -2586,27 +2587,27 @@ def render_t7_section() -> None:
                                     help="尚無持倉資料 — 請加入基金 + 設定單位/NAV/匯率")
                     _pc2.metric(
                         "💸 整體未實現損益 (TWD)",
-                        f"NT${_pl_total:+,.0f}",
+                        fmt_twd(_pl_total, sign=True),
                         delta=f"{_pl_total_pct:+.2f}% 報酬率",
                         delta_color="normal",   # v18.26: 損益恆用 normal（虧損紅、賺綠）
                     )
                     # v18.172：年配息拆「現金」+「配股」兩格；每月現金流改 cash-only
                     _pc3.metric(
                         "💵 預估年現金配息 (TWD)",
-                        f"NT${_cash_total_twd:,.0f}",
-                        help=f"年總配息 NT${_ann_total_twd:,.0f} 中**現金給付**部分。\n"
+                        fmt_twd(_cash_total_twd),
+                        help=f"年總配息 {fmt_twd(_ann_total_twd)} 中**現金給付**部分。\n"
                              f"= Σ 各檔 市值 × 配息率 × (div_cash_pct/100)。\n"
                              f"div_cash_pct=100 → 全現金；<100 → 部分轉新單位（配股）。"
                     )
                     _pc4.metric(
                         "📅 每月被動現金流",
-                        f"NT${_cash_total_twd/12:,.0f}",
+                        fmt_twd(_cash_total_twd / 12),
                         help="只算現金、不含再投入配股；= 預估年現金配息 / 12"
                     )
                     _pc5.metric(
                         "🪙 預估年配股 (TWD)",
-                        f"NT${_reinvest_total_twd:,.0f}",
-                        help=f"年總配息 NT${_ann_total_twd:,.0f} 中**再投入轉新單位**部分。\n"
+                        fmt_twd(_reinvest_total_twd),
+                        help=f"年總配息 {fmt_twd(_ann_total_twd)} 中**再投入轉新單位**部分。\n"
                              "= Σ 各檔 市值 × 配息率 × ((100-div_cash_pct)/100)。\n"
                              "此金額不會進現金流、會以新單位累加進部位（提升未來市值）。"
                     )
