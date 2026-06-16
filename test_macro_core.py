@@ -113,7 +113,8 @@ def test_fetch_fred_goes_through_proxy_helper(monkeypatch):
     assert captured["params"]["series_id"] == "NAPM"
     assert captured["params"]["api_key"] == "fake_key"
     assert len(df) == 3
-    assert list(df.columns) == ["date", "value"]
+    # v19.60 D1：fetch_fred 統一補 realtime_start 欄（API 無回則填 NaT）
+    assert list(df.columns) == ["date", "value", "realtime_start"]
     assert df["value"].dtype == float
 
 
