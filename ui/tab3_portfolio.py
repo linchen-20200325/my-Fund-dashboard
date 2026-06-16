@@ -53,6 +53,7 @@ from repositories.policy_repository import (
 from repositories.snapshot_repository import (
     get_state_metadata,
 )
+from services.format_helpers import fmt_twd
 from services.policy_advisor_service import (
     advise_fund,
     recommend_policy,
@@ -972,7 +973,7 @@ def render_portfolio_tab() -> None:
                     f"<span style='color:#64b5f6;font-weight:900;font-size:15px'>🏷️ {_pname}</span>"
                     f"<span style='color:#aaa;font-size:11px;margin-left:8px'>({_pid})</span>"
                     f"<span style='color:#fff;font-size:13px;margin-left:auto;float:right'>"
-                    f"投入 NT$ {_ptot:,.0f} · {len(_funds)} 檔 · 核心 {_p_core_pct}%</span>"
+                    f"投入 {fmt_twd(_ptot)} · {len(_funds)} 檔 · 核心 {_p_core_pct}%</span>"
                     f"</div>", unsafe_allow_html=True)
 
                 # ── P3: 保單級核心/衛星 mini donut ────────────────────
@@ -1114,7 +1115,7 @@ def render_portfolio_tab() -> None:
                         f"<span style='color:{_sig_clr};font-size:11px;background:#161b22;padding:2px 8px;border-radius:10px'>"
                         f"σ {_sig_str} · {_sig_lbl}</span>"
                         f"<span style='color:#ccc;font-size:11px'>{_div_icon} {_div_alert}</span>"
-                        f"<span style='color:#aaa;font-size:11px;margin-left:auto'>NT$ {_inv_amt:,.0f}</span>"
+                        f"<span style='color:#aaa;font-size:11px;margin-left:auto'>{fmt_twd(_inv_amt)}</span>"
                         f"</div>"
                         f"<div style='color:{_adv_clr};font-size:12px;margin-top:6px;line-height:1.5'>"
                         f"💡 {_advice['text']}</div>"
@@ -1241,7 +1242,7 @@ def render_portfolio_tab() -> None:
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💰 總資產（NTD）</div>"
-            f"<div style='color:#fff;font-size:26px;font-weight:900;margin-top:4px'>NT$ {_tot_kpi:,.0f}</div>"
+            f"<div style='color:#fff;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
             f"<div style='color:#888;font-size:10px;margin-top:2px'>{len(_pf_loaded)} 檔基金加總</div></div>"
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
             f"border-radius:12px;padding:16px 18px'>"
@@ -1256,7 +1257,7 @@ def render_portfolio_tab() -> None:
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💵 預估月配息</div>"
-            f"<div style='color:#ffb74d;font-size:26px;font-weight:900;margin-top:4px'>NT$ {_est_monthly_div:,.0f}</div>"
+            f"<div style='color:#ffb74d;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
             f"<div style='color:#888;font-size:10px;margin-top:2px'>依各基金配息率粗估</div></div>"
             "</div>", unsafe_allow_html=True)
 
@@ -1350,9 +1351,9 @@ def render_portfolio_tab() -> None:
                         marker=dict(size=[8,10,10,12],
                                     color=["#888","#00c853","#f44336","#fff"],
                                     line=dict(color="#0e1117", width=2)),
-                        text=["起點", f"高 NT${_total_curve.loc[_hi_idx]:,.0f}",
-                              f"低 NT${_total_curve.loc[_lo_idx]:,.0f}",
-                              f"今 NT${_total_curve.iloc[-1]:,.0f}"],
+                        text=["起點", f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
+                              f"低 {fmt_twd(_total_curve.loc[_lo_idx])}",
+                              f"今 {fmt_twd(_total_curve.iloc[-1])}"],
                         textposition=["top right","top center","bottom center","top left"],
                         textfont=dict(size=10, color="#e6edf3"),
                         showlegend=False,
@@ -1386,7 +1387,7 @@ def render_portfolio_tab() -> None:
         _dc       = "#f44336" if abs(_diff)>10 else ("#ff9800" if abs(_diff)>5 else "#00c853")
         st.markdown(
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid #30363d'>"
-            f"<div style='font-size:13px;color:#888;margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · NT${_tot:,.0f}" if _tot else "") + "</div>"
+            f"<div style='font-size:13px;color:#888;margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
             f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
             f"<div><div style='color:#64b5f6;font-size:11px'>🛡️ 核心資產</div><div style='color:#64b5f6;font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
             f"<div><div style='color:#ff9800;font-size:11px'>⚡ 衛星資產</div><div style='color:#ff9800;font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
