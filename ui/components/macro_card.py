@@ -15,6 +15,8 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 EDU_FIELDS = ("meaning", "how_to_read", "pair_with",
               "historical_anchor", "upstream", "downstream")
 
@@ -59,10 +61,10 @@ def make_sparkline(
     color = "#64b5f6"  # default 藍
     if threshold_crit is not None:
         if (high_is_bad and last_v >= threshold_crit) or (not high_is_bad and last_v <= threshold_crit):
-            color = "#f44336"
+            color = MATERIAL_RED
     if threshold_warn is not None and color == "#64b5f6":
         if (high_is_bad and last_v >= threshold_warn) or (not high_is_bad and last_v <= threshold_warn):
-            color = "#ff9800"
+            color = MATERIAL_ORANGE
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -82,16 +84,16 @@ def make_sparkline(
     # 警戒線
     if threshold_warn is not None:
         fig.add_hline(y=threshold_warn, line_dash="dot",
-                      line_color="#ff9800", opacity=0.55,
+                      line_color=MATERIAL_ORANGE, opacity=0.55,
                       annotation_text=f"警戒 {threshold_warn}",
                       annotation_position="top right",
-                      annotation_font=dict(size=9, color="#ff9800"))
+                      annotation_font=dict(size=9, color=MATERIAL_ORANGE))
     if threshold_crit is not None:
         fig.add_hline(y=threshold_crit, line_dash="dash",
-                      line_color="#f44336", opacity=0.7,
+                      line_color=MATERIAL_RED, opacity=0.7,
                       annotation_text=f"危險 {threshold_crit}",
                       annotation_position="bottom right",
-                      annotation_font=dict(size=9, color="#f44336"))
+                      annotation_font=dict(size=9, color=MATERIAL_RED))
     fig.update_layout(
         height=height,
         margin=dict(l=4, r=4, t=8, b=4),
@@ -155,9 +157,9 @@ def _z_color(z, high_is_bad):
         return "#888"
     if abs(z) >= 2:
         bad = (high_is_bad and z > 0) or (not high_is_bad and z < 0)
-        return "#f44336" if bad else "#00c853"
+        return MATERIAL_RED if bad else MATERIAL_GREEN
     if abs(z) >= 1.5:
-        return "#ff9800"
+        return MATERIAL_ORANGE
     return "#64b5f6"
 
 
