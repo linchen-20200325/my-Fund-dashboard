@@ -165,10 +165,13 @@ def render_single_fund_tab() -> None:
         if _status_fd == "failed":
             st.error(f"❌ 資料抓取失敗：{fd.get('error','未知錯誤')}")
         elif _status_fd == "partial":
+            # v19.60：partial = MoneyDJ 已抓到 perf/risk_metrics，僅 NAV 歷史序列失敗。
+            # 紅色 st.error 與下方成功顯示的風險/績效表自相矛盾 → 降為黃色 warning。
             _p_fn = fd.get("fund_name", "") or fd.get("full_key", "")
-            st.error(
-                f"❌ **{_p_fn}** — 資料不完整（歷史淨值序列未取得）\n\n"
-                f"基金核心分析需完整 NAV 歷史，缺序列無法計算 Sharpe / σ 買賣點 / 配息率等指標。\n\n"
+            st.warning(
+                f"⚠️ **{_p_fn}** — 部分數據已取得（歷史淨值序列未取得）\n\n"
+                f"系統已抓到基本資料 / 績效 / 風險指標，下方可繼續查看。\n"
+                f"但 Sharpe / σ 買賣點 / 配息率等需完整 NAV 歷史的核心分析會略過。\n\n"
                 f"**建議操作**：\n"
                 f"- 點擊「🔄 重新下載」按鈕重試（網路波動常見）\n"
                 f"- 確認 MoneyDJ 代碼正確（境外基金需用 wb01 頁面代碼）\n"

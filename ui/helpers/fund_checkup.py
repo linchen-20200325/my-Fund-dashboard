@@ -36,6 +36,8 @@ _DISPLAY_COLS = [
     "計價幣別", "NAV(原幣)", "即時匯率(FX)",
     "可申購單位數", "月配股(單位)",
     "每月100萬配息(TWD)",
+    # v19.60：投資試算完整 SSOT — 補實際本金 invest_twd 的 3 欄（原幣本金 / 月配 / 年配）
+    "原幣本金🧮(本金)", "月配息🧮(本金TWD)", "年配息🧮(本金TWD)",
     "買點", "體檢判定",
 ]
 
@@ -353,6 +355,17 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
             _units = _amt_local / _nav
             if _adr and _adr > 0:
                 _mon_units = (_amt_local * _adr / 100.0 / 12.0) / _nav
+        # v19.60：投資試算同源 SSOT — 吃 fund.invest_twd（sidebar 實際本金）
+        # 公式：原幣本金 = invest_twd / FX；月配 TWD = invest_twd × adr/100/12；年配 TWD = invest_twd × adr/100
+        _inv_twd = _safe_num(f.get("invest_twd")) or 0.0
+        _amt_local_inv = None
+        _mon_div_inv = None
+        _ann_div_inv = None
+        if _inv_twd > 0 and _fx and _fx > 0:
+            _amt_local_inv = _inv_twd / _fx
+            if _adr and _adr > 0:
+                _mon_div_inv = _inv_twd * _adr / 100.0 / 12.0
+                _ann_div_inv = _inv_twd * _adr / 100.0
         rows.append({
             "代碼": f.get("code", "—"),
             "標的名稱": f.get("name") or f.get("code") or "—",
@@ -370,6 +383,10 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
             "可申購單位數": _units,
             "月配股(單位)": _mon_units,
             "每月100萬配息(TWD)": _mdiv_1m,
+            # v19.60：投資試算實際本金 3 欄（無 invest_twd 全 None → 顯示 —）
+            "原幣本金🧮(本金)": _amt_local_inv,
+            "月配息🧮(本金TWD)": _mon_div_inv,
+            "年配息🧮(本金TWD)": _ann_div_inv,
             "買點": _ZONE_LABEL.get(tag_price_zone(f), "—"),
             "體檢判定": verdict,
         })
@@ -431,6 +448,19 @@ _CHECKUP_COL_CONFIG = {
         "每月100萬配息(TWD)", format="%,.0f",
         help="假設投入 100 萬 TWD，按 MoneyDJ wb05 年化配息率推估的單月配息現金流；"
              "公式：1,000,000 × 年化配息率 / 12。無配息資料的基金顯示 —"),
+    # v19.60：投資試算同源 SSOT — 對應 sidebar invest_twd 實際本金（沒填顯示 —）
+    "原幣本金🧮(本金)": st.column_config.NumberColumn(
+        "原幣本金🧮(本金)", format="%,.2f",
+        help="按 sidebar 實際投入本金（invest_twd）換成原幣的金額；"
+             "公式：invest_twd ÷ FX。未填投入金額顯示 —"),
+    "月配息🧮(本金TWD)": st.column_config.NumberColumn(
+        "月配息🧮(本金TWD)", format="%,.0f",
+        help="按 sidebar 實際本金推估的單月配息（TWD）；"
+             "公式：invest_twd × 年化配息率 / 100 / 12"),
+    "年配息🧮(本金TWD)": st.column_config.NumberColumn(
+        "年配息🧮(本金TWD)", format="%,.0f",
+        help="按 sidebar 實際本金推估的年配息（TWD）；"
+             "公式：invest_twd × 年化配息率 / 100"),
     "買點": st.column_config.TextColumn(
         "買點", help="標準差買點燈號：跌破 -1σ 便宜 / -2σ 超跌 / 破布林上軌停利"),
     "體檢判定": st.column_config.TextColumn(
