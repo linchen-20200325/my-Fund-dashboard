@@ -32,6 +32,9 @@ _DISPLAY_COLS = [
     "近1M(%)", "近3M(%)", "近6M(%)", "近1Y含息(%)",
     "同類平均(1Y%)", "超額(pp)",
     "夏普值", "年化波動(1Y%)",
+    # v19.59：從逐檔深度分析「投資試算」card 上抽 5 欄到上方比較表（同源公式）
+    "計價幣別", "NAV(原幣)", "即時匯率(FX)",
+    "可申購單位數", "月配股(單位)",
     "每月100萬配息(TWD)",
     "買點", "體檢判定",
 ]
@@ -47,6 +50,26 @@ _ZONE_LABEL = {
 # 超額報酬（pp）分級門檻：打敗同類 ≥ +2 為優等生、落後 ≤ −2 為汰弱候選。
 _EXCESS_GOOD = 2.0
 _EXCESS_LAG = -2.0
+
+
+def _norm_ccy(raw: str, default: str = "", mode: str = "yf") -> str:
+    """v19.59：lazy import services.currency.normalize_ccy 避 module load time 成本。"""
+    from services.currency import normalize_ccy
+    return normalize_ccy(raw, default=default, mode=mode)
+
+
+def _safe_fx(ccy: str) -> float | None:
+    """v19.59：取 ccy→TWD 即時匯率（5min cache，與 _render_investment_calc 同源）。TWD 計價回 1.0。"""
+    if not ccy:
+        return None
+    if ccy == "TWD":
+        return 1.0
+    try:
+        from repositories.fund_repository import get_latest_fx
+        v = get_latest_fx(f"{ccy}TWD=X")
+        return float(v) if (v is not None and v > 0) else None
+    except Exception:
+        return None
 
 
 def _safe_num(v):
@@ -310,12 +333,26 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
         ret_1y = _ret_1y_total(f)
         peer_1y, _ = _extract_peer_1y(f)
         excess, verdict = _grade(ret_1y, peer_1y)
+        mj = f.get("moneydj_raw") or {}
         # v19.58：每月每100萬配息（TWD）= 1,000,000 × adr% / 100 / 12 = 10000 × adr / 12
         # 沿用 _compute_fund_health_kpis 同源 adr 推導路徑（MoneyDJ wb05 優先 → metrics fallback）
-        mj = f.get("moneydj_raw") or {}
         _mj_dy = _safe_num(mj.get("moneydj_div_yield"))
         _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else _safe_num(m.get("annual_div_rate"))
         _mdiv_1m = (10000.0 * _adr / 12.0) if (_adr and _adr > 0) else None
+        # v19.59：從 fund_grp_health_extras._render_investment_calc L194-283 上抽同源欄位到比較表
+        _ccy_raw = (mj.get("currency") or f.get("currency") or "").strip()
+        _ccy = _norm_ccy(_ccy_raw, default="", mode="yf") if _ccy_raw else ""
+        _nav = _safe_num(m.get("nav") or mj.get("nav_latest"))
+        _fx = _safe_fx(_ccy) if _ccy else None
+        # 1,000,000 TWD → 原幣本金 → 可申購單位數 / 月配股
+        # 公式：amt_local = TWD / FX（TWD 計價 FX=1）；units = amt_local / NAV；月配股 = (amt_local × adr/100/12) / NAV
+        _units = None
+        _mon_units = None
+        if _nav and _nav > 0 and _fx and _fx > 0:
+            _amt_local = 1_000_000.0 / _fx
+            _units = _amt_local / _nav
+            if _adr and _adr > 0:
+                _mon_units = (_amt_local * _adr / 100.0 / 12.0) / _nav
         rows.append({
             "代碼": f.get("code", "—"),
             "標的名稱": f.get("name") or f.get("code") or "—",
@@ -327,6 +364,11 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
             "超額(pp)": excess,
             "夏普值": _safe_num(m.get("sharpe")),
             "年化波動(1Y%)": _safe_num(m.get("std_1y")),
+            "計價幣別": _ccy or "—",
+            "NAV(原幣)": _nav,
+            "即時匯率(FX)": _fx,
+            "可申購單位數": _units,
+            "月配股(單位)": _mon_units,
             "每月100萬配息(TWD)": _mdiv_1m,
             "買點": _ZONE_LABEL.get(tag_price_zone(f), "—"),
             "體檢判定": verdict,
@@ -370,6 +412,21 @@ _CHECKUP_COL_CONFIG = {
         help="(年化報酬-無風險利率)/年化波動。<0 代表承擔風險卻沒賺錢"),
     "年化波動(1Y%)": st.column_config.NumberColumn(
         "年化波動(1Y%)", format="%.2f", help="近一年日報酬年化標準差"),
+    # v19.59：從逐檔深度分析「投資試算」上抽 5 欄到比較表
+    "計價幣別": st.column_config.TextColumn(
+        "計價幣別", help="MoneyDJ wb05「計價幣別」欄；本系統嚴格走網路抓不再人工 fallback"),
+    "NAV(原幣)": st.column_config.NumberColumn(
+        "NAV(原幣)", format="%.4f",
+        help="MoneyDJ wb05 最新淨值（原幣計價）；缺則退 metrics.nav"),
+    "即時匯率(FX)": st.column_config.NumberColumn(
+        "即時匯率(FX)", format="%.4f",
+        help="1 原幣 = X TWD（Yahoo 即時匯率，5min cache）；TWD 計價基金顯示 1"),
+    "可申購單位數": st.column_config.NumberColumn(
+        "可申購單位數", format="%,.2f",
+        help="100 萬 TWD 換成原幣後，按最新 NAV 可買的單位數；公式：(1,000,000 ÷ FX) ÷ NAV"),
+    "月配股(單位)": st.column_config.NumberColumn(
+        "月配股(單位)", format="%,.2f",
+        help="若月配息全部再投入可換的單位數；公式：(月配息原幣) ÷ NAV"),
     "每月100萬配息(TWD)": st.column_config.NumberColumn(
         "每月100萬配息(TWD)", format="%,.0f",
         help="假設投入 100 萬 TWD，按 MoneyDJ wb05 年化配息率推估的單月配息現金流；"
