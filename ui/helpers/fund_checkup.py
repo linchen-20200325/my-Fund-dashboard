@@ -517,16 +517,78 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
         st.caption(
             "對照「📊 投資試算」與「② 體檢儀表板」邏輯：年化配息率取 MoneyDJ wb05 官方值；"
             "Coverage = 1Y 含息報酬 ÷ 年化配息率；TER 對標台灣基金市場同類均值。")
-        _seen_card: set = set()
+
+        # v19.61：健診摘要表 — 多檔橫向 PK（同源 _compute_fund_health_kpis SSOT）
+        _seen_sum: set = set()
+        _sum_rows: list = []
+        _kpi_cache: dict = {}
         for f in (portfolio_funds or []):
             if not f.get("loaded") or f.get("load_error"):
                 continue
             _c = str(f.get("code", "") or "").strip().upper()
-            if not _c or _c in _seen_card:
+            if not _c or _c in _seen_sum:
                 continue
-            _seen_card.add(_c)
+            _seen_sum.add(_c)
             try:
-                _kpis = _compute_fund_health_kpis(f)
-                _render_fund_health_card(f, _kpis)
+                _k = _compute_fund_health_kpis(f)
+                _kpi_cache[_c] = (f, _k)
+            except Exception as _e:
+                _k = None
+                _sum_rows.append({
+                    "代號": _c, "基金名": f.get("name") or _c,
+                    "吃本金狀態": f"⚠️ 計算失敗 [{type(_e).__name__}]",
+                    "1Y 含息%": None, "年化配息率%": None,
+                    "Coverage": None, "月配息(TWD)": None, "最高經理費%": None,
+                })
+                continue
+            _ds = _k.get("safety") or {}
+            _al = _ds.get("alert_level", "grey")
+            _status = (
+                f"{ {'red': '🔴', 'yellow': '🟡', 'green': '🟢'}.get(_al, '⬜') } "
+                f"{_ds.get('status', '不適用' if _k['adr'] is None else '資料不足')}"
+            )
+            _sum_rows.append({
+                "代號": _c,
+                "基金名": (f.get("name") or _c)[:30],
+                "吃本金狀態": _status,
+                "1Y 含息%": _k.get("ret_1y"),
+                "年化配息率%": _k.get("adr"),
+                "Coverage": _ds.get("coverage"),
+                "月配息(TWD)": _k.get("monthly_div_twd"),
+                "最高經理費%": _k.get("ter_val"),
+            })
+
+        if _sum_rows:
+            st.markdown("##### 📋 健診摘要表（多檔橫向 PK）")
+            _sum_df = pd.DataFrame(_sum_rows)
+            st.dataframe(
+                _sum_df, hide_index=True, use_container_width=True,
+                column_config={
+                    "吃本金狀態": st.column_config.TextColumn(
+                        "吃本金狀態",
+                        help="🟢 安全 / 🟡 警示 / 🔴 吃本金 / ⬜ 不適用或資料不足"),
+                    "1Y 含息%": st.column_config.NumberColumn(
+                        "1Y 含息%", format="%.2f",
+                        help="近一年含息總報酬（淨值漲跌＋配息）"),
+                    "年化配息率%": st.column_config.NumberColumn(
+                        "年化配息率%", format="%.2f",
+                        help="MoneyDJ wb05 官方年化配息率"),
+                    "Coverage": st.column_config.NumberColumn(
+                        "Coverage", format="%.2f",
+                        help="1Y 含息報酬 ÷ 年化配息率；< 1 即吃本金"),
+                    "月配息(TWD)": st.column_config.NumberColumn(
+                        "月配息(TWD)", format="%,.0f",
+                        help="按 sidebar 實際本金 × 年化配息率 ÷ 12；未填本金顯示 —"),
+                    "最高經理費%": st.column_config.NumberColumn(
+                        "最高經理費%", format="%.2f",
+                        help="MoneyDJ wb05 最高經理費；缺資料顯示 —"),
+                },
+            )
+            st.divider()
+
+        # 逐檔卡（drill-down 細節保留）
+        for _c, (_f, _k) in _kpi_cache.items():
+            try:
+                _render_fund_health_card(_f, _k)
             except Exception as _e:
                 st.caption(f"⚠️ {_c} 健診卡渲染失敗：[{type(_e).__name__}] {str(_e)[:60]}")
