@@ -366,27 +366,30 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
             if _adr and _adr > 0:
                 _mon_div_inv = _inv_twd * _adr / 100.0 / 12.0
                 _ann_div_inv = _inv_twd * _adr / 100.0
+        # v19.62：金額/單位欄 round to 2 防 Styler+dtype 漂移導致 NumberColumn format 失效
+        def _r2(v):
+            return round(v, 2) if v is not None else None
         rows.append({
             "代碼": f.get("code", "—"),
             "標的名稱": f.get("name") or f.get("code") or "—",
-            "近1M(%)": _period_ret(f, "1M", "ret_1m"),
-            "近3M(%)": _period_ret(f, "3M", "ret_3m"),
-            "近6M(%)": _period_ret(f, "6M", "ret_6m"),
-            "近1Y含息(%)": ret_1y,
-            "同類平均(1Y%)": peer_1y,
-            "超額(pp)": excess,
-            "夏普值": _safe_num(m.get("sharpe")),
-            "年化波動(1Y%)": _safe_num(m.get("std_1y")),
+            "近1M(%)": _r2(_period_ret(f, "1M", "ret_1m")),
+            "近3M(%)": _r2(_period_ret(f, "3M", "ret_3m")),
+            "近6M(%)": _r2(_period_ret(f, "6M", "ret_6m")),
+            "近1Y含息(%)": _r2(ret_1y),
+            "同類平均(1Y%)": _r2(peer_1y),
+            "超額(pp)": _r2(excess),
+            "夏普值": _r2(_safe_num(m.get("sharpe"))),
+            "年化波動(1Y%)": _r2(_safe_num(m.get("std_1y"))),
             "計價幣別": _ccy or "—",
-            "NAV(原幣)": _nav,
-            "即時匯率(FX)": _fx,
-            "可申購單位數": _units,
-            "月配股(單位)": _mon_units,
-            "每月100萬配息(TWD)": _mdiv_1m,
+            "NAV(原幣)": round(_nav, 4) if _nav is not None else None,
+            "即時匯率(FX)": round(_fx, 4) if _fx is not None else None,
+            "可申購單位數": _r2(_units),
+            "月配股(單位)": _r2(_mon_units),
+            "每月100萬配息(TWD)": _r2(_mdiv_1m),
             # v19.60：投資試算實際本金 3 欄（無 invest_twd 全 None → 顯示 —）
-            "原幣本金🧮(本金)": _amt_local_inv,
-            "月配息🧮(本金TWD)": _mon_div_inv,
-            "年配息🧮(本金TWD)": _ann_div_inv,
+            "原幣本金🧮(本金)": _r2(_amt_local_inv),
+            "月配息🧮(本金TWD)": _r2(_mon_div_inv),
+            "年配息🧮(本金TWD)": _r2(_ann_div_inv),
             "買點": _ZONE_LABEL.get(tag_price_zone(f), "—"),
             "體檢判定": verdict,
         })
@@ -445,7 +448,7 @@ _CHECKUP_COL_CONFIG = {
         "月配股(單位)", format="%,.2f",
         help="若月配息全部再投入可換的單位數；公式：(月配息原幣) ÷ NAV"),
     "每月100萬配息(TWD)": st.column_config.NumberColumn(
-        "每月100萬配息(TWD)", format="%,.0f",
+        "每月100萬配息(TWD)", format="%,.2f",
         help="假設投入 100 萬 TWD，按 MoneyDJ wb05 年化配息率推估的單月配息現金流；"
              "公式：1,000,000 × 年化配息率 / 12。無配息資料的基金顯示 —"),
     # v19.60：投資試算同源 SSOT — 對應 sidebar invest_twd 實際本金（沒填顯示 —）
@@ -454,11 +457,11 @@ _CHECKUP_COL_CONFIG = {
         help="按 sidebar 實際投入本金（invest_twd）換成原幣的金額；"
              "公式：invest_twd ÷ FX。未填投入金額顯示 —"),
     "月配息🧮(本金TWD)": st.column_config.NumberColumn(
-        "月配息🧮(本金TWD)", format="%,.0f",
+        "月配息🧮(本金TWD)", format="%,.2f",
         help="按 sidebar 實際本金推估的單月配息（TWD）；"
              "公式：invest_twd × 年化配息率 / 100 / 12"),
     "年配息🧮(本金TWD)": st.column_config.NumberColumn(
-        "年配息🧮(本金TWD)", format="%,.0f",
+        "年配息🧮(本金TWD)", format="%,.2f",
         help="按 sidebar 實際本金推估的年配息（TWD）；"
              "公式：invest_twd × 年化配息率 / 100"),
     "買點": st.column_config.TextColumn(
@@ -547,15 +550,18 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
                 f"{ {'red': '🔴', 'yellow': '🟡', 'green': '🟢'}.get(_al, '⬜') } "
                 f"{_ds.get('status', '不適用' if _k['adr'] is None else '資料不足')}"
             )
+            # v19.62：round 2 防 dtype 漂移；金額類欄與體檢表同源 2 位小數規範
+            def _r2s(v):
+                return round(v, 2) if v is not None else None
             _sum_rows.append({
                 "代號": _c,
                 "基金名": (f.get("name") or _c)[:30],
                 "吃本金狀態": _status,
-                "1Y 含息%": _k.get("ret_1y"),
-                "年化配息率%": _k.get("adr"),
-                "Coverage": _ds.get("coverage"),
-                "月配息(TWD)": _k.get("monthly_div_twd"),
-                "最高經理費%": _k.get("ter_val"),
+                "1Y 含息%": _r2s(_k.get("ret_1y")),
+                "年化配息率%": _r2s(_k.get("adr")),
+                "Coverage": _r2s(_ds.get("coverage")),
+                "月配息(TWD)": _r2s(_k.get("monthly_div_twd")),
+                "最高經理費%": _r2s(_k.get("ter_val")),
             })
 
         if _sum_rows:
@@ -577,7 +583,7 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
                         "Coverage", format="%.2f",
                         help="1Y 含息報酬 ÷ 年化配息率；< 1 即吃本金"),
                     "月配息(TWD)": st.column_config.NumberColumn(
-                        "月配息(TWD)", format="%,.0f",
+                        "月配息(TWD)", format="%,.2f",
                         help="按 sidebar 實際本金 × 年化配息率 ÷ 12；未填本金顯示 —"),
                     "最高經理費%": st.column_config.NumberColumn(
                         "最高經理費%", format="%.2f",
