@@ -2183,12 +2183,24 @@ def render_macro_tab() -> None:
                                            unsafe_allow_html=True)
 
                     # 失敗 fetcher 列表（仿 Stock v18.194 fail-trace）
+                    # v19.58：外層已是 expander → 改用原生 HTML <details> 避 StreamlitAPIException 巢狀爆
                     _errs = {k: v["_err"] for k, v in _us_liq.items() if "_err" in v}
                     if _errs:
-                        with st.expander(f"🔍 載入失敗詳情（{len(_errs)} 項）", expanded=False):
-                            for _ek, _ev in _errs.items():
-                                st.markdown(f"- **{_ek}**：`{_ev}`")
-                            st.caption("💡 多半是 FRED key 未設 / AAII 頁面格式改版 / Yahoo timeout；非全部失敗不影響核心判讀")
+                        _err_items = "".join(
+                            f"<li><b>{_ek}</b>：<code>{str(_ev).replace('<', '&lt;')[:120]}</code></li>"
+                            for _ek, _ev in _errs.items()
+                        )
+                        st.markdown(
+                            f"<details style='margin:8px 0;background:#0d1117;border:1px solid #30363d;"
+                            f"border-radius:6px;padding:6px 12px'>"
+                            f"<summary style='cursor:pointer;color:#d29922;font-size:12px'>"
+                            f"🔍 載入失敗詳情（{len(_errs)} 項）</summary>"
+                            f"<ul style='margin:6px 0 0 0;color:#aaa;font-size:11px'>{_err_items}</ul>"
+                            f"<div style='color:#666;font-size:10px;margin-top:6px'>"
+                            f"💡 多半是 FRED key 未設 / AAII 頁面格式改版 / Yahoo timeout；非全部失敗不影響核心判讀</div>"
+                            f"</details>",
+                            unsafe_allow_html=True,
+                        )
 
                     # v19.53 ══ 📊 資料新鮮度條 ══（traffic-light 掛「最舊指標 date 距今天數」，FRED 平日更新節奏 + 強制重抓）
                     _us_today = pd.Timestamp.now(tz="Asia/Taipei").date()

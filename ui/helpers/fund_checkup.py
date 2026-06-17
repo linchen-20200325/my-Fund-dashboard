@@ -31,7 +31,9 @@ _DISPLAY_COLS = [
     "代碼", "標的名稱",
     "近1M(%)", "近3M(%)", "近6M(%)", "近1Y含息(%)",
     "同類平均(1Y%)", "超額(pp)",
-    "夏普值", "年化波動(1Y%)", "買點", "體檢判定",
+    "夏普值", "年化波動(1Y%)",
+    "每月100萬配息(TWD)",
+    "買點", "體檢判定",
 ]
 
 _ZONE_LABEL = {
@@ -308,6 +310,12 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
         ret_1y = _ret_1y_total(f)
         peer_1y, _ = _extract_peer_1y(f)
         excess, verdict = _grade(ret_1y, peer_1y)
+        # v19.58：每月每100萬配息（TWD）= 1,000,000 × adr% / 100 / 12 = 10000 × adr / 12
+        # 沿用 _compute_fund_health_kpis 同源 adr 推導路徑（MoneyDJ wb05 優先 → metrics fallback）
+        mj = f.get("moneydj_raw") or {}
+        _mj_dy = _safe_num(mj.get("moneydj_div_yield"))
+        _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else _safe_num(m.get("annual_div_rate"))
+        _mdiv_1m = (10000.0 * _adr / 12.0) if (_adr and _adr > 0) else None
         rows.append({
             "代碼": f.get("code", "—"),
             "標的名稱": f.get("name") or f.get("code") or "—",
@@ -319,6 +327,7 @@ def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
             "超額(pp)": excess,
             "夏普值": _safe_num(m.get("sharpe")),
             "年化波動(1Y%)": _safe_num(m.get("std_1y")),
+            "每月100萬配息(TWD)": _mdiv_1m,
             "買點": _ZONE_LABEL.get(tag_price_zone(f), "—"),
             "體檢判定": verdict,
         })
@@ -361,6 +370,10 @@ _CHECKUP_COL_CONFIG = {
         help="(年化報酬-無風險利率)/年化波動。<0 代表承擔風險卻沒賺錢"),
     "年化波動(1Y%)": st.column_config.NumberColumn(
         "年化波動(1Y%)", format="%.2f", help="近一年日報酬年化標準差"),
+    "每月100萬配息(TWD)": st.column_config.NumberColumn(
+        "每月100萬配息(TWD)", format="%,.0f",
+        help="假設投入 100 萬 TWD，按 MoneyDJ wb05 年化配息率推估的單月配息現金流；"
+             "公式：1,000,000 × 年化配息率 / 12。無配息資料的基金顯示 —"),
     "買點": st.column_config.TextColumn(
         "買點", help="標準差買點燈號：跌破 -1σ 便宜 / -2σ 超跌 / 破布林上軌停利"),
     "體檢判定": st.column_config.TextColumn(
@@ -385,6 +398,8 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
             "- **近 1M/3M/6M/1Y**：各區間報酬趨勢，連續落後同類是汰換警訊。\n"
             "- **同類平均(1Y)**：來自 MoneyDJ 績效評比頁，約 3 成基金抓不到 → 標 ⬜ 不評。\n"
             "- **超額(pp)** = 近1Y含息 − 同類平均：≥ +2 🏆優等生；±2 內 🟡普通生；≤ −2 ⚠️汰弱候選。\n"
+            "- **每月100萬配息(TWD)** = 100萬 × MoneyDJ wb05 年化配息率 ÷ 12："
+            "用同口徑估「現金流量化能力」，方便橫向 PK。\n"
             "- ⚠️ 老師另兩項標準（成分股 ROE>15%/EPS 成長、規模流動性）資料源無法取得，未納入；"
             "買賣點細節請見上方「MK 智能戰情室」。")
 
