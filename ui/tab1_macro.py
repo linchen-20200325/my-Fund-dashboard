@@ -622,6 +622,21 @@ def _render_tw_local_dashboard(indicators: dict | None,
         st.warning(f"📊 台股本地視角：fetcher 載入失敗（{_e}）— 跳過本區塊")
         return
 
+    # v19.63：stash 台灣本地總經 + 外資連續日數給 data_registry 監控
+    try:
+        st.session_state["_macro_tw_local"] = {
+            "tw_pmi":     {"value": pmi_d.get("value"),
+                           "date":  pmi_d.get("date_latest", "")},
+            "ndc_signal": {"score": ndc_d.get("score_latest"),
+                           "date":  ndc_d.get("date_latest", "")},
+            "tw_export":  {"yoy":   export_d.get("value"),
+                           "date":  export_d.get("date_latest", "")},
+            "fi_streak":  {"consec_days": fii_d.get("consec_days"),
+                           "date":        fii_d.get("date_latest", "")},
+        }
+    except Exception:
+        pass
+
     ndc_score   = ndc_d.get("score_latest")
     tw_pmi      = pmi_d.get("value")
     export_yoy  = export_d.get("value")

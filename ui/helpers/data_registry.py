@@ -285,6 +285,61 @@ def _update_data_registry():
             "fresh_color": fcolor,
         }
 
+    # v19.63 §4a 台灣本地總經（PMI / NDC / 出口 YoY / 外資連續日數）
+    # 來源：services.macro_tw_local_fetch + tw_macro.fetch_foreign_consecutive_days
+    # 由 ui/tab1_macro.py 在抓取後 stash 至 _macro_tw_local。
+    _tw_local = st.session_state.get("_macro_tw_local") or {}
+    if isinstance(_tw_local, dict) and _tw_local:
+        _tw_specs = [
+            ("總經_TW_PMI", "🇹🇼 台灣製造業 PMI",
+             "FinMind TaiwanMacroEconomics",
+             _tw_local.get("tw_pmi", {}).get("value"),
+             _tw_local.get("tw_pmi", {}).get("date", ""), "monthly"),
+            ("總經_NDC_SIGNAL", "🇹🇼 NDC 景氣對策信號",
+             "FinMind TaiwanMacroEconomics",
+             _tw_local.get("ndc_signal", {}).get("score"),
+             _tw_local.get("ndc_signal", {}).get("date", ""), "monthly"),
+            ("總經_TW_EXPORT_YOY", "🇹🇼 台灣出口 YoY",
+             "FinMind TaiwanMacroEconomics",
+             _tw_local.get("tw_export", {}).get("yoy"),
+             _tw_local.get("tw_export", {}).get("date", ""), "monthly"),
+            ("總經_TW_FI_STREAK", "🇹🇼 外資連續日數",
+             "FinMind TaiwanStockTotalInstitutionalInvestors",
+             _tw_local.get("fi_streak", {}).get("consec_days"),
+             _tw_local.get("fi_streak", {}).get("date", ""), "daily"),
+        ]
+        for _k, _lbl, _src, _v, _d, _fq in _tw_specs:
+            if _v is None or not _d:
+                continue
+            _ic, _fl, _fc = _freshness(_d, _fq)
+            reg[_k] = {
+                "label":       _lbl,
+                "source":      _src,
+                "latest_date": _d,
+                "count":       1,
+                "series":      None,
+                "freq":        _fq,
+                "fresh_icon":  _ic,
+                "fresh_label": _fl,
+                "fresh_color": _fc,
+            }
+
+    # v19.63 §4b 外資/投信買賣超 + USDTWD（hot_money.py stash 至 _macro_hot_money）
+    _hm = st.session_state.get("_macro_hot_money") or {}
+    if isinstance(_hm, dict) and _hm.get("date"):
+        _hm_ic, _hm_fl, _hm_fc = _freshness(_hm.get("date", ""), "daily")
+        reg["總經_HOT_MONEY_FX"] = {
+            "label":       "🇹🇼 外資買賣超 × USDTWD 同步判讀",
+            "source":      "FinMind 外資 / yfinance USDTWD",
+            "latest_date": _hm.get("date", ""),
+            "count":       1,
+            "series":      None,
+            "freq":        "daily",
+            "fresh_icon":  _hm_ic,
+            "fresh_label": _hm_fl,
+            "fresh_color": _hm_fc,
+        }
+
     # 4. RSS 國際財經新聞 (fetch_market_news)
     # ⚠️ RSS feedparser.published 格式為 RFC 2822（"Wed, 06 May 2026 14:30:00 +0000"），
     #    舊版用 [:10] 切片得到 "Wed, 06 Ma" 無法解析 → 顯示「未知日期」。
@@ -390,6 +445,39 @@ def _update_data_registry():
                     "fresh_label": "已取得",
                     "fresh_color": "#00c853",
                 }
+
+        # v19.63 5e. 基金績效 wb01（1Y/3Y/5Y 含息報酬）
+        _perf = raw.get("perf") or {}
+        if isinstance(_perf, dict) and any(_perf.get(_k) is not None
+                                           for _k in ("1Y", "3Y", "5Y")):
+            reg[f"{prefix}_{fn}_績效"] = {
+                "label":       f"{fn} 績效 (1Y/3Y/5Y)",
+                "source":      "MoneyDJ wb01",
+                "latest_date": "本月",
+                "count":       sum(1 for _k in ("1Y", "3Y", "5Y")
+                                   if _perf.get(_k) is not None),
+                "series":      None,
+                "freq":        "monthly",
+                "fresh_icon":  "🟢",
+                "fresh_label": "已取得",
+                "fresh_color": "#00c853",
+            }
+
+        # v19.63 5f. 基金風險指標 wb07（標準差/Sharpe/Alpha/Beta）
+        _risk = raw.get("risk_metrics") or {}
+        _rtbl = _risk.get("risk_table") if isinstance(_risk, dict) else None
+        if isinstance(_rtbl, dict) and _rtbl:
+            reg[f"{prefix}_{fn}_風險指標"] = {
+                "label":       f"{fn} 風險指標 (σ/Sharpe/Alpha/Beta)",
+                "source":      "MoneyDJ wb07",
+                "latest_date": "本月",
+                "count":       len(_rtbl),
+                "series":      None,
+                "freq":        "monthly",
+                "fresh_icon":  "🟢",
+                "fresh_label": "已取得",
+                "fresh_color": "#00c853",
+            }
 
     _cf = st.session_state.get("current_fund") or {}
     if _cf:
