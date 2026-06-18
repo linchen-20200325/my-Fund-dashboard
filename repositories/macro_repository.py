@@ -281,6 +281,8 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
         return pd.Series(dtype=float, name=ticker)
 
 
+@register_cache
+@_ttl_cache(ttl_sec=300, maxsize=16)   # v19.64：盤中 ticker 5min TTL，rerun dedupe
 def fetch_yf_latest(tickers: tuple[str, ...]) -> dict[str, Optional[float]]:
     """批次抓多個 ticker 最新收盤(空值代表抓不到)。"""
     out: dict[str, Optional[float]] = {}

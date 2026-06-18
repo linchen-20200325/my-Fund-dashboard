@@ -18,6 +18,8 @@ from typing import Optional
 
 import pandas as pd
 
+from infra.cache import _ttl_cache, register_cache
+
 GREEN = "#22c55e"
 YELLOW = "#eab308"
 ORANGE = "#fb923c"
@@ -137,6 +139,8 @@ def _fetch_multpl_pe() -> Optional[float]:
         return None
 
 
+@register_cache
+@_ttl_cache(ttl_sec=1800, maxsize=2)   # v19.64：估值頁 30min TTL，避免 ^GSPC info 重打
 def fetch_forward_pe() -> Optional[float]:
     """Forward P/E 多源 chain：yfinance forwardPE → yfinance trailingPE → multpl trailing PE。
 
@@ -166,6 +170,8 @@ def fetch_forward_pe() -> Optional[float]:
     return None
 
 
+@register_cache
+@_ttl_cache(ttl_sec=1800, maxsize=4)   # v19.64：FRED 系列 30min TTL
 def fetch_gdpnow(fred_api_key: str) -> Optional[float]:
     """從 FRED 抓 GDPNOW 系列最新一筆；任意失敗回 None。"""
     if not fred_api_key:

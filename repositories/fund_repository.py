@@ -4212,6 +4212,8 @@ def fetch_risk_metrics(code: str) -> dict:
 # ════════════════════════════════════════════════════════════
 # 持股（yp013001.djhtm）: 產業配置 + 前10大持股
 # ════════════════════════════════════════════════════════════
+@register_cache
+@_ttl_cache(ttl_sec=1800, maxsize=64)   # v19.64：MoneyDJ 持股月更新，30min TTL 足夠
 def fetch_holdings(code: str) -> dict:
     """
     抓取 MoneyDJ 持股頁，回傳：
