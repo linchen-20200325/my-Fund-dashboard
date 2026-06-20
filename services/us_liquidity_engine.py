@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import requests
 
+from infra.cache import _ttl_cache, register_cache
 from repositories.macro_repository import fetch_fred, fetch_yf_close
 
 
@@ -198,6 +199,8 @@ def _aaii_sentiment() -> dict:
         return {"_err": f"{type(e).__name__}: {str(e)[:60]}"}
 
 
+@register_cache
+@_ttl_cache(ttl_sec=1800, maxsize=2)   # P1：美股流動性 6 指標，30min TTL，rerun 免重打 FRED
 def fetch_us_liquidity_snapshot(fred_api_key: str) -> dict:
     """6 指標 ThreadPoolExecutor 並行抓取，每 task 20s timeout."""
     jobs = {
