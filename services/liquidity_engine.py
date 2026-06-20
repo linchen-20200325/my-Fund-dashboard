@@ -205,7 +205,7 @@ def build_ssr() -> "dict | None":
     if ssr.empty:
         return None
     z = rolling_zscore(ssr)
-    # SSR 低 = 子彈多 = 偏多（健康）→ invert：z 越低越「警示(過熱/子彈耗盡)」
+    # SSR 高（Z > 0）= BTC 市值 >> 穩定幣市值 = 子彈耗盡 = 危險 → invert=False（高 z = 🔴）
     sig, color, score = _sig_color_score(z, invert=False)
     v = round(float(ssr.iloc[-1]), 2)
     p = round(float(ssr.iloc[-6]), 2) if len(ssr) >= 6 else v
