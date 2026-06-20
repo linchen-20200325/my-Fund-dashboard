@@ -494,6 +494,118 @@ class TestPutCallCboeFallback:
 
 
 # ──────────────────────────────────────────────────────────────
+# v19.65 P0：FRED VXVCLS + CBOE JSON 第 6/7 層備援
+# ──────────────────────────────────────────────────────────────
+class TestFredVxvclsFallback:
+    """v19.65 P0：所有前 5 層失敗後，FRED VXVCLS 作 VIX3M 最終救援。"""
+
+    def test_fred_vxvcls_rescues_when_all_others_fail(self):
+        """Yahoo + CBOE + stooq 全空 → _resolve_vix3m 走 FRED VXVCLS。"""
+        vxvcls_df = _fred([16.0, 17.0, 16.5, 17.2, 16.8, 17.5, 16.9, 17.1])
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=None), \
+             patch.object(rr, "fetch_fred", return_value=vxvcls_df):
+            s, src, trace = rr._resolve_vix3m(fred_api_key="test_key")
+        assert "FRED VXVCLS" in src
+        assert not s.empty
+        assert len(s) >= 2
+
+    def test_fred_vxvcls_skipped_when_no_api_key(self):
+        """fred_api_key=None 時不嘗試 FRED（不應加 FRED 失敗到 trace）。"""
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=None):
+            s, src, trace = rr._resolve_vix3m(fred_api_key=None)
+        assert s.empty
+        assert src == ""
+        assert not any("FRED" in t for t in trace)
+
+    def test_fred_vxvcls_empty_falls_through(self):
+        """FRED 也回空 → 最終仍回空 series，trace 包含 FRED 失敗訊息。"""
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", return_value=None), \
+             patch.object(rr, "fetch_fred", return_value=pd.DataFrame()):
+            s, src, trace = rr._resolve_vix3m(fred_api_key="test_key")
+        assert s.empty
+        assert src == ""
+        assert any("FRED VXVCLS" in t for t in trace)
+
+    def test_signal_vix_term_struct_passes_api_key(self):
+        """_signal_vix_term_struct(fred_api_key=...) 正確傳遞 key 到 _resolve_vix3m。"""
+        vxvcls_df = _fred([16.0, 17.0, 16.5, 17.2, 16.8, 17.5, 16.9, 17.1])
+        vix_s = _yf([15.0, 14.5, 15.2, 14.8, 15.5, 14.9, 15.3, 15.1])
+
+        def _yf_mock(t, **kw):
+            if t == "^VIX":
+                return vix_s
+            return pd.Series(dtype=float)  # ^VIX3M / ^VXV 都空
+
+        with patch.object(rr, "fetch_yf_close", side_effect=_yf_mock), \
+             patch("infra.proxy.fetch_url", return_value=None), \
+             patch.object(rr, "fetch_fred", return_value=vxvcls_df):
+            d = rr._signal_vix_term_struct(fred_api_key="test_key")
+        assert "⬜" not in d["signal"]  # 不是無資料
+        assert "FRED VXVCLS" in d["label"]
+
+
+class TestCboeJsonFallback:
+    """v19.65 P0：CBOE JSON API 作 Put/Call 第 7 層備援。"""
+
+    def _mk_resp(self, text: str, status: int = 200):
+        from unittest.mock import MagicMock
+        r = MagicMock()
+        r.status_code = status
+        r.text = text
+        return r
+
+    def test_parses_cboe_json(self):
+        import json
+        payload = json.dumps({"data": [
+            {"date": "2026-01-02", "close": 0.85},
+            {"date": "2026-01-03", "close": 0.90},
+        ]})
+        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(payload)):
+            s = rr._fetch_cboe_json("^CPC")
+        assert len(s) == 2
+        assert abs(float(s.iloc[-1]) - 0.90) < 1e-6
+
+    def test_http_failure_returns_empty(self):
+        with patch("infra.proxy.fetch_url", return_value=None):
+            s = rr._fetch_cboe_json("^CPC")
+        assert s.empty
+
+    def test_empty_data_array_returns_empty(self):
+        import json
+        payload = json.dumps({"data": []})
+        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(payload)):
+            s = rr._fetch_cboe_json("^CPC")
+        assert s.empty
+
+    def test_json_fallback_rescues_put_call(self):
+        """Yahoo + CBOE CSV + stooq 全失敗 → _resolve_put_call 走 CBOE JSON。"""
+        import json
+        payload = json.dumps({"data": [
+            {"date": "2026-01-02", "close": 0.85},
+            {"date": "2026-01-03", "close": 0.88},
+            {"date": "2026-01-04", "close": 0.90},
+        ]})
+
+        call_count = [0]
+
+        def _fetch_url_side_effect(url, **kw):
+            # CSV endpoints → None；JSON endpoint → 回 payload
+            call_count[0] += 1
+            if ".json" in url:
+                return self._mk_resp(payload)
+            return None  # CSV 全失敗
+
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", side_effect=_fetch_url_side_effect):
+            s, src, trace = rr._resolve_put_call()
+        assert "CBOE JSON" in src
+        assert not s.empty
+
+
+# ──────────────────────────────────────────────────────────────
 # 10. Asia overnight
 # ──────────────────────────────────────────────────────────────
 class TestAsiaOvernight:

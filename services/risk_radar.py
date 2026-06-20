@@ -197,10 +197,15 @@ def _fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
         return pd.Series(dtype=float)
 
 
-def _resolve_vix3m() -> tuple[pd.Series, str, list[str]]:
-    """VIX3M 多源 chain：Yahoo ^VIX3M → Yahoo ^VXV → CBOE CSV → stooq ^vix3m/^vxv。
+def _resolve_vix3m(
+    fred_api_key: str | None = None,
+) -> tuple[pd.Series, str, list[str]]:
+    """VIX3M 多源 chain：Yahoo ^VIX3M → Yahoo ^VXV → CBOE CSV → stooq ^vix3m/^vxv
+    → FRED VXVCLS（P0 第 6 層，需 fred_api_key）。
 
     v19.43：回傳 (series, src_label, fail_trace) — fail_trace 收集每層失敗原因供 UI 顯示。
+    v19.65：加 FRED VXVCLS 作最終備援——CBOE 3-Month Volatility 在 FRED 有官方序列，
+           與 fetch_fred 既有路徑共享 NAS Squid proxy 白名單，所有前 5 層失敗後最可靠。
     """
     trace: list[str] = []
     for t in ("^VIX3M", "^VXV"):
@@ -215,13 +220,82 @@ def _resolve_vix3m() -> tuple[pd.Series, str, list[str]]:
         s = _fetch_stooq_csv(sym, trace=trace)
         if not s.empty and len(s) >= 2:
             return s, f"stooq {sym}", trace
+    # P0 第 6 層：FRED VXVCLS（CBOE S&P 500 3-Month Volatility，官方等同 VIX3M）
+    if fred_api_key:
+        try:
+            df = fetch_fred("VXVCLS", fred_api_key, n=180)
+            if not df.empty and len(df) >= 2:
+                sv = df.set_index("date")["value"].sort_index().dropna()
+                if len(sv) >= 2:
+                    return sv.tail(180), "FRED VXVCLS", trace
+            trace.append("FRED VXVCLS: empty or insufficient data")
+        except Exception as _e:  # noqa: BLE001
+            trace.append(f"FRED VXVCLS: exception {str(_e)[:40]}")
     return pd.Series(dtype=float), "", trace
 
 
+def _fetch_cboe_json(symbol: str, trace: list[str] | None = None) -> pd.Series:
+    """CBOE delayed-quotes JSON API → 收盤 Series。
+
+    URL pattern:
+      https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/{enc}.json
+    其中 enc 是 URL-encode 後的 symbol（e.g. ^CPC → %5ECPC）。
+
+    v19.65：Put/Call 第 7 層備援——與 CSV 端點同源但走 JSON API，不同 CDN 路徑，
+    部分 NAS Squid / Cloudflare 策略對 .csv 與 .json 的封鎖行為不同。
+    失敗回空 Series。
+    """
+    import io
+    from urllib.parse import quote
+
+    from infra.proxy import fetch_url
+
+    def _t(msg: str) -> None:
+        if trace is not None:
+            trace.append(f"CBOE JSON {symbol}: {msg}")
+
+    try:
+        enc = quote(symbol, safe="")
+        url = (f"https://cdn.cboe.com/api/global/delayed_quotes/"
+               f"charts/historical/{enc}.json")
+        r = fetch_url(url, timeout=15)
+        if r is None or getattr(r, "status_code", 0) != 200:
+            code = getattr(r, "status_code", None)
+            _t(f"HTTP {code}")
+            return pd.Series(dtype=float)
+        import json
+        data = json.loads(r.text)
+        # Response shape (兩種已知格式):
+        #   {"data":  [{"date": "YYYY-MM-DD", "close": float}, ...]}
+        #   {"chart": [{"datetime": "YYYY-MM-DD", "Close": float}, ...]}
+        rows = data.get("data") or data.get("chart") or []
+        if not rows:
+            _t("empty data array")
+            return pd.Series(dtype=float)
+        dates, closes = [], []
+        for row in rows:
+            d = row.get("date") or row.get("datetime")
+            c = row.get("close") or row.get("Close")
+            if d and c is not None:
+                dates.append(d)
+                closes.append(float(c))
+        if not dates:
+            _t("no parseable rows")
+            return pd.Series(dtype=float)
+        idx = pd.to_datetime(dates, errors="coerce")
+        s = pd.Series(closes, index=idx).dropna().sort_index()
+        return s.tail(180)
+    except Exception as e:  # noqa: BLE001
+        _t(f"exception {str(e)[:40]}")
+        return pd.Series(dtype=float)
+
+
 def _resolve_put_call() -> tuple[pd.Series, str, list[str]]:
-    """CBOE Put/Call 多源 chain：Yahoo ^CPC/^CPCE → CBOE CSV CPC/CPCE → stooq ^cpc/^cpce。
+    """CBOE Put/Call 多源 chain：Yahoo ^CPC/^CPCE → CBOE CSV CPC/CPCE
+    → stooq ^cpc/^cpce → CBOE JSON API ^CPC/^CPCE。
 
     v19.43：回傳 (series, src_label, fail_trace) — fail_trace 收集每層失敗原因供 UI 顯示。
+    v19.65：加 CBOE JSON API 作第 7 層備援（不同 CDN 路徑，封鎖行為與 CSV 端點不同）。
     """
     trace: list[str] = []
     for t in ("^CPC", "^CPCE"):
@@ -237,14 +311,19 @@ def _resolve_put_call() -> tuple[pd.Series, str, list[str]]:
         s = _fetch_stooq_csv(sym, trace=trace)
         if not s.empty and len(s) >= 2:
             return s, f"stooq {sym}", trace
+    # P0 第 7 層：CBOE JSON API（不同路徑，部分 proxy 封鎖策略不同）
+    for sym in ("^CPC", "^CPCE"):
+        s = _fetch_cboe_json(sym, trace=trace)
+        if not s.empty and len(s) >= 2:
+            return s, f"CBOE JSON {sym}", trace
     return pd.Series(dtype=float), "", trace
 
 
 # ── 2. VIX 期限結構 (VIX / VIX3M) ────────────────────────────────
-def _signal_vix_term_struct() -> dict:
+def _signal_vix_term_struct(fred_api_key: str | None = None) -> dict:
     try:
         sv = fetch_yf_close("^VIX", range_="6mo")
-        s3, src3, trace = _resolve_vix3m()
+        s3, src3, trace = _resolve_vix3m(fred_api_key=fred_api_key)
         _label = f"Yahoo ^VIX / {src3}" if src3 else "Yahoo ^VIX / VIX3M（全源失敗）"
         if sv.empty:
             trace.insert(0, f"Yahoo ^VIX: empty (len={len(sv)})")
@@ -499,7 +578,7 @@ def detect_risk_radar(fred_api_key: str) -> dict[str, dict]:
     from concurrent.futures import ThreadPoolExecutor as _TPE_radar
     _jobs = {
         "vix_level":       _signal_vix_level,
-        "vix_term_struct": _signal_vix_term_struct,
+        "vix_term_struct": lambda: _signal_vix_term_struct(fred_api_key),
         "hy_oas_delta":    lambda: _signal_hy_oas_delta(fred_api_key),
         "yield_10y_shock": lambda: _signal_yield_10y_shock(fred_api_key),
         "move_level":      _signal_move_level,
