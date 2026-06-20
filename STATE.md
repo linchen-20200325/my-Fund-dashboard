@@ -125,8 +125,10 @@
 - 初始化基準：協議 v2.0 Auto-Ship 套用，歷史版本紀錄詳見 `git log`。
 
 ## 下一步
-v19.43 fail trace 寫入 UI note 完成。
-等 user redeploy 後截一張 ⬜ VIX 期限結構 / Put/Call card → 看到 4 層真實失敗碼
-（Yahoo empty / CBOE HTTP / stooq No data）→ 對症補第 5 層備援源
-（候選：investing.com HTML / MarketWatch / 換 CBOE endpoint）。
-（待 user 確認 Streamlit Cloud redeploy 完成 → 應顯示 v19.43_RadarFailTrace）
+**perf(radar) PR v19.65 P0 完成**：VIX3M + Put/Call 第 6/7 層備援源新增。
+
+- **VIX3M 第 6 層**：`_resolve_vix3m(fred_api_key)` → FRED `VXVCLS`（CBOE S&P 500 3-Month Volatility 官方序列，與 HY OAS / DGS10 同走 fetch_fred 路徑，NAS Squid proxy 已白名單）。`_signal_vix_term_struct(fred_api_key)` + `detect_risk_radar` lambda 傳遞 key；fred_api_key=None 時跳過（向後相容零 caller 異動）。
+- **Put/Call 第 7 層**：新 `_fetch_cboe_json(symbol)` helper → `https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/{enc}.json`（JSON API，與既有 CSV 端點同源但不同路徑，部分 NAS proxy 的 .csv 與 .json 封鎖策略不同）。`_resolve_put_call` 在所有 Yahoo + CBOE CSV + stooq 全失敗後嘗試 JSON API。
+- +12 tests（`TestFredVxvclsFallback` 4 case + `TestCboeJsonFallback` 5 case + CBOE JSON 全鏈 1 case）；pytest tests/test_risk_radar.py **87 passed / 0 failed**（zero regression）。
+
+下一步候選：P1 fetch_fred SSOT 收斂（fetch_all_indicators 集中入口）/ 等 user redeploy 驗證 VIX 期限結構卡是否從 ⬜ 轉亮。
