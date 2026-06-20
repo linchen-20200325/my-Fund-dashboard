@@ -265,7 +265,9 @@ def _fetch_cboe_json(symbol: str, trace: list[str] | None = None) -> pd.Series:
             return pd.Series(dtype=float)
         import json
         data = json.loads(r.text)
-        # Response shape: {"data": [{"date": "YYYY-MM-DD", "close": float}, ...]}
+        # Response shape (兩種已知格式):
+        #   {"data":  [{"date": "YYYY-MM-DD", "close": float}, ...]}
+        #   {"chart": [{"datetime": "YYYY-MM-DD", "Close": float}, ...]}
         rows = data.get("data") or data.get("chart") or []
         if not rows:
             _t("empty data array")
