@@ -185,8 +185,9 @@ def build_ssr() -> "dict | None":
     """SSR (Stablecoin Supply Ratio) = BTC 市值 / 穩定幣總市值。
 
     BTC 市值 ≈ BTC 價格 × 近似流通量；穩定幣市值取自 DefiLlama。
-    SSR 低（Z-Score 低）= 鏈上法幣子彈多 = 潛在買盤強（risk-on 偏多訊號，
-    與其他三個 risk-off 因子方向相反 → invert=True）。
+    SSR 高（Z > 0）= BTC 市值 >> 穩定幣市值 = 鏈上子彈耗盡 = 危險（高 z = 🔴），
+    與其他三個 risk-off 因子同向 → invert=False。
+    SSR 低（Z < 0）= 鏈上法幣子彈多 = 潛在買盤強（偏多訊號），附掛為獨立對沖參考。
     """
     stable = fetch_defillama_stablecoin_mcap()
     btc = fetch_yf_close("BTC-USD", "5y")
