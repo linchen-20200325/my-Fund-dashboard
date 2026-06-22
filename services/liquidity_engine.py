@@ -25,6 +25,7 @@ import pandas as pd
 
 from infra.cache import _ttl_cache, register_cache
 from shared.ttls import TTL_30MIN
+from shared.fred_series import FRED_CHF_USD, FRED_DXY, FRED_JPY_USD
 from repositories.macro_repository import (
     fetch_defillama_stablecoin_mcap,
     fetch_fred,
@@ -109,7 +110,7 @@ def build_xccy_proxy(fred_api_key: str) -> "dict | None":
     代理邏輯：真 3M XCCY basis 無免費源；以「美元急速走強」近似離岸美元荒
     （非美機構搶美元 → 美元指數噴升）。⚠️ 非真實 basis，UI 須標註代理。
     """
-    df = fetch_fred("DTWEXBGS", fred_api_key, 800)
+    df = fetch_fred(FRED_DXY, fred_api_key, 800)
     if df.empty or len(df) < _MIN_SAMPLES:
         return None
     s = df.set_index("date")["value"].astype(float)
@@ -145,7 +146,7 @@ def build_carry_unwind(fred_api_key: str) -> "dict | None":
     """
     appr_series = []     # 各貨幣「升值%」序列（正=升值）
     latest = {}
-    for sid, label in (("DEXJPUS", "JPY"), ("DEXSZUS", "CHF")):
+    for sid, label in ((FRED_JPY_USD, "JPY"), (FRED_CHF_USD, "CHF")):
         df = fetch_fred(sid, fred_api_key, 400)
         if df.empty or len(df) < _MIN_SAMPLES:
             continue

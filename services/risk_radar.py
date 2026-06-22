@@ -43,6 +43,7 @@ from shared.colors import (
     TRAFFIC_RED as RED,
     TRAFFIC_YELLOW as YELLOW,
 )
+from shared.fred_series import FRED_DGS10, FRED_HY_SPREAD, FRED_VXVCLS
 
 _RADAR_KEYS = (
     "vix_level",
@@ -224,7 +225,7 @@ def _resolve_vix3m(
     # P0 第 6 層：FRED VXVCLS（CBOE S&P 500 3-Month Volatility，官方等同 VIX3M）
     if fred_api_key:
         try:
-            df = fetch_fred("VXVCLS", fred_api_key, n=180)
+            df = fetch_fred(FRED_VXVCLS, fred_api_key, n=180)
             if not df.empty and len(df) >= 2:
                 sv = df.set_index("date")["value"].sort_index().dropna()
                 if len(sv) >= 2:
@@ -355,7 +356,7 @@ def _signal_vix_term_struct(fred_api_key: str | None = None) -> dict:
 # ── 3. HY OAS 1-day 變化 ──────────────────────────────────────────
 def _signal_hy_oas_delta(fred_api_key: str) -> dict:
     try:
-        df = fetch_fred("BAMLH0A0HYM2", fred_api_key, n=120)
+        df = fetch_fred(FRED_HY_SPREAD, fred_api_key, n=120)
         if df.empty or len(df) < 2:
             return _empty("HY OAS 抓取不足 2 筆", "FRED BAMLH0A0HYM2 日線")
         s = df.set_index("date")["value"].sort_index()
@@ -380,7 +381,7 @@ def _signal_hy_oas_delta(fred_api_key: str) -> dict:
 # ── 4. 10Y Treasury 殖利率衝擊 ────────────────────────────────────
 def _signal_yield_10y_shock(fred_api_key: str) -> dict:
     try:
-        df = fetch_fred("DGS10", fred_api_key, n=120)
+        df = fetch_fred(FRED_DGS10, fred_api_key, n=120)
         if df.empty or len(df) < 2:
             return _empty("10Y 殖利率抓取不足 2 筆", "FRED DGS10 日線")
         s = df.set_index("date")["value"].sort_index()

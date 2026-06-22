@@ -19,6 +19,28 @@ import numpy as np
 import pandas as pd
 
 from services.crisis_backtest import CrisisEvent
+from shared.fred_series import (
+    FRED_CCSA,
+    FRED_CPI,
+    FRED_DRTSCILM,
+    FRED_DXY,
+    FRED_FED_BS,
+    FRED_FED_FUNDS,
+    FRED_HY_SPREAD,
+    FRED_ICSA,
+    FRED_LEI,
+    FRED_M2,
+    FRED_NAPM,
+    FRED_NFCI,
+    FRED_PERMIT,
+    FRED_PPI,
+    FRED_SAHM_CURRENT,
+    FRED_T10Y2Y,
+    FRED_T10Y3M,
+    FRED_T5YIE,
+    FRED_UMCSENT,
+    FRED_UNRATE,
+)
 
 Direction = Literal["above", "below"]
 NormalizeMethod = Literal["zscore", "minmax"]
@@ -41,55 +63,55 @@ class FactorSpec:
 FACTOR_POOL: list[FactorSpec] = [
     FactorSpec("VIX", "VIX 恐慌指數", "yahoo", "^VIX", "above",
                note="高 VIX = 市場恐慌", frequency="daily"),
-    FactorSpec("HY_SPREAD", "HY 信用利差", "fred", "BAMLH0A0HYM2", "above",
+    FactorSpec("HY_SPREAD", "HY 信用利差", "fred", FRED_HY_SPREAD, "above",
                note="高 HY OAS = 信用緊縮", frequency="daily"),
-    FactorSpec("T10Y2Y", "10Y-2Y 殖利率利差", "fred", "T10Y2Y", "below",
+    FactorSpec("T10Y2Y", "10Y-2Y 殖利率利差", "fred", FRED_T10Y2Y, "below",
                note="負值 = 殖利率倒掛", frequency="daily"),
-    FactorSpec("UNRATE", "美國失業率", "fred", "UNRATE", "above",
+    FactorSpec("UNRATE", "美國失業率", "fred", FRED_UNRATE, "above",
                note="高失業 = 就業惡化", frequency="monthly"),
-    FactorSpec("PMI", "ISM 製造業 PMI", "fred", "NAPM", "below",
+    FactorSpec("PMI", "ISM 製造業 PMI", "fred", FRED_NAPM, "below",
                note="< 50 = 製造業萎縮", frequency="monthly"),
-    FactorSpec("CPI_YOY", "CPI 年增率", "fred", "CPIAUCSL", "above",
+    FactorSpec("CPI_YOY", "CPI 年增率", "fred", FRED_CPI, "above",
                note="高通膨 = Fed 緊縮壓力", frequency="monthly"),
-    FactorSpec("FEDFUNDS", "Fed Funds Rate", "fred", "FEDFUNDS", "above",
+    FactorSpec("FEDFUNDS", "Fed Funds Rate", "fred", FRED_FED_FUNDS, "above",
                note="高利率 = 緊縮環境", frequency="monthly"),
-    FactorSpec("M2_YOY", "M2 年增率", "fred", "M2SL", "below",
+    FactorSpec("M2_YOY", "M2 年增率", "fred", FRED_M2, "below",
                note="M2 收縮 = 流動性緊縮", frequency="monthly"),
-    FactorSpec("DXY", "美元指數", "fred", "DTWEXBGS", "above",
+    FactorSpec("DXY", "美元指數", "fred", FRED_DXY, "above",
                note="強美元 = 風險資產壓力", frequency="daily"),
-    FactorSpec("T10Y3M", "10Y-3M 殖利率利差", "fred", "T10Y3M", "below",
+    FactorSpec("T10Y3M", "10Y-3M 殖利率利差", "fred", FRED_T10Y3M, "below",
                note="負值 = 短端倒掛", frequency="daily"),
     # v18.286 進階補強因子（債市流動性 + 高頻景氣 + 金融環境）
     FactorSpec("MOVE", "MOVE 公債波動率", "yahoo", "^MOVE", "above",
                note="債市 VIX；高 MOVE = 利率波動 = 流動性枯竭",
                frequency="daily"),
-    FactorSpec("NFCI", "NFCI 全國金融狀況", "fred", "NFCI", "above",
+    FactorSpec("NFCI", "NFCI 全國金融狀況", "fred", FRED_NFCI, "above",
                note="芝加哥聯儲 105 項金融指標；>0 = 金融環境緊縮",
                frequency="weekly"),
     FactorSpec("COPPER_GOLD_RATIO", "銅金比", "calculated", "HG=F/GC=F", "below",
                note="銅/金期貨；下彎 = 景氣轉弱領先指標", frequency="daily"),
     # v19.4 補齊 10 因子：景氣領先 + 勞動信用 + 通膨預期 + Fed BS
-    FactorSpec("SAHM", "Sahm 法則衰退指標", "fred", "SAHMCURRENT", "above",
+    FactorSpec("SAHM", "Sahm 法則衰退指標", "fred", FRED_SAHM_CURRENT, "above",
                note="失業率 3MMA − 12M 低點 ≥ 0.5 = 衰退觸發",
                frequency="monthly"),
-    FactorSpec("SLOOS", "SLOOS 銀行信用緊縮", "fred", "DRTSCILM", "above",
+    FactorSpec("SLOOS", "SLOOS 銀行信用緊縮", "fred", FRED_DRTSCILM, "above",
                note="商業放款標準淨緊縮百分比；>0 = 信貸收縮",
                frequency="monthly"),
-    FactorSpec("LEI", "Leading Economic Index", "fred", "USSLIND", "below",
+    FactorSpec("LEI", "Leading Economic Index", "fred", FRED_LEI, "below",
                note="St. Louis Fed 領先指標；下行 = 景氣轉弱",
                frequency="monthly"),
-    FactorSpec("PPI", "PPI 全商品物價", "fred", "PPIACO", "above",
+    FactorSpec("PPI", "PPI 全商品物價", "fred", FRED_PPI, "above",
                note="生產者物價；上行 = 成本通膨壓力", frequency="monthly"),
-    FactorSpec("JOBLESS", "初領失業金人數", "fred", "ICSA", "above",
+    FactorSpec("JOBLESS", "初領失業金人數", "fred", FRED_ICSA, "above",
                note="ICSA 週頻；高 = 裁員增加", frequency="weekly"),
-    FactorSpec("CONT_CLAIMS", "持續領失業金人數", "fred", "CCSA", "above",
+    FactorSpec("CONT_CLAIMS", "持續領失業金人數", "fred", FRED_CCSA, "above",
                note="CCSA 週頻；高 = 重新就業困難", frequency="weekly"),
-    FactorSpec("CONSUMER_CONF", "密大消費者信心", "fred", "UMCSENT", "below",
+    FactorSpec("CONSUMER_CONF", "密大消費者信心", "fred", FRED_UMCSENT, "below",
                note="Michigan Consumer Sentiment；低 = 消費萎縮",
                frequency="monthly"),
-    FactorSpec("PERMIT_HOUSING", "新屋建照", "fred", "PERMIT", "below",
+    FactorSpec("PERMIT_HOUSING", "新屋建照", "fred", FRED_PERMIT, "below",
                note="領先房市指標；低 = 房市轉弱", frequency="monthly"),
-    FactorSpec("FED_BS", "Fed 資產負債表", "fred", "WALCL", "below",
+    FactorSpec("FED_BS", "Fed 資產負債表", "fred", FRED_FED_BS, "below",
                note="WALCL 總資產；下行 = QT 流動性緊縮", frequency="weekly"),
     # v19.12 短期 pullback 預警 — 既有因子的 5 日變化率版（calculated）
     FactorSpec("VIX_DELTA_5D", "VIX 5日變化率", "calculated", "VIX_5D_PCT", "above",
@@ -101,7 +123,7 @@ FACTOR_POOL: list[FactorSpec] = [
     FactorSpec("BREADTH_RSP_SPY_5D", "RSP/SPY 5日斜率", "calculated", "RSP_SPY_5D_PCT", "below",
                note="等權 / 市值權比率的 5日% 變化；下行 = breadth 衰退（僅七巨頭撐盤），pullback 領先",
                frequency="weekly"),
-    FactorSpec("INFL_EXP_5Y", "5Y 通膨預期", "fred", "T5YIE", "above",
+    FactorSpec("INFL_EXP_5Y", "5Y 通膨預期", "fred", FRED_T5YIE, "above",
                note="5Y breakeven inflation；高 = 通膨預期升溫",
                frequency="daily"),
 ]
@@ -179,7 +201,7 @@ def fetch_factor_series(
         if spec.source == "calculated" and spec.key == "HY_SPREAD_DELTA_5D":
             from repositories.macro_repository import fetch_fred
             n = max(int(years) * 365, 250)
-            df = fetch_fred("BAMLH0A0HYM2", fred_api_key, n=n)
+            df = fetch_fred(FRED_HY_SPREAD, fred_api_key, n=n)
             if df is None or df.empty:
                 return _empty()
             s = pd.Series(

@@ -35,6 +35,12 @@ from infra.cache import (  # noqa: F401
     _cache_load_meta,
     _cache_save_meta,
 )
+from shared.fred_series import (
+    FRED_CHF_USD,
+    FRED_CNH_USD,
+    FRED_EUR_USD,
+    FRED_JPY_USD,
+)
 from shared.ttls import TTL_5MIN, TTL_15MIN, TTL_30MIN
 
 # Utility from fund_fetcher — module-level import is partial-load safe，因為
@@ -4662,11 +4668,11 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     # 2. FRED DEX* — 只跑非 TWD pair（DEXTWUS 已停發，所有 TWD 終點都死了）
     if (not _is_twd) and fred_api_key:
         _FRED_FX_MAP = {
-            ("JPY", "USD"): ("DEXJPUS", False),
-            ("CHF", "USD"): ("DEXSZUS", False),
-            ("CNH", "USD"): ("DEXCHUS", False),
-            ("CNY", "USD"): ("DEXCHUS", False),
-            ("EUR", "USD"): ("DEXUSEU", "inv"),  # series 是 USD per EUR
+            ("JPY", "USD"): (FRED_JPY_USD, False),
+            ("CHF", "USD"): (FRED_CHF_USD, False),
+            ("CNH", "USD"): (FRED_CNH_USD, False),
+            ("CNY", "USD"): (FRED_CNH_USD, False),
+            ("EUR", "USD"): (FRED_EUR_USD, "inv"),  # series 是 USD per EUR
         }
         _spec = _FRED_FX_MAP.get((_ccy_base, _ccy_quote))
         if _spec:
@@ -4780,11 +4786,11 @@ def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
             out["fred"]["error"] = "未設定 FRED_API_KEY"
         else:
             _FRED_FX_MAP = {
-                ("JPY", "USD"): "DEXJPUS",
-                ("CHF", "USD"): "DEXSZUS",
-                ("CNH", "USD"): "DEXCHUS",
-                ("CNY", "USD"): "DEXCHUS",
-                ("EUR", "USD"): "DEXUSEU",
+                ("JPY", "USD"): FRED_JPY_USD,
+                ("CHF", "USD"): FRED_CHF_USD,
+                ("CNH", "USD"): FRED_CNH_USD,
+                ("CNY", "USD"): FRED_CNH_USD,
+                ("EUR", "USD"): FRED_EUR_USD,
             }
             _series_id = _FRED_FX_MAP.get((_ccy_base, _ccy_quote))
             if not _series_id:

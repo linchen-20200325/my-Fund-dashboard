@@ -31,6 +31,19 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from shared.fred_series import (
+    FRED_CPI,
+    FRED_FED_BS,
+    FRED_FED_FUNDS,
+    FRED_HY_SPREAD,
+    FRED_M2,
+    FRED_PAYEMS_MANEMP,
+    FRED_PPI,
+    FRED_T10Y2Y,
+    FRED_T10Y3M,
+    FRED_UNRATE,
+)
+
 
 # ════════════════════════════════════════════════════════════════
 # 14-factor 評分規則（與 services/macro_service.py:fetch_all_indicators 同邏輯）
@@ -353,16 +366,16 @@ def generate_synthetic_demo(n_months: int = 60, seed: int = 42
 # ════════════════════════════════════════════════════════════════
 # FRED series_id 映射；無 FRED 對應的指標走 yfinance 或派生
 _FRED_SERIES_MAP = {
-    "YIELD_10Y2Y": "T10Y2Y",   # 10Y - 2Y treasury spread
-    "YIELD_10Y3M": "T10Y3M",   # 10Y - 3M treasury spread
-    "PMI":         "MANEMP",   # 無 PMI FRED → 用就業代理；真實 PMI 需第三方
-    "HY_SPREAD":   "BAMLH0A0HYM2",
-    "M2":          "M2SL",     # M2 月底，YoY% 在 calling 端算
-    "CPI":         "CPIAUCSL", # CPI 月底，YoY% 在 calling 端算
-    "FEDRATE":     "FEDFUNDS", # 月平均
-    "UNEMP":       "UNRATE",
-    "PPI":         "PPIACO",   # PPI YoY 在 calling 端算
-    "FED_BS":      "WALCL",    # Fed 資產負債表，YoY% 在 calling 端算
+    "YIELD_10Y2Y": FRED_T10Y2Y,         # 10Y - 2Y treasury spread
+    "YIELD_10Y3M": FRED_T10Y3M,         # 10Y - 3M treasury spread
+    "PMI":         FRED_PAYEMS_MANEMP,  # 無 PMI FRED → 用就業代理；真實 PMI 需第三方
+    "HY_SPREAD":   FRED_HY_SPREAD,
+    "M2":          FRED_M2,             # M2 月底，YoY% 在 calling 端算
+    "CPI":         FRED_CPI,            # CPI 月底，YoY% 在 calling 端算
+    "FEDRATE":     FRED_FED_FUNDS,      # 月平均
+    "UNEMP":       FRED_UNRATE,
+    "PPI":         FRED_PPI,            # PPI YoY 在 calling 端算
+    "FED_BS":      FRED_FED_BS,         # Fed 資產負債表，YoY% 在 calling 端算
 }
 _YF_TICKERS = {
     "VIX":     "^VIX",

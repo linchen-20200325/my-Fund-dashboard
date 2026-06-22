@@ -19,13 +19,19 @@ import requests
 
 from infra.cache import _ttl_cache, register_cache
 from shared.ttls import TTL_30MIN
+from shared.fred_series import (
+    FRED_FED_BS,
+    FRED_HY_SPREAD,
+    FRED_M2,
+    FRED_RRP,
+)
 from repositories.macro_repository import fetch_fred, fetch_yf_close
 
 
 def _hy_oas(api_key: str) -> dict:
     """HY 信用利差 OAS (BAMLH0A0HYM2, % OAS)."""
     try:
-        df = fetch_fred("BAMLH0A0HYM2", api_key, n=60)
+        df = fetch_fred(FRED_HY_SPREAD, api_key, n=60)
         if df.empty:
             return {"_err": "FRED empty"}
         cur = float(df["value"].iloc[-1])
@@ -52,7 +58,7 @@ def _hy_oas(api_key: str) -> dict:
 def _rrp(api_key: str) -> dict:
     """隔夜逆回購 RRP (RRPONTSYD, USD bn) — 流動性蓄水池."""
     try:
-        df = fetch_fred("RRPONTSYD", api_key, n=60)
+        df = fetch_fred(FRED_RRP, api_key, n=60)
         if df.empty:
             return {"_err": "FRED empty"}
         cur = float(df["value"].iloc[-1])
@@ -79,7 +85,7 @@ def _rrp(api_key: str) -> dict:
 def _m2_yoy(api_key: str) -> dict:
     """M2 廣義貨幣供給 YoY (M2SL)."""
     try:
-        df = fetch_fred("M2SL", api_key, n=24)
+        df = fetch_fred(FRED_M2, api_key, n=24)
         if df.empty or len(df) < 13:
             return {"_err": "FRED insufficient data"}
         cur = float(df["value"].iloc[-1])
@@ -107,7 +113,7 @@ def _m2_yoy(api_key: str) -> dict:
 def _walcl(api_key: str) -> dict:
     """Fed 資產負債表 WALCL (USD mn) — QE/QT pace (13 週 = ~3 月)."""
     try:
-        df = fetch_fred("WALCL", api_key, n=60)
+        df = fetch_fred(FRED_FED_BS, api_key, n=60)
         if df.empty:
             return {"_err": "FRED empty"}
         cur_mn = float(df["value"].iloc[-1])
