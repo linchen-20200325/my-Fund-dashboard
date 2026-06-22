@@ -35,6 +35,7 @@ from infra.cache import (  # noqa: F401
     _cache_load_meta,
     _cache_save_meta,
 )
+from shared.ttls import TTL_5MIN, TTL_15MIN, TTL_30MIN
 
 # Utility from fund_fetcher — module-level import is partial-load safe，因為
 # fund_fetcher 載入到本檔的 re-export 點（line ~663）時，下方 utility 已定義
@@ -2745,7 +2746,7 @@ def _finish_metrics(result: dict):
 # 只需要貼網址即可取得所有 MK 分析所需資料
 # ═══════════════════════════════════════════════════════
 @register_cache
-@_ttl_cache(ttl_sec=900, maxsize=64)   # v18.58: 同 code 跨多保單載入時免重複 HTTP，15min TTL
+@_ttl_cache(ttl_sec=TTL_15MIN, maxsize=64)   # v18.58: 同 code 跨多保單載入時免重複 HTTP
 def fetch_fund_from_moneydj_url(url: str) -> dict:
     """
     輸入任何 MoneyDJ 基金頁面網址（或純代碼如 tlzf9），
@@ -4213,7 +4214,7 @@ def fetch_risk_metrics(code: str) -> dict:
 # 持股（yp013001.djhtm）: 產業配置 + 前10大持股
 # ════════════════════════════════════════════════════════════
 @register_cache
-@_ttl_cache(ttl_sec=1800, maxsize=64)   # v19.64：MoneyDJ 持股月更新，30min TTL 足夠
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=64)   # v19.64：MoneyDJ 持股月更新
 def fetch_holdings(code: str) -> dict:
     """
     抓取 MoneyDJ 持股頁，回傳：
@@ -4861,7 +4862,7 @@ def diagnose_fx_sources(currency_pair: str, fred_api_key: str = "") -> dict:
 
 
 @register_cache
-@_ttl_cache(ttl_sec=300, maxsize=128)   # v18.58: T7 每 fund render 一次，盤中 5min 鮮度足夠
+@_ttl_cache(ttl_sec=TTL_5MIN, maxsize=128)   # v18.58: T7 每 fund render 一次
 def get_latest_nav(fund_ticker: str) -> "float | None":
     """抓基金最新淨值。yfinance 為主，本檔既有 Morningstar / Cnyes 來源 fallback。
 

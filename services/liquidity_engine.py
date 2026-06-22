@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from infra.cache import _ttl_cache, register_cache
+from shared.ttls import TTL_30MIN
 from repositories.macro_repository import (
     fetch_defillama_stablecoin_mcap,
     fetch_fred,
@@ -266,7 +267,7 @@ def build_move_vix() -> "dict | None":
 # 對外入口：一次取齊四因子（個別失敗不影響其他）
 # ──────────────────────────────────────────────────────────────
 @register_cache
-@_ttl_cache(ttl_sec=1800, maxsize=2)   # P1：深水區流動性 4 因子，30min TTL，rerun 免重打 FRED
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=2)   # P1：深水區流動性 4 因子，rerun 免重打 FRED
 def fetch_liquidity_factors(fred_api_key: str = "") -> dict:
     """取齊四個深水區流動性因子，回傳 {KEY: indicator_dict}（抓不到的略過）。
 

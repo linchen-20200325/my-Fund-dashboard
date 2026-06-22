@@ -44,6 +44,7 @@ from infra.proxy import fetch_url
 
 # v18.58: 借用 fund_fetcher 的 TTL 快取裝飾器（同樣模組層共享、可 clear_all_caches 統一清空）
 from fund_fetcher import _ttl_cache, register_cache
+from shared.ttls import TTL_5MIN, TTL_10MIN, TTL_30MIN
 
 __version__ = "1.0.0"
 
@@ -198,7 +199,7 @@ MACRO_THRESHOLDS: dict = {
 # ══════════════════════════════════════════════════════════════
 
 @register_cache
-@_ttl_cache(ttl_sec=1800, maxsize=32)   # v18.58: FRED 日頻，30min TTL 足夠
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=32)   # v18.58: FRED 日頻
 def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
     """
     抓取 FRED 經濟序列(透過 NAS proxy)。
@@ -287,7 +288,7 @@ def fetch_fred_batch(
 
 
 @register_cache
-@_ttl_cache(ttl_sec=600, maxsize=64)   # v18.58: Yahoo Chart 10min TTL，渲染同一 ticker 多次免重抓
+@_ttl_cache(ttl_sec=TTL_10MIN, maxsize=64)   # v18.58: Yahoo Chart，渲染同一 ticker 多次免重抓
 def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.Series:
     """
     抓取 Yahoo Finance 收盤價序列(透過 NAS proxy 直打 Chart API)。
@@ -322,7 +323,7 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
 
 
 @register_cache
-@_ttl_cache(ttl_sec=300, maxsize=16)   # v19.64：盤中 ticker 5min TTL，rerun dedupe
+@_ttl_cache(ttl_sec=TTL_5MIN, maxsize=16)   # v19.64：盤中 ticker rerun dedupe
 def fetch_yf_latest(tickers: tuple[str, ...]) -> dict[str, Optional[float]]:
     """批次抓多個 ticker 最新收盤(空值代表抓不到)。"""
     out: dict[str, Optional[float]] = {}
@@ -339,7 +340,7 @@ DEFILLAMA_STABLECOIN_URL = "https://stablecoins.llama.fi/stablecoincharts/all"
 
 
 @register_cache
-@_ttl_cache(ttl_sec=1800, maxsize=2)   # 穩定幣市值日頻，30min TTL 足夠
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=2)   # 穩定幣市值日頻
 def fetch_defillama_stablecoin_mcap() -> pd.Series:
     """抓 DefiLlama 全市場穩定幣「總流通市值」歷史（USD，日頻）。
 
@@ -608,7 +609,7 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
 # ══════════════════════════════════════════════════════════════
 
 @register_cache
-@_ttl_cache(ttl_sec=300, maxsize=8)   # v18.58: 每次 rerun 都觸發 — 5min TTL 避免 widget 互動連環抓
+@_ttl_cache(ttl_sec=TTL_5MIN, maxsize=8)   # v18.58: 每次 rerun 都觸發 — 避免 widget 互動連環抓
 def fetch_macro_compass(range_: str = "6mo") -> dict:
     """Phase 1 — 一次抓 ^VIX / ^TNX / ^GSPC 三大美股指標 + GSPC 60MA。
 

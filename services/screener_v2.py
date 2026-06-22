@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
 from infra.cache import _ttl_cache, register_cache
+from shared.ttls import TTL_30MIN, TTL_1HOUR
 from infra.proxy import fetch_url
 
 # ════════════════════════════════════════════════════════════════
@@ -246,7 +247,7 @@ _TW_ETF_META: dict[str, str] = {
 
 
 @register_cache
-@_ttl_cache(ttl_sec=3600, maxsize=4)
+@_ttl_cache(ttl_sec=TTL_1HOUR, maxsize=4)
 def fetch_twse_etf_pool(use_cache_fallback: bool = True) -> list[FundETFRow]:
     """TWSE BWIBBU_ALL → 過濾 ETF whitelist → 取殖利率 (DividendYield)。"""
     try:
@@ -300,7 +301,7 @@ _YFINANCE_POOL: tuple[tuple[str, str, str, str], ...] = (
 
 
 @register_cache
-@_ttl_cache(ttl_sec=1800, maxsize=4)
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=4)
 def fetch_yfinance_pool(use_cache_fallback: bool = True) -> list[FundETFRow]:
     """yfinance: 1Y close % + info.yield。"""
     try:

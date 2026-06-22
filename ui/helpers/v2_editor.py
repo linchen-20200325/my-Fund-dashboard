@@ -17,6 +17,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from shared.ttls import TTL_1MIN
 from repositories.policy_repository import (
     ALL_COLS_V2,
     ITEM_TYPE_CASH,
@@ -252,13 +253,13 @@ def _show_quota_friendly(prefix: str, e: Exception) -> None:
 
 # v18.152：Streamlit cache wrapper — 同一 (sheet_id, policy_id) 60 秒內只打一次 API
 # 避免 Tab3 反覆 rerun（任何 button 點擊）都重新 list+load 整個帳本爆 quota。
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=TTL_1MIN, show_spinner=False)
 def _cached_load_policy_v2(_client: Any, sheet_id: str, policy_id: str):
     """`_client` 前綴底線 → Streamlit 不對 client object 計 hash。"""
     return load_policy_v2(_client, sheet_id, policy_id)
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=TTL_1MIN, show_spinner=False)
 def _cached_list_policies(_client: Any, sheet_id: str):
     from repositories.policy_repository import list_policy_worksheets as _lpw
     return _lpw(_client, sheet_id)

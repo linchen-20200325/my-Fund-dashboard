@@ -18,6 +18,7 @@ import pandas as pd
 import requests
 
 from infra.cache import _ttl_cache, register_cache
+from shared.ttls import TTL_30MIN
 from repositories.macro_repository import fetch_fred, fetch_yf_close
 
 
@@ -200,7 +201,7 @@ def _aaii_sentiment() -> dict:
 
 
 @register_cache
-@_ttl_cache(ttl_sec=1800, maxsize=2)   # P1：美股流動性 6 指標，30min TTL，rerun 免重打 FRED
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=2)   # P1：美股流動性 6 指標，rerun 免重打 FRED
 def fetch_us_liquidity_snapshot(fred_api_key: str) -> dict:
     """6 指標 ThreadPoolExecutor 並行抓取，每 task 20s timeout."""
     jobs = {

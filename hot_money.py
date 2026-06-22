@@ -19,6 +19,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from shared.ttls import TTL_10MIN, TTL_30MIN
+
 
 # 狀態白話解讀（針對基金 user 加上「境外基金影響」面）
 STATE_TEXT = {
@@ -97,7 +99,7 @@ def _yf_series_to_df(series: pd.Series) -> pd.DataFrame:
 # ────────────────────────────────────────────────────────────────────────
 # 資料層
 # ────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=TTL_30MIN, show_spinner=False)
 def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame, str]:
     """抓最近 N 天外資買賣超（FinMind，沿用 tw_macro pattern + token kwarg）。
 
@@ -146,7 +148,7 @@ def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame,
     return out.sort_values("date").reset_index(drop=True), ""
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=TTL_10MIN, show_spinner=False)
 def fetch_usdtwd_series(days: int) -> tuple[pd.DataFrame, str]:
     """抓 USDTWD=X 時序（複用 macro_repository.fetch_yf_close + NAS proxy）。
 
