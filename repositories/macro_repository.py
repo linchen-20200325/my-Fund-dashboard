@@ -246,6 +246,46 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
     return df.dropna(subset=["value"]).sort_values("date").reset_index(drop=True)
 
 
+# v19.65 P1-F1：FRED 批次預熱器
+# fetch_all_indicators 內 21 條 FRED 中 16 條原為 sequential 呼叫（首次 cache miss
+# 各等 0.2~0.5s × 16 ≈ 3~8s）。此 batch 並行調用既有 fetch_fred（已有 30min TTL）
+# 預熱所有 series_id 進 cache，後續所有呼叫點自然 hit @_ttl_cache，0 改動現有邏輯。
+# 不加自己的 cache：避免與 fetch_fred 的 @_ttl_cache 雙層失準。
+def fetch_fred_batch(
+    specs: list[tuple[str, int]],
+    api_key: str,
+    max_workers: int = 8,
+) -> dict[str, pd.DataFrame]:
+    """並行預熱多條 FRED series。
+
+    Parameters
+    ----------
+    specs : list of (series_id, n) — 例如 [("DGS10", 2600), ("CPIAUCSL", 144)]
+    api_key : FRED API key
+    max_workers : ThreadPool 並行度（預設 8，FRED 公開 API rate limit 約 120 req/min 安全）
+
+    Returns
+    -------
+    dict[series_id, DataFrame]
+        每個 series_id 對應其 fetch_fred 結果；失敗則為空 DataFrame。
+        副作用：所有 (series_id, api_key, n) 進入 fetch_fred 的 @_ttl_cache。
+    """
+    if not specs or not api_key:
+        return {}
+    from concurrent.futures import ThreadPoolExecutor
+    result: dict[str, pd.DataFrame] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futs = {pool.submit(fetch_fred, sid, api_key, n): sid for sid, n in specs}
+        for fut in futs:
+            sid = futs[fut]
+            try:
+                result[sid] = fut.result()
+            except Exception as e:
+                print(f"[macro_core/fred_batch] {sid} 失敗: {e}")
+                result[sid] = pd.DataFrame()
+    return result
+
+
 @register_cache
 @_ttl_cache(ttl_sec=600, maxsize=64)   # v18.58: Yahoo Chart 10min TTL，渲染同一 ticker 多次免重抓
 def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.Series:
