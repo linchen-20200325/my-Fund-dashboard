@@ -23,6 +23,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 from infra.cache import _ttl_cache, register_cache
 from shared.ttls import TTL_30MIN
 from shared.fred_series import FRED_CHF_USD, FRED_DXY, FRED_JPY_USD
@@ -84,10 +86,10 @@ def _sig_color_score(z: "float | None", *, hi: float = 2.0, mid: float = 1.0,
         return "⬜", "#666", 0            # 無資料 → 不評
     zz = -z if invert else z
     if zz >= hi:
-        return "🔴", "#f44336", -1
+        return "🔴", MATERIAL_RED, -1
     if zz >= mid:
-        return "🟡", "#ff9800", 0
-    return "🟢", "#00c853", 1
+        return "🟡", MATERIAL_ORANGE, 0
+    return "🟢", MATERIAL_GREEN, 1
 
 
 def _weekly_tail(series: pd.Series, n: int = 260) -> pd.Series:
@@ -298,12 +300,12 @@ def fetch_liquidity_factors(fred_api_key: str = "") -> dict:
 def _tier(score: float) -> tuple:
     """壓力分數 → (分級, signal, color, 研判文字)。"""
     if score >= 2.0:
-        return "流動性危機", "🔴", "#f44336", "美元荒/避險平倉/波動率背離同時引爆，risk-off 去槓桿"
+        return "流動性危機", "🔴", MATERIAL_RED, "美元荒/避險平倉/波動率背離同時引爆，risk-off 去槓桿"
     if score >= 1.0:
         return "警戒", "🟠", "#ff6d00", "壓力升溫，留意資金面轉向與槓桿回收"
     if score >= 0.5:
         return "正常偏緊", "🟡", "#ffc107", "壓力溫和，中性偏謹慎"
-    return "寬鬆充裕", "🟢", "#00c853", "流動性壓力低，risk-on 友善"
+    return "寬鬆充裕", "🟢", MATERIAL_GREEN, "流動性壓力低，risk-on 友善"
 
 
 def compute_liquidity_score(factors: dict, weights: "dict | None" = None) -> "dict | None":

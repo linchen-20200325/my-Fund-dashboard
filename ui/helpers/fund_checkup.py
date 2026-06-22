@@ -16,6 +16,8 @@ import math
 import pandas as pd
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 from services.portfolio_service import dividend_safety as div_safety_check
 from ui.components.mk_dashboard import tag_price_zone
 
@@ -239,8 +241,8 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
         _kpi_cov_txt = "—"
     else:
         _al = _ds.get("alert_level", "grey")
-        _kpi_color = {"red": "#f44336", "yellow": "#ff9800",
-                      "green": "#00c853"}.get(_al, "#888")
+        _kpi_color = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
+                      "green": MATERIAL_GREEN}.get(_al, "#888")
         _kpi_bg = {"red": "#2a0a0a", "yellow": "#2a1f00",
                    "green": "#0a1a0a"}.get(_al, "#161b22")
         _kpi_icon = {"red": "🔴", "yellow": "🟡", "green": "🟢"}.get(_al, "⬜")
@@ -287,7 +289,7 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
         _tcat = k["ter_cat"]
         _td = k["ter_diff"]
         if _ta is not None and _td is not None:
-            _ter_c = "#00c853" if _td <= 0 else ("#ff9800" if _td <= 0.5 else "#f44336")
+            _ter_c = MATERIAL_GREEN if _td <= 0 else (MATERIAL_ORANGE if _td <= 0.5 else MATERIAL_RED)
             _vs_txt = (f"高於均值 +{_td:.2f}%" if _td > 0 else f"低於均值 {abs(_td):.2f}%")
             _avg_html = (
                 f"<div><div style='color:#888;font-size:10px'>同類均值</div>"

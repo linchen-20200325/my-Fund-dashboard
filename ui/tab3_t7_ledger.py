@@ -19,6 +19,8 @@ import os
 import pandas as pd
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 from infra.oauth import (
     OAuthError,
     build_credentials_from_tokens,
@@ -463,9 +465,9 @@ def render_t7_section() -> None:
                 _t7_dbg_orphan_l = set(_t7_dbg_ledgers.keys()) - _t7_dbg_fund_pks
                 _t7_dbg_empty_f  = _t7_dbg_fund_pks - set(_t7_dbg_ledgers.keys())
                 _t7_dbg_color = (
-                    "#00c853" if len(_t7_dbg_match) == len(_pf_t7)
-                    else "#ff9800" if _t7_dbg_match
-                    else "#f44336"
+                    MATERIAL_GREEN if len(_t7_dbg_match) == len(_pf_t7)
+                    else MATERIAL_ORANGE if _t7_dbg_match
+                    else MATERIAL_RED
                 )
                 st.markdown(
                     f"<div style='font-size:11px;color:{_t7_dbg_color};margin:4px 0'>"
@@ -1943,8 +1945,8 @@ def render_t7_section() -> None:
 
                                     # 權重合計顯示
                                     _wsum_disp = sum(_bweights.values())
-                                    _wsum_color = ("#00c853"
-                                        if abs(_wsum_disp - 100.0) <= 0.5 else "#f44336")
+                                    _wsum_color = (MATERIAL_GREEN
+                                        if abs(_wsum_disp - 100.0) <= 0.5 else MATERIAL_RED)
                                     st.markdown(
                                         f"<div style='text-align:right;font-size:12px;"
                                         f"color:{_wsum_color};margin-top:4px'>"

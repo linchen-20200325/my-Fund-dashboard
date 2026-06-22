@@ -21,6 +21,8 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 # v11.0 C-12：utility 暫留 fund_fetcher（待 E 階段重新評估歸屬，可能整合到 infra/）
 # 此處 partial-load 安全：fund_fetcher.py 載入到本 service 的 shim re-export 點（L370）時，
 # safe_float (L154) / clean_risk_table (L170) 已在 fund_fetcher 內定義
@@ -75,15 +77,15 @@ def calc_health_from_manual(
     # 健康評級
     if eating_principal:
         health = "🔴 吃本金"
-        health_color = "#f44336"
+        health_color = MATERIAL_RED
         advice = f"含息報酬({total_return_pct:.2f}%) < 配息率({div_yield_pct:.2f}%)，配息部分來自本金，長期持有本金縮水"
     elif real_return_pct >= 3:
         health = "🟢 健康成長"
-        health_color = "#00c853"
+        health_color = MATERIAL_GREEN
         advice = f"真實收益 +{real_return_pct:.2f}%，淨值成長有餘力支撐配息"
     elif real_return_pct >= 0:
         health = "🟡 邊緣健康"
-        health_color = "#ff9800"
+        health_color = MATERIAL_ORANGE
         advice = f"真實收益 +{real_return_pct:.2f}%，勉強打平，建議持續觀察"
     else:
         health = "🟠 淨值下滑"
@@ -285,9 +287,9 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     if std_amt < ref_high * 0.001:   # σ < 0.1% → 資料不可靠
         pos_l, pos_c = "資料待更新 📡", "#555"
     elif now <= b3:    pos_l, pos_c = "大跌大買 🔥 (投 50%)", "#9c27b0"
-    elif now <= b2:    pos_l, pos_c = "急跌穩買 📈 (投 30%)", "#00c853"
+    elif now <= b2:    pos_l, pos_c = "急跌穩買 📈 (投 30%)", MATERIAL_GREEN
     elif now <= b1:    pos_l, pos_c = "小跌小買 ✅ (投 20%)", "#69f0ae"
-    elif now >= sell3: pos_l, pos_c = "大漲停利 🔔 (出 50%)", "#f44336"
+    elif now >= sell3: pos_l, pos_c = "大漲停利 🔔 (出 50%)", MATERIAL_RED
     elif now >= sell2: pos_l, pos_c = "急漲停利 ⚠️ (出 30%)", "#ff7043"
     elif now >= sell1: pos_l, pos_c = "小漲停利 💰 (出 20%)", "#ffa726"
     else:              pos_l, pos_c = "正常波動區",            "#888888"
@@ -303,11 +305,11 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     bb_d = float(bb_lower_s.iloc[-1]) if not bb_lower_s.isna().all() else None
     bb_m_val = float(bb_ma.iloc[-1]) if not bb_ma.isna().all() else None
     if bb_u and bb_d and (bb_u - bb_d) > 0.0001:
-        if   now >= bb_u: bb_sig, bb_c = "碰天花板 停利 📤", "#f44336"
-        elif now <= bb_d: bb_sig, bb_c = "碰地板 買進 📥",   "#00c853"
+        if   now >= bb_u: bb_sig, bb_c = "碰天花板 停利 📤", MATERIAL_RED
+        elif now <= bb_d: bb_sig, bb_c = "碰地板 買進 📥",   MATERIAL_GREEN
         else:
             p = round((now - bb_d) / (bb_u - bb_d) * 100, 1)
-            bb_sig, bb_c = f"通道 {p:.0f}% 位置", "#ff9800"
+            bb_sig, bb_c = f"通道 {p:.0f}% 位置", MATERIAL_ORANGE
     else:
         bb_sig, bb_c = "通道過窄（波動低）", "#888"
     # 輸出時間序列供圖表用
@@ -423,7 +425,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             cv=round(statistics.stdev(recent)/mn*100,1) if mn>0 else 0
             div_stability={"cv":cv,
                 "label":"穩定" if cv<10 else("尚可" if cv<25 else "不穩定"),
-                "color":"#00c853" if cv<10 else("#ff9800" if cv<25 else "#f44336")}
+                "color":MATERIAL_GREEN if cv<10 else(MATERIAL_ORANGE if cv<25 else MATERIAL_RED)}
         recent12=[d["amount"] for d in divs[:12]]
         if len(recent12)>=6:
             div_trend=round((sum(recent12[:3])/3-sum(recent12[3:6])/3)/(sum(recent12[3:6])/3)*100,1) if sum(recent12[3:6])>0 else 0

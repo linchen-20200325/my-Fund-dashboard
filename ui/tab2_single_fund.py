@@ -17,6 +17,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 from repositories.fund_repository import (
     tdcc_search_fund,
 )
@@ -367,7 +369,7 @@ def render_single_fund_tab() -> None:
                 # MA20 中軌
                 fig_n.add_trace(go.Scatter(
                     x=_bb_ma.dropna().index, y=_bb_ma.dropna().values,
-                    name="MA20", line=dict(color="#ff9800", width=1, dash="dot")))
+                    name="MA20", line=dict(color=MATERIAL_ORANGE, width=1, dash="dot")))
                 # MA60
                 _ma60 = s.rolling(60).mean()
                 fig_n.add_trace(go.Scatter(
@@ -413,7 +415,7 @@ def render_single_fund_tab() -> None:
                 # ── MK v3.0 買賣水平線（3 買 + 3 賣）────────────────────
                 for bv, bl, bc in [
                     (m.get("buy1"), "買1 小跌(年高-1σ)", "#69f0ae"),
-                    (m.get("buy2"), "買2 急跌(年高-2σ)", "#00c853"),
+                    (m.get("buy2"), "買2 急跌(年高-2σ)", MATERIAL_GREEN),
                     (m.get("buy3"), "買3 大跌(年高-3σ)", "#9c27b0"),
                 ]:
                     if bv:
@@ -423,7 +425,7 @@ def render_single_fund_tab() -> None:
                 for sv, sl, sc in [
                     (m.get("sell1"), "賣1 小漲(年低+1σ)", "#ffa726"),
                     (m.get("sell2"), "賣2 急漲(年低+2σ)", "#ff7043"),
-                    (m.get("sell3"), "賣3 大漲(年低+3σ)", "#f44336"),
+                    (m.get("sell3"), "賣3 大漲(年低+3σ)", MATERIAL_RED),
                 ]:
                     if sv:
                         fig_n.add_hline(y=sv, line_color=sc, line_dash="dash",
@@ -467,7 +469,7 @@ def render_single_fund_tab() -> None:
                         _n    = max(len(_mini_shield), 1)
                         _m_gd /= _n; _m_od /= _n; _m_nd /= _n
                         _mini_colors = [
-                            "#00c853" if v > 0.5 else ("#f44336" if v < -0.5 else "#ff9800")
+                            MATERIAL_GREEN if v > 0.5 else (MATERIAL_RED if v < -0.5 else MATERIAL_ORANGE)
                             for v in [_m_gd, _m_od, _m_nd]]
                         fig_mini = go.Figure(go.Bar(
                             x=["毛利率", "營益率", "淨利率"],
@@ -510,18 +512,18 @@ def render_single_fund_tab() -> None:
                         elif delta <= _NEAR:     return ("⚠️ 接近", "#ffa726", f"還差 {delta:.2f}%")
                         else:                    return ("▲ 距離", "#666",    f"還差 {delta:.2f}%")
                     else:
-                        if delta >= 0:           return ("🔔 觸發", "#f44336", f"{delta:.2f}% 已過")
+                        if delta >= 0:           return ("🔔 觸發", MATERIAL_RED, f"{delta:.2f}% 已過")
                         elif delta >= -_NEAR:    return ("⚠️ 接近", "#ffa726", f"還差 {-delta:.2f}%")
                         else:                    return ("▼ 距離", "#666",    f"還差 {-delta:.2f}%")
                 if _m_buy1:
                     _rows = ""
                     for _bv, _bl, _bc, _is_buy in [
                         (_m_buy3,  "💧 大跌大買 (50%) 年高-3σ", "#9c27b0", True),
-                        (_m_buy2,  "💧 急跌穩買 (30%) 年高-2σ", "#00c853", True),
+                        (_m_buy2,  "💧 急跌穩買 (30%) 年高-2σ", MATERIAL_GREEN, True),
                         (_m_buy1,  "💧 小跌小買 (20%) 年高-1σ", "#69f0ae", True),
                         (_m_sell1, "💰 小漲停利 (20%) 年低+1σ", "#ffa726", False),
                         (_m_sell2, "💰 急漲停利 (30%) 年低+2σ", "#ff7043", False),
-                        (_m_sell3, "💰 大漲停利 (50%) 年低+3σ", "#f44336", False),
+                        (_m_sell3, "💰 大漲停利 (50%) 年低+3σ", MATERIAL_RED, False),
                     ]:
                         if not _bv: continue
                         _chip_lbl, _chip_color, _chip_dist = _proximity_chip(_m_nav_v, _bv, _is_buy)
@@ -725,15 +727,15 @@ def render_single_fund_tab() -> None:
                     if _g_overall is None:
                         _gr, _gr_c, _verd = "—", "#888", "資料不足以評等"
                     elif _g_overall >= 80:
-                        _gr, _gr_c, _verd = "A", "#00c853", "✅ 健康優質基金"
+                        _gr, _gr_c, _verd = "A", MATERIAL_GREEN, "✅ 健康優質基金"
                     elif _g_overall >= 65:
                         _gr, _gr_c, _verd = "B", "#69f0ae", "🟢 表現穩健"
                     elif _g_overall >= 50:
                         _gr, _gr_c, _verd = "C", "#ffeb3b", "🟡 中性，持續觀察"
                     elif _g_overall >= 35:
-                        _gr, _gr_c, _verd = "D", "#ff9800", "🟠 警示偏弱"
+                        _gr, _gr_c, _verd = "D", MATERIAL_ORANGE, "🟠 警示偏弱"
                     else:
-                        _gr, _gr_c, _verd = "F", "#f44336", "🔴 多項警示"
+                        _gr, _gr_c, _verd = "F", MATERIAL_RED, "🔴 多項警示"
 
                     _eat_call = (" ⚠️ <b style='color:#f44336'>吃本金風險</b>"
                                  if (_d1_cov is not None and _d1_cov < 50) else "")
@@ -743,8 +745,8 @@ def render_single_fund_tab() -> None:
                             return ("<div><div style='color:#666;font-size:10px'>" + label + "</div>"
                                     "<div style='color:#666;font-size:20px;font-weight:700'>—</div>"
                                     "<div style='color:#555;font-size:9px'>資料不足</div></div>")
-                        _c = ("#00c853" if score >= 75 else "#69f0ae" if score >= 60 else
-                              "#ffeb3b" if score >= 45 else "#ff9800" if score >= 30 else "#f44336")
+                        _c = (MATERIAL_GREEN if score >= 75 else "#69f0ae" if score >= 60 else
+                              "#ffeb3b" if score >= 45 else MATERIAL_ORANGE if score >= 30 else MATERIAL_RED)
                         return (f"<div><div style='color:#888;font-size:10px'>{label}</div>"
                                 f"<div style='color:{_c};font-size:20px;font-weight:900'>{score:.0f}</div>"
                                 f"<div style='color:#555;font-size:9px'>/ 100</div></div>")
@@ -832,8 +834,8 @@ def render_single_fund_tab() -> None:
                         )
                         _kpi_al = _kpi_ds.get("alert_level", "grey")
                         _kpi_cov = _kpi_ds.get("coverage")
-                        _kpi_color = {"red": "#f44336", "yellow": "#ff9800",
-                                      "green": "#00c853"}.get(_kpi_al, "#888")
+                        _kpi_color = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
+                                      "green": MATERIAL_GREEN}.get(_kpi_al, "#888")
                         _kpi_bg = {"red": "#2a0a0a", "yellow": "#2a1f00",
                                    "green": "#0a1a0a"}.get(_kpi_al, "#161b22")
                         _kpi_icon = {"red": "🔴", "yellow": "🟡",
@@ -886,11 +888,11 @@ def render_single_fund_tab() -> None:
                     try:
                         _sh1_v = float(_sh1)
                         if _sh1_v > 0.5:
-                            _sh_txt, _sh_c = "優秀（>0.5）持久創造超額報酬", "#00c853"
+                            _sh_txt, _sh_c = "優秀（>0.5）持久創造超額報酬", MATERIAL_GREEN
                         elif _sh1_v >= 0:
-                            _sh_txt, _sh_c = "普通（0~0.5）勉強補償風險", "#ff9800"
+                            _sh_txt, _sh_c = "普通（0~0.5）勉強補償風險", MATERIAL_ORANGE
                         else:
-                            _sh_txt, _sh_c = "差勁（<0）不如持有現金", "#f44336"
+                            _sh_txt, _sh_c = "差勁（<0）不如持有現金", MATERIAL_RED
                         st.markdown(
                             f"<div style='font-size:10px;color:{_sh_c};padding:3px 10px;"
                             f"background:#0d1117;border-radius:4px;margin:2px 0 6px 0'>"
@@ -936,7 +938,7 @@ def render_single_fund_tab() -> None:
                             )
                             _al = _ds.get("alert_level","grey")
                             _bg = {"red":"#2a0a0a","yellow":"#2a1f00","green":"#0a1a0a"}.get(_al,"#111")
-                            _bc = {"red":"#f44336","yellow":"#ff9800","green":"#00c853"}.get(_al,"#888")
+                            _bc = {"red":MATERIAL_RED,"yellow":MATERIAL_ORANGE,"green":MATERIAL_GREEN}.get(_al,"#888")
                             st.markdown(
                                 f"<div style='background:{_bg};border:1px solid {_bc};border-radius:8px;"
                                 f"padding:8px 12px;margin-top:8px'>"
@@ -950,7 +952,7 @@ def render_single_fund_tab() -> None:
                         _adr_f  = float(_adr)  if _adr  else 0.0
                         if _tr1y_f is not None and _adr_f > 0:
                             _cov = _tr1y_f / _adr_f
-                            _cov_c = "#00c853" if _cov >= 1.0 else ("#ff9800" if _cov >= 0.8 else "#f44336")
+                            _cov_c = MATERIAL_GREEN if _cov >= 1.0 else (MATERIAL_ORANGE if _cov >= 0.8 else MATERIAL_RED)
                             _cov_label = (
                                 "🟢 安全 — 報酬足以支撐配息，無吃本金疑慮" if _cov >= 1.0 else
                                 "🟡 注意 — 輕微侵蝕，需觀察趨勢" if _cov >= 0.8 else
@@ -998,7 +1000,7 @@ def render_single_fund_tab() -> None:
                             (_v for _k, _v in _ter_avg_map.items() if _k in _ter_cat), None)
                         if _ter_avg is not None:
                             _ter_diff = _ter_val - _ter_avg
-                            _ter_c = "#f44336" if _ter_diff > 0.3 else ("#ff9800" if _ter_diff > 0 else "#00c853")
+                            _ter_c = MATERIAL_RED if _ter_diff > 0.3 else (MATERIAL_ORANGE if _ter_diff > 0 else MATERIAL_GREEN)
                             _ter_vs = f"高於均值 +{_ter_diff:.2f}%" if _ter_diff > 0 else f"低於均值 {abs(_ter_diff):.2f}%"
                             _ter_avg_html = (
                                 f"<div><div style='color:#888;font-size:10px'>同類均值</div>"
@@ -1158,9 +1160,9 @@ def render_single_fund_tab() -> None:
                             if _cached_shield:
                                 # 彙總判斷
                                 _overall_verdict = _pse2.evaluate_fund_three_ratios(_cached_shield)
-                                _ov_color = ("#00c853" if "🟢" in _overall_verdict
-                                             else "#f44336" if "🔴" in _overall_verdict
-                                             else "#ff9800")
+                                _ov_color = (MATERIAL_GREEN if "🟢" in _overall_verdict
+                                             else MATERIAL_RED if "🔴" in _overall_verdict
+                                             else MATERIAL_ORANGE)
                                 st.markdown(
                                     f"<div style='background:#0d1117;border:2px solid {_ov_color};"
                                     f"border-radius:10px;padding:10px 16px;margin:8px 0;"

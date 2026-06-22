@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_RED
+
 # ════════════════════════════════════════════════
 # 常量：indicators key → 頻率（高頻 daily / 中頻 weekly / 低頻 monthly）
 # ════════════════════════════════════════════════
@@ -234,7 +236,7 @@ def _verdict_for(total_score: float) -> tuple[str, str, str, str]:
     except Exception:
         c1, c2, c3, c4 = _DEFAULT_CUTOFFS
     if total_score > c1:
-        return ("🟢", "極度樂觀", "#00c853",
+        return ("🟢", "極度樂觀", MATERIAL_GREEN,
                 "多頭市場強勁：可滿倉持有，衛星部位積極佈局成長題材")
     if total_score > c2:
         return ("🟢", "樂觀", "#69f0ae",
@@ -245,7 +247,7 @@ def _verdict_for(total_score: float) -> tuple[str, str, str, str]:
     if total_score >= c4:
         return ("🔴", "悲觀", "#ff8a80",
                 "風險正在集結：拉高現金水位至 15-25%，衛星部位設停利")
-    return ("🔴", "極度悲觀", "#f44336",
+    return ("🔴", "極度悲觀", MATERIAL_RED,
             "避險情緒高漲：現金 30%+，核心轉防守型（投資等級債/全球均衡）")
 
 

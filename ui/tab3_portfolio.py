@@ -24,6 +24,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 from infra.oauth import (
     OAuthError,
     build_credentials_from_tokens,
@@ -986,7 +988,7 @@ def render_portfolio_tab() -> None:
                         fig_p_dn = go.Figure(go.Pie(
                             labels=_dn_pl, values=_dn_pv,
                             hole=0.65,
-                            marker=dict(colors=["#64b5f6", "#ff9800"],
+                            marker=dict(colors=["#64b5f6", MATERIAL_ORANGE],
                                         line=dict(color="#0e1117", width=1)),
                             textinfo="percent", textfont=dict(size=9),
                             hovertemplate="%{label}: NT$%{value:,.0f}<extra></extra>",
@@ -1038,8 +1040,8 @@ def render_portfolio_tab() -> None:
                             "dividend_info": _div_e,
                         })
                     _p_rec = recommend_policy(_funds_enriched, target_core_pct=_policy_target)
-                    _rec_clr = {"red": "#f44336", "orange": "#ff9800", "yellow": "#ffeb3b",
-                                "green": "#00c853", "grey": "#888"}.get(_p_rec["color"], "#888")
+                    _rec_clr = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
+                                "green": MATERIAL_GREEN, "grey": "#888"}.get(_p_rec["color"], "#888")
                     with _dn_p_msg:
                         st.markdown(
                             f"<div style='margin-top:18px;color:{_rec_clr};font-size:13px;"
@@ -1102,8 +1104,8 @@ def render_portfolio_tab() -> None:
                     _sig_str = f"{_sig_rnk:+.2f}σ" if isinstance(_sig_rnk, (int, float)) else "—"
                     _div_alert = (_div_info or {}).get("alert_level", "grey")
                     _div_icon  = {"red": "🔴", "yellow": "🟡", "green": "🟢", "grey": "⚪"}.get(_div_alert, "⚪")
-                    _adv_clr   = {"red": "#f44336", "orange": "#ff9800", "yellow": "#ffeb3b",
-                                  "green": "#00c853", "grey": "#888"}.get(_advice["color"], "#888")
+                    _adv_clr   = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
+                                  "green": MATERIAL_GREEN, "grey": "#888"}.get(_advice["color"], "#888")
                     _inv_amt   = _f.get("invest_twd", 0) or 0
 
                     st.markdown(
@@ -1235,7 +1237,7 @@ def render_portfolio_tab() -> None:
             except Exception:
                 pass  # noqa: smoke-allow-pass — 任一檔配息率非數值不影響其餘累加
 
-        _ret_color = "#00c853" if (_cum_ret_pct or 0) > 0 else ("#f44336" if (_cum_ret_pct or 0) < 0 else "#888")
+        _ret_color = MATERIAL_GREEN if (_cum_ret_pct or 0) > 0 else (MATERIAL_RED if (_cum_ret_pct or 0) < 0 else "#888")
         _ret_str   = f"{_cum_ret_pct:+.2f}%" if _cum_ret_pct is not None else "—"
         st.markdown(
             "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 16px'>"
@@ -1333,7 +1335,7 @@ def render_portfolio_tab() -> None:
                     fig_curve.add_trace(go.Scatter(
                         x=_total_curve.index, y=_total_curve.values,
                         name="你的組合", mode="lines",
-                        line=dict(color="#00c853", width=2.5, shape="spline"),
+                        line=dict(color=MATERIAL_GREEN, width=2.5, shape="spline"),
                         fill="tozeroy", fillcolor="rgba(0,200,83,0.08)",
                         hovertemplate="%{x|%Y-%m-%d}<br>NT$ %{y:,.0f}<extra></extra>"))
                     fig_curve.add_trace(go.Scatter(
@@ -1349,7 +1351,7 @@ def render_portfolio_tab() -> None:
                            _total_curve.loc[_lo_idx], _total_curve.iloc[-1]],
                         mode="markers+text",
                         marker=dict(size=[8,10,10,12],
-                                    color=["#888","#00c853","#f44336","#fff"],
+                                    color=["#888",MATERIAL_GREEN,MATERIAL_RED,"#fff"],
                                     line=dict(color="#0e1117", width=2)),
                         text=["起點", f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
                               f"低 {fmt_twd(_total_curve.loc[_lo_idx])}",
@@ -1384,7 +1386,7 @@ def render_portfolio_tab() -> None:
         _core_pct = round(_core/_tot*100,1) if _tot else 0
         _target   = st.session_state.get("portfolio_core_pct",75)
         _diff     = round(_core_pct - _target, 1)
-        _dc       = "#f44336" if abs(_diff)>10 else ("#ff9800" if abs(_diff)>5 else "#00c853")
+        _dc       = MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN)
         st.markdown(
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid #30363d'>"
             f"<div style='font-size:13px;color:#888;margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
@@ -1399,7 +1401,7 @@ def render_portfolio_tab() -> None:
             (f.get("code","?")[:8] + " 🛡️" if f.get("is_core") else f.get("code","?")[:8] + " ⚡")
             for f in _pf_loaded]
         _dn_values = [max(f.get("invest_twd", 0) or 0, 0) for f in _pf_loaded]
-        _dn_colors = ["#64b5f6" if f.get("is_core") else "#ff9800" for f in _pf_loaded]
+        _dn_colors = ["#64b5f6" if f.get("is_core") else MATERIAL_ORANGE for f in _pf_loaded]
         _alert     = abs(_diff) > 10
         _bg_c      = "#1a0808" if _alert else "#0e1117"
         fig_dn = go.Figure()
@@ -1760,8 +1762,8 @@ def render_portfolio_tab() -> None:
                     if _can_detail:
                         _adv_card = _compute_advice_for(pf_item)
                         _adv_clr_card = {
-                            "red": "#f44336", "orange": "#ff9800", "yellow": "#ffeb3b",
-                            "green": "#00c853", "grey": "#888"
+                            "red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
+                            "green": MATERIAL_GREEN, "grey": "#888"
                         }.get(_adv_card.get("color", "grey"), "#888")
                         st.markdown(
                             f"<div style='padding:6px 12px;background:#0d1117;"
@@ -1789,7 +1791,7 @@ def render_portfolio_tab() -> None:
                                         elif d <= _mi_NEAR:  return ("⚠️", "#ffa726")
                                         else:                return ("▲",  "#555")
                                     else:
-                                        if d >= 0:           return ("🔔", "#f44336")
+                                        if d >= 0:           return ("🔔", MATERIAL_RED)
                                         elif d >= -_mi_NEAR: return ("⚠️", "#ffa726")
                                         else:                return ("▼",  "#555")
                                 # 雙確認：σ 觸發 + 布林同向
@@ -1904,11 +1906,11 @@ def render_portfolio_tab() -> None:
                     if not _real:
                         _rc_colors.append("#888")       # 資料不足 → 灰
                     elif _d > 0 and _r < _d:
-                        _rc_colors.append("#f44336")   # 吃本金 → 紅
+                        _rc_colors.append(MATERIAL_RED)   # 吃本金 → 紅
                     elif _d > 0 and _r < _d * 1.2:
-                        _rc_colors.append("#ff9800")   # 邊緣 → 橙
+                        _rc_colors.append(MATERIAL_ORANGE)   # 邊緣 → 橙
                     else:
-                        _rc_colors.append("#00c853")   # 健康 → 綠
+                        _rc_colors.append(MATERIAL_GREEN)   # 健康 → 綠
 
                 fig_rc = go.Figure()
                 # 含息報酬率長條（吃本金時顯示最小高度 0.5 以確保可見）
@@ -1929,8 +1931,8 @@ def render_portfolio_tab() -> None:
                         x=_rc_names, y=_rc_div,
                         name="配息年化率%",
                         mode="markers+lines",
-                        line=dict(color="#f44336", width=1.5, dash="dot"),
-                        marker=dict(symbol="diamond", size=8, color="#f44336"),
+                        line=dict(color=MATERIAL_RED, width=1.5, dash="dot"),
+                        marker=dict(symbol="diamond", size=8, color=MATERIAL_RED),
                         hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
                 # 零基準線
                 fig_rc.add_hline(y=0, line_color="#555", line_width=1)
@@ -1947,9 +1949,9 @@ def render_portfolio_tab() -> None:
                             x=_n, y=_y_max,
                             text=f"⚠️ 吃本金<br>缺口 {_d-_r:.1f}%",
                             showarrow=False,
-                            font=dict(color="#f44336", size=11),
+                            font=dict(color=MATERIAL_RED, size=11),
                             bgcolor="rgba(42,10,10,0.85)",
-                            bordercolor="#f44336", borderwidth=1,
+                            bordercolor=MATERIAL_RED, borderwidth=1,
                             borderpad=4)
                     elif not _real and _d > 0:
                         # 缺 1Y 資料 → 顯示「資料不足」灰色標註，不誤判吃本金

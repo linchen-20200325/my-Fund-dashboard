@@ -17,6 +17,8 @@ import os
 import pandas as pd
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_RED
+
 
 # v18.261：三段 cache key + 參數 hash gate（避免 click-only 一次性 gating bug）
 _PHASE1_CACHE_KEY = "_crisis_phase1_cache"   # 主回測：events / mkt_series / labels
@@ -1906,8 +1908,8 @@ def _render_score_validation_section(events: list, years: int) -> None:
         ))
         # 分數區間參考線
         for y_val, label, color in [
-            (8, "高峰", "#f44336"),
-            (5, "擴張", "#00c853"),
+            (8, "高峰", MATERIAL_RED),
+            (5, "擴張", MATERIAL_GREEN),
             (3, "復甦", "#64b5f6"),
         ]:
             fig.add_hline(y=y_val, line_dash="dash", line_color=color,

@@ -18,6 +18,8 @@ import logging
 import numpy as np
 import pandas as pd
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 # v18.116 B-B: I/O 拆分後從 repository 取
 from repositories.financial_repository import (  # noqa: F401  legacy re-export
     _TW_NAME_MAP,
@@ -74,7 +76,7 @@ class PrecisionStrategyEngine:
         Returns: {level, color, icon, action, cash_pct}
         """
         if risk_score > 1.5:
-            return {"level": "極高風險", "color": "#f44336", "icon": "🚨",
+            return {"level": "極高風險", "color": MATERIAL_RED, "icon": "🚨",
                     "action": "流動性危機前兆：核心現金/短債 ≥50%，衛星嚴格停利出場，不宜追高",
                     "cash_pct": 50}
         elif risk_score > 0.8:
@@ -82,7 +84,7 @@ class PrecisionStrategyEngine:
                     "action": "流動性收縮：核心配置防禦性資產，衛星部位縮減至 20% 以內",
                     "cash_pct": 30}
         elif risk_score > 0.0:
-            return {"level": "中性偏高", "color": "#ff9800", "icon": "🔔",
+            return {"level": "中性偏高", "color": MATERIAL_ORANGE, "icon": "🔔",
                     "action": "市場情緒緊張但未惡化：維持現有配置，設好停利停損位",
                     "cash_pct": 15}
         elif risk_score > -0.5:
@@ -210,13 +212,13 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
         dist_pct   = (nav - hwm) / hwm * 100 if hwm > 0 else 0.0
 
         if sigma_rank >= -0.5:
-            label, color = "接近 HWM（≥ -0.5σ）", "#00c853"
+            label, color = "接近 HWM（≥ -0.5σ）", MATERIAL_GREEN
         elif sigma_rank >= -1.0:
             label, color = "HWM - 1σ 區（觀察）", "#69f0ae"
         elif sigma_rank >= -2.0:
-            label, color = "HWM - 2σ 區（加碼參考）", "#ff9800"
+            label, color = "HWM - 2σ 區（加碼參考）", MATERIAL_ORANGE
         else:
-            label, color = "HWM - 3σ+ 區（深度超跌）", "#f44336"
+            label, color = "HWM - 3σ+ 區（深度超跌）", MATERIAL_RED
 
         return {
             "hwm":            round(hwm,         4),
@@ -282,14 +284,14 @@ def three_ratio_row_html(r: dict) -> str:
     def _color(v):
         if not isinstance(v, (int, float)):
             return "#888"
-        return "#00c853" if v > 0.5 else ("#f44336" if v < -0.5 else "#ff9800")
+        return MATERIAL_GREEN if v > 0.5 else (MATERIAL_RED if v < -0.5 else MATERIAL_ORANGE)
 
     gd = r.get("gross_margin_diff", 0)
     od = r.get("op_margin_diff",    0)
     nd = r.get("net_margin_diff",   0)
     momentum = (gd or 0) + (od or 0) + (nd or 0)
     bg = "#061a06" if momentum > 2 else ("#1a0606" if momentum < -2 else "#161b22")
-    border = "#00c853" if momentum > 2 else ("#f44336" if momentum < -2 else "#30363d")
+    border = MATERIAL_GREEN if momentum > 2 else (MATERIAL_RED if momentum < -2 else "#30363d")
 
     return (
         f"<div style='background:{bg};border:1px solid {border};border-radius:8px;"

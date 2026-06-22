@@ -24,6 +24,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 from fund_fetcher import (
     fetch_market_news,
     set_risk_free_rate,
@@ -1180,9 +1182,9 @@ def render_macro_tab() -> None:
                     steps.append({"range": [prev, rng[1]], "color": thresholds[-1][1]})
                     # 指針顏色：超過最後閾值的 limit 為警報色
                     danger_lim = thresholds[-1][0]
-                    needle_c = ("#f44336" if (danger_above and val >= danger_lim)
-                                else ("#00c853" if (not danger_above and val <= danger_lim)
-                                else "#ff9800"))
+                    needle_c = (MATERIAL_RED if (danger_above and val >= danger_lim)
+                                else (MATERIAL_GREEN if (not danger_above and val <= danger_lim)
+                                else MATERIAL_ORANGE))
                     f = go.Figure(go.Indicator(
                         mode="gauge+number",
                         value=val,
@@ -1195,7 +1197,7 @@ def render_macro_tab() -> None:
                                "bgcolor": "#161b22",
                                "bordercolor": "#30363d",
                                "steps": steps,
-                               "threshold": {"line": {"color": "#f44336", "width": 3},
+                               "threshold": {"line": {"color": MATERIAL_RED, "width": 3},
                                              "thickness": 0.8, "value": danger_lim}}))
                     f.update_layout(paper_bgcolor="#0e1117", font_color="#e6edf3",
                                     height=200, margin=dict(t=40, b=5, l=15, r=15))
@@ -1270,26 +1272,26 @@ def render_macro_tab() -> None:
                         _pf_adr   = float(_pf_m.get("annual_div_rate") or 0)
                         _pf_core  = "🛡️ 核" if _pf.get("is_core") else "⚡ 衛"
                         # 燈號判定（v18.6: σ + 布林雙確認 升級）
-                        _tl_icon, _tl_bg, _tl_bc, _tl_reason = "🟢", "#061a06", "#00c853", "淨值穩定，含息報酬正常"
+                        _tl_icon, _tl_bg, _tl_bc, _tl_reason = "🟢", "#061a06", MATERIAL_GREEN, "淨值穩定，含息報酬正常"
                         # 雙確認買 = σ 買點觸發 + 布林下軌觸碰
                         _double_buy = (_pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1
                                        and _pf_bbd > 0 and _pf_nav <= _pf_bbd)
                         _double_sell = (_pf_s1 > 0 and _pf_nav > 0 and _pf_nav >= _pf_s1
                                         and _pf_bbu > 0 and _pf_nav >= _pf_bbu)
                         if _pf_adr > 0 and _pf_ret1y < _pf_adr:
-                            _tl_icon, _tl_bg, _tl_bc = "🔴", "#1a0606", "#f44336"
+                            _tl_icon, _tl_bg, _tl_bc = "🔴", "#1a0606", MATERIAL_RED
                             _tl_reason = f"吃本金警示：含息報酬 {_pf_ret1y:.1f}% < 配息率 {_pf_adr:.1f}%"
                         elif _double_buy:
                             _tl_icon, _tl_bg, _tl_bc = "🟢🟢", "#0a3a1a", "#00e676"
                             _tl_reason = f"σ+布林雙確認買 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f}) & 布林下軌"
                         elif _double_sell:
-                            _tl_icon, _tl_bg, _tl_bc = "🔔🔔", "#3a0a0a", "#f44336"
+                            _tl_icon, _tl_bg, _tl_bc = "🔔🔔", "#3a0a0a", MATERIAL_RED
                             _tl_reason = f"σ+布林雙確認賣 NAV {_pf_nav:.4f} ≥ 賣1({_pf_s1:.4f}) & 布林上軌"
                         elif _pf_b3 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b3:
                             _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a0a2a", "#9c27b0"
                             _tl_reason = f"大跌大買訊號 NAV {_pf_nav:.4f} ≤ 買3({_pf_b3:.4f})"
                         elif _pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1:
-                            _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a1500", "#ff9800"
+                            _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a1500", MATERIAL_ORANGE
                             _tl_reason = f"小跌小買訊號 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f})"
                         elif not _pf_m:
                             _tl_icon, _tl_bg, _tl_bc = "⬜", "#161b22", "#555"
@@ -1471,7 +1473,7 @@ def render_macro_tab() -> None:
                 _l3_sit_cards = []
                 if _pmi_v > 0 and _pmi_v < 50 and _sahm_v < 0.5:
                     _l3_sit_cards.append({
-                        "icon": "🟡", "border": "#ff9800", "bg": "#1a1200",
+                        "icon": "🟡", "border": MATERIAL_ORANGE, "bg": "#1a1200",
                         "title": "【Situation A — 庫存調整，非衰退】",
                         "body": (f"PMI={_pmi_v:.1f}（<50 收縮）但薩姆規則={_sahm_v:.2f}（<0.5 安全線）。"
                                  f"製造業庫存去化壓力，消費端仍撐盤，非系統性衰退訊號。"
@@ -1479,7 +1481,7 @@ def render_macro_tab() -> None:
                     })
                 if _adl_v < -2:
                     _l3_sit_cards.append({
-                        "icon": "🔴", "border": "#f44336", "bg": "#1a0606",
+                        "icon": "🔴", "border": MATERIAL_RED, "bg": "#1a0606",
                         "title": "【Situation B — 極端乖離警報】",
                         "body": (f"RSP/SPY 市場廣度={_adl_v:.2f}%（< -2% 危險線）。"
                                  f"大型權值股虛假拉抬，等權重指數嚴重落後。"
@@ -1839,13 +1841,13 @@ def render_macro_tab() -> None:
                                     line_width=0,
                                     annotation_text=_cn,
                                     annotation_position="top left",
-                                    annotation_font={"size": 9, "color": "#f44336"},
+                                    annotation_font={"size": 9, "color": MATERIAL_RED},
                                 )
                             # 翻正日綠虛線
                             for _e in _ev:
                                 _btfig.add_vline(
                                     x=_e["date"], line_dash="dash",
-                                    line_color="#00c853", line_width=1, opacity=0.7,
+                                    line_color=MATERIAL_GREEN, line_width=1, opacity=0.7,
                                 )
                             _btfig.update_yaxes(type="log",
                                                 gridcolor="#1a1f2e",
@@ -1984,8 +1986,8 @@ def render_macro_tab() -> None:
                             _bfig = go.Figure(go.Bar(
                                 x=[b["name"][:10] for b in _bd],
                                 y=[b["contrib"] for b in _bd],
-                                marker_color=["#f44336" if b["contrib"] > 0
-                                              else "#00c853" for b in _bd],
+                                marker_color=[MATERIAL_RED if b["contrib"] > 0
+                                              else MATERIAL_GREEN for b in _bd],
                                 hovertemplate="%{x}: 貢獻 %{y:+.3f}<extra></extra>"))
                             _bfig.add_hline(y=0, line_color="#555", line_width=1)
                             _bfig.update_layout(
@@ -2082,7 +2084,7 @@ def render_macro_tab() -> None:
                     _def_names = [f.get("fund_name") or f.get("code","?") for f in _pf_def]
                     _def_tr1y  = [float((f.get("metrics") or f.get("m") or {}).get("ret_1y") or 0) for f in _pf_def]
                     _def_adr   = [float((f.get("metrics") or f.get("m") or {}).get("annual_div_rate") or 0) for f in _pf_def]
-                    _def_colors = ["#f44336" if tr < adr else "#00c853"
+                    _def_colors = [MATERIAL_RED if tr < adr else MATERIAL_GREEN
                                    for tr, adr in zip(_def_tr1y, _def_adr)]
                     _def_fig = go.Figure()
                     _def_fig.add_trace(go.Bar(
@@ -2097,8 +2099,8 @@ def render_macro_tab() -> None:
                     _def_fig.add_trace(go.Scatter(
                         x=_def_names, y=_def_adr,
                         mode="markers",
-                        marker=dict(symbol="line-ew", size=16, color="#ff9800",
-                                    line=dict(width=3, color="#ff9800")),
+                        marker=dict(symbol="line-ew", size=16, color=MATERIAL_ORANGE,
+                                    line=dict(width=3, color=MATERIAL_ORANGE)),
                         name="配息年化率",
                         hovertemplate="配息率: %{y:.1f}%<extra></extra>",
                     ))

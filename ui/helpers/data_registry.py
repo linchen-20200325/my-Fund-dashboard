@@ -10,6 +10,8 @@ import datetime
 import os
 
 import streamlit as st
+
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 import pandas as pd
 
 from models.policy import fund_pk_str
@@ -154,62 +156,62 @@ def _update_data_registry():
                     if today < nrd:
                         return ("🟢",
                                 f"正常（下次 release {nrd.isoformat()}）",
-                                "#00c853")
+                                MATERIAL_GREEN)
                     # v18.20: +0~+1 為 release 當日 / 隔日，資料尚未發布即正常 → 🟢
                     if delta_to_release <= 1:
                         return ("🟢",
                                 f"今日/隔日 release（{nrd.isoformat()}，發布前正常 lag）",
-                                "#00c853")
+                                MATERIAL_GREEN)
                     # +2~+5: 微 lag，仍可接受 → 🟡
                     if delta_to_release <= 5:
                         return ("🟡",
                                 f"release lag {delta_to_release} 天（預期 {nrd.isoformat()}）",
-                                "#ff9800")
+                                MATERIAL_ORANGE)
                     return ("🔴",
                             f"真延遲 {delta_to_release} 天（預期 {nrd.isoformat()}）",
-                            "#f44336")
+                            MATERIAL_RED)
             # 沒映射 / API 失敗 → 落到下方 fallback
 
         if freq == "daily":
             if age <= 3:
-                return "🟢", f"最新（{age}天前）", "#00c853"
+                return "🟢", f"最新（{age}天前）", MATERIAL_GREEN
             if age <= 7:
-                return "🟡", f"延遲（{age}天前）", "#ff9800"
-            return "🔴", f"過舊（{age}天）", "#f44336"
+                return "🟡", f"延遲（{age}天前）", MATERIAL_ORANGE
+            return "🔴", f"過舊（{age}天）", MATERIAL_RED
 
         if freq == "weekly":
             # fallback：FRED release_dates 不可用時才走（v18.20 統一用 fallback 標籤）
             _fb_tag = "fallback" if (_fred_next_rel and _fred_key) else "舊閾值"
             if age <= 10:
-                return "🟢", f"本週（{age}天前 / {_fb_tag}）", "#00c853"
+                return "🟢", f"本週（{age}天前 / {_fb_tag}）", MATERIAL_GREEN
             if age <= 21:
-                return "🟡", f"延遲（{age}天前 / {_fb_tag}）", "#ff9800"
-            return "🔴", f"過舊（{age}天 / {_fb_tag}）", "#f44336"
+                return "🟡", f"延遲（{age}天前 / {_fb_tag}）", MATERIAL_ORANGE
+            return "🔴", f"過舊（{age}天 / {_fb_tag}）", MATERIAL_RED
 
         if freq == "monthly":
             # fallback：FRED API 失敗才走這邊（v16.1 寬鬆閾值保留）
             # v18.4 補上 "fallback" 字樣，使用者看到就知道走了舊判斷邏輯
             _fb_tag = "fallback" if (_fred_next_rel and _fred_key) else "舊閾值"
             if age <= 60:
-                return "🟢", f"本/上月（{age}天前 / {_fb_tag}）", "#00c853"
+                return "🟢", f"本/上月（{age}天前 / {_fb_tag}）", MATERIAL_GREEN
             if age <= 90:
-                return "🟡", f"延遲（{age}天前 / {_fb_tag}）", "#ff9800"
-            return "🔴", f"過舊（{age}天 / {_fb_tag}）", "#f44336"
+                return "🟡", f"延遲（{age}天前 / {_fb_tag}）", MATERIAL_ORANGE
+            return "🔴", f"過舊（{age}天 / {_fb_tag}）", MATERIAL_RED
 
         if freq == "quarterly":
             _fb_tag = "fallback" if (_fred_next_rel and _fred_key) else "舊閾值"
             if age <= 95:
-                return "🟢", f"本/上季（{age}天前 / {_fb_tag}）", "#00c853"
+                return "🟢", f"本/上季（{age}天前 / {_fb_tag}）", MATERIAL_GREEN
             if age <= 140:
-                return "🟡", f"延遲（{age}天前 / {_fb_tag}）", "#ff9800"
-            return "🔴", f"過舊（{age}天 / {_fb_tag}）", "#f44336"
+                return "🟡", f"延遲（{age}天前 / {_fb_tag}）", MATERIAL_ORANGE
+            return "🔴", f"過舊（{age}天 / {_fb_tag}）", MATERIAL_RED
 
         # nav / 未知 → 按日頻處理但容忍 7 天（T+1/T+2 報價）
         if age <= 7:
-            return "🟢", f"最新（{age}天前）", "#00c853"
+            return "🟢", f"最新（{age}天前）", MATERIAL_GREEN
         if age <= 14:
-            return "🟡", f"延遲（{age}天前）", "#ff9800"
-        return "🔴", f"過舊（{age}天）", "#f44336"
+            return "🟡", f"延遲（{age}天前）", MATERIAL_ORANGE
+        return "🔴", f"過舊（{age}天）", MATERIAL_RED
 
     reg = {}
 
@@ -441,7 +443,7 @@ def _update_data_registry():
                     "freq":        "monthly",
                     "fresh_icon":  "🟢",
                     "fresh_label": "已取得",
-                    "fresh_color": "#00c853",
+                    "fresh_color": MATERIAL_GREEN,
                 }
             if _sects:
                 reg[f"{prefix}_{fn}_產業配置"] = {
@@ -453,7 +455,7 @@ def _update_data_registry():
                     "freq":        "monthly",
                     "fresh_icon":  "🟢",
                     "fresh_label": "已取得",
-                    "fresh_color": "#00c853",
+                    "fresh_color": MATERIAL_GREEN,
                 }
             if _ter not in (None, "", 0):
                 reg[f"{prefix}_{fn}_TER"] = {
@@ -465,7 +467,7 @@ def _update_data_registry():
                     "freq":        "monthly",
                     "fresh_icon":  "🟢",
                     "fresh_label": "已取得",
-                    "fresh_color": "#00c853",
+                    "fresh_color": MATERIAL_GREEN,
                 }
 
         # v19.63 5e. 基金績效 wb01（1Y/3Y/5Y 含息報酬）
@@ -482,7 +484,7 @@ def _update_data_registry():
                 "freq":        "monthly",
                 "fresh_icon":  "🟢",
                 "fresh_label": "已取得",
-                "fresh_color": "#00c853",
+                "fresh_color": MATERIAL_GREEN,
             }
 
         # v19.63 5f. 基金風險指標 wb07（標準差/Sharpe/Alpha/Beta）
@@ -498,7 +500,7 @@ def _update_data_registry():
                 "freq":        "monthly",
                 "fresh_icon":  "🟢",
                 "fresh_label": "已取得",
-                "fresh_color": "#00c853",
+                "fresh_color": MATERIAL_GREEN,
             }
 
     _cf = st.session_state.get("current_fund") or {}

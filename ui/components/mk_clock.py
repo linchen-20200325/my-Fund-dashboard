@@ -15,6 +15,8 @@ from typing import Optional
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN
+
 
 # ══════════════════════════════════════════════════════════════════
 # Phase Classification（美林時鐘四象限）
@@ -32,7 +34,7 @@ _PHASE_META = {
     "recovery":  {"zh": "復甦期", "icon": "🌱",
                   "desc": "通膨降 / 利率降 / 經濟升",
                   "alloc_eq": 70, "alloc_bd": 30,
-                  "color": "#00c853",
+                  "color": MATERIAL_GREEN,
                   "advice": "股優於債（建議 股 7 : 債 3）｜衛星佈局：週期成長 / 科技 / 非必需消費"},
     "expansion": {"zh": "繁榮期", "icon": "🔥",
                   "desc": "通膨升 / 利率升 / 經濟升",
