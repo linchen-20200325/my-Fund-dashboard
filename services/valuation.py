@@ -27,6 +27,7 @@ from shared.colors import (
     TRAFFIC_RED as RED,
     TRAFFIC_YELLOW as YELLOW,
 )
+from shared.fred_series import FRED_GDPNOW
 
 # Forward P/E 25 年滾動參考（FactSet / Yardeni 2000-2025 長期統計）
 FORWARD_PE_MEAN = 16.5
@@ -180,7 +181,7 @@ def fetch_gdpnow(fred_api_key: str) -> Optional[float]:
         return None
     try:
         from repositories.macro_repository import fetch_fred
-        df = fetch_fred("GDPNOW", fred_api_key, n=10)
+        df = fetch_fred(FRED_GDPNOW, fred_api_key, n=10)
         if df.empty:
             return None
         return float(df["value"].iloc[-1])

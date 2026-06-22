@@ -13,6 +13,28 @@ import streamlit as st
 import pandas as pd
 
 from models.policy import fund_pk_str
+from shared.fred_series import (
+    FRED_CCSA,
+    FRED_CFNAI,
+    FRED_CPI,
+    FRED_DRTSCILM,
+    FRED_FED_BS,
+    FRED_FED_FUNDS,
+    FRED_HSN1F,
+    FRED_HY_SPREAD,
+    FRED_ICSA,
+    FRED_M2,
+    FRED_M2_WEEKLY,
+    FRED_NAPM,
+    FRED_PERMIT,
+    FRED_PPI,
+    FRED_SAHM,
+    FRED_T10Y2Y,
+    FRED_T10Y3M,
+    FRED_T5YIE,
+    FRED_UMCSENT,
+    FRED_UNRATE,
+)
 
 
 def _sync_invest_twd_from_ledgers() -> None:
@@ -73,26 +95,26 @@ def _update_data_registry():
 
     # ── v18.3 indicator_key → FRED series_id（供 next_release_date 動態查詢）
     _FRED_SERIES_MAP: dict[str, str] = {
-        "PMI":          "NAPM",          # 隔月 1 日 release
-        "CPI":          "CPIAUCSL",      # 隔月 ~13 日
-        "UNEMPLOYMENT": "UNRATE",        # 隔月 1st Friday
-        "M2":           "M2SL",
-        "M2_WEEKLY":    "WM2NS",
-        "FED_RATE":     "FEDFUNDS",
-        "PPI":          "PPIACO",
-        "CONSUMER_CONF":"UMCSENT",       # 隔月 last Friday
-        "NEW_HOME":     "HSN1F",         # 隔月 ~25 日
-        "LEI":          "CFNAI",         # 對齊 macro_engine.py 實際抓的 series
-        "PERMIT_HOUSING":"PERMIT",
-        "SAHM":         "SAHMREALTIME",
-        "SLOOS":        "DRTSCILM",
-        "JOBLESS":      "ICSA",
-        "CONT_CLAIMS":  "CCSA",
-        "FED_BS":       "WALCL",
-        "HY_SPREAD":    "BAMLH0A0HYM2",
-        "YIELD_10Y2Y":  "T10Y2Y",
-        "YIELD_10Y3M":  "T10Y3M",
-        "INFL_EXP_5Y":  "T5YIE",
+        "PMI":          FRED_NAPM,        # 隔月 1 日 release
+        "CPI":          FRED_CPI,         # 隔月 ~13 日
+        "UNEMPLOYMENT": FRED_UNRATE,      # 隔月 1st Friday
+        "M2":           FRED_M2,
+        "M2_WEEKLY":    FRED_M2_WEEKLY,
+        "FED_RATE":     FRED_FED_FUNDS,
+        "PPI":          FRED_PPI,
+        "CONSUMER_CONF":FRED_UMCSENT,     # 隔月 last Friday
+        "NEW_HOME":     FRED_HSN1F,       # 隔月 ~25 日
+        "LEI":          FRED_CFNAI,       # 對齊 macro_engine.py 實際抓的 series
+        "PERMIT_HOUSING":FRED_PERMIT,
+        "SAHM":         FRED_SAHM,
+        "SLOOS":        FRED_DRTSCILM,
+        "JOBLESS":      FRED_ICSA,
+        "CONT_CLAIMS":  FRED_CCSA,
+        "FED_BS":       FRED_FED_BS,
+        "HY_SPREAD":    FRED_HY_SPREAD,
+        "YIELD_10Y2Y":  FRED_T10Y2Y,
+        "YIELD_10Y3M":  FRED_T10Y3M,
+        "INFL_EXP_5Y":  FRED_T5YIE,
     }
 
     # ── v18.3 動態 next_release_date 查詢（cache 30 天）

@@ -12,6 +12,36 @@ v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + 編排。
 import pandas as pd, numpy as np, math
 from concurrent.futures import ThreadPoolExecutor as _TPE_macro
 from repositories.macro_repository import fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch
+from shared.fred_series import (
+    FRED_AMTMNO,
+    FRED_CCSA,
+    FRED_CFNAI,
+    FRED_CHF_USD,
+    FRED_CPI,
+    FRED_DGS10,
+    FRED_DGS2,
+    FRED_DGS3MO,
+    FRED_DRTSCILM,
+    FRED_DXY,
+    FRED_FED_BS,
+    FRED_FED_FUNDS,
+    FRED_HSN1F,
+    FRED_HY_SPREAD,
+    FRED_ICSA,
+    FRED_ISM_PMI,
+    FRED_JPY_USD,
+    FRED_M2,
+    FRED_M2_WEEKLY,
+    FRED_MNFCTRIRSA,
+    FRED_PAYEMS,
+    FRED_PERMIT,
+    FRED_PPI,
+    FRED_SAHM,
+    FRED_T10Y2Y,
+    FRED_T5YIE,
+    FRED_UMCSENT,
+    FRED_UNRATE,
+)
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 ENGINE_VERSION = "v18.2_tw_macro"
@@ -218,16 +248,16 @@ def fetch_all_indicators(fred_api_key):
     # 估 Fund 首頁總經 tab 載入 -3~6s（v19.67 額外覆蓋深水區流動性兩 builder 冷啟動）。
     if fred_api_key:
         fetch_fred_batch([
-            ("DGS10", 2600), ("DGS2", 2600), ("DGS3MO", 2600),
-            ("BAMLH0A0HYM2", 2500), ("M2SL", 144),
-            ("ISPMANPMI", 144), ("WALCL", 312), ("CPIAUCSL", 144),
-            ("FEDFUNDS", 144), ("UNRATE", 144), ("PPIACO", 144),
-            ("UMCSENT", 144), ("ICSA", 312), ("HSN1F", 144),
-            ("SAHMREALTIME", 144), ("DRTSCILM", 80), ("CFNAI", 144),
-            ("CCSA", 312), ("WM2NS", 520), ("T5YIE", 2500),
-            ("PERMIT", 144), ("PAYEMS", 144),
+            (FRED_DGS10, 2600), (FRED_DGS2, 2600), (FRED_DGS3MO, 2600),
+            (FRED_HY_SPREAD, 2500), (FRED_M2, 144),
+            (FRED_ISM_PMI, 144), (FRED_FED_BS, 312), (FRED_CPI, 144),
+            (FRED_FED_FUNDS, 144), (FRED_UNRATE, 144), (FRED_PPI, 144),
+            (FRED_UMCSENT, 144), (FRED_ICSA, 312), (FRED_HSN1F, 144),
+            (FRED_SAHM, 144), (FRED_DRTSCILM, 80), (FRED_CFNAI, 144),
+            (FRED_CCSA, 312), (FRED_M2_WEEKLY, 520), (FRED_T5YIE, 2500),
+            (FRED_PERMIT, 144), (FRED_PAYEMS, 144),
             # v19.67 P1-F2：liquidity_engine.py 用
-            ("DTWEXBGS", 800), ("DEXJPUS", 400), ("DEXSZUS", 400),
+            (FRED_DXY, 800), (FRED_JPY_USD, 400), (FRED_CHF_USD, 400),
         ], fred_api_key, max_workers=8)
 
     # ── PMI（v2.1 改用共用函式 fetch_ism_pmi 6 段備援 + 90 天時效檢查）──
@@ -1519,8 +1549,8 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
     # v19.48 並行化：5 個拐點抽成 inner func + ThreadPoolExecutor，wallclock 2-4s → ~max 單拐點
     def _calc_pmi_diff() -> tuple[str, dict]:
         try:
-            df_new = fetch_fred("AMTMNO",     fred_api_key, n=60)
-            df_inv = fetch_fred("MNFCTRIRSA", fred_api_key, n=60)
+            df_new = fetch_fred(FRED_AMTMNO,     fred_api_key, n=60)
+            df_inv = fetch_fred(FRED_MNFCTRIRSA, fred_api_key, n=60)
             ny = _yoy_pct(df_new)
             iy = _yoy_pct(df_inv)
             if ny.empty or iy.empty:
@@ -1557,7 +1587,7 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
 
     def _calc_yield_curve() -> tuple[str, dict]:
         try:
-            df_t = fetch_fred("T10Y2Y", fred_api_key, n=120)
+            df_t = fetch_fred(FRED_T10Y2Y, fred_api_key, n=120)
             if df_t.empty or len(df_t) < 30:
                 return "yield_curve", {}
             s = df_t.sort_values("date").set_index("date")["value"].astype(float).dropna()
@@ -1590,7 +1620,7 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
 
     def _calc_hy_spread() -> tuple[str, dict]:
         try:
-            df_hy = fetch_fred("BAMLH0A0HYM2", fred_api_key, n=400)
+            df_hy = fetch_fred(FRED_HY_SPREAD, fred_api_key, n=400)
             if df_hy.empty or len(df_hy) < 30:
                 return "hy_spread", {}
             s = df_hy.sort_values("date").set_index("date")["value"].astype(float).dropna()
@@ -1620,7 +1650,7 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
 
     def _calc_sahm() -> tuple[str, dict]:
         try:
-            df_sa = fetch_fred("SAHMREALTIME", fred_api_key, n=36)
+            df_sa = fetch_fred(FRED_SAHM, fred_api_key, n=36)
             if df_sa.empty or len(df_sa) < 6:
                 return "sahm_rule", {}
             s = df_sa.sort_values("date").set_index("date")["value"].astype(float).dropna()
@@ -1650,7 +1680,7 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
 
     def _calc_lei() -> tuple[str, dict]:
         try:
-            df_lei = fetch_fred("CFNAI", fred_api_key, n=36)
+            df_lei = fetch_fred(FRED_CFNAI, fred_api_key, n=36)
             if df_lei.empty or len(df_lei) < 6:
                 return "lei_cfnai", {}
             s = df_lei.sort_values("date").set_index("date")["value"].astype(float).dropna()
@@ -1829,7 +1859,7 @@ def backtest_turning_points(
 
     # ── 抓 T10Y2Y 30Y+ ───────────────────────────────────────────
     try:
-        df_t = fetch_fred("T10Y2Y", fred_api_key, n=11000)
+        df_t = fetch_fred(FRED_T10Y2Y, fred_api_key, n=11000)
     except Exception as e:
         out["note"] = f"T10Y2Y 抓取異常：{str(e)[:80]}"
         return out

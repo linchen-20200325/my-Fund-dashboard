@@ -44,6 +44,7 @@ from infra.proxy import fetch_url
 
 # v18.58: 借用 fund_fetcher 的 TTL 快取裝飾器（同樣模組層共享、可 clear_all_caches 統一清空）
 from fund_fetcher import _ttl_cache, register_cache
+from shared.fred_series import FRED_BSCICP02, FRED_PHILLY_FED
 from shared.ttls import TTL_5MIN, TTL_10MIN, TTL_30MIN
 
 __version__ = "1.0.0"
@@ -539,7 +540,7 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
     if fred_api_key:
         try:
             # v18.119 issue 1: 拉滿月頻 series 供 Phase 4/3-B 使用
-            df = fetch_fred('GACDFSA066MSFRBPHI', fred_api_key, n=144)
+            df = fetch_fred(FRED_PHILLY_FED, fred_api_key, n=144)
             if not df.empty and len(df) >= 5:
                 df = df.tail(120).copy()
                 last_date = pd.to_datetime(df['date'].iloc[-1]).date()
@@ -571,7 +572,7 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
     if fred_api_key:
         try:
             # v18.119 issue 1: 拉滿月頻 series
-            df = fetch_fred('BSCICP02USM460S', fred_api_key, n=144)
+            df = fetch_fred(FRED_BSCICP02, fred_api_key, n=144)
             if not df.empty and len(df) >= 5:
                 df = df.tail(120)
                 last_date = pd.to_datetime(df['date'].iloc[-1]).date()
