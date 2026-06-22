@@ -212,9 +212,10 @@ def fetch_all_indicators(fred_api_key):
     R = {}
 
     # ── v19.65 P1-F1：21 條 FRED 批次預熱（並行 8 worker）──
+    # v19.67 P1-F2：擴展 3 條 liquidity_engine.py 用 FRED（DTWEXBGS/DEXJPUS/DEXSZUS）
     # 原本 16 條 sequential `_fred()` 呼叫各 0.2~0.5s（首次 cache miss）→ 一次 batch
     # 並行 + 共享既有 @_ttl_cache(30min)，後續呼叫點自然 hit cache、邏輯 0 改動。
-    # 估 Fund 首頁總經 tab 載入 -3~6s。
+    # 估 Fund 首頁總經 tab 載入 -3~6s（v19.67 額外覆蓋深水區流動性兩 builder 冷啟動）。
     if fred_api_key:
         fetch_fred_batch([
             ("DGS10", 2600), ("DGS2", 2600), ("DGS3MO", 2600),
@@ -225,6 +226,8 @@ def fetch_all_indicators(fred_api_key):
             ("SAHMREALTIME", 144), ("DRTSCILM", 80), ("CFNAI", 144),
             ("CCSA", 312), ("WM2NS", 520), ("T5YIE", 2500),
             ("PERMIT", 144), ("PAYEMS", 144),
+            # v19.67 P1-F2：liquidity_engine.py 用
+            ("DTWEXBGS", 800), ("DEXJPUS", 400), ("DEXSZUS", 400),
         ], fred_api_key, max_workers=8)
 
     # ── PMI（v2.1 改用共用函式 fetch_ism_pmi 6 段備援 + 90 天時效檢查）──
