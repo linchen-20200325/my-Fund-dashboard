@@ -14,7 +14,7 @@ import hashlib
 import math
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone  # v19.74 W1-D: timezone for utcnow() migration
 from typing import Iterator, Literal, Optional, Protocol
 
 import numpy as np
@@ -265,7 +265,7 @@ def evaluate_subset(
         n_folds=n_folds,
         composite=composite_score(oos_f1, plateau_val, n_cross, fb),
         elapsed_sec=elapsed,
-        ts=datetime.utcnow().isoformat(timespec="seconds"),
+        ts=datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )
 
 
@@ -282,7 +282,7 @@ def _empty_result(
         oos_f1=0.0, oos_sharpe=0.0, plateau_score=0.0, train_f1=0.0,
         n_crossings=0, n_folds=0, composite=0.0,
         elapsed_sec=time.perf_counter() - start,
-        ts=datetime.utcnow().isoformat(timespec="seconds"),
+        ts=datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )
 
 
@@ -344,9 +344,9 @@ def create_job(
     max_forward_days: int = 90,
 ) -> SearchJob:
     """新建 job — run_id = 時間戳 + job_signature 短碼（含 lead time）."""
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     sig = job_signature(factor_pool, min_forward_days, max_forward_days)
-    run_id = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}_{sig[:6]}"
+    run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}_{sig[:6]}"
     return SearchJob(
         run_id=run_id,
         factor_pool_hash=sig,
@@ -439,7 +439,7 @@ def auto_search_iter(
         next_plan = _next_eval(job, existing)
         if next_plan is None:
             job.status = "done"
-            job.last_update = datetime.utcnow().isoformat(timespec="seconds")
+            job.last_update = datetime.now(timezone.utc).isoformat(timespec="seconds")
             store.save_job(job)
             return
 
@@ -450,7 +450,7 @@ def auto_search_iter(
         )
         store.append_result(result)
         job.done += 1
-        job.last_update = datetime.utcnow().isoformat(timespec="seconds")
+        job.last_update = datetime.now(timezone.utc).isoformat(timespec="seconds")
         _advance_phase(job, existing + [result])
         store.save_job(job)
         yield result

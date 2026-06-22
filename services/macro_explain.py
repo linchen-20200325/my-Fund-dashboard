@@ -18,9 +18,15 @@
 """
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from shared.colors import MATERIAL_GREEN, MATERIAL_RED
+from shared.signal_thresholds import (  # v19.74 W2 SSOT
+    SIGMA_VERY_HIGH_CUTOFF,
+    SIGMA_HIGH_CUTOFF,
+    SIGMA_LOW_CUTOFF,
+)
 
 # ════════════════════════════════════════════════
 # 常量：indicators key → 頻率（高頻 daily / 中頻 weekly / 低頻 monthly）
@@ -61,19 +67,19 @@ def _interpret_indicator(score: float) -> str:
 
     score 約定：正 = 偏空頭/風險升高、負 = 偏多頭/寬鬆環境（fund 端慣例）
     """
-    if score >= 1.5:
-        return "🔴 訊號**強烈偏空**（標準化超過 +1.5σ）"
-    if score >= 0.8:
-        return "🟠 訊號**偏空**（標準化 +0.8 ~ +1.5σ）"
-    if score >= 0.3:
-        return "🟡 訊號**輕度偏空**（標準化 +0.3 ~ +0.8σ）"
-    if score >= -0.3:
-        return "⚪ 訊號**接近中性**（標準化 ±0.3σ 內）"
-    if score >= -0.8:
-        return "🟢 訊號**輕度偏多**（標準化 -0.3 ~ -0.8σ）"
-    if score >= -1.5:
-        return "🟢 訊號**偏多**（標準化 -0.8 ~ -1.5σ）"
-    return "🟢 訊號**強烈偏多**（標準化超過 -1.5σ）"
+    if score >= SIGMA_VERY_HIGH_CUTOFF:
+        return f"🔴 訊號**強烈偏空**（標準化超過 +{SIGMA_VERY_HIGH_CUTOFF}σ）"
+    if score >= SIGMA_HIGH_CUTOFF:
+        return f"🟠 訊號**偏空**（標準化 +{SIGMA_HIGH_CUTOFF} ~ +{SIGMA_VERY_HIGH_CUTOFF}σ）"
+    if score >= SIGMA_LOW_CUTOFF:
+        return f"🟡 訊號**輕度偏空**（標準化 +{SIGMA_LOW_CUTOFF} ~ +{SIGMA_HIGH_CUTOFF}σ）"
+    if score >= -SIGMA_LOW_CUTOFF:
+        return f"⚪ 訊號**接近中性**（標準化 ±{SIGMA_LOW_CUTOFF}σ 內）"
+    if score >= -SIGMA_HIGH_CUTOFF:
+        return f"🟢 訊號**輕度偏多**（標準化 -{SIGMA_LOW_CUTOFF} ~ -{SIGMA_HIGH_CUTOFF}σ）"
+    if score >= -SIGMA_VERY_HIGH_CUTOFF:
+        return f"🟢 訊號**偏多**（標準化 -{SIGMA_HIGH_CUTOFF} ~ -{SIGMA_VERY_HIGH_CUTOFF}σ）"
+    return f"🟢 訊號**強烈偏多**（標準化超過 -{SIGMA_VERY_HIGH_CUTOFF}σ）"
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:
@@ -136,7 +142,7 @@ def build_beginner_payload(
             continue
         score = _safe_float(v.get("score"), 0.0)
         weight = _safe_float(v.get("weight"), 1.0)
-        if score == 0.0 and "score" not in v:
+        if math.isclose(score, 0.0, abs_tol=1e-9) and "score" not in v:  # v19.74 W1-E (§4.3): float ==
             continue  # 無 score 鍵（不是 0 而是真缺）→ 跳過
         contribution = score * weight
         edu = macro_edu.get(key) or {}

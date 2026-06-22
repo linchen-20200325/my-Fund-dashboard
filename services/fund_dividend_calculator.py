@@ -19,8 +19,10 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT  # v19.74 W2 SSOT
+
 DEFAULT_PRINCIPAL_TWD: float = 1_000_000.0
-DEFAULT_WARN_GAP_PCT: float = 2.0
+DEFAULT_WARN_GAP_PCT: float = NEAR_DIVIDEND_WARNING_PCT
 
 _LIGHT_EMOJI: dict[str, str] = {
     "健康": "🟢",

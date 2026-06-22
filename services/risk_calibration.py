@@ -18,9 +18,18 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from shared.signal_thresholds import (  # v19.74 W2 SSOT
+    RISK_SCORE_VIX_WEIGHT_RATIO,
+    RISK_SCORE_HY_WEIGHT_RATIO,
+    RISK_SCORE_YIELD_WEIGHT_RATIO,
+)
 
 _MACRO_COLS = ("VIX", "HY_Spread", "Yield_Curve_10Y_2Y")
-_WEIGHTS = {"VIX": 0.3, "HY_Spread": 0.4, "Yield_Curve_10Y_2Y": 0.3}
+_WEIGHTS = {
+    "VIX": RISK_SCORE_VIX_WEIGHT_RATIO,
+    "HY_Spread": RISK_SCORE_HY_WEIGHT_RATIO,
+    "Yield_Curve_10Y_2Y": RISK_SCORE_YIELD_WEIGHT_RATIO,
+}
 
 
 @dataclass(frozen=True)
