@@ -11,7 +11,7 @@ v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + 編排。
 """
 import pandas as pd, numpy as np, math
 from concurrent.futures import ThreadPoolExecutor as _TPE_macro
-from repositories.macro_repository import fetch_fred, fetch_yf_close, fetch_ism_pmi
+from repositories.macro_repository import fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 ENGINE_VERSION = "v18.2_tw_macro"
@@ -210,6 +210,22 @@ def _detect_inflection(indicators):
 
 def fetch_all_indicators(fred_api_key):
     R = {}
+
+    # ── v19.65 P1-F1：21 條 FRED 批次預熱（並行 8 worker）──
+    # 原本 16 條 sequential `_fred()` 呼叫各 0.2~0.5s（首次 cache miss）→ 一次 batch
+    # 並行 + 共享既有 @_ttl_cache(30min)，後續呼叫點自然 hit cache、邏輯 0 改動。
+    # 估 Fund 首頁總經 tab 載入 -3~6s。
+    if fred_api_key:
+        fetch_fred_batch([
+            ("DGS10", 2600), ("DGS2", 2600), ("DGS3MO", 2600),
+            ("BAMLH0A0HYM2", 2500), ("M2SL", 144),
+            ("ISPMANPMI", 144), ("WALCL", 312), ("CPIAUCSL", 144),
+            ("FEDFUNDS", 144), ("UNRATE", 144), ("PPIACO", 144),
+            ("UMCSENT", 144), ("ICSA", 312), ("HSN1F", 144),
+            ("SAHMREALTIME", 144), ("DRTSCILM", 80), ("CFNAI", 144),
+            ("CCSA", 312), ("WM2NS", 520), ("T5YIE", 2500),
+            ("PERMIT", 144), ("PAYEMS", 144),
+        ], fred_api_key, max_workers=8)
 
     # ── PMI（v2.1 改用共用函式 fetch_ism_pmi 6 段備援 + 90 天時效檢查）──
     #   舊版直接拿 FRED NAPM 末筆值，會誤用 2016-08 停更後的死值欺騙 UI；
