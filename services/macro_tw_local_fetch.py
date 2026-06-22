@@ -28,6 +28,7 @@ import pandas as pd
 
 from infra.cache import _ttl_cache, register_cache
 from infra.proxy import fetch_url
+from shared.ttls import TTL_15MIN
 
 __version__ = "1.0.0"
 
@@ -96,7 +97,7 @@ def _finmind_macro_series(indicator_keys: tuple,
 # §1 NDC 景氣對策信號（鏡像 stock tw_macro.py:369）
 # ════════════════════════════════════════════════════════════════════════════
 @register_cache
-@_ttl_cache(ttl_sec=900)
+@_ttl_cache(ttl_sec=TTL_15MIN)
 def fetch_ndc_signal_history(months_back: int = 12, token: str = "") -> dict:
     """抓景氣對策信號分數歷史，偵測連 2 月反轉拐點。
 
@@ -151,7 +152,7 @@ def fetch_ndc_signal_history(months_back: int = 12, token: str = "") -> dict:
 # §2 TW PMI（CIER 中華經濟研究院製造業）
 # ════════════════════════════════════════════════════════════════════════════
 @register_cache
-@_ttl_cache(ttl_sec=900)
+@_ttl_cache(ttl_sec=TTL_15MIN)
 def fetch_tw_pmi_local(months_back: int = 12, token: str = "") -> dict:
     """抓台灣製造業 PMI 歷史（FinMind 單源 MVP）。
 
@@ -206,7 +207,7 @@ def fetch_tw_pmi_local(months_back: int = 12, token: str = "") -> dict:
 # §3 TW Export YoY（財政部出口年增率）
 # ════════════════════════════════════════════════════════════════════════════
 @register_cache
-@_ttl_cache(ttl_sec=900)
+@_ttl_cache(ttl_sec=TTL_15MIN)
 def fetch_tw_export_yoy(months_back: int = 12, token: str = "") -> dict:
     """抓台灣出口年增率歷史。
 
@@ -259,7 +260,7 @@ def fetch_tw_export_yoy(months_back: int = 12, token: str = "") -> dict:
 # §4 外資連續日數（鏡像 stock tw_macro.py:492）
 # ════════════════════════════════════════════════════════════════════════════
 @register_cache
-@_ttl_cache(ttl_sec=900)
+@_ttl_cache(ttl_sec=TTL_15MIN)
 def fetch_foreign_consecutive_days(days_back: int = 30, token: str = "") -> dict:
     """抓外資最近 N 日買賣超，計算連續同向日數與反轉拐點。
 

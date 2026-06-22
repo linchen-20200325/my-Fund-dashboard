@@ -19,6 +19,7 @@ from typing import Optional
 import pandas as pd
 
 from infra.cache import _ttl_cache, register_cache
+from shared.ttls import TTL_30MIN
 from shared.colors import (
     TRAFFIC_GREEN as GREEN,
     TRAFFIC_NEUTRAL as GRAY,
@@ -141,7 +142,7 @@ def _fetch_multpl_pe() -> Optional[float]:
 
 
 @register_cache
-@_ttl_cache(ttl_sec=1800, maxsize=2)   # v19.64：估值頁 30min TTL，避免 ^GSPC info 重打
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=2)   # v19.64：估值頁，避免 ^GSPC info 重打
 def fetch_forward_pe() -> Optional[float]:
     """Forward P/E 多源 chain：yfinance forwardPE → yfinance trailingPE → multpl trailing PE。
 
@@ -172,7 +173,7 @@ def fetch_forward_pe() -> Optional[float]:
 
 
 @register_cache
-@_ttl_cache(ttl_sec=1800, maxsize=4)   # v19.64：FRED 系列 30min TTL
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=4)   # v19.64：FRED 系列
 def fetch_gdpnow(fred_api_key: str) -> Optional[float]:
     """從 FRED 抓 GDPNOW 系列最新一筆；任意失敗回 None。"""
     if not fred_api_key:
