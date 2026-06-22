@@ -192,6 +192,24 @@ MACRO_THRESHOLDS: dict = {
     "EURUSD":      {"green_above": 1.15, "yellow_below": 1.10, "red_below": 1.05},
     "USDJPY":      {"green_below": 140.0, "yellow_above": 150.0, "red_above": 155.0},
     "USDCNH":      {"green_below": 7.0, "yellow_above": 7.15, "red_above": 7.3},
+    # v19.71 SSOT 補完：以下 13 個閾值與 services/macro_service.py inline 判斷邏輯
+    # 完全等價（值對值同步），目前 production 仍用 inline conditional，本 dict 作為
+    # SSOT 文件來源 + 未來 refactor consume 的 single source of truth。
+    # 動態閾值（FED_RATE 的 v<prev / NEW_HOME 的 v>prev / ADL 的 chg）與多階分數
+    # （NFP 5 級評分）schema 不相容，暫不收錄。
+    "FED_RATE":       {"red_above": 5.0},                                  # green 為 v<prev 動態，dict 僅靜態 red
+    "UNEMPLOYMENT":   {"green_below": 4.5, "red_above": 6.0},
+    "PPI":            {"green_low": 0.0, "green_high": 3.0, "red_above": 5.0, "red_below": -1.0},
+    "COPPER":         {"green_above": 2.0, "red_below": -5.0},             # 月變動 %
+    "CONSUMER_CONF":  {"green_above": 80.0, "red_below": 60.0},
+    "JOBLESS":        {"green_below": 230000, "red_above": 300000},        # 人數（週頻）
+    "SAHM":           {"yellow_above": 0.3, "red_above": 0.5},
+    "SLOOS":          {"yellow_above": 0.0, "red_above": 20.0},            # 銀行緊縮放貸 %
+    "LEI":            {"green_above": 0.0, "red_below": -0.7},             # CFNAI z-score
+    "CONT_CLAIMS":    {"green_below": 1700000, "red_above": 1900000},      # 人數
+    "M2_WEEKLY":      {"red_below": 0.0, "green_above": 5.0},              # 與 M2_YOY 同 YoY 規則
+    "INFL_EXP_5Y":    {"green_low": 1.5, "green_high": 2.8, "red_above": 3.5},
+    "PERMIT_HOUSING": {"green_above": 1500, "red_below": 1200},            # 千戶
 }
 
 
