@@ -37,11 +37,12 @@ from typing import Optional
 import pandas as pd
 
 from repositories.macro_repository import fetch_fred, fetch_yf_close
-
-GREEN = "#22c55e"
-YELLOW = "#eab308"
-RED = "#ef4444"
-GRAY = "#888888"
+from shared.colors import (
+    TRAFFIC_GREEN as GREEN,
+    TRAFFIC_NEUTRAL as GRAY,
+    TRAFFIC_RED as RED,
+    TRAFFIC_YELLOW as YELLOW,
+)
 
 _RADAR_KEYS = (
     "vix_level",

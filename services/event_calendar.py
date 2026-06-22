@@ -22,13 +22,15 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-EVENT_KEYS = ("FOMC", "NFP", "CPI")
+from shared.colors import (
+    TRAFFIC_GREEN as GREEN,
+    TRAFFIC_NEUTRAL as GRAY,
+    TRAFFIC_ORANGE as ORANGE,
+    TRAFFIC_RED as RED,
+    TRAFFIC_YELLOW as YELLOW,
+)
 
-GREEN = "#22c55e"
-YELLOW = "#eab308"
-ORANGE = "#fb923c"
-RED = "#ef4444"
-GRAY = "#888888"
+EVENT_KEYS = ("FOMC", "NFP", "CPI")
 
 # Fed 官網公告 + 預估時間表（每年底需 update 下年度）
 _FOMC_2026 = (

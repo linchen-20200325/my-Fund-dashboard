@@ -19,12 +19,13 @@ from typing import Optional
 import pandas as pd
 
 from infra.cache import _ttl_cache, register_cache
-
-GREEN = "#22c55e"
-YELLOW = "#eab308"
-ORANGE = "#fb923c"
-RED = "#ef4444"
-GRAY = "#888888"
+from shared.colors import (
+    TRAFFIC_GREEN as GREEN,
+    TRAFFIC_NEUTRAL as GRAY,
+    TRAFFIC_ORANGE as ORANGE,
+    TRAFFIC_RED as RED,
+    TRAFFIC_YELLOW as YELLOW,
+)
 
 # Forward P/E 25 年滾動參考（FactSet / Yardeni 2000-2025 長期統計）
 FORWARD_PE_MEAN = 16.5
