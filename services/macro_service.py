@@ -42,6 +42,7 @@ from shared.fred_series import (
     FRED_UMCSENT,
     FRED_UNRATE,
 )
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 ENGINE_VERSION = "v18.2_tw_macro"
@@ -229,12 +230,12 @@ def _detect_inflection(indicators):
        cpi_v and cpi_v < 3.5 and "下降" in cpi_t:
         signals.append({"type":"buy","text":"⭐ MK黃金拐點：CPI+Fed Rate 雙雙見頂回落，勝率最高！"}); score += 5
 
-    if score >= 8:   infl = {"label":"🚀 強力買進拐點","color":"#00c853","desc":"多項指標同時確認，景氣最佳買點"}
+    if score >= 8:   infl = {"label":"🚀 強力買進拐點","color":MATERIAL_GREEN,"desc":"多項指標同時確認，景氣最佳買點"}
     elif score >= 4: infl = {"label":"✅ 買進拐點形成","color":"#69f0ae","desc":"落後見頂 + 領先反彈，建議逢低布局"}
-    elif score >= 1: infl = {"label":"👀 觀察（偏多）","color":"#ff9800","desc":"部分訊號出現，持續觀察"}
+    elif score >= 1: infl = {"label":"👀 觀察（偏多）","color":MATERIAL_ORANGE,"desc":"部分訊號出現，持續觀察"}
     elif score >= -2:infl = {"label":"⚖️ 中性整理","color":"#888888","desc":"指標分歧，維持資產配置"}
     elif score >= -5:infl = {"label":"⚠️ 謹慎偏空","color":"#ff7043","desc":"落後指標未見頂，降低股票型比重"}
-    else:            infl = {"label":"🔴 空頭拐點","color":"#f44336","desc":"確認衰退，優先貨幣型與投資等級債"}
+    else:            infl = {"label":"🔴 空頭拐點","color":MATERIAL_RED,"desc":"確認衰退，優先貨幣型與投資等級債"}
     return {"inflection":infl,"signals":signals,"infl_score":score}
 
 
@@ -315,7 +316,7 @@ def fetch_all_indicators(fred_api_key):
             desc=desc,
             trend=_trend([float(x) for x in vals_list[-6:]]),
             signal="🟢" if signal_g else ("🔴" if signal_r else "🟡"),
-            color="#00c853" if signal_g else ("#f44336" if signal_r else "#ff9800"),
+            color=MATERIAL_GREEN if signal_g else (MATERIAL_RED if signal_r else MATERIAL_ORANGE),
             score=score, weight=2, series=s,
             source=src_label,
             is_proxy=is_proxy,
@@ -389,7 +390,7 @@ def fetch_all_indicators(fred_api_key):
                 desc="倒掛(<0)=衰退 | 由負翻正=MK黃金買點",
                 trend=_trend(sp22.tolist()[-6:]),
                 signal="🟢" if v>0.5 else ("🔴" if v<0 else "🟡"),
-                color="#00c853" if v>0.5 else ("#f44336" if v<0 else "#ff9800"),
+                color=MATERIAL_GREEN if v>0.5 else (MATERIAL_RED if v<0 else MATERIAL_ORANGE),
                 score=2 if v>0.5 else (-2 if v<0 else 0),
                 weight=2, series=sp22)
 
@@ -402,7 +403,7 @@ def fetch_all_indicators(fred_api_key):
                 desc="倒掛解除=降息確認 | 最強衰退預測指標",
                 trend=_trend(sp3m.tolist()[-6:]),
                 signal="🟢" if v>0.5 else ("🔴" if v<0 else "🟡"),
-                color="#00c853" if v>0.5 else ("#f44336" if v<0 else "#ff9800"),
+                color=MATERIAL_GREEN if v>0.5 else (MATERIAL_RED if v<0 else MATERIAL_ORANGE),
                 score=2 if v>0 else -2,
                 weight=2, series=sp3m)
 
@@ -419,7 +420,7 @@ def fetch_all_indicators(fred_api_key):
             desc="<4%樂觀 | 4~6%中性 | >6%風險 | 擴大=逃離高風險資產",
             trend=_trend(s.tolist()[-6:]),
             signal="🟢" if v<4 else ("🔴" if v>6 else "🟡"),
-            color="#00c853" if v<4 else ("#f44336" if v>6 else "#ff9800"),
+            color=MATERIAL_GREEN if v<4 else (MATERIAL_RED if v>6 else MATERIAL_ORANGE),
             score=2 if v<4 else (-2 if v>6 else 0),
             weight=2, series=s)
 
@@ -437,7 +438,7 @@ def fetch_all_indicators(fred_api_key):
             desc=">5%流動性寬鬆→利多 | <0%緊縮→壓力",
             trend=_trend(s24.tolist()[-6:]),
             signal="🟢" if v>5 else ("🔴" if v<0 else "🟡"),
-            color="#00c853" if v>5 else ("#f44336" if v<0 else "#ff9800"),
+            color=MATERIAL_GREEN if v>5 else (MATERIAL_RED if v<0 else MATERIAL_ORANGE),
             score=1 if v>5 else (-1 if v<0 else 0),
             weight=1, series=s24)
 
@@ -472,7 +473,7 @@ def fetch_all_indicators(fred_api_key):
                 desc=f"等/市值比率月變{chg:+.2f}% | 上升=多頭健康 | 下降=僅七巨頭撐盤",
                 trend="up" if chg>0.5 else ("down" if chg<-0.5 else "flat"),
                 signal="🟢" if chg>0.5 else ("🔴" if chg<-1 else "🟡"),
-                color="#00c853" if chg>0.5 else ("#f44336" if chg<-1 else "#ff9800"),
+                color=MATERIAL_GREEN if chg>0.5 else (MATERIAL_RED if chg<-1 else MATERIAL_ORANGE),
                 score=1 if chg>0.5 else (-1 if chg<-1 else 0),
                 weight=1, series=s_w)
     except Exception as e:
@@ -492,7 +493,7 @@ def fetch_all_indicators(fred_api_key):
             desc=f"月漲跌 {chg_m:+.2f}% | 弱美元→新興市場利多 | 強美元→壓縮",
             trend="up" if chg_m>1 else ("down" if chg_m<-1 else "flat"),
             signal="🟡" if abs(chg_m)<1 else ("🟢" if chg_m<-1 else "🔴"),
-            color="#ff9800" if abs(chg_m)<1 else ("#00c853" if chg_m<-1 else "#f44336"),
+            color=MATERIAL_ORANGE if abs(chg_m)<1 else (MATERIAL_GREEN if chg_m<-1 else MATERIAL_RED),
             score=1 if chg_m<-1 else (-1 if chg_m>2 else 0),
             weight=1, series=s_w)
 
@@ -533,8 +534,8 @@ def fetch_all_indicators(fred_api_key):
                     # USDJPY / USDCNH：偏高代表 USD 太強（對新興市場壓力）
                     sig = "🔴" if v > _hi else ("🟢" if v < _lo else "🟡")
                     score = -1 if v > _hi else (1 if v < _lo else 0)
-                color = ("#00c853" if sig == "🟢"
-                         else ("#f44336" if sig == "🔴" else "#ff9800"))
+                color = (MATERIAL_GREEN if sig == "🟢"
+                         else (MATERIAL_RED if sig == "🔴" else MATERIAL_ORANGE))
                 R[_key] = dict(
                     name=_nm, value=v, prev=round(chg_m, 2),
                     unit="", type="跨幣別",
@@ -561,7 +562,7 @@ def fetch_all_indicators(fred_api_key):
             desc="擴表=注入流動性→利多 | 縮表=抽走流動性→壓力",
             trend=_trend(s24.tolist()[-6:]),
             signal="🟢" if v>5 else ("🔴" if v<-5 else "🟡"),
-            color="#00c853" if v>5 else ("#f44336" if v<-5 else "#ff9800"),
+            color=MATERIAL_GREEN if v>5 else (MATERIAL_RED if v<-5 else MATERIAL_ORANGE),
             score=1 if v>5 else (-1 if v<-5 else 0),
             weight=1, series=s24)
 
@@ -575,7 +576,7 @@ def fetch_all_indicators(fred_api_key):
             date=s_vix.index[-1].strftime("%Y-%m-%d"),
             desc="<18平靜 | >30恐慌=逢低加碼時機",
             signal="🟢" if v<18 else ("🔴" if v>30 else "🟡"),
-            color="#00c853" if v<18 else ("#f44336" if v>30 else "#ff9800"),
+            color=MATERIAL_GREEN if v<18 else (MATERIAL_RED if v>30 else MATERIAL_ORANGE),
             score=1 if v<18 else (-1 if v>30 else 0),
             weight=1, series=s_m)
 
@@ -591,7 +592,7 @@ def fetch_all_indicators(fred_api_key):
             unit="%", type="落後", date=str(df.iloc[-1]["date"])[:7],
             desc="目標2% | 高位回落=利多拐點", trend=t,
             signal="🟢" if 1<v<2.5 else ("🔴" if v>4 else "🟡"),
-            color="#00c853" if 1<v<2.5 else ("#f44336" if v>4 else "#ff9800"),
+            color=MATERIAL_GREEN if 1<v<2.5 else (MATERIAL_RED if v>4 else MATERIAL_ORANGE),
             score=1 if 1<v<2.5 else (-1 if v>4 else 0),
             weight=0.5, series=s24)
 
@@ -604,7 +605,7 @@ def fetch_all_indicators(fred_api_key):
             date=str(df.iloc[-1]["date"])[:7], desc="降息=利多 | 升息=緊縮",
             trend=_trend(df["value"].tolist()[-8:]),
             signal="🟢" if v<p else ("🔴" if v>5 else "🟡"),
-            color="#00c853" if v<p else ("#f44336" if v>5 else "#ff9800"),
+            color=MATERIAL_GREEN if v<p else (MATERIAL_RED if v>5 else MATERIAL_ORANGE),
             score=1 if v<p else (-1 if v>5 else 0),
             weight=0.5, series=s)
 
@@ -617,7 +618,7 @@ def fetch_all_indicators(fred_api_key):
             date=str(df.iloc[-1]["date"])[:7], desc="<4.5%健康 | 上升=景氣轉差",
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🟢" if v<4.5 else ("🔴" if v>6 else "🟡"),
-            color="#00c853" if v<4.5 else ("#f44336" if v>6 else "#ff9800"),
+            color=MATERIAL_GREEN if v<4.5 else (MATERIAL_RED if v>6 else MATERIAL_ORANGE),
             score=1 if v<4.5 else (-2 if v>6 else 0),
             weight=0.5, series=s)
 
@@ -635,7 +636,7 @@ def fetch_all_indicators(fred_api_key):
             desc="領先CPI，0~3%溫和，>5%過熱",
             trend=_trend(s24.tolist()[-6:]),
             signal="🟢" if 0<v<3 else ("🔴" if v>5 or v<-1 else "🟡"),
-            color="#00c853" if 0<v<3 else ("#f44336" if v>5 or v<-1 else "#ff9800"),
+            color=MATERIAL_GREEN if 0<v<3 else (MATERIAL_RED if v>5 or v<-1 else MATERIAL_ORANGE),
             score=0.5 if 0<v<3 else (-0.5 if v>5 else 0),
             weight=0.5, series=s24)
 
@@ -650,7 +651,7 @@ def fetch_all_indicators(fred_api_key):
             date=s_cu.index[-1].strftime("%Y-%m-%d"),
             desc=f"現價 {now:.3f} USD/lb | 漲=工業需求增",
             signal="🟢" if chg>2 else ("🔴" if chg<-5 else "🟡"),
-            color="#00c853" if chg>2 else ("#f44336" if chg<-5 else "#ff9800"),
+            color=MATERIAL_GREEN if chg>2 else (MATERIAL_RED if chg<-5 else MATERIAL_ORANGE),
             score=0.5 if chg>2 else (-0.5 if chg<-5 else 0),
             weight=0.5, series=monthly.dropna().tail(60))
 
@@ -664,7 +665,7 @@ def fetch_all_indicators(fred_api_key):
             desc="上升=消費回升，>85樂觀，<60悲觀",
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🟢" if v>80 else ("🔴" if v<60 else "🟡"),
-            color="#00c853" if v>80 else ("#f44336" if v<60 else "#ff9800"),
+            color=MATERIAL_GREEN if v>80 else (MATERIAL_RED if v<60 else MATERIAL_ORANGE),
             score=0.5 if v>80 else (-0.5 if v<60 else 0),
             weight=0.5, series=s)
 
@@ -680,7 +681,7 @@ def fetch_all_indicators(fred_api_key):
             desc="下降=就業好轉，<23萬健康，>30萬警戒",
             trend=_trend(df["value"].tolist()[-8:]),
             signal="🟢" if v<230000 else ("🔴" if v>300000 else "🟡"),
-            color="#00c853" if v<230000 else ("#f44336" if v>300000 else "#ff9800"),
+            color=MATERIAL_GREEN if v<230000 else (MATERIAL_RED if v>300000 else MATERIAL_ORANGE),
             score=0.5 if v<230000 else (-0.5 if v>300000 else 0),
             weight=0.5, series=s/10000)
 
@@ -692,7 +693,7 @@ def fetch_all_indicators(fred_api_key):
         R["NEW_HOME"] = dict(name="新屋銷售", value=v, prev=p, unit="千戶", type="領先",
             date=str(df.iloc[-1]["date"])[:7], desc=f"月增{v-p:+.0f}k | 增加=房市回升",
             trend=_trend(df["value"].tolist()[-6:]),
-            signal="🟢" if v>p else "🔴", color="#00c853" if v>p else "#f44336",
+            signal="🟢" if v>p else "🔴", color=MATERIAL_GREEN if v>p else MATERIAL_RED,
             score=0.5 if v>p else -0.5,
             weight=0.5, series=s)
 
@@ -706,7 +707,7 @@ def fetch_all_indicators(fred_api_key):
             desc="≥0.5 觸發衰退警報 | <0.3 安全 | 3月失業率均值-12月最低",
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🔴" if v >= 0.5 else ("🟡" if v >= 0.3 else "🟢"),
-            color="#f44336" if v >= 0.5 else ("#ff9800" if v >= 0.3 else "#00c853"),
+            color=MATERIAL_RED if v >= 0.5 else (MATERIAL_ORANGE if v >= 0.3 else MATERIAL_GREEN),
             score=-2 if v >= 0.5 else (-0.5 if v >= 0.3 else 1),
             weight=1.5, series=s)
 
@@ -722,7 +723,7 @@ def fetch_all_indicators(fred_api_key):
             desc=">20% 銀行大幅緊縮信貸（衰退前兆）| <0% 信貸寬鬆",
             trend=_trend(df["value"].tolist()[-4:]),
             signal="🔴" if v > 20 else ("🟡" if v > 0 else "🟢"),
-            color="#f44336" if v > 20 else ("#ff9800" if v > 0 else "#00c853"),
+            color=MATERIAL_RED if v > 20 else (MATERIAL_ORANGE if v > 0 else MATERIAL_GREEN),
             score=-2 if v > 30 else (-1 if v > 20 else (0.5 if v < 0 else -0.5)),
             weight=1.5, series=s)
 
@@ -750,7 +751,7 @@ def fetch_all_indicators(fred_api_key):
                  f"| > +0.7 強勁擴張 | < -0.7 衰退預警 | PMI 替代源",
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🟢" if v > 0.0 else ("🔴" if v < -0.7 else "🟡"),
-            color="#00c853" if v > 0.0 else ("#f44336" if v < -0.7 else "#ff9800"),
+            color=MATERIAL_GREEN if v > 0.0 else (MATERIAL_RED if v < -0.7 else MATERIAL_ORANGE),
             score=1 if v > 0.0 else (-2 if v_ma3 < -0.7 else (-1 if v < 0 else 0)),
             weight=1, series=s)
 
@@ -765,7 +766,7 @@ def fetch_all_indicators(fred_api_key):
             desc="尚在領失業金人數 | <170 萬健康 | >190 萬警戒 | 失業率月延遲時看這顆",
             trend=_trend(df["value"].tolist()[-8:]),
             signal="🟢" if v < 1700000 else ("🔴" if v > 1900000 else "🟡"),
-            color="#00c853" if v < 1700000 else ("#f44336" if v > 1900000 else "#ff9800"),
+            color=MATERIAL_GREEN if v < 1700000 else (MATERIAL_RED if v > 1900000 else MATERIAL_ORANGE),
             score=0.5 if v < 1700000 else (-0.5 if v > 1900000 else 0),
             weight=0.5, series=s/10000)
 
@@ -783,7 +784,7 @@ def fetch_all_indicators(fred_api_key):
                 desc="WM2NS 週頻 | M2 月版延遲時的最即時替代 | 同樣 >5%寬鬆 / <0%緊縮",
                 trend=_trend(s24.tolist()[-6:]),
                 signal="🟢" if v > 5 else ("🔴" if v < 0 else "🟡"),
-                color="#00c853" if v > 5 else ("#f44336" if v < 0 else "#ff9800"),
+                color=MATERIAL_GREEN if v > 5 else (MATERIAL_RED if v < 0 else MATERIAL_ORANGE),
                 score=1 if v > 5 else (-1 if v < 0 else 0),
                 weight=1, series=s24)
 
@@ -798,7 +799,7 @@ def fetch_all_indicators(fred_api_key):
             desc="債市每日交易計算 | Fed 目標 2-2.5% | >3% 通膨失控擔憂 | CPI 月延遲時看這顆",
             trend=_trend(df["value"].tolist()[-22:][::4]),
             signal="🟢" if 1.5 < v < 2.8 else ("🔴" if v > 3.5 else "🟡"),
-            color="#00c853" if 1.5 < v < 2.8 else ("#f44336" if v > 3.5 else "#ff9800"),
+            color=MATERIAL_GREEN if 1.5 < v < 2.8 else (MATERIAL_RED if v > 3.5 else MATERIAL_ORANGE),
             score=1 if 1.5 < v < 2.8 else (-1 if v > 3.5 else 0),
             weight=1, series=s)
 
@@ -813,7 +814,7 @@ def fetch_all_indicators(fred_api_key):
             desc=f"月增{v-p:+.0f}k | 領先新屋銷售 1-2 個月 | >150 萬健康 | <120 萬房市疲弱",
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🟢" if v > 1500 else ("🔴" if v < 1200 else "🟡"),
-            color="#00c853" if v > 1500 else ("#f44336" if v < 1200 else "#ff9800"),
+            color=MATERIAL_GREEN if v > 1500 else (MATERIAL_RED if v < 1200 else MATERIAL_ORANGE),
             score=0.5 if v > 1500 else (-0.5 if v < 1200 else 0),
             weight=0.5, series=s)
 
@@ -830,7 +831,7 @@ def fetch_all_indicators(fred_api_key):
         # 檔次評分：< 0 衰退 / 0-100k 偏冷 / 100-250k 中性 / 250-500k 強勁 / > 500k 過熱
         if cur_d < 0:
             score_nfp = 1.5      # 衰退
-            sig_nfp, col_nfp = "🔴", "#f44336"
+            sig_nfp, col_nfp = "🔴", MATERIAL_RED
         elif cur_d < 100:
             score_nfp = 0.5      # 偏冷
             sig_nfp, col_nfp = "🟠", "#ff8a80"
@@ -842,7 +843,7 @@ def fetch_all_indicators(fred_api_key):
             sig_nfp, col_nfp = "🟢", "#69f0ae"
         else:
             score_nfp = -1.0     # 過熱（也可能引發 Fed 緊縮）
-            sig_nfp, col_nfp = "🟢", "#00c853"
+            sig_nfp, col_nfp = "🟢", MATERIAL_GREEN
         R["NFP"] = dict(
             name="非農新增就業（月變動）", value=round(cur_d, 0), prev=round(prev_d, 0),
             unit="千人", type="同時", date=str(df.iloc[-1]["date"])[:7],
@@ -900,9 +901,9 @@ def get_market_phase(indicators: dict) -> dict:
 
     _map = {
         "復甦": ("#64b5f6", "Z 低位 + 斜率翻正，景氣底部確認，逢低布局機會"),
-        "擴張": ("#00c853", "Z 中位 + 斜率向上，成長動能充足，持有風險資產"),
-        "減速": ("#ff9800", "Z 高位 + 斜率轉負，擴張減速拐點！考慮調降衛星比重"),
-        "衰退": ("#f44336", "Z 低位 + 斜率向下，景氣收縮，轉向防禦配置"),
+        "擴張": (MATERIAL_GREEN, "Z 中位 + 斜率向上，成長動能充足，持有風險資產"),
+        "減速": (MATERIAL_ORANGE, "Z 高位 + 斜率轉負，擴張減速拐點！考慮調降衛星比重"),
+        "衰退": (MATERIAL_RED, "Z 低位 + 斜率向下，景氣收縮，轉向防禦配置"),
     }
     _color, _desc = _map.get(_winner, ("#888", ""))
     return {
@@ -984,22 +985,22 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
     # ── 四象限映射
     if growth_up and not inflation_up:
         quadrant    = "復甦/擴張"; quadrant_en = "Goldilocks"
-        quad_color  = "#00c853";   quad_icon   = "🌱"
+        quad_color  = MATERIAL_GREEN;   quad_icon   = "🌱"
         quad_desc   = "成長↑ 通膨↓ — 黃金期，積極持有風險資產"
         quad_alloc  = "衛星成長型↑  核心配息↑  現金↓"
     elif growth_up and inflation_up:
         quadrant    = "過熱";      quadrant_en = "Overheat"
-        quad_color  = "#ff9800";   quad_icon   = "🔥"
+        quad_color  = MATERIAL_ORANGE;   quad_icon   = "🔥"
         quad_desc   = "成長↑ 通膨↑ — 景氣高峰，注意泡沫與緊縮風險"
         quad_alloc  = "實物資產↑  高息防禦↑  成長型↓"
     elif not growth_up and inflation_up:
         quadrant    = "滯脹";      quadrant_en = "Stagflation"
-        quad_color  = "#f44336";   quad_icon   = "⚠️"
+        quad_color  = MATERIAL_RED;   quad_icon   = "⚠️"
         quad_desc   = "成長↓ 通膨↑ — 最惡劣環境，降低股票，持有商品與短債"
         quad_alloc  = "商品/黃金↑  短天期債↑  成長股↓↓"
     else:
         quadrant    = "衰退";      quadrant_en = "Recession"
-        quad_color  = "#ff9800";   quad_icon   = "🌧️"
+        quad_color  = MATERIAL_ORANGE;   quad_icon   = "🌧️"
         quad_desc   = "成長↓ 通膨↓ — 景氣收縮，轉向長債與防禦型配置"
         quad_alloc  = "長天期債↑↑  防禦股息↑  現金↑  成長股↓"
 
@@ -1059,12 +1060,12 @@ def calc_macro_phase(indicators: dict) -> dict:
 
     # ─── 修正後的景氣門檻 ───
     if score >= 8:
-        phase = "高峰"; phase_en = "Peak"; phase_color = "#f44336"
+        phase = "高峰"; phase_en = "Peak"; phase_color = MATERIAL_RED
         alloc = dict(股票=35, 債券=45, 現金=20)
         advice = "高峰期：適度獲利了結，轉向防禦型資產"
         strategy = "逐步減碼高估值成長股，增加投資等級債與黃金"
     elif score >= 5:
-        phase = "擴張"; phase_en = "Expansion"; phase_color = "#00c853"
+        phase = "擴張"; phase_en = "Expansion"; phase_color = MATERIAL_GREEN
         alloc = dict(股票=60, 債券=30, 現金=10)
         advice = "股優於債：核心高股息ETF + 衛星AI/半導體，設嚴格停利點"
         strategy = "持有核心配息資產，衛星資產設15%停利出場"
@@ -1074,7 +1075,7 @@ def calc_macro_phase(indicators: dict) -> dict:
         advice = "復甦期：最高勝率買點！逐步加碼，優先佈局高股息與平衡型"
         strategy = "積極佈局中小型成長股、非必需消費、金融股底部"
     else:
-        phase = "衰退"; phase_en = "Recession"; phase_color = "#ff9800"
+        phase = "衰退"; phase_en = "Recession"; phase_color = MATERIAL_ORANGE
         alloc = dict(股票=20, 債券=50, 現金=30)
         advice = "衰退期：保守為主，等待落後指標見頂為進場訊號"
         strategy = "保留現金，等待PMI落底與殖利率曲線翻正"
@@ -1118,7 +1119,7 @@ def calc_macro_phase(indicators: dict) -> dict:
         next_phase = PHASE_ORDER[(ph_idx + 1) % 4]
         trend_arrow = "↗"
         trend_label = "向上轉折（加速）"
-        trend_color = "#00c853"
+        trend_color = MATERIAL_GREEN
     elif infl_score >= 2:       # 偏多觀察 → 偏向上
         next_phase = PHASE_ORDER[(ph_idx + 1) % 4]
         trend_arrow = "→↗"
@@ -1128,7 +1129,7 @@ def calc_macro_phase(indicators: dict) -> dict:
         next_phase = PHASE_ORDER[(ph_idx - 1) % 4]
         trend_arrow = "↘"
         trend_label = "向下轉折（警示）"
-        trend_color = "#f44336"
+        trend_color = MATERIAL_RED
     elif infl_score <= -2:      # 偏空謹慎 → 偏向下
         next_phase = PHASE_ORDER[(ph_idx - 1) % 4]
         trend_arrow = "→↘"
@@ -1230,13 +1231,13 @@ def identify_regime(indicators: dict) -> dict:
     if pmi_v is None:
         regime = "未知"; regime_color = "#888888"
     elif pmi_v >= 52 and (cpi_v or 0) < 3.5:
-        regime = "🟢 成長期"; regime_color = "#00c853"
+        regime = "🟢 成長期"; regime_color = MATERIAL_GREEN
     elif pmi_v >= 52 and (cpi_v or 0) >= 3.5:
-        regime = "🟡 過熱期"; regime_color = "#ff9800"
+        regime = "🟡 過熱期"; regime_color = MATERIAL_ORANGE
     elif pmi_v < 50 and (fed_v or 5) <= (fed_p or 5):
         regime = "🔵 復甦期"; regime_color = "#2196f3"
     else:
-        regime = "🔴 衰退期"; regime_color = "#f44336"
+        regime = "🔴 衰退期"; regime_color = MATERIAL_RED
 
     # ── Z-Score 估值判斷（PMI / HY_SPREAD）──────────────
     pmi_series = (indicators.get("PMI") or {}).get("series")
@@ -1343,10 +1344,10 @@ def fetch_tw_market_tpi(fred_api_key: str = "") -> dict:
     result["tpi"] = round(tpi, 3)
 
     if tpi >= 1.5:
-        result.update(water_label="🥵 沸點（市場過熱）", color="#f44336", signal="🔴",
+        result.update(water_label="🥵 沸點（市場過熱）", color=MATERIAL_RED, signal="🔴",
                       advice="上漲家數銳減，外資持續賣超，建議啟動獲利了結機制")
     elif tpi >= 0.5:
-        result.update(water_label="🌡️ 溫熱（偏多）", color="#ff9800", signal="🟡",
+        result.update(water_label="🌡️ 溫熱（偏多）", color=MATERIAL_ORANGE, signal="🟡",
                       advice="市場動能良好，持續觀察是否過熱，衛星部位可設停利")
     elif tpi >= -0.5:
         result.update(water_label="⚖️ 常溫（中性）", color="#888888", signal="⚪",
@@ -1450,17 +1451,17 @@ def detect_systemic_risk(news_items: list) -> dict:
     # 風險等級判定
     if total_score >= 10:
         level  = "HIGH"
-        color  = "#f44336"
+        color  = MATERIAL_RED
         icon   = "🚨"
         advice = "偵測到多重高危信號，建議立即提高現金比重，核心部位 ≥80%，衛星部位設停損"
     elif total_score >= 5:
         level  = "MEDIUM"
-        color  = "#ff9800"
+        color  = MATERIAL_ORANGE
         icon   = "⚠️"
         advice = "市場存在潛在壓力訊號，密切追蹤 VIX 與 HY 利差，衛星部位設停利"
     else:
         level  = "LOW"
-        color  = "#00c853"
+        color  = MATERIAL_GREEN
         icon   = "✅"
         advice = "新聞面暫無系統性異常，維持既有配置策略"
 
@@ -1562,17 +1563,17 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             cur, prev = diff[-1], diff[-2]
             trend = [round(v, 2) for v in diff[-6:]]
             if prev <= 0 and cur > 0:
-                sig, col, ic = "🚀 擴張拐點已現", "#00c853", "🚀"
+                sig, col, ic = "🚀 擴張拐點已現", MATERIAL_GREEN, "🚀"
                 note = (f"前期 {prev:+.1f}pp → 本期 {cur:+.1f}pp（由負轉正）"
                         f"｜製造業新訂單成長動能首度超越庫存補貨")
             elif cur > 0 and prev > 0:
-                sig, col, ic = "🟢 擴張延續", "#00c853", "🟢"
+                sig, col, ic = "🟢 擴張延續", MATERIAL_GREEN, "🟢"
                 note = f"連續正值 {cur:+.1f}pp，新訂單動能 > 庫存補貨"
             elif cur < 0 and prev > 0:
-                sig, col, ic = "🟡 動能轉弱", "#ff9800", "🟡"
+                sig, col, ic = "🟡 動能轉弱", MATERIAL_ORANGE, "🟡"
                 note = f"前期 {prev:+.1f}pp → 本期 {cur:+.1f}pp（由正轉負）需觀察"
             elif cur < 0:
-                sig, col, ic = "🔻 收縮中", "#f44336", "🔻"
+                sig, col, ic = "🔻 收縮中", MATERIAL_RED, "🔻"
                 note = f"{cur:+.1f}pp，新訂單動能弱於庫存補貨"
             else:
                 sig, col, ic = "📊 持平", "#888", "📊"
@@ -1597,14 +1598,14 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             min60 = float(window60.min())
             trend = [round(v, 2) for v in s.tail(60).resample("W").last().dropna().tail(8).tolist()]
             if min60 < 0 and cur >= 0:
-                sig, col, ic = "⚠️ 衰退末期，布局反彈", "#ff9800", "⚠️"
+                sig, col, ic = "⚠️ 衰退末期，布局反彈", MATERIAL_ORANGE, "⚠️"
                 note = (f"近 60 日最低 {min60:+.2f}%（倒掛）→ 最新 {cur:+.2f}%（翻正）"
                         f"｜歷史經驗：倒掛翻正後 6~18 月為股市底部累積期")
             elif cur < 0:
-                sig, col, ic = "🔴 倒掛中", "#f44336", "🔴"
+                sig, col, ic = "🔴 倒掛中", MATERIAL_RED, "🔴"
                 note = f"{cur:+.2f}%（仍倒掛），衰退預警維持"
             elif cur >= 0 and min60 >= 0:
-                sig, col, ic = "🟢 正斜率（健康）", "#00c853", "🟢"
+                sig, col, ic = "🟢 正斜率（健康）", MATERIAL_GREEN, "🟢"
                 note = f"{cur:+.2f}%（近 60 日皆 ≥0），無拐點訊號"
             else:
                 sig, col, ic = "📊 持平", "#888", "📊"
@@ -1628,17 +1629,17 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             max90 = float(s.tail(90).max())
             trend = [round(v, 2) for v in s.tail(60).resample("W").last().dropna().tail(8).tolist()]
             if max90 >= 6.0 and cur < max90 * 0.85 and cur < prev:
-                sig, col, ic = "🚀 信用拐點：高位回落", "#00c853", "🚀"
+                sig, col, ic = "🚀 信用拐點：高位回落", MATERIAL_GREEN, "🚀"
                 note = (f"90 日高點 {max90:.2f}% → 最新 {cur:.2f}%（-{max90-cur:.2f}pp）"
                         f"｜信用風險溢價收斂，risk-on 醞釀")
             elif cur >= 6:
-                sig, col, ic = "🔴 高風險區", "#f44336", "🔴"
+                sig, col, ic = "🔴 高風險區", MATERIAL_RED, "🔴"
                 note = f"{cur:.2f}% ≥ 6%，信用市場警戒中"
             elif cur < 4:
-                sig, col, ic = "🟢 信用寬鬆", "#00c853", "🟢"
+                sig, col, ic = "🟢 信用寬鬆", MATERIAL_GREEN, "🟢"
                 note = f"{cur:.2f}% < 4%，市場樂觀（尚無拐點）"
             else:
-                sig, col, ic = "🟡 中性帶", "#ff9800", "🟡"
+                sig, col, ic = "🟡 中性帶", MATERIAL_ORANGE, "🟡"
                 note = f"{cur:.2f}%，介於 4~6%（待觀察方向）"
             return "hy_spread", {
                 "signal": sig, "color": col, "icon": ic,
@@ -1658,17 +1659,17 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             max12 = float(s.tail(12).max())
             trend = [round(v, 2) for v in s.tail(8).tolist()]
             if max12 >= 0.5 and cur < 0.5:
-                sig, col, ic = "🚀 衰退警報解除", "#00c853", "🚀"
+                sig, col, ic = "🚀 衰退警報解除", MATERIAL_GREEN, "🚀"
                 note = (f"近 12 月高點 {max12:.2f}（觸發過 0.5）→ 最新 {cur:.2f}"
                         f"｜歷史經驗：解除後 12 月內為股市底部布局期")
             elif cur >= 0.5:
-                sig, col, ic = "🔴 衰退警報中", "#f44336", "🔴"
+                sig, col, ic = "🔴 衰退警報中", MATERIAL_RED, "🔴"
                 note = f"{cur:.2f} ≥ 0.5，失業率上升訊號"
             elif cur < 0.3:
-                sig, col, ic = "🟢 安全區", "#00c853", "🟢"
+                sig, col, ic = "🟢 安全區", MATERIAL_GREEN, "🟢"
                 note = f"{cur:.2f} < 0.3，無衰退訊號"
             else:
-                sig, col, ic = "🟡 警戒中", "#ff9800", "🟡"
+                sig, col, ic = "🟡 警戒中", MATERIAL_ORANGE, "🟡"
                 note = f"{cur:.2f}，介於 0.3~0.5（接近觸發）"
             return "sahm_rule", {
                 "signal": sig, "color": col, "icon": ic,
@@ -1690,17 +1691,17 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             cur = float(ma3.iloc[-1]); prev = float(ma3.iloc[-2])
             trend = [round(v, 2) for v in ma3.tail(8).tolist()]
             if cur > 0 and prev <= 0:
-                sig, col, ic = "🚀 領先指標翻揚", "#00c853", "🚀"
+                sig, col, ic = "🚀 領先指標翻揚", MATERIAL_GREEN, "🚀"
                 note = (f"3M MA：前期 {prev:+.2f} → 本期 {cur:+.2f}（由負轉正）"
                         f"｜85 指標 z-score 平均轉正，景氣進入擴張")
             elif cur > 0:
-                sig, col, ic = "🟢 擴張中", "#00c853", "🟢"
+                sig, col, ic = "🟢 擴張中", MATERIAL_GREEN, "🟢"
                 note = f"3M MA {cur:+.2f}（正值），景氣正常擴張"
             elif cur < -0.7:
-                sig, col, ic = "🔴 衰退預警", "#f44336", "🔴"
+                sig, col, ic = "🔴 衰退預警", MATERIAL_RED, "🔴"
                 note = f"3M MA {cur:+.2f} < -0.7，強烈衰退訊號"
             elif cur < 0:
-                sig, col, ic = "🟡 動能轉弱", "#ff9800", "🟡"
+                sig, col, ic = "🟡 動能轉弱", MATERIAL_ORANGE, "🟡"
                 note = f"3M MA {cur:+.2f}（負值但 > -0.7），待觀察"
             else:
                 sig, col, ic = "📊 持平", "#888", "📊"
@@ -2044,9 +2045,9 @@ def calc_sub_cycle_lights(indicators: dict) -> list[dict]:
         elif z_avg < 0:
             signal, color, verdict = "🟡", "#ffeb3b", "中性偏好"
         elif z_avg < 1.0:
-            signal, color, verdict = "🟠", "#ff9800", "中性偏弱"
+            signal, color, verdict = "🟠", MATERIAL_ORANGE, "中性偏弱"
         else:
-            signal, color, verdict = "🔴", "#f44336", "警示"
+            signal, color, verdict = "🔴", MATERIAL_RED, "警示"
 
         out.append({
             "name": name, "icon": icon, "color": color,
@@ -2128,8 +2129,8 @@ def build_macro_sankey_data(indicators: dict) -> dict:
         if z_norm < 0:
             return "#ffeb3b"   # 🟡
         if z_norm < 1.0:
-            return "#ff9800"   # 🟠
-        return "#f44336"       # 🔴
+            return MATERIAL_ORANGE   # 🟠
+        return MATERIAL_RED       # 🔴
 
     labels = []
     node_colors = []
@@ -2591,11 +2592,11 @@ def compute_cluster_signals(indicators: dict) -> list[dict]:
         norm = (sum_ws / sum_w) if sum_w > 0 else 0.0
 
         if norm >= 0.3:
-            signal, color = "🟢 安全", "#00c853"
+            signal, color = "🟢 安全", MATERIAL_GREEN
         elif norm <= -0.3:
-            signal, color = "🔴 危險", "#f44336"
+            signal, color = "🔴 危險", MATERIAL_RED
         else:
-            signal, color = "🟡 警戒", "#ff9800"
+            signal, color = "🟡 警戒", MATERIAL_ORANGE
 
         top = ""
         if members:

@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 _CACHE_DIR = Path("cache")
 _CACHE_FILE = _CACHE_DIR / "cluster_calibration.json"
 _TTL_DAYS = 30
@@ -307,7 +309,7 @@ def f1_to_grade(f1: float | None) -> tuple[str, str]:
     if f1 is None:
         return "n/a", "#666"
     if f1 >= 0.7:
-        return "可信", "#00c853"
+        return "可信", MATERIAL_GREEN
     if f1 >= 0.5:
-        return "參考", "#ff9800"
-    return "雜訊", "#f44336"
+        return "參考", MATERIAL_ORANGE
+    return "雜訊", MATERIAL_RED

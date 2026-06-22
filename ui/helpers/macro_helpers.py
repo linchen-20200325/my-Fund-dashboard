@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 
 # ══════════════════════════════════════════════════════
 # HELPER: calculate_composite_score (v17.3)
@@ -66,7 +68,7 @@ def composite_verdict(total_score: float) -> tuple[str, str, str, str]:
     except ImportError:
         c1, c2, c3, c4 = 10.0, 5.0, -5.0, -10.0
     if total_score > c1:
-        return ("🟢", "極度樂觀", "#00c853",
+        return ("🟢", "極度樂觀", MATERIAL_GREEN,
                 "多頭市場強勁：可滿倉持有，衛星部位積極佈局成長題材")
     if total_score > c2:
         return ("🟢", "樂觀", "#69f0ae",
@@ -77,7 +79,7 @@ def composite_verdict(total_score: float) -> tuple[str, str, str, str]:
     if total_score >= c4:
         return ("🔴", "悲觀", "#ff8a80",
                 "風險正在集結：拉高現金水位至 15-25%，衛星部位設停利")
-    return ("🔴", "極度悲觀", "#f44336",
+    return ("🔴", "極度悲觀", MATERIAL_RED,
             "避險情緒高漲：現金 30%+，核心轉防守型（投資等級債/全球均衡）")
 
 
@@ -176,9 +178,9 @@ def category_verdict(z_now: float | None, z_trend_delta: float) -> tuple[str, st
     if z_now is None:
         return ("⬜", "#888", "資料不足，待補")
     if z_now <= -1.5:
-        icon, color = "🔴", "#f44336"
+        icon, color = "🔴", MATERIAL_RED
     elif z_now <= -0.5:
-        icon, color = "🟠", "#ff9800"
+        icon, color = "🟠", MATERIAL_ORANGE
     elif z_now < 0.5:
         icon, color = "🟡", "#ffd54f"
     else:
@@ -214,18 +216,18 @@ def mk_fund_signal(fund_info: dict, phase: str, score: float) -> dict:
     auto_alloc = None
     if _pmi and _vix:
         pf, vf = float(_pmi), float(_vix)
-        if pf>50 and vf<20: auto_alloc=(70,30,"復甦/擴張—積極","#00c853")
+        if pf>50 and vf<20: auto_alloc=(70,30,"復甦/擴張—積極",MATERIAL_GREEN)
         elif pf>50:          auto_alloc=(60,40,"擴張—穩健","#69f0ae")
-        elif pf<50 and vf>25: auto_alloc=(40,60,"衰退—保守","#f44336")
-        else:                auto_alloc=(50,50,"觀望—中性","#ff9800")
+        elif pf<50 and vf>25: auto_alloc=(40,60,"衰退—保守",MATERIAL_RED)
+        else:                auto_alloc=(50,50,"觀望—中性",MATERIAL_ORANGE)
     if _ue:
         try:
-            if float(_ue)>4.0: auto_alloc=(40,60,f"衰退（失業率{float(_ue):.1f}%破4%）","#f44336")
+            if float(_ue)>4.0: auto_alloc=(40,60,f"衰退（失業率{float(_ue):.1f}%破4%）",MATERIAL_RED)
         except Exception:
             pass   # noqa: smoke-allow-pass
     if _cpi and _cpip:
         try:
-            if float(_cpi)>float(_cpip) and float(_cpi)>3.0: auto_alloc=(50,50,f"升息尾聲—均衡（CPI {float(_cpi):.1f}%↑）","#ff9800")
+            if float(_cpi)>float(_cpip) and float(_cpi)>3.0: auto_alloc=(50,50,f"升息尾聲—均衡（CPI {float(_cpi):.1f}%↑）",MATERIAL_ORANGE)
         except Exception:
             pass   # noqa: smoke-allow-pass
     return dict(asset_class=asset_class, label=label, sig_type=sig_type, sig_style=sig_style, reason=reason, auto_alloc=auto_alloc)
@@ -261,7 +263,7 @@ def quartile_check(peer_compare: dict, risk_table: dict) -> dict:
         return out
     if not peer_sharpes:
         q = 1 if fund_sh > 1.5 else (2 if fund_sh > 0.8 else (3 if fund_sh > 0 else 4))
-        c = ["#00c853","#69f0ae","#ff9800","#f44336"][q-1]
+        c = [MATERIAL_GREEN,"#69f0ae",MATERIAL_ORANGE,MATERIAL_RED][q-1]
         lbl = ["第1四分位🏆(前25%)","第2四分位✅(前50%)","第3四分位⚠️(後50%)","第4四分位🔴(後25%)"][q-1]
         adv = "⚠️ 後25%達2季→建議跨行轉存至同類前25%標的" if q==4 else ("追蹤：若下季仍第3四分位考慮替換" if q==3 else "")
         return {"quartile":q,"color":c,"label":lbl,"warning":q>=4,"fund_sharpe":fund_sh,"peer_avg":None,"advice":adv}
@@ -269,10 +271,10 @@ def quartile_check(peer_compare: dict, risk_table: dict) -> dict:
     ps = sorted(peer_sharpes); n = len(ps)
     q25 = ps[max(0,n//4-1)]; q75 = ps[min(n-1,3*n//4)]; pavg = _stat.mean(ps)
     sh_ref = fund_sh if fund_sh is not None else pavg
-    if sh_ref>=q75:    q,c,lbl = 1,"#00c853","第1四分位🏆(前25%)"
+    if sh_ref>=q75:    q,c,lbl = 1,MATERIAL_GREEN,"第1四分位🏆(前25%)"
     elif sh_ref>=pavg: q,c,lbl = 2,"#69f0ae","第2四分位✅(前50%)"
-    elif sh_ref>=q25:  q,c,lbl = 3,"#ff9800","第3四分位⚠️(後50%)"
-    else:              q,c,lbl = 4,"#f44336","第4四分位🔴(後25%—警戒)"
+    elif sh_ref>=q25:  q,c,lbl = 3,MATERIAL_ORANGE,"第3四分位⚠️(後50%)"
+    else:              q,c,lbl = 4,MATERIAL_RED,"第4四分位🔴(後25%—警戒)"
     adv = "⚠️ 後25%達2季→建議跨行轉存至同類前25%標的" if q>=4 else ("注意：若下季仍第3四分位，考慮替換" if q==3 else "")
     return {"quartile":q,"color":c,"label":lbl,"warning":q>=4,"fund_sharpe":fund_sh,"peer_avg":round(pavg,3),"advice":adv}
 

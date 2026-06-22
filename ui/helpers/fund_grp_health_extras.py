@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 
 def _build_fund_dict(fd_raw: dict, code: str, principal_twd: float) -> dict:
     """把 _auto_fetch_moneydj 回傳的 raw dict 包成 portfolio_funds 標準結構。
@@ -126,11 +128,11 @@ def _render_dividend_matrix(funds: list) -> None:
         if not _real:
             _rc_colors.append("#888")
         elif _d > 0 and _r < _d:
-            _rc_colors.append("#f44336")
+            _rc_colors.append(MATERIAL_RED)
         elif _d > 0 and _r < _d * 1.2:
-            _rc_colors.append("#ff9800")
+            _rc_colors.append(MATERIAL_ORANGE)
         else:
-            _rc_colors.append("#00c853")
+            _rc_colors.append(MATERIAL_GREEN)
 
     fig_rc = go.Figure()
     _rc_ret_vis = [max(_r, 0.5) if (_d > 0 and _r < _d) else _r
@@ -149,8 +151,8 @@ def _render_dividend_matrix(funds: list) -> None:
             x=_rc_names, y=_rc_div,
             name="配息年化率%",
             mode="markers+lines",
-            line=dict(color="#f44336", width=1.5, dash="dot"),
-            marker=dict(symbol="diamond", size=8, color="#f44336"),
+            line=dict(color=MATERIAL_RED, width=1.5, dash="dot"),
+            marker=dict(symbol="diamond", size=8, color=MATERIAL_RED),
             hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
     fig_rc.add_hline(y=0, line_color="#555", line_width=1)
     _y_max = max(max(_rc_ret_vis, default=10), max(_rc_div, default=10)) * 1.35
@@ -167,9 +169,9 @@ def _render_dividend_matrix(funds: list) -> None:
                 x=_n, y=_y_max,
                 text=f"⚠️ 吃本金<br>缺口 {_d-_r:.1f}%",
                 showarrow=False,
-                font=dict(color="#f44336", size=11),
+                font=dict(color=MATERIAL_RED, size=11),
                 bgcolor="rgba(42,10,10,0.85)",
-                bordercolor="#f44336", borderwidth=1,
+                bordercolor=MATERIAL_RED, borderwidth=1,
                 borderpad=4)
         elif not _real and _d > 0:
             fig_rc.add_annotation(
@@ -304,8 +306,8 @@ def _render_holdings_block(fund: dict) -> None:
                 (_v for _k, _v in _ter_avg_map.items() if _k in _ter_cat), None)
             if _ter_avg is not None:
                 _ter_diff = _ter_val - _ter_avg
-                _ter_c = ("#f44336" if _ter_diff > 0.3
-                          else ("#ff9800" if _ter_diff > 0 else "#00c853"))
+                _ter_c = (MATERIAL_RED if _ter_diff > 0.3
+                          else (MATERIAL_ORANGE if _ter_diff > 0 else MATERIAL_GREEN))
                 _ter_vs = (f"高於均值 +{_ter_diff:.2f}%" if _ter_diff > 0
                            else f"低於均值 {abs(_ter_diff):.2f}%")
                 _ter_avg_html = (

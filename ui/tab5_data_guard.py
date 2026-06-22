@@ -24,6 +24,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
 from infra.proxy import get_proxy_config
 from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
@@ -105,9 +107,9 @@ def render_data_guard_tab() -> None:
                     inactive_label: str = "尚未使用"):
         if used and ok_n > 0:
             tail = f" / {total}" if total else ""
-            return ("🟢", f"已抓 {ok_n}{tail}", "#00c853")
+            return ("🟢", f"已抓 {ok_n}{tail}", MATERIAL_GREEN)
         if used:
-            return ("🟡", "已呼叫但無資料", "#ff9800")
+            return ("🟡", "已呼叫但無資料", MATERIAL_ORANGE)
         return ("⬜", inactive_label, "#666")
 
     _RAW_TABLE = [
@@ -194,7 +196,7 @@ def render_data_guard_tab() -> None:
     _FREQ_LABEL = {
         "daily":     ("日",    "#42a5f5"),
         "weekly":    ("週",    "#ab47bc"),
-        "monthly":   ("月",    "#ff9800"),
+        "monthly":   ("月",    MATERIAL_ORANGE),
         "quarterly": ("季",    "#ef5350"),
         "nav":       ("日NAV", "#42a5f5"),
     }
@@ -370,7 +372,7 @@ def render_data_guard_tab() -> None:
             # 即時顯示結果
             _pcols = st.columns(3)
             for _ci, (_sn, _ms) in enumerate(_ping_results.items()):
-                _col_c = "#00c853" if (_ms and _ms < 1000) else ("#ff9800" if (_ms and _ms < 3000) else "#f44336")
+                _col_c = MATERIAL_GREEN if (_ms and _ms < 1000) else (MATERIAL_ORANGE if (_ms and _ms < 3000) else MATERIAL_RED)
                 _pcols[_ci].markdown(
                     f"<div style='background:#1a1f2e;border-radius:8px;padding:10px;text-align:center'>"
                     f"<div style='font-size:11px;color:#888'>{_sn}</div>"
@@ -388,7 +390,7 @@ def render_data_guard_tab() -> None:
             _fig_lat  = go.Figure()
             for _lt_name, _lt_y, _lt_color in [
                 ("FRED/yfinance(載入)", _lh_fred, "#64b5f6"),
-                ("MoneyDJ(測速)",       _lh_mj,   "#ff9800"),
+                ("MoneyDJ(測速)",       _lh_mj,   MATERIAL_ORANGE),
                 ("Yahoo/yf(測速)",      _lh_yf,   "#ce93d8"),
             ]:
                 if any(v is not None for v in _lt_y):
@@ -399,13 +401,13 @@ def render_data_guard_tab() -> None:
                         connectgaps=True,
                         hovertemplate="%{y} ms<extra>" + _lt_name + "</extra>"))
             # 警戒線：1000ms 黃 / 3000ms 紅
-            _fig_lat.add_hline(y=1000, line_color="#ff9800", line_dash="dot",
+            _fig_lat.add_hline(y=1000, line_color=MATERIAL_ORANGE, line_dash="dot",
                                line_width=1, annotation_text="1s 警示",
-                               annotation_font_color="#ff9800",
+                               annotation_font_color=MATERIAL_ORANGE,
                                annotation_position="bottom right")
-            _fig_lat.add_hline(y=3000, line_color="#f44336", line_dash="dash",
+            _fig_lat.add_hline(y=3000, line_color=MATERIAL_RED, line_dash="dash",
                                line_width=1, annotation_text="3s 警戒",
-                               annotation_font_color="#f44336",
+                               annotation_font_color=MATERIAL_RED,
                                annotation_position="bottom right")
             _fig_lat.update_layout(
                 paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
@@ -620,7 +622,7 @@ def render_data_guard_tab() -> None:
             f"<div style='background:#1a1f2e;border-radius:8px;padding:12px'>"
             f"<div style='font-size:11px;color:#888'>FRED API Key</div>"
             f"<div style='font-size:16px;font-weight:700;"
-            f"color:{'#00c853' if _d5_fred_ok else '#f44336'}'>"
+            f"color:{MATERIAL_GREEN if _d5_fred_ok else MATERIAL_RED}'>"
             f"{'✅ 已設定' if _d5_fred_ok else '❌ 未填寫'}</div>"
             f"<div style='font-size:10px;color:#555'>"
             f"{'...' + _FRED_KEY[-6:] if _d5_fred_ok and len(_FRED_KEY) > 6 else '請在 secrets.toml 填入'}"
@@ -631,7 +633,7 @@ def render_data_guard_tab() -> None:
             f"<div style='background:#1a1f2e;border-radius:8px;padding:12px'>"
             f"<div style='font-size:11px;color:#888'>Gemini API Key</div>"
             f"<div style='font-size:16px;font-weight:700;"
-            f"color:{'#00c853' if _d5_gem_ok else '#f44336'}'>"
+            f"color:{MATERIAL_GREEN if _d5_gem_ok else MATERIAL_RED}'>"
             f"{'✅ 已設定' if _d5_gem_ok else '❌ 未填寫'}</div>"
             f"<div style='font-size:10px;color:#555'>"
             f"{'...' + _GEMINI_KEY[-6:] if _d5_gem_ok and len(_GEMINI_KEY) > 6 else '請在 secrets.toml 填入'}"
@@ -697,11 +699,11 @@ def render_data_guard_tab() -> None:
             if value == "N/A":
                 _ic, _vc, _vs = "ℹ️", "#888888", "N/A 不適用"
             elif _empty:
-                _ic, _vc, _vs = "⚠️", "#ff9800", "缺失"
+                _ic, _vc, _vs = "⚠️", MATERIAL_ORANGE, "缺失"
             elif not bool(ok_cond):
-                _ic, _vc, _vs = "⚠️", "#ff9800", "資料不足"
+                _ic, _vc, _vs = "⚠️", MATERIAL_ORANGE, "資料不足"
             else:
-                _ic, _vc, _vs = "✅", "#00c853", "已取得"
+                _ic, _vc, _vs = "✅", MATERIAL_GREEN, "已取得"
             col.markdown(
                 f"<div style='background:#1a1f2e;border-radius:6px;padding:6px 8px'>"
                 f"<div style='font-size:10px;color:#888'>{label}</div>"
