@@ -372,8 +372,9 @@ def calc_holdings_overlap(funds_data: list) -> "dict | None":
             "notes":        str
         }
 
-    閾值：score >= 0.70 → shadow（持股+產業都很像 = 影子基金 / 集中度過高）
-    公式：score = jaccard_holdings × 0.6 + cosine_sector × 0.4
+    閾值：score >= SHADOW_FUND_THRESHOLD_RATIO (0.70) → shadow（持股+產業都很像 = 影子基金 / 集中度過高）
+    公式：score = jaccard_holdings × SHADOW_FUND_JACCARD_WEIGHT_RATIO + cosine_sector × SHADOW_FUND_COSINE_WEIGHT_RATIO
+    （W5-3 §3.3:weights 已 SSOT 化於 shared/signal_thresholds.py,本 docstring 對應 v19.74 W2 落地）
 
     任一基金缺持股或產業資料 → 該對改用單獨可得的維度；皆缺 → score = 0、不入 shadow。
     """

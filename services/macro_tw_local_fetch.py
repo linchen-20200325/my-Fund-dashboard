@@ -307,8 +307,15 @@ def fetch_foreign_consecutive_days(days_back: int = 30, token: str = "") -> dict
         result['error'] = 'FinMind 無 Foreign_Investor 資料'
         return result
     df = pd.DataFrame(fi_rows)
-    df['net'] = pd.to_numeric(df.get('buy', 0), errors='coerce').fillna(0) - \
-                pd.to_numeric(df.get('sell', 0), errors='coerce').fillna(0)
+    # W5-3 §1: FII buy/sell 缺值處理 — to_numeric(errors='coerce') 把不可解析轉 NaN;
+    # 接 fillna(0) 視為「該方向無交易」(業務正確,FinMind 偶爾單向欄位缺漏)。加 log 透明化
+    _buy_num = pd.to_numeric(df.get('buy', 0), errors='coerce')
+    _sell_num = pd.to_numeric(df.get('sell', 0), errors='coerce')
+    _buy_nan = int(_buy_num.isna().sum())
+    _sell_nan = int(_sell_num.isna().sum())
+    if _buy_nan or _sell_nan:
+        print(f"[macro_tw_local_fetch FII] fillna(0): buy={_buy_nan}, sell={_sell_nan} 筆視為當日該向無交易")
+    df['net'] = _buy_num.fillna(0) - _sell_num.fillna(0)
     df = df.sort_values('date').reset_index(drop=True)
     if len(df) < 2:
         result['error'] = '外資資料筆數不足'
