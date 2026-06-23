@@ -114,8 +114,12 @@ def test_gemini_empty_api_key_returns_degraded_message():
 
 
 def test_gemini_http_error_returns_string(monkeypatch):
-    """monkeypatch requests.post 回 503 → 函式不抛例外，回字串。"""
-    import services.ai_service as ai_engine
+    """monkeypatch requests.post 回 503 → 函式不抛例外，回字串。
+
+    F-H2 v19.78:_gemini 已 delegate 至 infra.llm._call_gemini,
+    patch target 隨之改為 infra.llm.requests.post。
+    """
+    import infra.llm as _infra_llm
 
     class _FakeResp:
         status_code = 503
@@ -127,7 +131,7 @@ def test_gemini_http_error_returns_string(monkeypatch):
     def _fake_post(*_args, **_kwargs):
         return _FakeResp()
 
-    monkeypatch.setattr(ai_engine.requests, "post", _fake_post)
+    monkeypatch.setattr(_infra_llm.requests, "post", _fake_post)
     # retry=0 加速測試
     out = _gemini("fake-key", "test prompt", retry=0)
     assert isinstance(out, str)
