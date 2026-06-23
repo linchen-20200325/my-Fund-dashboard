@@ -45,6 +45,10 @@ from infra.proxy import fetch_url
 # v18.58: 借用 fund_fetcher 的 TTL 快取裝飾器（同樣模組層共享、可 clear_all_caches 統一清空）
 from fund_fetcher import _ttl_cache, register_cache
 from shared.fred_series import FRED_BSCICP02, FRED_PHILLY_FED
+from shared.signal_thresholds import (  # v19.74 W3a SSOT consume
+    RECESSION_LOGIT_COEF_INTERCEPT,
+    RECESSION_LOGIT_COEF_SPREAD,
+)
 from shared.ttls import TTL_5MIN, TTL_10MIN, TTL_30MIN
 
 __version__ = "1.0.0"
@@ -754,7 +758,7 @@ def recession_probability(spread_10y3m: Optional[float]) -> Optional[float]:
     """
     if spread_10y3m is None:
         return None
-    logit = -1.5 * spread_10y3m - 0.8
+    logit = RECESSION_LOGIT_COEF_SPREAD * spread_10y3m + RECESSION_LOGIT_COEF_INTERCEPT
     return round(1 / (1 + math.exp(-logit)) * 100, 1)
 
 

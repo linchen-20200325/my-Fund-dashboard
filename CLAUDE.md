@@ -224,22 +224,11 @@
 | `SCORE_RULES`(macro evaluation) | weights + lambdas | services/macro_validation.py:35-84 | ✅ SSOT + JSON override(macro_thresholds_global.json) |
 | Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | services/macro_weights_store.py:363-364 | ✅ SSOT + active.json override |
 | Valuation `FORWARD_PE_MEAN/STD`、`GDP_TREND/_STD` | 16.5/3.0/2.3/1.5 | services/valuation.py:33-38 | ✅ SSOT |
-| **252**(trading days/yr) | 年化常數 | fund_service.py:180,183,222,318-319,342-345(8+ 處) | ❌ **inline magic**(無 SSOT 常數) |
-| Sahm rule trigger | 0.5 | services/macro_service.py:216-218 | ❌ **inline magic** |
-| CFNAI recession threshold | -0.7 | services/macro_service.py:226 | ❌ **inline magic** |
-| Recession logit coef | -1.5 / -0.8 | services/macro_service.py:152 | ❌ **inline magic** |
-| Portfolio weights(jaccard/cosine) | 0.6 / 0.4 | services/portfolio_service.py:424 | ❌ **inline magic** |
-| Shadow fund threshold | 0.70 | services/portfolio_service.py:424 | ❌ **inline magic** |
-| Risk score weights(VIX/HY/Yield) | 0.3 / 0.4 / 0.3 | services/precision_service.py:64, risk_calibration.py:23 | ❌ **inline magic**(兩處重複) |
-| Liquidity weights(XCCY/CARRY/MOVE) | 0.4 / 0.3 / 0.3 | services/liquidity_engine.py:44 | ❌ **inline magic** |
-| TPI weights(z_b/z_f/z_m) | 0.4 / 0.3 / 0.3 | services/macro_service.py:1343 | ❌ **inline magic** |
-| NEAR_PCT / WARN_GAP_PCT | 2.0 % | fund_service.py:279, fund_dividend_calculator.py:23 | ❌ **inline magic**(兩處重複,值相同) |
-| σ verdict cutoffs | 0.8 / 0.3 / -0.3 / -0.8 | services/macro_explain.py:66-75 | ❌ **inline magic**(無 SSOT,σ 散落多處) |
-| CPI zone 邊界 | 2.0 / 3.0 / 4.0 / 5.0 | services/macro_tw_local.py:356-362 | ❌ **inline magic** |
-| Allocation phase params | DRIP/CASH/STAY 4×3 matrix | services/allocation_simulator.py:71-95 | ❌ **inline magic**(hardcoded matrix) |
-| Holdings NAV sanity bounds | 0.3x / 3.0x | services/fund_service.py:239-240 | ❌ **inline magic** |
+| `signal_thresholds.*`(23 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT 等 | shared/signal_thresholds.py v19.74 | ✅ SSOT(W2+W3a 已遷移 11 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability) |
+| CPI zone 邊界 | 2.0 / 3.0 / 4.0 / 5.0 | services/macro_tw_local.py:356-362 | ❌ **inline magic**(待 W3b:語意命名 + 加進 signal_thresholds) |
+| Allocation phase params | DRIP/CASH/STAY 4×3 matrix | services/allocation_simulator.py:71-95 | ⚠️ **policy preset 而非 metric**(scope 未定;若移 SSOT 建議獨立 `shared/allocation_policies.py`) |
 
-❌ 標記 **12 項**列入步驟 3 audit 高優先稽核項。
+❌ 標記 **1 項**待 W3b、⚠️ **1 項**待架構決定(其餘 10 項 W3a 已收斂)。
 
 **其他規則**:
 - `fillna` / `ffill` / `dropna` 必須顯式呼叫 + log 受影響筆數
