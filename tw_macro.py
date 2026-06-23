@@ -101,6 +101,9 @@ def fetch_twse_breadth() -> dict:
             result['dec']        = dec
             result['breadth']    = round((adv - dec) / (adv + dec) * 100, 2)
             result['z_breadth']  = max(-3.0, min(3.0, result['breadth'] / 20.0))
+            # F-PROV-1 phase 8 v19.94 — provenance(schema-additive,僅實際拿到資料時寫入)
+            result['source'] = 'TWSE:MI_INDEX:MS'
+            result['fetched_at'] = pd.Timestamp.now('UTC').isoformat()
         break
     return result
 
@@ -159,6 +162,9 @@ def fetch_finmind_foreign_investor(days_back: int = 7) -> dict:
     result['fii_net'] = fii_net
     result['z_fii']   = max(-3.0, min(3.0, fii_net / 5_000_000_000))
     result['date']    = latest.get('date', '')
+    # F-PROV-1 phase 8 v19.94 — provenance(schema-additive)
+    result['source'] = 'FinMind:TaiwanStockTotalInstitutionalInvestors:Foreign_Investor'
+    result['fetched_at'] = pd.Timestamp.now('UTC').isoformat()
     return result
 
 
@@ -280,6 +286,9 @@ def fetch_cbc_m1b_m2() -> dict:
         'tier_used': None, 'is_proxy_tier': False, 'error': None,
     }
 
+    # F-PROV-1 phase 8 v19.94 — provenance(schema-additive,tier-aware source)
+    _now_iso = pd.Timestamp.now('UTC').isoformat()
+
     # ── Tier 1 ──
     for url in CBC_MS1_URLS:
         out = _try_cbc_ms1(url)
@@ -287,14 +296,18 @@ def fetch_cbc_m1b_m2() -> dict:
             result['m1b_yoy'], result['m2_yoy'] = out
             result['gap']        = round(out[0] - out[1], 2)
             result['tier_used']  = 1
+            result['source']     = 'CBC:ms1.json:tier1'
+            result['fetched_at'] = _now_iso
             return result
 
     # ── Tier 2 ──
     out = _try_cbc_ef15m01()
     if out is not None:
         result['m1b_yoy'], result['m2_yoy'] = out
-        result['gap']       = round(out[0] - out[1], 2)
-        result['tier_used'] = 2
+        result['gap']        = round(out[0] - out[1], 2)
+        result['tier_used']  = 2
+        result['source']     = 'CBC:EF15M01:tier2'
+        result['fetched_at'] = _now_iso
         return result
 
     # ── Tier 3 ──
@@ -304,9 +317,13 @@ def fetch_cbc_m1b_m2() -> dict:
         result['gap']            = round(out[0] - out[1], 2)
         result['tier_used']      = 3
         result['is_proxy_tier']  = True
+        result['source']         = 'Yahoo:^TWII:proxy_tier3'
+        result['fetched_at']     = _now_iso
         return result
 
-    result['error'] = "三層備援全部失敗"
+    result['error']      = "三層備援全部失敗"
+    result['source']     = 'CBC:M1B_M2:all_tiers_failed'
+    result['fetched_at'] = _now_iso
     return result
 
 
