@@ -4183,6 +4183,10 @@ def fetch_performance_wb01(code: str) -> dict:
 
             if out:
                 print(f"[wb01 perf] ✅ {out}")
+                # F-PROV-1 phase 13 v19.99 — provenance(schema-additive)
+                _host_wb = url.split("/")[2] if "://" in url else "moneydj"
+                out["source"] = f"MoneyDJ:{_host_wb}:wb01"
+                out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 break
         except Exception as e:
             print(f"[fetch_perf_wb01] {url[:50]} ERR: {e}")
@@ -4320,7 +4324,12 @@ def fetch_risk_metrics(code: str) -> dict:
                         out["yearly_stats"] = yearly
                         print(f"[risk_metrics] 年度統計 {list(yearly.keys())}")
 
-            if out: break  # Got data from first working URL
+            if out:
+                # F-PROV-1 phase 13 v19.99 — provenance(schema-additive)
+                _host_wb07 = url.split("/")[2] if "://" in url else "moneydj"
+                out["source"] = f"MoneyDJ:{_host_wb07}:wb07"
+                out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                break  # Got data from first working URL
         return out
     except Exception as e:
         print(f"[fetch_risk_metrics] {e}")
@@ -4449,6 +4458,10 @@ def fetch_holdings(code: str) -> dict:
         dm = _re.search(r"資料月份[:：]\s*(\d{4}/\d{2})", full_txt)
         if dm: out["data_date"] = dm.group(1)
 
+        # F-PROV-1 phase 13 v19.99 — provenance(schema-additive,僅實際拿到資料時寫入)
+        if out:
+            out["source"] = f"MoneyDJ:yp:{_hold_page}"
+            out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
         return out
     except Exception as e:
         print(f"[fetch_holdings] {e}")
