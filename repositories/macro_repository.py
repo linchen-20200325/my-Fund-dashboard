@@ -722,8 +722,20 @@ def fetch_macro_compass(range_: str = "6mo") -> dict:
 # ══════════════════════════════════════════════════════════════
 # 純數學工具(不需要網路,兩邊共用)
 # ══════════════════════════════════════════════════════════════
-# W5-5 §1 + DRY:zscore() 函式已刪除(死碼 — 全庫 0 caller),
-# macro_service.zscore() 為唯一活的版本,std=0 已改回 NaN + log 對齊 §1。
+
+def zscore(s: pd.Series) -> pd.Series:
+    """標準分數 z-score(W5-5 §1:std=0 / NaN 退化時回全 NaN + log)。
+
+    SSOT for zscore — services.macro_service 端 import 此版本(消 DRY)。
+    caller 須以 isna() 檢查 NaN,**禁止**把 NaN 視為 0(掩蓋退化情境)。
+    """
+    if s.empty:
+        return s
+    std = float(s.std())
+    if std == 0 or np.isnan(std):
+        print(f"[macro_repository zscore] std=0/NaN 退化:len={len(s)}, mean={s.mean()},回 NaN")
+        return pd.Series([np.nan] * len(s), index=s.index)
+    return (s - s.mean()) / std
 
 
 def trend_arrow(vals: list[float]) -> str:

@@ -1223,20 +1223,9 @@ def calc_macro_phase(indicators: dict) -> dict:
 # v13 新增：Z-Score 工具 & 景氣循環辨識模型（Regime Model）
 # ══════════════════════════════════════════════════════════════
 
-def zscore(series: pd.Series) -> pd.Series:
-    """標準化 Z-Score,用於指標估值判斷
-
-    W5-5 §1 Fail Loud:std=0 / NaN(資料退化:全常數或空集)時回傳全 NaN,
-    並 print log;caller 須以 isna() 檢查,**禁止**將 NaN 視為 0(掩蓋)。
-    """
-    if series.empty:
-        return series
-    std = float(series.std())
-    if std == 0 or std != std:  # std=0 or NaN
-        print(f"[macro_service zscore] std=0 退化:len={len(series)}, mean={series.mean()},回 NaN")
-        import numpy as _np
-        return pd.Series([_np.nan] * len(series), index=series.index)
-    return (series - series.mean()) / std
+# W5-5+ §1 + DRY:zscore SSOT 在 repositories/macro_repository.py,本檔僅 re-export
+# 以維持既有 caller 介面;新 caller 應直接 from repositories.macro_repository import zscore
+from repositories.macro_repository import zscore  # noqa: F401, E402
 
 
 def identify_regime(indicators: dict) -> dict:
