@@ -48,6 +48,23 @@ def set_risk_free_rate(rf_annual: float) -> None:
     _RF_ANNUAL = max(0.0, float(rf_annual))
 
 
+# F-RECON-1 phase 3 v19.88 — Sharpe 對帳 helper(self-calc vs MoneyDJ wb07)
+def _reconcile_sharpe_pair(self_calc, moneydj) -> dict | None:
+    """Sharpe 雙演算法對帳;失敗(import error / 任一缺值)時 graceful 回 None。
+
+    Returns
+    -------
+    dict | None  reconcile_pair 標準 dict;graceful fallback 為 None。
+    """
+    try:
+        from services.reconcile import reconcile_sharpe
+        _sc = float(self_calc) if self_calc is not None else None
+        _mj = float(moneydj) if moneydj is not None else None
+        return reconcile_sharpe(_sc, _mj)
+    except Exception:  # noqa: BLE001 — pure additive flag,失敗不應影響主流程
+        return None
+
+
 # ── calc_health_from_manual ──────────────────────────────────────────
 def calc_health_from_manual(
     nav_current: float,
@@ -467,6 +484,11 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             safe_float(risk_tbl.get("一年",{}).get("Sharpe")) or
             safe_float(risk_tbl.get("六個月",{}).get("Sharpe")) or
             sharpe
+        ),
+        # F-RECON-1 phase 3 v19.88 — Sharpe 雙演算法對帳(self-calc vs MoneyDJ wb07)
+        sharpe_reconcile=_reconcile_sharpe_pair(
+            self_calc=sharpe,
+            moneydj=safe_float(risk_tbl.get("一年", {}).get("Sharpe")),
         ),
         max_drawdown=max_dd,
         ma20=round(float(s.tail(20).mean()),4) if len(s)>=20 else None,

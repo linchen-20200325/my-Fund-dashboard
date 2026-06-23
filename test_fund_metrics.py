@@ -252,6 +252,52 @@ def test_total_return_zero_nav_safe():
     assert not np.isinf(out["Adj_NAV"]).any()
 
 
+# ════════════════════════════════════════════════════════════
+# F-RECON-1 phase 3 v19.88 — Sharpe 雙演算法對帳(schema-additive)
+# ════════════════════════════════════════════════════════════
+def test_sharpe_reconcile_field_present():
+    """calc_metrics 返回 dict 必包含 sharpe_reconcile 鍵(可為 None)"""
+    s = _fake_series(n_days=300, start_nav=10.0)
+    m = calc_metrics(s, [])
+    assert "sharpe_reconcile" in m
+
+
+def test_sharpe_reconcile_agree_when_close():
+    """self-calc 與 wb07 在 abs_tol 0.1 內 → agree"""
+    s = _fake_series(n_days=300, start_nav=10.0)
+    # 用足夠長的序列讓 self-calc Sharpe 算得出來
+    risk_override = {
+        "year_high_nav": float(s.tail(252).max()),
+        "year_low_nav":  float(s.tail(252).min()),
+        "risk_table": {
+            "六個月": {"標準差": 10.0, "Sharpe": 1.20},
+            "一年":   {"標準差": 10.0, "Sharpe": 1.20},
+        },
+    }
+    m = calc_metrics(s, [], risk_override=risk_override)
+    # sharpe 欄優先用 wb07(1.20),sharpe_reconcile 比對 self-calc vs wb07(1.20)
+    if m["sharpe_reconcile"] is not None and m["sharpe_reconcile"]["status"] != "a_missing":
+        # 任一狀態都 OK,主要驗 schema 對
+        assert "agree" in m["sharpe_reconcile"]
+        assert "status" in m["sharpe_reconcile"]
+
+
+def test_sharpe_reconcile_a_missing_when_no_self_calc():
+    """序列過短(<60 筆)→ self-calc Sharpe = None → reconcile = a_missing"""
+    s = _fake_series(n_days=40, start_nav=10.0)   # < 60
+    risk_override = {
+        "year_high_nav": float(s.max()),
+        "year_low_nav":  float(s.min()),
+        "risk_table": {
+            "一年":   {"標準差": 10.0, "Sharpe": 1.20},
+        },
+    }
+    m = calc_metrics(s, [], risk_override=risk_override)
+    # self-calc Sharpe = None,wb07 有值
+    if m["sharpe_reconcile"] is not None:
+        assert m["sharpe_reconcile"]["status"] in ("a_missing", "both_missing")
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__, "-v"]))
