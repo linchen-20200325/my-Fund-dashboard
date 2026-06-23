@@ -474,6 +474,10 @@ def _src_cnyes_nav(code: str) -> pd.Series:
         s = fetch_nav_cnyes(code)
         if len(s) >= 10:
             print(f"[src_cnyes] ✅ {code} {len(s)} 筆")
+            # F-PROV-1 phase 10 v19.96 — provenance(Series.attrs;若上游已設則保留)
+            if "source" not in s.attrs:
+                s.attrs["source"] = "Cnyes:fund_nav_api"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
             return s
     except Exception as e:
         print(f"[src_cnyes] {code}: {e}")
@@ -787,6 +791,9 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
         if rows:
             s = pd.Series(rows).sort_index()
             print(f"[src_morningstar] ✅ {_code} (secId={sec_id}, UK) {len(s)} 筆")
+            # F-PROV-1 phase 10 v19.96 — provenance(Series.attrs)
+            s.attrs["source"] = f"Morningstar:UK:timeseries:{sec_id}"
+            s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
             return s
     except Exception as _e2:
         print(f"[src_morningstar] {_code} UK timeseries: {_e2}")
@@ -809,6 +816,9 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
             if rows:
                 s = pd.Series(rows).sort_index()
                 print(f"[src_morningstar] ✅ {_code} (secId={sec_id}, lt/{_tok}) {len(s)} 筆")
+                # F-PROV-1 phase 10 v19.96 — provenance(Series.attrs;含 token 識別)
+                s.attrs["source"] = f"Morningstar:lt:{_tok}:{sec_id}"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as _e3:
             print(f"[src_morningstar] {_code} lt/{_tok}: {_e3}")
@@ -867,6 +877,9 @@ def _src_yahoo_finance_nav(code: str) -> "pd.Series":
         if rows:
             s = pd.Series(rows).sort_index()
             print(f"[src_yahoo] ✅ {_code} ({yf_symbol}) {len(s)} 筆")
+            # F-PROV-1 phase 10 v19.96 — provenance(Series.attrs)
+            s.attrs["source"] = f"Yahoo:chart:{yf_symbol}"
+            s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
             return s
         print(f"[src_yahoo] {_code} ({yf_symbol}): 資料解析後為空")
     except Exception as _e:
