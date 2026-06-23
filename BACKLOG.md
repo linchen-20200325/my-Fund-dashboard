@@ -10,7 +10,11 @@
 > Bootstrap 4 步流程已完成(§0 改名「填寫紀錄」#322)，§3.3 反捏造 / §8.2 高項違憲皆 0。
 > 以下為**步驟 3 audit 中發現但本輪未動**的 ⚠️ / 灰色地帶 / 補洞項目，下個 session 入口。
 
-- [⚙️] **F-PROV-1** §2.2 provenance 補洞;v19.82 第 1 階段:`repositories.macro_repository.fetch_fred()` 已加 `source`(`"FRED:<sid>"`)+ `fetched_at`(UTC ISO)欄,schema-additive,33/33 targeted tests 全綠;後續階段:`fetch_yf_close` / FinMind / TWSE / CBC 等其餘 fetcher + macro 12 指標融合處 score 出口
+- [⚙️] **F-PROV-1** §2.2 provenance 補洞;v19.82-84 完成 phase 1-3:
+  * phase 1(#326):`fetch_fred` 加 source/fetched_at columns
+  * phase 2(#327):`fetch_yf_close` 加 attrs
+  * phase 3(#328):`fetch_defillama_stablecoin_mcap` (attrs) + `fetch_aaii_sentiment` (dict keys)
+  * 後續:`fetch_ism_pmi` 5-tier(僅缺 fetched_at)/ `fetch_macro_compass` / 12 指標融合處 score 出口
 - [x] **F-PIT-1** §2.3 v19.81 audit 結案:`crisis_backtest.py` + `crisis_strategy_grid.py` **PIT-safe**(時序順序掃描 + `shift(1)` 防 same-bar lookahead + 嚴格時間窗切片,無 merge_asof 跨頻)
 - [ ] **F-SCHEMA-1** §3.1 ⚠️ pandera 是否加 requirements + 逐 repository 落地 schema?(評估 ~200ms 啟動 cost)
 - [x] **F-GRAY-1** §8.3 v19.81 audit 結案:`fund_fetcher.py` **保留根目錄**(18 條 re-export shim + 57 caller,搬移為 cosmetic)
