@@ -426,7 +426,11 @@ def fetch_defillama_stablecoin_mcap() -> pd.Series:
             continue
     if not rows:
         return pd.Series(dtype=float, name="stablecoin_mcap")
-    return pd.Series(rows, name="stablecoin_mcap").sort_index()
+    s = pd.Series(rows, name="stablecoin_mcap").sort_index()
+    # F-PROV-1 v19.84 phase 3:provenance via Series.attrs(§2.2)
+    s.attrs["source"] = "DefiLlama:stablecoincharts:total_circulating"
+    s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+    return s
 
 
 # ══════════════════════════════════════════════════════════════
@@ -446,20 +450,27 @@ def fetch_aaii_sentiment() -> dict:
     Returns
     -------
     dict
-        成功:{value(spread), unit, bull, bear, date}
-        失敗:{_err: 描述}（fail-loud token,L2 caller 視為錯誤狀態）
+        成功:{value(spread), unit, bull, bear, date, source, fetched_at}
+        失敗:{_err: 描述, source, fetched_at}(fail-loud token,L2 caller 視為錯誤狀態)
+
+    F-PROV-1 v19.84 phase 3:provenance(§2.2)— 全路徑(含 _err)皆帶 source + fetched_at。
     """
     import re as _re
+    # F-PROV-1 v19.84:provenance 全路徑共享(成功/失敗 caller 都能追溯)
+    _prov = {
+        "source": "AAII:sentimentsurvey",
+        "fetched_at": pd.Timestamp.now('UTC').isoformat(),
+    }
     try:
         r = fetch_url(AAII_SENTIMENT_URL, timeout=8)
         if r is None:
-            return {"_err": "fetch_url 回 None(proxy/網路失敗)"}
+            return {"_err": "fetch_url 回 None(proxy/網路失敗)", **_prov}
         if r.status_code != 200:
-            return {"_err": f"HTTP {r.status_code}"}
+            return {"_err": f"HTTP {r.status_code}", **_prov}
         m_bull = _re.search(r"[Bb]ullish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
         m_bear = _re.search(r"[Bb]earish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
         if not m_bull or not m_bear:
-            return {"_err": "regex no match (page format changed)"}
+            return {"_err": "regex no match (page format changed)", **_prov}
         bull = float(m_bull.group(1))
         bear = float(m_bear.group(1))
         return {
@@ -468,9 +479,10 @@ def fetch_aaii_sentiment() -> dict:
             "bull": bull,
             "bear": bear,
             "date": "weekly",
+            **_prov,
         }
     except Exception as e:
-        return {"_err": f"{type(e).__name__}: {str(e)[:60]}"}
+        return {"_err": f"{type(e).__name__}: {str(e)[:60]}", **_prov}
 
 
 # ══════════════════════════════════════════════════════════════
