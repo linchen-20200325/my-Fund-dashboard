@@ -2037,6 +2037,7 @@ def _tdcc_get(ep: str) -> list:
             _tdcc_cache[ep] = data if isinstance(data, list) else []
         return _tdcc_cache[ep]
     except Exception as e:
+        print(f"[_tdcc_get] {ep} 失敗:{e}")
         return []
 
 

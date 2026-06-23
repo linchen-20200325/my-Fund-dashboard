@@ -32,10 +32,10 @@ import re as _re
 
 def _normalize_moneydj_url_for_cache(url: str) -> str:
     """v19.74 K2：Cache key 正規化 — 不論 tcbbankfund 或 www，都變成 (code, page_type) 唯一識別。
-    
+
     背景：同一基金代碼可能來自多個 URL（tcbbankfund、www、各家銀行冠名頁）。
     此函式將 URL 正規化為 (code, page_type) tuple key，避免「同基金不同 URL」重複 HTTP 抓取。
-    
+
     範例：
       - https://...?a=ACDD01&yp=010000  → "fetch_fund|ACDD01|010000"
       - https://...?A=ACDD01&yp=010001  → "fetch_fund|ACDD01|010001"
@@ -45,11 +45,11 @@ def _normalize_moneydj_url_for_cache(url: str) -> str:
         # 取代碼 &a=CODE 或 &A=CODE（MoneyDJ 大小寫混用）
         m = _re.search(r'[?&][aA]=([A-Z0-9\-]{3,30})', url)
         code = (m.group(1).upper() if m else "").strip()
-        
+
         # 取頁面類型（yp=010000 = 基本資料；yp=010001 = 績效表等）
         m_pt = _re.search(r'[?&][yY][pP]=([0-9]{6})', url)
         page_type = (m_pt.group(1) if m_pt else "default").strip()
-        
+
         # 最終 key = "fetch_fund|CODE|PAGE_TYPE"
         return f"fetch_fund|{code}|{page_type}"
     except Exception:
@@ -62,7 +62,7 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
 
     cache key 由 (args, sorted kwargs) 組成；無法 hash 的引數（list/dict）跳過快取直走原 fn。
     v19.74 K2：新增 key_fn 參數，可自訂 key 生成邏輯（用於 URL normalize 等特殊場景）。
-    
+
     Wrapper 暴露：cache_clear() / cache_info() → {size, maxsize, ttl_sec, hits, misses}
     """
     def decorator(fn):
@@ -84,10 +84,10 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
                     hash(key)
                 except TypeError:
                     return fn(*args, **kwargs)
-            
+
             if key is None:
                 return fn(*args, **kwargs)
-                
+
             now = _time.time()
             hit = _cache.get(key)
             if hit and (now - hit[0]) < ttl_sec:
