@@ -108,7 +108,7 @@
 - fund_repository.py 多 fetcher 回傳 dict 含 `source`、`fetched_at`、`page_type` 等欄位
 - `infra/proxy.py` 走 NAS Squid 時附 `X-Cache-*` header 供 audit
 - `infra/cache.py` `_CACHE_REGISTRY` 集中註冊所有 cache 函式,supports「clear all」
-- 步驟 3 audit 須點名缺血緣的關鍵 path(尤其 macro 12 指標融合處 → 單一 score 後失去來源),後續逐步補上。
+- ✅ **F-PROV-1 v19.82 第 1 階段**:`repositories.macro_repository.fetch_fred()` 已加 `source`(`"FRED:<sid>"`)+ `fetched_at`(UTC ISO)兩欄(schema-additive,既有 30 處 caller 無感)。其他 fetcher(`fetch_yf_close` / FinMind / TWSE / CBC 等)+ macro 12 指標融合處單一 score 後 provenance 後續逐步補上。
 
 ### 2.3 Point-in-Time — 防 Lookahead
 

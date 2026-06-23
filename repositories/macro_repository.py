@@ -239,11 +239,20 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
 
     Returns
     -------
-    pd.DataFrame  欄位: ['date' (Timestamp), 'value' (float),
-                          'realtime_start' (Timestamp)],已排序去除空值。
-                  v19.60 D1：補上 realtime_start（FRED API 該筆觀測首次發布日，
-                  ≈ BLS/FED 真實 publish 時間），用於 UI chip 區分「資料月份」
-                  與「真實發布日」。失敗時回傳空 DataFrame。
+    pd.DataFrame  欄位:
+        - `date` (Timestamp):資料歸屬日(observation_date)
+        - `value` (float):指標數值
+        - `realtime_start` (Timestamp):FRED 該筆觀測首次發布日(v19.60 D1)
+        - `source` (str):血緣標識,"FRED:<series_id>"(F-PROV-1 v19.82 新增)
+        - `fetched_at` (str):本次抓取的 UTC ISO 時間(F-PROV-1 v19.82 新增)
+
+    失敗時回傳空 DataFrame(無欄位,caller 須先 `df.empty` 判斷)。
+
+    v19.60 D1:`realtime_start` ≈ BLS/FED 真實 publish 時間,用於 UI chip
+    區分「資料月份」與「真實發布日」(PIT 對齊鍵)。
+
+    v19.82 F-PROV-1(§2.2 provenance):新增 `source` + `fetched_at` 兩欄,
+    schema-additive;既有 caller(讀 date/value/realtime_start)無需修改。
     """
     if not api_key:
         return pd.DataFrame()
@@ -277,7 +286,12 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
         df["realtime_start"] = pd.to_datetime(df["realtime_start"], errors="coerce")
     else:
         df["realtime_start"] = pd.NaT
-    return df.dropna(subset=["value"]).sort_values("date").reset_index(drop=True)
+    out = df.dropna(subset=["value"]).sort_values("date").reset_index(drop=True)
+    # v19.82 F-PROV-1:provenance schema(§2.2)— source 標識 + 抓取時間
+    # 用 Timestamp.now('UTC') 避 pandas 4 deprecation(原 Timestamp.utcnow())
+    out["source"] = f"FRED:{series_id}"
+    out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+    return out
 
 
 # v19.65 P1-F1：FRED 批次預熱器
