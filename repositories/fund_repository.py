@@ -300,6 +300,9 @@ def _src_allianzgi_meta(code: str) -> dict:
                     meta["currency"] = rows_map.get("計價幣別", "TWD")
                     if meta.get("fund_name"):
                         print(f"[src_allianz_meta] ✅ {code}: {meta['fund_name'][:20]}")
+                        # F-PROV-1 phase 15 v19.101 — provenance(schema-additive)
+                        meta["source"] = "AllianzGI:ifund_meta"
+                        meta["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                         return meta
     except Exception as e:
         print(f"[src_allianz_meta] {e}")
@@ -567,6 +570,12 @@ def _src_cache_files(code: str) -> "pd.Series":
         s = pd.Series(rows).sort_index()
         updated_at = data.get("updated_at", "")
         print(f"[cache_files] ✅ {code}: {len(s)} 筆 (更新時間: {updated_at[:10]})")
+        # F-PROV-1 phase 15 v19.101 — provenance(Series.attrs)
+        s.attrs["source"] = f"GitHubActions:cache/nav/{code}.json"
+        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        # 註:cache file 自帶 updated_at,代表 GH Actions 寫入時間,與本次讀取(fetched_at)不同維度
+        if updated_at:
+            s.attrs["cache_updated_at"] = updated_at
         return s
     except Exception as e:
         print(f"[cache_files] {code} 讀取失敗: {e}")
@@ -1028,6 +1037,9 @@ def _src_morningstar_meta(code: str, fund_name: str = "") -> dict:
                 if not meta.get("fund_name"):
                     meta["fund_name"] = ms_name
                 print(f"[src_morningstar_meta] ✅ {_code}: {ms_name[:40]}")
+                # F-PROV-1 phase 15 v19.101 — provenance(schema-additive)
+                meta["source"] = "Morningstar:lt:SecuritySearch"
+                meta["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
     except Exception as _e3:
         print(f"[src_morningstar_meta] {_code}: {_e3}")
     return meta
@@ -1903,6 +1915,11 @@ def _src_tcb_meta(code: str) -> dict:
                                 meta["year_low_nav"]  = safe_float(cells[3].get_text(strip=True))
                     if meta.get("fund_name"):
                         print(f"[src_tcb_meta] ✅ {code}: {meta['fund_name'][:20]}")
+                        # F-PROV-1 phase 15 v19.101 — provenance(schema-additive)
+                        _host_tm = base.split("/")[2] if "://" in base else "moneydj"
+                        _ep_tm = path.split("?")[0].rsplit("/", 1)[-1]
+                        meta["source"] = f"MoneyDJ:{_host_tm}:{_ep_tm}"
+                        meta["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                         return meta
         except Exception as e:
             print(f"[src_tcb_meta] {code} {path}: {e}")
@@ -2017,6 +2034,9 @@ def _src_sitca_meta(code: str) -> dict:
                 break
         if meta.get("fund_name"):
             print(f"[src_sitca] ✅ {code}: {meta['fund_name'][:20]}")
+            # F-PROV-1 phase 15 v19.101 — provenance(schema-additive)
+            meta["source"] = "SITCA:IN2213.aspx:meta"
+            meta["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
     except Exception as e:
         print(f"[src_sitca] {code}: {e}")
     return meta
