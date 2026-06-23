@@ -731,7 +731,11 @@ def fetch_macro_compass(range_: str = "6mo") -> dict:
       tnx  : 同上                                                          | None
       gspc : 同上 + {'ma60', 'ma60_series'}                                | None
     """
-    out: dict = {'vix': None, 'tnx': None, 'gspc': None}
+    # F-PROV-1 v19.86 phase 5:provenance(§2.2)
+    _fetched_at = pd.Timestamp.now('UTC').isoformat()
+    out: dict = {'vix': None, 'tnx': None, 'gspc': None,
+                  'source': 'Yahoo:^VIX+^TNX+^GSPC:compass',
+                  'fetched_at': _fetched_at}
 
     def _sig_vix(v):
         # Phase 1 規格：>25 黃 / >30 綠（恐慌貪婪區=逢低加碼時機）
