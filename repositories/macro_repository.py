@@ -196,11 +196,21 @@ MACRO_THRESHOLDS: dict = {
     "EURUSD":      {"green_above": 1.15, "yellow_below": 1.10, "red_below": 1.05},
     "USDJPY":      {"green_below": 140.0, "yellow_above": 150.0, "red_above": 155.0},
     "USDCNH":      {"green_below": 7.0, "yellow_above": 7.15, "red_above": 7.3},
-    # v19.71 SSOT 補完：以下 13 個閾值與 services/macro_service.py inline 判斷邏輯
-    # 完全等價（值對值同步），目前 production 仍用 inline conditional，本 dict 作為
-    # SSOT 文件來源 + 未來 refactor consume 的 single source of truth。
-    # 動態閾值（FED_RATE 的 v<prev / NEW_HOME 的 v>prev / ADL 的 chg）與多階分數
-    # （NFP 5 級評分）schema 不相容，暫不收錄。
+    # v19.71 SSOT 補完：以下 13 個閾值為**文件參考用**,目前 production 仍用 inline conditional。
+    #
+    # ⚠️ F-GRAY-4 v19.80 audit 釐清(2026-06-23):原 v19.71 註解稱「完全等價」過度承諾,
+    # 實際 inline 與本 dict **語意不同源**:
+    #   - inline 服務多種用途(signal classification / score function / regime ID /
+    #     inflection detection),同一指標在不同 site 有不同閾值
+    #   - 本 dict 為單一「stoplight 紅黃綠燈」schema,無法表達多用途閾值
+    #   - 範例:
+    #     * VIX dict red_above=30 vs inline `> 25`(macro_service.py:1119,其他 site `> 30`)
+    #     * PMI dict green_above=52 vs inline `>= 50`(:324, score function 用)
+    #     * CPI dict yellow_above=3.5 vs inline `> 4.0`(:201, signal "buy" 條件)
+    #   - 結論:**不應**機械式 swap inline → dict,需逐 site 評估語意才能 harmonize
+    #
+    # 動態閾值(FED_RATE 的 v<prev / NEW_HOME 的 v>prev / ADL 的 chg)與多階分數
+    # (NFP 5 級評分)schema 不相容,暫不收錄。
     "FED_RATE":       {"red_above": 5.0},                                  # green 為 v<prev 動態，dict 僅靜態 red
     "UNEMPLOYMENT":   {"green_below": 4.5, "red_above": 6.0},
     "PPI":            {"green_low": 0.0, "green_high": 3.0, "red_above": 5.0, "red_below": -1.0},
