@@ -146,6 +146,9 @@ def _src_fundclear_meta(code: str) -> dict:
             meta["nav_date"]    = str(nav_d)[:10] if nav_d else ""
             if meta.get("fund_name"):
                 print(f"[src_fundclear_meta] ✅ {code}: {meta['fund_name'][:20]}")
+                # F-PROV-1 phase 6 v19.92 — provenance(schema-additive)
+                meta["source"] = "FundClear:GetFundBasicInfo"
+                meta["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
     except Exception as e:
         print(f"[src_fundclear_meta] {code}: {e}")
     return meta
@@ -2079,6 +2082,10 @@ def _src_tdcc_meta(code: str) -> dict:
                 break
     except Exception as _e:
         print(f"[src_tdcc_meta] 3-4 {_c}: {_e}")
+    # F-PROV-1 phase 6 v19.92 — provenance(schema-additive,僅在實際拿到資料時寫入)
+    if meta:
+        meta.setdefault("source", "TDCC:OpenAPI:3-2+3-4")
+        meta.setdefault("fetched_at", pd.Timestamp.now('UTC').isoformat())
     return meta
 
 
