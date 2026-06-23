@@ -114,9 +114,12 @@ def test_fetch_fred_goes_through_proxy_helper(monkeypatch):
     assert captured["params"]["series_id"] == "NAPM"
     assert captured["params"]["api_key"] == "fake_key"
     assert len(df) == 3
-    # v19.60 D1：fetch_fred 統一補 realtime_start 欄（API 無回則填 NaT）
-    assert list(df.columns) == ["date", "value", "realtime_start"]
+    # v19.60 D1:fetch_fred 統一補 realtime_start 欄(API 無回則填 NaT)
+    # F-PROV-1 v19.82:新增 source + fetched_at provenance 欄位(§2.2)
+    assert {"date", "value", "realtime_start", "source", "fetched_at"}.issubset(df.columns)
     assert df["value"].dtype == float
+    assert (df["source"] == "FRED:NAPM").all()
+    assert df["fetched_at"].notna().all()
 
 
 def test_fetch_fred_empty_key_no_network():
