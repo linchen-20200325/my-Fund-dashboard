@@ -11,15 +11,15 @@
 > 以下為**步驟 3 audit 中發現但本輪未動**的 ⚠️ / 灰色地帶 / 補洞項目，下個 session 入口。
 
 - [ ] **F-PROV-1** §2.2 macro 12 指標融合處單一 score 後失去來源 → 補 source/fetched_at/as_of provenance schema
-- [ ] **F-PIT-1** §2.3 ⚠️ `services/crisis_backtest.py` + `crisis_strategy_grid.py` vintage 對齊釐清(目前僅文件存證)
+- [x] **F-PIT-1** §2.3 v19.81 audit 結案:`crisis_backtest.py` + `crisis_strategy_grid.py` **PIT-safe**(時序順序掃描 + `shift(1)` 防 same-bar lookahead + 嚴格時間窗切片,無 merge_asof 跨頻)
 - [ ] **F-SCHEMA-1** §3.1 ⚠️ pandera 是否加 requirements + 逐 repository 落地 schema?(評估 ~200ms 啟動 cost)
-- [ ] **F-GRAY-1** §8.3 灰色地帶 `fund_fetcher.py`(根目錄)是否搬到 `repositories/`(歷史包袱)
-- [ ] **F-GRAY-2** §8.3 灰色地帶 `hot_money.py` / `tw_macro.py`(根目錄)同上
-- [ ] **F-GRAY-3** §8.3 灰色地帶 `app.py`(425 LOC)確認無業務邏輯未下沉到 L2
-- [⚠️] **F-GRAY-4** §8.3 灰色地帶 `MACRO_THRESHOLDS` dict consumption gap — v19.80 audit 釐清:dict 與 inline 語意不同源,**不可機械式 swap**;若要 harmonize 需逐 site 評估語意(範疇升級為架構提案,詳見 `repositories/macro_repository.py:199-212` 註解 + CLAUDE.md §8.3)
+- [x] **F-GRAY-1** §8.3 v19.81 audit 結案:`fund_fetcher.py` **保留根目錄**(18 條 re-export shim + 57 caller,搬移為 cosmetic)
+- [x] **F-GRAY-2** §8.3 v19.81 audit 結案:`hot_money.py` / `tw_macro.py` 同上,根目錄 vs `repositories/` 為純 cosmetic
+- [x] **F-GRAY-3** §8.3 v19.81 audit 結案:`app.py`(568 LOC)已是 orchestrator,無業務邏輯需下沉;同步刪除 1 處 dead code `_unused_old_calculate_composite_score`
+- [⚠️] **F-GRAY-4** §8.3 v19.80 audit 結案:`MACRO_THRESHOLDS` dict 與 inline 語意不同源,**不可機械式 swap**;harmonize 需架構提案(詳見 `macro_repository.py:199-212` 註解 + CLAUDE.md §8.3)
 - [ ] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 已收一輪;其餘需逐一檢視
 
-**ROI 建議排序**(F-GRAY-4 v19.80 audit 後降級):F-PROV-1(影響資料可信度) → F-PIT-1(影響回測正確性) → F-GRAY-1/2/3(歷史包袱整理) → F-SCHEMA-1(ROI 偏低) → F-GRAY-4(架構提案)。
+**ROI 建議排序**(F-PIT-1/F-GRAY-1/2/3 已結案):F-PROV-1(影響資料可信度) → F-SCHEMA-1(ROI 偏低) → F-GRAY-4(架構提案) → F-MED 中項。
 
 ---
 

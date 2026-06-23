@@ -135,7 +135,11 @@
 - 月頻 macro vs 日頻 NAV:`merge_asof` direction="backward" + tolerance("40d" or 月底)
 - FX 換匯(USDTWD)用**當日**收盤率,**禁止**用未來率回填
 
-⚠️ **待 audit 確認項**:`services/crisis_backtest.py` + `crisis_strategy_grid.py` 是否確實實作 vintage 對齊?目前僅文件存證,程式碼層待步驟 3 釐清。
+✅ **F-PIT-1 v19.81 audit 結果**:`services/crisis_backtest.py` 與 `crisis_strategy_grid.py` **PIT-safe**:
+- `detect_crisis_events`:單序列時序順序掃描(走訪 + 維護 HWM),無未來索引存取
+- `attach_fund_drawdown`:嚴格時間窗 `>= peak_date & <= trough_date` 切片,recovery `> trough & <= recovery_date`
+- `crisis_strategy_grid.py:176`:`position = raw_pos.shift(1).fillna(1.0)` — 訊號於 t 計算、部位於 t+1 生效,防止 same-bar lookahead
+- 無 `merge_asof` 跨頻運算,無需 tolerance 對齊
 
 ### 2.4 Freshness — Max Staleness
 
@@ -471,12 +475,12 @@ except ImportError:
 
 新增例外**必須**:(1) 在此表登錄、(2) 對應檔案加註解指回此表、(3) PR 描述附理由。**禁止**未經登錄的潛在「軟例外」。
 
-### 8.3 灰色地帶(待 step 3 audit 確認是否違憲)
+### 8.3 灰色地帶(step 3 audit 確認結果)
 
-- **`fund_fetcher.py`(根目錄)**:分類 L1 Repository 但放在根目錄(歷史包袱)→ audit 看是否該搬到 `repositories/`(現況:`set_risk_free_rate` / `fetch_market_news` 已搬至 `services/fund_service` / `repositories/news_repository`,fund_fetcher 維持向後相容 re-export shim)
-- **`hot_money.py`、`tw_macro.py`(根目錄)**:同上,L1 邏輯散落根目錄
-- **`app.py`(425 LOC)**:已是 orchestrator,但確認是否完全無業務邏輯下沉到 L2
-- **`MACRO_THRESHOLDS` dict consumption gap**(F-GRAY-4 v19.80 audit 釐清):dict 與 inline **語意不同源**(inline 服務 signal classification / score function / regime ID / inflection detection 多用途,同指標多 site 不同閾值),**不可機械式 swap**;若要 harmonize 需逐 site 評估語意,本項升級為架構提案範疇。詳見 `macro_repository.py:199-212` 註解
+- ✅ **F-GRAY-1 v19.81 audit 結案**:`fund_fetcher.py`(根目錄,459 LOC)**保留根目錄**。檔內 18 條 `noqa: F401` re-export shim(infra.cache / infra.proxy 等)+ 57 個 caller import 線。內容已是「向後相容 shim 容器」,搬至 `repositories/` 為純 cosmetic 改動且需動 57 個 caller 介面,違反 §8.1 step 6「用不到的抽象先不做」。
+- ✅ **F-GRAY-2 v19.81 audit 結案**:`hot_money.py`(344 LOC, 5 callers) / `tw_macro.py`(334 LOC, 2 callers)同上 — self-contained L1 fetcher,根目錄 vs `repositories/` 為純 cosmetic,不視為違憲。
+- ✅ **F-GRAY-3 v19.81 audit 結案**:`app.py`(568 LOC)— 已是 orchestrator,主要功能為 `_now_tw`/`_load_keys`/`_check_secrets`/`_calc_data_health`(thin session-aware wrapper)/`render_macro_compass`(UI)。無顯著業務邏輯需下沉。同步刪除 1 處 dead code `_unused_old_calculate_composite_score`(deprecated placeholder, 0 callers)。
+- ⚠️ **F-GRAY-4 v19.80 audit 結案**:`MACRO_THRESHOLDS` dict 與 inline **語意不同源**(inline 服務 signal classification / score function / regime ID / inflection detection 多用途,同指標多 site 不同閾值),**不可機械式 swap**;若要 harmonize 需逐 site 評估語意,本項升級為架構提案範疇。詳見 `macro_repository.py:199-212` 註解
 
 ### 8.4 做到一半的新增功能 — 先盤點再動
 
