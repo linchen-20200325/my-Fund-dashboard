@@ -1726,6 +1726,10 @@ def _src_tcb_nav(code: str) -> pd.Series:
             s = _parse_nav_html(r.text)
             if len(s) >= 10:
                 print(f"[src_tcb] ✅ {code} {len(s)} 筆（{_url[:55]}）")
+                # F-PROV-1 phase 9 v19.95 — provenance(Series.attrs;源 URL 摘要)
+                _src_short = _url.split("/")[2] + ":" + _url.split("/")[-1].split("?")[0]
+                s.attrs["source"] = f"MoneyDJ:{_src_short}"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
             print(f"[src_tcb] {code} → {len(s)} 筆 ({_url[:45]})")
         except Exception as e:
@@ -1764,6 +1768,9 @@ def _src_tcb_nav(code: str) -> pd.Series:
             if len(rows) >= 10:
                 s = pd.Series(rows).sort_index()
                 print(f"[src_tcb] ✅ {code} {len(s)} 筆（yp004002 page={_page}）")
+                # F-PROV-1 phase 9 v19.95 — provenance(Series.attrs)
+                s.attrs["source"] = f"MoneyDJ:tcbbankfund:yp004002:{_page}"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as e:
             print(f"[src_tcb] {code} yp004002 page={_page}: {e}")
@@ -1772,6 +1779,10 @@ def _src_tcb_nav(code: str) -> pd.Series:
     s30 = _src_nav_30day(code)
     if len(s30) >= 10:
         print(f"[src_tcb] ⤵ {code} 改用近30日 ({len(s30)}筆)")
+        # F-PROV-1 phase 9 v19.95 — provenance(若 _src_nav_30day 已設則保留)
+        if "source" not in s30.attrs:
+            s30.attrs["source"] = "MoneyDJ:nav_30day:fallback"
+            s30.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
         return s30
     return pd.Series(dtype=float)
 
