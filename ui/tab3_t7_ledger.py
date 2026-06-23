@@ -32,7 +32,7 @@ from models.policy import (
     migrate_ledger_dict,
     parse_pk,
 )
-from repositories.fund_repository import fetch_fund_from_moneydj_url
+from services.moneydj_fetcher import auto_fetch_moneydj  # F-H6 v19.79: §8.2 L3→L2
 from repositories.ledger_repository import (
     append_ledger_row,
     replace_ledgers_for_policy,
@@ -1095,7 +1095,7 @@ def render_t7_section() -> None:
                             st.stop()
                         try:
                             with st.spinner(f"📡 抓取 {_new_code_clean}..."):
-                                _new_raw = fetch_fund_from_moneydj_url(_new_code_clean)
+                                _new_raw = auto_fetch_moneydj(_new_code_clean)
                             if _new_raw.get("error"):
                                 st.error(f"❌ 抓取失敗：{_new_raw['error']}")
                                 st.stop()

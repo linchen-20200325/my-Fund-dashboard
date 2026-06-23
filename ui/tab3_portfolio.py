@@ -33,7 +33,7 @@ from infra.oauth import (
 )
 from ui.helpers.metric_explainers import render_metric_explainer
 from ui.helpers.tw_time import tw_now_str
-from repositories.fund_repository import fetch_fund_from_moneydj_url
+from services.moneydj_fetcher import auto_fetch_moneydj  # F-H6 v19.79: §8.2 L3→L2
 from repositories.ledger_repository import (
     load_all_ledgers,
 )
@@ -1525,7 +1525,7 @@ def render_portfolio_tab() -> None:
                 _done = 0
                 with ThreadPoolExecutor(max_workers=4) as _ex:
                     _futures = {
-                        _ex.submit(fetch_fund_from_moneydj_url, _c): _c
+                        _ex.submit(auto_fetch_moneydj, _c): _c
                         for _c in _uniq_codes
                     }
                     for _fut in as_completed(_futures):
