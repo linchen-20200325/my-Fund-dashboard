@@ -1224,10 +1224,19 @@ def calc_macro_phase(indicators: dict) -> dict:
 # ══════════════════════════════════════════════════════════════
 
 def zscore(series: pd.Series) -> pd.Series:
-    """標準化 Z-Score，用於指標估值判斷"""
-    if series.std() == 0:
-        return pd.Series([0.0] * len(series), index=series.index)
-    return (series - series.mean()) / series.std()
+    """標準化 Z-Score,用於指標估值判斷
+
+    W5-5 §1 Fail Loud:std=0 / NaN(資料退化:全常數或空集)時回傳全 NaN,
+    並 print log;caller 須以 isna() 檢查,**禁止**將 NaN 視為 0(掩蓋)。
+    """
+    if series.empty:
+        return series
+    std = float(series.std())
+    if std == 0 or std != std:  # std=0 or NaN
+        print(f"[macro_service zscore] std=0 退化:len={len(series)}, mean={series.mean()},回 NaN")
+        import numpy as _np
+        return pd.Series([_np.nan] * len(series), index=series.index)
+    return (series - series.mean()) / std
 
 
 def identify_regime(indicators: dict) -> dict:
@@ -1260,9 +1269,12 @@ def identify_regime(indicators: dict) -> dict:
     zscore_pmi = None
     if pmi_series is not None and len(pmi_series) >= 12:
         z = float(zscore(pmi_series).iloc[-1])
-        if z < -1.5:   zscore_pmi = {"label": "PMI 低估（買進訊號）", "z": round(z,2), "signal": "🟢"}
-        elif z > 1.5:  zscore_pmi = {"label": "PMI 高估（過熱警告）", "z": round(z,2), "signal": "🔴"}
-        else:          zscore_pmi = {"label": "PMI 中性",             "z": round(z,2), "signal": "🟡"}
+        # W5-5 §1:std=0 退化時 zscore 回 NaN,caller 須跳過 zscore_pmi 輸出(不可填中性)
+        if z != z:  # NaN
+            zscore_pmi = None
+        elif z < -1.5:   zscore_pmi = {"label": "PMI 低估（買進訊號）", "z": round(z,2), "signal": "🟢"}
+        elif z > 1.5:    zscore_pmi = {"label": "PMI 高估（過熱警告）", "z": round(z,2), "signal": "🔴"}
+        else:            zscore_pmi = {"label": "PMI 中性",             "z": round(z,2), "signal": "🟡"}
 
     # ── 配置建議（依循環調整）────────────────────────────
     alloc_by_regime = {
