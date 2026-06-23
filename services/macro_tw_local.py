@@ -20,6 +20,18 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+# W5-4 §3.3:CPI zone 邊界 SSOT(取代 inline 2.0/3.0/4.0/5.0 + ±0.1/±0.3)
+from shared.signal_thresholds import (
+    CPI_YOY_IDEAL_MAX_PCT,
+    CPI_YOY_MILD_MAX_PCT,
+    CPI_YOY_NEUTRAL_MAX_PCT,
+    CPI_YOY_ELEVATED_MAX_PCT,
+    CPI_MOM_STRONG_DROP_PCT,
+    CPI_MOM_MILD_DROP_PCT,
+    CPI_MOM_FLAT_MAX_PCT,
+    CPI_MOM_MILD_RISE_PCT,
+)
+
 
 def _safe_float(x: Any) -> Optional[float]:
     """容錯轉浮點：None / 字串 / NaN → None。"""
@@ -147,13 +159,14 @@ def classify_long_term_regime(
     weight_total = 0.0
 
     if cpi_v is not None:
-        if cpi_v <= 2.0:
+        # W5-4 §3.3:CPI YoY 絕對分區走 SSOT(原 inline 2.0/3.0/4.0/5.0)
+        if cpi_v <= CPI_YOY_IDEAL_MAX_PCT:
             cpi_pts = 2
-        elif cpi_v <= 3.0:
+        elif cpi_v <= CPI_YOY_MILD_MAX_PCT:
             cpi_pts = 1
-        elif cpi_v <= 4.0:
+        elif cpi_v <= CPI_YOY_NEUTRAL_MAX_PCT:
             cpi_pts = 0
-        elif cpi_v <= 5.0:
+        elif cpi_v <= CPI_YOY_ELEVATED_MAX_PCT:
             cpi_pts = -1
         else:
             cpi_pts = -2
@@ -353,13 +366,14 @@ def classify_short_term_regime(
 
     if cpi_v is not None and cpi_p is not None:
         cpi_delta = cpi_v - cpi_p
-        if cpi_delta <= -0.3:
+        # W5-4 §3.3:CPI 月變化 MoM 分區走 SSOT(原 inline ±0.1/±0.3)
+        if cpi_delta <= CPI_MOM_STRONG_DROP_PCT:
             cpi_pts = 2
-        elif cpi_delta <= -0.1:
+        elif cpi_delta <= CPI_MOM_MILD_DROP_PCT:
             cpi_pts = 1
-        elif cpi_delta <= 0.1:
+        elif cpi_delta <= CPI_MOM_FLAT_MAX_PCT:
             cpi_pts = 0
-        elif cpi_delta <= 0.3:
+        elif cpi_delta <= CPI_MOM_MILD_RISE_PCT:
             cpi_pts = -1
         else:
             cpi_pts = -2
