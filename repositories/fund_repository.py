@@ -115,6 +115,9 @@ def _src_fundclear_nav(code: str) -> pd.Series:
         if rows:
             s = pd.Series(rows).sort_index()
             print(f"[src_fundclear] ✅ {code} {len(s)} 筆")
+            # F-PROV-1 phase 7 v19.93 — provenance(Series.attrs)
+            s.attrs["source"] = "FundClear:GetFundNAV"
+            s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
             return s
     except Exception as e:
         print(f"[src_fundclear] {code}: {e}")
