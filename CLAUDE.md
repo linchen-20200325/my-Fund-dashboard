@@ -9,10 +9,10 @@
 
 ---
 
-## §0. BOOTSTRAP 紀錄(首次填寫 2026-06-22;對應 Stock-Const-3 v3 模板)
+## §0. 填寫紀錄(首次填寫 2026-06-22;步驟 4 收尾 2026-06-23)
 
-> 完整稽核流程完成後再依 template 步驟 4 改名「§0. 填寫紀錄」。
-> 目前狀態:**步驟 2 完成(填寫 + §8 架構先行)→ 待步驟 3(回溯稽核違憲清單)→ 步驟 4 收尾**。
+> Bootstrap 流程全 4 步完成,§0 已從「BOOTSTRAP 紀錄」改名為「填寫紀錄」。
+> 完整收尾證據按時序記錄如下。
 
 **步驟 1｜探查專案** — 已完成,三組並行 Explore agent 掃描,涵蓋:
 - meta-docs(STATE/ARCHITECTURE/SPEC/STRATEGY/BACKLOG/Requirements/NAS_PROXY_GUIDE)
@@ -34,9 +34,24 @@
 - §4.6 領域邊界(基金特有狀態:配息切割 / 停售 / NAV 缺週 / FX 換匯 / 子網域 403)
 - §8 架構先行 — 4 層分層 + 5 條硬規則(對照 ARCHITECTURE.md v11.0)
 
-**步驟 3｜回溯稽核** — 待使用者確認 §2 後啟動,將分模組輸出「違憲清單(檔名 + 行號 + 違反哪條 + 高/中/低)」,**只報告先別修**。
+**步驟 3｜回溯稽核** — 已完成,違憲清單分高/中/低三級;以下 W 系列 + F-H 系列 PR 逐一收斂:
+- W1+W2(#310):3 處 except:pass + fillna 補 log + 業務語意註明
+- W5-1(#313):3 處 except:pass 補 log + fund_service fillna
+- W5-2(#314):4 處 ffill/dropna 補 log + 註明
+- W5-3(#315):shadow fund docstring SSOT + FII fillna 補 log
+- W3a(#312):macro_repository recession_probability 收 SSOT
+- F-H3(#316):CPI YoY+MoM zones 收 SSOT(signal_thresholds.py v19.75)
+- F-H5(#317):zscore DRY 合一 + std=0 改 NaN(§1 Fail Loud)
+- F-H4(#318):allocation matrix EX-POLICY-1 例外登記
+- F-H1(#319):AAII sentiment 下沉 L1 repository
+- F-H2(#320):ai_service Gemini I/O 下沉 infra.llm
+- F-H6(#321):moneydj 走 L2 + EX-CRUD-1 / EX-PASSTHRU-1 例外登記
 
-**步驟 4｜收尾** — 全部確認後改本 §0 為「填寫紀錄」並保留證據。
+**步驟 4｜收尾** — 已完成。
+- §3.3 反捏造 ❌ 0 項 / ⚠️ 0 項(F-H4 EX-POLICY-1 例外收結)
+- §8.2 高項違憲 0 項(F-H1/H2/H4/H6 全結案)
+- §8.2.A 例外清單:EX-CACHE-1 / EX-AI-1 / EX-POLICY-1 / EX-CRUD-1 / EX-PASSTHRU-1
+- 證據:全部 commit history + PR description 保留於 origin/main。
 
 ---
 
