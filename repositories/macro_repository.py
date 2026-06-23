@@ -399,6 +399,50 @@ def fetch_defillama_stablecoin_mcap() -> pd.Series:
 
 
 # ══════════════════════════════════════════════════════════════
+# AAII 散戶情緒調查 — 純 I/O + parse（F-H1 v19.77：從 us_liquidity_engine 下沉）
+#   來源：aaii.com/sentimentsurvey HTML scrape，週頻更新。
+#   回 raw dict {bull, bear, spread, date} 或 {_err: ...}；
+#   color/label 業務判讀由 L2 service (us_liquidity_engine) 處理。
+# ══════════════════════════════════════════════════════════════
+AAII_SENTIMENT_URL = "https://www.aaii.com/sentimentsurvey"
+
+
+@register_cache
+@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=2)
+def fetch_aaii_sentiment() -> dict:
+    """抓 AAII Investor Sentiment Survey 散戶情緒週度數值（best-effort scrape）。
+
+    Returns
+    -------
+    dict
+        成功:{value(spread), unit, bull, bear, date}
+        失敗:{_err: 描述}（fail-loud token,L2 caller 視為錯誤狀態）
+    """
+    import re as _re
+    try:
+        r = fetch_url(AAII_SENTIMENT_URL, timeout=8)
+        if r is None:
+            return {"_err": "fetch_url 回 None(proxy/網路失敗)"}
+        if r.status_code != 200:
+            return {"_err": f"HTTP {r.status_code}"}
+        m_bull = _re.search(r"[Bb]ullish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
+        m_bear = _re.search(r"[Bb]earish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
+        if not m_bull or not m_bear:
+            return {"_err": "regex no match (page format changed)"}
+        bull = float(m_bull.group(1))
+        bear = float(m_bear.group(1))
+        return {
+            "value": bull - bear,
+            "unit": "%",
+            "bull": bull,
+            "bear": bear,
+            "date": "weekly",
+        }
+    except Exception as e:
+        return {"_err": f"{type(e).__name__}: {str(e)[:60]}"}
+
+
+# ══════════════════════════════════════════════════════════════
 # ISM 製造業 PMI — 5 段備援共用函式（v1.1 兩端統一）
 #
 # 為什麼 5 段？

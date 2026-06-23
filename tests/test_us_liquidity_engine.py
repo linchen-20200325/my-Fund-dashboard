@@ -156,7 +156,7 @@ def test_hyg_lqd_empty():
         assert "_err" in r
 
 
-# ── _aaii_sentiment ──────────────────────────────────────────────────────────
+# ── AAII sentiment(F-H1 v19.77:L1 fetch_aaii_sentiment + L2 _aaii_with_judgment) ──
 
 class _MockResp:
     def __init__(self, status_code: int, text: str = ""):
@@ -165,47 +165,61 @@ class _MockResp:
 
 
 def test_aaii_neutral():
+    """中性 spread(5%)→ ➖ 情緒中性 label。"""
     html = "<p>Bullish 35.0%</p><p>Bearish 30.0%</p>"
-    with patch.object(ule.requests, "get", return_value=_MockResp(200, html)):
-        r = ule._aaii_sentiment()
+    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(200, html)):
+        ule.fetch_aaii_sentiment.cache_clear()
+        r = ule._aaii_with_judgment()
         assert r["value"] == pytest.approx(5.0, abs=0.1)
         assert r["bull"] == 35.0
         assert r["bear"] == 30.0
+        assert "中性" in r["label"]
 
 
 def test_aaii_extreme_bull_inverse():
+    """spread > 20 → 反指標賣訊號。"""
     html = "Bullish 55.0% ... Bearish 25.0%"
-    with patch.object(ule.requests, "get", return_value=_MockResp(200, html)):
-        r = ule._aaii_sentiment()
+    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(200, html)):
+        ule.fetch_aaii_sentiment.cache_clear()
+        r = ule._aaii_with_judgment()
         assert r["value"] > 20
         assert "賣訊號" in r["label"]
 
 
 def test_aaii_extreme_bear_inverse():
+    """spread < -20 → 反指標買訊號。"""
     html = "Bullish 20.0% xxx Bearish 50.0%"
-    with patch.object(ule.requests, "get", return_value=_MockResp(200, html)):
-        r = ule._aaii_sentiment()
+    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(200, html)):
+        ule.fetch_aaii_sentiment.cache_clear()
+        r = ule._aaii_with_judgment()
         assert r["value"] < -20
         assert "買訊號" in r["label"]
 
 
 def test_aaii_http_error():
-    with patch.object(ule.requests, "get", return_value=_MockResp(500)):
-        r = ule._aaii_sentiment()
+    """非 200 → _err 透傳,無 color/label。"""
+    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(500)):
+        ule.fetch_aaii_sentiment.cache_clear()
+        r = ule._aaii_with_judgment()
         assert "_err" in r
         assert "500" in r["_err"]
+        assert "color" not in r
 
 
 def test_aaii_regex_no_match():
-    with patch.object(ule.requests, "get", return_value=_MockResp(200, "<html>no data</html>")):
-        r = ule._aaii_sentiment()
+    """頁面格式變更 → _err 含 regex 字樣。"""
+    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(200, "<html>no data</html>")):
+        ule.fetch_aaii_sentiment.cache_clear()
+        r = ule._aaii_with_judgment()
         assert "_err" in r
         assert "regex" in r["_err"]
 
 
-def test_aaii_exception_graceful():
-    with patch.object(ule.requests, "get", side_effect=ConnectionError("net down")):
-        r = ule._aaii_sentiment()
+def test_aaii_proxy_failure():
+    """fetch_url 回 None(proxy 失敗)→ _err 透傳。"""
+    with patch("repositories.macro_repository.fetch_url", return_value=None):
+        ule.fetch_aaii_sentiment.cache_clear()
+        r = ule._aaii_with_judgment()
         assert "_err" in r
 
 
@@ -215,7 +229,8 @@ def test_snapshot_all_keys_present():
     """所有 6 指標都失敗時仍回完整 dict（每個都有 _err）."""
     with patch.object(ule, "fetch_fred", return_value=pd.DataFrame()), \
          patch.object(ule, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
-         patch.object(ule.requests, "get", return_value=_MockResp(500)):
+         patch("repositories.macro_repository.fetch_url", return_value=_MockResp(500)):
+        ule.fetch_aaii_sentiment.cache_clear()
         snap = ule.fetch_us_liquidity_snapshot("key")
         assert set(snap.keys()) == {"hy_oas", "rrp", "m2_yoy", "walcl", "hyg_lqd", "aaii"}
         for k, v in snap.items():
@@ -231,7 +246,8 @@ def test_snapshot_mixed_success_failure():
 
     with patch.object(ule, "fetch_fred", side_effect=_fake_fred), \
          patch.object(ule, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
-         patch.object(ule.requests, "get", return_value=_MockResp(500)):
+         patch("repositories.macro_repository.fetch_url", return_value=_MockResp(500)):
+        ule.fetch_aaii_sentiment.cache_clear()
         snap = ule.fetch_us_liquidity_snapshot("key")
         assert "_err" not in snap["hy_oas"]
         assert "_err" in snap["rrp"]
