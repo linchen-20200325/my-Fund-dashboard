@@ -436,6 +436,8 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 | **EX-CACHE-1** | L1 全層 | `@st.cache_data` / `@_ttl_cache` 條件 import | Streamlit Cloud cache 是部署架構核心,提供跨 session 共享 + TTL 自動失效,functools.lru_cache 不等價。**允許**在 L1 模組頂部寫 `try: import streamlit as st / except ImportError: 定義 no-op fallback decorator`,前提:**完全不用** `st.session_state` / `st.error()` / `st.markdown()` 等真 UI 呼叫。Fund 端 `@_ttl_cache(ttl_sec=N)` 為 custom 實作不依賴 streamlit,本例外主要適用 `@st.cache_data` 直接用法。 |
 | **EX-AI-1** | `services/ai_service.py` 全檔 public 函式 | LLM 輸出回 **str** 而非 dataclass | 既有 multiple caller 全部以 st.markdown 渲染字串,改 dataclass 需大規模 migration。**緩解措施**:所有 AI 字串強制帶視覺旗標(`### 🧬 AI ... **使用模型**: <model>`),caller 可用 string prefix 偵測;module docstring 強制宣告「禁止從 LLM 字串萃取數字當 data input」。違反此 caller 規則 = §2.2 反捏造違憲,須立刻修。 |
 | **EX-POLICY-1** | `services/allocation_simulator.py:34-97` | `DEFAULT_PHASE_SCRIPT` + `STRATEGY_PRESETS` 保 inline,**不抽** `shared/allocation_policies.py` | (1) policy preset 為 business config data,非 magic number metric,§3.3 SSOT 規則本意是防 inline magic number;(2) `STRATEGY_PRESETS` phase 名稱(復甦/擴張/放緩/衰退)與 `DEFAULT_PHASE_SCRIPT` 字串契約強耦合,同檔改動原子性高;(3) consumer 僅 simulator + 1 個 UI tab(`ui/tab_allocation_simulator.py`),scope 小,crisis_backtest 不共用此 phase 邏輯;(4) §8.1 step 6「用不到的抽象先不做」,若未來新增第二份共用此 policy 的 simulator,再升級 SSOT 模組。F-H4 v19.76 決策。 |
+| **EX-CRUD-1** | UI 直呼以下 L1 repository:`policy_repository` / `snapshot_repository` / `ledger_repository`(Google Sheets / 本地 JSON 持久化) | L3 UI 可直接 import L1 CRUD repository | §8.2 規則「L3 不得直呼 L1 — cache 才能集中」的核心理由是**外部 HTTP fetcher 的 TTL cache 須集中管理**。本三個 repository 為**本地持久化**(read+write 同檔),**無 `@_ttl_cache` / `@st.cache_data` 裝飾**,亦無外部 HTTP I/O — 不存在「cache 分散」問題。為純 CRUD 加 L2 pass-through wrapper = §8.1 step 6「用不到的抽象」反例。`ui/helpers/cloud_io.py` / `v2_editor.py` / `oauth_state.py` + `ui/tab3_portfolio.py` / `tab3_t7_ledger.py` 直接 import 為允許用法。F-H6 v19.79 決策。 |
+| **EX-PASSTHRU-1** | UI 直呼以下 L1 fetcher(無對應 L2 業務 wrapper):<br>- `repositories.fund_repository.tdcc_search_fund`(`ui/tab2_single_fund.py:147`)<br>- `repositories.fund_repository.get_latest_fx`(`ui/tab3_portfolio.py:2216` lazy import,有 manual `_FX_CACHE` TTL_300)<br>- `repositories.news_repository.fetch_market_news`(`ui/tab1_macro.py:909` / `ui/tab3_t7_ledger.py:2710` via fund_fetcher shim) | L3 UI 可直接 import L1 「pass-through 用 + 無 L2 業務值」的 fetcher | §8.2 規則「cache 才能集中」核心理由失效於本場景:fetcher 已**自帶 cache**(無外散風險)或**無 cache**(L2 wrapper 無從補上),且**無 L2 業務 wrapper**(多源 fallback / 結果後處理皆無)— L2 加一層 = pure pass-through = §8.1 step 6「用不到的抽象」反例。**升級觸發條件**:若未來新增 cache 需集中(跨 fetcher 統一 TTL)、多源 fallback chain、或結果後處理 → 應升級 L2 service。F-H6 v19.79 決策。 |
 
 **符合 EX-CACHE-1 的標準寫法**:
 ```python
@@ -456,7 +458,7 @@ except ImportError:
 
 ### 8.3 灰色地帶(待 step 3 audit 確認是否違憲)
 
-- **`fund_fetcher.py`(根目錄)**:分類 L1 Repository 但放在根目錄(歷史包袱)→ audit 看是否該搬到 `repositories/`
+- **`fund_fetcher.py`(根目錄)**:分類 L1 Repository 但放在根目錄(歷史包袱)→ audit 看是否該搬到 `repositories/`(現況:`set_risk_free_rate` / `fetch_market_news` 已搬至 `services/fund_service` / `repositories/news_repository`,fund_fetcher 維持向後相容 re-export shim)
 - **`hot_money.py`、`tw_macro.py`(根目錄)**:同上,L1 邏輯散落根目錄
 - **`app.py`(425 LOC)**:已是 orchestrator,但確認是否完全無業務邏輯下沉到 L2
 - **`MACRO_THRESHOLDS` dict consumption gap**:v19.72 補完 dict 但 services/macro_service.py inline 條件未改,test-doc vs production-grade gap → audit 看 inline → dict consume 重構規模
