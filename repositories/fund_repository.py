@@ -2747,6 +2747,21 @@ def _finish_metrics(result: dict):
                             reconcile_fund_annual_return(_sc, _mj))
             except Exception as _e_rec_1y:  # noqa: BLE001
                 pass
+            # F-RECON-1 phase 5 v19.90 — 配息殖利率對帳(self-calc vs MoneyDJ)
+            # self_calc = annual_div_rate(計於 calc_metrics)/ MoneyDJ = moneydj_div_yield(來自 wh06_4 dividends 第一筆)
+            try:
+                from services.reconcile import reconcile_dividend_yield
+                _m_local = result.get("metrics") or {}
+                _self_calc_dy = _m_local.get("annual_div_rate")
+                _mj_dy = result.get("moneydj_div_yield")
+                if _self_calc_dy is not None or _mj_dy is not None:
+                    _sc_dy = float(_self_calc_dy) / 100.0 if _self_calc_dy is not None else None
+                    _mj_dy_dec = float(_mj_dy) / 100.0 if _mj_dy is not None else None
+                    if isinstance(result.get("metrics"), dict):
+                        result["metrics"]["div_yield_reconcile"] = (
+                            reconcile_dividend_yield(_sc_dy, _mj_dy_dec))
+            except Exception as _e_rec_dy:  # noqa: BLE001
+                pass
             print(f"[metrics] ✅ {code} 指標計算完成（{len(s)} 筆，src:{src}）")
         except Exception as _ce:
             result["source_trace"].append(
