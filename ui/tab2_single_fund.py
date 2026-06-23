@@ -884,6 +884,21 @@ def render_single_fund_tab() -> None:
                     _al1  = _r1y.get("Alpha","—");  _be1 = _r1y.get("Beta","—")
                     for lbl, val in [("波動 σ(1Y)", f"{_std1}%"),("Sharpe(1Y)",str(_sh1)),("Alpha(1Y)",str(_al1)),("Beta(1Y)",str(_be1))]:
                         st.markdown(f"<div style='display:flex;justify-content:space-between;padding:5px 10px;background:#161b22;border-radius:6px;margin:3px 0'><span style='color:#888;font-size:12px'>{lbl}</span><span style='font-weight:700'>{val}</span></div>", unsafe_allow_html=True)
+                    # F-RECON-1 phase 6 v19.91 — Sharpe 對帳 chip(self-calc vs MoneyDJ wb07)
+                    _sh_rec = (m or {}).get("sharpe_reconcile")
+                    if isinstance(_sh_rec, dict) and _sh_rec.get("status") in ("agree", "disagree", "a_missing", "b_missing"):
+                        _sh_emoji = {"agree": "✅", "disagree": "⚠️",
+                                     "a_missing": "⬜", "b_missing": "⬜"}.get(_sh_rec.get("status"), "⬜")
+                        _sh_color = {"agree": "#22c55e", "disagree": "#ef4444"}.get(_sh_rec.get("status"), "#888")
+                        _va, _vb = _sh_rec.get("value_a"), _sh_rec.get("value_b")
+                        _va_t = f"{_va:.2f}" if isinstance(_va, (int, float)) else "—"
+                        _vb_t = f"{_vb:.2f}" if isinstance(_vb, (int, float)) else "—"
+                        st.markdown(
+                            f"<div style='font-size:10px;color:{_sh_color};padding:3px 10px;"
+                            f"background:#0d1117;border-radius:4px;margin:2px 0 6px 0'>"
+                            f"{_sh_emoji} 對帳:自算={_va_t} vs MoneyDJ wb07={_vb_t} ({_sh_rec.get('status')})"
+                            f"</div>",
+                            unsafe_allow_html=True)
                     # Sharpe 持久性說明（孫慶龍老師框架）
                     try:
                         _sh1_v = float(_sh1)
@@ -924,6 +939,32 @@ def render_single_fund_tab() -> None:
                         try: _adr = float(_adr)
                         except: _adr = 0.0
                         st.metric("年化配息率", f"{_adr:.2f}%", help="MoneyDJ wb05 官方值（優先）或自算估值")
+                        # F-RECON-1 phase 6 v19.91 — 配息殖利率對帳 chip(self-calc vs MoneyDJ)
+                        _dy_rec = (m or {}).get("div_yield_reconcile")
+                        if isinstance(_dy_rec, dict) and _dy_rec.get("status") in ("agree", "disagree", "a_missing", "b_missing"):
+                            _dy_emoji = {"agree": "✅", "disagree": "⚠️",
+                                         "a_missing": "⬜", "b_missing": "⬜"}.get(_dy_rec.get("status"), "⬜")
+                            _dy_color = {"agree": "#22c55e", "disagree": "#ef4444"}.get(_dy_rec.get("status"), "#888")
+                            _dva, _dvb = _dy_rec.get("value_a"), _dy_rec.get("value_b")
+                            _dva_t = f"{_dva*100:.2f}%" if isinstance(_dva, (int, float)) else "—"
+                            _dvb_t = f"{_dvb*100:.2f}%" if isinstance(_dvb, (int, float)) else "—"
+                            st.caption(
+                                f"<span style='color:{_dy_color};font-size:10px'>"
+                                f"{_dy_emoji} 對帳:自算={_dva_t} vs MoneyDJ={_dvb_t} ({_dy_rec.get('status')})</span>",
+                                unsafe_allow_html=True)
+                        # F-RECON-1 phase 6 v19.91 — 1Y 報酬對帳 chip(self-calc vs MoneyDJ wb01)
+                        _r1y_rec = (m or {}).get("ret_1y_reconcile")
+                        if isinstance(_r1y_rec, dict) and _r1y_rec.get("status") in ("agree", "disagree", "a_missing", "b_missing"):
+                            _r1y_emoji = {"agree": "✅", "disagree": "⚠️",
+                                          "a_missing": "⬜", "b_missing": "⬜"}.get(_r1y_rec.get("status"), "⬜")
+                            _r1y_color = {"agree": "#22c55e", "disagree": "#ef4444"}.get(_r1y_rec.get("status"), "#888")
+                            _ra, _rb = _r1y_rec.get("value_a"), _r1y_rec.get("value_b")
+                            _ra_t = f"{_ra*100:.2f}%" if isinstance(_ra, (int, float)) else "—"
+                            _rb_t = f"{_rb*100:.2f}%" if isinstance(_rb, (int, float)) else "—"
+                            st.caption(
+                                f"<span style='color:{_r1y_color};font-size:10px'>"
+                                f"{_r1y_emoji} 1Y 報酬對帳:自算={_ra_t} vs MoneyDJ wb01={_rb_t} ({_r1y_rec.get('status')})</span>",
+                                unsafe_allow_html=True)
                         for d in divs[:6]:
                             _dt = d.get("date",""); _amt = d.get("amount",""); _yld = d.get("yield_pct","")
                             st.markdown(f"<div style='display:flex;justify-content:space-between;padding:4px 10px;background:#161b22;border-radius:6px;margin:2px 0'><span style='color:#888;font-size:11px'>{_dt}</span><span style='font-weight:700'>{_amt}</span><span style='color:#ff9800;font-size:11px'>{_yld}</span></div>", unsafe_allow_html=True)
