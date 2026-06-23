@@ -148,6 +148,8 @@ def _cluster_norm_history(
         sub = score_df[avail_keys]
         w_arr = pd.Series({k: weights[k] for k in avail_keys})
         sum_w = (sub.notna() * w_arr).sum(axis=1)  # 該月有資料的 weight 總和
+        # W5-6 §1 註明:fillna(0) 對應「該指標當月無資料」,搭配 sum_w 只計入 notna 的 weight,
+        # 結果為「對有資料指標」做加權平均,數學上正確(非掩蓋)
         sum_s = sub.fillna(0).sum(axis=1)           # 該月 score 直接相加
         norm = (sum_s / sum_w).where(sum_w > 0)
         out[cluster["name"]] = norm

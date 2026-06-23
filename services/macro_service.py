@@ -478,7 +478,11 @@ def fetch_all_indicators(fred_api_key):
         s_rsp = _yf_pre.get("RSP", pd.Series(dtype=float))
         if len(s_spy)>=22 and len(s_rsp)>=22:
             ratio = (s_rsp / s_spy).dropna()
+            # W5-6 §1: reindex+ffill 把 ratio 對齊 SPY 日索引(填 RSP 缺日),log 補幾筆
+            _before_ratio = len(ratio)
             ratio = ratio.reindex(s_spy.index, method="ffill").dropna()
+            if len(ratio) != _before_ratio:
+                print(f"[macro_service ADL] ratio reindex ffill: {_before_ratio} → {len(ratio)}")
             v = round(float(ratio.iloc[-1]),4); m1 = round(float(ratio.iloc[-22]),4)
             chg = round((v-m1)/m1*100,2)
             s_w = ratio.resample("W").last().tail(260)

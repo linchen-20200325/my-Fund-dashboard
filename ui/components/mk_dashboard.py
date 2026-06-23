@@ -604,6 +604,8 @@ def _render_333_tab(df: pd.DataFrame) -> None:
         st.info("尚無資料可篩選。")
         return
 
+    # W5-6 §1 註明:此 fillna 為「篩選器」非「資料計算」— 缺值對應「新基金/年齡不明」應被過濾掉,
+    # fillna(0)→fail age_pass、fillna(-999)→fail ret_pass,語意正確(非掩蓋)
     age_pass = df["_age_years"].fillna(0) >= 3.0
     ret_pass = df["含息總報酬(1Y%)"].fillna(-999) > 7.0
     # std 中位數取「全部有 std」的 pool，不卡 cascade（讓基準穩定）
