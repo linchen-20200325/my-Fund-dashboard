@@ -190,7 +190,7 @@
 |---|---|---|
 | PMI(採購經理指數) | [30, 70] | services/macro_validation.py SCORE_RULES |
 | VIX | [5, 100] | services/macro_validation.py:35-84(crisis=30, warning=18) |
-| CPI YoY (%) | [-5, 20] | services/macro_tw_local.py:356-362(zone 邊界 2/3/4/5%) |
+| CPI YoY (%) | [-5, 20] | services/macro_tw_local.py:150-157 SSOT (CPI_YOY_*_MAX_PCT) |
 | US10Y (%) | [0, 20] | repositories/macro_repository.py:180-195 MACRO_THRESHOLDS |
 | DXY(美元指數) | [70, 130] | MACRO_THRESHOLDS |
 | HY OAS (%) | [1, 25] | MACRO_THRESHOLDS |
@@ -224,11 +224,10 @@
 | `SCORE_RULES`(macro evaluation) | weights + lambdas | services/macro_validation.py:35-84 | ✅ SSOT + JSON override(macro_thresholds_global.json) |
 | Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | services/macro_weights_store.py:363-364 | ✅ SSOT + active.json override |
 | Valuation `FORWARD_PE_MEAN/STD`、`GDP_TREND/_STD` | 16.5/3.0/2.3/1.5 | services/valuation.py:33-38 | ✅ SSOT |
-| `signal_thresholds.*`(23 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT 等 | shared/signal_thresholds.py v19.74 | ✅ SSOT(W2+W3a 已遷移 11 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability) |
-| CPI zone 邊界 | 2.0 / 3.0 / 4.0 / 5.0 | services/macro_tw_local.py:356-362 | ❌ **inline magic**(待 W3b:語意命名 + 加進 signal_thresholds) |
+| `signal_thresholds.*`(31 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT / CPI YoY+MoM zones 等 | shared/signal_thresholds.py v19.75 | ✅ SSOT(W2+W3a+W5-4 已遷移 12 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability / macro_tw_local CPI zones) |
 | Allocation phase params | DRIP/CASH/STAY 4×3 matrix | services/allocation_simulator.py:71-95 | ⚠️ **policy preset 而非 metric**(scope 未定;若移 SSOT 建議獨立 `shared/allocation_policies.py`) |
 
-❌ 標記 **1 項**待 W3b、⚠️ **1 項**待架構決定(其餘 10 項 W3a 已收斂)。
+❌ 標記 **0 項**(原 1 項 W5-4 收斂)、⚠️ **1 項**待架構決定。
 
 **其他規則**:
 - `fillna` / `ffill` / `dropna` 必須顯式呼叫 + log 受影響筆數

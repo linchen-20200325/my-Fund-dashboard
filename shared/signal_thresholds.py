@@ -71,3 +71,18 @@ SIGMA_LOW_CUTOFF: float = 0.3
 HOLDINGS_NAV_SANITY_LOWER_RATIO: float = 0.3
 HOLDINGS_NAV_SANITY_UPPER_RATIO: float = 3.0
 # parsing error 防呆:持股 NAV 比應在 [0.3x, 3.0x] 主要 NAV 之間,否則視為解析錯誤
+
+# ── US CPI YoY 絕對分區(macro_tw_local.py:150-157, W5-4 §3.3)──
+# Fed 通膨目標 2%;單位 %YoY
+# ≤ IDEAL: +2 / ≤ MILD: +1 / ≤ NEUTRAL: 0 / ≤ ELEVATED: -1 / > ELEVATED: -2
+CPI_YOY_IDEAL_MAX_PCT: float = 2.0
+CPI_YOY_MILD_MAX_PCT: float = 3.0
+CPI_YOY_NEUTRAL_MAX_PCT: float = 4.0
+CPI_YOY_ELEVATED_MAX_PCT: float = 5.0
+
+# ── CPI 月變化 MoM 分區(macro_tw_local.py:354-365, 動能指標)──
+# Δ ≤ STRONG_DROP: +2 / ≤ MILD_DROP: +1 / |Δ| ≤ FLAT: 0 / ≤ MILD_RISE: -1 / > MILD_RISE: -2
+CPI_MOM_STRONG_DROP_PCT: float = -0.3
+CPI_MOM_MILD_DROP_PCT: float = -0.1
+CPI_MOM_FLAT_MAX_PCT: float = 0.1
+CPI_MOM_MILD_RISE_PCT: float = 0.3
