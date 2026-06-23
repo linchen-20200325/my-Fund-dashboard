@@ -2990,14 +2990,18 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                                 result["year_high_nav"] = safe_float(cells[2].get_text(strip=True))
                                 result["year_low_nav"]  = safe_float(cells[3].get_text(strip=True))
                                 print(f"[fetch_basic] 年高={result['year_high_nav']} 年低={result['year_low_nav']}")
-                            except Exception: pass
+                            except (ValueError, TypeError, IndexError) as _e:
+                                # W5-1 §1 Fail Loud: bare except → narrow + log
+                                print(f"[fetch_basic] ⚠️ 年高低解析失敗 dt={dt}: {_e}")
                     elif len(cells) >= 2:
                         dt = cells[0].get_text(strip=True)
                         if _re.match(r"\d{4}/\d{2}/\d{2}", dt):
                             try:
                                 result["nav_date"]   = dt
                                 result["nav_latest"] = float(cells[1].get_text(strip=True).replace(",",""))
-                            except Exception: pass
+                            except (ValueError, TypeError) as _e:
+                                # W5-1 §1 Fail Loud: bare except → narrow + log
+                                print(f"[fetch_basic] ⚠️ nav_latest 解析失敗 dt={dt}: {_e}")
                 break
     except Exception as e:
         print(f"[fetch_basic] {e}")
@@ -3037,6 +3041,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         if r is not None:
             soup = BeautifulSoup(r.text, "lxml")
             nav_rows = {}
+            _nav30_parse_fail = 0  # W5-1 §1 Fail Loud: 計數解析失敗(逐 row 細 log 會 noise)
             for tbl in soup.find_all("table"):
                 for row in tbl.find_all("tr"):
                     cells = row.find_all("td")
@@ -3044,8 +3049,13 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                         date_txt = cells[0].get_text(strip=True)
                         nav_txt  = cells[1].get_text(strip=True).replace(",","")
                         if _re.match(r"\d{2}/\d{2}", date_txt) and _re.match(r"[\d.]+$", nav_txt):
-                            try: nav_rows[date_txt] = float(nav_txt)
-                            except Exception: pass
+                            try:
+                                nav_rows[date_txt] = float(nav_txt)
+                            except (ValueError, TypeError):
+                                # 已通過 regex 預檢仍解析失敗(如 "1.2.3"),累計後彙總 log
+                                _nav30_parse_fail += 1
+            if _nav30_parse_fail > 0:
+                print(f"[nav30] ⚠️ {code} nav 解析失敗 {_nav30_parse_fail} 筆(已過 regex 預檢)")
             # 轉換日期（MoneyDJ 近期只顯示 MM/DD，需補年份）
             import datetime as _dt
             today = _dt.date.today()
