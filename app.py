@@ -379,9 +379,8 @@ from ui.helpers.macro_helpers import (  # noqa: F401
 )
 
 
-def _unused_old_calculate_composite_score(ind: dict) -> float:
-    """deprecated; kept as placeholder before edit boundary."""
-    return ui.helpers.macro_helpers.calculate_composite_score(ind)
+# F-GRAY-3 v19.81:`_unused_old_calculate_composite_score` 已刪(deprecated placeholder,
+# grep 全 repo 唯一引用為定義本身;dead code)。CLAUDE.md §8.3 灰色地帶 audit 結案。
 
 
 # ══════════════════════════════════════════════════════
