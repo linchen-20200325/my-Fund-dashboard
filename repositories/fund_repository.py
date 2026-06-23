@@ -264,6 +264,10 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
             if len(rows) >= 5:
                 s = pd.Series(rows).sort_index()
                 print(f"[src_allianz] ✅ {code} {len(s)} 筆（{base_url[:40]}）")
+                # F-PROV-1 phase 11 v19.97 — provenance(Series.attrs)
+                _host_ay = base_url.split("/")[2] if "://" in base_url else "allianzgi"
+                s.attrs["source"] = f"AllianzGI:{_host_ay}"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as e:
             print(f"[src_allianz] {base_url[:40]}: {e}")
@@ -953,6 +957,9 @@ def _src_alphavantage_nav(code: str) -> "pd.Series":
             if rows:
                 s = pd.Series(rows).sort_index()
                 print(f"[src_alphavantage] ✅ {symbol}: {len(s)} 筆")
+                # F-PROV-1 phase 11 v19.97 — provenance(Series.attrs)
+                s.attrs["source"] = f"AlphaVantage:TIME_SERIES_DAILY_ADJUSTED:{symbol}"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as _e:
             print(f"[src_alphavantage] {symbol}: {_e}")
@@ -1147,6 +1154,11 @@ def _src_taiwanlife_nav(code: str) -> "pd.Series":
             if rows:
                 s = pd.Series(rows).sort_index()
                 print(f"[src_taiwanlife] ✅ {_code} {len(s)} 筆 ({_url[:50]})")
+                # F-PROV-1 phase 11 v19.97 — provenance(Series.attrs;host:endpoint)
+                _host_tl = _url.split("/")[2] if "://" in _url else "taiwanlife"
+                _ep_tl = _url.split("?")[0].rsplit("/", 1)[-1]
+                s.attrs["source"] = f"InsuranceSubdomain:{_host_tl}:{_ep_tl}"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as _e_tl:
             print(f"[src_taiwanlife] ❌ {_url[:50]}: {_e_tl}")
@@ -1255,6 +1267,9 @@ def _src_franklin_nav(code: str) -> "pd.Series":
             if rows:
                 s = pd.Series(rows).sort_index()
                 print(f"[src_franklin] ✅ {_code} direct nav {len(s)} 筆")
+                # F-PROV-1 phase 11 v19.97 — provenance(Series.attrs)
+                s.attrs["source"] = "Franklin:franklintempleton.com.tw:nav_direct"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as _ne:
             print(f"[src_franklin] nav {_nu[:60]}: {_ne}")
@@ -1312,6 +1327,9 @@ def _src_jpmorgan_nav(code: str) -> "pd.Series":
     if rows:
         s = pd.Series(rows).sort_index()
         print(f"[src_jpmorgan] ✅ {_code} {len(s)} 筆")
+        # F-PROV-1 phase 11 v19.97 — provenance(Series.attrs)
+        s.attrs["source"] = "JPMorgan:am.jpmorgan.com/tw:nav_direct"
+        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
         return s
 
     # fallback: 用 ISIN 走 Morningstar
@@ -1702,7 +1720,11 @@ def _src_nav_30day(code: str, page_type: str = "") -> pd.Series:
             break
 
     if rows:
-        return pd.Series(rows).sort_index()
+        s = pd.Series(rows).sort_index()
+        # F-PROV-1 phase 11 v19.97 — provenance(Series.attrs)
+        s.attrs["source"] = "MoneyDJ:nav_30day:table_parse"
+        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        return s
     return pd.Series(dtype=float)
 
 
