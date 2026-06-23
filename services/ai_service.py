@@ -1,11 +1,11 @@
 """services/ai_service.py — AI 分析引擎 Service Layer
-（v11.0 C-17 從 ai_engine.py 搬入）
+（v11.0 C-17 從 ai_engine.py 搬入;v19.78 F-H2:Gemini I/O 下沉 infra.llm）
 
 AI 分析引擎 v13 — 單次呼叫 · 含風險預警快照 · 六因子評分輸入 · 容錯降級
 
 公開 API：
   - assign_asset_role — 核心/衛星關鍵字分類
-  - _gemini           — Gemini API 單次呼叫（含 retry / 容錯降級）
+  - _gemini           — Gemini API 單次呼叫（thin delegate 至 infra.llm._call_gemini）
   - _build_snapshot   — 整合 indicators + phase + 風險快照
   - analyze_global    — 全球總經分析
   - analyze_portfolio_mk_advisor   — MK 智能戰情室 AI 建議
@@ -13,14 +13,12 @@ AI 分析引擎 v13 — 單次呼叫 · 含風險預警快照 · 六因子評分
   - event_impact_analysis — 持股 × 新聞交叉比對警報
   - get_gemini_keys / gemini_generate — v18.217 多 key 自動輪替
 
-v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + Gemini API 呼叫。
-（Gemini HTTP 呼叫雖屬 I/O，但與 prompt 構造 / 輸出解析緊耦合，整檔保留服務層
- 是常見做法 — 類似 fetch_stock_three_ratios 的處理；未來可拆 LLM client 到 infra/）
+v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + Gemini API 呼叫薄包。
+v19.78 F-H2 §8.2 修正：raw HTTP I/O 統一走 `infra.llm._call_gemini`（L0 infra）,
+本層僅留 prompt 構造 / 多 key 輪替 / 業務判讀（L2 service）;
 向後相容：根目錄 ai_engine.py 保留 shim re-export，既有 caller 零修改。
 """
-import requests
-
-from infra.llm import call_llm
+from infra.llm import _call_gemini, call_llm
 from services.ai_prompts import (
     build_event_impact_prompt,
     build_global_prompt,
@@ -51,66 +49,39 @@ def assign_asset_role(fund_name: str, manual_override: str = "") -> str:
     return "satellite"   # 未知預設衛星（較保守）
 
 
-# ── Gemini API 呼叫（容錯版）───────────────────────────────
+# ── Gemini API 呼叫（F-H2 v19.78:I/O 下沉 infra.llm._call_gemini）──────
 def _gemini(api_key: str, prompt: str, max_tokens: int = 2000,
             retry: int = 2, force_json: bool = False):
-    """單次 API 呼叫，容錯降級，不崩潰 App"""
+    """Gemini API 單次呼叫(thin delegate 至 infra.llm._call_gemini)。
+
+    本函式為 L2 service-level 薄包,保留 _gemini API 簽章供 `gemini_generate`
+    多 key 輪替 + `analyze_global` reflection 用。Raw HTTP I/O 已下沉 L0 infra。
+
+    錯誤訊息契約(與 _is_quota_error / _is_transient_error 偵測同步):
+    - 429: 含 "429" / "配額已達上限"
+    - 5xx: 含 "HTTP 5xx"
+    - 逾時: 含 "逾時"
+
+    Args:
+        api_key: Gemini API key;空 → 立即回降級訊息(degraded UX,不打網路)
+        prompt: 完整 prompt 字串
+        max_tokens: 最大輸出 token
+        retry: 內部 retry 次數
+        force_json: True → response_format="json"(native JSON mode)
+
+    Returns:
+        str — 成功:LLM 文字輸出;失敗:degraded message(⚠️/❌ 開頭)
+    """
     if not api_key:
         return "⚠️ 請先填入 Gemini API Key"
-    import time
-    for attempt in range(retry + 1):
-        try:
-            gen_cfg = {
-                "temperature": 0.7,       # 較高溫：輸出更完整自然
-                "maxOutputTokens": max_tokens,
-            }
-            # gemini-2.5-flash 是 thinking 模型：thinkingBudget=0 關閉思考鏈
-            # 讓全部 token 用於實際輸出而非內部推理
-            body = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": gen_cfg,
-            }
-            if "2.5" in GEMINI_URL or "flash" in GEMINI_URL:
-                body["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0}
-            if force_json:
-                gen_cfg["responseMimeType"] = "application/json"
-            r = requests.post(
-                f"{GEMINI_URL}?key={api_key}",
-                json=body,
-                headers={"Content-Type": "application/json"},
-                timeout=90,
-            )
-            if r.status_code == 200:
-                cands = r.json().get("candidates", [])
-                if cands:
-                    parts = cands[0].get("content", {}).get("parts", [])
-                    return "\n".join(p.get("text","") for p in parts if "text" in p).strip()
-                return "⚠️ Gemini 回傳空結果，請重試"
-            elif r.status_code == 429:
-                wait = 20 * (attempt + 1)
-                if attempt < retry:
-                    time.sleep(wait); continue
-                return (
-                    "❌ **Gemini 配額已達上限（HTTP 429）**\n\n"
-                    "請等待 1-2 分鐘後重試，或至 Google AI Studio 確認用量。"
-                )
-            else:
-                if attempt < retry:
-                    time.sleep(5 * (attempt + 1)); continue   # 5s,10s 指數退避
-                if r.status_code == 503:
-                    return (
-                        "❌ **Gemini 模型暫時忙線（HTTP 503）**\n\n"
-                        "伺服器需求尖峰，通常數十秒內恢復；快照已暫存，"
-                        "請稍候再按「🔄 重新生成」即可，不會重複扣用額度。"
-                    )
-                return f"❌ HTTP {r.status_code}：{r.text[:150]}"
-        except requests.exceptions.Timeout:
-            if attempt < retry:
-                time.sleep(5); continue
-            return "❌ 請求逾時，請重試"
-        except Exception as e:
-            return f"❌ {e}"
-    return "❌ 重試次數已達上限"
+    return _call_gemini(
+        api_key=api_key,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        retries=retry,
+        timeout=90,
+        response_format="json" if force_json else None,
+    )
 
 
 # ── 數據快照建構（極致精簡，不傳歷史 Array）─────────────────
