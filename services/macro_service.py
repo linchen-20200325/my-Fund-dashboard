@@ -12,6 +12,15 @@ v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + 編排。
 import pandas as pd, numpy as np, math
 from concurrent.futures import ThreadPoolExecutor as _TPE_macro
 from repositories.macro_repository import fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch
+from shared.signal_thresholds import (  # v19.74 W2 SSOT
+    SAHM_RECESSION_THRESHOLD,
+    CFNAI_RECESSION_THRESHOLD,
+    RECESSION_LOGIT_COEF_SPREAD,
+    RECESSION_LOGIT_COEF_INTERCEPT,
+    TPI_BUSINESS_WEIGHT_RATIO,
+    TPI_FINANCIAL_WEIGHT_RATIO,
+    TPI_MONETARY_WEIGHT_RATIO,
+)
 from shared.fred_series import (
     FRED_AMTMNO,
     FRED_CCSA,
@@ -149,7 +158,7 @@ def _spread_series(df_long, df_short, n_pts=60):
 def recession_probability(spread_10y3m):
     """用 10Y-3M 利差做 logistic 回歸估算衰退機率"""
     if spread_10y3m is None: return None
-    logit = -1.5 * spread_10y3m - 0.8
+    logit = RECESSION_LOGIT_COEF_SPREAD * spread_10y3m + RECESSION_LOGIT_COEF_INTERCEPT
     return round(1 / (1 + math.exp(-logit)) * 100, 1)
 
 def _detect_inflection(indicators):
@@ -213,18 +222,18 @@ def _detect_inflection(indicators):
     # v18.250 新增：薩姆規則由觸發→解除（衰退結束拐點）
     sahm_v = _chk("SAHM"); sahm_p = _chk("SAHM","prev")
     if sahm_v is not None:
-        if sahm_p is not None and sahm_p >= 0.5 and sahm_v < 0.5:
-            signals.append({"type":"buy","text":f"⚡ 薩姆規則 {sahm_p:.2f}→{sahm_v:.2f} 跌破 0.5 — 衰退警報解除拐點"}); score += 4
-        elif sahm_v >= 0.5:
-            signals.append({"type":"warn","text":f"薩姆規則 {sahm_v:.2f} ≥0.5 衰退警報中"}); score -= 2
+        if sahm_p is not None and sahm_p >= SAHM_RECESSION_THRESHOLD and sahm_v < SAHM_RECESSION_THRESHOLD:
+            signals.append({"type":"buy","text":f"⚡ 薩姆規則 {sahm_p:.2f}→{sahm_v:.2f} 跌破 {SAHM_RECESSION_THRESHOLD} — 衰退警報解除拐點"}); score += 4
+        elif sahm_v >= SAHM_RECESSION_THRESHOLD:
+            signals.append({"type":"warn","text":f"薩姆規則 {sahm_v:.2f} ≥{SAHM_RECESSION_THRESHOLD} 衰退警報中"}); score -= 2
 
     # v18.250 新增：CFNAI 領先指標由負轉正（領先翻揚拐點）
     lei_v = _chk("LEI"); lei_p = _chk("LEI","prev")
     if lei_v is not None and lei_p is not None:
         if lei_v > 0 and lei_p <= 0:
             signals.append({"type":"buy","text":f"⚡ CFNAI 領先 {lei_p:+.2f}→{lei_v:+.2f} 由負轉正 — 景氣翻揚拐點"}); score += 3
-        elif lei_v < -0.7:
-            signals.append({"type":"warn","text":f"CFNAI {lei_v:+.2f} < -0.7 強烈衰退"}); score -= 2
+        elif lei_v < CFNAI_RECESSION_THRESHOLD:
+            signals.append({"type":"warn","text":f"CFNAI {lei_v:+.2f} < {CFNAI_RECESSION_THRESHOLD} 強烈衰退"}); score -= 2
 
     if fed_v is not None and fed_p is not None and fed_v <= fed_p and fed_p > 0 and \
        cpi_v and cpi_v < 3.5 and "下降" in cpi_t:
@@ -1085,7 +1094,7 @@ def calc_macro_phase(indicators: dict) -> dict:
     rec_prob = None
     if sp3m is not None:
         import math
-        logit = -1.5 * sp3m - 0.8
+        logit = RECESSION_LOGIT_COEF_SPREAD * sp3m + RECESSION_LOGIT_COEF_INTERCEPT
         rec_prob = round(1 / (1 + math.exp(-logit)) * 100, 1)
 
     # 風險警報
@@ -1340,7 +1349,7 @@ def fetch_tw_market_tpi(fred_api_key: str = "") -> dict:
     z_b = result["z_breadth"] or 0.0
     z_f = result["z_fii"]     or 0.0
     z_m = result["z_m1b_m2"]
-    tpi = z_b * 0.4 + z_f * 0.3 + z_m * 0.3
+    tpi = z_b * TPI_BUSINESS_WEIGHT_RATIO + z_f * TPI_FINANCIAL_WEIGHT_RATIO + z_m * TPI_MONETARY_WEIGHT_RATIO
     result["tpi"] = round(tpi, 3)
 
     if tpi >= 1.5:

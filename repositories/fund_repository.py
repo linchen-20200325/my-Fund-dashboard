@@ -2989,14 +2989,14 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                                 result["year_high_nav"] = safe_float(cells[2].get_text(strip=True))
                                 result["year_low_nav"]  = safe_float(cells[3].get_text(strip=True))
                                 print(f"[fetch_basic] 年高={result['year_high_nav']} 年低={result['year_low_nav']}")
-                            except: pass
+                            except Exception: pass
                     elif len(cells) >= 2:
                         dt = cells[0].get_text(strip=True)
                         if _re.match(r"\d{4}/\d{2}/\d{2}", dt):
                             try:
                                 result["nav_date"]   = dt
                                 result["nav_latest"] = float(cells[1].get_text(strip=True).replace(",",""))
-                            except: pass
+                            except Exception: pass
                 break
     except Exception as e:
         print(f"[fetch_basic] {e}")
@@ -3044,7 +3044,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                         nav_txt  = cells[1].get_text(strip=True).replace(",","")
                         if _re.match(r"\d{2}/\d{2}", date_txt) and _re.match(r"[\d.]+$", nav_txt):
                             try: nav_rows[date_txt] = float(nav_txt)
-                            except: pass
+                            except Exception: pass
             # 轉換日期（MoneyDJ 近期只顯示 MM/DD，需補年份）
             import datetime as _dt
             today = _dt.date.today()
@@ -3054,7 +3054,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                     mo, da = int(mmdd.split("/")[0]), int(mmdd.split("/")[1])
                     yr = today.year if (mo, da) <= (today.month, today.day) else today.year - 1
                     parsed[_dt.date(yr, mo, da)] = v
-                except: pass
+                except Exception: pass
 
             # 再查詢整年歷史（使用查詢 endpoint）
             end_dt   = today
@@ -3104,7 +3104,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                                 try:
                                     import pandas as _pd
                                     hist_rows[_pd.to_datetime(dt_txt)] = float(nav_txt)
-                                except: pass
+                                except Exception: pass
                 if len(hist_rows) >= 20:
                     import pandas as _pd
                     result["series"] = _pd.Series(hist_rows).sort_index()
@@ -3138,7 +3138,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 try:
                     yr_txt = str(list(row_vals.values())[0]).replace("%","")
                     result["perf"]["1Y"] = float(yr_txt)
-                except: pass
+                except Exception: pass
                 break
     except Exception as e:
         print(f"[fetch_risk] {e}")
@@ -3208,7 +3208,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                             "yield_pct": _yld,
                             "currency":  _cur,
                         })
-                    except: pass
+                    except Exception: pass
                 # v10: 取最新一筆 年化配息率% 作為 MoneyDJ 官方值
                 if result["dividends"]:
                     latest_yield = result["dividends"][0].get("yield_pct", 0)
@@ -3426,7 +3426,7 @@ def _parse_nav_html(html: str) -> pd.Series:
                 v = float(cols[1].replace(",", ""))
                 if 0.01 < v < 100000:
                     rows_data.append((d, v))
-            except:
+            except Exception:
                 pass
     if rows_data:
         return pd.Series({r[0]: r[1] for r in rows_data}).sort_index().dropna()
@@ -3914,7 +3914,7 @@ def fetch_div(full_key: str, portal: str = "") -> list:
                                     v = float(nums[0])
                                     if 0.0001 < v < 100: amt=v; break
                             if amt > 0: divs.append({"date":str(d)[:10],"amount":amt})
-                        except: pass
+                        except Exception: pass
             if divs: break
         except Exception as e:
             print(f"[div] {e}")
@@ -4037,7 +4037,7 @@ def fetch_performance_wb01(code: str) -> dict:
                                     v = float(c_c)
                                     if -99 < v < 500:
                                         out[period_key] = v; break
-                                except: pass
+                                except Exception: pass
 
             # ── Strategy 2: column headers contain period names ──
             if not out:
@@ -4065,7 +4065,7 @@ def fetch_performance_wb01(code: str) -> dict:
                                             v = float(c_c)
                                             if -99 < v < 500:
                                                 out[period_key] = v
-                                        except: pass
+                                        except Exception: pass
                             if out: break
 
             if out:
@@ -4176,7 +4176,7 @@ def fetch_risk_metrics(code: str) -> dict:
                             h = hdr[i] if i < len(hdr) else f"col{i}"
                             v_s = cols[i].replace(",","").strip()
                             try: row_data[h] = float(v_s.replace("%",""))
-                            except: row_data[h] = cols[i]
+                            except Exception: row_data[h] = cols[i]
                         if row_data: peer[row_key] = row_data
                     if peer:
                         out["peer_compare"] = peer
@@ -4202,7 +4202,7 @@ def fetch_risk_metrics(code: str) -> dict:
                             if yr not in yearly: yearly[yr] = {}
                             if i+1 < len(cols):
                                 try: yearly[yr][metric_name] = float(cols[i+1])
-                                except: yearly[yr][metric_name] = cols[i+1]
+                                except Exception: yearly[yr][metric_name] = cols[i+1]
                     if yearly:
                         out["yearly_stats"] = yearly
                         print(f"[risk_metrics] 年度統計 {list(yearly.keys())}")
@@ -4273,10 +4273,10 @@ def fetch_holdings(code: str) -> dict:
                             try:
                                 pct = float(c.replace("%","").replace(",","").strip())
                                 if 0 < pct < 100: break
-                            except: pass
+                            except Exception: pass
                         if len(cols) >= 3:
                             try: amount = float(cols[1].replace(",","").replace("%",""))
-                            except: pass
+                            except Exception: pass
                         if pct > 0 and name:
                             sectors.append({"name": name, "amount": amount, "pct": pct})
                 if sectors:
@@ -4306,7 +4306,7 @@ def fetch_holdings(code: str) -> dict:
                                 v = float(c2)
                                 if 0 < v < 100:
                                     pct_txt = c2; break
-                            except: pass
+                            except Exception: pass
                         # 格式: "NVIDIA CORP,資訊科技" or just "NVIDIA CORP"
                         parts = raw.split(",", 1)
                         name   = parts[0].strip()
@@ -4325,7 +4325,7 @@ def fetch_holdings(code: str) -> dict:
                             pct = float(pct_txt)
                             if name and pct > 0:
                                 holdings.append({"name": name, "sector": sector, "pct": pct})
-                        except: pass
+                        except Exception: pass
                 if holdings:
                     out["top_holdings"] = holdings[:10]
                     print(f"[holdings] 前10大持股 {len(out['top_holdings'])} 筆")
@@ -4370,7 +4370,7 @@ def fetch_fund_by_key(full_key: str, fund_name: str = "",
             parts = line.strip().split(",")
             if len(parts) >= 2:
                 try: rows.append((pd.to_datetime(parts[0].strip()),float(parts[1].strip())))
-                except: pass
+                except Exception: pass
         if len(rows) >= 20:
             s = pd.Series({r[0]:r[1] for r in rows}).sort_index()
     # 配息：cnyes 或 MoneyDJ

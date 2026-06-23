@@ -22,6 +22,12 @@ import pandas as pd
 import numpy as np
 
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.signal_thresholds import (  # v19.74 W2 SSOT
+    TRADING_DAYS_PER_YEAR,
+    NEAR_DIVIDEND_WARNING_PCT,
+    HOLDINGS_NAV_SANITY_LOWER_RATIO,
+    HOLDINGS_NAV_SANITY_UPPER_RATIO,
+)
 
 # v11.0 C-12：utility 暫留 fund_fetcher（待 E 階段重新評估歸屬，可能整合到 infra/）
 # 此處 partial-load 安全：fund_fetcher.py 載入到本 service 的 shim re-export 點（L370）時，
@@ -177,10 +183,10 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     # MK 方法：最少 20 筆資料即可計算（降低門檻以支援短期資料）
     std_dict = {}
     for yrs, lb in [(1,"1年"),(2,"2年"),(3,"3年"),(5,"5年")]:
-        n = yrs * 252
+        n = yrs * TRADING_DAYS_PER_YEAR
         base = log_ret.tail(n) if len(log_ret) >= n else log_ret
         if len(base) >= 20:  # ← 降低門檻 60→20
-            std_dict[lb] = round(base.std() * np.sqrt(252) * 100, 2)
+            std_dict[lb] = round(base.std() * np.sqrt(TRADING_DAYS_PER_YEAR) * 100, 2)
     # 優先用 wb07 績效評比的標準差（最準確）
     # 其次: 2年計算值 > 1年計算值 > 全期計算值
     risk_tbl = (risk_override or {}).get("risk_table", {})
@@ -201,17 +207,17 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         # 若 wb07 所有期間 std 完全相同（資料品質差），補用 nav 計算值
         if len(_wb07_vals) <= 1:
             for yrs, lb in [(1,"1Y"),(2,"2Y"),(3,"3Y"),(5,"5Y")]:
-                n = yrs * 252
+                n = yrs * TRADING_DAYS_PER_YEAR
                 base = log_ret.tail(n) if len(log_ret) >= n else log_ret
                 if len(base) >= 20:
-                    _nav_std = round(base.std() * np.sqrt(252) * 100, 2)
+                    _nav_std = round(base.std() * np.sqrt(TRADING_DAYS_PER_YEAR) * 100, 2)
                     std_dict[lb] = _nav_std  # 覆蓋為各期真實計算值
         std_2y = std_dict.get("3Y", std_dict.get("2Y", std_wb07_1y))
         std_1y = std_dict.get("1Y", std_wb07_1y)
         print(f"[calc_metrics] 使用 wb07 標準差: 1Y={std_1y}% 3Y={std_2y}%")
     else:
         std_2y = std_dict.get("2年", std_dict.get("1年",
-                 round(log_ret.std() * np.sqrt(252) * 100, 2) if len(log_ret)>=20 else 0))
+                 round(log_ret.std() * np.sqrt(TRADING_DAYS_PER_YEAR) * 100, 2) if len(log_ret)>=20 else 0))
         std_1y = std_dict.get("1年", std_2y)
 
     # ── 高低點（MK 買點基準用2年）──────────────────────
@@ -219,9 +225,9 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         sub = s.tail(n) if len(s) >= n else s
         return (round(float(sub.max()),4), str(sub.idxmax())[:10],
                 round(float(sub.min()),4), str(sub.idxmin())[:10])
-    h1y,hd1,l1y,ld1 = _hl(252)
-    h2y,hd2,l2y,ld2 = _hl(504)   # ← 2年高低點
-    h3y,hd3,l3y,ld3 = _hl(756)
+    h1y,hd1,l1y,ld1 = _hl(TRADING_DAYS_PER_YEAR)
+    h2y,hd2,l2y,ld2 = _hl(2 * TRADING_DAYS_PER_YEAR)   # ← 2年高低點
+    h3y,hd3,l3y,ld3 = _hl(3 * TRADING_DAYS_PER_YEAR)
     hall = round(float(s.max()),4); hall_d = str(s.idxmax())[:10]
     lall = round(float(s.min()),4); lall_d = str(s.idxmin())[:10]
 
@@ -236,8 +242,8 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     #         若 _yh/_yl 偏離當前 NAV 超過 0.3x ~ 3x 範圍，視為解析錯誤 → 走 NAV 序列
     _hl_ok = (_yh and _yl and _yh > _yl and _yh > 0)
     if _hl_ok and now > 0:
-        if (_yh < now * 0.3 or _yh > now * 3.0
-                or _yl < now * 0.3 or _yl > now * 3.0):
+        if (_yh < now * HOLDINGS_NAV_SANITY_LOWER_RATIO or _yh > now * HOLDINGS_NAV_SANITY_UPPER_RATIO
+                or _yl < now * HOLDINGS_NAV_SANITY_LOWER_RATIO or _yl > now * HOLDINGS_NAV_SANITY_UPPER_RATIO):
             print(f"[calc_metrics] ⚠️ year_high/low 不合理（yh={_yh} yl={_yl} now={now}），"
                   f"走 NAV 序列 2Y 高低點 fallback")
             _hl_ok = False
@@ -276,7 +282,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     sell_basis = ref_low    # MK v3.0: 賣點錨定年最低
 
     # 距離 % （正=尚未觸發 / 0 或負=已觸發；接近閾值=2%）
-    NEAR_PCT = 2.0
+    NEAR_PCT = NEAR_DIVIDEND_WARNING_PCT  # v19.74 W2 SSOT
     def _dist(target):
         if (not target) or now <= 0: return None
         return round((now - target) / target * 100, 2)
@@ -315,8 +321,8 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     # 輸出時間序列供圖表用
     bb_upper_series = bb_upper_s.dropna()
     bb_lower_series = bb_lower_s.dropna()
-    rf=_RF_ANNUAL/252; r252=log_ret.tail(252) if len(log_ret)>=252 else log_ret  # Bug1: rf 改用即時 FEDFUNDS
-    sharpe=round(float((r252.mean()-rf)/r252.std()*np.sqrt(252)),2) if len(r252)>=60 else None
+    rf=_RF_ANNUAL/TRADING_DAYS_PER_YEAR; r252=log_ret.tail(TRADING_DAYS_PER_YEAR) if len(log_ret)>=TRADING_DAYS_PER_YEAR else log_ret  # Bug1: rf 改用即時 FEDFUNDS
+    sharpe=round(float((r252.mean()-rf)/r252.std()*np.sqrt(TRADING_DAYS_PER_YEAR)),2) if len(r252)>=60 else None
     cum=(1+log_ret).cumprod()
     max_dd=round(float(((cum-cum.cummax())/cum.cummax()).min())*100,2)
     def _ret(n): return round((now-float(s.iloc[-n]))/float(s.iloc[-n])*100,2) if len(s)>=n else None
@@ -339,10 +345,10 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         if _days_span < 7:
             _days_span = max(int(len(s) * 1.4), 14)
 
-        if len(s) >= 252:
-            _window_start_idx = -252
+        if len(s) >= TRADING_DAYS_PER_YEAR:
+            _window_start_idx = -TRADING_DAYS_PER_YEAR
             try:
-                _window_start_dt = pd.to_datetime(s.index[-252])
+                _window_start_dt = pd.to_datetime(s.index[-TRADING_DAYS_PER_YEAR])
                 _window_actual_days = (pd.to_datetime(s.index[-1]) - _window_start_dt).days
             except Exception:
                 _window_start_dt = None
@@ -402,7 +408,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             _dates = []
             for _d in divs[:13]:
                 try: _dates.append(pd.to_datetime(_d["date"]))
-                except: pass
+                except Exception: pass  # v19.74 W1-A (§1 Fail Loud): bare except → narrow
             _dates = sorted(_dates, reverse=True)
             if len(_dates) >= 2:
                 _gaps = [(_dates[i]-_dates[i+1]).days for i in range(min(len(_dates)-1,6))]
@@ -464,7 +470,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         ma20=round(float(s.tail(20).mean()),4) if len(s)>=20 else None,
         ma60=round(float(s.tail(60).mean()),4) if len(s)>=60 else None,
         ret_1w=_ret(6),ret_1m=_ret(22),ret_3m=_ret(65),
-        ret_6m=_ret(130),ret_1y=_ret(252),ret_3y=_ret(756),
+        ret_6m=_ret(130),ret_1y=_ret(TRADING_DAYS_PER_YEAR),ret_3y=_ret(3 * TRADING_DAYS_PER_YEAR),
         ret_1y_total=_ret_1y_total,   # v18.53 含息：NAV 變化 + 累積配息率
         ret_1y_window_days=_ret_1y_window_days,  # v18.65: 計算窗口天數（None / 30~365 / >=365）
         annual_div=round(annual_div,4),monthly_div=round(monthly_div,4),

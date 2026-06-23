@@ -17,6 +17,11 @@ v11.0 分層歸位：本檔屬於 Service Layer，純業務計算。
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional
+from shared.signal_thresholds import (  # v19.74 W2 SSOT
+    SHADOW_FUND_THRESHOLD_RATIO,
+    SHADOW_FUND_JACCARD_WEIGHT_RATIO,
+    SHADOW_FUND_COSINE_WEIGHT_RATIO,
+)
 
 # ── scipy 可選（Optimizer 需要）────────────────────────────────────────────
 try:
@@ -421,7 +426,7 @@ def calc_holdings_overlap(funds_data: list) -> "dict | None":
                 c_score = float(np.dot(a, b) / (na * nb)) if (na > 0 and nb > 0) else 0.0
             # 綜合
             if j_score is not None and c_score is not None:
-                v = j_score * 0.6 + c_score * 0.4
+                v = j_score * SHADOW_FUND_JACCARD_WEIGHT_RATIO + c_score * SHADOW_FUND_COSINE_WEIGHT_RATIO
             elif j_score is not None:
                 v = j_score
             elif c_score is not None:
@@ -443,10 +448,11 @@ def calc_holdings_overlap(funds_data: list) -> "dict | None":
     for i in range(n):
         for j in range(i + 1, n):
             v = float(M[i, j])
-            if v >= 0.70:
+            if v >= SHADOW_FUND_THRESHOLD_RATIO:
                 shadow_pairs.append((codes[i], codes[j], round(v, 4)))
     shadow_pairs.sort(key=lambda x: -x[2])
-    notes = f"method={method}；jaccard(holdings) × 0.6 + cosine(sector) × 0.4；shadow 門檻 = 0.70"
+    notes = (f"method={method}；jaccard(holdings) × {SHADOW_FUND_JACCARD_WEIGHT_RATIO} + "
+             f"cosine(sector) × {SHADOW_FUND_COSINE_WEIGHT_RATIO}；shadow 門檻 = {SHADOW_FUND_THRESHOLD_RATIO}")
     return {"matrix": matrix, "shadow_pairs": shadow_pairs,
             "method": method, "notes": notes}
 

@@ -17,6 +17,11 @@ import logging
 
 import numpy as np
 import pandas as pd
+from shared.signal_thresholds import (  # v19.74 W2 SSOT
+    RISK_SCORE_VIX_WEIGHT_RATIO,
+    RISK_SCORE_HY_WEIGHT_RATIO,
+    RISK_SCORE_YIELD_WEIGHT_RATIO,
+)
 
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
@@ -61,7 +66,7 @@ class PrecisionStrategyEngine:
             z_hy    = (latest["HY_Spread"]          - means["HY_Spread"])          / stds["HY_Spread"]
             z_yield = (latest["Yield_Curve_10Y_2Y"] - means["Yield_Curve_10Y_2Y"]) / stds["Yield_Curve_10Y_2Y"]
 
-            risk_score = float(z_vix * 0.3 + z_hy * 0.4 + z_yield * 0.3)
+            risk_score = float(z_vix * RISK_SCORE_VIX_WEIGHT_RATIO + z_hy * RISK_SCORE_HY_WEIGHT_RATIO + z_yield * RISK_SCORE_YIELD_WEIGHT_RATIO)
             return round(risk_score if not np.isnan(risk_score) else 0.0, 2)
         except KeyError as e:
             self.logger.error("缺少必要欄位: %s", e)
