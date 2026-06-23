@@ -225,9 +225,9 @@
 | Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | services/macro_weights_store.py:363-364 | ✅ SSOT + active.json override |
 | Valuation `FORWARD_PE_MEAN/STD`、`GDP_TREND/_STD` | 16.5/3.0/2.3/1.5 | services/valuation.py:33-38 | ✅ SSOT |
 | `signal_thresholds.*`(31 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT / CPI YoY+MoM zones 等 | shared/signal_thresholds.py v19.75 | ✅ SSOT(W2+W3a+W5-4 已遷移 12 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability / macro_tw_local CPI zones) |
-| Allocation phase params | DRIP/CASH/STAY 4×3 matrix | services/allocation_simulator.py:71-95 | ⚠️ **policy preset 而非 metric**(scope 未定;若移 SSOT 建議獨立 `shared/allocation_policies.py`) |
+| Allocation phase params | DRIP/CASH/STAY 4×3 matrix | services/allocation_simulator.py:34-97 | ✅ **EX-POLICY-1 例外**(policy preset 而非 metric,F-H4 v19.76 決策保 inline,§8.2.A 登記) |
 
-❌ 標記 **0 項**(原 1 項 W5-4 收斂)、⚠️ **1 項**待架構決定。
+❌ 標記 **0 項**(W3b/W5-4 已收斂)、⚠️ **0 項**(F-H4 v19.76 結案,登記為 EX-POLICY-1 例外)。
 
 **其他規則**:
 - `fillna` / `ffill` / `dropna` 必須顯式呼叫 + log 受影響筆數
@@ -435,6 +435,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 |---|---|---|---|
 | **EX-CACHE-1** | L1 全層 | `@st.cache_data` / `@_ttl_cache` 條件 import | Streamlit Cloud cache 是部署架構核心,提供跨 session 共享 + TTL 自動失效,functools.lru_cache 不等價。**允許**在 L1 模組頂部寫 `try: import streamlit as st / except ImportError: 定義 no-op fallback decorator`,前提:**完全不用** `st.session_state` / `st.error()` / `st.markdown()` 等真 UI 呼叫。Fund 端 `@_ttl_cache(ttl_sec=N)` 為 custom 實作不依賴 streamlit,本例外主要適用 `@st.cache_data` 直接用法。 |
 | **EX-AI-1** | `services/ai_service.py` 全檔 public 函式 | LLM 輸出回 **str** 而非 dataclass | 既有 multiple caller 全部以 st.markdown 渲染字串,改 dataclass 需大規模 migration。**緩解措施**:所有 AI 字串強制帶視覺旗標(`### 🧬 AI ... **使用模型**: <model>`),caller 可用 string prefix 偵測;module docstring 強制宣告「禁止從 LLM 字串萃取數字當 data input」。違反此 caller 規則 = §2.2 反捏造違憲,須立刻修。 |
+| **EX-POLICY-1** | `services/allocation_simulator.py:34-97` | `DEFAULT_PHASE_SCRIPT` + `STRATEGY_PRESETS` 保 inline,**不抽** `shared/allocation_policies.py` | (1) policy preset 為 business config data,非 magic number metric,§3.3 SSOT 規則本意是防 inline magic number;(2) `STRATEGY_PRESETS` phase 名稱(復甦/擴張/放緩/衰退)與 `DEFAULT_PHASE_SCRIPT` 字串契約強耦合,同檔改動原子性高;(3) consumer 僅 simulator + 1 個 UI tab(`ui/tab_allocation_simulator.py`),scope 小,crisis_backtest 不共用此 phase 邏輯;(4) §8.1 step 6「用不到的抽象先不做」,若未來新增第二份共用此 policy 的 simulator,再升級 SSOT 模組。F-H4 v19.76 決策。 |
 
 **符合 EX-CACHE-1 的標準寫法**:
 ```python
