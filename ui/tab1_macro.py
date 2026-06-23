@@ -1567,6 +1567,18 @@ def render_macro_tab() -> None:
                         _note_r = _dr.get("note", "")
                         _label_r = _dr.get("label", "")
                         _val_txt_r = "—" if _val_r is None else f"{_val_r}"
+                        # F-RECON-1 phase 2 v19.87 — 殖利率燈附「FRED vs Yahoo」對帳 chip
+                        _rec_chip_r = ''
+                        _rec_r = _dr.get('reconcile') if isinstance(_dr, dict) else None
+                        if isinstance(_rec_r, dict) and _rec_r.get('status') in ('agree', 'disagree', 'a_missing', 'b_missing'):
+                            _rec_emoji_r = {'agree': '✅', 'disagree': '⚠️',
+                                            'a_missing': '⬜', 'b_missing': '⬜'}.get(_rec_r.get('status'), '⬜')
+                            _rec_col_r = {'agree': '#22c55e', 'disagree': '#ef4444'}.get(
+                                _rec_r.get('status'), '#888')
+                            _rec_chip_r = (
+                                f"<br/><span style='color:{_rec_col_r};font-size:9px;'>"
+                                f"{_rec_emoji_r} 對帳：{_rec_r.get('status','')}</span>"
+                            )
                         with _col_r:
                             st.markdown(
                                 f"<div style='background:#0d1117;border:2px solid {_col_c_r};"
@@ -1583,7 +1595,7 @@ def render_macro_tab() -> None:
                                 f"</div>"
                                 f"<div style='color:#aaa;font-size:9px;border-top:1px solid #30363d;"
                                 f"padding-top:4px;margin-top:4px;line-height:1.3'>{_note_r}"
-                                f"<br/><span style='color:#555'>{_label_r}</span></div>"
+                                f"<br/><span style='color:#555'>{_label_r}</span>{_rec_chip_r}</div>"
                                 f"</div>", unsafe_allow_html=True)
                 st.caption("📡 資料源：FRED + Yahoo Chart API（NAS proxy）｜閾值：🟢平靜 → 🟡警戒 → 🔴警報")
 

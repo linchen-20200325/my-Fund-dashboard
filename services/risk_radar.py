@@ -396,8 +396,21 @@ def _signal_yield_10y_shock(fred_api_key: str) -> dict:
             lvl = 0
         note = f"10Y={cur:.2f}%（單日 {delta_bp:+.0f}bp）｜≥+10bp = 紅燈（殖利率衝擊）"
         trend = [round(x, 2) for x in s.tail(8).tolist()]
-        return _build(lvl, round(cur, 2), round(prev, 2), note,
-                      "FRED DGS10 日線", trend)
+        out = _build(lvl, round(cur, 2), round(prev, 2), note,
+                     "FRED DGS10 日線", trend)
+        # F-RECON-1 phase 2 v19.87 — 雙源對帳:FRED DGS10 vs Yahoo ^TNX(/10)
+        # 不影響原 lvl 判定;reconcile 結果作為輸出旗標,UI 可選擇是否顯示。
+        try:
+            from services.reconcile import reconcile_us10y_yield
+            tnx_s = fetch_yf_close("^TNX", range_="5d")
+            tnx_val = float(tnx_s.iloc[-1]) if not tnx_s.empty else None
+            out["reconcile"] = reconcile_us10y_yield(cur, tnx_val)
+        except Exception as _e_rec:  # noqa: BLE001
+            out["reconcile"] = {
+                "name": "US10Y_YIELD", "status": "error",
+                "agree": False, "note": f"reconcile failed: {type(_e_rec).__name__}",
+            }
+        return out
     except Exception as e:  # noqa: BLE001
         return _empty(f"10Y 殖利率抓取失敗：{str(e)[:60]}",
                       "FRED DGS10 日線")
