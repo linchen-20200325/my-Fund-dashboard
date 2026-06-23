@@ -185,7 +185,12 @@ def fetch_factor_series(
             gold = fetch_yf_close("GC=F", range_=f"{int(years)}y", interval="1d")
             if copper is None or copper.empty or gold is None or gold.empty:
                 return _empty()
-            df = pd.concat([copper.rename("c"), gold.rename("g")], axis=1).ffill().dropna()
+            # W5-6 §1: copper + gold 雙序列對齊用 ffill(兩源更新頻率近同),dropna 刪頭尾雙缺
+            df = pd.concat([copper.rename("c"), gold.rename("g")], axis=1)
+            _before = len(df)
+            df = df.ffill().dropna()
+            if _before != len(df):
+                print(f"[multi_factor copper/gold] ffill+dropna: {_before} → {len(df)} 筆")
             ratio = (df["c"] / df["g"]).dropna()
             ratio.name = spec.key
             return ratio
@@ -218,7 +223,12 @@ def fetch_factor_series(
             rsp = fetch_yf_close("RSP", range_=f"{int(years)}y", interval="1d")
             if spy is None or spy.empty or rsp is None or rsp.empty:
                 return _empty()
-            df = pd.concat([spy.rename("spy"), rsp.rename("rsp")], axis=1).ffill().dropna()
+            # W5-6 §1: SPY + RSP 雙序列對齊 ffill+dropna,加 log
+            df = pd.concat([spy.rename("spy"), rsp.rename("rsp")], axis=1)
+            _before = len(df)
+            df = df.ffill().dropna()
+            if _before != len(df):
+                print(f"[multi_factor spy/rsp] ffill+dropna: {_before} → {len(df)} 筆")
             ratio = (df["rsp"] / df["spy"]).dropna()
             out = ratio.pct_change(5).dropna()
             out.name = spec.key

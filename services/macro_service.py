@@ -478,7 +478,11 @@ def fetch_all_indicators(fred_api_key):
         s_rsp = _yf_pre.get("RSP", pd.Series(dtype=float))
         if len(s_spy)>=22 and len(s_rsp)>=22:
             ratio = (s_rsp / s_spy).dropna()
+            # W5-6 §1: reindex+ffill 把 ratio 對齊 SPY 日索引(填 RSP 缺日),log 補幾筆
+            _before_ratio = len(ratio)
             ratio = ratio.reindex(s_spy.index, method="ffill").dropna()
+            if len(ratio) != _before_ratio:
+                print(f"[macro_service ADL] ratio reindex ffill: {_before_ratio} → {len(ratio)}")
             v = round(float(ratio.iloc[-1]),4); m1 = round(float(ratio.iloc[-22]),4)
             chg = round((v-m1)/m1*100,2)
             s_w = ratio.resample("W").last().tail(260)
@@ -1223,11 +1227,9 @@ def calc_macro_phase(indicators: dict) -> dict:
 # v13 新增：Z-Score 工具 & 景氣循環辨識模型（Regime Model）
 # ══════════════════════════════════════════════════════════════
 
-def zscore(series: pd.Series) -> pd.Series:
-    """標準化 Z-Score，用於指標估值判斷"""
-    if series.std() == 0:
-        return pd.Series([0.0] * len(series), index=series.index)
-    return (series - series.mean()) / series.std()
+# W5-5+ §1 + DRY:zscore SSOT 在 repositories/macro_repository.py,本檔僅 re-export
+# 以維持既有 caller 介面;新 caller 應直接 from repositories.macro_repository import zscore
+from repositories.macro_repository import zscore  # noqa: F401, E402
 
 
 def identify_regime(indicators: dict) -> dict:
@@ -1260,9 +1262,12 @@ def identify_regime(indicators: dict) -> dict:
     zscore_pmi = None
     if pmi_series is not None and len(pmi_series) >= 12:
         z = float(zscore(pmi_series).iloc[-1])
-        if z < -1.5:   zscore_pmi = {"label": "PMI 低估（買進訊號）", "z": round(z,2), "signal": "🟢"}
-        elif z > 1.5:  zscore_pmi = {"label": "PMI 高估（過熱警告）", "z": round(z,2), "signal": "🔴"}
-        else:          zscore_pmi = {"label": "PMI 中性",             "z": round(z,2), "signal": "🟡"}
+        # W5-5 §1:std=0 退化時 zscore 回 NaN,caller 須跳過 zscore_pmi 輸出(不可填中性)
+        if z != z:  # NaN
+            zscore_pmi = None
+        elif z < -1.5:   zscore_pmi = {"label": "PMI 低估（買進訊號）", "z": round(z,2), "signal": "🟢"}
+        elif z > 1.5:    zscore_pmi = {"label": "PMI 高估（過熱警告）", "z": round(z,2), "signal": "🔴"}
+        else:            zscore_pmi = {"label": "PMI 中性",             "z": round(z,2), "signal": "🟡"}
 
     # ── 配置建議（依循環調整）────────────────────────────
     alloc_by_regime = {

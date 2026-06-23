@@ -724,12 +724,17 @@ def fetch_macro_compass(range_: str = "6mo") -> dict:
 # ══════════════════════════════════════════════════════════════
 
 def zscore(s: pd.Series) -> pd.Series:
-    """標準分數(std=0 時回傳全 0,避免除零)。"""
+    """標準分數 z-score(W5-5 §1:std=0 / NaN 退化時回全 NaN + log)。
+
+    SSOT for zscore — services.macro_service 端 import 此版本(消 DRY)。
+    caller 須以 isna() 檢查 NaN,**禁止**把 NaN 視為 0(掩蓋退化情境)。
+    """
     if s.empty:
         return s
     std = float(s.std())
     if std == 0 or np.isnan(std):
-        return pd.Series([0.0] * len(s), index=s.index)
+        print(f"[macro_repository zscore] std=0/NaN 退化:len={len(s)}, mean={s.mean()},回 NaN")
+        return pd.Series([np.nan] * len(s), index=s.index)
     return (s - s.mean()) / std
 
 

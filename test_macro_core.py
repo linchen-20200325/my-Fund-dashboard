@@ -29,9 +29,10 @@ def test_zscore_basic():
 
 
 def test_zscore_zero_std_no_div_zero():
+    """W5-5 §1 對齊:std=0 退化情境改回全 NaN(原 (z==0).all() 為 §1 違憲掩蓋斷言)。"""
     s = pd.Series([5, 5, 5, 5])
     z = macro_core.zscore(s)
-    assert (z == 0).all()
+    assert z.isna().all()
 
 
 def test_trend_arrow_strictly_up():
