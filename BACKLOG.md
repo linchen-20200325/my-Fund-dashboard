@@ -5,6 +5,24 @@
 
 ---
 
+## 🟡 Open — CLAUDE.md Bootstrap-audit 後續(2026-06-23 step 4 收尾後盤點)
+
+> Bootstrap 4 步流程已完成(§0 改名「填寫紀錄」#322)，§3.3 反捏造 / §8.2 高項違憲皆 0。
+> 以下為**步驟 3 audit 中發現但本輪未動**的 ⚠️ / 灰色地帶 / 補洞項目，下個 session 入口。
+
+- [ ] **F-PROV-1** §2.2 macro 12 指標融合處單一 score 後失去來源 → 補 source/fetched_at/as_of provenance schema
+- [ ] **F-PIT-1** §2.3 ⚠️ `services/crisis_backtest.py` + `crisis_strategy_grid.py` vintage 對齊釐清(目前僅文件存證)
+- [ ] **F-SCHEMA-1** §3.1 ⚠️ pandera 是否加 requirements + 逐 repository 落地 schema?(評估 ~200ms 啟動 cost)
+- [ ] **F-GRAY-1** §8.3 灰色地帶 `fund_fetcher.py`(根目錄)是否搬到 `repositories/`(歷史包袱)
+- [ ] **F-GRAY-2** §8.3 灰色地帶 `hot_money.py` / `tw_macro.py`(根目錄)同上
+- [ ] **F-GRAY-3** §8.3 灰色地帶 `app.py`(425 LOC)確認無業務邏輯未下沉到 L2
+- [ ] **F-GRAY-4** §8.3 灰色地帶 `MACRO_THRESHOLDS` dict consumption gap — `services/macro_service.py` inline 條件未改用 dict
+- [ ] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 已收一輪;其餘需逐一檢視
+
+**ROI 建議排序**:F-GRAY-4(scope 小最易動) → F-PROV-1(影響資料可信度) → F-PIT-1(影響回測正確性) → F-GRAY-1/2/3(歷史包袱整理) → F-SCHEMA-1(ROI 偏低)。
+
+---
+
 ## ✅ Done
 
 ### 2026-05-29（429 殘留 + D 模式 / Switch 引擎連環修：PR #74 → #94）
