@@ -235,7 +235,7 @@
 | `TTL_*`(6 個語意常數) | 60/300/600/900/1800/3600 s | shared/ttls.py v19.69 | ✅ SSOT(9 production 檔已遷移) |
 | `FRED_*`(34 個 series ID) | FRED API key 字串 | shared/fred_series.py v19.70 | ✅ SSOT(8 production 檔已遷移) |
 | `MATERIAL_*`(色票) | hex 字串 | shared/colors.py v19.71 | ✅ SSOT(18 production 檔已遷移) |
-| `MACRO_THRESHOLDS`(26 entries) | 各 indicator zone 邊界 | repositories/macro_repository.py:180 v19.72 | ✅ SSOT(但 services/macro_service.py inline 仍存,待後續 inline → dict consume 重構) |
+| `MACRO_THRESHOLDS`(26 entries) | 各 indicator zone 邊界 | repositories/macro_repository.py:180 v19.72 | ⚠️ **僅文件參考**(F-GRAY-4 v19.80 audit:dict 與 inline 條件**語意不同源**,inline 服務多用途有不同閾值,不可機械式 swap;詳見 macro_repository.py:199-212 註解) |
 | `SCORE_RULES`(macro evaluation) | weights + lambdas | services/macro_validation.py:35-84 | ✅ SSOT + JSON override(macro_thresholds_global.json) |
 | Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | services/macro_weights_store.py:363-364 | ✅ SSOT + active.json override |
 | Valuation `FORWARD_PE_MEAN/STD`、`GDP_TREND/_STD` | 16.5/3.0/2.3/1.5 | services/valuation.py:33-38 | ✅ SSOT |
@@ -476,7 +476,7 @@ except ImportError:
 - **`fund_fetcher.py`(根目錄)**:分類 L1 Repository 但放在根目錄(歷史包袱)→ audit 看是否該搬到 `repositories/`(現況:`set_risk_free_rate` / `fetch_market_news` 已搬至 `services/fund_service` / `repositories/news_repository`,fund_fetcher 維持向後相容 re-export shim)
 - **`hot_money.py`、`tw_macro.py`(根目錄)**:同上,L1 邏輯散落根目錄
 - **`app.py`(425 LOC)**:已是 orchestrator,但確認是否完全無業務邏輯下沉到 L2
-- **`MACRO_THRESHOLDS` dict consumption gap**:v19.72 補完 dict 但 services/macro_service.py inline 條件未改,test-doc vs production-grade gap → audit 看 inline → dict consume 重構規模
+- **`MACRO_THRESHOLDS` dict consumption gap**(F-GRAY-4 v19.80 audit 釐清):dict 與 inline **語意不同源**(inline 服務 signal classification / score function / regime ID / inflection detection 多用途,同指標多 site 不同閾值),**不可機械式 swap**;若要 harmonize 需逐 site 評估語意,本項升級為架構提案範疇。詳見 `macro_repository.py:199-212` 註解
 
 ### 8.4 做到一半的新增功能 — 先盤點再動
 

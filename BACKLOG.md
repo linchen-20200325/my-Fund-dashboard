@@ -16,10 +16,10 @@
 - [ ] **F-GRAY-1** §8.3 灰色地帶 `fund_fetcher.py`(根目錄)是否搬到 `repositories/`(歷史包袱)
 - [ ] **F-GRAY-2** §8.3 灰色地帶 `hot_money.py` / `tw_macro.py`(根目錄)同上
 - [ ] **F-GRAY-3** §8.3 灰色地帶 `app.py`(425 LOC)確認無業務邏輯未下沉到 L2
-- [ ] **F-GRAY-4** §8.3 灰色地帶 `MACRO_THRESHOLDS` dict consumption gap — `services/macro_service.py` inline 條件未改用 dict
+- [⚠️] **F-GRAY-4** §8.3 灰色地帶 `MACRO_THRESHOLDS` dict consumption gap — v19.80 audit 釐清:dict 與 inline 語意不同源,**不可機械式 swap**;若要 harmonize 需逐 site 評估語意(範疇升級為架構提案,詳見 `repositories/macro_repository.py:199-212` 註解 + CLAUDE.md §8.3)
 - [ ] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 已收一輪;其餘需逐一檢視
 
-**ROI 建議排序**:F-GRAY-4(scope 小最易動) → F-PROV-1(影響資料可信度) → F-PIT-1(影響回測正確性) → F-GRAY-1/2/3(歷史包袱整理) → F-SCHEMA-1(ROI 偏低)。
+**ROI 建議排序**(F-GRAY-4 v19.80 audit 後降級):F-PROV-1(影響資料可信度) → F-PIT-1(影響回測正確性) → F-GRAY-1/2/3(歷史包袱整理) → F-SCHEMA-1(ROI 偏低) → F-GRAY-4(架構提案)。
 
 ---
 
