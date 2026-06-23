@@ -2726,6 +2726,42 @@ def _finish_metrics(result: dict):
                     result["perf"]["1Y"] = _local_1y
                     result["perf_source"] = result.get("perf_source") or "local_calc"
                     print(f"[metrics] 🧮 {code} perf['1Y'] 用本地計算補：{_local_1y}%")
+            # F-RECON-1 phase 4 v19.89 — 1Y 報酬雙演算法對帳(self-calc vs MoneyDJ wb01)
+            # 同時拿到自算 ret_1y_total + wb01 perf["1Y"] 時做交叉驗證。schema-additive
+            # 結果寫入 result["metrics"]["ret_1y_reconcile"](dict | None)。
+            try:
+                from services.reconcile import reconcile_fund_annual_return
+                _m_local = result.get("metrics") or {}
+                _self_calc_1y = _m_local.get("ret_1y_total")
+                _wb01_1y = result.get("perf", {}).get("1Y")
+                # perf_source != "local_calc" 才是真 wb01;local_calc 等於自己 → 不對帳
+                _perf_source = result.get("perf_source") or ""
+                _is_wb01 = (_wb01_1y is not None and _perf_source != "local_calc")
+                if _self_calc_1y is not None or _is_wb01:
+                    # 兩值用 % 單位(0.15 = 15%) → 自算 ret_1y_total 也用 % 計,
+                    # 轉成小數比較(reconcile_fund_annual_return 預期小數)
+                    _sc = float(_self_calc_1y) / 100.0 if _self_calc_1y is not None else None
+                    _mj = float(_wb01_1y) / 100.0 if _is_wb01 else None
+                    if isinstance(result.get("metrics"), dict):
+                        result["metrics"]["ret_1y_reconcile"] = (
+                            reconcile_fund_annual_return(_sc, _mj))
+            except Exception as _e_rec_1y:  # noqa: BLE001
+                pass
+            # F-RECON-1 phase 5 v19.90 — 配息殖利率對帳(self-calc vs MoneyDJ)
+            # self_calc = annual_div_rate(計於 calc_metrics)/ MoneyDJ = moneydj_div_yield(來自 wh06_4 dividends 第一筆)
+            try:
+                from services.reconcile import reconcile_dividend_yield
+                _m_local = result.get("metrics") or {}
+                _self_calc_dy = _m_local.get("annual_div_rate")
+                _mj_dy = result.get("moneydj_div_yield")
+                if _self_calc_dy is not None or _mj_dy is not None:
+                    _sc_dy = float(_self_calc_dy) / 100.0 if _self_calc_dy is not None else None
+                    _mj_dy_dec = float(_mj_dy) / 100.0 if _mj_dy is not None else None
+                    if isinstance(result.get("metrics"), dict):
+                        result["metrics"]["div_yield_reconcile"] = (
+                            reconcile_dividend_yield(_sc_dy, _mj_dy_dec))
+            except Exception as _e_rec_dy:  # noqa: BLE001
+                pass
             print(f"[metrics] ✅ {code} 指標計算完成（{len(s)} 筆，src:{src}）")
         except Exception as _ce:
             result["source_trace"].append(
