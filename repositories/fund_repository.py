@@ -2045,6 +2045,9 @@ def _src_sitca_nav(code: str) -> pd.Series:
         if len(rows) >= 10:
             s = pd.Series(rows).sort_index()
             print(f"[src_sitca_nav] ✅ {code} {len(s)} 筆")
+            # F-PROV-1 phase 12 v19.98 — provenance(Series.attrs)
+            s.attrs["source"] = "SITCA:IN2213.aspx"
+            s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
             return s
     except Exception as e:
         print(f"[src_sitca_nav] {code}: {e}")
@@ -2372,6 +2375,10 @@ def _src_insurance_subdomain_nav(code: str) -> pd.Series:
                 s = _parse_nav_html(r.text)
                 if len(s) >= 10:
                     print(f"[src_ins] ✅ {_code} @ {portal} wf01/wb02 → {len(s)} 筆")
+                    # F-PROV-1 phase 12 v19.98 — provenance(Series.attrs)
+                    _ep_ins = path.split("?")[0].rsplit("/", 1)[-1]
+                    s.attrs["source"] = f"InsuranceSubdomain:{portal}.moneydj.com:{_ep_ins}"
+                    s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                     return s
             except Exception as _e:
                 print(f"[src_ins] {portal} {path}: {_e}")
@@ -2400,6 +2407,9 @@ def _src_insurance_subdomain_nav(code: str) -> pd.Series:
                 if len(rows) >= 10:
                     s = pd.Series(rows).sort_index()
                     print(f"[src_ins] ✅ {_code} @ {portal} yp004002 → {len(s)} 筆")
+                    # F-PROV-1 phase 12 v19.98 — provenance(Series.attrs)
+                    s.attrs["source"] = f"InsuranceSubdomain:{portal}.moneydj.com:yp004002:{page}"
+                    s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                     return s
             except Exception as _e:
                 print(f"[src_ins] {portal} yp004002: {_e}")
