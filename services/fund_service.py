@@ -152,9 +152,11 @@ def calculate_fund_total_return(nav_df: pd.DataFrame, div_df: pd.DataFrame) -> p
         div = div.sort_values("Date")
 
     df = pd.merge(nav, div, on="Date", how="left")
+    # W5-1 §1 註明:left-join 後 NaN 表示「該日無配息事件」,fillna(0) 為語意正確(非掩蓋)
     df["Dividend"] = df["Dividend"].fillna(0)
 
     # 除以零防護：NAV<=0 或 NaN → Factor=1（該日不貢獻再投資）
+    # W5-1 §1 註明:此 fillna(0) 對應 _safe_nav 為 NaN 的退化情境,Factor=1 為業務正確(顯式說明)
     _safe_nav = df["NAV"].where(df["NAV"] > 0, np.nan)
     div_ratio = (df["Dividend"] / _safe_nav).fillna(0)
     df["Factor"] = 1.0 + div_ratio
