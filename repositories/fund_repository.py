@@ -621,6 +621,9 @@ def _src_bank_platform_nav(base_code: str) -> "pd.Series":
                 if rows:
                     s = pd.Series(rows).sort_index()
                     print(f"[src_bank] ✅ {_code} @ 台灣人壽 mobile {len(s)} 筆")
+                    # F-PROV-1 phase 14 v19.100 — provenance(Series.attrs)
+                    s.attrs["source"] = f"BankPlatform:{domain}:taiwanlife_mobile"
+                    s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                     return s
 
             elif ptype.startswith("moneydj_"):
@@ -647,6 +650,9 @@ def _src_bank_platform_nav(base_code: str) -> "pd.Series":
                     if len(rows) >= 10:
                         s = pd.Series(rows).sort_index()
                         print(f"[src_bank] ✅ {_code} @ {domain} hist {len(s)} 筆")
+                        # F-PROV-1 phase 14 v19.100 — provenance(Series.attrs)
+                        s.attrs["source"] = f"BankPlatform:{domain}:yp004002:{page}"
+                        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                         return s
 
                 # fallback：近30日頁（wb01/wb02）
@@ -656,6 +662,9 @@ def _src_bank_platform_nav(base_code: str) -> "pd.Series":
                     s2 = _parse_nav_html(r2.text)
                     if len(s2) >= 5:
                         print(f"[src_bank] ✅ {_code} @ {domain} wb {len(s2)} 筆（近30日）")
+                        # F-PROV-1 phase 14 v19.100 — provenance(Series.attrs)
+                        s2.attrs["source"] = f"BankPlatform:{domain}:{page}:30day"
+                        s2.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                         return s2
 
         except Exception as _e_bp:
