@@ -144,8 +144,15 @@ def _spread_series(df_long, df_short, n_pts=60):
     if df_long.empty or df_short.empty: return pd.Series(dtype=float)
     dl = df_long[["date","value"]].set_index("date").rename(columns={"value":"v_l"}).copy()
     ds = df_short[["date","value"]].set_index("date").rename(columns={"value":"v_s"}).copy()
-    dl_m = dl.resample("ME").last().ffill()
-    ds_m = ds.resample("ME").last().ffill()
+    # W5-2 §1: 月底重採後 ffill 補缺月(同 macro_repository._spread_series 註解),加 log
+    dl_m = dl.resample("ME").last()
+    ds_m = ds.resample("ME").last()
+    _dl_ffill = int(dl_m["v_l"].isna().sum())
+    _ds_ffill = int(ds_m["v_s"].isna().sum())
+    dl_m = dl_m.ffill()
+    ds_m = ds_m.ffill()
+    if _dl_ffill or _ds_ffill:
+        print(f"[macro_service _spread_series] ffill v_l={_dl_ffill}, v_s={_ds_ffill} 個月份")
     merged = dl_m.join(ds_m, how="inner").dropna()
     if merged.empty:
         dl2 = df_long[["date","value"]].rename(columns={"value":"v_l"}).sort_values("date")

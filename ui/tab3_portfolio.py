@@ -1324,7 +1324,12 @@ def render_portfolio_tab() -> None:
                 else:
                     _curve_df = _curve_df.join(_value_series, how="outer")
             if _curve_df is not None and len(_curve_df) >= 2:
+                # W5-2 §1: 多基金 outer-join 後 NaN 代表「該基金當日無對應 NAV」(週末/假日/上市前),
+                # 此處 ffill 為「合成資產曲線」業務正確(用前一交易日 NAV 算當日市值),加 log 透明化
+                _ffill_n = int(_curve_df.isna().sum().sum())
                 _curve_df = _curve_df.sort_index().ffill()
+                if _ffill_n > 0:
+                    print(f"[tab3 portfolio curve] ffill 補 {_ffill_n} 個 NaN(週末/假日/未上市前)")
                 _total_curve = _curve_df.sum(axis=1)
                 # 2% 無風險基準（從首日總額複利）
                 _days = (_total_curve.index - _total_curve.index[0]).days

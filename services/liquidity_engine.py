@@ -212,7 +212,13 @@ def build_ssr() -> "dict | None":
         [btc_mcap.rename("btc"), stable.rename("stable")], axis=1
     )
     df.index = pd.to_datetime(df.index).normalize()
+    # W5-2 §1: BTC + stablecoin 雙序列 outer-merge 後 ffill 為對齊兩源不同更新頻率,
+    # dropna 為刪除「兩源都缺」的開頭/尾端,加 log 透明化
+    _before = len(df)
     df = df[~df.index.duplicated(keep="last")].sort_index().ffill().dropna()
+    _after = len(df)
+    if _before != _after:
+        print(f"[liquidity_engine SSR] ffill+dropna: {_before} → {_after} 筆(刪 {_before - _after} 雙缺值)")
     if len(df) < _MIN_SAMPLES:
         return None
     ssr = (df["btc"] / df["stable"]).replace([np.inf, -np.inf], np.nan).dropna()

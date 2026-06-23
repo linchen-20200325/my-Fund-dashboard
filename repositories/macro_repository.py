@@ -777,8 +777,16 @@ def spread_series(
 
     dl = df_long[["date", "value"]].set_index("date").rename(columns={"value": "v_l"})
     ds = df_short[["date", "value"]].set_index("date").rename(columns={"value": "v_s"})
-    dl_m = dl.resample("ME").last().ffill()
-    ds_m = ds.resample("ME").last().ffill()
+    # W5-2 §1: resample("ME").last() 取月底值後 ffill 補缺月(macro 月頻指標若某月未發布用前期);
+    # 此為 yield spread 計算的業務正確補值(月度差分容忍上期值),加 log 透明化
+    dl_m = dl.resample("ME").last()
+    ds_m = ds.resample("ME").last()
+    _dl_ffill = int(dl_m["v_l"].isna().sum())
+    _ds_ffill = int(ds_m["v_s"].isna().sum())
+    dl_m = dl_m.ffill()
+    ds_m = ds_m.ffill()
+    if _dl_ffill or _ds_ffill:
+        print(f"[macro_repo _spread_series] ffill v_l={_dl_ffill}, v_s={_ds_ffill} 個月份")
     merged = dl_m.join(ds_m, how="inner").dropna()
     if not merged.empty:
         return (merged["v_l"] - merged["v_s"]).tail(n_pts)
