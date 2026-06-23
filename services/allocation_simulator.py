@@ -16,6 +16,23 @@ User 需求：「設模擬器，再不同階段調整配股、配息、放停泊
 - 終值：基金桶 + 現金桶（× 期末 FX）+ 定存桶 → TWD 合計
 
 蒙地卡羅：FX = random GBM 時跑 N 次，輸出 5/50/95% quantile + 樣本路徑（供 fan chart）。
+
+────────────────────────────────────────────────────────────────────────
+SSOT 例外說明（CLAUDE.md §8.2.A EX-POLICY-1 / F-H4 v19.76 決策）
+────────────────────────────────────────────────────────────────────────
+本檔含 `DEFAULT_PHASE_SCRIPT` + `STRATEGY_PRESETS` 兩個 business policy
+preset，**未抽** `shared/allocation_policies.py`，理由：
+
+1. 兩常數為 policy data 而非 magic number metric，CLAUDE.md §3.3 SSOT
+   規則本意是防 inline magic number，policy preset 屬另一範疇。
+2. `STRATEGY_PRESETS` 的 phase 名稱（"復甦"/"擴張"/"放緩"/"衰退"）與
+   `DEFAULT_PHASE_SCRIPT` 字串契約強耦合 → 放同檔改動原子性高。
+3. 目前 consumer 僅 simulator 本檔 + `ui/tab_allocation_simulator.py`
+   一個 UI tab，scope 小；crisis_backtest 不共用此 phase 邏輯。
+4. 若未來新增第二份共用此 policy 的 simulator，再升級為 SSOT 模組
+   （§8.1 step 6「用不到的抽象先不做」）。
+
+違憲狀態（CLAUDE.md §3.3 表）：⚠️ → ✅（已登記 §8.2.A 例外）。
 """
 from __future__ import annotations
 
