@@ -11,11 +11,9 @@
 """
 from __future__ import annotations
 
-import re
 from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
-import requests
 
 from infra.cache import _ttl_cache, register_cache
 from shared.ttls import TTL_30MIN
@@ -25,7 +23,11 @@ from shared.fred_series import (
     FRED_M2,
     FRED_RRP,
 )
-from repositories.macro_repository import fetch_fred, fetch_yf_close
+from repositories.macro_repository import (
+    fetch_aaii_sentiment,
+    fetch_fred,
+    fetch_yf_close,
+)
 
 
 def _hy_oas(api_key: str) -> dict:
@@ -173,37 +175,23 @@ def _hyg_lqd_ratio() -> dict:
         return {"_err": f"{type(e).__name__}: {e}"}
 
 
-def _aaii_sentiment() -> dict:
-    """AAII 散戶情緒調查 (best-effort scrape aaii.com)."""
-    try:
-        url = "https://www.aaii.com/sentimentsurvey"
-        r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code != 200:
-            return {"_err": f"HTTP {r.status_code}"}
-        m_bull = re.search(r"[Bb]ullish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
-        m_bear = re.search(r"[Bb]earish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
-        if not m_bull or not m_bear:
-            return {"_err": "regex no match (page format changed)"}
-        bull = float(m_bull.group(1))
-        bear = float(m_bear.group(1))
-        spread = bull - bear
-        if spread > 20:
-            color, label = "#f85149", "🔴 散戶過度樂觀（反指標：賣訊號）"
-        elif spread < -20:
-            color, label = "#3fb950", "✅ 散戶過度悲觀（反指標：買訊號）"
-        else:
-            color, label = "#d29922", "➖ 情緒中性"
-        return {
-            "value": spread,
-            "unit": "%",
-            "bull": bull,
-            "bear": bear,
-            "color": color,
-            "label": label,
-            "date": "weekly",
-        }
-    except Exception as e:
-        return {"_err": f"{type(e).__name__}: {str(e)[:60]}"}
+def _aaii_with_judgment() -> dict:
+    """AAII 散戶情緒 + 業務判讀（color/label）.
+
+    F-H1 v19.77：raw I/O 已下沉 `repositories.macro_repository.fetch_aaii_sentiment`,
+    本函式專責 spread → color/label 的 business judgment(L2 純函式)。
+    """
+    raw = fetch_aaii_sentiment()
+    if "_err" in raw:
+        return raw
+    spread = raw["value"]
+    if spread > 20:
+        color, label = "#f85149", "🔴 散戶過度樂觀（反指標：賣訊號）"
+    elif spread < -20:
+        color, label = "#3fb950", "✅ 散戶過度悲觀（反指標：買訊號）"
+    else:
+        color, label = "#d29922", "➖ 情緒中性"
+    return {**raw, "color": color, "label": label}
 
 
 @register_cache
@@ -216,7 +204,7 @@ def fetch_us_liquidity_snapshot(fred_api_key: str) -> dict:
         "m2_yoy": lambda: _m2_yoy(fred_api_key),
         "walcl": lambda: _walcl(fred_api_key),
         "hyg_lqd": _hyg_lqd_ratio,
-        "aaii": _aaii_sentiment,
+        "aaii": _aaii_with_judgment,
     }
     out: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=6) as ex:
