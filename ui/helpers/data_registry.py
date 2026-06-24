@@ -233,7 +233,7 @@ def _update_data_registry():
                     latest_date = str(s.index[0])[:10]
                 sorted_s = s
             except Exception:
-                pass  # noqa: smoke-allow-pass
+                pass  # smoke-allow-pass
         freq = _FREQ.get(key, "monthly")
         icon, flabel, fcolor = _freshness(latest_date, freq, indicator_key=key)
         reg[f"總經_{key}"] = {
@@ -264,7 +264,7 @@ def _update_data_registry():
                     latest_date = str(s2.index[0])[:10]
                 sorted_s = s2
             except Exception:
-                pass  # noqa: smoke-allow-pass
+                pass  # smoke-allow-pass
         icon, flabel, fcolor = _freshness(latest_date, "nav")
         reg[f"基金_{fn}_淨值"] = {
             "label":       f"{fn} 淨值",
@@ -295,7 +295,7 @@ def _update_data_registry():
                     latest_date = str(s2.index[0])[:10]
                 sorted_s = s2
             except Exception:
-                pass  # noqa: smoke-allow-pass
+                pass  # smoke-allow-pass
         icon, flabel, fcolor = _freshness(latest_date, "nav")
         reg[f"組合_{fn}_淨值"] = {
             "label":       f"{fn} 淨值",
@@ -383,7 +383,7 @@ def _update_data_registry():
             if _parsed_dates:
                 _latest = max(_parsed_dates)
         except Exception:
-            pass  # noqa: smoke-allow-pass
+            pass  # smoke-allow-pass
         _icon, _flbl, _fcol = _freshness(_latest, "daily")
         reg["新聞_國際財經RSS"] = {
             "label":       "國際財經新聞 (8 RSS)",
@@ -412,7 +412,7 @@ def _update_data_registry():
                 if _dts:
                     _dlatest = max(_dts)
             except Exception:
-                pass  # noqa: smoke-allow-pass
+                pass  # smoke-allow-pass
             _ic, _lb, _co = _freshness(_dlatest, "monthly")
             reg[f"{prefix}_{fn}_配息"] = {
                 "label":       f"{fn} 配息紀錄",

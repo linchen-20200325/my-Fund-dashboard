@@ -224,12 +224,12 @@ def mk_fund_signal(fund_info: dict, phase: str, score: float) -> dict:
         try:
             if float(_ue)>4.0: auto_alloc=(40,60,f"衰退（失業率{float(_ue):.1f}%破4%）",MATERIAL_RED)
         except Exception:
-            pass   # noqa: smoke-allow-pass
+            pass   # smoke-allow-pass
     if _cpi and _cpip:
         try:
             if float(_cpi)>float(_cpip) and float(_cpi)>3.0: auto_alloc=(50,50,f"升息尾聲—均衡（CPI {float(_cpi):.1f}%↑）",MATERIAL_ORANGE)
         except Exception:
-            pass   # noqa: smoke-allow-pass
+            pass   # smoke-allow-pass
     return dict(asset_class=asset_class, label=label, sig_type=sig_type, sig_style=sig_style, reason=reason, auto_alloc=auto_alloc)
 
 
@@ -244,7 +244,7 @@ def quartile_check(peer_compare: dict, risk_table: dict) -> dict:
     try:
         fund_sh = float(str(risk_table.get("一年",{}).get("Sharpe","") or "").replace("—",""))
     except Exception:
-        pass   # noqa: smoke-allow-pass
+        pass   # smoke-allow-pass
     peer_sharpes = []
     for row_v in (peer_compare or {}).values():
         if isinstance(row_v, dict):
@@ -253,12 +253,12 @@ def quartile_check(peer_compare: dict, risk_table: dict) -> dict:
                     try:
                         peer_sharpes.append(float(str(v2).replace("—","")))
                     except Exception:
-                        pass   # noqa: smoke-allow-pass
+                        pass   # smoke-allow-pass
             try:
                 sh_v = float(str(row_v.get("Sharpe", row_v.get("夏普","")) or "").replace("—",""))
                 peer_sharpes.append(sh_v)
             except Exception:
-                pass   # noqa: smoke-allow-pass
+                pass   # smoke-allow-pass
     if fund_sh is None and not peer_sharpes:
         return out
     if not peer_sharpes:

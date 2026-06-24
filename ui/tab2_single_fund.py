@@ -90,7 +90,7 @@ def render_single_fund_tab() -> None:
             import repositories.macro_repository  # noqa: F401
             _cac_t2()
         except Exception:
-            pass   # noqa: smoke-allow-pass
+            pass   # smoke-allow-pass
         with st.spinner("📡 自動偵測基金類型並抓取資料..."):
             fd_raw, _t2_page_type = auto_fetch_moneydj(
                 mj_url_input.strip(), return_page_type=True
@@ -605,7 +605,7 @@ def render_single_fund_tab() -> None:
                                 f"σ = HWM × 年化日報酬標準差（{len(s)} 筆淨值計算）</div>"
                                 f"</div>", unsafe_allow_html=True)
                     except Exception:
-                        pass  # noqa: smoke-allow-pass
+                        pass  # smoke-allow-pass
 
                 # ── v18.47: 📊 基金健康總覽（4 維度評分 + Overall Grade + 白話結論）──
                 try:
@@ -631,7 +631,7 @@ def render_single_fund_tab() -> None:
                                             _raw_g = (_vn_g / _vo_g - 1.0) * 100.0
                                             _g_tr1y = _raw_g * (365.0 / _days_actual)
                         except Exception:
-                            pass  # noqa: smoke-allow-pass — NAV 1Y 估算失敗不影響其他維度
+                            pass  # smoke-allow-pass — NAV 1Y 估算失敗不影響其他維度
                     try: _g_tr1y = float(_g_tr1y) if _g_tr1y is not None else None
                     except (TypeError, ValueError): _g_tr1y = None
 
@@ -659,7 +659,7 @@ def render_single_fund_tab() -> None:
                             if _sum_amt > 0 and _nav_now and _nav_now > 0:
                                 _g_dy = (_sum_amt / _nav_now) * 100.0
                         except Exception:
-                            pass  # noqa: smoke-allow-pass — divs 歷史推算失敗不影響其他維度
+                            pass  # smoke-allow-pass — divs 歷史推算失敗不影響其他維度
 
                     _g_sharpe = m.get("sharpe")
                     if _g_sharpe is None:
@@ -689,7 +689,7 @@ def render_single_fund_tab() -> None:
                                     if _v_start > 0:
                                         _g_ma_dir = "up" if _v_end > _v_start else "down"
                     except Exception:
-                        pass  # noqa: smoke-allow-pass — 走勢方向估算失敗不影響其他維度
+                        pass  # smoke-allow-pass — 走勢方向估算失敗不影響其他維度
 
                     # 4 維度評分（0~100）
                     _d1_cov = None  # 配息健康度（Coverage）
@@ -771,7 +771,7 @@ def render_single_fund_tab() -> None:
                         f"{_g_block('🛡️ 低波動性', _d4_vol)}"
                         f"</div></div>", unsafe_allow_html=True)
                 except Exception:
-                    pass  # noqa: smoke-allow-pass — 評分卡失敗不影響後續資訊
+                    pass  # smoke-allow-pass — 評分卡失敗不影響後續資訊
 
                 # ── v18.20: 🔴 吃本金 KPI 紅綠燈（獨立 banner，主 KPI 列旁）──
                 # 不依賴 divs[] 是否有資料；只要有 ret_1y + 任一配息率來源即顯示。
@@ -804,7 +804,7 @@ def render_single_fund_tab() -> None:
                             if _sum_k > 0 and _nav_k and _nav_k > 0:
                                 _kpi_adr = (_sum_k / _nav_k) * 100.0
                         except Exception:
-                            pass  # noqa: smoke-allow-pass — divs 歷史推算失敗不影響後續
+                            pass  # smoke-allow-pass — divs 歷史推算失敗不影響後續
                     # v18.134: 改用 compute_1y_total_return 共用 helper
                     # 修使用者反饋「Tab2 跟 Tab3 對同一基金顯示不同 1Y 報酬」
                     # 統一順序：perf["1Y"] > ret_1y_total > ret_1y > NAV
@@ -914,7 +914,7 @@ def render_single_fund_tab() -> None:
                             f"策略2框架：{_sh_txt}</div>",
                             unsafe_allow_html=True)
                     except (ValueError, TypeError):
-                        pass  # noqa: smoke-allow-pass
+                        pass  # smoke-allow-pass
                     # 四分位
                     peer = mj_raw.get("risk_metrics",{}).get("peer_compare",{})
                     qr = _quartile_check(peer, risk_tbl)

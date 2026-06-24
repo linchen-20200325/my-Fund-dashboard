@@ -696,11 +696,11 @@ def _autofill_from_moneydj(fund_code: str) -> tuple[str, str, str]:
         fname = raw.get("fund_name", "") or ""
         ccy = raw.get("currency", "") or raw.get("metrics", {}).get("currency", "")
     except Exception:
-        pass   # noqa: smoke-allow-pass — MoneyDJ 抓失敗，user 之後可手動補
+        pass   # smoke-allow-pass — MoneyDJ 抓失敗，user 之後可手動補
     if fname:
         try:
             from ui.helpers.session import is_core_fund
             tier = "core" if is_core_fund(fname) else "satellite"
         except Exception:
-            pass   # noqa: smoke-allow-pass
+            pass   # smoke-allow-pass
     return fname, ccy, tier

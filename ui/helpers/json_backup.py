@@ -93,7 +93,7 @@ def restore_from_json_bytes(raw: bytes,
         ss["portfolio_funds"] = _rec
         _restored_funds = _rec
     except Exception:
-        pass   # noqa: smoke-allow-pass — 對帳失敗不擋還原，既有資料仍在
+        pass   # smoke-allow-pass — 對帳失敗不擋還原，既有資料仍在
 
     ss["t7_scenarios"] = list(_data.get("t7_scenarios", []) or [])
     if _data.get("policy_sheet_id"):

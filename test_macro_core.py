@@ -235,7 +235,7 @@ def test_flatten_snapshot_skips_none():
     rich = {
         "VIX": macro_core.make_indicator("VIX", "VIX", 28.3),
         "CPI": {"value": None},
-        "X":   "not a dict",  # noqa: 不該 crash
+        "X":   "not a dict",  # 不該 crash
     }
     flat = macro_core.flatten_snapshot(rich)
     assert flat == {"vix": 28.3}
