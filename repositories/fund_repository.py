@@ -437,7 +437,11 @@ def fetch_nav_cnyes(code: str) -> pd.Series:
             rows = _cnyes_parse_navs(navs)
             if rows:
                 print(f"[cnyes_nav] ✅ {code}→{_cand} {len(rows)} 筆")
-                return pd.Series(rows).sort_index()
+                s = pd.Series(rows).sort_index()
+                # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs)
+                s.attrs["source"] = f"Cnyes:fund.api:v2/funds/{_cand}/nav"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                return s
         except Exception as _e:
             print(f"[cnyes_nav] {_cand}: {_e}")
 
@@ -3605,6 +3609,11 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
             s = _parse_nav_html(r.text)
             if len(s) >= 10:
                 print(f"[fetch_nav] ✅ {len(s)} 筆")
+                # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs;動態 host:endpoint)
+                _host_fn = url.split("/")[2] if "://" in url else "moneydj"
+                _ep_fn = url.split("?")[0].rsplit("/", 1)[-1]
+                s.attrs["source"] = f"MoneyDJ:{_host_fn}:{_ep_fn}:fetch_nav"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as e:
             print(f"[fetch_nav] ERR: {e}")
@@ -3764,6 +3773,10 @@ def _fetch_nav_cnyes(code: str) -> "pd.Series | None":
             items = _walk_for_nav_items(data)
             s = _parse_nav_json_items(items)
             if not s.empty and len(s) >= 50:
+                # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs)
+                _ep_cn = url.split("?")[0].rsplit("/", 1)[-1]
+                s.attrs["source"] = f"Cnyes:api:v1/fund:{_ep_cn}"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as e:
             print(f"[_fetch_nav_cnyes] API {url[:60]} ERR: {e}")
@@ -3784,10 +3797,16 @@ def _fetch_nav_cnyes(code: str) -> "pd.Series | None":
                 items = _walk_for_nav_items(data)
                 s = _parse_nav_json_items(items)
                 if not s.empty and len(s) >= 50:
+                    s.attrs["source"] = "Cnyes:html:__NEXT_DATA__"
+                    s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                     return s
             except Exception as _e_j:
                 print(f"[_fetch_nav_cnyes] __NEXT_DATA__ JSON ERR: {_e_j}")
-        return _parse_html_nav_table(r.text)
+        s_tbl = _parse_html_nav_table(r.text)
+        if isinstance(s_tbl, pd.Series) and not s_tbl.empty:
+            s_tbl.attrs["source"] = "Cnyes:html:nav_table"
+            s_tbl.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        return s_tbl
     except Exception as e:
         print(f"[_fetch_nav_cnyes] HTML ERR: {e}")
     return None
@@ -3821,6 +3840,11 @@ def _fetch_nav_moneydj_history(code: str) -> "pd.Series | None":
             r.encoding = "big5"
             s = _parse_html_nav_table(r.text)
             if s is not None and not s.empty and len(s) >= 50:
+                # F-PROV-1 phase 16 v19.102 — provenance(動態 host:endpoint)
+                _host_mh = url.split("/")[2] if "://" in url else "moneydj"
+                _ep_mh = url.split("?")[0].rsplit("/", 1)[-1]
+                s.attrs["source"] = f"MoneyDJ:{_host_mh}:{_ep_mh}:nav_history_long"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as e:
             print(f"[_fetch_nav_moneydj_history] {url[:60]} ERR: {e}")
@@ -3850,6 +3874,10 @@ def _fetch_nav_fundrich(code: str) -> "pd.Series | None":
             items = _walk_for_nav_items(data)
             s = _parse_nav_json_items(items)
             if not s.empty and len(s) >= 50:
+                # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs)
+                _ep_fr = url.split("?")[0].rsplit("/", 1)[-1]
+                s.attrs["source"] = f"FundRich:api:v1/funds:{_ep_fr}"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
         except Exception as e:
             print(f"[_fetch_nav_fundrich] {url[:60]} ERR: {e}")
@@ -3880,6 +3908,10 @@ def _fetch_nav_fundclear(code: str) -> "pd.Series | None":
                 items = _walk_for_nav_items(data)
                 s = _parse_nav_json_items(items)
                 if not s.empty and len(s) >= 50:
+                    # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs)
+                    _host_fc = url.split("/")[2] if "://" in url else "fundclear"
+                    s.attrs["source"] = f"FundClear:{_host_fc}:nav_history_long:json"
+                    s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                     return s
             except Exception:
                 # CSV fallback
@@ -3889,6 +3921,9 @@ def _fetch_nav_fundclear(code: str) -> "pd.Series | None":
                     items = df.to_dict("records")
                     s = _parse_nav_json_items(items)
                     if not s.empty and len(s) >= 50:
+                        _host_fc = url.split("/")[2] if "://" in url else "fundclear"
+                        s.attrs["source"] = f"FundClear:{_host_fc}:nav_history_long:csv"
+                        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                         return s
                 except Exception as _e_c:
                     print(f"[_fetch_nav_fundclear] CSV parse ERR: {_e_c}")
