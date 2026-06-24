@@ -28,17 +28,19 @@
   * **phase 17**(v19.103):`fund_repository.fetch_fund_structure` 加 `MoneyDJ:STRUCTURE_PAGES:multi_portal` source + fetched_at;`fetch_fund_by_key` 加 `nav_source_used`(從 series.attrs 取出來)+ `fetched_at` orchestrator-level 旗標
   * **phase 18**(v19.104):services 層 NAV 抓取的 wrapper provenance:`crisis_backtest.fetch_market_series`(`Yahoo:fetch_yf_close:<ticker>:<range>:crisis_backtest`,setdefault 不蓋過上游)+ `multi_factor_optimization.fetch_factor_series`(yahoo / fred / COPPER_GOLD_RATIO / VIX_DELTA_5D `_stamp_prov` helper,涵蓋 calculated 因子)
   * **phase 19**(v19.105):3 個 L2 service 多指標融合 orchestrator 補 provenance:`us_liquidity_engine`(6 sub-fetcher 每個結果 dict 加 `source` + orchestrator-level `_provenance.sources`/`fetched_at`)/ `valuation.detect_valuation`(2 estimate 加 `_provenance.sources`:yfinance `^GSPC.info` chain + FRED GDPNOW)/ `risk_calibration.fetch_real_3factor_monthly`(df.attrs + spx.attrs + notes._provenance,涵蓋 HY_Spread/Yield_Curve/VIX/SPX 月度 resample 4 條來源)
-  * 後續:12 指標融合處 score 出口
+  * **phase 20**(v19.106):`tests/test_provenance_smoke.py` 4 個契約測試防退化(runtime fetch_fred + 靜態檢查 fund_repository / services 層命名 / reconcile pattern)
+  * **phase 21**(v19.107):`services/macro_service.calc_macro_phase` 12 指標融合處 `_provenance`(sources / contributing / total/earned weight / aggregator)
+  * **phase 22+(WONTFIX)**:剩餘 fetcher provenance — 套 §-1 工作準則,核心 40+ fetcher 已涵蓋,邊際效益遞減。v19.109 結案
 - [x] **F-PIT-1** §2.3 v19.81 audit 結案:`crisis_backtest.py` + `crisis_strategy_grid.py` **PIT-safe**(時序順序掃描 + `shift(1)` 防 same-bar lookahead + 嚴格時間窗切片,無 merge_asof 跨頻)
 - [⚙️] **F-RECON-1** §4.3 雙演算法對帳;**v19.87 phase 1+2**:新建 `services/reconcile.py`(L2 純函式)+ 21/21 unit tests。對外 API:`reconcile_pair`(通用)/ `reconcile_us10y_yield`(FRED DGS10 vs Yahoo ^TNX/10, 5bp 容差)/ `reconcile_fund_annual_return`(自算 vs MoneyDJ wb01)/ `reconcile_sharpe`(自算 vs MoneyDJ wb07)/ `reconcile_dividend_yield`(自算 vs MoneyDJ)。**Phase 2**:`services/risk_radar._signal_yield_10y_shock` 接入 reconcile,額外抓 `^TNX` 與 FRED DGS10 比對,結果以 schema-additive `reconcile` 欄寫入返回 dict;`ui/tab1_macro.py` 雷達卡片新增「✅/⚠️ 對帳 chip」;3 新 unit tests + 既有 3 test 不破。**v19.88 phase 3**:`services/fund_service.calc_metrics` 接入 `reconcile_sharpe`,在返回 dict 新增 `sharpe_reconcile` 欄(self-calc vs MoneyDJ wb07);3 新 unit tests 全綠;16/16 fund_metrics 不破。**v19.89 phase 4**:`repositories/fund_repository._finish_metrics` 1Y 報酬對帳(self-calc `ret_1y_total` vs MoneyDJ wb01 `perf["1Y"]`);schema-additive 寫入 `result["metrics"]["ret_1y_reconcile"]`,僅在真 wb01 來源(`perf_source != "local_calc"`)時啟動。**v19.90 phase 5**:同 `_finish_metrics` 加配息殖利率對帳(self-calc `annual_div_rate` vs MoneyDJ `moneydj_div_yield`);寫入 `result["metrics"]["div_yield_reconcile"]`,兩值皆 % 單位內部轉小數。**v19.91 phase 6**:`ui/tab2_single_fund.py` 接入三組對帳 chip 渲染(Sharpe / 配息殖利率 / 1Y 報酬),phase 3-5 寫入 metrics 的對帳資料正式被使用者看見。**F-RECON-1 完整收尾**(5 phase data + 1 phase UI)。
-- [ ] **F-SCHEMA-1** §3.1 ⚠️ pandera 是否加 requirements + 逐 repository 落地 schema?(評估 ~200ms 啟動 cost)
+- [⛔ WONTFIX] **F-SCHEMA-1** §3.1 pandera — 套 §-1 工作準則:未實際遇過 schema bug + 拖慢冷啟動 ~200ms + 半做覆蓋不全。v19.109 結案
 - [x] **F-GRAY-1** §8.3 v19.81 audit 結案:`fund_fetcher.py` **保留根目錄**(18 條 re-export shim + 57 caller,搬移為 cosmetic)
 - [x] **F-GRAY-2** §8.3 v19.81 audit 結案:`hot_money.py` / `tw_macro.py` 同上,根目錄 vs `repositories/` 為純 cosmetic
 - [x] **F-GRAY-3** §8.3 v19.81 audit 結案:`app.py`(568 LOC)已是 orchestrator,無業務邏輯需下沉;同步刪除 1 處 dead code `_unused_old_calculate_composite_score`
-- [⚠️] **F-GRAY-4** §8.3 v19.80 audit 結案:`MACRO_THRESHOLDS` dict 與 inline 語意不同源,**不可機械式 swap**;harmonize 需架構提案(詳見 `macro_repository.py:199-212` 註解 + CLAUDE.md §8.3)
-- [ ] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 已收一輪;其餘需逐一檢視
+- [⛔ WONTFIX] **F-GRAY-4** §8.3 `MACRO_THRESHOLDS` harmonize — v19.80 audit 結:不可機械式 swap;套 §-1 工作準則:未實際 bug,架構提案性質工作不主動推。v19.109 結案
+- [ ] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 已收一輪;其餘**遵 §-1 等實際 bug 觸發再收**,不主動清
 
-**ROI 建議排序**(F-PIT-1/F-GRAY-1/2/3 已結案):F-PROV-1(影響資料可信度) → F-SCHEMA-1(ROI 偏低) → F-GRAY-4(架構提案) → F-MED 中項。
+**v19.109 收尾**(CLAUDE.md §-1 工作準則立):Open 項全數 WONTFIX 或結案,僅 F-MED 等實際 bug 觸發再收。0 個 active pending。
 
 ---
 
