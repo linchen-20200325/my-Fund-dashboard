@@ -126,9 +126,43 @@ def test_china_macro_snapshot_usdcny_red_at_7p5():
 
 
 def test_china_macro_snapshot_m2_red_below_5():
-    """M2 YoY < 5% → 🔴(信用緊縮)"""
-    out = china_macro_snapshot({FRED_CHN_M2: _make_df(4.2)})
-    assert "🔴" in out["m2_yoy"]["zone"]
+    """M3 level series:13 月後 YoY < 5% → 🔴(信用緊縮)
+    v19.115 校正:M3(FRED MABMM301CNM189S)為 level 兆 CNY,
+    snapshot 內部 pct_change(12) 轉 YoY 才進 scorer。
+    """
+    # 13 筆 level:從 250 → 260(漲 4.0%,< 5% 緊縮閾值)
+    dates = pd.date_range('2025-01-01', periods=13, freq='ME')
+    levels = [250 + i * (10/12) for i in range(13)]  # 12 月漲 10 兆 = 4%
+    df = pd.DataFrame({
+        "date": dates,
+        "value": levels,
+        "source": ["FRED:test"] * 13,
+        "fetched_at": ["2026-06-24"] * 13,
+    })
+    out = china_macro_snapshot({FRED_CHN_M2: df})
+    assert "🔴" in out["m2_yoy"]["zone"], (
+        f"expected 🔴 紅,got zone={out['m2_yoy']['zone']}, value={out['m2_yoy']['value']}"
+    )
+
+
+def test_china_macro_snapshot_m2_short_series_no_yoy():
+    """v19.115 校正:M3 level 不足 13 筆 → YoY 不可算 → ⬜ 無資料"""
+    out = china_macro_snapshot({FRED_CHN_M2: _make_df(280.0)})
+    assert out["m2_yoy"]["zone"] == "⬜ 無資料"
+    assert out["m2_yoy"]["value"] is None
+
+
+def test_china_macro_snapshot_m2_level_to_yoy_green():
+    """M3 level 漲 10% YoY → 🟢 綠(寬鬆)"""
+    dates = pd.date_range('2025-01-01', periods=13, freq='ME')
+    levels = [250 * (1 + 0.10 * i / 12) for i in range(13)]
+    df = pd.DataFrame({
+        "date": dates, "value": levels,
+        "source": ["FRED:test"] * 13, "fetched_at": ["2026-06-24"] * 13,
+    })
+    out = china_macro_snapshot({FRED_CHN_M2: df})
+    assert "🟢" in out["m2_yoy"]["zone"]
+    assert 9.0 <= out["m2_yoy"]["value"] <= 11.0
 
 
 def test_china_macro_snapshot_provenance_passes_through():
