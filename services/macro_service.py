@@ -3229,7 +3229,7 @@ CHINA_MODIFIER_RANGE: float = 0.3  # 0.7 ~ 1.0 之間擺動
 
 
 def apply_china_modifier(main_score: Optional[float],
-                         china_subscore: Optional[float]) -> Optional[float]:
+                         china_subscore: Optional[float]) -> Optional[dict]:
     """套用 China 副盤對主分的乘法 modifier。
 
     公式:composite = main × (CHINA_MODIFIER_FLOOR + CHINA_MODIFIER_RANGE × china/100)
@@ -3242,27 +3242,45 @@ def apply_china_modifier(main_score: Optional[float],
 
     Returns
     -------
-    float | None:
-      - main_score=None → None(無主分可乘)
-      - china_subscore=None → main_score 原值(fail-safe:無中國資料時不懲罰)
-      - 否則 → main × (0.7 + 0.3 × china/100),clip 到 [0, 100]
+    dict | None:
+      - main_score=None 或 非數值 → None(無主分可乘)
+      - 否則 dict 含:
+          composite:  float [0,100],套用 modifier 後的分數(若 china=None 則=main)
+          main:       float [0,100],主分(已 clip)
+          china:      float [0,100] | None,使用的 china 副盤分數(None 表無資料)
+          multiplier: float [0.7, 1.0],實際使用的乘子(china=None 時為 1.0,fail-safe)
 
-    §1 fail loud:中國資料缺失時不偽造懲罰,讓主分原樣通過;
-    user 可從 china=None 推知「modifier 未啟用」。
+    §1 fail loud:中國資料缺失時 multiplier=1.0(不懲罰)但欄位明示 china=None,
+    caller 從 china==None 即知「modifier 未實際啟用」,UI 可條件渲染。
     """
     if main_score is None:
         return None
-    if china_subscore is None:
-        return float(main_score)  # 無中國資料 → 不懲罰也不加成
     try:
         m = float(main_score)
+    except (TypeError, ValueError):
+        return None
+    # main clip 到 [0,100] 防越界帶來的結果越界
+    m_clipped = max(0.0, min(100.0, m))
+
+    if china_subscore is None:
+        # Fail-safe:無中國資料 → multiplier=1.0,composite=main
+        return {
+            "composite": round(m_clipped, 2),
+            "main": round(m_clipped, 2),
+            "china": None,
+            "multiplier": 1.0,
+        }
+    try:
         c = float(china_subscore)
     except (TypeError, ValueError):
         return None
     # clip china 到 [0, 100] 防越界
-    c = max(0.0, min(100.0, c))
-    multiplier = CHINA_MODIFIER_FLOOR + CHINA_MODIFIER_RANGE * (c / 100.0)
-    composite = m * multiplier
-    # clip composite 到 [0, 100](防 main 越界帶來的結果越界)
-    composite = max(0.0, min(100.0, composite))
-    return round(composite, 2)
+    c_clipped = max(0.0, min(100.0, c))
+    multiplier = CHINA_MODIFIER_FLOOR + CHINA_MODIFIER_RANGE * (c_clipped / 100.0)
+    composite = max(0.0, min(100.0, m_clipped * multiplier))
+    return {
+        "composite": round(composite, 2),
+        "main": round(m_clipped, 2),
+        "china": round(c_clipped, 2),
+        "multiplier": round(multiplier, 4),
+    }
