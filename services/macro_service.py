@@ -3204,3 +3204,65 @@ def classify_china_regime(snapshot: dict) -> dict:
 
     return {"regime": "⚪ 中性", "fx_alert": fx_alert,
             "reason": f"CLI={cli}, PMI={pmi} 皆 99-100 區間"}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# v19.116 — China 副盤 → 主分 乘法 modifier(user 指定 blend 設計)
+# 設計:composite = main × (0.7 + 0.3 × china/100)
+#   - china=100(全綠)→ multiplier=1.0 → composite=main(不加分)
+#   - china=50(中性)→ multiplier=0.85 → composite=0.85×main(15% 懲罰)
+#   - china=0  (全紅)→ multiplier=0.7 → composite=0.7×main(30% 懲罰)
+# 哲學:不對「中國好」主觀加成(避免主分高估),只對「中國壞」做風險溢價懲罰。
+#
+# 用法(caller 自行選用,本檔不強制套用):
+#   from services.macro_service import (
+#       china_macro_snapshot, compute_china_subscore, apply_china_modifier,
+#       calc_macro_phase,
+#   )
+#   main = calc_macro_phase(indicators)["score"]
+#   china = compute_china_subscore(china_macro_snapshot(china_dict))
+#   composite = apply_china_modifier(main, china["score"] if china else None)
+# ════════════════════════════════════════════════════════════════════════════
+
+CHINA_MODIFIER_FLOOR: float = 0.7  # China 全紅時的最低折扣(70% × main)
+CHINA_MODIFIER_RANGE: float = 0.3  # 0.7 ~ 1.0 之間擺動
+
+
+def apply_china_modifier(main_score: Optional[float],
+                         china_subscore: Optional[float]) -> Optional[float]:
+    """套用 China 副盤對主分的乘法 modifier。
+
+    公式:composite = main × (CHINA_MODIFIER_FLOOR + CHINA_MODIFIER_RANGE × china/100)
+    範圍:multiplier ∈ [0.7, 1.0],只懲罰不加成。
+
+    Args
+    ----
+    main_score: 主 macro 分數,[0, 100] 或 None
+    china_subscore: China 副盤分數,[0, 100] 或 None(無資料)
+
+    Returns
+    -------
+    float | None:
+      - main_score=None → None(無主分可乘)
+      - china_subscore=None → main_score 原值(fail-safe:無中國資料時不懲罰)
+      - 否則 → main × (0.7 + 0.3 × china/100),clip 到 [0, 100]
+
+    §1 fail loud:中國資料缺失時不偽造懲罰,讓主分原樣通過;
+    user 可從 china=None 推知「modifier 未啟用」。
+    """
+    if main_score is None:
+        return None
+    if china_subscore is None:
+        return float(main_score)  # 無中國資料 → 不懲罰也不加成
+    try:
+        m = float(main_score)
+        c = float(china_subscore)
+    except (TypeError, ValueError):
+        return None
+    # clip china 到 [0, 100] 防越界
+    c = max(0.0, min(100.0, c))
+    multiplier = CHINA_MODIFIER_FLOOR + CHINA_MODIFIER_RANGE * (c / 100.0)
+    composite = m * multiplier
+    # clip composite 到 [0, 100](防 main 越界帶來的結果越界)
+    composite = max(0.0, min(100.0, composite))
+    return round(composite, 2)

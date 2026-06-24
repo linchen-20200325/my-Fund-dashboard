@@ -11,12 +11,17 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import math
+
 from services.macro_service import (
+    CHINA_MODIFIER_FLOOR,
+    CHINA_MODIFIER_RANGE,
     _score_cli,
     _score_cpi,
     _score_m2,
     _score_pmi,
     _score_usdcny,
+    apply_china_modifier,
     classify_china_regime,
     compute_china_subscore,
 )
@@ -208,3 +213,99 @@ def test_regime_fx_alert_when_data_short():
     out = classify_china_regime(_snap(usdcny=7.5))
     assert out["regime"] == "⬜ 資料不足"
     assert out["fx_alert"] is True
+
+
+# ══════════════════════════════════════════════════════════════
+# 4. apply_china_modifier — v19.116 乘法不對稱 blend
+#    composite = main × (0.7 + 0.3 × china/100),只懲罰不加成
+# ══════════════════════════════════════════════════════════════
+
+def test_modifier_constants_match_design():
+    """SSOT 守衛:floor=0.70(30% 最大懲罰)+ range=0.30(China 100→1.0×)"""
+    assert math.isclose(CHINA_MODIFIER_FLOOR, 0.70, abs_tol=1e-12)
+    assert math.isclose(CHINA_MODIFIER_RANGE, 0.30, abs_tol=1e-12)
+    # 不變量:floor + range = 1.0(China=100 時 multiplier=1.0,不加成)
+    assert math.isclose(
+        CHINA_MODIFIER_FLOOR + CHINA_MODIFIER_RANGE, 1.0, abs_tol=1e-12,
+    )
+
+
+@pytest.mark.parametrize("china,expected", [
+    (100.0, 60.00),  # multiplier=1.00 → main 原值
+    (50.0,  51.00),  # multiplier=0.85 → 60×0.85
+    (0.0,   42.00),  # multiplier=0.70 → 60×0.70(最大懲罰)
+    (75.0,  55.50),  # multiplier=0.925 → 60×0.925
+    (25.0,  46.50),  # multiplier=0.775 → 60×0.775
+])
+def test_modifier_main_60(china, expected):
+    """main=60 各 china 值對應的 composite(浮點容差)"""
+    got = apply_china_modifier(60.0, china)
+    assert math.isclose(got, expected, abs_tol=1e-9), (
+        f"main=60 china={china}: got {got}, expected {expected}"
+    )
+
+
+def test_modifier_china_none_returns_main_unchanged():
+    """§1 Fail-safe:無中國資料 → main 原值通過(不偽造懲罰)"""
+    assert apply_china_modifier(75.0, None) == 75.0
+    assert apply_china_modifier(0.0, None) == 0.0
+    assert apply_china_modifier(100.0, None) == 100.0
+
+
+def test_modifier_main_none_returns_none():
+    """無主分 → None(無從乘起)"""
+    assert apply_china_modifier(None, 50.0) is None
+    assert apply_china_modifier(None, None) is None
+
+
+def test_modifier_china_clipped_to_valid_range():
+    """china 越界(< 0 或 > 100)→ clip 到邊界,不 raise"""
+    # china=-10 → clip 到 0 → multiplier=0.70
+    assert math.isclose(
+        apply_china_modifier(60.0, -10.0), 42.0, abs_tol=1e-9,
+    )
+    # china=150 → clip 到 100 → multiplier=1.00
+    assert math.isclose(
+        apply_china_modifier(60.0, 150.0), 60.0, abs_tol=1e-9,
+    )
+
+
+def test_modifier_composite_clipped_to_0_100():
+    """composite 落在 [0, 100](防 main 越界帶來的結果越界)"""
+    # main=200 china=100 → 200×1.0=200 → clip 100
+    assert apply_china_modifier(200.0, 100.0) == 100.0
+    # main=-50 → -50×any=負數 → clip 0
+    assert apply_china_modifier(-50.0, 50.0) == 0.0
+
+
+def test_modifier_invalid_types_return_none():
+    """非數值輸入 → None(不靜默回 0,不 raise)"""
+    assert apply_china_modifier("abc", 50.0) is None
+    assert apply_china_modifier(60.0, "xyz") is None
+
+
+def test_modifier_no_boost_property():
+    """Property:對任何 (main, china) ∈ [0,100]²,composite ≤ main(只懲罰不加成)"""
+    for main in (0, 25, 50, 75, 100):
+        for china in (0, 25, 50, 75, 100):
+            composite = apply_china_modifier(float(main), float(china))
+            # 容差 1e-9 處理 china=100 的等號情況
+            assert composite <= main + 1e-9, (
+                f"main={main} china={china} composite={composite} > main 違反不加成屬性"
+            )
+
+
+def test_modifier_monotonic_in_china():
+    """Property:固定 main,composite 對 china 單調遞增(china 越好懲罰越輕)"""
+    main = 80.0
+    prev = -1.0
+    for china in (0, 10, 30, 50, 70, 90, 100):
+        composite = apply_china_modifier(main, float(china))
+        assert composite >= prev, f"china={china} composite={composite} < prev={prev}"
+        prev = composite
+
+
+# v19.116 §6 自審「3 個最容易出錯的輸入」:
+#   1. china=None (Fail-safe 不懲罰) ✅ test_modifier_china_none_returns_main_unchanged
+#   2. china 越界 < 0 或 > 100 (clip,不 raise) ✅ test_modifier_china_clipped_to_valid_range
+#   3. main 越界 / 非數值 (clip 到 [0,100] / 回 None) ✅ test_modifier_composite_clipped + invalid_types
