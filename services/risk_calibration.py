@@ -276,12 +276,32 @@ def fetch_real_3factor_monthly(
         spx_d = fetch_yf_close("^GSPC", range_=yf_range, interval="1d")
         if spx_d is None or spx_d.empty:
             notes["warnings"].append("SPX 抓取失敗")
-            return df_macro, pd.Series(dtype=float), notes
-        try: spx_d.index = spx_d.index.tz_localize(None)
-        except (AttributeError, TypeError): pass
-        spx = spx_d.resample("ME").last().tail(years * 12 + 12)
+            spx = pd.Series(dtype=float)
+        else:
+            try: spx_d.index = spx_d.index.tz_localize(None)
+            except (AttributeError, TypeError): pass
+            spx = spx_d.resample("ME").last().tail(years * 12 + 12)
     except Exception as e:
         notes["warnings"].append(f"SPX 異常：{type(e).__name__}: {e}")
         spx = pd.Series(dtype=float)
 
+    # F-PROV-1 phase 19 v19.105 — provenance(df.attrs + spx.attrs + notes)
+    _fetched_at = pd.Timestamp.now('UTC').isoformat()
+    _sources = {
+        "HY_Spread": "FRED:BAMLH0A0HYM2",
+        "Yield_Curve_10Y_2Y": "FRED:T10Y2Y",
+        "VIX": "Yahoo:fetch_yf_close:^VIX:monthly_resample",
+    }
+    df_macro.attrs.setdefault("source", "FRED+Yahoo:risk_calibration:3factor_monthly")
+    df_macro.attrs.setdefault("fetched_at", _fetched_at)
+    df_macro.attrs.setdefault("sources_per_col", {k: v for k, v in _sources.items() if k in df_macro.columns})
+    if not spx.empty:
+        spx.attrs.setdefault("source", "Yahoo:fetch_yf_close:^GSPC:monthly_resample")
+        spx.attrs.setdefault("fetched_at", _fetched_at)
+    notes["_provenance"] = {
+        "sources": {k: v for k, v in _sources.items() if k in df_macro.columns},
+        "spx_source": "Yahoo:fetch_yf_close:^GSPC:monthly_resample" if not spx.empty else None,
+        "fetched_at": _fetched_at,
+        "orchestrator": "risk_calibration.fetch_real_3factor_monthly",
+    }
     return df_macro, spx, notes

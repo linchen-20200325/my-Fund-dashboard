@@ -193,7 +193,16 @@ def detect_valuation(fred_api_key: str | None = None) -> dict:
     """整合 Forward P/E + GDPNow 兩件估值卡 — IO 入口。"""
     fpe_val = fetch_forward_pe()
     gdp_val = fetch_gdpnow(fred_api_key) if fred_api_key else None
+    # F-PROV-1 phase 19 v19.105 — orchestrator-level provenance
     return {
         "forward_pe": compute_forward_pe_verdict(fpe_val),
         "gdpnow": compute_gdpnow_verdict(gdp_val),
+        "_provenance": {
+            "sources": {
+                "forward_pe": "yfinance:^GSPC.info:forwardPE→trailingPE→multpl.com",
+                "gdpnow": f"FRED:{FRED_GDPNOW}",
+            },
+            "fetched_at": pd.Timestamp.now('UTC').isoformat(),
+            "orchestrator": "valuation.detect_valuation",
+        },
     }

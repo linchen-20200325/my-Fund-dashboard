@@ -52,6 +52,7 @@ def _hy_oas(api_key: str) -> dict:
             "color": color,
             "label": label,
             "date": str(df["date"].iloc[-1])[:10],
+            "source": f"FRED:{FRED_HY_SPREAD}",
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -79,6 +80,7 @@ def _rrp(api_key: str) -> dict:
             "color": color,
             "label": label,
             "date": str(df["date"].iloc[-1])[:10],
+            "source": f"FRED:{FRED_RRP}",
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -107,6 +109,7 @@ def _m2_yoy(api_key: str) -> dict:
             "color": color,
             "label": label,
             "date": str(df["date"].iloc[-1])[:10],
+            "source": f"FRED:{FRED_M2}",
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -137,6 +140,7 @@ def _walcl(api_key: str) -> dict:
             "color": color,
             "label": label,
             "date": str(df["date"].iloc[-1])[:10],
+            "source": f"FRED:{FRED_FED_BS}",
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -170,6 +174,7 @@ def _hyg_lqd_ratio() -> dict:
             "color": color,
             "label": label,
             "date": str(align.index[-1])[:10],
+            "source": "Yahoo:fetch_yf_close:HYG/LQD:ratio",
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -191,7 +196,10 @@ def _aaii_with_judgment() -> dict:
         color, label = "#3fb950", "✅ 散戶過度悲觀（反指標：買訊號）"
     else:
         color, label = "#d29922", "➖ 情緒中性"
-    return {**raw, "color": color, "label": label}
+    # F-PROV-1 phase 19 v19.105 — provenance(若上游 fetch_aaii_sentiment 已寫入 source 則保留)
+    out = {**raw, "color": color, "label": label}
+    out.setdefault("source", "AAII:scrape:sentiment_spread")
+    return out
 
 
 @register_cache
@@ -215,4 +223,12 @@ def fetch_us_liquidity_snapshot(fred_api_key: str) -> dict:
                 out[name] = fut.result(timeout=20)
             except Exception as e:
                 out[name] = {"_err": f"{type(e).__name__}: {str(e)[:60]}"}
+    # F-PROV-1 phase 19 v19.105 — orchestrator-level provenance(每個子指標的來源 + fetched_at)
+    sources = {n: r.get("source") for n, r in out.items() if isinstance(r, dict) and "source" in r}
+    if sources:
+        out["_provenance"] = {
+            "sources": sources,
+            "fetched_at": pd.Timestamp.now('UTC').isoformat(),
+            "orchestrator": "us_liquidity_engine.fetch_us_liquidity_snapshot",
+        }
     return out
