@@ -336,3 +336,65 @@ def test_modifier_monotonic_in_china():
 #      ✅ test_modifier_china_clipped_to_valid_range
 #   3. main 越界 / 非數值 (clip / 回 None)
 #      ✅ test_modifier_composite_clipped + invalid_types
+
+
+# ══════════════════════════════════════════════════════════════
+# 5. get_china_snapshot — v19.118 L2 thin wrapper
+#    避免 L3 UI 直呼 L1 fetch_china_macro,§8.2 分層守衛
+# ══════════════════════════════════════════════════════════════
+
+def test_get_china_snapshot_empty_key_returns_empty_dict():
+    """fail-safe:fred_api_key 空字串 → 空 dict,不呼叫 L1 fetcher"""
+    from services.macro_service import get_china_snapshot
+    assert get_china_snapshot("") == {}
+    assert get_china_snapshot(None) == {}  # type: ignore[arg-type]
+
+
+def test_get_china_snapshot_delegates_to_l1_then_l2(monkeypatch):
+    """wrapper 串接:fetch_china_macro → china_macro_snapshot,結構保留"""
+    from services import macro_service as _ms
+
+    # 偽造 L1 fetcher,確認 wrapper 用其輸出餵 china_macro_snapshot
+    _called = {"fetch": 0}
+
+    def _fake_fetch(api_key):
+        _called["fetch"] += 1
+        assert api_key == "fake-key-with-enough-length-for-truthiness"
+        # 回空 dict 模擬「FRED 全失敗」場景,snapshot 仍應跑完
+        return {}
+
+    monkeypatch.setattr(
+        "repositories.macro_repository.fetch_china_macro", _fake_fetch,
+    )
+    out = _ms.get_china_snapshot("fake-key-with-enough-length-for-truthiness")
+    assert _called["fetch"] == 1
+    # china_macro_snapshot({}) 應回 5 key + credit_impulse_proxy(每個 value=None)
+    assert set(out.keys()) >= {"cli", "pmi", "cpi_yoy", "m2_yoy", "usdcny"}
+    for k in ("cli", "pmi", "cpi_yoy", "m2_yoy", "usdcny"):
+        assert out[k]["value"] is None  # §1 fail loud:不偽造數值
+
+
+def test_get_china_snapshot_with_real_data_passthrough(monkeypatch):
+    """wrapper 對非空 L1 結果做正確 pass-through(不丟欄位、不改值)"""
+    from services import macro_service as _ms
+    from shared.fred_series import FRED_CHN_OECD_CLI
+
+    _df = pd.DataFrame({
+        "date": pd.to_datetime(["2026-04-01", "2026-05-01"]),
+        "value": [99.5, 100.2],
+        "source": [f"FRED:{FRED_CHN_OECD_CLI}", f"FRED:{FRED_CHN_OECD_CLI}"],
+        "fetched_at": ["2026-06-01T00:00:00Z"] * 2,
+    })
+
+    def _fake_fetch(api_key):  # noqa: ARG001
+        return {FRED_CHN_OECD_CLI: _df}
+
+    monkeypatch.setattr(
+        "repositories.macro_repository.fetch_china_macro", _fake_fetch,
+    )
+    out = _ms.get_china_snapshot("any-non-empty-key-string-padding-30+")
+    assert out["cli"]["value"] == 100.2  # 最新一筆
+    assert out["cli"]["source"] == f"FRED:{FRED_CHN_OECD_CLI}"
+    # 其餘 4 series 缺 → value=None
+    for k in ("pmi", "cpi_yoy", "m2_yoy", "usdcny"):
+        assert out[k]["value"] is None

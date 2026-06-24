@@ -3284,3 +3284,26 @@ def apply_china_modifier(main_score: Optional[float],
         "china": round(c_clipped, 2),
         "multiplier": round(multiplier, 4),
     }
+
+
+def get_china_snapshot(fred_api_key: str) -> dict:
+    """v19.118 L2 一站式 wrapper:抓取 + 組裝 China macro snapshot。
+
+    存在意義(§8.2 分層守衛):避免 L3 UI 直呼 L1 fetch_china_macro,
+    讓 ui/tab1_macro.py 的 China drag 面板用單一 L2 介面取數(無需登記
+    EX-PASSTHRU-1 例外)。本函式僅串接已存在的 L1 fetch_china_macro
+    + L2 china_macro_snapshot,5 行 thin wrapper。
+
+    Args
+    ----
+    fred_api_key: FRED API key,空字串 → 回空 dict(fail-safe)
+
+    Returns
+    -------
+    dict: snapshot 結構同 china_macro_snapshot(),5 key + credit_impulse_proxy;
+          fred_api_key 空時回 {} ,caller 應檢查 truthy 後再 compute_china_subscore。
+    """
+    from repositories.macro_repository import fetch_china_macro
+    if not fred_api_key:
+        return {}
+    return china_macro_snapshot(fetch_china_macro(fred_api_key))
