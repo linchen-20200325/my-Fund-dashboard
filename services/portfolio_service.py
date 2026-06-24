@@ -156,19 +156,30 @@ def dividend_safety(total_return: Optional[float],
         nav_change    : 淨值變化率 % (可選，用於交叉驗證)
     回傳：
         {status, coverage, eating_principal, alert_level, message}
+
+    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal
+    (output schema 100% 向後相容,5 級分類門檻保留於本 wrapper)。
     """
-    if dividend_yield <= 0:
+    # 保留 v18.x precedence:div ≤ 0 檢查優先於 missing return
+    # (canonical 把 missing 視為比 no_dividend 優先,本 wrapper 為 UI 顯示需要反過來)
+    if dividend_yield is not None and dividend_yield <= 0:
         return {"status": "N/A", "alert_level": "grey",
                 "message": "無配息資料", "coverage": None, "eating_principal": False}
 
-    if total_return is None:
+    from services.fund_dividend_health import classify_eating_principal
+    core = classify_eating_principal(total_return, dividend_yield)
+
+    if core.is_data_missing:
         return {"status": "無報酬資料", "alert_level": "grey",
                 "message": "需要含息報酬率資料", "coverage": None, "eating_principal": False}
+    if core.is_no_dividend:
+        # 理論上不會走到(上方已先檢 div ≤ 0),保留為防禦性 fallback
+        return {"status": "N/A", "alert_level": "grey",
+                "message": "無配息資料", "coverage": None, "eating_principal": False}
 
-    # 覆蓋率：含息報酬率 / 配息率
-    coverage = round(total_return / dividend_yield, 4)
-    eating   = total_return < dividend_yield
-
+    # 5 級分類門檻(本 wrapper UI 需求,保留)
+    coverage = round(core.coverage_ratio, 4)
+    eating = core.is_eating
     if coverage < 0:
         status = "🔴 嚴重吃本金（報酬為負）"
         alert  = "red"
@@ -186,7 +197,7 @@ def dividend_safety(total_return: Optional[float],
         alert  = "green"
         msg    = f"含息報酬{total_return:.1f}% 充分覆蓋配息{dividend_yield:.1f}%，覆蓋率{coverage:.2f}"
 
-    # 淨值交叉驗證
+    # 淨值交叉驗證(本 wrapper 獨有)
     nav_warn = None
     if nav_change is not None and nav_change < -5:
         nav_warn = f"⚠️ 淨值下跌{nav_change:.1f}%，配息源頭值得確認"
