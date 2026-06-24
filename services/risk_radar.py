@@ -247,7 +247,6 @@ def _fetch_cboe_json(symbol: str, trace: list[str] | None = None) -> pd.Series:
     部分 NAS Squid / Cloudflare 策略對 .csv 與 .json 的封鎖行為不同。
     失敗回空 Series。
     """
-    import io
     from urllib.parse import quote
 
     from infra.proxy import fetch_url

@@ -2414,7 +2414,6 @@ def build_macro_sankey_dynamic(indicators: dict) -> dict:
     link_corrs = []
     new_values = []
     new_labels = list(base["link_labels"])
-    key_by_idx = [n[0] for n in _SANKEY_NODES]
     for i, (src_key, tgt_key, edu) in enumerate(_SANKEY_LINKS):
         s_src = (indicators.get(src_key) or {}).get("series")
         s_tgt = (indicators.get(tgt_key) or {}).get("series")

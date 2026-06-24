@@ -3053,10 +3053,6 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
 
     # BASE 一律優先走 tcbbankfund（對 Colab IP 最友善）
     BASE = "https://tcbbankfund.moneydj.com/funddj"
-    BASE_LIST = [
-        "https://tcbbankfund.moneydj.com/funddj",
-        "https://www.moneydj.com/funddj",
-    ]
     print(f"[fetch] code={code}  BASE={BASE}")
 
     # ── 2. 基本資料 yp011001（tcbbankfund 優先，www fallback）──
@@ -4300,12 +4296,6 @@ def fetch_risk_metrics(code: str) -> dict:
                         "近一年","近三年","近五年",                    # 另一種寫法
                         "一個月","三個月","六個月",                   # 全寫
                     ]
-                    # 同時建立 Big5 轉換對照（部分環境解碼不完整時備用）
-                    PERIOD_ALIAS = {
-                        "近三月":"近三月","近3月":"近三月",
-                        "六個月":"六個月","三個月":"三個月",
-                        "一年":"一年","三年":"三年","五年":"五年","十年":"十年",
-                    }
                     # Find the header row that contains period names
                     hdr_idx = None
                     for ri, row in enumerate(rows):
