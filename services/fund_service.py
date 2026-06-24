@@ -212,7 +212,6 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     # ── v13 排錯：先用 safe_float 清洗，再做 N/A 判斷 ──────────────────
     risk_tbl = clean_risk_table(risk_tbl)      # 全表清洗，確保 N/A → None
     std_wb07_1y = safe_float(risk_tbl.get("一年", {}).get("標準差"))
-    std_wb07_3y = safe_float(risk_tbl.get("三年", {}).get("標準差"))
 
     if std_wb07_1y is not None:
         # 將各期 wb07 標準差填入 std_dict（只填轉換成功的數值）
