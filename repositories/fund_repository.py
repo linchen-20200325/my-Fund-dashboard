@@ -4658,8 +4658,6 @@ def fetch_fund_structure(full_key: str, portal: str = "") -> dict:
     bases = []
     if portal in PORTAL_CFG:
         bases.append(PORTAL_CFG[portal]["base_url"])
-    # 子網域猜測
-    mj = full_key.split("-")[-1] if "-" in full_key else full_key
     for p_name, p_cfg in PORTAL_CFG.items():
         if p_cfg["base_url"] not in bases:
             bases.append(p_cfg["base_url"])
@@ -4679,7 +4677,6 @@ def fetch_fund_structure(full_key: str, portal: str = "") -> dict:
                 if len(r.text) < 500:
                     continue
                 soup = BeautifulSoup(r.text, "lxml")
-                text = soup.get_text()
 
                 # ── 資產配置 ──────────────────────────────────
                 if page_name == "資產配置":

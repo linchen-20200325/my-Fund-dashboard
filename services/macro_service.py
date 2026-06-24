@@ -1170,7 +1170,6 @@ def calc_macro_phase(indicators: dict) -> dict:
     }
     cur_idx  = ph_idx  # 複用已計算的 ph_idx，消除重複定義
     next_p   = PHASE_ORDER[(cur_idx + 1) % 4]
-    prev_p   = PHASE_ORDER[(cur_idx - 1) % 4]
     next_alloc = ALLOC_MAP[next_p]
     cur_alloc  = ALLOC_MAP[phase] if phase in ALLOC_MAP else alloc
 
