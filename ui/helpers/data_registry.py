@@ -91,6 +91,12 @@ def _update_data_registry():
         # v16.1 高頻替代源（月頻）
         "LEI":          "monthly",     # CFNAI 月頻領先指標（USSLIND 已停更）
         "PERMIT_HOUSING":"monthly",    # PERMIT 月頻建照
+        # v19.113 China macro(方向 B)— OECD MEI 月頻發布,延遲 ~60 天
+        "CHN_CLI":      "monthly",
+        "CHN_PMI":      "monthly",
+        "CHN_CPI":      "monthly",
+        "CHN_M2":       "monthly",
+        "USDCNY":       "daily",       # DEXCHUS 日頻
         # 季頻（FRED 季度調查）
         "SLOOS":        "quarterly",
     }
@@ -117,6 +123,12 @@ def _update_data_registry():
         "YIELD_10Y2Y":  FRED_T10Y2Y,
         "YIELD_10Y3M":  FRED_T10Y3M,
         "INFL_EXP_5Y":  FRED_T5YIE,
+        # v19.113 — China macro(方向 B):FRED OECD MEI 收錄,月後 ~60 天延遲
+        "CHN_CLI":      "CHNLOLITONOSTSAM",   # OECD 中國綜合領先指標
+        "CHN_PMI":      "BSCICP03CNM665S",    # OECD 中國商業信心(PMI proxy)
+        "CHN_CPI":      "CPALTT01CNM659N",    # OECD 中國 CPI YoY
+        "CHN_M2":       "MABMM301CNM189S",    # 中國 M2 廣義貨幣
+        "USDCNY":       "DEXCHUS",            # CNY/USD 日匯率(已生產驗證)
     }
 
     # ── v18.3 動態 next_release_date 查詢（cache 30 天）
