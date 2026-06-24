@@ -175,3 +175,61 @@ def reconcile_dividend_yield(
         abs_tol=0.001,
         rel_tol=0.05,
     )
+
+
+def reconcile_macro_health(
+    main_score: Optional[float],
+    zpct_score: Optional[float],
+    *,
+    main_phase: Optional[str] = None,
+    zpct_phase: Optional[str] = None,
+) -> dict:
+    """F-RECON-1 v19.108 — macro health composite score 雙演算法對帳。
+
+    對照:
+    - 主路徑:`calc_macro_phase`(weighted_sum/total/2*10,0..10 + phase 4 級分類)
+    - 對照演算法:`calc_macro_phase_zpct`(Z-score 百分位平均 × 10,0..10 + 同門檻分類)
+
+    容差設計:
+    - score 絕對差 ≤ 1.5(0..10 量尺;兩種完全不同算法 ±1.5 內視為一致)
+    - 若 phase 一致(衰退/復甦/擴張/高峰),即便 score 差 > 1.5 仍視為「phase_agree」
+    - 兩個都缺資料 → both_missing
+
+    額外欄位:
+    - phase_agree:bool,兩個 phase 字串是否完全相同
+    - main_phase / zpct_phase:caller 渲染用
+
+    Parameters
+    ----------
+    main_score : float | None
+        主路徑 calc_macro_phase 回傳的 `score`(0..10)
+    zpct_score : float | None
+        對照 calc_macro_phase_zpct 回傳的 `score`(0..10)
+    main_phase : str | None
+        主路徑 `phase`(衰退/復甦/擴張/高峰)
+    zpct_phase : str | None
+        對照 `phase`
+    """
+    base = reconcile_pair(
+        name="MACRO_HEALTH",
+        value_a=main_score,
+        value_b=zpct_score,
+        source_a="self_calc:weighted_sum/calc_macro_phase",
+        source_b="self_calc:zpct_mean/calc_macro_phase_zpct",
+        abs_tol=1.5,
+        rel_tol=0.3,
+    )
+    # phase-level 對帳:即便 score 差較大,phase 一致仍視為通過(粒度更穩)
+    phase_agree = bool(
+        main_phase is not None
+        and zpct_phase is not None
+        and str(main_phase) == str(zpct_phase)
+    )
+    base["phase_agree"] = phase_agree
+    base["main_phase"] = main_phase
+    base["zpct_phase"] = zpct_phase
+    # 若 score-level disagree 但 phase 一致,降級為 phase_agree(語意更準確)
+    if base["status"] == "disagree" and phase_agree:
+        base["status"] = "phase_agree"
+        base["agree"] = True
+    return base
