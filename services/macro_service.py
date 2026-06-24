@@ -1261,6 +1261,148 @@ def _build_phase_provenance(indicators: dict, total_w: float, earned_w: float) -
 
 
 # ══════════════════════════════════════════════════════════════
+# F-RECON-1 macro_health 雙演算法 — Z-score 百分位排名平均(v19.108)
+# ══════════════════════════════════════════════════════════════
+# 設計動機:CLAUDE.md §4.3「macro health score 缺對照演算法」收結。
+# 主路徑 calc_macro_phase 用「weighted sum + 絕對閾值」,本對照走「Z-score → 百分位
+# → 平均」,與主路徑邏輯正交,可揪出單一指標權重壓制 / regime-change 訊號。
+#
+# 數學式:
+#   for each indicator with series:
+#     z = (value - mean(series.tail(60))) / std(series.tail(60))
+#     if 反向指標(HY_SPREAD/VIX/ICSA/DXY/CPI/FED_RATE): z = -z
+#     pct = Φ(z)  = 0.5 * (1 + erf(z / sqrt(2)))    # 標準常態 CDF
+#   score = mean(all pct) * 10
+#   phase 用主路徑相同門檻(0~3 衰退 / 3~5 復甦 / 5~8 擴張 / >=8 高峰)
+#
+# 不變量:
+#   * series < 60 期 → 該指標跳過(不偽造)
+#   * 全部缺資料 → score = None 並設 status="insufficient_data"
+#   * 不引入 scipy 依賴(用 math.erf 等價實作)
+
+# 反向指標:值越高越壞(對風險偏好的 sign 要倒過來)
+_ZPCT_REVERSE_KEYS = frozenset({
+    "HY_SPREAD",     # 信用利差越大越壞
+    "VIX",           # 恐慌指數越高越壞
+    "ICSA",          # 初領失業金越多越壞
+    "DXY",           # 強美元壓抑風險資產
+    "CPI",           # 通膨高 = 緊縮壓力
+    "FED_RATE",      # 利率高 = 緊縮
+    "UNRATE",        # 失業率高 = 衰退
+    "PPI",           # PPI 高 = 上游成本壓力
+})
+
+# Z-pct 採樣窗口(月);<60 視為樣本不足
+_ZPCT_MIN_SAMPLES = 60
+
+
+def _zpct_norm_cdf(z: float) -> float:
+    """標準常態累積分佈函數 Φ(z),不依賴 scipy。
+
+    Φ(z) = 0.5 * (1 + erf(z / sqrt(2)))    (math.erf 為 Python 標準庫)
+    """
+    import math
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+
+def calc_macro_phase_zpct(indicators: dict) -> dict:
+    """F-RECON-1 對照演算法:Z-score 百分位排名平均(v19.108)。
+
+    與 calc_macro_phase 邏輯正交:
+    - 主路徑:weighted_sum(score, weight) → 0..10
+    - 本路徑:mean(Φ(zscore vs 5y rolling)) × 10 → 0..10
+
+    Args
+    ----
+    indicators : dict
+        fetch_all_indicators 輸出格式;各 ind 須有 'value' + 'series'(pd.Series)
+        否則該指標跳過。
+
+    Returns
+    -------
+    dict
+        score / phase / phase_color(沿用主路徑 SSOT 配色)
+        sub_pcts / contributing(各指標百分位 + 計入數)
+        status: 'ok' | 'insufficient_data'
+        _provenance: schema-additive(aggregator + fetched_at)
+    """
+    import math
+    import pandas as _pd
+    sub_pcts: dict[str, float] = {}
+    skipped: list[str] = []
+    for key, ind in (indicators or {}).items():
+        if not isinstance(ind, dict):
+            continue
+        v = ind.get("value")
+        s = ind.get("series")
+        if v is None or s is None:
+            skipped.append(f"{key}:missing_value_or_series")
+            continue
+        try:
+            s_tail = s.dropna().tail(_ZPCT_MIN_SAMPLES)
+        except Exception:
+            skipped.append(f"{key}:series_invalid")
+            continue
+        if len(s_tail) < _ZPCT_MIN_SAMPLES:
+            skipped.append(f"{key}:samples={len(s_tail)}<{_ZPCT_MIN_SAMPLES}")
+            continue
+        mu = float(s_tail.mean())
+        sd = float(s_tail.std())
+        if sd <= 0 or math.isnan(sd):
+            skipped.append(f"{key}:std=0_or_nan")  # §1 Fail Loud:不偽造 z
+            continue
+        z = (float(v) - mu) / sd
+        if key in _ZPCT_REVERSE_KEYS:
+            z = -z
+        sub_pcts[key] = _zpct_norm_cdf(z)
+
+    if not sub_pcts:
+        return {
+            "score": None,
+            "phase": None,
+            "phase_color": "#888",
+            "sub_pcts": {},
+            "contributing": 0,
+            "skipped": skipped,
+            "status": "insufficient_data",
+            "_provenance": {
+                "aggregator": "macro_service.calc_macro_phase_zpct",
+                "fetched_at": _pd.Timestamp.now('UTC').isoformat(),
+                "method": "Z-score percentile mean (Φ(z) average × 10)",
+                "min_samples": _ZPCT_MIN_SAMPLES,
+            },
+        }
+
+    avg_pct = sum(sub_pcts.values()) / len(sub_pcts)
+    score = round(avg_pct * 10, 1)
+    # 與主路徑同門檻
+    if score >= 8:
+        phase = "高峰"; phase_color = MATERIAL_RED
+    elif score >= 5:
+        phase = "擴張"; phase_color = MATERIAL_GREEN
+    elif score >= 3:
+        phase = "復甦"; phase_color = "#64b5f6"
+    else:
+        phase = "衰退"; phase_color = MATERIAL_ORANGE
+    return {
+        "score": score,
+        "phase": phase,
+        "phase_color": phase_color,
+        "sub_pcts": sub_pcts,
+        "contributing": len(sub_pcts),
+        "skipped": skipped,
+        "status": "ok",
+        "_provenance": {
+            "aggregator": "macro_service.calc_macro_phase_zpct",
+            "fetched_at": _pd.Timestamp.now('UTC').isoformat(),
+            "method": "Z-score percentile mean (Φ(z) average × 10)",
+            "min_samples": _ZPCT_MIN_SAMPLES,
+            "reverse_keys": sorted(_ZPCT_REVERSE_KEYS),
+        },
+    }
+
+
+# ══════════════════════════════════════════════════════════════
 # v13 新增：Z-Score 工具 & 景氣循環辨識模型（Regime Model）
 # ══════════════════════════════════════════════════════════════
 
