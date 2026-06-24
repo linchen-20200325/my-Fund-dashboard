@@ -247,6 +247,100 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     }
 
 
+def _render_china_drag_panel(phase_dict: dict | None,
+                             fred_api_key: str = "") -> None:
+    """v19.118 中國拖累唯讀面板 — 4 個數字 + regime + FX 警示。
+
+    顯示 China 副盤對主分的乘法 modifier 結果,但**不改變**任何既有 UI 數字:
+    panel 只 READ phase['score'](0-10),COMPUTE multiplier + composite,RENDER NEW markdown。
+    既有的 verdict 大卡 / 戰情室 / 4 欄導航卡 score 顯示完全不動。
+
+    顯示:
+      - 主分(總經): phase['score'] / 10 (既有口徑,不重算)
+      - 中國副盤:   china_subscore   / 100 (0=最差,100=最好)
+      - 乘子:       multiplier ∈ [0.7, 1.0]
+      - 折扣後:     phase['score'] × multiplier (顯示同 0-10 scale)
+      - 4 級 regime + USDCNY fx_alert(若有)
+
+    §1 fail loud:
+      - fred_api_key 缺 → 顯示 '⬜ 未設 FRED key,跳過'
+      - china_subscore=None(5 條 series 全敗)→ 顯示 '⬜ 中國資料不足'
+      - 任何例外 → caption error,不擋整個 tab(由 caller try/except 包覆)
+
+    §8.2 分層:本函式 lazy import L2 services.macro_service.get_china_snapshot,
+              無 L1 直呼,無需 EX-PASSTHRU-1 例外。
+    """
+    _ph = phase_dict or {}
+    _main_score_10 = _ph.get("score")  # 0-10 scale
+
+    # AppTest / 缺 key 守衛(對齊 _render_macro_navigator L277)
+    if not fred_api_key or len(str(fred_api_key).strip()) < 30:
+        st.caption("🇨🇳 中國拖累 China Drag:⬜ 未設 FRED key,跳過")
+        return
+    if _main_score_10 is None:
+        st.caption("🇨🇳 中國拖累 China Drag:⬜ 等待 FRED 載入主分")
+        return
+
+    # ── L2 取數 + 計算 ───────────────────────────────────────────
+    from services.macro_service import (
+        apply_china_modifier,
+        classify_china_regime,
+        compute_china_subscore,
+        get_china_snapshot,
+    )
+    _snap = get_china_snapshot(fred_api_key)
+    if not _snap:
+        st.caption("🇨🇳 中國拖累 China Drag:⬜ 中國資料不足(5 條 series 全敗)")
+        return
+
+    _china_sub = compute_china_subscore(_snap)
+    _china_score = _china_sub.get("score") if _china_sub else None
+    _regime = classify_china_regime(_china_sub) if _china_sub else None
+    _regime_label = _regime.get("regime") if _regime else "—"
+    _regime_color = _regime.get("color") if _regime else "#888"
+    _fx_alert = _regime.get("fx_alert") if _regime else None
+
+    # 將 main 從 0-10 scale 升到 0-100 餵 modifier(modifier 要求 0-100)
+    _mod = apply_china_modifier(_main_score_10 * 10.0, _china_score)
+    if _mod is None:
+        st.caption("🇨🇳 中國拖累 China Drag:⬜ 計算失敗")
+        return
+
+    _multiplier = _mod["multiplier"]
+    # composite 換回 0-10 scale 顯示
+    _composite_10 = _mod["composite"] / 10.0
+
+    # ── 渲染:4-column 唯讀卡 ──────────────────────────────────────
+    st.markdown(
+        f'<div style="border-left:4px solid {_regime_color};padding:8px 12px;'
+        f'background:#fafafa;margin:8px 0;border-radius:4px;">'
+        f'<b>🇨🇳 中國拖累 China Drag</b>  '
+        f'<span style="color:{_regime_color};font-weight:bold;">{_regime_label}</span>'
+        f'{("  ⚠️ " + _fx_alert) if _fx_alert else ""}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    _c1, _c2, _c3, _c4 = st.columns(4)
+    with _c1:
+        st.metric("主分(總經)", f"{_main_score_10:+.2f} / 10")
+    with _c2:
+        if _china_score is None:
+            st.metric("中國副盤", "—")
+        else:
+            st.metric("中國副盤", f"{_china_score:.1f} / 100")
+    with _c3:
+        st.metric("乘子", f"{_multiplier:.3f}",
+                  help="0.7~1.0,中國越差扣得越多,只懲罰不加成")
+    with _c4:
+        st.metric("折扣後主分", f"{_composite_10:+.2f} / 10",
+                  delta=f"{_composite_10 - _main_score_10:+.2f}",
+                  delta_color="inverse")
+    st.caption(
+        "ℹ️ 唯讀展示:本面板**不改變**上方總經分數,僅示意「若 China 副盤納入主分」的折扣強度。"
+        "資料源:5 條 FRED OECD MEI(CLI/PMI/CPI/M2/USDCNY)。"
+    )
+
+
 def _render_macro_navigator(indicators: dict | None,
                             phase_dict: dict | None,
                             fred_api_key: str = "") -> None:
@@ -1096,6 +1190,13 @@ def render_macro_tab() -> None:
             _render_macro_navigator(ind, phase, FRED_KEY)
         except Exception as _nav_e:  # noqa: BLE001
             print(f"[tab1/navigator] {type(_nav_e).__name__}: {_nav_e}")
+
+        # ══ v19.118 中國拖累唯讀面板（China Drag）═════════════════════
+        # 4 數字唯讀展示:不改變上方總經分數,僅示意 China 副盤折扣強度
+        try:
+            _render_china_drag_panel(phase, FRED_KEY)
+        except Exception as _cd_e:  # noqa: BLE001
+            print(f"[tab1/china_drag] {type(_cd_e).__name__}: {_cd_e}")
 
 
         # v19.41 MOVED: ③ 🔬 即時訊號 + 決策矩陣 已移至 tab 內結尾（MK 時鐘前）
