@@ -81,6 +81,11 @@ def fetch_market_series(market: str = "SPX", years: int = 10) -> pd.Series:
             return pd.Series(dtype=float, name=market)
         s = s.dropna()
         s.name = market
+        # F-PROV-1 phase 18 v19.104 — provenance(Series.attrs;若上游 fetch_yf_close 已寫入則保留)
+        if "source" not in s.attrs:
+            s.attrs["source"] = f"Yahoo:fetch_yf_close:{ticker}:{range_}:crisis_backtest"
+            import pandas as _pd_cb
+            s.attrs["fetched_at"] = _pd_cb.Timestamp.now('UTC').isoformat()
         return s
     except Exception as e:
         print(f"[crisis_backtest.fetch_market_series] {market} 抓取失敗：{e}")
