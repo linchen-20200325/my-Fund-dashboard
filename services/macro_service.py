@@ -10,6 +10,7 @@ v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + 編排。
         E 階段收尾後 shim 刪除。
 """
 import pandas as pd, numpy as np, math
+from typing import Optional
 from concurrent.futures import ThreadPoolExecutor as _TPE_macro
 from repositories.macro_repository import fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
@@ -2837,3 +2838,146 @@ def summarize_cluster_consensus(clusters: list[dict]) -> dict:
         "n_green": n_g, "n_yellow": n_y, "n_red": n_r,
         "total": total, "verdict": verdict,
     }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# v19.113 — China macro snapshot + 衍生(方向 B)
+# 對稱 Stock 端 tw_macro + macro_helpers China 補完
+# Spec(§7 對齊):純函式無 I/O,搭配 macro_repository.fetch_china_macro 上游
+# ════════════════════════════════════════════════════════════════════════════
+
+# China zone(對齊 §3.2 合理範圍)
+_CHINA_THRESHOLDS = {
+    "CHN_CLI":   {"green_above": 100.0, "yellow_below": 99.0, "red_below": 98.0},
+    "CHN_PMI":   {"green_above": 100.0, "yellow_below": 99.0, "red_below": 98.0},
+    "CHN_CPI":   {"green_low": 1.0, "green_high": 3.0, "yellow_above": 4.0, "red_above": 5.0},
+    "CHN_M2":    {"red_below": 5.0, "green_above": 9.0},  # M2 YoY < 5% 緊縮
+    "USDCNY":    {"green_below": 7.0, "yellow_above": 7.2, "red_above": 7.4},
+}
+
+
+def calc_china_credit_impulse_proxy(m2_series: Optional[pd.Series],
+                                    lag_months: int = 12) -> Optional[float]:
+    """信貸脈衝 proxy:M2 YoY 與 12 月前 M2 YoY 的差(% pts)。
+
+    為什麼是 proxy:真正信貸脈衝 = Δ(信貸/GDP),需社融存量 + GDP,
+    無乾淨 FRED 來源;M2 YoY 變化是粗略貨幣寬鬆代理。
+
+    Args
+    ----
+    m2_series: M2 YoY % 月頻時間序(date index ascending);**需已經是 YoY**,
+               若上游給 level,caller 自己先 `.pct_change(12) * 100`。
+    lag_months: 比較期,預設 12 月。
+
+    Returns
+    -------
+    float | None
+        正值 = 12 月內 M2 加速(寬鬆中)、負值 = 緊縮中;
+        資料不足 N+1 筆 → None(§1 不偽造)。
+    """
+    if m2_series is None:
+        return None
+    try:
+        s = pd.Series(m2_series).dropna()
+    except (TypeError, ValueError):
+        return None
+    if len(s) < lag_months + 1:
+        return None
+    cur = float(s.iloc[-1])
+    prev = float(s.iloc[-(lag_months + 1)])
+    return round(cur - prev, 3)
+
+
+def _classify_zone(value: Optional[float], rules: dict) -> str:
+    """通用 traffic 分類:依 rules dict(green_above/yellow_below/red_below/...)→ 字串。"""
+    if value is None or pd.isna(value):
+        return "⬜ 無資料"
+    v = float(value)
+    if "red_above" in rules and v > rules["red_above"]:
+        return "🔴 紅"
+    if "red_below" in rules and v < rules["red_below"]:
+        return "🔴 紅"
+    if "yellow_above" in rules and v > rules["yellow_above"]:
+        return "🟡 黃"
+    if "yellow_below" in rules and v < rules["yellow_below"]:
+        return "🟡 黃"
+    if "green_above" in rules and v > rules["green_above"]:
+        return "🟢 綠"
+    if "green_below" in rules and v < rules["green_below"]:
+        return "🟢 綠"
+    if "green_low" in rules and "green_high" in rules:
+        if rules["green_low"] <= v <= rules["green_high"]:
+            return "🟢 綠"
+    return "⚪ 中性"
+
+
+def china_macro_snapshot(china_dict: dict) -> dict:
+    """組裝 5 條 China macro raw fetch 結果為簡單 snapshot。
+
+    Args
+    ----
+    china_dict: dict[series_id, DataFrame]
+        repositories.macro_repository.fetch_china_macro() 的回傳結果;
+        每個 DataFrame 含 [date, value, source, fetched_at] 至少欄位。
+
+    Returns
+    -------
+    dict 包含 5 個 key:`cli` / `pmi` / `cpi_yoy` / `m2_yoy` / `usdcny`,
+    每個對應:
+        {
+          "value": float | None,
+          "date": str | None,        # 最新月份 YYYY-MM-DD
+          "zone": str,                # 🟢/🟡/🔴/⚪/⬜
+          "source": str | None,       # FRED:<id>
+        }
+    + `credit_impulse_proxy`(M2 YoY 12 月變化,§4.3 衍生)。
+
+    §1 fail loud:單條 series 缺資料 → 該 key 的 value=None,**不偽造**。
+    """
+    # SSOT 從 shared/fred_series 引入(對應 _CHINA_FRED_SPECS)
+    from shared.fred_series import (
+        FRED_CHN_CPI,
+        FRED_CHN_M2,
+        FRED_CHN_OECD_CLI,
+        FRED_CHN_PMI,
+        FRED_CNH_USD,
+    )
+
+    def _extract(sid: str, threshold_key: str) -> dict:
+        df = china_dict.get(sid)
+        out = {"value": None, "date": None, "zone": "⬜ 無資料", "source": None}
+        if df is None or df.empty:
+            return out
+        try:
+            last = df.iloc[-1]
+            v = float(last["value"])
+            d = pd.Timestamp(last["date"]).strftime("%Y-%m-%d")
+            out["value"] = round(v, 4)
+            out["date"] = d
+            out["zone"] = _classify_zone(v, _CHINA_THRESHOLDS.get(threshold_key, {}))
+            out["source"] = str(last.get("source", f"FRED:{sid}"))
+        except (KeyError, ValueError, TypeError) as e:
+            print(f"[china_macro_snapshot/{sid}] extract 失敗: {e}")
+        return out
+
+    snapshot = {
+        "cli":     _extract(FRED_CHN_OECD_CLI, "CHN_CLI"),
+        "pmi":     _extract(FRED_CHN_PMI, "CHN_PMI"),
+        "cpi_yoy": _extract(FRED_CHN_CPI, "CHN_CPI"),
+        "m2_yoy":  _extract(FRED_CHN_M2, "CHN_M2"),
+        "usdcny":  _extract(FRED_CNH_USD, "USDCNY"),
+    }
+
+    # 衍生:信貸脈衝 proxy(M2 YoY 12 月變化)
+    m2_df = china_dict.get(FRED_CHN_M2)
+    if m2_df is not None and not m2_df.empty:
+        try:
+            m2_yoy_series = m2_df["value"].astype(float)
+            snapshot["credit_impulse_proxy"] = calc_china_credit_impulse_proxy(m2_yoy_series)
+        except (KeyError, ValueError, TypeError) as e:
+            print(f"[china_macro_snapshot/credit_impulse] {e}")
+            snapshot["credit_impulse_proxy"] = None
+    else:
+        snapshot["credit_impulse_proxy"] = None
+
+    return snapshot

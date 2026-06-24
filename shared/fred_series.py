@@ -73,3 +73,12 @@ FRED_LEI: str = "USSLIND"          # St. Louis Fed leading index (deprecated; le
 
 # ── Volatility ─────────────────────────────────────────────────────
 FRED_VXVCLS: str = "VXVCLS"        # CBOE 3M volatility
+
+# ── China macro (v19.113 方向 B 補完) ─────────────────────────────
+# 來源:FRED 收錄 OECD MEI / IMF IFS 中國資料。
+# 注意:本批 ID 為 OECD 月頻發布(~月後 60 天延遲),較 US 月頻指標慢。
+# DEXCHUS(CNY/USD)既有 FRED_CNH_USD 常數,本批不重複定義。
+FRED_CHN_OECD_CLI: str = "CHNLOLITONOSTSAM"   # OECD 中國綜合領先指標(PMI 替代,trend=100)
+FRED_CHN_CPI: str = "CPALTT01CNM659N"         # OECD 中國 CPI 年增率(% YoY)
+FRED_CHN_M2: str = "MABMM301CNM189S"          # 中國 M2 廣義貨幣(信貸脈衝 proxy)
+FRED_CHN_PMI: str = "BSCICP03CNM665S"         # OECD 中國商業信心(PMI proxy,對稱 FRED_BSCICP02)
