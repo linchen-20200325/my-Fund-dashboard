@@ -125,7 +125,9 @@ class TestDetectValuation:
         with patch.object(vl, "fetch_forward_pe", return_value=None), \
              patch.object(vl, "fetch_gdpnow", return_value=None):
             out = vl.detect_valuation(None)
-        assert set(out.keys()) == {"forward_pe", "gdpnow"}
+        # F-PROV-1 phase 19:_provenance 為 schema-additive 後設;指標 key 須 2 個
+        indicator_keys = {k for k in out.keys() if not k.startswith("_")}
+        assert indicator_keys == {"forward_pe", "gdpnow"}
         assert out["forward_pe"]["source_ok"] is False
         assert out["gdpnow"]["source_ok"] is False
 
