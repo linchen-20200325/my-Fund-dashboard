@@ -131,7 +131,7 @@ def render_portfolio_tab() -> None:
                              if f.get("loaded") and not f.get("load_error")]
             _mk_df_hero = _build_mk(_loaded_hero, bench_series=None)
         except Exception:
-            _mk_df_hero = None   # noqa: smoke-allow-pass — KPI 不影響後續功能
+            _mk_df_hero = None   # smoke-allow-pass — KPI 不影響後續功能
         _kpis_hero = compute_health_kpis(_pf_for_warroom, _mk_df_hero)
         st.session_state["_t3_kpis_hero"] = _kpis_hero   # 供下方 expander summary 用
         st.markdown(
@@ -801,7 +801,7 @@ def render_portfolio_tab() -> None:
                             f"（hits={_total_hits} / misses={_total_misses}）"
                         )
                 except Exception:
-                    pass   # noqa: smoke-allow-pass — 顯示性 caption 失敗不影響功能
+                    pass   # smoke-allow-pass — 顯示性 caption 失敗不影響功能
 
                 # 共用：取統計與更新 _sheet_stats
                 def _refresh_sheet_stats(_cli: object) -> None:
@@ -820,7 +820,7 @@ def render_portfolio_tab() -> None:
                             "last_sync": _meta_x.get("latest_updated_at", ""),
                         }
                     except Exception:
-                        pass   # noqa: smoke-allow-pass — 統計失敗不影響主流程
+                        pass   # smoke-allow-pass — 統計失敗不影響主流程
 
                 # v18.167：refresh_only 路徑（dump_all / load_all 已移到頂部快捷面板）
                 if _refresh_clicked:
@@ -942,7 +942,7 @@ def render_portfolio_tab() -> None:
                 _vix_for_adv = float((st.session_state.get("compass_data") or {}).get("vix", {}).get("value")) \
                     if (st.session_state.get("compass_data") or {}).get("vix") else None
             except Exception:
-                _vix_for_adv = None  # noqa: smoke-allow-pass
+                _vix_for_adv = None  # smoke-allow-pass
 
             # 分組
             _by_policy: dict[str, list[dict]] = {}
@@ -1018,7 +1018,7 @@ def render_portfolio_tab() -> None:
                                 from services.precision_service import calc_hwm_sigma_levels as _hwm_e
                                 _sig_e = _hwm_e(_s, lookback=252)
                             except Exception:
-                                _sig_e = None  # noqa: smoke-allow-pass
+                                _sig_e = None  # smoke-allow-pass
                         _div_e = None
                         try:
                             # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
@@ -1032,7 +1032,7 @@ def render_portfolio_tab() -> None:
                             if _dyld > 0:
                                 _div_e = div_safety_check(_tret, _dyld)
                         except Exception:
-                            _div_e = None  # noqa: smoke-allow-pass
+                            _div_e = None  # smoke-allow-pass
                         _funds_enriched.append({
                             "invest_twd": _f.get("invest_twd", 0) or 0,
                             "is_core":    _is_core_in_policy(_f),
@@ -1084,7 +1084,7 @@ def render_portfolio_tab() -> None:
                         if _dyld > 0:
                             _div_info = div_safety_check(_tret, _dyld)
                     except Exception:
-                        _div_info = None  # noqa: smoke-allow-pass
+                        _div_info = None  # smoke-allow-pass
 
                     # 60MA 趨勢
                     _ma_trend = None
@@ -1094,7 +1094,7 @@ def render_portfolio_tab() -> None:
                             if len(_ma60.dropna()) >= 5:
                                 _ma_trend = "up" if _ma60.iloc[-1] > _ma60.iloc[-5] else "down"
                         except Exception:
-                            _ma_trend = None  # noqa: smoke-allow-pass
+                            _ma_trend = None  # smoke-allow-pass
 
                     _advice = advise_fund(_sigma_info, _div_info, _ma_trend, _vix_for_adv)
 
@@ -1235,7 +1235,7 @@ def render_portfolio_tab() -> None:
             try:
                 _est_monthly_div += (float(_yld) / 100.0) * float(_amt) / 12.0
             except Exception:
-                pass  # noqa: smoke-allow-pass — 任一檔配息率非數值不影響其餘累加
+                pass  # smoke-allow-pass — 任一檔配息率非數值不影響其餘累加
 
         _ret_color = MATERIAL_GREEN if (_cum_ret_pct or 0) > 0 else (MATERIAL_RED if (_cum_ret_pct or 0) < 0 else "#888")
         _ret_str   = f"{_cum_ret_pct:+.2f}%" if _cum_ret_pct is not None else "—"
@@ -1673,7 +1673,7 @@ def render_portfolio_tab() -> None:
             _vix_t3_main = float(
                 (st.session_state.get("compass_data") or {}).get("vix", {}).get("value"))
         except Exception:
-            _vix_t3_main = None   # noqa: smoke-allow-pass — VIX 缺也能算 advice
+            _vix_t3_main = None   # smoke-allow-pass — VIX 缺也能算 advice
 
         def _compute_advice_for(_pf_item: dict) -> dict:
             """v18.30: 從 pf_item 算出 advise_fund 需要的三組訊號 + 呼叫 advisor。
@@ -1702,7 +1702,7 @@ def render_portfolio_tab() -> None:
                     if _dyld_l > 0:
                         _div = div_safety_check(_tret_l, _dyld_l)
                 except Exception:
-                    _div = None   # noqa: smoke-allow-pass
+                    _div = None   # smoke-allow-pass
                 _ma = None
                 if _s_local is not None and len(_s_local.dropna()) >= 65:
                     try:
@@ -1710,7 +1710,7 @@ def render_portfolio_tab() -> None:
                         if len(_ma60_l.dropna()) >= 5:
                             _ma = "up" if _ma60_l.iloc[-1] > _ma60_l.iloc[-5] else "down"
                     except Exception:
-                        _ma = None   # noqa: smoke-allow-pass
+                        _ma = None   # smoke-allow-pass
                 return advise_fund(_sigma, _div, _ma, _vix_t3_main)
             except Exception:
                 return {"text": "⏳ 建議計算失敗",
@@ -1897,7 +1897,7 @@ def render_portfolio_tab() -> None:
                             if _sa > 0 and _nv and _nv > 0:
                                 _div = round((_sa / _nv) * 100.0, 2)
                         except Exception:
-                            pass  # noqa: smoke-allow-pass — divs 歷史推算失敗不影響其他維度
+                            pass  # smoke-allow-pass — divs 歷史推算失敗不影響其他維度
                 _rc_names.append(_name)
                 _rc_ret.append(round(_ret_v, 2) if _ret_v is not None else 0.0)
                 _rc_div.append(round(_div, 2))
@@ -2199,7 +2199,7 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
                 f"（{'、'.join(_good[:5]) or '—'}）｜汰弱候選 {len(_lag)} 檔"
                 f"（{'、'.join(_lag[:5]) or '—'}）｜同類資料不足 {_na_n} 檔")
     except Exception:
-        pass   # noqa: smoke-allow-pass — AI 快照加料失敗不阻斷主流程
+        pass   # smoke-allow-pass — AI 快照加料失敗不阻斷主流程
 
     # v18.160：配息現金/單位拆分估算（從 _v2_buf 撈 user 已設定的 div_cash_pct）
     # v18.276：抓即時 FX 給配息折算用（成本基礎仍 avg_fx）— user 反饋

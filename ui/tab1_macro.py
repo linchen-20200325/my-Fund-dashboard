@@ -550,13 +550,6 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
             unsafe_allow_html=True,
         )
 
-    # v19.40 ARCHIVED PR2:
-    # ════════════════════════════════════════════════
-    # 區塊 2：🎯 為什麼是這位階？（top 3 driver 教學）
-    # 區塊 3：📚 本期使用 N 個關鍵指標（inline 教學 expanders）
-    # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
-    # ※ _render_beginner_dashboard() 已在 PR1B v19.38 停用（L853 已 comment out）
-    # 完整原始程式碼見 git log @ 13026cc 之前（L408-L472 ~65 行）
 
 
 def _render_tw_local_dashboard(indicators: dict | None,
@@ -1104,11 +1097,6 @@ def render_macro_tab() -> None:
         except Exception as _nav_e:  # noqa: BLE001
             print(f"[tab1/navigator] {type(_nav_e).__name__}: {_nav_e}")
 
-        # v19.38 ARCHIVED: ✨ 新手友善面板（雙速合議）— 矛盾主因（月度合議 vs 日級雷達混在同卡）
-        # v19.38 ARCHIVED: 📊 台股本地視角（12M/1Q）— 與下方「💵 台股熱錢監測」重複且 12M 視窗無關熊市驗證
-        # 復活：恢復下兩行 import + sub-function 即可（_render_beginner_dashboard / _render_tw_local_dashboard 完整保留）
-        # _render_beginner_dashboard(ind, FRED_KEY)
-        # _render_tw_local_dashboard(ind, FRED_KEY)
 
         # v19.41 MOVED: ③ 🔬 即時訊號 + 決策矩陣 已移至 tab 內結尾（MK 時鐘前）
         # 改動原因：user 反饋「總經、短期、拐點 三個面板 — 總經放在最上方」，
@@ -1122,20 +1110,8 @@ def render_macro_tab() -> None:
         import contextlib as _cl_v1942
         tab_main = _cl_v1942.nullcontext()
 
-        # v19.40 ARCHIVED PR2 (PR #TBD):
-        # with tab_edu: 📖 指標教學手冊（build_cards_from_indicators / MACRO_EDU）
-        # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
-        # 完整原始程式碼見 git log @ 13026cc 之前（L866-L922 ~57 行）
         with tab_main:
             # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）
-            # v19.38 ARCHIVED PR1B (PR #245)：
-            # ① 7 維獨立合議 + 23 指標健康度 — 與 ② 拐點偵測重複（共用 23 FRED 因子）
-            # 🚦 景氣細項燈號（7 子領域 Z-Score 健康度）— 與 ① 7 維獨立合議 100% 重複
-            # 🗂️ 四大類別景氣健康度（含 24M 歷史趨勢）— 純加權分類無新訊號
-            # ③ 今日市場結論 Hero 卡 — 重複 ① 戰情室三儀表 + ② 拐點偵測之綜合判讀
-            # 完整原始程式碼見 git log @ 91da530 之前（L928-L1229）
-            # v19.42: roadmap caption 下移 — 原置於 ① 上方會擋路 → 改放 ① 之後
-            # （由 ① 戰情室直接渲染為頁面首屏，無 tab strip / 無 caption 干擾）
 
 
             # ══ L3 60/40 雙欄佈局（戰情室 × Z-Score 矩陣）══════════════
@@ -1415,7 +1391,7 @@ def render_macro_tab() -> None:
                                         if _z_cand == _z_cand:  # NaN guard
                                             _z_score = _z_cand
                             except Exception:
-                                pass  # noqa: smoke-allow-pass
+                                pass  # smoke-allow-pass
                         _unit_s = f" {_zunit}" if _zunit else ""
                         _val_s  = f"{_zv_f:.{_zdec}f}{_unit_s}"
                         # 燈號 + 白話
@@ -1487,10 +1463,6 @@ def render_macro_tab() -> None:
                             unsafe_allow_html=True)
 
 
-            # v19.40 ARCHIVED PR2:
-            # ══ 📈 L2 景氣循環歷史對照圖（危機紅區 × 指標趨勢）expander
-            # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
-            # 完整原始程式碼見 git log @ 13026cc 之前（L1284-L1356 ~73 行）
 
             # ── L2 視角到此結束，L3 繼續顯示完整儀表板 ──────────────────
             if not _show_l2_plus:
@@ -1587,11 +1559,6 @@ def render_macro_tab() -> None:
                                 f"</div>", unsafe_allow_html=True)
                 st.caption("📡 資料源：FRED + Yahoo Chart API（NAS proxy）｜閾值：🟢平靜 → 🟡警戒 → 🔴警報")
 
-            # v19.39 ARCHIVED PR1C (PR #TBD):
-            # 📅 Tier A 事件 + 估值（FOMC / NFP / CPI 倒數日曆 + S&P 500 Forward P/E + GDPNow）
-            # archived 原因：屬「事件日曆」短線維度，非熊市結構驗證；
-            #   user 反饋：留下近2個月內可驗證熊市的面板，事件日曆已在外部 calendar 服務追蹤
-            # 完整原始程式碼見 git log @ 7244d5a 之前
 
             # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
             st.divider()
@@ -1669,7 +1636,7 @@ def render_macro_tab() -> None:
                                 st.plotly_chart(_spfig, use_container_width=True,
                                                 key=f"sp_tp_{_key}")
                             except Exception:
-                                pass  # noqa: smoke-allow-pass
+                                pass  # smoke-allow-pass
                 st.caption(
                     "💡 **拐點解讀**："
                     "🚀 新訂單擴散由負轉正 = 製造業景氣領先指標反轉，通常領先 EPS 修正 1~2 季｜"
@@ -1737,7 +1704,7 @@ def render_macro_tab() -> None:
                                 st.plotly_chart(_spfig, use_container_width=True,
                                                 key=f"sp_tp_{_key}")
                             except Exception:
-                                pass  # noqa: smoke-allow-pass
+                                pass  # smoke-allow-pass
                 st.caption(
                     "🎯 **景氣反轉三件套**："
                     "💳 HY 利差高位回落 = 信用市場開始正常化｜"
@@ -1873,34 +1840,14 @@ def render_macro_tab() -> None:
             # ── v19.18: 7 子領域 Z-Score 健康度已搬到戰情首頁 ① 7-cluster 下方 ──
             # 原 v18.100 區塊整段移除，避免與 7-cluster 視覺重複（user 反饋）
 
-            # v19.39 ARCHIVED PR1C (PR #TBD):
-            # 🔗 總經因果鏈 Sankey（升息 → 信貸 → 房市/就業 → VIX）
-            # archived 原因：8 節點 9 邊 Sankey 為教學圖示，非熊市直接驗證；
-            #   AI 摘要區仍可從 _macro_sankey stash 讀（缺失自動回退「—」）
-            # 完整原始程式碼見 git log @ 7244d5a 之前
 
-            # v19.39 ARCHIVED PR1C (PR #TBD):
-            # 📊 細項燈號歷史回測（紅燈出現後 LEI 走勢驗證）
-            # archived 原因：屬「教學/燈號回測」性質，非熊市直接驗證面板；
-            #   AI 摘要區仍可從 _macro_subsector_bt stash 讀（缺失自動回退「—」）
-            # 完整原始程式碼見 git log @ 7244d5a 之前
 
-            # v19.40 ARCHIVED PR2:
-            # ── v18.108 📊 變數重要性 Top-N（Phase 4）
-            # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
-            # _macro_var_importance stash 已移至 tab6 render 時寫入
-            # 完整原始程式碼見 git log @ 13026cc 之前（L2084-L2169 ~86 行）
 
 
             # ── MK 景氣時鐘 ＆ 資產輪動（v18.8）── L2/L3 皆顯示
             st.divider()
             render_mk_clock_section(ind)
 
-            # v19.38 ARCHIVED PR1B (PR #245)：
-            # 景氣時鐘 4 象限 + 天氣預報 + AI 配置建議 — 週級反應遲鈍，phase data 已餵 AI 摘要
-            # 風險警示燈號 + 系統性風險 + 美林時鐘語音 — 與 ① 戰情室 + 系統性風險 widget 重複
-            # （phase / systemic_risk_data 仍存 session_state，AI 摘要繼續吃到）
-            # 完整原始程式碼見 git log @ 91da530 之前（L1364-L1551）
 
             # ── 宏觀風險溫度計 + 景氣循環羅盤 + AI（僅 L3）──────────────
             import pandas as _pd_mac
@@ -1911,14 +1858,6 @@ def render_macro_tab() -> None:
                     return s.dropna().tail(60)
                 except Exception: return None
 
-            # v19.39 ARCHIVED PR1C (PR #TBD):
-            # 🌡️ 宏觀風險溫度計 4 cards + V4 複合風險溫度計 + 🎯 風險評分校準 + 🧮 景氣分數校準
-            # archived 原因：
-            #   - 風險溫度計 VIX/PMI/YIELD/分數 bar 與 ② 拐點偵測 + ① 戰情室三儀表完全重複
-            #   - V4 複合 risk_score 為單一加權分，與 score_val 同源
-            #   - 校準 2 個（risk score F1 / 14-factor）屬「教學/回測」性質，非熊市直接驗證面板
-            # 4 panels session_state stash 已停用，AI 摘要 widget 不再依賴
-            # 完整原始程式碼見 git log @ 7244d5a 之前（L1379-L1833 ~455 行）
 
             # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
             def _load_liquidity_factors() -> None:
@@ -2062,21 +2001,7 @@ def render_macro_tab() -> None:
                                 f"`{'—' if _sz is None else f'{_sz:+.2f}'}`\n\n"
                                 "SSR 低(Z<0)=鏈上法幣子彈多=潛在買盤強；高=子彈耗盡")
 
-            # v19.39 ARCHIVED PR1C (PR #TBD):
-            # 🧭 景氣循環羅盤（V5：薩姆 + RSP/SPY 廣度 + 基準利率）
-            # archived 原因：薩姆規則已在 ② 拐點偵測中心 + ④ 短線雷達 重複呈現，
-            #   羅盤的合議文字（虛假繁榮/復甦/分化）與 ① 戰情室評語衝突；
-            #   _macro_compass stash 仍保留（AI 摘要遞延使用 — _sahm_d 取自 ② 拐點 cache）
-            # 完整原始程式碼見 git log @ 7244d5a 之前
 
-            # v19.40 ARCHIVED PR2:
-            # ── 指標貢獻明細 _CONTRIB_MAP + 👉 查看完整 23 項指標加扣分明細 expander
-            # archived 原因：搬遷至 📖 說明書 Tab §11 宏觀教學文獻
-            # _macro_23items stash 已移至 tab6 render 時寫入（AI 摘要向後相容）
-            # 完整原始程式碼見 git log @ 13026cc 之前（L1534-L1637 ~104 行）
-            # ══════════════════════════════════════════════════
-            # L3 資本防線 — 含息報酬 vs 配息率（Bar Chart）
-            # ══════════════════════════════════════════════════
             if _show_l3:
                 _pf_def = [f for f in st.session_state.get("portfolio_funds", []) if f.get("loaded")]
                 if _pf_def:
@@ -2383,7 +2308,7 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
                 f"{('(' + str(x.get('verdict')) + ')') if x.get('verdict') else ''}"
                 for x in _lights[:8]))
     except Exception:
-        pass   # noqa: smoke-allow-pass — 進階分析缺失不阻斷 AI 摘要
+        pass   # smoke-allow-pass — 進階分析缺失不阻斷 AI 摘要
     # v18.254：把兩個校準器最新結果寫進快照，供 AI 產出「校準健檢」段落
     # v18.255：改三段式（這代表 / 為什麼 / 該怎麼做）
     try:
@@ -2439,7 +2364,7 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
                         lines.append(
                             "    -【該怎麼做】維持配置、追蹤 risk_score 月變化、突破門檻才動作")
     except Exception:
-        pass   # noqa: smoke-allow-pass — 校準資料缺失不阻斷 AI 摘要
+        pass   # smoke-allow-pass — 校準資料缺失不阻斷 AI 摘要
     # v18.255：9 章節白話判讀
     try:
         import streamlit as _st  # noqa: PLC0415
@@ -2554,7 +2479,7 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
             if _hm.get("interpretation"):
                 lines.append(f"  - 判讀：{_hm['interpretation']}")
     except Exception:
-        pass   # noqa: smoke-allow-pass — 章節資料缺失不阻斷 AI 摘要
+        pass   # smoke-allow-pass — 章節資料缺失不阻斷 AI 摘要
     headlines = [str(n.get("title", "") or n.get("headline", ""))
                  for n in (news or []) if isinstance(n, dict)][:8]
     sections = ["景氣位階與分數", "資產配置建議", "關鍵總經指標", "系統性風險",

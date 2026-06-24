@@ -120,7 +120,7 @@ def render_t7_section() -> None:
                 "或直接到 Google Sheet 內手動修改。"
             )
     except Exception:
-        pass   # noqa: smoke-allow-pass — UI 提示失敗不影響後續 T7 主邏輯
+        pass   # smoke-allow-pass — UI 提示失敗不影響後續 T7 主邏輯
 
     st.markdown("### 💰 T7 帳務與再平衡試算（A / B / C）")
     st.caption(
@@ -263,7 +263,7 @@ def render_t7_section() -> None:
                         if _l_fb is not None:
                             _fx = float(getattr(_l_fb.position, "fx_avg", 0) or 0)
                     except Exception:
-                        pass   # noqa: smoke-allow-pass — fallback 靜默：留 _fx=0 給上層 if 守
+                        pass   # smoke-allow-pass — fallback 靜默：留 _fx=0 給上層 if 守
                 # v18.76: 幣別保底匯率（YF 被擋 + 無 ledger 歷史時的最終救援）
                 #         讓自動估算「不再因 FX 抓不到全部 skip」；
                 #         準確匯率使用者可手動改 fx_at_buy。
@@ -315,7 +315,7 @@ def render_t7_section() -> None:
                     if pd.notna(_v) and float(_v) > 0:
                         return float(_v)
                 except Exception:
-                    pass   # noqa: smoke-allow-pass — asof 失敗回 0 讓上層走 fallback
+                    pass   # smoke-allow-pass — asof 失敗回 0 讓上層走 fallback
                 return 0.0
 
             _auto_est_count = 0
@@ -362,7 +362,7 @@ def render_t7_section() -> None:
                 try:
                     _t7_save_snapshot_to_sheets()
                 except Exception:
-                    pass   # noqa: smoke-allow-pass — dump 失敗不擋顯示
+                    pass   # smoke-allow-pass — dump 失敗不擋顯示
                 _msg_skip = ""
                 if _auto_est_skip_no_nav > 0:
                     _msg_skip = (f"（{_auto_est_skip_no_nav} 檔因 NAV 仍抓不到跳過 — "
@@ -784,7 +784,7 @@ def render_t7_section() -> None:
                                         st.session_state["policy_tabs"] = (
                                             list_policy_worksheets(_client, _sid))
                                     except Exception:
-                                        pass   # noqa: smoke-allow-pass — cache 刷失敗不擋
+                                        pass   # smoke-allow-pass — cache 刷失敗不擋
                             except (PolicySheetError, OAuthError) as _e_sy:
                                 _gsheet_sync_msg = (
                                     f" ⚠️ Sheets 同步失敗：{str(_e_sy)[:60]}")

@@ -102,7 +102,7 @@ def _functions_with_expander_transitive(path: Path) -> set[str]:
 def test_no_silent_except_pass_in_app() -> None:
     """app.py 中 except 區塊不可僅含 pass（沉默吞例外）。
 
-    白名單：行尾加 `# noqa: smoke-allow-pass` 註解可被跳過。
+    白名單：行尾加 `# smoke-allow-pass` 註解可被跳過。
     防 PR #41 / Tab5 5473/5477 類沉默吞例外重現。
     """
     src = APP.read_text(encoding="utf-8")
@@ -114,11 +114,11 @@ def test_no_silent_except_pass_in_app() -> None:
             if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
                 pass_lineno = node.body[0].lineno
                 line = src_lines[pass_lineno - 1] if pass_lineno <= len(src_lines) else ""
-                if "# noqa: smoke-allow-pass" not in line:
+                if "# smoke-allow-pass" not in line:
                     violations.append(pass_lineno)
     assert not violations, (
         f"app.py 偵測到 except: pass 沉默吞例外於行: {violations}\n"
-        f"  → 改為累積錯誤至 list 並以 st.caption 顯示，或加 `# noqa: smoke-allow-pass` 白名單"
+        f"  → 改為累積錯誤至 list 並以 st.caption 顯示，或加 `# smoke-allow-pass` 白名單"
     )
 
 

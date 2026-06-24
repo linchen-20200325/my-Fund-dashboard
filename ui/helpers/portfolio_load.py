@@ -163,7 +163,7 @@ def batch_load_unloaded_funds() -> None:
         import repositories.macro_repository  # noqa: F401 — 觸發 macro 快取註冊
         _cac()
     except Exception:
-        pass   # noqa: smoke-allow-pass — clear 失敗不擋 loading
+        pass   # smoke-allow-pass — clear 失敗不擋 loading
 
     # Step 1: 抓每個 unique code
     # v18.156: 不能用 st.status — 它本質是 expander，本 helper 會被

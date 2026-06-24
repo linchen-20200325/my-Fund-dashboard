@@ -1300,7 +1300,7 @@ def _apply_v2_header_format(ws: Any) -> None:
                 ws.format, auto_ranges,
                 {"backgroundColor": auto_bg, "textFormat": bold})
     except Exception:
-        pass  # noqa: smoke-allow-pass — 配色失敗不影響資料正確性
+        pass  # smoke-allow-pass — 配色失敗不影響資料正確性
 
 
 def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
