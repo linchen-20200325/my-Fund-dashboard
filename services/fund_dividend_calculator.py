@@ -56,14 +56,18 @@ def div_health_light_for_pair(
     - ret_pct ≥ div_pct → ('健康', '🟢')
     - gap = div_pct - ret_pct ∈ (0, warn_gap] → ('警示', '🟡')
     - gap > warn_gap → ('吃本金', '🔴')
+
+    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal
+    (output tuple 100% 向後相容,3 色燈門檻 gap vs warn_gap 保留於本 wrapper)。
     """
-    r = _safe_float(ret_pct)
-    d = _safe_float(div_pct)
-    if r is None or d is None:
+    from services.fund_dividend_health import classify_eating_principal
+    core = classify_eating_principal(ret_pct, div_pct)
+    if core.is_data_missing:
         return ("資料不足", _LIGHT_EMOJI["資料不足"])
-    if d <= 0:
+    if core.is_no_dividend:
         return ("健康", _LIGHT_EMOJI["健康"])
-    gap = d - r
+    # core.gap_pct = div - ret(資料齊全且 div > 0 時必非 None)
+    gap = core.gap_pct
     if gap <= 0:
         return ("健康", _LIGHT_EMOJI["健康"])
     if gap <= warn_gap:
