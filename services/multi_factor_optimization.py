@@ -159,6 +159,13 @@ def fetch_factor_series(
     _empty = lambda: pd.Series(  # noqa: E731
         dtype=float, name=spec.key, index=pd.DatetimeIndex([]),
     )
+    # F-PROV-1 phase 18 v19.104 — provenance helper(若 .attrs 已被上游寫入則保留,否則補)
+    def _stamp_prov(_s, _src):
+        if hasattr(_s, "attrs") and "source" not in _s.attrs:
+            _s.attrs["source"] = _src
+            _s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        return _s
+
     try:
         if spec.source == "yahoo":
             from repositories.macro_repository import fetch_yf_close
@@ -167,18 +174,19 @@ def fetch_factor_series(
                 return _empty()
             s = s.dropna()
             s.name = spec.key
-            return s
+            return _stamp_prov(s, f"Yahoo:fetch_yf_close:{spec.series_id}:multi_factor")
         if spec.source == "fred":
             from repositories.macro_repository import fetch_fred
             n = max(int(years) * 365, 250)
             df = fetch_fred(spec.series_id, fred_api_key, n=n)
             if df is None or df.empty:
                 return _empty()
-            return pd.Series(
+            out = pd.Series(
                 df["value"].values,
                 index=pd.to_datetime(df["date"]),
                 name=spec.key, dtype=float,
             ).dropna()
+            return _stamp_prov(out, f"FRED:fetch_fred:{spec.series_id}:multi_factor")
         if spec.source == "calculated" and spec.key == "COPPER_GOLD_RATIO":
             from repositories.macro_repository import fetch_yf_close
             copper = fetch_yf_close("HG=F", range_=f"{int(years)}y", interval="1d")
@@ -193,7 +201,7 @@ def fetch_factor_series(
                 print(f"[multi_factor copper/gold] ffill+dropna: {_before} → {len(df)} 筆")
             ratio = (df["c"] / df["g"]).dropna()
             ratio.name = spec.key
-            return ratio
+            return _stamp_prov(ratio, "Calculated:COPPER_GOLD_RATIO:HG/GC:multi_factor")
         # v19.12 短期 pullback 因子（既有 series 的 5 日變化率版）
         if spec.source == "calculated" and spec.key == "VIX_DELTA_5D":
             from repositories.macro_repository import fetch_yf_close
@@ -202,7 +210,7 @@ def fetch_factor_series(
                 return _empty()
             out = vix.dropna().pct_change(5).dropna()
             out.name = spec.key
-            return out
+            return _stamp_prov(out, "Calculated:VIX_DELTA_5D:multi_factor")
         if spec.source == "calculated" and spec.key == "HY_SPREAD_DELTA_5D":
             from repositories.macro_repository import fetch_fred
             n = max(int(years) * 365, 250)
