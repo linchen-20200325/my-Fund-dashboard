@@ -4582,6 +4582,10 @@ def fetch_fund_by_key(full_key: str, fund_name: str = "",
             if _local_1y is not None:
                 result["perf"]["1Y"] = _local_1y
                 result["perf_source"] = result.get("perf_source") or "local_calc"
+        # F-PROV-1 phase 17 v19.103 — provenance(orchestrator-level;若 series 已有 attrs.source 則記錄)
+        _s_src = s.attrs.get("source") if hasattr(s, "attrs") else None
+        result["nav_source_used"] = _s_src or "unknown"
+        result["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
     else:
         result["error"] = f"{full_key} 只取到 {len(s)} 筆淨值（需≥20）"
     return result
@@ -4778,6 +4782,10 @@ def fetch_fund_structure(full_key: str, portal: str = "") -> dict:
                 print(f"[structure {page_name}] {url[:50]} ERR: {e}")
                 continue
 
+    # F-PROV-1 phase 17 v19.103 — provenance(僅實際拿到資料時寫入)
+    if struct:
+        struct["source"] = "MoneyDJ:STRUCTURE_PAGES:multi_portal"
+        struct["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
     return struct
 
 
