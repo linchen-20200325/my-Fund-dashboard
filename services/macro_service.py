@@ -1220,7 +1220,44 @@ def calc_macro_phase(indicators: dict) -> dict:
         inflection=mk_signals.get("inflection",{}),
         signals=mk_signals.get("signals",[]),
         allocation=alloc,
+        # F-PROV-1 phase 21 v19.107 — 12 指標融合處 provenance(schema-additive)
+        # 把每個參與融合的指標來源串起來,讓 caller 能追溯 single composite score 的血緣
+        _provenance=_build_phase_provenance(indicators, total_w, earned_w),
     )
+
+
+def _build_phase_provenance(indicators: dict, total_w: float, earned_w: float) -> dict:
+    """F-PROV-1 phase 21 — calc_macro_phase 融合後 provenance builder.
+
+    把 fetch_all_indicators 各指標 dict 的 `source` 欄串成 sources map,
+    讓 caller 可追溯「composite score 由哪幾個 indicator + 哪些來源組成」。
+
+    Args:
+        indicators: fetch_all_indicators 回傳的 dict({key: {value, source, score, weight, ...}})
+        total_w / earned_w: 加權前 / 後總和(供 caller 驗算)
+
+    Returns:
+        dict with:
+          - sources: {indicator_key: source_label}(僅含有 source 的指標)
+          - contributing: 實際參與融合的指標數
+          - total_weight / earned_weight: 加權統計
+          - fetched_at: UTC ISO timestamp
+          - aggregator: "macro_service.calc_macro_phase"
+    """
+    import pandas as _pd
+    sources = {}
+    for k, ind in indicators.items():
+        if isinstance(ind, dict) and ind.get("source"):
+            sources[k] = str(ind["source"])
+    return {
+        "sources": sources,
+        "contributing": len([1 for ind in indicators.values()
+                             if isinstance(ind, dict) and ind.get("score") is not None]),
+        "total_weight": float(total_w),
+        "earned_weight": float(earned_w),
+        "fetched_at": _pd.Timestamp.now('UTC').isoformat(),
+        "aggregator": "macro_service.calc_macro_phase",
+    }
 
 
 # ══════════════════════════════════════════════════════════════
