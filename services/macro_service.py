@@ -2933,6 +2933,12 @@ def china_macro_snapshot(china_dict: dict) -> dict:
     + `credit_impulse_proxy`(M2 YoY 12 月變化,§4.3 衍生)。
 
     §1 fail loud:單條 series 缺資料 → 該 key 的 value=None,**不偽造**。
+
+    v19.115 校正(§4.1 量綱):
+    - `FRED_CHN_M2`(`MABMM301CNM189S`)FRED 回的是 **M3 level (兆 CNY)**,
+      非 YoY %。本函式內部先 `pct_change(12) * 100` 轉 YoY 才進 scorer。
+    - `m2_yoy["value"]` 為轉換後 YoY %,可直接餵 `_score_m2`(門檻 5/9%)
+    - `credit_impulse_proxy` 輸入也用 YoY 序列,而非 level
     """
     # SSOT 從 shared/fred_series 引入(對應 _CHINA_FRED_SPECS)
     from shared.fred_series import (
@@ -2960,19 +2966,48 @@ def china_macro_snapshot(china_dict: dict) -> dict:
             print(f"[china_macro_snapshot/{sid}] extract 失敗: {e}")
         return out
 
+    # v19.115 校正:M2(實 M3 level)先轉 YoY series 再進 _extract 路徑
+    # 避免直接吃 level 餵 _score_m2(門檻 5/9%)造成評分恆 100 的 bug
+    m2_yoy_df = None
+    m2_df_raw = china_dict.get(FRED_CHN_M2)
+    if m2_df_raw is not None and not m2_df_raw.empty:
+        try:
+            tmp = m2_df_raw.copy()
+            tmp["value"] = tmp["value"].astype(float).pct_change(12) * 100.0
+            tmp = tmp.dropna(subset=["value"])
+            if not tmp.empty:
+                m2_yoy_df = tmp
+        except (KeyError, ValueError, TypeError) as e:
+            print(f"[china_macro_snapshot/m2_yoy_conv] {e}")
+
+    def _extract_m2_yoy() -> dict:
+        out = {"value": None, "date": None, "zone": "⬜ 無資料", "source": None}
+        if m2_yoy_df is None:
+            return out
+        try:
+            last = m2_yoy_df.iloc[-1]
+            v = float(last["value"])
+            d = pd.Timestamp(last["date"]).strftime("%Y-%m-%d")
+            out["value"] = round(v, 4)
+            out["date"] = d
+            out["zone"] = _classify_zone(v, _CHINA_THRESHOLDS.get("CHN_M2", {}))
+            out["source"] = str(last.get("source", f"FRED:{FRED_CHN_M2}"))
+        except (KeyError, ValueError, TypeError) as e:
+            print(f"[china_macro_snapshot/m2_yoy] {e}")
+        return out
+
     snapshot = {
         "cli":     _extract(FRED_CHN_OECD_CLI, "CHN_CLI"),
         "pmi":     _extract(FRED_CHN_PMI, "CHN_PMI"),
         "cpi_yoy": _extract(FRED_CHN_CPI, "CHN_CPI"),
-        "m2_yoy":  _extract(FRED_CHN_M2, "CHN_M2"),
+        "m2_yoy":  _extract_m2_yoy(),
         "usdcny":  _extract(FRED_CNH_USD, "USDCNY"),
     }
 
-    # 衍生:信貸脈衝 proxy(M2 YoY 12 月變化)
-    m2_df = china_dict.get(FRED_CHN_M2)
-    if m2_df is not None and not m2_df.empty:
+    # 衍生:信貸脈衝 proxy(M2 YoY 12 月變化)— 用已轉換的 YoY series
+    if m2_yoy_df is not None:
         try:
-            m2_yoy_series = m2_df["value"].astype(float)
+            m2_yoy_series = m2_yoy_df["value"].astype(float)
             snapshot["credit_impulse_proxy"] = calc_china_credit_impulse_proxy(m2_yoy_series)
         except (KeyError, ValueError, TypeError) as e:
             print(f"[china_macro_snapshot/credit_impulse] {e}")
