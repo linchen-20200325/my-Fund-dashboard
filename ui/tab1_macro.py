@@ -30,25 +30,14 @@ from fund_fetcher import (
     fetch_market_news,
     set_risk_free_rate,
 )
-from services.ai_service import (
-    event_impact_analysis,
-)
 from services.macro_service import (
     backtest_turning_points,
     calc_macro_phase,
-    calc_sub_cycle_lights,
     detect_systemic_risk,
     detect_turning_points,
     fetch_all_indicators,
-    rank_macro_drivers,
 )
 from ui.components.mk_clock import render_mk_clock_section
-from ui.helpers.macro_helpers import (
-    _CATEGORY_MAP,
-    category_history,
-    category_score,
-    category_verdict,
-)
 from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
@@ -1011,7 +1000,6 @@ def render_macro_tab() -> None:
             return
         ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
         alloc = phase["alloc"];  advice = phase.get("advice","")
-        rec_p = phase.get("rec_prob")
 
         # v19.50 ══ 📊 資料新鮮度條（總抓取時間 + age + 各區塊資料截止日）══
         _ml_upd = st.session_state.get("macro_last_update")
