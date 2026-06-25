@@ -10,6 +10,12 @@
   ④ 投資試算 — 投入金額 → 單位數 / 月配息 TWD
   ⑤ TER 費用率 + 持股分析（產業配置 / 前10大持股）
 
+v19.120 新增 P0 4 區塊（多檔比較專屬）:
+  ⑥ 持股/產業相關性矩陣（Jaccard+Cosine + Pearson fallback,影子基金警示）
+  ⑦ HWM σ 位階表（現價距歷史高點 + σ rank）
+  ⑧ 風險指標對比表（σ/Sharpe/Sortino/Alpha/Beta 多檔並排）
+  ⑨ -2σ 超跌警示 badges（深度超跌基金一覽）
+
 呼叫端：ui/tab_fund_grp_health.py：render_fund_grp_health_tab。
 """
 from __future__ import annotations
@@ -396,6 +402,282 @@ def _render_holdings_block(fund: dict) -> None:
                     f"</div>", unsafe_allow_html=True)
 
 
+# ════════════════════════════════════════════════════════════════
+# v19.120 P0 — 多檔比較專屬區塊
+# ════════════════════════════════════════════════════════════════
+
+def _render_correlation_matrix(funds: list) -> None:
+    """⑥ 持股/產業相關性矩陣(N×N 熱力圖 + 影子基金警示)。
+
+    主算法:Jaccard(持股)×0.6 + Cosine(產業)×0.4,score ≥ 0.70 警示
+    Fallback:NAV Pearson(持股資料缺時),> 0.85 警示
+    SSOT:services/portfolio_service.py + shared/signal_thresholds.py
+
+    §1 Fail Loud:< 2 檔基金 → skip;持股全缺 → fallback;Pearson 失敗 → caption error
+    """
+    if len(funds) < 2:
+        st.divider()
+        st.markdown("### 🔗 持股/產業相關性矩陣")
+        st.caption("⬜ 至少需 2 檔基金才能計算相關性")
+        return
+
+    st.divider()
+    st.markdown("### 🔗 持股/產業相關性矩陣")
+    st.caption("Jaccard(持股)×0.6 + Cosine(產業)×0.4;**重疊度 ≥ 0.70 = 影子基金警告**(隱性重複曝險)")
+
+    try:
+        from services.portfolio_service import (
+            calc_correlation_matrix,
+            calc_holdings_overlap,
+        )
+    except Exception as e:
+        st.caption(f"⬜ 相關性模組載入失敗:{type(e).__name__}: {e}")
+        return
+
+    # 主算法:Jaccard + Cosine(需持股 + 產業資料)
+    _hov_input = []
+    for _f in funds:
+        _mj = _f.get("moneydj_raw") or {}
+        _h = _mj.get("holdings") or {}
+        _hov_input.append({
+            "code": _f.get("code", "?"),
+            "name": _f.get("name") or _f.get("code"),
+            "top_holdings": _h.get("top_holdings") or [],
+            "sector_alloc": _h.get("sector_alloc") or [],
+        })
+    _result = calc_holdings_overlap(_hov_input)
+
+    # Fallback:持股全缺 → NAV Pearson
+    _is_fallback = False
+    if (not _result) or _result.get("method") == "n/a":
+        _corr_input = [
+            {"code": _f.get("code", "?"), "series": _f.get("series")}
+            for _f in funds
+        ]
+        _result = calc_correlation_matrix(_corr_input)
+        if _result is not None:
+            _result.setdefault("method", "nav_fallback")
+            _is_fallback = True
+            _result.setdefault(
+                "notes",
+                f"持股/產業資料皆缺,降級為 NAV Pearson 相關({_result.get('freq', '?')}頻;"
+                f">= 0.85 為 shadow)",
+            )
+
+    if not _result or _result.get("matrix") is None:
+        st.caption("⬜ 相關性計算失敗(持股 + NAV 兩源都缺)")
+        return
+
+    _method = _result.get("method", "?")
+    _notes = _result.get("notes", "")
+    _shadow = _result.get("shadow_pairs", []) or []
+    _thr = 0.85 if _is_fallback else 0.70
+    _label = "相關係數" if _is_fallback else "重疊度"
+    st.info(f"📌 計算方式:**{_method}**({_notes})")
+
+    # 熱力圖
+    try:
+        import plotly.graph_objects as go
+        _mx = _result["matrix"]
+        fig = go.Figure(data=go.Heatmap(
+            z=_mx.values,
+            x=list(_mx.columns),
+            y=list(_mx.index),
+            colorscale=[[0, "#0e1117"], [0.5, "#2196f3"], [1, "#f44336"]],
+            zmin=0, zmax=1,
+            text=[[f"{v:.2f}" for v in row] for row in _mx.values],
+            texttemplate="%{text}",
+            textfont={"size": 11, "color": "white"},
+            hovertemplate="%{y} vs %{x}<br>" + _label + ":%{z:.3f}<extra></extra>",
+        ))
+        fig.update_layout(
+            paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
+            font_color="#e6edf3",
+            height=max(280, len(_mx) * 50 + 100),
+            margin=dict(t=20, b=20, l=80, r=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.caption(f"⬜ 熱力圖渲染失敗:{type(e).__name__}: {e}")
+
+    # 影子基金警示列表
+    if _shadow:
+        st.markdown(f"#### ⚠️ 偵測到 {len(_shadow)} 對影子基金({_label} ≥ {_thr})")
+        for _pair in _shadow:
+            _a, _b, _score = _pair[0], _pair[1], _pair[2]
+            st.markdown(
+                f"<div style='background:#2a0a0a;border-left:3px solid {MATERIAL_RED};"
+                f"padding:6px 12px;margin:4px 0;border-radius:4px;'>"
+                f"<b>{_a} ⟷ {_b}</b>　"
+                f"<span style='color:{MATERIAL_RED};font-weight:700'>"
+                f"{_label} {_score:.3f}</span>　"
+                f"<span style='color:#888;font-size:11px'>建議檢視是否該擇一持有</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.success(f"✅ 本組合無影子基金({_label} 皆 < {_thr})")
+
+
+def _render_hwm_sigma_table(funds: list) -> None:
+    """⑦ HWM σ 位階表(現價距歷史高點 + σ rank)。
+
+    SSOT:services/precision_service.py calc_hwm_sigma_levels
+    每檔 NAV 序列 → HWM / σ / current / σ_rank / label
+    """
+    st.divider()
+    st.markdown("### 📐 HWM σ 位階")
+    st.caption("HWM = 過去 252 天歷史最高 NAV;σ_rank = 現價在 HWM 下方第幾個 σ(負值)。"
+               "**-2σ 以下 = 深度超跌**(若基本面健康可能是機會),**+1σ 以上 = 過熱**。")
+
+    try:
+        from services.precision_service import calc_hwm_sigma_levels
+    except Exception as e:
+        st.caption(f"⬜ HWM σ 模組載入失敗:{type(e).__name__}: {e}")
+        return
+
+    _rows = []
+    for _f in funds:
+        _code = _f.get("code", "?")
+        _name = (_f.get("name") or _code)[:24]
+        _series = _f.get("series")
+        if _series is None or len(_series) < 30:
+            _rows.append({
+                "基金": f"{_name} ({_code})",
+                "現價": "—", "HWM": "—",
+                "距 HWM %": "—", "σ rank": "—",
+                "位階": "⬜ NAV 不足 30 天",
+            })
+            continue
+        _r = calc_hwm_sigma_levels(_series)
+        if _r.get("error"):
+            _rows.append({
+                "基金": f"{_name} ({_code})",
+                "現價": "—", "HWM": "—",
+                "距 HWM %": "—", "σ rank": "—",
+                "位階": f"⬜ {_r['error']}",
+            })
+            continue
+        _rows.append({
+            "基金": f"{_name} ({_code})",
+            "現價": f"{_r['current_nav']:.2f}",
+            "HWM": f"{_r['hwm']:.2f}",
+            "距 HWM %": f"{_r['dist_to_hwm_pct']:+.2f}%",
+            "σ rank": f"{_r['sigma_rank']:+.2f}σ",
+            "位階": f"{_r.get('label', '—')}",
+        })
+
+    try:
+        import pandas as pd
+        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.caption(f"⬜ HWM σ 表渲染失敗:{type(e).__name__}: {e}")
+
+
+def _render_risk_compare_table(funds: list) -> None:
+    """⑧ 風險指標對比表(σ / Sharpe / Sortino / Alpha / Beta 多檔並排)。
+
+    資料源:MoneyDJ wb07 已抓的 risk_metrics + metrics dict(不重算)。
+    缺項顯示 '—',不偽造數值(§1 Fail Loud)。
+    """
+    st.divider()
+    st.markdown("### 📊 風險指標對比表")
+    st.caption("資料源:MoneyDJ wb07 風險表(直接顯示,不重算)。**Sharpe 越高越好 / σ 越低越穩**。")
+
+    _rows = []
+    for _f in funds:
+        _code = _f.get("code", "?")
+        _name = (_f.get("name") or _code)[:24]
+        _mj = _f.get("moneydj_raw") or {}
+        _m = _f.get("metrics") or {}
+        _rm = _f.get("risk_metrics") or _mj.get("risk_metrics") or {}
+
+        def _g(key):
+            v = _rm.get(key) or _m.get(key) or _mj.get(key)
+            n = _safe_num(v)
+            return f"{n:.2f}" if n is not None else "—"
+
+        _rows.append({
+            "基金": f"{_name} ({_code})",
+            "σ (年化%)": _g("std_dev") if _g("std_dev") != "—" else _g("sigma"),
+            "Sharpe": _g("sharpe"),
+            "Sortino": _g("sortino"),
+            "Alpha": _g("alpha"),
+            "Beta": _g("beta"),
+        })
+
+    try:
+        import pandas as pd
+        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+        # 統計:有資料的基金數 / 全部
+        _has_sharpe = sum(1 for r in _rows if r["Sharpe"] != "—")
+        if _has_sharpe < len(_rows):
+            st.caption(
+                f"⬜ {len(_rows) - _has_sharpe} / {len(_rows)} 檔基金 MoneyDJ 風險表"
+                f"資料不全(顯示 '—',不偽造)"
+            )
+    except Exception as e:
+        st.caption(f"⬜ 風險表渲染失敗:{type(e).__name__}: {e}")
+
+
+def _render_oversold_badges(funds: list) -> None:
+    """⑨ -2σ 超跌警示 badges(深度超跌基金一覽)。
+
+    依 HWM σ rank 篩 σ ≤ -2.0 的基金。
+    深度超跌 + 基本面健康 = 抄底機會;若基本面也差 = 真實衰退,不要接刀。
+    """
+    st.divider()
+    st.markdown("### 🩸 -2σ 超跌警示")
+
+    try:
+        from services.precision_service import calc_hwm_sigma_levels
+    except Exception as e:
+        st.caption(f"⬜ σ 模組載入失敗:{type(e).__name__}: {e}")
+        return
+
+    _oversold = []
+    for _f in funds:
+        _code = _f.get("code", "?")
+        _name = (_f.get("name") or _code)[:24]
+        _series = _f.get("series")
+        if _series is None or len(_series) < 30:
+            continue
+        _r = calc_hwm_sigma_levels(_series)
+        if _r.get("error"):
+            continue
+        _sigma_rank = _r.get("sigma_rank")
+        if _sigma_rank is not None and _sigma_rank <= -2.0:
+            _oversold.append({
+                "code": _code, "name": _name,
+                "sigma_rank": _sigma_rank,
+                "dist_pct": _r.get("dist_to_hwm_pct", 0),
+                "current": _r.get("current_nav"),
+                "hwm": _r.get("hwm"),
+            })
+
+    if not _oversold:
+        st.success("✅ 目前無基金落入 -2σ 深度超跌區")
+        return
+
+    st.caption(f"⚠️ 偵測到 **{len(_oversold)} 檔基金** σ ≤ -2.0(歷史高點下方 2 個標準差以上)")
+    for _o in _oversold:
+        st.markdown(
+            f"<div style='background:#2a0a0a;border-left:4px solid {MATERIAL_RED};"
+            f"padding:8px 14px;margin:6px 0;border-radius:6px;'>"
+            f"<b style='color:#ff6b6b'>🩸 {_o['name']} ({_o['code']})</b><br>"
+            f"<span style='color:#ccc;font-size:12px'>"
+            f"現價 {_o['current']:.2f} ｜ HWM {_o['hwm']:.2f} ｜ "
+            f"距高點 <b style='color:{MATERIAL_RED}'>{_o['dist_pct']:+.2f}%</b> ｜ "
+            f"σ rank <b style='color:{MATERIAL_RED}'>{_o['sigma_rank']:+.2f}σ</b>"
+            f"</span><br>"
+            f"<span style='color:#888;font-size:11px'>"
+            f"💡 深度超跌:若基本面(評分/吃本金/Sharpe)仍健康 → 可考慮抄底;"
+            f"基本面也轉差 → 不要接刀</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
     """組合健檢 5 大貼圖區塊 entry。
 
@@ -437,3 +719,21 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
                 _render_holdings_block(_f)
             except Exception as e:
                 st.caption(f"⬜ TER/持股渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
+
+    # v19.120 P0 — 多檔比較專屬區塊(每個 try/except 不擋下一個)
+    try:
+        _render_correlation_matrix(funds)
+    except Exception as e:
+        st.caption(f"⬜ 相關性矩陣渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
+    try:
+        _render_hwm_sigma_table(funds)
+    except Exception as e:
+        st.caption(f"⬜ HWM σ 表渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
+    try:
+        _render_risk_compare_table(funds)
+    except Exception as e:
+        st.caption(f"⬜ 風險表渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
+    try:
+        _render_oversold_badges(funds)
+    except Exception as e:
+        st.caption(f"⬜ 超跌警示渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
