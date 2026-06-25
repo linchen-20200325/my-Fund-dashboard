@@ -1711,11 +1711,15 @@ def render_macro_tab() -> None:
                                      "白話判讀": st.column_config.TextColumn(width="large"),
                                  })
 
-        # ══════════════════════════════════════════════════
+            # ══════════════════════════════════════════════════
             # L3 情境判斷卡（Logic A / B）— L3 only
+            # v19.137: 物理重排後本區在 War Room 之前執行,_sahm_v/_adl_v
+            #          需在此自行從 ind 取(不依賴下方 ⚠️ 拐點桶 War Room 定義)
             # ══════════════════════════════════════════════════
             if _show_l3:
                 _pmi_v = float((ind.get("PMI") or {}).get("value") or 0)
+                _sahm_v = float((ind.get("SAHM") or {}).get("value") or 0)
+                _adl_v = float((ind.get("ADL") or {}).get("value") or 0)
                 _l3_sit_cards = []
                 if _pmi_v > 0 and _pmi_v < 50 and _sahm_v < 0.5:
                     _l3_sit_cards.append({
