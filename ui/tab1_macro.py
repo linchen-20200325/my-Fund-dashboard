@@ -1365,323 +1365,353 @@ def render_macro_tab() -> None:
             # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）
 
 
-            # ══ L3 60/40 雙欄佈局（戰情室 × Z-Score 矩陣）══════════════
-            if _show_l3:
-                _col_l3, _col_r3 = st.columns([3, 2])
-                _main_ctx = _col_l3
-            else:
-                import contextlib as _ctxlib
-                _main_ctx = _ctxlib.nullcontext()
 
-            with _main_ctx:
-                # ══ v19.129 — ⚠️ 拐點警報 桶 ══
-                st.markdown("### ⚠️ 拐點警報")
-                st.caption("全域導航塔 War Room(三儀表 + 持倉燈 + 本週清單)")
-                # ══════════════════════════════════════════════════
-                # V5 全域導航塔（War Room）── 三圓形氣象儀表
-                # ══════════════════════════════════════════════════
-                st.markdown("### ① 🎯 全域導航塔（戰情室三儀表：薩姆 + SLOOS + 廣度）")
-                _sahm_d  = ind.get("SAHM")  or {}
-                _sloos_d = ind.get("SLOOS") or {}
-                _adl_d   = ind.get("ADL")   or {}
-                _sahm_v  = float(_sahm_d.get("value")  or 0)
-                _sloos_v = float(_sloos_d.get("value") or 0)
-                _adl_v   = float(_adl_d.get("value")   or 0)
+            # v19.134 物理重排:60/40 col layout 已移除,sections 按四時域分組連續
 
-                _gg1, _gg2, _gg3 = st.columns(3)
 
-                def _make_gauge(val, title, suffix, rng, thresholds, danger_above=True):
-                    """thresholds: [(limit, color_hex), ...] 從低到高"""
-                    steps = []
-                    prev = rng[0]
-                    for lim, col in thresholds:
-                        steps.append({"range": [prev, lim], "color": col})
-                        prev = lim
-                    steps.append({"range": [prev, rng[1]], "color": thresholds[-1][1]})
-                    # 指針顏色：超過最後閾值的 limit 為警報色
-                    danger_lim = thresholds[-1][0]
-                    needle_c = (MATERIAL_RED if (danger_above and val >= danger_lim)
-                                else (MATERIAL_GREEN if (not danger_above and val <= danger_lim)
-                                else MATERIAL_ORANGE))
-                    f = go.Figure(go.Indicator(
-                        mode="gauge+number",
-                        value=val,
-                        title={"text": title, "font": {"size": 13, "color": "#aaa"}},
-                        number={"suffix": suffix, "font": {"size": 22, "color": "#e6edf3"},
-                                "valueformat": ".2f"},
-                        gauge={"axis": {"range": rng, "tickcolor": "#444",
-                                        "tickfont": {"size": 9, "color": "#666"}},
-                               "bar":  {"color": needle_c, "thickness": 0.25},
-                               "bgcolor": "#161b22",
-                               "bordercolor": "#30363d",
-                               "steps": steps,
-                               "threshold": {"line": {"color": MATERIAL_RED, "width": 3},
-                                             "thickness": 0.8, "value": danger_lim}}))
-                    f.update_layout(paper_bgcolor="#0e1117", font_color="#e6edf3",
-                                    height=200, margin=dict(t=40, b=5, l=15, r=15))
-                    return f
+            # ══════════════════════════════════════════════════════════
+            # v19.134 — 🌳 長期座標 桶(物理重排,連續區塊)
+            # ══════════════════════════════════════════════════════════
+            st.divider()
+            st.markdown("## 🌳 長期座標")
+            st.caption("regime / 結構 ｜ 美林時鐘 + 美股流動性熱錢 + 資本防線")
 
-                with _gg1:
-                    st.plotly_chart(_make_gauge(
-                        _sahm_v, "薩姆規則<br>衰退機率", "pp", [0, 1.0],
-                        [(0.3, "#0a2a0a"), (0.5, "#2a1f00"), (1.0, "#2a0a0a")],
-                        danger_above=True), use_container_width=True)
-                    _sahm_sig = ("🔴 **衰退觸發** ≥0.5" if _sahm_v >= 0.5
-                                 else "🟡 警戒區 ≥0.3" if _sahm_v >= 0.3
-                                 else "🟢 安全 <0.3")
-                    st.markdown(f"<div style='text-align:center;font-size:12px'>{_sahm_sig}</div>",
-                                unsafe_allow_html=True)
-                    if not _sahm_d:
-                        st.caption("⚠️ FRED SAHMREALTIME 未取得（API Key 或網路）")
-                    # T2: Tooltip
-                    with st.expander("ℹ️ 薩姆規則說明", expanded=False):
-                        st.markdown("**薩姆規則（Sahm Rule）**：當失業率的3個月滾動平均比過去12個月最低點高出 ≥0.5 百分點，代表美國進入衰退。⚠️ 新手白話：儀表板紅色時，代表景氣已經轉壞，建議降低高風險基金比重。")
+            # ── MK 景氣時鐘 ＆ 資產輪動（v18.8）── L2/L3 皆顯示
+            st.divider()
+            render_mk_clock_section(ind)
 
-                with _gg2:
-                    st.plotly_chart(_make_gauge(
-                        _sloos_v, "SLOOS 放貸寬鬆度<br>銀行信貸標準", "%", [-30, 60],
-                        [(-5, "#0a2a0a"), (20, "#2a1f00"), (60, "#2a0a0a")],
-                        danger_above=True), use_container_width=True)
-                    _sloos_sig = ("🔴 **銀行緊縮** >20%" if _sloos_v > 20
-                                  else "🟡 中性偏緊 >0%" if _sloos_v > 0
-                                  else "🟢 信貸寬鬆 <0%")
-                    st.markdown(f"<div style='text-align:center;font-size:12px'>{_sloos_sig}</div>",
-                                unsafe_allow_html=True)
-                    if not _sloos_d:
-                        st.caption("⚠️ FRED DRTSCILM 未取得")
-                    # T2: Tooltip
-                    with st.expander("ℹ️ SLOOS 說明", expanded=False):
-                        st.markdown("**SLOOS（銀行放貸標準）**：美聯儲季度調查，正值=銀行收緊放貸（壞），負值=銀行放寬放貸（好）。⚠️ 新手白話：儀表板紅色時，代表銀行不願貸款，企業融資困難，景氣降溫訊號。")
 
-                with _gg3:
-                    # ADL = RSP/SPY 市場寬度 (% MoM change, negative = narrowing breadth = bad)
-                    st.plotly_chart(_make_gauge(
-                        _adl_v, "市場健康度<br>RSP/SPY 廣度", "%", [-10, 10],
-                        [(-5, "#2a0a0a"), (0, "#2a1f00"), (5, "#0a2a0a")],
-                        danger_above=False), use_container_width=True)
-                    _adl_sig = ("🟢 市場廣度健康" if _adl_v > 2
-                                else "🔴 **廣度收窄** 虛假繁榮" if _adl_v < -2
-                                else "🟡 市場廣度持平")
-                    st.markdown(f"<div style='text-align:center;font-size:12px'>{_adl_sig}</div>",
-                                unsafe_allow_html=True)
-                    # T2: Tooltip
-                    with st.expander("ℹ️ 市場廣度說明", expanded=False):
-                        st.markdown("**RSP/SPY 廣度（市場廣度）**：RSP = 等權重標普500，SPY = 市值加權。RSP/SPY 比值上升 = 中小型股參與行情（健康），下降 = 只有大型股撐盤（虛胖）。⚠️ 新手白話：紅色時代表漲幅集中少數大股，市場不穩健，小心追高。")
+            # ── 宏觀風險溫度計 + 景氣循環羅盤 + AI（僅 L3）──────────────
+            import pandas as _pd_mac
+            def _safe_series(s):
+                if s is None: return None
+                try:
+                    if not isinstance(s, _pd_mac.Series): s = _pd_mac.Series(s)
+                    return s.dropna().tail(60)
+                except Exception: return None
 
-                # ── 持倉紅綠燈列表（War Room Middle）──────────────────────────
-                _pf_all = st.session_state.get("portfolio_funds", [])
-                _pf_loaded = [f for f in _pf_all if f.get("loaded")]
-                if _pf_loaded:
-                    st.markdown("#### 🚦 持倉紅綠燈")
-                    _tl_html = ""
-                    for _pf in _pf_loaded:
-                        _pf_code  = _pf.get("code","?")
-                        _pf_name  = _pf.get("fund_name") or _pf_code
-                        _pf_m     = _pf.get("metrics") or _pf.get("m") or {}
-                        _pf_divs  = _pf.get("dividends") or []
-                        _pf_nav   = float(_pf_m.get("nav") or 0)
-                        _pf_b1    = float(_pf_m.get("buy1") or 0)   # v18.6: 年高-1σ（小跌）
-                        _pf_b2    = float(_pf_m.get("buy2") or 0)   # 年高-2σ（急跌）
-                        _pf_b3    = float(_pf_m.get("buy3") or 0)   # 年高-3σ（大跌）
-                        _pf_s1    = float(_pf_m.get("sell1") or 0)  # 年低+1σ
-                        _pf_bbd   = float(_pf_m.get("bb_lower") or 0)
-                        _pf_bbu   = float(_pf_m.get("bb_upper") or 0)
-                        _pf_ret1y = float(_pf_m.get("ret_1y") or 0)
-                        _pf_adr   = float(_pf_m.get("annual_div_rate") or 0)
-                        _pf_core  = "🛡️ 核" if _pf.get("is_core") else "⚡ 衛"
-                        # 燈號判定（v18.6: σ + 布林雙確認 升級）
-                        _tl_icon, _tl_bg, _tl_bc, _tl_reason = "🟢", "#061a06", MATERIAL_GREEN, "淨值穩定，含息報酬正常"
-                        # 雙確認買 = σ 買點觸發 + 布林下軌觸碰
-                        _double_buy = (_pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1
-                                       and _pf_bbd > 0 and _pf_nav <= _pf_bbd)
-                        _double_sell = (_pf_s1 > 0 and _pf_nav > 0 and _pf_nav >= _pf_s1
-                                        and _pf_bbu > 0 and _pf_nav >= _pf_bbu)
-                        if _pf_adr > 0 and _pf_ret1y < _pf_adr:
-                            _tl_icon, _tl_bg, _tl_bc = "🔴", "#1a0606", MATERIAL_RED
-                            _tl_reason = f"吃本金警示：含息報酬 {_pf_ret1y:.1f}% < 配息率 {_pf_adr:.1f}%"
-                        elif _double_buy:
-                            _tl_icon, _tl_bg, _tl_bc = "🟢🟢", "#0a3a1a", "#00e676"
-                            _tl_reason = f"σ+布林雙確認買 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f}) & 布林下軌"
-                        elif _double_sell:
-                            _tl_icon, _tl_bg, _tl_bc = "🔔🔔", "#3a0a0a", MATERIAL_RED
-                            _tl_reason = f"σ+布林雙確認賣 NAV {_pf_nav:.4f} ≥ 賣1({_pf_s1:.4f}) & 布林上軌"
-                        elif _pf_b3 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b3:
-                            _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a0a2a", "#9c27b0"
-                            _tl_reason = f"大跌大買訊號 NAV {_pf_nav:.4f} ≤ 買3({_pf_b3:.4f})"
-                        elif _pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1:
-                            _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a1500", MATERIAL_ORANGE
-                            _tl_reason = f"小跌小買訊號 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f})"
-                        elif not _pf_m:
-                            _tl_icon, _tl_bg, _tl_bc = "⬜", "#161b22", "#555"
-                            _tl_reason = "資料尚未載入"
-                        _tl_html += (
-                            f"<div style='background:{_tl_bg};border:1px solid {_tl_bc};"
-                            f"border-radius:8px;padding:8px 14px;margin:4px 0;"
-                            f"display:flex;align-items:center;gap:14px'>"
-                            f"<span style='font-size:20px'>{_tl_icon}</span>"
-                            f"<span style='color:#64b5f6;font-size:11px;width:32px'>{_pf_core}</span>"
-                            f"<span style='color:#ccc;font-size:12px;flex:1'>"
-                            f"<b>{_pf_name[:20]}</b></span>"
-                            f"<span style='color:{_tl_bc};font-size:11px'>{_tl_reason}</span>"
-                            f"</div>"
+            with st.expander("⑥ 💵 美股流動性 × 熱錢監測 — 三角：流動性 × 信用 × 情緒",
+                             expanded=False):
+                st.caption(
+                    "💡 **為何重要**：境外美股基金 NAV 主受 ① 美元流動性（M2/RRP/WALCL）+ "
+                    "② 信用偏好（HY/HYG-LQD）+ ③ 散戶情緒（AAII）三軸驅動。"
+                    "**FED 升降息只是源頭**，熱錢 = 流動性 + 信用 + 情緒 三者綜合結果。"
+                )
+                try:
+                    from services.us_liquidity_engine import fetch_us_liquidity_snapshot  # noqa: PLC0415
+                    _us_liq = fetch_us_liquidity_snapshot(FRED_KEY)
+
+                    # Row 1: 流動性 3 chips
+                    _r1 = st.columns(3)
+                    _row1 = [
+                        ("m2_yoy", "📊 M2 YoY", "廣義貨幣供給年增（FRED M2SL）"),
+                        ("walcl", "🏦 Fed 資產負債表", "QE/QT pace（FRED WALCL）"),
+                        ("rrp", "💧 隔夜逆回購 RRP", "流動性蓄水池（FRED RRPONTSYD）"),
+                    ]
+                    for _i, (_key, _title, _default_desc) in enumerate(_row1):
+                        with _r1[_i]:
+                            _d = _us_liq.get(_key, {})
+                            if "_err" in _d:
+                                st.metric(_title, "待取得", help=f"{_default_desc}｜❌ {_d['_err'][:50]}")
+                            else:
+                                _val = _d["value"]
+                                _unit = _d.get("unit", "")
+                                _delta = _d.get("delta")
+                                _delta_str = f"{_delta:+.2f}{_unit}" if _delta is not None else None
+                                st.metric(_title, f"{_val:+.2f}{_unit}", delta=_delta_str,
+                                          help=f"{_default_desc} ({_d.get('date','')})")
+                                st.caption(f"<span style='color:{_d.get('color','#888')}'>● {_d.get('label','')}</span>",
+                                           unsafe_allow_html=True)
+
+                    # Row 2: 信用 + 情緒 3 chips
+                    _r2 = st.columns(3)
+                    _row2 = [
+                        ("hy_oas", "⚠️ HY 信用利差", "FRED BAMLH0A0HYM2 (% OAS)"),
+                        ("hyg_lqd", "💰 HYG/LQD 比", "高收益債 vs 投等債 — 風險偏好"),
+                        ("aaii", "😱 AAII 情緒 spread", "Bull − Bear（反指標）"),
+                    ]
+                    for _i, (_key, _title, _default_desc) in enumerate(_row2):
+                        with _r2[_i]:
+                            _d = _us_liq.get(_key, {})
+                            if "_err" in _d:
+                                st.metric(_title, "待取得", help=f"{_default_desc}｜❌ {_d['_err'][:50]}")
+                            else:
+                                _val = _d["value"]
+                                _unit = _d.get("unit", "")
+                                st.metric(_title, f"{_val:+.2f}{_unit}",
+                                          help=f"{_default_desc} ({_d.get('date','')})")
+                                st.caption(f"<span style='color:{_d.get('color','#888')}'>● {_d.get('label','')}</span>",
+                                           unsafe_allow_html=True)
+
+                    # 失敗 fetcher 列表（仿 Stock v18.194 fail-trace）
+                    # v19.58：外層已是 expander → 改用原生 HTML <details> 避 StreamlitAPIException 巢狀爆
+                    _errs = {k: v["_err"] for k, v in _us_liq.items() if "_err" in v}
+                    if _errs:
+                        _err_items = "".join(
+                            f"<li><b>{_ek}</b>：<code>{str(_ev).replace('<', '&lt;')[:120]}</code></li>"
+                            for _ek, _ev in _errs.items()
                         )
-                    st.markdown(_tl_html, unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        "<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;"
-                        "padding:10px 16px;color:#555;font-size:12px;text-align:center'>"
-                        "🚦 持倉紅綠燈：請先至「📊 組合基金」Tab 新增並載入基金，即可在此顯示即時燈號</div>",
-                        unsafe_allow_html=True)
+                        st.markdown(
+                            f"<details style='margin:8px 0;background:#0d1117;border:1px solid #30363d;"
+                            f"border-radius:6px;padding:6px 12px'>"
+                            f"<summary style='cursor:pointer;color:#d29922;font-size:12px'>"
+                            f"🔍 載入失敗詳情（{len(_errs)} 項）</summary>"
+                            f"<ul style='margin:6px 0 0 0;color:#aaa;font-size:11px'>{_err_items}</ul>"
+                            f"<div style='color:#666;font-size:10px;margin-top:6px'>"
+                            f"💡 多半是 FRED key 未設 / AAII 頁面格式改版 / Yahoo timeout；非全部失敗不影響核心判讀</div>"
+                            f"</details>",
+                            unsafe_allow_html=True,
+                        )
 
-                # ── AI 每日一句結論（v15.2 移除：使用者反饋過於簡略）──
-                st.divider()
+                    # v19.53 ══ 📊 資料新鮮度條 ══（traffic-light 掛「最舊指標 date 距今天數」，FRED 平日更新節奏 + 強制重抓）
+                    _us_today = pd.Timestamp.now(tz="Asia/Taipei").date()
+                    _us_dates = []
+                    for _v in _us_liq.values():
+                        _ds = _v.get("date") if isinstance(_v, dict) else None
+                        if _ds:
+                            try:
+                                _us_dates.append(pd.Timestamp(_ds).date())
+                            except Exception:
+                                pass
+                    if _us_dates:
+                        _us_cutoff = min(_us_dates)
+                        _us_days_old = (_us_today - _us_cutoff).days
+                        _us_color = "#3fb950" if _us_days_old <= 2 else ("#d29922" if _us_days_old <= 7 else "#f85149")
+                        _us_age_txt = "今日" if _us_days_old <= 0 else f"{_us_days_old} 天前"
+                    else:
+                        _us_cutoff = None
+                        _us_color = "#888"
+                        _us_age_txt = "—"
+                    _us_load_txt = pd.Timestamp.now(tz="Asia/Taipei").strftime("%m-%d %H:%M")
+                    _ucols = st.columns([5, 1])
+                    with _ucols[0]:
+                        st.markdown(
+                            f"<div style='background:#0d1117;border-left:3px solid {_us_color};"
+                            f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:8px;font-size:11px;color:#aaa'>"
+                            f"📅 最舊指標截止：<span style='color:{_us_color};font-weight:700'>{_us_cutoff or '—'}</span>"
+                            f" · <span style='color:{_us_color}'>{_us_age_txt}</span>"
+                            f"　|　🕐 本次載入：{_us_load_txt} (TW)"
+                            f"　|　📡 來源 FRED / Yahoo / AAII"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                    with _ucols[1]:
+                        if st.button("🔄 強制重抓", key="us_liq_force_refresh",
+                                     help="v19.57 C1：僅清 Tab1（FRED/Yahoo/AAII/熱錢）快取，"
+                                          "Tab2~Tab5 基金/組合/政策快取不受影響"):
+                            try:
+                                from services.macro_service import clear_tab1_macro_caches
+                                clear_tab1_macro_caches(session_state=st.session_state)
+                            except Exception:
+                                pass
+                            st.rerun()
+                except Exception as _us_e:
+                    st.error(f"美股流動性監測渲染失敗：[{type(_us_e).__name__}] {_us_e}")
 
-                # ══════════════════════════════════════════════════
-                # L1 新手待辦清單（所有等級均顯示）
-                # ══════════════════════════════════════════════════
-                _w_icon2  = phase.get("weather_icon", "⛅")
-                _w_label2 = phase.get("weather_label", "多雲")
-                _l1_stock = alloc.get("股票", 50)
-                _l1_bond  = alloc.get("債券", 30)
-                _l1_cash  = alloc.get("現金", 20)
-                _l1_checks = [
-                    f"確認核心部位是否符合 AI 建議：股 {_l1_stock}% / 債 {_l1_bond}% / 現金 {_l1_cash}%",
-                ]
-                if _sahm_v >= 0.5:
-                    _l1_checks.append(f"⚠️ **薩姆衰退警報已觸發**（{_sahm_v:.2f}pp）：暫停衛星加碼，保留防守型部位")
-                if _sloos_v > 20:
-                    _l1_checks.append(f"📊 **銀行緊縮偵測**（SLOOS {_sloos_v:.1f}%）：高收益債基金降至 10% 以下")
-                if _adl_v < -2:
-                    _l1_checks.append(f"🌍 **市場廣度警示**（RSP/SPY {_adl_v:.2f}%）：減少主題/集中型基金")
-                _l1_checks.append("定期定額不停扣（除非景氣位階進入「高峰」且 VIX < 15）")
-                _l1_checks.append(f"本週核心原則：景氣「{ph}」，{(advice or '均衡配置，嚴守紀律')[:40]}。")
-                _l1_md = "\n".join(f"- [ ] {c}" for c in _l1_checks)
-                st.markdown(
-                    f"<div style='background:#0d1117;border:1px solid #30363d;border-radius:12px;"
-                    f"padding:16px 20px;margin:8px 0'>"
-                    f"<div style='color:#e6edf3;font-weight:700;margin-bottom:10px'>"
-                    f"📋 本週操作清單（{_w_label2} {_w_icon2}）</div></div>",
-                    unsafe_allow_html=True)
-                st.markdown(_l1_md)
+            # ── 台股熱錢監測（v19.47 ARCHIVED：境外美股基金可略過｜原 ⑥ KEEP，user 反饋本土訊號非主驅力）──
+            # 移除 ⑥ 編號 + 標題加 📦 ARCHIVED 前綴 + 模組保留磁碟便於日後復活
+            st.divider()
+            with st.expander("📦 ARCHIVED — 台股熱錢監測（境外美股基金可略過｜本土訊號）",
+                             expanded=False):
+                st.caption("⚠️ v19.47 降級為 archive：USD 計價境外美股基金，台幣升貶/外資台股淨買賣對 NAV 影響有限。如需此資料請點開。")
+                try:
+                    from hot_money import render_hot_money_section
+                    _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
+                                     if hasattr(st, "secrets") else "") or ""
+                    render_hot_money_section(token=_finmind_tok,
+                                              key_prefix="tab1_hm")
+                except Exception as _hme:
+                    st.error(f"熱錢監測渲染失敗：[{type(_hme).__name__}] {_hme}")
+            if _show_l3:
+                _pf_def = [f for f in st.session_state.get("portfolio_funds", []) if f.get("loaded")]
+                if _pf_def:
+                    st.markdown("#### 💰 資本防線 — 含息報酬 vs 配息率")
+                    _def_names = [f.get("fund_name") or f.get("code","?") for f in _pf_def]
+                    _def_tr1y  = [float((f.get("metrics") or f.get("m") or {}).get("ret_1y") or 0) for f in _pf_def]
+                    _def_adr   = [float((f.get("metrics") or f.get("m") or {}).get("annual_div_rate") or 0) for f in _pf_def]
+                    _def_colors = [MATERIAL_RED if tr < adr else MATERIAL_GREEN
+                                   for tr, adr in zip(_def_tr1y, _def_adr)]
+                    _def_fig = go.Figure()
+                    _def_fig.add_trace(go.Bar(
+                        x=_def_names, y=_def_tr1y,
+                        marker_color=_def_colors,
+                        text=[f"{v:.1f}%" for v in _def_tr1y],
+                        textposition="outside",
+                        name="含息報酬率 TR1Y",
+                        customdata=list(zip(_def_adr, ["🚨 本金侵蝕" if tr < adr else "" for tr, adr in zip(_def_tr1y, _def_adr)])),
+                        hovertemplate="<b>%{x}</b><br>TR1Y: %{y:.1f}%<br>配息率: %{customdata[0]:.1f}%<br>%{customdata[1]}<extra></extra>",
+                    ))
+                    _def_fig.add_trace(go.Scatter(
+                        x=_def_names, y=_def_adr,
+                        mode="markers",
+                        marker=dict(symbol="line-ew", size=16, color=MATERIAL_ORANGE,
+                                    line=dict(width=3, color=MATERIAL_ORANGE)),
+                        name="配息年化率",
+                        hovertemplate="配息率: %{y:.1f}%<extra></extra>",
+                    ))
+                    _def_fig.update_layout(
+                        paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
+                        font_color="#e6edf3", height=260,
+                        margin=dict(t=20, b=50, l=10, r=10),
+                        legend=dict(orientation="h", y=-0.35),
+                        xaxis=dict(tickfont=dict(size=11)),
+                        yaxis=dict(title="報酬率 (%)", ticksuffix="%"),
+                    )
+                    st.plotly_chart(_def_fig, use_container_width=True)
+                    st.caption("🟢 綠色 = TR1Y > 配息率（配息有保障）｜🔴 紅色 = TR1Y < 配息率（本金侵蝕警示）｜橙色橫線 = 配息年化率")
+                    # v18.255 stash 給 AI 白話總體檢
+                    try:
+                        _eroded = [(n, tr, adr) for n, tr, adr
+                                   in zip(_def_names, _def_tr1y, _def_adr)
+                                   if tr < adr]
+                        st.session_state["_macro_capital_line"] = {
+                            "n_funds": len(_def_names),
+                            "n_eroded": len(_eroded),
+                            "eroded_funds": [{"name": n[:20], "tr1y": float(tr),
+                                              "adr": float(adr)} for n, tr, adr in _eroded[:5]],
+                        }
+                    except Exception:
+                        pass
 
-            # ══════════════════════════════════════════════════
-            # ══ v19.129 — 📈 中期循環 桶 ══
-            st.markdown("### 📈 中期循環")
-            st.caption("Z-Score 矩陣(18 指標,5 個重複已移至各桶主家)")
+            # ── 市場新聞（折疊）── L3 only
+            if _show_l3:
+                _news_items = st.session_state.get("news_items",[])
+                if _news_items:
+                    with st.expander(f"📰 市場新聞（{len(_news_items)} 則）", expanded=False):
+                        for _ni in _news_items[:20]:
+                            _nt = _ni.get("title","")[:90]
+                            _ns = _ni.get("source","")
+                            _nu = _ni.get("url","") or _ni.get("link","")
+                            _nd = str(_ni.get("published",""))[:16]
+                            if _nu:
+                                st.markdown(f"**[{_nt}]({_nu})** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                            else:
+                                st.markdown(f"**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+
+            # ── v19.47 ⑥ 美股流動性 × 熱錢監測（user 反饋：基金 USD 計價，台股熱錢非主訊號） ──
+            # 6 指標三角：流動性 (M2/WALCL/RRP) × 信用 (HY OAS / HYG-LQD) × 情緒 (AAII)
+            st.divider()
+
+            # ══════════════════════════════════════════════════════════
+            # v19.134 — 📈 中期循環 桶(物理重排,連續區塊)
+            # ══════════════════════════════════════════════════════════
+            st.divider()
+            st.markdown("## 📈 中期循環")
+            st.caption("景氣循環 3-12 月 ｜ Z-Score 矩陣(18 指標)+ 情境判斷")
+
             # L3 指標 Z-Score 矩陣（14 指標）— L3 only
             # ══════════════════════════════════════════════════
             if _show_l3:
-                with _col_r3:
-                    # v17.2：Z-Score 矩陣升級 — 燈號儀表 + 白話判讀 + |Z| DESC 排序
-                    st.markdown("**🔬 Z-Score 矩陣（23 指標 ｜ 異常先看）**")
-                    # 四色說明條（HTML，避免破壞 Streamlit theme）
-                    st.markdown(
-                        "<div style='display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px'>"
-                        "<span style='background:#0a3d1f;color:#69f0ae;padding:3px 10px;"
-                        "border-radius:4px;font-size:12px'>🟢 正常 |Z|&lt;1</span>"
-                        "<span style='background:#3d3408;color:#ffd54f;padding:3px 10px;"
-                        "border-radius:4px;font-size:12px'>🟡 關注 |Z|≥1</span>"
-                        "<span style='background:#4a2a08;color:#ffab40;padding:3px 10px;"
-                        "border-radius:4px;font-size:12px'>🟠 警示 |Z|≥1.5</span>"
-                        "<span style='background:#4a0d0d;color:#ff8a80;padding:3px 10px;"
-                        "border-radius:4px;font-size:12px'>🔴 極端 |Z|≥2</span>"
-                        "</div>",
-                        unsafe_allow_html=True,
-                    )
-                    st.caption("📖 已依 |Z| 由大至小排序，最異常的指標置頂。⭐ = v16.1 高頻替代源")
-                    import pandas as _pd_zs
-                    # spec: (key, 顯示名, 單位, 小數位, high_is_bad, z>0白話, z<0白話)
-                    _zs_indicators = [
-                        ("SLOOS",        "SLOOS 銀行放款意願", "%",   1,  True,  "銀行緊縮放貸",     "銀行寬鬆放貸"),
-                        ("ADL",          "RSP/SPY 廣度",        "%",   2,  False, "廣度健康",          "大型股獨撐"),
-                        ("PMI",          "ISM PMI",             "",    1,  False, "製造業擴張",        "製造業收縮"),
-                        ("LEI",          "⭐ CFNAI 領先指標",   "",    2,  False, "景氣加速",          "景氣放緩"),
-                        ("CPI",          "CPI 通膨率",          "%",   1,  True,  "物價壓力升溫",      "通膨壓力減退"),
-                        ("PPI",          "PPI 生產者物價",      "%",   2,  True,  "上游成本升溫",      "上游成本回落"),
-                        ("INFL_EXP_5Y",  "⭐ 5Y 通膨預期",      "%",   2,  True,  "通膨預期升溫",      "通膨預期降溫"),
-                        ("FED_RATE",     "聯準會利率",          "%",   2,  True,  "資金成本上升",      "資金成本下降"),
-                        ("UNEMPLOYMENT", "失業率",              "%",   1,  True,  "勞動市場惡化",      "勞動市場改善"),
-                        ("CONT_CLAIMS",  "⭐ 持續失業金週頻",   "萬",  0,  True,  "失業惡化",          "就業改善"),
-                        ("COPPER",       "銅博士月漲跌",        "%",   1,  False, "全球景氣轉熱",      "全球景氣轉冷"),
-                        ("CONSUMER_CONF","消費者信心",          "",    1,  False, "消費信心強",        "消費信心弱"),
-                        ("JOBLESS",      "初領失業金",          "萬",  1,  True,  "裁員壓力升溫",      "裁員壓力降溫"),
-                        ("M2",           "M2 YoY",              "%",   1,  False, "貨幣供給寬鬆",      "貨幣供給緊縮"),
-                        ("M2_WEEKLY",    "⭐ M2 週頻 YoY",      "%",   2,  False, "貨幣供給寬鬆",      "貨幣供給緊縮"),
-                        ("FED_BS",       "Fed 資產負債表 YoY",  "%",   2,  False, "QE 擴表",           "QT 縮表"),
-                        ("DXY",          "美元指數",            "",    2,  True,  "美元走強（外幣壓力）","美元走弱（外幣受益）"),
-                        ("PERMIT_HOUSING","⭐ 建照核發",         "千",  0,  False, "房市領先強",        "房市領先弱"),
-                    ]
-                    _zs_rows = []
-                    for _zk, _zname, _zunit, _zdec, _zhigh_bad, _z_pos_phrase, _z_neg_phrase in _zs_indicators:
-                        _zd = ind.get(_zk) or {}
-                        _zv = _zd.get("value")
-                        _zs_raw = _zd.get("series")
-                        # 預設行：資料不足時佔位（不參與 |Z| 排序，會 sink 到表尾）
-                        if _zv is None:
-                            _zs_rows.append({
-                                "_abs": -1, "指標": _zname, "當前值": "—",
-                                "白話判讀": "⬜ 資料不足，待補",
-                            })
-                            continue
-                        try:
-                            _zv_f = float(_zv)
-                        except (TypeError, ValueError):
-                            _zs_rows.append({
-                                "_abs": -1, "指標": _zname, "當前值": str(_zv)[:10],
-                                "白話判讀": "⬜ 數值格式異常",
-                            })
-                            continue
-                        _z_score = None
-                        if _zs_raw is not None:
-                            try:
-                                _zser = (_zs_raw if isinstance(_zs_raw, _pd_zs.Series)
-                                         else _pd_zs.Series(_zs_raw)).dropna()
-                                if len(_zser) >= 10:
-                                    _zmu, _zsig = float(_zser.mean()), float(_zser.std())
-                                    if _zsig > 0 and not (_zsig != _zsig):  # NaN guard
-                                        _z_cand = (_zv_f - _zmu) / _zsig
-                                        if _z_cand == _z_cand:  # NaN guard
-                                            _z_score = _z_cand
-                            except Exception:
-                                pass  # smoke-allow-pass
-                        _unit_s = f" {_zunit}" if _zunit else ""
-                        _val_s  = f"{_zv_f:.{_zdec}f}{_unit_s}"
-                        # 燈號 + 白話
-                        if _z_score is None:
-                            _verdict = "⬜ 樣本不足，無法判讀"
-                            _abs_z = -1
-                        else:
-                            _abs_z = abs(_z_score)
-                            _phrase = _z_pos_phrase if _z_score > 0 else _z_neg_phrase
-                            if _abs_z >= 2:
-                                _icon = "🔴 極端"
-                            elif _abs_z >= 1.5:
-                                _icon = "🟠 警示"
-                            elif _abs_z >= 1:
-                                _icon = "🟡 關注"
-                            else:
-                                _icon = "🟢 正常"
-                            _verdict = f"{_icon}（{_phrase}，Z={_z_score:+.2f}）"
+                # v17.2：Z-Score 矩陣升級 — 燈號儀表 + 白話判讀 + |Z| DESC 排序
+                st.markdown("**🔬 Z-Score 矩陣（23 指標 ｜ 異常先看）**")
+                # 四色說明條（HTML，避免破壞 Streamlit theme）
+                st.markdown(
+                    "<div style='display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px'>"
+                    "<span style='background:#0a3d1f;color:#69f0ae;padding:3px 10px;"
+                    "border-radius:4px;font-size:12px'>🟢 正常 |Z|&lt;1</span>"
+                    "<span style='background:#3d3408;color:#ffd54f;padding:3px 10px;"
+                    "border-radius:4px;font-size:12px'>🟡 關注 |Z|≥1</span>"
+                    "<span style='background:#4a2a08;color:#ffab40;padding:3px 10px;"
+                    "border-radius:4px;font-size:12px'>🟠 警示 |Z|≥1.5</span>"
+                    "<span style='background:#4a0d0d;color:#ff8a80;padding:3px 10px;"
+                    "border-radius:4px;font-size:12px'>🔴 極端 |Z|≥2</span>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+                st.caption("📖 已依 |Z| 由大至小排序，最異常的指標置頂。⭐ = v16.1 高頻替代源")
+                import pandas as _pd_zs
+                # spec: (key, 顯示名, 單位, 小數位, high_is_bad, z>0白話, z<0白話)
+                _zs_indicators = [
+                    ("SLOOS",        "SLOOS 銀行放款意願", "%",   1,  True,  "銀行緊縮放貸",     "銀行寬鬆放貸"),
+                    ("ADL",          "RSP/SPY 廣度",        "%",   2,  False, "廣度健康",          "大型股獨撐"),
+                    ("PMI",          "ISM PMI",             "",    1,  False, "製造業擴張",        "製造業收縮"),
+                    ("LEI",          "⭐ CFNAI 領先指標",   "",    2,  False, "景氣加速",          "景氣放緩"),
+                    ("CPI",          "CPI 通膨率",          "%",   1,  True,  "物價壓力升溫",      "通膨壓力減退"),
+                    ("PPI",          "PPI 生產者物價",      "%",   2,  True,  "上游成本升溫",      "上游成本回落"),
+                    ("INFL_EXP_5Y",  "⭐ 5Y 通膨預期",      "%",   2,  True,  "通膨預期升溫",      "通膨預期降溫"),
+                    ("FED_RATE",     "聯準會利率",          "%",   2,  True,  "資金成本上升",      "資金成本下降"),
+                    ("UNEMPLOYMENT", "失業率",              "%",   1,  True,  "勞動市場惡化",      "勞動市場改善"),
+                    ("CONT_CLAIMS",  "⭐ 持續失業金週頻",   "萬",  0,  True,  "失業惡化",          "就業改善"),
+                    ("COPPER",       "銅博士月漲跌",        "%",   1,  False, "全球景氣轉熱",      "全球景氣轉冷"),
+                    ("CONSUMER_CONF","消費者信心",          "",    1,  False, "消費信心強",        "消費信心弱"),
+                    ("JOBLESS",      "初領失業金",          "萬",  1,  True,  "裁員壓力升溫",      "裁員壓力降溫"),
+                    ("M2",           "M2 YoY",              "%",   1,  False, "貨幣供給寬鬆",      "貨幣供給緊縮"),
+                    ("M2_WEEKLY",    "⭐ M2 週頻 YoY",      "%",   2,  False, "貨幣供給寬鬆",      "貨幣供給緊縮"),
+                    ("FED_BS",       "Fed 資產負債表 YoY",  "%",   2,  False, "QE 擴表",           "QT 縮表"),
+                    ("DXY",          "美元指數",            "",    2,  True,  "美元走強（外幣壓力）","美元走弱（外幣受益）"),
+                    ("PERMIT_HOUSING","⭐ 建照核發",         "千",  0,  False, "房市領先強",        "房市領先弱"),
+                ]
+                _zs_rows = []
+                for _zk, _zname, _zunit, _zdec, _zhigh_bad, _z_pos_phrase, _z_neg_phrase in _zs_indicators:
+                    _zd = ind.get(_zk) or {}
+                    _zv = _zd.get("value")
+                    _zs_raw = _zd.get("series")
+                    # 預設行：資料不足時佔位（不參與 |Z| 排序，會 sink 到表尾）
+                    if _zv is None:
                         _zs_rows.append({
-                            "_abs": _abs_z,
-                            "指標": _zname,
-                            "當前值": _val_s,
-                            "白話判讀": _verdict,
+                            "_abs": -1, "指標": _zname, "當前值": "—",
+                            "白話判讀": "⬜ 資料不足，待補",
                         })
-                    if _zs_rows:
-                        # |Z| DESC，資料不足（_abs=-1）一律沉底
-                        _zs_rows.sort(key=lambda r: r["_abs"], reverse=True)
-                        for r in _zs_rows:
-                            r.pop("_abs", None)
-                        _zs_df = _pd_zs.DataFrame(_zs_rows)
-                        st.dataframe(_zs_df, use_container_width=True, hide_index=True,
-                                     column_config={
-                                         "指標":     st.column_config.TextColumn(width="small"),
-                                         "當前值":   st.column_config.TextColumn(width="small"),
-                                         "白話判讀": st.column_config.TextColumn(width="large"),
-                                     })
+                        continue
+                    try:
+                        _zv_f = float(_zv)
+                    except (TypeError, ValueError):
+                        _zs_rows.append({
+                            "_abs": -1, "指標": _zname, "當前值": str(_zv)[:10],
+                            "白話判讀": "⬜ 數值格式異常",
+                        })
+                        continue
+                    _z_score = None
+                    if _zs_raw is not None:
+                        try:
+                            _zser = (_zs_raw if isinstance(_zs_raw, _pd_zs.Series)
+                                     else _pd_zs.Series(_zs_raw)).dropna()
+                            if len(_zser) >= 10:
+                                _zmu, _zsig = float(_zser.mean()), float(_zser.std())
+                                if _zsig > 0 and not (_zsig != _zsig):  # NaN guard
+                                    _z_cand = (_zv_f - _zmu) / _zsig
+                                    if _z_cand == _z_cand:  # NaN guard
+                                        _z_score = _z_cand
+                        except Exception:
+                            pass  # smoke-allow-pass
+                    _unit_s = f" {_zunit}" if _zunit else ""
+                    _val_s  = f"{_zv_f:.{_zdec}f}{_unit_s}"
+                    # 燈號 + 白話
+                    if _z_score is None:
+                        _verdict = "⬜ 樣本不足，無法判讀"
+                        _abs_z = -1
+                    else:
+                        _abs_z = abs(_z_score)
+                        _phrase = _z_pos_phrase if _z_score > 0 else _z_neg_phrase
+                        if _abs_z >= 2:
+                            _icon = "🔴 極端"
+                        elif _abs_z >= 1.5:
+                            _icon = "🟠 警示"
+                        elif _abs_z >= 1:
+                            _icon = "🟡 關注"
+                        else:
+                            _icon = "🟢 正常"
+                        _verdict = f"{_icon}（{_phrase}，Z={_z_score:+.2f}）"
+                    _zs_rows.append({
+                        "_abs": _abs_z,
+                        "指標": _zname,
+                        "當前值": _val_s,
+                        "白話判讀": _verdict,
+                    })
+                if _zs_rows:
+                    # |Z| DESC，資料不足（_abs=-1）一律沉底
+                    _zs_rows.sort(key=lambda r: r["_abs"], reverse=True)
+                    for r in _zs_rows:
+                        r.pop("_abs", None)
+                    _zs_df = _pd_zs.DataFrame(_zs_rows)
+                    st.dataframe(_zs_df, use_container_width=True, hide_index=True,
+                                 column_config={
+                                     "指標":     st.column_config.TextColumn(width="small"),
+                                     "當前值":   st.column_config.TextColumn(width="small"),
+                                     "白話判讀": st.column_config.TextColumn(width="large"),
+                                 })
 
-            # ══════════════════════════════════════════════════
+        # ══════════════════════════════════════════════════
             # L3 情境判斷卡（Logic A / B）— L3 only
             # ══════════════════════════════════════════════════
             if _show_l3:
@@ -1720,11 +1750,16 @@ def render_macro_tab() -> None:
             if not _show_l2_plus:
                 pass  # L1 只看 Gauge + 清單，不繼續渲染下方 L3 內容
 
+
+            # ══════════════════════════════════════════════════════════
+            # v19.134 — 🎯 短線雷達 桶(物理重排,連續區塊)
+            # ══════════════════════════════════════════════════════════
+            st.divider()
+            st.markdown("## 🎯 短線雷達")
+            st.caption("即時 risk-off ｜ 10 燈雷達 + 流動性壓力預警")
+
             # ── v19.20 ⚡ 短線風險雷達（10 燈 1-day 急殺早期警報）──
             st.divider()
-            # ══ v19.129 — 🎯 短線雷達 桶 ══
-            st.markdown("### 🎯 短線雷達")
-            st.caption("10 燈 1-day 動量/情緒/位階 — 日級急殺確認")
             st.markdown("### ④ ⚡ 短線風險雷達（24H Risk-Off Velocity Radar ｜ 日級急殺確認）")
             st.caption("10 個 1-day 動量／情緒／位階訊號 — 補拐點偵測中心（月～季級慢）之短缺，"
                        "捕捉 1-day 急殺前的早期警報："
@@ -1823,11 +1858,348 @@ def render_macro_tab() -> None:
                            "｜v19.133 卡片底部 sparkline 含指標特定 threshold 線")
 
 
+
+            # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
+            def _load_liquidity_factors() -> None:
+                with st.spinner("抓取 FRED / DefiLlama / Yahoo 流動性因子（約 10–30 秒）..."):
+                    try:
+                        from services.liquidity_engine import (
+                            compute_liquidity_score, fetch_liquidity_factors)
+                        _f = fetch_liquidity_factors(FRED_KEY)
+                        st.session_state.liquidity_factors = _f
+                        st.session_state.liquidity_score = compute_liquidity_score(_f)
+                    except Exception as _le:
+                        st.session_state.liquidity_factors = {}
+                        st.session_state.liquidity_score = None
+                        st.error(f"流動性因子載入失敗：{_le}")
+
+            _liq_score = st.session_state.get("liquidity_score")
+            _liq_facs  = st.session_state.get("liquidity_factors") or {}
+            if _show_l3 and not _liq_score:
+                st.caption("🌊 **流動性壓力預警引擎**（深水區 4 因子）為進階觀察，"
+                           "獨立抓取以免拖慢總經主載入。")
+                if st.button("🌊 載入流動性壓力預警引擎", key="btn_load_liquidity"):
+                    _load_liquidity_factors()
+                    st.rerun()
+            if _liq_score and _show_l3:
+                with st.expander("⑤ 🌊 流動性壓力預警引擎（深水區 4 因子 ｜ lead SPX 1-3 週）", expanded=False):
+                    from ui.components.macro_card import make_sparkline as _mk_sl2
+                    from services.liquidity_engine import liquidity_verdict
+                    if st.button("🔄 重新抓取流動性因子", key="btn_reload_liquidity"):
+                        _load_liquidity_factors()
+                        st.rerun()
+                    st.caption("⚠️ 進階觀察｜XCCY 為代理指標、權重未經真值校準，僅供方向性參考")
+                    st.info(liquidity_verdict(_liq_score, _liq_facs))
+                    # v18.255 stash 給 AI 白話總體檢
+                    try:
+                        _liq_top_contrib = []
+                        for _b in (_liq_score.get("breakdown") or [])[:3]:
+                            _liq_top_contrib.append({
+                                "name": str(_b.get("name", ""))[:20],
+                                "contrib": float(_b.get("contrib", 0) or 0),
+                            })
+                        st.session_state["_macro_liquidity"] = {
+                            "value": float(_liq_score.get("value", 0) or 0),
+                            "tier": str(_liq_score.get("tier", "—")),
+                            "signal": str(_liq_score.get("signal", "")),
+                            "verdict": liquidity_verdict(_liq_score, _liq_facs),
+                            "top_contrib": _liq_top_contrib,
+                        }
+                    except Exception:
+                        pass
+
+                    # ── 壓力分數 + 分級 + 逐因子貢獻 ──────────────────
+                    _cs_l, _cs_r = st.columns([1, 2])
+                    with _cs_l:
+                        st.metric("流動性壓力分數", f"{_liq_score['value']:+.2f}",
+                                  _liq_score["tier"])
+                        st.markdown(
+                            f"<div style='font-size:1.3rem'>{_liq_score['signal']} "
+                            f"<b style='color:{_liq_score['color']}'>"
+                            f"{_liq_score['tier']}</b></div>",
+                            unsafe_allow_html=True)
+                    with _cs_r:
+                        st.markdown("**逐因子貢獻**（紅=推升壓力／綠=壓低）")
+                        _bd = _liq_score.get("breakdown") or []
+                        if _bd:
+                            _bfig = go.Figure(go.Bar(
+                                x=[b["name"][:10] for b in _bd],
+                                y=[b["contrib"] for b in _bd],
+                                marker_color=[MATERIAL_RED if b["contrib"] > 0
+                                              else MATERIAL_GREEN for b in _bd],
+                                hovertemplate="%{x}: 貢獻 %{y:+.3f}<extra></extra>"))
+                            _bfig.add_hline(y=0, line_color="#555", line_width=1)
+                            _bfig.update_layout(
+                                height=170, margin=dict(t=4, b=40, l=4, r=4),
+                                paper_bgcolor="rgba(0,0,0,0)",
+                                plot_bgcolor="rgba(0,0,0,0)", showlegend=False,
+                                xaxis=dict(showgrid=False, tickangle=-30,
+                                           tickfont=dict(size=9), fixedrange=True),
+                                yaxis=dict(showgrid=False, zeroline=False,
+                                           fixedrange=True))
+                            st.plotly_chart(_bfig, use_container_width=True,
+                                            config={"displayModeBar": False})
+
+                    # ── 合成壓力分數歷史趨勢（警戒線 1／危機線 2）──────
+                    _scs = _safe_series(_liq_score.get("score_series"))
+                    if _scs is not None and len(_scs) >= 2:
+                        st.markdown("**📉 流動性壓力分數趨勢**")
+                        _trend = _mk_sl2(_scs, threshold_warn=1.0,
+                                         threshold_crit=2.0, high_is_bad=True,
+                                         lookback=120, height=160)
+                        if _trend is not None:
+                            st.plotly_chart(_trend, use_container_width=True,
+                                            config={"displayModeBar": False})
+                    st.divider()
+
+                    # ── 三個 risk-off 壓力因子卡 ─────────────────────
+                    _fcols = st.columns(3)
+                    for _col, _fk in zip(
+                            _fcols, ("XCCY_PROXY", "CARRY_UNWIND", "MOVE_VIX")):
+                        _fe = _liq_facs.get(_fk)
+                        with _col:
+                            if not _fe:
+                                st.caption(f"（{_fk} 無資料）")
+                                continue
+                            _fz = _fe.get("zscore")
+                            st.markdown(f"**{_fe['signal']} {_fe['name']}**")
+                            st.markdown(
+                                f"值 `{_fe['value']}{_fe.get('unit', '')}`　"
+                                f"Z `{'—' if _fz is None else f'{_fz:+.2f}'}`")
+                            _fs = _safe_series(_fe.get("series"))
+                            _fsl = (_mk_sl2(_fs, high_is_bad=True, lookback=60,
+                                            height=110)
+                                    if _fs is not None else None)
+                            if _fsl is not None:
+                                st.plotly_chart(_fsl, use_container_width=True,
+                                                config={"displayModeBar": False})
+                            st.caption(_fe.get("desc", ""))
+                    st.divider()
+
+                    # ── SSR 鏈上子彈水位（獨立，不計入壓力分數）──────
+                    _ssr = _liq_facs.get("SSR")
+                    if _ssr:
+                        _ssr_l, _ssr_r = st.columns([1.5, 1])
+                        with _ssr_l:
+                            st.markdown(f"**🔫 {_ssr['name']}**")
+                            _ssr_s = _safe_series(_ssr.get("series"))
+                            _ssr_fig = (_mk_sl2(_ssr_s, high_is_bad=False,
+                                                lookback=60, height=140)
+                                        if _ssr_s is not None else None)
+                            if _ssr_fig is not None:
+                                st.plotly_chart(_ssr_fig, use_container_width=True,
+                                                config={"displayModeBar": False})
+                            else:
+                                st.caption("📡 資料載入中或筆數不足…")
+                        with _ssr_r:
+                            _sz = _ssr.get("zscore")
+                            st.markdown(
+                                "**怎麼看？**　SSR = BTC市值 ÷ 穩定幣市值，"
+                                "**獨立於壓力分數**（不計入）。\n\n"
+                                f"**目前讀數**　{_ssr['signal']} SSR "
+                                f"`{_ssr['value']}`，Z "
+                                f"`{'—' if _sz is None else f'{_sz:+.2f}'}`\n\n"
+                                "SSR 低(Z<0)=鏈上法幣子彈多=潛在買盤強；高=子彈耗盡")
+
+
+
+            # ══════════════════════════════════════════════════════════
+            # v19.134 — ⚠️ 拐點警報 桶(物理重排,連續區塊)
+            # ══════════════════════════════════════════════════════════
+            st.divider()
+            st.markdown("## ⚠️ 拐點警報")
+            st.caption("領先警報 3-9 月 ｜ 全域導航塔 + 拐點偵測中心")
+
+            # ══════════════════════════════════════════════════
+            # V5 全域導航塔（War Room）── 三圓形氣象儀表
+            # ══════════════════════════════════════════════════
+            st.markdown("### ① 🎯 全域導航塔（戰情室三儀表：薩姆 + SLOOS + 廣度）")
+            _sahm_d  = ind.get("SAHM")  or {}
+            _sloos_d = ind.get("SLOOS") or {}
+            _adl_d   = ind.get("ADL")   or {}
+            _sahm_v  = float(_sahm_d.get("value")  or 0)
+            _sloos_v = float(_sloos_d.get("value") or 0)
+            _adl_v   = float(_adl_d.get("value")   or 0)
+
+            _gg1, _gg2, _gg3 = st.columns(3)
+
+            def _make_gauge(val, title, suffix, rng, thresholds, danger_above=True):
+                """thresholds: [(limit, color_hex), ...] 從低到高"""
+                steps = []
+                prev = rng[0]
+                for lim, col in thresholds:
+                    steps.append({"range": [prev, lim], "color": col})
+                    prev = lim
+                steps.append({"range": [prev, rng[1]], "color": thresholds[-1][1]})
+                # 指針顏色：超過最後閾值的 limit 為警報色
+                danger_lim = thresholds[-1][0]
+                needle_c = (MATERIAL_RED if (danger_above and val >= danger_lim)
+                            else (MATERIAL_GREEN if (not danger_above and val <= danger_lim)
+                            else MATERIAL_ORANGE))
+                f = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=val,
+                    title={"text": title, "font": {"size": 13, "color": "#aaa"}},
+                    number={"suffix": suffix, "font": {"size": 22, "color": "#e6edf3"},
+                            "valueformat": ".2f"},
+                    gauge={"axis": {"range": rng, "tickcolor": "#444",
+                                    "tickfont": {"size": 9, "color": "#666"}},
+                           "bar":  {"color": needle_c, "thickness": 0.25},
+                           "bgcolor": "#161b22",
+                           "bordercolor": "#30363d",
+                           "steps": steps,
+                           "threshold": {"line": {"color": MATERIAL_RED, "width": 3},
+                                         "thickness": 0.8, "value": danger_lim}}))
+                f.update_layout(paper_bgcolor="#0e1117", font_color="#e6edf3",
+                                height=200, margin=dict(t=40, b=5, l=15, r=15))
+                return f
+
+            with _gg1:
+                st.plotly_chart(_make_gauge(
+                    _sahm_v, "薩姆規則<br>衰退機率", "pp", [0, 1.0],
+                    [(0.3, "#0a2a0a"), (0.5, "#2a1f00"), (1.0, "#2a0a0a")],
+                    danger_above=True), use_container_width=True)
+                _sahm_sig = ("🔴 **衰退觸發** ≥0.5" if _sahm_v >= 0.5
+                             else "🟡 警戒區 ≥0.3" if _sahm_v >= 0.3
+                             else "🟢 安全 <0.3")
+                st.markdown(f"<div style='text-align:center;font-size:12px'>{_sahm_sig}</div>",
+                            unsafe_allow_html=True)
+                if not _sahm_d:
+                    st.caption("⚠️ FRED SAHMREALTIME 未取得（API Key 或網路）")
+                # T2: Tooltip
+                with st.expander("ℹ️ 薩姆規則說明", expanded=False):
+                    st.markdown("**薩姆規則（Sahm Rule）**：當失業率的3個月滾動平均比過去12個月最低點高出 ≥0.5 百分點，代表美國進入衰退。⚠️ 新手白話：儀表板紅色時，代表景氣已經轉壞，建議降低高風險基金比重。")
+
+            with _gg2:
+                st.plotly_chart(_make_gauge(
+                    _sloos_v, "SLOOS 放貸寬鬆度<br>銀行信貸標準", "%", [-30, 60],
+                    [(-5, "#0a2a0a"), (20, "#2a1f00"), (60, "#2a0a0a")],
+                    danger_above=True), use_container_width=True)
+                _sloos_sig = ("🔴 **銀行緊縮** >20%" if _sloos_v > 20
+                              else "🟡 中性偏緊 >0%" if _sloos_v > 0
+                              else "🟢 信貸寬鬆 <0%")
+                st.markdown(f"<div style='text-align:center;font-size:12px'>{_sloos_sig}</div>",
+                            unsafe_allow_html=True)
+                if not _sloos_d:
+                    st.caption("⚠️ FRED DRTSCILM 未取得")
+                # T2: Tooltip
+                with st.expander("ℹ️ SLOOS 說明", expanded=False):
+                    st.markdown("**SLOOS（銀行放貸標準）**：美聯儲季度調查，正值=銀行收緊放貸（壞），負值=銀行放寬放貸（好）。⚠️ 新手白話：儀表板紅色時，代表銀行不願貸款，企業融資困難，景氣降溫訊號。")
+
+            with _gg3:
+                # ADL = RSP/SPY 市場寬度 (% MoM change, negative = narrowing breadth = bad)
+                st.plotly_chart(_make_gauge(
+                    _adl_v, "市場健康度<br>RSP/SPY 廣度", "%", [-10, 10],
+                    [(-5, "#2a0a0a"), (0, "#2a1f00"), (5, "#0a2a0a")],
+                    danger_above=False), use_container_width=True)
+                _adl_sig = ("🟢 市場廣度健康" if _adl_v > 2
+                            else "🔴 **廣度收窄** 虛假繁榮" if _adl_v < -2
+                            else "🟡 市場廣度持平")
+                st.markdown(f"<div style='text-align:center;font-size:12px'>{_adl_sig}</div>",
+                            unsafe_allow_html=True)
+                # T2: Tooltip
+                with st.expander("ℹ️ 市場廣度說明", expanded=False):
+                    st.markdown("**RSP/SPY 廣度（市場廣度）**：RSP = 等權重標普500，SPY = 市值加權。RSP/SPY 比值上升 = 中小型股參與行情（健康），下降 = 只有大型股撐盤（虛胖）。⚠️ 新手白話：紅色時代表漲幅集中少數大股，市場不穩健，小心追高。")
+
+            # ── 持倉紅綠燈列表（War Room Middle）──────────────────────────
+            _pf_all = st.session_state.get("portfolio_funds", [])
+            _pf_loaded = [f for f in _pf_all if f.get("loaded")]
+            if _pf_loaded:
+                st.markdown("#### 🚦 持倉紅綠燈")
+                _tl_html = ""
+                for _pf in _pf_loaded:
+                    _pf_code  = _pf.get("code","?")
+                    _pf_name  = _pf.get("fund_name") or _pf_code
+                    _pf_m     = _pf.get("metrics") or _pf.get("m") or {}
+                    _pf_divs  = _pf.get("dividends") or []
+                    _pf_nav   = float(_pf_m.get("nav") or 0)
+                    _pf_b1    = float(_pf_m.get("buy1") or 0)   # v18.6: 年高-1σ（小跌）
+                    _pf_b2    = float(_pf_m.get("buy2") or 0)   # 年高-2σ（急跌）
+                    _pf_b3    = float(_pf_m.get("buy3") or 0)   # 年高-3σ（大跌）
+                    _pf_s1    = float(_pf_m.get("sell1") or 0)  # 年低+1σ
+                    _pf_bbd   = float(_pf_m.get("bb_lower") or 0)
+                    _pf_bbu   = float(_pf_m.get("bb_upper") or 0)
+                    _pf_ret1y = float(_pf_m.get("ret_1y") or 0)
+                    _pf_adr   = float(_pf_m.get("annual_div_rate") or 0)
+                    _pf_core  = "🛡️ 核" if _pf.get("is_core") else "⚡ 衛"
+                    # 燈號判定（v18.6: σ + 布林雙確認 升級）
+                    _tl_icon, _tl_bg, _tl_bc, _tl_reason = "🟢", "#061a06", MATERIAL_GREEN, "淨值穩定，含息報酬正常"
+                    # 雙確認買 = σ 買點觸發 + 布林下軌觸碰
+                    _double_buy = (_pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1
+                                   and _pf_bbd > 0 and _pf_nav <= _pf_bbd)
+                    _double_sell = (_pf_s1 > 0 and _pf_nav > 0 and _pf_nav >= _pf_s1
+                                    and _pf_bbu > 0 and _pf_nav >= _pf_bbu)
+                    if _pf_adr > 0 and _pf_ret1y < _pf_adr:
+                        _tl_icon, _tl_bg, _tl_bc = "🔴", "#1a0606", MATERIAL_RED
+                        _tl_reason = f"吃本金警示：含息報酬 {_pf_ret1y:.1f}% < 配息率 {_pf_adr:.1f}%"
+                    elif _double_buy:
+                        _tl_icon, _tl_bg, _tl_bc = "🟢🟢", "#0a3a1a", "#00e676"
+                        _tl_reason = f"σ+布林雙確認買 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f}) & 布林下軌"
+                    elif _double_sell:
+                        _tl_icon, _tl_bg, _tl_bc = "🔔🔔", "#3a0a0a", MATERIAL_RED
+                        _tl_reason = f"σ+布林雙確認賣 NAV {_pf_nav:.4f} ≥ 賣1({_pf_s1:.4f}) & 布林上軌"
+                    elif _pf_b3 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b3:
+                        _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a0a2a", "#9c27b0"
+                        _tl_reason = f"大跌大買訊號 NAV {_pf_nav:.4f} ≤ 買3({_pf_b3:.4f})"
+                    elif _pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1:
+                        _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a1500", MATERIAL_ORANGE
+                        _tl_reason = f"小跌小買訊號 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f})"
+                    elif not _pf_m:
+                        _tl_icon, _tl_bg, _tl_bc = "⬜", "#161b22", "#555"
+                        _tl_reason = "資料尚未載入"
+                    _tl_html += (
+                        f"<div style='background:{_tl_bg};border:1px solid {_tl_bc};"
+                        f"border-radius:8px;padding:8px 14px;margin:4px 0;"
+                        f"display:flex;align-items:center;gap:14px'>"
+                        f"<span style='font-size:20px'>{_tl_icon}</span>"
+                        f"<span style='color:#64b5f6;font-size:11px;width:32px'>{_pf_core}</span>"
+                        f"<span style='color:#ccc;font-size:12px;flex:1'>"
+                        f"<b>{_pf_name[:20]}</b></span>"
+                        f"<span style='color:{_tl_bc};font-size:11px'>{_tl_reason}</span>"
+                        f"</div>"
+                    )
+                st.markdown(_tl_html, unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    "<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;"
+                    "padding:10px 16px;color:#555;font-size:12px;text-align:center'>"
+                    "🚦 持倉紅綠燈：請先至「📊 組合基金」Tab 新增並載入基金，即可在此顯示即時燈號</div>",
+                    unsafe_allow_html=True)
+
+            # ── AI 每日一句結論（v15.2 移除：使用者反饋過於簡略）──
+            st.divider()
+
+            # ══════════════════════════════════════════════════
+            # L1 新手待辦清單（所有等級均顯示）
+            # ══════════════════════════════════════════════════
+            _w_icon2  = phase.get("weather_icon", "⛅")
+            _w_label2 = phase.get("weather_label", "多雲")
+            _l1_stock = alloc.get("股票", 50)
+            _l1_bond  = alloc.get("債券", 30)
+            _l1_cash  = alloc.get("現金", 20)
+            _l1_checks = [
+                f"確認核心部位是否符合 AI 建議：股 {_l1_stock}% / 債 {_l1_bond}% / 現金 {_l1_cash}%",
+            ]
+            if _sahm_v >= 0.5:
+                _l1_checks.append(f"⚠️ **薩姆衰退警報已觸發**（{_sahm_v:.2f}pp）：暫停衛星加碼，保留防守型部位")
+            if _sloos_v > 20:
+                _l1_checks.append(f"📊 **銀行緊縮偵測**（SLOOS {_sloos_v:.1f}%）：高收益債基金降至 10% 以下")
+            if _adl_v < -2:
+                _l1_checks.append(f"🌍 **市場廣度警示**（RSP/SPY {_adl_v:.2f}%）：減少主題/集中型基金")
+            _l1_checks.append("定期定額不停扣（除非景氣位階進入「高峰」且 VIX < 15）")
+            _l1_checks.append(f"本週核心原則：景氣「{ph}」，{(advice or '均衡配置，嚴守紀律')[:40]}。")
+            _l1_md = "\n".join(f"- [ ] {c}" for c in _l1_checks)
+            st.markdown(
+                f"<div style='background:#0d1117;border:1px solid #30363d;border-radius:12px;"
+                f"padding:16px 20px;margin:8px 0'>"
+                f"<div style='color:#e6edf3;font-weight:700;margin-bottom:10px'>"
+                f"📋 本週操作清單（{_w_label2} {_w_icon2}）</div></div>",
+                unsafe_allow_html=True)
+            st.markdown(_l1_md)
+
+        # ══════════════════════════════════════════════════
             # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
             st.divider()
-            # ══ v19.129 — ⚠️ 拐點警報(細節) 桶 ══
-            st.markdown("### ⚠️ 拐點警報(細節)")
-            st.caption("拐點偵測中心 — 熊市預警主面板 ｜ 月級結構訊號")
             st.markdown("### ② 🎯 拐點偵測中心（熊市預警主面板 ｜ 月級結構訊號）")
             st.caption("集中所有景氣翻轉訊號：製造業新訂單－庫存擴散 ｜ 10Y-2Y 殖利率倒掛翻正 ｜ "
                        "HY 信用利差 ｜ 薩姆規則 ｜ CFNAI 領先指標 ｜ 歷史回測 ｜ 變數重要性")
@@ -2110,380 +2482,14 @@ def render_macro_tab() -> None:
 
 
 
-            # ══ v19.129 — 🌳 長期座標 桶 ══
-            st.markdown("### 🌳 長期座標")
-            st.caption("MK 美林景氣時鐘 — 4 階段 ｜ 結構性決策定盤")
-            # ── MK 景氣時鐘 ＆ 資產輪動（v18.8）── L2/L3 皆顯示
+
+            # ══════════════════════════════════════════════════════════
+            # v19.134 — 📋 即時訊號 + 決策矩陣 桶(物理重排,連續區塊)
+            # ══════════════════════════════════════════════════════════
             st.divider()
-            render_mk_clock_section(ind)
+            st.markdown("## 📋 即時訊號 + 決策矩陣")
+            st.caption("跨時域殿後 ｜ verdict 路徑 + 逐檔行動建議")
 
-
-            # ── 宏觀風險溫度計 + 景氣循環羅盤 + AI（僅 L3）──────────────
-            import pandas as _pd_mac
-            def _safe_series(s):
-                if s is None: return None
-                try:
-                    if not isinstance(s, _pd_mac.Series): s = _pd_mac.Series(s)
-                    return s.dropna().tail(60)
-                except Exception: return None
-
-            # ══ v19.129 — 🎯 短線雷達(深水區) 桶 ══
-            st.markdown("### 🎯 短線雷達(深水區)")
-            st.caption("流動性壓力預警 — 4 因子 ｜ lead SPX 1-3 週")
-
-            # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
-            def _load_liquidity_factors() -> None:
-                with st.spinner("抓取 FRED / DefiLlama / Yahoo 流動性因子（約 10–30 秒）..."):
-                    try:
-                        from services.liquidity_engine import (
-                            compute_liquidity_score, fetch_liquidity_factors)
-                        _f = fetch_liquidity_factors(FRED_KEY)
-                        st.session_state.liquidity_factors = _f
-                        st.session_state.liquidity_score = compute_liquidity_score(_f)
-                    except Exception as _le:
-                        st.session_state.liquidity_factors = {}
-                        st.session_state.liquidity_score = None
-                        st.error(f"流動性因子載入失敗：{_le}")
-
-            _liq_score = st.session_state.get("liquidity_score")
-            _liq_facs  = st.session_state.get("liquidity_factors") or {}
-            if _show_l3 and not _liq_score:
-                st.caption("🌊 **流動性壓力預警引擎**（深水區 4 因子）為進階觀察，"
-                           "獨立抓取以免拖慢總經主載入。")
-                if st.button("🌊 載入流動性壓力預警引擎", key="btn_load_liquidity"):
-                    _load_liquidity_factors()
-                    st.rerun()
-            if _liq_score and _show_l3:
-                with st.expander("⑤ 🌊 流動性壓力預警引擎（深水區 4 因子 ｜ lead SPX 1-3 週）", expanded=False):
-                    from ui.components.macro_card import make_sparkline as _mk_sl2
-                    from services.liquidity_engine import liquidity_verdict
-                    if st.button("🔄 重新抓取流動性因子", key="btn_reload_liquidity"):
-                        _load_liquidity_factors()
-                        st.rerun()
-                    st.caption("⚠️ 進階觀察｜XCCY 為代理指標、權重未經真值校準，僅供方向性參考")
-                    st.info(liquidity_verdict(_liq_score, _liq_facs))
-                    # v18.255 stash 給 AI 白話總體檢
-                    try:
-                        _liq_top_contrib = []
-                        for _b in (_liq_score.get("breakdown") or [])[:3]:
-                            _liq_top_contrib.append({
-                                "name": str(_b.get("name", ""))[:20],
-                                "contrib": float(_b.get("contrib", 0) or 0),
-                            })
-                        st.session_state["_macro_liquidity"] = {
-                            "value": float(_liq_score.get("value", 0) or 0),
-                            "tier": str(_liq_score.get("tier", "—")),
-                            "signal": str(_liq_score.get("signal", "")),
-                            "verdict": liquidity_verdict(_liq_score, _liq_facs),
-                            "top_contrib": _liq_top_contrib,
-                        }
-                    except Exception:
-                        pass
-
-                    # ── 壓力分數 + 分級 + 逐因子貢獻 ──────────────────
-                    _cs_l, _cs_r = st.columns([1, 2])
-                    with _cs_l:
-                        st.metric("流動性壓力分數", f"{_liq_score['value']:+.2f}",
-                                  _liq_score["tier"])
-                        st.markdown(
-                            f"<div style='font-size:1.3rem'>{_liq_score['signal']} "
-                            f"<b style='color:{_liq_score['color']}'>"
-                            f"{_liq_score['tier']}</b></div>",
-                            unsafe_allow_html=True)
-                    with _cs_r:
-                        st.markdown("**逐因子貢獻**（紅=推升壓力／綠=壓低）")
-                        _bd = _liq_score.get("breakdown") or []
-                        if _bd:
-                            _bfig = go.Figure(go.Bar(
-                                x=[b["name"][:10] for b in _bd],
-                                y=[b["contrib"] for b in _bd],
-                                marker_color=[MATERIAL_RED if b["contrib"] > 0
-                                              else MATERIAL_GREEN for b in _bd],
-                                hovertemplate="%{x}: 貢獻 %{y:+.3f}<extra></extra>"))
-                            _bfig.add_hline(y=0, line_color="#555", line_width=1)
-                            _bfig.update_layout(
-                                height=170, margin=dict(t=4, b=40, l=4, r=4),
-                                paper_bgcolor="rgba(0,0,0,0)",
-                                plot_bgcolor="rgba(0,0,0,0)", showlegend=False,
-                                xaxis=dict(showgrid=False, tickangle=-30,
-                                           tickfont=dict(size=9), fixedrange=True),
-                                yaxis=dict(showgrid=False, zeroline=False,
-                                           fixedrange=True))
-                            st.plotly_chart(_bfig, use_container_width=True,
-                                            config={"displayModeBar": False})
-
-                    # ── 合成壓力分數歷史趨勢（警戒線 1／危機線 2）──────
-                    _scs = _safe_series(_liq_score.get("score_series"))
-                    if _scs is not None and len(_scs) >= 2:
-                        st.markdown("**📉 流動性壓力分數趨勢**")
-                        _trend = _mk_sl2(_scs, threshold_warn=1.0,
-                                         threshold_crit=2.0, high_is_bad=True,
-                                         lookback=120, height=160)
-                        if _trend is not None:
-                            st.plotly_chart(_trend, use_container_width=True,
-                                            config={"displayModeBar": False})
-                    st.divider()
-
-                    # ── 三個 risk-off 壓力因子卡 ─────────────────────
-                    _fcols = st.columns(3)
-                    for _col, _fk in zip(
-                            _fcols, ("XCCY_PROXY", "CARRY_UNWIND", "MOVE_VIX")):
-                        _fe = _liq_facs.get(_fk)
-                        with _col:
-                            if not _fe:
-                                st.caption(f"（{_fk} 無資料）")
-                                continue
-                            _fz = _fe.get("zscore")
-                            st.markdown(f"**{_fe['signal']} {_fe['name']}**")
-                            st.markdown(
-                                f"值 `{_fe['value']}{_fe.get('unit', '')}`　"
-                                f"Z `{'—' if _fz is None else f'{_fz:+.2f}'}`")
-                            _fs = _safe_series(_fe.get("series"))
-                            _fsl = (_mk_sl2(_fs, high_is_bad=True, lookback=60,
-                                            height=110)
-                                    if _fs is not None else None)
-                            if _fsl is not None:
-                                st.plotly_chart(_fsl, use_container_width=True,
-                                                config={"displayModeBar": False})
-                            st.caption(_fe.get("desc", ""))
-                    st.divider()
-
-                    # ── SSR 鏈上子彈水位（獨立，不計入壓力分數）──────
-                    _ssr = _liq_facs.get("SSR")
-                    if _ssr:
-                        _ssr_l, _ssr_r = st.columns([1.5, 1])
-                        with _ssr_l:
-                            st.markdown(f"**🔫 {_ssr['name']}**")
-                            _ssr_s = _safe_series(_ssr.get("series"))
-                            _ssr_fig = (_mk_sl2(_ssr_s, high_is_bad=False,
-                                                lookback=60, height=140)
-                                        if _ssr_s is not None else None)
-                            if _ssr_fig is not None:
-                                st.plotly_chart(_ssr_fig, use_container_width=True,
-                                                config={"displayModeBar": False})
-                            else:
-                                st.caption("📡 資料載入中或筆數不足…")
-                        with _ssr_r:
-                            _sz = _ssr.get("zscore")
-                            st.markdown(
-                                "**怎麼看？**　SSR = BTC市值 ÷ 穩定幣市值，"
-                                "**獨立於壓力分數**（不計入）。\n\n"
-                                f"**目前讀數**　{_ssr['signal']} SSR "
-                                f"`{_ssr['value']}`，Z "
-                                f"`{'—' if _sz is None else f'{_sz:+.2f}'}`\n\n"
-                                "SSR 低(Z<0)=鏈上法幣子彈多=潛在買盤強；高=子彈耗盡")
-
-
-            if _show_l3:
-                _pf_def = [f for f in st.session_state.get("portfolio_funds", []) if f.get("loaded")]
-                if _pf_def:
-                    # ══ v19.129 — 🌳 長期座標(資本) 桶 ══
-                    st.markdown("### 🌳 長期座標(資本)")
-                    st.caption("資本防線 — 含息報酬 vs 配息率")
-                    st.markdown("#### 💰 資本防線 — 含息報酬 vs 配息率")
-                    _def_names = [f.get("fund_name") or f.get("code","?") for f in _pf_def]
-                    _def_tr1y  = [float((f.get("metrics") or f.get("m") or {}).get("ret_1y") or 0) for f in _pf_def]
-                    _def_adr   = [float((f.get("metrics") or f.get("m") or {}).get("annual_div_rate") or 0) for f in _pf_def]
-                    _def_colors = [MATERIAL_RED if tr < adr else MATERIAL_GREEN
-                                   for tr, adr in zip(_def_tr1y, _def_adr)]
-                    _def_fig = go.Figure()
-                    _def_fig.add_trace(go.Bar(
-                        x=_def_names, y=_def_tr1y,
-                        marker_color=_def_colors,
-                        text=[f"{v:.1f}%" for v in _def_tr1y],
-                        textposition="outside",
-                        name="含息報酬率 TR1Y",
-                        customdata=list(zip(_def_adr, ["🚨 本金侵蝕" if tr < adr else "" for tr, adr in zip(_def_tr1y, _def_adr)])),
-                        hovertemplate="<b>%{x}</b><br>TR1Y: %{y:.1f}%<br>配息率: %{customdata[0]:.1f}%<br>%{customdata[1]}<extra></extra>",
-                    ))
-                    _def_fig.add_trace(go.Scatter(
-                        x=_def_names, y=_def_adr,
-                        mode="markers",
-                        marker=dict(symbol="line-ew", size=16, color=MATERIAL_ORANGE,
-                                    line=dict(width=3, color=MATERIAL_ORANGE)),
-                        name="配息年化率",
-                        hovertemplate="配息率: %{y:.1f}%<extra></extra>",
-                    ))
-                    _def_fig.update_layout(
-                        paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-                        font_color="#e6edf3", height=260,
-                        margin=dict(t=20, b=50, l=10, r=10),
-                        legend=dict(orientation="h", y=-0.35),
-                        xaxis=dict(tickfont=dict(size=11)),
-                        yaxis=dict(title="報酬率 (%)", ticksuffix="%"),
-                    )
-                    st.plotly_chart(_def_fig, use_container_width=True)
-                    st.caption("🟢 綠色 = TR1Y > 配息率（配息有保障）｜🔴 紅色 = TR1Y < 配息率（本金侵蝕警示）｜橙色橫線 = 配息年化率")
-                    # v18.255 stash 給 AI 白話總體檢
-                    try:
-                        _eroded = [(n, tr, adr) for n, tr, adr
-                                   in zip(_def_names, _def_tr1y, _def_adr)
-                                   if tr < adr]
-                        st.session_state["_macro_capital_line"] = {
-                            "n_funds": len(_def_names),
-                            "n_eroded": len(_eroded),
-                            "eroded_funds": [{"name": n[:20], "tr1y": float(tr),
-                                              "adr": float(adr)} for n, tr, adr in _eroded[:5]],
-                        }
-                    except Exception:
-                        pass
-
-            # ── 市場新聞（折疊）── L3 only
-            if _show_l3:
-                _news_items = st.session_state.get("news_items",[])
-                if _news_items:
-                    with st.expander(f"📰 市場新聞（{len(_news_items)} 則）", expanded=False):
-                        for _ni in _news_items[:20]:
-                            _nt = _ni.get("title","")[:90]
-                            _ns = _ni.get("source","")
-                            _nu = _ni.get("url","") or _ni.get("link","")
-                            _nd = str(_ni.get("published",""))[:16]
-                            if _nu:
-                                st.markdown(f"**[{_nt}]({_nu})** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
-                            else:
-                                st.markdown(f"**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
-
-            # ── v19.47 ⑥ 美股流動性 × 熱錢監測（user 反饋：基金 USD 計價，台股熱錢非主訊號） ──
-            # 6 指標三角：流動性 (M2/WALCL/RRP) × 信用 (HY OAS / HYG-LQD) × 情緒 (AAII)
-            st.divider()
-            # ══ v19.129 — 🌳 長期座標(美股) 桶 ══
-            st.markdown("### 🌳 長期座標(美股)")
-            st.caption("美股流動性 × 熱錢 — 三角:流動性 × 信用 × 情緒")
-            with st.expander("⑥ 💵 美股流動性 × 熱錢監測 — 三角：流動性 × 信用 × 情緒",
-                             expanded=False):
-                st.caption(
-                    "💡 **為何重要**：境外美股基金 NAV 主受 ① 美元流動性（M2/RRP/WALCL）+ "
-                    "② 信用偏好（HY/HYG-LQD）+ ③ 散戶情緒（AAII）三軸驅動。"
-                    "**FED 升降息只是源頭**，熱錢 = 流動性 + 信用 + 情緒 三者綜合結果。"
-                )
-                try:
-                    from services.us_liquidity_engine import fetch_us_liquidity_snapshot  # noqa: PLC0415
-                    _us_liq = fetch_us_liquidity_snapshot(FRED_KEY)
-
-                    # Row 1: 流動性 3 chips
-                    _r1 = st.columns(3)
-                    _row1 = [
-                        ("m2_yoy", "📊 M2 YoY", "廣義貨幣供給年增（FRED M2SL）"),
-                        ("walcl", "🏦 Fed 資產負債表", "QE/QT pace（FRED WALCL）"),
-                        ("rrp", "💧 隔夜逆回購 RRP", "流動性蓄水池（FRED RRPONTSYD）"),
-                    ]
-                    for _i, (_key, _title, _default_desc) in enumerate(_row1):
-                        with _r1[_i]:
-                            _d = _us_liq.get(_key, {})
-                            if "_err" in _d:
-                                st.metric(_title, "待取得", help=f"{_default_desc}｜❌ {_d['_err'][:50]}")
-                            else:
-                                _val = _d["value"]
-                                _unit = _d.get("unit", "")
-                                _delta = _d.get("delta")
-                                _delta_str = f"{_delta:+.2f}{_unit}" if _delta is not None else None
-                                st.metric(_title, f"{_val:+.2f}{_unit}", delta=_delta_str,
-                                          help=f"{_default_desc} ({_d.get('date','')})")
-                                st.caption(f"<span style='color:{_d.get('color','#888')}'>● {_d.get('label','')}</span>",
-                                           unsafe_allow_html=True)
-
-                    # Row 2: 信用 + 情緒 3 chips
-                    _r2 = st.columns(3)
-                    _row2 = [
-                        ("hy_oas", "⚠️ HY 信用利差", "FRED BAMLH0A0HYM2 (% OAS)"),
-                        ("hyg_lqd", "💰 HYG/LQD 比", "高收益債 vs 投等債 — 風險偏好"),
-                        ("aaii", "😱 AAII 情緒 spread", "Bull − Bear（反指標）"),
-                    ]
-                    for _i, (_key, _title, _default_desc) in enumerate(_row2):
-                        with _r2[_i]:
-                            _d = _us_liq.get(_key, {})
-                            if "_err" in _d:
-                                st.metric(_title, "待取得", help=f"{_default_desc}｜❌ {_d['_err'][:50]}")
-                            else:
-                                _val = _d["value"]
-                                _unit = _d.get("unit", "")
-                                st.metric(_title, f"{_val:+.2f}{_unit}",
-                                          help=f"{_default_desc} ({_d.get('date','')})")
-                                st.caption(f"<span style='color:{_d.get('color','#888')}'>● {_d.get('label','')}</span>",
-                                           unsafe_allow_html=True)
-
-                    # 失敗 fetcher 列表（仿 Stock v18.194 fail-trace）
-                    # v19.58：外層已是 expander → 改用原生 HTML <details> 避 StreamlitAPIException 巢狀爆
-                    _errs = {k: v["_err"] for k, v in _us_liq.items() if "_err" in v}
-                    if _errs:
-                        _err_items = "".join(
-                            f"<li><b>{_ek}</b>：<code>{str(_ev).replace('<', '&lt;')[:120]}</code></li>"
-                            for _ek, _ev in _errs.items()
-                        )
-                        st.markdown(
-                            f"<details style='margin:8px 0;background:#0d1117;border:1px solid #30363d;"
-                            f"border-radius:6px;padding:6px 12px'>"
-                            f"<summary style='cursor:pointer;color:#d29922;font-size:12px'>"
-                            f"🔍 載入失敗詳情（{len(_errs)} 項）</summary>"
-                            f"<ul style='margin:6px 0 0 0;color:#aaa;font-size:11px'>{_err_items}</ul>"
-                            f"<div style='color:#666;font-size:10px;margin-top:6px'>"
-                            f"💡 多半是 FRED key 未設 / AAII 頁面格式改版 / Yahoo timeout；非全部失敗不影響核心判讀</div>"
-                            f"</details>",
-                            unsafe_allow_html=True,
-                        )
-
-                    # v19.53 ══ 📊 資料新鮮度條 ══（traffic-light 掛「最舊指標 date 距今天數」，FRED 平日更新節奏 + 強制重抓）
-                    _us_today = pd.Timestamp.now(tz="Asia/Taipei").date()
-                    _us_dates = []
-                    for _v in _us_liq.values():
-                        _ds = _v.get("date") if isinstance(_v, dict) else None
-                        if _ds:
-                            try:
-                                _us_dates.append(pd.Timestamp(_ds).date())
-                            except Exception:
-                                pass
-                    if _us_dates:
-                        _us_cutoff = min(_us_dates)
-                        _us_days_old = (_us_today - _us_cutoff).days
-                        _us_color = "#3fb950" if _us_days_old <= 2 else ("#d29922" if _us_days_old <= 7 else "#f85149")
-                        _us_age_txt = "今日" if _us_days_old <= 0 else f"{_us_days_old} 天前"
-                    else:
-                        _us_cutoff = None
-                        _us_color = "#888"
-                        _us_age_txt = "—"
-                    _us_load_txt = pd.Timestamp.now(tz="Asia/Taipei").strftime("%m-%d %H:%M")
-                    _ucols = st.columns([5, 1])
-                    with _ucols[0]:
-                        st.markdown(
-                            f"<div style='background:#0d1117;border-left:3px solid {_us_color};"
-                            f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:8px;font-size:11px;color:#aaa'>"
-                            f"📅 最舊指標截止：<span style='color:{_us_color};font-weight:700'>{_us_cutoff or '—'}</span>"
-                            f" · <span style='color:{_us_color}'>{_us_age_txt}</span>"
-                            f"　|　🕐 本次載入：{_us_load_txt} (TW)"
-                            f"　|　📡 來源 FRED / Yahoo / AAII"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
-                    with _ucols[1]:
-                        if st.button("🔄 強制重抓", key="us_liq_force_refresh",
-                                     help="v19.57 C1：僅清 Tab1（FRED/Yahoo/AAII/熱錢）快取，"
-                                          "Tab2~Tab5 基金/組合/政策快取不受影響"):
-                            try:
-                                from services.macro_service import clear_tab1_macro_caches
-                                clear_tab1_macro_caches(session_state=st.session_state)
-                            except Exception:
-                                pass
-                            st.rerun()
-                except Exception as _us_e:
-                    st.error(f"美股流動性監測渲染失敗：[{type(_us_e).__name__}] {_us_e}")
-
-            # ── 台股熱錢監測（v19.47 ARCHIVED：境外美股基金可略過｜原 ⑥ KEEP，user 反饋本土訊號非主驅力）──
-            # 移除 ⑥ 編號 + 標題加 📦 ARCHIVED 前綴 + 模組保留磁碟便於日後復活
-            st.divider()
-            with st.expander("📦 ARCHIVED — 台股熱錢監測（境外美股基金可略過｜本土訊號）",
-                             expanded=False):
-                st.caption("⚠️ v19.47 降級為 archive：USD 計價境外美股基金，台幣升貶/外資台股淨買賣對 NAV 影響有限。如需此資料請點開。")
-                try:
-                    from hot_money import render_hot_money_section
-                    _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
-                                     if hasattr(st, "secrets") else "") or ""
-                    render_hot_money_section(token=_finmind_tok,
-                                              key_prefix="tab1_hm")
-                except Exception as _hme:
-                    st.error(f"熱錢監測渲染失敗：[{type(_hme).__name__}] {_hme}")
-            # ══ v19.129 — 📋 即時訊號 + 決策矩陣 桶 ══
-            st.markdown("### 📋 即時訊號 + 決策矩陣")
-            st.caption("verdict 路徑 ｜ 逐檔行動建議")
 
             # ── v19.41 ③ 🔬 即時訊號決策矩陣（v19.15 verdict + 逐檔行動建議） ──
             # 原位於 tab 外（L799），下移至 tab 內結尾 → 讓 ① 戰情室（總經）成為 tab 首屏
@@ -2494,6 +2500,14 @@ def render_macro_tab() -> None:
             ):
                 _render_realtime_decision_dashboard(ind)
             # ── AI 結構化總經摘要 ── L3 only
+
+            # ══════════════════════════════════════════════════════════
+            # v19.134 — 🤖 AI 景氣判斷總結 桶(物理重排,連續區塊)
+            # ══════════════════════════════════════════════════════════
+            st.divider()
+            st.markdown("## 🤖 AI 景氣判斷總結")
+            st.caption("吃齊上方四桶資料,生成綜合白話摘要")
+
             if _show_l3:
                 st.divider()
             if GEMINI_KEY and _show_l3:
@@ -2513,9 +2527,6 @@ def render_macro_tab() -> None:
                     # v18.215：Tab1 改用通用「白話總體檢」widget（與 Tab2/3 一致），
                     # 刪除舊七節 macro AI；吃全總經資料、逐章節白話結論 + 時事、無選單。
                     # v19.38：明示 AI 總結涵蓋上方 6 個 KEEP 面板的同源資料（FRED 23 指標 + phase + risk + news）
-                    # ══ v19.129 — 🤖 AI 景氣判斷總結 桶 ══
-                    st.markdown("### 🤖 AI 景氣判斷總結")
-                    st.caption("吃齊上方桶資料,生成綜合白話摘要")
                     st.markdown("### 🤖 AI 景氣判斷總結")
                     st.caption(
                         "本 AI 摘要吃齊上方 **① 戰情室三儀表 / ② 拐點偵測 / ③ 即時決策矩陣 / "
