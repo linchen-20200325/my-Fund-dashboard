@@ -1192,12 +1192,6 @@ def render_macro_tab() -> None:
                     '建議按上方「🆕 強制重抓最新」清快取重試。'
                 )
 
-        # ══ v19.45 總經導航卡（4 欄 verdict 摘要）═════════════════════
-        # 對齊台股「震盪整理｜謹慎觀望」UX — 上方一眼看 4 面板結論
-        try:
-            _render_macro_navigator(ind, phase, FRED_KEY)
-        except Exception as _nav_e:  # noqa: BLE001
-            print(f"[tab1/navigator] {type(_nav_e).__name__}: {_nav_e}")
 
         # ══ v19.118 中國拖累唯讀面板（China Drag）═════════════════════
         # 4 數字唯讀展示:不改變上方總經分數,僅示意 China 副盤折扣強度
@@ -1246,6 +1240,9 @@ def render_macro_tab() -> None:
                 _main_ctx = _ctxlib.nullcontext()
 
             with _main_ctx:
+                # ══ v19.129 — ⚠️ 拐點警報 桶 ══
+                st.markdown("### ⚠️ 拐點警報")
+                st.caption("全域導航塔 War Room(三儀表 + 持倉燈 + 本週清單)")
                 # ══════════════════════════════════════════════════
                 # V5 全域導航塔（War Room）── 三圓形氣象儀表
                 # ══════════════════════════════════════════════════
@@ -1434,6 +1431,9 @@ def render_macro_tab() -> None:
                 st.markdown(_l1_md)
 
             # ══════════════════════════════════════════════════
+            # ══ v19.129 — 📈 中期循環 桶 ══
+            st.markdown("### 📈 中期循環")
+            st.caption("Z-Score 矩陣(18 指標,5 個重複已移至各桶主家)")
             # L3 指標 Z-Score 矩陣（14 指標）— L3 only
             # ══════════════════════════════════════════════════
             if _show_l3:
@@ -1458,15 +1458,10 @@ def render_macro_tab() -> None:
                     import pandas as _pd_zs
                     # spec: (key, 顯示名, 單位, 小數位, high_is_bad, z>0白話, z<0白話)
                     _zs_indicators = [
-                        ("SAHM",         "薩姆規則",            "pp",  2,  True,  "衰退風險升高",     "勞動市場穩健"),
                         ("SLOOS",        "SLOOS 銀行放款意願", "%",   1,  True,  "銀行緊縮放貸",     "銀行寬鬆放貸"),
                         ("ADL",          "RSP/SPY 廣度",        "%",   2,  False, "廣度健康",          "大型股獨撐"),
                         ("PMI",          "ISM PMI",             "",    1,  False, "製造業擴張",        "製造業收縮"),
                         ("LEI",          "⭐ CFNAI 領先指標",   "",    2,  False, "景氣加速",          "景氣放緩"),
-                        ("YIELD_10Y2Y",  "10Y-2Y 利差",         "%",   3,  False, "正斜率（健康）",    "倒掛（衰退預警）"),
-                        ("YIELD_10Y3M",  "10Y-3M 利差",         "%",   2,  False, "正斜率（健康）",    "倒掛（衰退預警）"),
-                        ("HY_SPREAD",    "高收益債利差",        "%",   2,  True,  "信用壓力升溫",      "信用環境寬鬆"),
-                        ("VIX",          "VIX 恐慌指數",        "",    1,  True,  "市場恐慌升溫",      "市場情緒平靜"),
                         ("CPI",          "CPI 通膨率",          "%",   1,  True,  "物價壓力升溫",      "通膨壓力減退"),
                         ("PPI",          "PPI 生產者物價",      "%",   2,  True,  "上游成本升溫",      "上游成本回落"),
                         ("INFL_EXP_5Y",  "⭐ 5Y 通膨預期",      "%",   2,  True,  "通膨預期升溫",      "通膨預期降溫"),
@@ -1593,6 +1588,9 @@ def render_macro_tab() -> None:
 
             # ── v19.20 ⚡ 短線風險雷達（10 燈 1-day 急殺早期警報）──
             st.divider()
+            # ══ v19.129 — 🎯 短線雷達 桶 ══
+            st.markdown("### 🎯 短線雷達")
+            st.caption("10 燈 1-day 動量/情緒/位階 — 日級急殺確認")
             st.markdown("### ④ ⚡ 短線風險雷達（24H Risk-Off Velocity Radar ｜ 日級急殺確認）")
             st.caption("10 個 1-day 動量／情緒／位階訊號 — 補拐點偵測中心（月～季級慢）之短缺，"
                        "捕捉 1-day 急殺前的早期警報："
@@ -1685,6 +1683,9 @@ def render_macro_tab() -> None:
 
             # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
             st.divider()
+            # ══ v19.129 — ⚠️ 拐點警報(細節) 桶 ══
+            st.markdown("### ⚠️ 拐點警報(細節)")
+            st.caption("拐點偵測中心 — 熊市預警主面板 ｜ 月級結構訊號")
             st.markdown("### ② 🎯 拐點偵測中心（熊市預警主面板 ｜ 月級結構訊號）")
             st.caption("集中所有景氣翻轉訊號：製造業新訂單－庫存擴散 ｜ 10Y-2Y 殖利率倒掛翻正 ｜ "
                        "HY 信用利差 ｜ 薩姆規則 ｜ CFNAI 領先指標 ｜ 歷史回測 ｜ 變數重要性")
@@ -1967,6 +1968,9 @@ def render_macro_tab() -> None:
 
 
 
+            # ══ v19.129 — 🌳 長期座標 桶 ══
+            st.markdown("### 🌳 長期座標")
+            st.caption("MK 美林景氣時鐘 — 4 階段 ｜ 結構性決策定盤")
             # ── MK 景氣時鐘 ＆ 資產輪動（v18.8）── L2/L3 皆顯示
             st.divider()
             render_mk_clock_section(ind)
@@ -1981,6 +1985,9 @@ def render_macro_tab() -> None:
                     return s.dropna().tail(60)
                 except Exception: return None
 
+            # ══ v19.129 — 🎯 短線雷達(深水區) 桶 ══
+            st.markdown("### 🎯 短線雷達(深水區)")
+            st.caption("流動性壓力預警 — 4 因子 ｜ lead SPX 1-3 週")
 
             # ── 🌊 流動性壓力預警引擎（v18.228：按鈕觸發，不塞總經主載入路徑）──
             def _load_liquidity_factors() -> None:
@@ -2128,6 +2135,9 @@ def render_macro_tab() -> None:
             if _show_l3:
                 _pf_def = [f for f in st.session_state.get("portfolio_funds", []) if f.get("loaded")]
                 if _pf_def:
+                    # ══ v19.129 — 🌳 長期座標(資本) 桶 ══
+                    st.markdown("### 🌳 長期座標(資本)")
+                    st.caption("資本防線 — 含息報酬 vs 配息率")
                     st.markdown("#### 💰 資本防線 — 含息報酬 vs 配息率")
                     _def_names = [f.get("fund_name") or f.get("code","?") for f in _pf_def]
                     _def_tr1y  = [float((f.get("metrics") or f.get("m") or {}).get("ret_1y") or 0) for f in _pf_def]
@@ -2194,6 +2204,9 @@ def render_macro_tab() -> None:
             # ── v19.47 ⑥ 美股流動性 × 熱錢監測（user 反饋：基金 USD 計價，台股熱錢非主訊號） ──
             # 6 指標三角：流動性 (M2/WALCL/RRP) × 信用 (HY OAS / HYG-LQD) × 情緒 (AAII)
             st.divider()
+            # ══ v19.129 — 🌳 長期座標(美股) 桶 ══
+            st.markdown("### 🌳 長期座標(美股)")
+            st.caption("美股流動性 × 熱錢 — 三角:流動性 × 信用 × 情緒")
             with st.expander("⑥ 💵 美股流動性 × 熱錢監測 — 三角：流動性 × 信用 × 情緒",
                              expanded=False):
                 st.caption(
@@ -2326,6 +2339,9 @@ def render_macro_tab() -> None:
                                               key_prefix="tab1_hm")
                 except Exception as _hme:
                     st.error(f"熱錢監測渲染失敗：[{type(_hme).__name__}] {_hme}")
+            # ══ v19.129 — 📋 即時訊號 + 決策矩陣 桶 ══
+            st.markdown("### 📋 即時訊號 + 決策矩陣")
+            st.caption("verdict 路徑 ｜ 逐檔行動建議")
 
             # ── v19.41 ③ 🔬 即時訊號決策矩陣（v19.15 verdict + 逐檔行動建議） ──
             # 原位於 tab 外（L799），下移至 tab 內結尾 → 讓 ① 戰情室（總經）成為 tab 首屏
@@ -2355,6 +2371,9 @@ def render_macro_tab() -> None:
                     # v18.215：Tab1 改用通用「白話總體檢」widget（與 Tab2/3 一致），
                     # 刪除舊七節 macro AI；吃全總經資料、逐章節白話結論 + 時事、無選單。
                     # v19.38：明示 AI 總結涵蓋上方 6 個 KEEP 面板的同源資料（FRED 23 指標 + phase + risk + news）
+                    # ══ v19.129 — 🤖 AI 景氣判斷總結 桶 ══
+                    st.markdown("### 🤖 AI 景氣判斷總結")
+                    st.caption("吃齊上方桶資料,生成綜合白話摘要")
                     st.markdown("### 🤖 AI 景氣判斷總結")
                     st.caption(
                         "本 AI 摘要吃齊上方 **① 戰情室三儀表 / ② 拐點偵測 / ③ 即時決策矩陣 / "
