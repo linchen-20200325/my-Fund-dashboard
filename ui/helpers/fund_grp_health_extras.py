@@ -20,6 +20,9 @@ v19.121 新增 P1 視覺 2 區塊（跨檔操作訊號 + 深度詳圖）:
   ⑩ MK 買賣點對比表（資產屬性 / 操作訊號 / 買賣水平線 / 現價位階）
   ⑪ Bollinger 可展開詳圖（逐檔 expander,點開才 render）
 
+v19.122 新增 P1 AI 1 區塊（跨檔統一評論）:
+  ⑫ AI 跨檔評論（複用 render_ai_summary_widget,組裝 snapshot 送 Gemini）
+
 呼叫端：ui/tab_fund_grp_health.py：render_fund_grp_health_tab。
 """
 from __future__ import annotations
@@ -930,6 +933,199 @@ def _render_bollinger_expanders(funds: list) -> None:
                 st.caption(f"⬜ {_code} chart 渲染失敗:{type(e).__name__}: {e}")
 
 
+# ════════════════════════════════════════════════════════════════
+# v19.122 P1 AI — 跨檔統一評論
+# ════════════════════════════════════════════════════════════════
+
+def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
+    """組裝 N 檔基金的跨檔 snapshot 字串給 AI 解讀。
+
+    內容:
+      - 整組概況(檔數 / 平均覆蓋率 / 平均 σ rank / 超跌統計)
+      - 逐檔簡表(代號 / 名稱 / 配息率 / 覆蓋率燈號 / σ rank / MK 操作建議)
+      - 跨檔影子基金清單(若有)
+
+    回傳:(snapshot_str, n_funds_with_data)
+    """
+    if not funds:
+        return ("(無基金資料)", 0)
+
+    _lines = [f"## 組合健檢全章節快照({len(funds)} 檔基金)"]
+
+    # 取共享計算結果(避免每段重算)
+    from services.fund_dividend_health import classify_eating_principal
+    try:
+        from services.precision_service import calc_hwm_sigma_levels
+    except Exception:
+        calc_hwm_sigma_levels = None
+
+    _per_fund = []
+    _eating_count = 0
+    _oversold_count = 0
+    _sigma_ranks = []
+    for _f in funds:
+        _code = _f.get("code", "?")
+        _name = (_f.get("name") or _code)[:20]
+        _m = _f.get("metrics") or {}
+        _mj = _f.get("moneydj_raw") or {}
+
+        # 配息覆蓋率
+        _adr = _safe_num(_mj.get("moneydj_div_yield") or _m.get("annual_div_rate"))
+        _ret1y = _safe_num(_m.get("ret_1y_total") or _m.get("ret_1y"))
+        _core_div = classify_eating_principal(_ret1y, _adr)
+        _div_status = "—"
+        if _core_div.is_data_missing:
+            _div_status = "資料不足"
+        elif _core_div.is_no_dividend:
+            _div_status = "無配息"
+        elif _core_div.is_eating:
+            _div_status = "🔴 吃本金"
+            _eating_count += 1
+        elif _core_div.coverage_ratio is not None and _core_div.coverage_ratio < 1.2:
+            _div_status = "🟡 邊緣"
+        else:
+            _div_status = "🟢 健康"
+
+        # σ 位階
+        _sigma_label = "—"
+        _sigma_rank = None
+        _series = _f.get("series")
+        if calc_hwm_sigma_levels and _series is not None and len(_series) >= 30:
+            try:
+                _hwm = calc_hwm_sigma_levels(_series)
+                if not _hwm.get("error"):
+                    _sigma_rank = _hwm.get("sigma_rank")
+                    _sigma_label = _hwm.get("label", "—")
+                    if _sigma_rank is not None and _sigma_rank <= -2.0:
+                        _oversold_count += 1
+                    if _sigma_rank is not None:
+                        _sigma_ranks.append(_sigma_rank)
+            except Exception:
+                pass
+
+        # 風險指標
+        _rm = _f.get("risk_metrics") or _mj.get("risk_metrics") or {}
+        _sharpe = _safe_num(_rm.get("sharpe") or _m.get("sharpe"))
+
+        _per_fund.append({
+            "code": _code, "name": _name,
+            "div_pct": _adr, "ret1y": _ret1y, "div_status": _div_status,
+            "coverage": _core_div.coverage_ratio,
+            "sigma_label": _sigma_label, "sigma_rank": _sigma_rank,
+            "sharpe": _sharpe,
+        })
+
+    # 整組概況
+    _avg_sigma = (sum(_sigma_ranks) / len(_sigma_ranks)) if _sigma_ranks else None
+    _lines.append("")
+    _lines.append("### 整組概況")
+    _lines.append(f"- 基金數:{len(funds)} 檔")
+    _lines.append(f"- 🔴 吃本金:{_eating_count} 檔 / {len(funds)}")
+    _lines.append(f"- 🩸 深度超跌(σ ≤ -2):{_oversold_count} 檔 / {len(funds)}")
+    if _avg_sigma is not None:
+        _lines.append(f"- 平均 σ rank:{_avg_sigma:+.2f}σ "
+                      f"(負 = 整組偏離歷史高點下方)")
+
+    # 逐檔簡表
+    _lines.append("")
+    _lines.append("### 逐檔健診")
+    for _p in _per_fund:
+        _bits = [f"{_p['name']} ({_p['code']})"]
+        if _p["div_pct"] is not None:
+            _bits.append(f"配息 {_p['div_pct']:.2f}%")
+        if _p["ret1y"] is not None:
+            _bits.append(f"1Y 含息 {_p['ret1y']:.2f}%")
+        if _p["coverage"] is not None:
+            _bits.append(f"覆蓋率 {_p['coverage']:.2f}")
+        _bits.append(_p["div_status"])
+        if _p["sigma_rank"] is not None:
+            _bits.append(f"σ {_p['sigma_rank']:+.2f}")
+        if _p["sharpe"] is not None:
+            _bits.append(f"Sharpe {_p['sharpe']:.2f}")
+        _lines.append(f"- {' ｜ '.join(_bits)}")
+
+    # 跨檔相關性(影子基金)
+    try:
+        from services.portfolio_service import calc_holdings_overlap
+        _hov_input = [
+            {
+                "code": _f.get("code", "?"),
+                "name": _f.get("name") or _f.get("code"),
+                "top_holdings": ((_f.get("moneydj_raw") or {}).get("holdings") or {}).get("top_holdings") or [],
+                "sector_alloc": ((_f.get("moneydj_raw") or {}).get("holdings") or {}).get("sector_alloc") or [],
+            }
+            for _f in funds
+        ]
+        _hov = calc_holdings_overlap(_hov_input)
+        _lines.append("")
+        _lines.append("### 跨檔重疊度")
+        if _hov and _hov.get("shadow_pairs"):
+            _lines.append(f"- ⚠️ 偵測到 {len(_hov['shadow_pairs'])} 對影子基金(重疊度 ≥ 0.70):")
+            for _pair in _hov["shadow_pairs"]:
+                _lines.append(f"  - {_pair[0]} ⟷ {_pair[1]}:重疊度 {_pair[2]:.3f}")
+        else:
+            _lines.append("- ✅ 本組合無影子基金")
+    except Exception:
+        pass
+
+    return ("\n".join(_lines), len(funds))
+
+
+def _render_ai_cross_fund_evaluation(funds: list) -> None:
+    """⑫ AI 跨檔統一評論(N 檔基金組合)。
+
+    複用 ui/helpers/ai_summary.render_ai_summary_widget(已成熟,Gemini 多 key 輪替)。
+    產出:逐段白話「整組是好是壞、哪幾檔該換、配息健康、影子基金、調整建議」。
+    """
+    st.divider()
+    st.markdown("### 🤖 AI 跨檔統一評論")
+
+    if not funds:
+        st.caption("⬜ 無基金資料")
+        return
+
+    # GEMINI key 取得(沿用既有 pattern)
+    import os
+    _key = os.environ.get("GEMINI_API_KEY", "")
+    if not _key and hasattr(st, "secrets"):
+        try:
+            _key = st.secrets.get("GEMINI_API_KEY", "") or ""
+        except Exception:
+            _key = ""
+    if not _key:
+        st.caption("⬜ 未設定 GEMINI_API_KEY(secrets / env),無法呼叫 AI")
+        return
+
+    # 組裝 snapshot
+    try:
+        _snap, _n = _build_cross_fund_snapshot(funds)
+    except Exception as e:
+        st.caption(f"⬜ Snapshot 組裝失敗:{type(e).__name__}: {e}")
+        return
+
+    # 呼叫共用 AI widget
+    try:
+        from ui.helpers.ai_summary import render_ai_summary_widget
+        render_ai_summary_widget(
+            tab_key="tab5_grp",
+            tab_label=f"組合健檢({_n} 檔基金)",
+            snapshot=_snap,
+            sections=[
+                "整組概況",
+                "配息健康總覽",
+                "風險位階 / 超跌警示",
+                "跨檔重疊度 / 影子基金",
+                "換手與調整建議",
+            ],
+            headlines=[],
+            stale_note="本快照為當下抓取的瞬時值",
+            gemini_api_key=_key,
+            expanded=False,
+        )
+    except Exception as e:
+        st.caption(f"⬜ AI widget 渲染失敗:{type(e).__name__}: {e}")
+
+
 def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
     """組合健檢 5 大貼圖區塊 entry。
 
@@ -999,3 +1195,9 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
         _render_bollinger_expanders(funds)
     except Exception as e:
         st.caption(f"⬜ Bollinger 詳圖渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
+
+    # v19.122 P1 AI — 跨檔統一評論
+    try:
+        _render_ai_cross_fund_evaluation(funds)
+    except Exception as e:
+        st.caption(f"⬜ AI 跨檔評論渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
