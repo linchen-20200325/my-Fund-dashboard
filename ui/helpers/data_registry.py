@@ -376,6 +376,58 @@ def _update_data_registry():
             "fresh_color": _hm_fc,
         }
 
+    # v19.140 §3a 短線風險雷達 10 燈（services.risk_radar.detect_risk_radar）
+    # ui/tab1_macro.py stash 至 _radar_v1921_top = (radar_dict, summary_dict)。
+    # 修正:之前 user 看到雷達兩盞燈 ⬜ 無資料但資料診斷裡找不到 → 因 registry
+    # 完全沒讀 _radar_v1921_top。每盞燈現在會在診斷表出現,失敗者帶 note
+    # (含 per-layer fail trace,可看出哪層 fallback 真的炸了)。§1 Fail Loud:
+    # 失敗顯式 🔴 + 失敗原因,不偽綠。
+    _radar_top = st.session_state.get("_radar_v1921_top")
+    _radar_dict = None
+    if isinstance(_radar_top, tuple) and len(_radar_top) >= 1:
+        _radar_dict = _radar_top[0]
+    if isinstance(_radar_dict, dict) and _radar_dict:
+        _LIGHT_LABELS = {
+            "vix_level":       "🚨 雷達 1｜VIX 恐慌指數",
+            "vix_term_struct": "🚨 雷達 2｜VIX 期限結構（VIX/VIX3M）",
+            "hy_oas_delta":    "🚨 雷達 3｜HY 信用日變化",
+            "yield_10y_shock": "🚨 雷達 4｜10Y 殖利率衝擊",
+            "move_level":      "🚨 雷達 5｜MOVE 債市波動",
+            "spx_trend_break": "🚨 雷達 6｜SPX 均線破口",
+            "sox_drop":        "🚨 雷達 7｜SOX 半導體",
+            "sector_rotation": "🚨 雷達 8｜防禦/攻擊輪動",
+            "put_call_ratio":  "🚨 雷達 9｜Put/Call 比率",
+            "asia_overnight":  "🚨 雷達 10｜亞洲夜盤",
+        }
+        for _lk in _LIGHT_LABELS:
+            _entry = _radar_dict.get(_lk) or {}
+            if not isinstance(_entry, dict):
+                continue
+            _val = _entry.get("value")
+            _src = _entry.get("label") or "—"
+            _note = _entry.get("note") or ""
+            _signal = _entry.get("signal") or ""
+            # 已取得：value 不為 None → 🟢；否則 🔴 + note 截斷顯示
+            if _val is not None:
+                _r_ic, _r_fl, _r_fc = "🟢", f"已取得（{_signal}）", MATERIAL_GREEN
+                _r_date = "今日"
+                _r_count = 1
+            else:
+                _r_ic, _r_fl, _r_fc = "🔴", (_note[:100] or "抓取失敗"), MATERIAL_RED
+                _r_date = "—"
+                _r_count = 0
+            reg[f"雷達_{_lk}"] = {
+                "label":       _LIGHT_LABELS[_lk],
+                "source":      _src,
+                "latest_date": _r_date,
+                "count":       _r_count,
+                "series":      None,
+                "freq":        "daily",
+                "fresh_icon":  _r_ic,
+                "fresh_label": _r_fl,
+                "fresh_color": _r_fc,
+            }
+
     # 4. RSS 國際財經新聞 (fetch_market_news)
     # ⚠️ RSS feedparser.published 格式為 RFC 2822（"Wed, 06 May 2026 14:30:00 +0000"），
     #    舊版用 [:10] 切片得到 "Wed, 06 Ma" 無法解析 → 顯示「未知日期」。
