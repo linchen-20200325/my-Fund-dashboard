@@ -67,15 +67,136 @@ def render_data_guard_tab() -> None:
             st.session_state.macro_done = False
             st.rerun()
 
-    # ── Section -1: 📥 第一手原始資料源總覽 ──
-    st.markdown("### ① 📥 第一手原始資料源總覽")
-    st.caption("系統實際下載的所有原始資料端點（依 ARCHITECTURE §5）— 顏色與筆數動態反映 session_state")
-
     _src_ind  = st.session_state.get("indicators") or {}
     _src_news = st.session_state.get("news_items") or []
     _src_cf   = st.session_state.get("current_fund") or st.session_state.get("fund_data") or {}
     _src_pf   = st.session_state.get("portfolio_funds") or []
     _src_pf_loaded = [f for f in _src_pf if f.get("loaded")]
+
+    # ════════════════════════════════════════════════════════════
+    # v19.131 Section 0 — 📊 前 4 Tab 資料完整性檢查表
+    # User 2026-06-25 反饋:「資料診斷應該要去捕捉前面 Tab 的所有資料都有被抓取到」
+    # 一眼看 Tab1/2/3/4 各需要什麼資料、現在抓到多少
+    # ════════════════════════════════════════════════════════════
+    st.markdown("### ⓪ 📊 前 4 Tab 資料完整性檢查表")
+    st.caption("快速確認 4 個資料 Tab 各自的關鍵資料是否都已抓到 — 紅燈 = 缺資料,該 Tab 可能渲染不完整")
+
+    # 計算各 Tab 資料覆蓋率
+    _FRED_REQUIRED = ["PMI", "YIELD_10Y2Y", "YIELD_10Y3M", "HY_SPREAD",
+                       "M2", "FED_BS", "CPI", "FED_RATE", "UNEMPLOYMENT",
+                       "PPI", "SAHM", "SLOOS"]
+    _YF_REQUIRED = ["VIX", "DXY", "ADL", "COPPER"]
+    _all_macro = _FRED_REQUIRED + _YF_REQUIRED
+    _macro_have = sum(1 for k in _all_macro if (_src_ind.get(k) or {}).get("value") is not None)
+    _macro_total = len(_all_macro)
+
+    _cf_have_nav  = bool(_src_cf and _src_cf.get("series") is not None)
+    _cf_have_meta = bool(_src_cf and (_src_cf.get("fund_name") or _src_cf.get("name")))
+    _cf_have_div  = bool(_src_cf and (_src_cf.get("dividends") or (_src_cf.get("moneydj_raw") or {}).get("dividends")))
+    _cf_have_holdings = bool(_src_cf and ((_src_cf.get("holdings") or {}).get("top_holdings")))
+    _single_have = sum([_cf_have_nav, _cf_have_meta, _cf_have_div, _cf_have_holdings])
+    _single_total = 4
+
+    _pf_total = len(_src_pf)
+    _pf_loaded_n = len(_src_pf_loaded)
+    _pf_nav_n = sum(1 for f in _src_pf_loaded if f.get("series") is not None)
+    _pf_div_n = sum(1 for f in _src_pf_loaded
+                    if (f.get("dividends") or (f.get("moneydj_raw") or {}).get("dividends")))
+
+    _fx_rate = st.session_state.get("usdtwd_rate") or st.session_state.get("fx_rate")
+    _gs_policy = st.session_state.get("policy_funds") or st.session_state.get("portfolio_policy")
+    _alloc_have = sum([_pf_loaded_n > 0, bool(_fx_rate), bool(_gs_policy)])
+    _alloc_total = 3
+
+    def _tab_status(have: int, total: int) -> tuple[str, str]:
+        """回傳 (emoji, color) 依完整率"""
+        if total == 0:
+            return ("⬜", "#666")
+        _r = have / total
+        if _r >= 0.85:
+            return ("🟢", MATERIAL_GREEN)
+        elif _r >= 0.5:
+            return ("🟡", MATERIAL_ORANGE)
+        else:
+            return ("🔴", MATERIAL_RED)
+
+    _t1_emoji, _t1_color = _tab_status(_macro_have, _macro_total)
+    _t2_emoji, _t2_color = (
+        _tab_status(_single_have, _single_total) if _src_cf else ("⬜", "#666")
+    )
+    _t3_emoji, _t3_color = (
+        _tab_status(_pf_loaded_n, _pf_total) if _pf_total else ("⬜", "#666")
+    )
+    _t4_emoji, _t4_color = (
+        _tab_status(_alloc_have, _alloc_total) if _pf_total else ("⬜", "#666")
+    )
+
+    _tab_table = [
+        ("🌐 Tab 1 總經", _t1_emoji, _t1_color,
+         f"{_macro_have}/{_macro_total} 指標",
+         f"FRED 12 / Yahoo 4 ｜ 缺值:{', '.join(k for k in _all_macro if not (_src_ind.get(k) or {}).get('value')) or '無'}",
+         "若 < 85% → 按上方「重新載入總經」"),
+        ("🔍 Tab 2 單一基金", _t2_emoji, _t2_color,
+         f"{_single_have}/{_single_total} 欄位" if _src_cf else "未查",
+         (f"NAV {'✓' if _cf_have_nav else '✗'} ｜ Meta {'✓' if _cf_have_meta else '✗'} ｜ "
+          f"配息 {'✓' if _cf_have_div else '✗'} ｜ 持股 {'✓' if _cf_have_holdings else '✗'}")
+         if _src_cf else "在 Tab 2 查詢基金代號觸發",
+         "若 NAV ✗ → 檢查 MoneyDJ / Cnyes / TDCC fallback chain"),
+        ("💊 Tab 3 組合健診", _t3_emoji, _t3_color,
+         f"{_pf_loaded_n}/{_pf_total} 已載入" if _pf_total else "未設定持倉",
+         (f"NAV {_pf_nav_n}/{_pf_loaded_n} ｜ 配息 {_pf_div_n}/{_pf_loaded_n}"
+          if _pf_loaded_n else "在 Tab 3 / 4 加入持倉基金"),
+         "若有未載入 → 該基金在 fallback chain 全敗"),
+        ("📊 Tab 4 組合配置", _t4_emoji, _t4_color,
+         f"{_alloc_have}/{_alloc_total} 元件" if _pf_total else "未設定",
+         f"持倉 {'✓' if _pf_loaded_n else '✗'} ｜ FX {'✓' if _fx_rate else '✗'} ｜ Sheet 政策 {'✓' if _gs_policy else '✗'}",
+         "FX 失敗 → §2.1 fund_repository.get_latest_fx;Sheet → OAuth"),
+    ]
+
+    _tab_th = "font-size:10px;color:#888;font-weight:700;padding:8px 10px;border-bottom:1px solid #30363d"
+    _tab_td = "font-size:11px;padding:8px 10px;line-height:1.4"
+    _t_html = (
+        f"<div style='display:grid;grid-template-columns:1.3fr 0.5fr 0.9fr 2.8fr 2fr;"
+        f"background:#0d1117;border-radius:6px 6px 0 0'>"
+        f"<span style='{_tab_th}'>Tab</span>"
+        f"<span style='{_tab_th};text-align:center'>狀態</span>"
+        f"<span style='{_tab_th}'>覆蓋率</span>"
+        f"<span style='{_tab_th}'>細項</span>"
+        f"<span style='{_tab_th}'>缺資料時排查</span>"
+        f"</div>"
+    )
+    for _name, _e, _c, _ratio, _detail, _action in _tab_table:
+        _bg = "#0a1a0a" if _e == "🟢" else ("#1a1200" if _e == "🟡" else
+              ("#1a0606" if _e == "🔴" else "#0d1117"))
+        _t_html += (
+            f"<div style='display:grid;grid-template-columns:1.3fr 0.5fr 0.9fr 2.8fr 2fr;"
+            f"background:{_bg};border-bottom:1px solid #21262d'>"
+            f"<span style='{_tab_td};color:#e6edf3;font-weight:600'>{_name}</span>"
+            f"<span style='{_tab_td};text-align:center;color:{_c};font-size:14px'>{_e}</span>"
+            f"<span style='{_tab_td};color:{_c};font-weight:600'>{_ratio}</span>"
+            f"<span style='{_tab_td};color:#bbb'>{_detail}</span>"
+            f"<span style='{_tab_td};color:#888;font-size:10px'>{_action}</span>"
+            f"</div>"
+        )
+    st.markdown(
+        f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+        f"{_t_html}</div>", unsafe_allow_html=True,
+    )
+    # 整體狀態 summary
+    _all_emojis = [_t1_emoji, _t2_emoji, _t3_emoji, _t4_emoji]
+    _n_green = _all_emojis.count("🟢")
+    _n_yellow = _all_emojis.count("🟡")
+    _n_red = _all_emojis.count("🔴")
+    _n_idle = _all_emojis.count("⬜")
+    st.caption(
+        f"全 4 個 Tab|🟢 完整 {_n_green}　🟡 部分 {_n_yellow}　🔴 缺失 {_n_red}　⬜ 未觸發 {_n_idle}　"
+        f"完整率 {'/'.join([str(_n_green), str(4)])}"
+    )
+    st.divider()
+
+    # ── Section ①: 📥 第一手原始資料源總覽 ──
+    st.markdown("### ① 📥 第一手原始資料源總覽")
+    st.caption("系統實際下載的所有原始資料端點(依 ARCHITECTURE §5)— 顏色與筆數動態反映 session_state")
 
     # ── Section 0: 全域資料健康總表 ──（caller 端 app.py 已先 call _update_data_registry()）
     _reg = st.session_state.get("data_registry", {})
