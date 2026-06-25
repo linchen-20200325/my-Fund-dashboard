@@ -24,7 +24,115 @@ from shared.colors import MATERIAL_ORANGE, MATERIAL_RED
 def render_manual_tab() -> None:
     """渲染系統說明書 Tab — 9 sub-tab 公式與判斷標準完整說明。"""
     st.markdown("## 📖 系統說明書 — 公式與判斷標準完整說明")
-    st.caption("📖 故事附錄・公式聖經：拆解前 3 站每個評分模型、公式與指標的算法，讓進階使用者看懂決策邏輯。")
+    st.caption("📖 故事附錄・公式聖經：拆解前 4 站每個評分模型、公式與指標的算法，讓進階使用者看懂決策邏輯。")
+
+    # ════════════════════════════════════════════════════════════
+    # v19.131 Section ⓪ — 📊 資料來源完整地圖
+    # User 2026-06-25 反饋:「說明書要把前面所用到的資料,作完整的說明」
+    # 一張總表列出每筆資料 → 用在哪個 Tab → 來源 endpoint → refresh 頻率 → fallback chain
+    # ════════════════════════════════════════════════════════════
+    with st.expander("⓪ 📊 資料來源完整地圖(每筆資料→Tab→endpoint→refresh→fallback)",
+                     expanded=True):
+        st.caption(
+            "本系統 4 個資料 Tab 用到的所有資料來源,按「**資料項目 → 用在哪個 Tab → 來源 / endpoint "
+            "→ refresh / 發布延遲 → 失敗 fallback**」整理。**任一筆失敗都會在 🔭 資料診斷 Tab "
+            "用紅燈標出**。對照 `CLAUDE.md §2.1 SSOT` 5-Tier 權威分級。"
+        )
+
+        _data_map = [
+            # (資料項目, 用在 Tab, 來源 / endpoint, refresh / 延遲, Fallback chain)
+            ("📈 美國總經 12 指標", "🌐 Tab1",
+             "FRED API(NAPM/DGS10/DGS2/DGS3MO/BAMLH0A0HYM2/M2SL/WALCL/CPIAUCSL/FEDFUNDS/UNRATE/PPIACO/UMCSENT)",
+             "FRED:1800s / 月後 ~13 天(CPI/NFP 有修正風險)",
+             "FRED 失敗 → DBnomics → MacroMicro HTML"),
+            ("📊 市場行情 4 項",   "🌐 Tab1",
+             "Yahoo Chart REST (^VIX / RSP / SPY / DX-Y.NYB / HG=F)",
+             "Yahoo:3600s / EOD 16:00 ET ≈ 翌日 04:00 TW",
+             "Yahoo 失敗 → FRED VIXCLS"),
+            ("🚨 拐點 5 指標",     "🌐 Tab1",
+             "FRED(SAHMREALTIME / DRTSCILM / ICSA / HSN1F / PERMIT)",
+             "週/月頻 ｜ 月後 ~5-30 天",
+             "FRED 主源,無備援(失敗會在拐點偵測 ⚠️ 卡顯示)"),
+            ("🇨🇳 中國拖累 modifier", "🌐 Tab1",
+             "FRED(CNCPIALLMINMEI / IRLTCT01CNM156N / MYAGM3CNM189N / XTEXVA01CNM664S)",
+             "月頻,90 天 cache fallback",
+             "全敗 → modifier = 1.0 中性"),
+            ("📰 RSS 新聞(8 source)", "🌐 Tab1 + Tab3",
+             "Reuters / MarketWatch / FT / Yahoo / Investing / CNBC × 2 / BBC / Bloomberg",
+             "即時(數秒-分鐘)",
+             "個別 RSS 失敗 → 其他源繼續"),
+            ("💰 基金 NAV 歷史",   "🔍 Tab2 + 💊 Tab3 + 📊 Tab4",
+             "MoneyDJ NAV 頁(yp401000 / tcbbankfund / chubb 子網域)",
+             "T+1 ~ T+3,30min cache",
+             "MoneyDJ 子網域 → TDCC openapi → FundClear → cnyes"),
+            ("📝 基金 Meta(經理 / 規模 / TER)", "🔍 Tab2",
+             "MoneyDJ wb01 / wb05 / wb07 + SITCA / Morningstar",
+             "1 hour",
+             "wb01 失敗 → wb05 → cnyes meta"),
+            ("💵 基金配息歷史",     "🔍 Tab2 + 💊 Tab3 + 📊 Tab4",
+             "MoneyDJ wh06_4 配息明細頁",
+             "1 hour",
+             "MoneyDJ 失敗 → cnyes dividend API"),
+            ("📦 基金前 10 大持股",  "🔍 Tab2 + 💊 Tab3",
+             "MoneyDJ wh06_3 持股明細頁",
+             "1 day",
+             "MoneyDJ 失敗 → fund meta 內 holdings.top_holdings 欄"),
+            ("💱 USDTWD 匯率",      "📊 Tab4",
+             "Yahoo USDTWD=X + FRED USDTWD",
+             "10 min(intraday)",
+             "Yahoo → FRED → manual cache"),
+            ("📋 Google Sheet 政策", "📊 Tab4",
+             "Google Sheets API(policy_funds 分頁)",
+             "1 min cache(寫後立即讀)",
+             "OAuth 失敗 → 需 Tab4 重連授權"),
+            ("🤖 AI 摘要",           "🌐 Tab1 + 💊 Tab3 + 📊 Tab4",
+             "Google Gemini API(EX-AI-1 例外,回 str 而非 dataclass)",
+             "On-demand(無 cache)",
+             "GEMINI_KEY 未設 → AI 區塊跳過(不擋畫面)"),
+            ("🇹🇼 FinMind macro",    "🌐 Tab1(輔助)",
+             "FinMind TaiwanMacroEconomics(PMI / NDC)",
+             "月後 5-10 天",
+             "FinMind quota 用罄 → 跳過(非主源)"),
+            ("📊 AAII Sentiment",    "🌐 Tab1(F-H1)",
+             "AAII 官網 HTML(bull/bear ratio)",
+             "週頻",
+             "AAII 失敗 → 拐點桶不參考此項"),
+        ]
+
+        _dm_th = ("font-size:10px;color:#888;font-weight:700;padding:8px 10px;"
+                  "border-bottom:1px solid #30363d")
+        _dm_td = "font-size:11px;padding:8px 10px;line-height:1.4"
+        _dm_html = (
+            f"<div style='display:grid;grid-template-columns:1.5fr 1.2fr 2.5fr 1.5fr 2.3fr;"
+            f"background:#0d1117;border-radius:6px 6px 0 0'>"
+            f"<span style='{_dm_th}'>資料項目</span>"
+            f"<span style='{_dm_th}'>用在 Tab</span>"
+            f"<span style='{_dm_th}'>來源 / endpoint</span>"
+            f"<span style='{_dm_th}'>Refresh / 延遲</span>"
+            f"<span style='{_dm_th}'>Fallback chain</span>"
+            f"</div>"
+        )
+        for _item, _tab, _src, _ref, _fb in _data_map:
+            _dm_html += (
+                f"<div style='display:grid;grid-template-columns:1.5fr 1.2fr 2.5fr 1.5fr 2.3fr;"
+                f"background:#0d1117;border-bottom:1px solid #21262d'>"
+                f"<span style='{_dm_td};color:#e6edf3;font-weight:600'>{_item}</span>"
+                f"<span style='{_dm_td};color:#79c0ff'>{_tab}</span>"
+                f"<span style='{_dm_td};color:#bbb;font-family:monospace;font-size:10px'>{_src}</span>"
+                f"<span style='{_dm_td};color:#888'>{_ref}</span>"
+                f"<span style='{_dm_td};color:#a5d6ff;font-size:10px'>{_fb}</span>"
+                f"</div>"
+            )
+        st.markdown(
+            f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+            f"{_dm_html}</div>", unsafe_allow_html=True,
+        )
+        st.caption(
+            "**📖 對應憲法**:`CLAUDE.md §2.1 SSOT`(5-Tier 權威分級)、`§2.3 PIT`(發布延遲表)、"
+            "`§2.4 Freshness`(TTL 對照)、`§4.6` 領域邊界(基金特有狀態)。"
+            " **任一筆紅燈 → 🔭 資料診斷 Tab 找對應 fetcher 修。**"
+        )
+    # ════════════════════════════════════════════════════════════
 
     # ── v18.272: 📋 曾經查過的基金清單（Tab2 + Tab3 自動記錄）─
     # ── v18.280: 加 CSV 上傳還原（reboot 後從備份 CSV merge 回來）─
