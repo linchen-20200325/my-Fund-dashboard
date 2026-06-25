@@ -250,6 +250,48 @@ class TestPrincipleChaptersIntegrity:
             )
 
 
+class TestChapterDepthEnhancement:
+    """v19.126 — 每章必須含 白話 + 📐 公式 + 📜 案例 三層深度"""
+
+    def test_every_chapter_has_formula_section(self):
+        """每章必須含 📐 數學定義 / 數學公式 / 公式 段"""
+        from ui.helpers.macro_beginner_view import _PRINCIPLE_CHAPTERS
+        for _i, (_t, _b) in enumerate(_PRINCIPLE_CHAPTERS):
+            assert "📐" in _b, (
+                f"第 {_i+1} 章 ({_t[:20]}) 缺 📐 數學定義段"
+            )
+
+    def test_every_chapter_has_history_case_section(self):
+        """每章必須含 📜 歷史案例 段"""
+        from ui.helpers.macro_beginner_view import _PRINCIPLE_CHAPTERS
+        for _i, (_t, _b) in enumerate(_PRINCIPLE_CHAPTERS):
+            assert "📜" in _b, (
+                f"第 {_i+1} 章 ({_t[:20]}) 缺 📜 歷史案例段"
+            )
+
+    def test_chapters_substantially_longer(self):
+        """深化後每章內文 > 400 字(原本 > 100,代表深度確實補足)"""
+        from ui.helpers.macro_beginner_view import _PRINCIPLE_CHAPTERS
+        for _i, (_t, _b) in enumerate(_PRINCIPLE_CHAPTERS):
+            assert len(_b.strip()) > 400, (
+                f"第 {_i+1} 章 ({_t[:20]}) body {len(_b.strip())} 字,< 400(深化未達標)"
+            )
+
+    def test_chapters_have_numeric_dates_in_cases(self):
+        """歷史案例段須含真實數據(年份 + 數字),不可只有空話"""
+        from ui.helpers.macro_beginner_view import _PRINCIPLE_CHAPTERS
+        import re
+        for _i, (_t, _b) in enumerate(_PRINCIPLE_CHAPTERS):
+            # 📜 段下方應有 ≥ 3 個 4 位數年份(1990-2024)
+            _hist_idx = _b.find("📜")
+            assert _hist_idx > 0, f"第 {_i+1} 章缺 📜 段"
+            _hist_section = _b[_hist_idx:]
+            _years = re.findall(r"(?:19[89]\d|20[012]\d)", _hist_section)
+            assert len(_years) >= 3, (
+                f"第 {_i+1} 章 ({_t[:20]}) 案例段年份數據 < 3 個(實際 {len(_years)}個)"
+            )
+
+
 # v19.124 §6 自審「3 個最容易出錯的輸入」:
 #   1. 空 / None indicators → 預設 score 5(中性燈),全綠燈 3 個 → 不 raise ✅
 #   2. SSOT 閾值漂移 → TestSSOTThresholdsApplied 強制以 SSOT 常數驗證觸發 ✅
