@@ -296,3 +296,45 @@ class TestChapterDepthEnhancement:
 #   1. 空 / None indicators → 預設 score 5(中性燈),全綠燈 3 個 → 不 raise ✅
 #   2. SSOT 閾值漂移 → TestSSOTThresholdsApplied 強制以 SSOT 常數驗證觸發 ✅
 #   3. 未知 phase(復甦/擴張/...以外)→ default ("觀望", yellow) ✅
+
+
+class TestFactCorrectionsV19127:
+    """v19.127 — 查證後事實修正回歸守衛(防數字被改回錯誤版本)。
+
+    來源:2026-06-25 四路平行查證(FRED / BEA / ISM / CBOE / Wikipedia 交叉)。
+    """
+
+    def _all_text(self):
+        from ui.helpers.macro_beginner_view import _PRINCIPLE_CHAPTERS
+        return "\n".join(b for _, b in _PRINCIPLE_CHAPTERS)
+
+    def test_ism_2022_first_sub50_is_november(self):
+        """ISM 首次跌破 50 是 2022/11(非 10 月,10 月仍 50.2 擴張)"""
+        t = self._all_text()
+        assert "2022/11" in t and "首次跌破 50" in t
+        # 不可再出現「2022/10 ... 49.0(跌破 50)」的錯誤組合
+        assert "| 2022/10 | **49.0**(跌破 50)" not in t
+
+    def test_yield_inversion_not_all_time_deepest(self):
+        """2022-23 倒掛是『1981 年來最深』,非『史上最深』(Volcker 期更深)"""
+        t = self._all_text()
+        assert "1981 年來最深" in t
+        assert "-1.1%**(史上最深)" not in t
+
+    def test_merrill_clock_has_citation_disclaimer(self):
+        """美林矩陣須帶『各方引用略有出入』免責(原報告各版數字不一)"""
+        t = self._all_text()
+        assert "各方引用略有出入" in t
+        # 修正後高峰(Stagflation)商品應為 +28%,非捏造的 現金 +5.7%
+        assert "+5.7%" not in t
+
+    def test_2008_gdp_is_peak_trough_not_quarterly(self):
+        """2008 GDP 谷底用峰谷 -4.3%,非誤用單季年化 -8.4%"""
+        t = self._all_text()
+        assert "-4.3%(峰谷)" in t
+        assert "**-8.4%**" not in t
+
+    def test_vix_intraday_vs_close_distinguished(self):
+        """VIX 89.5(盤中)vs 82.7(收盤)須標明口徑"""
+        t = self._all_text()
+        assert "盤中史上最高" in t and "收盤史上最高" in t
