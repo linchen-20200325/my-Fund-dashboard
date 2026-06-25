@@ -1163,11 +1163,18 @@ def render_macro_tab() -> None:
                         "請按側欄「🔍 測試 Proxy 連線」確認後再重試。")
                 else:
                     phase = calc_macro_phase(ind)
-                    old_phase = (st.session_state.phase_info.get("phase","")
-                                 if st.session_state.phase_info else "")
-                    new_phase = phase.get("phase","")
+                    # v19.141 P0:強制重抓會 pop phase_info(macro_service._TAB1_SESSION_KEYS),
+                    # 屬性存取 st.session_state.phase_info 在此路徑會 AttributeError 炸 production。
+                    # 改用 .get() 對齊 line 1218 既有的 v19.69 J1 防禦慣例。
+                    old_phase = (st.session_state.get("phase_info") or {}).get("phase", "")
+                    new_phase = phase.get("phase", "")
                     if old_phase and old_phase != new_phase:
-                        st.session_state.phase_history.append(
+                        # phase_history 雖未被 clear_tab1_macro_caches pop,但同步以 .get() 防初始化未跑路徑
+                        _hist = st.session_state.get("phase_history")
+                        if _hist is None:
+                            st.session_state.phase_history = []
+                            _hist = st.session_state.phase_history
+                        _hist.append(
                             {"from":old_phase,"to":new_phase,
                              "date":datetime.date.today().isoformat(),
                              "score":phase.get("score",0)})

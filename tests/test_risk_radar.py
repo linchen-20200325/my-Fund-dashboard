@@ -570,62 +570,8 @@ class TestFredVxvclsFallback:
         assert "FRED VXVCLS" in d["label"]
 
 
-class TestCboeJsonFallback:
-    """v19.65 P0：CBOE JSON API 作 Put/Call 第 7 層備援。"""
-
-    def _mk_resp(self, text: str, status: int = 200):
-        from unittest.mock import MagicMock
-        r = MagicMock()
-        r.status_code = status
-        r.text = text
-        return r
-
-    def test_parses_cboe_json(self):
-        import json
-        payload = json.dumps({"data": [
-            {"date": "2026-01-02", "close": 0.85},
-            {"date": "2026-01-03", "close": 0.90},
-        ]})
-        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(payload)):
-            s = rr._fetch_cboe_json("^CPC")
-        assert len(s) == 2
-        assert abs(float(s.iloc[-1]) - 0.90) < 1e-6
-
-    def test_http_failure_returns_empty(self):
-        with patch("infra.proxy.fetch_url", return_value=None):
-            s = rr._fetch_cboe_json("^CPC")
-        assert s.empty
-
-    def test_empty_data_array_returns_empty(self):
-        import json
-        payload = json.dumps({"data": []})
-        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(payload)):
-            s = rr._fetch_cboe_json("^CPC")
-        assert s.empty
-
-    def test_json_fallback_rescues_put_call(self):
-        """Yahoo + CBOE CSV + stooq 全失敗 → _resolve_put_call 走 CBOE JSON。"""
-        import json
-        payload = json.dumps({"data": [
-            {"date": "2026-01-02", "close": 0.85},
-            {"date": "2026-01-03", "close": 0.88},
-            {"date": "2026-01-04", "close": 0.90},
-        ]})
-
-        call_count = [0]
-
-        def _fetch_url_side_effect(url, **kw):
-            # CSV endpoints → None；JSON endpoint → 回 payload
-            call_count[0] += 1
-            if ".json" in url:
-                return self._mk_resp(payload)
-            return None  # CSV 全失敗
-
-        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
-             patch("infra.proxy.fetch_url", side_effect=_fetch_url_side_effect):
-            s, src, trace = rr._resolve_put_call()
-        assert "CBOE JSON" in src
-        assert not s.empty
+# v19.141: TestCboeJsonFallback 已刪除(CBOE 下架 delayed_quotes JSON,_fetch_cboe_json 移除)。
+# v19.141 新增的 PCR/VIX3M 對齊回歸測試見 TestV19141PcrChainAndVix3mAlignment(本檔下方)。
 
 
 # ──────────────────────────────────────────────────────────────
@@ -858,3 +804,92 @@ class TestSynthesizeDualVerdict:
         assert s["mode"] == "adopt_slow"
         assert s["level"] == "樂觀"
         assert s["icon"] == "🟢"
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.141 — PCR chain 清理 + VIX/VIX3M 對齊修正回歸
+# ════════════════════════════════════════════════════════════════
+class TestV19141PcrChainAndVix3mAlignment:
+    """user 截圖回報:VIX 期限結構顯示「對齊不足 2 筆」+ Put/Call「全源失敗」。
+    根因:(1) Yahoo 索引秒精度 vs CBOE 日期精度 → concat dropna 全 NaN。
+         (2) CBOE 下架 CPC/CPCE history CSV + JSON → 鏈裡 4 層永遠失敗。
+    本檔守 v19.141 兩個修正不再回歸。"""
+
+    def test_vix_term_struct_aligns_mixed_precision_indexes(self):
+        """v19.141 修正:Yahoo VIX(秒精度 UTC) + CBOE VIX3M(日期精度)應對齊成功。"""
+        # 模擬 Yahoo:UTC 秒精度(20:00)
+        yahoo_idx = pd.to_datetime([
+            "2026-01-02 20:00:00", "2026-01-03 20:00:00",
+            "2026-01-04 20:00:00", "2026-01-05 20:00:00",
+        ])
+        vix_s = pd.Series([15.0, 15.5, 16.0, 16.5], index=yahoo_idx)
+        # 模擬 CBOE CSV:日期精度(00:00)
+        cboe_idx = pd.to_datetime([
+            "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05",
+        ])
+        vix3m_s = pd.Series([14.0, 14.2, 14.4, 14.6], index=cboe_idx)
+
+        with patch.object(rr, "fetch_yf_close", return_value=vix_s), \
+             patch.object(rr, "_resolve_vix3m",
+                          return_value=(vix3m_s, "CBOE VIX3M_History.csv", [])):
+            d = rr._signal_vix_term_struct(fred_api_key="x" * 32)
+
+        assert "⬜" not in d["signal"], (
+            f"對齊應成功,實際 signal={d['signal']} note={d.get('note')!r}"
+        )
+        assert d["value"] is not None, "value 不該為 None"
+        # ratio = 16.5/14.6 ≈ 1.13 → 紅燈
+        assert 1.0 < float(d["value"]) < 1.3
+
+    def test_put_call_chain_no_longer_calls_cboe_csv_or_json(self):
+        """v19.141 修正:_resolve_put_call 已從 chain 移除 CBOE CSV + JSON
+        (兩源由 user 2026-06-25 截圖證實 AccessDenied)。
+        Yahoo 全失敗時應只試 stooq,不該再打 cdn.cboe.com 任何 URL。"""
+        urls_tried = []
+
+        def _fetch_url_track(url, **kw):
+            urls_tried.append(url)
+            return None  # stooq 也失敗
+
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", side_effect=_fetch_url_track):
+            _s, src, trace = rr._resolve_put_call()
+
+        assert src == "", f"全失敗時 src 應為空字串,實際 {src!r}"
+        for u in urls_tried:
+            assert "cdn.cboe.com" not in u, (
+                f"v19.141 後不該再打 cdn.cboe.com,實際打了:{u}"
+            )
+        # 應該至少試了 stooq
+        assert any("stooq.com" in u for u in urls_tried), (
+            f"應有試 stooq.com,實際 urls={urls_tried}"
+        )
+
+    def test_put_call_yahoo_short_circuits(self):
+        """Yahoo ^CPC 有資料時,根本不該打 stooq(更不該打 cdn.cboe.com)。"""
+        cpc_s = pd.Series(
+            [0.85, 0.90, 0.95, 1.00],
+            index=pd.to_datetime(["2026-01-02", "2026-01-03",
+                                  "2026-01-04", "2026-01-05"]),
+        )
+        urls_tried = []
+
+        def _fetch_url_track(url, **kw):
+            urls_tried.append(url)
+            return None
+
+        with patch.object(rr, "fetch_yf_close", return_value=cpc_s), \
+             patch("infra.proxy.fetch_url", side_effect=_fetch_url_track):
+            s, src, trace = rr._resolve_put_call()
+
+        assert "Yahoo" in src
+        assert not s.empty
+        assert urls_tried == [], (
+            f"Yahoo 命中時 stooq/cboe 都不該被呼叫,實際 {urls_tried}"
+        )
+
+    def test_fetch_cboe_json_removed(self):
+        """v19.141 死碼清理:_fetch_cboe_json 應已從模組刪除。"""
+        assert not hasattr(rr, "_fetch_cboe_json"), (
+            "v19.141 應刪除 _fetch_cboe_json(CBOE delayed_quotes JSON 已下架)"
+        )
