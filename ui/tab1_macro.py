@@ -97,6 +97,89 @@ def _apply_tp_thresholds(spfig, key: str) -> None:
         )
 
 
+# ════════════════════════════════════════════════════════════════
+# v19.133 — 短線雷達 10 燈 sparkline + threshold lines
+# threshold 對齊 services.risk_radar 各 signal 函式內部 cut-off 值
+# ════════════════════════════════════════════════════════════════
+
+def _radar_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
+    """回傳該 radar 信號的 horizontal threshold lines。
+
+    對齊 services/risk_radar.py 內部判斷邊界。
+    無 natural threshold 的 key 回傳空 list。
+    """
+    if key == "vix_level":
+        # services L103-L105:cur >= 30 紅 / cur >= 25 黃
+        return [(25.0, "dot", "#d29922", "警戒 25"),
+                (30.0, "dash", "#f85149", "恐慌 30")]
+    if key == "vix_term_struct":
+        # services L341-L343:cur >= 1.10 紅 / cur >= 1.00 黃 (backwardation = panic)
+        return [(1.00, "dot", "#d29922", "倒掛 1.00"),
+                (1.10, "dash", "#f85149", "極端 1.10")]
+    if key == "hy_oas_delta":
+        # trend 顯示 HY OAS level %;對齊拐點桶 6/8% threshold(SSOT MACRO_THRESHOLDS)
+        return [(_HY_WARN_THRESHOLD, "dot", "#d29922", f"警戒 {_HY_WARN_THRESHOLD}%"),
+                (_HY_CRISIS_THRESHOLD, "dash", "#f85149", f"危機 {_HY_CRISIS_THRESHOLD}%")]
+    if key == "move_level":
+        # services L426-L428:cur >= 130 紅 / cur >= 110 黃
+        return [(110.0, "dot", "#d29922", "警戒 110"),
+                (130.0, "dash", "#f85149", "高 130")]
+    if key == "sector_rotation":
+        # services L532-L534:cur >= 1.20 紅(XLP/XLY)/ cur >= 1.00 黃
+        return [(1.00, "dot", "#d29922", "防禦領 1.00"),
+                (1.20, "dash", "#f85149", "極防禦 1.20")]
+    if key == "put_call_ratio":
+        # PCR > 1.0 較看空,> 1.5 極端恐慌(教學常見值)
+        return [(1.00, "dot", "#d29922", "看空 1.0"),
+                (1.50, "dash", "#f85149", "恐慌 1.5")]
+    # 其他 key(yield_10y_shock / spx_trend_break / sox_drop / asia_overnight)
+    # trend 為絕對 level 而判斷用 delta,無單一 natural threshold,跳過 hline
+    return []
+
+
+def _make_radar_sparkline(trend: list, key: str, color: str):
+    """產生 radar 卡用的迷你 sparkline + threshold lines。
+
+    輸入:
+      trend: 近 6-8 期數值 list
+      key:   radar signal key(決定 threshold)
+      color: 主線色(取卡片 signal color)
+    """
+    if not trend or len(trend) < 2:
+        return None
+    try:
+        import plotly.graph_objects as _go_r
+        _fig = _go_r.Figure()
+        _fig.add_trace(_go_r.Scatter(
+            y=trend, mode="lines+markers",
+            line=dict(color=color, width=2),
+            marker=dict(size=4, color=color),
+            showlegend=False,
+            hovertemplate="%{y:.2f}<extra></extra>",
+        ))
+        # threshold lines (指標特定)
+        for _y, _dash, _color, _txt in _radar_threshold_lines(key):
+            _fig.add_hline(
+                y=_y, line_dash=_dash, line_color=_color, line_width=1.2,
+                opacity=0.65,
+                annotation_text=_txt,
+                annotation_position="top right",
+                annotation_font=dict(size=8, color=_color),
+            )
+        _fig.update_layout(
+            height=70,
+            margin=dict(l=2, r=2, t=2, b=2),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(visible=False, fixedrange=True),
+            yaxis=dict(visible=False, fixedrange=True),
+            showlegend=False,
+        )
+        return _fig
+    except Exception:
+        return None
+
+
 def _now_tw():
     return datetime.datetime.now(_TW_TZ)
 
@@ -1698,6 +1781,7 @@ def render_macro_tab() -> None:
                         _val_r = _dr.get("value")
                         _note_r = _dr.get("note", "")
                         _label_r = _dr.get("label", "")
+                        _trend_r = _dr.get("trend") or []  # v19.133: ~8 期 list
                         _val_txt_r = "—" if _val_r is None else f"{_val_r}"
                         # F-RECON-1 phase 2 v19.87 — 殖利率燈附「FRED vs Yahoo」對帳 chip
                         _rec_chip_r = ''
@@ -1714,7 +1798,7 @@ def render_macro_tab() -> None:
                         with _col_r:
                             st.markdown(
                                 f"<div style='background:#0d1117;border:2px solid {_col_c_r};"
-                                f"border-radius:10px;padding:10px 12px;margin:4px 0;"
+                                f"border-radius:10px;padding:10px 12px 6px;margin:4px 0;"
                                 f"min-height:165px;"
                                 f"display:flex;flex-direction:column;justify-content:space-between'>"
                                 f"<div>"
@@ -1729,7 +1813,14 @@ def render_macro_tab() -> None:
                                 f"padding-top:4px;margin-top:4px;line-height:1.3'>{_note_r}"
                                 f"<br/><span style='color:#555'>{_label_r}</span>{_rec_chip_r}</div>"
                                 f"</div>", unsafe_allow_html=True)
-                st.caption("📡 資料源：FRED + Yahoo Chart API（NAS proxy）｜閾值：🟢平靜 → 🟡警戒 → 🔴警報")
+                            # v19.133 — 嵌入 sparkline + threshold(若有 trend)
+                            _sp = _make_radar_sparkline(_trend_r, _key_r, _col_c_r)
+                            if _sp is not None:
+                                st.plotly_chart(_sp, use_container_width=True,
+                                                key=f"radar_sp_{_key_r}",
+                                                config={"displayModeBar": False})
+                st.caption("📡 資料源：FRED + Yahoo Chart API（NAS proxy）｜閾值：🟢平靜 → 🟡警戒 → 🔴警報"
+                           "｜v19.133 卡片底部 sparkline 含指標特定 threshold 線")
 
 
             # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
