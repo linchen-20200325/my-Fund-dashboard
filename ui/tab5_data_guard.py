@@ -45,6 +45,56 @@ def _calc_data_health(indicators=None):
     return _calc_data_health_pure(ind)
 
 
+# ════════════════════════════════════════════════════════════════
+# v19.135 — API Key 遮罩 + secrets 驗證 + 來源解析
+# 作法移植自 Stock 端 api_diagnostic.py(學 Stock 偵測精度)
+# 解決「Key 已設但全站抓不到」的根因排查:來源 / 遮罩 / TOML 解析
+# ════════════════════════════════════════════════════════════════
+
+def _mask_key(val: str) -> str:
+    """遮罩中段,保留前 4 + 後 4 字元 + 長度,避免診斷頁洩漏完整 key。"""
+    if not val:
+        return "(空)"
+    s = str(val)
+    n = len(s)
+    if n <= 8:
+        return f'{"*" * n} (len={n})'
+    return f"{s[:4]}…{s[-4:]} (len={n})"
+
+
+def _safe_secret(key: str):
+    """安全讀 st.secrets[key]。回傳 (value, error_str)。TOML 解析錯不 raise。"""
+    try:
+        sec = getattr(st, "secrets", None)
+        if sec is None:
+            return None, "st.secrets 不存在"
+        if key in sec:
+            return sec[key], None
+        return None, None
+    except Exception as e:  # noqa: BLE001 — TOML parse error 等
+        return None, f"{type(e).__name__}: {e}"
+
+
+def _resolve_key(key: str) -> dict:
+    """回傳一把 key 的完整解析:來源 / 值 / 遮罩 / 錯誤。
+
+    優先序對齊 app.py:_load_keys(st.secrets 先,os.environ 備)。
+    """
+    sec_val, sec_err = _safe_secret(key)
+    env_val = os.environ.get(key, "")
+    if sec_val:
+        return {"name": key, "source": "st.secrets", "val": str(sec_val),
+                "preview": _mask_key(sec_val), "sec_err": sec_err,
+                "env_preview": _mask_key(env_val)}
+    if env_val:
+        return {"name": key, "source": "os.environ", "val": env_val,
+                "preview": _mask_key(env_val), "sec_err": sec_err,
+                "env_preview": _mask_key(env_val)}
+    return {"name": key, "source": "(無)", "val": "",
+            "preview": "(未設定)", "sec_err": sec_err,
+            "env_preview": _mask_key(env_val)}
+
+
 def render_data_guard_tab() -> None:
     """渲染資料診斷 Tab — 全域 data_registry / API 延遲 / Phase 4-3B 狀態 /
     NAS Proxy / API Keys / 基金逐筆 / FRED next_release / 資料異常清單。
@@ -735,30 +785,67 @@ def render_data_guard_tab() -> None:
     st.divider()
 
     # ── Section 2: API Key 狀態 ───────────────────────────────────
+    # v19.135 升級(學 Stock 偵測精度):來源解析 + 遮罩 + secrets TOML 驗證
     st.markdown("### ④ 🔑 API 金鑰狀態")
-    _d5_k1, _d5_k2 = st.columns(2)
-    with _d5_k1:
-        _d5_fred_ok = bool(_FRED_KEY)
-        st.markdown(
-            f"<div style='background:#1a1f2e;border-radius:8px;padding:12px'>"
-            f"<div style='font-size:11px;color:#888'>FRED API Key</div>"
-            f"<div style='font-size:16px;font-weight:700;"
-            f"color:{MATERIAL_GREEN if _d5_fred_ok else MATERIAL_RED}'>"
-            f"{'✅ 已設定' if _d5_fred_ok else '❌ 未填寫'}</div>"
-            f"<div style='font-size:10px;color:#555'>"
-            f"{'...' + _FRED_KEY[-6:] if _d5_fred_ok and len(_FRED_KEY) > 6 else '請在 secrets.toml 填入'}"
-            f"</div></div>", unsafe_allow_html=True)
-    with _d5_k2:
-        _d5_gem_ok = bool(_GEMINI_KEY)
-        st.markdown(
-            f"<div style='background:#1a1f2e;border-radius:8px;padding:12px'>"
-            f"<div style='font-size:11px;color:#888'>Gemini API Key</div>"
-            f"<div style='font-size:16px;font-weight:700;"
-            f"color:{MATERIAL_GREEN if _d5_gem_ok else MATERIAL_RED}'>"
-            f"{'✅ 已設定' if _d5_gem_ok else '❌ 未填寫'}</div>"
-            f"<div style='font-size:10px;color:#555'>"
-            f"{'...' + _GEMINI_KEY[-6:] if _d5_gem_ok and len(_GEMINI_KEY) > 6 else '請在 secrets.toml 填入'}"
-            f"</div></div>", unsafe_allow_html=True)
+    st.caption("排查「Key 已設但全站抓不到資料」根因:來源(st.secrets / os.environ)→ 遮罩比對 → TOML 解析狀態")
+
+    # secrets 整體可讀性檢查(TOML 格式錯會整段 fallback 到空)
+    _sec_obj = getattr(st, "secrets", None)
+    _sec_keys: list = []
+    _sec_parse_err = None
+    try:
+        if _sec_obj is not None:
+            _sec_keys = list(_sec_obj.keys())
+    except Exception as _e_sec:  # noqa: BLE001
+        _sec_parse_err = f"{type(_e_sec).__name__}: {_e_sec}"
+
+    _sc1, _sc2 = st.columns(2)
+    _sc1.metric("st.secrets 可讀", "✅" if _sec_parse_err is None else "❌")
+    _sc2.metric("Secrets keys 數", len(_sec_keys))
+    if _sec_parse_err:
+        st.error(
+            f"⚠️ st.secrets 解析失敗:{_sec_parse_err}\n\n"
+            "→ 通常是 TOML 格式錯(缺引號 / 用了 export / 特殊字元未跳脫)。"
+            "Streamlit Cloud → App settings → Secrets 重貼,每個值都加雙引號。"
+        )
+
+    # 逐把 key 解析(遮罩 + 來源)
+    _key_targets = ["FRED_API_KEY", "GEMINI_API_KEY", "FINMIND_TOKEN",
+                    "PROXY_URL", "GOOGLE_SHEET_ID"]
+    _key_rows = [_resolve_key(_k) for _k in _key_targets]
+    _kt_th = ("font-size:10px;color:#888;font-weight:700;padding:6px 10px;"
+              "border-bottom:1px solid #30363d")
+    _kt_td = "font-size:11px;padding:6px 10px;line-height:1.4"
+    _kt_html = (
+        f"<div style='display:grid;grid-template-columns:1.4fr 1fr 1.6fr 1.4fr;"
+        f"background:#0d1117;border-radius:6px 6px 0 0'>"
+        f"<span style='{_kt_th}'>API Key</span>"
+        f"<span style='{_kt_th}'>使用來源</span>"
+        f"<span style='{_kt_th}'>實際值(遮罩)</span>"
+        f"<span style='{_kt_th}'>os.environ 同步</span>"
+        f"</div>"
+    )
+    for _kr in _key_rows:
+        _src_color = (MATERIAL_GREEN if _kr["source"] != "(無)" else MATERIAL_RED)
+        _bg = "#0a1a0a" if _kr["source"] != "(無)" else "#1a0606"
+        _kt_html += (
+            f"<div style='display:grid;grid-template-columns:1.4fr 1fr 1.6fr 1.4fr;"
+            f"background:{_bg};border-bottom:1px solid #21262d'>"
+            f"<span style='{_kt_td};color:#e6edf3;font-weight:600'>{_kr['name']}</span>"
+            f"<span style='{_kt_td};color:{_src_color};font-weight:600'>{_kr['source']}</span>"
+            f"<span style='{_kt_td};color:#bbb;font-family:monospace;font-size:10px'>{_kr['preview']}</span>"
+            f"<span style='{_kt_td};color:#7d8590;font-family:monospace;font-size:10px'>{_kr['env_preview']}</span>"
+            f"</div>"
+        )
+    st.markdown(
+        f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+        f"{_kt_html}</div>", unsafe_allow_html=True,
+    )
+    st.caption(
+        "「使用來源」= 程式實際取用的位置。若為 `(無)` → st.secrets 與 os.environ 都沒有,"
+        "fallback 拿到空字串,下游 API 必然 401/403/missing token。"
+        "「遮罩」顯示前 4 後 4 字 + 長度,可快速判「key 為空」vs「格式截斷」。"
+    )
 
     st.divider()
 
