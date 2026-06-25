@@ -1085,6 +1085,34 @@ def render_macro_tab() -> None:
         if "phase" not in phase:
             st.warning("⚠️ 市場相位資料缺失，請重新按「更新總經資料」")
             return
+
+        # ════════════════════════════════════════════════════════════
+        # v19.125 — 三層 toggle(新手 / 進階 / 專家)
+        # User 2026-06-25 反饋:「初學者也能像老手一樣看得懂」→ 三層 progressive disclosure。
+        # 新手模式 only 渲染三大紅綠燈 + 原理小教室(early return);進階/專家 = 原有渲染。
+        # 預設 🟢 新手 — user 期待這版作為主視圖;進階用 toggle 隨時切回。
+        # session_state["macro_tier_mode"] 記住選擇(Streamlit radio 自動記)。
+        # ════════════════════════════════════════════════════════════
+        _MODE_BEGINNER = "🟢 新手簡明（3 大紅綠燈 + 原理教室）"
+        _MODE_ADVANCED = "🔬 進階指標（含趨勢圖 + 拐點細節）"
+        _MODE_EXPERT = "🎓 專家深度（Z-Score 矩陣 + 流動性引擎全量）"
+        _tier_mode = st.radio(
+            "顯示模式（progressive disclosure）",
+            options=[_MODE_BEGINNER, _MODE_ADVANCED, _MODE_EXPERT],
+            index=0,
+            horizontal=True,
+            key="macro_tier_mode",
+            help="新手 = 三大紅綠燈一眼看完 + 原理教室;進階 = 加趨勢/拐點;專家 = 全量。切換不重抓資料。",
+        )
+        if _tier_mode == _MODE_BEGINNER:
+            from ui.helpers.macro_beginner_view import (
+                render_beginner_view,
+                render_principle_classroom,
+            )
+            render_beginner_view(ind, phase)
+            render_principle_classroom()
+            return
+
         ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
         alloc = phase["alloc"];  advice = phase.get("advice","")
 
