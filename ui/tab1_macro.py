@@ -1574,19 +1574,35 @@ def render_macro_tab() -> None:
                         pass
 
             # ── 市場新聞（折疊）── L3 only
+            # v19.139：systemic 排前 + Top 8 顯著 + 其餘 nested expander(對齊 AI 實際讀的 ≤8 則)
             if _show_l3:
                 _news_items = st.session_state.get("news_items",[])
                 if _news_items:
-                    with st.expander(f"📰 市場新聞（{len(_news_items)} 則）", expanded=False):
-                        for _ni in _news_items[:20]:
-                            _nt = _ni.get("title","")[:90]
-                            _ns = _ni.get("source","")
-                            _nu = _ni.get("url","") or _ni.get("link","")
-                            _nd = str(_ni.get("published",""))[:16]
-                            if _nu:
-                                st.markdown(f"**[{_nt}]({_nu})** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
-                            else:
-                                st.markdown(f"**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                    _sys = [n for n in _news_items if n.get("is_systemic")]
+                    _gen = [n for n in _news_items if not n.get("is_systemic")]
+                    _ordered = _sys + _gen
+                    _n_sys = len(_sys)
+                    _expander_label = (f"📰 市場新聞（{len(_news_items)} 則"
+                                       + (f"，🚨 {_n_sys} 系統性風險" if _n_sys else "")
+                                       + "） — Top 8（AI 實際讀的）+ 其餘摺疊")
+                    def _render_news(_ni):
+                        _nt = _ni.get("title","")[:90]
+                        _ns = _ni.get("source","")
+                        _nu = _ni.get("url","") or _ni.get("link","")
+                        _nd = str(_ni.get("published",""))[:16]
+                        _flag = "🚨 " if _ni.get("is_systemic") else ""
+                        if _nu:
+                            st.markdown(f"{_flag}**[{_nt}]({_nu})** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"{_flag}**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                    with st.expander(_expander_label, expanded=False):
+                        for _ni in _ordered[:8]:
+                            _render_news(_ni)
+                        _rest = _ordered[8:]
+                        if _rest:
+                            with st.expander(f"… 其餘 {len(_rest)} 則", expanded=False):
+                                for _ni in _rest:
+                                    _render_news(_ni)
 
             # ── v19.47 ⑥ 美股流動性 × 熱錢監測（user 反饋：基金 USD 計價，台股熱錢非主訊號） ──
             # 6 指標三角：流動性 (M2/WALCL/RRP) × 信用 (HY OAS / HYG-LQD) × 情緒 (AAII)
