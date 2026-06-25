@@ -230,6 +230,11 @@ def _update_data_registry():
     # 1. 總經指標 series (macro_engine indicators)
     ind = st.session_state.get("indicators") or {}
     for key, data in ind.items():
+        # v19.140: 過濾 _ 前綴 meta 鍵(慣例:internal bookkeeping)。
+        # 目前只 _fred_sources(macro_service.py:399,AI prompt 用的命中源 dict),
+        # 之前會在診斷表變成 "⬜ 未知日期 / 0 筆數" 幽靈列。§1:只列真實指標。
+        if str(key).startswith("_"):
+            continue
         if not isinstance(data, dict):
             continue
         series = data.get("series")

@@ -82,6 +82,24 @@ def test_no_radar_in_session_no_entries():
     assert radar_keys == [], "未載入雷達不應出現任何雷達 entry"
 
 
+def test_indicators_meta_underscore_keys_filtered():
+    """v19.140: indicators dict 內 _ 前綴 key(macro_service._fred_sources 等 meta)
+    不該進診斷表,否則 user 看到 '⬜ 未知日期 / 0 筆數' 幽靈列。"""
+    _reset()
+    st.session_state["indicators"] = {
+        "VIX": {"name": "VIX 恐慌指數", "value": 19.0, "date": "2026-06-25",
+                "series": None},
+        "_fred_sources": {"VIX": "FRED VIXCLS", "PMI": "FRED NAPM"},  # meta dict
+    }
+    _update_data_registry()
+    reg = st.session_state.get("data_registry", {})
+    keys = list(reg.keys())
+    assert "總經_VIX" in reg, "真實指標應入表"
+    assert "總經__fred_sources" not in reg, "_ 前綴 meta 不該入表"
+    assert not any(k.endswith("_fred_sources") for k in keys), \
+        f"_fred_sources 不該以任何形式入表: {keys}"
+
+
 def test_partial_radar_only_loaded_lights_registered():
     """部分燈缺 key（型錯）→ 其他正常處理，缺者跳過或失敗顯示。"""
     _reset()
