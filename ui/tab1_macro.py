@@ -1087,31 +1087,11 @@ def render_macro_tab() -> None:
             return
 
         # ════════════════════════════════════════════════════════════
-        # v19.125 — 三層 toggle(新手 / 進階 / 專家)
-        # User 2026-06-25 反饋:「初學者也能像老手一樣看得懂」→ 三層 progressive disclosure。
-        # 新手模式 only 渲染三大紅綠燈 + 原理小教室(early return);進階/專家 = 原有渲染。
-        # 預設 🟢 新手 — user 期待這版作為主視圖;進階用 toggle 隨時切回。
-        # session_state["macro_tier_mode"] 記住選擇(Streamlit radio 自動記)。
+        # v19.128 — 四時域重組:刪除 v19.125 三層 toggle(新手/進階/專家)
+        # User 2026-06-25 反饋:只保留專家,新手模式 / 進階模式 / 原理教室全刪;
+        # 改為四時域(長期/中期/短線/拐點)分組架構。
+        # 詳見下方 render_four_horizon_bar + 四個分組 subheader。
         # ════════════════════════════════════════════════════════════
-        _MODE_BEGINNER = "🟢 新手簡明（3 大紅綠燈 + 原理教室）"
-        _MODE_ADVANCED = "🔬 進階指標（含趨勢圖 + 拐點細節）"
-        _MODE_EXPERT = "🎓 專家深度（Z-Score 矩陣 + 流動性引擎全量）"
-        _tier_mode = st.radio(
-            "顯示模式（progressive disclosure）",
-            options=[_MODE_BEGINNER, _MODE_ADVANCED, _MODE_EXPERT],
-            index=0,
-            horizontal=True,
-            key="macro_tier_mode",
-            help="新手 = 三大紅綠燈一眼看完 + 原理教室;進階 = 加趨勢/拐點;專家 = 全量。切換不重抓資料。",
-        )
-        if _tier_mode == _MODE_BEGINNER:
-            from ui.helpers.macro_beginner_view import (
-                render_beginner_view,
-                render_principle_classroom,
-            )
-            render_beginner_view(ind, phase)
-            render_principle_classroom()
-            return
 
         ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
         alloc = phase["alloc"];  advice = phase.get("advice","")
@@ -1238,6 +1218,20 @@ def render_macro_tab() -> None:
         #         以 contextlib.nullcontext() 取代，所有 `with tab_main:` 區塊保持縮排不動
         import contextlib as _cl_v1942
         tab_main = _cl_v1942.nullcontext()
+
+        # ══ v19.128 — 📊 四時域 summary bar(頂部一覽:長期/中期/短線/拐點)══
+        # User 2026-06-25 反饋:刪除三層 toggle 後,在最上方放四時域總結卡,
+        # 用最小空間給「整版健康狀態」一眼判讀。下方四桶 subheader 對應放詳細。
+        try:
+            from ui.helpers.macro_beginner_view import (
+                compute_four_horizon_summary,
+                render_four_horizon_bar,
+            )
+            _4h_summary = compute_four_horizon_summary(ind, phase)
+            render_four_horizon_bar(_4h_summary)
+            st.divider()
+        except Exception as _e_4h:
+            st.warning(f"四時域 summary 渲染失敗(降級):{_e_4h}")
 
         with tab_main:
             # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）
