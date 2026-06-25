@@ -42,8 +42,59 @@ from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
 )
+from shared.signal_thresholds import (
+    CFNAI_RECESSION_THRESHOLD,
+    SAHM_RECESSION_THRESHOLD,
+)
 
 _TW_TZ = ZoneInfo("Asia/Taipei")
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.132 — 拐點偵測 sparkline 指標特定 threshold 線
+# 對齊 §1 Fail Loud 顯示原則:一看就知道有沒有超過 threshold
+# SSOT:SAHM 0.5 / CFNAI -0.7 from signal_thresholds.py
+#      HY 6% from repositories/macro_repository.MACRO_THRESHOLDS
+#      HY 8% 為教學經驗值(2008 / 2020 觸發)
+# ════════════════════════════════════════════════════════════════
+_HY_WARN_THRESHOLD: float = 6.0    # MACRO_THRESHOLDS HY_SPREAD yellow_below
+_HY_CRISIS_THRESHOLD: float = 8.0  # 教學經驗值:2008/3 / 2020/3 高點接近
+
+
+def _tp_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
+    """回傳該拐點指標的 horizontal threshold lines。
+
+    Returns list of (y_value, dash_style, line_color, annotation_text)。
+    無 threshold 的 key 回傳空 list(例:無自然零點的 indicator)。
+    """
+    if key == "pmi_diff":
+        return [(0.0, "dot", "#888", "擴張/收縮 0")]
+    if key == "yield_curve":
+        return [(0.0, "dot", "#f85149", "倒掛 0")]
+    if key == "hy_spread":
+        return [
+            (_HY_WARN_THRESHOLD, "dot", "#d29922", f"警戒 {_HY_WARN_THRESHOLD}%"),
+            (_HY_CRISIS_THRESHOLD, "dash", "#f85149", f"危機 {_HY_CRISIS_THRESHOLD}%"),
+        ]
+    if key == "sahm_rule":
+        return [(SAHM_RECESSION_THRESHOLD, "dash", "#f85149",
+                 f"衰退鎖定 {SAHM_RECESSION_THRESHOLD}")]
+    if key == "lei_cfnai":
+        return [(CFNAI_RECESSION_THRESHOLD, "dash", "#f85149",
+                 f"衰退鎖定 {CFNAI_RECESSION_THRESHOLD}")]
+    return []
+
+
+def _apply_tp_thresholds(spfig, key: str) -> None:
+    """對 sparkline figure 加上該指標的 threshold lines + annotation。"""
+    for _y, _dash, _color, _txt in _tp_threshold_lines(key):
+        spfig.add_hline(
+            y=_y, line_dash=_dash, line_color=_color, line_width=1.5,
+            opacity=0.7,
+            annotation_text=_txt,
+            annotation_position="top right",
+            annotation_font=dict(size=9, color=_color),
+        )
 
 
 def _now_tw():
@@ -1748,8 +1799,8 @@ def render_macro_tab() -> None:
                                     marker=dict(size=5, color=_col_c),
                                     showlegend=False,
                                 ))
-                                _spfig.add_hline(y=0, line_dash="dot",
-                                                 line_color="#888", line_width=1)
+                                # v19.132 — 指標特定 threshold lines(SSOT)
+                                _apply_tp_thresholds(_spfig, _key)
                                 _spfig.update_layout(
                                     height=110, margin=dict(l=10, r=10, t=4, b=4),
                                     plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
@@ -1816,8 +1867,8 @@ def render_macro_tab() -> None:
                                     marker=dict(size=5, color=_col_c),
                                     showlegend=False,
                                 ))
-                                _spfig.add_hline(y=0, line_dash="dot",
-                                                 line_color="#888", line_width=1)
+                                # v19.132 — 指標特定 threshold lines(SSOT)
+                                _apply_tp_thresholds(_spfig, _key)
                                 _spfig.update_layout(
                                     height=110, margin=dict(l=10, r=10, t=4, b=4),
                                     plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
