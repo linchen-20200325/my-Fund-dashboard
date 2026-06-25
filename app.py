@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""app.py — 基金戰情室 v18.0（重構版）
-模組架構：總經 / 單一基金 / 組合基金 / 資料診斷 / 說明書
-零快取：每次操作皆即時抓取，確保資料絕對最新
-v18.176：移除回測 Tab（user 只需汰弱留強判斷換基金，回測拖速度且 NAV 歷史抓不全）
+"""app.py — 基金戰情室 v18.0(重構版)
+模組架構(v19.130):總經 → 單一基金 → 組合基金健診 → 組合配置 → 資料診斷 → 說明書
+零快取:每次操作皆即時抓取,確保資料絕對最新
+v18.176:移除回測 Tab(user 只需汰弱留強判斷換基金,回測拖速度且 NAV 歷史抓不全)
+v19.130:tab 重排 + 改名 + 刪除「💼 配置模擬器」
 """
 import streamlit as st
 
@@ -27,7 +28,9 @@ from ui.tab2_single_fund import render_single_fund_tab
 from ui.tab3_portfolio import render_portfolio_tab
 from ui.tab5_data_guard import render_data_guard_tab
 from ui.tab6_manual import render_manual_tab
-from ui.tab_allocation_simulator import render_allocation_simulator_tab
+# v19.130 ARCHIVED: render_allocation_simulator_tab — 配置模擬器 tab 已從 UI 移除
+# 模組檔 ui/tab_allocation_simulator.py 保留於磁碟作 orphan(無 caller)
+# from ui.tab_allocation_simulator import render_allocation_simulator_tab
 # v19.31 ARCHIVED: 回測功能暫封存（📉 危機回測室 / 🔬 回測找參數），未來啟用時取消下兩行註解
 # from ui.tab_crisis_backtest import render_crisis_backtest_tab
 # from ui.tab_param_finder import render_param_finder_tab
@@ -469,14 +472,14 @@ render_macro_compass()
 # ══════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════
-# 故事化動線（v18.193）：tab 順序依 spec 敘事 —
-# 🌐 總經環境 → 📊 核心/衛星配置 → 🔍 單一基金深掘（原本「單一基金」在「組合」前，違反敘事）
-# v19.31 ARCHIVED: 回測 2 Tab 暫封存（📉 危機回測室 / 🔬 回測找參數）
-# 未來啟用步驟：(1) 取消上方 2 個 import 註解 (2) tuple 加回 tab_crisis, tab_param
-# (3) labels 加回 "📉 危機回測室" / "🔬 回測找參數" (4) 取消下方 TAB 4 / TAB 5 with-block 註解
-tab_macro, tab_portfolio, tab_single, tab_sim, tab_health, tab5, tab6 = st.tabs(
-    ["🌐 總經", "📊 組合基金", "🔍 單一基金",
-     "💼 配置模擬器", "💊 組合健診", "🔭 資料診斷", "📖 說明書"])
+# v19.130 故事化動線(2026-06-25 user 反饋,重排 + 改名 + 刪 配置模擬器):
+# 🌐 總經 → 🔍 單一基金(深掘)→ 💊 組合基金健診(原「組合健診」)
+#         → 📊 組合配置(原「組合基金」)→ 🔭 資料診斷 → 📖 說明書
+# 刪除:💼 配置模擬器(render_allocation_simulator_tab 函式檔保留作 archived)
+# 敘事:總經背景 → 個基細查 → 持有組合健康 → 配置決策 → 診斷 → 文件
+tab_macro, tab_single, tab_health, tab_portfolio, tab5, tab6 = st.tabs(
+    ["🌐 總經", "🔍 單一基金", "💊 組合基金健診",
+     "📊 組合配置", "🔭 資料診斷", "📖 說明書"])
 
 # ══════════════════════════════════════════════════════
 # TAB 1 — 🌐 總經環境（故事第 1 站）
@@ -486,43 +489,32 @@ with tab_macro:
     render_macro_tab()
 
 # ══════════════════════════════════════════════════════
-# TAB 2 — 📊 核心/衛星資產配置（故事第 2 站）
-# ══════════════════════════════════════════════════════
-with tab_portfolio:
-    # v18.128 B-C.6: 組合 Tab 內容（含 T5/T6/T7 子區）已搬到 ui/tab3_portfolio.py
-    render_portfolio_tab()
-
-# ══════════════════════════════════════════════════════
-# TAB 3 — 🔍 單一基金深掘（故事第 3 站）
+# TAB 2 — 🔍 單一基金深掘(故事第 2 站,v19.130 提前)
 # ══════════════════════════════════════════════════════
 with tab_single:
     # v18.126 B-C.4: 單一基金 Tab 內容已搬到 ui/tab2_single_fund.py
     render_single_fund_tab()
 
 # ══════════════════════════════════════════════════════
-# v19.31 ARCHIVED: TAB 4 📉 危機回測室 + TAB 5 🔬 回測找參數
-# 模組檔 ui/tab_crisis_backtest.py + ui/tab_param_finder.py + services/crisis_backtest.py
-# 完整保留於磁碟，未來啟用：取消上方 import + tab tuple + 以下 2 block 註解即可
-# ══════════════════════════════════════════════════════
-# with tab_crisis:
-#     render_crisis_backtest_tab()
-#
-# with tab_param:
-#     render_param_finder_tab()
-
-# ══════════════════════════════════════════════════════
-# TAB 6 — 💼 配置模擬器（v18.260 Phase 6b）
-# ══════════════════════════════════════════════════════
-with tab_sim:
-    render_allocation_simulator_tab()
-
-# ══════════════════════════════════════════════════════
-# TAB 7c — 💊 基金組合健診（v19.37）
-# 以 100 萬 TWD 為基準逐檔模擬：原幣本金 / 持有份額 / 逐期配息折算 TWD / 吃本金判定
-# 純函式核心 services/fund_dividend_calculator.py（zero-IO 可單測）
+# TAB 3 — 💊 組合基金健診(故事第 3 站,v19.37 / v19.130 改名)
+# 以 100 萬 TWD 為基準逐檔模擬:原幣本金 / 持有份額 / 逐期配息折算 TWD / 吃本金判定
+# 純函式核心 services/fund_dividend_calculator.py(zero-IO 可單測)
 # ══════════════════════════════════════════════════════
 with tab_health:
     render_fund_grp_health_tab()
+
+# ══════════════════════════════════════════════════════
+# TAB 4 — 📊 組合配置(故事第 4 站,v18.128 / v19.130 改名「組合基金」→「組合配置」)
+# ══════════════════════════════════════════════════════
+with tab_portfolio:
+    # v18.128 B-C.6: 組合 Tab 內容(含 T5/T6/T7 子區)已搬到 ui/tab3_portfolio.py
+    render_portfolio_tab()
+
+# ══════════════════════════════════════════════════════
+# v19.31 ARCHIVED: 📉 危機回測室 + 🔬 回測找參數
+# v19.130 ARCHIVED: 💼 配置模擬器(render_allocation_simulator_tab 保留為 orphan)
+# 三個模組檔完整保留於磁碟,未來啟用:重加 import + tab tuple + with-block 即可
+# ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════
 # TAB 8 — 資料診斷
