@@ -47,10 +47,20 @@ _MACRO_SCORE_DANGER_MAX: float = 3.0    # < 3 → 衰退區
 _MACRO_SCORE_HEALTHY_MIN: float = 6.0   # ≥ 6 → 擴張區(中間 3~6 為警戒)
 
 # 警訊燈號:任一觸發 = 紅
-_VIX_PANIC_THRESHOLD: float = 30.0       # 恐慌
-_VIX_WARNING_THRESHOLD: float = 20.0     # 警戒
-_HY_SPREAD_PANIC_THRESHOLD: float = 8.0  # 高收益債利差恐慌 (%)
-_HY_SPREAD_WARN_THRESHOLD: float = 5.0   # 警戒
+#
+# v19.147 multi-cutoff design 說明(SPEC §16 F-GRAY-4 結案):
+# 本檔 VIX 黃線 20.0 / HY 黃線 5.0 與 SSOT(macro_buckets.py:22/4)刻意不同,語意如下:
+#   - 本檔(macro_beginner_view):四時域教學「警戒前置」— 用戶剛打開
+#     首頁就看到的卡片,希望在到達公版警戒前就先預警(更敏感)
+#   - SSOT(macro_buckets.py):MACRO_THRESHOLDS 公版,SPEC §16 顯示用
+#   - macro_validation.DEFAULT_VIX_WARNING=18.0:長期評分,JSON 可校準
+#   - risk_radar.py:103-105 cur >= 25:1-day 雷達保守(避免日閃黃)
+#   - 全員一致:panic = 30 — 由 tests/test_cross_site_cutoffs.py 守護
+# F-GRAY-4 audit:multi-cutoff 非違憲,intentional design;不可機械式 swap。
+_VIX_PANIC_THRESHOLD: float = 30.0       # 恐慌(全員一致)
+_VIX_WARNING_THRESHOLD: float = 20.0     # 警戒(教學前置 — 比 SSOT 22 早)
+_HY_SPREAD_PANIC_THRESHOLD: float = 8.0  # 高收益債利差恐慌 (%)(教學保守 — 比 SSOT 6 晚)
+_HY_SPREAD_WARN_THRESHOLD: float = 5.0   # 警戒(教學前置 — 比 SSOT 4 晚一步)
 
 # UI 顏色(沿用 MATERIAL_*)
 _C_GREEN, _C_YELLOW, _C_RED = MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED

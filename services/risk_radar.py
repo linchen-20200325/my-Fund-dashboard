@@ -100,6 +100,11 @@ def _signal_vix_level() -> dict:
         cur = float(s.iloc[-1])
         prev = float(s.iloc[-2])
         delta_pct = (cur - prev) / prev * 100 if prev else 0.0
+        # v19.147 multi-cutoff design(SPEC §16 F-GRAY-4):
+        # 1-day 雷達黃線 25 比 SSOT 22 / MACRO_THRESHOLDS 22 高,**故意**保守化
+        # — 1-day 訊號每天評估,若用 22 會在輕微震盪時天天閃黃 → 訊號疲勞。
+        # SSOT 22 用於頂部五桶 bar / SPEC §16(顯示語意),非 day-level signal。
+        # 全員一致:panic = 30 — 由 tests/test_cross_site_cutoffs.py 守護。
         if cur >= 30 or delta_pct >= 20:
             lvl = 2
         elif cur >= 25 or delta_pct >= 10:
