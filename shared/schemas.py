@@ -17,11 +17,14 @@ CLAUDE.md §3.1 / SPEC §18 — DataFrame 邊界契約集中宣告。
 - `validate_fred(df) -> df`:wrapper(避免每個 caller import pandera 細節)
 - `YahooCloseSchema`:repositories.macro_repository.fetch_yf_close 出口 schema(Series)
 - `validate_yf_close(s) -> s`:wrapper(同時驗 attrs.source / attrs.fetched_at)
+- `FundNavSchema`:repositories.fund_repository.fetch_nav 等多 fetcher 共用 NAV 序列 schema
+- `validate_fund_nav(s) -> s`:wrapper(NAV-specific:>0 / 多源 source prefix 允許清單)
 
 Phase 規劃(SPEC §18.3):
 - ✅ Phase A v19.155 — pilot:fetch_fred 1 個 fetcher
-- ✅ Phase B v19.161 — 擴展 fetch_yf_close(本檔)
-- Phase B 後續 — fetch_fund_nav_series / fetch_dividends
+- ✅ Phase B v19.161 — 擴展 fetch_yf_close
+- ✅ Phase B 後續 v19.162 — fetch_nav(本檔)
+- Phase B 後續 — fetch_dividends
 - Phase C — service 入口(compute_1y_total_return_mk_simple / calc_metrics)
 - Phase D — 全面 + CI gate
 """
@@ -182,6 +185,99 @@ def validate_yf_close(s: Any) -> Any:
     if "T" not in fetched_at:
         raise ValueError(
             f"validate_yf_close: attrs.fetched_at 必須是 ISO 8601 字串(含 'T' 分隔符),"
+            f"實際 = {fetched_at!r}"
+        )
+    return s
+
+
+# ════════════════════════════════════════════════════════════════
+# FundNavSchema — fetch_nav 及相關 fund NAV fetcher 共用契約(pd.Series)
+# ════════════════════════════════════════════════════════════════
+# 依據(repositories/fund_repository.py:3578-3616 + 多 NAV fetcher):
+#   index = DatetimeIndex(monotonic_increasing,unique;週末/假日缺值為正常,
+#                          不可 ffill 偽造每日值 — CLAUDE.md §1 Fail Loud)
+#   value = float64(NAV > 0;停售/清算時應為 NaN,但生產線索 dropna 已過濾)
+#   attrs.source = "<Provider>:<host_or_endpoint>:..." — Fund 端多源 prefix:
+#       MoneyDJ / FundClear / TDCC / Cnyes / Morningstar / AllianzGI /
+#       JPMorgan / Franklin / FundRich / SITCA / InsuranceSubdomain /
+#       BankPlatform / GitHubActions / Yahoo(yf_close 共用)等
+#   attrs.fetched_at = UTC ISO 字串
+#
+# vs YahooCloseSchema:NAV 比股價更可能單點極低(基金清算),但生產
+# fetcher 已 dropna,我們嚴守 >0 契約。多源 prefix 用允許清單明列,違
+# 反 = 違反 §2.1 SSOT(可能 source 寫死成「unknown」之類的腦補字串)。
+
+# Fund NAV 多源 source prefix 允許清單(對應 §2.1 5-Tier 提到的 fetcher)
+_FUND_NAV_SOURCE_PREFIXES = (
+    "MoneyDJ:",
+    "FundClear:",
+    "TDCC:",
+    "Cnyes:",
+    "Morningstar:",
+    "AllianzGI:",
+    "JPMorgan:",
+    "Franklin:",
+    "FundRich:",
+    "SITCA:",
+    "InsuranceSubdomain:",
+    "BankPlatform:",
+    "GitHubActions:",
+    "Yahoo:",  # fetch_nav 部分路徑可能透過 yfinance 走
+)
+
+FundNavSchema = pa.SeriesSchema(
+    "float64",
+    nullable=False,
+    checks=[
+        pa.Check(lambda s: s.notna().all(), error="NAV 不可有 NaN(fetcher 已 dropna)"),
+        pa.Check(lambda s: (s > 0).all(), error="NAV 必為 > 0(停售/清算應為 NaN 而非 0)"),
+    ],
+    index=pa.Index(
+        "datetime64[ns]",
+        checks=[
+            pa.Check(lambda s: s.is_monotonic_increasing, error="index 必須單調遞增(asc)"),
+            pa.Check(lambda s: s.is_unique, error="index 不可重複"),
+        ],
+    ),
+)
+
+
+def validate_fund_nav(s: Any) -> Any:
+    """fetch_nav(+ 其他 fund NAV fetcher)出口 schema validation wrapper。
+
+    驗 3 件事:
+    1. Series values:float64, > 0, no NaN(NAV 鐵則)
+    2. Series index:datetime64[ns], monotonic, unique
+    3. Series attrs:`source` 須以 _FUND_NAV_SOURCE_PREFIXES 之一開頭;
+                    `fetched_at` 為 ISO 字串(含 'T')
+
+    對空 Series(fetch 失敗時)直接 pass — caller 已知 fallback chain。
+
+    Returns
+    -------
+    驗證通過的 Series(不複製)。
+
+    Raises
+    ------
+    pandera.errors.SchemaError:values / index 契約違反。
+    ValueError:attrs.source / attrs.fetched_at 契約違反(F-PROV-1)。
+    """
+    if s is None or len(s) == 0:
+        return s
+    # 1+2. pandera 驗 values + index
+    FundNavSchema.validate(s, lazy=False)
+    # 3. provenance(attrs)— SeriesSchema 不涵蓋,手動驗
+    src = s.attrs.get("source", "")
+    if not any(src.startswith(p) for p in _FUND_NAV_SOURCE_PREFIXES):
+        raise ValueError(
+            f"validate_fund_nav: attrs.source 必須以以下 prefix 之一開頭"
+            f"(F-PROV-1 §2.1 SSOT 多源命名約定):{_FUND_NAV_SOURCE_PREFIXES}。"
+            f"實際 = {src!r}"
+        )
+    fetched_at = s.attrs.get("fetched_at", "")
+    if "T" not in fetched_at:
+        raise ValueError(
+            f"validate_fund_nav: attrs.fetched_at 必須是 ISO 8601 字串(含 'T' 分隔符),"
             f"實際 = {fetched_at!r}"
         )
     return s
