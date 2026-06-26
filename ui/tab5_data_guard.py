@@ -248,6 +248,76 @@ def render_data_guard_tab() -> None:
     st.markdown("### ① 📥 第一手原始資料源總覽")
     st.caption("系統實際下載的所有原始資料端點(依 ARCHITECTURE §5)— 顏色與筆數動態反映 session_state")
 
+    # v19.152:外資/USDTWD 立即更新按鈕(避免 user 為了 refresh 還要點開 📦 ARCHIVED expander)
+    # _macro_hot_money 卡舊資料的根因是 v19.47 把 hot_money panel 收進 ARCHIVED,
+    # 不點開就不 refetch。本按鈕直接觸發 fetch + stash,提供獨立 refresh 路徑。
+    _hm_existing = st.session_state.get("_macro_hot_money") or {}
+    _hm_date = _hm_existing.get("date", "") if isinstance(_hm_existing, dict) else ""
+    _hm_age_txt = ""
+    if _hm_date:
+        try:
+            import datetime as _dt_hm_btn
+            _hm_dt = _dt_hm_btn.date.fromisoformat(str(_hm_date)[:10])
+            _age = (_dt_hm_btn.date.today() - _hm_dt).days
+            _hm_age_txt = f"(目前資料 {_age} 天前)"
+        except (ValueError, TypeError):
+            pass
+    _bc1, _bc2 = st.columns([2, 5])
+    with _bc1:
+        _refetch_btn = st.button(
+            "📥 立即更新外資 / USDTWD",
+            key="btn_refetch_hot_money_v19152",
+            help="直接觸發 hot_money fetch + 寫 session_state._macro_hot_money。"
+                 "不必點開 📦 ARCHIVED 台股熱錢監測 expander。",
+            use_container_width=True,
+        )
+    with _bc2:
+        st.caption(
+            f"🇹🇼 外資買賣超 × USDTWD 同步判讀 {_hm_age_txt}|"
+            f"v19.47 後 panel 收進 ARCHIVED expander,本按鈕為獨立 refresh 路徑。"
+        )
+    if _refetch_btn:
+        try:
+            from hot_money import (
+                build_signals, fetch_foreign_flow_series, fetch_usdtwd_series,
+            )
+            import pandas as _pd_hm
+            _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
+                            if hasattr(st, "secrets") else "") or ""
+            with st.spinner("📡 抓 FinMind 外資 + Yahoo USDTWD..."):
+                _flow_df, _ferr = fetch_foreign_flow_series(180, _finmind_tok)
+                _fx_df, _xerr = fetch_usdtwd_series(180)
+            for _err in (_ferr, _xerr):
+                if _err:
+                    st.warning(_err)
+            if _flow_df.empty or _fx_df.empty:
+                st.error("外資或 USDTWD 抓取為空,無法更新熱錢卡。")
+            else:
+                _sig = build_signals(_flow_df, _fx_df, window=5,
+                                     flow_thr_yi=50.0, fx_thr_pct=0.5)
+                if _sig.empty:
+                    st.warning("外資與匯率無重疊交易日,無法計算訊號。")
+                else:
+                    _latest = _sig.iloc[-1]
+                    st.session_state["_macro_hot_money"] = {
+                        "date": str(_pd_hm.Timestamp(_latest["date"]).date()),
+                        "state": str(_latest.get("state", "")),
+                        "is_divergence": bool(_latest.get("is_divergence", False)),
+                        "interpretation": str(_latest.get("interpretation", ""))[:200],
+                        "foreign_net_yi": float(_latest.get("foreign_net_yi", 0) or 0),
+                        "roll_flow": float(_latest.get("roll_flow", 0) or 0),
+                        "roll_apprec_pct": float(_latest.get("roll_apprec", 0) or 0),
+                        "window": 5,
+                    }
+                    st.success(
+                        f"✅ 已更新外資/USDTWD 資料至 "
+                        f"{st.session_state['_macro_hot_money']['date']}"
+                    )
+                    st.rerun()
+        except Exception as _e_rf:
+            st.error(f"refetch 失敗:[{type(_e_rf).__name__}] {_e_rf}")
+    st.divider()
+
     # ── Section 0: 全域資料健康總表 ──（caller 端 app.py 已先 call _update_data_registry()）
     _reg = st.session_state.get("data_registry", {})
 
