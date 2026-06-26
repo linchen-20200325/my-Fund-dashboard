@@ -44,6 +44,8 @@ from shared.colors import (
     TRAFFIC_YELLOW as YELLOW,
 )
 from shared.fred_series import FRED_DGS10, FRED_HY_SPREAD, FRED_VXVCLS
+# C2-A v19.157 — VIX yellow 25→22 統一,改 import SSOT(對齊 MACRO_THRESHOLDS)
+from shared.macro_buckets import _VIX_RED, _VIX_YELLOW
 
 _RADAR_KEYS = (
     "vix_level",
@@ -100,18 +102,18 @@ def _signal_vix_level() -> dict:
         cur = float(s.iloc[-1])
         prev = float(s.iloc[-2])
         delta_pct = (cur - prev) / prev * 100 if prev else 0.0
-        # v19.147 multi-cutoff design(SPEC §16 F-GRAY-4):
-        # 1-day 雷達黃線 25 比 SSOT 22 / MACRO_THRESHOLDS 22 高,**故意**保守化
-        # — 1-day 訊號每天評估,若用 22 會在輕微震盪時天天閃黃 → 訊號疲勞。
-        # SSOT 22 用於頂部五桶 bar / SPEC §16(顯示語意),非 day-level signal。
-        # 全員一致:panic = 30 — 由 tests/test_cross_site_cutoffs.py 守護。
-        if cur >= 30 or delta_pct >= 20:
+        # C2-A v19.157 — 全站 VIX 統一 SSOT(_VIX_YELLOW=22 / _VIX_RED=30)
+        # 取代 v19.147 multi-cutoff(原 yellow=25 保守化)。1-day 雷達在 VIX 22~25
+        # 區間會比舊版多閃黃 — user 已接受此 trade-off(C2 計畫風險已宣告)。
+        # delta_pct 仍保留原 1-day 變化幅度作為 secondary trigger(快速急殺優先)。
+        if cur >= _VIX_RED or delta_pct >= 20:
             lvl = 2
-        elif cur >= 25 or delta_pct >= 10:
+        elif cur >= _VIX_YELLOW or delta_pct >= 10:
             lvl = 1
         else:
             lvl = 0
-        note = f"VIX={cur:.1f}（單日 {delta_pct:+.1f}%）｜>30 或 +20% 為紅燈"
+        note = (f"VIX={cur:.1f}（單日 {delta_pct:+.1f}%）｜"
+                f">{_VIX_RED:.0f} 或 +20% 為紅燈;>{_VIX_YELLOW:.0f} 或 +10% 為黃燈")
         trend = [round(x, 2) for x in s.tail(8).tolist()]
         return _build(lvl, round(cur, 2), round(prev, 2), note,
                       "Yahoo ^VIX 日線", trend)

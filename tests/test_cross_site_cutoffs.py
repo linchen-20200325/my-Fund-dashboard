@@ -1,49 +1,46 @@
-"""test_cross_site_cutoffs.py — multi-cutoff design 守衛 (v19.147)
+"""test_cross_site_cutoffs.py — Phase D SSOT 統一進度守衛 (v19.157)
 
-CLAUDE.md §8.3 F-GRAY-4 audit 釐清:Fund 端 VIX/HY/MOVE/PCR 等指標的 yellow 線
-在不同模組刻意取不同值,語意不同**非 bug**:
-- macro_validation(長期評分,JSON 可校準):VIX warning=18
-- macro_buckets.py(SSOT/SPEC 顯示):VIX yellow=22
-- macro_beginner_view(四時域教學前置):VIX warning=20
-- risk_radar(1-day 雷達保守):VIX yellow=25
-- 全員一致:VIX panic = 30(crisis)
+C2 series(user 拍板):全站 VIX yellow 統一到 SSOT 22(macro_buckets._VIX_YELLOW)。
+- ✅ C2-A v19.157:risk_radar 25 → 22(本 PR)
+- ⏳ C2-B:macro_beginner_view 20 → 22
+- ⏳ C2-C:macro_validation 18 → 22 + calibration JSON bounds
+- ⏳ C2-D:結案 cross-site cutoffs + SPEC §16.1 結案
+
+歷史脈絡(v19.147 multi-cutoff design,已被 C2 series 撤銷):
+原本 4 個 yellow 點(18 / 20 / 22 / 25)刻意散落代表不同 cadence/校準層;
+user 改變主意,接受「日均閃黃」trade-off 換 SSOT 收斂單一值。
 
 本檔測試:
-1. 各 yellow 值維持各自設計(防有人路過順手「統一」破壞語意)
-2. **universal panic=30 必須一致**(這條是真 SSOT,任一處改 30 → CI 立擋)
-
-如果未來真要做 Phase D 全面 SSOT 統一,先看完 CLAUDE.md §8.3 F-GRAY-4 + SPEC §16
-multi-cutoff design 說明,確認是 user 指示的架構改造。
+1. risk_radar 已對齊 SSOT 22(C2-A 完成)
+2. 剩餘 sites(macro_validation 18 / macro_beginner_view 20)逐步收斂(C2-B/C 進行中)
+3. **universal panic=30 必須一致**(真 SSOT,任一處改 → CI 立擋)
 """
 import pytest
 
 
 # ──────────────────────────────────────────────────────────
-# 1. yellow 各自設計(intentional spread,語意各自正確)
+# 1. C2 series 收斂進度守衛
 # ──────────────────────────────────────────────────────────
-def test_vix_yellow_intentional_spread():
-    """VIX yellow 4 個值刻意散落:18(長期校準)/ 20(教學前置)/ 22(SSOT)/ 25(1-day 保守)。
-    若有人未經 user 同意改成統一值 → CI 立擋,要求看 SPEC §16 multi-cutoff 說明。"""
+def test_vix_yellow_c2_progress():
+    """C2-A v19.157 完成:risk_radar 已對齊 SSOT 22(從 macro_buckets._VIX_YELLOW)。
+    剩餘 sites 待 C2-B/C 收斂;測試固守目前合約值,C2-B/C merge 時同步調整。"""
     from services.macro_validation import DEFAULT_VIX_WARNING
     from shared.macro_buckets import _VIX_YELLOW
     from ui.helpers.macro_beginner_view import _VIX_WARNING_THRESHOLD
 
-    assert DEFAULT_VIX_WARNING == 18.0, (
-        f"macro_validation.DEFAULT_VIX_WARNING 應 18(長期校準),實際 {DEFAULT_VIX_WARNING}"
-    )
+    # SSOT 22(永遠 22,五桶 bar / SPEC §16 用)
     assert _VIX_YELLOW == 22.0, (
-        f"macro_buckets._VIX_YELLOW 應 22(SSOT/MACRO_THRESHOLDS),實際 {_VIX_YELLOW}"
+        f"macro_buckets._VIX_YELLOW(SSOT)應 22,實際 {_VIX_YELLOW}"
     )
+    # macro_validation 18(C2-C 待收 22)
+    assert DEFAULT_VIX_WARNING == 18.0, (
+        f"macro_validation.DEFAULT_VIX_WARNING 目前 18,C2-C 後將收 22。"
+        f" 實際 {DEFAULT_VIX_WARNING}"
+    )
+    # macro_beginner_view 20(C2-B 待收 22)
     assert _VIX_WARNING_THRESHOLD == 20.0, (
-        f"macro_beginner_view._VIX_WARNING_THRESHOLD 應 20(教學前置),"
-        f"實際 {_VIX_WARNING_THRESHOLD}"
-    )
-
-    # 4 個值應該全部不同(intentional spread)
-    yellows = {DEFAULT_VIX_WARNING, _VIX_YELLOW, _VIX_WARNING_THRESHOLD}
-    assert len(yellows) >= 3, (
-        f"4 個 yellow 點應 intentional spread 至少 3 個不同值,實際 {sorted(yellows)}。"
-        " 若改至統一,先讀 SPEC §16 F-GRAY-4 multi-cutoff 說明確認。"
+        f"macro_beginner_view._VIX_WARNING_THRESHOLD 目前 20,C2-B 後將收 22。"
+        f" 實際 {_VIX_WARNING_THRESHOLD}"
     )
 
 
@@ -76,17 +73,22 @@ def test_vix_panic_universal_30():
     )
 
 
-def test_risk_radar_vix_panic_source_check():
-    """risk_radar.py:103 source 字串守 30(避免有人手改 25 之類)。"""
+def test_risk_radar_vix_source_uses_ssot():
+    """C2-A v19.157:risk_radar._signal_vix_level 直接 import _VIX_YELLOW / _VIX_RED
+    SSOT,不再寫 inline magic 25 / 30。"""
     import inspect
     from services import risk_radar
     src = inspect.getsource(risk_radar._signal_vix_level)
-    assert "cur >= 30" in src, (
-        "risk_radar._signal_vix_level VIX panic 必須是 30 (multi-cutoff F-GRAY-4 一致點)"
+    assert "_VIX_RED" in src, (
+        "risk_radar._signal_vix_level 應從 shared.macro_buckets 引 _VIX_RED 為 panic 閾值"
     )
-    # yellow 25 也是刻意設計,守住
-    assert "cur >= 25" in src, (
-        "risk_radar._signal_vix_level VIX yellow 應為 25 (1-day 保守化,SPEC §16 設計)"
+    assert "_VIX_YELLOW" in src, (
+        "risk_radar._signal_vix_level 應從 shared.macro_buckets 引 _VIX_YELLOW 為 warning 閾值"
+        "(C2-A v19.157 從 inline 25 收斂)"
+    )
+    # 守:不可重新 inline magic 25 或 30
+    assert "cur >= 25" not in src, (
+        "C2-A v19.157 後不可 inline VIX yellow=25,須走 _VIX_YELLOW SSOT"
     )
 
 
