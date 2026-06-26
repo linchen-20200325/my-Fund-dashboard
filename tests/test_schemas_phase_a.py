@@ -138,3 +138,39 @@ class TestFetchFredIntegration:
         assert "source" in df.columns
         assert df["source"].iloc[0] == "FRED:CPILFESL"
         assert "fetched_at" in df.columns
+
+    def test_fetch_fred_integer_only_series_dtype(self, monkeypatch):
+        """v19.172 regression — FRED series 全為整數(PAYEMS / HSN1F 等)
+        時,fetch_fred 必須強制轉 float64,否則 MacroFredSchema 拒。
+
+        v19.171 之前:pd.to_numeric 對全整數 series 回 int64 → SchemaError
+        v19.172 起:.astype("float64") 強制統一 dtype。
+        """
+        class _MockResp:
+            def __init__(self, payload):
+                self._payload = payload
+            def json(self):
+                return self._payload
+            @property
+            def status_code(self):
+                return 200
+
+        # payload 全為整數字串(模擬 PAYEMS / HSN1F / ICSA 等就業/住宅啟動數)
+        _int_payload = {
+            "observations": [
+                {"date": "2026-01-01", "value": "300000",
+                 "realtime_start": "2026-01-15"},
+                {"date": "2026-02-01", "value": "305000",
+                 "realtime_start": "2026-02-15"},
+                {"date": "2026-03-01", "value": "310000",
+                 "realtime_start": "2026-03-15"},
+            ]
+        }
+        from repositories import macro_repository as mr
+        monkeypatch.setattr(mr, "fetch_url",
+                            lambda *a, **kw: _MockResp(_int_payload))
+        df = mr.fetch_fred("PAYEMS", "x" * 32, n=3)
+        # 核心斷言:整數 series 也要回 float64,否則上游 schema 炸
+        assert not df.empty
+        assert str(df["value"].dtype) == "float64", \
+            f"v19.172 regression: 整數 series value 必為 float64,實際 = {df['value'].dtype}"

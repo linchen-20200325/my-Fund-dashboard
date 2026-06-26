@@ -397,7 +397,10 @@ def calc_holdings_overlap(funds_data: list) -> "dict | None":
     """
     try:
         import numpy as np
-    except Exception:
+    except Exception as _e_np:
+        # F-MED v19.170: silent → stderr log
+        import sys as _sys_np
+        print(f'[portfolio_service/calc_shadow_score] numpy missing: {type(_e_np).__name__}: {_e_np}', file=_sys_np.stderr)
         return None
 
     # 整理資料：建 holdings set（由名稱代表）與 sector vector（dict 名稱→pct）
@@ -523,7 +526,10 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
                     shadow_pairs.append((codes[i], codes[j], round(float(v), 4)))
         shadow_pairs.sort(key=lambda x: -abs(x[2]))
         return {"matrix": corr, "shadow_pairs": shadow_pairs, "freq": freq_label}
-    except Exception:
+    except Exception as _e_corr:
+        # F-MED v19.170: silent → stderr log
+        import sys as _sys_corr
+        print(f'[portfolio_service/calc_correlation_matrix] fail: {type(_e_corr).__name__}: {_e_corr}', file=_sys_corr.stderr)
         return None
 
 

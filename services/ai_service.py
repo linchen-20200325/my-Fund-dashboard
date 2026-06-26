@@ -189,8 +189,10 @@ def _build_snapshot(indicators: dict, phase_info: dict,
             lines.append("\n[風險預警]")
             for a in red_alerts[:2]:
                 lines.append(f"  {a['message']}")
-    except Exception:
-        pass
+    except Exception as _e_ra:
+        # F-MED v19.170: silent → stderr log;risk_alert 失敗不阻斷主流程
+        import sys as _sys_ra
+        print(f'[ai_service/risk_alert_inject] fail: {type(_e_ra).__name__}: {_e_ra}', file=_sys_ra.stderr)
 
     return "\n".join(lines)
 
@@ -326,7 +328,10 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
         try:
             tr1y_f = float(tr1y) if tr1y is not None else None
             adr_f = float(adr) if adr else 0.0
-        except Exception:
+        except (ValueError, TypeError) as _e_tr1y:
+            # F-MED v19.170: narrow exception + stderr log;不變 fallback
+            import sys as _sys_tr
+            print(f'[ai_service/single_fund_summary] tr1y/adr parse fail: {type(_e_tr1y).__name__}: {_e_tr1y}', file=_sys_tr.stderr)
             tr1y_f, adr_f = None, 0.0
         eating = ""
         if tr1y_f is not None and adr_f > 0 and tr1y_f < adr_f:
@@ -518,8 +523,10 @@ def _write_error_ledger(error, context, api_key=""):
                 _f.write("# AI_Error_Ledger\n\n> Auto-maintained error log.\n")
         with open(_ledger_path, "a", encoding="utf-8") as _f:
             _f.write(_entry)
-    except Exception:
-        pass
+    except Exception as _e_ledger:
+        # F-MED v19.170: silent pass → stderr log;ledger write 失敗本身不阻斷主流程
+        import sys as _sys_ed
+        print(f'[ai_service/_append_error_ledger] ledger write fail {_ledger_path}: {type(_e_ledger).__name__}: {_e_ledger}', file=_sys_ed.stderr)
 
 
 # ══════════════════════════════════════════════════════════════════
