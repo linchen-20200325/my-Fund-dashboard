@@ -42,6 +42,7 @@ from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
 )
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
     SAHM_RECESSION_THRESHOLD,
@@ -54,11 +55,12 @@ _TW_TZ = ZoneInfo("Asia/Taipei")
 # v19.132 — 拐點偵測 sparkline 指標特定 threshold 線
 # 對齊 §1 Fail Loud 顯示原則:一看就知道有沒有超過 threshold
 # SSOT:SAHM 0.5 / CFNAI -0.7 from signal_thresholds.py
-#      HY 6% from repositories/macro_repository.MACRO_THRESHOLDS
-#      HY 8% 為教學經驗值(2008 / 2020 觸發)
+# F-GRAY-4 v19.169: HY 由 shared/macro_thresholds_v2.py SSOT 提供 (SPEC §16.2)
+# - warn (yellow): stoplight.yellow_below = 6.0
+# - crisis: beginner_panic.panic_above = 8.0(教學經驗值,2008/3 / 2020/3 高點)
 # ════════════════════════════════════════════════════════════════
-_HY_WARN_THRESHOLD: float = 6.0    # MACRO_THRESHOLDS HY_SPREAD yellow_below
-_HY_CRISIS_THRESHOLD: float = 8.0  # 教學經驗值:2008/3 / 2020/3 高點接近
+_HY_WARN_THRESHOLD: float = _HY_THR["stoplight"]["yellow_below"]
+_HY_CRISIS_THRESHOLD: float = _HY_THR["beginner_panic"]["panic_above"]
 
 
 def _tp_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
@@ -1354,19 +1356,22 @@ def render_macro_tab() -> None:
         import contextlib as _cl_v1942
         tab_main = _cl_v1942.nullcontext()
 
-        # ══ v19.128 — 📊 四時域 summary bar(頂部一覽:長期/中期/短線/拐點)══
-        # User 2026-06-25 反饋:刪除三層 toggle 後,在最上方放四時域總結卡,
-        # 用最小空間給「整版健康狀態」一眼判讀。下方四桶 subheader 對應放詳細。
+        # ══ v19.146 — 📊 五桶 summary bar(頂部一覽:長期/中期/短線/拐點/新聞)══
+        # 對齊 Stock v18.284 五桶 bar 體驗,Fund 加 📰 新聞為第 5 桶(讀 v19.144 SSOT)。
+        # news_items=None 時自動降級為 ⬜「未掃描」,點開「執行 AI 裁決」抓 RSS 後燈亮。
+        # render_five_bucket_bar 對無 news key 的 summary 會 fallback 為 4 columns,
+        # 任何異常(包括 import 失敗)走 except 降級為文字提示。
         try:
             from ui.helpers.macro_beginner_view import (
-                compute_four_horizon_summary,
-                render_four_horizon_bar,
+                compute_five_bucket_summary,
+                render_five_bucket_bar,
             )
-            _4h_summary = compute_four_horizon_summary(ind, phase)
-            render_four_horizon_bar(_4h_summary)
+            _news_items = st.session_state.get("news_items")
+            _5b_summary = compute_five_bucket_summary(ind, phase, news_items=_news_items)
+            render_five_bucket_bar(_5b_summary)
             st.divider()
-        except Exception as _e_4h:
-            st.warning(f"四時域 summary 渲染失敗(降級):{_e_4h}")
+        except Exception as _e_5b:
+            st.warning(f"五桶 summary 渲染失敗(降級):{_e_5b}")
 
         with tab_main:
             # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）
@@ -1607,9 +1612,21 @@ def render_macro_tab() -> None:
                             _render_news(_ni)
                         _rest = _ordered[8:]
                         if _rest:
-                            with st.expander(f"… 其餘 {len(_rest)} 則", expanded=False):
-                                for _ni in _rest:
-                                    _render_news(_ni)
+                            # v19.143 P0 fix:Streamlit 不准 nested expander
+                            # (v19.139 把「其餘 N 則」做成 inner expander → 線上炸
+                            # StreamlitAPIException: "Expanders may not be nested inside
+                            # other expanders")。改用 inline divider + caption 分隔,
+                            # rest 全部 inline 列出。外層 expander 預設折疊,user 點開
+                            # 才看到 Top 8 + 分隔線 + 其餘,語意不變。
+                            st.markdown(
+                                f"<div style='border-top:1px dashed #555;"
+                                f"margin:10px 0 6px;padding-top:6px;color:#888;"
+                                f"font-size:11px'>── 其餘 {len(_rest)} 則 "
+                                "(AI 未讀,僅供參考)──</div>",
+                                unsafe_allow_html=True,
+                            )
+                            for _ni in _rest:
+                                _render_news(_ni)
 
             # ── v19.47 ⑥ 美股流動性 × 熱錢監測（user 反饋：基金 USD 計價，台股熱錢非主訊號） ──
             # 6 指標三角：流動性 (M2/WALCL/RRP) × 信用 (HY OAS / HYG-LQD) × 情緒 (AAII)

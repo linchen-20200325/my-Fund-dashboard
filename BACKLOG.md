@@ -37,7 +37,7 @@
 - [x] **F-GRAY-1** §8.3 v19.81 audit 結案:`fund_fetcher.py` **保留根目錄**(18 條 re-export shim + 57 caller,搬移為 cosmetic)
 - [x] **F-GRAY-2** §8.3 v19.81 audit 結案:`hot_money.py` / `tw_macro.py` 同上,根目錄 vs `repositories/` 為純 cosmetic
 - [x] **F-GRAY-3** §8.3 v19.81 audit 結案:`app.py`(568 LOC)已是 orchestrator,無業務邏輯需下沉;同步刪除 1 處 dead code `_unused_old_calculate_composite_score`
-- [⛔ WONTFIX] **F-GRAY-4** §8.3 `MACRO_THRESHOLDS` harmonize — v19.80 audit 結:不可機械式 swap;套 §-1 工作準則:未實際 bug,架構提案性質工作不主動推。v19.109 結案
+- [⚙️] **F-GRAY-4** §8.3 `MACRO_THRESHOLDS` harmonize:v19.168(#406)architecture proposal 立案(SPEC §16.2)。**v19.169 HY_SPREAD** 落地:新建 `shared/macro_thresholds_v2.py` SSOT(4 sub-dict:stoplight / score_function / portfolio_advisor / beginner_panic),migrate 6 sites(macro_repository / macro_validation / macro_score_calibration / portfolio_service / macro_service / macro_beginner_view / tab1_macro),+ `tests/test_macro_thresholds_v2.py` 13 守護 tests 全綠。**CPI / PMI 後續**:等 user 指派(per §-1)
 - [ ] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 已收一輪;其餘**遵 §-1 等實際 bug 觸發再收**,不主動清
 
 **v19.109 收尾**(CLAUDE.md §-1 工作準則立):Open 項全數 WONTFIX 或結案,僅 F-MED 等實際 bug 觸發再收。0 個 active pending。

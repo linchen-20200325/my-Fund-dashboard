@@ -1599,3 +1599,341 @@ def _friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = 
     輸出  : st.{level}(title + hint) + st.expander("🔧 技術細節（給工程師）") with st.code(traceback)
     """
 ```
+
+---
+
+## §16 總經五桶 × 危險門檻一覽（`shared/macro_buckets.py` SSOT）
+
+> v19.144。Fund 端「總經五桶」危險門檻系統的單一參考表 — 與 Stock 端 SPEC §11 結構對齊,
+> 但桶配置不同(Fund 視角:`拐點` 取代 Stock 的 `籌碼`、加 `📰 新聞`)。
+> 桶燈號、未來圖表上的黃/紅標準線、本表三者**同源** — 全部讀
+> `shared/macro_buckets.py::BUCKET_DANGER_SPECS`,改門檻只改一處。
+
+**門檻來源透明度**（`DangerSpec.source`）:
+- 🔵 **官方 / SSOT**:有既有常數背書(`MACRO_THRESHOLDS` 鏡像由 `tests/test_macro_buckets.py` 守漂移;或直接 import `signal_thresholds`)。
+- ⚪ **系統設計**:本桶為 UI 判讀方便自訂之警示線(具名 + 文件化,§1 不適用 — 此為 UI 門檻 config,非偽造資料輸出)。
+
+**方向**:`high_bad` = 值越高越危險｜`low_bad` = 值越低越危險｜`band` = 兩端皆危險。
+
+### 🌳 長期（結構 / 景氣位階）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| 總經健康評分 | /10 | ≥6 | 3–6 | <3 | low_bad | 🔵 macro_validation.aggregate_score |
+| M2 貨幣供給 YoY | % | >5 寬鬆 | 0–5 | <0 緊縮 | low_bad | 🔵 MACRO_THRESHOLDS.M2_YOY |
+| Fed 資產負債表 YoY | % | >5 擴表 | −5–5 | <−5 縮表 | low_bad | 🔵 MACRO_THRESHOLDS.FED_BS_YOY |
+
+### 📈 中期（景氣循環 3-12 月）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| ISM 製造業 PMI | — | >50 | 46–50 收縮 | <46 嚴重 | low_bad | 🔵 MACRO_THRESHOLDS.PMI |
+| CPI YoY | % | <3.5 | 3.5–4.0 | ≥4 嚴峻 | high_bad | 🔵 MACRO_THRESHOLDS.CPI |
+| 失業率 | % | <4.5 | 4.5–6 | ≥6 衰退 | high_bad | 🔵 SCORE_RULES.UNEMPLOYMENT |
+| US10Y 殖利率 | % | <4.5 | 4.5–5 | ≥5 緊縮 | high_bad | 🔵 MACRO_THRESHOLDS.US10Y |
+| Forward P/E | 倍 | <19.5(+1σ) | 19.5–22.5 | ≥22.5(+2σ) | high_bad | 🔵 valuation.FORWARD_PE_MEAN+σ |
+
+### 🎯 短線急殺（即時 risk-off）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| VIX 恐慌指數 | — | <22 | 22–30 | ≥30 危機 | high_bad | 🔵 MACRO_THRESHOLDS.VIX + macro_validation |
+| HY 信用利差 OAS | % | <4 | 4–6 | ≥6 信用裂 | high_bad | 🔵 MACRO_THRESHOLDS.HY_SPREAD |
+| MOVE 債市波動 | — | <100 | 100–120 | ≥120 stress | high_bad | ⚪ 對齊 macro_beginner_view._MOVE_WARNING |
+| Put/Call 比率 | — | <1.0 | 1.0–1.5 | ≥1.5 散戶恐慌 | high_bad | ⚪ 對齊 macro_beginner_view._PCR_PANIC |
+
+### ⚠️ 拐點（領先警報）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| Sahm Rule | — | <0.3 | 0.3–0.5 | ≥0.5 觸發 | high_bad | 🔵 SAHM_RECESSION_THRESHOLD(0.5) + ⚪ 0.3 警戒 |
+| 10Y-2Y 殖利率差 | % | >0.5 | 0–0.5 接近倒掛 | ≤0 倒掛 | low_bad | 🔵 MACRO_THRESHOLDS.YIELD_10Y2Y |
+| 10Y-3M 殖利率差 | % | >0.5 | 0–0.5 接近倒掛 | ≤0 倒掛 | low_bad | 🔵 MACRO_THRESHOLDS.YIELD_10Y3M |
+| CFNAI 領先指標 | — | >−0.35 | −0.7–−0.35 走弱 | ≤−0.7 衰退 | low_bad | 🔵 CFNAI_RECESSION_THRESHOLD(−0.7) + ⚪ −0.35 警戒 |
+| SLOOS 銀行收緊 | % | <30 | 30–50 | ≥50 衰退級緊縮 | high_bad | ⚪ 對齊 macro_beginner_view._SLOOS_TIGHTENING |
+
+### 📰 新聞（系統性風險掃描）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| 系統性風險新聞數 | 則 | 0 | 1 | ≥2(戰爭/倒閉/崩盤關鍵字命中) | high_bad | ⚪ 命中則數規則(對齊 news_repository.SYSTEMIC_RISK_KEYWORDS)|
+
+> 桶燈號 = 該桶所有指標分級取**最危險者**(紅 > 黃 > 綠 > 灰未載入)。
+> 第 5 桶 📰 新聞需 Tab1 已抓 RSS(news_items session_state) 才有資料;未抓時 ⬜(§1 Fail Loud,不偽綠)。
+>
+> **與既有 4-horizon bar 的關係**:本表為 SSOT 危險門檻參考。`ui/helpers/macro_beginner_view.compute_four_horizon_summary`
+> 仍為 production 四時域 bar(已運作),不破壞既有體驗。Phase B 將把 SSOT 套到 chart `add_danger_hlines`
+> 視覺化危險距離,Phase C 視 user 反饋決定是否擴至 5 桶 bar。
+
+### §16.1 VIX 全站 SSOT 統一(C2 series v19.157~v19.160 結案)
+
+**歷史脈絡**:v19.147 曾以 "Multi-cutoff Design" 為 4 個 VIX yellow 值散落(18/20/22/25)
+做合理化辯護,標 F-GRAY-4「✅ 結案」(不機械式統一)。
+**2026-06-26 user 改變主意**,接受 trade-off(雷達日均閃黃 / 長期評分敏感度降 4 點 /
+教學前置語意喪失 2 點 / calibration JSON 重定 bound),拍板 C2 series 全面 SSOT 收斂。
+
+**現況(C2 完成後)**:Fund 端 VIX yellow 全站統一 **22**(`shared/macro_buckets._VIX_YELLOW`),
+panic 全站統一 **30**(`_VIX_RED`)。
+
+| 模組 | VIX yellow | VIX panic | 版本 |
+|---|---|---|---|
+| `shared/macro_buckets._VIX_YELLOW / _VIX_RED`(SSOT) | **22** | **30** | 鏡像 `MACRO_THRESHOLDS.VIX` |
+| `services/macro_validation.DEFAULT_VIX_WARNING / _CRISIS` | **22** | **30** | C2-C v19.159(原 18 / 30) |
+| `ui/helpers/macro_beginner_view._VIX_WARNING_THRESHOLD / _PANIC_THRESHOLD` | **22** | **30** | C2-B v19.158(原 20 / 30) |
+| `services/risk_radar.py::_signal_vix_level` | **22**(via `_VIX_YELLOW`) | **30**(via `_VIX_RED`) | C2-A v19.157(原 25 / 30) |
+| `services/macro_service.py` alert(`indicators[VIX] > _MB_VIX_YELLOW`) | **22** | — | C2-D v19.160(原 inline `> 25`) |
+
+**HY spread 保留 intentional spread**(C2 不一併收):
+- SSOT 黃線 **4**(`_HY_YELLOW`,`MACRO_THRESHOLDS.HY_SPREAD.green_below`)
+- `macro_beginner_view._HY_SPREAD_WARN_THRESHOLD = 5`(教學保守)
+- HY 屬慢速信用指標,提前預警 ROI 仍在;`test_hy_yellow_intentional_spread` 守。
+
+**Calibration JSON 機制改動**(C2-C):
+- `data_cache/macro_thresholds_global.json` 載入 bound 重定:`warning ∈ [14, 22]` → `[18, 26]`(對齊 SSOT 22 重心 ±4)
+- `scripts/calibrate_macro_score.py` grid `[14, 16, 18, 20, 22]` → `[18, 20, 22, 24, 26]`
+- 既有 JSON 校準到舊 `[14, 18)` 區 → silently fallback 至 SSOT 22(intended)
+- repo 內無 production calibration JSON → 本次 deploy 無實際 fallback 觸發
+
+**C2 series 步驟總表**:
+- ✅ C2-A v19.157:`risk_radar._signal_vix_level` 25 → 22(import `_VIX_YELLOW`)
+- ✅ C2-B v19.158:`macro_beginner_view._VIX_WARNING_THRESHOLD` 20 → 22
+- ✅ C2-C v19.159:`macro_validation.DEFAULT_VIX_WARNING` 18 → 22 + calibration bounds 重定
+- ✅ C2-D v19.160:本段 SPEC §16.1 改寫 + `macro_service.py` alert inline 25 → SSOT + CLAUDE.md F-GRAY-4 結案標記
+
+**User-facing 影響總覽**:
+1. **雷達**:`VIX ∈ [22, 25]` 區間會比舊版多閃黃(日均增 0~2 次,依市場波動)
+2. **macro_validation 評分**:VIX 18~22 不再扣 -1.0(改 0.0 中性);≥22 才扣分
+3. **macro_service alert**:VIX > 22 觸發 "市場恐慌升溫" 提示(原 > 25)
+4. **教學卡片 + 五桶 bar + SPEC §16 表**:統一 22 顯示,user 不再有「教學黃但雷達綠」的認知衝突
+5. **panic = 30** 全站不變
+
+**守護**:`tests/test_cross_site_cutoffs.py`
+- `test_vix_yellow_all_aligned_to_ssot`:3 site warning 全 22 + 全員一致
+- `test_vix_panic_universal_30`:3 site panic 全 30
+- `test_risk_radar_vix_source_uses_ssot`:risk_radar 必須 import `_VIX_YELLOW`/`_VIX_RED`,不可 inline 25
+
+### §16.2 PMI / CPI / HY 多用途閾值 harmonize architecture proposal(F-GRAY-4 收尾,v19.168)
+
+**背景**(F-GRAY-4 v19.80 audit 結論,CLAUDE.md §8.3):
+- VIX 子題 v19.157~v19.160 已收(本檔 §16.1),全站 yellow=22 / panic=30 統一
+- **其他指標**(PMI / CPI / HY_SPREAD 等)語意分歧,**不**一併 harmonize,需 architecture proposal
+
+**問題**:
+單一 `MACRO_THRESHOLDS` dict(`macro_repository.py:192`)為 stoplight schema(red/yellow/green 三級),
+但 inline 閾值服務多種用途:
+- **Signal classification**(`macro_validation.py`):買賣訊號觸發
+- **Score function**(`macro_service.py`):0-10 連續分數
+- **Regime ID**(`macro_explain.py`):衰退/復甦/擴張/高峰 4 級
+- **Inflection detection**(`crisis_backtest.py`):拐點觸發
+
+**範例**(PMI 為主):
+| Site | 用途 | 閾值 | 業務語意 |
+|---|---|---|---|
+| dict | stoplight | green=52 / yellow<50 / red<46 | 純三級顏色 |
+| `macro_service.py:324` | score | `>= 50` 中性,`>=52` 加分 | 連續 score 用 |
+| `macro_explain.py` | regime | `< 47` 衰退 | 4 級分類 |
+| 教學卡 | 教學 | `<50 收縮 ≥50 擴張` | 50 為唯一榮枯線 |
+
+機械式 swap 會把 4 個語意不同的 path 強塞進同一 `red/yellow/green` 三槽,破壞 score function 連續性、regime 4 級分類等。
+
+**Proposal**:**Multi-purpose threshold dict architecture**
+
+```python
+# shared/macro_thresholds_v2.py (新檔,設計案)
+PMI_THRESHOLDS = {
+    "stoplight": {              # 原 dict 用途(三級紅黃綠)
+        "green_above": 52,
+        "yellow_below": 50,
+        "red_below": 46,
+    },
+    "score_function": {         # macro_service.py 連續 score
+        "expansion_floor": 52,  # >= 52 加分
+        "neutral_floor": 50,    # 50-52 中性
+        "contraction_ceiling": 50,
+    },
+    "regime_classification": {  # macro_explain.py 4 級
+        "expansion": 52,
+        "neutral": 50,
+        "slowdown": 47,
+        "recession": 45,
+    },
+    "inflection_detection": {   # crisis_backtest 拐點
+        "expansion_to_slowdown": 50,
+        "slowdown_to_recession": 47,
+    },
+}
+```
+
+各 site 改 import 對應子 dict,**不**共用單一閾值,但所有閾值集中於 SSOT 檔。
+
+**Migration phases**(per indicator):
+1. **Phase 1 audit**:gather all inline thresholds for the indicator across all sites
+2. **Phase 2 design**:列出每個 site 的用途、依現有實際閾值定義 sub-dict shape
+3. **Phase 3 build**:在 `shared/macro_thresholds_v2.py` 加 SSOT 子 dict
+4. **Phase 4 migrate**:逐 site 改 import + 驗證行為 100% 等價(對照 test 守)
+5. **Phase 5 守護**:加 `tests/test_macro_thresholds_v2.py` 守 SSOT 完整性
+
+**Out-of-scope of this proposal**:
+- 改變任何 inline 閾值的數值(只搬位置,不改邏輯)
+- 將不同 site 的相同指標**強制**收斂到單一閾值(VIX 為 exception,user 接受 trade-off;PMI/CPI/HY 不接受)
+
+**ROI 評估**:
+| 指標 | inline 散落量 | 用途數 | migration cost | risk |
+|---|---|---|---|---|
+| PMI | ~8 處 | 4 用途 | 中 | 中(若 inline 漏抓 → 行為飄移) |
+| CPI | ~5 處 | 3 用途 | 中 | 中 |
+| HY_SPREAD | ~4 處 | 2 用途 | 低 | 低 |
+
+**建議優先順序**:HY_SPREAD(最少語意,最低風險)→ CPI → PMI
+
+**目前狀態**(v19.168):
+- 本 proposal 為 architecture spec,**未實作** code
+- 等 user 點哪個指標(或全部)動工 → 各拉一 PR 走 phase 1-5
+
+**§-1 對齊**:本 proposal 純文件,**不**自動觸發實作。user 明確指派某指標 → 才動工。
+
+---
+
+## §17 MK 老師吃本金檢查 SSOT(v19.148→v19.149)
+
+### §17.1 方法論
+
+依郭俊宏(MK)老師體檢邏輯:
+
+> **近一年含息總報酬率 < 年化配息率 → 🔴 吃本金**
+
+「含息總報酬率」採 MK 嚴格定義(教學版,**單利**):
+
+```
+含息_1Y = NAV 漲跌幅% + 累計配息率%
+       = (NAV_now − NAV_1Y_ago) / NAV_1Y_ago × 100
+       + Σ(divs in last 1Y) / NAV_1Y_ago × 100
+```
+
+### §17.2 SSOT 入口與優先序
+
+`services/fund_dividend_health.check_eating_principal_1y_mk(fund)` 為**跨 tab 唯一 SSOT 入口**。
+
+**含息報酬(tr1y)precedence**(v19.149):
+1. 🥇 **MK 嚴格單利**:`compute_1y_total_return_mk_simple(series, dividends)` — 從 fund 內 raw NAV + 配息 list 直算,符合教學版定義
+2. 🥈 業界複利 fallback:`metrics.ret_1y_total`(本地還原淨值法)→ `metrics.ret_1y`(純 NAV)— 當 fund 內缺 raw data 才用
+
+**年化配息率(adr)precedence**:
+1. 🥇 `moneydj_div_yield`(MoneyDJ wb05 官方)
+2. 🥈 `metrics.annual_div_rate`(本地估算)
+
+返回 dict 含 `_tr1y_method` 標記用了哪條路(`"mk_simple"` / `"metrics_fallback"`)。
+
+### §17.3 MK 單利 vs 業界複利的差異
+
+| 指標 | MK 單利(本系統 SSOT) | MoneyDJ wb01 / 還原淨值法(業界) |
+|---|---|---|
+| 公式 | NAV 漲跌 + 累計配息率(加法) | (Adj_NAV_end / Adj_NAV_start − 1) 配息再投資複利 |
+| 與教科書符合 | ✅ 100% | ⚠️ 不同(複利) |
+| 通常差異 | — | 通常 **高 5-15%**(複利 reinvestment 效應) |
+| Verdict flip 風險 | — | borderline 基金(coverage 接近 1.0)可能在兩公式間翻轉 |
+
+**為何選 MK 單利**:user 引述 MK 老師時很明確指向教學版,本系統優先對齊老師原意,wb01 變對帳 reference。Borderline 翻轉是 MK 觀點下的真相(複利低估了吃本金嚴重度)。
+
+### §17.4 跨 tab SSOT 涵蓋
+
+| Tab | 入口 | SSOT 狀態 |
+|---|---|---|
+| 單一基金(tab2)| `services.portfolio_service.dividend_safety`(同 canonical core)| ✅ 同源 |
+| 組合基金健診-健診總表(tab_fund_grp_health)| `check_eating_principal_1y_mk` | ✅ v19.148 接 + v19.149 升級 |
+| 組合基金健診-健診摘要表(fund_checkup)| `dividend_safety`(同 canonical core)| ✅ 同源 |
+| 組合配置(tab3_portfolio)| `dividend_safety`(同 canonical core)| ✅ 同源 |
+
+**Phase B 候選**(未動,等 user 觸發):fund_checkup 改 import `check_eating_principal_1y_mk`,讓所有 caller 走唯一 helper(目前各 caller 走 dividend_safety wrapper 各自 inline 取 inputs,功能等價但路徑分散)。
+
+### §17.5 3-3-3 原則(MK 老師長線輔助)
+
+`check_333_principle(years_since_inception, ann_return_3y_pct)`:
+
+- 成立 ≥ 3 年
+- 過去 3 年平均年化報酬 > 7%
+
+**用途**:挑選**新核心資產**時的長線篩選,不是吃本金主判定(短線吃本金以 §17.1 為準)。helper 已寫好,目前未接 UI,等 user 要看時可在任何 tab 加 column 顯示 ✅/❌。
+
+### §17.6 Test 守衛
+
+- `tests/test_mk_simple_formula.py`(v19.149):26 tests — 公式正確性 + 1Y 窗邊界 + 配息日界線 + 邊界條件 + property 加法可拆性
+- `tests/test_mk_ssot_unification.py`(v19.148):15 tests — 跨 shape SSOT + canonical 守 + cross-caller import 守
+- 既有 `test_portfolio_health` / `test_fund_dividend_calculator` / `test_fund_dividend_health` — 77 tests 零回歸
+
+---
+
+## §18 Pandera 導入設計提案(v19.154 — design only, **無 code 改動**)
+
+> CLAUDE.md §3.1 「待議:是否將 pandera 加入 requirements 並逐 repository 落地 schema?」
+> 本節為依 §8.1 「先設計、自評過度設計、經核准才寫」之**設計提案**,本 PR 不寫 code。
+
+### §18.1 動機(為何要做)
+
+`__init__` 與 repository 各 fetcher 回傳的 DataFrame shape 散落於 docstring + 範例,無強制驗證:
+- 新加 fetcher / 改 column / dtype drift → 下游計算靜默偏移,CI 無偵測
+- 同 schema 重複 assert 散落 callers(NAV>0 / date monotonic / weight sum=1 等)
+- §6 自審清單條目「不變量斷言」缺工具支撐
+
+pandera 提供宣告式 schema + 強制檢查 + 整合 pandas,在 fetcher 出口與 service 入口做門關。
+
+### §18.2 反對方視角(自評過度設計)
+
+| 反對理由 | 評估 |
+|---|---|
+| import 開銷 ~200ms(每次 streamlit reload) | 中度 — Streamlit cache 多數 fetcher 已避開 cold-path |
+| 既有 assert 已涵蓋大多數 | 真 — 但散落 + 重複,且新 caller 易忘 |
+| schema 修改需協同 caller 改 | 真 — 但這正是 pandera 想守的「契約」,改 = 契約變更須明示 |
+| 過度約束(strict mode 反而 brittle) | 真 — 需用 `strict=False` + `coerce=True` 緩解 |
+
+**自評結論**:**值得做但分階段**。Phase A 只在 2-3 個高 ROI 入口落地,不全面強推。
+
+### §18.3 範圍(Phase 拆分 — user approve 後逐 phase PR)
+
+#### Phase A — Pilot(最小可行 + 學習)
+- requirements.txt 加 `pandera>=0.20,<1.0`(pin minor)
+- 在 `repositories/macro_repository.fetch_fred()` 出口加 schema(date / value / source / fetched_at)
+- 寫 1 個 schema 模組:`shared/schemas.py`(L0,無 IO)
+- 加 5-10 個 tests 證明:合法 input 通過、illegal column drift 立擋
+- **scope 上限**:1 個 fetcher + 1 個 schema 模組 + tests + 文件
+- **時間預估**:1-2 個 PR
+
+#### Phase B — 擴展到核心 fetcher(approve 後)
+- `fetch_yf_close` / `fetch_fund_nav_series` / `fetch_dividends`
+- 每個 fetcher 配對 schema(`NavSchema` / `DividendSchema` / `MacroSchema`)
+- 補對應 tests
+
+#### Phase C — Service 入口(approve 後)
+- `compute_1y_total_return_mk_simple` / `calc_metrics` 等 L2 service 入口
+- 校驗從 fetcher 流入的 DataFrame 符合契約
+- 反捏造守(§3.3):不法輸入直接 raise,避免 silent drift
+
+#### Phase D — 全面落地(approve 後)
+- 所有 L1/L2 入口都用 schema
+- CI 跑 schema test 作為 PR gate
+
+### §18.4 失敗降級
+
+- pandera schema validation 失敗 → 視為**契約違反** raise SchemaError
+- 對齊 CLAUDE.md §1 Fail Loud:不偽造、不 silent fallback
+- 但需 caller decorator 把 SchemaError 轉為 friendly UI 訊息(避免線上 user 看到 stacktrace)
+
+### §18.5 §8.2 分層與依賴
+
+- `shared/schemas.py` 屬 L0(無 IO,純 schema 宣告)
+- 各 repository fetcher 在出口處 `.validate(df)`,屬 L1 自驗
+- service 入口 validation 屬 L2 防禦
+- pandera 只能被 L0/L1/L2 import,L3 UI 不直接呼叫
+
+### §18.6 SSOT — schema 唯一性
+
+- 同一資料源(NAV / Dividend / Macro)只有**一個** schema
+- repository 與 service 共用,杜絕雙寫雙改
+- schema 改動 = `shared/schemas.py` 唯一 commit point,**禁止** caller 端重新宣告
+
+### §18.7 接下來的動作
+
+**本 PR(v19.154)**:**只寫本設計提案 SPEC §18,不動 code**。
+
+**等 user 明示「OK Phase A 啟動」之後**:
+- 開新 PR v19.155 — Phase A pilot 落地(本 SPEC §18.3 Phase A 範圍)
+- Phase B/C/D 各自獨立 PR,每階段都需 user re-approve
+
+**WONTFIX 標準**(對齊 §-1):
+- 若 user 不啟動 → 本提案保留為 SPEC 文件,**永不主動推**
+- 唯有 user 明確說「動工」才開 Phase A PR

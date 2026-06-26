@@ -22,6 +22,8 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     TPI_FINANCIAL_WEIGHT_RATIO,
     TPI_MONETARY_WEIGHT_RATIO,
 )
+# C2-D v19.160 — alert 也對齊 SSOT(全站 22/30 收尾)
+from shared.macro_buckets import _VIX_RED as _MB_VIX_RED, _VIX_YELLOW as _MB_VIX_YELLOW
 from shared.fred_series import (
     FRED_AMTMNO,
     FRED_CCSA,
@@ -53,6 +55,10 @@ from shared.fred_series import (
     FRED_UNRATE,
 )
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+
+# F-GRAY-4 v19.169: HY_SPREAD stoplight SSOT (SPEC §16.2)
+_HY_YELLOW = _HY_THR["stoplight"]["yellow_below"]    # 6.0 — alert 觸發點
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 ENGINE_VERSION = "v18.2_tw_macro"
@@ -1113,12 +1119,12 @@ def calc_macro_phase(indicators: dict) -> dict:
     alerts = []
     if indicators.get("YIELD_10Y2Y",{}).get("value", 1) < 0:
         alerts.append("⚠️ 殖利率曲線倒掛（衰退前兆）")
-    if indicators.get("HY_SPREAD",{}).get("value", 4) > 6:
-        alerts.append("⚠️ 信用利差>6% — 市場恐慌升溫")
+    if indicators.get("HY_SPREAD",{}).get("value", 4) > _HY_YELLOW:
+        alerts.append(f"⚠️ 信用利差>{_HY_YELLOW:.0f}% — 市場恐慌升溫")
     if indicators.get("PMI",{}).get("value", 50) < 50:
         alerts.append("⚠️ PMI 跌破 50 — 製造業收縮")
-    if indicators.get("VIX",{}).get("value", 18) > 25:
-        alerts.append("⚠️ VIX>25 — 市場恐慌，注意波動")
+    if indicators.get("VIX",{}).get("value", 18) > _MB_VIX_YELLOW:
+        alerts.append(f"⚠️ VIX>{_MB_VIX_YELLOW:.0f} — 市場恐慌升溫,注意波動")
     if indicators.get("CPI",{}).get("value", 2) > 4:
         alerts.append("⚠️ 通膨偏高 — Fed 緊縮壓力")
     if indicators.get("M2",{}).get("value", 3) < 0:

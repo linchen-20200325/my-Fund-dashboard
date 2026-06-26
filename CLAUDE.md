@@ -507,7 +507,19 @@ except ImportError:
 - ✅ **F-GRAY-1 v19.81 audit 結案**:`fund_fetcher.py`(根目錄,459 LOC)**保留根目錄**。檔內 18 條 `noqa: F401` re-export shim(infra.cache / infra.proxy 等)+ 57 個 caller import 線。內容已是「向後相容 shim 容器」,搬至 `repositories/` 為純 cosmetic 改動且需動 57 個 caller 介面,違反 §8.1 step 6「用不到的抽象先不做」。
 - ✅ **F-GRAY-2 v19.81 audit 結案**:`hot_money.py`(344 LOC, 5 callers) / `tw_macro.py`(334 LOC, 2 callers)同上 — self-contained L1 fetcher,根目錄 vs `repositories/` 為純 cosmetic,不視為違憲。
 - ✅ **F-GRAY-3 v19.81 audit 結案**:`app.py`(568 LOC)— 已是 orchestrator,主要功能為 `_now_tw`/`_load_keys`/`_check_secrets`/`_calc_data_health`(thin session-aware wrapper)/`render_macro_compass`(UI)。無顯著業務邏輯需下沉。同步刪除 1 處 dead code `_unused_old_calculate_composite_score`(deprecated placeholder, 0 callers)。
-- ⚠️ **F-GRAY-4 v19.80 audit 結案**:`MACRO_THRESHOLDS` dict 與 inline **語意不同源**(inline 服務 signal classification / score function / regime ID / inflection detection 多用途,同指標多 site 不同閾值),**不可機械式 swap**;若要 harmonize 需逐 site 評估語意,本項升級為架構提案範疇。詳見 `macro_repository.py:199-212` 註解
+- ⚠️ **F-GRAY-4 v19.80 audit 部份結案,VIX 子題 C2 v19.160 完全收斂**:
+  - **VIX(已收)**:user 2026-06-26 撤銷 v19.147 multi-cutoff,接受 trade-off。
+    C2 series(v19.157 risk_radar / v19.158 macro_beginner_view / v19.159 macro_validation
+    + calibration JSON bounds / v19.160 macro_service alert + SPEC §16.1 結案)全站 yellow
+    統一 SSOT 22 / panic 30。`tests/test_cross_site_cutoffs.py` 守 3 site 全員 22 + universal 30。
+  - **其他指標(PMI/CPI/HY 等)**:`MACRO_THRESHOLDS` dict 與 inline **語意仍不同源**(inline
+    服務 signal classification / score function / regime ID / inflection detection 多用途),
+    **不一併 harmonize**;若要繼續收 PMI/CPI/HY,需新 architecture proposal。詳見
+    `macro_repository.py:199-212` 註解。
+  - ✅ **Architecture proposal v19.168**:multi-purpose threshold dict 設計案
+    (`shared/macro_thresholds_v2.py` schema)已寫入 SPEC §16.2。Proposal 含
+    per-indicator migration phases + ROI 評估(優先順序 HY_SPREAD → CPI → PMI)。
+    **未實作 code**,等 user 點哪個指標動工。
 
 ### 8.4 做到一半的新增功能 — 先盤點再動
 

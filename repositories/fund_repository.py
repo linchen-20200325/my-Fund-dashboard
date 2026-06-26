@@ -3610,6 +3610,11 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
                 _ep_fn = url.split("?")[0].rsplit("/", 1)[-1]
                 s.attrs["source"] = f"MoneyDJ:{_host_fn}:{_ep_fn}:fetch_nav"
                 s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                # v19.162 A1 Phase B 後續:pandera schema 驗 final contract
+                # (NAV-specific:>0 / 多源 source prefix);schema 違反 = 上游 bug,
+                # 不掩蓋(§1 Fail Loud)
+                from shared.schemas import validate_fund_nav
+                validate_fund_nav(s)
                 return s
         except Exception as e:
             print(f"[fetch_nav] ERR: {e}")
@@ -4094,7 +4099,13 @@ def fetch_div(full_key: str, portal: str = "") -> list:
     seen=set(); out=[]
     for d in sorted(divs, key=lambda x:x["date"], reverse=True):
         if d["date"] not in seen: seen.add(d["date"]); out.append(d)
-    return out[:24]
+    out = out[:24]
+    # v19.163 A1 Phase B 後續 part 2:pandera schema 驗 final contract
+    # (list[dict] / 長度 <= 24 / amount > 0 且 < 100 / date unique)
+    # schema 違反 = 上游 HTML 解析 bug,當場 raise(§1 Fail Loud)
+    from shared.schemas import validate_fund_dividends
+    validate_fund_dividends(out)
+    return out
 
 
 

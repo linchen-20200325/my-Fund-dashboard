@@ -198,8 +198,24 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     計算 MK 買點指標。
     risk_override: fetch_risk_metrics() 回傳的 dict，
                    若存在則優先使用 wb07 的年化標準差（更精準）。
+
+    v19.164 A1 Phase C:服務入口加 pandera data-only 驗證(NAV/dividends
+    業務契約),不驗 provenance(service caller 可能來自 cache/test fixture)。
     """
     if s.empty or len(s) < 5: return {}
+    # A1 Phase C v19.164:服務入口驗 NAV/dividends 業務契約
+    # (data-only,不驗 provenance attrs)
+    try:
+        from shared.schemas import (
+            validate_fund_nav_data_only,
+            validate_fund_dividends_data_only,
+        )
+        validate_fund_nav_data_only(s)
+        validate_fund_dividends_data_only(divs)
+    except Exception as _ve:
+        # Fail Loud:壞 NAV/dividends 進入服務層 = 上游 bug,當場 raise
+        print(f"[calc_metrics] schema 違反: {_ve}")
+        raise
     now = float(s.iloc[-1])
     log_ret = np.log(s / s.shift(1)).dropna()
 

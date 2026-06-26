@@ -20,7 +20,13 @@ from typing import Callable, Optional
 
 import pandas as pd
 
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+
 DEFAULT_PARQUET_CACHE_DIR = Path("data_cache")
+
+# F-GRAY-4 v19.169: HY_SPREAD score_function SSOT (SPEC §16.2)
+_HY_TIGHT = _HY_THR["score_function"]["tight_below"]
+_HY_WIDE = _HY_THR["score_function"]["wide_above"]
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -30,10 +36,19 @@ DEFAULT_PARQUET_CACHE_DIR = Path("data_cache")
 # ────────────────────────────────────────────────────────────────────
 ScoreFn = Callable[[float], float]
 
-# v18.279 D 案修正版：VIX 閾值可由 data_cache/macro_thresholds_global.json 覆寫
-# 由 scripts/calibrate_macro_score.py 季度校準後人類審閱 PR merge 寫入
-DEFAULT_VIX_CRISIS = 30.0
-DEFAULT_VIX_WARNING = 18.0
+# v18.279 D 案 + C2-C v19.159 — VIX 閾值對齊 SSOT
+# JSON override 由 scripts/calibrate_macro_score.py 季度校準後人類審閱 PR merge 寫入。
+#
+# C2-C v19.159(撤銷 v19.147 multi-cutoff):
+# - DEFAULT_VIX_WARNING 18.0 → 22.0(對齊 macro_buckets._VIX_YELLOW SSOT)
+# - DEFAULT_VIX_CRISIS 30.0(panic 全員一致)— 改 import _VIX_RED SSOT
+# - calibration JSON 仍可微調(新 bound:warning ∈ [18, 26] / crisis ∈ [25, 35]),
+#   原 JSON 若校準到 14~17 區會落 fallback → 自動採新 SSOT 22(intended)
+# - 用 macro_buckets SSOT 取代 inline magic;若未來 SSOT 改值,此處自動跟
+from shared.macro_buckets import _VIX_RED as _MB_VIX_RED, _VIX_YELLOW as _MB_VIX_YELLOW
+
+DEFAULT_VIX_CRISIS: float = _MB_VIX_RED       # = 30,全站 panic
+DEFAULT_VIX_WARNING: float = _MB_VIX_YELLOW   # = 22,SSOT yellow
 
 
 def _make_vix_score_fn(crisis_thr: float, warning_thr: float) -> ScoreFn:
@@ -52,8 +67,12 @@ def _load_vix_calibrated_thresholds(
 ) -> tuple[float, float]:
     """讀 data_cache/macro_thresholds_global.json → (crisis, warning).
 
-    缺檔 / 解析失敗 / 值越界 → silently 回 module 預設，不噴錯。
-    越界守門：crisis ∈ [25, 35]、warning ∈ [14, 22]、warning < crisis。
+    缺檔 / 解析失敗 / 值越界 → silently 回 module 預設,不噴錯。
+    C2-C v19.159 越界守門更新:
+        crisis  ∈ [25, 35](維持原寬幅)
+        warning ∈ [18, 26](原 [14, 22] → 對齊 SSOT 22 重心,允許微調 ±4)
+        warning < crisis 仍守。
+    既有校準 JSON 落在舊 [14, 18) 區會視為越界 → fallback 至 SSOT 22(intended)。
     """
     import json as _json
     path = cache_dir / "macro_thresholds_global.json"
@@ -62,7 +81,7 @@ def _load_vix_calibrated_thresholds(
             cfg = _json.loads(path.read_text(encoding="utf-8"))
             c = float(cfg.get("VIX_CRISIS_THRESHOLD", DEFAULT_VIX_CRISIS))
             w = float(cfg.get("VIX_WARNING_THRESHOLD", DEFAULT_VIX_WARNING))
-            if 25.0 <= c <= 35.0 and 14.0 <= w <= 22.0 and w < c:
+            if 25.0 <= c <= 35.0 and 18.0 <= w <= 26.0 and w < c:
                 return c, w
     except Exception:
         pass
@@ -75,7 +94,7 @@ SCORE_RULES: dict[str, tuple[float, ScoreFn]] = {
     "PMI":          (2.0, lambda v: 2.0 if v >= 50 else (-2.0 if v < 45 else -1.0)),
     "YIELD_10Y2Y":  (2.0, lambda v: 2.0 if v > 0.5 else (-2.0 if v < 0 else 0.0)),
     "YIELD_10Y3M":  (2.0, lambda v: 2.0 if v > 0 else -2.0),
-    "HY_SPREAD":    (2.0, lambda v: 2.0 if v < 4 else (-2.0 if v > 6 else 0.0)),
+    "HY_SPREAD":    (2.0, lambda v: 2.0 if v < _HY_TIGHT else (-2.0 if v > _HY_WIDE else 0.0)),
     "M2":           (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < 0 else 0.0)),
     "FED_BS":       (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < -5 else 0.0)),
     "VIX":          (1.0, _make_vix_score_fn(_VIX_CRISIS, _VIX_WARNING)),
