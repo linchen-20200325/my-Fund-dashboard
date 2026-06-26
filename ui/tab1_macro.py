@@ -1163,11 +1163,18 @@ def render_macro_tab() -> None:
                         "請按側欄「🔍 測試 Proxy 連線」確認後再重試。")
                 else:
                     phase = calc_macro_phase(ind)
-                    old_phase = (st.session_state.phase_info.get("phase","")
-                                 if st.session_state.phase_info else "")
-                    new_phase = phase.get("phase","")
+                    # v19.141 P0:強制重抓會 pop phase_info(macro_service._TAB1_SESSION_KEYS),
+                    # 屬性存取 st.session_state.phase_info 在此路徑會 AttributeError 炸 production。
+                    # 改用 .get() 對齊 line 1218 既有的 v19.69 J1 防禦慣例。
+                    old_phase = (st.session_state.get("phase_info") or {}).get("phase", "")
+                    new_phase = phase.get("phase", "")
                     if old_phase and old_phase != new_phase:
-                        st.session_state.phase_history.append(
+                        # phase_history 雖未被 clear_tab1_macro_caches pop,但同步以 .get() 防初始化未跑路徑
+                        _hist = st.session_state.get("phase_history")
+                        if _hist is None:
+                            st.session_state.phase_history = []
+                            _hist = st.session_state.phase_history
+                        _hist.append(
                             {"from":old_phase,"to":new_phase,
                              "date":datetime.date.today().isoformat(),
                              "score":phase.get("score",0)})
@@ -1574,19 +1581,35 @@ def render_macro_tab() -> None:
                         pass
 
             # ── 市場新聞（折疊）── L3 only
+            # v19.139：systemic 排前 + Top 8 顯著 + 其餘 nested expander(對齊 AI 實際讀的 ≤8 則)
             if _show_l3:
                 _news_items = st.session_state.get("news_items",[])
                 if _news_items:
-                    with st.expander(f"📰 市場新聞（{len(_news_items)} 則）", expanded=False):
-                        for _ni in _news_items[:20]:
-                            _nt = _ni.get("title","")[:90]
-                            _ns = _ni.get("source","")
-                            _nu = _ni.get("url","") or _ni.get("link","")
-                            _nd = str(_ni.get("published",""))[:16]
-                            if _nu:
-                                st.markdown(f"**[{_nt}]({_nu})** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
-                            else:
-                                st.markdown(f"**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                    _sys = [n for n in _news_items if n.get("is_systemic")]
+                    _gen = [n for n in _news_items if not n.get("is_systemic")]
+                    _ordered = _sys + _gen
+                    _n_sys = len(_sys)
+                    _expander_label = (f"📰 市場新聞（{len(_news_items)} 則"
+                                       + (f"，🚨 {_n_sys} 系統性風險" if _n_sys else "")
+                                       + "） — Top 8（AI 實際讀的）+ 其餘摺疊")
+                    def _render_news(_ni):
+                        _nt = _ni.get("title","")[:90]
+                        _ns = _ni.get("source","")
+                        _nu = _ni.get("url","") or _ni.get("link","")
+                        _nd = str(_ni.get("published",""))[:16]
+                        _flag = "🚨 " if _ni.get("is_systemic") else ""
+                        if _nu:
+                            st.markdown(f"{_flag}**[{_nt}]({_nu})** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"{_flag}**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                    with st.expander(_expander_label, expanded=False):
+                        for _ni in _ordered[:8]:
+                            _render_news(_ni)
+                        _rest = _ordered[8:]
+                        if _rest:
+                            with st.expander(f"… 其餘 {len(_rest)} 則", expanded=False):
+                                for _ni in _rest:
+                                    _render_news(_ni)
 
             # ── v19.47 ⑥ 美股流動性 × 熱錢監測（user 反饋：基金 USD 計價，台股熱錢非主訊號） ──
             # 6 指標三角：流動性 (M2/WALCL/RRP) × 信用 (HY OAS / HYG-LQD) × 情緒 (AAII)
@@ -2767,16 +2790,36 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
             )
         _hm = _st.session_state.get("_macro_hot_money")
         if isinstance(_hm, dict) and _hm:
-            lines.append(
-                f"- 台股熱錢三角交叉（{_hm.get('date', '')}）：{_hm.get('state', '')}"
-                f"{'（背離警示）' if _hm.get('is_divergence') else ''}"
-            )
-            lines.append(
-                f"  - 近 {_hm.get('window', 5)}日累計外資 {_hm.get('roll_flow', 0):+.0f} 億、"
-                f"台幣升貶 {_hm.get('roll_apprec_pct', 0):+.2f}%"
-            )
-            if _hm.get("interpretation"):
-                lines.append(f"  - 判讀：{_hm['interpretation']}")
+            # v19.142：staleness gate — 熱錢監測在 v19.47 起被收進 📦 ARCHIVED expander,
+            # session 卡舊資料 90 天屢見不鮮。對齊 CLAUDE.md §2.4 STALE 注入慣例:
+            # - > 30 天:全段 skip(避免 Gemini 用 3 月份外資資料做 6 月決策的 §1 違憲)
+            # - 8-30 天:Prompt 前加 [STALE: Nd] 標籤,Gemini 知道別重押
+            import datetime as _dt_hm
+            _hm_stale_days = None
+            try:
+                _hm_dt = _dt_hm.date.fromisoformat(str(_hm.get("date", ""))[:10])
+                _hm_stale_days = (_dt_hm.date.today() - _hm_dt).days
+            except (ValueError, TypeError):
+                _hm_stale_days = None
+            if _hm_stale_days is not None and _hm_stale_days > 30:
+                # 超過 30 天直接 drop（避免污染 prompt）；但留個簡短 marker 讓 AI 知道沒料
+                lines.append(
+                    f"- 台股熱錢三角交叉:資料過舊({_hm_stale_days} 天前),"
+                    "已從 prompt 中排除(需展開「📦 ARCHIVED 台股熱錢監測」更新)"
+                )
+            else:
+                _hm_stale_tag = (f"[STALE:{_hm_stale_days}d] "
+                                 if _hm_stale_days is not None and _hm_stale_days > 7 else "")
+                lines.append(
+                    f"- {_hm_stale_tag}台股熱錢三角交叉（{_hm.get('date', '')}）：{_hm.get('state', '')}"
+                    f"{'（背離警示）' if _hm.get('is_divergence') else ''}"
+                )
+                lines.append(
+                    f"  - 近 {_hm.get('window', 5)}日累計外資 {_hm.get('roll_flow', 0):+.0f} 億、"
+                    f"台幣升貶 {_hm.get('roll_apprec_pct', 0):+.2f}%"
+                )
+                if _hm.get("interpretation"):
+                    lines.append(f"  - 判讀：{_hm['interpretation']}")
     except Exception:
         pass   # smoke-allow-pass — 章節資料缺失不阻斷 AI 摘要
     headlines = [str(n.get("title", "") or n.get("headline", ""))

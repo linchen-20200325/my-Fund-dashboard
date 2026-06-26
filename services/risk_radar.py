@@ -236,67 +236,19 @@ def _resolve_vix3m(
     return pd.Series(dtype=float), "", trace
 
 
-def _fetch_cboe_json(symbol: str, trace: list[str] | None = None) -> pd.Series:
-    """CBOE delayed-quotes JSON API → 收盤 Series。
-
-    URL pattern:
-      https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/{enc}.json
-    其中 enc 是 URL-encode 後的 symbol（e.g. ^CPC → %5ECPC）。
-
-    v19.65：Put/Call 第 7 層備援——與 CSV 端點同源但走 JSON API，不同 CDN 路徑，
-    部分 NAS Squid / Cloudflare 策略對 .csv 與 .json 的封鎖行為不同。
-    失敗回空 Series。
-    """
-    from urllib.parse import quote
-
-    from infra.proxy import fetch_url
-
-    def _t(msg: str) -> None:
-        if trace is not None:
-            trace.append(f"CBOE JSON {symbol}: {msg}")
-
-    try:
-        enc = quote(symbol, safe="")
-        url = (f"https://cdn.cboe.com/api/global/delayed_quotes/"
-               f"charts/historical/{enc}.json")
-        r = fetch_url(url, timeout=15)
-        if r is None or getattr(r, "status_code", 0) != 200:
-            code = getattr(r, "status_code", None)
-            _t(f"HTTP {code}")
-            return pd.Series(dtype=float)
-        import json
-        data = json.loads(r.text)
-        # Response shape (兩種已知格式):
-        #   {"data":  [{"date": "YYYY-MM-DD", "close": float}, ...]}
-        #   {"chart": [{"datetime": "YYYY-MM-DD", "Close": float}, ...]}
-        rows = data.get("data") or data.get("chart") or []
-        if not rows:
-            _t("empty data array")
-            return pd.Series(dtype=float)
-        dates, closes = [], []
-        for row in rows:
-            d = row.get("date") or row.get("datetime")
-            c = row.get("close") or row.get("Close")
-            if d and c is not None:
-                dates.append(d)
-                closes.append(float(c))
-        if not dates:
-            _t("no parseable rows")
-            return pd.Series(dtype=float)
-        idx = pd.to_datetime(dates, errors="coerce")
-        s = pd.Series(closes, index=idx).dropna().sort_index()
-        return s.tail(180)
-    except Exception as e:  # noqa: BLE001
-        _t(f"exception {str(e)[:40]}")
-        return pd.Series(dtype=float)
+# v19.141: _fetch_cboe_json 已刪除。CBOE 於 2026 中期下架 delayed_quotes JSON API
+# (user 2026-06-25 瀏覽器驗證 cdn.cboe.com/.../historical/^CPC.json → AccessDenied)。
+# 原為 Put/Call 第 7 層備援(v19.65 新增),已從 _resolve_put_call chain 移除。
+# git history 仍可查回:git log -p services/risk_radar.py。
 
 
 def _resolve_put_call() -> tuple[pd.Series, str, list[str]]:
-    """CBOE Put/Call 多源 chain：Yahoo ^CPC/^CPCE → CBOE CSV CPC/CPCE
-    → stooq ^cpc/^cpce → CBOE JSON API ^CPC/^CPCE。
+    """CBOE Put/Call 多源 chain：Yahoo ^CPC/^CPCE → stooq ^cpc/^cpce。
 
     v19.43：回傳 (series, src_label, fail_trace) — fail_trace 收集每層失敗原因供 UI 顯示。
-    v19.65：加 CBOE JSON API 作第 7 層備援（不同 CDN 路徑，封鎖行為與 CSV 端點不同）。
+    v19.141：CBOE 已下架 CPC_History.csv / CPCE_History.csv / ^CPC.json / ^CPCE.json
+        (user 2026-06-25 瀏覽器驗證:cdn.cboe.com 直接回 AccessDenied)→ 從 chain 移除
+        這 4 層死路徑,只留 Yahoo + stooq。失敗時 trace 更乾淨,不再有 noise 假象。
     """
     trace: list[str] = []
     for t in ("^CPC", "^CPCE"):
@@ -304,19 +256,10 @@ def _resolve_put_call() -> tuple[pd.Series, str, list[str]]:
         if not s.empty and len(s) >= 2:
             return s, f"Yahoo {t}", trace
         trace.append(f"Yahoo {t}: empty (len={len(s)})")
-    for short in ("CPC", "CPCE"):
-        s = _fetch_cboe_csv(short, trace=trace)
-        if not s.empty and len(s) >= 2:
-            return s, f"CBOE {short}_History.csv", trace
     for sym in ("^cpc", "^cpce"):
         s = _fetch_stooq_csv(sym, trace=trace)
         if not s.empty and len(s) >= 2:
             return s, f"stooq {sym}", trace
-    # P0 第 7 層：CBOE JSON API（不同路徑，部分 proxy 封鎖策略不同）
-    for sym in ("^CPC", "^CPCE"):
-        s = _fetch_cboe_json(sym, trace=trace)
-        if not s.empty and len(s) >= 2:
-            return s, f"CBOE JSON {sym}", trace
     return pd.Series(dtype=float), "", trace
 
 
@@ -332,6 +275,16 @@ def _signal_vix_term_struct(fred_api_key: str | None = None) -> dict:
             note = ("VIX/VIX3M 全源失敗｜" + " ｜ ".join(trace)) if trace \
                    else "VIX/VIX3M 抓取失敗（Yahoo + CBOE 全源失敗）"
             return _empty(note, _label)
+        # v19.141 對齊修正：Yahoo ^VIX 的 index 是 Unix 秒精度 UTC(e.g. 20:00:00),
+        # CBOE CSV 是日期精度(00:00:00) → concat 後 dropna 全空 → 「對齊不足 2 筆」誤報。
+        # 兩邊先 normalize 到日期(去時間),merge 才會真的命中同一日。
+        sv = sv.copy()
+        sv.index = pd.to_datetime(sv.index).normalize()
+        s3 = s3.copy()
+        s3.index = pd.to_datetime(s3.index).normalize()
+        # 同日重複(罕見:Yahoo 偶有 dup intraday timestamps normalize 後重疊)→ 取末筆
+        sv = sv[~sv.index.duplicated(keep="last")]
+        s3 = s3[~s3.index.duplicated(keep="last")]
         df = pd.concat([sv.rename("vix"), s3.rename("v3m")], axis=1).dropna()
         if df.empty or len(df) < 2:
             return _empty("VIX/VIX3M 對齊後不足 2 筆", _label)
