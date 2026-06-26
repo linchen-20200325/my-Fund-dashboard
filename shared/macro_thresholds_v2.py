@@ -93,3 +93,71 @@ CPI_YOY_THRESHOLDS = {
         "overheat_above": 4.0,
     },
 }
+
+
+# ── PMI (NAPM / ISM Manufacturing PMI) — US, % ─────────────────────────
+# v19.179 F-GRAY-4 PMI harmonize per SPEC §16.2 ROI 第 3 順位
+#
+# Sanity filter [30, 70] 在 shared/signal_thresholds.PMI_VALID_MIN/MAX
+# (data-quality,非 business),本檔不重複定義。
+PMI_THRESHOLDS = {
+    "stoplight": {
+        # shared/macro_buckets.py:58-59
+        "green_above": 50.0,
+        "yellow_below": 50.0,
+        "red_below": 46.0,
+    },
+    "score_function": {
+        # services/macro_validation.py:102 SCORE_RULES["PMI"] lambda
+        # services/macro_score_calibration.py:58 _s_pmi
+        # 3 段:>= 50 → +2(擴張), [45,50) → -1(略弱), < 45 → -2(衰退)
+        "expansion_above": 50.0,
+        "recession_below": 45.0,
+    },
+    "regime_classification": {
+        # services/macro_service.py:1457-1461 4 象限
+        # 52 為「真正枯榮線」(新觀念,對應實際增速=潛在增速,產出缺口=0);
+        # 50-52 灰色帶字面擴張但實質收縮,故 else 兜底為衰退是 feature
+        "strong_growth_above": 52.0,
+        "contraction_below": 50.0,
+    },
+    "inflection_detection": {
+        # services/macro_service.py:194-198 拐點偵測
+        "peak_warning_above": 55.0,
+        "expansion_above": 50.0,
+        "rebound_below": 50.0,
+    },
+    "growth_signal": {
+        # services/macro_service.py:986 二元成長訊號
+        "expansion_above": 50.0,
+    },
+    "alert_generation": {
+        # services/macro_service.py:1145 警示文字觸發
+        "contraction_below": 50.0,
+    },
+    "beginner_panic": {
+        # ui/helpers/macro_beginner_view.py:314 _PMI_CONTRACTION_THRESHOLD
+        "contraction_below": 50.0,
+    },
+    "mk_tolerance": {
+        # ui/components/mk_clock.py:76-81,106-107 美林時鐘 ±0.5 容忍區間
+        # (邊界震盪不算翻面)
+        "expansion_above": 50.5,
+        "contraction_below": 49.5,
+    },
+}
+
+
+# ── TW PMI(中華經濟研究院 PMI)— 5 級評分,獨立於 US PMI ─────────────
+# 注意:台灣 PMI 為中經院編製,非中國統計局 PMI;閾值與 US 物理獨立。
+TW_PMI_THRESHOLDS = {
+    "tw_pmi_score": {
+        # services/macro_tw_local.py:205-214 (tpi_score_v2)
+        # services/macro_tw_local.py:323-332 (tpi_score_v3)
+        # 5 級:>=55(+2) / >=52(+1) / >=50(0) / >=48(-1) / <48(-2)
+        "strong_above": 55.0,
+        "expansion_above": 52.0,
+        "neutral_above": 50.0,
+        "weak_above": 48.0,
+    },
+}

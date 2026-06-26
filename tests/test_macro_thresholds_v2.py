@@ -232,3 +232,106 @@ def test_cpi_macro_validation_imports_ssot():
     assert "CPI_YOY_THRESHOLDS" in src
     assert "_CPI_IDEAL_LOW" in src
     assert "_CPI_ELEVATED" in src
+
+
+# ════════════════════════════════════════════════════════════════
+# 6. PMI_THRESHOLDS (F-GRAY-4 v19.179 PR-1 SSOT only)
+# ════════════════════════════════════════════════════════════════
+
+def test_pmi_schema_complete():
+    """PMI_THRESHOLDS 含 8 個 use-case sub-dict."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    assert set(PT.keys()) == {
+        "stoplight",
+        "score_function",
+        "regime_classification",
+        "inflection_detection",
+        "growth_signal",
+        "alert_generation",
+        "beginner_panic",
+        "mk_tolerance",
+    }
+
+
+def test_pmi_stoplight_values():
+    """stoplight 與原 macro_buckets.py:58-59 等價."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    s = PT["stoplight"]
+    assert s["green_above"] == 50.0
+    assert s["yellow_below"] == 50.0
+    assert s["red_below"] == 46.0
+
+
+def test_pmi_score_function_values():
+    """score_function 與 macro_validation.py:102 / macro_score_calibration.py:58 等價."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    sf = PT["score_function"]
+    assert sf["expansion_above"] == 50.0
+    assert sf["recession_below"] == 45.0
+
+
+def test_pmi_regime_classification_values():
+    """regime_classification 與 macro_service.py:1457-1461 等價;52=新觀念真正枯榮線."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    rc = PT["regime_classification"]
+    assert rc["strong_growth_above"] == 52.0
+    assert rc["contraction_below"] == 50.0
+
+
+def test_pmi_inflection_detection_values():
+    """inflection_detection 與 macro_service.py:194-198 等價."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    inf = PT["inflection_detection"]
+    assert inf["peak_warning_above"] == 55.0
+    assert inf["expansion_above"] == 50.0
+    assert inf["rebound_below"] == 50.0
+
+
+def test_pmi_growth_signal_values():
+    """growth_signal 與 macro_service.py:986 等價."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    assert PT["growth_signal"]["expansion_above"] == 50.0
+
+
+def test_pmi_alert_generation_values():
+    """alert_generation 與 macro_service.py:1145 等價."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    assert PT["alert_generation"]["contraction_below"] == 50.0
+
+
+def test_pmi_beginner_panic_values():
+    """beginner_panic 與 macro_beginner_view.py:314 等價."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    assert PT["beginner_panic"]["contraction_below"] == 50.0
+
+
+def test_pmi_mk_tolerance_values():
+    """mk_tolerance 與 mk_clock.py:76-81,106-107 等價."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS as PT
+    mk = PT["mk_tolerance"]
+    assert mk["expansion_above"] == 50.5
+    assert mk["contraction_below"] == 49.5
+
+
+def test_tw_pmi_schema_complete():
+    """TW_PMI_THRESHOLDS 結構."""
+    from shared.macro_thresholds_v2 import TW_PMI_THRESHOLDS as TPT
+    assert set(TPT.keys()) == {"tw_pmi_score"}
+
+
+def test_tw_pmi_score_values():
+    """TW PMI 5 級評分閾值與 macro_tw_local.py:205-214 / 323-332 等價."""
+    from shared.macro_thresholds_v2 import TW_PMI_THRESHOLDS as TPT
+    s = TPT["tw_pmi_score"]
+    assert s["strong_above"] == 55.0
+    assert s["expansion_above"] == 52.0
+    assert s["neutral_above"] == 50.0
+    assert s["weak_above"] == 48.0
+
+
+def test_pmi_thresholds_independent_from_tw():
+    """US PMI 與 TW PMI 為兩個獨立 dict,不可合併."""
+    from shared.macro_thresholds_v2 import PMI_THRESHOLDS, TW_PMI_THRESHOLDS
+    assert PMI_THRESHOLDS is not TW_PMI_THRESHOLDS
+    # 兩者 keys 無重疊(語意獨立)
+    assert set(PMI_THRESHOLDS.keys()) & set(TW_PMI_THRESHOLDS.keys()) == set()
