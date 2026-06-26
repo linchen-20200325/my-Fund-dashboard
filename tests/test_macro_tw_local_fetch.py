@@ -94,7 +94,9 @@ class TestFetchNdcSignalHistory:
         assert r['score_latest'] == 20
         assert r['score_prev'] == 17
         assert r['score_prev2'] == 18
-        assert r['source'] == 'FinMind'
+        # v19.151:source 升級為 'FinMind:<dataset>' 形式 + 加 fetched_at(F-PROV-1 phase 2)
+        assert r['source'].startswith('FinMind:')
+        assert 'fetched_at' in r and r['fetched_at']
         assert '🚀' in r['inflection']
         assert len(r['trend']) == 6
 
@@ -222,7 +224,9 @@ class TestFetchForeignConsecutiveDays:
             r = fetch_mod.fetch_foreign_consecutive_days()
         assert r['error'] is None
         assert r['consec_days'] == 5  # +5
-        assert r['source'] == 'FinMind'
+        # v19.151:source 升級為 'FinMind:<dataset>' 形式 + 加 fetched_at(F-PROV-1 phase 2)
+        assert r['source'].startswith('FinMind:')
+        assert 'fetched_at' in r and r['fetched_at']
         assert '🟢' in r['inflection']
 
     def test_inflection_sell_to_buy_after_long_sell(self):
