@@ -1659,3 +1659,35 @@ def _friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = 
 > **與既有 4-horizon bar 的關係**:本表為 SSOT 危險門檻參考。`ui/helpers/macro_beginner_view.compute_four_horizon_summary`
 > 仍為 production 四時域 bar(已運作),不破壞既有體驗。Phase B 將把 SSOT 套到 chart `add_danger_hlines`
 > 視覺化危險距離,Phase C 視 user 反饋決定是否擴至 5 桶 bar。
+
+### §16.1 Multi-cutoff Design 結案說明(v19.147 / F-GRAY-4 升級結案)
+
+**現況**:Fund 端 VIX / HY / MOVE / PCR 等指標的 **yellow 線**在不同模組刻意取不同值,**panic/red 線全員一致**。CLAUDE.md §8.3 ⚠️ F-GRAY-4 audit 已釐清此**非違憲、為 intentional design**。
+
+**VIX 為例,4 個 yellow 值各自設計**:
+
+| 模組 | VIX yellow | 語意 |
+|---|---|---|
+| `services/macro_validation.py::DEFAULT_VIX_WARNING` | **18** | 長期評分要敏感(早警示);JSON `data_cache/macro_thresholds_global.json` 可校準 |
+| `ui/helpers/macro_beginner_view._VIX_WARNING_THRESHOLD` | **20** | 四時域教學「警戒前置」— 用戶剛開首頁就看到,前置預警 |
+| `shared/macro_buckets._VIX_YELLOW`(SSOT) | **22** | 鏡像 `MACRO_THRESHOLDS`,公版顯示用;頂部五桶 bar + SPEC §16 表 |
+| `services/risk_radar.py:103-105` | **25** | 1-day 雷達保守化 — 每天評估,若用 22 會輕微震盪天天閃黃 → 訊號疲勞 |
+
+**真 SSOT(全員一致)**:VIX **panic = 30**(crisis),這條由 `tests/test_cross_site_cutoffs.py::test_vix_panic_universal_30` 跨 4 site 守護,任一處改 30 → CI 立擋。
+
+**HY spread 同樣 intentional spread**:
+- SSOT 黃線 4(MACRO_THRESHOLDS green_below)
+- `macro_beginner_view._HY_SPREAD_WARN_THRESHOLD = 5`(教學保守)
+- 兩者皆刻意,`test_hy_yellow_intentional_spread` 守。
+
+**為何不機械式統一**(F-GRAY-4 audit 警告):
+1. 把 `macro_validation` 從 18 改成 22 → **降低長期評分敏感度** + 破壞 calibration JSON 機制 + 炸 80+ 校準測試
+2. 把 `risk_radar` 從 25 改成 22 → **雷達每天閃黃**(輕微震盪日均觸發)→ 訊號疲勞 / user 反感
+3. 把 `macro_beginner_view` 從 20 改成 22 → **教學前置語意喪失**(原本希望比公版更早預警)
+
+**v19.147 結案動作**(3 件):
+- D1:三處 inline cutoff 加註解說明 + 反向 link 到本段
+- D2:`tests/test_cross_site_cutoffs.py` 守 4 yellow 各自 design + panic=30 universal
+- D3:本段(SPEC §16.1)— F-GRAY-4 從 §8.3 ⚠️ 待議升級「✅ 結案」
+
+**未來真要全面 SSOT 統一**:屬架構提案,需 user 明確背書 + 重做 calibration 機制 + 80+ test 重評(範圍類比 W1 v18.241 大重構)。

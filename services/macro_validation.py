@@ -32,6 +32,16 @@ ScoreFn = Callable[[float], float]
 
 # v18.279 D 案修正版：VIX 閾值可由 data_cache/macro_thresholds_global.json 覆寫
 # 由 scripts/calibrate_macro_score.py 季度校準後人類審閱 PR merge 寫入
+#
+# v19.147 multi-cutoff design 說明(SPEC §16 F-GRAY-4 結案):
+# Fund 端 VIX 黃線在不同模組刻意取不同值,語意不同**非 bug**:
+#   - macro_validation(本檔)warning=18.0:長期評分要敏感(早警示),JSON 可校準
+#   - macro_buckets.py(SSOT,SPEC §16)yellow=22.0:顯示/文件公版,鏡像 MACRO_THRESHOLDS
+#   - macro_beginner_view._VIX_WARNING=20.0:四時域教學「警戒前置」語意
+#   - risk_radar.py:103-105 cur >= 25:1-day 雷達保守化(避免每天閃)
+#   - 全員一致:VIX panic = 30(crisis)— 由 tests/test_cross_site_cutoffs.py 守護
+# 機械式統一會破壞各層語意 + 毀掉 calibration(F-GRAY-4 audit 警告:
+# 「不可機械式 swap;升級為架構提案範疇」)。
 DEFAULT_VIX_CRISIS = 30.0
 DEFAULT_VIX_WARNING = 18.0
 
