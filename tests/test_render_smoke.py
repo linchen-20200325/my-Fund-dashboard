@@ -196,3 +196,53 @@ render_macro_tab()
         at = AppTest.from_string(drv, default_timeout=90)
         at.run()
         _assert_no_uncaught(at, "render_macro_tab(UnboundLocal 回歸)")
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.143 P0 — Streamlit 不准 nested st.expander
+# v19.139 把「其餘 N 則」做成 inner expander → 線上炸:
+#   StreamlitAPIException: "Expanders may not be nested inside other expanders."
+# 用 AST 靜態守衛防回歸(無需 AppTest,fast lane 跑得到)。
+# ════════════════════════════════════════════════════════════════
+def test_no_nested_expanders_in_tab1_macro():
+    """靜態 AST 守衛:ui/tab1_macro.py 不得有 `with st.expander(...)` 巢狀 —
+    Streamlit 1.x 禁止 nested expanders,會在 render 時拋 StreamlitAPIException。
+    v19.139 e2354f1 → 線上炸,v19.143 修復後加此守衛。"""
+    import ast
+    src = open("/home/user/my-Fund-dashboard/ui/tab1_macro.py", encoding="utf-8").read()
+    tree = ast.parse(src)
+
+    def _is_expander_call(node):
+        if not isinstance(node, ast.Call):
+            return False
+        f = node.func
+        return (isinstance(f, ast.Attribute) and f.attr == "expander"
+                and isinstance(f.value, ast.Name) and f.value.id == "st")
+
+    def _stmt_opens_expander(stmt):
+        if isinstance(stmt, ast.With):
+            for item in stmt.items:
+                if _is_expander_call(item.context_expr):
+                    return True
+        return False
+
+    violations: list[str] = []
+
+    def _walk(stmt, in_expander_depth=0):
+        opens = _stmt_opens_expander(stmt)
+        if opens and in_expander_depth > 0:
+            violations.append(f"line {stmt.lineno}")
+        new_depth = in_expander_depth + (1 if opens else 0)
+        for child in ast.iter_child_nodes(stmt):
+            _walk(child, new_depth)
+
+    for stmt in ast.walk(tree):
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for body_stmt in stmt.body:
+                _walk(body_stmt, 0)
+
+    assert not violations, (
+        "ui/tab1_macro.py 內偵測到 nested st.expander:" + ", ".join(violations) +
+        " — Streamlit 不准 nested expander,會在 render 時炸 StreamlitAPIException。"
+        " v19.143 P0 修復後此檢查應永遠通過。"
+    )
