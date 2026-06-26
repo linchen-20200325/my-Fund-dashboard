@@ -44,3 +44,52 @@ HY_SPREAD_THRESHOLDS = {
         "panic_above": 8.0,
     },
 }
+
+
+# ── CPI_YOY (CPIAUCSL YoY) — US Consumer Price Index, % ─────────────────
+# v19.178 F-GRAY-4 CPI harmonize per SPEC §16.2 ROI 第 2 順位
+#
+# **NOT** a single threshold across sites — colocated SSOT for 4 use cases:
+#
+# 1. stoplight (UI 三燈) — repositories/macro_repository.py:198 MACRO_THRESHOLDS
+# 2. score_function (0-10 連續分數) — services/macro_validation.py:101 SCORE_RULES
+# 3. inflection_detection (拐點訊號) — services/macro_service.py:208-210,253
+# 4. regime_classification (4 級景氣) — services/macro_service.py:1447-1449
+# 5. beginner_panic (教學警示) — ui/helpers/macro_beginner_view.py:315
+#
+# **不**重收 regime 4 級 zone(`CPI_YOY_IDEAL_MAX_PCT` 等已在
+# shared/signal_thresholds.py W5-4 SSOT 化,本檔不重複定義避免飄移)。
+CPI_YOY_THRESHOLDS = {
+    "stoplight": {
+        # repositories/macro_repository.py:198 MACRO_THRESHOLDS["CPI"]
+        # green_band [1.5, 2.5],yellow_at 3.5,red_above 4.0
+        "green_low": 1.5,
+        "green_high": 2.5,
+        "yellow_above": 3.5,
+        "red_above": 4.0,
+    },
+    "score_function": {
+        # services/macro_validation.py:101 SCORE_RULES lambda
+        # 1 < v < 2.5 → +1 (理想)/ v > 4 → -1 (過熱)
+        "ideal_low": 1.0,      # v > 1.0 開始計入理想區
+        "ideal_high": 2.5,     # v < 2.5 通膨健康
+        "elevated_above": 4.0, # v > 4.0 過熱扣分
+    },
+    "inflection_detection": {
+        # services/macro_service.py:208-210 高位未降警示 + 回落多頭
+        # services/macro_service.py:253 MK 黃金拐點(CPI 見頂 + Fed 降息)
+        "warn_above": 4.0,      # > 4.0% 高位未降 警告
+        "bull_low": 1.5,        # 1.5 <= v <= 3.0 回落合理多頭
+        "bull_high": 3.0,
+        "mk_golden_below": 3.5, # < 3.5 + 下降 + Fed 見頂 = MK 黃金拐點
+    },
+    "regime_classification": {
+        # services/macro_service.py:1447-1449
+        # PMI >= 52 且 CPI < 3.5 → 成長期;CPI >= 3.5 → 過熱期
+        "overheat_above": 3.5,
+    },
+    "beginner_panic": {
+        # ui/helpers/macro_beginner_view.py:315
+        "overheat_above": 4.0,
+    },
+}

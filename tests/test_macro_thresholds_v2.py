@@ -135,3 +135,100 @@ def test_tab1_macro_uses_ssot():
     import ui.tab1_macro as tm
     src = open(tm.__file__, encoding="utf-8").read()
     assert "from shared.macro_thresholds_v2 import" in src
+
+
+# ════════════════════════════════════════════════════════════════
+# 5. CPI_YOY_THRESHOLDS (F-GRAY-4 v19.178)
+# ════════════════════════════════════════════════════════════════
+
+def test_cpi_yoy_schema_complete():
+    """CPI_YOY_THRESHOLDS 含 5 個 use-case sub-dict."""
+    from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as CT
+    assert set(CT.keys()) == {
+        "stoplight",
+        "score_function",
+        "inflection_detection",
+        "regime_classification",
+        "beginner_panic",
+    }
+
+
+def test_cpi_yoy_stoplight_values():
+    """stoplight 與原 macro_repository.MACRO_THRESHOLDS['CPI'] band 等價."""
+    from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as CT
+    s = CT["stoplight"]
+    assert s["green_low"] == 1.5
+    assert s["green_high"] == 2.5
+    assert s["yellow_above"] == 3.5
+    assert s["red_above"] == 4.0
+
+
+def test_cpi_yoy_score_function_values():
+    """score_function 與原 macro_validation.py:101 SCORE_RULES lambda 等價."""
+    from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as CT
+    sf = CT["score_function"]
+    assert sf["ideal_low"] == 1.0
+    assert sf["ideal_high"] == 2.5
+    assert sf["elevated_above"] == 4.0
+
+
+def test_cpi_yoy_inflection_detection_values():
+    """inflection_detection 與原 macro_service.py:208-210,253 等價."""
+    from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as CT
+    inf = CT["inflection_detection"]
+    assert inf["warn_above"] == 4.0
+    assert inf["bull_low"] == 1.5
+    assert inf["bull_high"] == 3.0
+    assert inf["mk_golden_below"] == 3.5
+
+
+def test_cpi_yoy_regime_classification_values():
+    """regime_classification 與原 macro_service.py:1447-1449 等價."""
+    from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as CT
+    rc = CT["regime_classification"]
+    assert rc["overheat_above"] == 3.5
+
+
+def test_cpi_yoy_beginner_panic_values():
+    """beginner_panic 與原 macro_beginner_view.py:315 等價."""
+    from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as CT
+    bp = CT["beginner_panic"]
+    assert bp["overheat_above"] == 4.0
+
+
+def test_cpi_score_function_behavior_equivalence():
+    """v19.178 後 SCORE_RULES["CPI"] lambda 與原 inline (1<v<2.5 → 1.0, v>4 → -1.0) 等價."""
+    from services.macro_validation import SCORE_RULES
+    _, fn = SCORE_RULES["CPI"]
+    assert fn(2.0) == 1.0           # ideal
+    assert fn(5.0) == -1.0          # elevated
+    assert fn(3.0) == 0.0           # neutral
+    assert fn(1.0) == 0.0           # boundary low (= 1, not > 1)
+    assert fn(2.5) == 0.0           # boundary high (= 2.5, not < 2.5)
+    assert fn(4.0) == 0.0           # boundary elevated (= 4, not > 4)
+
+
+def test_cpi_beginner_view_imports_ssot():
+    """macro_beginner_view 必須 import CPI_YOY_THRESHOLDS."""
+    import ui.helpers.macro_beginner_view as mbv
+    src = open(mbv.__file__, encoding="utf-8").read()
+    assert "CPI_YOY_THRESHOLDS" in src
+    assert "_CPI_THR_V2" in src or 'CPI_YOY_THRESHOLDS as' in src
+
+
+def test_cpi_macro_service_imports_ssot():
+    """macro_service 必須 import CPI_YOY_THRESHOLDS."""
+    import services.macro_service as ms
+    src = open(ms.__file__, encoding="utf-8").read()
+    assert "CPI_YOY_THRESHOLDS" in src
+    assert "_CPI_WARN_ABOVE" in src
+    assert "_CPI_REGIME_OVERHEAT" in src
+
+
+def test_cpi_macro_validation_imports_ssot():
+    """macro_validation 必須 import CPI_YOY_THRESHOLDS."""
+    import services.macro_validation as mv
+    src = open(mv.__file__, encoding="utf-8").read()
+    assert "CPI_YOY_THRESHOLDS" in src
+    assert "_CPI_IDEAL_LOW" in src
+    assert "_CPI_ELEVATED" in src
