@@ -291,7 +291,12 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.DataFrame(obs)
     df = df[df["value"] != "."].copy()
-    df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    # v19.172:強制轉 float64(不可只用 pd.to_numeric 後 dtype inference)。
+    # FRED 部分 series 全為整數(PAYEMS / HSN1F / ICSA 等就業/住宅啟動數),
+    # to_numeric 對「全整數」會回 int64,違反 MacroFredSchema "float64" 契約
+    # → pandera SchemaError → 整個 fetch_all_indicators 炸(v19.171 修了
+    # catastrophic propagation,但根因仍在此)。
+    df["value"] = pd.to_numeric(df["value"], errors="coerce").astype("float64")
     df["date"]  = pd.to_datetime(df["date"])
     # v19.60 D1：FRED API observations 已含 realtime_start 欄位（YYYY-MM-DD 字串）。
     # 缺欄或解析失敗回 NaT，呼叫端用 .get/.dropna 容錯。
