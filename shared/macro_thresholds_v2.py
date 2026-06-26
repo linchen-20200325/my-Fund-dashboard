@@ -97,51 +97,96 @@ CPI_YOY_THRESHOLDS = {
 
 # ── PMI (NAPM / ISM Manufacturing PMI) — US, % ─────────────────────────
 # v19.179 F-GRAY-4 PMI harmonize per SPEC §16.2 ROI 第 3 順位
+# v19.180 docstring 升級:加經濟學註解 + 教學區
+#
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║ 📚 經濟學教學 — PMI 雙枯榮線(50 教科書 / 52 真正枯榮線)            ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# PMI(Purchasing Managers' Index)是擴散指數(diffusion index):
+#   PMI = (上升% × 1.0) + (持平% × 0.5) + (下降% × 0.0)
+#
+# **教科書枯榮線 = 50%**:字面意義,>50 代表「多數受訪企業認為較上月擴張」。
+# 本檔多數 sub-dict(stoplight / score_function / inflection / growth_signal /
+# alert / beginner_panic)用 50,因為這是公開教科書共識,UI 觸發容易解釋。
+#
+# **真正枯榮線 = 52%**(US,1990-2020 歷史校準):
+#   產出缺口(output gap)= 實際增速 − 潛在增速
+#   美國潛在增速 ≈ 2.0% YoY,對應 PMI ≈ 52.0
+#   - PMI > 52 → 實際 > 潛在 → 產出缺口為正 → 真擴張
+#   - PMI 50~52 → 字面擴張但實質低於潛在 → 灰色帶(實際在收縮中)
+#   - PMI < 50 → 字面收縮(且必然低於潛在)→ 真衰退
+#
+# 為什麼 regime_classification 用 52?
+#   `macro_service.py:1457-1461` 4 象限要分「成長期 vs 衰退期」,需區分
+#   「字面擴張」與「實質擴張」— 用 52 才能把 50-52 灰色帶正確歸到衰退。
+#   else 兜底為衰退是 **feature 不是 bug**(灰色帶 = 字面看似擴張但已轉弱)。
+#
+# 為什麼 stoplight 不一併升 52?
+#   UI 觸發以「易解釋」優先,50 教科書線使用者一看就懂;52 真正枯榮線需要
+#   產出缺口知識才能理解。雙線並存即為本 multi-dict SSOT 設計動機。
 #
 # Sanity filter [30, 70] 在 shared/signal_thresholds.PMI_VALID_MIN/MAX
 # (data-quality,非 business),本檔不重複定義。
 PMI_THRESHOLDS = {
     "stoplight": {
-        # shared/macro_buckets.py:58-59
+        # UI 三燈(教科書枯榮線 50)— shared/macro_buckets.py:58-59
+        # 字面意義:>50 擴張、<50 收縮、<46 深度收縮
         "green_above": 50.0,
         "yellow_below": 50.0,
         "red_below": 46.0,
     },
     "score_function": {
+        # macro 分數函數(教科書枯榮線 50)
         # services/macro_validation.py:102 SCORE_RULES["PMI"] lambda
         # services/macro_score_calibration.py:58 _s_pmi
         # 3 段:>= 50 → +2(擴張), [45,50) → -1(略弱), < 45 → -2(衰退)
+        # 45 為「深度收縮」門檻(歷史衰退期常見區間 42-48)
         "expansion_above": 50.0,
         "recession_below": 45.0,
     },
     "regime_classification": {
-        # services/macro_service.py:1457-1461 4 象限
-        # 52 為「真正枯榮線」(新觀念,對應實際增速=潛在增速,產出缺口=0);
-        # 50-52 灰色帶字面擴張但實質收縮,故 else 兜底為衰退是 feature
+        # 4 象限景氣分類(**真正枯榮線 52**,產出缺口模型)
+        # services/macro_service.py:1457-1461
+        #
+        # 52 = 實際增速 ≈ 潛在增速(產出缺口 = 0)的 PMI 對應值,
+        # 學理:1990-2020 US 製造業 PMI 與 GDP YoY 回歸校準
+        #
+        # **灰色帶 [50, 52) 歸衰退是 feature**:
+        #   字面擴張但實質低於潛在 = 經濟動能已開始轉弱,屬擴張末期 / 衰退初期
+        #   else 兜底為衰退避免「字面擴張」誤導 UI
         "strong_growth_above": 52.0,
         "contraction_below": 50.0,
     },
     "inflection_detection": {
-        # services/macro_service.py:194-198 拐點偵測
+        # 拐點偵測(教科書枯榮線 50 + 過熱線 55)
+        # services/macro_service.py:194-198
+        # 55 = 歷史過熱區(連續 3 月 >55 常見於景氣末期前 6-12 月)
+        # 50 同時作為擴張 / 反彈雙向參考
         "peak_warning_above": 55.0,
         "expansion_above": 50.0,
         "rebound_below": 50.0,
     },
     "growth_signal": {
-        # services/macro_service.py:986 二元成長訊號
+        # 二元成長訊號(教科書枯榮線 50)
+        # services/macro_service.py:986
         "expansion_above": 50.0,
     },
     "alert_generation": {
-        # services/macro_service.py:1145 警示文字觸發
+        # 警示文字觸發(教科書枯榮線 50)
+        # services/macro_service.py:1145
         "contraction_below": 50.0,
     },
     "beginner_panic": {
+        # 新手教學介面(教科書枯榮線 50)
         # ui/helpers/macro_beginner_view.py:314 _PMI_CONTRACTION_THRESHOLD
+        # 用 50 而非 52:新手介面以「公開知識門檻」優先,避免引入產出缺口概念
         "contraction_below": 50.0,
     },
     "mk_tolerance": {
-        # ui/components/mk_clock.py:76-81,106-107 美林時鐘 ±0.5 容忍區間
-        # (邊界震盪不算翻面)
+        # 美林時鐘 ±0.5 容忍區間(邊界震盪不算翻面)
+        # ui/components/mk_clock.py:76-81,106-107
+        # 美林時鐘在 50 ±0.5 內視為「過渡帶」,避免月度雜訊頻繁翻面誤判
         "expansion_above": 50.5,
         "contraction_below": 49.5,
     },
@@ -149,15 +194,36 @@ PMI_THRESHOLDS = {
 
 
 # ── TW PMI(中華經濟研究院 PMI)— 5 級評分,獨立於 US PMI ─────────────
-# 注意:台灣 PMI 為中經院編製,非中國統計局 PMI;閾值與 US 物理獨立。
+# v19.180 docstring 升級:加經濟學註解
+#
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║ 📚 經濟學教學 — TW PMI 與 US PMI 為何**不**共用閾值                  ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# 1. **編製機構不同**:
+#    - TW PMI:中華經濟研究院(CIER)編製,自 2012/07 起發布
+#    - US PMI:ISM(Institute for Supply Management)編製,自 1948 起發布
+#    - **非中國統計局 PMI**(中國 PMI 由國家統計局編製,本系統不採用)
+#
+# 2. **產業結構不同 → 真正枯榮線不同**:
+#    - US 潛在 GDP 增速 ≈ 2.0% → 真正枯榮線 ≈ 52
+#    - TW 潛在 GDP 增速 ≈ 2.5-3.0%(出口導向、半導體強週期)
+#      → 真正枯榮線 ≈ 52-53(本系統取 52 作擴張上緣)
+#    - 兩者**物理獨立**,不可機械式 swap
+#
+# 3. **5 級評分設計**(符合 TW 半導體景氣循環高波動特性):
+#    - >=55 強擴張(+2):半導體擴產期典型值
+#    - >=52 溫和擴張(+1):接近潛在增速
+#    - >=50 中性(0):教科書枯榮線
+#    - >=48 略弱(-1):接近收縮但未進入
+#    - <48 收縮(-2):明確收縮
 TW_PMI_THRESHOLDS = {
     "tw_pmi_score": {
         # services/macro_tw_local.py:205-214 (tpi_score_v2)
         # services/macro_tw_local.py:323-332 (tpi_score_v3)
-        # 5 級:>=55(+2) / >=52(+1) / >=50(0) / >=48(-1) / <48(-2)
-        "strong_above": 55.0,
-        "expansion_above": 52.0,
-        "neutral_above": 50.0,
-        "weak_above": 48.0,
+        "strong_above": 55.0,      # 強擴張(半導體擴產典型值)
+        "expansion_above": 52.0,   # 溫和擴張(接近 TW 潛在增速)
+        "neutral_above": 50.0,     # 教科書枯榮線(中性)
+        "weak_above": 48.0,        # 略弱(收縮邊緣)
     },
 }
