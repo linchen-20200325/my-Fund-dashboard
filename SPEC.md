@@ -1760,3 +1760,85 @@ def _friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = 
 - `tests/test_mk_simple_formula.py`(v19.149):26 tests — 公式正確性 + 1Y 窗邊界 + 配息日界線 + 邊界條件 + property 加法可拆性
 - `tests/test_mk_ssot_unification.py`(v19.148):15 tests — 跨 shape SSOT + canonical 守 + cross-caller import 守
 - 既有 `test_portfolio_health` / `test_fund_dividend_calculator` / `test_fund_dividend_health` — 77 tests 零回歸
+
+---
+
+## §18 Pandera 導入設計提案(v19.154 — design only, **無 code 改動**)
+
+> CLAUDE.md §3.1 「待議:是否將 pandera 加入 requirements 並逐 repository 落地 schema?」
+> 本節為依 §8.1 「先設計、自評過度設計、經核准才寫」之**設計提案**,本 PR 不寫 code。
+
+### §18.1 動機(為何要做)
+
+`__init__` 與 repository 各 fetcher 回傳的 DataFrame shape 散落於 docstring + 範例,無強制驗證:
+- 新加 fetcher / 改 column / dtype drift → 下游計算靜默偏移,CI 無偵測
+- 同 schema 重複 assert 散落 callers(NAV>0 / date monotonic / weight sum=1 等)
+- §6 自審清單條目「不變量斷言」缺工具支撐
+
+pandera 提供宣告式 schema + 強制檢查 + 整合 pandas,在 fetcher 出口與 service 入口做門關。
+
+### §18.2 反對方視角(自評過度設計)
+
+| 反對理由 | 評估 |
+|---|---|
+| import 開銷 ~200ms(每次 streamlit reload) | 中度 — Streamlit cache 多數 fetcher 已避開 cold-path |
+| 既有 assert 已涵蓋大多數 | 真 — 但散落 + 重複,且新 caller 易忘 |
+| schema 修改需協同 caller 改 | 真 — 但這正是 pandera 想守的「契約」,改 = 契約變更須明示 |
+| 過度約束(strict mode 反而 brittle) | 真 — 需用 `strict=False` + `coerce=True` 緩解 |
+
+**自評結論**:**值得做但分階段**。Phase A 只在 2-3 個高 ROI 入口落地,不全面強推。
+
+### §18.3 範圍(Phase 拆分 — user approve 後逐 phase PR)
+
+#### Phase A — Pilot(最小可行 + 學習)
+- requirements.txt 加 `pandera>=0.20,<1.0`(pin minor)
+- 在 `repositories/macro_repository.fetch_fred()` 出口加 schema(date / value / source / fetched_at)
+- 寫 1 個 schema 模組:`shared/schemas.py`(L0,無 IO)
+- 加 5-10 個 tests 證明:合法 input 通過、illegal column drift 立擋
+- **scope 上限**:1 個 fetcher + 1 個 schema 模組 + tests + 文件
+- **時間預估**:1-2 個 PR
+
+#### Phase B — 擴展到核心 fetcher(approve 後)
+- `fetch_yf_close` / `fetch_fund_nav_series` / `fetch_dividends`
+- 每個 fetcher 配對 schema(`NavSchema` / `DividendSchema` / `MacroSchema`)
+- 補對應 tests
+
+#### Phase C — Service 入口(approve 後)
+- `compute_1y_total_return_mk_simple` / `calc_metrics` 等 L2 service 入口
+- 校驗從 fetcher 流入的 DataFrame 符合契約
+- 反捏造守(§3.3):不法輸入直接 raise,避免 silent drift
+
+#### Phase D — 全面落地(approve 後)
+- 所有 L1/L2 入口都用 schema
+- CI 跑 schema test 作為 PR gate
+
+### §18.4 失敗降級
+
+- pandera schema validation 失敗 → 視為**契約違反** raise SchemaError
+- 對齊 CLAUDE.md §1 Fail Loud:不偽造、不 silent fallback
+- 但需 caller decorator 把 SchemaError 轉為 friendly UI 訊息(避免線上 user 看到 stacktrace)
+
+### §18.5 §8.2 分層與依賴
+
+- `shared/schemas.py` 屬 L0(無 IO,純 schema 宣告)
+- 各 repository fetcher 在出口處 `.validate(df)`,屬 L1 自驗
+- service 入口 validation 屬 L2 防禦
+- pandera 只能被 L0/L1/L2 import,L3 UI 不直接呼叫
+
+### §18.6 SSOT — schema 唯一性
+
+- 同一資料源(NAV / Dividend / Macro)只有**一個** schema
+- repository 與 service 共用,杜絕雙寫雙改
+- schema 改動 = `shared/schemas.py` 唯一 commit point,**禁止** caller 端重新宣告
+
+### §18.7 接下來的動作
+
+**本 PR(v19.154)**:**只寫本設計提案 SPEC §18,不動 code**。
+
+**等 user 明示「OK Phase A 啟動」之後**:
+- 開新 PR v19.155 — Phase A pilot 落地(本 SPEC §18.3 Phase A 範圍)
+- Phase B/C/D 各自獨立 PR,每階段都需 user re-approve
+
+**WONTFIX 標準**(對齊 §-1):
+- 若 user 不啟動 → 本提案保留為 SPEC 文件,**永不主動推**
+- 唯有 user 明確說「動工」才開 Phase A PR
