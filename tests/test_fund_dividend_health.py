@@ -296,3 +296,68 @@ class TestDivHealthLightDelegation:
 #   1. 資料缺失(None/NaN/字串)→ is_data_missing=True ✅ TestCanonicalDataMissing
 #   2. 無配息基金(div=0/負)→ is_no_dividend=True, is_eating=False ✅ TestCanonicalNoDividend
 #   3. 報酬 = 配息(打平 edge case)→ is_eating=False(嚴格小於)✅ test_is_eating_strict_less_than
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.181 Bug 4 regression — check_eating_principal_1y_mk 接受 pd.Series
+# ════════════════════════════════════════════════════════════════
+
+class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
+    """v19.181 Bug 4 regression:fund["series"] 為 pd.Series 時不可 ambiguous truth value.
+
+    過去 `fund.get("series") or X` 對多元素 pd.Series 觸發
+    `ValueError: The truth value of a Series is ambiguous.` 導致組合基金
+    健診摘要表 10/10 ValueError 全炸,改顯式 None 檢查後解決。
+    """
+
+    def _build_fund(self, series_obj, divs_obj):
+        return {
+            "series": series_obj,
+            "dividends": divs_obj,
+            "moneydj_raw": {"moneydj_div_yield": 7.49},
+            "metrics": {"ret_1y_total": 14.5},
+        }
+
+    def test_pd_series_nav_no_value_error(self):
+        import pandas as pd
+        from services.fund_dividend_health import check_eating_principal_1y_mk
+        nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
+        nav["2025-06-01"] = 9.10
+        s = pd.Series(nav, name="nav")
+        divs = [{"date": "2024-12-15", "amount": 0.05}]
+        fund = self._build_fund(s, divs)
+        out = check_eating_principal_1y_mk(fund)  # 不可 raise
+        assert isinstance(out, dict)
+        assert out.get("_tr1y_method") == "mk_simple"
+
+    def test_dict_nav_still_works(self):
+        """confirm refactor 不破壞 dict 入口."""
+        from services.fund_dividend_health import check_eating_principal_1y_mk
+        nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
+        nav["2025-06-01"] = 9.10
+        divs = [{"date": "2024-12-15", "amount": 0.05}]
+        fund = self._build_fund(nav, divs)
+        out = check_eating_principal_1y_mk(fund)
+        assert isinstance(out, dict)
+        assert out.get("_tr1y_method") == "mk_simple"
+
+    def test_falls_back_to_moneydj_series_when_top_none(self):
+        """top-level None → 走 moneydj_raw["series"] fallback."""
+        import pandas as pd
+        from services.fund_dividend_health import check_eating_principal_1y_mk
+        nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
+        nav["2025-06-01"] = 9.10
+        s = pd.Series(nav, name="nav")
+        fund = {
+            "series": None,  # top-level missing
+            "dividends": None,
+            "moneydj_raw": {
+                "moneydj_div_yield": 7.49,
+                "series": s,
+                "dividends": [{"date": "2024-12-15", "amount": 0.05}],
+            },
+            "metrics": {"ret_1y_total": 14.5},
+        }
+        out = check_eating_principal_1y_mk(fund)
+        assert isinstance(out, dict)
+        assert out.get("_tr1y_method") == "mk_simple"
