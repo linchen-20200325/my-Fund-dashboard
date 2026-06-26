@@ -149,38 +149,21 @@ def _process_one_fund(
         _buy_fx = result["buy_fx"]
         _buy_fx_info = f"1M TWD→{_p_ccy:,.0f} {ccy} @ {_buy_fx:.2f}"
 
-        # v19.70 J2：MK 倉位（已有 fd.metrics）+ 1Y 快算吃本金（calc_health_from_manual）
+        # v19.148 — MK 老師 1Y SSOT 吃本金檢查(取代 v19.70 J2 calc_health_from_manual 自算路徑)
+        # 同源 ui/helpers/fund_checkup.py 第 2 表「健診摘要表」,確保跨表 verdict 一致。
+        # 方法論:近一年含息報酬率 vs MoneyDJ wb05 年化配息率(MK 老師體檢邏輯)。
         _metrics = fd.get("metrics") or {}
         _mk_pos = (_metrics.get("pos_label") or "—").strip() or "—"
-        _snap_health = "⚪ 資料不足"
+        _mk_safety = None
         try:
-            _items_sorted = sorted(nav_dict.items())  # iso 日期升冪
-            if len(_items_sorted) >= 2:
-                _last_d, _last_v = _items_sorted[-1]
-                _yr_ago = (_last_d[:4] + "-01-01") if len(_last_d) >= 10 else ""
-                _target_d = (
-                    f"{int(_last_d[:4]) - 1}{_last_d[4:10]}"
-                    if len(_last_d) >= 10 else ""
-                )
-                _below_1y = [
-                    v for d, v in _items_sorted if d <= _target_d
-                ] if _target_d else []
-                _nav_1y_ago = _below_1y[-1] if _below_1y else _items_sorted[0][1]
-                _freq_map = {"月配": 12, "季配": 4, "半年": 2, "年配": 1}
-                _freq_n = next(
-                    (n for k, n in _freq_map.items() if k in _div_freq), 12
-                )
-                _div_amt = float((divs[0] if divs else {}).get("amount") or 0)
-                if _last_v > 0 and _nav_1y_ago > 0 and _div_amt > 0:
-                    from services.fund_service import calc_health_from_manual
-                    _hm = calc_health_from_manual(
-                        nav_current=_last_v, nav_1y_ago=_nav_1y_ago,
-                        div_per_unit=_div_amt, div_freq=_freq_n,
-                    )
-                    if not _hm.get("error"):
-                        _snap_health = _hm.get("health", "⚪ 資料不足")
+            from services.fund_dividend_health import check_eating_principal_1y_mk
+            _mk_safety = check_eating_principal_1y_mk(fd)
         except Exception:
-            pass
+            _mk_safety = None
+        if _mk_safety is None:
+            _snap_health = "⚪ 資料不足"
+        else:
+            _snap_health = _mk_safety.get("status", "⚪ 資料不足")
 
         return {
             "code": code,
@@ -194,11 +177,14 @@ def _process_one_fund(
             "配息次數": result["n_events"],
             "累積 TWD 配息 🧮": s["total_twd_div_🧮"],
             "年均配息 TWD 🧮": _ann_twd_div,
-            "年化配息率% 🧮": s["annual_div_rate_pct_🧮"],
-            "年化淨值% 🧮": s["annual_nav_return_pct_🧮"],
-            "含息年化% 🧮": s["ret_1y_total_pct_🧮"],
-            "燈號（全期 🧮）": f"{s['div_health_emoji_🧮']} {s['div_health_light_🧮']}",
-            "快算燈號（1Y）": _snap_health,
+            # v19.148:全期自算欄位保留為「歷史資訊」(配息累積實況),
+            # 但**verdict 不再用全期自算**(會被短歷史 annualization bias 拉高致誤紅燈),
+            # 改用 MK 老師 1Y SSOT 標準。
+            "配息率% (全期自算)": s["annual_div_rate_pct_🧮"],
+            "淨值% (全期自算)": s["annual_nav_return_pct_🧮"],
+            "含息% (全期自算)": s["ret_1y_total_pct_🧮"],
+            # v19.148:單一 SSOT verdict(MK 老師 1Y 體檢標準,跨 tab 一致)
+            "吃本金燈號 (1Y · MK)": _snap_health,
             "MK 倉位": _mk_pos,
             "最高經理費%": _mgmt_fee,
             "配息頻率": _div_freq,
@@ -282,9 +268,13 @@ def _render_health_table(rows: list[dict]) -> None:
         # 鏡像 Stock v18.201 D2 「FinMind last_update」設計，但 Fund 端用 banner 而非 hover
         _render_mj_freshness_banner(ok_rows)
 
-        n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get("燈號（全期 🧮）", "")))
-        n_warn = sum(1 for r in ok_rows if "警示" in str(r.get("燈號（全期 🧮）", "")))
-        n_good = sum(1 for r in ok_rows if "健康" in str(r.get("燈號（全期 🧮）", "")))
+        # v19.148:SSOT 統一改用 MK 老師 1Y 標準(「吃本金燈號 (1Y · MK)」),
+        # 與下方「健診摘要表」同源,不再與全期自算 verdict 不一致。
+        _mk_col = "吃本金燈號 (1Y · MK)"
+        n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get(_mk_col, "")))
+        n_warn = sum(1 for r in ok_rows if ("警示" in str(r.get(_mk_col, ""))
+                                            or "邊緣" in str(r.get(_mk_col, ""))))
+        n_good = sum(1 for r in ok_rows if "健康" in str(r.get(_mk_col, "")))
         total_twd = sum(float(r.get("累積 TWD 配息 🧮", 0) or 0) for r in ok_rows)
 
         k1, k2, k3, k4, k5 = st.columns(5)
@@ -299,6 +289,15 @@ def _render_health_table(rows: list[dict]) -> None:
             for r in ok_rows
         ])
         st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
+        # v19.148:吃本金 verdict 改用 MK 老師 1Y SSOT 標準(對齊「健診摘要表」),
+        # 「(全期自算)」欄位保留為歷史資訊,不再用於 verdict 判定。
+        st.caption(
+            "🩺 **吃本金燈號 (1Y · MK)** 採郭俊宏 MK 老師體檢邏輯:"
+            "**近一年含息報酬 < 年化配息率 → 🔴 吃本金**(MoneyDJ wb05 官方數值)。"
+            "「(全期自算)」欄位為持有期實際累積數值,**僅供歷史參考**,"
+            "不參與燈號判定(避免短歷史 annualization 把剛買進基金誤判紅燈)。"
+            "📊 **長線挑核心資產**請另參 3-3-3 原則:成立 ≥ 3 年 + 3 年平均年化 > 7%。"
+        )
         # v19.77 L1：column_config 數值格式化（百分號 / 千分位）+ 欄寬調整
         from streamlit import column_config as _cc
         _col_cfg = {
@@ -311,9 +310,20 @@ def _render_health_table(rows: list[dict]) -> None:
             "配息次數": _cc.NumberColumn("配息次數", format="%d", width="small"),
             "累積 TWD 配息 🧮": _cc.NumberColumn("累積 TWD 配息 🧮", format="%,.0f"),
             "年均配息 TWD 🧮": _cc.NumberColumn("年均配息 TWD 🧮", format="%,.0f"),
-            "年化配息率% 🧮": _cc.NumberColumn("年化配息率% 🧮", format="%.2f %%"),
-            "年化淨值% 🧮": _cc.NumberColumn("年化淨值% 🧮", format="%.2f %%"),
-            "含息年化% 🧮": _cc.NumberColumn("含息年化% 🧮", format="%.2f %%"),
+            # v19.148:三欄改名 — 明確標「全期自算」,與 1Y MK SSOT verdict 視覺區隔
+            "配息率% (全期自算)": _cc.NumberColumn(
+                "配息率% (全期自算)", format="%.2f %%",
+                help="自買進日起累積配息 / 本金 / 持有年數,僅供歷史參考。verdict 不採此值。"),
+            "淨值% (全期自算)": _cc.NumberColumn(
+                "淨值% (全期自算)", format="%.2f %%",
+                help="自買進日起累積淨值變化年化。verdict 不採此值。"),
+            "含息% (全期自算)": _cc.NumberColumn(
+                "含息% (全期自算)", format="%.2f %%",
+                help="自買進日起累積含息報酬年化。verdict 不採此值。"),
+            "吃本金燈號 (1Y · MK)": _cc.TextColumn(
+                "吃本金燈號 (1Y · MK)",
+                help="MK 老師 1Y 體檢:近一年含息報酬 vs MoneyDJ wb05 年化配息率。"
+                     "與下方「健診摘要表」同源 SSOT。"),
         }
         st.dataframe(
             df, use_container_width=True, hide_index=True,
