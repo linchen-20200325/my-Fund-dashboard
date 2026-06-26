@@ -133,7 +133,9 @@ def fetch_ndc_signal_history(months_back: int = 12, token: str = "") -> dict:
     result['score_prev2']  = prev2
     result['trend']        = vals
     result['date_latest']  = str(sub['date'].iloc[-1])[:10]
-    result['source']       = 'FinMind'
+    # v19.151 F-PROV-1 phase 2:升級 source 至具名 dataset + 加 fetched_at UTC ISO
+    result['source']       = 'FinMind:TaiwanMacroEconomics'
+    result['fetched_at']   = _dt.datetime.now(_dt.timezone.utc).isoformat()
     if prev2 is not None:
         if prev2 >= prev and cur > prev:
             result['inflection'] = '🚀 連2月翻多'
@@ -187,7 +189,9 @@ def fetch_tw_pmi_local(months_back: int = 12, token: str = "") -> dict:
     result['prev']        = prev
     result['trend']       = vals
     result['date_latest'] = str(sub['date'].iloc[-1])[:10]
-    result['source']      = 'FinMind'
+    # v19.151 F-PROV-1 phase 2
+    result['source']      = 'FinMind:TaiwanMacroEconomics'
+    result['fetched_at']  = _dt.datetime.now(_dt.timezone.utc).isoformat()
     if prev < 50 <= cur:
         result['inflection'] = '🚀 由縮轉擴'
     elif prev >= 50 > cur:
@@ -240,7 +244,9 @@ def fetch_tw_export_yoy(months_back: int = 12, token: str = "") -> dict:
     result['prev']        = prev
     result['trend']       = vals
     result['date_latest'] = str(sub['date'].iloc[-1])[:10]
-    result['source']      = 'FinMind'
+    # v19.151 F-PROV-1 phase 2
+    result['source']      = 'FinMind:TaiwanMacroEconomics'
+    result['fetched_at']  = _dt.datetime.now(_dt.timezone.utc).isoformat()
     if prev < 0 <= cur:
         result['inflection'] = '🚀 由負轉正'
     elif prev >= 0 > cur:
@@ -345,7 +351,9 @@ def fetch_foreign_consecutive_days(days_back: int = 30, token: str = "") -> dict
     result['today_net']   = int(nets[-1])
     result['prev_streak'] = prev_streak
     result['date_latest'] = str(df['date'].iloc[-1])[:10]
-    result['source']      = 'FinMind'
+    # v19.151 F-PROV-1 phase 2(外資資料集名稱不同)
+    result['source']      = 'FinMind:TaiwanStockTotalInstitutionalInvestors'
+    result['fetched_at']  = _dt.datetime.now(_dt.timezone.utc).isoformat()
     result['reversed']    = (consec == 1 and prev_streak * last_sign < -5)
     if consec == 1 and prev_streak <= -5:
         result['inflection'] = f'🚀 連{-prev_streak}賣→買（拐點）'
