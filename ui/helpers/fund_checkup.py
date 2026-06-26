@@ -173,24 +173,33 @@ def _compute_fund_health_kpis(fund: dict) -> dict:
     mj = fund.get("moneydj_raw") or {}
     m = fund.get("metrics") or {}
 
-    # 1) 年化配息率：MoneyDJ wb05 官方值優先，缺則退本地估算
+    # v19.150:吃本金檢查改走 check_eating_principal_1y_mk SSOT 入口
+    # (與 tab_fund_grp_health 同源,未來 MK 公式變更只改一處)。
+    # _adr / _tr1y 仍 expose 給其他 KPI(月配息/Coverage 顯示)使用。
+    from services.fund_dividend_health import check_eating_principal_1y_mk
+
+    # 1) 年化配息率:MoneyDJ wb05 官方值優先,缺則退本地估算(展示用)
     _mj_dy = _safe_num(mj.get("moneydj_div_yield"))
     _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else _safe_num(m.get("annual_div_rate"))
     if _adr is not None and _adr <= 0:
         _adr = None
 
-    # 2) 1Y 含息報酬（沿用 PK 表同源）
-    _tr1y = _ret_1y_total(fund)
+    # 2) 吃本金檢查 + tr1y 經由 SSOT 入口
+    # check_eating_principal_1y_mk 內部用 MK 嚴格單利優先(有 series + dividends 時)
+    _ds = check_eating_principal_1y_mk(fund)
 
-    # 3) 吃本金檢查：div_safety_check 純函式（綠/黃/紅燈 + coverage）
-    _ds = None
-    if _adr is not None and _tr1y is not None:
-        try:
-            _ds = div_safety_check(
-                total_return=_tr1y, dividend_yield=_adr, nav_change=_tr1y,
-            )
-        except Exception:
-            _ds = None
+    # 3) tr1y 給其他 KPI 顯示用(月配息 / Coverage 計算)
+    # SSOT 一致:若 _ds 走 mk_simple,_tr1y 應從 _ds["_tr1y_meta"] 取(避免顯示與
+    # verdict 不同數字);若 fallback metrics,則用 _ret_1y_total。
+    _tr1y = None
+    if _ds and _ds.get("_tr1y_method") == "mk_simple":
+        _meta = _ds.get("_tr1y_meta") or {}
+        _nc = _meta.get("nav_change_pct")
+        _dt = _meta.get("div_total_pct")
+        if _nc is not None and _dt is not None:
+            _tr1y = _nc + _dt
+    if _tr1y is None:
+        _tr1y = _ret_1y_total(fund)
 
     # 4) 月配息（TWD）= invest_twd × 年化配息率 ÷ 12（沿用 single-fund 試算邏輯）
     _inv_twd = _safe_num(fund.get("invest_twd")) or 0.0
