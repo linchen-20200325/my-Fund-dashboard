@@ -45,8 +45,10 @@ def test_score_rules_threshold_boundary():
     assert pmi_fn(40) == -2.0         # 衰退
 
     vix_fn = SCORE_RULES["VIX"][1]
+    # v19.174:C2-C SSOT 後 warning=22 / crisis=30(由 v19.157~159 收斂)。
+    # 原 vix_fn(20)==0.0 失效:20 < 22 = safe → 1.0;改測中間區用 25(22 ≤ x < 30)。
     assert vix_fn(15) == 1.0
-    assert vix_fn(20) == 0.0
+    assert vix_fn(25) == 0.0
     assert vix_fn(35) == -1.0
 
     hy_fn = SCORE_RULES["HY_SPREAD"][1]

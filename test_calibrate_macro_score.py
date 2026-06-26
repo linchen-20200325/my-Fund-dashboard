@@ -158,10 +158,10 @@ def test_iter_valid_cells_filters_monotonic():
 
 def test_iter_valid_cells_default_full():
     cells = iter_valid_cells()
-    # 預設 5×5 = 25，扣掉 warning >= crisis 的無效組合
-    # crisis_grid=(25,27,30,32,35), warning_grid=(14,16,18,20,22)
-    # 全部 warning 都 < 25，所以全 25 個都保留
-    assert len(cells) == 25
+    # v19.174:C2-C v19.159 後 warning_grid 對齊 SSOT 22 重心移到 (18,20,22,24,26)。
+    # crisis_grid=(25,27,30,32,35), warning_grid=(18,20,22,24,26)
+    # c=25 排除 w=26(w>=c)→ 4 個;其餘 c ∈ {27,30,32,35} 全 5 個保留 → 4+5×4 = 24
+    assert len(cells) == 24
 
 
 # ════════════════════════════════════════════════════════════════
@@ -364,17 +364,22 @@ def test_proposal_report_fallback_marks_warning():
 # services/macro_validation 的 JSON loader hook
 # ════════════════════════════════════════════════════════════════
 def test_macro_validation_loader_reads_calibrated_json(tmp_path: Path, monkeypatch):
-    """寫 JSON → import macro_validation 看 SCORE_RULES['VIX'] 是否吃新閾值。"""
+    """寫 JSON → import macro_validation 看 SCORE_RULES['VIX'] 是否吃新閾值。
+
+    v19.174:C2-C v19.159 後 loader warning 越界守門改為 [18, 26](對齊 SSOT 22 重心)。
+    原 warning=16.0 在新範圍外 → loader fallback 至 SSOT(crisis=30, warning=22)導致 assert 失敗。
+    改用合法值 warning=20.0(在 [18,26])測讀取正確。
+    """
     cfg = {
         "VIX_CRISIS_THRESHOLD": 27.0,
-        "VIX_WARNING_THRESHOLD": 16.0,
+        "VIX_WARNING_THRESHOLD": 20.0,
     }
     (tmp_path / "macro_thresholds_global.json").write_text(
         json.dumps(cfg), encoding="utf-8")
     from services.macro_validation import _load_vix_calibrated_thresholds
     c, w = _load_vix_calibrated_thresholds(tmp_path)
     assert c == 27.0
-    assert w == 16.0
+    assert w == 20.0
 
 
 def test_macro_validation_loader_rejects_out_of_cap(tmp_path: Path):
