@@ -585,9 +585,11 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
                 v = round(float(df['value'].iloc[-1]), 1)
                 print(f'[macro_core/PMI/FRED] ✅ {sid}={v} date={last_date} '
                       f'series={len(df)} 期')
+                # F-PROV-1 phase 18 v19.156 — 加 fetched_at(source 已存在)
                 return {
                     'value': v, 'date': str(last_date), 'label': lbl,
-                    'source': 'FRED', 'is_proxy': False, 'series_id': sid,
+                    'source': f'FRED:{sid}', 'is_proxy': False, 'series_id': sid,
+                    'fetched_at': pd.Timestamp.now('UTC').isoformat(),
                     'dates':  [str(pd.to_datetime(d).date()) for d in df['date']],
                     'values': [round(float(x), 1) for x in df['value']],
                 }
@@ -614,10 +616,12 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
                 if 30 <= v <= 70 and 1 <= mo <= 12:
                     date = f'{yr}-{mo:02d}-01'
                     print(f'[macro_core/PMI/MacroMicro] ✅ {v} date={date}')
+                    # F-PROV-1 phase 18 v19.156 — 加 fetched_at
                     return {'value': v, 'date': date,
                             'label': 'MacroMicro ISM PMI',
-                            'source': 'MacroMicro', 'is_proxy': False,
-                            'series_id': '950'}
+                            'source': 'MacroMicro:us-ism-mfg-pmi', 'is_proxy': False,
+                            'series_id': '950',
+                            'fetched_at': pd.Timestamp.now('UTC').isoformat()}
     except Exception as e:
         errs.append(f'MacroMicro:{type(e).__name__}')
         print(f'[macro_core/PMI/MacroMicro] ❌ {e}')
@@ -648,10 +652,12 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
                               'September':9,'October':10,'November':11,'December':12}
                         date = f'{m_dt.group(2)}-{MO[m_dt.group(1)]:02d}-01'
                     print(f'[macro_core/PMI/ISM] ✅ {v} date={date or "?"}')
+                    # F-PROV-1 phase 18 v19.156 — 加 fetched_at
                     return {'value': v, 'date': date,
                             'label': 'ISM World Official',
-                            'source': 'ISM', 'is_proxy': False,
-                            'series_id': 'ismworld.org'}
+                            'source': 'ISM:ismworld.org', 'is_proxy': False,
+                            'series_id': 'ismworld.org',
+                            'fetched_at': pd.Timestamp.now('UTC').isoformat()}
     except Exception as e:
         errs.append(f'ISM:{type(e).__name__}')
         print(f'[macro_core/PMI/ISM] ❌ {e}')
@@ -684,10 +690,12 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
                     if age <= max_age_days and 30 <= v <= 70:
                         date = f'{period_str[:7]}-01'
                         print(f'[macro_core/PMI/DBnomics] ✅ {v} date={date}')
+                        # F-PROV-1 phase 18 v19.156 — 加 fetched_at
                         return {'value': v, 'date': date,
                                 'label': 'DBnomics ISM/pmi/pm',
-                                'source': 'DBnomics', 'is_proxy': False,
-                                'series_id': 'ISM/pmi/pm'}
+                                'source': 'DBnomics:ISM/pmi/pm', 'is_proxy': False,
+                                'series_id': 'ISM/pmi/pm',
+                                'fetched_at': pd.Timestamp.now('UTC').isoformat()}
                     else:
                         print(f'[macro_core/PMI/DBnomics] ⚠️ '
                               f'最新={period_str} v={v} age={age}d 不通過防呆')
@@ -713,11 +721,13 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
                     v = round(float(df['value'].iloc[-1]), 1)
                     print(f'[macro_core/PMI/PhilFed] ⚠️ 採用替代計 '
                           f'PMI_eq={v} (Phil Fed Diffusion 轉換) date={last_date}')
+                    # F-PROV-1 phase 18 v19.156 — 加 fetched_at
                     return {
                         'value': v, 'date': str(last_date),
                         'label': 'Phil Fed 製造業擴散（轉 PMI 刻度）',
-                        'source': 'PhilFed-Proxy', 'is_proxy': True,
+                        'source': 'FRED:GACDFSA066MSFRBPHI:proxy', 'is_proxy': True,
                         'series_id': 'GACDFSA066MSFRBPHI',
+                        'fetched_at': pd.Timestamp.now('UTC').isoformat(),
                         'dates':  [str(pd.to_datetime(d).date()) for d in df['date']],
                         'values': [round(float(x), 1) for x in df['value']],
                         'proxy_note': '⚠️ 替代指標：Phil Fed 製造業擴散指數，'
@@ -743,11 +753,13 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
                     v = round(float(df['value'].iloc[-1]), 2)
                     print(f'[macro_core/PMI/OECD-Proxy] ⚠️ 採用替代指標 '
                           f'BSCICP02USM460S={v} date={last_date}')
+                    # F-PROV-1 phase 18 v19.156 — 加 fetched_at
                     return {
                         'value': v, 'date': str(last_date),
                         'label': 'OECD US Business Confidence (Proxy)',
-                        'source': 'OECD-Proxy', 'is_proxy': True,
+                        'source': 'FRED:BSCICP02USM460S:proxy', 'is_proxy': True,
                         'series_id': 'BSCICP02USM460S',
+                        'fetched_at': pd.Timestamp.now('UTC').isoformat(),
                         'dates':  [str(pd.to_datetime(d).date()) for d in df['date']],
                         'values': [round(float(x), 2) for x in df['value']],
                         'proxy_note': '⚠️ 替代指標：OECD 美國商業信心指數。'
@@ -762,7 +774,10 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
 
     err_msg = ' | '.join(errs) or 'all 7 stages failed'
     print(f'[macro_core/PMI] ❌ 7 段備援全失敗：{err_msg}')
-    return {'_err_pmi': err_msg, 'value': None}
+    # F-PROV-1 phase 18 v19.156 — fail token 也帶 source + fetched_at(便於 audit)
+    return {'_err_pmi': err_msg, 'value': None,
+            'source': 'ISM-PMI:all_7_stages_failed',
+            'fetched_at': pd.Timestamp.now('UTC').isoformat()}
 
 
 # ══════════════════════════════════════════════════════════════

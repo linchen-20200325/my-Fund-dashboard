@@ -17,6 +17,8 @@ from __future__ import annotations
 import logging
 import re
 
+import pandas as pd
+
 
 logger = logging.getLogger("financial_repository")
 
@@ -141,6 +143,7 @@ def fetch_stock_three_ratios(holding_name: str) -> dict | None:
             v0, v1 = quarters[0].get(key), quarters[1].get(key)
             return round(v0 - v1, 2) if (v0 is not None and v1 is not None) else 0.0
 
+        # F-PROV-1 phase 18 v19.156 — provenance(schema-additive)
         return {
             "stock":             holding_name,
             "ticker":            ticker_sym,
@@ -155,6 +158,8 @@ def fetch_stock_three_ratios(holding_name: str) -> dict | None:
             "gross_margin_diff": _diff("gross_margin"),
             "op_margin_diff":    _diff("op_margin"),
             "net_margin_diff":   _diff("net_margin"),
+            "source":            f"yfinance:{ticker_sym}:quarterly_income_stmt",
+            "fetched_at":        pd.Timestamp.now('UTC').isoformat(),
         }
     except Exception as e:
         logger.warning("三率抓取失敗 %s(%s): %s", holding_name, ticker_sym, e)
