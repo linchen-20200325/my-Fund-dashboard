@@ -21,6 +21,8 @@ CLAUDE.md §3.1 / SPEC §18 — DataFrame 邊界契約集中宣告。
 - `validate_fund_nav(s) -> s`:wrapper(NAV-specific:>0 / 多源 source prefix 允許清單)
 - `FundDividendSchema`:repositories.fund_repository.fetch_div 配息序列 schema(DataFrame 內部表示)
 - `validate_fund_dividends(divs: list[dict]) -> list[dict]`:list[dict] wrapper(production interface 保留)
+- `validate_fund_nav_data_only(s) -> s`:服務層用 — 同 validate_fund_nav 但**不**驗 provenance
+- `validate_fund_dividends_data_only(divs) -> divs`:服務層用 — 同 validate_fund_dividends 但**不**驗 amount<100 上限(允許機構基金高配息)
 
 Phase 規劃(SPEC §18.3):
 - ✅ Phase A v19.155 — pilot:fetch_fred 1 個 fetcher
@@ -391,4 +393,107 @@ def validate_fund_dividends(divs: Any) -> Any:
         raise ValueError(f"validate_fund_dividends: amount 無法轉 float: {e}") from e
     # pandera 驗
     FundDividendSchema.validate(df, lazy=False)
+    return divs
+
+
+# ════════════════════════════════════════════════════════════════
+# 服務層 data-only validators(A1 Phase C v19.164)
+# ════════════════════════════════════════════════════════════════
+# 設計:服務入口(calc_metrics / compute_*)接 NAV/dividends 時,只驗業務契約
+# (數值範圍、index 形狀),**不**強制 provenance attrs—因為 service caller 可能
+# 來自:
+#   (1) fetcher 直接傳入 → 有 attrs(已過 validate_fund_nav 出口驗證)
+#   (2) cache 反序列化 → attrs 可能丟失(pickle 保留,parquet 不保留)
+#   (3) 測試 fixture → 通常無 attrs
+# 服務層守業務契約即可,provenance 是 fetcher 自我責任,不應在服務層重檢。
+
+
+def validate_fund_nav_data_only(s: Any) -> Any:
+    """fund NAV 服務層入口驗 — 只驗 values + index,**不**驗 provenance attrs。
+
+    用於:services.fund_service.calc_metrics / compute_1y_total_return_mk_simple 等
+    服務入口。對比 validate_fund_nav(出口完整驗):service caller 不一定有 attrs。
+
+    Returns
+    -------
+    驗證通過的 Series。
+
+    Raises
+    ------
+    pandera.errors.SchemaError:NAV <=0 / NaN / index 重複/非單調。
+    """
+    if s is None or len(s) == 0:
+        return s
+    FundNavSchema.validate(s, lazy=False)
+    return s
+
+
+# 服務層配息 schema:放寬 amount 上限(機構級基金可能單次配息 > 100)
+_FundDividendDataOnlySchema = pa.DataFrameSchema(
+    {
+        "date": pa.Column(
+            "datetime64[ns]",
+            nullable=False,
+            checks=[
+                pa.Check(lambda s: s.is_unique, error="date 不可重複"),
+            ],
+        ),
+        "amount": pa.Column(
+            "float64",
+            nullable=False,
+            checks=[
+                pa.Check(lambda s: (s > 0).all(),
+                         error="配息 amount 必為 > 0"),
+                # 服務層**不**驗 < 100 上限(機構基金 / 反向 ETF 可能高配息)
+            ],
+        ),
+    },
+    strict=False,
+    coerce=False,
+)
+
+
+def validate_fund_dividends_data_only(divs: Any) -> Any:
+    """fund dividends 服務層入口驗 — 同 validate_fund_dividends 但放寬 amount<100。
+
+    服務層可能處理機構級基金(reverse ETF / leveraged)配息額外大,不應卡上限。
+    出口端(fetch_div < 100)為防 HTML 解析錯誤,服務層信任 fetcher 已過濾。
+
+    Returns
+    -------
+    list[dict](原物件不複製)。
+
+    Raises
+    ------
+    ValueError:結構錯(非 list / 缺 key / date parse 失敗)。
+    pandera.errors.SchemaError:amount <= 0 / date 重複。
+    """
+    if divs is None or len(divs) == 0:
+        return divs
+    if not isinstance(divs, list):
+        raise ValueError(
+            f"validate_fund_dividends_data_only: divs 必須為 list[dict],"
+            f"實際型別 = {type(divs).__name__}"
+        )
+    # 服務層不卡長度上限(可能 backtest 數據跨多年)
+    try:
+        import pandas as _pd
+        df = _pd.DataFrame(divs)
+    except Exception as e:
+        raise ValueError(f"validate_fund_dividends_data_only: 無法轉 DataFrame: {e}") from e
+    for required_key in ("date", "amount"):
+        if required_key not in df.columns:
+            raise ValueError(
+                f"validate_fund_dividends_data_only: 每 dict 須含 '{required_key}' key,"
+                f"實際 columns = {list(df.columns)}"
+            )
+    try:
+        df["date"] = _pd.to_datetime(df["date"])
+    except Exception as e:
+        raise ValueError(f"validate_fund_dividends_data_only: date 無法 parse: {e}") from e
+    try:
+        df["amount"] = df["amount"].astype("float64")
+    except Exception as e:
+        raise ValueError(f"validate_fund_dividends_data_only: amount 無法轉 float: {e}") from e
+    _FundDividendDataOnlySchema.validate(df, lazy=False)
     return divs
