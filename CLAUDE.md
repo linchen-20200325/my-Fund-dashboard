@@ -516,6 +516,10 @@ except ImportError:
     服務 signal classification / score function / regime ID / inflection detection 多用途),
     **不一併 harmonize**;若要繼續收 PMI/CPI/HY,需新 architecture proposal。詳見
     `macro_repository.py:199-212` 註解。
+  - ✅ **Architecture proposal v19.168**:multi-purpose threshold dict 設計案
+    (`shared/macro_thresholds_v2.py` schema)已寫入 SPEC §16.2。Proposal 含
+    per-indicator migration phases + ROI 評估(優先順序 HY_SPREAD → CPI → PMI)。
+    **未實作 code**,等 user 點哪個指標動工。
 
 ### 8.4 做到一半的新增功能 — 先盤點再動
 

@@ -1707,6 +1707,86 @@ panic 全站統一 **30**(`_VIX_RED`)。
 - `test_vix_panic_universal_30`:3 site panic 全 30
 - `test_risk_radar_vix_source_uses_ssot`:risk_radar 必須 import `_VIX_YELLOW`/`_VIX_RED`,不可 inline 25
 
+### §16.2 PMI / CPI / HY 多用途閾值 harmonize architecture proposal(F-GRAY-4 收尾,v19.168)
+
+**背景**(F-GRAY-4 v19.80 audit 結論,CLAUDE.md §8.3):
+- VIX 子題 v19.157~v19.160 已收(本檔 §16.1),全站 yellow=22 / panic=30 統一
+- **其他指標**(PMI / CPI / HY_SPREAD 等)語意分歧,**不**一併 harmonize,需 architecture proposal
+
+**問題**:
+單一 `MACRO_THRESHOLDS` dict(`macro_repository.py:192`)為 stoplight schema(red/yellow/green 三級),
+但 inline 閾值服務多種用途:
+- **Signal classification**(`macro_validation.py`):買賣訊號觸發
+- **Score function**(`macro_service.py`):0-10 連續分數
+- **Regime ID**(`macro_explain.py`):衰退/復甦/擴張/高峰 4 級
+- **Inflection detection**(`crisis_backtest.py`):拐點觸發
+
+**範例**(PMI 為主):
+| Site | 用途 | 閾值 | 業務語意 |
+|---|---|---|---|
+| dict | stoplight | green=52 / yellow<50 / red<46 | 純三級顏色 |
+| `macro_service.py:324` | score | `>= 50` 中性,`>=52` 加分 | 連續 score 用 |
+| `macro_explain.py` | regime | `< 47` 衰退 | 4 級分類 |
+| 教學卡 | 教學 | `<50 收縮 ≥50 擴張` | 50 為唯一榮枯線 |
+
+機械式 swap 會把 4 個語意不同的 path 強塞進同一 `red/yellow/green` 三槽,破壞 score function 連續性、regime 4 級分類等。
+
+**Proposal**:**Multi-purpose threshold dict architecture**
+
+```python
+# shared/macro_thresholds_v2.py (新檔,設計案)
+PMI_THRESHOLDS = {
+    "stoplight": {              # 原 dict 用途(三級紅黃綠)
+        "green_above": 52,
+        "yellow_below": 50,
+        "red_below": 46,
+    },
+    "score_function": {         # macro_service.py 連續 score
+        "expansion_floor": 52,  # >= 52 加分
+        "neutral_floor": 50,    # 50-52 中性
+        "contraction_ceiling": 50,
+    },
+    "regime_classification": {  # macro_explain.py 4 級
+        "expansion": 52,
+        "neutral": 50,
+        "slowdown": 47,
+        "recession": 45,
+    },
+    "inflection_detection": {   # crisis_backtest 拐點
+        "expansion_to_slowdown": 50,
+        "slowdown_to_recession": 47,
+    },
+}
+```
+
+各 site 改 import 對應子 dict,**不**共用單一閾值,但所有閾值集中於 SSOT 檔。
+
+**Migration phases**(per indicator):
+1. **Phase 1 audit**:gather all inline thresholds for the indicator across all sites
+2. **Phase 2 design**:列出每個 site 的用途、依現有實際閾值定義 sub-dict shape
+3. **Phase 3 build**:在 `shared/macro_thresholds_v2.py` 加 SSOT 子 dict
+4. **Phase 4 migrate**:逐 site 改 import + 驗證行為 100% 等價(對照 test 守)
+5. **Phase 5 守護**:加 `tests/test_macro_thresholds_v2.py` 守 SSOT 完整性
+
+**Out-of-scope of this proposal**:
+- 改變任何 inline 閾值的數值(只搬位置,不改邏輯)
+- 將不同 site 的相同指標**強制**收斂到單一閾值(VIX 為 exception,user 接受 trade-off;PMI/CPI/HY 不接受)
+
+**ROI 評估**:
+| 指標 | inline 散落量 | 用途數 | migration cost | risk |
+|---|---|---|---|---|
+| PMI | ~8 處 | 4 用途 | 中 | 中(若 inline 漏抓 → 行為飄移) |
+| CPI | ~5 處 | 3 用途 | 中 | 中 |
+| HY_SPREAD | ~4 處 | 2 用途 | 低 | 低 |
+
+**建議優先順序**:HY_SPREAD(最少語意,最低風險)→ CPI → PMI
+
+**目前狀態**(v19.168):
+- 本 proposal 為 architecture spec,**未實作** code
+- 等 user 點哪個指標(或全部)動工 → 各拉一 PR 走 phase 1-5
+
+**§-1 對齊**:本 proposal 純文件,**不**自動觸發實作。user 明確指派某指標 → 才動工。
+
 ---
 
 ## §17 MK 老師吃本金檢查 SSOT(v19.148→v19.149)
