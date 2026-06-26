@@ -4,6 +4,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pandas as pd
+import pytest
 
 from services import risk_radar as rr
 
@@ -437,6 +438,12 @@ class TestResolvePutCall:
         assert "Yahoo ^CPCE" in src
         assert any("^CPC" in t for t in trace)
 
+    @pytest.mark.skip(
+        reason="v19.141:CBOE 已下架 CPC_History.csv / CPCE_History.csv "
+               "(user 2026-06-25 瀏覽器驗證 cdn.cboe.com → AccessDenied)。"
+               "_resolve_put_call() chain 已移除這 4 層死路徑,只留 Yahoo + stooq。"
+               "見 services/risk_radar.py:256 註解 — 此 test 契約已失效。"
+    )
     def test_falls_through_to_cboe_csv(self):
         from unittest.mock import MagicMock
         csv = "DATE,CLOSE\n2026-01-02,0.85\n2026-01-03,0.90\n"
@@ -502,6 +509,13 @@ class TestVixTermStructCboeFallback:
 
 
 class TestPutCallCboeFallback:
+    @pytest.mark.skip(
+        reason="v19.141:CBOE 已下架 CPC_History.csv / CPCE_History.csv "
+               "(user 2026-06-25 瀏覽器驗證 cdn.cboe.com → AccessDenied)。"
+               "_signal_put_call_ratio() 不再走 CBOE CSV 路徑,label 永不會含 "
+               "'CBOE CPC_History.csv'。見 services/risk_radar.py:256 註解 — "
+               "此 test 契約已失效。"
+    )
     def test_uses_cboe_label_when_yahoo_dead(self):
         """v19.30 ^CPC/^CPCE Yahoo 全失敗 → CBOE CSV 救援。"""
         from unittest.mock import MagicMock
