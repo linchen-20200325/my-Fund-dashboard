@@ -488,3 +488,115 @@ def render_four_horizon_bar(summary: dict) -> None:
 </div>""",
                 unsafe_allow_html=True,
             )
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.146 — 五桶 summary 擴充(對齊 Stock v18.284,Fund 加 📰 新聞為第 5 桶)
+#   wraps compute_four_horizon_summary + 新增新聞桶(讀 v19.144 SSOT 閾值)
+#   不修改既有 4-horizon 函式,zero 既有測試回歸
+# ════════════════════════════════════════════════════════════════
+def compute_five_bucket_summary(
+    indicators: Optional[dict],
+    phase_info: Optional[dict] = None,
+    news_items: Optional[list] = None,
+) -> dict:
+    """五桶 summary(4-horizon + 新聞)。
+
+    擴充自 compute_four_horizon_summary,直接呼叫它取 4 桶,再算第 5 桶。
+    不複製計算邏輯,避免兩處飄移。
+
+    第 5 桶「新聞」邏輯:
+    - news_items=None(尚未抓取)→ gray「未掃描」
+    - 數 is_systemic 命中數,依 shared.macro_buckets SSOT 閾值分級
+      (NEWS_SYSTEMIC_YELLOW_COUNT=1,NEWS_SYSTEMIC_RED_COUNT=2)
+    - 對齊 Stock 五桶 bar 第 5 桶語意
+
+    Returns
+    -------
+    dict 同 compute_four_horizon_summary 結構,多 "news" key:
+      {"long": {...}, "mid": {...}, "short": {...}, "inflection": {...},
+       "news": {level, label, headline, color, emoji}}
+    """
+    _summary = compute_four_horizon_summary(indicators, phase_info)
+
+    _level_to_color = {"green": _C_GREEN, "yellow": _C_YELLOW, "red": _C_RED,
+                       "gray": "#6e7681"}
+    _level_to_emoji = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⬜"}
+
+    if news_items is None:
+        _summary["news"] = {
+            "level": "gray", "label": "未掃描",
+            "headline": "尚未抓取 RSS 新聞",
+            "color": _level_to_color["gray"], "emoji": _level_to_emoji["gray"],
+        }
+        return _summary
+
+    # 數 is_systemic 命中(對齊 news_repository.SYSTEMIC_RISK_KEYWORDS 標記)
+    try:
+        _sys_count = sum(1 for n in news_items
+                         if isinstance(n, dict) and n.get("is_systemic"))
+    except Exception:
+        _sys_count = 0
+
+    # 讀 SSOT 閾值(v19.144 shared.macro_buckets)
+    try:
+        from shared.macro_buckets import (
+            NEWS_SYSTEMIC_YELLOW_COUNT, NEWS_SYSTEMIC_RED_COUNT,
+        )
+    except Exception:
+        NEWS_SYSTEMIC_YELLOW_COUNT, NEWS_SYSTEMIC_RED_COUNT = 1, 2
+
+    if _sys_count >= NEWS_SYSTEMIC_RED_COUNT:
+        _n_level, _n_label = "red", "系統性警報"
+        _n_headline = f"🚨 {_sys_count} 則系統性風險新聞(戰爭/倒閉/崩盤)"
+    elif _sys_count >= NEWS_SYSTEMIC_YELLOW_COUNT:
+        _n_level, _n_label = "yellow", "風險新聞"
+        _n_headline = f"🚨 {_sys_count} 則系統性風險新聞,留意"
+    else:
+        _n_level, _n_label = "green", "無系統風險"
+        _n_total = len(news_items)
+        _n_headline = (f"{_n_total} 則新聞掃描,無系統性風險" if _n_total > 0
+                       else "新聞掃描完成,無命中")
+
+    _summary["news"] = {
+        "level": _n_level, "label": _n_label, "headline": _n_headline,
+        "color": _level_to_color[_n_level], "emoji": _level_to_emoji[_n_level],
+    }
+    return _summary
+
+
+def render_five_bucket_bar(summary: dict) -> None:
+    """頂部五桶 summary bar(5 columns × emoji+燈號+1句)。
+
+    順序鎖定:🌳 長期 → 📈 中期 → 🎯 短線 → ⚠️ 拐點 → 📰 新聞
+    對齊 Stock v18.284 五桶 bar 語意,Fund 第 5 桶為新聞(Stock 是籌碼)。
+
+    向下相容:若 summary 沒有 "news" key(e.g. 仍用 4-horizon)→ fallback
+    為 4 columns,避免空白格。
+    """
+    _has_news = isinstance(summary.get("news"), dict) and summary["news"]
+    _order = [
+        ("long",       "🌳 長期", "regime / 結構"),
+        ("mid",        "📈 中期", "景氣循環"),
+        ("short",      "🎯 短線", "即時 risk-off"),
+        ("inflection", "⚠️ 拐點", "領先警報"),
+    ]
+    if _has_news:
+        _order.append(("news", "📰 新聞", "系統性風險"))
+
+    _cols = st.columns(len(_order))
+    for _col, (_key, _title, _sub) in zip(_cols, _order):
+        _d = summary.get(_key) or {}
+        _color = _d.get("color", "#888")
+        _emoji = _d.get("emoji", "⚪")
+        _label = _d.get("label", "—")
+        _headline = _d.get("headline", "")
+        with _col:
+            st.markdown(
+                f"""<div style="border-left:4px solid {_color};padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:6px;">
+<div style="font-size:0.78em;color:#888;letter-spacing:0.5px;">{_sub}</div>
+<div style="font-size:1.05em;font-weight:600;margin-top:2px;">{_emoji} {_title}: <span style="color:{_color};">{_label}</span></div>
+<div style="font-size:0.85em;color:#bbb;margin-top:4px;line-height:1.4;">{_headline}</div>
+</div>""",
+                unsafe_allow_html=True,
+            )

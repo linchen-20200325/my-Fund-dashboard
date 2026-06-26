@@ -1354,19 +1354,22 @@ def render_macro_tab() -> None:
         import contextlib as _cl_v1942
         tab_main = _cl_v1942.nullcontext()
 
-        # ══ v19.128 — 📊 四時域 summary bar(頂部一覽:長期/中期/短線/拐點)══
-        # User 2026-06-25 反饋:刪除三層 toggle 後,在最上方放四時域總結卡,
-        # 用最小空間給「整版健康狀態」一眼判讀。下方四桶 subheader 對應放詳細。
+        # ══ v19.146 — 📊 五桶 summary bar(頂部一覽:長期/中期/短線/拐點/新聞)══
+        # 對齊 Stock v18.284 五桶 bar 體驗,Fund 加 📰 新聞為第 5 桶(讀 v19.144 SSOT)。
+        # news_items=None 時自動降級為 ⬜「未掃描」,點開「執行 AI 裁決」抓 RSS 後燈亮。
+        # render_five_bucket_bar 對無 news key 的 summary 會 fallback 為 4 columns,
+        # 任何異常(包括 import 失敗)走 except 降級為文字提示。
         try:
             from ui.helpers.macro_beginner_view import (
-                compute_four_horizon_summary,
-                render_four_horizon_bar,
+                compute_five_bucket_summary,
+                render_five_bucket_bar,
             )
-            _4h_summary = compute_four_horizon_summary(ind, phase)
-            render_four_horizon_bar(_4h_summary)
+            _news_items = st.session_state.get("news_items")
+            _5b_summary = compute_five_bucket_summary(ind, phase, news_items=_news_items)
+            render_five_bucket_bar(_5b_summary)
             st.divider()
-        except Exception as _e_4h:
-            st.warning(f"四時域 summary 渲染失敗(降級):{_e_4h}")
+        except Exception as _e_5b:
+            st.warning(f"五桶 summary 渲染失敗(降級):{_e_5b}")
 
         with tab_main:
             # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）

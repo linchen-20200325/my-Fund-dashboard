@@ -351,3 +351,138 @@ class TestComputeFourHorizonSummary:
             phase_info={"phase": "擴張", "score": 6.0},
         )
         assert r2["inflection"]["level"] == "red"
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.146 — 五桶 summary 擴充(4-horizon + 📰 新聞)
+# 守 SSOT 對齊 + 向下相容(4-horizon 仍可運作 + render fallback)
+# ════════════════════════════════════════════════════════════════
+class TestFiveBucketSummary:
+    """compute_five_bucket_summary / render_five_bucket_bar 守衛"""
+
+    def test_news_gray_when_news_items_none(self):
+        """news_items=None → 第 5 桶 ⬜「未掃描」(對齊 Stock 未抓 RSS 狀態)。"""
+        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        r = compute_five_bucket_summary({}, phase_info={}, news_items=None)
+        assert "news" in r
+        assert r["news"]["level"] == "gray"
+        assert "⬜" in r["news"]["emoji"]
+
+    def test_news_green_when_no_systemic_hit(self):
+        """news_items 有資料但無 systemic → 🟢 無系統風險。"""
+        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        items = [
+            {"title": "Fed signals patience", "is_systemic": False},
+            {"title": "Earnings beat", "is_systemic": False},
+        ]
+        r = compute_five_bucket_summary({}, phase_info={}, news_items=items)
+        assert r["news"]["level"] == "green"
+        assert "🟢" in r["news"]["emoji"]
+        assert "2 則" in r["news"]["headline"]
+
+    def test_news_yellow_on_one_systemic(self):
+        """1 則 systemic → 🟡(對齊 SSOT NEWS_SYSTEMIC_YELLOW_COUNT=1)。"""
+        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        items = [
+            {"title": "Bank run risk warning", "is_systemic": True},
+            {"title": "Earnings beat", "is_systemic": False},
+        ]
+        r = compute_five_bucket_summary({}, phase_info={}, news_items=items)
+        assert r["news"]["level"] == "yellow"
+        assert "🟡" in r["news"]["emoji"]
+        assert "🚨" in r["news"]["headline"]
+
+    def test_news_red_on_two_or_more_systemic(self):
+        """≥2 則 systemic → 🔴(對齊 SSOT NEWS_SYSTEMIC_RED_COUNT=2)。"""
+        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        items = [
+            {"title": "War escalates", "is_systemic": True},
+            {"title": "Major bank fails", "is_systemic": True},
+            {"title": "VIX spikes", "is_systemic": True},
+        ]
+        r = compute_five_bucket_summary({}, phase_info={}, news_items=items)
+        assert r["news"]["level"] == "red"
+        assert "🔴" in r["news"]["emoji"]
+        assert "系統性警報" in r["news"]["label"]
+
+    def test_preserves_four_horizons(self):
+        """v19.146 不破壞既有 4-horizon — 應仍含 long/mid/short/inflection 完整 dict。"""
+        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        r = compute_five_bucket_summary(
+            {"PMI": {"value": 45.0}},
+            phase_info={"phase": "減速", "score": 4.0},
+            news_items=None,
+        )
+        for k in ("long", "mid", "short", "inflection", "news"):
+            assert k in r
+            assert "level" in r[k]
+            assert "label" in r[k]
+            assert "emoji" in r[k]
+            assert "color" in r[k]
+
+    def test_ssot_thresholds_imported_not_hardcoded(self):
+        """v19.146 應 import SSOT NEWS_SYSTEMIC_*_COUNT,非 inline 寫死。"""
+        from shared.macro_buckets import (
+            NEWS_SYSTEMIC_YELLOW_COUNT, NEWS_SYSTEMIC_RED_COUNT,
+        )
+        assert NEWS_SYSTEMIC_YELLOW_COUNT == 1
+        assert NEWS_SYSTEMIC_RED_COUNT == 2
+
+
+class TestFiveBucketBarRender:
+    """render_five_bucket_bar 守衛(streamlit stub mock)"""
+
+    def test_renders_5_cols_with_news(self, monkeypatch):
+        """summary 含 news → 5 columns。"""
+        import ui.helpers.macro_beginner_view as mbv
+        col_counts = []
+
+        class _FakeCol:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def _fake_columns(n):
+            col_counts.append(n)
+            return [_FakeCol() for _ in range(n)]
+
+        def _fake_markdown(*a, **k):
+            return None
+
+        monkeypatch.setattr(mbv.st, "columns", _fake_columns)
+        monkeypatch.setattr(mbv.st, "markdown", _fake_markdown)
+        summary = {
+            "long": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+            "mid": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+            "short": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+            "inflection": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+            "news": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+        }
+        mbv.render_five_bucket_bar(summary)
+        assert col_counts == [5], f"應 5 columns,實際 {col_counts}"
+
+    def test_fallback_to_4_cols_when_no_news_key(self, monkeypatch):
+        """summary 無 news key(舊 4-horizon 結構)→ fallback 4 columns,不留空白。"""
+        import ui.helpers.macro_beginner_view as mbv
+        col_counts = []
+
+        class _FakeCol:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def _fake_columns(n):
+            col_counts.append(n)
+            return [_FakeCol() for _ in range(n)]
+
+        def _fake_markdown(*a, **k):
+            return None
+
+        monkeypatch.setattr(mbv.st, "columns", _fake_columns)
+        monkeypatch.setattr(mbv.st, "markdown", _fake_markdown)
+        summary = {
+            "long": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+            "mid": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+            "short": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+            "inflection": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
+        }
+        mbv.render_five_bucket_bar(summary)
+        assert col_counts == [4], f"無 news 應 fallback 4 columns,實際 {col_counts}"
