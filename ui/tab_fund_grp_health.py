@@ -165,6 +165,40 @@ def _process_one_fund(
         else:
             _snap_health = _mk_safety.get("status", "⚪ 資料不足")
 
+        # v19.153:MK 老師 3-3-3 原則(長線挑核心資產輔助)
+        # 成立 ≥ 3 年 + 3 年平均年化 > 7% → 通過
+        _333_emoji = "⬜"
+        _333_msg = "資料不足"
+        try:
+            from services.fund_dividend_health import check_333_principle
+            # 成立年數:從 NAV 序列首日到今天
+            import datetime as _dt333
+            _yrs_inc = None
+            try:
+                _first_iso = sorted(nav_dict.keys())[0]
+                _first_d = _dt333.date.fromisoformat(str(_first_iso)[:10])
+                _yrs_inc = (_dt333.date.today() - _first_d).days / 365.25
+            except (ValueError, IndexError, TypeError):
+                _yrs_inc = None
+            # 3 年平均年化:metrics.ret_3y 為 3 年累計報酬,需開根號換算
+            _ret_3y_cum = _metrics.get("ret_3y")
+            _ann_3y = None
+            if _ret_3y_cum is not None:
+                try:
+                    _cum = float(_ret_3y_cum) / 100.0
+                    _ann_3y = ((1.0 + _cum) ** (1.0 / 3.0) - 1.0) * 100.0
+                except (TypeError, ValueError):
+                    _ann_3y = None
+            _333_r = check_333_principle(_yrs_inc, _ann_3y)
+            if _333_r.get("passed") is True:
+                _333_emoji = "✅"
+            elif _333_r.get("passed") is False:
+                _333_emoji = "❌"
+            _333_msg = _333_r.get("message", "")
+        except Exception:
+            pass
+        _333_status = f"{_333_emoji} {_333_msg[:32]}" if _333_msg else _333_emoji
+
         return {
             "code": code,
             "ok": True,
@@ -185,6 +219,8 @@ def _process_one_fund(
             "含息% (全期自算)": s["ret_1y_total_pct_🧮"],
             # v19.148:單一 SSOT verdict(MK 老師 1Y 體檢標準,跨 tab 一致)
             "吃本金燈號 (1Y · MK)": _snap_health,
+            # v19.153:MK 3-3-3 原則(長線核心資產篩選輔助 — 成立 ≥ 3 年 + 3 年平均年化 > 7%)
+            "MK 3-3-3 篩": _333_status,
             "MK 倉位": _mk_pos,
             "最高經理費%": _mgmt_fee,
             "配息頻率": _div_freq,
@@ -324,6 +360,12 @@ def _render_health_table(rows: list[dict]) -> None:
                 "吃本金燈號 (1Y · MK)",
                 help="MK 老師 1Y 體檢:近一年含息報酬 vs MoneyDJ wb05 年化配息率。"
                      "與下方「健診摘要表」同源 SSOT。"),
+            # v19.153:MK 3-3-3 原則(長線核心資產輔助)
+            "MK 3-3-3 篩": _cc.TextColumn(
+                "MK 3-3-3 篩",
+                help="MK 老師 3-3-3 長線挑核心資產篩選:成立 ≥ 3 年 + 過去 3 年平均年化報酬 > 7%。"
+                     "✅ 通過 / ❌ 未通過 / ⬜ 資料不足。3 年平均年化由 metrics.ret_3y(累計)"
+                     "用 (1+R)^(1/3)-1 換算。本欄為長線輔助,非吃本金主判定。"),
         }
         st.dataframe(
             df, use_container_width=True, hide_index=True,
