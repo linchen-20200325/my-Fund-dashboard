@@ -73,8 +73,8 @@ def _build_fake_st(captured_labels: list | None = None) -> MagicMock:
     return fake_st
 
 
-def test_render_calls_streamlit_tabs_with_11_subtabs():
-    """render_manual_tab 內部建立 11 個 sub-tab（v19.40 PR2 加第 11 宏觀教學文獻）。"""
+def test_render_calls_streamlit_tabs_with_12_subtabs():
+    """render_manual_tab 內部建立 12 個 sub-tab(v19.174 反映 v19.136+ 新增「12. 總經原理教室」)。"""
     from ui import tab6_manual as t6
     captured_labels: list = []
     fake_st = _build_fake_st(captured_labels)
@@ -82,10 +82,10 @@ def test_render_calls_streamlit_tabs_with_11_subtabs():
     with patch.object(t6, "st", fake_st):
         t6.render_manual_tab()
 
-    assert len(captured_labels) == 11
+    assert len(captured_labels) == 12
     for kw in ["Macro Score", "景氣天氣", "六因子", "吃本金", "再平衡",
                "台股TPI", "核心衛星", "汰弱留強",
-               "Sheet 資料結構", "全局指標關聯地圖", "宏觀教學文獻"]:
+               "Sheet 資料結構", "全局指標關聯地圖", "宏觀教學文獻", "總經原理教室"]:
         assert any(kw in lbl for lbl in captured_labels), f"missing sub-tab: {kw}"
 
 

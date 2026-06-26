@@ -18,7 +18,9 @@ def _stub_deps():
         sys.modules["streamlit"] = _s
 
 
-_stub_deps()
+# v19.174:module-top stub call 拿掉 — 改由 conftest._switch_streamlit_module_per_test
+# fixture per-test 裝(避免 stub 污染後續 collect 的 test,例如 AppTest)。
+# _stub_deps()
 
 
 class TestManualClassroom:

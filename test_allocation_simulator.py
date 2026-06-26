@@ -282,6 +282,11 @@ def test_total_twd_equals_sum_of_three_buckets():
 # ──────────────────────────────────────────────────────────────
 # UI source-level（app.py + tab file）
 # ──────────────────────────────────────────────────────────────
+@pytest.mark.skip(
+    reason="v19.130:配置模擬器 tab 已從 UI 移除(app.py:32 ARCHIVED 註解)。"
+           "模組檔 ui/tab_allocation_simulator.py 保留作 orphan,業務邏輯仍在 services,"
+           "但 app.py 不再 register tab_sim — 此 test 契約已失效。"
+)
 def test_app_py_registers_allocation_simulator_tab():
     src = (Path(__file__).parent / "app.py").read_text(encoding="utf-8")
     assert "render_allocation_simulator_tab" in src, "app.py 必須 import render"
