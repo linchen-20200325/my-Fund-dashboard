@@ -1,8 +1,8 @@
 """test_cross_site_cutoffs.py — Phase D SSOT 統一進度守衛 (v19.157)
 
 C2 series(user 拍板):全站 VIX yellow 統一到 SSOT 22(macro_buckets._VIX_YELLOW)。
-- ✅ C2-A v19.157:risk_radar 25 → 22(本 PR)
-- ⏳ C2-B:macro_beginner_view 20 → 22
+- ✅ C2-A v19.157:risk_radar 25 → 22
+- ✅ C2-B v19.158:macro_beginner_view 20 → 22(本 PR)
 - ⏳ C2-C:macro_validation 18 → 22 + calibration JSON bounds
 - ⏳ C2-D:結案 cross-site cutoffs + SPEC §16.1 結案
 
@@ -22,8 +22,8 @@ import pytest
 # 1. C2 series 收斂進度守衛
 # ──────────────────────────────────────────────────────────
 def test_vix_yellow_c2_progress():
-    """C2-A v19.157 完成:risk_radar 已對齊 SSOT 22(從 macro_buckets._VIX_YELLOW)。
-    剩餘 sites 待 C2-B/C 收斂;測試固守目前合約值,C2-B/C merge 時同步調整。"""
+    """C2-A/B 完成:risk_radar + macro_beginner_view 都對齊 SSOT 22。
+    剩餘 macro_validation 18 待 C2-C 收斂。"""
     from services.macro_validation import DEFAULT_VIX_WARNING
     from shared.macro_buckets import _VIX_YELLOW
     from ui.helpers.macro_beginner_view import _VIX_WARNING_THRESHOLD
@@ -32,15 +32,15 @@ def test_vix_yellow_c2_progress():
     assert _VIX_YELLOW == 22.0, (
         f"macro_buckets._VIX_YELLOW(SSOT)應 22,實際 {_VIX_YELLOW}"
     )
+    # macro_beginner_view 已對齊(C2-B v19.158 完成)
+    assert _VIX_WARNING_THRESHOLD == 22.0, (
+        f"macro_beginner_view._VIX_WARNING_THRESHOLD 應對齊 SSOT 22"
+        f"(C2-B v19.158),實際 {_VIX_WARNING_THRESHOLD}"
+    )
     # macro_validation 18(C2-C 待收 22)
     assert DEFAULT_VIX_WARNING == 18.0, (
         f"macro_validation.DEFAULT_VIX_WARNING 目前 18,C2-C 後將收 22。"
         f" 實際 {DEFAULT_VIX_WARNING}"
-    )
-    # macro_beginner_view 20(C2-B 待收 22)
-    assert _VIX_WARNING_THRESHOLD == 20.0, (
-        f"macro_beginner_view._VIX_WARNING_THRESHOLD 目前 20,C2-B 後將收 22。"
-        f" 實際 {_VIX_WARNING_THRESHOLD}"
     )
 
 
