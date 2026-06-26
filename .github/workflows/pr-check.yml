@@ -43,6 +43,44 @@ jobs:
         run: pre-commit run --all-files --show-diff-on-failure
 
   # ════════════════════════════════════════════════════════════
+  # Schema gate — A1 Phase D v19.165
+  # 純 pandera schema tests,獨立 job 讓 schema regression 在 PR 視圖
+  # 一眼可見(不混在通用 pytest 結果裡)。失敗即阻擋 merge。
+  # CLAUDE.md §3.1 守:fetcher 出口 + service 入口契約不可飄移。
+  # ════════════════════════════════════════════════════════════
+  schema-gate:
+    name: "Schema gate (pandera contracts, ~5s)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install runtime + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run pandera schema tests
+        run: |
+          python -m pytest -v \
+            tests/test_schemas_phase_a.py \
+            tests/test_schemas_phase_b.py \
+            tests/test_schemas_phase_b2_fund_nav.py \
+            tests/test_schemas_phase_b3_dividends.py \
+            tests/test_schemas_phase_c.py \
+            --tb=short
+
+  # ════════════════════════════════════════════════════════════
   # Slow lane — AppTest（單測約 25s）
   # 非阻擋（continue-on-error），僅作為 informational signal
   # 原因：Streamlit AppTest 可能偶發 timeout / 外部資源故障
