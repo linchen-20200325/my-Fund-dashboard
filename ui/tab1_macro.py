@@ -1607,9 +1607,21 @@ def render_macro_tab() -> None:
                             _render_news(_ni)
                         _rest = _ordered[8:]
                         if _rest:
-                            with st.expander(f"… 其餘 {len(_rest)} 則", expanded=False):
-                                for _ni in _rest:
-                                    _render_news(_ni)
+                            # v19.143 P0 fix:Streamlit 不准 nested expander
+                            # (v19.139 把「其餘 N 則」做成 inner expander → 線上炸
+                            # StreamlitAPIException: "Expanders may not be nested inside
+                            # other expanders")。改用 inline divider + caption 分隔,
+                            # rest 全部 inline 列出。外層 expander 預設折疊,user 點開
+                            # 才看到 Top 8 + 分隔線 + 其餘,語意不變。
+                            st.markdown(
+                                f"<div style='border-top:1px dashed #555;"
+                                f"margin:10px 0 6px;padding-top:6px;color:#888;"
+                                f"font-size:11px'>── 其餘 {len(_rest)} 則 "
+                                "(AI 未讀,僅供參考)──</div>",
+                                unsafe_allow_html=True,
+                            )
+                            for _ni in _rest:
+                                _render_news(_ni)
 
             # ── v19.47 ⑥ 美股流動性 × 熱錢監測（user 反饋：基金 USD 計價，台股熱錢非主訊號） ──
             # 6 指標三角：流動性 (M2/WALCL/RRP) × 信用 (HY OAS / HYG-LQD) × 情緒 (AAII)
