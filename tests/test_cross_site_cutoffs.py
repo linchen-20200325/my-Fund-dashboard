@@ -2,8 +2,8 @@
 
 C2 series(user 拍板):全站 VIX yellow 統一到 SSOT 22(macro_buckets._VIX_YELLOW)。
 - ✅ C2-A v19.157:risk_radar 25 → 22
-- ✅ C2-B v19.158:macro_beginner_view 20 → 22(本 PR)
-- ⏳ C2-C:macro_validation 18 → 22 + calibration JSON bounds
+- ✅ C2-B v19.158:macro_beginner_view 20 → 22
+- ✅ C2-C v19.159:macro_validation 18 → 22 + calibration JSON bounds 重定為 [18, 26](本 PR)
 - ⏳ C2-D:結案 cross-site cutoffs + SPEC §16.1 結案
 
 歷史脈絡(v19.147 multi-cutoff design,已被 C2 series 撤銷):
@@ -21,26 +21,32 @@ import pytest
 # ──────────────────────────────────────────────────────────
 # 1. C2 series 收斂進度守衛
 # ──────────────────────────────────────────────────────────
-def test_vix_yellow_c2_progress():
-    """C2-A/B 完成:risk_radar + macro_beginner_view 都對齊 SSOT 22。
-    剩餘 macro_validation 18 待 C2-C 收斂。"""
+def test_vix_yellow_all_aligned_to_ssot():
+    """C2-A/B/C 完成:risk_radar + macro_beginner_view + macro_validation 全對齊 SSOT 22。
+    C2-D 為文件結案(SPEC §16.1),不再有 site-level 收斂工作。"""
     from services.macro_validation import DEFAULT_VIX_WARNING
     from shared.macro_buckets import _VIX_YELLOW
     from ui.helpers.macro_beginner_view import _VIX_WARNING_THRESHOLD
 
-    # SSOT 22(永遠 22,五桶 bar / SPEC §16 用)
+    # SSOT 22
     assert _VIX_YELLOW == 22.0, (
         f"macro_buckets._VIX_YELLOW(SSOT)應 22,實際 {_VIX_YELLOW}"
     )
-    # macro_beginner_view 已對齊(C2-B v19.158 完成)
+    # macro_beginner_view(C2-B v19.158)
     assert _VIX_WARNING_THRESHOLD == 22.0, (
-        f"macro_beginner_view._VIX_WARNING_THRESHOLD 應對齊 SSOT 22"
+        f"macro_beginner_view._VIX_WARNING_THRESHOLD 應 22"
         f"(C2-B v19.158),實際 {_VIX_WARNING_THRESHOLD}"
     )
-    # macro_validation 18(C2-C 待收 22)
-    assert DEFAULT_VIX_WARNING == 18.0, (
-        f"macro_validation.DEFAULT_VIX_WARNING 目前 18,C2-C 後將收 22。"
-        f" 實際 {DEFAULT_VIX_WARNING}"
+    # macro_validation(C2-C v19.159 module-level default;runtime 值可由 calibration
+    # JSON 在 [18, 26] 微調)
+    assert DEFAULT_VIX_WARNING == 22.0, (
+        f"macro_validation.DEFAULT_VIX_WARNING 應 22(C2-C v19.159,"
+        f"calibration JSON 仍可在 [18, 26] 微調)。實際 {DEFAULT_VIX_WARNING}"
+    )
+    # 全員一致
+    yellows = {_VIX_YELLOW, _VIX_WARNING_THRESHOLD, DEFAULT_VIX_WARNING}
+    assert yellows == {22.0}, (
+        f"VIX yellow 全員 22.0(C2 SSOT 統一完成)。實際 {yellows}"
     )
 
 
