@@ -595,6 +595,24 @@ def _render_risk_compare_table(funds: list) -> None:
     st.markdown("### 📊 風險指標對比表")
     st.caption("資料源:MoneyDJ wb07 風險表(直接顯示,不重算)。**Sharpe 越高越好 / σ 越低越穩**。")
 
+    # v19.181 Bug 3 fix: MoneyDJ wb07 risk_metrics 是 **nested** 結構
+    # ({risk_table: {期間: {標準差/Sharpe/Alpha/Beta}}}),不是 flat dict;
+    # 過去 `_rm.get("std_dev")` flat lookup 永遠 None,所有欄位顯示 — 。
+    # 改為:metrics(本地算)優先 → wb07 risk_table 多期間 nested fallback。
+    _PERIOD_KEYS = ("近一年", "一年", "近1年", "1年", "近三年", "三年", "近六月", "六個月")
+
+    def _lookup_risk_table(rm: dict, *zh_keys: str):
+        """從 risk_table 多期間找第一個非空值,zh_keys 對齊 MoneyDJ 中文欄位名。"""
+        rt = (rm or {}).get("risk_table") or {}
+        for _p in _PERIOD_KEYS:
+            _row = rt.get(_p) or {}
+            for _k in zh_keys:
+                v = _row.get(_k)
+                n = _safe_num(v)
+                if n is not None:
+                    return n
+        return None
+
     _rows = []
     for _f in funds:
         _code = _f.get("code", "?")
@@ -603,18 +621,33 @@ def _render_risk_compare_table(funds: list) -> None:
         _m = _f.get("metrics") or {}
         _rm = _f.get("risk_metrics") or _mj.get("risk_metrics") or {}
 
-        def _g(key):
-            v = _rm.get(key) or _m.get(key) or _mj.get(key)
-            n = _safe_num(v)
-            return f"{n:.2f}" if n is not None else "—"
+        # σ:本地算 std_1y 優先 → wb07 risk_table["一年"]["標準差"]
+        _sigma = _safe_num(_m.get("std_1y"))
+        if _sigma is None:
+            _sigma = _lookup_risk_table(_rm, "標準差", "年化標準差")
+
+        # Sharpe:metrics.sharpe 優先 → wb07 risk_table["一年"]["Sharpe"]
+        _sharpe = _safe_num(_m.get("sharpe"))
+        if _sharpe is None:
+            _sharpe = _lookup_risk_table(_rm, "Sharpe", "Sharpe Ratio", "夏普值")
+
+        # Sortino:wb07 無此欄位,本地未算 → §1 Fail Loud,顯示 —
+        _sortino = _safe_num(_m.get("sortino"))
+
+        # Alpha / Beta:本地未算 → 只能走 wb07 nested
+        _alpha = _safe_num(_m.get("alpha")) or _lookup_risk_table(_rm, "Alpha", "α")
+        _beta = _safe_num(_m.get("beta")) or _lookup_risk_table(_rm, "Beta", "β")
+
+        def _fmt(v):
+            return f"{v:.2f}" if v is not None else "—"
 
         _rows.append({
             "基金": f"{_name} ({_code})",
-            "σ (年化%)": _g("std_dev") if _g("std_dev") != "—" else _g("sigma"),
-            "Sharpe": _g("sharpe"),
-            "Sortino": _g("sortino"),
-            "Alpha": _g("alpha"),
-            "Beta": _g("beta"),
+            "σ (年化%)": _fmt(_sigma),
+            "Sharpe": _fmt(_sharpe),
+            "Sortino": _fmt(_sortino),
+            "Alpha": _fmt(_alpha),
+            "Beta": _fmt(_beta),
         })
 
     try:

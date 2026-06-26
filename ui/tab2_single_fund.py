@@ -1231,7 +1231,18 @@ def render_single_fund_tab() -> None:
                     from services.currency import normalize_ccy as _norm_ccy
                     _ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")
                     _nav_calc = m.get("nav")
-                    _yield_calc = m.get("annual_div_rate")
+                    # v19.181 Bug 1 fix: 與 fund_checkup.py:352-353 同源 — MoneyDJ wb05
+                    # 官方年化配息率優先 → metrics.annual_div_rate fallback;
+                    # 過去單一基金頁直接吃 metrics 導致與組合體檢表算出不同月配息(7.36% vs 7.49%)。
+                    _mj_dy_raw = mj_raw.get("moneydj_div_yield")
+                    try:
+                        _mj_dy_calc = float(_mj_dy_raw) if _mj_dy_raw not in (None, "", "—") else None
+                    except (TypeError, ValueError):
+                        _mj_dy_calc = None
+                    if _mj_dy_calc and _mj_dy_calc > 0:
+                        _yield_calc = _mj_dy_calc
+                    else:
+                        _yield_calc = m.get("annual_div_rate")
                     try:
                         _nav_calc = float(_nav_calc) if _nav_calc not in (None, "", "—") else None
                     except (TypeError, ValueError):
