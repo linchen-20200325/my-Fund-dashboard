@@ -33,6 +33,7 @@ from typing import Optional
 import streamlit as st
 
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
     SAHM_RECESSION_THRESHOLD,
@@ -51,14 +52,15 @@ _MACRO_SCORE_HEALTHY_MIN: float = 6.0   # ≥ 6 → 擴張區(中間 3~6 為警�
 # C2-B v19.158 — VIX warning 20 → 22(直接 import SSOT _VIX_YELLOW)
 # user 拍板撤銷 v19.147 multi-cutoff(教學前置 20 比 SSOT 22 早 2 點),
 # 接受「教學卡片不再提前 2 點預警」trade-off 換 SSOT 收斂。panic=30 不變。
-# HY warning 5.0 仍保留 multi-cutoff(教學保守 — HY 屬慢速信用指標,提前
-# 預警 ROI 仍在,C2 series 不一併收)。
+# F-GRAY-4 v19.169 — HY beginner_panic 改 SSOT(SPEC §16.2):
+# 數值不變(panic=8 / warn=5,仍為新手保守版),改 import shared/macro_thresholds_v2。
 from shared.macro_buckets import _VIX_RED as _MB_VIX_RED, _VIX_YELLOW as _MB_VIX_YELLOW
 
 _VIX_PANIC_THRESHOLD: float = _MB_VIX_RED      # = 30,恐慌(全員一致)
 _VIX_WARNING_THRESHOLD: float = _MB_VIX_YELLOW # = 22,警戒(C2-B v19.158 收 SSOT)
-_HY_SPREAD_PANIC_THRESHOLD: float = 8.0  # 高收益債利差恐慌 (%)(教學保守 — 比 SSOT 6 晚)
-_HY_SPREAD_WARN_THRESHOLD: float = 5.0   # 警戒(教學前置 — 比 SSOT 4 晚一步)
+# 注意:新手介面閾值與 stoplight (4/6) 不同 — 更保守 (避免過早警示)
+_HY_SPREAD_PANIC_THRESHOLD: float = _HY_THR["beginner_panic"]["panic_above"]  # 8.0
+_HY_SPREAD_WARN_THRESHOLD: float = _HY_THR["beginner_panic"]["warn_above"]    # 5.0
 
 # UI 顏色(沿用 MATERIAL_*)
 _C_GREEN, _C_YELLOW, _C_RED = MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED

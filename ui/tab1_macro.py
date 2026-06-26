@@ -42,6 +42,7 @@ from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
 )
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
     SAHM_RECESSION_THRESHOLD,
@@ -54,11 +55,12 @@ _TW_TZ = ZoneInfo("Asia/Taipei")
 # v19.132 — 拐點偵測 sparkline 指標特定 threshold 線
 # 對齊 §1 Fail Loud 顯示原則:一看就知道有沒有超過 threshold
 # SSOT:SAHM 0.5 / CFNAI -0.7 from signal_thresholds.py
-#      HY 6% from repositories/macro_repository.MACRO_THRESHOLDS
-#      HY 8% 為教學經驗值(2008 / 2020 觸發)
+# F-GRAY-4 v19.169: HY 由 shared/macro_thresholds_v2.py SSOT 提供 (SPEC §16.2)
+# - warn (yellow): stoplight.yellow_below = 6.0
+# - crisis: beginner_panic.panic_above = 8.0(教學經驗值,2008/3 / 2020/3 高點)
 # ════════════════════════════════════════════════════════════════
-_HY_WARN_THRESHOLD: float = 6.0    # MACRO_THRESHOLDS HY_SPREAD yellow_below
-_HY_CRISIS_THRESHOLD: float = 8.0  # 教學經驗值:2008/3 / 2020/3 高點接近
+_HY_WARN_THRESHOLD: float = _HY_THR["stoplight"]["yellow_below"]
+_HY_CRISIS_THRESHOLD: float = _HY_THR["beginner_panic"]["panic_above"]
 
 
 def _tp_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:

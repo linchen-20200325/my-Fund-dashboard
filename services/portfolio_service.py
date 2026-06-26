@@ -22,6 +22,12 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     SHADOW_FUND_JACCARD_WEIGHT_RATIO,
     SHADOW_FUND_COSINE_WEIGHT_RATIO,
 )
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+
+# F-GRAY-4 v19.169: HY_SPREAD portfolio_advisor SSOT (SPEC §16.2)
+# 注意:warn=4.5 與 stoplight (4.0) 不同 — 投組建議更寬容
+_HY_PORTFOLIO_WARN = _HY_THR["portfolio_advisor"]["warn_above"]
+_HY_PORTFOLIO_RISK = _HY_THR["portfolio_advisor"]["risk_above"]
 
 # ── scipy 可選（Optimizer 需要）────────────────────────────────────────────
 try:
@@ -339,10 +345,10 @@ def risk_alert(drawdown:       Optional[float] = None,
                        "message": "🟡 升息環境：降低長久期債券，避免利率風險"})
 
     # ── HY 信用利差擴大 ────────────────────────────────────────────────
-    if hy_spread is not None and hy_spread > 6.0:
+    if hy_spread is not None and hy_spread > _HY_PORTFOLIO_RISK:
         alerts.append({"level": "red",    "type": "CreditSpread",
                        "message": f"🔴 HY 利差 {hy_spread:.2f}%，市場避險情緒高，減少非投資等級債"})
-    elif hy_spread is not None and hy_spread > 4.5:
+    elif hy_spread is not None and hy_spread > _HY_PORTFOLIO_WARN:
         alerts.append({"level": "yellow", "type": "CreditSpread",
                        "message": f"🟡 HY 利差 {hy_spread:.2f}%，信用風險升高，保持謹慎"})
 

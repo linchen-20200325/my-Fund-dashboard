@@ -43,6 +43,11 @@ from shared.fred_series import (
     FRED_T10Y3M,
     FRED_UNRATE,
 )
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+
+# F-GRAY-4 v19.169: HY_SPREAD score_function SSOT (SPEC §16.2)
+_HY_TIGHT = _HY_THR["score_function"]["tight_below"]
+_HY_WIDE = _HY_THR["score_function"]["wide_above"]
 
 
 # ════════════════════════════════════════════════════════════════
@@ -51,7 +56,7 @@ from shared.fred_series import (
 def _s_yield_10y2y(v):    return 2 if v > 0.5 else (-2 if v < 0 else 0)
 def _s_yield_10y3m(v):    return 2 if v > 0.5 else (-2 if v < 0 else 0)
 def _s_pmi(v):            return 2 if v >= 50 else (-2 if v < 45 else -1)
-def _s_hy_spread(v):      return 2 if v < 4 else (-2 if v > 6 else 0)
+def _s_hy_spread(v):      return 2 if v < _HY_TIGHT else (-2 if v > _HY_WIDE else 0)
 def _s_m2(v):             return 1 if v > 5 else (-1 if v < 0 else 0)
 def _s_breadth(chg):      return 1 if chg > 0.5 else (-1 if chg < -1 else 0)
 def _s_dxy(chg_m):        return 1 if chg_m < -1 else (-1 if chg_m > 2 else 0)
