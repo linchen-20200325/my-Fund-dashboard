@@ -124,6 +124,30 @@ def _assert_no_uncaught(at, label: str):
         pytest.fail(f"{label} 有 uncaught exception:\n" + "\n".join(msgs))
 
 
+@pytest.fixture(autouse=False)
+def _restore_polluted_module_attrs():
+    """v19.175:_build_driver 產生的 AppTest 腳本會在 process module-level
+    覆寫 services.risk_radar / services.macro_service / fund_fetcher 的函式,
+    且**不會自動還原** — 導致後續 test 拿到 stub lambda(例如 summarize_radar
+    被換成 `lambda: {"color": "#3fb950"}`,污染 test_risk_radar)。
+
+    此 fixture 在 test 前 snapshot 原始函式,test 結束後還原,杜絕跨檔污染。
+    """
+    import fund_fetcher as _ff
+    import services.macro_service as _ms
+    import services.risk_radar as _rr
+    _snapshot = {
+        (_rr, "detect_risk_radar"): _rr.detect_risk_radar,
+        (_rr, "summarize_radar"):   _rr.summarize_radar,
+        (_ms, "detect_turning_points"): _ms.detect_turning_points,
+        (_ms, "detect_systemic_risk"):  _ms.detect_systemic_risk,
+        (_ff, "fetch_market_news"):     _ff.fetch_market_news,
+    }
+    yield
+    for (mod, name), val in _snapshot.items():
+        setattr(mod, name, val)
+
+
 @pytest.mark.slow
 class TestRenderSmoke:
     """v19.138 — 改動 render 路徑 smoke test"""
@@ -135,6 +159,11 @@ class TestRenderSmoke:
             from streamlit.testing.v1 import AppTest  # noqa: F401
         except ImportError:
             pytest.skip("streamlit.testing.v1.AppTest 不可用(streamlit < 1.30)")
+
+    # v19.175:autouse 還原被 _build_driver 污染的 module attrs
+    @pytest.fixture(autouse=True)
+    def _auto_restore(self, _restore_polluted_module_attrs):
+        yield
 
     def test_render_macro_tab_four_horizons(self):
         """tab1_macro:v19.134 物理重排後 4 桶完整 render"""
