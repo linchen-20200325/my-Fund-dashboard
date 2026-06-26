@@ -311,8 +311,11 @@ def compute_traffic_lights(
 # ════════════════════════════════════════════════════════════════
 
 # 中期循環警戒閾值(本檔特用,§3.3 EX-POLICY-1 同理 — 教學語意門檻)
-_PMI_CONTRACTION_THRESHOLD: float = 50.0   # PMI < 50 = 收縮
-from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as _CPI_THR_V2  # F-GRAY-4 v19.178
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.178 + v19.179 PR-3
+    CPI_YOY_THRESHOLDS as _CPI_THR_V2,
+    PMI_THRESHOLDS as _PMI_THR_V2,
+)
+_PMI_CONTRACTION_THRESHOLD: float = _PMI_THR_V2["beginner_panic"]["contraction_below"]  # 50.0 (SSOT)
 _CPI_OVERHEAT_THRESHOLD: float = _CPI_THR_V2["beginner_panic"]["overheat_above"]  # 4.0 (SSOT)
 _UNEMP_ELEVATED_THRESHOLD: float = 5.0     # 失業率 > 5% = 偏高
 

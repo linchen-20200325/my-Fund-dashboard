@@ -55,8 +55,10 @@ _VIX_YELLOW = 22.0   # 對齊 MACRO_THRESHOLDS['VIX']['yellow_above']
 _VIX_RED    = 30.0   # 對齊 MACRO_THRESHOLDS['VIX']['red_above']
 _CPI_YELLOW = 3.5    # 對齊 MACRO_THRESHOLDS['CPI']['yellow_above']
 _CPI_RED    = 4.0    # 對齊 MACRO_THRESHOLDS['CPI']['red_above']
-_PMI_YELLOW = 50.0   # 對齊 MACRO_THRESHOLDS['PMI']['yellow_below'](<50 收縮)
-_PMI_RED    = 46.0   # 對齊 MACRO_THRESHOLDS['PMI']['red_below'](<46 嚴重)
+# F-GRAY-4 v19.179 PR-3: PMI stoplight SSOT(shared/macro_thresholds_v2.PMI_THRESHOLDS)
+from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
+_PMI_YELLOW = _PMI_THR_V2["stoplight"]["yellow_below"]  # 50.0(<50 收縮)
+_PMI_RED    = _PMI_THR_V2["stoplight"]["red_below"]     # 46.0(<46 嚴重)
 _HY_YELLOW  = 4.0    # 對齊 MACRO_THRESHOLDS['HY_SPREAD']['yellow_below']
 _HY_RED     = 6.0    # 對齊 MACRO_THRESHOLDS['HY_SPREAD']['red_above']
 _US10Y_YELLOW = 4.5  # 對齊 MACRO_THRESHOLDS['US10Y']['yellow_above']

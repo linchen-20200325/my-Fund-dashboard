@@ -20,10 +20,15 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.178 CPI
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.178 CPI + v19.179 PMI
     CPI_YOY_THRESHOLDS as _CPI_THR,
     HY_SPREAD_THRESHOLDS as _HY_THR,
+    PMI_THRESHOLDS as _PMI_THR,
 )
+
+# F-GRAY-4 v19.179: PMI score_function SSOT (SPEC §16.2)
+_PMI_EXPANSION = _PMI_THR["score_function"]["expansion_above"]  # 50.0
+_PMI_RECESSION = _PMI_THR["score_function"]["recession_below"]  # 45.0
 
 DEFAULT_PARQUET_CACHE_DIR = Path("data_cache")
 
@@ -99,7 +104,7 @@ def _load_vix_calibrated_thresholds(
 _VIX_CRISIS, _VIX_WARNING = _load_vix_calibrated_thresholds()
 
 SCORE_RULES: dict[str, tuple[float, ScoreFn]] = {
-    "PMI":          (2.0, lambda v: 2.0 if v >= 50 else (-2.0 if v < 45 else -1.0)),
+    "PMI":          (2.0, lambda v: 2.0 if v >= _PMI_EXPANSION else (-2.0 if v < _PMI_RECESSION else -1.0)),
     "YIELD_10Y2Y":  (2.0, lambda v: 2.0 if v > 0.5 else (-2.0 if v < 0 else 0.0)),
     "YIELD_10Y3M":  (2.0, lambda v: 2.0 if v > 0 else -2.0),
     "HY_SPREAD":    (2.0, lambda v: 2.0 if v < _HY_TIGHT else (-2.0 if v > _HY_WIDE else 0.0)),

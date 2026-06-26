@@ -16,6 +16,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from shared.colors import MATERIAL_GREEN
+# F-GRAY-4 v19.179 PR-3:PMI mk_tolerance SSOT
+from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
+_PMI_MK_EXPANSION = _PMI_THR_V2["mk_tolerance"]["expansion_above"]    # 50.5
+_PMI_MK_CONTRACTION = _PMI_THR_V2["mk_tolerance"]["contraction_below"]  # 49.5
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -104,9 +108,9 @@ def classify_phase(indicators: dict) -> tuple[str, dict]:
         return "unknown", meta
 
     # PMI 50 邊界 ±0.5 噪音容忍：49.5~50.5 視為臨界，配合 trend 才判方向
-    if pmi_v >= 50.5:
+    if pmi_v >= _PMI_MK_EXPANSION:
         econ_up = True
-    elif pmi_v <= 49.5:
+    elif pmi_v <= _PMI_MK_CONTRACTION:
         econ_up = pmi_t > 0   # 收縮區唯有趨勢上升才視為復甦動能
     else:
         econ_up = pmi_t >= 0  # 臨界區 trend 持平/上升 → 視為擴張側

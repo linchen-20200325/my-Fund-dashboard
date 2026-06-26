@@ -42,7 +42,11 @@ from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
 )
-from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.179 PMI
+    HY_SPREAD_THRESHOLDS as _HY_THR,
+    PMI_THRESHOLDS as _PMI_THR,
+)
+_PMI_SITUATION_BELOW = _PMI_THR["alert_generation"]["contraction_below"]  # 50.0(L3 situation card 用)
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
     SAHM_RECESSION_THRESHOLD,
@@ -1761,11 +1765,11 @@ def render_macro_tab() -> None:
                 _sahm_v = float((ind.get("SAHM") or {}).get("value") or 0)
                 _adl_v = float((ind.get("ADL") or {}).get("value") or 0)
                 _l3_sit_cards = []
-                if _pmi_v > 0 and _pmi_v < 50 and _sahm_v < 0.5:
+                if _pmi_v > 0 and _pmi_v < _PMI_SITUATION_BELOW and _sahm_v < 0.5:
                     _l3_sit_cards.append({
                         "icon": "🟡", "border": MATERIAL_ORANGE, "bg": "#1a1200",
                         "title": "【Situation A — 庫存調整，非衰退】",
-                        "body": (f"PMI={_pmi_v:.1f}（<50 收縮）但薩姆規則={_sahm_v:.2f}（<0.5 安全線）。"
+                        "body": (f"PMI={_pmi_v:.1f}（<{_PMI_SITUATION_BELOW:.0f} 收縮）但薩姆規則={_sahm_v:.2f}（<0.5 安全線）。"
                                  f"製造業庫存去化壓力，消費端仍撐盤，非系統性衰退訊號。"
                                  f"策略：維持衛星資產比重，等待 PMI 觸底回升確認後加碼。"),
                     })

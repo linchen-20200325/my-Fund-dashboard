@@ -388,3 +388,77 @@ def test_pmi_macro_service_no_inline_pmi_literals():
     for pat in inline_patterns:
         matches = re.findall(pat, src)
         assert not matches, f"macro_service.py 仍有 inline PMI literal: pattern={pat} matches={matches}"
+
+
+# ════════════════════════════════════════════════════════════════
+# 8. PR-3 其他 8 caller import + 值守(v19.179 PR-3)
+# ════════════════════════════════════════════════════════════════
+
+def test_pmi_macro_buckets_uses_ssot():
+    """shared/macro_buckets.py 必須 import PMI_THRESHOLDS,_PMI_YELLOW/_PMI_RED 對齊 SSOT."""
+    import shared.macro_buckets as mb
+    src = open(mb.__file__, encoding="utf-8").read()
+    assert "PMI_THRESHOLDS" in src
+    assert mb._PMI_YELLOW == 50.0
+    assert mb._PMI_RED == 46.0
+
+
+def test_pmi_macro_validation_uses_ssot():
+    """services/macro_validation.py 必須 import PMI_THRESHOLDS."""
+    from services.macro_validation import _PMI_EXPANSION, _PMI_RECESSION, SCORE_RULES
+    assert _PMI_EXPANSION == 50.0
+    assert _PMI_RECESSION == 45.0
+    # 行為等價:>= 50 → +2.0;< 45 → -2.0;[45, 50) → -1.0
+    _, fn = SCORE_RULES["PMI"]
+    assert fn(50.0) == 2.0
+    assert fn(44.0) == -2.0
+    assert fn(47.0) == -1.0
+
+
+def test_pmi_macro_score_calibration_uses_ssot():
+    """services/macro_score_calibration.py 必須 import PMI_THRESHOLDS."""
+    from services.macro_score_calibration import _s_pmi
+    # 行為等價:>= 50 → 2;< 45 → -2;[45, 50) → -1
+    assert _s_pmi(50.0) == 2
+    assert _s_pmi(44.0) == -2
+    assert _s_pmi(47.0) == -1
+
+
+def test_pmi_macro_tw_local_uses_ssot():
+    """services/macro_tw_local.py 必須 import TW_PMI_THRESHOLDS."""
+    from services.macro_tw_local import _TWPMI_STRONG, _TWPMI_EXPANSION, _TWPMI_NEUTRAL, _TWPMI_WEAK
+    assert _TWPMI_STRONG == 55.0
+    assert _TWPMI_EXPANSION == 52.0
+    assert _TWPMI_NEUTRAL == 50.0
+    assert _TWPMI_WEAK == 48.0
+
+
+def test_pmi_macro_beginner_view_uses_ssot():
+    """ui/helpers/macro_beginner_view.py 必須 import PMI_THRESHOLDS."""
+    from ui.helpers.macro_beginner_view import _PMI_CONTRACTION_THRESHOLD
+    assert _PMI_CONTRACTION_THRESHOLD == 50.0
+
+
+def test_pmi_mk_clock_uses_ssot():
+    """ui/components/mk_clock.py 必須 import PMI_THRESHOLDS mk_tolerance."""
+    from ui.components.mk_clock import _PMI_MK_EXPANSION, _PMI_MK_CONTRACTION
+    assert _PMI_MK_EXPANSION == 50.5
+    assert _PMI_MK_CONTRACTION == 49.5
+
+
+def test_pmi_tab1_macro_uses_ssot():
+    """ui/tab1_macro.py 必須 import PMI_THRESHOLDS (Situation A 用)."""
+    from ui.tab1_macro import _PMI_SITUATION_BELOW
+    assert _PMI_SITUATION_BELOW == 50.0
+
+
+def test_pmi_tab6_manual_uses_ssot():
+    """ui/tab6_manual.py 教學 markdown 必須走 f-string SSOT(per Q3 全遷)."""
+    import ui.tab6_manual as tm
+    src = open(tm.__file__, encoding="utf-8").read()
+    assert "PMI_THRESHOLDS" in src
+    assert "_PMI_TEXTBOOK" in src
+    # markdown body 已 f-string 化(原 `"""` → `f"""`)
+    assert 'f"""' in src
+    # 教學文案不應再有 hardcoded "PMI 為何 50 是" 字串(已 f-string 插值)
+    assert "PMI 為何 50 是" not in src, "title 仍 hardcoded 50,未走 f-string SSOT"
