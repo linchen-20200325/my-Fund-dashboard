@@ -293,8 +293,11 @@ def compute_1y_total_return_mk_simple(
                 if _start_date_str < _date_raw <= _end_date_str:
                     div_sum += _amt_f
                     div_count += 1
-        except Exception:
-            pass  # 配息解析錯誤靜默 skip,不阻斷 NAV 部分
+        except Exception as _e_div_parse:
+            # F-MED v19.170: silent pass → stderr log
+            import sys as _sys_dp
+            print(f'[fund_dividend_health] dividend parse fail: {type(_e_div_parse).__name__}: {_e_div_parse}', file=_sys_dp.stderr)
+            # NAV 部分仍可繼續
 
     meta["div_sum_per_unit"] = round(div_sum, 6)
     meta["div_count"] = div_count
@@ -367,8 +370,10 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
                 _tr1y_method = "mk_simple"
                 _tr1y_meta = _mk_meta
                 _tr1y_window_days = _mk_meta.get("window_days")
-        except Exception:
-            pass  # 嚴格算失敗 → fallback metrics
+        except Exception as _e_mk:
+            # F-MED v19.170: silent pass → stderr log;fallback 仍走 metrics
+            import sys as _sys_mk
+            print(f'[fund_dividend_health] mk_simple strict calc fail: {type(_e_mk).__name__}: {_e_mk}', file=_sys_mk.stderr)
 
     if tr1y is None:
         tr1y = _safe_float(_metrics.get("ret_1y_total")) or _safe_float(_metrics.get("ret_1y"))

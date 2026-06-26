@@ -48,7 +48,10 @@ def _load_cache_series(code: str) -> pd.Series:
         values = data.get("values", [])
         s = pd.Series(values, index=dates, dtype=float)
         return s[~s.index.duplicated(keep="last")].sort_index()
-    except Exception:
+    except Exception as e:
+        # F-MED v19.170: silent → stderr log;cache 存在但解析失敗應被記錄
+        import sys as _sys
+        print(f'[nav_history_store/_load_cache_series] cache parse fail {p}: {type(e).__name__}: {e}', file=_sys.stderr)
         return pd.Series(dtype=float)
 
 

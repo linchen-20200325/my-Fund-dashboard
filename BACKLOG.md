@@ -38,7 +38,20 @@
 - [x] **F-GRAY-2** §8.3 v19.81 audit 結案:`hot_money.py` / `tw_macro.py` 同上,根目錄 vs `repositories/` 為純 cosmetic
 - [x] **F-GRAY-3** §8.3 v19.81 audit 結案:`app.py`(568 LOC)已是 orchestrator,無業務邏輯需下沉;同步刪除 1 處 dead code `_unused_old_calculate_composite_score`
 - [⚙️] **F-GRAY-4** §8.3 `MACRO_THRESHOLDS` harmonize:v19.168(#406)architecture proposal 立案(SPEC §16.2)。**v19.169 HY_SPREAD** 落地:新建 `shared/macro_thresholds_v2.py` SSOT(4 sub-dict:stoplight / score_function / portfolio_advisor / beginner_panic),migrate 6 sites(macro_repository / macro_validation / macro_score_calibration / portfolio_service / macro_service / macro_beginner_view / tab1_macro),+ `tests/test_macro_thresholds_v2.py` 13 守護 tests 全綠。**CPI / PMI 後續**:等 user 指派(per §-1)
-- [ ] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 已收一輪;其餘**遵 §-1 等實際 bug 觸發再收**,不主動清
+- [⚙️] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 + **v19.170 Top-10 sweep** 已收兩輪:
+  * **v19.170(本批 10 項)**:10 處 silent `except Exception:` 散在 L2 service 層 → 全改 `except Exception as e:` + stderr log
+    - `services/nav_history_store.py:51` `_load_cache_series` cache 解析失敗
+    - `services/portfolio_service.py:400` `calc_shadow_score` numpy import 失敗
+    - `services/portfolio_service.py:526` `calc_correlation_matrix` 失敗
+    - `services/ai_service.py:192` risk_alert 注入失敗
+    - `services/ai_service.py:329` `single_fund_summary` tr1y/adr parse fail
+    - `services/ai_service.py:526` `_append_error_ledger` 寫檔失敗
+    - `services/fund_service.py:382` `calc_metrics` days_span 計算
+    - `services/fund_service.py:392` `calc_metrics` 1Y window 計算
+    - `services/fund_dividend_health.py:296` 配息解析
+    - `services/fund_dividend_health.py:370` mk_simple 嚴格計算
+  * 介面 0 改;只把「失敗時靜默」改成「失敗時 stderr 留軌跡」,便於生產 debug
+  * 剩餘 (M) 項**遵 §-1 等實際 bug 觸發再收**,不主動清
 
 **v19.109 收尾**(CLAUDE.md §-1 工作準則立):Open 項全數 WONTFIX 或結案,僅 F-MED 等實際 bug 觸發再收。0 個 active pending。
 
