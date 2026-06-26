@@ -423,10 +423,15 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
         # caller 不存取 attrs 時無感;需要追溯時 s.attrs["source"] / s.attrs["fetched_at"]。
         s.attrs["source"] = f"Yahoo:{ticker}"
         s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-        return s
     except Exception as e:
         print(f"[macro_core/yf] {ticker} 解析失敗: {e}")
         return pd.Series(dtype=float, name=ticker)
+    # v19.161 A1 Phase B:pandera schema 驗 final contract(values+index+attrs)
+    # 此驗證**故意放在 parse try-except 之外**,schema 違反(values=NaN /
+    # close<=0 / source 缺前綴等)為上游 bug,須當場 raise,**不**靜默返回空 Series。
+    from shared.schemas import validate_yf_close
+    validate_yf_close(s)
+    return s
 
 
 @register_cache

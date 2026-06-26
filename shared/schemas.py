@@ -15,10 +15,13 @@ CLAUDE.md §3.1 / SPEC §18 — DataFrame 邊界契約集中宣告。
 ========
 - `MacroFredSchema`:repositories.macro_repository.fetch_fred 出口 schema
 - `validate_fred(df) -> df`:wrapper(避免每個 caller import pandera 細節)
+- `YahooCloseSchema`:repositories.macro_repository.fetch_yf_close 出口 schema(Series)
+- `validate_yf_close(s) -> s`:wrapper(同時驗 attrs.source / attrs.fetched_at)
 
 Phase 規劃(SPEC §18.3):
-- Phase A(本檔)— pilot:fetch_fred 1 個 fetcher
-- Phase B — 擴展 fetch_yf_close / fetch_fund_nav_series / fetch_dividends
+- ✅ Phase A v19.155 — pilot:fetch_fred 1 個 fetcher
+- ✅ Phase B v19.161 — 擴展 fetch_yf_close(本檔)
+- Phase B 後續 — fetch_fund_nav_series / fetch_dividends
 - Phase C — service 入口(compute_1y_total_return_mk_simple / calc_metrics)
 - Phase D — 全面 + CI gate
 """
@@ -114,3 +117,71 @@ def validate_fred(df: Any) -> Any:
     if df is None or len(df) == 0:
         return df
     return MacroFredSchema.validate(df, lazy=False)
+
+
+# ════════════════════════════════════════════════════════════════
+# YahooCloseSchema — fetch_yf_close 出口契約(pd.Series)
+# ════════════════════════════════════════════════════════════════
+# 依據(repositories/macro_repository.py:392-429):
+#   index = DatetimeIndex(monotonic_increasing,unique;dropna 確保無 NaT)
+#   value = float64(close 價格 > 0;dropna 確保無 NaN)
+#   attrs.source = "Yahoo:<ticker>"(F-PROV-1 v19.83 phase 2)
+#   attrs.fetched_at = UTC ISO 字串(v19.83 phase 2)
+#
+# pandera SeriesSchema 支援 index + values 驗證;attrs 為 pandas-level
+# 額外 metadata,須在 wrapper 手動驗證(SeriesSchema 不涵蓋)。
+
+YahooCloseSchema = pa.SeriesSchema(
+    "float64",
+    nullable=False,
+    checks=[
+        pa.Check(lambda s: s.notna().all(), error="value 不可有 NaN(fetch_yf_close 已 dropna)"),
+        pa.Check(lambda s: (s > 0).all(), error="close 價格必為 > 0"),
+    ],
+    index=pa.Index(
+        "datetime64[ns]",
+        checks=[
+            pa.Check(lambda s: s.is_monotonic_increasing, error="index 必須單調遞增(asc)"),
+            pa.Check(lambda s: s.is_unique, error="index 不可重複"),
+        ],
+    ),
+)
+
+
+def validate_yf_close(s: Any) -> Any:
+    """fetch_yf_close 出口 schema validation wrapper。
+
+    驗 3 件事:
+    1. Series values:float64, > 0, no NaN
+    2. Series index:datetime64[ns], monotonic, unique
+    3. Series attrs:`source` 存在且以 'Yahoo:' 開頭;`fetched_at` 存在且為 ISO 字串
+
+    對空 Series(fetch 失敗時)直接 pass — caller 已知 fallback。
+
+    Returns
+    -------
+    驗證通過的 Series(不複製)。
+
+    Raises
+    ------
+    pandera.errors.SchemaError:values / index 契約違反。
+    ValueError:attrs.source / attrs.fetched_at 契約違反(F-PROV-1)。
+    """
+    if s is None or len(s) == 0:
+        return s
+    # 1+2. pandera 驗 values + index
+    YahooCloseSchema.validate(s, lazy=False)
+    # 3. provenance(attrs)— pandera SeriesSchema 不涵蓋,手動驗
+    src = s.attrs.get("source", "")
+    if not src.startswith("Yahoo:"):
+        raise ValueError(
+            f"validate_yf_close: attrs.source 必須以 'Yahoo:' 開頭(F-PROV-1),"
+            f"實際 = {src!r}"
+        )
+    fetched_at = s.attrs.get("fetched_at", "")
+    if "T" not in fetched_at:
+        raise ValueError(
+            f"validate_yf_close: attrs.fetched_at 必須是 ISO 8601 字串(含 'T' 分隔符),"
+            f"實際 = {fetched_at!r}"
+        )
+    return s
