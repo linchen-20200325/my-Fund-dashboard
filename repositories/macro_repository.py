@@ -53,6 +53,10 @@ from shared.fred_series import (
     FRED_CNH_USD,
     FRED_PHILLY_FED,
 )
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+
+# F-GRAY-4 v19.169: HY_SPREAD stoplight SSOT (SPEC §16.2)
+_HY_SPREAD_STOPLIGHT = _HY_THR["stoplight"]
 from shared.signal_thresholds import (  # v19.74 W3a SSOT consume
     RECESSION_LOGIT_COEF_INTERCEPT,
     RECESSION_LOGIT_COEF_SPREAD,
@@ -195,7 +199,8 @@ MACRO_THRESHOLDS: dict = {
     "US10Y":       {"yellow_above": 4.5, "red_above": 5.0},
     "DXY":         {"yellow_above": 105, "red_above": 110},
     "PMI":         {"red_below": 46, "yellow_below": 50, "green_above": 52},
-    "HY_SPREAD":   {"green_below": 4.0, "yellow_below": 6.0, "red_above": 6.0},
+    # F-GRAY-4 v19.169: HY_SPREAD stoplight 閾值由 shared/macro_thresholds_v2.py SSOT 提供
+    "HY_SPREAD":   _HY_SPREAD_STOPLIGHT,
     "YIELD_10Y2Y": {"red_below": 0.0, "yellow_below": 0.5},
     "YIELD_10Y3M": {"red_below": 0.0, "yellow_below": 0.5},
     "M2_YOY":      {"red_below": 0.0, "green_above": 5.0},

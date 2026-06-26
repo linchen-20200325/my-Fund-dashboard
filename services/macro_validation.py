@@ -20,7 +20,13 @@ from typing import Callable, Optional
 
 import pandas as pd
 
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+
 DEFAULT_PARQUET_CACHE_DIR = Path("data_cache")
+
+# F-GRAY-4 v19.169: HY_SPREAD score_function SSOT (SPEC §16.2)
+_HY_TIGHT = _HY_THR["score_function"]["tight_below"]
+_HY_WIDE = _HY_THR["score_function"]["wide_above"]
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -88,7 +94,7 @@ SCORE_RULES: dict[str, tuple[float, ScoreFn]] = {
     "PMI":          (2.0, lambda v: 2.0 if v >= 50 else (-2.0 if v < 45 else -1.0)),
     "YIELD_10Y2Y":  (2.0, lambda v: 2.0 if v > 0.5 else (-2.0 if v < 0 else 0.0)),
     "YIELD_10Y3M":  (2.0, lambda v: 2.0 if v > 0 else -2.0),
-    "HY_SPREAD":    (2.0, lambda v: 2.0 if v < 4 else (-2.0 if v > 6 else 0.0)),
+    "HY_SPREAD":    (2.0, lambda v: 2.0 if v < _HY_TIGHT else (-2.0 if v > _HY_WIDE else 0.0)),
     "M2":           (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < 0 else 0.0)),
     "FED_BS":       (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < -5 else 0.0)),
     "VIX":          (1.0, _make_vix_score_fn(_VIX_CRISIS, _VIX_WARNING)),
