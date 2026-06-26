@@ -110,8 +110,18 @@ def friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = "
     level : "warning" | "error" | "info"
     """
     import streamlit as st   # lazy import 避免 session.py 必要時可獨立測試
+    import sys as _sys_mod
     import traceback as _tb_mod
-    body = f"**{title}**"
+    # v19.171:異常摘要(類型+首行訊息)上浮到主訊息,別藏在 expander 裡。
+    # 過去使用者看到「總經指標載入失敗」+ 摺疊 expander → 不知道實際根因。
+    # 現在直接顯示「SchemaError: date 不可重複」等關鍵字,並同步 print 到
+    # stderr(Streamlit Cloud logs 抓得到,方便 user 截圖傳回。)
+    _exc_label = f"`{type(exc).__name__}`"
+    _exc_msg   = str(exc).strip().splitlines()[0] if str(exc).strip() else ""
+    _exc_msg_short = _exc_msg[:200] + ("…" if len(_exc_msg) > 200 else "")
+    body = f"**{title}** — {_exc_label}"
+    if _exc_msg_short:
+        body += f": {_exc_msg_short}"
     if hint:
         body += f"\n\n💡 {hint}"
     if level == "error":
@@ -120,6 +130,8 @@ def friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = "
         st.info(body)
     else:
         st.warning(body)
+    # stderr 鏡射(Streamlit Cloud log 可追)
+    print(f"[friendly_error] {title} | {type(exc).__name__}: {exc}", file=_sys_mod.stderr)
     with st.expander("🔧 技術細節（給工程師）", expanded=False):
         st.code(f"{type(exc).__name__}: {exc}\n\n" + _tb_mod.format_exc(), language="python")
 
