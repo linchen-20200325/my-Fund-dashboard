@@ -1599,3 +1599,63 @@ def _friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = 
     輸出  : st.{level}(title + hint) + st.expander("🔧 技術細節（給工程師）") with st.code(traceback)
     """
 ```
+
+---
+
+## §16 總經五桶 × 危險門檻一覽（`shared/macro_buckets.py` SSOT）
+
+> v19.144。Fund 端「總經五桶」危險門檻系統的單一參考表 — 與 Stock 端 SPEC §11 結構對齊,
+> 但桶配置不同(Fund 視角:`拐點` 取代 Stock 的 `籌碼`、加 `📰 新聞`)。
+> 桶燈號、未來圖表上的黃/紅標準線、本表三者**同源** — 全部讀
+> `shared/macro_buckets.py::BUCKET_DANGER_SPECS`,改門檻只改一處。
+
+**門檻來源透明度**（`DangerSpec.source`）:
+- 🔵 **官方 / SSOT**:有既有常數背書(`MACRO_THRESHOLDS` 鏡像由 `tests/test_macro_buckets.py` 守漂移;或直接 import `signal_thresholds`)。
+- ⚪ **系統設計**:本桶為 UI 判讀方便自訂之警示線(具名 + 文件化,§1 不適用 — 此為 UI 門檻 config,非偽造資料輸出)。
+
+**方向**:`high_bad` = 值越高越危險｜`low_bad` = 值越低越危險｜`band` = 兩端皆危險。
+
+### 🌳 長期（結構 / 景氣位階）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| 總經健康評分 | /10 | ≥6 | 3–6 | <3 | low_bad | 🔵 macro_validation.aggregate_score |
+| M2 貨幣供給 YoY | % | >5 寬鬆 | 0–5 | <0 緊縮 | low_bad | 🔵 MACRO_THRESHOLDS.M2_YOY |
+| Fed 資產負債表 YoY | % | >5 擴表 | −5–5 | <−5 縮表 | low_bad | 🔵 MACRO_THRESHOLDS.FED_BS_YOY |
+
+### 📈 中期（景氣循環 3-12 月）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| ISM 製造業 PMI | — | >50 | 46–50 收縮 | <46 嚴重 | low_bad | 🔵 MACRO_THRESHOLDS.PMI |
+| CPI YoY | % | <3.5 | 3.5–4.0 | ≥4 嚴峻 | high_bad | 🔵 MACRO_THRESHOLDS.CPI |
+| 失業率 | % | <4.5 | 4.5–6 | ≥6 衰退 | high_bad | 🔵 SCORE_RULES.UNEMPLOYMENT |
+| US10Y 殖利率 | % | <4.5 | 4.5–5 | ≥5 緊縮 | high_bad | 🔵 MACRO_THRESHOLDS.US10Y |
+| Forward P/E | 倍 | <19.5(+1σ) | 19.5–22.5 | ≥22.5(+2σ) | high_bad | 🔵 valuation.FORWARD_PE_MEAN+σ |
+
+### 🎯 短線急殺（即時 risk-off）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| VIX 恐慌指數 | — | <22 | 22–30 | ≥30 危機 | high_bad | 🔵 MACRO_THRESHOLDS.VIX + macro_validation |
+| HY 信用利差 OAS | % | <4 | 4–6 | ≥6 信用裂 | high_bad | 🔵 MACRO_THRESHOLDS.HY_SPREAD |
+| MOVE 債市波動 | — | <100 | 100–120 | ≥120 stress | high_bad | ⚪ 對齊 macro_beginner_view._MOVE_WARNING |
+| Put/Call 比率 | — | <1.0 | 1.0–1.5 | ≥1.5 散戶恐慌 | high_bad | ⚪ 對齊 macro_beginner_view._PCR_PANIC |
+
+### ⚠️ 拐點（領先警報）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| Sahm Rule | — | <0.3 | 0.3–0.5 | ≥0.5 觸發 | high_bad | 🔵 SAHM_RECESSION_THRESHOLD(0.5) + ⚪ 0.3 警戒 |
+| 10Y-2Y 殖利率差 | % | >0.5 | 0–0.5 接近倒掛 | ≤0 倒掛 | low_bad | 🔵 MACRO_THRESHOLDS.YIELD_10Y2Y |
+| 10Y-3M 殖利率差 | % | >0.5 | 0–0.5 接近倒掛 | ≤0 倒掛 | low_bad | 🔵 MACRO_THRESHOLDS.YIELD_10Y3M |
+| CFNAI 領先指標 | — | >−0.35 | −0.7–−0.35 走弱 | ≤−0.7 衰退 | low_bad | 🔵 CFNAI_RECESSION_THRESHOLD(−0.7) + ⚪ −0.35 警戒 |
+| SLOOS 銀行收緊 | % | <30 | 30–50 | ≥50 衰退級緊縮 | high_bad | ⚪ 對齊 macro_beginner_view._SLOOS_TIGHTENING |
+
+### 📰 新聞（系統性風險掃描）
+| 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
+|---|---|---|---|---|---|---|
+| 系統性風險新聞數 | 則 | 0 | 1 | ≥2(戰爭/倒閉/崩盤關鍵字命中) | high_bad | ⚪ 命中則數規則(對齊 news_repository.SYSTEMIC_RISK_KEYWORDS)|
+
+> 桶燈號 = 該桶所有指標分級取**最危險者**(紅 > 黃 > 綠 > 灰未載入)。
+> 第 5 桶 📰 新聞需 Tab1 已抓 RSS(news_items session_state) 才有資料;未抓時 ⬜(§1 Fail Loud,不偽綠)。
+>
+> **與既有 4-horizon bar 的關係**:本表為 SSOT 危險門檻參考。`ui/helpers/macro_beginner_view.compute_four_horizon_summary`
+> 仍為 production 四時域 bar(已運作),不破壞既有體驗。Phase B 將把 SSOT 套到 chart `add_danger_hlines`
+> 視覺化危險距離,Phase C 視 user 反饋決定是否擴至 5 桶 bar。
