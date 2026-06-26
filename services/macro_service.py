@@ -359,11 +359,22 @@ def fetch_all_indicators(fred_api_key):
         _f_d3m = _pool_dgs.submit(_fred, "DGS3MO", fred_api_key, 2600)
         _f_hy  = _pool_dgs.submit(_fred, "BAMLH0A0HYM2", fred_api_key, 2500)
         _f_m2  = _pool_dgs.submit(_fred, "M2SL",   fred_api_key, 144)
-        df10 = _f_d10.result()
-        df2  = _f_d2.result()
-        df3m = _f_d3m.result()
-        _df_hy_pre = _f_hy.result()
-        _df_m2_pre = _f_m2.result()
+        # v19.171:per-future 容錯(對齊 fetch_fred_batch 慣例)。
+        # 原本任一 series 觸發 pandera SchemaError / 上游 IO error 都會炸掉整個
+        # fetch_all_indicators 路徑 → UI 顯示「0 個指標」。改為 per-series 失敗回
+        # 空 DataFrame + 印 stderr,下游已有 df.empty 防線(本檔多處 `if df.empty:`)。
+        def _safe_fred_result(_fut, _label):
+            try:
+                return _fut.result()
+            except Exception as _e_fr:
+                print(f"[macro_service/fetch_all] FRED {_label} 失敗,以空 DataFrame 替代: "
+                      f"{type(_e_fr).__name__}: {_e_fr}")
+                return pd.DataFrame()
+        df10 = _safe_fred_result(_f_d10, "DGS10")
+        df2  = _safe_fred_result(_f_d2,  "DGS2")
+        df3m = _safe_fred_result(_f_d3m, "DGS3MO")
+        _df_hy_pre = _safe_fred_result(_f_hy, "BAMLH0A0HYM2")
+        _df_m2_pre = _safe_fred_result(_f_m2, "M2SL")
 
     # v19.56 B2: 5 條 FRED 個別命中狀態（series_id → success/last_date/rows）
     # v19.60 D1：補上 realtime_start（BLS/FED 真實發布日）+ publish_lag_days
