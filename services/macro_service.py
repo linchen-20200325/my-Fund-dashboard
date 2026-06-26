@@ -55,7 +55,17 @@ from shared.fred_series import (
     FRED_UNRATE,
 )
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
-from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.178 CPI
+    CPI_YOY_THRESHOLDS as _CPI_THR,
+    HY_SPREAD_THRESHOLDS as _HY_THR,
+)
+
+# F-GRAY-4 v19.178: CPI_YOY inflection + regime SSOT (SPEC §16.2)
+_CPI_WARN_ABOVE = _CPI_THR["inflection_detection"]["warn_above"]
+_CPI_BULL_LOW = _CPI_THR["inflection_detection"]["bull_low"]
+_CPI_BULL_HIGH = _CPI_THR["inflection_detection"]["bull_high"]
+_CPI_MK_GOLDEN_BELOW = _CPI_THR["inflection_detection"]["mk_golden_below"]
+_CPI_REGIME_OVERHEAT = _CPI_THR["regime_classification"]["overheat_above"]
 
 # F-GRAY-4 v19.169: HY_SPREAD stoplight SSOT (SPEC §16.2)
 _HY_YELLOW = _HY_THR["stoplight"]["yellow_below"]    # 6.0 — alert 觸發點
@@ -205,9 +215,9 @@ def _detect_inflection(indicators):
 
     cpi_v = _chk("CPI"); cpi_t = indicators.get("CPI",{}).get("trend","")
     if cpi_v:
-        if cpi_v > 4.0 and "下降" in cpi_t: signals.append({"type":"buy","text":f"⚡ CPI {cpi_v:.1f}% 高位但回落 — 落後指標見頂"}); score += 3
-        elif cpi_v > 4.0: signals.append({"type":"warn","text":f"CPI {cpi_v:.1f}% 高位未降，緊縮壓力"}); score -= 2
-        elif 1.5 <= cpi_v <= 3.0: signals.append({"type":"bull","text":f"CPI {cpi_v:.1f}% 回落至合理區間"}); score += 2
+        if cpi_v > _CPI_WARN_ABOVE and "下降" in cpi_t: signals.append({"type":"buy","text":f"⚡ CPI {cpi_v:.1f}% 高位但回落 — 落後指標見頂"}); score += 3
+        elif cpi_v > _CPI_WARN_ABOVE: signals.append({"type":"warn","text":f"CPI {cpi_v:.1f}% 高位未降，緊縮壓力"}); score -= 2
+        elif _CPI_BULL_LOW <= cpi_v <= _CPI_BULL_HIGH: signals.append({"type":"bull","text":f"CPI {cpi_v:.1f}% 回落至合理區間"}); score += 2
 
     fed_v = _chk("FED_RATE"); fed_p = _chk("FED_RATE","prev")
     if fed_v is not None and fed_p is not None:
@@ -250,7 +260,7 @@ def _detect_inflection(indicators):
             signals.append({"type":"warn","text":f"CFNAI {lei_v:+.2f} < {CFNAI_RECESSION_THRESHOLD} 強烈衰退"}); score -= 2
 
     if fed_v is not None and fed_p is not None and fed_v <= fed_p and fed_p > 0 and \
-       cpi_v and cpi_v < 3.5 and "下降" in cpi_t:
+       cpi_v and cpi_v < _CPI_MK_GOLDEN_BELOW and "下降" in cpi_t:
         signals.append({"type":"buy","text":"⭐ MK黃金拐點：CPI+Fed Rate 雙雙見頂回落，勝率最高！"}); score += 5
 
     if score >= 8:   infl = {"label":"🚀 強力買進拐點","color":MATERIAL_GREEN,"desc":"多項指標同時確認，景氣最佳買點"}
@@ -1444,9 +1454,9 @@ def identify_regime(indicators: dict) -> dict:
     # ── 四象限判斷 ────────────────────────────────────────
     if pmi_v is None:
         regime = "未知"; regime_color = "#888888"
-    elif pmi_v >= 52 and (cpi_v or 0) < 3.5:
+    elif pmi_v >= 52 and (cpi_v or 0) < _CPI_REGIME_OVERHEAT:
         regime = "🟢 成長期"; regime_color = MATERIAL_GREEN
-    elif pmi_v >= 52 and (cpi_v or 0) >= 3.5:
+    elif pmi_v >= 52 and (cpi_v or 0) >= _CPI_REGIME_OVERHEAT:
         regime = "🟡 過熱期"; regime_color = MATERIAL_ORANGE
     elif pmi_v < 50 and (fed_v or 5) <= (fed_p or 5):
         regime = "🔵 復甦期"; regime_color = "#2196f3"
