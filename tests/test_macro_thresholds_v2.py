@@ -335,3 +335,56 @@ def test_pmi_thresholds_independent_from_tw():
     assert PMI_THRESHOLDS is not TW_PMI_THRESHOLDS
     # 兩者 keys 無重疊(語意獨立)
     assert set(PMI_THRESHOLDS.keys()) & set(TW_PMI_THRESHOLDS.keys()) == set()
+
+
+# ════════════════════════════════════════════════════════════════
+# 7. PR-2 macro_service.py 行為等價 + import 守(v19.179 PR-2)
+# ════════════════════════════════════════════════════════════════
+
+def test_pmi_macro_service_imports_ssot():
+    """macro_service 必須 import PMI_THRESHOLDS + 6 個 module-level 常數."""
+    import services.macro_service as ms
+    src = open(ms.__file__, encoding="utf-8").read()
+    assert "PMI_THRESHOLDS" in src
+    assert "_PMI_INFL_REBOUND" in src
+    assert "_PMI_INFL_PEAK_WARN" in src
+    assert "_PMI_GROWTH_EXPANSION" in src
+    assert "_PMI_ALERT_CONTRACT" in src
+    assert "_PMI_REGIME_STRONG" in src
+    assert "_PMI_REGIME_CONTRACT" in src
+
+
+def test_pmi_macro_service_constants_values():
+    """6 個 PMI module-level 常數值對齊 SSOT."""
+    from services.macro_service import (
+        _PMI_INFL_REBOUND, _PMI_INFL_EXPANSION, _PMI_INFL_PEAK_WARN,
+        _PMI_GROWTH_EXPANSION, _PMI_ALERT_CONTRACT,
+        _PMI_REGIME_STRONG, _PMI_REGIME_CONTRACT,
+    )
+    assert _PMI_INFL_REBOUND == 50.0
+    assert _PMI_INFL_EXPANSION == 50.0
+    assert _PMI_INFL_PEAK_WARN == 55.0
+    assert _PMI_GROWTH_EXPANSION == 50.0
+    assert _PMI_ALERT_CONTRACT == 50.0
+    assert _PMI_REGIME_STRONG == 52.0    # 新觀念真正枯榮線
+    assert _PMI_REGIME_CONTRACT == 50.0
+
+
+def test_pmi_macro_service_no_inline_pmi_literals():
+    """macro_service.py 不應再有 inline `>= 50` / `>= 52` / `>= 55` / `< 50` 圍繞 PMI 變數的字面值.
+
+    用 regex 抓「pmi_v >= 50」 / 「pmi_v < 50」等 pattern,確保已 SSOT 化.
+    """
+    import re
+    import services.macro_service as ms
+    src = open(ms.__file__, encoding="utf-8").read()
+    # PMI inline patterns(if any survived migration)
+    inline_patterns = [
+        r"pmi_v\s*<\s*50\b",           # < 50 literal
+        r"pmi_v\s*>=\s*5[0-9]\b",      # >= 50/52/55 literal
+        r"pmi_v\s*<\s*5[0-9]\b",       # < 50/52/55 literal
+        r"PMI\b[^=]*\)\s*<\s*50\b",    # indicators.get('PMI'...) < 50
+    ]
+    for pat in inline_patterns:
+        matches = re.findall(pat, src)
+        assert not matches, f"macro_service.py 仍有 inline PMI literal: pattern={pat} matches={matches}"

@@ -55,9 +55,10 @@ from shared.fred_series import (
     FRED_UNRATE,
 )
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
-from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.178 CPI
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.178 CPI + v19.179 PMI
     CPI_YOY_THRESHOLDS as _CPI_THR,
     HY_SPREAD_THRESHOLDS as _HY_THR,
+    PMI_THRESHOLDS as _PMI_THR,
 )
 
 # F-GRAY-4 v19.178: CPI_YOY inflection + regime SSOT (SPEC §16.2)
@@ -66,6 +67,15 @@ _CPI_BULL_LOW = _CPI_THR["inflection_detection"]["bull_low"]
 _CPI_BULL_HIGH = _CPI_THR["inflection_detection"]["bull_high"]
 _CPI_MK_GOLDEN_BELOW = _CPI_THR["inflection_detection"]["mk_golden_below"]
 _CPI_REGIME_OVERHEAT = _CPI_THR["regime_classification"]["overheat_above"]
+
+# F-GRAY-4 v19.179: PMI inflection + growth + alert + regime SSOT (SPEC §16.2)
+_PMI_INFL_REBOUND = _PMI_THR["inflection_detection"]["rebound_below"]       # 50.0
+_PMI_INFL_EXPANSION = _PMI_THR["inflection_detection"]["expansion_above"]   # 50.0
+_PMI_INFL_PEAK_WARN = _PMI_THR["inflection_detection"]["peak_warning_above"]  # 55.0
+_PMI_GROWTH_EXPANSION = _PMI_THR["growth_signal"]["expansion_above"]        # 50.0
+_PMI_ALERT_CONTRACT = _PMI_THR["alert_generation"]["contraction_below"]     # 50.0
+_PMI_REGIME_STRONG = _PMI_THR["regime_classification"]["strong_growth_above"]  # 52.0(新觀念真正枯榮線)
+_PMI_REGIME_CONTRACT = _PMI_THR["regime_classification"]["contraction_below"]  # 50.0
 
 # F-GRAY-4 v19.169: HY_SPREAD stoplight SSOT (SPEC §16.2)
 _HY_YELLOW = _HY_THR["stoplight"]["yellow_below"]    # 6.0 — alert 觸發點
@@ -191,11 +201,11 @@ def _detect_inflection(indicators):
 
     pmi_v = _chk("PMI"); pmi_p = _chk("PMI","prev")
     if pmi_v and pmi_p:
-        if pmi_v < 50 and pmi_v > pmi_p:
+        if pmi_v < _PMI_INFL_REBOUND and pmi_v > pmi_p:
             signals.append({"type":"buy","text":f"PMI {pmi_v:.1f} 收縮區但止跌反彈（+{pmi_v-pmi_p:.1f}）— 復甦訊號"}); score += 2
-        elif pmi_v >= 50 and pmi_v > pmi_p:
+        elif pmi_v >= _PMI_INFL_EXPANSION and pmi_v > pmi_p:
             signals.append({"type":"bull","text":f"PMI {pmi_v:.1f} 擴張且上升"}); score += 1
-        elif pmi_v >= 55 and pmi_v < pmi_p:
+        elif pmi_v >= _PMI_INFL_PEAK_WARN and pmi_v < pmi_p:
             signals.append({"type":"warn","text":f"PMI {pmi_v:.1f} 高位回落，景氣可能見頂"}); score -= 1
 
     y22 = indicators.get("YIELD_10Y2Y",{})
@@ -983,7 +993,7 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
     growth_signals = []
     pmi_v = _get("PMI")
     if pmi_v is not None:
-        growth_signals.append(1 if pmi_v >= 50 else -1)
+        growth_signals.append(1 if pmi_v >= _PMI_GROWTH_EXPANSION else -1)
 
     y22 = _get("YIELD_10Y2Y")
     if y22 is not None:
@@ -1142,8 +1152,8 @@ def calc_macro_phase(indicators: dict) -> dict:
         alerts.append("⚠️ 殖利率曲線倒掛（衰退前兆）")
     if indicators.get("HY_SPREAD",{}).get("value", 4) > _HY_YELLOW:
         alerts.append(f"⚠️ 信用利差>{_HY_YELLOW:.0f}% — 市場恐慌升溫")
-    if indicators.get("PMI",{}).get("value", 50) < 50:
-        alerts.append("⚠️ PMI 跌破 50 — 製造業收縮")
+    if indicators.get("PMI",{}).get("value", _PMI_ALERT_CONTRACT) < _PMI_ALERT_CONTRACT:
+        alerts.append(f"⚠️ PMI 跌破 {_PMI_ALERT_CONTRACT:.0f} — 製造業收縮")
     if indicators.get("VIX",{}).get("value", 18) > _MB_VIX_YELLOW:
         alerts.append(f"⚠️ VIX>{_MB_VIX_YELLOW:.0f} — 市場恐慌升溫,注意波動")
     if indicators.get("CPI",{}).get("value", 2) > 4:
@@ -1454,11 +1464,11 @@ def identify_regime(indicators: dict) -> dict:
     # ── 四象限判斷 ────────────────────────────────────────
     if pmi_v is None:
         regime = "未知"; regime_color = "#888888"
-    elif pmi_v >= 52 and (cpi_v or 0) < _CPI_REGIME_OVERHEAT:
+    elif pmi_v >= _PMI_REGIME_STRONG and (cpi_v or 0) < _CPI_REGIME_OVERHEAT:
         regime = "🟢 成長期"; regime_color = MATERIAL_GREEN
-    elif pmi_v >= 52 and (cpi_v or 0) >= _CPI_REGIME_OVERHEAT:
+    elif pmi_v >= _PMI_REGIME_STRONG and (cpi_v or 0) >= _CPI_REGIME_OVERHEAT:
         regime = "🟡 過熱期"; regime_color = MATERIAL_ORANGE
-    elif pmi_v < 50 and (fed_v or 5) <= (fed_p or 5):
+    elif pmi_v < _PMI_REGIME_CONTRACT and (fed_v or 5) <= (fed_p or 5):
         regime = "🔵 復甦期"; regime_color = "#2196f3"
     else:
         regime = "🔴 衰退期"; regime_color = MATERIAL_RED
