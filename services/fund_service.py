@@ -379,7 +379,10 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             _ts_first = pd.to_datetime(s.index[0])
             _ts_last = pd.to_datetime(s.index[-1])
             _days_span = max(int((_ts_last - _ts_first).days), 0)
-        except Exception:
+        except Exception as _e_span:
+            # F-MED v19.170: silent → stderr log;index 解析失敗 fallback estimator
+            import sys as _sys_sp
+            print(f'[fund_service/calc_metrics] days_span calc fail: {type(_e_span).__name__}: {_e_span}', file=_sys_sp.stderr)
             _days_span = 0
         if _days_span < 7:
             _days_span = max(int(len(s) * 1.4), 14)
@@ -389,7 +392,10 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             try:
                 _window_start_dt = pd.to_datetime(s.index[-TRADING_DAYS_PER_YEAR])
                 _window_actual_days = (pd.to_datetime(s.index[-1]) - _window_start_dt).days
-            except Exception:
+            except Exception as _e_win:
+                # F-MED v19.170: silent → stderr log;fallback to 365d
+                import sys as _sys_w
+                print(f'[fund_service/calc_metrics] 1Y window calc fail: {type(_e_win).__name__}: {_e_win}', file=_sys_w.stderr)
                 _window_start_dt = None
                 _window_actual_days = 365
             _ret_1y_window_days = _window_actual_days or 365
