@@ -3610,6 +3610,11 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
                 _ep_fn = url.split("?")[0].rsplit("/", 1)[-1]
                 s.attrs["source"] = f"MoneyDJ:{_host_fn}:{_ep_fn}:fetch_nav"
                 s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                # v19.162 A1 Phase B 後續:pandera schema 驗 final contract
+                # (NAV-specific:>0 / 多源 source prefix);schema 違反 = 上游 bug,
+                # 不掩蓋(§1 Fail Loud)
+                from shared.schemas import validate_fund_nav
+                validate_fund_nav(s)
                 return s
         except Exception as e:
             print(f"[fetch_nav] ERR: {e}")
