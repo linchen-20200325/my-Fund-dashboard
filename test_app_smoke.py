@@ -487,6 +487,19 @@ def test_app_full_module_execution_with_secrets() -> None:
             _streamlit_dir.rmdir()
         for _mn in ("app", "fund_fetcher", "repositories.fund_repository"):
             sys.modules.pop(_mn, None)
+        # v19.176:重置 streamlit DeltaGenerator 表單狀態。
+        # app.py 在 bare mode 跑 module body 時,內部 with st.form(...) 可能殘留
+        # _form_data 在 _main DG 上,讓後續 AppTest(如 tests/test_render_smoke.py)
+        # 的 st.button() 誤判「仍在 form 內」→ StreamlitAPIException。
+        try:
+            import streamlit as _st_cleanup
+            if hasattr(_st_cleanup, "_main"):
+                _main_dg = _st_cleanup._main
+                _main_dg._form_data = None
+                if hasattr(_main_dg, "_active_dg"):
+                    _main_dg._active_dg = _main_dg
+        except Exception:
+            pass
 
 
 def test_tab_modules_import_without_error() -> None:
