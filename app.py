@@ -216,11 +216,27 @@ with st.sidebar:
                 ("er-api.com",  "https://open.er-api.com/v6/latest/USD"),
                 ("Frankfurter", "https://api.frankfurter.app/latest"),
             ]
+            # v19.173:對 429 加 1 次 fast retry (3s),對齊 production fetcher 已有 backoff 行為。
+            # 原本 single-shot test 一遇 429 就顯示黃色 ⚠️,但 production fetch_url 走 2/4/8s backoff
+            # 通常第二次就過(infra/proxy.py:172-181)— sidebar 假警報誤導 user 以為 production 也壞。
+            import time as _time
             for _nm, _url in _endpoints:
+                def _try_get():
+                    return _req.get(_url, proxies=_pcfg, timeout=25, allow_redirects=False, verify=False)
                 try:
-                    _r = _req.get(_url, proxies=_pcfg, timeout=25, allow_redirects=False, verify=False)
+                    _r = _try_get()
+                    if _r.status_code == 429:
+                        # 1 次 fast retry,通常第二次就過(Yahoo / FRED rate limit 為短時 burst)
+                        _time.sleep(3)
+                        _r = _try_get()
                     if _r.status_code in (200,301,302,403): st.sidebar.success(f"✅ {_nm} 可達！HTTP {_r.status_code}")
                     elif _r.status_code == 407: st.sidebar.error("❌ 407：帳密錯誤"); break
+                    elif _r.status_code == 429:
+                        # 重試後仍 429:user-friendly 訊息 — production fetcher 有 2/4/8s 三段 backoff,仍可用
+                        st.sidebar.warning(
+                            f"⚠️ {_nm} HTTP 429 (短時 rate limit) — "
+                            f"production fetch_url 已含 2/4/8s 三段 backoff 自動重試,不影響實際資料載入。"
+                        )
                     else: st.sidebar.warning(f"⚠️ {_nm} HTTP {_r.status_code}")
                 except _req.exceptions.ProxyError as _e: st.sidebar.error(f"❌ {_nm} ProxyError：{str(_e)[:120]}")
                 except _req.exceptions.Timeout: st.sidebar.error(f"❌ {_nm} Timeout（25s）")
