@@ -299,6 +299,13 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
     # 用 Timestamp.now('UTC') 避 pandas 4 deprecation(原 Timestamp.utcnow())
     out["source"] = f"FRED:{series_id}"
     out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+    # v19.155 Pandera Phase A pilot:fetch_fred 出口 schema validation。
+    # 契約違反 → raise SchemaError(§1 Fail Loud,上游 fix);環境問題 → silent fallback。
+    try:
+        from shared.schemas import validate_fred
+        validate_fred(out)
+    except ImportError:
+        pass  # pandera 不可用(極罕見 — requirements.txt pin >=0.20)
     return out
 
 
