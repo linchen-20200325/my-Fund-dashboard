@@ -369,6 +369,19 @@ def _update_data_registry():
     _hm = st.session_state.get("_macro_hot_money") or {}
     if isinstance(_hm, dict) and _hm.get("date"):
         _hm_ic, _hm_fl, _hm_fc = _freshness(_hm.get("date", ""), "daily")
+        # v19.142：診斷 fresh_label 改成 actionable 訊息。
+        # 熱錢 panel 自 v19.47 起被收進 📦 ARCHIVED expander(預設折疊),
+        # 不展開就不 refetch → user 看到「過舊 90 天」誤以為 fetcher 死,實際是 UX 設計使然。
+        # 同時對齊 tab1_macro.py:2791 staleness gate 邏輯,給一致的指引。
+        try:
+            _hm_dt = datetime.date.fromisoformat(str(_hm.get("date", ""))[:10])
+            _hm_age = (datetime.date.today() - _hm_dt).days
+        except (ValueError, TypeError):
+            _hm_age = None
+        if _hm_age is not None and _hm_age > 7:
+            _hm_fl = (f"📦 ARCHIVED · {_hm_age} 天前（v19.47 後收進 ARCHIVED expander，"
+                      "點開「📦 ARCHIVED 台股熱錢監測」才會更新；"
+                      f"{'> 30 天已自動排除於 AI prompt' if _hm_age > 30 else 'AI prompt 帶 [STALE] 標籤'}）")
         reg["總經_HOT_MONEY_FX"] = {
             "label":       "🇹🇼 外資買賣超 × USDTWD 同步判讀",
             "source":      "FinMind 外資 / yfinance USDTWD",

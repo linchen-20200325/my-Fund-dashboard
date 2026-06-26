@@ -100,6 +100,45 @@ def test_indicators_meta_underscore_keys_filtered():
         f"_fred_sources 不該以任何形式入表: {keys}"
 
 
+def test_hot_money_stale_registry_label_actionable():
+    """v19.142: _macro_hot_money 卡 90 天舊 → 診斷 label 應給 actionable 指引
+    (告訴 user 點開 📦 ARCHIVED expander 才會更新),而非單純「過舊」誤導。"""
+    import datetime as _dt
+    _reset()
+    _old = (_dt.date.today() - _dt.timedelta(days=90)).isoformat()
+    st.session_state["_macro_hot_money"] = {
+        "date": _old, "state": "正常", "is_divergence": False,
+        "window": 5, "roll_flow": -150.0, "roll_apprec_pct": -0.42,
+        "foreign_net_yi": -10.0, "interpretation": "test",
+    }
+    _update_data_registry()
+    reg = st.session_state.get("data_registry", {})
+    e = reg["總經_HOT_MONEY_FX"]
+    assert "ARCHIVED" in e["fresh_label"], (
+        f"90 天舊應透出 ARCHIVED 提示,實際 {e['fresh_label']!r}"
+    )
+    assert "expander" in e["fresh_label"] or "展開" in e["fresh_label"] or "點開" in e["fresh_label"]
+
+
+def test_hot_money_fresh_registry_label_unchanged():
+    """v19.142: _macro_hot_money 新鮮(< 7 天)→ 維持原 fresh_label 格式不變(無回歸)。"""
+    import datetime as _dt
+    _reset()
+    _today = _dt.date.today().isoformat()
+    st.session_state["_macro_hot_money"] = {
+        "date": _today, "state": "強勢", "is_divergence": False,
+        "window": 5, "roll_flow": 100.0, "roll_apprec_pct": 0.3,
+        "foreign_net_yi": 20.0, "interpretation": "ok",
+    }
+    _update_data_registry()
+    reg = st.session_state.get("data_registry", {})
+    e = reg["總經_HOT_MONEY_FX"]
+    assert "ARCHIVED" not in e["fresh_label"], (
+        f"新鮮資料不該帶 ARCHIVED 警示,實際 {e['fresh_label']!r}"
+    )
+    assert e["fresh_icon"] == "🟢"
+
+
 def test_partial_radar_only_loaded_lights_registered():
     """部分燈缺 key（型錯）→ 其他正常處理，缺者跳過或失敗顯示。"""
     _reset()

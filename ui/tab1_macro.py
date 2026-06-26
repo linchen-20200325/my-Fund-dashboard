@@ -2790,16 +2790,36 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
             )
         _hm = _st.session_state.get("_macro_hot_money")
         if isinstance(_hm, dict) and _hm:
-            lines.append(
-                f"- 台股熱錢三角交叉（{_hm.get('date', '')}）：{_hm.get('state', '')}"
-                f"{'（背離警示）' if _hm.get('is_divergence') else ''}"
-            )
-            lines.append(
-                f"  - 近 {_hm.get('window', 5)}日累計外資 {_hm.get('roll_flow', 0):+.0f} 億、"
-                f"台幣升貶 {_hm.get('roll_apprec_pct', 0):+.2f}%"
-            )
-            if _hm.get("interpretation"):
-                lines.append(f"  - 判讀：{_hm['interpretation']}")
+            # v19.142：staleness gate — 熱錢監測在 v19.47 起被收進 📦 ARCHIVED expander,
+            # session 卡舊資料 90 天屢見不鮮。對齊 CLAUDE.md §2.4 STALE 注入慣例:
+            # - > 30 天:全段 skip(避免 Gemini 用 3 月份外資資料做 6 月決策的 §1 違憲)
+            # - 8-30 天:Prompt 前加 [STALE: Nd] 標籤,Gemini 知道別重押
+            import datetime as _dt_hm
+            _hm_stale_days = None
+            try:
+                _hm_dt = _dt_hm.date.fromisoformat(str(_hm.get("date", ""))[:10])
+                _hm_stale_days = (_dt_hm.date.today() - _hm_dt).days
+            except (ValueError, TypeError):
+                _hm_stale_days = None
+            if _hm_stale_days is not None and _hm_stale_days > 30:
+                # 超過 30 天直接 drop（避免污染 prompt）；但留個簡短 marker 讓 AI 知道沒料
+                lines.append(
+                    f"- 台股熱錢三角交叉:資料過舊({_hm_stale_days} 天前),"
+                    "已從 prompt 中排除(需展開「📦 ARCHIVED 台股熱錢監測」更新)"
+                )
+            else:
+                _hm_stale_tag = (f"[STALE:{_hm_stale_days}d] "
+                                 if _hm_stale_days is not None and _hm_stale_days > 7 else "")
+                lines.append(
+                    f"- {_hm_stale_tag}台股熱錢三角交叉（{_hm.get('date', '')}）：{_hm.get('state', '')}"
+                    f"{'（背離警示）' if _hm.get('is_divergence') else ''}"
+                )
+                lines.append(
+                    f"  - 近 {_hm.get('window', 5)}日累計外資 {_hm.get('roll_flow', 0):+.0f} 億、"
+                    f"台幣升貶 {_hm.get('roll_apprec_pct', 0):+.2f}%"
+                )
+                if _hm.get("interpretation"):
+                    lines.append(f"  - 判讀：{_hm['interpretation']}")
     except Exception:
         pass   # smoke-allow-pass — 章節資料缺失不阻斷 AI 摘要
     headlines = [str(n.get("title", "") or n.get("headline", ""))
