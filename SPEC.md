@@ -1660,37 +1660,52 @@ def _friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = 
 > 仍為 production 四時域 bar(已運作),不破壞既有體驗。Phase B 將把 SSOT 套到 chart `add_danger_hlines`
 > 視覺化危險距離,Phase C 視 user 反饋決定是否擴至 5 桶 bar。
 
-### §16.1 Multi-cutoff Design 結案說明(v19.147 / F-GRAY-4 升級結案)
+### §16.1 VIX 全站 SSOT 統一(C2 series v19.157~v19.160 結案)
 
-**現況**:Fund 端 VIX / HY / MOVE / PCR 等指標的 **yellow 線**在不同模組刻意取不同值,**panic/red 線全員一致**。CLAUDE.md §8.3 ⚠️ F-GRAY-4 audit 已釐清此**非違憲、為 intentional design**。
+**歷史脈絡**:v19.147 曾以 "Multi-cutoff Design" 為 4 個 VIX yellow 值散落(18/20/22/25)
+做合理化辯護,標 F-GRAY-4「✅ 結案」(不機械式統一)。
+**2026-06-26 user 改變主意**,接受 trade-off(雷達日均閃黃 / 長期評分敏感度降 4 點 /
+教學前置語意喪失 2 點 / calibration JSON 重定 bound),拍板 C2 series 全面 SSOT 收斂。
 
-**VIX 為例,4 個 yellow 值各自設計**:
+**現況(C2 完成後)**:Fund 端 VIX yellow 全站統一 **22**(`shared/macro_buckets._VIX_YELLOW`),
+panic 全站統一 **30**(`_VIX_RED`)。
 
-| 模組 | VIX yellow | 語意 |
-|---|---|---|
-| `services/macro_validation.py::DEFAULT_VIX_WARNING` | **18** | 長期評分要敏感(早警示);JSON `data_cache/macro_thresholds_global.json` 可校準 |
-| `ui/helpers/macro_beginner_view._VIX_WARNING_THRESHOLD` | **20** | 四時域教學「警戒前置」— 用戶剛開首頁就看到,前置預警 |
-| `shared/macro_buckets._VIX_YELLOW`(SSOT) | **22** | 鏡像 `MACRO_THRESHOLDS`,公版顯示用;頂部五桶 bar + SPEC §16 表 |
-| `services/risk_radar.py:103-105` | **25** | 1-day 雷達保守化 — 每天評估,若用 22 會輕微震盪天天閃黃 → 訊號疲勞 |
+| 模組 | VIX yellow | VIX panic | 版本 |
+|---|---|---|---|
+| `shared/macro_buckets._VIX_YELLOW / _VIX_RED`(SSOT) | **22** | **30** | 鏡像 `MACRO_THRESHOLDS.VIX` |
+| `services/macro_validation.DEFAULT_VIX_WARNING / _CRISIS` | **22** | **30** | C2-C v19.159(原 18 / 30) |
+| `ui/helpers/macro_beginner_view._VIX_WARNING_THRESHOLD / _PANIC_THRESHOLD` | **22** | **30** | C2-B v19.158(原 20 / 30) |
+| `services/risk_radar.py::_signal_vix_level` | **22**(via `_VIX_YELLOW`) | **30**(via `_VIX_RED`) | C2-A v19.157(原 25 / 30) |
+| `services/macro_service.py` alert(`indicators[VIX] > _MB_VIX_YELLOW`) | **22** | — | C2-D v19.160(原 inline `> 25`) |
 
-**真 SSOT(全員一致)**:VIX **panic = 30**(crisis),這條由 `tests/test_cross_site_cutoffs.py::test_vix_panic_universal_30` 跨 4 site 守護,任一處改 30 → CI 立擋。
-
-**HY spread 同樣 intentional spread**:
-- SSOT 黃線 4(MACRO_THRESHOLDS green_below)
+**HY spread 保留 intentional spread**(C2 不一併收):
+- SSOT 黃線 **4**(`_HY_YELLOW`,`MACRO_THRESHOLDS.HY_SPREAD.green_below`)
 - `macro_beginner_view._HY_SPREAD_WARN_THRESHOLD = 5`(教學保守)
-- 兩者皆刻意,`test_hy_yellow_intentional_spread` 守。
+- HY 屬慢速信用指標,提前預警 ROI 仍在;`test_hy_yellow_intentional_spread` 守。
 
-**為何不機械式統一**(F-GRAY-4 audit 警告):
-1. 把 `macro_validation` 從 18 改成 22 → **降低長期評分敏感度** + 破壞 calibration JSON 機制 + 炸 80+ 校準測試
-2. 把 `risk_radar` 從 25 改成 22 → **雷達每天閃黃**(輕微震盪日均觸發)→ 訊號疲勞 / user 反感
-3. 把 `macro_beginner_view` 從 20 改成 22 → **教學前置語意喪失**(原本希望比公版更早預警)
+**Calibration JSON 機制改動**(C2-C):
+- `data_cache/macro_thresholds_global.json` 載入 bound 重定:`warning ∈ [14, 22]` → `[18, 26]`(對齊 SSOT 22 重心 ±4)
+- `scripts/calibrate_macro_score.py` grid `[14, 16, 18, 20, 22]` → `[18, 20, 22, 24, 26]`
+- 既有 JSON 校準到舊 `[14, 18)` 區 → silently fallback 至 SSOT 22(intended)
+- repo 內無 production calibration JSON → 本次 deploy 無實際 fallback 觸發
 
-**v19.147 結案動作**(3 件):
-- D1:三處 inline cutoff 加註解說明 + 反向 link 到本段
-- D2:`tests/test_cross_site_cutoffs.py` 守 4 yellow 各自 design + panic=30 universal
-- D3:本段(SPEC §16.1)— F-GRAY-4 從 §8.3 ⚠️ 待議升級「✅ 結案」
+**C2 series 步驟總表**:
+- ✅ C2-A v19.157:`risk_radar._signal_vix_level` 25 → 22(import `_VIX_YELLOW`)
+- ✅ C2-B v19.158:`macro_beginner_view._VIX_WARNING_THRESHOLD` 20 → 22
+- ✅ C2-C v19.159:`macro_validation.DEFAULT_VIX_WARNING` 18 → 22 + calibration bounds 重定
+- ✅ C2-D v19.160:本段 SPEC §16.1 改寫 + `macro_service.py` alert inline 25 → SSOT + CLAUDE.md F-GRAY-4 結案標記
 
-**未來真要全面 SSOT 統一**:屬架構提案,需 user 明確背書 + 重做 calibration 機制 + 80+ test 重評(範圍類比 W1 v18.241 大重構)。
+**User-facing 影響總覽**:
+1. **雷達**:`VIX ∈ [22, 25]` 區間會比舊版多閃黃(日均增 0~2 次,依市場波動)
+2. **macro_validation 評分**:VIX 18~22 不再扣 -1.0(改 0.0 中性);≥22 才扣分
+3. **macro_service alert**:VIX > 22 觸發 "市場恐慌升溫" 提示(原 > 25)
+4. **教學卡片 + 五桶 bar + SPEC §16 表**:統一 22 顯示,user 不再有「教學黃但雷達綠」的認知衝突
+5. **panic = 30** 全站不變
+
+**守護**:`tests/test_cross_site_cutoffs.py`
+- `test_vix_yellow_all_aligned_to_ssot`:3 site warning 全 22 + 全員一致
+- `test_vix_panic_universal_30`:3 site panic 全 30
+- `test_risk_radar_vix_source_uses_ssot`:risk_radar 必須 import `_VIX_YELLOW`/`_VIX_RED`,不可 inline 25
 
 ---
 

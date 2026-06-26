@@ -99,17 +99,16 @@ def test_risk_radar_vix_source_uses_ssot():
 
 
 # ──────────────────────────────────────────────────────────
-# 3. F-GRAY-4 結案文件存在性(防有人改 SPEC 卻忘了)
+# 3. SPEC §16.1 C2 series 結案文件存在性
 # ──────────────────────────────────────────────────────────
-def test_spec_documents_multi_cutoff():
-    """SPEC.md §16 必須含 multi-cutoff 結案說明 + F-GRAY-4 reference。"""
+def test_spec_documents_c2_closure():
+    """SPEC.md §16.1 必須含 C2 series 收斂結案 + 4 個 step 完整 reference。"""
     from pathlib import Path
     spec_path = Path(__file__).parent.parent / "SPEC.md"
     assert spec_path.exists()
     spec_text = spec_path.read_text(encoding="utf-8")
-    assert "multi-cutoff" in spec_text.lower() or "Multi-cutoff" in spec_text, (
-        "SPEC.md 應有 multi-cutoff 段(v19.147 D3 結案)"
-    )
-    assert "F-GRAY-4" in spec_text, (
-        "SPEC.md 應引用 F-GRAY-4 結案說明"
-    )
+    # C2 series 4 step 都應留紀錄
+    for tag in ("C2-A", "C2-B", "C2-C", "C2-D"):
+        assert tag in spec_text, f"SPEC.md §16.1 應記 {tag} 步驟"
+    # 仍保留 F-GRAY-4 歷史 reference(供反向查 v19.147 multi-cutoff 設計脈絡)
+    assert "F-GRAY-4" in spec_text, "SPEC.md 應保留 F-GRAY-4 歷史脈絡引用"
