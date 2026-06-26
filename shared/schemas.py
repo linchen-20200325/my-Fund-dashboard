@@ -19,12 +19,14 @@ CLAUDE.md §3.1 / SPEC §18 — DataFrame 邊界契約集中宣告。
 - `validate_yf_close(s) -> s`:wrapper(同時驗 attrs.source / attrs.fetched_at)
 - `FundNavSchema`:repositories.fund_repository.fetch_nav 等多 fetcher 共用 NAV 序列 schema
 - `validate_fund_nav(s) -> s`:wrapper(NAV-specific:>0 / 多源 source prefix 允許清單)
+- `FundDividendSchema`:repositories.fund_repository.fetch_div 配息序列 schema(DataFrame 內部表示)
+- `validate_fund_dividends(divs: list[dict]) -> list[dict]`:list[dict] wrapper(production interface 保留)
 
 Phase 規劃(SPEC §18.3):
 - ✅ Phase A v19.155 — pilot:fetch_fred 1 個 fetcher
 - ✅ Phase B v19.161 — 擴展 fetch_yf_close
-- ✅ Phase B 後續 v19.162 — fetch_nav(本檔)
-- Phase B 後續 — fetch_dividends
+- ✅ Phase B 後續 v19.162 — fetch_nav
+- ✅ Phase B 後續 v19.163 — fetch_div(本檔)
 - Phase C — service 入口(compute_1y_total_return_mk_simple / calc_metrics)
 - Phase D — 全面 + CI gate
 """
@@ -281,3 +283,112 @@ def validate_fund_nav(s: Any) -> Any:
             f"實際 = {fetched_at!r}"
         )
     return s
+
+
+# ════════════════════════════════════════════════════════════════
+# FundDividendSchema — fetch_div 配息序列契約(內部 DataFrame 表示)
+# ════════════════════════════════════════════════════════════════
+# 依據(repositories/fund_repository.py:4057-4102 fetch_div 實際輸出):
+#   list[dict]:[{"date": "YYYY-MM-DD", "amount": float}, ...]
+#   - 排序:date desc(reverse=True line 4100),最新除息在前
+#   - dedup:by date(seen set line 4101)
+#   - 長度上限:24 筆(line 4102 `[:24]`)
+#   - amount filter:0.0001 < amount < 100(line 4093)— 排除明顯壞值
+#
+# CLAUDE.md §3.1 spec(ascending DatetimeIndex / div_amount >= 0)— 我們在
+# 內部驗證時保留 production 順序(desc 也能驗 unique + > 0),不強制 sort,
+# 對齊 caller(MoneyDJ 顯示新到舊)。
+#
+# 設計:pandera 對 list[dict] 不直接支援,wrapper 內部轉 DataFrame 驗證後
+# 回傳原 list,production interface 完全保留。
+
+_FUND_DIVIDEND_MAX_ROWS = 24
+
+FundDividendSchema = pa.DataFrameSchema(
+    {
+        "date": pa.Column(
+            "datetime64[ns]",
+            nullable=False,
+            checks=[
+                pa.Check(lambda s: s.is_unique, error="date 不可重複(fetch_div 已 dedup)"),
+            ],
+        ),
+        "amount": pa.Column(
+            "float64",
+            nullable=False,
+            checks=[
+                pa.Check(lambda s: (s > 0).all(),
+                         error="配息 amount 必為 > 0(§3.1 div_amount >= 0,fetch_div filter > 0.0001)"),
+                pa.Check(lambda s: (s < 100).all(),
+                         error="配息 amount 必為 < 100(fetch_div filter < 100,防 OCR/HTML 解析錯誤)"),
+            ],
+        ),
+    },
+    strict=False,   # fetch_div 內部可能擴 currency 等欄位,不強制 strict
+    coerce=False,
+)
+
+
+def validate_fund_dividends(divs: Any) -> Any:
+    """fetch_div 出口 schema validation wrapper(list[dict] interface)。
+
+    驗 4 件事:
+    1. divs 為 list(空 list 直接 pass)
+    2. 長度 <= 24(fetch_div line 4102 [:24] 上限)
+    3. 每 dict 含 "date"(可 parse 為 datetime)+ "amount"(float > 0 且 < 100)
+    4. date 不可重複(fetch_div 已 dedup,但 schema 守確認)
+
+    對空 list(fetch 失敗時)直接 pass — caller 已知 fallback。
+
+    Parameters
+    ----------
+    divs : list[dict]
+        fetch_div 回傳的 list 結構,每 dict 含 "date" / "amount" key。
+
+    Returns
+    -------
+    list[dict]
+        驗證通過的原始 list(不複製,不重排)。
+
+    Raises
+    ------
+    pandera.errors.SchemaError:date 重複 / amount <= 0 / amount >= 100。
+    ValueError:divs 非 list / 長度超限 / 缺 key / date 不可 parse。
+    """
+    if divs is None or len(divs) == 0:
+        return divs
+    if not isinstance(divs, list):
+        raise ValueError(
+            f"validate_fund_dividends: divs 必須為 list[dict],"
+            f"實際型別 = {type(divs).__name__}"
+        )
+    if len(divs) > _FUND_DIVIDEND_MAX_ROWS:
+        raise ValueError(
+            f"validate_fund_dividends: 長度 {len(divs)} 超過上限 {_FUND_DIVIDEND_MAX_ROWS}"
+            f"(fetch_div :24 截斷契約)"
+        )
+    # 轉 DataFrame 內部驗證(production interface 保留 list 回傳)
+    try:
+        import pandas as _pd
+        df = _pd.DataFrame(divs)
+    except Exception as e:
+        raise ValueError(f"validate_fund_dividends: 無法轉 DataFrame: {e}") from e
+    # 確認 keys
+    for required_key in ("date", "amount"):
+        if required_key not in df.columns:
+            raise ValueError(
+                f"validate_fund_dividends: 每 dict 須含 '{required_key}' key,"
+                f"實際 columns = {list(df.columns)}"
+            )
+    # 強制型別 — 解析 date,production fetcher 已 str(d)[:10] 截斷
+    try:
+        df["date"] = _pd.to_datetime(df["date"])
+    except Exception as e:
+        raise ValueError(f"validate_fund_dividends: date 無法 parse: {e}") from e
+    try:
+        df["amount"] = df["amount"].astype("float64")
+    except Exception as e:
+        raise ValueError(f"validate_fund_dividends: amount 無法轉 float: {e}") from e
+    # pandera 驗
+    FundDividendSchema.validate(df, lazy=False)
+    return divs
