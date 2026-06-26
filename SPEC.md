@@ -1691,3 +1691,72 @@ def _friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = 
 - D3:本段(SPEC §16.1)— F-GRAY-4 從 §8.3 ⚠️ 待議升級「✅ 結案」
 
 **未來真要全面 SSOT 統一**:屬架構提案,需 user 明確背書 + 重做 calibration 機制 + 80+ test 重評(範圍類比 W1 v18.241 大重構)。
+
+---
+
+## §17 MK 老師吃本金檢查 SSOT(v19.148→v19.149)
+
+### §17.1 方法論
+
+依郭俊宏(MK)老師體檢邏輯:
+
+> **近一年含息總報酬率 < 年化配息率 → 🔴 吃本金**
+
+「含息總報酬率」採 MK 嚴格定義(教學版,**單利**):
+
+```
+含息_1Y = NAV 漲跌幅% + 累計配息率%
+       = (NAV_now − NAV_1Y_ago) / NAV_1Y_ago × 100
+       + Σ(divs in last 1Y) / NAV_1Y_ago × 100
+```
+
+### §17.2 SSOT 入口與優先序
+
+`services/fund_dividend_health.check_eating_principal_1y_mk(fund)` 為**跨 tab 唯一 SSOT 入口**。
+
+**含息報酬(tr1y)precedence**(v19.149):
+1. 🥇 **MK 嚴格單利**:`compute_1y_total_return_mk_simple(series, dividends)` — 從 fund 內 raw NAV + 配息 list 直算,符合教學版定義
+2. 🥈 業界複利 fallback:`metrics.ret_1y_total`(本地還原淨值法)→ `metrics.ret_1y`(純 NAV)— 當 fund 內缺 raw data 才用
+
+**年化配息率(adr)precedence**:
+1. 🥇 `moneydj_div_yield`(MoneyDJ wb05 官方)
+2. 🥈 `metrics.annual_div_rate`(本地估算)
+
+返回 dict 含 `_tr1y_method` 標記用了哪條路(`"mk_simple"` / `"metrics_fallback"`)。
+
+### §17.3 MK 單利 vs 業界複利的差異
+
+| 指標 | MK 單利(本系統 SSOT) | MoneyDJ wb01 / 還原淨值法(業界) |
+|---|---|---|
+| 公式 | NAV 漲跌 + 累計配息率(加法) | (Adj_NAV_end / Adj_NAV_start − 1) 配息再投資複利 |
+| 與教科書符合 | ✅ 100% | ⚠️ 不同(複利) |
+| 通常差異 | — | 通常 **高 5-15%**(複利 reinvestment 效應) |
+| Verdict flip 風險 | — | borderline 基金(coverage 接近 1.0)可能在兩公式間翻轉 |
+
+**為何選 MK 單利**:user 引述 MK 老師時很明確指向教學版,本系統優先對齊老師原意,wb01 變對帳 reference。Borderline 翻轉是 MK 觀點下的真相(複利低估了吃本金嚴重度)。
+
+### §17.4 跨 tab SSOT 涵蓋
+
+| Tab | 入口 | SSOT 狀態 |
+|---|---|---|
+| 單一基金(tab2)| `services.portfolio_service.dividend_safety`(同 canonical core)| ✅ 同源 |
+| 組合基金健診-健診總表(tab_fund_grp_health)| `check_eating_principal_1y_mk` | ✅ v19.148 接 + v19.149 升級 |
+| 組合基金健診-健診摘要表(fund_checkup)| `dividend_safety`(同 canonical core)| ✅ 同源 |
+| 組合配置(tab3_portfolio)| `dividend_safety`(同 canonical core)| ✅ 同源 |
+
+**Phase B 候選**(未動,等 user 觸發):fund_checkup 改 import `check_eating_principal_1y_mk`,讓所有 caller 走唯一 helper(目前各 caller 走 dividend_safety wrapper 各自 inline 取 inputs,功能等價但路徑分散)。
+
+### §17.5 3-3-3 原則(MK 老師長線輔助)
+
+`check_333_principle(years_since_inception, ann_return_3y_pct)`:
+
+- 成立 ≥ 3 年
+- 過去 3 年平均年化報酬 > 7%
+
+**用途**:挑選**新核心資產**時的長線篩選,不是吃本金主判定(短線吃本金以 §17.1 為準)。helper 已寫好,目前未接 UI,等 user 要看時可在任何 tab 加 column 顯示 ✅/❌。
+
+### §17.6 Test 守衛
+
+- `tests/test_mk_simple_formula.py`(v19.149):26 tests — 公式正確性 + 1Y 窗邊界 + 配息日界線 + 邊界條件 + property 加法可拆性
+- `tests/test_mk_ssot_unification.py`(v19.148):15 tests — 跨 shape SSOT + canonical 守 + cross-caller import 守
+- 既有 `test_portfolio_health` / `test_fund_dividend_calculator` / `test_fund_dividend_health` — 77 tests 零回歸
