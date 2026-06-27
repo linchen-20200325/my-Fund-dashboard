@@ -533,6 +533,31 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
             "Coverage = 1Y 含息報酬 ÷ 年化配息率；TER 對標台灣基金市場同類均值。")
 
         # v19.61：健診摘要表 — 多檔橫向 PK（同源 _compute_fund_health_kpis SSOT）
+        # v19.183 Bug5：加「費用率排名 / 同類排名」欄
+        #   - 費用率排名：組內升序(低=第1),格式 "n/N"
+        #   - 同類排名：MoneyDJ peer_compare 萃取 percentile(越高越強),缺則 —
+        try:
+            from services.portfolio_service import rank_funds_within_portfolio
+            _ranks = rank_funds_within_portfolio(
+                [f for f in (portfolio_funds or [])
+                 if f.get("loaded") and not f.get("load_error")]
+            )
+        except Exception as _e_rank:
+            import sys as _sys_rank
+            print(f"[fund_checkup] rank fail: {type(_e_rank).__name__}: {_e_rank}",
+                  file=_sys_rank.stderr)
+            _ranks = {}
+
+        def _rank_txt(code):
+            _r = _ranks.get(code) or {}
+            _er = _r.get("expense_rank")
+            _en = _r.get("expense_n") or 0
+            _exp_s = f"{_er}/{_en}" if (_er and _en) else "—"
+            _pp = _r.get("peer_percentile")
+            _praw = _r.get("peer_rank_raw")
+            _peer_s = f"{_pp:.0f}%（{_praw}）" if (_pp is not None and _praw) else "—"
+            return _exp_s, _peer_s
+
         _seen_sum: set = set()
         _sum_rows: list = []
         _kpi_cache: dict = {}
@@ -543,6 +568,7 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
             if not _c or _c in _seen_sum:
                 continue
             _seen_sum.add(_c)
+            _exp_rank_s, _peer_rank_s = _rank_txt(_c)
             try:
                 _k = _compute_fund_health_kpis(f)
                 _kpi_cache[_c] = (f, _k)
@@ -553,6 +579,7 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
                     "吃本金狀態": f"⚠️ 計算失敗 [{type(_e).__name__}]",
                     "1Y 含息%": None, "年化配息率%": None,
                     "Coverage": None, "月配息(TWD)": None, "最高經理費%": None,
+                    "費用率排名": _exp_rank_s, "同類排名": _peer_rank_s,
                 })
                 continue
             _ds = _k.get("safety") or {}
@@ -573,6 +600,8 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
                 "Coverage": _r2s(_ds.get("coverage")),
                 "月配息(TWD)": _r2s(_k.get("monthly_div_twd")),
                 "最高經理費%": _r2s(_k.get("ter_val")),
+                "費用率排名": _exp_rank_s,
+                "同類排名": _peer_rank_s,
             })
 
         if _sum_rows:
@@ -599,6 +628,14 @@ def render_fund_checkup(portfolio_funds: list | None) -> None:
                     "最高經理費%": st.column_config.NumberColumn(
                         "最高經理費%", format="%.2f",
                         help="MoneyDJ wb05 最高經理費；缺資料顯示 —"),
+                    "費用率排名": st.column_config.TextColumn(
+                        "費用率排名",
+                        help="在你載入的這幾檔之間，按最高經理費由低到高排名（第1名=最便宜）；"
+                             "格式 n/N，N 為有費用率資料的檔數"),
+                    "同類排名": st.column_config.TextColumn(
+                        "同類排名",
+                        help="MoneyDJ 同類型基金排名換算的 percentile（越高越強，100%=同類第1）；"
+                             "約 3 成基金 MoneyDJ 無同類排名資料 → 顯示 —"),
                 },
             )
             st.divider()
