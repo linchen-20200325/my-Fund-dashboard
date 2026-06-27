@@ -40,6 +40,13 @@ SHADOW_FUND_COSINE_WEIGHT_RATIO: float = 0.4
 # ── 配息接近警戒(fund_service.py:279, fund_dividend_calculator.py:23)──
 NEAR_DIVIDEND_WARNING_PCT: float = 2.0
 # 配息年化率距離警戒線(年率 6%/8%)≤ 2pp → near zone,UI 標黃
+# v19.175:同時兼任「吃本金 gap 容差」— gap = div - ret > 2pp → 🔴 吃本金
+
+# ── 年化最小歷史長度(fund_dividend_calculator.py:207,v19.175)──────
+MIN_YEARS_FOR_ANNUALIZE: float = 0.5
+# 持有歷史 < 0.5 年不年化(避免「2 個月配息 × 6 倍」變 30% 高配息幻象,
+# 對應 MK 老師「買舊不買新」警告 + §1 Fail Loud 不偽造數字),
+# 全期自算欄位顯示「—」+ 燈號顯示「⬜ 歷史不足」
 
 # ── Risk score 加權(precision_service.py:64, risk_calibration.py:23)─
 RISK_SCORE_VIX_WEIGHT_RATIO: float = 0.3

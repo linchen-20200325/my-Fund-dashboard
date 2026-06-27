@@ -313,29 +313,38 @@ def compute_1y_total_return_mk_simple(
 
 
 def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
-    """MK 老師 1Y 吃本金檢查 SSOT 入口(v19.149 升級為嚴格單利)。
+    """MK 老師 1Y 吃本金檢查 SSOT 入口(v19.175 回歸 wb01 業界複利優先)。
 
     依郭俊宏(MK)老師體檢邏輯:
         近一年含息總報酬率 < 年化配息率 → 🔴 吃本金
+
+    MK 老師核心精神是「善用免費理財網站直接查找數據,不要自己算複雜的數學」,
+    系統應以 MoneyDJ wb01 官方數字為絕對優先(SSOT),只在抓不到時才自算 fallback,
+    與使用者上網查到的數字一致,避免信任危機。
 
     支援兩種 fund dict shape:
     - **Nested**(tab3_portfolio / fund_checkup):`{moneydj_raw: {...}, metrics: {...}}`
     - **Flat**(`_auto_fetch_moneydj` 直回):`{moneydj_div_yield: ..., metrics: {...}}`
 
-    含息報酬(tr1y) precedence(v19.149 — 對齊 MK 嚴格單利公式):
-        1. **MK 嚴格單利**:從 fund["series"] + fund["dividends"] 直算
-           `compute_1y_total_return_mk_simple()`(教學定義,user 拿計算機算得出)
-        2. metrics.ret_1y_total / metrics.ret_1y(本地或 wb01,業界複利,作 fallback)
+    含息報酬(tr1y) precedence(v19.175 — 對齊 Tab2/Tab3 SSOT):
+        統一委派 `services.fund_total_return.compute_1y_total_return()`:
+            1. perf["1Y"] (wb01 MoneyDJ 官方,業界複利)— 最權威
+            2. ret_1y_total (本地含息計算)
+            3. ret_1y (純 NAV,不含息)
+            4. NAV 序列年化外推 (≥30d 才用,scale cap 12x)
+
+        v19.149 的 MK 嚴格簡單單利路徑改為「對照欄」備援(`_tr1y_mk_simple_meta`),
+        不再參與燈號判定 — 避免 Tab2(wb01)/ 健診總表(mk_simple)同檔結論相反。
 
     年化配息率(adr)precedence:
         moneydj_div_yield(MoneyDJ wb05 官方,優先)→ metrics.annual_div_rate(fallback)
 
     Returns
     -------
-    dividend_safety 5-level 結果 dict + 加 v19.149 欄位:
-      - `_tr1y_method`: "mk_simple" / "metrics_fallback"
-      - `_tr1y_window_days`: 實際窗口天數(MK 嚴格才有)
-      - `_tr1y_meta`: dict (MK 嚴格才有,nav_start/end/div_count 等)
+    dividend_safety 3 色結果 dict + v19.175 欄位:
+      - `_tr1y_method`: tr1y 來源(從 compute_1y_total_return 取得 source label)
+      - `_tr1y_window_days`: 仍保留欄位(對齊舊 caller),compute_1y_total_return 路徑為 None
+      - `_tr1y_meta`: 仍保留欄位,內含 MK 嚴格單利對照值(若可算)便於 UI「業界 vs MK」對照顯示
     或 None(資料不足:adr 缺/tr1y 缺/adr ≤ 0)
     """
     # 解析兩種 shape
@@ -352,39 +361,34 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     if adr is None or adr <= 0:
         return None
 
-    # tr1y precedence v19.149:
-    # 1) MK 嚴格單利(從 fund 內 raw series + dividends 直算)
-    # 2) metrics.ret_1y_total / metrics.ret_1y(業界複利 fallback)
-    tr1y: Optional[float] = None
-    _tr1y_method = "metrics_fallback"
-    _tr1y_meta: Optional[dict] = None
-    _tr1y_window_days: Optional[int] = None
+    # tr1y v19.175:統一走 SSOT compute_1y_total_return(wb01 業界複利優先)
+    from services.fund_total_return import compute_1y_total_return
+    tr1y, _tr1y_method = compute_1y_total_return(fund)
+    if tr1y is None:
+        return None
 
+    # 對照欄:MK 嚴格簡單單利(若 series + dividends 可用)仍計算供 UI 對照顯示,
+    # 但 不再 參與燈號判定。
+    _tr1y_meta: Optional[dict] = None
     _series = fund.get("series") or (fund.get("moneydj_raw") or {}).get("series")
     _divs = fund.get("dividends") or (fund.get("moneydj_raw") or {}).get("dividends")
     if _series is not None and _divs is not None:
         try:
             _mk_v, _mk_meta = compute_1y_total_return_mk_simple(_series, _divs)
-            if _mk_v is not None:
-                tr1y = _mk_v
-                _tr1y_method = "mk_simple"
-                _tr1y_meta = _mk_meta
-                _tr1y_window_days = _mk_meta.get("window_days")
+            if _mk_v is not None and isinstance(_mk_meta, dict):
+                _tr1y_meta = {**_mk_meta, "mk_simple_value": _mk_v}
         except Exception as _e_mk:
-            # F-MED v19.170: silent pass → stderr log;fallback 仍走 metrics
+            # F-MED v19.170: silent pass → stderr log;對照欄缺失不影響燈號
             import sys as _sys_mk
-            print(f'[fund_dividend_health] mk_simple strict calc fail: {type(_e_mk).__name__}: {_e_mk}', file=_sys_mk.stderr)
-
-    if tr1y is None:
-        tr1y = _safe_float(_metrics.get("ret_1y_total")) or _safe_float(_metrics.get("ret_1y"))
-    if tr1y is None:
-        return None
+            print(f'[fund_dividend_health] mk_simple compare-only calc fail: '
+                  f'{type(_e_mk).__name__}: {_e_mk}', file=_sys_mk.stderr)
 
     from services.portfolio_service import dividend_safety
     out = dividend_safety(total_return=tr1y, dividend_yield=adr, nav_change=tr1y)
     if isinstance(out, dict):
         out["_tr1y_method"] = _tr1y_method
-        out["_tr1y_window_days"] = _tr1y_window_days
+        out["_tr1y_window_days"] = (_tr1y_meta.get("window_days")
+                                    if _tr1y_meta else None)
         out["_tr1y_meta"] = _tr1y_meta
     return out
 

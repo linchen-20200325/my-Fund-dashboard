@@ -209,56 +209,80 @@ class TestEdgeCases:
 
 
 # ──────────────────────────────────────────────────────────
-# 4. check_eating_principal_1y_mk v19.149 升級向後相容
+# 4. check_eating_principal_1y_mk v19.175 — wb01 業界複利優先
 # ──────────────────────────────────────────────────────────
-class TestCheckEatingV19149Backcompat:
-    """v19.148 既有測試應仍 pass(metrics fallback path 仍可用)。
-    新增測試:當 fund 有 series + dividends → 應走 mk_simple,標記 method。"""
+# v19.175 user 拍板「網路資料(wb01 MoneyDJ 官方)優先,自算 fallback」,
+# v19.149 的「mk_simple 優先」契約已過時:
+#   - 主源 走 compute_1y_total_return chain(perf["1Y"] > ret_1y_total > ret_1y > NAV 外推)
+#   - mk_simple 退居「對照欄」(_tr1y_meta 內保留 mk_simple_value 供 UI 顯示)
+# 詳 services/fund_dividend_health.check_eating_principal_1y_mk docstring。
+class TestCheckEatingV19175WbCompoundFirst:
+    """v19.175 契約:tr1y 主源走 wb01 業界複利優先(對齊 Tab2/Tab3 SSOT)。"""
 
-    def test_metrics_only_falls_back_to_metrics(self):
-        """fund 只有 metrics(無 series + divs)→ fallback metrics,標 _tr1y_method。"""
+    def test_metrics_ret_1y_only_uses_ret_1y_path(self):
+        """fund 只有 metrics.ret_1y(無 perf / 無 series)→ tr1y 走 ret_1y precedence。
+
+        v19.175:gap = 7 - 4 = 3pp > 2pp 警戒線 → 🔴 吃本金(3 色制)。
+        """
         fund = {
             "moneydj_div_yield": 7.0,
-            "metrics": {"ret_1y": 5.0},
+            "metrics": {"ret_1y": 4.0},
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        assert "吃本金" in r["status"]
-        assert r["_tr1y_method"] == "metrics_fallback"
+        assert "吃本金" in r["status"], (
+            f"預期吃本金(gap=3pp > 2pp),實際 {r['status']}"
+        )
+        assert "ret_1y" in r["_tr1y_method"], (
+            f"預期走 ret_1y precedence,實際 {r['_tr1y_method']}"
+        )
 
-    def test_with_series_dividends_uses_mk_simple(self):
-        """fund 有 series + dividends → 應走 mk_simple,且 _tr1y_meta 有 nav_start/end。"""
+    def test_with_series_dividends_still_uses_wb_industry_precedence(self):
+        """v19.175:fund 有 series + dividends 也不再以 mk_simple 為主源。
+
+        precedence:perf['1Y'] > ret_1y_total > ret_1y > NAV 外推。
+        本 case:metrics.ret_1y=99(business path)→ tr1y=99, adr=5 → 健康。
+        mk_simple 算出的 13% 退居 `_tr1y_meta.mk_simple_value` 對照欄。
+        """
         fund = {
             "moneydj_div_yield": 5.0,
-            "metrics": {"ret_1y": 99.0},  # 故意設離譜值,證明 mk_simple 才是主源
+            "metrics": {"ret_1y": 99.0},  # v19.175 走業界路徑
             "series": {"2025-06-26": 100.0, "2026-06-26": 110.0},
             "dividends": [{"date": "2026-01-01", "amount": 3.0}],
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        assert r["_tr1y_method"] == "mk_simple", (
-            f"應走 mk_simple,實際 {r['_tr1y_method']}(metrics ret_1y=99 是誘餌應被無視)"
+        assert "ret_1y" in r["_tr1y_method"], (
+            f"v19.175 應走業界 ret_1y precedence,實際 {r['_tr1y_method']}"
         )
-        # MK simple: nav 漲 10% + div 3/100 = 3% → 13% 含息 > 配息 5% → 健康
+        # tr1y=99, adr=5 → gap=-94 → 🟢 健康
         assert "健康" in r["status"], f"預期健康,實際 {r['status']}"
+        # mk_simple 對照值仍計算並保留於 _tr1y_meta
         assert r["_tr1y_meta"] is not None
-        assert math.isclose(r["_tr1y_meta"]["nav_change_pct"], 10.0, abs_tol=0.01)
+        assert "mk_simple_value" in r["_tr1y_meta"]
+        assert math.isclose(r["_tr1y_meta"]["mk_simple_value"], 13.0, abs_tol=0.01), (
+            f"對照欄 mk_simple_value 應算出 13%(10 + 3),實際 {r['_tr1y_meta']['mk_simple_value']}"
+        )
 
-    def test_nested_shape_with_series(self):
-        """Nested fund shape(moneydj_raw 內帶 series + dividends)。"""
+    def test_nested_shape_with_perf_1y_wins(self):
+        """Nested shape + perf['1Y']=15% → perf 為最高優先級,SSOT wb01。"""
         fund = {
             "moneydj_raw": {
                 "moneydj_div_yield": 7.0,
+                "perf": {"1Y": 15.0},  # wb01 模本
+                "perf_source": "wb01",
                 "series": {"2025-06-26": 100.0, "2026-06-26": 102.0},
                 "dividends": [{"date": "2026-03-01", "amount": 2.0}],
             },
-            "metrics": {"ret_1y": 99.0},  # 誘餌
+            "metrics": {"ret_1y": 99.0},  # 誘餌:perf 應勝出
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        assert r["_tr1y_method"] == "mk_simple"
-        # nav 漲 2% + div 2/100 = 2% → 4% 含息 < 配息 7% → 吃本金
-        assert "吃本金" in r["status"]
+        # perf['1Y']=15 為最高優先 → tr1y=15, adr=7 → gap=-8 → 🟢 健康
+        assert "wb01" in r["_tr1y_method"], (
+            f"v19.175 應走 wb01 (perf['1Y']) 最權威,實際 {r['_tr1y_method']}"
+        )
+        assert "健康" in r["status"]
 
     def test_v19148_helper_signature_unchanged(self):
         """v19.148 既有 caller 介面 100% 相容(僅 fund dict input,return dict)。"""

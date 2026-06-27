@@ -161,57 +161,72 @@ def dividend_safety(total_return: Optional[float],
         dividend_yield: 年化配息率 %
         nav_change    : 淨值變化率 % (可選，用於交叉驗證)
     回傳：
-        {status, coverage, eating_principal, alert_level, message}
+        {status, coverage, gap_pct, eating_principal, alert_level, message}
 
-    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal
-    (output schema 100% 向後相容,5 級分類門檻保留於本 wrapper)。
+    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal。
+    v19.175:5 級 coverage 門檻 → 3 色 gap_pct > 2% 制(對齊 MK 老師「化繁為簡」),
+            與健診總表 `div_health_light_for_pair()` SSOT 同源。
+            「嚴重吃本金(報酬為負)」獨立旗標保留為「報酬為負」修飾,
+            主分類仍走 3 色。output schema 向後相容:coverage / eating_principal
+            欄位保留,新增 gap_pct 欄位。
     """
     # 保留 v18.x precedence:div ≤ 0 檢查優先於 missing return
-    # (canonical 把 missing 視為比 no_dividend 優先,本 wrapper 為 UI 顯示需要反過來)
     if dividend_yield is not None and dividend_yield <= 0:
         return {"status": "N/A", "alert_level": "grey",
-                "message": "無配息資料", "coverage": None, "eating_principal": False}
+                "message": "無配息資料", "coverage": None, "gap_pct": None,
+                "eating_principal": False}
 
     from services.fund_dividend_health import classify_eating_principal
     core = classify_eating_principal(total_return, dividend_yield)
 
     if core.is_data_missing:
         return {"status": "無報酬資料", "alert_level": "grey",
-                "message": "需要含息報酬率資料", "coverage": None, "eating_principal": False}
+                "message": "需要含息報酬率資料",
+                "coverage": None, "gap_pct": None, "eating_principal": False}
     if core.is_no_dividend:
-        # 理論上不會走到(上方已先檢 div ≤ 0),保留為防禦性 fallback
         return {"status": "N/A", "alert_level": "grey",
-                "message": "無配息資料", "coverage": None, "eating_principal": False}
+                "message": "無配息資料",
+                "coverage": None, "gap_pct": None, "eating_principal": False}
 
-    # 5 級分類門檻(本 wrapper UI 需求,保留)
+    # v19.175:3 色制 gap_pct 門檻 — 與 fund_dividend_calculator.div_health_light_for_pair
+    # 完全同源(都委派 classify_eating_principal 的 core.gap_pct),對齊「化繁為簡」MK 原則。
+    from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT
     coverage = round(core.coverage_ratio, 4)
+    gap_pct = round(core.gap_pct, 4)  # = div - ret;正 = 吃本金深度
     eating = core.is_eating
-    if coverage < 0:
-        status = "🔴 嚴重吃本金（報酬為負）"
-        alert  = "red"
-        msg    = f"含息報酬{total_return:.1f}% < 0，配息{dividend_yield:.1f}%，本金快速流失"
-    elif coverage < 1.0:
-        status = "🔴 吃本金警示"
-        alert  = "red"
-        msg    = f"含息報酬{total_return:.1f}% < 配息{dividend_yield:.1f}%，覆蓋率{coverage:.2f}"
-    elif coverage < 1.2:
-        status = "🟡 邊緣（建議觀察）"
-        alert  = "yellow"
-        msg    = f"覆蓋率{coverage:.2f}，略高於1但空間不足，需觀察淨值趨勢"
-    else:
-        status = "🟢 健康"
-        alert  = "green"
-        msg    = f"含息報酬{total_return:.1f}% 充分覆蓋配息{dividend_yield:.1f}%，覆蓋率{coverage:.2f}"
 
-    # 淨值交叉驗證(本 wrapper 獨有)
+    if gap_pct <= 0:
+        status = "🟢 健康"
+        alert = "green"
+        msg = (f"含息報酬{total_return:.1f}% 充分覆蓋配息{dividend_yield:.1f}%,"
+               f"覆蓋率{coverage:.2f}")
+    elif gap_pct <= NEAR_DIVIDEND_WARNING_PCT:
+        status = "🟡 警示"
+        alert = "yellow"
+        msg = (f"含息報酬{total_return:.1f}% 略低於配息{dividend_yield:.1f}%,"
+               f"缺口{gap_pct:.1f}pp(警戒線{NEAR_DIVIDEND_WARNING_PCT:.0f}pp 內,建議觀察)")
+    else:
+        # 嚴重吃本金(報酬為負)獨立修飾
+        if total_return is not None and total_return < 0:
+            status = "🔴 嚴重吃本金(報酬為負)"
+            msg = (f"含息報酬{total_return:.1f}% < 0,配息{dividend_yield:.1f}%,"
+                   f"缺口{gap_pct:.1f}pp,本金快速流失")
+        else:
+            status = "🔴 吃本金"
+            msg = (f"含息報酬{total_return:.1f}% < 配息{dividend_yield:.1f}%,"
+                   f"缺口{gap_pct:.1f}pp,長期將侵蝕本金")
+        alert = "red"
+
+    # 淨值交叉驗證(本 wrapper 獨有,獨立輔助警示)
     nav_warn = None
     if nav_change is not None and nav_change < -5:
-        nav_warn = f"⚠️ 淨值下跌{nav_change:.1f}%，配息源頭值得確認"
+        nav_warn = f"⚠️ 淨值下跌{nav_change:.1f}%,配息源頭值得確認"
 
     return {
         "status":          status,
         "alert_level":     alert,
         "coverage":        coverage,
+        "gap_pct":         gap_pct,
         "eating_principal": eating,
         "message":         msg,
         "nav_warning":     nav_warn,

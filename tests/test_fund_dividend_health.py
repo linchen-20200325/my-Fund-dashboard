@@ -138,32 +138,54 @@ class TestDividendSafetyGolden:
         assert out["eating_principal"] is False
 
     def test_serious_eating_negative_return(self):
+        # v19.175:gap = 5-(-2) = 7pp > 2pp + ret < 0 → 嚴重吃本金(報酬為負)
         out = _ds(-2.0, 5.0)
         assert "嚴重吃本金" in out["status"]
         assert out["alert_level"] == "red"
         assert out["eating_principal"] is True
         assert out["coverage"] == -0.4
+        assert out["gap_pct"] == 7.0  # v19.175 新增欄位
 
     def test_eating_principal_red(self):
-        out = _ds(3.0, 5.0)
-        assert out["status"] == "🔴 吃本金警示"
+        # v19.175:gap = 5-1 = 4pp > 2pp → 🔴 吃本金(3 色制)
+        out = _ds(1.0, 5.0)
+        assert out["status"] == "🔴 吃本金"
         assert out["alert_level"] == "red"
         assert out["eating_principal"] is True
-        assert out["coverage"] == 0.6
+        assert out["coverage"] == 0.2
+        assert out["gap_pct"] == 4.0
 
-    def test_edge_yellow(self):
-        out = _ds(5.5, 5.0)  # coverage=1.1 → yellow
-        assert "邊緣" in out["status"]
+    def test_edge_yellow_within_warn_gap(self):
+        # v19.175:gap = 5-4 = 1pp ∈ (0, 2pp] → 🟡 警示
+        out = _ds(4.0, 5.0)
+        assert "警示" in out["status"]
         assert out["alert_level"] == "yellow"
-        assert out["eating_principal"] is False
-        assert out["coverage"] == 1.1
+        # gap > 0 → 技術上吃本金,但在警戒線內
+        assert out["eating_principal"] is True
+        assert out["gap_pct"] == 1.0
 
-    def test_healthy_green(self):
-        out = _ds(8.0, 5.0)  # coverage=1.6 → green
+    def test_boundary_gap_equals_warn_threshold(self):
+        # v19.175 邊界 case:gap = 2.0pp 剛好等於警戒線 → 仍歸黃(<=)
+        out = _ds(3.0, 5.0)
+        assert "警示" in out["status"]
+        assert out["alert_level"] == "yellow"
+        assert out["gap_pct"] == 2.0
+
+    def test_healthy_green_full_coverage(self):
+        # v19.175:gap = 5-8 = -3pp ≤ 0 → 🟢 健康
+        out = _ds(8.0, 5.0)
         assert out["status"] == "🟢 健康"
         assert out["alert_level"] == "green"
         assert out["eating_principal"] is False
         assert out["coverage"] == 1.6
+        assert out["gap_pct"] == -3.0
+
+    def test_healthy_green_break_even(self):
+        # v19.175:gap = 5-5 = 0 → 🟢 健康(持平視同覆蓋)
+        out = _ds(5.0, 5.0)
+        assert out["status"] == "🟢 健康"
+        assert out["alert_level"] == "green"
+        assert out["gap_pct"] == 0.0
 
     def test_nav_cross_check_warning(self):
         out = _ds(3.0, 5.0, nav_change=-7.0)
