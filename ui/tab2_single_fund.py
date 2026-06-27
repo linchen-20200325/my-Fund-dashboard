@@ -780,6 +780,67 @@ def render_single_fund_tab() -> None:
                 except Exception as _kpi_e:  # noqa: BLE001
                     st.caption(f"吃本金 KPI 計算異常：{str(_kpi_e)[:60]}")
 
+                # v19.181:📊 進階指標(入門 KPI 之外的細項 — Sortino/Calmar/Alpha/Expense
+                # /MaxDD/3Y-5Y 年化/3-3-3 篩/MK 換標的建議)— 共用 fund_health_report SSOT,
+                # 跨 Tab3/健診 同源。
+                try:
+                    with st.expander("📊 進階指標(Sortino / Calmar / Alpha / Expense / 3Y-5Y / 3-3-3 / 換標的建議)", expanded=False):
+                        from services.fund_health_report import (
+                            build_dividend_summary_row,
+                            build_health_analysis_row,
+                        )
+                        _adv_fd = {
+                            "moneydj_raw": mj_raw,
+                            "metrics": m,
+                            "series": s,
+                            "dividends": divs,
+                            "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                            "fund_name": fd.get("fund_name") or mj_raw.get("fund_name") or code,
+                        }
+                        _adv_h = build_health_analysis_row(_adv_fd, code)
+                        _adv_d = build_dividend_summary_row(_adv_fd, code, principal_twd=None)
+
+                        def _fmt_pct(v):
+                            return f"{v:.2f}%" if isinstance(v, (int, float)) else "—"
+                        def _fmt_num(v):
+                            return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
+
+                        st.markdown("##### 🩺 健康分析(4D Grade + 6 進階指標)")
+                        cA, cB, cC, cD = st.columns(4)
+                        cA.metric("4D Grade", _adv_h.get("4D Grade") or "—",
+                                  help="A≥80 / B≥65 / C≥50 / D≥35 / F<35(SSOT v19.177)")
+                        cB.metric("4D Score", _fmt_num(_adv_h.get("4D Score")))
+                        cC.metric("Sharpe 1Y", _fmt_num(_adv_h.get("Sharpe 1Y")))
+                        cD.metric("Sortino", _fmt_num(_adv_h.get("Sortino")))
+
+                        cE, cF, cG, cH = st.columns(4)
+                        cE.metric("Calmar", _fmt_num(_adv_h.get("Calmar")))
+                        cF.metric("Alpha %", _fmt_pct(_adv_h.get("Alpha %")),
+                                  help="1Y 含息 − 年化配息率")
+                        cG.metric("費用率 %", _fmt_pct(_adv_h.get("費用率 %")))
+                        cH.metric("Max DD %", _fmt_pct(_adv_h.get("Max DD %")))
+
+                        cI, cJ, cK = st.columns(3)
+                        cI.metric("3Y 年化 %", _fmt_pct(_adv_h.get("3Y 年化 %")))
+                        cJ.metric("5Y 年化 %", _fmt_pct(_adv_h.get("5Y 年化 %")))
+                        cK.metric("MK 3-3-3", _adv_h.get("MK 3-3-3", "⬜"))
+
+                        st.markdown("##### 💰 換標的建議(MK 4 規則心型警結合)")
+                        st.markdown(
+                            f"**{_adv_d.get('換標的建議', '⬜ 資料不足')}**　"
+                            f"<span style='color:#888;font-size:11px'>"
+                            f"{_adv_d.get('_換標的 detail', '')}</span>",
+                            unsafe_allow_html=True,
+                        )
+                        st.caption(
+                            "MK 4 規則:(a) 吃本金且持有 ≥ 1 年 / (b) 4D Grade F / "
+                            "(c) 3-3-3 未通過且持有 ≥ 3 年 / (d) Sharpe<0 且 max_dd<-30%。"
+                            "任一中 → 🔴 換 / 1-2 觀察 → 🟡 / 全未中 → 🟢。"
+                            "**Tab2 單檔無 user 持有期 → (a)(c) 用基金成立年數判定**。"
+                        )
+                except Exception as _adv_e:  # noqa: BLE001
+                    st.caption(f"⬜ 進階指標渲染失敗:{type(_adv_e).__name__}: {str(_adv_e)[:60]}")
+
                 st.markdown("### ③ 風險指標 & 配息")
                 # 關鍵指標 + 配息
                 col_a, col_b = st.columns(2)

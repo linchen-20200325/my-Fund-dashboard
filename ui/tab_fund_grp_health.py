@@ -79,7 +79,9 @@ def render_fund_grp_health_tab() -> None:
         )
         _funds_extra = []
 
-    _render_health_table(rows, funds_extra=_funds_extra)
+    # v19.181:模組化 3 表 wrapper(健康分析 / 配息相關 / 實際購買結果)。
+    # funds_extra 透給 _render_health_table 內部用(基金體檢 PK + 健診卡)。
+    _render_health_3tables(rows, funds_extra=_funds_extra)
 
     # v19.58 — 其餘進階貼圖區塊（真實收益矩陣 + 投資試算 + 持股 + 多檔比較 + AI…）。
     # 基金體檢 PK + 4 大健診卡已上移至健診總表之前，不再由此區塊渲染（避免上下重複）。
@@ -332,6 +334,108 @@ def _render_mj_freshness_banner(ok_rows: list[dict]) -> None:
         for _r in ok_rows
     ]
     render_mj_freshness_banner(_items)
+
+
+def _render_health_3tables(rows: list[dict],
+                           funds_extra: list | None = None) -> None:
+    """v19.181 3 表模組化渲染:① 健康分析 ② 配息相關 ③ 實際購買結果(既有 _render_health_table)。
+
+    共用 SSOT row builder(`services.fund_health_report`)讓 Tab3 也能同源渲染。
+    每張表獨立 dataframe,user 可選關注的維度。
+
+    Args:
+        rows: process_one_fund 回傳的 row list
+        funds_extra: v19.189 基金體檢 PK + 健診卡資料(透給 _render_health_table 用,
+                     Tab3 caller 不傳則 None)
+    """
+    if not rows:
+        return
+    import pandas as pd
+    from streamlit import column_config as _cc
+    from services.fund_health_report import (
+        DIVIDEND_COLUMNS,
+        HEALTH_COLUMNS,
+        build_dividend_summary_row,
+        build_health_analysis_row,
+    )
+
+    ok_rows = [r for r in rows if r.get("ok")]
+    if not ok_rows:
+        _render_health_table(rows, funds_extra=funds_extra)
+        return
+
+    # ── 表 ① 健康分析(4D Grade + 6 進階指標 + 3-3-3)──────────────
+    st.markdown("#### 🩺 ① 健康分析表（4D Grade + 6 進階指標 + MK 3-3-3）")
+    st.caption(
+        "**4D Grade** 為基金健康度評等 SSOT(配息覆蓋 / Sharpe / 走勢 / 低波動 4 維)。"
+        "Sortino / Calmar / Alpha / 費用率為進階指標(無評等,僅供對照)。"
+        "Max DD / 3Y/5Y 年化 / 3-3-3 篩為長線挑核心資產輔助。"
+    )
+    _health_rows = []
+    for _r in ok_rows:
+        _fd = _r.get("_fund_raw") or {}
+        _code = _r.get("code", "")
+        _health_rows.append(build_health_analysis_row(_fd, _code))
+    _health_df = pd.DataFrame(_health_rows)
+    _health_cfg = {
+        "code": _cc.TextColumn("代號", width="small"),
+        "基金名": _cc.TextColumn("基金名", width="medium"),
+        "4D Grade": _cc.TextColumn("4D Grade", width="small",
+            help="A≥80 / B≥65 / C≥50 / D≥35 / F<35(SSOT v19.177)"),
+        "4D Score": _cc.NumberColumn("4D Score", format="%.1f", width="small"),
+        "Sharpe 1Y": _cc.NumberColumn("Sharpe 1Y", format="%.2f"),
+        "Sortino": _cc.NumberColumn("Sortino", format="%.2f"),
+        "Calmar": _cc.NumberColumn("Calmar", format="%.2f"),
+        "Alpha %": _cc.NumberColumn("Alpha %", format="%.2f %%",
+            help="1Y 含息報酬 − 年化配息率(真實收益,非貨幣 Alpha)"),
+        "費用率 %": _cc.NumberColumn("費用率 %", format="%.2f %%"),
+        "Max DD %": _cc.NumberColumn("Max DD %", format="%.2f %%"),
+        "3Y 年化 %": _cc.NumberColumn("3Y 年化 %", format="%.2f %%"),
+        "5Y 年化 %": _cc.NumberColumn("5Y 年化 %", format="%.2f %%"),
+        "MK 3-3-3": _cc.TextColumn("MK 3-3-3",
+            help="成立 ≥ 3 年 + 過去 3 年平均年化 > 7% → 通過"),
+    }
+    st.dataframe(
+        _health_df[HEALTH_COLUMNS], use_container_width=True, hide_index=True,
+        column_config={k: v for k, v in _health_cfg.items() if k in _health_df.columns},
+    )
+
+    # ── 表 ② 配息相關(adr + 1Y 含息 + 吃本金 + 換標的建議)─────
+    st.markdown("#### 💰 ② 配息相關表（含吃本金燈號 + MK 換標的建議）")
+    st.caption(
+        "**吃本金燈號 (1Y·MK)** 採郭俊宏老師 1Y 體檢:近一年含息報酬 < 年化配息率 → 🔴 吃本金。"
+        "**換標的建議**走 MK 4 規則心型警結合:"
+        "(a) 吃本金且持有 ≥ 1 年 / (b) 4D Grade F / "
+        "(c) 3-3-3 未通過且持有 ≥ 3 年 / (d) Sharpe<0 且 max_dd<-30%。"
+        "任一中 → 🔴 換 / 1-2 觀察 → 🟡 / 全未中 → 🟢。"
+    )
+    _div_rows = []
+    for _r in ok_rows:
+        _fd = _r.get("_fund_raw") or {}
+        _code = _r.get("code", "")
+        _div_rows.append(
+            build_dividend_summary_row(_fd, _code, principal_twd=None)
+        )
+    _div_df = pd.DataFrame(_div_rows)
+    _div_cfg = {
+        "code": _cc.TextColumn("代號", width="small"),
+        "基金名": _cc.TextColumn("基金名", width="medium"),
+        "1Y 含息 %": _cc.NumberColumn("1Y 含息 %", format="%.2f %%"),
+        "1Y 來源": _cc.TextColumn("1Y 來源",
+            help="wb01 / local_calc / ret_1y_total / NAV 年化"),
+        "年化配息率 %": _cc.NumberColumn("年化配息率 %", format="%.2f %%"),
+        "吃本金燈號 (1Y·MK)": _cc.TextColumn("吃本金燈號 (1Y·MK)"),
+        "換標的建議": _cc.TextColumn("換標的建議",
+            help="MK 4 規則綜合判定(hover 看細節)"),
+    }
+    st.dataframe(
+        _div_df[DIVIDEND_COLUMNS], use_container_width=True, hide_index=True,
+        column_config={k: v for k, v in _div_cfg.items() if k in _div_df.columns},
+    )
+
+    # ── 表 ③ 實際購買配息結果(既有大表 — 不動,只改 section title)──
+    st.markdown("#### 📦 ③ 實際購買配息結果（持有 meta + 累積 TWD 配息 + 全期實際/年化）")
+    _render_health_table(rows, funds_extra=funds_extra)
 
 
 def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> None:

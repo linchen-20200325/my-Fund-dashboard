@@ -2155,16 +2155,16 @@ def render_portfolio_tab() -> None:
         if _loaded_pf:
             try:
                 st.divider()
-                st.markdown("### 💊 持倉健診總表（共用 SSOT,本金用 invest_twd）")
+                st.markdown("### 💊 持倉健診（共用 SSOT 3 表:健康分析 / 配息相關 / 實際購買結果）")
                 st.caption(
-                    "與「基金組合健診」Tab 完全同源"
-                    "(吃本金燈號 1Y·MK + MK 3-3-3 + 全期實際/年化雙軸)。"
-                    "本金:每檔用 user 實際 invest_twd(未填者預設 100 萬 TWD)。"
-                    "目的:看完配息金額後,**判斷是否需要換標的**。"
+                    "與「基金組合健診」Tab 完全同源(v19.181 模組化 3 表)。"
+                    "**① 健康分析**:4D Grade + Sharpe/Sortino/Calmar/Alpha/Expense/MaxDD + 3Y/5Y 年化 + 3-3-3 篩。"
+                    "**② 配息相關**:adr + 1Y 含息 + 吃本金燈號(1Y·MK)+ **MK 4 規則換標的建議**。"
+                    "**③ 實際購買結果**:per-fund 用 invest_twd 為本金(未填預設 100 萬 TWD)。"
                 )
                 from ui.tab_fund_grp_health import (
                     process_one_fund as _proc_health,
-                    _render_health_table as _render_health_tbl,
+                    _render_health_3tables as _render_health_tbl,
                 )
                 from concurrent.futures import (
                     ThreadPoolExecutor as _TPE_h,

@@ -72,6 +72,18 @@ GRADE_CUTOFFS_4D: tuple[int, int, int, int] = (80, 65, 50, 35)
 # 取代 portfolio_service 6 因子 (75, 55, 40) 三級制(已 deprecated for grading,
 # 6F dict 仍保留供 Sortino / Calmar / Alpha / 費用率單獨顯示)。
 
+# ── 換標的建議 MK 4 規則門檻(services/fund_replacement_verdict.py,v19.181)──
+# 任一規則中 → 🔴 建議換 / 1-2 條件靈領未達 hard trigger → 🟡 觀察 / 全未中 → 🟢 保留
+REPLACE_RULE_A_MIN_HOLD_YEARS: float = 1.0
+# (a) 吃本金 1Y·MK 且持有 ≥ 1 年 — < 1 年不算(短期 NAV 波動正常)
+REPLACE_RULE_C_MIN_HOLD_YEARS: float = 3.0
+# (c) 3-3-3 未通過且持有 ≥ 3 年 — < 3 年屬於「還沒驗證期」,不該據此換
+REPLACE_RULE_D_SHARPE_MAX: float = 0.0
+REPLACE_RULE_D_MAX_DD_MIN_PCT: float = -30.0
+# (d) Sharpe < 0 且 max_dd < -30%(極差雙條件)
+REPLACE_OBSERVE_GRADE: str = "D"
+# 4D Grade D 是「警示偏弱」(C/D 邊緣),計 1 個觀察分;F < 35 計 1 個 hard trigger
+
 # ── Risk score 加權(precision_service.py:64, risk_calibration.py:23)─
 RISK_SCORE_VIX_WEIGHT_RATIO: float = 0.3
 RISK_SCORE_HY_WEIGHT_RATIO: float = 0.4
