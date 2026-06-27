@@ -748,13 +748,14 @@ def render_single_fund_tab() -> None:
                                      "green": "🟢"}.get(_kpi_al, "⬜")
                         _kpi_title = f"吃本金檢查 — {_kpi_icon} {_kpi_ds.get('status','')}"
                         _kpi_msg = _kpi_ds.get("message", "")
-                        # v18.42 標示 1Y 報酬來源（非 metrics 才提示，避免雜訊）
-                        if _kpi_tr1y_src and _kpi_tr1y_src != "metrics":
-                            _src_note = {
-                                "perf": "MoneyDJ 績效表",
-                                "nav_actual": "由 NAV 自算（足 1Y）",
-                            }.get(_kpi_tr1y_src, f"由 NAV 線性年化外推（樣本 {_kpi_tr1y_src.replace('nav_annualized_','')}）")
-                            _kpi_msg = f"{_kpi_msg}　〔1Y 來源：{_src_note}〕"
+                        # v19.178:_src_note dict 過時清掉(舊 key 'perf'/'nav_actual'/
+                        # 'nav_annualized_*' v19.175 後皆不命中 → fallback 文字「樣本 wb01
+                        # (MoneyDJ 官方)」自相矛盾)。SSOT compute_1y_total_return 已回
+                        # 人類可讀格式("wb01 (MoneyDJ 官方)" / "本地還原淨值法 (v18.71)" /
+                        # "ret_1y_total (本地, Nd 窗口)" / "NAV 序列年化 (Nd 外推)" / "—"),
+                        # 直接顯示即可。
+                        if _kpi_tr1y_src and _kpi_tr1y_src not in ("metrics", "—", ""):
+                            _kpi_msg = f"{_kpi_msg}　〔1Y 來源:{_kpi_tr1y_src}〕"
                         _kpi_cov_txt = (f"{_kpi_cov:.2f}" if _kpi_cov is not None
                                         else "—")
 

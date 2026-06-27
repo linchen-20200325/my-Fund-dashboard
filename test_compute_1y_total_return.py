@@ -82,3 +82,71 @@ def test_nav_series_fallback():
     assert v is not None
     assert abs(v - 10.0) < 1.0   # ~10% over 1 year
     assert "NAV" in src
+
+
+# ──────────────────────────────────────────────────────────
+# v19.178 — shape normalize regression(健診表平坦 fd 對齊 Tab2 nested)
+# ──────────────────────────────────────────────────────────
+class TestFlatFdShapeNormalize:
+    """v19.178 守:健診表 _auto_fetch_moneydj() 平坦 fd 直接傳入 SSOT 函式時,
+    必須能拿到 perf['1Y'](wb01)而非走 NAV 序列年化 fallback。
+
+    修「FTZU8 在 Tab2(nested)🟢 健康 vs 健診表(平坦)🔴 吃本金 結論相反」根因。
+    """
+
+    def test_flat_fd_with_perf_1y_uses_wb01(self):
+        """平坦 fd:top-level 有 perf 但無 moneydj_raw → 應自動 wrap 命中 wb01 perf['1Y']。"""
+        flat_fd = {
+            "perf": {"1Y": 12.35},
+            "perf_source": "wb01",
+            "series": None,
+            "metrics": {},
+            "dividends": [],
+            "moneydj_div_yield": 7.49,
+        }
+        v, src = compute_1y_total_return(flat_fd)
+        assert v == 12.35, (
+            f"平坦 fd 應拿到 wb01 perf['1Y']=12.35,實際 {v}(若走 NAV fallback 才會 None / 不準)"
+        )
+        assert "wb01" in src, f"src 應標 wb01,實際 {src}"
+
+    def test_flat_fd_vs_nested_same_result(self):
+        """同樣資料用 flat 與 nested 兩種 shape 包,SSOT 函式應回相同結果。"""
+        flat_fd = {
+            "perf": {"1Y": 12.35},
+            "perf_source": "wb01",
+            "metrics": {"ret_1y_total": 99.0},  # 故意設離譜值,perf 優先應勝出
+        }
+        nested_fd = {
+            "moneydj_raw": {"perf": {"1Y": 12.35}},
+            "perf_source": "wb01",
+            "metrics": {"ret_1y_total": 99.0},
+        }
+        v_flat, src_flat = compute_1y_total_return(flat_fd)
+        v_nested, src_nested = compute_1y_total_return(nested_fd)
+        assert v_flat == v_nested == 12.35, (
+            f"flat vs nested 結果不同(v_flat={v_flat}, v_nested={v_nested})— SSOT 違反"
+        )
+
+    def test_flat_fd_without_perf_falls_back_normally(self):
+        """平坦 fd 但 perf 也缺 → 走 metrics fallback(不該強迫 wrap 後出錯)。"""
+        flat_fd = {
+            "perf": {},  # top-level perf 是空 dict
+            "series": None,
+            "metrics": {"ret_1y_total": 8.0},
+            "dividends": [],
+        }
+        v, src = compute_1y_total_return(flat_fd)
+        assert v == 8.0
+        assert "ret_1y_total" in src
+
+    def test_nested_fd_unchanged_after_normalize(self):
+        """既有 nested fd 不應被 normalize 邏輯破壞(向後相容)。"""
+        nested_fd = {
+            "moneydj_raw": {"perf": {"1Y": 15.0}},
+            "perf_source": "wb01",
+            "metrics": {"ret_1y_total": 99.0},
+        }
+        v, src = compute_1y_total_return(nested_fd)
+        assert v == 15.0
+        assert "wb01" in src

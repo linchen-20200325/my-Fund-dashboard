@@ -22,13 +22,29 @@ def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
     """從 fund object 取「1Y 含息報酬率(%)」+ 來源標籤。
 
     Args:
-        fund_obj: 含 metrics / moneydj_raw / series 任一的 dict。
-                  支援 fund_data (Tab2) 與 portfolio_funds[i] (Tab3) 兩種 schema。
+        fund_obj: 支援 **3 種 shape**:
+          - **Nested**(Tab2 / Tab3):`{metrics, moneydj_raw: {perf, ...}, series, perf_source}`
+          - **Flat**(健診表 v19.178+ via `_auto_fetch_moneydj()` 直接結果):
+            `{perf, series, metrics, dividends, perf_source, ...}` — 整包就是 MoneyDJ raw
+          - **Hybrid**(legacy):mixed
+        v19.178 入口加 shape detect:flat → 自動 wrap 成 nested,避免拿不到 perf['1Y'] 走錯 fallback。
 
     Returns:
         (value, source_label)
         value=None 表示所有來源均無資料
     """
+    # v19.178 shape normalize:flat fd(top-level 有 perf 但無 moneydj_raw)
+    # → 把整包當 moneydj_raw,後續 mj.get("perf") 路徑能命中。
+    # 修「健診表 _auto_fetch_moneydj 平坦 fd 強迫走 NAV 序列年化 fallback,
+    # 跟 Tab2 nested 拿 wb01 perf['1Y'] 結論不同(🟢 vs 🔴)」。
+    if "moneydj_raw" not in fund_obj and "perf" in fund_obj:
+        fund_obj = {
+            "moneydj_raw": fund_obj,
+            "metrics": fund_obj.get("metrics") or {},
+            "series": fund_obj.get("series"),
+            "perf_source": fund_obj.get("perf_source"),
+        }
+
     m = fund_obj.get("metrics") or {}
     mj = fund_obj.get("moneydj_raw") or {}
     pf = mj.get("perf") or {}
