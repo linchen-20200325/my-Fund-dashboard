@@ -92,9 +92,8 @@ def _stub_tp():
 def _build_driver(body: str) -> str:
     """共用 driver:sys.path + stub 網路 fetcher + 灌 session_state"""
     return f'''
-import sys
-sys.path.insert(0, "/home/user/my-Fund-dashboard")
-import os
+import sys, os
+sys.path.insert(0, os.getcwd())
 os.environ["FRED_API_KEY"] = "x" * 32
 
 # stub 所有網路 fetcher(避免 CI 卡住、避免本機環境差異)
@@ -238,7 +237,7 @@ def test_no_nested_expanders_in_tab1_macro():
     Streamlit 1.x 禁止 nested expanders,會在 render 時拋 StreamlitAPIException。
     v19.139 e2354f1 → 線上炸,v19.143 修復後加此守衛。"""
     import ast
-    src = open("/home/user/my-Fund-dashboard/ui/tab1_macro.py", encoding="utf-8").read()
+    src = open("ui/tab1_macro.py", encoding="utf-8").read()
     tree = ast.parse(src)
 
     def _is_expander_call(node):

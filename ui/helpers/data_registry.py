@@ -138,8 +138,13 @@ def _update_data_registry():
         from repositories.macro_repository import fred_get_next_release_date as _fred_next_rel
     except Exception:
         _fred_next_rel = None
-    _fred_key = (st.secrets.get("FRED_API_KEY","")
-                 or os.environ.get("FRED_API_KEY",""))
+    # v19.196 CI fix:st.secrets 在無 secrets.toml(CI / 純 .py)會 raise
+    # StreamlitSecretNotFoundError,需 try/except 降級到 env(也讓無此 secret 的部署不炸)。
+    try:
+        _fred_key = st.secrets.get("FRED_API_KEY", "")
+    except Exception:
+        _fred_key = ""
+    _fred_key = _fred_key or os.environ.get("FRED_API_KEY", "")
 
     def _freshness(date_str: str, freq: str,
                    indicator_key: str = "") -> tuple[str, str, str]:
