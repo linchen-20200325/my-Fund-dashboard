@@ -380,6 +380,23 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     cum=(1+log_ret).cumprod()
     max_dd=round(float(((cum-cum.cummax())/cum.cummax()).min())*100,2)
     def _ret(n): return round((now-float(s.iloc[-n]))/float(s.iloc[-n])*100,2) if len(s)>=n else None
+
+    # v19.177 #2A:NY 報酬雙欄 SSOT — 累計 (cum) + 年化 (ann),
+    # 解決「健診表把 metrics.ret_3y 當累計開根,但 fund_service 寫的可能已年化」implicit
+    # contract 陷阱。caller 一律讀 ret_NY_ann 用,讀 ret_NY_cum 顯示原始累計。
+    # ret_NY(無後綴)保留 = ret_NY_cum 為向後相容,新 caller 不應使用。
+    def _annualize_cum_pct(cum_pct, years):
+        """純 NAV 累計 % → 年化 %,(1+r)^(1/N)-1 標準公式。失敗回 None(§1 Fail Loud)。"""
+        if cum_pct is None or years <= 0:
+            return None
+        try:
+            return round(((1.0 + float(cum_pct) / 100.0) ** (1.0 / years) - 1.0) * 100.0, 2)
+        except (ValueError, ZeroDivisionError, OverflowError):
+            return None
+    _ret_3y_cum = _ret(3 * TRADING_DAYS_PER_YEAR)
+    _ret_5y_cum = _ret(5 * TRADING_DAYS_PER_YEAR)
+    _ret_3y_ann = _annualize_cum_pct(_ret_3y_cum, 3)
+    _ret_5y_ann = _annualize_cum_pct(_ret_5y_cum, 5)
     # v18.53/v18.55/v18.60/v18.61/v18.65/v18.71: 境內基金 MoneyDJ wb01 不存在 → 本地計算含息
     # v18.71: 改用「還原淨值法（配息再投資複利）」— 透過 calculate_fund_total_return()
     #         比舊版「NAV 變化 + 累積配息率」（單利加總）更接近 MoneyDJ wb01 含息官方值，
@@ -521,11 +538,19 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         std_source="wb07" if (risk_override and risk_override.get("risk_table")) else "nav",
         risk_table=risk_tbl,
         # 夏普優先用 wb07（更精確），自算值需要60+筆
+        # v19.177 #5A:加 sharpe_source provenance 標記,ai_service / UI hover 顯示來源
         sharpe=(
             safe_float(risk_tbl.get("一年",{}).get("Sharpe")) or
             safe_float(risk_tbl.get("六個月",{}).get("Sharpe")) or
             sharpe
         ),
+        sharpe_source=(
+            "wb07_1y" if safe_float(risk_tbl.get("一年", {}).get("Sharpe")) is not None
+            else "wb07_6m" if safe_float(risk_tbl.get("六個月", {}).get("Sharpe")) is not None
+            else "self_calc" if sharpe is not None
+            else None
+        ),
+        max_drawdown_source="self_calc",  # max_dd 永遠自算(cum-cummax 算式,fund_service.py:381)
         # F-RECON-1 phase 3 v19.88 — Sharpe 雙演算法對帳(self-calc vs MoneyDJ wb07)
         sharpe_reconcile=_reconcile_sharpe_pair(
             self_calc=sharpe,
@@ -535,7 +560,10 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         ma20=round(float(s.tail(20).mean()),4) if len(s)>=20 else None,
         ma60=round(float(s.tail(60).mean()),4) if len(s)>=60 else None,
         ret_1w=_ret(6),ret_1m=_ret(22),ret_3m=_ret(65),
-        ret_6m=_ret(130),ret_1y=_ret(TRADING_DAYS_PER_YEAR),ret_3y=_ret(3 * TRADING_DAYS_PER_YEAR),
+        ret_6m=_ret(130),ret_1y=_ret(TRADING_DAYS_PER_YEAR),
+        # v19.177 #2A:NY 雙欄 SSOT。ret_3y / ret_5y 保留 = _cum 向後相容(deprecated)
+        ret_3y=_ret_3y_cum, ret_3y_cum=_ret_3y_cum, ret_3y_ann=_ret_3y_ann,
+        ret_5y_cum=_ret_5y_cum, ret_5y_ann=_ret_5y_ann,
         ret_1y_total=_ret_1y_total,   # v18.53 含息：NAV 變化 + 累積配息率
         ret_1y_window_days=_ret_1y_window_days,  # v18.65: 計算窗口天數（None / 30~365 / >=365）
         annual_div=round(annual_div,4),monthly_div=round(monthly_div,4),

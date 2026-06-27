@@ -46,12 +46,29 @@ def calc_fund_factor_score(fund_data: Dict,
                            expense_ratio: Optional[float] = None) -> Dict:
     """
     六因子評分：Sharpe / Sortino / MaxDD / Calmar / Alpha / 費用率
+
+    **⚠️ v19.177 #3A DEPRECATED for grading**
+    -------------------------------------------
+    本函式 grade 計算結果**不再用於全站基金評等** — 評等統一走
+    `services/fund_health.compute_4d_health` SSOT(配息/Sharpe/走勢/低波動 4 維)。
+
+    本函式保留用途:`factors` dict 內提供 4D 無法補的進階指標供 UI 單獨顯示:
+        - Sortino(下檔風險)
+        - Calmar(報酬/最大回撤比)
+        - Alpha(超額報酬)
+        - ExpenseRatio(費用率)
+    這四項仍可在「健診詳表」/「進階指標卡」單獨顯示為對照欄。
+
+    呼叫端需求變更:不要再從本函式 grade 欄位讀評等,改用 compute_4d_health。
+    取 Sortino/Calmar/Alpha 個別值仍可從 factors[...]["value"] 讀。
+
     輸入：
         fund_data   : 含 perf(1Y/3Y/5Y)、metrics(max_drawdown, sharpe 等) 的 dict
         risk_table  : MoneyDJ 風險表（含 Sharpe、標準差 等）
         expense_ratio: 費用率 % (optional)
     回傳：
         {"score": 0~100, "grade": "A/B/C/D", "factors": {...}}
+        (score / grade 為遺留欄位,不再用於評等)
     """
     factors = {}
     total_w = 0.0

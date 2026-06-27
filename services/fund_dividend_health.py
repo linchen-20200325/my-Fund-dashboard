@@ -312,6 +312,79 @@ def compute_1y_total_return_mk_simple(
     return round(ret_pct, 4), meta
 
 
+def _resolve_adr_with_fallback(fund: dict) -> tuple[Optional[float], str]:
+    """年化配息率(adr)3 層 fallback chain SSOT(v19.177)。
+
+    將原本散在 `check_eating_principal_1y_mk`(2 層)與 `tab2_single_fund.py`
+    KPI banner(3 層)的 adr 取數邏輯合一,確保跨 Tab 同檔基金顯示同一 adr 值。
+
+    precedence(最權威 → 次選):
+        1. **MoneyDJ wb05 官方** `moneydj_div_yield`(支援 nested moneydj_raw 與 flat shape)
+        2. **本地自算** `metrics.annual_div_rate`
+        3. **歷史推算** `divs[]` 12 個月累積配息 / `metrics.nav`(或 `moneydj_raw.nav_latest`)
+
+    Args
+    ----
+    fund : dict
+        支援兩種 shape:
+        - Nested: `{moneydj_raw: {moneydj_div_yield, dividends, nav_latest}, metrics: {...}}`
+        - Flat: `{moneydj_div_yield: ..., dividends: ..., metrics: {...}}`
+
+    Returns
+    -------
+    (adr_pct, source_label)
+        adr_pct: float (%) 或 None(全 fallback 皆失敗)
+        source_label: 'moneydj_wb05' / 'metrics_annual_div_rate' / 'divs_12m_sum' / '—'
+    """
+    # 解析兩種 shape
+    if "moneydj_raw" in fund:
+        _mj = fund.get("moneydj_raw") or {}
+    else:
+        _mj = fund
+    _metrics = fund.get("metrics") or {}
+
+    # Layer 1: MoneyDJ wb05 官方
+    _mj_dy = _safe_float(_mj.get("moneydj_div_yield"))
+    if _mj_dy and _mj_dy > 0:
+        return _mj_dy, "moneydj_wb05"
+
+    # Layer 2: metrics.annual_div_rate(本地自算 N×freq/NAV)
+    _local = _safe_float(_metrics.get("annual_div_rate"))
+    if _local and _local > 0:
+        return _local, "metrics_annual_div_rate"
+
+    # Layer 3: divs[] 12 個月累積 / 現價(歷史推算 fallback)
+    _divs = fund.get("dividends") or _mj.get("dividends")
+    if _divs:
+        try:
+            import datetime as _dt
+            _cutoff = _dt.datetime.now() - _dt.timedelta(days=365)
+            _sum = 0.0
+            for _dd in _divs:
+                if not isinstance(_dd, dict):
+                    continue
+                _dt_str = (_dd.get("date") or "").replace("/", "-")
+                try:
+                    _dt_p = _dt.datetime.strptime(_dt_str[:10], "%Y-%m-%d")
+                except (ValueError, TypeError):
+                    continue
+                if _dt_p >= _cutoff:
+                    try:
+                        _sum += float(_dd.get("amount", 0) or 0)
+                    except (TypeError, ValueError):
+                        continue
+            _nav = _safe_float(_metrics.get("nav")) or _safe_float(_mj.get("nav_latest"))
+            if _sum > 0 and _nav and _nav > 0:
+                return (_sum / _nav) * 100.0, "divs_12m_sum"
+        except Exception as _e:
+            # §1 Fail Loud(降級):log + 走 None,不偽造
+            import sys as _sys
+            print(f'[_resolve_adr_with_fallback] divs 12M fallback fail: '
+                  f'{type(_e).__name__}: {_e}', file=_sys.stderr)
+
+    return None, "—"
+
+
 def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     """MK 老師 1Y 吃本金檢查 SSOT 入口(v19.175 回歸 wb01 業界複利優先)。
 
@@ -347,17 +420,9 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
       - `_tr1y_meta`: 仍保留欄位,內含 MK 嚴格單利對照值(若可算)便於 UI「業界 vs MK」對照顯示
     或 None(資料不足:adr 缺/tr1y 缺/adr ≤ 0)
     """
-    # 解析兩種 shape
-    if "moneydj_raw" in fund:
-        _mj = fund.get("moneydj_raw") or {}
-        _mj_dy = _safe_float(_mj.get("moneydj_div_yield"))
-    else:
-        _mj_dy = _safe_float(fund.get("moneydj_div_yield"))
-
-    _metrics = fund.get("metrics") or {}
-
-    # adr:MoneyDJ wb05 優先,fallback metrics.annual_div_rate
-    adr = _mj_dy if (_mj_dy and _mj_dy > 0) else _safe_float(_metrics.get("annual_div_rate"))
+    # adr v19.177:統一走 SSOT _resolve_adr_with_fallback(3 層 chain)
+    # 與 tab2_single_fund.py KPI banner 同源,免「Tab2 算得出但健診表回 None」散落
+    adr, _adr_source = _resolve_adr_with_fallback(fund)
     if adr is None or adr <= 0:
         return None
 
@@ -390,6 +455,7 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
         out["_tr1y_window_days"] = (_tr1y_meta.get("window_days")
                                     if _tr1y_meta else None)
         out["_tr1y_meta"] = _tr1y_meta
+        out["_adr_source"] = _adr_source  # v19.177 — adr 來源 SSOT 標記
     return out
 
 

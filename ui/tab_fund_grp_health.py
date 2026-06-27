@@ -190,13 +190,16 @@ def _process_one_fund(
                 _yrs_inc = (_dt333.date.today() - _first_d).days / 365.25
             except (ValueError, IndexError, TypeError):
                 _yrs_inc = None
-            # 3 年平均年化:metrics.ret_3y 為 3 年累計報酬,需開根號換算
-            _ret_3y_cum = _metrics.get("ret_3y")
-            _ann_3y = None
-            if _ret_3y_cum is not None:
+            # v19.177:metrics.ret_3y_ann 為 fund_service 統一計算的 3 年年化 SSOT
+            # (cum→ann 開根公式集中於 fund_service.calc_metrics _annualize_cum_pct)。
+            # 舊版 metrics 無 _ann 欄位時 fallback 自算,免破壞向後相容。
+            _ann_3y = _metrics.get("ret_3y_ann")
+            if _ann_3y is None:
+                _ret_3y_cum = _metrics.get("ret_3y_cum") or _metrics.get("ret_3y")
                 try:
-                    _cum = float(_ret_3y_cum) / 100.0
-                    _ann_3y = ((1.0 + _cum) ** (1.0 / 3.0) - 1.0) * 100.0
+                    if _ret_3y_cum is not None:
+                        _cum = float(_ret_3y_cum) / 100.0
+                        _ann_3y = ((1.0 + _cum) ** (1.0 / 3.0) - 1.0) * 100.0
                 except (TypeError, ValueError):
                     _ann_3y = None
             _333_r = check_333_principle(_yrs_inc, _ann_3y)

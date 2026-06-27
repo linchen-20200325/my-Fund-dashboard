@@ -95,6 +95,17 @@ def _build_snapshot(indicators: dict, phase_info: dict,
     pi = phase_info or {}
     lines = ["【數據快照 — AI 只能根據此快照分析，嚴禁自行搜尋外部資訊】"]
 
+    # v19.177 #5A:資料來源說明(metrics provenance)— 讓 AI 文字輸出與 UI 顯示同源透明
+    # 全站指標 SSOT:
+    #   - 1Y 含息報酬: services.fund_total_return.compute_1y_total_return
+    #       precedence: wb01(MoneyDJ 官方)> ret_1y_total(本地含息)> ret_1y(純 NAV)> NAV 外推
+    #   - 年化配息率: services.fund_dividend_health._resolve_adr_with_fallback
+    #       precedence: moneydj_div_yield(wb05)> metrics.annual_div_rate > divs 12M sum/NAV
+    #   - Sharpe: 優先 wb07 一年 > wb07 六個月 > 自算(metrics.sharpe_source 標記)
+    #   - σ / std_1y: 優先 wb07 > NAV 自算(metrics.std_source 標記)
+    #   - Max DD: NAV 累計法自算
+    lines.append("\n[資料來源] tr1y=wb01官方優先;adr=wb05官方優先;Sharpe/σ=wb07優先,自算備援。")
+
     # ── 1. 總經（只留關鍵 5 指標 + 位階）────────────────
     lines.append("\n[總經位階]")
     lines.append(

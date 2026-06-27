@@ -65,6 +65,13 @@ MJ_FRESH_DAYS_YELLOW: int = 7
 # NAV 延遲天數:🟢 ≤ 2d / 🟠 ≤ 7d / 🔴 > 7d。
 # 基金 NAV T+1~T+3 公布,7 天放寬覆蓋連假;> 7d 視為資料異常需確認。
 
+# ── 基金健康度 4D 評分 Grade cutoffs(services/fund_health.py,v19.177 #4B)──
+GRADE_CUTOFFS_4D: tuple[int, int, int, int] = (80, 65, 50, 35)
+# A ≥ 80 / B ≥ 65 / C ≥ 50 / D ≥ 35 / F < 35。
+# 全站個檔基金健康度評等 SSOT(Tab2 KPI 卡 / Tab3 fund 評等共用),
+# 取代 portfolio_service 6 因子 (75, 55, 40) 三級制(已 deprecated for grading,
+# 6F dict 仍保留供 Sortino / Calmar / Alpha / 費用率單獨顯示)。
+
 # ── Risk score 加權(precision_service.py:64, risk_calibration.py:23)─
 RISK_SCORE_VIX_WEIGHT_RATIO: float = 0.3
 RISK_SCORE_HY_WEIGHT_RATIO: float = 0.4
