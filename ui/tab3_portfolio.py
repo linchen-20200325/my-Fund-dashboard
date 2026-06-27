@@ -2201,6 +2201,60 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     except Exception:
         pass   # smoke-allow-pass — AI 快照加料失敗不阻斷主流程
 
+    # v19.183 Bug5：組合加權回撤 + 歷年漲跌幅 + 相關性摘要 → 餵 AI 判斷組合回撤風險
+    #   權重來自 sidebar invest_twd(缺則等權);全部走 services.portfolio_service 純函式。
+    try:
+        from services.portfolio_service import (  # noqa: PLC0415
+            compute_portfolio_drawdown as _pdd_fn,
+            compute_max_drawdown as _mdd_fn,
+            calc_correlation_matrix as _corr_fn,
+        )
+        _fd_for_dd = [{"code": f.get("code"), "series": f.get("series")}
+                      for f in loaded if f.get("series") is not None]
+        # 權重 = sidebar 實際投入本金 invest_twd(缺則 0,函式內歸一;全缺 → 等權)
+        _weights = {f.get("code"): (f.get("invest_twd", 0) or 0) for f in loaded}
+        if _fd_for_dd:
+            _pdd = _pdd_fn(_fd_for_dd, weights=_weights)
+            if _pdd.get("max_dd_pct") is not None:
+                _dd_line = (
+                    f"- **📉 組合加權最大回撤**：{_pdd['max_dd_pct']:.1f}%"
+                    f"（{_pdd.get('peak_date', '—')} 高點 → {_pdd.get('trough_date', '—')} 谷底，"
+                    f"納入 {_pdd['n_funds']} 檔 / {_pdd['n_obs']} 個共同交易日）")
+                if _pdd.get("note"):
+                    _dd_line += f"；註：{_pdd['note']}"
+                lines.append(_dd_line)
+                _yr = _pdd.get("yearly_returns") or {}
+                if _yr:
+                    _yr_txt = "、".join(f"{y}: {v:+.1f}%" for y, v in sorted(_yr.items()))
+                    lines.append(f"- **📅 組合歷年漲跌幅**：{_yr_txt}")
+            else:
+                lines.append(
+                    f"- **📉 組合回撤**：無法計算（{_pdd.get('note', '資料不足')}）")
+            # 逐檔最大回撤(前 5,供 AI 對照哪檔拖累組合)
+            _per_dd = []
+            for f in loaded[:5]:
+                if f.get("series") is None:
+                    continue
+                _d = _mdd_fn(f.get("series"))
+                if _d.get("max_dd_pct") is not None:
+                    _per_dd.append(f"{f.get('code')} {_d['max_dd_pct']:.1f}%")
+            if _per_dd:
+                lines.append(f"- **逐檔最大回撤（前5）**：{'、'.join(_per_dd)}")
+        # 相關性摘要(影子基金對 → 分散不足警示,影響組合回撤集中度)
+        _corr = _corr_fn(_fd_for_dd)
+        if _corr and _corr.get("shadow_pairs"):
+            _sp = _corr["shadow_pairs"][:3]
+            _sp_txt = "、".join(f"{a}↔{b}({c:.2f})" for a, b, c in _sp)
+            lines.append(
+                f"- **🔗 高相關（影子基金，{_corr.get('freq', '')}）**：{_sp_txt}"
+                f"；相關性高 → 分散不足，回撤時容易齊跌")
+        elif _corr is not None:
+            lines.append("- **🔗 持股/NAV 相關性**：無 ≥0.85 高相關對，分散度尚可")
+    except Exception as _e_dd:
+        import sys as _sys_dd  # noqa: PLC0415
+        print(f"[tab3_ai] drawdown/corr snapshot fail: {type(_e_dd).__name__}: {_e_dd}",
+              file=_sys_dd.stderr)
+
     # v18.160：配息現金/單位拆分估算（從 _v2_buf 撈 user 已設定的 div_cash_pct）
     # v18.276：抓即時 FX 給配息折算用（成本基礎仍 avg_fx）— user 反饋
     # 「將有換美元換台幣的匯率都改成即時匯率」
