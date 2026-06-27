@@ -105,3 +105,41 @@ class TestWiring:
     def test_fred_tga_is_ssot(self):
         src = open("shared/fred_series.py", encoding="utf-8").read()
         assert 'FRED_TGA: str = "WTREGEN"' in src, "FRED_TGA 須在 SSOT (fred_series.py)"
+
+
+class TestNetLiquiditySeries:
+    """v19.193 — 共用純函式 net_liquidity_series(顯示卡 + 評分同源 SSOT)。"""
+
+    def test_series_correct_values(self):
+        wk = pd.date_range("2026-01-07", periods=10, freq="7D")
+        daily = pd.date_range("2025-12-01", periods=120, freq="D")
+        df_w = _mk_df(wk, [6_700_000] * 10)
+        df_t = _mk_df(wk, [700_000] * 10)
+        df_r = _mk_df(daily, [400.0] * 120)
+        s = ule.net_liquidity_series(df_w, df_r, df_t)
+        assert not s.empty
+        assert isinstance(s.index, pd.DatetimeIndex)
+        # 6.7 − 0.4 − 0.7 = 5.6 T(單位陷阱:WALCL/TGA 百萬、RRP 十億)
+        assert math.isclose(float(s.iloc[-1]), 5.6, abs_tol=1e-6)
+
+    def test_empty_input_returns_empty(self):
+        empty = pd.DataFrame(columns=["date", "value"])
+        wk = pd.date_range("2026-01-07", periods=5, freq="7D")
+        df = _mk_df(wk, [1.0] * 5)
+        assert ule.net_liquidity_series(empty, df, df).empty
+        assert ule.net_liquidity_series(df, empty, df).empty
+        assert ule.net_liquidity_series(df, df, empty).empty
+
+
+class TestCompositeUpgrade:
+    """v19.193 — 評分 FED_BS 槽升級為淨流動性(換輸入,門檻/權重不變,缺資料 fallback)。"""
+
+    def test_macro_service_uses_net_liquidity_for_fedbs(self):
+        src = open("services/macro_service.py", encoding="utf-8").read()
+        assert "net_liquidity_series" in src, "FED_BS 槽應改用淨流動性序列"
+        assert "淨流動性 (YoY)" in src
+        assert "_FEDBS_EXPANSION" in src, "須沿用同一 ±5% 門檻(不重新校準)"
+
+    def test_fallback_to_gross_walcl_present(self):
+        src = open("services/macro_service.py", encoding="utf-8").read()
+        assert "fallback" in src.lower(), "淨流動性缺資料須 fallback 原始 WALCL(§1 不消失)"
