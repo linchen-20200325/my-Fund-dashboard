@@ -533,6 +533,285 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
         return None
 
 
+def _safe_num_ps(v) -> "float | None":
+    """寬鬆數值轉換(portfolio_service 內用):float / "12.3%" / "1,234" / None → float|None。"""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        f = float(v)
+    else:
+        try:
+            f = float(str(v).replace("%", "").replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+    if f != f or f in (float("inf"), float("-inf")):  # NaN / inf guard
+        return None
+    return f
+
+
+def compute_max_drawdown(series: "pd.Series") -> "dict":
+    """單一基金最大回撤(從 NAV 序列算)。
+
+    定義(§4.1 量綱:回撤為負值 %,代表自前高的最大跌幅):
+        drawdown_t = (NAV_t − running_max(NAV_≤t)) / running_max(NAV_≤t) × 100
+        max_drawdown = min_t(drawdown_t)   # 最深(最負)的一點
+
+    Args
+    ----
+    series: pd.Series(index=date, value=NAV),原幣計價即可(回撤為相對值,不需換匯)
+
+    Returns
+    -------
+    {
+      "max_dd_pct": float|None,    # 最大回撤 %(≤ 0;-15.0 表最深跌 15%)
+      "peak_date":  str|None,      # 回撤起算的前高日期
+      "trough_date":str|None,      # 回撤最深谷底日期
+      "n_obs":      int,           # 有效 NAV 筆數
+    }
+    §1 Fail Loud:資料不足回 None 欄位 + n_obs,不偽造 0。
+    """
+    _empty = {"max_dd_pct": None, "peak_date": None, "trough_date": None, "n_obs": 0}
+    if series is None:
+        return _empty
+    try:
+        s = series.dropna().sort_index()
+    except Exception:
+        return _empty
+    n = len(s)
+    if n < 2:
+        return {**_empty, "n_obs": n}
+    # NAV 必為正(§3.2);非正值視為無效資料,Fail Loud 回 None
+    if (s <= 0).any():
+        return {**_empty, "n_obs": n}
+
+    running_max = s.cummax()
+    dd = (s - running_max) / running_max * 100.0
+    trough_pos = int(dd.values.argmin())
+    max_dd = float(dd.iloc[trough_pos])
+    trough_date = str(s.index[trough_pos])[:10]
+    # 谷底前的 running_max 對應的前高日期
+    peak_nav = float(running_max.iloc[trough_pos])
+    _peak_slice = s.iloc[: trough_pos + 1]
+    _peak_hits = _peak_slice[_peak_slice >= peak_nav]
+    peak_date = str(_peak_hits.index[0])[:10] if len(_peak_hits) else None
+    return {
+        "max_dd_pct": round(max_dd, 4),
+        "peak_date": peak_date,
+        "trough_date": trough_date,
+        "n_obs": n,
+    }
+
+
+def compute_portfolio_drawdown(funds_data: list,
+                               weights: "dict | None" = None) -> "dict":
+    """組合加權最大回撤 + 各年度報酬(把持倉權重套到各基金 NAV 後合成組合指數)。
+
+    方法(§4.1 / §4.5):
+      1. 各檔 NAV 對齊到共同交易日(outer join),**禁止 ffill 偽造**週末值,
+         以 inner-join(全員都有報價的日)避免缺值汙染合成指數。
+      2. 各檔正規化:nav / nav[第一個共同日] = 累積淨值倍數(起點=1.0)。
+      3. 組合指數 = Σ weight_i × 正規化_i(weight 缺則等權)。
+      4. max_drawdown(組合指數)+ 各年度(YE resample)報酬。
+
+    Args
+    ----
+    funds_data: [{"code": str, "series": pd.Series}, ...]
+    weights: {code: weight} 權重(可不歸一,函式內歸一);None → 等權
+
+    Returns
+    -------
+    {
+      "max_dd_pct": float|None,         # 組合最大回撤 %
+      "peak_date": str|None, "trough_date": str|None,
+      "yearly_returns": {year:int → ret_pct:float},  # 各年度報酬 %
+      "n_funds": int,                   # 納入合成的基金數
+      "n_obs": int,                     # 共同交易日筆數
+      "aligned_freq": str,              # "daily"(共同日 inner-join)
+      "note": str|None,                 # 降級/警示說明
+    }
+    §1 Fail Loud:< 1 檔有效 / 共同日 < 2 → None 欄位 + note,不偽造。
+    """
+    _empty = {
+        "max_dd_pct": None, "peak_date": None, "trough_date": None,
+        "yearly_returns": {}, "n_funds": 0, "n_obs": 0,
+        "aligned_freq": "daily", "note": None,
+    }
+    valid = [(f.get("code"), f.get("series")) for f in (funds_data or [])
+             if f.get("series") is not None and len(f.get("series")) >= 2]
+    if not valid:
+        return {**_empty, "note": "無有效 NAV 序列"}
+
+    try:
+        cols = {}
+        for code, s in valid:
+            ss = s.dropna().sort_index()
+            ss = ss[ss > 0]  # NAV 必正(§3.2),非正值丟棄
+            if len(ss) >= 2 and not ss.index.has_duplicates:
+                cols[code] = ss
+            elif len(ss) >= 2:
+                cols[code] = ss[~ss.index.duplicated(keep="last")]
+        if not cols:
+            return {**_empty, "note": "NAV 全為非正或重複"}
+
+        df = pd.concat(cols, axis=1)
+        # inner-join:只取全員都有報價的交易日(避免缺值用 0 / ffill 汙染)
+        df_inner = df.dropna(how="any")
+        n_funds = df_inner.shape[1]
+        n_obs = df_inner.shape[0]
+        if n_obs < 2:
+            return {**_empty, "n_funds": n_funds,
+                    "note": "共同交易日不足 2 筆(各基金歷史重疊太少)"}
+
+        # 權重歸一(缺則等權)
+        codes = list(df_inner.columns)
+        if weights:
+            w_raw = {c: _safe_num_ps(weights.get(c)) for c in codes}
+            w_clean = {c: (v if (v is not None and v > 0) else 0.0)
+                       for c, v in w_raw.items()}
+            w_sum = sum(w_clean.values())
+            if w_sum <= 0:
+                w_norm = {c: 1.0 / len(codes) for c in codes}
+                _wnote = "權重全缺 → 等權"
+            else:
+                w_norm = {c: w_clean[c] / w_sum for c in codes}
+                _wnote = None
+        else:
+            w_norm = {c: 1.0 / len(codes) for c in codes}
+            _wnote = None
+
+        # 正規化各檔(起點=1.0)→ 加權合成組合指數
+        norm = df_inner / df_inner.iloc[0]
+        port_index = sum(norm[c] * w_norm[c] for c in codes)
+
+        _dd = compute_max_drawdown(port_index)
+
+        # 各年度報酬(YE resample 右閉,§4.5 不引入未來)
+        # 首年以「首筆 NAV」為基準(部分年報酬,標 partial);其後以前一年底為基準。
+        yearly = {}
+        try:
+            ye = port_index.resample("YE").last()
+            prev = float(port_index.iloc[0])  # 首年基準 = 起點(已正規化為 1.0)
+            for ts, val in ye.items():
+                yr = ts.year
+                if prev is not None and prev > 0:
+                    yearly[yr] = round((val / prev - 1.0) * 100.0, 2)
+                prev = val
+        except Exception as _e_yr:
+            import sys as _sys_yr
+            print(f"[portfolio_service/compute_portfolio_drawdown] yearly fail: {type(_e_yr).__name__}: {_e_yr}", file=_sys_yr.stderr)
+
+        return {
+            "max_dd_pct": _dd["max_dd_pct"],
+            "peak_date": _dd["peak_date"],
+            "trough_date": _dd["trough_date"],
+            "yearly_returns": yearly,
+            "n_funds": n_funds,
+            "n_obs": n_obs,
+            "aligned_freq": "daily",
+            "note": _wnote,
+        }
+    except Exception as _e_pdd:
+        import sys as _sys_pdd
+        print(f"[portfolio_service/compute_portfolio_drawdown] fail: {type(_e_pdd).__name__}: {_e_pdd}", file=_sys_pdd.stderr)
+        return {**_empty, "note": f"計算失敗 [{type(_e_pdd).__name__}]"}
+
+
+def rank_funds_within_portfolio(funds_data: list) -> "dict":
+    """組內排名 + 同類 percentile(供組合基金摘要表「費用率排名 / 同性質排名」用)。
+
+    兩種排名(user 2026-06-27 決策「兩者都要」):
+      A. **組內排名**(intra-portfolio):在 user 載入的這幾檔之間排,純函式可算
+         - 費用率排名:mgmt_fee 越低越好(第 1 名 = 最便宜)
+         - 報酬排名:1Y 含息越高越好(第 1 名 = 最強)
+      B. **同類 percentile**:從 MoneyDJ peer_compare「同類排名」欄萃取(已抓資料,
+         不新增 fetch);格式多為 "12/45" → percentile = 1 - (12-1)/(45-1)。
+         缺資料 → None(§1 Fail Loud,不偽造)。
+
+    Args
+    ----
+    funds_data: [{"code","name","moneydj_raw":{mgmt_fee, risk_metrics:{peer_compare}},
+                  "metrics":{...}}, ...]
+                報酬取值與 fund_checkup 同源(MoneyDJ perf 1Y → metrics fallback)。
+
+    Returns
+    -------
+    {code: {
+      "expense_rank": int|None, "expense_n": int,     # 組內費用率名次 / 樣本數
+      "return_rank": int|None,  "return_n": int,      # 組內 1Y 報酬名次 / 樣本數
+      "peer_percentile": float|None,                  # 同類 percentile(0~100,越高越強)
+      "peer_rank_raw": str|None,                      # 原始 "12/45" 供顯示
+    }}
+    """
+    funds = [f for f in (funds_data or []) if f.get("code")]
+    if not funds:
+        return {}
+
+    def _expense(f):
+        return _safe_num_ps((f.get("moneydj_raw") or {}).get("mgmt_fee"))
+
+    def _ret1y(f):
+        mj = f.get("moneydj_raw") or {}
+        v = _safe_num_ps((mj.get("perf") or {}).get("1Y"))
+        if v is not None:
+            return v
+        m = f.get("metrics") or {}
+        for k in ("ret_1y_total", "ret_1y"):
+            v = _safe_num_ps(m.get(k))
+            if v is not None:
+                return v
+        return None
+
+    # A. 組內排名(只在「有該指標」的子集合內排名,缺值不參與)
+    _exp_pairs = [(f["code"], _expense(f)) for f in funds]
+    _exp_have = [(c, v) for c, v in _exp_pairs if v is not None]
+    # 費用率:升序(低=第1名)
+    _exp_sorted = sorted(_exp_have, key=lambda x: x[1])
+    _exp_rank = {c: i + 1 for i, (c, _) in enumerate(_exp_sorted)}
+    _exp_n = len(_exp_have)
+
+    _ret_pairs = [(f["code"], _ret1y(f)) for f in funds]
+    _ret_have = [(c, v) for c, v in _ret_pairs if v is not None]
+    # 報酬:降序(高=第1名)
+    _ret_sorted = sorted(_ret_have, key=lambda x: -x[1])
+    _ret_rank = {c: i + 1 for i, (c, _) in enumerate(_ret_sorted)}
+    _ret_n = len(_ret_have)
+
+    # B. 同類 percentile（從 peer_compare 萃取 "x/y" 名次）
+    import re as _re
+
+    def _peer(f):
+        mj = f.get("moneydj_raw") or {}
+        peer = ((mj.get("risk_metrics") or {}).get("peer_compare")) or {}
+        # 找含「排名」的 row / value
+        for _k, _row in peer.items():
+            if not isinstance(_row, dict):
+                continue
+            for _col, _val in _row.items():
+                if "排名" in str(_col):
+                    _m = _re.search(r"(\d+)\s*/\s*(\d+)", str(_val))
+                    if _m:
+                        rank_i, total = int(_m.group(1)), int(_m.group(2))
+                        if total >= 2 and 1 <= rank_i <= total:
+                            # percentile：第1名=100,最後一名 → 接近 0
+                            pct = (1.0 - (rank_i - 1) / (total - 1)) * 100.0
+                            return round(pct, 1), f"{rank_i}/{total}"
+        return None, None
+
+    out = {}
+    for f in funds:
+        c = f["code"]
+        _pp, _praw = _peer(f)
+        out[c] = {
+            "expense_rank": _exp_rank.get(c),
+            "expense_n": _exp_n,
+            "return_rank": _ret_rank.get(c),
+            "return_n": _ret_n,
+            "peer_percentile": _pp,
+            "peer_rank_raw": _praw,
+        }
+    return out
+
+
 def calc_kelly(series: "pd.Series",
                lookback: int = 252,
                risk_free: float = 0.02) -> Dict:
