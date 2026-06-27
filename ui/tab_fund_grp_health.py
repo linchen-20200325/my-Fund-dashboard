@@ -142,7 +142,17 @@ def _process_one_fund(
         s = result["summary"]
         # v19.69 J1：額外欄位（費用率 / 配息頻率 / 年均配息 / 換匯資訊）
         _mgmt_fee = (fd.get("mgmt_fee") or "").strip() or "—"
-        _div_freq = (fd.get("dividend_freq") or "").strip() or "—"
+        # v19.176：配息頻率走 metrics.div_freq_n SSOT(fund_service.calc_metrics:450-464
+        # auto-detect 結果),不再用 fd["dividend_freq"] MoneyDJ 原文。
+        # 修「健診總表顯示『月配息』、Tab2 顯示『12』」跨 Tab 不一致。
+        # 將數字轉回中文 label + 數字並陳:「月配息(12 次/年)」便於閱讀。
+        _div_freq_n = (fd.get("metrics") or {}).get("div_freq_n")
+        if _div_freq_n in (12, 4, 2, 1):
+            _div_freq_label = {12: "月配息", 4: "季配息", 2: "半年配", 1: "年配"}[_div_freq_n]
+            _div_freq = f"{_div_freq_label}({_div_freq_n} 次/年)"
+        else:
+            # fallback:auto-detect 失敗 → 顯示 MoneyDJ 原文(無數字)
+            _div_freq = (fd.get("dividend_freq") or "").strip() or "—"
         _hold_yrs = max(float(s.get("holding_years_🧮") or 1), 0.01)
         _ann_twd_div = round(s["total_twd_div_🧮"] / _hold_yrs, 0)
         _p_ccy = result["principal_ccy_🧮"]

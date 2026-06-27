@@ -48,6 +48,23 @@ MIN_YEARS_FOR_ANNUALIZE: float = 0.5
 # 對應 MK 老師「買舊不買新」警告 + §1 Fail Loud 不偽造數字),
 # 全期自算欄位顯示「—」+ 燈號顯示「⬜ 歷史不足」
 
+# ── Max Drawdown 評分門檻(portfolio_service.py:95,v19.176)──────────
+MAX_DRAWDOWN_ZERO_SCORE_PCT: float = -30.0
+# Max DD 0% → score 100 / -30% → score 0,線性內插。
+# portfolio_service 6 因子健康度的「回撤評分」分母。
+# 不是 alert 紅燈門檻(那是各 UI 自定義),純評分用。
+
+# ── 淨值跌警示門檻(portfolio_service.dividend_safety:222,v19.176)──
+NAV_DROP_WARNING_PCT: float = -5.0
+# 1Y 淨值跌幅 < -5% → 觸發 nav_warning 旗標,提示「配息源頭值得確認」。
+# 對應「配息可能來自本金」的早期警訊,獨立於吃本金主判定。
+
+# ── MoneyDJ 資料新鮮度燈號門檻(ui/helpers/freshness.py:28-32,v19.176)──
+MJ_FRESH_DAYS_GREEN: int = 2
+MJ_FRESH_DAYS_YELLOW: int = 7
+# NAV 延遲天數:🟢 ≤ 2d / 🟠 ≤ 7d / 🔴 > 7d。
+# 基金 NAV T+1~T+3 公布,7 天放寬覆蓋連假;> 7d 視為資料異常需確認。
+
 # ── Risk score 加權(precision_service.py:64, risk_calibration.py:23)─
 RISK_SCORE_VIX_WEIGHT_RATIO: float = 0.3
 RISK_SCORE_HY_WEIGHT_RATIO: float = 0.4

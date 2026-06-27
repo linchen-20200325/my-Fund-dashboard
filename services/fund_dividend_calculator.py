@@ -94,6 +94,16 @@ def _pick_fx_for_date(
     fx_by_date: dict | None,
     fx_default: float,
 ) -> tuple[float, str]:
+    """歷史配息折 TWD 的 FX 取數 SSOT(v19.176 標註)。
+
+    全站「歷史 dividend × FX」一律走本函式:
+    - buy_date FX(本檔 line 160 用):買入日換匯率
+    - ex_date FX(本檔 line 187 用):每筆配息除息日換匯率
+    優先順序:fx_by_date 字典查當日歷史率 → fx_default(spot)fallback。
+    回傳 (rate, source) 讓 caller 可記 provenance。
+
+    **不要** 在 UI / 其他 service 自行算「dividend × 某 FX」— 一律 import 本函式。
+    """
     if fx_by_date and date_iso in fx_by_date:
         v = _safe_float(fx_by_date[date_iso])
         if v is not None and v > 0:

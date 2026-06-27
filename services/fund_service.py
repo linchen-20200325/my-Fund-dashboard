@@ -201,6 +201,21 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
 
     v19.164 A1 Phase C:服務入口加 pandera data-only 驗證(NAV/dividends
     業務契約),不驗 provenance(service caller 可能來自 cache/test fixture)。
+
+    **v19.176 SSOT WRITER 公告**
+    -----------------------------
+    本函式為以下指標的**單一寫入點**(SSOT),所有 UI reader 一律從返回 dict 讀取,
+    不可重新呼叫第二份計算 / 自算覆蓋,免「同檔不同數字」散落:
+
+    - `sharpe`               年化 Sharpe Ratio(優先 wb07,本算 fallback)
+    - `std_1y` / std_2y / std_3y / std_5y  年化標準差(同優先序)
+    - `max_drawdown`         最大回撤 %
+    - `ret_1y` / ret_3y / ret_5y  純 NAV 報酬(不含息;1Y 含息走 fund_total_return)
+    - `annual_div_rate`      年化配息率(本算 fallback;主源 moneydj_div_yield wb05)
+    - `div_freq_n`           配息頻率(12/4/2/1 次/年,由 div 間隔 auto-detect)
+    - `buy1` / buy2 / buy3 / sell1 / sell2 / sell3  MK 1-2-3 加碼點
+
+    Reader 看到上述欄位 = 確定同源,無需 verify。
     """
     if s.empty or len(s) < 5: return {}
     # A1 Phase C v19.164:服務入口驗 NAV/dividends 業務契約

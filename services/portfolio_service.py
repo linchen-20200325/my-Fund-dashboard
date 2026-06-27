@@ -84,6 +84,10 @@ def calc_fund_factor_score(fund_data: Dict,
             pass
 
     # ── 3. Max Drawdown（權重 20，正向：回撤越小越好）──────────────────
+    # v19.176:max_dd 值本身為 SSOT(fund_service.py:519 calc_metrics 內自算),
+    # 本層只負責「拿 max_dd 套線性評分」。fallback 走 risk_tbl 為次源。
+    # 0 → score=100 / MAX_DRAWDOWN_ZERO_SCORE_PCT(-30%)→ score=0。
+    from shared.signal_thresholds import MAX_DRAWDOWN_ZERO_SCORE_PCT
     maxdd = m.get("max_drawdown")
     if maxdd is None:
         try: maxdd = float((rt.get("最大回撤") or "0").replace("%", ""))
@@ -91,8 +95,9 @@ def calc_fund_factor_score(fund_data: Dict,
     if maxdd is not None:
         try:
             maxdd_f = float(maxdd)
-            # 0% → 100分；-30% → 0分
-            s = min(max((1 - abs(maxdd_f) / 30) * 100, 0), 100)
+            s = min(max(
+                (1 - abs(maxdd_f) / abs(MAX_DRAWDOWN_ZERO_SCORE_PCT)) * 100, 0
+            ), 100)
             factors["MaxDrawdown"] = {"value": round(maxdd_f, 2), "score": round(s, 1), "weight": 20}
             total_s += s * 20; total_w += 20
         except (TypeError, ValueError):
@@ -218,8 +223,10 @@ def dividend_safety(total_return: Optional[float],
         alert = "red"
 
     # 淨值交叉驗證(本 wrapper 獨有,獨立輔助警示)
+    # v19.176:-5% 門檻收 shared/signal_thresholds.NAV_DROP_WARNING_PCT SSOT
+    from shared.signal_thresholds import NAV_DROP_WARNING_PCT
     nav_warn = None
-    if nav_change is not None and nav_change < -5:
+    if nav_change is not None and nav_change < NAV_DROP_WARNING_PCT:
         nav_warn = f"⚠️ 淨值下跌{nav_change:.1f}%,配息源頭值得確認"
 
     return {
@@ -387,6 +394,12 @@ def risk_alert(drawdown:       Optional[float] = None,
 
 def calc_holdings_overlap(funds_data: list) -> "dict | None":
     """T5 新版：以「底層持股 Jaccard + 產業 cosine」為主、NAV pearson 為 fallback。
+
+    **v19.176 SSOT WRITER 公告**:本函式為「**影子基金相似度**」計算 SSOT。
+    所有 UI 顯示「影子基金 / 持股重疊度」一律走本入口,不可在 UI 端自算 jaccard /
+    cosine / pearson。caller(`ui/tab3_portfolio.py:2049-2074`、
+    `ui/helpers/fund_grp_health_extras.py:515-517`)透過本函式取 matrix + shadow_pairs。
+
 
     輸入：
         [{
