@@ -1439,7 +1439,7 @@ def render_macro_tab() -> None:
                 f"<div style='flex-shrink:0;text-align:center;min-width:96px'>"
                 f"<div style='font-size:11px;color:#8b949e;letter-spacing:1px'>綜合健康度</div>"
                 f"<div style='font-size:42px;font-weight:900;color:{_cv_color};line-height:1.1'>{_comp_score:+.1f}</div>"
-                f"<div style='font-size:10px;color:#484f58'>23 指標加權淨分</div>"
+                f"<div style='font-size:10px;color:#484f58'>23 指標加權淨分<br>🌎 美股 / 全球總經</div>"
                 f"</div>"
                 f"<div style='flex:1;min-width:0'>"
                 f"<div style='font-size:22px;font-weight:900;color:{_cv_color}'>{_cv_icon} {_cv_level}</div>"
