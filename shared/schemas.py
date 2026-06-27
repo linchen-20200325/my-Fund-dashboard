@@ -497,3 +497,55 @@ def validate_fund_dividends_data_only(divs: Any) -> Any:
         raise ValueError(f"validate_fund_dividends_data_only: amount 無法轉 float: {e}") from e
     _FundDividendDataOnlySchema.validate(df, lazy=False)
     return divs
+
+
+# ════════════════════════════════════════════════════════════════
+# ForeignFlowSchema — fetch_foreign_flow_series 出口契約(pd.DataFrame)
+# v19.186 Pandera Phase B:hot_money.fetch_foreign_flow_series(§3.1 institutional_flow_df)
+#   columns = [date, foreign_net_yi]，date 升序唯一，foreign_net_yi 可正可負(買賣超淨額)
+# ════════════════════════════════════════════════════════════════
+ForeignFlowSchema = pa.DataFrameSchema(
+    {
+        "date": pa.Column(
+            "datetime64[ns]",
+            nullable=False,
+            checks=[
+                pa.Check(lambda s: s.is_monotonic_increasing,
+                         error="date 必須單調遞增(asc)"),
+                pa.Check(lambda s: s.is_unique, error="date 不可重複(已 groupby 彙總)"),
+            ],
+        ),
+        "foreign_net_yi": pa.Column(
+            "float64",
+            nullable=False,
+            checks=[
+                pa.Check(lambda s: s.notna().all(),
+                         error="foreign_net_yi 不可有 NaN"),
+                # 合理性:外資單日買賣超 |淨額| < 5000 億(歷史極值約 ±1000 億)
+                pa.Check(lambda s: (s.abs() < 5000).all(),
+                         error="foreign_net_yi 絕對值異常(> 5000 億，疑單位錯誤 元 vs 億)"),
+            ],
+        ),
+    },
+    strict=False,   # 允許上游額外欄位
+    coerce=False,
+)
+
+
+def validate_foreign_flow(df: Any) -> Any:
+    """fetch_foreign_flow_series 出口 schema validation wrapper(v19.186 Phase B)。
+
+    對空 DataFrame(fetch 失敗 / 非交易日)直接 pass — §1 Fail Loud:caller
+    已從 error_msg 得知失敗，schema 不重複擋。
+
+    Returns
+    -------
+    驗證通過的 DataFrame。
+
+    Raises
+    ------
+    pandera.errors.SchemaError:date 重複/非單調 / foreign_net_yi NaN / 單位異常。
+    """
+    if df is None or len(df) == 0:
+        return df
+    return ForeignFlowSchema.validate(df, lazy=False)
