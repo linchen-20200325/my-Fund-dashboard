@@ -608,72 +608,34 @@ def render_single_fund_tab() -> None:
                         pass  # smoke-allow-pass
 
                 # ── v18.47: 📊 基金健康總覽（4 維度評分 + Overall Grade + 白話結論）──
+                # v19.177 #3A+#4B：4D 評分 + grade 全走 services.fund_health.compute_4d_health SSOT,
+                # input 走 _resolve_adr_with_fallback / compute_1y_total_return SSOT。
+                # 原本 162 行 inline 邏輯(3 套 fallback chain + 4 套 score lookup + grade cutoff)
+                # 收斂到 ~30 行,全站個檔健康度評等統一同源。
                 try:
-                    # 共用 fallback chain：1Y 含息報酬
-                    _g_tr1y = m.get("ret_1y")
-                    if _g_tr1y is None:
-                        _g_tr1y = (mj_raw.get("perf") or {}).get("1Y")
-                    # v18.48 改成日期 index 找最接近 1Y 前的點（救週/月頻 NAV）
-                    if _g_tr1y is None and s is not None and hasattr(s, "dropna"):
-                        try:
-                            import pandas as _pd_g
-                            _ss_g = s.dropna()
-                            if len(_ss_g) >= 3:
-                                _now_t = _ss_g.index[-1]
-                                _target_t = _now_t - _pd_g.Timedelta(days=365)
-                                _idx_old = _ss_g.index.get_indexer([_target_t], method="nearest")[0]
-                                if 0 <= _idx_old < len(_ss_g) - 1:
-                                    _days_actual = (_now_t - _ss_g.index[_idx_old]).days
-                                    if _days_actual >= 90:
-                                        _vn_g = float(_ss_g.iloc[-1])
-                                        _vo_g = float(_ss_g.iloc[_idx_old])
-                                        if _vo_g > 0:
-                                            _raw_g = (_vn_g / _vo_g - 1.0) * 100.0
-                                            _g_tr1y = _raw_g * (365.0 / _days_actual)
-                        except Exception:
-                            pass  # smoke-allow-pass — NAV 1Y 估算失敗不影響其他維度
-                    try: _g_tr1y = float(_g_tr1y) if _g_tr1y is not None else None
-                    except (TypeError, ValueError): _g_tr1y = None
+                    from services.fund_dividend_health import _resolve_adr_with_fallback
+                    from services.fund_health import compute_4d_health
+                    from services.fund_total_return import compute_1y_total_return
 
-                    _g_dy = (mj_raw.get("moneydj_div_yield")
-                             or m.get("annual_div_rate"))
-                    try: _g_dy = float(_g_dy) if _g_dy is not None else None
-                    except (TypeError, ValueError): _g_dy = None
-                    # v18.49 第三層 fallback：從 divs[] 歷史推算（過去 12 個月配息合計 / 現價）
-                    if (_g_dy is None or _g_dy <= 0) and divs:
-                        try:
-                            import datetime as _dt_dy
-                            _cutoff = _dt_dy.datetime.now() - _dt_dy.timedelta(days=365)
-                            _sum_amt = 0.0
-                            for _dd in divs:
-                                _dt_str = (_dd.get("date") or "").replace("/", "-")
-                                try:
-                                    _dt_p = _dt_dy.datetime.strptime(_dt_str[:10], "%Y-%m-%d")
-                                except (ValueError, TypeError):
-                                    continue
-                                if _dt_p >= _cutoff:
-                                    _sum_amt += float(_dd.get("amount", 0) or 0)
-                            _nav_now = m.get("nav") or mj_raw.get("nav_latest")
-                            try: _nav_now = float(_nav_now) if _nav_now is not None else None
-                            except (TypeError, ValueError): _nav_now = None
-                            if _sum_amt > 0 and _nav_now and _nav_now > 0:
-                                _g_dy = (_sum_amt / _nav_now) * 100.0
-                        except Exception:
-                            pass  # smoke-allow-pass — divs 歷史推算失敗不影響其他維度
+                    _g_tr1y, _ = compute_1y_total_return({
+                        "metrics": m,
+                        "moneydj_raw": mj_raw,
+                        "series": s,
+                        "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                    })
+                    _g_dy, _ = _resolve_adr_with_fallback({
+                        "moneydj_raw": mj_raw,
+                        "metrics": m,
+                        "dividends": divs,
+                    })
+                    _g_sharpe = m.get("sharpe") or (
+                        ((rm.get("risk_table") or {}).get("一年") or {}).get("Sharpe")
+                    )
+                    _g_sigma = m.get("std_1y") or (
+                        ((rm.get("risk_table") or {}).get("一年") or {}).get("標準差")
+                    )
 
-                    _g_sharpe = m.get("sharpe")
-                    if _g_sharpe is None:
-                        _g_sharpe = ((rm.get("risk_table") or {}).get("一年") or {}).get("Sharpe")
-                    try: _g_sharpe = float(_g_sharpe) if _g_sharpe is not None else None
-                    except (TypeError, ValueError): _g_sharpe = None
-
-                    _g_sigma = m.get("std_1y")
-                    if _g_sigma is None:
-                        _g_sigma = ((rm.get("risk_table") or {}).get("一年") or {}).get("標準差")
-                    try: _g_sigma = float(_g_sigma) if _g_sigma is not None else None
-                    except (TypeError, ValueError): _g_sigma = None
-
-                    # v18.48 改成日期窗口（取最後 60 天 NAV）— 救週/月頻 NAV
+                    # 60d MA 方向(UI 端算,因需 nav series 而非純 metrics)
                     _g_ma_dir = None
                     try:
                         import pandas as _pd_g2
@@ -689,56 +651,20 @@ def render_single_fund_tab() -> None:
                                     if _v_start > 0:
                                         _g_ma_dir = "up" if _v_end > _v_start else "down"
                     except Exception:
-                        pass  # smoke-allow-pass — 走勢方向估算失敗不影響其他維度
+                        pass  # smoke-allow-pass — MA 方向估算失敗不影響其他維度
 
-                    # 4 維度評分（0~100）
-                    _d1_cov = None  # 配息健康度（Coverage）
-                    if _g_dy and _g_dy > 0 and _g_tr1y is not None:
-                        _cov_g = _g_tr1y / _g_dy
-                        _d1_cov = (95 if _cov_g >= 1.5 else
-                                   80 if _cov_g >= 1.2 else
-                                   65 if _cov_g >= 1.0 else
-                                   40 if _cov_g >= 0.5 else 15)
-
-                    _d2_sh = None  # 風險調整報酬
-                    if _g_sharpe is not None:
-                        _d2_sh = (95 if _g_sharpe >= 1.5 else
-                                  80 if _g_sharpe >= 1.0 else
-                                  60 if _g_sharpe >= 0.5 else
-                                  40 if _g_sharpe >= 0 else 15)
-
-                    _d3_tr = None  # 走勢健康
-                    if _g_ma_dir == "up" and (_g_tr1y or 0) > 0: _d3_tr = 85
-                    elif _g_ma_dir == "up": _d3_tr = 70
-                    elif _g_ma_dir == "down" and (_g_tr1y or 0) < 0: _d3_tr = 25
-                    elif _g_ma_dir == "down": _d3_tr = 45
-                    elif _g_tr1y is not None and _g_tr1y > 5: _d3_tr = 70
-                    elif _g_tr1y is not None and _g_tr1y < -5: _d3_tr = 25
-
-                    _d4_vol = None  # 低波動性（σ 越低越好）
-                    if _g_sigma is not None:
-                        _d4_vol = (90 if _g_sigma < 10 else
-                                   75 if _g_sigma < 15 else
-                                   55 if _g_sigma < 20 else
-                                   35 if _g_sigma < 30 else 15)
-
-                    _g_scores = [x for x in [_d1_cov, _d2_sh, _d3_tr, _d4_vol] if x is not None]
-                    _g_overall = (sum(_g_scores) / len(_g_scores)) if _g_scores else None
-                    if _g_overall is None:
-                        _gr, _gr_c, _verd = "—", "#888", "資料不足以評等"
-                    elif _g_overall >= 80:
-                        _gr, _gr_c, _verd = "A", MATERIAL_GREEN, "✅ 健康優質基金"
-                    elif _g_overall >= 65:
-                        _gr, _gr_c, _verd = "B", "#69f0ae", "🟢 表現穩健"
-                    elif _g_overall >= 50:
-                        _gr, _gr_c, _verd = "C", "#ffeb3b", "🟡 中性，持續觀察"
-                    elif _g_overall >= 35:
-                        _gr, _gr_c, _verd = "D", MATERIAL_ORANGE, "🟠 警示偏弱"
-                    else:
-                        _gr, _gr_c, _verd = "F", MATERIAL_RED, "🔴 多項警示"
-
+                    _4d = compute_4d_health(
+                        tr1y_pct=_g_tr1y, adr_pct=_g_dy,
+                        sharpe=_g_sharpe, sigma_pct=_g_sigma, ma_dir=_g_ma_dir,
+                    )
+                    _d1_cov = _4d["factors"]["coverage"]
+                    _d2_sh = _4d["factors"]["sharpe"]
+                    _d3_tr = _4d["factors"]["trend"]
+                    _d4_vol = _4d["factors"]["volatility"]
+                    _g_overall = _4d["score"]
+                    _gr, _gr_c, _verd = _4d["grade"], _4d["grade_color"], _4d["verdict"]
                     _eat_call = (" ⚠️ <b style='color:#f44336'>吃本金風險</b>"
-                                 if (_d1_cov is not None and _d1_cov < 50) else "")
+                                 if _4d["eat_warn"] else "")
 
                     def _g_block(label, score):
                         if score is None:
@@ -777,34 +703,14 @@ def render_single_fund_tab() -> None:
                 # 不依賴 divs[] 是否有資料；只要有 ret_1y + 任一配息率來源即顯示。
                 # 無配息資料時顯示 ⬜ 不適用（累積型基金等）。
                 try:
-                    _kpi_mj_dy = mj_raw.get("moneydj_div_yield")
-                    try:
-                        _kpi_mj_dy = float(_kpi_mj_dy) if _kpi_mj_dy is not None else None
-                    except (TypeError, ValueError):
-                        _kpi_mj_dy = None
-                    _kpi_adr = (_kpi_mj_dy if (_kpi_mj_dy and _kpi_mj_dy > 0)
-                                else float(m.get("annual_div_rate", 0) or 0))
-                    # v18.49 第三層 fallback：從 divs 歷史推算（12M 累積配息 / 現價）
-                    if (_kpi_adr is None or _kpi_adr <= 0) and divs:
-                        try:
-                            import datetime as _dt_kdy
-                            _cutoff_k = _dt_kdy.datetime.now() - _dt_kdy.timedelta(days=365)
-                            _sum_k = 0.0
-                            for _dd in divs:
-                                _dt_str = (_dd.get("date") or "").replace("/", "-")
-                                try:
-                                    _dt_p = _dt_kdy.datetime.strptime(_dt_str[:10], "%Y-%m-%d")
-                                except (ValueError, TypeError):
-                                    continue
-                                if _dt_p >= _cutoff_k:
-                                    _sum_k += float(_dd.get("amount", 0) or 0)
-                            _nav_k = m.get("nav") or mj_raw.get("nav_latest")
-                            try: _nav_k = float(_nav_k) if _nav_k is not None else None
-                            except (TypeError, ValueError): _nav_k = None
-                            if _sum_k > 0 and _nav_k and _nav_k > 0:
-                                _kpi_adr = (_sum_k / _nav_k) * 100.0
-                        except Exception:
-                            pass  # smoke-allow-pass — divs 歷史推算失敗不影響後續
+                    # v19.177:adr 走 SSOT _resolve_adr_with_fallback 3 層 chain,
+                    # 與健診總表 check_eating_principal_1y_mk 同源,免散落。
+                    from services.fund_dividend_health import _resolve_adr_with_fallback
+                    _kpi_adr, _kpi_adr_src = _resolve_adr_with_fallback({
+                        "moneydj_raw": mj_raw,
+                        "metrics": m,
+                        "dividends": divs,
+                    })
                     # v18.134: 改用 compute_1y_total_return 共用 helper
                     # 修使用者反饋「Tab2 跟 Tab3 對同一基金顯示不同 1Y 報酬」
                     # 統一順序：perf["1Y"] > ret_1y_total > ret_1y > NAV

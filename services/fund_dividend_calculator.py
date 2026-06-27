@@ -19,7 +19,10 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT  # v19.74 W2 SSOT
+from shared.signal_thresholds import (  # v19.74 W2 SSOT
+    MIN_YEARS_FOR_ANNUALIZE,  # v19.175 短歷史 guard
+    NEAR_DIVIDEND_WARNING_PCT,
+)
 
 DEFAULT_PRINCIPAL_TWD: float = 1_000_000.0
 DEFAULT_WARN_GAP_PCT: float = NEAR_DIVIDEND_WARNING_PCT
@@ -29,6 +32,7 @@ _LIGHT_EMOJI: dict[str, str] = {
     "警示": "🟡",
     "吃本金": "🔴",
     "資料不足": "⚪",
+    "歷史不足": "⬜",  # v19.175 — 持有 < 0.5 年無法年化
 }
 
 
@@ -90,6 +94,16 @@ def _pick_fx_for_date(
     fx_by_date: dict | None,
     fx_default: float,
 ) -> tuple[float, str]:
+    """歷史配息折 TWD 的 FX 取數 SSOT(v19.176 標註)。
+
+    全站「歷史 dividend × FX」一律走本函式:
+    - buy_date FX(本檔 line 160 用):買入日換匯率
+    - ex_date FX(本檔 line 187 用):每筆配息除息日換匯率
+    優先順序:fx_by_date 字典查當日歷史率 → fx_default(spot)fallback。
+    回傳 (rate, source) 讓 caller 可記 provenance。
+
+    **不要** 在 UI / 其他 service 自行算「dividend × 某 FX」— 一律 import 本函式。
+    """
     if fx_by_date and date_iso in fx_by_date:
         v = _safe_float(fx_by_date[date_iso])
         if v is not None and v > 0:
@@ -205,18 +219,27 @@ def compute_dividend_twd_series(
             cumulative_units += ccy_div_total / nav_at_ex
 
     years = _years_between(buy_date, last_date)
-    safe_years = years if years > 0 else 1.0
     nav_return_pct = ((last_nav - buy_nav) / buy_nav) * 100.0 if buy_nav > 0 else 0.0
-    annual_nav_return_pct = nav_return_pct / safe_years
-    annual_div_rate_pct = (
-        (total_ccy_div / principal_ccy / safe_years) * 100.0
-        if principal_ccy > 0 else 0.0
-    )
-    ret_1y_total_pct = annual_nav_return_pct + annual_div_rate_pct
 
-    light, light_emoji = div_health_light_for_pair(
-        ret_1y_total_pct, annual_div_rate_pct, warn_gap=warn_gap_pct
-    )
+    # v19.175:短歷史 guard — < 0.5 年不年化,顯示「—」/「⬜ 歷史不足」
+    # (避免「2 個月配息 × 6 倍 = 30% 高配息率」幻象,§1 Fail Loud)
+    if years < MIN_YEARS_FOR_ANNUALIZE:
+        annual_nav_return_pct = None
+        annual_div_rate_pct = None
+        ret_1y_total_pct = None
+        light = "歷史不足"
+        light_emoji = _LIGHT_EMOJI["歷史不足"]
+    else:
+        safe_years = years
+        annual_nav_return_pct = nav_return_pct / safe_years
+        annual_div_rate_pct = (
+            (total_ccy_div / principal_ccy / safe_years) * 100.0
+            if principal_ccy > 0 else 0.0
+        )
+        ret_1y_total_pct = annual_nav_return_pct + annual_div_rate_pct
+        light, light_emoji = div_health_light_for_pair(
+            ret_1y_total_pct, annual_div_rate_pct, warn_gap=warn_gap_pct
+        )
 
     return {
         "ok": True,
@@ -236,9 +259,13 @@ def compute_dividend_twd_series(
             "last_nav": last_nav,
             "holding_years_🧮": round(years, 2),
             "nav_return_pct_🧮": round(nav_return_pct, 2),
-            "annual_nav_return_pct_🧮": round(annual_nav_return_pct, 2),
-            "annual_div_rate_pct_🧮": round(annual_div_rate_pct, 2),
-            "ret_1y_total_pct_🧮": round(ret_1y_total_pct, 2),
+            # v19.175:短歷史(< 0.5 年)時年化欄 None;caller / UI 顯示「—」
+            "annual_nav_return_pct_🧮": (round(annual_nav_return_pct, 2)
+                                         if annual_nav_return_pct is not None else None),
+            "annual_div_rate_pct_🧮": (round(annual_div_rate_pct, 2)
+                                       if annual_div_rate_pct is not None else None),
+            "ret_1y_total_pct_🧮": (round(ret_1y_total_pct, 2)
+                                    if ret_1y_total_pct is not None else None),
             "div_health_light_🧮": light,
             "div_health_emoji_🧮": light_emoji,
         },

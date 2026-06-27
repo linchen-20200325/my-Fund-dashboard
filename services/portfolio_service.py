@@ -46,12 +46,29 @@ def calc_fund_factor_score(fund_data: Dict,
                            expense_ratio: Optional[float] = None) -> Dict:
     """
     六因子評分：Sharpe / Sortino / MaxDD / Calmar / Alpha / 費用率
+
+    **⚠️ v19.177 #3A DEPRECATED for grading**
+    -------------------------------------------
+    本函式 grade 計算結果**不再用於全站基金評等** — 評等統一走
+    `services/fund_health.compute_4d_health` SSOT(配息/Sharpe/走勢/低波動 4 維)。
+
+    本函式保留用途:`factors` dict 內提供 4D 無法補的進階指標供 UI 單獨顯示:
+        - Sortino(下檔風險)
+        - Calmar(報酬/最大回撤比)
+        - Alpha(超額報酬)
+        - ExpenseRatio(費用率)
+    這四項仍可在「健診詳表」/「進階指標卡」單獨顯示為對照欄。
+
+    呼叫端需求變更:不要再從本函式 grade 欄位讀評等,改用 compute_4d_health。
+    取 Sortino/Calmar/Alpha 個別值仍可從 factors[...]["value"] 讀。
+
     輸入：
         fund_data   : 含 perf(1Y/3Y/5Y)、metrics(max_drawdown, sharpe 等) 的 dict
         risk_table  : MoneyDJ 風險表（含 Sharpe、標準差 等）
         expense_ratio: 費用率 % (optional)
     回傳：
         {"score": 0~100, "grade": "A/B/C/D", "factors": {...}}
+        (score / grade 為遺留欄位,不再用於評等)
     """
     factors = {}
     total_w = 0.0
@@ -84,6 +101,10 @@ def calc_fund_factor_score(fund_data: Dict,
             pass
 
     # ── 3. Max Drawdown（權重 20，正向：回撤越小越好）──────────────────
+    # v19.176:max_dd 值本身為 SSOT(fund_service.py:519 calc_metrics 內自算),
+    # 本層只負責「拿 max_dd 套線性評分」。fallback 走 risk_tbl 為次源。
+    # 0 → score=100 / MAX_DRAWDOWN_ZERO_SCORE_PCT(-30%)→ score=0。
+    from shared.signal_thresholds import MAX_DRAWDOWN_ZERO_SCORE_PCT
     maxdd = m.get("max_drawdown")
     if maxdd is None:
         try: maxdd = float((rt.get("最大回撤") or "0").replace("%", ""))
@@ -91,8 +112,9 @@ def calc_fund_factor_score(fund_data: Dict,
     if maxdd is not None:
         try:
             maxdd_f = float(maxdd)
-            # 0% → 100分；-30% → 0分
-            s = min(max((1 - abs(maxdd_f) / 30) * 100, 0), 100)
+            s = min(max(
+                (1 - abs(maxdd_f) / abs(MAX_DRAWDOWN_ZERO_SCORE_PCT)) * 100, 0
+            ), 100)
             factors["MaxDrawdown"] = {"value": round(maxdd_f, 2), "score": round(s, 1), "weight": 20}
             total_s += s * 20; total_w += 20
         except (TypeError, ValueError):
@@ -161,57 +183,74 @@ def dividend_safety(total_return: Optional[float],
         dividend_yield: 年化配息率 %
         nav_change    : 淨值變化率 % (可選，用於交叉驗證)
     回傳：
-        {status, coverage, eating_principal, alert_level, message}
+        {status, coverage, gap_pct, eating_principal, alert_level, message}
 
-    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal
-    (output schema 100% 向後相容,5 級分類門檻保留於本 wrapper)。
+    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal。
+    v19.175:5 級 coverage 門檻 → 3 色 gap_pct > 2% 制(對齊 MK 老師「化繁為簡」),
+            與健診總表 `div_health_light_for_pair()` SSOT 同源。
+            「嚴重吃本金(報酬為負)」獨立旗標保留為「報酬為負」修飾,
+            主分類仍走 3 色。output schema 向後相容:coverage / eating_principal
+            欄位保留,新增 gap_pct 欄位。
     """
     # 保留 v18.x precedence:div ≤ 0 檢查優先於 missing return
-    # (canonical 把 missing 視為比 no_dividend 優先,本 wrapper 為 UI 顯示需要反過來)
     if dividend_yield is not None and dividend_yield <= 0:
         return {"status": "N/A", "alert_level": "grey",
-                "message": "無配息資料", "coverage": None, "eating_principal": False}
+                "message": "無配息資料", "coverage": None, "gap_pct": None,
+                "eating_principal": False}
 
     from services.fund_dividend_health import classify_eating_principal
     core = classify_eating_principal(total_return, dividend_yield)
 
     if core.is_data_missing:
         return {"status": "無報酬資料", "alert_level": "grey",
-                "message": "需要含息報酬率資料", "coverage": None, "eating_principal": False}
+                "message": "需要含息報酬率資料",
+                "coverage": None, "gap_pct": None, "eating_principal": False}
     if core.is_no_dividend:
-        # 理論上不會走到(上方已先檢 div ≤ 0),保留為防禦性 fallback
         return {"status": "N/A", "alert_level": "grey",
-                "message": "無配息資料", "coverage": None, "eating_principal": False}
+                "message": "無配息資料",
+                "coverage": None, "gap_pct": None, "eating_principal": False}
 
-    # 5 級分類門檻(本 wrapper UI 需求,保留)
+    # v19.175:3 色制 gap_pct 門檻 — 與 fund_dividend_calculator.div_health_light_for_pair
+    # 完全同源(都委派 classify_eating_principal 的 core.gap_pct),對齊「化繁為簡」MK 原則。
+    from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT
     coverage = round(core.coverage_ratio, 4)
+    gap_pct = round(core.gap_pct, 4)  # = div - ret;正 = 吃本金深度
     eating = core.is_eating
-    if coverage < 0:
-        status = "🔴 嚴重吃本金（報酬為負）"
-        alert  = "red"
-        msg    = f"含息報酬{total_return:.1f}% < 0，配息{dividend_yield:.1f}%，本金快速流失"
-    elif coverage < 1.0:
-        status = "🔴 吃本金警示"
-        alert  = "red"
-        msg    = f"含息報酬{total_return:.1f}% < 配息{dividend_yield:.1f}%，覆蓋率{coverage:.2f}"
-    elif coverage < 1.2:
-        status = "🟡 邊緣（建議觀察）"
-        alert  = "yellow"
-        msg    = f"覆蓋率{coverage:.2f}，略高於1但空間不足，需觀察淨值趨勢"
-    else:
-        status = "🟢 健康"
-        alert  = "green"
-        msg    = f"含息報酬{total_return:.1f}% 充分覆蓋配息{dividend_yield:.1f}%，覆蓋率{coverage:.2f}"
 
-    # 淨值交叉驗證(本 wrapper 獨有)
+    if gap_pct <= 0:
+        status = "🟢 健康"
+        alert = "green"
+        msg = (f"含息報酬{total_return:.1f}% 充分覆蓋配息{dividend_yield:.1f}%,"
+               f"覆蓋率{coverage:.2f}")
+    elif gap_pct <= NEAR_DIVIDEND_WARNING_PCT:
+        status = "🟡 警示"
+        alert = "yellow"
+        msg = (f"含息報酬{total_return:.1f}% 略低於配息{dividend_yield:.1f}%,"
+               f"缺口{gap_pct:.1f}pp(警戒線{NEAR_DIVIDEND_WARNING_PCT:.0f}pp 內,建議觀察)")
+    else:
+        # 嚴重吃本金(報酬為負)獨立修飾
+        if total_return is not None and total_return < 0:
+            status = "🔴 嚴重吃本金(報酬為負)"
+            msg = (f"含息報酬{total_return:.1f}% < 0,配息{dividend_yield:.1f}%,"
+                   f"缺口{gap_pct:.1f}pp,本金快速流失")
+        else:
+            status = "🔴 吃本金"
+            msg = (f"含息報酬{total_return:.1f}% < 配息{dividend_yield:.1f}%,"
+                   f"缺口{gap_pct:.1f}pp,長期將侵蝕本金")
+        alert = "red"
+
+    # 淨值交叉驗證(本 wrapper 獨有,獨立輔助警示)
+    # v19.176:-5% 門檻收 shared/signal_thresholds.NAV_DROP_WARNING_PCT SSOT
+    from shared.signal_thresholds import NAV_DROP_WARNING_PCT
     nav_warn = None
-    if nav_change is not None and nav_change < -5:
-        nav_warn = f"⚠️ 淨值下跌{nav_change:.1f}%，配息源頭值得確認"
+    if nav_change is not None and nav_change < NAV_DROP_WARNING_PCT:
+        nav_warn = f"⚠️ 淨值下跌{nav_change:.1f}%,配息源頭值得確認"
 
     return {
         "status":          status,
         "alert_level":     alert,
         "coverage":        coverage,
+        "gap_pct":         gap_pct,
         "eating_principal": eating,
         "message":         msg,
         "nav_warning":     nav_warn,
@@ -372,6 +411,12 @@ def risk_alert(drawdown:       Optional[float] = None,
 
 def calc_holdings_overlap(funds_data: list) -> "dict | None":
     """T5 新版：以「底層持股 Jaccard + 產業 cosine」為主、NAV pearson 為 fallback。
+
+    **v19.176 SSOT WRITER 公告**:本函式為「**影子基金相似度**」計算 SSOT。
+    所有 UI 顯示「影子基金 / 持股重疊度」一律走本入口,不可在 UI 端自算 jaccard /
+    cosine / pearson。caller(`ui/tab3_portfolio.py:2049-2074`、
+    `ui/helpers/fund_grp_health_extras.py:515-517`)透過本函式取 matrix + shadow_pairs。
+
 
     輸入：
         [{

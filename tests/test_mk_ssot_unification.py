@@ -64,18 +64,25 @@ class TestCheckEatingPrincipal1yMk:
         assert "健康" in r["status"], f"含息 10 > 配息 5 → 應健康,實際 {r['status']}"
 
     def test_moneydj_takes_precedence_over_metrics(self):
-        """moneydj_div_yield 有值 → 不應走 metrics.annual_div_rate fallback。"""
+        """moneydj_div_yield 有值 → 不應走 metrics.annual_div_rate fallback。
+
+        v19.175 3 色制改用 gap_pct 門檻:
+        - 用 mj=8 → tr=5, gap=8-5=3pp > 2pp → 🔴 吃本金
+        - 若誤用 metrics=3 → tr=5, gap=-2pp → 🟢 健康
+        測試確保走 mj 主源(若答案是吃本金 → 證明用對 mj)。
+        """
         fund = {
-            "moneydj_raw": {"moneydj_div_yield": 7.0},
-            "metrics": {"ret_1y": 8.0, "annual_div_rate": 3.0},
+            "moneydj_raw": {"moneydj_div_yield": 8.0},
+            "metrics": {"ret_1y": 5.0, "annual_div_rate": 3.0},  # metrics=3 是誤導陷阱
         }
         r = check_eating_principal_1y_mk(fund)
-        # 用 mj=7 → 8 > 7 → 健康(if used metrics=3 → 8>3 也健康,但 coverage 不同)
         assert r is not None
-        # Coverage = 8/7 ≈ 1.14 < 1.2 → 邊緣(if mj used);若 metrics 用 → 8/3 → 健康
-        # 用 mj 應該是邊緣
-        assert "邊緣" in r["status"] or "yellow" in r["alert_level"], (
-            f"應以 moneydj_div_yield=7 為準(coverage 1.14 邊緣),實際 {r}"
+        assert "吃本金" in r["status"] or r["alert_level"] == "red", (
+            f"應以 moneydj_div_yield=8 為準(gap=3pp 紅),"
+            f"若走 metrics=3 會誤判健康。實際 {r}"
+        )
+        assert r["gap_pct"] == 3.0, (
+            f"v19.175 應提供 gap_pct 欄位 = 8-5 = 3.0,實際 {r.get('gap_pct')}"
         )
 
     def test_data_missing_returns_none(self):

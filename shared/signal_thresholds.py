@@ -40,6 +40,37 @@ SHADOW_FUND_COSINE_WEIGHT_RATIO: float = 0.4
 # ── 配息接近警戒(fund_service.py:279, fund_dividend_calculator.py:23)──
 NEAR_DIVIDEND_WARNING_PCT: float = 2.0
 # 配息年化率距離警戒線(年率 6%/8%)≤ 2pp → near zone,UI 標黃
+# v19.175:同時兼任「吃本金 gap 容差」— gap = div - ret > 2pp → 🔴 吃本金
+
+# ── 年化最小歷史長度(fund_dividend_calculator.py:207,v19.175)──────
+MIN_YEARS_FOR_ANNUALIZE: float = 0.5
+# 持有歷史 < 0.5 年不年化(避免「2 個月配息 × 6 倍」變 30% 高配息幻象,
+# 對應 MK 老師「買舊不買新」警告 + §1 Fail Loud 不偽造數字),
+# 全期自算欄位顯示「—」+ 燈號顯示「⬜ 歷史不足」
+
+# ── Max Drawdown 評分門檻(portfolio_service.py:95,v19.176)──────────
+MAX_DRAWDOWN_ZERO_SCORE_PCT: float = -30.0
+# Max DD 0% → score 100 / -30% → score 0,線性內插。
+# portfolio_service 6 因子健康度的「回撤評分」分母。
+# 不是 alert 紅燈門檻(那是各 UI 自定義),純評分用。
+
+# ── 淨值跌警示門檻(portfolio_service.dividend_safety:222,v19.176)──
+NAV_DROP_WARNING_PCT: float = -5.0
+# 1Y 淨值跌幅 < -5% → 觸發 nav_warning 旗標,提示「配息源頭值得確認」。
+# 對應「配息可能來自本金」的早期警訊,獨立於吃本金主判定。
+
+# ── MoneyDJ 資料新鮮度燈號門檻(ui/helpers/freshness.py:28-32,v19.176)──
+MJ_FRESH_DAYS_GREEN: int = 2
+MJ_FRESH_DAYS_YELLOW: int = 7
+# NAV 延遲天數:🟢 ≤ 2d / 🟠 ≤ 7d / 🔴 > 7d。
+# 基金 NAV T+1~T+3 公布,7 天放寬覆蓋連假;> 7d 視為資料異常需確認。
+
+# ── 基金健康度 4D 評分 Grade cutoffs(services/fund_health.py,v19.177 #4B)──
+GRADE_CUTOFFS_4D: tuple[int, int, int, int] = (80, 65, 50, 35)
+# A ≥ 80 / B ≥ 65 / C ≥ 50 / D ≥ 35 / F < 35。
+# 全站個檔基金健康度評等 SSOT(Tab2 KPI 卡 / Tab3 fund 評等共用),
+# 取代 portfolio_service 6 因子 (75, 55, 40) 三級制(已 deprecated for grading,
+# 6F dict 仍保留供 Sortino / Calmar / Alpha / 費用率單獨顯示)。
 
 # ── Risk score 加權(precision_service.py:64, risk_calibration.py:23)─
 RISK_SCORE_VIX_WEIGHT_RATIO: float = 0.3
