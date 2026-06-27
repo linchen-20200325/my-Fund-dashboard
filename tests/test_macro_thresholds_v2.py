@@ -462,3 +462,59 @@ def test_pmi_tab6_manual_uses_ssot():
     assert 'f"""' in src
     # 教學文案不應再有 hardcoded "PMI 為何 50 是" 字串(已 f-string 插值)
     assert "PMI 為何 50 是" not in src, "title 仍 hardcoded 50,未走 f-string SSOT"
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.184 F-GRAY-4 M2 / Fed BS harmonize
+# ════════════════════════════════════════════════════════════════
+
+def test_m2_thresholds_schema():
+    from shared.macro_thresholds_v2 import M2_THRESHOLDS
+    sf = M2_THRESHOLDS["score_function"]
+    assert sf["easing_above"] == 5.0
+    assert sf["tightening_below"] == 0.0
+
+
+def test_fed_bs_thresholds_schema():
+    from shared.macro_thresholds_v2 import FED_BS_THRESHOLDS
+    sf = FED_BS_THRESHOLDS["score_function"]
+    assert sf["expansion_above"] == 5.0
+    assert sf["contraction_below"] == -5.0
+
+
+def test_m2_matches_macro_repository_dict():
+    """SSOT 值必須與 macro_repository MACRO_THRESHOLDS['M2_YOY'] 同源（drift guard）。"""
+    from shared.macro_thresholds_v2 import M2_THRESHOLDS
+    from repositories.macro_repository import MACRO_THRESHOLDS
+    m2 = MACRO_THRESHOLDS.get("M2_YOY", {})
+    assert M2_THRESHOLDS["score_function"]["easing_above"] == m2.get("green_above")
+    assert M2_THRESHOLDS["score_function"]["tightening_below"] == m2.get("red_below")
+
+
+def test_fed_bs_matches_macro_repository_dict():
+    from shared.macro_thresholds_v2 import FED_BS_THRESHOLDS
+    from repositories.macro_repository import MACRO_THRESHOLDS
+    fb = MACRO_THRESHOLDS.get("FED_BS_YOY", {})
+    assert FED_BS_THRESHOLDS["score_function"]["expansion_above"] == fb.get("green_above")
+    assert FED_BS_THRESHOLDS["score_function"]["contraction_below"] == fb.get("red_below")
+
+
+def test_calibration_m2_fedbs_use_ssot():
+    """macro_score_calibration._s_m2/_s_fed_bs 必須走 SSOT 常數（值 + 行為等價）。"""
+    from services.macro_score_calibration import (
+        _s_m2, _s_fed_bs,
+        _M2_EASING, _M2_TIGHTENING, _FEDBS_EXPANSION, _FEDBS_CONTRACTION,
+    )
+    assert (_M2_EASING, _M2_TIGHTENING) == (5.0, 0.0)
+    assert (_FEDBS_EXPANSION, _FEDBS_CONTRACTION) == (5.0, -5.0)
+    # 行為等價（遷移前後）
+    assert _s_m2(6) == 1 and _s_m2(-1) == -1 and _s_m2(2) == 0
+    assert _s_fed_bs(6) == 1 and _s_fed_bs(-6) == -1 and _s_fed_bs(0) == 0
+
+
+def test_macro_service_m2_fedbs_constants():
+    from services.macro_service import (
+        _M2_EASING, _M2_TIGHTENING, _FEDBS_EXPANSION, _FEDBS_CONTRACTION,
+    )
+    assert (_M2_EASING, _M2_TIGHTENING) == (5.0, 0.0)
+    assert (_FEDBS_EXPANSION, _FEDBS_CONTRACTION) == (5.0, -5.0)

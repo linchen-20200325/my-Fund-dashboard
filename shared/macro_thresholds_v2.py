@@ -193,6 +193,42 @@ PMI_THRESHOLDS = {
 }
 
 
+# ── M2(貨幣供給 YoY)— US, % ─────────────────────────────────────────
+# v19.184 F-GRAY-4 M2 harmonize（dict 與 inline 語意完全一致，低風險）
+#
+# F-GRAY-4 audit:本指標 dict（macro_repository MACRO_THRESHOLDS["M2"]
+# = {red_below: 0, green_above: 5}）與 inline score function **語意同源**：
+#   services/macro_service.py:494-496（signal/color）
+#   services/macro_score_calibration.py:67（_s_m2）
+# 皆用「> 5% 寬鬆利多 / < 0% 緊縮壓力 / 中間中性」同一組閾值，故可安全 SSOT 化。
+# 單一用途（流動性寬縮判讀，YoY %），無多 sub-dict 語意分化。
+M2_THRESHOLDS = {
+    "score_function": {
+        # > 5% → 流動性寬鬆（利多，+1/🟢）；< 0% → 緊縮（壓力，-1/🔴）；中間 0/🟡
+        "easing_above": 5.0,
+        "tightening_below": 0.0,
+    },
+}
+
+
+# ── Fed BS（聯準會資產負債表 YoY）— US, % ──────────────────────────────
+# v19.184 F-GRAY-4 Fed BS harmonize（dict 與 inline 語意完全一致，低風險）
+#
+# F-GRAY-4 audit:dict（MACRO_THRESHOLDS["FED_BS"] = {red_below: -5, green_above: 5}）
+# 與 inline score function **語意完全相同**：
+#   services/macro_service.py:622-624（signal/color）
+#   services/macro_score_calibration.py:70（_s_fed_bs）
+# 皆用「擴表 > 5% 注入流動性利多 / 縮表 < -5% 抽走流動性壓力」同組閾值。
+# 單一用途（流動性寬縮判讀，YoY %）。
+FED_BS_THRESHOLDS = {
+    "score_function": {
+        # > 5% → 擴表（注入流動性，+1/🟢）；< -5% → 縮表（抽走流動性，-1/🔴）；中間 0/🟡
+        "expansion_above": 5.0,
+        "contraction_below": -5.0,
+    },
+}
+
+
 # ── TW PMI(中華經濟研究院 PMI)— 5 級評分,獨立於 US PMI ─────────────
 # v19.180 docstring 升級:加經濟學註解
 #
