@@ -159,6 +159,173 @@ def render_portfolio_tab() -> None:
         from ui.helpers.fund_checkup import render_fund_checkup
         render_fund_checkup(st.session_state.portfolio_funds)
         st.divider()
+    # v19.185 Bug5:相關性矩陣物理上移至摘要正下方(原在 T7 後)。
+    # T5 只讀 session_state.portfolio_funds(全域)+ 自 guard(>=2 loaded),搬移變數安全。
+    # ── T5: 持股相關性矩陣（v18.36 按保單分組）──────────────────────────────
+    _pf_for_corr_raw = [f for f in st.session_state.portfolio_funds
+                        if f.get("loaded") and f.get("series") is not None]
+
+    # 按 policy_id 分組（無保單者歸入「(未綁保單)」），每組內按 code 去重，
+    # 避免同 code 跨保單時 calc_holdings_overlap 回傳 DataFrame 重複欄名
+    # 觸發 pyarrow `Duplicate column names found` 例外。
+    from collections import defaultdict as _dd_t5
+    _t5_buckets: dict = _dd_t5(list)
+    for _ft5 in _pf_for_corr_raw:
+        _pid_raw = str(_ft5.get("policy_id", "") or "").strip()
+        _t5_buckets[_pid_raw or "(未綁保單)"].append(_ft5)
+    _t5_groups: dict = {}
+    for _pid_k, _items_k in _t5_buckets.items():
+        _seen_c: set = set()
+        _uniq_k: list = []
+        for _ft5 in _items_k:
+            _code_k = str(_ft5.get("code", "") or "").strip().upper()
+            if not _code_k or _code_k in _seen_c:
+                continue
+            _seen_c.add(_code_k)
+            _uniq_k.append(_ft5)
+        if len(_uniq_k) >= 2:
+            _t5_groups[_pid_k] = _uniq_k
+
+    if _t5_groups:
+        st.divider()
+        st.markdown("### 🔬 ④ 持股重疊度診斷（T5 — 底層持股 + 產業重疊度，按保單分組）")
+        st.caption("以「持股 Jaccard × 0.6 + 產業 cosine × 0.4」綜合分;資料不齊自動降級為 NAV 相關係數。"
+                   "重疊度 大於等於 0.70 → 影子基金警告。已依保單號碼分群，組內基金互相比較。")
+        for _pid_g, _group_funds in _t5_groups.items():
+            with st.expander(f"📋 保單 **{_pid_g}**　·　{len(_group_funds)} 檔基金", expanded=False):
+                _btn_key = f"btn_corr_{_pid_g}"
+                _ss_key  = f"corr_result_{_pid_g}"
+                if st.button("🔗 計算基金重疊度", key=_btn_key):
+                    from services.portfolio_service import calc_holdings_overlap as _calc_holdings_overlap
+                    _hov_input = []
+                    for f in _group_funds:
+                        _mj = (f.get("moneydj_raw") or {})
+                        _h = _mj.get("holdings") or {}
+                        _hov_input.append({
+                            "code": f.get("code", "?"),
+                            "name": f.get("name") or f.get("code"),
+                            "top_holdings": _h.get("top_holdings") or [],
+                            "sector_alloc": _h.get("sector_alloc") or [],
+                        })
+                    _hov_result = _calc_holdings_overlap(_hov_input)
+                    if (not _hov_result) or _hov_result.get("method") == "n/a":
+                        _corr_input = [{"code": f.get("code","?"), "series": f.get("series")}
+                                       for f in _group_funds]
+                        _hov_result = calc_correlation_matrix(_corr_input)
+                        if _hov_result is not None:
+                            _hov_result.setdefault("method", "nav_fallback")
+                            _freq_used = _hov_result.get("freq", "?")
+                            _hov_result.setdefault("notes",
+                                f"持股 / 產業資料皆缺，降級為 NAV Pearson 相關"
+                                f"（{_freq_used}頻；>= 0.85 為 shadow）")
+                    st.session_state[_ss_key] = _hov_result
+                _cr = st.session_state.get(_ss_key)
+                if _cr and _cr.get("matrix") is not None:
+                    _method = _cr.get("method", "?")
+                    _notes  = _cr.get("notes", "")
+                    _is_nav_fb = _method == "nav_fallback"
+                    _shadow = _cr.get("shadow_pairs", [])
+                    _thr = 0.85 if _is_nav_fb else 0.70
+                    _label = "相關係數" if _is_nav_fb else "重疊度"
+                    st.info(f"📌 計算方式：**{_method}**（{_notes}）")
+                    if _shadow:
+                        st.error(
+                            f"⚠️ **影子基金警告**：偵測到 {len(_shadow)} 對 {_label} 大於等於 {_thr} 的基金，"
+                            "持有意義可能重疊！"
+                        )
+                        _holdings_by_code: dict = {}
+                        if not _is_nav_fb:
+                            for _f in _group_funds:
+                                _mj_h = ((_f.get("moneydj_raw") or {}).get("holdings") or {})
+                                _holdings_by_code[_f.get("code", "?")] = [
+                                    (h.get("name") or "").strip()
+                                    for h in (_mj_h.get("top_holdings") or [])
+                                    if h.get("name")
+                                ]
+                        for _sa, _sb, _sv in _shadow:
+                            _common_html = ""
+                            if not _is_nav_fb:
+                                _ha = _holdings_by_code.get(_sa, [])
+                                _hb_upper = {n.upper() for n in _holdings_by_code.get(_sb, []) if n}
+                                _common = [n for n in _ha if n and n.upper() in _hb_upper]
+                                if _common:
+                                    _items_zh = []
+                                    for _n in _common[:6]:
+                                        _zh = _zh_holding(_n)
+                                        _items_zh.append(f"{_n[:18]}{f'({_zh})' if _zh else ''}")
+                                    _more = f"…+{len(_common)-6}" if len(_common) > 6 else ""
+                                    _common_html = (
+                                        f"<div style='color:#ffb74d;font-size:11px;margin:2px 0 0 12px'>"
+                                        f"🔁 共同持股 {len(_common)} 檔："
+                                        f"{'、'.join(_items_zh)}{_more}</div>")
+                            st.markdown(
+                                f"- `{_sa}` × `{_sb}` — {_label} **{_sv:.3f}**{_common_html}",
+                                unsafe_allow_html=True)
+                    else:
+                        st.success(f"✅ 各基金 {_label} 均在 {_thr} 以下，組合分散效果良好")
+                    def _color_overlap(v, _thr=_thr):
+                        try: f = float(v)
+                        except Exception: return ""
+                        # v18.249: NaN（兩檔 NAV 無重疊期）不上色，跟其他級別區分
+                        if pd.isna(f): return "color:#888"
+                        if f >= _thr:    return "background-color:#b71c1c;color:#fff"
+                        if f >= 0.50:    return "background-color:#ef6c00;color:#fff"
+                        if f >= 0.20:    return "background-color:#558b2f;color:#fff"
+                        if f >= -0.20:   return "background-color:#2e7d32;color:#fff"
+                        return "background-color:#1565c0;color:#fff"
+                    # v18.249: NaN → 「—」（codebase 標準缺失符號），不再顯示 'nan'
+                    _fmt_corr = lambda v: "—" if pd.isna(v) else f"{v:.2f}"
+                    try:
+                        _styled = (_cr["matrix"].style
+                                   .map(_color_overlap)
+                                   .format(_fmt_corr))
+                        st.dataframe(_styled, use_container_width=True)
+                    except Exception:
+                        st.dataframe(_cr["matrix"].round(2), use_container_width=True)
+                    # v18.249: 補一行說明 — 兩檔 NAV 序列無重疊期就無法算相關性
+                    if _cr["matrix"].isna().any().any():
+                        st.caption(
+                            "ℹ️ `—` 代表兩檔基金的 NAV 序列**無重疊期**（如新基金 vs 舊基金），"
+                            "Pearson 相關係數無法計算；不代表 0 也不代表無相關。"
+                        )
+                    if _is_nav_fb:
+                        st.caption(
+                            "💡 NAV 相關法：1.0 = 漲跌完全一樣｜0.5~0.85 = 連動偏高｜0 = 無關｜負 = 反向。"
+                            "🔴 大於等於 0.85 = 影子基金。"
+                        )
+                    else:
+                        st.caption(
+                            f"💡 持股 + 產業重疊度（method={_method}）：1.0 = 完全相同組合｜"
+                            "0.7~1.0 = 影子基金 / 集中度過高｜0.4~0.7 = 中度重疊｜"
+                            "0~0.3 = 分散良好。建議擇一持有 大於等於 0.7 的對。"
+                        )
+
+    # ── Raw data（v19.185 Bug5：摘要 → 矩陣 → Raw data → AI 版面順序）──────
+    # 每檔基金 MoneyDJ 原始抓取結果攤平,供 user 核對 AI / 摘要的數字來源(§2.2 血緣)。
+    _pf_raw_dump = [f for f in st.session_state.portfolio_funds
+                    if f.get("loaded") and not f.get("load_error")]
+    if _pf_raw_dump:
+        with st.expander("🗂️ Raw data（基金原始抓取資料 — 核對數字來源）", expanded=False):
+            st.caption("MoneyDJ wb01/wb05/wb07 + metrics 原始值;摘要表 / AI 戰情室的數字皆源於此。")
+            for _frd in _pf_raw_dump:
+                _code_rd = _frd.get("code", "?")
+                _name_rd = (_frd.get("name") or _code_rd)[:30]
+                _m_rd = _frd.get("metrics") or {}
+                _mj_rd = _frd.get("moneydj_raw") or {}
+                _raw_view = {
+                    "代碼": _code_rd,
+                    "計價幣別": _mj_rd.get("currency") or _frd.get("currency") or "—",
+                    "NAV(原幣)": _m_rd.get("nav") or _mj_rd.get("nav_latest"),
+                    "年化配息率%(wb05)": _mj_rd.get("moneydj_div_yield"),
+                    "年化配息率%(metrics)": _m_rd.get("annual_div_rate"),
+                    "1Y含息%": _m_rd.get("ret_1y_total") or _m_rd.get("ret_1y"),
+                    "Sharpe": _m_rd.get("sharpe"),
+                    "年化波動%": _m_rd.get("std_1y"),
+                    "最高經理費%": _mj_rd.get("mgmt_fee"),
+                    "類別": _mj_rd.get("category") or "—",
+                }
+                st.markdown(f"**{_name_rd}** `{_code_rd}`")
+                st.json(_raw_view, expanded=False)
 
     # ════════════════════════════════════════════════════════════════
     # 🆕 v18.22 保單視圖 P1.3：保單管理 + 保單分組視圖（top-level expander）
@@ -1989,145 +2156,6 @@ def render_portfolio_tab() -> None:
     # ── T7 帳務 + AI 深度組合建議 ── (v18.144 抽至 ui/tab3_t7_ledger.py)
     st.markdown("### 💼 ③ 持倉戰情（T7 帳本）")
     render_t7_section()
-
-    # ── T5: 持股相關性矩陣（v18.36 按保單分組）──────────────────────────────
-    _pf_for_corr_raw = [f for f in st.session_state.portfolio_funds
-                        if f.get("loaded") and f.get("series") is not None]
-
-    # 按 policy_id 分組（無保單者歸入「(未綁保單)」），每組內按 code 去重，
-    # 避免同 code 跨保單時 calc_holdings_overlap 回傳 DataFrame 重複欄名
-    # 觸發 pyarrow `Duplicate column names found` 例外。
-    from collections import defaultdict as _dd_t5
-    _t5_buckets: dict = _dd_t5(list)
-    for _ft5 in _pf_for_corr_raw:
-        _pid_raw = str(_ft5.get("policy_id", "") or "").strip()
-        _t5_buckets[_pid_raw or "(未綁保單)"].append(_ft5)
-    _t5_groups: dict = {}
-    for _pid_k, _items_k in _t5_buckets.items():
-        _seen_c: set = set()
-        _uniq_k: list = []
-        for _ft5 in _items_k:
-            _code_k = str(_ft5.get("code", "") or "").strip().upper()
-            if not _code_k or _code_k in _seen_c:
-                continue
-            _seen_c.add(_code_k)
-            _uniq_k.append(_ft5)
-        if len(_uniq_k) >= 2:
-            _t5_groups[_pid_k] = _uniq_k
-
-    if _t5_groups:
-        st.divider()
-        st.markdown("### 🔬 ④ 持股重疊度診斷（T5 — 底層持股 + 產業重疊度，按保單分組）")
-        st.caption("以「持股 Jaccard × 0.6 + 產業 cosine × 0.4」綜合分;資料不齊自動降級為 NAV 相關係數。"
-                   "重疊度 大於等於 0.70 → 影子基金警告。已依保單號碼分群，組內基金互相比較。")
-        for _pid_g, _group_funds in _t5_groups.items():
-            with st.expander(f"📋 保單 **{_pid_g}**　·　{len(_group_funds)} 檔基金", expanded=False):
-                _btn_key = f"btn_corr_{_pid_g}"
-                _ss_key  = f"corr_result_{_pid_g}"
-                if st.button("🔗 計算基金重疊度", key=_btn_key):
-                    from services.portfolio_service import calc_holdings_overlap as _calc_holdings_overlap
-                    _hov_input = []
-                    for f in _group_funds:
-                        _mj = (f.get("moneydj_raw") or {})
-                        _h = _mj.get("holdings") or {}
-                        _hov_input.append({
-                            "code": f.get("code", "?"),
-                            "name": f.get("name") or f.get("code"),
-                            "top_holdings": _h.get("top_holdings") or [],
-                            "sector_alloc": _h.get("sector_alloc") or [],
-                        })
-                    _hov_result = _calc_holdings_overlap(_hov_input)
-                    if (not _hov_result) or _hov_result.get("method") == "n/a":
-                        _corr_input = [{"code": f.get("code","?"), "series": f.get("series")}
-                                       for f in _group_funds]
-                        _hov_result = calc_correlation_matrix(_corr_input)
-                        if _hov_result is not None:
-                            _hov_result.setdefault("method", "nav_fallback")
-                            _freq_used = _hov_result.get("freq", "?")
-                            _hov_result.setdefault("notes",
-                                f"持股 / 產業資料皆缺，降級為 NAV Pearson 相關"
-                                f"（{_freq_used}頻；>= 0.85 為 shadow）")
-                    st.session_state[_ss_key] = _hov_result
-                _cr = st.session_state.get(_ss_key)
-                if _cr and _cr.get("matrix") is not None:
-                    _method = _cr.get("method", "?")
-                    _notes  = _cr.get("notes", "")
-                    _is_nav_fb = _method == "nav_fallback"
-                    _shadow = _cr.get("shadow_pairs", [])
-                    _thr = 0.85 if _is_nav_fb else 0.70
-                    _label = "相關係數" if _is_nav_fb else "重疊度"
-                    st.info(f"📌 計算方式：**{_method}**（{_notes}）")
-                    if _shadow:
-                        st.error(
-                            f"⚠️ **影子基金警告**：偵測到 {len(_shadow)} 對 {_label} 大於等於 {_thr} 的基金，"
-                            "持有意義可能重疊！"
-                        )
-                        _holdings_by_code: dict = {}
-                        if not _is_nav_fb:
-                            for _f in _group_funds:
-                                _mj_h = ((_f.get("moneydj_raw") or {}).get("holdings") or {})
-                                _holdings_by_code[_f.get("code", "?")] = [
-                                    (h.get("name") or "").strip()
-                                    for h in (_mj_h.get("top_holdings") or [])
-                                    if h.get("name")
-                                ]
-                        for _sa, _sb, _sv in _shadow:
-                            _common_html = ""
-                            if not _is_nav_fb:
-                                _ha = _holdings_by_code.get(_sa, [])
-                                _hb_upper = {n.upper() for n in _holdings_by_code.get(_sb, []) if n}
-                                _common = [n for n in _ha if n and n.upper() in _hb_upper]
-                                if _common:
-                                    _items_zh = []
-                                    for _n in _common[:6]:
-                                        _zh = _zh_holding(_n)
-                                        _items_zh.append(f"{_n[:18]}{f'({_zh})' if _zh else ''}")
-                                    _more = f"…+{len(_common)-6}" if len(_common) > 6 else ""
-                                    _common_html = (
-                                        f"<div style='color:#ffb74d;font-size:11px;margin:2px 0 0 12px'>"
-                                        f"🔁 共同持股 {len(_common)} 檔："
-                                        f"{'、'.join(_items_zh)}{_more}</div>")
-                            st.markdown(
-                                f"- `{_sa}` × `{_sb}` — {_label} **{_sv:.3f}**{_common_html}",
-                                unsafe_allow_html=True)
-                    else:
-                        st.success(f"✅ 各基金 {_label} 均在 {_thr} 以下，組合分散效果良好")
-                    def _color_overlap(v, _thr=_thr):
-                        try: f = float(v)
-                        except Exception: return ""
-                        # v18.249: NaN（兩檔 NAV 無重疊期）不上色，跟其他級別區分
-                        if pd.isna(f): return "color:#888"
-                        if f >= _thr:    return "background-color:#b71c1c;color:#fff"
-                        if f >= 0.50:    return "background-color:#ef6c00;color:#fff"
-                        if f >= 0.20:    return "background-color:#558b2f;color:#fff"
-                        if f >= -0.20:   return "background-color:#2e7d32;color:#fff"
-                        return "background-color:#1565c0;color:#fff"
-                    # v18.249: NaN → 「—」（codebase 標準缺失符號），不再顯示 'nan'
-                    _fmt_corr = lambda v: "—" if pd.isna(v) else f"{v:.2f}"
-                    try:
-                        _styled = (_cr["matrix"].style
-                                   .map(_color_overlap)
-                                   .format(_fmt_corr))
-                        st.dataframe(_styled, use_container_width=True)
-                    except Exception:
-                        st.dataframe(_cr["matrix"].round(2), use_container_width=True)
-                    # v18.249: 補一行說明 — 兩檔 NAV 序列無重疊期就無法算相關性
-                    if _cr["matrix"].isna().any().any():
-                        st.caption(
-                            "ℹ️ `—` 代表兩檔基金的 NAV 序列**無重疊期**（如新基金 vs 舊基金），"
-                            "Pearson 相關係數無法計算；不代表 0 也不代表無相關。"
-                        )
-                    if _is_nav_fb:
-                        st.caption(
-                            "💡 NAV 相關法：1.0 = 漲跌完全一樣｜0.5~0.85 = 連動偏高｜0 = 無關｜負 = 反向。"
-                            "🔴 大於等於 0.85 = 影子基金。"
-                        )
-                    else:
-                        st.caption(
-                            f"💡 持股 + 產業重疊度（method={_method}）：1.0 = 完全相同組合｜"
-                            "0.7~1.0 = 影子基金 / 集中度過高｜0.4~0.7 = 中度重疊｜"
-                            "0~0.3 = 分散良好。建議擇一持有 大於等於 0.7 的對。"
-                        )
 
     # ── T7 已移至 T5 之前（v18.194 故事化：持倉戰情 → 重疊診斷）──
 
