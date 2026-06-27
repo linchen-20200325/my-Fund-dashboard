@@ -34,6 +34,7 @@ from shared.fred_series import (
     FRED_T10Y2Y,
     FRED_T10Y3M,
     FRED_T5YIE,
+    FRED_TGA,
     FRED_UMCSENT,
     FRED_UNRATE,
 )
@@ -119,6 +120,7 @@ def _update_data_registry():
         "JOBLESS":      FRED_ICSA,
         "CONT_CLAIMS":  FRED_CCSA,
         "FED_BS":       FRED_FED_BS,
+        "TGA":          FRED_TGA,         # 政府帳戶（淨流動性零件，v19.192）
         "HY_SPREAD":    FRED_HY_SPREAD,
         "YIELD_10Y2Y":  FRED_T10Y2Y,
         "YIELD_10Y3M":  FRED_T10Y3M,

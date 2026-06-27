@@ -1492,11 +1492,12 @@ def render_macro_tab() -> None:
                     ("m2_yoy",  "📊 M2 YoY",        "us_m2_yoy",  "貨幣供給年增；>4% 熱錢充裕、<0 緊縮"),
                     ("walcl",   "🏦 Fed 資產負債表", "us_walcl",   "擴表=QE 放水、縮表=QT 回收"),
                     ("rrp",     "💧 隔夜逆回購 RRP",  "us_rrp",     "流動性蓄水池；<100B 枯竭警示"),
+                    ("net_liq", "🌊 淨流動性",        "us_net_liq", "Fed資產−RRP−TGA；真正能流進股市的錢"),
                     ("hy_oas",  "⚠️ HY 信用利差",     "us_hy_oas",  "高收益債利差；>5.5% 信用緊縮撤離"),
                     ("hyg_lqd", "💰 HYG/LQD 比",      "us_hyg_lqd", "高收益/投等債比；升=risk-on 熱錢進股"),
                     ("aaii",    "😱 AAII 情緒",       "us_aaii",    "散戶多空差(反指標)；>+20 過熱賣訊"),
                 ]
-                for _row_start in (0, 3):
+                for _row_start in range(0, len(_us_card_specs), 3):
                     _ucards = st.columns(3)
                     for _ci, (_ek, _ctitle, _spk, _cnote) in enumerate(
                             _us_card_specs[_row_start:_row_start + 3]):
@@ -1552,12 +1553,13 @@ def render_macro_tab() -> None:
                     from services.us_liquidity_engine import fetch_us_liquidity_snapshot  # noqa: PLC0415
                     _us_liq = fetch_us_liquidity_snapshot(FRED_KEY)
 
-                    # Row 1: 流動性 3 chips
-                    _r1 = st.columns(3)
+                    # Row 1: 流動性 4 chips（v19.192 加淨流動性）
+                    _r1 = st.columns(4)
                     _row1 = [
                         ("m2_yoy", "📊 M2 YoY", "廣義貨幣供給年增（FRED M2SL）"),
                         ("walcl", "🏦 Fed 資產負債表", "QE/QT pace（FRED WALCL）"),
                         ("rrp", "💧 隔夜逆回購 RRP", "流動性蓄水池（FRED RRPONTSYD）"),
+                        ("net_liq", "🌊 淨流動性", "Fed資產−RRP−TGA（兆美元，真正進股市的錢）"),
                     ]
                     for _i, (_key, _title, _default_desc) in enumerate(_row1):
                         with _r1[_i]:

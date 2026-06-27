@@ -276,16 +276,16 @@ def test_hyg_lqd_series_matches_ratio():
 # ── fetch_us_liquidity_snapshot orchestrator ─────────────────────────────────
 
 def test_snapshot_all_keys_present():
-    """所有 6 指標都失敗時仍回完整 dict（每個都有 _err）."""
+    """所有 7 指標都失敗時仍回完整 dict（每個都有 _err）."""
     with patch.object(ule, "fetch_fred", return_value=pd.DataFrame()), \
          patch.object(ule, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
          patch("repositories.macro_repository.fetch_url", return_value=_MockResp(500)):
         ule.fetch_aaii_sentiment.cache_clear()
         snap = ule.fetch_us_liquidity_snapshot("key")
         # F-PROV-1 phase 19: _provenance 為 schema-additive 後設,僅在有成功子指標時出現;
-        # 此測試全失敗 → 不會有 _provenance,6 個指標 key 須齊全
+        # 此測試全失敗 → 不會有 _provenance,7 個指標 key 須齊全（v19.192 加 net_liq）
         indicator_keys = {k for k in snap.keys() if not k.startswith("_")}
-        assert indicator_keys == {"hy_oas", "rrp", "m2_yoy", "walcl", "hyg_lqd", "aaii"}
+        assert indicator_keys == {"hy_oas", "rrp", "m2_yoy", "walcl", "net_liq", "hyg_lqd", "aaii"}
         for k, v in snap.items():
             if k.startswith("_"):
                 continue
