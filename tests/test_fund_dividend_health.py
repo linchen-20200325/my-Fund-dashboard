@@ -138,32 +138,54 @@ class TestDividendSafetyGolden:
         assert out["eating_principal"] is False
 
     def test_serious_eating_negative_return(self):
+        # v19.175:gap = 5-(-2) = 7pp > 2pp + ret < 0 → 嚴重吃本金(報酬為負)
         out = _ds(-2.0, 5.0)
         assert "嚴重吃本金" in out["status"]
         assert out["alert_level"] == "red"
         assert out["eating_principal"] is True
         assert out["coverage"] == -0.4
+        assert out["gap_pct"] == 7.0  # v19.175 新增欄位
 
     def test_eating_principal_red(self):
-        out = _ds(3.0, 5.0)
-        assert out["status"] == "🔴 吃本金警示"
+        # v19.175:gap = 5-1 = 4pp > 2pp → 🔴 吃本金(3 色制)
+        out = _ds(1.0, 5.0)
+        assert out["status"] == "🔴 吃本金"
         assert out["alert_level"] == "red"
         assert out["eating_principal"] is True
-        assert out["coverage"] == 0.6
+        assert out["coverage"] == 0.2
+        assert out["gap_pct"] == 4.0
 
-    def test_edge_yellow(self):
-        out = _ds(5.5, 5.0)  # coverage=1.1 → yellow
-        assert "邊緣" in out["status"]
+    def test_edge_yellow_within_warn_gap(self):
+        # v19.175:gap = 5-4 = 1pp ∈ (0, 2pp] → 🟡 警示
+        out = _ds(4.0, 5.0)
+        assert "警示" in out["status"]
         assert out["alert_level"] == "yellow"
-        assert out["eating_principal"] is False
-        assert out["coverage"] == 1.1
+        # gap > 0 → 技術上吃本金,但在警戒線內
+        assert out["eating_principal"] is True
+        assert out["gap_pct"] == 1.0
 
-    def test_healthy_green(self):
-        out = _ds(8.0, 5.0)  # coverage=1.6 → green
+    def test_boundary_gap_equals_warn_threshold(self):
+        # v19.175 邊界 case:gap = 2.0pp 剛好等於警戒線 → 仍歸黃(<=)
+        out = _ds(3.0, 5.0)
+        assert "警示" in out["status"]
+        assert out["alert_level"] == "yellow"
+        assert out["gap_pct"] == 2.0
+
+    def test_healthy_green_full_coverage(self):
+        # v19.175:gap = 5-8 = -3pp ≤ 0 → 🟢 健康
+        out = _ds(8.0, 5.0)
         assert out["status"] == "🟢 健康"
         assert out["alert_level"] == "green"
         assert out["eating_principal"] is False
         assert out["coverage"] == 1.6
+        assert out["gap_pct"] == -3.0
+
+    def test_healthy_green_break_even(self):
+        # v19.175:gap = 5-5 = 0 → 🟢 健康(持平視同覆蓋)
+        out = _ds(5.0, 5.0)
+        assert out["status"] == "🟢 健康"
+        assert out["alert_level"] == "green"
+        assert out["gap_pct"] == 0.0
 
     def test_nav_cross_check_warning(self):
         out = _ds(3.0, 5.0, nav_change=-7.0)
@@ -319,6 +341,9 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         }
 
     def test_pd_series_nav_no_value_error(self):
+        # v19.175 後主源改 compute_1y_total_return(業界複利優先,perf['1Y'] >
+        # ret_1y_total > ret_1y > NAV 外推),Bug 4 fix 核心 assertion 仍守
+        # 「pd.Series 進去不 raise」+ 回 dict;_tr1y_method 期待業界路徑。
         import pandas as pd
         from services.fund_dividend_health import check_eating_principal_1y_mk
         nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
@@ -326,9 +351,13 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         s = pd.Series(nav, name="nav")
         divs = [{"date": "2024-12-15", "amount": 0.05}]
         fund = self._build_fund(s, divs)
-        out = check_eating_principal_1y_mk(fund)  # 不可 raise
+        out = check_eating_principal_1y_mk(fund)  # 不可 raise(Bug 4 核心)
         assert isinstance(out, dict)
-        assert out.get("_tr1y_method") == "mk_simple"
+        # v19.175:走業界 ret_1y_total 路徑;mk_simple 退居對照欄(_tr1y_meta)
+        assert "ret_1y_total" in (out.get("_tr1y_method") or "")
+        # 對照欄仍可算出 mk_simple_value
+        assert out.get("_tr1y_meta") is not None
+        assert "mk_simple_value" in out["_tr1y_meta"]
 
     def test_dict_nav_still_works(self):
         """confirm refactor 不破壞 dict 入口."""
@@ -339,10 +368,15 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         fund = self._build_fund(nav, divs)
         out = check_eating_principal_1y_mk(fund)
         assert isinstance(out, dict)
-        assert out.get("_tr1y_method") == "mk_simple"
+        # v19.175 業界路徑(metrics.ret_1y_total = 14.5 走 ret_1y_total)
+        assert "ret_1y_total" in (out.get("_tr1y_method") or "")
 
     def test_falls_back_to_moneydj_series_when_top_none(self):
-        """top-level None → 走 moneydj_raw["series"] fallback."""
+        """top-level None → 走 moneydj_raw["series"] fallback。
+
+        v19.175:此 test 守的核心仍是「不 raise + 回 dict」(Bug 4 fix 行為)。
+        主源走業界 ret_1y_total(metrics.ret_1y_total=14.5),mk_simple 退對照欄。
+        """
         import pandas as pd
         from services.fund_dividend_health import check_eating_principal_1y_mk
         nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
@@ -360,4 +394,6 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         }
         out = check_eating_principal_1y_mk(fund)
         assert isinstance(out, dict)
-        assert out.get("_tr1y_method") == "mk_simple"
+        # mk_simple 對照欄仍能從 moneydj_raw.series + dividends fallback 算出
+        assert out.get("_tr1y_meta") is not None
+        assert "mk_simple_value" in out["_tr1y_meta"]
