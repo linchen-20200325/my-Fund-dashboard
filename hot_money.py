@@ -149,6 +149,13 @@ def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame,
     # v19.151 F-PROV-1 phase 2:DataFrame.attrs 承載血緣(對齊 fetch_yf_close v19.83)
     out.attrs["source"] = "FinMind:TaiwanStockTotalInstitutionalInvestors"
     out.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+    # v19.186 Pandera Phase B:出口 schema 驗證(date 升序唯一 / net 無 NaN / 單位合理)
+    # 契約違反 = 上游資料異常,§1 Fail Loud 直接拋(不靜默回髒資料)
+    try:
+        from shared.schemas import validate_foreign_flow
+        out = validate_foreign_flow(out)
+    except ImportError:
+        pass  # pandera 不在環境(極罕見,requirements 已 pin)→ 降級不驗
     return out, ""
 
 

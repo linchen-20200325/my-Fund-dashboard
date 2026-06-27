@@ -318,3 +318,82 @@ class TestDivHealthLightDelegation:
 #   1. 資料缺失(None/NaN/字串)→ is_data_missing=True ✅ TestCanonicalDataMissing
 #   2. 無配息基金(div=0/負)→ is_no_dividend=True, is_eating=False ✅ TestCanonicalNoDividend
 #   3. 報酬 = 配息(打平 edge case)→ is_eating=False(嚴格小於)✅ test_is_eating_strict_less_than
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.181 Bug 4 regression — check_eating_principal_1y_mk 接受 pd.Series
+# ════════════════════════════════════════════════════════════════
+
+class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
+    """v19.181 Bug 4 regression:fund["series"] 為 pd.Series 時不可 ambiguous truth value.
+
+    過去 `fund.get("series") or X` 對多元素 pd.Series 觸發
+    `ValueError: The truth value of a Series is ambiguous.` 導致組合基金
+    健診摘要表 10/10 ValueError 全炸,改顯式 None 檢查後解決。
+    """
+
+    def _build_fund(self, series_obj, divs_obj):
+        return {
+            "series": series_obj,
+            "dividends": divs_obj,
+            "moneydj_raw": {"moneydj_div_yield": 7.49},
+            "metrics": {"ret_1y_total": 14.5},
+        }
+
+    def test_pd_series_nav_no_value_error(self):
+        # v19.175 後主源改 compute_1y_total_return(業界複利優先,perf['1Y'] >
+        # ret_1y_total > ret_1y > NAV 外推),Bug 4 fix 核心 assertion 仍守
+        # 「pd.Series 進去不 raise」+ 回 dict;_tr1y_method 期待業界路徑。
+        import pandas as pd
+        from services.fund_dividend_health import check_eating_principal_1y_mk
+        nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
+        nav["2025-06-01"] = 9.10
+        s = pd.Series(nav, name="nav")
+        divs = [{"date": "2024-12-15", "amount": 0.05}]
+        fund = self._build_fund(s, divs)
+        out = check_eating_principal_1y_mk(fund)  # 不可 raise(Bug 4 核心)
+        assert isinstance(out, dict)
+        # v19.175:走業界 ret_1y_total 路徑;mk_simple 退居對照欄(_tr1y_meta)
+        assert "ret_1y_total" in (out.get("_tr1y_method") or "")
+        # 對照欄仍可算出 mk_simple_value
+        assert out.get("_tr1y_meta") is not None
+        assert "mk_simple_value" in out["_tr1y_meta"]
+
+    def test_dict_nav_still_works(self):
+        """confirm refactor 不破壞 dict 入口."""
+        from services.fund_dividend_health import check_eating_principal_1y_mk
+        nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
+        nav["2025-06-01"] = 9.10
+        divs = [{"date": "2024-12-15", "amount": 0.05}]
+        fund = self._build_fund(nav, divs)
+        out = check_eating_principal_1y_mk(fund)
+        assert isinstance(out, dict)
+        # v19.175 業界路徑(metrics.ret_1y_total = 14.5 走 ret_1y_total)
+        assert "ret_1y_total" in (out.get("_tr1y_method") or "")
+
+    def test_falls_back_to_moneydj_series_when_top_none(self):
+        """top-level None → 走 moneydj_raw["series"] fallback。
+
+        v19.175:此 test 守的核心仍是「不 raise + 回 dict」(Bug 4 fix 行為)。
+        主源走業界 ret_1y_total(metrics.ret_1y_total=14.5),mk_simple 退對照欄。
+        """
+        import pandas as pd
+        from services.fund_dividend_health import check_eating_principal_1y_mk
+        nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
+        nav["2025-06-01"] = 9.10
+        s = pd.Series(nav, name="nav")
+        fund = {
+            "series": None,  # top-level missing
+            "dividends": None,
+            "moneydj_raw": {
+                "moneydj_div_yield": 7.49,
+                "series": s,
+                "dividends": [{"date": "2024-12-15", "amount": 0.05}],
+            },
+            "metrics": {"ret_1y_total": 14.5},
+        }
+        out = check_eating_principal_1y_mk(fund)
+        assert isinstance(out, dict)
+        # mk_simple 對照欄仍能從 moneydj_raw.series + dividends fallback 算出
+        assert out.get("_tr1y_meta") is not None
+        assert "mk_simple_value" in out["_tr1y_meta"]

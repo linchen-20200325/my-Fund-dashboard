@@ -434,9 +434,15 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
 
     # 對照欄:MK 嚴格簡單單利(若 series + dividends 可用)仍計算供 UI 對照顯示,
     # 但 不再 參與燈號判定。
+    # v19.181 Bug 4 fix: pd.Series 的 `or` 會觸發 ambiguous truth value ValueError —
+    # 改用顯式 None 檢查(`fund.get("series")` 可能回傳 pd.Series 物件)
     _tr1y_meta: Optional[dict] = None
-    _series = fund.get("series") or (fund.get("moneydj_raw") or {}).get("series")
-    _divs = fund.get("dividends") or (fund.get("moneydj_raw") or {}).get("dividends")
+    _series = fund.get("series")
+    if _series is None:
+        _series = (fund.get("moneydj_raw") or {}).get("series")
+    _divs = fund.get("dividends")
+    if _divs is None:
+        _divs = (fund.get("moneydj_raw") or {}).get("dividends")
     if _series is not None and _divs is not None:
         try:
             _mk_v, _mk_meta = compute_1y_total_return_mk_simple(_series, _divs)

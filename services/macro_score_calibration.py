@@ -43,11 +43,26 @@ from shared.fred_series import (
     FRED_T10Y3M,
     FRED_UNRATE,
 )
-from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.179 PMI + v19.184 M2/FedBS
+    HY_SPREAD_THRESHOLDS as _HY_THR,
+    PMI_THRESHOLDS as _PMI_THR,
+    M2_THRESHOLDS as _M2_THR,
+    FED_BS_THRESHOLDS as _FEDBS_THR,
+)
 
 # F-GRAY-4 v19.169: HY_SPREAD score_function SSOT (SPEC §16.2)
 _HY_TIGHT = _HY_THR["score_function"]["tight_below"]
 _HY_WIDE = _HY_THR["score_function"]["wide_above"]
+
+# F-GRAY-4 v19.179: PMI score_function SSOT (SPEC §16.2)
+_PMI_EXPANSION = _PMI_THR["score_function"]["expansion_above"]  # 50.0
+_PMI_RECESSION = _PMI_THR["score_function"]["recession_below"]  # 45.0
+
+# F-GRAY-4 v19.184: M2 / Fed BS score_function SSOT (SPEC §16.2)
+_M2_EASING = _M2_THR["score_function"]["easing_above"]            # 5.0
+_M2_TIGHTENING = _M2_THR["score_function"]["tightening_below"]    # 0.0
+_FEDBS_EXPANSION = _FEDBS_THR["score_function"]["expansion_above"]    # 5.0
+_FEDBS_CONTRACTION = _FEDBS_THR["score_function"]["contraction_below"]  # -5.0
 
 
 # ════════════════════════════════════════════════════════════════
@@ -55,12 +70,12 @@ _HY_WIDE = _HY_THR["score_function"]["wide_above"]
 # ════════════════════════════════════════════════════════════════
 def _s_yield_10y2y(v):    return 2 if v > 0.5 else (-2 if v < 0 else 0)
 def _s_yield_10y3m(v):    return 2 if v > 0.5 else (-2 if v < 0 else 0)
-def _s_pmi(v):            return 2 if v >= 50 else (-2 if v < 45 else -1)
+def _s_pmi(v):            return 2 if v >= _PMI_EXPANSION else (-2 if v < _PMI_RECESSION else -1)
 def _s_hy_spread(v):      return 2 if v < _HY_TIGHT else (-2 if v > _HY_WIDE else 0)
-def _s_m2(v):             return 1 if v > 5 else (-1 if v < 0 else 0)
+def _s_m2(v):             return 1 if v > _M2_EASING else (-1 if v < _M2_TIGHTENING else 0)
 def _s_breadth(chg):      return 1 if chg > 0.5 else (-1 if chg < -1 else 0)
 def _s_dxy(chg_m):        return 1 if chg_m < -1 else (-1 if chg_m > 2 else 0)
-def _s_fed_bs(v):         return 1 if v > 5 else (-1 if v < -5 else 0)
+def _s_fed_bs(v):         return 1 if v > _FEDBS_EXPANSION else (-1 if v < _FEDBS_CONTRACTION else 0)
 def _s_vix(v):            return 1 if v < 18 else (-1 if v > 30 else 0)
 def _s_cpi(v):            return 1 if 1 < v < 2.5 else (-1 if v > 4 else 0)
 def _s_fedrate(v, p):     return 0.5 if v < p else (-0.5 if v > 5 else 0)

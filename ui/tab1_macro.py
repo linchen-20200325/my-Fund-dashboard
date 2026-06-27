@@ -42,7 +42,11 @@ from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
 )
-from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.179 PMI
+    HY_SPREAD_THRESHOLDS as _HY_THR,
+    PMI_THRESHOLDS as _PMI_THR,
+)
+_PMI_SITUATION_BELOW = _PMI_THR["alert_generation"]["contraction_below"]  # 50.0(L3 situation card 用)
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
     SAHM_RECESSION_THRESHOLD,
@@ -134,7 +138,31 @@ def _radar_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
         # PCR > 1.0 較看空,> 1.5 極端恐慌(教學常見值)
         return [(1.00, "dot", "#d29922", "看空 1.0"),
                 (1.50, "dash", "#f85149", "恐慌 1.5")]
-    # 其他 key(yield_10y_shock / spx_trend_break / sox_drop / asia_overnight)
+    # v19.188 — 🌳 長期座標桶 美股流動性卡片 SPEC 線
+    # cut-off 全部 import 自 services.us_liquidity_engine（與各 fetcher 的 color/label 同源 SSOT）
+    if key in ("us_hy_oas", "us_m2_yoy", "us_rrp", "us_aaii"):
+        try:
+            from services.us_liquidity_engine import (
+                HY_OAS_WARN_PCT, HY_OAS_CRISIS_PCT,
+                M2_YOY_LOOSE_PCT, M2_YOY_HOT_PCT,
+                RRP_DRAIN_BN,
+                AAII_EUPHORIA_PCT, AAII_PANIC_PCT,
+            )
+        except Exception:
+            return []
+        if key == "us_hy_oas":
+            return [(HY_OAS_WARN_PCT, "dot", "#d29922", f"警戒 {HY_OAS_WARN_PCT}%"),
+                    (HY_OAS_CRISIS_PCT, "dash", "#f85149", f"緊縮 {HY_OAS_CRISIS_PCT}%")]
+        if key == "us_m2_yoy":
+            return [(M2_YOY_LOOSE_PCT, "dot", "#3fb950", f"寬鬆 {M2_YOY_LOOSE_PCT}%"),
+                    (M2_YOY_HOT_PCT, "dash", "#f85149", f"過熱 {M2_YOY_HOT_PCT}%")]
+        if key == "us_rrp":
+            return [(RRP_DRAIN_BN, "dash", "#d29922", f"枯竭 {RRP_DRAIN_BN:.0f}B")]
+        if key == "us_aaii":
+            return [(AAII_EUPHORIA_PCT, "dash", "#f85149", f"過熱 +{AAII_EUPHORIA_PCT:.0f}"),
+                    (AAII_PANIC_PCT, "dot", "#3fb950", f"恐慌 {AAII_PANIC_PCT:.0f}")]
+    # 其他 key(yield_10y_shock / spx_trend_break / sox_drop / asia_overnight
+    #          / us_walcl / us_hyg_lqd:delta-based,無 natural level threshold)
     # trend 為絕對 level 而判斷用 delta,無單一 natural threshold,跳過 hline
     return []
 
@@ -180,6 +208,44 @@ def _make_radar_sparkline(trend: list, key: str, color: str):
         return _fig
     except Exception:
         return None
+
+
+# v19.187 — 燈號 → 卡片邊框色(中期 Z-Score / 長期桶卡片共用,對齊短線雷達色票)
+_MACRO_CARD_LIGHT_COLOR = {
+    "red": "#f85149", "orange": "#ffab40", "yellow": "#d29922",
+    "green": "#3fb950", "gray": "#6e7681",
+}
+
+
+def _render_macro_indicator_card(title: str, signal: str, color: str,
+                                 value_str: str, note: str, label: str,
+                                 trend, spark_key: str) -> None:
+    """v19.187 — 通用總經指標卡(複製短線雷達卡格式:燈號 + 值 + 白話 + mini sparkline)。
+
+    user 2026-06-27:基金短線雷達為範本,長期/中期桶也改成小圖+SPEC 卡片。
+    本 helper 與短線雷達卡視覺一致(同 HTML 結構 + 同 _make_radar_sparkline),
+    供長期/中期桶複用。**須在 `with st.columns(...)[i]:` 區塊內呼叫**(streamlit 容器)。
+    trend 為近 6-8 期 list;spark_key 決定 sparkline 的 SPEC threshold 線(無則純線)。
+    """
+    import streamlit as _st_c
+    _st_c.markdown(
+        f"<div style='background:#0d1117;border:2px solid {color};"
+        f"border-radius:10px;padding:10px 12px 6px;margin:4px 0;min-height:150px;"
+        f"display:flex;flex-direction:column;justify-content:space-between'>"
+        f"<div>"
+        f"<div style='color:#888;font-size:10px;letter-spacing:1px'>{title}</div>"
+        f"<div style='color:{color};font-size:15px;font-weight:800;margin:4px 0 6px'>{signal}</div>"
+        f"<div style='color:#fff;font-weight:700;font-size:14px'>值 {value_str}</div>"
+        f"</div>"
+        f"<div style='color:#aaa;font-size:9px;border-top:1px solid #30363d;"
+        f"padding-top:4px;margin-top:4px;line-height:1.3'>{note}"
+        f"<br/><span style='color:#555'>{label}</span></div>"
+        f"</div>", unsafe_allow_html=True)
+    _sp = _make_radar_sparkline(trend, spark_key, color)
+    if _sp is not None:
+        _st_c.plotly_chart(_sp, use_container_width=True,
+                           key=f"mcard_sp_{spark_key}",
+                           config={"displayModeBar": False})
 
 
 def _now_tw():
@@ -1356,6 +1422,33 @@ def render_macro_tab() -> None:
         import contextlib as _cl_v1942
         tab_main = _cl_v1942.nullcontext()
 
+        # ══ v19.188 — 🩺 綜合健康度 hero 卡(對齊台股「綜合健康度」體驗)══
+        # user 2026-06-27:基金總經頂部補綜合健康度。
+        # 用 23 指標加權 composite(active.json 權重)+ composite_verdict 5 級白話。
+        # 與下方五桶 bar 互補不重複:此為「多空加權淨分」,五桶燈1為「景氣循環階段(0-10 phase)」。
+        try:
+            from ui.helpers.macro_helpers import (
+                calculate_composite_score, composite_verdict,
+            )
+            _comp_score = calculate_composite_score(ind)
+            _cv_icon, _cv_level, _cv_color, _cv_action = composite_verdict(_comp_score)
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,#0d1117,#161b22);"
+                f"border:2px solid {_cv_color};border-radius:12px;padding:14px 20px;margin:0 0 12px;"
+                f"display:flex;align-items:center;gap:20px'>"
+                f"<div style='flex-shrink:0;text-align:center;min-width:96px'>"
+                f"<div style='font-size:11px;color:#8b949e;letter-spacing:1px'>綜合健康度</div>"
+                f"<div style='font-size:42px;font-weight:900;color:{_cv_color};line-height:1.1'>{_comp_score:+.1f}</div>"
+                f"<div style='font-size:10px;color:#484f58'>23 指標加權淨分</div>"
+                f"</div>"
+                f"<div style='flex:1;min-width:0'>"
+                f"<div style='font-size:22px;font-weight:900;color:{_cv_color}'>{_cv_icon} {_cv_level}</div>"
+                f"<div style='font-size:13px;color:#c9d1d9;margin-top:4px;line-height:1.5'>{_cv_action}</div>"
+                f"</div></div>",
+                unsafe_allow_html=True)
+        except Exception as _comp_e:  # noqa: BLE001
+            st.caption(f"綜合健康度卡暫無法顯示：[{type(_comp_e).__name__}] {_comp_e}")
+
         # ══ v19.146 — 📊 五桶 summary bar(頂部一覽:長期/中期/短線/拐點/新聞)══
         # 對齊 Stock v18.284 五桶 bar 體驗,Fund 加 📰 新聞為第 5 桶(讀 v19.144 SSOT)。
         # news_items=None 時自動降級為 ⬜「未掃描」,點開「執行 AI 裁決」抓 RSS 後燈亮。
@@ -1388,6 +1481,52 @@ def render_macro_tab() -> None:
             st.markdown("## 🌳 長期座標")
             st.caption("regime / 結構 ｜ 美林時鐘 + 美股流動性熱錢 + 資本防線")
 
+            # ── v19.188 💵 美股流動性 6 卡片（短線雷達範本：燈號 + 值 + 白話 + mini sparkline + SPEC 線）──
+            # user 2026-06-27:基金短線雷達為範本,長期桶也改成小圖+SPEC 卡片;Raw data 收進下方 expander。
+            st.markdown("#### 💵 美股流動性 × 熱錢 — 流動性 × 信用 × 情緒")
+            try:
+                from services.us_liquidity_engine import fetch_us_liquidity_snapshot as _fetch_us_liq_cards  # noqa: PLC0415
+                _us_liq_cards = _fetch_us_liq_cards(FRED_KEY)
+                # (engine_key, 卡片標題, sparkline spark_key, 白話 note)
+                _us_card_specs = [
+                    ("m2_yoy",  "📊 M2 YoY",        "us_m2_yoy",  "貨幣供給年增；>4% 熱錢充裕、<0 緊縮"),
+                    ("walcl",   "🏦 Fed 資產負債表", "us_walcl",   "擴表=QE 放水、縮表=QT 回收"),
+                    ("rrp",     "💧 隔夜逆回購 RRP",  "us_rrp",     "流動性蓄水池；<100B 枯竭警示"),
+                    ("hy_oas",  "⚠️ HY 信用利差",     "us_hy_oas",  "高收益債利差；>5.5% 信用緊縮撤離"),
+                    ("hyg_lqd", "💰 HYG/LQD 比",      "us_hyg_lqd", "高收益/投等債比；升=risk-on 熱錢進股"),
+                    ("aaii",    "😱 AAII 情緒",       "us_aaii",    "散戶多空差(反指標)；>+20 過熱賣訊"),
+                ]
+                for _row_start in (0, 3):
+                    _ucards = st.columns(3)
+                    for _ci, (_ek, _ctitle, _spk, _cnote) in enumerate(
+                            _us_card_specs[_row_start:_row_start + 3]):
+                        with _ucards[_ci]:
+                            _ud = _us_liq_cards.get(_ek, {}) if isinstance(_us_liq_cards, dict) else {}
+                            if not _ud or "_err" in _ud:
+                                _emsg = (_ud.get("_err", "未載入") if isinstance(_ud, dict) else "未載入")
+                                _render_macro_indicator_card(
+                                    title=_ctitle, signal="⬜ 待取得",
+                                    color=_MACRO_CARD_LIGHT_COLOR["gray"],
+                                    value_str="—", note=_cnote,
+                                    label=f"❌ {str(_emsg)[:32]}", trend=None,
+                                    spark_key=_spk)
+                                continue
+                            _uval = _ud.get("value")
+                            _uunit = _ud.get("unit", "")
+                            _uval_str = (f"{_uval:+.2f}{_uunit}"
+                                         if isinstance(_uval, (int, float)) else "—")
+                            _render_macro_indicator_card(
+                                title=_ctitle,
+                                signal=_ud.get("label", "—"),
+                                color=_ud.get("color", _MACRO_CARD_LIGHT_COLOR["gray"]),
+                                value_str=_uval_str,
+                                note=_cnote,
+                                label=f"美股流動性 ｜ {_ud.get('date', '')}",
+                                trend=_ud.get("series"),
+                                spark_key=_spk)
+            except Exception as _us_card_e:  # noqa: BLE001
+                st.caption(f"💵 美股流動性卡片暫時無法顯示：[{type(_us_card_e).__name__}] {_us_card_e}")
+
             # ── MK 景氣時鐘 ＆ 資產輪動（v18.8）── L2/L3 皆顯示
             st.divider()
             render_mk_clock_section(ind)
@@ -1402,7 +1541,7 @@ def render_macro_tab() -> None:
                     return s.dropna().tail(60)
                 except Exception: return None
 
-            with st.expander("⑥ 💵 美股流動性 × 熱錢監測 — 三角：流動性 × 信用 × 情緒",
+            with st.expander("⑥ 💵 美股流動性 × 熱錢監測 — Raw data（metric 明細 + 新鮮度 + 強制重抓）",
                              expanded=False):
                 st.caption(
                     "💡 **為何重要**：境外美股基金 NAV 主受 ① 美元流動性（M2/RRP/WALCL）+ "
@@ -1689,23 +1828,30 @@ def render_macro_tab() -> None:
                     # 預設行：資料不足時佔位（不參與 |Z| 排序，會 sink 到表尾）
                     if _zv is None:
                         _zs_rows.append({
-                            "_abs": -1, "指標": _zname, "當前值": "—",
+                            "_abs": -1, "_key": _zk, "指標": _zname, "當前值": "—",
                             "白話判讀": "⬜ 資料不足，待補",
+                            "_color": "#6e7681", "_trend": [], "_signal": "⬜ 無資料",
                         })
                         continue
                     try:
                         _zv_f = float(_zv)
                     except (TypeError, ValueError):
                         _zs_rows.append({
-                            "_abs": -1, "指標": _zname, "當前值": str(_zv)[:10],
+                            "_abs": -1, "_key": _zk, "指標": _zname, "當前值": str(_zv)[:10],
                             "白話判讀": "⬜ 數值格式異常",
+                            "_color": "#6e7681", "_trend": [], "_signal": "⬜ 格式異常",
                         })
                         continue
                     _z_score = None
+                    _trend_list = []  # v19.187 sparkline 用近 8 期
                     if _zs_raw is not None:
                         try:
                             _zser = (_zs_raw if isinstance(_zs_raw, _pd_zs.Series)
                                      else _pd_zs.Series(_zs_raw)).dropna()
+                            try:
+                                _trend_list = [float(_x) for _x in _zser.tail(8).tolist()]
+                            except Exception:
+                                _trend_list = []
                             if len(_zser) >= 10:
                                 _zmu, _zsig = float(_zser.mean()), float(_zser.std())
                                 if _zsig > 0 and not (_zsig != _zsig):  # NaN guard
@@ -1716,40 +1862,54 @@ def render_macro_tab() -> None:
                             pass  # smoke-allow-pass
                     _unit_s = f" {_zunit}" if _zunit else ""
                     _val_s  = f"{_zv_f:.{_zdec}f}{_unit_s}"
-                    # 燈號 + 白話
+                    # 燈號 + 白話 + 卡片邊框色（對齊四色說明條）
                     if _z_score is None:
                         _verdict = "⬜ 樣本不足，無法判讀"
                         _abs_z = -1
+                        _zcolor = "#6e7681"
+                        _zsig_txt = "⬜ 樣本不足"
                     else:
                         _abs_z = abs(_z_score)
                         _phrase = _z_pos_phrase if _z_score > 0 else _z_neg_phrase
                         if _abs_z >= 2:
-                            _icon = "🔴 極端"
+                            _icon, _zcolor = "🔴 極端", "#f85149"
                         elif _abs_z >= 1.5:
-                            _icon = "🟠 警示"
+                            _icon, _zcolor = "🟠 警示", "#ffab40"
                         elif _abs_z >= 1:
-                            _icon = "🟡 關注"
+                            _icon, _zcolor = "🟡 關注", "#d29922"
                         else:
-                            _icon = "🟢 正常"
+                            _icon, _zcolor = "🟢 正常", "#3fb950"
                         _verdict = f"{_icon}（{_phrase}，Z={_z_score:+.2f}）"
+                        _zsig_txt = _icon
                     _zs_rows.append({
-                        "_abs": _abs_z,
-                        "指標": _zname,
-                        "當前值": _val_s,
-                        "白話判讀": _verdict,
+                        "_abs": _abs_z, "_key": _zk, "指標": _zname, "當前值": _val_s,
+                        "白話判讀": _verdict, "_color": _zcolor,
+                        "_trend": _trend_list, "_signal": _zsig_txt,
                     })
                 if _zs_rows:
                     # |Z| DESC，資料不足（_abs=-1）一律沉底
                     _zs_rows.sort(key=lambda r: r["_abs"], reverse=True)
-                    for r in _zs_rows:
-                        r.pop("_abs", None)
-                    _zs_df = _pd_zs.DataFrame(_zs_rows)
-                    st.dataframe(_zs_df, use_container_width=True, hide_index=True,
-                                 column_config={
-                                     "指標":     st.column_config.TextColumn(width="small"),
-                                     "當前值":   st.column_config.TextColumn(width="small"),
-                                     "白話判讀": st.column_config.TextColumn(width="large"),
-                                 })
+                    # v19.187 — 小圖卡片(範本:短線雷達):Z 可算的指標(異常先看)做成卡片格,每排 5
+                    _zs_carded = [r for r in _zs_rows if r["_abs"] >= 0]
+                    for _ci in range(0, len(_zs_carded), 5):
+                        _cz = st.columns(5)
+                        for _cc, _r in zip(_cz, _zs_carded[_ci:_ci + 5]):
+                            with _cc:
+                                _render_macro_indicator_card(
+                                    title=_r["指標"], signal=_r["_signal"], color=_r["_color"],
+                                    value_str=_r["當前值"], note=_r["白話判讀"], label="Z-Score 矩陣",
+                                    trend=_r["_trend"], spark_key=f"zs_{_r['_key']}")
+                    # Raw data:完整 23 指標表收進 expander(user:Raw data 縮起來,要看時候才打開)
+                    with st.expander("📋 Z-Score 完整矩陣（23 指標表 ｜ Raw data）", expanded=False):
+                        _zs_df = _pd_zs.DataFrame([
+                            {"指標": r["指標"], "當前值": r["當前值"], "白話判讀": r["白話判讀"]}
+                            for r in _zs_rows])
+                        st.dataframe(_zs_df, use_container_width=True, hide_index=True,
+                                     column_config={
+                                         "指標":     st.column_config.TextColumn(width="small"),
+                                         "當前值":   st.column_config.TextColumn(width="small"),
+                                         "白話判讀": st.column_config.TextColumn(width="large"),
+                                     })
 
             # ══════════════════════════════════════════════════
             # L3 情境判斷卡（Logic A / B）— L3 only
@@ -1761,11 +1921,11 @@ def render_macro_tab() -> None:
                 _sahm_v = float((ind.get("SAHM") or {}).get("value") or 0)
                 _adl_v = float((ind.get("ADL") or {}).get("value") or 0)
                 _l3_sit_cards = []
-                if _pmi_v > 0 and _pmi_v < 50 and _sahm_v < 0.5:
+                if _pmi_v > 0 and _pmi_v < _PMI_SITUATION_BELOW and _sahm_v < 0.5:
                     _l3_sit_cards.append({
                         "icon": "🟡", "border": MATERIAL_ORANGE, "bg": "#1a1200",
                         "title": "【Situation A — 庫存調整，非衰退】",
-                        "body": (f"PMI={_pmi_v:.1f}（<50 收縮）但薩姆規則={_sahm_v:.2f}（<0.5 安全線）。"
+                        "body": (f"PMI={_pmi_v:.1f}（<{_PMI_SITUATION_BELOW:.0f} 收縮）但薩姆規則={_sahm_v:.2f}（<0.5 安全線）。"
                                  f"製造業庫存去化壓力，消費端仍撐盤，非系統性衰退訊號。"
                                  f"策略：維持衛星資產比重，等待 PMI 觸底回升確認後加碼。"),
                     })

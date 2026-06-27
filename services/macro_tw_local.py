@@ -31,6 +31,12 @@ from shared.signal_thresholds import (
     CPI_MOM_FLAT_MAX_PCT,
     CPI_MOM_MILD_RISE_PCT,
 )
+# F-GRAY-4 v19.179 PR-3:TW PMI 5 級評分 SSOT
+from shared.macro_thresholds_v2 import TW_PMI_THRESHOLDS as _TW_PMI_THR
+_TWPMI_STRONG = _TW_PMI_THR["tw_pmi_score"]["strong_above"]      # 55.0
+_TWPMI_EXPANSION = _TW_PMI_THR["tw_pmi_score"]["expansion_above"]  # 52.0
+_TWPMI_NEUTRAL = _TW_PMI_THR["tw_pmi_score"]["neutral_above"]    # 50.0
+_TWPMI_WEAK = _TW_PMI_THR["tw_pmi_score"]["weak_above"]          # 48.0
 
 
 def _safe_float(x: Any) -> Optional[float]:
@@ -202,13 +208,13 @@ def classify_long_term_regime(
         weight_total += 20
 
     if pmi_v is not None:
-        if pmi_v >= 55:
+        if pmi_v >= _TWPMI_STRONG:
             pmi_pts = 2
-        elif pmi_v >= 52:
+        elif pmi_v >= _TWPMI_EXPANSION:
             pmi_pts = 1
-        elif pmi_v >= 50:
+        elif pmi_v >= _TWPMI_NEUTRAL:
             pmi_pts = 0
-        elif pmi_v >= 48:
+        elif pmi_v >= _TWPMI_WEAK:
             pmi_pts = -1
         else:
             pmi_pts = -2
@@ -320,13 +326,13 @@ def classify_short_term_regime(
         weight_total += 25
 
     if pmi_v is not None:
-        if pmi_v >= 55:
+        if pmi_v >= _TWPMI_STRONG:
             pmi_pts = 2
-        elif pmi_v >= 52:
+        elif pmi_v >= _TWPMI_EXPANSION:
             pmi_pts = 1
-        elif pmi_v >= 50:
+        elif pmi_v >= _TWPMI_NEUTRAL:
             pmi_pts = 0
-        elif pmi_v >= 48:
+        elif pmi_v >= _TWPMI_WEAK:
             pmi_pts = -1
         else:
             pmi_pts = -2

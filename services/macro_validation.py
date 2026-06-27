@@ -20,13 +20,26 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.178 CPI + v19.179 PMI
+    CPI_YOY_THRESHOLDS as _CPI_THR,
+    HY_SPREAD_THRESHOLDS as _HY_THR,
+    PMI_THRESHOLDS as _PMI_THR,
+)
+
+# F-GRAY-4 v19.179: PMI score_function SSOT (SPEC §16.2)
+_PMI_EXPANSION = _PMI_THR["score_function"]["expansion_above"]  # 50.0
+_PMI_RECESSION = _PMI_THR["score_function"]["recession_below"]  # 45.0
 
 DEFAULT_PARQUET_CACHE_DIR = Path("data_cache")
 
 # F-GRAY-4 v19.169: HY_SPREAD score_function SSOT (SPEC §16.2)
 _HY_TIGHT = _HY_THR["score_function"]["tight_below"]
 _HY_WIDE = _HY_THR["score_function"]["wide_above"]
+
+# F-GRAY-4 v19.178: CPI_YOY score_function SSOT (SPEC §16.2)
+_CPI_IDEAL_LOW = _CPI_THR["score_function"]["ideal_low"]
+_CPI_IDEAL_HIGH = _CPI_THR["score_function"]["ideal_high"]
+_CPI_ELEVATED = _CPI_THR["score_function"]["elevated_above"]
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -91,14 +104,14 @@ def _load_vix_calibrated_thresholds(
 _VIX_CRISIS, _VIX_WARNING = _load_vix_calibrated_thresholds()
 
 SCORE_RULES: dict[str, tuple[float, ScoreFn]] = {
-    "PMI":          (2.0, lambda v: 2.0 if v >= 50 else (-2.0 if v < 45 else -1.0)),
+    "PMI":          (2.0, lambda v: 2.0 if v >= _PMI_EXPANSION else (-2.0 if v < _PMI_RECESSION else -1.0)),
     "YIELD_10Y2Y":  (2.0, lambda v: 2.0 if v > 0.5 else (-2.0 if v < 0 else 0.0)),
     "YIELD_10Y3M":  (2.0, lambda v: 2.0 if v > 0 else -2.0),
     "HY_SPREAD":    (2.0, lambda v: 2.0 if v < _HY_TIGHT else (-2.0 if v > _HY_WIDE else 0.0)),
     "M2":           (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < 0 else 0.0)),
     "FED_BS":       (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < -5 else 0.0)),
     "VIX":          (1.0, _make_vix_score_fn(_VIX_CRISIS, _VIX_WARNING)),
-    "CPI":          (0.5, lambda v: 1.0 if 1 < v < 2.5 else (-1.0 if v > 4 else 0.0)),
+    "CPI":          (0.5, lambda v: 1.0 if _CPI_IDEAL_LOW < v < _CPI_IDEAL_HIGH else (-1.0 if v > _CPI_ELEVATED else 0.0)),
     "UNEMPLOYMENT": (0.5, lambda v: 1.0 if v < 4.5 else (-2.0 if v > 6 else 0.0)),
 }
 

@@ -55,7 +55,35 @@ from shared.fred_series import (
     FRED_UNRATE,
 )
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
-from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 CPI/HY + v19.179 PMI + v19.184 M2/FedBS
+    CPI_YOY_THRESHOLDS as _CPI_THR,
+    HY_SPREAD_THRESHOLDS as _HY_THR,
+    PMI_THRESHOLDS as _PMI_THR,
+    M2_THRESHOLDS as _M2_THR,
+    FED_BS_THRESHOLDS as _FEDBS_THR,
+)
+
+# F-GRAY-4 v19.178: CPI_YOY inflection + regime SSOT (SPEC §16.2)
+_CPI_WARN_ABOVE = _CPI_THR["inflection_detection"]["warn_above"]
+_CPI_BULL_LOW = _CPI_THR["inflection_detection"]["bull_low"]
+_CPI_BULL_HIGH = _CPI_THR["inflection_detection"]["bull_high"]
+_CPI_MK_GOLDEN_BELOW = _CPI_THR["inflection_detection"]["mk_golden_below"]
+_CPI_REGIME_OVERHEAT = _CPI_THR["regime_classification"]["overheat_above"]
+
+# F-GRAY-4 v19.179: PMI inflection + growth + alert + regime SSOT (SPEC §16.2)
+_PMI_INFL_REBOUND = _PMI_THR["inflection_detection"]["rebound_below"]       # 50.0
+_PMI_INFL_EXPANSION = _PMI_THR["inflection_detection"]["expansion_above"]   # 50.0
+_PMI_INFL_PEAK_WARN = _PMI_THR["inflection_detection"]["peak_warning_above"]  # 55.0
+_PMI_GROWTH_EXPANSION = _PMI_THR["growth_signal"]["expansion_above"]        # 50.0
+_PMI_ALERT_CONTRACT = _PMI_THR["alert_generation"]["contraction_below"]     # 50.0
+_PMI_REGIME_STRONG = _PMI_THR["regime_classification"]["strong_growth_above"]  # 52.0(新觀念真正枯榮線)
+_PMI_REGIME_CONTRACT = _PMI_THR["regime_classification"]["contraction_below"]  # 50.0
+
+# F-GRAY-4 v19.184: M2 / Fed BS score_function SSOT (SPEC §16.2)
+_M2_EASING = _M2_THR["score_function"]["easing_above"]            # 5.0
+_M2_TIGHTENING = _M2_THR["score_function"]["tightening_below"]    # 0.0
+_FEDBS_EXPANSION = _FEDBS_THR["score_function"]["expansion_above"]    # 5.0
+_FEDBS_CONTRACTION = _FEDBS_THR["score_function"]["contraction_below"]  # -5.0
 
 # F-GRAY-4 v19.169: HY_SPREAD stoplight SSOT (SPEC §16.2)
 _HY_YELLOW = _HY_THR["stoplight"]["yellow_below"]    # 6.0 — alert 觸發點
@@ -181,11 +209,11 @@ def _detect_inflection(indicators):
 
     pmi_v = _chk("PMI"); pmi_p = _chk("PMI","prev")
     if pmi_v and pmi_p:
-        if pmi_v < 50 and pmi_v > pmi_p:
+        if pmi_v < _PMI_INFL_REBOUND and pmi_v > pmi_p:
             signals.append({"type":"buy","text":f"PMI {pmi_v:.1f} 收縮區但止跌反彈（+{pmi_v-pmi_p:.1f}）— 復甦訊號"}); score += 2
-        elif pmi_v >= 50 and pmi_v > pmi_p:
+        elif pmi_v >= _PMI_INFL_EXPANSION and pmi_v > pmi_p:
             signals.append({"type":"bull","text":f"PMI {pmi_v:.1f} 擴張且上升"}); score += 1
-        elif pmi_v >= 55 and pmi_v < pmi_p:
+        elif pmi_v >= _PMI_INFL_PEAK_WARN and pmi_v < pmi_p:
             signals.append({"type":"warn","text":f"PMI {pmi_v:.1f} 高位回落，景氣可能見頂"}); score -= 1
 
     y22 = indicators.get("YIELD_10Y2Y",{})
@@ -205,9 +233,9 @@ def _detect_inflection(indicators):
 
     cpi_v = _chk("CPI"); cpi_t = indicators.get("CPI",{}).get("trend","")
     if cpi_v:
-        if cpi_v > 4.0 and "下降" in cpi_t: signals.append({"type":"buy","text":f"⚡ CPI {cpi_v:.1f}% 高位但回落 — 落後指標見頂"}); score += 3
-        elif cpi_v > 4.0: signals.append({"type":"warn","text":f"CPI {cpi_v:.1f}% 高位未降，緊縮壓力"}); score -= 2
-        elif 1.5 <= cpi_v <= 3.0: signals.append({"type":"bull","text":f"CPI {cpi_v:.1f}% 回落至合理區間"}); score += 2
+        if cpi_v > _CPI_WARN_ABOVE and "下降" in cpi_t: signals.append({"type":"buy","text":f"⚡ CPI {cpi_v:.1f}% 高位但回落 — 落後指標見頂"}); score += 3
+        elif cpi_v > _CPI_WARN_ABOVE: signals.append({"type":"warn","text":f"CPI {cpi_v:.1f}% 高位未降，緊縮壓力"}); score -= 2
+        elif _CPI_BULL_LOW <= cpi_v <= _CPI_BULL_HIGH: signals.append({"type":"bull","text":f"CPI {cpi_v:.1f}% 回落至合理區間"}); score += 2
 
     fed_v = _chk("FED_RATE"); fed_p = _chk("FED_RATE","prev")
     if fed_v is not None and fed_p is not None:
@@ -250,7 +278,7 @@ def _detect_inflection(indicators):
             signals.append({"type":"warn","text":f"CFNAI {lei_v:+.2f} < {CFNAI_RECESSION_THRESHOLD} 強烈衰退"}); score -= 2
 
     if fed_v is not None and fed_p is not None and fed_v <= fed_p and fed_p > 0 and \
-       cpi_v and cpi_v < 3.5 and "下降" in cpi_t:
+       cpi_v and cpi_v < _CPI_MK_GOLDEN_BELOW and "下降" in cpi_t:
         signals.append({"type":"buy","text":"⭐ MK黃金拐點：CPI+Fed Rate 雙雙見頂回落，勝率最高！"}); score += 5
 
     if score >= 8:   infl = {"label":"🚀 強力買進拐點","color":MATERIAL_GREEN,"desc":"多項指標同時確認，景氣最佳買點"}
@@ -471,9 +499,10 @@ def fetch_all_indicators(fred_api_key):
             unit="%", type="流動性", date=str(df.iloc[-1]["date"])[:7],
             desc=">5%流動性寬鬆→利多 | <0%緊縮→壓力",
             trend=_trend(s24.tolist()[-6:]),
-            signal="🟢" if v>5 else ("🔴" if v<0 else "🟡"),
-            color=MATERIAL_GREEN if v>5 else (MATERIAL_RED if v<0 else MATERIAL_ORANGE),
-            score=1 if v>5 else (-1 if v<0 else 0),
+            # F-GRAY-4 v19.184: M2 score_function SSOT（easing>5 / tightening<0）
+            signal="🟢" if v>_M2_EASING else ("🔴" if v<_M2_TIGHTENING else "🟡"),
+            color=MATERIAL_GREEN if v>_M2_EASING else (MATERIAL_RED if v<_M2_TIGHTENING else MATERIAL_ORANGE),
+            score=1 if v>_M2_EASING else (-1 if v<_M2_TIGHTENING else 0),
             weight=1, series=s24)
 
     # v19.49 perf: SPY / RSP / DXY 三條 yfinance 並行（原 3× 序列 → max(t)）
@@ -599,9 +628,10 @@ def fetch_all_indicators(fred_api_key):
             unit="%", type="流動性", date=str(df.iloc[-1]["date"])[:7],
             desc="擴表=注入流動性→利多 | 縮表=抽走流動性→壓力",
             trend=_trend(s24.tolist()[-6:]),
-            signal="🟢" if v>5 else ("🔴" if v<-5 else "🟡"),
-            color=MATERIAL_GREEN if v>5 else (MATERIAL_RED if v<-5 else MATERIAL_ORANGE),
-            score=1 if v>5 else (-1 if v<-5 else 0),
+            # F-GRAY-4 v19.184: Fed BS score_function SSOT（expansion>5 / contraction<-5）
+            signal="🟢" if v>_FEDBS_EXPANSION else ("🔴" if v<_FEDBS_CONTRACTION else "🟡"),
+            color=MATERIAL_GREEN if v>_FEDBS_EXPANSION else (MATERIAL_RED if v<_FEDBS_CONTRACTION else MATERIAL_ORANGE),
+            score=1 if v>_FEDBS_EXPANSION else (-1 if v<_FEDBS_CONTRACTION else 0),
             weight=1, series=s24)
 
     # ── VIX ──────────────────────────────────────────────────────────
@@ -973,7 +1003,7 @@ def calc_growth_inflation_axis(indicators: dict) -> dict:
     growth_signals = []
     pmi_v = _get("PMI")
     if pmi_v is not None:
-        growth_signals.append(1 if pmi_v >= 50 else -1)
+        growth_signals.append(1 if pmi_v >= _PMI_GROWTH_EXPANSION else -1)
 
     y22 = _get("YIELD_10Y2Y")
     if y22 is not None:
@@ -1132,8 +1162,8 @@ def calc_macro_phase(indicators: dict) -> dict:
         alerts.append("⚠️ 殖利率曲線倒掛（衰退前兆）")
     if indicators.get("HY_SPREAD",{}).get("value", 4) > _HY_YELLOW:
         alerts.append(f"⚠️ 信用利差>{_HY_YELLOW:.0f}% — 市場恐慌升溫")
-    if indicators.get("PMI",{}).get("value", 50) < 50:
-        alerts.append("⚠️ PMI 跌破 50 — 製造業收縮")
+    if indicators.get("PMI",{}).get("value", _PMI_ALERT_CONTRACT) < _PMI_ALERT_CONTRACT:
+        alerts.append(f"⚠️ PMI 跌破 {_PMI_ALERT_CONTRACT:.0f} — 製造業收縮")
     if indicators.get("VIX",{}).get("value", 18) > _MB_VIX_YELLOW:
         alerts.append(f"⚠️ VIX>{_MB_VIX_YELLOW:.0f} — 市場恐慌升溫,注意波動")
     if indicators.get("CPI",{}).get("value", 2) > 4:
@@ -1444,11 +1474,11 @@ def identify_regime(indicators: dict) -> dict:
     # ── 四象限判斷 ────────────────────────────────────────
     if pmi_v is None:
         regime = "未知"; regime_color = "#888888"
-    elif pmi_v >= 52 and (cpi_v or 0) < 3.5:
+    elif pmi_v >= _PMI_REGIME_STRONG and (cpi_v or 0) < _CPI_REGIME_OVERHEAT:
         regime = "🟢 成長期"; regime_color = MATERIAL_GREEN
-    elif pmi_v >= 52 and (cpi_v or 0) >= 3.5:
+    elif pmi_v >= _PMI_REGIME_STRONG and (cpi_v or 0) >= _CPI_REGIME_OVERHEAT:
         regime = "🟡 過熱期"; regime_color = MATERIAL_ORANGE
-    elif pmi_v < 50 and (fed_v or 5) <= (fed_p or 5):
+    elif pmi_v < _PMI_REGIME_CONTRACT and (fed_v or 5) <= (fed_p or 5):
         regime = "🔵 復甦期"; regime_color = "#2196f3"
     else:
         regime = "🔴 衰退期"; regime_color = MATERIAL_RED
