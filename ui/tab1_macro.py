@@ -186,6 +186,44 @@ def _make_radar_sparkline(trend: list, key: str, color: str):
         return None
 
 
+# v19.187 — 燈號 → 卡片邊框色(中期 Z-Score / 長期桶卡片共用,對齊短線雷達色票)
+_MACRO_CARD_LIGHT_COLOR = {
+    "red": "#f85149", "orange": "#ffab40", "yellow": "#d29922",
+    "green": "#3fb950", "gray": "#6e7681",
+}
+
+
+def _render_macro_indicator_card(title: str, signal: str, color: str,
+                                 value_str: str, note: str, label: str,
+                                 trend, spark_key: str) -> None:
+    """v19.187 — 通用總經指標卡(複製短線雷達卡格式:燈號 + 值 + 白話 + mini sparkline)。
+
+    user 2026-06-27:基金短線雷達為範本,長期/中期桶也改成小圖+SPEC 卡片。
+    本 helper 與短線雷達卡視覺一致(同 HTML 結構 + 同 _make_radar_sparkline),
+    供長期/中期桶複用。**須在 `with st.columns(...)[i]:` 區塊內呼叫**(streamlit 容器)。
+    trend 為近 6-8 期 list;spark_key 決定 sparkline 的 SPEC threshold 線(無則純線)。
+    """
+    import streamlit as _st_c
+    _st_c.markdown(
+        f"<div style='background:#0d1117;border:2px solid {color};"
+        f"border-radius:10px;padding:10px 12px 6px;margin:4px 0;min-height:150px;"
+        f"display:flex;flex-direction:column;justify-content:space-between'>"
+        f"<div>"
+        f"<div style='color:#888;font-size:10px;letter-spacing:1px'>{title}</div>"
+        f"<div style='color:{color};font-size:15px;font-weight:800;margin:4px 0 6px'>{signal}</div>"
+        f"<div style='color:#fff;font-weight:700;font-size:14px'>值 {value_str}</div>"
+        f"</div>"
+        f"<div style='color:#aaa;font-size:9px;border-top:1px solid #30363d;"
+        f"padding-top:4px;margin-top:4px;line-height:1.3'>{note}"
+        f"<br/><span style='color:#555'>{label}</span></div>"
+        f"</div>", unsafe_allow_html=True)
+    _sp = _make_radar_sparkline(trend, spark_key, color)
+    if _sp is not None:
+        _st_c.plotly_chart(_sp, use_container_width=True,
+                           key=f"mcard_sp_{spark_key}",
+                           config={"displayModeBar": False})
+
+
 def _now_tw():
     return datetime.datetime.now(_TW_TZ)
 
@@ -1693,23 +1731,30 @@ def render_macro_tab() -> None:
                     # 預設行：資料不足時佔位（不參與 |Z| 排序，會 sink 到表尾）
                     if _zv is None:
                         _zs_rows.append({
-                            "_abs": -1, "指標": _zname, "當前值": "—",
+                            "_abs": -1, "_key": _zk, "指標": _zname, "當前值": "—",
                             "白話判讀": "⬜ 資料不足，待補",
+                            "_color": "#6e7681", "_trend": [], "_signal": "⬜ 無資料",
                         })
                         continue
                     try:
                         _zv_f = float(_zv)
                     except (TypeError, ValueError):
                         _zs_rows.append({
-                            "_abs": -1, "指標": _zname, "當前值": str(_zv)[:10],
+                            "_abs": -1, "_key": _zk, "指標": _zname, "當前值": str(_zv)[:10],
                             "白話判讀": "⬜ 數值格式異常",
+                            "_color": "#6e7681", "_trend": [], "_signal": "⬜ 格式異常",
                         })
                         continue
                     _z_score = None
+                    _trend_list = []  # v19.187 sparkline 用近 8 期
                     if _zs_raw is not None:
                         try:
                             _zser = (_zs_raw if isinstance(_zs_raw, _pd_zs.Series)
                                      else _pd_zs.Series(_zs_raw)).dropna()
+                            try:
+                                _trend_list = [float(_x) for _x in _zser.tail(8).tolist()]
+                            except Exception:
+                                _trend_list = []
                             if len(_zser) >= 10:
                                 _zmu, _zsig = float(_zser.mean()), float(_zser.std())
                                 if _zsig > 0 and not (_zsig != _zsig):  # NaN guard
@@ -1720,40 +1765,54 @@ def render_macro_tab() -> None:
                             pass  # smoke-allow-pass
                     _unit_s = f" {_zunit}" if _zunit else ""
                     _val_s  = f"{_zv_f:.{_zdec}f}{_unit_s}"
-                    # 燈號 + 白話
+                    # 燈號 + 白話 + 卡片邊框色（對齊四色說明條）
                     if _z_score is None:
                         _verdict = "⬜ 樣本不足，無法判讀"
                         _abs_z = -1
+                        _zcolor = "#6e7681"
+                        _zsig_txt = "⬜ 樣本不足"
                     else:
                         _abs_z = abs(_z_score)
                         _phrase = _z_pos_phrase if _z_score > 0 else _z_neg_phrase
                         if _abs_z >= 2:
-                            _icon = "🔴 極端"
+                            _icon, _zcolor = "🔴 極端", "#f85149"
                         elif _abs_z >= 1.5:
-                            _icon = "🟠 警示"
+                            _icon, _zcolor = "🟠 警示", "#ffab40"
                         elif _abs_z >= 1:
-                            _icon = "🟡 關注"
+                            _icon, _zcolor = "🟡 關注", "#d29922"
                         else:
-                            _icon = "🟢 正常"
+                            _icon, _zcolor = "🟢 正常", "#3fb950"
                         _verdict = f"{_icon}（{_phrase}，Z={_z_score:+.2f}）"
+                        _zsig_txt = _icon
                     _zs_rows.append({
-                        "_abs": _abs_z,
-                        "指標": _zname,
-                        "當前值": _val_s,
-                        "白話判讀": _verdict,
+                        "_abs": _abs_z, "_key": _zk, "指標": _zname, "當前值": _val_s,
+                        "白話判讀": _verdict, "_color": _zcolor,
+                        "_trend": _trend_list, "_signal": _zsig_txt,
                     })
                 if _zs_rows:
                     # |Z| DESC，資料不足（_abs=-1）一律沉底
                     _zs_rows.sort(key=lambda r: r["_abs"], reverse=True)
-                    for r in _zs_rows:
-                        r.pop("_abs", None)
-                    _zs_df = _pd_zs.DataFrame(_zs_rows)
-                    st.dataframe(_zs_df, use_container_width=True, hide_index=True,
-                                 column_config={
-                                     "指標":     st.column_config.TextColumn(width="small"),
-                                     "當前值":   st.column_config.TextColumn(width="small"),
-                                     "白話判讀": st.column_config.TextColumn(width="large"),
-                                 })
+                    # v19.187 — 小圖卡片(範本:短線雷達):Z 可算的指標(異常先看)做成卡片格,每排 5
+                    _zs_carded = [r for r in _zs_rows if r["_abs"] >= 0]
+                    for _ci in range(0, len(_zs_carded), 5):
+                        _cz = st.columns(5)
+                        for _cc, _r in zip(_cz, _zs_carded[_ci:_ci + 5]):
+                            with _cc:
+                                _render_macro_indicator_card(
+                                    title=_r["指標"], signal=_r["_signal"], color=_r["_color"],
+                                    value_str=_r["當前值"], note=_r["白話判讀"], label="Z-Score 矩陣",
+                                    trend=_r["_trend"], spark_key=f"zs_{_r['_key']}")
+                    # Raw data:完整 23 指標表收進 expander(user:Raw data 縮起來,要看時候才打開)
+                    with st.expander("📋 Z-Score 完整矩陣（23 指標表 ｜ Raw data）", expanded=False):
+                        _zs_df = _pd_zs.DataFrame([
+                            {"指標": r["指標"], "當前值": r["當前值"], "白話判讀": r["白話判讀"]}
+                            for r in _zs_rows])
+                        st.dataframe(_zs_df, use_container_width=True, hide_index=True,
+                                     column_config={
+                                         "指標":     st.column_config.TextColumn(width="small"),
+                                         "當前值":   st.column_config.TextColumn(width="small"),
+                                         "白話判讀": st.column_config.TextColumn(width="large"),
+                                     })
 
             # ══════════════════════════════════════════════════
             # L3 情境判斷卡（Logic A / B）— L3 only
