@@ -29,6 +29,20 @@ from repositories.macro_repository import (
     fetch_yf_close,
 )
 
+# ════════════════════════════════════════════════════════════════
+# v19.188 — 美股流動性 6 指標判讀 cut-off（SSOT）
+# 同時供 ① 各 fetcher 的 color/label 判讀、② Tab1 卡片 sparkline 的 SPEC 線。
+# 兩處共用同一常數 → 卡片燈色與 SPEC 線永遠同源（§3.3 反捏造：禁止 inline magic）。
+# ════════════════════════════════════════════════════════════════
+HY_OAS_WARN_PCT: float = 4.0       # HY OAS ≥ → 風險偏好下滑（黃）
+HY_OAS_CRISIS_PCT: float = 5.5     # HY OAS ≥ → 信用緊縮 / 熱錢撤離（紅）
+M2_YOY_HOT_PCT: float = 10.0       # M2 YoY > → 貨幣供給過熱（紅）
+M2_YOY_LOOSE_PCT: float = 4.0      # M2 YoY > → 寬鬆 / 熱錢充裕（綠）
+RRP_DRAIN_BN: float = 100.0        # RRP < → 流動性枯竭警示（黃）
+RRP_GLUT_BN: float = 1000.0        # RRP ≥ → 流動性過剩 / QE 蓄水（藍）
+AAII_EUPHORIA_PCT: float = 20.0    # AAII spread > → 散戶過度樂觀（反指標賣訊）
+AAII_PANIC_PCT: float = -20.0      # AAII spread < → 散戶過度悲觀（反指標買訊）
+
 
 def _hy_oas(api_key: str) -> dict:
     """HY 信用利差 OAS (BAMLH0A0HYM2, % OAS)."""
@@ -39,9 +53,9 @@ def _hy_oas(api_key: str) -> dict:
         cur = float(df["value"].iloc[-1])
         m1 = float(df["value"].iloc[-22]) if len(df) >= 22 else cur
         delta_bp = (cur - m1) * 100
-        if cur >= 5.5:
+        if cur >= HY_OAS_CRISIS_PCT:
             color, label = "#f85149", "🔴 信用緊縮 / 熱錢撤離"
-        elif cur >= 4.0:
+        elif cur >= HY_OAS_WARN_PCT:
             color, label = "#d29922", "⚠️ 風險偏好下滑"
         else:
             color, label = "#3fb950", "✅ 信用寬鬆 / 風險偏好強"
@@ -53,6 +67,8 @@ def _hy_oas(api_key: str) -> dict:
             "label": label,
             "date": str(df["date"].iloc[-1])[:10],
             "source": f"FRED:{FRED_HY_SPREAD}",
+            # v19.188 sparkline:近 30 期 OAS level（% 單位，與卡片 SPEC 線同尺）
+            "series": [float(x) for x in df["value"].dropna().tail(30).tolist()],
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -67,9 +83,9 @@ def _rrp(api_key: str) -> dict:
         cur = float(df["value"].iloc[-1])
         m1 = float(df["value"].iloc[-22]) if len(df) >= 22 else cur
         delta = cur - m1
-        if cur < 100:
+        if cur < RRP_DRAIN_BN:
             color, label = "#d29922", "💧 流動性枯竭警示"
-        elif cur < 1000:
+        elif cur < RRP_GLUT_BN:
             color, label = "#3fb950", "✅ 流動性正常"
         else:
             color, label = "#58a6ff", "🌊 流動性過剩 / QE 蓄水"
@@ -81,6 +97,8 @@ def _rrp(api_key: str) -> dict:
             "label": label,
             "date": str(df["date"].iloc[-1])[:10],
             "source": f"FRED:{FRED_RRP}",
+            # v19.188 sparkline:近 30 期 RRP level（USD bn）
+            "series": [float(x) for x in df["value"].dropna().tail(30).tolist()],
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -95,14 +113,16 @@ def _m2_yoy(api_key: str) -> dict:
         cur = float(df["value"].iloc[-1])
         yr_ago = float(df["value"].iloc[-13])
         yoy = (cur / yr_ago - 1) * 100
-        if yoy > 10:
+        if yoy > M2_YOY_HOT_PCT:
             color, label = "#f85149", "🔴 貨幣供給過熱（通膨壓力）"
-        elif yoy > 4:
+        elif yoy > M2_YOY_LOOSE_PCT:
             color, label = "#3fb950", "✅ 寬鬆 / 熱錢充裕"
         elif yoy > 0:
             color, label = "#d29922", "⚠️ 中性偏緊"
         else:
             color, label = "#58a6ff", "🔵 貨幣緊縮 / 衰退警示"
+        # v19.188 sparkline:YoY 序列（與 value 同尺，非 level），近 12 期
+        _yoy_ser = (df["value"] / df["value"].shift(12) - 1) * 100
         return {
             "value": yoy,
             "unit": "%",
@@ -110,6 +130,7 @@ def _m2_yoy(api_key: str) -> dict:
             "label": label,
             "date": str(df["date"].iloc[-1])[:10],
             "source": f"FRED:{FRED_M2}",
+            "series": [float(x) for x in _yoy_ser.dropna().tail(12).tolist()],
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -141,6 +162,8 @@ def _walcl(api_key: str) -> dict:
             "label": label,
             "date": str(df["date"].iloc[-1])[:10],
             "source": f"FRED:{FRED_FED_BS}",
+            # v19.188 sparkline:WALCL level 換算兆美元（與 value 同尺 T）
+            "series": [float(x) / 1e6 for x in df["value"].dropna().tail(30).tolist()],
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -175,6 +198,8 @@ def _hyg_lqd_ratio() -> dict:
             "label": label,
             "date": str(align.index[-1])[:10],
             "source": "Yahoo:fetch_yf_close:HYG/LQD:ratio",
+            # v19.188 sparkline:HYG/LQD 比序列（近 30 交易日）
+            "series": [float(x) for x in ratio.dropna().tail(30).tolist()],
         }
     except Exception as e:
         return {"_err": f"{type(e).__name__}: {e}"}
@@ -190,9 +215,9 @@ def _aaii_with_judgment() -> dict:
     if "_err" in raw:
         return raw
     spread = raw["value"]
-    if spread > 20:
+    if spread > AAII_EUPHORIA_PCT:
         color, label = "#f85149", "🔴 散戶過度樂觀（反指標：賣訊號）"
-    elif spread < -20:
+    elif spread < AAII_PANIC_PCT:
         color, label = "#3fb950", "✅ 散戶過度悲觀（反指標：買訊號）"
     else:
         color, label = "#d29922", "➖ 情緒中性"
