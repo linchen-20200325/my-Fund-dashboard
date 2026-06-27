@@ -468,7 +468,10 @@ def fetch_all_indicators(fred_api_key):
                 trend=_trend(sp3m.tolist()[-6:]),
                 signal="🟢" if v>0.5 else ("🔴" if v<0 else "🟡"),
                 color=MATERIAL_GREEN if v>0.5 else (MATERIAL_RED if v<0 else MATERIAL_ORANGE),
-                score=2 if v>0 else -2,
+                # v19.195 A2:score 對齊同卡的 signal/color 門檻(0.5/0)+ 對齊 10Y-2Y 與
+                # 台股危險線。原 `2 if v>0 else -2` 把曲線轉平(0~0.5)當滿分多頭、與燈號
+                # 矛盾(燈黃卻給滿分),過度樂觀;改三段:>0.5 多頭 / 0~0.5 中性 / <0 倒掛。
+                score=2 if v>0.5 else (-2 if v<0 else 0),
                 weight=2, series=sp3m)
 
     # ── HY 信用利差 ──────────────────────────────────────────────────

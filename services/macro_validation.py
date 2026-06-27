@@ -106,7 +106,7 @@ _VIX_CRISIS, _VIX_WARNING = _load_vix_calibrated_thresholds()
 SCORE_RULES: dict[str, tuple[float, ScoreFn]] = {
     "PMI":          (2.0, lambda v: 2.0 if v >= _PMI_EXPANSION else (-2.0 if v < _PMI_RECESSION else -1.0)),
     "YIELD_10Y2Y":  (2.0, lambda v: 2.0 if v > 0.5 else (-2.0 if v < 0 else 0.0)),
-    "YIELD_10Y3M":  (2.0, lambda v: 2.0 if v > 0 else -2.0),
+    "YIELD_10Y3M":  (2.0, lambda v: 2.0 if v > 0.5 else (-2.0 if v < 0 else 0.0)),  # v19.195 A2:對齊 10Y-2Y 三段(0~0.5 轉平=中性)
     "HY_SPREAD":    (2.0, lambda v: 2.0 if v < _HY_TIGHT else (-2.0 if v > _HY_WIDE else 0.0)),
     "M2":           (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < 0 else 0.0)),
     "FED_BS":       (1.0, lambda v: 1.0 if v > 5 else (-1.0 if v < -5 else 0.0)),
