@@ -138,7 +138,31 @@ def _radar_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
         # PCR > 1.0 較看空,> 1.5 極端恐慌(教學常見值)
         return [(1.00, "dot", "#d29922", "看空 1.0"),
                 (1.50, "dash", "#f85149", "恐慌 1.5")]
-    # 其他 key(yield_10y_shock / spx_trend_break / sox_drop / asia_overnight)
+    # v19.188 — 🌳 長期座標桶 美股流動性卡片 SPEC 線
+    # cut-off 全部 import 自 services.us_liquidity_engine（與各 fetcher 的 color/label 同源 SSOT）
+    if key in ("us_hy_oas", "us_m2_yoy", "us_rrp", "us_aaii"):
+        try:
+            from services.us_liquidity_engine import (
+                HY_OAS_WARN_PCT, HY_OAS_CRISIS_PCT,
+                M2_YOY_LOOSE_PCT, M2_YOY_HOT_PCT,
+                RRP_DRAIN_BN,
+                AAII_EUPHORIA_PCT, AAII_PANIC_PCT,
+            )
+        except Exception:
+            return []
+        if key == "us_hy_oas":
+            return [(HY_OAS_WARN_PCT, "dot", "#d29922", f"警戒 {HY_OAS_WARN_PCT}%"),
+                    (HY_OAS_CRISIS_PCT, "dash", "#f85149", f"緊縮 {HY_OAS_CRISIS_PCT}%")]
+        if key == "us_m2_yoy":
+            return [(M2_YOY_LOOSE_PCT, "dot", "#3fb950", f"寬鬆 {M2_YOY_LOOSE_PCT}%"),
+                    (M2_YOY_HOT_PCT, "dash", "#f85149", f"過熱 {M2_YOY_HOT_PCT}%")]
+        if key == "us_rrp":
+            return [(RRP_DRAIN_BN, "dash", "#d29922", f"枯竭 {RRP_DRAIN_BN:.0f}B")]
+        if key == "us_aaii":
+            return [(AAII_EUPHORIA_PCT, "dash", "#f85149", f"過熱 +{AAII_EUPHORIA_PCT:.0f}"),
+                    (AAII_PANIC_PCT, "dot", "#3fb950", f"恐慌 {AAII_PANIC_PCT:.0f}")]
+    # 其他 key(yield_10y_shock / spx_trend_break / sox_drop / asia_overnight
+    #          / us_walcl / us_hyg_lqd:delta-based,無 natural level threshold)
     # trend 為絕對 level 而判斷用 delta,無單一 natural threshold,跳過 hline
     return []
 
@@ -1398,6 +1422,33 @@ def render_macro_tab() -> None:
         import contextlib as _cl_v1942
         tab_main = _cl_v1942.nullcontext()
 
+        # ══ v19.188 — 🩺 綜合健康度 hero 卡(對齊台股「綜合健康度」體驗)══
+        # user 2026-06-27:基金總經頂部補綜合健康度。
+        # 用 23 指標加權 composite(active.json 權重)+ composite_verdict 5 級白話。
+        # 與下方五桶 bar 互補不重複:此為「多空加權淨分」,五桶燈1為「景氣循環階段(0-10 phase)」。
+        try:
+            from ui.helpers.macro_helpers import (
+                calculate_composite_score, composite_verdict,
+            )
+            _comp_score = calculate_composite_score(ind)
+            _cv_icon, _cv_level, _cv_color, _cv_action = composite_verdict(_comp_score)
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,#0d1117,#161b22);"
+                f"border:2px solid {_cv_color};border-radius:12px;padding:14px 20px;margin:0 0 12px;"
+                f"display:flex;align-items:center;gap:20px'>"
+                f"<div style='flex-shrink:0;text-align:center;min-width:96px'>"
+                f"<div style='font-size:11px;color:#8b949e;letter-spacing:1px'>綜合健康度</div>"
+                f"<div style='font-size:42px;font-weight:900;color:{_cv_color};line-height:1.1'>{_comp_score:+.1f}</div>"
+                f"<div style='font-size:10px;color:#484f58'>23 指標加權淨分</div>"
+                f"</div>"
+                f"<div style='flex:1;min-width:0'>"
+                f"<div style='font-size:22px;font-weight:900;color:{_cv_color}'>{_cv_icon} {_cv_level}</div>"
+                f"<div style='font-size:13px;color:#c9d1d9;margin-top:4px;line-height:1.5'>{_cv_action}</div>"
+                f"</div></div>",
+                unsafe_allow_html=True)
+        except Exception as _comp_e:  # noqa: BLE001
+            st.caption(f"綜合健康度卡暫無法顯示：[{type(_comp_e).__name__}] {_comp_e}")
+
         # ══ v19.146 — 📊 五桶 summary bar(頂部一覽:長期/中期/短線/拐點/新聞)══
         # 對齊 Stock v18.284 五桶 bar 體驗,Fund 加 📰 新聞為第 5 桶(讀 v19.144 SSOT)。
         # news_items=None 時自動降級為 ⬜「未掃描」,點開「執行 AI 裁決」抓 RSS 後燈亮。
@@ -1430,6 +1481,52 @@ def render_macro_tab() -> None:
             st.markdown("## 🌳 長期座標")
             st.caption("regime / 結構 ｜ 美林時鐘 + 美股流動性熱錢 + 資本防線")
 
+            # ── v19.188 💵 美股流動性 6 卡片（短線雷達範本：燈號 + 值 + 白話 + mini sparkline + SPEC 線）──
+            # user 2026-06-27:基金短線雷達為範本,長期桶也改成小圖+SPEC 卡片;Raw data 收進下方 expander。
+            st.markdown("#### 💵 美股流動性 × 熱錢 — 流動性 × 信用 × 情緒")
+            try:
+                from services.us_liquidity_engine import fetch_us_liquidity_snapshot as _fetch_us_liq_cards  # noqa: PLC0415
+                _us_liq_cards = _fetch_us_liq_cards(FRED_KEY)
+                # (engine_key, 卡片標題, sparkline spark_key, 白話 note)
+                _us_card_specs = [
+                    ("m2_yoy",  "📊 M2 YoY",        "us_m2_yoy",  "貨幣供給年增；>4% 熱錢充裕、<0 緊縮"),
+                    ("walcl",   "🏦 Fed 資產負債表", "us_walcl",   "擴表=QE 放水、縮表=QT 回收"),
+                    ("rrp",     "💧 隔夜逆回購 RRP",  "us_rrp",     "流動性蓄水池；<100B 枯竭警示"),
+                    ("hy_oas",  "⚠️ HY 信用利差",     "us_hy_oas",  "高收益債利差；>5.5% 信用緊縮撤離"),
+                    ("hyg_lqd", "💰 HYG/LQD 比",      "us_hyg_lqd", "高收益/投等債比；升=risk-on 熱錢進股"),
+                    ("aaii",    "😱 AAII 情緒",       "us_aaii",    "散戶多空差(反指標)；>+20 過熱賣訊"),
+                ]
+                for _row_start in (0, 3):
+                    _ucards = st.columns(3)
+                    for _ci, (_ek, _ctitle, _spk, _cnote) in enumerate(
+                            _us_card_specs[_row_start:_row_start + 3]):
+                        with _ucards[_ci]:
+                            _ud = _us_liq_cards.get(_ek, {}) if isinstance(_us_liq_cards, dict) else {}
+                            if not _ud or "_err" in _ud:
+                                _emsg = (_ud.get("_err", "未載入") if isinstance(_ud, dict) else "未載入")
+                                _render_macro_indicator_card(
+                                    title=_ctitle, signal="⬜ 待取得",
+                                    color=_MACRO_CARD_LIGHT_COLOR["gray"],
+                                    value_str="—", note=_cnote,
+                                    label=f"❌ {str(_emsg)[:32]}", trend=None,
+                                    spark_key=_spk)
+                                continue
+                            _uval = _ud.get("value")
+                            _uunit = _ud.get("unit", "")
+                            _uval_str = (f"{_uval:+.2f}{_uunit}"
+                                         if isinstance(_uval, (int, float)) else "—")
+                            _render_macro_indicator_card(
+                                title=_ctitle,
+                                signal=_ud.get("label", "—"),
+                                color=_ud.get("color", _MACRO_CARD_LIGHT_COLOR["gray"]),
+                                value_str=_uval_str,
+                                note=_cnote,
+                                label=f"美股流動性 ｜ {_ud.get('date', '')}",
+                                trend=_ud.get("series"),
+                                spark_key=_spk)
+            except Exception as _us_card_e:  # noqa: BLE001
+                st.caption(f"💵 美股流動性卡片暫時無法顯示：[{type(_us_card_e).__name__}] {_us_card_e}")
+
             # ── MK 景氣時鐘 ＆ 資產輪動（v18.8）── L2/L3 皆顯示
             st.divider()
             render_mk_clock_section(ind)
@@ -1444,7 +1541,7 @@ def render_macro_tab() -> None:
                     return s.dropna().tail(60)
                 except Exception: return None
 
-            with st.expander("⑥ 💵 美股流動性 × 熱錢監測 — 三角：流動性 × 信用 × 情緒",
+            with st.expander("⑥ 💵 美股流動性 × 熱錢監測 — Raw data（metric 明細 + 新鮮度 + 強制重抓）",
                              expanded=False):
                 st.caption(
                     "💡 **為何重要**：境外美股基金 NAV 主受 ① 美元流動性（M2/RRP/WALCL）+ "

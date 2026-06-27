@@ -131,3 +131,49 @@ class TestRadarThresholdLines:
         assert _make_radar_sparkline([], "vix_level", "#ff0000") is None
         assert _make_radar_sparkline(None, "vix_level", "#ff0000") is None
         assert _make_radar_sparkline([1.0], "vix_level", "#ff0000") is None
+
+
+class TestUsLiquidityCardThresholdLines:
+    """v19.188 🌳 長期座標桶 美股流動性卡片 SPEC 線守 SSOT
+    (與 services.us_liquidity_engine 各 fetcher 的 color cut-off 同源)。"""
+
+    def test_hy_oas_matches_engine_cutoffs(self):
+        from services.us_liquidity_engine import HY_OAS_WARN_PCT, HY_OAS_CRISIS_PCT
+        from ui.tab1_macro import _radar_threshold_lines
+        lines = _radar_threshold_lines("us_hy_oas")
+        assert [lines[0][0], lines[1][0]] == [HY_OAS_WARN_PCT, HY_OAS_CRISIS_PCT]
+
+    def test_m2_yoy_matches_engine_cutoffs(self):
+        from services.us_liquidity_engine import M2_YOY_LOOSE_PCT, M2_YOY_HOT_PCT
+        from ui.tab1_macro import _radar_threshold_lines
+        lines = _radar_threshold_lines("us_m2_yoy")
+        assert [lines[0][0], lines[1][0]] == [M2_YOY_LOOSE_PCT, M2_YOY_HOT_PCT]
+
+    def test_rrp_matches_engine_cutoff(self):
+        from services.us_liquidity_engine import RRP_DRAIN_BN
+        from ui.tab1_macro import _radar_threshold_lines
+        lines = _radar_threshold_lines("us_rrp")
+        assert len(lines) == 1 and lines[0][0] == RRP_DRAIN_BN
+
+    def test_aaii_matches_engine_cutoffs(self):
+        from services.us_liquidity_engine import AAII_EUPHORIA_PCT, AAII_PANIC_PCT
+        from ui.tab1_macro import _radar_threshold_lines
+        lines = _radar_threshold_lines("us_aaii")
+        assert [lines[0][0], lines[1][0]] == [AAII_EUPHORIA_PCT, AAII_PANIC_PCT]
+
+    def test_delta_based_keys_no_lines(self):
+        """walcl / hyg_lqd 為 delta-based,無 natural level 線。"""
+        from ui.tab1_macro import _radar_threshold_lines
+        assert _radar_threshold_lines("us_walcl") == []
+        assert _radar_threshold_lines("us_hyg_lqd") == []
+
+    def test_each_us_line_has_4_fields(self):
+        from ui.tab1_macro import _radar_threshold_lines
+        for k in ("us_hy_oas", "us_m2_yoy", "us_rrp", "us_aaii"):
+            for line in _radar_threshold_lines(k):
+                assert len(line) == 4
+                _y, _dash, _color, _txt = line
+                assert isinstance(_y, (int, float))
+                assert _dash in ("dot", "dash", "solid")
+                assert _color.startswith("#")
+                assert _txt

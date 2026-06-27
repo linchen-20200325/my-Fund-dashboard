@@ -223,6 +223,56 @@ def test_aaii_proxy_failure():
         assert "_err" in r
 
 
+# ── v19.188 sparkline series 欄(長期座標桶卡片用,與 value 同尺) ────────────────
+
+def test_hy_oas_series_matches_value_unit():
+    df = _mk_fred_df([3.5, 3.6, 3.7, 3.8], ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"])
+    with patch.object(ule, "fetch_fred", return_value=df):
+        r = ule._hy_oas("key")
+        assert isinstance(r["series"], list)
+        assert all(isinstance(x, float) for x in r["series"])
+        # series 尾值 == value(同尺 % level)
+        assert r["series"][-1] == pytest.approx(r["value"])
+
+
+def test_rrp_series_matches_value_unit():
+    df = _mk_fred_df([400.0, 450.0, 500.0], ["2026-01-01", "2026-01-02", "2026-01-03"])
+    with patch.object(ule, "fetch_fred", return_value=df):
+        r = ule._rrp("key")
+        assert r["series"][-1] == pytest.approx(r["value"])  # 同尺 USD bn
+
+
+def test_m2_yoy_series_is_yoy_not_level():
+    vals = [100.0] * 12 + [108.0]
+    dates = pd.date_range("2025-01-01", periods=13, freq="MS").strftime("%Y-%m-%d").tolist()
+    df = _mk_fred_df(vals, dates)
+    with patch.object(ule, "fetch_fred", return_value=df):
+        r = ule._m2_yoy("key")
+        # series 應為 YoY %(非 level 100/108),尾值 == value(8.0)
+        assert r["series"][-1] == pytest.approx(r["value"], abs=0.01)
+        assert r["series"][-1] == pytest.approx(8.0, abs=0.01)
+
+
+def test_walcl_series_in_trillions():
+    vals = [7.0e6] + [7.5e6] * 12
+    dates = pd.date_range("2026-01-01", periods=13, freq="W").strftime("%Y-%m-%d").tolist()
+    df = _mk_fred_df(vals, dates)
+    with patch.object(ule, "fetch_fred", return_value=df):
+        r = ule._walcl("key")
+        # series 換算兆美元(/1e6),尾值 == value(cur_tn)
+        assert r["series"][-1] == pytest.approx(r["value"])
+        assert r["series"][-1] == pytest.approx(7.5)
+
+
+def test_hyg_lqd_series_matches_ratio():
+    idx = pd.date_range("2026-01-01", periods=25)
+    hyg = pd.Series([80.0] * 22 + [82.0, 82.0, 82.0], index=idx)
+    lqd = pd.Series([100.0] * 25, index=idx)
+    with patch.object(ule, "fetch_yf_close", side_effect=[hyg, lqd]):
+        r = ule._hyg_lqd_ratio()
+        assert r["series"][-1] == pytest.approx(r["value"])  # 同尺 ratio
+
+
 # ── fetch_us_liquidity_snapshot orchestrator ─────────────────────────────────
 
 def test_snapshot_all_keys_present():
