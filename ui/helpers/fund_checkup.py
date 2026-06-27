@@ -482,10 +482,14 @@ _CHECKUP_COL_CONFIG = {
 }
 
 
-def render_fund_checkup(portfolio_funds: list | None) -> None:
-    """Tab3 expander：基金體檢 PK 表（與同類型比較，揪優等生 / 汰弱候選）。"""
+def render_fund_checkup(portfolio_funds: list | None, expanded: bool = False) -> None:
+    """Tab3 expander：基金體檢 PK 表（與同類型比較，揪優等生 / 汰弱候選）。
+
+    expanded：expander 是否預設展開。組合健檢 tab 把此區塊上移到健診總表之上時傳
+    True，讓「逐檔財務健診（4 大功能）」直接可見、不必再點開（v19.190）。
+    """
     with st.expander("🩺 基金體檢表 — 與同類型 PK，揪出優等生 / 汰弱候選",
-                     expanded=False):
+                     expanded=expanded):
         st.caption(
             "📖 郭老師「挑三揀四」法則：把每檔基金的含息報酬與『同類型平均』PK，"
             "打敗同類＝🏆 優等生（抱緊滾雪球），明顯落後＝⚠️ 汰弱候選。")

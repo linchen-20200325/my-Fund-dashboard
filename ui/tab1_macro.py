@@ -2308,6 +2308,17 @@ def render_macro_tab() -> None:
             # ── 持倉紅綠燈列表（War Room Middle）──────────────────────────
             _pf_all = st.session_state.get("portfolio_funds", [])
             _pf_loaded = [f for f in _pf_all if f.get("loaded")]
+            # v19.190：去重 — portfolio_funds 可能含同 code 重複載入（多次 reload 累積），
+            # 導致紅綠燈同一檔列出 2-3 次。依 code 保留第一筆（upper-strip 正規化）。
+            _seen_tl: set = set()
+            _pf_dedup = []
+            for _f in _pf_loaded:
+                _c = str(_f.get("code", "") or "").strip().upper()
+                if _c and _c in _seen_tl:
+                    continue
+                _seen_tl.add(_c)
+                _pf_dedup.append(_f)
+            _pf_loaded = _pf_dedup
             if _pf_loaded:
                 st.markdown("#### 🚦 持倉紅綠燈")
                 _tl_html = ""

@@ -340,7 +340,8 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
         if funds_extra:
             try:
                 from ui.helpers.fund_checkup import render_fund_checkup
-                render_fund_checkup(funds_extra)
+                # expanded=True：上移到健診總表之上後直接展開，避免 user 以為「沒有」。
+                render_fund_checkup(funds_extra, expanded=True)
             except Exception as _e_chk:
                 st.caption(
                     f"⬜ 基金體檢 PK 表渲染失敗：[{type(_e_chk).__name__}] "
@@ -400,13 +401,16 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
             try:
                 import plotly.graph_objects as _go
                 _codes = [r["code"] for r in ok_rows]
-                _div_r  = [float(r.get("年化配息率% 🧮") or 0) for r in ok_rows]
-                _ret_r  = [float(r.get("含息年化% 🧮") or 0) for r in ok_rows]
-                _nav_r  = [float(r.get("年化淨值% 🧮") or 0) for r in ok_rows]
+                # v19.190 fix：key 對齊 _process_one_fund 實際輸出。v19.148 把三欄改名為
+                # 「X% (全期自算)」後，此處仍讀舊鍵「年化…% 🧮」→ .get() 全 None → 圖表/
+                # 比較表顯示 0.00%（其實 row dict 內有真值，健診總表已正常顯示）。
+                _div_r  = [float(r.get("配息率% (全期自算)") or 0) for r in ok_rows]
+                _ret_r  = [float(r.get("含息% (全期自算)") or 0) for r in ok_rows]
+                _nav_r  = [float(r.get("淨值% (全期自算)") or 0) for r in ok_rows]
                 _fig = _go.Figure()
-                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name="年化配息率%🧮", marker_color="#f0883e"))
-                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name="含息年化%🧮",  marker_color="#3fb950"))
-                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name="年化淨值%🧮",  marker_color="#58a6ff"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name="配息率%(全期自算)🧮", marker_color="#f0883e"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name="含息%(全期自算)🧮",  marker_color="#3fb950"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name="淨值%(全期自算)🧮",  marker_color="#58a6ff"))
                 _fig.add_hline(y=0, line_dash="dot", line_color="#555")
                 _fig.update_layout(
                     barmode="group",
@@ -423,9 +427,9 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                     {
                         "代號": r["code"],
                         "基金名": r.get("基金名", ""),
-                        "含息年化% 🧮": float(r.get("含息年化% 🧮") or 0),
-                        "年化配息率% 🧮": float(r.get("年化配息率% 🧮") or 0),
-                        "年化淨值% 🧮": float(r.get("年化淨值% 🧮") or 0),
+                        "含息% (全期自算)": float(r.get("含息% (全期自算)") or 0),
+                        "配息率% (全期自算)": float(r.get("配息率% (全期自算)") or 0),
+                        "淨值% (全期自算)": float(r.get("淨值% (全期自算)") or 0),
                     }
                     for r in ok_rows
                 ])
@@ -434,9 +438,9 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                     column_config={
                         "代號": _cc.TextColumn("代號", width="small"),
                         "基金名": _cc.TextColumn("基金名", width="medium"),
-                        "含息年化% 🧮": _cc.NumberColumn("含息年化% 🧮", format="%.2f %%"),
-                        "年化配息率% 🧮": _cc.NumberColumn("年化配息率% 🧮", format="%.2f %%"),
-                        "年化淨值% 🧮": _cc.NumberColumn("年化淨值% 🧮", format="%.2f %%"),
+                        "含息% (全期自算)": _cc.NumberColumn("含息% (全期自算)", format="%.2f %%"),
+                        "配息率% (全期自算)": _cc.NumberColumn("配息率% (全期自算)", format="%.2f %%"),
+                        "淨值% (全期自算)": _cc.NumberColumn("淨值% (全期自算)", format="%.2f %%"),
                     },
                 )
             except Exception as _e_chart:
