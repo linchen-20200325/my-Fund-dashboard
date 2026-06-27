@@ -1392,13 +1392,16 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
 
 
 def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
-    """組合健檢 5 大貼圖區塊 entry。
+    """組合健檢進階貼圖區塊 entry。
 
     區塊順序：
-      ① 基金體檢 PK 表（render_fund_checkup 一站涵蓋體檢 PK + 4 大健診卡）
       ③ 真實收益矩陣
       ④ 投資試算（每檔 expander）
       ⑤ TER + 持股分析（每檔 expander）
+      ⑥–⑭ 多檔比較 / MK / Bollinger / AI / 新聞 / 三率
+
+    注意（v19.189）：① 基金體檢 PK 表 + ② 4 大健診卡（fund_checkup）已上移至
+    tab_fund_grp_health._render_health_table 健診總表之前，不再由本函式渲染。
     """
     if not funds:
         return
@@ -1406,12 +1409,9 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
     st.divider()
     st.markdown("## 🔬 進階分析（移植自組合基金 / 單一基金）")
 
-    try:
-        from ui.helpers.fund_checkup import render_fund_checkup
-        render_fund_checkup(funds)
-    except Exception as e:
-        st.caption(f"⬜ 基金體檢 PK 表渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
-
+    # v19.189：基金體檢 PK + 4 大健診卡（fund_checkup）已上移至
+    # tab_fund_grp_health._render_health_table 健診總表之前（user 要求易讀摘要先看到），
+    # 此處不再渲染，避免上下兩份相同內容。
     try:
         _render_dividend_matrix(funds)
     except Exception as e:

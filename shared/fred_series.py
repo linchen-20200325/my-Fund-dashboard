@@ -25,6 +25,7 @@ FRED_M2: str = "M2SL"              # M2 monthly (seasonally adjusted)
 FRED_M2_WEEKLY: str = "WM2NS"      # M2 weekly (non-seasonal)
 FRED_FED_BS: str = "WALCL"         # Fed balance sheet (Wed level)
 FRED_RRP: str = "RRPONTSYD"        # Overnight reverse repo
+FRED_TGA: str = "WTREGEN"          # Treasury General Account (TGA, weekly Wed, USD mn)
 
 # ── Credit spreads ─────────────────────────────────────────────────
 FRED_HY_SPREAD: str = "BAMLH0A0HYM2"   # High yield OAS

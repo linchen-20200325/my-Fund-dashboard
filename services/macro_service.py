@@ -48,9 +48,11 @@ from shared.fred_series import (
     FRED_PAYEMS,
     FRED_PERMIT,
     FRED_PPI,
+    FRED_RRP,
     FRED_SAHM,
     FRED_T10Y2Y,
     FRED_T5YIE,
+    FRED_TGA,
     FRED_UMCSENT,
     FRED_UNRATE,
 )
@@ -615,24 +617,45 @@ def fetch_all_indicators(fred_api_key):
         except Exception as _e:
             print(f"[{_key}] {_e}")
 
-    # ── Fed 資產負債表 ────────────────────────────────────────────────
-    # n=312 (6y weekly) + tail(260) = Phase 3-B 燈號回測需 ≥60 樣本
+    # ── Fed 資產負債表 → v19.193 升級為「淨流動性」(WALCL − RRP − TGA) ──
+    # user 2026-06-27:評分這格從「原始 Fed 資產」升級成「淨流動性」(扣掉停在 RRP /
+    #   政府帳戶 TGA 的死錢),更貼近「真正進股市的錢」。算法/門檻/權重全不動(YoY% →
+    #   ±5% → score),只換輸入序列。淨流動性序列走 us_liquidity_engine.net_liquidity_series
+    #   SSOT(與顯示卡同源,user 要求資料 SSOT)。
+    #   §1 降級:淨流動性 series 不足 53 週(TGA/RRP 史太短/缺)→ fallback 原始 WALCL YoY,
+    #   指標永不消失。n=312 (6y weekly) + tail(260) = Phase 3-B 燈號回測需 ≥60 樣本。
     df = _fred("WALCL", fred_api_key, 312)
-    if len(df) >= 13:
-        s = df.set_index("date")["value"]
-        yoy = (s / s.shift(52) - 1) * 100
+    _fedbs_name = "Fed 資產負債表 (YoY)"
+    _fedbs_desc = "擴表=注入流動性→利多 | 縮表=抽走流動性→壓力"
+    _s_lvl = None
+    try:
+        from services.us_liquidity_engine import net_liquidity_series as _nl_series
+        _df_rrp = _fred(FRED_RRP, fred_api_key, 2000)   # 日頻,多抓供 52 週 YoY + 260 tail 對齊
+        _df_tga = _fred(FRED_TGA, fred_api_key, 312)    # 週頻(同 WALCL 6y)
+        _nl = _nl_series(df, _df_rrp, _df_tga)           # 淨流動性週序列(兆美元 T,DatetimeIndex)
+        if len(_nl) >= 53:                               # YoY 需 shift(52)+1
+            _s_lvl = _nl
+            _fedbs_name = "淨流動性 (YoY)"
+            _fedbs_desc = "Fed資產−RRP−TGA=真正進股市的錢；增=利多 | 減=壓力（升級自 Fed 資產）"
+    except Exception as _e_nl:
+        print(f"[fetch_all_indicators/net_liq] fallback gross WALCL: {type(_e_nl).__name__}: {_e_nl}")
+    if _s_lvl is None and len(df) >= 53:
+        _s_lvl = df.set_index("date")["value"]           # fallback：原始 WALCL level
+    if _s_lvl is not None and len(_s_lvl) >= 53:
+        yoy = (_s_lvl / _s_lvl.shift(52) - 1) * 100
         s24 = yoy.dropna().tail(260)
-        v = float(s24.iloc[-1]); p = float(s24.iloc[-2]) if len(s24)>=2 else v
-        R["FED_BS"] = dict(
-            name="Fed 資產負債表 (YoY)", value=round(v,2), prev=round(p,2),
-            unit="%", type="流動性", date=str(df.iloc[-1]["date"])[:7],
-            desc="擴表=注入流動性→利多 | 縮表=抽走流動性→壓力",
-            trend=_trend(s24.tolist()[-6:]),
-            # F-GRAY-4 v19.184: Fed BS score_function SSOT（expansion>5 / contraction<-5）
-            signal="🟢" if v>_FEDBS_EXPANSION else ("🔴" if v<_FEDBS_CONTRACTION else "🟡"),
-            color=MATERIAL_GREEN if v>_FEDBS_EXPANSION else (MATERIAL_RED if v<_FEDBS_CONTRACTION else MATERIAL_ORANGE),
-            score=1 if v>_FEDBS_EXPANSION else (-1 if v<_FEDBS_CONTRACTION else 0),
-            weight=1, series=s24)
+        if len(s24) >= 1:
+            v = float(s24.iloc[-1]); p = float(s24.iloc[-2]) if len(s24)>=2 else v
+            R["FED_BS"] = dict(
+                name=_fedbs_name, value=round(v,2), prev=round(p,2),
+                unit="%", type="流動性", date=str(df.iloc[-1]["date"])[:7],
+                desc=_fedbs_desc,
+                trend=_trend(s24.tolist()[-6:]),
+                # F-GRAY-4 v19.184: Fed BS score_function SSOT（expansion>5 / contraction<-5）
+                signal="🟢" if v>_FEDBS_EXPANSION else ("🔴" if v<_FEDBS_CONTRACTION else "🟡"),
+                color=MATERIAL_GREEN if v>_FEDBS_EXPANSION else (MATERIAL_RED if v<_FEDBS_CONTRACTION else MATERIAL_ORANGE),
+                score=1 if v>_FEDBS_EXPANSION else (-1 if v<_FEDBS_CONTRACTION else 0),
+                weight=1, series=s24)
 
     # ── VIX ──────────────────────────────────────────────────────────
     # period=5y + tail(260) 確保 Phase 4 lag-corr 與 Phase 3-B 燈號回測樣本足

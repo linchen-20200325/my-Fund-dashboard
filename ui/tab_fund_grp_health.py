@@ -61,26 +61,37 @@ def render_fund_grp_health_tab() -> None:
         return
 
     rows = _run_batch_health(codes, principal_twd, "", warn_gap)
-    _render_health_table(rows)
 
-    # v19.58 — 5 大貼圖區塊（基金體檢 PK + 健診卡 + 真實收益矩陣 + 投資試算 + 持股分析）
+    # v19.189：逐檔財務健診（4 大功能 + 健診摘要表 PK + 健診卡）移到「健診總表」上方
+    #（user 要求：易讀的摘要 PK + 健診卡應先看到，逐欄 🧮 總表移其下）。
+    # _funds_extra 由 _build_fund_dict 包裝，下方「健診總表」與「進階分析」共用同一份。
+    _funds_extra: list = []
     try:
-        from ui.helpers.fund_grp_health_extras import (
-            _build_fund_dict,
-            render_fund_grp_health_extras,
-        )
+        from ui.helpers.fund_grp_health_extras import _build_fund_dict
         _funds_extra = [
             _build_fund_dict(r["_fund_raw"], r["code"], principal_twd)
             for r in rows
             if r.get("ok") and r.get("_fund_raw")
         ]
-        if _funds_extra:
-            render_fund_grp_health_extras(_funds_extra, principal_twd)
-    except Exception as _e_extra:
+    except Exception as _e_build:
         st.caption(
-            f"⬜ 進階分析區塊渲染失敗：[{type(_e_extra).__name__}] "
-            f"{str(_e_extra)[:80]}"
+            f"⬜ 進階資料建構失敗：[{type(_e_build).__name__}] {str(_e_build)[:80]}"
         )
+        _funds_extra = []
+
+    _render_health_table(rows, funds_extra=_funds_extra)
+
+    # v19.58 — 其餘進階貼圖區塊（真實收益矩陣 + 投資試算 + 持股 + 多檔比較 + AI…）。
+    # 基金體檢 PK + 4 大健診卡已上移至健診總表之前，不再由此區塊渲染（避免上下重複）。
+    if _funds_extra:
+        try:
+            from ui.helpers.fund_grp_health_extras import render_fund_grp_health_extras
+            render_fund_grp_health_extras(_funds_extra, principal_twd)
+        except Exception as _e_extra:
+            st.caption(
+                f"⬜ 進階分析區塊渲染失敗：[{type(_e_extra).__name__}] "
+                f"{str(_e_extra)[:80]}"
+            )
 
 
 # v19.76 K3：原 32 行 _auto_fetch_moneydj 已遷移至 services.moneydj_fetcher，
@@ -323,7 +334,7 @@ def _render_mj_freshness_banner(ok_rows: list[dict]) -> None:
     render_mj_freshness_banner(_items)
 
 
-def _render_health_table(rows: list[dict]) -> None:
+def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> None:
     if not rows:
         return
     import pandas as pd
@@ -356,6 +367,19 @@ def _render_health_table(rows: list[dict]) -> None:
             {k: v for k, v in r.items() if not k.startswith("_")}
             for r in ok_rows
         ])
+        # v19.189：逐檔財務健診（4 大功能 + 健診摘要表 PK + 健診卡）插在健診總表上方。
+        # user 要求易讀的摘要 PK + 健診卡先看到（原在下方「進階分析」區塊）。
+        if funds_extra:
+            try:
+                from ui.helpers.fund_checkup import render_fund_checkup
+                # expanded=True：上移到健診總表之上後直接展開，避免 user 以為「沒有」。
+                render_fund_checkup(funds_extra, expanded=True)
+            except Exception as _e_chk:
+                st.caption(
+                    f"⬜ 基金體檢 PK 表渲染失敗：[{type(_e_chk).__name__}] "
+                    f"{str(_e_chk)[:80]}"
+                )
+
         st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
         # v19.180:全期實際 / 年化兩軸並陳。短歷史也顯示真實累計值,不再 None。
         st.caption(
@@ -419,13 +443,16 @@ def _render_health_table(rows: list[dict]) -> None:
             try:
                 import plotly.graph_objects as _go
                 _codes = [r["code"] for r in ok_rows]
-                _div_r  = [float(r.get("年化配息率% 🧮") or 0) for r in ok_rows]
-                _ret_r  = [float(r.get("含息年化% 🧮") or 0) for r in ok_rows]
-                _nav_r  = [float(r.get("年化淨值% 🧮") or 0) for r in ok_rows]
+                # v19.190 fix + v19.194 merge reconcile：key 對齊 process_one_fund 實際輸出。
+                # 並行線 v19.180 把欄位拆成「(全期實際)」+「(年化)」兩套；圖表取**年化**
+                # （= 原 annual_*_pct_🧮，跨檔可比）。舊鍵「年化…% 🧮」已不存在，不可再讀。
+                _div_r  = [float(r.get("配息率% (年化)") or 0) for r in ok_rows]
+                _ret_r  = [float(r.get("含息% (年化)") or 0) for r in ok_rows]
+                _nav_r  = [float(r.get("淨值% (年化)") or 0) for r in ok_rows]
                 _fig = _go.Figure()
-                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name="年化配息率%🧮", marker_color="#f0883e"))
-                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name="含息年化%🧮",  marker_color="#3fb950"))
-                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name="年化淨值%🧮",  marker_color="#58a6ff"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name="配息率%(年化)🧮", marker_color="#f0883e"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name="含息%(年化)🧮",  marker_color="#3fb950"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name="淨值%(年化)🧮",  marker_color="#58a6ff"))
                 _fig.add_hline(y=0, line_dash="dot", line_color="#555")
                 _fig.update_layout(
                     barmode="group",
@@ -442,9 +469,9 @@ def _render_health_table(rows: list[dict]) -> None:
                     {
                         "代號": r["code"],
                         "基金名": r.get("基金名", ""),
-                        "含息年化% 🧮": float(r.get("含息年化% 🧮") or 0),
-                        "年化配息率% 🧮": float(r.get("年化配息率% 🧮") or 0),
-                        "年化淨值% 🧮": float(r.get("年化淨值% 🧮") or 0),
+                        "含息% (年化)": float(r.get("含息% (年化)") or 0),
+                        "配息率% (年化)": float(r.get("配息率% (年化)") or 0),
+                        "淨值% (年化)": float(r.get("淨值% (年化)") or 0),
                     }
                     for r in ok_rows
                 ])
@@ -453,9 +480,9 @@ def _render_health_table(rows: list[dict]) -> None:
                     column_config={
                         "代號": _cc.TextColumn("代號", width="small"),
                         "基金名": _cc.TextColumn("基金名", width="medium"),
-                        "含息年化% 🧮": _cc.NumberColumn("含息年化% 🧮", format="%.2f %%"),
-                        "年化配息率% 🧮": _cc.NumberColumn("年化配息率% 🧮", format="%.2f %%"),
-                        "年化淨值% 🧮": _cc.NumberColumn("年化淨值% 🧮", format="%.2f %%"),
+                        "含息% (年化)": _cc.NumberColumn("含息% (年化)", format="%.2f %%"),
+                        "配息率% (年化)": _cc.NumberColumn("配息率% (年化)", format="%.2f %%"),
+                        "淨值% (年化)": _cc.NumberColumn("淨值% (年化)", format="%.2f %%"),
                     },
                 )
             except Exception as _e_chart:

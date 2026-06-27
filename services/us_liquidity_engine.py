@@ -1,8 +1,8 @@
 """v19.47 美股流動性 × 熱錢監測引擎.
 
 對應 user 反饋：「Fund 應放美股熱錢（非台股），美股熱錢 != FED 升降息」
-6 指標三角架構：
-  - 流動性：M2 YoY / WALCL (Fed BS) / RRP
+7 指標三角架構：
+  - 流動性：M2 YoY / WALCL (Fed BS) / RRP / 淨流動性(WALCL−RRP−TGA, v19.192)
   - 信用：HY OAS / HYG-LQD 比
   - 情緒：AAII bull-bear spread（best-effort scrape）
 
@@ -22,6 +22,7 @@ from shared.fred_series import (
     FRED_HY_SPREAD,
     FRED_M2,
     FRED_RRP,
+    FRED_TGA,
 )
 from repositories.macro_repository import (
     fetch_aaii_sentiment,
@@ -42,6 +43,10 @@ RRP_DRAIN_BN: float = 100.0        # RRP < → 流動性枯竭警示（黃）
 RRP_GLUT_BN: float = 1000.0        # RRP ≥ → 流動性過剩 / QE 蓄水（藍）
 AAII_EUPHORIA_PCT: float = 20.0    # AAII spread > → 散戶過度樂觀（反指標賣訊）
 AAII_PANIC_PCT: float = -20.0      # AAII spread < → 散戶過度悲觀（反指標買訊）
+# v19.192 — 淨流動性 Δ13週 cut-off（兆美元 T）。淨流動性 = Fed資產 − RRP − TGA。
+# 較 WALCL 單卡的 ±0.1T 寬，因 TGA/RRP 波動大（債限/繳稅季），避免雜訊亂跳。
+NET_LIQ_EXPAND_TN: float = 0.2     # Δ13週 > → 淨流動性擴張 / 股市燃料增（綠）
+NET_LIQ_DRAIN_TN: float = -0.2     # Δ13週 < → 淨流動性收縮 / 股市缺燃料（紅）
 
 
 def _hy_oas(api_key: str) -> dict:
@@ -169,6 +174,86 @@ def _walcl(api_key: str) -> dict:
         return {"_err": f"{type(e).__name__}: {e}"}
 
 
+def net_liquidity_series(df_walcl, df_rrp, df_tga):
+    """純函式：Fed資產(WALCL) − RRP − TGA → 週頻淨流動性序列（兆美元 T，DatetimeIndex）。
+
+    SSOT：顯示卡(_net_liquidity)與評分(macro_service FED_BS 槽)共用同一份計算，
+    避免兩處各算一次導致數字不一致（user 2026-06-27 要求資料 SSOT）。
+    單位陷阱(§4.1)：WALCL/TGA = 百萬、RRP = 十億 → 換 T 前係數不同。
+    時序(§4.5)：WALCL/TGA 週頻、RRP 日頻 → merge_asof backward(tol 7d)對齊週三格，不吃未來。
+    缺資料 / 無重疊 → 回空 Series（呼叫端依 §1 Fail Loud 決定降級）。
+    """
+    _MN_TO_TN = 1e6   # 百萬美元 → 兆美元
+    _BN_TO_TN = 1e3   # 十億美元 → 兆美元
+    if df_walcl is None or df_rrp is None or df_tga is None:
+        return pd.Series(dtype=float)
+    if df_walcl.empty or df_rrp.empty or df_tga.empty:
+        return pd.Series(dtype=float)
+    w = df_walcl[["date", "value"]].copy(); w["w_tn"] = w["value"] / _MN_TO_TN
+    t = df_tga[["date", "value"]].copy(); t["t_tn"] = t["value"] / _MN_TO_TN
+    r = df_rrp[["date", "value"]].copy(); r["r_tn"] = r["value"] / _BN_TO_TN
+    for _d in (w, t, r):
+        _d["date"] = pd.to_datetime(_d["date"])
+        _d.sort_values("date", inplace=True)
+    m = pd.merge_asof(w[["date", "w_tn"]], t[["date", "t_tn"]], on="date",
+                      direction="backward", tolerance=pd.Timedelta("7D"))
+    m = pd.merge_asof(m, r[["date", "r_tn"]], on="date",
+                      direction="backward", tolerance=pd.Timedelta("7D"))
+    m = m.dropna(subset=["w_tn", "t_tn", "r_tn"])
+    if m.empty:
+        return pd.Series(dtype=float)
+    return pd.Series(
+        (m["w_tn"] - m["r_tn"] - m["t_tn"]).to_numpy(),
+        index=pd.DatetimeIndex(m["date"]), name="net_liq_tn",
+    )
+
+
+def _net_liquidity(api_key: str) -> dict:
+    """淨流動性 = Fed資產(WALCL) − 隔夜逆回購(RRP) − 政府帳戶(TGA)，全部換算兆美元(T)。
+
+    白話：市場上「真正能流進股市的錢」。Fed 放的水(WALCL)扣掉停在央行的閒錢(RRP)
+    與卡在政府帳戶的錢(TGA)，剩下的才是股市的燃料。
+
+    單位陷阱（§4.1）：WALCL/TGA = 百萬美元、RRP = 十億美元 → 換算 T 前係數**不同**：
+        WALCL(mn)/1e6 = T ; TGA(mn)/1e6 = T ; RRP(bn)/1e3 = T
+    時序對齊（§4.5）：WALCL/TGA 週頻(週三)、RRP 日頻 → merge_asof backward(tol 7d)
+        對齊到週三格，不 lookahead、不偽造每日值。
+    Δ13週(≈1季)對齊 WALCL QE/QT pace。§1 Fail Loud：任一 series 缺 → _err 不捏造。
+    """
+    try:
+        df_w = fetch_fred(FRED_FED_BS, api_key, n=40)    # WALCL 百萬,週頻
+        df_t = fetch_fred(FRED_TGA, api_key, n=40)       # TGA   百萬,週頻
+        df_r = fetch_fred(FRED_RRP, api_key, n=260)      # RRP   十億,日頻(多抓供對齊週三格)
+        if df_w.empty or df_t.empty or df_r.empty:
+            return {"_err": "FRED empty (WALCL/RRP/TGA 任一缺)"}
+        s = net_liquidity_series(df_w, df_r, df_t)   # SSOT 共用序列(兆美元 T)
+        if s.empty:
+            return {"_err": "net-liq 對齊後無有效列"}
+        cur = float(s.iloc[-1])
+        delta_tn = 0.0
+        if len(s) >= 13:
+            delta_tn = cur - float(s.iloc[-13])
+        if delta_tn > NET_LIQ_EXPAND_TN:
+            color, label = "#3fb950", "💧 淨流動性擴張（股市燃料增）"
+        elif delta_tn < NET_LIQ_DRAIN_TN:
+            color, label = "#f85149", "🔴 淨流動性收縮（股市缺燃料）"
+        else:
+            color, label = "#d29922", "➖ 淨流動性中性"
+        return {
+            "value": cur,
+            "unit": "T",
+            "delta": delta_tn,
+            "color": color,
+            "label": label,
+            "date": str(s.index[-1])[:10],
+            "source": f"FRED:{FRED_FED_BS}-{FRED_RRP}-{FRED_TGA}",
+            # sparkline:淨流動性 level（兆美元 T；delta-based 判讀,無單一 SPEC 線）
+            "series": [round(float(x), 3) for x in s.tail(30).tolist()],
+        }
+    except Exception as e:
+        return {"_err": f"{type(e).__name__}: {e}"}
+
+
 def _hyg_lqd_ratio() -> dict:
     """HYG (高收益債 ETF) / LQD (投等債 ETF) — 風險偏好."""
     try:
@@ -236,11 +321,12 @@ def fetch_us_liquidity_snapshot(fred_api_key: str) -> dict:
         "rrp": lambda: _rrp(fred_api_key),
         "m2_yoy": lambda: _m2_yoy(fred_api_key),
         "walcl": lambda: _walcl(fred_api_key),
+        "net_liq": lambda: _net_liquidity(fred_api_key),   # v19.192 淨流動性 = WALCL−RRP−TGA
         "hyg_lqd": _hyg_lqd_ratio,
         "aaii": _aaii_with_judgment,
     }
     out: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=7) as ex:
         futs = {ex.submit(fn): name for name, fn in jobs.items()}
         for fut in futs:
             name = futs[fut]
