@@ -2148,6 +2148,77 @@ def render_portfolio_tab() -> None:
                 # v18.163：下方 4 卡 KPI 已移除（與 Tab3 頂部 hero KPI 重複）；
                 # 詳細數字在 hero「💵 現金流安全」/「🔴 留校查看」見。
 
+        # v19.180:💊 持倉健診總表(共用 SSOT 渲染,不重抓資料)
+        # 來源:與「基金組合健診」Tab 完全同源(process_one_fund + _render_health_table),
+        # 差異:per-fund 用 user 實際 invest_twd 為本金(若無則預設 100 萬 TWD)。
+        # 目的:user 看完真實收益矩陣後,直接判斷「是否需要換標的 / 基金不健康」。
+        if _loaded_pf:
+            try:
+                st.divider()
+                st.markdown("### 💊 持倉健診總表（共用 SSOT,本金用 invest_twd）")
+                st.caption(
+                    "與「基金組合健診」Tab 完全同源"
+                    "(吃本金燈號 1Y·MK + MK 3-3-3 + 全期實際/年化雙軸)。"
+                    "本金:每檔用 user 實際 invest_twd(未填者預設 100 萬 TWD)。"
+                    "目的:看完配息金額後,**判斷是否需要換標的**。"
+                )
+                from ui.tab_fund_grp_health import (
+                    process_one_fund as _proc_health,
+                    _render_health_table as _render_health_tbl,
+                )
+                from concurrent.futures import (
+                    ThreadPoolExecutor as _TPE_h,
+                    as_completed as _ac_h,
+                )
+                _warn_gap_h = 2.0  # SSOT 對齊 fund_dividend_calculator.DEFAULT_WARN_GAP_PCT
+                _DEFAULT_PRINC = 1_000_000.0
+                _health_results: list = [None] * len(_loaded_pf)
+                _prog_h = st.progress(0.0, text="📥 持倉健診計算中…")
+                try:
+                    with _TPE_h(max_workers=min(len(_loaded_pf), 4)) as _exh:
+                        _futs_h = {}
+                        for _ih, _fh in enumerate(_loaded_pf):
+                            _code_h = str(_fh.get("code", "") or "").strip().upper()
+                            _fd_h = _fh.get("moneydj_raw") or None
+                            _inv = _fh.get("invest_twd")
+                            try:
+                                _principal_h = (float(_inv) if _inv
+                                                else _DEFAULT_PRINC)
+                            except (TypeError, ValueError):
+                                _principal_h = _DEFAULT_PRINC
+                            if _principal_h <= 0:
+                                _principal_h = _DEFAULT_PRINC
+                            _futs_h[_exh.submit(
+                                _proc_health, _code_h, _principal_h,
+                                "", _warn_gap_h, _fd_h,
+                            )] = _ih
+                        _done_h = 0
+                        _n_h = len(_loaded_pf)
+                        for _futh in _ac_h(_futs_h):
+                            _ih2 = _futs_h[_futh]
+                            try:
+                                _health_results[_ih2] = _futh.result()
+                            except Exception as _eh:
+                                _health_results[_ih2] = {
+                                    "code": _loaded_pf[_ih2].get("code", "?"),
+                                    "ok": False,
+                                    "error": f"{type(_eh).__name__}: {_eh}",
+                                }
+                            _done_h += 1
+                            _prog_h.progress(
+                                _done_h / _n_h,
+                                text=f"📥 已完成 {_done_h}/{_n_h} 檔…",
+                            )
+                finally:
+                    _prog_h.empty()
+                _render_health_tbl(
+                    [r for r in _health_results if r is not None]
+                )
+            except Exception as _e_ph:
+                st.caption(
+                    f"⬜ 持倉健診總表渲染失敗:"
+                    f"{type(_e_ph).__name__}: {str(_e_ph)[:80]}"
+                )
 
     # ─── 以下為原 with tab3: 第二段 ───────────────
     # v18.194 故事化：T7 持倉戰情（③）移到 T5 重疊診斷（④）之前，
