@@ -55,10 +55,12 @@ from shared.fred_series import (
     FRED_UNRATE,
 )
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
-from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.178 CPI + v19.179 PMI
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 CPI/HY + v19.179 PMI + v19.184 M2/FedBS
     CPI_YOY_THRESHOLDS as _CPI_THR,
     HY_SPREAD_THRESHOLDS as _HY_THR,
     PMI_THRESHOLDS as _PMI_THR,
+    M2_THRESHOLDS as _M2_THR,
+    FED_BS_THRESHOLDS as _FEDBS_THR,
 )
 
 # F-GRAY-4 v19.178: CPI_YOY inflection + regime SSOT (SPEC §16.2)
@@ -76,6 +78,12 @@ _PMI_GROWTH_EXPANSION = _PMI_THR["growth_signal"]["expansion_above"]        # 50
 _PMI_ALERT_CONTRACT = _PMI_THR["alert_generation"]["contraction_below"]     # 50.0
 _PMI_REGIME_STRONG = _PMI_THR["regime_classification"]["strong_growth_above"]  # 52.0(新觀念真正枯榮線)
 _PMI_REGIME_CONTRACT = _PMI_THR["regime_classification"]["contraction_below"]  # 50.0
+
+# F-GRAY-4 v19.184: M2 / Fed BS score_function SSOT (SPEC §16.2)
+_M2_EASING = _M2_THR["score_function"]["easing_above"]            # 5.0
+_M2_TIGHTENING = _M2_THR["score_function"]["tightening_below"]    # 0.0
+_FEDBS_EXPANSION = _FEDBS_THR["score_function"]["expansion_above"]    # 5.0
+_FEDBS_CONTRACTION = _FEDBS_THR["score_function"]["contraction_below"]  # -5.0
 
 # F-GRAY-4 v19.169: HY_SPREAD stoplight SSOT (SPEC §16.2)
 _HY_YELLOW = _HY_THR["stoplight"]["yellow_below"]    # 6.0 — alert 觸發點
@@ -491,9 +499,10 @@ def fetch_all_indicators(fred_api_key):
             unit="%", type="流動性", date=str(df.iloc[-1]["date"])[:7],
             desc=">5%流動性寬鬆→利多 | <0%緊縮→壓力",
             trend=_trend(s24.tolist()[-6:]),
-            signal="🟢" if v>5 else ("🔴" if v<0 else "🟡"),
-            color=MATERIAL_GREEN if v>5 else (MATERIAL_RED if v<0 else MATERIAL_ORANGE),
-            score=1 if v>5 else (-1 if v<0 else 0),
+            # F-GRAY-4 v19.184: M2 score_function SSOT（easing>5 / tightening<0）
+            signal="🟢" if v>_M2_EASING else ("🔴" if v<_M2_TIGHTENING else "🟡"),
+            color=MATERIAL_GREEN if v>_M2_EASING else (MATERIAL_RED if v<_M2_TIGHTENING else MATERIAL_ORANGE),
+            score=1 if v>_M2_EASING else (-1 if v<_M2_TIGHTENING else 0),
             weight=1, series=s24)
 
     # v19.49 perf: SPY / RSP / DXY 三條 yfinance 並行（原 3× 序列 → max(t)）
@@ -619,9 +628,10 @@ def fetch_all_indicators(fred_api_key):
             unit="%", type="流動性", date=str(df.iloc[-1]["date"])[:7],
             desc="擴表=注入流動性→利多 | 縮表=抽走流動性→壓力",
             trend=_trend(s24.tolist()[-6:]),
-            signal="🟢" if v>5 else ("🔴" if v<-5 else "🟡"),
-            color=MATERIAL_GREEN if v>5 else (MATERIAL_RED if v<-5 else MATERIAL_ORANGE),
-            score=1 if v>5 else (-1 if v<-5 else 0),
+            # F-GRAY-4 v19.184: Fed BS score_function SSOT（expansion>5 / contraction<-5）
+            signal="🟢" if v>_FEDBS_EXPANSION else ("🔴" if v<_FEDBS_CONTRACTION else "🟡"),
+            color=MATERIAL_GREEN if v>_FEDBS_EXPANSION else (MATERIAL_RED if v<_FEDBS_CONTRACTION else MATERIAL_ORANGE),
+            score=1 if v>_FEDBS_EXPANSION else (-1 if v<_FEDBS_CONTRACTION else 0),
             weight=1, series=s24)
 
     # ── VIX ──────────────────────────────────────────────────────────
