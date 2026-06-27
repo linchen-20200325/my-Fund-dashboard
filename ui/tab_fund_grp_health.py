@@ -88,13 +88,23 @@ def render_fund_grp_health_tab() -> None:
 from services.moneydj_fetcher import auto_fetch_moneydj as _auto_fetch_moneydj  # noqa: F401
 
 
-def _process_one_fund(
+def process_one_fund(
     code: str,
     principal_twd: float,
     ccy_hint: str,
     warn_gap: float,
+    fd: dict | None = None,
 ) -> dict:
     """v19.68 H：單檔健診 worker（純 IO + 計算，無 st 呼叫 → 可並行）。
+
+    Args:
+        code: 基金代號(MoneyDJ)
+        principal_twd: 本金 TWD(per-fund;Tab3 用 user 實際 invest_twd,健診 Tab 統一 100 萬)
+        ccy_hint: legacy hint(v19.59 後不再使用,留簽名相容)
+        warn_gap: 配息率超出含息報酬率多少 → 警示燈
+        fd: v19.180 新增 — 預先抓好的 fd(`auto_fetch_moneydj` 結果)。
+            若 None → 本函式呼叫 `_auto_fetch_moneydj(code)`;
+            若有 → 跳過 fetch 直接用(Tab3 從 portfolio_funds 已存的 moneydj_raw 傳入,免重抓 2-30s)。
 
     回傳 row dict（與舊序列版完全一致）；任一步失敗回 {ok: False, error}。
     """
@@ -102,7 +112,8 @@ def _process_one_fund(
     from services.currency import normalize_ccy  # v19.71：single source of truth
     from services.fund_dividend_calculator import compute_dividend_twd_series
     try:
-        fd = _auto_fetch_moneydj(code)
+        if fd is None:
+            fd = _auto_fetch_moneydj(code)
         if fd.get("error") and not fd.get("series"):
             return {"code": code, "ok": False, "error": fd.get("error", "?")}
         nav_s = fd.get("series")
@@ -224,12 +235,16 @@ def _process_one_fund(
             "配息次數": result["n_events"],
             "累積 TWD 配息 🧮": s["total_twd_div_🧮"],
             "年均配息 TWD 🧮": _ann_twd_div,
-            # v19.148:全期自算欄位保留為「歷史資訊」(配息累積實況),
-            # 但**verdict 不再用全期自算**(會被短歷史 annualization bias 拉高致誤紅燈),
-            # 改用 MK 老師 1Y SSOT 標準。
-            "配息率% (全期自算)": s["annual_div_rate_pct_🧮"],
-            "淨值% (全期自算)": s["annual_nav_return_pct_🧮"],
-            "含息% (全期自算)": s["ret_1y_total_pct_🧮"],
+            # v19.180:三軸並陳 — 全期實際(永遠有值)+ 年化(< 0.5 年 None)。
+            # 修截圖反饋「配息率% / 淨值% / 含息% (全期自算) 全 None」— 短歷史 user 仍想看
+            # 「實際持有累計多少」(100% 真實數據,不年化故無 §1 Fail Loud 風險)。
+            # 年化欄保留供 ≥ 0.5 年的長線觀察,verdict 仍走 1Y MK SSOT 不受影響。
+            "配息率% (全期實際)": s["cum_div_rate_pct_🧮"],
+            "淨值% (全期實際)": s["cum_nav_return_pct_🧮"],
+            "含息% (全期實際)": s["cum_total_return_pct_🧮"],
+            "配息率% (年化)": s["annual_div_rate_pct_🧮"],
+            "淨值% (年化)": s["annual_nav_return_pct_🧮"],
+            "含息% (年化)": s["ret_1y_total_pct_🧮"],
             # v19.148:單一 SSOT verdict(MK 老師 1Y 體檢標準,跨 tab 一致)
             "吃本金燈號 (1Y · MK)": _snap_health,
             # v19.153:MK 3-3-3 原則(長線核心資產篩選輔助 — 成立 ≥ 3 年 + 3 年平均年化 > 7%)
@@ -246,6 +261,10 @@ def _process_one_fund(
         }
     except Exception as e:
         return {"code": code, "ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
+# v19.180:backward-compat alias(舊呼叫者 / 測試直接 import 老名)
+_process_one_fund = process_one_fund
 
 
 def _run_batch_health(
@@ -272,7 +291,7 @@ def _run_batch_health(
     try:
         with ThreadPoolExecutor(max_workers=_workers) as _ex:
             _futs = {
-                _ex.submit(_process_one_fund, _c, principal_twd, ccy_hint, warn_gap): _i
+                _ex.submit(process_one_fund, _c, principal_twd, ccy_hint, warn_gap): _i
                 for _i, _c in enumerate(codes)
             }
             _done = 0
@@ -338,13 +357,13 @@ def _render_health_table(rows: list[dict]) -> None:
             for r in ok_rows
         ])
         st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
-        # v19.148:吃本金 verdict 改用 MK 老師 1Y SSOT 標準(對齊「健診摘要表」),
-        # 「(全期自算)」欄位保留為歷史資訊,不再用於 verdict 判定。
+        # v19.180:全期實際 / 年化兩軸並陳。短歷史也顯示真實累計值,不再 None。
         st.caption(
             "🩺 **吃本金燈號 (1Y · MK)** 採郭俊宏 MK 老師體檢邏輯:"
             "**近一年含息報酬 < 年化配息率 → 🔴 吃本金**(MoneyDJ wb05 官方數值)。"
-            "「(全期自算)」欄位為持有期實際累積數值,**僅供歷史參考**,"
-            "不參與燈號判定(避免短歷史 annualization 把剛買進基金誤判紅燈)。"
+            "「**(全期實際)**」欄為持有期累計真實值(不年化),短歷史也照顯示;"
+            "「**(年化)**」欄需持有 ≥ 0.5 年才有數值(避免短歷史年化幻象)。"
+            "兩欄皆**僅供歷史參考**,不參與燈號判定。"
             "📊 **長線挑核心資產**請另參 3-3-3 原則:成立 ≥ 3 年 + 3 年平均年化 > 7%。"
         )
         # v19.77 L1：column_config 數值格式化（百分號 / 千分位）+ 欄寬調整
@@ -359,16 +378,26 @@ def _render_health_table(rows: list[dict]) -> None:
             "配息次數": _cc.NumberColumn("配息次數", format="%d", width="small"),
             "累積 TWD 配息 🧮": _cc.NumberColumn("累積 TWD 配息 🧮", format="%,.0f"),
             "年均配息 TWD 🧮": _cc.NumberColumn("年均配息 TWD 🧮", format="%,.0f"),
-            # v19.148:三欄改名 — 明確標「全期自算」,與 1Y MK SSOT verdict 視覺區隔
-            "配息率% (全期自算)": _cc.NumberColumn(
-                "配息率% (全期自算)", format="%.2f %%",
-                help="自買進日起累積配息 / 本金 / 持有年數,僅供歷史參考。verdict 不採此值。"),
-            "淨值% (全期自算)": _cc.NumberColumn(
-                "淨值% (全期自算)", format="%.2f %%",
-                help="自買進日起累積淨值變化年化。verdict 不採此值。"),
-            "含息% (全期自算)": _cc.NumberColumn(
-                "含息% (全期自算)", format="%.2f %%",
-                help="自買進日起累積含息報酬年化。verdict 不採此值。"),
+            # v19.180:全期實際(不年化,短歷史也顯示真實累計值)
+            "配息率% (全期實際)": _cc.NumberColumn(
+                "配息率% (全期實際)", format="%.2f %%",
+                help="自買進日起累積配息 / 本金 × 100(不年化)。短歷史也顯示真實累計。verdict 不採。"),
+            "淨值% (全期實際)": _cc.NumberColumn(
+                "淨值% (全期實際)", format="%.2f %%",
+                help="自買進日起累積淨值漲跌幅(不年化)。短歷史也顯示真實累計。verdict 不採。"),
+            "含息% (全期實際)": _cc.NumberColumn(
+                "含息% (全期實際)", format="%.2f %%",
+                help="全期實際淨值% + 全期實際配息%(不年化)。短歷史也顯示真實累計。verdict 不採。"),
+            # v19.148/v19.180:年化 3 軸(< 0.5 年顯示 None,避免幻象);verdict 仍走 1Y MK SSOT
+            "配息率% (年化)": _cc.NumberColumn(
+                "配息率% (年化)", format="%.2f %%",
+                help="(累積配息 / 本金 / 持有年數)× 100。需持有 ≥ 0.5 年。verdict 不採。"),
+            "淨值% (年化)": _cc.NumberColumn(
+                "淨值% (年化)", format="%.2f %%",
+                help="累積淨值變化 / 持有年數。需持有 ≥ 0.5 年。verdict 不採。"),
+            "含息% (年化)": _cc.NumberColumn(
+                "含息% (年化)", format="%.2f %%",
+                help="年化淨值% + 年化配息%。需持有 ≥ 0.5 年。verdict 不採。"),
             "吃本金燈號 (1Y · MK)": _cc.TextColumn(
                 "吃本金燈號 (1Y · MK)",
                 help="MK 老師 1Y 體檢:近一年含息報酬 vs MoneyDJ wb05 年化配息率。"

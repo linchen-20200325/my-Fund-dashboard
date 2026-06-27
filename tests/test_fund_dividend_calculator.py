@@ -341,3 +341,116 @@ class TestSelfCalcMetadata:
         assert "ccy_div_per_unit" in ev and "_🧮" not in "ccy_div_per_unit"
         assert "ex_date" in ev
         assert "nav_at_ex" in ev
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.180 — 全期實際 3 軸並陳(修截圖反饋:短歷史顯示 None 問題)
+# ════════════════════════════════════════════════════════════════
+class TestCumulativeActualFields:
+    """v19.180 守:全期實際 3 軸永遠算出(不受 0.5 年 guard 影響)。
+
+    修截圖反饋「配息率% / 淨值% / 含息% (全期自算) 全 None」根因:
+    v19.175 的 0.5 年 guard 把年化值設 None,但欄名「(全期自算)」字面是
+    持有期實際累計,跟 user 預期不符。改加「全期實際」3 軸並陳。
+    """
+
+    def test_short_history_cumulative_still_present(self):
+        """持有 0.1 年(< 0.5 年 guard)— 年化欄 None,但全期實際 3 欄仍有值。"""
+        # NAV 10 → 10.5 (持有 ~36 天 ≈ 0.1 年)
+        r = compute_dividend_twd_series(
+            nav_series={"2024-01-01": 10.0, "2024-02-06": 10.5},
+            dividend_events=[{"date": "2024-01-15", "amount": 0.1}],
+            fx_rate_default=30.0,
+        )
+        s = r["summary"]
+        assert s["holding_years_🧮"] < 0.5, "前提:持有 < 0.5 年觸發 guard"
+        # 年化欄 v19.175 設計 → None
+        assert s["annual_div_rate_pct_🧮"] is None
+        assert s["annual_nav_return_pct_🧮"] is None
+        assert s["ret_1y_total_pct_🧮"] is None
+        # 全期實際 3 欄 v19.180 → 必須有值(非 None)
+        assert s["cum_div_rate_pct_🧮"] is not None, "全期實際配息率短歷史也該算"
+        assert s["cum_nav_return_pct_🧮"] is not None, "全期實際淨值%短歷史也該算"
+        assert s["cum_total_return_pct_🧮"] is not None, "全期實際含息%短歷史也該算"
+
+    def test_cumulative_div_rate_no_annualization(self):
+        """全期實際配息率 = 累計配息 / 本金 × 100(不除年數)。"""
+        # 本金 100 萬 TWD / FX 30 = 33333.33 USD / NAV 10 = 3333.33 units
+        # 配息 0.5/unit → 1666.67 USD 累計配息
+        # 全期實際配息率 = 1666.67 / 33333.33 × 100 = 5.00%
+        r = compute_dividend_twd_series(
+            nav_series={"2024-01-01": 10.0, "2024-03-01": 10.0},  # ~0.16 年
+            dividend_events=[{"date": "2024-02-01", "amount": 0.5}],
+            fx_rate_default=30.0,
+        )
+        s = r["summary"]
+        assert s["cum_div_rate_pct_🧮"] == pytest.approx(5.0, abs=0.01), (
+            f"5.00% 預期(0.5 USD/unit × 3333 units / 33333 USD),實際 "
+            f"{s['cum_div_rate_pct_🧮']}"
+        )
+
+    def test_cumulative_nav_return_no_annualization(self):
+        """全期實際淨值% = (last_nav / buy_nav − 1) × 100,不除年數。"""
+        # NAV 10 → 11 = +10% (持有 0.3 年)
+        r = compute_dividend_twd_series(
+            nav_series={"2024-01-01": 10.0, "2024-04-15": 11.0},
+            dividend_events=[],
+            fx_rate_default=30.0,
+        )
+        s = r["summary"]
+        assert s["cum_nav_return_pct_🧮"] == pytest.approx(10.0, abs=0.01), (
+            f"+10% 預期(不年化),實際 {s['cum_nav_return_pct_🧮']}"
+        )
+        # 年化會放大 → 與全期實際必不同
+        assert s["annual_nav_return_pct_🧮"] is None, "短歷史年化應為 None"
+
+    def test_cumulative_total_equals_div_plus_nav(self):
+        """全期實際含息% = 全期實際配息% + 全期實際淨值%(加總一致性)。"""
+        r = compute_dividend_twd_series(
+            nav_series={"2024-01-01": 10.0, "2024-06-01": 10.5},
+            dividend_events=[{"date": "2024-03-01", "amount": 0.3}],
+            fx_rate_default=30.0,
+        )
+        s = r["summary"]
+        expected_total = s["cum_div_rate_pct_🧮"] + s["cum_nav_return_pct_🧮"]
+        assert s["cum_total_return_pct_🧮"] == pytest.approx(expected_total, abs=0.01)
+
+    def test_long_history_cumulative_and_annual_coexist(self):
+        """持有 ≥ 0.5 年:全期實際 + 年化 兩軸都該有值。"""
+        # NAV 10 → 11 持有 ~1 年,1 次配息 0.5
+        r = compute_dividend_twd_series(
+            nav_series={"2024-01-01": 10.0, "2025-01-01": 11.0},
+            dividend_events=[{"date": "2024-06-30", "amount": 0.5}],
+            fx_rate_default=30.0,
+        )
+        s = r["summary"]
+        assert s["holding_years_🧮"] >= 0.5, "前提:持有 ≥ 0.5 年"
+        # 兩軸並陳:都該有值
+        assert s["cum_div_rate_pct_🧮"] is not None
+        assert s["annual_div_rate_pct_🧮"] is not None
+        # 持有約 1 年時,全期實際 ≈ 年化(差距小)
+        assert abs(s["cum_div_rate_pct_🧮"] - s["annual_div_rate_pct_🧮"]) < 1.0
+
+    def test_self_calc_fields_includes_cumulative(self):
+        """v19.180 新欄位登錄於 _self_calc_fields(UI 染色用)。"""
+        r = compute_dividend_twd_series(
+            nav_series={"2024-01-01": 10.0, "2024-12-31": 10.0},
+            dividend_events=[],
+            fx_rate_default=30.0,
+        )
+        fields = r["_self_calc_fields"]
+        assert "summary.cum_div_rate_pct" in fields
+        assert "summary.cum_nav_return_pct" in fields
+        assert "summary.cum_total_return_pct" in fields
+
+    def test_zero_dividends_cumulative_div_rate_is_zero(self):
+        """無配息事件 → 全期實際配息率 = 0(非 None)。"""
+        r = compute_dividend_twd_series(
+            nav_series={"2024-01-01": 10.0, "2024-03-01": 10.5},
+            dividend_events=[],
+            fx_rate_default=30.0,
+        )
+        s = r["summary"]
+        assert s["cum_div_rate_pct_🧮"] == 0.0
+        assert s["cum_nav_return_pct_🧮"] == pytest.approx(5.0, abs=0.01)
+        assert s["cum_total_return_pct_🧮"] == pytest.approx(5.0, abs=0.01)

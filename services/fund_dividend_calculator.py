@@ -221,6 +221,19 @@ def compute_dividend_twd_series(
     years = _years_between(buy_date, last_date)
     nav_return_pct = ((last_nav - buy_nav) / buy_nav) * 100.0 if buy_nav > 0 else 0.0
 
+    # v19.180:全期實際累計 3 軸(不年化,即使持有 < 0.5 年也算出真實值)。
+    # 修截圖反饋:「(全期自算)」欄名暗示實際累計,但 v19.175 設計實作年化值,
+    # 短歷史顯示 None 反讓 user 失去「實際累計多少」這個 100% 真實 user 持有期數據。
+    # 兩軸並陳邏輯:
+    #   - 全期實際(本段):整段持有期累計配息 / 本金,持有 0.1 年也照算
+    #   - 年化(下段 v19.175 guard):需 ≥ 0.5 年才有意義,< 0.5 年仍 None
+    cum_div_rate_pct = (
+        (total_ccy_div / principal_ccy) * 100.0
+        if principal_ccy > 0 else 0.0
+    )
+    cum_nav_return_pct = nav_return_pct  # 全期實際 NAV 漲跌幅(同 nav_return_pct,語意命名)
+    cum_total_return_pct = cum_nav_return_pct + cum_div_rate_pct
+
     # v19.175:短歷史 guard — < 0.5 年不年化,顯示「—」/「⬜ 歷史不足」
     # (避免「2 個月配息 × 6 倍 = 30% 高配息率」幻象,§1 Fail Loud)
     if years < MIN_YEARS_FOR_ANNUALIZE:
@@ -259,7 +272,11 @@ def compute_dividend_twd_series(
             "last_nav": last_nav,
             "holding_years_🧮": round(years, 2),
             "nav_return_pct_🧮": round(nav_return_pct, 2),
-            # v19.175:短歷史(< 0.5 年)時年化欄 None;caller / UI 顯示「—」
+            # v19.180:全期實際 3 軸(永遠算出 — 短歷史也回真實累計值)
+            "cum_div_rate_pct_🧮": round(cum_div_rate_pct, 2),
+            "cum_nav_return_pct_🧮": round(cum_nav_return_pct, 2),
+            "cum_total_return_pct_🧮": round(cum_total_return_pct, 2),
+            # v19.175:年化 3 軸 — 短歷史(< 0.5 年)時 None;caller / UI 顯示「—」
             "annual_nav_return_pct_🧮": (round(annual_nav_return_pct, 2)
                                          if annual_nav_return_pct is not None else None),
             "annual_div_rate_pct_🧮": (round(annual_div_rate_pct, 2)
@@ -275,6 +292,8 @@ def compute_dividend_twd_series(
             "events[].twd_div", "events[].single_event_div_pct",
             "summary.total_ccy_div", "summary.total_twd_div",
             "summary.holding_years", "summary.nav_return_pct",
+            "summary.cum_div_rate_pct", "summary.cum_nav_return_pct",
+            "summary.cum_total_return_pct",
             "summary.annual_nav_return_pct", "summary.annual_div_rate_pct",
             "summary.ret_1y_total_pct", "summary.div_health_light",
         ],
