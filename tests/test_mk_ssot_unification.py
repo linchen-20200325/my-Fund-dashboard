@@ -159,7 +159,7 @@ class TestCrossCallerSSOT:
         """v19.148 後,兩 caller 都應呼叫 check_eating_principal_1y_mk。
         防有人靜默走回頭路自己算(SSOT 違憲)。"""
         # tab_fund_grp_health.py 程式碼掃描
-        with open("/home/user/my-Fund-dashboard/ui/tab_fund_grp_health.py",
+        with open("ui/tab_fund_grp_health.py",
                   encoding="utf-8") as _f:
             _src_grp = _f.read()
         assert "check_eating_principal_1y_mk" in _src_grp, (
@@ -176,7 +176,7 @@ class TestCrossCallerSSOT:
     def test_old_misleading_column_removed(self):
         """v19.148:移除「燈號（全期 🧮）」這個誤導 column(語意非 1Y,但顯示風格
         讓 user 以為與 1Y 燈號平行)。"""
-        with open("/home/user/my-Fund-dashboard/ui/tab_fund_grp_health.py",
+        with open("ui/tab_fund_grp_health.py",
                   encoding="utf-8") as _f:
             _src_grp = _f.read()
         # 該 column 已不再寫入 row dict

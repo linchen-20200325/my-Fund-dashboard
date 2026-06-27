@@ -85,7 +85,7 @@ class TestSchemaAdditiveNoBreaking:
         import subprocess
         result = subprocess.run(
             ["grep", "-rnE", r"source.*==.*['\"]FinMind['\"]\b", "services/", "ui/"],
-            cwd="/home/user/my-Fund-dashboard",
+            cwd=".",
             capture_output=True, text=True,
         )
         # 應該找不到任何嚴格比對(returncode != 0 = no match)
