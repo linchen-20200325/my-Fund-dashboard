@@ -120,7 +120,7 @@ class TestEndToEndAdvancedIndicatorsV191:
     """v19.191 e2e:fund_service 算出 sortino/calmar → fund_health_report 抓得到。"""
 
     def test_advanced_indicators_flow_into_health_row(self):
-        from services.fund_health_report import build_health_analysis_row
+        from services.health.report import build_health_analysis_row
         from services.fund_service import calc_metrics
         s = _make_nav_series(300)
         m = calc_metrics(s, divs=[])
@@ -147,7 +147,7 @@ class TestComputeHoldingYearsSeriesTruthValueBugV191:
 
     def test_non_empty_series_does_not_raise(self):
         """非空 Series 應正常算 holding_years,不可走 except 吞掉。"""
-        from services.fund_health_report import _compute_holding_years
+        from services.health.report import _compute_holding_years
         s = _make_nav_series(800)  # ~3.2 年
         fd = {"series": s}
         y = _compute_holding_years(fd)
@@ -155,13 +155,13 @@ class TestComputeHoldingYearsSeriesTruthValueBugV191:
         assert y > 3.0, f"800 個交易日應 > 3 年,實際 {y}"
 
     def test_none_series_returns_none_not_raise(self):
-        from services.fund_health_report import _compute_holding_years
+        from services.health.report import _compute_holding_years
         assert _compute_holding_years({}) is None
         assert _compute_holding_years({"series": None}) is None
 
     def test_moneydj_raw_series_fallback_works(self):
         """series 在 moneydj_raw 內也應 fallback。"""
-        from services.fund_health_report import _compute_holding_years
+        from services.health.report import _compute_holding_years
         s = _make_nav_series(400)
         fd = {"moneydj_raw": {"series": s}}
         y = _compute_holding_years(fd)

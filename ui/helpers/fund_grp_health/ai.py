@@ -24,7 +24,7 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
     _lines = [f"## 組合健檢全章節快照({len(funds)} 檔基金)"]
 
     # 取共享計算結果(避免每段重算)
-    from services.fund_dividend_health import classify_eating_principal
+    from services.health.dividend import classify_eating_principal
     try:
         from services.precision_service import calc_hwm_sigma_levels
     except Exception:

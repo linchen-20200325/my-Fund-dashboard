@@ -123,7 +123,7 @@ def process_one_fund(
     """
     from repositories.fund_repository import get_latest_fx
     from services.currency import normalize_ccy  # v19.71：single source of truth
-    from services.fund_dividend_calculator import compute_dividend_twd_series
+    from services.health.dividend_calc import compute_dividend_twd_series
     try:
         if fd is None:
             fd = _auto_fetch_moneydj(code)
@@ -190,7 +190,7 @@ def process_one_fund(
         _mk_pos = (_metrics.get("pos_label") or "—").strip() or "—"
         _mk_safety = None
         try:
-            from services.fund_dividend_health import check_eating_principal_1y_mk
+            from services.health.dividend import check_eating_principal_1y_mk
             _mk_safety = check_eating_principal_1y_mk(fd)
         except Exception:
             _mk_safety = None
@@ -204,7 +204,7 @@ def process_one_fund(
         _333_emoji = "⬜"
         _333_msg = "資料不足"
         try:
-            from services.fund_dividend_health import check_333_principle
+            from services.health.dividend import check_333_principle
             # 成立年數:從 NAV 序列首日到今天
             import datetime as _dt333
             _yrs_inc = None
@@ -352,7 +352,7 @@ def _render_health_3tables(rows: list[dict],
         return
     import pandas as pd
     from streamlit import column_config as _cc
-    from services.fund_health_report import (
+    from services.health.report import (
         DIVIDEND_COLUMNS,
         HEALTH_COLUMNS,
         build_dividend_summary_row,

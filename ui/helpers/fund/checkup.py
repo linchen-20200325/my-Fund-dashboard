@@ -163,7 +163,7 @@ def _compute_fund_health_kpis(fund: dict) -> dict:
     # v19.150:吃本金檢查改走 check_eating_principal_1y_mk SSOT 入口
     # (與 tab_fund_grp_health 同源,未來 MK 公式變更只改一處)。
     # _adr / _tr1y 仍 expose 給其他 KPI(月配息/Coverage 顯示)使用。
-    from services.fund_dividend_health import check_eating_principal_1y_mk
+    from services.health.dividend import check_eating_principal_1y_mk
 
     # 1) 年化配息率:MoneyDJ wb05 官方值優先,缺則退本地估算(展示用)
     _mj_dy = _safe_num(mj.get("moneydj_div_yield"))

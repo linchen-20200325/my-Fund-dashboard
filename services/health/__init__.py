@@ -1,44 +1,48 @@
-"""services/health — Fund Health 模組 discoverability facade(v19.231)。
+"""services/health — Fund Health subpackage(v19.231 完整 subpackage 化)。
 
-**最小可行 facade 模式**:本檔僅 re-export 既有 4 個 services/fund_*.py 模組
-的公開 fn,**不搬移源檔**(留 services/ root 作 source-local SSOT)。
+User 重申「#7-#9」+「檔案太大則分階段」→ 從最小可行 facade 升級為真正搬檔
+的 subpackage(5 子模組 + facade re-export)。
 
-設計理由
-========
-- 5 個 fund health 模組(`fund_dividend_calculator` / `fund_dividend_health` /
-  `fund_health` / `fund_health_report` / `fund_replacement_verdict`)散落
-  services/ root,16 個 caller 各自 import 細模組路徑,新 caller 難發現
-  「fund health 相關 API 集合在哪」
-- 16 caller 大改造為純 cosmetic 移檔(對齊 F-GRAY-1 v19.81 fund_fetcher.py
-  459 LOC + 57 caller 決策:保根目錄,不為 cosmetic 動),違反 §8.1 step 6
-  「用不到的抽象先不做」
-- **折衷**:0 caller 變更 + 新 facade 入口,新 code 可選用
-  `from services.health import compute_4d_health, check_replacement_recommendation`
-  vs 既有 `from services.fund_health import compute_4d_health` 都可用
+子模組對應(原 services/fund_*.py → services/health/*.py)
+========================================================
+- fund_health.py             → grade.py(4D 健診評分)
+- fund_dividend_calculator.py → dividend_calc.py(配息計算純機械邏輯)
+- fund_dividend_health.py    → dividend.py(配息健診業務:EatingPrincipal / 333 / MK 規則)
+- fund_replacement_verdict.py → replacement.py(替換建議 MK 4 規則)
+- fund_health_report.py      → report.py(健診表 row builder)
 
-未來升級觸發
+caller 變更
+===========
+~25 處 caller(production / test)從 `from services.fund_X import Y` 改成
+`from services.health.X import Y` 或 `from services.health import Y`。
+
+Backward compatibility
+======================
+原 services/fund_*.py 5 檔已 git mv 至 services/health/,**不留 shim**
+(P2-7 shim 不穿透 sub-module 風險,且全 caller 已同步更新,
+shim 純多餘負擔)。
+
+未來重啟觸發
 ============
-若以下任一觸發,則升級為真正搬檔的 subpackage:
-1. services/ root 因新增 fund_* 而爆滿到難 scan
-2. 4 個模組演化出共用 helper 需要 _helpers.py(私有 module)
-3. user 主動指派全面搬檔
-
-對應 EX-* 例外:本模式對齊 EX-CRUD-1 / EX-PASSTHRU-1「shim 無維護負擔」
-思路(本 facade 為純 re-export,無業務邏輯),不需新增 EX-* 編號。
+新增 fund health 相關模組時:
+1. 加在 services/health/ 內(不要回到 services/ root)
+2. 在本 __init__.py 加 re-export
 """
 from __future__ import annotations
 
 # ── grade(總體健診評分) ──────────────────────────────────────
-from services.fund_health import (
+from services.health.grade import (
     compute_4d_health,
 )
 
-# ── dividend(配息計算 + 健診) ───────────────────────────────
-from services.fund_dividend_calculator import (
+# ── dividend_calc(配息計算純機械) ───────────────────────────
+from services.health.dividend_calc import (
     compute_dividend_twd_series,
     div_health_light_for_pair,
 )
-from services.fund_dividend_health import (
+
+# ── dividend(配息健診業務) ──────────────────────────────────
+from services.health.dividend import (
     EatingPrincipalCore,
     check_333_principle,
     check_eating_principal_1y_mk,
@@ -47,12 +51,12 @@ from services.fund_dividend_health import (
 )
 
 # ── replacement(替換建議) ──────────────────────────────────
-from services.fund_replacement_verdict import (
+from services.health.replacement import (
     check_replacement_recommendation,
 )
 
 # ── report(健診表 row builder) ──────────────────────────────
-from services.fund_health_report import (
+from services.health.report import (
     build_dividend_summary_row,
     build_health_analysis_row,
 )
@@ -60,14 +64,15 @@ from services.fund_health_report import (
 __all__ = [
     # grade
     "compute_4d_health",
+    # dividend_calc
+    "compute_dividend_twd_series",
+    "div_health_light_for_pair",
     # dividend
     "EatingPrincipalCore",
     "check_333_principle",
     "check_eating_principal_1y_mk",
     "classify_eating_principal",
     "compute_1y_total_return_mk_simple",
-    "compute_dividend_twd_series",
-    "div_health_light_for_pair",
     # replacement
     "check_replacement_recommendation",
     # report

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.fund_dividend_health import (
+from services.health.dividend import (
     check_eating_principal_1y_mk,
     check_333_principle,
     classify_eating_principal,

@@ -11,7 +11,7 @@
 """
 from __future__ import annotations
 
-from services.fund_replacement_verdict import check_replacement_recommendation
+from services.health.replacement import check_replacement_recommendation
 
 
 class TestEmptyFd:

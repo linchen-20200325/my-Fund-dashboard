@@ -97,7 +97,7 @@ def calc_health_from_manual(
 
     # v19.119:核心判定委派 services.fund_dividend_health
     # (4 級分類門檻 real_return_pct ≥ 3 / ≥ 0 / < 0 保留於本 wrapper UI 需求)
-    from services.fund_dividend_health import classify_eating_principal
+    from services.health.dividend import classify_eating_principal
     _core = classify_eating_principal(total_return_pct, div_yield_pct)
     real_return_pct  = round(total_return_pct - div_yield_pct, 2)
     eating_principal = _core.is_eating

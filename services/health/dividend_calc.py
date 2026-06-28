@@ -57,7 +57,7 @@ def div_health_light_for_pair(
     v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal
     (output tuple 100% 向後相容,3 色燈門檻 gap vs warn_gap 保留於本 wrapper)。
     """
-    from services.fund_dividend_health import classify_eating_principal
+    from services.health.dividend import classify_eating_principal
     core = classify_eating_principal(ret_pct, div_pct)
     if core.is_data_missing:
         return ("資料不足", _LIGHT_EMOJI["資料不足"])

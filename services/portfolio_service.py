@@ -296,7 +296,7 @@ def dividend_safety(total_return: Optional[float],
                 "message": "無配息資料", "coverage": None, "gap_pct": None,
                 "eating_principal": False}
 
-    from services.fund_dividend_health import classify_eating_principal
+    from services.health.dividend import classify_eating_principal
     core = classify_eating_principal(total_return, dividend_yield)
 
     if core.is_data_missing:

@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from services.fund_health_report import (
+from services.health.report import (
     DIVIDEND_COLUMNS,
     HEALTH_COLUMNS,
     build_dividend_summary_row,

@@ -78,11 +78,11 @@ def check_replacement_recommendation(
         }
     """
     # 規則延遲 import 避免循環依賴
-    from services.fund_dividend_health import (
+    from services.health.dividend import (
         check_333_principle,
         check_eating_principal_1y_mk,
     )
-    from services.fund_health import compute_4d_health
+    from services.health.grade import compute_4d_health
     from services.fund_total_return import compute_1y_total_return
 
     # ─── shape normalize:平坦 fd 自動 wrap(對齊 v19.178 SSOT 模式)──

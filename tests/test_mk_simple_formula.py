@@ -22,7 +22,7 @@ import math
 
 import pytest
 
-from services.fund_dividend_health import (
+from services.health.dividend import (
     check_eating_principal_1y_mk,
     compute_1y_total_return_mk_simple,
 )

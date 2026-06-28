@@ -80,9 +80,9 @@ def build_health_analysis_row(
     mj = fd.get("moneydj_raw") or {}
 
     # ─── 4D Grade SSOT ─────────────────────────────────────
-    from services.fund_health import compute_4d_health
+    from services.health.grade import compute_4d_health
     from services.fund_total_return import compute_1y_total_return
-    from services.fund_dividend_health import (
+    from services.health.dividend import (
         _resolve_adr_with_fallback,
         check_333_principle,
     )
@@ -220,7 +220,7 @@ def build_dividend_summary_row(
         tr1y_pct, tr1y_src = None, "—"
 
     # ─── adr SSOT ─────────────────────────────────────
-    from services.fund_dividend_health import (
+    from services.health.dividend import (
         _resolve_adr_with_fallback,
         check_eating_principal_1y_mk,
     )
@@ -242,7 +242,7 @@ def build_dividend_summary_row(
     eat_status = (eat_result or {}).get("status", "⚪ 資料不足")
 
     # ─── 換標的建議 SSOT(MK 4 規則)─────────────────────
-    from services.fund_replacement_verdict import check_replacement_recommendation
+    from services.health.replacement import check_replacement_recommendation
     try:
         rep = check_replacement_recommendation(fd, holding_years=holding_years)
     except Exception as e:
