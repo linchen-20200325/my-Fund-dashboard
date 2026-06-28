@@ -2073,7 +2073,11 @@ def _forward_return(spx: pd.Series, t0: pd.Timestamp, days: int):
         if p0 <= 0:
             return None
         return round((p1 / p0 - 1.0) * 100.0, 2)
-    except Exception:
+    except Exception as e:
+        # v19.184 F-MED:加 stderr log(§3.3 反捏造)
+        import sys as _sys
+        print(f'[macro_service] _daily_spx_return fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         return None
 
 

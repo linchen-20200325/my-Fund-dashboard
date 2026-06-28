@@ -45,7 +45,11 @@ def _compute_holding_years(fd: dict) -> Optional[float]:
         first_iso = str(sorted([str(i)[:10] for i in s.index])[0])
         first_d = _dt.date.fromisoformat(first_iso)
         return (_dt.date.today() - first_d).days / 365.25
-    except Exception:
+    except Exception as e:
+        # v19.184 F-MED:加 stderr log 不靜默(§3.3 反捏造)
+        import sys as _sys
+        print(f'[fund_health_report] _compute_holding_years fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         return None
 
 
@@ -84,14 +88,20 @@ def build_health_analysis_row(
         _resolve_adr_with_fallback,
         check_333_principle,
     )
+    # v19.184 F-MED:silent except 全改加 stderr log(§3.3 反捏造)
+    import sys as _sys
     try:
         tr1y_pct, _ = compute_1y_total_return(fd)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] health_row compute_1y_total_return fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         tr1y_pct = None
     try:
         # v19.177 _resolve_adr_with_fallback 回 (value, source) tuple
         adr_pct, _adr_src = _resolve_adr_with_fallback(fd)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] health_row _resolve_adr_with_fallback fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         adr_pct, _adr_src = None, "—"
     sharpe = _safe_float(m.get("sharpe"))
     sigma = _safe_float(m.get("std_1y"))
@@ -100,7 +110,9 @@ def build_health_analysis_row(
             tr1y_pct=tr1y_pct, adr_pct=adr_pct,
             sharpe=sharpe, sigma_pct=sigma, ma_dir=None,
         )
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] health_row compute_4d_health fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         _4d = {}
 
     # ─── 6F 進階指標 SSOT(走 calc_fund_factor_score)──────
@@ -118,7 +130,9 @@ def build_health_analysis_row(
         risk_table = mj.get("risk_metrics") or fd.get("risk_metrics") or {}
         _6f = calc_fund_factor_score(_fdata, risk_table=risk_table)
         _factors = _6f.get("factors") or {}
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] calc_fund_factor_score fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         _factors = {}
     sortino_v = (_factors.get("Sortino") or {}).get("value")
     calmar_v = (_factors.get("Calmar") or {}).get("value")
@@ -143,7 +157,9 @@ def build_health_analysis_row(
     years_inception = holding_years if holding_years is not None else _compute_holding_years(fd)
     try:
         _333 = check_333_principle(years_inception, ret_3y_ann)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] check_333_principle fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         _333 = {}
     _333_passed = _333.get("passed")
     _333_emoji = "✅" if _333_passed is True else ("❌" if _333_passed is False else "⬜")
@@ -192,11 +208,15 @@ def build_dividend_summary_row(
         }
     mj = fd.get("moneydj_raw") or {}
 
+    # v19.184 F-MED:silent except 全改加 stderr log(§3.3 反捏造)
+    import sys as _sys
     # ─── 1Y 含息報酬 SSOT ────────────────────────────
     from services.fund_total_return import compute_1y_total_return
     try:
         tr1y_pct, tr1y_src = compute_1y_total_return(fd)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] div_row compute_1y_total_return fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         tr1y_pct, tr1y_src = None, "—"
 
     # ─── adr SSOT ─────────────────────────────────────
@@ -207,13 +227,17 @@ def build_dividend_summary_row(
     try:
         # v19.177 _resolve_adr_with_fallback 回 (value, source) tuple
         adr_pct, _adr_src = _resolve_adr_with_fallback(fd)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] div_row _resolve_adr_with_fallback fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         adr_pct, _adr_src = None, "—"
 
     # ─── 吃本金燈號 1Y·MK SSOT ──────────────────────────
     try:
         eat_result = check_eating_principal_1y_mk(fd)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] div_row check_eating_principal_1y_mk fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         eat_result = None
     eat_status = (eat_result or {}).get("status", "⚪ 資料不足")
 
@@ -221,7 +245,9 @@ def build_dividend_summary_row(
     from services.fund_replacement_verdict import check_replacement_recommendation
     try:
         rep = check_replacement_recommendation(fd, holding_years=holding_years)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_health_report] check_replacement_recommendation fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         rep = {"emoji": "⬜", "label": "資料不足", "message": ""}
 
     return {
