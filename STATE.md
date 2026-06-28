@@ -150,6 +150,17 @@
 - 初始化基準：協議 v2.0 Auto-Ship 套用，歷史版本紀錄詳見 `git log`。
 
 ## 下一步
+
+- **refactor(arch) 第三階段排毒(2026-06-28 完工,v19.202-208)**:User 「B+C → D1+D2+B3」分批授權,把第二階段 P2-1/P2-4/P2-5 revert backlog 用「直接搬位置 + `_*` 集中 + 改 test patch path」策略重做成功。
+  * **A1**(v19.202 `61af3e0`):清空殼目錄 + 修 2 過時 SSOT-guard test(129 passed)
+  * **B1**(v19.205 `b9eab84`):`repositories/macro_repository.py` 1078 LOC 拆 5 子檔(`fred / yf / china / alternate / math_utils`)+ 28 處 test patch path 規避 v19.199 shim 不穿透(485 passed,P2-5 backlog close)
+  * **B2**(v19.206 `b35dcbd`):`repositories/policy_repository.py` 1372 LOC 拆 3 子檔(`_helpers / v1 / v2`),共用 `_*` 集中 `_helpers.py` 規避 v19.199 `from X import *` 不取 `_*` 死結(239 passed,P2-4 backlog close)
+  * **C3**(v19.207 `5b32618`):app.py 542 → 471 LOC(−13%),抽 `_render_compass_card + render_macro_compass` 78 LOC 至 `ui/components/macro_compass_top.py`(89 LOC)。Sidebar 抽取 abort(over-engineering)
+  * **C2**(v19.208 `b7eb171`):F-PROV-1 補洞 9 fetcher(5 實質 + 4 docstring 標明),audit OK 23 → 31(+35%),PARTIAL 全清。news ×3 / fund_orchestrator / tw_market_snapshot 實質補,`_now_iso_utc` helper 新增
+  * **C1 / B3 標誤判**:6 檔 Fund Health + fund_checkup 均職責不同,v19.150/181 SSOT 抽取後已 aligned(同 P2-8 SCORE_RULES 案例)
+  * **D1+D2**:audit / BACKLOG / STATE 三檔同步完工
+  * 體積:god module 0(已拆完並維持)/ P2 backlog 3 → 0 / app.py −13% / `repositories/` 子套件 1 → 3(+200%)
+
 **perf(radar) PR v19.65 P0 完成**：VIX3M + Put/Call 第 6/7 層備援源新增。
 
 - **VIX3M 第 6 層**：`_resolve_vix3m(fred_api_key)` → FRED `VXVCLS`（CBOE S&P 500 3-Month Volatility 官方序列，與 HY OAS / DGS10 同走 fetch_fred 路徑，NAS Squid proxy 已白名單）。`_signal_vix_term_struct(fred_api_key)` + `detect_risk_radar` lambda 傳遞 key；fred_api_key=None 時跳過（向後相容零 caller 異動）。

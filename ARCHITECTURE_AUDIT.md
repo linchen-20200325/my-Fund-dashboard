@@ -439,3 +439,74 @@ P2-1 / P2-4 / P2-5 三條失敗共同 root cause 是 Python 模組系統限制:
 - `STATE.md`:加 v19.196 / v19.197 第二階段完工紀錄
 
 (以上 meta-docs 為 user 拍板項,本次自動執行不擅動。)
+
+---
+
+## §6 第三階段執行紀錄(2026-06-28 完工)
+
+User 2026-06-28 「B+C」+ 「D1+D2+B3」分批授權後進入第三階段,自動執行
+(動刀前自審 / 連續 2 同 error 停手 / 不印代碼)。重點:把第二階段 P2-1 /
+P2-4 / P2-5 revert backlog 用 _* 集中 + 直接搬位置 + 改 test patch path
+策略重做成功,並補完 F-PROV-1 phase 22+ 8 個 high-value fetcher。
+
+| 編號 | 內容 | Commit | 狀態 | 驗證 |
+|---|---|---|---|---|
+| **A1** | 清 2 個空殼目錄(P2-1/P2-5 revert 殘留 `services/fund_health/` + `repositories/macro/`)+ 修 2 個過時 SSOT-guard test(P1-5/P2-3 拆檔字串搬子檔) | `61af3e0` | ✅ 完工 | tests/test_provenance_smoke + 周邊 129 passed / 0 failed |
+| **B1** | P2-5 第二次 attempt:`repositories/macro_repository.py` 1078 LOC 拆 5 子檔(`fred / yf / china / alternate / math_utils` + `__init__`)。主檔 23 LOC shim,43+ caller 無感。**同步改 28 處 test patch path**(`repositories.macro.<submod>.X`)規避 v19.199 revert 主因 | `b9eab84` | ✅ 完工 | 485 passed / 0 failed(target test);全測 2444 passed / 13 failed(8 yfinance 環境 + 5 stale SSOT-guard pre-existing,本輪修 4 個) |
+| **B2** | P2-4 第二次 attempt:`repositories/policy_repository.py` 1372 LOC 拆 3 子檔(`_helpers / v1 / v2` + `__init__`)。主檔 23 LOC shim,19+ caller 無感。**共用 `_*` 私函集中 _helpers.py**(`_normalize_invest_twd` / `_normalize_fx` / `_normalize_float` / `_row_to_list` 等)規避 v19.199 `from X import *` 不取 `_*` 死結 | `b35dcbd` | ✅ 完工 | 239 passed / 0 failed(target);全測 2449 passed / 8 failed(全 yfinance 環境 pre-existing) |
+| **C3** | app.py 542 → 471 LOC(−13%):抽 `_render_compass_card + render_macro_compass`(78 LOC)到 `ui/components/macro_compass_top.py`(89 LOC)。第二輪 sidebar 抽取 abort(over-engineering risk,需 7-8 module-level vars 注入接口) | `5b32618` | ✅ 完工(第一輪) | 268 passed / 1 fail(test_refresh_oauth_state_updates_module_snapshot pre-existing,git stash verified non-C3) |
+| **C2** | F-PROV-1 phase 22+ 補洞 9 個 fetcher:**5 個實質補** + **4 個 pass-through docstring 標明 inheritance**。audit OK 23 → 31(+35%),PARTIAL 全清 | `b7eb171` | ✅ 完工 | 132 passed / 0 failed(target) |
+
+**第二輪 audit 結果**:V1-V7 違憲 100% 清空(已在第二階段完成);第三階段把
+P2-1/P2-4/P2-5 backlog 用直接搬位置策略全部消化(P2-1 → 取消因為復核發現
+6 檔職責不同 → 標誤判;P2-4 → B2 完工;P2-5 → B1 完工)。
+
+### B+C 系列 6 條決算
+
+| 編號 | 結局 | 原因 |
+|---|---|---|
+| **C1** fund_checkup → thin wrapper | ✅ **藍圖誤判** | v19.150 已走 SSOT(check_eating_principal_1y_mk);_compute_fund_health_kpis 為「KPI 卡專屬」(7 欄)與 build_health_analysis_row「dataframe row」(15+ 欄)職責不同。同 P2-8 SCORE_RULES 案例。 |
+| **B1** P2-5 macro_repository 拆 5 子檔 | ✅ **完工**(本次重做成功) | 直接搬位置 + 改 28 處 test patch path,規避 v19.199 patch shim 不穿透 sub-module |
+| **B2** P2-4 policy_repository 拆 3 子檔 | ✅ **完工**(本次重做成功) | 共用 `_*` 集中 `_helpers.py`,規避 v19.199 `from X import *` 不取 `_*` 死結 |
+| **C2** F-PROV-1 fetcher 補 provenance | ✅ **完工**(5 實質 + 4 docstring,8 backlog 留 complexity-justified) | scalar return + fallback chain + tuple 留 backlog |
+| **C3** app.py 549 → 471 LOC | ✅ **完工**(第一輪) | macro_compass 抽出;sidebar 抽取 abort(over-engineering) |
+| **B3** Fund Health 6 → 2 檔 SSOT 收口 | ✅ **藍圖誤判**(復核結論) | 6 檔職責不同(4D Grade / 配息 / MK 4 規則 / row builder / KPI 卡 UI / 7 子檔健診 UI),非「重複實作」;v19.181 SSOT 抽取後各檔均走 SSOT。同 C1 案例。 |
+
+### 新增/搬遷檔案清單(2026-06-28 第三階段成果)
+
+**新增**:
+- `repositories/macro/_helpers.py` / `fred.py` / `yf.py` / `china.py` / `alternate.py` / `math_utils.py` / `__init__.py`(B1 拆檔 7 檔)
+- `repositories/policy/_helpers.py` / `v1.py` / `v2.py` / `__init__.py`(B2 拆檔 4 檔)
+- `ui/components/macro_compass_top.py`(C3 抽 89 LOC)
+- `repositories/news_repository._now_iso_utc`(C2 helper)
+
+**搬遷**:無物理檔案搬遷(B1/B2 走 shim re-export pattern,C3 抽 UI 元件)
+
+**刪除**:
+- `services/fund_health/`(A1 空殼)
+- `repositories/macro/`(A1 空殼,後續 B1 重建)
+
+### 體積與分層變化
+
+| 指標 | 第二階段完工(2026-06-28 起) | 第三階段完工 | 變化 |
+|---|---|---|---|
+| Verified 違憲數 | 0 | **0** | 持平 |
+| god module 主檔(>1000 LOC) | 3(fund_repository 5117 / macro_service 3386 / fund_grp_health_extras 1478) → 拆完 → 主檔 shim | **拆完並維持** | 0 god module |
+| P2 backlog | 3(P2-1/P2-4/P2-5 revert) | **0**(B1+B2 重做成功,P2-1 復核標誤判) | −100% |
+| F-PROV-1 audit OK | 23/39(59%) | **31/39**(79%) | +20% |
+| app.py LOC | 549 | **471** | −13% |
+| `repositories/` 子套件數 | 1(`fund/`) | **3**(`fund/` + `macro/` + `policy/`) | +200% |
+| `services/` 子套件數 | 2(`macro/` + `calibration/`) | **2**(維持) | 持平 |
+
+### 後續手續
+
+依 §3.5,**已同步**(D1/D2 完工):
+- `ARCHITECTURE_AUDIT.md §6`:本節(D1)
+- `BACKLOG.md`:第三階段條目(D2,見另一檔)
+- `STATE.md`:v19.205-208 紀錄(D2,見另一檔)
+
+剩餘 backlog:
+- `CLAUDE.md §8.2.A 例外清單`:本次無新增例外(全部走標準分層)
+- **C2 8 個 MISS fetcher**:scalar return / list / fallback chain / tuple 留 complexity-justified backlog
+- **C3 第二輪 sidebar 抽取**:abort,需 user 接口設計才能動
+- **B3**:**復核結論為藍圖誤判**,無實質 code 改動;若 user 未來決定統一 Health 概念命名 / facade,可開新 epic

@@ -327,6 +327,27 @@
 
 ---
 
+## ✅ Done — 2026-06-28 第三階段排毒(v19.202-208)
+
+> User 2026-06-28 「B+C → D1+D2+B3」分批授權後執行。把第二階段 P2-1/P2-4/P2-5
+> revert backlog 用「直接搬位置 + _* 集中 + 改 test patch path」策略重做成功,並
+> 補完 F-PROV-1 phase 22+ 高 ROI fetcher。
+
+- [x] **A1**(v19.202, `61af3e0`):清 2 個空殼目錄(P2-1/P2-5 revert 殘留)+ 修 2 個過時 SSOT-guard test(test_provenance_smoke 改讀子套件 concat)
+- [x] **B1**(v19.205, `b9eab84`):P2-5 重做 — `repositories/macro_repository.py` 1078 LOC 拆 5 子檔(`fred / yf / china / alternate / math_utils`)+ 23 LOC shim。同步改 28 處 test patch path 至子模組,規避 v19.199 patch shim 不穿透 sub-module。485 passed
+- [x] **B2**(v19.206, `b35dcbd`):P2-4 重做 — `repositories/policy_repository.py` 1372 LOC 拆 3 子檔(`_helpers / v1 / v2`)+ 23 LOC shim。共用 `_*` 私函集中 `_helpers.py`,規避 v19.199 `from X import *` 不取 `_*` 死結。239 passed
+- [x] **C3**(v19.207, `5b32618`):app.py 542 → 471 LOC(−13%)。抽 `_render_compass_card + render_macro_compass`(78 LOC)到 `ui/components/macro_compass_top.py`。第二輪 sidebar 抽取 abort(over-engineering risk,需 7-8 module-level vars 注入接口)
+- [x] **C2**(v19.208, `b7eb171`):F-PROV-1 phase 22+ 補洞 9 個 fetcher(5 實質 + 4 docstring 標明)。audit OK 23 → 31(+35%),PARTIAL 全清(4 → 0)
+  * **實質補洞**:`fetch_market_news` / `fetch_stock_news` 加 `fetched_at` + `_now_iso_utc` helper / `fetch_fund_from_moneydj_url` 加 `source='MoneyDJ:fund_url_orchestrator'` / `fetch_tw_market_snapshot` 加 orchestrator-level source + fetched_at
+  * **Pass-through 標明 inheritance**:`fetch_china_macro` / `fetch_fred_batch` / `fetch_macro_news` / `fetch_fund_by_code`
+  * **8 MISS 留 backlog**(complexity-justified):3 scalar return(scalar 無法 schema-additively 加)/ 4 fallback chain(deep audit)/ 1 tuple(audit script 誤判)
+- [x] **C1**(藍圖誤判):`fund_checkup` v19.150 已走 SSOT(`check_eating_principal_1y_mk`),`_compute_fund_health_kpis`(KPI 卡 7 欄)與 `build_health_analysis_row`(dataframe row 15+ 欄)職責不同 — 同 P2-8 SCORE_RULES 案例
+- [x] **B3**(藍圖誤判):Fund Health 6 檔職責不同(4 services data layer 各維度 + 1 row builder facade + 2 UI presentation views),非「重複實作」;v19.181 SSOT 抽取後各檔均走 SSOT。同 C1 案例
+- [x] **D1**:`ARCHITECTURE_AUDIT.md §6` 同步本次第三階段執行紀錄
+- [x] **D2**:`BACKLOG.md` / `STATE.md` 同步本檔
+
+---
+
 ## 🚧 Next
 
 > **目前 sandbox 可獨立推進項：0**（v19.15 已 ship，無 in-flight epic）。新需求隨時開新 epic 起新三步法。
