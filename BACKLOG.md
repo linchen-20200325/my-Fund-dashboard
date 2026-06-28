@@ -34,7 +34,13 @@
   * **v19.185 二次確認 audit**:user 重評時平行 audit 確認剩餘 fetcher 全屬「多源融合 orchestrator / 落後輔助診斷 / 純邏輯包裝 / 邊界 dict.source 已含」4 類,維持 WONTFIX 結案
 - [x] **F-PIT-1** §2.3 v19.81 audit 結案:`crisis_backtest.py` + `crisis_strategy_grid.py` **PIT-safe**(時序順序掃描 + `shift(1)` 防 same-bar lookahead + 嚴格時間窗切片,無 merge_asof 跨頻)
 - [x] **F-RECON-1** §4.3 雙演算法對帳;**v19.87 phase 1+2**:新建 `services/reconcile.py`(L2 純函式)+ 21/21 unit tests。對外 API:`reconcile_pair`(通用)/ `reconcile_us10y_yield`(FRED DGS10 vs Yahoo ^TNX/10, 5bp 容差)/ `reconcile_fund_annual_return`(自算 vs MoneyDJ wb01)/ `reconcile_sharpe`(自算 vs MoneyDJ wb07)/ `reconcile_dividend_yield`(自算 vs MoneyDJ)。**Phase 2**:`services/risk_radar._signal_yield_10y_shock` 接入 reconcile,額外抓 `^TNX` 與 FRED DGS10 比對,結果以 schema-additive `reconcile` 欄寫入返回 dict;`ui/tab1_macro.py` 雷達卡片新增「✅/⚠️ 對帳 chip」;3 新 unit tests + 既有 3 test 不破。**v19.88 phase 3**:`services/fund_service.calc_metrics` 接入 `reconcile_sharpe`,在返回 dict 新增 `sharpe_reconcile` 欄(self-calc vs MoneyDJ wb07);3 新 unit tests 全綠;16/16 fund_metrics 不破。**v19.89 phase 4**:`repositories/fund_repository._finish_metrics` 1Y 報酬對帳(self-calc `ret_1y_total` vs MoneyDJ wb01 `perf["1Y"]`);schema-additive 寫入 `result["metrics"]["ret_1y_reconcile"]`,僅在真 wb01 來源(`perf_source != "local_calc"`)時啟動。**v19.90 phase 5**:同 `_finish_metrics` 加配息殖利率對帳(self-calc `annual_div_rate` vs MoneyDJ `moneydj_div_yield`);寫入 `result["metrics"]["div_yield_reconcile"]`,兩值皆 % 單位內部轉小數。**v19.91 phase 6**:`ui/tab2_single_fund.py` 接入三組對帳 chip 渲染(Sharpe / 配息殖利率 / 1Y 報酬),phase 3-5 寫入 metrics 的對帳資料正式被使用者看見。**F-RECON-1 完整收尾**(5 phase data + 1 phase UI)。
-- [⛔ WONTFIX] **F-SCHEMA-1** §3.1 pandera — 套 §-1 工作準則:未實際遇過 schema bug + 拖慢冷啟動 ~200ms + 半做覆蓋不全。v19.109 結案
+- [x] **F-SCHEMA-1** §3.1 pandera — 原 v19.109 WONTFIX 標籤**過時**(v19.187 audit 發現):實際早已啟動且推進至 Phase B5:
+  * **shared/schemas.py 已有 5 個 Schema**:`MacroFredSchema` / `YahooCloseSchema` / `FundNavSchema` / `FundDividendSchema` / `ForeignFlowSchema`
+  * **8 處 production caller 接入**:`fund_service.calc_metrics`(L228-229)/ `macro_repository.fetch_fred`(L324)/ `macro_repository.fetch_yf_close`(L451)/ `fund_repository.fetch_nav`(L3621)/ `fund_repository.fetch_div`(L4111)/ `hot_money.fetch_foreign_flow_series`(L155-158)
+  * **7 個 test 檔 91 tests 全綠**:test_schemas_phase_a/b/b2_fund_nav/b3_dividends/b_foreign_flow/c
+  * **Phase A v19.155(pilot)** + **Phase B v19.161-163(fetch_yf_close / fetch_nav / fetch_div)** + **Phase B5 v19.186(foreign_flow)** 已落地
+  * **pandera 已 pin** `requirements.txt`(>=0.20,<1.0),冷啟動 cost 已實測可接受
+  * Phase C/D(全面 + CI gate)留待 user 觸發,**遵 §-1 不主動推進**
 - [x] **F-GRAY-1** §8.3 v19.81 audit 結案:`fund_fetcher.py` **保留根目錄**(18 條 re-export shim + 57 caller,搬移為 cosmetic)
 - [x] **F-GRAY-2** §8.3 v19.81 audit 結案:`hot_money.py` / `tw_macro.py` 同上,根目錄 vs `repositories/` 為純 cosmetic
 - [x] **F-GRAY-3** §8.3 v19.81 audit 結案:`app.py`(568 LOC)已是 orchestrator,無業務邏輯需下沉;同步刪除 1 處 dead code `_unused_old_calculate_composite_score`
@@ -74,9 +80,20 @@
 
 4 個 ⚙️ checkbox 同步成 [x],BACKLOG 與實質狀態對齊。0 個 active pending。
 
----
-
-## ✅ Done
+**v19.187-189 三 epic 第三輪續做**(user 指派「F-PROV-1 phase 22+ + F-SCHEMA-1 + F-MED 餘量」):
+- **v19.187 F-MED L3** ✅ `infra/cache.py` 12 處 silent except 全改 stderr log
+  - `_normalize_moneydj_url_for_cache` malformed URL fallback
+  - `_ttl_cache` wrapper `key_fn` fail
+  - `clear_all_caches` / `clear_caches_by_names` / `get_all_cache_info` 單一 fn fail
+  - `clear_disk_cache` rm/listdir fail(2 處)
+  - `global_refresh_all` L1-L4 各層 fail(5 處)
+  - 介面 0 改,純可觀測性提升
+- **v19.188 F-PROV-1 phase 23** ✅ `services/risk_radar.py` 2 個 CSV fetcher 補 Series.attrs source/fetched_at
+  - `_fetch_cboe_csv` → `CBOE:cdn:daily_prices:{short_name}_History.csv`
+  - `_fetch_stooq_csv` → `stooq:q/d/l:{symbol}`
+  - 其餘 15 個無 provenance fetcher audit 結果:scalar return / list return / wrapper / orchestrator 4 類,**結構性無法 stamp**,WONTFIX 仍對
+- **v19.189 F-SCHEMA-1 audit** ✅ WONTFIX 標籤撤除,改 [x] — 實際 Phase A/B/B5 早已推進(細項見上)
+- 974/977 全測過(剩 1 fail = pre-existing yfinance 環境問題,非本批)
 
 ### 2026-05-29（429 殘留 + D 模式 / Switch 引擎連環修：PR #74 → #94）
 
