@@ -273,8 +273,26 @@ def test_tab1_macro_done_seeded_renders_composite_without_exception(
     monkeypatch.setenv("FRED_API_KEY", "test-fred-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
 
+    # v19.228 #6 F2 修補:test 用假 FRED key,渲染時 fred_get_next_release_date /
+    # fetch_yf_close 等 fetcher 真實 hit NAS proxy 403 → retry 鏈每 series ~30s
+    # → 240s 不夠。Mock 上游 fetcher 短路返回,讓 render path 純走 cache miss 0s。
+    # 同時 patch shim attribute(類 B1 模式,caller 走 shim function-level lazy import)。
+    import pandas as _pd
+    from repositories.macro import fred as _fred_mod
+    from repositories.macro import yf as _yf_mod
+    from repositories import macro_repository as _shim
+    _empty_df = lambda *a, **kw: _pd.DataFrame()
+    _empty_s = lambda t, *a, **kw: _pd.Series(dtype=float, name=t)
+    _none = lambda *a, **kw: None
+    _empty_dict = lambda tickers: {t: None for t in tickers}
+    for _mod in (_fred_mod, _yf_mod, _shim):
+        monkeypatch.setattr(_mod, "fred_get_next_release_date", _none, raising=False)
+        monkeypatch.setattr(_mod, "fetch_fred", _empty_df, raising=False)
+        monkeypatch.setattr(_mod, "fetch_yf_close", _empty_s, raising=False)
+        monkeypatch.setattr(_mod, "fetch_yf_latest", _empty_dict, raising=False)
+
     # macro_done=True 分支內含 23 指標卡 + 4 大類別 history + Sankey + KPI grid，
-    # 整體 render 比 default 60s 慢，給 240s 寬鬆預算
+    # mock 後純 render path 應 < 60s,維持 240s 寬鬆預算
     app = AppTest.from_file("app.py", default_timeout=240)
     app.secrets["FRED_API_KEY"] = "test-fred-key"
     app.secrets["GEMINI_API_KEY"] = "test-gemini-key"
