@@ -86,4 +86,7 @@ def render_macro_compass():
     _render_compass_card(c2, data.get('tnx'),  '美 10Y 殖利率',    '^TNX',  fmt='{:.2f}', unit='%')
     _render_compass_card(c3, data.get('gspc'), 'S&P 500 vs 60MA',  '^GSPC', fmt='{:,.2f}', show_ma=True)
 
-render_macro_compass()
+# v19.216 BUG-FIX:C3 commit 抽 module-level `render_macro_compass()` 呼叫時
+# 連 component 內的 call 一起搬過來,結果 component import 時自動執行一次 +
+# app.py:411 又執行一次 → button key='_compass_fetch_btn' 重複 →
+# StreamlitDuplicateElementKey。Component 應只 def 不執行,呼叫站留 app.py。
