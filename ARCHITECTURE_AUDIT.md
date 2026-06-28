@@ -125,7 +125,7 @@ my-Fund-dashboard/
 │   │
 │   ├── 其他 service
 │   │   ├── ledger_service          532
-│   │   ├── allocation_simulator    441
+│   │   ├── ~~allocation_simulator    441~~ (v19.212 P0-3-#4 拔毒,production 0 caller)
 │   │   ├── auto_search_store_local   ?
 │   │   ├── auto_search_store_gs      ?   ⚠️ Line 45 直 `import streamlit` 讀 secrets
 │   │   ├── moneydj_fetcher           ?   ⚠️ **名為 fetcher** — 但 spot-check 顯示是 URL 組裝 + 包 L1 fetch,不違憲

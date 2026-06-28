@@ -77,7 +77,7 @@
 **步驟 4｜收尾** — 已完成。
 - §3.3 反捏造 ❌ 0 項 / ⚠️ 0 項(F-H4 EX-POLICY-1 例外收結)
 - §8.2 高項違憲 0 項(F-H1/H2/H4/H6 全結案)
-- §8.2.A 例外清單:EX-CACHE-1 / EX-AI-1 / EX-POLICY-1 / EX-CRUD-1 / EX-PASSTHRU-1
+- §8.2.A 例外清單:EX-CACHE-1 / EX-AI-1 / ~~EX-POLICY-1~~(v19.212 P0-3-#4 退役) / EX-CRUD-1 / EX-PASSTHRU-1
 - 證據:全部 commit history + PR description 保留於 origin/main。
 
 ---
@@ -271,9 +271,9 @@
 | Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | services/macro_weights_store.py:363-364 | ✅ SSOT + active.json override |
 | Valuation `FORWARD_PE_MEAN/STD`、`GDP_TREND/_STD` | 16.5/3.0/2.3/1.5 | services/valuation.py:33-38 | ✅ SSOT |
 | `signal_thresholds.*`(31 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT / CPI YoY+MoM zones 等 | shared/signal_thresholds.py v19.75 | ✅ SSOT(W2+W3a+W5-4 已遷移 12 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability / macro_tw_local CPI zones) |
-| Allocation phase params | DRIP/CASH/STAY 4×3 matrix | services/allocation_simulator.py:34-97 | ✅ **EX-POLICY-1 例外**(policy preset 而非 metric,F-H4 v19.76 決策保 inline,§8.2.A 登記) |
+| ~~Allocation phase params~~ | ~~DRIP/CASH/STAY 4×3 matrix~~ | ~~services/allocation_simulator.py:34-97~~ | ~~EX-POLICY-1~~ **v19.212 P0-3-#4 整檔拔毒**(866 LOC,production 0 caller) |
 
-❌ 標記 **0 項**(W3b/W5-4 已收斂)、⚠️ **0 項**(F-H4 v19.76 結案,登記為 EX-POLICY-1 例外)。
+❌ 標記 **0 項**(W3b/W5-4 已收斂)、⚠️ **0 項**(F-H4 v19.76 結案,v19.212 EX-POLICY-1 對象拔毒退役)。
 
 **其他規則**:
 - `fillna` / `ffill` / `dropna` 必須顯式呼叫 + log 受影響筆數
@@ -463,7 +463,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 | **L0 Infra** | OAuth / Proxy / Cache / 跨層公用 | `infra/proxy.py`、`infra/oauth.py`、`infra/cache.py`(+ `_CACHE_REGISTRY`) |
 | **L0 Shared** | 常數 / TTL / FRED IDs / 色票(無 IO 純常數) | `shared/ttls.py`、`shared/fred_series.py`、`shared/colors.py` |
 | **L1 Repository** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund_repository.py`、`repositories/moneydj_fetcher.py`、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy)、`hot_money.py`、`tw_macro.py` |
-| **L2 Service** | 業務邏輯純函式 / 評分 / 策略 / 模擬 / AI | `services/macro_service.py`、`services/fund_service.py`、`services/portfolio_service.py`、`services/ai_service.py`、`services/allocation_simulator.py`、`services/crisis_backtest.py`、`services/valuation.py`、`services/macro_validation.py` 等 ~25 檔 |
+| **L2 Service** | 業務邏輯純函式 / 評分 / 策略 / 模擬 / AI | `services/macro_service.py`、`services/fund_service.py`、`services/portfolio_service.py`、`services/ai_service.py`、`services/crisis_backtest.py`、`services/valuation.py`、`services/macro_validation.py` 等 ~25 檔(v19.212 退 allocation_simulator) |
 | **L3 UI** | Streamlit Tab 渲染 + components + helpers | `app.py`(425 LOC,僅 orchestrator)+ `ui/tab*.py` + `ui/components/` + `ui/helpers/` |
 
 **硬規則(violation = 違憲)**:
@@ -481,7 +481,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 |---|---|---|---|
 | **EX-CACHE-1** | L1 全層 | `@st.cache_data` / `@_ttl_cache` 條件 import | Streamlit Cloud cache 是部署架構核心,提供跨 session 共享 + TTL 自動失效,functools.lru_cache 不等價。**允許**在 L1 模組頂部寫 `try: import streamlit as st / except ImportError: 定義 no-op fallback decorator`,前提:**完全不用** `st.session_state` / `st.error()` / `st.markdown()` 等真 UI 呼叫。Fund 端 `@_ttl_cache(ttl_sec=N)` 為 custom 實作不依賴 streamlit,本例外主要適用 `@st.cache_data` 直接用法。 |
 | **EX-AI-1** | `services/ai_service.py` 全檔 public 函式 | LLM 輸出回 **str** 而非 dataclass | 既有 multiple caller 全部以 st.markdown 渲染字串,改 dataclass 需大規模 migration。**緩解措施**:所有 AI 字串強制帶視覺旗標(`### 🧬 AI ... **使用模型**: <model>`),caller 可用 string prefix 偵測;module docstring 強制宣告「禁止從 LLM 字串萃取數字當 data input」。違反此 caller 規則 = §2.2 反捏造違憲,須立刻修。 |
-| **EX-POLICY-1** | `services/allocation_simulator.py:34-97` | `DEFAULT_PHASE_SCRIPT` + `STRATEGY_PRESETS` 保 inline,**不抽** `shared/allocation_policies.py` | (1) policy preset 為 business config data,非 magic number metric,§3.3 SSOT 規則本意是防 inline magic number;(2) `STRATEGY_PRESETS` phase 名稱(復甦/擴張/放緩/衰退)與 `DEFAULT_PHASE_SCRIPT` 字串契約強耦合,同檔改動原子性高;(3) consumer 僅 simulator + 1 個 UI tab(`ui/tab_allocation_simulator.py`),scope 小,crisis_backtest 不共用此 phase 邏輯;(4) §8.1 step 6「用不到的抽象先不做」,若未來新增第二份共用此 policy 的 simulator,再升級 SSOT 模組。F-H4 v19.76 決策。 |
+| ~~**EX-POLICY-1**~~(v19.212 P0-3-#4 退役) | ~~`services/allocation_simulator.py:34-97`~~ | ~~`DEFAULT_PHASE_SCRIPT` + `STRATEGY_PRESETS` 保 inline~~ | **退役原因**:`ui/tab_allocation_simulator.py` consumer 已在 P0-2 v18.x 刪除,`services/allocation_simulator.py` 6/6 fn 全 dead(production 0 caller),v19.212 整檔 866 LOC 拔毒(含 2 test 孤兒)。EX-POLICY-1 例外對象消失,退役。 |
 | **EX-CRUD-1** | UI 直呼以下 L1 repository:`policy_repository` / `snapshot_repository` / `ledger_repository`(Google Sheets / 本地 JSON 持久化) | L3 UI 可直接 import L1 CRUD repository | §8.2 規則「L3 不得直呼 L1 — cache 才能集中」的核心理由是**外部 HTTP fetcher 的 TTL cache 須集中管理**。本三個 repository 為**本地持久化**(read+write 同檔),**無 `@_ttl_cache` / `@st.cache_data` 裝飾**,亦無外部 HTTP I/O — 不存在「cache 分散」問題。為純 CRUD 加 L2 pass-through wrapper = §8.1 step 6「用不到的抽象」反例。`ui/helpers/cloud_io.py` / `v2_editor.py` / `oauth_state.py` + `ui/tab3_portfolio.py` / `tab3_t7_ledger.py` 直接 import 為允許用法。F-H6 v19.79 決策。 |
 | **EX-PASSTHRU-1** | UI 直呼以下 L1 fetcher(無對應 L2 業務 wrapper):<br>- `repositories.fund_repository.tdcc_search_fund`(`ui/tab2_single_fund.py:147`)<br>- `repositories.fund_repository.get_latest_fx`(`ui/tab3_portfolio.py:2216` lazy import,有 manual `_FX_CACHE` TTL_300)<br>- `repositories.news_repository.fetch_market_news`(`ui/tab1_macro.py:909` / `ui/tab3_t7_ledger.py:2710` via fund_fetcher shim) | L3 UI 可直接 import L1 「pass-through 用 + 無 L2 業務值」的 fetcher | §8.2 規則「cache 才能集中」核心理由失效於本場景:fetcher 已**自帶 cache**(無外散風險)或**無 cache**(L2 wrapper 無從補上),且**無 L2 業務 wrapper**(多源 fallback / 結果後處理皆無)— L2 加一層 = pure pass-through = §8.1 step 6「用不到的抽象」反例。**升級觸發條件**:若未來新增 cache 需集中(跨 fetcher 統一 TTL)、多源 fallback chain、或結果後處理 → 應升級 L2 service。F-H6 v19.79 決策。 |
 
