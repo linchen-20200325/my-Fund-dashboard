@@ -92,13 +92,13 @@ class TestEarlyReturn:
 # ════════════════════════════════════════════════════════════════════════════
 class TestHappyPath:
     def test_renders_section_heading_and_dual_columns(self, stub_st):
-        with patch('services.macro_tw_local_fetch.fetch_ndc_signal_history',
+        with patch('repositories.macro_tw_local_repository.fetch_ndc_signal_history',
                    return_value=_ok_ndc()), \
-             patch('services.macro_tw_local_fetch.fetch_tw_pmi_local',
+             patch('repositories.macro_tw_local_repository.fetch_tw_pmi_local',
                    return_value=_ok_pmi()), \
-             patch('services.macro_tw_local_fetch.fetch_tw_export_yoy',
+             patch('repositories.macro_tw_local_repository.fetch_tw_export_yoy',
                    return_value=_ok_export()), \
-             patch('services.macro_tw_local_fetch.fetch_foreign_consecutive_days',
+             patch('repositories.macro_tw_local_repository.fetch_foreign_consecutive_days',
                    return_value=_ok_fii()):
             tab1_macro._render_tw_local_dashboard(_FAKE_INDICATORS, _FAKE_FRED_KEY)
 
@@ -118,13 +118,13 @@ class TestHappyPath:
 # ════════════════════════════════════════════════════════════════════════════
 class TestGracefulDegrade:
     def test_all_fetchers_error_still_renders(self, stub_st):
-        with patch('services.macro_tw_local_fetch.fetch_ndc_signal_history',
+        with patch('repositories.macro_tw_local_repository.fetch_ndc_signal_history',
                    return_value=_err_block('NDC fail')), \
-             patch('services.macro_tw_local_fetch.fetch_tw_pmi_local',
+             patch('repositories.macro_tw_local_repository.fetch_tw_pmi_local',
                    return_value=_err_block('PMI fail')), \
-             patch('services.macro_tw_local_fetch.fetch_tw_export_yoy',
+             patch('repositories.macro_tw_local_repository.fetch_tw_export_yoy',
                    return_value=_err_block('Export fail')), \
-             patch('services.macro_tw_local_fetch.fetch_foreign_consecutive_days',
+             patch('repositories.macro_tw_local_repository.fetch_foreign_consecutive_days',
                    return_value=_err_block('FII fail')):
             tab1_macro._render_tw_local_dashboard(_FAKE_INDICATORS, _FAKE_FRED_KEY)
 
@@ -136,7 +136,7 @@ class TestGracefulDegrade:
 
     def test_fetcher_exception_warns_and_returns(self, stub_st):
         """fetcher 直接 raise 例外（極端情境）→ st.warning + 結束。"""
-        with patch('services.macro_tw_local_fetch.fetch_ndc_signal_history',
+        with patch('repositories.macro_tw_local_repository.fetch_ndc_signal_history',
                    side_effect=RuntimeError('boom')):
             tab1_macro._render_tw_local_dashboard(_FAKE_INDICATORS, _FAKE_FRED_KEY)
         stub_st.warning.assert_called_once()
@@ -153,13 +153,13 @@ class TestGracefulDegrade:
 class TestPartialIndicators:
     def test_missing_cpi_fed_still_works(self, stub_st):
         partial = {'VIX': {'value': 18.5}}  # 無 CPI / FED_RATE
-        with patch('services.macro_tw_local_fetch.fetch_ndc_signal_history',
+        with patch('repositories.macro_tw_local_repository.fetch_ndc_signal_history',
                    return_value=_ok_ndc()), \
-             patch('services.macro_tw_local_fetch.fetch_tw_pmi_local',
+             patch('repositories.macro_tw_local_repository.fetch_tw_pmi_local',
                    return_value=_ok_pmi()), \
-             patch('services.macro_tw_local_fetch.fetch_tw_export_yoy',
+             patch('repositories.macro_tw_local_repository.fetch_tw_export_yoy',
                    return_value=_ok_export()), \
-             patch('services.macro_tw_local_fetch.fetch_foreign_consecutive_days',
+             patch('repositories.macro_tw_local_repository.fetch_foreign_consecutive_days',
                    return_value=_ok_fii()):
             tab1_macro._render_tw_local_dashboard(partial, _FAKE_FRED_KEY)
 
@@ -175,13 +175,13 @@ class TestPartialIndicators:
 class TestAppTestGuard:
     def test_short_fred_key_skips_rendering(self, stub_st):
         """fred_api_key < 30 字元（AppTest 場景）→ 完全跳過渲染與 fetcher。"""
-        with patch('services.macro_tw_local_fetch.fetch_ndc_signal_history') as _m:
+        with patch('repositories.macro_tw_local_repository.fetch_ndc_signal_history') as _m:
             tab1_macro._render_tw_local_dashboard(_FAKE_INDICATORS, 'short-key')
             _m.assert_not_called()
         stub_st.markdown.assert_not_called()
 
     def test_empty_fred_key_skips_rendering(self, stub_st):
-        with patch('services.macro_tw_local_fetch.fetch_ndc_signal_history') as _m:
+        with patch('repositories.macro_tw_local_repository.fetch_ndc_signal_history') as _m:
             tab1_macro._render_tw_local_dashboard(_FAKE_INDICATORS, '')
             _m.assert_not_called()
         stub_st.markdown.assert_not_called()

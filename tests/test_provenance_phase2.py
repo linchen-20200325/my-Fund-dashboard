@@ -24,7 +24,7 @@ class TestMacroTwLocalFetchProvenance:
     """services/macro_tw_local_fetch.py 4 fetcher 結果 schema 守衛。"""
 
     def test_ndc_signal_returns_source_and_fetched_at(self):
-        from services import macro_tw_local_fetch as m
+        from repositories import macro_tw_local_repository as m  # v19.197 P1-4
         src = inspect.getsource(m.fetch_ndc_signal_history)
         assert "'source'" in src and "'fetched_at'" in src, (
             "fetch_ndc_signal_history 應寫入 source + fetched_at"
@@ -38,19 +38,19 @@ class TestMacroTwLocalFetchProvenance:
         )
 
     def test_tw_pmi_local_returns_source_and_fetched_at(self):
-        from services import macro_tw_local_fetch as m
+        from repositories import macro_tw_local_repository as m  # v19.197 P1-4
         src = inspect.getsource(m.fetch_tw_pmi_local)
         assert "FinMind:TaiwanMacroEconomics" in src
         assert "fetched_at" in src
 
     def test_tw_export_yoy_returns_source_and_fetched_at(self):
-        from services import macro_tw_local_fetch as m
+        from repositories import macro_tw_local_repository as m  # v19.197 P1-4
         src = inspect.getsource(m.fetch_tw_export_yoy)
         assert "FinMind:TaiwanMacroEconomics" in src
         assert "fetched_at" in src
 
     def test_foreign_consecutive_days_returns_source_and_fetched_at(self):
-        from services import macro_tw_local_fetch as m
+        from repositories import macro_tw_local_repository as m  # v19.197 P1-4
         src = inspect.getsource(m.fetch_foreign_consecutive_days)
         # 不同 dataset(外資資料)
         assert "FinMind:TaiwanStockTotalInstitutionalInvestors" in src
@@ -103,7 +103,7 @@ class TestProvenanceFormatConventions:
 
     def test_fetched_at_uses_utc_isoformat(self):
         """fetched_at 必須是 UTC ISO 字串(便於跨時區追蹤,§2.2 慣例)。"""
-        from services import macro_tw_local_fetch as m
+        from repositories import macro_tw_local_repository as m  # v19.197 P1-4
         src = inspect.getsource(m.fetch_ndc_signal_history)
         # 應出現 datetime.now(timezone.utc).isoformat() 或等價
         assert ("timezone.utc" in src or "tz=UTC" in src
@@ -113,7 +113,7 @@ class TestProvenanceFormatConventions:
 
     def test_source_format_convention(self):
         """source 格式應為 'Provider:Dataset'(對齊 fetch_fred 'FRED:<sid>' v19.83)。"""
-        from services import macro_tw_local_fetch as m
+        from repositories import macro_tw_local_repository as m  # v19.197 P1-4
         for fn in (m.fetch_ndc_signal_history, m.fetch_tw_pmi_local,
                    m.fetch_tw_export_yoy, m.fetch_foreign_consecutive_days):
             src = inspect.getsource(fn)

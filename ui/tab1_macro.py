@@ -875,7 +875,8 @@ def _render_tw_local_dashboard(indicators: dict | None,
             classify_short_term_regime,
             detect_mk_golden_inflection,
         )
-        from services.macro_tw_local_fetch import (
+        # v19.197 P1-4:macro_tw_local_fetch 已下沉 repositories/macro_tw_local_repository
+        from repositories.macro_tw_local_repository import (
             fetch_foreign_consecutive_days,
             fetch_ndc_signal_history,
             fetch_tw_export_yoy,
