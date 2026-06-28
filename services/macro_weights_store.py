@@ -98,11 +98,14 @@ def _empty_active() -> dict[str, Any]:
 # Google Sheets backend (v19.7) — lazy import + 自動建立 worksheet
 # ════════════════════════════════════════════════════════════════
 def _gs_enabled() -> bool:
-    """偵測 Streamlit secrets 是否齊備（service account + sheet_id）。"""
+    """偵測 Streamlit secrets 是否齊備（service account + sheet_id）。
+
+    v19.197 P1-2:走 infra.config wrapper,本檔不再直 import streamlit。
+    """
     try:
-        import streamlit as st
-        sa = st.secrets.get("google_service_account") or {}
-        sid = st.secrets.get("macro_weights_sheet_id")
+        from infra.config import get_secret
+        sa = get_secret("google_service_account") or {}
+        sid = get_secret("macro_weights_sheet_id")
         return bool(sa.get("client_email") and sid)
     except Exception:
         return False
@@ -110,12 +113,12 @@ def _gs_enabled() -> bool:
 
 def _gs_get_worksheet():
     """開啟（或自動建立）`_macro_weights` worksheet — 重用 policy_repository 的認證流程."""
-    import streamlit as st
-
+    # v19.197 P1-2:走 infra.config wrapper,本檔不再直 import streamlit
+    from infra.config import require_secret
     from repositories.policy_repository import get_gspread_client
 
-    creds = dict(st.secrets["google_service_account"])
-    sheet_id = st.secrets["macro_weights_sheet_id"]
+    creds = dict(require_secret("google_service_account"))
+    sheet_id = require_secret("macro_weights_sheet_id")
     client = get_gspread_client(creds)
     sh = client.open_by_key(sheet_id)
     try:
