@@ -13,7 +13,8 @@ import json
 
 import pytest
 
-import services.macro_weights_store as store
+# v19.202 P2-2:macro_weights_store 搬 services.macro.weights_store,test patch 用實際居所避免 shim 隔離
+from services.macro import weights_store as store
 
 
 @pytest.fixture(autouse=True)

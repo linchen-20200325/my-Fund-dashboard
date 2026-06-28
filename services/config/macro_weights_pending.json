@@ -1,0 +1,8 @@
+{
+  "version": "v19.0",
+  "indicators": {
+    "VIX": {
+      "weight": 0.6
+    }
+  }
+}

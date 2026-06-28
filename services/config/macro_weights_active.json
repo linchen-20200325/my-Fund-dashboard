@@ -1,0 +1,8 @@
+{
+  "version": "v19.0",
+  "indicators": {
+    "VIX_DELTA_5D": {
+      "weight": 0.8
+    }
+  }
+}
