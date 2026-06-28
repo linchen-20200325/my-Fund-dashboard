@@ -132,7 +132,7 @@ my-Fund-dashboard/
 │   │   ├── nav_history_store         ?
 │   │   ├── realtime_signal           ?   ⚠️ Line 67 `from ui.helpers.macro_helpers import ...` = L2→L3 反向依賴
 │   │   ├── valuation               ~250   ⚠️ Line 156 function-local `import yfinance` = L2 HTTP
-│   │   ├── reconcile / decision_matrix / event_calendar / quadrant_simulator / ...
+│   │   ├── reconcile / decision_matrix / event_calendar / ~~quadrant_simulator~~ (v19.210 P0-3-#2 拔毒) / ...
 │   │
 │   └── 跨域 + 邊緣
 │       ├── adjusted_nav / currency / format_helpers / policy_advisor_service / cross_source_compare

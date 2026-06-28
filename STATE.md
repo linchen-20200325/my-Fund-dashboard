@@ -152,7 +152,8 @@
 ## 下一步
 
 - **refactor(dead-code) 第四階段深層拔毒(2026-06-28 進行中,v19.209+)**:User 「深層稽核 → 同意全部」授權。3 個 Explore 平行掃描出 SSOT 7 類 / 架構越權 2 處 / Dead code 30 條 fn。一檔一刀策略執行 P0-3-#1~#N。
-  * **P0-3-#1**(v19.209,本 commit):`repositories/tw_macro_repository.py::fetch_tw_market_snapshot` 整合 API 拔毒 — production 0 caller(深層 audit verify,只有 1 個 test 是孤兒)。C2 v19.208 為它加的 orchestrator-level provenance(source/fetched_at)同步拔除。連動刪 `tests/test_tw_macro.py::test_snapshot_returns_three_factors`。3 個 sub-fetcher(twse_breadth / finmind_foreign_investor / cbc_m1b_m2)保留獨立可用。test_tw_macro + test_app_smoke 106 passed / 0 failed
+  * **P0-3-#2**(v19.210):`services/quadrant_simulator.py` **整檔拔毒**(286 LOC)+ `tests/test_quadrant_simulator.py` 連動刪除(213 LOC,test 是孤兒)。3 步 verify pass(production grep 0 caller / 4 fn 名 0 production refs / app.py 無 ARCHIVED marker)。BACKLOG + AUDIT doc 歷史提及改 strikethrough 標「已拔毒」。test_app_smoke + test_tw_macro + test_provenance_smoke 110 passed / 0 failed。net −499 LOC
+  * **P0-3-#1**(v19.209):`repositories/tw_macro_repository.py::fetch_tw_market_snapshot` 整合 API 拔毒 — production 0 caller(深層 audit verify,只有 1 個 test 是孤兒)。C2 v19.208 為它加的 orchestrator-level provenance(source/fetched_at)同步拔除。連動刪 `tests/test_tw_macro.py::test_snapshot_returns_three_factors`。3 個 sub-fetcher(twse_breadth / finmind_foreign_investor / cbc_m1b_m2)保留獨立可用。test_tw_macro + test_app_smoke 106 passed / 0 failed
 
 - **refactor(arch) 第三階段排毒(2026-06-28 完工,v19.202-208)**:User 「B+C → D1+D2+B3」分批授權,把第二階段 P2-1/P2-4/P2-5 revert backlog 用「直接搬位置 + `_*` 集中 + 改 test patch path」策略重做成功。
   * **A1**(v19.202 `61af3e0`):清空殼目錄 + 修 2 過時 SSOT-guard test(129 passed)

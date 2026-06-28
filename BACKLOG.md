@@ -63,7 +63,7 @@
     - `services/macro_tw_local_fetch.py:71` — FinMind JSON parse
     - `services/macro_service.py:2076` — _daily_spx_return
     - `services/fund_history.py:51` — preset funds JSON parse
-    - `services/quadrant_simulator.py:235` — resample "ME" fallback
+    - ~~`services/quadrant_simulator.py:235` — resample "ME" fallback~~(v19.210 P0-3-#2 整檔拔毒,production 0 caller)
     - `services/macro_validation.py:282` — index to_datetime
     - `repositories/fund_repository.py:3199` — nav_rows mmdd parse
   * 介面 0 改;只把「失敗時靜默」改成「失敗時 stderr 留軌跡」,便於生產 debug
