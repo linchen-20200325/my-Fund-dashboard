@@ -56,7 +56,8 @@ def test_fetch_fred_carries_source_columns(monkeypatch):
     def _mock_fetch(*args, **kwargs):
         return _MockResp()
 
-    monkeypatch.setattr(macro_repository, "fetch_url", _mock_fetch, raising=False)
+    # B1 v19.205: fetch_fred 在 fred.py 內呼叫 fetch_url,patch sub-module binding。
+    monkeypatch.setattr("repositories.macro.fred.fetch_url", _mock_fetch, raising=False)
     if hasattr(macro_repository.fetch_fred, "cache_clear"):
         macro_repository.fetch_fred.cache_clear()
     df = macro_repository.fetch_fred("CPILFESL", "dummy-key")

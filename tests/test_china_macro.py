@@ -65,7 +65,9 @@ def test_fetch_china_macro_uses_fetch_fred_batch():
         captured["api_key"] = api_key
         return {sid: pd.DataFrame() for sid, _ in specs}
 
-    with patch.object(macro_repository, "fetch_fred_batch", side_effect=fake_batch):
+    # B1 v19.205: fetch_china_macro 在 china.py 內 `from .fred import fetch_fred_batch`,
+    # patch shim attribute 不穿透 sub-module binding,改 patch 子模組 binding。
+    with patch("repositories.macro.china.fetch_fred_batch", side_effect=fake_batch):
         out = macro_repository.fetch_china_macro("fake_key")
 
     assert captured["api_key"] == "fake_key"

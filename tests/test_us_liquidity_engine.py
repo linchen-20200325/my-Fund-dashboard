@@ -167,7 +167,7 @@ class _MockResp:
 def test_aaii_neutral():
     """中性 spread(5%)→ ➖ 情緒中性 label。"""
     html = "<p>Bullish 35.0%</p><p>Bearish 30.0%</p>"
-    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(200, html)):
+    with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, html)):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()
         assert r["value"] == pytest.approx(5.0, abs=0.1)
@@ -179,7 +179,7 @@ def test_aaii_neutral():
 def test_aaii_extreme_bull_inverse():
     """spread > 20 → 反指標賣訊號。"""
     html = "Bullish 55.0% ... Bearish 25.0%"
-    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(200, html)):
+    with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, html)):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()
         assert r["value"] > 20
@@ -189,7 +189,7 @@ def test_aaii_extreme_bull_inverse():
 def test_aaii_extreme_bear_inverse():
     """spread < -20 → 反指標買訊號。"""
     html = "Bullish 20.0% xxx Bearish 50.0%"
-    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(200, html)):
+    with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, html)):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()
         assert r["value"] < -20
@@ -198,7 +198,7 @@ def test_aaii_extreme_bear_inverse():
 
 def test_aaii_http_error():
     """非 200 → _err 透傳,無 color/label。"""
-    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(500)):
+    with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(500)):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()
         assert "_err" in r
@@ -208,7 +208,7 @@ def test_aaii_http_error():
 
 def test_aaii_regex_no_match():
     """頁面格式變更 → _err 含 regex 字樣。"""
-    with patch("repositories.macro_repository.fetch_url", return_value=_MockResp(200, "<html>no data</html>")):
+    with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, "<html>no data</html>")):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()
         assert "_err" in r
@@ -217,7 +217,7 @@ def test_aaii_regex_no_match():
 
 def test_aaii_proxy_failure():
     """fetch_url 回 None(proxy 失敗)→ _err 透傳。"""
-    with patch("repositories.macro_repository.fetch_url", return_value=None):
+    with patch("repositories.macro.alternate.fetch_url", return_value=None):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()
         assert "_err" in r
@@ -279,7 +279,7 @@ def test_snapshot_all_keys_present():
     """所有 7 指標都失敗時仍回完整 dict（每個都有 _err）."""
     with patch.object(ule, "fetch_fred", return_value=pd.DataFrame()), \
          patch.object(ule, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
-         patch("repositories.macro_repository.fetch_url", return_value=_MockResp(500)):
+         patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(500)):
         ule.fetch_aaii_sentiment.cache_clear()
         snap = ule.fetch_us_liquidity_snapshot("key")
         # F-PROV-1 phase 19: _provenance 為 schema-additive 後設,僅在有成功子指標時出現;
@@ -301,7 +301,7 @@ def test_snapshot_mixed_success_failure():
 
     with patch.object(ule, "fetch_fred", side_effect=_fake_fred), \
          patch.object(ule, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
-         patch("repositories.macro_repository.fetch_url", return_value=_MockResp(500)):
+         patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(500)):
         ule.fetch_aaii_sentiment.cache_clear()
         snap = ule.fetch_us_liquidity_snapshot("key")
         assert "_err" not in snap["hy_oas"]

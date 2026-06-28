@@ -172,9 +172,14 @@ def test_fetch_url_with_retry_custom_headers_merge():
 
 def test_fund_repository_fx_nav_use_chart_api_not_direct_yfinance():
     """v18.201：fund_repository 的 FX/NAV 改走 Yahoo Chart API（fetch_yf_close +
-    NAS proxy），不再直連 yf.Ticker（避免 Cloud IP 403/限流）。整檔掃描，最穩。"""
+    NAS proxy），不再直連 yf.Ticker（避免 Cloud IP 403/限流）。整檔掃描，最穩。
+
+    B1 v19.205 / P1-5:repositories/fund_repository.py 已拆 repositories/fund/ 子套件,
+    改讀整個子套件 concat。
+    """
     import pathlib
-    src = pathlib.Path("repositories/fund_repository.py").read_text(encoding="utf-8")
+    src = "\n".join(p.read_text(encoding="utf-8")
+                    for p in sorted(pathlib.Path("repositories/fund").glob("*.py")))
     assert "yf.Ticker" not in src, "fund_repository 不應再直連 yf.Ticker"
     assert src.count("fetch_yf_close") >= 2, "FX + NAV 應都走 fetch_yf_close（Chart API）"
 

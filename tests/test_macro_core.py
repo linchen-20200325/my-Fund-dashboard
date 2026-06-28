@@ -107,7 +107,8 @@ def test_fetch_fred_goes_through_proxy_helper(monkeypatch):
         }
         return mock_resp
 
-    monkeypatch.setattr("repositories.macro_repository.fetch_url", fake_fetch_url)
+    # B1 v19.205: macro_repository → repositories.macro.fred (拆檔後 binding 在子模組)
+    monkeypatch.setattr("repositories.macro.fred.fetch_url", fake_fetch_url)
     df = macro_core.fetch_fred("NAPM", "fake_key", n=10)
 
     assert captured["url"] == macro_core.FRED_BASE
@@ -130,7 +131,8 @@ def test_fetch_fred_empty_key_no_network():
 
 def test_fetch_fred_proxy_unreachable(monkeypatch):
     """fetch_url 回 None(NAS 與直連都失敗)→ 回傳空 DataFrame,不可拋。"""
-    monkeypatch.setattr("repositories.macro_repository.fetch_url", lambda *a, **kw: None)
+    # B1 v19.205: patch 子模組 fred.fetch_url(拆檔後 binding 處)
+    monkeypatch.setattr("repositories.macro.fred.fetch_url", lambda *a, **kw: None)
     df = macro_core.fetch_fred("NAPM", "key", n=10)
     assert df.empty
 
@@ -158,7 +160,8 @@ def test_fetch_yf_close_goes_through_proxy_helper(monkeypatch):
         }
         return mock_resp
 
-    monkeypatch.setattr("repositories.macro_repository.fetch_url", fake_fetch_url)
+    # B1 v19.205: patch 子模組 yf.fetch_url(拆檔後 binding 處)
+    monkeypatch.setattr("repositories.macro.yf.fetch_url", fake_fetch_url)
     s = macro_core.fetch_yf_close("^VIX", range_="5d")
 
     assert captured["url"].endswith("/^VIX")
@@ -169,7 +172,8 @@ def test_fetch_yf_close_goes_through_proxy_helper(monkeypatch):
 
 
 def test_fetch_yf_close_proxy_failure(monkeypatch):
-    monkeypatch.setattr("repositories.macro_repository.fetch_url", lambda *a, **kw: None)
+    # B1 v19.205: patch 子模組 yf.fetch_url(拆檔後 binding 處)
+    monkeypatch.setattr("repositories.macro.yf.fetch_url", lambda *a, **kw: None)
     s = macro_core.fetch_yf_close("^VIX")
     assert s.empty
 
@@ -192,7 +196,8 @@ def test_fetch_yf_latest_batch(monkeypatch):
         }
         return mock_resp
 
-    monkeypatch.setattr("repositories.macro_repository.fetch_url", fake_fetch_url)
+    # B1 v19.205: patch 子模組 yf.fetch_url(拆檔後 binding 處)
+    monkeypatch.setattr("repositories.macro.yf.fetch_url", fake_fetch_url)
     out = macro_core.fetch_yf_latest(("^VIX", "DX-Y.NYB"))
     assert out["^VIX"]     == 22.5
     assert out["DX-Y.NYB"] == 104.3
