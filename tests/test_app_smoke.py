@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parents[1]  # v19.197 P0-3:test 遷移 tests/,改 parents[1] 回專案根
 APP = ROOT / "app.py"
 # v11.0 D-19: mk_dashboard.py 搬至 ui/components/mk_dashboard.py 並改為 shim
 # expander 巢狀守門 AST 解析需指向真正含函式體的新位置
@@ -545,7 +545,7 @@ def test_no_render_function_decorated_with_cache() -> None:
     import pathlib
     import re
 
-    root = pathlib.Path(__file__).parent
+    root = pathlib.Path(__file__).parents[1]  # v19.197 P0-3:同上
     scan_dirs = [root / "ui", root]
     py_files: list[pathlib.Path] = []
     for d in scan_dirs:

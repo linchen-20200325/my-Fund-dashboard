@@ -219,7 +219,7 @@ def test_compute_period_stats_empty_input():
 # ──────────────────────────────────────────────────────────────
 def test_phase_3_5_section_in_ui_source():
     """ui/tab_crisis_backtest.py 必須含 Phase 3.5 section 函式 + 呼叫。"""
-    src = (Path(__file__).parent / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
     assert "_render_score_validation_section" in src
     assert "Phase 3.5" in src
     assert "Tab1 Macro Score 預測力驗證" in src
@@ -227,7 +227,7 @@ def test_phase_3_5_section_in_ui_source():
 
 def test_phase_3_5_called_between_phase_3_and_phase_4():
     """Phase 3.5 必須在 Phase 3 後、Phase 4 前。"""
-    src = (Path(__file__).parent / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
     # v18.261 後 render 主流程改用 years_disp（自 session_state cache 取出）
     idx_3 = src.find("_render_signal_lookback_section(events,")
     idx_35 = src.find("_render_score_validation_section(events,")
@@ -238,7 +238,7 @@ def test_phase_3_5_called_between_phase_3_and_phase_4():
 
 def test_phase_3_5_imports_macro_validation_service():
     """Phase 3.5 必須從 services.macro_validation 拉 3 個核心函式。"""
-    src = (Path(__file__).parent / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
     assert "from services.macro_validation import" in src
     for fn in ("calc_macro_score_series", "verify_score_vs_crises", "compute_period_stats"):
         assert fn in src, f"UI 缺少 {fn} import / 使用"
@@ -485,7 +485,7 @@ def test_calc_macro_score_series_parquet_takes_precedence(tmp_path: Path):
 # ════════════════════════════════════════════════════════════════
 def test_ui_has_macro_score_csv_download_button():
     """Phase 3.5 section 必須含 macro_score CSV 下載按鈕（v18.276 新增）."""
-    src = (Path(__file__).parent / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
     assert "macro_score 月序列 CSV" in src or "下載 macro_score" in src
     assert "crisis_score_csv_download" in src   # 按鈕 key
     assert "to_csv" in src                       # 實際匯出邏輯
@@ -493,6 +493,6 @@ def test_ui_has_macro_score_csv_download_button():
 
 def test_ui_uses_parquet_cache_for_phase_3_5():
     """Phase 3.5 section 應引用 load_indicators_from_parquet（v18.276 新）."""
-    src = (Path(__file__).parent / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "ui" / "tab_crisis_backtest.py").read_text(encoding="utf-8")
     assert "load_indicators_from_parquet" in src
     assert "fred_indicators.parquet" in src

@@ -57,7 +57,7 @@ def test_app_py_shim_for_parse_indicator_date_still_works():
     只看 source code 內是否有 `_parse_indicator_date` re-export。
     """
     from pathlib import Path
-    src = (Path(__file__).parent / "app.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
     # B-C.3 後應該有 re-export line
     assert "from ui.helpers.session import parse_indicator_date as _parse_indicator_date" in src
     # 也應該還能找到 _parse_indicator_date 這個名字（caller 可用）

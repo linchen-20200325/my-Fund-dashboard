@@ -51,7 +51,7 @@ def test_calc_data_health_wrapper():
 def test_app_py_shim_render_indicator_map_still_works():
     """app.py 保留 render_indicator_map shim（純 source 驗證避免觸發 streamlit）。"""
     from pathlib import Path
-    src = (Path(__file__).parent / "app.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
     # B-C.5 後應該有 shim line
     assert "from ui.tab1_macro import render_indicator_map" in src
 
@@ -232,7 +232,7 @@ def test_no_st_stop_in_render_macro_tab():
     這個測試鎖死：tab1_macro.py 不能再出現 st.stop()，防止下次再踩。
     """
     from pathlib import Path
-    src = (Path(__file__).parent / "ui" / "tab1_macro.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "ui" / "tab1_macro.py").read_text(encoding="utf-8")
     import re
     matches = re.findall(r'^\s*st\.stop\(\)', src, flags=re.MULTILINE)
     assert len(matches) == 0, (

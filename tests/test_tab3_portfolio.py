@@ -40,7 +40,7 @@ def test_app_py_only_has_render_calls_for_all_5_tabs():
     v18.176：移除回測 Tab → render_backtest_tab 不再出現於 app.py。
     """
     from pathlib import Path
-    src = (Path(__file__).parent / "app.py").read_text(encoding="utf-8")
+    src = (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
     for fn in (
         "render_macro_tab",
         "render_single_fund_tab",

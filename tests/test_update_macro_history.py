@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 
 # scripts/ 不在 default sys.path —— 顯式加入 repo root 才能 `import scripts.update_macro_history`
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parents[1]))
 
 
 # ════════════════════════════════════════════════════════════════
