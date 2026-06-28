@@ -25,8 +25,6 @@ from services.ai_prompts import (
     build_mk_advisor_prompt,
 )
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-
 # ── 核心/衛星關鍵字分類 ──────────────────────────────────────
 _CORE_KW  = ["債", "收益", "配息", "平衡", "高息", "公用", "多元",
              "income", "bond", "dividend", "balanced", "utility"]

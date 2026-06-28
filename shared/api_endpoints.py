@@ -16,22 +16,37 @@ v19.223 P1-2:深層稽核發現 3+2+2 = 7 處 production URL 字串重複,收口
 
 未列入(各自 source-local SSOT,讀 caller 即見)
 ==============================================
-- repositories/macro/fred.py:28 FRED_BASE
-- repositories/macro/yf.py:18 YF_CHART_BASE
-- repositories/macro/alternate.py: DEFILLAMA / AAII
-- repositories/fund/sources.py: ALLIANZ / Cnyes / MoneyDJ
+- repositories/macro/fred.py:28 FRED_BASE(+ FRED_RELEASE_BASE / FRED_RELEASE_DATES_BASE)
+- repositories/macro/yf.py:18 YF_CHART_BASE(query1)
+- repositories/macro/alternate.py: DEFILLAMA_STABLECOIN_URL / AAII
+- repositories/fund/sources.py: 含 YF_MORNINGSTAR_CHART_URL(query2,
+  Morningstar-symbol 專用,v19.230 P1-2 第二輪 從 scripts dupe 收回)
+  + ALLIANZ / Cnyes / MoneyDJ
 - repositories/news_repository.py: _GOOGLE_NEWS_RSS
 - repositories/tw_macro_repository.py:39 TWSE_MI_INDEX_URL
 - repositories/tw_macro_repository.py:45 CBC_EF15M01_URL
-- services/ai_service.py:28 GEMINI_URL
+- infra/llm.py:111 Gemini generativelanguage(production fetcher,inline f-string)
 - infra/oauth.py: GOOGLE_AUTH_URL / GOOGLE_TOKEN_URL
 
 scripts 重複 URL 改 import 規則
 ==============================
-scripts/update_macro_history.py 原 dupe `FRED_URL` + `YF_CHART_BASE`
-改 import from production fetcher 位置(L1 SSOT):
-  - `from repositories.macro.fred import FRED_BASE`
-  - `from repositories.macro.yf import YF_CHART_BASE`
+scripts/* 原 dupe URL 改 import from production fetcher 位置(L1 SSOT):
+  - scripts/update_macro_history.py:
+    - `from repositories.macro.fred import FRED_BASE`
+    - `from repositories.macro.yf import YF_CHART_BASE`
+  - scripts/fetch_nav_cache.py(v19.230 P1-2 第二輪):
+    - `from repositories.fund.sources import YF_MORNINGSTAR_CHART_URL`
+
+v19.230 P1-2 第二輪深層稽核補刀
+================================
+本檔 12 個 single-source URL 各 1 caller(P1-2 結論正確 11 個);深挖發現:
+- ❌ **GEMINI_URL @ services/ai_service.py:28 dead constant**(v19.230 已刪)
+  — production fetcher 在 infra/llm.py:111 用 f-string inline 拼接,
+  services/ai_service.py 0 caller(P0-3-#10 漏網,本輪補刀)
+- ✅ **YF query2 Morningstar URL** 真 dupe(repositories/fund/sources.py:833
+  ↔ scripts/fetch_nav_cache.py:301)→ 加 YF_MORNINGSTAR_CHART_URL const
+  到 sources.py + scripts import 過去(對齊 P1-2 設計原則)
+- 其他 11 個 single-source URL 為 production 唯一定義,源碼即見 SSOT
 """
 from __future__ import annotations
 

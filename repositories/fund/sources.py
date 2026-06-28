@@ -28,6 +28,16 @@ from fund_fetcher import (  # noqa: F401
 from infra.proxy import _proxies, _ssl_verify  # noqa: F401
 
 
+# Yahoo Finance v8 chart API — Morningstar {secId}.F symbol 專用 template。
+# v19.230 P1-2 第二輪:深層稽核確認與 scripts/fetch_nav_cache.py:fetch_morningstar_via_yf
+# 真重複(同字串,兩處 production-ish caller)→ SSOT 收口至此(production fetcher 為主,
+# scripts 從這裡 import)。symbol 為 `{secId}.F`(_src_yahoo_finance_nav L830)。
+YF_MORNINGSTAR_CHART_URL = (
+    "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}"
+    "?interval=1d&range=2y&includePrePost=false"
+)
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 來源 1：FundClear API（境外基金，Colab 最穩定）
 # ══════════════════════════════════════════════════════════════════════
@@ -828,11 +838,9 @@ def _src_yahoo_finance_nav(code: str) -> "pd.Series":
         return pd.Series(dtype=float)
 
     yf_symbol = f"{sec_id}.F"
-    # Yahoo Finance v8 chart API（每日資料，近1年）
-    url = (
-        f"https://query2.finance.yahoo.com/v8/finance/chart/{yf_symbol}"
-        f"?interval=1d&range=2y&includePrePost=false"
-    )
+    # Yahoo Finance v8 chart API（每日資料,近 2 年）—— v19.230 P1-2 第二輪:
+    # URL template SSOT 同時提供給 scripts/fetch_nav_cache.py(production fetcher 為主)
+    url = YF_MORNINGSTAR_CHART_URL.format(symbol=yf_symbol)
     hdrs = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

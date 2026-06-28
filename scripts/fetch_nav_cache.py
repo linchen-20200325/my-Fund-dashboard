@@ -297,10 +297,9 @@ def fetch_yahoo_finance_history(code: str) -> list:
     if not sec_id:
         return []
     yf_symbol = f"{sec_id}.F"
-    url = (
-        f"https://query2.finance.yahoo.com/v8/finance/chart/{yf_symbol}"
-        f"?interval=1d&range=2y&includePrePost=false"
-    )
+    # v19.230 P1-2 第二輪:URL template SSOT 走 production fetcher(repositories/fund/sources.py)
+    from repositories.fund.sources import YF_MORNINGSTAR_CHART_URL
+    url = YF_MORNINGSTAR_CHART_URL.format(symbol=yf_symbol)
     hdrs = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
