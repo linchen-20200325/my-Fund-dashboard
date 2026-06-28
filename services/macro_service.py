@@ -1559,7 +1559,8 @@ def fetch_tw_market_tpi(fred_api_key: str = "") -> dict:
     tw_macro 模組,全部統一透過 proxy_helper.fetch_url 走 NAS 中繼站。
     原本 4 處直連 requests.get 全部消除。
     """
-    from tw_macro import (
+    # v19.196 P0-4-B:tw_macro 已下沉 repositories.tw_macro_repository
+    from repositories.tw_macro_repository import (
         fetch_twse_breadth,
         fetch_finmind_foreign_investor,
         fetch_cbc_m1b_m2,

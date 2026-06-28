@@ -12,7 +12,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 
-import tw_macro
+# v19.196 P0-4-B:tw_macro 搬 repositories/,alias 保留讓 monkeypatch.setattr 不破
+from repositories import tw_macro_repository as tw_macro
 
 
 def _mock_resp(json_data):
