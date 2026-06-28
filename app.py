@@ -403,81 +403,10 @@ from ui.tab1_macro import render_indicator_map  # noqa: F401
 
 
 # ══════════════════════════════════════════════════════
-# 🧭 總經指南針 (Top-Down Macro) — Phase 1 規格頂部三大美股指標
+# 🧭 總經指南針 (Top-Down Macro) — C3 v19.207 拆至 ui/components/macro_compass_top.py
 # ══════════════════════════════════════════════════════
-def _render_compass_card(col, info, title, ticker, fmt='{:.2f}', unit='', show_ma=False):
-    """單張指標卡：值 + Phase 1 訊號燈 + 60D sparkline。info=None 顯示降級訊息。"""
-    if info is None:
-        col.markdown(
-            f'<div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:10px;height:84px;">'
-            f'<div style="font-size:11px;color:#8b949e;">{title}（{ticker}）</div>'
-            f'<div style="font-size:13px;color:#8b949e;margin-top:6px;">🔴 未取得（yfinance 暫時失敗）</div>'
-            f'</div>', unsafe_allow_html=True)
-        return
-    val = info.get('value')
-    sig = info.get('signal') or ('⚪', '無訊號', '#8b949e')
-    light, label, color = sig[0], sig[1], sig[2]
-    val_str = fmt.format(val) + unit if val is not None else 'N/A'
-    extra = ''
-    if show_ma and info.get('ma60') is not None:
-        extra = f' <span style="font-size:10px;color:#8b949e;font-weight:400;">/ 60MA {fmt.format(info["ma60"])}</span>'
-    col.markdown(
-        f'<div style="background:#0d1117;border:1px solid {color};border-radius:8px;padding:10px;">'
-        f'<div style="font-size:11px;color:#8b949e;">{title}（{ticker}）</div>'
-        f'<div style="font-size:22px;font-weight:900;color:#e6edf3;margin:2px 0;">{val_str}{extra}</div>'
-        f'<div style="font-size:11px;font-weight:700;color:{color};">{light} {label}</div>'
-        f'</div>', unsafe_allow_html=True)
-    ser = info.get('series') or []
-    if ser:
-        try:
-            col.line_chart(pd.Series(ser, name=title), height=80, use_container_width=True)
-        except Exception:
-            pass  # smoke-allow-pass
+from ui.components.macro_compass_top import render_macro_compass
 
-def render_macro_compass():
-    """頂部三卡：VIX 恐慌指數 × 美 10Y 殖利率 × S&P 500 vs 60MA。
-    預設不抓資料（避免顯示過時值誤判），按「📡 抓取最新」按鈕才打 yfinance。
-    語意：按鈕當下＝盤面當下＝決策當下真實狀態。"""
-    import datetime as _dt_mc
-
-    def _do_fetch():
-        try:
-            from repositories.macro_repository import fetch_macro_compass as _fmc
-            _fmc.cache_clear()
-            _data = _fmc()
-        except Exception as e:
-            print(f'[render_macro_compass] fetch failed: {e}')
-            _data = {}
-        st.session_state['_macro_compass_cache'] = {
-            '_ts': _dt_mc.datetime.now(), 'data': _data,
-        }
-
-    _cache = st.session_state.get('_macro_compass_cache')
-    _has_data = bool(_cache and _cache.get('data'))
-    _ts_str = (_cache.get('_ts').strftime('%H:%M:%S')
-               if _has_data and _cache.get('_ts') else '尚未抓取')
-
-    _header = st.columns([6, 1])
-    _header[0].markdown(
-        '<div style="font-size:14px;font-weight:900;color:#e6edf3;margin:4px 0 4px;">'
-        '🧭 總經指南針 (Top-Down Macro)'
-        '<span style="font-size:10px;color:#8b949e;font-weight:400;margin-left:8px;">'
-        f'VIX × 10Y × S&amp;P 500 — {"即將抓取（無快取）" if not _has_data else f"更新於 {_ts_str}"}'
-        '</span></div>',
-        unsafe_allow_html=True)
-    _header[1].button('📡 抓取最新' if not _has_data else '🔄 重抓',
-                       key='_compass_fetch_btn', on_click=_do_fetch,
-                       use_container_width=True)
-
-    if not _has_data:
-        st.info('💡 點擊右上「📡 抓取最新」按鈕載入即時 VIX / 10Y / S&P 500')
-        return
-
-    data = _cache.get('data') or {}
-    c1, c2, c3 = st.columns(3)
-    _render_compass_card(c1, data.get('vix'),  'VIX 恐慌指數',     '^VIX',  fmt='{:.2f}')
-    _render_compass_card(c2, data.get('tnx'),  '美 10Y 殖利率',    '^TNX',  fmt='{:.2f}', unit='%')
-    _render_compass_card(c3, data.get('gspc'), 'S&P 500 vs 60MA',  '^GSPC', fmt='{:,.2f}', show_ma=True)
 
 render_macro_compass()
 
