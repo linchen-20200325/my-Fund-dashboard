@@ -182,20 +182,8 @@ def test_cbc_m1b_m2_all_fail(monkeypatch):
     assert r['error']     is not None
 
 
-# ══════════════════════════════════════════════════════════════
-# 整合 API
-# ══════════════════════════════════════════════════════════════
-
-def test_snapshot_returns_three_factors(monkeypatch):
-    """fetch_tw_market_snapshot 應回 breadth / fii / m1b_m2 三個 sub-dict。"""
-    monkeypatch.setattr(tw_macro, 'fetch_url', lambda *a, **kw: None)
-    monkeypatch.setattr(tw_macro, '_try_twii_proxy', lambda: None)
-    snap = tw_macro.fetch_tw_market_snapshot()
-    assert set(snap.keys()) == {'breadth', 'fii', 'm1b_m2'}
-    # 全部失敗的情況下,每個 sub-dict 應該都有 error
-    assert snap['breadth']['error'] is not None
-    assert snap['fii']['error']     is not None
-    assert snap['m1b_m2']['error']  is not None
+# v19.209 P0-3-#1:整合 API `fetch_tw_market_snapshot` 已拔毒(production 0 caller),
+# 此區 test 連動刪除。3 個 sub-fetcher 的個別 test 已在前面 covered。
 
 
 # ══════════════════════════════════════════════════════════════

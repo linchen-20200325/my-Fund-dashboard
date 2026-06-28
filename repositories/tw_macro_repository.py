@@ -326,32 +326,8 @@ def fetch_cbc_m1b_m2() -> dict:
     result['fetched_at'] = _now_iso
     return result
 
-
-# ══════════════════════════════════════════════════════════════
-# 整合 API — 一次抓回三大台股總經因子
-# ══════════════════════════════════════════════════════════════
-
-def fetch_tw_market_snapshot(days_back: int = 7) -> dict:
-    """
-    一次抓回三大台股總經因子(寬度 / 外資 / M1B-M2),供 TPI 計算使用。
-
-    Returns
-    -------
-    dict
-        {
-            'breadth': fetch_twse_breadth() 回傳值,
-            'fii':     fetch_finmind_foreign_investor() 回傳值,
-            'm1b_m2':  fetch_cbc_m1b_m2() 回傳值,
-            'source':     'TW:market_snapshot_orchestrator' (C2 v19.208),
-            'fetched_at': UTC ISO timestamp(§2.2),
-        }
-    """
-    import datetime as _dt_sn
-    return {
-        'breadth': fetch_twse_breadth(),
-        'fii':     fetch_finmind_foreign_investor(days_back=days_back),
-        'm1b_m2':  fetch_cbc_m1b_m2(),
-        # C2 v19.208 F-PROV-1:orchestrator-level provenance(§2.2,sub-result 各自帶細粒度)
-        'source':     'TW:market_snapshot_orchestrator',
-        'fetched_at': _dt_sn.datetime.now(_dt_sn.timezone.utc).isoformat(),
-    }
+# v19.209 P0-3-#1:`fetch_tw_market_snapshot` 整合 API 拔毒 — production 0 caller
+# (深層 audit verify),C2 v19.208 補的 orchestrator-level provenance 是浪費。
+# 連動刪 tests/test_tw_macro.py::test_snapshot_returns_three_factors。
+# 3 個 sub-fetcher(fetch_twse_breadth / fetch_finmind_foreign_investor /
+# fetch_cbc_m1b_m2)保留,獨立可用。
