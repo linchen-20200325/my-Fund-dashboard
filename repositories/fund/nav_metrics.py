@@ -483,6 +483,9 @@ def fetch_nav_history_long(code: str, min_years: int = 10) -> pd.Series:
     cached = _nav_history_cache_load(code)
     if cached is not None and len(cached) >= 100:
         print(f"[fetch_nav_history_long] {code} cache hit ({len(cached)} 筆)")
+        # v19.226 F-PROV-1 B3:disk cache load 後 attrs 不存,補 source(§2.2)
+        cached.attrs.setdefault("source", f"Fund:fetch_nav_history_long:disk_cache:{code}")
+        cached.attrs.setdefault("fetched_at", pd.Timestamp.now('UTC').isoformat())
         return cached
 
     # 1. CnYES（user 提到的正確 URL pattern）
@@ -534,6 +537,10 @@ def fetch_nav_history_long(code: str, min_years: int = 10) -> pd.Series:
     s = fetch_nav(code)
     if not s.empty:
         _nav_history_cache_save(code, s)
+        # v19.226 F-PROV-1 B3:fallback path 補 source(§2.2 schema-additive,
+        # 不蓋過 fetch_nav 已 set 的 source)
+        s.attrs.setdefault("source", f"Fund:fetch_nav_history_long:fallback_fetch_nav:{code}")
+        s.attrs.setdefault("fetched_at", pd.Timestamp.now('UTC').isoformat())
     return s
 
 def fetch_div(full_key: str, portal: str = "") -> list:
@@ -587,6 +594,13 @@ def fetch_div(full_key: str, portal: str = "") -> list:
     # schema 違反 = 上游 HTML 解析 bug,當場 raise(§1 Fail Loud)
     from shared.schemas import validate_fund_dividends
     validate_fund_dividends(out)
+    # v19.226 F-PROV-1 B2:list-of-dict 每 element 加 source + fetched_at(§2.2)
+    # schema-additive,在 validate 後加避免 pandera schema 不認得
+    if out:
+        _fa = pd.Timestamp.now('UTC').isoformat()
+        for _d in out:
+            _d["source"] = f"MoneyDJ:fetch_div:{full_key}"
+            _d["fetched_at"] = _fa
     return out
 
 

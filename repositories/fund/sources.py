@@ -431,6 +431,12 @@ def fetch_div_cnyes(code: str) -> list:
                         })
     except Exception as _e:
         print(f"[cnyes_div] {_code}: {_e}")
+    # v19.226 F-PROV-1 B2:list-of-dict 每 element 加 source + fetched_at(§2.2)
+    if divs:
+        _fa = pd.Timestamp.now('UTC').isoformat()
+        for _d in divs:
+            _d["source"] = f"Cnyes:dividend:{_code}"
+            _d["fetched_at"] = _fa
     return divs
 
 
@@ -2311,6 +2317,15 @@ def fetch_fund_multi_source(code: str,
         else [code.upper().strip()]
     )
     best_result = None
+    # v19.226 F-PROV-1 B4:orchestrator-level provenance(§2.2)
+    _fa = pd.Timestamp.now('UTC').isoformat()
+
+    def _attach_prov(r: dict, suffix: str = "") -> dict:
+        """orchestrator setdefault 不蓋過 inner fetcher 已 set 的 source。"""
+        if isinstance(r, dict):
+            r.setdefault("source", f"Fund:multi_source_orchestrator{suffix}")
+            r.setdefault("fetched_at", _fa)
+        return r
 
     for _candidate in code_candidates:
         _result = _fetch_fund_single(
@@ -2320,18 +2335,20 @@ def fetch_fund_multi_source(code: str,
         _status = classify_fetch_status(_result)
         print(f"[orchestrator] {_candidate} → {_status} (err:{_result.get('error','')[:40]})")
         if _status == "complete":
-            return _result
+            return _attach_prov(_result, ":complete")
         if best_result is None:
             best_result = _result
         elif (classify_fetch_status(best_result) == "failed"
               and _status == "partial"):
             best_result = _result
 
-    return best_result or {
+    if best_result:
+        return _attach_prov(best_result, ":partial_or_failed")
+    return _attach_prov({
         "fund_code": code, "error": f"所有候選代碼均無資料：{code_candidates}",
         "series": None, "fund_name": "", "nav_latest": None,
         "dividends": [], "metrics": {}, "perf": {}, "risk_metrics": {},
-    }
+    }, ":all_failed")
 
 
 def _src_insurance_subdomain_nav(code: str) -> pd.Series:
