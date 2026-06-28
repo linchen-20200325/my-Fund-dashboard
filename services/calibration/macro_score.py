@@ -18,8 +18,8 @@
 ========
 - `compute_historical_score(df)` — 逐月套 14-factor → 月度 Macro_Score
 - `classify_phase(score)`        — 0~10 → "Peak/Expansion/Recovery/Recession"
-- `phase_accuracy(score, spx)`   — 每位階 hit_rate + 平均後 horizon 月報酬
-- `grid_search_phase_thresholds` — 掃 phase 門檻組合，找最高總命中率
+- ~~`phase_accuracy(score, spx)`~~  v19.217 P0-3-#8 拔毒(production 0 caller)
+- ~~`grid_search_phase_thresholds`~~ v19.217 P0-3-#8 拔毒
 - `generate_synthetic_demo()`    — 60 月合成 + 2 段壓力事件，sandbox 用
 
 純函式，沒 I/O；要餵真實資料的 caller 自己抓 FRED + yfinance。
@@ -31,18 +31,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from shared.fred_series import (
-    FRED_CPI,
-    FRED_FED_BS,
-    FRED_FED_FUNDS,
-    FRED_HY_SPREAD,
-    FRED_M2,
-    FRED_PAYEMS_MANEMP,
-    FRED_PPI,
-    FRED_T10Y2Y,
-    FRED_T10Y3M,
-    FRED_UNRATE,
-)
+# v19.217 P0-3-#8:shared.fred_series 整 import 區隨 fetch_real_macro_factors_monthly 拔毒移除
 from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.179 PMI + v19.184 M2/FedBS
     HY_SPREAD_THRESHOLDS as _HY_THR,
     PMI_THRESHOLDS as _PMI_THR,
@@ -208,85 +197,14 @@ def classify_phase(score: float,
     return "Recession"
 
 
-# 真值規則：每位階 lambda fwd_ret → 是否命中
-_TRUTH_RULES: dict[str, Callable[[float], bool]] = {
-    "Peak":      lambda r: r < 0.0,        # 應減碼 → 真跌
-    "Expansion": lambda r: r > 0.0,        # 應持有 → 真漲
-    "Recovery":  lambda r: r > 0.10,       # 應加碼 → 真大漲
-    "Recession": lambda r: r < 0.0,        # 應防禦 → 真跌
-}
-
 
 def forward_return(spx: pd.Series, horizon_months: int = 12) -> pd.Series:
     """t 月底買 SPX，t+horizon 月底賣的累計報酬。"""
     return spx.shift(-horizon_months) / spx - 1.0
 
 
-def phase_accuracy(score: pd.Series,
-                   spx: pd.Series,
-                   horizon_months: int = 12,
-                   thresholds: tuple[float, float, float] | None = None
-                   ) -> pd.DataFrame:
-    """每位階：n 個樣本、hit 個命中、命中率、平均/中位數後 horizon 月 SPX 報酬。"""
-    fwd = forward_return(spx, horizon_months)
-    phases = score.apply(lambda s: classify_phase(s, thresholds))
-    df = pd.DataFrame({"score": score, "phase": phases, "fwd_ret": fwd}).dropna()
-    rows = []
-    for phase, rule in _TRUTH_RULES.items():
-        sub = df[df["phase"] == phase]
-        n = len(sub)
-        if n == 0:
-            rows.append({"phase": phase, "n": 0, "hit": 0, "hit_rate_pct": None,
-                         "mean_fwd_pct": None, "median_fwd_pct": None})
-            continue
-        hit = int(sub["fwd_ret"].apply(rule).sum())
-        rows.append({
-            "phase": phase, "n": n, "hit": hit,
-            "hit_rate_pct": round(hit / n * 100, 1),
-            "mean_fwd_pct": round(float(sub["fwd_ret"].mean()) * 100, 1),
-            "median_fwd_pct": round(float(sub["fwd_ret"].median()) * 100, 1),
-        })
-    return pd.DataFrame(rows)
-
-
-def overall_accuracy(score: pd.Series,
-                     spx: pd.Series,
-                     horizon_months: int = 12,
-                     thresholds: tuple[float, float, float] | None = None
-                     ) -> float:
-    """加權平均命中率（按樣本數）。"""
-    df = phase_accuracy(score, spx, horizon_months, thresholds)
-    df = df.dropna(subset=["hit_rate_pct"])
-    if df.empty:
-        return 0.0
-    total_n = df["n"].sum()
-    if total_n == 0:
-        return 0.0
-    return float((df["hit"].sum() / total_n) * 100.0)
-
-
-def grid_search_phase_thresholds(score: pd.Series,
-                                 spx: pd.Series,
-                                 horizon_months: int = 12,
-                                 peak_grid: tuple = (7.0, 7.5, 8.0, 8.5),
-                                 exp_grid: tuple = (4.0, 4.5, 5.0, 5.5),
-                                 rec_grid: tuple = (2.0, 2.5, 3.0, 3.5),
-                                 ) -> pd.DataFrame:
-    """掃描 phase 門檻組合 → 各組合總命中率，按 overall_acc 排序。"""
-    out = []
-    for p in peak_grid:
-        for e in exp_grid:
-            for r in rec_grid:
-                if not (p > e > r):
-                    continue
-                acc = overall_accuracy(score, spx, horizon_months, (p, e, r))
-                out.append({"peak_thr": p, "expansion_thr": e,
-                            "recovery_thr": r, "overall_acc_pct": round(acc, 1)})
-    if not out:
-        return pd.DataFrame(columns=["peak_thr", "expansion_thr", "recovery_thr",
-                                      "overall_acc_pct"])
-    return pd.DataFrame(out).sort_values("overall_acc_pct", ascending=False
-                                          ).reset_index(drop=True)
+# v19.217 P0-3-#8:phase_accuracy / overall_accuracy / grid_search_phase_thresholds
+# 三 fn 拔毒(production 0 caller,只 test 孤兒)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -381,173 +299,3 @@ def generate_synthetic_demo(n_months: int = 60, seed: int = 42
     return df, spx
 
 
-# ════════════════════════════════════════════════════════════════
-# 真實資料抓取（FRED 14-series + yfinance SPX）
-# ════════════════════════════════════════════════════════════════
-# FRED series_id 映射；無 FRED 對應的指標走 yfinance 或派生
-_FRED_SERIES_MAP = {
-    "YIELD_10Y2Y": FRED_T10Y2Y,         # 10Y - 2Y treasury spread
-    "YIELD_10Y3M": FRED_T10Y3M,         # 10Y - 3M treasury spread
-    "PMI":         FRED_PAYEMS_MANEMP,  # 無 PMI FRED → 用就業代理；真實 PMI 需第三方
-    "HY_SPREAD":   FRED_HY_SPREAD,
-    "M2":          FRED_M2,             # M2 月底，YoY% 在 calling 端算
-    "CPI":         FRED_CPI,            # CPI 月底，YoY% 在 calling 端算
-    "FEDRATE":     FRED_FED_FUNDS,      # 月平均
-    "UNEMP":       FRED_UNRATE,
-    "PPI":         FRED_PPI,            # PPI YoY 在 calling 端算
-    "FED_BS":      FRED_FED_BS,         # Fed 資產負債表，YoY% 在 calling 端算
-}
-_YF_TICKERS = {
-    "VIX":     "^VIX",
-    "DXY":     "DX-Y.NYB",
-    "COPPER":  "HG=F",
-    "BREADTH_NUM": "RSP",  # 等權 S&P
-    "BREADTH_DEN": "SPY",  # 市值權 S&P
-}
-
-
-def _fred_monthly_yoy(series_df: pd.DataFrame) -> pd.Series:
-    """FRED 日 / 月序列 → 月底 YoY%（給 M2 / CPI / FED_BS / PPI 用）。"""
-    if series_df is None or series_df.empty:
-        return pd.Series(dtype=float)
-    s = (series_df.sort_values("date").set_index("date")["value"]
-         .astype(float).resample("ME").last())
-    return (s / s.shift(12) - 1.0) * 100.0
-
-
-def _fred_monthly_value(series_df: pd.DataFrame) -> pd.Series:
-    """FRED 日 / 月序列 → 月底原值（給 spread / FEDRATE / UNRATE 用）。"""
-    if series_df is None or series_df.empty:
-        return pd.Series(dtype=float)
-    return (series_df.sort_values("date").set_index("date")["value"]
-            .astype(float).resample("ME").last())
-
-
-def _yf_monthly_pct_change(series: pd.Series) -> pd.Series:
-    """yfinance 日序列 → 月底收盤的月變化%（給 DXY / COPPER 用）。"""
-    if series is None or series.empty:
-        return pd.Series(dtype=float)
-    m = series.resample("ME").last()
-    return (m / m.shift(1) - 1.0) * 100.0
-
-
-def _yf_monthly_level(series: pd.Series) -> pd.Series:
-    """yfinance 日序列 → 月底收盤（給 VIX 用）。"""
-    if series is None or series.empty:
-        return pd.Series(dtype=float)
-    return series.resample("ME").last()
-
-
-def fetch_real_macro_factors_monthly(
-    fred_api_key: str,
-    years: int = 10,
-) -> tuple[pd.DataFrame, pd.Series, dict]:
-    """抓 FRED 14-series + yfinance ^GSPC → 月度 DataFrame + SPX 月底收盤。
-
-    Parameters
-    ----------
-    fred_api_key : str
-        FRED API key（無則回空 DataFrame + 警告 dict）
-    years : int
-        歷史長度（年），預設 10 年
-
-    Returns
-    -------
-    (df, spx, notes)
-        df: DataFrame index=月底, 14 columns（缺欄留 NaN，計分器會跳過）
-        spx: ^GSPC 月底收盤 Series
-        notes: dict 含警告 / 失敗來源清單
-    """
-    notes: dict = {"missing_factors": [], "warnings": []}
-    if not fred_api_key:
-        notes["warnings"].append("FRED API key 未設置，無法抓真實資料")
-        return pd.DataFrame(), pd.Series(dtype=float), notes
-    try:
-        from repositories.macro_repository import fetch_fred, fetch_yf_close
-    except ImportError as e:
-        notes["warnings"].append(f"import 失敗：{e}")
-        return pd.DataFrame(), pd.Series(dtype=float), notes
-
-    n_obs = years * 12 + 36  # 多抓 3 年讓 YoY 對齊
-    series_map: dict[str, pd.Series] = {}
-
-    # ── 1. FRED 8 個 spread / level 指標 ─────────────────────
-    for factor, sid in _FRED_SERIES_MAP.items():
-        try:
-            df_f = fetch_fred(sid, fred_api_key, n=n_obs * 10)
-            if df_f is None or df_f.empty:
-                notes["missing_factors"].append(f"{factor}({sid})")
-                continue
-            if factor in ("M2", "CPI", "FED_BS", "PPI"):
-                series_map[factor] = _fred_monthly_yoy(df_f)
-            elif factor == "PMI":
-                # MANEMP 是就業人數，YoY 當 PMI 代理（非完美）
-                yoy = _fred_monthly_yoy(df_f)
-                series_map[factor] = 50 + yoy * 5  # 粗略映射到 PMI 量級
-                notes["warnings"].append("PMI 用就業人數 YoY 代理（FRED 無 PMI）")
-            else:
-                series_map[factor] = _fred_monthly_value(df_f)
-        except Exception as e:
-            notes["missing_factors"].append(f"{factor}: {type(e).__name__}")
-
-    # ── 2. yfinance VIX / DXY / Copper ─────────────────────────
-    yf_range = f"{years + 3}y" if years <= 10 else "max"
-    for factor, ticker in _YF_TICKERS.items():
-        if factor in ("BREADTH_NUM", "BREADTH_DEN"):
-            continue  # 等下合成 BREADTH
-        try:
-            s = fetch_yf_close(ticker, range_=yf_range, interval="1d")
-            if s is None or s.empty:
-                notes["missing_factors"].append(f"{factor}({ticker})")
-                continue
-            try:
-                s.index = s.index.tz_localize(None)
-            except (AttributeError, TypeError):
-                pass
-            if factor == "VIX":
-                series_map[factor] = _yf_monthly_level(s)
-            else:  # DXY / COPPER → 月變化%
-                series_map[factor] = _yf_monthly_pct_change(s)
-        except Exception as e:
-            notes["missing_factors"].append(f"{factor}: {type(e).__name__}")
-
-    # ── 3. BREADTH = RSP / SPY 月變化% ───────────────────────────
-    try:
-        rsp = fetch_yf_close(_YF_TICKERS["BREADTH_NUM"], range_=yf_range,
-                              interval="1d")
-        spy = fetch_yf_close(_YF_TICKERS["BREADTH_DEN"], range_=yf_range,
-                              interval="1d")
-        if rsp is not None and not rsp.empty and spy is not None and not spy.empty:
-            for s in (rsp, spy):
-                try: s.index = s.index.tz_localize(None)
-                except (AttributeError, TypeError): pass
-            ratio = (rsp.resample("ME").last()
-                     / spy.resample("ME").last())
-            series_map["BREADTH"] = ((ratio / ratio.shift(1) - 1.0) * 100.0)
-        else:
-            notes["missing_factors"].append("BREADTH(RSP/SPY)")
-    except Exception as e:
-        notes["missing_factors"].append(f"BREADTH: {type(e).__name__}")
-
-    if not series_map:
-        notes["warnings"].append("所有指標抓取失敗")
-        return pd.DataFrame(), pd.Series(dtype=float), notes
-
-    # ── 4. 合併為 DataFrame（共同月份，缺欄留 NaN）─────────────
-    df = pd.DataFrame(series_map)
-    df = df.tail(years * 12)  # 截最後 N 年
-
-    # ── 5. SPX 月底收盤 ───────────────────────────────────────
-    try:
-        spx_d = fetch_yf_close("^GSPC", range_=yf_range, interval="1d")
-        if spx_d is None or spx_d.empty:
-            notes["warnings"].append("SPX 抓取失敗")
-            return df, pd.Series(dtype=float), notes
-        try: spx_d.index = spx_d.index.tz_localize(None)
-        except (AttributeError, TypeError): pass
-        spx = spx_d.resample("ME").last().tail(years * 12 + 24)
-    except Exception as e:
-        notes["warnings"].append(f"SPX 異常：{type(e).__name__}: {e}")
-        spx = pd.Series(dtype=float)
-
-    return df, spx, notes
