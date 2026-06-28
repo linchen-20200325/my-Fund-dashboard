@@ -514,8 +514,32 @@ def fetch_defillama_stablecoin_mcap() -> pd.Series:
 #   來源：aaii.com/sentimentsurvey HTML scrape，週頻更新。
 #   回 raw dict {bull, bear, spread, date} 或 {_err: ...}；
 #   color/label 業務判讀由 L2 service (us_liquidity_engine) 處理。
+#
+# v19.192：硬化策略(回應 user「沒用 NAS proxy 中繼站」報修)
+#   1. URL fallback chain 3 段:主頁 → sent_results → 子頁,
+#      模仿 §2.1 MoneyDJ 子網域 fallback pattern。
+#   2. UA 補完 Chrome/124 full string(原本 Mozilla 截斷,Cloudflare 易判 bot)。
+#   3. Accept / Accept-Language 帶齊,模擬真實瀏覽器。
+#   4. timeout 8 → 20s(原 8 太短,NAS Squid 中繼 + Cloudflare challenge 常 > 8s)。
+#   5. trace 累加每段失敗原因,_err 帶完整鏈路,user 看得出哪段失敗。
+#   `fetch_url` 本身已透過 `get_proxy_config()` 走 NAS Squid 中繼(infra/proxy.py:144),
+#   本層不需另外注入 proxy — 改善的是「中繼後仍被擋」的成功率。
 # ══════════════════════════════════════════════════════════════
 AAII_SENTIMENT_URL = "https://www.aaii.com/sentimentsurvey"
+AAII_FALLBACK_URLS = (
+    "https://www.aaii.com/sentimentsurvey",
+    "https://www.aaii.com/sentimentsurvey/sent_results",
+    "https://www.aaii.com/SentimentSurvey",  # 大小寫變體,部分 CDN edge 視為不同 cache key
+)
+AAII_BROWSER_HEADERS = {
+    # F-AAII v19.192:Cloudflare 反爬對截斷 Mozilla string 較敏感,補 Chrome/124 full UA。
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 
 @register_cache
@@ -523,11 +547,14 @@ AAII_SENTIMENT_URL = "https://www.aaii.com/sentimentsurvey"
 def fetch_aaii_sentiment() -> dict:
     """抓 AAII Investor Sentiment Survey 散戶情緒週度數值（best-effort scrape）。
 
+    v19.192:從單 URL 改成 3 段 fallback chain(模仿 MoneyDJ 子網域 pattern),
+    補完整 Chrome UA + Accept headers,timeout 提到 20s 配合 NAS Squid 中繼。
+
     Returns
     -------
     dict
-        成功:{value(spread), unit, bull, bear, date, source, fetched_at}
-        失敗:{_err: 描述, source, fetched_at}(fail-loud token,L2 caller 視為錯誤狀態)
+        成功:{value(spread), unit, bull, bear, date, source, fetched_at, url_used}
+        失敗:{_err: 多段 trace, source, fetched_at}(fail-loud token,L2 caller 視為錯誤狀態)
 
     F-PROV-1 v19.84 phase 3:provenance(§2.2)— 全路徑(含 _err)皆帶 source + fetched_at。
     """
@@ -537,28 +564,36 @@ def fetch_aaii_sentiment() -> dict:
         "source": "AAII:sentimentsurvey",
         "fetched_at": pd.Timestamp.now('UTC').isoformat(),
     }
-    try:
-        r = fetch_url(AAII_SENTIMENT_URL, timeout=8)
-        if r is None:
-            return {"_err": "fetch_url 回 None(proxy/網路失敗)", **_prov}
-        if r.status_code != 200:
-            return {"_err": f"HTTP {r.status_code}", **_prov}
-        m_bull = _re.search(r"[Bb]ullish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
-        m_bear = _re.search(r"[Bb]earish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
-        if not m_bull or not m_bear:
-            return {"_err": "regex no match (page format changed)", **_prov}
-        bull = float(m_bull.group(1))
-        bear = float(m_bear.group(1))
-        return {
-            "value": bull - bear,
-            "unit": "%",
-            "bull": bull,
-            "bear": bear,
-            "date": "weekly",
-            **_prov,
-        }
-    except Exception as e:
-        return {"_err": f"{type(e).__name__}: {str(e)[:60]}", **_prov}
+    trace: list[str] = []
+    for url in AAII_FALLBACK_URLS:
+        try:
+            r = fetch_url(url, headers=AAII_BROWSER_HEADERS, timeout=20)
+            if r is None:
+                trace.append(f"{url.rsplit('/', 1)[-1] or 'aaii'}:fetch_url None")
+                continue
+            if r.status_code != 200:
+                trace.append(f"{url.rsplit('/', 1)[-1] or 'aaii'}:HTTP {r.status_code}")
+                continue
+            m_bull = _re.search(r"[Bb]ullish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
+            m_bear = _re.search(r"[Bb]earish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
+            if not m_bull or not m_bear:
+                trace.append(f"{url.rsplit('/', 1)[-1] or 'aaii'}:regex no match")
+                continue
+            bull = float(m_bull.group(1))
+            bear = float(m_bear.group(1))
+            return {
+                "value": bull - bear,
+                "unit": "%",
+                "bull": bull,
+                "bear": bear,
+                "date": "weekly",
+                "url_used": url,
+                **_prov,
+            }
+        except Exception as e:
+            trace.append(f"{url.rsplit('/', 1)[-1] or 'aaii'}:{type(e).__name__}")
+    # 三段全失敗 → §1 Fail Loud,_err 帶完整 trace 供 user/audit 判讀
+    return {"_err": f"AAII fallback chain 全失敗:{' → '.join(trace)}", **_prov}
 
 
 # ══════════════════════════════════════════════════════════════
