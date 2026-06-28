@@ -21,8 +21,8 @@ class TestIsmPmiProvenance:
         """全 7 段失敗 → err token 也須帶 source + fetched_at(便於 audit 哪輪掛)。"""
         from repositories import macro_repository as mr
         # mock 全部 stage 失敗(fred 空 / 網路 503 / DBnomics 空 docs)
-        monkeypatch.setattr(mr, "fetch_fred", lambda *a, **kw: pd.DataFrame())
-        monkeypatch.setattr(mr, "fetch_url", lambda *a, **kw: None)
+        monkeypatch.setattr("repositories.macro.alternate.fetch_fred", lambda *a, **kw: pd.DataFrame())
+        monkeypatch.setattr("repositories.macro.alternate.fetch_url", lambda *a, **kw: None)
         out = mr.fetch_ism_pmi(fred_api_key="x" * 32)
         assert "_err_pmi" in out
         assert out.get("value") is None
@@ -47,7 +47,7 @@ class TestIsmPmiProvenance:
             "source": ["FRED:NAPM"] * 5,
             "fetched_at": ["2026-06-26T00:00:00+00:00"] * 5,
         })
-        monkeypatch.setattr(mr, "fetch_fred", lambda *a, **kw: _df)
+        monkeypatch.setattr("repositories.macro.alternate.fetch_fred", lambda *a, **kw: _df)
         out = mr.fetch_ism_pmi(fred_api_key="x" * 32, max_age_days=99999)
         assert out.get("value") is not None
         assert out["source"].startswith("FRED:")

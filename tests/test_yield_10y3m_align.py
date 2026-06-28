@@ -27,8 +27,13 @@ class TestScoreRule:
 
 class TestProductionAligned:
     def test_macro_service_10y3m_not_binary(self):
-        """production fetch_all_indicators 的 10Y-3M score 不得再是 binary `>0`。"""
-        src = open("services/macro_service.py", encoding="utf-8").read()
+        """production fetch_all_indicators 的 10Y-3M score 不得再是 binary `>0`。
+
+        B1 v19.205 / P1-7:services/macro_service.py 已拆 services/macro/ 子套件。
+        """
+        import glob as _g
+        src = "\n".join(open(p, encoding="utf-8").read()
+                        for p in sorted(_g.glob("services/macro/*.py")))
         assert "score=2 if v>0 else -2,\n                weight=2, series=sp3m)" not in src, \
             "10Y-3M 仍是 binary score(未對齊)"
         # 三段版存在(緊鄰 sp3m 區塊)

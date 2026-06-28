@@ -22,7 +22,8 @@ import pandas as pd
 
 
 def _cont_claims_block() -> str:
-    src = open("services/macro_service.py", encoding="utf-8").read()
+    # P1-7 v19.205 拆檔後 CONT_CLAIMS 區塊在 services/macro/us_indicators.py
+    src = open("services/macro/us_indicators.py", encoding="utf-8").read()
     # 抓 R["CONT_CLAIMS"] = dict(...) 到該 dict 收尾（weight=...）
     m = re.search(r'R\["CONT_CLAIMS"\]\s*=\s*dict\(.*?weight=[^\n]*\)', src, re.S)
     assert m, "找不到 R[\"CONT_CLAIMS\"] = dict(...) 區塊"

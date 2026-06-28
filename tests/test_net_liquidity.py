@@ -135,11 +135,17 @@ class TestCompositeUpgrade:
     """v19.193 — 評分 FED_BS 槽升級為淨流動性(換輸入,門檻/權重不變,缺資料 fallback)。"""
 
     def test_macro_service_uses_net_liquidity_for_fedbs(self):
-        src = open("services/macro_service.py", encoding="utf-8").read()
+        # B1 v19.205 / P1-7:services/macro_service.py 已拆 services/macro/ 子套件
+        import glob as _g
+        src = "\n".join(open(p, encoding="utf-8").read()
+                        for p in sorted(_g.glob("services/macro/*.py")))
         assert "net_liquidity_series" in src, "FED_BS 槽應改用淨流動性序列"
         assert "淨流動性 (YoY)" in src
         assert "_FEDBS_EXPANSION" in src, "須沿用同一 ±5% 門檻(不重新校準)"
 
     def test_fallback_to_gross_walcl_present(self):
-        src = open("services/macro_service.py", encoding="utf-8").read()
+        # B1 v19.205 / P1-7:services/macro_service.py 已拆 services/macro/ 子套件
+        import glob as _g
+        src = "\n".join(open(p, encoding="utf-8").read()
+                        for p in sorted(_g.glob("services/macro/*.py")))
         assert "fallback" in src.lower(), "淨流動性缺資料須 fallback 原始 WALCL(§1 不消失)"

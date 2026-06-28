@@ -26,7 +26,8 @@ _DUP_KEYS = [
 
 
 def _indicator_dict_nodes():
-    tree = ast.parse(open("services/macro_service.py", encoding="utf-8").read())
+    # P1-7 v19.205 拆檔後 fetch_all_indicators 搬至 services/macro/us_indicators.py
+    tree = ast.parse(open("services/macro/us_indicators.py", encoding="utf-8").read())
     fn = next(n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name == "fetch_all_indicators")
     out = {}

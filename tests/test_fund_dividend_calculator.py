@@ -1,9 +1,9 @@
-"""v19.37 tests — services.fund_dividend_calculator 純函式單元測試。"""
+"""v19.37 tests — services.health.dividend_calc 純函式單元測試。"""
 from __future__ import annotations
 
 import pytest
 
-from services.fund_dividend_calculator import (
+from services.health.dividend_calc import (
     DEFAULT_PRINCIPAL_TWD,
     compute_dividend_twd_series,
     div_health_light_for_pair,

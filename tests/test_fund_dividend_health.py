@@ -1,4 +1,4 @@
-"""v19.119 tests — services.fund_dividend_health canonical 吃本金判定。
+"""v19.119 tests — services.health.dividend canonical 吃本金判定。
 
 含:
 1. canonical 函式 `classify_eating_principal` 邊界 + 派生指標
@@ -13,7 +13,7 @@ import math
 
 import pytest
 
-from services.fund_dividend_health import (
+from services.health.dividend import (
     EatingPrincipalCore,
     classify_eating_principal,
 )
@@ -294,7 +294,7 @@ class TestDivHealthLightDelegation:
     """確認 v19.119 委派後行為與 canonical 一致"""
 
     def test_consistent_with_canonical_eating(self):
-        from services.fund_dividend_calculator import div_health_light_for_pair
+        from services.health.dividend_calc import div_health_light_for_pair
         # canonical 說 is_eating=True 時 → tuple 結果應為 警示 or 吃本金
         for r, d in [(3.0, 5.0), (-1.0, 4.0), (1.0, 8.0)]:
             core = classify_eating_principal(r, d)
@@ -305,7 +305,7 @@ class TestDivHealthLightDelegation:
                 )
 
     def test_consistent_with_canonical_healthy(self):
-        from services.fund_dividend_calculator import div_health_light_for_pair
+        from services.health.dividend_calc import div_health_light_for_pair
         # canonical 說 is_eating=False 且 div > 0 時 → 健康 or 警示 or 吃本金
         # (因為 warn_gap 細分,is_eating=False 也可能是「打平,gap=0,green」)
         # 嚴格 case:gap < 0 必綠
@@ -345,7 +345,7 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         # ret_1y_total > ret_1y > NAV 外推),Bug 4 fix 核心 assertion 仍守
         # 「pd.Series 進去不 raise」+ 回 dict;_tr1y_method 期待業界路徑。
         import pandas as pd
-        from services.fund_dividend_health import check_eating_principal_1y_mk
+        from services.health.dividend import check_eating_principal_1y_mk
         nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
         nav["2025-06-01"] = 9.10
         s = pd.Series(nav, name="nav")
@@ -361,7 +361,7 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
 
     def test_dict_nav_still_works(self):
         """confirm refactor 不破壞 dict 入口."""
-        from services.fund_dividend_health import check_eating_principal_1y_mk
+        from services.health.dividend import check_eating_principal_1y_mk
         nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
         nav["2025-06-01"] = 9.10
         divs = [{"date": "2024-12-15", "amount": 0.05}]
@@ -378,7 +378,7 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         主源走業界 ret_1y_total(metrics.ret_1y_total=14.5),mk_simple 退對照欄。
         """
         import pandas as pd
-        from services.fund_dividend_health import check_eating_principal_1y_mk
+        from services.health.dividend import check_eating_principal_1y_mk
         nav = {f"2024-{m:02d}-01": 8.0 + 0.01 * m for m in range(1, 13)}
         nav["2025-06-01"] = 9.10
         s = pd.Series(nav, name="nav")

@@ -297,9 +297,11 @@ def render_data_guard_tab() -> None:
         )
     if _refetch_btn:
         try:
-            from hot_money import (
-                build_signals, fetch_foreign_flow_series, fetch_usdtwd_series,
+            # v19.196 P0-4-A:hot_money 拆 2 檔
+            from repositories.hot_money_repository import (
+                fetch_foreign_flow_series, fetch_usdtwd_series,
             )
+            from ui.hot_money import build_signals
             import pandas as _pd_hm
             _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
                             if hasattr(st, "secrets") else "") or ""

@@ -634,13 +634,13 @@ def render_single_fund_tab() -> None:
                         pass  # smoke-allow-pass
 
                 # ── v18.47: 📊 基金健康總覽（4 維度評分 + Overall Grade + 白話結論）──
-                # v19.177 #3A+#4B：4D 評分 + grade 全走 services.fund_health.compute_4d_health SSOT,
+                # v19.177 #3A+#4B：4D 評分 + grade 全走 services.health.grade.compute_4d_health SSOT,
                 # input 走 _resolve_adr_with_fallback / compute_1y_total_return SSOT。
                 # 原本 162 行 inline 邏輯(3 套 fallback chain + 4 套 score lookup + grade cutoff)
                 # 收斂到 ~30 行,全站個檔健康度評等統一同源。
                 try:
-                    from services.fund_dividend_health import _resolve_adr_with_fallback
-                    from services.fund_health import compute_4d_health
+                    from services.health.dividend import _resolve_adr_with_fallback
+                    from services.health.grade import compute_4d_health
                     from services.fund_total_return import compute_1y_total_return
 
                     _g_tr1y, _ = compute_1y_total_return({
@@ -731,7 +731,7 @@ def render_single_fund_tab() -> None:
                 try:
                     # v19.177:adr 走 SSOT _resolve_adr_with_fallback 3 層 chain,
                     # 與健診總表 check_eating_principal_1y_mk 同源,免散落。
-                    from services.fund_dividend_health import _resolve_adr_with_fallback
+                    from services.health.dividend import _resolve_adr_with_fallback
                     _kpi_adr, _kpi_adr_src = _resolve_adr_with_fallback({
                         "moneydj_raw": mj_raw,
                         "metrics": m,
@@ -816,7 +816,7 @@ def render_single_fund_tab() -> None:
                         "📊 進階指標(Sortino / Calmar / Alpha / Expense / 3Y-5Y / 3-3-3 / 換標的建議)",
                         expanded=True,
                     ):
-                        from services.fund_health_report import (
+                        from services.health.report import (
                             build_dividend_summary_row,
                             build_health_analysis_row,
                         )
@@ -833,8 +833,11 @@ def render_single_fund_tab() -> None:
                         _adv_h = build_health_analysis_row(_adv_fd, _adv_code)
                         _adv_d = build_dividend_summary_row(_adv_fd, _adv_code, principal_twd=None)
 
+                        # v19.225 P1-1 leftover:inline _fmt_pct 收口至 shared/converters.fmt_pct SSOT
+                        # (non-ratio + decimals=2 + plus=False 對應原 "{v:.2f}%")
                         def _fmt_pct(v):
-                            return f"{v:.2f}%" if isinstance(v, (int, float)) else "—"
+                            from shared.converters import fmt_pct
+                            return fmt_pct(v, plus=False, decimals=2, ratio=False)
                         def _fmt_num(v):
                             return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
 

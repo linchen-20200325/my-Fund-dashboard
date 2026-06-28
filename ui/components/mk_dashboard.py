@@ -291,16 +291,9 @@ def _series_tail(series, n: int) -> Optional[list]:
     return None
 
 
-def _safe_float(v):
-    try:
-        if v is None:
-            return None
-        f = float(v)
-        if math.isnan(f) or math.isinf(f):
-            return None
-        return f
-    except (TypeError, ValueError):
-        return None
+# v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
+from shared.converters import safe_float as _safe_float  # noqa: E402
+
 
 
 def _verdict_text(mk_class: str, health: str, momentum: str, zone: str,

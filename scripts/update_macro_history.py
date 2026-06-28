@@ -57,8 +57,9 @@ import requests
 CACHE_DIR = Path("data_cache")
 META_PATH = CACHE_DIR / "metadata.json"
 
-FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
-YF_CHART_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
+# v19.223 P1-2:URL 收口 — FRED_URL 走 L1 fetcher SSOT,YF_CHART_BASE 同
+from repositories.macro.fred import FRED_BASE as FRED_URL  # noqa: E402
+from repositories.macro.yf import YF_CHART_BASE  # noqa: E402
 
 # FRED series：series_id 全部走同一個抓取邏輯
 FRED_SERIES_IDS: tuple = (

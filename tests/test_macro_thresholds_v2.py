@@ -103,7 +103,8 @@ def test_macro_repository_hy_spread_unchanged_shape():
 
 def test_macro_beginner_view_uses_ssot():
     """macro_beginner_view 必須 import HY_SPREAD_THRESHOLDS."""
-    import ui.helpers.macro_beginner_view as mbv
+    # B1 v19.205 / P2-7:ui/helpers/macro_beginner_view.py 已搬 ui/helpers/macro/beginner_view.py
+    import ui.helpers.macro.beginner_view as mbv
     src = open(mbv.__file__, encoding="utf-8").read()
     assert "from shared.macro_thresholds_v2 import" in src
     assert 'HY_SPREAD_THRESHOLDS' in src
@@ -210,7 +211,8 @@ def test_cpi_score_function_behavior_equivalence():
 
 def test_cpi_beginner_view_imports_ssot():
     """macro_beginner_view 必須 import CPI_YOY_THRESHOLDS."""
-    import ui.helpers.macro_beginner_view as mbv
+    # B1 v19.205 / P2-7:ui/helpers/macro_beginner_view.py 已搬 ui/helpers/macro/beginner_view.py
+    import ui.helpers.macro.beginner_view as mbv
     src = open(mbv.__file__, encoding="utf-8").read()
     assert "CPI_YOY_THRESHOLDS" in src
     assert "_CPI_THR_V2" in src or 'CPI_YOY_THRESHOLDS as' in src

@@ -36,7 +36,7 @@ class TestFallbackChainFirstUrlSuccessV192:
         """首 URL 命中 → fetch_url 只被叫 1 次,不浪費後續 URL。"""
         _clear()
         from repositories import macro_repository as mr
-        with patch.object(mr, "fetch_url", return_value=_MockResp(200, _GOOD_HTML)) as mock_fu:
+        with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, _GOOD_HTML)) as mock_fu:
             r = mr.fetch_aaii_sentiment()
         assert "_err" not in r
         assert r["value"] == pytest.approx(5.0)
@@ -49,7 +49,7 @@ class TestFallbackChainFirstUrlSuccessV192:
     def test_success_carries_provenance(self):
         _clear()
         from repositories import macro_repository as mr
-        with patch.object(mr, "fetch_url", return_value=_MockResp(200, _GOOD_HTML)):
+        with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, _GOOD_HTML)):
             r = mr.fetch_aaii_sentiment()
         assert r["source"].startswith("AAII"), "F-PROV-1 source 必須帶 AAII"
         assert "fetched_at" in r, "F-PROV-1 fetched_at 必須帶"
@@ -61,7 +61,7 @@ class TestFallbackChainRecoversFromFirstFailV192:
         _clear()
         from repositories import macro_repository as mr
         responses = [_MockResp(403), _MockResp(200, _GOOD_HTML), _MockResp(200, _GOOD_HTML)]
-        with patch.object(mr, "fetch_url", side_effect=responses) as mock_fu:
+        with patch("repositories.macro.alternate.fetch_url", side_effect=responses) as mock_fu:
             r = mr.fetch_aaii_sentiment()
         assert "_err" not in r, "第 2 URL 接得到應視為成功"
         assert r["url_used"] == mr.AAII_FALLBACK_URLS[1]
@@ -72,7 +72,7 @@ class TestFallbackChainRecoversFromFirstFailV192:
         _clear()
         from repositories import macro_repository as mr
         responses = [None, _MockResp(200, _GOOD_HTML), _MockResp(200, _GOOD_HTML)]
-        with patch.object(mr, "fetch_url", side_effect=responses):
+        with patch("repositories.macro.alternate.fetch_url", side_effect=responses):
             r = mr.fetch_aaii_sentiment()
         assert "_err" not in r
         assert r["bull"] == 35.0
@@ -82,7 +82,7 @@ class TestFallbackChainRecoversFromFirstFailV192:
         _clear()
         from repositories import macro_repository as mr
         responses = [_MockResp(403), None, _MockResp(200, _GOOD_HTML)]
-        with patch.object(mr, "fetch_url", side_effect=responses) as mock_fu:
+        with patch("repositories.macro.alternate.fetch_url", side_effect=responses) as mock_fu:
             r = mr.fetch_aaii_sentiment()
         assert "_err" not in r
         assert r["url_used"] == mr.AAII_FALLBACK_URLS[2]
@@ -95,7 +95,7 @@ class TestFallbackChainAllFailFailLoudV192:
     def test_all_three_403(self):
         _clear()
         from repositories import macro_repository as mr
-        with patch.object(mr, "fetch_url", return_value=_MockResp(403)):
+        with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(403)):
             r = mr.fetch_aaii_sentiment()
         assert "_err" in r
         assert "全失敗" in r["_err"]
@@ -111,7 +111,7 @@ class TestFallbackChainAllFailFailLoudV192:
         """所有 URL 都 fetch_url 回 None → _err 含 fetch_url None × 3。"""
         _clear()
         from repositories import macro_repository as mr
-        with patch.object(mr, "fetch_url", return_value=None):
+        with patch("repositories.macro.alternate.fetch_url", return_value=None):
             r = mr.fetch_aaii_sentiment()
         assert "_err" in r
         assert "全失敗" in r["_err"]
@@ -122,7 +122,7 @@ class TestFallbackChainAllFailFailLoudV192:
         _clear()
         from repositories import macro_repository as mr
         responses = [_MockResp(403), None, _MockResp(200, "<html>blank</html>")]
-        with patch.object(mr, "fetch_url", side_effect=responses):
+        with patch("repositories.macro.alternate.fetch_url", side_effect=responses):
             r = mr.fetch_aaii_sentiment()
         assert "_err" in r
         assert "403" in r["_err"]
@@ -136,7 +136,7 @@ class TestFetcherUsesBrowserHeadersV192:
     def test_browser_headers_passed_to_fetch_url(self):
         _clear()
         from repositories import macro_repository as mr
-        with patch.object(mr, "fetch_url", return_value=_MockResp(200, _GOOD_HTML)) as mock_fu:
+        with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, _GOOD_HTML)) as mock_fu:
             mr.fetch_aaii_sentiment()
         # fetch_url 必須以 headers=AAII_BROWSER_HEADERS 呼叫
         _, kwargs = mock_fu.call_args
@@ -151,7 +151,7 @@ class TestFetcherUsesBrowserHeadersV192:
         """v19.192:timeout 8→20 配合 NAS Squid 中繼 + Cloudflare challenge 較長 RTT。"""
         _clear()
         from repositories import macro_repository as mr
-        with patch.object(mr, "fetch_url", return_value=_MockResp(200, _GOOD_HTML)) as mock_fu:
+        with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, _GOOD_HTML)) as mock_fu:
             mr.fetch_aaii_sentiment()
         _, kwargs = mock_fu.call_args
         assert kwargs.get("timeout", 0) >= 15, (
@@ -166,7 +166,7 @@ class TestBackwardCompatV192:
         _clear()
         from repositories import macro_repository as mr
         from services import us_liquidity_engine as ule
-        with patch.object(mr, "fetch_url", return_value=_MockResp(200, _GOOD_HTML)):
+        with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, _GOOD_HTML)):
             ule.fetch_aaii_sentiment.cache_clear()
             r = ule._aaii_with_judgment()
         assert "value" in r

@@ -875,7 +875,8 @@ def _render_tw_local_dashboard(indicators: dict | None,
             classify_short_term_regime,
             detect_mk_golden_inflection,
         )
-        from services.macro_tw_local_fetch import (
+        # v19.197 P1-4:macro_tw_local_fetch 已下沉 repositories/macro_tw_local_repository
+        from repositories.macro_tw_local_repository import (
             fetch_foreign_consecutive_days,
             fetch_ndc_signal_history,
             fetch_tw_export_yoy,
@@ -1668,7 +1669,8 @@ def render_macro_tab() -> None:
                              expanded=False):
                 st.caption("⚠️ v19.47 降級為 archive：USD 計價境外美股基金，台幣升貶/外資台股淨買賣對 NAV 影響有限。如需此資料請點開。")
                 try:
-                    from hot_money import render_hot_money_section
+                    # v19.196 P0-4-A:hot_money render 已搬 ui.hot_money
+                    from ui.hot_money import render_hot_money_section
                     _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
                                      if hasattr(st, "secrets") else "") or ""
                     render_hot_money_section(token=_finmind_tok,

@@ -1,4 +1,4 @@
-"""v19.181 — services.fund_health_report 純函式單元測試。
+"""v19.181 — services.health.report 純函式單元測試。
 
 守住共用 row builder 的 schema 與 SSOT 串接行為:
 - build_health_analysis_row → 健康分析 row(4D + 6 進階指標 + 3-3-3)
@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from services.fund_health_report import (
+from services.health.report import (
     DIVIDEND_COLUMNS,
     HEALTH_COLUMNS,
     build_dividend_summary_row,

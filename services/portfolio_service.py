@@ -4,11 +4,13 @@
 包含：
   1. Fund Factor Model    基金六因子評分（calc_fund_factor_score）
   2. Dividend Safety      配息安全分析（dividend_safety）
-  3. Portfolio Optimizer  最大化 Sharpe 投資組合最佳化（optimize_portfolio）
-  4. Risk Alert System    即時風險預警（risk_alert）
-  5. Holdings Overlap     持股 Jaccard × 0.6 + 產業 cosine × 0.4 → shadow score
-  6. Correlation Matrix   T5 fallback：NAV Pearson 相關係數矩陣
-  7. Kelly Criterion      凱利公式計算（calc_kelly）
+  3. Risk Alert System    即時風險預警（risk_alert）
+  4. Holdings Overlap     持股 Jaccard × 0.6 + 產業 cosine × 0.4 → shadow score
+  5. Correlation Matrix   T5 fallback：NAV Pearson 相關係數矩陣
+
+v19.215 P0-3-#7 拔毒(production 0 caller):
+  - ~~Portfolio Optimizer(optimize_portfolio)~~ + scipy 依賴
+  - ~~Kelly Criterion(calc_kelly)~~
 
 v11.0 分層歸位：本檔屬於 Service Layer，純業務計算。
 向後相容：根目錄 portfolio_engine.py 保留 `from services.portfolio_service import *` shim，
@@ -29,12 +31,7 @@ from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY
 _HY_PORTFOLIO_WARN = _HY_THR["portfolio_advisor"]["warn_above"]
 _HY_PORTFOLIO_RISK = _HY_THR["portfolio_advisor"]["risk_above"]
 
-# ── scipy 可選（Optimizer 需要）────────────────────────────────────────────
-try:
-    from scipy.optimize import minimize
-    _SCIPY_OK = True
-except ImportError:
-    _SCIPY_OK = False
+# v19.215 P0-3-#7:scipy 依賴隨 optimize_portfolio 拔毒移除
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -286,7 +283,7 @@ def dividend_safety(total_return: Optional[float],
     回傳：
         {status, coverage, gap_pct, eating_principal, alert_level, message}
 
-    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal。
+    v19.119:核心判定委派 services.health.dividend.classify_eating_principal。
     v19.175:5 級 coverage 門檻 → 3 色 gap_pct > 2% 制(對齊 MK 老師「化繁為簡」),
             與健診總表 `div_health_light_for_pair()` SSOT 同源。
             「嚴重吃本金(報酬為負)」獨立旗標保留為「報酬為負」修飾,
@@ -299,7 +296,7 @@ def dividend_safety(total_return: Optional[float],
                 "message": "無配息資料", "coverage": None, "gap_pct": None,
                 "eating_principal": False}
 
-    from services.fund_dividend_health import classify_eating_principal
+    from services.health.dividend import classify_eating_principal
     core = classify_eating_principal(total_return, dividend_yield)
 
     if core.is_data_missing:
@@ -358,75 +355,8 @@ def dividend_safety(total_return: Optional[float],
     }
 
 
-# ══════════════════════════════════════════════════════════════════════════
-# 三、Portfolio Optimizer — 最大化 Sharpe 投資組合最佳化
-# ══════════════════════════════════════════════════════════════════════════
-
-def optimize_portfolio(returns_df: pd.DataFrame,
-                       rf: float = 0.02,
-                       max_weight: float = 0.6,
-                       min_weight: float = 0.0) -> Dict:
-    """
-    最大化 Sharpe Ratio 最佳化投資組合。
-    參數：
-        returns_df : 各基金月報酬率 DataFrame (列=時間, 欄=基金)
-        rf         : 無風險利率（年化）
-        max_weight : 單一資產最大權重
-        min_weight : 單一資產最小權重
-    回傳：
-        {weights, expected_return, expected_vol, expected_sharpe, status}
-    """
-    if not _SCIPY_OK:
-        return {"status": "❌ 需要安裝 scipy：pip install scipy",
-                "weights": None}
-
-    n = len(returns_df.columns)
-    if n < 2:
-        return {"status": "❌ 需要至少 2 檔基金", "weights": None}
-
-    mean_ret  = returns_df.mean() * 12              # 年化報酬
-    cov_matrix = returns_df.cov() * 12              # 年化共變異數
-
-    # ── 目標函數：最大化 Sharpe（最小化負 Sharpe）────────────────────
-    def neg_sharpe(w):
-        port_ret = float(w @ mean_ret)
-        port_vol = float(np.sqrt(w @ cov_matrix.values @ w))
-        if port_vol <= 0:
-            return 0.0
-        return -(port_ret - rf) / port_vol
-
-    constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
-    bounds      = [(min_weight, max_weight)] * n
-    w0          = np.ones(n) / n
-
-    try:
-        res = minimize(neg_sharpe, w0, method="SLSQP",
-                       bounds=bounds, constraints=constraints,
-                       options={"maxiter": 500, "ftol": 1e-9})
-        if not res.success:
-            # fallback：等權
-            opt_w = np.ones(n) / n
-            status = "⚠️ 最佳化未收斂，回退等權配置"
-        else:
-            opt_w  = res.x
-            status = "✅ 最佳化成功"
-    except Exception as e:
-        opt_w  = np.ones(n) / n
-        status = f"❌ 最佳化失敗：{e}"
-
-    weights_dict = {col: round(float(w), 4)
-                    for col, w in zip(returns_df.columns, opt_w)}
-    exp_ret = float(opt_w @ mean_ret)
-    exp_vol = float(np.sqrt(opt_w @ cov_matrix.values @ opt_w))
-    exp_shp = round((exp_ret - rf) / exp_vol, 4) if exp_vol > 0 else 0.0
-
-    return {
-        "status":            status,
-        "weights":           weights_dict,
-        "expected_return":   round(exp_ret * 100, 2),
-        "expected_vol":      round(exp_vol * 100, 2),
-        "expected_sharpe":   exp_shp,
-    }
+# v19.215 P0-3-#7:`三、Portfolio Optimizer` 章節整段拔毒(optimize_portfolio
+# production 0 caller,scipy 依賴一併移除)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -679,20 +609,9 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
         return None
 
 
-def _safe_num_ps(v) -> "float | None":
-    """寬鬆數值轉換(portfolio_service 內用):float / "12.3%" / "1,234" / None → float|None。"""
-    if v is None or isinstance(v, bool):
-        return None
-    if isinstance(v, (int, float)):
-        f = float(v)
-    else:
-        try:
-            f = float(str(v).replace("%", "").replace(",", "").strip())
-        except (TypeError, ValueError):
-            return None
-    if f != f or f in (float("inf"), float("-inf")):  # NaN / inf guard
-        return None
-    return f
+# v19.225 P1-1 leftover:_safe_num_ps 收口至 shared/converters.py SSOT
+# (signature 與 safe_num 完全相同 — 深挖驗證)
+from shared.converters import safe_num as _safe_num_ps  # noqa: E402
 
 
 def compute_max_drawdown(series: "pd.Series") -> "dict":
@@ -958,53 +877,4 @@ def rank_funds_within_portfolio(funds_data: list) -> "dict":
     return out
 
 
-def calc_kelly(series: "pd.Series",
-               lookback: int = 252,
-               risk_free: float = 0.02) -> Dict:
-    """
-    凱利公式：根據歷史日報酬計算最佳資金投入比例
-    - b  = 平均獲利日 / 平均虧損日  (賠率)
-    - p  = 正報酬日佔比              (勝率)
-    - q  = 1 - p                     (敗率)
-    - f* = (b*p - q) / b             (全凱利)
-    - Half-Kelly = f*/2              (建議實用值)
-    邊界保護：f* 超過 1 時夾在 [0, 1]
-    """
-    if series is None or len(series) < 30:
-        return {"kelly": None, "half_kelly": None,
-                "win_rate": None, "odds": None, "note": "資料不足"}
-    try:
-        import numpy as np
-        s = series.tail(lookback).dropna()
-        if len(s) < 30:
-            return {"kelly": None, "half_kelly": None,
-                    "win_rate": None, "odds": None, "note": "資料不足"}
-        r = s.pct_change().dropna()
-        wins  = r[r > 0]
-        losses= r[r < 0]
-        if len(wins) == 0 or len(losses) == 0:
-            return {"kelly": None, "half_kelly": None,
-                    "win_rate": None, "odds": None, "note": "無法計算"}
-        p  = len(wins) / len(r)
-        q  = 1 - p
-        b      = wins.mean() / abs(losses.mean())     # 賠率
-        _f_raw = (b * p - q) / b                     # 全凱利（未夾取，負值代表期望值為負）
-        f_star = float(np.clip(_f_raw, 0, 1))        # 夾在 [0,1]
-        half_k = round(f_star / 2, 4)
-        return {
-            "kelly":          round(f_star, 4),
-            "kelly_raw":      round(_f_raw, 4),   # 負值代表數學期望為負
-            "half_kelly":     half_k,
-            "half_kelly_pct": round(half_k * 100, 1),
-            "win_rate":       round(p, 4),
-            "win_rate_pct":   round(p * 100, 1),
-            "odds":           round(b, 4),
-            "note": (
-                f"勝率{p*100:.1f}% 賠率{b:.2f}x → 建議投入{half_k*100:.1f}%資金"
-                if f_star > 0 else
-                f"勝率{p*100:.1f}% 賠率{b:.2f}x，期望值為負(f*={_f_raw:.3f})，建議不加碼"
-            ),
-        }
-    except Exception as e:
-        return {"kelly": None, "half_kelly": None,
-                "win_rate": None, "odds": None, "note": str(e)[:60]}
+# v19.215 P0-3-#7:`calc_kelly` 凱利公式 fn 拔毒(production 0 caller)

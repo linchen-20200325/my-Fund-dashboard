@@ -11,6 +11,13 @@ v11.0 分層歸位：Repository Layer（純 RSS 抓取）。
 """
 from __future__ import annotations
 
+import datetime as _dt
+
+
+def _now_iso_utc() -> str:
+    """C2 v19.208 F-PROV-1:回 UTC ISO timestamp,供 news dict 加 fetched_at(§2.2)。"""
+    return _dt.datetime.now(_dt.timezone.utc).isoformat()
+
 
 def fetch_market_news(max_per_feed: int = 5) -> list:
     """
@@ -24,12 +31,13 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
             不再用 feedparser 內建裸連 → 修 Streamlit Cloud IP 被封時新聞整條死。
             抓取失敗不再靜默：累計失敗來源，結果為空時回友善提示（區分 Proxy 斷 vs 無命中）。
     """
+    _fetched_at = _now_iso_utc()
     try:
         import feedparser as _fp
     except ImportError:
         return [{"title": "feedparser 未安裝", "summary": "pip install feedparser",
                  "source": "system", "published": "", "url": "",
-                 "is_systemic": False}]
+                 "is_systemic": False, "fetched_at": _fetched_at}]
 
     # v18.186：透過 NAS Proxy 抓 RSS bytes（feedparser 解析 bytes，不自己連網）。
     # 取不到（無 streamlit / infra 不可用）時退回 feedparser 直連，行為與舊版一致。
@@ -130,6 +138,7 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
                     "published":   pub,
                     "url":         url,
                     "is_systemic": _is_sys,
+                    "fetched_at":  _fetched_at,
                 })
                 count += 1
         except Exception:
@@ -144,13 +153,13 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
                 "summary": (f"已嘗試 {len(FEEDS)} 個來源、{len(failed)} 個無回應"
                             "（可能 NAS Proxy 斷線或來源暫時不可用），稍後重試。"),
                 "source": "system", "published": "", "url": "",
-                "is_systemic": False,
+                "is_systemic": False, "fetched_at": _fetched_at,
             }]
         return [{
             "title": "ℹ️ 目前沒有符合追蹤條件的財經新聞",
             "summary": "RSS 來源正常，但近期標題未命中追蹤關鍵字。",
             "source": "system", "published": "", "url": "",
-            "is_systemic": False,
+            "is_systemic": False, "fetched_at": _fetched_at,
         }]
 
     # v18.86：systemic 永遠排前面（同類別內按日期新→舊）
@@ -236,23 +245,6 @@ def filter_news_by_asset_class(news: list, asset_class: str) -> list:
     return out or items
 
 
-def filter_news_by_keywords(news: list, keywords) -> list:
-    """v18.205：純過濾既有新聞清單，回傳 title/summary 命中**任一**關鍵字者
-    （case-insensitive）。給「個股新聞面」用持股名匹配快取新聞；**無 fallback**
-    （不命中即回空），與 filter_news_by_asset_class（會回退全部）刻意不同。"""
-    kws = [str(k).strip().lower() for k in (keywords or []) if str(k).strip()]
-    if not kws:
-        return []
-    out = []
-    for n in (news or []):
-        if not isinstance(n, dict):
-            continue
-        _txt = (str(n.get("title", "")) + " " + str(n.get("summary", ""))).lower()
-        if any(k in _txt for k in kws):
-            out.append(n)
-    return out
-
-
 _GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
 
 
@@ -266,6 +258,7 @@ def fetch_stock_news(query: str, max_items: int = 3,
     q = str(query or "").strip()
     if not q:
         return []
+    _fetched_at = _now_iso_utc()
     try:
         import feedparser as _fp
     except ImportError:
@@ -303,12 +296,17 @@ def fetch_stock_news(query: str, max_items: int = 3,
             "published":   getattr(e, "published", "")[:25],
             "url":         getattr(e, "link", ""),
             "is_systemic": False,
+            "fetched_at":  _fetched_at,
         })
     return out
 
 
 def fetch_macro_news(asset_class: str = "", max_per_feed: int = 5) -> list:
     """v5.0 Task3 接口：抓財經新聞並依資產類別過濾。
+
+    Provenance(C2 v19.208 F-PROV-1):pass-through fetch_market_news,每個
+    news dict 已含 'source' + 'fetched_at'(§2.2 schema-additive),
+    filter_news_by_asset_class 不改 dict 內容,inheritance 直通。
 
     asset_class: stock / bond / fx / commodity / macro（或中文：股/債/匯/原物料/總經）。
                  空字串或 macro → 不過濾（等同 fetch_market_news）。

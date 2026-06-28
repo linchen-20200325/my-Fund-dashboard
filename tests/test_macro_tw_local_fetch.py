@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from services import macro_tw_local_fetch as fetch_mod
+from repositories import macro_tw_local_repository as fetch_mod  # v19.197 P1-4
 
 
 # ════════════════════════════════════════════════════════════════════════════

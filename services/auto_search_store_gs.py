@@ -41,13 +41,15 @@ def _enabled() -> bool:
 
 
 def _get_sheet():
-    """開啟 v19.7 同份 Google Sheet（複用 secrets）."""
-    import streamlit as st
+    """開啟 v19.7 同份 Google Sheet（複用 secrets）.
 
+    v19.197 P1-2:走 infra.config wrapper,本檔不再直 import streamlit。
+    """
+    from infra.config import require_secret
     from repositories.policy_repository import get_gspread_client
 
-    creds = dict(st.secrets["google_service_account"])
-    sheet_id = st.secrets["macro_weights_sheet_id"]
+    creds = dict(require_secret("google_service_account"))
+    sheet_id = require_secret("macro_weights_sheet_id")
     client = get_gspread_client(creds)
     return client.open_by_key(sheet_id)
 

@@ -25,8 +25,6 @@ from services.ai_prompts import (
     build_mk_advisor_prompt,
 )
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-
 # ── 核心/衛星關鍵字分類 ──────────────────────────────────────
 _CORE_KW  = ["債", "收益", "配息", "平衡", "高息", "公用", "多元",
              "income", "bond", "dividend", "balanced", "utility"]
@@ -99,7 +97,7 @@ def _build_snapshot(indicators: dict, phase_info: dict,
     # 全站指標 SSOT:
     #   - 1Y 含息報酬: services.fund_total_return.compute_1y_total_return
     #       precedence: wb01(MoneyDJ 官方)> ret_1y_total(本地含息)> ret_1y(純 NAV)> NAV 外推
-    #   - 年化配息率: services.fund_dividend_health._resolve_adr_with_fallback
+    #   - 年化配息率: services.health.dividend._resolve_adr_with_fallback
     #       precedence: moneydj_div_yield(wb05)> metrics.annual_div_rate > divs 12M sum/NAV
     #   - Sharpe: 優先 wb07 一年 > wb07 六個月 > 自算(metrics.sharpe_source 標記)
     #   - σ / std_1y: 優先 wb07 > NAV 自算(metrics.std_source 標記)

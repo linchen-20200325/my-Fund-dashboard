@@ -2,7 +2,7 @@
 
 User 截圖回報:同一檔 FTZU8 在「健診總表(全期自算)」顯示 🔴 吃本金,
 在「健診摘要表(1Y MoneyDJ)」顯示 🟢 健康 — SSOT 違憲。
-v19.148 改用 services.fund_dividend_health.check_eating_principal_1y_mk 作為
+v19.148 改用 services.health.dividend.check_eating_principal_1y_mk 作為
 唯一 1Y SSOT 入口,本檔守:
 1. 新 helper 對 nested / flat 兩種 shape 都能讀到同樣 verdict
 2. 同 fund dict → 同 verdict(不論 caller 是 fund_checkup 還是 tab_fund_grp_health)
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.fund_dividend_health import (
+from services.health.dividend import (
     check_eating_principal_1y_mk,
     check_333_principle,
     classify_eating_principal,

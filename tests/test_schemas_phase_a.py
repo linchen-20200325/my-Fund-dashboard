@@ -129,7 +129,7 @@ class TestFetchFredIntegration:
             ]
         }
         from repositories import macro_repository as mr
-        monkeypatch.setattr(mr, "fetch_url",
+        monkeypatch.setattr("repositories.macro.fred.fetch_url",
                             lambda *a, **kw: _MockResp(_mock_payload))
         # fetch_fred 走完整 path → out 含 source / fetched_at,validate_fred 應 pass
         df = mr.fetch_fred("CPILFESL", "x" * 32, n=3)
@@ -167,7 +167,7 @@ class TestFetchFredIntegration:
             ]
         }
         from repositories import macro_repository as mr
-        monkeypatch.setattr(mr, "fetch_url",
+        monkeypatch.setattr("repositories.macro.fred.fetch_url",
                             lambda *a, **kw: _MockResp(_int_payload))
         df = mr.fetch_fred("PAYEMS", "x" * 32, n=3)
         # 核心斷言:整數 series 也要回 float64,否則上游 schema 炸

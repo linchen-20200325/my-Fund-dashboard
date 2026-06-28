@@ -416,10 +416,5 @@ MACRO_EDU: dict[str, dict] = {
 }
 
 
-def get_macro_edu(key: str) -> dict | None:
-    """依 indicator key 取得教學內容；無對應則 None。"""
-    return MACRO_EDU.get(key)
 
 
-def macro_edu_count() -> int:
-    return len(MACRO_EDU)

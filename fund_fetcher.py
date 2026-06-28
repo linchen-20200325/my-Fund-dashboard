@@ -265,13 +265,20 @@ def normalize_result_state(result: dict) -> dict:
 # ═════════════════════════════════════════════════════════
 # v11.0 B-9b-5：TDCC OpenAPI 整合已搬至 repositories/fund_repository.py
 # ═════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    _tdcc_get,
-    _src_tdcc_meta,
-    tdcc_search_fund,
-    tdcc_get_agents,
-    _tdcc_resolve_fund_name,
-)
+# v19.200 P1-5:repositories.fund_repository 已拆 fund 子套件,本 re-export 走
+# try-except 防 circular(若 fund_repository shim init 觸發 fund 子套件 init,
+# 期間 fund/sources.py 又從 fund_fetcher import 會 deadlock)。
+# 實測 0 active caller `from fund_fetcher import _tdcc*` — 此 try block 為純安全網。
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        _tdcc_get,
+        _src_tdcc_meta,
+        tdcc_search_fund,
+        tdcc_get_agents,
+        _tdcc_resolve_fund_name,
+    )
+except ImportError:
+    pass  # init-time circular — symbols resolve after fund 子套件 init 完成
 
 
 # ── v11.0 C-12：_RF_ANNUAL + set_risk_free_rate 已搬至 services/fund_service.py ──
@@ -314,16 +321,19 @@ from infra.cache import (  # noqa: F401  legacy re-export
 # v11.0 B-9b-2：Fundclear / AllianzGI adapters 已搬至 repositories/fund_repository.py
 # 此處 re-export 維持向後相容（聚合層 _fetch_fund_single 等內部 caller 不變）
 # ══════════════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    _src_fundclear_nav,
-    _src_fundclear_meta,
-    _src_fundclear_div,
-    _src_allianzgi_nav,
-    _src_allianzgi_meta,
-    _FUND_COMPANY_URLS,
-    _ALLIANZ_NAV_ENDPOINT,
-    _ALLIANZ_NAV_API,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        _src_fundclear_nav,
+        _src_fundclear_meta,
+        _src_fundclear_div,
+        _src_allianzgi_nav,
+        _src_allianzgi_meta,
+        _FUND_COMPANY_URLS,
+        _ALLIANZ_NAV_ENDPOINT,
+        _ALLIANZ_NAV_API,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 
 # ════════════════════════════════════════════════════════════
@@ -335,82 +345,97 @@ from services.fund_service import calc_health_from_manual  # noqa: F401
 # v11.0 B-9b-3：cnyes / cache_files / bank_platform / Morningstar /
 #              Yahoo / Alphavantage adapters 已搬至 repositories/fund_repository.py
 # ══════════════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    _cnyes_parse_navs,
-    _cnyes_resolve_code,
-    fetch_nav_cnyes,
-    fetch_div_cnyes,
-    _src_cnyes_nav,
-    _src_cnyes_div,
-    _src_cache_files,
-    _src_bank_platform_nav,
-    _morningstar_search_secid,
-    _src_morningstar_nav,
-    _src_yahoo_finance_nav,
-    _src_alphavantage_nav,
-    _src_morningstar_meta,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        _cnyes_parse_navs,
+        _cnyes_resolve_code,
+        fetch_nav_cnyes,
+        fetch_div_cnyes,
+        _src_cnyes_nav,
+        _src_cnyes_div,
+        _src_cache_files,
+        _src_bank_platform_nav,
+        _morningstar_search_secid,
+        _src_morningstar_nav,
+        _src_yahoo_finance_nav,
+        _src_alphavantage_nav,
+        _src_morningstar_meta,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 
 # ══════════════════════════════════════════════════════════════════════
 # v11.0 B-9b-4：保險公司 / URL canonicalize / 30day / TCB / SITCA adapters
 #              已搬至 repositories/fund_repository.py（17 函式）
 # ══════════════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    # 保險公司直連
-    probe_insurance_urls,
-    _src_taiwanlife_nav,
-    _src_franklin_nav,
-    _src_jpmorgan_nav,
-    # URL canonicalize / domestic code 系列
-    load_fund_code_mapping,
-    canonicalize_moneydj_url,
-    parse_moneydj_input,
-    _src_direct_moneydj_url,
-    normalize_domestic_code,
-    _is_domestic_code,
-    get_page_types_to_try,
-    # 30day NAV / TCB / SITCA
-    _src_nav_30day,
-    _src_tcb_nav,
-    _src_tcb_meta,
-    _src_tcb_div,
-    _src_sitca_meta,
-    _src_sitca_nav,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        # 保險公司直連
+        probe_insurance_urls,
+        _src_taiwanlife_nav,
+        _src_franklin_nav,
+        _src_jpmorgan_nav,
+        # URL canonicalize / domestic code 系列
+        load_fund_code_mapping,
+        canonicalize_moneydj_url,
+        parse_moneydj_input,
+        _src_direct_moneydj_url,
+        normalize_domestic_code,
+        _is_domestic_code,
+        get_page_types_to_try,
+        # 30day NAV / TCB / SITCA
+        _src_nav_30day,
+        _src_tcb_nav,
+        _src_tcb_meta,
+        _src_tcb_div,
+        _src_sitca_meta,
+        _src_sitca_nav,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 # ══════════════════════════════════════════════════════════════════════
 # v11.0 B-9b-5：多源聚合 + 主入口已搬至 repositories/fund_repository.py
 # ══════════════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    fetch_fund_multi_source,
-    _src_insurance_subdomain_nav,
-    _fetch_fund_single,
-    _finish_metrics,
-    fetch_fund_from_moneydj_url,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        fetch_fund_multi_source,
+        _src_insurance_subdomain_nav,
+        _fetch_fund_single,
+        _finish_metrics,
+        fetch_fund_from_moneydj_url,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 # ════════════════════════════════════════════════════════════
 # v11.0 B-9b-6：search / parse_nav / fetch_nav / fetch_div 已搬至 repositories/fund_repository.py
 # ════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    search_fundclear,
-    search_moneydj_by_name,
-    _parse_nav_html,
-    fetch_nav,
-    fetch_div,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        search_fundclear,
+        search_moneydj_by_name,
+        _parse_nav_html,
+        fetch_nav,
+        fetch_div,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 
 # ════════════════════════════════════════════════════════════
 # v11.0 B-9b-6：perf / risk / holdings 已搬至 repositories/fund_repository.py
 # ════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    _fetch_domestic_perf,
-    fetch_performance_wb01,
-    fetch_risk_metrics,
-    fetch_holdings,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        _fetch_domestic_perf,
+        fetch_performance_wb01,
+        fetch_risk_metrics,
+        fetch_holdings,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 # ════════════════════════════════════════════════════════════
 # v11.0 C-12：calculate_fund_total_return + calc_metrics 已搬至 services/fund_service.py
@@ -423,20 +448,26 @@ from services.fund_service import (  # noqa: F401  legacy re-export
 # ════════════════════════════════════════════════════════════
 # v11.0 B-9b-6：fund_by_key / fund_by_code 已搬至 repositories/fund_repository.py
 # ════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    fetch_fund_by_key,
-    fetch_fund_by_code,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        fetch_fund_by_key,
+        fetch_fund_by_code,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 
 # ════════════════════════════════════════════════════════════
 # v11.0 B-9b-6：structure 已搬至 repositories/fund_repository.py
 # ════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    STRUCTURE_PAGES,
-    _parse_pct_table,
-    fetch_fund_structure,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        STRUCTURE_PAGES,
+        _parse_pct_table,
+        fetch_fund_structure,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 # ════════════════════════════════════════════════════════════
 # v11.0 C-12：calc_dividend_estimate 已搬至 services/fund_service.py
@@ -453,7 +484,27 @@ from repositories.news_repository import fetch_market_news  # noqa: F401
 # ══════════════════════════════════════════════════════════════════════
 # v11.0 B-9b-6：Universal Ledger 已搬至 repositories/fund_repository.py
 # ══════════════════════════════════════════════════════════════════════
-from repositories.fund_repository import (  # noqa: F401  legacy re-export
-    get_latest_fx,
-    get_latest_nav,
-)
+try:
+    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+        get_latest_fx,
+        get_latest_nav,
+    )
+except ImportError:
+    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
+
+
+# ════════════════════════════════════════════════════════════════════════
+# v19.200 P1-5:PEP 562 lazy __getattr__ — 延遲 repositories.fund_repository
+# re-export 至 caller 取用時(避免 fund_repository shim 拆 fund 子套件後的
+# init-time circular import)。
+# ════════════════════════════════════════════════════════════════════════
+def __getattr__(name: str):
+    """延遲 attribute 解析:caller `from fund_fetcher import X` 觸發本 fn,
+    動態 forward 至 repositories.fund_repository(此時其 init 已完成)。"""
+    if name.startswith('__'):
+        raise AttributeError(f"module 'fund_fetcher' has no attribute {name!r}")
+    try:
+        from repositories import fund_repository as _fr
+        return getattr(_fr, name)
+    except (ImportError, AttributeError):
+        raise AttributeError(f"module 'fund_fetcher' has no attribute {name!r}")

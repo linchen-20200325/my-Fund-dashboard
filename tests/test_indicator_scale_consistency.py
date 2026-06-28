@@ -20,7 +20,8 @@ import ast
 
 
 def _fetch_all_indicators_fn() -> ast.FunctionDef:
-    tree = ast.parse(open("services/macro_service.py", encoding="utf-8").read())
+    # P1-7 v19.205 拆檔後 fetch_all_indicators 搬至 services/macro/us_indicators.py
+    tree = ast.parse(open("services/macro/us_indicators.py", encoding="utf-8").read())
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "fetch_all_indicators":
             return node
