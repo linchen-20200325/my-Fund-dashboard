@@ -3,7 +3,7 @@
 從 services/ 平層搬入:
 - `macro_score.py`(原 macro_score_calibration.py)— Walk-forward 月度 score replay
 - `risk.py`(原 risk_calibration.py)— Risk score z-score 標準化
-- `cluster.py`(原 cluster_calibration.py)— Portfolio k-means 群集校準
+- ~~`cluster.py`(原 cluster_calibration.py)~~ v19.213 P0-3-#5 拔毒(production 0 caller)
 - `signal_threshold.py`(原 signal_threshold_optimization.py)— Threshold grid search
 - `multi_factor.py`(原 multi_factor_optimization.py)— Modern Portfolio Theory allocator
 
