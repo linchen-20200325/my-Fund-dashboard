@@ -22,6 +22,13 @@ def _read(name: str) -> str:
         return f.read()
 
 
+def _read_pkg(pkg_path: str) -> str:
+    """讀 sub-package 所有 .py concat(支援 P1-5 / P2-3 拆檔後字串搬子檔)。"""
+    import glob as _g
+    files = sorted(_g.glob(os.path.join(PROJ_ROOT, pkg_path, "*.py")))
+    return "\n".join(open(f, "r", encoding="utf-8").read() for f in files)
+
+
 # ── 1. macro_repository.fetch_fred:DataFrame 須含 source + fetched_at ──
 def test_fetch_fred_carries_source_columns(monkeypatch):
     """phase 1 v19.82 — fetch_fred(成功 path)DataFrame 須含 schema-additive
@@ -64,8 +71,13 @@ def test_fetch_fred_carries_source_columns(monkeypatch):
 
 # ── 2. fund_repository:多 NAV fetcher 命名約定靜態檢查 ──
 def test_fund_repository_nav_provenance_naming():
-    """phase 6-17 v19.92-103 — fund_repository 各 NAV fetcher 須用約定命名。"""
-    src = _read("repositories/fund_repository.py")
+    """phase 6-17 v19.92-103 — fund_repository 各 NAV fetcher 須用約定命名。
+
+    v19.202 第三階段 A1:P1-5 god module 拆 `repositories/fund/` 子套件後,
+    NAV 命名字串搬到 sources.py / nav_metrics.py / fx_and_main.py;主檔變
+    28 LOC shim 無字串,改讀整個子套件 concat。
+    """
+    src = _read_pkg("repositories/fund")
     # phase 6-7:FundClear / TDCC meta + NAV
     assert "FundClear:GetFundBasicInfo" in src, "_src_fundclear_meta 命名"
     assert "TDCC:OpenAPI" in src, "_src_tdcc_meta 命名"
@@ -92,7 +104,8 @@ def test_services_layer_provenance_naming():
     assert "Yahoo:fetch_yf_close" in cb_src, "crisis_backtest 命名"
     assert "crisis_backtest" in cb_src, "phase 18 marker"
 
-    mfo_src = _read("services/multi_factor_optimization.py")
+    # v19.202 第三階段 A1:P2-3 拆 services/calibration/ 後,實作搬子檔。
+    mfo_src = _read("services/calibration/multi_factor.py")
     assert "multi_factor" in mfo_src, "multi_factor_optimization 命名"
     assert "_stamp_prov" in mfo_src, "phase 18 _stamp_prov helper 存在"
 
@@ -105,7 +118,8 @@ def test_services_layer_provenance_naming():
     assert "_provenance" in vl_src, "valuation.detect_valuation _provenance 存在"
     assert "FRED:" in vl_src or "GDPNOW" in vl_src, "valuation FRED 命名"
 
-    rc_src = _read("services/risk_calibration.py")
+    # v19.202 第三階段 A1:P2-3 拆 services/calibration/ 後,實作搬 risk.py
+    rc_src = _read("services/calibration/risk.py")
     assert "_provenance" in rc_src, "risk_calibration notes._provenance 存在"
     assert "FRED:" in rc_src, "risk_calibration FRED 命名"
 
