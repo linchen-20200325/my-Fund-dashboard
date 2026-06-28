@@ -232,7 +232,11 @@ def classify_historical_quadrants(
     try:
         nav_m = nav_series.resample("ME").last().dropna()
         fx_m = fx_series.resample("ME").last().dropna()
-    except Exception:
+    except Exception as e:
+        # v19.184 F-MED:加 stderr log(舊版 pandas 不認 "ME" → fallback "M")
+        import sys as _sys
+        print(f'[quadrant_simulator] resample "ME" fail (fallback "M"): '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         nav_m = nav_series.resample("M").last().dropna()
         fx_m = fx_series.resample("M").last().dropna()
     df = pd.concat([nav_m.rename("nav"), fx_m.rename("fx")], axis=1).dropna()

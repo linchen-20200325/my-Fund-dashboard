@@ -68,7 +68,11 @@ def _finmind_macro_series(indicator_keys: tuple,
         return None
     try:
         rows = r.json().get('data', [])
-    except Exception:
+    except Exception as e:
+        # v19.184 F-MED:加 stderr log(§3.3 反捏造)
+        import sys as _sys
+        print(f'[macro_tw_local_fetch] FinMind JSON parse fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         return None
     if not rows:
         return None

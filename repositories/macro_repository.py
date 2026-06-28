@@ -53,10 +53,15 @@ from shared.fred_series import (
     FRED_CNH_USD,
     FRED_PHILLY_FED,
 )
-from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 HY + v19.183 CPI
+    CPI_YOY_THRESHOLDS as _CPI_THR,
+    HY_SPREAD_THRESHOLDS as _HY_THR,
+)
 
 # F-GRAY-4 v19.169: HY_SPREAD stoplight SSOT (SPEC §16.2)
 _HY_SPREAD_STOPLIGHT = _HY_THR["stoplight"]
+# F-GRAY-4 v19.183:CPI stoplight SSOT(原 inline {1.5/2.5/3.5/4.0} 完全等價)
+_CPI_STOPLIGHT = _CPI_THR["stoplight"]
 from shared.signal_thresholds import (  # v19.74 W3a SSOT consume
     RECESSION_LOGIT_COEF_INTERCEPT,
     RECESSION_LOGIT_COEF_SPREAD,
@@ -195,7 +200,9 @@ def fred_get_next_release_date(series_id: str, api_key: str) -> Optional[_dt.dat
 # ══════════════════════════════════════════════════════════════
 MACRO_THRESHOLDS: dict = {
     "VIX":         {"green_below": 18, "yellow_above": 22, "red_above": 30},
-    "CPI":         {"green_low": 1.5, "green_high": 2.5, "yellow_above": 3.5, "red_above": 4.0},
+    # F-GRAY-4 v19.183: CPI stoplight 由 shared/macro_thresholds_v2.py SSOT 提供
+    # 既有值 {1.5/2.5/3.5/4.0} 不變,只把 dict literal 替換成 SSOT import。
+    "CPI":         _CPI_STOPLIGHT,
     "US10Y":       {"yellow_above": 4.5, "red_above": 5.0},
     "DXY":         {"yellow_above": 105, "red_above": 110},
     "PMI":         {"red_below": 46, "yellow_below": 50, "green_above": 52},
@@ -219,7 +226,8 @@ MACRO_THRESHOLDS: dict = {
     #   - 範例:
     #     * VIX dict red_above=30 vs inline `> 25`(macro_service.py:1119,其他 site `> 30`)
     #     * PMI dict green_above=52 vs inline `>= 50`(:324, score function 用)
-    #     * CPI dict yellow_above=3.5 vs inline `> 4.0`(:201, signal "buy" 條件)
+    #     * (CPI 已於 v19.183 完整 v2 SSOT 化:dict 走 _CPI_THR["stoplight"],
+    #        inflection / regime / score / beginner_panic 各走 v2 對應子 dict)
     #   - 結論:**不應**機械式 swap inline → dict,需逐 site 評估語意才能 harmonize
     #
     # 動態閾值(FED_RATE 的 v<prev / NEW_HOME 的 v>prev / ADL 的 chg)與多階分數

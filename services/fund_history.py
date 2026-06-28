@@ -48,7 +48,11 @@ def _load_default_funds() -> list[dict]:
                 continue
             out.append({"code": code, "name": str(d.get("name", "") or "").strip()})
         return out or list(_FALLBACK_DEFAULT_FUNDS)
-    except Exception:
+    except Exception as e:
+        # v19.184 F-MED:加 stderr log(§3.3 反捏造)
+        import sys as _sys
+        print(f'[fund_history] preset funds JSON parse fail (using fallback): '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         return list(_FALLBACK_DEFAULT_FUNDS)
 
 

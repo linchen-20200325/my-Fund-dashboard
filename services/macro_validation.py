@@ -279,7 +279,11 @@ def calc_macro_score_series(
         if not isinstance(s.index, pd.DatetimeIndex):
             try:
                 s.index = pd.to_datetime(s.index)
-            except Exception:
+            except Exception as e:
+                # v19.184 F-MED:加 stderr log(§3.3 反捏造);跳過該指標
+                import sys as _sys
+                print(f'[macro_validation] index to_datetime fail for "{key}" (skip): '
+                      f'{type(e).__name__}: {e}', file=_sys.stderr)
                 continue
         s = s.sort_index()
         aligned[key] = s.reindex(date_range, method="ffill")

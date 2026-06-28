@@ -3196,7 +3196,11 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                     mo, da = int(mmdd.split("/")[0]), int(mmdd.split("/")[1])
                     yr = today.year if (mo, da) <= (today.month, today.day) else today.year - 1
                     parsed[_dt.date(yr, mo, da)] = v
-                except Exception: pass
+                except Exception as e:
+                    # v19.184 F-MED:加 stderr log(§3.3 反捏造)
+                    import sys as _sys
+                    print(f'[fund_repository] nav_rows mmdd parse fail "{mmdd}": '
+                          f'{type(e).__name__}: {e}', file=_sys.stderr)
 
             # 再查詢整年歷史（使用查詢 endpoint）
             end_dt   = today

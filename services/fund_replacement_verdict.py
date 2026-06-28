@@ -110,9 +110,13 @@ def check_replacement_recommendation(
     holding_y = _safe_float(holding_years)
     rule_a_eligible = (holding_y is not None
                        and holding_y >= REPLACE_RULE_A_MIN_HOLD_YEARS)
+    # v19.184 F-MED:silent except 加 stderr log(§3.3 反捏造)
+    import sys as _sys
     try:
         eat_result = check_eating_principal_1y_mk(fd)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_replacement_verdict] check_eating_principal_1y_mk fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         eat_result = None
     eat_status = (eat_result or {}).get("status", "")
     if rule_a_eligible and "吃本金" in str(eat_status):
@@ -133,7 +137,9 @@ def check_replacement_recommendation(
                 sigma_pct=_safe_float(m.get("std_1y")),
                 ma_dir=None,
             )
-        except Exception:
+        except Exception as e:
+            print(f'[fund_replacement_verdict] compute_4d_health fail: '
+                  f'{type(e).__name__}: {e}', file=_sys.stderr)
             _4d_result = None
     grade = (_4d_result or {}).get("grade")
     if grade == "F":
@@ -152,7 +158,9 @@ def check_replacement_recommendation(
             _ret_3y_ann = ((1.0 + _cum / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0
     try:
         _333 = check_333_principle(holding_y, _ret_3y_ann)
-    except Exception:
+    except Exception as e:
+        print(f'[fund_replacement_verdict] check_333_principle fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
         _333 = {}
     if rule_c_eligible and _333.get("passed") is False:
         triggered.append(f"(c) 持有 {holding_y:.1f} 年 + 3-3-3 未通過")
