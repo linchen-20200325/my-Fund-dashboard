@@ -10,7 +10,7 @@
 > Bootstrap 4 步流程已完成(§0 改名「填寫紀錄」#322)，§3.3 反捏造 / §8.2 高項違憲皆 0。
 > 以下為**步驟 3 audit 中發現但本輪未動**的 ⚠️ / 灰色地帶 / 補洞項目，下個 session 入口。
 
-- [⚙️] **F-PROV-1** §2.2 provenance 補洞;v19.82-84 完成 phase 1-3:
+- [x] **F-PROV-1** §2.2 provenance 補洞;v19.82-84 完成 phase 1-3:
   * phase 1(#326):`fetch_fred` 加 source/fetched_at columns
   * phase 2(#327):`fetch_yf_close` 加 attrs
   * phase 3(#328):`fetch_defillama_stablecoin_mcap` (attrs) + `fetch_aaii_sentiment` (dict keys)
@@ -31,14 +31,15 @@
   * **phase 20**(v19.106):`tests/test_provenance_smoke.py` 4 個契約測試防退化(runtime fetch_fred + 靜態檢查 fund_repository / services 層命名 / reconcile pattern)
   * **phase 21**(v19.107):`services/macro_service.calc_macro_phase` 12 指標融合處 `_provenance`(sources / contributing / total/earned weight / aggregator)
   * **phase 22+(WONTFIX)**:剩餘 fetcher provenance — 套 §-1 工作準則,核心 40+ fetcher 已涵蓋,邊際效益遞減。v19.109 結案
+  * **v19.185 二次確認 audit**:user 重評時平行 audit 確認剩餘 fetcher 全屬「多源融合 orchestrator / 落後輔助診斷 / 純邏輯包裝 / 邊界 dict.source 已含」4 類,維持 WONTFIX 結案
 - [x] **F-PIT-1** §2.3 v19.81 audit 結案:`crisis_backtest.py` + `crisis_strategy_grid.py` **PIT-safe**(時序順序掃描 + `shift(1)` 防 same-bar lookahead + 嚴格時間窗切片,無 merge_asof 跨頻)
-- [⚙️] **F-RECON-1** §4.3 雙演算法對帳;**v19.87 phase 1+2**:新建 `services/reconcile.py`(L2 純函式)+ 21/21 unit tests。對外 API:`reconcile_pair`(通用)/ `reconcile_us10y_yield`(FRED DGS10 vs Yahoo ^TNX/10, 5bp 容差)/ `reconcile_fund_annual_return`(自算 vs MoneyDJ wb01)/ `reconcile_sharpe`(自算 vs MoneyDJ wb07)/ `reconcile_dividend_yield`(自算 vs MoneyDJ)。**Phase 2**:`services/risk_radar._signal_yield_10y_shock` 接入 reconcile,額外抓 `^TNX` 與 FRED DGS10 比對,結果以 schema-additive `reconcile` 欄寫入返回 dict;`ui/tab1_macro.py` 雷達卡片新增「✅/⚠️ 對帳 chip」;3 新 unit tests + 既有 3 test 不破。**v19.88 phase 3**:`services/fund_service.calc_metrics` 接入 `reconcile_sharpe`,在返回 dict 新增 `sharpe_reconcile` 欄(self-calc vs MoneyDJ wb07);3 新 unit tests 全綠;16/16 fund_metrics 不破。**v19.89 phase 4**:`repositories/fund_repository._finish_metrics` 1Y 報酬對帳(self-calc `ret_1y_total` vs MoneyDJ wb01 `perf["1Y"]`);schema-additive 寫入 `result["metrics"]["ret_1y_reconcile"]`,僅在真 wb01 來源(`perf_source != "local_calc"`)時啟動。**v19.90 phase 5**:同 `_finish_metrics` 加配息殖利率對帳(self-calc `annual_div_rate` vs MoneyDJ `moneydj_div_yield`);寫入 `result["metrics"]["div_yield_reconcile"]`,兩值皆 % 單位內部轉小數。**v19.91 phase 6**:`ui/tab2_single_fund.py` 接入三組對帳 chip 渲染(Sharpe / 配息殖利率 / 1Y 報酬),phase 3-5 寫入 metrics 的對帳資料正式被使用者看見。**F-RECON-1 完整收尾**(5 phase data + 1 phase UI)。
+- [x] **F-RECON-1** §4.3 雙演算法對帳;**v19.87 phase 1+2**:新建 `services/reconcile.py`(L2 純函式)+ 21/21 unit tests。對外 API:`reconcile_pair`(通用)/ `reconcile_us10y_yield`(FRED DGS10 vs Yahoo ^TNX/10, 5bp 容差)/ `reconcile_fund_annual_return`(自算 vs MoneyDJ wb01)/ `reconcile_sharpe`(自算 vs MoneyDJ wb07)/ `reconcile_dividend_yield`(自算 vs MoneyDJ)。**Phase 2**:`services/risk_radar._signal_yield_10y_shock` 接入 reconcile,額外抓 `^TNX` 與 FRED DGS10 比對,結果以 schema-additive `reconcile` 欄寫入返回 dict;`ui/tab1_macro.py` 雷達卡片新增「✅/⚠️ 對帳 chip」;3 新 unit tests + 既有 3 test 不破。**v19.88 phase 3**:`services/fund_service.calc_metrics` 接入 `reconcile_sharpe`,在返回 dict 新增 `sharpe_reconcile` 欄(self-calc vs MoneyDJ wb07);3 新 unit tests 全綠;16/16 fund_metrics 不破。**v19.89 phase 4**:`repositories/fund_repository._finish_metrics` 1Y 報酬對帳(self-calc `ret_1y_total` vs MoneyDJ wb01 `perf["1Y"]`);schema-additive 寫入 `result["metrics"]["ret_1y_reconcile"]`,僅在真 wb01 來源(`perf_source != "local_calc"`)時啟動。**v19.90 phase 5**:同 `_finish_metrics` 加配息殖利率對帳(self-calc `annual_div_rate` vs MoneyDJ `moneydj_div_yield`);寫入 `result["metrics"]["div_yield_reconcile"]`,兩值皆 % 單位內部轉小數。**v19.91 phase 6**:`ui/tab2_single_fund.py` 接入三組對帳 chip 渲染(Sharpe / 配息殖利率 / 1Y 報酬),phase 3-5 寫入 metrics 的對帳資料正式被使用者看見。**F-RECON-1 完整收尾**(5 phase data + 1 phase UI)。
 - [⛔ WONTFIX] **F-SCHEMA-1** §3.1 pandera — 套 §-1 工作準則:未實際遇過 schema bug + 拖慢冷啟動 ~200ms + 半做覆蓋不全。v19.109 結案
 - [x] **F-GRAY-1** §8.3 v19.81 audit 結案:`fund_fetcher.py` **保留根目錄**(18 條 re-export shim + 57 caller,搬移為 cosmetic)
 - [x] **F-GRAY-2** §8.3 v19.81 audit 結案:`hot_money.py` / `tw_macro.py` 同上,根目錄 vs `repositories/` 為純 cosmetic
 - [x] **F-GRAY-3** §8.3 v19.81 audit 結案:`app.py`(568 LOC)已是 orchestrator,無業務邏輯需下沉;同步刪除 1 處 dead code `_unused_old_calculate_composite_score`
-- [⚙️] **F-GRAY-4** §8.3 `MACRO_THRESHOLDS` harmonize:v19.168(#406)architecture proposal 立案(SPEC §16.2)。**v19.169 HY_SPREAD** 落地:新建 `shared/macro_thresholds_v2.py` SSOT(4 sub-dict:stoplight / score_function / portfolio_advisor / beginner_panic),migrate 6 sites(macro_repository / macro_validation / macro_score_calibration / portfolio_service / macro_service / macro_beginner_view / tab1_macro),+ `tests/test_macro_thresholds_v2.py` 13 守護 tests 全綠。**CPI / PMI 後續**:等 user 指派(per §-1)
-- [⚙️] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 + **v19.170 Top-10 sweep** 已收兩輪:
+- [x] **F-GRAY-4** §8.3 `MACRO_THRESHOLDS` harmonize:v19.168(#406)architecture proposal 立案(SPEC §16.2)。**v19.169 HY_SPREAD** 落地:新建 `shared/macro_thresholds_v2.py` SSOT(4 sub-dict:stoplight / score_function / portfolio_advisor / beginner_panic),migrate 6 sites(macro_repository / macro_validation / macro_score_calibration / portfolio_service / macro_service / macro_beginner_view / tab1_macro),+ `tests/test_macro_thresholds_v2.py` 13 守護 tests 全綠。**v19.178 CPI(部分)** + **v19.179-180 PMI(完整,8 sub-dict)** 落地。**v19.183 CPI 完整收尾**:`repositories/macro_repository.py:198` 最後 1 處 inline `{"green_low": 1.5, ...}` 改 `_CPI_THR["stoplight"]` SSOT(值完全等價)+ 註解同步更新。**HY+CPI+PMI 全部 v2 SSOT 化結案**
+- [x] **F-MED** Bootstrap-audit 中項(M) — W5-1~W5-4 + **v19.170 Top-10 sweep** + **v19.184 第二輪 15 處 sweep** 已收三輪共 25 處:
   * **v19.170(本批 10 項)**:10 處 silent `except Exception:` 散在 L2 service 層 → 全改 `except Exception as e:` + stderr log
     - `services/nav_history_store.py:51` `_load_cache_series` cache 解析失敗
     - `services/portfolio_service.py:400` `calc_shadow_score` numpy import 失敗
@@ -50,10 +51,28 @@
     - `services/fund_service.py:392` `calc_metrics` 1Y window 計算
     - `services/fund_dividend_health.py:296` 配息解析
     - `services/fund_dividend_health.py:370` mk_simple 嚴格計算
+  * **v19.184(本批 15 項)**:user 指派續做,15 處 silent except 全改 stderr log
+    - `services/fund_health_report.py:48,89,96,108,125,152` — _compute_holding_years / compute_1y_total_return / _resolve_adr_with_fallback / compute_4d_health / calc_fund_factor_score / check_333_principle
+    - `services/fund_replacement_verdict.py:115,138,158` — check_eating_principal_1y_mk / compute_4d_health / check_333_principle
+    - `services/macro_tw_local_fetch.py:71` — FinMind JSON parse
+    - `services/macro_service.py:2076` — _daily_spx_return
+    - `services/fund_history.py:51` — preset funds JSON parse
+    - `services/quadrant_simulator.py:235` — resample "ME" fallback
+    - `services/macro_validation.py:282` — index to_datetime
+    - `repositories/fund_repository.py:3199` — nav_rows mmdd parse
   * 介面 0 改;只把「失敗時靜默」改成「失敗時 stderr 留軌跡」,便於生產 debug
-  * 剩餘 (M) 項**遵 §-1 等實際 bug 觸發再收**,不主動清
+  * 三輪共 25 處收齊;剩餘 (M) 項**遵 §-1 等實際 bug 觸發再收**,不主動清
 
 **v19.109 收尾**(CLAUDE.md §-1 工作準則立):Open 項全數 WONTFIX 或結案,僅 F-MED 等實際 bug 觸發再收。0 個 active pending。
+
+**v19.185 二次收尾**(user 指派 3 epic「F-GRAY-4 + F-MED + F-PROV-1 phase 22+ 繼續」後完整盤點):
+- F-GRAY-4 ✅ HY+CPI+PMI 全 v2 SSOT 化(PR #436)
+- F-MED ✅ 三輪共 25 處 silent except 收齊(PR #436)
+- F-PROV-1 phase 22+ ✅ 二次 audit 確認 WONTFIX 維持(剩餘屬「多源融合 / 輔助診斷 / 純邏輯 / dict.source 已含」4 類)
+- F-RECON-1 ✅ 書記同步(v19.91 早已完整收尾,checkbox 改 [x])
+- F-PROV-1 ✅ 書記同步(v19.109 結案,checkbox 改 [x])
+
+4 個 ⚙️ checkbox 同步成 [x],BACKLOG 與實質狀態對齊。0 個 active pending。
 
 ---
 
