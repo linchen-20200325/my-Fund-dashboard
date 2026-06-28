@@ -54,7 +54,7 @@ def div_health_light_for_pair(
     - gap = div_pct - ret_pct ∈ (0, warn_gap] → ('警示', '🟡')
     - gap > warn_gap → ('吃本金', '🔴')
 
-    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal
+    v19.119:核心判定委派 services.health.dividend.classify_eating_principal
     (output tuple 100% 向後相容,3 色燈門檻 gap vs warn_gap 保留於本 wrapper)。
     """
     from services.health.dividend import classify_eating_principal

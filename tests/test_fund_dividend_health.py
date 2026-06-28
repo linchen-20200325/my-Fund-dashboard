@@ -1,4 +1,4 @@
-"""v19.119 tests — services.fund_dividend_health canonical 吃本金判定。
+"""v19.119 tests — services.health.dividend canonical 吃本金判定。
 
 含:
 1. canonical 函式 `classify_eating_principal` 邊界 + 派生指標

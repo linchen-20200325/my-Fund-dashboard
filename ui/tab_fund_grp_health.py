@@ -340,7 +340,7 @@ def _render_health_3tables(rows: list[dict],
                            funds_extra: list | None = None) -> None:
     """v19.181 3 表模組化渲染:① 健康分析 ② 配息相關 ③ 實際購買結果(既有 _render_health_table)。
 
-    共用 SSOT row builder(`services.fund_health_report`)讓 Tab3 也能同源渲染。
+    共用 SSOT row builder(`services.health.report`)讓 Tab3 也能同源渲染。
     每張表獨立 dataframe,user 可選關注的維度。
 
     Args:

@@ -1,4 +1,4 @@
-"""v19.181 — services.fund_replacement_verdict 純函式單元測試。
+"""v19.181 — services.health.replacement 純函式單元測試。
 
 守住 MK 4 規則心型警結合判定邏輯:
 (a) 吃本金 1Y·MK 且持有 ≥ 1 年 → hard trigger

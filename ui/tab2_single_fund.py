@@ -634,7 +634,7 @@ def render_single_fund_tab() -> None:
                         pass  # smoke-allow-pass
 
                 # ── v18.47: 📊 基金健康總覽（4 維度評分 + Overall Grade + 白話結論）──
-                # v19.177 #3A+#4B：4D 評分 + grade 全走 services.fund_health.compute_4d_health SSOT,
+                # v19.177 #3A+#4B：4D 評分 + grade 全走 services.health.grade.compute_4d_health SSOT,
                 # input 走 _resolve_adr_with_fallback / compute_1y_total_return SSOT。
                 # 原本 162 行 inline 邏輯(3 套 fallback chain + 4 套 score lookup + grade cutoff)
                 # 收斂到 ~30 行,全站個檔健康度評等統一同源。

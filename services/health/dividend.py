@@ -16,7 +16,7 @@ canonical 只負責**核心數學判定** — `is_eating = total_return < divide
 委派 wrapper(各自服務不同 UI 需求,output schema 不變):
 - `services.portfolio_service.dividend_safety` — 5 級 + nav_warning + 字串 message
 - `services.fund_service.calc_health_from_manual` — 4 級 + 自算 NAV/配息 chain
-- `services.fund_dividend_calculator.div_health_light_for_pair` — 3 色燈 tuple
+- `services.health.dividend_calc.div_health_light_for_pair` — 3 色燈 tuple
 """
 from __future__ import annotations
 

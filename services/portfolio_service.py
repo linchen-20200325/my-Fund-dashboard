@@ -283,7 +283,7 @@ def dividend_safety(total_return: Optional[float],
     回傳：
         {status, coverage, gap_pct, eating_principal, alert_level, message}
 
-    v19.119:核心判定委派 services.fund_dividend_health.classify_eating_principal。
+    v19.119:核心判定委派 services.health.dividend.classify_eating_principal。
     v19.175:5 級 coverage 門檻 → 3 色 gap_pct > 2% 制(對齊 MK 老師「化繁為簡」),
             與健診總表 `div_health_light_for_pair()` SSOT 同源。
             「嚴重吃本金(報酬為負)」獨立旗標保留為「報酬為負」修飾,

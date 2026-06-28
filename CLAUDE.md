@@ -228,7 +228,7 @@
 {"date": ..., "rate_twd_per_usd": float > 0 (TWD/USD 不混用倒數)}
 ```
 
-⚠️ **待議**:是否將 pandera 加入 requirements 並逐 repository 落地 schema?
+✅ **已結案 v19.189**(F-SCHEMA-1):pandera 已 pin `requirements.txt` (>=0.20,<1.0),Phase A(pilot v19.155)+ Phase B(fetch_yf_close / fetch_nav / fetch_div v19.161-163)+ Phase B5(foreign_flow v19.186)落地,5 個 Schema(`MacroFredSchema` / `YahooCloseSchema` / `FundNavSchema` / `FundDividendSchema` / `ForeignFlowSchema`)+ 8 處 production caller 接入 + 91 tests 全綠。Phase C/D(全面 + CI gate)留待 user 觸發(§-1 不主動推進)。
 
 ### 3.2 範圍 / 合理性檢查
 
