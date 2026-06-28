@@ -661,6 +661,10 @@ def _fetch_domestic_perf(code: str) -> dict:
                                 perf[key] = v
             if perf:
                 print(f"[domestic_perf] ✅ {code} {list(perf.keys())}")
+                # v19.233 F-PROV-1 cluster C 補洞:dict 加 _source(schema-additive,
+                # caller 用 perf["1Y"] 直接 key access 不會踩到 _source key)
+                perf["_source"] = f"MoneyDJ:{base.split('//')[1].split('/')[0]}:yp020000:{code}"
+                perf["_fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return perf
         except Exception as e:
             print(f"[domestic_perf] {code}: {e}")

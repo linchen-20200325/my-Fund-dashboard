@@ -600,14 +600,15 @@ User 後續「深層稽核 → #1→#9」分批授權,3 個 stacked PR(已 squas
 - **EX-POLICY-1 例外退役**(對象 `allocation_simulator.py` 拔毒)
 - **CLAUDE.md / BACKLOG.md / STATE.md / ARCHITECTURE_AUDIT.md** 全 doc 同步
 
-### 剩餘 backlog(明確留待 — v19.232 後狀態)
+### 剩餘 backlog(明確留待 — v19.233 後狀態)
 
 - ~~**P1-1 leftover 2 處**~~ **v19.225 已收**:走 SSOT alias 模式各別處理
-- **C2 3 個 MISS fetcher 真 breaking 留 backlog**(v19.226 從 12 → 3):剩 scalar 回傳的 fetcher 需 wrapper 改 dict 包裹,涉 caller 介面改動 complexity-justified
+- ~~**C2 MISS fetcher 12 處**~~ **v19.233 深挖收**:原標籤「3 個 scalar」過時,實際 12 處分三類:**Cluster C 4 dict orchestrator 補洞已動**(`_fetch_domestic_perf` / `fetch_yf_latest` / `fetch_liquidity_factors` / `fetch_tw_market_tpi`)→ MISS 從 12 → 8;**Cluster A 5 scalar**(`Optional[float]` 結構性無 .attrs)+ **Cluster B 3 thin wrapper passthrough**(upstream 已 stamp)為真結構性 WONTFIX
 - ~~**C3 第二輪 sidebar 抽取**~~ **v19.229 已動**(超越 v11.0 願景 425 LOC,實際達 289 LOC)
 - ~~**F1 OAuth refresh test fail**~~ **v19.227 已修**(P2-7 shim sub-module 直接 patch)
 - ~~**F2 macro_done seeded timeout**~~ **v19.228 已修**(247s → 39s,雙路徑 mock)
-- **test_financial_repository pre-existing fail**:yfinance 環境問題,non-blocking,不在本 session 範圍
+- ~~**test_financial_repository pre-existing fail**~~ **v19.233 已驗證 0 fail**(15/15 passed,標籤 stale,實際是 `test_fetch_nav_history_long::test_cache_expires_after_ttl` + `test_render_smoke::test_render_macro_tab_four_horizons` 2 個環境問題)
+- **2 pre-existing 環境 fail(non-blocking)**:`test_fetch_nav_history_long::test_cache_expires_after_ttl`(TTL 時序敏感)+ `test_render_smoke::test_render_macro_tab_four_horizons`(需 FRED API,403 環境問題)
 
 ### PR 整合
 

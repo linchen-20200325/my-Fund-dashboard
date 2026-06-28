@@ -127,7 +127,11 @@ def test_fetch_liquidity_factors_aggregates(monkeypatch) -> None:
     monkeypatch.setattr(le, "fetch_yf_close", _yf)
     monkeypatch.setattr(le, "fetch_defillama_stablecoin_mcap", _stable)
     out = le.fetch_liquidity_factors("KEY")
-    assert set(out) == {"XCCY_PROXY", "CARRY_UNWIND", "SSR", "MOVE_VIX"}
+    # v19.233 F-PROV-1 cluster C:_provenance key schema-additive,排除後比對 builder set
+    factor_keys = {k for k in out if not k.startswith("_")}
+    assert factor_keys == {"XCCY_PROXY", "CARRY_UNWIND", "SSR", "MOVE_VIX"}
+    assert "_provenance" in out
+    assert "sources" in out["_provenance"] and "fetched_at" in out["_provenance"]
 
 
 def test_fetch_liquidity_factors_isolates_failure(monkeypatch) -> None:

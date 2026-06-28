@@ -68,11 +68,22 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
 @register_cache
 @_ttl_cache(ttl_sec=TTL_5MIN, maxsize=16)   # v19.64：盤中 ticker rerun dedupe
 def fetch_yf_latest(tickers: tuple[str, ...]) -> dict[str, Optional[float]]:
-    """批次抓多個 ticker 最新收盤(空值代表抓不到)。"""
+    """批次抓多個 ticker 最新收盤(空值代表抓不到)。
+
+    v19.233 F-PROV-1 cluster C 補洞:加 `_provenance` key(schema-additive,既有
+    caller 用 `out[ticker]` 直接 key access 不會踩到 _provenance)。
+    """
     out: dict[str, Optional[float]] = {}
+    _success_tickers: list[str] = []
     for t in tickers:
         s = fetch_yf_close(t, range_="5d")
         out[t] = round(float(s.iloc[-1]), 4) if not s.empty else None
+        if out[t] is not None:
+            _success_tickers.append(t)
+    out["_provenance"] = {
+        "sources": [f"Yahoo:{t}:5d_latest" for t in _success_tickers],
+        "fetched_at": pd.Timestamp.now('UTC').isoformat(),
+    }
     return out
 
 

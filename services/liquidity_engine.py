@@ -306,6 +306,15 @@ def fetch_liquidity_factors(fred_api_key: str = "") -> dict:
                 out[key] = entry
         except Exception as e:
             print(f"[liquidity_engine] {key} 建構失敗: {e}")
+    # v19.233 F-PROV-1 cluster C 補洞:加 _provenance(schema-additive,對齊
+    # us_liquidity_engine v19.105 phase 19 模式)。caller 用 out["XCCY_PROXY"] 直接
+    # key access 不會踩到 _provenance。
+    import pandas as _pd_prov
+    out["_provenance"] = {
+        "sources": [k for k in ("XCCY_PROXY", "CARRY_UNWIND", "SSR", "MOVE_VIX") if k in out],
+        "fetched_at": _pd_prov.Timestamp.now('UTC').isoformat(),
+        "aggregator": "fetch_liquidity_factors",
+    }
     return out
 
 

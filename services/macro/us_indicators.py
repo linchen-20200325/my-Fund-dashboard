@@ -1470,6 +1470,22 @@ def fetch_tw_market_tpi(fred_api_key: str = "") -> dict:
         result.update(water_label="🥶 冰點（底部特徵）", color="#9c27b0", signal="🟢",
                       advice="散戶絕望期，偵測到底部特徵，準備分批建倉")
 
+    # v19.233 F-PROV-1 cluster C 補洞:加 _provenance(schema-additive,對齊
+    # us_liquidity_engine v19.105 phase 19 模式)。三 factor 各標來源 + tier 旗標。
+    import pandas as _pd_prov
+    _sources = []
+    if result.get("breadth") is not None:
+        _sources.append("TWSE:MI_INDEX:breadth")
+    if result.get("fii_net") is not None:
+        _sources.append("FinMind:TaiwanStockTotalInstitutionalInvestors:Foreign_Investor")
+    if result.get("m1b_yoy") is not None:
+        _tier = "proxy" if result.get("m1b_is_proxy") else "official"
+        _sources.append(f"CBC:M1B_M2:{_tier}")
+    result["_provenance"] = {
+        "sources": _sources,
+        "fetched_at": _pd_prov.Timestamp.now('UTC').isoformat(),
+        "aggregator": "fetch_tw_market_tpi:TPI_v15.3",
+    }
     return result
 
 
