@@ -242,40 +242,6 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
 
 
 # ── 模組層工具函式（供 app.py 直接呼叫）────────────────────────────
-def risk_score_gauge_html(risk_score: float, strategy: dict) -> str:
-    """
-    返回複合風險溫度計的 HTML 卡片字串
-    """
-    color     = strategy["color"]
-    level     = strategy["level"]
-    action    = strategy["action"]
-    cash_pct  = strategy["cash_pct"]
-    icon      = strategy["icon"]
-    # gauge bar：線性映射 [-3, +3] → [0%, 100%]
-    gauge_pct = min(100, max(0, int((risk_score + 3) / 6 * 100)))
-    return (
-        f"<div style='background:#161b22;border:2px solid {color};"
-        f"border-radius:12px;padding:16px 20px;margin:12px 0'>"
-        f"<div style='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px'>"
-        f"<div>"
-        f"<div style='color:#888;font-size:11px;letter-spacing:1px;margin-bottom:2px'>複合風險溫度計 Risk Score</div>"
-        f"<div style='color:{color};font-size:34px;font-weight:900;line-height:1.1'>{risk_score:+.2f}</div>"
-        f"<div style='color:{color};font-size:12px;font-weight:700;margin-top:3px'>{level}</div>"
-        f"</div>"
-        f"<div style='text-align:right'>"
-        f"<div style='color:#888;font-size:10px'>建議現金/短債部位</div>"
-        f"<div style='color:#fff;font-size:26px;font-weight:700'>{cash_pct}%</div>"
-        f"</div>"
-        f"</div>"
-        f"<div style='background:#0d1117;border-radius:6px;height:10px;margin-bottom:10px;overflow:hidden'>"
-        f"<div style='background:linear-gradient(90deg,#42a5f5 0%,#66bb6a 35%,#ff9800 65%,#f44336 100%);"
-        f"width:{gauge_pct}%;height:100%;border-radius:6px'></div>"
-        f"</div>"
-        f"<div style='color:#ccc;font-size:12px'>{icon} {action}</div>"
-        f"<div style='color:#444;font-size:10px;margin-top:6px'>"
-        f"公式：Z_{{VIX}}×0.3 + Z_{{HY}}×0.4 + Z_{{YC}}×0.3 ｜ &gt;1.5 強制提現金</div>"
-        f"</div>"
-    )
 
 
 def three_ratio_row_html(r: dict) -> str:

@@ -18,7 +18,6 @@ from scripts.calibrate_macro_score import (
     _make_vix_score_fn,
     _spearman_corr,
     align_score_with_forward_return,
-    bootstrap_ci_diff,
     build_proposal_report,
     build_score_rules_with_overrides,
     compute_objective,
@@ -201,15 +200,6 @@ def test_bootstrap_paired_diff_empty():
     assert _bootstrap_paired_diff(pd.DataFrame(), n_bootstrap=10) == []
 
 
-def test_bootstrap_ci_diff_low_le_high():
-    aligned = pd.DataFrame({
-        "score": [5, 6, 7, 8, 7, 6, 5, 4, 5, 6] * 5,
-        "fwd_ret": [0.05, 0.06, 0.07, 0.08, 0.07, 0.06, 0.05, 0.04, 0.05, 0.06] * 5,
-    })
-    mean, ci_low, ci_high = bootstrap_ci_diff(
-        aligned, cell_rec=(30.0, 18.0), cell_default=(30.0, 18.0),
-        n_bootstrap=100)
-    assert ci_low <= mean <= ci_high
 
 
 # ════════════════════════════════════════════════════════════════

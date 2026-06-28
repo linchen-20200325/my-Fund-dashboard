@@ -112,12 +112,6 @@ def test_clear_history_safe_when_no_file():
     clear_history()  # 沒檔案也不該 raise
 
 
-def test_history_size_matches_unique_count():
-    from services.fund_history import history_size, record_fund
-    record_fund("ACCP138", "聯博")
-    record_fund("ACCP138", "聯博")  # 重複，不增加 size
-    record_fund("LU0123456", "歐元基金")
-    assert history_size() == 2
 
 
 def test_jsonfile_actually_persists(tmp_path):

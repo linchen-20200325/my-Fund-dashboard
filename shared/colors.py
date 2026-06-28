@@ -33,8 +33,3 @@ TRAFFIC_HEX: tuple[str, str, str, str] = (
 )
 
 
-def emoji_to_hex(emoji: str) -> str:
-    """🟢/🟡/🔴/⬜ → traffic-light hex；未知 emoji → TRAFFIC_NEUTRAL。"""
-    _m = {"🟢": TRAFFIC_GREEN, "🟡": TRAFFIC_YELLOW,
-          "🔴": TRAFFIC_RED, "⬜": TRAFFIC_NEUTRAL}
-    return _m.get(emoji, TRAFFIC_NEUTRAL)

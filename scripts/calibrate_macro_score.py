@@ -296,35 +296,6 @@ def grid_search_on_sample(
 # ════════════════════════════════════════════════════════════════
 # Bootstrap CI：訓練池 resample → 顯著性檢定
 # ════════════════════════════════════════════════════════════════
-def bootstrap_ci_diff(
-    aligned: pd.DataFrame, cell_rec: tuple[float, float],
-    cell_default: tuple[float, float] = (DEFAULT_VIX_CRISIS, DEFAULT_VIX_WARNING),
-    n_bootstrap: int = 1000, alpha: float = 0.05, seed: int = 42,
-) -> tuple[float, float, float]:
-    """對 (rec - default) 算 bootstrap CI；回 (mean_diff, ci_low, ci_high)。
-
-    這裡的 cell 已是固定值，aligned 內 score 是 default 配置算出來的，
-    我們不重新跑 grid，而是在 aligned 子樣本上直接用 _spearman_corr 對比兩 cell 結果差。
-    為簡化：bootstrap 直接 resample aligned rows → Spearman(score, fwd_ret) 差不大，
-    這裡用「objective(rec) - objective(default)」on same sample 量化「rec 在這 sample 上是否真的優於 default」。
-    """
-    if aligned is None or aligned.empty:
-        return 0.0, 0.0, 0.0
-    rng = np.random.default_rng(seed)
-    n = len(aligned)
-    diffs = []
-    for _ in range(n_bootstrap):
-        idx = rng.integers(0, n, size=n)
-        sample = aligned.iloc[idx]
-        # objective 差 = Spearman 差（penalty 對固定 cell 是常數，相減消掉）
-        obj_rec = compute_objective(sample, *cell_rec)
-        obj_def = compute_objective(sample, *cell_default)
-        diffs.append(obj_rec - obj_def)
-    arr = np.array(diffs)
-    mean_diff = float(arr.mean())
-    ci_low = float(np.quantile(arr, alpha / 2))
-    ci_high = float(np.quantile(arr, 1 - alpha / 2))
-    return mean_diff, ci_low, ci_high
 
 
 # ════════════════════════════════════════════════════════════════

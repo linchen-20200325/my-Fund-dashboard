@@ -189,61 +189,10 @@ def clear_history() -> None:
             pass
 
 
-def delete_fund(code: str) -> bool:
-    """v18.283：刪除單筆 user 紀錄。
-
-    回傳 True 表示真的刪掉了；如果該 code 只在 _DEFAULT_FUNDS（hardcode）裡，
-    delete 後仍會在清單顯示為 preset（這是設計：預設不該被 runtime 刪掉，
-    要刪預設請改 services/fund_history.py:_DEFAULT_FUNDS）。
-    """
-    code = str(code or "").strip().upper()
-    if not code:
-        return False
-    data = _load()
-    if code in data:
-        del data[code]
-        try:
-            _save(data)
-            return True
-        except Exception:
-            return False
-    return False
 
 
-def delete_funds_bulk(codes: list[str]) -> dict:
-    """批次刪除多檔（給 UI multiselect 用）。
-
-    Returns:
-        {deleted: int, not_found: list[str], preset_only: list[str]}
-        preset_only: 那些 code 只存在預設清單裡，user 紀錄裡沒有可刪的
-    """
-    result = {"deleted": 0, "not_found": [], "preset_only": []}
-    if not codes:
-        return result
-    preset_codes = {str(d.get("code", "") or "").strip().upper() for d in _DEFAULT_FUNDS}
-    data = _load()
-    for raw in codes:
-        code = str(raw or "").strip().upper()
-        if not code:
-            continue
-        if code in data:
-            del data[code]
-            result["deleted"] += 1
-        elif code in preset_codes:
-            result["preset_only"].append(code)
-        else:
-            result["not_found"].append(code)
-    if result["deleted"] > 0:
-        try:
-            _save(data)
-        except Exception:
-            pass
-    return result
 
 
-def history_size() -> int:
-    """回傳當前已記錄的唯一基金數。"""
-    return len(_load())
 
 
 def import_from_csv(csv_bytes: bytes) -> dict:

@@ -1,6 +1,6 @@
 """F-RECON-1 macro_health 雙演算法 — 對照 + 對帳測試(v19.108).
 
-calc_macro_phase_zpct 與 reconcile_macro_health 的契約測試。
+calc_macro_phase_zpct 契約測試(v19.219 reconcile_macro_health 拔毒)。
 """
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import math
 import pandas as pd
 
 from services.macro_service import calc_macro_phase_zpct
-from services.reconcile import reconcile_macro_health
 
 
 # ── fixtures ────────────────────────────────────────────────────────────
@@ -114,48 +113,3 @@ def test_zpct_provenance_present():
     assert r["_provenance"]["aggregator"] == "macro_service.calc_macro_phase_zpct"
     assert "fetched_at" in r["_provenance"]
     assert r["_provenance"]["min_samples"] == 60
-
-
-# ── reconcile_macro_health 對帳契約 ────────────────────────────────────
-def test_reconcile_score_within_tolerance_agrees():
-    """主路徑 6.0 vs 對照 6.5 → 差 0.5 < 1.5 → agree。"""
-    r = reconcile_macro_health(6.0, 6.5, main_phase="擴張", zpct_phase="擴張")
-    assert r["agree"] is True
-    assert r["status"] == "agree"
-
-
-def test_reconcile_phase_agree_overrides_score_disagree():
-    """score 差 > 1.5 但 phase 一致 → 降級 phase_agree(語意更準確)。"""
-    r = reconcile_macro_health(5.1, 7.9, main_phase="擴張", zpct_phase="擴張")
-    assert r["phase_agree"] is True
-    assert r["status"] == "phase_agree"
-    assert r["agree"] is True
-
-
-def test_reconcile_phase_disagree_stays_disagree():
-    """score 差 > 1.5 且 phase 不一致 → 保持 disagree(真警示)。"""
-    r = reconcile_macro_health(2.5, 6.5, main_phase="衰退", zpct_phase="擴張")
-    assert r["phase_agree"] is False
-    assert r["status"] == "disagree"
-    assert r["agree"] is False
-
-
-def test_reconcile_one_missing():
-    """一邊缺資料 → a_missing / b_missing。"""
-    r = reconcile_macro_health(None, 5.0, main_phase=None, zpct_phase="擴張")
-    assert r["status"] == "a_missing"
-    r = reconcile_macro_health(5.0, None, main_phase="擴張", zpct_phase=None)
-    assert r["status"] == "b_missing"
-
-
-def test_reconcile_both_missing():
-    """兩邊都缺 → both_missing。"""
-    r = reconcile_macro_health(None, None)
-    assert r["status"] == "both_missing"
-
-
-def test_reconcile_carries_source_labels():
-    """確保 source_a / source_b 帶 algorithm 標籤,UI 可區別兩條路。"""
-    r = reconcile_macro_health(6.0, 6.5, main_phase="擴張", zpct_phase="擴張")
-    assert "calc_macro_phase" in r["source_a"]
-    assert "calc_macro_phase_zpct" in r["source_b"]

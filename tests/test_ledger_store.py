@@ -12,7 +12,6 @@ from repositories.ledger_repository import (
     append_ledger_row,
     ensure_ledger_worksheet,
     load_all_ledgers,
-    load_ledgers_for_policy,
     replace_ledgers_for_policy,
 )
 from repositories.policy_repository import PolicySheetError
@@ -76,7 +75,7 @@ def test_ensure_ledger_reuses_existing_with_header():
 
 
 # ──────────────────────────────────────────────────────────────────────
-# load_all_ledgers / load_ledgers_for_policy
+# load_all_ledgers
 # ──────────────────────────────────────────────────────────────────────
 def test_load_all_ledgers_empty_when_tab_missing():
     sh = _make_sh({})
@@ -106,23 +105,6 @@ def test_load_all_ledgers_normalizes_types_and_date():
     assert df.iloc[0]["action"] in ("BUY", "buy")
 
 
-def test_load_ledgers_for_policy_filters():
-    records = [
-        {"policy_id": "PL-A", "date": "2024-01-01", "code": "X",
-         "action": "buy", "units": 1, "nav_at_action": 1, "twd": 1, "fee": 0, "note": ""},
-        {"policy_id": "PL-B", "date": "2024-01-02", "code": "Y",
-         "action": "buy", "units": 2, "nav_at_action": 2, "twd": 2, "fee": 0, "note": ""},
-    ]
-    ws = _make_ws(records=records)
-    sh = _make_sh({LEDGER_TAB: ws})
-    df = load_ledgers_for_policy(_make_client(sh), "FAKE", "PL-A")
-    assert len(df) == 1
-    assert df.iloc[0]["code"] == "X"
-
-
-# ──────────────────────────────────────────────────────────────────────
-# append_ledger_row
-# ──────────────────────────────────────────────────────────────────────
 def test_append_ledger_normalizes_and_writes():
     ws = _make_ws(all_values=[list(LEDGER_COLS)])
     ws.row_values.return_value = list(LEDGER_COLS)

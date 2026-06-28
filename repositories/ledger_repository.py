@@ -139,17 +139,6 @@ def load_all_ledgers(client: Any, sheet_id: str) -> pd.DataFrame:
     return df
 
 
-def load_ledgers_for_policy(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
-    """讀指定保單的交易紀錄。"""
-    df = load_all_ledgers(client, sheet_id)
-    if df.empty:
-        return df
-    return df[df["policy_id"] == str(policy_id).strip()].reset_index(drop=True)
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Write
-# ──────────────────────────────────────────────────────────────────────
 def append_ledger_row(client: Any, sheet_id: str, row: dict) -> None:
     """
     純 append 一列交易（不去重，呼叫端負責主鍵）。
