@@ -800,10 +800,12 @@ def render_single_fund_tab() -> None:
                             "series": s,
                             "dividends": divs,
                             "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
-                            "fund_name": fd.get("fund_name") or mj_raw.get("fund_name") or code,
+                            "fund_name": fd.get("fund_name") or mj_raw.get("fund_name") or fk,
                         }
-                        _adv_h = build_health_analysis_row(_adv_fd, code)
-                        _adv_d = build_dividend_summary_row(_adv_fd, code, principal_twd=None)
+                        # v19.186 fix:本檔局部代碼變數為 fk(L234),非 code → 修 NameError
+                        _adv_code = fk or fd.get("fund_code", "?")
+                        _adv_h = build_health_analysis_row(_adv_fd, _adv_code)
+                        _adv_d = build_dividend_summary_row(_adv_fd, _adv_code, principal_twd=None)
 
                         def _fmt_pct(v):
                             return f"{v:.2f}%" if isinstance(v, (int, float)) else "—"
