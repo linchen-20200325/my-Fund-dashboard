@@ -135,7 +135,7 @@ my-Fund-dashboard/
 │   │   ├── reconcile / decision_matrix / ~~event_calendar~~ (v19.211 P0-3-#3 拔毒) / ~~quadrant_simulator~~ (v19.210 P0-3-#2 拔毒) / ...
 │   │
 │   └── 跨域 + 邊緣
-│       ├── adjusted_nav / currency / format_helpers / policy_advisor_service / cross_source_compare
+│       ├── ~~adjusted_nav~~ (v19.214 P0-3-#6 拔毒) / currency / format_helpers / policy_advisor_service / cross_source_compare
 │
 ├── ui/  (L3 Streamlit 渲染)
 │   ├── tab1_macro.py        3023       god module(11 個 render 子)
