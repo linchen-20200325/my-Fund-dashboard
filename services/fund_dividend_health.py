@@ -63,17 +63,9 @@ class EatingPrincipalCore:
     real_return_pct: Optional[float]
 
 
-def _safe_float(v: Any) -> Optional[float]:
-    """輸入 → float 或 None(None / NaN / 非數值都回 None)。"""
-    if v is None:
-        return None
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    if f != f:  # NaN guard
-        return None
-    return f
+# v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
+from shared.converters import safe_float as _safe_float  # noqa: E402
+
 
 
 def classify_eating_principal(

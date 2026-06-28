@@ -82,12 +82,9 @@ def _interpret_indicator(score: float) -> str:
     return f"🟢 訊號**強烈偏多**（標準化超過 -{SIGMA_VERY_HIGH_CUTOFF}σ）"
 
 
-def _safe_float(v: Any, default: float = 0.0) -> float:
-    try:
-        f = float(v) if v is not None else default
-        return f if f == f else default  # NaN guard
-    except (TypeError, ValueError):
-        return default
+# v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
+from shared.converters import safe_float as _safe_float  # noqa: E402
+
 
 
 # ════════════════════════════════════════════════

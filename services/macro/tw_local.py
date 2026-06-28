@@ -39,17 +39,9 @@ _TWPMI_NEUTRAL = _TW_PMI_THR["tw_pmi_score"]["neutral_above"]    # 50.0
 _TWPMI_WEAK = _TW_PMI_THR["tw_pmi_score"]["weak_above"]          # 48.0
 
 
-def _safe_float(x: Any) -> Optional[float]:
-    """容錯轉浮點：None / 字串 / NaN → None。"""
-    if x is None:
-        return None
-    try:
-        f = float(x)
-    except (TypeError, ValueError):
-        return None
-    if f != f:  # NaN guard
-        return None
-    return f
+# v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
+from shared.converters import safe_float as _safe_float  # noqa: E402
+
 
 
 def detect_mk_golden_inflection(

@@ -19,11 +19,9 @@ _MAX_EVENT_ROWS = 6
 _MAX_GRID_ROWS = 12  # 4 策略 × 3 門檻
 
 
-def _fmt_pct(v: Optional[float], plus: bool = True) -> str:
-    if v is None or pd.isna(v):
-        return "—"
-    fmt = "{:+.1%}" if plus else "{:.1%}"
-    return fmt.format(float(v))
+# v19.222 P1-1:_fmt_pct 收口至 shared/converters.py SSOT
+# (此 caller signature 與 SSOT 完全相容:plus / ratio=True / decimals=1)
+from shared.converters import fmt_pct as _fmt_pct  # noqa: E402
 
 
 def _fmt_num(v: Optional[float], digits: int = 2) -> str:

@@ -20,16 +20,9 @@ from __future__ import annotations
 from typing import Optional
 
 
-def _safe_float(v) -> Optional[float]:
-    if v is None:
-        return None
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    if f != f:
-        return None
-    return f
+# v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
+from shared.converters import safe_float as _safe_float  # noqa: E402
+
 
 
 def _compute_holding_years(fd: dict) -> Optional[float]:

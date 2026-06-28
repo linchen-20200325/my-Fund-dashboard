@@ -29,23 +29,5 @@ def _build_fund_dict(fd_raw: dict, code: str, principal_twd: float) -> dict:
     }
 
 
-def _safe_num(v):
-    """寬鬆數值轉換：吃 float / "12.3%" / "1,234" / None → float 或 None。"""
-    if v is None:
-        return None
-    if isinstance(v, bool):
-        return None
-    if isinstance(v, (int, float)):
-        try:
-            f = float(v)
-        except (TypeError, ValueError):
-            return None
-    else:
-        try:
-            f = float(str(v).replace("%", "").replace(",", "").strip())
-        except (TypeError, ValueError):
-            return None
-    import math
-    if math.isnan(f) or math.isinf(f):
-        return None
-    return f
+# v19.222 P1-1:_safe_num 收口至 shared/converters.py SSOT
+from shared.converters import safe_num as _safe_num  # noqa: E402

@@ -76,22 +76,9 @@ def _safe_fx(ccy: str) -> float | None:
         return None
 
 
-def _safe_num(v):
-    """寬鬆數值轉換：吃 float / "12.3%" / "1,234" / None → float 或 None。"""
-    if v is None:
-        return None
-    if isinstance(v, bool):
-        return None
-    if isinstance(v, (int, float)):
-        f = float(v)
-    else:
-        try:
-            f = float(str(v).replace("%", "").replace(",", "").strip())
-        except (TypeError, ValueError):
-            return None
-    if math.isnan(f) or math.isinf(f):
-        return None
-    return f
+# v19.222 P1-1:_safe_num 收口至 shared/converters.py SSOT
+from shared.converters import safe_num as _safe_num  # noqa: E402
+
 
 
 def _period_ret(fund: dict, perf_key: str, metric_key: str):
