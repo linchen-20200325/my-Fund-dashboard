@@ -297,6 +297,26 @@ _FX_CACHE: dict[tuple[str, str], tuple[float, float]] = {}   # (pair, key_hash) 
 _FX_CACHE_TTL = 300.0
 
 
+class _FxCacheProxy:
+    """v19.201 P2-6:把 `_FX_CACHE` raw dict 包裝為符合 `_CACHE_REGISTRY` 介面的 proxy。
+
+    既保留 v18.275 positive-only 設計(None 不入 cache 避免 poisoning)又能受
+    `clear_all_caches()` 一鍵清(過去 `_FX_CACHE` 漏網,只能個別呼叫 `_clear_fx_cache()`)。
+    """
+    __name__ = "_FX_CACHE"
+
+    @staticmethod
+    def cache_clear() -> None:
+        _FX_CACHE.clear()
+
+    @staticmethod
+    def cache_info() -> dict:
+        return {"name": "_FX_CACHE", "currsize": len(_FX_CACHE), "ttl": _FX_CACHE_TTL}
+
+
+register_cache(_FxCacheProxy())
+
+
 def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     """抓最新匯率（v18.275 精簡版）。
 
