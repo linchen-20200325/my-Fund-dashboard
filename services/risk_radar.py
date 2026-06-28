@@ -167,90 +167,13 @@ def _fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Serie
 
 
 def _fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
-    """stooq.com 公開歷史 CSV → 收盤 Series（key: symbol e.g. '^vix3m' / '^vxv' / '^cpc'）。
+    """v19.197 P1-3 thin wrapper:stooq fetcher 已下沉 repositories/external_market_repository。
 
-    URL pattern: https://stooq.com/q/d/l/?s={symbol}&i=d
-    對 CBOE 系列指數的第 4 層備援（公開 CDN 不需登入），多數 NAS Squid 環境可直連。
-
-    v19.43：可選 trace list 收集失敗原因供 UI 顯示。失敗或無此 symbol 回空 Series。
-
-    v19.194：
-    - URL 改用 `%5E` URL 編碼 `^`(部分 CDN 對未編碼 `^` 行為不一致)
-    - 主路徑失敗加 headerless fallback(stooq 偶爾回沒 header line 的純資料)
-    - trace 加入回應體首 80 字方便 user 看到實際長相
+    保留本檔 attr 供 test_data_guard_health_v194.py 的 `patch.object(rr, "_fetch_stooq_csv", ...)` 相容。
+    原 stooq URL chain / headerless fallback / trace 邏輯全部在 repositories 內。
     """
-    import io
-    import urllib.parse as _up
-
-    from infra.proxy import fetch_url
-
-    def _t(msg: str) -> None:
-        if trace is not None:
-            trace.append(f"stooq {symbol}: {msg}")
-
-    def _parse_standard(text: str) -> pd.Series:
-        df = pd.read_csv(io.StringIO(text))
-        if "Date" not in df.columns or "Close" not in df.columns or df.empty:
-            return pd.Series(dtype=float)
-        idx = pd.to_datetime(df["Date"], errors="coerce")
-        vals = pd.to_numeric(df["Close"], errors="coerce")
-        return pd.Series(vals.values, index=idx).dropna().sort_index()
-
-    def _parse_headerless(text: str) -> pd.Series:
-        """stooq 偶爾回的 'YYYY-MM-DD,open,high,low,close,volume\\n' 無 header 格式。"""
-        rows = []
-        for line in text.strip().split("\n"):
-            line = line.strip()
-            if not line or "," not in line:
-                continue
-            parts = line.split(",")
-            if len(parts) < 5:
-                continue
-            try:
-                dt = pd.to_datetime(parts[0].strip(), errors="raise")
-                val = float(parts[4].strip())
-                rows.append((dt, val))
-            except (ValueError, TypeError):
-                continue
-        if not rows:
-            return pd.Series(dtype=float)
-        s = pd.Series([v for _, v in rows], index=[d for d, _ in rows])
-        return s.sort_index().dropna()
-
-    try:
-        url = f"https://stooq.com/q/d/l/?s={_up.quote(symbol, safe='')}&i=d"
-        r = fetch_url(url, timeout=15)
-        if r is None or getattr(r, "status_code", 0) != 200:
-            code = getattr(r, "status_code", None)
-            _t(f"HTTP {code}")
-            print(f"[risk_radar/stooq] {symbol} HTTP {code}")
-            return pd.Series(dtype=float)
-        text = r.text
-        if "No data" in text or len(text) < 50:
-            _t(f"No data / body 過短 (len={len(text)})")
-            print(f"[risk_radar/stooq] {symbol} 無資料")
-            return pd.Series(dtype=float)
-
-        s = _parse_standard(text)
-        if s.empty:
-            s = _parse_headerless(text)
-            if not s.empty:
-                _t("standard header 失敗,headerless fallback 命中")
-                s.attrs["source"] = f"stooq:q/d/l:{symbol}:headerless"
-                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-                return s.tail(180)
-            _sample = text[:80].replace("\n", "\\n")
-            _t(f"欄位不符 standard+headerless 都失敗 sample={_sample!r}")
-            print(f"[risk_radar/stooq] {symbol} 欄位不符,sample={_sample!r}")
-            return pd.Series(dtype=float)
-
-        s.attrs["source"] = f"stooq:q/d/l:{symbol}"
-        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-        return s.tail(180)
-    except Exception as e:  # noqa: BLE001
-        _t(f"exception {str(e)[:40]}")
-        print(f"[risk_radar/stooq] {symbol} 失敗: {e}")
-        return pd.Series(dtype=float)
+    from repositories.external_market_repository import fetch_stooq_csv
+    return fetch_stooq_csv(symbol, trace=trace)
 
 
 def _resolve_vix3m(
