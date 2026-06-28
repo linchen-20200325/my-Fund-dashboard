@@ -27,8 +27,8 @@ preset，**未抽** `shared/allocation_policies.py`，理由：
    規則本意是防 inline magic number，policy preset 屬另一範疇。
 2. `STRATEGY_PRESETS` 的 phase 名稱（"復甦"/"擴張"/"放緩"/"衰退"）與
    `DEFAULT_PHASE_SCRIPT` 字串契約強耦合 → 放同檔改動原子性高。
-3. 目前 consumer 僅 simulator 本檔 + `ui/tab_allocation_simulator.py`
-   一個 UI tab，scope 小；crisis_backtest 不共用此 phase 邏輯。
+3. 目前 consumer 僅 simulator 本檔內部 + 對應 test_allocation_simulator.py，
+   scope 小；crisis_backtest 不共用此 phase 邏輯。
 4. 若未來新增第二份共用此 policy 的 simulator，再升級為 SSOT 模組
    （§8.1 step 6「用不到的抽象先不做」）。
 

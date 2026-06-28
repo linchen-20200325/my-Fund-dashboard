@@ -28,12 +28,8 @@ from ui.tab2_single_fund import render_single_fund_tab
 from ui.tab3_portfolio import render_portfolio_tab
 from ui.tab5_data_guard import render_data_guard_tab
 from ui.tab6_manual import render_manual_tab
-# v19.130 ARCHIVED: render_allocation_simulator_tab — 配置模擬器 tab 已從 UI 移除
-# 模組檔 ui/tab_allocation_simulator.py 保留於磁碟作 orphan(無 caller)
-# from ui.tab_allocation_simulator import render_allocation_simulator_tab
-# v19.31 ARCHIVED: 回測功能暫封存（📉 危機回測室 / 🔬 回測找參數），未來啟用時取消下兩行註解
+# v19.31 ARCHIVED: 📉 危機回測室,未來啟用時取消下行註解
 # from ui.tab_crisis_backtest import render_crisis_backtest_tab
-# from ui.tab_param_finder import render_param_finder_tab
 from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
 from fund_fetcher  import (
     get_proxy_config,
@@ -491,7 +487,6 @@ render_macro_compass()
 # v19.130 故事化動線(2026-06-25 user 反饋,重排 + 改名 + 刪 配置模擬器):
 # 🌐 總經 → 🔍 單一基金(深掘)→ 💊 組合基金健診(原「組合健診」)
 #         → 📊 組合配置(原「組合基金」)→ 🔭 資料診斷 → 📖 說明書
-# 刪除:💼 配置模擬器(render_allocation_simulator_tab 函式檔保留作 archived)
 # 敘事:總經背景 → 個基細查 → 持有組合健康 → 配置決策 → 診斷 → 文件
 tab_macro, tab_single, tab_health, tab_portfolio, tab5, tab6 = st.tabs(
     ["🌐 總經", "🔍 單一基金", "💊 組合基金健診",
@@ -527,9 +522,7 @@ with tab_portfolio:
     render_portfolio_tab()
 
 # ══════════════════════════════════════════════════════
-# v19.31 ARCHIVED: 📉 危機回測室 + 🔬 回測找參數
-# v19.130 ARCHIVED: 💼 配置模擬器(render_allocation_simulator_tab 保留為 orphan)
-# 三個模組檔完整保留於磁碟,未來啟用:重加 import + tab tuple + with-block 即可
+# v19.31 ARCHIVED: 📉 危機回測室,模組檔保留於磁碟,未來啟用解註 import + with-block
 # ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════

@@ -1,8 +1,6 @@
 """test_allocation_simulator.py — services/allocation_simulator.py 測試 (Phase 6b)."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from services.allocation_simulator import (
@@ -277,31 +275,3 @@ def test_total_twd_equals_sum_of_three_buckets():
     diff = df["total_twd"] - (df["fund_value_twd"] + df["cash_value_twd"] + df["stay_twd"])
     # rounding tolerance: 各欄都 round 2 位 → 累計誤差 ≤ 1.0
     assert diff.abs().max() < 1.0
-
-
-# ──────────────────────────────────────────────────────────────
-# UI source-level（app.py + tab file）
-# ──────────────────────────────────────────────────────────────
-@pytest.mark.skip(
-    reason="v19.130:配置模擬器 tab 已從 UI 移除(app.py:32 ARCHIVED 註解)。"
-           "模組檔 ui/tab_allocation_simulator.py 保留作 orphan,業務邏輯仍在 services,"
-           "但 app.py 不再 register tab_sim — 此 test 契約已失效。"
-)
-def test_app_py_registers_allocation_simulator_tab():
-    src = (Path(__file__).parent / "app.py").read_text(encoding="utf-8")
-    assert "render_allocation_simulator_tab" in src, "app.py 必須 import render"
-    assert "💼 配置模擬器" in src, "app.py 必須含新 Tab label"
-    assert "tab_sim" in src, "app.py 必須註冊 tab_sim 變數"
-
-
-def test_tab_file_has_all_4_sections():
-    src = (Path(__file__).parent / "ui" / "tab_allocation_simulator.py").read_text(encoding="utf-8")
-    for sec in ("1️⃣ 基本設定", "2️⃣ 景氣劇本", "3️⃣ 配息分配", "4️⃣ FX 匯率模型"):
-        assert sec in src, f"UI 缺少 section: {sec}"
-
-
-def test_tab_file_imports_simulator_service():
-    src = (Path(__file__).parent / "ui" / "tab_allocation_simulator.py").read_text(encoding="utf-8")
-    assert "from services.allocation_simulator import" in src
-    for sym in ("SimulationParams", "run_monte_carlo", "DEFAULT_PHASE_SCRIPT"):
-        assert sym in src, f"UI 缺少 {sym} 引用"
