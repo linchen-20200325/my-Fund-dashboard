@@ -76,13 +76,18 @@ def test_detect_turning_points_returns_5_keys():
 
 
 def test_detect_turning_points_safe_on_empty_dataframe(monkeypatch):
-    """fetch_fred 全部回空 DataFrame 時不應拋例外，所有 key source_ok 都是 False。"""
-    import services.macro_service as ms
+    """fetch_fred 全部回空 DataFrame 時不應拋例外，所有 key source_ok 都是 False。
+
+    v19.199 P1-7:macro_service 已拆 services/macro/ 子套件。
+    detect_turning_points 內 fetch_fred 引用走 services.macro.turning_points,
+    patch target 對應改為該子模組(原 patch shim services.macro_service 無效)。
+    """
+    from services.macro import turning_points as tp
 
     def _empty_fred(sid, key, n=250):
         return pd.DataFrame(columns=["date", "value"])
 
-    monkeypatch.setattr(ms, "fetch_fred", _empty_fred)
+    monkeypatch.setattr(tp, "fetch_fred", _empty_fred)
     out = detect_turning_points("dummy-key")
     for k in ("pmi_diff", "yield_curve", "hy_spread", "sahm_rule", "lei_cfnai"):
         assert out[k]["source_ok"] is False

@@ -316,9 +316,11 @@ def _synth_spx_uptrend() -> pd.Series:
 def test_backtest_turning_points_event_detection(monkeypatch):
     """mock FRED + SPX，斷言識別到 4 個事件且 12M 報酬皆 > 0。"""
     import services.macro_service as macro_engine
-    monkeypatch.setattr("services.macro_service.fetch_fred",
+    # v19.199 P1-7:fetch_fred 引用走 services.macro.turning_points(原 monkeypatch
+    # services.macro_service 在 shim 化後無效)
+    monkeypatch.setattr("services.macro.turning_points.fetch_fred",
                         lambda sid, key, n=250: _synth_t10y2y_with_inversions())
-    monkeypatch.setattr("services.macro_service.fetch_yf_close",
+    monkeypatch.setattr("services.macro.turning_points.fetch_yf_close",
                         lambda t, range_="2y", interval="1d": _synth_spx_uptrend())
 
     r = macro_engine.backtest_turning_points(
@@ -354,9 +356,11 @@ def test_backtest_turning_points_incomplete_window(monkeypatch):
     vals[mask] = -0.4
     df_t = pd.DataFrame({"date": rng, "value": vals})
 
-    monkeypatch.setattr("services.macro_service.fetch_fred",
+    # v19.199 P1-7:fetch_fred 引用走 services.macro.turning_points(原 monkeypatch
+    # services.macro_service 在 shim 化後無效)
+    monkeypatch.setattr("services.macro.turning_points.fetch_fred",
                         lambda sid, key, n=250: df_t)
-    monkeypatch.setattr("services.macro_service.fetch_yf_close",
+    monkeypatch.setattr("services.macro.turning_points.fetch_yf_close",
                         lambda t, range_="2y", interval="1d":
                         pd.Series(np.linspace(100, 200, len(rng)), index=rng))
 
