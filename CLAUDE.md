@@ -115,8 +115,8 @@
 
 | Tier | 等級 | 來源範例 | Evidence |
 |---|---|---|---|
-| **T1** | 官方政府/央行 API | FRED, TDCC OpenAPI, FundClear SmartFundAPI, CBC ms1.json, MOF | macro_repository.py:52-54, fund_repository.py:80-187,2043-2242, tw_macro.py:41-45 |
-| **T2** | 商用聚合 API(帶 token 或 stable IP) | FinMind, Yahoo Finance query1, Gemini API | tw_macro.py:40, hot_money.py:38, macro_repository.py:311-344 |
+| **T1** | 官方政府/央行 API | FRED, TDCC OpenAPI, FundClear SmartFundAPI, CBC ms1.json, MOF | macro_repository.py:52-54, fund_repository.py:80-187,2043-2242, repositories/tw_macro_repository.py:41-45(v19.224 D 步驟更新路徑)|
+| **T2** | 商用聚合 API(帶 token 或 stable IP) | FinMind, Yahoo Finance query1, Gemini API | repositories/tw_macro_repository.py:40, repositories/hot_money_repository.py:38, macro_repository.py:311-344(v19.224 D 步驟更新路徑)|
 | **T3** | 第三方網站(HTML 抓) | MoneyDJ(主 + TCB + Chubb 子網域), SITCA, Allianz 官網, Morningstar, Insurance subdomains(TL/FL/CT/JF/NN etc) | fund_fetcher.py:79-106, fund_repository.py:1061-1306,1467+,1926-2043,196-265,713-1060 |
 | **T4** | News RSS(非數值,僅文本) | Reuters, MarketWatch, FT, Yahoo Finance, Investing, CNBC, BBC, Bloomberg | news_repository.py:15-55 |
 | **T5** | User config / AI | Google Sheets(policy/portfolio), Gemini API(synthesis only) | services/auto_search_store_gs.py, services/ai_service.py |
@@ -462,7 +462,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 |---|---|---|
 | **L0 Infra** | OAuth / Proxy / Cache / 跨層公用 | `infra/proxy.py`、`infra/oauth.py`、`infra/cache.py`(+ `_CACHE_REGISTRY`) |
 | **L0 Shared** | 常數 / TTL / FRED IDs / 色票(無 IO 純常數) | `shared/ttls.py`、`shared/fred_series.py`、`shared/colors.py` |
-| **L1 Repository** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund_repository.py`、`repositories/moneydj_fetcher.py`、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy)、`hot_money.py`、`tw_macro.py` |
+| **L1 Repository** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund_repository.py`、`repositories/moneydj_fetcher.py`、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy shim)、`repositories/hot_money_repository.py`(P0-4-A 搬入)、`repositories/tw_macro_repository.py`(P0-4-B 搬入)|
 | **L2 Service** | 業務邏輯純函式 / 評分 / 策略 / 模擬 / AI | `services/macro_service.py`、`services/fund_service.py`、`services/portfolio_service.py`、`services/ai_service.py`、`services/crisis_backtest.py`、`services/valuation.py`、`services/macro_validation.py` 等 ~25 檔(v19.212 退 allocation_simulator) |
 | **L3 UI** | Streamlit Tab 渲染 + components + helpers | `app.py`(425 LOC,僅 orchestrator)+ `ui/tab*.py` + `ui/components/` + `ui/helpers/` |
 
@@ -505,7 +505,7 @@ except ImportError:
 ### 8.3 灰色地帶(step 3 audit 確認結果)
 
 - ✅ **F-GRAY-1 v19.81 audit 結案**:`fund_fetcher.py`(根目錄,459 LOC)**保留根目錄**。檔內 18 條 `noqa: F401` re-export shim(infra.cache / infra.proxy 等)+ 57 個 caller import 線。內容已是「向後相容 shim 容器」,搬至 `repositories/` 為純 cosmetic 改動且需動 57 個 caller 介面,違反 §8.1 step 6「用不到的抽象先不做」。
-- ✅ **F-GRAY-2 v19.81 audit 結案**:`hot_money.py`(344 LOC, 5 callers) / `tw_macro.py`(334 LOC, 2 callers)同上 — self-contained L1 fetcher,根目錄 vs `repositories/` 為純 cosmetic,不視為違憲。
+- ✅ **F-GRAY-2 v19.81 audit 結案 → P0-4 完成搬遷**:原 `hot_money.py`(344 LOC,5 callers)/ `tw_macro.py`(334 LOC,2 callers)F-GRAY-2 結論為「self-contained L1 fetcher,根目錄 vs `repositories/` 為純 cosmetic 不視為違憲」。**後續第二階段 P0-4-A/B v19.x 已完成搬遷**:`repositories/hot_money_repository.py`(P0-4-A 拆 2 檔 + UI 上層)+ `repositories/tw_macro_repository.py`(P0-4-B 整檔搬)。
 - ✅ **F-GRAY-3 v19.81 audit 結案**:`app.py`(568 LOC)— 已是 orchestrator,主要功能為 `_now_tw`/`_load_keys`/`_check_secrets`/`_calc_data_health`(thin session-aware wrapper)/`render_macro_compass`(UI)。無顯著業務邏輯需下沉。同步刪除 1 處 dead code `_unused_old_calculate_composite_score`(deprecated placeholder, 0 callers)。
 - ⚠️ **F-GRAY-4 v19.80 audit 部份結案,VIX 子題 C2 v19.160 完全收斂**:
   - **VIX(已收)**:user 2026-06-26 撤銷 v19.147 multi-cutoff,接受 trade-off。
