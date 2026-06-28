@@ -108,8 +108,13 @@ def build_health_analysis_row(
     # 但 factors[*] 個別 value 仍是 Sortino/Calmar/Alpha/Expense SSOT。
     from services.portfolio_service import calc_fund_factor_score
     try:
-        # fund_data 第一參數需 perf/metrics,fd 平坦/嵌套都吃
-        _fdata = fd if "perf" in fd else mj  # 平坦 fd 已 wrap,直接吃 fd
+        # v19.182 FIX:calc_fund_factor_score 需 {metrics, perf} 兩個 sub-dict。
+        # 舊版 `_fdata = fd if "perf" in fd else mj` 在「內部已 normalize」後 fd 變 nested
+        # (有 moneydj_raw 但無 top-level perf)→ 走 else 拿 mj(無 metrics)→
+        # 抓不到 sortino/calmar/expense → 3 Tab 全顯示「—」。
+        # 修法:無論 normalize 與否,顯式組 {metrics, perf} dict。perf 從 fd 或 mj 拿。
+        _pf = (fd.get("perf") if "perf" in fd else mj.get("perf")) or {}
+        _fdata = {"metrics": m, "perf": _pf}
         risk_table = mj.get("risk_metrics") or fd.get("risk_metrics") or {}
         _6f = calc_fund_factor_score(_fdata, risk_table=risk_table)
         _factors = _6f.get("factors") or {}

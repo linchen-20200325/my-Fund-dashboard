@@ -784,7 +784,12 @@ def render_single_fund_tab() -> None:
                 # /MaxDD/3Y-5Y 年化/3-3-3 篩/MK 換標的建議)— 共用 fund_health_report SSOT,
                 # 跨 Tab3/健診 同源。
                 try:
-                    with st.expander("📊 進階指標(Sortino / Calmar / Alpha / Expense / 3Y-5Y / 3-3-3 / 換標的建議)", expanded=False):
+                    # v19.182:預設展開,user 第一眼就看到(原 v19.181 expanded=False 收起來
+                    # 容易被忽略 — user 反饋「沒看到進階指標」)。
+                    with st.expander(
+                        "📊 進階指標(Sortino / Calmar / Alpha / Expense / 3Y-5Y / 3-3-3 / 換標的建議)",
+                        expanded=True,
+                    ):
                         from services.fund_health_report import (
                             build_dividend_summary_row,
                             build_health_analysis_row,
