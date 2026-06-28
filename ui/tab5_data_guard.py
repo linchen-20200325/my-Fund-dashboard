@@ -153,8 +153,28 @@ def render_data_guard_tab() -> None:
     _pf_div_n = sum(1 for f in _src_pf_loaded
                     if (f.get("dividends") or (f.get("moneydj_raw") or {}).get("dividends")))
 
-    _fx_rate = st.session_state.get("usdtwd_rate") or st.session_state.get("fx_rate")
-    _gs_policy = st.session_state.get("policy_funds") or st.session_state.get("portfolio_policy")
+    # v19.194 修假紅燈:`usdtwd_rate` / `policy_funds` 這 4 個 session key
+    # 整個 codebase 從未被任何代碼 set 過(grep 確認),原邏輯導致 Tab 4 永遠紅燈
+    # 與實際資料健康度無關。
+    # - FX:直接呼 cached get_latest_fx('USDTWD')(positive-only cache + 5min TTL,
+    #   render 時若 cache 命中為純 dict lookup)
+    # - 政策:真實檢查 (a) gservice_account secret(SA 模式),(b) OAuth configured
+    #   + gsheet_tokens(OAuth 模式),(c) 兩者皆無才算 ✗
+    try:
+        from repositories.fund_repository import get_latest_fx as _get_fx
+        _fx_rate = _get_fx("USDTWD")
+    except Exception:
+        _fx_rate = None
+    try:
+        from ui.helpers.oauth_state import (
+            _gsa_secret as _gs_sa_secret,
+            _oauth_configured as _gs_oauth_cfg_ok,
+        )
+        _has_sa = bool(_gs_sa_secret)
+        _has_oauth_login = bool(_gs_oauth_cfg_ok and st.session_state.get("gsheet_tokens"))
+        _gs_policy = _has_sa or _has_oauth_login
+    except Exception:
+        _gs_policy = False
     _alloc_have = sum([_pf_loaded_n > 0, bool(_fx_rate), bool(_gs_policy)])
     _alloc_total = 3
 
@@ -200,7 +220,7 @@ def render_data_guard_tab() -> None:
         ("📊 Tab 4 組合配置", _t4_emoji, _t4_color,
          f"{_alloc_have}/{_alloc_total} 元件" if _pf_total else "未設定",
          f"持倉 {'✓' if _pf_loaded_n else '✗'} ｜ FX {'✓' if _fx_rate else '✗'} ｜ Sheet 政策 {'✓' if _gs_policy else '✗'}",
-         "FX 失敗 → §2.1 fund_repository.get_latest_fx;Sheet → OAuth"),
+         "FX 失敗 → 上方 Proxy 連線測試;Sheet → sidebar 登入 Google / 設 gservice_account secret"),
     ]
 
     _tab_th = "font-size:10px;color:#888;font-weight:700;padding:8px 10px;border-bottom:1px solid #30363d"
