@@ -855,7 +855,12 @@ def fetch_all_indicators(fred_api_key):
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(260)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
-        R["CONT_CLAIMS"] = dict(name="持續失業金 (週)", value=int(v), prev=int(p),
+        # value/prev 統一以「萬人」為單位（與 series=s/10000 一致），避免 Z-Score 與 AI Prompt
+        # 單位錯位（對齊上方 ICSA/JOBLESS 既有正確寫法 L772-780）。原本 value=int(v) 為原始
+        # 人數（~1,821,000）但 series 已 /10000（~182 萬人）→ Z=(1.82M-182)/std≈+57000 爆量，
+        # Z-Score 矩陣顯示「值 1821000 萬、Z=+57324」假極端，並汙染「就業」子循環評分。
+        # signal/color/score 維持用原始 v（門檻 1.7M/1.9M 人數）不受影響。
+        R["CONT_CLAIMS"] = dict(name="持續失業金 (週)", value=round(v/10000, 1), prev=round(p/10000, 1),
             unit="萬人", type="領先", date=str(df.iloc[-1]["date"])[:10],
             desc="尚在領失業金人數 | <170 萬健康 | >190 萬警戒 | 失業率月延遲時看這顆",
             trend=_trend(df["value"].tolist()[-8:]),
