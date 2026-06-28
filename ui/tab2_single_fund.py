@@ -205,6 +205,20 @@ def render_single_fund_tab() -> None:
                         _pxy_line = "NAS Proxy: ❌ 未設定（走直連，Cloud IP 可能被封）"
                 except Exception as _e_pxy:
                     _pxy_line = f"NAS Proxy: ⚠️ 讀取失敗 ({type(_e_pxy).__name__})"
+                # v19.191:抓取診斷對齊「📊 進階指標」面板 — 揭露 6F 子欄位 ✅/❌,
+                # 避免 metrics dict ✅ 但子欄位都「—」造成診斷誤判。
+                _m_diag = fd.get("metrics") or {}
+                def _mk(v):
+                    return "✅" if v is not None else "—"
+                _adv_sortino  = _m_diag.get("sortino")
+                _adv_calmar   = _m_diag.get("calmar")
+                _adv_3y       = _m_diag.get("ret_3y_ann")
+                _adv_5y       = _m_diag.get("ret_5y_ann")
+                _adv_expense  = (_m_diag.get("expense_ratio")
+                                 or _mj_raw.get("mgmt_fee") or None)
+                _adv_perf1y   = (fd.get("perf") or _mj_raw.get("perf") or {}).get("1Y")
+                _adv_alpha_ok = (_adv_perf1y is not None
+                                 and _m_diag.get("annual_div_rate") is not None)
                 st.code(
                     f"{_pxy_line}\n"
                     f"────────────────────────\n"
@@ -218,6 +232,14 @@ def render_single_fund_tab() -> None:
                     f"最新淨值: {_mj_raw.get('nav_latest', '—')}\n"
                     f"基金類別: {_mj_raw.get('fund_type',  '—')}\n"
                     f"page_type: {fd.get('page_type', '—')}\n"
+                    f"────────────────────────\n"
+                    f"📊 進階指標(對齊「📊 進階指標」面板):\n"
+                    f"  Sortino:     {_mk(_adv_sortino)}  (需 ≥60 筆 + ≥5 筆負報酬)\n"
+                    f"  Calmar:      {_mk(_adv_calmar)}  (需 3Y 年化 / 或 1Y 報酬 + max_dd)\n"
+                    f"  Alpha:       {'✅' if _adv_alpha_ok else '—'}  (需 perf.1Y + annual_div_rate)\n"
+                    f"  費用率:      {_mk(_adv_expense)}  (mgmt_fee fallback)\n"
+                    f"  3Y 年化:     {_mk(_adv_3y)}  (需 NAV ≥ 3 年)\n"
+                    f"  5Y 年化:     {_mk(_adv_5y)}  (需 NAV ≥ 5 年)\n"
                     f"────────────────────────\n"
                     f"warning: {_raw_warn}\n"
                     f"error:   {_raw_err}",
@@ -845,6 +867,27 @@ def render_single_fund_tab() -> None:
                             "任一中 → 🔴 換 / 1-2 觀察 → 🟡 / 全未中 → 🟢。"
                             "**Tab2 單檔無 user 持有期 → (a)(c) 用基金成立年數判定**。"
                         )
+                        # v19.191:對齊「資料診斷」面板 — 進階指標各欄位「—」的原因揭露。
+                        # user 看了知道是「資料源真沒提供」還是「歷史長度不足」。
+                        _miss = []
+                        if _adv_h.get("Sortino") is None:
+                            _miss.append("Sortino(需 NAV ≥ 60 筆 + ≥5 筆負報酬)")
+                        if _adv_h.get("Calmar") is None:
+                            _miss.append("Calmar(需 3Y 年化 或 1Y 報酬 + max_dd)")
+                        if _adv_h.get("Alpha %") is None:
+                            _miss.append("Alpha(需 perf.1Y + 年化配息率)")
+                        if _adv_h.get("費用率 %") is None:
+                            _miss.append("費用率(MoneyDJ wb01 mgmt_fee fallback)")
+                        if _adv_h.get("3Y 年化 %") is None:
+                            _miss.append("3Y 年化(需 NAV ≥ 3 年)")
+                        if _adv_h.get("5Y 年化 %") is None:
+                            _miss.append("5Y 年化(需 NAV ≥ 5 年)")
+                        if _miss:
+                            st.caption(
+                                "🔍 **「—」欄位原因**:"
+                                + " · ".join(_miss)
+                                + "(對齊資料診斷面板)"
+                            )
                 except Exception as _adv_e:  # noqa: BLE001
                     st.caption(f"⬜ 進階指標渲染失敗:{type(_adv_e).__name__}: {str(_adv_e)[:60]}")
 

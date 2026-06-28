@@ -208,6 +208,8 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     不可重新呼叫第二份計算 / 自算覆蓋,免「同檔不同數字」散落:
 
     - `sharpe`               年化 Sharpe Ratio(優先 wb07,本算 fallback)
+    - `sortino`              年化 Sortino Ratio(下檔波動,需 ≥60 筆 + ≥5 筆負報酬)v19.191 +
+    - `calmar`               Calmar = 3Y 年化 / |max_dd|(3Y 缺則 1Y fallback)v19.191 +
     - `std_1y` / std_2y / std_3y / std_5y  年化標準差(同優先序)
     - `max_drawdown`         最大回撤 %
     - `ret_1y` / ret_3y / ret_5y  純 NAV 報酬(不含息;1Y 含息走 fund_total_return)
@@ -377,6 +379,15 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     bb_lower_series = bb_lower_s.dropna()
     rf=_RF_ANNUAL/TRADING_DAYS_PER_YEAR; r252=log_ret.tail(TRADING_DAYS_PER_YEAR) if len(log_ret)>=TRADING_DAYS_PER_YEAR else log_ret  # Bug1: rf 改用即時 FEDFUNDS
     sharpe=round(float((r252.mean()-rf)/r252.std()*np.sqrt(TRADING_DAYS_PER_YEAR)),2) if len(r252)>=60 else None
+    # v19.191 SSOT WRITER:Sortino(下檔波動年化)— 同 sharpe 60 筆門檻
+    # target=0,只取負報酬計 downside_std,避免 ÷0 用 1e-12 guard。
+    sortino = None
+    if len(r252) >= 60:
+        _neg = r252[r252 < 0]
+        if len(_neg) >= 5:
+            _dstd = float(_neg.std())
+            if _dstd > 1e-12:
+                sortino = round(float((r252.mean() - rf) / _dstd * np.sqrt(TRADING_DAYS_PER_YEAR)), 2)
     cum=(1+log_ret).cumprod()
     max_dd=round(float(((cum-cum.cummax())/cum.cummax()).min())*100,2)
     def _ret(n): return round((now-float(s.iloc[-n]))/float(s.iloc[-n])*100,2) if len(s)>=n else None
@@ -397,6 +408,12 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     _ret_5y_cum = _ret(5 * TRADING_DAYS_PER_YEAR)
     _ret_3y_ann = _annualize_cum_pct(_ret_3y_cum, 3)
     _ret_5y_ann = _annualize_cum_pct(_ret_5y_cum, 5)
+    # v19.191 SSOT WRITER:Calmar = 年化報酬 / |max_drawdown|
+    # 優先 3Y 年化(較穩定),fallback 1Y 純 NAV 報酬。max_dd=0 → None(避免 ÷0)。
+    calmar = None
+    _ann_for_calmar = _ret_3y_ann if _ret_3y_ann is not None else _ret(TRADING_DAYS_PER_YEAR)
+    if _ann_for_calmar is not None and max_dd is not None and abs(max_dd) > 1e-9:
+        calmar = round(float(_ann_for_calmar) / abs(float(max_dd)), 2)
     # v18.53/v18.55/v18.60/v18.61/v18.65/v18.71: 境內基金 MoneyDJ wb01 不存在 → 本地計算含息
     # v18.71: 改用「還原淨值法（配息再投資複利）」— 透過 calculate_fund_total_return()
     #         比舊版「NAV 變化 + 累積配息率」（單利加總）更接近 MoneyDJ wb01 含息官方值，
@@ -556,6 +573,9 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             self_calc=sharpe,
             moneydj=safe_float(risk_tbl.get("一年", {}).get("Sharpe")),
         ),
+        # v19.191 SSOT WRITER:6F factor 進階指標(配 portfolio_service.calc_fund_factor_score)
+        sortino=sortino,
+        calmar=calmar,
         max_drawdown=max_dd,
         ma20=round(float(s.tail(20).mean()),4) if len(s)>=20 else None,
         ma60=round(float(s.tail(60).mean()),4) if len(s)>=60 else None,
