@@ -156,6 +156,9 @@ def _fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Serie
         idx = pd.to_datetime(df[date_col], errors="coerce")
         vals = pd.to_numeric(df[close_col], errors="coerce")
         s = pd.Series(vals.values, index=idx).dropna().sort_index()
+        # v19.188 F-PROV-1 phase 23:CBOE CSV provenance
+        s.attrs["source"] = f"CBOE:cdn:daily_prices:{short_name}_History.csv"
+        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
         return s.tail(180)  # 對齊 6mo
     except Exception as e:  # noqa: BLE001
         _t(f"exception {str(e)[:40]}")
@@ -199,6 +202,9 @@ def _fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
         idx = pd.to_datetime(df["Date"], errors="coerce")
         vals = pd.to_numeric(df["Close"], errors="coerce")
         s = pd.Series(vals.values, index=idx).dropna().sort_index()
+        # v19.188 F-PROV-1 phase 23:stooq CSV provenance
+        s.attrs["source"] = f"stooq:q/d/l:{symbol}"
+        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
         return s.tail(180)
     except Exception as e:  # noqa: BLE001
         _t(f"exception {str(e)[:40]}")

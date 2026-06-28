@@ -52,8 +52,12 @@ def _normalize_moneydj_url_for_cache(url: str) -> str:
 
         # 最終 key = "fetch_fund|CODE|PAGE_TYPE"
         return f"fetch_fund|{code}|{page_type}"
-    except Exception:
-        # 異常情況（malformed URL）→ 回傳原 URL（放棄 normalize，直走原邏輯）
+    except Exception as e:
+        # v19.187 F-MED:malformed URL → fallback 原 URL,留 stderr 軌跡
+        import sys as _sys
+        print(f'[cache] _normalize_moneydj_url_for_cache fail '
+              f'(url={url[:80]!r}): {type(e).__name__}: {e}',
+              file=_sys.stderr)
         return url
 
 
@@ -75,8 +79,13 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
             if key_fn is not None and len(args) > 0:
                 try:
                     key = key_fn(args[0])  # 通常 args[0] 是 URL 或主要參數
-                except Exception:
-                    key = None  # key_fn 失敗 → 放棄快取
+                except Exception as e:
+                    # v19.187 F-MED:key_fn 失敗 → 放棄快取(不影響業務),留 stderr
+                    import sys as _sys
+                    print(f'[cache] key_fn fail in {fn.__name__} '
+                          f'(arg0={str(args[0])[:60]!r}): '
+                          f'{type(e).__name__}: {e}', file=_sys.stderr)
+                    key = None
             else:
                 # 防 unhashable args/kwargs（如 list/dict 引數）→ 跳過快取直走原 fn
                 try:
@@ -133,8 +142,12 @@ def clear_all_caches() -> int:
     for fn in _CACHE_REGISTRY:
         try:
             fn.cache_clear()
-        except Exception:
-            pass
+        except Exception as e:
+            # v19.187 F-MED:單一 cache clear 失敗不該中斷其他,留 stderr
+            import sys as _sys
+            print(f'[cache] clear_all_caches: '
+                  f'{getattr(fn, "__name__", "?")} cache_clear fail: '
+                  f'{type(e).__name__}: {e}', file=_sys.stderr)
     return len(_CACHE_REGISTRY)
 
 
@@ -153,8 +166,12 @@ def clear_caches_by_names(names) -> int:
             if getattr(fn, "__name__", "") in _wanted:
                 fn.cache_clear()
                 _hit += 1
-        except Exception:
-            pass
+        except Exception as e:
+            # v19.187 F-MED:單一 cache clear 失敗不影響其他,留 stderr
+            import sys as _sys
+            print(f'[cache] clear_caches_by_names: '
+                  f'{getattr(fn, "__name__", "?")} fail: '
+                  f'{type(e).__name__}: {e}', file=_sys.stderr)
     return _hit
 
 
@@ -166,8 +183,12 @@ def get_all_cache_info() -> list[dict]:
             info = fn.cache_info()
             info["name"] = fn.__name__
             out.append(info)
-        except Exception:
-            pass
+        except Exception as e:
+            # v19.187 F-MED:cache info 取不到不該擋整個 UI,留 stderr
+            import sys as _sys
+            print(f'[cache] get_all_cache_info: '
+                  f'{getattr(fn, "__name__", "?")} fail: '
+                  f'{type(e).__name__}: {e}', file=_sys.stderr)
     return out
 
 
@@ -211,10 +232,16 @@ def clear_disk_cache() -> dict:
                 try:
                     _os.remove(_os.path.join(_CACHE_DIR, _fn))
                     _stat["files_removed"] += 1
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    # v19.187 F-MED:單檔刪失敗(權限/併發)不擋全部
+                    import sys as _sys
+                    print(f'[cache] clear_disk_cache: rm {_fn} fail: '
+                          f'{type(e).__name__}: {e}', file=_sys.stderr)
+        except Exception as e:
+            # v19.187 F-MED:listdir 失敗(權限)
+            import sys as _sys
+            print(f'[cache] clear_disk_cache: listdir({_CACHE_DIR}) fail: '
+                  f'{type(e).__name__}: {e}', file=_sys.stderr)
     if _FUND_SNAPSHOT:
         _stat["snapshot_cleared"] = len(_FUND_SNAPSHOT)
         _FUND_SNAPSHOT.clear()
@@ -240,26 +267,35 @@ def global_refresh_all(session_state=None) -> dict:
         "disk_files_removed": 0, "snapshot_cleared": 0,
         "session_keys_popped": 0,
     }
+    import sys as _sys
     try:
         _stat["ttl_cleared"] = clear_all_caches()
-    except Exception:
-        pass
+    except Exception as e:
+        # v19.187 F-MED:layer 1 失敗仍要嘗試 layer 2-4
+        print(f'[cache] global_refresh_all L1 ttl fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
     try:
         from hot_money import fetch_foreign_flow_series, fetch_usdtwd_series
         for _fn in (fetch_foreign_flow_series, fetch_usdtwd_series):
             try:
                 _fn.clear()
                 _stat["st_cache_cleared"] += 1
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as e:
+                # v19.187 F-MED:單一 st.cache_data clear fail
+                print(f'[cache] global_refresh_all L2 {_fn.__name__} fail: '
+                      f'{type(e).__name__}: {e}', file=_sys.stderr)
+    except Exception as e:
+        # v19.187 F-MED:hot_money import fail(極罕見)
+        print(f'[cache] global_refresh_all L2 import fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
     try:
         _disk = clear_disk_cache()
         _stat["disk_files_removed"] = _disk.get("files_removed", 0)
         _stat["snapshot_cleared"] = _disk.get("snapshot_cleared", 0)
-    except Exception:
-        pass
+    except Exception as e:
+        # v19.187 F-MED:disk cache fail
+        print(f'[cache] global_refresh_all L3 disk fail: '
+              f'{type(e).__name__}: {e}', file=_sys.stderr)
     if session_state is not None:
         for _k in _GLOBAL_REFRESH_SESSION_KEYS:
             if _k in _GLOBAL_REFRESH_KEEP_KEYS:
@@ -268,8 +304,10 @@ def global_refresh_all(session_state=None) -> dict:
                 if _k in session_state:
                     session_state.pop(_k, None)
                     _stat["session_keys_popped"] += 1
-            except Exception:
-                pass
+            except Exception as e:
+                # v19.187 F-MED:單一 session key pop fail
+                print(f'[cache] global_refresh_all L4 pop {_k} fail: '
+                      f'{type(e).__name__}: {e}', file=_sys.stderr)
     return _stat
 
 
