@@ -53,8 +53,8 @@ def test_v19_15_dashboard_empty_path_has_all_required_keys():
 # 完整 e2e（mock 各層）
 # ════════════════════════════════════════════════
 @patch("services.macro_weights_store.apply_weight_overrides")
-@patch("ui.helpers.macro_helpers.calculate_composite_score")
-@patch("ui.helpers.macro_helpers.composite_verdict")
+@patch("services.macro_composite_score.calculate_composite_score")
+@patch("services.macro_composite_score.composite_verdict")
 @patch("services.macro_service.compute_cluster_signals")
 @patch("services.macro_service.summarize_cluster_consensus")
 def test_v19_15_dashboard_full_path_with_funds(
@@ -92,8 +92,8 @@ def test_v19_15_dashboard_full_path_with_funds(
 
 
 @patch("services.macro_weights_store.apply_weight_overrides")
-@patch("ui.helpers.macro_helpers.calculate_composite_score")
-@patch("ui.helpers.macro_helpers.composite_verdict")
+@patch("services.macro_composite_score.calculate_composite_score")
+@patch("services.macro_composite_score.composite_verdict")
 @patch("services.macro_service.compute_cluster_signals")
 @patch("services.macro_service.summarize_cluster_consensus")
 def test_v19_15_dashboard_extreme_bear_triggers_satellite_exit(
@@ -122,8 +122,8 @@ def test_v19_15_dashboard_extreme_bear_triggers_satellite_exit(
 
 
 @patch("services.macro_weights_store.apply_weight_overrides")
-@patch("ui.helpers.macro_helpers.calculate_composite_score")
-@patch("ui.helpers.macro_helpers.composite_verdict")
+@patch("services.macro_composite_score.calculate_composite_score")
+@patch("services.macro_composite_score.composite_verdict")
 @patch("services.macro_service.compute_cluster_signals")
 @patch("services.macro_service.summarize_cluster_consensus")
 def test_v19_15_dashboard_no_funds_returns_ready_with_empty_actions(

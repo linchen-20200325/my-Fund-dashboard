@@ -64,7 +64,8 @@ def compute_realtime_dashboard(
 
     try:
         from services.macro_weights_store import apply_weight_overrides
-        from ui.helpers.macro_helpers import calculate_composite_score, composite_verdict
+        # v19.197 P1-1:V2 修補 — 改走 services 同層,不再反向 import ui
+        from services.macro_composite_score import calculate_composite_score, composite_verdict
         from services.macro_service import compute_cluster_signals, summarize_cluster_consensus
     except ImportError as e:
         empty_dashboard["verdict_action_text"] = f"⚠️ 模組依賴未就緒：{e}"
