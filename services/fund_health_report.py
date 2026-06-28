@@ -39,7 +39,12 @@ def _compute_holding_years(fd: dict) -> Optional[float]:
     """
     try:
         import datetime as _dt
-        s = fd.get("series") or (fd.get("moneydj_raw") or {}).get("series")
+        # v19.191 BUG-FIX:`fd.get("series") or ...` 觸發 pandas Series.__bool__ ValueError
+        # ("truth value of a Series is ambiguous")→ except 吞掉 → 全站 MK 3-3-3 都「資料不足」。
+        # 用顯式 None 判斷,不靠 truthy。
+        s = fd.get("series")
+        if s is None:
+            s = (fd.get("moneydj_raw") or {}).get("series")
         if s is None or len(s) == 0:
             return None
         first_iso = str(sorted([str(i)[:10] for i in s.index])[0])
@@ -125,8 +130,10 @@ def build_health_analysis_row(
         # (有 moneydj_raw 但無 top-level perf)→ 走 else 拿 mj(無 metrics)→
         # 抓不到 sortino/calmar/expense → 3 Tab 全顯示「—」。
         # 修法:無論 normalize 與否,顯式組 {metrics, perf} dict。perf 從 fd 或 mj 拿。
+        # v19.191:加 moneydj_raw 透傳,讓 portfolio_service 的 expense_ratio mgmt_fee fallback
+        # 找得到(否則 fallback 永遠 dead code)。
         _pf = (fd.get("perf") if "perf" in fd else mj.get("perf")) or {}
-        _fdata = {"metrics": m, "perf": _pf}
+        _fdata = {"metrics": m, "perf": _pf, "moneydj_raw": mj}
         risk_table = mj.get("risk_metrics") or fd.get("risk_metrics") or {}
         _6f = calc_fund_factor_score(_fdata, risk_table=risk_table)
         _factors = _6f.get("factors") or {}

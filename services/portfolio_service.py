@@ -144,7 +144,16 @@ def calc_fund_factor_score(fund_data: Dict,
             pass
 
     # ── 6. 費用率（Expense Ratio，權重 10，越低越好）───────────────────
+    # v19.191:第 3 fallback 走 moneydj_raw.mgmt_fee(同源於 Tab2 TER 卡 L1000),
+    # 解決 expense_ratio 在 calc_metrics 從未產生 → 進階指標永遠「—」的 SSOT 缺洞。
     er = expense_ratio or m.get("expense_ratio")
+    if er is None:
+        mj_fee_raw = (fund_data.get("moneydj_raw") or {}).get("mgmt_fee")
+        if mj_fee_raw:
+            try:
+                er = float(str(mj_fee_raw).replace("%", "").strip())
+            except (ValueError, TypeError):
+                er = None
     if er is not None:
         try:
             er = float(er)

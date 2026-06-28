@@ -377,6 +377,15 @@ def _render_health_3tables(rows: list[dict],
         _code = _r.get("code", "")
         _health_rows.append(build_health_analysis_row(_fd, _code))
     _health_df = pd.DataFrame(_health_rows)
+    # v19.191:None → NaN for numeric cols(pandas object dtype 會顯示「None」字面值,
+    # NaN 走 NumberColumn format 後顯示「—」/ 空白)。caller 拿 dict → DataFrame 默認 object
+    # dtype,需顯式 to_numeric 轉。
+    _health_num_cols = ["4D Score", "Sharpe 1Y", "Sortino", "Calmar",
+                        "Alpha %", "費用率 %", "Max DD %",
+                        "3Y 年化 %", "5Y 年化 %"]
+    for _nc in _health_num_cols:
+        if _nc in _health_df.columns:
+            _health_df[_nc] = pd.to_numeric(_health_df[_nc], errors="coerce")
     _health_cfg = {
         "code": _cc.TextColumn("代號", width="small"),
         "基金名": _cc.TextColumn("基金名", width="medium"),
@@ -417,6 +426,11 @@ def _render_health_3tables(rows: list[dict],
             build_dividend_summary_row(_fd, _code, principal_twd=None)
         )
     _div_df = pd.DataFrame(_div_rows)
+    # v19.191:None → NaN for numeric cols(同 ① 表 None → NaN 邏輯)
+    _div_num_cols = ["1Y 含息 %", "年化配息率 %"]
+    for _nc in _div_num_cols:
+        if _nc in _div_df.columns:
+            _div_df[_nc] = pd.to_numeric(_div_df[_nc], errors="coerce")
     _div_cfg = {
         "code": _cc.TextColumn("代號", width="small"),
         "基金名": _cc.TextColumn("基金名", width="medium"),
