@@ -400,7 +400,10 @@ def test_refresh_oauth_state_updates_module_snapshot(
     snapshot 永遠 stale → 「💾 套用設定」按了沒反應、登入按鈕永遠不亮。
     本函式由 tab3 render 開頭 / app.py sidebar 渲染前呼叫以強制 re-resolve。
     """
-    import ui.helpers.oauth_state as _osm
+    # v19.227 F1 修補:P2-7 shim `ui/helpers/oauth_state.py` 不穿透 sub-module
+    # internal binding(類 B1 patch shim 不穿透 macro_repository 模式),
+    # test 改直接走 sub-module `ui.helpers.io.oauth_state`。
+    import ui.helpers.io.oauth_state as _osm
 
     # 1) 模擬 wizard 已寫入 session_state：refresh 後 _oauth_configured 應 True
     _truthy = {
