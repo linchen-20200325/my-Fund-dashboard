@@ -131,12 +131,11 @@ def render_data_guard_tab() -> None:
     st.markdown("### ⓪ 📊 前 4 Tab 資料完整性檢查表")
     st.caption("快速確認 4 個資料 Tab 各自的關鍵資料是否都已抓到 — 紅燈 = 缺資料,該 Tab 可能渲染不完整")
 
-    # 計算各 Tab 資料覆蓋率
-    _FRED_REQUIRED = ["PMI", "YIELD_10Y2Y", "YIELD_10Y3M", "HY_SPREAD",
-                       "M2", "FED_BS", "CPI", "FED_RATE", "UNEMPLOYMENT",
-                       "PPI", "SAHM", "SLOOS"]
-    _YF_REQUIRED = ["VIX", "DXY", "ADL", "COPPER"]
-    _all_macro = _FRED_REQUIRED + _YF_REQUIRED
+    # v19.195 SSOT:改 import ui.helpers.session.D5_FRED_KEYS / D5_YF_KEYS,
+    # 取代原 hardcoded 12 + 4(同一份清單在本檔出現 2 次 + session.py 1 次 = 3 處重複)。
+    from ui.helpers.session import D5_FRED_KEYS as _FRED_REQUIRED
+    from ui.helpers.session import D5_YF_KEYS as _YF_REQUIRED
+    _all_macro = list(_FRED_REQUIRED) + list(_YF_REQUIRED)
     _macro_have = sum(1 for k in _all_macro if (_src_ind.get(k) or {}).get("value") is not None)
     _macro_total = len(_all_macro)
 
@@ -344,9 +343,9 @@ def render_data_guard_tab() -> None:
     _FRED_KEYS = ["NAPM/PMI","DGS10","DGS2","DGS3MO","BAMLH0A0HYM2","M2SL","WALCL",
                   "CPIAUCSL","FEDFUNDS","UNRATE","PPIACO","UMCSENT","ICSA","HSN1F",
                   "SAHMREALTIME","DRTSCILM"]
-    _FRED_INTERNAL = ["PMI","YIELD_10Y2Y","YIELD_10Y3M","HY_SPREAD","M2","FED_BS",
-                      "CPI","FED_RATE","UNEMPLOYMENT","PPI","SAHM","SLOOS"]
-    _YF_KEYS = ["VIX","DXY","ADL","COPPER"]
+    # v19.195 SSOT:改 import D5_FRED_KEYS / D5_YF_KEYS,取代第 ② 區重複定義。
+    from ui.helpers.session import D5_FRED_KEYS as _FRED_INTERNAL
+    from ui.helpers.session import D5_YF_KEYS as _YF_KEYS
     _fred_ok = sum(1 for k in _FRED_INTERNAL
                    if (_src_ind.get(k) or {}).get("value") is not None)
     _yf_ok   = sum(1 for k in _YF_KEYS

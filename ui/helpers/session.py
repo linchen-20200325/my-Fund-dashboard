@@ -6,21 +6,37 @@
 - 避免「helper 內讀 module-level 全局」造成的測試難度
 
 公開 API：
-  - _D5_KEYS                   — 16 個關鍵總經指標代碼（Data Guard 5 燈源）
-  - calc_data_health(ind)      — 純函式：16 指標填充率 → (pct, traffic)
+  - D5_FRED_KEYS               — v19.195 SSOT:12 個 FRED 指標代碼
+  - D5_YF_KEYS                 — v19.195 SSOT:4 個 Yahoo 指標代碼
+  - D5_KEYS                    — v19.195 SSOT:union 16 個(D5_FRED_KEYS + D5_YF_KEYS)
+  - _D5_KEYS                   — backward compat alias = D5_KEYS
+  - calc_data_health(ind)      — 純函式:16 指標填充率 → (pct, traffic)
   - INITIAL_SESSION_STATE      — Streamlit session_state 預設字典
-  - init_session_state(ss)     — 為缺失 key 補預設值（caller 傳 st.session_state）
+  - init_session_state(ss)     — 為缺失 key 補預設值(caller 傳 st.session_state)
 
-v11.0 分層歸位：本檔屬於 ui/helpers/，可被 ui/tab*.py 共用；
-本身不 import streamlit，方便單測。
+v11.0 分層歸位：本檔屬於 ui/helpers/,可被 ui/tab*.py 共用;
+本身不 import streamlit,方便單測。
+
+v19.195 SSOT 統一:Tab5(`ui/tab5_data_guard.py:135-138 第 ⓪ 區 + 347-349
+第 ② 區`)原 hardcode 同一份 12 FRED + 4 Yahoo 共 16 keys × 2 處,改 import
+本檔 D5_FRED_KEYS / D5_YF_KEYS 統一;`_D5_KEYS` 保留為 backward compat alias。
 """
 from __future__ import annotations
 
 
-# 16 個關鍵總經指標代碼 — Data Guard 5 燈源（與 app.py Tab5 顯示一致）
-_D5_KEYS = ["SAHM", "SLOOS", "PMI", "CPI", "UNEMPLOYMENT", "YIELD_10Y2Y",
-            "YIELD_10Y3M", "HY_SPREAD", "M2", "FED_BS", "FED_RATE", "PPI",
-            "VIX", "DXY", "ADL", "COPPER"]
+# v19.195 SSOT:12 個 FRED 指標 internal key(與 fetch_all_indicators 一致)
+D5_FRED_KEYS = ["PMI", "YIELD_10Y2Y", "YIELD_10Y3M", "HY_SPREAD",
+                "M2", "FED_BS", "CPI", "FED_RATE", "UNEMPLOYMENT",
+                "PPI", "SAHM", "SLOOS"]
+
+# v19.195 SSOT:4 個 Yahoo 指標 internal key
+D5_YF_KEYS = ["VIX", "DXY", "ADL", "COPPER"]
+
+# v19.195 SSOT:union 16 keys — Data Guard 5 燈源(與 app.py Tab5 顯示一致)
+D5_KEYS = D5_FRED_KEYS + D5_YF_KEYS
+
+# backward compat alias(舊 caller 引用 _D5_KEYS)
+_D5_KEYS = D5_KEYS
 
 
 def calc_data_health(indicators: dict) -> tuple[int, str]:
