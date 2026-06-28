@@ -123,47 +123,14 @@ def _signal_vix_level() -> dict:
 
 # ── 多源 fallback helper (v19.30 鏡像 stock v18.181) ─────────────
 def _fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Series:
-    """CBOE 官方每日 CSV → 收盤 Series（key: short_name 如 'VIX3M' / 'CPC' / 'CPCE'）。
+    """v19.221 P1-3 thin wrapper:CBOE fetcher 已下沉 repositories/external_market_repository。
 
-    URL pattern: https://cdn.cboe.com/api/global/us_indices/daily_prices/{short}_History.csv
-    對 ^VIX3M、^CPC、^CPCE 等 Yahoo 已停供 ticker 的官方替代源。
-
-    v19.43：可選 trace list 收集失敗原因供 UI 顯示。失敗回空 Series。
+    保留本檔 attr 供 test_risk_radar.py 的 `patch.object(rr, "_fetch_cboe_csv", ...)` 相容。
+    原 CBOE URL chain / trace 邏輯全部在 repositories 內。
+    對稱 stooq P1-3 v19.197 wrapper 模式。N2 架構越權修補。
     """
-    import io
-
-    from infra.proxy import fetch_url
-
-    def _t(msg: str) -> None:
-        if trace is not None:
-            trace.append(f"CBOE {short_name}: {msg}")
-    try:
-        url = ("https://cdn.cboe.com/api/global/us_indices/"
-               f"daily_prices/{short_name}_History.csv")
-        r = fetch_url(url, timeout=15)
-        if r is None or getattr(r, "status_code", 0) != 200:
-            code = getattr(r, "status_code", None)
-            _t(f"HTTP {code}")
-            print(f"[risk_radar/cboe] {short_name} HTTP {code}")
-            return pd.Series(dtype=float)
-        df = pd.read_csv(io.StringIO(r.text))
-        date_col = next((c for c in df.columns if "DATE" in c.upper()), None)
-        close_col = next((c for c in df.columns if "CLOSE" in c.upper()), None)
-        if not date_col or not close_col or df.empty:
-            _t(f"欄位不符 {list(df.columns)[:3]}")
-            print(f"[risk_radar/cboe] {short_name} 欄位不符: {list(df.columns)}")
-            return pd.Series(dtype=float)
-        idx = pd.to_datetime(df[date_col], errors="coerce")
-        vals = pd.to_numeric(df[close_col], errors="coerce")
-        s = pd.Series(vals.values, index=idx).dropna().sort_index()
-        # v19.188 F-PROV-1 phase 23:CBOE CSV provenance
-        s.attrs["source"] = f"CBOE:cdn:daily_prices:{short_name}_History.csv"
-        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-        return s.tail(180)  # 對齊 6mo
-    except Exception as e:  # noqa: BLE001
-        _t(f"exception {str(e)[:40]}")
-        print(f"[risk_radar/cboe] {short_name} 失敗: {e}")
-        return pd.Series(dtype=float)
+    from repositories.external_market_repository import fetch_cboe_csv
+    return fetch_cboe_csv(short_name, trace=trace)
 
 
 def _fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:

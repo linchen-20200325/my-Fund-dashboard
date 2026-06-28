@@ -160,3 +160,47 @@ def fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
         _t(f"exception {str(e)[:40]}")
         print(f"[external_market/stooq] {symbol} 失敗: {e}")
         return pd.Series(dtype=float)
+
+
+def fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Series:
+    """CBOE 官方每日 CSV → 收盤 Series(key: short_name 如 'VIX3M' / 'CPC' / 'CPCE')。
+
+    URL pattern: https://cdn.cboe.com/api/global/us_indices/daily_prices/{short}_History.csv
+    對 ^VIX3M、^CPC、^CPCE 等 Yahoo 已停供 ticker 的官方替代源。
+
+    v19.221 P1-3 修補 N2(架構越權):從 services/risk_radar.py 下沉至 L1
+    repository。trace list 可選收集失敗原因。失敗回空 Series。
+    """
+    import io
+
+    from infra.proxy import fetch_url
+
+    def _t(msg: str) -> None:
+        if trace is not None:
+            trace.append(f"CBOE {short_name}: {msg}")
+    try:
+        url = ("https://cdn.cboe.com/api/global/us_indices/"
+               f"daily_prices/{short_name}_History.csv")
+        r = fetch_url(url, timeout=15)
+        if r is None or getattr(r, "status_code", 0) != 200:
+            code = getattr(r, "status_code", None)
+            _t(f"HTTP {code}")
+            print(f"[external_market/cboe] {short_name} HTTP {code}")
+            return pd.Series(dtype=float)
+        df = pd.read_csv(io.StringIO(r.text))
+        date_col = next((c for c in df.columns if "DATE" in c.upper()), None)
+        close_col = next((c for c in df.columns if "CLOSE" in c.upper()), None)
+        if not date_col or not close_col or df.empty:
+            _t(f"欄位不符 {list(df.columns)[:3]}")
+            print(f"[external_market/cboe] {short_name} 欄位不符: {list(df.columns)}")
+            return pd.Series(dtype=float)
+        idx = pd.to_datetime(df[date_col], errors="coerce")
+        vals = pd.to_numeric(df[close_col], errors="coerce")
+        s = pd.Series(vals.values, index=idx).dropna().sort_index()
+        s.attrs["source"] = f"CBOE:cdn:daily_prices:{short_name}_History.csv"
+        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        return s.tail(180)
+    except Exception as e:  # noqa: BLE001
+        _t(f"exception {str(e)[:40]}")
+        print(f"[external_market/cboe] {short_name} 失敗: {e}")
+        return pd.Series(dtype=float)
