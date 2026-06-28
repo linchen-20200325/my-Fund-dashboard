@@ -275,7 +275,10 @@ def global_refresh_all(session_state=None) -> dict:
         print(f'[cache] global_refresh_all L1 ttl fail: '
               f'{type(e).__name__}: {e}', file=_sys.stderr)
     try:
-        from hot_money import fetch_foreign_flow_series, fetch_usdtwd_series
+        # v19.196 P0-4-A:fetcher 已下沉 repositories.hot_money_repository
+        from repositories.hot_money_repository import (
+            fetch_foreign_flow_series, fetch_usdtwd_series,
+        )
         for _fn in (fetch_foreign_flow_series, fetch_usdtwd_series):
             try:
                 _fn.clear()
@@ -285,7 +288,7 @@ def global_refresh_all(session_state=None) -> dict:
                 print(f'[cache] global_refresh_all L2 {_fn.__name__} fail: '
                       f'{type(e).__name__}: {e}', file=_sys.stderr)
     except Exception as e:
-        # v19.187 F-MED:hot_money import fail(極罕見)
+        # v19.187 F-MED:hot_money_repository import fail(極罕見)
         print(f'[cache] global_refresh_all L2 import fail: '
               f'{type(e).__name__}: {e}', file=_sys.stderr)
     try:

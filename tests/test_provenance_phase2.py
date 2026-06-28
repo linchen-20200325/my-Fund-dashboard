@@ -58,11 +58,14 @@ class TestMacroTwLocalFetchProvenance:
 
 
 class TestHotMoneyDataFrameAttrs:
-    """hot_money.fetch_foreign_flow_series → DataFrame.attrs 承載 provenance。"""
+    """fetch_foreign_flow_series → DataFrame.attrs 承載 provenance。
+
+    v19.196 P0-4-A:fetcher 從根目錄 hot_money.py 下沉 repositories.hot_money_repository。
+    """
 
     def test_foreign_flow_series_sets_attrs(self):
-        import hot_money
-        src = inspect.getsource(hot_money.fetch_foreign_flow_series)
+        from repositories import hot_money_repository
+        src = inspect.getsource(hot_money_repository.fetch_foreign_flow_series)
         assert 'attrs["source"]' in src or "attrs['source']" in src, (
             "fetch_foreign_flow_series 應設 DataFrame.attrs['source']"
         )

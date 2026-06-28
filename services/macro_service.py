@@ -133,7 +133,10 @@ def clear_tab1_macro_caches(session_state=None) -> dict:
     except Exception:
         pass
     try:
-        from hot_money import fetch_foreign_flow_series, fetch_usdtwd_series
+        # v19.196 P0-4-A:fetcher 已下沉 repositories.hot_money_repository
+        from repositories.hot_money_repository import (
+            fetch_foreign_flow_series, fetch_usdtwd_series,
+        )
         for _fn in (fetch_foreign_flow_series, fetch_usdtwd_series):
             try:
                 _fn.clear()

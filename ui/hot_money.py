@@ -1,25 +1,22 @@
 # -*- coding: utf-8 -*-
-"""hot_money.py — 熱錢監測：三角交叉（外資 × 匯率） + 背離偵測（基金倉版）
+"""ui/hot_money.py — 熱錢監測 UI(L3)+ 純函式信號分類
 
-移植自 user 上傳的 `a731802d-app.py`（單頁 Streamlit demo）+ 股票倉 PR #101。
-基金倉特色：境外基金為主，但**台幣匯率變動會直接影響 TWD 換匯後報酬**，
-故 user 仍受台灣熱錢動向間接影響（避險 / 套利 / 加碼留意點）。
+v19.196 P0-4-A 從根目錄 hot_money.py 拆出 UI 渲染部分。
+原 hot_money.py 同時含 fetcher(I/O)+ render(UI),導致 §8.2 分層模糊。
 
-設計（與 CLAUDE.md §2 一致）：
-- 純函式 `build_signals` / `_yf_series_to_df` 無 streamlit 依賴，可單測
-- `render_hot_money_section` 自取 USDTWD（`repositories.macro_repository.fetch_yf_close`）
-  + 外資（FinMind，沿用既有 `tw_macro.FINMIND_BASE` URL）
-- FinMind 失敗 / 空資料一律安全降級
+本檔內容:
+- `STATE_TEXT` / `DIVERGENCE_STATES` — 9 狀態白話解讀(UI markdown 語料)
+- `build_signals` — 純函式,信號合併與向量化分類(可單測)
+- `render_hot_money_section` — Streamlit 渲染(三角交叉象限圖 + 時序圖 + 背離清單)
+
+Fetcher(`fetch_foreign_flow_series` / `fetch_usdtwd_series` / `_yf_series_to_df`)
+已下沉 `repositories/hot_money_repository.py`,本檔 render 內部 import 取數。
 """
 from __future__ import annotations
-
-import datetime as _dt
 
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-from shared.ttls import TTL_10MIN, TTL_30MIN
 
 
 # 狀態白話解讀（針對基金 user 加上「境外基金影響」面）
@@ -35,8 +32,6 @@ STATE_TEXT = {
 }
 DIVERGENCE_STATES = {"背離｜熱錢停泊匯市", "背離｜買盤遭拋匯掩蓋", "背離｜匯市先撤"}
 
-_FINMIND_BASE = "https://api.finmindtrade.com/api/v4/data"
-
 
 # ────────────────────────────────────────────────────────────────────────
 # 純函式：信號計算（無 streamlit 依賴）
@@ -49,27 +44,29 @@ def build_signals(flow_df: pd.DataFrame, fx_df: pd.DataFrame,
             "interpretation"]
     if flow_df.empty or fx_df.empty:
         return pd.DataFrame(columns=cols)
-
     df = pd.merge(flow_df, fx_df, on="date", how="inner").sort_values("date").reset_index(drop=True)
     if df.empty:
         return pd.DataFrame(columns=cols)
-
-    df["twd_apprec"] = -df["usdtwd"].pct_change() * 100.0
+    df["twd_apprec"] = -df["usdtwd"].pct_change() * 100.0  # USDTWD 跌 = 台幣升 = 正
     df["roll_flow"] = df["foreign_net_yi"].rolling(window, min_periods=1).sum()
     df["roll_apprec"] = df["twd_apprec"].rolling(window, min_periods=1).sum()
 
-    f = np.sign(np.where(df["roll_flow"].abs() >= flow_thr, df["roll_flow"], 0)).astype(int)
-    x = np.sign(np.where(df["roll_apprec"].abs() >= fx_thr, df["roll_apprec"], 0)).astype(int)
-    df["flow_sig"], df["fx_sig"] = f, x
-
+    df["flow_sig"] = np.select(
+        [df["roll_flow"] >= flow_thr, df["roll_flow"] <= -flow_thr],
+        ["buy", "sell"], default="flat",
+    )
+    df["fx_sig"] = np.select(
+        [df["roll_apprec"] >= fx_thr, df["roll_apprec"] <= -fx_thr],
+        ["appr", "depr"], default="flat",
+    )
     conds = [
-        (f == 1) & (x == 1),
-        (f == -1) & (x == -1),
-        (x == 1) & (f <= 0),
-        (f == 1) & (x == -1),
-        (x == -1) & (f >= 0),
-        (f == 1) & (x == 0),
-        (f == -1) & (x == 0),
+        (df["flow_sig"] == "buy") & (df["fx_sig"] == "appr"),
+        (df["flow_sig"] == "sell") & (df["fx_sig"] == "depr"),
+        (df["flow_sig"] == "flat") & (df["fx_sig"] == "appr"),
+        (df["flow_sig"] == "buy") & (df["fx_sig"] == "depr"),
+        (df["flow_sig"] == "flat") & (df["fx_sig"] == "depr"),
+        (df["flow_sig"] == "buy") & (df["fx_sig"] == "flat"),
+        (df["flow_sig"] == "sell") & (df["fx_sig"] == "flat"),
     ]
     labels = ["同步流入", "同步流出", "背離｜熱錢停泊匯市", "背離｜買盤遭拋匯掩蓋",
               "背離｜匯市先撤", "溫和流入", "溫和流出"]
@@ -79,115 +76,17 @@ def build_signals(flow_df: pd.DataFrame, fx_df: pd.DataFrame,
     return df
 
 
-def _yf_series_to_df(series: pd.Series) -> pd.DataFrame:
-    """`fetch_yf_close` 回傳的 pd.Series → 標準 [date, usdtwd] DataFrame。
-
-    空 series / 壞輸入 → 空 df。
-    """
-    if series is None or len(series) == 0:
-        return pd.DataFrame(columns=["date", "usdtwd"])
-    out = pd.DataFrame({
-        "date": pd.to_datetime(series.index).tz_localize(None) if (
-            getattr(series.index, "tz", None) is not None
-        ) else pd.to_datetime(series.index),
-        "usdtwd": pd.to_numeric(series.values, errors="coerce"),
-    }).dropna(subset=["usdtwd"])
-    out = out[out["usdtwd"] > 0]
-    return out.sort_values("date").reset_index(drop=True)
-
-
-# ────────────────────────────────────────────────────────────────────────
-# 資料層
-# ────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=TTL_30MIN, show_spinner=False)
-def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame, str]:
-    """抓最近 N 天外資買賣超（FinMind，沿用 tw_macro pattern + token kwarg）。
-
-    Returns: (df[date, foreign_net_yi 億元], error_msg or "")
-    """
-    try:
-        from fund_fetcher import fetch_url_with_retry
-        end_d = _dt.date.today()
-        start_d = end_d - _dt.timedelta(days=days + 14)
-        params = {
-            "dataset": "TaiwanStockTotalInstitutionalInvestors",
-            "start_date": start_d.strftime("%Y-%m-%d"),
-            "end_date":   end_d.strftime("%Y-%m-%d"),
-        }
-        if token:
-            params["token"] = token
-        r = fetch_url_with_retry(_FINMIND_BASE, params=params, timeout=15, retries=2)
-    except Exception as e:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), f"FinMind 抓取失敗：{e}"
-
-    if r is None:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), "FinMind 無回應"
-
-    try:
-        rows = r.json().get("data", []) or []
-    except Exception as e:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), f"FinMind JSON 解析失敗：{e}"
-
-    if not rows:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), "無資料回傳（可能為非交易日區間）"
-
-    df = pd.DataFrame(rows)
-    name_col = next((c for c in ("name", "institutional_investors") if c in df.columns), None)
-    if name_col is None:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), f"FinMind 缺類別欄"
-    mask = df[name_col].astype(str).str.contains("Foreign|外資", case=False, na=False, regex=True)
-    fdf = df.loc[mask].copy()
-    if fdf.empty:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), "FinMind 無 Foreign 類別資料"
-
-    fdf["net"] = pd.to_numeric(fdf["buy"], errors="coerce") - pd.to_numeric(fdf["sell"], errors="coerce")
-    out = (fdf.groupby("date", as_index=False)["net"].sum()
-              .assign(foreign_net_yi=lambda d: d["net"] / 1e8)
-              .loc[:, ["date", "foreign_net_yi"]])
-    out["date"] = pd.to_datetime(out["date"])
-    out = out.sort_values("date").reset_index(drop=True)
-    # v19.151 F-PROV-1 phase 2:DataFrame.attrs 承載血緣(對齊 fetch_yf_close v19.83)
-    out.attrs["source"] = "FinMind:TaiwanStockTotalInstitutionalInvestors"
-    out.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-    # v19.186 Pandera Phase B:出口 schema 驗證(date 升序唯一 / net 無 NaN / 單位合理)
-    # 契約違反 = 上游資料異常,§1 Fail Loud 直接拋(不靜默回髒資料)
-    try:
-        from shared.schemas import validate_foreign_flow
-        out = validate_foreign_flow(out)
-    except ImportError:
-        pass  # pandera 不在環境(極罕見,requirements 已 pin)→ 降級不驗
-    return out, ""
-
-
-@st.cache_data(ttl=TTL_10MIN, show_spinner=False)
-def fetch_usdtwd_series(days: int) -> tuple[pd.DataFrame, str]:
-    """抓 USDTWD=X 時序（複用 macro_repository.fetch_yf_close + NAS proxy）。
-
-    Returns: (df[date, usdtwd], error_msg or "")
-    """
-    try:
-        from repositories.macro_repository import fetch_yf_close
-        # range_ 換算：days 60-180 → 1y / 365 → 2y
-        range_ = "2y" if days > 365 else "1y" if days > 90 else "6mo"
-        series = fetch_yf_close("USDTWD=X", range_=range_, interval="1d")
-    except Exception as e:
-        return pd.DataFrame(columns=["date", "usdtwd"]), f"USDTWD 抓取失敗：{e}"
-
-    df = _yf_series_to_df(series)
-    if df.empty:
-        return df, "USDTWD 無資料（Yahoo Chart API 失敗或被限流）"
-    # 截取最近 days
-    cutoff = pd.Timestamp.now() - pd.Timedelta(days=days)
-    df = df[df["date"] >= cutoff].reset_index(drop=True)
-    return df, ""
-
-
 # ────────────────────────────────────────────────────────────────────────
 # UI render（基金倉特化：加 disclaimer 強調對境外基金的相關性）
 # ────────────────────────────────────────────────────────────────────────
 def render_hot_money_section(token: str = "",
                                 key_prefix: str = "fund_hm") -> None:
     """渲染熱錢三角交叉深度視圖（基金倉版，自取資料）。"""
+    # 走 L1 repository 取數,避免本檔(L3 UI)直接做 HTTP
+    from repositories.hot_money_repository import (
+        fetch_foreign_flow_series, fetch_usdtwd_series,
+    )
+
     st.caption(
         "💡 **為何境外基金 user 也要看熱錢？** "
         "台灣熱錢動向 → 推動台幣升貶 → 直接影響你 USD/EUR 計價基金 TWD 換算後的報酬。"
@@ -281,7 +180,7 @@ def render_hot_money_section(token: str = "",
 
     # 三角交叉象限圖
     st.markdown("**🧭 三角交叉象限圖**")
-    st.caption("橫軸＝外資累計買賣超，縱軸＝台幣累計升貶。右上＝同步流入，左下＝同步流出，"
+    st.caption("橫軸＝外資累計買賣超，縱軸＝台幣累計升貶。右上＝同步流入,左下＝同步流出,"
                 "左上/右下對角區＝背離。黑色菱形＝最新位置。")
     plot = sig.dropna(subset=["roll_flow", "roll_apprec"]).copy()
     try:

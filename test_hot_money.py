@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from hot_money import (
+# v19.196 P0-4-A:hot_money.py 拆 2 檔
+from repositories.hot_money_repository import _yf_series_to_df
+from ui.hot_money import (
     DIVERGENCE_STATES,
     STATE_TEXT,
-    _yf_series_to_df,
     build_signals,
 )
 
@@ -176,13 +177,20 @@ def test_yf_series_to_df_handles_tz_aware_index():
 # v18.240 regression：altair / typing_extensions chain smoke import
 # ────────────────────────────────────────────────────────────────────────
 def test_hot_money_module_imports_cleanly():
-    """整個 hot_money + render 函式 import 不應炸 (TypedDict closed= 等)。"""
+    """整個 hot_money + render 函式 import 不應炸 (TypedDict closed= 等)。
+
+    v19.196 P0-4-A:UI/render 在 ui.hot_money,fetcher 在 repositories.hot_money_repository。
+    """
     import importlib
-    import hot_money as _hm
+    from repositories import hot_money_repository as _hm_repo
+    from ui import hot_money as _hm
+    importlib.reload(_hm_repo)
     importlib.reload(_hm)
     assert callable(_hm.render_hot_money_section)
     assert callable(_hm.build_signals)
-    assert callable(_hm._yf_series_to_df)
+    assert callable(_hm_repo._yf_series_to_df)
+    assert callable(_hm_repo.fetch_foreign_flow_series)
+    assert callable(_hm_repo.fetch_usdtwd_series)
 
 
 def test_altair_import_chain_does_not_raise():

@@ -77,7 +77,10 @@ def test_unit_anomaly_raises():
 
 
 def test_fetcher_wires_schema():
-    """hot_money.fetch_foreign_flow_series 必須在出口呼叫 validate_foreign_flow。"""
-    import hot_money
-    src = open(hot_money.__file__, encoding="utf-8").read()
+    """fetch_foreign_flow_series 必須在出口呼叫 validate_foreign_flow。
+
+    v19.196 P0-4-A:fetcher 從根目錄 hot_money.py 下沉 repositories.hot_money_repository。
+    """
+    from repositories import hot_money_repository
+    src = open(hot_money_repository.__file__, encoding="utf-8").read()
     assert "validate_foreign_flow" in src
