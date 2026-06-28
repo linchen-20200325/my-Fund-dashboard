@@ -609,20 +609,9 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
         return None
 
 
-def _safe_num_ps(v) -> "float | None":
-    """寬鬆數值轉換(portfolio_service 內用):float / "12.3%" / "1,234" / None → float|None。"""
-    if v is None or isinstance(v, bool):
-        return None
-    if isinstance(v, (int, float)):
-        f = float(v)
-    else:
-        try:
-            f = float(str(v).replace("%", "").replace(",", "").strip())
-        except (TypeError, ValueError):
-            return None
-    if f != f or f in (float("inf"), float("-inf")):  # NaN / inf guard
-        return None
-    return f
+# v19.225 P1-1 leftover:_safe_num_ps 收口至 shared/converters.py SSOT
+# (signature 與 safe_num 完全相同 — 深挖驗證)
+from shared.converters import safe_num as _safe_num_ps  # noqa: E402
 
 
 def compute_max_drawdown(series: "pd.Series") -> "dict":

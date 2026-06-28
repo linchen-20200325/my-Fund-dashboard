@@ -123,4 +123,8 @@ def fetch_usdtwd_series(days: int) -> tuple[pd.DataFrame, str]:
     # 截取最近 days
     cutoff = pd.Timestamp.now() - pd.Timedelta(days=days)
     df = df[df["date"] >= cutoff].reset_index(drop=True)
+    # v19.226 F-PROV-1 B5:provenance 補洞(§2.2 schema-additive)
+    # tuple 第 2 元素是 error_msg 不是 source(audit 之前誤判),改 df.attrs 補
+    df.attrs["source"] = "Yahoo:USDTWD=X:fetch_yf_close"
+    df.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
     return df, ""

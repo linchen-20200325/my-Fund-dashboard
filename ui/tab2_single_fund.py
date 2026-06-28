@@ -833,8 +833,11 @@ def render_single_fund_tab() -> None:
                         _adv_h = build_health_analysis_row(_adv_fd, _adv_code)
                         _adv_d = build_dividend_summary_row(_adv_fd, _adv_code, principal_twd=None)
 
+                        # v19.225 P1-1 leftover:inline _fmt_pct 收口至 shared/converters.fmt_pct SSOT
+                        # (non-ratio + decimals=2 + plus=False 對應原 "{v:.2f}%")
                         def _fmt_pct(v):
-                            return f"{v:.2f}%" if isinstance(v, (int, float)) else "—"
+                            from shared.converters import fmt_pct
+                            return fmt_pct(v, plus=False, decimals=2, ratio=False)
                         def _fmt_num(v):
                             return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
 
