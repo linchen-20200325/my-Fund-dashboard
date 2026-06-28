@@ -293,6 +293,10 @@ def fetch_fred_batch(
 ) -> dict[str, pd.DataFrame]:
     """並行預熱多條 FRED series。
 
+    Provenance(C2 v19.208 F-PROV-1):每個回傳 df 已含 `source='FRED:<sid>'` +
+    `fetched_at` 欄(§2.2 schema-additive),inheritance 自 fetch_fred。
+    本 fn 為 batch dispatcher,無 batch-level provenance 需求。
+
     Parameters
     ----------
     specs : list of (series_id, n) — 例如 [("DGS10", 2600), ("CPIAUCSL", 144)]

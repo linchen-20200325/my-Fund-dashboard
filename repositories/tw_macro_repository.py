@@ -342,10 +342,16 @@ def fetch_tw_market_snapshot(days_back: int = 7) -> dict:
             'breadth': fetch_twse_breadth() 回傳值,
             'fii':     fetch_finmind_foreign_investor() 回傳值,
             'm1b_m2':  fetch_cbc_m1b_m2() 回傳值,
+            'source':     'TW:market_snapshot_orchestrator' (C2 v19.208),
+            'fetched_at': UTC ISO timestamp(§2.2),
         }
     """
+    import datetime as _dt_sn
     return {
         'breadth': fetch_twse_breadth(),
         'fii':     fetch_finmind_foreign_investor(days_back=days_back),
         'm1b_m2':  fetch_cbc_m1b_m2(),
+        # C2 v19.208 F-PROV-1:orchestrator-level provenance(§2.2,sub-result 各自帶細粒度)
+        'source':     'TW:market_snapshot_orchestrator',
+        'fetched_at': _dt_sn.datetime.now(_dt_sn.timezone.utc).isoformat(),
     }

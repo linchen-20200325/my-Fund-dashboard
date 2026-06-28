@@ -86,7 +86,11 @@ def fetch_fund_by_key(full_key: str, fund_name: str = "",
 def fetch_fund_by_code(insurance_code: str, gemini_key: str = "",
                        manual_full_key: str = "",
                        manual_nav_csv: str = "") -> dict:
-    """相容舊介面：直接用 insurance_code 當 full_key"""
+    """相容舊介面：直接用 insurance_code 當 full_key
+
+    Provenance(C2 v19.208 F-PROV-1):pass-through fetch_fund_by_key,結果
+    dict 已含 'source' + 'nav_source_used' + 'fetched_at'(§2.2 schema-additive)。
+    """
     key = manual_full_key.strip().upper() if manual_full_key.strip() else insurance_code.strip().upper()
     return fetch_fund_by_key(key, manual_nav_csv=manual_nav_csv)
 

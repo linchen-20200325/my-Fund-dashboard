@@ -39,6 +39,11 @@ _CHINA_FRED_SPECS: list[tuple[str, int]] = [
 def fetch_china_macro(api_key: str) -> dict[str, pd.DataFrame]:
     """並行抓 5 條 China macro FRED series。
 
+    Provenance(C2 v19.208 F-PROV-1):pass-through fetch_fred_batch,每個回傳
+    df 已含 `source='FRED:<sid>'` + `fetched_at` 欄(§2.2 schema-additive),
+    inheritance 自 fetch_fred → fetch_fred_batch。本 fn 無 batch-level
+    wrapper 需求。
+
     Returns
     -------
     dict[series_id, pd.DataFrame]

@@ -507,6 +507,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                   year_high_nav=None, year_low_nav=None,
                   series=None, dividends=[], perf={}, metrics={},
                   risk_metrics={}, holdings={}, error=None,
+                  # C2 v19.208 F-PROV-1:加 source orchestrator-level(§2.2)
+                  source="MoneyDJ:fund_url_orchestrator",
                   _moneydj_fetched_at=_dt_mj.datetime.now().strftime(
                       "%Y-%m-%d %H:%M:%S"))
 
