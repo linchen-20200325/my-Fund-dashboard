@@ -205,20 +205,24 @@ def render_single_fund_tab() -> None:
                         _pxy_line = "NAS Proxy: ❌ 未設定（走直連，Cloud IP 可能被封）"
                 except Exception as _e_pxy:
                     _pxy_line = f"NAS Proxy: ⚠️ 讀取失敗 ({type(_e_pxy).__name__})"
-                # v19.191:抓取診斷對齊「📊 進階指標」面板 — 揭露 6F 子欄位 ✅/❌,
-                # 避免 metrics dict ✅ 但子欄位都「—」造成診斷誤判。
+                # v19.193 SSOT:呼叫 portfolio_service.get_factor_availability(),
+                # 確保診斷 ✅/❌ ↔ calc_fund_factor_score 實際納入 factor 1-1 對齊。
+                # 修正 v19.191 inline 走岔(mgmt_fee="N/A"/expense_ratio=0/tr1y="abc"/
+                # annual_div_rate=None 等 case 的 ✅/❌ 偏差)。
+                from services.portfolio_service import get_factor_availability as _gfa
                 _m_diag = fd.get("metrics") or {}
+                # 若 fd 未帶 risk_table 但 moneydj_raw 有 → 補上,匹配 calc_fund_factor_score
+                # caller 慣例。
+                _avail_fd = dict(fd)
+                if "perf" not in _avail_fd:
+                    _avail_fd["perf"] = _mj_raw.get("perf") or {}
+                _avail = _gfa(_avail_fd, risk_table=_mj_raw.get("risk_metrics"))
+                def _mk_bool(b: bool) -> str:
+                    return "✅" if b else "—"
+                _adv_3y = _m_diag.get("ret_3y_ann")
+                _adv_5y = _m_diag.get("ret_5y_ann")
                 def _mk(v):
                     return "✅" if v is not None else "—"
-                _adv_sortino  = _m_diag.get("sortino")
-                _adv_calmar   = _m_diag.get("calmar")
-                _adv_3y       = _m_diag.get("ret_3y_ann")
-                _adv_5y       = _m_diag.get("ret_5y_ann")
-                _adv_expense  = (_m_diag.get("expense_ratio")
-                                 or _mj_raw.get("mgmt_fee") or None)
-                _adv_perf1y   = (fd.get("perf") or _mj_raw.get("perf") or {}).get("1Y")
-                _adv_alpha_ok = (_adv_perf1y is not None
-                                 and _m_diag.get("annual_div_rate") is not None)
                 st.code(
                     f"{_pxy_line}\n"
                     f"────────────────────────\n"
@@ -233,13 +237,13 @@ def render_single_fund_tab() -> None:
                     f"基金類別: {_mj_raw.get('fund_type',  '—')}\n"
                     f"page_type: {fd.get('page_type', '—')}\n"
                     f"────────────────────────\n"
-                    f"📊 進階指標(對齊「📊 進階指標」面板):\n"
-                    f"  Sortino:     {_mk(_adv_sortino)}  (需 ≥60 筆 + ≥5 筆負報酬)\n"
-                    f"  Calmar:      {_mk(_adv_calmar)}  (需 3Y 年化 / 或 1Y 報酬 + max_dd)\n"
-                    f"  Alpha:       {'✅' if _adv_alpha_ok else '—'}  (需 perf.1Y + annual_div_rate)\n"
-                    f"  費用率:      {_mk(_adv_expense)}  (mgmt_fee fallback)\n"
-                    f"  3Y 年化:     {_mk(_adv_3y)}  (需 NAV ≥ 3 年)\n"
-                    f"  5Y 年化:     {_mk(_adv_5y)}  (需 NAV ≥ 5 年)\n"
+                    f"📊 進階指標(對齊 calc_fund_factor_score SSOT):\n"
+                    f"  Sortino:     {_mk_bool(_avail['Sortino'])}  (需 ≥60 筆 + ≥5 筆負報酬)\n"
+                    f"  Calmar:      {_mk_bool(_avail['Calmar'])}  (需 3Y 年化 / 或 1Y 報酬 + max_dd)\n"
+                    f"  Alpha:       {_mk_bool(_avail['Alpha'])}  (perf.1Y 可解析;adr 預設 0)\n"
+                    f"  費用率:      {_mk_bool(_avail['ExpenseRatio'])}  (arg/expense_ratio/mgmt_fee float 可解析)\n"
+                    f"  3Y 年化:     {_mk(_adv_3y)}  (需 NAV ≥ 3 年,非 6F factor)\n"
+                    f"  5Y 年化:     {_mk(_adv_5y)}  (需 NAV ≥ 5 年,非 6F factor)\n"
                     f"────────────────────────\n"
                     f"warning: {_raw_warn}\n"
                     f"error:   {_raw_err}",

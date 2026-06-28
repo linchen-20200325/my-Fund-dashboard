@@ -178,6 +178,98 @@ def calc_fund_factor_score(fund_data: Dict,
     }
 
 
+def get_factor_availability(fund_data: Dict,
+                            risk_table: Optional[Dict] = None,
+                            expense_ratio: Optional[float] = None) -> Dict[str, bool]:
+    """v19.193 SSOT — 與 calc_fund_factor_score 共用解析邏輯回傳「6 因子是否被納入評分」。
+
+    既有 UI 診斷面板(`ui/tab2_single_fund.py`「📊 進階指標」)使用 inline 邏輯判斷
+    ✅/❌,與本檔 calc_fund_factor_score 走岔(例:`mgmt_fee="N/A"`、`tr1y="abc"`、
+    `metrics.expense_ratio=0`、`annual_div_rate=None` 等),造成「UI 顯示有但實際
+    未納入評分」或反之的 SSOT 漂移。UI 必須改呼叫本函式。
+
+    參數與 calc_fund_factor_score 相同,確保 ✅/❌ ↔ factor 納入 1-1 對應。
+
+    Return:
+        {"Sharpe": bool, "Sortino": bool, "MaxDrawdown": bool,
+         "Calmar": bool, "Alpha": bool, "ExpenseRatio": bool}
+    """
+    rt = (risk_table or {}).get("一年", {}) if risk_table else {}
+    m  = fund_data.get("metrics", {}) or {}
+    pf = fund_data.get("perf", {}) or {}
+    mj_raw = fund_data.get("moneydj_raw") or {}
+
+    avail = {"Sharpe": False, "Sortino": False, "MaxDrawdown": False,
+             "Calmar": False, "Alpha": False, "ExpenseRatio": False}
+
+    # ── Sharpe(對齊 line 82-90)──
+    try:
+        float(rt.get("Sharpe") or m.get("sharpe") or 0)
+        avail["Sharpe"] = True
+    except (TypeError, ValueError):
+        pass
+
+    # ── Sortino(對齊 line 93-101)──
+    sortino = m.get("sortino")
+    if sortino is not None:
+        try:
+            float(sortino)
+            avail["Sortino"] = True
+        except (TypeError, ValueError):
+            pass
+
+    # ── MaxDrawdown(對齊 line 108-121)──
+    maxdd = m.get("max_drawdown")
+    if maxdd is None:
+        try:
+            maxdd = float((rt.get("最大回撤") or "0").replace("%", ""))
+        except Exception:
+            maxdd = None
+    if maxdd is not None:
+        try:
+            float(maxdd)
+            avail["MaxDrawdown"] = True
+        except (TypeError, ValueError):
+            pass
+
+    # ── Calmar(對齊 line 124-132)──
+    calmar = m.get("calmar")
+    if calmar is not None:
+        try:
+            float(calmar)
+            avail["Calmar"] = True
+        except (TypeError, ValueError):
+            pass
+
+    # ── Alpha(對齊 line 135-144)── adr 預設 0 → 只需 tr1y 可解析
+    tr1y = pf.get("1Y")
+    adr = m.get("annual_div_rate", 0) or 0
+    if tr1y is not None:
+        try:
+            float(tr1y) - float(adr)
+            avail["Alpha"] = True
+        except (TypeError, ValueError):
+            pass
+
+    # ── ExpenseRatio(對齊 line 149-164)──
+    er = expense_ratio or m.get("expense_ratio")
+    if er is None:
+        mj_fee_raw = mj_raw.get("mgmt_fee")
+        if mj_fee_raw:
+            try:
+                er = float(str(mj_fee_raw).replace("%", "").strip())
+            except (ValueError, TypeError):
+                er = None
+    if er is not None:
+        try:
+            float(er)
+            avail["ExpenseRatio"] = True
+        except (TypeError, ValueError):
+            pass
+
+    return avail
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # 二、Dividend Safety Model — 配息安全分析
 # ══════════════════════════════════════════════════════════════════════════
