@@ -17,7 +17,7 @@ from repositories.macro_repository import (
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
 from services.macro._helpers import (  # noqa: F401
-    FRED_BASE, ENGINE_VERSION,
+    ENGINE_VERSION,
     _CPI_WARN_ABOVE, _CPI_BULL_LOW, _CPI_BULL_HIGH, _CPI_MK_GOLDEN_BELOW,
     _CPI_REGIME_OVERHEAT,
     _PMI_INFL_REBOUND, _PMI_INFL_EXPANSION, _PMI_INFL_PEAK_WARN,

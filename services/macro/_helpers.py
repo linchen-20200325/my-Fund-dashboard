@@ -85,7 +85,10 @@ _FEDBS_CONTRACTION = _FEDBS_THR["score_function"]["contraction_below"]  # -5.0
 # F-GRAY-4 v19.169: HY_SPREAD stoplight SSOT (SPEC §16.2)
 _HY_YELLOW = _HY_THR["stoplight"]["yellow_below"]    # 6.0 — alert 觸發點
 
-FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
+# v19.220 P1-4(N3):FRED_BASE 拔毒 — L2 services 不應定義 production HTTP URL
+# (架構越權 N3),且 3 個 caller(services/macro_service / macro/__init__ /
+# macro/us_indicators)全屬「import 但不使用」dead chain。SSOT 在 L1
+# `repositories/macro/fred.py:28 FRED_BASE`。
 ENGINE_VERSION = "v18.2_tw_macro"
 _INDICATOR_SNAPSHOT: dict = {}
 

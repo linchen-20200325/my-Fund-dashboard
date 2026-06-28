@@ -16,7 +16,6 @@ from __future__ import annotations
 # Re-export 全部公開 fn + clear_tab1_macro_caches body 需要的常數
 from services.macro._helpers import (  # noqa: F401
     ENGINE_VERSION,
-    FRED_BASE,
     _FEDBS_CONTRACTION,
     _FEDBS_EXPANSION,
     _M2_EASING,
