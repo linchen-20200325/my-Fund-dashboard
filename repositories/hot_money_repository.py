@@ -22,7 +22,8 @@ import streamlit as st  # EX-CACHE-1:僅 @st.cache_data decorator,無真 UI 呼�
 from shared.ttls import TTL_10MIN, TTL_30MIN
 
 
-_FINMIND_BASE = "https://api.finmindtrade.com/api/v4/data"
+# v19.223 P1-2:FinMind URL 收口至 shared/api_endpoints.py SSOT
+from shared.api_endpoints import FINMIND_BASE as _FINMIND_BASE
 
 
 def _yf_series_to_df(series: pd.Series) -> pd.DataFrame:

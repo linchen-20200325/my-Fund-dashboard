@@ -37,7 +37,8 @@ __version__ = "1.0.0"
 
 # ── 各端點 URL ────────────────────────────────────────────
 TWSE_MI_INDEX_URL = "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
-FINMIND_BASE      = "https://api.finmindtrade.com/api/v4/data"
+# v19.223 P1-2:FinMind URL 收口至 shared/api_endpoints.py SSOT
+from shared.api_endpoints import FINMIND_BASE
 CBC_MS1_URLS      = [
     "https://www.cbc.gov.tw/public/data/ms1.json",
     "https://www.cbc.gov.tw/tw/public/data/ms1.json",

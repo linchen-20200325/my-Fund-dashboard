@@ -32,7 +32,8 @@ from shared.ttls import TTL_15MIN
 
 __version__ = "1.0.0"
 
-FINMIND_BASE = "https://api.finmindtrade.com/api/v4/data"
+# v19.223 P1-2:FinMind URL 收口至 shared/api_endpoints.py SSOT
+from shared.api_endpoints import FINMIND_BASE
 
 # FinMind TaiwanMacroEconomics 指標關鍵字（含模糊比對 fallback）
 _NDC_SIGNAL_KEYS = ('景氣對策信號(分)', '景氣對策信號')
