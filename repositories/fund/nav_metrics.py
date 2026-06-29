@@ -916,21 +916,51 @@ def fetch_holdings(code: str) -> dict:
       "top_holdings": [{"name": str, "sector": str, "pct": float}],
     }
     """
+    import sys as _sys_h
     try:
-        # v14.5: 先試 tcbbankfund 子網域（Streamlit Cloud IP 封鎖較少），再試 www
+        # v14.5 + v19.251 R21:擴大 fallback chain
+        # User 反饋:單一頁面 / 單一子網域抓不到時應走更多備用源。
+        # NAS proxy 已內建於 fetch_url_with_retry → infra.proxy.fetch_url。
         _hold_page = "yp013000" if _is_domestic_code(code) else "yp013001"
+        # v19.251 R21:6 候選 URL chain(www/tcb/chubb/taishinlife/wq06 替代頁/insurance)
+        # 順序:先 platform 子網域(IP 封鎖較少)→ 主域 → 替代 page → insurance 子網域
         _hold_urls = [
+            # 1) tcbbankfund 子網域(Colab/Cloud IP 友善)
             f"https://tcbbankfund.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
+            # 2) chubb 子網域(保險平台,部分 ACDD/ACTI 保單代碼可用)
+            f"https://chubb.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
+            # 3) 主域 www
             f"https://www.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
+            # 4) taishinlife 子網域(部分保單路徑)
+            f"https://taishinlife.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
+            # 5) wq06 持股明細頁(部分 fund 結構不同,可能含 sector_alloc)
+            f"https://www.moneydj.com/funddj/wq/wq06.djhtm?a={code}",
+            f"https://tcbbankfund.moneydj.com/funddj/wq/wq06.djhtm?a={code}",
         ]
         r = None
+        _attempts: list = []  # 診斷:每個 URL 試了什麼結果
         for _hu in _hold_urls:
-            r = fetch_url_with_retry(_hu, headers=HDR, timeout=20, retries=2)
-            if r is not None and len(r.text) > 500:
-                break
-            r = None
+            try:
+                _r = fetch_url_with_retry(_hu, headers=HDR, timeout=20, retries=2)
+                _len = len(_r.text) if _r is not None else 0
+                _attempts.append({"url": _hu, "status": "ok" if _r else "no_resp", "len": _len})
+                if _r is not None and _len > 500:
+                    r = _r
+                    print(f"[holdings:{code}] ✅ {_hu[:60]}... len={_len}",
+                          file=_sys_h.stderr)
+                    break
+            except Exception as _e:
+                _attempts.append({"url": _hu, "status": f"err:{type(_e).__name__}", "len": 0})
+                print(f"[holdings:{code}] ❌ {_hu[:60]}... {type(_e).__name__}: {_e}",
+                      file=_sys_h.stderr)
         if r is None:
-            return {}
+            # Fail Loud(§1):列出全部嘗試的 URL 給 audit
+            print(f"[holdings:{code}] 全 {len(_hold_urls)} 候選 URL 失敗:"
+                  f"{[(a['status'], a['len']) for a in _attempts]}",
+                  file=_sys_h.stderr)
+            return {"source": "MoneyDJ:all_failed",
+                    "attempts": _attempts,
+                    "fetched_at": pd.Timestamp.now('UTC').isoformat()}
         soup = BeautifulSoup(r.text, "lxml")
         out = {}
 
