@@ -21,6 +21,13 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.241 R9 F-SCHEMA-1 全結案 文件漂移修(2026-06-29)**:深挖 Phase C/D 發現**早已落地**,CLAUDE.md §3.1 過時:
+  - **Phase C v19.164 已落地**:`shared/schemas.py` 增 `validate_fund_nav_data_only` + `validate_fund_dividends_data_only`(服務層 data-only,不驗 provenance attrs,允許 cache/test fixture 反序列化序列)
+  - **Phase D v19.165 已落地**:`.github/workflows/pr-check.yml::schema-gate` job 跑 6 個 schema test 檔(test_schemas_phase_a/b/b2/b3/b_foreign_flow/c.py)91 tests,failure 阻擋 merge
+  - 0 code change,純文件對齊:CLAUDE.md §3.1 從「Phase C/D 留待 user 觸發」改為「全 4 phase 落地」
+  - **剩餘 ~10 個 Tier 2/3 fetcher 未驗 schema**(stooq / cboe / defillama / TW macro / news)為次要源,§-1 不主動推進
+  - F-SCHEMA-1 從 ⚠️ 半結 → ✅ 全結;WONTFIX 從 3 → 2(剩 F-PROV-1 sentinel + Welford 顯式)
+
 - **v19.240 R8 EX-L1ORCH-1 升級退役(2026-06-29)**:深挖發現升級觸發條件實質達標:
   - 違憲 3 個 L2 symbol(`calc_metrics` + `reconcile_fund_annual_return` + `reconcile_dividend_yield`)
   - 80+ LOC L2 業務判斷(perf 注入 / window 閾值 / 對帳 % vs decimal)push 回 L1
