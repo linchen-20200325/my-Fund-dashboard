@@ -457,17 +457,8 @@ except ImportError:
     pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
 
 
-# ════════════════════════════════════════════════════════════
-# v11.0 B-9b-6：structure 已搬至 repositories/fund_repository.py
-# ════════════════════════════════════════════════════════════
-try:
-    from repositories.fund import (  # noqa: F401  legacy re-export
-        STRUCTURE_PAGES,
-        _parse_pct_table,
-        fetch_fund_structure,
-    )
-except ImportError:
-    pass  # v19.200 P1-5 circular-safe re-export(0 active caller)
+# v19.242 R10 退役:fetch_fund_structure + STRUCTURE_PAGES + _parse_pct_table
+# 死碼整鏈拔除(F-PROV-1 sentinel 深挖副產品,0 production caller)
 
 # ════════════════════════════════════════════════════════════
 # v11.0 C-12：calc_dividend_estimate 已搬至 services/fund_service.py
