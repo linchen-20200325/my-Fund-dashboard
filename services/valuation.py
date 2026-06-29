@@ -111,6 +111,11 @@ def _fetch_multpl_pe() -> Optional[float]:
     """v19.197 P1-3 thin wrapper:多 fetcher 已下沉 repositories。
 
     保留本檔 attr 供 test_valuation.patch.object 相容。
+
+    F-PROV-1 註:Optional[float] 結構性無 .attrs,**provenance 由
+    `detect_valuation()` orchestrator-level `_provenance` 捕(phase 19 v19.105)。
+    本 fn 為 thin wrapper 透傳 upstream `repositories.external_market_repository.fetch_multpl_pe`,
+    不重複 stamp 避免冗餘。
     """
     from repositories.external_market_repository import fetch_multpl_pe
     return fetch_multpl_pe()
@@ -123,6 +128,11 @@ def fetch_forward_pe() -> Optional[float]:
 
     v19.197 P1-3:HTTP 部分下沉 repositories/external_market_repository,
     本函式留 chain orchestration(yf 失敗 → multpl fallback)。
+
+    F-PROV-1 註:Optional[float] 結構性無 .attrs,**provenance 由
+    `detect_valuation()` orchestrator-level `_provenance.sources["forward_pe"]` 捕
+    (記為 `"yfinance:^GSPC.info:forwardPE→trailingPE→multpl.com"` 完整 chain,
+    phase 19 v19.105)。本 fn 為 chain orchestrator,不重複 stamp。
     """
     from repositories.external_market_repository import fetch_yf_forward_pe
     v_yf = fetch_yf_forward_pe("^GSPC")
@@ -138,7 +148,14 @@ def fetch_forward_pe() -> Optional[float]:
 @register_cache
 @_ttl_cache(ttl_sec=TTL_30MIN, maxsize=4)   # v19.64：FRED 系列
 def fetch_gdpnow(fred_api_key: str) -> Optional[float]:
-    """從 FRED 抓 GDPNOW 系列最新一筆；任意失敗回 None。"""
+    """從 FRED 抓 GDPNOW 系列最新一筆；任意失敗回 None。
+
+    F-PROV-1 註:Optional[float] 結構性無 .attrs,**provenance 由
+    `detect_valuation()` orchestrator-level `_provenance.sources["gdpnow"]` 捕
+    (記為 `f"FRED:{FRED_GDPNOW}"`,phase 19 v19.105)。底層
+    `repositories.macro_repository.fetch_fred` 回 DataFrame 已含 `.attrs["source"]`,
+    本 fn 取 scalar `.iloc[-1]` 為刻意降 schema(orchestrator 需求單值非序列)。
+    """
     if not fred_api_key:
         return None
     try:

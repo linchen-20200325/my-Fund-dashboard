@@ -51,7 +51,7 @@ from repositories.snapshot_repository import (
 )
 from services.ai_service import analyze_portfolio_mk_advisor
 from services.format_helpers import fmt_twd
-from services.macro_service import (
+from services.macro import (
     backtest_sub_cycle_lights,
     rank_macro_drivers,
 )

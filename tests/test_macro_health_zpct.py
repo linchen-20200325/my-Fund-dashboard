@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 import pandas as pd
 
-from services.macro_service import calc_macro_phase_zpct
+from services.macro import calc_macro_phase_zpct
 
 
 # ── fixtures ────────────────────────────────────────────────────────────

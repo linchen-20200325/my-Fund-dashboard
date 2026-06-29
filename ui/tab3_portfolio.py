@@ -2366,7 +2366,7 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
         if _ccy in _current_fx_t3_cache:
             return _current_fx_t3_cache[_ccy]
         try:
-            from repositories.fund_repository import get_latest_fx as _gf_t3
+            from repositories.fund import get_latest_fx as _gf_t3
             import os as _os_t3
             _fk_t3 = ""
             try:

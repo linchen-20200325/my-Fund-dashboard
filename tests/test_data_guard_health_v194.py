@@ -21,20 +21,20 @@ class TestTab5FxHealthV194:
 
     def test_fx_truthy_when_get_latest_fx_returns_positive(self):
         """get_latest_fx 回 31.4 → Tab5 應視為 ✓。"""
-        with patch("repositories.fund_repository.get_latest_fx", return_value=31.4):
-            from repositories.fund_repository import get_latest_fx
+        with patch("repositories.fund.get_latest_fx", return_value=31.4):
+            from repositories.fund import get_latest_fx
             assert bool(get_latest_fx("USDTWD")) is True
 
     def test_fx_falsy_when_get_latest_fx_returns_none(self):
         """get_latest_fx 回 None → Tab5 應視為 ✗(全鏈失敗,真紅燈)。"""
-        with patch("repositories.fund_repository.get_latest_fx", return_value=None):
-            from repositories.fund_repository import get_latest_fx
+        with patch("repositories.fund.get_latest_fx", return_value=None):
+            from repositories.fund import get_latest_fx
             assert bool(get_latest_fx("USDTWD")) is False
 
     def test_get_latest_fx_zero_treated_as_invalid(self):
         """rate=0 應被 positive-only cache 拒收,不算 ✓。"""
-        with patch("repositories.fund_repository.get_latest_fx", return_value=0):
-            from repositories.fund_repository import get_latest_fx
+        with patch("repositories.fund.get_latest_fx", return_value=0):
+            from repositories.fund import get_latest_fx
             assert bool(get_latest_fx("USDTWD")) is False
 
 

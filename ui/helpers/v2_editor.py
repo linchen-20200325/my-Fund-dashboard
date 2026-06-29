@@ -182,7 +182,7 @@ def _render_div_split_estimate(policy_id: str, fund_df: pd.DataFrame) -> None:
             if _ccy in _current_fx_cache:
                 return _current_fx_cache[_ccy]
             try:
-                from repositories.fund_repository import get_latest_fx as _gf
+                from repositories.fund import get_latest_fx as _gf
                 import os as _os_dvs
                 _fk = ""
                 try:

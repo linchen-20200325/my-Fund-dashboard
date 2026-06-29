@@ -13,7 +13,7 @@ import pytest
 
 import math
 
-from services.macro_service import (
+from services.macro import (
     CHINA_MODIFIER_FLOOR,
     CHINA_MODIFIER_RANGE,
     _score_cli,
@@ -345,14 +345,14 @@ def test_modifier_monotonic_in_china():
 
 def test_get_china_snapshot_empty_key_returns_empty_dict():
     """fail-safe:fred_api_key 空字串 → 空 dict,不呼叫 L1 fetcher"""
-    from services.macro_service import get_china_snapshot
+    from services.macro import get_china_snapshot
     assert get_china_snapshot("") == {}
     assert get_china_snapshot(None) == {}  # type: ignore[arg-type]
 
 
 def test_get_china_snapshot_delegates_to_l1_then_l2(monkeypatch):
     """wrapper 串接:fetch_china_macro → china_macro_snapshot,結構保留"""
-    from services import macro_service as _ms
+    from services import macro as _ms
 
     # 偽造 L1 fetcher,確認 wrapper 用其輸出餵 china_macro_snapshot
     _called = {"fetch": 0}
@@ -376,7 +376,7 @@ def test_get_china_snapshot_delegates_to_l1_then_l2(monkeypatch):
 
 def test_get_china_snapshot_with_real_data_passthrough(monkeypatch):
     """wrapper 對非空 L1 結果做正確 pass-through(不丟欄位、不改值)"""
-    from services import macro_service as _ms
+    from services import macro as _ms
     from shared.fred_series import FRED_CHN_OECD_CLI
 
     _df = pd.DataFrame({

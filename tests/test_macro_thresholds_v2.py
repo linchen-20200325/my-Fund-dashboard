@@ -219,9 +219,13 @@ def test_cpi_beginner_view_imports_ssot():
 
 
 def test_cpi_macro_service_imports_ssot():
-    """macro_service 必須 import CPI_YOY_THRESHOLDS."""
-    import services.macro_service as ms
-    src = open(ms.__file__, encoding="utf-8").read()
+    """services.macro subpackage 必須 import CPI_YOY_THRESHOLDS。
+
+    v19.236 R2:shim services/macro_service.py 已刪,改驗 sub-package
+    services/macro/_helpers.py(真 SSOT 來源)。
+    """
+    import services.macro._helpers as msh
+    src = open(msh.__file__, encoding="utf-8").read()
     assert "CPI_YOY_THRESHOLDS" in src
     assert "_CPI_WARN_ABOVE" in src
     assert "_CPI_REGIME_OVERHEAT" in src
@@ -344,9 +348,12 @@ def test_pmi_thresholds_independent_from_tw():
 # ════════════════════════════════════════════════════════════════
 
 def test_pmi_macro_service_imports_ssot():
-    """macro_service 必須 import PMI_THRESHOLDS + 6 個 module-level 常數."""
-    import services.macro_service as ms
-    src = open(ms.__file__, encoding="utf-8").read()
+    """services.macro._helpers 必須 import PMI_THRESHOLDS + 6 個 module-level 常數.
+
+    v19.236 R2:shim services/macro_service.py 已刪,真 SSOT 在 _helpers.py。
+    """
+    import services.macro._helpers as msh
+    src = open(msh.__file__, encoding="utf-8").read()
     assert "PMI_THRESHOLDS" in src
     assert "_PMI_INFL_REBOUND" in src
     assert "_PMI_INFL_PEAK_WARN" in src
@@ -358,7 +365,7 @@ def test_pmi_macro_service_imports_ssot():
 
 def test_pmi_macro_service_constants_values():
     """6 個 PMI module-level 常數值對齊 SSOT."""
-    from services.macro_service import (
+    from services.macro import (
         _PMI_INFL_REBOUND, _PMI_INFL_EXPANSION, _PMI_INFL_PEAK_WARN,
         _PMI_GROWTH_EXPANSION, _PMI_ALERT_CONTRACT,
         _PMI_REGIME_STRONG, _PMI_REGIME_CONTRACT,
@@ -373,12 +380,13 @@ def test_pmi_macro_service_constants_values():
 
 
 def test_pmi_macro_service_no_inline_pmi_literals():
-    """macro_service.py 不應再有 inline `>= 50` / `>= 52` / `>= 55` / `< 50` 圍繞 PMI 變數的字面值.
+    """services.macro.us_indicators 不應再有 inline `>= 50` / `>= 52` / `>= 55` / `< 50` 圍繞 PMI 變數的字面值.
 
     用 regex 抓「pmi_v >= 50」 / 「pmi_v < 50」等 pattern,確保已 SSOT 化.
+    v19.236 R2:shim 已刪,改掃 us_indicators(真 fetch_all_indicators 所在)。
     """
     import re
-    import services.macro_service as ms
+    import services.macro.us_indicators as ms
     src = open(ms.__file__, encoding="utf-8").read()
     # PMI inline patterns(if any survived migration)
     inline_patterns = [
@@ -515,7 +523,7 @@ def test_calibration_m2_fedbs_use_ssot():
 
 
 def test_macro_service_m2_fedbs_constants():
-    from services.macro_service import (
+    from services.macro import (
         _M2_EASING, _M2_TIGHTENING, _FEDBS_EXPANSION, _FEDBS_CONTRACTION,
     )
     assert (_M2_EASING, _M2_TIGHTENING) == (5.0, 0.0)

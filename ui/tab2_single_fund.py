@@ -19,7 +19,7 @@ import streamlit as st
 
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
-from repositories.fund_repository import (
+from repositories.fund import (
     tdcc_search_fund,
 )
 from services.portfolio_service import dividend_safety as div_safety_check
@@ -1299,7 +1299,7 @@ def render_single_fund_tab() -> None:
 
                         # 抓 FX（Yahoo → FRED fallback chain 內建於 get_latest_fx）
                         try:
-                            from repositories.fund_repository import get_latest_fx
+                            from repositories.fund import get_latest_fx
                             _fx_to_twd = get_latest_fx(f"{_ccy}TWD=X", fred_api_key=_fred_k)
                             if _fx_to_twd is None or _fx_to_twd <= 0:
                                 # v18.275：TWD pair 對應 chain 已精簡為 Yahoo + er-api（其他都已死掉）

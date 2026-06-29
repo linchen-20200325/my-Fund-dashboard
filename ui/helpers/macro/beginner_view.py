@@ -97,7 +97,7 @@ def compute_traffic_lights(
     # ── 用既有 phase_info 或重算
     if phase_info is None:
         try:
-            from services.macro_service import calc_macro_phase
+            from services.macro import calc_macro_phase
             phase_info = calc_macro_phase(indicators) or {}
         except Exception:
             phase_info = {}
@@ -347,7 +347,7 @@ def compute_four_horizon_summary(
     # ── phase 重算備援
     if phase_info is None:
         try:
-            from services.macro_service import calc_macro_phase
+            from services.macro import calc_macro_phase
             phase_info = calc_macro_phase(indicators) or {}
         except Exception:
             phase_info = {}

@@ -54,7 +54,7 @@ def auto_fetch_moneydj(
         無效輸入回 ({}, "") 或 {}
     """
     from fund_fetcher import classify_fetch_status, normalize_result_state
-    from repositories.fund_repository import fetch_fund_from_moneydj_url
+    from repositories.fund import fetch_fund_from_moneydj_url
 
     _raw = (raw_input or "").strip()
     if not _raw:

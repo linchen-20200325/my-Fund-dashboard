@@ -284,7 +284,7 @@ def test_thresholds_consistent_red_yellow_ordering():
 
 def test_backtest_turning_points_no_key():
     """空 FRED key → source_ok=False，不丟例外。"""
-    import services.macro_service as macro_engine
+    import services.macro as macro_engine
     r = macro_engine.backtest_turning_points("")
     assert r["source_ok"] is False
     assert r["summary"]["n_events"] == 0
@@ -320,7 +320,7 @@ def _synth_spx_uptrend() -> pd.Series:
 
 def test_backtest_turning_points_event_detection(monkeypatch):
     """mock FRED + SPX，斷言識別到 4 個事件且 12M 報酬皆 > 0。"""
-    import services.macro_service as macro_engine
+    import services.macro as macro_engine
     # v19.199 P1-7:fetch_fred 引用走 services.macro.turning_points(原 monkeypatch
     # services.macro_service 在 shim 化後無效)
     monkeypatch.setattr("services.macro.turning_points.fetch_fred",
@@ -343,7 +343,7 @@ def test_backtest_turning_points_event_detection(monkeypatch):
 
 def test_backtest_turning_points_incomplete_window(monkeypatch):
     """事件日 < 18M before today → complete=False，不污染 median_18m。"""
-    import services.macro_service as macro_engine
+    import services.macro as macro_engine
 
     today = pd.Timestamp.today().normalize()
     # 製造 2 個事件：一個 2 年前（完整），一個 3 個月前（不完整）
@@ -395,7 +395,7 @@ def _make_synth_indicator(values: list, current: float = None) -> dict:
 
 def test_calc_sub_cycle_lights_returns_seven_groups():
     """無論 indicators 是否齊全，回傳必為 7 個子領域。"""
-    from services.macro_service import calc_sub_cycle_lights
+    from services.macro import calc_sub_cycle_lights
     out = calc_sub_cycle_lights({})
     assert isinstance(out, list) and len(out) == 7
     # 全空 → 都應該是「資料不足」⬜
@@ -407,7 +407,7 @@ def test_calc_sub_cycle_lights_returns_seven_groups():
 
 def test_calc_sub_cycle_lights_healthy_signal():
     """製造業：PMI/LEI 都高於均值（high_is_bad=False）→ z_norm 負 → 🟢 健康。"""
-    from services.macro_service import calc_sub_cycle_lights
+    from services.macro import calc_sub_cycle_lights
     # PMI 12 期，均值 ~50；最新 60（+1.5σ 以上）
     pmi_hist = [50] * 11 + [60]
     lei_hist = [0] * 11 + [1.5]
@@ -423,7 +423,7 @@ def test_calc_sub_cycle_lights_healthy_signal():
 
 def test_calc_sub_cycle_lights_warning_signal():
     """信貸：SLOOS/HY_SPREAD 都顯著高於均值（high_is_bad=True）→ 🔴 警示。"""
-    from services.macro_service import calc_sub_cycle_lights
+    from services.macro import calc_sub_cycle_lights
     sloos_hist = [0] * 11 + [40]   # 最新 40，遠高於均值 0
     hy_hist    = [4.0] * 11 + [8.0]
     out = calc_sub_cycle_lights({
@@ -438,7 +438,7 @@ def test_calc_sub_cycle_lights_warning_signal():
 
 def test_calc_sub_cycle_lights_partial_data():
     """單一指標可用 → 仍能算出 z_avg（不要因半成資料整組降為 ⬜）。"""
-    from services.macro_service import calc_sub_cycle_lights
+    from services.macro import calc_sub_cycle_lights
     permit_hist = [1400] * 11 + [1800]
     out = calc_sub_cycle_lights({
         "PERMIT_HOUSING": _make_synth_indicator(permit_hist, current=1800),
@@ -453,7 +453,7 @@ def test_calc_sub_cycle_lights_partial_data():
 # ════════════════════════════════════════════════════════════
 def test_build_macro_sankey_data_empty_indicators():
     """無 indicators → ok=False, 全部節點 z 為 None。"""
-    from services.macro_service import build_macro_sankey_data
+    from services.macro import build_macro_sankey_data
     out = build_macro_sankey_data({})
     assert out["ok"] is False
     assert len(out["labels"]) == 8
@@ -462,7 +462,7 @@ def test_build_macro_sankey_data_empty_indicators():
 
 def test_build_macro_sankey_data_partial_ok():
     """5/8 節點有 z（>=4=50%）→ ok=True，色彩依 high_is_bad 翻轉。"""
-    from services.macro_service import build_macro_sankey_data
+    from services.macro import build_macro_sankey_data
     base = [50] * 11 + [60]   # +z
     out = build_macro_sankey_data({
         "FED_RATE":       _make_synth_indicator(base, current=60),
@@ -482,7 +482,7 @@ def test_build_macro_sankey_data_partial_ok():
 
 def test_build_macro_sankey_data_link_values_use_zscore():
     """邊粗細＝起點 |z|（最小 0.3）；缺資料退化為 0.3。"""
-    from services.macro_service import build_macro_sankey_data
+    from services.macro import build_macro_sankey_data
     out = build_macro_sankey_data({})
     # 全空 → 所有 value 應為 0.3 floor
     assert all(v == 0.3 for v in out["values"])
@@ -508,7 +508,7 @@ def _make_long_series(n: int = 80, base: float = 50.0,
 
 def test_build_macro_sankey_dynamic_empty():
     """無 indicators → fallback 同 build_macro_sankey_data，link_corrs 全 None。"""
-    from services.macro_service import build_macro_sankey_dynamic
+    from services.macro import build_macro_sankey_dynamic
     out = build_macro_sankey_dynamic({})
     assert out["ok"] is False
     assert len(out["link_corrs"]) == 9
@@ -517,7 +517,7 @@ def test_build_macro_sankey_dynamic_empty():
 
 def test_build_macro_sankey_dynamic_uses_correlation():
     """全節點有 series → values 應依 |corr| 變化，link_corrs 應有實數。"""
-    from services.macro_service import build_macro_sankey_dynamic
+    from services.macro import build_macro_sankey_dynamic
     ind = {key: _make_long_series(seed=i)
            for i, (key, *_) in enumerate([
                ("FED_RATE", "", 0, True), ("SLOOS", "", 1, True),
@@ -538,7 +538,7 @@ def test_build_macro_sankey_dynamic_uses_correlation():
 
 def test_backtest_sub_cycle_lights_no_target():
     """target_key 缺 series → 全部子領域回「資料不足」/「target 無 series」verdict。"""
-    from services.macro_service import backtest_sub_cycle_lights
+    from services.macro import backtest_sub_cycle_lights
     out = backtest_sub_cycle_lights({}, target_key="LEI")
     assert len(out) == 7
     for c in out:
@@ -549,7 +549,7 @@ def test_backtest_sub_cycle_lights_no_target():
 
 def test_backtest_sub_cycle_lights_full_history():
     """製造業（PMI+LEI）+ target=LEI 有 80 期歷史 → 應產生分桶 + verdict 含 '紅燈後/綠燈後'。"""
-    from services.macro_service import backtest_sub_cycle_lights
+    from services.macro import backtest_sub_cycle_lights
     ind = {
         "PMI": _make_long_series(n=80, base=50, slope=0.1, seed=1),
         "LEI": _make_long_series(n=80, base=0, slope=0.02, seed=2),
@@ -568,7 +568,7 @@ def test_backtest_sub_cycle_lights_full_history():
 # ════════════════════════════════════════════════════════════
 def test_rank_macro_drivers_empty():
     """無 indicators → ok=False, ranked=[]."""
-    from services.macro_service import rank_macro_drivers
+    from services.macro import rank_macro_drivers
     out = rank_macro_drivers({}, target_key="LEI")
     assert out["ok"] is False
     assert out["ranked"] == []
@@ -576,7 +576,7 @@ def test_rank_macro_drivers_empty():
 
 def test_rank_macro_drivers_returns_sorted_by_abs_corr():
     """target+多 driver 都有 series → ranked 按 abs_corr 降序排列。"""
-    from services.macro_service import rank_macro_drivers
+    from services.macro import rank_macro_drivers
     import pandas as _pd
     import numpy as _np
 
@@ -608,7 +608,7 @@ def test_rank_macro_drivers_returns_sorted_by_abs_corr():
 
 def test_rank_macro_drivers_skips_target_self():
     """target 自己不應出現在 ranked 列表。"""
-    from services.macro_service import rank_macro_drivers
+    from services.macro import rank_macro_drivers
     import pandas as _pd
     import numpy as _np
     _np.random.seed(7)
@@ -628,7 +628,7 @@ def test_rank_macro_drivers_skips_target_self():
 
 def test_rank_macro_drivers_insufficient_overlap():
     """driver 樣本 < min_overlap → 應被跳過。"""
-    from services.macro_service import rank_macro_drivers
+    from services.macro import rank_macro_drivers
     import pandas as _pd
     # target 60 期
     t = _pd.Series(range(60), index=_pd.date_range("2018-01-01", periods=60,

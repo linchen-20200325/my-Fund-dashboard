@@ -30,7 +30,7 @@ from fund_fetcher import (
     fetch_market_news,
     set_risk_free_rate,
 )
-from services.macro_service import (
+from services.macro import (
     backtest_turning_points,
     calc_macro_phase,
     detect_systemic_risk,
@@ -484,7 +484,7 @@ def _render_china_drag_panel(phase_dict: dict | None,
         return
 
     # ── L2 取數 + 計算 ───────────────────────────────────────────
-    from services.macro_service import (
+    from services.macro import (
         apply_china_modifier,
         classify_china_regime,
         compute_china_subscore,
@@ -1164,7 +1164,7 @@ def render_macro_tab() -> None:
                      "其他 Tab（基金詳情/組合/模擬器）不受影響")
         if _force_reload:
             try:
-                from services.macro_service import clear_tab1_macro_caches
+                from services.macro import clear_tab1_macro_caches
                 _clr = clear_tab1_macro_caches(session_state=st.session_state)
                 st.toast(
                     f"✅ Tab1 精準清快取：TTL {_clr['ttl_cleared']} 條 / "
@@ -1654,7 +1654,7 @@ def render_macro_tab() -> None:
                                      help="v19.57 C1：僅清 Tab1（FRED/Yahoo/AAII/熱錢）快取，"
                                           "Tab2~Tab5 基金/組合/政策快取不受影響"):
                             try:
-                                from services.macro_service import clear_tab1_macro_caches
+                                from services.macro import clear_tab1_macro_caches
                                 clear_tab1_macro_caches(session_state=st.session_state)
                             except Exception:
                                 pass
@@ -2805,7 +2805,7 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
             elif isinstance(v, (int, float, str)) and v not in (None, ""):
                 lines.append(f"  - {k}：{v}")
     try:
-        from services.macro_service import (  # noqa: PLC0415
+        from services.macro import (  # noqa: PLC0415
             rank_macro_drivers as _rmd,
             calc_sub_cycle_lights as _csl,
         )

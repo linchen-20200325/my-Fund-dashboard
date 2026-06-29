@@ -58,7 +58,7 @@ class DataValidationError(Exception):
 
 # ══════════════════════════════════════════════════════════════════
 # v18.122 issue 4 真根因修補：HTTP headers / PORTAL_CFG / 子網域映射等常數
-# 必須在 `from repositories.fund_repository import ...`（line 219）之前定義
+# 必須在 `from repositories.fund import ...`（line 219）之前定義
 # 否則 fund_repository.py module-level `from fund_fetcher import HDR` 會
 # 因 circular import 拿到 partially initialized module → NameError → 各
 # _src_* adapter 全 crash → series=0 假象（修了 NAS Proxy / page_type 都沒用）
@@ -270,7 +270,7 @@ def normalize_result_state(result: dict) -> dict:
 # 期間 fund/sources.py 又從 fund_fetcher import 會 deadlock)。
 # 實測 0 active caller `from fund_fetcher import _tdcc*` — 此 try block 為純安全網。
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         _tdcc_get,
         _src_tdcc_meta,
         tdcc_search_fund,
@@ -322,7 +322,7 @@ from infra.cache import (  # noqa: F401  legacy re-export
 # 此處 re-export 維持向後相容（聚合層 _fetch_fund_single 等內部 caller 不變）
 # ══════════════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         _src_fundclear_nav,
         _src_fundclear_meta,
         _src_fundclear_div,
@@ -346,7 +346,7 @@ from services.fund_service import calc_health_from_manual  # noqa: F401
 #              Yahoo / Alphavantage adapters 已搬至 repositories/fund_repository.py
 # ══════════════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         _cnyes_parse_navs,
         _cnyes_resolve_code,
         fetch_nav_cnyes,
@@ -370,7 +370,7 @@ except ImportError:
 #              已搬至 repositories/fund_repository.py（17 函式）
 # ══════════════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         # 保險公司直連
         probe_insurance_urls,
         _src_taiwanlife_nav,
@@ -399,7 +399,7 @@ except ImportError:
 # v11.0 B-9b-5：多源聚合 + 主入口已搬至 repositories/fund_repository.py
 # ══════════════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         fetch_fund_multi_source,
         _src_insurance_subdomain_nav,
         _fetch_fund_single,
@@ -413,7 +413,7 @@ except ImportError:
 # v11.0 B-9b-6：search / parse_nav / fetch_nav / fetch_div 已搬至 repositories/fund_repository.py
 # ════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         search_fundclear,
         search_moneydj_by_name,
         _parse_nav_html,
@@ -428,7 +428,7 @@ except ImportError:
 # v11.0 B-9b-6：perf / risk / holdings 已搬至 repositories/fund_repository.py
 # ════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         _fetch_domestic_perf,
         fetch_performance_wb01,
         fetch_risk_metrics,
@@ -449,7 +449,7 @@ from services.fund_service import (  # noqa: F401  legacy re-export
 # v11.0 B-9b-6：fund_by_key / fund_by_code 已搬至 repositories/fund_repository.py
 # ════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         fetch_fund_by_key,
         fetch_fund_by_code,
     )
@@ -461,7 +461,7 @@ except ImportError:
 # v11.0 B-9b-6：structure 已搬至 repositories/fund_repository.py
 # ════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         STRUCTURE_PAGES,
         _parse_pct_table,
         fetch_fund_structure,
@@ -485,7 +485,7 @@ from repositories.news_repository import fetch_market_news  # noqa: F401
 # v11.0 B-9b-6：Universal Ledger 已搬至 repositories/fund_repository.py
 # ══════════════════════════════════════════════════════════════════════
 try:
-    from repositories.fund_repository import (  # noqa: F401  legacy re-export
+    from repositories.fund import (  # noqa: F401  legacy re-export
         get_latest_fx,
         get_latest_nav,
     )
@@ -500,11 +500,11 @@ except ImportError:
 # ════════════════════════════════════════════════════════════════════════
 def __getattr__(name: str):
     """延遲 attribute 解析:caller `from fund_fetcher import X` 觸發本 fn,
-    動態 forward 至 repositories.fund_repository(此時其 init 已完成)。"""
+    動態 forward 至 repositories.fund subpackage(v19.235 R1:shim 已退役)。"""
     if name.startswith('__'):
         raise AttributeError(f"module 'fund_fetcher' has no attribute {name!r}")
     try:
-        from repositories import fund_repository as _fr
+        from repositories import fund as _fr
         return getattr(_fr, name)
     except (ImportError, AttributeError):
         raise AttributeError(f"module 'fund_fetcher' has no attribute {name!r}")

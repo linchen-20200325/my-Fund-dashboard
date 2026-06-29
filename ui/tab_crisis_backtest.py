@@ -328,7 +328,7 @@ def render_crisis_backtest_tab() -> None:
             # User 反饋 ACTI94 30 筆 NAV 不涵蓋 2018/2020/2022 危機事件 → 完全看不出影響。
             with st.spinner(f"抓取基金 {fund_key} 多年歷史 NAV（CnYES + MoneyDJ 歷史頁）..."):
                 try:
-                    from repositories.fund_repository import (
+                    from repositories.fund import (
                         fetch_fund_by_key,
                         fetch_nav_history_long,
                     )
