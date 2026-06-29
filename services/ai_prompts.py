@@ -12,62 +12,16 @@
 - services/prompts.* 未來可進一步拆檔，但目前 4 個 builder 共 ~200 行單檔即可
 
 公開 API：
-- build_global_prompt           — analyze_global (4 節結構)
 - build_mk_advisor_prompt       — analyze_portfolio_mk_advisor (策略3 組合 4 節)
-- build_event_impact_prompt     — event_impact_analysis (新聞衝擊評估)
-- build_structured_summary_prompt — v18.214 通用：吃該 Tab 全章節快照，逐章節
-                                    白話結論 + 時事（取代舊 4 視角散文 builder）
+- build_structured_summary_prompt — v18.214 通用：吃該 Tab 全章節快照,逐章節
+                                    白話結論 + 時事(取代舊 4 視角散文 builder)
 
 v18.238：移除 `build_fund_json_prompt` / `build_fund_json_structured_prompt`
-        + 整個 `services/ai_models.py`（dead code 自 v18.209 起 zero live caller）。
+        + 整個 `services/ai_models.py`(dead code 自 v18.209 起 zero live caller)。
+v19.239：R7 EX-AI-1 連動 — 移除 `build_global_prompt` + `build_event_impact_prompt`
+        (對應 ai_service.py 的 analyze_global / event_impact_analysis dead code 一併清)。
 """
 from __future__ import annotations
-
-
-# ════════════════════════════════════════════════════════════
-# 1. analyze_global — 4 節結構（位階 / 配置 / 警示 / 待辦）
-# ════════════════════════════════════════════════════════════
-def build_global_prompt(snapshot: str, phase: str, alloc_str: str,
-                        core_target_pct: int) -> str:
-    """組合「全域投資建議」prompt。
-
-    Args:
-        snapshot: _build_snapshot() 輸出（含指標 / 持倉 / 新聞快照）
-        phase: 當前景氣位階（如 "擴張中段"）
-        alloc_str: 建議配置字串（如 "股票60% / 債券30% / 現金10%"）
-        core_target_pct: 使用者目標核心配置 %
-    """
-    return f"""你是採用「策略3 以息養股」方法論的台灣財經顧問。
-你必須輸出完整的 4 個段落，缺少任何一段都是錯誤。
-⚠️ 嚴格規則：只能根據以下快照分析，禁止搜尋或引用任何外部資訊。
-
-{snapshot}
-
-═══════════════════════════════════════
-請用繁體中文，依序輸出以下【全部4節】，每節用 ### 開頭標題：
-
-### 📍 一、景氣位階判讀
-- 當前位階：{phase}，說明評分與趨勢方向
-- 主要依據：列出3個關鍵指標數值與解讀
-- 拐點觸發條件：何時需要調整配置？
-
-### ⚖️ 二、資產配置建議
-- 當前建議：{alloc_str}
-- 你的目標：核心{core_target_pct}% / 衛星{100-core_target_pct}%
-- 轉換位階後，如何調整？（給具體%數字）
-
-### 🔴 三、持倉警示
-每檔基金一行，格式：[基金名] → 🔴減碼/🟡持有/🟢加碼 [一句理由]
-（必須涵蓋吃本金、NAV位置偏高、低Sharpe等問題）
-
-### 🔄 四、本週操作待辦清單
-請用 Markdown checkbox 格式輸出3-5個具體行動項目：
-- [ ] 哪檔需要減碼？減多少？轉入什麼？
-- [ ] 哪檔接近-1σ買點，等待加碼？
-- [ ] 有無吃本金基金需要處理？
-- [ ] 每月定期扣款是否繼續執行？
-═══════════════════════════════════════
-【必須輸出完整4節，不可提前結束。第四節必須使用 - [ ] checkbox 格式】"""
 
 
 # ════════════════════════════════════════════════════════════
@@ -137,30 +91,6 @@ def build_mk_advisor_prompt(*, phase: str, score, alloc_str: str,
 最後一段用「⚠️ **系統性風險警示**」開頭，**必須引用：(1) 1-2 條上方新聞、(2) Phase 4 領先 driver 前 2 名的方向與幅度、(3) Phase 3-B 至少一個子領域的紅燈歷史回測結論**，加上 VIX / 殖利率倒掛 / NBER 等指標，給「目前該偏向 A 還是 B」的明確結論。
 ═══════════════════════════════════════════════
 【嚴格規則】只能引用上方資料（含新聞 / driver 排名 / 燈號回測）；禁止編造未提及的基金 / 數字 / 統計結論。"""
-
-
-# ════════════════════════════════════════════════════════════
-# 4. event_impact_analysis — 新聞衝擊評估（短回應）
-# ════════════════════════════════════════════════════════════
-def build_event_impact_prompt(*, fund_ctx: str, headlines: list[str],
-                              holdings_ctx: str) -> str:
-    """組合「事件衝擊評估」prompt（簡短，≤200 字）。"""
-    nl = chr(10)   # 字串內插不能放 backslash
-    return f"""你是一位機構級基金風險分析師。{fund_ctx}
-⚠️ 嚴格規則：只根據以下提供的新聞標題和持股資訊分析，禁止杜撰或引用外部資訊。
-
-[近期市場新聞標題]
-{nl.join(f'• {h}' for h in headlines)}
-{holdings_ctx}
-
-請完成以下分析（如無顯著衝擊事件，直接回覆「⚪ 無重大事件衝擊」即可）：
-
-### ⚠️ 事件衝擊評估
-1. 哪些新聞事件對基金底層持股有直接衝擊？（點名具體標題）
-2. 衝擊程度：🔴高 / 🟡中 / 🟢低，並說明理由
-3. 建議立即關注的風險點（1-2 條）
-
-【輸出必須簡短，整體不超過 200 字】"""
 
 
 # ════════════════════════════════════════════════════════════

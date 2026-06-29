@@ -6,24 +6,21 @@ AI 分析引擎 v13 — 單次呼叫 · 含風險預警快照 · 六因子評分
 公開 API：
   - assign_asset_role — 核心/衛星關鍵字分類
   - _gemini           — Gemini API 單次呼叫（thin delegate 至 infra.llm._call_gemini）
-  - _build_snapshot   — 整合 indicators + phase + 風險快照
-  - analyze_global    — 全球總經分析
   - analyze_portfolio_mk_advisor   — MK 智能戰情室 AI 建議
-  - build_stale_flags  — Data Guard STALE 旗標注入
-  - event_impact_analysis — 持股 × 新聞交叉比對警報
   - get_gemini_keys / gemini_generate — v18.217 多 key 自動輪替
 
 v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + Gemini API 呼叫薄包。
 v19.78 F-H2 §8.2 修正：raw HTTP I/O 統一走 `infra.llm._call_gemini`（L0 infra）,
 本層僅留 prompt 構造 / 多 key 輪替 / 業務判讀（L2 service）;
 向後相容：根目錄 ai_engine.py 保留 shim re-export，既有 caller 零修改。
+
+v19.239 R7 EX-AI-1 死碼清理:刪 _build_snapshot / analyze_global /
+build_stale_flags / event_impact_analysis 4 fn(共 ~214 LOC, 0 production caller),
+連動清 services/ai_prompts.py 的 build_global_prompt / build_event_impact_prompt
+2 dead helper。
 """
 from infra.llm import _call_gemini, call_llm
-from services.ai_prompts import (
-    build_event_impact_prompt,
-    build_global_prompt,
-    build_mk_advisor_prompt,
-)
+from services.ai_prompts import build_mk_advisor_prompt
 
 # ── 核心/衛星關鍵字分類 ──────────────────────────────────────
 _CORE_KW  = ["債", "收益", "配息", "平衡", "高息", "公用", "多元",
@@ -80,153 +77,6 @@ def _gemini(api_key: str, prompt: str, max_tokens: int = 2000,
         timeout=90,
         response_format="json" if force_json else None,
     )
-
-
-# ── 數據快照建構（極致精簡，不傳歷史 Array）─────────────────
-def _build_snapshot(indicators: dict, phase_info: dict,
-                    portfolio_funds: list, focus_fund: dict,
-                    news_headlines: list) -> str:
-    """
-    將所有數據壓縮為純文字快照，不傳歷史淨值數組。
-    目標：整個快照 < 800 tokens
-    """
-    pi = phase_info or {}
-    lines = ["【數據快照 — AI 只能根據此快照分析，嚴禁自行搜尋外部資訊】"]
-
-    # v19.177 #5A:資料來源說明(metrics provenance)— 讓 AI 文字輸出與 UI 顯示同源透明
-    # 全站指標 SSOT:
-    #   - 1Y 含息報酬: services.fund_total_return.compute_1y_total_return
-    #       precedence: wb01(MoneyDJ 官方)> ret_1y_total(本地含息)> ret_1y(純 NAV)> NAV 外推
-    #   - 年化配息率: services.health.dividend._resolve_adr_with_fallback
-    #       precedence: moneydj_div_yield(wb05)> metrics.annual_div_rate > divs 12M sum/NAV
-    #   - Sharpe: 優先 wb07 一年 > wb07 六個月 > 自算(metrics.sharpe_source 標記)
-    #   - σ / std_1y: 優先 wb07 > NAV 自算(metrics.std_source 標記)
-    #   - Max DD: NAV 累計法自算
-    lines.append("\n[資料來源] tr1y=wb01官方優先;adr=wb05官方優先;Sharpe/σ=wb07優先,自算備援。")
-
-    # ── 1. 總經（只留關鍵 5 指標 + 位階）────────────────
-    lines.append("\n[總經位階]")
-    lines.append(
-        f"位階:{pi.get('phase','?')} 評分:{pi.get('score','?')}/10 "
-        f"趨勢:{pi.get('trend_arrow','?')}→{pi.get('next_phase_name','?')} "
-        f"衰退率:{pi.get('rec_prob','?')}%"
-    )
-    alloc = pi.get("allocation", {})
-    if alloc:
-        lines.append("建議配置:" + " ".join(f"{k}{v}%" for k,v in alloc.items()))
-    alloc_t = pi.get("alloc_transition", {})
-    if alloc_t:
-        lines.append("轉位階後調整:" + " ".join(
-            f"{k}:{v['from']}%→{v['to']}%" for k,v in alloc_t.items()))
-    alerts = pi.get("alerts", [])
-    if alerts:
-        lines.append("⚠️ 警報:" + " | ".join(str(a) for a in alerts[:2]))
-
-    # 只傳最關鍵 5 指標數值
-    KEY_IND = ["PMI","HY_SPREAD","YIELD_10Y2Y","VIX","CPI"]
-    ind_vals = []
-    for k in KEY_IND:
-        v = (indicators or {}).get(k, {})
-        if v:
-            ind_vals.append(f"{k}:{v.get('value','?')}{v.get('unit','')} {v.get('signal','')}")
-    if ind_vals:
-        lines.append("指標:" + " | ".join(ind_vals))
-
-    # ── 2. 最新新聞標題（最多 3 則，只傳標題）───────────
-    if news_headlines:
-        lines.append("\n[最新新聞（僅標題）]")
-        for h in news_headlines[:3]:
-            lines.append(f"• {str(h)[:60]}")
-
-    # ── 3. 組合基金（每檔精簡 1 行）────────────────────
-    loaded = [f for f in (portfolio_funds or []) if f.get("loaded")]
-    if loaded:
-        lines.append(f"\n[投資組合 — {len(loaded)} 檔]")
-        for f in loaded:
-            m   = f.get("metrics", {}) or {}
-            mj  = f.get("moneydj_raw", {}) or {}
-            rt  = (mj.get("risk_metrics") or {}).get("risk_table", {}) or {}
-            yr  = rt.get("一年", {}) or {}
-            pf  = mj.get("perf", {}) or {}
-            adr = mj.get("moneydj_div_yield") or m.get("annual_div_rate", 0) or 0
-            tr1 = pf.get("1Y")
-            eat = "🔴吃本金" if (tr1 is not None and tr1 < adr and adr > 0) else "✅"
-            role_raw = "core" if f.get("is_core") else "satellite"
-            role = assign_asset_role(f.get("name",""), role_raw)
-            role_icon = "🛡️核心" if role == "core" else "⚡衛星"
-            pos  = m.get("pos_label", "?")
-            inv  = f.get("invest_twd", 0) or 0
-            name = f.get("name","") or f.get("code","?")
-            lines.append(
-                f"  {role_icon} {name[:18]} | "
-                f"配息{adr:.1f}% TR1Y:{tr1 if tr1 is not None else 'N/A'}% {eat} | "
-                f"σ:{yr.get('標準差','?')}% Sharpe:{yr.get('Sharpe','?')} "
-                f"DD:{m.get('max_drawdown','?')}% NAV位置:{pos}"
-                + (f" NT${inv:,}" if inv else "")
-            )
-
-    # ── 4. 個別基金（僅摘要，不傳歷史淨值）─────────────
-    if focus_fund:
-        m3  = focus_fund.get("metrics", {}) or {}
-        mj3 = focus_fund.get("moneydj_raw", {}) or {}
-        pf3 = mj3.get("perf", {}) or {}
-        adr3 = mj3.get("moneydj_div_yield") or m3.get("annual_div_rate",0) or 0
-        tr3  = pf3.get("1Y")
-        eat3 = "🔴吃本金" if (tr3 is not None and tr3 < adr3 and adr3>0) else "✅"
-        name3 = focus_fund.get("fund_name","") or "?"
-        lines.append(f"\n[個別基金診斷 — {name3}]")
-        lines.append(
-            f"  NAV:{m3.get('nav','?')} 位置:{m3.get('pos_label','?')} | "
-            f"買1σ:{m3.get('buy1','')} 買2σ:{m3.get('buy2','')} 停利:{m3.get('sell1','')}"
-        )
-        lines.append(f"  配息:{adr3:.1f}% TR1Y:{tr3 if tr3 is not None else 'N/A'}% {eat3}")
-
-
-    # ── 5. 風險預警快照（v13 新增）────────────────────────────────
-    try:
-        from services.portfolio_service import risk_alert as _ra
-        _regime_info = pi.get("regime_info", {}) or {}
-        _regime      = _regime_info.get("regime", "")
-        _hy          = (indicators or {}).get("HY_SPREAD", {}).get("value")
-        _vix_v       = (indicators or {}).get("VIX", {}).get("value")
-        _fed_v2      = (indicators or {}).get("FED_RATE", {}).get("value")
-        _fed_p2      = (indicators or {}).get("FED_RATE", {}).get("prev")
-        _fed_dir     = "up" if (_fed_v2 and _fed_p2 and _fed_v2 > _fed_p2) else "down"
-        _alerts      = _ra(regime=_regime, hy_spread=_hy, vix=_vix_v, fed_direction=_fed_dir)
-        red_alerts = [a for a in _alerts if a["level"] == "red"]
-        if red_alerts:
-            lines.append("\n[風險預警]")
-            for a in red_alerts[:2]:
-                lines.append(f"  {a['message']}")
-    except Exception as _e_ra:
-        # F-MED v19.170: silent → stderr log;risk_alert 失敗不阻斷主流程
-        import sys as _sys_ra
-        print(f'[ai_service/risk_alert_inject] fail: {type(_e_ra).__name__}: {_e_ra}', file=_sys_ra.stderr)
-
-    return "\n".join(lines)
-
-
-# ── 全局投資決策（主函數）───────────────────────────────────
-def analyze_global(api_key: str, indicators: dict, phase_info: dict,
-                   portfolio_funds: list = None, focus_fund: dict = None,
-                   news_headlines: list = None, core_target_pct: int = 80) -> str:
-    """
-    v12 唯一 AI 入口：單次呼叫，輸出四節投資決策
-    - 不自行搜尋任何外部資訊
-    - 輸入 < 800 tokens，輸出 < 1500 tokens
-    """
-    snapshot = _build_snapshot(indicators, phase_info,
-                               portfolio_funds, focus_fund, news_headlines)
-    pi = phase_info or {}
-    phase = pi.get("phase","?")
-    alloc = pi.get("allocation", {})
-    alloc_str = " / ".join(f"{k}{v}%" for k,v in alloc.items()) if alloc else "未知"
-
-    prompt = build_global_prompt(
-        snapshot=snapshot, phase=phase, alloc_str=alloc_str,
-        core_target_pct=core_target_pct,
-    )
-    return call_llm(prompt, max_tokens=8192, gemini_key=api_key)
 
 
 # ────────────────────────────────────────────────────────────────
@@ -536,75 +386,6 @@ def _write_error_ledger(error, context, api_key=""):
         # F-MED v19.170: silent pass → stderr log;ledger write 失敗本身不阻斷主流程
         import sys as _sys_ed
         print(f'[ai_service/_append_error_ledger] ledger write fail {_ledger_path}: {type(_e_ledger).__name__}: {_e_ledger}', file=_sys_ed.stderr)
-
-
-# ══════════════════════════════════════════════════════════════════
-# v18.1 三節結構化總經 AI 摘要
-# 依需求輸出：【現狀解讀】【潛在系統性風險評估】【未來一週觀察重點】
-# ══════════════════════════════════════════════════════════════════
-def build_stale_flags(data_registry: dict) -> str:
-    """
-    T3: 掃描 data_registry，回傳月度指標 > 50 天 / 季度 > 110 天的 STALE 標記字串。
-    格式: "[STALE: PMI=72d, CPI=68d]"  或空字串
-
-    閾值放寬說明（v16.1）：
-    - 月度資料常因「次月中下旬才發布」自然滯後 30-55 天，原 40 天閾值會誤報
-    - 改為 50 天（>= 1.5 個發布週期才算 stale），降低 AI 章節零警示噪音
-    """
-    import datetime as _dt
-    today = _dt.date.today()
-    stale = []
-    monthly_keys = {"PMI","CPI","UNEMPLOYMENT","M2","FED_RATE","PPI","SAHM",
-                    "UMCSENT","CONSUMER_CONF","NEW_HOME","PERMIT_HOUSING"}
-    quarterly_keys = {"SLOOS"}
-    for key, info in (data_registry or {}).items():
-        date_str = info.get("latest_date") or info.get("date")
-        if not date_str:
-            continue
-        try:
-            d = _dt.date.fromisoformat(str(date_str)[:10])
-            age = (today - d).days
-        except Exception:
-            continue
-        if key in monthly_keys and age > 50:
-            stale.append(f"{key}={age}d")
-        elif key in quarterly_keys and age > 110:
-            stale.append(f"{key}={age}d")
-    return f"[STALE: {', '.join(stale)}]" if stale else ""
-
-
-def event_impact_analysis(
-    api_key: str,
-    news_items: list,
-    fund_holdings_text: str = "",
-    fund_name: str = "",
-) -> str:
-    """
-    T1: 事件驅動影響分析 — 新聞事件 × 基金底層持股交叉比對
-    輸出: Markdown 格式的衝擊警報（若無重大事件，回傳空字串）
-    """
-    if not api_key or not news_items:
-        return ""
-
-    headlines = [item.get("title", "")[:80] for item in news_items[:10] if item.get("title")]
-    if not headlines:
-        return ""
-
-    holdings_ctx = f"\n[基金持股摘要]\n{fund_holdings_text[:400]}" if fund_holdings_text else ""
-    fund_ctx = f"分析標的：{fund_name}" if fund_name else "分析所有持倉基金"
-
-    prompt = build_event_impact_prompt(
-        fund_ctx=fund_ctx, headlines=headlines, holdings_ctx=holdings_ctx,
-    )
-
-    try:
-        result = call_llm(prompt, max_tokens=400, gemini_key=api_key)
-        if "無重大事件" in result or "無顯著" in result:
-            return ""
-        return result
-    except Exception:
-        return ""
-
 
 # ── v18.217 多 Gemini key 自動輪替（分散免費額度 + 防斷）──────────
 def get_gemini_keys() -> list[str]:

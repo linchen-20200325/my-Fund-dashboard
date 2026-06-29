@@ -21,6 +21,12 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.239 R7 EX-AI-1 死碼清(2026-06-29)**:5 個 WONTFIX 深挖,4 個確認維持,EX-AI-1 找到 4 個真死碼:
+  - `services/ai_service.py` -216 LOC:`_build_snapshot`(124)+ `analyze_global`(25)+ `build_stale_flags`(31)+ `event_impact_analysis`(34)+ 連動 import / docstring 清理
+  - `services/ai_prompts.py` -70 LOC:`build_global_prompt`(46)+ `build_event_impact_prompt`(24)兩個 dead prompt builder + 對應 section header + docstring 公開 API 清單更新
+  - **EX-AI-1 例外規則(LLM 回 str)維持有效**:本輪只清死碼,不動 caller 介面
+  - 全 113 守門 test 綠燈;0 caller 殘留 dead reference;Surviving public API:`assign_asset_role` / `analyze_portfolio_mk_advisor` / `get_gemini_keys` / `gemini_generate` / `_gemini` / `_format_fund_holdings` + `build_mk_advisor_prompt` / `build_structured_summary_prompt`
+
 - **v19.238 EX-L1ORCH-1(2026-06-29)**:架構違憲深挖 — `repositories/fund/` 4 處 L1→L2 `calc_metrics` import 復查:
   - **2 處死 re-export 清除**:`_helpers.py:64` + `nav_metrics.py:28`(純 `noqa: F401` 0 內部 caller)+ 連動清 `_helpers.py` 過時 `_finish_metrics` 註解(`_finish_metrics` 已於 P1-5 搬 `fund_orchestration.py`)
   - **2 處真呼叫登錄例外 EX-L1ORCH-1**:`fx_and_main.py:27`(於 `fetch_fund_by_key` 收尾呼叫)+ `fund_orchestration.py:30`(於 `_finish_metrics` + `fetch_fund_from_moneydj_url` 收尾)— L1 orchestrator(1766 LOC)抓 NAV+配息後即時 packaging `result["metrics"]` dict;三條替代路徑(整檔搬 L2 反向違憲 / 拆 return 改公開 API 10+ caller / lazy import 純 cosmetic)皆更差,§8.1 step 6 例外正解
