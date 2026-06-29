@@ -27,6 +27,10 @@ from fund_fetcher import (  # noqa: F401
     normalize_result_state, merge_non_empty, classify_fetch_status,
 )
 from infra.proxy import _proxies, _ssl_verify  # noqa: F401
+# CLAUDE.md §8.2.A EX-L1ORCH-1:L1 fund orchestrator bundle fetch+metric compute
+# 的 L1→L2 跨層 import 已登錄為例外。calc_metrics 於 _finish_metrics(line ~373)
+# + fetch_fund_from_moneydj_url(line ~971)收尾呼叫,負責把 NAV+配息 packaging
+# 成 result["metrics"]。詳見例外清單理由與升級觸發條件。
 from services.fund_service import calc_metrics  # noqa: F401
 
 from repositories.fund.sources import *  # noqa: F401, F403 — 所有 _src_* re-export

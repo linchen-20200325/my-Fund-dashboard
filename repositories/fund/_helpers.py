@@ -57,8 +57,3 @@ from fund_fetcher import (  # noqa: F401
 
 # v18.115 B-A: 修補 _proxies/_ssl_verify NameError（PR #171 已修）
 from infra.proxy import _proxies, _ssl_verify  # noqa: F401
-
-# v18.123 issue 4 round 6: _finish_metrics 內呼叫 calc_metrics 但漏 import
-# 跨層 import（repository → service）為務實妥協 — 正規修法應把 _finish_metrics
-# 搬到 services/fund_service.py，但範圍較大留下次重構
-from services.fund_service import calc_metrics  # noqa: F401

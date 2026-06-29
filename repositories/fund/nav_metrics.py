@@ -25,7 +25,6 @@ from fund_fetcher import (  # noqa: F401
     normalize_result_state, merge_non_empty, classify_fetch_status,
 )
 from infra.proxy import _proxies, _ssl_verify  # noqa: F401
-from services.fund_service import calc_metrics  # noqa: F401
 
 from repositories.fund.sources import *  # noqa: F401, F403
 
