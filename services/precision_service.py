@@ -177,6 +177,11 @@ class PrecisionStrategyEngine:
 
         為向後相容保留方法簽名；新 code 建議直接 import repo 函式：
             from repositories.financial_repository import fetch_stock_three_ratios
+
+        F-PROV-1 註:provenance **由 upstream `repositories.financial_repository.fetch_stock_three_ratios`
+        stamp 在 dict 內**(`source="yfinance:{ticker_sym}:quarterly_income_stmt"` +
+        `fetched_at`,phase 18 v19.156)。本 method 純 return upstream dict 透傳,
+        key 完整保留,不需 re-stamp 避免冗餘。
         """
         return _repo_fetch_stock_three_ratios(holding_name)
 

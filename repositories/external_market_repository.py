@@ -24,6 +24,11 @@ def fetch_yf_forward_pe(symbol: str = "^GSPC") -> Optional[float]:
     """從 yfinance Ticker.info 取 forwardPE,缺則降級 trailingPE。失敗回 None。
 
     v19.197 P1-3:V5 修補,從 services/valuation.py:154-167 下沉。
+
+    F-PROV-1 註:Optional[float] 結構性無 .attrs,**provenance 由
+    `services.valuation.detect_valuation()` orchestrator-level `_provenance.sources`
+    捕(phase 19 v19.105),記為 `"yfinance:^GSPC.info:forwardPE→trailingPE→multpl.com"`。
+    本 fn 屬 leaf scalar,不重複 stamp 避免冗餘。
     """
     try:
         import yfinance as yf
@@ -48,6 +53,10 @@ def fetch_multpl_pe() -> Optional[float]:
     穩定(id="current" 區塊內含當前 PE)。
 
     v19.197 P1-3:V5 修補,從 services/valuation.py:110-142 下沉。
+
+    F-PROV-1 註:Optional[float] 結構性無 .attrs,**provenance 由
+    `services.valuation.detect_valuation()` orchestrator-level `_provenance.sources`
+    捕(phase 19 v19.105),記為 chain 末段「→multpl.com」。
 
     Returns:
         float | None: 最近一期 trailing PE;任意失敗回 None;console log 印 root cause 助 debug。
