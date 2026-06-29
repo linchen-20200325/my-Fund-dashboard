@@ -1781,9 +1781,7 @@ PMI_THRESHOLDS = {
 
 **建議優先順序**:HY_SPREAD(最少語意,最低風險)→ CPI → PMI
 
-**目前狀態**(v19.168):
-- 本 proposal 為 architecture spec,**未實作** code
-- 等 user 點哪個指標(或全部)動工 → 各拉一 PR 走 phase 1-5
+**目前狀態**(v19.245 R13 復查):**proposal 已大幅落地** — `shared/macro_thresholds_v2.py` 已建立 5 SSOT(`HY_SPREAD_THRESHOLDS` / `CPI_YOY_THRESHOLDS` / `PMI_THRESHOLDS` / `FED_BS_THRESHOLDS` / `TW_PMI_THRESHOLDS`),13 consumer files 已接入(`v19.169` HY+CPI / `v19.178` CPI v2 進階 / `v19.179` PMI / `v19.184` M2+FedBS / `v19.245` HY inflection 收口)。剩餘 Tier 2/3 inline(`services/calibration/risk.py` synthetic data;`scripts/` calibration)為**模擬/校準資料,不影響 production 邏輯**,§-1 等實際 bug 觸發再加。
 
 **§-1 對齊**:本 proposal 純文件,**不**自動觸發實作。user 明確指派某指標 → 才動工。
 
@@ -1839,7 +1837,7 @@ PMI_THRESHOLDS = {
 | 組合基金健診-健診摘要表(fund_checkup)| `dividend_safety`(同 canonical core)| ✅ 同源 |
 | 組合配置(tab3_portfolio)| `dividend_safety`(同 canonical core)| ✅ 同源 |
 
-**Phase B 候選**(未動,等 user 觸發):fund_checkup 改 import `check_eating_principal_1y_mk`,讓所有 caller 走唯一 helper(目前各 caller 走 dividend_safety wrapper 各自 inline 取 inputs,功能等價但路徑分散)。
+**Phase B 候選**(v19.245 R13 復查:fund_checkup 早於 v19.150 已 migrate 至 `check_eating_principal_1y_mk` SSOT,line 166 動態 import;原 `dividend_safety as div_safety_check` 為 dead import 已清。其餘 caller `tab1_macro` / `tab2_single_fund` / `tab3_portfolio` 仍用 `dividend_safety(_tret, _dyld)` scalar 介面,**signature 不同**,migration 會引入 reshape 複雜度違 §8.1 step 6,**WONTFIX 維持**)
 
 ### §17.5 3-3-3 原則(MK 老師長線輔助)
 

@@ -21,9 +21,20 @@ import pytest
 def test_hy_spread_schema_complete():
     from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as HT
 
+    # v19.245 R13:新增 inflection_detection sub-dict(us_indicators.py:98-100 信用拐點 SSOT)
     assert set(HT.keys()) == {
-        "stoplight", "score_function", "portfolio_advisor", "beginner_panic"
+        "stoplight", "score_function", "portfolio_advisor", "beginner_panic",
+        "inflection_detection",
     }
+
+
+def test_hy_spread_inflection_detection_values():
+    """inflection_detection 與原 us_indicators.py:98-100 字面值等價(v19.245 R13)."""
+    from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as HT
+    infl = HT["inflection_detection"]
+    assert infl["high_position"] == 6.0
+    assert infl["moderate_position"] == 4.0
+    assert infl["moderate_drop_pp"] == 0.3
 
 
 def test_hy_spread_stoplight_values():

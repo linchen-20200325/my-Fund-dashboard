@@ -43,6 +43,16 @@ HY_SPREAD_THRESHOLDS = {
         "warn_above": 5.0,
         "panic_above": 8.0,
     },
+    "inflection_detection": {
+        # v19.245 R13 F-GRAY-4 Phase A HY_SPREAD inflection 收口
+        # services/macro/us_indicators.py:98-100 信用拐點偵測(v18.250)
+        # 「從高位首度回落」是動態變化檢測,與 stoplight「靜態水位」語意不同源
+        # 即使 high_position 6.0 與 stoplight.yellow_below 巧合同值,語意分離才能
+        # 防未來改 stoplight 影響 inflection 偵測。
+        "high_position": 6.0,        # ≥6 視為高位,首度回落為拐點
+        "moderate_position": 4.0,    # ≥4 + 收斂 0.3pp+ 為 risk-on 醞釀
+        "moderate_drop_pp": 0.3,     # 0.3pp 收斂幅度門檻
+    },
 }
 
 

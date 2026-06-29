@@ -15,6 +15,8 @@ from repositories.macro_repository import (
     fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch,
 )
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+# v19.245 R13 F-GRAY-4 Phase A HY_SPREAD inflection 收口 SSOT
+from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR_V2
 
 from services.macro._helpers import (  # noqa: F401
     ENGINE_VERSION,
@@ -92,12 +94,13 @@ def _detect_inflection(indicators):
         if jb_v < jb_p and jb_v < 25: signals.append({"type":"bull","text":f"初領失業金 {jb_v:.1f} 萬 改善"}); score += 1
         elif jb_v > 30: signals.append({"type":"warn","text":f"初領失業金 {jb_v:.1f} 萬 高位"}); score -= 1
 
-    # v18.250 新增：HY Spread 由高位回落（信用拐點）
+    # v18.250 新增：HY Spread 由高位回落（信用拐點）— v19.245 R13 收口 SSOT
     hy_v = _chk("HY_SPREAD"); hy_p = _chk("HY_SPREAD","prev")
     if hy_v is not None and hy_p is not None:
-        if hy_p >= 6.0 and hy_v < hy_p:
+        _HY_INFL = _HY_THR_V2["inflection_detection"]
+        if hy_p >= _HY_INFL["high_position"] and hy_v < hy_p:
             signals.append({"type":"buy","text":f"⚡ HY 利差 {hy_p:.2f}%→{hy_v:.2f}% 高位首度回落 — 信用拐點"}); score += 3
-        elif hy_p >= 4.0 and hy_v < hy_p - 0.3:
+        elif hy_p >= _HY_INFL["moderate_position"] and hy_v < hy_p - _HY_INFL["moderate_drop_pp"]:
             signals.append({"type":"buy","text":f"HY 利差 {hy_v:.2f}% 明顯收斂（-{hy_p-hy_v:.2f}pp）— risk-on 醞釀"}); score += 1
 
     # v18.250 新增：薩姆規則由觸發→解除（衰退結束拐點）

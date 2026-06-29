@@ -18,7 +18,9 @@ import streamlit as st
 
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
-from services.portfolio_service import dividend_safety as div_safety_check
+# v19.245 R13:`dividend_safety` 已於 v19.150 由 SSOT `check_eating_principal_1y_mk`
+# 取代(下方 _compute_fund_health_kpis line 166 動態 import),原 `div_safety_check`
+# 為 dead import 0 caller。
 from ui.components.mk_dashboard import tag_price_zone
 
 # v19.54：TER 同類均值（沿用 tab2_single_fund L1004-1009 既有對照表，台灣基金市場常見估值）
