@@ -121,7 +121,7 @@ def process_one_fund(
 
     回傳 row dict（與舊序列版完全一致）；任一步失敗回 {ok: False, error}。
     """
-    from repositories.fund import get_latest_fx
+    from services.fund_service import get_latest_fx
     from services.currency import normalize_ccy  # v19.71：single source of truth
     from services.health.dividend_calc import compute_dividend_twd_series
     try:

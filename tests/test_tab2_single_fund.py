@@ -100,8 +100,9 @@ def test_invest_calc_fetches_fx_rate():
     """非 TWD 基金應呼叫 get_latest_fx 抓 {CCY}TWD=X 即時匯率。"""
     from pathlib import Path
     src = (Path(__file__).parents[1] / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
-    assert "from repositories.fund import get_latest_fx" in src, \
-        "必須 import get_latest_fx 抓即時匯率"
+    # v19.247 R16:EX-PASSTHRU-1 升級 — UI 改走 L2 services.fund_service.get_latest_fx
+    assert "from services.fund_service import get_latest_fx" in src, \
+        "必須 import get_latest_fx 抓即時匯率(v19.247 R16 後走 L2 facade)"
     # v18.264：簽名加 fred_api_key 後位置/kwarg 均可，只驗 ticker pair 出現
     assert 'get_latest_fx(f"{_ccy}TWD=X"' in src, \
         "應呼叫 get_latest_fx 用 {CCY}TWD=X pair（簽名 v18.264 後可加 fred_api_key）"
