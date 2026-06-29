@@ -276,4 +276,3 @@ def sync_policies_to_portfolio_funds(
 
     removed = [pk for pk in cur_by_pk.keys() if pk not in aggregated]
     return merged, {"added": added, "kept": kept, "removed": removed}
-

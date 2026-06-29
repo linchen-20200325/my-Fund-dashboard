@@ -85,5 +85,3 @@ def fetch_yf_latest(tickers: tuple[str, ...]) -> dict[str, Optional[float]]:
         "fetched_at": pd.Timestamp.now('UTC').isoformat(),
     }
     return out
-
-

@@ -31,5 +31,3 @@ TRAFFIC_EMOJI: tuple[str, str, str, str] = ("🟢", "🟡", "🔴", "⬜")
 TRAFFIC_HEX: tuple[str, str, str, str] = (
     TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL,
 )
-
-

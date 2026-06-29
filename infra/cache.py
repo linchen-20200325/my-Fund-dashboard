@@ -138,7 +138,7 @@ def register_cache(fn):
 
 
 # ── v19.250 R20:日 TTL 快取(保存當日,隔日自動 miss 重抓)──────────
-def _daily_cache(fn=None, *, today_fn=None):
+def _daily_cache(fn=None, *, today_fn=None, cache_if=None):
     """日 TTL 快取裝飾器:保存當日(TW UTC+8 timezone),隔日午夜自動 miss → 重抓。
 
     **設計理由**(v19.250 R20):30min TTL 對「月更新源頭」(MoneyDJ 持股 / wb07 風險 /
@@ -146,11 +146,20 @@ def _daily_cache(fn=None, *, today_fn=None):
     - 同日多次呼叫:cache hit,0 HTTP
     - 隔日 00:00 TW(UTC+8):自動 miss → 重抓最新版本
 
+    **v19.253 R23 失敗結果不入 cache**(防 cache 鎖死):
+    R20 原版無條件 `_cache[key] = result`,若當日第一次呼叫遇上游 403 / 暫時網路錯誤
+    回 empty / failure dict → 整天 caller 都拿到該 cached failure → user 看見「全域刷新」
+    也救不回(因為 GC 規則只清「前一日」entry)。R23 加 `cache_if` 預設過濾:
+    - dict 含 `"source": "...all_failed"` 或 empty `{}` → 不入 cache(下次重試)
+    - Series / list 為空 → 不入 cache
+    - 其他(包含有 sector_alloc / top_holdings 等真實資料的 dict)→ 入 cache
+
     **SSOT 對齊**:與 `_ttl_cache` 對稱 — 暴露 `cache_clear()` / `cache_info()`;
     透過 `@register_cache` 接入 `_CACHE_REGISTRY`,UI「全域刷新」一鍵清。
 
     Args:
         today_fn: 可選 date provider(test 用,預設 TW UTC+8 today ISO string)。
+        cache_if: 可選 predicate(result) -> bool,True 才入 cache。預設過濾失敗結果。
 
     Memory hygiene:今日 key 變化(隔日 first call)會把所有舊日 entry GC 掉,
     無需手動清,記憶體用量 bounded(N=當日 cached call 數)。
@@ -161,11 +170,33 @@ def _daily_cache(fn=None, *, today_fn=None):
         _tw_tz = _dt.timezone(_dt.timedelta(hours=8))
         return _dt.datetime.now(_tw_tz).date().isoformat()
 
+    def _default_cache_if(result):
+        """預設過濾:失敗 / 空結果不入 cache,讓下次呼叫重試。"""
+        if result is None:
+            return False
+        # dict 系列:empty 或含 all_failed marker 都不存
+        if isinstance(result, dict):
+            if not result:
+                return False
+            _src = result.get("source", "")
+            if isinstance(_src, str) and "all_failed" in _src:
+                return False
+            return True
+        # Series / list / tuple 空集合不存
+        if hasattr(result, "__len__"):
+            try:
+                if len(result) == 0:
+                    return False
+            except Exception:
+                pass
+        return True
+
     _today_provider = today_fn or _default_today
+    _cache_predicate = cache_if or _default_cache_if
 
     def decorator(_fn):
         _cache: dict = {}
-        _stats = {"hits": 0, "misses": 0}
+        _stats = {"hits": 0, "misses": 0, "uncached_fail": 0}
 
         @_ft.wraps(_fn)
         def wrapper(*args, **kwargs):
@@ -188,7 +219,11 @@ def _daily_cache(fn=None, *, today_fn=None):
 
             _stats["misses"] += 1
             result = _fn(*args, **kwargs)
-            _cache[key] = result
+            # v19.253 R23:只 cache 成功結果,失敗下次重試(防 cache 鎖死)
+            if _cache_predicate(result):
+                _cache[key] = result
+            else:
+                _stats["uncached_fail"] += 1
             return result
 
         wrapper.cache_clear = lambda: _cache.clear()

@@ -165,4 +165,3 @@ def recession_probability(spread_10y3m):
     if spread_10y3m is None: return None
     logit = RECESSION_LOGIT_COEF_SPREAD * spread_10y3m + RECESSION_LOGIT_COEF_INTERCEPT
     return round(1 / (1 + math.exp(-logit)) * 100, 1)
-

@@ -1039,5 +1039,3 @@ def search_moneydj_by_name(keyword: str) -> list:
 
     print(f"[search_total] {kw!r} → {len(results)} 筆")
     return results[:15]
-
-

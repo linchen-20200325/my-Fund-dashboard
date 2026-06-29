@@ -519,5 +519,3 @@ _SUB_CYCLE_SPEC = [
     ("通膨壓力", "🔥", [("CPI", True), ("PPI", True)],
      "CPI + PPI 年增（越低越好）"),
 ]
-
-

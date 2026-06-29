@@ -455,4 +455,3 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
                     )
             elif _cached is not None and not _cached:
                 st.warning("所有持倉均無法解析 Ticker 或 yfinance 暫無財報")
-

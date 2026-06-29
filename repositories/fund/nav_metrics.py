@@ -918,25 +918,38 @@ def fetch_holdings(code: str) -> dict:
     """
     import sys as _sys_h
     try:
-        # v14.5 + v19.251 R21:擴大 fallback chain
-        # User 反饋:單一頁面 / 單一子網域抓不到時應走更多備用源。
+        # v14.5 + v19.251 R21 + v19.252 R22:擴大 fallback chain + 保險平台子網域
+        # User 反饋(R22):R21 6 URL 對保險平台代碼(JFZN3/TLZF9/FLFM1 等)仍空,
+        # 比照 _src_insurance_subdomain_nav(sources.py L2406-2473)依代碼前綴展開
+        # _INSURANCE_SUBDOMAIN_HINTS portal,套到 yp013xxx 頁。
         # NAS proxy 已內建於 fetch_url_with_retry → infra.proxy.fetch_url。
-        _hold_page = "yp013000" if _is_domestic_code(code) else "yp013001"
-        # v19.251 R21:6 候選 URL chain(www/tcb/chubb/taishinlife/wq06 替代頁/insurance)
-        # 順序:先 platform 子網域(IP 封鎖較少)→ 主域 → 替代 page → insurance 子網域
+        _code_up = (code or "").upper().strip()
+        _hold_page = "yp013000" if _is_domestic_code(_code_up) else "yp013001"
+        # 基線 6 URL(R21 chain)
         _hold_urls = [
-            # 1) tcbbankfund 子網域(Colab/Cloud IP 友善)
             f"https://tcbbankfund.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
-            # 2) chubb 子網域(保險平台,部分 ACDD/ACTI 保單代碼可用)
             f"https://chubb.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
-            # 3) 主域 www
             f"https://www.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
-            # 4) taishinlife 子網域(部分保單路徑)
             f"https://taishinlife.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
-            # 5) wq06 持股明細頁(部分 fund 結構不同,可能含 sector_alloc)
             f"https://www.moneydj.com/funddj/wq/wq06.djhtm?a={code}",
             f"https://tcbbankfund.moneydj.com/funddj/wq/wq06.djhtm?a={code}",
         ]
+        # v19.252 R22:依 _INSURANCE_SUBDOMAIN_HINTS 前綴展開 portal 子網域 yp013xxx 頁
+        # JF→jpmorgan/jpmf/jpmfund;TL→tlife/twlife/taiwanlife;FL→franklintem/franklin;
+        # CT→cathaylife/ctbclife/ctlife;NS→nanshan;FS→fubonlife;...
+        # 同時對 wq06 替代頁也展開(部分 fund 走 /w/wq 路徑)。
+        _ins_portals: list = []
+        for _pfx, _portals in _INSURANCE_SUBDOMAIN_HINTS.items():
+            if _code_up.startswith(_pfx):
+                _ins_portals.extend(_portals)
+        # 去重保序
+        _seen_p: set = set()
+        _ins_portals = [p for p in _ins_portals if not (p in _seen_p or _seen_p.add(p))]
+        for _p in _ins_portals:
+            _hold_urls.append(
+                f"https://{_p}.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}")
+            _hold_urls.append(
+                f"https://{_p}.moneydj.com/w/wq/wq06.djhtm?a={code}")
         r = None
         _attempts: list = []  # 診斷:每個 URL 試了什麼結果
         for _hu in _hold_urls:

@@ -696,5 +696,3 @@ _CHINA_THRESHOLDS = {
     "CHN_M2":    {"red_below": 5.0, "green_above": 9.0},  # M2 YoY < 5% 緊縮
     "USDCNY":    {"green_below": 7.0, "yellow_above": 7.2, "red_above": 7.4},
 }
-
-
