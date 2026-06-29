@@ -90,8 +90,11 @@ def test_fund_fetcher_reexports_same_callables_as_infra_proxy():
 
 def test_fund_repository_has_proxies_and_ssl_verify_in_namespace():
     """B-A 之前 fund_repository 內 30+ 處用 _proxies()/_ssl_verify() 但沒 import
-    → NameError 隱藏 bug。B-A 後從 infra.proxy 直接 import，namespace 應該齊全。"""
-    from repositories import fund_repository as fr
+    → NameError 隱藏 bug。B-A 後從 infra.proxy 直接 import，namespace 應該齊全。
+
+    v19.235 R1:shim repositories/fund_repository.py 已刪,改驗 sub-package
+    repositories.fund namespace。"""
+    from repositories import fund as fr
     assert hasattr(fr, "_proxies") and callable(fr._proxies)
     assert hasattr(fr, "_ssl_verify") and callable(fr._ssl_verify)
 
@@ -188,7 +191,7 @@ def test_fund_repository_has_re_and_requests_module_imported():
     """v18.203：re / requests 必須在 fund_repository 模組層 import — 原本缺，導致
     多處 HTML 解析（re.findall）與 requests.get fetch 路徑被呼叫時 NameError→靜默失敗。"""
     import fund_fetcher  # noqa: F401  先載解 circular
-    import repositories.fund_repository as fr
+    import repositories.fund as fr
     assert getattr(fr, "re", None) is not None, "fund_repository 缺 import re"
     assert getattr(fr, "requests", None) is not None, "fund_repository 缺 import requests"
 

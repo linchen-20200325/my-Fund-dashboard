@@ -160,7 +160,7 @@ def render_data_guard_tab() -> None:
     # - 政策:真實檢查 (a) gservice_account secret(SA 模式),(b) OAuth configured
     #   + gsheet_tokens(OAuth 模式),(c) 兩者皆無才算 ✗
     try:
-        from repositories.fund_repository import get_latest_fx as _get_fx
+        from repositories.fund import get_latest_fx as _get_fx
         _fx_rate = _get_fx("USDTWD")
     except Exception:
         _fx_rate = None
@@ -829,7 +829,7 @@ def render_data_guard_tab() -> None:
         )
         if st.button("🔍 跑 FX 來源診斷", key="_d5_fx_btn"):
             try:
-                from repositories.fund_repository import diagnose_fx_sources
+                from repositories.fund import diagnose_fx_sources
                 import os as _os_fx
                 _fred_k_diag = ""
                 try:

@@ -473,7 +473,7 @@ def test_app_full_module_execution_with_secrets() -> None:
 
     try:
         # 2. clean module cache：強制重新 exec
-        for _mn in ("app", "fund_fetcher", "repositories.fund_repository"):
+        for _mn in ("app", "fund_fetcher", "repositories.fund"):
             sys.modules.pop(_mn, None)
         # 3. fund_fetcher 先載（解 circular）
         importlib.import_module("fund_fetcher")
@@ -485,7 +485,7 @@ def test_app_full_module_execution_with_secrets() -> None:
             _secrets_file.unlink()
         if _created_dir:
             _streamlit_dir.rmdir()
-        for _mn in ("app", "fund_fetcher", "repositories.fund_repository"):
+        for _mn in ("app", "fund_fetcher", "repositories.fund"):
             sys.modules.pop(_mn, None)
         # v19.176:重置 streamlit DeltaGenerator 表單狀態。
         # app.py 在 bare mode 跑 module body 時,內部 with st.form(...) 可能殘留

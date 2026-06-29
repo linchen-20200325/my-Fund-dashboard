@@ -262,7 +262,7 @@ def incremental_update(code: str) -> dict:
 
     # Lazy import 避免循環
     try:
-        from repositories.fund_repository import fetch_nav
+        from repositories.fund import fetch_nav
     except Exception as e:
         result["errors"].append(f"import 失敗：{e}")
         return result

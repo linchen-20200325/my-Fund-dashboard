@@ -13,16 +13,18 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolate_disk_cache(tmp_path, monkeypatch):
-    """每個 test 用 tmp_path 取代 cache/nav_history/ 避免污染。"""
-    from repositories import fund_repository
-    monkeypatch.setattr(
-        fund_repository, "_NAV_HISTORY_CACHE_DIR", tmp_path / "nav_history"
-    )
+    """每個 test 用 tmp_path 取代 cache/nav_history/ 避免污染。
+
+    v19.235 R1:shim repositories/fund_repository.py 已刪,改 patch 真正的
+    sub-module repositories.fund.nav_metrics(P2-7 shim 不穿透模式同源)。
+    """
+    from repositories.fund import nav_metrics as _nav
+    monkeypatch.setattr(_nav, "_NAV_HISTORY_CACHE_DIR", tmp_path / "nav_history")
     yield
 
 
 def test_empty_code_returns_empty():
-    from repositories.fund_repository import fetch_nav_history_long
+    from repositories.fund import fetch_nav_history_long
     assert fetch_nav_history_long("").empty
     assert fetch_nav_history_long("   ").empty
     assert fetch_nav_history_long(None).empty  # type: ignore
@@ -30,7 +32,7 @@ def test_empty_code_returns_empty():
 
 def test_walk_finds_nested_nav_items():
     """_walk_for_nav_items 應在 nested JSON 中找到 NAV list。"""
-    from repositories.fund_repository import _walk_for_nav_items
+    from repositories.fund import _walk_for_nav_items
     data = {
         "ok": True,
         "data": {
@@ -47,7 +49,7 @@ def test_walk_finds_nested_nav_items():
 
 def test_walk_handles_various_key_names():
     """欄位名 nav_date / publishDate / Nav / Price 等都應認得。"""
-    from repositories.fund_repository import _walk_for_nav_items
+    from repositories.fund import _walk_for_nav_items
     data = {"records": [
         {"publishDate": "2024-01-01", "Price": 9.5},
         {"publishDate": "2024-01-02", "Price": 9.6},
@@ -58,7 +60,7 @@ def test_walk_handles_various_key_names():
 
 def test_parse_nav_json_items_skips_invalid():
     """壞 row（缺 date / nav 為負）應跳過，不該整批失敗。"""
-    from repositories.fund_repository import _parse_nav_json_items
+    from repositories.fund import _parse_nav_json_items
     items = [
         {"date": "2024-01-01", "nav": 10.5},
         {"date": "bad-date", "nav": 11.0},
@@ -72,7 +74,7 @@ def test_parse_nav_json_items_skips_invalid():
 
 def test_parse_nav_json_items_dedupes_dates():
     """同日多筆 → 後者勝（keep="last"）。"""
-    from repositories.fund_repository import _parse_nav_json_items
+    from repositories.fund import _parse_nav_json_items
     items = [
         {"date": "2024-01-01", "nav": 10.0},
         {"date": "2024-01-01", "nav": 10.5},  # dup
@@ -84,7 +86,7 @@ def test_parse_nav_json_items_dedupes_dates():
 
 def test_cache_save_and_load_roundtrip():
     """寫入 + 讀回 cache 應一致。"""
-    from repositories.fund_repository import (
+    from repositories.fund import (
         _nav_history_cache_load,
         _nav_history_cache_save,
     )
@@ -119,13 +121,13 @@ def test_cache_expires_after_ttl(monkeypatch):
 
 
 def test_cache_load_returns_none_when_missing():
-    from repositories.fund_repository import _nav_history_cache_load
+    from repositories.fund import _nav_history_cache_load
     assert _nav_history_cache_load("NEVERSAVED") is None
 
 
 def test_fetch_long_returns_cache_hit_without_http():
     """有 cache hit (≥100 筆) 時不打 HTTP，直接返回。"""
-    from repositories.fund_repository import (
+    from repositories.fund import (
         _nav_history_cache_save,
         fetch_nav_history_long,
     )
@@ -142,7 +144,7 @@ def test_fetch_long_returns_cache_hit_without_http():
 
 def test_fetch_long_normalizes_code_to_upper():
     """code 自動 .upper() + strip。"""
-    from repositories.fund_repository import (
+    from repositories.fund import (
         _nav_history_cache_save,
         fetch_nav_history_long,
     )
@@ -161,7 +163,7 @@ def test_fetch_long_normalizes_code_to_upper():
 # ─────────────────────────────────────────────────────────────────────
 def test_parse_unix_timestamp_milliseconds():
     """CnYES 等 API 可能用 13 位 ms epoch — 應正確轉日期。"""
-    from repositories.fund_repository import _parse_nav_json_items
+    from repositories.fund import _parse_nav_json_items
     items = [
         {"date": 1704067200000, "nav": 10.5},  # 2024-01-01 00:00:00 UTC
         {"date": 1704153600000, "nav": 10.6},  # 2024-01-02
@@ -173,7 +175,7 @@ def test_parse_unix_timestamp_milliseconds():
 
 def test_parse_unix_timestamp_seconds():
     """10 位 sec epoch 也應正確處理。"""
-    from repositories.fund_repository import _parse_nav_json_items
+    from repositories.fund import _parse_nav_json_items
     items = [{"date": 1704067200, "nav": 10.5}]
     s = _parse_nav_json_items(items)
     assert len(s) == 1
@@ -182,7 +184,7 @@ def test_parse_unix_timestamp_seconds():
 
 def test_parse_cnyes_native_field_name():
     """CnYES 用 `netAssetValue` 作為淨值欄位 — 應被認得。"""
-    from repositories.fund_repository import _parse_nav_json_items, _walk_for_nav_items
+    from repositories.fund import _parse_nav_json_items, _walk_for_nav_items
     data = {"data": {"items": [
         {"date": "2024-01-01", "netAssetValue": 12.34},
         {"date": "2024-01-02", "netAssetValue": 12.45},
@@ -195,7 +197,7 @@ def test_parse_cnyes_native_field_name():
 
 def test_parse_time_field_name():
     """有些 API 用 `time` 作為日期欄 — 應被 walk 認得。"""
-    from repositories.fund_repository import _walk_for_nav_items
+    from repositories.fund import _walk_for_nav_items
     data = [{"time": 1704067200000, "value": 10.5}]
     items = _walk_for_nav_items(data)
     assert len(items) == 1
