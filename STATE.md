@@ -21,6 +21,11 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.243 R11 Welford 顯式 深挖維持 WONTFIX + 副產品 §4.3 浮點 == 違憲修(2026-06-29)**:
+  - **Welford 深挖確認 ROI=0**:`rolling().std()` 4 處(BB band 3 + liquidity z-score 1)+ `series.std()` 12 處,全部單序列小 N(<1000 點),pandas 內部已 Welford-friendly C-level loop。**0 處 N×T 大序列場景** / **0 處 manual sum-of-squares** / **0 處 catastrophic cancellation**。WONTFIX 維持
+  - **副產品 — §4.3 浮點 == 違憲修**:`scripts/calibrate_macro_score.py:234` 原 `xr.std() == 0 or yr.std() == 0` 違 CLAUDE.md §4.3「浮點比較禁止 ==」,改 `np.isclose(..., 0.0, atol=1e-12)`(degenerate spearman 同 deterministic 行為)
+  - WONTFIX 清單從 1 → 0(全部 active WONTFIX 復查完成);僅留**半結等 user 觸發**項(F-GRAY-4 PMI/CPI/HY harmonize + SPEC §16.2 macro_thresholds_v2 migration + check_eating_principal_1y_mk Phase B caller 統一)
+
 - **v19.242 R10 F-PROV-1 sentinel 深挖 + dead chain 拔除(2026-06-29)**:F-PROV-1 sentinel WONTFIX 復核維持(schema-additive 已 100% pass,改 dataclass ROI=0),但深挖 audit 工具發現 bug 後重跑找到 **dead code chain** 拔除:
   - `fetch_fund_structure` 整 fn(132 LOC,0 production caller,fund_fetcher.py:467 re-export shim 列名但實際 0 call site)
   - `STRUCTURE_PAGES` constant(9 LOC,獨 caller = fetch_fund_structure)
