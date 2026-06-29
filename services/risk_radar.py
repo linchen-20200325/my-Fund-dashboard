@@ -121,36 +121,13 @@ def _signal_vix_level() -> dict:
         return _empty(f"VIX 抓取失敗：{str(e)[:60]}", "Yahoo ^VIX 日線")
 
 
-# ── 多源 fallback helper (v19.30 鏡像 stock v18.181) ─────────────
-def _fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Series:
-    """v19.221 P1-3 thin wrapper:CBOE fetcher 已下沉 repositories/external_market_repository。
-
-    保留本檔 attr 供 test_risk_radar.py 的 `patch.object(rr, "_fetch_cboe_csv", ...)` 相容。
-    原 CBOE URL chain / trace 邏輯全部在 repositories 內。
-    對稱 stooq P1-3 v19.197 wrapper 模式。N2 架構越權修補。
-
-    F-PROV-1 註:provenance **由 upstream `repositories/external_market_repository.fetch_cboe_csv`
-    stamp 在 Series.attrs**(`source="CBOE:cdn:daily_prices:{short_name}_History.csv"` +
-    `fetched_at`,v19.188 phase 23)。本 wrapper 純 return upstream Series 透傳,
-    .attrs 完整保留,不需 re-stamp 避免冗餘。
-    """
-    from repositories.external_market_repository import fetch_cboe_csv
-    return fetch_cboe_csv(short_name, trace=trace)
-
-
-def _fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
-    """v19.197 P1-3 thin wrapper:stooq fetcher 已下沉 repositories/external_market_repository。
-
-    保留本檔 attr 供 test_data_guard_health_v194.py 的 `patch.object(rr, "_fetch_stooq_csv", ...)` 相容。
-    原 stooq URL chain / headerless fallback / trace 邏輯全部在 repositories 內。
-
-    F-PROV-1 註:provenance **由 upstream `repositories/external_market_repository.fetch_stooq_csv`
-    stamp 在 Series.attrs**(`source="stooq:{symbol}"` 或 `"stooq:{symbol}:headerless"` +
-    `fetched_at`,v19.188 phase 23)。本 wrapper 純 return upstream Series 透傳,
-    .attrs 完整保留,不需 re-stamp 避免冗餘。
-    """
-    from repositories.external_market_repository import fetch_stooq_csv
-    return fetch_stooq_csv(symbol, trace=trace)
+# v19.237 R3:_fetch_cboe_csv / _fetch_stooq_csv 兩 thin wrapper 退役。
+# 原為 mock 介面而保留,test 改 patch upstream 後 wrapper 為純多餘抽象 — 違反 §8.1 step 6。
+# 內部 callsite 改 import upstream(repositories.external_market_repository)。
+from repositories.external_market_repository import (
+    fetch_cboe_csv as _fetch_cboe_csv,    # noqa: F401  alias 保 internal callsites 不變
+    fetch_stooq_csv as _fetch_stooq_csv,  # noqa: F401
+)
 
 
 def _resolve_vix3m(
