@@ -160,7 +160,7 @@ def render_data_guard_tab() -> None:
     # - 政策:真實檢查 (a) gservice_account secret(SA 模式),(b) OAuth configured
     #   + gsheet_tokens(OAuth 模式),(c) 兩者皆無才算 ✗
     try:
-        from repositories.fund import get_latest_fx as _get_fx
+        from services.fund_service import get_latest_fx as _get_fx
         _fx_rate = _get_fx("USDTWD")
     except Exception:
         _fx_rate = None

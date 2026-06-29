@@ -733,3 +733,22 @@ def calc_dividend_estimate(nav, invest_amount, monthly_div, annual_div,
         monthly_twd=round(units*monthly_div*rate,0),
         annual_twd=round(units*annual_div*rate,0),
     )
+
+
+# ── v19.247 R16 EX-PASSTHRU-1 升級:get_latest_fx L2 facade ────────────────
+def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
+    """v19.247 R16 EX-PASSTHRU-1 升級 — L2 service layer entry for FX。
+
+    包裝 L1 multi-source orchestrator(`repositories.fund.get_latest_fx`)的:
+    - 4 源 fallback chain(Yahoo → FRED DEX* → open.er-api → Frankfurter)
+    - positive-only `_FX_CACHE` TTL_300(via `_CACHE_REGISTRY`)
+    - currency normalize + `=X` 補綴 + TWD pair 特殊路徑
+
+    R16 升級**架構意義**:UI 不再直接 import L1 fetcher,改走 L2 service 層,
+    符合 §8.2 規則「L3 不得直呼 L1 — L2 wrapper 才能集中 cache」核心理由。
+    本 wrapper 為 thin pass-through,L1 實作不動(保留 `diagnose_fx_sources`
+    internal use + 0 行為改動風險)。EX-PASSTHRU-1 例外清單對 get_latest_fx
+    條目退役(`tdcc_search_fund` / `fetch_market_news` 例外維持,規則繼續適用)。
+    """
+    from repositories.fund import get_latest_fx as _l1_impl
+    return _l1_impl(currency_pair, fred_api_key)

@@ -1299,7 +1299,7 @@ def render_single_fund_tab() -> None:
 
                         # 抓 FX（Yahoo → FRED fallback chain 內建於 get_latest_fx）
                         try:
-                            from repositories.fund import get_latest_fx
+                            from services.fund_service import get_latest_fx
                             _fx_to_twd = get_latest_fx(f"{_ccy}TWD=X", fred_api_key=_fred_k)
                             if _fx_to_twd is None or _fx_to_twd <= 0:
                                 # v18.275：TWD pair 對應 chain 已精簡為 Yahoo + er-api（其他都已死掉）

@@ -135,7 +135,8 @@ def render_t7_section() -> None:
     else:
         try:
             from services.ledger_service import Ledger as _LedT7, Switch as _SwT7
-            from fund_fetcher import get_latest_fx as _fx_now, get_latest_nav as _nav_now
+            from services.fund_service import get_latest_fx as _fx_now
+            from fund_fetcher import get_latest_nav as _nav_now
             _T7_OK = True
         except ImportError as _e:
             _T7_OK = False

@@ -71,7 +71,7 @@ def _safe_fx(ccy: str) -> float | None:
     if ccy == "TWD":
         return 1.0
     try:
-        from repositories.fund import get_latest_fx
+        from services.fund_service import get_latest_fx
         v = get_latest_fx(f"{ccy}TWD=X")
         return float(v) if (v is not None and v > 0) else None
     except Exception:

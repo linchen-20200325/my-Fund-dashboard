@@ -148,7 +148,7 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
     else:
         try:
             if _fx_lookup is None:
-                from fund_fetcher import get_latest_fx as _fx_lookup
+                from services.fund_service import get_latest_fx as _fx_lookup
             _fxv = _fx_lookup(f"{out['currency']}TWD")
             out["fx"] = float(_fxv) if (_fxv and _fxv > 0) else 31.0
         except Exception:

@@ -21,6 +21,14 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.247 R16 EX-PASSTHRU-1 部分升級 — get_latest_fx 走 L2 facade(2026-06-29)**:
+  - 新增 L2 facade `services/fund_service.py::get_latest_fx`(thin wrapper 呼 L1 實作)
+  - 9 UI caller migrate import path L1 → L2(investment.py / checkup.py / v2_editor.py / d_mode.py / tab_fund_grp_health / tab2 / tab5 / tab3_portfolio / tab3_t7_ledger)
+  - EX-PASSTHRU-1 對象縮減 3 → 2 fn(`tdcc_search_fund` + `fetch_market_news` 維持,caller 數少升級 ROI 不對等)
+  - test 守門 `tests/test_tab2_single_fund.py:103` regex L1→L2 path 對齊
+  - L1 業務 0 改動(`diagnose_fx_sources` internal use 保留),架構意義:UI 不再直接 bypass L2 對 FX data 取得
+  - 50 守門 test 全綠 + 2258 broader test(R15)0 regression
+
 - **v19.246 R15 4 例外二輪深挖 — EX-PASSTHRU-1 framing 重大修正(2026-06-29)**:
   - **EX-AI-1**:caller 從 str 萃取數字違規復查 0 處(grep `re.search/json.loads/float(resp)` 全網 0 hit)→ 維持
   - **EX-CRUD-1**:三個 repo(policy / snapshot / ledger)0 HTTP I/O / 0 cache / 純資料層 → 維持

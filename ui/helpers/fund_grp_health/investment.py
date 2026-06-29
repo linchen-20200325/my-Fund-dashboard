@@ -29,7 +29,7 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
         _fx = 1.0
     else:
         try:
-            from repositories.fund import get_latest_fx
+            from services.fund_service import get_latest_fx
             _fx = get_latest_fx(f"{_ccy}TWD=X")
             if _fx is None or _fx <= 0:
                 _fx = None
