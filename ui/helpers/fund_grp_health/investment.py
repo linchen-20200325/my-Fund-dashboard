@@ -209,4 +209,3 @@ def _render_holdings_block(fund: dict) -> None:
                     f"<span style='color:#58a6ff;font-weight:700;font-size:11px;"
                     f"width:36px;text-align:right'>{_tp:.1f}%</span>"
                     f"</div>", unsafe_allow_html=True)
-

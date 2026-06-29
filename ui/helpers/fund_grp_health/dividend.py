@@ -133,4 +133,3 @@ def _render_dividend_matrix(funds: list) -> None:
         yaxis=dict(range=[min(0, min(_rc_ret, default=0)) - 2, _y_max]),
         bargap=0.35, hovermode="x unified")
     st.plotly_chart(fig_rc, use_container_width=True)
-

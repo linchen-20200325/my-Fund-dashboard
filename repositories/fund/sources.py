@@ -2471,5 +2471,3 @@ def _src_insurance_subdomain_nav(code: str) -> pd.Series:
             except Exception as _e:
                 print(f"[src_ins] {portal} yp004002: {_e}")
     return pd.Series(dtype=float)
-
-

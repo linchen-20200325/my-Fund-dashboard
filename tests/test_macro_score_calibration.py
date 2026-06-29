@@ -120,4 +120,3 @@ def test_synthetic_score_full_range():
     phases = score.apply(msc.classify_phase).unique()
     assert "Recession" in phases or "Recovery" in phases, \
         f"壓力事件應觸發 Recession/Recovery 位階，實際得 {phases}"
-

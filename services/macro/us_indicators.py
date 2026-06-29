@@ -1609,4 +1609,3 @@ def detect_systemic_risk(news_items: list) -> dict:
         "headlines":   hit_titles,
         "advice":      advice,
     }
-

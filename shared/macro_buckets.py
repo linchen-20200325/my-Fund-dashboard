@@ -202,5 +202,3 @@ BUCKET_DANGER_SPECS: list[DangerSpec] = [
 
 # 快速查表
 SPECS_BY_KEY: dict[str, DangerSpec] = {s.key: s for s in BUCKET_DANGER_SPECS}
-
-

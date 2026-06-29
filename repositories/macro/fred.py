@@ -323,4 +323,3 @@ def fetch_fred_batch(
                 print(f"[macro_core/fred_batch] {sid} 失敗: {e}")
                 result[sid] = pd.DataFrame()
     return result
-

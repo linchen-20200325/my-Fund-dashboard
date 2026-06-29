@@ -61,5 +61,3 @@ def fetch_china_macro(api_key: str) -> dict[str, pd.DataFrame]:
     if not api_key:
         return {}
     return fetch_fred_batch(_CHINA_FRED_SPECS, api_key)
-
-

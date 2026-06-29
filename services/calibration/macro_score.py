@@ -297,5 +297,3 @@ def generate_synthetic_demo(n_months: int = 60, seed: int = 42
     spx = pd.Series(4500.0 * np.exp(np.cumsum(monthly_rets)),
                     index=dates, name="SPX")
     return df, spx
-
-

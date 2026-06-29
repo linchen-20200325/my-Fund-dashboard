@@ -175,5 +175,3 @@ def reconcile_dividend_yield(
         abs_tol=0.001,
         rel_tol=0.05,
     )
-
-
