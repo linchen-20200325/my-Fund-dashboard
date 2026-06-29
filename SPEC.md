@@ -686,7 +686,7 @@ render_fund_checkup(portfolio_funds) -> None               # expander：caption 
 
 **驗證**：AST PASS（ai_service.py / app.py）、ai_service.py 無 dangling ref、`pytest -m "not slow"` 606 passed / 1 skipped、slow AppTest 全綠。
 
-**後續候選（未動，待 user 拍板）**：`build_fund_json_prompt`/`build_fund_json_structured_prompt` + `FUND_JSON_SCHEMA_HINT`/`fund_analysis_to_markdown`/`parse_llm_json` 現為「有 test 但無 live caller」的閒置 fund-JSON 工具組；若確定不重啟可連同 test 一併下架。
+**後續候選**(v19.245 R13 復查:**已自動下架**,SPEC 文件漂移):`build_fund_json_prompt` / `build_fund_json_structured_prompt` + `FUND_JSON_SCHEMA_HINT` / `fund_analysis_to_markdown` / `parse_llm_json` 五個 symbol 早於 v18.238 整檔 `services/ai_models.py` 移除時連帶下架,grep 全網 0 caller / 0 module 殘留。`tests/test_ai_models.py` 同步下架。本段歷史紀錄保留。
 
 ---
 
