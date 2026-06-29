@@ -237,10 +237,26 @@ def _render_per_fund_news_expanders(funds: list) -> None:
         _mj = _f.get("moneydj_raw") or {}
         _holdings = _mj.get("holdings") or {}
         _tops = _holdings.get("top_holdings") or []
+        _sectors_xa = _holdings.get("sector_alloc") or []
 
         with st.expander(f"📰 {_name}　·　{_code}", expanded=False):
             if not _tops:
-                st.caption("⬜ MoneyDJ 未提供持股,無法抓新聞")
+                # v19.250 R19:fallback 訊息精準化 — 區分多重資產 vs 真缺資料
+                if _sectors_xa:
+                    _top3 = " / ".join(
+                        f"{_s.get('name','?')} {_s.get('pct',0):.1f}%"
+                        for _s in _sectors_xa[:3]
+                    )
+                    st.caption(
+                        f"ℹ️ 多重資產 fund 無個股持股 — 資產配置:{_top3}…"
+                        f"(MoneyDJ 不公開個股,無法抓個股新聞)"
+                    )
+                else:
+                    st.caption(
+                        "⬜ MoneyDJ 未提供持股,無法抓新聞"
+                        "(可能 yp013xxx 頁面結構變動 / 子網域限制 / cache 鎖死,"
+                        "按 sidebar「全域刷新」清 cache 重試)"
+                    )
                 continue
 
             # 前 6 大持股(顯示名, 查詢字)
@@ -352,7 +368,23 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
 
         with st.expander(f"🛡️ {_name}　·　{_code}", expanded=False):
             if not _tops:
-                st.caption("⬜ MoneyDJ 未提供持股,無法掃三率")
+                # v19.250 R19:精準化 fallback
+                _sectors_shield = _holdings.get("sector_alloc") or []
+                if _sectors_shield:
+                    _top3 = " / ".join(
+                        f"{_s.get('name','?')} {_s.get('pct',0):.1f}%"
+                        for _s in _sectors_shield[:3]
+                    )
+                    st.caption(
+                        f"ℹ️ 多重資產 fund 無個股持股 — 資產配置:{_top3}…"
+                        f"(無法掃個股三率,但組合風險可由資產類別評估)"
+                    )
+                else:
+                    st.caption(
+                        "⬜ MoneyDJ 未提供持股,無法掃三率"
+                        "(可能 yp013xxx 結構變動 / cache 鎖死,"
+                        "按 sidebar「全域刷新」清 cache 重試)"
+                    )
                 continue
 
             _ss_key = f"_tab5grp_shield_{_code}"
