@@ -228,7 +228,14 @@
 {"date": ..., "rate_twd_per_usd": float > 0 (TWD/USD 不混用倒數)}
 ```
 
-✅ **已結案 v19.189**(F-SCHEMA-1):pandera 已 pin `requirements.txt` (>=0.20,<1.0),Phase A(pilot v19.155)+ Phase B(fetch_yf_close / fetch_nav / fetch_div v19.161-163)+ Phase B5(foreign_flow v19.186)落地,5 個 Schema(`MacroFredSchema` / `YahooCloseSchema` / `FundNavSchema` / `FundDividendSchema` / `ForeignFlowSchema`)+ 8 處 production caller 接入 + 91 tests 全綠。Phase C/D(全面 + CI gate)留待 user 觸發(§-1 不主動推進)。
+✅ **全結案 v19.241**(F-SCHEMA-1):pandera 已 pin `requirements.txt` (>=0.20,<1.0)。**全 4 phase 落地**:
+- **Phase A**(pilot v19.155)— `MacroFredSchema` + `validate_fred` 模板建立
+- **Phase B**(v19.161-163)— `YahooCloseSchema` / `FundNavSchema` / `FundDividendSchema` + 對應 validator,5 production fetcher 接入
+- **Phase B5**(v19.186)— `ForeignFlowSchema` + `validate_foreign_flow` 新增 hot_money fetcher 接入
+- **Phase C**(v19.164)— 服務層 data-only validators `validate_fund_nav_data_only` + `validate_fund_dividends_data_only`(對比出口 validator,不驗 provenance attrs,讓 cache/test fixture 反序列化序列也能驗業務契約)
+- **Phase D**(v19.165)— **CI gate** 落地:`.github/workflows/pr-check.yml::schema-gate` job 跑 6 個 schema test 檔(`test_schemas_phase_a/b/b2/b3/b_foreign_flow/c.py`)91 tests 全綠,failure 即阻擋 merge,獨立 job 讓 schema regression 在 PR 視圖一眼可見
+
+**最終 surface**:5 Schema + 7 validator(4 出口含 attrs + 2 data-only + 1 foreign_flow)+ 6 test file 91 tests + CI gate。**剩餘未驗 fetcher**(stooq / cboe / defillama / TW macro fetchers 等 ~10 個)為 Tier 2/3 次要源,§-1 等實際 bug 觸發再加,**不主動推進**(§8.1 step 6)。
 
 ### 3.2 範圍 / 合理性檢查
 
