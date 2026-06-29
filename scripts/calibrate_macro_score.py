@@ -231,7 +231,9 @@ def _spearman_corr(x: pd.Series, y: pd.Series) -> float:
         return 0.0
     xr = x.rank(method="average")
     yr = y.rank(method="average")
-    if xr.std() == 0 or yr.std() == 0:
+    # v19.243 R11 §4.3:浮點比較禁止 ==。rank() 後 std 為 0 = 序列全相等
+    # (degenerate spearman → 無相關性);用 atol=1e-12 守 §4.3 字面規範
+    if np.isclose(xr.std(), 0.0, atol=1e-12) or np.isclose(yr.std(), 0.0, atol=1e-12):
         return 0.0
     return float(xr.corr(yr))
 
