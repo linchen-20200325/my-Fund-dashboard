@@ -21,6 +21,18 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.240 R8 EX-L1ORCH-1 升級退役(2026-06-29)**:深挖發現升級觸發條件實質達標:
+  - 違憲 3 個 L2 symbol(`calc_metrics` + `reconcile_fund_annual_return` + `reconcile_dividend_yield`)
+  - 80+ LOC L2 業務判斷(perf 注入 / window 閾值 / 對帳 % vs decimal)push 回 L1
+  - 觸發條件 (a)+(b) 都達標 → 採方案 (b) 拆 return + L2 wrapper
+  - **新增 L2 SSOT** `services/fund_service.py::finalize_fund_metrics(result)` + 2 enriched wrapper(`fetch_fund_by_key_enriched` / `fetch_fund_from_moneydj_url_enriched`)
+  - **L1 純化**:`repositories/fund/fund_orchestration.py::_finish_metrics` 從 100 LOC → 22 LOC(只剩 source_trace + normalize_result_state);`fx_and_main.py::fetch_fund_by_key` 移除 calc_metrics 收尾;`fund_orchestration.py::fetch_fund_from_moneydj_url` 移除 inline calc_metrics + perf 注入
+  - **Caller migrate** 4 處:`ui/helpers/v2_editor.py:695` + `services/moneydj_fetcher.py:65, 68, 76`(3 sites 共用同一 enriched alias)
+  - **L1→L2 violation**:3 → 0(完全清零)
+  - **EX-L1ORCH-1 退役**(CLAUDE.md §8.2.A 標 strikethrough,§0 收尾紀錄同步)
+  - **副產品**:test_realtime_signal.py 3 處 patch path 從 R2 stale `services.macro_service.*` 改 `services.macro.*`;test_ai_prompts.py 3 dead test 補清(R7 漏網)
+  - 2254 broader tests 全綠
+
 - **v19.239 R7 EX-AI-1 死碼清(2026-06-29)**:5 個 WONTFIX 深挖,4 個確認維持,EX-AI-1 找到 4 個真死碼:
   - `services/ai_service.py` -216 LOC:`_build_snapshot`(124)+ `analyze_global`(25)+ `build_stale_flags`(31)+ `event_impact_analysis`(34)+ 連動 import / docstring 清理
   - `services/ai_prompts.py` -70 LOC:`build_global_prompt`(46)+ `build_event_impact_prompt`(24)兩個 dead prompt builder + 對應 section header + docstring 公開 API 清單更新

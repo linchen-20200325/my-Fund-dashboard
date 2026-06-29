@@ -24,10 +24,10 @@ from fund_fetcher import (  # noqa: F401
     normalize_result_state, merge_non_empty, classify_fetch_status,
 )
 from infra.proxy import _proxies, _ssl_verify  # noqa: F401
-# CLAUDE.md §8.2.A EX-L1ORCH-1:L1 fund orchestrator bundle fetch+metric compute
-# 的 L1→L2 跨層 import 已登錄為例外,理由見例外清單。calc_metrics 於本檔 line ~67
-# `fetch_fund_by_key` 收尾時呼叫,把 NAV 序列 + 配息 packaging 成 result["metrics"]。
-from services.fund_service import calc_metrics  # noqa: F401
+# v19.240 R8 EX-L1ORCH-1 退役:calc_metrics + perf 注入 + reconcile 業務邏輯已上提
+# 至 services.fund_service.finalize_fund_metrics + L2 enriched wrapper
+# (fetch_fund_by_key_enriched)。本層只回 raw result(無 metrics key,caller 走 L2
+# wrapper 才會 enrich)。
 
 from repositories.fund.sources import *  # noqa: F401, F403
 from repositories.fund.nav_metrics import *  # noqa: F401, F403
@@ -67,15 +67,8 @@ def fetch_fund_by_key(full_key: str, fund_name: str = "",
     if len(s) >= 20:
         result["series"]    = s
         result["dividends"] = divs
-        result["metrics"]   = calc_metrics(s, divs)
-        # v18.53: 同 _finish_metrics — 境內缺 wb01 perf["1Y"] 改用本地計算
-        if not isinstance(result.get("perf"), dict):
-            result["perf"] = {}
-        if result["perf"].get("1Y") is None:
-            _local_1y = (result.get("metrics") or {}).get("ret_1y_total")
-            if _local_1y is not None:
-                result["perf"]["1Y"] = _local_1y
-                result["perf_source"] = result.get("perf_source") or "local_calc"
+        # v19.240 R8 EX-L1ORCH-1 退役:metrics + perf 注入由 L2
+        # services.fund_service.fetch_fund_by_key_enriched 統一處理。
         # F-PROV-1 phase 17 v19.103 — provenance(orchestrator-level;若 series 已有 attrs.source 則記錄)
         _s_src = s.attrs.get("source") if hasattr(s, "attrs") else None
         result["nav_source_used"] = _s_src or "unknown"

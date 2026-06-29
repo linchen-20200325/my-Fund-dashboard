@@ -591,6 +591,132 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     )
 
 
+# ── v19.240 R8 EX-L1ORCH-1 升級:L1 orchestrator 業務邏輯上提 ──────
+def finalize_fund_metrics(result: dict) -> dict:
+    """v19.240 R8 EX-L1ORCH-1 退役:把原 L1 fund_orchestration._finish_metrics +
+    fx_and_main.fetch_fund_by_key 收尾 + fund_orchestration.fetch_fund_from_moneydj_url
+    收尾 3 處的 metric + perf 注入 + F-RECON-1 對帳 4 個 L2 業務邏輯收編進 L2,
+    L1 純化為 raw fetch + packaging。
+
+    接收 raw `result`(含 series / dividends / risk_metrics / perf / year_high_nav /
+    year_low_nav / moneydj_div_yield / fund_code / data_source / source_trace),enrich:
+    - result["metrics"] = calc_metrics(s, divs, risk_override=combined_override)
+    - source_trace append calc_metrics 成功 / 失敗
+    - perf["1Y"] 從本地計算注入(v18.65 window >= 350 才視為真 1Y)
+    - F-RECON-1 phase 4 ret_1y_reconcile
+    - F-RECON-1 phase 5 div_yield_reconcile
+
+    Mutates + returns result(同一物件,方便 chain)。
+    """
+    from services.reconcile import reconcile_dividend_yield, reconcile_fund_annual_return
+
+    s = result.get("series")
+    divs = result.get("dividends", [])
+    code = result.get("fund_code", "?")
+    src = result.get("data_source", "")
+
+    if "source_trace" not in result:
+        result["source_trace"] = []
+
+    if s is None:
+        result["source_trace"].append(
+            {"source": "nav_series", "success": False, "error": "無淨值序列"})
+        return result
+
+    if len(s) < 10:
+        result["source_trace"].append(
+            {"source": "nav_series", "success": False,
+             "error": f"只有 {len(s)} 筆(需≥10)"})
+        return result
+
+    try:
+        combined_override = dict(result.get("risk_metrics") or {})
+        if result.get("year_high_nav"):
+            combined_override["year_high_nav"] = result["year_high_nav"]
+        if result.get("year_low_nav"):
+            combined_override["year_low_nav"] = result["year_low_nav"]
+        result["metrics"] = calc_metrics(s, divs, risk_override=combined_override)
+        result["source_trace"].append({"source": "calc_metrics", "success": True})
+
+        # v18.53 + v18.65: 境內缺 wb01 perf["1Y"] 改用本地計算,window >= 350 才視為真 1Y
+        if not isinstance(result.get("perf"), dict):
+            result["perf"] = {}
+        if result["perf"].get("1Y") is None:
+            _m_local = result.get("metrics") or {}
+            _local_1y = _m_local.get("ret_1y_total")
+            _local_window = _m_local.get("ret_1y_window_days") or 0
+            if _local_1y is not None and _local_window >= 350:
+                result["perf"]["1Y"] = _local_1y
+                result["perf_source"] = result.get("perf_source") or "local_calc"
+                print(f"[metrics] 🧮 {code} perf['1Y'] 用本地計算補:{_local_1y}%")
+
+        # F-RECON-1 phase 4 v19.89 — 1Y 報酬雙演算法對帳(self-calc vs MoneyDJ wb01)
+        try:
+            _m_local = result.get("metrics") or {}
+            _self_calc_1y = _m_local.get("ret_1y_total")
+            _wb01_1y = result.get("perf", {}).get("1Y")
+            _perf_source = result.get("perf_source") or ""
+            _is_wb01 = (_wb01_1y is not None and _perf_source != "local_calc")
+            if _self_calc_1y is not None or _is_wb01:
+                _sc = float(_self_calc_1y) / 100.0 if _self_calc_1y is not None else None
+                _mj = float(_wb01_1y) / 100.0 if _is_wb01 else None
+                if isinstance(result.get("metrics"), dict):
+                    result["metrics"]["ret_1y_reconcile"] = (
+                        reconcile_fund_annual_return(_sc, _mj))
+        except Exception:  # noqa: BLE001
+            pass
+
+        # F-RECON-1 phase 5 v19.90 — 配息殖利率對帳
+        try:
+            _m_local = result.get("metrics") or {}
+            _self_calc_dy = _m_local.get("annual_div_rate")
+            _mj_dy = result.get("moneydj_div_yield")
+            if _self_calc_dy is not None or _mj_dy is not None:
+                _sc_dy = float(_self_calc_dy) / 100.0 if _self_calc_dy is not None else None
+                _mj_dy_dec = float(_mj_dy) / 100.0 if _mj_dy is not None else None
+                if isinstance(result.get("metrics"), dict):
+                    result["metrics"]["div_yield_reconcile"] = (
+                        reconcile_dividend_yield(_sc_dy, _mj_dy_dec))
+        except Exception:  # noqa: BLE001
+            pass
+
+        print(f"[metrics] ✅ {code} 指標計算完成({len(s)} 筆,src:{src})")
+    except Exception as _ce:
+        result["source_trace"].append(
+            {"source": "calc_metrics", "success": False, "error": str(_ce)[:60]})
+        result["error"] = f"指標計算異常:{str(_ce)[:80]}"
+        print(f"[metrics] ❌ calc_metrics: {_ce}")
+
+    return result
+
+
+def fetch_fund_by_key_enriched(full_key: str, fund_name: str = "",
+                                portal: str = "", source: str = "",
+                                manual_nav_csv: str = "") -> dict:
+    """v19.240 R8 L2 enriched wrapper:L1 fetch_fund_by_key(raw NAV + 配息)+
+    finalize_fund_metrics(metrics + perf 注入 + reconcile)。
+
+    取代原 L1 fetch_fund_by_key 收尾呼 calc_metrics 的 L1→L2 跨層 import 模式
+    (EX-L1ORCH-1 退役)。
+    """
+    from repositories.fund import fetch_fund_by_key
+    result = fetch_fund_by_key(full_key, fund_name, portal, source, manual_nav_csv)
+    return finalize_fund_metrics(result)
+
+
+def fetch_fund_from_moneydj_url_enriched(url: str) -> dict:
+    """v19.240 R8 L2 enriched wrapper:L1 fetch_fund_from_moneydj_url(raw)+
+    finalize_fund_metrics。
+
+    取代原 L1 內 inline calc_metrics + perf + reconcile 的 L1→L2 跨層 import
+    (EX-L1ORCH-1 退役)。L1 cache(@_ttl_cache TTL_15MIN)由 L1 保留,本 wrapper
+    每次 L1 命中 cache 後仍 re-run finalize(metrics 計算為 in-memory pandas
+    vectorized 操作,成本 ~ms 級可接受)。
+    """
+    from repositories.fund import fetch_fund_from_moneydj_url
+    result = fetch_fund_from_moneydj_url(url)
+    return finalize_fund_metrics(result)
+
 
 # ── calc_dividend_estimate ───────────────────────────────────────────
 def calc_dividend_estimate(nav, invest_amount, monthly_div, annual_div,
