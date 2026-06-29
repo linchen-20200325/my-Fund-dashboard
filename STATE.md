@@ -21,6 +21,19 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.246 R15 4 例外二輪深挖 — EX-PASSTHRU-1 framing 重大修正(2026-06-29)**:
+  - **EX-AI-1**:caller 從 str 萃取數字違規復查 0 處(grep `re.search/json.loads/float(resp)` 全網 0 hit)→ 維持
+  - **EX-CRUD-1**:三個 repo(policy / snapshot / ledger)0 HTTP I/O / 0 cache / 純資料層 → 維持
+  - **EX-CACHE-1**:hot_money_repository 仍唯一適用(`@st.cache_data` ×2)→ 維持
+  - **EX-PASSTHRU-1 重大發現**:**原 doc framing 錯誤** — 3 fn 實際是 **L1 facade** 不是 pass-through:
+    * `get_latest_fx`:4 源 fallback chain(Yahoo → FRED → open.er-api → Frankfurter)+ positive-only `_FX_CACHE` TTL_300 + currency normalize
+    * `tdcc_search_fund`:多 endpoint 整合(TDCC 3-2 + 3-4)+ dedup + nav merge
+    * `fetch_market_news`:11 RSS feeds + keyword filter + systemic risk classify + sort
+    * 升級觸發條件「多源 fallback / 結果後處理 / 自帶 cache」**理論上 3 fn 全達標**
+    * 但實務評估:3 fn ≥1 年穩定 + blast radius 大(get_latest_fx 9 caller / tdcc 1 / news 2)+ 升級需完整重寫 fallback chain(R8 EX-L1ORCH-1 規模)→ §-1 不主動推進
+    * doc framing 修正:從「pass-through 用 + 無 L2 業務值」改為「L1 facade(multi-source orchestration + cache + 後處理 + 業務分類)」,升級觸發條件改寫為「user 明確指派 / 第 5 個 source / 後處理 bug」
+  - 0 code change,純 doc framing 對齊
+
 - **v19.244 R12 4 例外復查 + EX-PASSTHRU-1 doc 漂移修(2026-06-29)**:深挖 EX-CACHE-1 / EX-AI-1 / EX-CRUD-1 / EX-PASSTHRU-1 4 例外:
   - **EX-AI-1**:R7 清死碼後 public fn 4(`assign_asset_role` / `analyze_portfolio_mk_advisor` / `get_gemini_keys` / `gemini_generate`),caller 全用 markdown 渲染,無從 str 萃取數字違規 → 維持
   - **EX-CRUD-1**:三個 repo(policy / snapshot / ledger)caller 全在 ui/ + 1 處 scripts/(migration),符合 EX-CRUD-1 範圍 → 維持
