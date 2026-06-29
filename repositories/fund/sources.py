@@ -5,6 +5,11 @@
   Insurance / Franklin / JPMorgan / MoneyDJ direct / TCB / SITCA / TDCC / Insurance subdomain
 - code mapping helper(load_fund_code_mapping / canonicalize_moneydj_url / parse_moneydj_input /
   normalize_domestic_code / _is_domestic_code / get_page_types_to_try)
+
+v19.248 R17 bug fix:Python `from X import *` 規則**不引入底線開頭名稱**,
+P1-5 拆檔後 `fund_orchestration.py:32` 的 `from sources import *` 無法載入
+任何 `_src_*` → NameError 全爆。**修法**:明確宣告 `__all__` SSOT export list
+包含全部 `_src_*` 名單(有 `__all__` 時 `import *` 依名單載入,可含底線名)。
 """
 from __future__ import annotations
 
@@ -26,6 +31,45 @@ from fund_fetcher import (  # noqa: F401
     normalize_result_state, merge_non_empty, classify_fetch_status,
 )
 from infra.proxy import _proxies, _ssl_verify  # noqa: F401
+
+
+# v19.248 R17 SSOT bug fix:`from X import *` 規則不引入底線開頭名(`_src_*` 全壞)。
+# 顯式 `__all__` 名單支援 `import *` 取得所有 source adapter helper(含底線名)。
+# 此 SSOT 為 `fund_orchestration.py` re-export 入口,新增 `_src_*` 必須同步加入。
+__all__ = [
+    # ── _src_* source adapters(基金 NAV / meta / div 各來源)──
+    "_src_allianzgi_meta", "_src_allianzgi_nav",
+    "_src_alphavantage_nav",
+    "_src_bank_platform_nav",
+    "_src_cache_files",
+    "_src_cnyes_div", "_src_cnyes_nav",
+    "_src_direct_moneydj_url",
+    "_src_franklin_nav",
+    "_src_fundclear_div", "_src_fundclear_meta", "_src_fundclear_nav",
+    "_src_insurance_subdomain_nav",
+    "_src_jpmorgan_nav",
+    "_src_morningstar_meta", "_src_morningstar_nav",
+    "_src_nav_30day",
+    "_src_sitca_meta", "_src_sitca_nav",
+    "_src_taiwanlife_nav",
+    "_src_tcb_div", "_src_tcb_meta", "_src_tcb_nav",
+    "_src_tdcc_meta",
+    "_src_yahoo_finance_nav",
+    # ── 內部 helper(orchestration 用)──
+    "_cnyes_parse_navs", "_cnyes_resolve_code",
+    "_is_domestic_code",
+    "_morningstar_search_secid",
+    "_tdcc_get", "_tdcc_resolve_fund_name",
+    # ── public functions ──
+    "canonicalize_moneydj_url",
+    "fetch_div_cnyes", "fetch_fund_multi_source", "fetch_nav_cnyes",
+    "get_page_types_to_try",
+    "load_fund_code_mapping",
+    "normalize_domestic_code",
+    "parse_moneydj_input",
+    "probe_insurance_urls",
+    "tdcc_get_agents", "tdcc_search_fund",
+]
 
 
 # Yahoo Finance v8 chart API — Morningstar {secId}.F symbol 專用 template。
