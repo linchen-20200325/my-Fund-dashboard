@@ -100,13 +100,22 @@ def test_cache_save_and_load_roundtrip():
 
 
 def test_cache_expires_after_ttl(monkeypatch):
-    """24 小時後 cache 失效回 None。"""
-    from repositories import fund_repository
-    monkeypatch.setattr(fund_repository, "_NAV_HISTORY_CACHE_TTL_SEC", 1)
+    """24 小時後 cache 失效回 None。
+
+    v19.234 P2 fix:原寫法 patch shim `fund_repository` 不穿透 sub-module(P2-7
+    模式),且 `time.sleep(1.5)` 依賴實際時鐘易產生 timing-flaky。改 patch
+    sub-module `fund/nav_metrics` 真正 TTL const + mock `time.time` 跳到 TTL 之後。
+    """
+    from repositories.fund import nav_metrics
+    # patch sub-module 真正 const(避免 P2-7 shim 不穿透)
+    monkeypatch.setattr(nav_metrics, "_NAV_HISTORY_CACHE_TTL_SEC", 1)
     s = pd.Series([10.0], index=pd.to_datetime(["2024-01-01"]))
-    fund_repository._nav_history_cache_save("XYZ", s)
-    time.sleep(1.5)
-    assert fund_repository._nav_history_cache_load("XYZ") is None
+    nav_metrics._nav_history_cache_save("XYZ", s)
+    # mock time.time 跳到 TTL 之後(避免實際 sleep,消除 timing 敏感)
+    import time as _time_mod
+    _real_time = _time_mod.time()
+    monkeypatch.setattr(_time_mod, "time", lambda: _real_time + 10)
+    assert nav_metrics._nav_history_cache_load("XYZ") is None
 
 
 def test_cache_load_returns_none_when_missing():
