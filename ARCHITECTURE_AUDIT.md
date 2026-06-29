@@ -608,7 +608,9 @@ User 後續「深層稽核 → #1→#9」分批授權,3 個 stacked PR(已 squas
 - ~~**F1 OAuth refresh test fail**~~ **v19.227 已修**(P2-7 shim sub-module 直接 patch)
 - ~~**F2 macro_done seeded timeout**~~ **v19.228 已修**(247s → 39s,雙路徑 mock)
 - ~~**test_financial_repository pre-existing fail**~~ **v19.233 已驗證 0 fail**(15/15 passed,標籤 stale,實際是 `test_fetch_nav_history_long::test_cache_expires_after_ttl` + `test_render_smoke::test_render_macro_tab_four_horizons` 2 個環境問題)
-- **2 pre-existing 環境 fail(non-blocking)**:`test_fetch_nav_history_long::test_cache_expires_after_ttl`(TTL 時序敏感)+ `test_render_smoke::test_render_macro_tab_four_horizons`(需 FRED API,403 環境問題)
+- ~~**test_fetch_nav_history_long::test_cache_expires_after_ttl**~~ **v19.234 P2 已修**:patch 改 sub-module nav_metrics + mock time.time(消除 sleep,P2-7 模式延伸第三例)
+- ~~**test_render_smoke::test_render_macro_tab_four_horizons**~~ **v19.234 P3 confirmed pass**:53.73s 慢但全綠;標籤過時,main reconciliation 後 stub chain 接通完整。test_render_smoke 5/5 + test_app_smoke 全綠
+- **F-PROV-1 audit MISS** ~~12 → 8~~ → **0**(v19.234 P1 完成,8 fn docstring 補 F-PROV-1 註,真相:全部 provenance 都已存在,只是 audit script fn-level 看不到 orchestrator/upstream 契約)
 
 ### PR 整合
 
