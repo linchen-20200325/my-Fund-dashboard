@@ -21,6 +21,16 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.242 R10 F-PROV-1 sentinel 深挖 + dead chain 拔除(2026-06-29)**:F-PROV-1 sentinel WONTFIX 復核維持(schema-additive 已 100% pass,改 dataclass ROI=0),但深挖 audit 工具發現 bug 後重跑找到 **dead code chain** 拔除:
+  - `fetch_fund_structure` 整 fn(132 LOC,0 production caller,fund_fetcher.py:467 re-export shim 列名但實際 0 call site)
+  - `STRUCTURE_PAGES` constant(9 LOC,獨 caller = fetch_fund_structure)
+  - `_parse_pct_table` helper(30 LOC,獨 caller = fetch_fund_structure)
+  - `fund_fetcher.py:460-470` re-export shim 11 LOC
+  - 對應 `repositories/fund/fx_and_main.py` 模組 docstring 更新
+  - **總計 -183 LOC**(repositories/fund/fx_and_main.py -183 / fund_fetcher.py -8)
+  - 39 個 fetcher 全部覆蓋 source/fetched_at (F-PROV-1 audit 真正 0 MISS,我的初版 audit 工具 100-line window 太窄漏看)
+  - WONTFIX 清單從 2 → 1(剩 Welford 顯式,確認 ROI=0)
+
 - **v19.241 R9 F-SCHEMA-1 全結案 文件漂移修(2026-06-29)**:深挖 Phase C/D 發現**早已落地**,CLAUDE.md §3.1 過時:
   - **Phase C v19.164 已落地**:`shared/schemas.py` 增 `validate_fund_nav_data_only` + `validate_fund_dividends_data_only`(服務層 data-only,不驗 provenance attrs,允許 cache/test fixture 反序列化序列)
   - **Phase D v19.165 已落地**:`.github/workflows/pr-check.yml::schema-gate` job 跑 6 個 schema test 檔(test_schemas_phase_a/b/b2/b3/b_foreign_flow/c.py)91 tests,failure 阻擋 merge
