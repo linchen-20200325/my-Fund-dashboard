@@ -20,7 +20,7 @@ TW_TZ = datetime.timezone(datetime.timedelta(hours=8))
 def _now_tw():
     return datetime.datetime.now(TW_TZ)
 
-from services.macro_service import (
+from services.macro import (
     ENGINE_VERSION,
 )
 from ui.tab1_macro import render_macro_tab

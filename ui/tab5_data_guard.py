@@ -712,7 +712,7 @@ def render_data_guard_tab() -> None:
             # ── B. Phase 3-B 7 子領域樣本量 ────────────────────────
             st.markdown("**B. Phase 3-B 7 子領域燈號回測樣本量**")
             try:
-                from services.macro_service import backtest_sub_cycle_lights as _d5_bt
+                from services.macro import backtest_sub_cycle_lights as _d5_bt
                 _d5_bt_out = _d5_bt(_d5_ind, target_key="LEI", window=60, forward_months=3)
                 _d5_bt_rows = []
                 for c in _d5_bt_out:

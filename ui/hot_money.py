@@ -164,7 +164,7 @@ def render_hot_money_section(token: str = "",
                      help="v19.57 C1：僅清外資 / USDTWD / FRED / Yahoo（Tab1 範圍）快取，"
                           "Tab2~Tab5 基金/組合/政策快取不受影響"):
             try:
-                from services.macro_service import clear_tab1_macro_caches
+                from services.macro import clear_tab1_macro_caches
                 clear_tab1_macro_caches(session_state=st.session_state)
             except Exception:
                 pass

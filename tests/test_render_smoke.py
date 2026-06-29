@@ -98,7 +98,7 @@ os.environ["FRED_API_KEY"] = "x" * 32
 
 # stub 所有網路 fetcher(避免 CI 卡住、避免本機環境差異)
 import services.risk_radar as _rr
-import services.macro_service as _ms
+import services.macro as _ms
 import fund_fetcher as _ff
 _rr.detect_risk_radar = lambda *a, **k: {_stub_radar()!r}
 _rr.summarize_radar = lambda *a, **k: {{"level": "平靜", "color": "#3fb950",
@@ -133,7 +133,7 @@ def _restore_polluted_module_attrs():
     此 fixture 在 test 前 snapshot 原始函式,test 結束後還原,杜絕跨檔污染。
     """
     import fund_fetcher as _ff
-    import services.macro_service as _ms
+    import services.macro as _ms
     import services.risk_radar as _rr
     _snapshot = {
         (_rr, "detect_risk_radar"): _rr.detect_risk_radar,

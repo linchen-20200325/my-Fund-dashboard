@@ -383,7 +383,7 @@ def classify_china_regime(snapshot: dict) -> dict:
 # 哲學:不對「中國好」主觀加成(避免主分高估),只對「中國壞」做風險溢價懲罰。
 #
 # 用法(caller 自行選用,本檔不強制套用):
-#   from services.macro_service import (
+#   from services.macro import (
 #       china_macro_snapshot, compute_china_subscore, apply_china_modifier,
 #       calc_macro_phase,
 #   )

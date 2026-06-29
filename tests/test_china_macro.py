@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from services.macro_service import (
+from services.macro import (
     calc_china_credit_impulse_proxy,
     china_macro_snapshot,
 )

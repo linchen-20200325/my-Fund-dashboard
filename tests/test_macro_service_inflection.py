@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from services.macro_service import _detect_inflection, detect_turning_points
+from services.macro import _detect_inflection, detect_turning_points
 
 
 # ════════════════════════════════════════════════════════════
