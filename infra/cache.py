@@ -137,6 +137,75 @@ def register_cache(fn):
     return fn
 
 
+# ── v19.250 R20:日 TTL 快取(保存當日,隔日自動 miss 重抓)──────────
+def _daily_cache(fn=None, *, today_fn=None):
+    """日 TTL 快取裝飾器:保存當日(TW UTC+8 timezone),隔日午夜自動 miss → 重抓。
+
+    **設計理由**(v19.250 R20):30min TTL 對「月更新源頭」(MoneyDJ 持股 / wb07 風險 /
+    wb05 配息等)過於激進,當日無謂重抓浪費 IO + MoneyDJ 流量。改成日 cache 後:
+    - 同日多次呼叫:cache hit,0 HTTP
+    - 隔日 00:00 TW(UTC+8):自動 miss → 重抓最新版本
+
+    **SSOT 對齊**:與 `_ttl_cache` 對稱 — 暴露 `cache_clear()` / `cache_info()`;
+    透過 `@register_cache` 接入 `_CACHE_REGISTRY`,UI「全域刷新」一鍵清。
+
+    Args:
+        today_fn: 可選 date provider(test 用,預設 TW UTC+8 today ISO string)。
+
+    Memory hygiene:今日 key 變化(隔日 first call)會把所有舊日 entry GC 掉,
+    無需手動清,記憶體用量 bounded(N=當日 cached call 數)。
+    """
+    import datetime as _dt
+
+    def _default_today():
+        _tw_tz = _dt.timezone(_dt.timedelta(hours=8))
+        return _dt.datetime.now(_tw_tz).date().isoformat()
+
+    _today_provider = today_fn or _default_today
+
+    def decorator(_fn):
+        _cache: dict = {}
+        _stats = {"hits": 0, "misses": 0}
+
+        @_ft.wraps(_fn)
+        def wrapper(*args, **kwargs):
+            today = _today_provider()
+            try:
+                key = (today, args, tuple(sorted(kwargs.items())))
+                hash(key)
+            except TypeError:
+                # 不可 hash 引數 → 跳過快取(對齊 _ttl_cache 行為)
+                return _fn(*args, **kwargs)
+
+            if key in _cache:
+                _stats["hits"] += 1
+                return _cache[key]
+
+            # GC 舊日 entry — 隔日首次呼叫自動清前一日 cache
+            _stale = [k for k in _cache if k[0] != today]
+            for _k in _stale:
+                del _cache[_k]
+
+            _stats["misses"] += 1
+            result = _fn(*args, **kwargs)
+            _cache[key] = result
+            return result
+
+        wrapper.cache_clear = lambda: _cache.clear()
+        wrapper.cache_info = lambda: {
+            "name": _fn.__name__,
+            "currsize": len(_cache),
+            "ttl": "daily-reset",
+            **_stats,
+        }
+        return wrapper
+
+    # Support both @_daily_cache and @_daily_cache(today_fn=...)
+    if fn is not None and callable(fn):
+        return decorator(fn)
+    return decorator
+
+
 def clear_all_caches() -> int:
     """清空所有註冊的 TTL cache。回傳清空的函式數量。"""
     for fn in _CACHE_REGISTRY:

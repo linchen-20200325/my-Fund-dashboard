@@ -13,7 +13,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from infra.cache import (  # noqa: F401
-    _ttl_cache, register_cache, _CACHE_DIR, _FUND_SNAPSHOT, _cache_path,
+    _ttl_cache, _daily_cache, register_cache, _CACHE_DIR, _FUND_SNAPSHOT, _cache_path,
     _cache_load_nav, _cache_save_nav, _cache_load_div, _cache_save_div,
     _cache_load_meta, _cache_save_meta,
 )
@@ -906,7 +906,7 @@ def fetch_risk_metrics(code: str) -> dict:
 # 持股（yp013001.djhtm）: 產業配置 + 前10大持股
 # ════════════════════════════════════════════════════════════
 @register_cache
-@_ttl_cache(ttl_sec=TTL_30MIN, maxsize=64)   # v19.64：MoneyDJ 持股月更新
+@_daily_cache  # v19.250 R20:MoneyDJ 持股月更新,改日 cache(保存當日,隔日 TW 午夜 miss 重抓)
 def fetch_holdings(code: str) -> dict:
     """
     抓取 MoneyDJ 持股頁，回傳：
