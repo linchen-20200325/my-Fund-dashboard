@@ -938,7 +938,16 @@ def fetch_holdings(code: str) -> dict:
             txt = tbl.get_text()
 
             # ── 產業配置 ──
-            if "資訊科技" in txt or "工業" in txt or "金融" in txt:
+            # v19.249 R18 bug fix:原寫死 keyword 「資訊科技/工業/金融」只覆蓋股票型 sector,
+            # multi-asset fund(ACCP138 等)的 asset class「全球股票/投資等級債券/現金與約當現金」
+            # 完全 0 命中 → sector_alloc 沒抓 → out 空 → AI 顯示「MoneyDJ 未提供持股」。
+            # 改用結構性偵測:含 sector 類 header(產業/資產類別/類別/地區)+ 比例 + 無投資名稱
+            # column(避免吃到 top_holdings table)。對齊 SSOT 結構契約而非 hardcoded names。
+            _SECTOR_HEADER_KW = ("產業", "産業", "資產類別", "類別", "地區")  # 涵蓋股票/多重資產/區域
+            _has_sector_header = any(kw in txt for kw in _SECTOR_HEADER_KW)
+            _has_pct_header = "比例" in txt
+            _has_top_holdings_marker = "投資名稱" in txt
+            if _has_sector_header and _has_pct_header and not _has_top_holdings_marker:
                 rows = tbl.find_all("tr")
                 sectors = []
                 # MoneyDJ table rule: row0=title(colspan), row1=colheader, row2+=data
@@ -970,6 +979,10 @@ def fetch_holdings(code: str) -> dict:
                     print(f"[holdings] 產業 {len(sectors)} 類")
 
             # ── 前10大持股 ──
+            # v19.249 R18:加「目前無資料」explicit skip 避免日後 parser 誤吃空表 garbage
+            if "目前無資料" in txt and "投資名稱" in txt:
+                print(f"[holdings] top_holdings 表存在但顯示「目前無資料」(multi-asset / 透明度不足 fund 常態)")
+                continue
             if "投資名稱" in txt and "比例" in txt:
                 rows = tbl.find_all("tr")
                 holdings = []
