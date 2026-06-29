@@ -21,6 +21,12 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.238 EX-L1ORCH-1(2026-06-29)**:架構違憲深挖 — `repositories/fund/` 4 處 L1→L2 `calc_metrics` import 復查:
+  - **2 處死 re-export 清除**:`_helpers.py:64` + `nav_metrics.py:28`(純 `noqa: F401` 0 內部 caller)+ 連動清 `_helpers.py` 過時 `_finish_metrics` 註解(`_finish_metrics` 已於 P1-5 搬 `fund_orchestration.py`)
+  - **2 處真呼叫登錄例外 EX-L1ORCH-1**:`fx_and_main.py:27`(於 `fetch_fund_by_key` 收尾呼叫)+ `fund_orchestration.py:30`(於 `_finish_metrics` + `fetch_fund_from_moneydj_url` 收尾)— L1 orchestrator(1766 LOC)抓 NAV+配息後即時 packaging `result["metrics"]` dict;三條替代路徑(整檔搬 L2 反向違憲 / 拆 return 改公開 API 10+ caller / lazy import 純 cosmetic)皆更差,§8.1 step 6 例外正解
+  - **緩解規則**:本例外僅限 `calc_metrics` 單一 symbol;同檔嚴禁追加其他 L2 import;升級觸發 = orchestrator 需呼 ≥2 個 L2 symbol 或 L2 push 業務判斷回 L1
+  - 86 守門 test 全綠;CLAUDE.md §0 收尾紀錄 + §8.2.A 例外清單 + 對應檔註解三同步
+
 - **v19.112 DeadCodeWave3(2026-06-24 session 收尾)**:本 session 累計 5 PR(#348-352)merged → main、無 open PR。
   - **PR #348 v19.108 F-RECON-1 macro_health 雙演算法**:`services/macro_service.py` 新增 `calc_macro_phase_zpct(indicators)` Z-score 百分位演算法(對稱主路徑 `calc_macro_phase`,使用 `math.erf` 實作 Φ(z) 無需 scipy);新建 `services/reconcile.py:reconcile_macro_health` 處理 score-disagree-but-phase-agree 場景(回 `phase_agree` 狀態);加 `_ZPCT_REVERSE_KEYS` SSOT + 14 unit tests(`test_macro_health_zpct.py`)
   - **PR #349 v19.109 立 §-1 工作準則**:CLAUDE.md 新增 §-1「沒實際 bug / 沒具體需求 → 不要動」最高鐵律,凌駕 §0~§8;標準 default = 等指令不主動找事;3 項 WONTFIX 結案(F-SCHEMA-1 pandera / F-PROV-1 phase 22+ / F-RECON-1 phase B/C)
