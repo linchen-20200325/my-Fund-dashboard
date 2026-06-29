@@ -691,8 +691,9 @@ def _autofill_from_moneydj(fund_code: str) -> tuple[str, str, str]:
     if not fund_code:
         return fname, ccy, tier
     try:
-        from fund_fetcher import fetch_fund_from_moneydj_url
-        raw = fetch_fund_from_moneydj_url(fund_code)
+        # v19.240 R8 EX-L1ORCH-1 退役:走 L2 enriched wrapper(含 metrics + reconcile)
+        from services.fund_service import fetch_fund_from_moneydj_url_enriched
+        raw = fetch_fund_from_moneydj_url_enriched(fund_code)
         fname = raw.get("fund_name", "") or ""
         ccy = raw.get("currency", "") or raw.get("metrics", {}).get("currency", "")
     except Exception:

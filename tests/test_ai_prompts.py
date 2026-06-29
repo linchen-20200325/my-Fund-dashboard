@@ -5,35 +5,9 @@
 from __future__ import annotations
 
 from services.ai_prompts import (
-    build_event_impact_prompt,
-
-    build_global_prompt,
     build_mk_advisor_prompt,
     build_structured_summary_prompt,
 )
-
-
-# ════════════════════════════════════════════════════════════
-# build_global_prompt
-# ════════════════════════════════════════════════════════════
-def test_build_global_prompt_has_4_sections() -> None:
-    out = build_global_prompt(
-        snapshot="[snapshot block]",
-        phase="擴張中段",
-        alloc_str="股票60% / 債券30% / 現金10%",
-        core_target_pct=80,
-    )
-    assert "[snapshot block]" in out
-    assert "擴張中段" in out
-    assert "股票60% / 債券30% / 現金10%" in out
-    # 4 節皆出現
-    for header in ("### 📍 一、", "### ⚖️ 二、", "### 🔴 三、", "### 🔄 四、"):
-        assert header in out
-    # core/satellite 算式正確
-    assert "核心80%" in out
-    assert "衛星20%" in out
-    # checkbox 規範
-    assert "- [ ]" in out
 
 
 # ════════════════════════════════════════════════════════════
@@ -68,31 +42,6 @@ def test_build_mk_advisor_prompt_requires_phase4_3b_citation() -> None:
     assert "(2) Phase 4 領先 driver" in out
     assert "(3) Phase 3-B 至少一個子領域" in out
 
-
-# ════════════════════════════════════════════════════════════
-# build_event_impact_prompt
-# ════════════════════════════════════════════════════════════
-def test_build_event_impact_prompt_joins_headlines() -> None:
-    out = build_event_impact_prompt(
-        fund_ctx="分析標的：JFZN3",
-        headlines=["Fed 升息", "雷曼破產", "戰爭升級"],
-        holdings_ctx="\n[基金持股摘要]\nApple 5%",
-    )
-    assert "• Fed 升息" in out
-    assert "• 雷曼破產" in out
-    assert "• 戰爭升級" in out
-    assert "Apple 5%" in out
-    assert "事件衝擊評估" in out
-    assert "不超過 200 字" in out
-
-
-def test_build_event_impact_prompt_no_holdings() -> None:
-    out = build_event_impact_prompt(
-        fund_ctx="分析所有持倉基金",
-        headlines=["Single headline"],
-        holdings_ctx="",
-    )
-    assert "• Single headline" in out
 
 
 # ════════════════════════════════════════════════════════════

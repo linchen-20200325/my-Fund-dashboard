@@ -55,8 +55,8 @@ def test_v19_15_dashboard_empty_path_has_all_required_keys():
 @patch("services.macro_weights_store.apply_weight_overrides")
 @patch("services.macro_composite_score.calculate_composite_score")
 @patch("services.macro_composite_score.composite_verdict")
-@patch("services.macro_service.compute_cluster_signals")
-@patch("services.macro_service.summarize_cluster_consensus")
+@patch("services.macro.compute_cluster_signals")
+@patch("services.macro.summarize_cluster_consensus")
 def test_v19_15_dashboard_full_path_with_funds(
     mock_consensus, mock_clusters, mock_verdict, mock_score, mock_apply
 ):
@@ -94,8 +94,8 @@ def test_v19_15_dashboard_full_path_with_funds(
 @patch("services.macro_weights_store.apply_weight_overrides")
 @patch("services.macro_composite_score.calculate_composite_score")
 @patch("services.macro_composite_score.composite_verdict")
-@patch("services.macro_service.compute_cluster_signals")
-@patch("services.macro_service.summarize_cluster_consensus")
+@patch("services.macro.compute_cluster_signals")
+@patch("services.macro.summarize_cluster_consensus")
 def test_v19_15_dashboard_extreme_bear_triggers_satellite_exit(
     mock_consensus, mock_clusters, mock_verdict, mock_score, mock_apply
 ):
@@ -124,8 +124,8 @@ def test_v19_15_dashboard_extreme_bear_triggers_satellite_exit(
 @patch("services.macro_weights_store.apply_weight_overrides")
 @patch("services.macro_composite_score.calculate_composite_score")
 @patch("services.macro_composite_score.composite_verdict")
-@patch("services.macro_service.compute_cluster_signals")
-@patch("services.macro_service.summarize_cluster_consensus")
+@patch("services.macro.compute_cluster_signals")
+@patch("services.macro.summarize_cluster_consensus")
 def test_v19_15_dashboard_no_funds_returns_ready_with_empty_actions(
     mock_consensus, mock_clusters, mock_verdict, mock_score, mock_apply
 ):
