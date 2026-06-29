@@ -21,6 +21,14 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.248 R22+R23+R24 fetch_holdings 抓取鏈完整修補(2026-06-29)**:
+  - **R22** — `fetch_holdings` 依 `_INSURANCE_SUBDOMAIN_HINTS` 展開保險平台 portal 子網域(JF→jpmorgan/jpmf/jpmfund 等 10 prefix × 1-5 portal × yp013xxx+wq06 兩頁);JFZN3 fallback chain 6 → 12 URL,TLZF9/FLFM1 等保險代碼同理覆蓋
+  - **R23** — `_daily_cache` 加 `cache_if` predicate,失敗結果(empty dict / `source: *all_failed*` / None / 空 Series / 空 list)**不入 cache**;修 R20 引入的「當日第一次失敗鎖整天」鎖死現象;`cache_info` 加 `uncached_fail` 計數供 audit
+  - **R24** — pre-commit `end-of-file-fixer` 對 23 個歷史檔尾巴空行清掃 + 2 JSON 加 final newline(non-functional,修 PR #472 CI Fast checks 紅)
+  - 完整 chain:R18 結構性偵測 → R19 fallback msg → R20 daily cache → R21 6 URL → **R22 insurance portal 展開** → **R23 失敗不入 cache** → R24 CI 修補
+  - Tests:27/27 全綠(R22 4 新 + R23 7 新 + R20 8 + R21 4 + R18 4)
+  - 詳:PR #472 / squash commit `c61ef8e`
+
 - **v19.247 R16 EX-PASSTHRU-1 部分升級 — get_latest_fx 走 L2 facade(2026-06-29)**:
   - 新增 L2 facade `services/fund_service.py::get_latest_fx`(thin wrapper 呼 L1 實作)
   - 9 UI caller migrate import path L1 → L2(investment.py / checkup.py / v2_editor.py / d_mode.py / tab_fund_grp_health / tab2 / tab5 / tab3_portfolio / tab3_t7_ledger)
