@@ -21,6 +21,14 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.244 R12 4 例外復查 + EX-PASSTHRU-1 doc 漂移修(2026-06-29)**:深挖 EX-CACHE-1 / EX-AI-1 / EX-CRUD-1 / EX-PASSTHRU-1 4 例外:
+  - **EX-AI-1**:R7 清死碼後 public fn 4(`assign_asset_role` / `analyze_portfolio_mk_advisor` / `get_gemini_keys` / `gemini_generate`),caller 全用 markdown 渲染,無從 str 萃取數字違規 → 維持
+  - **EX-CRUD-1**:三個 repo(policy / snapshot / ledger)caller 全在 ui/ + 1 處 scripts/(migration),符合 EX-CRUD-1 範圍 → 維持
+  - **EX-CACHE-1**:scope 縮窄 — 實際適用 `repositories/hot_money_repository.py`(`@st.cache_data` ×2),`news_repository.py` docstring 明說「不 cache」;`ledger_repository.py` + `snapshot_repository.py` docstring 明說「純資料層不 import streamlit」,非 EX-CACHE-1 對象。doc audit 註明
+  - **EX-PASSTHRU-1 doc 嚴重漂移**:`get_latest_fx` doc 寫 1 處 caller(`tab3_portfolio.py:2216`),**實際 9 caller files / 18 call sites**(R4 後沒更新),範圍急速擴散但**升級觸發條件未達到**(無多源 fallback / 結果後處理 / cache 集中已自帶);doc 更新完整 caller list,例外維持有效
+  - 0 code change,純文件對齊 + 例外規則復查
+  - 4 例外全部 valid,無升級觸發
+
 - **v19.243 R11 Welford 顯式 深挖維持 WONTFIX + 副產品 §4.3 浮點 == 違憲修(2026-06-29)**:
   - **Welford 深挖確認 ROI=0**:`rolling().std()` 4 處(BB band 3 + liquidity z-score 1)+ `series.std()` 12 處,全部單序列小 N(<1000 點),pandas 內部已 Welford-friendly C-level loop。**0 處 N×T 大序列場景** / **0 處 manual sum-of-squares** / **0 處 catastrophic cancellation**。WONTFIX 維持
   - **副產品 — §4.3 浮點 == 違憲修**:`scripts/calibrate_macro_score.py:234` 原 `xr.std() == 0 or yr.std() == 0` 違 CLAUDE.md §4.3「浮點比較禁止 ==」,改 `np.isclose(..., 0.0, atol=1e-12)`(degenerate spearman 同 deterministic 行為)
