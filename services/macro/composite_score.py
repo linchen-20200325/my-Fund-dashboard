@@ -19,12 +19,27 @@ from __future__ import annotations
 from shared.colors import MATERIAL_GREEN, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200
 
 
-def calculate_composite_score(ind: dict) -> float:
+def calculate_composite_score(ind: dict, *,
+                              provenance_out: dict | None = None) -> float:
     """將 23 項指標 (score × weight) 加總為「宏觀健康度總分」。
 
     缺值/NaN/型別錯誤一律以 0 處理（fillna(0) 等價）；純函式、零快取。
     v19.1 (C-2)：入口呼叫 ``apply_weight_overrides`` — active.json 有 weight 就蓋，
     否則保留呼叫端原值（active 為空時行為跟 v18.x 完全一樣）。
+
+    v19.270 D8 #8 F-PROV-1:opt-in provenance via side-car dict(§2.2 補洞)。
+
+    Parameters
+    ----------
+    ind : dict
+        23 項指標 dict,每項含 score/weight/source/fetched_at(後二者 schema-additive)。
+    provenance_out : dict | None, optional
+        若傳入(非 None),會被填入聚合 provenance:
+        - ``sources``: list[str] — 排序去重的個別指標 source 字串
+        - ``fetched_at_latest``: str — 各指標 fetched_at 取最大值(代表最新一次抓取)
+        - ``contributions``: dict[str, dict] — 每指標 {score, weight, weighted}
+        - ``n_indicators``: int — 實際有效參與的指標數
+        既有 caller 傳 None 行為完全一致;新 caller 傳 dict 取得血緣。
     """
     if not isinstance(ind, dict):
         return 0.0
@@ -34,7 +49,12 @@ def calculate_composite_score(ind: dict) -> float:
     except ImportError:
         pass  # C-2 模組未部署時走原邏輯
     total = 0.0
-    for v in ind.values():
+    # v19.270 D8 #8:provenance 蒐集容器(只在 caller opt-in 時用)
+    _sources: list[str] = []
+    _fetched_at_max: str = ""
+    _contribs: dict[str, dict] = {}
+    _n: int = 0
+    for k, v in ind.items():
         if not isinstance(v, dict):
             continue
         try:
@@ -44,7 +64,25 @@ def calculate_composite_score(ind: dict) -> float:
             continue
         if sf != sf or wf != wf:  # IEEE-754 NaN guard
             continue
-        total += sf * wf
+        contrib = sf * wf
+        total += contrib
+        if provenance_out is not None:
+            _n += 1
+            src = v.get("source")
+            if isinstance(src, str) and src:
+                _sources.append(src)
+            fa = v.get("fetched_at")
+            if isinstance(fa, str) and fa > _fetched_at_max:
+                _fetched_at_max = fa
+            _contribs[str(k)] = {
+                "score": sf, "weight": wf,
+                "weighted": round(contrib, 4),
+            }
+    if provenance_out is not None:
+        provenance_out["sources"] = sorted(set(_sources))
+        provenance_out["fetched_at_latest"] = _fetched_at_max
+        provenance_out["contributions"] = _contribs
+        provenance_out["n_indicators"] = _n
     return round(total, 2)
 
 

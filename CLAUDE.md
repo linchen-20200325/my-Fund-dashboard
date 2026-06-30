@@ -138,7 +138,10 @@
 - ✅ **F-PROV-1 主要 fetcher 全收**(v19.82 → v19.221 逐步):
   - **L1 fetcher 已收**(各帶 `source` + `fetched_at`):`fetch_fred` v19.82 / `fetch_yf_close` v19.83 / `fetch_defillama_stablecoin_mcap` v19.84 / `fetch_aaii_sentiment` v19.84 / `fetch_foreign_flow_series` v19.151 / `fetch_twse_breadth` + `fetch_finmind_foreign_investor` + `fetch_cbc_m1b_m2` v19.94 / `fetch_ndc_signal_history` + `fetch_tw_pmi_local` v19.151 / `fetch_ism_pmi` v19.156(7 個 return 點) / `fetch_macro_compass` v19.86 / `fetch_stooq_csv` v19.197 / `fetch_cboe_csv` v19.221(`s.attrs["source"]/"fetched_at"`)
   - **By-design 不可收**:`fetch_yf_forward_pe` / `fetch_multpl_pe`(`Optional[float]` scalar 結構性無 `.attrs`,docstring 已明說「provenance 由 caller orchestrator 記錄,leaf scalar 不重複 stamp」)
-  - **未收**:macro 12 指標融合處 `calculate_composite_score()` 純函式回 float,聚合後 provenance 遺失。屬**設計缺口**(需新 dataclass / dict wrap 包裝),非單一 fetcher 補洞,需 architecture proposal,等 user 點。
+  - ✅ **macro 融合層 v19.270 D8 #8 落地**:`calculate_composite_score(ind, *, provenance_out=None)`
+    opt-in side-car dict pattern。既有 caller 傳 None 行為零變化;新 caller 傳 dict 取得
+    `sources` / `fetched_at_latest` / `contributions[indicator]` / `n_indicators`。設計選 E
+    (側車容器)避免 dataclass 改 signature 連帶 6+ caller 全 migrate 的 churn。
 
 ### 2.3 Point-in-Time — 防 Lookahead
 
