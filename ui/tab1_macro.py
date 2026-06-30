@@ -836,11 +836,28 @@ def _render_tw_local_dashboard(indicators: dict | None,
     fed_p  = fed.get("prev")
     vix_v  = vix.get("value")
 
+    # v19.268 D8 #7 F-SCHEMA-1:TW locals 4 fetcher schema 驗證(graceful — 驗失敗轉 fail token)
+    def _safe_tw(fetcher, validator):
+        try:
+            return validator(fetcher())
+        except (ValueError, Exception) as _e:  # noqa: BLE001
+            print(f"[tab1_tw_local/schema] {fetcher.__name__} 驗證失敗:{type(_e).__name__}: {str(_e)[:120]}")
+            return {"error": f"schema 違反:{str(_e)[:80]}", "source": None,
+                    "value": None, "score_latest": None, "consec_days": None,
+                    "trend": [], "inflection": "⬜ schema 異常",
+                    "date_latest": "", "reversed": False, "today_net": None}
+
     try:
-        ndc_d    = fetch_ndc_signal_history()
-        pmi_d    = fetch_tw_pmi_local()
-        export_d = fetch_tw_export_yoy()
-        fii_d    = fetch_foreign_consecutive_days()
+        from shared.schemas import (
+            validate_foreign_consec_dict,
+            validate_ndc_signal_dict,
+            validate_tw_export_yoy_dict,
+            validate_tw_pmi_dict,
+        )
+        ndc_d    = _safe_tw(fetch_ndc_signal_history,      validate_ndc_signal_dict)
+        pmi_d    = _safe_tw(fetch_tw_pmi_local,            validate_tw_pmi_dict)
+        export_d = _safe_tw(fetch_tw_export_yoy,           validate_tw_export_yoy_dict)
+        fii_d    = _safe_tw(fetch_foreign_consecutive_days,validate_foreign_consec_dict)
     except Exception as _e:  # noqa: BLE001
         st.warning(f"📊 台股本地視角：fetcher 載入失敗（{_e}）— 跳過本區塊")
         return

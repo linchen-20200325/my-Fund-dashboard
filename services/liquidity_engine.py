@@ -203,6 +203,13 @@ def build_ssr() -> "dict | None":
     SSR 低（Z < 0）= 鏈上法幣子彈多 = 潛在買盤強（偏多訊號），附掛為獨立對沖參考。
     """
     stable = fetch_defillama_stablecoin_mcap()
+    # F-SCHEMA-1 v19.267 D8 #6:出口 schema 驗證(graceful — 驗失敗回 None)
+    try:
+        from shared.schemas import validate_defillama_series
+        stable = validate_defillama_series(stable)
+    except ValueError as _ve:
+        print(f"[liquidity_engine/defillama/schema] 驗證失敗,SSR 不計算:{_ve}")
+        return None
     btc = fetch_yf_close("BTC-USD", "5y")
     if stable.empty or btc.empty:
         return None

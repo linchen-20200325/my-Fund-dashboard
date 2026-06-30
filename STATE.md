@@ -22,6 +22,22 @@
 
 ## 當前版本
 
+- **v19.265 D7 F-SCHEMA-1 Tier 2/3 — stooq + CBOE Series validators(2026-06-30,PR #483,squash `771d256`)**:
+  - **背景**:user honest-scoping 後決定推進 D7(4 個 D epic 中,D6 純 docstring 低 ROI、D8/D9 經實地核對發現大都已 v19.86~v19.221 默默收完,只剩 D7 真有實質工作)
+  - **新增 shared/schemas.py 2 validator**(共用 YahooCloseSchema 結構契約,Series 形狀相同):
+    - `validate_stooq_series(s)` — 結構 + `'stooq:'` source prefix + ISO `fetched_at`
+    - `validate_cboe_series(s)` — 結構 + `'CBOE:'` source prefix + ISO `fetched_at`
+  - **Caller wiring**(`services/risk_radar.py`):
+    - `_safe_validate_stooq` / `_safe_validate_cboe` wrapper:schema 違反 → 回空 Series + log,fallback chain 不鎖
+    - `_resolve_vix3m` chain 3 處(CBOE+stooq×2)+ `_resolve_put_call` chain 2 處(stooq×2)接入
+  - **CI gate**:`tests/test_schemas_phase_d.py` 加入 `.github/workflows/pr-check.yml` schema-gate job
+  - **設計理由**:
+    - **共用結構契約**:stooq/CBOE/Yahoo 三 source Series 形狀相同(datetime → float > 0),YahooCloseSchema 直接複用避免重複 Schema 物件
+    - **fallback chain 防鎖**:strict raise 會中斷 chain(失去 fallback 意義),改用 _safe_validate_* wrapper 回空 → caller 跳下一層。同時 print log,符合 §1 Fail Loud
+    - **長尾擴展 pattern**:後續 dict-return fetcher(AAII / DefiLlama / Taiwan locals)可依此 pattern 增量加
+  - **F-SCHEMA-1 surface 升級**:7 → 9 validator(5 Schema + 9 validator + 7 test file,CI gate 7 test)
+  - **驗證**:phase_d 13 + phase_b 12 + app_smoke 96 = **121 passed**,CI Fast + Schema gate 雙綠
+
 - **v19.263-264 P3 long-tail SSOT 收口(2026-06-30,PR #482,squash `9efb297`)**:
   - **背景**:P3 拆檔(PR #480/#481)後 5 sibling files 殘留 9 處 inline hex,user 指示「請繼續深挖」+「C 項目補上」深挖到底
   - **方法論**:cardinality scan(各 hex 跨檔出現次數)→ 跨檔重複高 ROI 直接收 SSOT;單檔/單用按 user 要求一起收完

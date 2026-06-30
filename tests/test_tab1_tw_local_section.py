@@ -17,29 +17,44 @@ from ui import tab1_macro
 # ────────────────────────────────────────────────────────────────────────
 # Helpers — mock fetcher 回傳 schema 與 mock streamlit 元件
 # ────────────────────────────────────────────────────────────────────────
-def _ok_ndc(score: float = 26.0, prev: float = 24.0):
-    return {'score_latest': score, 'score_prev': prev, 'score_prev2': 22.0,
+# v19.268 D8 #7 後新增 schema validator 要求:
+# - source 必以 'FinMind:' 開頭(非 'FinMind' 純字串)
+# - 須有 ISO 8601 fetched_at(含 'T')
+# - score_latest 必為 int(NDC)
+# - today_net 須是數值或 None(FII)
+# 此 helper 對齊 repository 實際出口 dict 結構,守住生產契約。
+_SRC = 'FinMind:TaiwanMacroEconomics'
+_FETCHED = '2026-06-30T10:00:00+00:00'
+
+
+def _ok_ndc(score: int = 26, prev: int = 24):
+    return {'score_latest': score, 'score_prev': prev, 'score_prev2': 22,
             'trend': [20, 22, 24, 24, prev, score],
             'inflection': '🟢 連3月升',
-            'date_latest': '2026-05-01', 'source': 'FinMind', 'error': None}
+            'date_latest': '2026-05-01', 'source': _SRC,
+            'fetched_at': _FETCHED, 'error': None}
 
 
 def _ok_pmi(val: float = 52.5, prev: float = 50.8):
     return {'value': val, 'prev': prev, 'trend': [49, 50, 51, 51, prev, val],
             'inflection': '🟢 擴張加速',
-            'date_latest': '2026-05-01', 'source': 'FinMind', 'error': None}
+            'date_latest': '2026-05-01', 'source': _SRC,
+            'fetched_at': _FETCHED, 'error': None}
 
 
 def _ok_export(val: float = 8.2, prev: float = 6.5):
     return {'value': val, 'prev': prev, 'trend': [-2, 0, 3, 5, prev, val],
             'inflection': '🟢 正成長加速',
-            'date_latest': '2026-05-01', 'source': 'FinMind', 'error': None}
+            'date_latest': '2026-05-01', 'source': _SRC,
+            'fetched_at': _FETCHED, 'error': None}
 
 
 def _ok_fii(consec: int = 4, prev_streak: int = -3):
     return {'consec_days': consec, 'prev_streak': prev_streak, 'reversed': True,
+            'today_net': 1_500_000_000,  # v19.268 D8 #7 schema 要 numeric/None
             'inflection': '🚀 連3賣→買（拐點）',
-            'date_latest': '2026-06-05', 'source': 'FinMind', 'error': None}
+            'date_latest': '2026-06-05', 'source': _SRC,
+            'fetched_at': _FETCHED, 'error': None}
 
 
 def _err_block(msg: str = 'FinMind 抓取失敗'):

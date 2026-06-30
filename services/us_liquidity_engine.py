@@ -296,8 +296,19 @@ def _aaii_with_judgment() -> dict:
 
     F-H1 v19.77：raw I/O 已下沉 `repositories.macro_repository.fetch_aaii_sentiment`,
     本函式專責 spread → color/label 的 business judgment(L2 純函式)。
+
+    v19.267 D8 #5:加 schema 驗證(graceful — 驗失敗回 _err token,L2 流程不中斷)。
     """
     raw = fetch_aaii_sentiment()
+    # F-SCHEMA-1 v19.267 D8 #5:出口 schema 驗證(失敗 graceful 轉 _err token)
+    try:
+        from shared.schemas import validate_aaii_sentiment
+        raw = validate_aaii_sentiment(raw)
+    except ValueError as _ve:
+        print(f"[us_liquidity/aaii/schema] 驗證失敗:{_ve}")
+        raw = {"_err": f"AAII schema 驗證失敗:{str(_ve)[:120]}",
+               "source": raw.get("source", "AAII:scrape:sentiment_spread"),
+               "fetched_at": raw.get("fetched_at", "")}
     if "_err" in raw:
         return raw
     spread = raw["value"]
