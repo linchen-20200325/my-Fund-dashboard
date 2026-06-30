@@ -22,6 +22,19 @@
 
 ## 當前版本
 
+- **v19.275 深度死碼掃描 + 清理 A+B(2026-06-30,PR #488,squash `1175073`)**:
+  - **背景**:user 要求「深度檢查是否還有雜亂的程式碼與死碼讓系統拖累跟膨脹」
+  - **方法論**:4 路並行 Explore agent(殭屍函式 / 死 import / legacy檔+scripts / 大檔膨脹)+ **逐一 adversarial 驗證**
+  - **關鍵:raw scan 偽陽性率高,驗證救回 4 個誤判**(若直接刪會炸 production):
+    - `backtest_turning_points` / `backtest_sub_cycle_lights` — agent 報 0-caller,實際 inflection.py:445 / tab3_t7_ledger:2743 / tab5:715 有呼叫
+    - `_helpers.py` dead imports — re-export hub(`# noqa: F401` 刻意 shim)
+    - `migrate_v149_schema.py` — tab3:864 有 live UI 按鈕
+  - **A — 刪 3 孤兒 SSOT 常數**(`shared/macro_buckets.py`):`LEVEL_EMOJI` / `LEVEL_RANK` / `BUCKET_LEVEL_LABEL` 全站 0 ref(連 test 都沒)。成因:P3 拆 tab1_macro 5 section 前的「5 桶視覺 registry」,section 改手寫未接 → 孤兒。**誠實縮範圍 5→3**(`BUCKET_ORDER`/`BUCKET_META` 守 live `BUCKET_DANGER_SPECS` taxonomy 保留;`LEVEL_COLOR` danger.py 消費保留)
+  - **B — 刪 2 dev throwaway script + 1 test**:`scripts/compare_wb01_vs_local.py`(108)+ `scripts/eval_macro_consensus.py`(323)+ `tests/test_eval_macro_consensus.py`。runtime 從不 import,非運行系統膨脹,純 repo 整潔度
+  - **淨 -758 LOC**
+  - **系統健康結論**:整體很乾淨——debt markers 僅 3(全 benign)、v19.261-274 新增碼 0 死碼、前 4 階段 + PHASE1/Phase2 已把真違規清光。本次只挖到 1 個 production 孤兒常數 cluster + 2 個 dev script 雜物
+  - **驗證**:CI Fast + Schema gate + Slow tests 三項全綠
+
 - **v19.274 Phase 2 收尾 — mk_clock 第4 chrome + #111 chip bg 2 保留項 SSOT(2026-06-30,PR #487,squash `61c6bdf`)**:
   - **背景**:user 指示深挖 PHASE1_AUDIT_DELTA.md 2 個保留項,深挖後確認都是真 SSOT gap(非單純 cosmetic)
   - **mk_clock 第 4 處 chrome**(`f62fe89`):`ui/components/mk_clock.py:237` 三面向訊號 cell 卡外框收斂至 `gh_card`(byte-identical)。**全站 4 個 GitHub-style 卡片 chrome 100% 收斂至 `ui/components/cards.gh_card`**
