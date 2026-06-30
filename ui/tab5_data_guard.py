@@ -1016,7 +1016,9 @@ def render_data_guard_tab() -> None:
             _d5_m     = _d5_fd.get("metrics", {}) or {}
             _d5_err   = _d5_fd.get("error", "") or _d5_mj.get("error", "")
             _d5_nav   = _d5_m.get("nav") or _d5_mj.get("nav")
-            _d5_adr   = _d5_mj.get("moneydj_div_yield") or _d5_m.get("annual_div_rate")
+            # v19.272 Phase 2 TOP 1.3:adr 走 SSOT 3 層 fallback chain(原行內 2 層收斂)
+            from services.health.dividend import _resolve_adr_with_fallback
+            _d5_adr, _ = _resolve_adr_with_fallback(_d5_fd)
             _d5_perf  = _d5_mj.get("perf", {}) or {}
             _d5_risk  = (_d5_mj.get("risk_metrics", {}) or {})
             _d5_r1y   = (_d5_risk.get("risk_table") or {}).get("一年", {}) or {}

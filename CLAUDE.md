@@ -137,7 +137,7 @@
 - `infra/cache.py` `_CACHE_REGISTRY` 集中註冊所有 cache 函式,supports「clear all」
 - ✅ **F-PROV-1 主要 fetcher 全收**(v19.82 → v19.221 逐步):
   - **L1 fetcher 已收**(各帶 `source` + `fetched_at`):`fetch_fred` v19.82 / `fetch_yf_close` v19.83 / `fetch_defillama_stablecoin_mcap` v19.84 / `fetch_aaii_sentiment` v19.84 / `fetch_foreign_flow_series` v19.151 / `fetch_twse_breadth` + `fetch_finmind_foreign_investor` + `fetch_cbc_m1b_m2` v19.94 / `fetch_ndc_signal_history` + `fetch_tw_pmi_local` v19.151 / `fetch_ism_pmi` v19.156(7 個 return 點) / `fetch_macro_compass` v19.86 / `fetch_stooq_csv` v19.197 / `fetch_cboe_csv` v19.221(`s.attrs["source"]/"fetched_at"`)
-  - **By-design 不可收**:`fetch_yf_forward_pe` / `fetch_multpl_pe`(`Optional[float]` scalar 結構性無 `.attrs`,docstring 已明說「provenance 由 caller orchestrator 記錄,leaf scalar 不重複 stamp」)
+  - **WONTFIX(v19.271 C 深挖確認)**:`fetch_yf_forward_pe` / `fetch_multpl_pe` 兩 fn **production 0 caller**(`services/valuation.py` v19.251 已退役,Forward P/E 改 `shared/macro_buckets.py:150-153` inline literal),且 fn 內部 `print(f"[external_market/...]")` console log 已具 audit trail。包 NamedTuple/dict 雖技術可行但 0 caller = ROI 0,§-1 不主動推。**未來條件**:若 V5 修補復活並接入 orchestrator,再評估 NamedTuple 包裝。
   - ✅ **macro 融合層 v19.270 D8 #8 落地**:`calculate_composite_score(ind, *, provenance_out=None)`
     opt-in side-car dict pattern。既有 caller 傳 None 行為零變化;新 caller 傳 dict 取得
     `sources` / `fetched_at_latest` / `contributions[indicator]` / `n_indicators`。設計選 E
@@ -535,15 +535,22 @@ except ImportError:
     **剩 `ui/components/macro_card_edu.py:300-304` 教學文(<4% 樂觀 / 4-6% 中性 / >6% 走擴 /
     >10% 崩潰)**:**by-design 不收**,屬「threshold story 文檔」而非「inline 邏輯」,
     若 threshold 改 narrative 也需重寫,SSOT 化反而綁死敘事(§8.1 step 6 反例)。
+    v19.271 C 深挖確認:`macro_card_edu.py` 共 25 個 `how_to_read` 表(VIX/PMI/CPI/HY/Sahm/SLOOS
+    /yield spread/Fed rate/NFP/ICSA/CCSA/Consumer Sentiment/DXY/LEI 等),全為 `(str, str)`
+    documentation literal 不參與 calculation;HY 4 級含「>10% 崩潰」與 stoplight 3 級**層級不對齊**,
+    強收會遺失教學資訊;VIX 教學表 22/30 與 v19.160 SSOT 數值巧合相同但 5 級結構仍應 inline。
+    本檔語意分離為 feature 不是 bug。
   - **CPI(部份收)**:`shared/macro_thresholds_v2.py:CPI_YOY_THRESHOLDS` schema 落地(stoplight /
     score_function / inflection_detection / regime_classification / beginner_panic 5 section);
     `services/macro_validation.py` SCORE_RULES 已對齊 score_function。
     **剩 2 處 logic inline**(`services/macro/macro_score.py:69` lambda + `ui/helpers/macro/helpers.py:183` 3.0 check)
     需 caller migrate,中風險(動 core scoring path),等實際 bug / user 需求觸發。
-  - **PMI(WONTFIX,user 撤銷)**:user 2026-06-26 明確撤銷 v19.147 multi-cutoff,接受 PMI
-    stoplight (50.0) vs regime (52.0) vs alert (50.0) 不同源 trade-off。**等同明確 declines**,
-    不再規劃 harmonize 動作。`shared/macro_thresholds_v2.py:PMI_THRESHOLDS` 已備好 schema,
-    僅 `ui/tab1_macro.py` 用 `alert_generation.contraction_below`,**其餘維持現狀**。
+  - **PMI(WONTFIX 二段澄清,v19.271 C 深挖確認)**:user 2026-06-26 撤銷的是**「harmonize 統一值」**
+    (50.0 / 52.0 / 45.0 不同源 trade-off),**不是「SSOT 化(下沉但不統一值)」**。後者已 v19.179 PR-1~3
+    完整落地:`shared/macro_thresholds_v2.py:141-203` PMI_THRESHOLDS schema 8 sub-dict 完整 +
+    10 production consumer 全 migrate import + `tests/test_macro_thresholds_v2.py` lock(含 TW_PMI_THRESHOLDS
+    line 266 同步 SSOT)。剩餘 inline 命中皆為**文件 / 註解 / 教學字串 / UI slider default**,非邏輯 inline,
+    屬 §8.1 step 6「文檔 SSOT 化反綁死敘事」反例,**by-design 不收**。**最小行動:無**。
   - ✅ **Architecture proposal v19.168 已落地**:`shared/macro_thresholds_v2.py` schema 已生效
     (HY/CPI/PMI 三 dict 註冊);SPEC §16.2 設計案 + per-indicator migration phases 已寫入。
 

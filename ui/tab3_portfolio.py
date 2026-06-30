@@ -1247,7 +1247,12 @@ def render_portfolio_tab() -> None:
                             "metrics": _metrics, "moneydj_raw": _mj,
                         })
                         _tret = float(_tret_v or 0)
-                        _dyld = float(_mj.get("moneydj_div_yield") or _metrics.get("annual_div_rate") or 0)
+                        # v19.272 Phase 2 TOP 1:adr 走 SSOT 3 層 fallback chain(原行內 2 層收斂)
+                        from services.health.dividend import _resolve_adr_with_fallback
+                        _dyld_v, _ = _resolve_adr_with_fallback({
+                            "metrics": _metrics, "moneydj_raw": _mj,
+                        })
+                        _dyld = float(_dyld_v or 0)
                         if _dyld > 0:
                             _div_info = div_safety_check(_tret, _dyld)
                     except Exception:
@@ -2038,33 +2043,11 @@ def render_portfolio_tab() -> None:
                 _is_real = _ret_v is not None
                 _ret_window_days = None    # v18.65 短窗口提示（helper 內部已標明來源）
 
-                try:
-                    _div = float(_mj.get("moneydj_div_yield") or _m.get("annual_div_rate") or 0)
-                except Exception:
-                    _div = 0.0
-                # v18.49 配息率 fallback：從 divs 歷史推算（12M 累積配息 / 現價）
-                if _div <= 0:
-                    _divs_f = _f.get("dividends") or []
-                    if _divs_f:
-                        try:
-                            import datetime as _dt_t3d
-                            _ctf = _dt_t3d.datetime.now() - _dt_t3d.timedelta(days=365)
-                            _sa = 0.0
-                            for _dd in _divs_f:
-                                _ds = (_dd.get("date") or "").replace("/", "-")
-                                try:
-                                    _dp = _dt_t3d.datetime.strptime(_ds[:10], "%Y-%m-%d")
-                                except (ValueError, TypeError):
-                                    continue
-                                if _dp >= _ctf:
-                                    _sa += float(_dd.get("amount", 0) or 0)
-                            _nv = _m.get("nav") or _mj.get("nav_latest")
-                            try: _nv = float(_nv) if _nv is not None else None
-                            except (TypeError, ValueError): _nv = None
-                            if _sa > 0 and _nv and _nv > 0:
-                                _div = round((_sa / _nv) * 100.0, 2)
-                        except Exception:
-                            pass  # smoke-allow-pass — divs 歷史推算失敗不影響其他維度
+                # v19.272 Phase 2 TOP 1.2:adr 走 SSOT _resolve_adr_with_fallback 3 層 chain
+                # 原 line 2042 + 2046-2067 inline 3 層 fallback 完全複製 SSOT 邏輯,收掉 22 LOC
+                from services.health.dividend import _resolve_adr_with_fallback
+                _div_v, _ = _resolve_adr_with_fallback(_f)
+                _div = round(float(_div_v), 2) if _div_v else 0.0
                 _rc_names.append(_name)
                 _rc_ret.append(round(_ret_v, 2) if _ret_v is not None else 0.0)
                 _rc_div.append(round(_div, 2))
