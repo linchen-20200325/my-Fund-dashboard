@@ -293,96 +293,6 @@ def render_indicator_map() -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-# v19.14：雙軌 banner 標籤（與 ui.tab_crisis_backtest.MULTIFACTOR_MODE_LABELS 對齊；
-# 此處硬編避免循環依賴 — tab_crisis_backtest 也 import 自 services 層）
-_PENDING_MODE_LABELS = {
-    "macro": "🏔️ 總經長期",
-    "pullback": "⚡ 短期回檔",
-}
-
-
-def _render_one_pending_banner(mode: str, payload: dict) -> None:
-    """v19.14：單一 mode 的待審 banner + ✅/❌ 按鈕（避免 widget key collision）."""
-    from services.macro_weights_store import approve_pending, reject_pending
-
-    label = _PENDING_MODE_LABELS.get(mode, mode)
-    _meta = payload.get("oos_metrics") or {}
-    _calibrated_at = payload.get("calibrated_at", "—")
-    _method = payload.get("calibration_method", "—")
-    _n_ind = len(payload.get("indicators") or {})
-    _oos_f1 = _meta.get("oos_f1", 0.0)
-    _oos_sharpe = _meta.get("oos_sharpe", 0.0)
-    _n_folds = _meta.get("n_folds", 0)
-    _ai_text = payload.get("ai_explanation") or "_（無 AI 解讀）_"
-
-    st.markdown(
-        f"<div style='background:#3a2700;border:2px solid #ff9800;"
-        f"border-radius:10px;padding:14px 18px;margin:0 0 14px'>"
-        f"<div style='color:#ff9800;font-weight:700;font-size:16px;margin-bottom:6px'>"
-        f"⚠️ {label} 有 1 筆新權重待審核</div>"
-        f"<div style='color:#e6edf3;font-size:13px;line-height:1.6'>"
-        f"來源：<code>{_method}</code>　|　提交時間：<code>{_calibrated_at}</code>　|　"
-        f"涵蓋 <b>{_n_ind}</b> 個指標<br>"
-        f"OOS F1 = <code>{_oos_f1:.3f}</code>　|　"
-        f"OOS Sharpe = <code>{_oos_sharpe:.3f}</code>　|　"
-        f"折數 = <code>{_n_folds}</code>"
-        f"</div></div>",
-        unsafe_allow_html=True,
-    )
-
-    with st.expander(f"🤖 看 {label} AI 解讀", expanded=False):
-        st.markdown(_ai_text)
-
-    col_a, col_b, _ = st.columns([1, 1, 4])
-    if col_a.button(
-        f"✅ 批准 {label}（升格為 active）",
-        type="primary",
-        key=f"_pending_approve_btn_{mode}",
-        use_container_width=True,
-    ):
-        if approve_pending(mode=mode):
-            st.success(
-                f"✅ {label} 已升格為 active — 重整套用（C-2 後面板會載入新權重）"
-            )
-            st.rerun()
-        else:
-            st.error("❌ 升格失敗（可能 pending 已被刪除或 corrupt）")
-    if col_b.button(
-        f"❌ 拒絕 {label}（刪除待審）",
-        type="secondary",
-        key=f"_pending_reject_btn_{mode}",
-        use_container_width=True,
-    ):
-        if reject_pending(mode=mode):
-            st.warning(f"🗑️ 已拒絕 {label}，該 mode pending 檔已刪除")
-            st.rerun()
-
-
-def _render_pending_weights_banner() -> None:
-    """📌 Route C-1：偵測待審權重，存在則顯示審核 banner.
-
-    v19.14：mode-aware — 逐 mode 檢查 ``has_pending(mode=mode)``，每個有 pending 的
-    mode 各自獨立渲染 1 條橘色 banner + 1 對 ✅/❌ 按鈕（widget key 帶 mode 後綴）。
-    兩 mode 都無 pending → 完全不渲染（無噪音）。
-    """
-    try:
-        from services.macro_weights_store import (
-            PENDING_MODES,
-            has_pending,
-            load_pending,
-        )
-    except ImportError:
-        return  # Route C 未部署時靜默退場
-
-    for mode in PENDING_MODES:
-        if not has_pending(mode=mode):
-            continue
-        payload = load_pending(mode=mode)
-        if not payload:
-            continue
-        _render_one_pending_banner(mode, payload)
-
-
 # ════════════════════════════════════════════════
 # v19.15：即時訊號燈 + 決策矩陣
 # ════════════════════════════════════════════════
@@ -698,7 +608,7 @@ def _render_macro_navigator(indicators: dict | None,
 
 
 def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") -> None:
-    """✨ v19.17：新手友善總經面板 — 接在 pending banner 後、v19.15 進階區之前。
+    """✨ v19.17：新手友善總經面板 — 接在 tab header 後、v19.15 進階區之前。
 
     v19.21：頂部結論大卡升級為「雙速合議」— 慢總經 ｜ 短線雷達 ｜ 合議行動。
     fred_api_key 為空或 <30 字元時自動 fallback 回 v19.17 單頭 banner（AppTest 保護）。
@@ -1004,7 +914,7 @@ def _render_tw_local_dashboard(indicators: dict | None,
 
 
 def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
-    """🎯 v19.15：即時訊號燈 + 決策矩陣 — 接在 pending banner 後、tabs 前。
+    """🎯 v19.15：即時訊號燈 + 決策矩陣 — 接在 tab header 後、tabs 前。
 
     3 區塊：
       1. 頂部即時 verdict 大卡（icon + level + 分數 + 配置建議）
@@ -1125,9 +1035,6 @@ def render_macro_tab() -> None:
     from ui.helpers.data_registry import _update_data_registry
 
     st.markdown("## 🌐 總經位階評估 ＆ 拐點偵測")
-
-    # ── 📌 Route C-1：待審權重 banner（從危機回測室提交過來的）───
-    _render_pending_weights_banner()
 
     from ui.helpers.story_nav import render_story_nav
     render_story_nav("macro")
