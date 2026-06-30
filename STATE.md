@@ -21,6 +21,20 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.250 B Route C-1 pending review ceremony 整批拔毒(2026-06-30)**:
+  - User 訊號:總經 Tab 顯示「X 筆新權重待審核」橘色 banner,User 確認該 ceremony 已不再使用 → 選方案 B 拔 pending UI,保留 active.json 注入機制讓 production scoring 正常運作(可手動編輯 active.json)
+  - 退役:`services/macro/weights_store.py` 的 pending 6 fn(load_pending / save_pending / approve_pending / reject_pending / has_pending / build_payload_from_multifactor)+ pending helper + GS pending CRUD + PENDING_MODES 常數 + dual-mode 路由,4 個 active fn(load_active / apply_weight_overrides / get_verdict_cutoffs / get_weight_override / get_phase_thresholds)100% 保留
+  - 退役:`services/ai_advisor_pending.py::explain_pending_weights` + 3 helper(pending 事後 AI 解讀);**保留**`recommend_weights` + 3 helper(AutoSearch top-5 winners 仍 reuse)
+  - 退役:`ui/tab1_macro.py` 的 `_render_one_pending_banner` + `_render_pending_weights_banner` + render_macro_tab caller + 2 處 stale docstring
+  - 退役:`ui/tab_crisis_backtest.py` 的 `_render_ai_recommendation_section`(事前 AI 提交建議) + `_render_pending_submit_section`(📌 提交按鈕)+ 兩處 caller
+  - 退役:`services/config/macro_weights_pending.json`(active.json 留)
+  - 退役:`tests/test_macro_weights_store.py` 的 40 個 pending 系列 test(留 23 個 active 系列)
+  - 保留:6 個 production scoring consumer 全 0 改動 — `composite_score` / `explain` / `causal_sankey` / `realtime_signal` / `calibration/macro_score` / `ui/helpers/macro/helpers`
+  - 保留:AutoSearch AI 比對線 `_render_autosearch_ai_section` + `recommend_weights` 完整不動
+  - Net diff:**−857 LOC**(115 insertions / 972 deletions across 5 檔 + 1 JSON 刪)
+  - Tests:2266 passed / 0 regression(全 fast suite)
+  - 4 例外清單對齊:EX-CACHE-1 / EX-AI-1 / EX-CRUD-1 / EX-PASSTHRU-1 全不受影響
+
 - **v19.249 R25 doc-sync — CLAUDE.md §8.2「白話名 / 3 鐵盒」對照欄(2026-06-30)**:
   - User 上個 turn 把 SaaS audit template 套進來提議「植入 DataFetcher / CalcEngine / ComponentUI 三鐵盒架構」;深挖發現 3 鐵盒模型 = 既有 L1/L2/L3 100% 對齊,且 L0 Infra/Shared 在 3 鐵盒沒有對應位(塞進任一鐵盒都違 §8.2 硬規則第 3 條)
   - 取代「植入第二份架構」(A 改名 / B 包大 class / C 加 facade,3 條都負 ROI),改純 doc 加白話對照欄
