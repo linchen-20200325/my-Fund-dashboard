@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 
 from repositories.fund import (
     tdcc_search_fund,
@@ -570,7 +570,7 @@ def render_single_fund_tab() -> None:
                     st.markdown(gh_card(
                         f"<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
                         f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.0（{_m_mode} ｜ σ 來源：{_m_std_src}）</span>"
-                        f"<span style='background:#111;color:{_m_pc};border:1px solid {_m_pc};padding:2px 10px;"
+                        f"<span style='background:{CHIP_BG_NEAR_BLACK};color:{_m_pc};border:1px solid {_m_pc};padding:2px 10px;"
                         f"border-radius:12px;font-size:12px;font-weight:700'>{_m_pl}</span>"
                         f"</div>"
                         + _rows
@@ -1010,7 +1010,7 @@ def render_single_fund_tab() -> None:
                                 nav_change=float(m.get("ret_1y", 0) or 0),
                             )
                             _al = _ds.get("alert_level","grey")
-                            _bg = {"red":BG_DARK_RED_1,"yellow":BG_DARK_AMBER_1,"green":BG_DARK_GREEN_1}.get(_al,"#111")
+                            _bg = {"red":BG_DARK_RED_1,"yellow":BG_DARK_AMBER_1,"green":BG_DARK_GREEN_1}.get(_al,CHIP_BG_NEAR_BLACK)
                             _bc = {"red":MATERIAL_RED,"yellow":MATERIAL_ORANGE,"green":MATERIAL_GREEN}.get(_al,TRAFFIC_NEUTRAL)
                             st.markdown(
                                 f"<div style='background:{_bg};border:1px solid {_bc};border-radius:8px;"

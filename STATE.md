@@ -22,6 +22,19 @@
 
 ## 當前版本
 
+- **v19.273 Phase 2 TOP 2+3 — gh_card chrome SSOT + EX-PASSTHRU-1 補登(2026-06-30,PR #486,squash `098796f`)**:
+  - **背景**:user 指示「做 TOP 2 / TOP 3」,依 `PHASE1_AUDIT_DELTA.md` 收完最後 2 個候選
+  - **TOP 2 — GitHub-style 卡片外框 chrome SSOT**:
+    - **審查修正**:原 audit 建議收斂到 `_render_macro_indicator_card` 為誤判——3 site 形狀全不同(策略訊號 banner / σ 買賣點表卡 / empty-state),都不是 metric card。正確 SSOT 為「卡片外框 chrome」
+    - 新檔 `ui/components/cards.py`:`gh_card(inner, *, radius, padding, margin, extra)` 純字串 helper(零 streamlit/plotly/pandas 依賴,只 shared.colors L0),**byte-identical 輸出設計**(margin/extra 空時省略宣告)
+    - 5 commits 小步快跑:helper + `test_cards_chrome.py` 6 case 守門(`52dfa81`)→ Site 1 tab2:359 banner(`09b19bb`)→ Site 2 tab2:564 σ卡(`5a1d93d`)→ Site 3 tab1_macro_inflection:248 empty-state(`18b2a51`)
+    - 第 4 處(`mk_clock.py`)等該檔下次觸碰順手收
+  - **TOP 3 — EX-PASSTHRU-1 補登**(`e4a5aeb`,純文件):
+    - CLAUDE.md §8.2.A 補第 6 組 entry:`ui/tab1_macro.py:821` UI 直呼 4 個 TW 本地總經 self-contained L1 fetcher(v19.197 P1-4 下沉後既有 pattern)
+    - callsite 加 3 行註解指回例外表
+  - **驗證**:CI Fast + Schema gate 雙綠;test_cards_chrome 6 + tab2 16 + tab1_macro 13 + app_smoke 96 = 131 passed / 2 skipped
+  - **Phase 2 全收**:TOP 1(PR #485 ADR SSOT)+ TOP 2(card chrome)+ TOP 3(EX-PASSTHRU-1)= PHASE1_AUDIT_DELTA.md 3 大候選 100% 清空。排毒達穩態,§-1 停手等指令
+
 - **v19.272 Phase 2 TOP 1 — Tab3/Tab5 ADR fallback SSOT 收斂(2026-06-30,PR #485,squash `4ce2bf4`)**:
   - **背景**:user 啟動 Phase 2「精準打擊與實作」,依 `PHASE1_AUDIT_DELTA.md` TOP 1 收斂 3 個 ADR callsite
   - **方法論**:小步快跑(1 site → test → 1 commit × 3),每步 0 regression,鐵血鐵律(SSOT 收斂 / 拒絕狗皮膏藥 / 增量修改)

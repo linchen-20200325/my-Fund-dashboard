@@ -233,11 +233,13 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
             else:
                 num_html = f"{fmt.format(val)}{unit} {arrow}"
                 tag = ""
-            return (
-                f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:8px;padding:10px;text-align:center'>"
+            # v19.274 Phase 2 收尾:卡片外框走 gh_card chrome SSOT(byte-identical;第 4/4 處)
+            from ui.components.cards import gh_card
+            return gh_card(
                 f"<div style='font-size:11px;color:{TRAFFIC_NEUTRAL}'>{label}</div>"
                 f"<div style='font-size:18px;font-weight:600;color:#e0e0e0'>{num_html}</div>"
-                f"{tag}</div>"
+                f"{tag}",
+                radius=8, padding="10px", margin="", extra="text-align:center",
             )
 
         st.markdown(
