@@ -78,7 +78,7 @@ def _mock_streamlit(monkeypatch, session_state: dict):
 def test_snapshot_sections_include_all_new_v255():
     """v18.255：sections 清單包含 9 個新章節 + 校準健檢 + 既有 5 章節 + 新聞時事。"""
     import fund_fetcher  # noqa: F401
-    from ui.tab1_macro import _build_macro_ai_snapshot
+    from ui.tab1_macro_ai import _build_macro_ai_snapshot
     _, _, sections = _build_macro_ai_snapshot({}, {}, {}, {}, [])
     must_have = ["景氣位階與分數", "校準健檢", "流動性壓力", "景氣循環羅盤",
                  "23 項加扣分明細", "資本防線", "倒掛翻正歷史回測",
@@ -91,7 +91,7 @@ def test_snapshot_sections_include_all_new_v255():
 def test_snapshot_reads_liquidity_stash(monkeypatch):
     """v18.255：session_state['_macro_liquidity'] 有資料時，snapshot 應出現「流動性壓力」段。"""
     import fund_fetcher  # noqa: F401
-    from ui.tab1_macro import _build_macro_ai_snapshot
+    from ui.tab1_macro_ai import _build_macro_ai_snapshot
     _mock_streamlit(monkeypatch, {
         "_macro_liquidity": {
             "value": 1.45, "tier": "警戒", "signal": "🟡",
@@ -112,7 +112,7 @@ def test_snapshot_reads_liquidity_stash(monkeypatch):
 def test_snapshot_reads_capital_line_stash(monkeypatch):
     """v18.255：本金侵蝕基金應出現在白話摘要。"""
     import fund_fetcher  # noqa: F401
-    from ui.tab1_macro import _build_macro_ai_snapshot
+    from ui.tab1_macro_ai import _build_macro_ai_snapshot
     _mock_streamlit(monkeypatch, {
         "_macro_capital_line": {
             "n_funds": 5,
@@ -131,7 +131,7 @@ def test_snapshot_reads_capital_line_stash(monkeypatch):
 def test_snapshot_calibration_three_step_format(monkeypatch):
     """v18.255：校準健檢改三段式（代表/為什麼/該怎麼做）。"""
     import fund_fetcher  # noqa: F401
-    from ui.tab1_macro import _build_macro_ai_snapshot
+    from ui.tab1_macro_ai import _build_macro_ai_snapshot
     _mock_streamlit(monkeypatch, {
         "_cal_macro_score": {
             "src": "真實 FRED + SPX × 10 年（120 月）",
@@ -164,7 +164,7 @@ def test_snapshot_calibration_three_step_format(monkeypatch):
 def test_snapshot_reads_hot_money_divergence(monkeypatch):
     """v18.255：熱錢三角交叉背離應在 snapshot 標註。"""
     import fund_fetcher  # noqa: F401
-    from ui.tab1_macro import _build_macro_ai_snapshot
+    from ui.tab1_macro_ai import _build_macro_ai_snapshot
     _mock_streamlit(monkeypatch, {
         "_macro_hot_money": {
             # R26: 動態日期防 staleness threshold(原寫死 "2026-05-30",
@@ -188,7 +188,7 @@ def test_snapshot_reads_hot_money_divergence(monkeypatch):
 def test_snapshot_no_state_no_section(monkeypatch):
     """v18.255：當 session_state 空時，snapshot 不應該出現新章節資料行（但 sections 清單仍含 key）。"""
     import fund_fetcher  # noqa: F401
-    from ui.tab1_macro import _build_macro_ai_snapshot
+    from ui.tab1_macro_ai import _build_macro_ai_snapshot
     _mock_streamlit(monkeypatch, {})
     snap, _, sections = _build_macro_ai_snapshot({}, {}, {}, {}, [])
     # 沒 stash → snapshot 不應出現「流動性壓力」「本金侵蝕」「熱錢」等具體判讀
@@ -202,7 +202,7 @@ def test_snapshot_no_state_no_section(monkeypatch):
 def test_snapshot_reads_23items_top_contributors(monkeypatch):
     """v18.255：23 項明細 Top3 正/負貢獻寫入 snapshot。"""
     import fund_fetcher  # noqa: F401
-    from ui.tab1_macro import _build_macro_ai_snapshot
+    from ui.tab1_macro_ai import _build_macro_ai_snapshot
     _mock_streamlit(monkeypatch, {
         "_macro_23items": {
             "n_total": 23, "n_pos": 12, "n_neg": 8,
