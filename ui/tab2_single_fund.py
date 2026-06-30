@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_NEUTRAL, WHITE
 
 from repositories.fund import (
     tdcc_search_fund,
@@ -275,7 +275,7 @@ def render_single_fund_tab() -> None:
                     f"border-radius:10px;padding:14px 18px;margin:8px 0'>"
                     f"<div style='color:#ff9800;font-weight:700;font-size:13px;margin-bottom:8px'>"
                     f"🟡 部分資料（歷史淨值序列未取得，下方顯示已有資訊）</div>"
-                    + (f"<div style='color:#ccc;font-size:11px;margin-bottom:6px'>{_p_err}</div>"
+                    + (f"<div style='color:{GRAY_CC};font-size:11px;margin-bottom:6px'>{_p_err}</div>"
                        if _p_err else "")
                     + (f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;border-top:1px solid {BG_DARK_AMBER_1};padding-top:8px;margin-top:4px'>"
                     f"💡 系統已自動嘗試境內/境外雙路由。若仍失敗，可直接貼入完整 MoneyDJ 網址：<br>"
@@ -354,7 +354,7 @@ def render_single_fund_tab() -> None:
                         _aa_stk, _aa_bnd, _aa_lbl, _aa_c = _aa
                         st.markdown(f"<div style='background:{BG_DARK_NAVY_1};border:1px solid {_aa_c};border-radius:8px;padding:8px 14px;margin:4px 0 8px 0;display:flex;align-items:center;gap:16px'>"
                             f"<span>📊</span><div><div style='color:{_aa_c};font-weight:700;font-size:12px'>總經自動配比建議：{_aa_lbl}</div>"
-                            f"<div style='color:#ccc;font-size:12px'>股 {_aa_stk}% ／ 債 {_aa_bnd}%</div></div></div>", unsafe_allow_html=True)
+                            f"<div style='color:{GRAY_CC};font-size:12px'>股 {_aa_stk}% ／ 債 {_aa_bnd}%</div></div></div>", unsafe_allow_html=True)
                     _sig_style = sig["sig_style"]
                     st.markdown(f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:10px;padding:14px 18px;margin:8px 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap'>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>資產屬性</div><div style='font-size:14px;font-weight:700;color:#58a6ff'>{sig['asset_class']}</div></div>"
@@ -504,7 +504,7 @@ def render_single_fund_tab() -> None:
                             text=[f"{v:+.1f}%" for v in [_m_gd, _m_od, _m_nd]],
                             textposition="outside",
                             textfont=dict(size=10)))
-                        fig_mini.add_hline(y=0, line_color="#555", line_width=1)
+                        fig_mini.add_hline(y=0, line_color=GRAY_55, line_width=1)
                         fig_mini.update_layout(
                             paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
                             font_color=GH_FG_PRIMARY, height=240,
@@ -531,16 +531,16 @@ def render_single_fund_tab() -> None:
                 def _proximity_chip(nav_v, target, is_buy):
                     """買: nav≤target 觸發；賣: nav≥target 觸發；±NEAR% 為接近區"""
                     if (not target) or nav_v <= 0:
-                        return ("—", "#666", "")
+                        return ("—", GRAY_66, "")
                     delta = (nav_v - target) / target * 100  # 正=高於 target
                     if is_buy:
                         if delta <= 0:           return ("🟢 觸發", MD_GREEN_A400, f"{abs(delta):.2f}% 已破")
                         elif delta <= _NEAR:     return ("⚠️ 接近", "#ffa726", f"還差 {delta:.2f}%")
-                        else:                    return ("▲ 距離", "#666",    f"還差 {delta:.2f}%")
+                        else:                    return ("▲ 距離", GRAY_66,    f"還差 {delta:.2f}%")
                     else:
                         if delta >= 0:           return ("🔔 觸發", MATERIAL_RED, f"{delta:.2f}% 已過")
                         elif delta >= -_NEAR:    return ("⚠️ 接近", "#ffa726", f"還差 {-delta:.2f}%")
-                        else:                    return ("▼ 距離", "#666",    f"還差 {-delta:.2f}%")
+                        else:                    return ("▼ 距離", GRAY_66,    f"還差 {-delta:.2f}%")
                 if _m_buy1:
                     _rows = ""
                     for _bv, _bl, _bc, _is_buy in [
@@ -558,7 +558,7 @@ def render_single_fund_tab() -> None:
                                   f"<span style='color:{_bc};font-size:12px;flex:1'>{_bl}</span>"
                                   f"<span style='font-weight:700;font-size:13px;min-width:64px;text-align:right'>{_bv:.4f}</span>"
                                   f"<span style='color:{_chip_color};font-size:11px;min-width:74px;text-align:right;font-weight:600'>{_chip_lbl}</span>"
-                                  f"<span style='color:#666;font-size:10px;min-width:96px;text-align:right'>{_chip_dist}</span>"
+                                  f"<span style='color:{GRAY_66};font-size:10px;min-width:96px;text-align:right'>{_chip_dist}</span>"
                                   f"</div>")
                     st.markdown(
                         f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:10px;padding:12px 16px;margin:10px 0'>"
@@ -568,7 +568,7 @@ def render_single_fund_tab() -> None:
                         f"border-radius:12px;font-size:12px;font-weight:700'>{_m_pl}</span>"
                         f"</div>"
                         + _rows
-                        + f"<div style='color:#666;font-size:10px;margin-top:6px'>現值 {_m_nav_v:.4f} ｜ 接近閾值 ±{_NEAR:.1f}%</div>"
+                        + f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>現值 {_m_nav_v:.4f} ｜ 接近閾值 ±{_NEAR:.1f}%</div>"
                         + "</div>", unsafe_allow_html=True)
 
                 # ── V3-3: -2σ 超跌機會卡（布林下軌突破警報）────────────
@@ -581,14 +581,14 @@ def render_single_fund_tab() -> None:
                         f"⚡ -2σ 超跌機會卡 — 布林下軌突破！</div>"
                         f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px'>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>現值 NAV</div>"
-                        f"<div style='color:#fff;font-weight:700;font-size:16px'>{_m_nav_v:.4f}</div></div>"
+                        f"<div style='color:{WHITE};font-weight:700;font-size:16px'>{_m_nav_v:.4f}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>布林下軌(-2σ)</div>"
                         f"<div style='color:{MD_GREEN_A400};font-weight:700;font-size:16px'>{_boll_latest_low:.4f}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>跌破幅度</div>"
                         f"<div style='color:{MD_GREEN_A200};font-weight:700;font-size:16px'>"
                         f"{(_boll_latest_low - _m_nav_v) / _boll_latest_low * 100:.2f}%</div></div>"
                         f"</div>"
-                        f"<div style='color:#aaa;font-size:11px;border-top:1px solid #1a3a1a;padding-top:8px'>"
+                        f"<div style='color:{GRAY_AA};font-size:11px;border-top:1px solid #1a3a1a;padding-top:8px'>"
                         f"策略2：布林下軌突破 = 短期非理性超跌，適合左側交易分批承接。"
                         f"建議：小量試單（部位 ≤20%），並設停損於下軌下方 3%。</div>"
                         f"</div>", unsafe_allow_html=True)
@@ -614,7 +614,7 @@ def render_single_fund_tab() -> None:
                                 f"📐 HWM σ 絕對位階 — {_hl}</div>"
                                 f"<div style='display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px'>"
                                 f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>歷史最高(HWM)</div>"
-                                f"<div style='color:#fff;font-weight:700;font-size:16px'>{_hwm_v:.4f}</div></div>"
+                                f"<div style='color:{WHITE};font-weight:700;font-size:16px'>{_hwm_v:.4f}</div></div>"
                                 f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>現值 NAV</div>"
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_nav_h:.4f}</div></div>"
                                 f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>距 HWM</div>"
@@ -627,7 +627,7 @@ def render_single_fund_tab() -> None:
                                 f"<span style='color:#ff9800'>HWM-2σ: {_l2:.4f}</span>"
                                 f"<span style='color:#f44336'>HWM-3σ: {_l3:.4f}</span>"
                                 f"</div>"
-                                f"<div style='color:#666;font-size:10px;margin-top:6px'>"
+                                f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>"
                                 f"σ = HWM × 年化日報酬標準差（{len(s)} 筆淨值計算）</div>"
                                 f"</div>", unsafe_allow_html=True)
                     except Exception:
@@ -694,14 +694,14 @@ def render_single_fund_tab() -> None:
 
                     def _g_block(label, score):
                         if score is None:
-                            return ("<div><div style='color:#666;font-size:10px'>" + label + "</div>"
-                                    "<div style='color:#666;font-size:20px;font-weight:700'>—</div>"
-                                    "<div style='color:#555;font-size:9px'>資料不足</div></div>")
+                            return ("<div><div style=f'color:{GRAY_66};font-size:10px'>" + label + "</div>"
+                                    "<div style=f'color:{GRAY_66};font-size:20px;font-weight:700'>—</div>"
+                                    "<div style=f'color:{GRAY_55};font-size:9px'>資料不足</div></div>")
                         _c = (MATERIAL_GREEN if score >= 75 else MD_GREEN_A200 if score >= 60 else
                               "#ffeb3b" if score >= 45 else MATERIAL_ORANGE if score >= 30 else MATERIAL_RED)
                         return (f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{label}</div>"
                                 f"<div style='color:{_c};font-size:20px;font-weight:900'>{score:.0f}</div>"
-                                f"<div style='color:#555;font-size:9px'>/ 100</div></div>")
+                                f"<div style='color:{GRAY_55};font-size:9px'>/ 100</div></div>")
 
                     st.markdown(
                         f"<div style='background:linear-gradient(135deg,{GH_BG_PRIMARY},{GH_BG_CARD});"
@@ -709,7 +709,7 @@ def render_single_fund_tab() -> None:
                         f"<div style='display:flex;align-items:center;gap:16px;margin-bottom:10px;flex-wrap:wrap'>"
                         f"<div style='color:{_gr_c};font-size:46px;font-weight:900;line-height:1'>{_gr}</div>"
                         f"<div style='flex:1;min-width:200px'>"
-                        f"<div style='color:#aaa;font-size:11px'>📊 基金健康總覽</div>"
+                        f"<div style='color:{GRAY_AA};font-size:11px'>📊 基金健康總覽</div>"
                         f"<div style='color:{_gr_c};font-size:16px;font-weight:800;margin-top:2px'>{_verd}{_eat_call}</div></div>"
                         f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;text-align:right'>"
                         f"綜合評分<br><b style='color:{_gr_c};font-size:18px'>"
@@ -792,16 +792,16 @@ def render_single_fund_tab() -> None:
                         f"margin-bottom:8px'>{_kpi_title}</div>"
                         f"<div style='display:flex;gap:24px;flex-wrap:wrap'>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>1Y 含息報酬</div>"
-                        f"<div style='color:#fff;font-weight:700;font-size:16px'>"
+                        f"<div style='color:{WHITE};font-weight:700;font-size:16px'>"
                         f"{(f'{_kpi_tr1y:.2f}%' if _kpi_tr1y is not None else '—')}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>年化配息率</div>"
-                        f"<div style='color:#fff;font-weight:700;font-size:16px'>"
+                        f"<div style='color:{WHITE};font-weight:700;font-size:16px'>"
                         f"{(f'{_kpi_adr:.2f}%' if _kpi_adr and _kpi_adr > 0 else '—')}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>Coverage</div>"
                         f"<div style='color:{_kpi_color};font-weight:700;font-size:16px'>"
                         f"{_kpi_cov_txt}</div></div>"
                         f"</div>"
-                        f"<div style='color:#aaa;font-size:11px;margin-top:6px'>{_kpi_msg}</div>"
+                        f"<div style='color:{GRAY_AA};font-size:11px;margin-top:6px'>{_kpi_msg}</div>"
                         f"</div>", unsafe_allow_html=True)
                 except Exception as _kpi_e:  # noqa: BLE001
                     st.caption(f"吃本金 KPI 計算異常：{str(_kpi_e)[:60]}")
@@ -1009,7 +1009,7 @@ def render_single_fund_tab() -> None:
                                 f"<div style='background:{_bg};border:1px solid {_bc};border-radius:8px;"
                                 f"padding:8px 12px;margin-top:8px'>"
                                 f"<div style='color:{_bc};font-weight:700;font-size:12px'>{_ds['status']}</div>"
-                                f"<div style='color:#ccc;font-size:11px;margin-top:2px'>{_ds['message']}</div>"
+                                f"<div style='color:{GRAY_CC};font-size:11px;margin-top:2px'>{_ds['message']}</div>"
                                 + (f"<div style='color:#ff9800;font-size:10px;margin-top:4px'>{_ds['nav_warning']}</div>" if _ds.get("nav_warning") else "")
                                 + "</div>", unsafe_allow_html=True)
 
@@ -1029,8 +1029,8 @@ def render_single_fund_tab() -> None:
                                 f"border-radius:10px;padding:10px 14px;margin-top:8px'>"
                                 f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;letter-spacing:1px;margin-bottom:6px'>"
                                 f"📖 配息覆蓋率講義 ── 策略3《以息養股》</div>"
-                                f"<div style='color:#aaa;font-size:11px;font-style:italic;"
-                                f"border-left:2px solid #444;padding-left:8px;margin-bottom:8px'>"
+                                f"<div style='color:{GRAY_AA};font-size:11px;font-style:italic;"
+                                f"border-left:2px solid {GRAY_44};padding-left:8px;margin-bottom:8px'>"
                                 f"「高殖利率不等於高報酬，必須確認是否吃本金。」</div>"
                                 f"<div style='font-family:monospace;font-size:12px;color:{GH_FG_PRIMARY};margin-bottom:6px'>"
                                 f"Coverage = TR₁Y ÷ 年化配息率<br>"
@@ -1039,7 +1039,7 @@ def render_single_fund_tab() -> None:
                                 f" = <span style='color:{_cov_c};font-weight:700;font-size:14px'>{_cov:.2f}</span></div>"
                                 f"<div style='color:{_cov_c};font-size:12px;font-weight:600;margin-bottom:6px'>"
                                 f"{_cov_label}</div>"
-                                f"<div style='color:#555;font-size:10px'>"
+                                f"<div style='color:{GRAY_55};font-size:10px'>"
                                 f"Coverage ≥ 1.0 = 安全 ｜ 0.8–1.0 = 注意 ｜ &lt; 0.8 = 高警示</div>"
                                 f"</div>", unsafe_allow_html=True)
 
@@ -1086,7 +1086,7 @@ def render_single_fund_tab() -> None:
                             f"<div style='color:{_ter_c};font-weight:700;font-size:16px'>{_ter_val:.2f}%</div></div>"
                             + _ter_avg_html +
                             f"</div>"
-                            f"<div style='color:#555;font-size:10px'>"
+                            f"<div style='color:{GRAY_55};font-size:10px'>"
                             f"費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~25%）</div>"
                             f"</div>", unsafe_allow_html=True)
 
@@ -1106,7 +1106,7 @@ def render_single_fund_tab() -> None:
                                     _sp = float(_sec.get("pct", 0) or 0)
                                     st.markdown(
                                         f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0'>"
-                                        f"<div style='color:#ccc;font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
+                                        f"<div style='color:{GRAY_CC};font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
                                         f"<div style='flex:1;background:#1a1a2a;border-radius:3px;height:10px'>"
                                         f"<div style='background:{MD_BLUE_500};width:{min(_sp*3,100):.0f}%;height:100%;border-radius:3px'></div></div>"
                                         f"<div style='color:{MD_BLUE_500};font-size:11px;width:40px;text-align:right'>{_sp:.1f}%</div>"
@@ -1124,7 +1124,7 @@ def render_single_fund_tab() -> None:
                                     _ts = str(_top.get("sector",""))[:12]
                                     st.markdown(
                                         f"<div style='display:flex;gap:6px;padding:3px 8px;background:{GH_BG_CARD};border-radius:6px;margin:2px 0'>"
-                                        f"<span style='color:#555;font-size:11px;width:16px'>#{_i}</span>"
+                                        f"<span style='color:{GRAY_55};font-size:11px;width:16px'>#{_i}</span>"
                                         f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
                                         f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"
                                         f"<span style='color:#58a6ff;font-weight:700;font-size:11px;width:36px;text-align:right'>{_tp:.1f}%</span>"
@@ -1181,7 +1181,7 @@ def render_single_fund_tab() -> None:
                                         f"<div style='padding:4px 8px;background:{GH_BG_CARD};"
                                         f"border-radius:6px;margin:2px 0;font-size:12px'>"
                                         f"<span style='color:{MD_ORANGE_300};font-weight:700'>{_disp_nm}</span>　"
-                                        f"{_lh}<span style='color:#666;font-size:10px;"
+                                        f"{_lh}<span style='color:{GRAY_66};font-size:10px;"
                                         f"margin-left:6px'>{_src}</span></div>",
                                         unsafe_allow_html=True)
                         elif _do_fetch:

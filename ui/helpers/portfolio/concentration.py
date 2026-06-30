@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
+from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, GRAY_66, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
 
 
 def _norm_name(s) -> str:
@@ -111,7 +111,7 @@ def render_concentration_summary(portfolio_funds) -> None:
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
         f"color:{GH_FG_MUTED};line-height:1.7'>"
         f"🎯 <b>穿透式持股集中度</b>（{_emoji} {_lvl}）"
-        f"<span style='color:#666;font-size:10px'> · 跨 {_r['n_with_holdings']} 檔基金"
+        f"<span style='color:{GRAY_66};font-size:10px'> · 跨 {_r['n_with_holdings']} 檔基金"
         f"看你實際押在哪些個股</span><br/>"
         f"{' ｜ '.join(_items)}"
         f"</div>",
@@ -211,7 +211,7 @@ def render_sector_concentration_summary(portfolio_funds) -> None:
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
         f"color:{GH_FG_MUTED};line-height:1.7'>"
         f"🏭 <b>穿透式產業集中度</b>（{_emoji} {_lvl}）"
-        f"<span style='color:#666;font-size:10px'> · 跨 {_r['n_with_sectors']} 檔基金"
+        f"<span style='color:{GRAY_66};font-size:10px'> · 跨 {_r['n_with_sectors']} 檔基金"
         f"看你實際押在哪些產業</span><br/>"
         f"{' ｜ '.join(_items)}"
         f"</div>",

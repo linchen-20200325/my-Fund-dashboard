@@ -28,7 +28,7 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     LIQUIDITY_MOVE_WEIGHT_RATIO,
 )
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import GRAY_66, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
 from infra.cache import _ttl_cache, register_cache
 from shared.ttls import TTL_30MIN
@@ -92,7 +92,7 @@ def _sig_color_score(z: "float | None", *, hi: float = 2.0, mid: float = 1.0,
     score：+1 健康 / 0 中性 / -1 警示，供研判層加權。
     """
     if z is None:
-        return "⬜", "#666", 0            # 無資料 → 不評
+        return "⬜", GRAY_66, 0            # 無資料 → 不評
     zz = -z if invert else z
     if zz >= hi:
         return "🔴", MATERIAL_RED, -1

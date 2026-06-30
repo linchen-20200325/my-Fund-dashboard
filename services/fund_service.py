@@ -21,7 +21,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL
+from shared.colors import GRAY_55, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     TRADING_DAYS_PER_YEAR,
     NEAR_DIVIDEND_WARNING_PCT,
@@ -347,7 +347,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
 
     # 倉位判斷（深度優先；買勝過賣以利風險控管）
     if std_amt < ref_high * 0.001:   # σ < 0.1% → 資料不可靠
-        pos_l, pos_c = "資料待更新 📡", "#555"
+        pos_l, pos_c = "資料待更新 📡", GRAY_55
     elif now <= b3:    pos_l, pos_c = "大跌大買 🔥 (投 50%)", MD_PURPLE_500
     elif now <= b2:    pos_l, pos_c = "急跌穩買 📈 (投 30%)", MATERIAL_GREEN
     elif now <= b1:    pos_l, pos_c = "小跌小買 ✅ (投 20%)", MD_GREEN_A200

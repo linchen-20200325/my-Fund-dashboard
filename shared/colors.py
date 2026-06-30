@@ -57,6 +57,15 @@ MD_AMBER_300: str = "#ffd54f"      # Material Amber 300
 MD_ORANGE_300: str = "#ffb74d"     # Material Orange 300
 MD_PURPLE_500: str = "#9c27b0"     # Material Purple 500
 
+# v19.257 Phase 4-B3: 灰調漸層 SSOT(short hex,by intensity 命名避免 false semantic 分群)
+GRAY_44: str = "#444"              # very dark gray
+GRAY_55: str = "#555"              # dark gray
+GRAY_66: str = "#666"              # medium dark gray
+GRAY_AA: str = "#aaa"              # medium gray
+GRAY_BB: str = "#bbb"              # medium light gray
+GRAY_CC: str = "#ccc"              # light gray
+WHITE: str = "#fff"                # pure white
+
 # 同義對應
 TRAFFIC_EMOJI: tuple[str, str, str, str] = ("🟢", "🟡", "🔴", "⬜")
 TRAFFIC_HEX: tuple[str, str, str, str] = (

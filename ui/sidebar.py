@@ -16,7 +16,7 @@ import streamlit as st
 from fund_fetcher import get_proxy_config
 from infra.oauth import build_authorize_url
 from repositories.policy_repository import get_sheet_title
-from shared.colors import GH_BG_PRIMARY, GH_BORDER, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
+from shared.colors import GH_BG_PRIMARY, GH_BORDER, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT, WHITE
 
 
 def render_sidebar(*,
@@ -46,7 +46,7 @@ def render_sidebar(*,
         st.markdown(
             f"<div style='background:linear-gradient(90deg,#7c3aed,#ec4899);"
             f"border-radius:8px;padding:10px 14px;margin-top:8px;"
-            f"font-size:13px;color:#fff;font-weight:700;text-align:center;"
+            f"font-size:13px;color:{WHITE};font-weight:700;text-align:center;"
             f"box-shadow:0 2px 8px rgba(124,58,237,0.4)'>"
             f"✨ {app_version}"
             f"</div>",

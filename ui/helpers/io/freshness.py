@@ -16,7 +16,7 @@ import datetime as _dt
 import streamlit as st
 
 from shared.signal_thresholds import MJ_FRESH_DAYS_GREEN, MJ_FRESH_DAYS_YELLOW
-from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_MUTED, GH_FG_SECONDARY, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
+from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_MUTED, GH_FG_SECONDARY, GRAY_44, GRAY_66, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
 
 
 def nav_age_emoji(nav_date_str, today=None):
@@ -98,7 +98,7 @@ def render_mj_freshness_banner(items: list, title: str = "MoneyDJ 資料新鮮�
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;"
         f"font-size:11px;color:{GH_FG_MUTED};line-height:1.7'>"
         f"📊 <b>{title}</b>　{_summary}　"
-        f"<span style='color:#666;font-size:10px'>"
+        f"<span style='color:{GRAY_66};font-size:10px'>"
         f"（hover chip 看完整時戳 ｜ 規則：🟢 ≤2d / 🟠 ≤7d / 🔴 >7d）</span><br/>"
         f"{' ｜ '.join(_parts)}"
         f"</div>",
@@ -194,7 +194,7 @@ def render_sidebar_data_health(session_state, now_tw=None) -> None:
     _head_order = {"🔴": 3, "🟠": 2, "🟢": 1, "⬜": 0}
     _headline = max(_domain_emojis, key=lambda e: _head_order.get(e, 0)) if _domain_emojis else "⬜"
     _body = "<br/>".join(_lines)
-    _border = {"🔴": TRAFFIC_RED, "🟠": TRAFFIC_YELLOW, "🟢": TRAFFIC_GREEN, "⬜": "#444"}.get(_headline, "#444")
+    _border = {"🔴": TRAFFIC_RED, "🟠": TRAFFIC_YELLOW, "🟢": TRAFFIC_GREEN, "⬜": GRAY_44}.get(_headline, GRAY_44)
     st.markdown(
         f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
         f"border-radius:4px;padding:6px 10px;font-size:11px;color:{GH_FG_MUTED};"

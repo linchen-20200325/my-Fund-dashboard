@@ -18,7 +18,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_BB, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 # F-GRAY-4 v19.179 PR-3:PMI 教學 markdown SSOT(per Q3「全遷,markdown 也用 f-string 插值」)
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_TEXTBOOK = _PMI_THR_V2["stoplight"]["green_above"]  # 50.0 = 教科書枯榮線(字面分界)
@@ -568,7 +568,7 @@ def render_manual_tab() -> None:
                 f"background:{GH_BG_PRIMARY};border-bottom:1px solid {GH_BG_HOVER}'>"
                 f"<span style='{_dm_td};color:{GH_FG_PRIMARY};font-weight:600'>{_item}</span>"
                 f"<span style='{_dm_td};color:#79c0ff'>{_tab}</span>"
-                f"<span style='{_dm_td};color:#bbb;font-family:monospace;font-size:10px'>{_src}</span>"
+                f"<span style='{_dm_td};color:{GRAY_BB};font-family:monospace;font-size:10px'>{_src}</span>"
                 f"<span style='{_dm_td};color:{TRAFFIC_NEUTRAL}'>{_ref}</span>"
                 f"<span style='{_dm_td};color:#a5d6ff;font-size:10px'>{_fb}</span>"
                 f"</div>"

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_ORANGE_300, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BORDER, GRAY_55, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_ORANGE_300, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -147,7 +147,7 @@ def _render_holdings_block(fund: dict) -> None:
                 f"{_ter_val:.2f}%</div></div>"
                 + _ter_avg_html +
                 "</div>"
-                "<div style='color:#555;font-size:10px'>"
+                "<div style=f'color:{GRAY_55};font-size:10px'>"
                 "費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~25%）</div>"
                 "</div>", unsafe_allow_html=True)
     else:
@@ -182,7 +182,7 @@ def _render_holdings_block(fund: dict) -> None:
                 _sp = float(_sec.get("pct", 0) or 0)
                 st.markdown(
                     f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0'>"
-                    f"<div style='color:#ccc;font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
+                    f"<div style='color:{GRAY_CC};font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
                     f"<div style='flex:1;background:#1a1a2a;border-radius:3px;height:10px'>"
                     f"<div style='background:{MD_BLUE_500};width:{min(_sp*3,100):.0f}%;"
                     f"height:100%;border-radius:3px'></div></div>"
@@ -203,7 +203,7 @@ def _render_holdings_block(fund: dict) -> None:
                 st.markdown(
                     f"<div style='display:flex;gap:6px;padding:3px 8px;"
                     f"background:{GH_BG_CARD};border-radius:6px;margin:2px 0'>"
-                    f"<span style='color:#555;font-size:11px;width:16px'>#{_i}</span>"
+                    f"<span style='color:{GRAY_55};font-size:11px;width:16px'>#{_i}</span>"
                     f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
                     f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"
                     f"<span style='color:#58a6ff;font-weight:700;font-size:11px;"

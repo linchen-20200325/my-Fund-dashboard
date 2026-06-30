@@ -16,7 +16,7 @@ import math
 import pandas as pd
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_RED_1, GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_RED_1, GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL, WHITE
 
 # v19.245 R13:`dividend_safety` 已於 v19.150 由 SSOT `check_eating_principal_1y_mk`
 # 取代(下方 _compute_fund_health_kpis line 166 動態 import),原 `div_safety_check`
@@ -266,16 +266,16 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
         f"{_kpi_title}</div>"
         f"<div style='display:flex;gap:18px;flex-wrap:wrap'>"
         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>1Y 含息報酬</div>"
-        f"<div style='color:#fff;font-weight:700;font-size:15px'>{_tr1y_txt}</div></div>"
+        f"<div style='color:{WHITE};font-weight:700;font-size:15px'>{_tr1y_txt}</div></div>"
         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>年化配息率</div>"
-        f"<div style='color:#fff;font-weight:700;font-size:15px'>{_adr_txt}</div></div>"
+        f"<div style='color:{WHITE};font-weight:700;font-size:15px'>{_adr_txt}</div></div>"
         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>Coverage</div>"
         f"<div style='color:{_kpi_color};font-weight:700;font-size:15px'>{_kpi_cov_txt}</div></div>"
         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>月配息（TWD）</div>"
-        f"<div style='color:#fff;font-weight:700;font-size:15px'>{_monthly_txt}</div></div>"
+        f"<div style='color:{WHITE};font-weight:700;font-size:15px'>{_monthly_txt}</div></div>"
         f"</div>"
-        f"<div style='color:#aaa;font-size:11px;margin-top:6px'>{_kpi_msg}</div>"
-        f"<div style='color:#666;font-size:10px;margin-top:2px'>{_inv_hint}</div>"
+        f"<div style='color:{GRAY_AA};font-size:11px;margin-top:6px'>{_kpi_msg}</div>"
+        f"<div style='color:{GRAY_66};font-size:10px;margin-top:2px'>{_inv_hint}</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -307,7 +307,7 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
             f"<div style='color:{_ter_c};font-weight:700;font-size:15px'>{_tv:.2f}%</div></div>"
             + _avg_html +
             "</div>"
-            "<div style='color:#555;font-size:10px;margin-top:4px'>"
+            "<div style=f'color:{GRAY_55};font-size:10px;margin-top:4px'>"
             "費用率愈低，長期複利效益愈佳（每降 1% TER，20 年後終值多 ~25%）</div>"
             "</div>",
             unsafe_allow_html=True,

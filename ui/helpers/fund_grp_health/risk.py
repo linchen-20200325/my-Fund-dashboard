@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import BG_DARK_RED_1, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_RED_1, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -187,7 +187,7 @@ def _render_oversold_badges(funds: list) -> None:
             f"<div style='background:{BG_DARK_RED_1};border-left:4px solid {MATERIAL_RED};"
             f"padding:8px 14px;margin:6px 0;border-radius:6px;'>"
             f"<b style='color:#ff6b6b'>🩸 {_o['name']} ({_o['code']})</b><br>"
-            f"<span style='color:#ccc;font-size:12px'>"
+            f"<span style='color:{GRAY_CC};font-size:12px'>"
             f"現價 {_o['current']:.2f} ｜ HWM {_o['hwm']:.2f} ｜ "
             f"距高點 <b style='color:{MATERIAL_RED}'>{_o['dist_pct']:+.2f}%</b> ｜ "
             f"σ rank <b style='color:{MATERIAL_RED}'>{_o['sigma_rank']:+.2f}σ</b>"

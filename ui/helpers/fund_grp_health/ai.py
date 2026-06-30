@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_ORANGE_300
+from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GRAY_66, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_ORANGE_300
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -318,7 +318,7 @@ def _render_per_fund_news_expanders(funds: list) -> None:
                             f"<div style='padding:4px 8px;background:{GH_BG_CARD};"
                             f"border-radius:6px;margin:2px 0;font-size:12px'>"
                             f"<span style='color:{MD_ORANGE_300};font-weight:700'>{_disp_nm}</span>　"
-                            f"{_lh}<span style='color:#666;font-size:10px;"
+                            f"{_lh}<span style='color:{GRAY_66};font-size:10px;"
                             f"margin-left:6px'>{_src}</span></div>",
                             unsafe_allow_html=True,
                         )

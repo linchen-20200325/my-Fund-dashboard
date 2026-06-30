@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL, WHITE
 
 from infra.oauth import (
     OAuthError,
@@ -268,11 +268,11 @@ def render_portfolio_tab() -> None:
                         except Exception: return ""
                         # v18.249: NaN（兩檔 NAV 無重疊期）不上色，跟其他級別區分
                         if pd.isna(f): return f"color:{TRAFFIC_NEUTRAL}"
-                        if f >= _thr:    return "background-color:#b71c1c;color:#fff"
-                        if f >= 0.50:    return "background-color:#ef6c00;color:#fff"
-                        if f >= 0.20:    return "background-color:#558b2f;color:#fff"
-                        if f >= -0.20:   return "background-color:#2e7d32;color:#fff"
-                        return "background-color:#1565c0;color:#fff"
+                        if f >= _thr:    return f"background-color:#b71c1c;color:{WHITE}"
+                        if f >= 0.50:    return f"background-color:#ef6c00;color:{WHITE}"
+                        if f >= 0.20:    return f"background-color:#558b2f;color:{WHITE}"
+                        if f >= -0.20:   return f"background-color:#2e7d32;color:{WHITE}"
+                        return f"background-color:#1565c0;color:{WHITE}"
                     # v18.249: NaN → 「—」（codebase 標準缺失符號），不再顯示 'nan'
                     _fmt_corr = lambda v: "—" if pd.isna(v) else f"{v:.2f}"
                     try:
@@ -1140,8 +1140,8 @@ def render_portfolio_tab() -> None:
                     f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});"
                     f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:10px 0 6px'>"
                     f"<span style='color:{MD_BLUE_300};font-weight:900;font-size:15px'>🏷️ {_pname}</span>"
-                    f"<span style='color:#aaa;font-size:11px;margin-left:8px'>({_pid})</span>"
-                    f"<span style='color:#fff;font-size:13px;margin-left:auto;float:right'>"
+                    f"<span style='color:{GRAY_AA};font-size:11px;margin-left:8px'>({_pid})</span>"
+                    f"<span style='color:{WHITE};font-size:13px;margin-left:auto;float:right'>"
                     f"投入 {fmt_twd(_ptot)} · {len(_funds)} 檔 · 核心 {_p_core_pct}%</span>"
                     f"</div>", unsafe_allow_html=True)
 
@@ -1283,8 +1283,8 @@ def render_portfolio_tab() -> None:
                         f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code}</span>"
                         f"<span style='color:{_sig_clr};font-size:11px;background:{GH_BG_CARD};padding:2px 8px;border-radius:10px'>"
                         f"σ {_sig_str} · {_sig_lbl}</span>"
-                        f"<span style='color:#ccc;font-size:11px'>{_div_icon} {_div_alert}</span>"
-                        f"<span style='color:#aaa;font-size:11px;margin-left:auto'>{fmt_twd(_inv_amt)}</span>"
+                        f"<span style='color:{GRAY_CC};font-size:11px'>{_div_icon} {_div_alert}</span>"
+                        f"<span style='color:{GRAY_AA};font-size:11px;margin-left:auto'>{fmt_twd(_inv_amt)}</span>"
                         f"</div>"
                         f"<div style='color:{_adv_clr};font-size:12px;margin-top:6px;line-height:1.5'>"
                         f"💡 {_advice['text']}</div>"
@@ -1350,15 +1350,15 @@ def render_portfolio_tab() -> None:
     if not _pf_loaded:
         st.markdown(
             f"<div style='background:{BG_DARK_NAVY_1};border:1px dashed {MD_BLUE_300};border-radius:8px;"
-            "padding:6px 14px;margin:4px 0 10px;font-size:12px;color:#aaa;"
+            f"padding:6px 14px;margin:4px 0 10px;font-size:12px;color:{GRAY_AA};"
             "display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
             "<span style=f'color:{MD_BLUE_300};font-weight:700'>👋 三步驟：</span>"
-            "<span><b style='color:#fff'>1️⃣ 貼代碼</b></span>"
-            "<span style='color:#555'>→</span>"
-            "<span><b style='color:#fff'>2️⃣ 批次加入</b></span>"
-            "<span style='color:#555'>→</span>"
-            "<span><b style='color:#fff'>3️⃣ 看 KPI / T5 / T7</b></span>"
-            "<span style='margin-left:auto;color:#666;font-size:10px'>"
+            "<span><b style=f'color:{WHITE}'>1️⃣ 貼代碼</b></span>"
+            "<span style=f'color:{GRAY_55}'>→</span>"
+            "<span><b style=f'color:{WHITE}'>2️⃣ 批次加入</b></span>"
+            "<span style=f'color:{GRAY_55}'>→</span>"
+            "<span><b style=f'color:{WHITE}'>3️⃣ 看 KPI / T5 / T7</b></span>"
+            "<span style=f'margin-left:auto;color:{GRAY_66};font-size:10px'>"
             "💡 AI 分析按鈕觸發，不自動扣 API</span>"
             "</div>", unsafe_allow_html=True)
 
@@ -1410,22 +1410,22 @@ def render_portfolio_tab() -> None:
             "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 16px'>"
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:#aaa;font-size:11px'>💰 總資產（NTD）</div>"
-            f"<div style='color:#fff;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
+            f"<div style='color:{GRAY_AA};font-size:11px'>💰 總資產（NTD）</div>"
+            f"<div style='color:{WHITE};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>{len(_pf_loaded)} 檔基金加總</div></div>"
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:#aaa;font-size:11px'>📈 累計報酬</div>"
+            f"<div style='color:{GRAY_AA};font-size:11px'>📈 累計報酬</div>"
             f"<div style='color:{_ret_color};font-size:26px;font-weight:900;margin-top:4px'>{_ret_str}</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>從淨值首日加權至今</div></div>"
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:#aaa;font-size:11px'>🛡️ 核心資產比例</div>"
+            f"<div style='color:{GRAY_AA};font-size:11px'>🛡️ 核心資產比例</div>"
             f"<div style='color:{MD_BLUE_300};font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>衛星 {100-_core_pct_kpi:.1f}%</div></div>"
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:#aaa;font-size:11px'>💵 預估月配息</div>"
+            f"<div style='color:{GRAY_AA};font-size:11px'>💵 預估月配息</div>"
             f"<div style='color:{MD_ORANGE_300};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>依各基金配息率粗估</div></div>"
             "</div>", unsafe_allow_html=True)
@@ -1523,7 +1523,7 @@ def render_portfolio_tab() -> None:
                            _total_curve.loc[_lo_idx], _total_curve.iloc[-1]],
                         mode="markers+text",
                         marker=dict(size=[8,10,10,12],
-                                    color=[TRAFFIC_NEUTRAL,MATERIAL_GREEN,MATERIAL_RED,"#fff"],
+                                    color=[TRAFFIC_NEUTRAL,MATERIAL_GREEN,MATERIAL_RED,WHITE],
                                     line=dict(color=STREAMLIT_BG, width=2)),
                         text=["起點", f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
                               f"低 {fmt_twd(_total_curve.loc[_lo_idx])}",
@@ -1956,16 +1956,16 @@ def render_portfolio_tab() -> None:
                             _mi_NEAR = float(m_i.get("near_threshold_pct") or 2.0)
                             if _mi_b1 and _mi_nav > 0:
                                 def _mini_chip(target, is_buy):
-                                    if not target: return ("—", "#666")
+                                    if not target: return ("—", GRAY_66)
                                     d = (_mi_nav - target) / target * 100
                                     if is_buy:
                                         if d <= 0:           return ("🟢", MD_GREEN_A400)
                                         elif d <= _mi_NEAR:  return ("⚠️", "#ffa726")
-                                        else:                return ("▲",  "#555")
+                                        else:                return ("▲",  GRAY_55)
                                     else:
                                         if d >= 0:           return ("🔔", MATERIAL_RED)
                                         elif d >= -_mi_NEAR: return ("⚠️", "#ffa726")
-                                        else:                return ("▼",  "#555")
+                                        else:                return ("▼",  GRAY_55)
                                 # 雙確認：σ 觸發 + 布林同向
                                 _double_buy  = (_mi_b1 and _mi_nav <= _mi_b1) and (_mi_bbd and _mi_nav <= _mi_bbd)
                                 _double_sell = (_mi_s1 and _mi_nav >= _mi_s1) and (_mi_bbu and _mi_nav >= _mi_bbu)
@@ -1984,7 +1984,7 @@ def render_portfolio_tab() -> None:
                                     _cells += (f"<div style='flex:1;text-align:center;padding:4px 2px;"
                                                f"background:{GH_BG_PRIMARY};border-radius:6px;margin:0 2px'>"
                                                f"<div style='font-size:9px;color:{TRAFFIC_NEUTRAL}'>{_lbl}</div>"
-                                               f"<div style='font-size:11px;font-weight:700;color:#ccc'>{_v:.3f}</div>"
+                                               f"<div style='font-size:11px;font-weight:700;color:{GRAY_CC}'>{_v:.3f}</div>"
                                                f"<div style='font-size:13px;color:{_cc}'>{_ch}</div></div>")
                                 st.markdown(
                                     f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;padding:8px 12px;margin:2px 0 8px 0'>"
@@ -1993,7 +1993,7 @@ def render_portfolio_tab() -> None:
                                     f"<span style='background:#111;color:{_mi_pc};border:1px solid {_mi_pc};padding:1px 8px;"
                                     f"border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>{_mi_pl}</span>"
                                     f"{_badge}"
-                                    f"<span style='color:#555;font-size:10px;margin-left:auto'>NAV {_mi_nav:.4f}</span>"
+                                    f"<span style='color:{GRAY_55};font-size:10px;margin-left:auto'>NAV {_mi_nav:.4f}</span>"
                                     f"</div>"
                                     f"<div style='display:flex;align-items:stretch'>{_cells}</div>"
                                     f"</div>", unsafe_allow_html=True)
@@ -2107,7 +2107,7 @@ def render_portfolio_tab() -> None:
                         marker=dict(symbol="diamond", size=8, color=MATERIAL_RED),
                         hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
                 # 零基準線
-                fig_rc.add_hline(y=0, line_color="#555", line_width=1)
+                fig_rc.add_hline(y=0, line_color=GRAY_55, line_width=1)
                 # ── 吃本金：背景色塊 + 標註（v18.48 只在 1Y 真實值有取到時才標）──
                 _y_max = max(max(_rc_ret_vis, default=10), max(_rc_div, default=10)) * 1.35
                 for _i, (_r, _d, _n, _real) in enumerate(zip(_rc_ret, _rc_div, _rc_names, _rc_real)):
@@ -2131,9 +2131,9 @@ def render_portfolio_tab() -> None:
                             x=_n, y=_y_max,
                             text="⬜ 1Y 資料不足<br>無法判定",
                             showarrow=False,
-                            font=dict(color="#aaa", size=10),
+                            font=dict(color=GRAY_AA, size=10),
                             bgcolor="rgba(60,60,60,0.7)",
-                            bordercolor="#666", borderwidth=1,
+                            bordercolor=GRAY_66, borderwidth=1,
                             borderpad=4)
                 fig_rc.update_layout(
                     paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,

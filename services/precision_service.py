@@ -23,7 +23,7 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     RISK_SCORE_YIELD_WEIGHT_RATIO,
 )
 
-from shared.colors import BG_DARK_RED_2, GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_RED_2, GH_BG_CARD, GH_BORDER, GRAY_55, GRAY_66, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, TRAFFIC_NEUTRAL
 
 # v18.116 B-B: I/O 拆分後從 repository 取
 from repositories.financial_repository import (  # noqa: F401  legacy re-export
@@ -272,17 +272,17 @@ def three_ratio_row_html(r: dict) -> str:
     return (
         f"<div style='background:{bg};border:1px solid {border};border-radius:8px;"
         f"padding:8px 12px;margin:4px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-        f"<div style='flex:1.5;font-size:11px;color:#ccc'>{r.get('stock','')[:20]}"
-        f"<span style='color:#555;margin-left:6px;font-size:10px'>{r.get('ticker','')}</span></div>"
-        f"<div style='flex:1;font-size:10px;color:#666'>{r.get('q_old','')[-7:]}→{r.get('q_new','')[-7:]}</div>"
+        f"<div style='flex:1.5;font-size:11px;color:{GRAY_CC}'>{r.get('stock','')[:20]}"
+        f"<span style='color:{GRAY_55};margin-left:6px;font-size:10px'>{r.get('ticker','')}</span></div>"
+        f"<div style='flex:1;font-size:10px;color:{GRAY_66}'>{r.get('q_old','')[-7:]}→{r.get('q_new','')[-7:]}</div>"
         f"<div style='text-align:center'>"
-        f"<div style='color:#666;font-size:9px'>毛利率</div>"
+        f"<div style='color:{GRAY_66};font-size:9px'>毛利率</div>"
         f"<div style='color:{_color(gd)};font-weight:700;font-size:12px'>{_fmt(gd)}</div></div>"
         f"<div style='text-align:center'>"
-        f"<div style='color:#666;font-size:9px'>營益率</div>"
+        f"<div style='color:{GRAY_66};font-size:9px'>營益率</div>"
         f"<div style='color:{_color(od)};font-weight:700;font-size:12px'>{_fmt(od)}</div></div>"
         f"<div style='text-align:center'>"
-        f"<div style='color:#666;font-size:9px'>淨利率</div>"
+        f"<div style='color:{GRAY_66};font-size:9px'>淨利率</div>"
         f"<div style='color:{_color(nd)};font-weight:700;font-size:12px'>{_fmt(nd)}</div></div>"
         f"</div>"
     )

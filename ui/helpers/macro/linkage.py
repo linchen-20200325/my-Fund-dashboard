@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, MD_BLUE_300, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
+from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, GRAY_AA, MD_BLUE_300, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
 
 
 def render_macro_exposure_link(session_state, core_pct=None) -> None:
@@ -77,7 +77,7 @@ def render_macro_exposure_link(session_state, core_pct=None) -> None:
         f"border-radius:4px;padding:8px 12px;margin-bottom:8px;font-size:12px;"
         f"color:{GH_FG_MUTED};line-height:1.7'>"
         f"{_head}<br/>{_body}"
-        + (f"<br/><span style='color:#aaa;font-size:11px'>💡 {_advice}</span>"
+        + (f"<br/><span style='color:{GRAY_AA};font-size:11px'>💡 {_advice}</span>"
            if _advice else "")
         + "</div>",
         unsafe_allow_html=True,

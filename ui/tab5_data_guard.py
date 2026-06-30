@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.proxy import get_proxy_config
 from ui.helpers.session import (
@@ -180,7 +180,7 @@ def render_data_guard_tab() -> None:
     def _tab_status(have: int, total: int) -> tuple[str, str]:
         """回傳 (emoji, color) 依完整率"""
         if total == 0:
-            return ("⬜", "#666")
+            return ("⬜", GRAY_66)
         _r = have / total
         if _r >= 0.85:
             return ("🟢", MATERIAL_GREEN)
@@ -191,13 +191,13 @@ def render_data_guard_tab() -> None:
 
     _t1_emoji, _t1_color = _tab_status(_macro_have, _macro_total)
     _t2_emoji, _t2_color = (
-        _tab_status(_single_have, _single_total) if _src_cf else ("⬜", "#666")
+        _tab_status(_single_have, _single_total) if _src_cf else ("⬜", GRAY_66)
     )
     _t3_emoji, _t3_color = (
-        _tab_status(_pf_loaded_n, _pf_total) if _pf_total else ("⬜", "#666")
+        _tab_status(_pf_loaded_n, _pf_total) if _pf_total else ("⬜", GRAY_66)
     )
     _t4_emoji, _t4_color = (
-        _tab_status(_alloc_have, _alloc_total) if _pf_total else ("⬜", "#666")
+        _tab_status(_alloc_have, _alloc_total) if _pf_total else ("⬜", GRAY_66)
     )
 
     _tab_table = [
@@ -243,7 +243,7 @@ def render_data_guard_tab() -> None:
             f"<span style='{_tab_td};color:{GH_FG_PRIMARY};font-weight:600'>{_name}</span>"
             f"<span style='{_tab_td};text-align:center;color:{_c};font-size:14px'>{_e}</span>"
             f"<span style='{_tab_td};color:{_c};font-weight:600'>{_ratio}</span>"
-            f"<span style='{_tab_td};color:#bbb'>{_detail}</span>"
+            f"<span style='{_tab_td};color:{GRAY_BB}'>{_detail}</span>"
             f"<span style='{_tab_td};color:{TRAFFIC_NEUTRAL};font-size:10px'>{_action}</span>"
             f"</div>"
         )
@@ -372,7 +372,7 @@ def render_data_guard_tab() -> None:
             return ("🟢", f"已抓 {ok_n}{tail}", MATERIAL_GREEN)
         if used:
             return ("🟡", "已呼叫但無資料", MATERIAL_ORANGE)
-        return ("⬜", inactive_label, "#666")
+        return ("⬜", inactive_label, GRAY_66)
 
     _RAW_TABLE = [
         # (#, 類別, 用途, 端點/Ticker, NAS Proxy, status_tuple)
@@ -431,9 +431,9 @@ def render_data_guard_tab() -> None:
         _src_html += (
             f"<div style='display:grid;grid-template-columns:38px 1.2fr 1.5fr 3fr 50px 1.4fr;"
             f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
-            f"<span style='{_src_td};color:#aaa'>{_no}</span>"
+            f"<span style='{_src_td};color:{GRAY_AA}'>{_no}</span>"
             f"<span style='{_src_td};color:{GH_FG_PRIMARY};font-weight:600'>{_cat}</span>"
-            f"<span style='{_src_td};color:#bbb'>{_purp}</span>"
+            f"<span style='{_src_td};color:{GRAY_BB}'>{_purp}</span>"
             f"<span style='{_src_td};color:#7d8590;font-family:monospace;font-size:10px'>{_ep}</span>"
             f"<span style='{_src_td};text-align:center;color:{TRAFFIC_NEUTRAL}'>{_proxy}</span>"
             f"<span style='{_src_td};color:{_sc};font-weight:600'>{_ic} {_stxt}</span>"
@@ -480,7 +480,7 @@ def render_data_guard_tab() -> None:
                 "來源", _opts_source, default=_opts_source, key="reg_flt_source"
             )
         with _flt_c3:
-            _freq_label_map = {f: _FREQ_LABEL.get(f, (f, "#555"))[0] for f in _opts_freq}
+            _freq_label_map = {f: _FREQ_LABEL.get(f, (f, GRAY_55))[0] for f in _opts_freq}
             _sel_freq = st.multiselect(
                 "頻率", _opts_freq, default=_opts_freq,
                 format_func=lambda f: _freq_label_map.get(f, f),
@@ -517,7 +517,7 @@ def render_data_guard_tab() -> None:
             _freq  = _rv.get("freq", "monthly")
             _ficon = _rv.get("fresh_icon", "⬜")
             _flbl  = _rv.get("fresh_label", "未知")
-            _fcol  = _rv.get("fresh_color", "#555")
+            _fcol  = _rv.get("fresh_color", GRAY_55)
             _row_bg = GH_BG_CARD if _ficon == "🟢" else (BG_DARK_AMBER_2 if _ficon == "🟡" else "#1a0808")
             _rows_html += (
                 f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 3fr 1fr;"
@@ -525,14 +525,14 @@ def render_data_guard_tab() -> None:
                 f"<span style='{_td_base};color:{GH_FG_PRIMARY}'>{_rv.get('label', _rk)}</span>"
                 f"<span style='{_td_base};color:{TRAFFIC_NEUTRAL}'>{_rv.get('source','')}</span>"
                 f"<span style='{_td_base}'>"
-                f"<span style='background:{_FREQ_LABEL.get(_freq,('?','#555'))[1]}22;"
-                f"color:{_FREQ_LABEL.get(_freq,('?','#555'))[1]};"
-                f"border:1px solid {_FREQ_LABEL.get(_freq,('?','#555'))[1]};"
+                f"<span style='background:{_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]}22;"
+                f"color:{_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]};"
+                f"border:1px solid {_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]};"
                 f"border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700'>"
-                f"{_FREQ_LABEL.get(_freq,(_freq,'#555'))[0]}</span></span>"
-                f"<span style='{_td_base};color:#aaa'>{_rd}</span>"
+                f"{_FREQ_LABEL.get(_freq,(_freq,GRAY_55))[0]}</span></span>"
+                f"<span style='{_td_base};color:{GRAY_AA}'>{_rd}</span>"
                 f"<span style='{_td_base};color:{_fcol};font-weight:600'>{_ficon} {_flbl}</span>"
-                f"<span style='{_td_base};color:#aaa'>{_rn}</span>"
+                f"<span style='{_td_base};color:{GRAY_AA}'>{_rn}</span>"
                 f"</div>"
             )
             if _ficon == "🔴":
@@ -924,7 +924,7 @@ def render_data_guard_tab() -> None:
             f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
             f"<span style='{_kt_td};color:{GH_FG_PRIMARY};font-weight:600'>{_kr['name']}</span>"
             f"<span style='{_kt_td};color:{_src_color};font-weight:600'>{_kr['source']}</span>"
-            f"<span style='{_kt_td};color:#bbb;font-family:monospace;font-size:10px'>{_kr['preview']}</span>"
+            f"<span style='{_kt_td};color:{GRAY_BB};font-family:monospace;font-size:10px'>{_kr['preview']}</span>"
             f"<span style='{_kt_td};color:#7d8590;font-family:monospace;font-size:10px'>{_kr['env_preview']}</span>"
             f"</div>"
         )
@@ -1126,7 +1126,7 @@ def render_data_guard_tab() -> None:
                          fmt=lambda v: "已取得 ✓")
 
                 st.markdown(
-                    f"<span style='font-size:10px;color:#555'>"
+                    f"<span style='font-size:10px;color:{GRAY_55}'>"
                     f"來源：{_d5_fd.get('_source','投資組合')} | "
                     f"is_core: {_d5_fd.get('is_core','?')} | "
                     f"currency: {_d5_fd.get('currency', _d5_mj.get('currency','?'))}"
@@ -1245,7 +1245,7 @@ def render_data_guard_tab() -> None:
             _albl  = _av.get("fresh_label", "未知")
             _acol  = _av.get("fresh_color", "#999")
             _afreq = _av.get("freq", "")
-            _afq_lbl, _afq_col = _FREQ_LABEL.get(_afreq, (_afreq or "—", "#555"))
+            _afq_lbl, _afq_col = _FREQ_LABEL.get(_afreq, (_afreq or "—", GRAY_55))
             _abg = "#1a0808" if _aicon == "🔴" else BG_DARK_AMBER_2
             _rows_a += (
                 f"<div style='display:grid;grid-template-columns:2.4fr 1.4fr 0.8fr 1.2fr 1.6fr;"
@@ -1256,7 +1256,7 @@ def render_data_guard_tab() -> None:
                 f"<span style='background:{_afq_col}22;color:{_afq_col};"
                 f"border:1px solid {_afq_col};border-radius:10px;padding:1px 7px;"
                 f"font-size:10px;font-weight:700'>{_afq_lbl}</span></span>"
-                f"<span style='{_td_a};color:#aaa'>{_av.get('latest_date','—') or '—'}</span>"
+                f"<span style='{_td_a};color:{GRAY_AA}'>{_av.get('latest_date','—') or '—'}</span>"
                 f"<span style='{_td_a};color:{_acol};font-weight:600'>{_aicon} {_albl}</span>"
                 f"</div>"
             )
