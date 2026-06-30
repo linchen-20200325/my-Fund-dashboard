@@ -1247,7 +1247,12 @@ def render_portfolio_tab() -> None:
                             "metrics": _metrics, "moneydj_raw": _mj,
                         })
                         _tret = float(_tret_v or 0)
-                        _dyld = float(_mj.get("moneydj_div_yield") or _metrics.get("annual_div_rate") or 0)
+                        # v19.272 Phase 2 TOP 1:adr 走 SSOT 3 層 fallback chain(原行內 2 層收斂)
+                        from services.health.dividend import _resolve_adr_with_fallback
+                        _dyld_v, _ = _resolve_adr_with_fallback({
+                            "metrics": _metrics, "moneydj_raw": _mj,
+                        })
+                        _dyld = float(_dyld_v or 0)
                         if _dyld > 0:
                             _div_info = div_safety_check(_tret, _dyld)
                     except Exception:
