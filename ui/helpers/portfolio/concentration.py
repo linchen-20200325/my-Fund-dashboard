@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
+
 
 def _norm_name(s) -> str:
     return str(s or "").strip().upper()
@@ -83,11 +85,11 @@ def render_concentration_summary(portfolio_funds) -> None:
 
     _max = _r["max_exposure"]
     if _max >= 10:
-        _emoji, _border, _lvl = "🔴", "#f85149", "高度集中"
+        _emoji, _border, _lvl = "🔴", TRAFFIC_RED, "高度集中"
     elif _max >= 6:
-        _emoji, _border, _lvl = "🟠", "#d29922", "偏集中"
+        _emoji, _border, _lvl = "🟠", TRAFFIC_YELLOW, "偏集中"
     else:
-        _emoji, _border, _lvl = "🟢", "#3fb950", "相對分散"
+        _emoji, _border, _lvl = "🟢", TRAFFIC_GREEN, "相對分散"
 
     try:
         from ui.helpers.holdings import _zh_holding
@@ -191,11 +193,11 @@ def render_sector_concentration_summary(portfolio_funds) -> None:
 
     _max = _r["max_exposure"]
     if _max >= 30:
-        _emoji, _border, _lvl = "🔴", "#f85149", "高度集中"
+        _emoji, _border, _lvl = "🔴", TRAFFIC_RED, "高度集中"
     elif _max >= 20:
-        _emoji, _border, _lvl = "🟠", "#d29922", "偏集中"
+        _emoji, _border, _lvl = "🟠", TRAFFIC_YELLOW, "偏集中"
     else:
-        _emoji, _border, _lvl = "🟢", "#3fb950", "相對分散"
+        _emoji, _border, _lvl = "🟢", TRAFFIC_GREEN, "相對分散"
 
     _items = []
     for _nm, _exp_pct, _fc in _top:

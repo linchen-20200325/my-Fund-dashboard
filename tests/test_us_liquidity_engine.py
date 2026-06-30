@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from services import us_liquidity_engine as ule
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_RED
 
 
 def _mk_fred_df(values: list[float], dates: list[str]) -> pd.DataFrame:
@@ -20,7 +21,7 @@ def test_hy_oas_normal_range_green():
     with patch.object(ule, "fetch_fred", return_value=df):
         r = ule._hy_oas("key")
         assert r["value"] == 3.5
-        assert r["color"] == "#3fb950"
+        assert r["color"] == TRAFFIC_GREEN  # v19.252 Phase 4A SSOT
         assert "寬鬆" in r["label"]
 
 
@@ -28,7 +29,7 @@ def test_hy_oas_high_red():
     df = _mk_fred_df([6.0] * 25, [f"2026-01-{i+1:02d}" for i in range(25)])
     with patch.object(ule, "fetch_fred", return_value=df):
         r = ule._hy_oas("key")
-        assert r["color"] == "#f85149"
+        assert r["color"] == TRAFFIC_RED  # v19.252 Phase 4A SSOT
         assert "緊縮" in r["label"]
 
 

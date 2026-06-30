@@ -24,7 +24,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import (
+    MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED,
+    TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL,
+)
 
 from fund_fetcher import (
     fetch_market_news,
@@ -76,17 +79,17 @@ def _tp_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
     if key == "pmi_diff":
         return [(0.0, "dot", "#888", "擴張/收縮 0")]
     if key == "yield_curve":
-        return [(0.0, "dot", "#f85149", "倒掛 0")]
+        return [(0.0, "dot", TRAFFIC_RED, "倒掛 0")]
     if key == "hy_spread":
         return [
-            (_HY_WARN_THRESHOLD, "dot", "#d29922", f"警戒 {_HY_WARN_THRESHOLD}%"),
-            (_HY_CRISIS_THRESHOLD, "dash", "#f85149", f"危機 {_HY_CRISIS_THRESHOLD}%"),
+            (_HY_WARN_THRESHOLD, "dot", TRAFFIC_YELLOW, f"警戒 {_HY_WARN_THRESHOLD}%"),
+            (_HY_CRISIS_THRESHOLD, "dash", TRAFFIC_RED, f"危機 {_HY_CRISIS_THRESHOLD}%"),
         ]
     if key == "sahm_rule":
-        return [(SAHM_RECESSION_THRESHOLD, "dash", "#f85149",
+        return [(SAHM_RECESSION_THRESHOLD, "dash", TRAFFIC_RED,
                  f"衰退鎖定 {SAHM_RECESSION_THRESHOLD}")]
     if key == "lei_cfnai":
-        return [(CFNAI_RECESSION_THRESHOLD, "dash", "#f85149",
+        return [(CFNAI_RECESSION_THRESHOLD, "dash", TRAFFIC_RED,
                  f"衰退鎖定 {CFNAI_RECESSION_THRESHOLD}")]
     return []
 
@@ -116,28 +119,28 @@ def _radar_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
     """
     if key == "vix_level":
         # services L103-L105:cur >= 30 紅 / cur >= 25 黃
-        return [(25.0, "dot", "#d29922", "警戒 25"),
-                (30.0, "dash", "#f85149", "恐慌 30")]
+        return [(25.0, "dot", TRAFFIC_YELLOW, "警戒 25"),
+                (30.0, "dash", TRAFFIC_RED, "恐慌 30")]
     if key == "vix_term_struct":
         # services L341-L343:cur >= 1.10 紅 / cur >= 1.00 黃 (backwardation = panic)
-        return [(1.00, "dot", "#d29922", "倒掛 1.00"),
-                (1.10, "dash", "#f85149", "極端 1.10")]
+        return [(1.00, "dot", TRAFFIC_YELLOW, "倒掛 1.00"),
+                (1.10, "dash", TRAFFIC_RED, "極端 1.10")]
     if key == "hy_oas_delta":
         # trend 顯示 HY OAS level %;對齊拐點桶 6/8% threshold(SSOT MACRO_THRESHOLDS)
-        return [(_HY_WARN_THRESHOLD, "dot", "#d29922", f"警戒 {_HY_WARN_THRESHOLD}%"),
-                (_HY_CRISIS_THRESHOLD, "dash", "#f85149", f"危機 {_HY_CRISIS_THRESHOLD}%")]
+        return [(_HY_WARN_THRESHOLD, "dot", TRAFFIC_YELLOW, f"警戒 {_HY_WARN_THRESHOLD}%"),
+                (_HY_CRISIS_THRESHOLD, "dash", TRAFFIC_RED, f"危機 {_HY_CRISIS_THRESHOLD}%")]
     if key == "move_level":
         # services L426-L428:cur >= 130 紅 / cur >= 110 黃
-        return [(110.0, "dot", "#d29922", "警戒 110"),
-                (130.0, "dash", "#f85149", "高 130")]
+        return [(110.0, "dot", TRAFFIC_YELLOW, "警戒 110"),
+                (130.0, "dash", TRAFFIC_RED, "高 130")]
     if key == "sector_rotation":
         # services L532-L534:cur >= 1.20 紅(XLP/XLY)/ cur >= 1.00 黃
-        return [(1.00, "dot", "#d29922", "防禦領 1.00"),
-                (1.20, "dash", "#f85149", "極防禦 1.20")]
+        return [(1.00, "dot", TRAFFIC_YELLOW, "防禦領 1.00"),
+                (1.20, "dash", TRAFFIC_RED, "極防禦 1.20")]
     if key == "put_call_ratio":
         # PCR > 1.0 較看空,> 1.5 極端恐慌(教學常見值)
-        return [(1.00, "dot", "#d29922", "看空 1.0"),
-                (1.50, "dash", "#f85149", "恐慌 1.5")]
+        return [(1.00, "dot", TRAFFIC_YELLOW, "看空 1.0"),
+                (1.50, "dash", TRAFFIC_RED, "恐慌 1.5")]
     # v19.188 — 🌳 長期座標桶 美股流動性卡片 SPEC 線
     # cut-off 全部 import 自 services.us_liquidity_engine（與各 fetcher 的 color/label 同源 SSOT）
     if key in ("us_hy_oas", "us_m2_yoy", "us_rrp", "us_aaii"):
@@ -151,16 +154,16 @@ def _radar_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
         except Exception:
             return []
         if key == "us_hy_oas":
-            return [(HY_OAS_WARN_PCT, "dot", "#d29922", f"警戒 {HY_OAS_WARN_PCT}%"),
-                    (HY_OAS_CRISIS_PCT, "dash", "#f85149", f"緊縮 {HY_OAS_CRISIS_PCT}%")]
+            return [(HY_OAS_WARN_PCT, "dot", TRAFFIC_YELLOW, f"警戒 {HY_OAS_WARN_PCT}%"),
+                    (HY_OAS_CRISIS_PCT, "dash", TRAFFIC_RED, f"緊縮 {HY_OAS_CRISIS_PCT}%")]
         if key == "us_m2_yoy":
-            return [(M2_YOY_LOOSE_PCT, "dot", "#3fb950", f"寬鬆 {M2_YOY_LOOSE_PCT}%"),
-                    (M2_YOY_HOT_PCT, "dash", "#f85149", f"過熱 {M2_YOY_HOT_PCT}%")]
+            return [(M2_YOY_LOOSE_PCT, "dot", TRAFFIC_GREEN, f"寬鬆 {M2_YOY_LOOSE_PCT}%"),
+                    (M2_YOY_HOT_PCT, "dash", TRAFFIC_RED, f"過熱 {M2_YOY_HOT_PCT}%")]
         if key == "us_rrp":
-            return [(RRP_DRAIN_BN, "dash", "#d29922", f"枯竭 {RRP_DRAIN_BN:.0f}B")]
+            return [(RRP_DRAIN_BN, "dash", TRAFFIC_YELLOW, f"枯竭 {RRP_DRAIN_BN:.0f}B")]
         if key == "us_aaii":
-            return [(AAII_EUPHORIA_PCT, "dash", "#f85149", f"過熱 +{AAII_EUPHORIA_PCT:.0f}"),
-                    (AAII_PANIC_PCT, "dot", "#3fb950", f"恐慌 {AAII_PANIC_PCT:.0f}")]
+            return [(AAII_EUPHORIA_PCT, "dash", TRAFFIC_RED, f"過熱 +{AAII_EUPHORIA_PCT:.0f}"),
+                    (AAII_PANIC_PCT, "dot", TRAFFIC_GREEN, f"恐慌 {AAII_PANIC_PCT:.0f}")]
     # 其他 key(yield_10y_shock / spx_trend_break / sox_drop / asia_overnight
     #          / us_walcl / us_hyg_lqd:delta-based,無 natural level threshold)
     # trend 為絕對 level 而判斷用 delta,無單一 natural threshold,跳過 hline
@@ -212,8 +215,8 @@ def _make_radar_sparkline(trend: list, key: str, color: str):
 
 # v19.187 — 燈號 → 卡片邊框色(中期 Z-Score / 長期桶卡片共用,對齊短線雷達色票)
 _MACRO_CARD_LIGHT_COLOR = {
-    "red": "#f85149", "orange": "#ffab40", "yellow": "#d29922",
-    "green": "#3fb950", "gray": "#6e7681",
+    "red": TRAFFIC_RED, "orange": "#ffab40", "yellow": TRAFFIC_YELLOW,
+    "green": TRAFFIC_GREEN, "gray": TRAFFIC_NEUTRAL,
 }
 
 
@@ -1217,8 +1220,8 @@ def render_macro_tab() -> None:
         _ml_upd = st.session_state.get("macro_last_update")
         if _ml_upd is not None:
             _age_min_ml = (_now_tw() - _ml_upd).total_seconds() / 60
-            _age_color_ml = ('#3fb950' if _age_min_ml < 60
-                             else ('#d29922' if _age_min_ml < 240 else '#f85149'))
+            _age_color_ml = (TRAFFIC_GREEN if _age_min_ml < 60
+                             else (TRAFFIC_YELLOW if _age_min_ml < 240 else TRAFFIC_RED))
             _age_label_ml = (f'{int(_age_min_ml)} 分鐘前' if _age_min_ml < 60
                              else f'{_age_min_ml/60:.1f} 小時前')
             # 各區塊資料截止日（從 ind 各 indicator 的 date 欄取）
@@ -1515,7 +1518,7 @@ def render_macro_tab() -> None:
                         st.markdown(
                             f"<details style='margin:8px 0;background:#0d1117;border:1px solid #30363d;"
                             f"border-radius:6px;padding:6px 12px'>"
-                            f"<summary style='cursor:pointer;color:#d29922;font-size:12px'>"
+                            f"<summary style='cursor:pointer;color:{TRAFFIC_YELLOW};font-size:12px'>"
                             f"🔍 載入失敗詳情（{len(_errs)} 項）</summary>"
                             f"<ul style='margin:6px 0 0 0;color:#aaa;font-size:11px'>{_err_items}</ul>"
                             f"<div style='color:#666;font-size:10px;margin-top:6px'>"
@@ -1537,7 +1540,7 @@ def render_macro_tab() -> None:
                     if _us_dates:
                         _us_cutoff = min(_us_dates)
                         _us_days_old = (_us_today - _us_cutoff).days
-                        _us_color = "#3fb950" if _us_days_old <= 2 else ("#d29922" if _us_days_old <= 7 else "#f85149")
+                        _us_color = TRAFFIC_GREEN if _us_days_old <= 2 else (TRAFFIC_YELLOW if _us_days_old <= 7 else TRAFFIC_RED)
                         _us_age_txt = "今日" if _us_days_old <= 0 else f"{_us_days_old} 天前"
                     else:
                         _us_cutoff = None
@@ -1741,7 +1744,7 @@ def render_macro_tab() -> None:
                         _zs_rows.append({
                             "_abs": -1, "_key": _zk, "指標": _zname, "當前值": "—",
                             "白話判讀": "⬜ 資料不足，待補",
-                            "_color": "#6e7681", "_trend": [], "_signal": "⬜ 無資料",
+                            "_color": TRAFFIC_NEUTRAL, "_trend": [], "_signal": "⬜ 無資料",
                         })
                         continue
                     try:
@@ -1750,7 +1753,7 @@ def render_macro_tab() -> None:
                         _zs_rows.append({
                             "_abs": -1, "_key": _zk, "指標": _zname, "當前值": str(_zv)[:10],
                             "白話判讀": "⬜ 數值格式異常",
-                            "_color": "#6e7681", "_trend": [], "_signal": "⬜ 格式異常",
+                            "_color": TRAFFIC_NEUTRAL, "_trend": [], "_signal": "⬜ 格式異常",
                         })
                         continue
                     _z_score = None
@@ -1777,19 +1780,19 @@ def render_macro_tab() -> None:
                     if _z_score is None:
                         _verdict = "⬜ 樣本不足，無法判讀"
                         _abs_z = -1
-                        _zcolor = "#6e7681"
+                        _zcolor = TRAFFIC_NEUTRAL
                         _zsig_txt = "⬜ 樣本不足"
                     else:
                         _abs_z = abs(_z_score)
                         _phrase = _z_pos_phrase if _z_score > 0 else _z_neg_phrase
                         if _abs_z >= 2:
-                            _icon, _zcolor = "🔴 極端", "#f85149"
+                            _icon, _zcolor = "🔴 極端", TRAFFIC_RED
                         elif _abs_z >= 1.5:
                             _icon, _zcolor = "🟠 警示", "#ffab40"
                         elif _abs_z >= 1:
-                            _icon, _zcolor = "🟡 關注", "#d29922"
+                            _icon, _zcolor = "🟡 關注", TRAFFIC_YELLOW
                         else:
-                            _icon, _zcolor = "🟢 正常", "#3fb950"
+                            _icon, _zcolor = "🟢 正常", TRAFFIC_GREEN
                         _verdict = f"{_icon}（{_phrase}，Z={_z_score:+.2f}）"
                         _zsig_txt = _icon
                     _zs_rows.append({

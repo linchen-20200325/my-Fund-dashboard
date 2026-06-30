@@ -31,6 +31,8 @@ from shared.signal_thresholds import (
     CPI_MOM_FLAT_MAX_PCT,
     CPI_MOM_MILD_RISE_PCT,
 )
+# v19.252 Phase 4A:traffic light hex 從 SSOT 引入(原 inline #3fb950/#d29922/#f85149)
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
 # F-GRAY-4 v19.179 PR-3:TW PMI 5 級評分 SSOT
 from shared.macro_thresholds_v2 import TW_PMI_THRESHOLDS as _TW_PMI_THR
 _TWPMI_STRONG = _TW_PMI_THR["tw_pmi_score"]["strong_above"]      # 55.0
@@ -93,7 +95,7 @@ def detect_mk_golden_inflection(
         return {
             'label': 'MK 黃金拐點 ⭐',
             'icon': '⭐',
-            'color': '#3fb950',
+            'color': TRAFFIC_GREEN,
             'detail': (
                 f'核心 CPI {cpi_prev_yoy:+.2f}% → {cpi_yoy:+.2f}% '
                 f'（月降 {abs(cpi_delta):.2f}ppt） + Fed Funds '
@@ -105,7 +107,7 @@ def detect_mk_golden_inflection(
     return {
         'label': 'MK 拐點觀察中',
         'icon': '✅',
-        'color': '#d29922',
+        'color': TRAFFIC_YELLOW,
         'detail': (
             f'核心 CPI {cpi_prev_yoy:+.2f}% → {cpi_yoy:+.2f}% + '
             f'Fed Funds {fed_prev_rate:.2f}% → {fed_rate:.2f}% '
@@ -238,16 +240,16 @@ def classify_long_term_regime(
     score = weighted_sum / weight_total
 
     if score >= 1.0:
-        regime, color, suggest = '🟢 成長期', '#3fb950', '80%+'
+        regime, color, suggest = '🟢 成長期', TRAFFIC_GREEN, '80%+'
         detail = '景氣擴張+通膨溫和+資金寬鬆 → 多頭主升段，可積極做多'
     elif score >= 0.0:
         regime, color, suggest = '🔵 復甦期', '#58a6ff', '60-80%'
         detail = '景氣由谷底回升 → 加碼基本面好的標的，留意通膨變化'
     elif score >= -1.0:
-        regime, color, suggest = '🟡 過熱/震盪期', '#d29922', '40-60%'
+        regime, color, suggest = '🟡 過熱/震盪期', TRAFFIC_YELLOW, '40-60%'
         detail = '景氣高檔震盪或通膨壓力 → 謹慎觀望，等待方向確認'
     else:
-        regime, color, suggest = '🔴 衰退期', '#f85149', '<30%'
+        regime, color, suggest = '🔴 衰退期', TRAFFIC_RED, '<30%'
         detail = '景氣下行+通膨壓力或政策緊縮 → 保守減倉，現金為王'
 
     return {
@@ -392,15 +394,15 @@ def classify_short_term_regime(
     score = weighted_sum / weight_total
 
     if score >= 0.8:
-        regime, color = '⚡ 偏多', '#3fb950'
+        regime, color = '⚡ 偏多', TRAFFIC_GREEN
         detail = '下個財報季正向動能 → 加碼績優股、波段佈局好時機'
         action = '建議：擇強做多、留意外資連續買超的個股'
     elif score >= -0.3:
-        regime, color = '⚖️ 中性', '#d29922'
+        regime, color = '⚖️ 中性', TRAFFIC_YELLOW
         detail = '訊號分歧或多空交織 → 觀望為主、留意個股輪動'
         action = '建議：區間操作、避免追高殺低、續抱長期持股'
     else:
-        regime, color = '⚠️ 偏空', '#f85149'
+        regime, color = '⚠️ 偏空', TRAFFIC_RED
         detail = '下個財報季承壓 → 防守為主、現金為王'
         action = '建議：減碼高估值、停利出場、留意外資連續賣超'
 

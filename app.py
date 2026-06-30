@@ -20,6 +20,7 @@ TW_TZ = datetime.timezone(datetime.timedelta(hours=8))
 def _now_tw():
     return datetime.datetime.now(TW_TZ)
 
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_RED
 from services.macro import (
     ENGINE_VERSION,
 )
@@ -67,13 +68,14 @@ from ui.helpers.session import friendly_error as _friendly_error  # noqa: F401
 # ══════════════════════════════════════════════════════
 # CSS（page_config 已於檔首 hoist，避免 StreamlitSetPageConfigMustBeFirstCommandError）
 # ══════════════════════════════════════════════════════
-st.markdown("""<style>
-body,.stApp{background:#0e1117;color:#e6edf3}
-.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px 18px;margin:6px 0}
-.signal-buy{background:#1c3a2a;color:#3fb950;border:1px solid #3fb950;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}
-.signal-sell{background:#3a1010;color:#f85149;border:1px solid #f85149;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}
-.signal-hold{background:#1a3450;color:#58a6ff;border:1px solid #58a6ff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}
-.signal-switch{background:#3a2a10;color:#f0b132;border:1px solid #f0b132;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}
+# v19.252 Phase 4A:signal-buy/sell 走 TRAFFIC SSOT(原 inline #3fb950 / #f85149)
+st.markdown(f"""<style>
+body,.stApp{{background:#0e1117;color:#e6edf3}}
+.card{{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px 18px;margin:6px 0}}
+.signal-buy{{background:#1c3a2a;color:{TRAFFIC_GREEN};border:1px solid {TRAFFIC_GREEN};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
+.signal-sell{{background:#3a1010;color:{TRAFFIC_RED};border:1px solid {TRAFFIC_RED};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
+.signal-hold{{background:#1a3450;color:#58a6ff;border:1px solid #58a6ff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
+.signal-switch{{background:#3a2a10;color:#f0b132;border:1px solid #f0b132;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
 </style>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════

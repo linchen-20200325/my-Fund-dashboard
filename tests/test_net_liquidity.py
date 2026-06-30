@@ -13,6 +13,7 @@ import math
 import pandas as pd
 
 import services.us_liquidity_engine as ule
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
 
 
 def _mk_df(dates, values):
@@ -52,20 +53,20 @@ class TestNetLiquidity:
         _patch_fred(monkeypatch, walcl, [700_000] * 20)
         out = ule._net_liquidity("KEY")
         assert out["delta"] > ule.NET_LIQ_EXPAND_TN
-        assert out["color"] == "#3fb950"
+        assert out["color"] == TRAFFIC_GREEN  # v19.252 Phase 4A SSOT
 
     def test_delta_drain_red(self, monkeypatch):
         walcl = [6_700_000 - i * 30_000 for i in range(20)]
         _patch_fred(monkeypatch, walcl, [700_000] * 20)
         out = ule._net_liquidity("KEY")
         assert out["delta"] < ule.NET_LIQ_DRAIN_TN
-        assert out["color"] == "#f85149"
+        assert out["color"] == TRAFFIC_RED  # v19.252 Phase 4A SSOT
 
     def test_neutral_yellow(self, monkeypatch):
         _patch_fred(monkeypatch, [6_700_000] * 20, [700_000] * 20)
         out = ule._net_liquidity("KEY")
         assert abs(out["delta"]) <= ule.NET_LIQ_EXPAND_TN
-        assert out["color"] == "#d29922"
+        assert out["color"] == TRAFFIC_YELLOW  # v19.252 Phase 4A SSOT
 
     def test_missing_tga_fail_loud(self, monkeypatch):
         # TGA 回空 → §1 不捏造,回 _err（不回 value）

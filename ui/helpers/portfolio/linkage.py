@@ -12,6 +12,7 @@ from __future__ import annotations
 import streamlit as st
 
 from services.format_helpers import fmt_twd
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW
 
 
 def _norm(s) -> str:
@@ -54,11 +55,11 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
         else:
             _msg = (f"✅ <b>此基金已在你的組合</b>（共 {_n} 檔）｜定位 {_tag}"
                     f"<span style='color:#666'>（尚未填投資金額）</span>")
-        _border = "#3fb950"
+        _border = TRAFFIC_GREEN
     else:
         _msg = (f"➕ 此基金<b>尚未加入</b>你的組合（目前 {_n} 檔）"
                 f"<span style='color:#666'>　· 可至「📊 組合基金」Tab 加入後比較</span>")
-        _border = "#d29922"
+        _border = TRAFFIC_YELLOW
 
     st.markdown(
         f"<div style='background:#0d1117;border-left:4px solid {_border};"

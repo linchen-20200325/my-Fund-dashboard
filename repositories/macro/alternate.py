@@ -14,6 +14,7 @@ import pandas as pd
 
 from infra.proxy import fetch_url
 from fund_fetcher import _ttl_cache, register_cache
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
 from shared.fred_series import FRED_BSCICP02, FRED_PHILLY_FED
 from shared.ttls import TTL_5MIN, TTL_30MIN
 
@@ -423,22 +424,22 @@ def fetch_macro_compass(range_: str = "6mo") -> dict:
 
     def _sig_vix(v):
         # Phase 1 規格：>25 黃 / >30 綠（恐慌貪婪區=逢低加碼時機）
-        if v > 30: return ('🟢', '恐慌貪婪區（準備跌深就買）', '#3fb950')
-        if v > 25: return ('🟡', '波動加劇', '#d29922')
-        return ('🟢', '市場平靜', '#3fb950')
+        if v > 30: return ('🟢', '恐慌貪婪區（準備跌深就買）', TRAFFIC_GREEN)
+        if v > 25: return ('🟡', '波動加劇', TRAFFIC_YELLOW)
+        return ('🟢', '市場平靜', TRAFFIC_GREEN)
 
     def _sig_tnx(t):
         # 估值壓力：≥4.5% 紅 / 3.5–4.5 黃 / <3.5 綠（寬鬆）
-        if t >= 4.5: return ('🔴', '估值壓力（科技股不利）', '#f85149')
-        if t >= 3.5: return ('🟡', '中性區', '#d29922')
-        return ('🟢', '寬鬆有利', '#3fb950')
+        if t >= 4.5: return ('🔴', '估值壓力（科技股不利）', TRAFFIC_RED)
+        if t >= 3.5: return ('🟡', '中性區', TRAFFIC_YELLOW)
+        return ('🟢', '寬鬆有利', TRAFFIC_GREEN)
 
     def _sig_gspc(g, ma):
         # Phase 1 規格：站上 60MA=多頭、跌破=趨勢轉弱
         if ma is None or g is None:
             return ('⚪', '60MA 計算中', '#8b949e')
-        if g >= ma: return ('🟢', '多頭格局（股優於債）', '#3fb950')
-        return ('🔴', '趨勢轉弱（提高防禦）', '#f85149')
+        if g >= ma: return ('🟢', '多頭格局（股優於債）', TRAFFIC_GREEN)
+        return ('🔴', '趨勢轉弱（提高防禦）', TRAFFIC_RED)
 
     # ── ^VIX ────────────────────────────────────────────────
     try:

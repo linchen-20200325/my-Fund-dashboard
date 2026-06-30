@@ -39,11 +39,13 @@ from shared.colors import (
     MATERIAL_GREEN as _C_GREEN,
     MATERIAL_ORANGE as _C_YELLOW,
     MATERIAL_RED as _C_RED,
+    TRAFFIC_NEUTRAL,
 )
 
 # ── 燈號 → 色 / emoji / 嚴重度排序(bar + chart + SPEC 共用)──
+# v19.252 Phase 4A:gray 從 SSOT 取(原 inline #6e7681,已 v19.68 升級為 #888888)
 LEVEL_COLOR = {"green": _C_GREEN, "yellow": _C_YELLOW,
-               "red": _C_RED, "gray": "#6e7681"}
+               "red": _C_RED, "gray": TRAFFIC_NEUTRAL}
 LEVEL_EMOJI = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⬜"}
 LEVEL_RANK = {"green": 1, "yellow": 2, "red": 3}   # gray 不參與 worst 計算
 

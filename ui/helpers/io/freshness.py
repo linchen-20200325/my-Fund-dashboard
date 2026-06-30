@@ -16,6 +16,7 @@ import datetime as _dt
 import streamlit as st
 
 from shared.signal_thresholds import MJ_FRESH_DAYS_GREEN, MJ_FRESH_DAYS_YELLOW
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
 
 
 def nav_age_emoji(nav_date_str, today=None):
@@ -193,7 +194,7 @@ def render_sidebar_data_health(session_state, now_tw=None) -> None:
     _head_order = {"🔴": 3, "🟠": 2, "🟢": 1, "⬜": 0}
     _headline = max(_domain_emojis, key=lambda e: _head_order.get(e, 0)) if _domain_emojis else "⬜"
     _body = "<br/>".join(_lines)
-    _border = {"🔴": "#f85149", "🟠": "#d29922", "🟢": "#3fb950", "⬜": "#444"}.get(_headline, "#444")
+    _border = {"🔴": TRAFFIC_RED, "🟠": TRAFFIC_YELLOW, "🟢": TRAFFIC_GREEN, "⬜": "#444"}.get(_headline, "#444")
     st.markdown(
         f"<div style='background:#0d1117;border-left:4px solid {_border};"
         f"border-radius:4px;padding:6px 10px;font-size:11px;color:#8b949e;"

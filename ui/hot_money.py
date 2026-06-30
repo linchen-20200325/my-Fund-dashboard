@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
+
 
 # 狀態白話解讀（針對基金 user 加上「境外基金影響」面）
 STATE_TEXT = {
@@ -147,7 +149,7 @@ def render_hot_money_section(token: str = "",
     _hm_cutoff = pd.Timestamp(latest["date"]).date()
     _hm_today = pd.Timestamp.now(tz="Asia/Taipei").date()
     _hm_days_old = (_hm_today - _hm_cutoff).days
-    _hm_color = "#3fb950" if _hm_days_old <= 1 else ("#d29922" if _hm_days_old <= 4 else "#f85149")
+    _hm_color = TRAFFIC_GREEN if _hm_days_old <= 1 else (TRAFFIC_YELLOW if _hm_days_old <= 4 else TRAFFIC_RED)
     _hm_age_txt = "今日" if _hm_days_old <= 0 else f"{_hm_days_old} 天前"
     _hm_load_txt = pd.Timestamp.now(tz="Asia/Taipei").strftime("%m-%d %H:%M")
     _hcols = st.columns([5, 1])
