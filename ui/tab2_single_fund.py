@@ -356,11 +356,16 @@ def render_single_fund_tab() -> None:
                             f"<span>📊</span><div><div style='color:{_aa_c};font-weight:700;font-size:12px'>總經自動配比建議：{_aa_lbl}</div>"
                             f"<div style='color:{GRAY_CC};font-size:12px'>股 {_aa_stk}% ／ 債 {_aa_bnd}%</div></div></div>", unsafe_allow_html=True)
                     _sig_style = sig["sig_style"]
-                    st.markdown(f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:10px;padding:14px 18px;margin:8px 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap'>"
+                    # v19.273 Phase 2 TOP 2.1:卡片外框走 gh_card chrome SSOT(byte-identical)
+                    from ui.components.cards import gh_card
+                    st.markdown(gh_card(
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>資產屬性</div><div style='font-size:14px;font-weight:700;color:{INFO_BLUE}'>{sig['asset_class']}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>策略3 操作訊號</div><span style='{_sig_style};padding:4px 12px;border-radius:20px;font-size:13px;font-weight:700;display:inline-block'>{sig['label']}</span></div>"
                         f"<div style='flex:1'><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>景氣位階（{phase_info_s['phase']} {phase_info_s['score']}/10）</div>"
-                        f"<div style='font-size:12px;color:{GH_FG_SECONDARY}'>{sig['reason']}</div></div></div>", unsafe_allow_html=True)
+                        f"<div style='font-size:12px;color:{GH_FG_SECONDARY}'>{sig['reason']}</div></div>",
+                        radius=10, padding="14px 18px", margin="8px 0",
+                        extra="display:flex;align-items:center;gap:16px;flex-wrap:wrap",
+                    ), unsafe_allow_html=True)
 
                 # 淨值走勢圖（Bollinger Bands + 配息標記 v2.0 + V5 三合一）
                 # V5: 微觀防護盾掃描後才出現右側三率動能柱（未掃描時主圖佔滿全寬）
