@@ -22,6 +22,15 @@
 
 ## 當前版本
 
+- **v19.278 持股 Morningstar fallback — 保單/FoF 代碼第二替代源(2026-06-30)**:
+  - **背景**:user 回報 v19.276 cnyes fallback **部署後仍抓不到**(ACTI71/JFZN3/ACCP138/TLZF9)。⚠️ **關鍵診斷**:Tab5 Put/Call trace 只有 Yahoo+stooq、**無 CBOE 嘗試** → 證實**線上仍跑舊 deploy**,v19.276/277 根本還沒生效。但這些保單平台多重資產/FoF 代碼即使 cnyes 生效也未必有 → user 要求再找替代源
+  - **研究結論**:這幾檔在 Morningstar **有**資料(如 Allianz Income&Growth = ISIN LU0689472784);本專案已有 secId 基建(`_MORNINGSTAR_SECID_MAP` TLZF9=0P0001J5YG / JFZN3=0P0001N4II + `_morningstar_search_secid` + token-free `tools.morningstar.co.uk`)
+  - `repositories/fund/sources.py:fetch_holdings_morningstar(code)` — `_resolve_ms_secid`(硬編表→TDCC 名稱橋接搜尋)+ `_ms_parse_holdings`(防禦式多 viewId×多欄位 parse;多重資產主抓**資產配置** 股/債/可轉債/現金 %)
+  - wire 進 `nav_metrics.fetch_holdings` cnyes 之後(MoneyDJ→cnyes→Morningstar 三層 fallback)
+  - F-PROV-1 `Morningstar:holdings:{secid}:{view}`;失敗回 {} + log keys(§1)
+  - `tests/test_fetch_holdings_cnyes.py` +7 例;既有 fallback test patch Morningstar 維持確定性。33 passed
+  - **⚠️ 誠實限制**:Morningstar holdings viewId / JSON shape 開發環境(proxy 403)無法實測 → 防禦式;且 FoF granular 個股本就稀少,主要拿到資產類別配置(夠 shadow-fund overlap 用)。**真正未驗的是「線上有沒有部署到」**——需 user 確認 redeploy + 硬刷新後看 production log
+
 - **v19.276+277 資料抓不到修復 — 持股 cnyes fallback + Put/Call CBOE 官方源(2026-06-30)**:
   - **背景**:user 截圖資料診斷回報兩個真實「抓不到資料」故障,要求修復(§-1 真 bug 觸發)
   - **v19.276 持股 cnyes fallback**(`579a4ab`):

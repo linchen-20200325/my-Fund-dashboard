@@ -132,11 +132,12 @@ def test_structural_detection_skips_non_sector_tables():
     </table>
     </body></html>"""
 
-    # v19.276:此 fund 抓不到任何 holdings → 會試 cnyes fallback;本測試只驗
-    # MoneyDJ parser 不誤吃 perf table,patch cnyes 回 {} 維持確定性。
+    # v19.276/278:此 fund 抓不到任何 holdings → 會試 cnyes + Morningstar fallback;
+    # 本測試只驗 MoneyDJ parser 不誤吃 perf table,patch 兩 fallback 回 {} 維持確定性。
     with patch("repositories.fund.nav_metrics.fetch_url_with_retry",
                return_value=_FakeResp(_NOISE_HTML)), \
-         patch("repositories.fund.nav_metrics.fetch_holdings_cnyes", return_value={}):
+         patch("repositories.fund.nav_metrics.fetch_holdings_cnyes", return_value={}), \
+         patch("repositories.fund.nav_metrics.fetch_holdings_morningstar", return_value={}):
         out = fetch_holdings("XXX")
 
     assert "sector_alloc" not in out, f"perf table 不該被誤吃為 sector_alloc:{out}"

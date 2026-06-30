@@ -43,10 +43,11 @@ def test_fetch_holdings_tries_six_candidate_urls():
         _called.append(url)
         return None  # 全 fail → fetcher 應繼續試下個
 
-    # v19.276:MoneyDJ 全失敗後會試 cnyes fallback;本測試只驗 MoneyDJ chain,
-    # patch cnyes 回 {} 維持確定性(避免真網路呼叫)。
+    # v19.276/278:MoneyDJ 全失敗後會試 cnyes + Morningstar fallback;本測試只驗
+    # MoneyDJ chain,patch 兩 fallback 回 {} 維持確定性(避免真網路呼叫)。
     with patch("repositories.fund.nav_metrics.fetch_url_with_retry", side_effect=_spy), \
-         patch("repositories.fund.nav_metrics.fetch_holdings_cnyes", return_value={}):
+         patch("repositories.fund.nav_metrics.fetch_holdings_cnyes", return_value={}), \
+         patch("repositories.fund.nav_metrics.fetch_holdings_morningstar", return_value={}):
         result = fetch_holdings("TESTCODE")
 
     # 應至少嘗試 4 個不同 subdomain(去重 subdomain 看)
@@ -86,7 +87,8 @@ def test_fetch_holdings_failure_records_per_url_audit():
     fetch_holdings.cache_clear()
 
     with patch("repositories.fund.nav_metrics.fetch_url_with_retry", return_value=None), \
-         patch("repositories.fund.nav_metrics.fetch_holdings_cnyes", return_value={}):
+         patch("repositories.fund.nav_metrics.fetch_holdings_cnyes", return_value={}), \
+         patch("repositories.fund.nav_metrics.fetch_holdings_morningstar", return_value={}):
         result = fetch_holdings("BBB")
 
     assert "attempts" in result

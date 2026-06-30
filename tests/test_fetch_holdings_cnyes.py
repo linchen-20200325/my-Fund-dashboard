@@ -179,6 +179,86 @@ def test_fetch_holdings_falls_back_to_cnyes_when_page_has_no_holdings():
     assert out["sector_alloc"][0]["name"] == "債券"
 
 
+# ── v19.278 Morningstar 持股 fallback(cnyes 之後第二替代源)──────────────
+
+def test_ms_parse_asset_allocation_nested_portfolios():
+    """Morningstar Portfolios[].assetAllocation → sector_alloc(多重資產主路徑)。"""
+    payload = {"Portfolios": [{"assetAllocation": [
+        {"assetClass": "Equity", "netAssetPercent": 31.7},
+        {"assetClass": "Convertible", "netAssetPercent": 31.6},
+        {"assetClass": "High Yield Bond", "netAssetPercent": 30.8},
+    ]}]}
+    out = S._ms_parse_holdings(payload)
+    secs = {s["name"]: s["pct"] for s in out["sector_alloc"]}
+    assert secs == {"Equity": 31.7, "Convertible": 31.6, "High Yield Bond": 30.8}
+    assert "top_holdings" not in out
+
+
+def test_ms_parse_top_holdings_field_fallbacks():
+    """holdingDetails + 多欄位名(securityName/weighting)。"""
+    payload = {"holdingDetails": [
+        {"securityName": "NVIDIA", "weighting": 6.5, "sector": "Technology"},
+        {"name": "APPLE", "weight": 5.2},
+    ]}
+    out = S._ms_parse_holdings(payload)
+    tops = {h["name"]: h["pct"] for h in out["top_holdings"]}
+    assert tops == {"NVIDIA": 6.5, "APPLE": 5.2}
+    assert out["top_holdings"][0]["sector"] == "Technology"
+
+
+def test_ms_parse_unrecognized_returns_empty():
+    assert S._ms_parse_holdings({"foo": "bar"}) == {}
+
+
+def test_fetch_holdings_morningstar_happy_path():
+    """secId 解析成功 + snapshot 回資產配置 → 帶 provenance 契約 dict。"""
+    portfolio = {"Portfolios": [{"assetAllocation": [
+        {"assetClass": "Equity", "netAssetPercent": 42.0},
+        {"assetClass": "Bond", "netAssetPercent": 50.0}]}]}
+
+    def _fake_get(url, **kw):
+        return _FakeJsonResp(portfolio)
+
+    with patch.object(S, "_resolve_ms_secid", return_value="0P0001J5YG"), \
+         patch.object(S.requests, "get", side_effect=_fake_get):
+        out = S.fetch_holdings_morningstar("TLZF9")
+
+    secs = {s["name"]: s["pct"] for s in out["sector_alloc"]}
+    assert secs == {"Equity": 42.0, "Bond": 50.0}
+    assert out["source"].startswith("Morningstar:holdings:0P0001J5YG")
+    assert "fetched_at" in out
+
+
+def test_fetch_holdings_morningstar_no_secid_returns_empty():
+    """secId 解析失敗 → {}(不發網路)。"""
+    with patch.object(S, "_resolve_ms_secid", return_value=""):
+        assert S.fetch_holdings_morningstar("UNKNOWN9") == {}
+
+
+def test_fetch_holdings_morningstar_blank_code():
+    assert S.fetch_holdings_morningstar("") == {}
+
+
+def test_fetch_holdings_falls_back_to_morningstar_when_cnyes_empty():
+    """MoneyDJ 全失敗 + cnyes 空 → 落到 Morningstar。"""
+    fetch_holdings.cache_clear()
+    _ms = {"sector_alloc": [{"name": "Equity", "pct": 42.0, "amount": 0.0}],
+           "source": "Morningstar:holdings:0P0001J5YG:PortfolioSAL",
+           "fetched_at": "2026-06-30T00:00:00Z"}
+
+    with patch("repositories.fund.nav_metrics.fetch_url_with_retry",
+               return_value=None), \
+         patch("repositories.fund.nav_metrics.fetch_holdings_cnyes",
+               return_value={}), \
+         patch("repositories.fund.nav_metrics.fetch_holdings_morningstar",
+               return_value=_ms) as _m:
+        out = fetch_holdings("TLZF9")
+
+    _m.assert_called_once_with("TLZF9")
+    assert out["source"].startswith("Morningstar:")
+    assert out["sector_alloc"][0]["name"] == "Equity"
+
+
 def test_fetch_holdings_no_cnyes_when_moneydj_succeeds():
     """MoneyDJ 抓到持股 → 不該呼 cnyes(避免無謂網路)。"""
     fetch_holdings.cache_clear()

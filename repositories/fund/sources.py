@@ -63,7 +63,7 @@ __all__ = [
     # ── public functions ──
     "canonicalize_moneydj_url",
     "fetch_div_cnyes", "fetch_fund_multi_source",
-    "fetch_holdings_cnyes", "fetch_nav_cnyes",
+    "fetch_holdings_cnyes", "fetch_holdings_morningstar", "fetch_nav_cnyes",
     "get_page_types_to_try",
     "load_fund_code_mapping",
     "normalize_domestic_code",
@@ -653,6 +653,166 @@ def fetch_holdings_cnyes(code: str) -> dict:
                      else type(data).__name__)
             print(f"[cnyes_holdings] {_cand}/{_res} 200 但無可解析持股 keys={_keys}",
                   file=_sys_c.stderr)
+    return {}
+
+
+# ── v19.278 Morningstar 持股 / 資產配置 fallback(cnyes 之後的第二替代源)──────
+# 設計脈絡:user 反饋 ACTI71 / JFZN3 / ACCP138 / TLZF9 等**保單平台代碼**的
+# 多重資產 / 組合(FoF)基金,MoneyDJ + cnyes 都抓不到 granular 持股。這些基金
+# (如 Allianz Income & Growth = ISIN LU0689472784)在 Morningstar **有**資料。
+# 本專案已有 secId 基礎建設:`_MORNINGSTAR_SECID_MAP`(TLZF9/JFZN3 已硬編)+
+# `_morningstar_search_secid`(名稱搜尋)+ token-free `tools.morningstar.co.uk`
+# (NAV 已用,美國 IP 可達)。本 fetcher 借同一條路抓 portfolio。
+#
+# ⚠️ Morningstar holdings 端點 JSON shape / viewId 無法於開發環境(proxy 403)
+#    實測 → 防禦式多 viewId × 多欄位名解析:猜錯 → 回空 + log 真實 keys
+#    (§1 Fail Loud,production log 揭露真 shape 供下一輪精修)。
+_MS_HOLD_NAME_KEYS = ("securityName", "name", "holdingName", "stockName",
+                      "Name", "SecurityName")
+_MS_PCT_KEYS = ("weighting", "weight", "netAssetPercent", "percent",
+                "Weighting", "percentage", "marketValuePercentage")
+_MS_ASSET_NAME_KEYS = ("assetClass", "type", "name", "categoryName",
+                       "AssetClass", "Type", "label")
+# holdings 陣列可能掛的 key(snapshot / portfolio view 各異)
+_MS_HOLD_LIST_KEYS = ("holdingDetails", "HoldingDetails", "topHoldings",
+                      "holdings", "Holdings", "holdingActiveShare")
+# 資產配置陣列可能掛的 key
+_MS_ASSET_LIST_KEYS = ("assetAllocation", "AssetAllocation", "allocationMap",
+                       "assetAllocList", "portfolioAllocation", "breakdowns")
+
+
+def _resolve_ms_secid(code: str) -> str:
+    """保單平台代碼 → Morningstar secId(硬編表 → TDCC 名稱橋接搜尋)。查無回 ""。"""
+    _code = (code or "").upper().strip()
+    _mapped = _MORNINGSTAR_SECID_MAP.get(_code, ("", ""))
+    if _mapped[0]:
+        return _mapped[0]
+    # 用 TDCC 中文名搜 Morningstar(英文名較準,但中文也試)
+    try:
+        _name = _tdcc_resolve_fund_name(_code) or ""
+    except Exception:
+        _name = ""
+    for _q in (_name, _code):
+        if _q:
+            _sid = _morningstar_search_secid(_q)
+            if _sid:
+                return _sid
+    return ""
+
+
+def _ms_parse_holdings(data) -> dict:
+    """防禦式解析 Morningstar security_details JSON(多 viewId shape)。
+
+    回傳 {top_holdings:[{name,sector,pct}], sector_alloc:[{name,pct,amount}]}
+    (任一可缺;全缺回 {})。Morningstar 多重資產基金主要有資產配置(股/債/
+    可轉債/現金),個股 top holdings 視 fund 而定 — 兩者都盡力抓。
+    """
+    out: dict = {}
+    # 攤平:Morningstar 常把資料包在 Portfolios[0] / Portfolio / data 之下
+    payloads = [data]
+    if isinstance(data, dict):
+        for _k in ("Portfolios", "portfolios", "Portfolio", "portfolio",
+                   "data", "Data"):
+            _v = data.get(_k)
+            if isinstance(_v, list) and _v:
+                payloads.extend([x for x in _v if isinstance(x, dict)])
+            elif isinstance(_v, dict):
+                payloads.append(_v)
+
+    def _find_list(keys):
+        for node in payloads:
+            if not isinstance(node, dict):
+                continue
+            for k in keys:
+                v = node.get(k)
+                if isinstance(v, list) and v:
+                    return v
+        return []
+
+    # top_holdings
+    holdings = []
+    for item in _find_list(_MS_HOLD_LIST_KEYS):
+        if not isinstance(item, dict):
+            continue
+        name = _cnyes_pick(item, _MS_HOLD_NAME_KEYS)
+        pct = safe_float(_cnyes_pick(item, _MS_PCT_KEYS))
+        if name and pct is not None and 0 < pct < 100:
+            sector = _cnyes_pick(item, ("sector", "Sector", "industry",
+                                        "country", "Country")) or ""
+            holdings.append({"name": str(name).strip(),
+                             "sector": str(sector).strip(), "pct": pct})
+    if holdings:
+        out["top_holdings"] = holdings[:10]
+
+    # sector_alloc(多重資產基金主要靠這個 — 資產類別 %)
+    sectors = []
+    for item in _find_list(_MS_ASSET_LIST_KEYS):
+        if not isinstance(item, dict):
+            continue
+        name = _cnyes_pick(item, _MS_ASSET_NAME_KEYS)
+        pct = safe_float(_cnyes_pick(item, _MS_PCT_KEYS))
+        if name and pct is not None and 0 < pct <= 100:
+            sectors.append({"name": str(name).strip(), "pct": pct,
+                            "amount": 0.0})
+    if sectors:
+        out["sector_alloc"] = sectors
+    return out
+
+
+def fetch_holdings_morningstar(code: str) -> dict:
+    """Morningstar 持股 / 資產配置 fallback(cnyes 之後的第二替代源)。
+
+    回傳契約對齊 nav_metrics.fetch_holdings:
+      {data_date, sector_alloc:[{name,pct,amount}], top_holdings:[{name,sector,pct}],
+       source, fetched_at}
+    抓不到 → {}(§1 Fail Loud)。token-free `tools.morningstar.co.uk`,美國 IP /
+    NAS proxy 皆可達(NAV 同源已驗)。
+    """
+    import sys as _sys_m
+    _code = (code or "").upper().strip()
+    if not _code:
+        return {}
+    sec_id = _resolve_ms_secid(_code)
+    if not sec_id:
+        print(f"[ms_holdings] {_code}: 無 secId(未在映射表且搜尋失敗)",
+              file=_sys_m.stderr)
+        return {}
+    _hdrs = {
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/124.0.0.0 Safari/537.36"),
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://tools.morningstar.co.uk/",
+    }
+    # viewId 未驗證 → 多候選嘗試(snapshot 含資產配置;portfolio view 含 holdings)
+    _views = ("PortfolioSAL", "snapshot", "Portfolio")
+    for _view in _views:
+        _url = (f"https://tools.morningstar.co.uk/api/rest.svc/security_details/"
+                f"{sec_id}?viewId={_view}&idtype=Morningstar"
+                f"&responseViewFormat=json&languageId=en-GB")
+        try:
+            r = requests.get(_url, headers=_hdrs, timeout=15,
+                             proxies=_proxies(), verify=_ssl_verify())
+            if r.status_code != 200:
+                continue
+            data = r.json()
+        except Exception as _e:
+            print(f"[ms_holdings] {sec_id}/{_view}: {_e}", file=_sys_m.stderr)
+            continue
+        out = _ms_parse_holdings(data)
+        if out.get("top_holdings") or out.get("sector_alloc"):
+            out["source"] = f"Morningstar:holdings:{sec_id}:{_view}"
+            out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+            print(f"[ms_holdings] ✅ {code}→{sec_id}/{_view} "
+                  f"top={len(out.get('top_holdings', []))} "
+                  f"sector={len(out.get('sector_alloc', []))}",
+                  file=_sys_m.stderr)
+            return out
+        _keys = (list(data.keys()) if isinstance(data, dict)
+                 else f"list[{len(data)}]" if isinstance(data, list)
+                 else type(data).__name__)
+        print(f"[ms_holdings] {sec_id}/{_view} 200 但無可解析持股 keys={_keys}",
+              file=_sys_m.stderr)
     return {}
 
 
