@@ -32,7 +32,7 @@ from typing import Optional
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
@@ -490,16 +490,16 @@ def render_four_horizon_bar(summary: dict) -> None:
     ]
     for _col, (_key, _title, _sub) in zip(_cols, _order):
         _d = summary.get(_key) or {}
-        _color = _d.get("color", "#888")
+        _color = _d.get("color", TRAFFIC_NEUTRAL)
         _emoji = _d.get("emoji", "⚪")
         _label = _d.get("label", "—")
         _headline = _d.get("headline", "")
         with _col:
             st.markdown(
                 f"""<div style="border-left:4px solid {_color};padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:6px;">
-<div style="font-size:0.78em;color:#888;letter-spacing:0.5px;">{_sub}</div>
+<div style="font-size:0.78em;color:{TRAFFIC_NEUTRAL};letter-spacing:0.5px;">{_sub}</div>
 <div style="font-size:1.05em;font-weight:600;margin-top:2px;">{_emoji} {_title}: <span style="color:{_color};">{_label}</span></div>
-<div style="font-size:0.85em;color:#bbb;margin-top:4px;line-height:1.4;">{_headline}</div>
+<div style=f"font-size:0.85em;color:{GRAY_BB};margin-top:4px;line-height:1.4;">{_headline}</div>
 </div>""",
                 unsafe_allow_html=True,
             )
@@ -602,16 +602,16 @@ def render_five_bucket_bar(summary: dict) -> None:
     _cols = st.columns(len(_order))
     for _col, (_key, _title, _sub) in zip(_cols, _order):
         _d = summary.get(_key) or {}
-        _color = _d.get("color", "#888")
+        _color = _d.get("color", TRAFFIC_NEUTRAL)
         _emoji = _d.get("emoji", "⚪")
         _label = _d.get("label", "—")
         _headline = _d.get("headline", "")
         with _col:
             st.markdown(
                 f"""<div style="border-left:4px solid {_color};padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:6px;">
-<div style="font-size:0.78em;color:#888;letter-spacing:0.5px;">{_sub}</div>
+<div style="font-size:0.78em;color:{TRAFFIC_NEUTRAL};letter-spacing:0.5px;">{_sub}</div>
 <div style="font-size:1.05em;font-weight:600;margin-top:2px;">{_emoji} {_title}: <span style="color:{_color};">{_label}</span></div>
-<div style="font-size:0.85em;color:#bbb;margin-top:4px;line-height:1.4;">{_headline}</div>
+<div style=f"font-size:0.85em;color:{GRAY_BB};margin-top:4px;line-height:1.4;">{_headline}</div>
 </div>""",
                 unsafe_allow_html=True,
             )

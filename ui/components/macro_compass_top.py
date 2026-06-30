@@ -7,6 +7,7 @@
 呼叫站:app.py 在 sidebar 之後、tabs 之前,module-level 直呼 render_macro_compass()。
 """
 from __future__ import annotations
+from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_PRIMARY  # v19.254 B1 GH_* SSOT
 
 import pandas as pd
 import streamlit as st
@@ -16,22 +17,22 @@ def _render_compass_card(col, info, title, ticker, fmt='{:.2f}', unit='', show_m
     """單張指標卡：值 + Phase 1 訊號燈 + 60D sparkline。info=None 顯示降級訊息。"""
     if info is None:
         col.markdown(
-            f'<div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:10px;height:84px;">'
-            f'<div style="font-size:11px;color:#8b949e;">{title}（{ticker}）</div>'
-            f'<div style="font-size:13px;color:#8b949e;margin-top:6px;">🔴 未取得（yfinance 暫時失敗）</div>'
+            f'<div style="background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;padding:10px;height:84px;">'
+            f'<div style="font-size:11px;color:{GH_FG_MUTED};">{title}（{ticker}）</div>'
+            f'<div style="font-size:13px;color:{GH_FG_MUTED};margin-top:6px;">🔴 未取得（yfinance 暫時失敗）</div>'
             f'</div>', unsafe_allow_html=True)
         return
     val = info.get('value')
-    sig = info.get('signal') or ('⚪', '無訊號', '#8b949e')
+    sig = info.get('signal') or ('⚪', '無訊號', GH_FG_MUTED)
     light, label, color = sig[0], sig[1], sig[2]
     val_str = fmt.format(val) + unit if val is not None else 'N/A'
     extra = ''
     if show_ma and info.get('ma60') is not None:
-        extra = f' <span style="font-size:10px;color:#8b949e;font-weight:400;">/ 60MA {fmt.format(info["ma60"])}</span>'
+        extra = f' <span style="font-size:10px;color:{GH_FG_MUTED};font-weight:400;">/ 60MA {fmt.format(info["ma60"])}</span>'
     col.markdown(
-        f'<div style="background:#0d1117;border:1px solid {color};border-radius:8px;padding:10px;">'
-        f'<div style="font-size:11px;color:#8b949e;">{title}（{ticker}）</div>'
-        f'<div style="font-size:22px;font-weight:900;color:#e6edf3;margin:2px 0;">{val_str}{extra}</div>'
+        f'<div style="background:{GH_BG_PRIMARY};border:1px solid {color};border-radius:8px;padding:10px;">'
+        f'<div style="font-size:11px;color:{GH_FG_MUTED};">{title}（{ticker}）</div>'
+        f'<div style="font-size:22px;font-weight:900;color:{GH_FG_PRIMARY};margin:2px 0;">{val_str}{extra}</div>'
         f'<div style="font-size:11px;font-weight:700;color:{color};">{light} {label}</div>'
         f'</div>', unsafe_allow_html=True)
     ser = info.get('series') or []
@@ -66,9 +67,9 @@ def render_macro_compass():
 
     _header = st.columns([6, 1])
     _header[0].markdown(
-        '<div style="font-size:14px;font-weight:900;color:#e6edf3;margin:4px 0 4px;">'
+        '<div style=f"font-size:14px;font-weight:900;color:{GH_FG_PRIMARY};margin:4px 0 4px;">'
         '🧭 總經指南針 (Top-Down Macro)'
-        '<span style="font-size:10px;color:#8b949e;font-weight:400;margin-left:8px;">'
+        '<span style=f"font-size:10px;color:{GH_FG_MUTED};font-weight:400;margin-left:8px;">'
         f'VIX × 10Y × S&amp;P 500 — {"即將抓取（無快取）" if not _has_data else f"更新於 {_ts_str}"}'
         '</span></div>',
         unsafe_allow_html=True)

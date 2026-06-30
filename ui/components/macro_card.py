@@ -15,7 +15,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, TRAFFIC_NEUTRAL
 
 EDU_FIELDS = ("meaning", "how_to_read", "pair_with",
               "historical_anchor", "upstream", "downstream")
@@ -58,11 +58,11 @@ def make_sparkline(
 
     # 判斷整體走勢顏色
     last_v = float(s.iloc[-1])
-    color = "#64b5f6"  # default 藍
+    color = MD_BLUE_300  # default 藍
     if threshold_crit is not None:
         if (high_is_bad and last_v >= threshold_crit) or (not high_is_bad and last_v <= threshold_crit):
             color = MATERIAL_RED
-    if threshold_warn is not None and color == "#64b5f6":
+    if threshold_warn is not None and color == MD_BLUE_300:
         if (high_is_bad and last_v >= threshold_warn) or (not high_is_bad and last_v <= threshold_warn):
             color = MATERIAL_ORANGE
 
@@ -154,13 +154,13 @@ def render_edu_markdown(edu: dict | None) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 def _z_color(z, high_is_bad):
     if z is None:
-        return "#888"
+        return TRAFFIC_NEUTRAL
     if abs(z) >= 2:
         bad = (high_is_bad and z > 0) or (not high_is_bad and z < 0)
         return MATERIAL_RED if bad else MATERIAL_GREEN
     if abs(z) >= 1.5:
         return MATERIAL_ORANGE
-    return "#64b5f6"
+    return MD_BLUE_300
 
 
 def render_macro_card(
@@ -195,9 +195,9 @@ def render_macro_card(
         f"<div style='display:flex;justify-content:space-between;align-items:baseline;gap:8px'>"
         f"<div style='min-width:0;flex:1'>"
         f"<span style='font-size:16px;margin-right:4px'>{signal or ''}</span>"
-        f"<b style='color:#e6edf3;font-size:14px'>{_esc(name)}</b></div>"
+        f"<b style='color:{GH_FG_PRIMARY};font-size:14px'>{_esc(name)}</b></div>"
         f"<div style='white-space:nowrap'>"
-        f"<span style='color:#e6edf3;font-size:14px;font-weight:600'>{val_str}</span>"
+        f"<span style='color:{GH_FG_PRIMARY};font-size:14px;font-weight:600'>{val_str}</span>"
         f"<span style='color:{z_col};font-size:11px;margin-left:8px'>{z_str}</span>"
         f"</div></div></div>",
         unsafe_allow_html=True,

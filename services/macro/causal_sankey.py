@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import GRAY_66, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
 from services.macro._helpers import (  # noqa: F401
     _trend, _safe_last, recession_probability,
@@ -75,7 +75,7 @@ def calc_sub_cycle_lights(indicators: dict) -> list[dict]:
 
         if not z_components:
             out.append({
-                "name": name, "icon": icon, "color": "#666",
+                "name": name, "icon": icon, "color": GRAY_66,
                 "signal": "⬜", "z_avg": None, "verdict": "資料不足",
                 "indicators": [], "description": desc,
             })
@@ -165,7 +165,7 @@ def build_macro_sankey_data(indicators: dict) -> dict:
 
     def _node_color(z_norm):
         if z_norm is None:
-            return "#666"
+            return GRAY_66
         if z_norm < -1.0:
             return "#4caf50"   # 🟢
         if z_norm < 0:

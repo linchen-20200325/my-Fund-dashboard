@@ -14,7 +14,7 @@ import pandas as pd
 
 from infra.proxy import fetch_url
 from fund_fetcher import _ttl_cache, register_cache
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
+from shared.colors import GH_FG_MUTED, TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW
 from shared.fred_series import FRED_BSCICP02, FRED_PHILLY_FED
 from shared.ttls import TTL_5MIN, TTL_30MIN
 
@@ -437,7 +437,7 @@ def fetch_macro_compass(range_: str = "6mo") -> dict:
     def _sig_gspc(g, ma):
         # Phase 1 規格：站上 60MA=多頭、跌破=趨勢轉弱
         if ma is None or g is None:
-            return ('⚪', '60MA 計算中', '#8b949e')
+            return ('⚪', '60MA 計算中', GH_FG_MUTED)
         if g >= ma: return ('🟢', '多頭格局（股優於債）', TRAFFIC_GREEN)
         return ('🔴', '趨勢轉弱（提高防禦）', TRAFFIC_RED)
 

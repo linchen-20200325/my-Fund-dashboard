@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_RED
+from shared.colors import BG_DARK_RED_1, GH_FG_PRIMARY, MATERIAL_RED, MD_BLUE_500, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 
 def _render_correlation_matrix(funds: list) -> None:
@@ -83,7 +83,7 @@ def _render_correlation_matrix(funds: list) -> None:
             z=_mx.values,
             x=list(_mx.columns),
             y=list(_mx.index),
-            colorscale=[[0, "#0e1117"], [0.5, "#2196f3"], [1, "#f44336"]],
+            colorscale=[[0, STREAMLIT_BG], [0.5, MD_BLUE_500], [1, "#f44336"]],
             zmin=0, zmax=1,
             text=[[f"{v:.2f}" for v in row] for row in _mx.values],
             texttemplate="%{text}",
@@ -91,8 +91,8 @@ def _render_correlation_matrix(funds: list) -> None:
             hovertemplate="%{y} vs %{x}<br>" + _label + ":%{z:.3f}<extra></extra>",
         ))
         fig.update_layout(
-            paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
-            font_color="#e6edf3",
+            paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
+            font_color=GH_FG_PRIMARY,
             height=max(280, len(_mx) * 50 + 100),
             margin=dict(t=20, b=20, l=80, r=20),
         )
@@ -106,12 +106,12 @@ def _render_correlation_matrix(funds: list) -> None:
         for _pair in _shadow:
             _a, _b, _score = _pair[0], _pair[1], _pair[2]
             st.markdown(
-                f"<div style='background:#2a0a0a;border-left:3px solid {MATERIAL_RED};"
+                f"<div style='background:{BG_DARK_RED_1};border-left:3px solid {MATERIAL_RED};"
                 f"padding:6px 12px;margin:4px 0;border-radius:4px;'>"
                 f"<b>{_a} ⟷ {_b}</b>　"
                 f"<span style='color:{MATERIAL_RED};font-weight:700'>"
                 f"{_label} {_score:.3f}</span>　"
-                f"<span style='color:#888;font-size:11px'>建議檢視是否該擇一持有</span>"
+                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>建議檢視是否該擇一持有</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )

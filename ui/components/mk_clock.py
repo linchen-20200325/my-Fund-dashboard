@@ -15,7 +15,7 @@ from typing import Optional
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN
+from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GRAY_44, GRAY_AA, MATERIAL_GREEN, MD_DEEP_ORANGE_400, TRAFFIC_NEUTRAL, WHITE
 # F-GRAY-4 v19.179 PR-3:PMI mk_tolerance SSOT
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_MK_EXPANSION = _PMI_THR_V2["mk_tolerance"]["expansion_above"]    # 50.5
@@ -48,7 +48,7 @@ _PHASE_META = {
     "slowdown":  {"zh": "趨緩期", "icon": "⚠️",
                   "desc": "通膨升 / 利率升 / 經濟降（停滯性通膨）",
                   "alloc_eq": 40, "alloc_bd": 60,
-                  "color": "#ff7043",
+                  "color": MD_DEEP_ORANGE_400,
                   "advice": "現金 / 債優於股（建議 股 4 : 債 6）｜核心轉向：防禦型 / 高股息 / 醫療 / 公用事業"},
     "recession": {"zh": "衰退期", "icon": "❄️",
                   "desc": "通膨降 / 利率降 / 經濟降",
@@ -160,7 +160,7 @@ def _build_clock_figure(phase: str) -> go.Figure:
             marker=dict(
                 color=meta["color"],
                 opacity=0.20 if is_unknown else (1.0 if is_current else 0.30),
-                line=dict(color="#fff" if is_current else "#444", width=2),
+                line=dict(color=WHITE if is_current else GRAY_44, width=2),
             ),
             name=f"{meta['icon']} {meta['zh']}",
             hovertemplate=f"<b>{meta['zh']}</b><br>{meta['desc']}<extra></extra>",
@@ -174,8 +174,8 @@ def _build_clock_figure(phase: str) -> go.Figure:
             r=[0, 0.85],
             theta=[0, cur_theta],
             mode="lines+markers",
-            line=dict(color="#fff", width=4),
-            marker=dict(size=[8, 14], color="#fff", symbol=["circle", "arrow"]),
+            line=dict(color=WHITE, width=4),
+            marker=dict(size=[8, 14], color=WHITE, symbol=["circle", "arrow"]),
             name="當前位置",
             showlegend=False,
             hoverinfo="skip",
@@ -191,11 +191,11 @@ def _build_clock_figure(phase: str) -> go.Figure:
                 tickfont=dict(size=14, color="#ddd"),
                 rotation=90, direction="counterclockwise",
             ),
-            bgcolor="#0d1117",
+            bgcolor=GH_BG_PRIMARY,
         ),
-        paper_bgcolor="#0d1117",
+        paper_bgcolor=GH_BG_PRIMARY,
         height=420, margin=dict(t=20, b=20, l=20, r=20),
-        legend=dict(orientation="h", y=-0.05, font=dict(size=11, color="#aaa")),
+        legend=dict(orientation="h", y=-0.05, font=dict(size=11, color=GRAY_AA)),
     )
     return fig
 
@@ -212,13 +212,13 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
     with c2:
         # 配置建議大字卡
         st.markdown(
-            f"<div style='background:linear-gradient(135deg,{meta['color']}22,#0d1117);"
+            f"<div style='background:linear-gradient(135deg,{meta['color']}22,{GH_BG_PRIMARY});"
             f"border-left:6px solid {meta['color']};border-radius:10px;padding:18px 20px;"
             f"margin-bottom:14px'>"
-            f"<div style='font-size:12px;color:#888;letter-spacing:2px'>當前景氣階段</div>"
+            f"<div style='font-size:12px;color:{TRAFFIC_NEUTRAL};letter-spacing:2px'>當前景氣階段</div>"
             f"<div style='font-size:32px;font-weight:700;color:{meta['color']};margin:6px 0'>"
             f"{meta['icon']} {meta['zh']}</div>"
-            f"<div style='font-size:13px;color:#aaa;margin-bottom:10px'>{meta['desc']}</div>"
+            f"<div style='font-size:13px;color:{GRAY_AA};margin-bottom:10px'>{meta['desc']}</div>"
             f"<div style='font-size:14px;color:#e0e0e0;line-height:1.7'>{meta['advice']}</div>"
             f"</div>",
             unsafe_allow_html=True,
@@ -228,20 +228,20 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
         def _fmt_cell(label: str, val, t_int: int, unit: str = "", fmt: str = "{:.1f}"):
             arrow = "↑" if t_int > 0 else ("↓" if t_int < 0 else "→")
             if val is None:
-                num_html = "<span style='color:#ff7043'>—</span>"
-                tag = "<div style='font-size:10px;color:#ff7043;margin-top:2px'>未抓到</div>"
+                num_html = "<span style=f'color:{MD_DEEP_ORANGE_400}'>—</span>"
+                tag = "<div style=f'font-size:10px;color:{MD_DEEP_ORANGE_400};margin-top:2px'>未抓到</div>"
             else:
                 num_html = f"{fmt.format(val)}{unit} {arrow}"
                 tag = ""
             return (
-                f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px;text-align:center'>"
-                f"<div style='font-size:11px;color:#888'>{label}</div>"
+                f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:8px;padding:10px;text-align:center'>"
+                f"<div style='font-size:11px;color:{TRAFFIC_NEUTRAL}'>{label}</div>"
                 f"<div style='font-size:18px;font-weight:600;color:#e0e0e0'>{num_html}</div>"
                 f"{tag}</div>"
             )
 
         st.markdown(
-            f"<div style='font-size:12px;color:#888;margin-bottom:6px'>三面向訊號</div>"
+            f"<div style='font-size:12px;color:{TRAFFIC_NEUTRAL};margin-bottom:6px'>三面向訊號</div>"
             f"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px'>"
             f"{_fmt_cell('基本面 PMI', meta.get('pmi'),  meta['pmi_t'], '',  '{:.1f}')}"
             f"{_fmt_cell('通膨 CPI',   meta.get('cpi'),  meta['cpi_t'], '%', '{:.2f}')}"
@@ -259,12 +259,12 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
 
         # 配置條
         st.markdown(
-            f"<div style='margin-top:14px;font-size:12px;color:#888'>建議股債比例</div>"
+            f"<div style='margin-top:14px;font-size:12px;color:{TRAFFIC_NEUTRAL}'>建議股債比例</div>"
             f"<div style='display:flex;height:28px;border-radius:6px;overflow:hidden;margin-top:4px'>"
             f"<div style='width:{meta['alloc_eq']}%;background:#26a69a;display:flex;align-items:center;"
-            f"justify-content:center;color:#fff;font-size:12px;font-weight:600'>股 {meta['alloc_eq']}%</div>"
+            f"justify-content:center;color:{WHITE};font-size:12px;font-weight:600'>股 {meta['alloc_eq']}%</div>"
             f"<div style='width:{meta['alloc_bd']}%;background:#5c6bc0;display:flex;align-items:center;"
-            f"justify-content:center;color:#fff;font-size:12px;font-weight:600'>債 {meta['alloc_bd']}%</div>"
+            f"justify-content:center;color:{WHITE};font-size:12px;font-weight:600'>債 {meta['alloc_bd']}%</div>"
             f"</div>",
             unsafe_allow_html=True,
         )

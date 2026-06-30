@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 
 def _render_dividend_matrix(funds: list) -> None:
@@ -68,7 +68,7 @@ def _render_dividend_matrix(funds: list) -> None:
     _rc_colors = []
     for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
         if not _real:
-            _rc_colors.append("#888")
+            _rc_colors.append(TRAFFIC_NEUTRAL)
         elif _d > 0 and _r < _d:
             _rc_colors.append(MATERIAL_RED)
         elif _d > 0 and _r < _d * 1.2:
@@ -96,7 +96,7 @@ def _render_dividend_matrix(funds: list) -> None:
             line=dict(color=MATERIAL_RED, width=1.5, dash="dot"),
             marker=dict(symbol="diamond", size=8, color=MATERIAL_RED),
             hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
-    fig_rc.add_hline(y=0, line_color="#555", line_width=1)
+    fig_rc.add_hline(y=0, line_color=GRAY_55, line_width=1)
     _y_max = max(max(_rc_ret_vis, default=10), max(_rc_div, default=10)) * 1.35
     for _i, (_r, _d, _n, _real) in enumerate(
         zip(_rc_ret, _rc_div, _rc_names, _rc_real)
@@ -120,13 +120,13 @@ def _render_dividend_matrix(funds: list) -> None:
                 x=_n, y=_y_max,
                 text="⬜ 1Y 資料不足<br>無法判定",
                 showarrow=False,
-                font=dict(color="#aaa", size=10),
+                font=dict(color=GRAY_AA, size=10),
                 bgcolor="rgba(60,60,60,0.7)",
-                bordercolor="#666", borderwidth=1,
+                bordercolor=GRAY_66, borderwidth=1,
                 borderpad=4)
     fig_rc.update_layout(
-        paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-        font_color="#e6edf3", height=360,
+        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+        font_color=GH_FG_PRIMARY, height=360,
         margin=dict(t=40, b=20, l=40, r=20),
         legend=dict(orientation="h", font_size=10, y=1.08),
         yaxis_title="報酬率 / 配息率 (%)",

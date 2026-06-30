@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import GH_BG_CARD, GH_BORDER, GRAY_55, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_ORANGE_300, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -38,7 +38,7 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
 
     st.markdown(
         f"#### 💰 投資試算 — 投入金額 → 單位數 / 配息估算 "
-        f"<span style='color:#888;font-size:11px'>{_code} / {_ccy}</span>",
+        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code} / {_ccy}</span>",
         unsafe_allow_html=True,
     )
     _ic1, _ic2 = st.columns([2, 1])
@@ -126,28 +126,28 @@ def _render_holdings_block(fund: dict) -> None:
                 _ter_vs = (f"高於均值 +{_ter_diff:.2f}%" if _ter_diff > 0
                            else f"低於均值 {abs(_ter_diff):.2f}%")
                 _ter_avg_html = (
-                    f"<div><div style='color:#888;font-size:10px'>同類均值</div>"
-                    f"<div style='color:#888;font-weight:700;font-size:16px'>"
+                    f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>同類均值</div>"
+                    f"<div style='color:{TRAFFIC_NEUTRAL};font-weight:700;font-size:16px'>"
                     f"{_ter_avg:.2f}%</div></div>"
-                    f"<div><div style='color:#888;font-size:10px'>費用比較</div>"
+                    f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>費用比較</div>"
                     f"<div style='color:{_ter_c};font-weight:700;font-size:16px'>"
                     f"{_ter_vs}</div></div>"
                 )
             else:
-                _ter_c, _ter_avg_html = "#888", ""
+                _ter_c, _ter_avg_html = TRAFFIC_NEUTRAL, ""
             st.markdown(
-                "<div style='background:#161b22;border:1px solid #30363d;"
+                "<div style=f'background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
                 "border-radius:10px;padding:10px 16px;margin:8px 0'>"
-                "<div style='color:#888;font-size:11px;margin-bottom:6px'>"
+                f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>"
                 "💰 TER 費用率分析"
                 + (f" — {_ter_cat[:12]}" if _ter_cat else "") + "</div>"
                 f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:6px'>"
-                f"<div><div style='color:#888;font-size:10px'>最高經理費</div>"
+                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>最高經理費</div>"
                 f"<div style='color:{_ter_c};font-weight:700;font-size:16px'>"
                 f"{_ter_val:.2f}%</div></div>"
                 + _ter_avg_html +
                 "</div>"
-                "<div style='color:#555;font-size:10px'>"
+                "<div style=f'color:{GRAY_55};font-size:10px'>"
                 "費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~25%）</div>"
                 "</div>", unsafe_allow_html=True)
     else:
@@ -169,7 +169,7 @@ def _render_holdings_block(fund: dict) -> None:
 
     st.markdown(
         "**📂 持股分析**"
-        + (f"<span style='color:#888;font-size:11px;margin-left:8px'>"
+        + (f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>"
            f"（{_hdate}）</span>" if _hdate else ""),
         unsafe_allow_html=True,
     )
@@ -182,11 +182,11 @@ def _render_holdings_block(fund: dict) -> None:
                 _sp = float(_sec.get("pct", 0) or 0)
                 st.markdown(
                     f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0'>"
-                    f"<div style='color:#ccc;font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
+                    f"<div style='color:{GRAY_CC};font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
                     f"<div style='flex:1;background:#1a1a2a;border-radius:3px;height:10px'>"
-                    f"<div style='background:#2196f3;width:{min(_sp*3,100):.0f}%;"
+                    f"<div style='background:{MD_BLUE_500};width:{min(_sp*3,100):.0f}%;"
                     f"height:100%;border-radius:3px'></div></div>"
-                    f"<div style='color:#2196f3;font-size:11px;width:40px;text-align:right'>"
+                    f"<div style='color:{MD_BLUE_500};font-size:11px;width:40px;text-align:right'>"
                     f"{_sp:.1f}%</div></div>",
                     unsafe_allow_html=True)
     with _hc2:
@@ -196,16 +196,16 @@ def _render_holdings_block(fund: dict) -> None:
                 _tn_raw = str(_top.get("name", ""))
                 _zh = _zh_holding(_tn_raw)
                 _tn = _tn_raw[:22]
-                _zh_html = (f"<span style='color:#ffb74d;font-size:10px;margin-left:6px'>"
+                _zh_html = (f"<span style='color:{MD_ORANGE_300};font-size:10px;margin-left:6px'>"
                             f"({_zh})</span>" if _zh else "")
                 _tp = float(_top.get("pct", 0) or 0)
                 _ts = str(_top.get("sector", ""))[:12]
                 st.markdown(
                     f"<div style='display:flex;gap:6px;padding:3px 8px;"
-                    f"background:#161b22;border-radius:6px;margin:2px 0'>"
-                    f"<span style='color:#555;font-size:11px;width:16px'>#{_i}</span>"
+                    f"background:{GH_BG_CARD};border-radius:6px;margin:2px 0'>"
+                    f"<span style='color:{GRAY_55};font-size:11px;width:16px'>#{_i}</span>"
                     f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
-                    f"<span style='color:#888;font-size:10px'>{_ts}</span>"
+                    f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"
                     f"<span style='color:#58a6ff;font-weight:700;font-size:11px;"
                     f"width:36px;text-align:right'>{_tp:.1f}%</span>"
                     f"</div>", unsafe_allow_html=True)

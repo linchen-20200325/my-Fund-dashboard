@@ -17,7 +17,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_RED, MD_BLUE_300
 
 
 # v18.261：三段 cache key + 參數 hash gate（避免 click-only 一次性 gating bug）
@@ -1784,7 +1784,7 @@ def _render_score_validation_section(events: list, years: int) -> None:
         for y_val, label, color in [
             (8, "高峰", MATERIAL_RED),
             (5, "擴張", MATERIAL_GREEN),
-            (3, "復甦", "#64b5f6"),
+            (3, "復甦", MD_BLUE_300),
         ]:
             fig.add_hline(y=y_val, line_dash="dash", line_color=color,
                           opacity=0.3, annotation_text=label, annotation_position="right")

@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.proxy import get_proxy_config
 from ui.helpers.session import (
@@ -180,7 +180,7 @@ def render_data_guard_tab() -> None:
     def _tab_status(have: int, total: int) -> tuple[str, str]:
         """回傳 (emoji, color) 依完整率"""
         if total == 0:
-            return ("⬜", "#666")
+            return ("⬜", GRAY_66)
         _r = have / total
         if _r >= 0.85:
             return ("🟢", MATERIAL_GREEN)
@@ -191,13 +191,13 @@ def render_data_guard_tab() -> None:
 
     _t1_emoji, _t1_color = _tab_status(_macro_have, _macro_total)
     _t2_emoji, _t2_color = (
-        _tab_status(_single_have, _single_total) if _src_cf else ("⬜", "#666")
+        _tab_status(_single_have, _single_total) if _src_cf else ("⬜", GRAY_66)
     )
     _t3_emoji, _t3_color = (
-        _tab_status(_pf_loaded_n, _pf_total) if _pf_total else ("⬜", "#666")
+        _tab_status(_pf_loaded_n, _pf_total) if _pf_total else ("⬜", GRAY_66)
     )
     _t4_emoji, _t4_color = (
-        _tab_status(_alloc_have, _alloc_total) if _pf_total else ("⬜", "#666")
+        _tab_status(_alloc_have, _alloc_total) if _pf_total else ("⬜", GRAY_66)
     )
 
     _tab_table = [
@@ -222,11 +222,11 @@ def render_data_guard_tab() -> None:
          "FX 失敗 → 上方 Proxy 連線測試;Sheet → sidebar 登入 Google / 設 gservice_account secret"),
     ]
 
-    _tab_th = "font-size:10px;color:#888;font-weight:700;padding:8px 10px;border-bottom:1px solid #30363d"
+    _tab_th = f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:8px 10px;border-bottom:1px solid {GH_BORDER}"
     _tab_td = "font-size:11px;padding:8px 10px;line-height:1.4"
     _t_html = (
         f"<div style='display:grid;grid-template-columns:1.3fr 0.5fr 0.9fr 2.8fr 2fr;"
-        f"background:#0d1117;border-radius:6px 6px 0 0'>"
+        f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
         f"<span style='{_tab_th}'>Tab</span>"
         f"<span style='{_tab_th};text-align:center'>狀態</span>"
         f"<span style='{_tab_th}'>覆蓋率</span>"
@@ -235,20 +235,20 @@ def render_data_guard_tab() -> None:
         f"</div>"
     )
     for _name, _e, _c, _ratio, _detail, _action in _tab_table:
-        _bg = "#0a1a0a" if _e == "🟢" else ("#1a1200" if _e == "🟡" else
-              ("#1a0606" if _e == "🔴" else "#0d1117"))
+        _bg = BG_DARK_GREEN_1 if _e == "🟢" else (BG_DARK_AMBER_2 if _e == "🟡" else
+              (BG_DARK_RED_2 if _e == "🔴" else GH_BG_PRIMARY))
         _t_html += (
             f"<div style='display:grid;grid-template-columns:1.3fr 0.5fr 0.9fr 2.8fr 2fr;"
-            f"background:{_bg};border-bottom:1px solid #21262d'>"
-            f"<span style='{_tab_td};color:#e6edf3;font-weight:600'>{_name}</span>"
+            f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
+            f"<span style='{_tab_td};color:{GH_FG_PRIMARY};font-weight:600'>{_name}</span>"
             f"<span style='{_tab_td};text-align:center;color:{_c};font-size:14px'>{_e}</span>"
             f"<span style='{_tab_td};color:{_c};font-weight:600'>{_ratio}</span>"
-            f"<span style='{_tab_td};color:#bbb'>{_detail}</span>"
-            f"<span style='{_tab_td};color:#888;font-size:10px'>{_action}</span>"
+            f"<span style='{_tab_td};color:{GRAY_BB}'>{_detail}</span>"
+            f"<span style='{_tab_td};color:{TRAFFIC_NEUTRAL};font-size:10px'>{_action}</span>"
             f"</div>"
         )
     st.markdown(
-        f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+        f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
         f"{_t_html}</div>", unsafe_allow_html=True,
     )
     # 整體狀態 summary
@@ -372,7 +372,7 @@ def render_data_guard_tab() -> None:
             return ("🟢", f"已抓 {ok_n}{tail}", MATERIAL_GREEN)
         if used:
             return ("🟡", "已呼叫但無資料", MATERIAL_ORANGE)
-        return ("⬜", inactive_label, "#666")
+        return ("⬜", inactive_label, GRAY_66)
 
     _RAW_TABLE = [
         # (#, 類別, 用途, 端點/Ticker, NAS Proxy, status_tuple)
@@ -412,12 +412,12 @@ def render_data_guard_tab() -> None:
          "—", _src_status(False, 0, inactive_label="僅個股查詢觸發")),
     ]
 
-    _src_th = ("font-size:10px;color:#888;font-weight:700;padding:6px 8px;"
-               "border-bottom:1px solid #30363d")
+    _src_th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:6px 8px;"
+               f"border-bottom:1px solid {GH_BORDER}")
     _src_td = "font-size:11px;padding:6px 8px;line-height:1.4"
     _src_html = (
         f"<div style='display:grid;grid-template-columns:38px 1.2fr 1.5fr 3fr 50px 1.4fr;"
-        f"background:#0d1117;border-radius:6px 6px 0 0'>"
+        f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
         f"<span style='{_src_th}'>#</span>"
         f"<span style='{_src_th}'>類別</span>"
         f"<span style='{_src_th}'>用途</span>"
@@ -427,20 +427,20 @@ def render_data_guard_tab() -> None:
         f"</div>"
     )
     for _no, _cat, _purp, _ep, _proxy, (_ic, _stxt, _sc) in _RAW_TABLE:
-        _bg = "#0a1a0a" if _ic == "🟢" else ("#1a1200" if _ic == "🟡" else "#0d1117")
+        _bg = BG_DARK_GREEN_1 if _ic == "🟢" else (BG_DARK_AMBER_2 if _ic == "🟡" else GH_BG_PRIMARY)
         _src_html += (
             f"<div style='display:grid;grid-template-columns:38px 1.2fr 1.5fr 3fr 50px 1.4fr;"
-            f"background:{_bg};border-bottom:1px solid #21262d'>"
-            f"<span style='{_src_td};color:#aaa'>{_no}</span>"
-            f"<span style='{_src_td};color:#e6edf3;font-weight:600'>{_cat}</span>"
-            f"<span style='{_src_td};color:#bbb'>{_purp}</span>"
+            f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
+            f"<span style='{_src_td};color:{GRAY_AA}'>{_no}</span>"
+            f"<span style='{_src_td};color:{GH_FG_PRIMARY};font-weight:600'>{_cat}</span>"
+            f"<span style='{_src_td};color:{GRAY_BB}'>{_purp}</span>"
             f"<span style='{_src_td};color:#7d8590;font-family:monospace;font-size:10px'>{_ep}</span>"
-            f"<span style='{_src_td};text-align:center;color:#888'>{_proxy}</span>"
+            f"<span style='{_src_td};text-align:center;color:{TRAFFIC_NEUTRAL}'>{_proxy}</span>"
             f"<span style='{_src_td};color:{_sc};font-weight:600'>{_ic} {_stxt}</span>"
             f"</div>"
         )
     st.markdown(
-        f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+        f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
         f"{_src_html}</div>", unsafe_allow_html=True,
     )
 
@@ -480,7 +480,7 @@ def render_data_guard_tab() -> None:
                 "來源", _opts_source, default=_opts_source, key="reg_flt_source"
             )
         with _flt_c3:
-            _freq_label_map = {f: _FREQ_LABEL.get(f, (f, "#555"))[0] for f in _opts_freq}
+            _freq_label_map = {f: _FREQ_LABEL.get(f, (f, GRAY_55))[0] for f in _opts_freq}
             _sel_freq = st.multiselect(
                 "頻率", _opts_freq, default=_opts_freq,
                 format_func=lambda f: _freq_label_map.get(f, f),
@@ -495,12 +495,12 @@ def render_data_guard_tab() -> None:
         }
 
         # 表格標頭
-        _th = ("font-size:10px;color:#888;font-weight:700;padding:4px 8px;"
-               "border-bottom:1px solid #30363d")
+        _th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:4px 8px;"
+               f"border-bottom:1px solid {GH_BORDER}")
         _td_base = "font-size:11px;padding:4px 8px"
         _hdr = (
             f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 3fr 1fr;"
-            f"background:#0d1117;border-radius:6px 6px 0 0'>"
+            f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
             f"<span style='{_th}'>資料名稱</span>"
             f"<span style='{_th}'>來源</span>"
             f"<span style='{_th}'>頻率</span>"
@@ -517,28 +517,28 @@ def render_data_guard_tab() -> None:
             _freq  = _rv.get("freq", "monthly")
             _ficon = _rv.get("fresh_icon", "⬜")
             _flbl  = _rv.get("fresh_label", "未知")
-            _fcol  = _rv.get("fresh_color", "#555")
-            _row_bg = "#161b22" if _ficon == "🟢" else ("#1a1200" if _ficon == "🟡" else "#1a0808")
+            _fcol  = _rv.get("fresh_color", GRAY_55)
+            _row_bg = GH_BG_CARD if _ficon == "🟢" else (BG_DARK_AMBER_2 if _ficon == "🟡" else "#1a0808")
             _rows_html += (
                 f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 3fr 1fr;"
-                f"background:{_row_bg};border-bottom:1px solid #21262d'>"
-                f"<span style='{_td_base};color:#e6edf3'>{_rv.get('label', _rk)}</span>"
-                f"<span style='{_td_base};color:#888'>{_rv.get('source','')}</span>"
+                f"background:{_row_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
+                f"<span style='{_td_base};color:{GH_FG_PRIMARY}'>{_rv.get('label', _rk)}</span>"
+                f"<span style='{_td_base};color:{TRAFFIC_NEUTRAL}'>{_rv.get('source','')}</span>"
                 f"<span style='{_td_base}'>"
-                f"<span style='background:{_FREQ_LABEL.get(_freq,('?','#555'))[1]}22;"
-                f"color:{_FREQ_LABEL.get(_freq,('?','#555'))[1]};"
-                f"border:1px solid {_FREQ_LABEL.get(_freq,('?','#555'))[1]};"
+                f"<span style='background:{_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]}22;"
+                f"color:{_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]};"
+                f"border:1px solid {_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]};"
                 f"border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700'>"
-                f"{_FREQ_LABEL.get(_freq,(_freq,'#555'))[0]}</span></span>"
-                f"<span style='{_td_base};color:#aaa'>{_rd}</span>"
+                f"{_FREQ_LABEL.get(_freq,(_freq,GRAY_55))[0]}</span></span>"
+                f"<span style='{_td_base};color:{GRAY_AA}'>{_rd}</span>"
                 f"<span style='{_td_base};color:{_fcol};font-weight:600'>{_ficon} {_flbl}</span>"
-                f"<span style='{_td_base};color:#aaa'>{_rn}</span>"
+                f"<span style='{_td_base};color:{GRAY_AA}'>{_rn}</span>"
                 f"</div>"
             )
             if _ficon == "🔴":
                 _stale_list.append(_rv.get("label", _rk))
         st.markdown(
-            f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+            f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
             f"{_rows_html}</div>",
             unsafe_allow_html=True,
         )
@@ -636,8 +636,8 @@ def render_data_guard_tab() -> None:
             for _ci, (_sn, _ms) in enumerate(_ping_results.items()):
                 _col_c = MATERIAL_GREEN if (_ms and _ms < 1000) else (MATERIAL_ORANGE if (_ms and _ms < 3000) else MATERIAL_RED)
                 _pcols[_ci].markdown(
-                    f"<div style='background:#1a1f2e;border-radius:8px;padding:10px;text-align:center'>"
-                    f"<div style='font-size:11px;color:#888'>{_sn}</div>"
+                    f"<div style='background:{BG_DARK_NAVY_4};border-radius:8px;padding:10px;text-align:center'>"
+                    f"<div style='font-size:11px;color:{TRAFFIC_NEUTRAL}'>{_sn}</div>"
                     f"<div style='font-size:20px;font-weight:700;color:{_col_c}'>"
                     f"{'N/A' if _ms is None else f'{_ms} ms'}</div></div>",
                     unsafe_allow_html=True)
@@ -651,7 +651,7 @@ def render_data_guard_tab() -> None:
             _lh_yf   = [r.get("yf_ms")      for r in _lat_hist]
             _fig_lat  = go.Figure()
             for _lt_name, _lt_y, _lt_color in [
-                ("FRED/yfinance(載入)", _lh_fred, "#64b5f6"),
+                ("FRED/yfinance(載入)", _lh_fred, MD_BLUE_300),
                 ("MoneyDJ(測速)",       _lh_mj,   MATERIAL_ORANGE),
                 ("Yahoo/yf(測速)",      _lh_yf,   "#ce93d8"),
             ]:
@@ -672,11 +672,11 @@ def render_data_guard_tab() -> None:
                                annotation_font_color=MATERIAL_RED,
                                annotation_position="bottom right")
             _fig_lat.update_layout(
-                paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-                font_color="#e6edf3", height=260,
+                paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                font_color=GH_FG_PRIMARY, height=260,
                 margin=dict(t=10, b=40, l=60, r=20),
-                xaxis=dict(tickangle=-30, tickfont_size=9, gridcolor="#1e2a3a"),
-                yaxis=dict(title="回應時間 (ms)", gridcolor="#1e2a3a"),
+                xaxis=dict(tickangle=-30, tickfont_size=9, gridcolor=BG_DARK_NAVY_3),
+                yaxis=dict(title="回應時間 (ms)", gridcolor=BG_DARK_NAVY_3),
                 legend=dict(orientation="h", font_size=10, y=1.05),
                 hovermode="x unified")
             st.plotly_chart(_fig_lat, use_container_width=True)
@@ -904,12 +904,12 @@ def render_data_guard_tab() -> None:
     _key_targets = ["FRED_API_KEY", "GEMINI_API_KEY", "FINMIND_TOKEN",
                     "PROXY_URL", "GOOGLE_SHEET_ID"]
     _key_rows = [_resolve_key(_k) for _k in _key_targets]
-    _kt_th = ("font-size:10px;color:#888;font-weight:700;padding:6px 10px;"
-              "border-bottom:1px solid #30363d")
+    _kt_th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:6px 10px;"
+              f"border-bottom:1px solid {GH_BORDER}")
     _kt_td = "font-size:11px;padding:6px 10px;line-height:1.4"
     _kt_html = (
         f"<div style='display:grid;grid-template-columns:1.4fr 1fr 1.6fr 1.4fr;"
-        f"background:#0d1117;border-radius:6px 6px 0 0'>"
+        f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
         f"<span style='{_kt_th}'>API Key</span>"
         f"<span style='{_kt_th}'>使用來源</span>"
         f"<span style='{_kt_th}'>實際值(遮罩)</span>"
@@ -918,18 +918,18 @@ def render_data_guard_tab() -> None:
     )
     for _kr in _key_rows:
         _src_color = (MATERIAL_GREEN if _kr["source"] != "(無)" else MATERIAL_RED)
-        _bg = "#0a1a0a" if _kr["source"] != "(無)" else "#1a0606"
+        _bg = BG_DARK_GREEN_1 if _kr["source"] != "(無)" else BG_DARK_RED_2
         _kt_html += (
             f"<div style='display:grid;grid-template-columns:1.4fr 1fr 1.6fr 1.4fr;"
-            f"background:{_bg};border-bottom:1px solid #21262d'>"
-            f"<span style='{_kt_td};color:#e6edf3;font-weight:600'>{_kr['name']}</span>"
+            f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
+            f"<span style='{_kt_td};color:{GH_FG_PRIMARY};font-weight:600'>{_kr['name']}</span>"
             f"<span style='{_kt_td};color:{_src_color};font-weight:600'>{_kr['source']}</span>"
-            f"<span style='{_kt_td};color:#bbb;font-family:monospace;font-size:10px'>{_kr['preview']}</span>"
+            f"<span style='{_kt_td};color:{GRAY_BB};font-family:monospace;font-size:10px'>{_kr['preview']}</span>"
             f"<span style='{_kt_td};color:#7d8590;font-family:monospace;font-size:10px'>{_kr['env_preview']}</span>"
             f"</div>"
         )
     st.markdown(
-        f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+        f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
         f"{_kt_html}</div>", unsafe_allow_html=True,
     )
     st.caption(
@@ -1004,8 +1004,8 @@ def render_data_guard_tab() -> None:
             else:
                 _ic, _vc, _vs = "✅", MATERIAL_GREEN, "已取得"
             col.markdown(
-                f"<div style='background:#1a1f2e;border-radius:6px;padding:6px 8px'>"
-                f"<div style='font-size:10px;color:#888'>{label}</div>"
+                f"<div style='background:{BG_DARK_NAVY_4};border-radius:6px;padding:6px 8px'>"
+                f"<div style='font-size:10px;color:{TRAFFIC_NEUTRAL}'>{label}</div>"
                 f"<div style='font-size:13px;color:{_vc};font-weight:700'>{_ic} {_vs}</div>"
                 f"</div>", unsafe_allow_html=True)
 
@@ -1126,7 +1126,7 @@ def render_data_guard_tab() -> None:
                          fmt=lambda v: "已取得 ✓")
 
                 st.markdown(
-                    f"<span style='font-size:10px;color:#555'>"
+                    f"<span style='font-size:10px;color:{GRAY_55}'>"
                     f"來源：{_d5_fd.get('_source','投資組合')} | "
                     f"is_core: {_d5_fd.get('is_core','?')} | "
                     f"currency: {_d5_fd.get('currency', _d5_mj.get('currency','?'))}"
@@ -1226,12 +1226,12 @@ def render_data_guard_tab() -> None:
             f"共 {len(_anom_items)} 筆異常　｜　🔴 真延遲 {_anom_red}　🟡 其他延遲 {_anom_yel}"
             f"　｜　依嚴重度排序（release window 內的 🟡 已自動排除）"
         )
-        _th_a = ("font-size:10px;color:#888;font-weight:700;padding:4px 8px;"
-                 "border-bottom:1px solid #30363d")
+        _th_a = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:4px 8px;"
+                 f"border-bottom:1px solid {GH_BORDER}")
         _td_a = "font-size:11px;padding:4px 8px"
         _hdr_a = (
             f"<div style='display:grid;grid-template-columns:2.4fr 1.4fr 0.8fr 1.2fr 1.6fr;"
-            f"background:#0d1117;border-radius:6px 6px 0 0'>"
+            f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
             f"<span style='{_th_a}'>資料名稱</span>"
             f"<span style='{_th_a}'>來源</span>"
             f"<span style='{_th_a}'>頻率</span>"
@@ -1245,23 +1245,23 @@ def render_data_guard_tab() -> None:
             _albl  = _av.get("fresh_label", "未知")
             _acol  = _av.get("fresh_color", "#999")
             _afreq = _av.get("freq", "")
-            _afq_lbl, _afq_col = _FREQ_LABEL.get(_afreq, (_afreq or "—", "#555"))
-            _abg = "#1a0808" if _aicon == "🔴" else "#1a1200"
+            _afq_lbl, _afq_col = _FREQ_LABEL.get(_afreq, (_afreq or "—", GRAY_55))
+            _abg = "#1a0808" if _aicon == "🔴" else BG_DARK_AMBER_2
             _rows_a += (
                 f"<div style='display:grid;grid-template-columns:2.4fr 1.4fr 0.8fr 1.2fr 1.6fr;"
-                f"background:{_abg};border-bottom:1px solid #21262d'>"
-                f"<span style='{_td_a};color:#e6edf3'>{_av.get('label', _ak)}</span>"
-                f"<span style='{_td_a};color:#888'>{_av.get('source','—') or '—'}</span>"
+                f"background:{_abg};border-bottom:1px solid {GH_BG_HOVER}'>"
+                f"<span style='{_td_a};color:{GH_FG_PRIMARY}'>{_av.get('label', _ak)}</span>"
+                f"<span style='{_td_a};color:{TRAFFIC_NEUTRAL}'>{_av.get('source','—') or '—'}</span>"
                 f"<span style='{_td_a}'>"
                 f"<span style='background:{_afq_col}22;color:{_afq_col};"
                 f"border:1px solid {_afq_col};border-radius:10px;padding:1px 7px;"
                 f"font-size:10px;font-weight:700'>{_afq_lbl}</span></span>"
-                f"<span style='{_td_a};color:#aaa'>{_av.get('latest_date','—') or '—'}</span>"
+                f"<span style='{_td_a};color:{GRAY_AA}'>{_av.get('latest_date','—') or '—'}</span>"
                 f"<span style='{_td_a};color:{_acol};font-weight:600'>{_aicon} {_albl}</span>"
                 f"</div>"
             )
         st.markdown(
-            f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+            f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
             f"{_rows_a}</div>",
             unsafe_allow_html=True,
         )

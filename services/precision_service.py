@@ -23,7 +23,7 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     RISK_SCORE_YIELD_WEIGHT_RATIO,
 )
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import BG_DARK_RED_2, GH_BG_CARD, GH_BORDER, GRAY_55, GRAY_66, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, TRAFFIC_NEUTRAL
 
 # v18.116 B-B: I/O 拆分後從 repository 取
 from repositories.financial_repository import (  # noqa: F401  legacy re-export
@@ -85,7 +85,7 @@ class PrecisionStrategyEngine:
                     "action": "流動性危機前兆：核心現金/短債 ≥50%，衛星嚴格停利出場，不宜追高",
                     "cash_pct": 50}
         elif risk_score > 0.8:
-            return {"level": "風險偏高", "color": "#ff7043", "icon": "⚠️",
+            return {"level": "風險偏高", "color": MD_DEEP_ORANGE_400, "icon": "⚠️",
                     "action": "流動性收縮：核心配置防禦性資產，衛星部位縮減至 20% 以內",
                     "cash_pct": 30}
         elif risk_score > 0.0:
@@ -224,7 +224,7 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
         if sigma_rank >= -0.5:
             label, color = "接近 HWM（≥ -0.5σ）", MATERIAL_GREEN
         elif sigma_rank >= -1.0:
-            label, color = "HWM - 1σ 區（觀察）", "#69f0ae"
+            label, color = "HWM - 1σ 區（觀察）", MD_GREEN_A200
         elif sigma_rank >= -2.0:
             label, color = "HWM - 2σ 區（加碼參考）", MATERIAL_ORANGE
         else:
@@ -259,30 +259,30 @@ def three_ratio_row_html(r: dict) -> str:
 
     def _color(v):
         if not isinstance(v, (int, float)):
-            return "#888"
+            return TRAFFIC_NEUTRAL
         return MATERIAL_GREEN if v > 0.5 else (MATERIAL_RED if v < -0.5 else MATERIAL_ORANGE)
 
     gd = r.get("gross_margin_diff", 0)
     od = r.get("op_margin_diff",    0)
     nd = r.get("net_margin_diff",   0)
     momentum = (gd or 0) + (od or 0) + (nd or 0)
-    bg = "#061a06" if momentum > 2 else ("#1a0606" if momentum < -2 else "#161b22")
-    border = MATERIAL_GREEN if momentum > 2 else (MATERIAL_RED if momentum < -2 else "#30363d")
+    bg = "#061a06" if momentum > 2 else (BG_DARK_RED_2 if momentum < -2 else GH_BG_CARD)
+    border = MATERIAL_GREEN if momentum > 2 else (MATERIAL_RED if momentum < -2 else GH_BORDER)
 
     return (
         f"<div style='background:{bg};border:1px solid {border};border-radius:8px;"
         f"padding:8px 12px;margin:4px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-        f"<div style='flex:1.5;font-size:11px;color:#ccc'>{r.get('stock','')[:20]}"
-        f"<span style='color:#555;margin-left:6px;font-size:10px'>{r.get('ticker','')}</span></div>"
-        f"<div style='flex:1;font-size:10px;color:#666'>{r.get('q_old','')[-7:]}→{r.get('q_new','')[-7:]}</div>"
+        f"<div style='flex:1.5;font-size:11px;color:{GRAY_CC}'>{r.get('stock','')[:20]}"
+        f"<span style='color:{GRAY_55};margin-left:6px;font-size:10px'>{r.get('ticker','')}</span></div>"
+        f"<div style='flex:1;font-size:10px;color:{GRAY_66}'>{r.get('q_old','')[-7:]}→{r.get('q_new','')[-7:]}</div>"
         f"<div style='text-align:center'>"
-        f"<div style='color:#666;font-size:9px'>毛利率</div>"
+        f"<div style='color:{GRAY_66};font-size:9px'>毛利率</div>"
         f"<div style='color:{_color(gd)};font-weight:700;font-size:12px'>{_fmt(gd)}</div></div>"
         f"<div style='text-align:center'>"
-        f"<div style='color:#666;font-size:9px'>營益率</div>"
+        f"<div style='color:{GRAY_66};font-size:9px'>營益率</div>"
         f"<div style='color:{_color(od)};font-weight:700;font-size:12px'>{_fmt(od)}</div></div>"
         f"<div style='text-align:center'>"
-        f"<div style='color:#666;font-size:9px'>淨利率</div>"
+        f"<div style='color:{GRAY_66};font-size:9px'>淨利率</div>"
         f"<div style='color:{_color(nd)};font-weight:700;font-size:12px'>{_fmt(nd)}</div></div>"
         f"</div>"
     )

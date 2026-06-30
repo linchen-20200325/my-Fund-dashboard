@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     SIGMA_VERY_HIGH_CUTOFF,
     SIGMA_HIGH_CUTOFF,
@@ -242,10 +242,10 @@ def _verdict_for(total_score: float) -> tuple[str, str, str, str]:
         return ("🟢", "極度樂觀", MATERIAL_GREEN,
                 "多頭市場強勁：可滿倉持有，衛星部位積極佈局成長題材")
     if total_score > c2:
-        return ("🟢", "樂觀", "#69f0ae",
+        return ("🟢", "樂觀", MD_GREEN_A200,
                 "景氣穩定擴張：核心持有不動，定期定額正常進行")
     if total_score >= c3:
-        return ("🟡", "中性", "#ffd54f",
+        return ("🟡", "中性", MD_AMBER_300,
                 "市場震盪整理：分批進場，避免重押單一題材")
     if total_score >= c4:
         return ("🔴", "悲觀", "#ff8a80",

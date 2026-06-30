@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import BG_DARK_RED_1, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -184,15 +184,15 @@ def _render_oversold_badges(funds: list) -> None:
     st.caption(f"⚠️ 偵測到 **{len(_oversold)} 檔基金** σ ≤ -2.0(歷史高點下方 2 個標準差以上)")
     for _o in _oversold:
         st.markdown(
-            f"<div style='background:#2a0a0a;border-left:4px solid {MATERIAL_RED};"
+            f"<div style='background:{BG_DARK_RED_1};border-left:4px solid {MATERIAL_RED};"
             f"padding:8px 14px;margin:6px 0;border-radius:6px;'>"
             f"<b style='color:#ff6b6b'>🩸 {_o['name']} ({_o['code']})</b><br>"
-            f"<span style='color:#ccc;font-size:12px'>"
+            f"<span style='color:{GRAY_CC};font-size:12px'>"
             f"現價 {_o['current']:.2f} ｜ HWM {_o['hwm']:.2f} ｜ "
             f"距高點 <b style='color:{MATERIAL_RED}'>{_o['dist_pct']:+.2f}%</b> ｜ "
             f"σ rank <b style='color:{MATERIAL_RED}'>{_o['sigma_rank']:+.2f}σ</b>"
             f"</span><br>"
-            f"<span style='color:#888;font-size:11px'>"
+            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>"
             f"💡 深度超跌:若基本面(評分/吃本金/Sharpe)仍健康 → 可考慮抄底;"
             f"基本面也轉差 → 不要接刀</span>"
             f"</div>",
