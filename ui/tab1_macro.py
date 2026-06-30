@@ -818,6 +818,8 @@ def _render_tw_local_dashboard(indicators: dict | None,
             detect_mk_golden_inflection,
         )
         # v19.197 P1-4:macro_tw_local_fetch 已下沉 repositories/macro_tw_local_repository
+        # CLAUDE.md §8.2.A EX-PASSTHRU-1(v19.273 補登):L3 UI 直呼 4 個 TW 本地總經
+        # self-contained L1 fetcher 為允許用法(FinMind 單源,UI 取數後 L3 regime 判讀)。
         from repositories.macro_tw_local_repository import (
             fetch_foreign_consecutive_days,
             fetch_ndc_signal_history,

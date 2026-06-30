@@ -22,6 +22,17 @@
 
 ## 當前版本
 
+- **v19.272 Phase 2 TOP 1 — Tab3/Tab5 ADR fallback SSOT 收斂(2026-06-30,PR #485,squash `4ce2bf4`)**:
+  - **背景**:user 啟動 Phase 2「精準打擊與實作」,依 `PHASE1_AUDIT_DELTA.md` TOP 1 收斂 3 個 ADR callsite
+  - **方法論**:小步快跑(1 site → test → 1 commit × 3),每步 0 regression,鐵血鐵律(SSOT 收斂 / 拒絕狗皮膏藥 / 增量修改)
+  - **Site 1**(`a65171b`):`ui/tab3_portfolio.py:1250` div_safety_check 入點,原 2-layer → `_resolve_adr_with_fallback` SSOT 3-layer
+  - **Site 2**(`3da899e`):`ui/tab3_portfolio.py:2041-2067` 健診總表 _div,**抽掉 22 LOC inline 完整 SSOT 複製**(原本 UI 層逐行重做 datetime parse + 12M 累積 + nav 換算)→ 1 行 SSOT call
+  - **Site 3**(`919e379`):`ui/tab5_data_guard.py:1019` _d5_adr,原 2-layer → SSOT 3-layer
+  - **淨收斂**:+14/-29 = **-15 LOC**
+  - **語意升級**:Tab2(v19.177 已 SSOT)/ Tab3 / Tab5 三 tab 顯示 ADR 完全對稱;當「wb05 缺 + metrics 缺但有 dividends 歷史」時 Tab3/5 可多救一筆
+  - **驗證**:CI Fast + Schema gate + Slow tests 三項全綠(Site 1 後 100 / Site 2 後 145 / Site 3 後 114 passed)
+  - **剩餘 Phase 2 候選**:TOP 2(HTML card pattern,~10 LOC 純視覺)/ TOP 3(EX-PASSTHRU-1 補登,~5 LOC 純文件),等 user 點
+
 - **v19.266-270 C #1~8 8-項一鍋燴(2026-06-30,PR #484,squash `0f2bec3`)**:
   - **背景**:user 指示「C #1~8」對全部 doc + schema + scoring 一鍋掃。風險梯度從低到高分 5 phase
   - **Phase 1 v19.266 doc-sync**:CLAUDE.md F-PROV-1 / F-GRAY-4 / F-RECON-1 status 更新

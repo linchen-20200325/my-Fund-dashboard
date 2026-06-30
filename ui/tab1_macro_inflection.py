@@ -244,11 +244,13 @@ def render_inflection_alert_section(
             )
         st.markdown(_tl_html, unsafe_allow_html=True)
     else:
-        st.markdown(
-            f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:8px;"
-            f"padding:10px 16px;color:{GRAY_55};font-size:12px;text-align:center'>"
-            "🚦 持倉紅綠燈：請先至「📊 組合基金」Tab 新增並載入基金，即可在此顯示即時燈號</div>",
-            unsafe_allow_html=True)
+        # v19.273 Phase 2 TOP 2.3:empty-state 卡外框走 gh_card chrome SSOT(byte-identical)
+        from ui.components.cards import gh_card
+        st.markdown(gh_card(
+            "🚦 持倉紅綠燈：請先至「📊 組合基金」Tab 新增並載入基金，即可在此顯示即時燈號",
+            radius=8, padding="10px 16px", margin="",
+            extra=f"color:{GRAY_55};font-size:12px;text-align:center",
+        ), unsafe_allow_html=True)
 
     # ── AI 每日一句結論（v15.2 移除：使用者反饋過於簡略）──
     st.divider()
