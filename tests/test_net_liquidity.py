@@ -100,8 +100,9 @@ class TestWiring:
         assert "max_workers=7" in src, "worker 應 6→7"
 
     def test_tab1_renders_net_liq_card(self):
-        src = open("ui/tab1_macro.py", encoding="utf-8").read()
-        assert '"net_liq"' in src and "us_net_liq" in src, "tab1 應有 net_liq 卡 + spark_key"
+        # v19.262 P3-A5: net_liq 卡隨長期座標整 section 抽至 ui/tab1_macro_longterm.py
+        src = open("ui/tab1_macro_longterm.py", encoding="utf-8").read()
+        assert '"net_liq"' in src and "us_net_liq" in src, "long-term section 應有 net_liq 卡 + spark_key"
 
     def test_fred_tga_is_ssot(self):
         src = open("shared/fred_series.py", encoding="utf-8").read()
