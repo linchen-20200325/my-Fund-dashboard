@@ -700,7 +700,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
             <div style="background: linear-gradient(90deg, {_color}22, {_color}11);
                         border-left: 6px solid {_color}; border-radius: 8px;
                         padding: 18px 22px; margin: 10px 0;">
-              <div style="font-size: 14px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
+              <div style=f"font-size: 14px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
                 ✨ 目前總經位階（綜合 {_n_total} 項指標 score × 權重）
               </div>
               <div style="font-size: 30px; font-weight: 700; color: {_color}; line-height: 1.2;">
@@ -733,7 +733,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
                 <div style="background: linear-gradient(90deg, {_color}22, {_color}11);
                             border-left: 6px solid {_color}; border-radius: 8px;
                             padding: 14px 18px; margin: 6px 0; min-height: 132px;">
-                  <div style="font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
+                  <div style=f"font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
                     🐌 慢總經位階（{_n_total} 項指標 × 權重 ｜ 月～季級）
                   </div>
                   <div style="font-size: 26px; font-weight: 700; color: {_color}; line-height: 1.2;">
@@ -753,7 +753,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
                 <div style="background: linear-gradient(90deg, {_r_color}22, {_r_color}11);
                             border-left: 6px solid {_r_color}; border-radius: 8px;
                             padding: 14px 18px; margin: 6px 0; min-height: 132px;">
-                  <div style="font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
+                  <div style=f"font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
                     ⚡ 短線雷達（10 燈 1-day 動量／情緒 ｜ 日級）
                   </div>
                   <div style="font-size: 26px; font-weight: 700; color: {_r_color}; line-height: 1.2;">
@@ -773,7 +773,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
             <div style="background: linear-gradient(90deg, {_syn['color']}33, {_syn['color']}11);
                         border: 2px solid {_syn['color']}; border-radius: 10px;
                         padding: 16px 22px; margin: 6px 0 14px 0;">
-              <div style="font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
+              <div style=f"font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
                 🤝 雙速合議（mode={_syn['mode']}）
               </div>
               <div style="font-size: 24px; font-weight: 800; color: {_syn['color']}; line-height: 1.2;">
@@ -1970,7 +1970,7 @@ def render_macro_tab() -> None:
                         if isinstance(_rec_r, dict) and _rec_r.get('status') in ('agree', 'disagree', 'a_missing', 'b_missing'):
                             _rec_emoji_r = {'agree': '✅', 'disagree': '⚠️',
                                             'a_missing': '⬜', 'b_missing': '⬜'}.get(_rec_r.get('status'), '⬜')
-                            _rec_col_r = {'agree': '#22c55e', 'disagree': '#ef4444'}.get(
+                            _rec_col_r = {'agree': TRAFFIC_GREEN, 'disagree': TRAFFIC_RED}.get(
                                 _rec_r.get('status'), TRAFFIC_NEUTRAL)
                             _rec_chip_r = (
                                 f"<br/><span style='color:{_rec_col_r};font-size:9px;'>"
@@ -2672,7 +2672,7 @@ def render_macro_tab() -> None:
                 _ai_mac_pct, _ai_mac_tl = _calc_data_health(ind)
                 if _ai_mac_pct < 50:
                     st.markdown(
-                        "<div style=f'border-left:4px solid #f44336;background:{BG_DARK_NAVY_4};"
+                        "<div style=f'border-left:4px solid {MATERIAL_RED};background:{BG_DARK_NAVY_4};"
                         "border-radius:0 8px 8px 0;padding:10px 14px;font-size:13px'>"
                         "🔴 <b>紅燈阻斷</b>：總經資料完整率 "
                         f"<b>{_ai_mac_pct}%</b>（&lt;50%），AI 分析停用。"

@@ -354,7 +354,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     elif now >= sell3: pos_l, pos_c = "大漲停利 🔔 (出 50%)", MATERIAL_RED
     elif now >= sell2: pos_l, pos_c = "急漲停利 ⚠️ (出 30%)", MD_DEEP_ORANGE_400
     elif now >= sell1: pos_l, pos_c = "小漲停利 💰 (出 20%)", "#ffa726"
-    else:              pos_l, pos_c = "正常波動區",            "#888888"
+    else:              pos_l, pos_c = "正常波動區",            TRAFFIC_NEUTRAL
 
     # ── 布林通道（20日 Rolling Band，作為時間序列輸出）──
     bb_period = min(20, len(s))

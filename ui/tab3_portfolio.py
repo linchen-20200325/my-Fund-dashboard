@@ -1564,7 +1564,7 @@ def render_portfolio_tab() -> None:
             f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
             f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
             f"<div><div style='color:{MD_BLUE_300};font-size:11px'>🛡️ 核心資產</div><div style='color:{MD_BLUE_300};font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
-            f"<div><div style='color:#ff9800;font-size:11px'>⚡ 衛星資產</div><div style='color:#ff9800;font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
+            f"<div><div style='color:{MATERIAL_ORANGE};font-size:11px'>⚡ 衛星資產</div><div style='color:{MATERIAL_ORANGE};font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
             f"<div><div style='color:{_dc};font-size:11px'>目標偏差</div><div style='color:{_dc};font-size:28px;font-weight:900'>{_diff:+.1f}%</div></div>"
             f"</div></div>", unsafe_allow_html=True)
 
@@ -1911,13 +1911,13 @@ def render_portfolio_tab() -> None:
                             f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0'>"
                             f"{status_icon} <b style='color:{GH_FG_PRIMARY}'>{(pf_item.get('name','') or pf_item['code'])[:28]}</b> "
                             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{pf_item['code']}</span> "
-                            f"<span style='color:#ff9800;font-size:11px;margin-left:6px'>{role_i}</span></div>",
+                            f"<span style='color:{MATERIAL_ORANGE};font-size:11px;margin-left:6px'>{role_i}</span></div>",
                             unsafe_allow_html=True)
                     with ci2:
                         st.markdown(
                             f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0;font-size:11px;color:{TRAFFIC_NEUTRAL}'>"
                             f"NAV: <b style='color:{GH_FG_PRIMARY}'>{_nav_i}</b>"
-                            f"　配息率: <b style='color:#ff9800'>{_adr_i}{'%' if _adr_i else ''}</b>"
+                            f"　配息率: <b style='color:{MATERIAL_ORANGE}'>{_adr_i}{'%' if _adr_i else ''}</b>"
                             f"　Sharpe: <b style='color:{MD_GREEN_A200}'>{_sh_i}</b>"
                             f"　σ: <b>{_std_i}{'%' if _std_i else ''}</b></div>",
                             unsafe_allow_html=True)
@@ -1973,7 +1973,7 @@ def render_portfolio_tab() -> None:
                                 if _double_buy:
                                     _badge = "<span style=f'background:#0a3a1a;color:{MD_GREEN_A400};border:1px solid {MD_GREEN_A400};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🟢🟢 σ+布林 雙確認買</span>"
                                 elif _double_sell:
-                                    _badge = "<span style='background:#3a0a0a;color:#f44336;border:1px solid #f44336;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🔔🔔 σ+布林 雙確認賣</span>"
+                                    _badge = "<span style=f'background:#3a0a0a;color:{MATERIAL_RED};border:1px solid {MATERIAL_RED};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🔔🔔 σ+布林 雙確認賣</span>"
                                 # 6 個訊號方塊（從深買到深賣）
                                 _cells = ""
                                 for _v, _lbl, _is_buy in [

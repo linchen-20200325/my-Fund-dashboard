@@ -126,7 +126,7 @@ def _detect_inflection(indicators):
     if score >= 8:   infl = {"label":"🚀 強力買進拐點","color":MATERIAL_GREEN,"desc":"多項指標同時確認，景氣最佳買點"}
     elif score >= 4: infl = {"label":"✅ 買進拐點形成","color":MD_GREEN_A200,"desc":"落後見頂 + 領先反彈，建議逢低布局"}
     elif score >= 1: infl = {"label":"👀 觀察（偏多）","color":MATERIAL_ORANGE,"desc":"部分訊號出現，持續觀察"}
-    elif score >= -2:infl = {"label":"⚖️ 中性整理","color":"#888888","desc":"指標分歧，維持資產配置"}
+    elif score >= -2:infl = {"label":"⚖️ 中性整理","color":TRAFFIC_NEUTRAL,"desc":"指標分歧，維持資產配置"}
     elif score >= -5:infl = {"label":"⚠️ 謹慎偏空","color":MD_DEEP_ORANGE_400,"desc":"落後指標未見頂，降低股票型比重"}
     else:            infl = {"label":"🔴 空頭拐點","color":MATERIAL_RED,"desc":"確認衰退，優先貨幣型與投資等級債"}
     return {"inflection":infl,"signals":signals,"infl_score":score}
@@ -1078,7 +1078,7 @@ def calc_macro_phase(indicators: dict) -> dict:
         next_phase = phase
         trend_arrow = "→"
         trend_label = "持穩整理"
-        trend_color = "#888888"
+        trend_color = TRAFFIC_NEUTRAL
 
     # ── 各景氣位階配置 Map（供拐點轉換顯示）────────────────
     ALLOC_MAP = {
@@ -1344,7 +1344,7 @@ def identify_regime(indicators: dict) -> dict:
 
     # ── 四象限判斷 ────────────────────────────────────────
     if pmi_v is None:
-        regime = "未知"; regime_color = "#888888"
+        regime = "未知"; regime_color = TRAFFIC_NEUTRAL
     elif pmi_v >= _PMI_REGIME_STRONG and (cpi_v or 0) < _CPI_REGIME_OVERHEAT:
         regime = "🟢 成長期"; regime_color = MATERIAL_GREEN
     elif pmi_v >= _PMI_REGIME_STRONG and (cpi_v or 0) >= _CPI_REGIME_OVERHEAT:
@@ -1469,7 +1469,7 @@ def fetch_tw_market_tpi(fred_api_key: str = "") -> dict:
         result.update(water_label="🌡️ 溫熱（偏多）", color=MATERIAL_ORANGE, signal="🟡",
                       advice="市場動能良好，持續觀察是否過熱，衛星部位可設停利")
     elif tpi >= -0.5:
-        result.update(water_label="⚖️ 常溫（中性）", color="#888888", signal="⚪",
+        result.update(water_label="⚖️ 常溫（中性）", color=TRAFFIC_NEUTRAL, signal="⚪",
                       advice="市場趨向均衡，維持既有配置，觀察漲跌家數變化")
     elif tpi >= -1.5:
         result.update(water_label="🌡️ 偏冷（謹慎）", color=MD_BLUE_300, signal="🟡",

@@ -43,7 +43,7 @@ from shared.colors import (
 )
 
 # ── 燈號 → 色 / emoji / 嚴重度排序(bar + chart + SPEC 共用)──
-# v19.252 Phase 4A:gray 從 SSOT 取(原 inline #6e7681,已 v19.68 升級為 #888888)
+# v19.252 Phase 4A:gray 從 SSOT 取(原 inline #6e7681,已 v19.68 升級為 {TRAFFIC_NEUTRAL})
 LEVEL_COLOR = {"green": _C_GREEN, "yellow": _C_YELLOW,
                "red": _C_RED, "gray": TRAFFIC_NEUTRAL}
 LEVEL_EMOJI = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⬜"}

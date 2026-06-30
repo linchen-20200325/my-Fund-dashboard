@@ -58,7 +58,7 @@ _PHASE_META = {
     "unknown":   {"zh": "資料不足", "icon": "❓",
                   "desc": "PMI / CPI 任一面向缺資料，無法定位四象限",
                   "alloc_eq": 50, "alloc_bd": 50,
-                  "color": "#888888",
+                  "color": TRAFFIC_NEUTRAL,
                   "advice": "請至 Tab1 點「載入總經指標」抓取 FRED 最新資料後再回來查看；勿以此狀態作投資依據。"},
 }
 

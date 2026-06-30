@@ -1814,7 +1814,7 @@ def render_t7_section() -> None:
                                 _hd_cols = st.columns([5, 1])
                                 _hd_cols[0].markdown(
                                     "<div style='background:linear-gradient(90deg,#3a1a1a,#2a1010);"
-                                    "border-left:4px solid #f44336;border-radius:0 6px 6px 0;"
+                                    f"border-left:4px solid {MATERIAL_RED};border-radius:0 6px 6px 0;"
                                     "padding:8px 14px;margin-bottom:8px'>"
                                     "<span style=f'color:{MD_DEEP_ORANGE_400};font-weight:700;font-size:13px'>"
                                     "📉 賣方設定</span>"
@@ -1855,7 +1855,7 @@ def render_t7_section() -> None:
                                 # ─── 綠區：買方設定 ───
                                 st.markdown(
                                     "<div style='background:linear-gradient(90deg,#0d2a1a,#0a1f12);"
-                                    "border-left:4px solid #00c853;border-radius:0 6px 6px 0;"
+                                    f"border-left:4px solid {MATERIAL_GREEN};border-radius:0 6px 6px 0;"
                                     "padding:8px 14px;margin-bottom:8px'>"
                                     "<span style=f'color:{MD_GREEN_A200};font-weight:700;font-size:13px'>"
                                     "📈 買方組（此賣款導向以下標的）</span>"
@@ -2548,8 +2548,8 @@ def render_t7_section() -> None:
                                 # 抽出第一個正/負號旁的數字
                                 v = val.replace("NT$", "").replace(",", "").replace("%", "")
                                 f = float(v)
-                                if f > 0:  return "color:#00c853;font-weight:600"
-                                if f < 0:  return "color:#f44336;font-weight:600"
+                                if f > 0:  return f"color:{MATERIAL_GREEN};font-weight:600"
+                                if f < 0:  return f"color:{MATERIAL_RED};font-weight:600"
                             except Exception:
                                 return ""
                             return ""
@@ -2679,7 +2679,7 @@ def render_t7_section() -> None:
                     "<span style=f'color:{MD_GREEN_A200};font-weight:700'>🔍 分析範圍：</span>"
                     f"<span style='color:{GH_FG_SECONDARY}'>主帳本 <b>{_mk_n_funds} 檔</b>"
                     f"，合計投入 <b>NT${_mk_total_inv:,}</b></span>"
-                    + (f"<span style='color:#ff9800;margin-left:12px'>"
+                    + (f"<span style='color:{MATERIAL_ORANGE};margin-left:12px'>"
                        f"（A/B/C 暫存方案 {_mk_n_scenarios} 個 — <b>不</b>納入分析）"
                        "</span>" if _mk_n_scenarios > 0 else "")
                     + "</div>",
