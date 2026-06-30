@@ -18,7 +18,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from shared.colors import MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 # F-GRAY-4 v19.179 PR-3:PMI 教學 markdown SSOT(per Q3「全遷,markdown 也用 f-string 插值」)
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_TEXTBOOK = _PMI_THR_V2["stoplight"]["green_above"]  # 50.0 = 教科書枯榮線(字面分界)
@@ -549,7 +549,7 @@ def render_manual_tab() -> None:
              "AAII 失敗 → 拐點桶不參考此項"),
         ]
 
-        _dm_th = ("font-size:10px;color:#888;font-weight:700;padding:8px 10px;"
+        _dm_th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:8px 10px;"
                   "border-bottom:1px solid #30363d")
         _dm_td = "font-size:11px;padding:8px 10px;line-height:1.4"
         _dm_html = (
@@ -569,7 +569,7 @@ def render_manual_tab() -> None:
                 f"<span style='{_dm_td};color:#e6edf3;font-weight:600'>{_item}</span>"
                 f"<span style='{_dm_td};color:#79c0ff'>{_tab}</span>"
                 f"<span style='{_dm_td};color:#bbb;font-family:monospace;font-size:10px'>{_src}</span>"
-                f"<span style='{_dm_td};color:#888'>{_ref}</span>"
+                f"<span style='{_dm_td};color:{TRAFFIC_NEUTRAL}'>{_ref}</span>"
                 f"<span style='{_dm_td};color:#a5d6ff;font-size:10px'>{_fb}</span>"
                 f"</div>"
             )
@@ -1254,7 +1254,7 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
                         _c["edu_default_open"] = True
                     with st.container(border=True):
                         st.markdown(
-                            "<div style='color:#888;font-size:12px;margin:-4px 0 6px'>"
+                            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:12px;margin:-4px 0 6px'>"
                             "點開每張卡片下方「📖 完整教學」可看：白話定義 / 怎麼判讀 / 搭配看誰 / "
                             "上游因 / 下游果 / 歷史錨點。"
                             "</div>", unsafe_allow_html=True)

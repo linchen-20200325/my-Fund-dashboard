@@ -14,7 +14,7 @@ import pandas as pd
 from repositories.macro_repository import (
     fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch,
 )
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 # v19.245 R13 F-GRAY-4 Phase A HY_SPREAD inflection 收口 SSOT
 from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR_V2
 
@@ -831,7 +831,7 @@ def get_market_phase(indicators: dict) -> dict:
             _phases.append("衰退")
 
     if not _phases:
-        return {"phase2d": "未知", "phase2d_color": "#888", "phase2d_desc": "資料不足"}
+        return {"phase2d": "未知", "phase2d_color": TRAFFIC_NEUTRAL, "phase2d_desc": "資料不足"}
 
     # 多數決
     from collections import Counter
@@ -844,7 +844,7 @@ def get_market_phase(indicators: dict) -> dict:
         "減速": (MATERIAL_ORANGE, "Z 高位 + 斜率轉負，擴張減速拐點！考慮調降衛星比重"),
         "衰退": (MATERIAL_RED, "Z 低位 + 斜率向下，景氣收縮，轉向防禦配置"),
     }
-    _color, _desc = _map.get(_winner, ("#888", ""))
+    _color, _desc = _map.get(_winner, (TRAFFIC_NEUTRAL, ""))
     return {
         "phase2d":        _winner,
         "phase2d_color":  _color,
@@ -1278,7 +1278,7 @@ def calc_macro_phase_zpct(indicators: dict) -> dict:
         return {
             "score": None,
             "phase": None,
-            "phase_color": "#888",
+            "phase_color": TRAFFIC_NEUTRAL,
             "sub_pcts": {},
             "contributing": 0,
             "skipped": skipped,
@@ -1411,7 +1411,7 @@ def fetch_tw_market_tpi(fred_api_key: str = "") -> dict:
     result = {
         "tpi": None, "z_breadth": None, "z_fii": None, "z_m1b_m2": 0.0,
         "fii_net": None, "breadth": None,
-        "water_label": "資料取得中", "color": "#888",
+        "water_label": "資料取得中", "color": TRAFFIC_NEUTRAL,
         "signal": "⬜", "advice": "", "date": "", "error": None,
         "_fred_api_key": fred_api_key,  # 保留 API 相容,雖已不再使用
     }

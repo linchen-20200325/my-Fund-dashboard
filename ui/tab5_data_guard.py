@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from infra.proxy import get_proxy_config
 from ui.helpers.session import (
@@ -222,7 +222,7 @@ def render_data_guard_tab() -> None:
          "FX 失敗 → 上方 Proxy 連線測試;Sheet → sidebar 登入 Google / 設 gservice_account secret"),
     ]
 
-    _tab_th = "font-size:10px;color:#888;font-weight:700;padding:8px 10px;border-bottom:1px solid #30363d"
+    _tab_th = f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:8px 10px;border-bottom:1px solid #30363d"
     _tab_td = "font-size:11px;padding:8px 10px;line-height:1.4"
     _t_html = (
         f"<div style='display:grid;grid-template-columns:1.3fr 0.5fr 0.9fr 2.8fr 2fr;"
@@ -244,7 +244,7 @@ def render_data_guard_tab() -> None:
             f"<span style='{_tab_td};text-align:center;color:{_c};font-size:14px'>{_e}</span>"
             f"<span style='{_tab_td};color:{_c};font-weight:600'>{_ratio}</span>"
             f"<span style='{_tab_td};color:#bbb'>{_detail}</span>"
-            f"<span style='{_tab_td};color:#888;font-size:10px'>{_action}</span>"
+            f"<span style='{_tab_td};color:{TRAFFIC_NEUTRAL};font-size:10px'>{_action}</span>"
             f"</div>"
         )
     st.markdown(
@@ -412,7 +412,7 @@ def render_data_guard_tab() -> None:
          "—", _src_status(False, 0, inactive_label="僅個股查詢觸發")),
     ]
 
-    _src_th = ("font-size:10px;color:#888;font-weight:700;padding:6px 8px;"
+    _src_th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:6px 8px;"
                "border-bottom:1px solid #30363d")
     _src_td = "font-size:11px;padding:6px 8px;line-height:1.4"
     _src_html = (
@@ -435,7 +435,7 @@ def render_data_guard_tab() -> None:
             f"<span style='{_src_td};color:#e6edf3;font-weight:600'>{_cat}</span>"
             f"<span style='{_src_td};color:#bbb'>{_purp}</span>"
             f"<span style='{_src_td};color:#7d8590;font-family:monospace;font-size:10px'>{_ep}</span>"
-            f"<span style='{_src_td};text-align:center;color:#888'>{_proxy}</span>"
+            f"<span style='{_src_td};text-align:center;color:{TRAFFIC_NEUTRAL}'>{_proxy}</span>"
             f"<span style='{_src_td};color:{_sc};font-weight:600'>{_ic} {_stxt}</span>"
             f"</div>"
         )
@@ -495,7 +495,7 @@ def render_data_guard_tab() -> None:
         }
 
         # 表格標頭
-        _th = ("font-size:10px;color:#888;font-weight:700;padding:4px 8px;"
+        _th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:4px 8px;"
                "border-bottom:1px solid #30363d")
         _td_base = "font-size:11px;padding:4px 8px"
         _hdr = (
@@ -523,7 +523,7 @@ def render_data_guard_tab() -> None:
                 f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 3fr 1fr;"
                 f"background:{_row_bg};border-bottom:1px solid #21262d'>"
                 f"<span style='{_td_base};color:#e6edf3'>{_rv.get('label', _rk)}</span>"
-                f"<span style='{_td_base};color:#888'>{_rv.get('source','')}</span>"
+                f"<span style='{_td_base};color:{TRAFFIC_NEUTRAL}'>{_rv.get('source','')}</span>"
                 f"<span style='{_td_base}'>"
                 f"<span style='background:{_FREQ_LABEL.get(_freq,('?','#555'))[1]}22;"
                 f"color:{_FREQ_LABEL.get(_freq,('?','#555'))[1]};"
@@ -637,7 +637,7 @@ def render_data_guard_tab() -> None:
                 _col_c = MATERIAL_GREEN if (_ms and _ms < 1000) else (MATERIAL_ORANGE if (_ms and _ms < 3000) else MATERIAL_RED)
                 _pcols[_ci].markdown(
                     f"<div style='background:#1a1f2e;border-radius:8px;padding:10px;text-align:center'>"
-                    f"<div style='font-size:11px;color:#888'>{_sn}</div>"
+                    f"<div style='font-size:11px;color:{TRAFFIC_NEUTRAL}'>{_sn}</div>"
                     f"<div style='font-size:20px;font-weight:700;color:{_col_c}'>"
                     f"{'N/A' if _ms is None else f'{_ms} ms'}</div></div>",
                     unsafe_allow_html=True)
@@ -904,7 +904,7 @@ def render_data_guard_tab() -> None:
     _key_targets = ["FRED_API_KEY", "GEMINI_API_KEY", "FINMIND_TOKEN",
                     "PROXY_URL", "GOOGLE_SHEET_ID"]
     _key_rows = [_resolve_key(_k) for _k in _key_targets]
-    _kt_th = ("font-size:10px;color:#888;font-weight:700;padding:6px 10px;"
+    _kt_th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:6px 10px;"
               "border-bottom:1px solid #30363d")
     _kt_td = "font-size:11px;padding:6px 10px;line-height:1.4"
     _kt_html = (
@@ -1005,7 +1005,7 @@ def render_data_guard_tab() -> None:
                 _ic, _vc, _vs = "✅", MATERIAL_GREEN, "已取得"
             col.markdown(
                 f"<div style='background:#1a1f2e;border-radius:6px;padding:6px 8px'>"
-                f"<div style='font-size:10px;color:#888'>{label}</div>"
+                f"<div style='font-size:10px;color:{TRAFFIC_NEUTRAL}'>{label}</div>"
                 f"<div style='font-size:13px;color:{_vc};font-weight:700'>{_ic} {_vs}</div>"
                 f"</div>", unsafe_allow_html=True)
 
@@ -1226,7 +1226,7 @@ def render_data_guard_tab() -> None:
             f"共 {len(_anom_items)} 筆異常　｜　🔴 真延遲 {_anom_red}　🟡 其他延遲 {_anom_yel}"
             f"　｜　依嚴重度排序（release window 內的 🟡 已自動排除）"
         )
-        _th_a = ("font-size:10px;color:#888;font-weight:700;padding:4px 8px;"
+        _th_a = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:4px 8px;"
                  "border-bottom:1px solid #30363d")
         _td_a = "font-size:11px;padding:4px 8px"
         _hdr_a = (
@@ -1251,7 +1251,7 @@ def render_data_guard_tab() -> None:
                 f"<div style='display:grid;grid-template-columns:2.4fr 1.4fr 0.8fr 1.2fr 1.6fr;"
                 f"background:{_abg};border-bottom:1px solid #21262d'>"
                 f"<span style='{_td_a};color:#e6edf3'>{_av.get('label', _ak)}</span>"
-                f"<span style='{_td_a};color:#888'>{_av.get('source','—') or '—'}</span>"
+                f"<span style='{_td_a};color:{TRAFFIC_NEUTRAL}'>{_av.get('source','—') or '—'}</span>"
                 f"<span style='{_td_a}'>"
                 f"<span style='background:{_afq_col}22;color:{_afq_col};"
                 f"border:1px solid {_afq_col};border-radius:10px;padding:1px 7px;"

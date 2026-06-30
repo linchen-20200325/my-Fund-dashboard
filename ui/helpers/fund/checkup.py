@@ -16,7 +16,7 @@ import math
 import pandas as pd
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 # v19.245 R13:`dividend_safety` 已於 v19.150 由 SSOT `check_eating_principal_1y_mk`
 # 取代(下方 _compute_fund_health_kpis line 166 動態 import),原 `div_safety_check`
@@ -228,19 +228,19 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
     _adr = k["adr"]
     _tr1y = k["ret_1y"]
     if _adr is None:
-        _kpi_icon, _kpi_color, _kpi_bg = "⬜", "#888", "#161b22"
+        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, "#161b22"
         _kpi_title = "吃本金檢查 — ⬜ 不適用"
         _kpi_msg = "本基金無年化配息率資料（可能為累積型 / 不配息基金）"
         _kpi_cov_txt = "—"
     elif _tr1y is None or _ds is None:
-        _kpi_icon, _kpi_color, _kpi_bg = "⬜", "#888", "#161b22"
+        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, "#161b22"
         _kpi_title = "吃本金檢查 — ⬜ 資料不足"
         _kpi_msg = "缺含息總報酬（1Y），無法計算 Coverage"
         _kpi_cov_txt = "—"
     else:
         _al = _ds.get("alert_level", "grey")
         _kpi_color = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
-                      "green": MATERIAL_GREEN}.get(_al, "#888")
+                      "green": MATERIAL_GREEN}.get(_al, TRAFFIC_NEUTRAL)
         _kpi_bg = {"red": "#2a0a0a", "yellow": "#2a1f00",
                    "green": "#0a1a0a"}.get(_al, "#161b22")
         _kpi_icon = {"red": "🔴", "yellow": "🟡", "green": "🟢"}.get(_al, "⬜")
@@ -261,17 +261,17 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
         f"<div style='background:{_kpi_bg};border:2px solid {_kpi_color};"
         f"border-radius:12px;padding:10px 14px;margin:8px 0'>"
         f"<div style='color:#e6edf3;font-weight:800;font-size:13px;margin-bottom:4px'>"
-        f"💊 {_name} <span style='color:#888;font-size:11px'>{_code}</span></div>"
+        f"💊 {_name} <span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code}</span></div>"
         f"<div style='color:{_kpi_color};font-size:12px;font-weight:700;margin-bottom:8px'>"
         f"{_kpi_title}</div>"
         f"<div style='display:flex;gap:18px;flex-wrap:wrap'>"
-        f"<div><div style='color:#888;font-size:10px'>1Y 含息報酬</div>"
+        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>1Y 含息報酬</div>"
         f"<div style='color:#fff;font-weight:700;font-size:15px'>{_tr1y_txt}</div></div>"
-        f"<div><div style='color:#888;font-size:10px'>年化配息率</div>"
+        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>年化配息率</div>"
         f"<div style='color:#fff;font-weight:700;font-size:15px'>{_adr_txt}</div></div>"
-        f"<div><div style='color:#888;font-size:10px'>Coverage</div>"
+        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>Coverage</div>"
         f"<div style='color:{_kpi_color};font-weight:700;font-size:15px'>{_kpi_cov_txt}</div></div>"
-        f"<div><div style='color:#888;font-size:10px'>月配息（TWD）</div>"
+        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>月配息（TWD）</div>"
         f"<div style='color:#fff;font-weight:700;font-size:15px'>{_monthly_txt}</div></div>"
         f"</div>"
         f"<div style='color:#aaa;font-size:11px;margin-top:6px'>{_kpi_msg}</div>"
@@ -290,20 +290,20 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
             _ter_c = MATERIAL_GREEN if _td <= 0 else (MATERIAL_ORANGE if _td <= 0.5 else MATERIAL_RED)
             _vs_txt = (f"高於均值 +{_td:.2f}%" if _td > 0 else f"低於均值 {abs(_td):.2f}%")
             _avg_html = (
-                f"<div><div style='color:#888;font-size:10px'>同類均值</div>"
-                f"<div style='color:#888;font-weight:700;font-size:15px'>{_ta:.2f}%</div></div>"
-                f"<div><div style='color:#888;font-size:10px'>費用比較</div>"
+                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>同類均值</div>"
+                f"<div style='color:{TRAFFIC_NEUTRAL};font-weight:700;font-size:15px'>{_ta:.2f}%</div></div>"
+                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>費用比較</div>"
                 f"<div style='color:{_ter_c};font-weight:700;font-size:15px'>{_vs_txt}</div></div>"
             )
         else:
-            _ter_c, _avg_html = "#888", ""
+            _ter_c, _avg_html = TRAFFIC_NEUTRAL, ""
         _ter_lbl = f" — {_tcat[:12]}" if _tcat else ""
         st.markdown(
             f"<div style='background:#161b22;border:1px solid #30363d;"
             f"border-radius:10px;padding:8px 14px;margin:4px 0 12px 0'>"
-            f"<div style='color:#888;font-size:11px;margin-bottom:6px'>💰 TER 費用率分析{_ter_lbl}</div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>💰 TER 費用率分析{_ter_lbl}</div>"
             f"<div style='display:flex;gap:18px;flex-wrap:wrap'>"
-            f"<div><div style='color:#888;font-size:10px'>最高經理費</div>"
+            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>最高經理費</div>"
             f"<div style='color:{_ter_c};font-weight:700;font-size:15px'>{_tv:.2f}%</div></div>"
             + _avg_html +
             "</div>"
@@ -517,7 +517,7 @@ def render_fund_checkup(portfolio_funds: list | None, expanded: bool = False) ->
         st.divider()
         st.markdown(
             "#### 💊 逐檔財務健診（4 大功能）"
-            "<span style='color:#888;font-size:11px;margin-left:8px'>"
+            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>"
             "吃本金 / 月配息 TWD / 年化配息率 / TER 費用率</span>",
             unsafe_allow_html=True,
         )

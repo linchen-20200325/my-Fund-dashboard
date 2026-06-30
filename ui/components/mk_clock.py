@@ -15,7 +15,7 @@ from typing import Optional
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN
+from shared.colors import MATERIAL_GREEN, TRAFFIC_NEUTRAL
 # F-GRAY-4 v19.179 PR-3:PMI mk_tolerance SSOT
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_MK_EXPANSION = _PMI_THR_V2["mk_tolerance"]["expansion_above"]    # 50.5
@@ -215,7 +215,7 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
             f"<div style='background:linear-gradient(135deg,{meta['color']}22,#0d1117);"
             f"border-left:6px solid {meta['color']};border-radius:10px;padding:18px 20px;"
             f"margin-bottom:14px'>"
-            f"<div style='font-size:12px;color:#888;letter-spacing:2px'>當前景氣階段</div>"
+            f"<div style='font-size:12px;color:{TRAFFIC_NEUTRAL};letter-spacing:2px'>當前景氣階段</div>"
             f"<div style='font-size:32px;font-weight:700;color:{meta['color']};margin:6px 0'>"
             f"{meta['icon']} {meta['zh']}</div>"
             f"<div style='font-size:13px;color:#aaa;margin-bottom:10px'>{meta['desc']}</div>"
@@ -235,13 +235,13 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
                 tag = ""
             return (
                 f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px;text-align:center'>"
-                f"<div style='font-size:11px;color:#888'>{label}</div>"
+                f"<div style='font-size:11px;color:{TRAFFIC_NEUTRAL}'>{label}</div>"
                 f"<div style='font-size:18px;font-weight:600;color:#e0e0e0'>{num_html}</div>"
                 f"{tag}</div>"
             )
 
         st.markdown(
-            f"<div style='font-size:12px;color:#888;margin-bottom:6px'>三面向訊號</div>"
+            f"<div style='font-size:12px;color:{TRAFFIC_NEUTRAL};margin-bottom:6px'>三面向訊號</div>"
             f"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px'>"
             f"{_fmt_cell('基本面 PMI', meta.get('pmi'),  meta['pmi_t'], '',  '{:.1f}')}"
             f"{_fmt_cell('通膨 CPI',   meta.get('cpi'),  meta['cpi_t'], '%', '{:.2f}')}"
@@ -259,7 +259,7 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
 
         # 配置條
         st.markdown(
-            f"<div style='margin-top:14px;font-size:12px;color:#888'>建議股債比例</div>"
+            f"<div style='margin-top:14px;font-size:12px;color:{TRAFFIC_NEUTRAL}'>建議股債比例</div>"
             f"<div style='display:flex;height:28px;border-radius:6px;overflow:hidden;margin-top:4px'>"
             f"<div style='width:{meta['alloc_eq']}%;background:#26a69a;display:flex;align-items:center;"
             f"justify-content:center;color:#fff;font-size:12px;font-weight:600'>股 {meta['alloc_eq']}%</div>"

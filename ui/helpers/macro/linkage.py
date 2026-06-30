@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from shared.colors import TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
+
 
 def render_macro_exposure_link(session_state, core_pct=None) -> None:
     """渲染總經→組合曝險聯動 banner（純顯示，零副作用，零新 IO）。
@@ -51,7 +53,7 @@ def render_macro_exposure_link(session_state, core_pct=None) -> None:
     if _score is not None:
         _head += f" {_score}/10"
     if _arrow and _next:
-        _head += f" <span style='color:#888'>{_arrow} {_next}</span>"
+        _head += f" <span style='color:{TRAFFIC_NEUTRAL}'>{_arrow} {_next}</span>"
     if _recp is not None:
         try:
             _head += f"　衰退機率 {float(_recp):.0f}%"

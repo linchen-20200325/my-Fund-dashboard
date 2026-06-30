@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL
 
 
 def _norm_name(s) -> str:
@@ -101,7 +101,7 @@ def render_concentration_summary(portfolio_funds) -> None:
     for _nm, _exp_pct, _fc in _top:
         _zh = _zh_holding(_nm)
         _zh_s = f"({_zh})" if _zh else ""
-        _multi = f" <span style='color:#888'>·{_fc}檔</span>" if _fc >= 2 else ""
+        _multi = f" <span style='color:{TRAFFIC_NEUTRAL}'>·{_fc}檔</span>" if _fc >= 2 else ""
         _items.append(
             f"<b style='color:#c9d1d9'>{_nm[:18]}{_zh_s}</b> "
             f"{_exp_pct:.1f}%{_multi}")
@@ -201,7 +201,7 @@ def render_sector_concentration_summary(portfolio_funds) -> None:
 
     _items = []
     for _nm, _exp_pct, _fc in _top:
-        _multi = f" <span style='color:#888'>·{_fc}檔</span>" if _fc >= 2 else ""
+        _multi = f" <span style='color:{TRAFFIC_NEUTRAL}'>·{_fc}檔</span>" if _fc >= 2 else ""
         _items.append(
             f"<b style='color:#c9d1d9'>{_nm[:14]}</b> "
             f"{_exp_pct:.1f}%{_multi}")

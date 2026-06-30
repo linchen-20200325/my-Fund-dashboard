@@ -16,6 +16,7 @@ import streamlit as st
 from fund_fetcher import get_proxy_config
 from infra.oauth import build_authorize_url
 from repositories.policy_repository import get_sheet_title
+from shared.colors import TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
 
 
 def render_sidebar(*,
@@ -40,7 +41,7 @@ def render_sidebar(*,
         st.markdown("## 📊 基金戰情室")
         _upd = st.session_state.get("macro_last_update")
         st.caption(f"📡 總經：{_upd.strftime('%m/%d %H:%M') if _upd else '未載入'}　|　{now_tw_fn().strftime('%m/%d %H:%M')} TW")
-        st.markdown(f"<div style='background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:8px 12px;font-size:11px;color:#888'>App {app_version} | Engine {engine_version} | Fetcher v6.24</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:8px 12px;font-size:11px;color:{TRAFFIC_NEUTRAL}'>App {app_version} | Engine {engine_version} | Fetcher v6.24</div>", unsafe_allow_html=True)
         # v18.277：部署 beacon — 改成動態反映 app_version，避免歡迎卡停留在舊版本誤導 user
         st.markdown(
             f"<div style='background:linear-gradient(90deg,#7c3aed,#ec4899);"

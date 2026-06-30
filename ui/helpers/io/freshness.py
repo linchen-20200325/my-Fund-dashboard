@@ -16,7 +16,7 @@ import datetime as _dt
 import streamlit as st
 
 from shared.signal_thresholds import MJ_FRESH_DAYS_GREEN, MJ_FRESH_DAYS_YELLOW
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL
 
 
 def nav_age_emoji(nav_date_str, today=None):
@@ -86,7 +86,7 @@ def render_mj_freshness_banner(items: list, title: str = "MoneyDJ 資料新鮮�
             f"<span title='{_code} ｜ NAV {_nav_show} ｜ 抓取於 "
             f"{_fetched_show} ｜ 延遲 {_age_txt}'>"
             f"{_emoji} <b>{_nm}</b> "
-            f"<span style='color:#888'>{_nav_inline}/{_fetch_short}/{_age_txt}</span>"
+            f"<span style='color:{TRAFFIC_NEUTRAL}'>{_nav_inline}/{_fetch_short}/{_age_txt}</span>"
             f"</span>"
         )
     _summary = (

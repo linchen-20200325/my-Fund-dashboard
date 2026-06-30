@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_RED
+from shared.colors import MATERIAL_RED, TRAFFIC_NEUTRAL
 
 
 def _render_correlation_matrix(funds: list) -> None:
@@ -111,7 +111,7 @@ def _render_correlation_matrix(funds: list) -> None:
                 f"<b>{_a} ⟷ {_b}</b>　"
                 f"<span style='color:{MATERIAL_RED};font-weight:700'>"
                 f"{_label} {_score:.3f}</span>　"
-                f"<span style='color:#888;font-size:11px'>建議檢視是否該擇一持有</span>"
+                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>建議檢視是否該擇一持有</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )

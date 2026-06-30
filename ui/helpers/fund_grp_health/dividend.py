@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 
 def _render_dividend_matrix(funds: list) -> None:
@@ -68,7 +68,7 @@ def _render_dividend_matrix(funds: list) -> None:
     _rc_colors = []
     for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
         if not _real:
-            _rc_colors.append("#888")
+            _rc_colors.append(TRAFFIC_NEUTRAL)
         elif _d > 0 and _r < _d:
             _rc_colors.append(MATERIAL_RED)
         elif _d > 0 and _r < _d * 1.2:

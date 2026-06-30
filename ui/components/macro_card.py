@@ -15,7 +15,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 EDU_FIELDS = ("meaning", "how_to_read", "pair_with",
               "historical_anchor", "upstream", "downstream")
@@ -154,7 +154,7 @@ def render_edu_markdown(edu: dict | None) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 def _z_color(z, high_is_bad):
     if z is None:
-        return "#888"
+        return TRAFFIC_NEUTRAL
     if abs(z) >= 2:
         bad = (high_is_bad and z > 0) or (not high_is_bad and z < 0)
         return MATERIAL_RED if bad else MATERIAL_GREEN

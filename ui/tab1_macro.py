@@ -77,7 +77,7 @@ def _tp_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
     無 threshold 的 key 回傳空 list(例:無自然零點的 indicator)。
     """
     if key == "pmi_diff":
-        return [(0.0, "dot", "#888", "擴張/收縮 0")]
+        return [(0.0, "dot", TRAFFIC_NEUTRAL, "擴張/收縮 0")]
     if key == "yield_curve":
         return [(0.0, "dot", TRAFFIC_RED, "倒掛 0")]
     if key == "hy_spread":
@@ -236,7 +236,7 @@ def _render_macro_indicator_card(title: str, signal: str, color: str,
         f"border-radius:10px;padding:10px 12px 6px;margin:4px 0;min-height:150px;"
         f"display:flex;flex-direction:column;justify-content:space-between'>"
         f"<div>"
-        f"<div style='color:#888;font-size:10px;letter-spacing:1px'>{title}</div>"
+        f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;letter-spacing:1px'>{title}</div>"
         f"<div style='color:{color};font-size:15px;font-weight:800;margin:4px 0 6px'>{signal}</div>"
         f"<div style='color:#fff;font-weight:700;font-size:14px'>值 {value_str}</div>"
         f"</div>"
@@ -412,7 +412,7 @@ def _render_china_drag_panel(phase_dict: dict | None,
     _china_score = _china_sub.get("score") if _china_sub else None
     _regime = classify_china_regime(_china_sub) if _china_sub else None
     _regime_label = _regime.get("regime") if _regime else "—"
-    _regime_color = _regime.get("color") if _regime else "#888"
+    _regime_color = _regime.get("color") if _regime else TRAFFIC_NEUTRAL
     _fx_alert = _regime.get("fx_alert") if _regime else None
 
     # 將 main 從 0-10 scale 升到 0-100 餵 modifier(modifier 要求 0-100)
@@ -470,7 +470,7 @@ def _render_macro_navigator(indicators: dict | None,
     _ph_score = _ph.get("score")
     _ph_alloc = _ph.get("alloc") or _ph.get("allocation") or "—"
     _ph_advice = _ph.get("advice") or ""
-    _ph_color = _ph.get("color") or "#888"
+    _ph_color = _ph.get("color") or TRAFFIC_NEUTRAL
     _ph_icon = _ph.get("icon") or "🌍"
     if _ph_score is None:
         _ph_metric = "等待 FRED 載入"
@@ -480,7 +480,7 @@ def _render_macro_navigator(indicators: dict | None,
     # ── 2. ⚡ 短線 verdict（④ 短線雷達同源：summarize_radar）──────────
     _rd_level = "—"
     _rd_metric = "等待 FRED 載入"
-    _rd_color = "#888"
+    _rd_color = TRAFFIC_NEUTRAL
     _rd_icon = "⬜"
     _rd_action = "FRED API key 未設或抓取失敗"
     if fred_api_key and len(str(fred_api_key).strip()) >= 30:
@@ -492,7 +492,7 @@ def _render_macro_navigator(indicators: dict | None,
             _r, _rs = _cache
             if _rs is not None:
                 _rd_level = _rs.get("level", "—")
-                _rd_color = _rs.get("color", "#888")
+                _rd_color = _rs.get("color", TRAFFIC_NEUTRAL)
                 _rd_icon = {"平靜": "🟢", "警戒": "🟡",
                             "警報": "🔴", "極端警報": "🔴"}.get(_rd_level, "⬜")
                 _rd_metric = (f"🔴 {_rs.get('red',0)} ｜ 🟡 {_rs.get('yellow',0)} "
@@ -507,7 +507,7 @@ def _render_macro_navigator(indicators: dict | None,
     # ── 3. 🎯 拐點 verdict（② 拐點同源：detect_turning_points 計票）────
     _tp_label = "—"
     _tp_metric = "等待 FRED 載入"
-    _tp_color = "#888"
+    _tp_color = TRAFFIC_NEUTRAL
     _tp_icon = "⬜"
     _tp_detail = "FRED API key 未設或抓取失敗"
     if fred_api_key and len(str(fred_api_key).strip()) >= 30:
@@ -529,7 +529,7 @@ def _render_macro_navigator(indicators: dict | None,
                 _tp_metric = f"訊號命中 {_tp_hit} / {_tp_total}"
                 if _tp_total == 0:
                     _tp_label = "資料不足"
-                    _tp_color = "#888"
+                    _tp_color = TRAFFIC_NEUTRAL
                     _tp_icon = "⬜"
                     _tp_detail = "5 個拐點訊號全 ⬜"
                 elif _tp_hit >= 2:
@@ -553,7 +553,7 @@ def _render_macro_navigator(indicators: dict | None,
     # ── 4. 🕐 美林時鐘 verdict（MK 時鐘同源：classify_phase 四象限）────
     _mk_label = "資料不足"
     _mk_metric = "—"
-    _mk_color = "#888"
+    _mk_color = TRAFFIC_NEUTRAL
     _mk_icon = "❓"
     _mk_advice = "PMI / CPI 缺資料"
     try:
@@ -561,7 +561,7 @@ def _render_macro_navigator(indicators: dict | None,
         _mk_key, _mk_meta = classify_phase(indicators or {})
         if _mk_key and _mk_meta:
             _mk_label = _mk_meta.get("zh", "—")
-            _mk_color = _mk_meta.get("color", "#888")
+            _mk_color = _mk_meta.get("color", TRAFFIC_NEUTRAL)
             _mk_icon = _mk_meta.get("icon", "❓")
             _mk_metric = f"股 {_mk_meta.get('alloc_eq','—')}% ／ 債 {_mk_meta.get('alloc_bd','—')}%"
             _mk_advice = _mk_meta.get("advice", "")[:50]  # 截斷避免卡片過長
@@ -672,7 +672,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
             <div style="background: linear-gradient(90deg, {_color}22, {_color}11);
                         border-left: 6px solid {_color}; border-radius: 8px;
                         padding: 18px 22px; margin: 10px 0;">
-              <div style="font-size: 14px; color: #888; margin-bottom: 4px;">
+              <div style="font-size: 14px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
                 ✨ 目前總經位階（綜合 {_n_total} 項指標 score × 權重）
               </div>
               <div style="font-size: 30px; font-weight: 700; color: {_color}; line-height: 1.2;">
@@ -705,7 +705,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
                 <div style="background: linear-gradient(90deg, {_color}22, {_color}11);
                             border-left: 6px solid {_color}; border-radius: 8px;
                             padding: 14px 18px; margin: 6px 0; min-height: 132px;">
-                  <div style="font-size: 13px; color: #888; margin-bottom: 4px;">
+                  <div style="font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
                     🐌 慢總經位階（{_n_total} 項指標 × 權重 ｜ 月～季級）
                   </div>
                   <div style="font-size: 26px; font-weight: 700; color: {_color}; line-height: 1.2;">
@@ -725,7 +725,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
                 <div style="background: linear-gradient(90deg, {_r_color}22, {_r_color}11);
                             border-left: 6px solid {_r_color}; border-radius: 8px;
                             padding: 14px 18px; margin: 6px 0; min-height: 132px;">
-                  <div style="font-size: 13px; color: #888; margin-bottom: 4px;">
+                  <div style="font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
                     ⚡ 短線雷達（10 燈 1-day 動量／情緒 ｜ 日級）
                   </div>
                   <div style="font-size: 26px; font-weight: 700; color: {_r_color}; line-height: 1.2;">
@@ -745,7 +745,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
             <div style="background: linear-gradient(90deg, {_syn['color']}33, {_syn['color']}11);
                         border: 2px solid {_syn['color']}; border-radius: 10px;
                         padding: 16px 22px; margin: 6px 0 14px 0;">
-              <div style="font-size: 13px; color: #888; margin-bottom: 4px;">
+              <div style="font-size: 13px; color: {TRAFFIC_NEUTRAL}; margin-bottom: 4px;">
                 🤝 雙速合議（mode={_syn['mode']}）
               </div>
               <div style="font-size: 24px; font-weight: 800; color: {_syn['color']}; line-height: 1.2;">
@@ -1484,7 +1484,7 @@ def render_macro_tab() -> None:
                                 _delta_str = f"{_delta:+.2f}{_unit}" if _delta is not None else None
                                 st.metric(_title, f"{_val:+.2f}{_unit}", delta=_delta_str,
                                           help=f"{_default_desc} ({_d.get('date','')})")
-                                st.caption(f"<span style='color:{_d.get('color','#888')}'>● {_d.get('label','')}</span>",
+                                st.caption(f"<span style='color:{_d.get('color',TRAFFIC_NEUTRAL)}'>● {_d.get('label','')}</span>",
                                            unsafe_allow_html=True)
 
                     # Row 2: 信用 + 情緒 3 chips
@@ -1504,7 +1504,7 @@ def render_macro_tab() -> None:
                                 _unit = _d.get("unit", "")
                                 st.metric(_title, f"{_val:+.2f}{_unit}",
                                           help=f"{_default_desc} ({_d.get('date','')})")
-                                st.caption(f"<span style='color:{_d.get('color','#888')}'>● {_d.get('label','')}</span>",
+                                st.caption(f"<span style='color:{_d.get('color',TRAFFIC_NEUTRAL)}'>● {_d.get('label','')}</span>",
                                            unsafe_allow_html=True)
 
                     # 失敗 fetcher 列表（仿 Stock v18.194 fail-trace）
@@ -1544,7 +1544,7 @@ def render_macro_tab() -> None:
                         _us_age_txt = "今日" if _us_days_old <= 0 else f"{_us_days_old} 天前"
                     else:
                         _us_cutoff = None
-                        _us_color = "#888"
+                        _us_color = TRAFFIC_NEUTRAL
                         _us_age_txt = "—"
                     _us_load_txt = pd.Timestamp.now(tz="Asia/Taipei").strftime("%m-%d %H:%M")
                     _ucols = st.columns([5, 1])
@@ -1657,9 +1657,9 @@ def render_macro_tab() -> None:
                         _nd = str(_ni.get("published",""))[:16]
                         _flag = "🚨 " if _ni.get("is_systemic") else ""
                         if _nu:
-                            st.markdown(f"{_flag}**[{_nt}]({_nu})** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                            st.markdown(f"{_flag}**[{_nt}]({_nu})** <span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
                         else:
-                            st.markdown(f"{_flag}**{_nt}** <span style='color:#888;font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
+                            st.markdown(f"{_flag}**{_nt}** <span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>｜{_ns} {_nd}</span>", unsafe_allow_html=True)
                     with st.expander(_expander_label, expanded=False):
                         for _ni in _ordered[:8]:
                             _render_news(_ni)
@@ -1673,7 +1673,7 @@ def render_macro_tab() -> None:
                             # 才看到 Top 8 + 分隔線 + 其餘,語意不變。
                             st.markdown(
                                 f"<div style='border-top:1px dashed #555;"
-                                f"margin:10px 0 6px;padding-top:6px;color:#888;"
+                                f"margin:10px 0 6px;padding-top:6px;color:{TRAFFIC_NEUTRAL};"
                                 f"font-size:11px'>── 其餘 {len(_rest)} 則 "
                                 "(AI 未讀,僅供參考)──</div>",
                                 unsafe_allow_html=True,
@@ -1930,7 +1930,7 @@ def render_macro_tab() -> None:
                     for _col_r, (_key_r, _title_r) in zip(_cols_radar, _row):
                         _dr = _radar.get(_key_r) or {}
                         _sig_r = _dr.get("signal", "⬜ 無資料")
-                        _col_c_r = _dr.get("color", "#888")
+                        _col_c_r = _dr.get("color", TRAFFIC_NEUTRAL)
                         _val_r = _dr.get("value")
                         _note_r = _dr.get("note", "")
                         _label_r = _dr.get("label", "")
@@ -1943,7 +1943,7 @@ def render_macro_tab() -> None:
                             _rec_emoji_r = {'agree': '✅', 'disagree': '⚠️',
                                             'a_missing': '⬜', 'b_missing': '⬜'}.get(_rec_r.get('status'), '⬜')
                             _rec_col_r = {'agree': '#22c55e', 'disagree': '#ef4444'}.get(
-                                _rec_r.get('status'), '#888')
+                                _rec_r.get('status'), TRAFFIC_NEUTRAL)
                             _rec_chip_r = (
                                 f"<br/><span style='color:{_rec_col_r};font-size:9px;'>"
                                 f"{_rec_emoji_r} 對帳：{_rec_r.get('status','')}</span>"
@@ -1955,7 +1955,7 @@ def render_macro_tab() -> None:
                                 f"min-height:165px;"
                                 f"display:flex;flex-direction:column;justify-content:space-between'>"
                                 f"<div>"
-                                f"<div style='color:#888;font-size:10px;letter-spacing:1px'>"
+                                f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;letter-spacing:1px'>"
                                 f"{_title_r}</div>"
                                 f"<div style='color:{_col_c_r};font-size:15px;font-weight:800;"
                                 f"margin:4px 0 6px'>{_sig_r}</div>"
@@ -2350,7 +2350,7 @@ def render_macro_tab() -> None:
                 ]:
                     _d = _tp[_key]
                     _sig = _d.get("signal", "⬜")
-                    _col_c = _d.get("color", "#888")
+                    _col_c = _d.get("color", TRAFFIC_NEUTRAL)
                     _val = _d.get("value")
                     _prev = _d.get("prev")
                     _trend = _d.get("trend") or []
@@ -2366,14 +2366,14 @@ def render_macro_tab() -> None:
                         st.markdown(
                             f"<div style='background:#0d1117;border:2px solid {_col_c};"
                             f"border-radius:12px;padding:14px 18px;margin:6px 0'>"
-                            f"<div style='color:#888;font-size:11px;letter-spacing:1px'>"
+                            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;letter-spacing:1px'>"
                             f"{_title}</div>"
                             f"<div style='color:{_col_c};font-size:18px;font-weight:800;"
                             f"margin:6px 0 10px'>{_sig}</div>"
                             f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px'>"
-                            f"<div><div style='color:#888;font-size:10px'>本期</div>"
+                            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>本期</div>"
                             f"<div style='color:#fff;font-weight:700;font-size:16px'>{_val_txt}</div></div>"
-                            f"<div><div style='color:#888;font-size:10px'>前期</div>"
+                            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>前期</div>"
                             f"<div style='color:#aaa;font-weight:700;font-size:16px'>{_prev_txt}</div></div>"
                             f"</div>"
                             f"<div style='color:#aaa;font-size:11px;border-top:1px solid #30363d;"
@@ -2421,7 +2421,7 @@ def render_macro_tab() -> None:
                     if not _d:
                         continue
                     _sig = _d.get("signal", "⬜")
-                    _col_c = _d.get("color", "#888")
+                    _col_c = _d.get("color", TRAFFIC_NEUTRAL)
                     _val = _d.get("value")
                     _prev = _d.get("prev")
                     _trend = _d.get("trend") or []
@@ -2435,14 +2435,14 @@ def render_macro_tab() -> None:
                         st.markdown(
                             f"<div style='background:#0d1117;border:2px solid {_col_c};"
                             f"border-radius:12px;padding:14px 18px;margin:6px 0'>"
-                            f"<div style='color:#888;font-size:11px;letter-spacing:1px'>"
+                            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;letter-spacing:1px'>"
                             f"{_title}</div>"
                             f"<div style='color:{_col_c};font-size:18px;font-weight:800;"
                             f"margin:6px 0 10px'>{_sig}</div>"
                             f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px'>"
-                            f"<div><div style='color:#888;font-size:10px'>本期</div>"
+                            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>本期</div>"
                             f"<div style='color:#fff;font-weight:700;font-size:16px'>{_val_txt}</div></div>"
-                            f"<div><div style='color:#888;font-size:10px'>前期</div>"
+                            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>前期</div>"
                             f"<div style='color:#aaa;font-weight:700;font-size:16px'>{_prev_txt}</div></div>"
                             f"</div>"
                             f"<div style='color:#aaa;font-size:11px;border-top:1px solid #30363d;"
@@ -2585,8 +2585,8 @@ def render_macro_tab() -> None:
                                 )
                             _btfig.update_yaxes(type="log",
                                                 gridcolor="#1a1f2e",
-                                                color="#888")
-                            _btfig.update_xaxes(gridcolor="#1a1f2e", color="#888")
+                                                color=TRAFFIC_NEUTRAL)
+                            _btfig.update_xaxes(gridcolor="#1a1f2e", color=TRAFFIC_NEUTRAL)
                             _btfig.update_layout(
                                 paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
                                 font_color="#e6edf3", height=360,

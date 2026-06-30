@@ -21,7 +21,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     TRADING_DAYS_PER_YEAR,
     NEAR_DIVIDEND_WARNING_PCT,
@@ -373,7 +373,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             p = round((now - bb_d) / (bb_u - bb_d) * 100, 1)
             bb_sig, bb_c = f"通道 {p:.0f}% 位置", MATERIAL_ORANGE
     else:
-        bb_sig, bb_c = "通道過窄（波動低）", "#888"
+        bb_sig, bb_c = "通道過窄（波動低）", TRAFFIC_NEUTRAL
     # 輸出時間序列供圖表用
     bb_upper_series = bb_upper_s.dropna()
     bb_lower_series = bb_lower_s.dropna()

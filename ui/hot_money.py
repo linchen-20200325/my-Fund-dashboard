@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL
 
 
 # 狀態白話解讀（針對基金 user 加上「境外基金影響」面）
@@ -200,8 +200,8 @@ def render_hot_money_section(token: str = "",
                      alt.Tooltip("roll_flow:Q", title="累計買賣超(億)", format=".0f"),
                      alt.Tooltip("roll_apprec:Q", title="累計升貶(%)", format=".2f"),
                      alt.Tooltip("state:N", title="狀態")])
-        v = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(strokeDash=[4, 4], color="#888").encode(x="x:Q")
-        h = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(strokeDash=[4, 4], color="#888").encode(y="y:Q")
+        v = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(strokeDash=[4, 4], color=TRAFFIC_NEUTRAL).encode(x="x:Q")
+        h = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(strokeDash=[4, 4], color=TRAFFIC_NEUTRAL).encode(y="y:Q")
         last = alt.Chart(plot.tail(1)).mark_point(
             size=320, shape="diamond", filled=True, color="black").encode(
                 x="roll_flow:Q", y="roll_apprec:Q")

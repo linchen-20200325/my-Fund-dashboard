@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_RED, TRAFFIC_NEUTRAL
 
 
 # ══════════════════════════════════════════════════════
@@ -128,7 +128,7 @@ def category_history(ind: dict, keys: list, lookback: int = 24):
 def category_verdict(z_now: float | None, z_trend_delta: float) -> tuple[str, str, str]:
     """根據最新 Z 與近期變化回傳 (icon, color, 一句話)。"""
     if z_now is None:
-        return ("⬜", "#888", "資料不足，待補")
+        return ("⬜", TRAFFIC_NEUTRAL, "資料不足，待補")
     if z_now <= -1.5:
         icon, color = "🔴", MATERIAL_RED
     elif z_now <= -0.5:
@@ -190,7 +190,7 @@ def mk_fund_signal(fund_info: dict, phase: str, score: float) -> dict:
 # HELPER: _quartile_check
 # ══════════════════════════════════════════════════════
 def quartile_check(peer_compare: dict, risk_table: dict) -> dict:
-    out = {"quartile":None,"color":"#888","label":"無同類資料","warning":False,"fund_sharpe":None,"peer_avg":None,"advice":""}
+    out = {"quartile":None,"color":TRAFFIC_NEUTRAL,"label":"無同類資料","warning":False,"fund_sharpe":None,"peer_avg":None,"advice":""}
     if not peer_compare and not risk_table:
         return out
     fund_sh = None

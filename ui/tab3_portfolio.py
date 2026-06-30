@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from infra.oauth import (
     OAuthError,
@@ -138,7 +138,7 @@ def render_portfolio_tab() -> None:
             "<div style='background:linear-gradient(135deg,#1a2845,#0d1b2a);"
             "border-left:4px solid #64b5f6;border-radius:8px;padding:10px 14px;margin:8px 0'>"
             "<span style='color:#64b5f6;font-size:15px;font-weight:900'>📊 組合健康儀表</span>"
-            "<span style='color:#888;font-size:11px;margin-left:8px'>v18.163 6 指標一覽</span>"
+            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.163 6 指標一覽</span>"
             "</div>",
             unsafe_allow_html=True)
         render_hero_kpi_cards(_kpis_hero)
@@ -149,7 +149,7 @@ def render_portfolio_tab() -> None:
             "<div style='background:linear-gradient(135deg,#1a2845,#0d1b2a);"
             "border-left:4px solid #64b5f6;border-radius:8px;padding:10px 14px;margin:8px 0'>"
             "<span style='color:#64b5f6;font-size:15px;font-weight:900'>🎯 策略3 智能戰情室</span>"
-            "<span style='color:#888;font-size:11px;margin-left:8px'>v18.9 新手戰情中心</span>"
+            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.9 新手戰情中心</span>"
             "</div>",
             unsafe_allow_html=True)
         render_mk_war_room(st.session_state.portfolio_funds)
@@ -267,7 +267,7 @@ def render_portfolio_tab() -> None:
                         try: f = float(v)
                         except Exception: return ""
                         # v18.249: NaN（兩檔 NAV 無重疊期）不上色，跟其他級別區分
-                        if pd.isna(f): return "color:#888"
+                        if pd.isna(f): return f"color:{TRAFFIC_NEUTRAL}"
                         if f >= _thr:    return "background-color:#b71c1c;color:#fff"
                         if f >= 0.50:    return "background-color:#ef6c00;color:#fff"
                         if f >= 0.20:    return "background-color:#558b2f;color:#fff"
@@ -1208,7 +1208,7 @@ def render_portfolio_tab() -> None:
                         })
                     _p_rec = recommend_policy(_funds_enriched, target_core_pct=_policy_target)
                     _rec_clr = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
-                                "green": MATERIAL_GREEN, "grey": "#888"}.get(_p_rec["color"], "#888")
+                                "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}.get(_p_rec["color"], TRAFFIC_NEUTRAL)
                     with _dn_p_msg:
                         st.markdown(
                             f"<div style='margin-top:18px;color:{_rec_clr};font-size:13px;"
@@ -1266,13 +1266,13 @@ def render_portfolio_tab() -> None:
                     _advice = advise_fund(_sigma_info, _div_info, _ma_trend, _vix_for_adv)
 
                     _sig_lbl = (_sigma_info or {}).get("label", "—") if _sigma_info else "—"
-                    _sig_clr = (_sigma_info or {}).get("color", "#888") if _sigma_info else "#888"
+                    _sig_clr = (_sigma_info or {}).get("color", TRAFFIC_NEUTRAL) if _sigma_info else TRAFFIC_NEUTRAL
                     _sig_rnk = (_sigma_info or {}).get("sigma_rank")
                     _sig_str = f"{_sig_rnk:+.2f}σ" if isinstance(_sig_rnk, (int, float)) else "—"
                     _div_alert = (_div_info or {}).get("alert_level", "grey")
                     _div_icon  = {"red": "🔴", "yellow": "🟡", "green": "🟢", "grey": "⚪"}.get(_div_alert, "⚪")
                     _adv_clr   = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
-                                  "green": MATERIAL_GREEN, "grey": "#888"}.get(_advice["color"], "#888")
+                                  "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}.get(_advice["color"], TRAFFIC_NEUTRAL)
                     _inv_amt   = _f.get("invest_twd", 0) or 0
 
                     st.markdown(
@@ -1280,7 +1280,7 @@ def render_portfolio_tab() -> None:
                         f"padding:10px 14px;margin:4px 0 8px 20px'>"
                         f"<div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
                         f"<span style='color:#e6edf3;font-weight:700;font-size:13px'>{_name}</span>"
-                        f"<span style='color:#888;font-size:11px'>{_code}</span>"
+                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code}</span>"
                         f"<span style='color:{_sig_clr};font-size:11px;background:#161b22;padding:2px 8px;border-radius:10px'>"
                         f"σ {_sig_str} · {_sig_lbl}</span>"
                         f"<span style='color:#ccc;font-size:11px'>{_div_icon} {_div_alert}</span>"
@@ -1292,7 +1292,7 @@ def render_portfolio_tab() -> None:
 
             if _ungrouped:
                 st.markdown(
-                    "<div style='color:#888;font-size:12px;margin-top:14px'>📂 未分組基金（手動加入、未綁保單）</div>",
+                    f"<div style='color:{TRAFFIC_NEUTRAL};font-size:12px;margin-top:14px'>📂 未分組基金（手動加入、未綁保單）</div>",
                     unsafe_allow_html=True)
                 for _f in _ungrouped:
                     st.caption(f"• {_f.get('code','?')} — {_f.get('name','') or '尚未載入'}")
@@ -1404,7 +1404,7 @@ def render_portfolio_tab() -> None:
             except Exception:
                 pass  # smoke-allow-pass — 任一檔配息率非數值不影響其餘累加
 
-        _ret_color = MATERIAL_GREEN if (_cum_ret_pct or 0) > 0 else (MATERIAL_RED if (_cum_ret_pct or 0) < 0 else "#888")
+        _ret_color = MATERIAL_GREEN if (_cum_ret_pct or 0) > 0 else (MATERIAL_RED if (_cum_ret_pct or 0) < 0 else TRAFFIC_NEUTRAL)
         _ret_str   = f"{_cum_ret_pct:+.2f}%" if _cum_ret_pct is not None else "—"
         st.markdown(
             "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 16px'>"
@@ -1412,22 +1412,22 @@ def render_portfolio_tab() -> None:
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💰 總資產（NTD）</div>"
             f"<div style='color:#fff;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
-            f"<div style='color:#888;font-size:10px;margin-top:2px'>{len(_pf_loaded)} 檔基金加總</div></div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>{len(_pf_loaded)} 檔基金加總</div></div>"
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>📈 累計報酬</div>"
             f"<div style='color:{_ret_color};font-size:26px;font-weight:900;margin-top:4px'>{_ret_str}</div>"
-            f"<div style='color:#888;font-size:10px;margin-top:2px'>從淨值首日加權至今</div></div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>從淨值首日加權至今</div></div>"
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>🛡️ 核心資產比例</div>"
             f"<div style='color:#64b5f6;font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
-            f"<div style='color:#888;font-size:10px;margin-top:2px'>衛星 {100-_core_pct_kpi:.1f}%</div></div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>衛星 {100-_core_pct_kpi:.1f}%</div></div>"
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💵 預估月配息</div>"
             f"<div style='color:#ffb74d;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
-            f"<div style='color:#888;font-size:10px;margin-top:2px'>依各基金配息率粗估</div></div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>依各基金配息率粗估</div></div>"
             "</div>", unsafe_allow_html=True)
 
         # ── v19.64 I1：總經 → 組合曝險聯動 banner（讀 Tab1 phase_info，跨 Tab 訊號）──
@@ -1513,7 +1513,7 @@ def render_portfolio_tab() -> None:
                     fig_curve.add_trace(go.Scatter(
                         x=_total_curve.index, y=_rf_curve,
                         name="2% 無風險基準", mode="lines",
-                        line=dict(color="#888", width=1.2, dash="dot"),
+                        line=dict(color=TRAFFIC_NEUTRAL, width=1.2, dash="dot"),
                         hovertemplate="%{x|%Y-%m-%d}<br>NT$ %{y:,.0f}<extra>無風險</extra>"))
                     # 標註：起點 / 當前 / 最高 / 最低
                     _hi_idx = _total_curve.idxmax(); _lo_idx = _total_curve.idxmin()
@@ -1523,7 +1523,7 @@ def render_portfolio_tab() -> None:
                            _total_curve.loc[_lo_idx], _total_curve.iloc[-1]],
                         mode="markers+text",
                         marker=dict(size=[8,10,10,12],
-                                    color=["#888",MATERIAL_GREEN,MATERIAL_RED,"#fff"],
+                                    color=[TRAFFIC_NEUTRAL,MATERIAL_GREEN,MATERIAL_RED,"#fff"],
                                     line=dict(color="#0e1117", width=2)),
                         text=["起點", f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
                               f"低 {fmt_twd(_total_curve.loc[_lo_idx])}",
@@ -1561,7 +1561,7 @@ def render_portfolio_tab() -> None:
         _dc       = MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN)
         st.markdown(
             f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid #30363d'>"
-            f"<div style='font-size:13px;color:#888;margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
+            f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
             f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
             f"<div><div style='color:#64b5f6;font-size:11px'>🛡️ 核心資產</div><div style='color:#64b5f6;font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
             f"<div><div style='color:#ff9800;font-size:11px'>⚡ 衛星資產</div><div style='color:#ff9800;font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
@@ -1910,12 +1910,12 @@ def render_portfolio_tab() -> None:
                         st.markdown(
                             f"<div style='padding:8px 12px;background:#161b22;border-radius:8px;margin:3px 0'>"
                             f"{status_icon} <b style='color:#e6edf3'>{(pf_item.get('name','') or pf_item['code'])[:28]}</b> "
-                            f"<span style='color:#888;font-size:11px'>{pf_item['code']}</span> "
+                            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{pf_item['code']}</span> "
                             f"<span style='color:#ff9800;font-size:11px;margin-left:6px'>{role_i}</span></div>",
                             unsafe_allow_html=True)
                     with ci2:
                         st.markdown(
-                            f"<div style='padding:8px 12px;background:#161b22;border-radius:8px;margin:3px 0;font-size:11px;color:#888'>"
+                            f"<div style='padding:8px 12px;background:#161b22;border-radius:8px;margin:3px 0;font-size:11px;color:{TRAFFIC_NEUTRAL}'>"
                             f"NAV: <b style='color:#e6edf3'>{_nav_i}</b>"
                             f"　配息率: <b style='color:#ff9800'>{_adr_i}{'%' if _adr_i else ''}</b>"
                             f"　Sharpe: <b style='color:#69f0ae'>{_sh_i}</b>"
@@ -1935,8 +1935,8 @@ def render_portfolio_tab() -> None:
                         _adv_card = _compute_advice_for(pf_item)
                         _adv_clr_card = {
                             "red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
-                            "green": MATERIAL_GREEN, "grey": "#888"
-                        }.get(_adv_card.get("color", "grey"), "#888")
+                            "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL
+                        }.get(_adv_card.get("color", "grey"), TRAFFIC_NEUTRAL)
                         st.markdown(
                             f"<div style='padding:6px 12px;background:#0d1117;"
                             f"border-left:3px solid {_adv_clr_card};"
@@ -1951,7 +1951,7 @@ def render_portfolio_tab() -> None:
                             _mi_s1 = m_i.get("sell1"); _mi_s2 = m_i.get("sell2"); _mi_s3 = m_i.get("sell3")
                             _mi_nav = float(m_i.get("nav") or 0)
                             _mi_pl  = m_i.get("pos_label","正常")
-                            _mi_pc  = m_i.get("pos_color","#888")
+                            _mi_pc  = m_i.get("pos_color",TRAFFIC_NEUTRAL)
                             _mi_bbd = m_i.get("bb_lower"); _mi_bbu = m_i.get("bb_upper")
                             _mi_NEAR = float(m_i.get("near_threshold_pct") or 2.0)
                             if _mi_b1 and _mi_nav > 0:
@@ -1983,13 +1983,13 @@ def render_portfolio_tab() -> None:
                                     _ch, _cc = _mini_chip(_v, _is_buy)
                                     _cells += (f"<div style='flex:1;text-align:center;padding:4px 2px;"
                                                f"background:#0d1117;border-radius:6px;margin:0 2px'>"
-                                               f"<div style='font-size:9px;color:#888'>{_lbl}</div>"
+                                               f"<div style='font-size:9px;color:{TRAFFIC_NEUTRAL}'>{_lbl}</div>"
                                                f"<div style='font-size:11px;font-weight:700;color:#ccc'>{_v:.3f}</div>"
                                                f"<div style='font-size:13px;color:{_cc}'>{_ch}</div></div>")
                                 st.markdown(
                                     f"<div style='background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:8px 12px;margin:2px 0 8px 0'>"
                                     f"<div style='display:flex;align-items:center;margin-bottom:5px'>"
-                                    f"<span style='color:#888;font-size:10px'>📍 策略3 訊號</span>"
+                                    f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>📍 策略3 訊號</span>"
                                     f"<span style='background:#111;color:{_mi_pc};border:1px solid {_mi_pc};padding:1px 8px;"
                                     f"border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>{_mi_pl}</span>"
                                     f"{_badge}"
@@ -2076,7 +2076,7 @@ def render_portfolio_tab() -> None:
                 _rc_colors = []
                 for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
                     if not _real:
-                        _rc_colors.append("#888")       # 資料不足 → 灰
+                        _rc_colors.append(TRAFFIC_NEUTRAL)       # 資料不足 → 灰
                     elif _d > 0 and _r < _d:
                         _rc_colors.append(MATERIAL_RED)   # 吃本金 → 紅
                     elif _d > 0 and _r < _d * 1.2:

@@ -23,7 +23,7 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     RISK_SCORE_YIELD_WEIGHT_RATIO,
 )
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 # v18.116 B-B: I/O 拆分後從 repository 取
 from repositories.financial_repository import (  # noqa: F401  legacy re-export
@@ -259,7 +259,7 @@ def three_ratio_row_html(r: dict) -> str:
 
     def _color(v):
         if not isinstance(v, (int, float)):
-            return "#888"
+            return TRAFFIC_NEUTRAL
         return MATERIAL_GREEN if v > 0.5 else (MATERIAL_RED if v < -0.5 else MATERIAL_ORANGE)
 
     gd = r.get("gross_margin_diff", 0)

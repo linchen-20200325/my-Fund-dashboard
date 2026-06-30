@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -192,7 +192,7 @@ def _render_oversold_badges(funds: list) -> None:
             f"距高點 <b style='color:{MATERIAL_RED}'>{_o['dist_pct']:+.2f}%</b> ｜ "
             f"σ rank <b style='color:{MATERIAL_RED}'>{_o['sigma_rank']:+.2f}σ</b>"
             f"</span><br>"
-            f"<span style='color:#888;font-size:11px'>"
+            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>"
             f"💡 深度超跌:若基本面(評分/吃本金/Sharpe)仍健康 → 可考慮抄底;"
             f"基本面也轉差 → 不要接刀</span>"
             f"</div>",

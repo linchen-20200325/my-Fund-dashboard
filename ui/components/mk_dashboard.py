@@ -293,6 +293,7 @@ def _series_tail(series, n: int) -> Optional[list]:
 
 # v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
 from shared.converters import safe_float as _safe_float  # noqa: E402
+from shared.colors import TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT  # noqa: E402
 
 
 
@@ -542,7 +543,7 @@ def _render_benchmark_chart(sat_df: pd.DataFrame, portfolio_funds: list,
     fig.add_trace(go.Scatter(
         x=bench_norm.index, y=bench_norm.values,
         mode="lines", name=f"{bench_ticker}（基準）",
-        line=dict(color="#888", width=2, dash="dash"),
+        line=dict(color=TRAFFIC_NEUTRAL, width=2, dash="dash"),
     ))
     for f in sat_funds:
         s = f.get("series")

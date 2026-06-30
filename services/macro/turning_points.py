@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from repositories.macro_repository import fetch_fred, fetch_yf_close
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from services.macro._helpers import (  # noqa: F401
     FRED_AMTMNO, FRED_DGS10, FRED_DGS2, FRED_MNFCTRIRSA, FRED_T10Y2Y,
@@ -51,32 +51,32 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
     """
     out: dict = {
         "pmi_diff": {
-            "signal": "⬜ 資料不足", "color": "#888", "icon": "⬜",
+            "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "新訂單 YoY − 庫存 YoY (M3 製造業)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
         },
         "yield_curve": {
-            "signal": "⬜ 資料不足", "color": "#888", "icon": "⬜",
+            "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "10Y − 2Y 利差 (T10Y2Y)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
         },
         # v18.250 新增三組景氣反轉拐點
         "hy_spread": {
-            "signal": "⬜ 資料不足", "color": "#888", "icon": "⬜",
+            "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "HY 信用利差 (BAMLH0A0HYM2)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
         },
         "sahm_rule": {
-            "signal": "⬜ 資料不足", "color": "#888", "icon": "⬜",
+            "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "薩姆規則 (SAHMREALTIME)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
         },
         "lei_cfnai": {
-            "signal": "⬜ 資料不足", "color": "#888", "icon": "⬜",
+            "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "CFNAI 領先指標 3M MA",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
@@ -115,7 +115,7 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
                 sig, col, ic = "🔻 收縮中", MATERIAL_RED, "🔻"
                 note = f"{cur:+.1f}pp，新訂單動能弱於庫存補貨"
             else:
-                sig, col, ic = "📊 持平", "#888", "📊"
+                sig, col, ic = "📊 持平", TRAFFIC_NEUTRAL, "📊"
                 note = f"{cur:+.1f}pp，無明確方向"
             return "pmi_diff", {
                 "signal": sig, "color": col, "icon": ic,
@@ -147,7 +147,7 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
                 sig, col, ic = "🟢 正斜率（健康）", MATERIAL_GREEN, "🟢"
                 note = f"{cur:+.2f}%（近 60 日皆 ≥0），無拐點訊號"
             else:
-                sig, col, ic = "📊 持平", "#888", "📊"
+                sig, col, ic = "📊 持平", TRAFFIC_NEUTRAL, "📊"
                 note = f"{cur:+.2f}%"
             return "yield_curve", {
                 "signal": sig, "color": col, "icon": ic,
@@ -243,7 +243,7 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
                 sig, col, ic = "🟡 動能轉弱", MATERIAL_ORANGE, "🟡"
                 note = f"3M MA {cur:+.2f}（負值但 > -0.7），待觀察"
             else:
-                sig, col, ic = "📊 持平", "#888", "📊"
+                sig, col, ic = "📊 持平", TRAFFIC_NEUTRAL, "📊"
                 note = f"3M MA {cur:+.2f}"
             return "lei_cfnai", {
                 "signal": sig, "color": col, "icon": ic,

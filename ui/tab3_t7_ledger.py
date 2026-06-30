@@ -19,7 +19,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from infra.oauth import (
     OAuthError,
@@ -1818,7 +1818,7 @@ def render_t7_section() -> None:
                                     "padding:8px 14px;margin-bottom:8px'>"
                                     "<span style='color:#ff7043;font-weight:700;font-size:13px'>"
                                     "📉 賣方設定</span>"
-                                    f"<span style='color:#888;font-size:11px;margin-left:8px'>"
+                                    f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>"
                                     f"{_slabel}</span></div>",
                                     unsafe_allow_html=True,
                                 )
@@ -1859,7 +1859,7 @@ def render_t7_section() -> None:
                                     "padding:8px 14px;margin-bottom:8px'>"
                                     "<span style='color:#69f0ae;font-weight:700;font-size:13px'>"
                                     "📈 買方組（此賣款導向以下標的）</span>"
-                                    f"<span style='color:#888;font-size:11px;margin-left:8px'>"
+                                    f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>"
                                     f"同保單 {_sel_pid} 下，最多 5 檔</span></div>",
                                     unsafe_allow_html=True,
                                 )
@@ -2419,7 +2419,7 @@ def render_t7_section() -> None:
                             _bcol1, _bcol2, _bcol3 = st.columns([4, 1, 1])
                             _bcol1.markdown(
                                 f"**{_sc['name']}** "
-                                f"<span style='color:#888;font-size:11px'>"
+                                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>"
                                 f"({_sc['action_type']} @ {_sc['created_at']})"
                                 f"</span>",
                                 unsafe_allow_html=True,
@@ -2646,7 +2646,7 @@ def render_t7_section() -> None:
                 "padding:10px 14px;margin:8px 0'>"
                 "<span style='color:#b388ff;font-size:15px;font-weight:900'>"
                 "📜 策略3 深度組合建議</span>"
-                "<span style='color:#888;font-size:11px;margin-left:8px'>"
+                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>"
                 "AI 4 節結構：3 大缺點 / 換股建議 / 配置比例 / 高賣低買 vs 跌就買</span>"
                 "</div>",
                 unsafe_allow_html=True,
