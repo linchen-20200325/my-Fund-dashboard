@@ -253,10 +253,19 @@ def _render_per_fund_news_expanders(funds: list) -> None:
                     )
                 else:
                     st.caption(
-                        "⬜ MoneyDJ 未提供持股,無法抓新聞"
-                        "(可能 yp013xxx 頁面結構變動 / 子網域限制 / cache 鎖死,"
-                        "按 sidebar「全域刷新」清 cache 重試)"
+                        "⬜ 三源持股全抓不到(MoneyDJ → cnyes → Morningstar)"
+                        ",無法抓個股新聞"
                     )
+                    # v19.280:抓取診斷攤開(讓 user 看「有沒有抓到、抓到什麼」)
+                    _diag = _holdings.get("diag") or []
+                    if _diag:
+                        st.caption("🔍 **抓取診斷**(逐源結果):")
+                        st.code("\n".join(str(_x) for _x in _diag), language=None)
+                    else:
+                        st.caption(
+                            f"🔍 來源={_holdings.get('source', '—')}"
+                            "(若無 diag 表示線上仍為舊版,請 Manage app → Reboot + 強制刷新)"
+                        )
                 continue
 
             # 前 6 大持股(顯示名, 查詢字)

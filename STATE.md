@@ -22,6 +22,14 @@
 
 ## 當前版本
 
+- **v19.280 持股抓取診斷 UI 可視化(2026-06-30)**:
+  - **背景**:user 回報 TLZF9 等仍抓不到,問「能不能用 print 確認有沒有抓到資料」。根因 stderr log 藏在 Streamlit Cloud 後台 user 看不到 → 改**把逐源診斷攤在 UI**
+  - `fetch_holdings_cnyes` / `fetch_holdings_morningstar` 加 opt-in `diag` list 參數,逐步記錄(代碼解析候選 / secId / 每端點 HTTP+keys / ✅命中)
+  - `nav_metrics.fetch_holdings` 串 `_diag`,**所有空結果 return 路徑都掛 `out["diag"]`**(MoneyDJ→cnyes→Morningstar 三源逐一結果)
+  - `ui/helpers/fund_grp_health/ai.py` 持股新聞 empty-state 改顯示 `st.code(diag)` —— user 直接在 app 看「試了哪些源、各回什麼 keys」;無 diag → 提示「線上仍舊版,Reboot+強刷」
+  - tests +3(diag 掛載 / cnyes keys / ms no-secId);call-arg assert 補 `diag=ANY`。40 passed
+  - **用途**:部署後 user 一看 UI diag 就知卡在哪(代碼沒解析到？secId 找不到？端點 200 但 keys 不認得？)→ 貼回來即可精修,不用再猜
+
 - **v19.278 持股 Morningstar fallback — 保單/FoF 代碼第二替代源(2026-06-30)**:
   - **背景**:user 回報 v19.276 cnyes fallback **部署後仍抓不到**(ACTI71/JFZN3/ACCP138/TLZF9)。⚠️ **關鍵診斷**:Tab5 Put/Call trace 只有 Yahoo+stooq、**無 CBOE 嘗試** → 證實**線上仍跑舊 deploy**,v19.276/277 根本還沒生效。但這些保單平台多重資產/FoF 代碼即使 cnyes 生效也未必有 → user 要求再找替代源
   - **研究結論**:這幾檔在 Morningstar **有**資料(如 Allianz Income&Growth = ISIN LU0689472784);本專案已有 secId 基建(`_MORNINGSTAR_SECID_MAP` TLZF9=0P0001J5YG / JFZN3=0P0001N4II + `_morningstar_search_secid` + token-free `tools.morningstar.co.uk`)

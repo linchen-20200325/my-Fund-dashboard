@@ -966,20 +966,25 @@ def fetch_holdings(code: str) -> dict:
             print(f"[holdings:{code}] 全 {len(_hold_urls)} 候選 URL 失敗:"
                   f"{[(a['status'], a['len']) for a in _attempts]}",
                   file=_sys_h.stderr)
+            # v19.280:抓取診斷 list — 逐源記錄(供 UI 顯示「有沒有抓到、抓到什麼」)
+            _diag = [f"MoneyDJ｜{len(_hold_urls)} 候選 URL 全失敗"]
             # v19.276 fallback:MoneyDJ 全失敗 → 試 cnyes 持股 API
-            _cy = fetch_holdings_cnyes(code)
+            _cy = fetch_holdings_cnyes(code, diag=_diag)
             if _cy.get("top_holdings") or _cy.get("sector_alloc"):
+                _cy["diag"] = _diag
                 print(f"[holdings:{code}] ↩ cnyes fallback 命中(MoneyDJ 全失敗)",
                       file=_sys_h.stderr)
                 return _cy
             # v19.278 fallback:cnyes 也空 → 試 Morningstar(保單/FoF 代碼專用)
-            _ms = fetch_holdings_morningstar(code)
+            _ms = fetch_holdings_morningstar(code, diag=_diag)
             if _ms.get("top_holdings") or _ms.get("sector_alloc"):
+                _ms["diag"] = _diag
                 print(f"[holdings:{code}] ↩ Morningstar fallback 命中(MoneyDJ+cnyes 全失敗)",
                       file=_sys_h.stderr)
                 return _ms
             return {"source": "MoneyDJ:all_failed",
                     "attempts": _attempts,
+                    "diag": _diag,
                     "fetched_at": pd.Timestamp.now('UTC').isoformat()}
         soup = BeautifulSoup(r.text, "lxml")
         out = {}
@@ -1093,17 +1098,22 @@ def fetch_holdings(code: str) -> dict:
         # parser 0 命中)→ 試 cnyes 持股 API。命中則整包以 cnyes 為準(provenance
         # 一致),不與 MoneyDJ 空殼合併以免血緣混淆(§2.2)。
         if not (out.get("top_holdings") or out.get("sector_alloc")):
-            _cy = fetch_holdings_cnyes(code)
+            _diag2 = ["MoneyDJ｜抓到頁但 0 持股(multi-asset / FoF / 透明度不足)"]
+            _cy = fetch_holdings_cnyes(code, diag=_diag2)
             if _cy.get("top_holdings") or _cy.get("sector_alloc"):
+                _cy["diag"] = _diag2
                 print(f"[holdings:{code}] ↩ cnyes fallback 命中(MoneyDJ 頁無持股)",
                       file=_sys_h.stderr)
                 return _cy
             # v19.278:cnyes 也空 → 試 Morningstar(保單/FoF 代碼專用)
-            _ms = fetch_holdings_morningstar(code)
+            _ms = fetch_holdings_morningstar(code, diag=_diag2)
             if _ms.get("top_holdings") or _ms.get("sector_alloc"):
+                _ms["diag"] = _diag2
                 print(f"[holdings:{code}] ↩ Morningstar fallback 命中(MoneyDJ 頁無持股)",
                       file=_sys_h.stderr)
                 return _ms
+            # v19.280:全鏈空 → diag 掛回 out,讓 UI 看得到「試了哪些源、各回什麼」
+            out["diag"] = _diag2
         return out
     except Exception as e:
         print(f"[fetch_holdings] {e}")

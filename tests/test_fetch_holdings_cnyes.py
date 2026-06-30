@@ -9,7 +9,7 @@ multi-asset 透明度不足),要求「找其他替代方案爬持股」。新增
 """
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import repositories.fund.sources as S
 from repositories.fund.nav_metrics import fetch_holdings
@@ -149,7 +149,7 @@ def test_fetch_holdings_falls_back_to_cnyes_when_moneydj_all_fail():
                return_value=_cy) as _m:
         out = fetch_holdings("AAA")
 
-    _m.assert_called_once_with("AAA")
+    _m.assert_called_once_with("AAA", diag=ANY)
     assert out["source"] == "Cnyes:portfolio:AAA"
     assert out["top_holdings"][0]["name"] == "X"
 
@@ -174,7 +174,7 @@ def test_fetch_holdings_falls_back_to_cnyes_when_page_has_no_holdings():
                return_value=_cy) as _m:
         out = fetch_holdings("BBB")
 
-    _m.assert_called_once_with("BBB")
+    _m.assert_called_once_with("BBB", diag=ANY)
     assert out["source"] == "Cnyes:asset:BBB"
     assert out["sector_alloc"][0]["name"] == "債券"
 
@@ -254,9 +254,46 @@ def test_fetch_holdings_falls_back_to_morningstar_when_cnyes_empty():
                return_value=_ms) as _m:
         out = fetch_holdings("TLZF9")
 
-    _m.assert_called_once_with("TLZF9")
+    _m.assert_called_once_with("TLZF9", diag=ANY)
     assert out["source"].startswith("Morningstar:")
     assert out["sector_alloc"][0]["name"] == "Equity"
+
+
+def test_fetch_holdings_attaches_diag_on_total_failure():
+    """v19.280 — 三源全失敗時,回傳 dict 帶 diag(供 UI 顯示逐源診斷)。"""
+    fetch_holdings.cache_clear()
+    with patch("repositories.fund.nav_metrics.fetch_url_with_retry",
+               return_value=None), \
+         patch("repositories.fund.nav_metrics.fetch_holdings_cnyes",
+               return_value={}), \
+         patch("repositories.fund.nav_metrics.fetch_holdings_morningstar",
+               return_value={}):
+        out = fetch_holdings("TLZF9")
+    assert out.get("source") == "MoneyDJ:all_failed"
+    assert isinstance(out.get("diag"), list) and out["diag"], "diag 應為非空 list"
+    assert any("MoneyDJ" in d for d in out["diag"])
+
+
+def test_cnyes_records_diag_keys_on_unrecognized_shape():
+    """cnyes 200 但 shape 不認得 → diag 記錄真實 keys(讓 user 看見抓到什麼)。"""
+    def _fake_get(url, **kw):
+        return _FakeJsonResp({"unknownKey": [1, 2, 3]})
+
+    diag: list = []
+    with patch.object(S, "_cnyes_resolve_code", return_value=["TLZF9"]), \
+         patch.object(S.requests, "get", side_effect=_fake_get):
+        out = S.fetch_holdings_cnyes("TLZF9", diag=diag)
+    assert out == {}
+    assert any("unknownKey" in d for d in diag), f"diag 應含真實 keys,實際 {diag}"
+
+
+def test_morningstar_records_diag_no_secid():
+    """Morningstar 無 secId → diag 記錄(讓 user 知道卡在代碼解析)。"""
+    diag: list = []
+    with patch.object(S, "_resolve_ms_secid", return_value=""):
+        out = S.fetch_holdings_morningstar("UNKNOWN9", diag=diag)
+    assert out == {}
+    assert any("secId" in d for d in diag)
 
 
 def test_fetch_holdings_no_cnyes_when_moneydj_succeeds():
