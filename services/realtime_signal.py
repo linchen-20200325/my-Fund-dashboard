@@ -63,7 +63,7 @@ def compute_realtime_dashboard(
         return empty_dashboard
 
     try:
-        from services.macro_weights_store import apply_weight_overrides
+        from services.macro.weights_store import apply_weight_overrides
         # v19.197 P1-1:V2 修補 — 改走 services 同層,不再反向 import ui
         from services.macro_composite_score import calculate_composite_score, composite_verdict
         from services.macro import compute_cluster_signals, summarize_cluster_consensus

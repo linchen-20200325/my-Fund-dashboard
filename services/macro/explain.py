@@ -234,7 +234,7 @@ def _empty_payload() -> dict:
 def _verdict_for(total_score: float) -> tuple[str, str, str, str]:
     """同 macro_helpers.composite_verdict 但避免循環 import — 本檔不依賴 UI 層。"""
     try:
-        from services.macro_weights_store import get_verdict_cutoffs
+        from services.macro.weights_store import get_verdict_cutoffs
         c1, c2, c3, c4 = get_verdict_cutoffs()
     except Exception:
         c1, c2, c3, c4 = _DEFAULT_CUTOFFS

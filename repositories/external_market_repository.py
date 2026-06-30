@@ -1,6 +1,6 @@
 """repositories/external_market_repository.py — 第三方公開市場資料(v19.197 P1-3)
 
-從 services/valuation.py + services/risk_radar.py 下沉的 HTTP fetcher,
+從 services/risk_radar.py(+ services/valuation.py,v19.251 退役)下沉的 HTTP fetcher,
 修 ARCHITECTURE_AUDIT V5+V7 違憲(L2 service 直 import yfinance / urllib + HTTP)。
 
 對外 API:
@@ -23,12 +23,12 @@ import pandas as pd
 def fetch_yf_forward_pe(symbol: str = "^GSPC") -> Optional[float]:
     """從 yfinance Ticker.info 取 forwardPE,缺則降級 trailingPE。失敗回 None。
 
-    v19.197 P1-3:V5 修補,從 services/valuation.py:154-167 下沉。
+    v19.197 P1-3:V5 修補(原 services/valuation.py 已於 v19.251 退役)。
 
-    F-PROV-1 註:Optional[float] 結構性無 .attrs,**provenance 由
-    `services.valuation.detect_valuation()` orchestrator-level `_provenance.sources`
-    捕(phase 19 v19.105),記為 `"yfinance:^GSPC.info:forwardPE→trailingPE→multpl.com"`。
-    本 fn 屬 leaf scalar,不重複 stamp 避免冗餘。
+    F-PROV-1 註:Optional[float] 結構性無 .attrs,provenance 由 caller 端
+    上層 orchestrator 自行記錄(若有),記為
+    `"yfinance:^GSPC.info:forwardPE→trailingPE→multpl.com"`。本 fn 屬 leaf scalar,
+    不重複 stamp 避免冗餘。
     """
     try:
         import yfinance as yf
@@ -52,11 +52,10 @@ def fetch_multpl_pe() -> Optional[float]:
     作為 yfinance Ticker.info["forwardPE"] 掛點時的降級備援。multpl.com 結構 10+ 年
     穩定(id="current" 區塊內含當前 PE)。
 
-    v19.197 P1-3:V5 修補,從 services/valuation.py:110-142 下沉。
+    v19.197 P1-3:V5 修補(原 services/valuation.py 已於 v19.251 退役)。
 
-    F-PROV-1 註:Optional[float] 結構性無 .attrs,**provenance 由
-    `services.valuation.detect_valuation()` orchestrator-level `_provenance.sources`
-    捕(phase 19 v19.105),記為 chain 末段「→multpl.com」。
+    F-PROV-1 註:Optional[float] 結構性無 .attrs,provenance 由 caller 端
+    上層 orchestrator 自行記錄(若有),記為 chain 末段「→multpl.com」。
 
     Returns:
         float | None: 最近一期 trailing PE;任意失敗回 None;console log 印 root cause 助 debug。

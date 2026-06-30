@@ -64,7 +64,7 @@ def category_score(ind: dict, keys: list) -> tuple[float, int, int]:
     v19.1 (C-2)：入口呼叫 ``apply_weight_overrides``；active 空時行為不變。
     """
     try:
-        from services.macro_weights_store import apply_weight_overrides
+        from services.macro.weights_store import apply_weight_overrides
         ind = apply_weight_overrides(ind or {})
     except ImportError:
         ind = ind or {}

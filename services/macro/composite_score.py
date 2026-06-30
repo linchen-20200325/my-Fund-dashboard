@@ -7,7 +7,7 @@ v19.197 P1-1 從 ui/helpers/macro_helpers.py 下沉。修 ARCHITECTURE_AUDIT V2 
 - `calculate_composite_score(ind)` — 將 23 項指標 (score × weight) 加總為健康度總分
 - `composite_verdict(total_score)` — 5 級白話評價(icon / level / color / action_text)
 
-兩函式皆為 L2 純函式,本來就不依賴 streamlit/UI,只用 services.macro_weights_store(同層)
+兩函式皆為 L2 純函式,本來就不依賴 streamlit/UI,只用 services.macro.weights_store(同層)
 + shared.colors(L0)。原放 ui/helpers/macro_helpers.py 純屬歷史遺留 — v18.133 從 app.py
 搬出時就近塞進 ui/helpers,實際是 macro 業務邏輯。
 
@@ -29,7 +29,7 @@ def calculate_composite_score(ind: dict) -> float:
     if not isinstance(ind, dict):
         return 0.0
     try:
-        from services.macro_weights_store import apply_weight_overrides
+        from services.macro.weights_store import apply_weight_overrides
         ind = apply_weight_overrides(ind)
     except ImportError:
         pass  # C-2 模組未部署時走原邏輯
@@ -55,7 +55,7 @@ def composite_verdict(total_score: float) -> tuple[str, str, str, str]:
     active.json.verdict_cutoffs 為 null → 回退硬編碼 (+10, +5, -5, -10)。
     """
     try:
-        from services.macro_weights_store import get_verdict_cutoffs
+        from services.macro.weights_store import get_verdict_cutoffs
         c1, c2, c3, c4 = get_verdict_cutoffs()
     except ImportError:
         c1, c2, c3, c4 = 10.0, 5.0, -5.0, -10.0
