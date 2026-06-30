@@ -761,7 +761,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                                 try:
                                     import pandas as _pd
                                     hist_rows[_pd.to_datetime(dt_txt)] = float(nav_txt)
-                                except Exception: pass
+                                except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
                 if len(hist_rows) >= 20:
                     import pandas as _pd
                     result["series"] = _pd.Series(hist_rows).sort_index()
@@ -795,7 +795,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 try:
                     yr_txt = str(list(row_vals.values())[0]).replace("%","")
                     result["perf"]["1Y"] = float(yr_txt)
-                except Exception: pass
+                except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
                 break
     except Exception as e:
         print(f"[fetch_risk] {e}")
@@ -865,7 +865,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                             "yield_pct": _yld,
                             "currency":  _cur,
                         })
-                    except Exception: pass
+                    except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
                 # v10: 取最新一筆 年化配息率% 作為 MoneyDJ 官方值
                 if result["dividends"]:
                     latest_yield = result["dividends"][0].get("yield_pct", 0)

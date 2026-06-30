@@ -55,7 +55,7 @@ def fetch_fund_by_key(full_key: str, fund_name: str = "",
             parts = line.strip().split(",")
             if len(parts) >= 2:
                 try: rows.append((pd.to_datetime(parts[0].strip()),float(parts[1].strip())))
-                except Exception: pass
+                except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
         if len(rows) >= 20:
             s = pd.Series({r[0]:r[1] for r in rows}).sort_index()
     # 配息：cnyes 或 MoneyDJ
