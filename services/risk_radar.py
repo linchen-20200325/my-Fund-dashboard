@@ -128,6 +128,30 @@ from repositories.external_market_repository import (
     fetch_cboe_csv as _fetch_cboe_csv,    # noqa: F401  alias 保 internal callsites 不變
     fetch_stooq_csv as _fetch_stooq_csv,  # noqa: F401
 )
+# v19.265 D7 F-SCHEMA-1:stooq + CBOE Series 出口 schema 驗證(fallback chain 防鎖)
+from shared.schemas import validate_cboe_series, validate_stooq_series
+
+
+def _safe_validate_stooq(s):
+    """fallback chain 內 stooq schema 驗證 wrapper(防驗證失敗鎖整條 chain)。
+
+    schema 違反 → log + return 空 Series(caller 跳下一層 fallback)。
+    符合 CLAUDE.md §1 Fail Loud:錯誤可見,不靜默吞,但 fallback 鏈不受個別來源污染。
+    """
+    try:
+        return validate_stooq_series(s)
+    except (ValueError, Exception) as e:  # noqa: BLE001
+        print(f"[risk_radar/schema] stooq 驗證失敗,跳下一層:{type(e).__name__}: {str(e)[:80]}")
+        return pd.Series(dtype=float)
+
+
+def _safe_validate_cboe(s):
+    """fallback chain 內 CBOE schema 驗證 wrapper(同 _safe_validate_stooq 設計)。"""
+    try:
+        return validate_cboe_series(s)
+    except (ValueError, Exception) as e:  # noqa: BLE001
+        print(f"[risk_radar/schema] CBOE 驗證失敗,跳下一層:{type(e).__name__}: {str(e)[:80]}")
+        return pd.Series(dtype=float)
 
 
 def _resolve_vix3m(
@@ -146,11 +170,11 @@ def _resolve_vix3m(
         if not s.empty and len(s) >= 2:
             return s, f"Yahoo {t}", trace
         trace.append(f"Yahoo {t}: empty (len={len(s)})")
-    s = _fetch_cboe_csv("VIX3M", trace=trace)
+    s = _safe_validate_cboe(_fetch_cboe_csv("VIX3M", trace=trace))
     if not s.empty and len(s) >= 2:
         return s, "CBOE VIX3M_History.csv", trace
     for sym in ("^vix3m", "^vxv"):
-        s = _fetch_stooq_csv(sym, trace=trace)
+        s = _safe_validate_stooq(_fetch_stooq_csv(sym, trace=trace))
         if not s.empty and len(s) >= 2:
             return s, f"stooq {sym}", trace
     # P0 第 6 層：FRED VXVCLS（CBOE S&P 500 3-Month Volatility，官方等同 VIX3M）
@@ -188,7 +212,7 @@ def _resolve_put_call() -> tuple[pd.Series, str, list[str]]:
             return s, f"Yahoo {t}", trace
         trace.append(f"Yahoo {t}: empty (len={len(s)})")
     for sym in ("^cpc", "^cpce"):
-        s = _fetch_stooq_csv(sym, trace=trace)
+        s = _safe_validate_stooq(_fetch_stooq_csv(sym, trace=trace))
         if not s.empty and len(s) >= 2:
             return s, f"stooq {sym}", trace
     return pd.Series(dtype=float), "", trace
