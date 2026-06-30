@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import TRAFFIC_GREEN
+from shared.colors import GH_BG_PRIMARY, GH_FG_SECONDARY, TRAFFIC_GREEN
 
 _MAX_CODES = 10
 _DEFAULT_CCY = "USD"
@@ -578,8 +578,8 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                     barmode="group",
                     title="📊 多基金績效比較 🧮（配息率 / 含息報酬 / 淨值漲跌）",
                     height=360,
-                    paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
-                    font=dict(color="#c9d1d9"),
+                    paper_bgcolor=GH_BG_PRIMARY, plot_bgcolor=GH_BG_PRIMARY,
+                    font=dict(color=GH_FG_SECONDARY),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
                     margin=dict(l=20, r=20, t=70, b=20),
                 )

@@ -15,7 +15,7 @@ from typing import Optional
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, MATERIAL_GREEN, TRAFFIC_NEUTRAL
 # F-GRAY-4 v19.179 PR-3:PMI mk_tolerance SSOT
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_MK_EXPANSION = _PMI_THR_V2["mk_tolerance"]["expansion_above"]    # 50.5
@@ -191,9 +191,9 @@ def _build_clock_figure(phase: str) -> go.Figure:
                 tickfont=dict(size=14, color="#ddd"),
                 rotation=90, direction="counterclockwise",
             ),
-            bgcolor="#0d1117",
+            bgcolor=GH_BG_PRIMARY,
         ),
-        paper_bgcolor="#0d1117",
+        paper_bgcolor=GH_BG_PRIMARY,
         height=420, margin=dict(t=20, b=20, l=20, r=20),
         legend=dict(orientation="h", y=-0.05, font=dict(size=11, color="#aaa")),
     )
@@ -212,7 +212,7 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
     with c2:
         # 配置建議大字卡
         st.markdown(
-            f"<div style='background:linear-gradient(135deg,{meta['color']}22,#0d1117);"
+            f"<div style='background:linear-gradient(135deg,{meta['color']}22,{GH_BG_PRIMARY});"
             f"border-left:6px solid {meta['color']};border-radius:10px;padding:18px 20px;"
             f"margin-bottom:14px'>"
             f"<div style='font-size:12px;color:{TRAFFIC_NEUTRAL};letter-spacing:2px'>當前景氣階段</div>"
@@ -234,7 +234,7 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
                 num_html = f"{fmt.format(val)}{unit} {arrow}"
                 tag = ""
             return (
-                f"<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px;text-align:center'>"
+                f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:8px;padding:10px;text-align:center'>"
                 f"<div style='font-size:11px;color:{TRAFFIC_NEUTRAL}'>{label}</div>"
                 f"<div style='font-size:18px;font-weight:600;color:#e0e0e0'>{num_html}</div>"
                 f"{tag}</div>"

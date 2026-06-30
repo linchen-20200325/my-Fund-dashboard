@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.oauth import (
     OAuthError,
@@ -1156,13 +1156,13 @@ def render_portfolio_tab() -> None:
                             labels=_dn_pl, values=_dn_pv,
                             hole=0.65,
                             marker=dict(colors=["#64b5f6", MATERIAL_ORANGE],
-                                        line=dict(color="#0e1117", width=1)),
+                                        line=dict(color=STREAMLIT_BG, width=1)),
                             textinfo="percent", textfont=dict(size=9),
                             hovertemplate="%{label}: NT$%{value:,.0f}<extra></extra>",
                         ))
                         fig_p_dn.update_layout(
-                            paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
-                            font_color="#e6edf3",
+                            paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
+                            font_color=GH_FG_PRIMARY,
                             height=120,
                             margin=dict(t=4, b=4, l=4, r=4),
                             showlegend=False,
@@ -1276,12 +1276,12 @@ def render_portfolio_tab() -> None:
                     _inv_amt   = _f.get("invest_twd", 0) or 0
 
                     st.markdown(
-                        f"<div style='background:#0d1117;border:1px solid #21262d;border-radius:8px;"
+                        f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;"
                         f"padding:10px 14px;margin:4px 0 8px 20px'>"
                         f"<div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-                        f"<span style='color:#e6edf3;font-weight:700;font-size:13px'>{_name}</span>"
+                        f"<span style='color:{GH_FG_PRIMARY};font-weight:700;font-size:13px'>{_name}</span>"
                         f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code}</span>"
-                        f"<span style='color:{_sig_clr};font-size:11px;background:#161b22;padding:2px 8px;border-radius:10px'>"
+                        f"<span style='color:{_sig_clr};font-size:11px;background:{GH_BG_CARD};padding:2px 8px;border-radius:10px'>"
                         f"σ {_sig_str} · {_sig_lbl}</span>"
                         f"<span style='color:#ccc;font-size:11px'>{_div_icon} {_div_alert}</span>"
                         f"<span style='color:#aaa;font-size:11px;margin-left:auto'>{fmt_twd(_inv_amt)}</span>"
@@ -1408,22 +1408,22 @@ def render_portfolio_tab() -> None:
         _ret_str   = f"{_cum_ret_pct:+.2f}%" if _cum_ret_pct is not None else "—"
         st.markdown(
             "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 16px'>"
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
+            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💰 總資產（NTD）</div>"
             f"<div style='color:#fff;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>{len(_pf_loaded)} 檔基金加總</div></div>"
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
+            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>📈 累計報酬</div>"
             f"<div style='color:{_ret_color};font-size:26px;font-weight:900;margin-top:4px'>{_ret_str}</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>從淨值首日加權至今</div></div>"
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
+            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>🛡️ 核心資產比例</div>"
             f"<div style='color:#64b5f6;font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>衛星 {100-_core_pct_kpi:.1f}%</div></div>"
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid #30363d;"
+            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💵 預估月配息</div>"
             f"<div style='color:#ffb74d;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
@@ -1524,17 +1524,17 @@ def render_portfolio_tab() -> None:
                         mode="markers+text",
                         marker=dict(size=[8,10,10,12],
                                     color=[TRAFFIC_NEUTRAL,MATERIAL_GREEN,MATERIAL_RED,"#fff"],
-                                    line=dict(color="#0e1117", width=2)),
+                                    line=dict(color=STREAMLIT_BG, width=2)),
                         text=["起點", f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
                               f"低 {fmt_twd(_total_curve.loc[_lo_idx])}",
                               f"今 {fmt_twd(_total_curve.iloc[-1])}"],
                         textposition=["top right","top center","bottom center","top left"],
-                        textfont=dict(size=10, color="#e6edf3"),
+                        textfont=dict(size=10, color=GH_FG_PRIMARY),
                         showlegend=False,
                         hoverinfo="skip"))
                     fig_curve.update_layout(
-                        paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-                        font_color="#e6edf3", height=320,
+                        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                        font_color=GH_FG_PRIMARY, height=320,
                         margin=dict(t=20, b=30, l=55, r=20),
                         legend=dict(orientation="h", y=1.05, font_size=10),
                         hovermode="x unified")
@@ -1560,7 +1560,7 @@ def render_portfolio_tab() -> None:
         _diff     = round(_core_pct - _target, 1)
         _dc       = MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN)
         st.markdown(
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid #30363d'>"
+            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid {GH_BORDER}'>"
             f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
             f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
             f"<div><div style='color:#64b5f6;font-size:11px'>🛡️ 核心資產</div><div style='color:#64b5f6;font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
@@ -1575,21 +1575,21 @@ def render_portfolio_tab() -> None:
         _dn_values = [max(f.get("invest_twd", 0) or 0, 0) for f in _pf_loaded]
         _dn_colors = ["#64b5f6" if f.get("is_core") else MATERIAL_ORANGE for f in _pf_loaded]
         _alert     = abs(_diff) > 10
-        _bg_c      = "#1a0808" if _alert else "#0e1117"
+        _bg_c      = "#1a0808" if _alert else STREAMLIT_BG
         fig_dn = go.Figure()
         if sum(_dn_values) > 0:
             fig_dn.add_trace(go.Pie(
                 labels    = _dn_labels,
                 values    = _dn_values,
                 hole      = 0.65,
-                marker    = dict(colors=_dn_colors, line=dict(color="#0e1117", width=1)),
+                marker    = dict(colors=_dn_colors, line=dict(color=STREAMLIT_BG, width=1)),
                 textinfo  = "percent",
                 textfont  = dict(size=9),
                 hovertemplate="%{label}: NT$%{value:,.0f} (%{percent})<extra></extra>",
             ))
         fig_dn.update_layout(
             paper_bgcolor = _bg_c, plot_bgcolor = _bg_c,
-            font_color    = "#e6edf3",
+            font_color    = GH_FG_PRIMARY,
             height        = 140,
             margin        = dict(t=4, b=4, l=4, r=4),
             showlegend    = False,
@@ -1908,15 +1908,15 @@ def render_portfolio_tab() -> None:
                     ci1, ci2, ci3 = st.columns([4,4,1])
                     with ci1:
                         st.markdown(
-                            f"<div style='padding:8px 12px;background:#161b22;border-radius:8px;margin:3px 0'>"
-                            f"{status_icon} <b style='color:#e6edf3'>{(pf_item.get('name','') or pf_item['code'])[:28]}</b> "
+                            f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0'>"
+                            f"{status_icon} <b style='color:{GH_FG_PRIMARY}'>{(pf_item.get('name','') or pf_item['code'])[:28]}</b> "
                             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{pf_item['code']}</span> "
                             f"<span style='color:#ff9800;font-size:11px;margin-left:6px'>{role_i}</span></div>",
                             unsafe_allow_html=True)
                     with ci2:
                         st.markdown(
-                            f"<div style='padding:8px 12px;background:#161b22;border-radius:8px;margin:3px 0;font-size:11px;color:{TRAFFIC_NEUTRAL}'>"
-                            f"NAV: <b style='color:#e6edf3'>{_nav_i}</b>"
+                            f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0;font-size:11px;color:{TRAFFIC_NEUTRAL}'>"
+                            f"NAV: <b style='color:{GH_FG_PRIMARY}'>{_nav_i}</b>"
                             f"　配息率: <b style='color:#ff9800'>{_adr_i}{'%' if _adr_i else ''}</b>"
                             f"　Sharpe: <b style='color:#69f0ae'>{_sh_i}</b>"
                             f"　σ: <b>{_std_i}{'%' if _std_i else ''}</b></div>",
@@ -1938,7 +1938,7 @@ def render_portfolio_tab() -> None:
                             "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL
                         }.get(_adv_card.get("color", "grey"), TRAFFIC_NEUTRAL)
                         st.markdown(
-                            f"<div style='padding:6px 12px;background:#0d1117;"
+                            f"<div style='padding:6px 12px;background:{GH_BG_PRIMARY};"
                             f"border-left:3px solid {_adv_clr_card};"
                             f"border-radius:6px;margin:3px 0 8px 0;"
                             f"font-size:12px;color:{_adv_clr_card};line-height:1.55'>"
@@ -1982,12 +1982,12 @@ def render_portfolio_tab() -> None:
                                 ]:
                                     _ch, _cc = _mini_chip(_v, _is_buy)
                                     _cells += (f"<div style='flex:1;text-align:center;padding:4px 2px;"
-                                               f"background:#0d1117;border-radius:6px;margin:0 2px'>"
+                                               f"background:{GH_BG_PRIMARY};border-radius:6px;margin:0 2px'>"
                                                f"<div style='font-size:9px;color:{TRAFFIC_NEUTRAL}'>{_lbl}</div>"
                                                f"<div style='font-size:11px;font-weight:700;color:#ccc'>{_v:.3f}</div>"
                                                f"<div style='font-size:13px;color:{_cc}'>{_ch}</div></div>")
                                 st.markdown(
-                                    f"<div style='background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:8px 12px;margin:2px 0 8px 0'>"
+                                    f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;padding:8px 12px;margin:2px 0 8px 0'>"
                                     f"<div style='display:flex;align-items:center;margin-bottom:5px'>"
                                     f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>📍 策略3 訊號</span>"
                                     f"<span style='background:#111;color:{_mi_pc};border:1px solid {_mi_pc};padding:1px 8px;"
@@ -2136,8 +2136,8 @@ def render_portfolio_tab() -> None:
                             bordercolor="#666", borderwidth=1,
                             borderpad=4)
                 fig_rc.update_layout(
-                    paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-                    font_color="#e6edf3", height=360,
+                    paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                    font_color=GH_FG_PRIMARY, height=360,
                     margin=dict(t=40, b=20, l=40, r=20),
                     legend=dict(orientation="h", font_size=10, y=1.08),
                     yaxis_title="報酬率 / 配息率 (%)",

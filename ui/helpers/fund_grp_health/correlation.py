@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_FG_PRIMARY, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 
 def _render_correlation_matrix(funds: list) -> None:
@@ -83,7 +83,7 @@ def _render_correlation_matrix(funds: list) -> None:
             z=_mx.values,
             x=list(_mx.columns),
             y=list(_mx.index),
-            colorscale=[[0, "#0e1117"], [0.5, "#2196f3"], [1, "#f44336"]],
+            colorscale=[[0, STREAMLIT_BG], [0.5, "#2196f3"], [1, "#f44336"]],
             zmin=0, zmax=1,
             text=[[f"{v:.2f}" for v in row] for row in _mx.values],
             texttemplate="%{text}",
@@ -91,8 +91,8 @@ def _render_correlation_matrix(funds: list) -> None:
             hovertemplate="%{y} vs %{x}<br>" + _label + ":%{z:.3f}<extra></extra>",
         ))
         fig.update_layout(
-            paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
-            font_color="#e6edf3",
+            paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
+            font_color=GH_FG_PRIMARY,
             height=max(280, len(_mx) * 50 + 100),
             margin=dict(t=20, b=20, l=80, r=20),
         )

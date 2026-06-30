@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
 
 
 def _norm_name(s) -> str:
@@ -103,13 +103,13 @@ def render_concentration_summary(portfolio_funds) -> None:
         _zh_s = f"({_zh})" if _zh else ""
         _multi = f" <span style='color:{TRAFFIC_NEUTRAL}'>·{_fc}檔</span>" if _fc >= 2 else ""
         _items.append(
-            f"<b style='color:#c9d1d9'>{_nm[:18]}{_zh_s}</b> "
+            f"<b style='color:{GH_FG_SECONDARY}'>{_nm[:18]}{_zh_s}</b> "
             f"{_exp_pct:.1f}%{_multi}")
 
     st.markdown(
-        f"<div style='background:#0d1117;border-left:4px solid {_border};"
+        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
-        f"color:#8b949e;line-height:1.7'>"
+        f"color:{GH_FG_MUTED};line-height:1.7'>"
         f"🎯 <b>穿透式持股集中度</b>（{_emoji} {_lvl}）"
         f"<span style='color:#666;font-size:10px'> · 跨 {_r['n_with_holdings']} 檔基金"
         f"看你實際押在哪些個股</span><br/>"
@@ -203,13 +203,13 @@ def render_sector_concentration_summary(portfolio_funds) -> None:
     for _nm, _exp_pct, _fc in _top:
         _multi = f" <span style='color:{TRAFFIC_NEUTRAL}'>·{_fc}檔</span>" if _fc >= 2 else ""
         _items.append(
-            f"<b style='color:#c9d1d9'>{_nm[:14]}</b> "
+            f"<b style='color:{GH_FG_SECONDARY}'>{_nm[:14]}</b> "
             f"{_exp_pct:.1f}%{_multi}")
 
     st.markdown(
-        f"<div style='background:#0d1117;border-left:4px solid {_border};"
+        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
-        f"color:#8b949e;line-height:1.7'>"
+        f"color:{GH_FG_MUTED};line-height:1.7'>"
         f"🏭 <b>穿透式產業集中度</b>（{_emoji} {_lvl}）"
         f"<span style='color:#666;font-size:10px'> · 跨 {_r['n_with_sectors']} 檔基金"
         f"看你實際押在哪些產業</span><br/>"

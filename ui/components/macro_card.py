@@ -15,7 +15,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 EDU_FIELDS = ("meaning", "how_to_read", "pair_with",
               "historical_anchor", "upstream", "downstream")
@@ -195,9 +195,9 @@ def render_macro_card(
         f"<div style='display:flex;justify-content:space-between;align-items:baseline;gap:8px'>"
         f"<div style='min-width:0;flex:1'>"
         f"<span style='font-size:16px;margin-right:4px'>{signal or ''}</span>"
-        f"<b style='color:#e6edf3;font-size:14px'>{_esc(name)}</b></div>"
+        f"<b style='color:{GH_FG_PRIMARY};font-size:14px'>{_esc(name)}</b></div>"
         f"<div style='white-space:nowrap'>"
-        f"<span style='color:#e6edf3;font-size:14px;font-weight:600'>{val_str}</span>"
+        f"<span style='color:{GH_FG_PRIMARY};font-size:14px;font-weight:600'>{val_str}</span>"
         f"<span style='color:{z_col};font-size:11px;margin-left:8px'>{z_str}</span>"
         f"</div></div></div>",
         unsafe_allow_html=True,

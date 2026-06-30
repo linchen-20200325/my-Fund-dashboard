@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -136,7 +136,7 @@ def _render_holdings_block(fund: dict) -> None:
             else:
                 _ter_c, _ter_avg_html = TRAFFIC_NEUTRAL, ""
             st.markdown(
-                "<div style='background:#161b22;border:1px solid #30363d;"
+                "<div style=f'background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
                 "border-radius:10px;padding:10px 16px;margin:8px 0'>"
                 f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>"
                 "💰 TER 費用率分析"
@@ -202,7 +202,7 @@ def _render_holdings_block(fund: dict) -> None:
                 _ts = str(_top.get("sector", ""))[:12]
                 st.markdown(
                     f"<div style='display:flex;gap:6px;padding:3px 8px;"
-                    f"background:#161b22;border-radius:6px;margin:2px 0'>"
+                    f"background:{GH_BG_CARD};border-radius:6px;margin:2px 0'>"
                     f"<span style='color:#555;font-size:11px;width:16px'>#{_i}</span>"
                     f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
                     f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"

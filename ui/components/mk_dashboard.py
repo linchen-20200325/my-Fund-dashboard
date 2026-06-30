@@ -293,7 +293,7 @@ def _series_tail(series, n: int) -> Optional[list]:
 
 # v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
 from shared.converters import safe_float as _safe_float  # noqa: E402
-from shared.colors import TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT  # noqa: E402
+from shared.colors import GH_BG_PRIMARY, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT  # noqa: E402
 
 
 
@@ -567,7 +567,7 @@ def _render_benchmark_chart(sat_df: pd.DataFrame, portfolio_funds: list,
         title=f"衛星淨值 vs {bench_ticker}（起點歸一化＝100）",
         height=320, margin=dict(t=40, b=20, l=20, r=10),
         legend=dict(orientation="h", y=-0.15, font=dict(size=10)),
-        paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
+        paper_bgcolor=GH_BG_PRIMARY, plot_bgcolor=GH_BG_PRIMARY,
         font=dict(color="#ddd"),
         xaxis=dict(gridcolor="#222"), yaxis=dict(gridcolor="#222"),
     )

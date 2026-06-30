@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
+from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
 
 
 def render_macro_exposure_link(session_state, core_pct=None) -> None:
@@ -64,7 +64,7 @@ def render_macro_exposure_link(session_state, core_pct=None) -> None:
 
     # ── 建議配置（股/債/現金）+ 你的核心比例 context ──
     _alloc_str = " / ".join(f"{_k} {_v}%" for _k, _v in _alloc.items()) if _alloc else "—"
-    _body = f"建議資產配置：<b style='color:#c9d1d9'>{_alloc_str}</b>"
+    _body = f"建議資產配置：<b style='color:{GH_FG_SECONDARY}'>{_alloc_str}</b>"
     if core_pct is not None:
         try:
             _body += (f"　·　你目前核心(穩健) <b style='color:#64b5f6'>"
@@ -73,9 +73,9 @@ def render_macro_exposure_link(session_state, core_pct=None) -> None:
             pass
 
     st.markdown(
-        f"<div style='background:#0d1117;border-left:4px solid {_color};"
+        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_color};"
         f"border-radius:4px;padding:8px 12px;margin-bottom:8px;font-size:12px;"
-        f"color:#8b949e;line-height:1.7'>"
+        f"color:{GH_FG_MUTED};line-height:1.7'>"
         f"{_head}<br/>{_body}"
         + (f"<br/><span style='color:#aaa;font-size:11px'>💡 {_advice}</span>"
            if _advice else "")

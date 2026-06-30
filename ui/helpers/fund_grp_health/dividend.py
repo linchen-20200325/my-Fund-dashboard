@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 
 def _render_dividend_matrix(funds: list) -> None:
@@ -125,8 +125,8 @@ def _render_dividend_matrix(funds: list) -> None:
                 bordercolor="#666", borderwidth=1,
                 borderpad=4)
     fig_rc.update_layout(
-        paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-        font_color="#e6edf3", height=360,
+        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+        font_color=GH_FG_PRIMARY, height=360,
         margin=dict(t=40, b=20, l=40, r=20),
         legend=dict(orientation="h", font_size=10, y=1.08),
         yaxis_title="報酬率 / 配息率 (%)",

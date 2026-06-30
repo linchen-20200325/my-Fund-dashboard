@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.proxy import get_proxy_config
 from ui.helpers.session import (
@@ -222,11 +222,11 @@ def render_data_guard_tab() -> None:
          "FX 失敗 → 上方 Proxy 連線測試;Sheet → sidebar 登入 Google / 設 gservice_account secret"),
     ]
 
-    _tab_th = f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:8px 10px;border-bottom:1px solid #30363d"
+    _tab_th = f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:8px 10px;border-bottom:1px solid {GH_BORDER}"
     _tab_td = "font-size:11px;padding:8px 10px;line-height:1.4"
     _t_html = (
         f"<div style='display:grid;grid-template-columns:1.3fr 0.5fr 0.9fr 2.8fr 2fr;"
-        f"background:#0d1117;border-radius:6px 6px 0 0'>"
+        f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
         f"<span style='{_tab_th}'>Tab</span>"
         f"<span style='{_tab_th};text-align:center'>狀態</span>"
         f"<span style='{_tab_th}'>覆蓋率</span>"
@@ -236,11 +236,11 @@ def render_data_guard_tab() -> None:
     )
     for _name, _e, _c, _ratio, _detail, _action in _tab_table:
         _bg = "#0a1a0a" if _e == "🟢" else ("#1a1200" if _e == "🟡" else
-              ("#1a0606" if _e == "🔴" else "#0d1117"))
+              ("#1a0606" if _e == "🔴" else GH_BG_PRIMARY))
         _t_html += (
             f"<div style='display:grid;grid-template-columns:1.3fr 0.5fr 0.9fr 2.8fr 2fr;"
-            f"background:{_bg};border-bottom:1px solid #21262d'>"
-            f"<span style='{_tab_td};color:#e6edf3;font-weight:600'>{_name}</span>"
+            f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
+            f"<span style='{_tab_td};color:{GH_FG_PRIMARY};font-weight:600'>{_name}</span>"
             f"<span style='{_tab_td};text-align:center;color:{_c};font-size:14px'>{_e}</span>"
             f"<span style='{_tab_td};color:{_c};font-weight:600'>{_ratio}</span>"
             f"<span style='{_tab_td};color:#bbb'>{_detail}</span>"
@@ -248,7 +248,7 @@ def render_data_guard_tab() -> None:
             f"</div>"
         )
     st.markdown(
-        f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+        f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
         f"{_t_html}</div>", unsafe_allow_html=True,
     )
     # 整體狀態 summary
@@ -413,11 +413,11 @@ def render_data_guard_tab() -> None:
     ]
 
     _src_th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:6px 8px;"
-               "border-bottom:1px solid #30363d")
+               f"border-bottom:1px solid {GH_BORDER}")
     _src_td = "font-size:11px;padding:6px 8px;line-height:1.4"
     _src_html = (
         f"<div style='display:grid;grid-template-columns:38px 1.2fr 1.5fr 3fr 50px 1.4fr;"
-        f"background:#0d1117;border-radius:6px 6px 0 0'>"
+        f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
         f"<span style='{_src_th}'>#</span>"
         f"<span style='{_src_th}'>類別</span>"
         f"<span style='{_src_th}'>用途</span>"
@@ -427,12 +427,12 @@ def render_data_guard_tab() -> None:
         f"</div>"
     )
     for _no, _cat, _purp, _ep, _proxy, (_ic, _stxt, _sc) in _RAW_TABLE:
-        _bg = "#0a1a0a" if _ic == "🟢" else ("#1a1200" if _ic == "🟡" else "#0d1117")
+        _bg = "#0a1a0a" if _ic == "🟢" else ("#1a1200" if _ic == "🟡" else GH_BG_PRIMARY)
         _src_html += (
             f"<div style='display:grid;grid-template-columns:38px 1.2fr 1.5fr 3fr 50px 1.4fr;"
-            f"background:{_bg};border-bottom:1px solid #21262d'>"
+            f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
             f"<span style='{_src_td};color:#aaa'>{_no}</span>"
-            f"<span style='{_src_td};color:#e6edf3;font-weight:600'>{_cat}</span>"
+            f"<span style='{_src_td};color:{GH_FG_PRIMARY};font-weight:600'>{_cat}</span>"
             f"<span style='{_src_td};color:#bbb'>{_purp}</span>"
             f"<span style='{_src_td};color:#7d8590;font-family:monospace;font-size:10px'>{_ep}</span>"
             f"<span style='{_src_td};text-align:center;color:{TRAFFIC_NEUTRAL}'>{_proxy}</span>"
@@ -440,7 +440,7 @@ def render_data_guard_tab() -> None:
             f"</div>"
         )
     st.markdown(
-        f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+        f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
         f"{_src_html}</div>", unsafe_allow_html=True,
     )
 
@@ -496,11 +496,11 @@ def render_data_guard_tab() -> None:
 
         # 表格標頭
         _th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:4px 8px;"
-               "border-bottom:1px solid #30363d")
+               f"border-bottom:1px solid {GH_BORDER}")
         _td_base = "font-size:11px;padding:4px 8px"
         _hdr = (
             f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 3fr 1fr;"
-            f"background:#0d1117;border-radius:6px 6px 0 0'>"
+            f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
             f"<span style='{_th}'>資料名稱</span>"
             f"<span style='{_th}'>來源</span>"
             f"<span style='{_th}'>頻率</span>"
@@ -518,11 +518,11 @@ def render_data_guard_tab() -> None:
             _ficon = _rv.get("fresh_icon", "⬜")
             _flbl  = _rv.get("fresh_label", "未知")
             _fcol  = _rv.get("fresh_color", "#555")
-            _row_bg = "#161b22" if _ficon == "🟢" else ("#1a1200" if _ficon == "🟡" else "#1a0808")
+            _row_bg = GH_BG_CARD if _ficon == "🟢" else ("#1a1200" if _ficon == "🟡" else "#1a0808")
             _rows_html += (
                 f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 3fr 1fr;"
-                f"background:{_row_bg};border-bottom:1px solid #21262d'>"
-                f"<span style='{_td_base};color:#e6edf3'>{_rv.get('label', _rk)}</span>"
+                f"background:{_row_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
+                f"<span style='{_td_base};color:{GH_FG_PRIMARY}'>{_rv.get('label', _rk)}</span>"
                 f"<span style='{_td_base};color:{TRAFFIC_NEUTRAL}'>{_rv.get('source','')}</span>"
                 f"<span style='{_td_base}'>"
                 f"<span style='background:{_FREQ_LABEL.get(_freq,('?','#555'))[1]}22;"
@@ -538,7 +538,7 @@ def render_data_guard_tab() -> None:
             if _ficon == "🔴":
                 _stale_list.append(_rv.get("label", _rk))
         st.markdown(
-            f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+            f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
             f"{_rows_html}</div>",
             unsafe_allow_html=True,
         )
@@ -672,8 +672,8 @@ def render_data_guard_tab() -> None:
                                annotation_font_color=MATERIAL_RED,
                                annotation_position="bottom right")
             _fig_lat.update_layout(
-                paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-                font_color="#e6edf3", height=260,
+                paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                font_color=GH_FG_PRIMARY, height=260,
                 margin=dict(t=10, b=40, l=60, r=20),
                 xaxis=dict(tickangle=-30, tickfont_size=9, gridcolor="#1e2a3a"),
                 yaxis=dict(title="回應時間 (ms)", gridcolor="#1e2a3a"),
@@ -905,11 +905,11 @@ def render_data_guard_tab() -> None:
                     "PROXY_URL", "GOOGLE_SHEET_ID"]
     _key_rows = [_resolve_key(_k) for _k in _key_targets]
     _kt_th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:6px 10px;"
-              "border-bottom:1px solid #30363d")
+              f"border-bottom:1px solid {GH_BORDER}")
     _kt_td = "font-size:11px;padding:6px 10px;line-height:1.4"
     _kt_html = (
         f"<div style='display:grid;grid-template-columns:1.4fr 1fr 1.6fr 1.4fr;"
-        f"background:#0d1117;border-radius:6px 6px 0 0'>"
+        f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
         f"<span style='{_kt_th}'>API Key</span>"
         f"<span style='{_kt_th}'>使用來源</span>"
         f"<span style='{_kt_th}'>實際值(遮罩)</span>"
@@ -921,15 +921,15 @@ def render_data_guard_tab() -> None:
         _bg = "#0a1a0a" if _kr["source"] != "(無)" else "#1a0606"
         _kt_html += (
             f"<div style='display:grid;grid-template-columns:1.4fr 1fr 1.6fr 1.4fr;"
-            f"background:{_bg};border-bottom:1px solid #21262d'>"
-            f"<span style='{_kt_td};color:#e6edf3;font-weight:600'>{_kr['name']}</span>"
+            f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
+            f"<span style='{_kt_td};color:{GH_FG_PRIMARY};font-weight:600'>{_kr['name']}</span>"
             f"<span style='{_kt_td};color:{_src_color};font-weight:600'>{_kr['source']}</span>"
             f"<span style='{_kt_td};color:#bbb;font-family:monospace;font-size:10px'>{_kr['preview']}</span>"
             f"<span style='{_kt_td};color:#7d8590;font-family:monospace;font-size:10px'>{_kr['env_preview']}</span>"
             f"</div>"
         )
     st.markdown(
-        f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+        f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
         f"{_kt_html}</div>", unsafe_allow_html=True,
     )
     st.caption(
@@ -1227,11 +1227,11 @@ def render_data_guard_tab() -> None:
             f"　｜　依嚴重度排序（release window 內的 🟡 已自動排除）"
         )
         _th_a = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:4px 8px;"
-                 "border-bottom:1px solid #30363d")
+                 f"border-bottom:1px solid {GH_BORDER}")
         _td_a = "font-size:11px;padding:4px 8px"
         _hdr_a = (
             f"<div style='display:grid;grid-template-columns:2.4fr 1.4fr 0.8fr 1.2fr 1.6fr;"
-            f"background:#0d1117;border-radius:6px 6px 0 0'>"
+            f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
             f"<span style='{_th_a}'>資料名稱</span>"
             f"<span style='{_th_a}'>來源</span>"
             f"<span style='{_th_a}'>頻率</span>"
@@ -1249,8 +1249,8 @@ def render_data_guard_tab() -> None:
             _abg = "#1a0808" if _aicon == "🔴" else "#1a1200"
             _rows_a += (
                 f"<div style='display:grid;grid-template-columns:2.4fr 1.4fr 0.8fr 1.2fr 1.6fr;"
-                f"background:{_abg};border-bottom:1px solid #21262d'>"
-                f"<span style='{_td_a};color:#e6edf3'>{_av.get('label', _ak)}</span>"
+                f"background:{_abg};border-bottom:1px solid {GH_BG_HOVER}'>"
+                f"<span style='{_td_a};color:{GH_FG_PRIMARY}'>{_av.get('label', _ak)}</span>"
                 f"<span style='{_td_a};color:{TRAFFIC_NEUTRAL}'>{_av.get('source','—') or '—'}</span>"
                 f"<span style='{_td_a}'>"
                 f"<span style='background:{_afq_col}22;color:{_afq_col};"
@@ -1261,7 +1261,7 @@ def render_data_guard_tab() -> None:
                 f"</div>"
             )
         st.markdown(
-            f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+            f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
             f"{_rows_a}</div>",
             unsafe_allow_html=True,
         )

@@ -25,6 +25,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from shared.colors import (
+    GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_MUTED, GH_FG_PRIMARY, GH_FG_SECONDARY, STREAMLIT_BG,
     MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED,
     TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL,
 )
@@ -232,7 +233,7 @@ def _render_macro_indicator_card(title: str, signal: str, color: str,
     """
     import streamlit as _st_c
     _st_c.markdown(
-        f"<div style='background:#0d1117;border:2px solid {color};"
+        f"<div style='background:{GH_BG_PRIMARY};border:2px solid {color};"
         f"border-radius:10px;padding:10px 12px 6px;margin:4px 0;min-height:150px;"
         f"display:flex;flex-direction:column;justify-content:space-between'>"
         f"<div>"
@@ -240,7 +241,7 @@ def _render_macro_indicator_card(title: str, signal: str, color: str,
         f"<div style='color:{color};font-size:15px;font-weight:800;margin:4px 0 6px'>{signal}</div>"
         f"<div style='color:#fff;font-weight:700;font-size:14px'>值 {value_str}</div>"
         f"</div>"
-        f"<div style='color:#aaa;font-size:9px;border-top:1px solid #30363d;"
+        f"<div style='color:#aaa;font-size:9px;border-top:1px solid {GH_BORDER};"
         f"padding-top:4px;margin-top:4px;line-height:1.3'>{note}"
         f"<br/><span style='color:#555'>{label}</span></div>"
         f"</div>", unsafe_allow_html=True)
@@ -572,21 +573,21 @@ def _render_macro_navigator(indicators: dict | None,
     def _card(title: str, icon: str, label: str, color: str,
               metric: str, detail: str) -> str:
         return (
-            f'<div style="background:#0d1117;border:2px solid {color};'
+            f'<div style="background:{GH_BG_PRIMARY};border:2px solid {color};'
             f'border-radius:10px;padding:12px 14px;min-height:140px;'
             f'box-shadow:0 1px 3px rgba(0,0,0,0.3);">'
-            f'<div style="color:#8b949e;font-size:12px;margin-bottom:4px;'
+            f'<div style="color:{GH_FG_MUTED};font-size:12px;margin-bottom:4px;'
             f'font-weight:600;">{icon} {title}</div>'
             f'<div style="color:{color};font-size:20px;font-weight:800;'
             f'line-height:1.2;margin:4px 0;">{label}</div>'
-            f'<div style="color:#c9d1d9;font-size:13px;margin-top:6px;">{metric}</div>'
-            f'<div style="color:#8b949e;font-size:11px;margin-top:6px;'
+            f'<div style="color:{GH_FG_SECONDARY};font-size:13px;margin-top:6px;">{metric}</div>'
+            f'<div style="color:{GH_FG_MUTED};font-size:11px;margin-top:6px;'
             f'line-height:1.5;">{detail}</div>'
             f'</div>'
         )
 
     st.markdown(
-        '<div style="font-size:13px;color:#8b949e;margin:8px 0 6px 0;'
+        '<div style=f"font-size:13px;color:{GH_FG_MUTED};margin:8px 0 6px 0;'
         'font-weight:600;">🧭 總經導航卡 — 上方 4 面板 verdict 速覽</div>',
         unsafe_allow_html=True,
     )
@@ -853,12 +854,12 @@ def _render_tw_local_dashboard(indicators: dict | None,
             st.markdown(
                 f"<div style='padding:8px 4px 4px;border-left:6px solid {long_v['color']};"
                 f"background:linear-gradient(90deg,{long_v['color']}22 0%,transparent 80%);'>"
-                f"<div style='font-size:12px;color:#8b949e'>🏔️ 長期 12M ｜ 景氣大循環</div>"
+                f"<div style='font-size:12px;color:{GH_FG_MUTED}'>🏔️ 長期 12M ｜ 景氣大循環</div>"
                 f"<div style='font-size:22px;font-weight:700;color:{long_v['color']}'>"
                 f"{long_v['regime']}</div>"
-                f"<div style='font-size:13px;color:#c9d1d9;margin-top:4px'>"
+                f"<div style='font-size:13px;color:{GH_FG_SECONDARY};margin-top:4px'>"
                 f"得分：<b>{long_v['score']:+.2f}</b> ｜ 建議持股：<b>{long_v['suggest_pct']}</b></div>"
-                f"<div style='font-size:12px;color:#8b949e;margin-top:6px'>{long_v['detail']}</div>"
+                f"<div style='font-size:12px;color:{GH_FG_MUTED};margin-top:6px'>{long_v['detail']}</div>"
                 "</div>", unsafe_allow_html=True)
             with st.expander("📐 評分拆解（components）", expanded=False):
                 if long_v.get("components"):
@@ -873,12 +874,12 @@ def _render_tw_local_dashboard(indicators: dict | None,
             st.markdown(
                 f"<div style='padding:8px 4px 4px;border-left:6px solid {short_v['color']};"
                 f"background:linear-gradient(90deg,{short_v['color']}22 0%,transparent 80%);'>"
-                f"<div style='font-size:12px;color:#8b949e'>⚡ 短期 1Q ｜ 財報季偏向</div>"
+                f"<div style='font-size:12px;color:{GH_FG_MUTED}'>⚡ 短期 1Q ｜ 財報季偏向</div>"
                 f"<div style='font-size:22px;font-weight:700;color:{short_v['color']}'>"
                 f"{short_v['regime']}</div>"
-                f"<div style='font-size:13px;color:#c9d1d9;margin-top:4px'>"
+                f"<div style='font-size:13px;color:{GH_FG_SECONDARY};margin-top:4px'>"
                 f"得分：<b>{short_v['score']:+.2f}</b> ｜ 建議行動：<b>{short_v.get('action','—')}</b></div>"
-                f"<div style='font-size:12px;color:#8b949e;margin-top:6px'>{short_v['detail']}</div>"
+                f"<div style='font-size:12px;color:{GH_FG_MUTED};margin-top:6px'>{short_v['detail']}</div>"
                 "</div>", unsafe_allow_html=True)
             with st.expander("📐 評分拆解（components）", expanded=False):
                 if short_v.get("components"):
@@ -956,8 +957,8 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
         f"border-left:6px solid {color};border-radius:8px;padding:14px 18px;margin:8px 0 12px'>"
         f"<div style='font-size:13px;color:#aaa;margin-bottom:4px'>📌 當前總經 verdict</div>"
         f"<div style='font-size:24px;color:{color};font-weight:700;margin-bottom:6px'>"
-        f"{icon} {level}　<span style='font-size:18px;color:#e6edf3'>score = {score:+.2f}</span></div>"
-        f"<div style='font-size:14px;color:#e6edf3;line-height:1.55'>{action_text}</div>"
+        f"{icon} {level}　<span style='font-size:18px;color:{GH_FG_PRIMARY}'>score = {score:+.2f}</span></div>"
+        f"<div style='font-size:14px;color:{GH_FG_PRIMARY};line-height:1.55'>{action_text}</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -999,7 +1000,7 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
     def _row_style(row):
         action = row["建議"]
         bg = _ACTION_BADGE_BG.get(action, "#1f2937")
-        fg = _ACTION_BADGE_FG.get(action, "#e6edf3")
+        fg = _ACTION_BADGE_FG.get(action, GH_FG_PRIMARY)
         return [f"background-color: {bg}; color: {fg};" if c == "建議" else "" for c in row.index]
 
     st.dataframe(
@@ -1290,17 +1291,17 @@ def render_macro_tab() -> None:
                 )
             )
             st.markdown(
-                f'<div style="background:#0d1117;border-left:4px solid {_age_color_ml};'
+                f'<div style="background:{GH_BG_PRIMARY};border-left:4px solid {_age_color_ml};'
                 f'border-radius:4px;padding:8px 14px;margin-bottom:8px;font-size:11px;'
-                f'color:#8b949e;line-height:1.6;">'
+                f'color:{GH_FG_MUTED};line-height:1.6;">'
                 f'📊 <b>資料新鮮度</b>　'
-                f'🕐 抓取：<b style="color:#c9d1d9;">{_ml_upd.strftime("%Y-%m-%d %H:%M")}</b>　'
+                f'🕐 抓取：<b style="color:{GH_FG_SECONDARY};">{_ml_upd.strftime("%Y-%m-%d %H:%M")}</b>　'
                 f'⏱️ <span style="color:{_age_color_ml};font-weight:700;">{_age_label_ml}</span>　'
                 f'📡 來源：FRED + Yahoo<br/>'
-                f'📅 月頻截止：<span style="color:#c9d1d9;">{_src_str}</span>　'
+                f'📅 月頻截止：<span style="color:{GH_FG_SECONDARY};">{_src_str}</span>　'
                 f'⚡ 雷達：{"🟢 已載入" if _radar_ready else "⬜ 未載入"}　'
                 f'🎯 拐點：{"🟢 已載入" if _tp_ready else "⬜ 未載入"}<br/>'
-                f'📡 <b>FRED 命中</b>：<span style="color:#c9d1d9;">{_fred_chip_line}</span>'
+                f'📡 <b>FRED 命中</b>：<span style="color:{GH_FG_SECONDARY};">{_fred_chip_line}</span>'
                 f'</div>', unsafe_allow_html=True)
             if _age_min_ml > 240:
                 st.warning(
@@ -1344,17 +1345,17 @@ def render_macro_tab() -> None:
             _comp_score = calculate_composite_score(ind)
             _cv_icon, _cv_level, _cv_color, _cv_action = composite_verdict(_comp_score)
             st.markdown(
-                f"<div style='background:linear-gradient(135deg,#0d1117,#161b22);"
+                f"<div style='background:linear-gradient(135deg,{GH_BG_PRIMARY},{GH_BG_CARD});"
                 f"border:2px solid {_cv_color};border-radius:12px;padding:14px 20px;margin:0 0 12px;"
                 f"display:flex;align-items:center;gap:20px'>"
                 f"<div style='flex-shrink:0;text-align:center;min-width:96px'>"
-                f"<div style='font-size:11px;color:#8b949e;letter-spacing:1px'>綜合健康度</div>"
+                f"<div style='font-size:11px;color:{GH_FG_MUTED};letter-spacing:1px'>綜合健康度</div>"
                 f"<div style='font-size:42px;font-weight:900;color:{_cv_color};line-height:1.1'>{_comp_score:+.1f}</div>"
                 f"<div style='font-size:10px;color:#484f58'>23 指標加權淨分<br>🌎 美股 / 全球總經</div>"
                 f"</div>"
                 f"<div style='flex:1;min-width:0'>"
                 f"<div style='font-size:22px;font-weight:900;color:{_cv_color}'>{_cv_icon} {_cv_level}</div>"
-                f"<div style='font-size:13px;color:#c9d1d9;margin-top:4px;line-height:1.5'>{_cv_action}</div>"
+                f"<div style='font-size:13px;color:{GH_FG_SECONDARY};margin-top:4px;line-height:1.5'>{_cv_action}</div>"
                 f"</div></div>",
                 unsafe_allow_html=True)
         except Exception as _comp_e:  # noqa: BLE001
@@ -1516,7 +1517,7 @@ def render_macro_tab() -> None:
                             for _ek, _ev in _errs.items()
                         )
                         st.markdown(
-                            f"<details style='margin:8px 0;background:#0d1117;border:1px solid #30363d;"
+                            f"<details style='margin:8px 0;background:{GH_BG_PRIMARY};border:1px solid {GH_BORDER};"
                             f"border-radius:6px;padding:6px 12px'>"
                             f"<summary style='cursor:pointer;color:{TRAFFIC_YELLOW};font-size:12px'>"
                             f"🔍 載入失敗詳情（{len(_errs)} 項）</summary>"
@@ -1550,7 +1551,7 @@ def render_macro_tab() -> None:
                     _ucols = st.columns([5, 1])
                     with _ucols[0]:
                         st.markdown(
-                            f"<div style='background:#0d1117;border-left:3px solid {_us_color};"
+                            f"<div style='background:{GH_BG_PRIMARY};border-left:3px solid {_us_color};"
                             f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:8px;font-size:11px;color:#aaa'>"
                             f"📅 最舊指標截止：<span style='color:{_us_color};font-weight:700'>{_us_cutoff or '—'}</span>"
                             f" · <span style='color:{_us_color}'>{_us_age_txt}</span>"
@@ -1615,8 +1616,8 @@ def render_macro_tab() -> None:
                         hovertemplate="配息率: %{y:.1f}%<extra></extra>",
                     ))
                     _def_fig.update_layout(
-                        paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-                        font_color="#e6edf3", height=260,
+                        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                        font_color=GH_FG_PRIMARY, height=260,
                         margin=dict(t=20, b=50, l=10, r=10),
                         legend=dict(orientation="h", y=-0.35),
                         xaxis=dict(tickfont=dict(size=11)),
@@ -1858,7 +1859,7 @@ def render_macro_tab() -> None:
                             f"<div style='background:{_sc['bg']};border-left:4px solid {_sc['border']};" \
                             f"border-radius:0 10px 10px 0;padding:12px 16px;margin:6px 0'>"
                             f"<span style='font-size:16px'>{_sc['icon']}</span> "
-                            f"<b style='color:#e6edf3'>{_sc['title']}</b><br>"
+                            f"<b style='color:{GH_FG_PRIMARY}'>{_sc['title']}</b><br>"
                             f"<span style='color:#ccc;font-size:13px'>{_sc['body']}</span></div>",
                             unsafe_allow_html=True)
 
@@ -1904,7 +1905,7 @@ def render_macro_tab() -> None:
 
             if _radar and _radar_sum:
                 st.markdown(
-                    f"<div style='background:#0d1117;border:2px solid {_radar_sum['color']};"
+                    f"<div style='background:{GH_BG_PRIMARY};border:2px solid {_radar_sum['color']};"
                     f"border-radius:10px;padding:10px 16px;margin:6px 0'>"
                     f"<span style='color:{_radar_sum['color']};font-size:18px;font-weight:800'>"
                     f"整體狀態：{_radar_sum['level']}</span>"
@@ -1950,7 +1951,7 @@ def render_macro_tab() -> None:
                             )
                         with _col_r:
                             st.markdown(
-                                f"<div style='background:#0d1117;border:2px solid {_col_c_r};"
+                                f"<div style='background:{GH_BG_PRIMARY};border:2px solid {_col_c_r};"
                                 f"border-radius:10px;padding:10px 12px 6px;margin:4px 0;"
                                 f"min-height:165px;"
                                 f"display:flex;flex-direction:column;justify-content:space-between'>"
@@ -1962,7 +1963,7 @@ def render_macro_tab() -> None:
                                 f"<div style='color:#fff;font-weight:700;font-size:14px'>"
                                 f"值 {_val_txt_r}</div>"
                                 f"</div>"
-                                f"<div style='color:#aaa;font-size:9px;border-top:1px solid #30363d;"
+                                f"<div style='color:#aaa;font-size:9px;border-top:1px solid {GH_BORDER};"
                                 f"padding-top:4px;margin-top:4px;line-height:1.3'>{_note_r}"
                                 f"<br/><span style='color:#555'>{_label_r}</span>{_rec_chip_r}</div>"
                                 f"</div>", unsafe_allow_html=True)
@@ -2158,17 +2159,17 @@ def render_macro_tab() -> None:
                     mode="gauge+number",
                     value=val,
                     title={"text": title, "font": {"size": 13, "color": "#aaa"}},
-                    number={"suffix": suffix, "font": {"size": 22, "color": "#e6edf3"},
+                    number={"suffix": suffix, "font": {"size": 22, "color": GH_FG_PRIMARY},
                             "valueformat": ".2f"},
                     gauge={"axis": {"range": rng, "tickcolor": "#444",
                                     "tickfont": {"size": 9, "color": "#666"}},
                            "bar":  {"color": needle_c, "thickness": 0.25},
-                           "bgcolor": "#161b22",
-                           "bordercolor": "#30363d",
+                           "bgcolor": GH_BG_CARD,
+                           "bordercolor": GH_BORDER,
                            "steps": steps,
                            "threshold": {"line": {"color": MATERIAL_RED, "width": 3},
                                          "thickness": 0.8, "value": danger_lim}}))
-                f.update_layout(paper_bgcolor="#0e1117", font_color="#e6edf3",
+                f.update_layout(paper_bgcolor=STREAMLIT_BG, font_color=GH_FG_PRIMARY,
                                 height=200, margin=dict(t=40, b=5, l=15, r=15))
                 return f
 
@@ -2274,7 +2275,7 @@ def render_macro_tab() -> None:
                         _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a1500", MATERIAL_ORANGE
                         _tl_reason = f"小跌小買訊號 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f})"
                     elif not _pf_m:
-                        _tl_icon, _tl_bg, _tl_bc = "⬜", "#161b22", "#555"
+                        _tl_icon, _tl_bg, _tl_bc = "⬜", GH_BG_CARD, "#555"
                         _tl_reason = "資料尚未載入"
                     _tl_html += (
                         f"<div style='background:{_tl_bg};border:1px solid {_tl_bc};"
@@ -2290,7 +2291,7 @@ def render_macro_tab() -> None:
                 st.markdown(_tl_html, unsafe_allow_html=True)
             else:
                 st.markdown(
-                    "<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;"
+                    "<div style=f'background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:8px;"
                     "padding:10px 16px;color:#555;font-size:12px;text-align:center'>"
                     "🚦 持倉紅綠燈：請先至「📊 組合基金」Tab 新增並載入基金，即可在此顯示即時燈號</div>",
                     unsafe_allow_html=True)
@@ -2319,9 +2320,9 @@ def render_macro_tab() -> None:
             _l1_checks.append(f"本週核心原則：景氣「{ph}」，{(advice or '均衡配置，嚴守紀律')[:40]}。")
             _l1_md = "\n".join(f"- [ ] {c}" for c in _l1_checks)
             st.markdown(
-                f"<div style='background:#0d1117;border:1px solid #30363d;border-radius:12px;"
+                f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BORDER};border-radius:12px;"
                 f"padding:16px 20px;margin:8px 0'>"
-                f"<div style='color:#e6edf3;font-weight:700;margin-bottom:10px'>"
+                f"<div style='color:{GH_FG_PRIMARY};font-weight:700;margin-bottom:10px'>"
                 f"📋 本週操作清單（{_w_label2} {_w_icon2}）</div></div>",
                 unsafe_allow_html=True)
             st.markdown(_l1_md)
@@ -2364,7 +2365,7 @@ def render_macro_tab() -> None:
                                   else f"{_prev:+.2f}%"))
                     with _col:
                         st.markdown(
-                            f"<div style='background:#0d1117;border:2px solid {_col_c};"
+                            f"<div style='background:{GH_BG_PRIMARY};border:2px solid {_col_c};"
                             f"border-radius:12px;padding:14px 18px;margin:6px 0'>"
                             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;letter-spacing:1px'>"
                             f"{_title}</div>"
@@ -2376,7 +2377,7 @@ def render_macro_tab() -> None:
                             f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>前期</div>"
                             f"<div style='color:#aaa;font-weight:700;font-size:16px'>{_prev_txt}</div></div>"
                             f"</div>"
-                            f"<div style='color:#aaa;font-size:11px;border-top:1px solid #30363d;"
+                            f"<div style='color:#aaa;font-size:11px;border-top:1px solid {GH_BORDER};"
                             f"padding-top:6px;margin-top:4px'>{_note}</div>"
                             f"<div style='color:#555;font-size:10px;margin-top:4px'>{_label}</div>"
                             f"</div>", unsafe_allow_html=True)
@@ -2395,7 +2396,7 @@ def render_macro_tab() -> None:
                                 _apply_tp_thresholds(_spfig, _key)
                                 _spfig.update_layout(
                                     height=110, margin=dict(l=10, r=10, t=4, b=4),
-                                    plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
+                                    plot_bgcolor=GH_BG_PRIMARY, paper_bgcolor=GH_BG_PRIMARY,
                                     xaxis=dict(visible=False),
                                     yaxis=dict(showgrid=False, color="#555",
                                                tickfont=dict(size=9)),
@@ -2433,7 +2434,7 @@ def render_macro_tab() -> None:
                     _prev_txt = "—" if _prev is None else f"{_prev:+.2f}{_unit}"
                     with _col:
                         st.markdown(
-                            f"<div style='background:#0d1117;border:2px solid {_col_c};"
+                            f"<div style='background:{GH_BG_PRIMARY};border:2px solid {_col_c};"
                             f"border-radius:12px;padding:14px 18px;margin:6px 0'>"
                             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;letter-spacing:1px'>"
                             f"{_title}</div>"
@@ -2445,7 +2446,7 @@ def render_macro_tab() -> None:
                             f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>前期</div>"
                             f"<div style='color:#aaa;font-weight:700;font-size:16px'>{_prev_txt}</div></div>"
                             f"</div>"
-                            f"<div style='color:#aaa;font-size:11px;border-top:1px solid #30363d;"
+                            f"<div style='color:#aaa;font-size:11px;border-top:1px solid {GH_BORDER};"
                             f"padding-top:6px;margin-top:4px'>{_note}</div>"
                             f"<div style='color:#555;font-size:10px;margin-top:4px'>{_label}</div>"
                             f"</div>", unsafe_allow_html=True)
@@ -2463,7 +2464,7 @@ def render_macro_tab() -> None:
                                 _apply_tp_thresholds(_spfig, _key)
                                 _spfig.update_layout(
                                     height=110, margin=dict(l=10, r=10, t=4, b=4),
-                                    plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
+                                    plot_bgcolor=GH_BG_PRIMARY, paper_bgcolor=GH_BG_PRIMARY,
                                     xaxis=dict(visible=False),
                                     yaxis=dict(showgrid=False, color="#555",
                                                tickfont=dict(size=9)),
@@ -2588,8 +2589,8 @@ def render_macro_tab() -> None:
                                                 color=TRAFFIC_NEUTRAL)
                             _btfig.update_xaxes(gridcolor="#1a1f2e", color=TRAFFIC_NEUTRAL)
                             _btfig.update_layout(
-                                paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
-                                font_color="#e6edf3", height=360,
+                                paper_bgcolor=GH_BG_PRIMARY, plot_bgcolor=GH_BG_PRIMARY,
+                                font_color=GH_FG_PRIMARY, height=360,
                                 margin=dict(t=20, b=30, l=50, r=20),
                                 hovermode="x unified",
                                 showlegend=False,

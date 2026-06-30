@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -315,7 +315,7 @@ def _render_per_fund_news_expanders(funds: list) -> None:
                                f"style='color:#58a6ff;text-decoration:none'>{_ttl}</a>"
                                if _u else _ttl)
                         st.markdown(
-                            f"<div style='padding:4px 8px;background:#161b22;"
+                            f"<div style='padding:4px 8px;background:{GH_BG_CARD};"
                             f"border-radius:6px;margin:2px 0;font-size:12px'>"
                             f"<span style='color:#ffb74d;font-weight:700'>{_disp_nm}</span>　"
                             f"{_lh}<span style='color:#666;font-size:10px;"
@@ -429,7 +429,7 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
                            else MATERIAL_RED if "🔴" in _verdict
                            else MATERIAL_ORANGE)
                     st.markdown(
-                        f"<div style='background:#0d1117;border:2px solid {_vc};"
+                        f"<div style='background:{GH_BG_PRIMARY};border:2px solid {_vc};"
                         f"border-radius:10px;padding:10px 16px;margin:8px 0;"
                         f"font-size:13px;font-weight:700;color:{_vc}'>"
                         f"{_verdict}</div>",

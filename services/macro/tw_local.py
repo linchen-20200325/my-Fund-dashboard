@@ -32,7 +32,7 @@ from shared.signal_thresholds import (
     CPI_MOM_MILD_RISE_PCT,
 )
 # v19.252 Phase 4A:traffic light hex 從 SSOT 引入(原 inline #3fb950/#d29922/#f85149)
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
+from shared.colors import GH_FG_MUTED, TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW
 # F-GRAY-4 v19.179 PR-3:TW PMI 5 級評分 SSOT
 from shared.macro_thresholds_v2 import TW_PMI_THRESHOLDS as _TW_PMI_THR
 _TWPMI_STRONG = _TW_PMI_THR["tw_pmi_score"]["strong_above"]      # 55.0
@@ -231,7 +231,7 @@ def classify_long_term_regime(
         return {
             'regime': '⚪ 資料不足',
             'score': 0.0,
-            'color': '#8b949e',
+            'color': GH_FG_MUTED,
             'detail': '所有長期指標皆缺失，無法判讀',
             'suggest_pct': 'N/A',
             'components': components,
@@ -385,7 +385,7 @@ def classify_short_term_regime(
         return {
             'regime': '⚪ 資料不足',
             'score': 0.0,
-            'color': '#8b949e',
+            'color': GH_FG_MUTED,
             'detail': '所有短期指標皆缺失，無法判讀',
             'action': 'N/A',
             'components': components,

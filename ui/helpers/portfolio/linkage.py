@@ -12,7 +12,7 @@ from __future__ import annotations
 import streamlit as st
 
 from services.format_helpers import fmt_twd
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW
+from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, TRAFFIC_GREEN, TRAFFIC_YELLOW
 
 
 def _norm(s) -> str:
@@ -62,8 +62,8 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
         _border = TRAFFIC_YELLOW
 
     st.markdown(
-        f"<div style='background:#0d1117;border-left:4px solid {_border};"
+        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
-        f"color:#8b949e;line-height:1.6'>🔗 {_msg}</div>",
+        f"color:{GH_FG_MUTED};line-height:1.6'>🔗 {_msg}</div>",
         unsafe_allow_html=True,
     )

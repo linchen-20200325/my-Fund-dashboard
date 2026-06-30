@@ -19,7 +19,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_PRIMARY, GH_BORDER, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from infra.oauth import (
     OAuthError,
@@ -1847,7 +1847,7 @@ def render_t7_section() -> None:
 
                                 st.markdown(
                                     "<div style='height:1px;background:linear-gradient(90deg,"
-                                    "transparent,#30363d 30%,#30363d 70%,transparent);"
+                                    f"transparent,{GH_BORDER} 30%,{GH_BORDER} 70%,transparent);"
                                     "margin:14px 0'></div>",
                                     unsafe_allow_html=True,
                                 )
@@ -2674,10 +2674,10 @@ def render_t7_section() -> None:
                                      for f in _pf_t7 if f.get("loaded"))
                 _mk_n_scenarios = len(st.session_state.get("t7_scenarios", []) or [])
                 st.markdown(
-                    "<div style='background:#0d1117;border:1px solid #30363d;"
+                    "<div style=f'background:{GH_BG_PRIMARY};border:1px solid {GH_BORDER};"
                     "border-radius:6px;padding:8px 12px;margin:6px 0;font-size:12px'>"
                     "<span style='color:#69f0ae;font-weight:700'>🔍 分析範圍：</span>"
-                    f"<span style='color:#c9d1d9'>主帳本 <b>{_mk_n_funds} 檔</b>"
+                    f"<span style='color:{GH_FG_SECONDARY}'>主帳本 <b>{_mk_n_funds} 檔</b>"
                     f"，合計投入 <b>NT${_mk_total_inv:,}</b></span>"
                     + (f"<span style='color:#ff9800;margin-left:12px'>"
                        f"（A/B/C 暫存方案 {_mk_n_scenarios} 個 — <b>不</b>納入分析）"

@@ -16,7 +16,7 @@ import datetime as _dt
 import streamlit as st
 
 from shared.signal_thresholds import MJ_FRESH_DAYS_GREEN, MJ_FRESH_DAYS_YELLOW
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_MUTED, GH_FG_SECONDARY, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
 
 
 def nav_age_emoji(nav_date_str, today=None):
@@ -94,9 +94,9 @@ def render_mj_freshness_banner(items: list, title: str = "MoneyDJ 資料新鮮�
         f"🔴 {_stats['red']} ｜ ⬜ {_stats['unknown']}"
     )
     st.markdown(
-        f"<div style='background:#0d1117;border-left:4px solid #58a6ff;"
+        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid #58a6ff;"
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;"
-        f"font-size:11px;color:#8b949e;line-height:1.7'>"
+        f"font-size:11px;color:{GH_FG_MUTED};line-height:1.7'>"
         f"📊 <b>{title}</b>　{_summary}　"
         f"<span style='color:#666;font-size:10px'>"
         f"（hover chip 看完整時戳 ｜ 規則：🟢 ≤2d / 🟠 ≤7d / 🔴 >7d）</span><br/>"
@@ -196,8 +196,8 @@ def render_sidebar_data_health(session_state, now_tw=None) -> None:
     _body = "<br/>".join(_lines)
     _border = {"🔴": TRAFFIC_RED, "🟠": TRAFFIC_YELLOW, "🟢": TRAFFIC_GREEN, "⬜": "#444"}.get(_headline, "#444")
     st.markdown(
-        f"<div style='background:#0d1117;border-left:4px solid {_border};"
-        f"border-radius:4px;padding:6px 10px;font-size:11px;color:#8b949e;"
+        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
+        f"border-radius:4px;padding:6px 10px;font-size:11px;color:{GH_FG_MUTED};"
         f"line-height:1.7'>{_body}</div>",
         unsafe_allow_html=True,
     )
@@ -237,8 +237,8 @@ def _render_data_health_ai(session_state, lines) -> None:
     _resp = session_state.get(_AI_KEY)
     if _resp:
         st.markdown(
-            f"<div style='background:#161b22;border:1px solid #30363d;"
+            f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
             f"border-radius:6px;padding:8px 10px;margin-top:4px;font-size:11px;"
-            f"color:#c9d1d9;line-height:1.6'>🤖 {_resp}</div>",
+            f"color:{GH_FG_SECONDARY};line-height:1.6'>🤖 {_resp}</div>",
             unsafe_allow_html=True,
         )

@@ -16,7 +16,7 @@ import math
 import pandas as pd
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 # v19.245 R13:`dividend_safety` 已於 v19.150 由 SSOT `check_eating_principal_1y_mk`
 # 取代(下方 _compute_fund_health_kpis line 166 動態 import),原 `div_safety_check`
@@ -228,12 +228,12 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
     _adr = k["adr"]
     _tr1y = k["ret_1y"]
     if _adr is None:
-        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, "#161b22"
+        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
         _kpi_title = "吃本金檢查 — ⬜ 不適用"
         _kpi_msg = "本基金無年化配息率資料（可能為累積型 / 不配息基金）"
         _kpi_cov_txt = "—"
     elif _tr1y is None or _ds is None:
-        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, "#161b22"
+        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
         _kpi_title = "吃本金檢查 — ⬜ 資料不足"
         _kpi_msg = "缺含息總報酬（1Y），無法計算 Coverage"
         _kpi_cov_txt = "—"
@@ -242,7 +242,7 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
         _kpi_color = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
                       "green": MATERIAL_GREEN}.get(_al, TRAFFIC_NEUTRAL)
         _kpi_bg = {"red": "#2a0a0a", "yellow": "#2a1f00",
-                   "green": "#0a1a0a"}.get(_al, "#161b22")
+                   "green": "#0a1a0a"}.get(_al, GH_BG_CARD)
         _kpi_icon = {"red": "🔴", "yellow": "🟡", "green": "🟢"}.get(_al, "⬜")
         _kpi_title = f"吃本金檢查 — {_kpi_icon} {_ds.get('status', '')}"
         _kpi_msg = _ds.get("message", "")
@@ -260,7 +260,7 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
     st.markdown(
         f"<div style='background:{_kpi_bg};border:2px solid {_kpi_color};"
         f"border-radius:12px;padding:10px 14px;margin:8px 0'>"
-        f"<div style='color:#e6edf3;font-weight:800;font-size:13px;margin-bottom:4px'>"
+        f"<div style='color:{GH_FG_PRIMARY};font-weight:800;font-size:13px;margin-bottom:4px'>"
         f"💊 {_name} <span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code}</span></div>"
         f"<div style='color:{_kpi_color};font-size:12px;font-weight:700;margin-bottom:8px'>"
         f"{_kpi_title}</div>"
@@ -299,7 +299,7 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
             _ter_c, _avg_html = TRAFFIC_NEUTRAL, ""
         _ter_lbl = f" — {_tcat[:12]}" if _tcat else ""
         st.markdown(
-            f"<div style='background:#161b22;border:1px solid #30363d;"
+            f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
             f"border-radius:10px;padding:8px 14px;margin:4px 0 12px 0'>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>💰 TER 費用率分析{_ter_lbl}</div>"
             f"<div style='display:flex;gap:18px;flex-wrap:wrap'>"

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -241,8 +241,8 @@ def _render_bollinger_expanders(funds: list) -> None:
                                       annotation_position="top right")
 
                 fig.update_layout(
-                    paper_bgcolor="#0e1117", plot_bgcolor="#161b22",
-                    font_color="#e6edf3", height=360,
+                    paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                    font_color=GH_FG_PRIMARY, height=360,
                     margin=dict(t=20, b=20, l=40, r=20),
                     legend=dict(orientation="h", font_size=10, y=1.08),
                     hovermode="x unified",

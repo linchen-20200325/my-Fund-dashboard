@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_PRIMARY, GH_BORDER, GH_FG_MUTED, GH_FG_SECONDARY, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
 
 
 # 狀態白話解讀（針對基金 user 加上「境外基金影響」面）
@@ -155,11 +155,11 @@ def render_hot_money_section(token: str = "",
     _hcols = st.columns([5, 1])
     with _hcols[0]:
         st.markdown(
-            f'<div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;'
+            f'<div style="background:{GH_BG_PRIMARY};border:1px solid {GH_BORDER};border-radius:8px;'
             f'padding:8px 14px;margin:4px 0 10px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12px;">'
-            f'<span style="color:#8b949e;">📅 資料截止 <b style="color:{_hm_color};">{_hm_cutoff}（{_hm_age_txt}）</b></span>'
-            f'<span style="color:#8b949e;">🕐 本次載入 <b style="color:#c9d1d9;">{_hm_load_txt} TW</b></span>'
-            f'<span style="color:#8b949e;">📡 來源 <b style="color:#c9d1d9;">FinMind 外資（快取 30min）/ yfinance USDTWD（快取 10min）</b></span>'
+            f'<span style="color:{GH_FG_MUTED};">📅 資料截止 <b style="color:{_hm_color};">{_hm_cutoff}（{_hm_age_txt}）</b></span>'
+            f'<span style="color:{GH_FG_MUTED};">🕐 本次載入 <b style="color:{GH_FG_SECONDARY};">{_hm_load_txt} TW</b></span>'
+            f'<span style="color:{GH_FG_MUTED};">📡 來源 <b style="color:{GH_FG_SECONDARY};">FinMind 外資（快取 30min）/ yfinance USDTWD（快取 10min）</b></span>'
             f'</div>', unsafe_allow_html=True)
     with _hcols[1]:
         if st.button("🔄 強制重抓", key=f"{key_prefix}_force_refresh",

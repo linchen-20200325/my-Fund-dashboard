@@ -18,7 +18,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from shared.colors import MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 # F-GRAY-4 v19.179 PR-3:PMI 教學 markdown SSOT(per Q3「全遷,markdown 也用 f-string 插值」)
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_TEXTBOOK = _PMI_THR_V2["stoplight"]["green_above"]  # 50.0 = 教科書枯榮線(字面分界)
@@ -550,11 +550,11 @@ def render_manual_tab() -> None:
         ]
 
         _dm_th = (f"font-size:10px;color:{TRAFFIC_NEUTRAL};font-weight:700;padding:8px 10px;"
-                  "border-bottom:1px solid #30363d")
+                  f"border-bottom:1px solid {GH_BORDER}")
         _dm_td = "font-size:11px;padding:8px 10px;line-height:1.4"
         _dm_html = (
             f"<div style='display:grid;grid-template-columns:1.5fr 1.2fr 2.5fr 1.5fr 2.3fr;"
-            f"background:#0d1117;border-radius:6px 6px 0 0'>"
+            f"background:{GH_BG_PRIMARY};border-radius:6px 6px 0 0'>"
             f"<span style='{_dm_th}'>資料項目</span>"
             f"<span style='{_dm_th}'>用在 Tab</span>"
             f"<span style='{_dm_th}'>來源 / endpoint</span>"
@@ -565,8 +565,8 @@ def render_manual_tab() -> None:
         for _item, _tab, _src, _ref, _fb in _data_map:
             _dm_html += (
                 f"<div style='display:grid;grid-template-columns:1.5fr 1.2fr 2.5fr 1.5fr 2.3fr;"
-                f"background:#0d1117;border-bottom:1px solid #21262d'>"
-                f"<span style='{_dm_td};color:#e6edf3;font-weight:600'>{_item}</span>"
+                f"background:{GH_BG_PRIMARY};border-bottom:1px solid {GH_BG_HOVER}'>"
+                f"<span style='{_dm_td};color:{GH_FG_PRIMARY};font-weight:600'>{_item}</span>"
                 f"<span style='{_dm_td};color:#79c0ff'>{_tab}</span>"
                 f"<span style='{_dm_td};color:#bbb;font-family:monospace;font-size:10px'>{_src}</span>"
                 f"<span style='{_dm_td};color:{TRAFFIC_NEUTRAL}'>{_ref}</span>"
@@ -574,7 +574,7 @@ def render_manual_tab() -> None:
                 f"</div>"
             )
         st.markdown(
-            f"<div style='border:1px solid #30363d;border-radius:6px;overflow:hidden'>"
+            f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
             f"{_dm_html}</div>", unsafe_allow_html=True,
         )
         st.caption(
@@ -1313,16 +1313,16 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
                                 annotation_position="top left",
                                 annotation_font={"size": 9, "color": MATERIAL_RED})
                         _l2fig.update_layout(
-                            paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
-                            font_color="#e6edf3", height=320,
+                            paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
+                            font_color=GH_FG_PRIMARY, height=320,
                             margin=dict(t=30, b=20, l=50, r=50),
                             legend=dict(orientation="h", y=-0.15, font={"size": 10}),
                             hovermode="x unified")
                         _l2fig.update_yaxes(title_text="薩姆規則 (pp)",
-                                            gridcolor="#21262d", secondary_y=False)
+                                            gridcolor=GH_BG_HOVER, secondary_y=False)
                         _l2fig.update_yaxes(title_text="SLOOS (%)",
-                                            gridcolor="#21262d", secondary_y=True)
-                        _l2fig.update_xaxes(gridcolor="#21262d")
+                                            gridcolor=GH_BG_HOVER, secondary_y=True)
+                        _l2fig.update_xaxes(gridcolor=GH_BG_HOVER)
                         st.plotly_chart(_l2fig, use_container_width=True)
                         st.caption("🔴 紅色陰影 = 歷史衰退/危機區間，藍線 = 薩姆規則，橘虛線 = SLOOS 銀行放貸標準")
                 except Exception as _e_c:
