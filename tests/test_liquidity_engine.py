@@ -64,7 +64,11 @@ def _yf(ticker, range_="2y", interval="1d"):
 
 def _stable():
     rng = np.linspace(0, 1, 300)
-    return pd.Series(150e9 * (1 + 0.2 * rng), index=_dates(300), name="stablecoin_mcap")
+    s = pd.Series(150e9 * (1 + 0.2 * rng), index=_dates(300), name="stablecoin_mcap")
+    # v19.267 D8 #6 F-SCHEMA-1:mock 需注入 attrs 才能過 validate_defillama_series
+    s.attrs["source"] = "DefiLlama:stablecoincharts:total_circulating"
+    s.attrs["fetched_at"] = "2026-06-30T10:00:00+00:00"
+    return s
 
 
 _REQUIRED_KEYS = {"name", "value", "prev", "unit", "type", "desc",

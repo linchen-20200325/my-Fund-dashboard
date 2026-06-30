@@ -19,6 +19,8 @@ CLAUDE.md §3.1 / SPEC §18 — DataFrame 邊界契約集中宣告。
 - `validate_yf_close(s) -> s`:wrapper(同時驗 attrs.source / attrs.fetched_at)
 - `validate_stooq_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'stooq:' source prefix)v19.265 D7
 - `validate_cboe_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'CBOE:' source prefix)v19.265 D7
+- `validate_defillama_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'DefiLlama:' source prefix)v19.267 D8 #6
+- `validate_aaii_sentiment(d) -> d`:dict wrapper(success path 驗 spread+bull+bear+source / fail path 驗 _err)v19.267 D8 #5
 - `FundNavSchema`:repositories.fund_repository.fetch_nav 等多 fetcher 共用 NAV 序列 schema
 - `validate_fund_nav(s) -> s`:wrapper(NAV-specific:>0 / 多源 source prefix 允許清單)
 - `FundDividendSchema`:repositories.fund_repository.fetch_div 配息序列 schema(DataFrame 內部表示)
@@ -265,6 +267,114 @@ def validate_cboe_series(s: Any) -> Any:
             f"實際 = {fetched_at!r}"
         )
     return s
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.267 D8 #6 — F-SCHEMA-1:DefiLlama stablecoin mcap Series 出口契約
+# ════════════════════════════════════════════════════════════════
+# 依據(repositories/macro/alternate.py:33-68):
+#   fetch_defillama_stablecoin_mcap → pd.Series[datetime → float > 0]
+#   attrs.source = "DefiLlama:stablecoincharts:total_circulating"
+#   attrs.fetched_at = UTC ISO 字串
+# 結構同 YahooCloseSchema → 共用,僅 source prefix 不同。
+
+
+def validate_defillama_series(s: Any) -> Any:
+    """fetch_defillama_stablecoin_mcap 出口 schema validation(v19.267 D8 #6)。
+
+    驗 3 件事:
+    1. Series values:float64, > 0, no NaN(共用 YahooCloseSchema 結構契約)
+    2. Series index:datetime64[ns], monotonic, unique
+    3. Series attrs:`source` 以 'DefiLlama:' 開頭;`fetched_at` 含 'T'
+
+    對空 Series 直接 pass(fetch 失敗合法,L2 caller 自處理)。
+    """
+    if s is None or len(s) == 0:
+        return s
+    YahooCloseSchema.validate(s, lazy=False)
+    src = s.attrs.get("source", "")
+    if not src.startswith("DefiLlama:"):
+        raise ValueError(
+            f"validate_defillama_series: attrs.source 必須以 'DefiLlama:' 開頭(F-PROV-1),"
+            f"實際 = {src!r}"
+        )
+    fetched_at = s.attrs.get("fetched_at", "")
+    if "T" not in fetched_at:
+        raise ValueError(
+            f"validate_defillama_series: attrs.fetched_at 必須是 ISO 8601 字串(含 'T'),"
+            f"實際 = {fetched_at!r}"
+        )
+    return s
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.267 D8 #5 — F-SCHEMA-1:AAII sentiment dict 出口契約
+# ════════════════════════════════════════════════════════════════
+# 依據(repositories/macro/alternate.py:106-155):
+#   success: {value:float, unit:'%', bull:float[0,100], bear:float[0,100],
+#             date:str, url_used:str, source:'AAII:...', fetched_at:ISO}
+#   failure: {_err:str, source:'AAII:...', fetched_at:ISO}
+# dict 簡單 record,不用 pandera DataFrameSchema,純 Python 鍵驗證。
+
+
+def validate_aaii_sentiment(d: Any) -> Any:
+    """fetch_aaii_sentiment 出口 schema validation(v19.267 D8 #5)。
+
+    驗 schema 分兩條 path:
+    - 失敗(含 _err):驗 _err 為字串 + source/fetched_at 符規
+    - 成功:驗 value(spread)/bull/bear 為 float;bull/bear ∈ [0,100];
+            unit == '%';source 以 'AAII:' 開頭;fetched_at 含 'T'
+
+    None / 空 dict 直接 pass(L2 caller 自處理 missing 狀態)。
+    """
+    if d is None or not isinstance(d, dict) or not d:
+        return d
+
+    # 共用 provenance 檢查(成功 + 失敗 path 共有)
+    src = d.get("source", "")
+    if not src.startswith("AAII:"):
+        raise ValueError(
+            f"validate_aaii_sentiment: source 必須以 'AAII:' 開頭(F-PROV-1),"
+            f"實際 = {src!r}"
+        )
+    fetched_at = d.get("fetched_at", "")
+    if "T" not in fetched_at:
+        raise ValueError(
+            f"validate_aaii_sentiment: fetched_at 必須 ISO 8601 字串(含 'T'),"
+            f"實際 = {fetched_at!r}"
+        )
+
+    # 失敗 path:_err 為字串
+    if "_err" in d:
+        if not isinstance(d["_err"], str):
+            raise ValueError(
+                f"validate_aaii_sentiment: _err 必須是字串(fail-loud trace),"
+                f"實際型別 = {type(d['_err']).__name__}"
+            )
+        return d
+
+    # 成功 path:驗 spread / bull / bear / unit
+    if "value" not in d or "bull" not in d or "bear" not in d:
+        raise ValueError(
+            f"validate_aaii_sentiment: 成功 path 必有 value/bull/bear,實際 keys = {sorted(d.keys())}"
+        )
+    for k in ("value", "bull", "bear"):
+        v = d[k]
+        if not isinstance(v, (int, float)):
+            raise ValueError(
+                f"validate_aaii_sentiment: {k} 須為數值,實際 = {v!r} ({type(v).__name__})"
+            )
+    bull, bear = float(d["bull"]), float(d["bear"])
+    if not (0 <= bull <= 100):
+        raise ValueError(f"validate_aaii_sentiment: bull={bull} 越界 [0,100]")
+    if not (0 <= bear <= 100):
+        raise ValueError(f"validate_aaii_sentiment: bear={bear} 越界 [0,100]")
+    unit = d.get("unit", "")
+    if unit != "%":
+        raise ValueError(
+            f"validate_aaii_sentiment: unit 必為 '%'(spread 百分點),實際 = {unit!r}"
+        )
+    return d
 
 
 # ════════════════════════════════════════════════════════════════
