@@ -31,9 +31,11 @@ from shared.colors import (
     BG_DARK_AMBER_3,
     BG_DARK_GREEN_2,
     BG_DARK_GREEN_3,
+    BG_DARK_GREEN_GAUGE,
     BG_DARK_NAVY_4,
     BG_DARK_RED_1,
     BG_DARK_RED_2,
+    BG_DARK_PURPLE_1,
     BG_DARK_RED_3,
     GH_BG_CARD,
     GH_BG_PRIMARY,
@@ -128,7 +130,7 @@ def render_inflection_alert_section(
     with _gg1:
         st.plotly_chart(_make_gauge(
             _sahm_v, "薩姆規則<br>衰退機率", "pp", [0, 1.0],
-            [(0.3, "#0a2a0a"), (0.5, BG_DARK_AMBER_1), (1.0, BG_DARK_RED_1)],
+            [(0.3, BG_DARK_GREEN_GAUGE), (0.5, BG_DARK_AMBER_1), (1.0, BG_DARK_RED_1)],
             danger_above=True), use_container_width=True)
         _sahm_sig = ("🔴 **衰退觸發** ≥0.5" if _sahm_v >= 0.5
                      else "🟡 警戒區 ≥0.3" if _sahm_v >= 0.3
@@ -144,7 +146,7 @@ def render_inflection_alert_section(
     with _gg2:
         st.plotly_chart(_make_gauge(
             _sloos_v, "SLOOS 放貸寬鬆度<br>銀行信貸標準", "%", [-30, 60],
-            [(-5, "#0a2a0a"), (20, BG_DARK_AMBER_1), (60, BG_DARK_RED_1)],
+            [(-5, BG_DARK_GREEN_GAUGE), (20, BG_DARK_AMBER_1), (60, BG_DARK_RED_1)],
             danger_above=True), use_container_width=True)
         _sloos_sig = ("🔴 **銀行緊縮** >20%" if _sloos_v > 20
                       else "🟡 中性偏緊 >0%" if _sloos_v > 0
@@ -161,7 +163,7 @@ def render_inflection_alert_section(
         # ADL = RSP/SPY 市場寬度 (% MoM change, negative = narrowing breadth = bad)
         st.plotly_chart(_make_gauge(
             _adl_v, "市場健康度<br>RSP/SPY 廣度", "%", [-10, 10],
-            [(-5, BG_DARK_RED_1), (0, BG_DARK_AMBER_1), (5, "#0a2a0a")],
+            [(-5, BG_DARK_RED_1), (0, BG_DARK_AMBER_1), (5, BG_DARK_GREEN_GAUGE)],
             danger_above=False), use_container_width=True)
         _adl_sig = ("🟢 市場廣度健康" if _adl_v > 2
                     else "🔴 **廣度收窄** 虛假繁榮" if _adl_v < -2
@@ -221,7 +223,7 @@ def render_inflection_alert_section(
                 _tl_icon, _tl_bg, _tl_bc = "🔔🔔", BG_DARK_RED_3, MATERIAL_RED
                 _tl_reason = f"σ+布林雙確認賣 NAV {_pf_nav:.4f} ≥ 賣1({_pf_s1:.4f}) & 布林上軌"
             elif _pf_b3 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b3:
-                _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a0a2a", MD_PURPLE_500
+                _tl_icon, _tl_bg, _tl_bc = "🟡", BG_DARK_PURPLE_1, MD_PURPLE_500
                 _tl_reason = f"大跌大買訊號 NAV {_pf_nav:.4f} ≤ 買3({_pf_b3:.4f})"
             elif _pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1:
                 _tl_icon, _tl_bg, _tl_bc = "🟡", BG_DARK_AMBER_3, MATERIAL_ORANGE
