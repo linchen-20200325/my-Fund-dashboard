@@ -12,7 +12,7 @@ from __future__ import annotations
 import streamlit as st
 
 from services.format_helpers import fmt_twd
-from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GRAY_66, TRAFFIC_GREEN, TRAFFIC_YELLOW
+from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GRAY_66, INFO_BLUE, TRAFFIC_GREEN, TRAFFIC_YELLOW
 
 
 def _norm(s) -> str:
@@ -50,7 +50,7 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
         _tag = "核心(穩健)" if _matched.get("is_core") else "衛星(積極)"
         if _total > 0 and _amt > 0:
             _w = _amt / _total * 100.0
-            _msg = (f"✅ <b>此基金已在你的組合</b>：權重 <b style='color:#58a6ff'>"
+            _msg = (f"✅ <b>此基金已在你的組合</b>：權重 <b style='color:{INFO_BLUE}'>"
                     f"{_w:.1f}%</b>（{fmt_twd(_amt)}）｜定位 {_tag}")
         else:
             _msg = (f"✅ <b>此基金已在你的組合</b>（共 {_n} 檔）｜定位 {_tag}"

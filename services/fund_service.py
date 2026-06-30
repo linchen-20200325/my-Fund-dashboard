@@ -21,7 +21,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 
-from shared.colors import GRAY_55, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL
+from shared.colors import GRAY_55, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL, WARN_AMBER
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     TRADING_DAYS_PER_YEAR,
     NEAR_DIVIDEND_WARNING_PCT,
@@ -353,7 +353,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     elif now <= b1:    pos_l, pos_c = "小跌小買 ✅ (投 20%)", MD_GREEN_A200
     elif now >= sell3: pos_l, pos_c = "大漲停利 🔔 (出 50%)", MATERIAL_RED
     elif now >= sell2: pos_l, pos_c = "急漲停利 ⚠️ (出 30%)", MD_DEEP_ORANGE_400
-    elif now >= sell1: pos_l, pos_c = "小漲停利 💰 (出 20%)", "#ffa726"
+    elif now >= sell1: pos_l, pos_c = "小漲停利 💰 (出 20%)", WARN_AMBER
     else:              pos_l, pos_c = "正常波動區",            TRAFFIC_NEUTRAL
 
     # ── 布林通道（20日 Rolling Band，作為時間序列輸出）──

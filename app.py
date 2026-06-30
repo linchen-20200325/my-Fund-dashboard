@@ -20,7 +20,7 @@ TW_TZ = datetime.timezone(datetime.timedelta(hours=8))
 def _now_tw():
     return datetime.datetime.now(TW_TZ)
 
-from shared.colors import GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_RED
+from shared.colors import GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, INFO_BLUE, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_RED
 from services.macro import (
     ENGINE_VERSION,
 )
@@ -74,7 +74,7 @@ body,.stApp{{background:{STREAMLIT_BG};color:{GH_FG_PRIMARY}}}
 .card{{background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:10px;padding:14px 18px;margin:6px 0}}
 .signal-buy{{background:#1c3a2a;color:{TRAFFIC_GREEN};border:1px solid {TRAFFIC_GREEN};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
 .signal-sell{{background:#3a1010;color:{TRAFFIC_RED};border:1px solid {TRAFFIC_RED};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
-.signal-hold{{background:#1a3450;color:#58a6ff;border:1px solid #58a6ff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
+.signal-hold{{background:#1a3450;color:{INFO_BLUE};border:1px solid {INFO_BLUE};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
 .signal-switch{{background:#3a2a10;color:#f0b132;border:1px solid #f0b132;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
 </style>""", unsafe_allow_html=True)
 

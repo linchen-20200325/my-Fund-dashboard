@@ -32,7 +32,7 @@ from shared.signal_thresholds import (
     CPI_MOM_MILD_RISE_PCT,
 )
 # v19.252 Phase 4A:traffic light hex 從 SSOT 引入(原 inline #3fb950/#d29922/#f85149)
-from shared.colors import GH_FG_MUTED, TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW
+from shared.colors import GH_FG_MUTED, INFO_BLUE, TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW
 # F-GRAY-4 v19.179 PR-3:TW PMI 5 級評分 SSOT
 from shared.macro_thresholds_v2 import TW_PMI_THRESHOLDS as _TW_PMI_THR
 _TWPMI_STRONG = _TW_PMI_THR["tw_pmi_score"]["strong_above"]      # 55.0
@@ -243,7 +243,7 @@ def classify_long_term_regime(
         regime, color, suggest = '🟢 成長期', TRAFFIC_GREEN, '80%+'
         detail = '景氣擴張+通膨溫和+資金寬鬆 → 多頭主升段，可積極做多'
     elif score >= 0.0:
-        regime, color, suggest = '🔵 復甦期', '#58a6ff', '60-80%'
+        regime, color, suggest = '🔵 復甦期', INFO_BLUE, '60-80%'
         detail = '景氣由谷底回升 → 加碼基本面好的標的，留意通膨變化'
     elif score >= -1.0:
         regime, color, suggest = '🟡 過熱/震盪期', TRAFFIC_YELLOW, '40-60%'

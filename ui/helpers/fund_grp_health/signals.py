@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, STREAMLIT_BG
+from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, STREAMLIT_BG, WARN_AMBER
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -230,7 +230,7 @@ def _render_bollinger_expanders(funds: list) -> None:
                                       annotation_font_color=_bc,
                                       annotation_position="bottom right")
                 for _sv, _sl, _sc in [
-                    (_safe_num(_m.get("sell1")), "賣1 (年低+1σ)", "#ffa726"),
+                    (_safe_num(_m.get("sell1")), "賣1 (年低+1σ)", WARN_AMBER),
                     (_safe_num(_m.get("sell2")), "賣2 (年低+2σ)", MD_DEEP_ORANGE_400),
                     (_safe_num(_m.get("sell3")), "賣3 (年低+3σ)", MATERIAL_RED),
                 ]:

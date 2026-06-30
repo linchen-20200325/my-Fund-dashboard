@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL, WHITE
+from shared.colors import BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, CAUTION_YELLOW, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL, WARN_AMBER, WHITE
 
 from infra.oauth import (
     OAuthError,
@@ -137,7 +137,7 @@ def render_portfolio_tab() -> None:
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
             f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
-            "<span style=f'color:{MD_BLUE_300};font-size:15px;font-weight:900'>📊 組合健康儀表</span>"
+            f"<span style='color:{MD_BLUE_300};font-size:15px;font-weight:900'>📊 組合健康儀表</span>"
             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.163 6 指標一覽</span>"
             "</div>",
             unsafe_allow_html=True)
@@ -148,7 +148,7 @@ def render_portfolio_tab() -> None:
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
             f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
-            "<span style=f'color:{MD_BLUE_300};font-size:15px;font-weight:900'>🎯 策略3 智能戰情室</span>"
+            f"<span style='color:{MD_BLUE_300};font-size:15px;font-weight:900'>🎯 策略3 智能戰情室</span>"
             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.9 新手戰情中心</span>"
             "</div>",
             unsafe_allow_html=True)
@@ -1207,7 +1207,7 @@ def render_portfolio_tab() -> None:
                             "dividend_info": _div_e,
                         })
                     _p_rec = recommend_policy(_funds_enriched, target_core_pct=_policy_target)
-                    _rec_clr = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
+                    _rec_clr = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
                                 "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}.get(_p_rec["color"], TRAFFIC_NEUTRAL)
                     with _dn_p_msg:
                         st.markdown(
@@ -1271,7 +1271,7 @@ def render_portfolio_tab() -> None:
                     _sig_str = f"{_sig_rnk:+.2f}σ" if isinstance(_sig_rnk, (int, float)) else "—"
                     _div_alert = (_div_info or {}).get("alert_level", "grey")
                     _div_icon  = {"red": "🔴", "yellow": "🟡", "green": "🟢", "grey": "⚪"}.get(_div_alert, "⚪")
-                    _adv_clr   = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
+                    _adv_clr   = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
                                   "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}.get(_advice["color"], TRAFFIC_NEUTRAL)
                     _inv_amt   = _f.get("invest_twd", 0) or 0
 
@@ -1352,13 +1352,13 @@ def render_portfolio_tab() -> None:
             f"<div style='background:{BG_DARK_NAVY_1};border:1px dashed {MD_BLUE_300};border-radius:8px;"
             f"padding:6px 14px;margin:4px 0 10px;font-size:12px;color:{GRAY_AA};"
             "display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-            "<span style=f'color:{MD_BLUE_300};font-weight:700'>👋 三步驟：</span>"
-            "<span><b style=f'color:{WHITE}'>1️⃣ 貼代碼</b></span>"
-            "<span style=f'color:{GRAY_55}'>→</span>"
-            "<span><b style=f'color:{WHITE}'>2️⃣ 批次加入</b></span>"
-            "<span style=f'color:{GRAY_55}'>→</span>"
-            "<span><b style=f'color:{WHITE}'>3️⃣ 看 KPI / T5 / T7</b></span>"
-            "<span style=f'margin-left:auto;color:{GRAY_66};font-size:10px'>"
+            f"<span style='color:{MD_BLUE_300};font-weight:700'>👋 三步驟：</span>"
+            f"<span><b style='color:{WHITE}'>1️⃣ 貼代碼</b></span>"
+            f"<span style='color:{GRAY_55}'>→</span>"
+            f"<span><b style='color:{WHITE}'>2️⃣ 批次加入</b></span>"
+            f"<span style='color:{GRAY_55}'>→</span>"
+            f"<span><b style='color:{WHITE}'>3️⃣ 看 KPI / T5 / T7</b></span>"
+            f"<span style='margin-left:auto;color:{GRAY_66};font-size:10px'>"
             "💡 AI 分析按鈕觸發，不自動扣 API</span>"
             "</div>", unsafe_allow_html=True)
 
@@ -1934,7 +1934,7 @@ def render_portfolio_tab() -> None:
                     if _can_detail:
                         _adv_card = _compute_advice_for(pf_item)
                         _adv_clr_card = {
-                            "red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": "#ffeb3b",
+                            "red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
                             "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL
                         }.get(_adv_card.get("color", "grey"), TRAFFIC_NEUTRAL)
                         st.markdown(
@@ -1960,20 +1960,20 @@ def render_portfolio_tab() -> None:
                                     d = (_mi_nav - target) / target * 100
                                     if is_buy:
                                         if d <= 0:           return ("🟢", MD_GREEN_A400)
-                                        elif d <= _mi_NEAR:  return ("⚠️", "#ffa726")
+                                        elif d <= _mi_NEAR:  return ("⚠️", WARN_AMBER)
                                         else:                return ("▲",  GRAY_55)
                                     else:
                                         if d >= 0:           return ("🔔", MATERIAL_RED)
-                                        elif d >= -_mi_NEAR: return ("⚠️", "#ffa726")
+                                        elif d >= -_mi_NEAR: return ("⚠️", WARN_AMBER)
                                         else:                return ("▼",  GRAY_55)
                                 # 雙確認：σ 觸發 + 布林同向
                                 _double_buy  = (_mi_b1 and _mi_nav <= _mi_b1) and (_mi_bbd and _mi_nav <= _mi_bbd)
                                 _double_sell = (_mi_s1 and _mi_nav >= _mi_s1) and (_mi_bbu and _mi_nav >= _mi_bbu)
                                 _badge = ""
                                 if _double_buy:
-                                    _badge = "<span style=f'background:#0a3a1a;color:{MD_GREEN_A400};border:1px solid {MD_GREEN_A400};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🟢🟢 σ+布林 雙確認買</span>"
+                                    _badge = f"<span style='background:#0a3a1a;color:{MD_GREEN_A400};border:1px solid {MD_GREEN_A400};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🟢🟢 σ+布林 雙確認買</span>"
                                 elif _double_sell:
-                                    _badge = "<span style=f'background:#3a0a0a;color:{MATERIAL_RED};border:1px solid {MATERIAL_RED};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🔔🔔 σ+布林 雙確認賣</span>"
+                                    _badge = f"<span style='background:#3a0a0a;color:{MATERIAL_RED};border:1px solid {MATERIAL_RED};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🔔🔔 σ+布林 雙確認賣</span>"
                                 # 6 個訊號方塊（從深買到深賣）
                                 _cells = ""
                                 for _v, _lbl, _is_buy in [

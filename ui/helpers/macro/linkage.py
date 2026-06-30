@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, GRAY_AA, MD_BLUE_300, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
+from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, GRAY_AA, INFO_BLUE, MD_BLUE_300, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
 
 
 def render_macro_exposure_link(session_state, core_pct=None) -> None:
@@ -36,7 +36,7 @@ def render_macro_exposure_link(session_state, core_pct=None) -> None:
 
     _ph = str(_phase.get("phase", "?"))
     _score = _phase.get("score")
-    _color = str(_phase.get("phase_color", "#58a6ff") or "#58a6ff")
+    _color = str(_phase.get("phase_color", INFO_BLUE) or INFO_BLUE)
     _alloc = _phase.get("alloc") or {}
     _advice = str(_phase.get("advice", "") or "")
     _arrow = str(_phase.get("trend_arrow", "") or "")

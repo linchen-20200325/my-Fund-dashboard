@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from shared.colors import GRAY_66, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+from shared.colors import CAUTION_YELLOW, GRAY_66, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 
 from services.macro._helpers import (  # noqa: F401
     _trend, _safe_last, recession_probability,
@@ -85,7 +85,7 @@ def calc_sub_cycle_lights(indicators: dict) -> list[dict]:
         if z_avg < -1.0:
             signal, color, verdict = "🟢", "#4caf50", "健康"
         elif z_avg < 0:
-            signal, color, verdict = "🟡", "#ffeb3b", "中性偏好"
+            signal, color, verdict = "🟡", CAUTION_YELLOW, "中性偏好"
         elif z_avg < 1.0:
             signal, color, verdict = "🟠", MATERIAL_ORANGE, "中性偏弱"
         else:
@@ -169,7 +169,7 @@ def build_macro_sankey_data(indicators: dict) -> dict:
         if z_norm < -1.0:
             return "#4caf50"   # 🟢
         if z_norm < 0:
-            return "#ffeb3b"   # 🟡
+            return CAUTION_YELLOW   # 🟡
         if z_norm < 1.0:
             return MATERIAL_ORANGE   # 🟠
         return MATERIAL_RED       # 🔴

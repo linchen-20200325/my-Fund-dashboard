@@ -57,6 +57,11 @@ MD_AMBER_300: str = "#ffd54f"      # Material Amber 300
 MD_ORANGE_300: str = "#ffb74d"     # Material Orange 300
 MD_PURPLE_500: str = "#9c27b0"     # Material Purple 500
 
+# v19.259 Item 2 long-tail 高頻收口(各 ≥8 處跨多檔)
+INFO_BLUE: str = "#58a6ff"         # GitHub-style info blue(hold signal / link / border,17 處)
+WARN_AMBER: str = "#ffa726"        # 賣訊號 amber(sell1 / 接近警示,8 處)
+CAUTION_YELLOW: str = "#ffeb3b"    # C 評等 / 中性偏好 caution(8 處)
+
 # v19.257 Phase 4-B3: 灰調漸層 SSOT(short hex,by intensity 命名避免 false semantic 分群)
 GRAY_44: str = "#444"              # very dark gray
 GRAY_55: str = "#555"              # dark gray

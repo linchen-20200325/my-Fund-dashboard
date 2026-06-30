@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WHITE
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 
 from repositories.fund import (
     tdcc_search_fund,
@@ -357,7 +357,7 @@ def render_single_fund_tab() -> None:
                             f"<div style='color:{GRAY_CC};font-size:12px'>股 {_aa_stk}% ／ 債 {_aa_bnd}%</div></div></div>", unsafe_allow_html=True)
                     _sig_style = sig["sig_style"]
                     st.markdown(f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:10px;padding:14px 18px;margin:8px 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap'>"
-                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>資產屬性</div><div style='font-size:14px;font-weight:700;color:#58a6ff'>{sig['asset_class']}</div></div>"
+                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>資產屬性</div><div style='font-size:14px;font-weight:700;color:{INFO_BLUE}'>{sig['asset_class']}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>策略3 操作訊號</div><span style='{_sig_style};padding:4px 12px;border-radius:20px;font-size:13px;font-weight:700;display:inline-block'>{sig['label']}</span></div>"
                         f"<div style='flex:1'><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>景氣位階（{phase_info_s['phase']} {phase_info_s['score']}/10）</div>"
                         f"<div style='font-size:12px;color:{GH_FG_SECONDARY}'>{sig['reason']}</div></div></div>", unsafe_allow_html=True)
@@ -449,7 +449,7 @@ def render_single_fund_tab() -> None:
                                         annotation_text=bl, annotation_font_color=bc,
                                         annotation_position="bottom right")
                 for sv, sl, sc in [
-                    (m.get("sell1"), "賣1 小漲(年低+1σ)", "#ffa726"),
+                    (m.get("sell1"), "賣1 小漲(年低+1σ)", WARN_AMBER),
                     (m.get("sell2"), "賣2 急漲(年低+2σ)", MD_DEEP_ORANGE_400),
                     (m.get("sell3"), "賣3 大漲(年低+3σ)", MATERIAL_RED),
                 ]:
@@ -535,11 +535,11 @@ def render_single_fund_tab() -> None:
                     delta = (nav_v - target) / target * 100  # 正=高於 target
                     if is_buy:
                         if delta <= 0:           return ("🟢 觸發", MD_GREEN_A400, f"{abs(delta):.2f}% 已破")
-                        elif delta <= _NEAR:     return ("⚠️ 接近", "#ffa726", f"還差 {delta:.2f}%")
+                        elif delta <= _NEAR:     return ("⚠️ 接近", WARN_AMBER, f"還差 {delta:.2f}%")
                         else:                    return ("▲ 距離", GRAY_66,    f"還差 {delta:.2f}%")
                     else:
                         if delta >= 0:           return ("🔔 觸發", MATERIAL_RED, f"{delta:.2f}% 已過")
-                        elif delta >= -_NEAR:    return ("⚠️ 接近", "#ffa726", f"還差 {-delta:.2f}%")
+                        elif delta >= -_NEAR:    return ("⚠️ 接近", WARN_AMBER, f"還差 {-delta:.2f}%")
                         else:                    return ("▼ 距離", GRAY_66,    f"還差 {-delta:.2f}%")
                 if _m_buy1:
                     _rows = ""
@@ -547,7 +547,7 @@ def render_single_fund_tab() -> None:
                         (_m_buy3,  "💧 大跌大買 (50%) 年高-3σ", MD_PURPLE_500, True),
                         (_m_buy2,  "💧 急跌穩買 (30%) 年高-2σ", MATERIAL_GREEN, True),
                         (_m_buy1,  "💧 小跌小買 (20%) 年高-1σ", MD_GREEN_A200, True),
-                        (_m_sell1, "💰 小漲停利 (20%) 年低+1σ", "#ffa726", False),
+                        (_m_sell1, "💰 小漲停利 (20%) 年低+1σ", WARN_AMBER, False),
                         (_m_sell2, "💰 急漲停利 (30%) 年低+2σ", MD_DEEP_ORANGE_400, False),
                         (_m_sell3, "💰 大漲停利 (50%) 年低+3σ", MATERIAL_RED, False),
                     ]:
@@ -689,16 +689,16 @@ def render_single_fund_tab() -> None:
                     _d4_vol = _4d["factors"]["volatility"]
                     _g_overall = _4d["score"]
                     _gr, _gr_c, _verd = _4d["grade"], _4d["grade_color"], _4d["verdict"]
-                    _eat_call = (" ⚠️ <b style=f'color:{MATERIAL_RED}'>吃本金風險</b>"
+                    _eat_call = (f" ⚠️ <b style='color:{MATERIAL_RED}'>吃本金風險</b>"
                                  if _4d["eat_warn"] else "")
 
                     def _g_block(label, score):
                         if score is None:
-                            return ("<div><div style=f'color:{GRAY_66};font-size:10px'>" + label + "</div>"
-                                    "<div style=f'color:{GRAY_66};font-size:20px;font-weight:700'>—</div>"
-                                    "<div style=f'color:{GRAY_55};font-size:9px'>資料不足</div></div>")
+                            return (f"<div><div style='color:{GRAY_66};font-size:10px'>" + label + "</div>"
+                                    f"<div style='color:{GRAY_66};font-size:20px;font-weight:700'>—</div>"
+                                    f"<div style='color:{GRAY_55};font-size:9px'>資料不足</div></div>")
                         _c = (MATERIAL_GREEN if score >= 75 else MD_GREEN_A200 if score >= 60 else
-                              "#ffeb3b" if score >= 45 else MATERIAL_ORANGE if score >= 30 else MATERIAL_RED)
+                              CAUTION_YELLOW if score >= 45 else MATERIAL_ORANGE if score >= 30 else MATERIAL_RED)
                         return (f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{label}</div>"
                                 f"<div style='color:{_c};font-size:20px;font-weight:900'>{score:.0f}</div>"
                                 f"<div style='color:{GRAY_55};font-size:9px'>/ 100</div></div>")
@@ -1127,7 +1127,7 @@ def render_single_fund_tab() -> None:
                                         f"<span style='color:{GRAY_55};font-size:11px;width:16px'>#{_i}</span>"
                                         f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
                                         f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"
-                                        f"<span style='color:#58a6ff;font-weight:700;font-size:11px;width:36px;text-align:right'>{_tp:.1f}%</span>"
+                                        f"<span style='color:{INFO_BLUE};font-weight:700;font-size:11px;width:36px;text-align:right'>{_tp:.1f}%</span>"
                                         f"</div>", unsafe_allow_html=True)
 
                 # ── 📰 個股新聞面（v18.206）：逐股 Google News 搜尋（按鈕）+ AI 新聞面分析 ──
@@ -1175,7 +1175,7 @@ def render_single_fund_tab() -> None:
                                     _ttl = _it.get("title", "")
                                     _src = _it.get("source", "")
                                     _lh = (f"<a href='{_u}' target='_blank' "
-                                           f"style='color:#58a6ff;text-decoration:none'>{_ttl}</a>"
+                                           f"style='color:{INFO_BLUE};text-decoration:none'>{_ttl}</a>"
                                            if _u else _ttl)
                                     st.markdown(
                                         f"<div style='padding:4px 8px;background:{GH_BG_CARD};"

@@ -228,8 +228,8 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
         def _fmt_cell(label: str, val, t_int: int, unit: str = "", fmt: str = "{:.1f}"):
             arrow = "↑" if t_int > 0 else ("↓" if t_int < 0 else "→")
             if val is None:
-                num_html = "<span style=f'color:{MD_DEEP_ORANGE_400}'>—</span>"
-                tag = "<div style=f'font-size:10px;color:{MD_DEEP_ORANGE_400};margin-top:2px'>未抓到</div>"
+                num_html = f"<span style='color:{MD_DEEP_ORANGE_400}'>—</span>"
+                tag = f"<div style='font-size:10px;color:{MD_DEEP_ORANGE_400};margin-top:2px'>未抓到</div>"
             else:
                 num_html = f"{fmt.format(val)}{unit} {arrow}"
                 tag = ""
