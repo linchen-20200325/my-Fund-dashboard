@@ -48,6 +48,7 @@ from shared.colors import (
     MD_BLUE_300,
     MD_GREEN_A200,
     MD_GREEN_A400,
+    MD_ORANGE_A200,
     MD_PURPLE_500,
     STREAMLIT_BG,
     TRAFFIC_GREEN,
@@ -243,7 +244,7 @@ def _make_radar_sparkline(trend: list, key: str, color: str):
 
 # v19.187 — 燈號 → 卡片邊框色(中期 Z-Score / 長期桶卡片共用,對齊短線雷達色票)
 _MACRO_CARD_LIGHT_COLOR = {
-    "red": TRAFFIC_RED, "orange": "#ffab40", "yellow": TRAFFIC_YELLOW,
+    "red": TRAFFIC_RED, "orange": MD_ORANGE_A200, "yellow": TRAFFIC_YELLOW,
     "green": TRAFFIC_GREEN, "gray": TRAFFIC_NEUTRAL,
 }
 

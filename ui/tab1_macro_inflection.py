@@ -28,9 +28,13 @@ from services.macro import (
 )
 from shared.colors import (
     BG_DARK_AMBER_1,
+    BG_DARK_AMBER_3,
+    BG_DARK_GREEN_2,
+    BG_DARK_GREEN_3,
     BG_DARK_NAVY_4,
     BG_DARK_RED_1,
     BG_DARK_RED_2,
+    BG_DARK_RED_3,
     GH_BG_CARD,
     GH_BG_PRIMARY,
     GH_BORDER,
@@ -201,7 +205,7 @@ def render_inflection_alert_section(
             _pf_adr   = float(_pf_m.get("annual_div_rate") or 0)
             _pf_core  = "🛡️ 核" if _pf.get("is_core") else "⚡ 衛"
             # 燈號判定（v18.6: σ + 布林雙確認 升級）
-            _tl_icon, _tl_bg, _tl_bc, _tl_reason = "🟢", "#061a06", MATERIAL_GREEN, "淨值穩定，含息報酬正常"
+            _tl_icon, _tl_bg, _tl_bc, _tl_reason = "🟢", BG_DARK_GREEN_2, MATERIAL_GREEN, "淨值穩定，含息報酬正常"
             # 雙確認買 = σ 買點觸發 + 布林下軌觸碰
             _double_buy = (_pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1
                            and _pf_bbd > 0 and _pf_nav <= _pf_bbd)
@@ -211,16 +215,16 @@ def render_inflection_alert_section(
                 _tl_icon, _tl_bg, _tl_bc = "🔴", BG_DARK_RED_2, MATERIAL_RED
                 _tl_reason = f"吃本金警示：含息報酬 {_pf_ret1y:.1f}% < 配息率 {_pf_adr:.1f}%"
             elif _double_buy:
-                _tl_icon, _tl_bg, _tl_bc = "🟢🟢", "#0a3a1a", MD_GREEN_A400
+                _tl_icon, _tl_bg, _tl_bc = "🟢🟢", BG_DARK_GREEN_3, MD_GREEN_A400
                 _tl_reason = f"σ+布林雙確認買 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f}) & 布林下軌"
             elif _double_sell:
-                _tl_icon, _tl_bg, _tl_bc = "🔔🔔", "#3a0a0a", MATERIAL_RED
+                _tl_icon, _tl_bg, _tl_bc = "🔔🔔", BG_DARK_RED_3, MATERIAL_RED
                 _tl_reason = f"σ+布林雙確認賣 NAV {_pf_nav:.4f} ≥ 賣1({_pf_s1:.4f}) & 布林上軌"
             elif _pf_b3 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b3:
                 _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a0a2a", MD_PURPLE_500
                 _tl_reason = f"大跌大買訊號 NAV {_pf_nav:.4f} ≤ 買3({_pf_b3:.4f})"
             elif _pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1:
-                _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a1500", MATERIAL_ORANGE
+                _tl_icon, _tl_bg, _tl_bc = "🟡", BG_DARK_AMBER_3, MATERIAL_ORANGE
                 _tl_reason = f"小跌小買訊號 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f})"
             elif not _pf_m:
                 _tl_icon, _tl_bg, _tl_bc = "⬜", GH_BG_CARD, GRAY_55

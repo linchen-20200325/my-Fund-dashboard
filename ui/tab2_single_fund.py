@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 
 from repositories.fund import (
     tdcc_search_fund,
@@ -271,7 +271,7 @@ def render_single_fund_tab() -> None:
                 _p_fee   = mj_raw.get("mgmt_fee","")
 
                 st.markdown(
-                    f"<div style='background:#1a1500;border:1px solid {MATERIAL_ORANGE};"
+                    f"<div style='background:{BG_DARK_AMBER_3};border:1px solid {MATERIAL_ORANGE};"
                     f"border-radius:10px;padding:14px 18px;margin:8px 0'>"
                     f"<div style='color:{MATERIAL_ORANGE};font-weight:700;font-size:13px;margin-bottom:8px'>"
                     f"🟡 部分資料（歷史淨值序列未取得，下方顯示已有資訊）</div>"
@@ -575,7 +575,7 @@ def render_single_fund_tab() -> None:
                 _boll_latest_low = float(_bb_dn.iloc[-1]) if len(_bb_dn) > 0 else None
                 if _boll_latest_low is not None and _m_nav_v > 0 and _m_nav_v <= _boll_latest_low:
                     st.markdown(
-                        f"<div style='background:linear-gradient(135deg,#061a06,#0d2a0d);"
+                        f"<div style='background:linear-gradient(135deg,{BG_DARK_GREEN_2},#0d2a0d);"
                         f"border:2px solid {MD_GREEN_A400};border-radius:12px;padding:14px 18px;margin:10px 0'>"
                         f"<div style='color:{MD_GREEN_A400};font-size:14px;font-weight:700;margin-bottom:8px'>"
                         f"⚡ -2σ 超跌機會卡 — 布林下軌突破！</div>"
