@@ -972,6 +972,12 @@ def fetch_holdings(code: str) -> dict:
                 print(f"[holdings:{code}] ↩ cnyes fallback 命中(MoneyDJ 全失敗)",
                       file=_sys_h.stderr)
                 return _cy
+            # v19.278 fallback:cnyes 也空 → 試 Morningstar(保單/FoF 代碼專用)
+            _ms = fetch_holdings_morningstar(code)
+            if _ms.get("top_holdings") or _ms.get("sector_alloc"):
+                print(f"[holdings:{code}] ↩ Morningstar fallback 命中(MoneyDJ+cnyes 全失敗)",
+                      file=_sys_h.stderr)
+                return _ms
             return {"source": "MoneyDJ:all_failed",
                     "attempts": _attempts,
                     "fetched_at": pd.Timestamp.now('UTC').isoformat()}
@@ -1092,6 +1098,12 @@ def fetch_holdings(code: str) -> dict:
                 print(f"[holdings:{code}] ↩ cnyes fallback 命中(MoneyDJ 頁無持股)",
                       file=_sys_h.stderr)
                 return _cy
+            # v19.278:cnyes 也空 → 試 Morningstar(保單/FoF 代碼專用)
+            _ms = fetch_holdings_morningstar(code)
+            if _ms.get("top_holdings") or _ms.get("sector_alloc"):
+                print(f"[holdings:{code}] ↩ Morningstar fallback 命中(MoneyDJ 頁無持股)",
+                      file=_sys_h.stderr)
+                return _ms
         return out
     except Exception as e:
         print(f"[fetch_holdings] {e}")
