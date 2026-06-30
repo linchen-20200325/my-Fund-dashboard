@@ -499,7 +499,7 @@ def render_four_horizon_bar(summary: dict) -> None:
                 f"""<div style="border-left:4px solid {_color};padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:6px;">
 <div style="font-size:0.78em;color:{TRAFFIC_NEUTRAL};letter-spacing:0.5px;">{_sub}</div>
 <div style="font-size:1.05em;font-weight:600;margin-top:2px;">{_emoji} {_title}: <span style="color:{_color};">{_label}</span></div>
-<div style=f"font-size:0.85em;color:{GRAY_BB};margin-top:4px;line-height:1.4;">{_headline}</div>
+<div style="font-size:0.85em;color:{GRAY_BB};margin-top:4px;line-height:1.4;">{_headline}</div>
 </div>""",
                 unsafe_allow_html=True,
             )
@@ -611,7 +611,7 @@ def render_five_bucket_bar(summary: dict) -> None:
                 f"""<div style="border-left:4px solid {_color};padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:6px;">
 <div style="font-size:0.78em;color:{TRAFFIC_NEUTRAL};letter-spacing:0.5px;">{_sub}</div>
 <div style="font-size:1.05em;font-weight:600;margin-top:2px;">{_emoji} {_title}: <span style="color:{_color};">{_label}</span></div>
-<div style=f"font-size:0.85em;color:{GRAY_BB};margin-top:4px;line-height:1.4;">{_headline}</div>
+<div style="font-size:0.85em;color:{GRAY_BB};margin-top:4px;line-height:1.4;">{_headline}</div>
 </div>""",
                 unsafe_allow_html=True,
             )

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BORDER, GRAY_55, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_ORANGE_300, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BORDER, GRAY_55, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_ORANGE_300, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -136,7 +136,7 @@ def _render_holdings_block(fund: dict) -> None:
             else:
                 _ter_c, _ter_avg_html = TRAFFIC_NEUTRAL, ""
             st.markdown(
-                "<div style=f'background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
+                f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
                 "border-radius:10px;padding:10px 16px;margin:8px 0'>"
                 f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>"
                 "💰 TER 費用率分析"
@@ -147,7 +147,7 @@ def _render_holdings_block(fund: dict) -> None:
                 f"{_ter_val:.2f}%</div></div>"
                 + _ter_avg_html +
                 "</div>"
-                "<div style=f'color:{GRAY_55};font-size:10px'>"
+                f"<div style='color:{GRAY_55};font-size:10px'>"
                 "費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~25%）</div>"
                 "</div>", unsafe_allow_html=True)
     else:
@@ -206,6 +206,6 @@ def _render_holdings_block(fund: dict) -> None:
                     f"<span style='color:{GRAY_55};font-size:11px;width:16px'>#{_i}</span>"
                     f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
                     f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"
-                    f"<span style='color:#58a6ff;font-weight:700;font-size:11px;"
+                    f"<span style='color:{INFO_BLUE};font-weight:700;font-size:11px;"
                     f"width:36px;text-align:right'>{_tp:.1f}%</span>"
                     f"</div>", unsafe_allow_html=True)

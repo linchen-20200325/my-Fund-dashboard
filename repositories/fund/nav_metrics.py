@@ -49,8 +49,7 @@ def _parse_nav_html(html: str) -> pd.Series:
                 v = float(cols[1].replace(",", ""))
                 if 0.01 < v < 100000:
                     rows_data.append((d, v))
-            except Exception:
-                pass
+            except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
     if rows_data:
         return pd.Series({r[0]: r[1] for r in rows_data}).sort_index().dropna()
     return pd.Series(dtype=float)
@@ -151,10 +150,7 @@ def _nav_history_cache_save(code: str, s: "pd.Series") -> None:
             "dates": [str(d.date()) for d in s.index],
             "values": [float(v) for v in s.values],
         }, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
-
-
+    except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
 def _parse_nav_json_items(items: list) -> "pd.Series":
     """從 JSON list of {date/value} dict 解析成 NAV Series。寬容多種欄位名 + Unix timestamp。"""
     if not items:
@@ -580,7 +576,7 @@ def fetch_div(full_key: str, portal: str = "") -> list:
                                     v = float(nums[0])
                                     if 0.0001 < v < 100: amt=v; break
                             if amt > 0: divs.append({"date":str(d)[:10],"amount":amt})
-                        except Exception: pass
+                        except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
             if divs: break
         except Exception as e:
             print(f"[div] {e}")
@@ -720,8 +716,7 @@ def fetch_performance_wb01(code: str) -> dict:
                                     v = float(c_c)
                                     if -99 < v < 500:
                                         out[period_key] = v; break
-                                except Exception: pass
-
+                                except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
             # ── Strategy 2: column headers contain period names ──
             if not out:
                 for tbl in soup.find_all("table"):
@@ -748,7 +743,7 @@ def fetch_performance_wb01(code: str) -> dict:
                                             v = float(c_c)
                                             if -99 < v < 500:
                                                 out[period_key] = v
-                                        except Exception: pass
+                                        except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
                             if out: break
 
             if out:
@@ -1011,10 +1006,10 @@ def fetch_holdings(code: str) -> dict:
                             try:
                                 pct = float(c.replace("%","").replace(",","").strip())
                                 if 0 < pct < 100: break
-                            except Exception: pass
+                            except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
                         if len(cols) >= 3:
                             try: amount = float(cols[1].replace(",","").replace("%",""))
-                            except Exception: pass
+                            except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
                         if pct > 0 and name:
                             sectors.append({"name": name, "amount": amount, "pct": pct})
                 if sectors:
@@ -1048,7 +1043,7 @@ def fetch_holdings(code: str) -> dict:
                                 v = float(c2)
                                 if 0 < v < 100:
                                     pct_txt = c2; break
-                            except Exception: pass
+                            except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
                         # 格式: "NVIDIA CORP,資訊科技" or just "NVIDIA CORP"
                         parts = raw.split(",", 1)
                         name   = parts[0].strip()
@@ -1067,7 +1062,7 @@ def fetch_holdings(code: str) -> dict:
                             pct = float(pct_txt)
                             if name and pct > 0:
                                 holdings.append({"name": name, "sector": sector, "pct": pct})
-                        except Exception: pass
+                        except (ValueError, TypeError, AttributeError, IndexError, KeyError): pass  # smoke-allow-pass — parse best-effort,row invalid skip
                 if holdings:
                     out["top_holdings"] = holdings[:10]
                     print(f"[holdings] 前10大持股 {len(out['top_holdings'])} 筆")

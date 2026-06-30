@@ -67,9 +67,9 @@ def render_macro_compass():
 
     _header = st.columns([6, 1])
     _header[0].markdown(
-        '<div style=f"font-size:14px;font-weight:900;color:{GH_FG_PRIMARY};margin:4px 0 4px;">'
+        f'<div style="font-size:14px;font-weight:900;color:{GH_FG_PRIMARY};margin:4px 0 4px;">'
         '🧭 總經指南針 (Top-Down Macro)'
-        '<span style=f"font-size:10px;color:{GH_FG_MUTED};font-weight:400;margin-left:8px;">'
+        f'<span style="font-size:10px;color:{GH_FG_MUTED};font-weight:400;margin-left:8px;">'
         f'VIX × 10Y × S&amp;P 500 — {"即將抓取（無快取）" if not _has_data else f"更新於 {_ts_str}"}'
         '</span></div>',
         unsafe_allow_html=True)

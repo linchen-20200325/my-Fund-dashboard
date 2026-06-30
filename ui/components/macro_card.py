@@ -15,7 +15,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-from shared.colors import GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, TRAFFIC_NEUTRAL
+from shared.colors import CAUTION_YELLOW, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, TRAFFIC_NEUTRAL
 
 EDU_FIELDS = ("meaning", "how_to_read", "pair_with",
               "historical_anchor", "upstream", "downstream")
@@ -78,7 +78,7 @@ def make_sparkline(
     fig.add_trace(go.Scatter(
         x=[s.index[-1]], y=[last_v],
         mode="markers",
-        marker=dict(color="#ffeb3b", size=8, line=dict(color="#000", width=1)),
+        marker=dict(color=CAUTION_YELLOW, size=8, line=dict(color="#000", width=1)),
         showlegend=False, hoverinfo="skip",
     ))
     # 警戒線

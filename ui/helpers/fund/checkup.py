@@ -307,7 +307,7 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
             f"<div style='color:{_ter_c};font-weight:700;font-size:15px'>{_tv:.2f}%</div></div>"
             + _avg_html +
             "</div>"
-            "<div style=f'color:{GRAY_55};font-size:10px;margin-top:4px'>"
+            f"<div style='color:{GRAY_55};font-size:10px;margin-top:4px'>"
             "費用率愈低，長期複利效益愈佳（每降 1% TER，20 年後終值多 ~25%）</div>"
             "</div>",
             unsafe_allow_html=True,

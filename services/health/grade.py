@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL
+from shared.colors import CAUTION_YELLOW, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import GRADE_CUTOFFS_4D
 
 
@@ -119,7 +119,7 @@ def _grade_from_score(score: Optional[float]) -> tuple[str, str, str]:
     if score >= b:
         return "B", MD_GREEN_A200, "🟢 表現穩健"
     if score >= c:
-        return "C", "#ffeb3b", "🟡 中性,持續觀察"
+        return "C", CAUTION_YELLOW, "🟡 中性,持續觀察"
     if score >= d:
         return "D", MATERIAL_ORANGE, "🟠 警示偏弱"
     return "F", MATERIAL_RED, "🔴 多項警示"

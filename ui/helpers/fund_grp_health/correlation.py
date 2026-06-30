@@ -83,7 +83,7 @@ def _render_correlation_matrix(funds: list) -> None:
             z=_mx.values,
             x=list(_mx.columns),
             y=list(_mx.index),
-            colorscale=[[0, STREAMLIT_BG], [0.5, MD_BLUE_500], [1, "#f44336"]],
+            colorscale=[[0, STREAMLIT_BG], [0.5, MD_BLUE_500], [1, MATERIAL_RED]],
             zmin=0, zmax=1,
             text=[[f"{v:.2f}" for v in row] for row in _mx.values],
             texttemplate="%{text}",

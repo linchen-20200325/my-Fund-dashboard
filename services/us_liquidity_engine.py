@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 
 from infra.cache import _ttl_cache, register_cache
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
+from shared.colors import INFO_BLUE, TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW
 from shared.ttls import TTL_30MIN
 from shared.fred_series import (
     FRED_FED_BS,
@@ -94,7 +94,7 @@ def _rrp(api_key: str) -> dict:
         elif cur < RRP_GLUT_BN:
             color, label = TRAFFIC_GREEN, "✅ 流動性正常"
         else:
-            color, label = "#58a6ff", "🌊 流動性過剩 / QE 蓄水"
+            color, label = INFO_BLUE, "🌊 流動性過剩 / QE 蓄水"
         return {
             "value": cur,
             "unit": "B",
@@ -126,7 +126,7 @@ def _m2_yoy(api_key: str) -> dict:
         elif yoy > 0:
             color, label = TRAFFIC_YELLOW, "⚠️ 中性偏緊"
         else:
-            color, label = "#58a6ff", "🔵 貨幣緊縮 / 衰退警示"
+            color, label = INFO_BLUE, "🔵 貨幣緊縮 / 衰退警示"
         # v19.188 sparkline:YoY 序列（與 value 同尺，非 level），近 12 期
         _yoy_ser = (df["value"] / df["value"].shift(12) - 1) * 100
         return {

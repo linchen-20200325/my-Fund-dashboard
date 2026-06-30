@@ -614,7 +614,7 @@ def _render_macro_navigator(indicators: dict | None,
         )
 
     st.markdown(
-        '<div style=f"font-size:13px;color:{GH_FG_MUTED};margin:8px 0 6px 0;'
+        f'<div style="font-size:13px;color:{GH_FG_MUTED};margin:8px 0 6px 0;'
         'font-weight:600;">🧭 總經導航卡 — 上方 4 面板 verdict 速覽</div>',
         unsafe_allow_html=True,
     )
@@ -705,9 +705,9 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
               </div>
               <div style="font-size: 30px; font-weight: 700; color: {_color}; line-height: 1.2;">
                 {_icon} {_level}
-                <span style=f"font-size: 20px; color: {GRAY_AA}; margin-left: 14px;">score = {_score:+.2f}</span>
+                <span style="font-size: 20px; color: {GRAY_AA}; margin-left: 14px;">score = {_score:+.2f}</span>
               </div>
-              <div style=f"font-size: 15px; color: {GRAY_CC}; margin-top: 8px;">
+              <div style="font-size: 15px; color: {GRAY_CC}; margin-top: 8px;">
                 🎯 {_action}
               </div>
             </div>
@@ -738,9 +738,9 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
                   </div>
                   <div style="font-size: 26px; font-weight: 700; color: {_color}; line-height: 1.2;">
                     {_icon} {_level}
-                    <span style=f"font-size: 17px; color: {GRAY_AA}; margin-left: 12px;">score = {_score:+.2f}</span>
+                    <span style="font-size: 17px; color: {GRAY_AA}; margin-left: 12px;">score = {_score:+.2f}</span>
                   </div>
-                  <div style=f"font-size: 13px; color: {GRAY_AA}; margin-top: 6px;">
+                  <div style="font-size: 13px; color: {GRAY_AA}; margin-top: 6px;">
                     📊 完整逐檔 driver 見下方「為什麼是這位階」
                   </div>
                 </div>
@@ -759,7 +759,7 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
                   <div style="font-size: 26px; font-weight: 700; color: {_r_color}; line-height: 1.2;">
                     {_r_icon} {_r_level}
                   </div>
-                  <div style=f"font-size: 13px; color: {GRAY_AA}; margin-top: 6px;">
+                  <div style="font-size: 13px; color: {GRAY_AA}; margin-top: 6px;">
                     🔴 {_r_red} ｜ 🟡 {_r_yel} ｜ 🟢 {_r_grn} ｜ ⬜ {_r_gry} ｜ 詳見下方雷達卡片
                   </div>
                 </div>
@@ -1728,9 +1728,9 @@ def render_macro_tab() -> None:
                 # 四色說明條（HTML，避免破壞 Streamlit theme）
                 st.markdown(
                     "<div style='display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px'>"
-                    "<span style=f'background:#0a3d1f;color:{MD_GREEN_A200};padding:3px 10px;"
+                    f"<span style='background:#0a3d1f;color:{MD_GREEN_A200};padding:3px 10px;"
                     "border-radius:4px;font-size:12px'>🟢 正常 |Z|&lt;1</span>"
-                    "<span style=f'background:#3d3408;color:{MD_AMBER_300};padding:3px 10px;"
+                    f"<span style='background:#3d3408;color:{MD_AMBER_300};padding:3px 10px;"
                     "border-radius:4px;font-size:12px'>🟡 關注 |Z|≥1</span>"
                     "<span style='background:#4a2a08;color:#ffab40;padding:3px 10px;"
                     "border-radius:4px;font-size:12px'>🟠 警示 |Z|≥1.5</span>"
@@ -1970,7 +1970,7 @@ def render_macro_tab() -> None:
                         if isinstance(_rec_r, dict) and _rec_r.get('status') in ('agree', 'disagree', 'a_missing', 'b_missing'):
                             _rec_emoji_r = {'agree': '✅', 'disagree': '⚠️',
                                             'a_missing': '⬜', 'b_missing': '⬜'}.get(_rec_r.get('status'), '⬜')
-                            _rec_col_r = {'agree': '#22c55e', 'disagree': '#ef4444'}.get(
+                            _rec_col_r = {'agree': TRAFFIC_GREEN, 'disagree': TRAFFIC_RED}.get(
                                 _rec_r.get('status'), TRAFFIC_NEUTRAL)
                             _rec_chip_r = (
                                 f"<br/><span style='color:{_rec_col_r};font-size:9px;'>"
@@ -2318,7 +2318,7 @@ def render_macro_tab() -> None:
                 st.markdown(_tl_html, unsafe_allow_html=True)
             else:
                 st.markdown(
-                    "<div style=f'background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:8px;"
+                    f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:8px;"
                     f"padding:10px 16px;color:{GRAY_55};font-size:12px;text-align:center'>"
                     "🚦 持倉紅綠燈：請先至「📊 組合基金」Tab 新增並載入基金，即可在此顯示即時燈號</div>",
                     unsafe_allow_html=True)
@@ -2672,7 +2672,7 @@ def render_macro_tab() -> None:
                 _ai_mac_pct, _ai_mac_tl = _calc_data_health(ind)
                 if _ai_mac_pct < 50:
                     st.markdown(
-                        "<div style=f'border-left:4px solid #f44336;background:{BG_DARK_NAVY_4};"
+                        f"<div style='border-left:4px solid {MATERIAL_RED};background:{BG_DARK_NAVY_4};"
                         "border-radius:0 8px 8px 0;padding:10px 14px;font-size:13px'>"
                         "🔴 <b>紅燈阻斷</b>：總經資料完整率 "
                         f"<b>{_ai_mac_pct}%</b>（&lt;50%），AI 分析停用。"

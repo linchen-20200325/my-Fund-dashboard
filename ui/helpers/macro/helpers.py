@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
+from shared.colors import INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
 
 
 # ══════════════════════════════════════════════════════
@@ -160,7 +160,7 @@ def mk_fund_signal(fund_info: dict, phase: str, score: float) -> dict:
     }
     label, sig_type, reason = RECS.get(phase, RECS["擴張"])[is_core]
     # v19.252 Phase 4A:sell 走 TRAFFIC_RED SSOT(原 inline #f85149)
-    SIG = {"buy":"background:#1a3328;color:#00c853;border:1px solid #00c853","sell":f"background:#3a1a1a;color:{TRAFFIC_RED};border:1px solid {TRAFFIC_RED}","hold":"background:#1a3450;color:#58a6ff;border:1px solid #58a6ff","switch":"background:#3a2a10;color:#f0a500;border:1px solid #f0a500"}
+    SIG = {"buy":"background:#1a3328;color:{MATERIAL_GREEN};border:1px solid {MATERIAL_GREEN}","sell":f"background:#3a1a1a;color:{TRAFFIC_RED};border:1px solid {TRAFFIC_RED}","hold":"background:#1a3450;color:{INFO_BLUE};border:1px solid {INFO_BLUE}","switch":"background:#3a2a10;color:#f0a500;border:1px solid #f0a500"}
     sig_style = SIG.get(sig_type, SIG["hold"])
     _ind  = st.session_state.get("indicators", {})
     _pmi  = _ind.get("PMI",{}).get("value"); _vix = _ind.get("VIX",{}).get("value")

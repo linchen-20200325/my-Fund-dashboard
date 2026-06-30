@@ -996,7 +996,7 @@ def render_data_guard_tab() -> None:
             _empty = (value is None or value == "" or
                       (isinstance(value, (dict, list)) and not value))
             if value == "N/A":
-                _ic, _vc, _vs = "ℹ️", "#888888", "N/A 不適用"
+                _ic, _vc, _vs = "ℹ️", TRAFFIC_NEUTRAL, "N/A 不適用"
             elif _empty:
                 _ic, _vc, _vs = "⚠️", MATERIAL_ORANGE, "缺失"
             elif not bool(ok_cond):

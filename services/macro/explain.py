@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200
+from shared.colors import MATERIAL_GREEN, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     SIGMA_VERY_HIGH_CUTOFF,
     SIGMA_HIGH_CUTOFF,
@@ -221,7 +221,7 @@ def _empty_payload() -> dict:
         "score":               0.0,
         "verdict_icon":        "⏳",
         "verdict_level":       "未載入",
-        "verdict_color":       "#888888",
+        "verdict_color":       TRAFFIC_NEUTRAL,
         "verdict_action_text": "請先按 sidebar「📡 載入總經資料」",
         "verdict_oneline":     "⏳ 尚未載入總經資料",
         "why_bullets":         [],

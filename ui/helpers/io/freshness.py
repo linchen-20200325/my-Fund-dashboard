@@ -16,7 +16,7 @@ import datetime as _dt
 import streamlit as st
 
 from shared.signal_thresholds import MJ_FRESH_DAYS_GREEN, MJ_FRESH_DAYS_YELLOW
-from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_MUTED, GH_FG_SECONDARY, GRAY_44, GRAY_66, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
+from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_MUTED, GH_FG_SECONDARY, GRAY_44, GRAY_66, INFO_BLUE, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
 
 
 def nav_age_emoji(nav_date_str, today=None):
@@ -94,7 +94,7 @@ def render_mj_freshness_banner(items: list, title: str = "MoneyDJ 資料新鮮�
         f"🔴 {_stats['red']} ｜ ⬜ {_stats['unknown']}"
     )
     st.markdown(
-        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid #58a6ff;"
+        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {INFO_BLUE};"
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;"
         f"font-size:11px;color:{GH_FG_MUTED};line-height:1.7'>"
         f"📊 <b>{title}</b>　{_summary}　"

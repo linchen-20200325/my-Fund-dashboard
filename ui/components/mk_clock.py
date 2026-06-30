@@ -58,7 +58,7 @@ _PHASE_META = {
     "unknown":   {"zh": "資料不足", "icon": "❓",
                   "desc": "PMI / CPI 任一面向缺資料，無法定位四象限",
                   "alloc_eq": 50, "alloc_bd": 50,
-                  "color": "#888888",
+                  "color": TRAFFIC_NEUTRAL,
                   "advice": "請至 Tab1 點「載入總經指標」抓取 FRED 最新資料後再回來查看；勿以此狀態作投資依據。"},
 }
 
@@ -228,8 +228,8 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
         def _fmt_cell(label: str, val, t_int: int, unit: str = "", fmt: str = "{:.1f}"):
             arrow = "↑" if t_int > 0 else ("↓" if t_int < 0 else "→")
             if val is None:
-                num_html = "<span style=f'color:{MD_DEEP_ORANGE_400}'>—</span>"
-                tag = "<div style=f'font-size:10px;color:{MD_DEEP_ORANGE_400};margin-top:2px'>未抓到</div>"
+                num_html = f"<span style='color:{MD_DEEP_ORANGE_400}'>—</span>"
+                tag = f"<div style='font-size:10px;color:{MD_DEEP_ORANGE_400};margin-top:2px'>未抓到</div>"
             else:
                 num_html = f"{fmt.format(val)}{unit} {arrow}"
                 tag = ""
