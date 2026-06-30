@@ -21,6 +21,13 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+- **v19.249 R25 doc-sync — CLAUDE.md §8.2「白話名 / 3 鐵盒」對照欄(2026-06-30)**:
+  - User 上個 turn 把 SaaS audit template 套進來提議「植入 DataFetcher / CalcEngine / ComponentUI 三鐵盒架構」;深挖發現 3 鐵盒模型 = 既有 L1/L2/L3 100% 對齊,且 L0 Infra/Shared 在 3 鐵盒沒有對應位(塞進任一鐵盒都違 §8.2 硬規則第 3 條)
+  - 取代「植入第二份架構」(A 改名 / B 包大 class / C 加 facade,3 條都負 ROI),改純 doc 加白話對照欄
+  - `CLAUDE.md §8.2`:既有 4 層表加第 2 欄「白話名」;表前加 1 段對照敘述(`DataFetcher = L1` / `CalcEngine = L2` / `ComponentUI = L3`,L0 標「跨層基底」)
+  - 強調「3 鐵盒只當捷思詞,實際 import path 仍走 `repositories/` / `services/` / `ui/`」防誤解
+  - 0 production code 改動;0 layer violation 復查維持(R12/R15/R16 4 例外全 valid)
+
 - **v19.248 R22+R23+R24 fetch_holdings 抓取鏈完整修補(2026-06-29)**:
   - **R22** — `fetch_holdings` 依 `_INSURANCE_SUBDOMAIN_HINTS` 展開保險平台 portal 子網域(JF→jpmorgan/jpmf/jpmfund 等 10 prefix × 1-5 portal × yp013xxx+wq06 兩頁);JFZN3 fallback chain 6 → 12 URL,TLZF9/FLFM1 等保險代碼同理覆蓋
   - **R23** — `_daily_cache` 加 `cache_if` predicate,失敗結果(empty dict / `source: *all_failed*` / None / 空 Series / 空 list)**不入 cache**;修 R20 引入的「當日第一次失敗鎖整天」鎖死現象;`cache_info` 加 `uncached_fail` 計數供 audit

@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pytest
 
 
@@ -165,7 +167,9 @@ def test_snapshot_reads_hot_money_divergence(monkeypatch):
     from ui.tab1_macro import _build_macro_ai_snapshot
     _mock_streamlit(monkeypatch, {
         "_macro_hot_money": {
-            "date": "2026-05-30",
+            # R26: 動態日期防 staleness threshold(原寫死 "2026-05-30",
+            # 任何 >30 天的相對 today 都會被 hot money snapshot 排除)
+            "date": (date.today() - timedelta(days=5)).strftime("%Y-%m-%d"),
             "state": "背離｜熱錢停泊匯市",
             "is_divergence": True,
             "interpretation": "外資匯入但暫不進股市",
