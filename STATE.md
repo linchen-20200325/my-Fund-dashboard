@@ -22,6 +22,21 @@
 
 ## 當前版本
 
+- **v19.261-262 P3 tab1_macro.py 5 section 拆檔完整收口(2026-06-30,PR #480 + #481,squash `c783ee3` + `0fc6ef0`)**:
+  - **背景**:`ui/tab1_macro.py` 2963 LOC monolith,5 大 section(長期/中期/短線/拐點/AI)全擠在一個 `render_macro_tab()` 函式,closure-heavy 難維護
+  - **方法論**:每 section 抽到 sibling file(`ui/tab1_macro_<section>.py`),參數注入(`ind`/`phase`/`fred_key`/`show_l3`)取代 closure local,module-level helper(`_render_macro_indicator_card` 等)lazy import 避循環
+  - **P3-A2**(`c783ee3` v19.261 PR #480):🤖 AI 景氣判斷 → `ui/tab1_macro_ai.py`(-289 LOC,含 `_build_macro_ai_snapshot` 9 章節)
+  - **P3-A3~A6**(`0fc6ef0` v19.262 PR #481 一單 4 commits + 1 fixup):
+    - A3 📈 中期循環 → `ui/tab1_macro_midcycle.py`(-176 LOC,含 Z-Score 矩陣 23 指標 + L3 情境判斷卡)
+    - A4 🎯 短線雷達 → `ui/tab1_macro_radar.py`(-245 LOC,10 燈雷達 + 流動性壓力預警引擎)
+    - A5 🌳 長期座標 → `ui/tab1_macro_longterm.py`(-293 LOC,美股流動性 6 卡 + MK 時鐘 + 資本防線 + 新聞)
+    - A6 ⚠️ 拐點警報 → `ui/tab1_macro_inflection.py`(-484 LOC,戰情室三儀表 + 持倉紅綠燈 + 拐點偵測中心 + 倒掛 SPX 回測)
+    - fixup:3 source-string regression test(`test_grp_health_bugfixes` / `test_net_liquidity` / `test_tab1_no_unbound`)path 改新 sibling + 檔尾 EOF trim
+  - **總計**:`ui/tab1_macro.py` **2963 → 1475 LOC(-1488, -50%)**,5 新檔(AI/中期/短線/長期/拐點)
+  - **架構**:0 §8.2 違憲新增,4 EX 例外清單(EX-CACHE-1 / EX-AI-1 / EX-CRUD-1 / EX-PASSTHRU-1)無新增 entry;sibling 全屬 L3 UI helper(允許讀寫 session_state + lazy import)
+  - **SSOT**:既有 `shared.colors`(50+ 常數)+ `shared.macro_thresholds_v2`(_PMI_SITUATION_BELOW)完全延用,0 新 SSOT,0 新 hex literal
+  - **驗證**:13 + 109 tests passed(test_tab1_macro + test_app_smoke),CI Fast + Schema + Slow tests 全綠
+
 - **v19.253-257 Phase 4 全 SSOT 收口 — B1+B2+B3+B4+B5 一鍋燴(2026-06-30,PR #477,squash `bef2426`)**:
   - **背景**:User 主動要求 B1-5 全做。深度盤點發現 720+ hex literal 散落 ~50 production 檔,2 hour 連續 5 batch 收口完成
   - **B2**(`dc8a4bc` v19.253):`#888` 短寫全站 → `TRAFFIC_NEUTRAL`,165 處 / 26 檔,0 新 SSOT(用既有)
