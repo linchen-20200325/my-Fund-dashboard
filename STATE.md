@@ -22,6 +22,13 @@
 
 ## 當前版本
 
+- **v19.274 Phase 2 收尾 — mk_clock 第4 chrome + #111 chip bg 2 保留項 SSOT(2026-06-30,PR #487,squash `61c6bdf`)**:
+  - **背景**:user 指示深挖 PHASE1_AUDIT_DELTA.md 2 個保留項,深挖後確認都是真 SSOT gap(非單純 cosmetic)
+  - **mk_clock 第 4 處 chrome**(`f62fe89`):`ui/components/mk_clock.py:237` 三面向訊號 cell 卡外框收斂至 `gh_card`(byte-identical)。**全站 4 個 GitHub-style 卡片 chrome 100% 收斂至 `ui/components/cards.gh_card`**
+  - **`#111` chip bg**(`3dabe0e`):**深挖修正**——先前 TOP 2 標為「單一 site 範疇外」是低估,實為 3 處 cross-file 真重複(`tab2:573` + `tab2:1013` + `tab3:1998`)且無 SSOT 常數。新 `shared/colors.py:CHIP_BG_NEAR_BLACK = "#111"`,3 site 收斂,grep `ui/` `#111` = 0 殘留
+  - **驗證**:CI Fast + Schema gate + Slow tests 三項全綠,0 regression
+  - **Phase 2 完整收尾**:TOP 1/2/3 + 2 保留項全部 SSOT gap 清空,排毒真正達穩態
+
 - **v19.273 Phase 2 TOP 2+3 — gh_card chrome SSOT + EX-PASSTHRU-1 補登(2026-06-30,PR #486,squash `098796f`)**:
   - **背景**:user 指示「做 TOP 2 / TOP 3」,依 `PHASE1_AUDIT_DELTA.md` 收完最後 2 個候選
   - **TOP 2 — GitHub-style 卡片外框 chrome SSOT**:
