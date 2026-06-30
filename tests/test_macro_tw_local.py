@@ -12,6 +12,7 @@ from services.macro_tw_local import (
     classify_short_term_regime,
     detect_mk_golden_inflection,
 )
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -25,7 +26,7 @@ class TestDetectMkGoldenInflection:
         sig = detect_mk_golden_inflection(3.0, 3.3, 5.25, 5.33)
         assert sig is not None
         assert sig['strength'] == 'strong'
-        assert sig['color'] == '#3fb950'
+        assert sig['color'] == TRAFFIC_GREEN  # v19.252 Phase 4A SSOT
         assert '⭐' in sig['icon']
         assert 'MK 黃金拐點' in sig['label']
 
@@ -41,7 +42,7 @@ class TestDetectMkGoldenInflection:
         sig = detect_mk_golden_inflection(3.2, 3.3, 5.25, 5.33)
         assert sig is not None
         assert sig['strength'] == 'weak'
-        assert sig['color'] == '#d29922'
+        assert sig['color'] == TRAFFIC_YELLOW  # v19.252 Phase 4A SSOT
         assert 'MK 拐點觀察中' in sig['label']
 
     def test_no_signal_cpi_rising(self):

@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from shared.colors import TRAFFIC_GREEN
+
 _MAX_CODES = 10
 _DEFAULT_CCY = "USD"
 
@@ -569,7 +571,7 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                 _nav_r  = [float(r.get("淨值% (年化)") or 0) for r in ok_rows]
                 _fig = _go.Figure()
                 _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name="配息率%(年化)🧮", marker_color="#f0883e"))
-                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name="含息%(年化)🧮",  marker_color="#3fb950"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name="含息%(年化)🧮",  marker_color=TRAFFIC_GREEN))
                 _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name="淨值%(年化)🧮",  marker_color="#58a6ff"))
                 _fig.add_hline(y=0, line_dash="dot", line_color="#555")
                 _fig.update_layout(

@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 
 from infra.cache import _ttl_cache, register_cache
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED
 from shared.ttls import TTL_30MIN
 from shared.fred_series import (
     FRED_FED_BS,
@@ -59,11 +60,11 @@ def _hy_oas(api_key: str) -> dict:
         m1 = float(df["value"].iloc[-22]) if len(df) >= 22 else cur
         delta_bp = (cur - m1) * 100
         if cur >= HY_OAS_CRISIS_PCT:
-            color, label = "#f85149", "🔴 信用緊縮 / 熱錢撤離"
+            color, label = TRAFFIC_RED, "🔴 信用緊縮 / 熱錢撤離"
         elif cur >= HY_OAS_WARN_PCT:
-            color, label = "#d29922", "⚠️ 風險偏好下滑"
+            color, label = TRAFFIC_YELLOW, "⚠️ 風險偏好下滑"
         else:
-            color, label = "#3fb950", "✅ 信用寬鬆 / 風險偏好強"
+            color, label = TRAFFIC_GREEN, "✅ 信用寬鬆 / 風險偏好強"
         return {
             "value": cur,
             "unit": "%",
@@ -89,9 +90,9 @@ def _rrp(api_key: str) -> dict:
         m1 = float(df["value"].iloc[-22]) if len(df) >= 22 else cur
         delta = cur - m1
         if cur < RRP_DRAIN_BN:
-            color, label = "#d29922", "💧 流動性枯竭警示"
+            color, label = TRAFFIC_YELLOW, "💧 流動性枯竭警示"
         elif cur < RRP_GLUT_BN:
-            color, label = "#3fb950", "✅ 流動性正常"
+            color, label = TRAFFIC_GREEN, "✅ 流動性正常"
         else:
             color, label = "#58a6ff", "🌊 流動性過剩 / QE 蓄水"
         return {
@@ -119,11 +120,11 @@ def _m2_yoy(api_key: str) -> dict:
         yr_ago = float(df["value"].iloc[-13])
         yoy = (cur / yr_ago - 1) * 100
         if yoy > M2_YOY_HOT_PCT:
-            color, label = "#f85149", "🔴 貨幣供給過熱（通膨壓力）"
+            color, label = TRAFFIC_RED, "🔴 貨幣供給過熱（通膨壓力）"
         elif yoy > M2_YOY_LOOSE_PCT:
-            color, label = "#3fb950", "✅ 寬鬆 / 熱錢充裕"
+            color, label = TRAFFIC_GREEN, "✅ 寬鬆 / 熱錢充裕"
         elif yoy > 0:
-            color, label = "#d29922", "⚠️ 中性偏緊"
+            color, label = TRAFFIC_YELLOW, "⚠️ 中性偏緊"
         else:
             color, label = "#58a6ff", "🔵 貨幣緊縮 / 衰退警示"
         # v19.188 sparkline:YoY 序列（與 value 同尺，非 level），近 12 期
@@ -154,11 +155,11 @@ def _walcl(api_key: str) -> dict:
             prev_mn = float(df["value"].iloc[-13])
             delta_tn = (cur_mn - prev_mn) / 1e6
         if delta_tn > 0.1:
-            color, label = "#3fb950", "💧 QE 擴表（流動性釋放）"
+            color, label = TRAFFIC_GREEN, "💧 QE 擴表（流動性釋放）"
         elif delta_tn > -0.1:
-            color, label = "#d29922", "➖ 觀望 / 中性"
+            color, label = TRAFFIC_YELLOW, "➖ 觀望 / 中性"
         else:
-            color, label = "#f85149", "🔴 QT 縮表（流動性回收）"
+            color, label = TRAFFIC_RED, "🔴 QT 縮表（流動性回收）"
         return {
             "value": cur_tn,
             "unit": "T",
@@ -234,11 +235,11 @@ def _net_liquidity(api_key: str) -> dict:
         if len(s) >= 13:
             delta_tn = cur - float(s.iloc[-13])
         if delta_tn > NET_LIQ_EXPAND_TN:
-            color, label = "#3fb950", "💧 淨流動性擴張（股市燃料增）"
+            color, label = TRAFFIC_GREEN, "💧 淨流動性擴張（股市燃料增）"
         elif delta_tn < NET_LIQ_DRAIN_TN:
-            color, label = "#f85149", "🔴 淨流動性收縮（股市缺燃料）"
+            color, label = TRAFFIC_RED, "🔴 淨流動性收縮（股市缺燃料）"
         else:
-            color, label = "#d29922", "➖ 淨流動性中性"
+            color, label = TRAFFIC_YELLOW, "➖ 淨流動性中性"
         return {
             "value": cur,
             "unit": "T",
@@ -270,11 +271,11 @@ def _hyg_lqd_ratio() -> dict:
         m1 = float(ratio.iloc[-22]) if len(ratio) >= 22 else cur
         delta_pct = (cur / m1 - 1) * 100 if m1 != 0 else 0.0
         if delta_pct > 1:
-            color, label = "#3fb950", "✅ 風險偏好上升 / 熱錢進股"
+            color, label = TRAFFIC_GREEN, "✅ 風險偏好上升 / 熱錢進股"
         elif delta_pct > -1:
-            color, label = "#d29922", "➖ 持平"
+            color, label = TRAFFIC_YELLOW, "➖ 持平"
         else:
-            color, label = "#f85149", "🔴 risk-off / 熱錢撤離"
+            color, label = TRAFFIC_RED, "🔴 risk-off / 熱錢撤離"
         return {
             "value": cur,
             "unit": "",
@@ -301,11 +302,11 @@ def _aaii_with_judgment() -> dict:
         return raw
     spread = raw["value"]
     if spread > AAII_EUPHORIA_PCT:
-        color, label = "#f85149", "🔴 散戶過度樂觀（反指標：賣訊號）"
+        color, label = TRAFFIC_RED, "🔴 散戶過度樂觀（反指標：賣訊號）"
     elif spread < AAII_PANIC_PCT:
-        color, label = "#3fb950", "✅ 散戶過度悲觀（反指標：買訊號）"
+        color, label = TRAFFIC_GREEN, "✅ 散戶過度悲觀（反指標：買訊號）"
     else:
-        color, label = "#d29922", "➖ 情緒中性"
+        color, label = TRAFFIC_YELLOW, "➖ 情緒中性"
     # F-PROV-1 phase 19 v19.105 — provenance(若上游 fetch_aaii_sentiment 已寫入 source 則保留)
     out = {**raw, "color": color, "label": label}
     out.setdefault("source", "AAII:scrape:sentiment_spread")
