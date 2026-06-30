@@ -7,6 +7,8 @@
 - `fetch_yf_forward_pe(symbol)` — yfinance Ticker.info forwardPE / trailingPE chain
 - `fetch_multpl_pe()` — multpl.com HTML scrape S&P 500 trailing P/E
 - `fetch_stooq_csv(symbol, trace)` — stooq.com daily CSV + headerless fallback
+- `fetch_cboe_csv(short_name, trace)` — CBOE daily_prices/{X}_History.csv(VIX3M 等)
+- `fetch_cboe_pcratio_csv(kind, trace)` — CBOE 官方 Put/Call 比率 CSV(v19.277)
 
 所有抓取統一走 `infra.proxy.fetch_url`(L0 NAS Squid 中繼)。
 """
@@ -211,4 +213,107 @@ def fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Series
     except Exception as e:  # noqa: BLE001
         _t(f"exception {str(e)[:40]}")
         print(f"[external_market/cboe] {short_name} 失敗: {e}")
+        return pd.Series(dtype=float)
+
+
+# Put/Call 為每日市場情緒指標;末筆超過此天數視為「非當期」→ 拒用(§1/§2.4)。
+# 30 天遠大於任何交易假期間隔(最長連假 ~4 日),足以分辨「當期」vs「凍結歷史檔」。
+_CBOE_PC_MAX_AGE_DAYS = 30
+
+
+def fetch_cboe_pcratio_csv(
+    kind: str = "total", trace: list[str] | None = None
+) -> pd.Series:
+    """CBOE 官方 Put/Call 比率每日 CSV → 比率收盤 Series。
+
+    v19.277:Yahoo ^CPC/^CPCE + stooq ^cpc/^cpce 全失效後的官方替代源
+    (user 2026-06-30 資料診斷回報「Put/Call 全源失敗」)。
+
+    URL: https://cdn.cboe.com/resources/options/volume_and_call_put_ratios/{file}
+      kind="total"  → totalpc.csv   (總和 P/C,語意對齊現有 ^CPC 閾值 >1.0/>1.2)
+      kind="equity" → equitypc.csv  (股票 P/C,單欄乾淨,確定存在)
+      kind="index"  → indexpc.csv   (指數 P/C)
+
+    ⚠️ 此為 CBOE 公開現用目錄(MacroMicro / Alphacast 皆源於此),與 v19.141
+       下架的 `daily_prices/CPC_History.csv`(index 風格 path,回 AccessDenied)
+       為**不同 endpoint**,不要混淆。
+
+    格式:2 行 preamble(PRODUCT/EXCHANGE)+ header(DATE,CALL,PUT,TOTAL,P/C Ratio)
+    + 資料列。本 parser **不寫死 skiprows**,自動偵測含「P/C」或「RATIO」的 header 行
+    (CBOE 偶調整 preamble 行數)。失敗回空 Series + trace。
+
+    ⚠️ sandbox(local proxy 403)無法驗證真實 body → 防禦式解析;production
+       NAS Squid 連得上(VIX3M 同 CDN 已成功)。失敗 = 跟現在一樣空,
+       但多一條官方 fallback(§1 Fail Loud:不崩潰、不偽造)。
+    """
+    from infra.proxy import fetch_url
+
+    _file = {"total": "totalpc.csv", "equity": "equitypc.csv",
+             "index": "indexpc.csv"}.get(kind, "totalpc.csv")
+
+    def _t(msg: str) -> None:
+        if trace is not None:
+            trace.append(f"CBOE {_file}: {msg}")
+
+    try:
+        url = ("https://cdn.cboe.com/resources/options/"
+               f"volume_and_call_put_ratios/{_file}")
+        r = fetch_url(url, timeout=15)
+        if r is None or getattr(r, "status_code", 0) != 200:
+            code = getattr(r, "status_code", None)
+            _t(f"HTTP {code}")
+            print(f"[external_market/cboe_pc] {_file} HTTP {code}")
+            return pd.Series(dtype=float)
+        text = r.text or ""
+        if len(text) < 50:
+            _t(f"body 過短 (len={len(text)})")
+            print(f"[external_market/cboe_pc] {_file} body 過短")
+            return pd.Series(dtype=float)
+
+        # 自動偵測 header 行(含 'DATE' + ('P/C' 或 'RATIO'))— 不寫死 preamble 行數
+        lines = text.splitlines()
+        header_idx = next(
+            (i for i, ln in enumerate(lines[:12])
+             if "DATE" in ln.upper()
+             and ("P/C" in ln.upper() or "RATIO" in ln.upper())),
+            None)
+        if header_idx is None:
+            _t(f"找不到 header 行 sample={lines[:3]!r}")
+            print(f"[external_market/cboe_pc] {_file} 找不到 header,sample={lines[:2]}")
+            return pd.Series(dtype=float)
+
+        df = pd.read_csv(io.StringIO(text), skiprows=header_idx)
+        date_col = next((c for c in df.columns if "DATE" in str(c).upper()), None)
+        ratio_col = next(
+            (c for c in df.columns
+             if "P/C" in str(c).upper() or "RATIO" in str(c).upper()), None)
+        if not date_col or not ratio_col or df.empty:
+            _t(f"欄位不符 cols={list(df.columns)[:6]}")
+            print(f"[external_market/cboe_pc] {_file} 欄位不符: {list(df.columns)}")
+            return pd.Series(dtype=float)
+        idx = pd.to_datetime(df[date_col], errors="coerce")
+        vals = pd.to_numeric(df[ratio_col], errors="coerce")
+        s = pd.Series(vals.values, index=idx).dropna().sort_index()
+        if s.empty:
+            _t("解析後 0 筆有效")
+            print(f"[external_market/cboe_pc] {_file} 解析後 0 筆")
+            return pd.Series(dtype=float)
+        s = s[~s.index.duplicated(keep="last")]
+        # §1/§2.4 Freshness guard:CBOE 公開 CDN 的 volume_and_call_put_ratios
+        # 部分檔為**凍結歷史檔**(實測 GitHub CI 抓 totalpc.csv 末筆停在 2019-10-04)。
+        # Put/Call 為每日情緒指標,末筆過舊 = 不可當「當期」用 → 顯式拒絕回空,
+        # 絕不把陳舊值當現值(§1 寧炸不假);亦讓 chain 由凍結 total 落到較新 equity。
+        _last_dt = pd.Timestamp(s.index.max())
+        _age_days = (pd.Timestamp.now().normalize() - _last_dt.normalize()).days
+        if _age_days > _CBOE_PC_MAX_AGE_DAYS:
+            _t(f"資料過舊 last={_last_dt.date()} ({_age_days}d>{_CBOE_PC_MAX_AGE_DAYS}d)")
+            print(f"[external_market/cboe_pc] {_file} 過舊 last={_last_dt.date()} "
+                  f"({_age_days}d),拒用(防陳舊當現值)")
+            return pd.Series(dtype=float)
+        s.attrs["source"] = f"CBOE:pcratio:{_file}"
+        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        return s.tail(180)
+    except Exception as e:  # noqa: BLE001
+        _t(f"exception {str(e)[:40]}")
+        print(f"[external_market/cboe_pc] {_file} 失敗: {e}")
         return pd.Series(dtype=float)
