@@ -22,6 +22,23 @@
 
 ## 當前版本
 
+- **v19.263-264 P3 long-tail SSOT 收口(2026-06-30,PR #482,squash `9efb297`)**:
+  - **背景**:P3 拆檔(PR #480/#481)後 5 sibling files 殘留 9 處 inline hex,user 指示「請繼續深挖」+「C 項目補上」深挖到底
+  - **方法論**:cardinality scan(各 hex 跨檔出現次數)→ 跨檔重複高 ROI 直接收 SSOT;單檔/單用按 user 要求一起收完
+  - **v19.263**(5 跨檔重複):
+    - `MD_ORANGE_A200 = "#ffab40"`(Z-Score 警示,3 處 / 2 檔)
+    - `BG_DARK_GREEN_2 = "#061a06"`(success deep,3 處 / 3 檔)
+    - `BG_DARK_GREEN_3 = "#0a3a1a"`(雙確認買 badge,2 處 / 2 檔)
+    - `BG_DARK_RED_3 = "#3a0a0a"`(雙確認賣 badge,2 處 / 2 檔)
+    - `BG_DARK_AMBER_3 = "#1a1500"`(σ 小跌小買 alert,2 處 / 2 檔)
+  - **v19.264**(2 單檔/單用,user 指示一併收):
+    - `BG_DARK_GREEN_GAUGE = "#0a2a0a"`(gauge safe zone tuple,3 處同檔)
+    - `BG_DARK_PURPLE_1 = "#1a0a2a"`(大跌大買訊號 bg,1 處)
+  - **總計**:**7 新 SSOT 常數 / 15 hex literal 收回 / 0 inline hex 殘留**
+  - **Caller 收口**:6 production 檔(`ui/tab1_macro.py` + 4 sibling + `services/precision_service.py`)+ `shared/colors.py` SSOT 註冊
+  - **架構**:§8.2 0 違憲新增;BG/MD 常數屬 L0 Shared,跨層被全層 import 為預期 pattern;L2 service `precision_service.py` 用 `shared.colors` 既存 pattern
+  - **驗證**:CI Fast checks + Schema gate 雙綠,131 passed / 2 skipped
+
 - **v19.261-262 P3 tab1_macro.py 5 section 拆檔完整收口(2026-06-30,PR #480 + #481,squash `c783ee3` + `0fc6ef0`)**:
   - **背景**:`ui/tab1_macro.py` 2963 LOC monolith,5 大 section(長期/中期/短線/拐點/AI)全擠在一個 `render_macro_tab()` 函式,closure-heavy 難維護
   - **方法論**:每 section 抽到 sibling file(`ui/tab1_macro_<section>.py`),參數注入(`ind`/`phase`/`fred_key`/`show_l3`)取代 closure local,module-level helper(`_render_macro_indicator_card` 等)lazy import 避循環
