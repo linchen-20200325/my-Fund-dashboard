@@ -21,6 +21,40 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+
+- **v19.253-257 Phase 4 全 SSOT 收口 — B1+B2+B3+B4+B5 一鍋燴(2026-06-30,PR #477,squash `bef2426`)**:
+  - **背景**:User 主動要求 B1-5 全做。深度盤點發現 720+ hex literal 散落 ~50 production 檔,2 hour 連續 5 batch 收口完成
+  - **B2**(`dc8a4bc` v19.253):`#888` 短寫全站 → `TRAFFIC_NEUTRAL`,165 處 / 26 檔,0 新 SSOT(用既有)
+  - **B1**(`e8ea6cf` v19.254):GitHub Dark Theme palette → `GH_BG_PRIMARY/CARD/HOVER/BORDER` + `GH_FG_PRIMARY/SECONDARY/MUTED` + `STREAMLIT_BG`,238 處 / 27 檔,**8 個新 SSOT 常數**
+  - **B5**(`8f7e369` v19.255):Dark accent BG → `BG_DARK_NAVY_1/2/3/4` + `BG_DARK_RED_1/2` + `BG_DARK_AMBER_1/2` + `BG_DARK_GREEN_1`,60 處 / 8 檔,**9 個新常數**
+  - **B4**(`09f9e35` v19.256):Material extended palette → `MD_BLUE_300/500` + `MD_GREEN_A200/A400` + `MD_DEEP_ORANGE_400` + `MD_AMBER_300` + `MD_ORANGE_300` + `MD_PURPLE_500`,99 處 / 21 檔,**8 個新常數**
+  - **B3**(`4313663` v19.257):灰調漸層短寫 + 純白 → `GRAY_44/55/66/AA/BB/CC` + `WHITE`,158 處 / 22 檔,**7 個新常數**
+  - **修補**(`9de1c3d`):Slow tests 失敗 14 處 NameError → 根因 B1/B3 script import-merge 邏輯對 inline trailing comment 處理有 bug → `app.py:23` 補 `GH_FG_PRIMARY` + `ui/sidebar.py:19` 修 WHITE 漏在 comment 內
+  - **總計**:**32 個新 SSOT 常數** / **720+ hex literal 收口** / **~50 production 檔** / **0 視覺變化**(SSOT 值 = 原 hex)
+  - **方法論**:Bulk Python script(per-hex per-file replace_all + AST-aware import 處理 + smart f-string detection + short-hex 精確匹配),B5 學到教訓後 B4/B3 改進
+  - **驗證**:Targeted tests 各 cluster 全綠(B2:94 / B1:98 / B5:86 / B4:103 / B3:91 = 472 tests),CI Fast+Schema+Slow 全綠
+  - **架構**:0 L1→streamlit / 0 L2→I/O / 32 新常數全有 caller / 0 違憲新增
+  - **跳過長尾**:各 cluster < 5 出現 hex(~50 處)留 BACKLOG,屬 component-specific,擴 SSOT ROI 不對等
+
+- **v19.252 Phase 4A v19.68 TRAFFIC SSOT 升級補完(2026-06-30,PR #476,squash `3a50309`)**:
+  - 背景:`shared/colors.py:17` docstring 宣告 v19.68 已升級 TRAFFIC 4 色 GitHub-style → Tailwind-style,但深掃發現 production 還散 104 處舊 hex(`#f85149`/`#d29922`/`#3fb950`/`#6e7681`),屬「升級半途而廢」
+  - 收口:88 處 production literal + 13 處 test assertion → `TRAFFIC_RED/YELLOW/GREEN/NEUTRAL` SSOT
+  - 動 13 production 檔(`ui/tab1_macro.py` 36 處 hotspot)+ 3 test 檔(2/2/3 assertion)
+  - 0 新 SSOT 常數(全用既有);test assertion 改鎖 SSOT 而非 literal,未來再改色不撕 test
+  - 視覺色變化:Tailwind 比 GitHub 更鮮豔(`#f85149` 暗紅 → `#ef4444` 亮紅 等),v19.68 已決定,本 PR 讓 production 真的用新色
+  - Tests:全測 2258 passed,本地 + CI 雙綠
+  - 詳:PR #476 / 16 files / +237 / -102
+
+- **v19.251 深層稽核排毒 — Phase 1+2+3 一次到位(2026-06-30,PR #475,squash `62b6e82`)**:
+  - User 指派《逆向工程稽核》— 深層稽核發現 ARCHITECTURE.md 文件 drift、3 個 0-/低-caller dead/shim 檔、5 個 UI→L1 facade 未登錄例外
+  - Phase 1 doc-sync:ARCHITECTURE.md v11.0 → v12.0(新增 §0' 反映 6 個新 subpackage)+ CLAUDE.md 5 處對齊
+  - Phase 2:`services/valuation.py` 整檔退役(-342 LOC,0 production caller)+ tests + provenance smoke + macro_buckets source 字串 + external_market docstring
+  - Phase 3:`services/macro_weights_store.py` shim 拔除(9 production caller + 3 test patch migrate `services.macro_weights_store` → `services.macro.weights_store`) + `services/risk_calibration.py` shim 拔除(3 test migrate)
+  - 例外清單同步:EX-PASSTHRU-1 補登 3 fn(`fetch_fund_by_key` / `fetch_nav_history_long` / `diagnose_fx_sources`)
+  - Net diff:**−161 LOC**(18 檔 / +237 / -398),3 production file deleted + 1 test orphan
+  - Tests:2258 passed / 8 skipped / 1 deselected(pre-existing 網路 flaky)
+  - 詳:PR #475 / squash commit `62b6e82`
+
 - **v19.250 B Route C-1 pending review ceremony 整批拔毒(2026-06-30)**:
   - User 訊號:總經 Tab 顯示「X 筆新權重待審核」橘色 banner,User 確認該 ceremony 已不再使用 → 選方案 B 拔 pending UI,保留 active.json 注入機制讓 production scoring 正常運作(可手動編輯 active.json)
   - 退役:`services/macro/weights_store.py` 的 pending 6 fn(load_pending / save_pending / approve_pending / reject_pending / has_pending / build_payload_from_multifactor)+ pending helper + GS pending CRUD + PENDING_MODES 常數 + dual-mode 路由,4 個 active fn(load_active / apply_weight_overrides / get_verdict_cutoffs / get_weight_override / get_phase_thresholds)100% 保留
