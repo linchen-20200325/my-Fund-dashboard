@@ -420,6 +420,80 @@ class TestResolveVix3m:
         assert len(trace) >= 4
 
 
+# ──────────────────────────────────────────────────────────────
+# 9c. v19.277 CBOE 官方 Put/Call CSV fetcher（Yahoo + stooq 全失效後的替代源）
+#     URL: cdn.cboe.com/resources/options/volume_and_call_put_ratios/{kind}pc.csv
+#     格式:preamble + header(DATE,CALL,PUT,TOTAL,P/C Ratio)+ 資料列
+# ──────────────────────────────────────────────────────────────
+class TestCboePcRatioCsv:
+    def _mk_resp(self, text: str, status: int = 200):
+        from unittest.mock import MagicMock
+        r = MagicMock()
+        r.status_code = status
+        r.text = text
+        return r
+
+    # 真實 equitypc.csv 形狀:2 行 preamble + header + 資料
+    _CSV = ("Cboe Equity Volume And Put/Call Ratios\n"
+            "PRODUCT: EQUITY  EXCHANGE: Cboe\n"
+            "DATE,CALL,PUT,TOTAL,P/C Ratio\n"
+            "2026-06-26,1500000,1100000,2600000,0.73\n"
+            "2026-06-27,1400000,1300000,2700000,0.93\n"
+            "2026-06-30,1200000,1500000,2700000,1.25\n")
+
+    def test_parses_pcratio_with_preamble(self):
+        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(self._CSV)):
+            s = rr._fetch_cboe_pcratio_csv("equity")
+        assert len(s) == 3
+        assert abs(float(s.iloc[-1]) - 1.25) < 1e-9
+        # F-PROV-1：source 必須以 CBOE: 開頭(過 validate_cboe_series)
+        assert s.attrs["source"].startswith("CBOE:pcratio:")
+        assert "T" in s.attrs["fetched_at"]
+
+    def test_auto_detects_header_when_preamble_count_varies(self):
+        """CBOE 偶調整 preamble 行數 → parser 不寫死 skiprows,自動偵測 header。"""
+        csv3 = ("L1 title\nL2 meta\nL3 more meta\n"
+                "DATE,CALL,PUT,TOTAL,P/C Ratio\n"
+                "2026-06-27,1,2,3,0.90\n2026-06-30,1,2,3,1.10\n")
+        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(csv3)):
+            s = rr._fetch_cboe_pcratio_csv("total")
+        assert len(s) == 2
+        assert abs(float(s.iloc[-1]) - 1.10) < 1e-9
+
+    def test_http_failure_returns_empty_with_trace(self):
+        trace: list[str] = []
+        with patch("infra.proxy.fetch_url", return_value=None):
+            s = rr._fetch_cboe_pcratio_csv("total", trace=trace)
+        assert s.empty
+        assert any("totalpc.csv" in t for t in trace)
+
+    def test_status_500_returns_empty(self):
+        with patch("infra.proxy.fetch_url",
+                   return_value=self._mk_resp("Server Error", status=500)):
+            s = rr._fetch_cboe_pcratio_csv("total")
+        assert s.empty
+
+    def test_unrecognized_shape_returns_empty(self):
+        """無 P/C header 行 → 回空(§1 Fail Loud,不亂猜欄位)。"""
+        with patch("infra.proxy.fetch_url",
+                   return_value=self._mk_resp(
+                       "GARBAGE\nfoo,bar,baz\n1,2,3\n" + "x" * 60)):
+            s = rr._fetch_cboe_pcratio_csv("total")
+        assert s.empty
+
+    def test_kind_maps_to_filename(self):
+        """kind → 正確檔名(provenance 可追)。"""
+        seen: list[str] = []
+
+        def _spy(url, **kw):
+            seen.append(url)
+            return self._mk_resp(self._CSV)
+
+        with patch("infra.proxy.fetch_url", side_effect=_spy):
+            rr._fetch_cboe_pcratio_csv("equity")
+        assert seen and seen[0].endswith("equitypc.csv")
+
+
 class TestResolvePutCall:
     def test_yahoo_cpc_primary_wins(self):
         with patch.object(rr, "fetch_yf_close", return_value=_yf([0.8] * 8)):
@@ -456,12 +530,37 @@ class TestResolvePutCall:
         assert "CBOE CPC_History.csv" in src
         assert not s.empty
 
+    def test_falls_through_to_cboe_pcratio(self):
+        """v19.277 — Yahoo + stooq 全失效 → 落到 CBOE 官方 totalpc.csv。"""
+        from unittest.mock import MagicMock
+        csv = ("Cboe Total Volume And Put/Call Ratios\n"
+               "PRODUCT: TOTAL  EXCHANGE: Cboe\n"
+               "DATE,CALL,PUT,TOTAL,P/C Ratio\n"
+               "2026-06-27,1,1,2,0.95\n2026-06-30,1,2,3,1.05\n")
+        cboe_resp = MagicMock()
+        cboe_resp.status_code = 200
+        cboe_resp.text = csv
+
+        def _fu(url, **kw):
+            # stooq 也走 fetch_url → 只讓 CBOE pcratio URL 回 CSV,其餘 None
+            if "volume_and_call_put_ratios" in url:
+                return cboe_resp
+            return None
+
+        with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
+             patch("infra.proxy.fetch_url", side_effect=_fu):
+            s, src, _ = rr._resolve_put_call()
+        assert "CBOE totalpc.csv" in src
+        assert not s.empty
+        assert abs(float(s.iloc[-1]) - 1.05) < 1e-9
+
     def test_all_sources_fail(self):
         with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
              patch("infra.proxy.fetch_url", return_value=None):
             s, src, trace = rr._resolve_put_call()
         assert s.empty
         assert src == ""
+        # 2 Yahoo + 2 stooq + 2 CBOE(total/equity)= 6 條失敗痕跡
         assert len(trace) >= 4
 
 
@@ -855,15 +954,18 @@ class TestV19141PcrChainAndVix3mAlignment:
         # ratio = 16.5/14.6 ≈ 1.13 → 紅燈
         assert 1.0 < float(d["value"]) < 1.3
 
-    def test_put_call_chain_no_longer_calls_cboe_csv_or_json(self):
-        """v19.141 修正:_resolve_put_call 已從 chain 移除 CBOE CSV + JSON
-        (兩源由 user 2026-06-25 截圖證實 AccessDenied)。
-        Yahoo 全失敗時應只試 stooq,不該再打 cdn.cboe.com 任何 URL。"""
+    def test_put_call_chain_avoids_dead_cboe_paths_but_uses_live_csv(self):
+        """v19.141 死路徑守 + v19.277 更新:
+        - 不該再打 v19.141 證實 AccessDenied 的 daily_prices/CPC*_History.csv
+          與 delayed_quotes JSON(死路徑回歸守門)。
+        - v19.277 起**允許**改打現用的 volume_and_call_put_ratios/{kind}pc.csv
+          (與死路徑不同 endpoint;user 2026-06-30 回報 Put/Call 全源失敗後新增)。
+        Yahoo + stooq 全失敗時應落到新 CBOE 官方 CSV 目錄。"""
         urls_tried = []
 
         def _fetch_url_track(url, **kw):
             urls_tried.append(url)
-            return None  # stooq 也失敗
+            return None  # 全失敗
 
         with patch.object(rr, "fetch_yf_close", return_value=pd.Series(dtype=float)), \
              patch("infra.proxy.fetch_url", side_effect=_fetch_url_track):
@@ -871,12 +973,19 @@ class TestV19141PcrChainAndVix3mAlignment:
 
         assert src == "", f"全失敗時 src 應為空字串,實際 {src!r}"
         for u in urls_tried:
-            assert "cdn.cboe.com" not in u, (
-                f"v19.141 後不該再打 cdn.cboe.com,實際打了:{u}"
+            # 死路徑(v19.141 AccessDenied)不可回歸
+            assert "daily_prices/CPC" not in u, (
+                f"v19.141 下架的 daily_prices/CPC*_History.csv 不該再打:{u}"
             )
-        # 應該至少試了 stooq
+            assert "delayed_quotes" not in u and not u.endswith(".json"), (
+                f"v19.141 下架的 CBOE JSON 不該再打:{u}"
+            )
+        # v19.277:應有試 stooq + 新 CBOE volume_and_call_put_ratios 目錄
         assert any("stooq.com" in u for u in urls_tried), (
             f"應有試 stooq.com,實際 urls={urls_tried}"
+        )
+        assert any("volume_and_call_put_ratios" in u for u in urls_tried), (
+            f"v19.277 應落到 CBOE 官方 Put/Call CSV 目錄,實際 urls={urls_tried}"
         )
 
     def test_put_call_yahoo_short_circuits(self):

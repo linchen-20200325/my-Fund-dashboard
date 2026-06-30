@@ -126,6 +126,7 @@ def _signal_vix_level() -> dict:
 # 內部 callsite 改 import upstream(repositories.external_market_repository)。
 from repositories.external_market_repository import (
     fetch_cboe_csv as _fetch_cboe_csv,    # noqa: F401  alias 保 internal callsites 不變
+    fetch_cboe_pcratio_csv as _fetch_cboe_pcratio_csv,  # noqa: F401  v19.277 Put/Call 官方源
     fetch_stooq_csv as _fetch_stooq_csv,  # noqa: F401
 )
 # v19.265 D7 F-SCHEMA-1:stooq + CBOE Series 出口 schema 驗證(fallback chain 防鎖)
@@ -204,6 +205,11 @@ def _resolve_put_call() -> tuple[pd.Series, str, list[str]]:
     v19.141：CBOE 已下架 CPC_History.csv / CPCE_History.csv / ^CPC.json / ^CPCE.json
         (user 2026-06-25 瀏覽器驗證:cdn.cboe.com 直接回 AccessDenied)→ 從 chain 移除
         這 4 層死路徑,只留 Yahoo + stooq。失敗時 trace 更乾淨,不再有 noise 假象。
+    v19.277：user 2026-06-30 資料診斷回報「Put/Call 全源失敗」(Yahoo ^CPC/^CPCE
+        回空 + stooq ^cpc 無法解析)。新增 CBOE 官方 volume_and_call_put_ratios
+        現用 CSV 目錄(totalpc.csv → equitypc.csv)為末層官方源 — 與 v19.141 下架
+        的 daily_prices/CPC_History.csv 是**不同 endpoint**(MacroMicro/Alphacast
+        皆源於此目錄)。total 優先(語意對齊 ^CPC 閾值),equity 為次。
     """
     trace: list[str] = []
     for t in ("^CPC", "^CPCE"):
@@ -215,6 +221,11 @@ def _resolve_put_call() -> tuple[pd.Series, str, list[str]]:
         s = _safe_validate_stooq(_fetch_stooq_csv(sym, trace=trace))
         if not s.empty and len(s) >= 2:
             return s, f"stooq {sym}", trace
+    # v19.277 末層:CBOE 官方 Put/Call CSV(total 語意對齊 ^CPC → equity 次)
+    for _kind in ("total", "equity"):
+        s = _safe_validate_cboe(_fetch_cboe_pcratio_csv(_kind, trace=trace))
+        if not s.empty and len(s) >= 2:
+            return s, f"CBOE {_kind}pc.csv", trace
     return pd.Series(dtype=float), "", trace
 
 
