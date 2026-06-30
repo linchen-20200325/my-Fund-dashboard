@@ -565,16 +565,18 @@ def render_single_fund_tab() -> None:
                                   f"<span style='color:{_chip_color};font-size:11px;min-width:74px;text-align:right;font-weight:600'>{_chip_lbl}</span>"
                                   f"<span style='color:{GRAY_66};font-size:10px;min-width:96px;text-align:right'>{_chip_dist}</span>"
                                   f"</div>")
-                    st.markdown(
-                        f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};border-radius:10px;padding:12px 16px;margin:10px 0'>"
+                    # v19.273 Phase 2 TOP 2.2:σ 買賣點卡外框走 gh_card chrome SSOT(byte-identical)
+                    from ui.components.cards import gh_card
+                    st.markdown(gh_card(
                         f"<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
                         f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.0（{_m_mode} ｜ σ 來源：{_m_std_src}）</span>"
                         f"<span style='background:#111;color:{_m_pc};border:1px solid {_m_pc};padding:2px 10px;"
                         f"border-radius:12px;font-size:12px;font-weight:700'>{_m_pl}</span>"
                         f"</div>"
                         + _rows
-                        + f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>現值 {_m_nav_v:.4f} ｜ 接近閾值 ±{_NEAR:.1f}%</div>"
-                        + "</div>", unsafe_allow_html=True)
+                        + f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>現值 {_m_nav_v:.4f} ｜ 接近閾值 ±{_NEAR:.1f}%</div>",
+                        radius=10, padding="12px 16px", margin="10px 0",
+                    ), unsafe_allow_html=True)
 
                 # ── V3-3: -2σ 超跌機會卡（布林下軌突破警報）────────────
                 _boll_latest_low = float(_bb_dn.iloc[-1]) if len(_bb_dn) > 0 else None
