@@ -1,6 +1,207 @@
 # 基金戰情室 — 技術架構書 (ARCHITECTURE.md)
-> 版本：v11.0（v18.109 分層架構重構**已完工**）| 更新：2026-05-16 | 分支：`claude/fix-data-retrieval-4BX3v`
+> 版本：**v12.0**(v19.251 深層稽核後 doc-sync) | 更新：2026-06-30 | 分支：`claude/restore-context-protocol-lH9kg`
+> 歷史版本:v11.0 (2026-05-16, v18.109 分層完工總結,完整保留於 §0 下方)
 > **核心禁令**：🚫 全面排除 ETF，本系統專注**共同基金**。
+
+---
+
+## §0' 現況快照 — v12.0(v19.251,2026-06-30)
+
+> v11.0(§0)定義的 4 層架構**至今依然有效**;本節只更新 v11.0 → v12.0 之間
+> 變動的「實體檔案分佈」與「新 subpackage」,讓本檔反映真實程式碼結構。
+> §0~§8 描述的「為何分層 / 4 層職責 / 重構成績」**不需重讀**,只需把單檔指涉
+> 在腦中對應到下表的 subpackage 即可。
+
+### v11.0 → v12.0 變動軌跡
+
+| 階段 | PR 數 | 內容 |
+|---|---|---|
+| **AI / Fund Health 強化**(v18.117 → v18.140) | ~32 | 已在 §0 表內記錄 |
+| **P1-5/P1-6/P1-7 大檔拆 subpackage**(v19.x) | 3 | `repositories/fund_repository.py 4216 行` → `repositories/fund/` 5 子模組;`fund_grp_health` → `services/health/` 5 子模組;`services/macro_service.py 2128 行` → `services/macro/` 11 子模組 |
+| **P2-3/P2-4/P2-5 第二輪拆分**(v19.x) | 3 | `services/risk_calibration` 等 → `services/calibration/` 4 子模組;`policy_repository.py 1372 行` → `repositories/policy/` 3 子模組;`repositories/macro_repository.py 1078 行` → `repositories/macro/` 5 子模組 |
+| **第四階段 dead code 大掃** | ~10 | quadrant_simulator / event_calendar / allocation_simulator / adjusted_nav / cluster.calibration / macro_buckets dead fn / 散批 11 fn / `services/valuation.py` 整檔(v19.251) |
+| **R1-R8 shim 拆除**(v19.x) | 8 | `fund_repository.py` / `macro_service.py` / `fund_fetcher.py` / `services/risk_calibration.py` / `services/macro_weights_store.py` 全 shim 拔除 |
+| **R22-R26 PR-track 維運** | 4 | Insurance / JPMorgan API / pending review ceremony 拔毒(v19.250 B) / R25 doc-sync |
+
+### 真實目錄結構(v12.0)
+
+```
+my-Fund-dashboard/
+├── app.py                          # L3 入口(425 LOC,thin orchestrator)
+├── fund_fetcher.py                 # 過渡 shim(F-GRAY-1 保留,501 LOC, 18 re-export)
+├── conftest.py                     # pytest fixture
+│
+├── infra/                          # L0 跨層基礎(0 業務邏輯)
+│   ├── cache.py                    # @_ttl_cache + register_cache + _CACHE_REGISTRY
+│   ├── proxy.py                    # NAS Squid + 直連 fallback
+│   ├── oauth.py                    # Google OAuth + Service Account
+│   ├── llm.py                      # Gemini multi-key round-robin
+│   └── config.py                   # Streamlit secrets wrapper
+│
+├── shared/                         # L0 純常數(無 IO)
+│   ├── ttls.py                     # 6 個 TTL 語意常數
+│   ├── fred_series.py              # 34 個 FRED series IDs
+│   ├── colors.py                   # TRAFFIC_* / MATERIAL_*
+│   ├── signal_thresholds.py        # 31 個信號 magic 數字 SSOT
+│   ├── api_endpoints.py            # FINMIND_BASE 等真實重複 URL
+│   ├── converters.py               # 單位 / 型別轉換
+│   ├── macro_buckets.py            # DangerSpec + LEVEL_COLOR(危險閾值面板)
+│   └── (其他常數檔)
+│
+├── models/                         # L0 純 dataclass
+│   ├── policy.py
+│   └── ledger.py
+│
+├── repositories/                   # L1 DataFetcher(I/O / 解析 / 快取)
+│   ├── fund/                       # 基金 fetcher subpackage(原 fund_repository.py 4216 LOC)
+│   │   ├── _helpers.py
+│   │   ├── sources.py              # MoneyDJ / Cnyes / Allianz / Insurance 子網域
+│   │   ├── fx_and_main.py          # FX + tdcc_search + diagnose_fx_sources
+│   │   ├── nav_metrics.py          # NAV 抓取 + metrics 包裝
+│   │   └── fund_orchestration.py   # 多 fetcher 整合 orchestrator
+│   ├── macro/                      # 總經 fetcher subpackage(原 macro_repository.py 1078 LOC)
+│   │   ├── fred.py                 # FRED 34 series fetcher
+│   │   ├── yf.py                   # Yahoo Finance OHLCV
+│   │   ├── china.py                # 中國總經(替代源)
+│   │   ├── alternate.py            # AAII / DEFILLAMA / 其他替代源
+│   │   └── math_utils.py           # recession_probability / sigma_band
+│   ├── policy/                     # 政策 CRUD subpackage(原 policy_repository.py 1372 LOC)
+│   │   ├── _helpers.py
+│   │   ├── v1.py
+│   │   └── v2.py
+│   ├── ledger_repository.py        # T7 帳本 CRUD(本地 JSON)
+│   ├── snapshot_repository.py      # 快照 CRUD
+│   ├── news_repository.py          # 11 RSS feed 並聯
+│   ├── hot_money_repository.py     # 外資買賣超 + USDTWD(EX-CACHE-1)
+│   ├── tw_macro_repository.py      # TW PMI / NDC / CBC
+│   ├── moneydj_fetcher.py          # MoneyDJ 多 page_type fallback
+│   └── external_market_repository.py  # YF Ticker.info / multpl.com(原 valuation/risk_radar 下沉)
+│
+├── services/                       # L2 CalcEngine(純函式 / 業務邏輯)
+│   ├── macro/                      # 總經評分 subpackage(原 macro_service.py 2128 LOC)
+│   │   ├── _helpers.py
+│   │   ├── composite_score.py      # 23 指標 health score
+│   │   ├── explain.py              # 白話評語
+│   │   ├── validation.py           # macro 範圍合理性
+│   │   ├── weights_store.py        # active.json + GS backend(Route C-2 注入器)
+│   │   ├── causal_sankey.py        # 因果鏈視覺化
+│   │   ├── turning_points.py       # 拐點偵測
+│   │   ├── tw_local.py             # TW 在地總經
+│   │   ├── us_indicators.py        # US macro orchestrator
+│   │   ├── signal_lookback.py      # 訊號歷史回看
+│   │   ├── china.py                # 中國總經
+│   │   └── composite_score.py
+│   ├── health/                     # 基金健診 subpackage(原 fund_grp_health_extras 拆)
+│   │   ├── dividend.py
+│   │   ├── dividend_calc.py
+│   │   ├── grade.py                # 健診評等 SSOT
+│   │   ├── replacement.py          # MK 替換規則
+│   │   └── report.py               # 健診表 row builder
+│   ├── calibration/                # 校準 subpackage(原 risk_calibration 等)
+│   │   ├── risk.py                 # 風險校準 + Fama-French 3-factor
+│   │   ├── macro_score.py          # macro 評分校準
+│   │   ├── multi_factor.py         # 多因子 walk-forward
+│   │   └── signal_threshold.py     # 訊號閾值 grid search
+│   ├── config/
+│   │   └── macro_weights_active.json  # C-2 active override(可手動編輯)
+│   ├── fund_service.py             # 基金主 service
+│   ├── portfolio_service.py        # portfolio 模擬
+│   ├── precision_service.py        # 精準策略
+│   ├── ai_service.py               # Gemini 包裝(EX-AI-1)
+│   ├── crisis_backtest.py
+│   ├── crisis_strategy_grid.py
+│   ├── crisis_ai_advisor.py
+│   ├── ai_advisor_pending.py       # 事前 AI 比對 top-N(v19.250 B 後 pending review 退役,僅留 recommend_weights)
+│   ├── moneydj_fetcher.py          # 基金 L2 orchestrator(R8 EX-L1ORCH-1 退役後純 L2)
+│   ├── liquidity_engine.py
+│   ├── us_liquidity_engine.py
+│   ├── reconcile.py                # 對帳 wrapper
+│   ├── auto_search.py + auto_search_store_gs/local.py  # 自動搜尋
+│   ├── decision_matrix.py
+│   ├── macro_validation.py         # macro SCORE_RULES
+│   ├── macro_explain.py
+│   ├── macro_tw_local.py
+│   ├── macro_composite_score.py
+│   ├── macro_signal_lookback.py
+│   ├── macro_score_calibration.py
+│   ├── multi_factor_optimization.py
+│   ├── nav_history_store.py
+│   ├── policy_advisor_service.py
+│   ├── realtime_signal.py
+│   ├── risk_radar.py
+│   ├── signal_threshold_optimization.py
+│   ├── currency.py
+│   ├── format_helpers.py
+│   ├── cross_source_compare.py
+│   ├── fund_history.py
+│   ├── fund_total_return.py
+│   ├── fund_replacement_verdict.py
+│   ├── fund_health_report.py
+│   ├── fund_dividend_calculator.py
+│   ├── fund_dividend_health.py
+│   ├── ai_prompts.py
+│   └── ledger_service.py
+│   # v19.251 退役清單:valuation.py / risk_calibration.py(shim) / macro_weights_store.py(shim)
+│
+├── ui/                             # L3 ComponentUI(Streamlit only)
+│   ├── tab1_macro.py ~ tab6_manual.py
+│   ├── tab_crisis_backtest.py      # 危機回測(走 lazy import L1,登 EX-PASSTHRU-1)
+│   ├── tab3_t7_ledger.py
+│   ├── tab5_data_guard.py          # 資料看板(走 lazy import L1)
+│   ├── tab_allocation_simulator.py(已刪)
+│   ├── sidebar.py                  # 抽出 sidebar(C3)
+│   ├── components/
+│   │   ├── macro_card.py / macro_card_edu.py
+│   │   ├── mk_dashboard.py / mk_clock.py
+│   │   ├── macro_compass.py        # 抽出 macro compass(C3)
+│   │   └── (其他 component)
+│   └── helpers/
+│       ├── session.py
+│       ├── macro_helpers.py(shim) / macro/(子模組)
+│       ├── chart/danger.py         # DangerSpec 渲染(讀 shared.macro_buckets)
+│       ├── holdings.py
+│       ├── data_registry.py
+│       ├── io/oauth_state.py
+│       ├── v2_editor.py
+│       ├── cloud_io.py
+│       ├── portfolio/load.py
+│       ├── d_mode.py
+│       ├── metric_explainers.py
+│       └── (其他 helper)
+│
+├── tests/                          # ~270 test 檔(75 個從根目錄遷入,P0-3)
+└── scripts/                        # 一次性 script(eval_macro_consensus / update_macro_history 等)
+```
+
+### 已知例外清單(同 CLAUDE.md §8.2.A,version-stamped)
+
+| ID | 狀態 | 內容 |
+|---|---|---|
+| EX-CACHE-1 | ✅ alive | L1 用 `@st.cache_data` decorator(不做真 UI 呼叫) |
+| EX-AI-1 | ✅ alive | `services/ai_service.py` 回 str 而非 dataclass |
+| ~~EX-POLICY-1~~ | ❌ 退役 (v19.212) | allocation_simulator 整檔刪 |
+| EX-CRUD-1 | ✅ alive | UI 直呼 L1 CRUD(policy/snapshot/ledger) |
+| EX-PASSTHRU-1 | ✅ alive (v19.251 補登 3 entries → 5 fn) | UI 直呼 L1 facade(tdcc_search / fetch_market_news / fetch_fund_by_key / fetch_nav_history_long / diagnose_fx_sources) |
+| ~~EX-L1ORCH-1~~ | ❌ 退役 (v19.240) | R8 升級拆 return + L2 wrapper |
+
+### 體積變化(v11.0 → v12.0)
+
+| 模組 | v11.0 | v12.0 | 變化 |
+|---|---|---|---|
+| `services/macro_service.py` | 2128 | 0(拆 services/macro/ 11 子模組) | 整檔搬走 |
+| `repositories/fund_repository.py` | 4216 | 0(拆 repositories/fund/ 5 子模組) | 整檔搬走 |
+| `repositories/macro_repository.py` | 721 → 1078 | 0(拆 repositories/macro/ 5 子模組) | 二度成長後整檔搬走 |
+| `repositories/policy_repository.py` | 656 → 1372 | 0(拆 repositories/policy/ 3 子模組) | 二度成長後整檔搬走 |
+| `services/fund_grp_health_extras.py` | (新) | 0(拆 services/health/ 5 子模組) | 拆完即退 |
+| `services/risk_calibration.py` | (新) | 0(v19.251 拔 shim,實作搬 services/calibration/risk.py) | shim 退役 |
+| `services/macro_weights_store.py` | (新) | 0(v19.251 拔 shim,實作搬 services/macro/weights_store.py) | shim 退役 |
+| `services/valuation.py` | 187 | **0 (v19.251 退役)** | 0 production caller,test 孤兒同清 |
+| 根目錄業務 .py | 2 (app.py + fund_fetcher.py) | 2 | 不變 |
+
+### 完整 v11.0 細節(原文保留)
+
+> 以下 §0 ~ §8 為 v11.0 完工時 snapshot,內含 v18.109 重構完整背景。
+> v11.0 → v12.0 之間的變動已在上方 §0' 總結。閱讀順序建議:**先讀 §0' 對齊現況,再選擇性回查 §0**。
 
 ---
 

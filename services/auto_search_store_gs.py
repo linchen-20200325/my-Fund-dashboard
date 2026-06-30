@@ -31,9 +31,9 @@ _RESULT_HEADERS = [
 
 
 def _enabled() -> bool:
-    """重用 macro_weights_store 的 secrets 偵測（同一份 GS sheet）."""
+    """重用 macro.weights_store 的 secrets 偵測（同一份 GS sheet）."""
     try:
-        from services.macro_weights_store import _gs_enabled
+        from services.macro.weights_store import _gs_enabled
 
         return _gs_enabled()
     except Exception:

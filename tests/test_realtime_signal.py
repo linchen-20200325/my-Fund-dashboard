@@ -52,7 +52,7 @@ def test_v19_15_dashboard_empty_path_has_all_required_keys():
 # ════════════════════════════════════════════════
 # 完整 e2e（mock 各層）
 # ════════════════════════════════════════════════
-@patch("services.macro_weights_store.apply_weight_overrides")
+@patch("services.macro.weights_store.apply_weight_overrides")
 @patch("services.macro_composite_score.calculate_composite_score")
 @patch("services.macro_composite_score.composite_verdict")
 @patch("services.macro.compute_cluster_signals")
@@ -91,7 +91,7 @@ def test_v19_15_dashboard_full_path_with_funds(
     assert d["actions_summary"]["n_hold"] == 2
 
 
-@patch("services.macro_weights_store.apply_weight_overrides")
+@patch("services.macro.weights_store.apply_weight_overrides")
 @patch("services.macro_composite_score.calculate_composite_score")
 @patch("services.macro_composite_score.composite_verdict")
 @patch("services.macro.compute_cluster_signals")
@@ -121,7 +121,7 @@ def test_v19_15_dashboard_extreme_bear_triggers_satellite_exit(
     assert "S2" in d["actions_summary"]["top_risk_funds"]
 
 
-@patch("services.macro_weights_store.apply_weight_overrides")
+@patch("services.macro.weights_store.apply_weight_overrides")
 @patch("services.macro_composite_score.calculate_composite_score")
 @patch("services.macro_composite_score.composite_verdict")
 @patch("services.macro.compute_cluster_signals")

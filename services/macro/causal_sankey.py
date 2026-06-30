@@ -602,7 +602,7 @@ def compute_cluster_signals(indicators: dict) -> list[dict]:
         list of {name, icon, score_norm, signal, color, top_contributor, members}
     """
     try:
-        from services.macro_weights_store import apply_weight_overrides
+        from services.macro.weights_store import apply_weight_overrides
         indicators = apply_weight_overrides(indicators or {})
     except ImportError:
         indicators = indicators or {}

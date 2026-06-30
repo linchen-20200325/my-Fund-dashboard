@@ -110,7 +110,7 @@ def compute_score_row(row: dict | pd.Series, prev: dict | None = None) -> float:
     active.json 有就蓋、沒有就用 FACTORS 表硬編碼；total_weight 用即時 sum 重算。
     """
     try:
-        from services.macro_weights_store import get_weight_override
+        from services.macro.weights_store import get_weight_override
     except ImportError:
         get_weight_override = None  # type: ignore[assignment]
 
@@ -173,7 +173,7 @@ def _resolve_phase_thresholds(
     if thresholds is not None:
         return thresholds
     try:
-        from services.macro_weights_store import get_phase_thresholds
+        from services.macro.weights_store import get_phase_thresholds
         return get_phase_thresholds(PHASE_THRESHOLDS_DEFAULT)
     except ImportError:
         return PHASE_THRESHOLDS_DEFAULT

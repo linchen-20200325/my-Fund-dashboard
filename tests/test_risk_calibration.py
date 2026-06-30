@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from services.risk_calibration import (
+from services.calibration.risk import (
     CalibrationResult,
     compute_calibration,
     generate_synthetic_demo,
@@ -103,7 +103,7 @@ def test_rolling_risk_score_missing_columns_returns_nan():
 # fetch_real_3factor_monthly (v18.253) — 邊界 + import 防護
 # ════════════════════════════════════════════════════════════
 def test_fetch_real_3factor_monthly_no_api_key():
-    from services.risk_calibration import fetch_real_3factor_monthly
+    from services.calibration.risk import fetch_real_3factor_monthly
 
     df, spx, notes = fetch_real_3factor_monthly("", years=10)
     assert df.empty
@@ -112,7 +112,7 @@ def test_fetch_real_3factor_monthly_no_api_key():
 
 
 def test_fetch_real_3factor_monthly_returns_tuple_schema():
-    from services.risk_calibration import fetch_real_3factor_monthly
+    from services.calibration.risk import fetch_real_3factor_monthly
 
     result = fetch_real_3factor_monthly("", years=5)
     assert isinstance(result, tuple) and len(result) == 3

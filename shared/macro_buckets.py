@@ -150,7 +150,7 @@ BUCKET_DANGER_SPECS: list[DangerSpec] = [
     DangerSpec("forward_pe", "Forward P/E (S&P 500)", "mid", "倍", "high_bad",
                yellow=19.5, red=22.5, decimals=1,  # PE_MEAN(16.5) + 1σ / +2σ
                note=">+1σ 偏貴 / >+2σ 過熱",
-               source="SSOT:valuation.FORWARD_PE_MEAN(16.5)+σ(3.0)"),
+               source="DESIGN:FactSet/Yardeni 25Y 統計 PE_MEAN=16.5 σ=3.0(v19.251 valuation.py 退役後 inline literal)"),
 
     # ── 🎯 短線急殺:即時 risk-off ──
     DangerSpec("vix", "VIX 恐慌指數", "short", "", "high_bad",

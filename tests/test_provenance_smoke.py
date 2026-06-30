@@ -110,14 +110,11 @@ def test_services_layer_provenance_naming():
     assert "multi_factor" in mfo_src, "multi_factor_optimization 命名"
     assert "_stamp_prov" in mfo_src, "phase 18 _stamp_prov helper 存在"
 
-    # phase 19:us_liquidity_engine / valuation / risk_calibration
+    # phase 19:us_liquidity_engine / risk_calibration
+    # (v19.251 Phase 2:valuation 整檔退役 — 0 production caller,test 孤兒清)
     ule_src = _read("services/us_liquidity_engine.py")
     assert "_provenance" in ule_src, "us_liquidity_engine orchestrator _provenance 存在"
     assert "FRED:" in ule_src, "us_liquidity_engine FRED 命名"
-
-    vl_src = _read("services/valuation.py")
-    assert "_provenance" in vl_src, "valuation.detect_valuation _provenance 存在"
-    assert "FRED:" in vl_src or "GDPNOW" in vl_src, "valuation FRED 命名"
 
     # v19.202 第三階段 A1:P2-3 拆 services/calibration/ 後,實作搬 risk.py
     rc_src = _read("services/calibration/risk.py")
