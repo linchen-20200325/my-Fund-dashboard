@@ -22,6 +22,21 @@
 
 ## 當前版本
 
+- **v19.266-270 C #1~8 8-項一鍋燴(2026-06-30,PR #484,squash `0f2bec3`)**:
+  - **背景**:user 指示「C #1~8」對全部 doc + schema + scoring 一鍋掃。風險梯度從低到高分 5 phase
+  - **Phase 1 v19.266 doc-sync**:CLAUDE.md F-PROV-1 / F-GRAY-4 / F-RECON-1 status 更新
+    - F-PROV-1:13 L1 fetcher 已收 v19.82~v19.221,2 個 by-design 不可收,1 個 macro 融合缺口(Phase 5 補)
+    - F-GRAY-4:HY 90% / CPI 部份 / PMI WONTFIX(user 2026-06-26 撤銷 v19.147)
+    - F-RECON-1 新章節:v19.91 phase 6 全 3 chip 渲染落地(Sharpe/配息殖利率/1Y 報酬)
+  - **Phase 2 v19.267 D8 #5+#6**:`validate_defillama_series`(共用 YahooCloseSchema)+ `validate_aaii_sentiment`(dict 雙 path),caller wiring(us_liquidity_engine + liquidity_engine)
+  - **Phase 3 v19.268 D8 #7**:`validate_ndc_signal_dict` / `validate_tw_pmi_dict` / `validate_tw_export_yoy_dict` / `validate_foreign_consec_dict` 4 個 TW dict validator + `ui/tab1_macro.py` `_safe_tw()` 4 sites
+  - **Phase 4 v19.269 D8 #3**:CPI 2 處 logic inline 收口 → SSOT(`services/calibration/macro_score.py:_s_cpi` + `ui/helpers/macro/helpers.py:183`)。0 行為變化
+  - **Phase 5 v19.270 D8 #8**:`calculate_composite_score(ind, *, provenance_out=None)` opt-in side-car dict(設計 E:避 NamedTuple 改 signature)
+  - **Fixup `005e22d`**:`test_tab1_tw_local_section.py` 4 fixture 加 source 全名 + ISO fetched_at + `today_net`(對齊 Phase 3 schema 驗證)
+  - **F-SCHEMA-1 surface 升級**:7 → 15 validator(7 起點 → 9 v19.265 → 11 v19.267 → 15 v19.268)
+  - **驗證**:CI Fast + Schema gate 雙綠,phase_d 41 case + composite_score_provenance 9 case + 既有 test 全綠
+  - **C deep-dive 後續(workflow 結果)**:`#2 HY education docstring` / `#4 PMI WONTFIX` / `#9 yf_forward_pe 包裝` 三項經 3 agent audit + adversarial verify 一致確認 **WONTFIX 成立**,皆無 1-PR 行動建議。CLAUDE.md §8.3 + §2.2 文字微調防再 audit
+
 - **v19.265 D7 F-SCHEMA-1 Tier 2/3 — stooq + CBOE Series validators(2026-06-30,PR #483,squash `771d256`)**:
   - **背景**:user honest-scoping 後決定推進 D7(4 個 D epic 中,D6 純 docstring 低 ROI、D8/D9 經實地核對發現大都已 v19.86~v19.221 默默收完,只剩 D7 真有實質工作)
   - **新增 shared/schemas.py 2 validator**(共用 YahooCloseSchema 結構契約,Series 形狀相同):
