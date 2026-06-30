@@ -325,6 +325,14 @@ def _src_allianzgi_meta(code: str) -> dict:
 # 17 函式（13 _src_* + 4 _cnyes_* / _morningstar_search_secid 等 helper）
 # ════════════════════════════════════════════════════════════
 
+# ── SSOT:外部 API base(v19.279 收口 inline 重複)──────────────────────
+# 同檔多 fetcher 共用同一 base path;各 fetcher 以 f"{BASE}/..." 串接不同 path。
+# 收口前 cnyes base ×4 / Morningstar tools base ×2 散落 inline,現集中於此。
+# 註:`lt.morningstar.com/.../SecuritySearch.ashx`(secId 搜尋)為**不同 host**,
+#     不併入此 base(語意:搜尋 API vs 資料 API)。
+_CNYES_FUND_API = "https://fund.api.cnyes.com/fund/api/v2/funds"   # 鉅亨網基金 REST
+_MS_TOOLS_REST = "https://tools.morningstar.co.uk/api/rest.svc"    # Morningstar UK tools(token-free)
+
 # ── 來源2：鉅亨網 API（無 IP 限制，伺服器可用）────────────────────────
 def _cnyes_parse_navs(navs: list) -> dict:
     """解析 cnyes NAV 列表，回傳 {timestamp: float}"""
@@ -367,7 +375,7 @@ def _cnyes_resolve_code(moneydj_code: str) -> list:
     def _cnyes_search(key: str, limit: int = 10) -> list:
         """呼叫 cnyes search API，回傳 fundCode 列表"""
         try:
-            url = (f"https://fund.api.cnyes.com/fund/api/v2/funds/search"
+            url = (f"{_CNYES_FUND_API}/search"
                    f"?key={_uquote(key)}&limit={limit}")
             r = requests.get(url, headers=_hdrs, timeout=10, proxies=_proxies(), verify=_ssl_verify())
             if r.status_code == 200:
@@ -431,7 +439,7 @@ def fetch_nav_cnyes(code: str) -> pd.Series:
         "Referer": "https://fund.cnyes.com/",
     }
     for _cand in candidates:
-        _url = (f"https://fund.api.cnyes.com/fund/api/v2/funds/{_cand}"
+        _url = (f"{_CNYES_FUND_API}/{_cand}"
                 f"/nav?start={start_ms}&end={end_ms}")
         try:
             r = requests.get(_url, headers=_hdrs, timeout=15, proxies=_proxies(), verify=_ssl_verify())
@@ -465,7 +473,7 @@ def fetch_div_cnyes(code: str) -> list:
     divs = []
     _code = code.upper().strip()
     try:
-        url = f"https://fund.api.cnyes.com/fund/api/v2/funds/{_code}/dividend"
+        url = f"{_CNYES_FUND_API}/{_code}/dividend"
         r = requests.get(url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             "Accept": "application/json",
@@ -628,7 +636,7 @@ def fetch_holdings_cnyes(code: str) -> dict:
     _resources = ("portfolio", "holding", "holdings", "asset")
     for _cand in candidates:
         for _res in _resources:
-            _url = f"https://fund.api.cnyes.com/fund/api/v2/funds/{_cand}/{_res}"
+            _url = f"{_CNYES_FUND_API}/{_cand}/{_res}"
             try:
                 r = requests.get(_url, headers=_hdrs, timeout=15,
                                  proxies=_proxies(), verify=_ssl_verify())
@@ -787,7 +795,7 @@ def fetch_holdings_morningstar(code: str) -> dict:
     # viewId 未驗證 → 多候選嘗試(snapshot 含資產配置;portfolio view 含 holdings)
     _views = ("PortfolioSAL", "snapshot", "Portfolio")
     for _view in _views:
-        _url = (f"https://tools.morningstar.co.uk/api/rest.svc/security_details/"
+        _url = (f"{_MS_TOOLS_REST}/security_details/"
                 f"{sec_id}?viewId={_view}&idtype=Morningstar"
                 f"&responseViewFormat=json&languageId=en-GB")
         try:
@@ -1141,7 +1149,7 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
 
     # 3a. 主端點：tools.morningstar.co.uk（secId 在 path，UK 伺服器，美國 IP 可用）
     url_uk = (
-        f"https://tools.morningstar.co.uk/api/rest.svc/timeseries_price/{sec_id}"
+        f"{_MS_TOOLS_REST}/timeseries_price/{sec_id}"
         f"?currencyId={currency_id}&idtype=Morningstar&frequency=daily"
         f"&startDate={start_d.isoformat()}&endDate={end_d.isoformat()}"
         f"&outputType=COMPACTJSON"
