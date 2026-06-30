@@ -62,7 +62,8 @@ __all__ = [
     "_tdcc_get", "_tdcc_resolve_fund_name",
     # ── public functions ──
     "canonicalize_moneydj_url",
-    "fetch_div_cnyes", "fetch_fund_multi_source", "fetch_nav_cnyes",
+    "fetch_div_cnyes", "fetch_fund_multi_source",
+    "fetch_holdings_cnyes", "fetch_nav_cnyes",
     "get_page_types_to_try",
     "load_fund_code_mapping",
     "normalize_domestic_code",
@@ -492,6 +493,167 @@ def fetch_div_cnyes(code: str) -> list:
             _d["source"] = f"Cnyes:dividend:{_code}"
             _d["fetched_at"] = _fa
     return divs
+
+
+# ── v19.276 cnyes 持股 fallback(MoneyDJ yp013xxx 全失敗時的替代源)─────────
+# 設計脈絡:user 反饋 ACTI71 / JFZN3 等基金 MoneyDJ 持股頁全空(子網域限制 /
+# multi-asset 透明度不足),要求「找其他替代方案爬持股」。cnyes 已是現用 JSON
+# API(NAV / 配息走同一 base URL + NAS proxy),為架構一致性最高的 fallback。
+#
+# ⚠️ cnyes 持股端點 JSON shape 無法於開發環境(local proxy 403)實測 →
+#    採防禦式「多 endpoint × 多欄位名」解析:猜錯 → 回空 + log 真實 keys
+#    (§1 Fail Loud:絕不崩潰、絕不偽造;production log 揭露真 shape 供下一輪精修)。
+#    worst case = 跟現在一樣空,但多一條 fallback 路徑。
+_CNYES_HOLD_NAME_KEYS = ("name", "stockName", "securityName", "holdingName",
+                         "comName", "companyName", "secName", "fundName")
+_CNYES_HOLD_SECTOR_KEYS = ("industry", "sector", "category", "categoryName",
+                           "industryName", "type")
+_CNYES_PCT_KEYS = ("weight", "ratio", "pct", "percentage", "percent",
+                   "proportion", "rate", "weighting")
+_CNYES_AMOUNT_KEYS = ("amount", "marketValue", "value", "netAsset")
+# 持股陣列在 payload 中可能掛的 key
+_CNYES_HOLD_LIST_KEYS = ("holdings", "topHoldings", "stockHoldings",
+                         "holdingList", "topHolding", "stocks", "holding")
+# 產業 / 資產 / 區域配置陣列可能掛的 key
+_CNYES_SECTOR_LIST_KEYS = ("industryAllocation", "sectorAllocation",
+                           "assetAllocation", "regionAllocation",
+                           "industryList", "assetList", "allocation",
+                           "industry", "sector", "asset", "region")
+# 配置項額外名稱欄位(產業/資產/區域名)
+_CNYES_SECTOR_NAME_KEYS = (_CNYES_HOLD_NAME_KEYS +
+                           ("industryName", "sectorName", "assetName",
+                            "categoryName", "regionName", "className"))
+
+
+def _cnyes_pick(item: dict, keys):
+    """從 dict 依候選 key 順序取第一個非空值;查無回 None。"""
+    if not isinstance(item, dict):
+        return None
+    for k in keys:
+        v = item.get(k)
+        if v not in (None, "", [], {}):
+            return v
+    return None
+
+
+def _cnyes_parse_holdings(data) -> dict:
+    """
+    防禦式解析 cnyes 持股 JSON(多 shape)。
+    回傳 {top_holdings:[{name,sector,pct}], sector_alloc:[{name,pct,amount}],
+          data_date}(任一項可缺;全缺回 {})。
+    不寫 provenance(由 caller fetch_holdings_cnyes 統一加)。
+    """
+    out: dict = {}
+    # 拆 payload:優先 data["data"](dict/list),否則 data 本體
+    payload = data
+    if isinstance(data, dict):
+        _inner = data.get("data")
+        payload = _inner if isinstance(_inner, (dict, list)) else data
+
+    def _as_list(node, keys):
+        if not isinstance(node, dict):
+            return []
+        for k in keys:
+            v = node.get(k)
+            if isinstance(v, list) and v:
+                return v
+        return []
+
+    # ── top_holdings ──
+    if isinstance(payload, list):
+        hold_list = payload                       # data 直接是 holdings 陣列
+    else:
+        hold_list = _as_list(payload, _CNYES_HOLD_LIST_KEYS)
+    holdings = []
+    for item in hold_list:
+        if not isinstance(item, dict):
+            continue
+        name = _cnyes_pick(item, _CNYES_HOLD_NAME_KEYS)
+        pct = safe_float(_cnyes_pick(item, _CNYES_PCT_KEYS))
+        if name and pct is not None and 0 < pct < 100:
+            sector = _cnyes_pick(item, _CNYES_HOLD_SECTOR_KEYS) or ""
+            holdings.append({"name": str(name).strip(),
+                             "sector": str(sector).strip(),
+                             "pct": pct})
+    if holdings:
+        out["top_holdings"] = holdings[:10]
+
+    # ── sector / asset / region allocation ──
+    sector_list = _as_list(payload, _CNYES_SECTOR_LIST_KEYS)
+    sectors = []
+    for item in sector_list:
+        if not isinstance(item, dict):
+            continue
+        name = _cnyes_pick(item, _CNYES_SECTOR_NAME_KEYS)
+        pct = safe_float(_cnyes_pick(item, _CNYES_PCT_KEYS))
+        if name and pct is not None and 0 < pct <= 100:
+            amount = safe_float(_cnyes_pick(item, _CNYES_AMOUNT_KEYS)) or 0.0
+            sectors.append({"name": str(name).strip(),
+                            "pct": pct, "amount": amount})
+    if sectors:
+        out["sector_alloc"] = sectors
+
+    # ── data_date(盡力抓,缺無妨)──
+    _dd = None
+    if isinstance(data, dict):
+        _dd = data.get("dataDate") or data.get("date")
+        if not _dd and isinstance(data.get("data"), dict):
+            _dd = data["data"].get("dataDate") or data["data"].get("date")
+    if _dd:
+        out["data_date"] = str(_dd)[:10]
+
+    return out
+
+
+def fetch_holdings_cnyes(code: str) -> dict:
+    """
+    鉅亨網持股 / 資產配置 fallback(REST API)。MoneyDJ yp013xxx 全失敗時的替代源。
+    回傳契約對齊 nav_metrics.fetch_holdings:
+      {data_date, sector_alloc:[{name,pct,amount}], top_holdings:[{name,sector,pct}],
+       source, fetched_at}
+    抓不到 → {}(§1 Fail Loud:不偽造,log 真實 JSON keys 供 production 精修)。
+    L1 純 fetcher,不自帶 cache(由 orchestrator fetch_holdings 的 @_daily_cache 統管)。
+    """
+    import sys as _sys_c
+    _code = (code or "").upper().strip()
+    if not _code:
+        return {}
+    candidates = _cnyes_resolve_code(_code)
+    _hdrs = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+        "Referer": "https://fund.cnyes.com/",
+    }
+    # cnyes 持股端點名未驗證 → 多候選 resource path 嘗試
+    _resources = ("portfolio", "holding", "holdings", "asset")
+    for _cand in candidates:
+        for _res in _resources:
+            _url = f"https://fund.api.cnyes.com/fund/api/v2/funds/{_cand}/{_res}"
+            try:
+                r = requests.get(_url, headers=_hdrs, timeout=15,
+                                 proxies=_proxies(), verify=_ssl_verify())
+                if r.status_code != 200:
+                    continue
+                data = r.json()
+            except Exception as _e:
+                print(f"[cnyes_holdings] {_cand}/{_res}: {_e}", file=_sys_c.stderr)
+                continue
+            out = _cnyes_parse_holdings(data)
+            if out.get("top_holdings") or out.get("sector_alloc"):
+                out["source"] = f"Cnyes:{_res}:{_cand}"
+                out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                print(f"[cnyes_holdings] ✅ {code}→{_cand}/{_res} "
+                      f"top={len(out.get('top_holdings', []))} "
+                      f"sector={len(out.get('sector_alloc', []))}",
+                      file=_sys_c.stderr)
+                return out
+            # 200 但 shape 不認得 → log 真實 keys(§1,production 揭露真 shape)
+            _keys = (list(data.keys()) if isinstance(data, dict)
+                     else f"list[{len(data)}]" if isinstance(data, list)
+                     else type(data).__name__)
+            print(f"[cnyes_holdings] {_cand}/{_res} 200 但無可解析持股 keys={_keys}",
+                  file=_sys_c.stderr)
+    return {}
 
 
 def _src_cnyes_nav(code: str) -> pd.Series:

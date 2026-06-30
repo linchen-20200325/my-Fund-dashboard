@@ -966,6 +966,12 @@ def fetch_holdings(code: str) -> dict:
             print(f"[holdings:{code}] 全 {len(_hold_urls)} 候選 URL 失敗:"
                   f"{[(a['status'], a['len']) for a in _attempts]}",
                   file=_sys_h.stderr)
+            # v19.276 fallback:MoneyDJ 全失敗 → 試 cnyes 持股 API
+            _cy = fetch_holdings_cnyes(code)
+            if _cy.get("top_holdings") or _cy.get("sector_alloc"):
+                print(f"[holdings:{code}] ↩ cnyes fallback 命中(MoneyDJ 全失敗)",
+                      file=_sys_h.stderr)
+                return _cy
             return {"source": "MoneyDJ:all_failed",
                     "attempts": _attempts,
                     "fetched_at": pd.Timestamp.now('UTC').isoformat()}
@@ -1077,6 +1083,15 @@ def fetch_holdings(code: str) -> dict:
         if out:
             out["source"] = f"MoneyDJ:yp:{_hold_page}"
             out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        # v19.276 fallback:MoneyDJ 頁抓到但無持股(multi-asset / FoF 透明度不足 /
+        # parser 0 命中)→ 試 cnyes 持股 API。命中則整包以 cnyes 為準(provenance
+        # 一致),不與 MoneyDJ 空殼合併以免血緣混淆(§2.2)。
+        if not (out.get("top_holdings") or out.get("sector_alloc")):
+            _cy = fetch_holdings_cnyes(code)
+            if _cy.get("top_holdings") or _cy.get("sector_alloc"):
+                print(f"[holdings:{code}] ↩ cnyes fallback 命中(MoneyDJ 頁無持股)",
+                      file=_sys_h.stderr)
+                return _cy
         return out
     except Exception as e:
         print(f"[fetch_holdings] {e}")
