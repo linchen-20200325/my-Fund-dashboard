@@ -2671,4 +2671,3 @@ def render_macro_tab() -> None:
             )
     else:
         st.info("👆 點擊「載入總經資料」開始分析")
-
