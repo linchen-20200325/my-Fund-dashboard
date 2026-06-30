@@ -25,9 +25,25 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from shared.colors import (
-    GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_MUTED, GH_FG_PRIMARY, GH_FG_SECONDARY, STREAMLIT_BG,
-    MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED,
-    TRAFFIC_GREEN, TRAFFIC_YELLOW, TRAFFIC_RED, TRAFFIC_NEUTRAL,
+    BG_DARK_AMBER_1,
+    BG_DARK_AMBER_2,
+    BG_DARK_NAVY_4,
+    BG_DARK_RED_1,
+    BG_DARK_RED_2,
+    GH_BG_CARD,
+    GH_BG_PRIMARY,
+    GH_BORDER,
+    GH_FG_MUTED,
+    GH_FG_PRIMARY,
+    GH_FG_SECONDARY,
+    MATERIAL_GREEN,
+    MATERIAL_ORANGE,
+    MATERIAL_RED,
+    STREAMLIT_BG,
+    TRAFFIC_GREEN,
+    TRAFFIC_NEUTRAL,
+    TRAFFIC_RED,
+    TRAFFIC_YELLOW,
 )
 
 from fund_fetcher import (
@@ -1838,7 +1854,7 @@ def render_macro_tab() -> None:
                 _l3_sit_cards = []
                 if _pmi_v > 0 and _pmi_v < _PMI_SITUATION_BELOW and _sahm_v < 0.5:
                     _l3_sit_cards.append({
-                        "icon": "🟡", "border": MATERIAL_ORANGE, "bg": "#1a1200",
+                        "icon": "🟡", "border": MATERIAL_ORANGE, "bg": BG_DARK_AMBER_2,
                         "title": "【Situation A — 庫存調整，非衰退】",
                         "body": (f"PMI={_pmi_v:.1f}（<{_PMI_SITUATION_BELOW:.0f} 收縮）但薩姆規則={_sahm_v:.2f}（<0.5 安全線）。"
                                  f"製造業庫存去化壓力，消費端仍撐盤，非系統性衰退訊號。"
@@ -1846,7 +1862,7 @@ def render_macro_tab() -> None:
                     })
                 if _adl_v < -2:
                     _l3_sit_cards.append({
-                        "icon": "🔴", "border": MATERIAL_RED, "bg": "#1a0606",
+                        "icon": "🔴", "border": MATERIAL_RED, "bg": BG_DARK_RED_2,
                         "title": "【Situation B — 極端乖離警報】",
                         "body": (f"RSP/SPY 市場廣度={_adl_v:.2f}%（< -2% 危險線）。"
                                  f"大型權值股虛假拉抬，等權重指數嚴重落後。"
@@ -2176,7 +2192,7 @@ def render_macro_tab() -> None:
             with _gg1:
                 st.plotly_chart(_make_gauge(
                     _sahm_v, "薩姆規則<br>衰退機率", "pp", [0, 1.0],
-                    [(0.3, "#0a2a0a"), (0.5, "#2a1f00"), (1.0, "#2a0a0a")],
+                    [(0.3, "#0a2a0a"), (0.5, BG_DARK_AMBER_1), (1.0, BG_DARK_RED_1)],
                     danger_above=True), use_container_width=True)
                 _sahm_sig = ("🔴 **衰退觸發** ≥0.5" if _sahm_v >= 0.5
                              else "🟡 警戒區 ≥0.3" if _sahm_v >= 0.3
@@ -2192,7 +2208,7 @@ def render_macro_tab() -> None:
             with _gg2:
                 st.plotly_chart(_make_gauge(
                     _sloos_v, "SLOOS 放貸寬鬆度<br>銀行信貸標準", "%", [-30, 60],
-                    [(-5, "#0a2a0a"), (20, "#2a1f00"), (60, "#2a0a0a")],
+                    [(-5, "#0a2a0a"), (20, BG_DARK_AMBER_1), (60, BG_DARK_RED_1)],
                     danger_above=True), use_container_width=True)
                 _sloos_sig = ("🔴 **銀行緊縮** >20%" if _sloos_v > 20
                               else "🟡 中性偏緊 >0%" if _sloos_v > 0
@@ -2209,7 +2225,7 @@ def render_macro_tab() -> None:
                 # ADL = RSP/SPY 市場寬度 (% MoM change, negative = narrowing breadth = bad)
                 st.plotly_chart(_make_gauge(
                     _adl_v, "市場健康度<br>RSP/SPY 廣度", "%", [-10, 10],
-                    [(-5, "#2a0a0a"), (0, "#2a1f00"), (5, "#0a2a0a")],
+                    [(-5, BG_DARK_RED_1), (0, BG_DARK_AMBER_1), (5, "#0a2a0a")],
                     danger_above=False), use_container_width=True)
                 _adl_sig = ("🟢 市場廣度健康" if _adl_v > 2
                             else "🔴 **廣度收窄** 虛假繁榮" if _adl_v < -2
@@ -2260,7 +2276,7 @@ def render_macro_tab() -> None:
                     _double_sell = (_pf_s1 > 0 and _pf_nav > 0 and _pf_nav >= _pf_s1
                                     and _pf_bbu > 0 and _pf_nav >= _pf_bbu)
                     if _pf_adr > 0 and _pf_ret1y < _pf_adr:
-                        _tl_icon, _tl_bg, _tl_bc = "🔴", "#1a0606", MATERIAL_RED
+                        _tl_icon, _tl_bg, _tl_bc = "🔴", BG_DARK_RED_2, MATERIAL_RED
                         _tl_reason = f"吃本金警示：含息報酬 {_pf_ret1y:.1f}% < 配息率 {_pf_adr:.1f}%"
                     elif _double_buy:
                         _tl_icon, _tl_bg, _tl_bc = "🟢🟢", "#0a3a1a", "#00e676"
@@ -2585,9 +2601,9 @@ def render_macro_tab() -> None:
                                     line_color=MATERIAL_GREEN, line_width=1, opacity=0.7,
                                 )
                             _btfig.update_yaxes(type="log",
-                                                gridcolor="#1a1f2e",
+                                                gridcolor=BG_DARK_NAVY_4,
                                                 color=TRAFFIC_NEUTRAL)
-                            _btfig.update_xaxes(gridcolor="#1a1f2e", color=TRAFFIC_NEUTRAL)
+                            _btfig.update_xaxes(gridcolor=BG_DARK_NAVY_4, color=TRAFFIC_NEUTRAL)
                             _btfig.update_layout(
                                 paper_bgcolor=GH_BG_PRIMARY, plot_bgcolor=GH_BG_PRIMARY,
                                 font_color=GH_FG_PRIMARY, height=360,
@@ -2645,7 +2661,7 @@ def render_macro_tab() -> None:
                 _ai_mac_pct, _ai_mac_tl = _calc_data_health(ind)
                 if _ai_mac_pct < 50:
                     st.markdown(
-                        "<div style='border-left:4px solid #f44336;background:#1a1f2e;"
+                        "<div style=f'border-left:4px solid #f44336;background:{BG_DARK_NAVY_4};"
                         "border-radius:0 8px 8px 0;padding:10px 14px;font-size:13px'>"
                         "🔴 <b>紅燈阻斷</b>：總經資料完整率 "
                         f"<b>{_ai_mac_pct}%</b>（&lt;50%），AI 分析停用。"

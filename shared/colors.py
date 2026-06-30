@@ -36,6 +36,17 @@ GH_FG_SECONDARY: str = "#c9d1d9"   # GitHub fg secondary(次文字)
 GH_FG_MUTED: str = "#8b949e"       # GitHub fg muted(注意:跟 TRAFFIC_NEUTRAL #888888 不同色)
 STREAMLIT_BG: str = "#0e1117"      # Streamlit default body bg(1 hex off from GH_BG_PRIMARY)
 
+# v19.255 Phase 4-B5: Dark accent BG palette(semi-transparent danger / warning / success panel bg)
+BG_DARK_NAVY_1: str = "#0d1b2a"    # navy dark(最常用,~11 處)
+BG_DARK_NAVY_2: str = "#1a2845"    # navy mid
+BG_DARK_NAVY_3: str = "#1e2a3a"    # navy deep
+BG_DARK_NAVY_4: str = "#1a1f2e"    # navy alt
+BG_DARK_RED_1: str = "#2a0a0a"     # danger dark
+BG_DARK_RED_2: str = "#1a0606"     # danger deep
+BG_DARK_AMBER_1: str = "#2a1f00"   # warning dark
+BG_DARK_AMBER_2: str = "#1a1200"   # warning deep
+BG_DARK_GREEN_1: str = "#0a1a0a"   # success dark
+
 # 同義對應
 TRAFFIC_EMOJI: tuple[str, str, str, str] = ("🟢", "🟡", "🔴", "⬜")
 TRAFFIC_HEX: tuple[str, str, str, str] = (

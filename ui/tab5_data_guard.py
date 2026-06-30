@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.proxy import get_proxy_config
 from ui.helpers.session import (
@@ -235,8 +235,8 @@ def render_data_guard_tab() -> None:
         f"</div>"
     )
     for _name, _e, _c, _ratio, _detail, _action in _tab_table:
-        _bg = "#0a1a0a" if _e == "🟢" else ("#1a1200" if _e == "🟡" else
-              ("#1a0606" if _e == "🔴" else GH_BG_PRIMARY))
+        _bg = BG_DARK_GREEN_1 if _e == "🟢" else (BG_DARK_AMBER_2 if _e == "🟡" else
+              (BG_DARK_RED_2 if _e == "🔴" else GH_BG_PRIMARY))
         _t_html += (
             f"<div style='display:grid;grid-template-columns:1.3fr 0.5fr 0.9fr 2.8fr 2fr;"
             f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
@@ -427,7 +427,7 @@ def render_data_guard_tab() -> None:
         f"</div>"
     )
     for _no, _cat, _purp, _ep, _proxy, (_ic, _stxt, _sc) in _RAW_TABLE:
-        _bg = "#0a1a0a" if _ic == "🟢" else ("#1a1200" if _ic == "🟡" else GH_BG_PRIMARY)
+        _bg = BG_DARK_GREEN_1 if _ic == "🟢" else (BG_DARK_AMBER_2 if _ic == "🟡" else GH_BG_PRIMARY)
         _src_html += (
             f"<div style='display:grid;grid-template-columns:38px 1.2fr 1.5fr 3fr 50px 1.4fr;"
             f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
@@ -518,7 +518,7 @@ def render_data_guard_tab() -> None:
             _ficon = _rv.get("fresh_icon", "⬜")
             _flbl  = _rv.get("fresh_label", "未知")
             _fcol  = _rv.get("fresh_color", "#555")
-            _row_bg = GH_BG_CARD if _ficon == "🟢" else ("#1a1200" if _ficon == "🟡" else "#1a0808")
+            _row_bg = GH_BG_CARD if _ficon == "🟢" else (BG_DARK_AMBER_2 if _ficon == "🟡" else "#1a0808")
             _rows_html += (
                 f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 3fr 1fr;"
                 f"background:{_row_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
@@ -636,7 +636,7 @@ def render_data_guard_tab() -> None:
             for _ci, (_sn, _ms) in enumerate(_ping_results.items()):
                 _col_c = MATERIAL_GREEN if (_ms and _ms < 1000) else (MATERIAL_ORANGE if (_ms and _ms < 3000) else MATERIAL_RED)
                 _pcols[_ci].markdown(
-                    f"<div style='background:#1a1f2e;border-radius:8px;padding:10px;text-align:center'>"
+                    f"<div style='background:{BG_DARK_NAVY_4};border-radius:8px;padding:10px;text-align:center'>"
                     f"<div style='font-size:11px;color:{TRAFFIC_NEUTRAL}'>{_sn}</div>"
                     f"<div style='font-size:20px;font-weight:700;color:{_col_c}'>"
                     f"{'N/A' if _ms is None else f'{_ms} ms'}</div></div>",
@@ -675,8 +675,8 @@ def render_data_guard_tab() -> None:
                 paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
                 font_color=GH_FG_PRIMARY, height=260,
                 margin=dict(t=10, b=40, l=60, r=20),
-                xaxis=dict(tickangle=-30, tickfont_size=9, gridcolor="#1e2a3a"),
-                yaxis=dict(title="回應時間 (ms)", gridcolor="#1e2a3a"),
+                xaxis=dict(tickangle=-30, tickfont_size=9, gridcolor=BG_DARK_NAVY_3),
+                yaxis=dict(title="回應時間 (ms)", gridcolor=BG_DARK_NAVY_3),
                 legend=dict(orientation="h", font_size=10, y=1.05),
                 hovermode="x unified")
             st.plotly_chart(_fig_lat, use_container_width=True)
@@ -918,7 +918,7 @@ def render_data_guard_tab() -> None:
     )
     for _kr in _key_rows:
         _src_color = (MATERIAL_GREEN if _kr["source"] != "(無)" else MATERIAL_RED)
-        _bg = "#0a1a0a" if _kr["source"] != "(無)" else "#1a0606"
+        _bg = BG_DARK_GREEN_1 if _kr["source"] != "(無)" else BG_DARK_RED_2
         _kt_html += (
             f"<div style='display:grid;grid-template-columns:1.4fr 1fr 1.6fr 1.4fr;"
             f"background:{_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
@@ -1004,7 +1004,7 @@ def render_data_guard_tab() -> None:
             else:
                 _ic, _vc, _vs = "✅", MATERIAL_GREEN, "已取得"
             col.markdown(
-                f"<div style='background:#1a1f2e;border-radius:6px;padding:6px 8px'>"
+                f"<div style='background:{BG_DARK_NAVY_4};border-radius:6px;padding:6px 8px'>"
                 f"<div style='font-size:10px;color:{TRAFFIC_NEUTRAL}'>{label}</div>"
                 f"<div style='font-size:13px;color:{_vc};font-weight:700'>{_ic} {_vs}</div>"
                 f"</div>", unsafe_allow_html=True)
@@ -1246,7 +1246,7 @@ def render_data_guard_tab() -> None:
             _acol  = _av.get("fresh_color", "#999")
             _afreq = _av.get("freq", "")
             _afq_lbl, _afq_col = _FREQ_LABEL.get(_afreq, (_afreq or "—", "#555"))
-            _abg = "#1a0808" if _aicon == "🔴" else "#1a1200"
+            _abg = "#1a0808" if _aicon == "🔴" else BG_DARK_AMBER_2
             _rows_a += (
                 f"<div style='display:grid;grid-template-columns:2.4fr 1.4fr 0.8fr 1.2fr 1.6fr;"
                 f"background:{_abg};border-bottom:1px solid {GH_BG_HOVER}'>"

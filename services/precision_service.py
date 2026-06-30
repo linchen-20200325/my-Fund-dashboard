@@ -23,7 +23,7 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     RISK_SCORE_YIELD_WEIGHT_RATIO,
 )
 
-from shared.colors import GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_RED_2, GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 # v18.116 B-B: I/O 拆分後從 repository 取
 from repositories.financial_repository import (  # noqa: F401  legacy re-export
@@ -266,7 +266,7 @@ def three_ratio_row_html(r: dict) -> str:
     od = r.get("op_margin_diff",    0)
     nd = r.get("net_margin_diff",   0)
     momentum = (gd or 0) + (od or 0) + (nd or 0)
-    bg = "#061a06" if momentum > 2 else ("#1a0606" if momentum < -2 else GH_BG_CARD)
+    bg = "#061a06" if momentum > 2 else (BG_DARK_RED_2 if momentum < -2 else GH_BG_CARD)
     border = MATERIAL_GREEN if momentum > 2 else (MATERIAL_RED if momentum < -2 else GH_BORDER)
 
     return (

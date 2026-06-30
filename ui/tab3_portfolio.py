@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.oauth import (
     OAuthError,
@@ -135,7 +135,7 @@ def render_portfolio_tab() -> None:
         _kpis_hero = compute_health_kpis(_pf_for_warroom, _mk_df_hero)
         st.session_state["_t3_kpis_hero"] = _kpis_hero   # 供下方 expander summary 用
         st.markdown(
-            "<div style='background:linear-gradient(135deg,#1a2845,#0d1b2a);"
+            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
             "border-left:4px solid #64b5f6;border-radius:8px;padding:10px 14px;margin:8px 0'>"
             "<span style='color:#64b5f6;font-size:15px;font-weight:900'>📊 組合健康儀表</span>"
             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.163 6 指標一覽</span>"
@@ -146,7 +146,7 @@ def render_portfolio_tab() -> None:
 
         # v18.14: 改用 markdown 章節（避免外層 expander 包住內部 expander 觸發 Streamlit 巢狀錯誤）
         st.markdown(
-            "<div style='background:linear-gradient(135deg,#1a2845,#0d1b2a);"
+            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
             "border-left:4px solid #64b5f6;border-radius:8px;padding:10px 14px;margin:8px 0'>"
             "<span style='color:#64b5f6;font-size:15px;font-weight:900'>🎯 策略3 智能戰情室</span>"
             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.9 新手戰情中心</span>"
@@ -1137,7 +1137,7 @@ def render_portfolio_tab() -> None:
                 _p_core_pct = round(_p_core_amt / _ptot * 100.0, 1) if _ptot else 0
 
                 st.markdown(
-                    f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);"
+                    f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});"
                     f"border-left:4px solid #64b5f6;border-radius:8px;padding:10px 14px;margin:10px 0 6px'>"
                     f"<span style='color:#64b5f6;font-weight:900;font-size:15px'>🏷️ {_pname}</span>"
                     f"<span style='color:#aaa;font-size:11px;margin-left:8px'>({_pid})</span>"
@@ -1349,7 +1349,7 @@ def render_portfolio_tab() -> None:
     _pf_loaded = [f for f in st.session_state.portfolio_funds if f.get("loaded")]
     if not _pf_loaded:
         st.markdown(
-            "<div style='background:#0d1b2a;border:1px dashed #64b5f6;border-radius:8px;"
+            f"<div style='background:{BG_DARK_NAVY_1};border:1px dashed #64b5f6;border-radius:8px;"
             "padding:6px 14px;margin:4px 0 10px;font-size:12px;color:#aaa;"
             "display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
             "<span style='color:#64b5f6;font-weight:700'>👋 三步驟：</span>"
@@ -1408,22 +1408,22 @@ def render_portfolio_tab() -> None:
         _ret_str   = f"{_cum_ret_pct:+.2f}%" if _cum_ret_pct is not None else "—"
         st.markdown(
             "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 16px'>"
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid {GH_BORDER};"
+            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💰 總資產（NTD）</div>"
             f"<div style='color:#fff;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>{len(_pf_loaded)} 檔基金加總</div></div>"
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid {GH_BORDER};"
+            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>📈 累計報酬</div>"
             f"<div style='color:{_ret_color};font-size:26px;font-weight:900;margin-top:4px'>{_ret_str}</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>從淨值首日加權至今</div></div>"
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid {GH_BORDER};"
+            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>🛡️ 核心資產比例</div>"
             f"<div style='color:#64b5f6;font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>衛星 {100-_core_pct_kpi:.1f}%</div></div>"
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2845);border:1px solid {GH_BORDER};"
+            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💵 預估月配息</div>"
             f"<div style='color:#ffb74d;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
@@ -1538,8 +1538,8 @@ def render_portfolio_tab() -> None:
                         margin=dict(t=20, b=30, l=55, r=20),
                         legend=dict(orientation="h", y=1.05, font_size=10),
                         hovermode="x unified")
-                    fig_curve.update_yaxes(title_text="總資產 (NTD)", gridcolor="#1e2a3a")
-                    fig_curve.update_xaxes(gridcolor="#1e2a3a")
+                    fig_curve.update_yaxes(title_text="總資產 (NTD)", gridcolor=BG_DARK_NAVY_3)
+                    fig_curve.update_xaxes(gridcolor=BG_DARK_NAVY_3)
                     st.plotly_chart(fig_curve, use_container_width=True)
                     st.caption(
                         "💡 **怎麼看**：綠線是你的組合走勢，灰虛線是「把錢放定存賺 2%」的基準。"
@@ -1560,7 +1560,7 @@ def render_portfolio_tab() -> None:
         _diff     = round(_core_pct - _target, 1)
         _dc       = MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN)
         st.markdown(
-            f"<div style='background:linear-gradient(135deg,#0d1b2a,#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid {GH_BORDER}'>"
+            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid {GH_BORDER}'>"
             f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
             f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
             f"<div><div style='color:#64b5f6;font-size:11px'>🛡️ 核心資產</div><div style='color:#64b5f6;font-size:28px;font-weight:900'>{_core_pct}%</div></div>"

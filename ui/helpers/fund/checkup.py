@@ -16,7 +16,7 @@ import math
 import pandas as pd
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_RED_1, GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 # v19.245 R13:`dividend_safety` 已於 v19.150 由 SSOT `check_eating_principal_1y_mk`
 # 取代(下方 _compute_fund_health_kpis line 166 動態 import),原 `div_safety_check`
@@ -241,8 +241,8 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
         _al = _ds.get("alert_level", "grey")
         _kpi_color = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
                       "green": MATERIAL_GREEN}.get(_al, TRAFFIC_NEUTRAL)
-        _kpi_bg = {"red": "#2a0a0a", "yellow": "#2a1f00",
-                   "green": "#0a1a0a"}.get(_al, GH_BG_CARD)
+        _kpi_bg = {"red": BG_DARK_RED_1, "yellow": BG_DARK_AMBER_1,
+                   "green": BG_DARK_GREEN_1}.get(_al, GH_BG_CARD)
         _kpi_icon = {"red": "🔴", "yellow": "🟡", "green": "🟢"}.get(_al, "⬜")
         _kpi_title = f"吃本金檢查 — {_kpi_icon} {_ds.get('status', '')}"
         _kpi_msg = _ds.get("message", "")

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_FG_PRIMARY, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_RED_1, GH_FG_PRIMARY, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 
 def _render_correlation_matrix(funds: list) -> None:
@@ -106,7 +106,7 @@ def _render_correlation_matrix(funds: list) -> None:
         for _pair in _shadow:
             _a, _b, _score = _pair[0], _pair[1], _pair[2]
             st.markdown(
-                f"<div style='background:#2a0a0a;border-left:3px solid {MATERIAL_RED};"
+                f"<div style='background:{BG_DARK_RED_1};border-left:3px solid {MATERIAL_RED};"
                 f"padding:6px 12px;margin:4px 0;border-radius:4px;'>"
                 f"<b>{_a} ⟷ {_b}</b>　"
                 f"<span style='color:{MATERIAL_RED};font-weight:700'>"

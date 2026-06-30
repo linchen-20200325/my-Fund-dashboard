@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from repositories.fund import (
     tdcc_search_fund,
@@ -277,7 +277,7 @@ def render_single_fund_tab() -> None:
                     f"🟡 部分資料（歷史淨值序列未取得，下方顯示已有資訊）</div>"
                     + (f"<div style='color:#ccc;font-size:11px;margin-bottom:6px'>{_p_err}</div>"
                        if _p_err else "")
-                    + (f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;border-top:1px solid #2a1f00;padding-top:8px;margin-top:4px'>"
+                    + (f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;border-top:1px solid {BG_DARK_AMBER_1};padding-top:8px;margin-top:4px'>"
                     f"💡 系統已自動嘗試境內/境外雙路由。若仍失敗，可直接貼入完整 MoneyDJ 網址：<br>"
                     f"境內：<code>yp010000.djhtm?a={fk}</code>　"
                     f"境外：<code>yp010001.djhtm?a={fk}</code></div>"
@@ -352,7 +352,7 @@ def render_single_fund_tab() -> None:
                     _aa = sig.get("auto_alloc")
                     if _aa:
                         _aa_stk, _aa_bnd, _aa_lbl, _aa_c = _aa
-                        st.markdown(f"<div style='background:#0d1b2a;border:1px solid {_aa_c};border-radius:8px;padding:8px 14px;margin:4px 0 8px 0;display:flex;align-items:center;gap:16px'>"
+                        st.markdown(f"<div style='background:{BG_DARK_NAVY_1};border:1px solid {_aa_c};border-radius:8px;padding:8px 14px;margin:4px 0 8px 0;display:flex;align-items:center;gap:16px'>"
                             f"<span>📊</span><div><div style='color:{_aa_c};font-weight:700;font-size:12px'>總經自動配比建議：{_aa_lbl}</div>"
                             f"<div style='color:#ccc;font-size:12px'>股 {_aa_stk}% ／ 債 {_aa_bnd}%</div></div></div>", unsafe_allow_html=True)
                     _sig_style = sig["sig_style"]
@@ -510,7 +510,7 @@ def render_single_fund_tab() -> None:
                             font_color=GH_FG_PRIMARY, height=240,
                             margin=dict(t=10, b=10, l=5, r=5),
                             showlegend=False,
-                            yaxis=dict(gridcolor="#1e2a3a", zeroline=False))
+                            yaxis=dict(gridcolor=BG_DARK_NAVY_3, zeroline=False))
                         st.plotly_chart(fig_mini, use_container_width=True)
                         _tot_mom = _m_gd + _m_od + _m_nd
                         if _tot_mom > 2:
@@ -608,7 +608,7 @@ def render_single_fund_tab() -> None:
                             _dist  = _hwm["dist_to_hwm_pct"]
                             _l1, _l2, _l3 = _hwm["level_1s"], _hwm["level_2s"], _hwm["level_3s"]
                             st.markdown(
-                                f"<div style='background:#0d1b2a;border:2px solid {_hc};"
+                                f"<div style='background:{BG_DARK_NAVY_1};border:2px solid {_hc};"
                                 f"border-radius:12px;padding:14px 18px;margin:10px 0'>"
                                 f"<div style='color:{_hc};font-size:13px;font-weight:800;margin-bottom:10px'>"
                                 f"📐 HWM σ 絕對位階 — {_hl}</div>"
@@ -768,8 +768,8 @@ def render_single_fund_tab() -> None:
                         _kpi_cov = _kpi_ds.get("coverage")
                         _kpi_color = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
                                       "green": MATERIAL_GREEN}.get(_kpi_al, TRAFFIC_NEUTRAL)
-                        _kpi_bg = {"red": "#2a0a0a", "yellow": "#2a1f00",
-                                   "green": "#0a1a0a"}.get(_kpi_al, GH_BG_CARD)
+                        _kpi_bg = {"red": BG_DARK_RED_1, "yellow": BG_DARK_AMBER_1,
+                                   "green": BG_DARK_GREEN_1}.get(_kpi_al, GH_BG_CARD)
                         _kpi_icon = {"red": "🔴", "yellow": "🟡",
                                      "green": "🟢"}.get(_kpi_al, "⬜")
                         _kpi_title = f"吃本金檢查 — {_kpi_icon} {_kpi_ds.get('status','')}"
@@ -948,7 +948,7 @@ def render_single_fund_tab() -> None:
                         _qr_adv = (f"<div style='color:#ff9800;font-size:11px;margin-top:4px'>{qr['advice']}</div>"
                                    if qr.get("advice") else "")
                         st.markdown(
-                            f"<div style='background:#1a1f2e;border-radius:8px;padding:8px 12px;margin-top:6px'>"
+                            f"<div style='background:{BG_DARK_NAVY_4};border-radius:8px;padding:8px 12px;margin-top:6px'>"
                             f"<span style='color:{_qr_color};font-weight:700'>{qr['label']}</span>"
                             + _qr_adv + "</div>", unsafe_allow_html=True)
                     # v18.192：教學化 — 風險指標白話文（收合、不藏任何數據）
@@ -1003,7 +1003,7 @@ def render_single_fund_tab() -> None:
                                 nav_change=float(m.get("ret_1y", 0) or 0),
                             )
                             _al = _ds.get("alert_level","grey")
-                            _bg = {"red":"#2a0a0a","yellow":"#2a1f00","green":"#0a1a0a"}.get(_al,"#111")
+                            _bg = {"red":BG_DARK_RED_1,"yellow":BG_DARK_AMBER_1,"green":BG_DARK_GREEN_1}.get(_al,"#111")
                             _bc = {"red":MATERIAL_RED,"yellow":MATERIAL_ORANGE,"green":MATERIAL_GREEN}.get(_al,TRAFFIC_NEUTRAL)
                             st.markdown(
                                 f"<div style='background:{_bg};border:1px solid {_bc};border-radius:8px;"
