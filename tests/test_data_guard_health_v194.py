@@ -170,9 +170,12 @@ class TestPutCallChainCoversAllSourcesV194:
         """全失敗 → 空 series + trace 完整列出每段失敗。"""
         import pandas as pd
         from services import risk_radar as rr
+        # v19.277:chain 末層為 CBOE pcratio,一併 patch 空維持確定性(不打網路)
         with patch.object(rr, "fetch_yf_close",
                           return_value=pd.Series(dtype=float)), \
              patch.object(rr, "_fetch_stooq_csv",
+                          return_value=pd.Series(dtype=float)), \
+             patch.object(rr, "_fetch_cboe_pcratio_csv",
                           return_value=pd.Series(dtype=float)):
             s, src, trace = rr._resolve_put_call()
         assert s.empty

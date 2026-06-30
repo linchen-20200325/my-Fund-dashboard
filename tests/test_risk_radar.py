@@ -433,16 +433,23 @@ class TestCboePcRatioCsv:
         r.text = text
         return r
 
-    # 真實 equitypc.csv 形狀:2 行 preamble + header + 資料
-    _CSV = ("Cboe Equity Volume And Put/Call Ratios\n"
-            "PRODUCT: EQUITY  EXCHANGE: Cboe\n"
-            "DATE,CALL,PUT,TOTAL,P/C Ratio\n"
-            "2026-06-26,1500000,1100000,2600000,0.73\n"
-            "2026-06-27,1400000,1300000,2700000,0.93\n"
-            "2026-06-30,1200000,1500000,2700000,1.25\n")
+    @staticmethod
+    def _recent_csv(ratios, preamble: int = 2) -> str:
+        """生成「最近交易日」CBOE pcratio CSV。
+
+        日期相對 today 動態生成(避免 freshness guard 造成 date-flaky;R26 教訓)。
+        末筆 = today,確保 < _CBOE_PC_MAX_AGE_DAYS。
+        """
+        dates = pd.bdate_range(end=pd.Timestamp.now().normalize(),
+                               periods=len(ratios))
+        head = "\n".join(f"PREAMBLE LINE {i}" for i in range(preamble))
+        rows = "\n".join(f"{d.date()},1000,2000,3000,{r}"
+                         for d, r in zip(dates, ratios))
+        return f"{head}\nDATE,CALL,PUT,TOTAL,P/C Ratio\n{rows}\n"
 
     def test_parses_pcratio_with_preamble(self):
-        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(self._CSV)):
+        csv = self._recent_csv([0.73, 0.93, 1.25])
+        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(csv)):
             s = rr._fetch_cboe_pcratio_csv("equity")
         assert len(s) == 3
         assert abs(float(s.iloc[-1]) - 1.25) < 1e-9
@@ -452,13 +459,26 @@ class TestCboePcRatioCsv:
 
     def test_auto_detects_header_when_preamble_count_varies(self):
         """CBOE 偶調整 preamble 行數 → parser 不寫死 skiprows,自動偵測 header。"""
-        csv3 = ("L1 title\nL2 meta\nL3 more meta\n"
-                "DATE,CALL,PUT,TOTAL,P/C Ratio\n"
-                "2026-06-27,1,2,3,0.90\n2026-06-30,1,2,3,1.10\n")
-        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(csv3)):
+        csv5 = self._recent_csv([0.90, 1.10], preamble=5)
+        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(csv5)):
             s = rr._fetch_cboe_pcratio_csv("total")
         assert len(s) == 2
         assert abs(float(s.iloc[-1]) - 1.10) < 1e-9
+
+    def test_rejects_stale_frozen_history(self):
+        """§1/§2.4 — 末筆過舊(凍結 2019 歷史檔)→ 拒用回空,不把陳舊當現值。
+
+        實測:GitHub CI 抓 CBOE totalpc.csv 末筆停在 2019-10-04 → 必須拒絕。
+        """
+        stale = ("Cboe Total Volume And Put/Call Ratios\n"
+                 "PRODUCT: TOTAL\n"
+                 "DATE,CALL,PUT,TOTAL,P/C Ratio\n"
+                 "2019-10-03,1,2,3,1.37\n2019-10-04,1,2,3,1.05\n")
+        trace: list[str] = []
+        with patch("infra.proxy.fetch_url", return_value=self._mk_resp(stale)):
+            s = rr._fetch_cboe_pcratio_csv("total", trace=trace)
+        assert s.empty, "凍結 2019 歷史檔不可當現值(§1)"
+        assert any("過舊" in t for t in trace)
 
     def test_http_failure_returns_empty_with_trace(self):
         trace: list[str] = []
@@ -487,7 +507,7 @@ class TestCboePcRatioCsv:
 
         def _spy(url, **kw):
             seen.append(url)
-            return self._mk_resp(self._CSV)
+            return self._mk_resp(self._recent_csv([0.9, 1.0, 1.1]))
 
         with patch("infra.proxy.fetch_url", side_effect=_spy):
             rr._fetch_cboe_pcratio_csv("equity")
@@ -533,10 +553,12 @@ class TestResolvePutCall:
     def test_falls_through_to_cboe_pcratio(self):
         """v19.277 — Yahoo + stooq 全失效 → 落到 CBOE 官方 totalpc.csv。"""
         from unittest.mock import MagicMock
+        # 相對 today 日期(避免 freshness guard date-flaky)
+        _d = pd.bdate_range(end=pd.Timestamp.now().normalize(), periods=2)
         csv = ("Cboe Total Volume And Put/Call Ratios\n"
                "PRODUCT: TOTAL  EXCHANGE: Cboe\n"
                "DATE,CALL,PUT,TOTAL,P/C Ratio\n"
-               "2026-06-27,1,1,2,0.95\n2026-06-30,1,2,3,1.05\n")
+               f"{_d[0].date()},1,1,2,0.95\n{_d[1].date()},1,2,3,1.05\n")
         cboe_resp = MagicMock()
         cboe_resp.status_code = 200
         cboe_resp.text = csv
@@ -749,9 +771,15 @@ class TestDetectRiskRadar:
             assert set(v.keys()) == self.EXPECTED_FIELDS
 
     def test_all_empty_safe_degrade(self):
+        # v19.277:put_call chain 末層 stooq + CBOE pcratio 走 infra.proxy 真網路,
+        # 一併 patch 空,確保「全空降級」測試不依賴網路(否則 CI 抓到真資料 → 非⬜)
         with patch.object(rr, "fetch_yf_close",
                           return_value=pd.Series(dtype=float)), \
-             patch.object(rr, "fetch_fred", return_value=pd.DataFrame()):
+             patch.object(rr, "fetch_fred", return_value=pd.DataFrame()), \
+             patch.object(rr, "_fetch_stooq_csv",
+                          return_value=pd.Series(dtype=float)), \
+             patch.object(rr, "_fetch_cboe_pcratio_csv",
+                          return_value=pd.Series(dtype=float)):
             radar = rr.detect_risk_radar("")
         for v in radar.values():
             assert "⬜" in v["signal"]

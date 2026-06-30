@@ -34,7 +34,8 @@
     - **故障**:雷達 9 Put/Call「全源失敗」(Yahoo ^CPC/^CPCE 回空 + stooq ^cpc 無法解析;v19.141 移除的 CBOE daily_prices/CPC_History.csv 確下架)
     - `repositories/external_market_repository.py:fetch_cboe_pcratio_csv(kind)` — 接 CBOE **另一現用**官方目錄 `cdn.cboe.com/resources/options/volume_and_call_put_ratios/{total,equity}pc.csv`(與死路徑不同 endpoint;MacroMicro/Alphacast 皆源於此)。parser 不寫死 skiprows,自動偵測 header 行
     - `services/risk_radar.py:_resolve_put_call` 末層加 CBOE total→equity(total 語意對齊 ^CPC >1.0/>1.2 閾值);過 `validate_cboe_series`(source `CBOE:pcratio:`)
-    - `tests/test_risk_radar.py`:`TestCboePcRatioCsv` 6 例 + fallthrough;更新 v19.141 死路徑守門 test(禁 daily_prices/CPC + .json,允許 volume_and_call_put_ratios)
+    - **⚠️ CI 實證 + Freshness guard(關鍵)**:GitHub CI(有真網路)抓 `totalpc.csv` 末筆**停在 2019-10-04** → 該公開 CDN 檔為**凍結歷史檔**,非當期 feed。加 `_CBOE_PC_MAX_AGE_DAYS=30` 守門:末筆 > 30 日 → 拒用回空(§1 寧炸不假,**絕不把 2019 當現值**),並讓 chain 由凍結 total 落到較新 equity。**誠實結論**:若 CBOE 公開 CDN 全凍結,Put/Call 仍誠實顯示「全源失敗」(不退步、不造假);真要當期值需付費/帶 key 源(CBOE DataShop 等)
+    - `tests/test_risk_radar.py`:`TestCboePcRatioCsv` 7 例(含 stale-reject,日期相對 today 防 flaky)+ fallthrough;更新 v19.141 死路徑守門 test(禁 daily_prices/CPC + .json,允許 volume_and_call_put_ratios);修 2 既有 test patch 新 CBOE 層維持確定性
   - **架構/SSOT 合規**:兩 fetcher 皆 L1,僅依 L0 `infra.proxy`(L2→L1 import 合法方向);無 inline magic / 無偽造 / 無新例外需登錄。資料診斷 data-driven 自動轉綠,0 UI 改動
   - **⚠️ sandbox 限制**:local proxy 403 無法驗證 cnyes /portfolio 與 CBOE CSV 真實 body → 防禦式解析(production NAS Squid 連得上,VIX3M 同 CDN 已成功)。猜錯欄位 = 回空 + log 真實 shape 供下一輪精修,絕不崩潰
   - **驗證**:155 passed / 2 skipped(risk_radar + holdings + schema gate + data_guard)

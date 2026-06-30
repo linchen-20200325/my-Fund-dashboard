@@ -216,6 +216,11 @@ def fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Series
         return pd.Series(dtype=float)
 
 
+# Put/Call 為每日市場情緒指標;末筆超過此天數視為「非當期」→ 拒用(§1/§2.4)。
+# 30 天遠大於任何交易假期間隔(最長連假 ~4 日),足以分辨「當期」vs「凍結歷史檔」。
+_CBOE_PC_MAX_AGE_DAYS = 30
+
+
 def fetch_cboe_pcratio_csv(
     kind: str = "total", trace: list[str] | None = None
 ) -> pd.Series:
@@ -294,6 +299,17 @@ def fetch_cboe_pcratio_csv(
             print(f"[external_market/cboe_pc] {_file} 解析後 0 筆")
             return pd.Series(dtype=float)
         s = s[~s.index.duplicated(keep="last")]
+        # §1/§2.4 Freshness guard:CBOE 公開 CDN 的 volume_and_call_put_ratios
+        # 部分檔為**凍結歷史檔**(實測 GitHub CI 抓 totalpc.csv 末筆停在 2019-10-04)。
+        # Put/Call 為每日情緒指標,末筆過舊 = 不可當「當期」用 → 顯式拒絕回空,
+        # 絕不把陳舊值當現值(§1 寧炸不假);亦讓 chain 由凍結 total 落到較新 equity。
+        _last_dt = pd.Timestamp(s.index.max())
+        _age_days = (pd.Timestamp.now().normalize() - _last_dt.normalize()).days
+        if _age_days > _CBOE_PC_MAX_AGE_DAYS:
+            _t(f"資料過舊 last={_last_dt.date()} ({_age_days}d>{_CBOE_PC_MAX_AGE_DAYS}d)")
+            print(f"[external_market/cboe_pc] {_file} 過舊 last={_last_dt.date()} "
+                  f"({_age_days}d),拒用(防陳舊當現值)")
+            return pd.Series(dtype=float)
         s.attrs["source"] = f"CBOE:pcratio:{_file}"
         s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
         return s.tail(180)
