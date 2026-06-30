@@ -613,7 +613,7 @@ def _cnyes_parse_holdings(data) -> dict:
     return out
 
 
-def fetch_holdings_cnyes(code: str) -> dict:
+def fetch_holdings_cnyes(code: str, diag: "list | None" = None) -> dict:
     """
     鉅亨網持股 / 資產配置 fallback(REST API)。MoneyDJ yp013xxx 全失敗時的替代源。
     回傳契約對齊 nav_metrics.fetch_holdings:
@@ -621,12 +621,21 @@ def fetch_holdings_cnyes(code: str) -> dict:
        source, fetched_at}
     抓不到 → {}(§1 Fail Loud:不偽造,log 真實 JSON keys 供 production 精修)。
     L1 純 fetcher,不自帶 cache(由 orchestrator fetch_holdings 的 @_daily_cache 統管)。
+
+    diag:可選 list,逐步記錄抓取診斷(供 UI 顯示「有沒有抓到、抓到什麼」)。
     """
     import sys as _sys_c
+
+    def _d(msg: str) -> None:
+        if diag is not None:
+            diag.append(f"cnyes｜{msg}")
+
     _code = (code or "").upper().strip()
     if not _code:
+        _d("空代碼")
         return {}
     candidates = _cnyes_resolve_code(_code)
+    _d(f"代碼解析候選={candidates[:5]}")
     _hdrs = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
@@ -641,15 +650,20 @@ def fetch_holdings_cnyes(code: str) -> dict:
                 r = requests.get(_url, headers=_hdrs, timeout=15,
                                  proxies=_proxies(), verify=_ssl_verify())
                 if r.status_code != 200:
+                    if r.status_code != 404:
+                        _d(f"{_cand}/{_res} HTTP {r.status_code}")
                     continue
                 data = r.json()
             except Exception as _e:
+                _d(f"{_cand}/{_res} 例外 {type(_e).__name__}")
                 print(f"[cnyes_holdings] {_cand}/{_res}: {_e}", file=_sys_c.stderr)
                 continue
             out = _cnyes_parse_holdings(data)
             if out.get("top_holdings") or out.get("sector_alloc"):
                 out["source"] = f"Cnyes:{_res}:{_cand}"
                 out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                _d(f"✅ {_cand}/{_res} top={len(out.get('top_holdings', []))} "
+                   f"sector={len(out.get('sector_alloc', []))}")
                 print(f"[cnyes_holdings] ✅ {code}→{_cand}/{_res} "
                       f"top={len(out.get('top_holdings', []))} "
                       f"sector={len(out.get('sector_alloc', []))}",
@@ -659,6 +673,7 @@ def fetch_holdings_cnyes(code: str) -> dict:
             _keys = (list(data.keys()) if isinstance(data, dict)
                      else f"list[{len(data)}]" if isinstance(data, list)
                      else type(data).__name__)
+            _d(f"{_cand}/{_res} 200 但無持股 keys={_keys}")
             print(f"[cnyes_holdings] {_cand}/{_res} 200 但無可解析持股 keys={_keys}",
                   file=_sys_c.stderr)
     return {}
@@ -767,7 +782,7 @@ def _ms_parse_holdings(data) -> dict:
     return out
 
 
-def fetch_holdings_morningstar(code: str) -> dict:
+def fetch_holdings_morningstar(code: str, diag: "list | None" = None) -> dict:
     """Morningstar 持股 / 資產配置 fallback(cnyes 之後的第二替代源)。
 
     回傳契約對齊 nav_metrics.fetch_holdings:
@@ -775,16 +790,26 @@ def fetch_holdings_morningstar(code: str) -> dict:
        source, fetched_at}
     抓不到 → {}(§1 Fail Loud)。token-free `tools.morningstar.co.uk`,美國 IP /
     NAS proxy 皆可達(NAV 同源已驗)。
+
+    diag:可選 list,逐步記錄抓取診斷(供 UI 顯示)。
     """
     import sys as _sys_m
+
+    def _d(msg: str) -> None:
+        if diag is not None:
+            diag.append(f"Morningstar｜{msg}")
+
     _code = (code or "").upper().strip()
     if not _code:
+        _d("空代碼")
         return {}
     sec_id = _resolve_ms_secid(_code)
     if not sec_id:
+        _d(f"{_code} 無 secId(映射表無 + 名稱搜尋失敗)")
         print(f"[ms_holdings] {_code}: 無 secId(未在映射表且搜尋失敗)",
               file=_sys_m.stderr)
         return {}
+    _d(f"{_code} secId={sec_id}")
     _hdrs = {
         "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                        "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -802,15 +827,19 @@ def fetch_holdings_morningstar(code: str) -> dict:
             r = requests.get(_url, headers=_hdrs, timeout=15,
                              proxies=_proxies(), verify=_ssl_verify())
             if r.status_code != 200:
+                _d(f"{_view} HTTP {r.status_code}")
                 continue
             data = r.json()
         except Exception as _e:
+            _d(f"{_view} 例外 {type(_e).__name__}")
             print(f"[ms_holdings] {sec_id}/{_view}: {_e}", file=_sys_m.stderr)
             continue
         out = _ms_parse_holdings(data)
         if out.get("top_holdings") or out.get("sector_alloc"):
             out["source"] = f"Morningstar:holdings:{sec_id}:{_view}"
             out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+            _d(f"✅ {_view} top={len(out.get('top_holdings', []))} "
+               f"sector={len(out.get('sector_alloc', []))}")
             print(f"[ms_holdings] ✅ {code}→{sec_id}/{_view} "
                   f"top={len(out.get('top_holdings', []))} "
                   f"sector={len(out.get('sector_alloc', []))}",
@@ -819,6 +848,7 @@ def fetch_holdings_morningstar(code: str) -> dict:
         _keys = (list(data.keys()) if isinstance(data, dict)
                  else f"list[{len(data)}]" if isinstance(data, list)
                  else type(data).__name__)
+        _d(f"{_view} 200 但無持股 keys={_keys}")
         print(f"[ms_holdings] {sec_id}/{_view} 200 但無可解析持股 keys={_keys}",
               file=_sys_m.stderr)
     return {}
