@@ -17,7 +17,11 @@ from shared.schemas import (
     validate_aaii_sentiment,
     validate_cboe_series,
     validate_defillama_series,
+    validate_foreign_consec_dict,
+    validate_ndc_signal_dict,
     validate_stooq_series,
+    validate_tw_export_yoy_dict,
+    validate_tw_pmi_dict,
 )
 
 
@@ -205,3 +209,90 @@ class TestAaiiValidator:
              "fetched_at": "2026-06-30T10:00:00+00:00"}
         with pytest.raises(ValueError, match="value/bull/bear"):
             validate_aaii_sentiment(d)
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.268 D8 #7 — TW locals 4 fetcher
+# ════════════════════════════════════════════════════════════════
+def _tw_success(**overrides):
+    """build NDC-like success dict skeleton."""
+    base = {"source": "FinMind:TaiwanMacroEconomics",
+            "fetched_at": "2026-06-30T10:00:00+00:00",
+            "date_latest": "2026-05-31", "error": None,
+            "inflection": "🚀 連2月翻多", "trend": []}
+    base.update(overrides)
+    return base
+
+
+def _tw_failure(err="FinMind 抓取失敗"):
+    return {"source": None, "fetched_at": "", "error": err,
+            "inflection": "⬜ 資料不足", "trend": [], "date_latest": ""}
+
+
+class TestNdcSignalValidator:
+    def test_legal_success(self):
+        d = _tw_success(score_latest=25, score_prev=24, trend=[20, 22, 24, 25])
+        assert validate_ndc_signal_dict(d) is d
+
+    def test_failure_path_passes(self):
+        d = _tw_failure()
+        assert validate_ndc_signal_dict(d) is d
+
+    def test_score_out_of_range_raises(self):
+        d = _tw_success(score_latest=99, trend=[20, 22, 24, 99])
+        with pytest.raises(ValueError, match=r"\[9,45\]"):
+            validate_ndc_signal_dict(d)
+
+    def test_wrong_source_raises(self):
+        d = _tw_success(score_latest=25, source="Yahoo:wrong",
+                        trend=[20, 22, 24])
+        with pytest.raises(ValueError, match="FinMind:"):
+            validate_ndc_signal_dict(d)
+
+
+class TestTwPmiValidator:
+    def test_legal(self):
+        d = _tw_success(value=52.5, prev=51.0, trend=[50.5, 51.0, 52.5])
+        assert validate_tw_pmi_dict(d) is d
+
+    def test_value_out_of_range_raises(self):
+        d = _tw_success(value=150.0, trend=[])
+        with pytest.raises(ValueError, match=r"\[0,100\]"):
+            validate_tw_pmi_dict(d)
+
+
+class TestTwExportYoYValidator:
+    def test_legal(self):
+        d = _tw_success(value=18.5, prev=15.2, trend=[10, 12, 15, 18])
+        assert validate_tw_export_yoy_dict(d) is d
+
+    def test_negative_legal(self):
+        d = _tw_success(value=-25.0, prev=-20.0, trend=[-15, -20, -25])
+        assert validate_tw_export_yoy_dict(d) is d
+
+    def test_value_out_of_range_raises(self):
+        d = _tw_success(value=300.0, trend=[])
+        with pytest.raises(ValueError, match=r"\[-100, 200\]"):
+            validate_tw_export_yoy_dict(d)
+
+
+class TestForeignConsecValidator:
+    def test_legal_positive(self):
+        d = _tw_success(consec_days=5, today_net=1500_000_000,
+                        reversed=False, prev_streak=-2)
+        assert validate_foreign_consec_dict(d) is d
+
+    def test_legal_negative(self):
+        d = _tw_success(consec_days=-3, today_net=-800_000_000,
+                        reversed=True, prev_streak=4)
+        assert validate_foreign_consec_dict(d) is d
+
+    def test_consec_days_non_int_raises(self):
+        d = _tw_success(consec_days="3", today_net=1.0, reversed=False)
+        with pytest.raises(ValueError, match="consec_days"):
+            validate_foreign_consec_dict(d)
+
+    def test_reversed_must_be_bool(self):
+        d = _tw_success(consec_days=5, today_net=1.0, reversed="yes")
+        with pytest.raises(ValueError, match="reversed"):
+            validate_foreign_consec_dict(d)

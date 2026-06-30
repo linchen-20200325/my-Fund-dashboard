@@ -21,6 +21,10 @@ CLAUDE.md §3.1 / SPEC §18 — DataFrame 邊界契約集中宣告。
 - `validate_cboe_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'CBOE:' source prefix)v19.265 D7
 - `validate_defillama_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'DefiLlama:' source prefix)v19.267 D8 #6
 - `validate_aaii_sentiment(d) -> d`:dict wrapper(success path 驗 spread+bull+bear+source / fail path 驗 _err)v19.267 D8 #5
+- `validate_ndc_signal_dict(d) -> d`:TW 國發會景氣對策信號(success 驗 score 9-45 / fail 驗 error)v19.268 D8 #7
+- `validate_tw_pmi_dict(d) -> d`:TW 製造業 PMI(success 驗 value 0-100)v19.268 D8 #7
+- `validate_tw_export_yoy_dict(d) -> d`:TW 出口年增率(success 驗 value 浮動 %)v19.268 D8 #7
+- `validate_foreign_consec_dict(d) -> d`:外資連續買賣超日數(success 驗 consec_days int / today_net 數值)v19.268 D8 #7
 - `FundNavSchema`:repositories.fund_repository.fetch_nav 等多 fetcher 共用 NAV 序列 schema
 - `validate_fund_nav(s) -> s`:wrapper(NAV-specific:>0 / 多源 source prefix 允許清單)
 - `FundDividendSchema`:repositories.fund_repository.fetch_div 配息序列 schema(DataFrame 內部表示)
@@ -374,6 +378,134 @@ def validate_aaii_sentiment(d: Any) -> Any:
         raise ValueError(
             f"validate_aaii_sentiment: unit 必為 '%'(spread 百分點),實際 = {unit!r}"
         )
+    return d
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.268 D8 #7 — F-SCHEMA-1:TW locals 4 dict-return fetcher 共用契約
+# ════════════════════════════════════════════════════════════════
+# 依據 repositories/macro_tw_local_repository.py:
+#   fetch_ndc_signal_history → score_latest int / 9~45 / trend list[int] / source 'FinMind:...'
+#   fetch_tw_pmi_local → value float / 0~100 / trend list[float] / source 'FinMind:...'
+#   fetch_tw_export_yoy → value float / % / trend list[float] / source 'FinMind:...'
+#   fetch_foreign_consecutive_days → consec_days int(±) / today_net int / source 'FinMind:...'
+#
+# 4 fn 共用「success/fail 雙 path」+ source/fetched_at 兩 attr 模式。
+# 抽出 _validate_tw_macro_common 通用 path 驗證,各 fn 加自己 value 範圍檢查。
+
+
+def _validate_tw_macro_common(d: Any, *, fn_label: str) -> dict:
+    """TW locals 4 fetcher 共用 path 驗證(source + fetched_at + None/empty handling)。
+
+    fail path 含 'error' key → 不必驗 value(L2 caller 自處理 error 字串)。
+    success path 必須驗各 fn 特定 value/trend/range。
+
+    Returns
+    -------
+    dict | None
+        - None / empty / fail-path: 直接 return,caller skip 後續特定驗證
+        - success path: return d 供 caller 繼續驗 value
+    """
+    if d is None or not isinstance(d, dict) or not d:
+        return d  # type: ignore[return-value]
+    src = d.get("source")
+    # fetcher 可能 source=None(fetch 失敗早 return),共用驗 source 已存在 + None / startswith 'FinMind:'
+    if src is not None and not (isinstance(src, str) and src.startswith("FinMind:")):
+        raise ValueError(
+            f"{fn_label}: source 必須以 'FinMind:' 開頭或為 None(F-PROV-1),"
+            f"實際 = {src!r}"
+        )
+    # fetched_at 為 success path 必有;fail path(source=None)可缺
+    if src is not None:
+        fetched_at = d.get("fetched_at", "")
+        if "T" not in fetched_at:
+            raise ValueError(
+                f"{fn_label}: success path 必有 ISO 8601 fetched_at(含 'T'),"
+                f"實際 = {fetched_at!r}"
+            )
+    # 有 error 即 fail path
+    if d.get("error"):
+        if not isinstance(d["error"], str):
+            raise ValueError(f"{fn_label}: error 必為字串,實際 = {d['error']!r}")
+        return d  # type: ignore[return-value]
+    return d  # type: ignore[return-value]
+
+
+def validate_ndc_signal_dict(d: Any) -> Any:
+    """fetch_ndc_signal_history 出口 dict 驗證(v19.268 D8 #7)。
+
+    success path 驗 score_latest int / 範圍 [9,45]、trend list[int]、date_latest 字串。
+    fail path 經 _validate_tw_macro_common 驗 error 字串即放行。
+    """
+    d = _validate_tw_macro_common(d, fn_label="validate_ndc_signal_dict")
+    if d is None or not d or d.get("error") or d.get("source") is None:
+        return d
+    score = d.get("score_latest")
+    if not isinstance(score, int):
+        raise ValueError(f"validate_ndc_signal_dict: score_latest 須為 int,實際 = {score!r}")
+    if not (9 <= score <= 45):
+        raise ValueError(f"validate_ndc_signal_dict: score_latest={score} 越界 [9,45]")
+    trend = d.get("trend", [])
+    if not isinstance(trend, list):
+        raise ValueError(f"validate_ndc_signal_dict: trend 須為 list,實際型別 = {type(trend).__name__}")
+    return d
+
+
+def validate_tw_pmi_dict(d: Any) -> Any:
+    """fetch_tw_pmi_local 出口 dict 驗證(v19.268 D8 #7)。
+
+    success path 驗 value float / 範圍 [0,100]、prev float、trend list[float]。
+    """
+    d = _validate_tw_macro_common(d, fn_label="validate_tw_pmi_dict")
+    if d is None or not d or d.get("error") or d.get("source") is None:
+        return d
+    v = d.get("value")
+    if not isinstance(v, (int, float)):
+        raise ValueError(f"validate_tw_pmi_dict: value 須為數值,實際 = {v!r}")
+    if not (0 <= float(v) <= 100):
+        raise ValueError(f"validate_tw_pmi_dict: value={v} 越界 [0,100](PMI 應在此區間)")
+    trend = d.get("trend", [])
+    if not isinstance(trend, list):
+        raise ValueError(f"validate_tw_pmi_dict: trend 須為 list,實際型別 = {type(trend).__name__}")
+    return d
+
+
+def validate_tw_export_yoy_dict(d: Any) -> Any:
+    """fetch_tw_export_yoy 出口 dict 驗證(v19.268 D8 #7)。
+
+    success path 驗 value float(% YoY,可正可負)。範圍 [-100, 200] 容極端值。
+    """
+    d = _validate_tw_macro_common(d, fn_label="validate_tw_export_yoy_dict")
+    if d is None or not d or d.get("error") or d.get("source") is None:
+        return d
+    v = d.get("value")
+    if not isinstance(v, (int, float)):
+        raise ValueError(f"validate_tw_export_yoy_dict: value 須為數值,實際 = {v!r}")
+    if not (-100 <= float(v) <= 200):
+        raise ValueError(f"validate_tw_export_yoy_dict: value={v} 越界 [-100, 200] %(YoY 合理區間)")
+    trend = d.get("trend", [])
+    if not isinstance(trend, list):
+        raise ValueError(f"validate_tw_export_yoy_dict: trend 須為 list,實際型別 = {type(trend).__name__}")
+    return d
+
+
+def validate_foreign_consec_dict(d: Any) -> Any:
+    """fetch_foreign_consecutive_days 出口 dict 驗證(v19.268 D8 #7)。
+
+    success path 驗 consec_days int(帶號,正連買/負連賣)、today_net 數值、reversed bool。
+    """
+    d = _validate_tw_macro_common(d, fn_label="validate_foreign_consec_dict")
+    if d is None or not d or d.get("error") or d.get("source") is None:
+        return d
+    consec = d.get("consec_days")
+    if not isinstance(consec, int):
+        raise ValueError(f"validate_foreign_consec_dict: consec_days 須為 int,實際 = {consec!r}")
+    today_net = d.get("today_net")
+    if today_net is not None and not isinstance(today_net, (int, float)):
+        raise ValueError(f"validate_foreign_consec_dict: today_net 須為數值或 None,實際 = {today_net!r}")
+    reversed_flag = d.get("reversed")
+    if not isinstance(reversed_flag, bool):
+        raise ValueError(f"validate_foreign_consec_dict: reversed 須為 bool,實際 = {reversed_flag!r}")
     return d
 
 
