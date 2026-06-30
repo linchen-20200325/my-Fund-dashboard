@@ -42,12 +42,11 @@ from shared.colors import (
     TRAFFIC_NEUTRAL,
 )
 
-# ── 燈號 → 色 / emoji / 嚴重度排序(bar + chart + SPEC 共用)──
+# ── 燈號 → 色(bar + chart + SPEC 共用;danger.py 消費)──
 # v19.252 Phase 4A:gray 從 SSOT 取(原 inline #6e7681,已 v19.68 升級為 {TRAFFIC_NEUTRAL})
+# v19.275 死碼清理:LEVEL_EMOJI / LEVEL_RANK 全站 0 ref(孤兒 SSOT)已刪
 LEVEL_COLOR = {"green": _C_GREEN, "yellow": _C_YELLOW,
                "red": _C_RED, "gray": TRAFFIC_NEUTRAL}
-LEVEL_EMOJI = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⬜"}
-LEVEL_RANK = {"green": 1, "yellow": 2, "red": 3}   # gray 不參與 worst 計算
 
 # ════════════════════════════════════════════════════════════════
 # 鏡像 macro_repository.MACRO_THRESHOLDS(L1,L0 不可 import)— drift test 守護
@@ -80,14 +79,8 @@ BUCKET_META = {
     "news":       {"emoji": "📰", "title": "新聞",     "sub": "系統性風險掃描"},
 }
 
-# 各桶 × 燈號 → 狀態短語(bar 上的 1 句 label)
-BUCKET_LEVEL_LABEL = {
-    "long":       {"green": "結構健康", "yellow": "結構轉折", "red": "結構防禦",   "gray": "未載入"},
-    "mid":        {"green": "循環健康", "yellow": "局部走弱", "red": "循環惡化",   "gray": "未載入"},
-    "short":      {"green": "短線平靜", "yellow": "短線警戒", "red": "急殺風險",   "gray": "未載入"},
-    "inflection": {"green": "拐點未現", "yellow": "拐點臨近", "red": "拐點鎖定",   "gray": "未載入"},
-    "news":       {"green": "無系統風險", "yellow": "風險新聞", "red": "系統性警報", "gray": "未掃描"},
-}
+# v19.275 死碼清理:BUCKET_LEVEL_LABEL(各桶 × 燈號 → 狀態短語)全站 0 ref(孤兒 SSOT)已刪
+# (BUCKET_ORDER / BUCKET_META 保留:test_all_specs_valid 用 BUCKET_ORDER 守 BUCKET_DANGER_SPECS taxonomy)
 
 # 新聞桶:系統性風險命中「則數」→ 燈號(對齊 Stock v18.284)
 NEWS_SYSTEMIC_YELLOW_COUNT = 1   # ≥1 則系統性新聞 → 🟡
