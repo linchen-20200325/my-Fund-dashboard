@@ -135,7 +135,10 @@
 - fund_repository.py 多 fetcher 回傳 dict 含 `source`、`fetched_at`、`page_type` 等欄位
 - `infra/proxy.py` 走 NAS Squid 時附 `X-Cache-*` header 供 audit
 - `infra/cache.py` `_CACHE_REGISTRY` 集中註冊所有 cache 函式,supports「clear all」
-- ✅ **F-PROV-1 v19.82 第 1 階段**:`repositories.macro_repository.fetch_fred()` 已加 `source`(`"FRED:<sid>"`)+ `fetched_at`(UTC ISO)兩欄(schema-additive,既有 30 處 caller 無感)。其他 fetcher(`fetch_yf_close` / FinMind / TWSE / CBC 等)+ macro 12 指標融合處單一 score 後 provenance 後續逐步補上。
+- ✅ **F-PROV-1 主要 fetcher 全收**(v19.82 → v19.221 逐步):
+  - **L1 fetcher 已收**(各帶 `source` + `fetched_at`):`fetch_fred` v19.82 / `fetch_yf_close` v19.83 / `fetch_defillama_stablecoin_mcap` v19.84 / `fetch_aaii_sentiment` v19.84 / `fetch_foreign_flow_series` v19.151 / `fetch_twse_breadth` + `fetch_finmind_foreign_investor` + `fetch_cbc_m1b_m2` v19.94 / `fetch_ndc_signal_history` + `fetch_tw_pmi_local` v19.151 / `fetch_ism_pmi` v19.156(7 個 return 點) / `fetch_macro_compass` v19.86 / `fetch_stooq_csv` v19.197 / `fetch_cboe_csv` v19.221(`s.attrs["source"]/"fetched_at"`)
+  - **By-design 不可收**:`fetch_yf_forward_pe` / `fetch_multpl_pe`(`Optional[float]` scalar 結構性無 `.attrs`,docstring 已明說「provenance 由 caller orchestrator 記錄,leaf scalar 不重複 stamp」)
+  - **未收**:macro 12 指標融合處 `calculate_composite_score()` 純函式回 float,聚合後 provenance 遺失。屬**設計缺口**(需新 dataclass / dict wrap 包裝),非單一 fetcher 補洞,需 architecture proposal,等 user 點。
 
 ### 2.3 Point-in-Time — 防 Lookahead
 
@@ -522,14 +525,34 @@ except ImportError:
     C2 series(v19.157 risk_radar / v19.158 macro_beginner_view / v19.159 macro_validation
     + calibration JSON bounds / v19.160 macro_service alert + SPEC §16.1 結案)全站 yellow
     統一 SSOT 22 / panic 30。`tests/test_cross_site_cutoffs.py` 守 3 site 全員 22 + universal 30。
-  - **其他指標(PMI/CPI/HY 等)**:`MACRO_THRESHOLDS` dict 與 inline **語意仍不同源**(inline
-    服務 signal classification / score function / regime ID / inflection detection 多用途),
-    **不一併 harmonize**;若要繼續收 PMI/CPI/HY,需新 architecture proposal。詳見
-    `macro_repository.py:199-212` 註解。
-  - ✅ **Architecture proposal v19.168**:multi-purpose threshold dict 設計案
-    (`shared/macro_thresholds_v2.py` schema)已寫入 SPEC §16.2。Proposal 含
-    per-indicator migration phases + ROI 評估(優先順序 HY_SPREAD → CPI → PMI)。
-    **未實作 code**,等 user 點哪個指標動工。
+  - **HY_SPREAD(已收 90%)**:`shared/macro_thresholds_v2.py:HY_SPREAD_THRESHOLDS` schema 落地,
+    5 個 multi-purpose section(stoplight / score_function / portfolio_advisor / beginner_panic /
+    inflection_detection)各自 SSOT;`ui/helpers/macro/beginner_view.py` 用 `_HY_THR` import;
+    `services/macro_score_calibration.py` 用 `score_function`;v19.245 R13 inflection 收口。
+    **剩 `ui/components/macro_card_edu.py:300-304` 教學文(<4% 樂觀 / 4-6% 中性 / >6% 走擴 /
+    >10% 崩潰)**:**by-design 不收**,屬「threshold story 文檔」而非「inline 邏輯」,
+    若 threshold 改 narrative 也需重寫,SSOT 化反而綁死敘事(§8.1 step 6 反例)。
+  - **CPI(部份收)**:`shared/macro_thresholds_v2.py:CPI_YOY_THRESHOLDS` schema 落地(stoplight /
+    score_function / inflection_detection / regime_classification / beginner_panic 5 section);
+    `services/macro_validation.py` SCORE_RULES 已對齊 score_function。
+    **剩 2 處 logic inline**(`services/macro/macro_score.py:69` lambda + `ui/helpers/macro/helpers.py:183` 3.0 check)
+    需 caller migrate,中風險(動 core scoring path),等實際 bug / user 需求觸發。
+  - **PMI(WONTFIX,user 撤銷)**:user 2026-06-26 明確撤銷 v19.147 multi-cutoff,接受 PMI
+    stoplight (50.0) vs regime (52.0) vs alert (50.0) 不同源 trade-off。**等同明確 declines**,
+    不再規劃 harmonize 動作。`shared/macro_thresholds_v2.py:PMI_THRESHOLDS` 已備好 schema,
+    僅 `ui/tab1_macro.py` 用 `alert_generation.contraction_below`,**其餘維持現狀**。
+  - ✅ **Architecture proposal v19.168 已落地**:`shared/macro_thresholds_v2.py` schema 已生效
+    (HY/CPI/PMI 三 dict 註冊);SPEC §16.2 設計案 + per-indicator migration phases 已寫入。
+
+- ✅ **F-RECON-1 雙演算法對帳全 phase 落地**(v19.87 → v19.91):
+  - **服務層**:`services/reconcile.py` 5 fn 全實裝(`reconcile_pair` 通用 + `reconcile_us10y_yield` /
+    `reconcile_fund_annual_return` / `reconcile_sharpe` / `reconcile_dividend_yield`)
+  - **L2 wiring**:`services/fund_service.py:_reconcile_sharpe_pair` + `finalize_fund_metrics` 3 處
+    對帳 dict 注入(`sharpe_reconcile` / `ret_1y_reconcile` / `div_yield_reconcile`)
+  - **UI 渲染**:`ui/tab2_single_fund.py:913+968+981` 3 個對帳 chip(Sharpe / 配息殖利率 / 1Y 報酬)
+    v19.91 phase 6 完整渲染(agree / disagree / a_missing / b_missing 四態 + 色碼)。
+  - **未補**:macro health score 雙演算法 — `calculate_composite_score()` 單一 path,缺對標演算法。
+    需架構設計第二套評分方案,**未實作**。等 user 點。
 
 ### 8.4 做到一半的新增功能 — 先盤點再動
 
