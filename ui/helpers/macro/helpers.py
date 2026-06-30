@@ -22,6 +22,10 @@ from __future__ import annotations
 import streamlit as st
 
 from shared.colors import INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
+# F-GRAY-4 v19.269 D8 Phase 4 (#3):CPI bull_high SSOT(SPEC §16.2 inflection_detection)
+from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as _CPI_THR
+
+_CPI_BULL_HIGH = _CPI_THR["inflection_detection"]["bull_high"]  # 3.0
 
 
 # ══════════════════════════════════════════════════════
@@ -180,7 +184,7 @@ def mk_fund_signal(fund_info: dict, phase: str, score: float) -> dict:
             pass   # smoke-allow-pass
     if _cpi and _cpip:
         try:
-            if float(_cpi)>float(_cpip) and float(_cpi)>3.0: auto_alloc=(50,50,f"升息尾聲—均衡（CPI {float(_cpi):.1f}%↑）",MATERIAL_ORANGE)
+            if float(_cpi)>float(_cpip) and float(_cpi)>_CPI_BULL_HIGH: auto_alloc=(50,50,f"升息尾聲—均衡（CPI {float(_cpi):.1f}%↑）",MATERIAL_ORANGE)
         except Exception:
             pass   # smoke-allow-pass
     return dict(asset_class=asset_class, label=label, sig_type=sig_type, sig_style=sig_style, reason=reason, auto_alloc=auto_alloc)

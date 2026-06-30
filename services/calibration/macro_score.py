@@ -32,11 +32,12 @@ import numpy as np
 import pandas as pd
 
 # v19.217 P0-3-#8:shared.fred_series 整 import 區隨 fetch_real_macro_factors_monthly 拔毒移除
-from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.179 PMI + v19.184 M2/FedBS
+from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.179 PMI + v19.184 M2/FedBS + v19.269 CPI
     HY_SPREAD_THRESHOLDS as _HY_THR,
     PMI_THRESHOLDS as _PMI_THR,
     M2_THRESHOLDS as _M2_THR,
     FED_BS_THRESHOLDS as _FEDBS_THR,
+    CPI_YOY_THRESHOLDS as _CPI_THR,
 )
 
 # F-GRAY-4 v19.169: HY_SPREAD score_function SSOT (SPEC §16.2)
@@ -53,6 +54,11 @@ _M2_TIGHTENING = _M2_THR["score_function"]["tightening_below"]    # 0.0
 _FEDBS_EXPANSION = _FEDBS_THR["score_function"]["expansion_above"]    # 5.0
 _FEDBS_CONTRACTION = _FEDBS_THR["score_function"]["contraction_below"]  # -5.0
 
+# F-GRAY-4 v19.269 D8 Phase 4 (#3): CPI score_function SSOT(SPEC §16.2)
+_CPI_IDEAL_LOW = _CPI_THR["score_function"]["ideal_low"]          # 1.0
+_CPI_IDEAL_HIGH = _CPI_THR["score_function"]["ideal_high"]        # 2.5
+_CPI_ELEVATED = _CPI_THR["score_function"]["elevated_above"]      # 4.0
+
 
 # ════════════════════════════════════════════════════════════════
 # 14-factor 評分規則（與 services/macro_service.py:fetch_all_indicators 同邏輯）
@@ -66,7 +72,7 @@ def _s_breadth(chg):      return 1 if chg > 0.5 else (-1 if chg < -1 else 0)
 def _s_dxy(chg_m):        return 1 if chg_m < -1 else (-1 if chg_m > 2 else 0)
 def _s_fed_bs(v):         return 1 if v > _FEDBS_EXPANSION else (-1 if v < _FEDBS_CONTRACTION else 0)
 def _s_vix(v):            return 1 if v < 18 else (-1 if v > 30 else 0)
-def _s_cpi(v):            return 1 if 1 < v < 2.5 else (-1 if v > 4 else 0)
+def _s_cpi(v):            return 1 if _CPI_IDEAL_LOW < v < _CPI_IDEAL_HIGH else (-1 if v > _CPI_ELEVATED else 0)
 def _s_fedrate(v, p):     return 0.5 if v < p else (-0.5 if v > 5 else 0)
 def _s_unemp(v):          return 0.5 if v < 4.5 else (-1 if v > 6 else 0)
 def _s_ppi(v):            return 0.5 if 0 < v < 3 else (-0.5 if v > 5 else 0)
