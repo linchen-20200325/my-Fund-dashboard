@@ -16,7 +16,7 @@ import streamlit as st
 from fund_fetcher import get_proxy_config
 from infra.oauth import build_authorize_url
 from repositories.policy_repository import get_sheet_title
-from shared.colors import GH_BG_PRIMARY, GH_BORDER, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT, WHITE
+from shared.colors import GH_BG_PRIMARY, GH_BORDER, TRAFFIC_NEUTRAL, WHITE  # v19.253 Phase 4-B2 / B3 SSOT
 
 
 def render_sidebar(*,

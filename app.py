@@ -20,7 +20,7 @@ TW_TZ = datetime.timezone(datetime.timedelta(hours=8))
 def _now_tw():
     return datetime.datetime.now(TW_TZ)
 
-from shared.colors import GH_BG_CARD, GH_BORDER, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_RED
+from shared.colors import GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_RED
 from services.macro import (
     ENGINE_VERSION,
 )
