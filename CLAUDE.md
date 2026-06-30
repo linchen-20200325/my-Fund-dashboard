@@ -465,13 +465,15 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 
 **4 層架構**(Clean Architecture,UI → service → repository → infra,~單向):
 
-| 層 | 職責 | 代表檔案 |
-|---|---|---|
-| **L0 Infra** | OAuth / Proxy / Cache / 跨層公用 | `infra/proxy.py`、`infra/oauth.py`、`infra/cache.py`(+ `_CACHE_REGISTRY`) |
-| **L0 Shared** | 常數 / TTL / FRED IDs / 色票(無 IO 純常數) | `shared/ttls.py`、`shared/fred_series.py`、`shared/colors.py` |
-| **L1 Repository** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund_repository.py`、`repositories/moneydj_fetcher.py`、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy shim)、`repositories/hot_money_repository.py`(P0-4-A 搬入)、`repositories/tw_macro_repository.py`(P0-4-B 搬入)|
-| **L2 Service** | 業務邏輯純函式 / 評分 / 策略 / 模擬 / AI | `services/macro_service.py`、`services/fund_service.py`、`services/portfolio_service.py`、`services/ai_service.py`、`services/crisis_backtest.py`、`services/valuation.py`、`services/macro_validation.py` 等 ~25 檔(v19.212 退 allocation_simulator) |
-| **L3 UI** | Streamlit Tab 渲染 + components + helpers | `app.py`(425 LOC,僅 orchestrator)+ `ui/tab*.py` + `ui/components/` + `ui/helpers/` |
+**白話對照(3 鐵盒 v19.249 加,純認知 alias,不是另一份架構)**:`DataFetcher = L1 Repository`、`CalcEngine = L2 Service`、`ComponentUI = L3 UI`。**L0 Infra / Shared 不在 3 鐵盒模型**(它們是跨層被全層 import 的基底,塞進任一鐵盒都違 §8.2 硬規則第 3 條)。3 鐵盒只當「找東西時的捷思詞」,實際 import path 仍走 `repositories/` / `services/` / `ui/`。
+
+| 層 | 白話名 | 職責 | 代表檔案 |
+|---|---|---|---|
+| **L0 Infra** | (跨層基底) | OAuth / Proxy / Cache / 跨層公用 | `infra/proxy.py`、`infra/oauth.py`、`infra/cache.py`(+ `_CACHE_REGISTRY`) |
+| **L0 Shared** | (跨層基底) | 常數 / TTL / FRED IDs / 色票(無 IO 純常數) | `shared/ttls.py`、`shared/fred_series.py`、`shared/colors.py` |
+| **L1 Repository** | **DataFetcher** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund_repository.py`、`repositories/moneydj_fetcher.py`、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy shim)、`repositories/hot_money_repository.py`(P0-4-A 搬入)、`repositories/tw_macro_repository.py`(P0-4-B 搬入)|
+| **L2 Service** | **CalcEngine** | 業務邏輯純函式 / 評分 / 策略 / 模擬 / AI | `services/macro_service.py`、`services/fund_service.py`、`services/portfolio_service.py`、`services/ai_service.py`、`services/crisis_backtest.py`、`services/valuation.py`、`services/macro_validation.py` 等 ~25 檔(v19.212 退 allocation_simulator) |
+| **L3 UI** | **ComponentUI** | Streamlit Tab 渲染 + components + helpers | `app.py`(425 LOC,僅 orchestrator)+ `ui/tab*.py` + `ui/components/` + `ui/helpers/` |
 
 **硬規則(violation = 違憲)**:
 - ❌ **L1 Repository 不得 import streamlit 真 UI 呼叫**(`st.session_state` / `st.error()` / `st.markdown()`),允許 `@st.cache_data` 走 EX-CACHE-1 例外
