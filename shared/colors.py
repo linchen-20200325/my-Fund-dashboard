@@ -77,6 +77,8 @@ GRAY_AA: str = "#aaa"              # medium gray
 GRAY_BB: str = "#bbb"              # medium light gray
 GRAY_CC: str = "#ccc"              # light gray
 WHITE: str = "#fff"                # pure white
+# v19.274 Phase 2 收尾:策略3 訊號 chip 近黑底(3 處跨 tab2/tab3,原 inline "#111")
+CHIP_BG_NEAR_BLACK: str = "#111"   # near-black chip bg(phase-signal chip / alloc fallback)
 
 # 同義對應
 TRAFFIC_EMOJI: tuple[str, str, str, str] = ("🟢", "🟡", "🔴", "⬜")
