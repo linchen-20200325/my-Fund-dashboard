@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
+from shared.colors import GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_SECONDARY, MD_BLUE_300, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT
 
 
 def render_macro_exposure_link(session_state, core_pct=None) -> None:
@@ -67,7 +67,7 @@ def render_macro_exposure_link(session_state, core_pct=None) -> None:
     _body = f"建議資產配置：<b style='color:{GH_FG_SECONDARY}'>{_alloc_str}</b>"
     if core_pct is not None:
         try:
-            _body += (f"　·　你目前核心(穩健) <b style='color:#64b5f6'>"
+            _body += (f"　·　你目前核心(穩健) <b style='color:{MD_BLUE_300}'>"
                       f"{float(core_pct):.1f}%</b>（核心/衛星軸，與股債配置不同）")
         except (TypeError, ValueError):
             pass

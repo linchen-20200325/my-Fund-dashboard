@@ -19,7 +19,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from shared.colors import GH_BG_PRIMARY, GH_BORDER, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_PRIMARY, GH_BORDER, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, TRAFFIC_NEUTRAL
 
 from infra.oauth import (
     OAuthError,
@@ -1816,7 +1816,7 @@ def render_t7_section() -> None:
                                     "<div style='background:linear-gradient(90deg,#3a1a1a,#2a1010);"
                                     "border-left:4px solid #f44336;border-radius:0 6px 6px 0;"
                                     "padding:8px 14px;margin-bottom:8px'>"
-                                    "<span style='color:#ff7043;font-weight:700;font-size:13px'>"
+                                    "<span style=f'color:{MD_DEEP_ORANGE_400};font-weight:700;font-size:13px'>"
                                     "📉 賣方設定</span>"
                                     f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>"
                                     f"{_slabel}</span></div>",
@@ -1857,7 +1857,7 @@ def render_t7_section() -> None:
                                     "<div style='background:linear-gradient(90deg,#0d2a1a,#0a1f12);"
                                     "border-left:4px solid #00c853;border-radius:0 6px 6px 0;"
                                     "padding:8px 14px;margin-bottom:8px'>"
-                                    "<span style='color:#69f0ae;font-weight:700;font-size:13px'>"
+                                    "<span style=f'color:{MD_GREEN_A200};font-weight:700;font-size:13px'>"
                                     "📈 買方組（此賣款導向以下標的）</span>"
                                     f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>"
                                     f"同保單 {_sel_pid} 下，最多 5 檔</span></div>",
@@ -2676,7 +2676,7 @@ def render_t7_section() -> None:
                 st.markdown(
                     "<div style=f'background:{GH_BG_PRIMARY};border:1px solid {GH_BORDER};"
                     "border-radius:6px;padding:8px 12px;margin:6px 0;font-size:12px'>"
-                    "<span style='color:#69f0ae;font-weight:700'>🔍 分析範圍：</span>"
+                    "<span style=f'color:{MD_GREEN_A200};font-weight:700'>🔍 分析範圍：</span>"
                     f"<span style='color:{GH_FG_SECONDARY}'>主帳本 <b>{_mk_n_funds} 檔</b>"
                     f"，合計投入 <b>NT${_mk_total_inv:,}</b></span>"
                     + (f"<span style='color:#ff9800;margin-left:12px'>"

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_ORANGE_300, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -184,9 +184,9 @@ def _render_holdings_block(fund: dict) -> None:
                     f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0'>"
                     f"<div style='color:#ccc;font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
                     f"<div style='flex:1;background:#1a1a2a;border-radius:3px;height:10px'>"
-                    f"<div style='background:#2196f3;width:{min(_sp*3,100):.0f}%;"
+                    f"<div style='background:{MD_BLUE_500};width:{min(_sp*3,100):.0f}%;"
                     f"height:100%;border-radius:3px'></div></div>"
-                    f"<div style='color:#2196f3;font-size:11px;width:40px;text-align:right'>"
+                    f"<div style='color:{MD_BLUE_500};font-size:11px;width:40px;text-align:right'>"
                     f"{_sp:.1f}%</div></div>",
                     unsafe_allow_html=True)
     with _hc2:
@@ -196,7 +196,7 @@ def _render_holdings_block(fund: dict) -> None:
                 _tn_raw = str(_top.get("name", ""))
                 _zh = _zh_holding(_tn_raw)
                 _tn = _tn_raw[:22]
-                _zh_html = (f"<span style='color:#ffb74d;font-size:10px;margin-left:6px'>"
+                _zh_html = (f"<span style='color:{MD_ORANGE_300};font-size:10px;margin-left:6px'>"
                             f"({_zh})</span>" if _zh else "")
                 _tp = float(_top.get("pct", 0) or 0)
                 _ts = str(_top.get("sector", ""))[:12]

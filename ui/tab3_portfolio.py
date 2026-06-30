@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.oauth import (
     OAuthError,
@@ -136,8 +136,8 @@ def render_portfolio_tab() -> None:
         st.session_state["_t3_kpis_hero"] = _kpis_hero   # 供下方 expander summary 用
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
-            "border-left:4px solid #64b5f6;border-radius:8px;padding:10px 14px;margin:8px 0'>"
-            "<span style='color:#64b5f6;font-size:15px;font-weight:900'>📊 組合健康儀表</span>"
+            f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
+            "<span style=f'color:{MD_BLUE_300};font-size:15px;font-weight:900'>📊 組合健康儀表</span>"
             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.163 6 指標一覽</span>"
             "</div>",
             unsafe_allow_html=True)
@@ -147,8 +147,8 @@ def render_portfolio_tab() -> None:
         # v18.14: 改用 markdown 章節（避免外層 expander 包住內部 expander 觸發 Streamlit 巢狀錯誤）
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
-            "border-left:4px solid #64b5f6;border-radius:8px;padding:10px 14px;margin:8px 0'>"
-            "<span style='color:#64b5f6;font-size:15px;font-weight:900'>🎯 策略3 智能戰情室</span>"
+            f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
+            "<span style=f'color:{MD_BLUE_300};font-size:15px;font-weight:900'>🎯 策略3 智能戰情室</span>"
             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.9 新手戰情中心</span>"
             "</div>",
             unsafe_allow_html=True)
@@ -255,7 +255,7 @@ def render_portfolio_tab() -> None:
                                         _items_zh.append(f"{_n[:18]}{f'({_zh})' if _zh else ''}")
                                     _more = f"…+{len(_common)-6}" if len(_common) > 6 else ""
                                     _common_html = (
-                                        f"<div style='color:#ffb74d;font-size:11px;margin:2px 0 0 12px'>"
+                                        f"<div style='color:{MD_ORANGE_300};font-size:11px;margin:2px 0 0 12px'>"
                                         f"🔁 共同持股 {len(_common)} 檔："
                                         f"{'、'.join(_items_zh)}{_more}</div>")
                             st.markdown(
@@ -1138,8 +1138,8 @@ def render_portfolio_tab() -> None:
 
                 st.markdown(
                     f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});"
-                    f"border-left:4px solid #64b5f6;border-radius:8px;padding:10px 14px;margin:10px 0 6px'>"
-                    f"<span style='color:#64b5f6;font-weight:900;font-size:15px'>🏷️ {_pname}</span>"
+                    f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:10px 0 6px'>"
+                    f"<span style='color:{MD_BLUE_300};font-weight:900;font-size:15px'>🏷️ {_pname}</span>"
                     f"<span style='color:#aaa;font-size:11px;margin-left:8px'>({_pid})</span>"
                     f"<span style='color:#fff;font-size:13px;margin-left:auto;float:right'>"
                     f"投入 {fmt_twd(_ptot)} · {len(_funds)} 檔 · 核心 {_p_core_pct}%</span>"
@@ -1155,7 +1155,7 @@ def render_portfolio_tab() -> None:
                         fig_p_dn = go.Figure(go.Pie(
                             labels=_dn_pl, values=_dn_pv,
                             hole=0.65,
-                            marker=dict(colors=["#64b5f6", MATERIAL_ORANGE],
+                            marker=dict(colors=[MD_BLUE_300, MATERIAL_ORANGE],
                                         line=dict(color=STREAMLIT_BG, width=1)),
                             textinfo="percent", textfont=dict(size=9),
                             hovertemplate="%{label}: NT$%{value:,.0f}<extra></extra>",
@@ -1169,7 +1169,7 @@ def render_portfolio_tab() -> None:
                             annotations=[dict(
                                 text=f"<b>{_p_core_pct}%</b>",
                                 x=0.5, y=0.5, font_size=12, showarrow=False,
-                                font=dict(color="#64b5f6"))],
+                                font=dict(color=MD_BLUE_300))],
                         )
                         st.plotly_chart(fig_p_dn, use_container_width=True,
                                         key=f"policy_dn_{_pid}")
@@ -1349,10 +1349,10 @@ def render_portfolio_tab() -> None:
     _pf_loaded = [f for f in st.session_state.portfolio_funds if f.get("loaded")]
     if not _pf_loaded:
         st.markdown(
-            f"<div style='background:{BG_DARK_NAVY_1};border:1px dashed #64b5f6;border-radius:8px;"
+            f"<div style='background:{BG_DARK_NAVY_1};border:1px dashed {MD_BLUE_300};border-radius:8px;"
             "padding:6px 14px;margin:4px 0 10px;font-size:12px;color:#aaa;"
             "display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-            "<span style='color:#64b5f6;font-weight:700'>👋 三步驟：</span>"
+            "<span style=f'color:{MD_BLUE_300};font-weight:700'>👋 三步驟：</span>"
             "<span><b style='color:#fff'>1️⃣ 貼代碼</b></span>"
             "<span style='color:#555'>→</span>"
             "<span><b style='color:#fff'>2️⃣ 批次加入</b></span>"
@@ -1421,12 +1421,12 @@ def render_portfolio_tab() -> None:
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>🛡️ 核心資產比例</div>"
-            f"<div style='color:#64b5f6;font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
+            f"<div style='color:{MD_BLUE_300};font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>衛星 {100-_core_pct_kpi:.1f}%</div></div>"
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:#aaa;font-size:11px'>💵 預估月配息</div>"
-            f"<div style='color:#ffb74d;font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
+            f"<div style='color:{MD_ORANGE_300};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
             f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>依各基金配息率粗估</div></div>"
             "</div>", unsafe_allow_html=True)
 
@@ -1563,7 +1563,7 @@ def render_portfolio_tab() -> None:
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid {GH_BORDER}'>"
             f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
             f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
-            f"<div><div style='color:#64b5f6;font-size:11px'>🛡️ 核心資產</div><div style='color:#64b5f6;font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
+            f"<div><div style='color:{MD_BLUE_300};font-size:11px'>🛡️ 核心資產</div><div style='color:{MD_BLUE_300};font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
             f"<div><div style='color:#ff9800;font-size:11px'>⚡ 衛星資產</div><div style='color:#ff9800;font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
             f"<div><div style='color:{_dc};font-size:11px'>目標偏差</div><div style='color:{_dc};font-size:28px;font-weight:900'>{_diff:+.1f}%</div></div>"
             f"</div></div>", unsafe_allow_html=True)
@@ -1573,7 +1573,7 @@ def render_portfolio_tab() -> None:
             (f.get("code","?")[:8] + " 🛡️" if f.get("is_core") else f.get("code","?")[:8] + " ⚡")
             for f in _pf_loaded]
         _dn_values = [max(f.get("invest_twd", 0) or 0, 0) for f in _pf_loaded]
-        _dn_colors = ["#64b5f6" if f.get("is_core") else MATERIAL_ORANGE for f in _pf_loaded]
+        _dn_colors = [MD_BLUE_300 if f.get("is_core") else MATERIAL_ORANGE for f in _pf_loaded]
         _alert     = abs(_diff) > 10
         _bg_c      = "#1a0808" if _alert else STREAMLIT_BG
         fig_dn = go.Figure()
@@ -1596,7 +1596,7 @@ def render_portfolio_tab() -> None:
             annotations   = [dict(
                 text  = f"<b>{_core_pct}%</b><br><span style='font-size:9px'>核心</span>",
                 x=0.5, y=0.5, font_size=14, showarrow=False,
-                font=dict(color="#64b5f6"))],
+                font=dict(color=MD_BLUE_300))],
         )
         st.plotly_chart(fig_dn, use_container_width=True)
         _target2 = st.session_state.get("portfolio_core_pct", 75)
@@ -1918,7 +1918,7 @@ def render_portfolio_tab() -> None:
                             f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0;font-size:11px;color:{TRAFFIC_NEUTRAL}'>"
                             f"NAV: <b style='color:{GH_FG_PRIMARY}'>{_nav_i}</b>"
                             f"　配息率: <b style='color:#ff9800'>{_adr_i}{'%' if _adr_i else ''}</b>"
-                            f"　Sharpe: <b style='color:#69f0ae'>{_sh_i}</b>"
+                            f"　Sharpe: <b style='color:{MD_GREEN_A200}'>{_sh_i}</b>"
                             f"　σ: <b>{_std_i}{'%' if _std_i else ''}</b></div>",
                             unsafe_allow_html=True)
                     with ci3:
@@ -1959,7 +1959,7 @@ def render_portfolio_tab() -> None:
                                     if not target: return ("—", "#666")
                                     d = (_mi_nav - target) / target * 100
                                     if is_buy:
-                                        if d <= 0:           return ("🟢", "#00e676")
+                                        if d <= 0:           return ("🟢", MD_GREEN_A400)
                                         elif d <= _mi_NEAR:  return ("⚠️", "#ffa726")
                                         else:                return ("▲",  "#555")
                                     else:
@@ -1971,7 +1971,7 @@ def render_portfolio_tab() -> None:
                                 _double_sell = (_mi_s1 and _mi_nav >= _mi_s1) and (_mi_bbu and _mi_nav >= _mi_bbu)
                                 _badge = ""
                                 if _double_buy:
-                                    _badge = "<span style='background:#0a3a1a;color:#00e676;border:1px solid #00e676;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🟢🟢 σ+布林 雙確認買</span>"
+                                    _badge = "<span style=f'background:#0a3a1a;color:{MD_GREEN_A400};border:1px solid {MD_GREEN_A400};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🟢🟢 σ+布林 雙確認買</span>"
                                 elif _double_sell:
                                     _badge = "<span style='background:#3a0a0a;color:#f44336;border:1px solid #f44336;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🔔🔔 σ+布林 雙確認賣</span>"
                                 # 6 個訊號方塊（從深買到深賣）

@@ -15,7 +15,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-from shared.colors import GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, TRAFFIC_NEUTRAL
 
 EDU_FIELDS = ("meaning", "how_to_read", "pair_with",
               "historical_anchor", "upstream", "downstream")
@@ -58,11 +58,11 @@ def make_sparkline(
 
     # 判斷整體走勢顏色
     last_v = float(s.iloc[-1])
-    color = "#64b5f6"  # default 藍
+    color = MD_BLUE_300  # default 藍
     if threshold_crit is not None:
         if (high_is_bad and last_v >= threshold_crit) or (not high_is_bad and last_v <= threshold_crit):
             color = MATERIAL_RED
-    if threshold_warn is not None and color == "#64b5f6":
+    if threshold_warn is not None and color == MD_BLUE_300:
         if (high_is_bad and last_v >= threshold_warn) or (not high_is_bad and last_v <= threshold_warn):
             color = MATERIAL_ORANGE
 
@@ -160,7 +160,7 @@ def _z_color(z, high_is_bad):
         return MATERIAL_RED if bad else MATERIAL_GREEN
     if abs(z) >= 1.5:
         return MATERIAL_ORANGE
-    return "#64b5f6"
+    return MD_BLUE_300
 
 
 def render_macro_card(

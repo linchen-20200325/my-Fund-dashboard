@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG
+from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, STREAMLIT_BG
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -180,13 +180,13 @@ def _render_bollinger_expanders(funds: list) -> None:
                     fig.add_trace(go.Scatter(
                         x=_ma60.dropna().index, y=_ma60.dropna().values,
                         name="MA60",
-                        line=dict(color="#9c27b0", width=1, dash="dot"),
+                        line=dict(color=MD_PURPLE_500, width=1, dash="dot"),
                     ))
                 # NAV 主線
                 fig.add_trace(go.Scatter(
                     x=_df["date"], y=_df["nav"], name="淨值",
                     mode="lines",
-                    line=dict(color="#2196f3", width=2),
+                    line=dict(color=MD_BLUE_500, width=2),
                 ))
 
                 # 配息標記
@@ -220,9 +220,9 @@ def _render_bollinger_expanders(funds: list) -> None:
 
                 # MK 買賣水平線
                 for _bv, _bl, _bc in [
-                    (_safe_num(_m.get("buy1")), "買1 (年高-1σ)", "#69f0ae"),
+                    (_safe_num(_m.get("buy1")), "買1 (年高-1σ)", MD_GREEN_A200),
                     (_safe_num(_m.get("buy2")), "買2 (年高-2σ)", MATERIAL_GREEN),
-                    (_safe_num(_m.get("buy3")), "買3 (年高-3σ)", "#9c27b0"),
+                    (_safe_num(_m.get("buy3")), "買3 (年高-3σ)", MD_PURPLE_500),
                 ]:
                     if _bv is not None:
                         fig.add_hline(y=_bv, line_color=_bc, line_dash="dot",
@@ -231,7 +231,7 @@ def _render_bollinger_expanders(funds: list) -> None:
                                       annotation_position="bottom right")
                 for _sv, _sl, _sc in [
                     (_safe_num(_m.get("sell1")), "賣1 (年低+1σ)", "#ffa726"),
-                    (_safe_num(_m.get("sell2")), "賣2 (年低+2σ)", "#ff7043"),
+                    (_safe_num(_m.get("sell2")), "賣2 (年低+2σ)", MD_DEEP_ORANGE_400),
                     (_safe_num(_m.get("sell3")), "賣3 (年低+3σ)", MATERIAL_RED),
                 ]:
                     if _sv is not None:

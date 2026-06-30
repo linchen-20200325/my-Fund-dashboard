@@ -47,6 +47,16 @@ BG_DARK_AMBER_1: str = "#2a1f00"   # warning dark
 BG_DARK_AMBER_2: str = "#1a1200"   # warning deep
 BG_DARK_GREEN_1: str = "#0a1a0a"   # success dark
 
+# v19.256 Phase 4-B4: Material extended palette(component accent colors)
+MD_BLUE_300: str = "#64b5f6"       # Material Blue 300(info accent,最常用)
+MD_BLUE_500: str = "#2196f3"       # Material Blue 500
+MD_GREEN_A200: str = "#69f0ae"     # Material Green A200(success accent)
+MD_GREEN_A400: str = "#00e676"     # Material Green A400
+MD_DEEP_ORANGE_400: str = "#ff7043" # Material Deep Orange 400(warning accent)
+MD_AMBER_300: str = "#ffd54f"      # Material Amber 300
+MD_ORANGE_300: str = "#ffb74d"     # Material Orange 300
+MD_PURPLE_500: str = "#9c27b0"     # Material Purple 500
+
 # 同義對應
 TRAFFIC_EMOJI: tuple[str, str, str, str] = ("🟢", "🟡", "🔴", "⬜")
 TRAFFIC_HEX: tuple[str, str, str, str] = (

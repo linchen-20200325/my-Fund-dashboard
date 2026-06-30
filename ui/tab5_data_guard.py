@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.proxy import get_proxy_config
 from ui.helpers.session import (
@@ -651,7 +651,7 @@ def render_data_guard_tab() -> None:
             _lh_yf   = [r.get("yf_ms")      for r in _lat_hist]
             _fig_lat  = go.Figure()
             for _lt_name, _lt_y, _lt_color in [
-                ("FRED/yfinance(載入)", _lh_fred, "#64b5f6"),
+                ("FRED/yfinance(載入)", _lh_fred, MD_BLUE_300),
                 ("MoneyDJ(測速)",       _lh_mj,   MATERIAL_ORANGE),
                 ("Yahoo/yf(測速)",      _lh_yf,   "#ce93d8"),
             ]:

@@ -23,7 +23,7 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     RISK_SCORE_YIELD_WEIGHT_RATIO,
 )
 
-from shared.colors import BG_DARK_RED_2, GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_RED_2, GH_BG_CARD, GH_BORDER, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, TRAFFIC_NEUTRAL
 
 # v18.116 B-B: I/O 拆分後從 repository 取
 from repositories.financial_repository import (  # noqa: F401  legacy re-export
@@ -85,7 +85,7 @@ class PrecisionStrategyEngine:
                     "action": "流動性危機前兆：核心現金/短債 ≥50%，衛星嚴格停利出場，不宜追高",
                     "cash_pct": 50}
         elif risk_score > 0.8:
-            return {"level": "風險偏高", "color": "#ff7043", "icon": "⚠️",
+            return {"level": "風險偏高", "color": MD_DEEP_ORANGE_400, "icon": "⚠️",
                     "action": "流動性收縮：核心配置防禦性資產，衛星部位縮減至 20% 以內",
                     "cash_pct": 30}
         elif risk_score > 0.0:
@@ -224,7 +224,7 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
         if sigma_rank >= -0.5:
             label, color = "接近 HWM（≥ -0.5σ）", MATERIAL_GREEN
         elif sigma_rank >= -1.0:
-            label, color = "HWM - 1σ 區（觀察）", "#69f0ae"
+            label, color = "HWM - 1σ 區（觀察）", MD_GREEN_A200
         elif sigma_rank >= -2.0:
             label, color = "HWM - 2σ 區（加碼參考）", MATERIAL_ORANGE
         else:

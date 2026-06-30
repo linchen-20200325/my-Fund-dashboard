@@ -18,7 +18,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 # F-GRAY-4 v19.179 PR-3:PMI 教學 markdown SSOT(per Q3「全遷,markdown 也用 f-string 插值」)
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_TEXTBOOK = _PMI_THR_V2["stoplight"]["green_above"]  # 50.0 = 教科書枯榮線(字面分界)
@@ -1283,7 +1283,7 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
                             _sh = _sh.dropna().tail(120)
                             _l2fig.add_trace(_go_c.Scatter(
                                 x=_sh.index, y=_sh.values, name="薩姆規則 (pp)",
-                                line={"color": "#64b5f6", "width": 2},
+                                line={"color": MD_BLUE_300, "width": 2},
                                 hovertemplate="Sahm: %{y:.2f}pp<extra></extra>"),
                                 secondary_y=False)
                             _l2fig.add_hline(y=0.5, line_dash="dash",

@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from repositories.fund import (
     tdcc_search_fund,
@@ -400,12 +400,12 @@ def render_single_fund_tab() -> None:
                 _ma60 = s.rolling(60).mean()
                 fig_n.add_trace(go.Scatter(
                     x=_ma60.dropna().index, y=_ma60.dropna().values,
-                    name="MA60", line=dict(color="#9c27b0", width=1, dash="dot")))
+                    name="MA60", line=dict(color=MD_PURPLE_500, width=1, dash="dot")))
                 # 淨值主線（純線；不再 fill 到 0 以免 y 軸被自動拉到 0 壓扁走勢）
                 fig_n.add_trace(go.Scatter(
                     x=df_show["date"], y=df_show["nav"],
                     name="淨值", mode="lines",
-                    line=dict(color="#2196f3", width=2)))
+                    line=dict(color=MD_BLUE_500, width=2)))
 
                 # ── 配息標記 💰（除息日垂直虛線 + marker）───────────────
                 _chart_divs = mj_raw.get("dividends") or []
@@ -440,9 +440,9 @@ def render_single_fund_tab() -> None:
 
                 # ── MK v3.0 買賣水平線（3 買 + 3 賣）────────────────────
                 for bv, bl, bc in [
-                    (m.get("buy1"), "買1 小跌(年高-1σ)", "#69f0ae"),
+                    (m.get("buy1"), "買1 小跌(年高-1σ)", MD_GREEN_A200),
                     (m.get("buy2"), "買2 急跌(年高-2σ)", MATERIAL_GREEN),
-                    (m.get("buy3"), "買3 大跌(年高-3σ)", "#9c27b0"),
+                    (m.get("buy3"), "買3 大跌(年高-3σ)", MD_PURPLE_500),
                 ]:
                     if bv:
                         fig_n.add_hline(y=bv, line_color=bc, line_dash="dot",
@@ -450,7 +450,7 @@ def render_single_fund_tab() -> None:
                                         annotation_position="bottom right")
                 for sv, sl, sc in [
                     (m.get("sell1"), "賣1 小漲(年低+1σ)", "#ffa726"),
-                    (m.get("sell2"), "賣2 急漲(年低+2σ)", "#ff7043"),
+                    (m.get("sell2"), "賣2 急漲(年低+2σ)", MD_DEEP_ORANGE_400),
                     (m.get("sell3"), "賣3 大漲(年低+3σ)", MATERIAL_RED),
                 ]:
                     if sv:
@@ -534,7 +534,7 @@ def render_single_fund_tab() -> None:
                         return ("—", "#666", "")
                     delta = (nav_v - target) / target * 100  # 正=高於 target
                     if is_buy:
-                        if delta <= 0:           return ("🟢 觸發", "#00e676", f"{abs(delta):.2f}% 已破")
+                        if delta <= 0:           return ("🟢 觸發", MD_GREEN_A400, f"{abs(delta):.2f}% 已破")
                         elif delta <= _NEAR:     return ("⚠️ 接近", "#ffa726", f"還差 {delta:.2f}%")
                         else:                    return ("▲ 距離", "#666",    f"還差 {delta:.2f}%")
                     else:
@@ -544,11 +544,11 @@ def render_single_fund_tab() -> None:
                 if _m_buy1:
                     _rows = ""
                     for _bv, _bl, _bc, _is_buy in [
-                        (_m_buy3,  "💧 大跌大買 (50%) 年高-3σ", "#9c27b0", True),
+                        (_m_buy3,  "💧 大跌大買 (50%) 年高-3σ", MD_PURPLE_500, True),
                         (_m_buy2,  "💧 急跌穩買 (30%) 年高-2σ", MATERIAL_GREEN, True),
-                        (_m_buy1,  "💧 小跌小買 (20%) 年高-1σ", "#69f0ae", True),
+                        (_m_buy1,  "💧 小跌小買 (20%) 年高-1σ", MD_GREEN_A200, True),
                         (_m_sell1, "💰 小漲停利 (20%) 年低+1σ", "#ffa726", False),
-                        (_m_sell2, "💰 急漲停利 (30%) 年低+2σ", "#ff7043", False),
+                        (_m_sell2, "💰 急漲停利 (30%) 年低+2σ", MD_DEEP_ORANGE_400, False),
                         (_m_sell3, "💰 大漲停利 (50%) 年低+3σ", MATERIAL_RED, False),
                     ]:
                         if not _bv: continue
@@ -576,16 +576,16 @@ def render_single_fund_tab() -> None:
                 if _boll_latest_low is not None and _m_nav_v > 0 and _m_nav_v <= _boll_latest_low:
                     st.markdown(
                         f"<div style='background:linear-gradient(135deg,#061a06,#0d2a0d);"
-                        f"border:2px solid #00e676;border-radius:12px;padding:14px 18px;margin:10px 0'>"
-                        f"<div style='color:#00e676;font-size:14px;font-weight:700;margin-bottom:8px'>"
+                        f"border:2px solid {MD_GREEN_A400};border-radius:12px;padding:14px 18px;margin:10px 0'>"
+                        f"<div style='color:{MD_GREEN_A400};font-size:14px;font-weight:700;margin-bottom:8px'>"
                         f"⚡ -2σ 超跌機會卡 — 布林下軌突破！</div>"
                         f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px'>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>現值 NAV</div>"
                         f"<div style='color:#fff;font-weight:700;font-size:16px'>{_m_nav_v:.4f}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>布林下軌(-2σ)</div>"
-                        f"<div style='color:#00e676;font-weight:700;font-size:16px'>{_boll_latest_low:.4f}</div></div>"
+                        f"<div style='color:{MD_GREEN_A400};font-weight:700;font-size:16px'>{_boll_latest_low:.4f}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>跌破幅度</div>"
-                        f"<div style='color:#69f0ae;font-weight:700;font-size:16px'>"
+                        f"<div style='color:{MD_GREEN_A200};font-weight:700;font-size:16px'>"
                         f"{(_boll_latest_low - _m_nav_v) / _boll_latest_low * 100:.2f}%</div></div>"
                         f"</div>"
                         f"<div style='color:#aaa;font-size:11px;border-top:1px solid #1a3a1a;padding-top:8px'>"
@@ -623,7 +623,7 @@ def render_single_fund_tab() -> None:
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_sr:+.2f}σ</div></div>"
                                 f"</div>"
                                 f"<div style='display:flex;gap:12px;flex-wrap:wrap;font-size:11px'>"
-                                f"<span style='color:#69f0ae'>HWM-1σ: {_l1:.4f}</span>"
+                                f"<span style='color:{MD_GREEN_A200}'>HWM-1σ: {_l1:.4f}</span>"
                                 f"<span style='color:#ff9800'>HWM-2σ: {_l2:.4f}</span>"
                                 f"<span style='color:#f44336'>HWM-3σ: {_l3:.4f}</span>"
                                 f"</div>"
@@ -697,7 +697,7 @@ def render_single_fund_tab() -> None:
                             return ("<div><div style='color:#666;font-size:10px'>" + label + "</div>"
                                     "<div style='color:#666;font-size:20px;font-weight:700'>—</div>"
                                     "<div style='color:#555;font-size:9px'>資料不足</div></div>")
-                        _c = (MATERIAL_GREEN if score >= 75 else "#69f0ae" if score >= 60 else
+                        _c = (MATERIAL_GREEN if score >= 75 else MD_GREEN_A200 if score >= 60 else
                               "#ffeb3b" if score >= 45 else MATERIAL_ORANGE if score >= 30 else MATERIAL_RED)
                         return (f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{label}</div>"
                                 f"<div style='color:{_c};font-size:20px;font-weight:900'>{score:.0f}</div>"
@@ -1108,8 +1108,8 @@ def render_single_fund_tab() -> None:
                                         f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0'>"
                                         f"<div style='color:#ccc;font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
                                         f"<div style='flex:1;background:#1a1a2a;border-radius:3px;height:10px'>"
-                                        f"<div style='background:#2196f3;width:{min(_sp*3,100):.0f}%;height:100%;border-radius:3px'></div></div>"
-                                        f"<div style='color:#2196f3;font-size:11px;width:40px;text-align:right'>{_sp:.1f}%</div>"
+                                        f"<div style='background:{MD_BLUE_500};width:{min(_sp*3,100):.0f}%;height:100%;border-radius:3px'></div></div>"
+                                        f"<div style='color:{MD_BLUE_500};font-size:11px;width:40px;text-align:right'>{_sp:.1f}%</div>"
                                         f"</div>", unsafe_allow_html=True)
                         with _hc2:
                             if _tops:
@@ -1118,7 +1118,7 @@ def render_single_fund_tab() -> None:
                                     _tn_raw = str(_top.get("name",""))
                                     _zh = _zh_holding(_tn_raw)
                                     _tn = _tn_raw[:22]
-                                    _zh_html = (f"<span style='color:#ffb74d;font-size:10px;margin-left:6px'>({_zh})</span>"
+                                    _zh_html = (f"<span style='color:{MD_ORANGE_300};font-size:10px;margin-left:6px'>({_zh})</span>"
                                                 if _zh else "")
                                     _tp = float(_top.get("pct", 0) or 0)
                                     _ts = str(_top.get("sector",""))[:12]
@@ -1180,7 +1180,7 @@ def render_single_fund_tab() -> None:
                                     st.markdown(
                                         f"<div style='padding:4px 8px;background:{GH_BG_CARD};"
                                         f"border-radius:6px;margin:2px 0;font-size:12px'>"
-                                        f"<span style='color:#ffb74d;font-weight:700'>{_disp_nm}</span>　"
+                                        f"<span style='color:{MD_ORANGE_300};font-weight:700'>{_disp_nm}</span>　"
                                         f"{_lh}<span style='color:#666;font-size:10px;"
                                         f"margin-left:6px'>{_src}</span></div>",
                                         unsafe_allow_html=True)

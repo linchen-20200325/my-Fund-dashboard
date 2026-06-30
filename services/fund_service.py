@@ -21,7 +21,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     TRADING_DAYS_PER_YEAR,
     NEAR_DIVIDEND_WARNING_PCT,
@@ -117,7 +117,7 @@ def calc_health_from_manual(
         advice = f"真實收益 +{real_return_pct:.2f}%，勉強打平，建議持續觀察"
     else:
         health = "🟠 淨值下滑"
-        health_color = "#ff7043"
+        health_color = MD_DEEP_ORANGE_400
         advice = f"淨值下滑 {real_return_pct:.2f}%，配息雖充足但需注意本金侵蝕趨勢"
 
     return {
@@ -348,11 +348,11 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     # 倉位判斷（深度優先；買勝過賣以利風險控管）
     if std_amt < ref_high * 0.001:   # σ < 0.1% → 資料不可靠
         pos_l, pos_c = "資料待更新 📡", "#555"
-    elif now <= b3:    pos_l, pos_c = "大跌大買 🔥 (投 50%)", "#9c27b0"
+    elif now <= b3:    pos_l, pos_c = "大跌大買 🔥 (投 50%)", MD_PURPLE_500
     elif now <= b2:    pos_l, pos_c = "急跌穩買 📈 (投 30%)", MATERIAL_GREEN
-    elif now <= b1:    pos_l, pos_c = "小跌小買 ✅ (投 20%)", "#69f0ae"
+    elif now <= b1:    pos_l, pos_c = "小跌小買 ✅ (投 20%)", MD_GREEN_A200
     elif now >= sell3: pos_l, pos_c = "大漲停利 🔔 (出 50%)", MATERIAL_RED
-    elif now >= sell2: pos_l, pos_c = "急漲停利 ⚠️ (出 30%)", "#ff7043"
+    elif now >= sell2: pos_l, pos_c = "急漲停利 ⚠️ (出 30%)", MD_DEEP_ORANGE_400
     elif now >= sell1: pos_l, pos_c = "小漲停利 💰 (出 20%)", "#ffa726"
     else:              pos_l, pos_c = "正常波動區",            "#888888"
 

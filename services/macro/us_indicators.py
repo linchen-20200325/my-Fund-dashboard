@@ -14,7 +14,7 @@ import pandas as pd
 from repositories.macro_repository import (
     fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch,
 )
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_BLUE_300, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL
 # v19.245 R13 F-GRAY-4 Phase A HY_SPREAD inflection 收口 SSOT
 from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR_V2
 
@@ -124,10 +124,10 @@ def _detect_inflection(indicators):
         signals.append({"type":"buy","text":"⭐ MK黃金拐點：CPI+Fed Rate 雙雙見頂回落，勝率最高！"}); score += 5
 
     if score >= 8:   infl = {"label":"🚀 強力買進拐點","color":MATERIAL_GREEN,"desc":"多項指標同時確認，景氣最佳買點"}
-    elif score >= 4: infl = {"label":"✅ 買進拐點形成","color":"#69f0ae","desc":"落後見頂 + 領先反彈，建議逢低布局"}
+    elif score >= 4: infl = {"label":"✅ 買進拐點形成","color":MD_GREEN_A200,"desc":"落後見頂 + 領先反彈，建議逢低布局"}
     elif score >= 1: infl = {"label":"👀 觀察（偏多）","color":MATERIAL_ORANGE,"desc":"部分訊號出現，持續觀察"}
     elif score >= -2:infl = {"label":"⚖️ 中性整理","color":"#888888","desc":"指標分歧，維持資產配置"}
-    elif score >= -5:infl = {"label":"⚠️ 謹慎偏空","color":"#ff7043","desc":"落後指標未見頂，降低股票型比重"}
+    elif score >= -5:infl = {"label":"⚠️ 謹慎偏空","color":MD_DEEP_ORANGE_400,"desc":"落後指標未見頂，降低股票型比重"}
     else:            infl = {"label":"🔴 空頭拐點","color":MATERIAL_RED,"desc":"確認衰退，優先貨幣型與投資等級債"}
     return {"inflection":infl,"signals":signals,"infl_score":score}
 
@@ -776,10 +776,10 @@ def fetch_all_indicators(fred_api_key):
             sig_nfp, col_nfp = "🟠", "#ff8a80"
         elif cur_d < 250:
             score_nfp = 0.0      # 中性
-            sig_nfp, col_nfp = "🟡", "#ffd54f"
+            sig_nfp, col_nfp = "🟡", MD_AMBER_300
         elif cur_d < 500:
             score_nfp = -0.5     # 強勁
-            sig_nfp, col_nfp = "🟢", "#69f0ae"
+            sig_nfp, col_nfp = "🟢", MD_GREEN_A200
         else:
             score_nfp = -1.0     # 過熱（也可能引發 Fed 緊縮）
             sig_nfp, col_nfp = "🟢", MATERIAL_GREEN
@@ -839,7 +839,7 @@ def get_market_phase(indicators: dict) -> dict:
     _vote_ratio = Counter(_phases).most_common(1)[0][1] / len(_phases)
 
     _map = {
-        "復甦": ("#64b5f6", "Z 低位 + 斜率翻正，景氣底部確認，逢低布局機會"),
+        "復甦": (MD_BLUE_300, "Z 低位 + 斜率翻正，景氣底部確認，逢低布局機會"),
         "擴張": (MATERIAL_GREEN, "Z 中位 + 斜率向上，成長動能充足，持有風險資產"),
         "減速": (MATERIAL_ORANGE, "Z 高位 + 斜率轉負，擴張減速拐點！考慮調降衛星比重"),
         "衰退": (MATERIAL_RED, "Z 低位 + 斜率向下，景氣收縮，轉向防禦配置"),
@@ -1009,7 +1009,7 @@ def calc_macro_phase(indicators: dict) -> dict:
         advice = "股優於債：核心高股息ETF + 衛星AI/半導體，設嚴格停利點"
         strategy = "持有核心配息資產，衛星資產設15%停利出場"
     elif score >= 3:
-        phase = "復甦"; phase_en = "Recovery"; phase_color = "#64b5f6"
+        phase = "復甦"; phase_en = "Recovery"; phase_color = MD_BLUE_300
         alloc = dict(股票=40, 債券=40, 現金=20)
         advice = "復甦期：最高勝率買點！逐步加碼，優先佈局高股息與平衡型"
         strategy = "積極佈局中小型成長股、非必需消費、金融股底部"
@@ -1063,7 +1063,7 @@ def calc_macro_phase(indicators: dict) -> dict:
         next_phase = PHASE_ORDER[(ph_idx + 1) % 4]
         trend_arrow = "→↗"
         trend_label = "偏向上（觀察中）"
-        trend_color = "#69f0ae"
+        trend_color = MD_GREEN_A200
     elif infl_score <= -5:      # 多項空頭訊號 → 向下轉
         next_phase = PHASE_ORDER[(ph_idx - 1) % 4]
         trend_arrow = "↘"
@@ -1073,7 +1073,7 @@ def calc_macro_phase(indicators: dict) -> dict:
         next_phase = PHASE_ORDER[(ph_idx - 1) % 4]
         trend_arrow = "→↘"
         trend_label = "偏向下（謹慎）"
-        trend_color = "#ff7043"
+        trend_color = MD_DEEP_ORANGE_400
     else:                       # 中性整理
         next_phase = phase
         trend_arrow = "→"
@@ -1100,7 +1100,7 @@ def calc_macro_phase(indicators: dict) -> dict:
 
     # v15: Weather metaphor (before return dict)
     _weather_tup = (
-        ("☀️", "晴天", "#ffd54f",
+        ("☀️", "晴天", MD_AMBER_300,
          "股 {}% / 債 {}% / 現金 {}%".format(alloc.get("股票",60),alloc.get("債券",30),alloc.get("現金",10)))
         if score >= 7 else
         ("⛅", "多雲", "#90caf9",
@@ -1299,7 +1299,7 @@ def calc_macro_phase_zpct(indicators: dict) -> dict:
     elif score >= 5:
         phase = "擴張"; phase_color = MATERIAL_GREEN
     elif score >= 3:
-        phase = "復甦"; phase_color = "#64b5f6"
+        phase = "復甦"; phase_color = MD_BLUE_300
     else:
         phase = "衰退"; phase_color = MATERIAL_ORANGE
     return {
@@ -1350,7 +1350,7 @@ def identify_regime(indicators: dict) -> dict:
     elif pmi_v >= _PMI_REGIME_STRONG and (cpi_v or 0) >= _CPI_REGIME_OVERHEAT:
         regime = "🟡 過熱期"; regime_color = MATERIAL_ORANGE
     elif pmi_v < _PMI_REGIME_CONTRACT and (fed_v or 5) <= (fed_p or 5):
-        regime = "🔵 復甦期"; regime_color = "#2196f3"
+        regime = "🔵 復甦期"; regime_color = MD_BLUE_500
     else:
         regime = "🔴 衰退期"; regime_color = MATERIAL_RED
 
@@ -1472,10 +1472,10 @@ def fetch_tw_market_tpi(fred_api_key: str = "") -> dict:
         result.update(water_label="⚖️ 常溫（中性）", color="#888888", signal="⚪",
                       advice="市場趨向均衡，維持既有配置，觀察漲跌家數變化")
     elif tpi >= -1.5:
-        result.update(water_label="🌡️ 偏冷（謹慎）", color="#64b5f6", signal="🟡",
+        result.update(water_label="🌡️ 偏冷（謹慎）", color=MD_BLUE_300, signal="🟡",
                       advice="外資轉弱、漲跌家數惡化，考慮降低台股部位")
     else:
-        result.update(water_label="🥶 冰點（底部特徵）", color="#9c27b0", signal="🟢",
+        result.update(water_label="🥶 冰點（底部特徵）", color=MD_PURPLE_500, signal="🟢",
                       advice="散戶絕望期，偵測到底部特徵，準備分批建倉")
 
     # v19.233 F-PROV-1 cluster C 補洞:加 _provenance(schema-additive,對齊

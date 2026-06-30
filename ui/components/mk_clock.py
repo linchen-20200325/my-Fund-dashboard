@@ -15,7 +15,7 @@ from typing import Optional
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, MATERIAL_GREEN, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, MATERIAL_GREEN, MD_DEEP_ORANGE_400, TRAFFIC_NEUTRAL
 # F-GRAY-4 v19.179 PR-3:PMI mk_tolerance SSOT
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_MK_EXPANSION = _PMI_THR_V2["mk_tolerance"]["expansion_above"]    # 50.5
@@ -48,7 +48,7 @@ _PHASE_META = {
     "slowdown":  {"zh": "趨緩期", "icon": "⚠️",
                   "desc": "通膨升 / 利率升 / 經濟降（停滯性通膨）",
                   "alloc_eq": 40, "alloc_bd": 60,
-                  "color": "#ff7043",
+                  "color": MD_DEEP_ORANGE_400,
                   "advice": "現金 / 債優於股（建議 股 4 : 債 6）｜核心轉向：防禦型 / 高股息 / 醫療 / 公用事業"},
     "recession": {"zh": "衰退期", "icon": "❄️",
                   "desc": "通膨降 / 利率降 / 經濟降",
@@ -228,8 +228,8 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
         def _fmt_cell(label: str, val, t_int: int, unit: str = "", fmt: str = "{:.1f}"):
             arrow = "↑" if t_int > 0 else ("↓" if t_int < 0 else "→")
             if val is None:
-                num_html = "<span style='color:#ff7043'>—</span>"
-                tag = "<div style='font-size:10px;color:#ff7043;margin-top:2px'>未抓到</div>"
+                num_html = "<span style=f'color:{MD_DEEP_ORANGE_400}'>—</span>"
+                tag = "<div style=f'font-size:10px;color:{MD_DEEP_ORANGE_400};margin-top:2px'>未抓到</div>"
             else:
                 num_html = f"{fmt.format(val)}{unit} {arrow}"
                 tag = ""

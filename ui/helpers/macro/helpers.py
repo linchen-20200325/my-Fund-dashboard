@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_RED, TRAFFIC_NEUTRAL
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
 
 
 # ══════════════════════════════════════════════════════
@@ -134,9 +134,9 @@ def category_verdict(z_now: float | None, z_trend_delta: float) -> tuple[str, st
     elif z_now <= -0.5:
         icon, color = "🟠", MATERIAL_ORANGE
     elif z_now < 0.5:
-        icon, color = "🟡", "#ffd54f"
+        icon, color = "🟡", MD_AMBER_300
     else:
-        icon, color = "🟢", "#69f0ae"
+        icon, color = "🟢", MD_GREEN_A200
     direction = "改善中 📈" if z_trend_delta > 0.2 else ("惡化中 📉" if z_trend_delta < -0.2 else "持平 →")
     return (icon, color, f"當前 Z={z_now:+.2f}（{direction}）")
 
@@ -170,7 +170,7 @@ def mk_fund_signal(fund_info: dict, phase: str, score: float) -> dict:
     if _pmi and _vix:
         pf, vf = float(_pmi), float(_vix)
         if pf>50 and vf<20: auto_alloc=(70,30,"復甦/擴張—積極",MATERIAL_GREEN)
-        elif pf>50:          auto_alloc=(60,40,"擴張—穩健","#69f0ae")
+        elif pf>50:          auto_alloc=(60,40,"擴張—穩健",MD_GREEN_A200)
         elif pf<50 and vf>25: auto_alloc=(40,60,"衰退—保守",MATERIAL_RED)
         else:                auto_alloc=(50,50,"觀望—中性",MATERIAL_ORANGE)
     if _ue:
@@ -216,7 +216,7 @@ def quartile_check(peer_compare: dict, risk_table: dict) -> dict:
         return out
     if not peer_sharpes:
         q = 1 if fund_sh > 1.5 else (2 if fund_sh > 0.8 else (3 if fund_sh > 0 else 4))
-        c = [MATERIAL_GREEN,"#69f0ae",MATERIAL_ORANGE,MATERIAL_RED][q-1]
+        c = [MATERIAL_GREEN,MD_GREEN_A200,MATERIAL_ORANGE,MATERIAL_RED][q-1]
         lbl = ["第1四分位🏆(前25%)","第2四分位✅(前50%)","第3四分位⚠️(後50%)","第4四分位🔴(後25%)"][q-1]
         adv = "⚠️ 後25%達2季→建議跨行轉存至同類前25%標的" if q==4 else ("追蹤：若下季仍第3四分位考慮替換" if q==3 else "")
         return {"quartile":q,"color":c,"label":lbl,"warning":q>=4,"fund_sharpe":fund_sh,"peer_avg":None,"advice":adv}
@@ -225,7 +225,7 @@ def quartile_check(peer_compare: dict, risk_table: dict) -> dict:
     q25 = ps[max(0,n//4-1)]; q75 = ps[min(n-1,3*n//4)]; pavg = _stat.mean(ps)
     sh_ref = fund_sh if fund_sh is not None else pavg
     if sh_ref>=q75:    q,c,lbl = 1,MATERIAL_GREEN,"第1四分位🏆(前25%)"
-    elif sh_ref>=pavg: q,c,lbl = 2,"#69f0ae","第2四分位✅(前50%)"
+    elif sh_ref>=pavg: q,c,lbl = 2,MD_GREEN_A200,"第2四分位✅(前50%)"
     elif sh_ref>=q25:  q,c,lbl = 3,MATERIAL_ORANGE,"第3四分位⚠️(後50%)"
     else:              q,c,lbl = 4,MATERIAL_RED,"第4四分位🔴(後25%—警戒)"
     adv = "⚠️ 後25%達2季→建議跨行轉存至同類前25%標的" if q>=4 else ("注意：若下季仍第3四分位，考慮替換" if q==3 else "")

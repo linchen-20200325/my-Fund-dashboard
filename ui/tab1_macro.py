@@ -39,6 +39,11 @@ from shared.colors import (
     MATERIAL_GREEN,
     MATERIAL_ORANGE,
     MATERIAL_RED,
+    MD_AMBER_300,
+    MD_BLUE_300,
+    MD_GREEN_A200,
+    MD_GREEN_A400,
+    MD_PURPLE_500,
     STREAMLIT_BG,
     TRAFFIC_GREEN,
     TRAFFIC_NEUTRAL,
@@ -556,12 +561,12 @@ def _render_macro_navigator(indicators: dict | None,
                     _tp_detail = "≥2 訊號同向，留意景氣翻轉"
                 elif _tp_hit == 1:
                     _tp_label = "單一警示"
-                    _tp_color = "#69f0ae"
+                    _tp_color = MD_GREEN_A200
                     _tp_icon = "🟢"
                     _tp_detail = "僅 1 訊號，雜訊機率高"
                 else:
                     _tp_label = "無拐點"
-                    _tp_color = "#69f0ae"
+                    _tp_color = MD_GREEN_A200
                     _tp_icon = "🟢"
                     _tp_detail = "5 訊號均無翻轉特徵"
         except Exception as _te:  # noqa: BLE001
@@ -1717,9 +1722,9 @@ def render_macro_tab() -> None:
                 # 四色說明條（HTML，避免破壞 Streamlit theme）
                 st.markdown(
                     "<div style='display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px'>"
-                    "<span style='background:#0a3d1f;color:#69f0ae;padding:3px 10px;"
+                    "<span style=f'background:#0a3d1f;color:{MD_GREEN_A200};padding:3px 10px;"
                     "border-radius:4px;font-size:12px'>🟢 正常 |Z|&lt;1</span>"
-                    "<span style='background:#3d3408;color:#ffd54f;padding:3px 10px;"
+                    "<span style=f'background:#3d3408;color:{MD_AMBER_300};padding:3px 10px;"
                     "border-radius:4px;font-size:12px'>🟡 關注 |Z|≥1</span>"
                     "<span style='background:#4a2a08;color:#ffab40;padding:3px 10px;"
                     "border-radius:4px;font-size:12px'>🟠 警示 |Z|≥1.5</span>"
@@ -2279,13 +2284,13 @@ def render_macro_tab() -> None:
                         _tl_icon, _tl_bg, _tl_bc = "🔴", BG_DARK_RED_2, MATERIAL_RED
                         _tl_reason = f"吃本金警示：含息報酬 {_pf_ret1y:.1f}% < 配息率 {_pf_adr:.1f}%"
                     elif _double_buy:
-                        _tl_icon, _tl_bg, _tl_bc = "🟢🟢", "#0a3a1a", "#00e676"
+                        _tl_icon, _tl_bg, _tl_bc = "🟢🟢", "#0a3a1a", MD_GREEN_A400
                         _tl_reason = f"σ+布林雙確認買 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f}) & 布林下軌"
                     elif _double_sell:
                         _tl_icon, _tl_bg, _tl_bc = "🔔🔔", "#3a0a0a", MATERIAL_RED
                         _tl_reason = f"σ+布林雙確認賣 NAV {_pf_nav:.4f} ≥ 賣1({_pf_s1:.4f}) & 布林上軌"
                     elif _pf_b3 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b3:
-                        _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a0a2a", "#9c27b0"
+                        _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a0a2a", MD_PURPLE_500
                         _tl_reason = f"大跌大買訊號 NAV {_pf_nav:.4f} ≤ 買3({_pf_b3:.4f})"
                     elif _pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1:
                         _tl_icon, _tl_bg, _tl_bc = "🟡", "#1a1500", MATERIAL_ORANGE
@@ -2298,7 +2303,7 @@ def render_macro_tab() -> None:
                         f"border-radius:8px;padding:8px 14px;margin:4px 0;"
                         f"display:flex;align-items:center;gap:14px'>"
                         f"<span style='font-size:20px'>{_tl_icon}</span>"
-                        f"<span style='color:#64b5f6;font-size:11px;width:32px'>{_pf_core}</span>"
+                        f"<span style='color:{MD_BLUE_300};font-size:11px;width:32px'>{_pf_core}</span>"
                         f"<span style='color:#ccc;font-size:12px;flex:1'>"
                         f"<b>{_pf_name[:20]}</b></span>"
                         f"<span style='color:{_tl_bc};font-size:11px'>{_tl_reason}</span>"
@@ -2576,7 +2581,7 @@ def render_macro_tab() -> None:
                             _btfig = go.Figure()
                             _btfig.add_trace(go.Scatter(
                                 x=_spx.index, y=_spx.values, mode="lines",
-                                name="S&P 500", line=dict(color="#64b5f6", width=1.5),
+                                name="S&P 500", line=dict(color=MD_BLUE_300, width=1.5),
                             ))
                             # NBER 衰退期（與 app.py:1778 _crises 同源 + 1990/2001）
                             _bt_crises = [
