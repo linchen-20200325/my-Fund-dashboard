@@ -43,9 +43,15 @@ BG_DARK_NAVY_3: str = "#1e2a3a"    # navy deep
 BG_DARK_NAVY_4: str = "#1a1f2e"    # navy alt
 BG_DARK_RED_1: str = "#2a0a0a"     # danger dark
 BG_DARK_RED_2: str = "#1a0606"     # danger deep
+BG_DARK_RED_3: str = "#3a0a0a"     # danger bright(σ+布林雙確認賣 badge bg,2 處)
 BG_DARK_AMBER_1: str = "#2a1f00"   # warning dark
 BG_DARK_AMBER_2: str = "#1a1200"   # warning deep
+BG_DARK_AMBER_3: str = "#1a1500"   # warning alert(σ 小跌小買 alert bg,2 處)
 BG_DARK_GREEN_1: str = "#0a1a0a"   # success dark
+BG_DARK_GREEN_2: str = "#061a06"   # success deep(持倉紅綠燈/momentum/gradient,3 處)
+BG_DARK_GREEN_3: str = "#0a3a1a"   # success bright(σ+布林雙確認買 badge bg,2 處)
+BG_DARK_GREEN_GAUGE: str = "#0a2a0a"  # success mid(gauge safe zone tuple,3 處同檔)
+BG_DARK_PURPLE_1: str = "#1a0a2a"  # purple dark(大跌大買訊號 bg,1 處 single-use)
 
 # v19.256 Phase 4-B4: Material extended palette(component accent colors)
 MD_BLUE_300: str = "#64b5f6"       # Material Blue 300(info accent,最常用)
@@ -55,6 +61,7 @@ MD_GREEN_A400: str = "#00e676"     # Material Green A400
 MD_DEEP_ORANGE_400: str = "#ff7043" # Material Deep Orange 400(warning accent)
 MD_AMBER_300: str = "#ffd54f"      # Material Amber 300
 MD_ORANGE_300: str = "#ffb74d"     # Material Orange 300
+MD_ORANGE_A200: str = "#ffab40"    # Material Orange A200(Z-Score 警示 |Z|≥1.5,3 處跨 2 檔)
 MD_PURPLE_500: str = "#9c27b0"     # Material Purple 500
 
 # v19.259 Item 2 long-tail 高頻收口(各 ≥8 處跨多檔)

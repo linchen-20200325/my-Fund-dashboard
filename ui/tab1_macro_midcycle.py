@@ -26,6 +26,7 @@ from shared.colors import (
     MATERIAL_RED,
     MD_AMBER_300,
     MD_GREEN_A200,
+    MD_ORANGE_A200,
     TRAFFIC_GREEN,
     TRAFFIC_NEUTRAL,
     TRAFFIC_RED,
@@ -66,7 +67,7 @@ def render_mid_cycle_section(
             "border-radius:4px;font-size:12px'>🟢 正常 |Z|&lt;1</span>"
             f"<span style='background:#3d3408;color:{MD_AMBER_300};padding:3px 10px;"
             "border-radius:4px;font-size:12px'>🟡 關注 |Z|≥1</span>"
-            "<span style='background:#4a2a08;color:#ffab40;padding:3px 10px;"
+            f"<span style='background:#4a2a08;color:{MD_ORANGE_A200};padding:3px 10px;"
             "border-radius:4px;font-size:12px'>🟠 警示 |Z|≥1.5</span>"
             "<span style='background:#4a0d0d;color:#ff8a80;padding:3px 10px;"
             "border-radius:4px;font-size:12px'>🔴 極端 |Z|≥2</span>"
@@ -150,7 +151,7 @@ def render_mid_cycle_section(
                 if _abs_z >= 2:
                     _icon, _zcolor = "🔴 極端", TRAFFIC_RED
                 elif _abs_z >= 1.5:
-                    _icon, _zcolor = "🟠 警示", "#ffab40"
+                    _icon, _zcolor = "🟠 警示", MD_ORANGE_A200
                 elif _abs_z >= 1:
                     _icon, _zcolor = "🟡 關注", TRAFFIC_YELLOW
                 else:
