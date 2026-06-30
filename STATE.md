@@ -22,6 +22,23 @@
 
 ## 當前版本
 
+- **v19.276+277 資料抓不到修復 — 持股 cnyes fallback + Put/Call CBOE 官方源(2026-06-30)**:
+  - **背景**:user 截圖資料診斷回報兩個真實「抓不到資料」故障,要求修復(§-1 真 bug 觸發)
+  - **v19.276 持股 cnyes fallback**(`579a4ab`):
+    - **故障**:Tab2 ACTI71(聯博多元資產收益,FoF)/ JFZN3(摩根多重收益)等「MoneyDJ 未提供持股,無法抓新聞」(yp013xxx 子網域限制 / multi-asset / FoF 透明度不足)
+    - `repositories/fund/sources.py:fetch_holdings_cnyes(code)` — L1 純 fetcher,鏡像 `fetch_div_cnyes`,多 endpoint(portfolio/holding/holdings/asset)× 多候選代碼;`_cnyes_parse_holdings` 防禦式多 shape 解析(top_holdings + sector/asset/region allocation,多欄位名 fallback)
+    - wire 進 `nav_metrics.fetch_holdings` 兩處空結果 exit(MoneyDJ 全 URL 失敗 / 抓到頁但 parser 0 命中)
+    - F-PROV-1 provenance `Cnyes:{res}:{code}`;失敗回 {} + log 真實 keys(§1 Fail Loud)
+    - `tests/test_fetch_holdings_cnyes.py` 14 例 + 既有 fallback_chain/multi_asset patch cnyes 維持確定性
+  - **v19.277 Put/Call CBOE 官方源**(`18a0df8`):
+    - **故障**:雷達 9 Put/Call「全源失敗」(Yahoo ^CPC/^CPCE 回空 + stooq ^cpc 無法解析;v19.141 移除的 CBOE daily_prices/CPC_History.csv 確下架)
+    - `repositories/external_market_repository.py:fetch_cboe_pcratio_csv(kind)` — 接 CBOE **另一現用**官方目錄 `cdn.cboe.com/resources/options/volume_and_call_put_ratios/{total,equity}pc.csv`(與死路徑不同 endpoint;MacroMicro/Alphacast 皆源於此)。parser 不寫死 skiprows,自動偵測 header 行
+    - `services/risk_radar.py:_resolve_put_call` 末層加 CBOE total→equity(total 語意對齊 ^CPC >1.0/>1.2 閾值);過 `validate_cboe_series`(source `CBOE:pcratio:`)
+    - `tests/test_risk_radar.py`:`TestCboePcRatioCsv` 6 例 + fallthrough;更新 v19.141 死路徑守門 test(禁 daily_prices/CPC + .json,允許 volume_and_call_put_ratios)
+  - **架構/SSOT 合規**:兩 fetcher 皆 L1,僅依 L0 `infra.proxy`(L2→L1 import 合法方向);無 inline magic / 無偽造 / 無新例外需登錄。資料診斷 data-driven 自動轉綠,0 UI 改動
+  - **⚠️ sandbox 限制**:local proxy 403 無法驗證 cnyes /portfolio 與 CBOE CSV 真實 body → 防禦式解析(production NAS Squid 連得上,VIX3M 同 CDN 已成功)。猜錯欄位 = 回空 + log 真實 shape 供下一輪精修,絕不崩潰
+  - **驗證**:155 passed / 2 skipped(risk_radar + holdings + schema gate + data_guard)
+
 - **v19.275 深度死碼掃描 + 清理 A+B(2026-06-30,PR #488,squash `1175073`)**:
   - **背景**:user 要求「深度檢查是否還有雜亂的程式碼與死碼讓系統拖累跟膨脹」
   - **方法論**:4 路並行 Explore agent(殭屍函式 / 死 import / legacy檔+scripts / 大檔膨脹)+ **逐一 adversarial 驗證**
