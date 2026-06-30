@@ -12,7 +12,8 @@ from __future__ import annotations
 _GRP = "ui/tab_fund_grp_health.py"
 # B1 v19.205 / P2-7:ui/helpers/fund_checkup.py 已搬 ui/helpers/fund/checkup.py
 _CHK = "ui/helpers/fund/checkup.py"
-_MACRO = "ui/tab1_macro.py"
+# v19.262 P3-A6: 持倉紅綠燈隨拐點警報整 section 抽至 ui/tab1_macro_inflection.py
+_MACRO = "ui/tab1_macro_inflection.py"
 
 
 def _src(path: str) -> str:
@@ -58,8 +59,10 @@ class TestCheckupExpanded:
 class TestTrafficLightDedup:
     def test_traffic_light_dedups_by_code(self):
         src = _src(_MACRO)
-        # 去重區塊存在於持倉紅綠燈之前
+        # 去重區塊存在於持倉紅綠燈渲染之前
+        # v19.262 P3-A6: docstring 也含「🚦 持倉紅綠燈」,改抓真渲染呼叫定位
         i_dedup = src.find("_seen_tl")
-        i_light = src.find("🚦 持倉紅綠燈")
+        i_light = src.find('st.markdown("#### 🚦 持倉紅綠燈")')
         assert i_dedup != -1, "持倉紅綠燈缺少去重邏輯（_seen_tl）"
+        assert i_light != -1, "找不到持倉紅綠燈渲染呼叫"
         assert i_dedup < i_light, "去重應在渲染持倉紅綠燈之前"

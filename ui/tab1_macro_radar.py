@@ -303,4 +303,3 @@ def render_short_radar_section(
                         f"`{_ssr['value']}`，Z "
                         f"`{'—' if _sz is None else f'{_sz:+.2f}'}`\n\n"
                         "SSR 低(Z<0)=鏈上法幣子彈多=潛在買盤強；高=子彈耗盡")
-

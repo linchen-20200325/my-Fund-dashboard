@@ -17,13 +17,22 @@ def _load_source():
     return p.read_text(encoding="utf-8")
 
 
+def _load_midcycle_source():
+    # v19.262 P3-A3: L3 情境判斷卡隨中期循環整 section 抽至 ui/tab1_macro_midcycle.py
+    p = pathlib.Path(__file__).parent.parent / "ui" / "tab1_macro_midcycle.py"
+    return p.read_text(encoding="utf-8")
+
+
 class TestNoUnboundLocal:
     def test_situation_cards_define_sahm_adl_locally(self):
         """情境判斷區的 _sahm_v / _adl_v 必須在『L3 情境判斷』區塊內自取,
-        不依賴下方 War Room(物理重排後在後面)。"""
-        src = _load_source()
-        # 定位情境判斷區塊
-        idx = src.find("L3 情境判斷卡")
+        不依賴下方 War Room(物理重排後在後面)。
+
+        v19.262 P3-A3: 中期循環(含 L3 情境判斷)整 section 抽至 ui/tab1_macro_midcycle.py。
+        """
+        src = _load_midcycle_source()
+        # 定位情境判斷區塊(避開 module docstring 中的同名字串)
+        idx = src.find("L3 情境判斷卡（Logic")
         assert idx > 0, "找不到 L3 情境判斷區塊"
         # 取該區塊後 ~30 行
         block = src[idx: idx + 1500]

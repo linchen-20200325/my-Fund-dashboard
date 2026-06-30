@@ -555,10 +555,3 @@ def render_inflection_alert_section(
 
     # ── v19.18: 7 子領域 Z-Score 健康度已搬到戰情首頁 ① 7-cluster 下方 ──
     # 原 v18.100 區塊整段移除，避免與 7-cluster 視覺重複（user 反饋）
-
-
-
-
-
-
-
