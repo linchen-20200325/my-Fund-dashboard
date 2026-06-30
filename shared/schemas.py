@@ -17,6 +17,8 @@ CLAUDE.md §3.1 / SPEC §18 — DataFrame 邊界契約集中宣告。
 - `validate_fred(df) -> df`:wrapper(避免每個 caller import pandera 細節)
 - `YahooCloseSchema`:repositories.macro_repository.fetch_yf_close 出口 schema(Series)
 - `validate_yf_close(s) -> s`:wrapper(同時驗 attrs.source / attrs.fetched_at)
+- `validate_stooq_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'stooq:' source prefix)v19.265 D7
+- `validate_cboe_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'CBOE:' source prefix)v19.265 D7
 - `FundNavSchema`:repositories.fund_repository.fetch_nav 等多 fetcher 共用 NAV 序列 schema
 - `validate_fund_nav(s) -> s`:wrapper(NAV-specific:>0 / 多源 source prefix 允許清單)
 - `FundDividendSchema`:repositories.fund_repository.fetch_div 配息序列 schema(DataFrame 內部表示)
@@ -189,6 +191,77 @@ def validate_yf_close(s: Any) -> Any:
     if "T" not in fetched_at:
         raise ValueError(
             f"validate_yf_close: attrs.fetched_at 必須是 ISO 8601 字串(含 'T' 分隔符),"
+            f"實際 = {fetched_at!r}"
+        )
+    return s
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.265 D7 — F-SCHEMA-1 Tier 2/3:stooq + CBOE Series 出口契約
+# ════════════════════════════════════════════════════════════════
+# 依據(repositories/external_market_repository.py:85-214):
+#   fetch_stooq_csv / fetch_cboe_csv 結構同 fetch_yf_close 出口:
+#     index = DatetimeIndex(monotonic_increasing,unique)
+#     value = float64(>0;指數收盤;dropna 已過濾 NaN)
+#     attrs.source = "stooq:<symbol>[:headerless]" / "CBOE:cdn:daily_prices:<...>"
+#     attrs.fetched_at = UTC ISO 字串
+#
+# 結構與 YahooCloseSchema 一致 → values+index 驗證共用,attrs source prefix 分別驗。
+# caller(services/risk_radar.py)在 fallback chain 內呼叫;空 Series 為合法(fetch
+# 失敗 → 跳下一層),驗證對 empty 直接 pass。
+
+
+def validate_stooq_series(s: Any) -> Any:
+    """fetch_stooq_csv 出口 schema validation wrapper(v19.265 D7)。
+
+    驗 3 件事:
+    1. Series values:float64, > 0, no NaN(共用 YahooCloseSchema 結構契約)
+    2. Series index:datetime64[ns], monotonic, unique
+    3. Series attrs:`source` 存在且以 'stooq:' 開頭;`fetched_at` 含 'T' 分隔符
+
+    對空 Series 直接 pass(fetch 失敗 → caller 跳下一層 fallback)。
+    """
+    if s is None or len(s) == 0:
+        return s
+    YahooCloseSchema.validate(s, lazy=False)  # 結構契約共用
+    src = s.attrs.get("source", "")
+    if not src.startswith("stooq:"):
+        raise ValueError(
+            f"validate_stooq_series: attrs.source 必須以 'stooq:' 開頭(F-PROV-1),"
+            f"實際 = {src!r}"
+        )
+    fetched_at = s.attrs.get("fetched_at", "")
+    if "T" not in fetched_at:
+        raise ValueError(
+            f"validate_stooq_series: attrs.fetched_at 必須是 ISO 8601 字串(含 'T'),"
+            f"實際 = {fetched_at!r}"
+        )
+    return s
+
+
+def validate_cboe_series(s: Any) -> Any:
+    """fetch_cboe_csv 出口 schema validation wrapper(v19.265 D7)。
+
+    驗 3 件事:
+    1. Series values:float64, > 0, no NaN(共用 YahooCloseSchema 結構契約)
+    2. Series index:datetime64[ns], monotonic, unique
+    3. Series attrs:`source` 存在且以 'CBOE:' 開頭;`fetched_at` 含 'T' 分隔符
+
+    對空 Series 直接 pass(fetch 失敗 → caller 跳下一層 fallback)。
+    """
+    if s is None or len(s) == 0:
+        return s
+    YahooCloseSchema.validate(s, lazy=False)  # 結構契約共用
+    src = s.attrs.get("source", "")
+    if not src.startswith("CBOE:"):
+        raise ValueError(
+            f"validate_cboe_series: attrs.source 必須以 'CBOE:' 開頭(F-PROV-1),"
+            f"實際 = {src!r}"
+        )
+    fetched_at = s.attrs.get("fetched_at", "")
+    if "T" not in fetched_at:
+        raise ValueError(
+            f"validate_cboe_series: attrs.fetched_at 必須是 ISO 8601 字串(含 'T'),"
             f"實際 = {fetched_at!r}"
         )
     return s

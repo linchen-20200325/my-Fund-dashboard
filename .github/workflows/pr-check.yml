@@ -79,6 +79,7 @@ jobs:
             tests/test_schemas_phase_b3_dividends.py \
             tests/test_schemas_phase_b_foreign_flow.py \
             tests/test_schemas_phase_c.py \
+            tests/test_schemas_phase_d.py \
             --tb=short
 
   # ════════════════════════════════════════════════════════════
