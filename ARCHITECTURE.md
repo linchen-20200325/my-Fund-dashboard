@@ -170,7 +170,7 @@ my-Fund-dashboard/
 │       └── (其他 helper)
 │
 ├── tests/                          # ~270 test 檔(75 個從根目錄遷入,P0-3)
-└── scripts/                        # 一次性 script(eval_macro_consensus / update_macro_history 等)
+└── scripts/                        # 維運 script(update_macro_history / fetch_nav_cache CI cron + calibrate_macro_score / migrate_v149_schema 等;v19.275 刪 2 dead dev script)
 ```
 
 ### 已知例外清單(同 CLAUDE.md §8.2.A,version-stamped)
