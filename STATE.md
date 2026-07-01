@@ -22,6 +22,13 @@
 
 ## 當前版本
 
+- **v19.286 fetch_holdings 外層 bare except 補 diag(2026-07-01)**:
+  - **背景**:v19.285 上線後,user 截圖 Tab2 持股區塊仍顯示「三源持股全抓不到」+「來源=—(若無 diag 表示線上仍為舊版,請 Manage app → Reboot)」——這句提示文字本身就是 v19.280 程式碼的一部分,代表 production **已經**跑在有 diag 機制的版本,矛盾點在於:診斷機制存在,但 diag 依然是空的
+  - **真根因(讀 code 找到)**:`fetch_holdings()` 整個函式本體包在一個大 `try:` 裡,外層 `except Exception as e: print(...); return {}` —— 只要函式本體任何一處拋出未預期例外(不是逐 URL 迴圈內、已個別 try/except 保護的那種,而是例如 BeautifulSoup 解析、字串處理等),就會被這個 bare except 整個吞掉,直接回傳空 `{}`,連 v19.280/v19.285 辛苦建立的 diag 機制都完全繞過。這正是「有 diag 機制、但 diag 是空的」這個矛盾的解釋:不是版本舊,是真的中途拋了例外
+  - **修法**:外層 except 也帶 `diag`(含例外類型 + 訊息)+ `source="MoneyDJ:exception"`,讓例外訊息本身變成 UI 可見、可 audit 的線索,不再是完全空白的「—」
+  - tests:`tests/test_fetch_holdings_fallback_chain.py` +1(patch `BeautifulSoup` 拋例外,驗證 diag/source 仍被填入)。70 個 holdings/nav_metrics/moneydj 測試全綠
+  - **下一步**:user 需在 production 重新整理 Tab2,若這次 diag 顯示出具體例外訊息(例如某個 parse 邏輯真的壞了)→ 直接對症修;若 diag 顯示逐 URL 明細但全部連不到 → 回到 v19.285 原本設想的「資料源覆蓋率限制」路線
+
 - **v19.285 持股抓取診斷補逐 URL 明細(PR #498,2026-07-01)**:
   - **背景**:user 給 2 個實際 MoneyDJ 網址(境內 `yp010000.djhtm?a=acdd01` / 境外 `yp010001.djhtm?a=jfzn3`)反饋持股仍有缺,要求「製作爬蟲補齊」。查核發現本專案**早已有成熟爬蟲**涵蓋這兩種格式(`services/moneydj_fetcher.py::auto_fetch_moneydj` 自動偵測境內/境外互換;`nav_metrics.py::fetch_holdings` 14 組候選 URL,依代碼前綴展開保險平台子網域),非從零開始
   - **真缺口(讀 code 找到)**:`fetch_holdings()` 內部已算出每個候選 URL 的逐一結果(`_attempts`:host/status/len),但傳給 UI 的 `diag` 只塞一行「N 候選 URL 全失敗」摘要,`_attempts` 細節被丟棄——`render_holdings_diag`(v19.280 建立)因此看不到任何可 audit 的細節,user 截圖回報時無從分辨「完全連不上」vs「連上但表格結構 parser 沒涵蓋」
