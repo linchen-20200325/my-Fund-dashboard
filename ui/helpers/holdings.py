@@ -344,3 +344,84 @@ def _zh_holding(name: str) -> str:
     first = key.split()[0] if key.split() else ""
     if first and first in _HOLDING_ZH: return _HOLDING_ZH[first]
     return ""
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v19.282 持股明細共用渲染器(SSOT)
+# ──────────────────────────────────────────────────────────────────────
+# 背景:Tab2 單一基金(tab2_single_fund L1100-1138)與 組合健檢
+# (fund_grp_health/investment.py L156-211)各有一份 byte-identical 的
+# 「產業配置 + 前10大持股」渲染 → 重複邏輯違反 SSOT。抽此共用 render,兩處共用。
+# 純 L3 UI 渲染:僅依 streamlit + shared.colors(L0)+ 同模組 _zh_holding,無 IO。
+# ══════════════════════════════════════════════════════════════════════
+def render_holdings_detail(holdings: dict) -> bool:
+    """渲染持股明細(🏭 產業配置 + 🏆 前10大持股,兩欄)。
+
+    holdings:fetch_holdings 契約 dict(sector_alloc / top_holdings)。
+    回傳 True 若渲染了任何持股/產業;False 若全空(caller 自行決定空訊息)。
+    """
+    import streamlit as st
+    from shared.colors import (
+        GH_BG_CARD, GRAY_55, GRAY_CC, INFO_BLUE,
+        MD_BLUE_500, MD_ORANGE_300, TRAFFIC_NEUTRAL,
+    )
+    _sectors = (holdings or {}).get("sector_alloc") or []
+    _tops = (holdings or {}).get("top_holdings") or []
+    if not (_sectors or _tops):
+        return False
+
+    _hc1, _hc2 = st.columns(2)
+    with _hc1:
+        if _sectors:
+            st.markdown("**🏭 產業配置**")
+            for _sec in _sectors[:10]:
+                _sn = str(_sec.get("name", ""))[:18]
+                _sp = float(_sec.get("pct", 0) or 0)
+                st.markdown(
+                    f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0'>"
+                    f"<div style='color:{GRAY_CC};font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
+                    f"<div style='flex:1;background:#1a1a2a;border-radius:3px;height:10px'>"
+                    f"<div style='background:{MD_BLUE_500};width:{min(_sp*3,100):.0f}%;"
+                    f"height:100%;border-radius:3px'></div></div>"
+                    f"<div style='color:{MD_BLUE_500};font-size:11px;width:40px;text-align:right'>"
+                    f"{_sp:.1f}%</div></div>",
+                    unsafe_allow_html=True)
+    with _hc2:
+        if _tops:
+            st.markdown("**🏆 前10大持股**")
+            for _i, _top in enumerate(_tops[:10], 1):
+                _tn_raw = str(_top.get("name", ""))
+                _zh = _zh_holding(_tn_raw)
+                _tn = _tn_raw[:22]
+                _zh_html = (f"<span style='color:{MD_ORANGE_300};font-size:10px;margin-left:6px'>"
+                            f"({_zh})</span>" if _zh else "")
+                _tp = float(_top.get("pct", 0) or 0)
+                _ts = str(_top.get("sector", ""))[:12]
+                st.markdown(
+                    f"<div style='display:flex;gap:6px;padding:3px 8px;"
+                    f"background:{GH_BG_CARD};border-radius:6px;margin:2px 0'>"
+                    f"<span style='color:{GRAY_55};font-size:11px;width:16px'>#{_i}</span>"
+                    f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
+                    f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"
+                    f"<span style='color:{INFO_BLUE};font-weight:700;font-size:11px;"
+                    f"width:36px;text-align:right'>{_tp:.1f}%</span>"
+                    f"</div>", unsafe_allow_html=True)
+    return True
+
+
+def render_holdings_diag(holdings: dict) -> None:
+    """空持股時顯示逐源抓取診斷(SSOT:Tab2 + 組合健檢共用)。
+
+    holdings 內若帶 `diag`(v19.280 三源逐一結果)→ 攤 st.code;否則提示舊版。
+    """
+    import streamlit as st
+    st.caption("⬜ 三源持股全抓不到(MoneyDJ → cnyes → Morningstar)")
+    _diag = (holdings or {}).get("diag") or []
+    if _diag:
+        st.caption("🔍 **抓取診斷**(逐源結果):")
+        st.code("\n".join(str(_x) for _x in _diag), language=None)
+    else:
+        st.caption(
+            f"🔍 來源={(holdings or {}).get('source', '—')}"
+            "(若無 diag 表示線上仍為舊版,請 Manage app → Reboot + 強制刷新)"
+        )

@@ -22,6 +22,14 @@
 
 ## 當前版本
 
+- **v19.282 持股明細 SSOT 共用 render + Tab2 常駐(2026-07-01)**:
+  - **背景**:user 要求「單一基金也放持股資訊」+ 提醒守 SSOT。查核發現 Tab2(`tab2_single_fund` L1100)與 組合健檢(`fund_grp_health/investment` L156)**各有一份 byte-identical 的持股渲染** → 既有 SSOT 違規;且 Tab2 只在 `if _sectors or _tops` 才顯示,空持股靜默(user 誤以為沒功能)
+  - **修法**:抽共用 `ui/helpers/holdings.render_holdings_detail`(產業配置 + 前10大持股)+ `render_holdings_diag`(空持股攤三源診斷),兩處 + Tab5 news 空狀態全改呼共用
+  - Tab2 持股 expander 改**常駐**(空時顯示 diag,不再靜默);investment.py / ai.py 去重複
+  - 純 L3 UI render:僅依 streamlit + shared.colors(L0)+ 同模組 `_zh_holding`,無 IO、無上行 import
+  - **回歸**:AppTest `test_tab2_loaded_fund_...` 抓到 `_sectors` NameError(移除定義但下游 AI snapshot 仍用)→ 已補回;`test_holdings_render_ssot.py` 4 例守共用契約
+  - investment.py 清 4 個孤兒 color import(F401)。141 passed / 1 skipped
+
 - **v19.281 NAV 歷史修復 — 保單代碼「成立 0.1 年」根因(2026-07-01)**:
   - **背景**:user 截圖 TLZF9 —— MoneyDJ 有 3-5 年 NAV(3Y 報酬 39.31%)+ 完整前十大持股(NVIDIA/APPLE…),但本站顯示「成立 0.1 年」、3Y/5Y 全 —。**資料嚴重缺少**
   - **根因(讀 code 確認)**:`fund_orchestration._fetch_fund_single` NAV 來源鏈**只用筆數把關**(`len(nav_s) < 10/20`),**無跨度檢查**。保單代碼(cnyes/FundClear 解析不到)落到近期短源(insurance_subdomain / tcb ~1 月,≥10 筆)就鎖定,把長歷史 Morningstar(TLZF9 硬編 secId=0P0001J5YG)整條 `if len<10` skip → 只剩 ~1 月 → 成立 0.1 年
