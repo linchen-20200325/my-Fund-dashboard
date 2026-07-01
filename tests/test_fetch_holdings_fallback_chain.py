@@ -166,3 +166,29 @@ def test_fetch_holdings_zero_parse_diag_names_winning_url_and_table_count():
     _diag_text = "\n".join(result.get("diag") or [])
     assert "table" in _diag_text, f"diag 應報告 table 數量,實際 {result.get('diag')}"
     assert ".moneydj.com" in _diag_text, f"diag 應點名成功抓到頁的 host,實際 {result.get('diag')}"
+
+
+def test_fetch_holdings_unhandled_exception_still_returns_diag():
+    """v19.286:函式本體任何一處拋未預期例外(非逐 URL 迴圈內的、已個別 try/except
+    的那種)時,外層 bare `except Exception: return {}` 原本會讓 diag 機制完全失效
+    —— UI 顯示「來源=—、無 diag」,user 會誤判成「線上仍是舊版」,實際是這裡真的
+    拋例外被吞掉。改法:例外也要帶 diag,讓例外訊息本身變成可 audit 的線索。"""
+    import fund_fetcher  # noqa: F401
+    from repositories.fund.nav_metrics import fetch_holdings
+    fetch_holdings.cache_clear()
+
+    def _boom(url, **kw):
+        return _FakeResp(_VALID_HTML)
+
+    with patch("repositories.fund.nav_metrics.fetch_url_with_retry", side_effect=_boom), \
+         patch("repositories.fund.nav_metrics.BeautifulSoup",
+               side_effect=RuntimeError("parser exploded")):
+        result = fetch_holdings("FFF")
+
+    assert "top_holdings" not in result and "sector_alloc" not in result
+    assert result.get("diag"), f"例外時也要有 diag 給 UI 顯示,實際 {result}"
+    _diag_text = "\n".join(result["diag"])
+    assert "RuntimeError" in _diag_text or "parser exploded" in _diag_text, \
+        f"diag 應包含例外訊息本身,實際 {_diag_text}"
+    assert result.get("source") not in (None, ""), \
+        f"例外時 source 不應是空字串/None(避免 UI 顯示裸「—」),實際 {result.get('source')!r}"

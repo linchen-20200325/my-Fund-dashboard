@@ -1127,8 +1127,13 @@ def fetch_holdings(code: str) -> dict:
             out["diag"] = _diag2
         return out
     except Exception as e:
-        print(f"[fetch_holdings] {e}")
-        return {}
+        # v19.286:原本 bare return {} 讓整條 diag 機制失去意義 —— UI 只看到
+        # 「來源=—、無 diag」,user 會誤判成「線上仍為舊版」,實際是這裡拋了例外
+        # 被吞掉。改帶 diag,讓例外本身變成可 audit 的訊息(§1 Fail Loud)。
+        print(f"[fetch_holdings] {e}", file=_sys_h.stderr)
+        return {"source": "MoneyDJ:exception",
+                "diag": [f"MoneyDJ｜抓取過程拋出例外:{type(e).__name__}: {e}"],
+                "fetched_at": pd.Timestamp.now('UTC').isoformat()}
 
 
 
