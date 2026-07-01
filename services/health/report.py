@@ -26,23 +26,37 @@ from shared.converters import safe_float as _safe_float  # noqa: E402
 
 
 def _compute_holding_years(fd: dict) -> Optional[float]:
-    """從 fd NAV 序列推算「成立至今」年數(MK 3-3-3 用)。
+    """從 inception_date metadata 或 NAV 序列推算「成立至今」年數(MK 3-3-3 用)。
     注意:這是「基金成立年數」非「user 持有年數」。
     user 持有年數應由 caller 從 ledger 傳入。
     """
     try:
         import datetime as _dt
+        _mj = fd.get("moneydj_raw") or {}
+        # 優先：inception_date metadata（由 _src_allianzgi_meta / _src_fundclear_meta 提供）
+        _inception = fd.get("inception_date") or _mj.get("inception_date")
+        if _inception:
+            try:
+                _inc_d = _dt.date.fromisoformat(str(_inception)[:10])
+                return (_dt.date.today() - _inc_d).days / 365.25
+            except Exception:
+                pass
+        # Fallback：NAV series 第一筆日期推算
         # v19.191 BUG-FIX:`fd.get("series") or ...` 觸發 pandas Series.__bool__ ValueError
         # ("truth value of a Series is ambiguous")→ except 吞掉 → 全站 MK 3-3-3 都「資料不足」。
         # 用顯式 None 判斷,不靠 truthy。
         s = fd.get("series")
         if s is None:
-            s = (fd.get("moneydj_raw") or {}).get("series")
+            s = _mj.get("series")
         if s is None or len(s) == 0:
             return None
         first_iso = str(sorted([str(i)[:10] for i in s.index])[0])
         first_d = _dt.date.fromisoformat(first_iso)
-        return (_dt.date.today() - first_d).days / 365.25
+        years_est = (_dt.date.today() - first_d).days / 365.25
+        # series < 90 筆且推算年數 < 0.5 年 → series 太短，無法可信估算成立日
+        if len(s) < 90 and years_est < 0.5:
+            return None
+        return years_est
     except Exception as e:
         # v19.184 F-MED:加 stderr log 不靜默(§3.3 反捏造)
         import sys as _sys

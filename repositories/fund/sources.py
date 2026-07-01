@@ -164,6 +164,15 @@ def _src_fundclear_meta(code: str) -> dict:
             meta["nav_latest"]  = safe_float(info.get("LatestNAV") or info.get("latestNav"))
             nav_d = (info.get("LatestNAVDate") or info.get("navDate") or "")
             meta["nav_date"]    = str(nav_d)[:10] if nav_d else ""
+            # 成立日期（FundClear 可能欄位名稱不一）
+            _inc_raw = (info.get("EstablishDate") or info.get("InceptionDate") or
+                        info.get("LaunchDate") or info.get("FundCreationDate") or
+                        info.get("establishDate") or info.get("inceptionDate") or
+                        info.get("launchDate") or "")
+            if _inc_raw:
+                _inc_str = str(_inc_raw)[:10].replace("/", "-")
+                if len(_inc_str) == 10:
+                    meta["inception_date"] = _inc_str
             if meta.get("fund_name"):
                 print(f"[src_fundclear_meta] ✅ {code}: {meta['fund_name'][:20]}")
                 # F-PROV-1 phase 6 v19.92 — provenance(schema-additive)
@@ -235,10 +244,45 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
     """
     安聯投信官網歷史淨值抓取。
     Colab IP 對 allianzgi.com 無限制，是 ACTI 系列最可靠的來源。
-    路徑：tw.allianzgi.com → ifund.allianzgi.com.tw
+    路徑：_ALLIANZ_NAV_API JSON API（2000d 歷史）→ ifund HTML → tw.allianzgi.com HTML
     """
     rows = {}
-    # 優先從 ifund 平台抓淨值表（HTML 表格）
+    # ── 優先：JSON API（支援 2000d 完整歷史，有 inception_date 可用）──────────
+    try:
+        _api_resp = requests.post(
+            _ALLIANZ_NAV_API,
+            json={"FundCode": code, "Days": 2000},
+            headers={**HDR_JSON, "Referer": "https://tw.allianzgi.com/"},
+            timeout=15,
+            proxies=_proxies, verify=_ssl_verify,
+        )
+        if _api_resp and _api_resp.status_code == 200:
+            _api_data = _api_resp.json()
+            _nav_list = (_api_data.get("Data") or _api_data.get("data") or
+                        (_api_data if isinstance(_api_data, list) else []))
+            for _item in (_nav_list if isinstance(_nav_list, list) else []):
+                _dt_str = str(
+                    _item.get("Date") or _item.get("date") or
+                    _item.get("NavDate") or _item.get("navDate") or ""
+                )[:10]
+                _nav_val = safe_float(
+                    _item.get("Nav") or _item.get("nav") or
+                    _item.get("NAV") or _item.get("Price") or "")
+                if _dt_str and _nav_val and _nav_val > 0:
+                    try:
+                        rows[pd.Timestamp(_dt_str)] = _nav_val
+                    except Exception:
+                        pass
+            if len(rows) >= 30:
+                s = pd.Series(rows).sort_index()
+                print(f"[src_allianz] ✅ {code} {len(s)} 筆（JSON API 2000d）")
+                s.attrs["source"] = "AllianzGI:JSON_API"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                return s
+    except Exception as _api_e:
+        print(f"[src_allianz] JSON API fail({code}): {_api_e}")
+
+    # ── Fallback：HTML scraper（近30日）──────────────────────────────────────
     for base_url in [
         _ALLIANZ_NAV_ENDPOINT,
         "https://tw.allianzgi.com/zh-tw/tools/fund-nav-search",
@@ -315,6 +359,21 @@ def _src_allianzgi_meta(code: str) -> dict:
                     meta["fund_name"] = rows_map.get("基金名稱", "")
                     meta["nav_latest"] = safe_float(rows_map.get("最新淨值") or rows_map.get("淨值"))
                     meta["currency"] = rows_map.get("計價幣別", "TWD")
+                    # 成立日期（多個可能標籤）
+                    import re as _re_m
+                    _inc_raw = (rows_map.get("成立日期") or rows_map.get("設立日期") or
+                                rows_map.get("成立日") or rows_map.get("基金成立日") or "")
+                    if _inc_raw:
+                        _inc_m = _re_m.search(r"\d{4}[/-]\d{1,2}[/-]\d{1,2}", _inc_raw)
+                        if _inc_m:
+                            meta["inception_date"] = _inc_m.group().replace("/", "-")
+                    # 最高經理費 / 管理費
+                    _fee_raw = (rows_map.get("最高經理費") or rows_map.get("經理費") or
+                                rows_map.get("管理費") or "")
+                    if _fee_raw:
+                        _fee_v = safe_float(_fee_raw.replace("%", "").strip())
+                        if _fee_v is not None:
+                            meta["mgmt_fee"] = _fee_v
                     if meta.get("fund_name"):
                         print(f"[src_allianz_meta] ✅ {code}: {meta['fund_name'][:20]}")
                         # F-PROV-1 phase 15 v19.101 — provenance(schema-additive)

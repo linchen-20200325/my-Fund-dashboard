@@ -488,6 +488,10 @@ def check_333_principle(years_since_inception: Optional[float],
     if _yrs is None and _ret is None:
         return {"passed": None, "years_ok": None, "return_ok": None,
                 "message": "資料不足(缺成立年數 + 3 年平均年化)"}
+    # 缺成立年數 → 無法判斷是否成立 ≥ 3 年，passed=None（顯示 ⬜）而非 False（❌）
+    if _yrs is None:
+        return {"passed": None, "years_ok": None, "return_ok": None,
+                "message": "資料不足(缺成立年數)"}
     _y_ok = (_yrs is not None and _yrs >= THREE_THREE_THREE_MIN_YEARS)
     _r_ok = (_ret is not None and _ret > THREE_THREE_THREE_MIN_ANN_RETURN_PCT)
     _passed = _y_ok and _r_ok
