@@ -234,3 +234,33 @@ def test_fetch_fund_from_moneydj_url_legacy_path_calls_fetch_holdings():
         "legacy pipeline 必須呼叫 fetch_holdings(code) 填入 result['holdings'],"
         "否則這條 pipeline 產出的基金(如保單代碼 TLZF9)永遠拿不到持股"
     )
+
+
+def test_fund_orchestration_has_no_undefined_bare_names():
+    """v19.288 全站掃描回歸網:user 反饋「還有沒有其他類似一直抓不到的
+    function」,用 `ruff --select F405`(可能未定義或來自 star import)
+    全站掃描 + 逐一動態 hasattr 驗證,在 `fund_orchestration.py` 抓到另外
+    5 個同病灶的 bare name(前面 v19.287 只修了 fetch_holdings 一個):
+
+    - fetch_risk_metrics / fetch_performance_wb01(兩條 pipeline 皆呼叫)—
+      Sharpe/Sortino/Calmar/Alpha 全站顯示 None 的根因之一
+    - fetch_nav(legacy pipeline「最終備援」)— 從未真的執行過
+    - _BANK_PLATFORM_CODES / _MORNINGSTAR_SECID_MAP(兩個 dict 常數,未列入
+      sources.py 的 __all__)— 呼叫點沒有 try/except 包住,NAV 筆數不足時
+      直接拋出未捕捉例外
+
+    本測試鎖住這 6 個名字(含 v19.287 的 fetch_holdings)都能在
+    `fund_orchestration` 模組命名空間正確解析,防止之後重構誤刪 import
+    又回到同一種 silent-failure 模式。
+    """
+    import repositories.fund.fund_orchestration as O
+
+    _required_names = [
+        "fetch_holdings", "fetch_nav", "fetch_risk_metrics",
+        "fetch_performance_wb01", "_BANK_PLATFORM_CODES",
+        "_MORNINGSTAR_SECID_MAP",
+    ]
+    _missing = [n for n in _required_names if not hasattr(O, n)]
+    assert not _missing, (
+        f"fund_orchestration 模組無法解析以下名字,呼叫時會 NameError:{_missing}"
+    )

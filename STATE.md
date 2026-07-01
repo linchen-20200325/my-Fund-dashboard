@@ -20,6 +20,20 @@
 - `scripts/` — 工具腳本（`quick_merge.sh` 等）
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
+## 當前版本
+
+- **v19.288 全站掃描 — F405 揪出另外 5 個同病灶的未 import bare name(2026-07-01)**:
+  - **背景**:v19.287 修完 `fetch_holdings` 後,user 問「還有沒有其他類似這種一直抓不到的 function?請幫我掃所有程式找出並 list 出來」。截圖同時證實 Tab2/Tab3 健康分析表 Sharpe/Sortino/Calmar/Alpha 全部顯示 `None`——正是本次掃到的其中兩個 bug 的直接後果
+  - **掃描方法**:`ruff check --select F405`(可能未定義,或來自 star import)全站掃 → 71 個命中,幾乎全集中在 `repositories/fund/` 子套件;逐一動態驗證(import 模組後 `hasattr` 檢查)區分真 bug vs 假警報
+  - **確認 5 個真 bug**(全部在 `repositories/fund/fund_orchestration.py`,病灶與 v19.287 完全相同——名字定義在 `nav_metrics.py`/`sources.py`,但本模組從未 import):
+    - `fetch_risk_metrics` / `fetch_performance_wb01`(兩條 pipeline 皆呼叫)— 有 `except Exception` 接住,靜默失敗;`result["risk_metrics"]`/`result["perf"]` wb01 覆蓋從未真的執行過 → **Sharpe/Sortino/Calmar/Alpha/wb01 報酬率全站顯示 None 的根因之一**
+    - `fetch_nav`(legacy pipeline「最終備援:完整 TCB 多路徑爬取」)— 同樣被吞掉,這條號稱的救援機制從未真的執行過
+    - `_BANK_PLATFORM_CODES` / `_MORNINGSTAR_SECID_MAP`(兩個 dict 常數,`sources.py` 定義了但沒列進 `__all__`)— 呼叫點**沒有** try/except 包住,只要 `len(nav_s) < 10`(NAV 筆數不足,常見情況)就會直接拋出未捕捉例外
+  - **1 個假警報**:`nav_metrics.py:109` 的 `Path` 是 `X if False else Y` 死路(False 分支永遠不求值),下一行才是真正的 import,非真 bug,不動
+  - **修法(SSOT)**:`fund_orchestration.py` 頂部 import 擴充為 `from repositories.fund.nav_metrics import (fetch_holdings, fetch_nav, fetch_performance_wb01, fetch_risk_metrics)`;`_BANK_PLATFORM_CODES`/`_MORNINGSTAR_SECID_MAP` 補進 `sources.py` 的 `__all__`(對齊該檔既有其他 `_src_*`/`_is_domestic_code` 等 underscore 常數的匯出模式)
+  - tests:`tests/test_nav_history_window.py` +1(綜合鎖住 6 個名字 — 含 v19.287 的 `fetch_holdings` — 都能在 `fund_orchestration` 模組正確解析,防止之後重構誤刪 import 又回到同一種 silent-failure 模式)。再次跑 F405 掃描確認全站只剩 `Path` 這個已知假警報
+  - **下一步**:部署後 user 重新整理 Tab2/Tab3 健康分析表,Sharpe/Sortino/Calmar/Alpha 應該不再是 None(除非該基金本身資料源真的沒有 wb07/wb01 頁面);持股區塊也應該能看到真正的抓取結果
+
 - **v19.287 真根因 —「持股」全站從未真正被抓過:fetch_holdings 從未被 import(2026-07-01)**:
   - **背景**:v19.285/v19.286 兩輪修正上線、user 也確認 production 已重新部署 + 清過所有快取,持股區塊卻**一字不差**顯示跟修之前一樣的「三源持股全抓不到」+「來源=—(若無 diag 表示線上仍為舊版)」。部署、快取兩個假說都被 user 提供的證據排除,代表根因在別處
   - **真根因(直接在 sandbox 執行程式碼複現,非猜測)**:`repositories/fund/fund_orchestration.py` 內兩個呼叫「持股」的地方,呼叫的是 bare name `fetch_holdings(code)`,但**這個模組從未 import 這個名字**——`from repositories.fund.sources import *` 不含它、模組內也沒有其他 import 路徑。實際執行 `exec('fetch_holdings("X")', fund_orchestration.__dict__)` 直接復現:`NameError: name 'fetch_holdings' is not defined`。這個 NameError 被兩處呼叫點外層的 `except Exception as e: print(...)` 完整吞掉,`result["holdings"]` 因此永遠停在初始化模板的空 dict `{}`,從未真正呼叫到 `nav_metrics.fetch_holdings()` 本體——v19.285/v19.286 對這顆函式做的所有診斷強化完全沒有機會執行到

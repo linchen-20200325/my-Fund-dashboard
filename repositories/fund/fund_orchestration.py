@@ -32,13 +32,20 @@ from infra.proxy import _proxies, _ssl_verify  # noqa: F401
 # 只回 raw result(metrics 由 L2 wrapper 補)。
 
 from repositories.fund.sources import *  # noqa: F401, F403 — 所有 _src_* re-export
-# v19.287 真根因:`fetch_holdings` 從未在本模組被 import,line ~882 呼叫的是一個
-# 不存在的 bare name — 每次呼叫都拋 NameError,被外層 `except Exception` 吞掉,
-# `result["holdings"]` 因此永遠停在初始模板的空 dict {}。v19.285/v19.286 對
-# `nav_metrics.fetch_holdings()` 本體的診斷強化完全沒機會執行到,因為這個函式
-# 根本沒被呼叫成功過。此 import 補上後,兩處呼叫點(pipeline 1 既有 + pipeline 2
-# 新增,見下方)才會真的執行到 fetch_holdings() 本體。
-from repositories.fund.nav_metrics import fetch_holdings
+# v19.287/v19.288 真根因:ruff --select F405 全站掃描 + 逐一動態驗證(import
+# 模組後 hasattr 檢查)發現本模組共 4 個 bare name 呼叫從未真的被 import,每次
+# 呼叫都拋 NameError:
+# - fetch_holdings(v19.287 已修):`result["holdings"]` 永遠停在空 dict {}
+# - fetch_risk_metrics / fetch_performance_wb01(兩條 pipeline 皆呼叫):
+#   `result["risk_metrics"]` / `result["perf"]` wb01 覆蓋從未真的執行過 ——
+#   Sharpe/Sortino/Calmar/Alpha 全站顯示 None 的根因之一
+# - fetch_nav(legacy pipeline「最終備援：完整 TCB 多路徑爬取」):從未真的執行過
+# 以上 4 者呼叫點外層皆有 `except Exception: print(...)`,例外被完整吞掉,
+# 診斷強化(v19.285/v19.286)完全沒機會執行到。此 import 補上後才會真的呼叫到
+# nav_metrics 本體。
+from repositories.fund.nav_metrics import (
+    fetch_holdings, fetch_nav, fetch_performance_wb01, fetch_risk_metrics,
+)
 
 
 def _nav_span_days(_s) -> int:

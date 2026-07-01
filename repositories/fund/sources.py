@@ -60,6 +60,11 @@ __all__ = [
     "_is_domestic_code",
     "_morningstar_search_secid",
     "_tdcc_get", "_tdcc_resolve_fund_name",
+    # v19.288 F405 掃描補洞:兩個 dict 常數先前未列進 __all__,
+    # fund_orchestration.py 靠 `import *` 拿不到 → 對應 if 判斷式
+    # 每次都拋 NameError(見同批補洞的 fetch_nav/fetch_risk_metrics/
+    # fetch_performance_wb01 import)
+    "_BANK_PLATFORM_CODES", "_MORNINGSTAR_SECID_MAP",
     # ── public functions ──
     "canonicalize_moneydj_url",
     "fetch_div_cnyes", "fetch_fund_multi_source",
