@@ -34,6 +34,64 @@ from infra.proxy import _proxies, _ssl_verify  # noqa: F401
 from repositories.fund.sources import *  # noqa: F401, F403 — 所有 _src_* re-export
 
 
+def _nav_span_days(_s) -> int:
+    """NAV Series 首末日跨度(天)。空/單筆回 0。純函式,不吃 IO。"""
+    try:
+        if _s is None or len(_s) < 2:
+            return 0
+        return int((pd.Timestamp(_s.index.max())
+                    - pd.Timestamp(_s.index.min())).days)
+    except Exception:
+        return 0
+
+
+def _span_extend_insurance_nav(
+    code: str, nav_s: pd.Series, nav_source: str,
+    fund_name: str = "", is_insurance_code: "bool | None" = None,
+) -> "tuple[pd.Series, str, int]":
+    """v19.281/v19.284 SSOT:短跨度保單代碼 NAV → 試 Morningstar / cnyes 長歷史。
+
+    背景:本檔內有**兩條獨立 NAV pipeline**——`_fetch_fund_single`(多來源
+    waterfall)與 `fetch_fund_from_moneydj_url` 內的 legacy 直接爬蟲(當前者
+    `_s_ok`/`_m_ok` 判斷失敗時的 fallback,見該函式「Step 3+ 原始流程」)。
+    兩者都只用「筆數 ≥10/20」把關,無跨度檢查,保單代碼(如 TLZF9)常被短源
+    (近30日、~1 月)搶先鎖定,長歷史 Morningstar 永遠沒機會補救。
+
+    抽成本共用函式,**兩條 pipeline 都呼叫同一份**(而非各寫一份 span-extend),
+    對齊 SSOT。additive:只在「短跨度 + 保單代碼」時嘗試,只換「跨度更長」者,
+    不影響其餘 case。
+
+    回傳 (nav_s, nav_source, span_days) — 未觸發時原樣回傳(nav_source 不變)。
+    """
+    _code = (code or "").upper().strip()
+    if is_insurance_code is None:
+        is_insurance_code = (not _is_domestic_code(_code) and
+                             any(_code.startswith(p) for p in _INSURANCE_SUBDOMAIN_HINTS))
+
+    _cur_span = _nav_span_days(nav_s)
+    if is_insurance_code and 0 < _cur_span < 300:
+        _long_candidates = (
+            ("morningstar",
+             lambda: _src_morningstar_nav(_code, fund_name=fund_name or "")),
+            ("cnyes", lambda: _src_cnyes_nav(_code)),
+        )
+        for _long_src, _long_fn in _long_candidates:
+            try:
+                _cand = _long_fn()
+            except Exception as _le:
+                print(f"[orchestrator] span-extend {_long_src} 失敗: {_le}")
+                _cand = pd.Series(dtype=float)
+            if (_cand is not None and len(_cand) >= 10
+                    and _nav_span_days(_cand) > _cur_span):
+                print(f"[orchestrator] 📏 {_code} span-extend "
+                      f"{nav_source}({_cur_span}d/{len(nav_s)}筆) → "
+                      f"{_long_src}({_nav_span_days(_cand)}d/{len(_cand)}筆)")
+                nav_s = _cand
+                nav_source = f"{_long_src}(span-extend)"
+                _cur_span = _nav_span_days(_cand)
+    return nav_s, nav_source, _cur_span
+
+
 def _fetch_fund_single(code: str, force_refresh: bool = False,
                        page_type: str = "") -> dict:
     """單一代碼的多來源抓取（由 fetch_fund_multi_source 呼叫）"""
@@ -259,49 +317,19 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                 {"source": "taiwanlife_direct", "success": False,
                  "error": "官網端點查無資料或 URL 需更新"})
 
-    # v19.281 span-extend:上面各 source 只用「筆數 ≥10/20」把關,無「跨度」檢查。
-    # 保單代碼(如 TLZF9)常落到近期短源(insurance_subdomain / tcb ~1 月,≥10 筆
-    # 就鎖定),把 Morningstar(硬編 secId,已擴 5.5 年)整條 skip → user 看到
-    # 「成立 0.1 年」、3Y/5Y 全 —。修法:若目前 nav_s 跨度 < 300 天且為保單代碼,
-    # 顯式試 Morningstar / cnyes 長歷史,取「跨度更長」者(additive,只換更長不退步)。
-    def _nav_span_days(_s) -> int:
-        try:
-            if _s is None or len(_s) < 2:
-                return 0
-            return int((pd.Timestamp(_s.index.max())
-                        - pd.Timestamp(_s.index.min())).days)
-        except Exception:
-            return 0
-
-    if _is_insurance_code and 0 < _nav_span_days(nav_s) < 300:
-        _cur_span = _nav_span_days(nav_s)
-        _long_candidates = (
-            ("morningstar",
-             lambda: _src_morningstar_nav(_code, fund_name=result.get("fund_name") or "")),
-            ("cnyes", lambda: _src_cnyes_nav(_code)),
-        )
-        for _long_src, _long_fn in _long_candidates:
-            try:
-                _cand = _long_fn()
-            except Exception as _le:
-                print(f"[orchestrator] span-extend {_long_src} 失敗: {_le}")
-                _cand = pd.Series(dtype=float)
-            if (_cand is not None and len(_cand) >= 10
-                    and _nav_span_days(_cand) > _cur_span):
-                print(f"[orchestrator] 📏 {_code} span-extend "
-                      f"{nav_source}({_cur_span}d/{len(nav_s)}筆) → "
-                      f"{_long_src}({_nav_span_days(_cand)}d/{len(_cand)}筆)")
-                nav_s = _cand
-                nav_source = f"{_long_src}(span-extend)"
-                _cur_span = _nav_span_days(_cand)
+    # v19.281/v19.284 span-extend(共用 _span_extend_insurance_nav,見檔頭 SSOT 說明)
+    nav_s, nav_source, _span_days = _span_extend_insurance_nav(
+        _code, nav_s, nav_source,
+        fund_name=result.get("fund_name") or "", is_insurance_code=_is_insurance_code,
+    )
 
     if len(nav_s) >= 10:
         result["series"]      = nav_s
         result["data_source"] = nav_source
-        result["nav_span_days"] = _nav_span_days(nav_s)
+        result["nav_span_days"] = _span_days
         result.setdefault("source_trace", []).append(
             {"source": nav_source, "success": True, "nav_count": len(nav_s),
-             "span_days": _nav_span_days(nav_s)})
+             "span_days": _span_days})
     else:
         result.setdefault("source_trace", []).append(
             {"source": "nav_all", "success": False,
@@ -925,6 +953,21 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 print(f"[fetch_nav_fallback] \u2705 {len(_fallback_s)} \u7b46")
         except Exception as _fnf_e:
             print(f"[fetch_nav_fallback] {_fnf_e}")
+
+    # v19.284:本函式的「Step 3+ 原始流程」是與 _fetch_fund_single 平行的第二條
+    # NAV pipeline(前面 Step 2 多來源 orchestrator 若 _s_ok/_m_ok 判斷失敗才會
+    # 走到這裡)。user 反饋 TLZF9 banner 顯示「來源:—」且無跨度 —— 根因正是這條
+    # legacy pipeline 從未設 data_source/nav_span_days,也從未套用 span-extend。
+    # 呼叫與 _fetch_fund_single 相同的共用函式(SSOT,不重寫第二份 span-extend),
+    # 命中即用長歷史覆蓋;未命中也至少標出 data_source,banner 不再顯示「—」。
+    if result.get("series") is not None and len(result["series"]) >= 10:
+        _ext_s, _ext_src, _ext_span = _span_extend_insurance_nav(
+            code, result["series"], result.get("data_source") or "moneydj_legacy_scrape",
+            fund_name=result.get("fund_name") or "",
+        )
+        result["series"]        = _ext_s
+        result["data_source"]   = _ext_src
+        result["nav_span_days"] = _ext_span
 
     # v19.240 R8 EX-L1ORCH-1 退役:metrics + perf 注入 + reconcile 上提 L2
     # services.fund_service.finalize_fund_metrics(走 fetch_fund_from_moneydj_url_enriched
