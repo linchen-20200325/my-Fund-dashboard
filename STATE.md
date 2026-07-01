@@ -22,6 +22,15 @@
 
 ## 當前版本
 
+- **v19.281 NAV 歷史修復 — 保單代碼「成立 0.1 年」根因(2026-07-01)**:
+  - **背景**:user 截圖 TLZF9 —— MoneyDJ 有 3-5 年 NAV(3Y 報酬 39.31%)+ 完整前十大持股(NVIDIA/APPLE…),但本站顯示「成立 0.1 年」、3Y/5Y 全 —。**資料嚴重缺少**
+  - **根因(讀 code 確認)**:`fund_orchestration._fetch_fund_single` NAV 來源鏈**只用筆數把關**(`len(nav_s) < 10/20`),**無跨度檢查**。保單代碼(cnyes/FundClear 解析不到)落到近期短源(insurance_subdomain / tcb ~1 月,≥10 筆)就鎖定,把長歷史 Morningstar(TLZF9 硬編 secId=0P0001J5YG)整條 `if len<10` skip → 只剩 ~1 月 → 成立 0.1 年
+  - **修法**:
+    1. cnyes `fetch_nav_cnyes` + Morningstar `_src_morningstar_nav` 窗口 **400d → 2000d(~5.5 年)**,讓 3Y/5Y 可算
+    2. `_fetch_fund_single` 加 **span-extend**:若選定 nav_s 跨度 < 300 天且為保單代碼 → 顯式試 Morningstar / cnyes 長歷史,取跨度更長者(additive,只換更長不退步);`result["nav_span_days"]` + source_trace 記 span
+  - tests:`test_nav_history_window.py` 3 例(cnyes/Morningstar 窗口 ≥5 年 + span-extend 決策)。56 既有 orchestration/nav 測試 0 regression
+  - **⚠️ sandbox 無法驗證**(proxy 403)→ 邏輯 additive + guarded,production 部署後看 TLZF9「成立年數」是否轉正 + 3Y/5Y 是否出數
+
 - **v19.280 持股抓取診斷 UI 可視化(2026-06-30)**:
   - **背景**:user 回報 TLZF9 等仍抓不到,問「能不能用 print 確認有沒有抓到資料」。根因 stderr log 藏在 Streamlit Cloud 後台 user 看不到 → 改**把逐源診斷攤在 UI**
   - `fetch_holdings_cnyes` / `fetch_holdings_morningstar` 加 opt-in `diag` list 參數,逐步記錄(代碼解析候選 / secId / 每端點 HTTP+keys / ✅命中)

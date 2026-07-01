@@ -426,7 +426,9 @@ def fetch_nav_cnyes(code: str) -> pd.Series:
     import datetime as _dt2
     import time as _time2
     end_d    = _dt2.date.today()
-    start_d  = end_d - _dt2.timedelta(days=400)
+    # v19.281:400d(~13 月)→ 2000d(~5.5 年),讓 3Y/5Y 指標可算(user 反饋
+    # MoneyDJ 有 3-5 年但本站只顯示 <1 年)。cnyes API 支援任意起訖日。
+    start_d  = end_d - _dt2.timedelta(days=2000)
     end_ms   = int(_time2.mktime(end_d.timetuple())) * 1000
     start_ms = int(_time2.mktime(start_d.timetuple())) * 1000
 
@@ -1150,7 +1152,10 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
         return pd.Series(dtype=float)
 
     end_d   = _dt2.date.today()
-    start_d = end_d - _dt2.timedelta(days=400)
+    # v19.281:400d → 2000d(~5.5 年),讓 3Y/5Y 指標可算(保單代碼如 TLZF9
+    # 走 Morningstar 時原僅 ~13 月 → 補足多年歷史)。tools.morningstar.co.uk
+    # timeseries_price 支援任意起訖日。
+    start_d = end_d - _dt2.timedelta(days=2000)
     _hdrs_ms = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
