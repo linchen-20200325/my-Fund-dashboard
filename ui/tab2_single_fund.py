@@ -320,7 +320,23 @@ def render_single_fund_tab() -> None:
                         _perf_cols[_pi].metric(f"報酬率({_pk})", f"{_pv:.2f}%" if isinstance(_pv,(int,float)) else str(_pv))
             else:
                 st.markdown("### ① 基本資料 & 淨值趨勢")
-                st.success(f"✅ **{name or fk}** ｜ 淨值 {len(s)} 筆 ‧ 配息 {len(divs)} 筆")
+                # v19.283:NAV 來源 + 跨度攤在最顯眼處(不藏進 expander)。
+                # 背景:user 反饋 TLZF9「成立 0.1 年」查無資料位置 → 根因是
+                # _fetch_fund_single 用「筆數」把關導致短源(如 insurance_subdomain
+                # ~1 月)搶先鎖定,連 span-extend(v19.281)有無觸發都無從得知。
+                # 直接顯示 data_source(哪個 SSOT 來源贏)+ nav_span_days(v19.281
+                # fund_orchestration._fetch_fund_single 算好、存在 result 裡的既有
+                # 欄位,此處純讀取顯示,不重算 — 對齊 SSOT)。
+                _nav_src = mj_raw.get("data_source") or "—"
+                _nav_span_d = mj_raw.get("nav_span_days")
+                _nav_span_txt = (
+                    f" ‧ 跨度 {_nav_span_d} 天(≈{_nav_span_d / 365.25:.1f} 年)"
+                    if isinstance(_nav_span_d, (int, float)) else ""
+                )
+                st.success(
+                    f"✅ **{name or fk}** ｜ 淨值 {len(s)} 筆 ‧ 配息 {len(divs)} 筆"
+                    f" ‧ 來源:`{_nav_src}`{_nav_span_txt}"
+                )
 
                 # v19.62 E3：MoneyDJ 資料新鮮度條（單檔，鏡像 Tab5 / Stock 個股）
                 try:

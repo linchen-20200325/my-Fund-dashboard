@@ -530,3 +530,69 @@ def test_tab2_loaded_fund_with_macro_renders_mk_signal_without_exception(
         f"未偵測到 mk_fund_signal auto_alloc 配比卡渲染；"
         f"markdown 前 500 字: {markdown_blobs[:500]!r}"
     )
+
+
+def test_tab2_nav_source_banner_shows_data_source_and_span(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v19.283 — Tab2「① 基本資料」banner 應顯示 NAV 來源 + 跨度。
+
+    背景：user 反饋 TLZF9 顯示「成立 0.1 年」卻查不到「資料存放位置」；
+    根因是 `_fetch_fund_single`（repositories/fund/fund_orchestration.py）
+    已算好 `data_source` / `nav_span_days` 存進 result，但 UI 從未顯示，
+    print() log 又進不了 user 視野。本測試守：`moneydj_raw` 帶這兩個既有
+    欄位時，Tab2 banner 必須把它們攤出來（純讀取顯示，不重算，對齊 SSOT）。
+    """
+    import pandas as pd
+
+    monkeypatch.setenv("FRED_API_KEY", "test-fred-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+
+    app = AppTest.from_file("app.py", default_timeout=180)
+    app.secrets["FRED_API_KEY"] = "test-fred-key"
+    app.secrets["GEMINI_API_KEY"] = "test-gemini-key"
+
+    _idx = pd.date_range(end=pd.Timestamp.today().normalize(), periods=400, freq="B")
+    _nav = pd.Series(
+        [100.0 * (1 + 0.0003 * i) for i in range(400)],
+        index=_idx, name="TLZF9",
+    )
+
+    app.session_state["macro_done"] = False
+    app.session_state["fund_data"] = {
+        "status": "ok",
+        "full_key": "TLZF9",
+        "fund_name": "安聯收益成長基金",
+        "series": _nav,
+        "dividends": [],
+        "metrics": {"nav_latest": 112.0, "sharpe": 1.1, "std_1y": 12.0},
+        # v19.281 span-extend 命中後,_fetch_fund_single 會把這兩欄寫進 result
+        # (= moneydj_raw)。此處模擬「已命中長歷史」情境。
+        "moneydj_raw": {
+            "data_source": "morningstar(span-extend)",
+            "nav_span_days": 1825,
+        },
+        "page_type": "yp010001",
+        "error": "",
+        "warning": "",
+    }
+
+    app.run()
+    assert not app.exception, (
+        f"runtime exception: {[str(e) for e in app.exception]}"
+    )
+    markdown_blobs = " ".join(
+        m.value for m in app.markdown if isinstance(m.value, str)
+    )
+    success_blobs = " ".join(
+        str(getattr(m, "value", "")) for m in app.success
+    )
+    blob = markdown_blobs + " " + success_blobs
+    assert "morningstar(span-extend)" in blob, (
+        f"banner 應顯示 data_source；"
+        f"success/markdown 前 500 字: {blob[:500]!r}"
+    )
+    assert "跨度 1825" in blob, (
+        f"banner 應顯示 nav_span_days；"
+        f"success/markdown 前 500 字: {blob[:500]!r}"
+    )
