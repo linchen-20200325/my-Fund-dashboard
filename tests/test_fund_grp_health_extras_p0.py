@@ -156,6 +156,48 @@ class TestCorrelationMatrix:
         ]
         _render_correlation_matrix(_funds)
 
+    def test_both_panels_computed_when_holdings_and_nav_both_present(self):
+        """v19.289:user 要求「相關性矩陣多加漲跌幅相關係數」——NAV Pearson
+        面板從「持股資料全缺時才 fallback」升級為恆算的第二面板。本測試鎖住:
+        即使兩檔基金持股資料齊全(面板 1 走得通),只要 NAV 也齊全,
+        calc_correlation_matrix 依然要被呼叫(面板 2 恆算,不是只有 fallback
+        才算),回歸網防止之後改回舊的「二選一」邏輯。
+        """
+        from unittest.mock import patch
+        import ui.helpers.fund_grp_health.correlation as _corr_mod
+        import services.portfolio_service as _ps_mod
+
+        _idx = pd.date_range("2024-01-01", periods=100, freq="D")
+        _funds = [
+            {
+                "code": "A001", "name": "Fund A",
+                "series": pd.Series(range(100), index=_idx, dtype=float),
+                "moneydj_raw": {"holdings": {
+                    "top_holdings": [{"name": "AAPL", "pct": 5.0}],
+                    "sector_alloc": [{"name": "科技", "pct": 60}],
+                }},
+            },
+            {
+                "code": "B002", "name": "Fund B",
+                "series": pd.Series(range(100, 200), index=_idx, dtype=float),
+                "moneydj_raw": {"holdings": {
+                    "top_holdings": [{"name": "GOOG", "pct": 6.0}],
+                    "sector_alloc": [{"name": "科技", "pct": 50}],
+                }},
+            },
+        ]
+
+        with patch.object(
+            _ps_mod, "calc_correlation_matrix",
+            wraps=_ps_mod.calc_correlation_matrix,
+        ) as _spy:
+            _corr_mod._render_correlation_matrix(_funds)
+
+        assert _spy.called, (
+            "持股資料齊全時 calc_correlation_matrix 也必須被呼叫"
+            "(NAV 相關係數面板恆算,不是只有 fallback 才算)"
+        )
+
 
 # ════════════════════════════════════════════════════════════════
 # 3. _render_hwm_sigma_table 邊界

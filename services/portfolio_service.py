@@ -23,6 +23,7 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     SHADOW_FUND_THRESHOLD_RATIO,
     SHADOW_FUND_JACCARD_WEIGHT_RATIO,
     SHADOW_FUND_COSINE_WEIGHT_RATIO,
+    SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO,  # v19.289
 )
 from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
 
@@ -598,7 +599,7 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
         for i in range(len(codes)):
             for j in range(i + 1, len(codes)):
                 v = corr.iloc[i, j]
-                if not np.isnan(v) and abs(v) >= 0.85:
+                if not np.isnan(v) and abs(v) >= SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO:
                     shadow_pairs.append((codes[i], codes[j], round(float(v), 4)))
         shadow_pairs.sort(key=lambda x: -abs(x[2]))
         return {"matrix": corr, "shadow_pairs": shadow_pairs, "freq": freq_label}
