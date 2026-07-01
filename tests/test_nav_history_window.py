@@ -192,3 +192,45 @@ def test_fetch_fund_from_moneydj_url_legacy_path_labels_data_source():
 
     assert hasattr(O, "_span_extend_insurance_nav")
     assert hasattr(O, "fetch_fund_from_moneydj_url")
+
+
+def test_fetch_holdings_is_actually_importable_in_fund_orchestration():
+    """v19.287 真根因回歸網:`fund_orchestration.py` 兩處持股呼叫點
+    (`_fetch_fund_single` 既有 + `fetch_fund_from_moneydj_url` v19.287 新增)
+    呼叫的都是 bare name `fetch_holdings(code)` —— 但這個模組先前從未 import
+    這個名字,每次呼叫都拋 `NameError`,被外層 `except Exception` 吞掉,
+    `result["holdings"]` 因此永遠停在初始模板的空 dict {}。v19.285/v19.286
+    對 `nav_metrics.fetch_holdings()` 本體的診斷強化完全沒機會執行到,因為這個
+    函式根本沒被成功呼叫過 —— 這才是 user 反饋「還是找不到持股」的真根因。
+
+    本測試直接驗證 module-level name 解析正確(不會 NameError),且解析到的
+    就是 `nav_metrics.fetch_holdings` 本體(同一顆函式物件,不是另一份重寫)。
+    """
+    import repositories.fund.fund_orchestration as O
+    import repositories.fund.nav_metrics as NM
+
+    assert hasattr(O, "fetch_holdings"), (
+        "fetch_holdings 必須能在 fund_orchestration 模組命名空間解析,"
+        "否則兩處呼叫點都會 NameError(被外層 except 吞掉,silent failure)"
+    )
+    assert O.fetch_holdings is NM.fetch_holdings, (
+        "應該是同一顆共用函式物件(SSOT),不是另一份重寫的持股抓取邏輯"
+    )
+
+
+def test_fetch_fund_from_moneydj_url_legacy_path_calls_fetch_holdings():
+    """v19.287:legacy pipeline(`fetch_fund_from_moneydj_url`)先前完全沒有
+    呼叫持股抓取 —— `result["holdings"]` 全程停在初始模板的空 dict {},
+    不管 `nav_metrics.fetch_holdings()` 內部診斷多完整都沒有意義。
+
+    直接檢查原始碼字串確認呼叫點確實存在(該函式牽涉大量網路分支,端到端
+    mock 成本過高;source-level 存在性檢查足以在之後重構誤刪時擋下)。
+    """
+    import inspect
+    import repositories.fund.fund_orchestration as O
+
+    src = inspect.getsource(O.fetch_fund_from_moneydj_url)
+    assert "fetch_holdings(code)" in src, (
+        "legacy pipeline 必須呼叫 fetch_holdings(code) 填入 result['holdings'],"
+        "否則這條 pipeline 產出的基金(如保單代碼 TLZF9)永遠拿不到持股"
+    )

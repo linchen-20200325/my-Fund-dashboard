@@ -20,7 +20,13 @@
 - `scripts/` — 工具腳本（`quick_merge.sh` 等）
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
-## 當前版本
+- **v19.287 真根因 —「持股」全站從未真正被抓過:fetch_holdings 從未被 import(2026-07-01)**:
+  - **背景**:v19.285/v19.286 兩輪修正上線、user 也確認 production 已重新部署 + 清過所有快取,持股區塊卻**一字不差**顯示跟修之前一樣的「三源持股全抓不到」+「來源=—(若無 diag 表示線上仍為舊版)」。部署、快取兩個假說都被 user 提供的證據排除,代表根因在別處
+  - **真根因(直接在 sandbox 執行程式碼複現,非猜測)**:`repositories/fund/fund_orchestration.py` 內兩個呼叫「持股」的地方,呼叫的是 bare name `fetch_holdings(code)`,但**這個模組從未 import 這個名字**——`from repositories.fund.sources import *` 不含它、模組內也沒有其他 import 路徑。實際執行 `exec('fetch_holdings("X")', fund_orchestration.__dict__)` 直接復現:`NameError: name 'fetch_holdings' is not defined`。這個 NameError 被兩處呼叫點外層的 `except Exception as e: print(...)` 完整吞掉,`result["holdings"]` 因此永遠停在初始化模板的空 dict `{}`,從未真正呼叫到 `nav_metrics.fetch_holdings()` 本體——v19.285/v19.286 對這顆函式做的所有診斷強化完全沒有機會執行到
+  - **另一個缺口**:`fetch_fund_from_moneydj_url`(legacy pipeline,TLZF9 這類保單代碼實際使用的路徑)裡**從頭到尾根本沒有呼叫持股抓取**,連壞掉的呼叫都沒有——這條 pipeline 對持股完全空白
+  - **修法(SSOT)**:`fund_orchestration.py` 頂部補 `from repositories.fund.nav_metrics import fetch_holdings` 明確 import;`fetch_fund_from_moneydj_url` 補上與 `_fetch_fund_single` 同款的呼叫(`try: result["holdings"] = fetch_holdings(code) except Exception as e: print(...)`),兩條 pipeline 現在都會真正呼叫到同一顆共用函式
+  - tests:`tests/test_nav_history_window.py` +2(`fetch_holdings` 可在 `fund_orchestration` 模組命名空間正確解析且與 `nav_metrics.fetch_holdings` 是同一物件;legacy pipeline 原始碼確實含 `fetch_holdings(code)` 呼叫)。87+ 個 fund_orchestration/moneydj/nav_metrics/holdings 相關測試全綠
+  - **這是整個「找不到持股」系列(v19.280→v19.287)真正的根因** — 前面幾輪對 `nav_metrics.fetch_holdings()` 診斷機制的強化雖然本身沒錯,但因為這顆函式從未被成功呼叫過,所有強化都無從發揮作用。這次修完後,production 重新整理 Tab2 應該會看到**真正**的抓取結果(成功持股 / 詳細 diag),不會再是一模一樣的「來源=—」
 
 - **v19.286 fetch_holdings 外層 bare except 補 diag(2026-07-01)**:
   - **背景**:v19.285 上線後,user 截圖 Tab2 持股區塊仍顯示「三源持股全抓不到」+「來源=—(若無 diag 表示線上仍為舊版,請 Manage app → Reboot)」——這句提示文字本身就是 v19.280 程式碼的一部分,代表 production **已經**跑在有 diag 機制的版本,矛盾點在於:診斷機制存在,但 diag 依然是空的
