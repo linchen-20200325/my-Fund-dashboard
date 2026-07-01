@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BORDER, GRAY_55, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_ORANGE_300, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BORDER, GRAY_55, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -153,59 +153,17 @@ def _render_holdings_block(fund: dict) -> None:
     else:
         st.caption("💰 TER 費用率分析 — ⬜ 缺 mgmt_fee 資料")
 
+    # v19.282 SSOT:持股明細改呼共用 render(ui.helpers.holdings),不再各寫一份
+    from ui.helpers.holdings import render_holdings_detail
     _holdings = _mj.get("holdings", {}) or {}
-    _sectors = _holdings.get("sector_alloc", []) or []
-    _tops = _holdings.get("top_holdings", []) or []
     _hdate = _holdings.get("data_date", "")
-    if not (_sectors or _tops):
+    if not (_holdings.get("sector_alloc") or _holdings.get("top_holdings")):
         st.caption("📂 持股分析 — ⬜ MoneyDJ 未提供持股 / 產業資料")
         return
-
-    try:
-        from ui.helpers.holdings import _zh_holding  # type: ignore
-    except Exception:
-        def _zh_holding(_n):  # type: ignore
-            return ""
-
     st.markdown(
         "**📂 持股分析**"
         + (f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>"
            f"（{_hdate}）</span>" if _hdate else ""),
         unsafe_allow_html=True,
     )
-    _hc1, _hc2 = st.columns(2)
-    with _hc1:
-        if _sectors:
-            st.markdown("**🏭 產業配置**")
-            for _sec in _sectors[:10]:
-                _sn = str(_sec.get("name", ""))[:18]
-                _sp = float(_sec.get("pct", 0) or 0)
-                st.markdown(
-                    f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0'>"
-                    f"<div style='color:{GRAY_CC};font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
-                    f"<div style='flex:1;background:#1a1a2a;border-radius:3px;height:10px'>"
-                    f"<div style='background:{MD_BLUE_500};width:{min(_sp*3,100):.0f}%;"
-                    f"height:100%;border-radius:3px'></div></div>"
-                    f"<div style='color:{MD_BLUE_500};font-size:11px;width:40px;text-align:right'>"
-                    f"{_sp:.1f}%</div></div>",
-                    unsafe_allow_html=True)
-    with _hc2:
-        if _tops:
-            st.markdown("**🏆 前10大持股**")
-            for _i, _top in enumerate(_tops[:10], 1):
-                _tn_raw = str(_top.get("name", ""))
-                _zh = _zh_holding(_tn_raw)
-                _tn = _tn_raw[:22]
-                _zh_html = (f"<span style='color:{MD_ORANGE_300};font-size:10px;margin-left:6px'>"
-                            f"({_zh})</span>" if _zh else "")
-                _tp = float(_top.get("pct", 0) or 0)
-                _ts = str(_top.get("sector", ""))[:12]
-                st.markdown(
-                    f"<div style='display:flex;gap:6px;padding:3px 8px;"
-                    f"background:{GH_BG_CARD};border-radius:6px;margin:2px 0'>"
-                    f"<span style='color:{GRAY_55};font-size:11px;width:16px'>#{_i}</span>"
-                    f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
-                    f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"
-                    f"<span style='color:{INFO_BLUE};font-weight:700;font-size:11px;"
-                    f"width:36px;text-align:right'>{_tp:.1f}%</span>"
-                    f"</div>", unsafe_allow_html=True)
+    render_holdings_detail(_holdings)

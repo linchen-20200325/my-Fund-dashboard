@@ -1097,45 +1097,23 @@ def render_single_fund_tab() -> None:
                             f"費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~25%）</div>"
                             f"</div>", unsafe_allow_html=True)
 
-                # ── 持股分析（折疊）──
+                # ── 持股分析（折疊）── v19.282 SSOT:改呼共用 render_holdings_detail;
+                # 空持股時顯示三源抓取診斷(不再靜默),expander 永遠顯示(user 要求
+                # 單一基金也放持股資訊)。
+                from ui.helpers.holdings import (
+                    render_holdings_detail, render_holdings_diag,
+                )
                 _holdings = mj_raw.get("holdings", {}) or {}
-                _sectors  = _holdings.get("sector_alloc", []) or []
-                _tops     = _holdings.get("top_holdings", []) or []
+                _tops     = _holdings.get("top_holdings", []) or []   # 下方個股新聞 / AI snapshot 用
+                _sectors  = _holdings.get("sector_alloc", []) or []   # 下方 AI snapshot 用
                 _hdate    = _holdings.get("data_date", "")
-                if _sectors or _tops:
-                    with st.expander(f"📂 持股分析" + (f"（{_hdate}）" if _hdate else ""), expanded=False):
-                        _hc1, _hc2 = st.columns(2)
-                        with _hc1:
-                            if _sectors:
-                                st.markdown("**🏭 產業配置**")
-                                for _sec in _sectors[:10]:
-                                    _sn = str(_sec.get("name",""))[:18]
-                                    _sp = float(_sec.get("pct", 0) or 0)
-                                    st.markdown(
-                                        f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0'>"
-                                        f"<div style='color:{GRAY_CC};font-size:11px;width:95px;flex-shrink:0'>{_sn}</div>"
-                                        f"<div style='flex:1;background:#1a1a2a;border-radius:3px;height:10px'>"
-                                        f"<div style='background:{MD_BLUE_500};width:{min(_sp*3,100):.0f}%;height:100%;border-radius:3px'></div></div>"
-                                        f"<div style='color:{MD_BLUE_500};font-size:11px;width:40px;text-align:right'>{_sp:.1f}%</div>"
-                                        f"</div>", unsafe_allow_html=True)
-                        with _hc2:
-                            if _tops:
-                                st.markdown("**🏆 前10大持股**")
-                                for _i, _top in enumerate(_tops[:10], 1):
-                                    _tn_raw = str(_top.get("name",""))
-                                    _zh = _zh_holding(_tn_raw)
-                                    _tn = _tn_raw[:22]
-                                    _zh_html = (f"<span style='color:{MD_ORANGE_300};font-size:10px;margin-left:6px'>({_zh})</span>"
-                                                if _zh else "")
-                                    _tp = float(_top.get("pct", 0) or 0)
-                                    _ts = str(_top.get("sector",""))[:12]
-                                    st.markdown(
-                                        f"<div style='display:flex;gap:6px;padding:3px 8px;background:{GH_BG_CARD};border-radius:6px;margin:2px 0'>"
-                                        f"<span style='color:{GRAY_55};font-size:11px;width:16px'>#{_i}</span>"
-                                        f"<span style='font-size:11px;flex:1'>{_tn}{_zh_html}</span>"
-                                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_ts}</span>"
-                                        f"<span style='color:{INFO_BLUE};font-weight:700;font-size:11px;width:36px;text-align:right'>{_tp:.1f}%</span>"
-                                        f"</div>", unsafe_allow_html=True)
+                _has_hold = bool(_sectors or _tops)
+                with st.expander(
+                    "📂 持股分析" + (f"（{_hdate}）" if _hdate else ""),
+                    expanded=_has_hold,
+                ):
+                    if not render_holdings_detail(_holdings):
+                        render_holdings_diag(_holdings)
 
                 # ── 📰 個股新聞面（v18.206）：逐股 Google News 搜尋（按鈕）+ AI 新聞面分析 ──
                 if _tops:
