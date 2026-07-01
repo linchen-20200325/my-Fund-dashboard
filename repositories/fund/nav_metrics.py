@@ -946,6 +946,7 @@ def fetch_holdings(code: str) -> dict:
             _hold_urls.append(
                 f"https://{_p}.moneydj.com/w/wq/wq06.djhtm?a={code}")
         r = None
+        _winning_url = ""
         _attempts: list = []  # 診斷:每個 URL 試了什麼結果
         for _hu in _hold_urls:
             try:
@@ -954,6 +955,7 @@ def fetch_holdings(code: str) -> dict:
                 _attempts.append({"url": _hu, "status": "ok" if _r else "no_resp", "len": _len})
                 if _r is not None and _len > 500:
                     r = _r
+                    _winning_url = _hu
                     print(f"[holdings:{code}] ✅ {_hu[:60]}... len={_len}",
                           file=_sys_h.stderr)
                     break
@@ -966,8 +968,12 @@ def fetch_holdings(code: str) -> dict:
             print(f"[holdings:{code}] 全 {len(_hold_urls)} 候選 URL 失敗:"
                   f"{[(a['status'], a['len']) for a in _attempts]}",
                   file=_sys_h.stderr)
-            # v19.280:抓取診斷 list — 逐源記錄(供 UI 顯示「有沒有抓到、抓到什麼」)
-            _diag = [f"MoneyDJ｜{len(_hold_urls)} 候選 URL 全失敗"]
+            # v19.285:逐 URL 明細(原本只留一行摘要,attempts 算出來卻沒進 diag,
+            # UI 看不到「哪個 host 回什麼」→ 補進 diag,banner 才有 audit 價值)
+            _diag = [f"MoneyDJ｜{len(_hold_urls)} 候選 URL 全失敗:"]
+            for _a in _attempts:
+                _host = _a["url"].split("/")[2] if "://" in _a["url"] else _a["url"]
+                _diag.append(f"  · {_host} → {_a['status']} (len={_a['len']})")
             # v19.276 fallback:MoneyDJ 全失敗 → 試 cnyes 持股 API
             _cy = fetch_holdings_cnyes(code, diag=_diag)
             if _cy.get("top_holdings") or _cy.get("sector_alloc"):
@@ -1098,7 +1104,12 @@ def fetch_holdings(code: str) -> dict:
         # parser 0 命中)→ 試 cnyes 持股 API。命中則整包以 cnyes 為準(provenance
         # 一致),不與 MoneyDJ 空殼合併以免血緣混淆(§2.2)。
         if not (out.get("top_holdings") or out.get("sector_alloc")):
-            _diag2 = ["MoneyDJ｜抓到頁但 0 持股(multi-asset / FoF / 透明度不足)"]
+            _host = _winning_url.split("/")[2] if "://" in _winning_url else _winning_url
+            _n_tbl = len(soup.find_all("table"))
+            _diag2 = [
+                f"MoneyDJ｜{_host} 抓到頁(len={len(r.text)}, {_n_tbl} 個 table)"
+                "但 parser 0 命中(multi-asset / FoF / 透明度不足 / 表格結構未涵蓋)",
+            ]
             _cy = fetch_holdings_cnyes(code, diag=_diag2)
             if _cy.get("top_holdings") or _cy.get("sector_alloc"):
                 _cy["diag"] = _diag2
