@@ -22,6 +22,16 @@
 
 ## 當前版本
 
+- **v19.283 Tab2 NAV 來源 + 跨度診斷 banner(2026-07-01)**:
+  - **背景**:user 截圖 TLZF9「MK 3-3-3 ❌ 成立 0.1 年」在 v19.281(NAV 窗口擴展 + span-extend)合併後**依然存在**,並問「請確定資料存放位置找到對的地方修改」
+  - **根因定位(讀 code 追蹤,非猜測)**:
+    - `_compute_holding_years`(`services/health/report.py`)讀 `fd["series"]` 算年數 — 這條鏈路正確,問題不在計算端
+    - `_fetch_fund_single`(`repositories/fund/fund_orchestration.py`,v19.281 已加 span-extend + `nav_span_days`/`data_source` 欄位)**是正確的資料存放位置**,但這兩個欄位算完後**從未在 UI 顯示** — user 和我都看不到「到底哪個來源贏、跨度多長、span-extend 有沒有觸發」,只能盲猜
+    - 額外發現:`_fetch_fund_single` 中 www.moneydj.com 400 天窗口(step 2d)只在 `len(nav_s)<10` 才觸發 — 若更早的短源(如 insurance_subdomain,~1 月)以 `≥10` 筆數過關,連這條路徑都會被跳過,更凸顯「筆數把關無跨度檢查」是系統性設計缺口(v19.281 span-extend 已補在最後一關堵住,但無法補救「用哪個源」的可見性問題)
+  - **修法(v19.283,純 UI 唯讀顯示,不重算,SSOT 合規)**:`ui/tab2_single_fund.py`「① 基本資料」banner 追加顯示 `mj_raw.get("data_source")` + `mj_raw.get("nav_span_days")`(換算年數)— 兩者皆 L1 orchestrator 已算好的既有欄位,L3 純讀取渲染,無新業務邏輯、無重複計算
+  - tests:`tests/test_app_apptest.py::test_tab2_nav_source_banner_shows_data_source_and_span` 端到端(AppTest 真渲染)守 banner 顯示 `data_source` + `nav_span_days`。既有 Tab2 apptest 3 個全過
+  - **下一步**:部署後 user 看 Tab2 banner「來源:`X` ‧ 跨度 Y 天」即可判讀:若來源顯示 `morningstar(span-extend)`/`cnyes` 但 MK 3-3-3 仍錯 → 另有 bug;若來源仍是短源(如 `insurance_subdomain`)且跨度 < 300 天 → span-extend 在 production 未命中(可能 Morningstar/cnyes 對 TLZF9 在該環境查無資料),需要真實 production log 才能繼續往下修,而非在 sandbox 繼續猜測(proxy 403 無法驗證真實抓取)
+
 - **v19.282 持股明細 SSOT 共用 render + Tab2 常駐(2026-07-01)**:
   - **背景**:user 要求「單一基金也放持股資訊」+ 提醒守 SSOT。查核發現 Tab2(`tab2_single_fund` L1100)與 組合健檢(`fund_grp_health/investment` L156)**各有一份 byte-identical 的持股渲染** → 既有 SSOT 違規;且 Tab2 只在 `if _sectors or _tops` 才顯示,空持股靜默(user 誤以為沒功能)
   - **修法**:抽共用 `ui/helpers/holdings.render_holdings_detail`(產業配置 + 前10大持股)+ `render_holdings_diag`(空持股攤三源診斷),兩處 + Tab5 news 空狀態全改呼共用
