@@ -214,6 +214,10 @@ def process_one_fund(
                 _first_iso = sorted(nav_dict.keys())[0]
                 _first_d = _dt333.date.fromisoformat(str(_first_iso)[:10])
                 _yrs_inc = (_dt333.date.today() - _first_d).days / 365.25
+                # v19.292 FIX: 鏡像 _compute_holding_years guard —
+                # series < 90 筆且年數 < 0.5 → 太短，無法可信估算成立日
+                if len(nav_dict) < 90 and _yrs_inc < 0.5:
+                    _yrs_inc = None
             except (ValueError, IndexError, TypeError):
                 _yrs_inc = None
             # v19.177:metrics.ret_3y_ann 為 fund_service 統一計算的 3 年年化 SSOT
@@ -451,7 +455,9 @@ def _render_health_3tables(rows: list[dict],
 
     # ── 表 ③ 實際購買配息結果(既有大表 — 不動,只改 section title)──
     st.markdown("#### 📦 ③ 實際購買配息結果（持有 meta + 累積 TWD 配息 + 全期實際/年化）")
-    _render_health_table(rows, funds_extra=funds_extra)
+    # v19.292 FIX: funds_extra=None → 不在此重複渲染 PK体检表 + 健診摘要表
+    # (表 ① ② 已涵蓋健康分析資訊;PK 體檢由外層 render_fund_grp_health_extras 統一提供)
+    _render_health_table(rows, funds_extra=None)
 
 
 def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> None:
