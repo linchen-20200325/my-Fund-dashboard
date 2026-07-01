@@ -259,11 +259,49 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                 {"source": "taiwanlife_direct", "success": False,
                  "error": "官網端點查無資料或 URL 需更新"})
 
+    # v19.281 span-extend:上面各 source 只用「筆數 ≥10/20」把關,無「跨度」檢查。
+    # 保單代碼(如 TLZF9)常落到近期短源(insurance_subdomain / tcb ~1 月,≥10 筆
+    # 就鎖定),把 Morningstar(硬編 secId,已擴 5.5 年)整條 skip → user 看到
+    # 「成立 0.1 年」、3Y/5Y 全 —。修法:若目前 nav_s 跨度 < 300 天且為保單代碼,
+    # 顯式試 Morningstar / cnyes 長歷史,取「跨度更長」者(additive,只換更長不退步)。
+    def _nav_span_days(_s) -> int:
+        try:
+            if _s is None or len(_s) < 2:
+                return 0
+            return int((pd.Timestamp(_s.index.max())
+                        - pd.Timestamp(_s.index.min())).days)
+        except Exception:
+            return 0
+
+    if _is_insurance_code and 0 < _nav_span_days(nav_s) < 300:
+        _cur_span = _nav_span_days(nav_s)
+        _long_candidates = (
+            ("morningstar",
+             lambda: _src_morningstar_nav(_code, fund_name=result.get("fund_name") or "")),
+            ("cnyes", lambda: _src_cnyes_nav(_code)),
+        )
+        for _long_src, _long_fn in _long_candidates:
+            try:
+                _cand = _long_fn()
+            except Exception as _le:
+                print(f"[orchestrator] span-extend {_long_src} 失敗: {_le}")
+                _cand = pd.Series(dtype=float)
+            if (_cand is not None and len(_cand) >= 10
+                    and _nav_span_days(_cand) > _cur_span):
+                print(f"[orchestrator] 📏 {_code} span-extend "
+                      f"{nav_source}({_cur_span}d/{len(nav_s)}筆) → "
+                      f"{_long_src}({_nav_span_days(_cand)}d/{len(_cand)}筆)")
+                nav_s = _cand
+                nav_source = f"{_long_src}(span-extend)"
+                _cur_span = _nav_span_days(_cand)
+
     if len(nav_s) >= 10:
         result["series"]      = nav_s
         result["data_source"] = nav_source
+        result["nav_span_days"] = _nav_span_days(nav_s)
         result.setdefault("source_trace", []).append(
-            {"source": nav_source, "success": True, "nav_count": len(nav_s)})
+            {"source": nav_source, "success": True, "nav_count": len(nav_s),
+             "span_days": _nav_span_days(nav_s)})
     else:
         result.setdefault("source_trace", []).append(
             {"source": "nav_all", "success": False,
