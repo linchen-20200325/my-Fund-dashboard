@@ -32,6 +32,13 @@ from infra.proxy import _proxies, _ssl_verify  # noqa: F401
 # 只回 raw result(metrics 由 L2 wrapper 補)。
 
 from repositories.fund.sources import *  # noqa: F401, F403 — 所有 _src_* re-export
+# v19.287 真根因:`fetch_holdings` 從未在本模組被 import,line ~882 呼叫的是一個
+# 不存在的 bare name — 每次呼叫都拋 NameError,被外層 `except Exception` 吞掉,
+# `result["holdings"]` 因此永遠停在初始模板的空 dict {}。v19.285/v19.286 對
+# `nav_metrics.fetch_holdings()` 本體的診斷強化完全沒機會執行到,因為這個函式
+# 根本沒被呼叫成功過。此 import 補上後,兩處呼叫點(pipeline 1 既有 + pipeline 2
+# 新增,見下方)才會真的執行到 fetch_holdings() 本體。
+from repositories.fund.nav_metrics import fetch_holdings
 
 
 def _nav_span_days(_s) -> int:
@@ -968,6 +975,15 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         result["series"]        = _ext_s
         result["data_source"]   = _ext_src
         result["nav_span_days"] = _ext_span
+
+    # v19.287:本函式(legacy pipeline)從未呼叫 fetch_holdings —— 唯一有持股呼叫的
+    # 是 _fetch_fund_single(pipeline 1),但那邊呼叫的 bare name 從未被 import,
+    # 兩條 pipeline 加總下來持股實際上從未真的被抓過。這裡補上與 pipeline 1
+    # 同款呼叫(SSOT,呼叫同一顆共用函式,不重寫解析邏輯)。
+    try:
+        result["holdings"] = fetch_holdings(code)
+    except Exception as e:
+        print(f"[fetch_holdings] {e}")
 
     # v19.240 R8 EX-L1ORCH-1 退役:metrics + perf 注入 + reconcile 上提 L2
     # services.fund_service.finalize_fund_metrics(走 fetch_fund_from_moneydj_url_enriched
