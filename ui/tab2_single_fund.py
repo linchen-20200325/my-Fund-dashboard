@@ -869,13 +869,14 @@ def render_single_fund_tab() -> None:
                         cA.metric("4D Grade", _adv_h.get("4D Grade") or "—",
                                   help="A≥80 / B≥65 / C≥50 / D≥35 / F<35(SSOT v19.177)")
                         cB.metric("4D Score", _fmt_num(_adv_h.get("4D Score")))
-                        cC.metric("Sharpe 1Y", _fmt_num(_adv_h.get("Sharpe 1Y")))
+                        cC.metric("Sharpe 1Y", _fmt_num(_adv_h.get("Sharpe 1Y")),
+                                  help="自計算(NAV 序列,用於 4D 評分);見下方風險指標對帳")
                         cD.metric("Sortino", _fmt_num(_adv_h.get("Sortino")))
 
                         cE, cF, cG, cH = st.columns(4)
                         cE.metric("Calmar", _fmt_num(_adv_h.get("Calmar")))
-                        cF.metric("Alpha %", _fmt_pct(_adv_h.get("Alpha %")),
-                                  help="1Y 含息 − 年化配息率")
+                        cF.metric("真實收益 %", _fmt_pct(_adv_h.get("Alpha %")),
+                                  help="含息報酬率 − 年化配息率（≠ CAPM Alpha）")
                         cG.metric("費用率 %", _fmt_pct(_adv_h.get("費用率 %")))
                         cH.metric("Max DD %", _fmt_pct(_adv_h.get("Max DD %")))
 
@@ -905,7 +906,7 @@ def render_single_fund_tab() -> None:
                         if _adv_h.get("Calmar") is None:
                             _miss.append("Calmar(需 3Y 年化 或 1Y 報酬 + max_dd)")
                         if _adv_h.get("Alpha %") is None:
-                            _miss.append("Alpha(需 perf.1Y + 年化配息率)")
+                            _miss.append("真實收益(需 perf.1Y + 年化配息率)")
                         if _adv_h.get("費用率 %") is None:
                             _miss.append("費用率(MoneyDJ wb01 mgmt_fee fallback)")
                         if _adv_h.get("3Y 年化 %") is None:

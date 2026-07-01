@@ -44,26 +44,6 @@ from infra.oauth import (
 
 APP_VERSION = "v19.45_MacroNavigator"
 
-# ══════════════════════════════════════════════════════
-# 外國企業中文對照表（持股清單顯示用，零外呼）
-# ══════════════════════════════════════════════════════
-# v18.136: _HOLDING_ZH / _HOLDING_ZH_SUFFIXES / _zh_holding 搬至 ui/helpers/holdings.py
-from ui.helpers.holdings import (  # noqa: F401
-    _HOLDING_ZH,
-    _HOLDING_ZH_SUFFIXES,
-    _zh_holding,
-)
-
-# v18.125 B-C.3 shim：_parse_indicator_date 仍在 ui/helpers/session.py
-from ui.helpers.session import parse_indicator_date as _parse_indicator_date  # noqa: F401
-
-# ══════════════════════════════════════════════════════
-# v15.1 友善錯誤 helper：白話 warning + 收合的技術細節
-# 設計原則：新手看「發生什麼/該怎麼辦」、工程師展開看 traceback
-# ══════════════════════════════════════════════════════
-# v18.126 B-C.4: _friendly_error 已搬至 ui/helpers/session.py
-from ui.helpers.session import friendly_error as _friendly_error  # noqa: F401
-
 
 # ══════════════════════════════════════════════════════
 # CSS（page_config 已於檔首 hoist，避免 StreamlitSetPageConfigMustBeFirstCommandError）
@@ -127,9 +107,12 @@ _check_secrets()
 from ui.helpers.session import init_session_state as _init_session_state
 _init_session_state(st.session_state)
 
-
-# v18.139（清單 14）：_sync_invest_twd_from_ledgers 搬至 ui/helpers/data_registry.py
-from ui.helpers.data_registry import _sync_invest_twd_from_ledgers  # noqa: F401
+# B1 Fix: server cold restart 後 module-level _RF_ANNUAL 歸預設 4%;
+# 若 session_state 已有 FED_RATE 快取,立即同步，不等 Tab1 button click。
+_cached_ind = st.session_state.get("indicators", {})
+if "FED_RATE" in _cached_ind:
+    from services.fund_service import set_risk_free_rate as _set_rf
+    _set_rf(_cached_ind["FED_RATE"].get("value", 4.0) / 100)
 
 
 # v18.136: _update_data_registry 搬至 ui/helpers/data_registry.py
@@ -159,15 +142,7 @@ def _calc_data_health(indicators=None):
 #          仍是 import 時的 False snapshot，sidebar 登入按鈕永遠不亮）。
 from ui.helpers.oauth_state import refresh_oauth_state as _refresh_oauth_state
 _refresh_oauth_state()
-from ui.helpers.oauth_state import (  # noqa: F401
-    _gsa_secret,
-    _sheet_id_secret,
-    _resolve_oauth_cfg,
-    _oauth_cfg,
-    _oauth_configured,
-    _get_oauth_client,
-    handle_oauth_callback as _oauth_callback,
-)
+from ui.helpers.oauth_state import handle_oauth_callback as _oauth_callback
 # 觸發 OAuth callback (原 app.py:949-962)
 _oauth_callback()
 
@@ -183,43 +158,8 @@ render_sidebar(
     now_tw_fn=_now_tw,
 )
 
-# ══════════════════════════════════════════════════════
-# HELPER: _is_core_fund
-# ══════════════════════════════════════════════════════
-# v18.126 B-C.4: _is_core_fund + 3 constants 已搬至 ui/helpers/session.py
-from ui.helpers.session import (  # noqa: F401
-    _CORE_WHITELIST,
-    _CORE_KEYWORDS,
-    _SAT_KEYWORDS,
-    is_core_fund as _is_core_fund,
-)
-
-# ══════════════════════════════════════════════════════
-# HELPER: v18.133 從本檔搬至 ui/helpers/macro_helpers.py（B-C 連環 hotfix 收尾）
-# 留 shim re-export 給既有 callsite + tests 向後相容
-# ══════════════════════════════════════════════════════
-from ui.helpers.macro_helpers import (  # noqa: F401
-    _CATEGORY_MAP,
-    calculate_composite_score,
-    composite_verdict,
-    category_score,
-    category_history,
-    category_verdict,
-    mk_fund_signal,
-    quartile_check as _quartile_check,
-)
-
-
 # F-GRAY-3 v19.81:`_unused_old_calculate_composite_score` 已刪(deprecated placeholder,
 # grep 全 repo 唯一引用為定義本身;dead code)。CLAUDE.md §8.3 灰色地帶 audit 結案。
-
-
-# ══════════════════════════════════════════════════════
-# v15.2 全局指標關聯地圖（Sankey）— 方案 B：新人秒懂上下游傳導
-# ══════════════════════════════════════════════════════
-# v18.127 B-C.5: render_indicator_map 已搬至 ui/tab1_macro.py（Tab1 唯一 caller）
-# 保留 shim 供任何外部 callsite（grep 過全 repo 無；shim 純為防禦）
-from ui.tab1_macro import render_indicator_map  # noqa: F401
 
 
 # ══════════════════════════════════════════════════════

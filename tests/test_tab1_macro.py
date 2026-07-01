@@ -5,6 +5,9 @@
 - render_macro_tab callable + 無位置 arg（與其他 4 個 tab 同設計）
 - render_indicator_map private helper 也 callable
 - _calc_data_health / _friendly_error alias 正確
+
+A1 cleanup: app.py 的 render_indicator_map shim 已於 v19.291 移除（無外部 caller），
+            guard test test_app_py_shim_render_indicator_map_still_works 同步刪除。
 """
 from __future__ import annotations
 
@@ -49,13 +52,6 @@ def test_calc_data_health_wrapper():
     assert pct == 6
     assert traffic == "🔴"
 
-
-def test_app_py_shim_render_indicator_map_still_works():
-    """app.py 保留 render_indicator_map shim（純 source 驗證避免觸發 streamlit）。"""
-    from pathlib import Path
-    src = (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
-    # B-C.5 後應該有 shim line
-    assert "from ui.tab1_macro import render_indicator_map" in src
 
 
 # ──────────────────────────────────────────────────────────────

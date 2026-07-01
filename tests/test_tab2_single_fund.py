@@ -49,13 +49,6 @@ def test_calc_data_health_returns_pct_traffic():
     assert traffic == "🔴"
 
 
-def test_app_py_shim_friendly_error():
-    """app.py 內 _friendly_error / _is_core_fund shim 仍存在。"""
-    from pathlib import Path
-    src = (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
-    assert "from ui.helpers.session import friendly_error as _friendly_error" in src
-    assert "from ui.helpers.session import (" in src   # is_core_fund block
-    assert "is_core_fund as _is_core_fund" in src
 
 
 # ──────────────────────────────────────────────────────────────
