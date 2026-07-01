@@ -126,6 +126,13 @@ def build_health_analysis_row(
         # v19.191:加 moneydj_raw 透傳,讓 portfolio_service 的 expense_ratio mgmt_fee fallback
         # 找得到(否則 fallback 永遠 dead code)。
         _pf = (fd.get("perf") if "perf" in fd else mj.get("perf")) or {}
+        # v19.290:_pf["1Y"] 常缺(wb01/本地 350d+窗口兩條寫入路徑都有各自的
+        # gate,保單代碼短窗基金兩條都不滿足)→ Alpha(= tr1y - 配息率)永遠算
+        # 不出來。tr1y_pct 在上面第 92 行已經走 compute_1y_total_return()
+        # 的完整 SSOT fallback chain(perf.1Y → ret_1y_total → NAV 外推)算好,
+        # 這裡直接借用,不重算、不新增分支。
+        if _pf.get("1Y") is None and tr1y_pct is not None:
+            _pf = {**_pf, "1Y": tr1y_pct}
         _fdata = {"metrics": m, "perf": _pf, "moneydj_raw": mj}
         risk_table = mj.get("risk_metrics") or fd.get("risk_metrics") or {}
         _6f = calc_fund_factor_score(_fdata, risk_table=risk_table)
