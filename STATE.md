@@ -22,6 +22,17 @@
 
 ## 當前版本
 
+- **v19.284 真根因修復 — 第二條 legacy NAV pipeline 補 span-extend(2026-07-01)**:
+  - **背景**:v19.283 banner 上線後,user 截圖 TLZF9 顯示「淨值 30 筆 ‧ 配息 24 筆 ‧ 來源:—」—— 30 筆、無 `data_source`,證實 v19.281 的 span-extend **完全沒被觸發**
+  - **真根因(追蹤 code 找到)**:`repositories/fund/fund_orchestration.py` 內其實有**兩條平行的 NAV pipeline**:
+    1. `_fetch_fund_single`(多來源 waterfall,v19.281 已加 span-extend)—— 由 `fetch_fund_multi_source` 呼叫
+    2. `fetch_fund_from_moneydj_url` 函式**自己內建的第二套 legacy 直接爬蟲**(「Step 3+ 原始流程」,~250 行,含近30日/yp004002 歷史查詢/`fetch_nav()`最終備援)—— 當 pipeline 1 的 `_s_ok`/`_m_ok` 判斷失敗時才會 fallback 到這裡
+    - TLZF9 走的正是 pipeline 2(「近30日」分支命中 30 筆,與截圖數字吻合),而 v19.281 的 span-extend **只補在 pipeline 1**,pipeline 2 完全沒有、也從未設 `data_source`/`nav_span_days` —— 這就是 banner 顯示「來源:—」的真正原因,也是 v19.281 對 TLZF9 這個 case 實際上「沒生效」的原因
+  - **修法(SSOT 收斂,而非各補一份)**:抽出模組級共用函式 `_span_extend_insurance_nav(code, nav_s, nav_source, fund_name, is_insurance_code)`(+`_nav_span_days` helper),原本巢狀在 `_fetch_fund_single` 內的 span-extend 邏輯改呼此共用函式;**同時**在 `fetch_fund_from_moneydj_url` legacy pipeline 的 NAV 組裝完成點(`fetch_nav()` 最終備援之後、`len<10` 錯誤判斷之前)也呼叫同一份函式 —— 兩條 pipeline 共用同一份 span-extend,不再各寫一份(對齊 user 要求的 SSOT)
+  - **額外效果**:即使 Morningstar/cnyes 對某檔基金真的沒有長歷史(span-extend 未命中),legacy pipeline 現在也會標出 baseline `data_source`(如 `moneydj_legacy_scrape`)—— banner 不會再顯示完全空白的「—」,至少能看出「這是哪條 pipeline 產出的」
+  - tests:`tests/test_nav_history_window.py` +5(`_span_extend_insurance_nav` 直接單元測試:短跨度救援命中 / 未命中保留 baseline label / 非保單代碼跳過 / 已夠長跳過 / legacy pipeline import 存在性防重構誤刪)。104 orchestration/nav/holdings 測試 + 3 Tab2 AppTest 全過,0 regression
+  - **下一步**:部署後看 TLZF9 banner —— 若 `來源:tcb_moneydj`(或其他短源,無 span-extend 字樣)且跨度仍短 → 代表 Morningstar/cnyes 對 TLZF9 在 production 確實查無資料,是資料源本身的限制,不再是程式邏輯漏洞;若顯示 `morningstar(span-extend)` 且跨度 > 300 天 → 這次真的修好了
+
 - **v19.283 Tab2 NAV 來源 + 跨度診斷 banner(2026-07-01)**:
   - **背景**:user 截圖 TLZF9「MK 3-3-3 ❌ 成立 0.1 年」在 v19.281(NAV 窗口擴展 + span-extend)合併後**依然存在**,並問「請確定資料存放位置找到對的地方修改」
   - **根因定位(讀 code 追蹤,非猜測)**:

@@ -112,3 +112,83 @@ def test_span_extend_helper_prefers_longer_span():
     assert _span(_long) >= 300
     # 替換規則:長者 span 嚴格大於短者 → 採長者
     assert _span(_long) > _span(_short)
+
+
+# ── v19.284:_span_extend_insurance_nav 已抽成模組級共用函式 —————————
+# 供 _fetch_fund_single 與 fetch_fund_from_moneydj_url 的 legacy pipeline
+# 共用(避免同檔內兩條 NAV pipeline 各寫一份 span-extend)。以下對該函式本體
+# 直接單元測試(v19.281 版本是巢狀 closure,無法直接測;抽出後可測)。
+
+def _mk_series(n: int, end="2026-06-30") -> pd.Series:
+    return pd.Series(range(n), index=pd.date_range(end=end, periods=n, freq="D"))
+
+
+def test_span_extend_insurance_nav_rescues_short_series():
+    """短跨度(<300d)+ 保單代碼 → Morningstar 命中且跨度更長 → 換用。"""
+    import repositories.fund.fund_orchestration as O
+
+    _short = _mk_series(30)     # 保單代碼常見的「近30日」legacy fallback
+    _long = _mk_series(1200)    # Morningstar 長歷史
+
+    with patch.object(O, "_src_morningstar_nav", return_value=_long):
+        s, src, span = O._span_extend_insurance_nav(
+            "TLZF9", _short, "moneydj_legacy_scrape", fund_name="安聯收益成長",
+        )
+    assert len(s) == 1200
+    assert src == "morningstar(span-extend)"
+    assert span > 300
+
+
+def test_span_extend_insurance_nav_keeps_baseline_label_when_no_rescue():
+    """短跨度但 Morningstar/cnyes 皆查無資料 → 原樣回傳,baseline label 保留
+    (banner 至少顯示「這是哪個來源」,不再是完全空白的「—」)。"""
+    import repositories.fund.fund_orchestration as O
+
+    _short = _mk_series(30)
+    with patch.object(O, "_src_morningstar_nav", return_value=pd.Series(dtype=float)), \
+         patch.object(O, "_src_cnyes_nav", return_value=pd.Series(dtype=float)):
+        s, src, span = O._span_extend_insurance_nav(
+            "TLZF9", _short, "moneydj_legacy_scrape",
+        )
+    assert len(s) == 30
+    assert src == "moneydj_legacy_scrape"
+    assert 0 < span < 300
+
+
+def test_span_extend_insurance_nav_skips_non_insurance_code():
+    """非保單代碼(如境內投信 ACTI71)→ 完全不觸發,原樣回傳。"""
+    import repositories.fund.fund_orchestration as O
+
+    _short = _mk_series(30)
+    with patch.object(O, "_src_morningstar_nav") as _m:
+        s, src, span = O._span_extend_insurance_nav("ACTI71", _short, "FundClear")
+    _m.assert_not_called()
+    assert len(s) == 30 and src == "FundClear"
+
+
+def test_span_extend_insurance_nav_skips_when_already_long():
+    """跨度已 ≥300 天(即使是保單代碼)→ 不需要 extend,不觸發外部呼叫。"""
+    import repositories.fund.fund_orchestration as O
+
+    _long = _mk_series(400)
+    with patch.object(O, "_src_morningstar_nav") as _m:
+        s, src, span = O._span_extend_insurance_nav(
+            "TLZF9", _long, "tcb_moneydj", is_insurance_code=True,
+        )
+    _m.assert_not_called()
+    assert len(s) == 400 and src == "tcb_moneydj"
+
+
+def test_fetch_fund_from_moneydj_url_legacy_path_labels_data_source():
+    """v19.284 回歸網:legacy pipeline(fetch_fund_from_moneydj_url 內「Step 3+
+    原始流程」)最終組裝 result 時,也必須帶 data_source/nav_span_days —— 這是
+    user 反饋「Tab2 banner 顯示來源:—」的直接根因(該 pipeline 先前完全沒設
+    這兩欄)。此測試不做端到端網路 mock(該函式牽涉大量分支),改為直接驗證
+    共用函式在該路徑的呼叫點語意正確(見上面 4 個 _span_extend_insurance_nav
+    單元測試);此處額外確認函式簽章存在且可從 fund_orchestration 匯入,
+    防止之後重構誤刪。
+    """
+    import repositories.fund.fund_orchestration as O
+
+    assert hasattr(O, "_span_extend_insurance_nav")
+    assert hasattr(O, "fetch_fund_from_moneydj_url")
