@@ -264,3 +264,40 @@ def test_fund_orchestration_has_no_undefined_bare_names():
     assert not _missing, (
         f"fund_orchestration 模組無法解析以下名字,呼叫時會 NameError:{_missing}"
     )
+
+
+def test_direct_moneydj_nav_fetchers_use_2000d_window_not_400d():
+    """v19.291 回歸網:user 截圖證實 MoneyDJ 官網對 JFZN3 有近 5 年淨值歷史
+    (2021/10~2026/06),但本站 MK 3-3-3 卻判定「成立 0.1 年」。追查發現
+    v19.281 只把 cnyes(`fetch_nav_cnyes`)/ Morningstar(`_src_morningstar_nav`)
+    的查詢窗口從 400 天延伸到 2000 天,**但直接對 MoneyDJ 本身(`yp004002.djhtm`
+    帶日期 A/B/C 三參數)的 9 個呼叫點漏做同樣的延伸**——這是保單代碼(如
+    JFZN3)MK 3-3-3 常誤判「成立 0.1 年」的根因之一。
+
+    本測試直接檢查原始碼:9 個已知呼叫點都不該再殘留 `timedelta(days=400)`,
+    防止之後重構/合併衝突時,某一處被意外改回短窗口。
+    """
+    import inspect
+    import repositories.fund.sources as S
+    import repositories.fund.fund_orchestration as O
+
+    _checks = [
+        (S._src_fundclear_nav, "sources._src_fundclear_nav"),
+        (S._src_bank_platform_nav, "sources._src_bank_platform_nav"),
+        (S._src_taiwanlife_nav, "sources._src_taiwanlife_nav"),
+        (S._src_franklin_nav, "sources._src_franklin_nav"),
+        (S._src_tcb_nav, "sources._src_tcb_nav"),
+        (S._src_sitca_nav, "sources._src_sitca_nav"),
+        (S._src_insurance_subdomain_nav, "sources._src_insurance_subdomain_nav"),
+        (O._fetch_fund_single, "fund_orchestration._fetch_fund_single"),
+        (O.fetch_fund_from_moneydj_url, "fund_orchestration.fetch_fund_from_moneydj_url"),
+    ]
+    _still_short = []
+    for _fn, _label in _checks:
+        _src = inspect.getsource(_fn)
+        if "timedelta(days=400)" in _src:
+            _still_short.append(_label)
+    assert not _still_short, (
+        f"以下函式仍用 400 天短窗口查詢 MoneyDJ NAV 歷史(應為 2000 天,"
+        f"對齊 v19.281 cnyes/Morningstar 已做的延伸):{_still_short}"
+    )
