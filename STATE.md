@@ -22,6 +22,14 @@
 
 ## 當前版本
 
+- **v19.290 Alpha % 永遠 None 的真根因 — perf["1Y"] 沒接到已算好的 tr1y_pct(2026-07-01)**:
+  - **背景**:v19.287/288 修完 fetch_holdings/fetch_risk_metrics/fetch_performance_wb01 的 import 後,production 截圖證實 Sharpe 1Y 已經抓到真實數字(0.32),但 Alpha % 仍固定顯示「—」。**user 敏銳發現**:同一頁下方「風險指標」表格另外顯示 `Alpha(1Y) = -0.12`,質疑「上下兩區塊有共同資料,為什麼一個有一個沒有」
+  - **先排除誤判**:查證後這兩個 Alpha 其實是**不同定義的指標**——下方是 MoneyDJ 官方 CAPM 型 Alpha(對大盤超額報酬),上方「健康分析」的 Alpha % 則是本專案設計的「真實收益 = 含息報酬 - 配息率」(抓「配息配得比成長還多」的吃老本警訊)。兩者不能互相替代,直接複製會變成掛錯標籤的數字(違反 §3.3 反捏造)
+  - **真根因(agent 追蹤到精確行號)**:`services/health/report.py:92` 已經用 `compute_1y_total_return()` 的完整 SSOT fallback chain(`perf["1Y"] → ret_1y_total → ret_1y → NAV 外推`)算出 `tr1y_pct`(這正是畫面上「1Y 含息報酬 2.11%」的來源),但 **line 128 組給 `calc_fund_factor_score()` 的 `_pf` dict 完全沒有重用這個已經算好的值**,只檢查 `fd.get("perf")`/`mj.get("perf")`——保單代碼短窗基金的兩條 `perf["1Y"]` 寫入路徑(wb01 注入 / 本地 ≥350 天窗口注入)都不滿足,`_pf.get("1Y")` 永遠是 None,Alpha 因此永遠算不出來,即使 `tr1y_pct` 在同一個函式的上面幾行就已經是實數
+  - **修法(SSOT,借用既有已算好的值,不重算、不新增分支)**:`services/health/report.py:128` 補一行 `if _pf.get("1Y") is None and tr1y_pct is not None: _pf = {**_pf, "1Y": tr1y_pct}`
+  - tests:`tests/test_fund_health_report.py` +1(`perf["1Y"]` 缺但 `metrics.ret_1y_total` 有值時,Alpha 仍應 fallback 算出來,鎖住數值 = tr1y - 配息率)。45 個 health_report/factor_availability/portfolio_service 相關測試全綠
+  - **本輪 v19.287→v19.290 完整脈絡**:同一個「進階指標全部顯示 None」症狀,實際疊了 3 層獨立根因——① `fetch_holdings` 從未 import(v19.287)② `fetch_risk_metrics`/`fetch_performance_wb01`/`fetch_nav` 等 5 個同病灶(v19.288)③ `perf["1Y"]` 沒接到已算好的 `tr1y_pct`(v19.290)。三層都修完後,Sharpe/持股應該都已正常,Alpha 這次應該也會正常顯示
+
 - **v19.289 相關性矩陣加漲跌幅相關係數(2026-07-01)**:
   - **背景**:user 反饋「相關性矩陣幫我多加漲跌幅相關係數」。查核發現 `services/portfolio_service.py::calc_correlation_matrix()`(NAV Pearson 相關係數,自適應月→週→日頻,|r| ≥ 0.85 警示)**早已存在**,但目前只在「持股/產業資料完全缺」時才當 fallback 使用——只要有任何持股資料,NAV 相關係數就完全不會被算、也不會顯示
   - **修法(對齊 user 確認)**:`ui/helpers/fund_grp_health/correlation.py::_render_correlation_matrix` 從「二選一(fallback)」改成「兩個面板都恆算、獨立顯示」:

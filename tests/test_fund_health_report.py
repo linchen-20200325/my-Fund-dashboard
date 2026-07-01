@@ -56,6 +56,35 @@ class TestHealthAnalysisRow:
         r = build_health_analysis_row(flat, "FLAT1")
         assert r["Sharpe 1Y"] == 0.8
 
+    def test_alpha_falls_back_to_ret_1y_total_when_perf_1y_missing(self):
+        """v19.290 回歸網:user 反饋「上下兩個面板同一種資料,上面有下面沒有」
+        ——追出 Alpha 計算讀的是 `perf["1Y"]`,但短窗口保單代碼兩條寫入路徑
+        (wb01 注入 / 本地 350d+ 窗口注入)都不滿足,`perf["1Y"]` 永遠是 None,
+        Alpha 因此永遠算不出來 —— 即使同一個 fd 內`metrics.ret_1y_total`
+        早就透過 compute_1y_total_return() 的 SSOT fallback chain 算出真實值
+        (畫面上「1Y 含息報酬」那格用的正是這個值)。
+
+        本測試鎖住:`perf["1Y"]` 缺、但 `metrics.ret_1y_total` 有值時,
+        Alpha 仍應該算出來(用 ret_1y_total 當 tr1y,而非停在 None)。
+        """
+        fd = {
+            "moneydj_raw": {"perf": {}, "moneydj_div_yield": 9.49},
+            "metrics": {
+                "sharpe": 0.32,
+                "ret_1y_total": 2.11,      # 短窗口本地含息計算(46 天)
+                "ret_1y_window_days": 46,
+                "annual_div_rate": 9.49,
+            },
+        }
+        r = build_health_analysis_row(fd, "SHORT1")
+        assert r["Alpha %"] is not None, (
+            "perf['1Y'] 缺但 ret_1y_total 有值時,Alpha 仍應 fallback 算出來"
+            "(不應該永遠停在 None)"
+        )
+        assert abs(r["Alpha %"] - (2.11 - 9.49)) < 0.05, (
+            f"Alpha 應等於 tr1y(ret_1y_total) - 配息率,實際 {r['Alpha %']}"
+        )
+
 
 class TestDividendSummaryRow:
     def test_empty_fd_returns_row(self):
