@@ -677,11 +677,12 @@ def render_single_fund_tab() -> None:
                         "metrics": m,
                         "dividends": divs,
                     })
+                    _rm = (mj_raw.get("risk_metrics") or {})
                     _g_sharpe = m.get("sharpe") or (
-                        ((rm.get("risk_table") or {}).get("一年") or {}).get("Sharpe")
+                        ((_rm.get("risk_table") or {}).get("一年") or {}).get("Sharpe")
                     )
                     _g_sigma = m.get("std_1y") or (
-                        ((rm.get("risk_table") or {}).get("一年") or {}).get("標準差")
+                        ((_rm.get("risk_table") or {}).get("一年") or {}).get("標準差")
                     )
 
                     # 60d MA 方向(UI 端算,因需 nav series 而非純 metrics)
@@ -931,7 +932,7 @@ def render_single_fund_tab() -> None:
                     _r1y = risk_tbl.get("一年",{})
                     _std1 = _r1y.get("標準差","—"); _sh1 = _r1y.get("Sharpe","—")
                     _al1  = _r1y.get("Alpha","—");  _be1 = _r1y.get("Beta","—")
-                    for lbl, val in [("波動 σ(1Y)", f"{_std1}%"),("Sharpe(1Y)",str(_sh1)),("Alpha(1Y)",str(_al1)),("Beta(1Y)",str(_be1))]:
+                    for lbl, val in [("波動 σ(1Y)", f"{_std1}%" if isinstance(_std1, (int, float)) else _std1),("Sharpe(1Y)",str(_sh1)),("Alpha(1Y)",str(_al1)),("Beta(1Y)",str(_be1))]:
                         st.markdown(f"<div style='display:flex;justify-content:space-between;padding:5px 10px;background:{GH_BG_CARD};border-radius:6px;margin:3px 0'><span style='color:{TRAFFIC_NEUTRAL};font-size:12px'>{lbl}</span><span style='font-weight:700'>{val}</span></div>", unsafe_allow_html=True)
                     # F-RECON-1 phase 6 v19.91 — Sharpe 對帳 chip(self-calc vs MoneyDJ wb07)
                     _sh_rec = (m or {}).get("sharpe_reconcile")
