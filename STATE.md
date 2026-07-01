@@ -22,6 +22,15 @@
 
 ## 當前版本
 
+- **v19.289 相關性矩陣加漲跌幅相關係數(2026-07-01)**:
+  - **背景**:user 反饋「相關性矩陣幫我多加漲跌幅相關係數」。查核發現 `services/portfolio_service.py::calc_correlation_matrix()`(NAV Pearson 相關係數,自適應月→週→日頻,|r| ≥ 0.85 警示)**早已存在**,但目前只在「持股/產業資料完全缺」時才當 fallback 使用——只要有任何持股資料,NAV 相關係數就完全不會被算、也不會顯示
+  - **修法(對齊 user 確認)**:`ui/helpers/fund_grp_health/correlation.py::_render_correlation_matrix` 從「二選一(fallback)」改成「兩個面板都恆算、獨立顯示」:
+    1. 面板 1(不變):Jaccard(持股)×0.6 + Cosine(產業)×0.4,重疊度 ≥ 0.70 警示
+    2. 面板 2(新增,恆算):NAV Pearson 漲跌幅相關係數,|r| ≥ 0.85 警示 —— 即使持股完全不同,若同受單一總經因子驅動導致走勢同步,也能被抓出來
+    - 兩個門檻獨立判定、獨立顯示警示,不合併成單一分數(語意不同:持股重疊 vs 走勢同步)
+  - **SSOT**:新增 `SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO = 0.85` 到 `shared/signal_thresholds.py`,收斂原本 inline 在 `calc_correlation_matrix()` 內的 magic number;抽共用 `_render_one_matrix()` helper 避免兩面板各寫一份熱力圖 + 影子基金警示渲染邏輯(DRY)
+  - tests:`tests/test_fund_grp_health_extras_p0.py` +1(鎖住「持股資料齊全時 `calc_correlation_matrix` 也必須被呼叫」,防止之後改回舊的二選一邏輯)。63 個相關 regression 測試全綠
+
 - **v19.288 全站掃描 — F405 揪出另外 5 個同病灶的未 import bare name(2026-07-01)**:
   - **背景**:v19.287 修完 `fetch_holdings` 後,user 問「還有沒有其他類似這種一直抓不到的 function?請幫我掃所有程式找出並 list 出來」。截圖同時證實 Tab2/Tab3 健康分析表 Sharpe/Sortino/Calmar/Alpha 全部顯示 `None`——正是本次掃到的其中兩個 bug 的直接後果
   - **掃描方法**:`ruff check --select F405`(可能未定義,或來自 star import)全站掃 → 71 個命中,幾乎全集中在 `repositories/fund/` 子套件;逐一動態驗證(import 模組後 `hasattr` 檢查)區分真 bug vs 假警報

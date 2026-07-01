@@ -36,6 +36,10 @@ SHADOW_FUND_THRESHOLD_RATIO: float = 0.70
 SHADOW_FUND_JACCARD_WEIGHT_RATIO: float = 0.6
 SHADOW_FUND_COSINE_WEIGHT_RATIO: float = 0.4
 # composite = jaccard * JACCARD_W + cosine * COSINE_W,JACCARD_W + COSINE_W = 1.0
+SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO: float = 0.85
+# v19.289:NAV 漲跌幅 Pearson |r| ≥ 0.85 → 警示「走勢同步」影子基金(不同於持股重疊,
+# 是另一種曝險維度:即使持股完全不同,若同受單一總經因子驅動,回撤時仍會齊跌)。
+# 原本 inline 於 portfolio_service.py::calc_correlation_matrix 與其 UI caller,收 SSOT。
 
 # ── 配息接近警戒(fund_service.py:279, fund_dividend_calculator.py:23)──
 NEAR_DIVIDEND_WARNING_PCT: float = 2.0
