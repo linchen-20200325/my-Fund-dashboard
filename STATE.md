@@ -22,6 +22,16 @@
 
 ## 當前版本
 
+- **v19.285 持股抓取診斷補逐 URL 明細(PR #498,2026-07-01)**:
+  - **背景**:user 給 2 個實際 MoneyDJ 網址(境內 `yp010000.djhtm?a=acdd01` / 境外 `yp010001.djhtm?a=jfzn3`)反饋持股仍有缺,要求「製作爬蟲補齊」。查核發現本專案**早已有成熟爬蟲**涵蓋這兩種格式(`services/moneydj_fetcher.py::auto_fetch_moneydj` 自動偵測境內/境外互換;`nav_metrics.py::fetch_holdings` 14 組候選 URL,依代碼前綴展開保險平台子網域),非從零開始
+  - **真缺口(讀 code 找到)**:`fetch_holdings()` 內部已算出每個候選 URL 的逐一結果(`_attempts`:host/status/len),但傳給 UI 的 `diag` 只塞一行「N 候選 URL 全失敗」摘要,`_attempts` 細節被丟棄——`render_holdings_diag`(v19.280 建立)因此看不到任何可 audit 的細節,user 截圖回報時無從分辨「完全連不上」vs「連上但表格結構 parser 沒涵蓋」
+  - **修法(SSOT,擴充既有欄位,不新增邏輯分支)**:
+    1. 全失敗分支:`diag` 改逐 URL 列出 host + 狀態 + 長度(原本算好的 `_attempts` 直接攤平進去)
+    2. 頁抓到但 parser 0 命中分支:`diag` 點名成功抓到頁的 host + table 數量
+  - tests:`tests/test_fetch_holdings_fallback_chain.py` +2(全失敗逐 URL 列出 / 0 命中標明 host+table 數)。69 個 holdings/nav_metrics/moneydj 相關測試全綠
+  - **架構合規**:純 L1 Repository 內部欄位擴充(`repositories/fund/nav_metrics.py`),無跨層 import、無新 SSOT 常數、無新例外需登錄 §8.2.A
+  - **下一步**:user 需在 production 重查 ACDD01/JFZN3,截圖 Tab2 持股診斷 banner(這次含逐源明細)回報,才能看出具體卡在哪一關,對症修正(而非在 sandbox 猜測 HTML 結構——`www.moneydj.com` 與 `m.moneydj.com` 同樣被本 sandbox 出口政策擋下,無法直接驗證)
+
 - **v19.284 真根因修復 — 第二條 legacy NAV pipeline 補 span-extend(2026-07-01)**:
   - **背景**:v19.283 banner 上線後,user 截圖 TLZF9 顯示「淨值 30 筆 ‧ 配息 24 筆 ‧ 來源:—」—— 30 筆、無 `data_source`,證實 v19.281 的 span-extend **完全沒被觸發**
   - **真根因(追蹤 code 找到)**:`repositories/fund/fund_orchestration.py` 內其實有**兩條平行的 NAV pipeline**:
