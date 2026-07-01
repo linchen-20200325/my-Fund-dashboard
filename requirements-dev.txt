@@ -2,6 +2,10 @@
 # Install: pip install -r requirements-dev.txt && pre-commit install
 pytest>=8.0
 pre-commit>=3.5
+# v19.291:tests/test_undefined_name_scan.py 用它掃全站「呼叫了但沒真的 import
+# 到」的 bare name(v19.287/288 那種 fetch_holdings/fetch_risk_metrics NameError
+# 被 except 吞掉的病灶類型)。CI 環境需要能 `ruff check` 才能跑這個測試。
+ruff>=0.15
 # Phase B headless e2e（v18.99）— playwright pixel-diff baseline
 # 安裝後須執行 `playwright install chromium` 下載瀏覽器
 # 首次跑：streamlit run app.py & pytest -m playwright --update-snapshots

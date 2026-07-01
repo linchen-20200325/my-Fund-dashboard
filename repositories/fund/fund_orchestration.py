@@ -178,7 +178,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
             import re as _re4
             base_www = "https://www.moneydj.com/funddj"
             today2 = _dt2.date.today()
-            st2 = today2 - _dt2.timedelta(days=400)
+            # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+            # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+            st2 = today2 - _dt2.timedelta(days=2000)
             # v13.8: page_type 互換 — 首選失敗自動換頁型重試
             _pages2 = get_page_types_to_try(
                 "yp010000" if _is_domestic_code(_code) else "yp010001"
@@ -795,7 +797,9 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
 
             # 再查詢整年歷史（使用查詢 endpoint）
             end_dt   = today
-            start_dt = today - _dt.timedelta(days=400)
+            # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+            # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+            start_dt = today - _dt.timedelta(days=2000)
             # v13.8: page_type 互換 — 首選失敗自動換頁型重試
             _hist_pages = get_page_types_to_try(
                 "yp010000" if _is_domestic_code(code) else "yp010001"

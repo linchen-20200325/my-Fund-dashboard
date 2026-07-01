@@ -100,7 +100,9 @@ def _src_fundclear_nav(code: str) -> pd.Series:
     try:
         import datetime as _dt
         end_d = _dt.date.today()
-        start_d = end_d - _dt.timedelta(days=400)
+        # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+        # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+        start_d = end_d - _dt.timedelta(days=2000)
         url = (
             f"https://www.fundclear.com.tw/SmartFundAPI/api/FundAjax/GetFundNAV"
             f"?FundCode={code}&StartDate={start_d.strftime('%Y/%m/%d')}"
@@ -981,7 +983,9 @@ def _src_bank_platform_nav(base_code: str) -> "pd.Series":
         return pd.Series(dtype=float)
 
     end_d   = _dt_bp.date.today()
-    start_d = end_d - _dt_bp.timedelta(days=400)
+    # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    start_d = end_d - _dt_bp.timedelta(days=2000)
     _hdrs_bp = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "text/html,*/*;q=0.9",
@@ -1502,7 +1506,9 @@ def _src_taiwanlife_nav(code: str) -> "pd.Series":
     rows = {}
     _code = code.upper().strip()
     end_d   = _dt_tl.date.today()
-    start_d = end_d - _dt_tl.timedelta(days=400)
+    # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    start_d = end_d - _dt_tl.timedelta(days=2000)
 
     _hdrs_tl = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -1648,7 +1654,9 @@ def _src_franklin_nav(code: str) -> "pd.Series":
 
     # Step 3: Franklin TW nav endpoint（備用，部分基金有效）
     end_d   = _dt.date.today()
-    start_d = end_d - _dt.timedelta(days=400)
+    # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    start_d = end_d - _dt.timedelta(days=2000)
     _nav_urls = [
         f"https://www.franklintempleton.com.tw/api/fund/nav?code={_code}"
         f"&startDate={start_d.isoformat()}&endDate={end_d.isoformat()}",
@@ -2144,7 +2152,9 @@ def _src_tcb_nav(code: str) -> pd.Series:
     import datetime as _dt
     import re as _re2
     today = _dt.date.today()
-    start = today - _dt.timedelta(days=400)
+    # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    start = today - _dt.timedelta(days=2000)
 
     # ── 優先嘗試原始 wf01/wb02 路徑（境內/境外通用，子網域限制最少）
     _dom = _is_domestic_code(code)
@@ -2436,7 +2446,9 @@ def _src_sitca_nav(code: str) -> pd.Series:
     try:
         import datetime as _dt
         today = _dt.date.today()
-        start = today - _dt.timedelta(days=400)
+        # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+        # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+        start = today - _dt.timedelta(days=2000)
         url = (f"https://www.sitca.org.tw/ROC/Industry/IN2213.aspx"
                f"?txtFundCode={code}"
                f"&txtBeginDate={start.strftime('%Y/%m/%d')}"
@@ -2788,7 +2800,9 @@ def _src_insurance_subdomain_nav(code: str) -> pd.Series:
 
     import datetime as _dt
     today = _dt.date.today()
-    start = today - _dt.timedelta(days=400)
+    # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
+    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    start = today - _dt.timedelta(days=2000)
 
     for portal in portals:
         base = f"https://{portal}.moneydj.com"
