@@ -13,7 +13,8 @@ from repositories.macro_repository import fetch_fred, fetch_yf_close
 from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from services.macro._helpers import (  # noqa: F401
-    FRED_AMTMNO, FRED_DGS10, FRED_DGS2, FRED_MNFCTRIRSA, FRED_T10Y2Y,
+    FRED_AMTMNO, FRED_CFNAI, FRED_DGS10, FRED_DGS2, FRED_HY_SPREAD,
+    FRED_MNFCTRIRSA, FRED_SAHM, FRED_T10Y2Y,
     _trend, _safe_last,
 )
 
