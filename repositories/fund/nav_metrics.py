@@ -770,9 +770,10 @@ def fetch_risk_metrics(code: str) -> dict:
     try:
         BASE = "https://www.moneydj.com/funddj"
         TCB  = "https://tcbbankfund.moneydj.com"
+        # v19.292: tcbbankfund 優先（www.moneydj.com 在 Streamlit Cloud 被封 → 25s×3 stall）
         urls = [
-            f"{BASE}/yp/wb07.djhtm?a={code}",
             f"{TCB}/w/wb/wb07.djhtm?a={code}",
+            f"{BASE}/yp/wb07.djhtm?a={code}",
         ]
         out = {}
 
