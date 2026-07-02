@@ -64,7 +64,7 @@ def build_authorize_url(
         "response_type": "code",
         "scope":         " ".join(scopes or GOOGLE_OAUTH_SCOPES),
         "access_type":   "offline",      # 拿 refresh_token
-        "prompt":        "consent",      # 每次重授權強制 consent → 確保有 refresh_token
+        "prompt":        "select_account consent",  # v19.293: 強制帳號選擇器 + consent → 避免 Chrome 已登入帳號被自動套用導致帳號錯誤
         "include_granted_scopes": "true",
     }
     if state:
