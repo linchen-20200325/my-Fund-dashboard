@@ -244,22 +244,42 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
     """
     安聯投信官網歷史淨值抓取。
     Colab IP 對 allianzgi.com 無限制，是 ACTI 系列最可靠的來源。
-    路徑：_ALLIANZ_NAV_API JSON API（2000d 歷史）→ ifund HTML → tw.allianzgi.com HTML
+    路徑：_ALLIANZ_NAV_API JSON API（2000d 歷史）→ MoneyDJ yp004002 完整歷史頁 → ifund/tw HTML（近30日）
+
+    JSON API 結果只在 ≥90 筆時才短路返回；若只拿到近30日資料，繼續往 MoneyDJ yp004002 嘗試，
+    確保回傳序列涵蓋至少 3 個月歷史（>90 交易日），而非僅最近 30 天。
     """
+    import datetime as _dt_az
+    import re as _re2
+    _today_az = _dt_az.date.today()
+    _start_az = (_today_az - _dt_az.timedelta(days=2000)).strftime("%Y%m%d")
     rows = {}
-    # ── 優先：JSON API（支援 2000d 完整歷史，有 inception_date 可用）──────────
-    try:
-        _api_resp = requests.post(
-            _ALLIANZ_NAV_API,
-            json={"FundCode": code, "Days": 2000},
-            headers={**HDR_JSON, "Referer": "https://tw.allianzgi.com/"},
-            timeout=15,
-            proxies=_proxies, verify=_ssl_verify,
-        )
-        if _api_resp and _api_resp.status_code == 200:
+
+    # ── 1. JSON API（支援 2000d 完整歷史）─────────────────────────────────────
+    # 嘗試多種 request body 格式，因 Sitecore API 參數名稱不一定一致
+    for _body in [
+        {"FundCode": code, "Days": 2000},
+        {"fundCode": code, "days": 2000},
+        {"FundCode": code, "Period": "MAX"},
+    ]:
+        try:
+            _api_resp = requests.post(
+                _ALLIANZ_NAV_API,
+                json=_body,
+                headers={**HDR_JSON, "Referer": "https://tw.allianzgi.com/"},
+                timeout=15,
+                proxies=_proxies, verify=_ssl_verify,
+            )
+            if not (_api_resp and _api_resp.status_code == 200):
+                continue
             _api_data = _api_resp.json()
-            _nav_list = (_api_data.get("Data") or _api_data.get("data") or
-                        (_api_data if isinstance(_api_data, list) else []))
+            _nav_list = (
+                _api_data.get("Data") or _api_data.get("data") or
+                _api_data.get("NavList") or _api_data.get("navList") or
+                _api_data.get("Items") or _api_data.get("items") or
+                (_api_data if isinstance(_api_data, list) else [])
+            )
+            _rows_api: dict = {}
             for _item in (_nav_list if isinstance(_nav_list, list) else []):
                 _dt_str = str(
                     _item.get("Date") or _item.get("date") or
@@ -270,19 +290,66 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
                     _item.get("NAV") or _item.get("Price") or "")
                 if _dt_str and _nav_val and _nav_val > 0:
                     try:
-                        rows[pd.Timestamp(_dt_str)] = _nav_val
+                        _rows_api[pd.Timestamp(_dt_str)] = _nav_val
                     except Exception:
                         pass
-            if len(rows) >= 30:
-                s = pd.Series(rows).sort_index()
-                print(f"[src_allianz] ✅ {code} {len(s)} 筆（JSON API 2000d）")
+            # Accept JSON API result only when it clearly covers >90 days of history.
+            # A 30-entry result means the API ignored `Days` and returned only recent data;
+            # fall through to the yp004002 path which reliably provides full history.
+            if len(_rows_api) >= 90:
+                s = pd.Series(_rows_api).sort_index()
+                print(f"[src_allianz] ✅ {code} {len(s)} 筆（JSON API {list(_body.keys())[1]}）")
                 s.attrs["source"] = "AllianzGI:JSON_API"
                 s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
-    except Exception as _api_e:
-        print(f"[src_allianz] JSON API fail({code}): {_api_e}")
+            if _rows_api:
+                rows.update(_rows_api)
+                print(f"[src_allianz] ⚠ {code} JSON API 只得 {len(_rows_api)} 筆，繼續嘗試 yp004002")
+                break  # Got some data from API; no point retrying other body formats
+        except Exception as _api_e:
+            print(f"[src_allianz] JSON API fail({code}, {list(_body.keys())}): {_api_e}")
 
-    # ── Fallback：HTML scraper（近30日）──────────────────────────────────────
+    # ── 2. MoneyDJ yp004002 完整歷史淨值頁（2000d 視窗，同 orchestration 2d 路徑）──
+    # 境內 ACTI/ACCP/ACDD 使用 yp010000；境外走 yp010001。
+    try:
+        _pages_az = get_page_types_to_try(
+            "yp010000" if _is_domestic_code(code) else "yp010001"
+        )
+        _params_az = {"A": code, "B": _start_az, "C": _today_az.strftime("%Y%m%d")}
+        for _pg_az in _pages_az:
+            _hdr_az = {**HDR, "Referer": f"https://www.moneydj.com/funddj/ya/{_pg_az}.djhtm?a={code}"}
+            _rr = fetch_url_with_retry(
+                "https://www.moneydj.com/funddj/yf/yp004002.djhtm",
+                headers=_hdr_az, params=_params_az, timeout=25, retries=2,
+            )
+            if not (_rr and is_valid_moneydj_page(_rr.text)):
+                print(f"[src_allianz] yp004002 {code} page={_pg_az} → 無效，換頁型")
+                continue
+            soup_az = BeautifulSoup(_rr.text, "lxml")
+            for tbl in soup_az.find_all("table"):
+                for row in tbl.find_all("tr"):
+                    cells = row.find_all("td")
+                    if len(cells) >= 2:
+                        dt_t = cells[0].get_text(strip=True)
+                        nv_t = cells[1].get_text(strip=True).replace(",", "")
+                        if _re2.match(r"\d{4}/\d{2}/\d{2}", dt_t):
+                            v = safe_float(nv_t)
+                            if v and v > 0:
+                                try:
+                                    rows[pd.Timestamp(dt_t)] = v
+                                except Exception:
+                                    pass
+            if len(rows) >= 90:
+                s = pd.Series(rows).sort_index()
+                print(f"[src_allianz] ✅ {code} {len(s)} 筆（MoneyDJ yp004002）")
+                s.attrs["source"] = "AllianzGI:moneydj_hist"
+                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                return s
+            break  # Only try the first working page type
+    except Exception as _mj_e:
+        print(f"[src_allianz] yp004002 fail({code}): {_mj_e}")
+
+    # ── 3. Fallback：HTML scraper（近30日）────────────────────────────────────
     for base_url in [
         _ALLIANZ_NAV_ENDPOINT,
         "https://tw.allianzgi.com/zh-tw/tools/fund-nav-search",
@@ -292,7 +359,6 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
             if r is None:
                 continue
             soup = BeautifulSoup(r.text, "lxml")
-            import re as _re2
             for tbl in soup.find_all("table"):
                 txt = tbl.get_text()
                 if "淨值" not in txt and "NAV" not in txt.upper():
