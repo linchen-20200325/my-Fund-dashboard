@@ -317,9 +317,9 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
         )
         _params_az = {"A": code, "B": _start_az, "C": _today_az.strftime("%Y%m%d")}
         for _pg_az in _pages_az:
-            _hdr_az = {**HDR, "Referer": f"https://www.moneydj.com/funddj/ya/{_pg_az}.djhtm?a={code}"}
+            _hdr_az = {**HDR, "Referer": f"https://tcbbankfund.moneydj.com/funddj/ya/{_pg_az}.djhtm?a={code}"}
             _rr = fetch_url_with_retry(
-                "https://www.moneydj.com/funddj/yf/yp004002.djhtm",
+                "https://tcbbankfund.moneydj.com/funddj/yf/yp004002.djhtm",
                 headers=_hdr_az, params=_params_az, timeout=25, retries=2,
             )
             if not (_rr and is_valid_moneydj_page(_rr.text)):

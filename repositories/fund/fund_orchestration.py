@@ -136,9 +136,14 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     nav_s = pd.Series(dtype=float)
     nav_source = ""
 
-    # 0. 安聯投信官網（ACTI/ACCP/ACDD 境內基金首選，Colab 友善）
+    # 0. 安聯投信官網（ACTI/ACCP/ACDD 境內基金 + 保險平台安聯代碼）
     # v6.23 fix: 加入 len(nav_s) < 10 防護，避免覆蓋 GitHub Actions 快取資料
-    if len(nav_s) < 10 and _is_domestic_code(_code) and any(_code.startswith(p) for p in ("ACTI","ACCP","ACDD","ACTT")):
+    # TLZF9/ANZ89 = 安聯收益成長，透過台灣人壽/兆豐等保險平台，走 tcbbankfund 取完整歷史
+    _ALLIANZ_INSURANCE_CODES = frozenset({"TLZF9", "ANZ89"})
+    if len(nav_s) < 10 and (
+        (_is_domestic_code(_code) and any(_code.startswith(p) for p in ("ACTI","ACCP","ACDD","ACTT")))
+        or _code in _ALLIANZ_INSURANCE_CODES
+    ):
         _allianz_s = _src_allianzgi_nav(_code)
         if len(_allianz_s) >= 5:
             nav_s = _allianz_s
