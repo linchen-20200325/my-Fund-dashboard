@@ -29,7 +29,7 @@
 
 ### ⚪ LOW（邊界設計或 UX 微調）
 
-- ⬜ **[L1] MoneyDJ NAV 延遲標示不清** — 基金 NAV 最多 T+3 才公布，Tab2 單一基金頁可能顯示 3 天前淨值，但快取標示「剛更新」易造成誤解（`MJ_FRESH_DAYS_YELLOW = 7` 容差讓差異幾乎看不出來）。
+- ✅ **[L1] MoneyDJ NAV 延遲標示不清** (v19.297) — `ui/helpers/io/freshness.py`：freshness banner 說明文字補充「⚠️ 基金 NAV T+1~T+3 公布屬正常，燈號顯示淨值日期非抓取時間」，消除「🟢剛更新」誤解。
 
 
 
@@ -52,6 +52,14 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+
+- **v19.297(2026-07-03)**:LOW 稽核修正 + 全面重新確認:
+  - **[L1] NAV 延遲標示**：`ui/helpers/io/freshness.py` freshness banner 補充「⚠️ 基金 NAV T+1~T+3 公布屬正常，燈號顯示淨值日期非抓取時間」說明。
+  - **[新發現] Yahoo Finance RSS 死亡**：`repositories/news_repository.py` 舊 URL `rss/2.0/headline?s=%5EGSPC`（回傳空）→ 改用 `news/rssindex`（實測有效）。
+  - **[新發現] USDCNH 門檻更新**：`repositories/macro/fred.py` `green_below: 7.0→7.1 / yellow_above: 7.15→7.3 / red_above: 7.3→7.45`，與 Stock USDCNY 門檻更新同步對齊離岸人民幣實際區間。
+  - 全面重新確認：RSS feeds 5 來源（MarketWatch/Yahoo/CNBC×2/BBC），Reuters/Bloomberg/Investing/FT 已正確移除；USDJPY/EURUSD 門檻（v19.295 已修）；CHN_BCI 標籤（v19.295 已修）；Tab1 staleness emoji（v19.296 已修）。
+
+- **v19.296(2026-07-03)**:稽核修正（AAII 錯誤標籤 + Tab1 staleness emoji）
 
 - **v19.295(2026-07-03)**:HIGH + MEDIUM 稽核項目修正:
   - 移除死亡 / 封鎖 RSS：Bloomberg Markets / Investing.com / FT Markets（`repositories/news_repository.py`）

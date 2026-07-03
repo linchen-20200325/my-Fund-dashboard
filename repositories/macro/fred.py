@@ -171,7 +171,7 @@ MACRO_THRESHOLDS: dict = {
     # v19.295: USDJPY green_below 140→148（日圓自 2022 起持續高於 140，舊門檻 2 年沒亮過綠燈）
     "EURUSD":      {"green_above": 1.10, "yellow_below": 1.05, "red_below": 1.00},
     "USDJPY":      {"green_below": 148.0, "yellow_above": 153.0, "red_above": 158.0},
-    "USDCNH":      {"green_below": 7.0, "yellow_above": 7.15, "red_above": 7.3},
+    "USDCNH":      {"green_below": 7.1, "yellow_above": 7.3, "red_above": 7.45},  # v19.297: 7.0→7.1/7.15→7.3/7.3→7.45 離岸人民幣 2022 後走弱,舊 green_below 7.0 已 2+ 年無法到達
     # v19.71 SSOT 補完：以下 13 個閾值為**文件參考用**,目前 production 仍用 inline conditional。
     #
     # ⚠️ F-GRAY-4 v19.80 audit 釐清(2026-06-23):原 v19.71 註解稱「完全等價」過度承諾,

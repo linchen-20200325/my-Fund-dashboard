@@ -1,0 +1,53 @@
+=== 2026/7/3 ¤U¤È 01:21:31 ===
+STATUS:
+ M STATE.md
+ M app.py
+ M repositories/macro/fred.py
+ M repositories/news_repository.py
+ M services/macro/china.py
+ M ui/helpers/io/data_registry.py
+ M ui/tab1_macro.py
+ M ui/tab1_macro_longterm.py
+ M ui/tab5_data_guard.py
+ M ui/tab6_manual.py
+?? git_push_v19294.vbs
+?? git_push_v19294_log.txt
+?? push_v19293.bat
+?? push_v19294.bat
+?? push_v19296.vbs
+
+add news_repository: fatal: Unable to create 'E:/01.Github/my-Fund-dashboard/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, or the lock file may be stale
+
+add tab5: fatal: Unable to create 'E:/01.Github/my-Fund-dashboard/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, or the lock file may be stale
+
+add tab6: fatal: Unable to create 'E:/01.Github/my-Fund-dashboard/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, or the lock file may be stale
+
+add data_registry: 
+add app.py: 
+add STATE.md: 
+COMMIT:
+On branch main
+Your branch is ahead of 'origin/main' by 1 commit.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   git_push_v19294_log.txt
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	push_v19296.log
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+PUSH:
+Everything up-to-date
+
+=== Done 2026/7/3 ¤U¤È 01:21:37 ===

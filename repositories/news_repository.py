@@ -53,7 +53,8 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
         # v19.295: Investing.com blocked (403 without login) — removed
         # v19.295: Bloomberg Markets blocked for non-subscribers — removed
         ("MarketWatch",      "https://feeds.content.dowjones.io/public/rss/mw_bulletins"),
-        ("Yahoo Finance",    "https://finance.yahoo.com/rss/2.0/headline?s=%5EGSPC&region=US&lang=en-US"),
+        # v19.297: rss/2.0/headline?s=%5EGSPC 回空（已死亡）→ 改用 news/rssindex（實測有 application/xml 回傳）
+        ("Yahoo Finance",    "https://finance.yahoo.com/news/rssindex"),
         ("CNBC Economy",     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"),
         ("CNBC Finance",     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664"),
         # v18.86：地緣政治 / 突發新聞專屬 feed — 純財經 feed 對「戰爭爆發」捕捉較慢
