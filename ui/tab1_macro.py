@@ -481,7 +481,8 @@ def _render_china_drag_panel(phase_dict: dict | None,
                   delta_color="inverse")
     st.caption(
         "ℹ️ 唯讀展示:本面板**不改變**上方總經分數,僅示意「若 China 副盤納入主分」的折扣強度。"
-        "資料源:5 條 FRED OECD MEI(CLI/PMI/CPI/M2/USDCNY)。"
+        "資料源:5 條 FRED OECD MEI(CLI/BCI/CPI/M2/USDCNY)。"
+        "⚠️ BCI=OECD 商業信心指數(BSCICP03CNM665S,基準值 100 ≠ PMI 50 榮枯線)。"
     )
 
 
@@ -1273,14 +1274,22 @@ def render_macro_tab() -> None:
             _age_label_ml = (f'{int(_age_min_ml)} 分鐘前' if _age_min_ml < 60
                              else f'{_age_min_ml/60:.1f} 小時前')
             # 各區塊資料截止日（從 ind 各 indicator 的 date 欄取）
+            # v19.296 M5: 加 🟢/🟠/🔴 staleness emoji，對齊 Tab5 資料診斷的新鮮度邏輯
+            # 月頻閾值：≤45天🟢 / ≤75天🟠 / >75天🔴（同 CLAUDE.md §2.4）
             _src_dates = []
+            _today_src = _now_tw().date()
             for _k_src, _lbl_src in (("PMI", "PMI"), ("YIELD_10Y2Y", "10Y-2Y"),
                                      ("HY_SPREAD", "HY"), ("CPI", "CPI"),
                                      ("UNRATE", "UNRATE")):
                 _v_src = (ind or {}).get(_k_src) or {}
                 _d_src = str(_v_src.get("date", "")).strip()
                 if _d_src:
-                    _src_dates.append(f'{_lbl_src}:{_d_src}')
+                    try:
+                        _age_src = (_today_src - pd.to_datetime(_d_src).date()).days
+                        _s_emoji = '🟢' if _age_src <= 45 else ('🟠' if _age_src <= 75 else '🔴')
+                    except Exception:
+                        _s_emoji = '⬜'
+                    _src_dates.append(f'{_s_emoji}{_lbl_src}:{_d_src}')
             _src_str = ' ｜ '.join(_src_dates) if _src_dates else '—'
             _radar_cache = st.session_state.get("_radar_v1921_top")
             _radar_ready = bool(_radar_cache and _radar_cache[0])

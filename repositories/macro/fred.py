@@ -167,8 +167,10 @@ MACRO_THRESHOLDS: dict = {
     "M2_YOY":      {"red_below": 0.0, "green_above": 5.0},
     "FED_BS_YOY":  {"red_below": -5.0, "green_above": 5.0},
     # v18.107 跨幣別
-    "EURUSD":      {"green_above": 1.15, "yellow_below": 1.10, "red_below": 1.05},
-    "USDJPY":      {"green_below": 140.0, "yellow_above": 150.0, "red_above": 155.0},
+    # v19.295: EURUSD green_above 1.15→1.10（2021 強勢歐元時代過去，現實區間 1.05-1.14）
+    # v19.295: USDJPY green_below 140→148（日圓自 2022 起持續高於 140，舊門檻 2 年沒亮過綠燈）
+    "EURUSD":      {"green_above": 1.10, "yellow_below": 1.05, "red_below": 1.00},
+    "USDJPY":      {"green_below": 148.0, "yellow_above": 153.0, "red_above": 158.0},
     "USDCNH":      {"green_below": 7.0, "yellow_above": 7.15, "red_above": 7.3},
     # v19.71 SSOT 補完：以下 13 個閾值為**文件參考用**,目前 production 仍用 inline conditional。
     #

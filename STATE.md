@@ -2,6 +2,37 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🔍 2026-07-03 全面稽核待修清單（跨 Tab 稽核）
+
+> Claude 逐檔讀取所有 Tab 後彙整，對照 2026-07-03 真實市場數值確認。
+> 修完一項請在前面改為 ✅，並在括號內標版本號。
+
+### 🔴 HIGH（影響判斷正確性）
+
+- ✅ **[H1] Bloomberg RSS 靜默死亡** (v19.295) — `repositories/news_repository.py:61`：移除 `feeds.bloomberg.com/markets/news.rss`，加版本移除說明。
+
+- ✅ **[H2] USDJPY 綠燈 2 年以上沒亮** (v19.295) — `repositories/macro/fred.py:171`：`green_below: 140→148`、`yellow_above: 150→153`、`red_above: 155→158`，反映日銀升息後新均衡。
+
+- ✅ **[H3] Investing.com RSS 封鎖** (v19.295) — `repositories/news_repository.py:54`：移除 `www.investing.com/rss/news_14.rss`。
+
+### 🟡 MEDIUM（資料品質或門檻偏差）
+
+- ✅ **[M1] EURUSD 門檻偏保守** (v19.295) — `repositories/macro/fred.py:170`：`green_above: 1.15→1.10`、`yellow_below: 1.10→1.05`、`red_below: 1.05→1.00`，對齊 2022 後實際區間。
+
+- ✅ **[M2] 中國副盤 CHN_PMI 標籤錯誤** (v19.295) — `services/macro/china.py` `classify_china_regime()` reason 字串全改為 BCI；`ui/tab1_macro.py` China Drag caption 加 BCI 刻度說明。
+
+- ✅ **[M3] AAII 情緒調查抓取脆弱** (v19.296) — `ui/tab1_macro_longterm.py`：AAII.com 因 Cloudflare/JS 渲染持續攔截為已知 best-effort 問題；改善卡片錯誤標籤從 32 字截斷改為明確說明「⚠️ aaii.com Cloudflare 攔截（best-effort，非嚴重）」，底層抓取架構不變（3 段 fallback 已正確 fail-loud）。
+
+- ✅ **[M4] FT RSS 需訂閱** (v19.295) — `repositories/news_repository.py:53`：移除 `www.ft.com/rss/home/uk`（免費版空內容）。
+
+- ✅ **[M5] Tab5 stale 燈號與 Tab1 不同步** (v19.296) — `ui/tab1_macro.py`：Tab1 底部月頻資料截止日列表（PMI/10Y-2Y/HY/CPI/UNRATE）加上 🟢/🟠/🔴 staleness emoji，閾值 ≤45天🟢 / ≤75天🟠 / >75天🔴（對齊 CLAUDE.md §2.4），與 Tab5 資料診斷信號一致。
+
+### ⚪ LOW（邊界設計或 UX 微調）
+
+- ⬜ **[L1] MoneyDJ NAV 延遲標示不清** — 基金 NAV 最多 T+3 才公布，Tab2 單一基金頁可能顯示 3 天前淨值，但快取標示「剛更新」易造成誤解（`MJ_FRESH_DAYS_YELLOW = 7` 容差讓差異幾乎看不出來）。
+
+
+
 ## 專案定位
 - **產品**：境外共同基金（保險型保單）戰情室 — TWD 換匯後績效 + 總經訊號 + 危機回測 + AI 策略建議
 - **技術棧**：Streamlit + pandas + plotly/altair + FRED / Yahoo / FundClear / Cnyes + Google Sheets + Gemini API + NAS Squid Proxy
@@ -21,6 +52,14 @@
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
+
+- **v19.295(2026-07-03)**:HIGH + MEDIUM 稽核項目修正:
+  - 移除死亡 / 封鎖 RSS：Bloomberg Markets / Investing.com / FT Markets（`repositories/news_repository.py`）
+  - USDJPY 門檻更新：`green_below: 140→148`（日圓 2022 年後不再低於 140）
+  - EURUSD 門檻更新：`green_above: 1.15→1.10`（2022 後歐元走弱新均衡）
+  - 同步更新 Tab5 / Tab6 / data_registry.py 來源描述（移除已刪 feeds，8→5 來源計數）
+  - **[M2] CHN_PMI→CHN_BCI**：`services/macro/china.py` reason 字串全改 BCI；`ui/tab1_macro.py` China Drag caption 加 OECD 刻度說明
+  - **[M4] FT RSS**：已含在 v19.295 同批移除
 
 - **v19.294(2026-07-03)**:Stale description strings — Tab5 / Tab6 / data_registry.py 仍顯示「Reuters」於 RSS 來源說明:
   - `ui/tab5_data_guard.py`:RSS 來源描述更新為 "MarketWatch / FT / Yahoo / Investing / CNBC × 2 / BBC / Bloomberg"

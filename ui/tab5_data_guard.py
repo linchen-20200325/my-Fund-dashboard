@@ -404,8 +404,8 @@ def render_data_guard_tab() -> None:
          "allianz / chubb 子網域（_ALLIANZ_NAV_ENDPOINT）",
          "—", _src_status(_fund_n > 0, _fund_n,
                           inactive_label="僅安聯/安達標的觸發")),
-        ("9️⃣", "RSS 新聞 (8 來源)",    "國際財經事件",
-         "MarketWatch / FT / Yahoo / Investing / CNBC × 2 / BBC / Bloomberg",  # v19.294: Reuters removed
+        ("9️⃣", "RSS 新聞 (5 來源)",    "國際財經事件",
+         "MarketWatch / Yahoo Finance / CNBC × 2 / BBC World",  # v19.295: FT/Investing.com/Bloomberg removed (blocked/subscription)
          "—", _src_status(bool(_src_news), len(_src_news))),
         ("🔟", "yfinance 個股財報",     "三率 QoQ（precision_engine）",
          "yfinance.Ticker(...).quarterly_financials",

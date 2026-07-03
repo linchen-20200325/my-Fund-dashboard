@@ -475,8 +475,8 @@ def _update_data_registry():
             pass  # smoke-allow-pass
         _icon, _flbl, _fcol = _freshness(_latest, "daily")
         reg["新聞_國際財經RSS"] = {
-            "label":       "國際財經新聞 (8 RSS)",
-            "source":      "MarketWatch/FT/Yahoo/Investing/CNBC/BBC/Bloomberg",  # v19.294: Reuters removed
+            "label":       "國際財經新聞 (5 RSS)",
+            "source":      "MarketWatch/Yahoo/CNBC/BBC",  # v19.295: FT/Investing.com/Bloomberg removed (blocked/subscription)
             "latest_date": _latest,
             "count":       len(_news),
             "series":      None,

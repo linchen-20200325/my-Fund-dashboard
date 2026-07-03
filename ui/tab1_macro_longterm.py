@@ -84,11 +84,17 @@ def render_long_term_section(
                     _ud = _us_liq_cards.get(_ek, {}) if isinstance(_us_liq_cards, dict) else {}
                     if not _ud or "_err" in _ud:
                         _emsg = (_ud.get("_err", "未載入") if isinstance(_ud, dict) else "未載入")
+                        # v19.296 M3: AAII 因 Cloudflare/JS 渲染被攔截為已知 best-effort 問題，
+                        # 原始 _err 訊息太長且技術性，改為使用者友善短說明。
+                        if _ek == "aaii":
+                            _err_label = "⚠️ aaii.com Cloudflare 攔截（best-effort，非嚴重）"
+                        else:
+                            _err_label = f"❌ {str(_emsg)[:45]}"
                         _render_macro_indicator_card(
                             title=_ctitle, signal="⬜ 待取得",
                             color=_MACRO_CARD_LIGHT_COLOR["gray"],
                             value_str="—", note=_cnote,
-                            label=f"❌ {str(_emsg)[:32]}", trend=None,
+                            label=_err_label, trend=None,
                             spark_key=_spk)
                         continue
                     _uval = _ud.get("value")

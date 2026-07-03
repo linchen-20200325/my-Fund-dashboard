@@ -507,8 +507,8 @@ def render_manual_tab() -> None:
              "FRED(CNCPIALLMINMEI / IRLTCT01CNM156N / MYAGM3CNM189N / XTEXVA01CNM664S)",
              "月頻,90 天 cache fallback",
              "全敗 → modifier = 1.0 中性"),
-            ("📰 RSS 新聞(8 source)", "🌐 Tab1 + Tab3",
-             "MarketWatch / FT / Yahoo / Investing / CNBC × 2 / BBC / Bloomberg",  # v19.294: Reuters removed
+            ("📰 RSS 新聞(5 source)", "🌐 Tab1 + Tab3",
+             "MarketWatch / Yahoo Finance / CNBC × 2 / BBC World",  # v19.295: FT/Investing.com/Bloomberg removed (blocked/subscription)
              "即時(數秒-分鐘)",
              "個別 RSS 失敗 → 其他源繼續"),
             ("💰 基金 NAV 歷史",   "🔍 Tab2 + 💊 Tab3 + 📊 Tab4",

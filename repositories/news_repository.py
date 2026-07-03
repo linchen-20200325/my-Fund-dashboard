@@ -49,16 +49,15 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
     FEEDS = [
         # ── 美國 / 全球財經主流 ──
         # v19.293: Reuters feeds.reuters.com dead since June 2020 (all 404) — removed 3 entries
+        # v19.295: FT Markets requires subscription (near-empty content) — removed
+        # v19.295: Investing.com blocked (403 without login) — removed
+        # v19.295: Bloomberg Markets blocked for non-subscribers — removed
         ("MarketWatch",      "https://feeds.content.dowjones.io/public/rss/mw_bulletins"),
-        ("FT Markets",       "https://www.ft.com/rss/home/uk"),
         ("Yahoo Finance",    "https://finance.yahoo.com/rss/2.0/headline?s=%5EGSPC&region=US&lang=en-US"),
-        ("Investing.com",    "https://www.investing.com/rss/news_14.rss"),
         ("CNBC Economy",     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"),
         ("CNBC Finance",     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664"),
         # v18.86：地緣政治 / 突發新聞專屬 feed — 純財經 feed 對「戰爭爆發」捕捉較慢
         ("BBC World",         "https://feeds.bbci.co.uk/news/world/rss.xml"),
-        # Reuters Top News removed — feeds.reuters.com dead since June 2020
-        ("Bloomberg Markets", "https://feeds.bloomberg.com/markets/news.rss"),
     ]
 
     # 一般財經 — 任一命中就保留
