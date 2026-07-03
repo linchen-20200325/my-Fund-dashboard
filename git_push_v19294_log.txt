@@ -28,9 +28,9 @@ add tab6: fatal: Unable to create 'E:/01.Github/my-Fund-dashboard/.git/index.loc
 
 Another git process seems to be running in this repository, or the lock file may be stale
 
-add data_registry: 
-add app.py: 
-add STATE.md: 
+add data_registry:
+add app.py:
+add STATE.md:
 COMMIT:
 On branch main
 Your branch is ahead of 'origin/main' by 1 commit.
