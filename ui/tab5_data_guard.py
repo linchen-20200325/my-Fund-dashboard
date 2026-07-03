@@ -277,7 +277,10 @@ def render_data_guard_tab() -> None:
         try:
             import datetime as _dt_hm_btn
             _hm_dt = _dt_hm_btn.date.fromisoformat(str(_hm_date)[:10])
-            _age = (_dt_hm_btn.date.today() - _hm_dt).days
+            _today_tw = _dt_hm_btn.datetime.now(
+                _dt_hm_btn.timezone(_dt_hm_btn.timedelta(hours=8))
+            ).date()
+            _age = (_today_tw - _hm_dt).days
             _hm_age_txt = f"(目前資料 {_age} 天前)"
         except (ValueError, TypeError):
             pass
