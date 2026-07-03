@@ -53,6 +53,15 @@
 
 ## 當前版本
 
+- **v19.298(2026-07-03)**:MK 3-3-3 殘留根因修復 — inception_date 優先 + wb01 3Y fallback:
+  - **背景**:user 反饋「某基金成立超過 3 年但 MK 3-3-3 仍顯示不行」。v19.291 已修 timedelta 窗口(400→2000天),但仍有 2 個獨立根因未解:
+    1. **`tab_fund_grp_health.py` 成立年數計算只用 NAV 序列首日**:保險子網域代碼（如 JFZN3）在 Streamlit Cloud 上因 IP 封鎖拿不到 MoneyDJ 保險子網域歷史 NAV → 序列短 → 首日偏新 → `_yrs_inc` 算出 < 3 年，即使 inception_date metadata 已在 FundClear/AllianzGI 抓到正確成立日也完全沒用到。
+    2. **`ret_3y_ann` 沒有 wb01 fallback**:NAV 序列 < 756 筆時（序列太短），`calc_metrics` 算不出 `ret_3y_ann`，但 MoneyDJ wb01 的 "3Y" 欄位（三年累計報酬率）早已抓到且存在 `fd["perf"]["3Y"]`，卻從未被 `tab_fund_grp_health.py` / `services/health/report.py` / `services/health/replacement.py` 讀取當 fallback。
+  - **修法（三處一致）**:
+    - `ui/tab_fund_grp_health.py`：成立年數加 Priority 1 = `fd.inception_date` / `fd.moneydj_raw.inception_date`（鏡像 `_compute_holding_years` SSOT 邏輯），原 NAV 首日計算降為 Priority 2 fallback；`_ann_3y` 在 metrics + ret_3y_cum 兩段 fallback 後再加 `fd.perf["3Y"]` 累計→年化 (1+c)^(1/3)-1。
+    - `services/health/report.py`：`ret_3y_ann` 在 metrics + ret_3y_cum fallback 後再加 wb01 `fd.perf["3Y"]` fallback（同公式）。
+    - `services/health/replacement.py`：`_ret_3y_ann` 同樣加 wb01 `fd.perf["3Y"]` fallback，確保換標的建議規則 (c) 使用相同的 3Y 年化數字。
+
 - **v19.297(2026-07-03)**:LOW 稽核修正 + 全面重新確認:
   - **[L1] NAV 延遲標示**：`ui/helpers/io/freshness.py` freshness banner 補充「⚠️ 基金 NAV T+1~T+3 公布屬正常，燈號顯示淨值日期非抓取時間」說明。
   - **[新發現] Yahoo Finance RSS 死亡**：`repositories/news_repository.py` 舊 URL `rss/2.0/headline?s=%5EGSPC`（回傳空）→ 改用 `news/rssindex`（實測有效）。

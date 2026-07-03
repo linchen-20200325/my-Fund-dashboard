@@ -169,6 +169,16 @@ def build_health_analysis_row(
         _cum3 = _safe_float(m.get("ret_3y_cum") or m.get("ret_3y"))
         if _cum3 is not None:
             ret_3y_ann = ((1.0 + _cum3 / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0
+    # v19.298 FIX: 最終 fallback — MoneyDJ wb01 perf["3Y"] 累計 → 年化
+    # NAV 序列 < 756 筆時（保險子網域封鎖或短窗口），wb01 三年期總報酬為唯一替代來源。
+    if ret_3y_ann is None:
+        _perf_report = (fd.get("perf") or (fd.get("moneydj_raw") or {}).get("perf") or {})
+        _wb01_3y = _safe_float(_perf_report.get("3Y"))
+        if _wb01_3y is not None:
+            try:
+                ret_3y_ann = round(((1.0 + _wb01_3y / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0, 2)
+            except (ValueError, ZeroDivisionError, OverflowError):
+                pass
     if ret_5y_ann is None:
         _cum5 = _safe_float(m.get("ret_5y_cum") or m.get("ret_5y"))
         if _cum5 is not None:

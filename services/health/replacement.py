@@ -149,6 +149,15 @@ def check_replacement_recommendation(
         _cum = _safe_float(m.get("ret_3y_cum") or m.get("ret_3y"))
         if _cum is not None:
             _ret_3y_ann = ((1.0 + _cum / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0
+    # v19.298 FIX: 最終 fallback — MoneyDJ wb01 perf["3Y"] 累計 → 年化
+    if _ret_3y_ann is None:
+        _perf_repl = (fd.get("perf") or (fd.get("moneydj_raw") or {}).get("perf") or {})
+        _wb01_3y = _safe_float(_perf_repl.get("3Y"))
+        if _wb01_3y is not None:
+            try:
+                _ret_3y_ann = round(((1.0 + _wb01_3y / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0, 2)
+            except (ValueError, ZeroDivisionError, OverflowError):
+                pass
     try:
         _333 = check_333_principle(holding_y, _ret_3y_ann)
     except Exception as e:

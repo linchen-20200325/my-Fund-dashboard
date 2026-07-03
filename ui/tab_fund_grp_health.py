@@ -207,19 +207,32 @@ def process_one_fund(
         _333_msg = "資料不足"
         try:
             from services.health.dividend import check_333_principle
-            # 成立年數:從 NAV 序列首日到今天
+            # 成立年數:三段優先序（鏡像 _compute_holding_years SSOT）
             import datetime as _dt333
             _yrs_inc = None
-            try:
-                _first_iso = sorted(nav_dict.keys())[0]
-                _first_d = _dt333.date.fromisoformat(str(_first_iso)[:10])
-                _yrs_inc = (_dt333.date.today() - _first_d).days / 365.25
-                # v19.292 FIX: 鏡像 _compute_holding_years guard —
-                # series < 90 筆且年數 < 0.5 → 太短，無法可信估算成立日
-                if len(nav_dict) < 90 and _yrs_inc < 0.5:
+            # Priority 1: inception_date 中繼資料（FundClear / AllianzGI / MoneyDJ meta）
+            # v19.298 FIX: 原來只用 NAV 序列首日，保險子網域 IP 封鎖時序列短 → 成立年數錯誤。
+            # 鏡像 _compute_holding_years 優先走 inception_date metadata。
+            _mj_raw_333 = fd.get("moneydj_raw") or fd
+            _inc_meta = (fd.get("inception_date") or _mj_raw_333.get("inception_date") or "")
+            if _inc_meta:
+                try:
+                    _inc_d = _dt333.date.fromisoformat(str(_inc_meta)[:10])
+                    _yrs_inc = (_dt333.date.today() - _inc_d).days / 365.25
+                except (ValueError, TypeError):
                     _yrs_inc = None
-            except (ValueError, IndexError, TypeError):
-                _yrs_inc = None
+            # Priority 2: NAV 序列首日（原邏輯，作為 fallback）
+            if _yrs_inc is None:
+                try:
+                    _first_iso = sorted(nav_dict.keys())[0]
+                    _first_d = _dt333.date.fromisoformat(str(_first_iso)[:10])
+                    _yrs_inc = (_dt333.date.today() - _first_d).days / 365.25
+                    # v19.292 FIX: 鏡像 _compute_holding_years guard —
+                    # series < 90 筆且年數 < 0.5 → 太短，無法可信估算成立日
+                    if len(nav_dict) < 90 and _yrs_inc < 0.5:
+                        _yrs_inc = None
+                except (ValueError, IndexError, TypeError):
+                    _yrs_inc = None
             # v19.177:metrics.ret_3y_ann 為 fund_service 統一計算的 3 年年化 SSOT
             # (cum→ann 開根公式集中於 fund_service.calc_metrics _annualize_cum_pct)。
             # 舊版 metrics 無 _ann 欄位時 fallback 自算,免破壞向後相容。
@@ -232,6 +245,18 @@ def process_one_fund(
                         _ann_3y = ((1.0 + _cum) ** (1.0 / 3.0) - 1.0) * 100.0
                 except (TypeError, ValueError):
                     _ann_3y = None
+            # v19.298 FIX: 最終 fallback — 用 MoneyDJ wb01 perf["3Y"] 三年累計 → 年化
+            # NAV 序列不足 756 筆時（如 Streamlit Cloud 封鎖保險子網域，序列短），
+            # wb01 抓到的三年期總報酬可作 annualize 替代來源。
+            if _ann_3y is None:
+                _perf_333 = fd.get("perf") or _mj_raw_333.get("perf") or {}
+                _perf_3y_cum = _perf_333.get("3Y")
+                if _perf_3y_cum is not None:
+                    try:
+                        _c = float(_perf_3y_cum) / 100.0
+                        _ann_3y = round(((1.0 + _c) ** (1.0 / 3.0) - 1.0) * 100.0, 2)
+                    except (TypeError, ValueError):
+                        _ann_3y = None
             _333_r = check_333_principle(_yrs_inc, _ann_3y)
             if _333_r.get("passed") is True:
                 _333_emoji = "✅"
