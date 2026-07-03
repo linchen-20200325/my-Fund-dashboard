@@ -7,6 +7,14 @@ from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GRAY_66, INFO_BLUE, MATERIA
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
+# v19.301:三率掃描防當機參數(SSOT,§3.3 反捏造 — 具名常數非 inline magic)。
+# 根因:原本按鈕會「同步」連打 N 檔 yfinance 抓財報,每次都無 timeout;N=10 檔
+# × 5-10s(或 hang)= 主執行緒卡 50-100s+,Streamlit websocket 斷線 → 整頁空白
+# (user 2026-07-03 回報「壓一下畫面整個不見」)。改為並行 + 總時限:無論幾檔
+# hang,主執行緒最多等 _THREE_RATIO_SCAN_DEADLINE_SEC 秒就收斂,拿已完成的部分結果。
+_THREE_RATIO_SCAN_MAX_WORKERS = 5      # yfinance 並行度(過高易被 Yahoo rate-limit)
+_THREE_RATIO_SCAN_DEADLINE_SEC = 30.0  # 整批掃描總時限;逾時用已完成部分,不卡死畫面
+
 
 def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
     """組裝 N 檔基金的跨檔 snapshot 字串給 AI 解讀。
@@ -402,21 +410,55 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
                     st.caption("yfinance 抓財報 ~5-10s / 檔")
 
             if _do_scan:
+                # v19.301:並行 + 總時限,避免 N 檔 yfinance 同步阻塞主執行緒。
+                # 舊版逐檔同步 for-loop、每檔無 timeout → 10 檔 × 5-10s(或 hang)
+                # 卡死主執行緒 → Streamlit websocket 斷線、整頁空白。改用
+                # ThreadPoolExecutor + as_completed(timeout=deadline):逾時就用
+                # 已完成部分,shutdown(wait=False) 不等 hang 住的執行緒(§1 Fail
+                # Loud — 部分結果照顯示,不因單一 hang 讓整個掃描/畫面死掉)。
+                import concurrent.futures as _cf
                 _results = []
                 _prog = st.progress(0.0, text="🔍 掃描財報…")
-                for _i, _top in enumerate(_tops):
-                    _sh_name = _top.get("name", "")
+                _ex = _cf.ThreadPoolExecutor(
+                    max_workers=min(_THREE_RATIO_SCAN_MAX_WORKERS, len(_tops))
+                )
+                try:
+                    _fut_map = {
+                        _ex.submit(_pse.fetch_stock_three_ratios,
+                                   _t.get("name", "")): _t.get("name", "")
+                        for _t in _tops
+                    }
+                    _done = 0
+                    _total = len(_fut_map)
                     try:
-                        _data = _pse.fetch_stock_three_ratios(_sh_name)
-                    except Exception as _e_sh:
-                        print(f"[tab5grp_shield/{_code}/{_sh_name}] "
-                              f"{type(_e_sh).__name__}: {_e_sh}")
-                        _data = None
-                    if _data:
-                        _results.append(_data)
-                    _prog.progress((_i + 1) / len(_tops),
-                                   text=f"🔍 {_i+1}/{len(_tops)}")
-                _prog.empty()
+                        for _fut in _cf.as_completed(
+                            _fut_map, timeout=_THREE_RATIO_SCAN_DEADLINE_SEC
+                        ):
+                            _done += 1
+                            _sh_name = _fut_map.get(_fut, "?")
+                            try:
+                                _data = _fut.result()
+                            except Exception as _e_sh:
+                                print(f"[tab5grp_shield/{_code}/{_sh_name}] "
+                                      f"{type(_e_sh).__name__}: {_e_sh}")
+                                _data = None
+                            if _data:
+                                _results.append(_data)
+                            _prog.progress(_done / _total,
+                                           text=f"🔍 {_done}/{_total}")
+                    except _cf.TimeoutError:
+                        # 逾時:用已完成的部分結果,不卡死畫面(§1 Fail Loud)
+                        print(f"[tab5grp_shield/{_code}] 掃描逾時 "
+                              f"{_THREE_RATIO_SCAN_DEADLINE_SEC}s,已完成 "
+                              f"{_done}/{_total},用部分結果")
+                except Exception as _e_scan:
+                    # 整批掃描不預期失敗 → 記 log,不讓例外往上炸掉整個 tab
+                    print(f"[tab5grp_shield/{_code}] 掃描失敗:"
+                          f"{type(_e_scan).__name__}: {_e_scan}")
+                finally:
+                    # wait=False:不等仍 hang 住的 yfinance 執行緒收工(否則又卡住)
+                    _ex.shutdown(wait=False, cancel_futures=True)
+                    _prog.empty()
                 st.session_state[_ss_key] = _results
 
             _cached = st.session_state.get(_ss_key)

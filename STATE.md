@@ -53,6 +53,15 @@
 
 ## 當前版本
 
+- **v19.301 三率穿透掃描當機 —「壓一下畫面整個不見」根因(2026-07-03)**:
+  - **背景**:user 回報組合健診 Tab「🛡️ 微觀防護盾 — 持倉三率穿透」的「🔍 掃 N 檔持股三率」按鈕,一按整個畫面就消失(app 直接不能用)。(本輪同時 user 反饋的「年化三欄空白」與「Google Sheet 登入搶帳號」兩題,經查已分別由 v19.298 wb01 3Y fallback / v19.293 oauth prompt=select_account 於 main 平行修掉,本 entry 只收掃描當機這唯一未修項。)
+  - **真根因**:`ui/helpers/fund_grp_health/ai.py::_render_per_fund_three_ratio_expanders` 按鈕 handler 用**逐檔同步 for-loop** 連打 N 檔 yfinance 抓財報(`fetch_stock_three_ratios`),**每檔都沒有 timeout**。10 檔 × 5-10s(或某檔 hang)= 主執行緒被卡 50-100s+,Streamlit 的 websocket 在等不到 server 回應時斷線 → 整頁空白。這不是 Python 例外(那會顯示紅色錯誤框),而是**長時間阻塞導致連線中斷**
+  - **修法(並行 + 總時限,§1 Fail Loud)**:改用 `concurrent.futures.ThreadPoolExecutor`(max_workers=5)並行抓,`as_completed(timeout=_THREE_RATIO_SCAN_DEADLINE_SEC=30s)` 收斂——逾時就用已完成的部分結果,`shutdown(wait=False, cancel_futures=True)` **不等** 仍 hang 住的執行緒。無論幾檔 hang,主執行緒最多等 30s 就返回,畫面不再被卡死。整批掃描外層再包 try/except,任何不預期例外只記 log 不往上炸掉整個 tab
+  - **SSOT / §3.3 反捏造**:`_THREE_RATIO_SCAN_MAX_WORKERS`(5)+ `_THREE_RATIO_SCAN_DEADLINE_SEC`(30.0)為 module 頂部具名常數(非 inline magic),附註解說明用途
+  - **架構合規**:純 L3 UI 層改動(掃描的 UX 責任本就屬 UI);L1 `fetch_stock_three_ratios` 純 fetcher 不動,無跨層 import、無新例外需登錄 §8.2.A
+  - tests:`tests/test_fund_grp_health_extras_p1_news_ratio.py` +1(`TestThreeRatioScanBoundedTime` — 把 deadline 壓到 0.6s、每檔 fetch 故意 sleep 3s,驗證整個 render 總耗時被 deadline 約束在 < 2.5s、且不拋例外;舊版逐檔同步會卡 ~9s 直接 fail)。40 個 fund_grp_health extras 相關測試全綠
+  - **下一步**:部署後 user 重按「掃 N 檔持股三率」,畫面不該再消失;抓不到的檔會標「無法解析 Ticker」,能抓到的正常顯示三率
+
 - **v19.298(2026-07-03)**:MK 3-3-3 殘留根因修復 — inception_date 優先 + wb01 3Y fallback:
   - **背景**:user 反饋「某基金成立超過 3 年但 MK 3-3-3 仍顯示不行」。v19.291 已修 timedelta 窗口(400→2000天),但仍有 2 個獨立根因未解:
     1. **`tab_fund_grp_health.py` 成立年數計算只用 NAV 序列首日**:保險子網域代碼（如 JFZN3）在 Streamlit Cloud 上因 IP 封鎖拿不到 MoneyDJ 保險子網域歷史 NAV → 序列短 → 首日偏新 → `_yrs_inc` 算出 < 3 年，即使 inception_date metadata 已在 FundClear/AllianzGI 抓到正確成立日也完全沒用到。

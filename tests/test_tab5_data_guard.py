@@ -48,5 +48,3 @@ def test_parse_indicator_date_reexport_works():
     idate, errs = _parse_indicator_date({"date": "2026-05-15"})
     assert idate is not None
     assert errs == []
-
-

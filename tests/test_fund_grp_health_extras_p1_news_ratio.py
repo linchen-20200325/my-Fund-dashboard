@@ -12,8 +12,6 @@ from __future__ import annotations
 import sys
 import types
 
-import pytest
-
 
 def _stub_streamlit():
     if "streamlit" in sys.modules and getattr(
@@ -216,6 +214,81 @@ class TestPerFundThreeRatioExpanders:
         # Tab 2 既有 key 必須完整保留
         assert st.session_state.get("shield_ACCP138") == ["tab2 cached data"]
         assert st.session_state.get("_stknews_ACCP138") == {"tab2": "cache"}
+
+
+class TestThreeRatioScanBoundedTime:
+    """v19.301 回歸網:掃描不因單一 yfinance hang 卡死整個畫面。
+
+    根因(user 2026-07-03「壓一下畫面會整個不見」):舊版按鈕會逐檔**同步**
+    連打 N 檔 yfinance,每檔無 timeout → 10 檔 × 5-10s(或 hang)卡死主執行緒
+    → Streamlit websocket 斷線、整頁空白。修法:並行 + as_completed(timeout=
+    deadline) + shutdown(wait=False),逾時用已完成部分,不等 hang 的執行緒。
+
+    本測試把每檔 fetch 故意 sleep 到遠超 deadline,驗證整個 render **總耗時被
+    deadline 約束**(而非 N × sleep 的線性累加),且不拋例外。
+    """
+
+    def test_hanging_fetch_does_not_block_whole_scan(self, monkeypatch):
+        import time as _time
+
+        import streamlit as _st
+
+        # 觸發掃描:按鈕回 True
+        monkeypatch.setattr(_st, "button", lambda *a, **k: True)
+
+        # 提供有 .progress()/.empty() 的 progress 替身(conftest 預設 stub 沒有)
+        class _FakeProg:
+            def progress(self, *a, **k):
+                return None
+
+            def empty(self):
+                return None
+
+        monkeypatch.setattr(_st, "progress", lambda *a, **k: _FakeProg())
+
+        # 把 deadline 壓低,fetch 故意 hang 遠超 deadline
+        import ui.helpers.fund_grp_health.ai as _ai_mod
+        monkeypatch.setattr(_ai_mod, "_THREE_RATIO_SCAN_DEADLINE_SEC", 0.6)
+
+        _HANG_SEC = 3.0
+
+        from services import precision_service as _ps
+
+        def _hang(self, stock_name):
+            _time.sleep(_HANG_SEC)
+            return None
+
+        monkeypatch.setattr(
+            _ps.PrecisionStrategyEngine, "fetch_stock_three_ratios", _hang,
+        )
+
+        _funds = [
+            {
+                "code": "H001", "name": "Hang Fund",
+                "moneydj_raw": {"holdings": {
+                    "top_holdings": [
+                        {"name": "AAPL", "pct": 5.0},
+                        {"name": "MSFT", "pct": 4.0},
+                        {"name": "TSMC", "pct": 8.0},
+                    ],
+                }},
+            },
+        ]
+
+        from ui.helpers.fund_grp_health_extras import (
+            _render_per_fund_three_ratio_expanders,
+        )
+
+        _t0 = _time.monotonic()
+        # 不該拋例外(§1 Fail Loud — 部分/零結果照顯示,不炸整個 tab)
+        _render_per_fund_three_ratio_expanders(_funds)
+        _elapsed = _time.monotonic() - _t0
+
+        # 舊版逐檔同步 = 3 × 3.0s = 9s;新版被 deadline(0.6s)約束 → 應 < 2.5s
+        assert _elapsed < 2.5, (
+            f"掃描應被 deadline 約束(~0.6s),實際耗時 {_elapsed:.2f}s —— "
+            f"疑似退回逐檔同步阻塞(舊版會卡 ~9s,正是整頁空白根因)"
+        )
 
 
 # v19.123 §6 自審「3 個最容易出錯的輸入」:
