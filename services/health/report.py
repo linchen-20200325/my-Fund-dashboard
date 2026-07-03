@@ -183,6 +183,17 @@ def build_health_analysis_row(
         _cum5 = _safe_float(m.get("ret_5y_cum") or m.get("ret_5y"))
         if _cum5 is not None:
             ret_5y_ann = ((1.0 + _cum5 / 100.0) ** (1.0 / 5.0) - 1.0) * 100.0
+    # v19.299 FIX: 最終 fallback — MoneyDJ wb01 perf["5Y"] 累計 → 年化
+    # NAV 序列 < 1260 筆時（保險子網域封鎖），wb01 五年期總報酬為唯一真實替代來源。
+    # wb01 已在 fetch_fund_details() 拉取，非捏造值。
+    if ret_5y_ann is None:
+        _perf_report5 = (fd.get("perf") or (fd.get("moneydj_raw") or {}).get("perf") or {})
+        _wb01_5y = _safe_float(_perf_report5.get("5Y"))
+        if _wb01_5y is not None:
+            try:
+                ret_5y_ann = round(((1.0 + _wb01_5y / 100.0) ** (1.0 / 5.0) - 1.0) * 100.0, 2)
+            except (ValueError, ZeroDivisionError, OverflowError):
+                pass
 
     # ─── 3-3-3 篩(成立年數 + 3Y 年化)SSOT ─────────────
     years_inception = holding_years if holding_years is not None else _compute_holding_years(fd)
