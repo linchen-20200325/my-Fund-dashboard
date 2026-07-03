@@ -22,6 +22,16 @@
 
 ## 當前版本
 
+- **v19.294(2026-07-03)**:Stale description strings — Tab5 / Tab6 / data_registry.py 仍顯示「Reuters」於 RSS 來源說明:
+  - `ui/tab5_data_guard.py`:RSS 來源描述更新為 "MarketWatch / FT / Yahoo / Investing / CNBC × 2 / BBC / Bloomberg"
+  - `ui/tab6_manual.py`:同步移除 Reuters，補上 BBC / Bloomberg
+  - `ui/helpers/io/data_registry.py`:source 字串 "Reuters/MarketWatch/FT/Yahoo/Investing/CNBC" → "MarketWatch/FT/Yahoo/Investing/CNBC/BBC/Bloomberg"
+
+- **v19.293(2026-07-03)**:Bug fixes — dead Reuters RSS 移除 + Tab5 build_signals kwarg 修正 + APP_VERSION 字串更新:
+  - `repositories/news_repository.py`:移除 3 個 `feeds.reuters.com` RSS feed (Reuters Business / Reuters Markets / Reuters Top News),自 2020 年 6 月起全部 404,每次新聞抓取白費 timeout
+  - `ui/tab5_data_guard.py`:修正 `build_signals()` 呼叫的 kwarg 名稱 (`flow_thr_yi`→`flow_thr`, `fx_thr_pct`→`fx_thr`)，消除 TypeError
+  - `app.py`:APP_VERSION 字串從 `v19.45_MacroNavigator` 更新為 `v19.293_MacroNavigator`
+
 - **v19.291 MK 3-3-3「成立 0.1 年」誤判根因 + 全站自動掃描機制(2026-07-01)**:
   - **背景**:user 截圖 JFZN3(摩根投資基金-多重收益基金 A 股)在本站 MK 3-3-3 顯示「❌ 成立 0.1 年 <3 年」,但同時提供 MoneyDJ 官網截圖證實該基金淨值歷史實際橫跨 2021/10/15~2026/06/29(近 5 年)。user 另外要求:「額外寫一個『自動檢查』的機制,以後如果又有人漏搬東西,測試會直接抓出來,不用等到你在正式環境上踩到才發現」(涵蓋資料一致性 + 程式碼健康兩面向)
   - **真根因**:v19.281 曾把 cnyes(`_src_cnyes_nav`)/ Morningstar(`_src_morningstar_nav`)的查詢窗口從 400 天(~13 月)延伸到 2000 天(~5.5 年),但**直接對 MoneyDJ 本身**(`yp004002.djhtm` 帶日期 A/B/C 三參數)的呼叫點漏做同樣延伸。實際 grep 全站 `timedelta(days=400)` 共 9 處全部殘留短窗口:`repositories/fund/sources.py` 7 處(`_src_fundclear_nav` / `_src_bank_platform_nav` / `_src_taiwanlife_nav` / `_src_franklin_nav` / `_src_tcb_nav` / `_src_sitca_nav` / `_src_insurance_subdomain_nav`)+ `repositories/fund/fund_orchestration.py` 2 處(`_fetch_fund_single` 的「2d. www.moneydj.com 主站」分支 + `fetch_fund_from_moneydj_url` 的「再查詢整年歷史」分支)。保單代碼(如 JFZN3)常見經這些直接 MoneyDJ 路徑取數,查詢窗口太短 → 只抓到近 1 個月資料 → `_compute_holding_years` 算出 0.1 年

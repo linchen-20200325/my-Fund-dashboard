@@ -315,7 +315,7 @@ def render_data_guard_tab() -> None:
                 st.error("外資或 USDTWD 抓取為空,無法更新熱錢卡。")
             else:
                 _sig = build_signals(_flow_df, _fx_df, window=5,
-                                     flow_thr_yi=50.0, fx_thr_pct=0.5)
+                                     flow_thr=50.0, fx_thr=0.5)  # v19.292: fix wrong kwarg names
                 if _sig.empty:
                     st.warning("外資與匯率無重疊交易日,無法計算訊號。")
                 else:
@@ -405,7 +405,7 @@ def render_data_guard_tab() -> None:
          "—", _src_status(_fund_n > 0, _fund_n,
                           inactive_label="僅安聯/安達標的觸發")),
         ("9️⃣", "RSS 新聞 (8 來源)",    "國際財經事件",
-         "Reuters / MarketWatch / FT / Yahoo / Investing / CNBC × 2",
+         "MarketWatch / FT / Yahoo / Investing / CNBC × 2 / BBC / Bloomberg",  # v19.294: Reuters removed
          "—", _src_status(bool(_src_news), len(_src_news))),
         ("🔟", "yfinance 個股財報",     "三率 QoQ（precision_engine）",
          "yfinance.Ticker(...).quarterly_financials",
