@@ -53,6 +53,15 @@
 
 ## 當前版本
 
+- **v19.302 Google Sheet 登入「搶帳號」根治 — Tab3 client 改優先 Service Account(2026-07-03)**:
+  - **背景(三帳號纏鬥)**:user 回報 app 內按「用 Google 登入」讀 Google Sheet 一直失敗、跳「You do not have access to this app or it does not exist」。截圖確認:登入 GitHub/Streamlit Cloud = `cheng10022`、Google Sheet 擁有者 = `chen10021`、GCP/git = `cheng10029`。Google 同意頁帳號(chen10021)與 app URL(`my-fund-dashboard-…streamlit.app`)都正確,按繼續後卻落到 Streamlit Cloud 平台頁看到 `cheng10022`
+  - **真根因**:**app 內自建 user Google OAuth 與 Streamlit Community Cloud 平台自身登入先天衝突** —— OAuth 導回 `*.streamlit.app` 被平台攔截,app 認證的 chen10021 跟平台的 cheng10022 對不上。`redirect_uri` / `login_hint` / v19.293 的 `prompt=select_account` 都救不了(那些只解「選錯帳號」,解不了平台層攔截)
+  - **修法(改用 Service Account,app 本來就支援)**:`repositories/policy/_helpers.py:101 get_gspread_client()` 有 SA headless 存取,但 `ui/tab3_portfolio.py:397` 舊決策是「`_oauth_configured` 為真就強制走 OAuth」→ 永遠撞。改成新 SSOT helper **`_t3_sheet_client()` 優先 Service Account**(有 `google_service_account` secret 就用它,沒設才退回 OAuth),套用到 auto-load / 讀回 / 存檔 / refresh 全部主要讀寫點。**只換 client 不動 schema**:v1/v2 仍由各點 `oauth_mode=bool(_oauth_configured)` 決定,SA client 照樣讀 v2 sheet(前提:Sheet 已分享給 SA client_email)。另補 `_sheet_id_q` 從 `_sheet_id_secret`(POLICY_SHEET_ID)fallback(對齊 L828 既有 pattern),讓純 SA 使用者(從不 OAuth 登入)也能觸發自動讀回
+  - **範圍界定(§8.5 不越權)**:本輪只改**讀寫主路徑**(load/save/auto-load/refresh)。schema 遷移 + v2 native 編輯 UI(`844-916` 那批 `_get_oauth_client()`)因 gated 在 `_logged_in` migration 區、且動到寫入路徑,**維持 OAuth 不動**(SA 使用者用不到、無回歸);若之後要 v2 編輯也走 SA,另案處理
+  - **架構/SSOT 合規**:純 L3 UI 決策收斂為單一 `_t3_sheet_client()` helper(DRY);L1 `get_gspread_client` / `_get_oauth_client` 不動;無新跨層 import、無新 §8.2.A 例外
+  - tests:`tests/test_tab3_sa_client_preference.py`(新檔,3 test — 原始碼檢查鎖住「SA 優先 helper 存在」+「舊 OAuth 優先三元式不得殘留」+「sheet_id 有 secret fallback」)。126 個 tab3/policy/cloud_io 相關測試全綠;ruff baseline 21→21 零新增
+  - **user 端還要做的(平台設定,程式碼改不到)**:① GCP 建 Service Account + 下載 JSON;② 把那張 Sheet 分享給 SA 的 `client_email`(編輯者);③ Streamlit secrets 加 `[google_service_account]` = JSON + `POLICY_SHEET_ID`;④ reboot。之後讀寫 Sheet 完全不需 Google 登入 → 不再撞帳號。`[google_oauth]` secret 可留(SA 優先),Drive 瀏覽/建新 Sheet 才會用到 OAuth
+
 - **v19.301 三率穿透掃描當機 —「壓一下畫面整個不見」根因(2026-07-03)**:
   - **背景**:user 回報組合健診 Tab「🛡️ 微觀防護盾 — 持倉三率穿透」的「🔍 掃 N 檔持股三率」按鈕,一按整個畫面就消失(app 直接不能用)。(本輪同時 user 反饋的「年化三欄空白」與「Google Sheet 登入搶帳號」兩題,經查已分別由 v19.298 wb01 3Y fallback / v19.293 oauth prompt=select_account 於 main 平行修掉,本 entry 只收掃描當機這唯一未修項。)
   - **真根因**:`ui/helpers/fund_grp_health/ai.py::_render_per_fund_three_ratio_expanders` 按鈕 handler 用**逐檔同步 for-loop** 連打 N 檔 yfinance 抓財報(`fetch_stock_three_ratios`),**每檔都沒有 timeout**。10 檔 × 5-10s(或某檔 hang)= 主執行緒被卡 50-100s+,Streamlit 的 websocket 在等不到 server 回應時斷線 → 整頁空白。這不是 Python 例外(那會顯示紅色錯誤框),而是**長時間阻塞導致連線中斷**
