@@ -28,6 +28,7 @@ from shared.colors import BG_DARK_GREEN_3, BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DA
 
 from infra.oauth import (
     OAuthError,
+    build_authorize_url,
     build_credentials_from_tokens,
     ensure_fresh_tokens,
 )
@@ -100,6 +101,7 @@ def render_portfolio_tab() -> None:
         _get_oauth_client,
         _gsa_secret,
         _sheet_id_secret,
+        get_login_state as _get_login_state,  # v19.296: 快捷登入按鈕
     )
     from ui.helpers.holdings import _zh_holding
 
@@ -516,6 +518,16 @@ def render_portfolio_tab() -> None:
                     st.warning(
                         "⚠️ 尚未用 Google 登入。請至左側 sidebar 點「🔐 用 Google 登入」。"
                     )
+                    # v19.296: 快捷登入按鈕（免回 Sidebar）
+                    if _oauth_configured:
+                        try:
+                            _cfg_ld = _resolve_oauth_cfg()
+                            _url_ld = build_authorize_url(
+                                _cfg_ld["client_id"], _cfg_ld["redirect_uri"],
+                                state=_get_login_state())
+                            st.link_button("🔐 用 Google 登入", _url_ld)
+                        except Exception:
+                            pass
                 else:
                     # v18.168：對調 — 上半「📂 從 Drive 挑帳本」，下半「📥 立即全部讀回」
                     # 上半 ── 從 Drive 挑帳本（OAuth + 已登入時顯示）
@@ -696,6 +708,16 @@ def render_portfolio_tab() -> None:
                     st.warning(
                         "⚠️ 尚未用 Google 登入。請至左側 sidebar 點「🔐 用 Google 登入」。"
                     )
+                    # v19.296: 快捷登入按鈕（免回 Sidebar）
+                    if _oauth_configured:
+                        try:
+                            _cfg_nw = _resolve_oauth_cfg()
+                            _url_nw = build_authorize_url(
+                                _cfg_nw["client_id"], _cfg_nw["redirect_uri"],
+                                state=_get_login_state())
+                            st.link_button("🔐 用 Google 登入", _url_nw)
+                        except Exception:
+                            pass
                 else:
                     st.caption(
                         "💡 讓 app 建一張全新的 Google Sheet 作為帳本（不必先到 Drive 開檔）。"
@@ -788,6 +810,15 @@ def render_portfolio_tab() -> None:
                 st.success("🟢 已用 Google 登入（OAuth）— 登出請至左側 sidebar")
             else:
                 st.info("ℹ️ 尚未登入 Google — 請至左側 sidebar 點「🔐 用 Google 登入」")
+                # v19.296: 快捷登入按鈕（免回 Sidebar）
+                try:
+                    _cfg_auth = _resolve_oauth_cfg()
+                    _url_auth = build_authorize_url(
+                        _cfg_auth["client_id"], _cfg_auth["redirect_uri"],
+                        state=_get_login_state())
+                    st.link_button("🔐 用 Google 登入", _url_auth)
+                except Exception:
+                    pass
         elif _gsa_secret and _sheet_id_secret:
             st.info("ℹ️ 偵測到 Service Account 設定，走舊版單表 schema（向後相容）")
             _logged_in = True   # SA 視同已登入
