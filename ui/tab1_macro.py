@@ -1372,10 +1372,12 @@ def render_macro_tab() -> None:
 
         # ══ v19.118 中國拖累唯讀面板（China Drag）═════════════════════
         # 4 數字唯讀展示:不改變上方總經分數,僅示意 China 副盤折扣強度
-        try:
-            _render_china_drag_panel(phase, FRED_KEY)
-        except Exception as _cd_e:  # noqa: BLE001
-            print(f"[tab1/china_drag] {type(_cd_e).__name__}: {_cd_e}")
+        # v19.296: 改為預設摺疊 expander — 資料屬補充參考，不需預設佔版面
+        with st.expander("🇨🇳 中國拖累（China Drag）— 唯讀副盤參考", expanded=False):
+            try:
+                _render_china_drag_panel(phase, FRED_KEY)
+            except Exception as _cd_e:  # noqa: BLE001
+                st.caption(f"⬜ 中國副盤載入失敗：{type(_cd_e).__name__}")
 
 
         # v19.41 MOVED: ③ 🔬 即時訊號 + 決策矩陣 已移至 tab 內結尾（MK 時鐘前）

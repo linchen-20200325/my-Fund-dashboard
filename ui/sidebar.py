@@ -147,12 +147,20 @@ def render_sidebar(*,
             pass  # smoke-allow-pass — sidebar 健康總覽純顯示，異常不擋主畫面
 
         # ── v19.59 C2：全域刷新總開關 — 清所有記憶體 + 落地快取 + 跨 Tab session 殘留 ──
+        # v19.296: 加二次確認 checkbox，防止誤觸
         st.divider()
         st.markdown("##### 🧹 全域刷新")
+        st.caption("⚠️ 會清掉所有快取，下次載入會重打 API；OAuth 登入保留")
+        _confirm_refresh = st.checkbox(
+            "確認清空快取（此操作不可復原）",
+            key="chk_global_refresh_confirm",
+            value=False,
+        )
         if st.button(
             "🧹 全域刷新（清所有快取 + 落地檔）",
             key="btn_global_refresh",
             use_container_width=True,
+            disabled=not _confirm_refresh,
             help="v19.59 C2：清全部 TTL cache + hot_money @st.cache_data + "
                  "/tmp/fund_cache 落地檔 + 跨 Tab session 殘留。保留 OAuth/sheet "
                  "登入狀態。嚴禁清 data_cache/ 上游 cron 歷史資料倉。"
@@ -172,7 +180,6 @@ def render_sidebar(*,
             except Exception as _e_gr:
                 st.toast(f"⚠️ 全域刷新失敗：{type(_e_gr).__name__}", icon="⚠️")
             st.rerun()
-        st.caption("⚠️ 會清掉所有快取，下次載入會重打 API；OAuth 登入保留")
 
         # ── v18.75 Google 帳號（從 Tab3 expander 搬上來，登入更顯眼）──
         st.divider()
