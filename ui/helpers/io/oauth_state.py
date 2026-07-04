@@ -107,6 +107,28 @@ def _get_oauth_client():
     return get_gspread_client_from_oauth(creds)
 
 
+def _should_reject_oauth_code(expected_state, got_state) -> bool:
+    """v19.305 OAuth callback state 守門判斷（純函式，可單元測試）。
+
+    user 2026-07-04 回報「登入了卻顯示沒登入、一直迴圈」。根因為 dff0c41
+    (v19.301) 收緊的 state 檢查：「只要 URL 帶 state 就必須和本 session 的
+    _oauth_state 完全相符」。但 Streamlit Cloud 在「整頁導去 Google 再導回」
+    的過程會把本 session 重置成全新 session → _oauth_state 遺失成 None →
+    每次導回都被判定不符 → 永遠拒絕換 token → 無限迴圈。
+    （本檔 852cfb1 建檔時無此檢查、可正常登入；v19.301 後才壞 = regression。）
+
+    修法（可用性優先，user 明確選擇）：只有「本 session 確實記得自己發起過
+    OAuth（expected_state 有值）且回傳 state 不符」才拒絕——這仍保有
+    session_state 存活時的跨 session 防搶碼保護。當 expected_state 為 None
+    （session 於導回時遺失）→ 放行。
+
+    取捨：放行 None 會重新打開「殘留/多分頁互相搶授權碼」窗口（v19.301 的
+    修補對象）。但單一使用者情境下最壞只是自我踢除、可重按，遠優於「永遠
+    登不進去」。
+    """
+    return bool(got_state and expected_state and got_state != expected_state)
+
+
 def handle_oauth_callback() -> None:
     """OAuth callback：URL 帶 ?code=... 時自動換 token。
 
@@ -116,18 +138,14 @@ def handle_oauth_callback() -> None:
         return
     _qp = st.query_params
     if "code" in _qp and "gsheet_tokens" not in st.session_state:
-        # 修「登入互相踢掉 / 搶帳號」嚴格版（v19.301）：
-        # 只認本 session 發起的授權碼。
-        # 判斷邏輯：只要 URL 帶了 state，就必須和本 session 的 _oauth_state 完全相符，
-        # 否則一律略過（不吞碼、不報錯）。
-        # 修補舊版漏洞：舊版「_expected_state 為 None 時放行」會讓任何沒啟動 OAuth
-        # 的 session（全新分頁 / server 重啟後殘留分頁）也能搶到別的 session 的授權碼，
-        # 造成 chen10021 登入後被踢出或帳號混用。
-        # 退化處理：server 重啟遺失 session_state → user 需重按登入，是可接受的行為。
+        # v19.305（user 2026-07-04「登入了卻顯示沒登入、一直迴圈」）：state 守門
+        # 判斷抽成純函式 _should_reject_oauth_code（見其 docstring 完整取捨說明）。
+        # 只在「本 session 記得發起過 OAuth 且回傳 state 不符」時拒；session_state
+        # 於 Streamlit Cloud 導回遺失（_expected_state=None）時放行，避免無限迴圈。
         _expected_state = st.session_state.get("_oauth_state")
         _got_state = _qp.get("state")
-        if _got_state and _got_state != _expected_state:
-            return  # 嚴格拒絕：URL 帶了 state 但不符本 session → 屬於別的 session
+        if _should_reject_oauth_code(_expected_state, _got_state):
+            return  # 跨 session 保護（session_state 存活時照樣防搶碼）
         try:
             _tokens = exchange_code_for_tokens(
                 _qp["code"], _oauth_cfg["client_id"],

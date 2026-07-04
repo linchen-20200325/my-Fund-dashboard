@@ -53,6 +53,15 @@
 
 ## 當前版本
 
+- **v19.305 Google 登入迴圈根治 — OAuth state 檢查放寬(2026-07-04)**:
+  - **背景**:user 回報「已登入卻顯示沒登入、一直迴圈」,並指證「掃毒減肥前都能登入,之後才壞」。git 歷史逐 commit 比對確認為 **regression**:本檔 `852cfb1`(第四階段 deep refactor 建檔)登入邏輯**無 state 檢查、可正常登入**;`dff0c41`(v19.301「fix OAuth state strict check」)加上嚴格檢查後才壞。
+  - **真根因**:v19.301 把守門改為「只要 URL 帶 state 就必須與本 session 的 `_oauth_state` 完全相符」。但 **Streamlit Cloud 在「整頁導去 Google 再導回」時會把本 session 重置成全新 session** → `_oauth_state` 遺失成 `None` → 回傳 state 與 None 永遠不符 → `handle_oauth_callback()` 每次都 early-return、不換 token → `gsheet_tokens` 永遠沒設 → 側邊欄一直顯示「用 Google 登入」→ 無限迴圈。(**訂正 v19.304 note**:當時判為「純平台攔截、程式端無可再改」,實為此 code regression,可修。)
+  - **修法(中間解,可用性優先 — user 明確選擇)**:守門判斷抽成純函式 SSOT `_should_reject_oauth_code(expected, got)`,規則改為 `bool(got and expected and got != expected)` —— **只有「本 session 確實記得發起過 OAuth(expected 有值)且 state 不符」才拒**;`expected` 為 None(session 於導回遺失)時**放行**換 token。仍保留 session_state 存活時的跨 session 防搶碼保護。
+  - **取捨(已向 user 揭露並取得同意)**:放行 None 會重新打開「殘留/多分頁互相搶授權碼」窗口(v19.301 的修補對象)。但單一使用者情境下最壞只是自我踢除、可重按,遠優於「永遠登不進去」。
+  - **SSOT / 架構合規**:決策收斂單一純函式 `_should_reject_oauth_code()`(可單元測試、不需 streamlit);純 L3/helper 層改動,無跨層 import、無新 §8.2.A 例外。
+  - tests:新增 `tests/test_oauth_callback_state.py`(7 tests:失憶放行 / 相符放行 / 雙值不符拒 / 無 got 放行 / 雙 None 放行 / 空字串放行 + wiring 守門接上 callback)。既有 `test_app_apptest.py` oauth/refresh 2 tests 續綠。
+  - **下一步**:merge main + user reboot app → 重按「用 Google 登入」即可成功進 Tab3 讀 Google Sheet。(Service Account 仍是更穩的長期選項,但非必要;user 選擇留用既有 OAuth。)
+
 - **v19.304 多基金績效比較圖「資料都是 0」根治 — 圖表基準自適應(2026-07-04)**:
   - (版號說明:原記為 v19.303,因 main 平行 UI 線已用 v19.303「trend arrows」,依本 session 撞號改號慣例 bump v19.304 避免混淆。)
   - **背景**:user 截圖回報組合健診 Tab「📊 多基金績效比較」圖 + 比較表三軸(配息率/含息/淨值)全 0.00%,但上方②③健診表同 3 檔(TLZF9/JFZN3/ACTI71)明明有值(全期實際配息率 4.62%/5.53%/4.79%、年化配息率 9.09%/11.01%/9.49%)。user 誤以為資料來源掉了(「請連上網找資料來源」),實為內部欄位讀錯。
