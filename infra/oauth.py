@@ -73,6 +73,34 @@ def build_authorize_url(
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Step 1.5:CSRF / session 綁定用 state + 帳號 email 解析（修「登入互相踢掉」）
+# ──────────────────────────────────────────────────────────────────────
+def generate_state(nbytes: int = 24) -> str:
+    """產生 URL-safe 隨機 state。用來把 authorize 請求綁定到發起它的 session，
+    callback 回來時只認 state 相符的授權碼 → 避免跨 session / 跨分頁搶帳號互踢。"""
+    import secrets as _secrets
+    return _secrets.token_urlsafe(nbytes)
+
+
+def decode_id_token_email(tokens: dict) -> str:
+    """從 OpenID id_token(JWT)『無驗證』解出 email，純顯示用（讓使用者確認登入到哪個帳號）。
+    id_token 由 Google 於同一 token response 直接簽發(openid scope)，此處不做簽章驗證，
+    僅取 payload 的 email 欄位；失敗一律回空字串（防禦性:絕不 raise）。"""
+    idt = (tokens or {}).get("id_token")
+    if not idt:
+        return ""
+    try:
+        import base64 as _b64
+        import json as _json
+        _payload = idt.split(".")[1]
+        _payload += "=" * (-len(_payload) % 4)  # 補 padding
+        _data = _json.loads(_b64.urlsafe_b64decode(_payload))
+        return str(_data.get("email", "") or "")
+    except Exception:
+        return ""
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Step 2: 把 authorization code 換成 access_token + refresh_token
 # ──────────────────────────────────────────────────────────────────────
 def exchange_code_for_tokens(

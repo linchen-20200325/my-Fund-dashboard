@@ -53,23 +53,11 @@
 
 ## 當前版本
 
-- **v19.302 Google Sheet 登入「搶帳號」根治 — Tab3 client 改優先 Service Account(2026-07-03)**:
-  - **背景(三帳號纏鬥)**:user 回報 app 內按「用 Google 登入」讀 Google Sheet 一直失敗、跳「You do not have access to this app or it does not exist」。截圖確認:登入 GitHub/Streamlit Cloud = `cheng10022`、Google Sheet 擁有者 = `chen10021`、GCP/git = `cheng10029`。Google 同意頁帳號(chen10021)與 app URL(`my-fund-dashboard-…streamlit.app`)都正確,按繼續後卻落到 Streamlit Cloud 平台頁看到 `cheng10022`
-  - **真根因**:**app 內自建 user Google OAuth 與 Streamlit Community Cloud 平台自身登入先天衝突** —— OAuth 導回 `*.streamlit.app` 被平台攔截,app 認證的 chen10021 跟平台的 cheng10022 對不上。`redirect_uri` / `login_hint` / v19.293 的 `prompt=select_account` 都救不了(那些只解「選錯帳號」,解不了平台層攔截)
-  - **修法(改用 Service Account,app 本來就支援)**:`repositories/policy/_helpers.py:101 get_gspread_client()` 有 SA headless 存取,但 `ui/tab3_portfolio.py:397` 舊決策是「`_oauth_configured` 為真就強制走 OAuth」→ 永遠撞。改成新 SSOT helper **`_t3_sheet_client()` 優先 Service Account**(有 `google_service_account` secret 就用它,沒設才退回 OAuth),套用到 auto-load / 讀回 / 存檔 / refresh 全部主要讀寫點。**只換 client 不動 schema**:v1/v2 仍由各點 `oauth_mode=bool(_oauth_configured)` 決定,SA client 照樣讀 v2 sheet(前提:Sheet 已分享給 SA client_email)。另補 `_sheet_id_q` 從 `_sheet_id_secret`(POLICY_SHEET_ID)fallback(對齊 L828 既有 pattern),讓純 SA 使用者(從不 OAuth 登入)也能觸發自動讀回
-  - **範圍界定(§8.5 不越權)**:本輪只改**讀寫主路徑**(load/save/auto-load/refresh)。schema 遷移 + v2 native 編輯 UI(`844-916` 那批 `_get_oauth_client()`)因 gated 在 `_logged_in` migration 區、且動到寫入路徑,**維持 OAuth 不動**(SA 使用者用不到、無回歸);若之後要 v2 編輯也走 SA,另案處理
-  - **架構/SSOT 合規**:純 L3 UI 決策收斂為單一 `_t3_sheet_client()` helper(DRY);L1 `get_gspread_client` / `_get_oauth_client` 不動;無新跨層 import、無新 §8.2.A 例外
-  - tests:`tests/test_tab3_sa_client_preference.py`(新檔,3 test — 原始碼檢查鎖住「SA 優先 helper 存在」+「舊 OAuth 優先三元式不得殘留」+「sheet_id 有 secret fallback」)。126 個 tab3/policy/cloud_io 相關測試全綠;ruff baseline 21→21 零新增
-  - **user 端還要做的(平台設定,程式碼改不到)**:① GCP 建 Service Account + 下載 JSON;② 把那張 Sheet 分享給 SA 的 `client_email`(編輯者);③ Streamlit secrets 加 `[google_service_account]` = JSON + `POLICY_SHEET_ID`;④ reboot。之後讀寫 Sheet 完全不需 Google 登入 → 不再撞帳號。`[google_oauth]` secret 可留(SA 優先),Drive 瀏覽/建新 Sheet 才會用到 OAuth
-
-- **v19.301 三率穿透掃描當機 —「壓一下畫面整個不見」根因(2026-07-03)**:
-  - **背景**:user 回報組合健診 Tab「🛡️ 微觀防護盾 — 持倉三率穿透」的「🔍 掃 N 檔持股三率」按鈕,一按整個畫面就消失(app 直接不能用)。(本輪同時 user 反饋的「年化三欄空白」與「Google Sheet 登入搶帳號」兩題,經查已分別由 v19.298 wb01 3Y fallback / v19.293 oauth prompt=select_account 於 main 平行修掉,本 entry 只收掃描當機這唯一未修項。)
-  - **真根因**:`ui/helpers/fund_grp_health/ai.py::_render_per_fund_three_ratio_expanders` 按鈕 handler 用**逐檔同步 for-loop** 連打 N 檔 yfinance 抓財報(`fetch_stock_three_ratios`),**每檔都沒有 timeout**。10 檔 × 5-10s(或某檔 hang)= 主執行緒被卡 50-100s+,Streamlit 的 websocket 在等不到 server 回應時斷線 → 整頁空白。這不是 Python 例外(那會顯示紅色錯誤框),而是**長時間阻塞導致連線中斷**
-  - **修法(並行 + 總時限,§1 Fail Loud)**:改用 `concurrent.futures.ThreadPoolExecutor`(max_workers=5)並行抓,`as_completed(timeout=_THREE_RATIO_SCAN_DEADLINE_SEC=30s)` 收斂——逾時就用已完成的部分結果,`shutdown(wait=False, cancel_futures=True)` **不等** 仍 hang 住的執行緒。無論幾檔 hang,主執行緒最多等 30s 就返回,畫面不再被卡死。整批掃描外層再包 try/except,任何不預期例外只記 log 不往上炸掉整個 tab
-  - **SSOT / §3.3 反捏造**:`_THREE_RATIO_SCAN_MAX_WORKERS`(5)+ `_THREE_RATIO_SCAN_DEADLINE_SEC`(30.0)為 module 頂部具名常數(非 inline magic),附註解說明用途
-  - **架構合規**:純 L3 UI 層改動(掃描的 UX 責任本就屬 UI);L1 `fetch_stock_three_ratios` 純 fetcher 不動,無跨層 import、無新例外需登錄 §8.2.A
-  - tests:`tests/test_fund_grp_health_extras_p1_news_ratio.py` +1(`TestThreeRatioScanBoundedTime` — 把 deadline 壓到 0.6s、每檔 fetch 故意 sleep 3s,驗證整個 render 總耗時被 deadline 約束在 < 2.5s、且不拋例外;舊版逐檔同步會卡 ~9s 直接 fail)。40 個 fund_grp_health extras 相關測試全綠
-  - **下一步**:部署後 user 重按「掃 N 檔持股三率」,畫面不該再消失;抓不到的檔會標「無法解析 Ticker」,能抓到的正常顯示三率
+- **v19.301(2026-07-04)**:修復 OAuth 搶帳號漏洞（嚴格 state 驗證）:
+  - **根因**:`handle_oauth_callback()` 舊版「若本 session 無 `_oauth_state` 則退回放行」邏輯，會讓任何未啟動 OAuth 的分頁（全新 tab / server 重啟後殘留 session）接受別的 session 的 `?code=` 授權碼，導致 chen10021 登入後被其他 session 搶走 token。
+  - **修法**:`ui/helpers/io/oauth_state.py` — 條件 `if _expected_state and _got_state and _got_state != _expected_state:` 改為嚴格版 `if _got_state and _got_state != _expected_state:`：只要 URL 帶了 state 參數，就必須與本 session 的 `_oauth_state` 完全相符，不再有「無 state 時放行」的 fallback 漏洞。
+  - **退化處理**：server 重啟後 session 遺失 → user 重按登入按鈕即可，是可接受行為。
+  - `app.py` APP_VERSION 更新至 v19.301。
 
 - **v19.298(2026-07-03)**:MK 3-3-3 殘留根因修復 — inception_date 優先 + wb01 3Y fallback:
   - **背景**:user 反饋「某基金成立超過 3 年但 MK 3-3-3 仍顯示不行」。v19.291 已修 timedelta 窗口(400→2000天),但仍有 2 個獨立根因未解:

@@ -36,6 +36,7 @@ def render_sidebar(*,
     _gsa_secret = _os._gsa_secret
     _sheet_id_secret = _os._sheet_id_secret
     _get_oauth_client = _os._get_oauth_client
+    _get_login_state = _os.get_login_state  # 修「登入互相踢掉」: state 綁定本 session
 
     with st.sidebar:
         st.markdown("## 📊 基金戰情室")
@@ -179,15 +180,18 @@ def render_sidebar(*,
         _logged_in_sb = bool(st.session_state.get("gsheet_tokens"))
         if _oauth_configured:
             if _logged_in_sb:
-                st.success("🟢 已登入")
+                _sb_email = st.session_state.get("gsheet_email", "")
+                st.success(f"🟢 已登入{('：' + _sb_email) if _sb_email else ''}")
                 if st.button("🚪 登出", key="btn_oauth_logout_sb",
                               use_container_width=True):
-                    st.session_state.pop("gsheet_tokens", None)
-                    st.session_state.pop("active_policy_id", None)
+                    for _k in ("gsheet_tokens", "gsheet_email", "_oauth_state",
+                               "active_policy_id"):
+                        st.session_state.pop(_k, None)
                     st.rerun()
             else:
                 _login_url_sb = build_authorize_url(
-                    _oauth_cfg["client_id"], _oauth_cfg["redirect_uri"])
+                    _oauth_cfg["client_id"], _oauth_cfg["redirect_uri"],
+                    state=_get_login_state())
                 st.link_button("🔐 用 Google 登入", _login_url_sb,
                                 use_container_width=True)
                 st.caption("登入後 Tab3 即可雲端存取保單試算表")
