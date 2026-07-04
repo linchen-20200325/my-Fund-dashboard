@@ -159,6 +159,49 @@ def render_portfolio_tab() -> None:
             "</div>",
             unsafe_allow_html=True)
         render_hero_kpi_cards(_kpis_hero)
+
+        # v19.303: FX 曝險摘要 — 組合匯率敏感度一覽
+        try:
+            _fx_counts: dict = {}
+            for _pf_fx in _pf_for_warroom:
+                _ccy = str(_pf_fx.get("currency") or "USD").strip().upper() or "USD"
+                _fx_counts[_ccy] = _fx_counts.get(_ccy, 0) + 1
+            _total_fx = sum(_fx_counts.values()) or 1
+            if _fx_counts:
+                # 取 FX 即時匯率（re-use tab3 cache pattern）
+                _fx_spot: dict = {}
+                for _ccy_fx in _fx_counts:
+                    if _ccy_fx == "TWD":
+                        _fx_spot[_ccy_fx] = 1.0
+                        continue
+                    try:
+                        from services.fund_service import get_latest_fx as _gf_fx
+                        import os as _os_fx
+                        _fk_fx = st.secrets.get("FRED_API_KEY", "") or _os_fx.environ.get("FRED_API_KEY", "")
+                        _v_fx = _gf_fx(f"{_ccy_fx}TWD=X", fred_api_key=_fk_fx)
+                        _fx_spot[_ccy_fx] = float(_v_fx) if _v_fx else 0.0
+                    except Exception:
+                        _fx_spot[_ccy_fx] = 0.0
+                _fx_lines = []
+                for _ccy_fx, _cnt in sorted(_fx_counts.items(), key=lambda x: -x[1]):
+                    _pct = _cnt / _total_fx * 100
+                    _rate = _fx_spot.get(_ccy_fx, 0)
+                    _rate_str = f"1 {_ccy_fx} ≈ {_rate:.2f} TWD" if _rate > 0 else "匯率待抓"
+                    _fx_lines.append(f"**{_ccy_fx}** {_cnt} 檔（{_pct:.0f}%）· {_rate_str}")
+                with st.expander(f"💱 FX 曝險摘要（{len(_fx_counts)} 種幣別）", expanded=False):
+                    st.caption(
+                        "組合中非 TWD 基金的幣別分布。台幣升值 1% 約等幅侵蝕該幣別折算績效。"
+                    )
+                    for _line in _fx_lines:
+                        st.markdown(f"- {_line}")
+                    _usd_pct = _fx_counts.get("USD", 0) / _total_fx * 100
+                    if _usd_pct >= 50:
+                        st.warning(
+                            f"⚠️ 組合 {_usd_pct:.0f}% 為 USD 計價，台幣大幅升值時 TWD 績效將明顯縮水。"
+                        )
+        except Exception:
+            pass  # smoke-allow: FX expander 非核心功能
+
         st.divider()
 
         # v18.14: 改用 markdown 章節（避免外層 expander 包住內部 expander 觸發 Streamlit 巢狀錯誤）

@@ -260,6 +260,21 @@ def _render_macro_indicator_card(title: str, signal: str, color: str,
     trend 為近 6-8 期 list;spark_key 決定 sparkline 的 SPEC threshold 線(無則純線)。
     """
     import streamlit as _st_c
+    # v19.303: 趨勢箭頭 — 比較最新期 vs 3 期前（月資料≈一季趨勢）
+    _arr_html = ''
+    if trend and len(trend) >= 4:
+        try:
+            _cur, _prv = float(trend[-1]), float(trend[-4])
+            if _prv != 0:
+                _chg = (_cur - _prv) / abs(_prv)
+                if _chg > 0.02:
+                    _arr_html = '<span style="font-size:11px;color:#22c55e;margin-left:5px;">↑</span>'
+                elif _chg < -0.02:
+                    _arr_html = '<span style="font-size:11px;color:#ef4444;margin-left:5px;">↓</span>'
+                else:
+                    _arr_html = '<span style="font-size:10px;color:#888888;margin-left:5px;">→</span>'
+        except Exception:
+            pass
     _st_c.markdown(
         f"<div style='background:{GH_BG_PRIMARY};border:2px solid {color};"
         f"border-radius:10px;padding:10px 12px 6px;margin:4px 0;min-height:150px;"
@@ -267,7 +282,7 @@ def _render_macro_indicator_card(title: str, signal: str, color: str,
         f"<div>"
         f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;letter-spacing:1px'>{title}</div>"
         f"<div style='color:{color};font-size:15px;font-weight:800;margin:4px 0 6px'>{signal}</div>"
-        f"<div style='color:{WHITE};font-weight:700;font-size:14px'>值 {value_str}</div>"
+        f"<div style='color:{WHITE};font-weight:700;font-size:14px'>值 {value_str}{_arr_html}</div>"
         f"</div>"
         f"<div style='color:{GRAY_AA};font-size:9px;border-top:1px solid {GH_BORDER};"
         f"padding-top:4px;margin-top:4px;line-height:1.3'>{note}"

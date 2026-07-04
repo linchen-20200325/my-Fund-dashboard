@@ -13,8 +13,29 @@ import pandas as pd
 import streamlit as st
 
 
+def _trend_dir(series: list, lookback: int = 20, threshold_pct: float = 0.03):
+    """v19.303: 計算近期趨勢方向。回傳 (arrow_html, arrow_char) 或 ('', '')。
+    lookback: 比較最新值 vs N 期前（日資料用 20≈1M，月資料用 3≈一季）。"""
+    if not series or len(series) < 4:
+        return '', ''
+    try:
+        lb = min(lookback, len(series) - 1)
+        cur, prv = float(series[-1]), float(series[-1 - lb])
+        if prv == 0:
+            return '', ''
+        chg = (cur - prv) / abs(prv)
+        if chg > threshold_pct:
+            return f'<span style="font-size:11px;color:#22c55e;margin-left:5px;">↑ 1M</span>', '↑'
+        elif chg < -threshold_pct:
+            return f'<span style="font-size:11px;color:#ef4444;margin-left:5px;">↓ 1M</span>', '↓'
+        else:
+            return f'<span style="font-size:11px;color:#888888;margin-left:5px;">→ 1M</span>', '→'
+    except Exception:
+        return '', ''
+
+
 def _render_compass_card(col, info, title, ticker, fmt='{:.2f}', unit='', show_ma=False):
-    """單張指標卡：值 + Phase 1 訊號燈 + 60D sparkline。info=None 顯示降級訊息。"""
+    """單張指標卡：值 + Phase 1 訊號燈 + 60D sparkline + v19.303 趨勢箭頭。info=None 顯示降級訊息。"""
     if info is None:
         col.markdown(
             f'<div style="background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;padding:10px;height:84px;">'
@@ -29,10 +50,12 @@ def _render_compass_card(col, info, title, ticker, fmt='{:.2f}', unit='', show_m
     extra = ''
     if show_ma and info.get('ma60') is not None:
         extra = f' <span style="font-size:10px;color:{GH_FG_MUTED};font-weight:400;">/ 60MA {fmt.format(info["ma60"])}</span>'
+    # v19.303: 趨勢箭頭 — 比較當前值與約 1M 前（lookback=20 交易日）
+    _trend_html, _ = _trend_dir(info.get('series') or [], lookback=20)
     col.markdown(
         f'<div style="background:{GH_BG_PRIMARY};border:1px solid {color};border-radius:8px;padding:10px;">'
         f'<div style="font-size:11px;color:{GH_FG_MUTED};">{title}（{ticker}）</div>'
-        f'<div style="font-size:22px;font-weight:900;color:{GH_FG_PRIMARY};margin:2px 0;">{val_str}{extra}</div>'
+        f'<div style="font-size:22px;font-weight:900;color:{GH_FG_PRIMARY};margin:2px 0;">{val_str}{extra}{_trend_html}</div>'
         f'<div style="font-size:11px;font-weight:700;color:{color};">{light} {label}</div>'
         f'</div>', unsafe_allow_html=True)
     ser = info.get('series') or []

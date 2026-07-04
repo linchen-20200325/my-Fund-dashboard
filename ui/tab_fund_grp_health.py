@@ -29,6 +29,25 @@ def render_fund_grp_health_tab() -> None:
         "🧮 = 本系統自行換算（非 MoneyDJ/Cnyes 直給）。"
     )
 
+    # v19.303: 總經 Phase 對照橫幅 — 提供健診結果的市場環境上下文
+    _phase_info = st.session_state.get("phase_info") or {}
+    _phase_name = _phase_info.get("phase", "")
+    if _phase_name:
+        _score = _phase_info.get("score", 0)
+        _phase_lower = _phase_name.lower()
+        if any(k in _phase_lower for k in ("多頭", "擴張", "bull", "expansion")):
+            _phase_icon, _phase_tip = "🟢", "多頭期：健診標準可適度放寬，重點看含息報酬能否跑贏通膨。"
+        elif any(k in _phase_lower for k in ("衰退", "防禦", "bear", "recession")):
+            _phase_icon, _phase_tip = "🔴", "防禦期：吃本金判定應從嚴看待；股票型基金承壓，配息穩定性更重要。"
+        else:
+            _phase_icon, _phase_tip = "🟡", "過渡期：健診結果請搭配個別基金趨勢判斷。"
+        st.info(
+            f"📊 當前總經 Phase：{_phase_icon} **{_phase_name}**（評分 {_score:+.1f}）"
+            f"　{_phase_tip}"
+        )
+    else:
+        st.caption("💡 先至「🌐 總經」Tab 載入資料，健診結果將顯示對應市場環境說明。")
+
     # v19.302: 從組合配置帶入基金代號（讀 portfolio_funds session_state）
     _pf_raw = st.session_state.get("portfolio_funds") or []
     _pf_codes = [str(f.get("code", "")).strip().upper() for f in _pf_raw if str(f.get("code", "")).strip()]
