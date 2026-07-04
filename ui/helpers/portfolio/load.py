@@ -169,7 +169,16 @@ def batch_load_unloaded_funds() -> None:
     # v18.156: 不能用 st.status — 它本質是 expander，本 helper 會被
     # tab3「🗂️ 保單分組視圖」expander 內按鈕呼叫，巢狀違規會 crash。
     # 改用 st.empty placeholder（label）+ st.progress + st.write log 平面組合。
-    from fund_fetcher import fetch_fund_from_moneydj_url
+    # v19.307：改走 L2 enriched wrapper（內含 finalize_fund_metrics）。
+    # 修 R8/fdbfb55（PR #457）漏遷移的 caller —— 原 raw 版 result["metrics"]
+    # 永遠是 {}，導致核心戰情室 / ① 健康分析表所有 metric 欄位 None（目前市價 /
+    # 夏普 / 年化波動 / σ 帶 / 含息報酬 / 配息率）。enriched 版每檔跑
+    # finalize_fund_metrics（純函式、thread-safe、無 st.*）→ metrics 有值，且
+    # MoneyDJ risk_metrics 走 risk_override 優先（user 要的「網路有就用、無才自算」）。
+    # 方向 L3 UI→L2 service，比原 L3→L1 直呼更合規。
+    from services.fund_service import (
+        fetch_fund_from_moneydj_url_enriched as fetch_fund_from_moneydj_url,
+    )
     from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: PLC0415
     code_cache: dict = {}
     n_uniq = len(uniq_codes_load)
