@@ -126,23 +126,14 @@ def tag_principal_erosion(fund: dict) -> str:
         return "N/A"
 
 
-def _fund_age_years(series) -> Optional[float]:
-    """v18.158：從 NAV series 算實際成立年資（NAV 起始日 → 今天，單位：年）。
+def _fund_age_years(series, inception_date=None) -> Optional[float]:
+    """v18.158 → v19.308：成立年資改走 SSOT `fund_inception_years`。
 
-    取代「以 ret_3y 存在性近似 3 年」的舊判斷 — `_ret(756)` 需 series ≥ 756 點，
-    對低頻 NAV（週/雙週/月線）即使基金成立 5+ 年也回 None，造成 3-3-3 第一條誤判。
+    優先用 MoneyDJ 現成成立日（inception_date），缺則 NAV 起始日推算。統一到單一
+    演算法，與 3-3-3 篩選 / 健診表同源（避免三份實作各自漂移）。
     """
-    if series is None or not hasattr(series, "index"):
-        return None
-    try:
-        s = series.dropna()
-        if len(s) == 0:
-            return None
-        first = pd.to_datetime(s.index[0])
-        now = pd.Timestamp.now(tz=first.tz) if first.tzinfo else pd.Timestamp.now()
-        return float((now - first).days / 365.25)
-    except (TypeError, ValueError, IndexError, AttributeError):
-        return None
+    from services.fund_screening import fund_inception_years
+    return fund_inception_years(inception_date, series)
 
 
 def _quarter_rets_from_series(s) -> Optional[tuple]:
@@ -269,7 +260,11 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
             # 隱藏欄（給篩選用）
             "_std_1y": _safe_float(m.get("std_1y")),
             "_ret_3y": _safe_float(m.get("ret_3y")),
-            "_age_years": _fund_age_years(f.get("series")),  # v18.158
+            "_age_years": _fund_age_years(  # v18.158 → v19.308 帶 MoneyDJ 成立日
+                f.get("series"),
+                (m.get("inception_date")
+                 or (f.get("moneydj_raw") or {}).get("inception_date")),
+            ),
         })
     return pd.DataFrame(rows)
 

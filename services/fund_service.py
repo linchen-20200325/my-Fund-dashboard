@@ -638,6 +638,11 @@ def finalize_fund_metrics(result: dict) -> dict:
         result["metrics"] = calc_metrics(s, divs, risk_override=combined_override)
         result["source_trace"].append({"source": "calc_metrics", "success": True})
 
+        # v19.308：把 MoneyDJ 現成「成立日」帶進 metrics，讓只吃 metrics 的 consumer
+        #（check_333_fund / mk_dashboard 成立年）免依賴本地長 NAV 歷史即可算成立年。
+        if result.get("inception_date") and isinstance(result.get("metrics"), dict):
+            result["metrics"]["inception_date"] = result["inception_date"]
+
         # v18.53 + v18.65: 境內缺 wb01 perf["1Y"] 改用本地計算,window >= 350 才視為真 1Y
         if not isinstance(result.get("perf"), dict):
             result["perf"] = {}
