@@ -53,6 +53,21 @@
 
 ## 當前版本
 
+- **v19.308 成立年改抓 MoneyDJ 現成成立日 — SSOT 一條龍(2026-07-04)**:
+  - **背景**:承 v19.307，成立年 / 5Y / Sortino 等仍 None,因 Cloud IP 被 MoneyDJ 擋、本地 NAV 只抓到近 1 月(成立年用 `series.index[0]` → 算成 0.1 年、MK 3-3-3 ① 全誤判)。user 明確要求「**不抓 NAV 歷史,抓 MoneyDJ 已算好的指標**」。
+  - **關鍵發現**:MoneyDJ 頁面「成立日期」**部分路徑早已在抓**(`sources.py` Allianz meta),但 (1) 主 moneydj 路徑(yp010000/yp010001,即 user 那幾檔)**沒抓**;(2) 成立年計算用序列而非成立日;(3) `report._compute_holding_years` 已優先讀 inception_date 但沒人餵。
+  - **修法(SSOT 一條龍,5 處)**:
+    1. `repositories/fund/fund_orchestration.py`:moneydj meta table 補抓「成立日期/設立日期/成立日/基金成立日」→ `result["inception_date"]`(抓不到不設,自動 fallback)。
+    2. `services/fund_service.py::finalize_fund_metrics`:`inception_date` 複製進 `metrics`,讓只吃 metrics 的 consumer 也讀得到。
+    3. `services/fund_screening.py`:新增 **SSOT 純函式 `fund_inception_years(inception_date, series)`**(成立日優先、序列 fallback、<90 筆且 <0.5 年 → None 不硬報);`check_333_fund` C1 改讀 `metrics["inception_date"]`。
+    4. `ui/components/mk_dashboard.py::_fund_age_years` 改 delegate 同 helper。
+    5. `services/health/report.py::_compute_holding_years` 改 delegate 同 helper(消除第三份重複實作)。
+  - **SSOT 保證**:成立年**只剩一個演算法** `fund_inception_years()`,3 consumer(3-3-3 / 健診 / 戰情室)全走它;成立日只從 fetcher 抓一次進 result→metrics。
+  - **安全 / Fail Loud**:抓不到成立日 → fallback 回序列(= v19.307 現狀,不更糟);序列過短且無成立日 → None(顯示「資料不足」而非誤導的「0.1 年 ❌」)。
+  - tests:新增 `tests/test_fund_inception_years.py`(8 tests:成立日優先 / ISO 解析 / 長序列 fallback / 短序列 None / 壞格式 fallback / 雙缺 None / check_333 短序列+成立日→通過 / 短序列無成立日→資料不足)。既有 dedup + enriched 測試續綠(17 全綠)。
+  - **⚠️ 需 live 驗證**:MoneyDJ 頁面「成立日期」欄是否存在、Cloud 上抓不抓得到,sandbox(403)無法測。程式照現有 pattern 寫 + fallback 安全,最終須 user reboot 後在線上確認成立年有無跑出真值。
+  - **下一步**:merge main + user reboot + 重載 → 成立年應顯示真實年數(3-3-3 ① 對老基金通過);若仍 None 代表該頁無成立日欄,再評估改抓 wb07 風險頁 Sharpe/標準差。
+
 - **v19.307 Tab3 分析表大量 None 根治 — 載入改走 L2 enriched wrapper(2026-07-04)**:
   - **背景**:user 截圖回報「組合配置 / 組合健診」多張分析表大量欄位 None、與現實不符——核心戰情室連「目前市價」都 None;① 健康分析表 Sharpe/Sortino/Calmar/MaxDD/5Y 全 None;3-3-3 成立年全 0.1 年。
   - **根因(regression)**:R8(commit `fdbfb55` / PR #457)把 L1 orchestrator 的 `calc_metrics` 上提 L2 `finalize_fund_metrics`,只有 `_enriched` wrapper 會呼叫它。但 **Tab3 批次載入器 `ui/helpers/portfolio/load.py:172` 與 `ui/helpers/d_mode.py:100` 這兩個 caller 漏遷移**,仍呼叫 raw `fetch_fund_from_moneydj_url`(`result["metrics"]` 永遠 `{}`)→ 所有讀 `metrics` 的欄位 None。**「目前市價」None 是鐵證**(有 series 一定算得出,除非 metrics dict 空)。

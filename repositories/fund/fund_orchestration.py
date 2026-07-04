@@ -706,6 +706,15 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 result["umbrella_fund"]   = rows_map.get("傘型架構", "").replace(" ","")
                 result["mgmt_fee"]        = rows_map.get("最高經理費(%)", "")
                 result["is_esg"]          = rows_map.get("是否為ESG", "")
+                # v19.308：MoneyDJ 現成「成立日期」→ 供成立年計算免依賴本地長歷史
+                #（Cloud IP 被擋、NAV 只抓到近 1 月時，成立年仍能正確）。抓不到則不設，
+                # 成立年自動 fallback 回 NAV 序列（見 fund_screening.fund_inception_years）。
+                _inc_raw = (rows_map.get("成立日期") or rows_map.get("設立日期") or
+                            rows_map.get("成立日") or rows_map.get("基金成立日") or "")
+                if _inc_raw:
+                    _inc_m = _re.search(r"\d{4}[/-]\d{1,2}[/-]\d{1,2}", _inc_raw)
+                    if _inc_m:
+                        result["inception_date"] = _inc_m.group().replace("/", "-")
                 # latest NAV + 年度高低點 from this page
                 for row in tbl.find_all("tr"):
                     cells = row.find_all("td")

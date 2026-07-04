@@ -42,7 +42,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.307_MacroNavigator"
+APP_VERSION = "v19.308_MacroNavigator"
 
 
 # ══════════════════════════════════════════════════════

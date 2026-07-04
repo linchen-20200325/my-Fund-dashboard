@@ -21,6 +21,43 @@ if TYPE_CHECKING:
     pass
 
 
+def fund_inception_years(inception_date, series=None) -> "float | None":
+    """v19.308 SSOT — 基金「成立至今」年數（MK 3-3-3 ① / 健診 / 戰情室共用）。
+
+    優先用 MoneyDJ 頁面現成的「成立日期」（inception_date，ISO 或 YYYY/MM/DD）——
+    這是 user 要的「抓 MoneyDJ 已算好的」，不需本地長 NAV 歷史。缺成立日才以 NAV
+    序列最早日推算；序列在 Streamlit Cloud 上可能因長歷史源被擋而過短
+    （< 90 筆且推算 < 0.5 年 → 不可信 → None，§1 Fail Loud 不硬報 0.1 年）。
+
+    回傳 float 年數，或 None（無成立日且序列不足以可信推算）。
+    """
+    import datetime as _dt
+    # 1) MoneyDJ 現成成立日優先（免依賴本地長歷史）
+    if inception_date:
+        try:
+            _inc = _dt.date.fromisoformat(str(inception_date)[:10])
+            return (_dt.date.today() - _inc).days / 365.25
+        except Exception:
+            pass  # 成立日格式異常 → 落到序列 fallback
+    # 2) fallback：NAV 序列最早日
+    if series is None:
+        return None
+    try:
+        s = series.dropna().sort_index() if hasattr(series, "dropna") else series
+        if len(s) == 0:
+            return None
+        first = pd.Timestamp(s.index[0])
+        if first.tzinfo is not None:
+            first = first.tz_localize(None)
+        _today = pd.Timestamp.utcnow().tz_localize(None).normalize()
+        years = (_today - first).days / 365.25
+        if len(s) < 90 and years < 0.5:
+            return None  # 序列太短，無法可信估算成立日（Cloud 長歷史被擋時常見）
+        return years
+    except Exception:
+        return None
+
+
 def check_333_fund(
     nav_series: "pd.Series | None",
     metrics: "dict | None" = None,
@@ -79,14 +116,17 @@ def check_333_fund(
 
     today = pd.Timestamp.utcnow().tz_localize(None).normalize()
 
-    # ── C1：成立年數（以 NAV 最早日推算）────────────────────────────────────
-    earliest = pd.Timestamp(s.index[0])
-    if earliest.tzinfo is not None:
-        earliest = earliest.tz_localize(None)
-    age_years = (today - earliest).days / 365.25
-    c1_pass = age_years >= min_years
-    result.update({'c1_age_years': round(age_years, 2), 'c1_pass': c1_pass})
-    result['criteria_count'] += 1
+    # ── C1：成立年數（v19.308：優先 MoneyDJ 現成成立日，缺則 NAV 最早日推算）──
+    _inception = (metrics or {}).get("inception_date")
+    age_years = fund_inception_years(_inception, s)
+    if age_years is not None:
+        c1_pass = age_years >= min_years
+        result.update({'c1_age_years': round(age_years, 2), 'c1_pass': c1_pass})
+        result['criteria_count'] += 1
+    else:
+        # 無成立日且序列過短 → 資料不足（c1_age_years/c1_pass 保持 None，
+        # 顯示「—」/❓ 而非誤導的「0.1 年 ❌」）
+        result['c1_age_years'] = None
 
     # ── C2：3 年年化報酬率 ──────────────────────────────────────────────────
     _m = metrics or {}
