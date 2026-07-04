@@ -192,10 +192,21 @@ def batch_333_funds(
     Returns
     -------
     pd.DataFrame  欄位：代碼 / 名稱 / C1成立年 / C2三年年化 / C2來源 / 整體通過
+
+    v19.306：以 code 去重（一檔一列，保留首次出現順序）。3-3-3 評估的是基金
+    內在屬性（成立年 / 3 年年化 / 同儕排名），同一基金若跨多張保單在
+    portfolio_funds 重複，會產生完全相同的重複列 + 灌水「共 N 檔」統計。此處
+    收斂為 SSOT 一檔一列。注意：僅基金內在分析去重；組合層投入金額 / 配置需保留
+    跨保單重複，故不在 portfolio_funds 源頭去重。
     """
     rows = []
+    _seen_codes: set = set()  # v19.306 SSOT 去重（見 docstring）：同 code 只評一次
     for f in fund_list:
         code    = f.get('code', '')
+        if code and code in _seen_codes:
+            continue  # 同基金已評過，跳過重複列
+        if code:
+            _seen_codes.add(code)
         name    = f.get('name', '')
         series  = f.get('series')
         metrics = f.get('metrics', {})

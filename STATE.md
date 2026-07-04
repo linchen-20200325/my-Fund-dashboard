@@ -53,6 +53,15 @@
 
 ## 當前版本
 
+- **v19.306 MK 3-3-3 批次篩選明細表去重 — SSOT 一檔一列(2026-07-04)**:
+  - **背景**:user 截圖回報 Tab3「MK 3-3-3 原則批次篩選 → 展開 3-3-3 評估明細」表出現重複列(JFZN3 / ACCP138 各兩次),底部「共 25 檔」統計含重複。
+  - **根因**:同一基金可跨多張保單存在於 `st.session_state.portfolio_funds`(policy schema 主鍵為 `(policy_id, fund_url)`,同基金不同保單合法各一筆)。`services/fund_screening.py:batch_333_funds()` 逐檔建列**未去重** → 明細列 + 「共 N 檔」統計灌水。
+  - **修法(SSOT 去重)**:在 `batch_333_funds()` 迴圈加 `_seen_codes` set,以 code 一檔一列、保留首次出現順序。3-3-3 評估的是**基金內在屬性**(成立年 / 3年年化 / 同儕排名),同基金跨保單重複列 = 完全相同的雜訊,收斂為 SSOT 一檔一列。
+  - **為何去重放 L2 服務層而非 UI / 源頭**:(1) `batch_333_funds` 是產出這張表的唯一 SSOT,去重放這裡則所有 caller 自動乾淨,不散落 UI;(2) **不可**在 `portfolio_funds` 源頭去重——組合層投入金額 / 配置需保留跨保單重複,只有基金內在分析才去重。
+  - **架構合規**:純 L2 service 內部邏輯,公開 signature / 回傳欄位不變;唯一 caller `ui/tab3_portfolio.py` 無需改動。
+  - tests:新增 `tests/test_fund_screening_dedup.py`(4 tests:重複收斂+順序保留 / 統計反映去重檔數 / 無重複行為不變 / 空 list)。4 綠。
+  - **下一步**:merge main + user reboot → 3-3-3 明細表一檔一列,「共 N 檔」統計正確。
+
 - **v19.305 Google 登入迴圈根治 — OAuth state 檢查放寬(2026-07-04)**:
   - **背景**:user 回報「已登入卻顯示沒登入、一直迴圈」,並指證「掃毒減肥前都能登入,之後才壞」。git 歷史逐 commit 比對確認為 **regression**:本檔 `852cfb1`(第四階段 deep refactor 建檔)登入邏輯**無 state 檢查、可正常登入**;`dff0c41`(v19.301「fix OAuth state strict check」)加上嚴格檢查後才壞。
   - **真根因**:v19.301 把守門改為「只要 URL 帶 state 就必須與本 session 的 `_oauth_state` 完全相符」。但 **Streamlit Cloud 在「整頁導去 Google 再導回」時會把本 session 重置成全新 session** → `_oauth_state` 遺失成 `None` → 回傳 state 與 None 永遠不符 → `handle_oauth_callback()` 每次都 early-return、不換 token → `gsheet_tokens` 永遠沒設 → 側邊欄一直顯示「用 Google 登入」→ 無限迴圈。(**訂正 v19.304 note**:當時判為「純平台攔截、程式端無可再改」,實為此 code regression,可修。)
