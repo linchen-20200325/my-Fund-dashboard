@@ -53,6 +53,100 @@ def _calc_data_health(indicators=None):
     return _calc_data_health_pure(ind)
 
 
+# ── MK 3-3-3 原則評估（v19.295）────────────────────────────────────────────
+
+def _render_333_fund_expander(
+    nav_series: "pd.Series",
+    metrics: dict,
+    display_name: str,
+) -> None:
+    """MK 3-3-3 原則評估 expander（Tab2 單一基金）。
+
+    C1 成立>3年 / C2 三年年化>7% / C3 同儕排名前1/3
+    資料來源：nav_series (DatetimeIndex) + metrics.ret_3y_ann (MoneyDJ)。
+    C3 目前顯示說明文字（無 portfolio peer 傳入時）。
+    """
+    from services.fund_screening import check_333_fund  # EX-PASSTHRU L3→L2 直呼 service
+
+    with st.expander("🎯 MK 3-3-3 優質標的評估", expanded=False):
+        st.caption(
+            "**MK 郭俊宏核心篩選原則** — "
+            "①成立 >3年（歷經牛熊）｜"
+            "②3年年化報酬 >7%（真正定存替代品）｜"
+            "③晨星3顆星 / 同儕前1/3（中前段班有潛力）"
+        )
+
+        r = check_333_fund(nav_series, metrics)
+
+        def _icon(b) -> str:
+            if b is True:  return '✅'
+            if b is False: return '❌'
+            return '❓'
+
+        age   = r.get('c1_age_years')
+        ret3y = r.get('c2_return_3y')
+        src   = r.get('c2_source', '')
+
+        age_str = f'{age:.1f} 年' if age is not None else 'N/A'
+        if ret3y is not None:
+            ret_str = f'{ret3y * 100:.1f}%'
+            ret_note = f'（來源：{src}）' if src else ''
+        else:
+            ret_str  = 'N/A'
+            ret_note = '（需 2.5 年以上 NAV 資料）'
+
+        overall = r.get('overall_pass')
+        if overall is True:
+            bcolor  = '#16a085'
+            verdict = '🏆 C1+C2 全過！符合 MK 3-3-3 初步篩選標準'
+        elif overall is False:
+            bcolor  = '#c0392b'
+            verdict = '⚠️ 未達標 — 至少一項條件不符'
+        else:
+            bcolor  = '#586069'
+            verdict = '📊 評估完成（C3 需人工核對晨星評級）'
+
+        st.markdown(
+            f'<div style="border-left:4px solid {bcolor};padding:14px 18px;'
+            f'border-radius:6px;margin:10px 0;background:rgba(0,0,0,0.10);">'
+            f'<div style="font-size:1.05em;font-weight:bold;margin-bottom:10px;">{verdict}</div>'
+            '<table style="width:100%;border-collapse:collapse;font-size:0.95em;">'
+            f'<tr><td style="padding:5px 0;color:#8b949e;width:55%">① 成立時間 &gt; 3 年</td>'
+            f'<td>{_icon(r.get("c1_pass"))} &nbsp;<b>{age_str}</b></td></tr>'
+            f'<tr><td style="padding:5px 0;color:#8b949e;">② 3 年年化報酬 &gt; 7%</td>'
+            f'<td>{_icon(r.get("c2_pass"))} &nbsp;<b>{ret_str}</b>'
+            f'<span style="font-size:0.85em;color:#8b949e;"> {ret_note}</span></td></tr>'
+            '<tr><td style="padding:5px 0;color:#8b949e;">③ 晨星評級 / 同儕前 1/3</td>'
+            '<td>❓ &nbsp;<span style="font-size:0.85em;color:#8b949e;">'
+            '請至 <a href="https://www.morningstar.com.tw" target="_blank">Morningstar.com.tw</a>'
+            ' 查詢同類評級</span></td></tr>'
+            '</table></div>',
+            unsafe_allow_html=True,
+        )
+
+        # 輔助提示
+        if age is not None and not r.get('c1_pass'):
+            remain = 3.0 - age
+            st.caption(f'⏳ 距離 3 年門檻還需 {remain:.1f} 年（{int(remain * 12)} 個月）')
+        if ret3y is not None and not r.get('c2_pass'):
+            gap = 0.07 - ret3y
+            st.caption(f'❗ 年化報酬距 7% 目標差 {gap * 100:.1f} 個百分點')
+        if r.get('c2_pass') is True and r.get('c1_pass') is True:
+            st.caption('💡 C1+C2 通過後，請至晨星確認 C3（同類前 40 名 ≈ 3 顆星以上）'
+                       '，三項全過才是 MK 定義的「基優生」。')
+
+        with st.expander('📖 3-3-3 原則說明', expanded=False):
+            st.markdown(
+                '**①成立 >3 年** — 足以歷經完整牛熊循環，有資本利得作為配息後盾，'
+                '可透過歷史驗證抗跌能力。\n\n'
+                '**②3 年年化報酬 >7%** — MK 核心目標：找「7% 以上的定存替代品」。'
+                '長期穩定 7%+ 代表能透過資本利得+股息完整支付配息，不吃本金。\n\n'
+                '**③晨星 3 顆星 / 同儕前 1/3** — 晨星 3 顆星 = 同類前 40 名。'
+                '選中前段班而非頂尖，因為資優生落差大；中前段班費率、風控和績效已達標，'
+                '更有持續往上的空間。'
+            )
+
+
 def render_single_fund_tab() -> None:
     """渲染單一基金深度分析 Tab — MoneyDJ 抓取 + 風險指標 + AI 分析。
 
@@ -1592,6 +1686,13 @@ def render_single_fund_tab() -> None:
                                 pass
                     else:
                         st.info("⚠️ 此基金 NAV 未取得，無法試算單位數。請先確認基本資料區是否成功抓取淨值。")
+
+                # ── MK 3-3-3 原則評估（v19.295）─────────────────────────────
+                try:
+                    _render_333_fund_expander(s, m, name or fk)
+                except Exception as _e333:
+                    import sys as _sys333
+                    print(f'[tab2/333] render error: {_e333}', file=_sys333.stderr)
 
                 st.markdown("### ④ AI 深度解盤")
                 st.divider()

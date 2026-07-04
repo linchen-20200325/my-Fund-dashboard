@@ -174,6 +174,61 @@ def render_portfolio_tab() -> None:
         from ui.helpers.fund_checkup import render_fund_checkup
         render_fund_checkup(st.session_state.portfolio_funds)
         st.divider()
+
+        # v19.xxx：MK 3-3-3 原則批次篩選（留強汰弱量化依據）
+        st.markdown(
+            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
+            f"border-left:4px solid {MD_GREEN_A200};border-radius:8px;padding:10px 14px;margin:8px 0'>"
+            f"<span style='color:{MD_GREEN_A200};font-size:15px;font-weight:900'>🔢 MK 3-3-3 原則批次篩選</span>"
+            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>成立>3年 ／ 3年年化>7% ／ 晨星3星(手動確認)</span>"
+            "</div>",
+            unsafe_allow_html=True)
+        try:
+            from services.fund_screening import batch_333_funds as _batch_333
+            _funds_333 = [
+                {
+                    "code":    f.get("code", ""),
+                    "name":    f.get("name") or f.get("code") or "",
+                    "series":  f.get("series"),
+                    "metrics": f.get("metrics") or {},
+                }
+                for f in _pf_for_warroom
+                if f.get("series") is not None
+            ]
+            if _funds_333:
+                with st.expander("📋 展開 3-3-3 評估明細", expanded=True):
+                    _df_333 = _batch_333(_funds_333)
+                    if not _df_333.empty:
+                        st.dataframe(
+                            _df_333,
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                        st.caption(
+                            "✅=通過 ❌=未通過 ❓=資料不足　"
+                            "②來源空=MoneyDJ 含息報酬；②來源*=NAV 未含配息(保守估計)　"
+                            "③晨星評級請至 [Morningstar](https://www.morningstar.com.tw/) 手動查閱"
+                        )
+                        # 整體通過統計
+                        _pass_cnt = (_df_333["整體"] == "✅").sum()
+                        _fail_cnt = (_df_333["整體"] == "❌").sum()
+                        _unk_cnt  = (_df_333["整體"] == "❓").sum()
+                        _total    = len(_df_333)
+                        st.info(
+                            f"共 {_total} 檔　✅ 通過 {_pass_cnt} 檔　"
+                            f"❌ 未通過 {_fail_cnt} 檔　❓ 資料不足 {_unk_cnt} 檔　"
+                            f"（③同儕排名由 Tab2 個別查詢，組合批次僅評 ①②）",
+                            icon="📊",
+                        )
+                    else:
+                        st.info("NAV 資料尚未載入或不足，無法評估。")
+            else:
+                st.info("請先在下方加入基金並載入資料。", icon="👇")
+        except Exception as _e333_tab3:
+            import sys as _sys333
+            print(f"[tab3/333] batch error: {_e333_tab3}", file=_sys333.stderr)
+            st.warning("3-3-3 批次評估載入失敗，請檢查 services/fund_screening.py。")
+        st.divider()
     # v19.185 Bug5:相關性矩陣物理上移至摘要正下方(原在 T7 後)。
     # T5 只讀 session_state.portfolio_funds(全域)+ 自 guard(>=2 loaded),搬移變數安全。
     # ── T5: 持股相關性矩陣（v18.36 按保單分組）──────────────────────────────
