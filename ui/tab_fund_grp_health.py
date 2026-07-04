@@ -29,6 +29,14 @@ def render_fund_grp_health_tab() -> None:
         "🧮 = 本系統自行換算（非 MoneyDJ/Cnyes 直給）。"
     )
 
+    # v19.302: 從組合配置帶入基金代號（讀 portfolio_funds session_state）
+    _pf_raw = st.session_state.get("portfolio_funds") or []
+    _pf_codes = [str(f.get("code", "")).strip().upper() for f in _pf_raw if str(f.get("code", "")).strip()]
+    if _pf_codes:
+        if st.button(f"🔗 從我的組合帶入（{len(_pf_codes)} 檔）", key="grp_health_import_from_pf"):
+            st.session_state["fund_grp_health_codes"] = "\n".join(_pf_codes)
+            st.rerun()
+
     codes_raw = st.text_area(
         f"基金代號（每行一檔，最多 {_MAX_CODES} 檔；例：ACCP138）",
         key="fund_grp_health_codes",

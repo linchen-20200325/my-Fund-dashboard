@@ -1106,7 +1106,7 @@ def render_macro_tab() -> None:
                 # v16.0 異常遮罩：原 warning 會讓新手以為程式壞掉，改溫馨提示
                 st.info(f"ℹ️ 指標數據已 {_age_h:.1f} 小時未更新（上次：{_upd_str}），點擊下方「🔄 更新總經資料」即可同步最新數據。")
             else:
-                st.caption(f"🕐 最後從 FRED 抓取：{_upd_str}（{_age_h:.1f} 小時前）")
+                st.caption(f"✅ 已載入 · {_upd_str} TW（{_age_h:.1f}h 前）")
         else:
             st.info("💡 尚未載入總經資料，點擊下方按鈕開始")
 

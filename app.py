@@ -168,7 +168,7 @@ render_sidebar(
 from ui.components.macro_compass_top import render_macro_compass
 
 
-render_macro_compass()
+# v19.302: render_macro_compass() 移入 tab_macro — 僅在總經 Tab 顯示（不跨 Tab 污染）
 
 # ══════════════════════════════════════════════════════
 # TABS
@@ -185,6 +185,7 @@ tab_macro, tab_single, tab_health, tab_portfolio, tab5, tab6 = st.tabs(
 # TAB 1 — 🌐 總經環境（故事第 1 站）
 # ══════════════════════════════════════════════════════
 with tab_macro:
+    render_macro_compass()  # v19.302: 移入此處 — 僅在總經 Tab 顯示
     # v18.127 B-C.5: 總經 Tab 內容已搬到 ui/tab1_macro.py
     render_macro_tab()
 
