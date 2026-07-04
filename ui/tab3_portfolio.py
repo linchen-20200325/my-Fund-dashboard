@@ -102,6 +102,21 @@ def render_portfolio_tab() -> None:
         _sheet_id_secret,
     )
     from ui.helpers.holdings import _zh_holding
+
+    # ── v19.302: 政策 Sheet client 決策 SSOT — 優先 Service Account ──────────
+    # 背景:app 內 user Google OAuth 在 Streamlit Cloud 上會跟平台自身登入相撞
+    #   (OAuth 導回 *.streamlit.app 被平台攔截 → 「You do not have access / does
+    #    not exist」帳號錯亂),redirect_uri / login_hint 都救不了。Service Account
+    #   為 headless 存取、完全不需使用者登入 → 徹底避開帳號衝突。
+    # 規則:只要 `google_service_account` secret 有設就優先用它;沒設才退回既有
+    #   user OAuth(Drive 瀏覽等功能仍需 OAuth)。
+    # 重要:本 helper 只換「用哪顆 client」,不動 schema —— v1/v2 仍由各呼叫點的
+    #   `oauth_mode=bool(_oauth_configured)` 決定,SA client 照樣能讀 v2 sheet
+    #   (前提:該 Sheet 已分享給 SA 的 client_email)。
+    def _t3_sheet_client():
+        if _gsa_secret:
+            return get_gspread_client(dict(_gsa_secret))
+        return _get_oauth_client()
     from ui.helpers.data_registry import (
         _update_data_registry,
     )
@@ -375,7 +390,11 @@ def render_portfolio_tab() -> None:
                       help="從本機 JSON 還原整本帳本")
 
         # 共用：雲端 panel 需要的快取狀態（避免重複打 API）
-        _sheet_id_q = (st.session_state.get("policy_sheet_id") or "").strip()
+        # v19.302: 補 _sheet_id_secret fallback(對齊 L828 既有 pattern)——純 Service
+        # Account 使用者(設了 POLICY_SHEET_ID secret、從不走 OAuth 登入)原本
+        # session 無 policy_sheet_id → _sheet_id_q 為空 → 自動讀回/讀取鈕都不出現。
+        _sheet_id_q = (st.session_state.get("policy_sheet_id")
+                       or _sheet_id_secret or "").strip()
         _logged_in_q = bool(st.session_state.get("gsheet_tokens"))
         _can_cloud_q = bool(_sheet_id_q) and (
             _logged_in_q or (_gsa_secret and _sheet_id_secret)
@@ -394,8 +413,8 @@ def render_portfolio_tab() -> None:
                     _sheet_title_q = ""
 
         def _t3_cloud_client_q():
-            return (_get_oauth_client() if _oauth_configured
-                    else get_gspread_client(dict(_gsa_secret)))
+            # v19.302: 委派 SSOT helper — 優先 Service Account(見 _t3_sheet_client)
+            return _t3_sheet_client()
 
         # ── 切換帳本後自動讀回：持倉切換 + 同 code 基金資訊沿用（免重抓）──
         # 只在「帳本 ID 變了」且雲端可達時跑一次；真正不同的新標的留給既有
@@ -992,8 +1011,7 @@ def render_portfolio_tab() -> None:
                 # v18.167：refresh_only 路徑（dump_all / load_all 已移到頂部快捷面板）
                 if _refresh_clicked:
                     from ui.helpers.cloud_io import load_all_from_sheet
-                    _client = _get_oauth_client() if _oauth_configured else \
-                              get_gspread_client(dict(_gsa_secret))
+                    _client = _t3_sheet_client()  # v19.302: 優先 Service Account
                     _res_l = load_all_from_sheet(
                         _client, _sheet_id, st.session_state,
                         oauth_mode=bool(_oauth_configured),
