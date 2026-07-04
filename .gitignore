@@ -30,3 +30,9 @@ Thumbs.db
 # Debug protocol artifacts (Phase 1-4 generated, cleaned at Phase 4)
 *.bak
 debug.log
+
+# 一次性 git push 輔助腳本（電腦用）
+push_fund*.bat
+push_v*.bat
+push_v*_result.txt
+commit_msg_*.txt

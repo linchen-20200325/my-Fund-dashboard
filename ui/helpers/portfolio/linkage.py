@@ -56,14 +56,42 @@ def render_fund_portfolio_membership(session_state, fund_codes, fund_name="") ->
             _msg = (f"✅ <b>此基金已在你的組合</b>（共 {_n} 檔）｜定位 {_tag}"
                     f"<span style='color:{GRAY_66}'>（尚未填投資金額）</span>")
         _border = TRAFFIC_GREEN
+        st.markdown(
+            f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
+            f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
+            f"color:{GH_FG_MUTED};line-height:1.6'>🔗 {_msg}</div>",
+            unsafe_allow_html=True,
+        )
     else:
-        _msg = (f"➕ 此基金<b>尚未加入</b>你的組合（目前 {_n} 檔）"
-                f"<span style='color:{GRAY_66}'>　· 可至「📊 組合基金」Tab 加入後比較</span>")
+        # v19.297：未加入時除顯示提示外，同時提供快捷「加入組合」按鈕
+        _msg = (f"➕ 此基金<b>尚未加入</b>你的組合（目前 {_n} 檔）")
         _border = TRAFFIC_YELLOW
-
-    st.markdown(
-        f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
-        f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
-        f"color:{GH_FG_MUTED};line-height:1.6'>🔗 {_msg}</div>",
-        unsafe_allow_html=True,
-    )
+        _add_code = next((_norm(c) for c in (fund_codes or []) if _norm(c)), "")
+        _lnk_col, _btn_col = st.columns([3, 1])
+        _lnk_col.markdown(
+            f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
+            f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
+            f"color:{GH_FG_MUTED};line-height:1.6'>🔗 {_msg}</div>",
+            unsafe_allow_html=True,
+        )
+        if _add_code:
+            _btn_key = f"btn_add_to_pf_{_add_code}"
+            if _btn_col.button("➕ 加入組合", key=_btn_key, use_container_width=True,
+                               help="加入 Tab3 組合基金（加入後請至 Tab3 點「📡 載入」取得資料）"):
+                _pf = session_state.get("portfolio_funds") or []
+                # 防重複
+                _already = any(_norm(_f.get("code")) == _add_code
+                               for _f in _pf if isinstance(_f, dict))
+                if not _already:
+                    _pf.append({
+                        "code": _add_code,
+                        "name": fund_name or _add_code,
+                        "loaded": False,
+                        "is_core": True,   # 預設核心，使用者可在 Tab3 調整
+                        "invest_twd": 0,
+                    })
+                    session_state["portfolio_funds"] = _pf
+                    st.toast(f"✅ {fund_name or _add_code} 已加入組合，請至 Tab3 點「📡 載入」", icon="✅")
+                    st.rerun()
+                else:
+                    st.toast(f"ℹ️ {fund_name or _add_code} 已在組合中", icon="ℹ️")
