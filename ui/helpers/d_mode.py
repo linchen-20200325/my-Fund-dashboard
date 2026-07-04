@@ -97,7 +97,11 @@ def fetch_fund_meta_safe(code: str, _fetch=None, _fx_lookup=None,
             # fetch_fund_multi_source 缺 mapping 預查 + normalize 容錯，
             # ACCP138 走多源時某 fetcher 漏防護 None。改用 high-level entry
             # 自動帶 mapping → page_type、保 meta、normalize_result_state。
-            from fund_fetcher import fetch_fund_from_moneydj_url as _fetch
+            # v19.307: 改走 L2 enriched wrapper —— raw 版 metrics 永遠 {}，
+            # 導致本函式 out["metrics"]（T7 配息殖利率用）恆空 → dy=0。
+            from services.fund_service import (
+                fetch_fund_from_moneydj_url_enriched as _fetch,
+            )
         _r = _fetch(_code)
     except Exception as _e:
         # v18.240: 把 traceback 最內層 frame 帶到 error 訊息（root cause 定位用）

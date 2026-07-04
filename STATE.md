@@ -53,6 +53,14 @@
 
 ## 當前版本
 
+- **v19.307 Tab3 分析表大量 None 根治 — 載入改走 L2 enriched wrapper(2026-07-04)**:
+  - **背景**:user 截圖回報「組合配置 / 組合健診」多張分析表大量欄位 None、與現實不符——核心戰情室連「目前市價」都 None;① 健康分析表 Sharpe/Sortino/Calmar/MaxDD/5Y 全 None;3-3-3 成立年全 0.1 年。
+  - **根因(regression)**:R8(commit `fdbfb55` / PR #457)把 L1 orchestrator 的 `calc_metrics` 上提 L2 `finalize_fund_metrics`,只有 `_enriched` wrapper 會呼叫它。但 **Tab3 批次載入器 `ui/helpers/portfolio/load.py:172` 與 `ui/helpers/d_mode.py:100` 這兩個 caller 漏遷移**,仍呼叫 raw `fetch_fund_from_moneydj_url`(`result["metrics"]` 永遠 `{}`)→ 所有讀 `metrics` 的欄位 None。**「目前市價」None 是鐵證**(有 series 一定算得出,除非 metrics dict 空)。
+  - **修法**:兩 caller 改 import `services.fund_service.fetch_fund_from_moneydj_url_enriched`(= raw + `finalize_fund_metrics`)。方向 L3 UI→L2 service(比原 L3→L1 直呼更合規);`finalize_fund_metrics` 無 `st.*`、thread-safe,可在 ThreadPoolExecutor 內跑。**同時實現 user 要的「MoneyDJ 優先、無資料才自算」**:`finalize` 用 `risk_override`(=MoneyDJ risk_metrics)覆蓋自算值。
+  - **仍為 None 的部分(§1 Fail Loud,非本次可解)**:成立年 / 5Y年化 / Sortino(需≥60筆) / Calmar(需3Y) 需**長 NAV 歷史**;Streamlit Cloud IP 被 MoneyDJ/子網域封鎖 → 長歷史源全敗、退到近 ~30 日 nav 頁(series ~0.1 年)。這些欄位無足夠資料時顯示 None/資料不足是**正確的、不該假造**。若要根治需讓 Cloud 端抓到長歷史(NAS proxy)或改讀 MoneyDJ 成立日/wb07 預算值——屬後續資料源工作,已與 user 對齊。
+  - tests:新增 `tests/test_fund_load_enriched.py`(7 tests:2 caller 走 enriched 守門 + `finalize_fund_metrics` 正常 series 產 metrics(含 nav) / 短 series 不假造 / None series 安全)。既有 `test_portfolio_load.py` 15 tests 續綠。
+  - **下一步**:merge main + user reboot + 重新載入 → 核心戰情室「目前市價/波動/σ 帶」、健診表 Sharpe(資料夠時)恢復;長歷史欄位視 Cloud 能否抓到長 NAV 而定。
+
 - **v19.306 MK 3-3-3 批次篩選明細表去重 — SSOT 一檔一列(2026-07-04)**:
   - **背景**:user 截圖回報 Tab3「MK 3-3-3 原則批次篩選 → 展開 3-3-3 評估明細」表出現重複列(JFZN3 / ACCP138 各兩次),底部「共 25 檔」統計含重複。
   - **根因**:同一基金可跨多張保單存在於 `st.session_state.portfolio_funds`(policy schema 主鍵為 `(policy_id, fund_url)`,同基金不同保單合法各一筆)。`services/fund_screening.py:batch_333_funds()` 逐檔建列**未去重** → 明細列 + 「共 N 檔」統計灌水。
