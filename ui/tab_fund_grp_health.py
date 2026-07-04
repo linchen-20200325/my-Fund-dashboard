@@ -21,6 +21,29 @@ _MAX_CODES = 10
 _DEFAULT_CCY = "USD"
 
 
+def _pick_comparison_basis(rows: "list[dict]") -> str:
+    """v19.304: 多基金績效比較圖的「基準」選擇 SSOT（純函式，可單元測試）。
+
+    背景（user 2026-07-04「多檔比較資料都是 0」）：v19.180 把績效欄拆成
+    「(年化)」+「(全期實際)」兩套。年化欄在持有 < 0.5 年時依
+    `dividend_calc.MIN_YEARS_FOR_ANNUALIZE`（SSOT = shared/signal_thresholds.py）
+    一律回 None（防「短期配息 × 倍數」年化幻象，§1 Fail Loud）。同保單同期買進的
+    多檔常整排短歷史 → 年化全 None → 圖表 `float(None or 0)` 畫成全 0 空圖。
+
+    規則：全檔都有年化值（皆 ≥ 0.5 年）→ 用「年化」(跨檔可比、原設計)；
+    任一檔短歷史（年化為 None）→ 全圖退「全期實際」(100% 真實累計、永遠有值、
+    不年化故無造假)。回傳基準字串，caller 用 f"X% ({basis})" 組欄位鍵，
+    確保同一張圖各檔基準一致（不混基準）。
+    """
+    _all_annual = all(
+        r.get("配息率% (年化)") is not None
+        and r.get("含息% (年化)") is not None
+        and r.get("淨值% (年化)") is not None
+        for r in rows
+    )
+    return "年化" if _all_annual else "全期實際"
+
+
 def render_fund_grp_health_tab() -> None:
     """渲染 💊 基金組合健診 Tab（v19.37 新增）。"""
     st.markdown("### 💊 基金組合健診")
@@ -623,19 +646,30 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                 import plotly.graph_objects as _go
                 _codes = [r["code"] for r in ok_rows]
                 # v19.190 fix + v19.194 merge reconcile：key 對齊 process_one_fund 實際輸出。
-                # 並行線 v19.180 把欄位拆成「(全期實際)」+「(年化)」兩套；圖表取**年化**
-                # （= 原 annual_*_pct_🧮，跨檔可比）。舊鍵「年化…% 🧮」已不存在，不可再讀。
-                _div_r  = [float(r.get("配息率% (年化)") or 0) for r in ok_rows]
-                _ret_r  = [float(r.get("含息% (年化)") or 0) for r in ok_rows]
-                _nav_r  = [float(r.get("淨值% (年化)") or 0) for r in ok_rows]
+                # 並行線 v19.180 把欄位拆成「(全期實際)」+「(年化)」兩套。
+                # v19.304 FIX（user 2026-07-04「多檔比較資料都是 0」根治）:
+                #   年化欄在持有 < 0.5 年時依 dividend_calc.MIN_YEARS_FOR_ANNUALIZE guard
+                #   一律為 None（防「短期配息 × 倍數」年化幻象，§1 Fail Loud）。同保單同期
+                #   買進的多檔常整排短歷史 → 年化全 None → 圖表 float(None or 0) 畫成全 0 空圖。
+                #   修法:全檔都有年化值才用「年化」(跨檔可比、原設計);任一檔短歷史 →
+                #   全圖改用「全期實際」(100% 真實累計、永遠有值、不年化故無造假風險),
+                #   基準統一避免同圖混基準,並在標題 / 圖例 / caption 明示當前基準。
+                _basis = _pick_comparison_basis(ok_rows)
+                _all_annual = _basis == "年化"
+                _div_key = f"配息率% ({_basis})"
+                _ret_key = f"含息% ({_basis})"
+                _nav_key = f"淨值% ({_basis})"
+                _div_r  = [float(r.get(_div_key) or 0) for r in ok_rows]
+                _ret_r  = [float(r.get(_ret_key) or 0) for r in ok_rows]
+                _nav_r  = [float(r.get(_nav_key) or 0) for r in ok_rows]
                 _fig = _go.Figure()
-                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name="配息率%(年化)🧮", marker_color="#f0883e"))
-                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name="含息%(年化)🧮",  marker_color=TRAFFIC_GREEN))
-                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name="淨值%(年化)🧮",  marker_color=INFO_BLUE))
+                _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name=f"配息率%({_basis})🧮", marker_color="#f0883e"))
+                _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name=f"含息%({_basis})🧮",  marker_color=TRAFFIC_GREEN))
+                _fig.add_trace(_go.Bar(x=_codes, y=_nav_r, name=f"淨值%({_basis})🧮",  marker_color=INFO_BLUE))
                 _fig.add_hline(y=0, line_dash="dot", line_color=GRAY_55)
                 _fig.update_layout(
                     barmode="group",
-                    title="📊 多基金績效比較 🧮（配息率 / 含息報酬 / 淨值漲跌）",
+                    title=f"📊 多基金績效比較 🧮（{_basis}:配息率 / 含息報酬 / 淨值漲跌）",
                     height=360,
                     paper_bgcolor=GH_BG_PRIMARY, plot_bgcolor=GH_BG_PRIMARY,
                     font=dict(color=GH_FG_SECONDARY),
@@ -643,14 +677,19 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                     margin=dict(l=20, r=20, t=70, b=20),
                 )
                 st.plotly_chart(_fig, use_container_width=True)
-                # v19.77 L1：精簡比較表（對照圖看精確值）
+                if not _all_annual:
+                    st.caption(
+                        "ℹ️ 部分基金持有 < 0.5 年，年化值會失真（短期配息 × 倍數的幻象），"
+                        "故本圖改以「全期實際」(持有期累計、未年化) 呈現真實數據，各檔基準一致。"
+                    )
+                # v19.77 L1：精簡比較表（對照圖看精確值，基準同上圖 v19.304）
                 _cmp_df = pd.DataFrame([
                     {
                         "代號": r["code"],
                         "基金名": r.get("基金名", ""),
-                        "含息% (年化)": float(r.get("含息% (年化)") or 0),
-                        "配息率% (年化)": float(r.get("配息率% (年化)") or 0),
-                        "淨值% (年化)": float(r.get("淨值% (年化)") or 0),
+                        _ret_key: float(r.get(_ret_key) or 0),
+                        _div_key: float(r.get(_div_key) or 0),
+                        _nav_key: float(r.get(_nav_key) or 0),
                     }
                     for r in ok_rows
                 ])
@@ -659,9 +698,9 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                     column_config={
                         "代號": _cc.TextColumn("代號", width="small"),
                         "基金名": _cc.TextColumn("基金名", width="medium"),
-                        "含息% (年化)": _cc.NumberColumn("含息% (年化)", format="%.2f %%"),
-                        "配息率% (年化)": _cc.NumberColumn("配息率% (年化)", format="%.2f %%"),
-                        "淨值% (年化)": _cc.NumberColumn("淨值% (年化)", format="%.2f %%"),
+                        _ret_key: _cc.NumberColumn(_ret_key, format="%.2f %%"),
+                        _div_key: _cc.NumberColumn(_div_key, format="%.2f %%"),
+                        _nav_key: _cc.NumberColumn(_nav_key, format="%.2f %%"),
                     },
                 )
             except Exception as _e_chart:

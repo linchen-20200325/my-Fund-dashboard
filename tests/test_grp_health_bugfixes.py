@@ -22,13 +22,16 @@ def _src(path: str) -> str:
 
 
 class TestPerfChartKeys:
-    def test_chart_reads_quanqi_keys(self):
-        # v19.194 merge reconcile：並行線 v19.180 把欄位拆成「(全期實際)」+「(年化)」，
-        # 圖表改取年化（= annual_*_pct，跨檔可比）。
+    def test_chart_uses_adaptive_basis(self):
+        # v19.304 fix（user 2026-07-04「多檔比較資料都是 0」）：圖表基準改自適應。
+        # 舊版寫死讀「(年化)」→ 短歷史整排 None → float(None or 0) 全 0 空圖。
+        # 新版走 _pick_comparison_basis(ok_rows)：全檔皆年化 → 年化;任一短歷史 → 全期實際。
         src = _src(_GRP)
-        assert 'r.get("配息率% (年化)")' in src
-        assert 'r.get("含息% (年化)")' in src
-        assert 'r.get("淨值% (年化)")' in src
+        assert "_pick_comparison_basis(ok_rows)" in src, "圖表應改走自適應基準 helper"
+        # f-string 組鍵，兩套欄名都可能被讀到
+        assert 'f"配息率% ({_basis})"' in src
+        assert 'f"含息% ({_basis})"' in src
+        assert 'f"淨值% ({_basis})"' in src
 
     def test_old_renamed_keys_gone(self):
         """v19.148 改名前的舊鍵不得殘留（否則又會讀到 None → 0）。"""
@@ -37,12 +40,47 @@ class TestPerfChartKeys:
         assert "含息年化% 🧮" not in src
         assert "年化淨值% 🧮" not in src
 
-    def test_process_one_fund_emits_quanqi_keys(self):
-        """確認 row dict 真的有圖表來源的「(年化)」鍵（v19.180 後欄位拆兩套）。"""
+    def test_process_one_fund_emits_both_bases(self):
+        """確認 row dict 同時有「(年化)」+「(全期實際)」兩套鍵（v19.180 拆欄 + v19.304 需 fallback）。"""
         src = _src(_GRP)
         assert '"配息率% (年化)": s[' in src
         assert '"含息% (年化)": s[' in src
         assert '"淨值% (年化)": s[' in src
+        assert '"配息率% (全期實際)": s[' in src
+        assert '"含息% (全期實際)": s[' in src
+        assert '"淨值% (全期實際)": s[' in src
+
+
+class TestComparisonBasisPicker:
+    """v19.304 純函式回歸網 — _pick_comparison_basis 基準決策。"""
+
+    def test_all_annual_present_picks_annual(self):
+        from ui.tab_fund_grp_health import _pick_comparison_basis
+        rows = [
+            {"配息率% (年化)": 9.09, "含息% (年化)": 10.8, "淨值% (年化)": 1.7},
+            {"配息率% (年化)": 11.0, "含息% (年化)": 12.6, "淨值% (年化)": 1.6},
+        ]
+        assert _pick_comparison_basis(rows) == "年化"
+
+    def test_any_short_history_falls_back_to_quanqi(self):
+        """任一檔年化為 None（持有 < 0.5 年）→ 全圖退全期實際，避免全 0 空圖。"""
+        from ui.tab_fund_grp_health import _pick_comparison_basis
+        rows = [
+            {"配息率% (年化)": 9.09, "含息% (年化)": 10.8, "淨值% (年化)": 1.7,
+             "配息率% (全期實際)": 4.62, "含息% (全期實際)": 6.3, "淨值% (全期實際)": 1.7},
+            # 短歷史檔:年化三軸皆 None,只有全期實際有值(截圖 TLZF9/JFZN3/ACTI71 情境)
+            {"配息率% (年化)": None, "含息% (年化)": None, "淨值% (年化)": None,
+             "配息率% (全期實際)": 5.53, "含息% (全期實際)": 7.2, "淨值% (全期實際)": 1.64},
+        ]
+        assert _pick_comparison_basis(rows) == "全期實際"
+
+    def test_partial_none_in_single_row_falls_back(self):
+        """單檔只有部分年化欄 None 也算不完整 → 退全期實際（基準統一）。"""
+        from ui.tab_fund_grp_health import _pick_comparison_basis
+        rows = [
+            {"配息率% (年化)": 9.09, "含息% (年化)": None, "淨值% (年化)": 1.7},
+        ]
+        assert _pick_comparison_basis(rows) == "全期實際"
 
 
 class TestCheckupExpanded:

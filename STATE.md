@@ -53,6 +53,17 @@
 
 ## 當前版本
 
+- **v19.304 多基金績效比較圖「資料都是 0」根治 — 圖表基準自適應(2026-07-04)**:
+  - (版號說明:原記為 v19.303,因 main 平行 UI 線已用 v19.303「trend arrows」,依本 session 撞號改號慣例 bump v19.304 避免混淆。)
+  - **背景**:user 截圖回報組合健診 Tab「📊 多基金績效比較」圖 + 比較表三軸(配息率/含息/淨值)全 0.00%,但上方②③健診表同 3 檔(TLZF9/JFZN3/ACTI71)明明有值(全期實際配息率 4.62%/5.53%/4.79%、年化配息率 9.09%/11.01%/9.49%)。user 誤以為資料來源掉了(「請連上網找資料來源」),實為內部欄位讀錯。
+  - **真根因**:v19.180 把績效欄拆「(年化)」+「(全期實際)」兩套;比較圖 `ui/tab_fund_grp_health.py` **寫死只讀「(年化)」**欄。年化欄依 `dividend_calc.MIN_YEARS_FOR_ANNUALIZE`(SSOT=`shared/signal_thresholds.py`=0.5)在**持有 < 0.5 年**時一律回 `None`(防「短期配息 × 倍數」年化幻象,§1 Fail Loud)。同保單同期買進的多檔常整排短歷史(截圖 3 檔配息 6 次 ≈ 5-6 個月)→ 年化全 None → 圖表 `float(None or 0)` 畫成**全 0 空圖**。資料一直都在(全期實際欄),只是圖讀了「合法為空」的那欄。
+  - **修法(基準自適應,§1 不造假)**:新增純函式 SSOT `_pick_comparison_basis(rows)` — 全檔都有年化值(皆 ≥ 0.5 年)→ 用「年化」(跨檔可比、原設計);**任一檔短歷史 → 全圖退「全期實際」**(100% 真實累計、永遠有值、不年化)。基準對整張圖統一(不同圖混基準),標題/圖例/新增 caption 明示當前基準;< 0.5 年時 caption 說明「改以全期實際呈現真實數據」。比較表同步跟隨基準。
+  - **SSOT / §3.3 反捏造**:基準決策收斂為單一 `_pick_comparison_basis()` 純函式(可單元測試,不需 streamlit);0.5 年門檻續留 `shared/signal_thresholds.py` 不複製;無 inline magic number。
+  - **架構合規**:純 L3 UI 層改動;L2 `dividend_calc` 欄位契約不動(仍同時吐兩套欄);無跨層 import、無新 §8.2.A 例外。
+  - tests:`tests/test_grp_health_bugfixes.py` 改 `TestPerfChartKeys`(對齊 f-string 自適應鍵)+ 新增 `TestComparisonBasisPicker`(3 純函式 test:全年化→年化 / 任一短歷史→全期實際 / 單檔部分 None→全期實際)。9 + 44(dividend_calc)測試全綠。
+  - **下一步**:部署後 user 重看多基金比較圖,短歷史組合會顯示「全期實際」真實數據(不再全 0),並有 caption 說明基準。
+  - **另 Google Sheet 登入迴圈**:user 本輪同時反饋「已登入但 Google Sheet 一直迴圈」。此為 **Streamlit Cloud 平台自身登入 vs app 內 OAuth 先天衝突**——OAuth 導回 `*.streamlit.app` 被平台攔截,token 存不進 session → 面板一直顯示「尚未登入」→ 迴圈(main v19.301 嚴格 state 驗證修的是 token 被別 session 搶,非本迴圈)。**唯一可靠解仍是 Service Account**(headless、免登入),需 user 完成 4 步平台設定:① GCP 建 SA + 下載 JSON;② 把 Sheet 分享給 SA `client_email`(編輯者);③ Streamlit secrets 加 `[google_service_account]` + `POLICY_SHEET_ID`;④ reboot。程式碼端(Tab3 優先 SA)已備妥,無可再改處。
+
 - **v19.301(2026-07-04)**:修復 OAuth 搶帳號漏洞（嚴格 state 驗證）:
   - **根因**:`handle_oauth_callback()` 舊版「若本 session 無 `_oauth_state` 則退回放行」邏輯，會讓任何未啟動 OAuth 的分頁（全新 tab / server 重啟後殘留 session）接受別的 session 的 `?code=` 授權碼，導致 chen10021 登入後被其他 session 搶走 token。
   - **修法**:`ui/helpers/io/oauth_state.py` — 條件 `if _expected_state and _got_state and _got_state != _expected_state:` 改為嚴格版 `if _got_state and _got_state != _expected_state:`：只要 URL 帶了 state 參數，就必須與本 session 的 `_oauth_state` 完全相符，不再有「無 state 時放行」的 fallback 漏洞。
