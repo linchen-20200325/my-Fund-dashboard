@@ -318,28 +318,44 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         buy_mode  = "2年高低點σ"
         print(f"[calc_metrics] 買點模式=2年高低點σ 高={ref_high} 低={ref_low}")
 
-    # ── MK v3.1 公式：買=年高-kσ｜賣=年低+kσ（對稱，區間基準）──────────
-    # v19.313 修:σ 改「區間基準」= (年高-年低)/3(對齊 L292 原始設計 + 原 fallback)。
-    #   原 v3.0 用 wb07 年化波動率(std_1y%):σ_abs=年高×年化σ%,3σ 可達 ~18%,
-    #   常「超出」2 年高低區間 → 買3/賣3 掉出真實區間(買3 比史低還低,永遠觸不到)。
-    #   改 (年高-年低)/3 → 買3=年低、賣3=年高,3 檔均分區間,訊號必觸得到。
-    #   std_1y 仍保留供 Sharpe/波動顯示,只是不再拿來當買賣 band 的 σ。
-    # 買點：小跌(20%)=年高-1σ｜急跌(30%)=年高-2σ｜大跌(50%)=年高-3σ(=年低)
-    # 賣點：小漲(20%)=年低+1σ｜急漲(30%)=年低+2σ｜大漲(50%)=年低+3σ(=年高)
-    std_amt = round((ref_high - ref_low) / 3, 4)
-    std_amt = max(std_amt, 0.0001)   # 防呆：σ 不可為 0（年高=年低 退化序列）
+    # ── MK v3.2 公式（A+B v19.318）：回歸中樞 ± kσ，σ=真·淨值統計標準差 ─────────
+    # 沿革:v3.0 用 wb07 年化波動率(σ_abs=年高×年化σ%)→ 3σ 常超出區間、買賣點永遠觸不到;
+    #   v3.1(v19.313)改區間基準 (年高-年低)/3,但「買錨年高、賣錨年低」使 買1=賣2、買2=賣1
+    #   數學重疊,6 條線塌成 4 條,且 band 寬度=年區間(平靜基金仍看似過寬)。
+    # v3.2(user 選 A+B):
+    #   B — σ 改「近 1 年淨值的統計標準差」(真 standard deviation,隨實際波動縮放,
+    #       平靜期自動變窄貼價,不受一年前大跌拖累)。
+    #   A — 以「回歸中樞(近 1 年均值)」為中心 ± kσ 對稱佈局 → 6 條線天然不重疊。
+    #   年高/年低改在 Tab2 圖上以參考線呈現(區間脈絡),不再當 band 錨點。
+    #   訊號語意:現價偏離回歸中樞幾個 σ → 幾檔買/賣。std_1y(年化%)仍供 Sharpe/波動顯示。
+    _sig_win = s.dropna()
+    if len(_sig_win) > TRADING_DAYS_PER_YEAR:
+        _sig_win = _sig_win.tail(TRADING_DAYS_PER_YEAR)   # 近 1 年(不足則全序列)
+    if len(_sig_win) >= 20:
+        sigma_center = round(float(_sig_win.mean()), 4)          # 回歸中樞
+        sigma_abs    = round(float(_sig_win.std(ddof=1)), 4)     # 真·統計標準差(NAV 單位)
+        buy_mode     = "淨值σ通道"
+        print(f"[calc_metrics] 買點模式=淨值σ通道 中樞={sigma_center} σ={sigma_abs} n={len(_sig_win)}")
+    else:
+        # 資料不足(<20 筆)→ 退回區間中點 + (年高-年低)/6(仍對稱不重疊),旗標待更新
+        sigma_center = round((ref_high + ref_low) / 2, 4)
+        sigma_abs    = round((ref_high - ref_low) / 6, 4)
+        buy_mode     = "區間σ(資料不足)"
+        print(f"[calc_metrics] 買點模式=區間σ fallback(n<20) 中樞={sigma_center} σ={sigma_abs}")
 
-    b1    = round(ref_high - std_amt,     4)   # 年高 - 1σ（小跌小買 20%）
-    b2    = round(ref_high - 2 * std_amt, 4)   # 年高 - 2σ（急跌穩買 30%）
-    b3    = round(ref_high - 3 * std_amt, 4)   # 年高 - 3σ（大跌大買 50%）
-    sell1 = round(ref_low  + std_amt,     4)   # 年低 + 1σ（小漲停利 20%）
-    sell2 = round(ref_low  + 2 * std_amt, 4)   # 年低 + 2σ（急漲停利 30%）
-    sell3 = round(ref_low  + 3 * std_amt, 4)   # 年低 + 3σ（大漲停利 50%）
+    std_amt = max(sigma_abs, 0.0001)   # 防呆:σ 不可為 0(全平序列)
+
+    b1    = round(sigma_center - std_amt,     4)   # 中樞 - 1σ（小跌小買 20%）
+    b2    = round(sigma_center - 2 * std_amt, 4)   # 中樞 - 2σ（急跌穩買 30%）
+    b3    = round(sigma_center - 3 * std_amt, 4)   # 中樞 - 3σ（大跌大買 50%）
+    sell1 = round(sigma_center + std_amt,     4)   # 中樞 + 1σ（小漲停利 20%）
+    sell2 = round(sigma_center + 2 * std_amt, 4)   # 中樞 + 2σ（急漲停利 30%）
+    sell3 = round(sigma_center + 3 * std_amt, 4)   # 中樞 + 3σ（大漲停利 50%）
 
     print(f"[calc_metrics] σ={std_amt} b1={b1} b2={b2} b3={b3} sell1={sell1} sell2={sell2} sell3={sell3}")
 
-    buy_basis  = ref_high   # MK v3.0: 買點錨定年最高
-    sell_basis = ref_low    # MK v3.0: 賣點錨定年最低
+    buy_basis  = sigma_center   # v3.2: 買賣點均錨定回歸中樞(近 1 年均值)
+    sell_basis = sigma_center
 
     # 距離 % （正=尚未觸發 / 0 或負=已觸發；接近閾值=2%）
     NEAR_PCT = NEAR_DIVIDEND_WARNING_PCT  # v19.74 W2 SSOT
@@ -350,8 +366,8 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     sell_distance_pct = {"s1": _dist(sell1), "s2": _dist(sell2), "s3": _dist(sell3)}
 
     # 倉位判斷（深度優先；買勝過賣以利風險控管）
-    if std_amt < ref_high * 0.001:   # σ < 0.1% → 資料不可靠
-        pos_l, pos_c = "資料待更新 📡", GRAY_55
+    if std_amt < ref_high * 0.001:   # σ < 現價 0.1% → 波動極低或資料不足,訊號不可靠
+        pos_l, pos_c = "波動極低/待更新 📡", GRAY_55
     elif now <= b3:    pos_l, pos_c = "大跌大買 🔥 (投 50%)", MD_PURPLE_500
     elif now <= b2:    pos_l, pos_c = "急跌穩買 📈 (投 30%)", MATERIAL_GREEN
     elif now <= b1:    pos_l, pos_c = "小跌小買 ✅ (投 20%)", MD_GREEN_A200

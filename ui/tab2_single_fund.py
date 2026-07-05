@@ -562,32 +562,40 @@ def render_single_fund_tab() -> None:
                         textfont=dict(size=9, color="#ffd600"),
                         hovertemplate="%{text}<br>淨值：%{y:.4f}<extra></extra>"))
 
-                # ── MK v3.0 買賣水平線（3 買 + 3 賣）────────────────────
+                # ── MK v3.2 買賣水平線（回歸中樞 ± kσ；σ=近1年淨值統計標準差）────
                 for bv, bl, bc in [
-                    (m.get("buy1"), "買1 小跌(年高-1σ)", MD_GREEN_A200),
-                    (m.get("buy2"), "買2 急跌(年高-2σ)", MATERIAL_GREEN),
-                    (m.get("buy3"), "買3 大跌(年高-3σ)", MD_PURPLE_500),
+                    (m.get("buy1"), "買1 小跌(中樞-1σ)", MD_GREEN_A200),
+                    (m.get("buy2"), "買2 急跌(中樞-2σ)", MATERIAL_GREEN),
+                    (m.get("buy3"), "買3 大跌(中樞-3σ)", MD_PURPLE_500),
                 ]:
                     if bv:
                         fig_n.add_hline(y=bv, line_color=bc, line_dash="dot",
                                         annotation_text=bl, annotation_font_color=bc,
                                         annotation_position="bottom right")
                 for sv, sl, sc in [
-                    (m.get("sell1"), "賣1 小漲(年低+1σ)", WARN_AMBER),
-                    (m.get("sell2"), "賣2 急漲(年低+2σ)", MD_DEEP_ORANGE_400),
-                    (m.get("sell3"), "賣3 大漲(年低+3σ)", MATERIAL_RED),
+                    (m.get("sell1"), "賣1 小漲(中樞+1σ)", WARN_AMBER),
+                    (m.get("sell2"), "賣2 急漲(中樞+2σ)", MD_DEEP_ORANGE_400),
+                    (m.get("sell3"), "賣3 大漲(中樞+3σ)", MATERIAL_RED),
                 ]:
                     if sv:
                         fig_n.add_hline(y=sv, line_color=sc, line_dash="dash",
                                         annotation_text=sl, annotation_font_color=sc,
                                         annotation_position="top right")
+                # 年高/年低參考線（區間脈絡；非 band 錨點）— A+B 的 A 面
+                for _rv, _rl in [(m.get("high_1y"), "年高"), (m.get("low_1y"), "年低")]:
+                    if _rv:
+                        fig_n.add_hline(y=float(_rv), line_color=TRAFFIC_NEUTRAL,
+                                        line_dash="longdash", line_width=1, opacity=0.55,
+                                        annotation_text=_rl, annotation_font_color=TRAFFIC_NEUTRAL,
+                                        annotation_font_size=9, annotation_position="top left")
 
-                # ── y 軸範圍：取 NAV / BB / 買賣線整體 min-max，留 5% 邊界 ──
+                # ── y 軸範圍：取 NAV / BB / 買賣線 / 年高低整體 min-max，留 5% 邊界 ──
                 _y_vals = [float(v) for v in df_show["nav"].dropna().values]
                 if len(_bb_up) > 0: _y_vals += [float(v) for v in _bb_up.values if pd.notna(v)]
                 if len(_bb_dn) > 0: _y_vals += [float(v) for v in _bb_dn.values if pd.notna(v)]
                 for _hv in (m.get("buy1"), m.get("buy2"), m.get("buy3"),
-                            m.get("sell1"), m.get("sell2"), m.get("sell3")):
+                            m.get("sell1"), m.get("sell2"), m.get("sell3"),
+                            m.get("high_1y"), m.get("low_1y")):
                     if _hv: _y_vals.append(float(_hv))
                 if _y_vals:
                     _y_min, _y_max = min(_y_vals), max(_y_vals)
@@ -668,12 +676,12 @@ def render_single_fund_tab() -> None:
                 if _m_buy1:
                     _rows = ""
                     for _bv, _bl, _bc, _is_buy in [
-                        (_m_buy3,  "💧 大跌大買 (50%) 年高-3σ", MD_PURPLE_500, True),
-                        (_m_buy2,  "💧 急跌穩買 (30%) 年高-2σ", MATERIAL_GREEN, True),
-                        (_m_buy1,  "💧 小跌小買 (20%) 年高-1σ", MD_GREEN_A200, True),
-                        (_m_sell1, "💰 小漲停利 (20%) 年低+1σ", WARN_AMBER, False),
-                        (_m_sell2, "💰 急漲停利 (30%) 年低+2σ", MD_DEEP_ORANGE_400, False),
-                        (_m_sell3, "💰 大漲停利 (50%) 年低+3σ", MATERIAL_RED, False),
+                        (_m_buy3,  "💧 大跌大買 (50%) 中樞-3σ", MD_PURPLE_500, True),
+                        (_m_buy2,  "💧 急跌穩買 (30%) 中樞-2σ", MATERIAL_GREEN, True),
+                        (_m_buy1,  "💧 小跌小買 (20%) 中樞-1σ", MD_GREEN_A200, True),
+                        (_m_sell1, "💰 小漲停利 (20%) 中樞+1σ", WARN_AMBER, False),
+                        (_m_sell2, "💰 急漲停利 (30%) 中樞+2σ", MD_DEEP_ORANGE_400, False),
+                        (_m_sell3, "💰 大漲停利 (50%) 中樞+3σ", MATERIAL_RED, False),
                     ]:
                         if not _bv: continue
                         _chip_lbl, _chip_color, _chip_dist = _proximity_chip(_m_nav_v, _bv, _is_buy)
@@ -688,7 +696,7 @@ def render_single_fund_tab() -> None:
                     from ui.components.cards import gh_card
                     st.markdown(gh_card(
                         f"<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
-                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.1（{_m_mode} ｜ σ=(年高-年低)÷3）</span>"
+                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.2（{_m_mode} ｜ σ=近1年淨值標準差 ｜ 中樞±kσ）</span>"
                         f"<span style='background:{CHIP_BG_NEAR_BLACK};color:{_m_pc};border:1px solid {_m_pc};padding:2px 10px;"
                         f"border-radius:12px;font-size:12px;font-weight:700'>{_m_pl}</span>"
                         f"</div>"

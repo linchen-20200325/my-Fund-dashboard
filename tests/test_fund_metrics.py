@@ -1,9 +1,10 @@
-"""MK v3.0 標準差買賣點公式驗算
+"""MK v3.2 標準差買賣點公式驗算（v19.318 A+B）
 公式：
-  買點 = 年高 - k×σ_amount   (k=1,2,3)
-  賣點 = 年低 + k×σ_amount   (k=1,2,3)
-  σ_amount = 年高 × std_1y%
+  買點 = 回歸中樞 - k×σ   (k=1,2,3)
+  賣點 = 回歸中樞 + k×σ   (k=1,2,3)
+  回歸中樞 = 近 1 年淨值均值；σ = 近 1 年淨值統計標準差（真 std）
   接近閾值 = 2%
+  → 6 條線對稱於中樞、天然不重疊（修 v3.1 買1=賣2 的重疊 bug）
 """
 import numpy as np
 import pandas as pd
@@ -21,54 +22,41 @@ def _fake_series(n_days=300, start_nav=10.0, daily_vol=0.012, seed=42):
     return pd.Series(navs, index=dates)
 
 
-def test_mk_v3_buy_anchored_to_year_high():
-    """買點公式: 年高-1σ > 年高-2σ > 年高-3σ"""
+def _center_sigma(s):
+    """v3.2 期望值:回歸中樞 = 近1年均值;σ = 近1年統計標準差。"""
+    win = s.dropna()
+    if len(win) > 252:
+        win = win.tail(252)
+    return round(float(win.mean()), 4), round(float(win.std(ddof=1)), 4)
+
+
+def test_mk_v3_buy_from_center():
+    """買點公式(v3.2): 中樞-1σ > 中樞-2σ > 中樞-3σ,錨定回歸中樞。"""
     s = _fake_series()
-    risk_override = {
-        "year_high_nav": float(s.tail(252).max()),
-        "year_low_nav":  float(s.tail(252).min()),
-        "risk_table": {
-            "六個月": {"標準差": 11.5},
-            "一年":   {"標準差": 12.0},
-            "三年":   {"標準差": 13.0},
-            "五年":   {"標準差": 14.0},
-        },
-    }
-    m = calc_metrics(s, [], risk_override=risk_override)
-    yh = risk_override["year_high_nav"]
-    yl = risk_override["year_low_nav"]
-    sigma = round((yh - yl) / 3, 4)   # v19.313: σ 改區間基準 (年高-年低)/3（原 yh×年化σ%）
-    assert abs(m["buy1"] - round(yh - 1*sigma, 4)) < 1e-3, f"buy1={m['buy1']} expected {yh - sigma}"
-    assert abs(m["buy2"] - round(yh - 2*sigma, 4)) < 1e-3
-    assert abs(m["buy3"] - round(yh - 3*sigma, 4)) < 1e-3
-    assert m["buy_basis"] == yh
+    m = calc_metrics(s, [])
+    center, sigma = _center_sigma(s)
+    assert sigma > 0
+    assert abs(m["buy1"] - round(center - 1 * sigma, 4)) < 1e-2, f"buy1={m['buy1']} expected {center - sigma}"
+    assert abs(m["buy2"] - round(center - 2 * sigma, 4)) < 1e-2
+    assert abs(m["buy3"] - round(center - 3 * sigma, 4)) < 1e-2
+    assert abs(m["buy_basis"] - center) < 1e-2   # v3.2: 買點錨定回歸中樞
     # 三檔遞減（買3最深）
     assert m["buy1"] > m["buy2"] > m["buy3"]
 
 
-def test_mk_v3_sell_anchored_to_year_low():
-    """賣點公式: 年低+1σ < 年低+2σ < 年低+3σ"""
+def test_mk_v3_sell_from_center():
+    """賣點公式(v3.2): 中樞+1σ < 中樞+2σ < 中樞+3σ,錨定回歸中樞。"""
     s = _fake_series()
-    risk_override = {
-        "year_high_nav": float(s.tail(252).max()),
-        "year_low_nav":  float(s.tail(252).min()),
-        "risk_table": {
-            "六個月": {"標準差": 9.5},
-            "一年":   {"標準差": 10.0},
-            "三年":   {"標準差": 11.0},
-            "五年":   {"標準差": 12.0},
-        },
-    }
-    m = calc_metrics(s, [], risk_override=risk_override)
-    yl = risk_override["year_low_nav"]
-    yh = risk_override["year_high_nav"]
-    sigma = round((yh - yl) / 3, 4)   # v19.313: σ 改區間基準 (年高-年低)/3（原 yh×年化σ%）
-    assert abs(m["sell1"] - round(yl + 1*sigma, 4)) < 1e-3
-    assert abs(m["sell2"] - round(yl + 2*sigma, 4)) < 1e-3
-    assert abs(m["sell3"] - round(yl + 3*sigma, 4)) < 1e-3
-    assert m["sell_basis"] == yl
+    m = calc_metrics(s, [])
+    center, sigma = _center_sigma(s)
+    assert abs(m["sell1"] - round(center + 1 * sigma, 4)) < 1e-2
+    assert abs(m["sell2"] - round(center + 2 * sigma, 4)) < 1e-2
+    assert abs(m["sell3"] - round(center + 3 * sigma, 4)) < 1e-2
+    assert abs(m["sell_basis"] - center) < 1e-2   # v3.2: 賣點亦錨定回歸中樞
     # 三檔遞增（賣3最高）
     assert m["sell1"] < m["sell2"] < m["sell3"]
+    # v19.318 核心回歸:買賣不重疊(v3.1 bug 買1=賣2)
+    assert m["buy1"] != m["sell2"] and m["buy2"] != m["sell1"]
 
 
 def test_mk_v3_distance_pct_signs():
@@ -100,36 +88,25 @@ def test_mk_v3_distance_pct_signs():
 
 
 def test_mk_v3_position_label_priority():
-    """倉位標籤：深買 > 淺買 > 淺賣 > 深賣（買勝過賣以利風險控管）"""
-    # 強迫 NAV 落在 b3 以下 → 應顯示「大跌大買」
+    """倉位標籤(v3.2)：深買 > 淺買 > 淺賣 > 深賣（買勝過賣以利風險控管）。
+
+    以「回歸中樞 ± kσ」為基準,把最新 NAV 放到對應區帶。單點對 252 窗的 mean/σ
+    影響極小,故用中樞 ± 倍數 σ 設定即可穩定命中對應標籤。
+    """
     s = _fake_series()
-    yh, yl = 100.0, 50.0
-    # v19.313: σ 改區間基準 → sigma=(100-50)/3≈16.667
-    #   b1≈83.33 b2≈66.67 b3≈50(=年低)｜sell1≈66.67 sell2≈83.33 sell3≈100(=年高)
-    sigma = round((yh - yl) / 3, 4)
-    s = s.copy()
-    s.iloc[-1] = 45.0   # 落在 b3≈50 下方 → 大跌大買
-    risk_override = {
-        "year_high_nav": yh, "year_low_nav": yl,
-        "risk_table": {
-            "六個月": {"標準差": 9.0},
-            "一年":   {"標準差": 10.0},
-            "三年":   {"標準差": 11.0},
-            "五年":   {"標準差": 12.0},
-        },
-    }
-    m = calc_metrics(s, [], risk_override=risk_override)
-    assert abs(m["buy3"] - round(yh - 3*sigma, 4)) < 1e-3
-    assert abs(m["buy3"] - yl) < 0.01   # 買3 = 年低（區間下緣）
-    assert "大跌大買" in m["pos_label"], f"got {m['pos_label']}"
-    # NAV=75 落在 b2≈66.67 與 b1≈83.33 之間 → 「小跌小買」
-    s.iloc[-1] = 75.0
-    m = calc_metrics(s, [], risk_override=risk_override)
-    assert "小跌小買" in m["pos_label"], f"got {m['pos_label']}"
-    # NAV=105 ≥ sell3≈100（年高）→ 大漲停利
-    s.iloc[-1] = 105.0
-    m = calc_metrics(s, [], risk_override=risk_override)
-    assert "大漲停利" in m["pos_label"], f"got {m['pos_label']}"
+    m0 = calc_metrics(s, [])
+    center = m0["buy_basis"]      # v3.2: buy_basis=sell_basis=回歸中樞
+    sigma = m0["std_amount"]
+    assert sigma > 0
+    # NAV 落在 中樞-4σ（< 買3=中樞-3σ）→ 大跌大買
+    s1 = s.copy(); s1.iloc[-1] = center - 4 * sigma
+    assert "大跌大買" in calc_metrics(s1, [])["pos_label"], f"got {calc_metrics(s1, [])['pos_label']}"
+    # NAV 落在 中樞-1.5σ（買2 與 買1 之間）→ 小跌小買
+    s2 = s.copy(); s2.iloc[-1] = center - 1.5 * sigma
+    assert "小跌小買" in calc_metrics(s2, [])["pos_label"], f"got {calc_metrics(s2, [])['pos_label']}"
+    # NAV 落在 中樞+4σ（> 賣3=中樞+3σ）→ 大漲停利
+    s3 = s.copy(); s3.iloc[-1] = center + 4 * sigma
+    assert "大漲停利" in calc_metrics(s3, [])["pos_label"], f"got {calc_metrics(s3, [])['pos_label']}"
 
 
 def test_ret_1y_total_full_window():
