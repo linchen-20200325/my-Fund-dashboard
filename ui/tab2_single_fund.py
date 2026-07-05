@@ -496,17 +496,26 @@ def render_single_fund_tab() -> None:
                 _bb_std = s.rolling(_bb_period).std()
                 _bb_up  = (_bb_ma + 2 * _bb_std).dropna()
                 _bb_dn  = (_bb_ma - 2 * _bb_std).dropna()
-                # 上軌（填色基準，先畫，不顯示圖例線條）
-                fig_n.add_trace(go.Scatter(
-                    x=_bb_up.index, y=_bb_up.values, name="BB上軌",
-                    line=dict(color="rgba(33,150,243,0.25)", width=1),
-                    showlegend=False))
-                # 下軌 + fill to 上軌（半透明藍色通道）
-                fig_n.add_trace(go.Scatter(
-                    x=_bb_dn.index, y=_bb_dn.values, name="布林通道(±2σ)",
-                    fill="tonexty",
-                    fillcolor="rgba(33,150,243,0.08)",
-                    line=dict(color="rgba(33,150,243,0.25)", width=1)))
+                # v19.312 §1 Fail-Loud：帶點 < 2 時畫不出通道(tonexty 填色至少需 2 點成線;
+                # rolling(20) 需 ≥21 個 NAV 點)→ 明講「資料不足」,不再默默省略讓 user 以為功能壞掉。
+                _bb_drawable = len(_bb_up) >= 2 and len(_bb_dn) >= 2
+                if _bb_drawable:
+                    # 上軌（填色基準，先畫，不顯示圖例線條）
+                    fig_n.add_trace(go.Scatter(
+                        x=_bb_up.index, y=_bb_up.values, name="BB上軌",
+                        line=dict(color="rgba(33,150,243,0.25)", width=1),
+                        showlegend=False))
+                    # 下軌 + fill to 上軌（半透明藍色通道）
+                    fig_n.add_trace(go.Scatter(
+                        x=_bb_dn.index, y=_bb_dn.values, name="布林通道(±2σ)",
+                        fill="tonexty",
+                        fillcolor="rgba(33,150,243,0.08)",
+                        line=dict(color="rgba(33,150,243,0.25)", width=1)))
+                else:
+                    st.caption(
+                        f"⚠️ 布林通道(±2σ)無法繪製 — 本檔 NAV 歷史僅 {len(s)} 點,"
+                        "需 ≥21 點(20 日窗口)。此為**資料不足**非功能故障,"
+                        "NAV 歷史補足後自動恢復。")
                 # MA20 中軌
                 fig_n.add_trace(go.Scatter(
                     x=_bb_ma.dropna().index, y=_bb_ma.dropna().values,
@@ -640,7 +649,7 @@ def render_single_fund_tab() -> None:
                 _m_buy1 = m.get("buy1"); _m_buy2 = m.get("buy2"); _m_buy3 = m.get("buy3")
                 _m_sell1 = m.get("sell1"); _m_sell2 = m.get("sell2"); _m_sell3 = m.get("sell3")
                 _m_pl = m.get("pos_label",""); _m_pc = m.get("pos_color",TRAFFIC_NEUTRAL)
-                _m_mode = m.get("buy_mode",""); _m_std_src = m.get("std_source","nav")
+                _m_mode = m.get("buy_mode","")  # v19.313: 買賣 band σ 改區間基準,不再標 wb07
                 _m_nav_v = float(m.get("nav") or 0)
                 _NEAR = float(m.get("near_threshold_pct") or 2.0)
                 def _proximity_chip(nav_v, target, is_buy):
@@ -679,7 +688,7 @@ def render_single_fund_tab() -> None:
                     from ui.components.cards import gh_card
                     st.markdown(gh_card(
                         f"<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
-                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.0（{_m_mode} ｜ σ 來源：{_m_std_src}）</span>"
+                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.1（{_m_mode} ｜ σ=(年高-年低)÷3）</span>"
                         f"<span style='background:{CHIP_BG_NEAR_BLACK};color:{_m_pc};border:1px solid {_m_pc};padding:2px 10px;"
                         f"border-radius:12px;font-size:12px;font-weight:700'>{_m_pl}</span>"
                         f"</div>"
