@@ -41,7 +41,42 @@ from repositories.macro_repository import (
 
 WINDOW = 252                     # 滾動標準化視窗（交易日）
 _MIN_SAMPLES = 60                # 樣本少於此不計算 Z-Score（邊界防禦）
-_BTC_SUPPLY_APPROX = 19_800_000  # BTC 流通量近似（~固定）→ 市值 ≈ 價格 × 供給
+
+# ── BTC 流通量（時變，v19.320 取代原「~固定」常數 19_800_000）──────────────
+# BTC 供給不是固定的：每 210,000 塊減半、約 144 塊/日，供給持續緩增（~+1.6%/年）。
+# 由「減半發行時程」（Bitcoin 協定事實，公開可查）純函式推算，無 I/O、可重現（§5）：
+#   供給(date) ≈ 最近一次減半錨點供給 + 天數 × 該時期日發行量（= 區塊獎勵 × 144）。
+# 註：SSR 走 Z-score，「固定」倍率會被約掉；改時變後才真實反映供給緩增（雖影響仍小）。
+# 元組：(減半日, 該次減半後累積供給, 之後日發行量)。2028 為估計日（±數週對供給 <0.1%）。
+_BTC_HALVINGS = (
+    ("2016-07-09", 15_750_000.0, 1_800.0),   # 12.5   BTC/塊 × 144
+    ("2020-05-11", 18_375_000.0,   900.0),   # 6.25   × 144
+    ("2024-04-20", 19_687_500.0,   450.0),   # 3.125  × 144
+    ("2028-04-15", 20_343_750.0,   225.0),   # 1.5625 × 144（減半日估計）
+)
+_BTC_SUPPLY_FALLBACK = 20_000_000.0  # 推算失敗時退路（僅影響顯示絕對值；Z-score 中會被約掉）
+
+
+def _btc_circulating_supply(index) -> "pd.Series":
+    """由 Bitcoin 減半發行時程推算流通量（純 L2 函式，無 I/O，可重現 §5）。
+
+    每個日期取「≤ 該日期的最後一次減半錨點供給 + 天數 × 該時期日發行量」。
+    回傳與傳入 index 對齊（等長、同順序）的 Series，供 build_ssr 算 BTC 時變市值。
+    """
+    idx = pd.DatetimeIndex(pd.to_datetime(index))
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    anchors = [(pd.Timestamp(_d), _s, _r) for _d, _s, _r in _BTC_HALVINGS]
+    vals = []
+    for _dt in idx:
+        _bd, _bs, _rate = anchors[0]
+        for _ad, _as, _ar in anchors:
+            if _dt >= _ad:
+                _bd, _bs, _rate = _ad, _as, _ar
+            else:
+                break
+        vals.append(_bs + max((_dt - _bd).days, 0) * _rate)
+    return pd.Series(vals, index=idx, dtype=float)
 
 # 流動性「壓力分數」只由三個 risk-off 因子組成（同向：Z 越高=壓力越大）。
 # SSR 依設計為獨立「鏈上子彈水位」對沖指標，不計入壓力分數（見 compute_liquidity_score）。
@@ -213,7 +248,14 @@ def build_ssr() -> "dict | None":
     btc = fetch_yf_close("BTC-USD", "5y")
     if stable.empty or btc.empty:
         return None
-    btc_mcap = (btc * _BTC_SUPPLY_APPROX)
+    # v19.320:BTC 市值改用「時變流通量」（減半發行時程）取代原「~固定」常數。
+    # 以 positional（values）相乘避免 index tz/normalize 對齊問題；推算失敗才退 fallback 常數（§1 不靜默）。
+    _supply = _btc_circulating_supply(btc.index)
+    if _supply.empty or _supply.isna().all():
+        print("[liquidity_engine SSR] ⚠️ BTC 供給推算失敗，退回 fallback 常數")
+        btc_mcap = btc * _BTC_SUPPLY_FALLBACK
+    else:
+        btc_mcap = pd.Series(btc.to_numpy() * _supply.to_numpy(), index=btc.index, name="btc")
     # 日對齊（兩者皆日頻；normalize 去時分秒）
     df = pd.concat(
         [btc_mcap.rename("btc"), stable.rename("stable")], axis=1

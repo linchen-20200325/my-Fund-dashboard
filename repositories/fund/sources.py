@@ -1066,7 +1066,10 @@ def _src_cache_files(code: str) -> "pd.Series":
     """
     import json as _json
     from pathlib import Path as _Path
-    cache_file = _Path(__file__).parent / "cache" / "nav" / f"{code}.json"
+    # v19.319 修路徑 bug:GitHub Actions 寫入 repo 根目錄 cache/nav/(scripts/fetch_nav_cache.py
+    # CACHE_DIR = __file__.parent.parent / cache/nav)。本檔 = repositories/fund/sources.py,
+    # 原 .parent 指到 repositories/fund/cache/nav(不存在)→ 永遠讀不到。parents[2] = repo 根。
+    cache_file = _Path(__file__).resolve().parents[2] / "cache" / "nav" / f"{code}.json"
     if not cache_file.exists():
         return pd.Series(dtype=float)
     try:

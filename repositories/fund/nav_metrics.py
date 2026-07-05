@@ -98,6 +98,17 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
                 return s
         except Exception as e:
             print(f"[fetch_nav] ERR: {e}")
+    # v19.319:全部 live URL 失敗（常見 = Streamlit Cloud IP 被 MoneyDJ 子網域封鎖）→
+    # 退回 GitHub Actions 每日預存快取 cache/nav/{code}.json（§4.6 proxy/直連降級的最終保障）。
+    # 只在 live 全敗時觸發、不覆蓋任何 live 資料;快取自帶 source/fetched_at provenance（§2.2）。
+    try:
+        _cache_code = (mj_short or full_key).strip().upper()
+        _cs = _src_cache_files(_cache_code)
+        if _cs is not None and not _cs.empty:
+            print(f"[fetch_nav] ⚠️ live 全敗 → 退回 GitHub Actions 快取 {len(_cs)} 筆")
+            return _cs
+    except Exception as e:
+        print(f"[fetch_nav] cache fallback ERR: {e}")
     return pd.Series(dtype=float)
 
 
