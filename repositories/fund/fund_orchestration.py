@@ -419,17 +419,22 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         if latest_yield > 0:
             result["moneydj_div_yield"] = round(latest_yield, 2)
 
-    # ── Step 5: 風險指標（wb07，MoneyDJ 才有）───────────────────────
+    # ── Step 5: 風險指標（wb07）+ 績效（wb01）────────────────────────
+    # v19.310 Bug A:原本 wb01 績效巢狀在 `if risk_data:` 內 → wb07 風險一失敗,
+    # 3Y/5Y 績效就跟著不抓(即使 wb01 本來抓得到)。兩個是獨立頁,分開抓、互不綁架。
     try:
         risk_data = fetch_risk_metrics(_code)
         if risk_data:
             result["risk_metrics"] = risk_data
-            perf_wb01 = fetch_performance_wb01(_code)
-            if perf_wb01:
-                result["perf"].update(perf_wb01)
-                result["perf_source"] = "wb01"
     except Exception as _re5:
         print(f"[orchestrator] risk_metrics: {_re5}")
+    try:
+        perf_wb01 = fetch_performance_wb01(_code)
+        if perf_wb01:
+            result["perf"].update(perf_wb01)
+            result["perf_source"] = "wb01"
+    except Exception as _rep5:
+        print(f"[orchestrator] perf_wb01: {_rep5}")
 
     # ── Step 6: 計算 MK 指標 ────────────────────────────────────────
     _finish_metrics(result)

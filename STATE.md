@@ -53,6 +53,16 @@
 
 ## 當前版本
 
+- **v19.310 修健診 4 表多年期/進階欄位全空 — wb01/wb07 保單子網域 + 解耦(2026-07-05)**:
+  - **背景**:user 貼健診 4 表(① 健康分析 / ② 配息 / 三籃子 / MK3-3-3 明細),多年期 & 進階欄位(3Y/5Y 年化、3年年化、Sortino、Calmar、同儕排名、Price_Zone/Health_Check/Principal_Erosion)**全 None/N/A/?**。Sharpe 1Y / 成立年 / 1Y 含息**有值** → 證明近一年 NAV + MoneyDJ meta 抓得到,只是 **wb01(3Y/5Y 績效)+ wb07(Sortino/Calmar/排名)沒抓到**,連鎖讓下游全空。
+  - **根因**:程式的 fallback 其實都在(`report.py` 已有 wb01 3Y/5Y fallback、`calc_fund_factor_score` 吃 `risk_metrics`),卡在**資料沒進來**。挖到 2 個真 code bug:
+    - **Bug A(耦合)** `fund_orchestration.py:427`:wb01 績效巢狀在 `if risk_data:` 內 → wb07 風險一失敗,3Y/5Y 也跟著不抓(即使 wb01 本抓得到)。→ 解耦成兩個獨立 try 區塊。
+    - **Bug B(子網域)** `nav_metrics.py`:`fetch_performance_wb01`/`fetch_risk_metrics` 只試 `tcbbankfund`+`www` 兩 host,非合庫保單基金(JF/TL/ANZ/FL 前綴 + 走安達/Chubb 平台的 AC*)全 miss。→ 抽 `_wb_page_urls(code, page)` 比照已驗證的 `fetch_holdings`(L906+)展開:baseline host(tcbbankfund/chubb/taishinlife + www)+ `_INSURANCE_SUBDOMAIN_HINTS` 前綴 portal,路徑用 tcbbankfund 既有 proven 的 `/w/wb/{page}.djhtm`(**不發明 URL**,只把 proven pattern 套到 proven host 集)。
+  - **回歸網**:`tests/test_wb_page_urls.py`(8 test)守 baseline host / page 名 / JF·TL·ANZ·FL 前綴展開 / 去重 / 空代碼不炸 / proven path pattern。
+  - **⚠️ 覆蓋範圍誠實標註**:Bug B 直接命中 **JFZN3/TLZF9/ANZ89/FLFM1**(前綴有 hint);**ACTI71/ACCP138/ACDD01/ACDD19/ACTI94(AC\*)+ ALBT8(AL)** 前綴不在 `_INSURANCE_SUBDOMAIN_HINTS`,只能靠 `chubb` baseline 碰(AC\* 多走安達/Chubb 平台)。若 AC\*/AL 仍空,需後續識別其 MoneyDJ 子網域再補 hint。
+  - **驗證限制**:sandbox 連不到 MoneyDJ,僅驗「邏輯 + URL 展開 + import + pre-commit 綠」;**數字是否真的回填,須在有 NAS proxy 的環境(部署站/本機掛 proxy)驗**。
+  - **範圍**:L1 fetcher(`nav_metrics.py`)+ orchestrator 解耦(`fund_orchestration.py`)+ test;無 L2/L3 改動、無 SSOT 新增。
+
 - **v19.309 修每日 NAV 快取 Action `ModuleNotFoundError: bs4`(CI-only,2026-07-05)**:
   - **背景**:user 貼 GitHub Action `fetch_nav_cache.yml` 失敗 run — `scripts/fetch_nav_cache.py:301` 的 Yahoo fallback `from repositories.fund.sources import YF_MORNINGSTAR_CHART_URL` 會拉入整個 `repositories/fund` package,其 module-load 即 `from bs4 import BeautifulSoup`(用 `"lxml"` parser);但 workflow 只裝 `requests pandas gspread google-auth`,漏 bs4/lxml → 半夜 cron 每日炸。根因=排毒重構後 import 鏈長出來、但 workflow 的精簡裝套清單沒跟上。
   - **修法(尊重既有設計,不搬 SSOT)**:`shared/api_endpoints.py` docstring 明定此 URL 常數**留在 `repositories/fund/sources.py`(L1 source-local SSOT)、script 從那 import**(single-caller URL 不上 shared)。故正解=workflow 補裝 import 鏈需要的 `beautifulsoup4 lxml`,**非**改 import 來源。`fetch_nav_cache.yml` pip install 補兩套 + 註解說明為何。

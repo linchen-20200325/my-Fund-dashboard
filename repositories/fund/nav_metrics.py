@@ -668,6 +668,36 @@ def _fetch_domestic_perf(code: str) -> dict:
     return perf
 
 
+def _wb_page_urls(code: str, page: str) -> list:
+    """MoneyDJ wb 頁(``wb01`` 績效 / ``wb07`` 風險)候選 URL 清單。
+
+    v19.310 Bug B:原本 ``fetch_performance_wb01`` / ``fetch_risk_metrics`` 只試
+    ``tcbbankfund`` + ``www.moneydj.com`` 兩個 host,**非合庫的保單基金**(JF/TL/ANZ/FL
+    等前綴,以及走安達/Chubb 平台的 AC* 代碼)全 miss → 3Y/5Y/Sortino/同儕排名 連鎖空。
+
+    比照 ``fetch_holdings``(本檔 L906+,已驗證)的保單子網域展開:
+    - 基線 host(比照 holdings baseline):``tcbbankfund``(www 在 Cloud 被封,優先它)
+      / ``chubb`` / ``taishinlife`` + www;
+    - 依 ``_INSURANCE_SUBDOMAIN_HINTS`` 代碼前綴展開 portal 子網域。
+
+    路徑用 ``tcbbankfund`` 既有已驗證的 ``/w/wb/{page}.djhtm`` pattern(www 走
+    ``/yp/{page}.djhtm``)。**不發明新 URL**,只把 proven pattern 套到 proven host 集。
+    """
+    BASE = "https://www.moneydj.com/funddj"
+    _cu = (code or "").upper().strip()
+    hosts = ["tcbbankfund", "chubb", "taishinlife"]
+    for _pfx, _ports in _INSURANCE_SUBDOMAIN_HINTS.items():
+        if _cu.startswith(_pfx):
+            hosts.extend(_ports)
+    _seen: set = set()
+    hosts = [h for h in hosts if not (h in _seen or _seen.add(h))]
+    urls = [f"https://{h}.moneydj.com/w/wb/{page}.djhtm?a={code}" for h in hosts]
+    urls.append(f"{BASE}/yp/{page}.djhtm?a={code}")  # www 走 /yp/(既有 pattern)
+    urls.append(  # tcbbankfund 小寫變體(wb01 既有)
+        f"https://tcbbankfund.moneydj.com/w/wb/{page}.djhtm?a={(code or '').lower()}")
+    return urls
+
+
 def fetch_performance_wb01(code: str) -> dict:
     """
     v13.9: 境外基金用 wb01（含息報酬率），境內基金用 yp020000（績效頁）。
@@ -679,12 +709,8 @@ def fetch_performance_wb01(code: str) -> dict:
     # 境外基金：正常走 wb01（含息報酬率）
     out = {}
     BASE = "https://www.moneydj.com/funddj"
-    TCB  = "https://tcbbankfund.moneydj.com"
-    urls = [
-        f"{TCB}/w/wb/wb01.djhtm?a={code}",
-        f"{BASE}/yp/wb01.djhtm?a={code}",
-        f"{TCB}/w/wb/wb01.djhtm?a={code.lower()}",
-    ]
+    # v19.310 Bug B:比照 fetch_holdings 展開保單子網域(原只 tcbbankfund+www)
+    urls = _wb_page_urls(code, "wb01")
     PERIOD_MAP = {
         "一個月":"1M","三個月":"3M","六個月":"6M",
         "一年":"1Y","二年":"2Y","三年":"3Y","五年":"5Y",
@@ -769,12 +795,9 @@ def fetch_risk_metrics(code: str) -> dict:
     """
     try:
         BASE = "https://www.moneydj.com/funddj"
-        TCB  = "https://tcbbankfund.moneydj.com"
         # v19.292: tcbbankfund 優先（www.moneydj.com 在 Streamlit Cloud 被封 → 25s×3 stall）
-        urls = [
-            f"{TCB}/w/wb/wb07.djhtm?a={code}",
-            f"{BASE}/yp/wb07.djhtm?a={code}",
-        ]
+        # v19.310 Bug B: 比照 fetch_holdings 展開保單子網域(原只 tcbbankfund+www)
+        urls = _wb_page_urls(code, "wb07")
         out = {}
 
         for url in urls:
