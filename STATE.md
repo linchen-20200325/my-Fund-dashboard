@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.316 總經加「現在能不能買」總結燈(改進 #4-①,2026-07-05)**:
+  - **背景**:功能盤點改進 —— 總經頁子視圖多(即時/中期/短線/長期/拐點),user 要「確認位階可買/賣」的一句話結論。既有「雙速合議結論大卡」是分數式,**缺硬衰退訊號安全層**。
+  - **修法(user 批准草案)**:新 L2 純函式 `services/macro/action_light.py::macro_action_light(indicators, phase_score_10)` → 🟢 可加碼 / 🟡 持有 / 🔴 減碼 + 理由。邏輯:(1) **硬衰退/恐慌 override** —— 殖利率曲線倒掛(10Y-2Y/10Y-3M<0)/ Sahm≥0.5 / VIX≥30 任一亮 → 強制 🔴(位階再高也蓋,分數卡缺的安全層);(2) 無 override → 依景氣位階 0-10(≥6.5🟢 / 4~6.5🟡 / <4🔴);(3) 位階缺 → 🟡 資料不足(§1 不假綠燈)。`ui/tab1_macro.py::_render_beginner_dashboard` 頂部(結論大卡之前)加彩色 `st.success/warning/error` 一句話燈,純顯示失敗不擋。
+  - **門檻 provenance**:`SAHM_RECESSION_THRESHOLD` 走 signal_thresholds SSOT;VIX panic 30 對齊 C2 v19.160 universal;倒掛=利差<0;位階 6.5/4.0 cutoff 為 self-contained 可調常數。
+  - **回歸網**:`tests/test_macro_action_light.py`(8 test)守 3 種 override 各自觸發 / 位階 3 級 / 缺分數 unknown / 空 indicators 不炸。
+  - **範圍**:新 L2 純函式 + macro `__init__` 匯出 + L3 tab1 頂部渲染 + test。誠實面:位階/機率非精準擇時(燈都附理由)。
+
 - **v19.315 健診加「淘汰候選紅區」— 把 MK 4 換標規則提到最上面(改進 #4-②,2026-07-05)**:
   - **背景**:功能盤點改進項 —— user 要「單一/多檔基金挑出體質差的」,但既有 `check_replacement_recommendation`(MK 4 規則:吃本金≥1年 / 4D Grade F / 3-3-3 未過≥3年 / Sharpe<0且maxdd<-30%)的 verdict 只藏在 ② 配息表「換標的建議」欄裡,不夠醒目。
   - **修法(零新邏輯,只露出既有 SSOT)**:(1) `services/health/report.py` `build_dividend_summary_row` 加曝露 `_verdict`(raw verdict,`_` 前綴不進表格欄);(2) `ui/tab_fund_grp_health.py` `_render_health_3tables` **頂部**加「🔴 淘汰候選 N 檔」`st.error` 紅區,篩 `_verdict=="replace"` 的基金 + 觸發原因,提到 ① ② 表之前。`_div_rows` 上移一次算、紅區與表 ② 共用不重算(SSOT)。
