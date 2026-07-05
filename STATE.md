@@ -53,6 +53,11 @@
 
 ## 當前版本
 
+- **v19.311 修 NAV 快取 Action 寫檔缺檔尾換行 → 擋後續 PR 的 CI(2026-07-05)**:
+  - **背景(連鎖自 v19.309)**:v19.309 bs4 修好後,`fetch_nav_cache` Action **真的成功跑了**並 commit 新 NAV 快取進 main(`1cf6bea`)。但 `scripts/fetch_nav_cache.py:386` `save_cache` 用 `json.dumps(...)` 寫檔**沒補檔尾 `\n`** → `cache/nav/*.json` 缺檔尾換行。Action commit 帶 `[skip ci]` 自己不跑 pre-commit,卻讓**下一個 PR** 的 `pre-commit run --all-files` 判 `cache/nav/TLZF9.json` 缺換行而紅(PR #514 CI 連兩次卡此)。
+  - **修法**:(1) 根因 —— `save_cache` 改 `json.dumps(...) + "\n"`(對齊 `update_macro_history.py:367` 既有正確寫法);(2) 修現存 malformed `cache/nav/TLZF9.json`(補檔尾換行)。
+  - **範圍**:script + 1 cache 檔;無邏輯改動。與 v19.310 同 PR。
+
 - **v19.310 修健診 4 表多年期/進階欄位全空 — wb01/wb07 保單子網域 + 解耦(2026-07-05)**:
   - **背景**:user 貼健診 4 表(① 健康分析 / ② 配息 / 三籃子 / MK3-3-3 明細),多年期 & 進階欄位(3Y/5Y 年化、3年年化、Sortino、Calmar、同儕排名、Price_Zone/Health_Check/Principal_Erosion)**全 None/N/A/?**。Sharpe 1Y / 成立年 / 1Y 含息**有值** → 證明近一年 NAV + MoneyDJ meta 抓得到,只是 **wb01(3Y/5Y 績效)+ wb07(Sortino/Calmar/排名)沒抓到**,連鎖讓下游全空。
   - **根因**:程式的 fallback 其實都在(`report.py` 已有 wb01 3Y/5Y fallback、`calc_fund_factor_score` 吃 `risk_metrics`),卡在**資料沒進來**。挖到 2 個真 code bug:
