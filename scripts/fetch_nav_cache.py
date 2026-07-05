@@ -383,7 +383,11 @@ def save_cache(code: str, history: list, source: str, fund_name: str = "") -> No
         "count": len(history),
         "history": history,
     }
-    cache_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # v19.311:結尾補 "\n" — 否則 pre-commit end-of-file-fixer 在後續 PR 的
+    # `--all-files` 掃描會判 cache/nav/*.json 缺檔尾換行而紅(每日 cron 寫檔 [skip ci]
+    # 自己不跑 hook,卻會擋下一個 PR 的 CI)。對齊 update_macro_history.py:367。
+    cache_file.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"[cache] ✅ {code}: 已儲存 {len(history)} 筆 → cache/nav/{code}.json")
 
 
