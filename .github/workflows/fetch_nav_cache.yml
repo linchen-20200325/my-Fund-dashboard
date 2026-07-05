@@ -27,7 +27,10 @@ jobs:
 
       - name: Install dependencies
         # requests=核心抓取；pandas/gspread/google-auth=可選 Sheet 自動同步持倉代碼
-        run: pip install requests pandas gspread google-auth
+        # beautifulsoup4+lxml=Yahoo fallback(fetch_yahoo_finance_history:301)會 import
+        #   repositories.fund.sources,該 package module-load 時即 import bs4 並用 "lxml" parser。
+        #   ⚠️ 若此 script 的 import 鏈長出新硬依賴,tests/test_fetch_nav_cache_ci_deps.py 會紅提醒同步本行。
+        run: pip install requests pandas gspread google-auth beautifulsoup4 lxml
 
       - name: Fetch NAV cache
         env:
