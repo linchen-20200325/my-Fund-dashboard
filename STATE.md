@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.317 系統說明書瘦身 — 砍 4 段純教學區塊(−679 LOC,功能盤點 #3,2026-07-05)**:
+  - **背景**:功能盤點 #3 —— user 是專家自用,`ui/tab6_manual.py`(1548 LOC)90% 是真參考文件(公式口徑/資料來源地圖/Sheet 結構,該留),但夾雜大量「新手教學」佔行數大宗又最不會查。user 選力度 A(大瘦身)。
+  - **砍除(option A,4 段純教學 + 1 客觀過時)**:section 11 §A「為什麼是這位階」(與總經 tab 重複渲染同一份 `build_beginner_payload`)+ §B「23 指標教學手冊」+ §E「變數重要性 Top-N」;section 12「總經原理教室」整段 render + `_PRINCIPLE_CHAPTERS` 10 章資料(438 行)+ st.tabs 第 12 標籤 + `_PMI_TEXTBOOK`/`PMI_THRESHOLDS` import(砍後無 caller)。**保留** section 11 §C 景氣循環歷史圖 + §D 加扣分明細(即時數據參考)。
+  - **客觀修正**:`line 757` 過時引用「之後**危機回測**會優先讀 cache」(v19.314 已拔危機回測)→ 改「系統計算長期報酬 / 健診時會優先讀 cache」。
+  - **連動退役**:orphan test `tests/test_manual_classroom.py`(測 `_PRINCIPLE_CHAPTERS`)刪;`tests/test_macro_thresholds_v2.py::test_pmi_tab6_manual_uses_ssot`(守 tab6 PMI SSOT,對象消失)退役;`test_render_..._12_subtabs`→`11_subtabs`;`conftest.py` `_STUB_INSTALLER_FILES` 移除該檔(8→7)。
+  - **範圍**:純 L3 UI 減法 + test 同步。無新邏輯、無資料流改動。**驗證**:py_compile + import OK;pre-commit `--all-files`(2287 passed / 8 skipped)。
+
 - **v19.316 總經加「現在能不能買」總結燈(改進 #4-①,2026-07-05)**:
   - **背景**:功能盤點改進 —— 總經頁子視圖多(即時/中期/短線/長期/拐點),user 要「確認位階可買/賣」的一句話結論。既有「雙速合議結論大卡」是分數式,**缺硬衰退訊號安全層**。
   - **修法(user 批准草案)**:新 L2 純函式 `services/macro/action_light.py::macro_action_light(indicators, phase_score_10)` → 🟢 可加碼 / 🟡 持有 / 🔴 減碼 + 理由。邏輯:(1) **硬衰退/恐慌 override** —— 殖利率曲線倒掛(10Y-2Y/10Y-3M<0)/ Sahm≥0.5 / VIX≥30 任一亮 → 強制 🔴(位階再高也蓋,分數卡缺的安全層);(2) 無 override → 依景氣位階 0-10(≥6.5🟢 / 4~6.5🟡 / <4🔴);(3) 位階缺 → 🟡 資料不足(§1 不假綠燈)。`ui/tab1_macro.py::_render_beginner_dashboard` 頂部(結論大卡之前)加彩色 `st.success/warning/error` 一句話燈,純顯示失敗不擋。
