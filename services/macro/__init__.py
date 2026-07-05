@@ -36,6 +36,7 @@ from services.macro._helpers import (  # noqa: F401
     _yf_s,
     recession_probability,
 )
+from services.macro.action_light import macro_action_light  # noqa: F401
 from services.macro.us_indicators import (  # noqa: F401
     _build_phase_provenance,
     _detect_inflection,

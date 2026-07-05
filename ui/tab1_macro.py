@@ -684,6 +684,26 @@ def _render_beginner_dashboard(indicators: dict | None, fred_api_key: str = "") 
         return
 
     # ════════════════════════════════════════════════
+    # 區塊 0：總經一句話總結燈 — v19.316 功能盤點改進 #4-①
+    #   「現在能不能買」🟢 可加碼 / 🟡 持有 / 🔴 減碼 + 為什麼。
+    #   關鍵:硬衰退/恐慌訊號(倒掛 / Sahm≥0.5 / VIX≥30)override —— 位階再高也強制 🔴,
+    #   這是分數式合議大卡缺的安全層。純顯示,失敗不擋主面板。
+    # ════════════════════════════════════════════════
+    try:
+        from services.macro import calc_macro_phase, macro_action_light
+        _pscore = (calc_macro_phase(indicators) or {}).get("score")
+        _lt = macro_action_light(indicators or {}, phase_score_10=_pscore)
+        _summary_md = (
+            f"### {_lt['light']} 現在能不能買：{_lt['action']}\n\n"
+            "**依據**：" + "；".join(_lt["reasons"]) +
+            "\n\n⚠️ 位階/機率判讀,非精準擇時 —— 附理由供你自行決策。"
+        )
+        {"🟢": st.success, "🟡": st.warning, "🔴": st.error}.get(
+            _lt["light"], st.info)(_summary_md)
+    except Exception as _e_light:  # noqa: F841
+        pass
+
+    # ════════════════════════════════════════════════
     # 區塊 1：結論大卡 — v19.21 雙速合議（慢總經 ｜ 短線雷達 ｜ 合議行動）
     # ════════════════════════════════════════════════
     _color = payload["verdict_color"]
