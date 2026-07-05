@@ -108,9 +108,7 @@ my-Fund-dashboard/
 │   ├── portfolio_service.py        # portfolio 模擬
 │   ├── precision_service.py        # 精準策略
 │   ├── ai_service.py               # Gemini 包裝(EX-AI-1)
-│   ├── crisis_backtest.py
-│   ├── crisis_strategy_grid.py
-│   ├── crisis_ai_advisor.py
+│   ├── crisis_backtest.py          # CrisisEvent/detect_crisis_events(macro/calibration 共用;v19.314 危機回測 UI 拔除後保留)
 │   ├── ai_advisor_pending.py       # 事前 AI 比對 top-N(v19.250 B 後 pending review 退役,僅留 recommend_weights)
 │   ├── moneydj_fetcher.py          # 基金 L2 orchestrator(R8 EX-L1ORCH-1 退役後純 L2)
 │   ├── liquidity_engine.py
@@ -145,7 +143,6 @@ my-Fund-dashboard/
 │
 ├── ui/                             # L3 ComponentUI(Streamlit only)
 │   ├── tab1_macro.py ~ tab6_manual.py
-│   ├── tab_crisis_backtest.py      # 危機回測(走 lazy import L1,登 EX-PASSTHRU-1)
 │   ├── tab3_t7_ledger.py
 │   ├── tab5_data_guard.py          # 資料看板(走 lazy import L1)
 │   ├── tab_allocation_simulator.py(已刪)

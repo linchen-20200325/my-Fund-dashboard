@@ -29,8 +29,9 @@ from ui.tab2_single_fund import render_single_fund_tab
 from ui.tab3_portfolio import render_portfolio_tab
 from ui.tab5_data_guard import render_data_guard_tab
 from ui.tab6_manual import render_manual_tab
-# v19.31 ARCHIVED: 📉 危機回測室,未來啟用時取消下行註解
-# from ui.tab_crisis_backtest import render_crisis_backtest_tab
+# v19.314:危機回測室(tab_crisis_backtest + crisis_strategy_grid + crisis_ai_advisor)
+# 自 v19.31 起即註解停用、進不去;user 確認不用 → 整功能拔除(2798 LOC)。
+# 註:services/crisis_backtest.py(CrisisEvent/detect_crisis_events)保留,macro/calibration 仍用。
 from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
 from fund_fetcher  import (
     get_proxy_config,
@@ -42,7 +43,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.313_MacroNavigator"
+APP_VERSION = "v19.314_MacroNavigator"
 
 
 # ══════════════════════════════════════════════════════

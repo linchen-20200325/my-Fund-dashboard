@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.314 拔除危機回測室(死功能,−3693 LOC)— 功能盤點第 1 刀(2026-07-05)**:
+  - **背景**:user 拿當初 4 個設計初衷(總經位階/單基金體質/多基金金流/組合配置)回頭檢視儀表板,請我點出該改進/刪除的功能。盤點發現 `ui/tab_crisis_backtest.py`(2316 LOC)的 import 自 v19.31 起即**註解停用、進不去**,全 codebase 無第二個掛載點 = **死功能**,且不在 4 目標內。user 確認不用 → 整功能拔除。
+  - **刪除(7 檔,−3693 LOC)**:`ui/tab_crisis_backtest.py` + `services/crisis_strategy_grid.py`(291,唯一 caller=死 UI)+ `services/crisis_ai_advisor.py`(191,唯一 caller=死 UI)+ 4 orphan test(`test_crisis_strategy_grid` / `test_crisis_ai_advisor` / `test_tab_crisis_backtest_gating` / `test_dual_signal_routing` —後者測的 AutoSearch routing helper 全數只存在於死 UI,無 live caller)。
+  - **保留**:`services/crisis_backtest.py`(`CrisisEvent`/`detect_crisis_events`)—macro `signal_lookback` + calibration `multi_factor`/`signal_threshold` 仍共用,**非**危機回測專屬。
+  - **doc-sync**:`app.py` 註解、`shared/converters.py` 過時註解、`ARCHITECTURE.md`(services + ui 樹刪 3 行)、`CLAUDE.md §2.3`(crisis_strategy_grid 參照更新)、`§8.2.A EX-PASSTHRU-1`(2 條 tab_crisis_backtest 例外退役)。歷史 changelog(STATE 舊條目 / BACKLOG F-PIT-1)為史料不動。
+  - **驗證**:全庫 0 殘留真 import;保留的 crisis_backtest + 3 消費者 import smoke OK;pre-commit `--all-files`。
+
 - **v19.313 修 MK 買賣點 σ 過寬 — 改「區間基準」(年高-年低)/3(2026-07-05)**:
   - **背景**:user 回報「策略3 標準差買賣點」的 -3σ 買點離現價 18.73%,「怎麼可能差異那麼大」。根因 `services/fund_service.py:325`:`std_amt = 年高 × std_1y/100`,`std_1y` = wb07「一年標準差」=**年化波動率**(~5.5~6.2%)→ 3σ ≈ 年高×3×年化σ% ≈ 18%,**常超出 2 年高低區間** → 買3/賣3 掉出真實區間(買3 比史低還低,永遠觸不到)。同檔註解 `L292`(σ=(年高-年低)/3)+ fallback(/4)本就是區間基準,主路徑卻偷換成年化 σ 才爆。
   - **修法(user 選 ①)**:`std_amt` 改 `(年高-年低)/3`(v3.0→v3.1)→ 買3=年低、賣3=年高,3 檔均分區間,band 必落區間內、訊號必觸得到。`std_1y` 仍保留供 Sharpe/波動顯示。Tab2 標籤 `σ 來源:wb07` → `σ=(年高-年低)÷3`(移除誤導,連帶清 `_m_std_src` unused)。
