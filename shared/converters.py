@@ -11,7 +11,7 @@ alias import,inner code 0 改動。
   寬鬆版,額外吃 "12.3%" / "1,234"(strip % 與 ,)→ float
 - fmt_pct(v, plus=True, decimals=1, ratio=True) → str
   v(ratio 0.05 或 pct 5.0)→ "5.0%" 或 "+5.0%"
-  ratio=True:輸入 0.05 表示 5%(內建 *100,crisis_ai_advisor 用法)
+  ratio=True:輸入 0.05 表示 5%(內建 *100,組合報酬率類用法)
   ratio=False:輸入 5.0 已是百分比(tab2 用法)
 """
 from __future__ import annotations
