@@ -496,17 +496,26 @@ def render_single_fund_tab() -> None:
                 _bb_std = s.rolling(_bb_period).std()
                 _bb_up  = (_bb_ma + 2 * _bb_std).dropna()
                 _bb_dn  = (_bb_ma - 2 * _bb_std).dropna()
-                # 上軌（填色基準，先畫，不顯示圖例線條）
-                fig_n.add_trace(go.Scatter(
-                    x=_bb_up.index, y=_bb_up.values, name="BB上軌",
-                    line=dict(color="rgba(33,150,243,0.25)", width=1),
-                    showlegend=False))
-                # 下軌 + fill to 上軌（半透明藍色通道）
-                fig_n.add_trace(go.Scatter(
-                    x=_bb_dn.index, y=_bb_dn.values, name="布林通道(±2σ)",
-                    fill="tonexty",
-                    fillcolor="rgba(33,150,243,0.08)",
-                    line=dict(color="rgba(33,150,243,0.25)", width=1)))
+                # v19.312 §1 Fail-Loud：帶點 < 2 時畫不出通道(tonexty 填色至少需 2 點成線;
+                # rolling(20) 需 ≥21 個 NAV 點)→ 明講「資料不足」,不再默默省略讓 user 以為功能壞掉。
+                _bb_drawable = len(_bb_up) >= 2 and len(_bb_dn) >= 2
+                if _bb_drawable:
+                    # 上軌（填色基準，先畫，不顯示圖例線條）
+                    fig_n.add_trace(go.Scatter(
+                        x=_bb_up.index, y=_bb_up.values, name="BB上軌",
+                        line=dict(color="rgba(33,150,243,0.25)", width=1),
+                        showlegend=False))
+                    # 下軌 + fill to 上軌（半透明藍色通道）
+                    fig_n.add_trace(go.Scatter(
+                        x=_bb_dn.index, y=_bb_dn.values, name="布林通道(±2σ)",
+                        fill="tonexty",
+                        fillcolor="rgba(33,150,243,0.08)",
+                        line=dict(color="rgba(33,150,243,0.25)", width=1)))
+                else:
+                    st.caption(
+                        f"⚠️ 布林通道(±2σ)無法繪製 — 本檔 NAV 歷史僅 {len(s)} 點,"
+                        "需 ≥21 點(20 日窗口)。此為**資料不足**非功能故障,"
+                        "NAV 歷史補足後自動恢復。")
                 # MA20 中軌
                 fig_n.add_trace(go.Scatter(
                     x=_bb_ma.dropna().index, y=_bb_ma.dropna().values,

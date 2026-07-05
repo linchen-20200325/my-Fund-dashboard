@@ -53,6 +53,11 @@
 
 ## 當前版本
 
+- **v19.312 布林通道畫不出時明講「資料不足」— §1 Fail-Loud(2026-07-05)**:
+  - **背景**:user 回報「布林通道不見了」。排查確認**非 code regression**(布林計算 `fund_service.py:359` / 繪圖 `tab2_single_fund.py:493` 近期均未動,最後改為 v19.283)。根因=該檔 **NAV 序列太短**:布林為 20 日 rolling ±2σ,`rolling(min(20,len)).std().dropna()` 在序列 <21 點時只剩 ≤1 個帶點 → `tonexty` 填色無法成線 → **靜默消失**(淨值線仍在),與健診 4 表同一條「NAV 序列抓太短」根。
+  - **修法**:`ui/tab2_single_fund.py` 加 `_bb_drawable = len(_bb_up) >= 2 and len(_bb_dn) >= 2` guard —— 畫得出才畫;畫不出改 `st.caption("⚠️ 布林通道無法繪製 — NAV 歷史僅 N 點,需 ≥21 點…資料不足非故障")`。turns 靜默消失 → 明確告知(§1 Fail-Loud)。
+  - **範圍**:L3 UI 單檔;無邏輯/資料改動。真正讓布林回來仍需 NAV 歷史補足(proxy 資料管線)。
+
 - **v19.311 修 NAV 快取 Action 寫檔缺檔尾換行 → 擋後續 PR 的 CI(2026-07-05)**:
   - **背景(連鎖自 v19.309)**:v19.309 bs4 修好後,`fetch_nav_cache` Action **真的成功跑了**並 commit 新 NAV 快取進 main(`1cf6bea`)。但 `scripts/fetch_nav_cache.py:386` `save_cache` 用 `json.dumps(...)` 寫檔**沒補檔尾 `\n`** → `cache/nav/*.json` 缺檔尾換行。Action commit 帶 `[skip ci]` 自己不跑 pre-commit,卻讓**下一個 PR** 的 `pre-commit run --all-files` 判 `cache/nav/TLZF9.json` 缺換行而紅(PR #514 CI 連兩次卡此)。
   - **修法**:(1) 根因 —— `save_cache` 改 `json.dumps(...) + "\n"`(對齊 `update_macro_history.py:367` 既有正確寫法);(2) 修現存 malformed `cache/nav/TLZF9.json`(補檔尾換行)。
