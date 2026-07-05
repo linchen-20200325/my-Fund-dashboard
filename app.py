@@ -43,7 +43,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.321_NavCacheAlert"
+APP_VERSION = "v19.322_HealthDedup"
 
 
 # ══════════════════════════════════════════════════════

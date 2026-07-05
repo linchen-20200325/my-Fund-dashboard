@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.322 基金組合健診代號去重 — 修「配息事件（多檔合併）」重複列(user 回報,2026-07-05)**:
+  - **背景**:user 貼圖「配息事件（多檔合併）」同一基金重複出現。根因:`ui/tab_fund_grp_health.py` 代號清單**無去重** —— 同基金若被多張保單持有,`portfolio_funds`(session)出現同 code 多筆;「🔗 從我的組合帶入」或手動貼多次 → `_run_batch_health` 逐檔各算一次 → 持有 meta / 配息事件 / 比較圖三表全部重複列。
+  - **修法(SSOT,兩層互補)**:(1) 新純函式 `_dedup_upper(seq)`(order-preserving + 大寫 + 去空)接在**代號輸入端** —— `_pf_codes`(組合帶入,line 76)+ `codes`(手動處理 chokepoint,line 109);兼省重複網路抓取。(2) 新 `_dedup_rows_by_code(rows)` 接在**顯示層 chokepoint** `_render_health_3tables` 入口 —— 此函式同時被健診 Tab 與 Tab3 組合 embed 呼叫,rows 去重一次覆蓋兩條路徑。本 Tab 輸入僅「代號 + 單一本金」,同 code = 完全相同計算 = 真重複,去重安全。
+  - **範圍 / 架構**:純 L3 UI(`tab_fund_grp_health.py`)加 2 純 helper + 3 處接線,無跨層、無資料流改動。
+  - **回歸網**:`tests/test_fund_grp_health_dedup.py`(7:代號去重 order-preserving / 大寫去空 / generator 接受 / rows 去重留第一筆 / 空 code 不誤刪 等)。既有 health 103 test 全綠。
+  - **驗證**:pre-commit `--all-files` 全綠。
+
 - **v19.321 NAV 快取 Action 覆蓋過低發 GitHub warning — 終結靜默綠勾(user #2 深挖,2026-07-05)**:
   - **深挖結論(修正先前誤判)**:user 問「怎麼讓 NAV 快取涵蓋全部基金」。查證發現**種子機制早已存在** —— `scripts/fetch_nav_cache.py:_discover_fund_codes()` = `FUND_CODES`(11 檔)∪ 既有 cache ∪ Sheet(有 SA 憑證時)。真根因**不是缺種子**:`git log cache/nav/` 顯示每日 Action **數週來只 commit `TLZF9.json` 一檔、且 `source=cache_only`(count 10)** = **fetch 全敗、只重存舊快取,卻仍回綠勾**。因 GitHub Actions 美國 IP 被台灣站點(TDCC/SITCA/MoneyDJ)封鎖,`PROXY_URL` secret 未生效;唯一美國可直取源 `MORNINGSTAR_SECID_MAP` 只涵蓋 3 檔(TLZF9/ANZ89/JFZN3)。
   - **程式修法(§1 Fail-Loud / §5 可觀測)**:新增 `_emit_coverage_alert(summary)` —— 本次抓到新資料(fresh)比例 <50% → 發 **GitHub Actions `::warning::` annotation** + 寫 `$GITHUB_STEP_SUMMARY`,明講「疑似 IP 封鎖 / PROXY_URL 未設」。loop 每檔記 `fresh=bool(new_rows)`。**不 hard-fail**(仍保留既有快取),只讓「每天綠勾卻 0 抓取」的靜默失敗**被看見**。
