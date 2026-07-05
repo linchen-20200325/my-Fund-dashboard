@@ -286,6 +286,8 @@ def build_dividend_summary_row(
         "吃本金燈號 (1Y·MK)": eat_status,
         "換標的建議": f"{rep['emoji']} {rep['label']}",
         "_換標的 detail": rep.get("message", ""),
+        # v19.315:raw verdict 供「淘汰候選紅區」篩選(replace)。`_` 前綴 → 不進 DIVIDEND_COLUMNS 表格。
+        "_verdict": rep.get("verdict", "unknown"),
     }
 
 

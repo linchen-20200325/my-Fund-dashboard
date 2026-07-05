@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.315 健診加「淘汰候選紅區」— 把 MK 4 換標規則提到最上面(改進 #4-②,2026-07-05)**:
+  - **背景**:功能盤點改進項 —— user 要「單一/多檔基金挑出體質差的」,但既有 `check_replacement_recommendation`(MK 4 規則:吃本金≥1年 / 4D Grade F / 3-3-3 未過≥3年 / Sharpe<0且maxdd<-30%)的 verdict 只藏在 ② 配息表「換標的建議」欄裡,不夠醒目。
+  - **修法(零新邏輯,只露出既有 SSOT)**:(1) `services/health/report.py` `build_dividend_summary_row` 加曝露 `_verdict`(raw verdict,`_` 前綴不進表格欄);(2) `ui/tab_fund_grp_health.py` `_render_health_3tables` **頂部**加「🔴 淘汰候選 N 檔」`st.error` 紅區,篩 `_verdict=="replace"` 的基金 + 觸發原因,提到 ① ② 表之前。`_div_rows` 上移一次算、紅區與表 ② 共用不重算(SSOT)。
+  - **範圍**:L2 report(+1 欄)+ L3 health tab(紅區 + 去重算)+ test。因 `_render_health_3tables` 同時被健診 tab 與組合配置內嵌呼叫,紅區兩處皆顯示(一致)。
+  - **回歸網**:`tests/test_replacement_red_zone.py`(3 test)守 `_verdict` key 不消失 / Sharpe<0+maxdd<-30% → replace / 指標全缺 → unknown(不假綠燈)。
+  - **驗證**:實測 build row(壞基金→replace、空基金→unknown);pre-commit `--all-files`。
+
 - **v19.314 拔除危機回測室(死功能,−3693 LOC)— 功能盤點第 1 刀(2026-07-05)**:
   - **背景**:user 拿當初 4 個設計初衷(總經位階/單基金體質/多基金金流/組合配置)回頭檢視儀表板,請我點出該改進/刪除的功能。盤點發現 `ui/tab_crisis_backtest.py`(2316 LOC)的 import 自 v19.31 起即**註解停用、進不去**,全 codebase 無第二個掛載點 = **死功能**,且不在 4 目標內。user 確認不用 → 整功能拔除。
   - **刪除(7 檔,−3693 LOC)**:`ui/tab_crisis_backtest.py` + `services/crisis_strategy_grid.py`(291,唯一 caller=死 UI)+ `services/crisis_ai_advisor.py`(191,唯一 caller=死 UI)+ 4 orphan test(`test_crisis_strategy_grid` / `test_crisis_ai_advisor` / `test_tab_crisis_backtest_gating` / `test_dual_signal_routing` —後者測的 AutoSearch routing helper 全數只存在於死 UI,無 live caller)。

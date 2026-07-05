@@ -445,6 +445,27 @@ def _render_health_3tables(rows: list[dict],
         _render_health_table(rows, funds_extra=funds_extra)
         return
 
+    # ── 🔴 淘汰候選紅區(MK 4 規則 verdict=replace)── v19.315:提到最上面,一眼看見要換的 ──
+    # 先建 ② 配息 rows(內含 _verdict),紅區與下方表 ② 共用同一份、不重算(SSOT,避免雙倍計算)。
+    _div_rows = [
+        build_dividend_summary_row(_r.get("_fund_raw") or {}, _r.get("code", ""),
+                                   principal_twd=None)
+        for _r in ok_rows
+    ]
+    _replace = [r for r in _div_rows if r.get("_verdict") == "replace"]
+    if _replace:
+        _lines = "\n".join(
+            f"- **{r.get('code', '')}** "
+            f"{str(r.get('基金名', '') or '')[:20]}："
+            f"{r.get('_換標的 detail', '') or r.get('換標的建議', '')}"
+            for r in _replace
+        )
+        st.error(
+            f"### 🔴 淘汰候選 {len(_replace)} 檔（MK 4 規則觸發，建議換標的）\n\n"
+            f"{_lines}\n\n"
+            "↓ 完整指標見下方 ① 健康分析 / ② 配息相關表。"
+        )
+
     # ── 表 ① 健康分析(4D Grade + 6 進階指標 + 3-3-3)──────────────
     st.markdown("#### 🩺 ① 健康分析表（4D Grade + 6 進階指標 + MK 3-3-3）")
     st.caption(
@@ -500,13 +521,7 @@ def _render_health_3tables(rows: list[dict],
         "(c) 3-3-3 未通過且持有 ≥ 3 年 / (d) Sharpe<0 且 max_dd<-30%。"
         "任一中 → 🔴 換 / 1-2 觀察 → 🟡 / 全未中 → 🟢。"
     )
-    _div_rows = []
-    for _r in ok_rows:
-        _fd = _r.get("_fund_raw") or {}
-        _code = _r.get("code", "")
-        _div_rows.append(
-            build_dividend_summary_row(_fd, _code, principal_twd=None)
-        )
+    # v19.315:_div_rows 已於頂部「淘汰候選紅區」建好,此處共用不重算(SSOT)。
     _div_df = pd.DataFrame(_div_rows)
     # v19.191:None → NaN for numeric cols(同 ① 表 None → NaN 邏輯)
     _div_num_cols = ["1Y 含息 %", "年化配息率 %"]
