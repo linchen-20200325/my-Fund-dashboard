@@ -220,9 +220,9 @@ def _render_bollinger_expanders(funds: list) -> None:
 
                 # MK 買賣水平線
                 for _bv, _bl, _bc in [
-                    (_safe_num(_m.get("buy1")), "買1 (年高-1σ)", MD_GREEN_A200),
-                    (_safe_num(_m.get("buy2")), "買2 (年高-2σ)", MATERIAL_GREEN),
-                    (_safe_num(_m.get("buy3")), "買3 (年高-3σ)", MD_PURPLE_500),
+                    (_safe_num(_m.get("buy1")), "買1 (中樞-1σ)", MD_GREEN_A200),
+                    (_safe_num(_m.get("buy2")), "買2 (中樞-2σ)", MATERIAL_GREEN),
+                    (_safe_num(_m.get("buy3")), "買3 (中樞-3σ)", MD_PURPLE_500),
                 ]:
                     if _bv is not None:
                         fig.add_hline(y=_bv, line_color=_bc, line_dash="dot",
@@ -230,9 +230,9 @@ def _render_bollinger_expanders(funds: list) -> None:
                                       annotation_font_color=_bc,
                                       annotation_position="bottom right")
                 for _sv, _sl, _sc in [
-                    (_safe_num(_m.get("sell1")), "賣1 (年低+1σ)", WARN_AMBER),
-                    (_safe_num(_m.get("sell2")), "賣2 (年低+2σ)", MD_DEEP_ORANGE_400),
-                    (_safe_num(_m.get("sell3")), "賣3 (年低+3σ)", MATERIAL_RED),
+                    (_safe_num(_m.get("sell1")), "賣1 (中樞+1σ)", WARN_AMBER),
+                    (_safe_num(_m.get("sell2")), "賣2 (中樞+2σ)", MD_DEEP_ORANGE_400),
+                    (_safe_num(_m.get("sell3")), "賣3 (中樞+3σ)", MATERIAL_RED),
                 ]:
                     if _sv is not None:
                         fig.add_hline(y=_sv, line_color=_sc, line_dash="dash",

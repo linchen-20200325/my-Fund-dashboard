@@ -52,8 +52,8 @@ def _stub_cache_decorator(*args, **kwargs):
 def _complete_streamlit_stub(mod: types.ModuleType) -> types.ModuleType:
     """補強 streamlit stub 到「核心 surface 全有」狀態。
 
-    8 個 test 檔(test_fund_grp_health_extras_p0/p1_*、test_macro_beginner_view、
-    test_manual_classroom、test_tab1_threshold_lines、test_tab5_key_diagnostic)
+    7 個 test 檔(test_fund_grp_health_extras_p0/p1_*、test_macro_beginner_view、
+    test_tab1_threshold_lines、test_tab5_key_diagnostic)
     在 import-time `sys.modules['streamlit'] = mod`。若 mod 缺常用屬性,後 collect
     的 test 拿不到 → AttributeError 連鎖。本函式做 idempotent 補強,只加缺的屬性,
     不覆寫既有(各 stub 可以保有自己客製過的特定函式)。
@@ -154,9 +154,9 @@ def _clear_fetch_cache_between_tests():
 # ════════════════════════════════════════════════════════════════
 # v19.174 Group A:capture 真 streamlit + dynamic switch per test
 # ════════════════════════════════════════════════════════════════
-# 在 conftest import 早期捕捉真 streamlit。8 個 stub-installer test 檔
+# 在 conftest import 早期捕捉真 streamlit。7 個 stub-installer test 檔
 # (test_fund_grp_health_extras_p0 / p1_ai / p1_news_ratio / p1_visual、
-#  test_macro_beginner_view、test_manual_classroom、test_tab1_threshold_lines、
+#  test_macro_beginner_view、test_tab1_threshold_lines、
 #  test_tab5_key_diagnostic)在 import-time 把 stub 蓋進 sys.modules,
 # 之後跑「需要真 streamlit」的 test(如 AppTest)會炸。
 # autouse fixture 在每個 test 之前,根據 test path 動態切換正確的 module。
@@ -169,14 +169,14 @@ try:
 except Exception:
     _CAPTURED_REAL_STREAMLIT = None
 
-# 已知安裝 stub 的 8 個 test 檔(由 grep 確認):這些 test 要 stub
+# 已知安裝 stub 的 7 個 test 檔(由 grep 確認):這些 test 要 stub
+# (v19.317:test_manual_classroom.py 隨總經原理教室瘦身退役,已從清單移除)
 _STUB_INSTALLER_FILES = frozenset({
     "test_fund_grp_health_extras_p0.py",
     "test_fund_grp_health_extras_p1_ai.py",
     "test_fund_grp_health_extras_p1_news_ratio.py",
     "test_fund_grp_health_extras_p1_visual.py",
     "test_macro_beginner_view.py",
-    "test_manual_classroom.py",
     "test_tab1_threshold_lines.py",
     "test_tab5_key_diagnostic.py",
 })

@@ -53,6 +53,23 @@
 
 ## 當前版本
 
+- **v19.318 標準差買賣點 σ 大改 v3.2「回歸中樞 ± kσ」— 真統計標準差(user A+B,2026-07-05)**:
+  - **背景**:user 回報「標準差的圖還沒有修好」(附三合一趨勢圖)。深挖兩個疊加問題:(1) **v19.313(v3.1)有重疊 bug** —— 買點錨年高、賣點錨年低 + σ=(年高-年低)/3 → 數學上 買1=賣2、買2=賣1,6 條線塌成 4 條(程式驗證確認);(2) 螢幕顯示的仍是**舊 v3.0 寬 band**(部署/cache 未刷新),band 橫跨整年高低區間、遠離現價。
+  - **修法(user 選 A+B)**:`services/fund_service.py:calc_metrics` σ 公式改 v3.2 ——
+    **B**:σ 改「近 1 年淨值的**統計標準差**」(真 standard deviation,`s.tail(252).std(ddof=1)`,隨實際波動縮放,平靜期自動變窄貼價);
+    **A**:以「回歸中樞(近 1 年均值)」為中心 **± kσ 對稱佈局** → 6 條線天然不重疊、對稱。買/賣點均錨定中樞;年高/年低改在 Tab2 圖上以**參考線**呈現(區間脈絡,非 band 錨點)。資料<20 筆 fallback 區間中點 ±(年高-年低)/6(仍對稱)。
+  - **效果**(平靜基金實測 NAV~75.5):中樞 75.56 / σ 0.48 → band 總寬 **2.87**(舊版年區間式 ~22),6 條線 74.12→76.99 對稱貼價,現價落「正常波動區」。訊號語意:現價偏離中樞幾個 σ → 幾檔買/賣。
+  - **連動**:Tab2 圖 hline 標籤 `年高-Nσ`→`中樞-Nσ`、加年高/年低參考線 + y 軸範圍納入;Tab2 σ 卡標題 `v3.1 σ=(年高-年低)÷3`→`v3.2 σ=近1年淨值標準差 中樞±kσ`;`fund_grp_health/signals.py` + `tab1_macro_inflection.py` 標籤/註解同步。倉位 guard 標籤「資料待更新」→「波動極低/待更新」。`std_1y`(年化%)仍供 Sharpe/波動顯示不動。
+  - **回歸網**:`tests/test_sigma_band_range.py`(3 test:σ=真統計 std / **6 條不重疊+對稱** / 三檔等距)+ `tests/test_fund_metrics.py`(3 test 改 v3.2 中樞基準 + 不重疊斷言 + 倉位標籤走中樞±kσ)。
+  - **⚠️ user 端注意**:部署後需**強制刷新**(側邊欄重抓 / Streamlit「Rerun」或 Clear cache)才會看到新 band,基金指標有 TTL cache。
+
+- **v19.317 系統說明書瘦身 — 砍 4 段純教學區塊(−679 LOC,功能盤點 #3,2026-07-05)**:
+  - **背景**:功能盤點 #3 —— user 是專家自用,`ui/tab6_manual.py`(1548 LOC)90% 是真參考文件(公式口徑/資料來源地圖/Sheet 結構,該留),但夾雜大量「新手教學」佔行數大宗又最不會查。user 選力度 A(大瘦身)。
+  - **砍除(option A,4 段純教學 + 1 客觀過時)**:section 11 §A「為什麼是這位階」(與總經 tab 重複渲染同一份 `build_beginner_payload`)+ §B「23 指標教學手冊」+ §E「變數重要性 Top-N」;section 12「總經原理教室」整段 render + `_PRINCIPLE_CHAPTERS` 10 章資料(438 行)+ st.tabs 第 12 標籤 + `_PMI_TEXTBOOK`/`PMI_THRESHOLDS` import(砍後無 caller)。**保留** section 11 §C 景氣循環歷史圖 + §D 加扣分明細(即時數據參考)。
+  - **客觀修正**:`line 757` 過時引用「之後**危機回測**會優先讀 cache」(v19.314 已拔危機回測)→ 改「系統計算長期報酬 / 健診時會優先讀 cache」。
+  - **連動退役**:orphan test `tests/test_manual_classroom.py`(測 `_PRINCIPLE_CHAPTERS`)刪;`tests/test_macro_thresholds_v2.py::test_pmi_tab6_manual_uses_ssot`(守 tab6 PMI SSOT,對象消失)退役;`test_render_..._12_subtabs`→`11_subtabs`;`conftest.py` `_STUB_INSTALLER_FILES` 移除該檔(8→7)。
+  - **範圍**:純 L3 UI 減法 + test 同步。無新邏輯、無資料流改動。**驗證**:py_compile + import OK;pre-commit `--all-files`(2287 passed / 8 skipped)。
+
 - **v19.316 總經加「現在能不能買」總結燈(改進 #4-①,2026-07-05)**:
   - **背景**:功能盤點改進 —— 總經頁子視圖多(即時/中期/短線/長期/拐點),user 要「確認位階可買/賣」的一句話結論。既有「雙速合議結論大卡」是分數式,**缺硬衰退訊號安全層**。
   - **修法(user 批准草案)**:新 L2 純函式 `services/macro/action_light.py::macro_action_light(indicators, phase_score_10)` → 🟢 可加碼 / 🟡 持有 / 🔴 減碼 + 理由。邏輯:(1) **硬衰退/恐慌 override** —— 殖利率曲線倒掛(10Y-2Y/10Y-3M<0)/ Sahm≥0.5 / VIX≥30 任一亮 → 強制 🔴(位階再高也蓋,分數卡缺的安全層);(2) 無 override → 依景氣位階 0-10(≥6.5🟢 / 4~6.5🟡 / <4🔴);(3) 位階缺 → 🟡 資料不足(§1 不假綠燈)。`ui/tab1_macro.py::_render_beginner_dashboard` 頂部(結論大卡之前)加彩色 `st.success/warning/error` 一句話燈,純顯示失敗不擋。

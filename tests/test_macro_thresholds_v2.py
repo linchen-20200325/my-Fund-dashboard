@@ -473,16 +473,9 @@ def test_pmi_tab1_macro_uses_ssot():
     assert _PMI_SITUATION_BELOW == 50.0
 
 
-def test_pmi_tab6_manual_uses_ssot():
-    """ui/tab6_manual.py 教學 markdown 必須走 f-string SSOT(per Q3 全遷)."""
-    import ui.tab6_manual as tm
-    src = open(tm.__file__, encoding="utf-8").read()
-    assert "PMI_THRESHOLDS" in src
-    assert "_PMI_TEXTBOOK" in src
-    # markdown body 已 f-string 化(原 `"""` → `f"""`)
-    assert 'f"""' in src
-    # 教學文案不應再有 hardcoded "PMI 為何 50 是" 字串(已 f-string 插值)
-    assert "PMI 為何 50 是" not in src, "title 仍 hardcoded 50,未走 f-string SSOT"
+# v19.317 說明書瘦身:tab6_manual 的 PMI 教學段(總經原理教室 + 23 指標教學)已整段砍除,
+# 檔內不再引用 PMI_THRESHOLDS,原 test_pmi_tab6_manual_uses_ssot 的 SSOT-drift 守門對象消失,
+# 連動退役(orphan test)。tab1_macro 的 PMI SSOT 仍由 test_pmi_tab1_macro_uses_ssot 守。
 
 
 # ════════════════════════════════════════════════════════════════

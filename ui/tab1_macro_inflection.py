@@ -197,10 +197,10 @@ def render_inflection_alert_section(
             _pf_m     = _pf.get("metrics") or _pf.get("m") or {}
             _pf_divs  = _pf.get("dividends") or []
             _pf_nav   = float(_pf_m.get("nav") or 0)
-            _pf_b1    = float(_pf_m.get("buy1") or 0)   # v18.6: 年高-1σ（小跌）
-            _pf_b2    = float(_pf_m.get("buy2") or 0)   # 年高-2σ（急跌）
-            _pf_b3    = float(_pf_m.get("buy3") or 0)   # 年高-3σ（大跌）
-            _pf_s1    = float(_pf_m.get("sell1") or 0)  # 年低+1σ
+            _pf_b1    = float(_pf_m.get("buy1") or 0)   # v3.2: 中樞-1σ（小跌）
+            _pf_b2    = float(_pf_m.get("buy2") or 0)   # 中樞-2σ（急跌）
+            _pf_b3    = float(_pf_m.get("buy3") or 0)   # 中樞-3σ（大跌）
+            _pf_s1    = float(_pf_m.get("sell1") or 0)  # 中樞+1σ
             _pf_bbd   = float(_pf_m.get("bb_lower") or 0)
             _pf_bbu   = float(_pf_m.get("bb_upper") or 0)
             _pf_ret1y = float(_pf_m.get("ret_1y") or 0)
