@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.320 BTC 流通量常數改「時變（減半發行時程）」— 取代 stale 19.8M(user 檢查選 B,2026-07-05)**:
+  - **背景**:user 請檢查 `services/liquidity_engine.py` 的 BTC 供給量常數。診斷:`_BTC_SUPPLY_APPROX = 19_800_000`(註解「~固定」)偏低約 1%、且是 ~1.5 年前(≈2025 初)的值;BTC 供給實為**持續增發**(~+1.6%/年),2026 中約 20.0M。**但**:`build_ssr` 走 Z-score,固定倍率在 `(SSR−均值)/標準差` 中會**被約掉** → 對紅綠燈**訊號零影響**;常數只漏到「顯示的 SSR 絕對值」(~1% 縮放)。屬 §3.3 灰色 + 註解語意誤導。user 選 B(改真實供給)。
+  - **修法(B,但用純函式非 API)**:live API 需新 L1 fetcher + 網路 + fallback,且 `liquidity_engine.py` 為 L2(§8.2 不得 I/O)。改以 **Bitcoin 減半發行時程純函式** `_btc_circulating_supply(index)` 推算時變流通量(協定事實、無 I/O、可重現 §5):供給(date)= 最近減半錨點供給 + 天數×該時期日發行量。`build_ssr` 的 BTC 市值改 `btc × 時變供給`(positional 相乘避 tz 對齊問題),推算失敗才退 `_BTC_SUPPLY_FALLBACK`(§1 不靜默)。
+  - **效果**:2021→2026 供給曲線 18.75M→20.05M(4th halving 錨點 19.6875M 精確),取代單一 stale 常數。訊號幾乎不變(供給緩增被 Z-score 大幅抵消),但顯示絕對值 + 供給語意變正確。
+  - **回歸網**:`tests/test_btc_supply.py`(5:單調且≤21M上限 / 減半錨點值 / 減半後 450/日 / 2026 落 19.9–20.2M / tz-aware index 不炸)。
+  - **範圍 / 架構**:純 L2(`services/liquidity_engine.py`)加 1 純函式 + 改 1 處相乘,無新依賴、無跨層 I/O(§8.2 clean)。誠實面:live API 版(即時流通量)未做,ROI 對訊號 ~0,如需再議。
+
 - **v19.319 修 `_src_cache_files` 路徑 bug + 接進 fetch_nav 當 IP 封鎖最終保障(user 指名 item 6,2026-07-05)**:
   - **背景**:GitHub Actions(`scripts/fetch_nav_cache.py`)每日把 NAV 存到 repo 根 `cache/nav/{CODE}.json`,設計為「Streamlit Cloud IP 被 MoneyDJ 封鎖時的最終保障」。但 `repositories/fund/sources.py:_src_cache_files` 有兩個問題:(1) **路徑算錯** —— `__file__.parent` 指到 `repositories/fund/cache/nav`(不存在),永遠讀不到;(2) **死接線** —— 只在 sources `__all__` re-export,沒接進任何 fetch chain(原唯一潛在消費者 `fetch_nav_history_long` 也因危機回測 v19.314 拔除而孤立)。等於這層防護整條沒作用。
   - **修法**:(1) `sources.py` 路徑改 `_Path(__file__).resolve().parents[2]`(= repo 根);(2) `nav_metrics.py:fetch_nav` 在**所有 live URL 失敗後、return 空之前**加快取 fallback —— `_src_cache_files((mj_short or full_key).upper())`,只在 live 全敗時觸發、不覆蓋任何 live 資料,快取自帶 `source`/`fetched_at` provenance(§2.2)。
