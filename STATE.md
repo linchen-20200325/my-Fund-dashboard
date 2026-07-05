@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.309 修每日 NAV 快取 Action `ModuleNotFoundError: bs4`(CI-only,2026-07-05)**:
+  - **背景**:user 貼 GitHub Action `fetch_nav_cache.yml` 失敗 run — `scripts/fetch_nav_cache.py:301` 的 Yahoo fallback `from repositories.fund.sources import YF_MORNINGSTAR_CHART_URL` 會拉入整個 `repositories/fund` package,其 module-load 即 `from bs4 import BeautifulSoup`(用 `"lxml"` parser);但 workflow 只裝 `requests pandas gspread google-auth`,漏 bs4/lxml → 半夜 cron 每日炸。根因=排毒重構後 import 鏈長出來、但 workflow 的精簡裝套清單沒跟上。
+  - **修法(尊重既有設計,不搬 SSOT)**:`shared/api_endpoints.py` docstring 明定此 URL 常數**留在 `repositories/fund/sources.py`(L1 source-local SSOT)、script 從那 import**(single-caller URL 不上 shared)。故正解=workflow 補裝 import 鏈需要的 `beautifulsoup4 lxml`,**非**改 import 來源。`fetch_nav_cache.yml` pip install 補兩套 + 註解說明為何。
+  - **診斷嚴謹度**:模擬 CI 直譯器(擋掉 streamlit/feedparser/yfinance/scipy/… 等 CI 沒裝的重依賴)確認完整缺集=`bs4`+`lxml` 兩個(streamlit 為 `infra/proxy.py:40` try/except 選配、feedparser/yfinance 不在 module-load 鏈)→ **不打地鼠**。另驗 sibling `update_macro_history.yml`(跑 `update_macro_history.py`,import `repositories.macro.fred/yf`)**無同類洞**。
+  - **回歸網**:`tests/test_fetch_nav_cache_ci_deps.py`(2 test)— (1) 靜態驗 workflow pip install 含 bs4+lxml;(2) 子行程模擬 CI 精簡依賴驗關鍵 import 仍解析 → 未來 import 鏈長出**新硬依賴**會紅提醒同步 workflow,不等半夜 cron 才發現。
+  - **範圍**:純 CI/infra(workflow yaml + test);app runtime 0 改動(APP_VERSION 仍隨版號 lockstep bump 便於書記)。
+
 - **v19.308 成立年改抓 MoneyDJ 現成成立日 — SSOT 一條龍(2026-07-04)**:
   - **背景**:承 v19.307，成立年 / 5Y / Sortino 等仍 None,因 Cloud IP 被 MoneyDJ 擋、本地 NAV 只抓到近 1 月(成立年用 `series.index[0]` → 算成 0.1 年、MK 3-3-3 ① 全誤判)。user 明確要求「**不抓 NAV 歷史,抓 MoneyDJ 已算好的指標**」。
   - **關鍵發現**:MoneyDJ 頁面「成立日期」**部分路徑早已在抓**(`sources.py` Allianz meta),但 (1) 主 moneydj 路徑(yp010000/yp010001,即 user 那幾檔)**沒抓**;(2) 成立年計算用序列而非成立日;(3) `report._compute_holding_years` 已優先讀 inception_date 但沒人餵。
