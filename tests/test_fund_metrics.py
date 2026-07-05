@@ -36,7 +36,8 @@ def test_mk_v3_buy_anchored_to_year_high():
     }
     m = calc_metrics(s, [], risk_override=risk_override)
     yh = risk_override["year_high_nav"]
-    sigma = round(yh * 0.12, 4)
+    yl = risk_override["year_low_nav"]
+    sigma = round((yh - yl) / 3, 4)   # v19.313: σ 改區間基準 (年高-年低)/3（原 yh×年化σ%）
     assert abs(m["buy1"] - round(yh - 1*sigma, 4)) < 1e-3, f"buy1={m['buy1']} expected {yh - sigma}"
     assert abs(m["buy2"] - round(yh - 2*sigma, 4)) < 1e-3
     assert abs(m["buy3"] - round(yh - 3*sigma, 4)) < 1e-3
@@ -61,7 +62,7 @@ def test_mk_v3_sell_anchored_to_year_low():
     m = calc_metrics(s, [], risk_override=risk_override)
     yl = risk_override["year_low_nav"]
     yh = risk_override["year_high_nav"]
-    sigma = round(yh * 0.10, 4)
+    sigma = round((yh - yl) / 3, 4)   # v19.313: σ 改區間基準 (年高-年低)/3（原 yh×年化σ%）
     assert abs(m["sell1"] - round(yl + 1*sigma, 4)) < 1e-3
     assert abs(m["sell2"] - round(yl + 2*sigma, 4)) < 1e-3
     assert abs(m["sell3"] - round(yl + 3*sigma, 4)) < 1e-3
@@ -103,30 +104,30 @@ def test_mk_v3_position_label_priority():
     # 強迫 NAV 落在 b3 以下 → 應顯示「大跌大買」
     s = _fake_series()
     yh, yl = 100.0, 50.0
-    sigma_pct = 10.0
-    sigma = yh * sigma_pct / 100   # = 10
-    # 模擬 NAV 在 b3 = 100-30 = 70 以下，但又要在合理 series 內
-    # 直接餵 series 末值改寫
+    # v19.313: σ 改區間基準 → sigma=(100-50)/3≈16.667
+    #   b1≈83.33 b2≈66.67 b3≈50(=年低)｜sell1≈66.67 sell2≈83.33 sell3≈100(=年高)
+    sigma = round((yh - yl) / 3, 4)
     s = s.copy()
-    s.iloc[-1] = 65.0   # 落在 b3=70 下方
+    s.iloc[-1] = 45.0   # 落在 b3≈50 下方 → 大跌大買
     risk_override = {
         "year_high_nav": yh, "year_low_nav": yl,
         "risk_table": {
-            "六個月": {"標準差": sigma_pct - 1},
-            "一年":   {"標準差": sigma_pct},
-            "三年":   {"標準差": sigma_pct + 1},
-            "五年":   {"標準差": sigma_pct + 2},
+            "六個月": {"標準差": 9.0},
+            "一年":   {"標準差": 10.0},
+            "三年":   {"標準差": 11.0},
+            "五年":   {"標準差": 12.0},
         },
     }
     m = calc_metrics(s, [], risk_override=risk_override)
-    assert m["buy3"] == round(yh - 3*sigma, 4) == 70.0
+    assert abs(m["buy3"] - round(yh - 3*sigma, 4)) < 1e-3
+    assert abs(m["buy3"] - yl) < 0.01   # 買3 = 年低（區間下緣）
     assert "大跌大買" in m["pos_label"], f"got {m['pos_label']}"
-    # NAV=85 落在 b1=90 與 b2=80 之間 → 「小跌小買」
-    s.iloc[-1] = 85.0
+    # NAV=75 落在 b2≈66.67 與 b1≈83.33 之間 → 「小跌小買」
+    s.iloc[-1] = 75.0
     m = calc_metrics(s, [], risk_override=risk_override)
     assert "小跌小買" in m["pos_label"], f"got {m['pos_label']}"
-    # NAV=95 → 落在正常區（買1=90 上方、賣3=80 上方 → 觸發 sell3 大漲）
-    s.iloc[-1] = 95.0
+    # NAV=105 ≥ sell3≈100（年高）→ 大漲停利
+    s.iloc[-1] = 105.0
     m = calc_metrics(s, [], risk_override=risk_override)
     assert "大漲停利" in m["pos_label"], f"got {m['pos_label']}"
 

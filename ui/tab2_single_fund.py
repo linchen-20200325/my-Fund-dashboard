@@ -649,7 +649,7 @@ def render_single_fund_tab() -> None:
                 _m_buy1 = m.get("buy1"); _m_buy2 = m.get("buy2"); _m_buy3 = m.get("buy3")
                 _m_sell1 = m.get("sell1"); _m_sell2 = m.get("sell2"); _m_sell3 = m.get("sell3")
                 _m_pl = m.get("pos_label",""); _m_pc = m.get("pos_color",TRAFFIC_NEUTRAL)
-                _m_mode = m.get("buy_mode",""); _m_std_src = m.get("std_source","nav")
+                _m_mode = m.get("buy_mode","")  # v19.313: 買賣 band σ 改區間基準,不再標 wb07
                 _m_nav_v = float(m.get("nav") or 0)
                 _NEAR = float(m.get("near_threshold_pct") or 2.0)
                 def _proximity_chip(nav_v, target, is_buy):
@@ -688,7 +688,7 @@ def render_single_fund_tab() -> None:
                     from ui.components.cards import gh_card
                     st.markdown(gh_card(
                         f"<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
-                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.0（{_m_mode} ｜ σ 來源：{_m_std_src}）</span>"
+                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>📍 策略3 標準差買賣點 v3.1（{_m_mode} ｜ σ=(年高-年低)÷3）</span>"
                         f"<span style='background:{CHIP_BG_NEAR_BLACK};color:{_m_pc};border:1px solid {_m_pc};padding:2px 10px;"
                         f"border-radius:12px;font-size:12px;font-weight:700'>{_m_pl}</span>"
                         f"</div>"
