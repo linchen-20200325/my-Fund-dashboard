@@ -44,6 +44,44 @@ def _pick_comparison_basis(rows: "list[dict]") -> str:
     return "年化" if _all_annual else "全期實際"
 
 
+def _dedup_upper(seq) -> "list[str]":
+    """代號清單 order-preserving 去重 + 大寫正規化 —— SSOT:本 Tab 代號唯一化只此一處。
+
+    背景(user 2026-07-05「配息事件（多檔合併）有重複」):同一基金若被多張保單持有,
+    `portfolio_funds` 會出現同 code 多筆;「🔗 從我的組合帶入」後代號清單即帶重複 →
+    `_run_batch_health` 逐檔各算一次 → 持有 meta / 配息事件 / 比較圖三表全部重複列。
+    本 Tab 輸入僅「代號 + 單一本金」,同 code = 完全相同計算 = 真重複,去重安全。
+    """
+    out: "list[str]" = []
+    seen: set[str] = set()
+    for x in seq:
+        c = str(x).strip().upper()
+        if c and c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
+def _dedup_rows_by_code(rows: "list[dict]") -> "list[dict]":
+    """row list order-preserving 去重(以 code 為鍵)—— SSOT 顯示層 chokepoint。
+
+    `_render_health_3tables` 同時被健診 Tab 與 Tab3 組合 embed 呼叫;任一路徑若傳入
+    同 code 多筆(多保單持同檔),持有 meta / 配息事件 / 比較圖三表都會重複列。在渲染
+    入口一次去重覆蓋所有 caller(補「代號輸入端 `_dedup_upper`」的另一半,兩者互補)。
+    空 code 的 row 視為各自唯一(不丟、不去重),避免誤刪合法列。
+    """
+    out: "list[dict]" = []
+    seen: set[str] = set()
+    for r in rows:
+        c = str(r.get("code", "")).strip().upper()
+        if c and c in seen:
+            continue
+        if c:
+            seen.add(c)
+        out.append(r)
+    return out
+
+
 def render_fund_grp_health_tab() -> None:
     """渲染 💊 基金組合健診 Tab（v19.37 新增）。"""
     st.markdown("### 💊 基金組合健診")
@@ -73,7 +111,8 @@ def render_fund_grp_health_tab() -> None:
 
     # v19.302: 從組合配置帶入基金代號（讀 portfolio_funds session_state）
     _pf_raw = st.session_state.get("portfolio_funds") or []
-    _pf_codes = [str(f.get("code", "")).strip().upper() for f in _pf_raw if str(f.get("code", "")).strip()]
+    # v19.322 SSOT 去重:同基金跨多保單會出現同 code 多筆,帶入前先唯一化(否則三表重複列)
+    _pf_codes = _dedup_upper(f.get("code", "") for f in _pf_raw)
     if _pf_codes:
         if st.button(f"🔗 從我的組合帶入（{len(_pf_codes)} 檔）", key="grp_health_import_from_pf"):
             st.session_state["fund_grp_health_codes"] = "\n".join(_pf_codes)
@@ -106,8 +145,8 @@ def render_fund_grp_health_tab() -> None:
     if not st.button("🩺 開始健診", key="fund_grp_health_btn"):
         return
 
-    codes = [c.strip().upper() for c in codes_raw.splitlines() if c.strip()]
-    codes = codes[:_MAX_CODES]
+    # v19.322:代號去重(SSOT _dedup_upper)—— 防同檔被多保單/手動貼多次 → 逐檔明細三表重複列
+    codes = _dedup_upper(codes_raw.splitlines())[:_MAX_CODES]
     if not codes:
         st.warning("請至少輸入 1 個基金代號")
         return
@@ -431,6 +470,9 @@ def _render_health_3tables(rows: list[dict],
     """
     if not rows:
         return
+    # v19.322 SSOT 去重(顯示層 chokepoint):健診 Tab + Tab3 embed 皆經此;同 code 多筆
+    # (多保單持同檔)只留第一筆 → 持有 meta / 配息事件 / 比較圖三表不再重複列。
+    rows = _dedup_rows_by_code(rows)
     import pandas as pd
     from streamlit import column_config as _cc
     from services.health.report import (
