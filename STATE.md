@@ -53,6 +53,14 @@
 
 ## 當前版本
 
+- **v19.321 NAV 快取 Action 覆蓋過低發 GitHub warning — 終結靜默綠勾(user #2 深挖,2026-07-05)**:
+  - **深挖結論(修正先前誤判)**:user 問「怎麼讓 NAV 快取涵蓋全部基金」。查證發現**種子機制早已存在** —— `scripts/fetch_nav_cache.py:_discover_fund_codes()` = `FUND_CODES`(11 檔)∪ 既有 cache ∪ Sheet(有 SA 憑證時)。真根因**不是缺種子**:`git log cache/nav/` 顯示每日 Action **數週來只 commit `TLZF9.json` 一檔、且 `source=cache_only`(count 10)** = **fetch 全敗、只重存舊快取,卻仍回綠勾**。因 GitHub Actions 美國 IP 被台灣站點(TDCC/SITCA/MoneyDJ)封鎖,`PROXY_URL` secret 未生效;唯一美國可直取源 `MORNINGSTAR_SECID_MAP` 只涵蓋 3 檔(TLZF9/ANZ89/JFZN3)。
+  - **程式修法(§1 Fail-Loud / §5 可觀測)**:新增 `_emit_coverage_alert(summary)` —— 本次抓到新資料(fresh)比例 <50% → 發 **GitHub Actions `::warning::` annotation** + 寫 `$GITHUB_STEP_SUMMARY`,明講「疑似 IP 封鎖 / PROXY_URL 未設」。loop 每檔記 `fresh=bool(new_rows)`。**不 hard-fail**(仍保留既有快取),只讓「每天綠勾卻 0 抓取」的靜默失敗**被看見**。
+  - **⚠️ 真正的 unblock 是 user 設定(非程式可解)**:repo Settings → Secrets and variables → Actions 設 `PROXY_URL`(NAS Squid,與 app 同一把)→ Action 走台灣 IP → 11 檔全部抓得到 → v19.319 fallback 才真正有料可退。或補 `MORNINGSTAR_SECID_MAP`(需 user 提供已驗證 secId,不可腦補 §1)。
+  - **範圍**:`scripts/fetch_nav_cache.py`(+1 helper、summary 加 fresh、main 尾呼叫)。非 app runtime 路徑,不影響 Streamlit。
+  - **回歸網**:`tests/test_nav_cache_coverage_alert.py`(4:低覆蓋發 warning / 高覆蓋不發 / 空 summary 不炸 / 有 GITHUB_STEP_SUMMARY 寫檔)。
+  - **驗證**:pre-commit `--all-files` 全綠。
+
 - **v19.320 BTC 流通量常數改「時變（減半發行時程）」— 取代 stale 19.8M(user 檢查選 B,2026-07-05)**:
   - **背景**:user 請檢查 `services/liquidity_engine.py` 的 BTC 供給量常數。診斷:`_BTC_SUPPLY_APPROX = 19_800_000`(註解「~固定」)偏低約 1%、且是 ~1.5 年前(≈2025 初)的值;BTC 供給實為**持續增發**(~+1.6%/年),2026 中約 20.0M。**但**:`build_ssr` 走 Z-score,固定倍率在 `(SSR−均值)/標準差` 中會**被約掉** → 對紅綠燈**訊號零影響**;常數只漏到「顯示的 SSR 絕對值」(~1% 縮放)。屬 §3.3 灰色 + 註解語意誤導。user 選 B(改真實供給)。
   - **修法(B,但用純函式非 API)**:live API 需新 L1 fetcher + 網路 + fallback,且 `liquidity_engine.py` 為 L2(§8.2 不得 I/O)。改以 **Bitcoin 減半發行時程純函式** `_btc_circulating_supply(index)` 推算時變流通量(協定事實、無 I/O、可重現 §5):供給(date)= 最近減半錨點供給 + 天數×該時期日發行量。`build_ssr` 的 BTC 市值改 `btc × 時變供給`(positional 相乘避 tz 對齊問題),推算失敗才退 `_BTC_SUPPLY_FALLBACK`(§1 不靜默)。

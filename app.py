@@ -43,7 +43,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.320_BtcSupplyCurve"
+APP_VERSION = "v19.321_NavCacheAlert"
 
 
 # ══════════════════════════════════════════════════════

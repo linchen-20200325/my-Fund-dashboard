@@ -400,6 +400,49 @@ def merge_history(existing: list, new_rows: list) -> list:
     return result[:750]
 
 
+def _emit_coverage_alert(summary: list) -> dict:
+    """v19.321 §1 Fail-Loud / §5 可觀測:抓取覆蓋過低時發 GitHub Actions warning
+    annotation + step summary,終結「每天綠勾但其實 0 新抓取」的靜默失敗
+    (症狀:所有 code 只重存舊快取 source=cache_only,新持倉永遠拿不到種子檔)。
+
+    覆蓋 = 本次真的抓到「新資料」(fresh=True)的比例。過半沒抓到 → 極可能是
+    GitHub Actions 美國 IP 被台灣站點(TDCC/SITCA/MoneyDJ)封鎖、且 PROXY_URL
+    secret 未生效 → fetch 全敗。不 hard-fail(仍保留既有快取),只讓失敗「被看見」。
+    回傳診斷 dict 供測試 / log。
+    """
+    total = len(summary)
+    fresh = [r["code"] for r in summary if r.get("fresh")]
+    no_data = [r["code"] for r in summary if int(r.get("count") or 0) == 0]
+    frac = (len(fresh) / total) if total else 1.0
+    low = total > 0 and frac < 0.5
+    if low:
+        msg = (
+            f"NAV 快取覆蓋過低:{total} 檔僅 {len(fresh)} 檔本次抓到新資料"
+            f"({len(no_data)} 檔完全無快取)。最可能原因:GitHub Actions 美國 IP 被台灣站點"
+            f"(TDCC/SITCA/MoneyDJ)封鎖、PROXY_URL secret 未生效 → fetch 全敗只重存舊快取。"
+            f"請至 repo Settings → Secrets and variables → Actions 設 PROXY_URL"
+            f"(NAS Squid,與 app 同一把),或補 MORNINGSTAR_SECID_MAP(美國可存取源)。"
+        )
+        # GitHub Actions annotation:顯示在 run 頁 + PR checks(單行,去換行)
+        print(f"::warning title=NAV 快取覆蓋過低::{msg.replace(chr(10), ' ')}")
+        _gs = os.environ.get("GITHUB_STEP_SUMMARY")
+        if _gs:
+            try:
+                with open(_gs, "a", encoding="utf-8") as _f:
+                    _f.write(
+                        f"### ⚠️ NAV 快取覆蓋過低（{len(fresh)}/{total} 檔有新資料）\n\n"
+                        f"{msg}\n\n"
+                        f"- 本次有新資料:{', '.join(fresh) or '（無）'}\n"
+                        f"- 完全無快取:{', '.join(no_data) or '（無）'}\n"
+                    )
+            except Exception as _e:
+                print(f"[step-summary] 寫入失敗:{_e}")
+    else:
+        print(f"[coverage] ✅ {len(fresh)}/{total} 檔本次有新資料")
+    return {"total": total, "fresh": fresh, "no_data": no_data,
+            "frac_fresh": round(frac, 3), "low": low}
+
+
 def main():
     print(f"\n{'='*60}")
     print(f"NAV Cache Fetcher — {datetime.datetime.now().isoformat()}")
@@ -506,7 +549,8 @@ def main():
             _final_count = len(existing_history)
             _final_src = existing_cache.get("source", "cache_only")
 
-        _summary.append({"code": code, "count": _final_count, "source": _final_src})
+        _summary.append({"code": code, "count": _final_count, "source": _final_src,
+                         "fresh": bool(new_rows)})
         time.sleep(0.5)
 
     # ── v18.178 (#2)：診斷彙整表 — 一眼看哪些 fund 歷史太短 / 卡 fallback ──
@@ -526,6 +570,8 @@ def main():
     if _short:
         print(f"\n⚠️  以下 {len(_short)} 檔 <60 筆（季線/回測/相關係數會受限，需查來源）："
               f"{', '.join(_short)}")
+    # v19.321：覆蓋過低 → 發 GitHub Actions warning（§1 Fail-Loud，別再靜默綠勾）
+    _emit_coverage_alert(_summary)
     print(f"\n{'='*60}")
     print("完成！")
     print(f"{'='*60}")
