@@ -53,6 +53,14 @@
 
 ## 當前版本
 
+- **v19.319 修 `_src_cache_files` 路徑 bug + 接進 fetch_nav 當 IP 封鎖最終保障(user 指名 item 6,2026-07-05)**:
+  - **背景**:GitHub Actions(`scripts/fetch_nav_cache.py`)每日把 NAV 存到 repo 根 `cache/nav/{CODE}.json`,設計為「Streamlit Cloud IP 被 MoneyDJ 封鎖時的最終保障」。但 `repositories/fund/sources.py:_src_cache_files` 有兩個問題:(1) **路徑算錯** —— `__file__.parent` 指到 `repositories/fund/cache/nav`(不存在),永遠讀不到;(2) **死接線** —— 只在 sources `__all__` re-export,沒接進任何 fetch chain(原唯一潛在消費者 `fetch_nav_history_long` 也因危機回測 v19.314 拔除而孤立)。等於這層防護整條沒作用。
+  - **修法**:(1) `sources.py` 路徑改 `_Path(__file__).resolve().parents[2]`(= repo 根);(2) `nav_metrics.py:fetch_nav` 在**所有 live URL 失敗後、return 空之前**加快取 fallback —— `_src_cache_files((mj_short or full_key).upper())`,只在 live 全敗時觸發、不覆蓋任何 live 資料,快取自帶 `source`/`fetched_at` provenance(§2.2)。
+  - **範圍 / 架構**:純 L1 內修(`repositories/fund/` 同層,`fetch_nav` 呼 `_src_cache_files` 走既有 `sources import *`);additive fallback、live 正常時零行為變化(§8 不改主資料流、只補降級鏈)。
+  - **回歸網**:`tests/test_cache_nav_fallback.py`(4 test:路徑指 repo 根讀得到 / 缺檔回空不炸 / live 全敗退快取 / 無快取仍回空)。
+  - **⚠️ 現況限制(誠實揭露)**:`cache/nav/` 目前僅 1 檔(TLZF9),Action 用 `glob("*.json")` 只更新既有檔,新基金需先有種子檔才會被每日快取 —— 種子機制為另一獨立議題,本次不處理(§-1)。另 `fetch_nav_history_long` 現已無 live caller(危機回測拔除後孤立),未動,留記錄。
+  - **驗證**:pre-commit `--all-files` 全綠。
+
 - **v19.318 標準差買賣點 σ 大改 v3.2「回歸中樞 ± kσ」— 真統計標準差(user A+B,2026-07-05)**:
   - **背景**:user 回報「標準差的圖還沒有修好」(附三合一趨勢圖)。深挖兩個疊加問題:(1) **v19.313(v3.1)有重疊 bug** —— 買點錨年高、賣點錨年低 + σ=(年高-年低)/3 → 數學上 買1=賣2、買2=賣1,6 條線塌成 4 條(程式驗證確認);(2) 螢幕顯示的仍是**舊 v3.0 寬 band**(部署/cache 未刷新),band 橫跨整年高低區間、遠離現價。
   - **修法(user 選 A+B)**:`services/fund_service.py:calc_metrics` σ 公式改 v3.2 ——

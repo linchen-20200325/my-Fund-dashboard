@@ -43,7 +43,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.318_SigmaChannel"
+APP_VERSION = "v19.319_NavCacheFallback"
 
 
 # ══════════════════════════════════════════════════════
