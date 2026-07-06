@@ -156,11 +156,13 @@ def test_invest_calc_stash_includes_amount_local_and_monthly_units():
 
 
 def test_invest_calc_metric_cards_show_twd():
-    """metric 卡主秀「月配息（TWD）」+「月配股（單位）」。"""
+    """metric 卡主秀「月配息（TWD）」+「每月配息單位數」(v19.324 改真實記錄版)。"""
     from pathlib import Path
     src = (Path(__file__).parents[1] / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
     assert '"月配息（TWD）"' in src, "metric 應主秀「月配息（TWD）」"
-    assert '"月配股（單位）"' in src, "metric 應新增「月配股（單位）」"
+    # v19.324:月配股（單位）改名「每月配息單位數」,且改走最近一筆真實配息記錄
+    assert '"每月配息單位數"' in src, "metric 應為「每月配息單位數」(真實記錄版)"
+    assert "monthly_dividend_from_records" in src, "月配應走真實記錄 SSOT"
 
 
 def test_invest_calc_manual_fx_fallback():

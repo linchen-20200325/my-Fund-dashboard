@@ -387,8 +387,8 @@ def process_one_fund(
             "配息頻率": _div_freq,
             "換匯資訊 🧮": _buy_fx_info,
             "_detail": result,
-            # v19.323：本金透傳給 ② 配息表 build_dividend_summary_row 算「每月配息(TWD)」。
-            # 健診 Tab 全檔統一 100 萬;Tab3 embed 為 user 各檔實際 invest_twd。
+            # v19.323→v19.324：本金透傳給 ② 配息表算「每月配息單位數」(真實記錄版,
+            # 搭配 row["fx_spot"] 換原幣本金)。健診 Tab 全檔統一 100 萬;Tab3 為各檔實際 invest_twd。
             "_principal_twd": float(principal_twd or 0),
             "_fund_raw": fd,  # v19.58：留給 render_fund_grp_health_extras
             # v19.61 E1：MoneyDJ 資料新鮮度（_ 開頭自動排除表格）
@@ -494,7 +494,8 @@ def _render_health_3tables(rows: list[dict],
     # 先建 ② 配息 rows(內含 _verdict),紅區與下方表 ② 共用同一份、不重算(SSOT,避免雙倍計算)。
     _div_rows = [
         build_dividend_summary_row(_r.get("_fund_raw") or {}, _r.get("code", ""),
-                                   principal_twd=_r.get("_principal_twd"))
+                                   principal_twd=_r.get("_principal_twd"),
+                                   fx=_r.get("fx_spot"))
         for _r in ok_rows
     ]
     _replace = [r for r in _div_rows if r.get("_verdict") == "replace"]
@@ -569,8 +570,8 @@ def _render_health_3tables(rows: list[dict],
     # v19.315:_div_rows 已於頂部「淘汰候選紅區」建好,此處共用不重算(SSOT)。
     _div_df = pd.DataFrame(_div_rows)
     # v19.191:None → NaN for numeric cols(同 ① 表 None → NaN 邏輯)
-    # v19.323:每月配息 (TWD) 加入 numeric 欄(None → NaN → NumberColumn 顯示空白)
-    _div_num_cols = ["1Y 含息 %", "年化配息率 %", "每月配息 (TWD)"]
+    # v19.324:每月配息單位數(真實記錄版)加入 numeric 欄(None → NaN → 顯示空白)
+    _div_num_cols = ["1Y 含息 %", "年化配息率 %", "每月配息單位數"]
     for _nc in _div_num_cols:
         if _nc in _div_df.columns:
             _div_df[_nc] = pd.to_numeric(_div_df[_nc], errors="coerce")
@@ -581,9 +582,10 @@ def _render_health_3tables(rows: list[dict],
         "1Y 來源": _cc.TextColumn("1Y 來源",
             help="wb01 / local_calc / ret_1y_total / NAV 年化"),
         "年化配息率 %": _cc.NumberColumn("年化配息率 %", format="%.2f %%"),
-        # v19.323:每月配息(TWD) = 本金 × 年化配息率 / 12(前瞻估算,與 Tab2 投資試算同源)
-        "每月配息 (TWD)": _cc.NumberColumn("每月配息 (TWD)", format="%.0f",
-            help="= 投入本金 × 年化配息率 / 12(前瞻估算,非歷史實配)。"
+        # v19.324:每月配息單位數 = 最近一筆實際配息 × 持有單位 / NAV(真實記錄,非年化估算)
+        "每月配息單位數": _cc.NumberColumn("每月配息單位數", format="%.2f",
+            help="= 最近一筆實際配息(原幣/單位) × 持有單位 / NAV。"
+                 "用 MoneyDJ 真實配息記錄(非年化÷12 估算);無配息記錄顯示空白。"
                  "健診 Tab 全檔以 100 萬 TWD 為基準比較;Tab3 為各檔實際投入本金。"),
         "吃本金燈號 (1Y·MK)": _cc.TextColumn("吃本金燈號 (1Y·MK)"),
         "換標的建議": _cc.TextColumn("換標的建議",

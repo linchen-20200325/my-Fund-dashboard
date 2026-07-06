@@ -1464,121 +1464,129 @@ def render_single_fund_tab() -> None:
                         _mc1, _mc2, _mc3, _mc4 = st.columns(4)
                         _mc1.metric("可申購單位數", f"{_units:,.2f}")
                         if _yield_calc and _yield_calc > 0:
-                            # 配息型：原幣算配息 → 換回 TWD；月配股 = 月配息 ÷ NAV
-                            _ann_div = _amt_local * _yield_calc / 100.0
-                            _mon_div = _ann_div / 12.0
-                            _mon_units = _mon_div / _nav_calc
-                            if _ccy != "TWD" and _fx_to_twd:
-                                _ann_div_twd = _ann_div * _fx_to_twd
-                                _mon_div_twd = _mon_div * _fx_to_twd
-                            else:
-                                _ann_div_twd = _ann_div
-                                _mon_div_twd = _mon_div
-                            _mc2.metric("月配息（TWD）", f"{_mon_div_twd:,.0f}")
-                            _mc3.metric("月配股（單位）", f"{_mon_units:,.2f}",
-                                        help="月配息若再投入可換得的單位數（月配息 ÷ NAV）")
+                            # v19.324：月配息 / 每月配息單位數改用「最近一筆真實配息記錄」
+                            # （取代年化÷12 估算），與 Tab3 / 健檢 ② 同源走 dividend_calc。
+                            # 無逐筆配息記錄 → 顯示「—」（§1 Fail Loud，不用 adr 估算矇混）。
+                            from services.health.dividend_calc import (
+                                monthly_dividend_from_records,
+                            )
+                            _fx_eff2 = _fx_to_twd if (_ccy != "TWD" and _fx_to_twd) else 1.0
+                            _mdiv2 = monthly_dividend_from_records(
+                                mj_raw.get("dividends") or [], _units, _nav_calc, _fx_eff2)
+                            _latest2 = _mdiv2["latest_div_per_unit"]
+                            _has_rec = (_latest2 is not None
+                                        and _mdiv2["mon_div_units"] is not None)
+                            _mon_div = _mdiv2["mon_div_ccy"] or 0.0       # 月配息(原幣,總額)
+                            _mon_div_twd = _mdiv2["mon_div_twd"] or 0.0
+                            _mon_units = _mdiv2["mon_div_units"] or 0.0
+                            _ann_div = _mon_div * 12.0                    # 年化 = 月配 × 12
+                            _ann_div_twd = _mon_div_twd * 12.0
+                            _mc2.metric("月配息（TWD）",
+                                        f"{_mon_div_twd:,.0f}" if _has_rec else "—")
+                            _mc3.metric("每月配息單位數",
+                                        f"{_mon_units:,.2f}" if _has_rec else "—",
+                                        help="最近一筆實際配息 × 持有單位 ÷ NAV（真實記錄，非年化估算）")
                             _mc4.metric("年化配息率", f"{_yield_calc:.2f}%",
-                                        help="年化配息率 = 年配息 / 投入本金（原幣）")
-                            if _ccy != "TWD":
+                                        help="MoneyDJ wb05 官方年化配息率（僅參考，月配走真實記錄）")
+                            if not _has_rec:
+                                st.caption(
+                                    f"⬜ 此基金無逐筆配息記錄，無法用真實記錄精算月配"
+                                    f"（年化配息率 {_yield_calc:.2f}% 僅供參考）"
+                                )
+                            elif _ccy != "TWD":
                                 st.success(
                                     f"💱 **換算 TWD**（1 {_ccy} = {_fx_to_twd:.4f}，{_fx_tag}）："
                                     f"本金 {_amount_twd:,.0f} TWD → "
                                     f"原幣本金 **{_amt_local:,.2f}** {_ccy} → "
                                     f"可買 **{_units:,.2f}** 單位｜"
-                                    f"年息 **{_ann_div_twd:,.0f}** TWD"
+                                    f"最近一筆實配 **{_latest2:,.4f}** {_ccy}/單位"
                                     f"（每月 ≈ **{_mon_div_twd:,.0f}** TWD"
-                                    f" / 配股 ≈ **{_mon_units:,.2f}** 單位）"
+                                    f" / 配息單位 ≈ **{_mon_units:,.2f}** 單位）"
                                 )
                             else:
                                 st.success(
                                     f"📌 本金 {_amount_twd:,.0f} TWD → 可買 **{_units:,.2f}** 單位｜"
-                                    f"年息 **{_ann_div_twd:,.0f}** TWD"
+                                    f"最近一筆實配 **{_latest2:,.4f}** {_ccy}/單位"
                                     f"（每月 ≈ **{_mon_div_twd:,.0f}** TWD"
-                                    f" / 配股 ≈ **{_mon_units:,.2f}** 單位）"
+                                    f" / 配息單位 ≈ **{_mon_units:,.2f}** 單位）"
                                 )
 
-                            # v18.263：完整計算公式（含數字代入）— user 反饋「我要有公式的」
-                            with st.expander("📐 完整計算公式（含數字代入）", expanded=False):
-                                if _ccy != "TWD" and _fx_to_twd:
-                                    _formula_text = (
-                                        f"# 投入本金 / 單位數\n"
-                                        f"原幣本金   = TWD ÷ FX\n"
-                                        f"           = {_amount_twd:,.0f} ÷ {_fx_to_twd:.4f}\n"
-                                        f"           = {_amt_local:,.2f} {_ccy}\n"
-                                        f"\n"
-                                        f"可申購單位 = 原幣本金 ÷ NAV\n"
-                                        f"           = {_amt_local:,.2f} ÷ {_nav_calc:.4f}\n"
-                                        f"           = {_units:,.2f} 單位\n"
-                                        f"\n"
-                                        f"# 配息（原幣）\n"
-                                        f"年配息(原幣) = 原幣本金 × ADR%\n"
-                                        f"             = {_amt_local:,.2f} × {_yield_calc:.2f}%\n"
-                                        f"             = {_ann_div:,.2f} {_ccy}\n"
-                                        f"\n"
-                                        f"月配息(原幣) = 年配息(原幣) ÷ 12\n"
-                                        f"             = {_ann_div:,.2f} ÷ 12\n"
-                                        f"             = {_mon_div:,.2f} {_ccy}\n"
-                                        f"\n"
-                                        f"# 配息（換回 TWD）\n"
-                                        f"年配息(TWD)  = 年配息(原幣) × FX\n"
-                                        f"             = {_ann_div:,.2f} × {_fx_to_twd:.4f}\n"
-                                        f"             = {_ann_div_twd:,.0f} TWD\n"
-                                        f"\n"
-                                        f"月配息(TWD)  = 年配息(TWD) ÷ 12\n"
-                                        f"             = {_ann_div_twd:,.0f} ÷ 12\n"
-                                        f"             = {_mon_div_twd:,.0f} TWD\n"
-                                        f"\n"
-                                        f"# 月配股（再投入單位）\n"
-                                        f"月配股(單位) = 月配息(原幣) ÷ NAV\n"
-                                        f"             = {_mon_div:,.2f} ÷ {_nav_calc:.4f}\n"
-                                        f"             = {_mon_units:,.2f} 單位\n"
+                            # v18.263→v19.324：完整計算公式改「真實配息記錄」版
+                            if _has_rec:
+                                with st.expander("📐 完整計算公式（含數字代入）", expanded=False):
+                                    if _ccy != "TWD" and _fx_to_twd:
+                                        _formula_text = (
+                                            f"# 投入本金 / 單位數\n"
+                                            f"原幣本金   = TWD ÷ FX\n"
+                                            f"           = {_amount_twd:,.0f} ÷ {_fx_to_twd:.4f}\n"
+                                            f"           = {_amt_local:,.2f} {_ccy}\n"
+                                            f"\n"
+                                            f"可申購單位 = 原幣本金 ÷ NAV\n"
+                                            f"           = {_amt_local:,.2f} ÷ {_nav_calc:.4f}\n"
+                                            f"           = {_units:,.2f} 單位\n"
+                                            f"\n"
+                                            f"# 每月配息（最近一筆真實配息記錄）\n"
+                                            f"最近一筆實配 = {_latest2:,.4f} {_ccy}/單位\n"
+                                            f"\n"
+                                            f"月配息(原幣) = 最近一筆實配 × 持有單位\n"
+                                            f"             = {_latest2:,.4f} × {_units:,.2f}\n"
+                                            f"             = {_mon_div:,.2f} {_ccy}\n"
+                                            f"\n"
+                                            f"月配息(TWD)  = 月配息(原幣) × FX\n"
+                                            f"             = {_mon_div:,.2f} × {_fx_to_twd:.4f}\n"
+                                            f"             = {_mon_div_twd:,.0f} TWD\n"
+                                            f"\n"
+                                            f"# 每月配息單位數（再投入）\n"
+                                            f"配息單位     = 月配息(原幣) ÷ NAV\n"
+                                            f"             = {_mon_div:,.2f} ÷ {_nav_calc:.4f}\n"
+                                            f"             = {_mon_units:,.2f} 單位\n"
+                                        )
+                                    else:
+                                        _formula_text = (
+                                            f"# 投入本金 / 單位數（TWD 計價基金）\n"
+                                            f"可申購單位 = TWD ÷ NAV\n"
+                                            f"           = {_amount_twd:,.0f} ÷ {_nav_calc:.4f}\n"
+                                            f"           = {_units:,.2f} 單位\n"
+                                            f"\n"
+                                            f"# 每月配息（最近一筆真實配息記錄）\n"
+                                            f"最近一筆實配 = {_latest2:,.4f} 元/單位\n"
+                                            f"\n"
+                                            f"月配息(TWD) = 最近一筆實配 × 持有單位\n"
+                                            f"            = {_latest2:,.4f} × {_units:,.2f}\n"
+                                            f"            = {_mon_div_twd:,.0f} TWD\n"
+                                            f"\n"
+                                            f"# 每月配息單位數（再投入）\n"
+                                            f"配息單位    = 月配息 ÷ NAV\n"
+                                            f"            = {_mon_div_twd:,.0f} ÷ {_nav_calc:.4f}\n"
+                                            f"            = {_mon_units:,.2f} 單位\n"
+                                        )
+                                    st.code(_formula_text, language="text")
+                                    st.caption(
+                                        "⚠️ 估算假設：(1) 以最近一筆實際配息代表每月配息 "
+                                        "(2) FX / NAV 以現值計 (3) 配息 100% 再投入計算配息單位。"
+                                        "實際配息以保險公司每月對帳單為準。"
                                     )
-                                else:
-                                    _formula_text = (
-                                        f"# 投入本金 / 單位數（TWD 計價基金）\n"
-                                        f"可申購單位 = TWD ÷ NAV\n"
-                                        f"           = {_amount_twd:,.0f} ÷ {_nav_calc:.4f}\n"
-                                        f"           = {_units:,.2f} 單位\n"
-                                        f"\n"
-                                        f"# 配息\n"
-                                        f"年配息(TWD) = TWD × ADR%\n"
-                                        f"            = {_amount_twd:,.0f} × {_yield_calc:.2f}%\n"
-                                        f"            = {_ann_div_twd:,.0f} TWD\n"
-                                        f"\n"
-                                        f"月配息(TWD) = 年配息(TWD) ÷ 12\n"
-                                        f"            = {_ann_div_twd:,.0f} ÷ 12\n"
-                                        f"            = {_mon_div_twd:,.0f} TWD\n"
-                                        f"\n"
-                                        f"# 月配股（再投入單位）\n"
-                                        f"月配股(單位) = 月配息(TWD) ÷ NAV\n"
-                                        f"             = {_mon_div_twd:,.0f} ÷ {_nav_calc:.4f}\n"
-                                        f"             = {_mon_units:,.2f} 單位\n"
-                                    )
-                                st.code(_formula_text, language="text")
-                                st.caption(
-                                    "⚠️ 估算假設：(1) FX 全期不變 (2) NAV 全期不變 (3) ADR 等於宣告值 "
-                                    "(4) 配息 100% 用於再投入計算月配股單位。實際配息以保險公司每月對帳單為準。"
-                                )
-                            try:
-                                st.session_state[f"_calc_invest_{fk}"] = {
-                                    "amount": float(_amount_twd),
-                                    "amount_local": float(_amt_local),
-                                    "currency": _ccy,
-                                    "nav": float(_nav_calc),
-                                    "units": float(_units),
-                                    "annual_div_rate": float(_yield_calc),
-                                    "annual_dividend": float(_ann_div),
-                                    "monthly_dividend": float(_mon_div),
-                                    "monthly_dividend_units": float(_mon_units),
-                                    "fx_to_twd": float(_fx_to_twd) if _fx_to_twd else None,
-                                    "fx_manual": bool(_fx_manual),
-                                    "amount_twd": float(_amount_twd),
-                                    "annual_dividend_twd": float(_ann_div_twd),
-                                    "monthly_dividend_twd": float(_mon_div_twd),
-                                    "fund_type": "income",
-                                }
-                            except Exception:
-                                pass
+                                try:
+                                    st.session_state[f"_calc_invest_{fk}"] = {
+                                        "amount": float(_amount_twd),
+                                        "amount_local": float(_amt_local),
+                                        "currency": _ccy,
+                                        "nav": float(_nav_calc),
+                                        "units": float(_units),
+                                        "annual_div_rate": float(_yield_calc),
+                                        "latest_div_per_unit": float(_latest2),
+                                        "annual_dividend": float(_ann_div),
+                                        "monthly_dividend": float(_mon_div),
+                                        "monthly_dividend_units": float(_mon_units),
+                                        "fx_to_twd": float(_fx_to_twd) if _fx_to_twd else None,
+                                        "fx_manual": bool(_fx_manual),
+                                        "amount_twd": float(_amount_twd),
+                                        "annual_dividend_twd": float(_ann_div_twd),
+                                        "monthly_dividend_twd": float(_mon_div_twd),
+                                        "fund_type": "income",
+                                    }
+                                except Exception:
+                                    pass
                         else:
                             # v19.73 K1：累積型用 1Y 總報酬估市值 — 改走 SSOT compute_1y_total_return
                             # 修補 v18.134 漏接點（原本只用 ret_1y_total/ret_1y 跳過 perf["1Y"] 真 1Y）

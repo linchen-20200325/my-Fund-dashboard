@@ -43,7 +43,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.323_MonthlyDivTWD"
+APP_VERSION = "v19.324_MonthlyDivUnits"
 
 
 # ══════════════════════════════════════════════════════

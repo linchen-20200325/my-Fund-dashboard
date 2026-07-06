@@ -72,34 +72,80 @@ def div_health_light_for_pair(
     return ("吃本金", _LIGHT_EMOJI["吃本金"])
 
 
-def estimate_monthly_dividend_twd(
-    principal_twd: Any,
-    adr_pct: Any,
-) -> Optional[float]:
-    """每月配息(TWD)前瞻估算 SSOT — Tab2「投資試算」月配息(TWD) 同源算式。
+def latest_dividend_per_unit(dividends: Any) -> Optional[float]:
+    """從 dividends[] 取「最近一筆」真實配息額(原幣 / 單位)SSOT。
 
-    數學式:每月配息(TWD) = 本金(TWD) × 年化配息率(%) / 100 / 12
+    dividends[] 為 MoneyDJ wh06 / TDCC 真實每筆配息記錄:
+    ``[{date|ex_date, amount, ...}]``,amount = 每單位實際配息(原幣)。
+    月配息基金 = 一個月一筆 → 最新一筆即「這個月」實配。
 
-    FX 中性證明:原幣本金 = 本金TWD / fx;月配息(原幣) = 原幣本金 × adr/100/12;
-    月配息(TWD) = 月配息(原幣) × fx → fx 前後相乘互相約掉,故 **不需匯率**,
-    純由「本金 × 年化配息率」決定(evidence:
-    ui/helpers/fund_grp_health/investment.py:64-77 與 tab2_single_fund.py 投資試算,
-    截圖 100萬 × 13.55% / 12 = 11,292 對帳一致)。因 FX-free → 本函式可留在 L2 zero-IO。
+    取法:依 date(缺則 ex_date)ISO 日期字串**降序**取第一筆 amount > 0。
+    日期正規化 `/`→`-` 避免混格式誤排序。
 
-    語意:年化配息率攤平至每月的「前瞻」估算,非歷史實配(季配 / 年配基金
-    某些月實際為 0);與「年均配息 TWD(= 累計實配 / 持有年數)」為不同軸,勿混用。
+    Returns:
+        最近一筆配息(原幣 / 單位)float,或 None(無記錄 / 全 ≤ 0 → §1 顯式 None,不估算)
+    """
+    if not dividends:
+        return None
+    best_date = ""
+    best_amt: Optional[float] = None
+    for d in dividends:
+        if not isinstance(d, dict):
+            continue
+        ds = str(d.get("date") or d.get("ex_date") or "")[:10].replace("/", "-")
+        amt = _safe_float(d.get("amount"))
+        if amt is None:
+            amt = _safe_float(d.get("div_per_unit"))
+        if amt is None or amt <= 0 or not ds:
+            continue
+        if ds >= best_date:  # ISO 字串比較,保留最新日期
+            best_date, best_amt = ds, amt
+    return best_amt
+
+
+def monthly_dividend_from_records(
+    dividends: Any,
+    units_held: Any,
+    nav: Any,
+    fx: Any = 1.0,
+) -> dict:
+    """用「最近一筆真實配息記錄」算每月配息(原幣 / TWD / 可再投入單位數)SSOT。
+
+    取代「年化配息率 ÷ 12」前瞻估算 —— 全站(單一基金 Tab2 / 組合基金 Tab3 /
+    基金健檢 ② 表)月配息 / 月配股一律走本函式,確保跨頁同源(§2.1 SSOT)。
+
+    數學式(最近一筆實配 d = latest_dividend_per_unit(dividends)):
+        每月配息(原幣)       = d × 持有單位(units_held)
+        每月配息(TWD)        = 每月配息(原幣) × fx
+        每月配息可再投入單位數 = 每月配息(原幣) / nav
 
     Args:
-        principal_twd: 投入本金(TWD)
-        adr_pct: 年化配息率(%),caller 應走 _resolve_adr_with_fallback SSOT 解析
+        dividends: 真實配息記錄 list(見 latest_dividend_per_unit)
+        units_held: 持有單位數(caller 算:原幣本金 / nav)
+        nav: 現在 NAV(原幣)
+        fx: 1 原幣 = ? TWD(TWD 基金 = 1.0);缺 / ≤ 0 → mon_div_twd None
     Returns:
-        每月配息(TWD) float,或 None(本金 / adr 缺或 ≤ 0 → 顯式 None,§1 不填 0)
+        dict {latest_div_per_unit, mon_div_ccy, mon_div_twd, mon_div_units}
+        任一必要輸入缺 / ≤ 0 → 對應 None(§1 Fail Loud,不填 0 / 不估算)
     """
-    p = _safe_float(principal_twd)
-    a = _safe_float(adr_pct)
-    if p is None or a is None or p <= 0 or a <= 0:
-        return None
-    return p * a / 100.0 / 12.0
+    latest = latest_dividend_per_unit(dividends)
+    u = _safe_float(units_held)
+    n = _safe_float(nav)
+    f = _safe_float(fx)
+    out: dict = {
+        "latest_div_per_unit": latest,
+        "mon_div_ccy": None,
+        "mon_div_twd": None,
+        "mon_div_units": None,
+    }
+    if latest is None or latest <= 0 or u is None or u <= 0 or n is None or n <= 0:
+        return out
+    mon_div_ccy = latest * u
+    out["mon_div_ccy"] = mon_div_ccy
+    if f is not None and f > 0:
+        out["mon_div_twd"] = mon_div_ccy * f
+    out["mon_div_units"] = mon_div_ccy / n
+    return out
 
 
 def _years_between(start_iso: str, end_iso: str) -> float:

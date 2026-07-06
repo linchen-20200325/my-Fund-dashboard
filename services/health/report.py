@@ -214,14 +214,17 @@ def build_dividend_summary_row(
     code: str,
     principal_twd: Optional[float] = None,
     holding_years: Optional[float] = None,
+    fx: Optional[float] = None,
 ) -> dict:
-    """配息相關 row(SSOT):adr + 1Y 含息報酬 + 吃本金燈號 (1Y·MK) + 是否建議換標的。
+    """配息相關 row(SSOT):adr + 1Y 含息報酬 + 吃本金燈號 (1Y·MK) + 換標的 + 每月配息單位數。
 
     Args:
         fd: 基金 dict
         code: 基金代號
-        principal_twd: 本金 TWD(透給後續 caller 用,本函式不算 TWD 配息額)
+        principal_twd: 本金 TWD(算每月配息單位數用;缺 → 該欄 None)
         holding_years: user 持有年數(換標的 verdict 用)
+        fx: 1 原幣 = ? TWD(TWD 基金 = 1.0;caller 由 process_one_fund row["fx_spot"] 傳入)。
+            缺 → 每月配息單位數 None(需匯率換原幣本金,§1 不估算)
 
     Returns:
         dict — UI 直接 render 成 dataframe row
@@ -277,11 +280,21 @@ def build_dividend_summary_row(
               f'{type(e).__name__}: {e}', file=_sys.stderr)
         rep = {"emoji": "⬜", "label": "資料不足", "message": ""}
 
-    # ─── 每月配息(TWD)前瞻估算 SSOT ────────────────────────
-    # = 本金 × 年化配息率 / 12(FX-free);與 Tab2 投資試算「月配息(TWD)」同源算式。
-    # principal_twd 缺(如 Tab2 進階表傳 None)→ 顯式 None → UI 顯示「—」(§1 不填 0)。
-    from services.health.dividend_calc import estimate_monthly_dividend_twd
-    _mon_div_twd = estimate_monthly_dividend_twd(principal_twd, adr_pct)
+    # ─── 每月配息可再投入單位數 SSOT(真實記錄,取代年化估算)────
+    # 最近一筆實配(原幣/單位) × 持有單位 / NAV;持有單位 = 原幣本金(本金TWD/fx) / NAV。
+    # 需 principal + fx(process_one_fund row["fx_spot"])+ nav + 真實配息記錄,
+    # 任一缺 → None → UI「—」(§1 不估算)。全站(Tab2/Tab3/健檢)同源走 dividend_calc。
+    from services.health.dividend_calc import monthly_dividend_from_records
+    _nav_ccy = _safe_float((fd.get("metrics") or {}).get("nav") or mj.get("nav_latest"))
+    _divs = fd.get("dividends") or mj.get("dividends") or []
+    _p = _safe_float(principal_twd)
+    _fx = _safe_float(fx)
+    _units_held = None
+    if (_p is not None and _p > 0 and _fx is not None and _fx > 0
+            and _nav_ccy is not None and _nav_ccy > 0):
+        _units_held = (_p / _fx) / _nav_ccy
+    _mon_div_units = monthly_dividend_from_records(
+        _divs, _units_held, _nav_ccy, _fx).get("mon_div_units")
 
     return {
         "code": code,
@@ -289,7 +302,7 @@ def build_dividend_summary_row(
         "1Y 含息 %": tr1y_pct,
         "1Y 來源": tr1y_src,
         "年化配息率 %": adr_pct,
-        "每月配息 (TWD)": _mon_div_twd,
+        "每月配息單位數": _mon_div_units,
         "吃本金燈號 (1Y·MK)": eat_status,
         "換標的建議": f"{rep['emoji']} {rep['label']}",
         "_換標的 detail": rep.get("message", ""),
@@ -311,7 +324,7 @@ DIVIDEND_COLUMNS = [
     "code", "基金名",
     "1Y 含息 %", "1Y 來源",
     "年化配息率 %",
-    "每月配息 (TWD)",
+    "每月配息單位數",
     "吃本金燈號 (1Y·MK)",
     "換標的建議",
 ]
