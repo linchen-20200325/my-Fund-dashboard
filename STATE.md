@@ -59,7 +59,7 @@
   - **修法**:(1) 新 L2 純函式 `services/health/asset_class.py`(`SATELLITE_KEYWORDS`/`CORE_KEYWORDS` SSOT + `classify_by_category` + `classify_core_satellite`)。(2) `report.build_health_analysis_row` 讀 `category`(MoneyDJ 投資標的)+ 呼叫分類 → row 加「基金類別」「核心/衛星」「分類依據」3 欄 + `HEALTH_COLUMNS`(排基金名後)。(3) `tab_fund_grp_health` ① 表 column_config 加 3 欄 TextColumn。組合 Tab3 共用同路徑自動同步。
   - **架構**:L2 純函式(zero-IO)+ L3 column_config,無越權。3-3-3 通過但集中型 → 仍歸衛星(角色正確);年輕廣泛型(3-3-3 未達)由類別歸核心(涵蓋率修補)。
   - **回歸網**:`tests/test_asset_class_core_satellite.py`(22:類別判定/衛星覆蓋3-3-3/廣泛型補涵蓋/待定不亂扣/row builder 整合/schema);相關 health+report 212 test 全綠。
-  - **待調**:單一國+風格類(如「美國成長」)無關鍵字命中 → 待定;user 可指定 `美國/美股` 歸核心或改 Google Sheet 覆寫。
+  - **v19.328 補**:user 指定「美國成長 = 衛星」→ `成長`(風格)加入 `SATELLITE_KEYWORDS`(成長型追報酬歸衛星);`美國成長` / `科技成長` 等成長型自動歸衛星。剩單一國非成長類(如純「美國股票」)仍待定,可後續再標。
 - **v19.326 健檢 ② 表補回「每月配息 (TWD)」金額欄(user 回報「沒看到每月配息金額」,2026-07-06)**:
   - **背景**:v19.324/325 只放了「每月配息**單位數**」,user 貼圖指出沒看到每月配息**金額(TWD)**。SSOT `monthly_dividend_from_records` 早已算出 `mon_div_twd`(= 最近一筆實配 × 持有單位 × 匯率),只是 row builder 沒取出。
   - **修法**:`report.build_dividend_summary_row` 取 `_mdiv["mon_div_twd"]` → row 加「每月配息 (TWD)」欄(排在「年化配息率 %」後、「每月配息單位數」前)+ `DIVIDEND_COLUMNS`;`tab_fund_grp_health` column_config 加 NumberColumn(format `%.0f`)+ numeric coercion。金額與單位共用同一 `source`(配息來源欄真實/估算),缺資料同顯「—」。零新增計算(SSOT 現成值)。

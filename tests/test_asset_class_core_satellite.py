@@ -27,12 +27,20 @@ from services.health.asset_class import (
     ("多重收益平衡", "核心"),
     ("投資等級債券", "核心"),
     ("環球債券組合", "核心"),
-    ("美國成長", None),              # 單一國+風格,無關鍵字 → 無法判
+    ("美國成長", "衛星"),            # v19.328 user:成長型追報酬 → 衛星
+    ("科技成長", "衛星"),
+    ("價值型股票", None),           # 純風格(非成長)無關鍵字 → 無法判
     ("", None),
     (None, None),
 ])
 def test_classify_by_category(cat, expect):
     assert classify_by_category(cat) == expect
+
+
+def test_growth_style_is_satellite():
+    """v19.328 user 指定:美國成長 = 衛星(成長型追報酬)。"""
+    r = classify_core_satellite("美國成長", passed_333=None)
+    assert r["label"] == "衛星" and r["source"] == "類別"
 
 
 # ── classify_core_satellite 兩層 + 來源 ───────────────────
@@ -60,9 +68,9 @@ def test_broad_category_333_fail_still_core():
 
 
 @pytest.mark.parametrize("cat,p333", [
-    ("美國成長", None),     # 無法判類別 + 無 3-3-3
+    ("價值型股票", None),   # 無關鍵字類別 + 無 3-3-3
     ("", None),
-    ("美國成長", False),    # 無法判 + 未達 3-3-3
+    ("價值型股票", False),  # 無關鍵字 + 未達 3-3-3
 ])
 def test_undetermined_when_no_signal(cat, p333):
     r = classify_core_satellite(cat, passed_333=p333)
