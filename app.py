@@ -43,7 +43,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.325_DivSourceTag"
+APP_VERSION = "v19.326_MonthlyDivTWDcol"
 
 
 # ══════════════════════════════════════════════════════

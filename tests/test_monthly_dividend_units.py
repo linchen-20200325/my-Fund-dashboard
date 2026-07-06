@@ -140,6 +140,8 @@ def test_row_builder_units_when_fx_and_principal_given():
     # units_held = (100萬/32.035)/73.48;每月配息單位數 = 0.5 × units / 73.48
     _units = (1_000_000 / 32.035) / 73.48
     assert math.isclose(row["每月配息單位數"], 0.5 * _units / 73.48, rel_tol=1e-9)
+    # v19.326:每月配息金額(TWD) = 0.5 × units × fx
+    assert math.isclose(row["每月配息 (TWD)"], 0.5 * _units * 32.035, rel_tol=1e-9)
 
 
 def test_row_builder_none_when_fx_missing():
@@ -175,14 +177,18 @@ def test_row_builder_estimate_fallback_when_no_records():
 
 
 # ── 4. column schema 換欄 ────────────────────────────────
-def test_dividend_columns_uses_units_not_twd():
+def test_dividend_columns_have_twd_amount_and_units():
+    """v19.326:每月配息金額(TWD) + 每月配息單位數 並列,順序:年化率 → TWD → 單位 → 來源 → 吃本金。"""
     from services.health.report import DIVIDEND_COLUMNS
+    assert "每月配息 (TWD)" in DIVIDEND_COLUMNS       # v19.326 加回「金額」欄
     assert "每月配息單位數" in DIVIDEND_COLUMNS
-    assert "每月配息 (TWD)" not in DIVIDEND_COLUMNS   # v19.323 估算欄已退役
+    assert "配息來源" in DIVIDEND_COLUMNS
     i_adr = DIVIDEND_COLUMNS.index("年化配息率 %")
-    i_mon = DIVIDEND_COLUMNS.index("每月配息單位數")
+    i_twd = DIVIDEND_COLUMNS.index("每月配息 (TWD)")
+    i_unit = DIVIDEND_COLUMNS.index("每月配息單位數")
+    i_src = DIVIDEND_COLUMNS.index("配息來源")
     i_eat = DIVIDEND_COLUMNS.index("吃本金燈號 (1Y·MK)")
-    assert i_adr < i_mon < i_eat
+    assert i_adr < i_twd < i_unit < i_src < i_eat
 
 
 def test_estimate_twd_function_removed():

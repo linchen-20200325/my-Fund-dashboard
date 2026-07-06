@@ -295,7 +295,8 @@ def build_dividend_summary_row(
         _units_held = (_p / _fx) / _nav_ccy
     _mdiv = monthly_dividend_from_records(
         _divs, _units_held, _nav_ccy, _fx, adr_pct=adr_pct)
-    _mon_div_units = _mdiv.get("mon_div_units")
+    _mon_div_twd = _mdiv.get("mon_div_twd")      # 每月配息金額(TWD 現金)
+    _mon_div_units = _mdiv.get("mon_div_units")  # 每月配息可再投入單位數
     _div_src = {"records": "真實", "estimate": "估算"}.get(_mdiv.get("source"), "—")
 
     return {
@@ -304,6 +305,7 @@ def build_dividend_summary_row(
         "1Y 含息 %": tr1y_pct,
         "1Y 來源": tr1y_src,
         "年化配息率 %": adr_pct,
+        "每月配息 (TWD)": _mon_div_twd,
         "每月配息單位數": _mon_div_units,
         "配息來源": _div_src,
         "吃本金燈號 (1Y·MK)": eat_status,
@@ -327,6 +329,7 @@ DIVIDEND_COLUMNS = [
     "code", "基金名",
     "1Y 含息 %", "1Y 來源",
     "年化配息率 %",
+    "每月配息 (TWD)",
     "每月配息單位數",
     "配息來源",
     "吃本金燈號 (1Y·MK)",
