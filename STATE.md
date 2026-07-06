@@ -53,6 +53,11 @@
 
 ## 當前版本
 
+- **v19.325 每月配息真實記錄缺 → 年化配息率估算 fallback + 來源標記(user 回報,2026-07-06)**:
+  - **背景**:v19.324 全改真實逐筆配息記錄後,user 指出「拿不到就用年化配息率吧,只是要註記來源」—— 加雙層 fallback + 血緣標記,避免保險子網域封鎖時大量顯示「—」。
+  - **修法**:(1) `dividend_calc.monthly_dividend_from_records()` 加 `adr_pct` 參數 + 回傳 `source` 欄:真實記錄有 → `source="records"`(最近一筆實配 × 持有單位);無記錄但有年化配息率 → `source="estimate"`(原幣本金 × adr/12,= 持有單位 × adr/1200,nav 約掉);皆無 → None(§1 不捏造)。(2) `report.build_dividend_summary_row` 傳 `adr_pct` + 新增「配息來源」欄(真實/估算/—)進 `DIVIDEND_COLUMNS`。(3) 健檢 ② 表 column_config 加「配息來源」TextColumn。(4) Tab2 投資試算 + `investment.py` 依 `source` 顯示「📊 真實記錄 / 〜 年化估算」註記(估算註明季配/年配某些月實際為 0);Tab2 詳細公式展開 + AI stash 仍限真實記錄(`_has_rec`)。
+  - **血緣(§2.2)**:每筆月配數字帶 source 標記,UI 一眼分辨真實 vs 估算,不混用。
+  - **回歸網**:`tests/test_monthly_dividend_units.py` 加 source/estimate fallback/nav 無關性/row builder 配息來源 共 8 test(累計 30);相關 dividend+health+report+portfolio 352 test 全綠。
 - **v19.324 每月配息改「最近一筆真實配息記錄」— 取代年化÷12 估算(單一基金 / 組合基金 / 基金健檢 三處一併,user 回報,2026-07-06)**:
   - **背景**:v19.323 先以「年化配息率 ÷ 12」前瞻估算加了「每月配息 (TWD)」欄;user 指此估算不夠誠實(季配基金某些月實際=0 卻報平均),要求改**抓最近一筆真實配息記錄**算配息單位數,且**全站三處**(單一基金 Tab2 / 組合基金 Tab3 / 基金健檢)一併換。v19.323 估算路徑整段退役(僅存在分支未進 main)。
   - **算式(真實記錄,SSOT)**:最近一筆實配 d = `dividends[]`(MoneyDJ wh06 真實每筆配息額,原幣/單位)依日期最新一筆;持有單位 u = (本金TWD/fx)/NAV;`每月配息單位數 = d × u / NAV`(A 案);`每月配息(TWD) = d × u × fx`(Tab2 投資試算用)。無配息記錄 → 顯式「—」(§1 Fail Loud,不用 adr 估算矇混)。

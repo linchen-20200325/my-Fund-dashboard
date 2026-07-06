@@ -280,10 +280,10 @@ def build_dividend_summary_row(
               f'{type(e).__name__}: {e}', file=_sys.stderr)
         rep = {"emoji": "⬜", "label": "資料不足", "message": ""}
 
-    # ─── 每月配息可再投入單位數 SSOT(真實記錄,取代年化估算)────
-    # 最近一筆實配(原幣/單位) × 持有單位 / NAV;持有單位 = 原幣本金(本金TWD/fx) / NAV。
-    # 需 principal + fx(process_one_fund row["fx_spot"])+ nav + 真實配息記錄,
-    # 任一缺 → None → UI「—」(§1 不估算)。全站(Tab2/Tab3/健檢)同源走 dividend_calc。
+    # ─── 每月配息可再投入單位數 SSOT(真實記錄優先,年化估算 fallback)────
+    # 真實:最近一筆實配 × 持有單位 / NAV;估算 fallback:原幣本金 × adr / 12 / NAV。
+    # 持有單位 = 原幣本金(本金TWD/fx) / NAV。需 principal + fx + nav;`配息來源`欄註記
+    # 真實 / 估算 / —(§2.2 血緣)。全站(Tab2/Tab3/健檢)同源走 dividend_calc。
     from services.health.dividend_calc import monthly_dividend_from_records
     _nav_ccy = _safe_float((fd.get("metrics") or {}).get("nav") or mj.get("nav_latest"))
     _divs = fd.get("dividends") or mj.get("dividends") or []
@@ -293,8 +293,10 @@ def build_dividend_summary_row(
     if (_p is not None and _p > 0 and _fx is not None and _fx > 0
             and _nav_ccy is not None and _nav_ccy > 0):
         _units_held = (_p / _fx) / _nav_ccy
-    _mon_div_units = monthly_dividend_from_records(
-        _divs, _units_held, _nav_ccy, _fx).get("mon_div_units")
+    _mdiv = monthly_dividend_from_records(
+        _divs, _units_held, _nav_ccy, _fx, adr_pct=adr_pct)
+    _mon_div_units = _mdiv.get("mon_div_units")
+    _div_src = {"records": "真實", "estimate": "估算"}.get(_mdiv.get("source"), "—")
 
     return {
         "code": code,
@@ -303,6 +305,7 @@ def build_dividend_summary_row(
         "1Y 來源": tr1y_src,
         "年化配息率 %": adr_pct,
         "每月配息單位數": _mon_div_units,
+        "配息來源": _div_src,
         "吃本金燈號 (1Y·MK)": eat_status,
         "換標的建議": f"{rep['emoji']} {rep['label']}",
         "_換標的 detail": rep.get("message", ""),
@@ -325,6 +328,7 @@ DIVIDEND_COLUMNS = [
     "1Y 含息 %", "1Y 來源",
     "年化配息率 %",
     "每月配息單位數",
+    "配息來源",
     "吃本金燈號 (1Y·MK)",
     "換標的建議",
 ]

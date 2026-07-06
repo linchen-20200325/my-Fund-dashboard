@@ -108,39 +108,54 @@ def monthly_dividend_from_records(
     units_held: Any,
     nav: Any,
     fx: Any = 1.0,
+    adr_pct: Any = None,
 ) -> dict:
-    """用「最近一筆真實配息記錄」算每月配息(原幣 / TWD / 可再投入單位數)SSOT。
+    """算每月配息(原幣 / TWD / 可再投入單位數)SSOT — 真實記錄優先,年化估算 fallback。
 
-    取代「年化配息率 ÷ 12」前瞻估算 —— 全站(單一基金 Tab2 / 組合基金 Tab3 /
-    基金健檢 ② 表)月配息 / 月配股一律走本函式,確保跨頁同源(§2.1 SSOT)。
+    全站(單一基金 Tab2 / 組合基金 Tab3 / 基金健檢 ② 表)月配息 / 配息單位數一律
+    走本函式,確保跨頁同源(§2.1 SSOT)+ 帶 `source` 供 UI 註記來源。
 
-    數學式(最近一筆實配 d = latest_dividend_per_unit(dividends)):
-        每月配息(原幣)       = d × 持有單位(units_held)
-        每月配息(TWD)        = 每月配息(原幣) × fx
-        每月配息可再投入單位數 = 每月配息(原幣) / nav
+    **兩層取數**(每筆都回傳 `source` 標記,§2.2 血緣):
+      1. **真實記錄**(source="records"):最近一筆實配 d = latest_dividend_per_unit(dividends)
+         每月配息(原幣) = d × 持有單位;每月配息單位數 = 每月配息(原幣) / nav
+      2. **年化估算 fallback**(source="estimate"):無真實逐筆記錄但有年化配息率時,
+         原幣本金 = 持有單位 × nav;每月配息(原幣) = 原幣本金 × adr% / 100 / 12
+         (= 年化配息 ÷ 12 攤平至每月;季配 / 年配基金為平均值非實配,故標 estimate)
+    共通:每月配息(TWD) = 每月配息(原幣) × fx。
 
     Args:
         dividends: 真實配息記錄 list(見 latest_dividend_per_unit)
         units_held: 持有單位數(caller 算:原幣本金 / nav)
         nav: 現在 NAV(原幣)
         fx: 1 原幣 = ? TWD(TWD 基金 = 1.0);缺 / ≤ 0 → mon_div_twd None
+        adr_pct: 年化配息率(%)—— 真實記錄缺時的 fallback 依據;None → 不 fallback
     Returns:
-        dict {latest_div_per_unit, mon_div_ccy, mon_div_twd, mon_div_units}
-        任一必要輸入缺 / ≤ 0 → 對應 None(§1 Fail Loud,不填 0 / 不估算)
+        dict {latest_div_per_unit, mon_div_ccy, mon_div_twd, mon_div_units, source}
+        source ∈ {"records", "estimate", None};必要輸入缺 → 值 None + source None
+        (§1 Fail Loud:真實與估算皆不可得時不捏造)
     """
     latest = latest_dividend_per_unit(dividends)
     u = _safe_float(units_held)
     n = _safe_float(nav)
     f = _safe_float(fx)
+    a = _safe_float(adr_pct)
     out: dict = {
         "latest_div_per_unit": latest,
         "mon_div_ccy": None,
         "mon_div_twd": None,
         "mon_div_units": None,
+        "source": None,
     }
-    if latest is None or latest <= 0 or u is None or u <= 0 or n is None or n <= 0:
+    if u is None or u <= 0 or n is None or n <= 0:
         return out
-    mon_div_ccy = latest * u
+    if latest is not None and latest > 0:
+        mon_div_ccy = latest * u                       # 真實:最近一筆實配 × 持有單位
+        out["source"] = "records"
+    elif a is not None and a > 0:
+        mon_div_ccy = (u * n) * a / 100.0 / 12.0       # 估算:原幣本金 × adr / 12
+        out["source"] = "estimate"
+    else:
+        return out
     out["mon_div_ccy"] = mon_div_ccy
     if f is not None and f > 0:
         out["mon_div_twd"] = mon_div_ccy * f

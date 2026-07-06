@@ -91,6 +91,36 @@ def test_monthly_units_bad_fx_still_gives_units_but_no_twd():
     assert r["mon_div_twd"] is None
 
 
+# ── 2b. 來源標記 + 年化估算 fallback (v19.325) ─────────────
+def test_source_is_records_when_real_dividends():
+    divs = [{"date": "2026-05-15", "amount": 0.5}]
+    r = monthly_dividend_from_records(divs, 100.0, 10.0, fx=1.0, adr_pct=6.0)
+    assert r["source"] == "records"          # 有真實記錄 → 優先真實,不走估算
+
+
+def test_source_is_estimate_when_no_records_but_adr():
+    """無真實記錄但有 adr → 估算 = 持有單位 × adr / 1200(nav 約掉)。"""
+    r = monthly_dividend_from_records([], units_held=100.0, nav=10.0, fx=1.0, adr_pct=6.0)
+    assert r["source"] == "estimate"
+    assert r["latest_div_per_unit"] is None
+    assert math.isclose(r["mon_div_units"], 100.0 * 6.0 / 1200.0, rel_tol=1e-9)
+    # mon_div_ccy = 原幣本金(100×10) × 6% / 12 = 1000 × 0.005 = 5.0
+    assert math.isclose(r["mon_div_ccy"], 1000.0 * 6.0 / 100.0 / 12.0, rel_tol=1e-9)
+
+
+def test_source_none_when_no_records_and_no_adr():
+    r = monthly_dividend_from_records([], units_held=100.0, nav=10.0, fx=1.0, adr_pct=None)
+    assert r["source"] is None
+    assert r["mon_div_units"] is None
+
+
+def test_estimate_units_independent_of_nav():
+    """估算單位數 = units × adr / 1200,與 NAV 無關(nav 約掉)。"""
+    r1 = monthly_dividend_from_records([], 100.0, 10.0, fx=1.0, adr_pct=6.0)
+    r2 = monthly_dividend_from_records([], 100.0, 999.0, fx=1.0, adr_pct=6.0)
+    assert math.isclose(r1["mon_div_units"], r2["mon_div_units"], rel_tol=1e-12)
+
+
 # ── 3. build_dividend_summary_row 整合 ───────────────────
 def _fd_with_divs():
     return {
@@ -119,11 +149,29 @@ def test_row_builder_none_when_fx_missing():
     assert row["每月配息單位數"] is None
 
 
-def test_row_builder_none_when_no_dividends():
+def test_row_builder_none_when_no_dividends_and_no_adr():
     from services.health.report import build_dividend_summary_row
-    fd = {"fund_name": "X", "metrics": {"nav": 10.0}}  # 無 dividends
+    fd = {"fund_name": "X", "metrics": {"nav": 10.0}}  # 無 dividends + 無 adr
     row = build_dividend_summary_row(fd, "X", principal_twd=1_000_000, fx=1.0)
     assert row["每月配息單位數"] is None
+    assert row["配息來源"] == "—"
+
+
+def test_row_builder_source_records():
+    from services.health.report import build_dividend_summary_row
+    row = build_dividend_summary_row(
+        _fd_with_divs(), "ALBT8", principal_twd=1_000_000, fx=32.035)
+    assert row["配息來源"] == "真實"          # 有逐筆記錄 → 真實
+
+
+def test_row_builder_estimate_fallback_when_no_records():
+    """無逐筆記錄但有年化配息率 → 估算 fallback + 配息來源=估算。"""
+    from services.health.report import build_dividend_summary_row
+    fd = {"fund_name": "X", "metrics": {"nav": 10.0},
+          "moneydj_div_yield": 6.0}          # 有 adr,無 dividends
+    row = build_dividend_summary_row(fd, "X", principal_twd=1_000_000, fx=1.0)
+    assert row["配息來源"] == "估算"
+    assert row["每月配息單位數"] is not None
 
 
 # ── 4. column schema 換欄 ────────────────────────────────

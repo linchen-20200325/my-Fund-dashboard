@@ -582,11 +582,14 @@ def _render_health_3tables(rows: list[dict],
         "1Y 來源": _cc.TextColumn("1Y 來源",
             help="wb01 / local_calc / ret_1y_total / NAV 年化"),
         "年化配息率 %": _cc.NumberColumn("年化配息率 %", format="%.2f %%"),
-        # v19.324:每月配息單位數 = 最近一筆實際配息 × 持有單位 / NAV(真實記錄,非年化估算)
+        # v19.324:每月配息單位數 = 最近一筆實際配息 × 持有單位 / NAV(真實記錄優先)
+        # v19.325:真實記錄缺 → 年化配息率估算 fallback,「配息來源」欄註記真實/估算
         "每月配息單位數": _cc.NumberColumn("每月配息單位數", format="%.2f",
             help="= 最近一筆實際配息(原幣/單位) × 持有單位 / NAV。"
-                 "用 MoneyDJ 真實配息記錄(非年化÷12 估算);無配息記錄顯示空白。"
+                 "優先用 MoneyDJ 真實配息記錄;缺則以年化配息率估算(見「配息來源」欄)。"
                  "健診 Tab 全檔以 100 萬 TWD 為基準比較;Tab3 為各檔實際投入本金。"),
+        "配息來源": _cc.TextColumn("配息來源", width="small",
+            help="真實=最近一筆實際配息記錄;估算=年化配息率÷12 攤平(季配/年配某些月實際為 0)"),
         "吃本金燈號 (1Y·MK)": _cc.TextColumn("吃本金燈號 (1Y·MK)"),
         "換標的建議": _cc.TextColumn("換標的建議",
             help="MK 4 規則綜合判定(hover 看細節)"),
