@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.327 健檢 ① 表加「核心/衛星資產」+「基金類別」分類(user 回報「基金總類核心還衛星沒顯示」,2026-07-06)**:
+  - **背景**:user 要每檔顯示核心 or 衛星資產。原擬單用 MK 3-3-3(挑核心),但 user 指出「3-3-3 很多檔抓不到」(保單子網域封鎖 → 成立日/3年報酬缺 → 資料不足)。改**兩層 + 來源標記**(對齊 v19.325 配息來源精神)補涵蓋率。
+  - **判定順序(SSOT `services/health/asset_class.classify_core_satellite`)**:① 類別命中衛星關鍵字(產業/科技/新興/單一國/高收益…集中主題型)→ 🟠 衛星(角色由類別決定,覆蓋 3-3-3);② MK 3-3-3 通過 → 🟦 核心;③ 類別命中核心關鍵字(全球/平衡/多重資產/投資級債…廣泛分散)→ 🟦 核心;④ 皆無法判 → ⬜ 待定(§1 不亂扣)。關鍵字對照為可調 SSOT。
+  - **修法**:(1) 新 L2 純函式 `services/health/asset_class.py`(`SATELLITE_KEYWORDS`/`CORE_KEYWORDS` SSOT + `classify_by_category` + `classify_core_satellite`)。(2) `report.build_health_analysis_row` 讀 `category`(MoneyDJ 投資標的)+ 呼叫分類 → row 加「基金類別」「核心/衛星」「分類依據」3 欄 + `HEALTH_COLUMNS`(排基金名後)。(3) `tab_fund_grp_health` ① 表 column_config 加 3 欄 TextColumn。組合 Tab3 共用同路徑自動同步。
+  - **架構**:L2 純函式(zero-IO)+ L3 column_config,無越權。3-3-3 通過但集中型 → 仍歸衛星(角色正確);年輕廣泛型(3-3-3 未達)由類別歸核心(涵蓋率修補)。
+  - **回歸網**:`tests/test_asset_class_core_satellite.py`(22:類別判定/衛星覆蓋3-3-3/廣泛型補涵蓋/待定不亂扣/row builder 整合/schema);相關 health+report 212 test 全綠。
+  - **v19.328 補**:user 指定「美國成長 = 衛星」→ `成長`(風格)加入 `SATELLITE_KEYWORDS`(成長型追報酬歸衛星);`美國成長` / `科技成長` 等成長型自動歸衛星。剩單一國非成長類(如純「美國股票」)仍待定,可後續再標。
 - **v19.326 健檢 ② 表補回「每月配息 (TWD)」金額欄(user 回報「沒看到每月配息金額」,2026-07-06)**:
   - **背景**:v19.324/325 只放了「每月配息**單位數**」,user 貼圖指出沒看到每月配息**金額(TWD)**。SSOT `monthly_dividend_from_records` 早已算出 `mon_div_twd`(= 最近一筆實配 × 持有單位 × 匯率),只是 row builder 沒取出。
   - **修法**:`report.build_dividend_summary_row` 取 `_mdiv["mon_div_twd"]` → row 加「每月配息 (TWD)」欄(排在「年化配息率 %」後、「每月配息單位數」前)+ `DIVIDEND_COLUMNS`;`tab_fund_grp_health` column_config 加 NumberColumn(format `%.0f`)+ numeric coercion。金額與單位共用同一 `source`(配息來源欄真實/估算),缺資料同顯「—」。零新增計算(SSOT 現成值)。
