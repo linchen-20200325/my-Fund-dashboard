@@ -537,6 +537,14 @@ def _render_health_3tables(rows: list[dict],
     _health_cfg = {
         "code": _cc.TextColumn("代號", width="small"),
         "基金名": _cc.TextColumn("基金名", width="medium"),
+        # v19.327:核心/衛星資產分類(類別 + MK 3-3-3 兩層,見「分類依據」欄)
+        "基金類別": _cc.TextColumn("基金類別", width="small",
+            help="MoneyDJ 投資標的 / 基金類型原始值(核心/衛星判定依據)"),
+        "核心/衛星": _cc.TextColumn("核心/衛星", width="small",
+            help="🟦 核心=廣泛分散/穩健長線(可重壓);🟠 衛星=集中/主題/高波動(小部位);"
+                 "⬜ 待定=類別+3-3-3 皆無法判定"),
+        "分類依據": _cc.TextColumn("分類依據", width="small",
+            help="類別=依基金類型;3-3-3=通過 MK 3-3-3 達核心標準;—=資料不足"),
         "4D Grade": _cc.TextColumn("4D Grade", width="small",
             help="A≥80 / B≥65 / C≥50 / D≥35 / F<35(SSOT v19.177)"),
         "4D Score": _cc.NumberColumn("4D Score", format="%.1f", width="small"),

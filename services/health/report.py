@@ -192,9 +192,18 @@ def build_health_analysis_row(
     _333_emoji = "✅" if _333_passed is True else ("❌" if _333_passed is False else "⬜")
     _333_msg = (_333.get("message") or "")[:36]
 
+    # ─── 核心 / 衛星資產分類 SSOT(兩層:類別 + 3-3-3,帶來源)──────
+    # v19.327:3-3-3 對保單子網域封鎖基金常「資料不足」→ 退回基金類別判定補涵蓋率。
+    from services.health.asset_class import classify_core_satellite
+    _category = (mj.get("category") or fd.get("category") or "").strip()
+    _cs = classify_core_satellite(_category, _333_passed)
+
     return {
         "code": code,
         "基金名": (fd.get("fund_name") or mj.get("fund_name") or code)[:24],
+        "基金類別": _category or "—",
+        "核心/衛星": _cs["display"],
+        "分類依據": _cs["source"] or "—",
         "4D Grade": _4d.get("grade") or "—",
         "4D Score": _4d.get("score"),
         "Sharpe 1Y": sharpe,
@@ -319,6 +328,7 @@ def build_dividend_summary_row(
 # UI column_config 順序常數(供 caller 用)
 HEALTH_COLUMNS = [
     "code", "基金名",
+    "基金類別", "核心/衛星", "分類依據",
     "4D Grade", "4D Score",
     "Sharpe 1Y", "Sortino", "Calmar", "Alpha %", "費用率 %",
     "Max DD %", "3Y 年化 %", "5Y 年化 %",
