@@ -65,39 +65,47 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
     _units = _amt_local / _nav
     _mc1, _mc2, _mc3, _mc4 = st.columns(4)
     _mc1.metric("可申購單位數", f"{_units:,.2f}")
-    if _adr and _adr > 0:
-        _ann_div = _amt_local * _adr / 100.0
-        _mon_div = _ann_div / 12.0
-        _mon_units = _mon_div / _nav
-        if _ccy != "TWD" and _fx:
-            _ann_div_twd = _ann_div * _fx
-            _mon_div_twd = _mon_div * _fx
+    # v19.324→v19.325:月配息 / 每月配息單位數優先「最近一筆真實配息記錄」,
+    # 真實記錄缺 → 年化配息率估算 fallback,並註記來源(真實/估算)。
+    # 全站(Tab2 / Tab3 / 健檢 ②)同源走 dividend_calc.monthly_dividend_from_records。
+    from services.health.dividend_calc import monthly_dividend_from_records
+    _fx_eff = _fx if (_ccy != "TWD" and _fx) else 1.0
+    _divs = fund.get("dividends") or _mj.get("dividends") or []
+    _mdiv = monthly_dividend_from_records(_divs, _units, _nav, _fx_eff, adr_pct=_adr)
+    _src = _mdiv["source"]
+    _latest = _mdiv["latest_div_per_unit"]
+    _mon_div_twd = _mdiv["mon_div_twd"]
+    _mon_units = _mdiv["mon_div_units"]
+    if _mon_units is not None:
+        _src_lbl = "真實記錄" if _src == "records" else "年化估算"
+        _mc2.metric("月配息（TWD）", f"{_mon_div_twd:,.0f}" if _mon_div_twd else "—")
+        _mc3.metric("每月配息單位數", f"{_mon_units:,.2f}",
+                    help=f"最近一筆實際配息 × 持有單位 ÷ NAV（來源：{_src_lbl}）")
+        _mc4.metric("年化配息率", f"{_adr:.2f}%" if _adr else "—",
+                    help="MoneyDJ wb05 官方年化配息率")
+        if _src == "records":
+            _note = f"📊 配息來源：**真實記錄**（最近一筆實配 {_latest:,.4f} {_ccy}/單位）"
         else:
-            _ann_div_twd = _ann_div
-            _mon_div_twd = _mon_div
-        _mc2.metric("月配息（TWD）", f"{_mon_div_twd:,.0f}")
-        _mc3.metric("月配股（單位）", f"{_mon_units:,.2f}",
-                    help="月配息若再投入可換得的單位數（月配息 ÷ NAV）")
-        _mc4.metric("年化配息率", f"{_adr:.2f}%",
-                    help="年化配息率 = 年配息 / 投入本金（原幣）")
+            _note = (f"〜 配息來源：**年化估算**（無逐筆配息記錄，"
+                     f"以年化配息率 {_adr:.2f}% ÷ 12 攤平，季配/年配某些月實際為 0）")
         if _ccy != "TWD":
             st.success(
                 f"💱 **換算 TWD**（1 {_ccy} = {_fx:.4f}）："
                 f"本金 {float(principal_twd):,.0f} TWD → "
                 f"原幣本金 **{_amt_local:,.2f}** {_ccy} → "
-                f"可買 **{_units:,.2f}** 單位｜年息 **{_ann_div_twd:,.0f}** TWD"
+                f"可買 **{_units:,.2f}** 單位"
                 f"（每月 ≈ **{_mon_div_twd:,.0f}** TWD / "
-                f"配股 ≈ **{_mon_units:,.2f}** 單位）"
+                f"配息單位 ≈ **{_mon_units:,.2f}** 單位）\n\n{_note}"
             )
         else:
             st.success(
                 f"📌 本金 {float(principal_twd):,.0f} TWD → "
-                f"可買 **{_units:,.2f}** 單位｜年息 **{_ann_div_twd:,.0f}** TWD"
+                f"可買 **{_units:,.2f}** 單位"
                 f"（每月 ≈ **{_mon_div_twd:,.0f}** TWD / "
-                f"配股 ≈ **{_mon_units:,.2f}** 單位）"
+                f"配息單位 ≈ **{_mon_units:,.2f}** 單位）\n\n{_note}"
             )
     else:
-        st.caption("⬜ 此基金無年化配息率，無月配試算")
+        st.caption("⬜ 無配息記錄且無年化配息率，無月配試算")
 
 
 def _render_holdings_block(fund: dict) -> None:

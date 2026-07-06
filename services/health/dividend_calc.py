@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, Optional
 
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     MIN_YEARS_FOR_ANNUALIZE,  # v19.175 短歷史 guard
@@ -70,6 +70,97 @@ def div_health_light_for_pair(
     if gap <= warn_gap:
         return ("警示", _LIGHT_EMOJI["警示"])
     return ("吃本金", _LIGHT_EMOJI["吃本金"])
+
+
+def latest_dividend_per_unit(dividends: Any) -> Optional[float]:
+    """從 dividends[] 取「最近一筆」真實配息額(原幣 / 單位)SSOT。
+
+    dividends[] 為 MoneyDJ wh06 / TDCC 真實每筆配息記錄:
+    ``[{date|ex_date, amount, ...}]``,amount = 每單位實際配息(原幣)。
+    月配息基金 = 一個月一筆 → 最新一筆即「這個月」實配。
+
+    取法:依 date(缺則 ex_date)ISO 日期字串**降序**取第一筆 amount > 0。
+    日期正規化 `/`→`-` 避免混格式誤排序。
+
+    Returns:
+        最近一筆配息(原幣 / 單位)float,或 None(無記錄 / 全 ≤ 0 → §1 顯式 None,不估算)
+    """
+    if not dividends:
+        return None
+    best_date = ""
+    best_amt: Optional[float] = None
+    for d in dividends:
+        if not isinstance(d, dict):
+            continue
+        ds = str(d.get("date") or d.get("ex_date") or "")[:10].replace("/", "-")
+        amt = _safe_float(d.get("amount"))
+        if amt is None:
+            amt = _safe_float(d.get("div_per_unit"))
+        if amt is None or amt <= 0 or not ds:
+            continue
+        if ds >= best_date:  # ISO 字串比較,保留最新日期
+            best_date, best_amt = ds, amt
+    return best_amt
+
+
+def monthly_dividend_from_records(
+    dividends: Any,
+    units_held: Any,
+    nav: Any,
+    fx: Any = 1.0,
+    adr_pct: Any = None,
+) -> dict:
+    """算每月配息(原幣 / TWD / 可再投入單位數)SSOT — 真實記錄優先,年化估算 fallback。
+
+    全站(單一基金 Tab2 / 組合基金 Tab3 / 基金健檢 ② 表)月配息 / 配息單位數一律
+    走本函式,確保跨頁同源(§2.1 SSOT)+ 帶 `source` 供 UI 註記來源。
+
+    **兩層取數**(每筆都回傳 `source` 標記,§2.2 血緣):
+      1. **真實記錄**(source="records"):最近一筆實配 d = latest_dividend_per_unit(dividends)
+         每月配息(原幣) = d × 持有單位;每月配息單位數 = 每月配息(原幣) / nav
+      2. **年化估算 fallback**(source="estimate"):無真實逐筆記錄但有年化配息率時,
+         原幣本金 = 持有單位 × nav;每月配息(原幣) = 原幣本金 × adr% / 100 / 12
+         (= 年化配息 ÷ 12 攤平至每月;季配 / 年配基金為平均值非實配,故標 estimate)
+    共通:每月配息(TWD) = 每月配息(原幣) × fx。
+
+    Args:
+        dividends: 真實配息記錄 list(見 latest_dividend_per_unit)
+        units_held: 持有單位數(caller 算:原幣本金 / nav)
+        nav: 現在 NAV(原幣)
+        fx: 1 原幣 = ? TWD(TWD 基金 = 1.0);缺 / ≤ 0 → mon_div_twd None
+        adr_pct: 年化配息率(%)—— 真實記錄缺時的 fallback 依據;None → 不 fallback
+    Returns:
+        dict {latest_div_per_unit, mon_div_ccy, mon_div_twd, mon_div_units, source}
+        source ∈ {"records", "estimate", None};必要輸入缺 → 值 None + source None
+        (§1 Fail Loud:真實與估算皆不可得時不捏造)
+    """
+    latest = latest_dividend_per_unit(dividends)
+    u = _safe_float(units_held)
+    n = _safe_float(nav)
+    f = _safe_float(fx)
+    a = _safe_float(adr_pct)
+    out: dict = {
+        "latest_div_per_unit": latest,
+        "mon_div_ccy": None,
+        "mon_div_twd": None,
+        "mon_div_units": None,
+        "source": None,
+    }
+    if u is None or u <= 0 or n is None or n <= 0:
+        return out
+    if latest is not None and latest > 0:
+        mon_div_ccy = latest * u                       # 真實:最近一筆實配 × 持有單位
+        out["source"] = "records"
+    elif a is not None and a > 0:
+        mon_div_ccy = (u * n) * a / 100.0 / 12.0       # 估算:原幣本金 × adr / 12
+        out["source"] = "estimate"
+    else:
+        return out
+    out["mon_div_ccy"] = mon_div_ccy
+    if f is not None and f > 0:
+        out["mon_div_twd"] = mon_div_ccy * f
+    out["mon_div_units"] = mon_div_ccy / n
+    return out
 
 
 def _years_between(start_iso: str, end_iso: str) -> float:

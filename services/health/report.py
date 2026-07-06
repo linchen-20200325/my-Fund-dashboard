@@ -214,14 +214,17 @@ def build_dividend_summary_row(
     code: str,
     principal_twd: Optional[float] = None,
     holding_years: Optional[float] = None,
+    fx: Optional[float] = None,
 ) -> dict:
-    """配息相關 row(SSOT):adr + 1Y 含息報酬 + 吃本金燈號 (1Y·MK) + 是否建議換標的。
+    """配息相關 row(SSOT):adr + 1Y 含息報酬 + 吃本金燈號 (1Y·MK) + 換標的 + 每月配息單位數。
 
     Args:
         fd: 基金 dict
         code: 基金代號
-        principal_twd: 本金 TWD(透給後續 caller 用,本函式不算 TWD 配息額)
+        principal_twd: 本金 TWD(算每月配息單位數用;缺 → 該欄 None)
         holding_years: user 持有年數(換標的 verdict 用)
+        fx: 1 原幣 = ? TWD(TWD 基金 = 1.0;caller 由 process_one_fund row["fx_spot"] 傳入)。
+            缺 → 每月配息單位數 None(需匯率換原幣本金,§1 不估算)
 
     Returns:
         dict — UI 直接 render 成 dataframe row
@@ -277,12 +280,32 @@ def build_dividend_summary_row(
               f'{type(e).__name__}: {e}', file=_sys.stderr)
         rep = {"emoji": "⬜", "label": "資料不足", "message": ""}
 
+    # ─── 每月配息可再投入單位數 SSOT(真實記錄優先,年化估算 fallback)────
+    # 真實:最近一筆實配 × 持有單位 / NAV;估算 fallback:原幣本金 × adr / 12 / NAV。
+    # 持有單位 = 原幣本金(本金TWD/fx) / NAV。需 principal + fx + nav;`配息來源`欄註記
+    # 真實 / 估算 / —(§2.2 血緣)。全站(Tab2/Tab3/健檢)同源走 dividend_calc。
+    from services.health.dividend_calc import monthly_dividend_from_records
+    _nav_ccy = _safe_float((fd.get("metrics") or {}).get("nav") or mj.get("nav_latest"))
+    _divs = fd.get("dividends") or mj.get("dividends") or []
+    _p = _safe_float(principal_twd)
+    _fx = _safe_float(fx)
+    _units_held = None
+    if (_p is not None and _p > 0 and _fx is not None and _fx > 0
+            and _nav_ccy is not None and _nav_ccy > 0):
+        _units_held = (_p / _fx) / _nav_ccy
+    _mdiv = monthly_dividend_from_records(
+        _divs, _units_held, _nav_ccy, _fx, adr_pct=adr_pct)
+    _mon_div_units = _mdiv.get("mon_div_units")
+    _div_src = {"records": "真實", "estimate": "估算"}.get(_mdiv.get("source"), "—")
+
     return {
         "code": code,
         "基金名": (fd.get("fund_name") or mj.get("fund_name") or code)[:24],
         "1Y 含息 %": tr1y_pct,
         "1Y 來源": tr1y_src,
         "年化配息率 %": adr_pct,
+        "每月配息單位數": _mon_div_units,
+        "配息來源": _div_src,
         "吃本金燈號 (1Y·MK)": eat_status,
         "換標的建議": f"{rep['emoji']} {rep['label']}",
         "_換標的 detail": rep.get("message", ""),
@@ -304,6 +327,8 @@ DIVIDEND_COLUMNS = [
     "code", "基金名",
     "1Y 含息 %", "1Y 來源",
     "年化配息率 %",
+    "每月配息單位數",
+    "配息來源",
     "吃本金燈號 (1Y·MK)",
     "換標的建議",
 ]

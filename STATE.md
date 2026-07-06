@@ -53,6 +53,18 @@
 
 ## 當前版本
 
+- **v19.325 每月配息真實記錄缺 → 年化配息率估算 fallback + 來源標記(user 回報,2026-07-06)**:
+  - **背景**:v19.324 全改真實逐筆配息記錄後,user 指出「拿不到就用年化配息率吧,只是要註記來源」—— 加雙層 fallback + 血緣標記,避免保險子網域封鎖時大量顯示「—」。
+  - **修法**:(1) `dividend_calc.monthly_dividend_from_records()` 加 `adr_pct` 參數 + 回傳 `source` 欄:真實記錄有 → `source="records"`(最近一筆實配 × 持有單位);無記錄但有年化配息率 → `source="estimate"`(原幣本金 × adr/12,= 持有單位 × adr/1200,nav 約掉);皆無 → None(§1 不捏造)。(2) `report.build_dividend_summary_row` 傳 `adr_pct` + 新增「配息來源」欄(真實/估算/—)進 `DIVIDEND_COLUMNS`。(3) 健檢 ② 表 column_config 加「配息來源」TextColumn。(4) Tab2 投資試算 + `investment.py` 依 `source` 顯示「📊 真實記錄 / 〜 年化估算」註記(估算註明季配/年配某些月實際為 0);Tab2 詳細公式展開 + AI stash 仍限真實記錄(`_has_rec`)。
+  - **血緣(§2.2)**:每筆月配數字帶 source 標記,UI 一眼分辨真實 vs 估算,不混用。
+  - **回歸網**:`tests/test_monthly_dividend_units.py` 加 source/estimate fallback/nav 無關性/row builder 配息來源 共 8 test(累計 30);相關 dividend+health+report+portfolio 352 test 全綠。
+- **v19.324 每月配息改「最近一筆真實配息記錄」— 取代年化÷12 估算(單一基金 / 組合基金 / 基金健檢 三處一併,user 回報,2026-07-06)**:
+  - **背景**:v19.323 先以「年化配息率 ÷ 12」前瞻估算加了「每月配息 (TWD)」欄;user 指此估算不夠誠實(季配基金某些月實際=0 卻報平均),要求改**抓最近一筆真實配息記錄**算配息單位數,且**全站三處**(單一基金 Tab2 / 組合基金 Tab3 / 基金健檢)一併換。v19.323 估算路徑整段退役(僅存在分支未進 main)。
+  - **算式(真實記錄,SSOT)**:最近一筆實配 d = `dividends[]`(MoneyDJ wh06 真實每筆配息額,原幣/單位)依日期最新一筆;持有單位 u = (本金TWD/fx)/NAV;`每月配息單位數 = d × u / NAV`(A 案);`每月配息(TWD) = d × u × fx`(Tab2 投資試算用)。無配息記錄 → 顯式「—」(§1 Fail Loud,不用 adr 估算矇混)。
+  - **修法**:(1) `services/health/dividend_calc.py` 新兩純函式 `latest_dividend_per_unit()`(日期降序取最新 + slash 正規化)+ `monthly_dividend_from_records()`(回 latest/ccy/twd/units 四軸);移除 v19.323 `estimate_monthly_dividend_twd`。(2) `services/health/report.py:build_dividend_summary_row` 加 `fx` 參數 + 算「每月配息單位數」,`DIVIDEND_COLUMNS` 換欄(每月配息 (TWD)→每月配息單位數)。(3) `ui/tab_fund_grp_health.py`:`_render_health_3tables` 傳 `fx=row["fx_spot"]` + column_config。(4) `ui/helpers/fund_grp_health/investment.py` + `ui/tab2_single_fund.py` 投資試算月配息 / 每月配息單位數改真實記錄(含公式展開 + AI stash 同步,無記錄顯示「—」)。
+  - **同源覆蓋**:組合基金 Tab3「持倉健診」共用 `process_one_fund` + `_render_health_3tables`(同基金健檢路徑)→ 自動吃到新欄,一改三處齊。
+  - **範圍 / 架構**:L2 純函式(zero-IO,fx 以純數傳入)+ L3 傳參,無越權。
+  - **回歸網**:`tests/test_monthly_dividend_units.py`(22:latest 取數 / d×u/NAV 算式 / 邊界缺值→None / row builder 整合 / column schema / 舊估算函式已移除);`tests/test_tab2_single_fund.py` metric 卡斷言同步改「每月配息單位數」+ 真實記錄 SSOT。相關 dividend+health+report+tab2 全綠。
 - **v19.322 基金組合健診代號去重 — 修「配息事件（多檔合併）」重複列(user 回報,2026-07-05)**:
   - **背景**:user 貼圖「配息事件（多檔合併）」同一基金重複出現。根因:`ui/tab_fund_grp_health.py` 代號清單**無去重** —— 同基金若被多張保單持有,`portfolio_funds`(session)出現同 code 多筆;「🔗 從我的組合帶入」或手動貼多次 → `_run_batch_health` 逐檔各算一次 → 持有 meta / 配息事件 / 比較圖三表全部重複列。
   - **修法(SSOT,兩層互補)**:(1) 新純函式 `_dedup_upper(seq)`(order-preserving + 大寫 + 去空)接在**代號輸入端** —— `_pf_codes`(組合帶入,line 76)+ `codes`(手動處理 chokepoint,line 109);兼省重複網路抓取。(2) 新 `_dedup_rows_by_code(rows)` 接在**顯示層 chokepoint** `_render_health_3tables` 入口 —— 此函式同時被健診 Tab 與 Tab3 組合 embed 呼叫,rows 去重一次覆蓋兩條路徑。本 Tab 輸入僅「代號 + 單一本金」,同 code = 完全相同計算 = 真重複,去重安全。
