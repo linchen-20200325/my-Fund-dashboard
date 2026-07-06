@@ -571,7 +571,7 @@ def _render_health_3tables(rows: list[dict],
     _div_df = pd.DataFrame(_div_rows)
     # v19.191:None → NaN for numeric cols(同 ① 表 None → NaN 邏輯)
     # v19.324:每月配息單位數(真實記錄版)加入 numeric 欄(None → NaN → 顯示空白)
-    _div_num_cols = ["1Y 含息 %", "年化配息率 %", "每月配息單位數"]
+    _div_num_cols = ["1Y 含息 %", "年化配息率 %", "每月配息 (TWD)", "每月配息單位數"]
     for _nc in _div_num_cols:
         if _nc in _div_df.columns:
             _div_df[_nc] = pd.to_numeric(_div_df[_nc], errors="coerce")
@@ -582,6 +582,10 @@ def _render_health_3tables(rows: list[dict],
         "1Y 來源": _cc.TextColumn("1Y 來源",
             help="wb01 / local_calc / ret_1y_total / NAV 年化"),
         "年化配息率 %": _cc.NumberColumn("年化配息率 %", format="%.2f %%"),
+        # v19.326:每月配息金額(TWD 現金)= 最近一筆實配 × 持有單位 × 匯率(來源同「配息來源」欄)
+        "每月配息 (TWD)": _cc.NumberColumn("每月配息 (TWD)", format="%.0f",
+            help="每月實領台幣現金 = 最近一筆實際配息 × 持有單位 × 匯率。"
+                 "健診 Tab 全檔以 100 萬 TWD 為基準;Tab3 為各檔實際投入本金。"),
         # v19.324:每月配息單位數 = 最近一筆實際配息 × 持有單位 / NAV(真實記錄優先)
         # v19.325:真實記錄缺 → 年化配息率估算 fallback,「配息來源」欄註記真實/估算
         "每月配息單位數": _cc.NumberColumn("每月配息單位數", format="%.2f",

@@ -53,6 +53,10 @@
 
 ## 當前版本
 
+- **v19.326 健檢 ② 表補回「每月配息 (TWD)」金額欄(user 回報「沒看到每月配息金額」,2026-07-06)**:
+  - **背景**:v19.324/325 只放了「每月配息**單位數**」,user 貼圖指出沒看到每月配息**金額(TWD)**。SSOT `monthly_dividend_from_records` 早已算出 `mon_div_twd`(= 最近一筆實配 × 持有單位 × 匯率),只是 row builder 沒取出。
+  - **修法**:`report.build_dividend_summary_row` 取 `_mdiv["mon_div_twd"]` → row 加「每月配息 (TWD)」欄(排在「年化配息率 %」後、「每月配息單位數」前)+ `DIVIDEND_COLUMNS`;`tab_fund_grp_health` column_config 加 NumberColumn(format `%.0f`)+ numeric coercion。金額與單位共用同一 `source`(配息來源欄真實/估算),缺資料同顯「—」。零新增計算(SSOT 現成值)。
+  - **回歸網**:`tests/test_monthly_dividend_units.py`(28)加每月配息(TWD)算式斷言 + column schema 順序(年化→TWD→單位→來源→吃本金);相關 dividend+health+report+portfolio+tab2 377 test 全綠。
 - **v19.325 每月配息真實記錄缺 → 年化配息率估算 fallback + 來源標記(user 回報,2026-07-06)**:
   - **背景**:v19.324 全改真實逐筆配息記錄後,user 指出「拿不到就用年化配息率吧,只是要註記來源」—— 加雙層 fallback + 血緣標記,避免保險子網域封鎖時大量顯示「—」。
   - **修法**:(1) `dividend_calc.monthly_dividend_from_records()` 加 `adr_pct` 參數 + 回傳 `source` 欄:真實記錄有 → `source="records"`(最近一筆實配 × 持有單位);無記錄但有年化配息率 → `source="estimate"`(原幣本金 × adr/12,= 持有單位 × adr/1200,nav 約掉);皆無 → None(§1 不捏造)。(2) `report.build_dividend_summary_row` 傳 `adr_pct` + 新增「配息來源」欄(真實/估算/—)進 `DIVIDEND_COLUMNS`。(3) 健檢 ② 表 column_config 加「配息來源」TextColumn。(4) Tab2 投資試算 + `investment.py` 依 `source` 顯示「📊 真實記錄 / 〜 年化估算」註記(估算註明季配/年配某些月實際為 0);Tab2 詳細公式展開 + AI stash 仍限真實記錄(`_has_rec`)。
