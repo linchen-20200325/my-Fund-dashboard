@@ -67,14 +67,14 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
     _mc1.metric("可申購單位數", f"{_units:,.2f}")
     if _adr and _adr > 0:
         _ann_div = _amt_local * _adr / 100.0
-        _mon_div = _ann_div / 12.0
+        _mon_div = _ann_div / 12.0          # 原幣月配(供「月配股（單位）」用)
         _mon_units = _mon_div / _nav
-        if _ccy != "TWD" and _fx:
-            _ann_div_twd = _ann_div * _fx
-            _mon_div_twd = _mon_div * _fx
-        else:
-            _ann_div_twd = _ann_div
-            _mon_div_twd = _mon_div
+        # v19.323:月配息 / 年息(TWD)收口 SSOT(FX-free 前瞻估算 = 本金 × adr / 12),
+        # 與健診 ② 表「每月配息 (TWD)」同源。原「_mon_div × fx」與此等價(fx 約掉),
+        # 拿掉 TWD/非TWD 分支。principal 極端為 0 → SSOT 回 None → 0.0。
+        from services.health.dividend_calc import estimate_monthly_dividend_twd
+        _mon_div_twd = estimate_monthly_dividend_twd(principal_twd, _adr) or 0.0
+        _ann_div_twd = _mon_div_twd * 12.0
         _mc2.metric("月配息（TWD）", f"{_mon_div_twd:,.0f}")
         _mc3.metric("月配股（單位）", f"{_mon_units:,.2f}",
                     help="月配息若再投入可換得的單位數（月配息 ÷ NAV）")

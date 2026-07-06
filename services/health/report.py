@@ -277,12 +277,19 @@ def build_dividend_summary_row(
               f'{type(e).__name__}: {e}', file=_sys.stderr)
         rep = {"emoji": "⬜", "label": "資料不足", "message": ""}
 
+    # ─── 每月配息(TWD)前瞻估算 SSOT ────────────────────────
+    # = 本金 × 年化配息率 / 12(FX-free);與 Tab2 投資試算「月配息(TWD)」同源算式。
+    # principal_twd 缺(如 Tab2 進階表傳 None)→ 顯式 None → UI 顯示「—」(§1 不填 0)。
+    from services.health.dividend_calc import estimate_monthly_dividend_twd
+    _mon_div_twd = estimate_monthly_dividend_twd(principal_twd, adr_pct)
+
     return {
         "code": code,
         "基金名": (fd.get("fund_name") or mj.get("fund_name") or code)[:24],
         "1Y 含息 %": tr1y_pct,
         "1Y 來源": tr1y_src,
         "年化配息率 %": adr_pct,
+        "每月配息 (TWD)": _mon_div_twd,
         "吃本金燈號 (1Y·MK)": eat_status,
         "換標的建議": f"{rep['emoji']} {rep['label']}",
         "_換標的 detail": rep.get("message", ""),
@@ -304,6 +311,7 @@ DIVIDEND_COLUMNS = [
     "code", "基金名",
     "1Y 含息 %", "1Y 來源",
     "年化配息率 %",
+    "每月配息 (TWD)",
     "吃本金燈號 (1Y·MK)",
     "換標的建議",
 ]

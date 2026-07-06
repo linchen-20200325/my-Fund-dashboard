@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, Optional
 
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     MIN_YEARS_FOR_ANNUALIZE,  # v19.175 短歷史 guard
@@ -70,6 +70,36 @@ def div_health_light_for_pair(
     if gap <= warn_gap:
         return ("警示", _LIGHT_EMOJI["警示"])
     return ("吃本金", _LIGHT_EMOJI["吃本金"])
+
+
+def estimate_monthly_dividend_twd(
+    principal_twd: Any,
+    adr_pct: Any,
+) -> Optional[float]:
+    """每月配息(TWD)前瞻估算 SSOT — Tab2「投資試算」月配息(TWD) 同源算式。
+
+    數學式:每月配息(TWD) = 本金(TWD) × 年化配息率(%) / 100 / 12
+
+    FX 中性證明:原幣本金 = 本金TWD / fx;月配息(原幣) = 原幣本金 × adr/100/12;
+    月配息(TWD) = 月配息(原幣) × fx → fx 前後相乘互相約掉,故 **不需匯率**,
+    純由「本金 × 年化配息率」決定(evidence:
+    ui/helpers/fund_grp_health/investment.py:64-77 與 tab2_single_fund.py 投資試算,
+    截圖 100萬 × 13.55% / 12 = 11,292 對帳一致)。因 FX-free → 本函式可留在 L2 zero-IO。
+
+    語意:年化配息率攤平至每月的「前瞻」估算,非歷史實配(季配 / 年配基金
+    某些月實際為 0);與「年均配息 TWD(= 累計實配 / 持有年數)」為不同軸,勿混用。
+
+    Args:
+        principal_twd: 投入本金(TWD)
+        adr_pct: 年化配息率(%),caller 應走 _resolve_adr_with_fallback SSOT 解析
+    Returns:
+        每月配息(TWD) float,或 None(本金 / adr 缺或 ≤ 0 → 顯式 None,§1 不填 0)
+    """
+    p = _safe_float(principal_twd)
+    a = _safe_float(adr_pct)
+    if p is None or a is None or p <= 0 or a <= 0:
+        return None
+    return p * a / 100.0 / 12.0
 
 
 def _years_between(start_iso: str, end_iso: str) -> float:
