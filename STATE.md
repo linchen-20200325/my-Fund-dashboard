@@ -53,6 +53,12 @@
 
 ## 當前版本
 
+- **v19.329 組合 Tab3 加「核心/衛星配置檢查」(依投入金額加權 vs 目標 核心 50~80%,user 貼核心-衛星策略表要求,2026-07-07)**:
+  - **背景**:v19.327/328 已標每檔核心/衛星;user 貼「核心持股 50~80% / 衛星持股 20~50%」策略表要求對照組合實際配置比例。
+  - **算法(SSOT `services/health/asset_class.summarize_core_satellite_allocation`)**:各檔 label(核心/衛星/待定)× weight(投入金額 invest_twd)→ 加權算核心/衛星/待定佔比 → 對照目標(`CORE_TARGET_MIN/MAX_PCT` = 50/80)。燈號:待定 > 30% → ⚪(不可靠);核心 < 50% → 🔴(衛星過重);核心 > 80% → 🟡(過保守);50~80% → 🟢(穩健)。
+  - **修法**:(1) `asset_class.py` 加 `CORE_TARGET_MIN/MAX_PCT` + `UNDETERMINED_UNRELIABLE_PCT` 常數 + `summarize_core_satellite_allocation`(L2 純函式,weight≤0/非數略過)。(2) `ui/tab3_portfolio.py` 持倉健診渲染前加「🧭 核心/衛星配置檢查」metric row(核心%/衛星%/待定%/評估燈)+ caption;label 走現成 `build_health_analysis_row`「核心/衛星」欄(SSOT,與 ① 表同源),weight 走 `_principal_twd`。
+  - **架構**:L2 純函式 + L3 render,無越權;分類複用現成 SSOT 不重寫。**基金健檢 Tab 未加**(該 tab 全檔統一 100 萬 = 等權,配置比例意義有限);僅組合 Tab3(真實 invest_twd 加權)顯示。
+  - **回歸網**:`tests/test_asset_class_core_satellite.py` 加 7 test(加權/綠燈區間/衛星過重紅/過保守黃/待定多白/略過非正權重/空集)累計 32;相關 health+report 全綠。
 - **v19.327 健檢 ① 表加「核心/衛星資產」+「基金類別」分類(user 回報「基金總類核心還衛星沒顯示」,2026-07-06)**:
   - **背景**:user 要每檔顯示核心 or 衛星資產。原擬單用 MK 3-3-3(挑核心),但 user 指出「3-3-3 很多檔抓不到」(保單子網域封鎖 → 成立日/3年報酬缺 → 資料不足)。改**兩層 + 來源標記**(對齊 v19.325 配息來源精神)補涵蓋率。
   - **判定順序(SSOT `services/health/asset_class.classify_core_satellite`)**:① 類別命中衛星關鍵字(產業/科技/新興/單一國/高收益…集中主題型)→ 🟠 衛星(角色由類別決定,覆蓋 3-3-3);② MK 3-3-3 通過 → 🟦 核心;③ 類別命中核心關鍵字(全球/平衡/多重資產/投資級債…廣泛分散)→ 🟦 核心;④ 皆無法判 → ⬜ 待定(§1 不亂扣)。關鍵字對照為可調 SSOT。

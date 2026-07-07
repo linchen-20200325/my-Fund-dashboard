@@ -43,7 +43,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.328_CoreSatellite"
+APP_VERSION = "v19.329_CoreSatAlloc"
 
 
 # ══════════════════════════════════════════════════════

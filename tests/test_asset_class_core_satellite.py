@@ -11,8 +11,11 @@ from __future__ import annotations
 import pytest
 
 from services.health.asset_class import (
+    CORE_TARGET_MAX_PCT,
+    CORE_TARGET_MIN_PCT,
     classify_by_category,
     classify_core_satellite,
+    summarize_core_satellite_allocation,
 )
 
 
@@ -106,3 +109,57 @@ def test_health_row_missing_category_is_undetermined():
     row = build_health_analysis_row(fd, "X")
     assert row["基金類別"] == "—"
     assert "待定" in row["核心/衛星"]
+
+
+# ── summarize_core_satellite_allocation (v19.329) ────────
+def test_alloc_weighted_by_amount():
+    """依投入金額加權(非等權):核心 80萬 / 衛星 20萬 → 核心 80%。"""
+    r = summarize_core_satellite_allocation([
+        {"label": "🟦 核心", "weight": 800_000},
+        {"label": "🟠 衛星", "weight": 200_000},
+    ])
+    assert r["core_pct"] == 80.0 and r["satellite_pct"] == 20.0
+    assert r["n_core"] == 1 and r["n_satellite"] == 1
+
+
+def test_alloc_green_in_target_range():
+    r = summarize_core_satellite_allocation([
+        {"label": "核心", "weight": 62}, {"label": "衛星", "weight": 38}])
+    assert r["status"] == "🟢"
+
+
+def test_alloc_red_when_satellite_overweight():
+    """核心 < 50% → 🔴(衛星過重)。"""
+    r = summarize_core_satellite_allocation([
+        {"label": "核心", "weight": 30}, {"label": "衛星", "weight": 70}])
+    assert r["status"] == "🔴" and r["core_pct"] < CORE_TARGET_MIN_PCT
+
+
+def test_alloc_yellow_when_too_conservative():
+    """核心 > 80% → 🟡(過保守)。"""
+    r = summarize_core_satellite_allocation([
+        {"label": "核心", "weight": 90}, {"label": "衛星", "weight": 10}])
+    assert r["status"] == "🟡" and r["core_pct"] > CORE_TARGET_MAX_PCT
+
+
+def test_alloc_white_when_too_many_undetermined():
+    """待定 > 30% → ⚪(不可靠)。"""
+    r = summarize_core_satellite_allocation([
+        {"label": "核心", "weight": 10}, {"label": "待定", "weight": 90}])
+    assert r["status"] == "⚪" and r["undetermined_pct"] > 30
+
+
+def test_alloc_skips_nonpositive_weight():
+    """weight ≤ 0 / 非數 略過,不計入分母。"""
+    r = summarize_core_satellite_allocation([
+        {"label": "核心", "weight": 100},
+        {"label": "衛星", "weight": 0},
+        {"label": "衛星", "weight": "x"},
+    ])
+    assert r["total_weight"] == 100 and r["core_pct"] == 100.0
+    assert r["n_satellite"] == 0
+
+
+def test_alloc_empty_is_white():
+    r = summarize_core_satellite_allocation([])
+    assert r["status"] == "⚪" and r["total_weight"] == 0.0

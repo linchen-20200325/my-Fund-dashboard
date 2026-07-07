@@ -47,6 +47,13 @@ CORE_KEYWORDS: tuple[str, ...] = (
 
 _EMOJI = {"核心": "🟦", "衛星": "🟠", "待定": "⬜"}
 
+# ── 核心 / 衛星「建議配置比例」目標(可調 SSOT)──
+# 依 user 提供之核心-衛星策略表:核心持股 50~80%(穩定成長)、衛星持股 20~50%(超額報酬)。
+CORE_TARGET_MIN_PCT: float = 50.0
+CORE_TARGET_MAX_PCT: float = 80.0
+# 待定佔比超過此門檻 → 判「分類不足,比例不可靠」(不硬給燈號,§1)
+UNDETERMINED_UNRELIABLE_PCT: float = 30.0
+
 
 def classify_by_category(category: Optional[str]) -> Optional[str]:
     """純用基金類別字串判「核心 / 衛星」。命中衛星優先(集中型角色明確)。
@@ -110,3 +117,87 @@ def _pack(label: str, source: Optional[str], note: str) -> dict:
         "display": f"{emoji} {label}",
         "note": note,
     }
+
+
+def summarize_core_satellite_allocation(items) -> dict:
+    """組合層「核心 / 衛星配置比例」彙總 SSOT + 對照目標(核心 50~80%)燈號。
+
+    以各檔**投入金額加權**(非等權),算出組合實際核心 / 衛星 / 待定佔比,
+    再與建議比例(CORE_TARGET_MIN~MAX_PCT)對照給燈號。
+
+    Args:
+        items: [{"label": "核心" / "衛星" / "待定", "weight": float(投入金額 TWD)}]
+               weight ≤ 0 / 非數 → 該檔略過(不計入分母)。
+    Returns:
+        {
+          "total_weight": float,
+          "core_pct" / "satellite_pct" / "undetermined_pct": float(0~100,佔總權重,三者和≈100),
+          "n_core" / "n_satellite" / "n_undetermined": int,
+          "status": "🟢" / "🟡" / "🔴" / "⚪",   # 配置評估燈
+          "message": str,
+        }
+        判定:待定 > 30% → ⚪(不可靠);核心 < 50% → 🔴(衛星過重);核心 > 80% → 🟡(過保守);
+        50~80% → 🟢(穩健)。無有效權重 → ⚪。
+    """
+    core_w = sat_w = und_w = 0.0
+    n_core = n_sat = n_und = 0
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        w = _safe_w(it.get("weight"))
+        if w is None or w <= 0:
+            continue
+        label = str(it.get("label") or "").strip()
+        if "核心" in label:
+            core_w += w
+            n_core += 1
+        elif "衛星" in label:
+            sat_w += w
+            n_sat += 1
+        else:
+            und_w += w
+            n_und += 1
+    total = core_w + sat_w + und_w
+    if total <= 0:
+        return {"total_weight": 0.0, "core_pct": 0.0, "satellite_pct": 0.0,
+                "undetermined_pct": 0.0, "n_core": 0, "n_satellite": 0,
+                "n_undetermined": 0, "status": "⚪", "message": "無有效投入金額,無法計算配置比例"}
+    core_pct = core_w / total * 100.0
+    sat_pct = sat_w / total * 100.0
+    und_pct = und_w / total * 100.0
+
+    if und_pct > UNDETERMINED_UNRELIABLE_PCT:
+        status = "⚪"
+        msg = (f"待定 {und_pct:.0f}% 過多(> {UNDETERMINED_UNRELIABLE_PCT:.0f}%),"
+               f"配置比例不可靠 — 請補基金分類再判讀")
+    elif core_pct < CORE_TARGET_MIN_PCT:
+        status = "🔴"
+        msg = (f"核心僅 {core_pct:.0f}% < 目標 {CORE_TARGET_MIN_PCT:.0f}%,"
+               f"衛星過重({sat_pct:.0f}%)— 追超額報酬但波動 / 風險偏高")
+    elif core_pct > CORE_TARGET_MAX_PCT:
+        status = "🟡"
+        msg = (f"核心 {core_pct:.0f}% > {CORE_TARGET_MAX_PCT:.0f}%,偏保守 — "
+               f"衛星僅 {sat_pct:.0f}%,較少超額報酬機會")
+    else:
+        status = "🟢"
+        msg = (f"核心 {core_pct:.0f}% 落在建議 {CORE_TARGET_MIN_PCT:.0f}~"
+               f"{CORE_TARGET_MAX_PCT:.0f}% 區間,配置穩健")
+
+    return {
+        "total_weight": round(total, 0),
+        "core_pct": round(core_pct, 1),
+        "satellite_pct": round(sat_pct, 1),
+        "undetermined_pct": round(und_pct, 1),
+        "n_core": n_core, "n_satellite": n_sat, "n_undetermined": n_und,
+        "status": status, "message": msg,
+    }
+
+
+def _safe_w(v) -> Optional[float]:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f:  # NaN
+        return None
+    return f
