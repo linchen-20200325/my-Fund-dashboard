@@ -490,6 +490,39 @@ def _render_health_3tables(rows: list[dict],
         _render_health_table(rows, funds_extra=funds_extra)
         return
 
+    # v19.330:① 健康分析 rows 提前建(核心/衛星 label 來源)—— 供「配置檢查」+ ① 表共用,不重算。
+    _health_rows = [
+        build_health_analysis_row(_r.get("_fund_raw") or {}, _r.get("code", ""))
+        for _r in ok_rows
+    ]
+
+    # ── 🧭 核心/衛星配置檢查(依投入本金加權 vs 核心 50~80%)── v19.330:兩 tab 共用最上方 ──
+    # 健檢 Tab 全檔本金 100 萬 = 等權(≈ 檔數佔比);組合 Tab3 為各檔實際 invest_twd 加權。
+    try:
+        from services.health.asset_class import summarize_core_satellite_allocation
+        _cs_items = []
+        for _hr, _r in zip(_health_rows, ok_rows):
+            _lbl = (_hr.get("核心/衛星") or "").split()
+            _cs_items.append({
+                "label": _lbl[-1] if _lbl else "待定",
+                "weight": _r.get("_principal_twd") or 0,
+            })
+        _csa = summarize_core_satellite_allocation(_cs_items)
+        st.markdown("#### 🧭 核心 / 衛星配置檢查（建議：核心 50~80%）")
+        _ca1, _ca2, _ca3, _ca4 = st.columns(4)
+        _ca1.metric("🟦 核心", f"{_csa['core_pct']:.0f}%", f"{_csa['n_core']} 檔")
+        _ca2.metric("🟠 衛星", f"{_csa['satellite_pct']:.0f}%", f"{_csa['n_satellite']} 檔")
+        _ca3.metric("⬜ 待定", f"{_csa['undetermined_pct']:.0f}%", f"{_csa['n_undetermined']} 檔")
+        _ca4.metric("配置評估", _csa["status"])
+        st.caption(
+            f"{_csa['status']} {_csa['message']}"
+            f"（依各檔投入本金加權，總計 {_csa['total_weight']:,.0f} TWD；"
+            f"核心=穩健長線 / 衛星=主題追報酬 / 待定=分類不足）"
+        )
+    except Exception as _e_csa:
+        st.caption(f"⬜ 核心/衛星配置檢查失敗："
+                   f"{type(_e_csa).__name__}: {str(_e_csa)[:80]}")
+
     # ── 🔴 淘汰候選紅區(MK 4 規則 verdict=replace)── v19.315:提到最上面,一眼看見要換的 ──
     # 先建 ② 配息 rows(內含 _verdict),紅區與下方表 ② 共用同一份、不重算(SSOT,避免雙倍計算)。
     _div_rows = [
@@ -519,11 +552,7 @@ def _render_health_3tables(rows: list[dict],
         "Sortino / Calmar / Alpha / 費用率為進階指標(無評等,僅供對照)。"
         "Max DD / 3Y/5Y 年化 / 3-3-3 篩為長線挑核心資產輔助。"
     )
-    _health_rows = []
-    for _r in ok_rows:
-        _fd = _r.get("_fund_raw") or {}
-        _code = _r.get("code", "")
-        _health_rows.append(build_health_analysis_row(_fd, _code))
+    # v19.330:_health_rows 已於本函式頂部(配置檢查前)建好,此處直接用不重算。
     _health_df = pd.DataFrame(_health_rows)
     # v19.191:None → NaN for numeric cols(pandas object dtype 會顯示「None」字面值,
     # NaN 走 NumberColumn format 後顯示「—」/ 空白)。caller 拿 dict → DataFrame 默認 object
