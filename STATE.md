@@ -53,6 +53,11 @@
 
 ## 當前版本
 
+- **v19.330 修「核心/衛星配置檢查看不到」— 下沉共用 render,兩 tab 齊顯示(user 回報,2026-07-07)**:
+  - **根因**:v19.329 只把配置檢查 inline 在**組合配置 Tab3 持倉健診**(需先載入組合);user 在**基金組合健診 Tab**看 → 沒加到 → 看不到。
+  - **修法**:配置檢查下沉共用 `ui/tab_fund_grp_health._render_health_3tables`(基金健檢 Tab + Tab3 持倉健診皆呼此)→ 兩 tab 齊顯示。順手把 `_health_rows`(核心/衛星 label 來源)提前建一次,供「配置檢查」+ ① 表共用不重算(原 ① 表段內另建一份,現移除)。Tab3 inline 版移除(改由共用 render 出)。
+  - **架構**:分類 label 複用 `build_health_analysis_row`(SSOT),比例走 `summarize_core_satellite_allocation`;純 L3 render 位置調整,無新邏輯。健檢 Tab 全檔 100 萬 = 等權(≈檔數佔比),caption 註明。
+  - **回歸網**:asset_class 32 test 全綠(比例邏輯不變);health+report+fund_grp 211 test 全綠。
 - **v19.329 組合 Tab3 加「核心/衛星配置檢查」(依投入金額加權 vs 目標 核心 50~80%,user 貼核心-衛星策略表要求,2026-07-07)**:
   - **背景**:v19.327/328 已標每檔核心/衛星;user 貼「核心持股 50~80% / 衛星持股 20~50%」策略表要求對照組合實際配置比例。
   - **算法(SSOT `services/health/asset_class.summarize_core_satellite_allocation`)**:各檔 label(核心/衛星/待定)× weight(投入金額 invest_twd)→ 加權算核心/衛星/待定佔比 → 對照目標(`CORE_TARGET_MIN/MAX_PCT` = 50/80)。燈號:待定 > 30% → ⚪(不可靠);核心 < 50% → 🔴(衛星過重);核心 > 80% → 🟡(過保守);50~80% → 🟢(穩健)。

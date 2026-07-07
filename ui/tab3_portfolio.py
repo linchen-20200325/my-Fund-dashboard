@@ -2362,39 +2362,8 @@ def render_portfolio_tab() -> None:
                             )
                 finally:
                     _prog_h.empty()
-                # v19.329:🧭 核心/衛星配置檢查(目標 核心 50~80%)— 依各檔投入金額加權。
-                # 分類走現成 SSOT(build_health_analysis_row 的「核心/衛星」欄);比例算 L2。
-                try:
-                    from services.health.report import build_health_analysis_row as _bh_cs
-                    from services.health.asset_class import (
-                        summarize_core_satellite_allocation as _summ_cs,
-                    )
-                    _cs_items = []
-                    for _rr in _health_results:
-                        if not _rr or not _rr.get("ok"):
-                            continue
-                        _hr = _bh_cs(_rr.get("_fund_raw") or {}, _rr.get("code", ""))
-                        _lbl = (_hr.get("核心/衛星") or "").split()
-                        _cs_items.append({
-                            "label": _lbl[-1] if _lbl else "待定",
-                            "weight": _rr.get("_principal_twd") or 0,
-                        })
-                    _csa = _summ_cs(_cs_items)
-                    st.markdown("#### 🧭 核心 / 衛星配置檢查（建議：核心 50~80%）")
-                    _ca1, _ca2, _ca3, _ca4 = st.columns(4)
-                    _ca1.metric("🟦 核心", f"{_csa['core_pct']:.0f}%", f"{_csa['n_core']} 檔")
-                    _ca2.metric("🟠 衛星", f"{_csa['satellite_pct']:.0f}%", f"{_csa['n_satellite']} 檔")
-                    _ca3.metric("⬜ 待定", f"{_csa['undetermined_pct']:.0f}%",
-                                f"{_csa['n_undetermined']} 檔")
-                    _ca4.metric("配置評估", _csa["status"])
-                    st.caption(
-                        f"{_csa['status']} {_csa['message']}"
-                        f"（依各檔投入金額加權，總計 {_csa['total_weight']:,.0f} TWD；"
-                        f"核心=穩健長線 / 衛星=主題追報酬 / 待定=分類不足）"
-                    )
-                except Exception as _e_csa:
-                    st.caption(f"⬜ 核心/衛星配置檢查失敗："
-                               f"{type(_e_csa).__name__}: {str(_e_csa)[:80]}")
+                # v19.330:🧭 核心/衛星配置檢查已下沉共用 _render_health_3tables(兩 tab 齊顯示),
+                # 不再於此 inline(避免重複 + 只在 Tab3 出現)。
                 _render_health_tbl(
                     [r for r in _health_results if r is not None]
                 )
