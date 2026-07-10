@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """app.py — 基金戰情室 v18.0(重構版)
 模組架構(v19.130):總經 → 單一基金 → 組合基金健診 → 組合配置 → 資料診斷 → 說明書
-零快取:每次操作皆即時抓取,確保資料絕對最新
+快取策略(v19.333 對齊實作,review F10):L1 repository 以 @_ttl_cache / @_daily_cache
+短 TTL 快取(infra/cache.py _CACHE_REGISTRY 集中註冊;失敗結果不入快取),
+UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述與實作不符,已更正
 v18.176:移除回測 Tab(user 只需汰弱留強判斷換基金,回測拖速度且 NAV 歷史抓不全)
 v19.130:tab 重排 + 改名 + 刪除「💼 配置模擬器」
 """

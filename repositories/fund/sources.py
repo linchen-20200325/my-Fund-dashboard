@@ -240,6 +240,17 @@ _ALLIANZ_NAV_ENDPOINT = "https://ifund.allianzgi.com.tw/WebNav.aspx"
 _ALLIANZ_NAV_API = "https://tw.allianzgi.com/api/sitecore/fund/GetFundNav"
 
 
+def _infer_year_for_mmdd(mo: int, da: int, today) -> int:
+    """「近30日」頁 MM/DD 條目補年份:MM/DD ≤ 今日 → 今年,否則 → 去年。
+
+    v19.333 review F5 抽出成純函式(可測)。`today` 必須是 **TW 時區**的
+    date(§4.5 慣例) — 用 UTC today 會在「TW 已跨日、UTC 未跨日」的 8 小時窗
+    把當日條目錯置到去年(≈365 天位移)。跨年語意本身正確:1 月讀到 12/28
+    → 去年 12/28(近30日窗內最近的一個 12/28)。
+    """
+    return today.year if (mo, da) <= (today.month, today.day) else today.year - 1
+
+
 def _src_allianzgi_nav(code: str) -> pd.Series:
     """
     安聯投信官網歷史淨值抓取。
@@ -377,17 +388,23 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
                                     pass
                         elif _re2.match(r"\d{2}/\d{2}$", dt_txt):
                             # MM/DD 格式（近30日頁面）補年份
+                            # v19.333 review F5:改用 TW 時區今日(§4.5 慣例)。
+                            # Streamlit Cloud 為 UTC,比 TW 慢最多 8 小時 — Allianz 頁
+                            # 若已列出「TW 已到、UTC 未到」的日期(如 TW 01/05 vs UTC 01/04),
+                            # 舊 date.today() 會把該筆推回去年同日(≈365 天錯置)。
                             import datetime as _dtt2
-                            _td2 = _dtt2.date.today()
+                            _td2 = _dtt2.datetime.now(
+                                _dtt2.timezone(_dtt2.timedelta(hours=8))).date()
                             try:
                                 _mo2 = int(dt_txt.split("/")[0])
                                 _da2 = int(dt_txt.split("/")[1])
-                                _yr2 = _td2.year if (_mo2, _da2) <= (_td2.month, _td2.day) else _td2.year - 1
+                                _yr2 = _infer_year_for_mmdd(_mo2, _da2, _td2)
                                 _v2  = safe_float(nav_txt)
                                 if _v2 and _v2 > 0:
                                     rows[pd.Timestamp(_dtt2.date(_yr2, _mo2, _da2))] = _v2
-                            except Exception:
-                                pass
+                            except Exception as _e_mmdd:
+                                # §1:不可靜默吞;含 2/29 推到非閏年等日期建構失敗
+                                print(f"[src_allianz] MM/DD 條目跳過 {dt_txt}: {_e_mmdd}")
             if len(rows) >= 5:
                 s = pd.Series(rows).sort_index()
                 print(f"[src_allianz] ✅ {code} {len(s)} 筆（{base_url[:40]}）")
@@ -1405,11 +1422,14 @@ def _src_yahoo_finance_nav(code: str) -> "pd.Series":
             return pd.Series(dtype=float)
         r = result[0]
         timestamps = r.get("timestamp", [])
-        closes = (r.get("indicators", {})
-                   .get("quote", [{}])[0]
-                   .get("close", []))
+        # v19.333 review F2:.get("quote", [{}]) 的 default 只在 key 缺失時生效;
+        # API 回 "quote": [](key 在但空 list)時 [0] 會 IndexError 被外層吞掉,
+        # 錯誤訊息誤導(實為無資料非解析失敗)。顯式判空。
+        _quote_list = r.get("indicators", {}).get("quote", [])
+        closes = (_quote_list[0] if _quote_list else {}).get("close", [])
         rows = {}
         for ts, cl in zip(timestamps, closes):
+            # cl 為 None(缺值)或 0 皆跳過 — NAV 必為正(§3.2 不變量),0 非合法淨值
             if ts and cl:
                 try:
                     rows[pd.Timestamp(ts, unit="s")] = float(cl)
@@ -1486,8 +1506,11 @@ def _src_alphavantage_nav(code: str) -> "pd.Series":
             for date_str, ohlc in ts.items():
                 try:
                     # 使用收盤價（adjusted close 更準確）
-                    v = float(ohlc.get("5. adjusted close", ohlc.get("4. close", 0)))
-                    if v > 0:
+                    # v19.333 review F4:值可為 JSON null → 舊 float(None) 拋 TypeError,
+                    # 不在 (ValueError, KeyError) 內 → 冒泡到外層丟「整段」序列。
+                    # 改 safe_float(SSOT 轉換):None/非數值 → 只跳過該筆。
+                    v = safe_float(ohlc.get("5. adjusted close", ohlc.get("4. close")))
+                    if v is not None and v > 0:
                         rows[pd.Timestamp(date_str)] = v
                 except (ValueError, KeyError):
                     pass

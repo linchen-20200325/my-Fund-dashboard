@@ -27,6 +27,8 @@ import streamlit as st
 from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 from infra.proxy import get_proxy_config
+from shared.converters import safe_float as _safe_float
+from shared.signal_thresholds import TRADING_DAYS_PER_YEAR as _TD_1Y
 from ui.helpers.session import (
     calc_data_health as _calc_data_health_pure,
     parse_indicator_date as _parse_indicator_date,  # noqa: F401 — re-export for tests
@@ -272,9 +274,12 @@ def render_data_guard_tab() -> None:
     _n_yellow = _all_emojis.count("🟡")
     _n_red = _all_emojis.count("🔴")
     _n_idle = _all_emojis.count("⬜")
+    # v19.333 review F8:原「完整率 N/4」只數 🟢 — 3🟢1🟡 與 3🟢1🔴 同顯 3/4
+    # 無法區分。🟡(部分資料)以 ½ 計入;0.5 為顯示語意權重,非業務門檻。
+    _d5_full_ratio = _n_green + 0.5 * _n_yellow
     st.caption(
         f"全 4 個 Tab|🟢 完整 {_n_green}　🟡 部分 {_n_yellow}　🔴 缺失 {_n_red}　⬜ 未觸發 {_n_idle}　"
-        f"完整率 {'/'.join([str(_n_green), str(4)])}"
+        f"完整率 {_d5_full_ratio:g}/4"
     )
     st.divider()
 
@@ -1077,13 +1082,16 @@ def render_data_guard_tab() -> None:
                     st.caption("ℹ️ 此基金為**累積型 / 不配息**：年化配息率與配息記錄欄位 N/A 為正常現象")
                 # Row 1: NAV / 配息率 / 1Y報酬 / 淨值筆數
                 _r1 = st.columns(4)
+                # v19.333 review F1:裸 float() 為 eager 求值,來源若混入非數值字串
+                # (如 "12.34 元")會 ValueError 炸掉整個 Tab5(逐檔迴圈無 try 包覆)。
+                # 改 _safe_float(SSOT):非數值 → None → 顯「資料不足」而非崩潰。
                 _d5_cell(_r1[0], "最新淨值 NAV",   _d5_nav,
-                         ok_cond=(_d5_nav is not None and float(_d5_nav or 0) > 0),
+                         ok_cond=((_safe_float(_d5_nav) or 0) > 0),
                          fmt=lambda v: f"{float(v):.4f}")
                 # 配息率：累積型 → 標 N/A 不配息 用佔位避免 cell empty
                 _d5_cell(_r1[1], "年化配息率",
                          _d5_adr if not _d5_is_accum else "N/A",
-                         ok_cond=(_d5_is_accum or (_d5_adr is not None and float(_d5_adr or 0) > 0)),
+                         ok_cond=(_d5_is_accum or (_safe_float(_d5_adr) or 0) > 0),
                          fmt=lambda v: f"{float(v):.2f}%")
                 # v18.55: 1Y含息報酬 fallback 鏈 — 救已快取 session_state（pre-v18.53）
                 # perf["1Y"] (wb01 / local_calc 注入) → metrics.ret_1y_total (本地計算原值)
@@ -1168,6 +1176,29 @@ def render_data_guard_tab() -> None:
                 _d5_cell(_r4[3], "基金規模",        _d5_scale or None,
                          ok_cond=bool(_d5_scale),
                          fmt=lambda v: str(v)[:18])
+                st.markdown("<div style='margin:4px 0'></div>", unsafe_allow_html=True)
+                # Row 5(v19.333 review F9):多年期報酬 calc_metrics 已算未列
+                # (ret_3y_ann / ret_5y_ann / ret_6m);TER 原僅 Section① 聚合計數。
+                # 歷史不足 → "N/A 不適用"(ℹ️)而非「缺失」(⚠️)— 新發行基金 3Y/5Y
+                # 本來就算不出(§4.6),與「該有而沒有」語意區分(review 面向一
+                # 亦點名「短序列靜默 None 未標示原因」)。252=_TD_1Y 交易日 SSOT。
+                _r5 = st.columns(4)
+                _d5_r3y = _d5_m.get("ret_3y_ann")
+                _d5_cell(_r5[0], "3Y年化報酬",
+                         _d5_r3y if _d5_r3y is not None
+                         else ("N/A" if _d5_slen < 3 * _TD_1Y else None))
+                _d5_r5y = _d5_m.get("ret_5y_ann")
+                _d5_cell(_r5[1], "5Y年化報酬",
+                         _d5_r5y if _d5_r5y is not None
+                         else ("N/A" if _d5_slen < 5 * _TD_1Y else None))
+                _d5_r6m = _d5_m.get("ret_6m")
+                _d5_cell(_r5[2], "6M報酬",
+                         _d5_r6m if _d5_r6m is not None
+                         else ("N/A" if _d5_slen < _TD_1Y // 2 else None))
+                # TER 取值鏡像 Section① _ter_n 的雙路徑(holdings.ter → 頂層 ter)
+                _d5_ter = ((_d5_mj.get("holdings") or {}).get("ter")
+                           or _d5_mj.get("ter"))
+                _d5_cell(_r5[3], "TER費用率",       _d5_ter or None)
 
                 st.markdown(
                     f"<span style='font-size:10px;color:{GRAY_55}'>"

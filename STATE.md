@@ -53,6 +53,21 @@
 
 ## 當前版本
 
+- **v19.334 Tab3 空組合歡迎卡縮小(user 2026-07-10 截圖指示「說明縮小,不需要這麼大」)**:
+  - `ui/tab3_portfolio.py` 空組合引導畫面:48px 大圖示+置中 20px 大標+28px padding 整屏卡
+    + 3 個 st.info 步驟框 → 收成**單張緊湊卡**(14px 標題行+12px 兩行說明,padding 10px);
+    三步驟指引(Tab2 搜尋加入/下方輸入載入/自動出現分析)併入卡內文字,資訊不減、高度約原 1/4。
+- **v19.333 第二份外部 review 查證後修復(user 2026-07-10 指派第二份建議書;12 條主張逐條查證:5 修/1 已修過/2 誤判/其餘部分屬實)**:
+  - **F2 `_src_yahoo_finance_nav`**:`.get("quote", [{}])[0]` 在 API 回 `"quote": []`(key 在但空)時 IndexError 被外層吞,錯誤訊息誤導 → 顯式判空;`if ts and cl` 的 0 跳過為 by-design(NAV>0 不變量 §3.2)加註。
+  - **F4 `_src_alphavantage_nav`**:`float(ohlc.get(...))` 遇 JSON null → TypeError 不在 `(ValueError, KeyError)` 內 → 冒泡丟**整段**序列 → 改 `safe_float`(SSOT),null 只跳該筆。測試:11 筆有效+1 null → 舊 len 0 / 新 len 11。
+  - **F5 Allianz MM/DD 年份**:review 主張「12 月資料年初錯置去年」為**誤判**(該語意本來正確),但查證挖出真 bug:`date.today()` 在 Streamlit Cloud 為 UTC,TW 已跨日、UTC 未跨日的 8 小時窗會把當日條目推回**去年同日**(≈365 天錯置)→ 改 TW 時區今日(§4.5),抽 `_infer_year_for_mmdd` 純函式可測;`except pass` 補 log(§1)。
+  - **F6 `infra/proxy.fetch_url` session 複用**:原每呼叫 new Session → 連線池零複用,跨國 RTT+TLS handshake 逐請求重付(單基金 fallback 鏈十幾請求)→ thread-local 單例 `_get_thread_session()`(同緒共池/異緒隔離;proxies/verify 逐請求傳入不影響降級直連)。`make_retry_session` API 不變;`test_proxy_infra.py` 加 autouse fixture 清 TLS 快取讓 patch 生效。
+  - **F1 tab5 Section ⑤ 裸 float() 防禦**:`float(_d5_nav or 0)`/`float(_d5_adr or 0)` eager 求值,逐檔迴圈無 try 包覆 → 一檔炸=整個 Tab5 炸;現行餵入為強型別(metrics/resolver 皆 float|None)故 review 稱的崩潰**打不到**,防禦性改 `_safe_float`(SSOT)。
+  - **F8 完整率語意**:原只數 🟢 → 3🟢1🟡 與 3🟢1🔴 同顯 3/4 → 🟡 以 ½ 計入(0.5 為顯示語意權重)。
+  - **F9 Section ⑤ 補 Row 5**:3Y/5Y 年化+6M 報酬(`calc_metrics` 已算未列)+TER 費用率(原僅 Section① 聚合計數);歷史不足顯 N/A(ℹ️)非「缺失」(⚠️),用 `TRADING_DAYS_PER_YEAR` SSOT 判 3Y=756/5Y=1260 門檻(§4.6 新發行基金語意)。review 稱 YTD「已算未列」誤判 — 根本沒算,不動。
+  - **F10 app.py docstring**:「零快取」與 `@_ttl_cache`/`@_daily_cache` 事實矛盾 → 更正為實際快取策略描述。
+  - **已修過確認**:F3 `_div_n` 複製貼上(v19.331 已修);**誤判確認**:F7 tab5 `_calc_data_health` 有測試 consumer 非純死碼(不刪);F11 組合健診「逐檔序列」stale — v18.219 起已 ThreadPoolExecutor(4) 平行。
+  - **回歸網**:`tests/test_review_fixes_v19_333.py` 18 test;全套件 2,402 passed / 0 failed。
 - **v19.332 review B 類監控盲區收斂(user 2026-07-10 核准「B+C+D 請繼續」,A 類大重構不動)**:
   - **B6 tab5 Section ⑤ 補 Row 4 診斷格**:最大回撤 / Sortino / Calmar / 基金規模。前三者 `calc_metrics` 一直有算(fund_service.py:599/404/433)只是診斷沒列格;規模為 MoneyDJ `fund_scale` 基本資料字串(原樣顯示前 18 字)。缺值顯 N/A 紅格,不造假。
   - **B7 持股物件統一取值路徑**:新 `_get_holdings(fd)` helper(頂層 `holdings` 優先 → `moneydj_raw.holdings` 補位,對齊 dividends 雙路徑既有精神)。原 Section ⓪(只看頂層)/①(pf 看 moneydj_raw、cf 看頂層)/⑤(只看 moneydj_raw)三處判定不一致 → 同檔基金各 section 計數可能不同(統計偏差),3 呼叫點全收斂。

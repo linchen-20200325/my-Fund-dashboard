@@ -9,7 +9,19 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from infra import proxy as ip
+
+
+@pytest.fixture(autouse=True)
+def _fresh_thread_session():
+    """v19.333 F6:fetch_url 改用 thread-local session 複用後,
+    patch make_retry_session 需先清本執行緒快取才會生效;
+    測後再清,避免 _FakeSess 殘留污染後續測試。"""
+    ip._TLS_HTTP.__dict__.clear()
+    yield
+    ip._TLS_HTTP.__dict__.clear()
 
 
 # ════════════════════════════════════════════════════════════
