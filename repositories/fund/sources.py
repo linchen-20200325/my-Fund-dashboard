@@ -1869,8 +1869,14 @@ def _src_jpmorgan_nav(code: str) -> "pd.Series":
             with _ur2.urlopen(req_j, timeout=10) as resp_j:
                 d_j = _j2.loads(resp_j.read())
             # 嘗試直接取 NAV 序列
-            nav_list = (d_j.get("navHistory") or d_j.get("priceHistory") or
-                        d_j.get("data") or (d_j if isinstance(d_j, list) else []))
+            # v19.336 review M6:d_j 可能是 list — 原寫法第一個 d_j.get() 先炸
+            # AttributeError,尾端 isinstance(d_j, list) 分支永遠執行不到(dead code),
+            # list 型回應被外層 except 靜默丟棄(誤判為該 URL 失敗)。先判型再取。
+            if isinstance(d_j, dict):
+                nav_list = (d_j.get("navHistory") or d_j.get("priceHistory") or
+                            d_j.get("data") or [])
+            else:
+                nav_list = d_j if isinstance(d_j, list) else []
             for item in (nav_list or []):
                 if isinstance(item, dict):
                     _d = str(item.get("date") or item.get("Date") or "")[:10]
@@ -1880,8 +1886,8 @@ def _src_jpmorgan_nav(code: str) -> "pd.Series":
                             rows[pd.Timestamp(_d)] = _v
                         except Exception:
                             pass
-            # 嘗試取 ISIN
-            if not _isin:
+            # 嘗試取 ISIN(v19.336 M6:同樣先判 dict,list 型回應無 ISIN 可取)
+            if not _isin and isinstance(d_j, dict):
                 _isin = (d_j.get("isin") or d_j.get("ISIN") or
                          (d_j.get("fund") or {}).get("isin") or "")
                 if _isin:

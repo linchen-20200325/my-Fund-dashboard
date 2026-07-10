@@ -53,6 +53,27 @@
 
 ## 當前版本
 
+- **v19.336 第三份外部 review 查證後修復(9 條新主張:6 修 / 1 駁回 / 2 低 ROI 不動)**:
+  - **M6 `_src_jpmorgan_nav`**:d_j 為 list 時第一個 `.get()` 先炸 AttributeError,尾端
+    isinstance list 分支因短路**永遠執行不到**(dead code)→ 先判型再取;ISIN 取得同守衛。
+  - **M7 `search_fundclear`**:裸 `float()` 在單筆 nav="N/A" 時 ValueError **中斷整批**
+    (外層 except 包整個迴圈)→ `safe_float` 逐筆容錯,測試:好/壞/好 3 筆 → 舊 1 筆/新 3 筆。
+  - **M3 registry 子資料真新鮮度**:前十大持股/產業配置/TER/績效/風險指標 5 條目原
+    latest_date 寫死「本月/年度」+硬編 🟢(過期永不亮紅)→ holdings 走 MoneyDJ `data_date`
+    (YYYY/MM)真判 monthly、績效/風險走 provenance `fetched_at` 真判 nav(7/14 天);
+    無日期時保留原「已取得」行為(§1 不造日期)。
+  - **M2 診斷盲點補登記**:(a) `總經_FX_USDTWD` 進 registry 總表(走與 Tab5 標頭同一
+    L2 cached 服務,失敗顯 🔴 非靜默缺席);(b) `_進階風險`(maxDD/Sortino/Calmar)
+    進 Section② 總表(Section⑤ 逐檔卡 v19.332 已有,總表原缺),NAV 最新日真判。
+    (c) AAII/穩定幣註冊 → 列待核准(需跨 3 檔 stash 管線,併入「fetcher 自我登記」架構案)。
+  - **M9 tab2 風險卡去重**:partial 視圖 vs complete 視圖兩套同款 flex-div 卡 →
+    抽 `_risk_1y_rows_html()` 共用 helper,label_style 保留兩處原標籤差異(行為 0 改)。
+  - **駁回/不動(證據)**:M1 tab2 硬索引 KeyError — `mk_fund_signal`/`compute_4d_health`
+    皆單一 return 鍵恆全,無缺鍵分支;M4 nav 門檻 10/50/100 不一致 — 屬實但
+    `fetch_nav_history_long` **production 0 caller**(v19.314 危機回測退役後懸空),
+    §-1 WONTFIX;M5 cache 命中重跑 finalize — docstring 自承 ms 級;M8 Sheets sleep —
+    按鈕路徑非 render 熱路徑,auto-load 已有 sheet-id 守衛。
+  - **回歸網**:`tests/test_review_fixes_v19_336.py` 9 test;全套件 2,414 passed / 0 failed。
 - **v19.335 雲端倒站 hotfix(2026-07-10 11:50 UTC 平台事故)**:
   - **事故**:Streamlit Cloud 平台重啟潮強制 Python 3.14 + **pyarrow 25.0.0 當日發布** →
     本 app 死釘的 `streamlit==1.45.1`(早於 py3.14 支援,啟動即 import pyarrow)
