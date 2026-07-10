@@ -53,6 +53,15 @@
 
 ## 當前版本
 
+- **v19.338 M9 回歸 hotfix:Tab2 `_sh1` NameError(merge 前 CI slow lane 抓到)**:
+  v19.336 M9 抽 `_risk_1y_rows_html` 時,`_sh1`(Sharpe 1Y)的定義隨 inline 區塊移入 helper,
+  但下游「Sharpe 持久性說明(孫慶龍框架)」仍引用 → NameError(`except (ValueError,
+  TypeError)` 接不住)→ Tab2 完整視圖整段炸。補回
+  `_sh1 = (risk_tbl.get("一年",{}) or {}).get("Sharpe","—")`。
+  驗證:2 個原紅 AppTest(`test_tab2_loaded_fund_with_macro_*` / `test_tab2_nav_source_banner_*`)
+  轉綠;全套件 2,422 passed。教訓:slow AppTest 不在本機預設 suite(`-m "not slow"`),
+  UI 級重構(抽 helper / 搬區塊)後應主動跑 slow lane 再收工。
+
 - **v19.337 第四份外部 review 查證後修復(4 條新主張:3 修 / 1 誤判;另 ≥4 條已修過/過時)**:
   - **F NAV/配息/績效/風險 4 fetcher 零快取(本輪最高價值)**:`fetch_nav`/`fetch_div`/
     `fetch_performance_wb01`/`fetch_risk_metrics` 每次 render 逐 URL 序列即時抓(每支 25s
