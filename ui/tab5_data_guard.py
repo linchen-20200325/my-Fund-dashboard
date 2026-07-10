@@ -359,7 +359,10 @@ def render_data_guard_tab() -> None:
     _nav_n   = sum(1 for f in _src_pf_loaded if f.get("series") is not None) \
                + (1 if _src_cf and (_src_cf.get("series") is not None) else 0)
     _div_n   = sum(1 for f in _src_pf_loaded if (f.get("dividends") or (f.get("moneydj_raw") or {}).get("dividends"))) \
-               + (1 if _src_cf and (_src_cf.get("dividends") or _src_cf.get("dividends")) else 0)
+               + (1 if _src_cf and (_src_cf.get("dividends")
+                                    or (_src_cf.get("moneydj_raw") or {}).get("dividends")) else 0)
+    # ^ v19.331 review 修正:原第二項 `or _src_cf.get("dividends")` 對同 key or 自身
+    #   (筆誤 dead fallback);對齊上一行 pf_loaded 的雙路徑語意(頂層 or moneydj_raw)。
     _hold_n  = sum(1 for f in _src_pf_loaded
                    if ((f.get("moneydj_raw") or {}).get("holdings") or {}).get("top_holdings")) \
                + (1 if _src_cf and (_src_cf.get("holdings") or {}).get("top_holdings") else 0)

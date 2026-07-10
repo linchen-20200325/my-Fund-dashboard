@@ -132,6 +132,33 @@ def _detect_inflection(indicators):
     return {"inflection":infl,"signals":signals,"infl_score":score}
 
 
+def _fred_iso(sid, key, n=250):
+    """v19.331 review:per-series 隔離(把 v19.171 五條並行 pool 的 per-future 容錯
+    慣例擴及本檔其餘 16 處 sequential `_fred()` 呼叫)。
+
+    單一 series 例外(pandera SchemaError / 上游 IO error)原本會炸掉整個
+    fetch_all_indicators → 該指標**之後的所有指標格全滅**(UI 大面積空白)。
+    改為失敗回空 DataFrame + stderr log — 只犧牲該格(下游各區塊已有
+    `len(df)>=N` 防線),repository 層 fail-loud 驗證不動(§1 分層:來源炸、編排格局部降級)。
+    """
+    try:
+        return _fred(sid, key, n)
+    except Exception as _e_iso:
+        print(f"[macro_service/fetch_all] FRED {sid} 失敗,以空 DataFrame 替代: "
+              f"{type(_e_iso).__name__}: {_e_iso}")
+        return pd.DataFrame()
+
+
+def _yf_iso(ticker, period="2y"):
+    """v19.331 review:同 _fred_iso,Yahoo 收盤序列 per-ticker 隔離(VIX / 銅博士)。"""
+    try:
+        return _yf_s(ticker, period)
+    except Exception as _e_iso:
+        print(f"[macro_service/fetch_all] Yahoo {ticker} 失敗,以空 Series 替代: "
+              f"{type(_e_iso).__name__}: {_e_iso}")
+        return pd.Series(dtype=float)
+
+
 def fetch_all_indicators(fred_api_key):
     R = {}
 
@@ -152,6 +179,9 @@ def fetch_all_indicators(fred_api_key):
             (FRED_PERMIT, 144), (FRED_PAYEMS, 144),
             # v19.67 P1-F2：liquidity_engine.py 用
             (FRED_DXY, 800), (FRED_JPY_USD, 400), (FRED_CHF_USD, 400),
+            # v19.331 review:淨流動性路徑補進 batch(原 sequential 冷啟動 2 次串行往返;
+            # n 與下方呼叫點一致 → 同 cache key 直接命中)
+            (FRED_RRP, 2000), (FRED_TGA, 312),
         ], fred_api_key, max_workers=8)
 
     # ── PMI（v2.1 改用共用函式 fetch_ism_pmi 6 段備援 + 90 天時效檢查）──
@@ -467,7 +497,7 @@ def fetch_all_indicators(fred_api_key):
     #   SSOT(與顯示卡同源,user 要求資料 SSOT)。
     #   §1 降級:淨流動性 series 不足 53 週(TGA/RRP 史太短/缺)→ fallback 原始 WALCL YoY,
     #   指標永不消失。n=312 (6y weekly) + tail(260) = Phase 3-B 燈號回測需 ≥60 樣本。
-    df = _fred(FRED_FED_BS, fred_api_key, 312)
+    df = _fred_iso(FRED_FED_BS, fred_api_key, 312)
     _fedbs_name = "Fed 資產負債表 (YoY)"
     _fedbs_desc = "擴表=注入流動性→利多 | 縮表=抽走流動性→壓力"
     _s_lvl = None
@@ -502,7 +532,7 @@ def fetch_all_indicators(fred_api_key):
 
     # ── VIX ──────────────────────────────────────────────────────────
     # period=5y + tail(260) 確保 Phase 4 lag-corr 與 Phase 3-B 燈號回測樣本足
-    s_vix = _yf_s("^VIX","5y")
+    s_vix = _yf_iso("^VIX","5y")
     if len(s_vix) >= 6:
         v = round(float(s_vix.iloc[-1]),2); p = round(float(s_vix.iloc[-6]),2)
         s_m = s_vix.resample("W").last().tail(260)
@@ -515,23 +545,29 @@ def fetch_all_indicators(fred_api_key):
             weight=1, series=s_m)
 
     # ── CPI ──────────────────────────────────────────────────────────
-    df = _fred(FRED_CPI, fred_api_key, 144)
+    df = _fred_iso(FRED_CPI, fred_api_key, 144)
     if len(df) >= 14:
         s = df.set_index("date")["value"]
         yoy = (s / s.shift(12) - 1) * 100
         s24 = yoy.dropna().tail(120)
-        v = float(s24.iloc[-1]); p = float(s24.iloc[-2])
-        t = _trend(s24.tolist()[-6:])
-        R["CPI"] = dict(name="CPI 通膨率 (YoY)", value=round(v,2), prev=round(p,2),
-            unit="%", type="落後", date=str(df.iloc[-1]["date"])[:7],
-            desc="目標2% | 高位回落=利多拐點", trend=t,
-            signal="🟢" if 1<v<2.5 else ("🔴" if v>4 else "🟡"),
-            color=MATERIAL_GREEN if 1<v<2.5 else (MATERIAL_RED if v>4 else MATERIAL_ORANGE),
-            score=1 if 1<v<2.5 else (-1 if v>4 else 0),
-            weight=0.5, series=s24)
+        # v19.331 review 修正:守衛檢查的是**原始 df** 長度,但 shift(12)+dropna 後
+        # s24 可能只剩 <2 筆(序列短且含缺漏)→ 原 `s24.iloc[-2]` 直接 IndexError
+        # 且中斷其後所有指標。對齊同檔 PPI(len>=1/len>=2 雙守衛)既有模式。
+        if len(s24) >= 1:
+            v = float(s24.iloc[-1])
+            p = float(s24.iloc[-2]) if len(s24) >= 2 else None
+            t = _trend(s24.tolist()[-6:])
+            R["CPI"] = dict(name="CPI 通膨率 (YoY)", value=round(v,2),
+                prev=round(p,2) if p is not None else None,
+                unit="%", type="落後", date=str(df.iloc[-1]["date"])[:7],
+                desc="目標2% | 高位回落=利多拐點", trend=t,
+                signal="🟢" if 1<v<2.5 else ("🔴" if v>4 else "🟡"),
+                color=MATERIAL_GREEN if 1<v<2.5 else (MATERIAL_RED if v>4 else MATERIAL_ORANGE),
+                score=1 if 1<v<2.5 else (-1 if v>4 else 0),
+                weight=0.5, series=s24)
 
     # ── Fed Rate ──────────────────────────────────────────────────────
-    df = _fred(FRED_FED_FUNDS, fred_api_key, 144)
+    df = _fred_iso(FRED_FED_FUNDS, fred_api_key, 144)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(120)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -544,7 +580,7 @@ def fetch_all_indicators(fred_api_key):
             weight=0.5, series=s)
 
     # ── 失業率 ───────────────────────────────────────────────────────
-    df = _fred(FRED_UNRATE, fred_api_key, 144)
+    df = _fred_iso(FRED_UNRATE, fred_api_key, 144)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(120)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -557,7 +593,7 @@ def fetch_all_indicators(fred_api_key):
             weight=0.5, series=s)
 
     # ── PPI ──────────────────────────────────────────────────────────
-    df = _fred(FRED_PPI, fred_api_key, 144)
+    df = _fred_iso(FRED_PPI, fred_api_key, 144)
     if len(df) >= 13:
         s = df.set_index("date")["value"]
         yoy = (s / s.shift(12) - 1) * 100
@@ -575,7 +611,7 @@ def fetch_all_indicators(fred_api_key):
             weight=0.5, series=s24)
 
     # ── 銅博士 ────────────────────────────────────────────────────────
-    s_cu = _yf_s("HG=F","5y")
+    s_cu = _yf_iso("HG=F","5y")
     if len(s_cu) >= 22:
         now = float(s_cu.iloc[-1]); prev = float(s_cu.iloc[-22])
         chg = round((now-prev)/prev*100, 2) if prev else 0
@@ -590,7 +626,7 @@ def fetch_all_indicators(fred_api_key):
             weight=0.5, series=monthly.dropna().tail(60))
 
     # ── 消費者信心 ────────────────────────────────────────────────────
-    df = _fred(FRED_UMCSENT, fred_api_key, 144)
+    df = _fred_iso(FRED_UMCSENT, fred_api_key, 144)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(120)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -605,7 +641,7 @@ def fetch_all_indicators(fred_api_key):
 
     # ── 初領失業金 ────────────────────────────────────────────────────
     # n=312 (6y weekly) + tail(260) = Phase 3-B 燈號回測 ≥60 樣本
-    df = _fred(FRED_ICSA, fred_api_key, 312)
+    df = _fred_iso(FRED_ICSA, fred_api_key, 312)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(260)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -620,7 +656,7 @@ def fetch_all_indicators(fred_api_key):
             weight=0.5, series=s/10000)
 
     # ── 新屋銷售 ──────────────────────────────────────────────────────
-    df = _fred(FRED_HSN1F, fred_api_key, 144)
+    df = _fred_iso(FRED_HSN1F, fred_api_key, 144)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(120)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -632,7 +668,7 @@ def fetch_all_indicators(fred_api_key):
             weight=0.5, series=s)
 
     # ── 薩姆規則（Sahm Rule Recession Indicator）──────────────────────
-    df = _fred(FRED_SAHM, fred_api_key, 144)
+    df = _fred_iso(FRED_SAHM, fred_api_key, 144)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(120)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -647,7 +683,7 @@ def fetch_all_indicators(fred_api_key):
 
     # ── SLOOS 銀行放貸標準（Senior Loan Officer Survey）──────────────
     # 季頻 (quarterly)：n=80 (20y)、tail(60) (15y) → Phase 3-B ≥60 樣本
-    df = _fred(FRED_DRTSCILM, fred_api_key, 80)
+    df = _fred_iso(FRED_DRTSCILM, fred_api_key, 80)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(60)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -672,7 +708,7 @@ def fetch_all_indicators(fred_api_key):
     #    CFNAI 月頻活躍發布，匯總 85 個月度經濟指標，z-score 標準化後
     #    平均值=0，標準差=1。三月均值 < -0.7 強烈衰退訊號。
     # 注意：CFNAI 數值意涵與 USSLIND 不同，閾值與描述已對應調整。
-    df = _fred(FRED_CFNAI, fred_api_key, 144)
+    df = _fred_iso(FRED_CFNAI, fred_api_key, 144)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(120)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -691,7 +727,7 @@ def fetch_all_indicators(fred_api_key):
 
     # ── CONT_CLAIMS 持續失業金（CCSA，週頻）──────────────────────
     # UNEMPLOYMENT 月度延遲時的高頻替代；與 ICSA(初領)互補：CCSA=尚未找到工作的人數
-    df = _fred(FRED_CCSA, fred_api_key, 312)
+    df = _fred_iso(FRED_CCSA, fred_api_key, 312)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(260)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -711,7 +747,7 @@ def fetch_all_indicators(fred_api_key):
 
     # ── M2_WEEKLY 週頻 M2（WM2NS）─────────────────────────────────
     # M2 月度延遲時的補位；YoY 計算用 52 週前的數據對比
-    df = _fred(FRED_M2_WEEKLY, fred_api_key, 520)
+    df = _fred_iso(FRED_M2_WEEKLY, fred_api_key, 520)
     if len(df) >= 53:
         s_full = df.set_index("date")["value"]
         yoy = (s_full / s_full.shift(52) - 1) * 100
@@ -729,7 +765,7 @@ def fetch_all_indicators(fred_api_key):
 
     # ── INFL_EXP_5Y 5Y 通膨預期（T5YIE，日頻）─────────────────────
     # CPI 月度延遲時的高頻補位；債市每日交易計算的 5 年期 breakeven
-    df = _fred(FRED_T5YIE, fred_api_key, 2500)
+    df = _fred_iso(FRED_T5YIE, fred_api_key, 2500)
     if len(df) >= 22:
         s = df.set_index("date")["value"].tail(2500)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-22]["value"])
@@ -744,7 +780,7 @@ def fetch_all_indicators(fred_api_key):
 
     # ── PERMIT_HOUSING 建照核發（PERMIT）──────────────────────────
     # NEW_HOME（新屋銷售）的領先指標：建商先拿建照才開工再銷售，PERMIT 早 1-2 個月反映
-    df = _fred(FRED_PERMIT, fred_api_key, 144)
+    df = _fred_iso(FRED_PERMIT, fred_api_key, 144)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(120)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
@@ -760,7 +796,7 @@ def fetch_all_indicators(fred_api_key):
     # ── NFP 非農新增就業 v19.17 ─────────────────────────────────────
     # PAYEMS 是「就業人口總數」，市場關注的「非農新增」是月變動量（千人）
     # direction=below：高增量 = 景氣強 = score 偏負（low risk）
-    df = _fred(FRED_PAYEMS, fred_api_key, 144)
+    df = _fred_iso(FRED_PAYEMS, fred_api_key, 144)
     if len(df) >= 3:
         s_full = df.set_index("date")["value"]
         # 月變動（單位：千人，PAYEMS 原始單位就是千人）

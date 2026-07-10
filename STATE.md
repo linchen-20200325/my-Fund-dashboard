@@ -53,6 +53,13 @@
 
 ## 當前版本
 
+- **v19.331 外部 code review P0/P1 修正(user 2026-07-10 指派 dashboard_code_review.md)**:
+  - **P1 tab2 partial 視圖 float 崩潰**:`ui/tab2_single_fund.py` MoneyDJ 失敗時 `nav_latest` 常為 "—"/"N/A"/"查無資料"(非 None),原裸 float() 轉型 ValueError 炸整頁 → 改 SSOT `shared/converters.safe_float`(非數值顯示 N/A);同段買賣點 `m.get("nav")`/`near_threshold_pct` 一併防護(數值輸入行為不變)。**review Bug 1(健康卡 rm NameError)已在 main 先修**(現行 791 行已定義 `_rm`),本次無需動。
+  - **P1 us_indicators per-series 隔離**:單一 FRED series 例外(pandera SchemaError / IO)原本炸掉 `fetch_all_indicators` → 該指標之後全滅(UI 大面積空白)。新 `_fred_iso`/`_yf_iso` 把 v19.171 五條並行 pool 的 per-future 容錯慣例擴及其餘 16 處 sequential `_fred()` + 2 處 `_yf_s()`(VIX/銅)— 失敗回空 + stderr log,只犧牲該格;repository 層 fail-loud 驗證不動(§1 分層:來源炸、編排局部降級)。
+  - **P1 CPI `.iloc[-2]` IndexError**:守衛檢查原始 df 長度(≥14)但 shift(12)+dropna 後 s24 可能 <2 筆 → 補 `len(s24)>=1/2` 雙守衛(對齊同檔 PPI 既有模式),prev 缺時回 None 不造假。
+  - **perf RRP/TGA 補進 batch**:`fetch_fred_batch` 清單加 (FRED_RRP,2000)+(FRED_TGA,312)(n 與呼叫點一致 → 同 cache key 命中),淨流動性路徑冷啟動省 2 次串行往返。
+  - **次要 tab5 `_div_n` dead fallback**:`_src_cf.get("dividends") or _src_cf.get("dividends")` 對同 key or 自身(筆誤)→ 對齊上一行 pf_loaded 雙路徑語意(頂層 or moneydj_raw)。
+  - **回歸網**:`tests/test_review_fixes_v19_331.py` 9 test(單 series 炸不連坐/CPI 病態序列不炸/正常路徑不誤傷/RRP+TGA 進 batch/占位字串防護/源碼守衛);schema gate + tab2/tab5/macro 相關 161 test 全綠。
 - **v19.330 修「核心/衛星配置檢查看不到」— 下沉共用 render,兩 tab 齊顯示(user 回報,2026-07-07)**:
   - **根因**:v19.329 只把配置檢查 inline 在**組合配置 Tab3 持倉健診**(需先載入組合);user 在**基金組合健診 Tab**看 → 沒加到 → 看不到。
   - **修法**:配置檢查下沉共用 `ui/tab_fund_grp_health._render_health_3tables`(基金健檢 Tab + Tab3 持倉健診皆呼此)→ 兩 tab 齊顯示。順手把 `_health_rows`(核心/衛星 label 來源)提前建一次,供「配置檢查」+ ① 表共用不重算(原 ① 表段內另建一份,現移除)。Tab3 inline 版移除(改由共用 render 出)。
