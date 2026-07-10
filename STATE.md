@@ -53,6 +53,38 @@
 
 ## 當前版本
 
+- **v19.338 M9 回歸 hotfix:Tab2 `_sh1` NameError(merge 前 CI slow lane 抓到)**:
+  v19.336 M9 抽 `_risk_1y_rows_html` 時,`_sh1`(Sharpe 1Y)的定義隨 inline 區塊移入 helper,
+  但下游「Sharpe 持久性說明(孫慶龍框架)」仍引用 → NameError(`except (ValueError,
+  TypeError)` 接不住)→ Tab2 完整視圖整段炸。補回
+  `_sh1 = (risk_tbl.get("一年",{}) or {}).get("Sharpe","—")`。
+  驗證:2 個原紅 AppTest(`test_tab2_loaded_fund_with_macro_*` / `test_tab2_nav_source_banner_*`)
+  轉綠;全套件 2,422 passed。教訓:slow AppTest 不在本機預設 suite(`-m "not slow"`),
+  UI 級重構(抽 helper / 搬區塊)後應主動跑 slow lane 再收工。
+
+- **v19.337 第四份外部 review 查證後修復(4 條新主張:3 修 / 1 誤判;另 ≥4 條已修過/過時)**:
+  - **F NAV/配息/績效/風險 4 fetcher 零快取(本輪最高價值)**:`fetch_nav`/`fetch_div`/
+    `fetch_performance_wb01`/`fetch_risk_metrics` 每次 render 逐 URL 序列即時抓(每支 25s
+    timeout)→ 補 `@register_cache + @_daily_cache`(同 R20 持股先例):NAV T+1、績效/風險/
+    配息月更,日內序列不變;R23 cache_if 失敗結果(空 Series/list/dict)不入 cache 無失敗
+    黑洞;「全域刷新」經 registry 可清。不選 `_ttl_cache` 因其無條件快取失敗結果
+    (§2.4 TTL 對照 trade-off 記於 fetch_nav docstring)。
+  - **D cnyes `"data": null`**:key 存在但值為 null 時 `.get("data", {})` 回 None(default
+    不生效)→ `None.get()` AttributeError 被寬 except 吞 → fallback 鍵(items)永遠讀不到,
+    失敗誤判為無資料。`_cnyes_resolve_code` + `fetch_nav_cnyes` 兩處先判型再取,
+    data=null 時 items 可達(測試驗證舊行為丟資料/新行為取回)。
+  - **E registry 淨值 source 硬寫 MoneyDJ**:實際可能由 Cnyes 等供應(F-PROV-1 attrs 已帶
+    真實來源)→ 基金_/組合_淨值兩處改讀 `s.attrs["source"]`,無 attrs fallback 舊字樣。
+  - **誤判(證據)**:4-B-4「真值判斷丟棄合法 0.0 NAV」— §3.1 `nav > 0` 鐵則,NAV=0 非合法
+    值(=缺值語意),`0.01<v<100000` 為 §3.2 範圍檢查 by-design;改 `is not None` 反使 0.0
+    假值入序列(§1 造假)。**已修過/過時**:tab5 `float()` 崩潰(v19.333 `_safe_float`)/
+    yahoo `quote[0]` IndexError(v19.333)/「零快取」話術(v19.333 docstring 已改)/
+    持股・績效靜態綠燈無真日期(v19.336 M3 真新鮮度)。
+  - **回歸網**:`tests/test_review_fixes_v19_337.py` 8 test(daily_cache 失敗不入快取機制 /
+    data=null fallback 可達 / attrs source);全套件 **2,422 passed / 0 failed**。
+  - **大項待核准(§-1 不擅動)**:逐基金 ThreadPoolExecutor 平行化、fallback 分級 timeout、
+    IndicatorMeta 三軸 SSOT、異常分數引擎、NAV/持股/配息多來源逐源診斷 — 詳 PR 描述。
+
 - **v19.336 第三份外部 review 查證後修復(9 條新主張:6 修 / 1 駁回 / 2 低 ROI 不動)**:
   - **M6 `_src_jpmorgan_nav`**:d_j 為 list 時第一個 `.get()` 先炸 AttributeError,尾端
     isinstance list 分支因短路**永遠執行不到**(dead code)→ 先判型再取;ISIN 取得同守衛。

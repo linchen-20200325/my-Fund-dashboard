@@ -290,9 +290,12 @@ def _update_data_registry():
             except Exception:
                 pass  # smoke-allow-pass
         icon, flabel, fcolor = _freshness(latest_date, "nav")
+        # v19.337 review E:source 原硬寫 "MoneyDJ" — 實際可能由 cnyes/FundClear 等
+        # 供應。F-PROV-1 起 series.attrs 帶真實來源,優先讀;無 attrs 保留舊字樣。
+        _nav_src = (getattr(s, "attrs", None) or {}).get("source") or "MoneyDJ"
         reg[f"基金_{fn}_淨值"] = {
             "label":       f"{fn} 淨值",
-            "source":      "MoneyDJ",
+            "source":      _nav_src,
             "latest_date": latest_date,
             "count":       count,
             "series":      sorted_s,
@@ -321,9 +324,11 @@ def _update_data_registry():
             except Exception:
                 pass  # smoke-allow-pass
         icon, flabel, fcolor = _freshness(latest_date, "nav")
+        # v19.337 review E:同上 — 讀 series.attrs 真實來源,fallback MoneyDJ
+        _nav_src = (getattr(s, "attrs", None) or {}).get("source") or "MoneyDJ"
         reg[f"組合_{fn}_淨值"] = {
             "label":       f"{fn} 淨值",
-            "source":      "MoneyDJ",
+            "source":      _nav_src,
             "latest_date": latest_date,
             "count":       count,
             "series":      sorted_s,

@@ -529,8 +529,13 @@ def _cnyes_resolve_code(moneydj_code: str) -> list:
             r = requests.get(url, headers=_hdrs, timeout=10, proxies=_proxies(), verify=_ssl_verify())
             if r.status_code == 200:
                 data = r.json()
-                items = (data.get("data", {}).get("list")
-                         or data.get("data")
+                # v19.337 review D:API 回 "data": null 時 .get("data", {}) 回 None
+                # (key 在,default 不生效)→ None.get() AttributeError 被寬 except 吞,
+                # 失敗被誤判為無資料。先判型再取。
+                _d_raw = data.get("data")
+                _d_dict = _d_raw if isinstance(_d_raw, dict) else {}
+                items = (_d_dict.get("list")
+                         or (_d_raw if isinstance(_d_raw, list) else None)
                          or data.get("items")
                          or [])
                 if isinstance(items, list):
@@ -597,8 +602,11 @@ def fetch_nav_cnyes(code: str) -> pd.Series:
             if r.status_code != 200:
                 continue
             data = r.json()
-            navs = (data.get("data", {}).get("nav")
-                    or data.get("data", {}).get("navs")
+            # v19.337 review D:同上 — "data": null → None.get() AttributeError;先判型
+            _d_raw = data.get("data")
+            _d_dict = _d_raw if isinstance(_d_raw, dict) else {}
+            navs = (_d_dict.get("nav")
+                    or _d_dict.get("navs")
                     or data.get("items")
                     or [])
             if not navs and isinstance(data, list):
