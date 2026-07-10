@@ -95,6 +95,21 @@ def _resolve_key(key: str) -> dict:
             "env_preview": _mask_key(env_val)}
 
 
+def _get_holdings(fd: dict) -> dict:
+    """持股物件統一取值路徑(B7 v19.332,review 監控盲區)。
+
+    原三處判定路徑不一致(Section ⓪ 只看頂層 `holdings`、Section ① pf 看
+    `moneydj_raw.holdings` / cf 看頂層、Section ⑤ 只看 moneydj_raw)→ 同一檔
+    基金在不同 section 計數可能不同(統計偏差)。統一語意:頂層優先、
+    moneydj_raw 補位(對齊 dividends 既有雙路徑 fallback 精神)。
+    """
+    if not fd:
+        return {}
+    return (fd.get("holdings")
+            or (fd.get("moneydj_raw") or {}).get("holdings")
+            or {})
+
+
 def render_data_guard_tab() -> None:
     """渲染資料診斷 Tab — 全域 data_registry / API 延遲 / Phase 4-3B 狀態 /
     NAS Proxy / API Keys / 基金逐筆 / FRED next_release / 資料異常清單。
@@ -142,7 +157,7 @@ def render_data_guard_tab() -> None:
     _cf_have_nav  = bool(_src_cf and _src_cf.get("series") is not None)
     _cf_have_meta = bool(_src_cf and (_src_cf.get("fund_name") or _src_cf.get("name")))
     _cf_have_div  = bool(_src_cf and (_src_cf.get("dividends") or (_src_cf.get("moneydj_raw") or {}).get("dividends")))
-    _cf_have_holdings = bool(_src_cf and ((_src_cf.get("holdings") or {}).get("top_holdings")))
+    _cf_have_holdings = bool(_src_cf and _get_holdings(_src_cf).get("top_holdings"))  # B7 v19.332 統一路徑
     _single_have = sum([_cf_have_nav, _cf_have_meta, _cf_have_div, _cf_have_holdings])
     _single_total = 4
 
@@ -364,8 +379,8 @@ def render_data_guard_tab() -> None:
     # ^ v19.331 review 修正:原第二項 `or _src_cf.get("dividends")` 對同 key or 自身
     #   (筆誤 dead fallback);對齊上一行 pf_loaded 的雙路徑語意(頂層 or moneydj_raw)。
     _hold_n  = sum(1 for f in _src_pf_loaded
-                   if ((f.get("moneydj_raw") or {}).get("holdings") or {}).get("top_holdings")) \
-               + (1 if _src_cf and (_src_cf.get("holdings") or {}).get("top_holdings") else 0)
+                   if _get_holdings(f).get("top_holdings")) \
+               + (1 if _src_cf and _get_holdings(_src_cf).get("top_holdings") else 0)  # B7 v19.332 統一路徑
     _ter_n   = sum(1 for f in _src_pf_loaded
                    if ((f.get("moneydj_raw") or {}).get("holdings") or {}).get("ter")
                    or (f.get("moneydj_raw") or {}).get("ter")) \
@@ -1030,7 +1045,7 @@ def render_data_guard_tab() -> None:
             _d5_r1y   = (_d5_risk.get("risk_table") or {}).get("一年", {}) or {}
             _d5_divs  = _d5_fd.get("dividends") or _d5_mj.get("dividends") or []
             _d5_divs  = _d5_divs if isinstance(_d5_divs, list) else []
-            _d5_hold  = (_d5_mj.get("holdings") or {})
+            _d5_hold  = _get_holdings(_d5_fd)  # B7 v19.332 統一路徑(頂層優先 → moneydj_raw)
             _d5_sects = _d5_hold.get("sector_alloc", []) or []
             _d5_tops  = _d5_hold.get("top_holdings", []) or []
 
@@ -1132,6 +1147,27 @@ def render_data_guard_tab() -> None:
                 _d5_cell(_r3[3], "基本資料",        _d5_basic,
                          ok_cond=bool(_d5_basic),
                          fmt=lambda v: "已取得 ✓")
+                st.markdown("<div style='margin:4px 0'></div>", unsafe_allow_html=True)
+                # Row 4(B6 v19.332,review 監控盲區):最大回撤 / Sortino / Calmar / 規模
+                # 前三者 calc_metrics 一直有算(fund_service.py:599/404/433)只是診斷沒列格;
+                # 規模 fund_scale 為 MoneyDJ 基本資料字串(可能含日期註記,原樣顯示前 18 字)
+                _r4 = st.columns(4)
+                _d5_mdd = _d5_m.get("max_drawdown")
+                _d5_cell(_r4[0], "最大回撤",        _d5_mdd,
+                         ok_cond=(_d5_mdd is not None),
+                         fmt=lambda v: f"{float(v):.2f}%")
+                _d5_sortino = _d5_m.get("sortino")
+                _d5_cell(_r4[1], "Sortino",         _d5_sortino,
+                         ok_cond=(_d5_sortino is not None),
+                         fmt=lambda v: str(v))
+                _d5_calmar = _d5_m.get("calmar")
+                _d5_cell(_r4[2], "Calmar",          _d5_calmar,
+                         ok_cond=(_d5_calmar is not None),
+                         fmt=lambda v: str(v))
+                _d5_scale = str(_d5_mj.get("fund_scale") or "").strip()
+                _d5_cell(_r4[3], "基金規模",        _d5_scale or None,
+                         ok_cond=bool(_d5_scale),
+                         fmt=lambda v: str(v)[:18])
 
                 st.markdown(
                     f"<span style='font-size:10px;color:{GRAY_55}'>"
