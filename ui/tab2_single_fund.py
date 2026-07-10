@@ -18,6 +18,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
+from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
 
 from repositories.fund import (
     tdcc_search_fund,
@@ -381,8 +382,12 @@ def render_single_fund_tab() -> None:
                 # 顯示已取得的基本資料
                 _pc1, _pc2, _pc3 = st.columns(3)
                 with _pc1:
-                    if _p_nav is not None:
-                        st.metric("最新淨值", f"{float(_p_nav):.4f}")
+                    # v19.331 review 修正:MoneyDJ 失敗時 nav_latest 常為 "—"/"N/A"/"查無資料"
+                    # (非 None)→ 原裸 float() 轉型直接 ValueError,partial 視圖整頁炸。
+                    # 改 safe_float(SSOT shared/converters):非數值顯示 N/A,不造假不炸頁。
+                    _p_nav_f = _safe_float(_p_nav)
+                    if _p_nav_f is not None:
+                        st.metric("最新淨值", f"{_p_nav_f:.4f}")
                     else:
                         st.metric("最新淨值", "N/A")
                 with _pc2:
@@ -658,8 +663,10 @@ def render_single_fund_tab() -> None:
                 _m_sell1 = m.get("sell1"); _m_sell2 = m.get("sell2"); _m_sell3 = m.get("sell3")
                 _m_pl = m.get("pos_label",""); _m_pc = m.get("pos_color",TRAFFIC_NEUTRAL)
                 _m_mode = m.get("buy_mode","")  # v19.313: 買賣 band σ 改區間基準,不再標 wb07
-                _m_nav_v = float(m.get("nav") or 0)
-                _NEAR = float(m.get("near_threshold_pct") or 2.0)
+                # v19.331 review:safe_float 防占位字串(數值輸入行為不變;字串 → 0 走
+                # _proximity_chip 既有 nav_v<=0 → "—" 路徑,不炸不造假)
+                _m_nav_v = _safe_float(m.get("nav")) or 0
+                _NEAR = _safe_float(m.get("near_threshold_pct")) or 2.0
                 def _proximity_chip(nav_v, target, is_buy):
                     """買: nav≤target 觸發；賣: nav≥target 觸發；±NEAR% 為接近區"""
                     if (not target) or nav_v <= 0:
@@ -1093,12 +1100,11 @@ def render_single_fund_tab() -> None:
                 with col_b:
                     st.markdown("#### 💸 近期配息")
                     if divs and len(divs) >= 1:
-                        _mj_dy = mj_raw.get("moneydj_div_yield")
-                        try: _mj_dy = float(_mj_dy) if _mj_dy is not None else None
-                        except: _mj_dy = None
+                        # v19.331 review:兩處裸 except: → SSOT safe_float(語意等價,
+                        # 不再攔截 KeyboardInterrupt/SystemExit;§3.3 bare except 違憲收斂)
+                        _mj_dy = _safe_float(mj_raw.get("moneydj_div_yield"))
                         _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else (m.get("annual_div_rate",0) or 0)
-                        try: _adr = float(_adr)
-                        except: _adr = 0.0
+                        _adr = _safe_float(_adr) or 0.0
                         st.metric("年化配息率", f"{_adr:.2f}%", help="MoneyDJ wb05 官方值（優先）或自算估值")
                         # F-RECON-1 phase 6 v19.91 — 配息殖利率對帳 chip(self-calc vs MoneyDJ)
                         _dy_rec = (m or {}).get("div_yield_reconcile")
