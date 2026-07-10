@@ -516,80 +516,136 @@ def _update_data_registry():
             }
 
         # 5b/5c/5d. 持股 / 產業 / TER (MoneyDJ yp004002 + wb05)
+        # v19.336 review M3:原 5 個子條目 latest_date 寫死「本月/年度」+ 硬編 🟢,
+        # _freshness 不參與 → 資料過期永不亮紅燈。改真判:MoneyDJ 有 data_date
+        # ("YYYY/MM")就走 _freshness(monthly);無日期時保留原「已取得」行為
+        # (不憑空造日期,§1)但 label 註明無日期。
         _hold = raw.get("holdings") or {}
         if isinstance(_hold, dict):
             _tops  = _hold.get("top_holdings") or []
             _sects = _hold.get("sector_alloc") or []
             _ter   = _hold.get("ter") or raw.get("ter")
+            _hd_date = str(_hold.get("data_date") or "").strip()
+
+            def _sub_fresh(freq: str = "monthly"):
+                """(latest_date, icon, label, color) — 有 data_date 真判,無則保留舊行為。"""
+                if _hd_date:
+                    _i, _l, _c = _freshness(_hd_date, freq)
+                    return _hd_date, _i, _l, _c
+                return "本月", "🟢", "已取得(無資料日期)", MATERIAL_GREEN
 
             if _tops:
+                _ld, _ic, _lb, _co = _sub_fresh()
                 reg[f"{prefix}_{fn}_前十大持股"] = {
                     "label":       f"{fn} 前十大持股",
                     "source":      "MoneyDJ yp004002",
-                    "latest_date": "本月",
+                    "latest_date": _ld,
                     "count":       len(_tops),
                     "series":      None,
                     "freq":        "monthly",
-                    "fresh_icon":  "🟢",
-                    "fresh_label": "已取得",
-                    "fresh_color": MATERIAL_GREEN,
+                    "fresh_icon":  _ic,
+                    "fresh_label": _lb,
+                    "fresh_color": _co,
                 }
             if _sects:
+                _ld, _ic, _lb, _co = _sub_fresh()
                 reg[f"{prefix}_{fn}_產業配置"] = {
                     "label":       f"{fn} 產業配置",
                     "source":      "MoneyDJ yp004002",
-                    "latest_date": "本月",
+                    "latest_date": _ld,
                     "count":       len(_sects),
                     "series":      None,
                     "freq":        "monthly",
-                    "fresh_icon":  "🟢",
-                    "fresh_label": "已取得",
-                    "fresh_color": MATERIAL_GREEN,
+                    "fresh_icon":  _ic,
+                    "fresh_label": _lb,
+                    "fresh_color": _co,
                 }
             if _ter not in (None, "", 0):
+                _ld, _ic, _lb, _co = _sub_fresh()
                 reg[f"{prefix}_{fn}_TER"] = {
                     "label":       f"{fn} 總費用率 TER",
                     "source":      "MoneyDJ wb05",
-                    "latest_date": "年度",
+                    "latest_date": _ld if _hd_date else "年度",
                     "count":       1,
                     "series":      None,
                     "freq":        "monthly",
-                    "fresh_icon":  "🟢",
-                    "fresh_label": "已取得",
-                    "fresh_color": MATERIAL_GREEN,
+                    "fresh_icon":  _ic,
+                    "fresh_label": _lb,
+                    "fresh_color": _co,
                 }
+
+        def _prov_fresh(src_dict: dict):
+            """(latest_date, icon, label, color) — 用 provenance fetched_at 真判
+            (v19.336 M3;freq='nav' 7/14 天閾值 = 「多久沒重新抓」語意);
+            無 fetched_at 保留舊「已取得」行為。"""
+            _fa = str((src_dict or {}).get("fetched_at") or "")[:10]
+            if _fa:
+                _i, _l, _c = _freshness(_fa, "nav")
+                return _fa, _i, _l, _c
+            return "本月", "🟢", "已取得(無抓取時間)", MATERIAL_GREEN
 
         # v19.63 5e. 基金績效 wb01（1Y/3Y/5Y 含息報酬）
         _perf = raw.get("perf") or {}
         if isinstance(_perf, dict) and any(_perf.get(_k) is not None
                                            for _k in ("1Y", "3Y", "5Y")):
+            _ld, _ic, _lb, _co = _prov_fresh(_perf)
             reg[f"{prefix}_{fn}_績效"] = {
                 "label":       f"{fn} 績效 (1Y/3Y/5Y)",
                 "source":      "MoneyDJ wb01",
-                "latest_date": "本月",
+                "latest_date": _ld,
                 "count":       sum(1 for _k in ("1Y", "3Y", "5Y")
                                    if _perf.get(_k) is not None),
                 "series":      None,
                 "freq":        "monthly",
-                "fresh_icon":  "🟢",
-                "fresh_label": "已取得",
-                "fresh_color": MATERIAL_GREEN,
+                "fresh_icon":  _ic,
+                "fresh_label": _lb,
+                "fresh_color": _co,
             }
 
         # v19.63 5f. 基金風險指標 wb07（標準差/Sharpe/Alpha/Beta）
         _risk = raw.get("risk_metrics") or {}
         _rtbl = _risk.get("risk_table") if isinstance(_risk, dict) else None
         if isinstance(_rtbl, dict) and _rtbl:
+            _ld, _ic, _lb, _co = _prov_fresh(_risk)
             reg[f"{prefix}_{fn}_風險指標"] = {
                 "label":       f"{fn} 風險指標 (σ/Sharpe/Alpha/Beta)",
                 "source":      "MoneyDJ wb07",
-                "latest_date": "本月",
+                "latest_date": _ld,
                 "count":       len(_rtbl),
                 "series":      None,
                 "freq":        "monthly",
-                "fresh_icon":  "🟢",
-                "fresh_label": "已取得",
-                "fresh_color": MATERIAL_GREEN,
+                "fresh_icon":  _ic,
+                "fresh_label": _lb,
+                "fresh_color": _co,
+            }
+
+        # v19.336 5g. 進階風險（max_drawdown / Sortino / Calmar）— review M2b:
+        # calc_metrics 一直有算、Section⑤ 逐檔卡 v19.332 B6 已列,Section② 總表
+        # 原缺(第三份 review 點名盲點)。新鮮度以 NAV 序列最新日真判(nav 7/14)。
+        _mx = fund.get("metrics") or {}
+        _adv_vals = {k: _mx.get(k) for k in ("max_drawdown", "sortino", "calmar")}
+        if isinstance(_mx, dict) and any(v is not None for v in _adv_vals.values()):
+            _s_nav = fund.get("series")
+            _nav_last = ""
+            try:
+                if _s_nav is not None and len(_s_nav) > 0:
+                    _nav_last = str(_s_nav.index[-1])[:10]
+            except Exception:
+                _nav_last = ""
+            if _nav_last:
+                _ic, _lb, _co = _freshness(_nav_last, "nav")
+            else:
+                _ic, _lb, _co = "🟢", "已取得(無 NAV 日期)", MATERIAL_GREEN
+            reg[f"{prefix}_{fn}_進階風險"] = {
+                "label":       f"{fn} 進階風險 (maxDD/Sortino/Calmar)",
+                "source":      "calc_metrics(NAV 自算)",
+                "latest_date": _nav_last or "本月",
+                "count":       sum(1 for v in _adv_vals.values() if v is not None),
+                "series":      None,
+                "freq":        "nav",
+                "fresh_icon":  _ic,
+                "fresh_label": _lb,
+                "fresh_color": _co,
             }
 
     _cf = st.session_state.get("current_fund") or {}
@@ -603,5 +659,35 @@ def _update_data_registry():
             continue
         _raw = _pf.get("moneydj_raw") or {}
         _register_fund_subdata("組合", _pf, _raw, _pf.get("code","基金"))
+
+    # v19.336 review M2a:FX 原完全不在 registry 總表(僅 Tab5 標頭單格 + 按需
+    # 診斷 expander)。走與標頭相同的 L2 cached 服務(positive-only cache +
+    # 5min TTL,命中時為純 dict lookup,與標頭同 render 內第二次呼叫幾乎必命中);
+    # 成功=今日即時匯率(daily 真判),失敗=🔴 在總表可見。多幣別(EUR/JPY/CHF/CNH)
+    # 仍走 Tab5 按需診斷,不在 render 路徑逐幣打網路(§8.1 step 6)。
+    try:
+        from services.fund_service import get_latest_fx as _reg_fx
+        _fx_v = _reg_fx("USDTWD")
+    except Exception as _e_regfx:
+        print(f"[DataRegistry] FX_USDTWD 取得失敗: {_e_regfx}")
+        _fx_v = None
+    _fx_today = datetime.date.today().isoformat()
+    if _fx_v:
+        _ic, _lb, _co = _freshness(_fx_today, "daily")
+        reg["總經_FX_USDTWD"] = {
+            "label": "USD/TWD 匯率(即時服務)",
+            "source": "Yahoo→FRED→er-api→Frankfurter",
+            "latest_date": _fx_today, "count": 1, "series": None,
+            "freq": "daily", "fresh_icon": _ic, "fresh_label": _lb,
+            "fresh_color": _co,
+        }
+    else:
+        reg["總經_FX_USDTWD"] = {
+            "label": "USD/TWD 匯率(即時服務)",
+            "source": "Yahoo→FRED→er-api→Frankfurter",
+            "latest_date": "N/A", "count": 0, "series": None,
+            "freq": "daily", "fresh_icon": "🔴", "fresh_label": "全源失敗",
+            "fresh_color": MATERIAL_RED,
+        }
 
     st.session_state["data_registry"] = reg

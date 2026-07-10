@@ -1096,7 +1096,10 @@ def search_fundclear(keyword: str) -> list:
             for item in fund_list:
                 code = str(item.get("fundCode") or item.get("code") or "")
                 name = str(item.get("fundName") or item.get("name") or "")
-                nav  = float(item.get("nav") or item.get("latestNav") or 0)
+                # v19.336 review M7:原裸 float() 在單筆 nav 為非數字("N/A"等)時
+                # ValueError 中斷整個迴圈 → 壞筆之後的搜尋結果全部丟失(外層
+                # except 包整批)。改 safe_float 逐筆容錯,單筆壞 nav 只影響該筆。
+                nav = safe_float(item.get("nav") or item.get("latestNav")) or 0.0
                 if not code or not name or code in seen: continue
                 seen.add(code)
                 portal = "allianz" if ("安聯" in name or "AGIF" in code) else ""

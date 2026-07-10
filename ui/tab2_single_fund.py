@@ -148,6 +148,32 @@ def _render_333_fund_expander(
             )
 
 
+def _risk_1y_rows_html(risk_table: dict, *, label_style: str = "short") -> str:
+    """1Y 風險指標列(標準差/Sharpe/Alpha/Beta)共用 HTML。
+
+    v19.336 review M9 去重:partial 資料視圖與 complete 視圖原各刻一套
+    同款 flex-div 卡(僅標籤微異),抽共用 helper、以 label_style 保留兩處
+    原有標籤差異(不趁機統一文案,行為 0 改變)。
+    - "short":標準差(1Y)/Sharpe(1Y)…,值原樣(partial 視圖)
+    - "long" :波動 σ(1Y)/…,標準差數值型加 %(complete 視圖)
+    """
+    _r1y = (risk_table or {}).get("一年", {}) or {}
+    _std = _r1y.get("標準差", "—"); _sh = _r1y.get("Sharpe", "—")
+    _al  = _r1y.get("Alpha", "—");  _be = _r1y.get("Beta", "—")
+    if label_style == "long":
+        rows = [("波動 σ(1Y)", f"{_std}%" if isinstance(_std, (int, float)) else _std),
+                ("Sharpe(1Y)", str(_sh)), ("Alpha(1Y)", str(_al)), ("Beta(1Y)", str(_be))]
+    else:
+        rows = [("標準差(1Y)", _std), ("Sharpe(1Y)", _sh),
+                ("Alpha(1Y)", _al), ("Beta(1Y)", _be)]
+    return "".join(
+        f"<div style='display:flex;justify-content:space-between;padding:5px 10px;"
+        f"background:{GH_BG_CARD};border-radius:6px;margin:3px 0'>"
+        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:12px'>{lbl}</span>"
+        f"<span style='font-weight:700'>{val}</span></div>"
+        for lbl, val in rows)
+
+
 def render_single_fund_tab() -> None:
     """渲染單一基金深度分析 Tab — MoneyDJ 抓取 + 風險指標 + AI 分析。
 
@@ -398,18 +424,9 @@ def render_single_fund_tab() -> None:
                 # 若有風險指標，仍顯示
                 if _p_risk.get("risk_table"):
                     st.markdown("#### 📊 風險指標（已取得）")
-                    _rt = _p_risk["risk_table"]
-                    _r1y = _rt.get("一年", {})
-                    for lbl, val in [("標準差",_r1y.get("標準差","—")),
-                                     ("Sharpe", _r1y.get("Sharpe","—")),
-                                     ("Alpha",  _r1y.get("Alpha","—")),
-                                     ("Beta",   _r1y.get("Beta","—"))]:
-                        st.markdown(
-                            f"<div style='display:flex;justify-content:space-between;padding:5px 10px;"
-                            f"background:{GH_BG_CARD};border-radius:6px;margin:3px 0'>"
-                            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:12px'>{lbl}(1Y)</span>"
-                            f"<span style='font-weight:700'>{val}</span></div>",
-                            unsafe_allow_html=True)
+                    # v19.336 M9:與 complete 視圖共用 _risk_1y_rows_html(原兩套同款 HTML)
+                    st.markdown(_risk_1y_rows_html(_p_risk["risk_table"]),
+                                unsafe_allow_html=True)
 
                 # 若有績效數據，顯示
                 if _p_perf:
@@ -1047,11 +1064,9 @@ def render_single_fund_tab() -> None:
                 with col_a:
                     st.markdown("#### 📊 風險指標")
                     risk_tbl = mj_raw.get("risk_metrics",{}).get("risk_table",{})
-                    _r1y = risk_tbl.get("一年",{})
-                    _std1 = _r1y.get("標準差","—"); _sh1 = _r1y.get("Sharpe","—")
-                    _al1  = _r1y.get("Alpha","—");  _be1 = _r1y.get("Beta","—")
-                    for lbl, val in [("波動 σ(1Y)", f"{_std1}%" if isinstance(_std1, (int, float)) else _std1),("Sharpe(1Y)",str(_sh1)),("Alpha(1Y)",str(_al1)),("Beta(1Y)",str(_be1))]:
-                        st.markdown(f"<div style='display:flex;justify-content:space-between;padding:5px 10px;background:{GH_BG_CARD};border-radius:6px;margin:3px 0'><span style='color:{TRAFFIC_NEUTRAL};font-size:12px'>{lbl}</span><span style='font-weight:700'>{val}</span></div>", unsafe_allow_html=True)
+                    # v19.336 M9:與 partial 視圖共用 _risk_1y_rows_html(原兩套同款 HTML)
+                    st.markdown(_risk_1y_rows_html(risk_tbl, label_style="long"),
+                                unsafe_allow_html=True)
                     # F-RECON-1 phase 6 v19.91 — Sharpe 對帳 chip(self-calc vs MoneyDJ wb07)
                     _sh_rec = (m or {}).get("sharpe_reconcile")
                     if isinstance(_sh_rec, dict) and _sh_rec.get("status") in ("agree", "disagree", "a_missing", "b_missing"):
