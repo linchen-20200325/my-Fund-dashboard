@@ -55,9 +55,16 @@ def _parse_nav_html(html: str) -> pd.Series:
     return pd.Series(dtype=float)
 
 
+@register_cache
+@_daily_cache  # v19.337 review F:NAV T+1 公布,日內序列不變 — 同 R20 持股先例
 def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
     """
     取基金淨值歷史。
+
+    v19.337:原每次即時抓(逐 URL 序列 25s timeout,無快取)。@_daily_cache 失敗
+    結果(空 Series)不入 cache(R23 cache_if),不會複製「失敗黑洞」;「全域刷新」
+    經 register_cache 可強制清。與 §2.4 TTL_30MIN 的 trade-off:daily 語意更貼
+    資料真實更新頻率(T+1),且失敗過濾 > TTL 精度(_ttl_cache 會快取空結果)。
     portal 子網域 → tcbbankfund（境內/境外通用）→ moneydj 主站（境外用 yp004001）
     """
     mj_short = full_key.split("-")[-1] if "-" in full_key else full_key
@@ -549,6 +556,8 @@ def fetch_nav_history_long(code: str, min_years: int = 10) -> pd.Series:
         s.attrs.setdefault("fetched_at", pd.Timestamp.now('UTC').isoformat())
     return s
 
+@register_cache
+@_daily_cache  # v19.337 review F:配息為歷史型資料(月/季更),日內不變;空 list 不入 cache
 def fetch_div(full_key: str, portal: str = "") -> list:
     divs = []
     urls = []
@@ -709,6 +718,8 @@ def _wb_page_urls(code: str, page: str) -> list:
     return urls
 
 
+@register_cache
+@_daily_cache  # v19.337 review F:MoneyDJ 績效頁月更,日內不變;空/failed dict 不入 cache
 def fetch_performance_wb01(code: str) -> dict:
     """
     v13.9: 境外基金用 wb01（含息報酬率），境內基金用 yp020000（績效頁）。
@@ -795,6 +806,8 @@ def fetch_performance_wb01(code: str) -> dict:
     return out
 
 
+@register_cache
+@_daily_cache  # v19.337 review F:wb07 風險表月更,日內不變;空/failed dict 不入 cache
 def fetch_risk_metrics(code: str) -> dict:
     """
     抓取 MoneyDJ 績效評比頁（wb07.djhtm），回傳：
