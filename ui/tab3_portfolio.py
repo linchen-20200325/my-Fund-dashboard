@@ -276,24 +276,23 @@ def render_portfolio_tab() -> None:
         st.divider()
     else:
         # v19.297：空組合歡迎卡 — 未加入任何基金（或全未載入）時的引導畫面
+        # v19.334 user 指示「說明縮小,不需要這麼大」:48px 圖示+置中大標+28px padding
+        # 的整屏卡 + 3 個 st.info 步驟框 → 收成單張緊湊卡(標題行+兩行說明),
+        # 資訊不減、高度約原本 1/4。
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
-            f"border:1px solid {GH_BORDER};border-radius:12px;"
-            f"padding:28px 32px;margin:16px 0;text-align:center'>"
-            f"<div style='font-size:48px;margin-bottom:12px'>📊</div>"
-            f"<div style='color:{WHITE};font-size:20px;font-weight:700;margin-bottom:8px'>"
-            f"歡迎使用基金組合管理</div>"
-            f"<div style='color:{GRAY_AA};font-size:13px;line-height:1.8'>"
-            f"加入基金後，這裡將顯示 MK 戰情室、組合健康儀表、3-3-3 篩選等分析。<br>"
-            f"從 <b style='color:{TRAFFIC_NEUTRAL}'>Tab2「單檔基金」</b> 搜尋後加入，"
-            f"或直接在下方輸入基金代碼，也可從 Google Sheet 讀回已存的組合。"
-            f"</div>"
-            f"</div>",
+            f"border:1px solid {GH_BORDER};border-radius:8px;"
+            f"padding:10px 14px;margin:8px 0'>"
+            f"<div style='color:{WHITE};font-size:14px;font-weight:700;margin-bottom:4px'>"
+            f"📊 歡迎使用基金組合管理"
+            f"<span style='color:{GRAY_AA};font-size:11px;font-weight:400'>"
+            f"　— 加入基金後顯示 MK 戰情室、組合健康儀表、3-3-3 篩選</span></div>"
+            f"<div style='color:{GRAY_AA};font-size:12px;line-height:1.7'>"
+            f"🔍 <b style='color:{TRAFFIC_NEUTRAL}'>Tab2「單檔基金」</b>搜尋 → 按「➕ 加入組合」；"
+            f"📥 或在下方「➕ 加入基金」輸入代碼點「📡 載入」；"
+            f"也可從 Google Sheet 讀回已存組合。🎯 組合有資料後，分析自動出現在頁面頂部。"
+            f"</div></div>",
             unsafe_allow_html=True)
-        _wc1, _wc2, _wc3 = st.columns(3)
-        _wc1.info("前往 **Tab2「單檔基金」**，搜尋目標基金，按「➕ 加入組合」快速加入", icon="🔍")
-        _wc2.info("或在下方「**➕ 加入基金**」區直接輸入基金代碼，點「📡 載入」取得資料", icon="📥")
-        _wc3.info("組合有資料後，戰情室 / 健康儀表 / 3-3-3 篩選自動出現在頁面頂部", icon="🎯")
         st.divider()
     # v19.185 Bug5:相關性矩陣物理上移至摘要正下方(原在 T7 後)。
     # T5 只讀 session_state.portfolio_funds(全域)+ 自 guard(>=2 loaded),搬移變數安全。

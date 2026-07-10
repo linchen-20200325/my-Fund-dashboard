@@ -53,6 +53,10 @@
 
 ## 當前版本
 
+- **v19.334 Tab3 空組合歡迎卡縮小(user 2026-07-10 截圖指示「說明縮小,不需要這麼大」)**:
+  - `ui/tab3_portfolio.py` 空組合引導畫面:48px 大圖示+置中 20px 大標+28px padding 整屏卡
+    + 3 個 st.info 步驟框 → 收成**單張緊湊卡**(14px 標題行+12px 兩行說明,padding 10px);
+    三步驟指引(Tab2 搜尋加入/下方輸入載入/自動出現分析)併入卡內文字,資訊不減、高度約原 1/4。
 - **v19.333 第二份外部 review 查證後修復(user 2026-07-10 指派第二份建議書;12 條主張逐條查證:5 修/1 已修過/2 誤判/其餘部分屬實)**:
   - **F2 `_src_yahoo_finance_nav`**:`.get("quote", [{}])[0]` 在 API 回 `"quote": []`(key 在但空)時 IndexError 被外層吞,錯誤訊息誤導 → 顯式判空;`if ts and cl` 的 0 跳過為 by-design(NAV>0 不變量 §3.2)加註。
   - **F4 `_src_alphavantage_nav`**:`float(ohlc.get(...))` 遇 JSON null → TypeError 不在 `(ValueError, KeyError)` 內 → 冒泡丟**整段**序列 → 改 `safe_float`(SSOT),null 只跳該筆。測試:11 筆有效+1 null → 舊 len 0 / 新 len 11。
