@@ -53,6 +53,11 @@
 
 ## 當前版本
 
+- **v19.332 review B 類監控盲區收斂(user 2026-07-10 核准「B+C+D 請繼續」,A 類大重構不動)**:
+  - **B6 tab5 Section ⑤ 補 Row 4 診斷格**:最大回撤 / Sortino / Calmar / 基金規模。前三者 `calc_metrics` 一直有算(fund_service.py:599/404/433)只是診斷沒列格;規模為 MoneyDJ `fund_scale` 基本資料字串(原樣顯示前 18 字)。缺值顯 N/A 紅格,不造假。
+  - **B7 持股物件統一取值路徑**:新 `_get_holdings(fd)` helper(頂層 `holdings` 優先 → `moneydj_raw.holdings` 補位,對齊 dividends 雙路徑既有精神)。原 Section ⓪(只看頂層)/①(pf 看 moneydj_raw、cf 看頂層)/⑤(只看 moneydj_raw)三處判定不一致 → 同檔基金各 section 計數可能不同(統計偏差),3 呼叫點全收斂。
+  - **C 類複查(review 判定不成立項,附證據)**:C9 健康卡 rm NameError main 已修(tab2:791 `_rm` 已定義);C11 投資試算 FX 非每次 rerun 打網路(`repositories/fund/fx_and_main.py` `_FX_CACHE_TTL=300` positive-only cache,5 分內純 dict lookup);C12 診斷 ping verify=False 僅測速場景維持。
+  - **回歸網**:`tests/test_review_bcd_v19_332.py` 7 test(helper 三態/頂層優先/None 安全/三呼叫點源碼守衛/Row4 四格與 metrics 契約鍵)+ tab5 相關 29 test 全綠。
 - **v19.331 外部 code review P0/P1 修正(user 2026-07-10 指派 dashboard_code_review.md)**:
   - **P1 tab2 partial 視圖 float 崩潰**:`ui/tab2_single_fund.py` MoneyDJ 失敗時 `nav_latest` 常為 "—"/"N/A"/"查無資料"(非 None),原裸 float() 轉型 ValueError 炸整頁 → 改 SSOT `shared/converters.safe_float`(非數值顯示 N/A);同段買賣點 `m.get("nav")`/`near_threshold_pct` 一併防護(數值輸入行為不變)。**review Bug 1(健康卡 rm NameError)已在 main 先修**(現行 791 行已定義 `_rm`),本次無需動。
   - **P1 us_indicators per-series 隔離**:單一 FRED series 例外(pandera SchemaError / IO)原本炸掉 `fetch_all_indicators` → 該指標之後全滅(UI 大面積空白)。新 `_fred_iso`/`_yf_iso` 把 v19.171 五條並行 pool 的 per-future 容錯慣例擴及其餘 16 處 sequential `_fred()` + 2 處 `_yf_s()`(VIX/銅)— 失敗回空 + stderr log,只犧牲該格;repository 層 fail-loud 驗證不動(§1 分層:來源炸、編排局部降級)。
