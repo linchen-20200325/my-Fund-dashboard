@@ -53,6 +53,17 @@
 
 ## 當前版本
 
+- **v19.335 雲端倒站 hotfix(2026-07-10 11:50 UTC 平台事故)**:
+  - **事故**:Streamlit Cloud 平台重啟潮強制 Python 3.14 + **pyarrow 25.0.0 當日發布** →
+    本 app 死釘的 `streamlit==1.45.1`(早於 py3.14 支援,啟動即 import pyarrow)
+    **進程秒殺 Segmentation fault**(app 程式碼零行執行;股票儀表板同時段同源事故)。
+  - **requirements**:`streamlit==1.45.1` → `>=1.59.1,<1.60.0`(**本地全套件 2,404 tests
+    本就在 1.59.1 上執行 = 升級預驗證**;連帶把 protobuf/tornado 拉到 cp314 原生 wheel);
+    顯式 `pyarrow>=14,<25` cap 回 24.x(當日新版=兇手;解禁條件=25.x 在 cp314 穩定數週)。
+  - **回歸網**:`tests/test_hotfix_v19_335.py` 3 test(pin 守護+本地環境=部署目標版本);
+    沙盒 pyarrow 對齊 24.0.0 後全套件 2,404 passed / 0 failed。
+  - 註:`use_container_width` ×136 處在 1.59 為 deprecation warning 非錯誤,遷移
+    留待 user 點(§-1,非本次事故範圍)。
 - **v19.334 Tab3 空組合歡迎卡縮小(user 2026-07-10 截圖指示「說明縮小,不需要這麼大」)**:
   - `ui/tab3_portfolio.py` 空組合引導畫面:48px 大圖示+置中 20px 大標+28px padding 整屏卡
     + 3 個 st.info 步驟框 → 收成**單張緊湊卡**(14px 標題行+12px 兩行說明,padding 10px);

@@ -1,8 +1,14 @@
-streamlit==1.45.1
+# v19.335 hotfix(2026-07-10):Streamlit Cloud 平台強制遷移 Python 3.14,
+# 死釘的 streamlit==1.45.1 早於 py3.14 支援 → 進程啟動即 Segmentation fault。
+# 升至 1.59.1(本地全套件 2,402 tests 已在 1.59.1 上驗證綠),上界防未測 minor。
+streamlit>=1.59.1,<1.60.0
 typing-extensions>=4.13.0
 pandas>=2.1.0
 numpy>=1.24.0
 plotly>=5.18.0
+# v19.335 hotfix:pyarrow 25.0.0(2026-07-10 當日發布)在雲端 py3.14 造成
+# segfault(與股票儀表板同源事故)— cap 回 24.x;解禁條件同股票 repo 註解。
+pyarrow>=14,<25
 pandera>=0.20,<1.0
 yfinance>=0.2.36
 google-generativeai>=0.5.0
