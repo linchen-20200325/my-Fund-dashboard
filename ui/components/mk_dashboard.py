@@ -228,6 +228,11 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
         if not f.get("loaded") or f.get("load_error"):
             continue
         m = f.get("metrics") or {}
+        # v19.345: 含息總報酬(1Y%) 改走全 app 一致的 SSOT fallback
+        # (compute_1y_total_return: perf['1Y'] wb01 → ret_1y_total 含息 → ret_1y →
+        # NAV 序列年化)，不再直接讀 strict-252 的 m['ret_1y']——後者對 <252 交易日 NAV
+        # 的基金恆 None(user 回報 5 檔全 None)，且語意錯(ret_1y 為「不含息」純 NAV)。
+        _tr1y_val, _ = compute_1y_total_return(f)
         mk_class = tag_mk_class(f)
         health = tag_health_check(f)
         momentum = tag_momentum(f)
@@ -240,7 +245,7 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
             "MK_Class": mk_class,
             "走勢(60D)": _series_tail(f.get("series"), 60),
             "目前市價": _safe_float(m.get("nav")),
-            "含息總報酬(1Y%)": _safe_float(m.get("ret_1y")),
+            "含息總報酬(1Y%)": _safe_float(_tr1y_val),
             "年化配息率(%)": _safe_float(m.get("annual_div_rate")),
             "夏普值": _safe_float(m.get("sharpe")),
             "年化波動(1Y%)": _safe_float(m.get("std_1y")),
@@ -289,6 +294,7 @@ def _series_tail(series, n: int) -> Optional[list]:
 # v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
 from shared.converters import safe_float as _safe_float  # noqa: E402
 from shared.colors import GH_BG_PRIMARY, TRAFFIC_NEUTRAL  # v19.253 Phase 4-B2 #888 SSOT  # noqa: E402
+from services.fund_total_return import compute_1y_total_return  # noqa: E402  # v19.345 SSOT 1Y 含息 fallback
 
 
 
@@ -424,7 +430,8 @@ _COL_CONFIG = {
     "目前市價": st.column_config.NumberColumn("目前市價", format="%.2f"),
     "含息總報酬(1Y%)": st.column_config.NumberColumn(
         "含息總報酬(1Y%)", format="%.2f",
-        help="包含領到的股息與淨值漲跌的真實總獲利（近一年）"),
+        help="包含領到的股息與淨值漲跌的真實總獲利（近一年）。"
+             "優先用 MoneyDJ 官方 1Y／本地含息；歷史不足 1 年時以現有區間年化估算"),
     "年化配息率(%)": st.column_config.NumberColumn(
         "年化配息率(%)", format="%.2f",
         help="近 12 期配息加總 ÷ 目前淨值，僅反映現金流回饋"),

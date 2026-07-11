@@ -2,6 +2,15 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 💰 2026-07-11 核心戰情室「含息總報酬(1Y%)」全 None 修復（v19.345）
+
+user 實機截圖回報 核心戰情室 5 檔基金（ACCP138/ACTI71/ACTI94/JFZN3/TLZF9）「含息總報酬(1Y%)」欄全 None,但同表 夏普/年化波動/年化配息率/便宜超跌停利價 都有值。
+
+- **根因（診斷屬實,非資料源故障）**:`ui/components/mk_dashboard.py:243` 該欄直讀 `m.get("ret_1y")`,而 `ret_1y = _ret(252)`（fund_service.py:609）**硬性要求 NAV 序列 ≥252 交易日**（`_ret(n)`:`len(s)>=n` 才算,否則 None）。這些配息型基金本地 NAV 序列 <252 日 → `ret_1y` 恆 None;而 夏普只需 60+ 筆、`std_1y` 退 wb07、`ret_1y_total` 有短窗分支 → 那幾欄照樣有值。**雙重 bug**:① 欄名「含息」卻讀「不含息」的純 NAV `ret_1y`（語意錯）;② 繞過全 app 一致的 SSOT `compute_1y_total_return`（4 層 fallback:perf['1Y'] wb01 → ret_1y_total 含息 → ret_1y → NAV 序列年化）——戰情室是**唯一**沒走 SSOT 的視圖（checkup/dividend/portfolio_health 全走）。
+- **修**:戰情室欄改呼 `compute_1y_total_return(f)`（L3 UI → L2 service,合法方向）。有 MoneyDJ perf 者顯示官方 1Y 含息（tier 1）;僅短序列者走年化 fallback（tier 4,≥30d）;真的全無來源才誠實 None（§1）。欄位 help 補述 fallback 鏈（優先官方 1Y／本地含息;不足 1 年以區間年化估算）＝§1 標記。
+- **非資料源問題**:user 原以為要「上網找解法」,實為內部 SSOT 不一致（戰情室繞過 fallback 鏈）,非 MoneyDJ/資料源故障 → 純內部修,不需外部研究。
+- **回歸網**:`tests/test_mk_dashboard.py` +3 test（ret_1y=None 但 perf 有值 → 取 perf；短序列無 perf → 年化非 None；全無來源 → 誠實 None）。mk_dashboard/app_smoke/portfolio_health 113 passed;全套零破。ruff 對 mk_dashboard 零新增（既有 5 個 E702 分號非本次）。
+
 ## 📉 2026-07-11 A~E backlog 批次3(c)（行為改善）：MA60 圖表資料不足提示（v19.344）
 
 user 核准「1~4 陸續慢慢做」。3(c) 取風險最低的行為改善型先做（只修壞掉/靜默的情況,不動已正確訊號）:

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ui.components.mk_dashboard import _fund_age_years
+from ui.components.mk_dashboard import _fund_age_years, build_mk_dataframe
 
 
 def _mk_series(start: str, n: int = 10) -> pd.Series:
@@ -52,3 +52,52 @@ def test_fund_age_years_low_freq_still_works():
     age = _fund_age_years(s)
     assert age is not None
     assert age >= 3.0   # 關鍵：≥3 年該回 True
+
+
+# ── v19.345: 含息總報酬(1Y%) 走 SSOT fallback，不再讀 strict-252 的 m['ret_1y'] ──
+def _short_nav(days_back: int = 120, n: int = 60) -> pd.Series:
+    start = (pd.Timestamp.now() - pd.Timedelta(days=days_back)).strftime("%Y-%m-%d")
+    idx = pd.date_range(start=start, periods=n, freq="B")
+    return pd.Series([10.0 + i * 0.02 for i in range(n)], index=idx)
+
+
+def test_total_return_1y_uses_perf_when_local_ret_1y_none():
+    """<252 日 NAV → m['ret_1y']=None，但 MoneyDJ perf['1Y'] 有值 → 顯示 perf（非 None）。
+
+    這正是 user 回報「5 檔全 None」的場景：舊碼直讀 m['ret_1y'] 恆 None。
+    """
+    f = {
+        "loaded": True, "code": "TEST1", "name": "測試多重收益B配息",
+        "metrics": {"nav": 10.0, "ret_1y": None, "annual_div_rate": 8.0,
+                    "sharpe": 0.5, "std_1y": 5.0},
+        "moneydj_raw": {"perf": {"1Y": 7.5}},
+        "series": _short_nav(),
+        "perf_source": "wb01",
+    }
+    df = build_mk_dataframe([f])
+    assert len(df) == 1
+    assert df.iloc[0]["含息總報酬(1Y%)"] == 7.5   # 舊行為=None；新行為取 perf['1Y']
+
+
+def test_total_return_1y_annualizes_when_short_history_no_perf():
+    """無 perf + ret_1y=None + 短序列(>30d) → 走 NAV 年化 fallback，非 None。"""
+    f = {
+        "loaded": True, "code": "TEST2", "name": "新基金",
+        "metrics": {"nav": 11.0, "ret_1y": None},
+        "series": _short_nav(days_back=150, n=80),
+    }
+    df = build_mk_dataframe([f])
+    assert len(df) == 1
+    assert pd.notna(df.iloc[0]["含息總報酬(1Y%)"])   # 年化 fallback → 有值
+
+
+def test_total_return_1y_still_none_when_truly_insufficient():
+    """真的無任何來源(無 perf / ret_1y_total / ret_1y / 序列<3) → 仍誠實 None（§1）。"""
+    f = {
+        "loaded": True, "code": "TEST3", "name": "無資料基金",
+        "metrics": {"nav": 10.0, "ret_1y": None},
+        "series": None,
+    }
+    df = build_mk_dataframe([f])
+    assert len(df) == 1
+    assert pd.isna(df.iloc[0]["含息總報酬(1Y%)"])
