@@ -124,14 +124,9 @@ from ui.helpers.data_registry import _update_data_registry  # noqa: F401
 
 # ── Tab5 完整率所需的 16 個關鍵指標(SAHM/SLOOS/PMI/.../COPPER) ──
 # v11.0 D-20: _D5_KEYS / calc_data_health 已抽至 ui/helpers/session.py
-from ui.helpers.session import calc_data_health as _calc_data_health_pure
-
-
-def _calc_data_health(indicators=None):
-    """Thin wrapper：保留「indicators=None → 走 session_state」的呼叫站慣例。"""
-    # 同 run 內直接從 indicators 計算，避免 Tab1 讀到 Tab5 上一輪寫入的舊值
-    ind = indicators if indicators is not None else st.session_state.get("indicators", {})
-    return _calc_data_health_pure(ind)
+# v19.342(第八份 review 屬實項):app.py 的 `_calc_data_health` thin wrapper
+# 本檔 0 呼叫者(真 caller 在 ui/tab1_macro.py:305 自帶同款 wrapper;tab5 版
+# v19.339 已刪)— import + wrapper 一併移除,session.py 純函式為唯一實作。
 
 
 # ══════════════════════════════════════════════════════

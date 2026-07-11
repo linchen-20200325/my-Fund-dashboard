@@ -1248,7 +1248,7 @@ def render_single_fund_tab() -> None:
                             + _ter_avg_html +
                             f"</div>"
                             f"<div style='color:{GRAY_55};font-size:10px'>"
-                            f"費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~25%）</div>"
+                            f"費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~22%＝1.01²⁰ 複利）</div>"
                             f"</div>", unsafe_allow_html=True)
 
                 # ── 持股分析（折疊）── v19.282 SSOT:改呼共用 render_holdings_detail;

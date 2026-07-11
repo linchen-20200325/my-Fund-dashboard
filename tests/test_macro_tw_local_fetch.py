@@ -28,11 +28,12 @@ def _fake_bad_json() -> MagicMock:
 
 
 def _ndc_rows(vals: list) -> list:
-    """模擬 TaiwanMacroEconomics indicator = 景氣對策信號(分) 的回傳 rows。"""
+    """模擬 TaiwanBusinessIndicator 寬表 rows(v19.342 起 NDC fetcher 的資料源;
+    原 TaiwanMacroEconomics 長表 dataset 不存在,已正名)。"""
     return [
         {'date': f'2026-{i+1:02d}-01',
-         'indicator': '景氣對策信號(分)',
-         'value': v}
+         'monitoring': v,
+         'monitoring_color': 'green'}
         for i, v in enumerate(vals)
     ]
 
@@ -121,7 +122,7 @@ class TestFetchNdcSignalHistory:
         with patch.object(fetch_mod, 'fetch_url', return_value=None):
             r = fetch_mod.fetch_ndc_signal_history()
         assert r['error'] is not None
-        assert 'TaiwanMacroEconomics' in r['error']
+        assert 'TaiwanBusinessIndicator' in r['error']
 
     def test_partial_data_below_3_rows(self):
         with patch.object(fetch_mod, 'fetch_url',

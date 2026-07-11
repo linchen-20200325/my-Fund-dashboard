@@ -249,6 +249,24 @@ def render_long_term_section(
     # ── 台股熱錢監測（v19.47 ARCHIVED：境外美股基金可略過｜原 ⑥ KEEP，user 反饋本土訊號非主驅力）──
     # 移除 ⑥ 編號 + 標題加 📦 ARCHIVED 前綴 + 模組保留磁碟便於日後復活
     st.divider()
+    # v19.342 資料自動補抓:面板維持 ARCHIVED(v19.47 user 決策不變),但 stash
+    # 資料 >30 天(= AI prompt 排除閾值)時 data-only 補抓一次 — 解「不點開
+    # expander 就永遠 stale → 資料診斷永久紅 + AI prompt 永久排除」死循環。
+    # 30 分鐘 @st.cache_data(hot_money_repository)天然節流;失敗保留舊 stash,
+    # 只 print log 不打擾 UI(§1 fail loud at log)。
+    try:
+        from ui.hot_money import hot_money_is_stale, refresh_hot_money_data
+        # 每 session 最多嘗試一次(成敗皆標記):失敗時不隨每次 rerun 重打網路
+        # (v19.340 AppTest 教訓:refused 連線的 retry 會逐 rerun 累積)。
+        if (not st.session_state.get("_hm_auto_refresh_tried")
+                and hot_money_is_stale(st.session_state.get("_macro_hot_money"))):
+            st.session_state["_hm_auto_refresh_tried"] = True
+            _hm_tok = (st.secrets.get("FINMIND_TOKEN", "")
+                       if hasattr(st, "secrets") else "") or ""
+            _hm_ok, _hm_msg = refresh_hot_money_data(token=_hm_tok)
+            print(f"[tab1/hot_money-auto] ok={_hm_ok} {_hm_msg}")
+    except Exception as _e_hm_auto:
+        print(f"[tab1/hot_money-auto] ❌ {type(_e_hm_auto).__name__}: {_e_hm_auto}")
     with st.expander("📦 ARCHIVED — 台股熱錢監測（境外美股基金可略過｜本土訊號）",
                      expanded=False):
         st.caption("⚠️ v19.47 降級為 archive：USD 計價境外美股基金，台幣升貶/外資台股淨買賣對 NAV 影響有限。如需此資料請點開。")

@@ -79,6 +79,72 @@ def build_signals(flow_df: pd.DataFrame, fx_df: pd.DataFrame,
 
 
 # ────────────────────────────────────────────────────────────────────────
+# v19.342 data-only 補抓（不渲染面板;解「fetch 綁 ARCHIVED expander」的永久 stale）
+# ────────────────────────────────────────────────────────────────────────
+# 對齊 ui/tab1_macro_ai.py 的 AI prompt 排除閾值(>30 天整段 drop):資料老到會被
+# AI 排除時才自動補抓,平時不增加 Tab1 載入成本(v19.47 archive 的效能初衷不變)。
+_HM_AUTO_REFRESH_AGE_DAYS = 30
+
+
+def hot_money_is_stale(hm: dict | None, today=None) -> bool:
+    """`_macro_hot_money` stash 缺失或資料日 > 30 天 → True(該補抓)。
+
+    純函式(today 可注入),date 解析失敗視同 stale(補抓一次即自癒)。
+    """
+    if today is None:
+        today = pd.Timestamp.now(tz="Asia/Taipei").date()
+    if not isinstance(hm, dict) or not hm.get("date"):
+        return True
+    try:
+        _d = pd.Timestamp(str(hm["date"])[:10]).date()
+    except (ValueError, TypeError):
+        return True
+    return (today - _d).days > _HM_AUTO_REFRESH_AGE_DAYS
+
+
+def refresh_hot_money_data(token: str = "", days: int = 180, window: int = 5,
+                           flow_thr: float = 50.0, fx_thr: float = 0.5
+                           ) -> tuple[bool, str]:
+    """抓外資買賣超 + USDTWD → build_signals → 寫 `_macro_hot_money`(無 UI)。
+
+    v19.342 抽出:tab5「📥 立即更新」按鈕與 tab1 長期桶自動補抓共用同一條
+    資料路(原按鈕邏輯 inline 於 tab5_data_guard.py:317-356)。
+    參數 default 對齊 render panel 的 slider default(180d/5d/50億/0.5%)。
+
+    Returns
+    -------
+    (ok, msg):失敗時 stash 不動(保留舊資料),msg 帶原因(§1 fail loud)。
+    """
+    from repositories.hot_money_repository import (
+        fetch_foreign_flow_series, fetch_usdtwd_series,
+    )
+    flow_df, ferr = fetch_foreign_flow_series(days, token)
+    fx_df, xerr = fetch_usdtwd_series(days)
+    _errs = "；".join(e for e in (ferr, xerr) if e)
+    if flow_df.empty or fx_df.empty:
+        return False, f"外資或 USDTWD 抓取為空{('（' + _errs + '）') if _errs else ''}"
+    sig = build_signals(flow_df, fx_df, window=window,
+                        flow_thr=flow_thr, fx_thr=fx_thr)
+    if sig.empty:
+        return False, "外資與匯率無重疊交易日,無法計算訊號"
+    latest = sig.iloc[-1]
+    st.session_state["_macro_hot_money"] = {
+        "date": str(pd.Timestamp(latest["date"]).date()),
+        "state": str(latest.get("state", "")),
+        "is_divergence": bool(latest.get("is_divergence", False)),
+        "interpretation": str(latest.get("interpretation", ""))[:200],
+        "foreign_net_yi": float(latest.get("foreign_net_yi", 0) or 0),
+        "roll_flow": float(latest.get("roll_flow", 0) or 0),
+        "roll_apprec_pct": float(latest.get("roll_apprec", 0) or 0),
+        "window": int(window),
+    }
+    _msg = f"已更新至 {st.session_state['_macro_hot_money']['date']}"
+    if _errs:
+        _msg += f"（部分來源警告：{_errs}）"
+    return True, _msg
+
+
+# ────────────────────────────────────────────────────────────────────────
 # UI render（基金倉特化：加 disclaimer 強調對境外基金的相關性）
 # ────────────────────────────────────────────────────────────────────────
 def render_hot_money_section(token: str = "",
