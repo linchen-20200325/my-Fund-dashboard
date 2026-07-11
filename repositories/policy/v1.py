@@ -10,6 +10,10 @@ V1 schema:1 張 worksheet (DEFAULT_WORKSHEET="Policies") 含 8+6 欄,每列 = (�
 """
 from __future__ import annotations
 
+# v19.340(ruff F821):Iterable 用於 sync_policies_to_portfolio_funds 型別註解,
+# 原漏 import — 靠 future-annotations 延遲求值才沒在 runtime 炸;補正以免
+# 未來有人拿掉 future import 或 runtime introspect 註解時爆 NameError。
+from collections.abc import Iterable
 from typing import Any, Optional
 
 import pandas as pd

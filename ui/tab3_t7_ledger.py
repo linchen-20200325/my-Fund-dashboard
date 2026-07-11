@@ -2138,8 +2138,12 @@ def render_t7_section() -> None:
                                                     or _Bd["fx"]
                                                 )
                                                 if _fxB_t <= 0:
+                                                    # v19.340(ruff F821):原 f-string 引用
+                                                    # 懸空名 _bc(全檔 0 定義)— 匯率為 0
+                                                    # 時本想 raise ValueError 卻先炸
+                                                    # NameError,診斷訊息全毀。改買方幣別。
                                                     raise ValueError(
-                                                        f"{_bc} 對 TWD 匯率為 0"
+                                                        f"{_Bd['ccy']} 對 TWD 匯率為 0"
                                                     )
                                                 _cross_t = _fxA_t / _fxB_t
                                                 _sr = _SwT7.switch_cross_currency(
