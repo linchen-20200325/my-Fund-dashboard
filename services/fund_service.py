@@ -398,7 +398,11 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     bb_upper_series = bb_upper_s.dropna()
     bb_lower_series = bb_lower_s.dropna()
     rf=_RF_ANNUAL/TRADING_DAYS_PER_YEAR; r252=log_ret.tail(TRADING_DAYS_PER_YEAR) if len(log_ret)>=TRADING_DAYS_PER_YEAR else log_ret  # Bug1: rf 改用即時 FEDFUNDS
-    sharpe=round(float((r252.mean()-rf)/r252.std()*np.sqrt(TRADING_DAYS_PER_YEAR)),2) if len(r252)>=60 else None
+    # v19.341(第七份 review 3-2):Sharpe 分母補 std guard — 同函式 Sortino(1e-12)/
+    # Calmar(1e-9)皆有防,唯 Sharpe 漏。常數 NAV(停售/剛成立填平值,§4.6)std=0 →
+    # inf 直流 UI。對齊 Sortino 既有 1e-12 門檻,不足回 None(§1 寧缺勿假)。
+    _std252 = float(r252.std()) if len(r252) >= 60 else 0.0
+    sharpe=round(float((r252.mean()-rf)/_std252*np.sqrt(TRADING_DAYS_PER_YEAR)),2) if (len(r252)>=60 and _std252>1e-12) else None
     # v19.191 SSOT WRITER:Sortino(下檔波動年化)— 同 sharpe 60 筆門檻
     # target=0,只取負報酬計 downside_std,避免 ÷0 用 1e-12 guard。
     sortino = None
@@ -410,7 +414,9 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
                 sortino = round(float((r252.mean() - rf) / _dstd * np.sqrt(TRADING_DAYS_PER_YEAR)), 2)
     cum=(1+log_ret).cumprod()
     max_dd=round(float(((cum-cum.cummax())/cum.cummax()).min())*100,2)
-    def _ret(n): return round((now-float(s.iloc[-n]))/float(s.iloc[-n])*100,2) if len(s)>=n else None
+    # v19.341(第七份 review 3-2):分母補 >0 guard(第二道防線)— 本函式入口
+    # pandera 已擋 nav<=0,此 guard 防未來驗證放寬/內部直呼時 ZeroDivisionError。
+    def _ret(n): return round((now-float(s.iloc[-n]))/float(s.iloc[-n])*100,2) if (len(s)>=n and float(s.iloc[-n])>0) else None
 
     # v19.177 #2A:NY 報酬雙欄 SSOT — 累計 (cum) + 年化 (ann),
     # 解決「健診表把 metrics.ret_3y 當累計開根,但 fund_service 寫的可能已年化」implicit
