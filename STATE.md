@@ -53,6 +53,33 @@
 
 ## 當前版本
 
+- **v19.341 第七份外部 review 查證後修復(Sharpe 分母防 0;多數主張已修過 — 快照在 v19.337/340 前)**:
+  - **Sharpe std guard(3-2,真)**:`calc_metrics` 同函式 Sortino(1e-12)/Calmar(1e-9)
+    皆有分母防護,**唯 Sharpe 漏** — 常數 NAV(停售/剛成立填平值,§4.6 邊界)
+    std=0 → inf/nan 直流 UI。對齊 Sortino 既有 1e-12 門檻,不足回 None(§1)。
+    `_ret(n)` 分母同補 >0 guard(第二道防線;入口 pandera 已擋 nav<=0)。
+  - **已修過/誤判(證據)**:fetch_nav/fetch_div/fetch_performance「無快取(死 import)」
+    =**v19.337 已修**(`@_daily_cache` 三處在場,report 快照舊);「零快取註解矛盾」
+    =v19.333 F10 已修;持股/配置「占位式硬寫 🟢 本月」=大部分已修(現行
+    `_freshness(monthly)` 真新鮮度路徑在場,僅無日期 fallback 誠實標「已取得
+    (無資料日期)」— fallback 用 ⚪ 取代 🟢 屬顯示政策列待核准);
+    `calc_hwm_sigma_levels` sqrt(len)=設計而非 bug(precision_service:215 inline
+    註解明載「對應 lookback 期間 σ」,改 sqrt(252)=語意變更)→ 待核准;
+    組合配置 Tab 序列 vs 健診 ThreadPool=屬實的效能一致性缺口 → 待核准
+    (行為/效能變更);reconcile 不阻斷 verdict=屬實但為 v19.9x 設計決策
+    (「不影響原 lvl」註解在場)→ assert_reconciled 列待核准;
+    turning_points 日曆日 vs 252=語意辯論 → 待核准。
+  - **回歸網**:`tests/test_review_fixes_v19_341.py` 4 test(常數 NAV Sharpe=None
+    不出 inf / 正常序列不誤殺 / 兩 guard 源掃描)。
+  - **大項待核准(§-1 不擅動;⭐=本輪新增)**:⭐`assert_reconciled`(對帳 disagree/
+    過期 → 燈降級 🟡,把 reconcile 接進決策鏈)、⭐組合配置 Tab 複用健診
+    ThreadPool 模式、⭐診斷主動巡檢+source_trace 一級欄位+保單 ledger/FX
+    常態列(P4)、⭐含息雙口徑(複利 vs MK 單利)UI 並列標註、⭐ISM PMI 補
+    @_ttl_cache(快取失敗語意需先對齊 v19.337「失敗不快取」原則)、
+    ⭐shim 債務 codemod 純刪+normalize_fund_shape 抽共用+risk_radar
+    spec-driven(P5)、⭐DataManager(P5 §8 架構案)、⭐surface_anomalies/
+    term_glossary(P6)、Session 池化/串行→平行(前輪已列)— 詳 PR 描述。
+
 - **v19.340 第六份外部 review 查證後修復(主聚合入口 NameError + 掃描網 F821 補盲區;UI 崩潰類主張 4 條全已修過或誤判)**:
   - **核心(真,報告 Bug 6 同病灶第三次現形)`fetch_fund_multi_source` NameError**:
     v19.248 拆檔後 `_fetch_fund_single` 已搬 `fund_orchestration.py`,`sources.py`
