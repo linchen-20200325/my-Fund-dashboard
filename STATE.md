@@ -53,6 +53,48 @@
 
 ## 當前版本
 
+- **v19.340 第六份外部 review 查證後修復(主聚合入口 NameError + 掃描網 F821 補盲區;UI 崩潰類主張 4 條全已修過或誤判)**:
+  - **核心(真,報告 Bug 6 同病灶第三次現形)`fetch_fund_multi_source` NameError**:
+    v19.248 拆檔後 `_fetch_fund_single` 已搬 `fund_orchestration.py`,`sources.py`
+    頂層從未 import(fund_orchestration L34 頂層 star-import sources → 循環,不能
+    頂層補)。**runtime 證實**:呼叫即 `NameError: name '_fetch_fund_single' is not
+    defined` — **多來源聚合主入口**每呼叫必炸,被 caller `except Exception: print`
+    吞掉 → `fetch_fund_from_moneydj_url`(v2 編輯器新增/更新基金流程)的 Step 2
+    多來源聚合 + alt page_type 重試(境內↔境外 mapping 錯誤自救)自 v19.248 全滅。
+    修:呼叫端 lazy import(同 v19.339 `_parse_nav_html` 解法)。
+  - **掃描網盲區(防再犯的根修)**:`test_undefined_name_scan`(v19.291 user 點名建的網)
+    只選 **F405**(star-import 歧義)— F405 僅在模組有 star-import 時觸發,`sources.py`
+    無任何 star-import → 本病灶是純 **F821**,防護網完全看不見。擴 `--select F405,F821`
+    (F821=確定未定義,直接列違規不需 hasattr 動態驗證);ruff 本來就在
+    requirements-dev(v19.291 裝的),0 新依賴。
+  - **F821 掃出另 2 顆**:(a) `ui/tab3_t7_ledger.py:2142` 換匯率=0 的 raise ValueError
+    f-string 引用懸空名 `_bc`(全檔 0 定義)→ 觸發時先炸 NameError 診斷訊息全毀,改
+    `_Bd['ccy']`;(b) `repositories/policy/v1.py` 型別註解 `Iterable` 漏 import(靠
+    future-annotations 延遲求值才沒炸)→ 補 `from collections.abc import Iterable`。
+  - **已修過/誤判(證據)**:Bug 7 `float("N/A")` 崩潰=v19.331 起 `_safe_float`
+    (shared/converters)已鋪 tab5:1083/tab2:414;Bug 8 tab3 資產曲線崩潰=現行整段
+    try/except + `len(_s.dropna())<2` 守衛(v18.43 歷史強化);Bug 9 sparkline duplicate
+    key=誤判(v19.187 卡片 key 各桶有 `us_`/`zs_` 命名空間前綴,不重複);Bug 10 nan 顯示
+    =大宗已由 safe_float 覆蓋,殘餘 `:+.2f` 皆計算分數非抓取值;尾段 18 條 `_fred()` 無
+    try=已修過(`_fred_iso`/`_yf_iso` 隔離 wrapper 全鋪);app.py「零快取」docstring=
+    v19.333 F10 已更正;tab5 `_FRED_KEYS`/`_calc_data_health` 死碼=**上輪 v19.339 剛刪**
+    (報告基準舊);tab5 個股財報監控=已修過(`inactive_label="僅個股查詢觸發"` 非死燈);
+    wb01/holdings NameError=v19.287/288 已修(報告自己也註明);FX 4 源診斷/外資
+    pandera/breadth 三層備援=報告自評「良好」無主張。
+  - **回歸網**:`tests/test_review_fixes_v19_340.py` 7 test(主入口 lazy import scan+
+    monkeypatch 跑通 complete/failed 兩路 + provenance / policy v1 Iterable 解析 /
+    掃描網 F405,F821 meta-pin / production F821=0 健檢);`test_undefined_name_scan`
+    擴選後全綠。
+  - **大項待核准(§-1 不擅動)**:例外分類 runtime re-raise(NameError/ImportError fail
+    loud — F821 gate 已靜態涵蓋同類,runtime 版有把資料型 AttributeError 誤殺成崩潰的
+    風險,建議維持靜態網);`infra/proxy.py` Session 單例池化;基金 13-16 源串行→平行
+    競速(5-8× 提速,涉 thread-safety 與快取寫入順序);專題 A 保單代碼優先接
+    `fetch_nav_history_long` 6 級長史補 ≥365d 再算含息(資料流變更);1Y 含息 None →
+    stale dict(`{"value":None,"stale":True,"reason":...}`)顯示層分級;Sortino 改教科書
+    定義/MDD 改還原 NAV 直算(指標語意變更);tab5 FX cache-miss 即時抓取唯讀破口;
+    indicator taxonomy 三軸 + `render_smart_metric` + 異常置頂橫幅;術語白話化;
+    Tab2/Tab3 合併與健診表格收斂 — 詳 PR 描述。
+
 - **v19.339 第五份外部 review 查證後修復(5 條 Bug 主張:3 修 / 2 已修過或半誤判;另 UI/效能項列待核准)**:
   - **Bug 4(真,本輪最高價值)`_parse_nav_html` NameError 潛伏 ×3**:v19.248 P1-5 拆檔後
     `sources.py` 頂層從未 import 該 fn(定義在 `nav_metrics.py`,且 nav_metrics 頂層

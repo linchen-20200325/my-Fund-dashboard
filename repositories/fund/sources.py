@@ -2939,6 +2939,14 @@ def fetch_fund_multi_source(code: str,
             r.setdefault("fetched_at", _fa)
         return r
 
+    # v19.340(第六份 review Bug 6 同病灶,ruff F821 抓出):v19.248 拆檔後
+    # _fetch_fund_single 已住 fund_orchestration(該檔 L34 頂層 star-import 本檔,
+    # 本檔頂層回頭 import 會循環)→ 與 v19.339 _parse_nav_html 同解法:呼叫端
+    # lazy import。此前本函式(多來源聚合主入口)每呼叫必 NameError,被 caller
+    # `except Exception: print` 吞掉 → fetch_fund_from_moneydj_url 的 Step 2
+    # 多來源聚合 + alt page_type 重試(境內↔境外切換)自 v19.248 全滅。
+    from repositories.fund.fund_orchestration import _fetch_fund_single
+
     for _candidate in code_candidates:
         _result = _fetch_fund_single(
             _candidate, force_refresh=force_refresh,
