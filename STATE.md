@@ -2,6 +2,15 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📉 2026-07-11 A~E backlog 批次3(c)（行為改善）：MA60 圖表資料不足提示（v19.344）
+
+user 核准「1~4 陸續慢慢做」。3(c) 取風險最低的行為改善型先做（只修壞掉/靜默的情況,不動已正確訊號）:
+
+- **基金 MA60 圖表靜默消失（修）**:tab2 `s.rolling(60).mean()` 對 <60 NAV 點的新基金全 NaN → `.dropna()` 後 trace 空 = MA60 均線靜默消失、無提示（同檔 MA20/布林已有「資料不足」caption,唯 MA60 漏了）。修:對齊既有 §1 Fail-Loud 模式,<60 點時明講「MA60 均線未繪製 — NAV 僅 N 點,需 ≥60」而非默默省略。**不用動態縮窗偽裝**（縮到 30 點的線標「MA60」會誤導,且與 MA20 概念重疊）。`calc_metrics` 的 MA60 早有 `if len(s)>=60 else None` 守衛,只圖表 trace 漏 — 本修補齊。
+- **金融股判定（誤判,不動）**:第八份說股票端「用代號前綴猜金融股」— 實為誤判。`data_loader._is_financial_stock` 已是「`taiwan_stock_info` 產業別欄優先(比對 金融/保險/金控/銀行/證券)→ 28/58 前綴 fallback」,v19.80 N5 還補強過。故 3(c) 僅基金 MA60 一項。
+- **回歸網**:`tests/test_review_fixes_v19_344.py` 3 test（MA60 圖表閘門 source-scan + calc_metrics 短序列回 None/長序列回 float 回歸鎖）。
+- **A~E 進度**:批次1(止血)✅ / 批次3(c)本次 ✅ / 下一步批次2 時效閘(§8 先設計) → 批次3(a) 標準公式(RSI Wilder/ATR TR,§7 先給數學式) → 批次3(b) 語意項 → 批次4 架構。
+
 ## 🔒 2026-07-11 A~E backlog 批次1（止血）：CLAUDE.md §2.1 dataset 正名（A-3）
 
 user 核准「A~E 陸續修復」。基金端本批唯一適用項為文件校正（NAS SSRF 屬股票 repo 的 nas_server.py，基金 infra/proxy.py 僅為 NAS 消費端無 relay server；死碼 fetch_tw_pmi_local/export 有 tab1 caller 不可刪）：
