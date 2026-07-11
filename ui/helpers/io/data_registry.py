@@ -218,10 +218,15 @@ def _update_data_registry():
             return "🔴", f"過舊（{age}天 / {_fb_tag}）", MATERIAL_RED
 
         if freq == "quarterly":
+            # v19.342 校正:FRED 季頻 obs 標在「季首」(如 SLOOS Q2 調查標 04-01,
+            # 5 月中旬才發布),發布延遲 ~30-45 天 → 下一筆發布前,最新 obs 的
+            # 正常最大 age ≈ 92(季長)+ 43 ≈ 135 天。原 95/140 把每季發布前
+            # ~5 週的正常空窗誤判 🟡(user 2026-07-11 回報 SLOOS「延遲 101 天」
+            # 實為正常節奏)。GDP(advance ~+30 天)同樣被 135 覆蓋。
             _fb_tag = "fallback" if (_fred_next_rel and _fred_key) else "舊閾值"
-            if age <= 95:
+            if age <= 135:
                 return "🟢", f"本/上季（{age}天前 / {_fb_tag}）", MATERIAL_GREEN
-            if age <= 140:
+            if age <= 170:
                 return "🟡", f"延遲（{age}天前 / {_fb_tag}）", MATERIAL_ORANGE
             return "🔴", f"過舊（{age}天 / {_fb_tag}）", MATERIAL_RED
 
@@ -391,8 +396,12 @@ def _update_data_registry():
         except (ValueError, TypeError):
             _hm_age = None
         if _hm_age is not None and _hm_age > 7:
-            _hm_fl = (f"📦 ARCHIVED · {_hm_age} 天前（v19.47 後收進 ARCHIVED expander，"
-                      "點開「📦 ARCHIVED 台股熱錢監測」才會更新；"
+            # v19.342:tab1 長期桶已加「>30 天自動 data-only 補抓」(ui/hot_money.py
+            # refresh_hot_money_data)→ 正常情況不會再停在 >30 天;若仍看到,代表
+            # 自動補抓也失敗(FinMind/Yahoo 網路層),指引同步更新。
+            _hm_fl = (f"📦 ARCHIVED · {_hm_age} 天前（面板收在 ARCHIVED expander；"
+                      "資料 >30 天時 Tab1 會自動補抓,持續過舊代表 FinMind/Yahoo 抓取失敗,"
+                      "可用 Tab5「📥 立即更新外資 / USDTWD」重試；"
                       f"{'> 30 天已自動排除於 AI prompt' if _hm_age > 30 else 'AI prompt 帶 [STALE] 標籤'}）")
         reg["總經_HOT_MONEY_FX"] = {
             "label":       "🇹🇼 外資買賣超 × USDTWD 同步判讀",
@@ -443,7 +452,10 @@ def _update_data_registry():
                 _r_date = "今日"
                 _r_count = 1
             else:
-                _r_ic, _r_fl, _r_fc = "🔴", (_note[:100] or "抓取失敗"), MATERIAL_RED
+                # v19.342:100 → 250 字。100 字截斷把多層 fallback trace 的
+                # 尾段吃掉(2026-07-11 Put/Call 案例:v19.277 新增的 CBOE 官方
+                # CSV 層失敗原因被截走,無法診斷)→ 放寬保留完整 per-layer trace。
+                _r_ic, _r_fl, _r_fc = "🔴", (_note[:250] or "抓取失敗"), MATERIAL_RED
                 _r_date = "—"
                 _r_count = 0
             reg[f"雷達_{_lk}"] = {

@@ -2,6 +2,19 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🛰️ 2026-07-11 資料異常實診修復 + 第八份建議書查證（v19.342）
+
+user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷達9 Put-Call 全源失敗 / SLOOS 延遲 101天 fallback),同輪併入第八份建議書(595 行全面稽核)查證。
+
+- **SLOOS 101 天「延遲」= 季頻靜態閾值算錯(修)**:FRED 季頻 obs 標在季首(SLOOS Q2 調查標 04-01、5 月中旬才發布)→ 下一筆發布前正常最大 age ≈ 92+43 ≈ 135 天;原 95/140 把每季發布前 ~5 週的正常空窗誤判 🟡(101 天實為正常節奏)。修:135/170+推導註(`ui/helpers/io/data_registry.py`)。「fallback」標籤=FRED next_release 對 DRTSCILM 回 None 落靜態閾值 — 動態路徑本身參數正確(`include_release_dates_with_no_data=true` 在場),疑為 FRED 端 SLOOS 排程公布視窗短,不動。
+- **外資買賣超 ARCHIVED 永久紅(修,設計補洞)**:根因=v19.47 面板收 ARCHIVED expander 後 fetch 綁在 render 內,不點開就永不更新(v19.152 只補了 tab5 手動鈕)。修:抽 `ui/hot_money.refresh_hot_money_data()` data-only helper(tab5 鈕改薄殼共用)+ `hot_money_is_stale()`(>30 天=AI prompt 排除閾值)+ tab1 長期桶 render 時自動補抓一次(每 session 至多一次,成敗皆標記 — v19.340 AppTest refused-retry 教訓);面板維持封存(v19.47 user 決策不變)。tab5 診斷字串同步改「自動補抓+手動重試」指引。
+- **雷達9 Put/Call(據實回報+診斷力修復)**:六層上游確認全死 — Yahoo ^CPC/^CPCE 已下架(production trace「empty len=0」)、stooq 無此標的、CBOE `volume_and_call_put_ratios/*.csv` 為封存檔(資料止於 2019-10,WebSearch 佐證);v19.277 已加的官方 CSV 層在 production 的失敗原因**被 tab5 note 100 字截斷吃掉**(截斷點恰在 stooq trace)→ 修:截斷 100→250,下輪報異常時能看到 CBOE 層真因(HTTP 碼或過舊拒收)再決定 OCC 替代層(未驗證端點不盲上,列待核准)。
+- **NDC fetcher 假 dataset 正名(修,§3.3)**:`TaiwanMacroEconomics` 在 FinMind 不存在(SDK 2.0.4 枚舉+官方文件皆無;真名 `TaiwanBusinessIndicator` 寬表含 monitoring 分數/燈號/leading)→ `fetch_ndc_signal_history` 改走新 `_finmind_business_indicator()`,additive `color_latest` 官方燈號欄(schema 驗證僅驗 score/trend,安全);`fetch_tw_pmi_local`/`fetch_tw_export_yoy` 同病但 FinMind 無 PMI/出口 dataset 可換 — 檔頭如實標註,新源設計列待核准。與 stock v19.85 同根因同修法(該 repo 憲法 §2.1 還寫著「TW PMI/NDC:FinMind TaiwanMacroEconomics」— 文件漂移待 user 更新)。
+- **第八份屬實項(修)**:app.py `_calc_data_health` thin wrapper 0 呼叫者(真 caller 在 tab1_macro 自帶;tab5 版 v19.339 已刪)→ 刪;tab2 TER 卡「費用每降 1%,20 年後終值多 ~25%」無依據 → 改「~22%＝1.01²⁰ 複利」。
+- **第八份不適用清單(證據)**:AUM `fund_scale` 無寫入者=誤判(sources.py:2149/2466+orchestration:705 從 MoneyDJ 基本資料寫入,tab5:1129 有渲染);tab5 §① yfinance 列 hard-wired ⬜=與現行碼不符(已是 `_yf_ok` 動態計數;rows 3-8 共用 `_fund_n` 屬粗粒度「來源已用」表,per-source 健康在 §② registry);positional NAV 解析複製 5 次=已修過(v19.339 起 `_parse_nav_html` 在 sources.py 被引用 9 處);`_FRED_KEYS` 死列=v19.195 已 SSOT 化;holdings/risk 未 import 假綠燈=v19.287-288 已修(報告引用自家 STATE);折溢價/追蹤誤差不適用開放式基金=報告自我校正正確;基金 MA60 min_periods/Sharpe σ 短史=前輪已列待核准。
+- **第八份大項待核准**:⭐Put/Call OCC 替代層(等 250 字 trace 看到 CBOE 真因後設計)、⭐裸 urllib ×3(bank_platform/morningstar/yahoo)統一走 fetch_url 連線層、⭐TER 真源(現僅 Allianz 經理費+內建參考均值)、⭐NAV freshness banner 上游值缺(nav_date/_moneydj_fetched_at)、⭐monitored 裝飾器強制診斷登錄(P4 家族)、staleness 閘/data_manager/並行化/UX(前輪已列)。
+- **回歸網**:`tests/test_review_fixes_v19_342.py` 15 test(季頻閾值+note 250 掃描 ×2、hot_money stale 判定 ×4、refresh helper 成功寫 stash/失敗保舊 ×2、tab1 once-flag+tab5 共用掃描 ×2、NDC TBI 功能 ×3、app 死 wrapper+TER 依據 ×2)。
+
 ## 🔍 2026-07-03 全面稽核待修清單（跨 Tab 稽核）
 
 > Claude 逐檔讀取所有 Tab 後彙整，對照 2026-07-03 真實市場數值確認。

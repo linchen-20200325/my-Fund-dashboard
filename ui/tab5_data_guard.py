@@ -316,44 +316,18 @@ def render_data_guard_tab() -> None:
         )
     if _refetch_btn:
         try:
-            # v19.196 P0-4-A:hot_money 拆 2 檔
-            from repositories.hot_money_repository import (
-                fetch_foreign_flow_series, fetch_usdtwd_series,
-            )
-            from ui.hot_money import build_signals
-            import pandas as _pd_hm
+            # v19.342:fetch+stash 邏輯抽至 ui.hot_money.refresh_hot_money_data
+            # (與 tab1 長期桶 >30 天自動補抓共用同一條資料路),本按鈕只留 UI 殼。
+            from ui.hot_money import refresh_hot_money_data
             _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
                             if hasattr(st, "secrets") else "") or ""
             with st.spinner("📡 抓 FinMind 外資 + Yahoo USDTWD..."):
-                _flow_df, _ferr = fetch_foreign_flow_series(180, _finmind_tok)
-                _fx_df, _xerr = fetch_usdtwd_series(180)
-            for _err in (_ferr, _xerr):
-                if _err:
-                    st.warning(_err)
-            if _flow_df.empty or _fx_df.empty:
-                st.error("外資或 USDTWD 抓取為空,無法更新熱錢卡。")
+                _hm_ok, _hm_msg = refresh_hot_money_data(token=_finmind_tok)
+            if _hm_ok:
+                st.success(f"✅ 外資/USDTWD {_hm_msg}")
+                st.rerun()
             else:
-                _sig = build_signals(_flow_df, _fx_df, window=5,
-                                     flow_thr=50.0, fx_thr=0.5)  # v19.292: fix wrong kwarg names
-                if _sig.empty:
-                    st.warning("外資與匯率無重疊交易日,無法計算訊號。")
-                else:
-                    _latest = _sig.iloc[-1]
-                    st.session_state["_macro_hot_money"] = {
-                        "date": str(_pd_hm.Timestamp(_latest["date"]).date()),
-                        "state": str(_latest.get("state", "")),
-                        "is_divergence": bool(_latest.get("is_divergence", False)),
-                        "interpretation": str(_latest.get("interpretation", ""))[:200],
-                        "foreign_net_yi": float(_latest.get("foreign_net_yi", 0) or 0),
-                        "roll_flow": float(_latest.get("roll_flow", 0) or 0),
-                        "roll_apprec_pct": float(_latest.get("roll_apprec", 0) or 0),
-                        "window": 5,
-                    }
-                    st.success(
-                        f"✅ 已更新外資/USDTWD 資料至 "
-                        f"{st.session_state['_macro_hot_money']['date']}"
-                    )
-                    st.rerun()
+                st.error(f"更新失敗:{_hm_msg}")
         except Exception as _e_rf:
             st.error(f"refetch 失敗:[{type(_e_rf).__name__}] {_e_rf}")
     st.divider()

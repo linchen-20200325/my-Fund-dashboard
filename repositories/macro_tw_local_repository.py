@@ -36,6 +36,11 @@ __version__ = "1.0.0"
 from shared.api_endpoints import FINMIND_BASE
 
 # FinMind TaiwanMacroEconomics 指標關鍵字（含模糊比對 fallback）
+# ⚠️ v19.342 診斷:dataset `TaiwanMacroEconomics` 在 FinMind **不存在**(SDK 2.0.4
+#    Dataset 枚舉 + 官方文件皆無此名;真名為 `TaiwanBusinessIndicator`,寬表)。
+#    → fetch_ndc_signal_history 已改走 _finmind_business_indicator(TBI 寬表)。
+#    → fetch_tw_pmi_local / fetch_tw_export_yoy 仍掛死源(FinMind 無 PMI/出口
+#      dataset 可替換),恆回 error='...無資料' — 新源設計列待核准,先如實標註。
 _NDC_SIGNAL_KEYS = ('景氣對策信號(分)', '景氣對策信號')
 _TW_PMI_KEYS     = ('製造業採購經理人指數', '製造業 PMI', 'PMI')
 _EXPORT_YOY_KEYS = ('出口年增率(%)', '出口年增率', '出口貿易')
@@ -98,6 +103,54 @@ def _finmind_macro_series(indicator_keys: tuple,
     return sub
 
 
+def _finmind_business_indicator(months_back: int = 18,
+                                token: str = "") -> Optional[pd.DataFrame]:
+    """抓 FinMind `TaiwanBusinessIndicator`(國發會景氣指標官方鏡像,寬表)。
+
+    v19.342 新增(鏡像 stock tw_macro.fetch_business_indicator_series v19.85):
+    欄位契約(FinMind SDK data_loader.taiwan_business_indicator):
+      date / leading / coincident / lagging / monitoring(景氣對策信號綜合分數)
+      / monitoring_color(燈號)。
+    失敗回 None(print log,不捏造)。
+    """
+    today = _dt.date.today()
+    params: dict = {
+        'dataset':    'TaiwanBusinessIndicator',
+        'start_date': (today - _dt.timedelta(days=int(months_back * 31))
+                       ).strftime('%Y-%m-%d'),
+        'end_date':   today.strftime('%Y-%m-%d'),
+    }
+    if token:
+        params['token'] = token
+    r = fetch_url(FINMIND_BASE, params=params, timeout=15)
+    if r is None:
+        print('[macro_tw_local/TBI] ❌ FinMind TaiwanBusinessIndicator 無回應')
+        return None
+    try:
+        _j = r.json()
+    except Exception as e:
+        import sys as _sys
+        print(f'[macro_tw_local/TBI] ❌ JSON parse: {type(e).__name__}: {e}',
+              file=_sys.stderr)
+        return None
+    rows = _j.get('data', [])
+    if not rows:
+        print(f"[macro_tw_local/TBI] ⚠️ 空 data(msg={str(_j.get('msg', ''))[:80]})")
+        return None
+    df = pd.DataFrame(rows)
+    if 'date' not in df.columns or 'monitoring' not in df.columns:
+        print(f'[macro_tw_local/TBI] ❌ 欄位不符: {list(df.columns)[:8]}')
+        return None
+    _keep = ['date'] + [c for c in ('monitoring', 'monitoring_color', 'leading')
+                        if c in df.columns]
+    out = df[_keep].copy()
+    out['monitoring'] = pd.to_numeric(out['monitoring'], errors='coerce')
+    out = out.dropna(subset=['monitoring']).sort_values('date').reset_index(drop=True)
+    if out.empty:
+        return None
+    return out
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # §1 NDC 景氣對策信號（鏡像 stock tw_macro.py:369）
 # ════════════════════════════════════════════════════════════════════════════
@@ -124,12 +177,21 @@ def fetch_ndc_signal_history(months_back: int = 12, token: str = "") -> dict:
         'score_latest': None, 'score_prev': None, 'score_prev2': None,
         'trend': [], 'inflection': '⬜ 資料不足',
         'date_latest': '', 'source': None, 'error': None,
+        # v19.342 additive:官方燈號字串(TBI monitoring_color;schema 驗證僅驗
+        # score/trend,additive key 安全)
+        'color_latest': None,
     }
-    sub = _finmind_macro_series(_NDC_SIGNAL_KEYS,
-                                months_back=months_back, token=token)
-    if sub is None or len(sub) < 3:
-        result['error'] = 'FinMind TaiwanMacroEconomics 無景氣對策信號資料'
+    # v19.342:改走 TaiwanBusinessIndicator 寬表(原 TaiwanMacroEconomics 長表
+    # dataset 不存在,自建立起恆回「無資料」— 見檔頭 v19.342 診斷註)。
+    sub_tbi = _finmind_business_indicator(months_back=max(months_back, 6),
+                                          token=token)
+    if sub_tbi is None or len(sub_tbi) < 3:
+        result['error'] = 'FinMind TaiwanBusinessIndicator 無景氣對策信號資料'
         return result
+    if 'monitoring_color' in sub_tbi.columns:
+        _c = str(sub_tbi['monitoring_color'].iloc[-1] or '').strip()
+        result['color_latest'] = _c or None
+    sub = sub_tbi[['date', 'monitoring']].rename(columns={'monitoring': 'value'})
     vals = [int(round(v)) for v in sub['value'].tail(6).tolist()]
     cur, prev = vals[-1], vals[-2]
     prev2 = vals[-3] if len(vals) >= 3 else None
@@ -139,7 +201,8 @@ def fetch_ndc_signal_history(months_back: int = 12, token: str = "") -> dict:
     result['trend']        = vals
     result['date_latest']  = str(sub['date'].iloc[-1])[:10]
     # v19.151 F-PROV-1 phase 2:升級 source 至具名 dataset + 加 fetched_at UTC ISO
-    result['source']       = 'FinMind:TaiwanMacroEconomics'
+    # v19.342:dataset 正名 TaiwanBusinessIndicator(舊名不存在,見檔頭診斷註)
+    result['source']       = 'FinMind:TaiwanBusinessIndicator'
     result['fetched_at']   = _dt.datetime.now(_dt.timezone.utc).isoformat()
     if prev2 is not None:
         if prev2 >= prev and cur > prev:

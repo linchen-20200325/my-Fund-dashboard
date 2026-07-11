@@ -29,7 +29,8 @@ class TestMacroTwLocalFetchProvenance:
         assert "'source'" in src and "'fetched_at'" in src, (
             "fetch_ndc_signal_history 應寫入 source + fetched_at"
         )
-        assert "FinMind:TaiwanMacroEconomics" in src, (
+        # v19.342:dataset 正名 TaiwanBusinessIndicator(TaiwanMacroEconomics 不存在)
+        assert "FinMind:TaiwanBusinessIndicator" in src, (
             "source 應為具名 dataset(非僅 'FinMind')"
         )
         # 抓所有寫入 source 的行,確認都升級

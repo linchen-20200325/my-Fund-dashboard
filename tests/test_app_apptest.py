@@ -33,6 +33,23 @@ def _force_network_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("no_proxy", raising=False)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _no_hot_money_auto_refresh():
+    """v19.342:tab1「>30 天自動補抓外資/USDTWD」在 AppTest 全程停用。
+
+    該 data-only 補抓邏輯由 test_review_fixes_v19_342 單元測試覆蓋;AppTest
+    每建一個 instance 都會觸發一次(session 全新 → is_stale=True),對
+    FinMind/Yahoo 真打網路 — CI 引入不確定性、本地沙箱 proxy retry 累秒
+    (同 v19.340 hermetic 原則:AppTest 只驗 UI 渲染,不外連)。
+    module attr 直接替換(tab1 於 render 時 from-import,逐次讀 module attr)。
+    """
+    import ui.hot_money as _hm
+    _orig = _hm.refresh_hot_money_data
+    _hm.refresh_hot_money_data = lambda *a, **k: (False, "skipped in AppTest")
+    yield
+    _hm.refresh_hot_money_data = _orig
+
+
 @pytest.fixture(scope="module")
 def at() -> AppTest:
     """初始化一個共享 AppTest（單檔多測試共用以省 import 時間）。"""
