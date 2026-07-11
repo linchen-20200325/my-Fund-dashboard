@@ -2,6 +2,13 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🔒 2026-07-11 A~E backlog 批次1（止血）：CLAUDE.md §2.1 dataset 正名（A-3）
+
+user 核准「A~E 陸續修復」。基金端本批唯一適用項為文件校正（NAS SSRF 屬股票 repo 的 nas_server.py，基金 infra/proxy.py 僅為 NAS 消費端無 relay server；死碼 fetch_tw_pmi_local/export 有 tab1 caller 不可刪）：
+
+- **A-3 文件正名**：CLAUDE.md §2.1 把已證實不存在的 `TaiwanMacroEconomics` 更正為 `TaiwanBusinessIndicator`（NDC fetcher 已於 v19.342 改走此 dataset）；PMI/出口 fetcher 同掛不存在 dataset、FinMind 無替代集 → 註明現況恆無資料、新源待評估。憲法漂移收斂。
+- **A~E 後續**：基金端待落地項為 MA60 min_periods（批次3 公式，§7 先給數學式）、staleness 閘（批次2，§8 先設計）、Put/Call OCC 替代層（卡 user 提供 250 字診斷 trace）、裸 urllib×3 統一連線層、monitored 診斷登錄（批次4 架構）。與股票端同步排程。
+
 ## 🛰️ 2026-07-11 資料異常實診修復 + 第八份建議書查證（v19.342）
 
 user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷達9 Put-Call 全源失敗 / SLOOS 延遲 101天 fallback),同輪併入第八份建議書(595 行全面稽核)查證。
