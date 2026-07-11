@@ -18,6 +18,21 @@ streamlit_testing = pytest.importorskip(
 AppTest = streamlit_testing.AppTest
 
 
+def _force_network_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """v19.340:讓本測試行程內所有外連秒收 ECONNREFUSED,測試回歸本旨(驗 UI 渲染)。
+
+    背景:v19.340 修活 `fetch_fund_multi_source`(v19.248 起 NameError 秒死被吞)後,
+    注入 mock 基金的 AppTest 在 tab3 健檢 ThreadPool 會對 mock 代碼**真打**多來源
+    網路抓取 → CI 60s timeout。此前測試「跑得快」是騎在壞掉的 production 路徑上。
+    對齊 stock repo v19.81 同類前例:proxy 指向 127.0.0.1:9(discard port,必
+    ECONNREFUSED),requests/urllib 皆 trust_env → 全外連立即失敗走既有降級路徑。
+    """
+    for _pv in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        monkeypatch.setenv(_pv, "http://127.0.0.1:9")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+
+
 @pytest.fixture(scope="module")
 def at() -> AppTest:
     """初始化一個共享 AppTest（單檔多測試共用以省 import 時間）。"""
@@ -98,6 +113,7 @@ def test_tab3_with_mock_fund_renders_kpi_cards(monkeypatch: pytest.MonkeyPatch) 
     """
     monkeypatch.setenv("FRED_API_KEY", "test-fred-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    _force_network_refused(monkeypatch)  # v19.340:防 tab3 健檢真打網路 timeout
 
     app = AppTest.from_file("app.py", default_timeout=60)
     app.secrets["FRED_API_KEY"] = "test-fred-key"
@@ -125,6 +141,7 @@ def test_tab5_overlap_button_click_renders_method_caption(
     """
     monkeypatch.setenv("FRED_API_KEY", "test-fred-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    _force_network_refused(monkeypatch)  # v19.340:防 tab3/tab5 健檢真打網路 timeout
 
     app = AppTest.from_file("app.py", default_timeout=60)
     app.secrets["FRED_API_KEY"] = "test-fred-key"
