@@ -6,7 +6,7 @@
 - render_data_guard_tab() -> None **零閉包依賴**（與 Tab4/Tab6 相同）
 - 外部 helper 處理：
   * _update_data_registry() → caller (app.py) 在呼叫本函式前先 call
-  * _calc_data_health / _parse_indicator_date → 從 ui.helpers.session import
+  * _parse_indicator_date → 從 ui.helpers.session import(v19.339:_calc_data_health wrapper 已刪,本檔 0 呼叫)
   * _now_tw → 本檔內 lambda 重定義
   * FRED_KEY / GEMINI_KEY → os.environ.get（app.py:_load_keys 已寫到 env）
 
@@ -30,7 +30,6 @@ from infra.proxy import get_proxy_config
 from shared.converters import safe_float as _safe_float
 from shared.signal_thresholds import TRADING_DAYS_PER_YEAR as _TD_1Y
 from ui.helpers.session import (
-    calc_data_health as _calc_data_health_pure,
     parse_indicator_date as _parse_indicator_date,  # noqa: F401 — re-export for tests
 )
 
@@ -40,11 +39,8 @@ _TW_TZ = ZoneInfo("Asia/Taipei")
 def _now_tw():
     return datetime.datetime.now(_TW_TZ)
 
-
-def _calc_data_health(indicators=None):
-    """同 app.py 內 _calc_data_health：indicators=None → 走 session_state。"""
-    ind = indicators if indicators is not None else st.session_state.get("indicators", {})
-    return _calc_data_health_pure(ind)
+# v19.339(第五份 review):刪死碼 _calc_data_health wrapper + calc_data_health
+# import — 本檔 0 呼叫(⓪/②區直接數 indicators),tab1/2/3 各有自己的 wrapper。
 
 
 # ════════════════════════════════════════════════════════════════
@@ -365,10 +361,8 @@ def render_data_guard_tab() -> None:
     # ── Section 0: 全域資料健康總表 ──（caller 端 app.py 已先 call _update_data_registry()）
     _reg = st.session_state.get("data_registry", {})
 
-    _FRED_KEYS = ["NAPM/PMI","DGS10","DGS2","DGS3MO","BAMLH0A0HYM2","M2SL","WALCL",
-                  "CPIAUCSL","FEDFUNDS","UNRATE","PPIACO","UMCSENT","ICSA","HSN1F",
-                  "SAHMREALTIME","DRTSCILM"]
     # v19.195 SSOT:改 import D5_FRED_KEYS / D5_YF_KEYS,取代第 ② 區重複定義。
+    # v19.339:刪 v19.195 遷移殘留的 16 元素 _FRED_KEYS 死清單(定義後 0 引用)。
     from ui.helpers.session import D5_FRED_KEYS as _FRED_INTERNAL
     from ui.helpers.session import D5_YF_KEYS as _YF_KEYS
     _fred_ok = sum(1 for k in _FRED_INTERNAL

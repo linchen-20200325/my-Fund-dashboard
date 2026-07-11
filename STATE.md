@@ -53,6 +53,41 @@
 
 ## 當前版本
 
+- **v19.339 第五份外部 review 查證後修復(5 條 Bug 主張:3 修 / 2 已修過或半誤判;另 UI/效能項列待核准)**:
+  - **Bug 4(真,本輪最高價值)`_parse_nav_html` NameError 潛伏 ×3**:v19.248 P1-5 拆檔後
+    `sources.py` 頂層從未 import 該 fn(定義在 `nav_metrics.py`,且 nav_metrics 頂層
+    star-import sources → 循環,不能頂層補)。動態驗證 `hasattr(sources,'_parse_nav_html')
+    =False` — `_src_bank_platform_nav`(wb 近30日 fallback)/`_src_tcb_nav`/
+    `_src_insurance_subdomain_nav` 三條 NAV 備援一走到解析就 NameError 被外層 except
+    吞掉,**拆檔後從未生效**(v19.287 同 class)。修:三函式各補呼叫端 lazy import。
+  - **Bug 5(真)Morningstar secId 暫時性失敗永久負快取**:`_morningstar_search_secid`
+    except 路徑落到 `_ms_secid_cache[query]=""` — 一次 timeout/403 就讓該基金的
+    Morningstar 長史救援(v19.281 span-extend)整個 process 存活期失效,且該 dict 不在
+    `_CACHE_REGISTRY`(全域刷新清不到)。修:失敗 return 不入快取(對齊 v19.337
+    `_daily_cache` 失敗不快取原則);HTTP 200 查無結果=確定性負結果,保留合法負快取。
+  - **Bug 3(半真)DXY 月變化除零**:`us_indicators` DXY 區塊 `(v-m1)/m1` 無守衛且無
+    try — m1=0(病態源資料)會炸掉後面所有指標。補 `if m1 else 0.0`(同檔 COPPER/
+    cross-rate 既有 pattern)。報告連帶點名的 ADL 其實整塊有自己的 try/except,誤判。
+  - **死碼 ×2(tab5)**:16 元素 `_FRED_KEYS` 清單(v19.195 SSOT 遷移殘留,定義後 0 引用)
+    + `_calc_data_health` wrapper(本檔 0 呼叫,tab1/2/3 各有自用 wrapper)刪除。
+  - **Bug 1 防再犯**:v19.287 根因(star-import 漏綁 → NameError 被 except 吞)已修過;
+    本輪補 smoke test 釘住 orchestration 7 個關鍵名字可解析+可呼叫,再漏綁立即紅燈。
+  - **已修過/誤判(證據)**:Bug 2 `.iloc[-2]` IndexError — CPI 守衛 round-1 已修,其餘
+    指標塊全有 `if len(df)>=2` 前置守衛或 `_fred_iso`/`_yf_iso` 隔離 wrapper,「殺光
+    後續指標」結構不存在;「基金 entrypoint 零快取 ~20 round-trip」— v19.337 已把重
+    子源(nav/div/perf/risk+holdings)全上 `_daily_cache`,瀑布大頭已消;入口
+    `fetch_fund_from_moneydj_url`/`_fetch_fund_single` 本身有 `force_refresh` 參數,
+    盲加 TTL 會破壞強制刷新語意 → 列待核准。
+  - **回歸網**:`tests/test_review_fixes_v19_339.py` 11 test(TCB/保險子域端到端跑通
+    NameError 路徑 / 負快取兩態 / DXY 守衛 / 死碼歸零 / orchestration smoke);
+    `test_tab5_data_guard` 原 wrapper delegate 測試改直測 SSOT 純函式(數值斷言不變)。
+    全套件 **2,433 passed / 0 failed**。
+  - **大項待核准(§-1 不擅動)**:入口 TTL(需定義與 force_refresh 交互)、NAV 瀑布
+    ThreadPool race、fetch cycle 級 Session 複用、COPPER/VIX/RRP/TGA 進預熱 pool、
+    診斷盲區(AI 呼叫成敗/Sheet 帳本內容/RSS 逐源/熱錢新鮮度燈)、指南針自動抓取、
+    Tab2/Tab3 合併、健診表格收斂、sidebar 開發者功能移診斷頁、配息幣別多源 fallback
+    — 詳 PR 描述。
+
 - **v19.338 M9 回歸 hotfix:Tab2 `_sh1` NameError(merge 前 CI slow lane 抓到)**:
   v19.336 M9 抽 `_risk_1y_rows_html` 時,`_sh1`(Sharpe 1Y)的定義隨 inline 區塊移入 helper,
   但下游「Sharpe 持久性說明(孫慶龍框架)」仍引用 → NameError(`except (ValueError,
