@@ -542,11 +542,19 @@ def render_single_fund_tab() -> None:
                 fig_n.add_trace(go.Scatter(
                     x=_bb_ma.dropna().index, y=_bb_ma.dropna().values,
                     name="MA20", line=dict(color=MATERIAL_ORANGE, width=1, dash="dot")))
-                # MA60
-                _ma60 = s.rolling(60).mean()
-                fig_n.add_trace(go.Scatter(
-                    x=_ma60.dropna().index, y=_ma60.dropna().values,
-                    name="MA60", line=dict(color=MD_PURPLE_500, width=1, dash="dot")))
+                # MA60（v19.343 A~E 3c：新基金 <60 NAV 點時 rolling(60) 全 NaN →
+                # dropna 後 trace 空 = 靜默消失。對齊上方 MA20/布林的 §1 Fail-Loud
+                # 模式:明講「資料不足」而非默默省略,避免 user 以為 MA60 功能壞掉。
+                # 不用動態縮窗偽裝(縮到 30 點的線標「MA60」會誤導,且與 MA20 概念重疊)。
+                if len(s) >= 60:
+                    _ma60 = s.rolling(60).mean()
+                    fig_n.add_trace(go.Scatter(
+                        x=_ma60.dropna().index, y=_ma60.dropna().values,
+                        name="MA60", line=dict(color=MD_PURPLE_500, width=1, dash="dot")))
+                else:
+                    st.caption(
+                        f"⚠️ MA60 均線未繪製 — 本檔 NAV 歷史僅 {len(s)} 點,需 ≥60 點。"
+                        "此為**資料不足**非功能故障,NAV 歷史補足後自動顯示。")
                 # 淨值主線（純線；不再 fill 到 0 以免 y 軸被自動拉到 0 壓扁走勢）
                 fig_n.add_trace(go.Scatter(
                     x=df_show["date"], y=df_show["nav"],

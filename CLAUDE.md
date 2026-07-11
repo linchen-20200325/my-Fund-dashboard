@@ -124,7 +124,8 @@
 **關鍵衝突裁決**:
 - **基金 NAV**:FundClear(境外)主、TDCC(境內)主、MoneyDJ 補強(績效/風險/持股),Cnyes / Morningstar 為最末 fallback(evidence: fund_repository.py:2352+)
 - **MoneyDJ 子網域**:依保單發行商選對應子網域(合庫→tcbbankfund / 安達→chubb),**不混用**(evidence: fund_fetcher.py:94-106)
-- **TW PMI / NDC**:FinMind TaiwanMacroEconomics(evidence: macro_tw_local_fetch.py:35)
+- **TW NDC 景氣燈號**:FinMind **`TaiwanBusinessIndicator`**(國發會官方鏡像,含 monitoring 分數 + monitoring_color 燈號 + leading;evidence: repositories/macro_tw_local_repository.py `_finmind_business_indicator`)。⚠️ v19.342 更正:原文寫的 `TaiwanMacroEconomics` **不存在於 FinMind**(SDK 2.0.4 枚舉 + 官方文件皆無此名),NDC fetcher 已改走 TaiwanBusinessIndicator。
+- **TW PMI / 出口 YoY**:`fetch_tw_pmi_local` / `fetch_tw_export_yoy` 原亦掛 `TaiwanMacroEconomics`(同上不存在),FinMind 無 PMI/出口替代資料集 → 現況恆無資料,新源設計待評估(見 STATE v19.342)
 - **TW 外資買賣超**:FinMind TaiwanStockTotalInstitutionalInvestors(evidence: hot_money.py:38)
 - **VIX**:Yahoo `^VIX` 主,FRED VIXCLS 備
 - **News**:8 個 RSS feed 並聯,**不去重後平均**,以情緒詞典關鍵字命中為準(evidence: news_repository.py:15-55)
