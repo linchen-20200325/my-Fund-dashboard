@@ -80,6 +80,20 @@ def _mock_loaded_fund(code: str = "0050", name: str = "元大台灣50",
         "load_error": None,
         "is_core": True,
         "policy_id": "P001",
+        # v19.340:tab3 健檢 worker(process_one_fund)有 v19.180 設計的 fd 短路 —
+        # portfolio_funds 帶 moneydj_raw 就跳過 auto_fetch_moneydj 真抓。原 mock
+        # 缺此欄,v19.340 修活主聚合入口後健檢 ThreadPool 對 mock 代碼真打
+        # 13-16 源網路 → AppTest 60s timeout(此前靠 NameError 秒死誤打誤撞地快)。
+        # currency=TWD 同時走 tab2 v18.278 鏡像短路,不打 FX API → 全程零網路。
+        "moneydj_raw": {
+            "fund_code": code,
+            "fund_name": name,
+            "currency": "TWD",
+            "series": series,
+            "dividends": [],
+            "nav_latest": last,
+            "nav_date": str(series.index[-1])[:10],
+        },
         "metrics": {
             "nav": last,
             "ret_1y": 8.5,
