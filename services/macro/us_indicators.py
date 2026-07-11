@@ -426,7 +426,9 @@ def fetch_all_indicators(fred_api_key):
     s_dxy = _yf_pre.get("DX-Y.NYB", pd.Series(dtype=float))
     if len(s_dxy) >= 22:
         v = round(float(s_dxy.iloc[-1]),2); m1 = round(float(s_dxy.iloc[-22]),2)
-        chg_m = round((v-m1)/m1*100, 2)
+        # v19.339(第五份 review Bug 3):m1=0(病態源資料)原直接 ZeroDivisionError,
+        # 本區塊無 try → 炸掉後面所有指標。補守衛,對齊同檔 COPPER/cross-rate pattern。
+        chg_m = round((v-m1)/m1*100, 2) if m1 else 0.0
         s_w = s_dxy.resample("W").last().tail(260)
         R["DXY"] = dict(
             name="美元指數 DXY", value=v, prev=round(chg_m,2),

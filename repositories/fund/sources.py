@@ -1130,6 +1130,11 @@ def _src_bank_platform_nav(base_code: str) -> "pd.Series":
     支援 MoneyDJ 格式（wb01/wb02/wr02）與台灣人壽 mobile .aspx 格式。
     """
     import datetime as _dt_bp, re as _re_bp, urllib.request as _ur_bp
+    # v19.339(第五份 review Bug 4):_parse_nav_html 定義於 nav_metrics,本模組
+    # 頂層從未 import(P1-5 拆檔後 hasattr(sources,'_parse_nav_html')=False)→
+    # wb 近30日 fallback 一走到就 NameError 被外層 except 吞掉,路徑從未生效。
+    # nav_metrics 頂層 star-import 本模組 → 循環,故採呼叫端 lazy import。
+    from repositories.fund.nav_metrics import _parse_nav_html
     _code = base_code.upper().strip()
     platforms = _BANK_PLATFORM_CODES.get(_code, [])
     if not platforms:
@@ -1280,7 +1285,13 @@ def _morningstar_search_secid(query: str, currency: str = "TWD") -> str:
             _ms_secid_cache[query] = sec_id
             return sec_id
     except Exception as _e:
+        # v19.339(第五份 review Bug 5):暫時性失敗(timeout/403/JSON 壞)原本也落到
+        # 下方永久負快取 — 一次網路抖動就讓該基金的 Morningstar 長史救援
+        # (span-extend)整個 process 存活期失效。失敗不入快取,下次呼叫重試
+        # (對齊 v19.337 _daily_cache「失敗不快取」原則)。
         print(f"[morningstar_search] '{query}': {_e}")
+        return ""
+    # HTTP 200 但查無結果 = 確定性負結果 → 合法負快取(避免重複打搜尋 API)
     _ms_secid_cache[query] = ""
     return ""
 
@@ -2316,6 +2327,8 @@ def _src_tcb_nav(code: str) -> pd.Series:
     """
     import datetime as _dt
     import re as _re2
+    # v19.339(Bug 4):同 _src_bank_platform_nav — lazy import 解 NameError 潛伏
+    from repositories.fund.nav_metrics import _parse_nav_html
     today = _dt.date.today()
     # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
     # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
@@ -2964,6 +2977,8 @@ def _src_insurance_subdomain_nav(code: str) -> pd.Series:
         return pd.Series(dtype=float)
 
     import datetime as _dt
+    # v19.339(Bug 4):同 _src_bank_platform_nav — lazy import 解 NameError 潛伏
+    from repositories.fund.nav_metrics import _parse_nav_html
     today = _dt.date.today()
     # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
     # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
