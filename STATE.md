@@ -2,6 +2,16 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🗂️ 2026-07-12 Tab5 資料診斷「分類分組」(v19.350,user 要求「參考台股」)
+
+user 看台股 Tab5 診斷表(依類別收合 +「台灣總經（6 筆｜🟢3 🟡1 🔴2）」rollup)後要求基金端比照。原基金 ② 全域資料健康總表為單張平面表 + 三篩選器,無分類。
+
+- **新純模組** `ui/helpers/io/registry_classify.py`(L3 UI helper,**不 import streamlit**、純函式 dict→list):`classify_registry(reg)` 依 key 前綴(總經_/雷達_/新聞_/基金_/組合_)分組 + 算每類 🟢🟡🔴⚪ rollup;`DIAG_CATEGORIES` 中繼 SSOT(前綴→顯示名→未載入提示 Tab);`rollup_caption()` 生成「🟢3　🟡1　🔴2」字串。未知前綴收「其他」群組(§1 不讓已登記資料消失)。
+- **Tab5 ② 改造**:平面 rows 迴圈 → 依類別分組渲染。**rollup 反映全類真實健康**(不受篩選,同台股語義);既有三篩選器改為「隱藏列」,謂詞複用既有 `_reg_filtered`(單一真相零重複);整類未載入 → ⚪「請至 TabX 載入」誠實提示。filter/snapshot viewer 保留不動。
+- **範圍誠實聲明(§8.1 step 6)**:只做「分組 + rollup + 類別級 ⚪ 未載入提示」= 類別級缺席可見性。**不做逐指標「應有而無」**:總經引擎(us_indicators.fetch_all_indicators)實際輸出 25 鍵與 data_registry `_FREQ` 30 鍵不一致(含 CHN_* 核心迴圈未設),無乾淨正典 SSOT 可比對,硬湊會誤報(違 §1);雷達 10 燈既有 code 本就迴圈跑滿全登記(缺的以 N/A 紅燈現身,不消失),無缺席問題。升級觸發:總經引擎日後抽正典 indicator SSOT → 再加逐指標缺席列。
+- **§8.2 分層**:純函式 co-locate `ui/helpers/io/`(與 data_registry 同域 L3);無新資料流、無外部抓取、無跨層違憲。
+- **回歸網**:`tests/test_registry_classify_v19_350.py` 7 test(空 registry 五類全未載入/分組+rollup+紅黃綠排序/未知前綴進其他/非dict+缺icon不炸/key 欄注入/rollup_caption 省略 0 燈/多段 key 前綴只取首段)。registry 子集 65 passed。ruff 三檔全淨。
+
 ## ⚡ 2026-07-12 「今日關鍵」異常橫幅(v19.349,第 4 步;股票 v19.108 同構)
 
 未完成清單第 4 步(user「第四步 基金端」)。Tab1 頁首置頂橫幅列「今天最需要看的異常」;基金版兩層**零新計算,純消費既有 SSOT 輸出**(對照股票版門檻/急變兩層):
