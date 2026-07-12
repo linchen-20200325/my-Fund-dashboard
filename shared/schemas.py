@@ -394,6 +394,16 @@ def validate_aaii_sentiment(d: Any) -> Any:
 # 抽出 _validate_tw_macro_common 通用 path 驗證,各 fn 加自己 value 範圍檢查。
 
 
+# v19.348:TW PMI 改 9 源賽跑(移植 Stock,repositories/tw_pmi_repository)後,
+# source 不再限 FinMind。允許來源白名單收 shared 作 SSOT(維持反捏造嚴格度:
+# source 必須出自已知 registry,不收任意字串);tests/test_tw_pmi_race_v19_348
+# 有漂移鎖:registry 來源名 ⊆ 本 tuple,兩邊改其一 CI 即紅。
+TW_PMI_RACE_SOURCES: tuple = (
+    'CIER-EN', 'data.gov.tw', 'NDC', 'MacroMicro', 'CIER',
+    'StockFeel', 'Cnyes', 'CIER-cid8', 'MoneyDJ',
+)
+
+
 def _validate_tw_macro_common(d: Any, *, fn_label: str) -> dict:
     """TW locals 4 fetcher 共用 path 驗證(source + fetched_at + None/empty handling)。
 
@@ -409,11 +419,14 @@ def _validate_tw_macro_common(d: Any, *, fn_label: str) -> dict:
     if d is None or not isinstance(d, dict) or not d:
         return d  # type: ignore[return-value]
     src = d.get("source")
-    # fetcher 可能 source=None(fetch 失敗早 return),共用驗 source 已存在 + None / startswith 'FinMind:'
-    if src is not None and not (isinstance(src, str) and src.startswith("FinMind:")):
+    # fetcher 可能 source=None(fetch 失敗早 return)。允許集(F-PROV-1 反捏造):
+    # 'FinMind:' 前綴(ndc/export/foreign 仍單源) / TW_PMI_RACE_SOURCES 白名單
+    # (v19.348 PMI 9 源賽跑) / None。
+    if src is not None and not (isinstance(src, str) and (
+            src.startswith("FinMind:") or src in TW_PMI_RACE_SOURCES)):
         raise ValueError(
-            f"{fn_label}: source 必須以 'FinMind:' 開頭或為 None(F-PROV-1),"
-            f"實際 = {src!r}"
+            f"{fn_label}: source 必須以 'FinMind:' 開頭、屬 TW_PMI_RACE_SOURCES "
+            f"白名單、或為 None(F-PROV-1),實際 = {src!r}"
         )
     # fetched_at 為 success path 必有;fail path(source=None)可缺
     if src is not None:

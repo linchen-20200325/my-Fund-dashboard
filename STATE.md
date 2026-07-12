@@ -2,6 +2,17 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🇹🇼 2026-07-12 TW PMI 接 9 源並行賽跑 — 恆空指標復活（v19.348,設計 B）
+
+user 對「基金端要不要台灣 PMI」答**要**,核准設計 B(§7/§8.1 先設計後動工)。原 `fetch_tw_pmi_local` 掛 FinMind `TaiwanMacroEconomics`(v19.342 判定 dataset 不存在)→ **恆無資料**;本包移植 Stock repo 9 源賽跑讓它復活。
+
+- **新 L1 `repositories/tw_pmi_repository.py`**(~530 行):自 Stock `macro_core.py:932-1353` 移植 9 個解析器 + `PMI_SOURCE_REGISTRY` + `fetch_tw_pmi_race()`(ThreadPool 並行,依優先序取第一命中,**禁止平均** §2.1)。適配:`infra.proxy.fetch_url`(attempts→retries)/log 前綴/`[tw_pmi_repo]`。**不含** Stock 的 90 天檔案 stale-cache 層(§8.1 step 6 先不做;升級觸發:9 源常態全敗需兜底時)。
+- **fund 端擴充(超越 Stock 版)**:dgtw(data.gov.tw dataset/6100)CSV 天然含全月度歷史 → 解析器記住命中欄名掃全表回 `series`(升冪,壞列顯式跳過 §1);其餘 8 源單點。
+- **`fetch_tw_pmi_local` 改寫**(合約/裝飾器/UI 零改動):吃賽跑結果 → series 源(dgtw)填 trend(6)/prev/inflection(既有 6 分支邏輯原樣);單點源 → value/date/source 有值、trend=[value]、prev=None、inflection 誠實「⬜ 資料不足」;全敗 → error 合約。provenance source 沿用命中源(F-PROV-1 動態血緣)。
+- **validator 演進**:`shared/schemas._validate_tw_macro_common` 原寫死「source 必 FinMind: 前綴」(單源時代)→ 加 `TW_PMI_RACE_SOURCES` 白名單(shared SSOT,維持反捏造嚴格度:不收任意字串);**漂移鎖測試**釘 registry 來源名 ⊆ 白名單,兩邊改其一 CI 即紅。
+- **舊測試重釘 3+2**:`test_macro_tw_local_fetch` 4 case 自 FinMind mock 改 patch 賽跑(其中 http_fail 改 patch 賽跑 repo fetch_url=None **端到端**跑 9 源全敗 — 原寫法靠沙箱斷網僥倖過,有網 CI 會真打外部源);`test_provenance_phase2` 2 處 source-scan 改驗動態血緣寫法+假 dataset 不得回歸。
+- **回歸網**:`tests/test_tw_pmi_race_v19_348.py` 8 test(優先序贏/低位遞補/全敗誠實 error/dgtw series 抽取+壞列跳過/合約映射三態含 validator 原樣通過/SSOT 漂移鎖)。相關子集 274 passed。CLAUDE.md §2.1 裁決表同步更新(PMI 條目改 9 源;出口 YoY 誠實留待)。
+
 ## ⚡ 2026-07-12 大工程清單 🟢 ⑯:追蹤誤差 Tracking Error 接 UI（v19.347）
 
 user 核准大工程清單「先做你推薦的三項」(⑯基金/⑨①a股票),本包為基金側 ⑯:
