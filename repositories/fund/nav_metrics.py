@@ -86,9 +86,14 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
         ]
     for url in urls:
         try:
-            r = requests.get(url, headers=HDR, timeout=25, proxies=_proxies(), verify=_ssl_verify())
+            # v19.346(第九份 review):raw requests.get(無重試/無 403 降級直連/無
+            # Big5 解碼)→ fetch_url_with_retry(infra 統一鏈,同檔 wb01 v14.1 慣例)。
+            # helper 僅 200 回 Response,失敗/重試耗盡回 None。
+            r = fetch_url_with_retry(url, headers=HDR, timeout=25, retries=2)
+            if r is None:
+                print(f"[fetch_nav] {url[:65]} → 失敗(重試耗盡/非 200)")
+                continue
             print(f"[fetch_nav] {url[:65]} → {r.status_code}")
-            if r.status_code != 200: continue
             s = _parse_nav_html(r.text)
             if len(s) >= 10:
                 print(f"[fetch_nav] ✅ {len(s)} 筆")
@@ -579,8 +584,10 @@ def fetch_div(full_key: str, portal: str = "") -> list:
         ]
     for url in urls:
         try:
-            r = requests.get(url, headers=HDR, timeout=20, proxies=_proxies(), verify=_ssl_verify())
-            if r.status_code != 200: continue
+            # v19.346(第九份 review):同 fetch_nav — raw requests.get 改走
+            # fetch_url_with_retry(重試 + 403 降級 + Big5 解碼),None=失敗跳下一源。
+            r = fetch_url_with_retry(url, headers=HDR, timeout=20, retries=2)
+            if r is None: continue
             soup = BeautifulSoup(r.text, "lxml")
             for tbl in soup.find_all("table"):
                 if not any(k in tbl.get_text() for k in ["配息","除息","配發"]): continue
@@ -878,6 +885,17 @@ def fetch_risk_metrics(code: str) -> dict:
                     if any(risk_table[p] for p in periods_found):
                         out["risk_table"] = risk_table
                         print(f"[risk_metrics] 風險指標 {periods_found}")
+                        # v19.346(第九份 review):metric 鍵直取 cols[0] 無預期集
+                        # 驗證 — MoneyDJ 改 row 標籤時 clean_risk_table NUMERIC 集
+                        # 與 UI 查「標準差/Sharpe」會靜默落空。不 raise(其餘指標
+                        # 仍可用),缺核心鍵時掛旗標 + loud log(§1)。
+                        _metrics_seen = {m for p in periods_found
+                                         for m in risk_table[p]}
+                        if not (_metrics_seen & {"標準差", "Sharpe", "夏普值"}):
+                            out["risk_table_missing_core"] = True
+                            print(f"[risk_metrics] ⚠️ 解析到 {len(_metrics_seen)} 個指標"
+                                  f"但無核心鍵(標準差/Sharpe)— 版型可能已變,"
+                                  f"實得: {sorted(_metrics_seen)[:6]}")
 
                 # ─── 同類比較表（peer_compare）─────────────────────────
                 elif ("同投資類型" in txt or "同投資區域" in txt or "同類" in txt) and "報酬" in txt:
@@ -1086,6 +1104,16 @@ def fetch_holdings(code: str) -> dict:
                 if sectors:
                     out["sector_alloc"] = sectors
                     print(f"[holdings] 產業 {len(sectors)} 類")
+                    # v19.346(第九份 review):rows[2:] 定位法解析無總和 sanity —
+                    # 版型漂移(吃錯欄/漏列)時比例悄悄失真。Σpct 合理帶 [95,105]%
+                    # (容忍現金截尾/四捨五入)。超帶**不丟資料**(§1 不掩蓋也不誤殺:
+                    # 多重資產/部分揭露基金可合法超帶),掛旗標+log 供診斷/AI 端判讀。
+                    _pct_sum = sum(s["pct"] for s in sectors)
+                    if not (95.0 <= _pct_sum <= 105.0):
+                        out["sector_alloc_sum_pct"] = round(_pct_sum, 2)
+                        out["sector_alloc_sum_suspect"] = True
+                        print(f"[holdings] ⚠️ 產業比例總和 {_pct_sum:.1f}% 超出 [95,105]"
+                              f" — 版型可能漂移或僅部分列,pct 判讀保留")
 
             # ── 前10大持股 ──
             # v19.249 R18:加「目前無資料」explicit skip 避免日後 parser 誤吃空表 garbage

@@ -2,6 +2,16 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧾 2026-07-12 第九份外部 review 落地(基金側):查證屬實 6 組修復（v19.346）
+
+user 上傳第九份深度 review,指示「看是否需要修改讓資料更完整,不修的提供清單」。逐條對 origin/main 查證後基金側屬實 6 組本次修;誤判/已修過/待核准清單見對話/PR 描述。
+
+- **連線層 2 修(nav_metrics)**:①`fetch_nav` MoneyDJ 迴圈 raw `requests.get`(無重試/無 403 降級直連/無 Big5 解碼)→ `fetch_url_with_retry`(infra 統一鏈,同檔 wb01 v14.1 既有慣例;helper 僅 200 回 Response,失敗 None → log 後跳下一源) ②`fetch_div` 同病同修。cnyes/fundrich/fundclear 等 `_fetch_nav_*` 的 raw requests.get 為**不同源不同語意**(JSON API),非本次查證範圍,§-1 不擴 scope。
+- **解析 sanity 2 增(nav_metrics)**:③`fetch_holdings` sector_alloc Σpct 檢查 — rows[2:] 定位法版型漂移時比例會悄悄失真;Σ∉[95,105]% → 掛 `sector_alloc_sum_suspect` 旗標+記 `sector_alloc_sum_pct`+log,**不丟資料**(多重資產/部分揭露可合法超帶,§1 不掩蓋不誤殺) ④`fetch_risk_metrics` 核心鍵檢查 — metric 鍵直取 cols[0],MoneyDJ 改標籤時 `clean_risk_table` NUMERIC 集與 UI 查「標準差/Sharpe」靜默落空;缺核心鍵(標準差/Sharpe/夏普值)→ 掛 `risk_table_missing_core` 旗標+log。
+- **§3.3 log 6 補(tab2_single_fund)**:⑤無註解裸 `except Exception: pass` 全清 — 新鮮度條/組合聯動/配息型試算/累積型試算/AI 吃本金檢查/AI σ位階 6 處補 stderr log(比照同檔 :1757 慣例);其餘帶 `smoke-allow-pass` 註解者為既核准沉默,不動。
+- **診斷頁 2 修(tab5_data_guard)**:⑥`_d5_cell` `fmt` 參數從 v16.5「保留兼容」死參數轉實作 — 狀態判定不變,fmt 有給且值非空時附加實際數值(`✅ 已取得 · 12.3456`),16 個 caller 的 lambda 全部活化,診斷表從「有/無」升級為可肉眼對值(user 本輪「讓資料更完整」指示,fmt 失敗留 log 退回純狀態) ⑦§⑤ 基金資料診斷加誠實 caption — 本區只讀 session_state 快取非即時重抓,原無說明易誤讀為當下狀態(§2.4 精神)。
+- **回歸網**:`tests/test_review_fixes_v19_346.py` 11 test — fetch_nav/div 源掃(排除註解行)、holdings Σ 兩態 runtime(monkeypatch + `__wrapped__` 繞 `@_daily_cache` 防測試資料入 production cache,§3.3 隔離)、risk 核心鍵兩態 runtime、tab2 無註解裸 pass 掃零+6 tag、tab5 fmt/caption 掃描。ruff:3 個改動檔 103→102(淨 −1),新測試檔 0 錯。
+
 ## 💰 2026-07-11 核心戰情室「含息總報酬(1Y%)」全 None 修復（v19.345）
 
 user 實機截圖回報 核心戰情室 5 檔基金（ACCP138/ACTI71/ACTI94/JFZN3/TLZF9）「含息總報酬(1Y%)」欄全 None,但同表 夏普/年化波動/年化配息率/便宜超跌停利價 都有值。

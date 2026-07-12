@@ -463,8 +463,11 @@ def render_single_fund_tab() -> None:
                         "nav_date": fd.get("nav_date", ""),
                         "fetched_at": fd.get("_moneydj_fetched_at", ""),
                     }])
-                except Exception:
-                    pass
+                except Exception as _e_fresh:
+                    # v19.346 §3.3:原靜默吞 — 輔助 UI 壞了不擋主流程,但須留痕
+                    import sys as _sys_fr
+                    print(f'[tab2/freshness] 新鮮度條渲染失敗: '
+                          f'{type(_e_fresh).__name__}: {_e_fresh}', file=_sys_fr.stderr)
 
                 # v19.65 I2：單檔 ↔ 組合持倉聯動（讀 Tab3 portfolio_funds，跨 Tab 訊號）
                 try:
@@ -474,8 +477,11 @@ def render_single_fund_tab() -> None:
                         fund_codes=[fk, fd.get("fund_code", ""), fd.get("full_key", "")],
                         fund_name=name,
                     )
-                except Exception:
-                    pass
+                except Exception as _e_link:
+                    # v19.346 §3.3:原靜默吞 — 跨 Tab 聯動為輔助訊號,壞了留痕不擋主流程
+                    import sys as _sys_lk
+                    print(f'[tab2/linkage] 組合持倉聯動渲染失敗: '
+                          f'{type(_e_link).__name__}: {_e_link}', file=_sys_lk.stderr)
 
                 # MK 訊號卡片
                 phase_info_s = st.session_state.phase_info if st.session_state.macro_done else None
@@ -1624,8 +1630,13 @@ def render_single_fund_tab() -> None:
                                         "monthly_dividend_twd": float(_mon_div_twd),
                                         "fund_type": "income",
                                     }
-                                except Exception:
-                                    pass
+                                except Exception as _e_inc:
+                                    # v19.346 §3.3:原靜默吞 — 配息型試算失敗會讓
+                                    # 快照悄悄缺這檔,至少留痕供追查
+                                    import sys as _sys_inc
+                                    print(f'[tab2/income-calc] 配息型試算失敗: '
+                                          f'{type(_e_inc).__name__}: {_e_inc}',
+                                          file=_sys_inc.stderr)
                         else:
                             # v19.73 K1：累積型用 1Y 總報酬估市值 — 改走 SSOT compute_1y_total_return
                             # 修補 v18.134 漏接點（原本只用 ret_1y_total/ret_1y 跳過 perf["1Y"] 真 1Y）
@@ -1746,8 +1757,12 @@ def render_single_fund_tab() -> None:
                                     "proj_1y_twd": float(_proj_1y_twd) if _proj_1y_twd else None,
                                     "fund_type": "accumulation",
                                 }
-                            except Exception:
-                                pass
+                            except Exception as _e_acc:
+                                # v19.346 §3.3:原靜默吞 — 累積型試算失敗至少留痕
+                                import sys as _sys_acc
+                                print(f'[tab2/accum-calc] 累積型試算失敗: '
+                                      f'{type(_e_acc).__name__}: {_e_acc}',
+                                      file=_sys_acc.stderr)
                     else:
                         st.info("⚠️ 此基金 NAV 未取得，無法試算單位數。請先確認基本資料區是否成功抓取淨值。")
 
@@ -1805,8 +1820,12 @@ def render_single_fund_tab() -> None:
                             if _cov_ai is not None:
                                 _div_line += (f"｜吃本金 coverage={_cov_ai:.2f}"
                                               f"（{_ds_ai.get('alert_level','')}）")
-                        except Exception:
-                            pass
+                        except Exception as _e_dsafe:
+                            # v19.346 §3.3:原靜默吞 — AI 快照少掉吃本金線索,留痕
+                            import sys as _sys_ds
+                            print(f'[tab2/ai-divsafety] 吃本金檢查失敗: '
+                                  f'{type(_e_dsafe).__name__}: {_e_dsafe}',
+                                  file=_sys_ds.stderr)
                         _snap.append(_div_line)
                     _bs = [f"{_k}={m.get(_k)}" for _k in
                            ("buy1", "buy2", "buy3", "sell1", "sell2", "sell3",
@@ -1823,8 +1842,12 @@ def render_single_fund_tab() -> None:
                                     f"- σ絕對位階：{_hwm_ai.get('label','')}"
                                     f"｜距HWM={_hwm_ai.get('dist_to_hwm_pct','')}%"
                                     f"｜σ_rank={_hwm_ai.get('sigma_rank','')}")
-                        except Exception:
-                            pass
+                        except Exception as _e_hwm:
+                            # v19.346 §3.3:原靜默吞 — AI 快照少 σ 位階線索,留痕
+                            import sys as _sys_hw
+                            print(f'[tab2/ai-hwm] σ絕對位階計算失敗: '
+                                  f'{type(_e_hwm).__name__}: {_e_hwm}',
+                                  file=_sys_hw.stderr)
                     if _tops:
                         _snap.append("- 前10大持股：" + "、".join(
                             f"{_zh_holding(str(_t.get('name',''))) or str(_t.get('name',''))[:14]}"

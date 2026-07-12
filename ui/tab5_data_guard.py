@@ -936,6 +936,12 @@ def render_data_guard_tab() -> None:
 
     # ── Section 3: 基金逐筆診斷 ───────────────────────────────────
     st.markdown("### ⑤ 📊 基金資料診斷")
+    # v19.346(第九份 review):本區只讀 session_state 快取(單一/組合 Tab 載入時寫入),
+    # 不即時重抓 — 原無說明,易被誤讀為「當下狀態」。誠實標示資料時點(§2.4 精神)。
+    st.caption(
+        "ℹ️ 本區讀取**本 session 已載入的快取**（單一基金／組合基金 Tab 載入時寫入），"
+        "非即時重抓；抓取時間與新鮮度以上方 **① 原始資料源總覽** 的時間戳為準。"
+    )
     _d5_pf   = st.session_state.get("portfolio_funds", []) or []
     # v17.3：單一基金 Tab 寫入 fund_data，組合基金寫入 current_fund，兩者都要讀
     _d5_cf   = st.session_state.get("current_fund") or st.session_state.get("fund_data")
@@ -983,9 +989,11 @@ def render_data_guard_tab() -> None:
         st.info("尚未載入任何基金。請至「單一基金」或「組合基金」Tab 載入後再查看。")
     else:
         def _d5_cell(col, label, value, ok_cond=True, fmt=None):
-            """v16.5：只顯示『資料是否取得』，不顯示具體數值（現況）。
-            v18.53: value == "N/A" 視為「不適用」（如累積型基金無配息）顯灰色 ℹ️ 不視為缺失。
-            符合「資料診斷 = 確認資料是否遺漏或過期」本意。fmt 參數保留兼容。
+            """v16.5：只顯示『資料是否取得』；v18.53: "N/A" = 不適用（ℹ️ 灰）。
+            v19.346（第九份 review + user「讓資料更完整」指示）：fmt 從保留參數
+            轉為實作 — 狀態判定不變，但 fmt 有給且值可格式化時，於狀態後**附加**
+            實際數值（✅ 已取得 · 12.3456），診斷表從「有/無」升級為可肉眼對值。
+            fmt 失敗不掩蓋：留 stderr log、退回純狀態顯示（§3.3 不靜默）。
             """
             _empty = (value is None or value == "" or
                       (isinstance(value, (dict, list)) and not value))
@@ -997,6 +1005,13 @@ def render_data_guard_tab() -> None:
                 _ic, _vc, _vs = "⚠️", MATERIAL_ORANGE, "資料不足"
             else:
                 _ic, _vc, _vs = "✅", MATERIAL_GREEN, "已取得"
+            if fmt is not None and not _empty and value != "N/A":
+                try:
+                    _vs = f"{_vs} · {fmt(value)}"
+                except Exception as _e_fmt:
+                    import sys as _sys_d5
+                    print(f'[tab5/_d5_cell] {label} fmt 失敗(退回純狀態): '
+                          f'{type(_e_fmt).__name__}: {_e_fmt}', file=_sys_d5.stderr)
             col.markdown(
                 f"<div style='background:{BG_DARK_NAVY_4};border-radius:6px;padding:6px 8px'>"
                 f"<div style='font-size:10px;color:{TRAFFIC_NEUTRAL}'>{label}</div>"
