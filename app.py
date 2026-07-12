@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.330_CoreSatAllocShared"
+APP_VERSION = "v19.346_V2NestExpanderFix"
 
 
 # ══════════════════════════════════════════════════════

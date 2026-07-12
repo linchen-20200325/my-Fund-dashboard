@@ -149,7 +149,11 @@ def _render_div_split_estimate(policy_id: str, fund_df: pd.DataFrame) -> None:
     if not rows:
         return
 
-    with st.expander("📊 配息現金/單位拆分估算（依 div_cash_pct）", expanded=False):
+    # v19.346：expander → container(border)。本 mini-section 從 _render_policy_block
+    # 內渲染,而該區塊又位於 tab3「保單管理」expander 內 → 不得用巢狀 expander
+    # (StreamlitAPIException: Expanders may not be nested inside other expanders)。
+    with st.container(border=True):
+        st.markdown("**📊 配息現金/單位拆分估算（依 div_cash_pct）**")
         st.caption(
             "ℹ️ 估算用 user 手填的「年配息率假設 %」乘上每檔基金的 invest_twd，"
             "再依 `現金給付%` 拆分。實際配息以保險公司每月對帳單為準。"
@@ -348,7 +352,12 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
     _title = f"📋 保單「{policy_id}」"
     if dirty:
         _title += "  🔸 未存檔"
-    with st.expander(_title, expanded=False):
+    # v19.346：expander → container(border)。render_v2_section 從 tab3「保單管理」
+    # expander 內呼叫(見 module docstring),巢狀 expander 會 crash 整個 v2 編輯 UI
+    # (StreamlitAPIException: Expanders may not be nested inside other expanders)。
+    # 代價:每張保單改為常開外框卡片,不再各自收合。
+    with st.container(border=True):
+        st.markdown(f"#### {_title}")
         # v18.153：色彩說明 + auto 欄位視覺區隔
         st.caption(
             "🟨 黃底：自己填（保單對帳單抄）　·　"
