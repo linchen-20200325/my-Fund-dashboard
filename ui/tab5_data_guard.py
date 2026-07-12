@@ -503,37 +503,66 @@ def render_data_guard_tab() -> None:
             f"<span style='{_th}'>筆數</span>"
             f"</div>"
         )
-        _rows_html = _hdr
-        _stale_list = []
-        for _rk, _rv in _reg_filtered.items():
+        # v19.350：依類別前綴分組渲染（user 要求「參考台股」— 台股 Tab5 診斷表
+        # 依類別收合 +「（N 筆｜🟢x 🟡y 🔴z）」rollup）。rollup 反映**全類真實
+        # 健康**（不受篩選影響，同台股截圖語義）；上方三篩選器改為「隱藏列」，
+        # 謂詞複用既有 _reg_filtered（單一真相，零重複）。整類未載入 → ⚪ 誠實提示。
+        from ui.helpers.io.registry_classify import classify_registry, rollup_caption
+
+        def _row_html(_rk, _rv):
             _rn    = _rv.get("count", 0)
             _rd    = _rv.get("latest_date", "N/A")
             _freq  = _rv.get("freq", "monthly")
             _ficon = _rv.get("fresh_icon", "⬜")
             _flbl  = _rv.get("fresh_label", "未知")
             _fcol  = _rv.get("fresh_color", GRAY_55)
+            _fqc   = _FREQ_LABEL.get(_freq, (_freq, GRAY_55))
             _row_bg = GH_BG_CARD if _ficon == "🟢" else (BG_DARK_AMBER_2 if _ficon == "🟡" else "#1a0808")
-            _rows_html += (
+            return (
                 f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 3fr 1fr;"
                 f"background:{_row_bg};border-bottom:1px solid {GH_BG_HOVER}'>"
                 f"<span style='{_td_base};color:{GH_FG_PRIMARY}'>{_rv.get('label', _rk)}</span>"
                 f"<span style='{_td_base};color:{TRAFFIC_NEUTRAL}'>{_rv.get('source','')}</span>"
                 f"<span style='{_td_base}'>"
-                f"<span style='background:{_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]}22;"
-                f"color:{_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]};"
-                f"border:1px solid {_FREQ_LABEL.get(_freq,('?',GRAY_55))[1]};"
-                f"border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700'>"
-                f"{_FREQ_LABEL.get(_freq,(_freq,GRAY_55))[0]}</span></span>"
+                f"<span style='background:{_fqc[1]}22;color:{_fqc[1]};"
+                f"border:1px solid {_fqc[1]};border-radius:10px;padding:1px 7px;"
+                f"font-size:10px;font-weight:700'>{_fqc[0]}</span></span>"
                 f"<span style='{_td_base};color:{GRAY_AA}'>{_rd}</span>"
                 f"<span style='{_td_base};color:{_fcol};font-weight:600'>{_ficon} {_flbl}</span>"
                 f"<span style='{_td_base};color:{GRAY_AA}'>{_rn}</span>"
                 f"</div>"
             )
-            if _ficon == "🔴":
-                _stale_list.append(_rv.get("label", _rk))
+
+        _cat_css = (f"font-size:12px;font-weight:800;color:{GH_FG_PRIMARY};"
+                    f"padding:7px 10px;background:{GH_BG_PRIMARY};"
+                    f"border-top:2px solid {GH_BORDER}")
+        _sections = ""
+        for _grp in classify_registry(_reg):
+            _cap = rollup_caption(_grp["rollup"])
+            _n_full = len(_grp["rows"])
+            _sections += (
+                f"<div style='{_cat_css}'>{_grp['name']}"
+                f"　<span style='font-weight:600;color:{TRAFFIC_NEUTRAL}'>"
+                f"（{_n_full} 筆｜{_cap}）</span></div>"
+            )
+            if not _grp["loaded"]:
+                _sections += (
+                    f"<div style='{_td_base};color:{GRAY_AA};padding:8px 12px'>"
+                    f"⚪ 尚未載入 — 請至 {_grp['hint']} 載入後回此檢視</div>"
+                )
+                continue
+            _visible = [_r for _r in _grp["rows"] if _r["key"] in _reg_filtered]
+            if not _visible:
+                _sections += (
+                    f"<div style='{_td_base};color:{GRAY_AA};padding:8px 12px'>"
+                    f"（{_n_full} 筆已載入，全被上方篩選器隱藏）</div>"
+                )
+                continue
+            for _r in _visible:
+                _sections += _row_html(_r["key"], _r)
         st.markdown(
             f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
-            f"{_rows_html}</div>",
+            f"{_hdr}{_sections}</div>",
             unsafe_allow_html=True,
         )
         _reg_total = len(_reg)
