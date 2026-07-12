@@ -2,6 +2,14 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ⚡ 2026-07-12 大工程清單 🟢 ⑯:追蹤誤差 Tracking Error 接 UI（v19.347）
+
+user 核准大工程清單「先做你推薦的三項」(⑯基金/⑨①a股票),本包為基金側 ⑯:
+
+- **現況**:wb07 風險表解析本就把「Tracking Error」收進 risk_table(`clean_risk_table` NUMERIC 集含此鍵),但 `_risk_1y_rows_html`(1Y 風險列共用 renderer,v19.336 M9 抽出,short/long 兩視圖共用)從未顯示 — 抓了不給看。
+- **修**:helper 補「追蹤誤差」列 — short 視圖 `追蹤誤差(1Y)` 值原樣;long 視圖 `追蹤誤差 TE(1Y)` 數值型加 %(對齊同視圖標準差既有格式)。缺值誠實顯「—」(§1),字串(N/A)不硬加 %。兩處 caller(partial :428 / complete :1082)零改動自動生效。
+- **回歸網**:`tests/test_review_fixes_v19_347.py` 4 test(short 含值/long 加 %/缺值顯—/N/A 字串不加 %)。
+
 ## 🧾 2026-07-12 第九份外部 review 落地(基金側):查證屬實 6 組修復（v19.346）
 
 user 上傳第九份深度 review,指示「看是否需要修改讓資料更完整,不修的提供清單」。逐條對 origin/main 查證後基金側屬實 6 組本次修;誤判/已修過/待核准清單見對話/PR 描述。
