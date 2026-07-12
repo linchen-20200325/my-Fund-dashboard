@@ -2,6 +2,15 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ⚡ 2026-07-12 「今日關鍵」異常橫幅(v19.349,第 4 步;股票 v19.108 同構)
+
+未完成清單第 4 步(user「第四步 基金端」)。Tab1 頁首置頂橫幅列「今天最需要看的異常」;基金版兩層**零新計算,純消費既有 SSOT 輸出**(對照股票版門檻/急變兩層):
+
+- **訊號層**:吃 `indicators`(fetch_all_indicators,23 keys)各 block 的 `score`(SCORE_RULES SSOT 已算好;fund 慣例正=偏空)。分級沿用 `_interpret_indicator` 同組 `SIGMA_*_CUTOFF`(shared SSOT):≥HIGH(0.8) 紅級/≥LOW(0.3) 黃級,不另造第二套門檻;白話 detail 直接用 `_interpret_indicator(score)`。**同級內依 |score×weight| 降冪** — active.json 校準權重自然決定誰排前面。
+- **拐點層**:吃 `detect_turning_points` 輸出(session `_tp_v1948_top`,5 組拐點 signal/icon/note 已判定)。icon {🔴,🔻,⚠️}→紅級/{🟡,🚀}→黃級(利多拐點同樣該看)/{🟢,📊,⬜}=非事件;`source_ok=False`(抓取失敗)不進橫幅。note 作 hover 白話。
+- **分層**:L2 `services/macro/daily_key_alerts.py`(純函式,零 I/O 零 streamlit,單項 try 收窄)→ L3 `ui/helpers/macro/key_alerts.py`(純 HTML,股票 v19.108 同構、色票走本 repo shared/colors)→ tab1 標題區後、載入按鈕前掛載。**未載入(兩源皆空)不渲染** — 防誤導性「無異常」(股票版有載入 gate 擋,fund 版無 gate 故由掛載端自守)。
+- **回歸網**:`tests/test_daily_key_alerts_v19_349.py` 10 test(全空/σ 分級/校準權重排序/垃圾 score 跳過/拐點 icon 映射+source_ok 守門/跨層紅先/L2 純度/橫幅三態/掛載位置+未載入守門鎖)。相關子集 96 passed。ruff tab1 22=22 零新增,新檔 0 錯。
+
 ## 🇹🇼 2026-07-12 TW PMI 接 9 源並行賽跑 — 恆空指標復活（v19.348,設計 B）
 
 user 對「基金端要不要台灣 PMI」答**要**,核准設計 B(§7/§8.1 先設計後動工)。原 `fetch_tw_pmi_local` 掛 FinMind `TaiwanMacroEconomics`(v19.342 判定 dataset 不存在)→ **恆無資料**;本包移植 Stock repo 9 源賽跑讓它復活。

@@ -1127,6 +1127,17 @@ def render_macro_tab() -> None:
     render_story_nav("macro")
     st.caption("策略3 三層指標加權方法論 v7 — 領先×2 | 中級×1 | 次級×0.5")
 
+    # ── ⚡ 今日關鍵橫幅(v19.349 第 4 步;股票 v19.108 同構)──────────
+    # 訊號層吃 indicators 各 block 的 score(SCORE_RULES SSOT)+ 拐點層吃
+    # detect_turning_points 輸出 — 零新 I/O,全讀 session。未載入(兩者皆空)
+    # 不渲染,避免誤導性「無異常」;載入後每次 rerun 自動更新。
+    _ka_ind = st.session_state.get("indicators") or {}
+    _ka_tp = st.session_state.get("_tp_v1948_top") or {}
+    if _ka_ind or _ka_tp:
+        from services.macro.daily_key_alerts import collect_key_alerts as _cka
+        from ui.helpers.macro.key_alerts import key_alerts_banner as _kab
+        st.markdown(_kab(_cka(_ka_ind, _ka_tp)), unsafe_allow_html=True)
+
     # v18.174：「🗺️ 全局指標關聯地圖」整塊搬到「說明書 §10」（純教學圖，無動態資料）
     # 函數 render_indicator_map() 保留在本檔頂層供 tab6 import 復用
 
