@@ -133,15 +133,30 @@ class TestFetchNdcSignalHistory:
 
 # ════════════════════════════════════════════════════════════════════════════
 # §2 fetch_tw_pmi_local — 4 case
+# v19.348 重釘:PMI 改 9 源賽跑(repositories/tw_pmi_repository),不再走
+# FinMind(_pmi_rows 工廠對本 fetcher 退役)。happy path patch 賽跑回傳;
+# 失敗 path patch 賽跑 repo 的 fetch_url=None → 真跑 9 源全敗(端到端,
+# 不依賴沙箱斷網僥倖 — 原寫法在有網 CI 會真打外部來源)。
 # ════════════════════════════════════════════════════════════════════════════
+def _race_hit(value, series=None, source='data.gov.tw'):
+    d = {'value': value, 'date': '2026-06-01', 'source': source,
+         'fetched_at': '2026-07-12T00:00:00+00:00'}
+    if series is not None:
+        d['series'] = series
+    return d
+
+
 class TestFetchTwPmiLocal:
     def setup_method(self):
         _clear_caches()
 
     def test_happy_expansion_to_contraction(self):
+        import repositories.tw_pmi_repository as race_mod
         # prev=51, cur=48 → '⚠️ 由擴轉縮'
-        with patch.object(fetch_mod, 'fetch_url',
-                          return_value=_fake_response(_pmi_rows([52, 51, 51, 50, 51, 48]))):
+        _ser = [(f'2026-0{i+1}-01', v) for i, v in
+                enumerate([52.0, 51.0, 51.0, 50.0, 51.0, 48.0])]
+        with patch.object(race_mod, 'fetch_tw_pmi_race',
+                          return_value=_race_hit(48.0, series=_ser)):
             r = fetch_mod.fetch_tw_pmi_local()
         assert r['error'] is None
         assert r['value'] == 48.0
@@ -149,24 +164,31 @@ class TestFetchTwPmiLocal:
         assert '⚠️' in r['inflection']
 
     def test_happy_contraction_to_expansion(self):
+        import repositories.tw_pmi_repository as race_mod
         # prev=49, cur=52 → '🚀 由縮轉擴'
-        with patch.object(fetch_mod, 'fetch_url',
-                          return_value=_fake_response(_pmi_rows([47, 48, 48, 49, 49, 52]))):
+        _ser = [(f'2026-0{i+1}-01', v) for i, v in
+                enumerate([47.0, 48.0, 48.0, 49.0, 49.0, 52.0])]
+        with patch.object(race_mod, 'fetch_tw_pmi_race',
+                          return_value=_race_hit(52.0, series=_ser)):
             r = fetch_mod.fetch_tw_pmi_local()
         assert r['value'] == 52.0
         assert '🚀' in r['inflection']
 
-    def test_empty_data(self):
-        with patch.object(fetch_mod, 'fetch_url',
-                          return_value=_fake_response([])):
+    def test_single_point_source_no_inflection(self):
+        import repositories.tw_pmi_repository as race_mod
+        # 單點源(如 CIER-EN)命中:值可用但無上月 → 誠實「資料不足」(§1)
+        with patch.object(race_mod, 'fetch_tw_pmi_race',
+                          return_value=_race_hit(53.4, source='CIER-EN')):
             r = fetch_mod.fetch_tw_pmi_local()
-        assert r['error'] is not None
-        assert r['value'] is None
+        assert r['value'] == 53.4 and r['prev'] is None
+        assert r['inflection'] == '⬜ 資料不足'
 
-    def test_http_fail(self):
-        with patch.object(fetch_mod, 'fetch_url', return_value=None):
+    def test_http_fail_all_sources(self):
+        import repositories.tw_pmi_repository as race_mod
+        # 端到端:賽跑 repo 的 fetch_url 全回 None → 9 源全敗 → error 合約
+        with patch.object(race_mod, 'fetch_url', return_value=None):
             r = fetch_mod.fetch_tw_pmi_local()
-        assert r['error'] is not None
+        assert r['error'] is not None and '9 源全敗' in r['error']
         assert r['value'] is None
 
 

@@ -219,59 +219,80 @@ def fetch_ndc_signal_history(months_back: int = 12, token: str = "") -> dict:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# §2 TW PMI（CIER 中華經濟研究院製造業）
+# §2 TW PMI（9 源並行賽跑 — v19.348 自 Stock repo 移植）
 # ════════════════════════════════════════════════════════════════════════════
 @register_cache
 @_ttl_cache(ttl_sec=TTL_15MIN)
 def fetch_tw_pmi_local(months_back: int = 12, token: str = "") -> dict:
-    """抓台灣製造業 PMI 歷史（FinMind 單源 MVP）。
+    """抓台灣製造業 PMI（9 源並行賽跑;user 2026-07-12 核准設計 B）。
+
+    v19.348:原 FinMind 單源打的 dataset `TaiwanMacroEconomics` 不存在
+    (v19.342 查證,恆無資料)→ 改走 `repositories.tw_pmi_repository`
+    9 源賽跑(CIER-EN → data.gov.tw → NDC → MacroMicro → CIER → StockFeel
+    → Cnyes → CIER-cid8 → MoneyDJ,第一命中即用、禁止平均,§2.1)。
+
+    trend/prev 資料現實(§1 不腦補):
+    - 命中源=data.gov.tw(CSV 天然含全月度歷史,帶 `series`)→ trend=近 6 月、
+      prev=上月、inflection 正常判定
+    - 命中源=其他 8 個單點源 → value/date/source 有值,trend=[value]、
+      prev=None、inflection 維持「⬜ 資料不足」(單點無從判轉折,誠實顯示)
+
+    Args:
+        months_back: 保留參數(向後相容;賽跑源天然回最新,不吃此參數)。
+        token: 保留參數(向後相容;9 源皆無需 token)。
 
     Returns
     -------
     dict
         {
           'value':       float | None,   # 最新月份 PMI
-          'prev':        float | None,   # 上月 PMI
-          'trend':       list[float],    # 近 6 月
+          'prev':        float | None,   # 上月 PMI(單點源為 None)
+          'trend':       list[float],    # 近 6 月(單點源為 [value])
           'inflection':  str,            # '🚀 由縮轉擴' / '⚠️ 由擴轉縮' / ...
           'date_latest': str,
-          'source':      'FinMind' | None,
+          'source':      str | None,     # 'CIER-EN' / 'data.gov.tw' / ...
           'error':       str | None,
         }
 
     分類門檻：PMI 50 為擴張 / 收縮分水嶺。
     """
+    _ = (months_back, token)   # 向後相容保留,賽跑版不使用
     result: dict = {
         'value': None, 'prev': None, 'trend': [],
         'inflection': '⬜ 資料不足',
         'date_latest': '', 'source': None, 'error': None,
     }
-    sub = _finmind_macro_series(_TW_PMI_KEYS,
-                                months_back=months_back, token=token)
-    if sub is None or len(sub) < 2:
-        result['error'] = 'FinMind TaiwanMacroEconomics 無 PMI 資料'
+    from repositories.tw_pmi_repository import fetch_tw_pmi_race
+    hit = fetch_tw_pmi_race()
+    result['fetched_at'] = hit.get('fetched_at') or _dt.datetime.now(
+        _dt.timezone.utc).isoformat()
+    if hit.get('value') is None:
+        result['error'] = f"TW PMI 9 源全敗:{hit.get('_err_pmi', 'unknown')}"
         return result
-    vals = [round(float(v), 1) for v in sub['value'].tail(6).tolist()]
-    cur, prev = vals[-1], vals[-2]
-    result['value']       = cur
-    result['prev']        = prev
-    result['trend']       = vals
-    result['date_latest'] = str(sub['date'].iloc[-1])[:10]
-    # v19.151 F-PROV-1 phase 2
-    result['source']      = 'FinMind:TaiwanMacroEconomics'
-    result['fetched_at']  = _dt.datetime.now(_dt.timezone.utc).isoformat()
-    if prev < 50 <= cur:
-        result['inflection'] = '🚀 由縮轉擴'
-    elif prev >= 50 > cur:
-        result['inflection'] = '⚠️ 由擴轉縮'
-    elif cur >= 50 and cur > prev:
-        result['inflection'] = '🟢 擴張加速'
-    elif cur >= 50:
-        result['inflection'] = '🟡 擴張趨緩'
-    elif cur < prev:
-        result['inflection'] = '🔴 收縮加深'
+    result['value']       = round(float(hit['value']), 1)
+    result['date_latest'] = str(hit.get('date', ''))[:10]
+    result['source']      = str(hit.get('source', ''))   # F-PROV-1 血緣沿用
+    _series = hit.get('series') or []
+    if len(_series) >= 2:
+        vals = [round(float(v), 1) for _, v in _series[-6:]]
+        cur, prev = vals[-1], vals[-2]
+        result['prev']  = prev
+        result['trend'] = vals
+        if prev < 50 <= cur:
+            result['inflection'] = '🚀 由縮轉擴'
+        elif prev >= 50 > cur:
+            result['inflection'] = '⚠️ 由擴轉縮'
+        elif cur >= 50 and cur > prev:
+            result['inflection'] = '🟢 擴張加速'
+        elif cur >= 50:
+            result['inflection'] = '🟡 擴張趨緩'
+        elif cur < prev:
+            result['inflection'] = '🔴 收縮加深'
+        else:
+            result['inflection'] = '📊 收縮趨緩'
     else:
-        result['inflection'] = '📊 收縮趨緩'
+        # 單點源:值可用但無上月對照 — inflection 誠實維持「資料不足」
+        result['trend'] = [result['value']]
     return result
 
 

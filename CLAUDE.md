@@ -125,7 +125,8 @@
 - **基金 NAV**:FundClear(境外)主、TDCC(境內)主、MoneyDJ 補強(績效/風險/持股),Cnyes / Morningstar 為最末 fallback(evidence: fund_repository.py:2352+)
 - **MoneyDJ 子網域**:依保單發行商選對應子網域(合庫→tcbbankfund / 安達→chubb),**不混用**(evidence: fund_fetcher.py:94-106)
 - **TW NDC 景氣燈號**:FinMind **`TaiwanBusinessIndicator`**(國發會官方鏡像,含 monitoring 分數 + monitoring_color 燈號 + leading;evidence: repositories/macro_tw_local_repository.py `_finmind_business_indicator`)。⚠️ v19.342 更正:原文寫的 `TaiwanMacroEconomics` **不存在於 FinMind**(SDK 2.0.4 枚舉 + 官方文件皆無此名),NDC fetcher 已改走 TaiwanBusinessIndicator。
-- **TW PMI / 出口 YoY**:`fetch_tw_pmi_local` / `fetch_tw_export_yoy` 原亦掛 `TaiwanMacroEconomics`(同上不存在),FinMind 無 PMI/出口替代資料集 → 現況恆無資料,新源設計待評估(見 STATE v19.342)
+- **TW PMI**:✅ v19.348 接 **9 源並行賽跑**(移植 Stock repo `PMI_SOURCE_REGISTRY`,user 2026-07-12 核准):CIER-EN → data.gov.tw → NDC → MacroMicro → CIER → StockFeel → Cnyes → CIER-cid8 → MoneyDJ,**第一命中即用、禁止平均**(evidence: `repositories/tw_pmi_repository.py` + `macro_tw_local_repository.fetch_tw_pmi_local`;來源白名單 SSOT `shared/schemas.TW_PMI_RACE_SOURCES` + 漂移鎖測試)。trend/prev 僅 data.gov.tw(CSV 含全月度歷史)命中時可填;單點源命中 → inflection 誠實「⬜ 資料不足」(§1)。原 FinMind `TaiwanMacroEconomics` 掛法已於 v19.342 判定 dataset 不存在。
+- **TW 出口 YoY**:`fetch_tw_export_yoy` 仍掛 `TaiwanMacroEconomics`(不存在)→ 現況恆無資料,新源(MOF 線,同 Stock repo)待 user 點名再評估(§-1)
 - **TW 外資買賣超**:FinMind TaiwanStockTotalInstitutionalInvestors(evidence: hot_money.py:38)
 - **VIX**:Yahoo `^VIX` 主,FRED VIXCLS 備
 - **News**:8 個 RSS feed 並聯,**不去重後平均**,以情緒詞典關鍵字命中為準(evidence: news_repository.py:15-55)

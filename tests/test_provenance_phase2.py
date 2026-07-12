@@ -39,10 +39,14 @@ class TestMacroTwLocalFetchProvenance:
         )
 
     def test_tw_pmi_local_returns_source_and_fetched_at(self):
+        # v19.348 重釘:PMI 改 9 源賽跑,source 由賽跑命中源帶回(血緣沿用),
+        # 不再是寫死的 'FinMind:TaiwanMacroEconomics'(該 dataset 不存在,v19.342)
         from repositories import macro_tw_local_repository as m  # v19.197 P1-4
         src = inspect.getsource(m.fetch_tw_pmi_local)
-        assert "FinMind:TaiwanMacroEconomics" in src
+        assert "fetch_tw_pmi_race" in src, "PMI 須走 9 源賽跑(v19.348)"
+        assert "FinMind:TaiwanMacroEconomics" not in src, "假 dataset 不得回歸"
         assert "fetched_at" in src
+        assert "result['source']" in src, "provenance source 沿用命中源(F-PROV-1)"
 
     def test_tw_export_yoy_returns_source_and_fetched_at(self):
         from repositories import macro_tw_local_repository as m  # v19.197 P1-4
@@ -113,9 +117,14 @@ class TestProvenanceFormatConventions:
         )
 
     def test_source_format_convention(self):
-        """source 格式應為 'Provider:Dataset'(對齊 fetch_fred 'FRED:<sid>' v19.83)。"""
+        """source 格式應為 'Provider:Dataset'(對齊 fetch_fred 'FRED:<sid>' v19.83)。
+
+        v19.348 重釘:fetch_tw_pmi_local 改 9 源賽跑後 source 為**動態**命中源
+        (白名單守在 shared.schemas.TW_PMI_RACE_SOURCES + validator),無字面
+        'Provider:Dataset' 常數可掃 → 從本掃描移除,改驗「沿用命中源」寫法。
+        """
         from repositories import macro_tw_local_repository as m  # v19.197 P1-4
-        for fn in (m.fetch_ndc_signal_history, m.fetch_tw_pmi_local,
+        for fn in (m.fetch_ndc_signal_history,
                    m.fetch_tw_export_yoy, m.fetch_foreign_consecutive_days):
             src = inspect.getsource(fn)
             # 應有 'X:Y' 形式
@@ -123,3 +132,7 @@ class TestProvenanceFormatConventions:
             assert re.search(r"'[A-Z][a-zA-Z]+:[A-Z][a-zA-Z]+", src), (
                 f"{fn.__name__} source 應為 'Provider:Dataset' 形式"
             )
+        # PMI:動態血緣 — 驗沿用 hit['source'] 而非字面常數
+        _pmi_src = inspect.getsource(m.fetch_tw_pmi_local)
+        assert "hit.get('source'" in _pmi_src, (
+            'fetch_tw_pmi_local source 應沿用賽跑命中源(動態血緣,v19.348)')
