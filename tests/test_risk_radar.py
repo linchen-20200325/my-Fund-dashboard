@@ -24,6 +24,11 @@ def _fred(vals: list[float], base_date: str = "2026-06-01") -> pd.DataFrame:
     return pd.DataFrame({"date": dates, "value": vals})
 
 
+# v19.351:Put/Call staleness gate(最新點 >7d→gray 退出加權)後,PCR level 測試需
+# 「新鮮」序列才測得到 level 邏輯。此 base 讓 8 筆序列的最新點 = 今天(age=0)。
+_FRESH_BASE = (pd.Timestamp.now().normalize() - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
+
+
 # ──────────────────────────────────────────────────────────────
 # 常量與工具函式
 # ──────────────────────────────────────────────────────────────
@@ -325,20 +330,22 @@ class TestSectorRotation:
 # 9. Put/Call ratio
 # ──────────────────────────────────────────────────────────────
 class TestPutCallRatio:
+    # v19.351:PCR 序列改用 _FRESH_BASE(最新點=今天),否則會被 staleness gate 判過時→gray。
     def test_calm(self):
-        with patch.object(rr, "fetch_yf_close", return_value=_yf([0.7] * 8)):
+        with patch.object(rr, "fetch_yf_close",
+                          return_value=_yf([0.7] * 8, base_date=_FRESH_BASE)):
             d = rr._signal_put_call_ratio()
         assert "🟢" in d["signal"]
 
     def test_yellow_1_0(self):
         with patch.object(rr, "fetch_yf_close",
-                          return_value=_yf([0.85] * 7 + [1.05])):
+                          return_value=_yf([0.85] * 7 + [1.05], base_date=_FRESH_BASE)):
             d = rr._signal_put_call_ratio()
         assert "🟡" in d["signal"]
 
     def test_red_extreme(self):
         with patch.object(rr, "fetch_yf_close",
-                          return_value=_yf([0.9] * 7 + [1.25])):
+                          return_value=_yf([0.9] * 7 + [1.25], base_date=_FRESH_BASE)):
             d = rr._signal_put_call_ratio()
         assert "🔴" in d["signal"]
 

@@ -2,6 +2,26 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🛡️ 2026-07-13 Put/Call staleness gate（v19.351,外部稽核 C2 查證後唯一真項）
+
+user 上傳外部「雙儀表板終極重構說明書」,逐條查證後**幾乎全是效能/UX/架構升級提案、非 bug**
+(且多前提過時:Stock app.py 稱 1178 實際 763、引用不存在的 `ARCHITECTURE_AUDIT.md`、@cache 已普遍、
+融資維持率 ÷0 已 v19.91 修)。user 核准唯一值得做的 **C2 後半**。
+
+- **真問題**:`_signal_put_call_ratio` 只取 `s.iloc[-1]` 算 level,**從不看最新資料點日期**。CBOE PCR
+  源常過時(v19.141/v19.277 已多次換源),一個數週前的舊值仍會算成 🔴/🟡 塞進 `summarize_radar`
+  系統性風險計數 → **用過時值污染風險分數**(違 §1 + §2.4)。
+- **修**(§2.4 日頻 🔴>7d + §1):最新點 > `_PCR_STALE_DAYS`(7)天 → 回 `_empty` ⬜。`summarize_radar`
+  本就不計 gray → **等同退出風險加權**,附誠實 note「N 天前過時→已退出風險加權」。**沿用既有 gray
+  機制,零新架構**。
+- **「換 CBOE 官方源」= 稽核誤判(已做)**:v19.277(2026-06-30)已加官方 `volume_and_call_put_ratios`
+  (total/equity)為末層源,比稽核早兩週。
+- **回歸網**:`test_pcr_staleness_v19_351`(過時→gray / 過時極端值不污染 / 新鮮正常計分 / 7d 邊界 /
+  summarize 排除 gray / 常數對齊 §2.4)6 test;`test_risk_radar` 3 個 PCR level 測試改用 `_FRESH_BASE`
+  (否則被新 gate 判過時)。**102 passed / 2 skipped 全綠**,新碼 ruff 淨。
+- **其餘稽核項全部不做**(§-1):async 重寫/app.py 下沉(已達標)/safe_divide 全案/FinMind 熔斷/
+  9 個視覺新功能 → 要嘛已做、要嘛需 §8.1 核准的架構/新功能,user 未點名不動。
+
 ## 🗂️ 2026-07-12 Tab5 資料診斷「分類分組」(v19.350,user 要求「參考台股」)
 
 user 看台股 Tab5 診斷表(依類別收合 +「台灣總經（6 筆｜🟢3 🟡1 🔴2）」rollup)後要求基金端比照。原基金 ② 全域資料健康總表為單張平面表 + 三篩選器,無分類。
