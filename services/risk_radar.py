@@ -438,6 +438,11 @@ def _signal_sector_rotation() -> dict:
 
 
 # ── 9. CBOE Put/Call Ratio ───────────────────────────────────────
+# v19.351：Put/Call staleness 門檻。PCR 為**日頻**指標,對齊 Fund §2.4「Daily 指標
+# 🔴 > 7 days」。最新資料點超過此天數 = 過時 → 退出風險加權(不以舊值污染系統性風險分數)。
+_PCR_STALE_DAYS = 7
+
+
 def _signal_put_call_ratio() -> dict:
     try:
         s, src, trace = _resolve_put_call()
@@ -446,6 +451,17 @@ def _signal_put_call_ratio() -> dict:
             note = ("Put/Call 全源失敗｜" + " ｜ ".join(trace)) if trace \
                    else "Put/Call 抓取失敗（Yahoo ^CPC/^CPCE + CBOE CSV 全源失敗）"
             return _empty(note, _label)
+        # v19.351 staleness gate（§2.4 日頻 🔴>7d + §1 不用舊值污染分數）:
+        # 最新資料點 > _PCR_STALE_DAYS 天 → 回 _empty ⬜（summarize_radar 不計 gray,
+        # 等同退出風險加權）,而非拿數週前的值誤判「散戶恐慌」紅/黃燈。
+        _last_dt = pd.Timestamp(s.index[-1])
+        if _last_dt.tzinfo is not None:
+            _last_dt = _last_dt.tz_localize(None)
+        _age_days = (pd.Timestamp.now().normalize() - _last_dt.normalize()).days
+        if _age_days > _PCR_STALE_DAYS:
+            return _empty(
+                f"Put/Call 最新資料 {_age_days} 天前（>{_PCR_STALE_DAYS}d 過時）"
+                f"→ 已退出風險加權,不以舊值污染系統性風險分數", _label)
         cur = float(s.iloc[-1])
         prev = float(s.iloc[-2])
         if cur >= 1.20:
