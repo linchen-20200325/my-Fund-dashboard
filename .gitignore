@@ -36,3 +36,6 @@ push_fund*.bat
 push_v*.bat
 push_v*_result.txt
 commit_msg_*.txt
+
+# Local push helper scripts (contain local paths / account names — never commit)
+*.vbs
