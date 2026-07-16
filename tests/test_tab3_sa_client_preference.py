@@ -1,10 +1,10 @@
 """v19.302 回歸網 — Tab3 政策 Sheet client 必須優先 Service Account。
 
 背景(user 2026-07-03 三帳號纏鬥):
-- 登入 GitHub / Streamlit Cloud = `cheng10022`
-- Google Sheet 擁有者 = `chen10021`
-- app 內按「用 Google 登入」→ Google 認證 chen10021 → 導回 *.streamlit.app →
-  Streamlit Cloud 平台自身登入看到 cheng10022 → 「You do not have access to this
+- 登入 GitHub / Streamlit Cloud = `帳號A`
+- Google Sheet 擁有者 = `帳號B`
+- app 內按「用 Google 登入」→ Google 認證 帳號B → 導回 *.streamlit.app →
+  Streamlit Cloud 平台自身登入看到 帳號A → 「You do not have access to this
   app or it does not exist」。這是「app 內 user OAuth」與「Streamlit Cloud 平台
   登入」的先天衝突,redirect_uri / login_hint 都救不了。
 
