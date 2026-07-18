@@ -2,6 +2,15 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📝 2026-07-18 文件校正 v19.354 — news_repository docstring RSS 數目漂移
+
+user 批次4「順手把文件小修也做了」。`repositories/news_repository.py` docstring 寫「抓 **11 個**
+RSS feed」,但實際 `FEEDS` 現為 **5 個**(MarketWatch / Yahoo Finance / CNBC Economy /
+CNBC Finance / BBC World)— Reuters(3)/FT/Investing/Bloomberg 已於 v19.293~297 陸續下架移除,
+docstring 未同步。純 docstring 校正,無 code 行為改動。
+⚠️ **另註(未動,governance-sensitive)**:`CLAUDE.md §2.1` 寫「8 個 RSS feed」、EX-PASSTHRU-1 條
+寫「11 RSS feeds」,兩處與實際 5 個亦不一致 — 屬憲法檔,留待 user 明示再校正。
+
 ## ⚡ 2026-07-18 單一基金分析 v19.353 — 移除每次分析冷清全站快取（下載速度大贏面）
 
 user 批次2 大贏面②。`ui/tab2_single_fund.py:212` 「🚀 分析」按鈕每次點都先
