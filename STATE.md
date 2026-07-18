@@ -2,6 +2,22 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🐞 2026-07-18 總經判讀 sign 反向修正（v19.352,判斷正確）
+
+user「聽你的建議 都修吧」批次1 第②項。稽核發現**兩處總經白話/橫幅判定 sign 反了**:
+- **根因**:`us_indicators.fetch_all_indicators` 全 ~25 指標 score 慣例為 **🟢 正分=偏多/風險降、
+  🔴 負分=偏空/風險升**(如 PMI≥50→+2🟢、VIX 恐慌→-2🔴、Sahm 觸發→-2🔴、殖利率倒掛→-2🔴)。
+- **`services/macro/explain.py:_interpret_indicator`**:寫成「正分→🔴強烈偏空」,與**同檔** `_verdict_for`
+  (`total_score>10→🟢極度樂觀`)自相矛盾。唯一 live consumer(今日關鍵橫幅 chip hover detail)因此顯示
+  反向白話。→ 改為正分=偏多、負分=偏空(色碼:偏多🟢/中性⚪/偏空 🟡→🟠→🔴 escalate)。
+- **`services/macro/daily_key_alerts.py:_indicator_items`**:判定 `score ≥ SIGMA` → 把**偏多**指標
+  當紅色警示置頂,真正**風險側**(負分)指標反被 continue 跳過。→ 改吃負分側:`score ≤ -SIGMA_HIGH`
+  紅級、`≤ -SIGMA_LOW` 黃級、`≥ -SIGMA_LOW`(偏多/中性)非事件。|score×weight| 排序不變。
+- **測試**:`test_macro_explain.py` 2 個 interpretation 測試(原編碼反向慣例:score=2.0 期望「偏空」)修正
+  sign;`test_daily_key_alerts_v19_349.py` 4 個訊號層 fixture 翻負分 + 新增 `test_signal_layer_bullish_
+  score_not_surfaced` 迴歸鎖(偏多不進橫幅、風險才進、detail 白話為偏空)。38 passed;broader macro 108 passed。
+- **純 sign bug fix**,函式簽名/呼叫圖/資料流全不變,不觸發 §8。
+
 ## 🛡️ 2026-07-13 Put/Call staleness gate（v19.351,外部稽核 C2 查證後唯一真項）
 
 user 上傳外部「雙儀表板終極重構說明書」,逐條查證後**幾乎全是效能/UX/架構升級提案、非 bug**

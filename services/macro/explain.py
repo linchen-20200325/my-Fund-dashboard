@@ -65,21 +65,26 @@ _DEFAULT_CUTOFFS = (10.0, 5.0, -5.0, -10.0)
 def _interpret_indicator(score: float) -> str:
     """根據標準化 score 給一句白話判讀。
 
-    score 約定：正 = 偏空頭/風險升高、負 = 偏多頭/寬鬆環境（fund 端慣例）
+    score 約定（fund 端慣例，對照 us_indicators.py `fetch_all_indicators` 各指標
+    🟢=正分 / 🔴=負分，並與本檔 `_verdict_for` 一致）：
+    **正 = 偏多頭/風險下降、負 = 偏空頭/風險升高**。
+    (v19.352 修正:原實作 sign 反向——正分被判「偏空」——與同檔 _verdict_for
+     `total_score>10 → 樂觀` 內部矛盾;唯一 live consumer 今日關鍵橫幅 detail 因此顯示
+     反向白話。此處改為與 score 慣例一致。)
     """
     if score >= SIGMA_VERY_HIGH_CUTOFF:
-        return f"🔴 訊號**強烈偏空**（標準化超過 +{SIGMA_VERY_HIGH_CUTOFF}σ）"
+        return f"🟢 訊號**強烈偏多**（標準化超過 +{SIGMA_VERY_HIGH_CUTOFF}σ）"
     if score >= SIGMA_HIGH_CUTOFF:
-        return f"🟠 訊號**偏空**（標準化 +{SIGMA_HIGH_CUTOFF} ~ +{SIGMA_VERY_HIGH_CUTOFF}σ）"
+        return f"🟢 訊號**偏多**（標準化 +{SIGMA_HIGH_CUTOFF} ~ +{SIGMA_VERY_HIGH_CUTOFF}σ）"
     if score >= SIGMA_LOW_CUTOFF:
-        return f"🟡 訊號**輕度偏空**（標準化 +{SIGMA_LOW_CUTOFF} ~ +{SIGMA_HIGH_CUTOFF}σ）"
+        return f"🟢 訊號**輕度偏多**（標準化 +{SIGMA_LOW_CUTOFF} ~ +{SIGMA_HIGH_CUTOFF}σ）"
     if score >= -SIGMA_LOW_CUTOFF:
         return f"⚪ 訊號**接近中性**（標準化 ±{SIGMA_LOW_CUTOFF}σ 內）"
     if score >= -SIGMA_HIGH_CUTOFF:
-        return f"🟢 訊號**輕度偏多**（標準化 -{SIGMA_LOW_CUTOFF} ~ -{SIGMA_HIGH_CUTOFF}σ）"
+        return f"🟡 訊號**輕度偏空**（標準化 -{SIGMA_LOW_CUTOFF} ~ -{SIGMA_HIGH_CUTOFF}σ）"
     if score >= -SIGMA_VERY_HIGH_CUTOFF:
-        return f"🟢 訊號**偏多**（標準化 -{SIGMA_HIGH_CUTOFF} ~ -{SIGMA_VERY_HIGH_CUTOFF}σ）"
-    return f"🟢 訊號**強烈偏多**（標準化超過 -{SIGMA_VERY_HIGH_CUTOFF}σ）"
+        return f"🟠 訊號**偏空**（標準化 -{SIGMA_HIGH_CUTOFF} ~ -{SIGMA_VERY_HIGH_CUTOFF}σ）"
+    return f"🔴 訊號**強烈偏空**（標準化超過 -{SIGMA_VERY_HIGH_CUTOFF}σ）"
 
 
 # v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT

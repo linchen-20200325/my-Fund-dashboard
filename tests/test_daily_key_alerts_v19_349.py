@@ -41,10 +41,11 @@ class TestCollectKeyAlerts:
             SIGMA_HIGH_CUTOFF, SIGMA_LOW_CUTOFF,
         )
         from services.macro.daily_key_alerts import collect_key_alerts
+        # v19.352:fund 慣例負分 = 風險側,橫幅只挑負分且夠強者(對照 us_indicators 🔴=負)
         ind = {
-            'CALM':  _ind(SIGMA_LOW_CUTOFF - 0.1),    # 未達黃 → 排除
-            'WARN':  _ind(SIGMA_LOW_CUTOFF + 0.1),    # 黃級
-            'DANGER': _ind(SIGMA_HIGH_CUTOFF + 0.1),  # 紅級
+            'CALM':  _ind(-(SIGMA_LOW_CUTOFF - 0.1)),   # -0.2 風險太弱 → 排除
+            'WARN':  _ind(-(SIGMA_LOW_CUTOFF + 0.1)),   # -0.4 黃級
+            'DANGER': _ind(-(SIGMA_HIGH_CUTOFF + 0.1)),  # -0.9 紅級
         }
         out = collect_key_alerts(ind, None)
         assert len(out['items']) == 2
@@ -55,7 +56,7 @@ class TestCollectKeyAlerts:
     def test_signal_layer_ranked_by_calibrated_weight(self):
         from shared.signal_thresholds import SIGMA_HIGH_CUTOFF
         from services.macro.daily_key_alerts import collect_key_alerts
-        _s = SIGMA_HIGH_CUTOFF + 0.2
+        _s = -(SIGMA_HIGH_CUTOFF + 0.2)   # v19.352 負分風險側
         ind = {
             'LIGHT': _ind(_s, weight=0.5, name='輕權重'),
             'HEAVY': _ind(_s, weight=3.0, name='重權重'),
@@ -64,12 +65,30 @@ class TestCollectKeyAlerts:
         assert out['items'][0]['text'].startswith('重權重'), (
             '同級內依 |score×weight| 降冪 — active.json 校準權重決定順序')
 
+    def test_signal_layer_bullish_score_not_surfaced(self):
+        """v19.352 迴歸鎖:偏多(正分)不進風險橫幅,風險(負分)才進 + detail 白話為偏空。
+
+        原 bug:sign 反向 → 偏多指標被當紅色警示置頂、真風險被 continue 跳過。
+        鎖住修正後方向,防再犯。
+        """
+        from shared.signal_thresholds import SIGMA_HIGH_CUTOFF
+        from services.macro.daily_key_alerts import collect_key_alerts
+        ind = {
+            'BULLISH': _ind(SIGMA_HIGH_CUTOFF + 0.5, name='偏多不該進'),    # +1.3 偏多
+            'RISK':    _ind(-(SIGMA_HIGH_CUTOFF + 0.5), name='風險該進'),   # -1.3 偏空
+        }
+        out = collect_key_alerts(ind, None)
+        assert len(out['items']) == 1, '只有風險側(負分)進橫幅'
+        assert '風險該進' in out['items'][0]['text']
+        assert out['items'][0]['severity'] == 0
+        assert '偏空' in out['items'][0]['detail'], 'detail 白話為偏空(非偏多)'
+
     def test_signal_layer_garbage_score_skipped(self):
         from shared.signal_thresholds import SIGMA_HIGH_CUTOFF
         from services.macro.daily_key_alerts import collect_key_alerts
         ind = {
             'BAD': _ind('N/A'),
-            'OK': _ind(SIGMA_HIGH_CUTOFF + 0.1, name='正常'),
+            'OK': _ind(-(SIGMA_HIGH_CUTOFF + 0.1), name='正常'),   # v19.352 負分風險側
         }
         out = collect_key_alerts(ind, None)
         assert len(out['items']) == 1 and '正常' in out['items'][0]['text']
@@ -93,8 +112,8 @@ class TestCollectKeyAlerts:
         from shared.signal_thresholds import SIGMA_LOW_CUTOFF
         from services.macro.daily_key_alerts import collect_key_alerts
         out = collect_key_alerts(
-            {'W': _ind(SIGMA_LOW_CUTOFF + 0.1)},   # 黃(訊號層)
-            {'t': _tp('⚠️')})                        # 紅(拐點層)
+            {'W': _ind(-(SIGMA_LOW_CUTOFF + 0.1))},   # -0.4 黃(訊號層,負分風險側)
+            {'t': _tp('⚠️')})                          # 紅(拐點層)
         assert out['items'][0]['layer'] == 'turning_point'
         assert out['items'][0]['severity'] == 0
 
