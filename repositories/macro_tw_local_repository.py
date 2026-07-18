@@ -39,11 +39,11 @@ from shared.api_endpoints import FINMIND_BASE
 # ⚠️ v19.342 診斷:dataset `TaiwanMacroEconomics` 在 FinMind **不存在**(SDK 2.0.4
 #    Dataset 枚舉 + 官方文件皆無此名;真名為 `TaiwanBusinessIndicator`,寬表)。
 #    → fetch_ndc_signal_history 已改走 _finmind_business_indicator(TBI 寬表)。
-#    → fetch_tw_pmi_local / fetch_tw_export_yoy 仍掛死源(FinMind 無 PMI/出口
-#      dataset 可替換),恆回 error='...無資料' — 新源設計列待核准,先如實標註。
+#    → fetch_tw_pmi_local 仍掛死源(FinMind 無 PMI dataset 可替換),恆回
+#      error='...無資料'。fetch_tw_export_yoy 已於 v19.355 改走海關 opendata
+#      6053(見下方 _customs_export_yoy_points),`_EXPORT_YOY_KEYS` 隨之移除。
 _NDC_SIGNAL_KEYS = ('景氣對策信號(分)', '景氣對策信號')
 _TW_PMI_KEYS     = ('製造業採購經理人指數', '製造業 PMI', 'PMI')
-_EXPORT_YOY_KEYS = ('出口年增率(%)', '出口年增率', '出口貿易')
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -299,44 +299,106 @@ def fetch_tw_pmi_local(months_back: int = 12, token: str = "") -> dict:
 # ════════════════════════════════════════════════════════════════════════════
 # §3 TW Export YoY（財政部出口年增率）
 # ════════════════════════════════════════════════════════════════════════════
+# ── 海關 opendata 6053(新臺幣出口總值)CSV 解析 — v19.355 移植股票 repo ──
+_CUSTOMS_EXPORT_CSV_URL = 'https://opendata.customs.gov.tw/data/6053/csv.csv'
+
+
+def _customs_export_yoy_points(text: str) -> list:
+    """解析海關 6053 出口 CSV → 同月對齊 YoY 序列(純函式,可單測)。
+
+    真實格式(股票 repo 探針實測):
+        "年度","月份","出口總值(新臺幣千元)",...
+        "115","4","2153671224",...        # 民國年、降序、新臺幣千元
+    §7 數學式:西元年 = 民國年 + 1911;YoY% = (值[Y,M] / 值[Y-1,M] − 1) × 100
+    (**同月對齊**,非 iloc 位置索引 — 抗缺月/亂序)。
+    sanity:base>0、民國年≥50、月∈[1,12]、YoY∈[-80,200]。
+    Returns: [((西元年, 月), yoy_pct), ...] 依 (年,月) 升冪;資料不足 → []。
+    """
+    import csv as _csv
+    import io as _io
+    try:
+        _rows = list(_csv.DictReader(_io.StringIO(text)))
+    except Exception:
+        return []
+    if len(_rows) < 13:
+        return []
+    _cols = list(_rows[0].keys())
+    _yr_c = next((c for c in _cols if '年度' in str(c)), None)
+    _mo_c = next((c for c in _cols if '月份' in str(c) or str(c).strip() == '月'), None)
+    # 出口總值優先(含復出口,對齊頭條口徑);無則純出口(排除 增/率/比/差/復)
+    _val_c = (next((c for c in _cols if '出口總值' in str(c)), None)
+              or next((c for c in _cols if str(c).startswith('出口')
+                       and not any(_x in str(c) for _x in ('增', '率', '比', '差', '復'))),
+                      None))
+    if not (_yr_c and _mo_c and _val_c):
+        return []
+    _by_ym: dict = {}   # (西元年, 月) -> 出口總值(千元)
+    for _r in _rows:
+        try:
+            _roc = int(str(_r.get(_yr_c, '')).strip())
+            _mo = int(str(_r.get(_mo_c, '')).strip())
+            _v = float(str(_r.get(_val_c, '')).replace(',', '').strip())
+        except (ValueError, TypeError):
+            continue
+        if _roc < 50 or not (1 <= _mo <= 12):   # 民國年 sanity
+            continue
+        _by_ym[(_roc + 1911, _mo)] = _v
+    _pts = []
+    for (_y, _m), _v_now in _by_ym.items():
+        _base = _by_ym.get((_y - 1, _m))         # 去年同月
+        if _base is None or _base <= 0:
+            continue
+        _yoy = round((_v_now / _base - 1) * 100, 2)
+        if -80 <= _yoy <= 200:
+            _pts.append(((_y, _m), _yoy))
+    _pts.sort(key=lambda t: t[0])                # 依 (年,月) 升冪
+    return _pts
+
+
 @register_cache
 @_ttl_cache(ttl_sec=TTL_15MIN)
 def fetch_tw_export_yoy(months_back: int = 12, token: str = "") -> dict:
-    """抓台灣出口年增率歷史。
+    """抓台灣出口年增率歷史(海關 opendata 6053,**新臺幣**計價)。
 
-    Returns
+    v19.355:原掛 FinMind `TaiwanMacroEconomics`(FinMind 不存在此 dataset,恆
+    error)→ 改走海關 opendata 6053 CSV(股票 repo 已驗證穩定源),同月對齊算 YoY。
+    §4.1 單位:新臺幣千元(YoY 為比率,單位無關;但與財政部美元頭條有匯率落差,
+    source 標「新臺幣」誠實區分)。months_back / token 參數保留相容(本源不需)。
+
+    Returns  # (contract 不變)
     -------
-    dict
-        {
-          'value':       float | None,   # 最新月份 YoY (%)
-          'prev':        float | None,   # 上月 YoY (%)
-          'trend':       list[float],    # 近 6 月
-          'inflection':  str,            # '🚀 由負轉正' / '⚠️ 由正轉負' / ...
-          'date_latest': str,
-          'source':      'FinMind' | None,
-          'error':       str | None,
-        }
+    dict {value/prev/trend/inflection/date_latest/source/error}
     """
     result: dict = {
         'value': None, 'prev': None, 'trend': [],
         'inflection': '⬜ 資料不足',
         'date_latest': '', 'source': None, 'error': None,
     }
-    sub = _finmind_macro_series(_EXPORT_YOY_KEYS,
-                                months_back=months_back, token=token)
-    if sub is None or len(sub) < 2:
-        result['error'] = 'FinMind TaiwanMacroEconomics 無出口年增率資料'
+    r = fetch_url(_CUSTOMS_EXPORT_CSV_URL, timeout=15)
+    if r is None or getattr(r, 'status_code', 0) != 200:
+        result['error'] = (f'海關 opendata 6053 無回應'
+                           f'(status={getattr(r, "status_code", "None")})')
         return result
-    vals = [round(float(v), 2) for v in sub['value'].tail(6).tolist()]
-    cur, prev = vals[-1], vals[-2]
-    result['value']       = cur
-    result['prev']        = prev
-    result['trend']       = vals
-    result['date_latest'] = str(sub['date'].iloc[-1])[:10]
-    # v19.151 F-PROV-1 phase 2
-    result['source']      = 'FinMind:TaiwanMacroEconomics'
-    result['fetched_at']  = _dt.datetime.now(_dt.timezone.utc).isoformat()
-    if prev < 0 <= cur:
+    try:
+        _text = r.content.decode('utf-8-sig', errors='ignore')
+    except Exception:
+        _text = getattr(r, 'text', '') or ''
+    _pts = _customs_export_yoy_points(_text)
+    if not _pts:
+        result['error'] = '海關 6053 CSV 解析後無足夠出口 YoY 資料(需 ≥13 月同月對齊)'
+        return result
+    _tail = _pts[-6:]                            # 近 6 月(升冪)
+    result['trend'] = [p[1] for p in _tail]
+    (_y, _m), cur = _pts[-1]
+    result['value'] = cur
+    result['prev'] = _pts[-2][1] if len(_pts) >= 2 else None
+    result['date_latest'] = f'{_y}-{_m:02d}'
+    result['source'] = 'Customs:Export6053(海關新臺幣出口總值)'
+    result['fetched_at'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    prev = result['prev']
+    if prev is None:
+        result['inflection'] = '⬜ 資料不足'
+    elif prev < 0 <= cur:
         result['inflection'] = '🚀 由負轉正'
     elif prev >= 0 > cur:
         result['inflection'] = '⚠️ 由正轉負'

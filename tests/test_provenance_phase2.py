@@ -51,7 +51,8 @@ class TestMacroTwLocalFetchProvenance:
     def test_tw_export_yoy_returns_source_and_fetched_at(self):
         from repositories import macro_tw_local_repository as m  # v19.197 P1-4
         src = inspect.getsource(m.fetch_tw_export_yoy)
-        assert "FinMind:TaiwanMacroEconomics" in src
+        # v19.355:出口改走海關 opendata 6053(原 FinMind:TaiwanMacroEconomics 不存在)
+        assert "Customs:Export6053" in src
         assert "fetched_at" in src
 
     def test_foreign_consecutive_days_returns_source_and_fetched_at(self):

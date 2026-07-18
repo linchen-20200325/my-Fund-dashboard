@@ -420,12 +420,13 @@ def _validate_tw_macro_common(d: Any, *, fn_label: str) -> dict:
         return d  # type: ignore[return-value]
     src = d.get("source")
     # fetcher 可能 source=None(fetch 失敗早 return)。允許集(F-PROV-1 反捏造):
-    # 'FinMind:' 前綴(ndc/export/foreign 仍單源) / TW_PMI_RACE_SOURCES 白名單
+    # 'FinMind:' / 'Customs:' 前綴 / TW_PMI_RACE_SOURCES 白名單
     # (v19.348 PMI 9 源賽跑) / None。
     if src is not None and not (isinstance(src, str) and (
-            src.startswith("FinMind:") or src in TW_PMI_RACE_SOURCES)):
+            src.startswith("FinMind:") or src.startswith("Customs:")
+            or src in TW_PMI_RACE_SOURCES)):
         raise ValueError(
-            f"{fn_label}: source 必須以 'FinMind:' 開頭、屬 TW_PMI_RACE_SOURCES "
+            f"{fn_label}: source 必須以 'FinMind:'/'Customs:' 開頭、屬 TW_PMI_RACE_SOURCES "
             f"白名單、或為 None(F-PROV-1),實際 = {src!r}"
         )
     # fetched_at 為 success path 必有;fail path(source=None)可缺
