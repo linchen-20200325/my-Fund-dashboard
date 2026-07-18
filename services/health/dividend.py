@@ -266,12 +266,16 @@ def compute_1y_total_return_mk_simple(
         try:
             for _d in dividends:
                 if isinstance(_d, dict):
-                    _date_raw = str(_d.get("date") or _d.get("ex_date") or "")[:10]
+                    # v19.352:配息日正規化斜線→破折號(對照 dividend.py:358 /
+                    # dividend_calc.py:95 / fund_service.py:501 慣例)。MoneyDJ 常給
+                    # "YYYY/MM/DD",與 dash-ISO 窗界做字典序比較時 '/'(0x2F)>'-'(0x2D)
+                    # → 窗內配息被誤判超出上界而漏算,div_sum 少計 → 殖利率/總報酬偏低。
+                    _date_raw = str(_d.get("date") or _d.get("ex_date") or "")[:10].replace("/", "-")
                     _amt = _d.get("amount")
                     if _amt is None:
                         _amt = _d.get("div_per_unit")
                 elif isinstance(_d, (tuple, list)) and len(_d) >= 2:
-                    _date_raw = str(_d[0])[:10]
+                    _date_raw = str(_d[0])[:10].replace("/", "-")   # v19.352 同上正規化
                     _amt = _d[1]
                 else:
                     continue

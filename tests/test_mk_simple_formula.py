@@ -144,6 +144,29 @@ class TestWindowBoundary:
         assert math.isclose(ret, 0.0, abs_tol=0.01)
         assert meta["div_count"] == 0
 
+    def test_slash_format_dividend_date_normalized(self):
+        """配息日為斜線格式 "YYYY/MM/DD"(MoneyDJ 常見)→ 正規化後仍落窗內算入。
+
+        v19.352 迴歸鎖:修正前 dict shape 未 .replace("/","-"),字典序比較
+        '/'(0x2F) > '-'(0x2D) → 窗內配息被誤判超出 dash-ISO 上界而漏算,
+        div_sum 少計 → 殖利率/總報酬偏低(靜默失真)。
+        """
+        nav = {"2025-06-26": 100.0, "2026-06-26": 100.0}
+        divs = [{"date": "2026/01/01", "amount": 5.0}]   # 斜線 + 窗內
+        ret, meta = compute_1y_total_return_mk_simple(nav, divs)
+        assert math.isclose(ret, 5.0, abs_tol=0.01), (
+            f"斜線日期應正規化後算入(修正前漏算 → 0),實際 {ret}"
+        )
+        assert meta["div_count"] == 1
+
+    def test_slash_format_tuple_shape_normalized(self):
+        """tuple shape 的斜線日期同樣正規化(對稱守 dict/tuple 兩分支)。"""
+        nav = {"2025-06-26": 100.0, "2026-06-26": 100.0}
+        divs = [("2026/04/01", 3.0)]
+        ret, meta = compute_1y_total_return_mk_simple(nav, divs)
+        assert math.isclose(ret, 3.0, abs_tol=0.01)
+        assert meta["div_count"] == 1
+
 
 # ──────────────────────────────────────────────────────────
 # 3. 邊界條件 / fail loud
