@@ -210,13 +210,12 @@ def render_single_fund_tab() -> None:
     # services.moneydj_fetcher，tab2/tab5 共用同一份 fallback chain。
 
     if do_load and mj_url_input.strip():
-        # v18.60: 載入前清 fetch 快取，確保用最新 calc_metrics 邏輯
-        try:
-            from fund_fetcher import clear_all_caches as _cac_t2
-            import repositories.macro_repository  # noqa: F401
-            _cac_t2()
-        except Exception:
-            pass   # smoke-allow-pass
+        # v19.353 效能:移除「每次分析都 clear_all_caches()」全站冷清。原 v18.60 為
+        # 「確保用最新 calc_metrics 邏輯」而清全站快取,但:(1) calc 是 code — 部署即
+        # 重啟自然清快取,不需每次點清;(2) NAV 走 @_daily_cache(T+1,日內不變)。原行為
+        # 導致同一基金重複分析、或任何 rerun 後再點,都冷抓 2000d NAV(MoneyDJ HTML 爬)
+        # + 全站 fetcher。改吃既有快取 → 同基金再分析走 daily cache 即時回。需最新資料
+        # 的 escape hatch 已存在:sidebar「🧹 全域刷新」(global_refresh_all) 或跨日自動失效。
         with st.spinner("📡 自動偵測基金類型並抓取資料..."):
             fd_raw, _t2_page_type = auto_fetch_moneydj(
                 mj_url_input.strip(), return_page_type=True

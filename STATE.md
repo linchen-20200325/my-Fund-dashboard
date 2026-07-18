@@ -2,6 +2,27 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ⚡ 2026-07-18 單一基金分析 v19.353 — 移除每次分析冷清全站快取（下載速度大贏面）
+
+user 批次2 大贏面②。`ui/tab2_single_fund.py:212` 「🚀 分析」按鈕每次點都先
+`clear_all_caches()` 冷清**全站** TTL cache,再 `auto_fetch_moneydj` 冷抓。
+- **根因**:原 v18.60 註解「載入前清 fetch 快取,確保用最新 calc_metrics 邏輯」——但
+  (1) calc 是 **code**(部署即重啟自然清快取,不需每次點清);(2) NAV 走 `@_daily_cache`
+  (T+1 公布,日內序列不變)。原行為 = **同一基金重複分析、或任何 rerun 後再點,都冷抓
+  2000 天 NAV(MoneyDJ HTML 爬,慢)+ 全站 fetcher** → 這是單檔分析頁最大的下載速度痛點。
+- **修**:移除 `clear_all_caches()` blanket 冷清(連帶移除只為註冊順序而放的
+  `import repositories.macro_repository` — 該模組另有 5+ caller,module cache 照常註冊)。
+  「🚀 分析」改吃既有快取 → 同基金再分析走 daily cache 即時回。
+- **freshness escape hatch 已存在(非移除唯一路徑)**:sidebar「🧹 全域刷新」
+  (`global_refresh_all`,ui/sidebar.py:159)清全站 + 落地檔;tab1 亦有「🆕 強制重抓最新」;
+  且 `@_daily_cache` 跨日自動失效。無 lookahead / 無資料正確性風險(cache key 含基金識別,
+  無跨基金污染)。
+- **同批次查證後略過(§-1,非真 bug)**:orchestrator cache(sub-fetcher 已 `@_daily_cache`,
+  再加層 = 過度設計)、並行 NAV cascade(`fetch_fund_by_key` 是 fallback chain cnyes→MoneyDJ,
+  並行會改語意 fire-all)、縮 2000d NAV 窗(v19.291 為修 MK 3-3-3「成立 0.1 年」保單代碼誤判
+  **刻意**延窗,縮回會 regress)。
+- **測試**:`test_tab2_single_fund` 加 `test_analyze_does_not_blanket_clear_caches` 迴歸鎖。16 passed。
+
 ## 🐞 2026-07-18 總經判讀 sign 反向修正（v19.352,判斷正確）
 
 user「聽你的建議 都修吧」批次1 第②項。稽核發現**兩處總經白話/橫幅判定 sign 反了**:
