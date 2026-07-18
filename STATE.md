@@ -2,6 +2,60 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📝 2026-07-18 文件校正 v19.354 — news_repository docstring RSS 數目漂移
+
+user 批次4「順手把文件小修也做了」。`repositories/news_repository.py` docstring 寫「抓 **11 個**
+RSS feed」,但實際 `FEEDS` 現為 **5 個**(MarketWatch / Yahoo Finance / CNBC Economy /
+CNBC Finance / BBC World)— Reuters(3)/FT/Investing/Bloomberg 已於 v19.293~297 陸續下架移除,
+docstring 未同步。純 docstring 校正,無 code 行為改動。
+⚠️ **另註(未動,governance-sensitive)**:`CLAUDE.md §2.1` 寫「8 個 RSS feed」、EX-PASSTHRU-1 條
+寫「11 RSS feeds」,兩處與實際 5 個亦不一致 — 屬憲法檔,留待 user 明示再校正。
+
+## ⚡ 2026-07-18 單一基金分析 v19.353 — 移除每次分析冷清全站快取（下載速度大贏面）
+
+user 批次2 大贏面②。`ui/tab2_single_fund.py:212` 「🚀 分析」按鈕每次點都先
+`clear_all_caches()` 冷清**全站** TTL cache,再 `auto_fetch_moneydj` 冷抓。
+- **根因**:原 v18.60 註解「載入前清 fetch 快取,確保用最新 calc_metrics 邏輯」——但
+  (1) calc 是 **code**(部署即重啟自然清快取,不需每次點清);(2) NAV 走 `@_daily_cache`
+  (T+1 公布,日內序列不變)。原行為 = **同一基金重複分析、或任何 rerun 後再點,都冷抓
+  2000 天 NAV(MoneyDJ HTML 爬,慢)+ 全站 fetcher** → 這是單檔分析頁最大的下載速度痛點。
+- **修**:移除 `clear_all_caches()` blanket 冷清(連帶移除只為註冊順序而放的
+  `import repositories.macro_repository` — 該模組另有 5+ caller,module cache 照常註冊)。
+  「🚀 分析」改吃既有快取 → 同基金再分析走 daily cache 即時回。
+- **freshness escape hatch 已存在(非移除唯一路徑)**:sidebar「🧹 全域刷新」
+  (`global_refresh_all`,ui/sidebar.py:159)清全站 + 落地檔;tab1 亦有「🆕 強制重抓最新」;
+  且 `@_daily_cache` 跨日自動失效。無 lookahead / 無資料正確性風險(cache key 含基金識別,
+  無跨基金污染)。
+- **同批次查證後略過(§-1,非真 bug)**:orchestrator cache(sub-fetcher 已 `@_daily_cache`,
+  再加層 = 過度設計)、並行 NAV cascade(`fetch_fund_by_key` 是 fallback chain cnyes→MoneyDJ,
+  並行會改語意 fire-all)、縮 2000d NAV 窗(v19.291 為修 MK 3-3-3「成立 0.1 年」保單代碼誤判
+  **刻意**延窗,縮回會 regress)。
+- **測試**:`test_tab2_single_fund` 加 `test_analyze_does_not_blanket_clear_caches` 迴歸鎖。16 passed。
+
+## 🐞 2026-07-18 總經判讀 sign 反向修正（v19.352,判斷正確）
+
+user「聽你的建議 都修吧」批次1 第②項。稽核發現**兩處總經白話/橫幅判定 sign 反了**:
+- **根因**:`us_indicators.fetch_all_indicators` 全 ~25 指標 score 慣例為 **🟢 正分=偏多/風險降、
+  🔴 負分=偏空/風險升**(如 PMI≥50→+2🟢、VIX 恐慌→-2🔴、Sahm 觸發→-2🔴、殖利率倒掛→-2🔴)。
+- **`services/macro/explain.py:_interpret_indicator`**:寫成「正分→🔴強烈偏空」,與**同檔** `_verdict_for`
+  (`total_score>10→🟢極度樂觀`)自相矛盾。唯一 live consumer(今日關鍵橫幅 chip hover detail)因此顯示
+  反向白話。→ 改為正分=偏多、負分=偏空(色碼:偏多🟢/中性⚪/偏空 🟡→🟠→🔴 escalate)。
+- **`services/macro/daily_key_alerts.py:_indicator_items`**:判定 `score ≥ SIGMA` → 把**偏多**指標
+  當紅色警示置頂,真正**風險側**(負分)指標反被 continue 跳過。→ 改吃負分側:`score ≤ -SIGMA_HIGH`
+  紅級、`≤ -SIGMA_LOW` 黃級、`≥ -SIGMA_LOW`(偏多/中性)非事件。|score×weight| 排序不變。
+- **測試**:`test_macro_explain.py` 2 個 interpretation 測試(原編碼反向慣例:score=2.0 期望「偏空」)修正
+  sign;`test_daily_key_alerts_v19_349.py` 4 個訊號層 fixture 翻負分 + 新增 `test_signal_layer_bullish_
+  score_not_surfaced` 迴歸鎖(偏多不進橫幅、風險才進、detail 白話為偏空)。38 passed;broader macro 108 passed。
+- **純 sign bug fix**,函式簽名/呼叫圖/資料流全不變,不觸發 §8。
+
+**同版第③項 — 配息日斜線漏算修正**:`services/health/dividend.py:compute_1y_total_return_mk_simple`
+Step 5 窗內配息累計,`_date_raw` 未做 `.replace("/","-")` 正規化(dict + tuple 兩分支皆缺),
+但**同檔 :358 + `dividend_calc.py:95` + `fund_service.py:501` 三個 sibling 都有**。MoneyDJ 常給
+`"YYYY/MM/DD"`,與 dash-ISO 窗界(`_start/_end_date_str` 來自 NAV items,fromisoformat 驗證過)做
+字典序比較時 `'/'(0x2F) > '-'(0x2D)` → 窗內配息被誤判超出上界漏算,`div_sum` 少計 → 殖利率/含息
+總報酬**靜默偏低**。修:兩分支各補 `.replace("/","-")`(對齊 sibling 慣例)。加 2 golden test
+(dict + tuple 斜線日期落窗內算入)。28 passed。純單行防禦式修正。
+
 ## 🛡️ 2026-07-13 Put/Call staleness gate（v19.351,外部稽核 C2 查證後唯一真項）
 
 user 上傳外部「雙儀表板終極重構說明書」,逐條查證後**幾乎全是效能/UX/架構升級提案、非 bug**

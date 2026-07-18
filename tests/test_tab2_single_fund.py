@@ -172,3 +172,22 @@ def test_invest_calc_manual_fx_fallback():
     assert "_fx_manual" in src, "缺少手動 FX 模式 flag"
     assert "切換手動模式" in src, "缺少手動模式切換提示"
     assert "手動填 1" in src, "缺少手動填匯率 input label"
+
+
+# ──────────────────────────────────────────────────────────────
+# v19.353：移除「每次分析都 clear_all_caches()」全站冷清（下載速度）
+# ──────────────────────────────────────────────────────────────
+def test_analyze_does_not_blanket_clear_caches():
+    """「🚀 分析」路徑不得再冷清全站快取 — 同基金再分析應走 @_daily_cache。
+
+    v19.353 迴歸鎖:原 v18.60 每次點分析都 clear_all_caches() → 冷抓 2000d NAV
+    (MoneyDJ HTML 爬)+ 全站 fetcher。需最新資料的 escape hatch 已在 sidebar
+    「🧹 全域刷新」(global_refresh_all)。防回退。
+    """
+    from pathlib import Path
+    src = (Path(__file__).parents[1] / "ui" / "tab2_single_fund.py").read_text(encoding="utf-8")
+    # 精準鎖呼叫/匯入(容忍說明註解提及名稱)
+    assert "import clear_all_caches" not in src, (
+        "分析路徑不得再 import clear_all_caches(全站冷清)")
+    assert "_cac_t2()" not in src, (
+        "分析路徑不得再呼叫 clear_all_caches();需最新資料走 sidebar「🧹 全域刷新」")

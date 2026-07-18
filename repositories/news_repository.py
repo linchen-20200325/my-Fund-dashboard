@@ -1,7 +1,10 @@
 """repositories/news_repository.py — 國際財經新聞 RSS Repository
 （v11.0 B-10 從 fund_fetcher.py 抽出）
 
-純資料層：feedparser 抓 11 個 RSS feed → 過濾 + 排序 → 回 list[dict]。
+純資料層：feedparser 抓 RSS feed → 過濾 + 排序 → 回 list[dict]。
+（v19.354 文件校正：實際 FEEDS 現為 5 個 — MarketWatch / Yahoo Finance /
+ CNBC Economy / CNBC Finance / BBC World；Reuters(3)/FT/Investing/Bloomberg
+ 已於 v19.293~297 陸續下架移除。原 docstring「11 個」為漂移。）
 - 一般財經關鍵字命中即收錄；系統性風險關鍵字命中者 is_systemic=True 並永遠排前
 - 不依賴 streamlit；caller 自行 cache（不在這層使用 @st.cache_data）
 

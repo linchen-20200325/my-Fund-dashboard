@@ -5,12 +5,15 @@ v19.349(未完成清單第 4 步,user 核准;股票 repo v19.108 設計 A 同構
 
 基金版兩層(**零新計算,純消費既有 SSOT 輸出** — 對照股票版的門檻/急變兩層):
 - **訊號層**:吃 `indicators` dict(fetch_all_indicators,23 keys)各 block 的
-  `score`(SCORE_RULES SSOT 已算好;fund 慣例:**正 = 偏空/風險升高**)。
-  分級沿用 `_interpret_indicator` 同一組 SIGMA_*_CUTOFF(shared SSOT):
-  score ≥ SIGMA_HIGH_CUTOFF → 紅級;≥ SIGMA_LOW_CUTOFF → 黃級。
+  `score`(SCORE_RULES SSOT 已算好;fund 慣例:**正 = 偏多/風險下降、負 = 偏空/
+  風險升高** — 對照 us_indicators.py 各指標 🟢=正分/🔴=負分)。橫幅只挑**風險側**
+  (負分)且夠強的指標,|score| 越大越嚴重:score ≤ -SIGMA_HIGH_CUTOFF → 紅級;
+  ≤ -SIGMA_LOW_CUTOFF → 黃級;≥ -SIGMA_LOW_CUTOFF(偏多或接近中性)= 非風險事件。
   白話 detail 直接用 `_interpret_indicator(score)`(SSOT 敘事)。
   同級內依 |score×weight|(contribution)降冪 — active.json 校準權重
   自然決定「誰排前面」。
+  (v19.352 修正:原判定用 `score ≥ SIGMA` 把**偏多**指標當紅色警示置頂,並把
+   真正的**風險側**負分指標 continue 跳過——sign 反了。此版改吃負分側。)
 - **拐點層**:吃 `detect_turning_points` 輸出(session `_tp_v1948_top`,
   5 組拐點,signal/icon/note 已由該 SSOT 判定)。icon ∈ {🔴,🔻,⚠️} → 紅級;
   {🟡,🚀} → 黃級(🚀 利多拐點同樣「今天該看」);{🟢,📊,⬜} = 非事件不進橫幅。
@@ -42,9 +45,11 @@ def _indicator_items(indicators: dict | None) -> list[dict]:
             weight = float(v.get('weight', 1.0))
         except (TypeError, ValueError):
             continue   # 型別壞 → 跳過該指標(§1 不腦補)
-        if score < SIGMA_LOW_CUTOFF:
-            continue   # fund 慣例:正=偏空;未達黃級門檻 = 非事件
-        _sev = 0 if score >= SIGMA_HIGH_CUTOFF else 1
+        # fund 慣例:score 負 = 偏空/風險升高(對照 us_indicators.py 各指標 🟢=正/🔴=負)。
+        # 橫幅只挑風險側(負分)且夠強者;|score| 越大越嚴重。
+        if score > -SIGMA_LOW_CUTOFF:
+            continue   # score ≥ -SIGMA_LOW_CUTOFF(偏多/接近中性)= 非風險事件
+        _sev = 0 if score <= -SIGMA_HIGH_CUTOFF else 1
         _val = v.get('value')
         _val_txt = ''
         if _val is not None:

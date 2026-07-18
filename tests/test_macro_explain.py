@@ -237,7 +237,8 @@ def test_v19_17_indicator_without_score_key_skipped():
 # interpretation 7 級
 # ════════════════════════════════════════════════
 def test_v19_17_interpretation_extreme_bear_score():
-    indicators = {"VIX": _ind("VIX", score=2.0)}
+    # v19.352 修正:fund 慣例負分 = 偏空/風險升高(對照 us_indicators 🔴=負分)
+    indicators = {"VIX": _ind("VIX", score=-2.0)}
     p = build_beginner_payload(indicators, {}, top_n=1)
     assert "強烈偏空" in p["active_factors"][0]["interpretation"]
 
@@ -249,6 +250,7 @@ def test_v19_17_interpretation_neutral_zero_score():
 
 
 def test_v19_17_interpretation_strong_bull_score():
-    indicators = {"VIX": _ind("VIX", score=-2.0)}
+    # v19.352 修正:fund 慣例正分 = 偏多/風險下降(對照 us_indicators 🟢=正分)
+    indicators = {"VIX": _ind("VIX", score=2.0)}
     p = build_beginner_payload(indicators, {}, top_n=1)
     assert "強烈偏多" in p["active_factors"][0]["interpretation"]
