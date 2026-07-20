@@ -2,6 +2,14 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📝 2026-07-20 CLAUDE.md RSS 數目校正 v19.357 — 3 處漂移收齊(user 核准 SSOT)
+
+實際 `news_repository.FEEDS` 現為 **5 個**(MarketWatch / Yahoo Finance / CNBC Economy /
+CNBC Finance / BBC World;Reuters(3)/FT/Investing/Bloomberg 已於 v19.293~297 下架移除),
+但 CLAUDE.md 有 3 處未同步:§2.1 T4 範例列(8 名含已下架源)、§2.1 News 條「8 個」、
+EX-PASSTHRU-1「11 RSS feeds」。v19.354 已修 news_repository docstring,當時 CLAUDE.md 屬
+governance-sensitive 留待 user 明示 — 本次 user 核准後 3 處全收齊為 5。純憲法文件校正,無 code 改動。
+
 ## 🧮 2026-07-18 配息還原淨值供風險指標 v19.356 — 除息跳空不再算假回撤(判斷正確)
 
 user「未完成項目」查證後點名開工(項4)。配息型基金**除息日 NAV 下跳一個配息額**,
