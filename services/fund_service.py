@@ -193,6 +193,75 @@ def calculate_fund_total_return(nav_df: pd.DataFrame, div_df: pd.DataFrame) -> p
     return df
 
 
+def _total_return_nav(s: pd.Series, divs: list) -> pd.Series:
+    """把配息「再投資複利」還原進 NAV 序列,供風險指標(σ / Sharpe / Sortino /
+    max_drawdown)計算,消除除息日 NAV 跳空造成的**假**波動與**假**回撤。
+
+    背景(§4.5 配息切割 / §4.6 ex-date 跳空):配息型基金除息日 NAV 會下跳一個
+    配息額,這**不是**真實下跌(持有人領到現金),但自算的 log return 會把它當一次
+    暴跌 → 高估波動度、放大 max_drawdown、壓低 Sharpe/Sortino。wb07(MoneyDJ 官方
+    風險表)本就含息;本函式讓「自算 fallback」與 wb07 同基準(apples-to-apples),
+    也讓 reconcile 對帳兩邊可比。
+
+    複用 SSOT `calculate_fund_total_return()`(Factor 還原法)+ 既有
+    `divs → div_df` 轉換規則(對齊 calc_metrics ret_1y_total 路徑:skip
+    amount<=0、日期斜線正規化)。
+
+    Returns
+    -------
+    pd.Series
+        與 `s` **同 index、同長度** 的還原後序列(Adj_NAV)。
+
+    降級(§1 Fail Loud → 顯式回退,不偽造):
+      - `divs` 空 / 全部 amount<=0 / 日期不可解析 → 無配息事件 → **逐點等於 `s`**
+        (純累積型基金天然一致,非掩蓋;純累積型行為零變化)。
+      - 還原序列長度/正值不變量不符(如同一除息日重複配息使 left-merge 膨脹)→
+        stderr log + **回退原始 `s`**(寧可用未還原序列,不可回傳錯位序列污染指標)。
+    """
+    if s is None or s.empty:
+        return s
+    # divs(list[dict{date,amount}]) → div_df:複用 ret_1y_total 路徑的轉換規則
+    _div_rows = []
+    if divs:
+        for _d in divs:
+            try:
+                _amt = float(_d.get("amount", 0) or 0)
+                if _amt <= 0:                       # 0 / 負配息不還原
+                    continue
+                _date_raw = str(_d.get("date", "") or "").replace("/", "-")
+                _div_rows.append(
+                    {"Date": pd.to_datetime(_date_raw), "Dividend": _amt}
+                )
+            except Exception:
+                continue
+    if not _div_rows:
+        # 無有效配息事件 → 還原序列 == 原序列(顯式,非偽造)
+        return s
+    try:
+        _nav_df = pd.DataFrame({
+            "Date": pd.to_datetime(s.index),
+            "NAV": s.values.astype(float),
+        })
+        _tr = calculate_fund_total_return(_nav_df, pd.DataFrame(_div_rows))
+        # 不變量(§4.2):還原序列須與原序列等長 + 全正。
+        # FundNavSchema 保證 s 升冪,calculate_fund_total_return 內部亦 sort_values,
+        # 故可位置對齊;長度不符(重複除息日使 left-merge 膨脹)即放棄還原、回退 s。
+        if _tr.empty or len(_tr) != len(s):
+            raise ValueError(f"還原序列長度 {len(_tr)} != 原序列 {len(s)}")
+        s_tr = pd.Series(_tr["Adj_NAV"].to_numpy(), index=s.index)
+        if not bool((s_tr > 0).all()):
+            raise ValueError("還原後序列含非正值")
+        return s_tr
+    except Exception as _e:
+        import sys as _sys_tr
+        print(
+            f"[fund_service/_total_return_nav] 配息還原失敗,回退原始 NAV 算風險:"
+            f"{type(_e).__name__}: {_e}",
+            file=_sys_tr.stderr,
+        )
+        return s
+
+
 def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     """
     計算 MK 買點指標。
@@ -234,7 +303,13 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         print(f"[calc_metrics] schema 違反: {_ve}")
         raise
     now = float(s.iloc[-1])
-    log_ret = np.log(s / s.shift(1)).dropna()
+    # v19.356 項4:風險指標(σ / Sharpe / Sortino / max_drawdown)改用「配息還原
+    # 淨值序列」s_tr — 消除除息日跳空造成的假波動/假回撤,並與 wb07 官方含息風險表
+    # 同基準(詳見 _total_return_nav docstring)。**顯示值 `now`、買賣點(_sig_win)、
+    # 高低點(_hl)、純 NAV 報酬(_ret / ret_1y_total)一律仍用原始 `s`。**
+    # 無配息基金 s_tr 逐點等於 s → log_ret 與舊版位元相同,行為零變化。
+    s_tr = _total_return_nav(s, divs)
+    log_ret = np.log(s_tr / s_tr.shift(1)).dropna()
 
     # ── 年化標準差（各期間）─────────────────────────────
     # MK 方法：最少 20 筆資料即可計算（降低門檻以支援短期資料）

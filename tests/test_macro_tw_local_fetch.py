@@ -195,33 +195,54 @@ class TestFetchTwPmiLocal:
 # ════════════════════════════════════════════════════════════════════════════
 # §3 fetch_tw_export_yoy — 4 case
 # ════════════════════════════════════════════════════════════════════════════
+# v19.355:出口 YoY 改走海關 6053 CSV(非 FinMind JSON)→ 測試改建海關 CSV。
+def _customs_csv(yoys: list) -> str:
+    """建海關 6053 CSV:2025 base=1000,2026 各月 = 1000×(1+yoy/100),使 YoY = 目標值。"""
+    lines = ['"年度","月份","出口總值(新臺幣千元)"']
+    for i, y in enumerate(yoys):                    # 2026(民國115)1..N 月
+        lines.append(f'"115","{i+1}","{round(1000 * (1 + y / 100))}"')
+    for m in range(1, 13):                          # 2025(民國114)base
+        lines.append(f'"114","{m}","1000"')
+    return '\n'.join(lines) + '\n'
+
+
+def _fake_csv_response(csv_text: str) -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.content = csv_text.encode('utf-8-sig')
+    resp.text = csv_text
+    return resp
+
+
 class TestFetchTwExportYoy:
     def setup_method(self):
         _clear_caches()
 
     def test_happy_negative_to_positive(self):
-        # prev=-2.5, cur=3.5 → '🚀 由負轉正'
+        # 2026 YoY [-5,-4,-3,-2.5,-2.5,3.5] → prev=-2.5, cur=3.5 → '🚀 由負轉正'
         with patch.object(fetch_mod, 'fetch_url',
-                          return_value=_fake_response(_export_rows(
-                              [-5.0, -4.0, -3.0, -2.5, -2.5, 3.5]))):
+                          return_value=_fake_csv_response(
+                              _customs_csv([-5.0, -4.0, -3.0, -2.5, -2.5, 3.5]))):
             r = fetch_mod.fetch_tw_export_yoy()
         assert r['error'] is None
         assert r['value'] == 3.5
         assert r['prev'] == -2.5
         assert '🚀' in r['inflection']
+        assert 'Customs:Export6053' in r['source']
 
     def test_happy_positive_to_negative(self):
-        # prev=2.0, cur=-1.5 → '⚠️ 由正轉負'
+        # 2026 YoY [10,8,5,3,2,-1.5] → prev=2.0, cur=-1.5 → '⚠️ 由正轉負'
         with patch.object(fetch_mod, 'fetch_url',
-                          return_value=_fake_response(_export_rows(
-                              [10.0, 8.0, 5.0, 3.0, 2.0, -1.5]))):
+                          return_value=_fake_csv_response(
+                              _customs_csv([10.0, 8.0, 5.0, 3.0, 2.0, -1.5]))):
             r = fetch_mod.fetch_tw_export_yoy()
         assert r['value'] == -1.5
         assert '⚠️' in r['inflection']
 
-    def test_bad_json_returns_error(self):
+    def test_bad_csv_returns_error(self):
+        # 欄位不符 CSV → 解析後無資料 → error(§1 不腦補)
         with patch.object(fetch_mod, 'fetch_url',
-                          return_value=_fake_bad_json()):
+                          return_value=_fake_csv_response('"x","y"\n' + '"1","2"\n' * 20)):
             r = fetch_mod.fetch_tw_export_yoy()
         assert r['error'] is not None
         assert r['value'] is None
@@ -295,13 +316,16 @@ class TestSharedHelper:
         _clear_caches()
 
     def test_indicator_fuzzy_match_fallback(self):
-        # 用變形 indicator key（含 '出口年增率' 但格式不同）→ 應走 contains fallback
+        # v19.355:出口改走海關源後,fuzzy match 改直接測共用 helper
+        # _finmind_macro_series(仍供 fetch_tw_pmi_local 等使用)。
+        # 變形 indicator key（含關鍵字但格式不同）→ 應走 contains fallback。
         rows = [{'date': f'2026-{i+1:02d}-01',
                  'indicator': '臺灣出口年增率_月底',  # 模糊比對
                  'value': v}
                 for i, v in enumerate([1.0, 2.0, 3.0])]
         with patch.object(fetch_mod, 'fetch_url',
                           return_value=_fake_response(rows)):
-            r = fetch_mod.fetch_tw_export_yoy()
-        assert r['error'] is None
-        assert r['value'] == 3.0
+            sub = fetch_mod._finmind_macro_series(('出口年增率',),
+                                                  months_back=6, token='x')
+        assert sub is not None
+        assert list(sub['value']) == [1.0, 2.0, 3.0]

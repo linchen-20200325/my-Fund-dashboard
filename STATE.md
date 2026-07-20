@@ -2,6 +2,49 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧮 2026-07-18 配息還原淨值供風險指標 v19.356 — 除息跳空不再算假回撤(判斷正確)
+
+user「未完成項目」查證後點名開工(項4)。配息型基金**除息日 NAV 下跳一個配息額**,
+這**不是**真實下跌(持有人領到現金),但 `services/fund_service.py:calc_metrics` 的
+`log_ret = np.log(s / s.shift(1))` 走**原始 NAV** → 把除息跳空當成一次暴跌:
+**高估 σ、放大 max_drawdown、壓低 Sharpe/Sortino**。而 wb07(MoneyDJ 官方風險表)本就含息 →
+自算 fallback 與 wb07 **不同基準**(對帳失真)。
+- **§8.1 設計核准後動工**(user 選預設案:max_dd 一併含息化,4 指標同基準內部一致)。
+- **新增純函式 `_total_return_nav(s, divs)`**(L2,放 `calculate_fund_total_return` 與 `calc_metrics` 之間):
+  複用 **SSOT `calculate_fund_total_return()`**(Factor 還原法:`Factor=1+Div/NAV → Cum_Factor.cumprod()
+  → Adj_NAV`)+ 既有 `divs→div_df` 轉換規則(對齊 ret_1y_total 路徑:skip amount<=0、日期斜線正規化)。
+  回傳與 `s` **同 index 同長度**的還原序列。
+- **改動範圍極小(1 處污染點)**:`calc_metrics` 內 `s_tr = _total_return_nav(s, divs)`,
+  `log_ret` 改吃 `s_tr` → σ / Sharpe / Sortino / max_drawdown 全走還原序列。
+  **顯示值 `now`、買賣點(_sig_win σ通道)、高低點(_hl)、布林、純 NAV 報酬(_ret / ret_1y_total)一律仍用原始 `s`**。
+- **§1 Fail Loud 降級**:divs 空/全 amount<=0/日期壞 → 逐點等於 s(**純累積型基金 log_ret 位元相同、零變化**);
+  還原後長度/正值不變量不符(如重複除息日使 left-merge 膨脹)→ stderr log + **回退原始 s**(寧可未還原,不回錯位序列)。
+- **測試**:新增 `test_total_return_nav_v19_356`(13:降級×4 / golden 還原×2 / 3 個易錯輸入 /
+  property 不變量×2 / calc_metrics 整合含息 max_dd 顯著小於 raw / **純累積型零變化對帳** / wiring source-scan)。
+  相關迴歸 27 + schema-gate/reconcile/provenance 103 全綠。
+⚠️ **副作用(user 已知會)**:配息型基金的 max_drawdown 會「含息化」變小(除息假回撤被消掉);
+  這正是修正目的 — 反映持有人真實經歷(含再投資)而非帳面淨值跳空。
+
+## 🔌 2026-07-18 出口 YoY 接海關 opendata v19.355 — 取代不存在的 FinMind dataset(數據正確)
+
+user「未完成項目」查證後點名開工(項3)。`repositories/macro_tw_local_repository.py:fetch_tw_export_yoy`
+原掛 FinMind `TaiwanMacroEconomics`(v19.342 診斷此 dataset 在 FinMind 不存在)→ 出口卡片**恆無資料**。
+- **§7 對齊後動工**:移植股票 repo 已驗證穩定源 **海關 opendata 6053**
+  (`opendata.customs.gov.tw/data/6053/csv.csv`,新臺幣出口總值,民國年月降序)。
+- **公式(同月對齊,非 iloc)**:西元年 = 民國年 + 1911;`YoY% = (值[Y,M] / 值[Y-1,M] − 1) × 100`。
+  抽純函式 `_customs_export_yoy_points(text)`(可單測),延伸為近 6 月 trend + prev + inflection。
+  sanity:base>0、民國年≥50、月∈[1,12]、YoY∈[-80,200];fail-loud(來源死/解析空 → error 不腦補)。
+- **§4.1 單位誠實**:新臺幣計價(與財政部美元頭條有匯率落差),source `Customs:Export6053(海關新臺幣
+  出口總值)` 明標;dict contract(value/prev/trend/inflection/date_latest/source)不變 → UI 端 `_safe_tw()`
+  + `validate_tw_export_yoy_dict` 無感。validator 加 `Customs:` 前綴白名單(F-PROV-1)。
+- **清理**:移除死 `_EXPORT_YOY_KEYS`(原指向死 dataset);更新檔頭診斷註。
+- **測試**:新增 `test_export_yoy_customs_v19_355`(7:同月對齊/缺 base/不足列/欄位不符/base=0/整合成功/
+  來源死)+ 改寫 `test_macro_tw_local_fetch` 出口 4 測(改建海關 CSV)+ fuzzy 測改直測 `_finmind_macro_series`
+  + provenance 測改 `Customs:Export6053`。schema-gate + 相關 234 passed。
+⚠️ **項5(次要源 schema)查證後撤下**:`validate_stooq/cboe/defillama_series` 其實**已 wire 在 consumer**
+  (`services/risk_radar.py:143/152` + `liquidity_engine.py:244`)— 資料進計算前已驗,fetcher 端再加 = 冗餘
+  (§8.1 step 6),不寫。
+
 ## 📝 2026-07-18 文件校正 v19.354 — news_repository docstring RSS 數目漂移
 
 user 批次4「順手把文件小修也做了」。`repositories/news_repository.py` docstring 寫「抓 **11 個**
