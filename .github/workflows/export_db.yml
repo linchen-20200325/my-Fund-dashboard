@@ -1,0 +1,50 @@
+name: "匯出 fund.db（供 2026 多智能體系統讀取）"
+
+# 把 my-Fund 的美股/全球總經（FRED 利差/CPI、SPX、VIX）落地成 fund.db，
+# force-push 到本 repo 的 `data` 分支（永遠 1 個 commit，不撐大 repo）。
+# 下游 2026 的國際盤 workflow 會 checkout `data` 分支取用。
+#
+# Phase 1 只需「離線層」(讀已 commit 的 data_cache parquet)——真總經、免 key、免網路。
+# 連動美股/匯率(live 層)為 Phase 2 再開 --live。
+
+on:
+  schedule:
+    # 每日 UTC 21:00（台灣 05:00）—— 排在下游 2026 國際盤推播（早上）之前。
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install minimal deps
+        # 離線層只讀 data_cache/*.parquet（已 commit）+ config/preset_funds.json → 只需 pandas/pyarrow。
+        run: pip install pandas pyarrow
+
+      - name: Export fund.db（離線層：真美股/全球總經）
+        run: python scripts/export_fund_db.py --no-live --output fund.db
+
+      - name: Publish fund.db → data 分支
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 暫存 orphan 分支 → force-push 到 data：永遠 1 個 commit，不累積歷史、不撐大 repo。
+          git checkout --orphan _pub
+          git reset -q .
+          git add -f fund.db
+          git commit -q -m "data: fund.db $(date -u '+%Y-%m-%dT%H:%M:%SZ') [skip ci]"
+          git push -f origin _pub:data
