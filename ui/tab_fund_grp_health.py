@@ -172,7 +172,8 @@ def render_fund_grp_health_tab() -> None:
 
     # v19.181:模組化 3 表 wrapper(健康分析 / 配息相關 / 實際購買結果)。
     # funds_extra 透給 _render_health_table 內部用(基金體檢 PK + 健診卡)。
-    _render_health_3tables(rows, funds_extra=_funds_extra)
+    # v19.347：健檢 Tab 開「🎯 選基金（低基期）」;Tab3 持倉健診不開(預設 False)。
+    _render_health_3tables(rows, funds_extra=_funds_extra, show_screener=True)
 
     # v19.58 — 其餘進階貼圖區塊（真實收益矩陣 + 投資試算 + 持股 + 多檔比較 + AI…）。
     # 基金體檢 PK + 4 大健診卡已上移至健診總表之前，不再由此區塊渲染（避免上下重複）。
@@ -459,8 +460,117 @@ def _render_mj_freshness_banner(ok_rows: list[dict]) -> None:
     render_mj_freshness_banner(_items)
 
 
+def _eats_principal_flag(fd: dict) -> "bool | None":
+    """v19.347：從 MK 吃本金 verdict 取乾淨布林（True=吃本金 / False=不吃 / None=未知）。
+
+    走 `dividend_safety` 的 `alert_level`（red/yellow/green/grey）語意欄位,
+    不解析 emoji：red→吃本金；green/yellow→不吃（黃=margin 薄但未吃）；其餘→未知。
+    """
+    try:
+        from services.health.dividend import check_eating_principal_1y_mk
+        _v = check_eating_principal_1y_mk(fd)
+        if isinstance(_v, dict):
+            _lvl = _v.get("alert_level")
+            if _lvl == "red":
+                return True
+            if _lvl in ("green", "yellow"):
+                return False
+    except Exception:
+        pass
+    return None
+
+
+def _render_low_base_screener(ok_rows: list[dict]) -> None:
+    """🎯 選基金（低基期進場點）— v19.347。
+
+    在「已載入的基金」裡找進場候選：現價落在「期間高點 − N×標準差」之下（低基期）
+    且不吃本金，可依幣別/類別篩。**重用組合健診已抓的 NAV**，不新增外部抓取。
+    L3 render；篩選邏輯全在 `services.fund_screening`（L2 純函式）。
+    """
+    from services.fund_screening import screen_funds  # L2 純函式
+
+    # 1) 由已載入 row 的 _fund_raw 組 items（series/幣別/類別 + 吃本金布林）
+    items = []
+    for _r in ok_rows:
+        fd = _r.get("_fund_raw") or {}
+        _mj = fd.get("moneydj_raw") or {}
+        items.append({
+            "code": _r.get("code", ""),
+            "name": (fd.get("fund_name") or _r.get("基金名") or "")[:24],
+            "series": fd.get("series"),
+            "currency": (fd.get("currency") or _r.get("ccy") or "").strip().upper(),
+            "category": (_mj.get("category") or fd.get("category") or "").strip(),
+            "eats_principal": _eats_principal_flag(fd),
+        })
+
+    st.markdown("#### 🎯 選基金（低基期進場點 · 高點−σ）")
+    st.caption(
+        "在已載入的基金裡，找「現價 ≤ 期間高點 − N×標準差」且不吃本金的**進場候選**。"
+        "低幾σ 越大 = 離高點越深。"
+    )
+
+    _c1, _c2, _c3 = st.columns([1, 1, 2])
+    _n = _c1.radio("低基期 σ 倍數", [1, 2], horizontal=True, key="lb_nsigma",
+                   help="門檻 = 期間高點 − N×標準差；N 越大越嚴（要跌更深才算低基期）。")
+    _lb_years = _c2.radio("回看期間", ["1年", "2年", "3年"], key="lb_years",
+                          help="以交易日計：1年≈252、2年≈504、3年≈756。")
+    _lookback = {"1年": 252, "2年": 504, "3年": 756}[_lb_years]
+    _all_ccy = sorted({it["currency"] for it in items if it["currency"]})
+    _all_cat = sorted({it["category"] for it in items if it["category"]})
+    _sel_ccy = _c3.multiselect("幣別（外幣/台幣）", _all_ccy, default=_all_ccy, key="lb_ccy")
+    _sel_cat = _c3.multiselect("基金類別", _all_cat, default=_all_cat, key="lb_cat")
+    _cc1, _cc2 = st.columns(2)
+    _only_eat = _cc1.checkbox("只留不吃本金（MK 綠/黃燈）", value=True, key="lb_noeat")
+    _only_low = _cc2.checkbox("只留低基期", value=True, key="lb_onlylow")
+
+    # 2) L2 純函式篩選（多選清空 → None = 不篩該維度，避免空表困惑）
+    rows = screen_funds(
+        items, n_sigma=float(_n), lookback=_lookback,
+        only_low_base=_only_low, only_no_eat=_only_eat,
+        currencies=(set(_sel_ccy) or None),
+        categories=(set(_sel_cat) or None),
+    )
+    if not rows:
+        st.info("目前沒有符合條件的基金——可放寬 σ / 回看期間，或取消『只留』勾選。")
+        return
+
+    import pandas as pd
+    from streamlit import column_config as _cc
+    _eat_map = {True: "🔴 吃本金", False: "🟢 不吃", None: "❓ 未知"}
+    _lb_map = {True: "✅ 低基期", False: "— 非低基期", None: "⚪ 無法判定"}
+    _df = pd.DataFrame([{
+        "代號": r["code"], "基金名": r["name"],
+        "類別": r["category"] or "—", "幣別": r["currency"] or "—",
+        "現價": r["current"], "期間高點": r["high"],
+        "門檻(高點−σ)": r["threshold"],
+        "低幾σ": r["sigma_below_high"],
+        "低基期": _lb_map.get(r["is_low_base"], "⚪"),
+        "吃本金": _eat_map.get(r["eats_principal"], "❓ 未知"),
+        "樣本數": r["n_points"],
+        "可信度": "✅" if r["reliable"] else "⚠️ 低",
+    } for r in rows])
+    st.dataframe(
+        _df, use_container_width=True, hide_index=True,
+        column_config={
+            "現價": _cc.NumberColumn(format="%.2f"),
+            "期間高點": _cc.NumberColumn(format="%.2f"),
+            "門檻(高點−σ)": _cc.NumberColumn(format="%.2f"),
+            "低幾σ": _cc.NumberColumn(format="%.2f σ"),
+        },
+    )
+    st.caption(
+        f"共 {len(rows)} 檔符合（依「低幾σ」深→淺排序）。門檻/σ 以「{_lb_years}」窗 × {_n}σ 計算；"
+        "停售/NAV 幾乎不動者（std≈0）標『無法判定』不硬湊（§1）；樣本 < 60 筆標『可信度低』。"
+    )
+    st.download_button(
+        "⬇️ 下載選基金清單 CSV", _df.to_csv(index=False).encode("utf-8-sig"),
+        "low_base_funds.csv", "text/csv", key="lb_dl",
+    )
+
+
 def _render_health_3tables(rows: list[dict],
-                           funds_extra: list | None = None) -> None:
+                           funds_extra: list | None = None,
+                           show_screener: bool = False) -> None:
     """v19.181 3 表模組化渲染:① 健康分析 ② 配息相關 ③ 實際購買結果(既有 _render_health_table)。
 
     共用 SSOT row builder(`services.health.report`)讓 Tab3 也能同源渲染。
@@ -522,6 +632,15 @@ def _render_health_3tables(rows: list[dict],
     except Exception as _e_csa:
         st.caption(f"⬜ 核心/衛星配置檢查失敗："
                    f"{type(_e_csa).__name__}: {str(_e_csa)[:80]}")
+
+    # ── 🎯 選基金（低基期進場點）── v19.347：僅健檢 Tab 顯示(show_screener),
+    #    Tab3 持倉健診不放(避免互動 widget key 與健檢 Tab 撞 + §8.1 不過度設計)。
+    if show_screener:
+        try:
+            _render_low_base_screener(ok_rows)
+        except Exception as _e_lb:
+            st.caption(f"⬜ 選基金（低基期）渲染失敗："
+                       f"{type(_e_lb).__name__}: {str(_e_lb)[:80]}")
 
     # ── 🔴 淘汰候選紅區(MK 4 規則 verdict=replace)── v19.315:提到最上面,一眼看見要換的 ──
     # 先建 ② 配息 rows(內含 _verdict),紅區與下方表 ② 共用同一份、不重算(SSOT,避免雙倍計算)。
