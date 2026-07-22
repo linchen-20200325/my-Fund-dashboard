@@ -2,6 +2,20 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave B1:infra/cache L0→L1 上行 import 反轉 v19.374
+
+- **病灶(架構越權查緝,§8.2 硬規則 3 違憲)**:`infra/cache.py:383 global_refresh_all` 內
+  lazy `from repositories.hot_money_repository import ...` = **L0 Infra 反向依賴 L1 Repository**
+  (未登錄例外)。
+- **修(依賴反轉,非登例外)**:`infra.cache` 新增 `_ST_CACHE_REGISTRY` + `register_st_cache`;
+  `repositories/hot_money_repository` 兩個 `@st.cache_data` fetcher 疊 `@register_st_cache`
+  (於 import 時**下行**註冊 repositories→infra,合規)。`global_refresh_all` 改 iterate registry,
+  不再 import repositories。未 import 的 fetcher cache 本就空 → 語意等價。
+- **驗**:infra/cache.py **0 上行 import**;import hot_money 後 registry=2 且皆有 `.clear`;
+  `global_refresh_all` st_cache_cleared=**2**(行為零變化);cache/hot_money 相關 **73 測試綠**。
+- **改動檔:`infra/cache.py` + `repositories/hot_money_repository.py`**(依賴反轉本質需兩端)。
+  §8.2 硬規則 3 違憲 **1 → 0**。
+
 ## 🧹 2026-07-22 全域排毒 Wave A3(slice 1):portfolio_service 百分比 parser 收 SSOT v19.373
 
 - **病灶(SSOT 查緝 #3,parser 分歧)**:`services/portfolio_service.py` 自帶 `_parse_pct`(僅 strip '%')

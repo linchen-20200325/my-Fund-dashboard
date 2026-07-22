@@ -25,6 +25,10 @@ from shared.ttls import TTL_10MIN, TTL_30MIN
 # v19.223 P1-2:FinMind URL 收口至 shared/api_endpoints.py SSOT
 from shared.api_endpoints import FINMIND_BASE as _FINMIND_BASE
 
+# v19.374 B1:向 infra.cache(L0)下行註冊本檔 @st.cache_data fetcher,供 global_refresh_all
+# 一併清。取代原 infra.cache 反向 import 本檔的 L0→L1 上行違憲(§8.2 硬規則 3)。
+from infra.cache import register_st_cache
+
 
 def _yf_series_to_df(series: pd.Series) -> pd.DataFrame:
     """`fetch_yf_close` 回傳的 pd.Series → 標準 [date, usdtwd] DataFrame。
@@ -43,6 +47,7 @@ def _yf_series_to_df(series: pd.Series) -> pd.DataFrame:
     return out.sort_values("date").reset_index(drop=True)
 
 
+@register_st_cache
 @st.cache_data(ttl=TTL_30MIN, show_spinner=False)
 def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame, str]:
     """抓最近 N 天外資買賣超（FinMind，沿用 tw_macro pattern + token kwarg）。
@@ -103,6 +108,7 @@ def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame,
     return out, ""
 
 
+@register_st_cache
 @st.cache_data(ttl=TTL_10MIN, show_spinner=False)
 def fetch_usdtwd_series(days: int) -> tuple[pd.DataFrame, str]:
     """抓 USDTWD=X 時序（複用 macro_repository.fetch_yf_close + NAS proxy）。
