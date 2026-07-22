@@ -2,6 +2,26 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ⏰ 2026-07-22 ③ 台灣端每日累積(NAS cron)v19.363 — 封「覆蓋靠使用習慣」致命傷(序列 2/8)
+
+- **新 `scripts/accumulate_nav_tw.py`**:台灣 IP 端(NAS/本機)每天自動抓一次最新 NAV 寫
+  `nav_history`,不靠 user 開 App。與 CI 腳本(美國 IP、精簡依賴、平行實作)不同 —— 本腳本裝
+  **完整 requirements**、直接走 app 已驗證抓取鏈 `services.moneydj_fetcher.auto_fetch_moneydj`
+  (tab2/健診同一條),**不做第二份抓取實作**(SSOT)。
+  - 代碼清單復用 `fetch_nav_cache._discover_fund_codes`(importlib,避免第二份清單漂移);fallback env `NAV_CODES`
+  - 取值復用 `nav_history_hook._extract_point`(series 末點 SSOT,同 App 端規則;scripts/ 為 ops 入口不受層級 import 約束)
+  - §1:secrets 缺 → exit 2、全抓失敗 → exit 1(cron 信可見);單檔失敗顯式 skip + 計數不拖累整批(§4.6)
+  - §5:同日重跑 (code,date) 冪等
+- **L2 修 NAS 相容坑**:env fallback 的 `google_service_account` 是 **JSON 字串**(非 dict)→
+  舊 `status()`/`_get_sheet` 會誤判未啟用。新 `_sa_to_dict`(dict 原樣 / JSON 字串→dict / 壞值→{});
+  `is_enabled()` 改委派 `status()`(單一判斷源,Streamlit 端行為不變);`_get_sheet` 解析後仍無
+  client_email → raise(§1)。
+- **NAS 設定**(user 動作):`pip install -r requirements.txt` + env 兩把
+  (`google_service_account`=SA JSON 字串 / `macro_weights_sheet_id`)+ cron
+  `30 18 * * 1-5 cd <repo> && python scripts/accumulate_nav_tw.py`(台灣時間傍晚,NAV T+1 多傍晚更新)。
+- **測試** `tests/test_accumulate_nav_tw.py` 7(happy path nas_cron 標記 / 單檔失敗不拖批 /
+  冪等 dup 計數 / 空清單 / _sa_to_dict 5 型 / env 字串 SA status 啟用);nav_history 全家 **59 綠**。
+
 ## 💡 2026-07-22 ① NAV 累積狀態燈 v19.362 — 終結「以為在累積其實沒有」(未結案序列修復 1/8)
 
 user 指示:未結案項目除 LLM 兩項(AI 結構化輸出 / LLM-as-judge)外按序逐一修。本項為第 1 件。
