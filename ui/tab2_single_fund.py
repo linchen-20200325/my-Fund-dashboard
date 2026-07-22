@@ -1296,6 +1296,7 @@ def render_single_fund_tab() -> None:
 
                 # ── 📰 個股新聞面（v18.206）：逐股 Google News 搜尋（按鈕）+ AI 新聞面分析 ──
                 if _tops:
+                    # EX-PASSTHRU-1(v19.377):同 ai.py,fetch_stock_news self-contained news fetcher(見 CLAUDE.md §8.2.A)
                     from repositories.news_repository import (  # noqa: PLC0415
                         fetch_stock_news as _fetch_stk,
                     )

@@ -115,11 +115,9 @@ def refresh_hot_money_data(token: str = "", days: int = 180, window: int = 5,
     -------
     (ok, msg):失敗時 stash 不動(保留舊資料),msg 帶原因(§1 fail loud)。
     """
-    from repositories.hot_money_repository import (
-        fetch_foreign_flow_series, fetch_usdtwd_series,
-    )
-    flow_df, ferr = fetch_foreign_flow_series(days, token)
-    fx_df, xerr = fetch_usdtwd_series(days)
+    # v19.375 B2:改走 L2 facade(§8.2 硬規則 4:L3 不直呼 L1 fetcher)
+    from services.hot_money_service import fetch_hot_money_frames
+    flow_df, fx_df, ferr, xerr = fetch_hot_money_frames(days, token)
     _errs = "；".join(e for e in (ferr, xerr) if e)
     if flow_df.empty or fx_df.empty:
         return False, f"外資或 USDTWD 抓取為空{('（' + _errs + '）') if _errs else ''}"
@@ -150,10 +148,8 @@ def refresh_hot_money_data(token: str = "", days: int = 180, window: int = 5,
 def render_hot_money_section(token: str = "",
                                 key_prefix: str = "fund_hm") -> None:
     """渲染熱錢三角交叉深度視圖（基金倉版，自取資料）。"""
-    # 走 L1 repository 取數,避免本檔(L3 UI)直接做 HTTP
-    from repositories.hot_money_repository import (
-        fetch_foreign_flow_series, fetch_usdtwd_series,
-    )
+    # v19.375 B2:走 L2 facade 取數(§8.2 硬規則 4:L3 不直呼 L1 fetcher)
+    from services.hot_money_service import fetch_hot_money_frames
 
     st.caption(
         "💡 **為何境外基金 user 也要看熱錢？** "
@@ -173,8 +169,7 @@ def render_hot_money_section(token: str = "",
                           key=f"{key_prefix}_fx_thr")
 
     with st.spinner("📡 抓 USDTWD 匯率 + FinMind 外資買賣超..."):
-        fx_df, xerr = fetch_usdtwd_series(days)
-        flow_df, ferr = fetch_foreign_flow_series(days, token)
+        flow_df, fx_df, ferr, xerr = fetch_hot_money_frames(days, token)
     for err in (xerr, ferr):
         if err:
             st.warning(err)

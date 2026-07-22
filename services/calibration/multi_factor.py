@@ -41,6 +41,7 @@ from shared.fred_series import (
     FRED_UMCSENT,
     FRED_UNRATE,
 )
+from shared.signal_thresholds import TRADING_DAYS_PER_YEAR
 
 Direction = Literal["above", "below"]
 NormalizeMethod = Literal["zscore", "minmax"]
@@ -248,11 +249,21 @@ def fetch_factor_series(
 
 
 def _zscore(series: pd.Series) -> pd.Series:
-    mu = series.mean()
-    sd = series.std()
-    if not np.isfinite(sd) or sd == 0:
-        return pd.Series(0.0, index=series.index)
-    return (series - mu) / sd
+    """Z-score,收斂至 SSOT `repositories.macro.math_utils.zscore`(§1:std=0/NaN 回 NaN + log)。
+
+    v19.371 消 DRY:原本本檔自帶一份 z-score 實作,std=0 時回 `0.0`,與 SSOT 回 `NaN`
+    分歧(SSOT 為 §1 Fail-Loud 而設,禁止把退化情境當 0 掩蓋)。改為委派 SSOT 計算。
+
+    但本 composite context 用 `sum(skipna=False)`,任一 NaN factor 會清空整條 composite。
+    退化因子(std=0 = 零資訊)在 factor 模型語意上就是「無 tilt」,故此處**顯式**中性化
+    為 0(§1 填補三要件:顯式呼叫 + SSOT 已寫 log + 語意註明)。非退化路徑輸出與原式
+    逐位元相同 → composite 數值零變化,不改核心業務邏輯。
+    """
+    from repositories.macro.math_utils import zscore as _ssot_zscore  # L2→L1 純 util(macro_service 同 import)
+    z = _ssot_zscore(series)
+    if len(z) > 0 and z.isna().all():
+        return pd.Series(0.0, index=series.index)   # 退化因子顯式中性化(SSOT 已 log std=0/NaN)
+    return z
 
 
 def _normalize(series: pd.Series, method: NormalizeMethod, spec_direction: Direction) -> pd.Series:
@@ -377,7 +388,7 @@ def evaluate_sharpe(
     mu = trade_rets.mean()
     sd = trade_rets.std()
     n = len(trade_rets)
-    periods_per_year = 252 / fwd_days
+    periods_per_year = TRADING_DAYS_PER_YEAR / fwd_days
     annual_return = mu * periods_per_year
     annual_vol = sd * np.sqrt(periods_per_year) if sd > 0 else 0.0
     sharpe = annual_return / annual_vol if annual_vol > 0 else 0.0

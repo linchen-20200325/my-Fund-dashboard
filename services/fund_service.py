@@ -488,7 +488,15 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             if _dstd > 1e-12:
                 sortino = round(float((r252.mean() - rf) / _dstd * np.sqrt(TRADING_DAYS_PER_YEAR)), 2)
     cum=(1+log_ret).cumprod()
-    max_dd=round(float(((cum-cum.cummax())/cum.cummax()).min())*100,2)
+    # v19.372:max_dd ÷0 guard(對齊本函式 Sharpe/Sortino/Calmar 既有 §1 防線 + SSOT
+    # portfolio_service.compute_max_drawdown 的 (s<=0) 語意)。停售/剛成立/資料異常使 cum
+    # 或其 running-max ≤0(§4.6 邊界)→ 回撤未定義,回 None 寧缺勿假,避免 inf/NaN 汙染 KPI。
+    # 非退化路徑算式與原式逐位元相同(cummax 只算一次)→ max_dd 數值零變化。
+    _cummax=cum.cummax()
+    if len(cum)>=2 and bool((cum>0).all()) and bool((_cummax>0).all()):
+        max_dd=round(float(((cum-_cummax)/_cummax).min())*100,2)
+    else:
+        max_dd=None
     # v19.341(第七份 review 3-2):分母補 >0 guard(第二道防線)— 本函式入口
     # pandera 已擋 nav<=0,此 guard 防未來驗證放寬/內部直呼時 ZeroDivisionError。
     def _ret(n): return round((now-float(s.iloc[-n]))/float(s.iloc[-n])*100,2) if (len(s)>=n and float(s.iloc[-n])>0) else None

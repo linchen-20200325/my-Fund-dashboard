@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.370_RealTerFundClear"
+APP_VERSION = "v19.378_RefactorD_DeadCodeSweep"
 
 
 # ══════════════════════════════════════════════════════

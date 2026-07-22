@@ -1233,6 +1233,7 @@ def render_data_guard_tab() -> None:
             "此時 `_freshness()` 會自動 fallback 到舊天數閾值。"
         )
         try:
+            # EX-PASSTHRU-1(v19.377):同 data_registry,thin FRED 揭露日 helper 診斷用(見 CLAUDE.md §8.2.A)
             from repositories.macro_repository import fred_get_next_release_date as _diag_next_rel
             _diag_key = (st.secrets.get("FRED_API_KEY","")
                          or os.environ.get("FRED_API_KEY",""))

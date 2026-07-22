@@ -151,13 +151,10 @@ def calc_fund_factor_score(fund_data: Dict,
     # §1:估計為真實揭露值之和/單值,顯式標 source(非捏造);揭露 TER 端點/欄位名
     # 須台灣網路實機驗證(沙盒 403 打不到 fundclear.com.tw),多候選 or 鏈 + 缺則
     # graceful fallback,見 STATE v19.370。
-    def _parse_pct(v):
-        if v is None or v == "":
-            return None
-        try:
-            return float(str(v).replace("%", "").strip())
-        except (ValueError, TypeError):
-            return None
+    # v19.373:百分比 parser 收斂 SSOT `shared.converters.safe_num`(_safe_num_ps)。
+    # 原本檔自帶一份僅 strip '%';SSOT 另 strip ',' + 擋 bool/inf/nan,對費用率域輸出等價
+    # 且更穩(§3.3 消 DRY,§1 更嚴)。缺/髒值仍回 None → 下游 graceful fallback 不變。
+    _parse_pct = _safe_num_ps
 
     er = expense_ratio or m.get("expense_ratio")
     er_src = "metrics" if er is not None else None
@@ -282,21 +279,14 @@ def get_factor_availability(fund_data: Dict,
     if er is None:
         # v19.370:揭露 TER(FundClear top-level / MoneyDJ total_expense_ratio)優先於估計
         for _cand in (fund_data.get("expense_ratio"), mj_raw.get("total_expense_ratio")):
-            if _cand not in (None, ""):
-                try:
-                    _v = float(str(_cand).replace("%", "").strip())
-                    if 0 < _v <= 10:
-                        er = _v
-                        break
-                except (ValueError, TypeError):
-                    pass
+            _v = _safe_num_ps(_cand)          # v19.373 SSOT(None/髒值 → None)
+            if _v is not None and 0 < _v <= 10:
+                er = _v
+                break
     if er is None:
         mj_fee_raw = mj_raw.get("mgmt_fee")
         if mj_fee_raw:
-            try:
-                er = float(str(mj_fee_raw).replace("%", "").strip())
-            except (ValueError, TypeError):
-                er = None
+            er = _safe_num_ps(mj_fee_raw)    # v19.373 SSOT
     if er is not None:
         try:
             float(er)

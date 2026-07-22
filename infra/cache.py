@@ -137,6 +137,21 @@ def register_cache(fn):
     return fn
 
 
+_ST_CACHE_REGISTRY: list = []   # @st.cache_data fetcher(EX-CACHE-1)供 global_refresh 清
+
+
+def register_st_cache(fn):
+    """把 `@st.cache_data` 包過的 L1 fetcher 註冊進來,`global_refresh_all()` 一併 `.clear()`。
+
+    v19.374 B1(分層歸位):消除原本 infra(L0)→ repositories(L1)的**上行 import**
+    (§8.2 硬規則 3 違憲)。改由 L1 fetcher 於自身 import 時向本 L0 registry **下行**註冊
+    (repositories → infra,合規),infra.cache 不再反向 import repositories。
+    `@st.cache_data` wrapper 具 `.clear()`;用法:`@register_st_cache` 疊在 `@st.cache_data` 之上。
+    """
+    _ST_CACHE_REGISTRY.append(fn)
+    return fn
+
+
 # ── v19.250 R20:日 TTL 快取(保存當日,隔日自動 miss 重抓)──────────
 def _daily_cache(fn=None, *, today_fn=None, cache_if=None):
     """日 TTL 快取裝飾器:保存當日(TW UTC+8 timezone),隔日午夜自動 miss → 重抓。
@@ -378,23 +393,18 @@ def global_refresh_all(session_state=None) -> dict:
         # v19.187 F-MED:layer 1 失敗仍要嘗試 layer 2-4
         print(f'[cache] global_refresh_all L1 ttl fail: '
               f'{type(e).__name__}: {e}', file=_sys.stderr)
-    try:
-        # v19.196 P0-4-A:fetcher 已下沉 repositories.hot_money_repository
-        from repositories.hot_money_repository import (
-            fetch_foreign_flow_series, fetch_usdtwd_series,
-        )
-        for _fn in (fetch_foreign_flow_series, fetch_usdtwd_series):
-            try:
-                _fn.clear()
-                _stat["st_cache_cleared"] += 1
-            except Exception as e:
-                # v19.187 F-MED:單一 st.cache_data clear fail
-                print(f'[cache] global_refresh_all L2 {_fn.__name__} fail: '
-                      f'{type(e).__name__}: {e}', file=_sys.stderr)
-    except Exception as e:
-        # v19.187 F-MED:hot_money_repository import fail(極罕見)
-        print(f'[cache] global_refresh_all L2 import fail: '
-              f'{type(e).__name__}: {e}', file=_sys.stderr)
+    # v19.374 B1:改走 _ST_CACHE_REGISTRY(L1 fetcher import 時下行註冊),消除原
+    # infra(L0)→ repositories(L1)上行 import(§8.2 硬規則 3)。未被 import 的 fetcher
+    # 其 cache 本就是空的,不在 registry = 無需清,語意等價。
+    for _fn in list(_ST_CACHE_REGISTRY):
+        try:
+            _fn.clear()
+            _stat["st_cache_cleared"] += 1
+        except Exception as e:
+            # v19.187 F-MED:單一 st.cache_data clear fail 不中斷其他
+            print(f'[cache] global_refresh_all L2 '
+                  f'{getattr(_fn, "__name__", "?")} clear fail: '
+                  f'{type(e).__name__}: {e}', file=_sys.stderr)
     try:
         _disk = clear_disk_cache()
         _stat["disk_files_removed"] = _disk.get("files_removed", 0)

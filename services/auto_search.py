@@ -286,43 +286,8 @@ def _empty_result(
     )
 
 
-# ════════════════════════════════════════════════════════════════
-# Plan generator — 列出所有要跑的 subset（subset, phase）
-# ════════════════════════════════════════════════════════════════
-def _plan_univariate(pool: list[str]) -> list[tuple[list[str], Phase]]:
-    return [([k], "univariate") for k in pool]
-
-
-def _plan_greedy(seed: list[str], pool: list[str], max_size: int) -> list[tuple[list[str], Phase]]:
-    """Greedy forward：在既有 seed 上逐輪挑下一個最佳因子."""
-    plan: list[tuple[list[str], Phase]] = []
-    current = list(seed)
-    remaining = [k for k in pool if k not in current]
-    while len(current) < max_size and remaining:
-        for cand in remaining:
-            plan.append((current + [cand], "greedy"))
-        # 下一輪會 swap 進當輪 best，但 plan 階段我們只列上限
-        # 實際 run 時用 selected_seed 來追蹤進度
-        if not plan:
-            break
-        # 推算下一輪 candidates：簡化版只列 1 輪，run-time 動態選 seed
-        break
-    return plan
-
-
-def _plan_refine(best_subset: list[str], pool: list[str]) -> list[tuple[list[str], Phase]]:
-    """Refine：對 best subset 每個位置嘗試與池內其他因子互換."""
-    plan: list[tuple[list[str], Phase]] = []
-    n = len(best_subset)
-    for i in range(n):
-        for cand in pool:
-            if cand in best_subset:
-                continue
-            swapped = best_subset[:i] + [cand] + best_subset[i + 1:]
-            plan.append((swapped, "refine"))
-    return plan
-
-
+# v19.378 D1:_plan_univariate / _plan_greedy / _plan_refine 拔毒(全 repo 0 caller,
+# 只有 def 自身;plan generator 從未接線)。estimate_total_evals 保留(progress bar 用)。
 def estimate_total_evals(top_k: int, max_size: int) -> int:
     """估算 hybrid 總 eval 次數（給 progress bar 用）."""
     univariate = top_k

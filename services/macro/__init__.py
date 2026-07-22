@@ -46,7 +46,6 @@ from services.macro.us_indicators import (  # noqa: F401
     calc_macro_phase_zpct,
     detect_systemic_risk,
     fetch_all_indicators,
-    fetch_tw_market_tpi,
     get_market_phase,
     identify_regime,
 )

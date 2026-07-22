@@ -2,6 +2,120 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave D:死碼 sweep(5 fn / ~155 LOC)v19.378
+
+- **死碼查緝(grep 二度驗證 0 production + 0 test caller,§-1「毫不留情刪死碼」)**:
+  - **D1** `services/auto_search.py`:`_plan_univariate` / `_plan_greedy` / `_plan_refine`
+    (plan generator 三兄弟從未接線)。
+  - **D2** `services/ai_service.py`:`_write_error_ledger`(Colab `/content/` 遺跡,39 LOC)。
+  - **D3** `services/auto_search_store_local.py`:`_job_path`(class 內聯建路徑已取代)。
+  - **D4** `services/macro/us_indicators.py`:`fetch_tw_market_tpi`(106 LOC,**0 真呼叫**,只
+    re-export + 字串 label)—— Wave C 稽核誤標「錯置」,實勘為**死碼**;連動移除
+    `services/macro/__init__.py` re-export + 清 orphan TPI banner。
+- **驗**:AST 精準刪除(`end_lineno`,不誤傷相鄰 `detect_systemic_risk` 的 keyword dict);
+  4 檔 syntax + import OK;`detect_systemic_risk` 仍運作;ruff E3xx clean;`test_auto_search`
+  42 綠;**0 test 引用、全 repo 0 殘引**(除自身註解)。
+- **淨刪 ~155 LOC**。改動 5 檔。F841 死變數 / F811 重複 import 為 ruff 小項,留待需要時 --fix。
+
+## 🧹 2026-07-22 全域排毒 Wave B2(slice 3,**收官**):4 thin fetcher 登 EX-PASSTHRU-1 v19.377
+
+- **病灶(Rule 4)**:`fred_get_next_release_date` ×2(`data_registry` / `tab5`)、`fetch_stock_news`
+  ×2(`ai.py` / `tab2`)UI 直呼 L1 fetcher。
+- **修(user 核准「混合」案:此 4 處為 thin pass-through,無 L2 業務可上提,建 facade =
+  §8.1 step 6「用不到的抽象」→ 登例外)**:§8.2.A EX-PASSTHRU-1 補登 2 fetcher 群(**6 → 8 組**)
+  + 4 site 加註解指回例外表。`fetch_stock_news` 與**已登錄兄弟** `fetch_market_news` 一致處理。
+- **驗**:4 檔 syntax OK(純註解 + import 別名不變,零邏輯改動)。
+  §8.2 硬規則 4 違憲 **4 → 0**。
+- **B2 收官**:7 處 Rule 4 違憲全清 —— B2a facade×2(hot_money)/ B2b facade×1(macro_compass)/
+  B2c 例外×4。**硬規則 4 違憲 7 → 0**。
+- **改動檔:`data_registry.py` / `tab5_data_guard.py` / `ai.py` / `tab2_single_fund.py`(註解)
+  + `CLAUDE.md`(§8.2.A)**。
+
+## 🧹 2026-07-22 全域排毒 Wave B2(slice 2):macro_compass L3→L1 上提 L2 facade v19.376
+
+- **病灶(Rule 4)**:`ui/components/macro_compass_top.py` `_do_fetch` 直接
+  `from repositories.macro_repository import fetch_macro_compass` + 手動 `.cache_clear()`
+  + 呼叫(L3 UI 碰 L1 fetcher **及其 cache 內部**)。
+- **修(user 核准「混合」案:此項有 cache 集中價值 → facade)**:新增
+  `services/macro/compass.refresh_macro_compass()` 封裝「cache_clear + fetch」,UI 只呼 facade,
+  不再需要知道 L1 cache 的存在。behavior 等價(同 clear + fetch + try/except fail-soft)。
+- **驗**:macro_compass_top.py **0 L1 直呼**;facade 封裝正確;L1 fetch_macro_compass 有 cache_clear。
+  §8.2 硬規則 4 違憲 **5 → 4**。
+- **改動檔:新增 `services/macro/compass.py` + `ui/components/macro_compass_top.py`**。
+- **B2 剩 4 處**(user 核准登 EX-PASSTHRU-1):`fred_get_next_release_date` ×2 + `fetch_stock_news` ×2。
+
+## 🧹 2026-07-22 全域排毒 Wave B2(slice 1):hot_money L3→L1 直呼上提 L2 facade v19.375
+
+- **病灶(架構越權查緝 Rule 4,§8.2 硬規則 4)**:`ui/hot_money.py` refresh + render 兩處直接
+  `from repositories.hot_money_repository import fetch_foreign_flow_series, fetch_usdtwd_series`
+  (L3 UI 直呼 L1 fetcher,未登錄例外)。
+- **修(比照 R16 `get_latest_fx` 上提 L2 前例)**:新增 L2 facade
+  `services/hot_money_service.fetch_hot_money_frames`(內部 lazy import 走 L1,L2→L1 下行合規);
+  `ui/hot_money.py` 兩處改呼 facade,回 4-tuple 展平,UI 語意零改動。`build_signals` 純函式
+  維持原位(本就未越權)。
+- **驗**:`ui/hot_money.py` **0 L1 直呼**;facade 回 4-tuple;`test_hot_money` 16 綠。
+  §8.2 硬規則 4 違憲 **7 → 5**。
+- **改動檔:新增 `services/hot_money_service.py` + `ui/hot_money.py`**。
+- **B2 剩(逐檔續)**:`fred_get_next_release_date` ×2(data_registry/tab5)、`fetch_stock_news`
+  ×2(ai.py/tab2)、`fetch_macro_compass` ×1(macro_compass_top)。
+
+## 🧹 2026-07-22 全域排毒 Wave B1:infra/cache L0→L1 上行 import 反轉 v19.374
+
+- **病灶(架構越權查緝,§8.2 硬規則 3 違憲)**:`infra/cache.py:383 global_refresh_all` 內
+  lazy `from repositories.hot_money_repository import ...` = **L0 Infra 反向依賴 L1 Repository**
+  (未登錄例外)。
+- **修(依賴反轉,非登例外)**:`infra.cache` 新增 `_ST_CACHE_REGISTRY` + `register_st_cache`;
+  `repositories/hot_money_repository` 兩個 `@st.cache_data` fetcher 疊 `@register_st_cache`
+  (於 import 時**下行**註冊 repositories→infra,合規)。`global_refresh_all` 改 iterate registry,
+  不再 import repositories。未 import 的 fetcher cache 本就空 → 語意等價。
+- **驗**:infra/cache.py **0 上行 import**;import hot_money 後 registry=2 且皆有 `.clear`;
+  `global_refresh_all` st_cache_cleared=**2**(行為零變化);cache/hot_money 相關 **73 測試綠**。
+- **改動檔:`infra/cache.py` + `repositories/hot_money_repository.py`**(依賴反轉本質需兩端)。
+  §8.2 硬規則 3 違憲 **1 → 0**。
+
+## 🧹 2026-07-22 全域排毒 Wave A3(slice 1):portfolio_service 百分比 parser 收 SSOT v19.373
+
+- **病灶(SSOT 查緝 #3,parser 分歧)**:`services/portfolio_service.py` 自帶 `_parse_pct`(僅 strip '%')
+  + 2 處 raw inline `float(str(x).replace("%",""))`,與 SSOT `shared.converters.safe_num`(_safe_num_ps,
+  另 strip ',' + 擋 bool/inf/nan)分歧。
+- **修**:3 處全收斂 `_safe_num_ps`(`_parse_pct` 改別名 + 2 inline 直呼)。費用率域輸出等價且更穩,
+  缺/髒值仍回 None → 下游 graceful fallback 不變。本檔 inline 百分比 parser **0 殘留**。
+- **驗**:`test_expense_ratio_custody` + `test_real_ter_fundclear` + `test_factor_availability_ssot`
+  32 綠。**唯一改動檔:`services/portfolio_service.py`**。
+- **A3 未竟(後續逐檔續收)**:`fund_fetcher.py:113 safe_float` 重複定義(30+ caller,大 blast radius,
+  需獨立謹慎處理)、`nav_metrics` / `policy/v2` / `fund_orchestration` / ui 的 inline replace 鏈。
+
+## 🧹 2026-07-22 全域排毒 Wave A2:fund_service max_dd ÷0 guard v19.372
+
+- **A2 病灶(SSOT 查緝 #4,真 bug)**:`services/fund_service.py:491 calc_metrics` inline max_dd
+  `(cum-cummax)/cummax` **無 ÷0 guard**(對比 SSOT `portfolio_service.compute_max_drawdown` 有
+  `(s<=0)` 防線)。停售/剛成立/資料異常使 cum≤0(§4.6 邊界)→ 產生 >100% 假回撤(實測 -163%)
+  或 inf/NaN 灌入 KPI + 連動污染 calmar。
+- **修(behavior-preserving)**:加 `len>=2 & (cum>0).all() & (cummax>0).all()` guard,退化回 None
+  (對齊本函式 Sharpe/Sortino/Calmar 既有 §1 防線;calmar:516 已 None-safe;跨檔消費全走
+  `.get`+`_safe_float`)。非退化算式逐位元相同(cummax 只算一次)→ max_dd 數值零變化。
+- **為何不直接改呼 compute_max_drawdown**:本函式 max_dd 建於 `cum=(1+log_ret).cumprod()`
+  (log_ret 為 log 報酬),與 SSOT 直接吃 NAV 序列 **basis 不同**,swap 會改數值 → §-1/§req1 不做,
+  只補 guard(SSOT 收口留待 basis 統一的獨立議題)。
+- **驗**:`test_fund_service_advanced_metrics` + `test_fund_load_enriched` 17 綠;等價驗算
+  normal old==new(-8.84)、degenerate old -163% → new None。**唯一改動檔:`services/fund_service.py`**。
+
+## 🧹 2026-07-22 全域排毒 Wave A1:multi_factor z-score 收 SSOT v19.371
+
+- **背景**:4 維並行深掃(架構越權 / SSOT / 死碼 / 肥大 god-file)後 user 同意藍圖,進實作階段,
+  嚴守「一次一檔」。動刀順序 A(真 bug+SSOT)→ B(分層越權)→ C(邏輯下沉)→ D(死碼)。
+- **A1 病灶(SSOT 查緝 TOP-1,真 bug)**:`services/calibration/multi_factor.py:250 _zscore` 自帶一份
+  z-score,std=0 時回 `0.0`,與 SSOT `repositories/macro/math_utils.zscore`(回 `NaN` + log)**分歧** →
+  退化因子被靜默中性化,違 §1 Fail-Loud。
+- **修(behavior-preserving)**:`_zscore` 委派 SSOT 計算。因本 composite 用 `sum(skipna=False)`
+  (單一 NaN factor 會清空整條 composite),退化因子(std=0 = 零資訊 = 無 tilt)**顯式**中性化 0
+  (§1 填補三要件:顯式呼叫 + SSOT 已寫 log + 語意註明);非退化路徑逐位元相同 → composite 數值零變化。
+  另 raw `252` → `shared.signal_thresholds.TRADING_DAYS_PER_YEAR` SSOT。
+- **驗**:`test_multi_factor_optimization` 50 綠;退化因子 sanity(flat→全 0 / composite 含退化因子仍
+  非空 len 29 不被清空 / 正常因子 z std≈1;SSOT 現對 std=0 寫 log)。
+- **分層**:`_zscore` lazy import `repositories.macro.math_utils.zscore`(L2→L1 純 util,macro_service
+  同 precedent),無新違憲。**唯一改動檔:`services/calibration/multi_factor.py`**(+ app.py 版號 + 本檔)。
+
 ## 💰 2026-07-22 真實 TER(FundClear fetcher)v19.370 —(user 點名續做「真實 TER」)
 
 - **背景**:v19.368 費用率僅到「經理+保管」估計(mgmt+custody_est),缺官方揭露的年度

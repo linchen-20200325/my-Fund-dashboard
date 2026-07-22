@@ -348,45 +348,6 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
 # ====================================================
 import os as _os_el, traceback as _tb_el, datetime as _dt_el
 
-def _write_error_ledger(error, context, api_key=""):
-    _tb_str = _tb_el.format_exc()
-    _ts = _dt_el.datetime.now().strftime("%Y-%m-%d %H:%M")
-    _ledger_path = "/content/AI_Error_Ledger.md"
-    _reflection = "(no API Key, skip AI reflection)"
-    if api_key:
-        _prompt = (
-            "You are a Python Streamlit dashboard debug expert.\n\n"
-            f"[Location] {context}\n"
-            f"[Error] {type(error).__name__}: {str(error)[:200]}\n"
-            f"[Traceback]\n{_tb_str[:600]}\n\n"
-            "Output 3 items (Traditional Chinese, concise):\n"
-            "**根本原因**：(1 sentence)\n"
-            "**防範規則**：(1 rule)\n"
-            "**快速修法**：(1-3 lines in ```python ```)\n"
-        )
-        try:
-            _reflection = _gemini(api_key, _prompt, max_tokens=400)
-        except Exception:
-            _reflection = "(AI reflection failed)"
-    _entry = (
-        "\n\n---\n"
-        f"## [{_ts}] `{type(error).__name__}` in `{context}`\n\n"
-        f"**Error:** {str(error)[:300]}\n\n"
-        "<details><summary>Traceback</summary>\n\n"
-        f"```\n{_tb_str[:800]}\n```\n\n</details>\n\n"
-        f"**AI Reflection:**\n\n{_reflection}\n"
-    )
-    try:
-        if not _os_el.path.exists(_ledger_path):
-            with open(_ledger_path, "w", encoding="utf-8") as _f:
-                _f.write("# AI_Error_Ledger\n\n> Auto-maintained error log.\n")
-        with open(_ledger_path, "a", encoding="utf-8") as _f:
-            _f.write(_entry)
-    except Exception as _e_ledger:
-        # F-MED v19.170: silent pass → stderr log;ledger write 失敗本身不阻斷主流程
-        import sys as _sys_ed
-        print(f'[ai_service/_append_error_ledger] ledger write fail {_ledger_path}: {type(_e_ledger).__name__}: {_e_ledger}', file=_sys_ed.stderr)
-
 # ── v18.217 多 Gemini key 自動輪替（分散免費額度 + 防斷）──────────
 def get_gemini_keys() -> list[str]:
     """收集所有可用的 Gemini API key（多帳號輪替用），去重保序。

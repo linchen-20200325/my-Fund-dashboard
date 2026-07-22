@@ -134,6 +134,7 @@ def _update_data_registry():
     }
 
     # ── v18.3 動態 next_release_date 查詢（cache 30 天）
+    # EX-PASSTHRU-1(v19.377):thin FRED 揭露日 helper,無 L2 業務邏輯,UI 直呼取數(見 CLAUDE.md §8.2.A)
     try:
         from repositories.macro_repository import fred_get_next_release_date as _fred_next_rel
     except Exception:
