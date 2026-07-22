@@ -236,123 +236,113 @@ def fetch_moneydj_30day(code: str, domain: str = "www.moneydj.com") -> list:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 資料來源 4：SITCA（境內基金，適用 ACTI/ACCP/ACDD 代碼）
+# 資料來源 4：AllianzGI 安聯官網（境內 ACTI/ACCP/ACDD 主力,直接用內部碼,無需 ISIN）
 # ══════════════════════════════════════════════════════════════════════
-def _parse_sitca_rows(html: str) -> list:
-    """從 SITCA 結果頁 HTML 解析 (date, nav) 列。"""
-    rows, seen = [], set()
-    matches = re.findall(
-        r"(\d{4}/\d{2}/\d{2})[^<]*</td>[^<]*<td[^>]*>([0-9]+\.[0-9]+)", html
-    )
-    if not matches:
-        matches = re.findall(r"(\d{4}/\d{2}/\d{2}).*?([0-9]+\.[0-9]{2,4})", html[:200000])
-    for date_str, nav_str in matches:
-        d = date_str.replace("/", "-")
-        if d not in seen:
-            seen.add(d)
-            try:
-                rows.append({"date": d, "nav": float(nav_str.replace(",", ""))})
-            except ValueError:
-                pass
-    rows.sort(key=lambda x: x["date"], reverse=True)
-    return rows
+# v19.351:境內主力來源。鏡像 app 的 repositories/fund/sources._src_allianzgi_nav 解析
+# 邏輯 —— CI 精簡環境不能 import 該檔(會拉進 streamlit),故在此做精簡平行實作。
+_ALLIANZ_NAV_API = "https://tw.allianzgi.com/api/sitecore/fund/GetFundNav"
 
 
-def fetch_sitca_history(code: str) -> list:
-    """SITCA 境內基金歷史淨值(ASP.NET postback)。適用 ACTI/ACCP/ACDD 代碼。
+def fetch_allianzgi_history(code: str) -> list:
+    """安聯投信官網歷史 NAV(境內 ACTI/ACCP/ACDD 主力)。**直接用內部碼,無需 ISIN。**
 
-    v19.349:v19.348 診斷探針確診 —— 舊版 GET query 參數**不觸發查詢**,SITCA
-    IN2213.aspx 回的是空查詢表單(status=200 + __VIEWSTATE 在 + 0 日期列)。改走
-    標準 ASP.NET postback:先 GET 表單頁拿隱藏欄位(__VIEWSTATE/__EVENTVALIDATION 等)
-    → 依「欄位名含 FundCode/BeginDate/EndDate」通用匹配填值(自動吃 ContentPlaceHolder
-    前綴,不寫死)+ submit 鈕 → POST → 解析結果表。
-
-    §1:抓不到仍回 [](不偽造);§5:0 筆時 dump form 欄位名 + POST 診斷,供下次精修。
-    ⚠️ 沙盒無法驗證(SITCA 擋非台灣 IP),需經 NAS 代理的真實 run 確認欄位匹配是否命中。
+    路徑:安聯 Sitecore JSON API(2000d)→ MoneyDJ yp004002 完整歷史頁(境內 yp010000)。
+    §1:抓不到回 [](不偽造);§5:各步印診斷。
+    ⚠️ 沙盒測不了(安聯站擋非台灣 IP),需經 NAS 代理的真實 run 確認。
     """
     import datetime
     today = datetime.date.today()
-    start = today - datetime.timedelta(days=420)
-    base_url = "https://www.sitca.org.tw/ROC/Industry/IN2213.aspx"
-    _bdate = start.strftime("%Y/%m/%d")
-    _edate = today.strftime("%Y/%m/%d")
+    start = today - datetime.timedelta(days=2000)
+    rows: dict = {}
+
+    # 1) 安聯 Sitecore JSON API(參數名不一定一致,試多種 body)
+    for _body in ({"FundCode": code, "Days": 2000},
+                  {"fundCode": code, "days": 2000},
+                  {"FundCode": code, "Period": "MAX"}):
+        try:
+            r = SESSION.post(_ALLIANZ_NAV_API, json=_body,
+                             headers={"Referer": "https://tw.allianzgi.com/"}, timeout=15)
+            if not r or r.status_code != 200:
+                continue
+            data = r.json()
+            nav_list = (data.get("Data") or data.get("data") or data.get("NavList")
+                        or data.get("navList") or data.get("Items") or data.get("items")
+                        or (data if isinstance(data, list) else []))
+            got: dict = {}
+            for it in (nav_list if isinstance(nav_list, list) else []):
+                if not isinstance(it, dict):
+                    continue
+                ds = str(it.get("Date") or it.get("date") or it.get("NavDate")
+                         or it.get("navDate") or "")[:10]
+                _nv = (it.get("Nav") or it.get("nav") or it.get("NAV") or it.get("Price"))
+                try:
+                    nv = float(str(_nv).replace(",", "")) if _nv not in (None, "") else 0.0
+                except (TypeError, ValueError):
+                    nv = 0.0
+                if ds and nv > 0:
+                    got[ds.replace("/", "-")] = nv
+            # ≥90 筆才短路(30 筆代表 API 忽略 Days 只回近期 → 續走 yp004002 拿完整歷史)
+            if len(got) >= 90:
+                out = sorted(({"date": d, "nav": v} for d, v in got.items()),
+                             key=lambda x: x["date"], reverse=True)
+                print(f"[AllianzGI] {code}: {len(out)} 筆 (JSON API {list(_body.keys())[0]})")
+                return out
+            if got:
+                rows.update(got)
+                print(f"[AllianzGI] {code} JSON API 只得 {len(got)} 筆,續試 yp004002")
+                break
+        except Exception as e:
+            print(f"[AllianzGI] {code} JSON API fail({list(_body.keys())}): {str(e)[:80]}")
+
+    # 2) MoneyDJ yp004002 完整歷史頁(境內 yp010000)
     try:
         from bs4 import BeautifulSoup
     except Exception:
-        print(f"[SITCA] {code}: 0 筆 ⚠️ bs4 不可用,無法 POST")
-        return []
-
-    try:
-        # 1) GET 表單頁 → 拿全部隱藏欄位(SESSION 保留 cookie 供 postback)
-        r0 = SESSION.get(base_url, timeout=25)
-        r0.raise_for_status()
-        soup = BeautifulSoup(r0.text, "lxml")
-        form = soup.find("form") or soup
-        data, names = {}, []
-        for el in form.find_all(["input", "select", "textarea"]):
-            nm = el.get("name")
-            if not nm:
-                continue
-            names.append(nm)
-            data[nm] = el.get("value", "") or ""
-
-        # 2) 依「名稱含關鍵字」填基金代碼 + 起訖日(吃 ctl00$... 前綴,不寫死)
-        def _set(substrs, val) -> bool:
-            hit = [n for n in data if any(s in n.lower() for s in substrs)]
-            for n in hit:
-                data[n] = val
-            return bool(hit)
-
-        ok_code = _set(["fundcode"], code)
-        ok_bd = _set(["begindate", "startdate", "txtbegin", "sdate"], _bdate)
-        ok_ed = _set(["enddate", "txtend", "edate"], _edate)
-        # submit 鈕:type=submit/image 或名稱含 query/search/btn。**保留頁面 rendered value**
-        # (不亂填「查詢」,避免 ASP.NET EventValidation 拒收 → server error)。
-        _sub = None
-        for btn in form.find_all(["input", "button"]):
-            nm, typ = btn.get("name"), (btn.get("type") or "").lower()
-            if nm and (typ in ("submit", "image")
-                       or any(k in nm.lower() for k in ("query", "search", "btn"))):
-                data[nm] = btn.get("value", "") or ""
-                _sub = nm
-                break
-
-        # 3) POST 至 form action
-        from urllib.parse import urljoin
-        action = (form.get("action") if hasattr(form, "get") else None) or base_url
-        # v19.350 §5:POST 前**無條件** dump 真實 form 結構(action/submit/欄位名),POST 成敗都印得到。
-        # 上一版(v19.349)POST 觸發 ASP.NET EventValidation server error → GenericError 404,
-        # 走 except 沒印到欄位名。此行讓下次 run 直接拿到真名,終結盲猜。
-        print(
-            f"[SITCA] {code} form診斷 action={action} submit={_sub} "
-            f"填入(code={ok_code},begin={ok_bd},end={ok_ed}) 欄位名={names[:30]}"
-        )
-        # v19.350:POST 獨立接住 —— server error(EventValidation)不再讓整個 fetch 走
-        # 頂層 except、吞掉上面的 form 診斷。
+        BeautifulSoup = None
+    if BeautifulSoup is not None:
         try:
-            r = SESSION.post(urljoin(base_url, action), data=data, timeout=25)
-            r.raise_for_status()
-        except Exception as _pe:
-            print(f"[SITCA] {code}: 0 筆 ⚠️ POST 失敗(server error/EventValidation?): "
-                  f"{str(_pe)[:120]}")
-            return []
-        html = r.text
-        rows = _parse_sitca_rows(html)
-        if rows:
-            print(f"[SITCA] {code}: {len(rows)} 筆 (POST postback)")
-        else:
-            # §5:0 筆 → dump 欄位名 + POST 診斷,定位是欄位沒對到 / 版型改 / 查無資料
-            _dates = len(re.findall(r"\d{4}/\d{2}/\d{2}", html))
-            _no_data = any(k in html for k in ("查無", "無資料", "無符合", "沒有資料"))
-            print(
-                f"[SITCA] {code}: 0 筆 ⚠️診斷(POST) status={r.status_code} len={len(html)} "
-                f"日期命中={_dates} 查無資料={'是' if _no_data else '否'} "
-                f"填入(code={ok_code},begin={ok_bd},end={ok_ed}) form欄位名={names[:25]}"
-            )
-        return rows
-    except Exception as e:
-        print(f"[SITCA] {code} 失敗: {e}")
-        return []
+            params = {"A": code, "B": start.strftime("%Y%m%d"),
+                      "C": today.strftime("%Y%m%d")}
+            hdr = {"Referer": f"https://tcbbankfund.moneydj.com/funddj/ya/yp010000.djhtm?a={code}"}
+            r = SESSION.get("https://tcbbankfund.moneydj.com/funddj/yf/yp004002.djhtm",
+                            params=params, headers=hdr, timeout=25)
+            if r is not None and r.status_code == 200:
+                r.encoding = "big5"
+                soup = BeautifulSoup(r.text, "lxml")
+                for tbl in soup.find_all("table"):
+                    for tr in tbl.find_all("tr"):
+                        cells = tr.find_all("td")
+                        if len(cells) >= 2:
+                            dt_t = cells[0].get_text(strip=True)
+                            nv_t = cells[1].get_text(strip=True).replace(",", "")
+                            if re.match(r"\d{4}/\d{2}/\d{2}", dt_t):
+                                try:
+                                    v = float(nv_t)
+                                    if v > 0:
+                                        rows[dt_t.replace("/", "-")] = v
+                                except ValueError:
+                                    pass
+        except Exception as e:
+            print(f"[AllianzGI] {code} yp004002 fail: {str(e)[:80]}")
+
+    out = sorted(({"date": d, "nav": v} for d, v in rows.items()),
+                 key=lambda x: x["date"], reverse=True)
+    if out:
+        print(f"[AllianzGI] {code}: {len(out)} 筆 (含 MoneyDJ yp004002)")
+    else:
+        print(f"[AllianzGI] {code}: 0 筆 ⚠️ 安聯 API + yp004002 皆無資料")
+    return out
+
+
+def fetch_sitca_history(code: str) -> list:
+    """⛔ 已停用(v19.351):SITCA IN2213.aspx 確認為「投信公司 + 年月 + 類別」下拉月報表頁,
+    **無單檔基金代碼查詢欄位**——v19.350 探針 run #70 證實表單只有 ddlQ_YM / ddlQ_Comid /
+    ddlQ_CLASS + BtnQuery(填 code/begin/end 皆 False;POST 觸發 ASP.NET EventValidation
+    server error)。故無法用它取單檔 NAV 時序。境內改走 fetch_allianzgi_history。
+    保留此函式僅為記錄結論 + 明確 skip(§1 不偽造、不再無謂打壞端點)。
+    """
+    print(f"[SITCA] {code}: 略過(IN2213 為公司/月份下拉月報表頁,不支援單檔查詢;見 v19.350 探針)")
+    return []
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -566,14 +556,17 @@ def main():
         _is_domestic = is_domestic_code(code)
 
         if _is_domestic:
-            # ── 境內基金（ACTI/ACCP/ACDD）：走 SITCA，不走 TDCC 境外 API ──
-            print(f"  [境內基金] 走 SITCA 路徑")
-            # 1d. SITCA 境內基金歷史淨值
+            # ── 境內基金（ACTI/ACCP/ACDD）：走 AllianzGI 安聯官網（app 主力，直接用內部碼）──
+            # v19.351:SITCA IN2213 確認是「公司/月份下拉月報表頁」、抓不到單檔(見 fetch_sitca_history),
+            # 改走安聯官網 JSON API + MoneyDJ yp004002(境內 yp010000)。
+            print(f"  [境內基金] 走 AllianzGI（安聯官網）路徑")
             if len(existing_history) + len(new_rows) < 30:
-                hist = fetch_sitca_history(code)
+                hist = fetch_allianzgi_history(code)
                 if hist:
                     new_rows = merge_history(new_rows, hist)
-                    source_used = "sitca"
+                    source_used = "allianzgi"
+                else:
+                    fetch_sitca_history(code)  # 記錄 SITCA 已停用結論(§5),不影響結果
                 time.sleep(0.5)
         else:
             # ── 境外基金：走 TDCC + MoneyDJ + Yahoo Finance ──

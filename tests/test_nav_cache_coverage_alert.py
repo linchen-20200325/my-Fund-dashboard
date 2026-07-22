@@ -90,72 +90,52 @@ def test_proxy_on_message_does_not_blame_missing_proxy(monkeypatch, capsys):
     assert "未設" not in out and "未啟用 proxy" not in out
 
 
-# ── v19.349：SITCA 改 ASP.NET postback(GET 表單→POST) ──
-def _sitca_form_html() -> str:
-    """模擬 SITCA IN2213 查詢表單頁(隱藏欄位 + 基金代碼/日期/查詢鈕,帶 ctl00 前綴)。"""
-    return (
-        "<html><body><form action='IN2213.aspx' method='post'>"
-        "<input type='hidden' name='__VIEWSTATE' value='vs'/>"
-        "<input type='hidden' name='__EVENTVALIDATION' value='ev'/>"
-        "<input type='text' name='ctl00$ContentPlaceHolder1$txtFundCode' value=''/>"
-        "<input type='text' name='ctl00$ContentPlaceHolder1$txtBeginDate' value=''/>"
-        "<input type='text' name='ctl00$ContentPlaceHolder1$txtEndDate' value=''/>"
-        "<input type='submit' name='ctl00$ContentPlaceHolder1$btnQuery' value='查詢'/>"
-        "</form></body></html>"
-    )
-
-
+# ── v19.351：境內改走 AllianzGI(安聯官網);SITCA 確認為公司/月份下拉頁,已停用 ──
 class _Resp:
-    def __init__(self, text, status=200):
-        self.text, self.status_code = text, status
+    def __init__(self, text="", status=200, payload=None):
+        self.text, self.status_code, self._payload = text, status, payload
 
     def raise_for_status(self):
         return None
 
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no json")
+        return self._payload
 
-def test_sitca_post_success_parses_rows(monkeypatch):
-    """GET 表單 → POST(帶隱藏欄位 + 基金代碼吃 ctl00 前綴) → 結果頁解析出列。"""
-    result = ("<table><tr><td>2026/07/20</td><td>12.34</td></tr>"
-              "<tr><td>2026/07/19</td><td>12.30</td></tr></table>")
-    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(_sitca_form_html()))
+
+def test_sitca_history_now_skips(capsys):
+    """v19.351:SITCA IN2213 確認公司/月份下拉頁,不支援單檔 → 直接 skip 回 []。"""
+    rows = _MOD.fetch_sitca_history("ACTI71")
+    out = capsys.readouterr().out
+    assert rows == []
+    assert "略過" in out
+
+
+def test_allianzgi_json_api_parses_rows(monkeypatch):
+    """安聯 Sitecore JSON API 回 ≥90 筆 → 直接解析短路(不需 ISIN,直接用內部碼)。"""
+    payload = {"Data": [{"Date": f"2026-01-{(i % 28) + 1:02d}", "Nav": 10 + i * 0.01}
+                        for i in range(95)]}
     _posted = {}
 
-    def _fake_post(url, data=None, **k):
-        _posted["data"] = data or {}
-        return _Resp(result)
+    def _fake_post(url, json=None, **k):
+        _posted["url"] = url
+        _posted["body"] = json
+        return _Resp(payload=payload)
 
     monkeypatch.setattr(_MOD.SESSION, "post", _fake_post)
-    rows = _MOD.fetch_sitca_history("ACTI71")
-    assert len(rows) == 2 and rows[0]["date"] == "2026-07-20" and rows[0]["nav"] == 12.34
-    # 基金代碼填進「名稱含 fundcode」的欄位(吃 ctl00$ContentPlaceHolder1$ 前綴,不寫死)
-    assert any("txtFundCode" in k and v == "ACTI71" for k, v in _posted["data"].items())
-    assert _posted["data"].get("__VIEWSTATE") == "vs"  # 隱藏欄位有帶回
+    rows = _MOD.fetch_allianzgi_history("ACTI71")
+    assert len(rows) >= 28                                    # 去重後仍多筆
+    assert all("date" in r and "nav" in r for r in rows)
+    assert _posted["url"] == _MOD._ALLIANZ_NAV_API
+    assert _posted["body"].get("FundCode") == "ACTI71"        # 直接用內部碼
 
 
-def test_sitca_post_zero_rows_dumps_field_names(monkeypatch, capsys):
-    """POST 後仍 0 筆 → dump form 欄位名 + POST 診斷,供下次精修(§5)。"""
-    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(_sitca_form_html()))
+def test_allianzgi_empty_returns_empty_list(monkeypatch):
+    """安聯 API 全空 + yp004002 無資料 → 回 [](§1 不偽造)。"""
     monkeypatch.setattr(_MOD.SESSION, "post",
-                        lambda *a, **k: _Resp("<html>查無資料</html>"))
-    rows = _MOD.fetch_sitca_history("ACTI71")
-    out = capsys.readouterr().out
+                        lambda *a, **k: _Resp(status=404))
+    monkeypatch.setattr(_MOD.SESSION, "get",
+                        lambda *a, **k: _Resp(text="<html></html>", status=200))
+    rows = _MOD.fetch_allianzgi_history("ACTI71")
     assert rows == []
-    assert "form診斷" in out and "欄位名=" in out               # 無條件 dump
-    assert "⚠️診斷(POST)" in out and "查無資料=是" in out
-
-
-def test_sitca_post_server_error_still_dumps_form(monkeypatch, capsys):
-    """v19.350:POST 觸發 server error(ASP.NET EventValidation → GenericError 404)→
-    不讓整個 fetch 走頂層 except 吞掉 form 診斷;仍印真實欄位名 + POST 失敗訊息。"""
-    import requests
-    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(_sitca_form_html()))
-
-    def _boom(*a, **k):
-        raise requests.exceptions.HTTPError("404 GenericError")
-
-    monkeypatch.setattr(_MOD.SESSION, "post", _boom)
-    rows = _MOD.fetch_sitca_history("ACTI71")
-    out = capsys.readouterr().out
-    assert rows == []
-    assert "form診斷" in out and "欄位名=" in out               # 拿得到真實欄位名(關鍵)
-    assert "POST 失敗" in out
