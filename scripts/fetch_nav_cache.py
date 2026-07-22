@@ -306,19 +306,36 @@ def fetch_sitca_history(code: str) -> list:
         ok_code = _set(["fundcode"], code)
         ok_bd = _set(["begindate", "startdate", "txtbegin", "sdate"], _bdate)
         ok_ed = _set(["enddate", "txtend", "edate"], _edate)
-        # submit 鈕:type=submit/image 或名稱含 query/search/btn
+        # submit 鈕:type=submit/image 或名稱含 query/search/btn。**保留頁面 rendered value**
+        # (不亂填「查詢」,避免 ASP.NET EventValidation 拒收 → server error)。
+        _sub = None
         for btn in form.find_all(["input", "button"]):
             nm, typ = btn.get("name"), (btn.get("type") or "").lower()
             if nm and (typ in ("submit", "image")
                        or any(k in nm.lower() for k in ("query", "search", "btn"))):
-                data[nm] = btn.get("value") or "查詢"
+                data[nm] = btn.get("value", "") or ""
+                _sub = nm
                 break
 
         # 3) POST 至 form action
         from urllib.parse import urljoin
         action = (form.get("action") if hasattr(form, "get") else None) or base_url
-        r = SESSION.post(urljoin(base_url, action), data=data, timeout=25)
-        r.raise_for_status()
+        # v19.350 §5:POST 前**無條件** dump 真實 form 結構(action/submit/欄位名),POST 成敗都印得到。
+        # 上一版(v19.349)POST 觸發 ASP.NET EventValidation server error → GenericError 404,
+        # 走 except 沒印到欄位名。此行讓下次 run 直接拿到真名,終結盲猜。
+        print(
+            f"[SITCA] {code} form診斷 action={action} submit={_sub} "
+            f"填入(code={ok_code},begin={ok_bd},end={ok_ed}) 欄位名={names[:30]}"
+        )
+        # v19.350:POST 獨立接住 —— server error(EventValidation)不再讓整個 fetch 走
+        # 頂層 except、吞掉上面的 form 診斷。
+        try:
+            r = SESSION.post(urljoin(base_url, action), data=data, timeout=25)
+            r.raise_for_status()
+        except Exception as _pe:
+            print(f"[SITCA] {code}: 0 筆 ⚠️ POST 失敗(server error/EventValidation?): "
+                  f"{str(_pe)[:120]}")
+            return []
         html = r.text
         rows = _parse_sitca_rows(html)
         if rows:
