@@ -2,6 +2,23 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 💸 2026-07-22 費用率升級:經理+保管 TER 估計 v19.368 —(序列 7/8)
+
+- **現況**:費用率鏈 = 顯式 expense_ratio → metrics(從未產生)→ `mgmt_fee`(v19.191)。
+  但經理費 ≠ 總開銷比率(TER 還含保管費等)。
+- **發現**:MoneyDJ 基本頁 `rows_map` **整表已抓回**,只抽了「最高經理費」——「保管費」同表在手
+  沒抽 → **零新增 HTTP** 補抽即可。
+- **修**:4 個抽取點補 `custody_fee`(sources.py 基本頁 ×2 + AllianzGI meta + orchestration;
+  key 變體 最高保管費(%)/保管費(%)/保管費);`portfolio_service` 費用率因子升級:
+  兩費齊 → `er = mgmt+custody`(source="mgmt+custody_est",TER 兩大主成分,比單經理費準)、
+  僅經理 → 原行為(source="mgmt_only_est")、顯式真值恆優先(source="metrics")。
+  factors 加 `source` key(schema-additive provenance)。
+- **§1 誠實界定**:est = 兩個真實揭露值之和 + 顯式 source 標記,非捏造;
+  **真 TER**(FundClear 年度費用資訊)端點驗證需台灣網路(沙盒 proxy 403 擋 TW 站),
+  留待 user 有需求時在 App/NAS 端實測 —— 不在沙盒瞎寫沒驗過的 fetcher(§1 不猜)。
+- **測試** `tests/test_expense_ratio_custody.py` 5(兩費相加 / 單費原行為 / 真值優先 /
+  壞值顯式跳過 / schema-additive);advanced_metrics 迴歸 12 綠。
+
 ## ⚖️ 2026-07-22 健康度雙演算法對帳 v19.367 — F-RECON-1 最後一項收尾(序列 6/8)
 
 - **背景**:F-RECON-1(§4.3 重算對帳)基金端 3 組對帳 v19.87-91 已落地,唯 macro health score

@@ -457,6 +457,12 @@ def _src_allianzgi_meta(code: str) -> dict:
                         _fee_v = safe_float(_fee_raw.replace("%", "").strip())
                         if _fee_v is not None:
                             meta["mgmt_fee"] = _fee_v
+                    # v19.368 7/8:保管費(TER 估計第 2 主成分)
+                    _cust_raw = (rows_map.get("最高保管費") or rows_map.get("保管費") or "")
+                    if _cust_raw:
+                        _cust_v = safe_float(_cust_raw.replace("%", "").strip())
+                        if _cust_v is not None:
+                            meta["custody_fee"] = _cust_v
                     if meta.get("fund_name"):
                         print(f"[src_allianz_meta] ✅ {code}: {meta['fund_name'][:20]}")
                         # F-PROV-1 phase 15 v19.101 — provenance(schema-additive)
@@ -2149,6 +2155,10 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
                 out["fund_scale"]   = rows_map.get("基金規模", "")
                 out["category"]     = rows_map.get("投資標的", rows_map.get("基金類型", ""))
                 out["mgmt_fee"]     = rows_map.get("最高經理費(%)", "")
+                # v19.368 7/8:同表補抽保管費 → TER 估計第 2 主成分(零新增 HTTP)
+                out["custody_fee"]  = (rows_map.get("最高保管費(%)") or
+                                       rows_map.get("保管費(%)") or
+                                       rows_map.get("保管費", ""))
             # 最新淨值 + 年高低（日期格式行）
             for row in tbl.find_all("tr"):
                 cells = row.find_all("td")
@@ -2466,6 +2476,10 @@ def _src_tcb_meta(code: str) -> dict:
                         meta["fund_scale"]  = rows_map.get("基金規模", "")
                         meta["category"]    = rows_map.get("投資標的", rows_map.get("基金類型", ""))
                         meta["mgmt_fee"]    = rows_map.get("最高經理費(%)", "")
+                        # v19.368 7/8:同表補抽保管費(TER 估計第 2 主成分)
+                        meta["custody_fee"] = (rows_map.get("最高保管費(%)") or
+                                               rows_map.get("保管費(%)") or
+                                               rows_map.get("保管費", ""))
                         # v18.19: 補三個 Tab5「基本資料」診斷需用的獨立欄位
                         meta["investment_target"] = rows_map.get("投資標的", "").replace(" ", "")
                         meta["fund_region"]       = rows_map.get("投資區域", "").replace(" ", "")

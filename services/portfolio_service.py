@@ -142,21 +142,35 @@ def calc_fund_factor_score(fund_data: Dict,
             pass
 
     # ── 6. 費用率（Expense Ratio，權重 10，越低越好）───────────────────
-    # v19.191:第 3 fallback 走 moneydj_raw.mgmt_fee(同源於 Tab2 TER 卡 L1000),
-    # 解決 expense_ratio 在 calc_metrics 從未產生 → 進階指標永遠「—」的 SSOT 缺洞。
+    # v19.191:第 3 fallback 走 moneydj_raw.mgmt_fee(同源於 Tab2 TER 卡 L1000)。
+    # v19.368 7/8:升級 — 保管費(custody_fee)已隨基本頁同表抽回,經理+保管 = TER 兩大
+    # 主成分 → 兩者齊 → `mgmt+custody` 估計(比單經理費更接近真 TER);僅經理 → 原行為。
+    # §1:est 為兩個真實揭露值之和,顯式標 source(非捏造);真 TER(FundClear 年度費用)
+    # 端點待台灣網路驗證(沙盒 403),見 STATE v19.368。
+    def _parse_pct(v):
+        if v is None or v == "":
+            return None
+        try:
+            return float(str(v).replace("%", "").strip())
+        except (ValueError, TypeError):
+            return None
+
     er = expense_ratio or m.get("expense_ratio")
+    er_src = "metrics" if er is not None else None
     if er is None:
-        mj_fee_raw = (fund_data.get("moneydj_raw") or {}).get("mgmt_fee")
-        if mj_fee_raw:
-            try:
-                er = float(str(mj_fee_raw).replace("%", "").strip())
-            except (ValueError, TypeError):
-                er = None
+        _mj = fund_data.get("moneydj_raw") or {}
+        _mgmt = _parse_pct(_mj.get("mgmt_fee"))
+        _cust = _parse_pct(_mj.get("custody_fee"))
+        if _mgmt is not None and _cust is not None:
+            er, er_src = _mgmt + _cust, "mgmt+custody_est"
+        elif _mgmt is not None:
+            er, er_src = _mgmt, "mgmt_only_est"
     if er is not None:
         try:
             er = float(er)
             s = min(max((3 - er) / 3 * 100, 0), 100)   # 0%→100分；3%→0分
-            factors["ExpenseRatio"] = {"value": er, "score": round(s, 1), "weight": 10}
+            factors["ExpenseRatio"] = {"value": er, "score": round(s, 1), "weight": 10,
+                                       "source": er_src}  # provenance(schema-additive)
             total_s += s * 10; total_w += 10
         except (TypeError, ValueError):
             pass
