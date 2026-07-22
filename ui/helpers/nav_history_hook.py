@@ -73,9 +73,17 @@ def _record(pairs: list, source: str) -> None:
         return
 
     try:
-        from services.nav_history_gs import append_points, is_enabled
-        if not is_enabled():
-            return  # 無 GS secrets(local):安靜略過,不干擾
+        from services.nav_history_gs import append_points, status as _nh_status
+        _st = _nh_status()
+        if not _st["enabled"]:
+            # v19.362 ①:靜默失敗變可見 —— 一次性提示(session 旗標防洗版),
+            # 終結「你以為在累積、其實沒有」(§5 可觀測)。
+            if not st.session_state.get("_nav_hist_disabled_warned"):
+                st.session_state["_nav_hist_disabled_warned"] = True
+                st.caption(
+                    f"⬜ NAV 累積未啟用:缺 secrets({', '.join(_st['missing'])})→ "
+                    f"本次抓到的淨值不會累積。設定後自動恢復(詳見 Tab5 🗂️ NAV 歷史匯入)。")
+            return
         res = append_points(fresh)
         for p in fresh:  # 標記 session,避免同 session 反覆 rerun 重寫
             written.add((p["code"], p["nav_date"]))

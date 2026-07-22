@@ -2,6 +2,22 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 💡 2026-07-22 ① NAV 累積狀態燈 v19.362 — 終結「以為在累積其實沒有」(未結案序列修復 1/8)
+
+user 指示:未結案項目除 LLM 兩項(AI 結構化輸出 / LLM-as-judge)外按序逐一修。本項為第 1 件。
+- **問題**(體檢瑕疵 #6):GS secrets 沒設時累積是「安靜略過」——設計上不干擾 local,但雲端漏設
+  secrets 時 user 會以為在累積、其實沒有(靜默失敗,違 §5 可觀測精神)。
+- **L2 `nav_history_gs.status()`**(新,可測):回 `{"enabled": bool, "missing": [缺的 secret 名]}`,
+  檢查 `google_service_account`(需含 client_email)+ `macro_weights_sheet_id`。
+- **L3 兩處亮燈**:
+  - Tab5 「🗂️ NAV 歷史匯入」expander 頂部:🟢 已啟用 / 🔴 未啟用(列缺哪些 secrets + 修法)
+  - `nav_history_hook._record`:未啟用時**一次性** caption 提示(session 旗標 `_nav_hist_disabled_warned`
+    防洗版),不再純靜默 return。
+- **測試**:test_nav_history_gs 加 3(測試環境無 secrets → disabled + missing 列名 / monkeypatch
+  secrets 齊 → enabled / status 與 is_enabled 同向),34 綠。
+- **序列待辦**:③ NAS 每日累積 → CI workflow 去留 → ④ 儲存收斂 → 純累積救援 → macro 對帳 →
+  費用率 → F-SCHEMA-1 餘量 → CPI inline。
+
 ## 📥 2026-07-22 PR-2(A) 保單對帳單 CSV 匯入 nav_history v19.361 — 立刻補回數年歷史(B+A+② 組合完結)
 
 B+A+② 最後一塊:v19.360 裝好引擎(消費端接線)後,本 PR 給「油」——user 從保險公司對帳單
