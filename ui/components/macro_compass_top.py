@@ -73,9 +73,9 @@ def render_macro_compass():
 
     def _do_fetch():
         try:
-            from repositories.macro_repository import fetch_macro_compass as _fmc
-            _fmc.cache_clear()
-            _data = _fmc()
+            # v19.376 B2b:走 L2 facade(§8.2 硬規則 4:L3 不直呼 L1 fetcher / 不碰 L1 cache 內部)
+            from services.macro.compass import refresh_macro_compass
+            _data = refresh_macro_compass()
         except Exception as e:
             print(f'[render_macro_compass] fetch failed: {e}')
             _data = {}

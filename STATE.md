@@ -2,6 +2,19 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave B2(slice 2):macro_compass L3→L1 上提 L2 facade v19.376
+
+- **病灶(Rule 4)**:`ui/components/macro_compass_top.py` `_do_fetch` 直接
+  `from repositories.macro_repository import fetch_macro_compass` + 手動 `.cache_clear()`
+  + 呼叫(L3 UI 碰 L1 fetcher **及其 cache 內部**)。
+- **修(user 核准「混合」案:此項有 cache 集中價值 → facade)**:新增
+  `services/macro/compass.refresh_macro_compass()` 封裝「cache_clear + fetch」,UI 只呼 facade,
+  不再需要知道 L1 cache 的存在。behavior 等價(同 clear + fetch + try/except fail-soft)。
+- **驗**:macro_compass_top.py **0 L1 直呼**;facade 封裝正確;L1 fetch_macro_compass 有 cache_clear。
+  §8.2 硬規則 4 違憲 **5 → 4**。
+- **改動檔:新增 `services/macro/compass.py` + `ui/components/macro_compass_top.py`**。
+- **B2 剩 4 處**(user 核准登 EX-PASSTHRU-1):`fred_get_next_release_date` ×2 + `fetch_stock_news` ×2。
+
 ## 🧹 2026-07-22 全域排毒 Wave B2(slice 1):hot_money L3→L1 直呼上提 L2 facade v19.375
 
 - **病灶(架構越權查緝 Rule 4,§8.2 硬規則 4)**:`ui/hot_money.py` refresh + render 兩處直接
