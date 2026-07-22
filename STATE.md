@@ -2,6 +2,17 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-22 nav_history 開表錯誤可行動化 v19.380 —(user 匯入炸「空白錯誤」)
+
+- **病灶**:user secrets 設好、`status()` 綠,但匯入時 `_get_sheet` 開表階段炸,UI 顯示
+  「append_points 失敗:」**後面空白** —— gspread 對「SA 完全無權限存取那張 Sheet」回
+  `SpreadsheetNotFound`(其 `str()` 為空),被包成無資訊的錯誤,user 無從下手。
+- **修**:`_get_sheet` 的 `open_by_key` 包 try,任何 open 失敗 → `NavHistoryError` **點名**
+  「服務帳戶 `<client_email>` 找不到/無權限存取 `sheet_id=...` → (1) 加該信箱進 Sheet 共用(編輯者)
+  (2) sheet_id 是否正確 (3) 啟用 Drive API」。Tab5 匯入錯誤顯示 `[:120]` → `[:400]` 免截斷。
+- **驗**:syntax + **34 nav_history 測試不破**(改動只在 open 失敗的 except 分支)。§5 可觀測。
+- **改動:`services/nav_history_gs.py` + `ui/tab5_data_guard.py`**。
+
 ## 🩺 2026-07-22 nav_history secrets 診斷細化 v19.379 —(user 實機除錯:secrets 設了仍紅)
 
 - **背景**:user 設完 Streamlit secrets 但 Tab5 仍紅「缺 secrets」。原 `status()` 把「沒讀到」

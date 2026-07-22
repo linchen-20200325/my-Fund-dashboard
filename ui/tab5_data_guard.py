@@ -1357,7 +1357,7 @@ def render_data_guard_tab() -> None:
                         f"（重複略過 {_ni_res['skipped_dup']}、壞列 {_ni_res['skipped_rows']}）。"
                         f"請確認 CSV 欄位（日期/淨值）與代碼是否正確。")
             except Exception as _e_ni:
-                st.error(f"❌ 匯入失敗：[{type(_e_ni).__name__}] {str(_e_ni)[:120]}")
+                st.error(f"❌ 匯入失敗：[{type(_e_ni).__name__}] {str(_e_ni)[:400]}")
 
     # ══════════════════════════════════════════════════════
     # ⚠️ 資料異常清單（最下方一覽，獨立於上方總表/體檢區）

@@ -143,7 +143,17 @@ def _get_sheet():
             "google_service_account 無法解析為含 client_email 的 dict(env 字串需為完整 SA JSON)")
     sheet_id = require_secret("macro_weights_sheet_id")
     client = get_gspread_client(creds)
-    return client.open_by_key(sheet_id)
+    try:
+        return client.open_by_key(sheet_id)
+    except Exception as e:
+        # v19.380:gspread 對「SA 完全無權限存取」回 SpreadsheetNotFound(str 常為空),
+        # 原本包成 append_points 失敗:<空白> 讓 user 無從下手。改印可行動訊息 + 點名 SA/sheet。
+        raise NavHistoryError(
+            f"開表失敗（{type(e).__name__}）:服務帳戶 {creds.get('client_email', '?')} "
+            f"找不到或無權限存取 sheet_id={sheet_id!r}。請確認:"
+            f"(1) 已把該服務帳戶信箱加進這張 Sheet 的「共用 → 編輯者」;"
+            f"(2) sheet_id 是那張 Sheet 的 ID;(3) 該 GCP project 已啟用 Google Drive API。"
+        ) from e
 
 
 def _get_worksheet(sh):
