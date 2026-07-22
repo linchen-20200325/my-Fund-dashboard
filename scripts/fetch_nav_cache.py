@@ -238,54 +238,99 @@ def fetch_moneydj_30day(code: str, domain: str = "www.moneydj.com") -> list:
 # ══════════════════════════════════════════════════════════════════════
 # 資料來源 4：SITCA（境內基金，適用 ACTI/ACCP/ACDD 代碼）
 # ══════════════════════════════════════════════════════════════════════
+def _parse_sitca_rows(html: str) -> list:
+    """從 SITCA 結果頁 HTML 解析 (date, nav) 列。"""
+    rows, seen = [], set()
+    matches = re.findall(
+        r"(\d{4}/\d{2}/\d{2})[^<]*</td>[^<]*<td[^>]*>([0-9]+\.[0-9]+)", html
+    )
+    if not matches:
+        matches = re.findall(r"(\d{4}/\d{2}/\d{2}).*?([0-9]+\.[0-9]{2,4})", html[:200000])
+    for date_str, nav_str in matches:
+        d = date_str.replace("/", "-")
+        if d not in seen:
+            seen.add(d)
+            try:
+                rows.append({"date": d, "nav": float(nav_str.replace(",", ""))})
+            except ValueError:
+                pass
+    rows.sort(key=lambda x: x["date"], reverse=True)
+    return rows
+
+
 def fetch_sitca_history(code: str) -> list:
-    """從 SITCA 境內基金歷史淨值 API 取資料。適用 ACTI71/ACTI98/ACTI94/ACCP138/ACDD19。
-    SITCA 為台灣公開政府資料，不應封鎖 GitHub Actions IP。
+    """SITCA 境內基金歷史淨值(ASP.NET postback)。適用 ACTI/ACCP/ACDD 代碼。
+
+    v19.349:v19.348 診斷探針確診 —— 舊版 GET query 參數**不觸發查詢**,SITCA
+    IN2213.aspx 回的是空查詢表單(status=200 + __VIEWSTATE 在 + 0 日期列)。改走
+    標準 ASP.NET postback:先 GET 表單頁拿隱藏欄位(__VIEWSTATE/__EVENTVALIDATION 等)
+    → 依「欄位名含 FundCode/BeginDate/EndDate」通用匹配填值(自動吃 ContentPlaceHolder
+    前綴,不寫死)+ submit 鈕 → POST → 解析結果表。
+
+    §1:抓不到仍回 [](不偽造);§5:0 筆時 dump form 欄位名 + POST 診斷,供下次精修。
+    ⚠️ 沙盒無法驗證(SITCA 擋非台灣 IP),需經 NAS 代理的真實 run 確認欄位匹配是否命中。
     """
     import datetime
     today = datetime.date.today()
     start = today - datetime.timedelta(days=420)
-    url = (
-        f"https://www.sitca.org.tw/ROC/Industry/IN2213.aspx"
-        f"?txtFundCode={code}"
-        f"&txtBeginDate={start.strftime('%Y/%m/%d')}"
-        f"&txtEndDate={today.strftime('%Y/%m/%d')}"
-    )
+    base_url = "https://www.sitca.org.tw/ROC/Industry/IN2213.aspx"
+    _bdate = start.strftime("%Y/%m/%d")
+    _edate = today.strftime("%Y/%m/%d")
     try:
-        r = SESSION.get(url, timeout=25)
+        from bs4 import BeautifulSoup
+    except Exception:
+        print(f"[SITCA] {code}: 0 筆 ⚠️ bs4 不可用,無法 POST")
+        return []
+
+    try:
+        # 1) GET 表單頁 → 拿全部隱藏欄位(SESSION 保留 cookie 供 postback)
+        r0 = SESSION.get(base_url, timeout=25)
+        r0.raise_for_status()
+        soup = BeautifulSoup(r0.text, "lxml")
+        form = soup.find("form") or soup
+        data, names = {}, []
+        for el in form.find_all(["input", "select", "textarea"]):
+            nm = el.get("name")
+            if not nm:
+                continue
+            names.append(nm)
+            data[nm] = el.get("value", "") or ""
+
+        # 2) 依「名稱含關鍵字」填基金代碼 + 起訖日(吃 ctl00$... 前綴,不寫死)
+        def _set(substrs, val) -> bool:
+            hit = [n for n in data if any(s in n.lower() for s in substrs)]
+            for n in hit:
+                data[n] = val
+            return bool(hit)
+
+        ok_code = _set(["fundcode"], code)
+        ok_bd = _set(["begindate", "startdate", "txtbegin", "sdate"], _bdate)
+        ok_ed = _set(["enddate", "txtend", "edate"], _edate)
+        # submit 鈕:type=submit/image 或名稱含 query/search/btn
+        for btn in form.find_all(["input", "button"]):
+            nm, typ = btn.get("name"), (btn.get("type") or "").lower()
+            if nm and (typ in ("submit", "image")
+                       or any(k in nm.lower() for k in ("query", "search", "btn"))):
+                data[nm] = btn.get("value") or "查詢"
+                break
+
+        # 3) POST 至 form action
+        from urllib.parse import urljoin
+        action = (form.get("action") if hasattr(form, "get") else None) or base_url
+        r = SESSION.post(urljoin(base_url, action), data=data, timeout=25)
         r.raise_for_status()
         html = r.text
-        rows = []
-        seen = set()
-        # 解析日期 YYYY/MM/DD 與淨值
-        matches = re.findall(
-            r"(\d{4}/\d{2}/\d{2})[^<]*</td>[^<]*<td[^>]*>([0-9]+\.[0-9]+)", html
-        )
-        if not matches:
-            matches = re.findall(r"(\d{4}/\d{2}/\d{2}).*?([0-9]+\.[0-9]{2,4})", html[:100000])
-        for date_str, nav_str in matches:
-            d = date_str.replace("/", "-")
-            if d not in seen:
-                seen.add(d)
-                try:
-                    rows.append({"date": d, "nav": float(nav_str)})
-                except ValueError:
-                    pass
-        rows.sort(key=lambda x: x["date"], reverse=True)
+        rows = _parse_sitca_rows(html)
         if rows:
-            print(f"[SITCA] {code}: {len(rows)} 筆")
+            print(f"[SITCA] {code}: {len(rows)} 筆 (POST postback)")
         else:
-            # v19.348 §5 可觀測 / §1 誠實:0 筆時印真因線索,讓下次真實 run(透過 NAS
-            # 代理)定位 —— 空 ASP.NET 表單(需 POST)? 查無資料? 版型改? 仍被擋?
-            _has_vs = "__VIEWSTATE" in html
+            # §5:0 筆 → dump 欄位名 + POST 診斷,定位是欄位沒對到 / 版型改 / 查無資料
+            _dates = len(re.findall(r"\d{4}/\d{2}/\d{2}", html))
             _no_data = any(k in html for k in ("查無", "無資料", "無符合", "沒有資料"))
-            _pat_hits = len(re.findall(r"\d{4}/\d{2}/\d{2}", html))
-            _sample = re.sub(r"\s+", " ", html[:280])
             print(
-                f"[SITCA] {code}: 0 筆 ⚠️診斷 status={r.status_code} len={len(html)} "
-                f"__VIEWSTATE={'有(ASP.NET,GET恐不觸發查詢→需POST)' if _has_vs else '無'} "
-                f"查無資料字樣={'是' if _no_data else '否'} 日期樣式命中={_pat_hits} "
-                f"body樣本='{_sample}'"
+                f"[SITCA] {code}: 0 筆 ⚠️診斷(POST) status={r.status_code} len={len(html)} "
+                f"日期命中={_dates} 查無資料={'是' if _no_data else '否'} "
+                f"填入(code={ok_code},begin={ok_bd},end={ok_ed}) form欄位名={names[:25]}"
             )
         return rows
     except Exception as e:
