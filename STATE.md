@@ -2,6 +2,24 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📥 2026-07-22 PR-2(A) 保單對帳單 CSV 匯入 nav_history v19.361 — 立刻補回數年歷史(B+A+② 組合完結)
+
+B+A+② 最後一塊:v19.360 裝好引擎(消費端接線)後,本 PR 給「油」——user 從保險公司對帳單
+下載歷史淨值 CSV,一次灌入 `nav_history` → **不必等每日累積,馬上解鎖 3Y/5Y/低基期**。
+- **L2 `nav_history_gs.import_csv_text(code, csv_text)`**:CSV → 解析 → `append_points`
+  (§1 過濾 + §5 (code,date) 去重,重跑不灌水)。欄位偵測 header 關鍵字(日期/淨值/date/nav),
+  無 header 退第 1 欄=date、第 2 欄=nav;**ROC 民國(113/03/15)與西元都吃**(復用
+  `nav_history_store._parse_roc_or_western_date`);千分位逗號 nav OK;壞列顯式 skip + 計數回報。
+  **真 bug 抓到**:「淨值日期」欄同時含「淨值」→ nav 欄誤中 date 欄,`_pick_col` 加 `exclude` 防呆
+  (ROC 測試紅→修→綠,測試先行價值實證)。
+- **L3 Tab5**:`### ⑥` 前加「🗂️ NAV 歷史匯入」expander(代碼 + 名稱 + file_uploader + 匯入鈕;
+  utf-8-sig 解碼吃 Excel BOM;GS 未設 secrets → 誠實紅字不靜默;成功顯示 解析/新寫入/重複/壞列 四計數)。
+- **測試** `tests/test_nav_history_import.py` 7(header 西元 / ROC / 無 header / 千分位+壞列計數 /
+  對既有列去重 / GS 未啟用誠實 / 空文字);nav_history 三檔共 **50 綠**。
+- **使用法**:Tab5 → 🗂️ NAV 歷史匯入 → 輸代碼(如 TLZF9)→ 上傳 CSV → 按匯入;
+  下次分析該基金,v19.360 的合併器自動把匯入歷史併進 Sortino/Calmar/3Y/5Y/低基期計算。
+- **B+A+② 全落地**。剩餘(等 user 點):③ 台灣端自動每日累積(NAS cron)/ ① 累積狀態燈 / ④ 三套儲存收斂。
+
 ## 🔌 2026-07-22 Increment B+② 累積序列接回 metrics v19.360 — 消費端總開關(user 核准 B+A+② 組合的 PR-1)
 
 策略體檢(artifact 610d949e)後 user 核准「B 引擎 + A 油 + ② 安全帶」。本 PR = B+②;A(CSV 匯入)為 PR-2。

@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.360_NavHistConsume"
+APP_VERSION = "v19.361_NavHistCsvImport"
 
 
 # ══════════════════════════════════════════════════════
