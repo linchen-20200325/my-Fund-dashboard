@@ -726,7 +726,10 @@ def _merge_nav_history_series(s_live: pd.Series, code: str) -> tuple:
     - Sheet 無資料 / 未啟用 → 回 (s_live, None) 行為與現在完全一致
     - Sheet 讀失敗 → fail-soft:log + 回 (s_live, trace{success:False})(不炸整個健診)
     - 有新增點 → 回 (merged, trace{success:True, added:N})
+    - v19.366 5/8:s_live=None(live 全敗)→ 視為空序列,純累積歷史可整段頂上(救援)
     """
+    if s_live is None:
+        s_live = pd.Series(dtype=float)
     try:
         from services.nav_history_gs import load_series
         s_hist = load_series(code)
@@ -774,20 +777,28 @@ def finalize_fund_metrics(result: dict) -> dict:
     if "source_trace" not in result:
         result["source_trace"] = []
 
-    if s is None:
-        result["source_trace"].append(
-            {"source": "nav_series", "success": False, "error": "無淨值序列"})
-        return result
-
-    # v19.360 B:合併 nav_history 累積/匯入序列(union keep-last,live 優先)。
-    # 放在 len<10 gate 之前 → 短 live 序列可被累積歷史「救回」進 metrics 計算。
+    # v19.360 B + v19.366 5/8:合併 nav_history 累積/匯入序列(union keep-last,live 優先)。
+    # 放在 len<10 gate 之前 → 短 live 序列可被累積歷史「救回」;
+    # v19.366:live **全敗**(s=None)也試 — Sheet 有累積 → 純累積序列頂上(救援),
+    # status 由後續 classify_fetch_status 從內容自然升級(L1 不預寫 status,已查證)。
     _hist_trace = None
     _s_merged, _hist_trace = _merge_nav_history_series(s, code)
     if _hist_trace is not None:
         result["source_trace"].append(_hist_trace)
         if _hist_trace.get("success"):
+            if s is None:
+                print(f"[nav_history] 🛟 {code} live 全敗 → 純累積序列救援"
+                      f"({len(_s_merged)} 筆)")
+                result["source_trace"].append(
+                    {"source": "nav_history_rescue", "success": True,
+                     "note": f"live 全敗,改用累積序列 {len(_s_merged)} 筆"})
             s = _s_merged
             result["series"] = s
+
+    if s is None:
+        result["source_trace"].append(
+            {"source": "nav_series", "success": False, "error": "無淨值序列"})
+        return result
 
     if len(s) < 10:
         result["source_trace"].append(
