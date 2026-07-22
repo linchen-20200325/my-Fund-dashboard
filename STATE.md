@@ -2,6 +2,22 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-07-22 F-SCHEMA-1 餘量 + CPI 文件更正 v19.369 —(序列 8/8,**未結案序列全數完成**)
+
+- **CPI「剩 2 處 inline」查證 = 過時記載**:(1) score lambda 現於
+  `services/calibration/macro_score.py:75 _s_cpi`,:58-60 已吃 `CPI_YOY_THRESHOLDS` SSOT
+  (v19.202 P2-2);(2) `ui/helpers/macro/helpers.py:187` 已用 `_CPI_BULL_HIGH`(:28 SSOT)。
+  → **無 code 待辦**,CLAUDE.md §8.3 CPI 條目更正為 ✅ 全收(文件與現實對齊)。
+- **F-SCHEMA-1 餘量輕量驗證**(v19.189 輕量版同精神,不加 pandera):
+  新 `external_market_repository._validate_market_series`(§4.2:空放行;非空必須 DatetimeIndex
+  單調 + 無重複日 + 全有限值;違反 raise → 外層 except 轉空 + log → fallback chain 走下一源,
+  壞資料不靜默流入)。接線 4 點:stooq 兩回傳點 / cboe / defillama(defillama 顯式 try 防外洩)。
+- **測試** `tests/test_market_series_validation.py` 7(空放行 / 合法原樣 / 重複日 / 未排序 /
+  inf / 非 DatetimeIndex 各 raise + 三 fetcher 接線 source lock)。
+- **未結案序列 8/8 全完成**(v19.362-369):①狀態燈 → ③NAS 累積 → CI 停排程 → ④儲存收斂 →
+  純累積救援 → 健康度對帳(F-RECON-1 全結)→ 費用率 est → SCHEMA 餘量+CPI 文件。
+  LLM 兩項(AI 結構化 / LLM-as-judge)依 user 指示不做。
+
 ## 💸 2026-07-22 費用率升級:經理+保管 TER 估計 v19.368 —(序列 7/8)
 
 - **現況**:費用率鏈 = 顯式 expense_ratio → metrics(從未產生)→ `mgmt_fee`(v19.191)。
