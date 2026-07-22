@@ -209,5 +209,87 @@ def load_series(code: str, *, _sheet: Any = None):
     return s
 
 
+# ── v19.361 PR-2(A):保單對帳單 CSV 歷史匯入 ──────────────────────
+_DATE_COL_HINTS = ("日期", "淨值日期", "除息日", "date", "nav_date", "時間")
+_NAV_COL_HINTS = ("淨值", "單位淨值", "基金淨值", "nav", "value", "price")
+
+
+def _pick_col(cols: list, hints: tuple, exclude: int | None = None) -> int | None:
+    """從 header 找欄位 index(大小寫不敏感、substring 命中)。找不到回 None。
+
+    exclude:跳過該 index —— 如「淨值日期」同時含「淨值」,nav 欄偵測須排除已選定的
+    date 欄,否則兩者都指到同一欄(v19.361 匯入測試抓到的真 bug)。
+    """
+    for i, c in enumerate(cols):
+        if i == exclude:
+            continue
+        low = str(c).strip().lower()
+        if any(h.lower() in low for h in hints):
+            return i
+    return None
+
+
+def import_csv_text(code: str, csv_text: str, *, fund_name: str = "",
+                    source: str = "csv_import", _sheet: Any = None) -> dict:
+    """CSV 文字 → 解析 → 批次寫入 nav_history(委派 append_points:§1 過濾 + §5 去重)。
+
+    唯一能「立刻補回數年歷史」的路:user 從保險公司對帳單下載歷史淨值,一次灌入。
+    - 欄位偵測:header 含 日期/淨值 等關鍵字 → 對應欄;無 header → 第 1 欄=date、第 2 欄=nav
+    - 日期:ROC(113/03/15)與西元都吃(復用 nav_history_store._parse_roc_or_western_date)
+    - 壞列顯式 skip + 計數回報(§1:不猜、不靜默丟)
+    回 {"enabled", "rows", "parsed", "written", "skipped_rows", "skipped_dup"}。
+    """
+    import csv as _csv
+    import io
+
+    from services.nav_history_store import _parse_roc_or_western_date
+
+    enabled = _sheet is not None or is_enabled()
+    out = {"enabled": enabled, "rows": 0, "parsed": 0, "written": 0,
+           "skipped_rows": 0, "skipped_dup": 0}
+
+    rows = [r for r in _csv.reader(io.StringIO(csv_text or "")) if any(
+        str(c).strip() for c in r)]
+    if not rows:
+        return out
+
+    # header 偵測:首列有任一欄命中 date/nav 關鍵字 → 當 header
+    # date 先選;nav 排除 date 欄(「淨值日期」含「淨值」會誤中,exclude 防呆)
+    d_i = _pick_col(rows[0], _DATE_COL_HINTS)
+    n_i = _pick_col(rows[0], _NAV_COL_HINTS, exclude=d_i)
+    if d_i is not None or n_i is not None:
+        data_rows = rows[1:]
+        d_i = 0 if d_i is None else d_i
+        n_i = 1 if n_i is None else n_i
+    else:                       # 無 header:第 1 欄=date、第 2 欄=nav
+        data_rows, d_i, n_i = rows, 0, 1
+
+    out["rows"] = len(data_rows)
+    points: list[dict] = []
+    for r in data_rows:
+        if len(r) <= max(d_i, n_i):
+            out["skipped_rows"] += 1
+            continue
+        ts = _parse_roc_or_western_date(str(r[d_i]))
+        try:
+            nav_f = float(str(r[n_i]).replace(",", "").strip())
+        except (TypeError, ValueError):
+            nav_f = None
+        if ts is None or nav_f is None or nav_f <= 0:
+            out["skipped_rows"] += 1     # §1 顯式 skip + 計數,不猜不補
+            continue
+        points.append({"code": code, "nav": nav_f,
+                       "nav_date": ts.strftime("%Y-%m-%d"),
+                       "fund_name": fund_name, "source": source})
+    out["parsed"] = len(points)
+    if not points or not enabled:
+        return out
+
+    res = append_points(points, _sheet=_sheet)   # (code,date) 去重 + 一次 append_rows
+    out["written"] = res["written"]
+    out["skipped_dup"] = out["parsed"] - res["written"]
+    return out
+
+
 __all__ = ["append_point", "append_points", "load_points", "load_series",
-           "is_enabled", "NavHistoryError"]
+           "import_csv_text", "is_enabled", "NavHistoryError"]

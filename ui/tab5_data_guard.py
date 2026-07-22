@@ -1285,6 +1285,48 @@ def render_data_guard_tab() -> None:
             st.error(f"❌ 診斷模組載入失敗：{_e_diag}")
 
     # ══════════════════════════════════════════════════════
+    # v19.361 PR-2(A)：保單對帳單 CSV 歷史匯入 → nav_history 累積(L3→L2)
+    # ══════════════════════════════════════════════════════
+    st.divider()
+    with st.expander("🗂️ NAV 歷史匯入（保單對帳單 CSV → nav_history 累積）", expanded=False):
+        st.caption(
+            "從保險公司網站 / 對帳單下載歷史淨值 CSV，一次灌入 Google Sheet "
+            "`nav_history` 分頁 —— **立刻補回過去數年**，解鎖 3Y/5Y/低基期（不必等每日累積）。"
+            "格式：header 含「日期/淨值」關鍵字自動對欄；無 header 則第 1 欄=日期、第 2 欄=淨值。"
+            "民國(113/03/15)與西元日期都支援；同 (代碼,日期) 自動去重，重跑不灌水。")
+        _ni_c1, _ni_c2 = st.columns(2)
+        with _ni_c1:
+            _ni_code = st.text_input("基金代碼", key="navhist_import_code",
+                                     placeholder="TLZF9 / ACTI71 ...")
+        with _ni_c2:
+            _ni_name = st.text_input("基金名稱（選填）", key="navhist_import_name")
+        _ni_file = st.file_uploader("上傳歷史淨值 CSV", type=["csv", "txt"],
+                                    key="navhist_import_file")
+        if st.button("📥 匯入到 nav_history", key="navhist_import_btn",
+                     disabled=not (_ni_file and _ni_code.strip())):
+            try:
+                _ni_text = _ni_file.getvalue().decode("utf-8-sig", errors="replace")
+                from services.nav_history_gs import import_csv_text
+                _ni_res = import_csv_text(_ni_code.strip().upper(), _ni_text,
+                                          fund_name=_ni_name.strip())
+                if not _ni_res["enabled"]:
+                    st.error("❌ Google Sheets 未設定（google_service_account / "
+                             "macro_weights_sheet_id secrets）→ 無法匯入。")
+                elif _ni_res["written"] > 0:
+                    st.success(
+                        f"✅ 匯入完成：{_ni_res['rows']} 列 → 解析 {_ni_res['parsed']} 筆 → "
+                        f"**新寫入 {_ni_res['written']} 筆**"
+                        f"（重複略過 {_ni_res['skipped_dup']}、壞列 {_ni_res['skipped_rows']}）。"
+                        f"下次分析該基金時會自動併入計算。")
+                else:
+                    st.warning(
+                        f"⚠️ 0 筆新寫入：{_ni_res['rows']} 列 → 解析 {_ni_res['parsed']} 筆"
+                        f"（重複略過 {_ni_res['skipped_dup']}、壞列 {_ni_res['skipped_rows']}）。"
+                        f"請確認 CSV 欄位（日期/淨值）與代碼是否正確。")
+            except Exception as _e_ni:
+                st.error(f"❌ 匯入失敗：[{type(_e_ni).__name__}] {str(_e_ni)[:120]}")
+
+    # ══════════════════════════════════════════════════════
     # ⚠️ 資料異常清單（最下方一覽，獨立於上方總表/體檢區）
     # ══════════════════════════════════════════════════════
     st.divider()
