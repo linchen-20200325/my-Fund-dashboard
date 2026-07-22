@@ -34,13 +34,25 @@ class NavHistoryError(Exception):
     """nav_history 寫入/讀取失敗(§1 Fail Loud:呼叫端須看見,不靜默 no-op)。"""
 
 
+def _sa_to_dict(v: Any) -> dict:
+    """Service Account secret 正規化:dict 原樣;**JSON 字串 → dict**(NAS/cron 的
+    env fallback 只能給字串,v19.363 ③);解析失敗 / 其他型別 → {}(視同缺)。"""
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str) and v.strip():
+        import json
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+    return {}
+
+
 def is_enabled() -> bool:
-    """GS secrets 是否齊備(複用 macro.weights_store,同一份 sheet)。未齊 → 安靜 no-op。"""
-    try:
-        from services.macro.weights_store import _gs_enabled
-        return _gs_enabled()
-    except Exception:
-        return False
+    """GS secrets 是否齊備。v19.363 起 `status()` 為 SSOT(含 env JSON 字串 SA 支援,
+    NAS cron 環境不再被誤判未啟用);Streamlit 端行為不變(同兩把 secrets)。"""
+    return status()["enabled"]
 
 
 def status() -> dict:
@@ -48,12 +60,13 @@ def status() -> dict:
 
     體檢瑕疵 #6「secrets 沒設 = 安靜略過 → 你以為在累積其實沒有」的解方:
     UI(Tab5 狀態燈 / hook 一次性提示)用本 fn 把靜默失敗變可見(§5 可觀測)。
+    v19.363 ③:SA 支援 env JSON 字串(_sa_to_dict),NAS cron 可用。
     """
     missing: list[str] = []
     try:
         from infra.config import get_secret
-        sa = get_secret("google_service_account") or {}
-        if not (isinstance(sa, dict) and sa.get("client_email")):
+        sa = _sa_to_dict(get_secret("google_service_account"))
+        if not sa.get("client_email"):
             missing.append("google_service_account")
         if not get_secret("macro_weights_sheet_id"):
             missing.append("macro_weights_sheet_id")
@@ -95,10 +108,17 @@ def _clean_points(points: list[dict]) -> list[dict]:
 
 
 def _get_sheet():
-    """開啟 macro_weights_sheet_id 那本 workbook(複用 secrets + 認證,同 auto_search_store_gs)。"""
+    """開啟 macro_weights_sheet_id 那本 workbook(複用 secrets + 認證,同 auto_search_store_gs)。
+
+    v19.363 ③:SA 走 _sa_to_dict — env JSON 字串(NAS cron)與 st.secrets dict 都吃;
+    解析後仍空 → raise(§1 Fail Loud,部署配置錯不靜默)。
+    """
     from infra.config import require_secret
     from repositories.policy_repository import get_gspread_client
-    creds = dict(require_secret("google_service_account"))
+    creds = _sa_to_dict(require_secret("google_service_account"))
+    if not creds.get("client_email"):
+        raise NavHistoryError(
+            "google_service_account 無法解析為含 client_email 的 dict(env 字串需為完整 SA JSON)")
     sheet_id = require_secret("macro_weights_sheet_id")
     client = get_gspread_client(creds)
     return client.open_by_key(sheet_id)
