@@ -139,3 +139,8 @@ CPI_MOM_MILD_RISE_PCT: float = 0.3
 # 序列稀疏時會失真 → §1 寧可回 None 不給假精確。
 NAV_HIST_COVERAGE_MIN: float = 0.6      # 實際點數 / 預期交易日(span×252/365)下限
 NAV_HIST_MAX_GAP_DAYS: int = 14         # 相鄰兩點最大缺口(日曆日;台灣長假 ~9-10 天)
+
+# ── Composite 對帳:不加權方向投票中性帶(macro composite_score,v19.367 6/8)──
+# F-RECON-1 最後一項:健康度雙演算法對帳。第二演算法 = 不加權多空投票
+# net_ratio=(n_pos-n_neg)/n_valid;|net_ratio| <= 本帶寬 → 方向視為中性(60/40 不算決定性)
+COMPOSITE_VOTE_NEUTRAL_BAND: float = 0.2
