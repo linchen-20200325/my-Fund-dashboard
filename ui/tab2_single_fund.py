@@ -258,6 +258,13 @@ def render_single_fund_tab() -> None:
                 _c_fn = fd_raw.get("fund_name","") or fd_raw.get("full_key","")
                 _c_n  = len(fd_raw.get("series")) if fd_raw.get("series") is not None else 0
                 st.success(f"✅ **{_c_fn}** ｜ 淨值 {_c_n} 筆 資料已載入")
+                # v19.359 Track 2:App 抓成功 → 把當日最新 NAV append 進 Google Sheet
+                # nav_history 分頁(從現在累積,解 CI 端抓不到歷史的困境)。冪等 + 非致命。
+                try:
+                    from ui.helpers.nav_history_hook import record_fund_nav_point
+                    record_fund_nav_point(fd_raw, source="Tab2")
+                except Exception:
+                    pass  # 記錄失敗不影響主流程(helper 內已顯示提示)
 
     # ── 關鍵字搜尋（折疊）──
     with st.expander("🔍 關鍵字搜尋境外基金（TDCC / FundClear）", expanded=False):
