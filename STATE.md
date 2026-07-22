@@ -2,6 +2,21 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave D:死碼 sweep(5 fn / ~155 LOC)v19.378
+
+- **死碼查緝(grep 二度驗證 0 production + 0 test caller,§-1「毫不留情刪死碼」)**:
+  - **D1** `services/auto_search.py`:`_plan_univariate` / `_plan_greedy` / `_plan_refine`
+    (plan generator 三兄弟從未接線)。
+  - **D2** `services/ai_service.py`:`_write_error_ledger`(Colab `/content/` 遺跡,39 LOC)。
+  - **D3** `services/auto_search_store_local.py`:`_job_path`(class 內聯建路徑已取代)。
+  - **D4** `services/macro/us_indicators.py`:`fetch_tw_market_tpi`(106 LOC,**0 真呼叫**,只
+    re-export + 字串 label)—— Wave C 稽核誤標「錯置」,實勘為**死碼**;連動移除
+    `services/macro/__init__.py` re-export + 清 orphan TPI banner。
+- **驗**:AST 精準刪除(`end_lineno`,不誤傷相鄰 `detect_systemic_risk` 的 keyword dict);
+  4 檔 syntax + import OK;`detect_systemic_risk` 仍運作;ruff E3xx clean;`test_auto_search`
+  42 綠;**0 test 引用、全 repo 0 殘引**(除自身註解)。
+- **淨刪 ~155 LOC**。改動 5 檔。F841 死變數 / F811 重複 import 為 ruff 小項,留待需要時 --fix。
+
 ## 🧹 2026-07-22 全域排毒 Wave B2(slice 3,**收官**):4 thin fetcher 登 EX-PASSTHRU-1 v19.377
 
 - **病灶(Rule 4)**:`fred_get_next_release_date` ×2(`data_registry` / `tab5`)、`fetch_stock_news`

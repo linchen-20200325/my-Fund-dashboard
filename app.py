@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.377_RefactorB2c_ExPassthru"
+APP_VERSION = "v19.378_RefactorD_DeadCodeSweep"
 
 
 # ══════════════════════════════════════════════════════

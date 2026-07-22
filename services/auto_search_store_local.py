@@ -14,10 +14,6 @@ from services.auto_search import SearchJob, SearchResult
 _CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "autosearch"
 
 
-def _job_path(run_id: str) -> Path:
-    return _CACHE_DIR / f"{run_id}.json"
-
-
 class LocalJsonSearchStore:
     """單檔 = 單 job + 該 job 的所有 results."""
 
