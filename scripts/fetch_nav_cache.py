@@ -132,7 +132,10 @@ def fetch_tdcc_all() -> dict:
         items = r.json()
         result = {}
         for item in items:
-            code = (item.get("基金代號") or item.get("境外基金代碼") or "").strip().upper()
+            # v19.358：TDCC 3-x 實際欄位是「基金代碼」(碼);舊版用「基金代號」(號)→ 全查無
+            # → [TDCC] 恆 0 筆。對齊 app 已驗證的 _src_tdcc_meta(sources.py:2717)。
+            code = (item.get("基金代碼") or item.get("基金代號")
+                    or item.get("境外基金代碼") or "").strip().upper()
             if code:
                 result[code] = item
         print(f"[TDCC 3-4] 取得 {len(result)} 筆最新淨值")
@@ -151,7 +154,10 @@ def fetch_tdcc_basic() -> dict:
         items = r.json()
         result = {}
         for item in items:
-            code = (item.get("基金代號") or item.get("境外基金代碼") or "").strip().upper()
+            # v19.358：TDCC 3-x 實際欄位是「基金代碼」(碼);舊版用「基金代號」(號)→ 全查無
+            # → [TDCC] 恆 0 筆。對齊 app 已驗證的 _src_tdcc_meta(sources.py:2717)。
+            code = (item.get("基金代碼") or item.get("基金代號")
+                    or item.get("境外基金代碼") or "").strip().upper()
             if code:
                 result[code] = item
         print(f"[TDCC 3-2] 取得 {len(result)} 筆基本資料")
@@ -661,11 +667,17 @@ def main():
                 time.sleep(0.5)
         else:
             # ── 境外基金：走 TDCC + MoneyDJ + Yahoo Finance ──
-            # 1. TDCC 最新淨值（只有一筆，但每天都更新）
+            # 1. TDCC 最新淨值（只有一筆，但每天都更新 → 每天累積一筆 §5）
+            # v19.358：TDCC 3-4 實際欄位是「基金淨值」/「日期」;舊版用「單位淨值」/「淨值日期」
+            # → 恆解析失敗 float("") → 每天 0 筆、cache 停滯。對齊 app _src_tdcc_meta
+            # (sources.py:2732-2733)。修對後這 5 檔境外每天由 TDCC 補 1 筆最新 NAV,
+            # merge_history 按日期去重累積 → 長期自養歷史序列。
             if code in tdcc_nav:
                 item = tdcc_nav[code]
-                date_raw = item.get("淨值日期") or item.get("最新淨值日期") or ""
-                nav_raw  = item.get("單位淨值") or item.get("最新淨值") or ""
+                date_raw = (item.get("日期") or item.get("淨值日期")
+                            or item.get("最新淨值日期") or "")
+                nav_raw = (item.get("基金淨值") or item.get("單位淨值")
+                           or item.get("最新淨值") or "")
                 if not fund_name:
                     fund_name = item.get("基金中文名稱") or item.get("基金名稱") or ""
                 try:

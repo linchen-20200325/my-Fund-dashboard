@@ -181,3 +181,32 @@ def test_cnyes_fetch_empty_returns_empty(monkeypatch):
     """CnYES API 全無資料 → 回 [](§1)。"""
     monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(status=404))
     assert _MOD.fetch_cnyes_history("CTZP0") == []
+
+
+# ── v19.358：修 TDCC 欄位名(基金代碼/基金淨值/日期) + 「每天累積一筆」保證 ──
+def test_fetch_tdcc_all_keys_by_基金代碼(monkeypatch):
+    """TDCC 3-4 實際欄位是『基金代碼』;舊版用『基金代號』→ 全查無。修對後應 key 得到。"""
+    payload = [
+        {"基金代碼": "TLZF9", "基金淨值": "12.34", "日期": "2026-07-22"},
+        {"基金代碼": "JFZN3", "基金淨值": "9.87", "日期": "2026-07-22"},
+    ]
+    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(payload=payload))
+    d = _MOD.fetch_tdcc_all()
+    assert "TLZF9" in d and "JFZN3" in d               # 用「基金代碼」key 得到
+    assert d["TLZF9"]["基金淨值"] == "12.34"
+
+
+def test_merge_history_accumulates_new_date_keeps_old():
+    """核心「累積」保證:每天餵 1 筆新日期 → append 不洗舊筆(按日期去重)。"""
+    existing = [{"date": "2026-07-20", "nav": 10.0}]
+    merged = _MOD.merge_history(existing, [{"date": "2026-07-22", "nav": 11.0}])
+    _dates = {r["date"] for r in merged}
+    assert _dates == {"2026-07-20", "2026-07-22"}       # 舊筆保留 + 新筆加入
+    assert len(merged) == 2
+
+
+def test_merge_history_same_date_dedups():
+    """同日期重跑 → 覆蓋不重複(冪等,不會灌水)。"""
+    existing = [{"date": "2026-07-22", "nav": 10.0}]
+    merged = _MOD.merge_history(existing, [{"date": "2026-07-22", "nav": 12.0}])
+    assert len(merged) == 1 and merged[0]["nav"] == 12.0

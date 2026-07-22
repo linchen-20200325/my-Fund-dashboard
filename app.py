@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.352_OffshoreCnyes"
+APP_VERSION = "v19.358_TdccFieldFix"
 
 
 # ══════════════════════════════════════════════════════
