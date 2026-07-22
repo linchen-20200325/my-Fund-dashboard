@@ -2,6 +2,23 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🗃️ 2026-07-22 ④ 三套儲存收斂 v19.365 — Sheet 為 durable SSOT(序列 4/8)
+
+NAV 散在三處:cache/nav(git,CI 寫,已停排程)/ cache/nav_history(本機磁碟,Tab6 CSV 匯入)/
+Google Sheet nav_history(durable)。收斂原則:**寫路徑全指向 Sheet、讀路徑不動**(舊快取仍當
+fallback 讀,零回歸)。§8.1 step 6 自評:不做大遷移重構,只補兩個真缺口:
+- **(A) Tab6 CSV 匯入補雙寫**:原本只寫 `cache/nav_history/`(Streamlit Cloud 重啟即清空,
+  = user 匯入的歷史會默默蒸發的真陷阱)。現匯入成功後同步 `nav_history_gs.import_csv_text`
+  (source="tab6_csv",(code,date) 去重、GS 未啟用顯示誠實 caption、同步失敗非致命)。
+- **(B) 一次性遷移腳本 `scripts/migrate_nav_caches_to_sheet.py`**:兩套舊快取(CI schema
+  `history:[{date,nav}]` + Tab6 schema `dates/values`)→ 統一 point → `append_points`(冪等)。
+  預設白名單過濾(`_discover_fund_codes`,擋 XYZ/CACHED01 類測試殘留),`--all` 全搬;
+  壞檔顯式 skip + 列名(§1);secrets 缺 exit 2。user 在本機/NAS 跑一次即完成搬家。
+- **免做確認**:cache/nav_history 殘留檔未被 git 追蹤(容器本機殘留,repo 乾淨);
+  讀者(`_src_cache_files` / nav_history_store 讀路徑)不動。
+- **測試** `tests/test_migrate_nav_caches.py` 5(雙 schema 解析 / 白名單擋殘留 / --all /
+  壞檔顯式 skip / 目錄缺回空)。
+
 ## ⏸️ 2026-07-22 CI 每日 NAV workflow 停排程留手動 v19.364 — 空跑收斂(序列 3/8,user 選 A)
 
 - **決策**:user 4 選 1 選「停排程、留手動」。`每日淨值快取更新` 已實證從 GitHub 美國 IP
