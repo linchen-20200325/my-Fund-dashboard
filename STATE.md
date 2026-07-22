@@ -2,6 +2,23 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ⚖️ 2026-07-22 健康度雙演算法對帳 v19.367 — F-RECON-1 最後一項收尾(序列 6/8)
+
+- **背景**:F-RECON-1(§4.3 重算對帳)基金端 3 組對帳 v19.87-91 已落地,唯 macro health score
+  一直單一 path(`calculate_composite_score` 加權淨分),CLAUDE.md §8.3 掛「等 user 點」多時。
+- **第二演算法**(方法學獨立):**不加權多空方向投票** — 只數 score>0/<0 指標數,
+  `net_ratio=(n_pos-n_neg)/n_valid`,**無視權重** → 專抓「單一大權重指標把總分拖向與多數指標
+  相反方向」的權重配置錯誤(加權和自己驗自己驗不出這種)。
+- **L2 `reconcile_composite_score(ind)`**(composite_score.py):A 向用 `get_verdict_cutoffs`
+  同組語意分界(§3.3 不另造 magic)、B 向中性帶 `COMPOSITE_VOTE_NEUTRAL_BAND=0.2`(SSOT 新常數);
+  status ∈ agree / neutral_mix(弱訊號非衝突)/ disagree(⚠️)/ no_data(§1)。
+- **L3**:tab1 綜合健康度 hero 卡下加對帳 chip(agree ✅ / disagree ⚠️ 顯示;neutral_mix/no_data
+  不佔版面);非致命 try/except。
+- **測試** `tests/test_composite_reconcile.py` 6(同向 agree / **大權重拖翻 disagree 核心場景** /
+  60-40 中性帶 / no_data 誠實 / 投票無視權重的獨立性 / weighted_total 與主演算法同源)。
+  分數取極值,任何合理 cutoffs 下方向不變(防 active.json 改分界讓測試 flaky)。
+- **F-RECON-1 至此全結案**(基金 3 組 + macro 1 組)。
+
 ## 🛟 2026-07-22 純累積序列救援 v19.366 — live 全敗 Sheet 頂上(序列 5/8)
 
 - **問題**:v19.360 的合併只在 live series **存在**時觸發;live **全敗**(series=None,

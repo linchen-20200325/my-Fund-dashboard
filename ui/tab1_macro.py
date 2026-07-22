@@ -1462,6 +1462,20 @@ def render_macro_tab() -> None:
                 f"<div style='font-size:13px;color:{GH_FG_SECONDARY};margin-top:4px;line-height:1.5'>{_cv_action}</div>"
                 f"</div></div>",
                 unsafe_allow_html=True)
+            # v19.367 6/8:F-RECON-1 健康度雙演算法對帳 chip(§4.3 — 加權淨分 vs 不加權多空投票)
+            try:
+                from services.macro.composite_score import reconcile_composite_score
+                _rc = reconcile_composite_score(ind)
+                if _rc["status"] == "disagree":
+                    st.caption(f"⚠️ 對帳:{_rc['note']}"
+                               f"(投票 {_rc['n_pos']}多/{_rc['n_neg']}空,"
+                               f"net {_rc['vote_net_ratio']:+.2f})")
+                elif _rc["status"] == "agree":
+                    st.caption(f"✅ 對帳:加權淨分與多空投票同向"
+                               f"({_rc['n_pos']}多/{_rc['n_neg']}空)")
+                # neutral_mix / no_data → 不顯示(弱訊號不佔版面)
+            except Exception:  # noqa: BLE001 — 對帳 chip 非致命
+                pass
         except Exception as _comp_e:  # noqa: BLE001
             st.caption(f"綜合健康度卡暫無法顯示：[{type(_comp_e).__name__}] {_comp_e}")
 

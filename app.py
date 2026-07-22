@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.366_NavHistRescue"
+APP_VERSION = "v19.367_CompositeRecon"
 
 
 # ══════════════════════════════════════════════════════

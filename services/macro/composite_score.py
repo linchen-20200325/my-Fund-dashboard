@@ -86,6 +86,73 @@ def calculate_composite_score(ind: dict, *,
     return round(total, 2)
 
 
+def reconcile_composite_score(ind: dict) -> dict:
+    """v19.367 6/8:F-RECON-1 最後一項 — 健康度**雙演算法對帳**(§4.3)。
+
+    演算法 A(主):`calculate_composite_score` 加權淨分(score × weight 加總)。
+    演算法 B(對照):**不加權多空方向投票** — 只數 score>0 / score<0 的指標數,
+    `net_ratio = (n_pos - n_neg) / n_valid` ∈ [-1, 1]。**方法學獨立**(無視權重),
+    專抓「單一大權重指標把總分拖向與多數指標相反方向」的權重配置錯誤。
+
+    方向判定:
+    - A 向:total > c2(樂觀線)→ pos;total < c3(悲觀線)→ neg;其間 → neu
+      (沿用 `get_verdict_cutoffs` 同一組語意分界,§3.3 不另造 magic)
+    - B 向:|net_ratio| <= COMPOSITE_VOTE_NEUTRAL_BAND → neu;否則依正負
+    狀態:同向 → "agree";一向中性 → "neutral_mix"(弱訊號,非衝突);
+          一正一負 → "disagree"(⚠️ 需檢查權重配置 / 單指標暴衝)。
+    純函式;ind 無效 → n_valid=0 + status="no_data"(§1 不偽造)。
+    """
+    from shared.signal_thresholds import COMPOSITE_VOTE_NEUTRAL_BAND
+
+    total = calculate_composite_score(ind)
+    n_pos = n_neg = n_zero = 0
+    if isinstance(ind, dict):
+        for v in ind.values():
+            if not isinstance(v, dict):
+                continue
+            try:
+                sf = float(v.get("score", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if sf != sf:  # NaN guard
+                continue
+            if sf > 0:
+                n_pos += 1
+            elif sf < 0:
+                n_neg += 1
+            else:
+                n_zero += 1
+    n_valid = n_pos + n_neg + n_zero
+    if n_valid == 0:
+        return {"weighted_total": total, "vote_net_ratio": None,
+                "n_pos": 0, "n_neg": 0, "n_zero": 0,
+                "dir_weighted": "neu", "dir_vote": "neu",
+                "status": "no_data", "note": "無有效指標,無法對帳(§1)"}
+
+    net_ratio = (n_pos - n_neg) / n_valid
+    try:
+        from services.macro.weights_store import get_verdict_cutoffs
+        _c1, c2, c3, _c4 = get_verdict_cutoffs()
+    except ImportError:
+        c2, c3 = 5.0, -5.0
+    dir_w = "pos" if total > c2 else ("neg" if total < c3 else "neu")
+    dir_v = ("neu" if abs(net_ratio) <= COMPOSITE_VOTE_NEUTRAL_BAND
+             else ("pos" if net_ratio > 0 else "neg"))
+
+    if dir_w == dir_v:
+        status, note = "agree", "加權淨分與多空投票同向"
+    elif "neu" in (dir_w, dir_v):
+        status, note = "neutral_mix", "一方中性 — 弱訊號,非衝突"
+    else:
+        status = "disagree"
+        note = (f"⚠️ 加權淨分({dir_w})與多空投票({dir_v})反向 — "
+                f"檢查權重配置 / 是否單一大權重指標暴衝")
+    return {"weighted_total": total, "vote_net_ratio": round(net_ratio, 3),
+            "n_pos": n_pos, "n_neg": n_neg, "n_zero": n_zero,
+            "dir_weighted": dir_w, "dir_vote": dir_v,
+            "status": status, "note": note}
+
+
 def composite_verdict(total_score: float) -> tuple[str, str, str, str]:
     """回傳 (icon, level, color, action_text) 對應 5 級白話評價。
 
