@@ -710,6 +710,10 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 result["fund_rating"]     = rows_map.get("基金評等", "")
                 result["umbrella_fund"]   = rows_map.get("傘型架構", "").replace(" ","")
                 result["mgmt_fee"]        = rows_map.get("最高經理費(%)", "")
+                # v19.368 7/8:同表補抽保管費 → TER 估計第 2 主成分(零新增 HTTP)
+                result["custody_fee"]     = (rows_map.get("最高保管費(%)") or
+                                             rows_map.get("保管費(%)") or
+                                             rows_map.get("保管費", ""))
                 result["is_esg"]          = rows_map.get("是否為ESG", "")
                 # v19.308：MoneyDJ 現成「成立日期」→ 供成立年計算免依賴本地長歷史
                 #（Cloud IP 被擋、NAV 只抓到近 1 月時，成立年仍能正確）。抓不到則不設，
