@@ -342,6 +342,22 @@ def render_manual_tab() -> None:
                         f"✅ 匯入成功：新增 {_r['imported']:,} 筆、覆蓋 {_r['merged']:,} 筆 "
                         f"→ 總 {_r['total']:,} 筆 ({_r['date_min']} ~ {_r['date_max']})"
                     )
+                    # v19.365 ④ 儲存收斂:磁碟 cache 在 Streamlit Cloud 重啟會清空 →
+                    # 雙寫進 Google Sheet nav_history((code,date) 去重,重啟不丟;非致命)。
+                    try:
+                        from services.nav_history_gs import import_csv_text as _gs_import
+                        _g = _gs_import(
+                            _nh_code,
+                            _nh_file.getvalue().decode("utf-8-sig", errors="replace"),
+                            source="tab6_csv")
+                        if _g["enabled"] and _g["written"]:
+                            st.caption(f"🗂️ 已同步 {_g['written']} 筆到雲端 nav_history(重啟不丟)")
+                        elif not _g["enabled"]:
+                            st.caption("⬜ 雲端 nav_history 未啟用(缺 secrets)→ 本次僅存本機,"
+                                       "容器重啟會清空(詳見 Tab5 狀態燈)")
+                    except Exception as _e_gs:  # 雲端同步失敗不影響本機匯入結果
+                        st.caption(f"⬜ 雲端同步失敗(本機已存):[{type(_e_gs).__name__}] "
+                                   f"{str(_e_gs)[:60]}")
                     st.rerun()
 
             _act_c1, _act_c2, _act_c3 = st.columns(3)
