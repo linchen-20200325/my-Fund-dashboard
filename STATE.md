@@ -2,6 +2,22 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave A1:multi_factor z-score 收 SSOT v19.371
+
+- **背景**:4 維並行深掃(架構越權 / SSOT / 死碼 / 肥大 god-file)後 user 同意藍圖,進實作階段,
+  嚴守「一次一檔」。動刀順序 A(真 bug+SSOT)→ B(分層越權)→ C(邏輯下沉)→ D(死碼)。
+- **A1 病灶(SSOT 查緝 TOP-1,真 bug)**:`services/calibration/multi_factor.py:250 _zscore` 自帶一份
+  z-score,std=0 時回 `0.0`,與 SSOT `repositories/macro/math_utils.zscore`(回 `NaN` + log)**分歧** →
+  退化因子被靜默中性化,違 §1 Fail-Loud。
+- **修(behavior-preserving)**:`_zscore` 委派 SSOT 計算。因本 composite 用 `sum(skipna=False)`
+  (單一 NaN factor 會清空整條 composite),退化因子(std=0 = 零資訊 = 無 tilt)**顯式**中性化 0
+  (§1 填補三要件:顯式呼叫 + SSOT 已寫 log + 語意註明);非退化路徑逐位元相同 → composite 數值零變化。
+  另 raw `252` → `shared.signal_thresholds.TRADING_DAYS_PER_YEAR` SSOT。
+- **驗**:`test_multi_factor_optimization` 50 綠;退化因子 sanity(flat→全 0 / composite 含退化因子仍
+  非空 len 29 不被清空 / 正常因子 z std≈1;SSOT 現對 std=0 寫 log)。
+- **分層**:`_zscore` lazy import `repositories.macro.math_utils.zscore`(L2→L1 純 util,macro_service
+  同 precedent),無新違憲。**唯一改動檔:`services/calibration/multi_factor.py`**(+ app.py 版號 + 本檔)。
+
 ## 💰 2026-07-22 真實 TER(FundClear fetcher)v19.370 —(user 點名續做「真實 TER」)
 
 - **背景**:v19.368 費用率僅到「經理+保管」估計(mgmt+custody_est),缺官方揭露的年度
