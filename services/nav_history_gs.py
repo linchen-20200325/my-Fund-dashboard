@@ -43,6 +43,25 @@ def is_enabled() -> bool:
         return False
 
 
+def status() -> dict:
+    """v19.362 ①:累積狀態診斷 — 回 {"enabled": bool, "missing": [缺的 secret 名]}。
+
+    體檢瑕疵 #6「secrets 沒設 = 安靜略過 → 你以為在累積其實沒有」的解方:
+    UI(Tab5 狀態燈 / hook 一次性提示)用本 fn 把靜默失敗變可見(§5 可觀測)。
+    """
+    missing: list[str] = []
+    try:
+        from infra.config import get_secret
+        sa = get_secret("google_service_account") or {}
+        if not (isinstance(sa, dict) and sa.get("client_email")):
+            missing.append("google_service_account")
+        if not get_secret("macro_weights_sheet_id"):
+            missing.append("macro_weights_sheet_id")
+    except Exception:
+        missing = ["google_service_account", "macro_weights_sheet_id"]
+    return {"enabled": not missing, "missing": missing}
+
+
 def _norm_date(v: Any) -> str:
     """轉 'YYYY-MM-DD'。接受 date/datetime/'YYYY/MM/DD'/'YYYY-MM-DD...'。壞值回 ''(§1 不猜)。"""
     if v is None or v == "":
@@ -292,4 +311,4 @@ def import_csv_text(code: str, csv_text: str, *, fund_name: str = "",
 
 
 __all__ = ["append_point", "append_points", "load_points", "load_series",
-           "import_csv_text", "is_enabled", "NavHistoryError"]
+           "import_csv_text", "is_enabled", "status", "NavHistoryError"]

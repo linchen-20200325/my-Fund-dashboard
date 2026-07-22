@@ -1289,6 +1289,19 @@ def render_data_guard_tab() -> None:
     # ══════════════════════════════════════════════════════
     st.divider()
     with st.expander("🗂️ NAV 歷史匯入（保單對帳單 CSV → nav_history 累積）", expanded=False):
+        # v19.362 ①:累積狀態燈 — 終結「secrets 沒設 = 靜默略過,以為在累積其實沒有」
+        try:
+            from services.nav_history_gs import status as _nh_status
+            _ni_st = _nh_status()
+            if _ni_st["enabled"]:
+                st.caption("🟢 **累積狀態:已啟用** — App 抓到的淨值會自動累積到 "
+                           "Google Sheet `nav_history` 分頁")
+            else:
+                st.error(f"🔴 **累積未啟用**:缺 secrets（{', '.join(_ni_st['missing'])}）"
+                         f"→ App 抓到的淨值**不會**累積、下方匯入也無法寫入。"
+                         f"請在 Streamlit Cloud secrets 補上後重啟。")
+        except Exception as _e_st:
+            st.caption(f"⬜ 累積狀態檢查失敗:[{type(_e_st).__name__}] {str(_e_st)[:60]}")
         st.caption(
             "從保險公司網站 / 對帳單下載歷史淨值 CSV，一次灌入 Google Sheet "
             "`nav_history` 分頁 —— **立刻補回過去數年**，解鎖 3Y/5Y/低基期（不必等每日累積）。"

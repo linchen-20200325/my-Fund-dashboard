@@ -209,3 +209,26 @@ def test_extract_point_code_hint_overrides():
 def test_extract_point_returns_none_on_insufficient(fd):
     from ui.helpers.nav_history_hook import _extract_point
     assert _extract_point(fd) is None
+
+
+# ── v19.362 ①:累積狀態燈(status 診斷)──────────────────────
+def test_status_disabled_in_test_env_lists_missing():
+    """測試環境無 secrets → enabled=False,missing 列出缺的 secret 名(§5 可觀測)。"""
+    st = M.status()
+    assert st["enabled"] is False
+    assert "google_service_account" in st["missing"]
+
+
+def test_status_enabled_when_secrets_present(monkeypatch):
+    """secrets 齊備 → enabled=True、missing 空。"""
+    import infra.config as _cfg
+    _fake = {"google_service_account": {"client_email": "sa@x.iam"},
+             "macro_weights_sheet_id": "sheet123"}
+    monkeypatch.setattr(_cfg, "get_secret", lambda k, default=None: _fake.get(k, default))
+    st = M.status()
+    assert st["enabled"] is True and st["missing"] == []
+
+
+def test_status_consistent_with_is_enabled(monkeypatch):
+    """status().enabled 與 is_enabled() 同向(兩者都走同組 secrets)。"""
+    assert M.status()["enabled"] == M.is_enabled()
