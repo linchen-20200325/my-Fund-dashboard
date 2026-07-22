@@ -61,18 +61,40 @@ def status() -> dict:
     體檢瑕疵 #6「secrets 沒設 = 安靜略過 → 你以為在累積其實沒有」的解方:
     UI(Tab5 狀態燈 / hook 一次性提示)用本 fn 把靜默失敗變可見(§5 可觀測)。
     v19.363 ③:SA 支援 env JSON 字串(_sa_to_dict),NAS cron 可用。
+    v19.379:回傳增設 `diag` 細分失敗模式 —— absent(App 完全沒讀到)/ unparseable
+    (有值但非合法 JSON)/ no_client_email(JSON 缺欄),並旁證 `st_secrets_alive`
+    (讀不讀得到既有 FRED_API_KEY),讓 UI 直接講出「放錯地方」還是「引號貼壞」(§5 可觀測)。
     """
     missing: list[str] = []
+    diag: dict = {}
     try:
         from infra.config import get_secret
-        sa = _sa_to_dict(get_secret("google_service_account"))
-        if not sa.get("client_email"):
+        _raw_sa = get_secret("google_service_account")
+        if _raw_sa is None or (isinstance(_raw_sa, str) and not _raw_sa.strip()):
             missing.append("google_service_account")
+            diag["google_service_account"] = "absent"          # App 完全沒讀到這把 key
+        else:
+            sa = _sa_to_dict(_raw_sa)
+            if not sa:
+                missing.append("google_service_account")
+                diag["google_service_account"] = "unparseable"  # 有值但不是合法 JSON dict
+            elif not sa.get("client_email"):
+                missing.append("google_service_account")
+                diag["google_service_account"] = "no_client_email"
+            else:
+                diag["google_service_account"] = "ok"
         if not get_secret("macro_weights_sheet_id"):
             missing.append("macro_weights_sheet_id")
-    except Exception:
+            diag["macro_weights_sheet_id"] = "absent"
+        else:
+            diag["macro_weights_sheet_id"] = "ok"
+        # 旁證:讀得到既有 FRED_API_KEY = st.secrets 本身有效(問題只在這兩把);
+        # 讀不到 = 整份 secrets 沒生效(TOML 壞 / 放錯 App / 沒 reboot)。
+        diag["st_secrets_alive"] = bool(get_secret("FRED_API_KEY"))
+    except Exception as e:
         missing = ["google_service_account", "macro_weights_sheet_id"]
-    return {"enabled": not missing, "missing": missing}
+        diag = {"error": f"{type(e).__name__}: {str(e)[:80]}"}
+    return {"enabled": not missing, "missing": missing, "diag": diag}
 
 
 def _norm_date(v: Any) -> str:

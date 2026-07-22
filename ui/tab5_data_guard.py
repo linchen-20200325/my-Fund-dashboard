@@ -1298,9 +1298,28 @@ def render_data_guard_tab() -> None:
                 st.caption("🟢 **累積狀態:已啟用** — App 抓到的淨值會自動累積到 "
                            "Google Sheet `nav_history` 分頁")
             else:
-                st.error(f"🔴 **累積未啟用**:缺 secrets（{', '.join(_ni_st['missing'])}）"
-                         f"→ App 抓到的淨值**不會**累積、下方匯入也無法寫入。"
-                         f"請在 Streamlit Cloud secrets 補上後重啟。")
+                # v19.379:細分病因(放錯地方 / 引號貼壞 / 整份 secrets 沒生效)
+                _diag = _ni_st.get("diag", {})
+                _lines = [f"🔴 **累積未啟用**:缺 {', '.join(_ni_st['missing'])} "
+                          "→ 淨值不會累積、下方匯入也無法寫入。"]
+                _sa_d = _diag.get("google_service_account")
+                if _sa_d == "absent":
+                    _lines.append("• `google_service_account`:**App 完全沒讀到這把 key** → 檢查："
+                                  "有按 **Save** 嗎?有 **Reboot app** 嗎?名字是不是**全小寫**?"
+                                  "是不是存在**這個 App**(不是別的 App / 不是 GitHub)的 Secrets?")
+                elif _sa_d == "unparseable":
+                    _lines.append("• `google_service_account`:**有讀到值,但 JSON 解析失敗** → "
+                                  "包 JSON 要用 `'''`(三個**單**引號,不是雙引號);檢查內容有沒有貼歪 / 缺字 / 結尾少了 `'''`。")
+                elif _sa_d == "no_client_email":
+                    _lines.append("• `google_service_account`:JSON 有解析但**缺 client_email** → JSON 貼不完整。")
+                if _diag.get("macro_weights_sheet_id") == "absent":
+                    _lines.append("• `macro_weights_sheet_id`:**沒讀到** → 同上(全小寫、放對 App、Save + Reboot)。")
+                if _diag.get("st_secrets_alive") is False:
+                    _lines.append("⚠️ 連既有的 `FRED_API_KEY` 都讀不到 → **整份 secrets 沒生效**"
+                                  "(TOML 格式壞 / 放錯 App / 沒 reboot),不是這兩把單獨的問題。")
+                elif _diag.get("st_secrets_alive") is True:
+                    _lines.append("✅ 旁證:`FRED_API_KEY` 讀得到 → secrets 本身有效,問題**只在上面這兩把**。")
+                st.error("\n\n".join(_lines))
         except Exception as _e_st:
             st.caption(f"⬜ 累積狀態檢查失敗:[{type(_e_st).__name__}] {str(_e_st)[:60]}")
         st.caption(

@@ -2,6 +2,17 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-22 nav_history secrets 診斷細化 v19.379 —(user 實機除錯:secrets 設了仍紅)
+
+- **背景**:user 設完 Streamlit secrets 但 Tab5 仍紅「缺 secrets」。原 `status()` 把「沒讀到」
+  「有值但 JSON 壞」「缺 client_email」全併成一句 `missing`,無法定位是**放錯地方**還是**引號貼壞**。
+- **修**:`status()` 增 `diag` 細分 `absent` / `unparseable` / `no_client_email` + 旁證
+  `st_secrets_alive`(讀不讀得到既有 `FRED_API_KEY` → 判斷整份 secrets 是否生效)。Tab5 紅框改
+  逐條講病因 + 對應檢查步驟(Save/Reboot/全小寫/放對 App、引號用三單引號、整份沒生效)。
+- **驗**:diag 三模式實測(absent / unparseable / ok)+ st_secrets_alive True/False;既有
+  **34 測試不破**(status 新增 `diag` key 為 additive,測試只驗 `enabled`/`missing`)。§5 可觀測。
+- **改動:`services/nav_history_gs.py` + `ui/tab5_data_guard.py`**。
+
 ## 🧹 2026-07-22 全域排毒 Wave D:死碼 sweep(5 fn / ~155 LOC)v19.378
 
 - **死碼查緝(grep 二度驗證 0 production + 0 test caller,§-1「毫不留情刪死碼」)**:
