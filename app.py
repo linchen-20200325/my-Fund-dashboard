@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.349_SitcaPost"
+APP_VERSION = "v19.350_SitcaFormDiag"
 
 
 # ══════════════════════════════════════════════════════

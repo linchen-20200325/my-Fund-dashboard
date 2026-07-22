@@ -140,4 +140,22 @@ def test_sitca_post_zero_rows_dumps_field_names(monkeypatch, capsys):
     rows = _MOD.fetch_sitca_history("ACTI71")
     out = capsys.readouterr().out
     assert rows == []
-    assert "⚠️診斷(POST)" in out and "form欄位名" in out and "查無資料=是" in out
+    assert "form診斷" in out and "欄位名=" in out               # 無條件 dump
+    assert "⚠️診斷(POST)" in out and "查無資料=是" in out
+
+
+def test_sitca_post_server_error_still_dumps_form(monkeypatch, capsys):
+    """v19.350:POST 觸發 server error(ASP.NET EventValidation → GenericError 404)→
+    不讓整個 fetch 走頂層 except 吞掉 form 診斷;仍印真實欄位名 + POST 失敗訊息。"""
+    import requests
+    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(_sitca_form_html()))
+
+    def _boom(*a, **k):
+        raise requests.exceptions.HTTPError("404 GenericError")
+
+    monkeypatch.setattr(_MOD.SESSION, "post", _boom)
+    rows = _MOD.fetch_sitca_history("ACTI71")
+    out = capsys.readouterr().out
+    assert rows == []
+    assert "form診斷" in out and "欄位名=" in out               # 拿得到真實欄位名(關鍵)
+    assert "POST 失敗" in out
