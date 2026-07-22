@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.374_RefactorB1_CacheInversion"
+APP_VERSION = "v19.375_RefactorB2a_HotMoneyFacade"
 
 
 # ══════════════════════════════════════════════════════

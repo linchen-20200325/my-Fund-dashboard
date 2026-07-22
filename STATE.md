@@ -2,6 +2,21 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave B2(slice 1):hot_money L3→L1 直呼上提 L2 facade v19.375
+
+- **病灶(架構越權查緝 Rule 4,§8.2 硬規則 4)**:`ui/hot_money.py` refresh + render 兩處直接
+  `from repositories.hot_money_repository import fetch_foreign_flow_series, fetch_usdtwd_series`
+  (L3 UI 直呼 L1 fetcher,未登錄例外)。
+- **修(比照 R16 `get_latest_fx` 上提 L2 前例)**:新增 L2 facade
+  `services/hot_money_service.fetch_hot_money_frames`(內部 lazy import 走 L1,L2→L1 下行合規);
+  `ui/hot_money.py` 兩處改呼 facade,回 4-tuple 展平,UI 語意零改動。`build_signals` 純函式
+  維持原位(本就未越權)。
+- **驗**:`ui/hot_money.py` **0 L1 直呼**;facade 回 4-tuple;`test_hot_money` 16 綠。
+  §8.2 硬規則 4 違憲 **7 → 5**。
+- **改動檔:新增 `services/hot_money_service.py` + `ui/hot_money.py`**。
+- **B2 剩(逐檔續)**:`fred_get_next_release_date` ×2(data_registry/tab5)、`fetch_stock_news`
+  ×2(ai.py/tab2)、`fetch_macro_compass` ×1(macro_compass_top)。
+
 ## 🧹 2026-07-22 全域排毒 Wave B1:infra/cache L0→L1 上行 import 反轉 v19.374
 
 - **病灶(架構越權查緝,§8.2 硬規則 3 違憲)**:`infra/cache.py:383 global_refresh_all` 內
