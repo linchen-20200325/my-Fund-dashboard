@@ -1,11 +1,12 @@
 name: "每日淨值快取更新"
 
 on:
-  schedule:
-    # 每日台灣時間 00:30 執行（UTC 16:30）
-    - cron: "30 16 * * *"
+  # v19.364 3/8：停每日排程 — GitHub 美國 IP 對台灣基金源已實證全抓不到
+  # （TDCC 3-4 回空、AllianzGI/CnYES/MoneyDJ/Yahoo 被擋，run #557/#71 log 證據），
+  # 每天只產生空跑 commit + 假覆蓋警告。累積改由台灣端 NAS cron 接手
+  # （scripts/accumulate_nav_tw.py，v19.363）。保留手動觸發：未來來源復活或
+  # 想測試時在 Actions 頁點 Run workflow 即可，恢復排程只需還原本段 cron。
   workflow_dispatch:
-    # 允許手動觸發（在 GitHub Actions 頁面點 Run workflow）
 
 jobs:
   fetch-nav:

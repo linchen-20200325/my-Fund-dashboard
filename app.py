@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.363_NasDailyAccumulate"
+APP_VERSION = "v19.364_CiNavCronOff"
 
 
 # ══════════════════════════════════════════════════════

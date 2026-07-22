@@ -2,6 +2,16 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ⏸️ 2026-07-22 CI 每日 NAV workflow 停排程留手動 v19.364 — 空跑收斂(序列 3/8,user 選 A)
+
+- **決策**:user 4 選 1 選「停排程、留手動」。`每日淨值快取更新` 已實證從 GitHub 美國 IP
+  對台灣基金源全抓不到(run #557/#71 log),每天只產生空跑 commit + 假覆蓋警告;
+  累積已由 ③ NAS cron(v19.363)接手。
+- **改動**:`.github/workflows/fetch_nav_cache.yml` 拔 `schedule` cron(`30 16 * * *`),
+  保留 `workflow_dispatch` 手動觸發 + 註解說明恢復方法(可逆)。YAML 驗證通過。
+- **不動**:`cache/nav/*.json` 保留(app `_src_cache_files` fallback 仍讀);
+  `scripts/fetch_nav_cache.py` 保留(手動觸發用)。
+
 ## ⏰ 2026-07-22 ③ 台灣端每日累積(NAS cron)v19.363 — 封「覆蓋靠使用習慣」致命傷(序列 2/8)
 
 - **新 `scripts/accumulate_nav_tw.py`**:台灣 IP 端(NAS/本機)每天自動抓一次最新 NAV 寫
