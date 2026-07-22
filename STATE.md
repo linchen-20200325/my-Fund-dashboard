@@ -2,6 +2,20 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🛟 2026-07-22 純累積序列救援 v19.366 — live 全敗 Sheet 頂上(序列 5/8)
+
+- **問題**:v19.360 的合併只在 live series **存在**時觸發;live **全敗**(series=None,
+  來源被擋/改版時的常態)→ 早退,累積再多也用不上 —— 正是「來源死了靠累積活」的核心場景缺口。
+- **前置查證**:L1 **不預寫** `result["status"]`;status 由 `classify_fetch_status`(fund_fetcher:197)
+  在 enriched pipeline(finalize)**之後**從內容推導(name + series≥10 + metrics)→ 救援注入
+  series+metrics 後 status 自然升級 complete/partial,無 stale status 風險(PR-1 時的顧慮解除)。
+- **修**:`_merge_nav_history_series` 接受 `s_live=None`(視為空序列,純累積整段頂上);
+  `finalize_fund_metrics` 把合併移到 `s is None` 早退**之前** —— live 全敗但 Sheet 有累積 →
+  救援(trace `nav_history_rescue`)+ 走 ② 稀疏門(累積序列必檢);Sheet 也空 → 行為與現在
+  完全一致。救回但 <10 筆 → series 留(真資料)、metrics 不算(§1)。
+- **測試**:consume 加 4(密集 300 筆救援成功+不稀疏 / Sheet 空行為不變 / 5 筆救回但不算 metrics /
+  merge(None) 單元),16 綠。
+
 ## 🗃️ 2026-07-22 ④ 三套儲存收斂 v19.365 — Sheet 為 durable SSOT(序列 4/8)
 
 NAV 散在三處:cache/nav(git,CI 寫,已停排程)/ cache/nav_history(本機磁碟,Tab6 CSV 匯入)/

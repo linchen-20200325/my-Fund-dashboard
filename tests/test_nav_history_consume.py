@@ -183,3 +183,49 @@ def test_finalize_live_only_unchanged(monkeypatch):
     assert m and "nav_coverage" not in m
     assert not any(t.get("source") == "nav_history_merge"
                    for t in result["source_trace"])
+
+
+# ── v19.366 5/8:純累積序列救援(live 全敗 → Sheet 頂上)──────
+def test_finalize_rescue_when_live_totally_fails(monkeypatch):
+    """series=None + Sheet 有 300 筆密集累積 → 救援成功、算出 metrics。"""
+    hist_idx = pd.bdate_range("2025-01-01", periods=300)
+    hist = _noisy_series(hist_idx)
+    hist.attrs["source"] = "GoogleSheet:nav_history:X"
+    monkeypatch.setattr(GS, "load_series", lambda code: hist)
+    result = {"series": None, "dividends": [], "fund_code": "X"}
+    finalize_fund_metrics(result)
+    assert result.get("series") is not None and len(result["series"]) == 300
+    m = result.get("metrics") or {}
+    assert m, "純累積序列應算出 metrics"
+    assert any(t.get("source") == "nav_history_rescue" for t in result["source_trace"])
+    assert m["nav_coverage"]["sparse"] is False       # 密集歷史 → 不稀疏
+
+
+def test_finalize_no_rescue_when_sheet_empty(monkeypatch):
+    """series=None + Sheet 空 → 行為與現在完全一致(無 metrics + 無淨值序列 trace)。"""
+    monkeypatch.setattr(GS, "load_series", lambda code: pd.Series(dtype=float))
+    result = {"series": None, "dividends": [], "fund_code": "X"}
+    finalize_fund_metrics(result)
+    assert result.get("metrics") is None or not result.get("metrics")
+    assert any(t.get("source") == "nav_series" and not t.get("success")
+               for t in result["source_trace"])
+
+
+def test_finalize_rescue_too_short_no_metrics(monkeypatch):
+    """series=None + Sheet 僅 5 筆 → 救回 series 但 len<10 gate 擋 metrics(§1)。"""
+    hist = _noisy_series(pd.bdate_range("2026-07-14", periods=5))
+    monkeypatch.setattr(GS, "load_series", lambda code: hist)
+    result = {"series": None, "dividends": [], "fund_code": "X"}
+    finalize_fund_metrics(result)
+    assert result.get("series") is not None and len(result["series"]) == 5
+    assert not result.get("metrics")                   # 不足不算,不偽造
+
+
+def test_merge_accepts_none_live():
+    """_merge_nav_history_series(None, ...) 單元:hist 整段回傳。"""
+    import services.nav_history_gs as _gs
+    hist = _noisy_series(pd.bdate_range("2026-01-01", periods=20))
+    import unittest.mock as _m
+    with _m.patch.object(_gs, "load_series", lambda code: hist):
+        merged, trace = _merge_nav_history_series(None, "X")
+    assert len(merged) == 20 and trace["success"] is True and trace["added"] == 20
