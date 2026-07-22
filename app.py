@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.368_ExpenseRatioEst"
+APP_VERSION = "v19.369_SchemaSweepCpiDoc"
 
 
 # ══════════════════════════════════════════════════════

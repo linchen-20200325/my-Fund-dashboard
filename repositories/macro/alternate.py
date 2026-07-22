@@ -65,6 +65,13 @@ def fetch_defillama_stablecoin_mcap() -> pd.Series:
     # F-PROV-1 v19.84 phase 3:provenance via Series.attrs(§2.2)
     s.attrs["source"] = "DefiLlama:stablecoincharts:total_circulating"
     s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+    # F-SCHEMA-1 餘量輕量驗證(v19.369 8/8):壞形狀 → log + 回空(§1 不靜默流入)
+    try:
+        from repositories.external_market_repository import _validate_market_series
+        _validate_market_series(s, "defillama:stablecoin_mcap")
+    except AssertionError as _ve:
+        print(f"[macro/alternate] stablecoin 驗證失敗:{_ve}")
+        return pd.Series(dtype=float, name="stablecoin_mcap")
     return s
 
 

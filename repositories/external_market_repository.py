@@ -84,6 +84,23 @@ def fetch_multpl_pe() -> Optional[float]:
         return None
 
 
+def _validate_market_series(s: "pd.Series", src: str) -> "pd.Series":
+    """F-SCHEMA-1 餘量輕量驗證(v19.369 8/8,§4.2 不變量;v19.189 輕量版同精神)。
+
+    空序列放行(上游已 log);非空必須:DatetimeIndex 單調遞增 + 無重複日 + 全有限值。
+    違反 → raise AssertionError(§1 Fail Loud)→ 外層 except 轉空序列 + log,
+    fallback chain 自然走下一源(§4.6),壞資料不靜默流入計算。
+    """
+    if s is None or len(s) == 0:
+        return s
+    assert isinstance(s.index, pd.DatetimeIndex), f"{src}: index 非 DatetimeIndex"
+    assert s.index.is_monotonic_increasing, f"{src}: 時序未排序"
+    assert s.index.is_unique, f"{src}: 日期重複"
+    assert s.notna().all() and (~s.isin([float("inf"), float("-inf")])).all(), \
+        f"{src}: 含 NaN/inf 非有限值"
+    return s
+
+
 def fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
     """stooq.com 公開歷史 CSV → 收盤 Series（key: symbol e.g. '^vix3m' / '^vxv' / '^cpc'）。
 
@@ -152,7 +169,7 @@ def fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
         if not s.empty:
             s.attrs["source"] = f"stooq:{symbol}"
             s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-            return s.tail(180)
+            return _validate_market_series(s, f"stooq:{symbol}").tail(180)
 
         # headerless fallback
         s_hl = _parse_headerless(text)
@@ -160,7 +177,7 @@ def fetch_stooq_csv(symbol: str, trace: list[str] | None = None) -> pd.Series:
             _t(f"headerless fallback hit ({len(s_hl)} rows)")
             s_hl.attrs["source"] = f"stooq:{symbol}:headerless"
             s_hl.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-            return s_hl.tail(180)
+            return _validate_market_series(s_hl, f"stooq:{symbol}:headerless").tail(180)
 
         sample = repr(text[:80])
         _t(f"無法解析 sample={sample}")
@@ -209,7 +226,7 @@ def fetch_cboe_csv(short_name: str, trace: list[str] | None = None) -> pd.Series
         s = pd.Series(vals.values, index=idx).dropna().sort_index()
         s.attrs["source"] = f"CBOE:cdn:daily_prices:{short_name}_History.csv"
         s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-        return s.tail(180)
+        return _validate_market_series(s, f"cboe:{short_name}").tail(180)
     except Exception as e:  # noqa: BLE001
         _t(f"exception {str(e)[:40]}")
         print(f"[external_market/cboe] {short_name} 失敗: {e}")

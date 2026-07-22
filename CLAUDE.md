@@ -541,11 +541,12 @@ except ImportError:
     documentation literal 不參與 calculation;HY 4 級含「>10% 崩潰」與 stoplight 3 級**層級不對齊**,
     強收會遺失教學資訊;VIX 教學表 22/30 與 v19.160 SSOT 數值巧合相同但 5 級結構仍應 inline。
     本檔語意分離為 feature 不是 bug。
-  - **CPI(部份收)**:`shared/macro_thresholds_v2.py:CPI_YOY_THRESHOLDS` schema 落地(stoplight /
-    score_function / inflection_detection / regime_classification / beginner_panic 5 section);
-    `services/macro_validation.py` SCORE_RULES 已對齊 score_function。
-    **剩 2 處 logic inline**(`services/macro/macro_score.py:69` lambda + `ui/helpers/macro/helpers.py:183` 3.0 check)
-    需 caller migrate,中風險(動 core scoring path),等實際 bug / user 需求觸發。
+  - ✅ **CPI(全收,v19.369 8/8 查證更正)**:`shared/macro_thresholds_v2.py:CPI_YOY_THRESHOLDS`
+    schema 落地(5 section);`services/macro_validation.py` SCORE_RULES 已對齊 score_function。
+    原記載「剩 2 處 logic inline」為**過時**:(1) score lambda 現於
+    `services/calibration/macro_score.py:75 _s_cpi`,已吃 SSOT 常數(:58-60,v19.202 P2-2);
+    (2) `ui/helpers/macro/helpers.py:187` 已用 `_CPI_BULL_HIGH`(:28 從 `_CPI_THR` 讀)。
+    兩處皆 SSOT,無 caller migrate 待辦。
   - **PMI(WONTFIX 二段澄清,v19.271 C 深挖確認)**:user 2026-06-26 撤銷的是**「harmonize 統一值」**
     (50.0 / 52.0 / 45.0 不同源 trade-off),**不是「SSOT 化(下沉但不統一值)」**。後者已 v19.179 PR-1~3
     完整落地:`shared/macro_thresholds_v2.py:141-203` PMI_THRESHOLDS schema 8 sub-dict 完整 +
