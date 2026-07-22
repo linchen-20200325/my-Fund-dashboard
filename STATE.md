@@ -2,6 +2,30 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🗂️ 2026-07-22 Track 2 App 端 NAV 累積到 Google Sheets v19.359 — 從現在累積(user 選 Track 2)
+
+**Track 1 驗證後轉向**:run #557 log 實證 v19.358 修對了 TDCC 3-2(0→5251 筆),但 **3-4 淨值端點
+回 0 筆** + 這些是**保單內部標的碼非 TDCC 統一編號** → 5 檔境外 TDCC 救不了(0/11 fresh)。
+CI 精簡腳本重寫的獨立來源(AllianzGI/CnYES/MoneyDJ)從 GitHub 美國 IP 全掛。**但 App 端**
+(完整 `sources.py` + NAS 代理)使用者實際查詢時**抓得到當日最新淨值**(user 於 App 確認淨值日期是最近的)。
+- **§7/§8 對齊後動工**(user 選 Track 2 + 確認 App 抓得到 + 核准掛兩個點):把 App 顯示成功那筆
+  `(code, date, nav)` append 進 Google Sheet `nav_history` 分頁,靠日常使用**從現在累積**歷史序列。
+- **L2 新模組 `services/nav_history_gs.py`**(比照 `auto_search_store_gs.py`,複用 `macro_weights_sheet_id`
+  那本 workbook + `_gs_enabled` + `get_gspread_client`):`append_points`(讀一次去重 + 一次 `append_rows`
+  省 quota)/ `append_point` / `load_points` / `is_enabled` / `NavHistoryError`。**§5 (code,date) 冪等去重**;
+  **§1 Fail Loud**:nav<=0/date 壞/code 空 → 不寫(不偽造),真 GS I/O 失敗 → raise;GS 未設 → 安靜 no-op。
+- **L3 掛鉤 `ui/helpers/nav_history_hook.py`**(L3→L2,§8.2 乾淨,不擴 EX-CRUD-1 —— 走 L2 有
+  auto_search_store_gs 先例):Tab2 抓成功(`tab2_single_fund.py:257`)+ 健診批次(`tab_fund_grp_health.py:154`,
+  一鍵累積全部持倉)。`st.session_state['_nav_hist_written']` 防每次 rerun 重寫;錯誤顯示非致命 caption。
+- **§4.1 SSOT 取值**:nav 與 date 一律取「同一條 series 的最後一點」(避免 metrics['nav'] 與
+  nav_latest wb01-scrape 不同日錯位);series 缺才退 metrics['nav']+nav_date。
+- **測試** `tests/test_nav_history_gs.py`(31:寫入/去重×3/建分頁/§1 不足不寫×6/no-op/raise/norm_date×9/
+  load/L3 _extract_point SSOT×3+None×5);+ fund_grp_health_dedup 迴歸 7 全綠 = 38。
+- **⏳ 回本很慢(user 已知會)**:每天 1 筆 → Sortino/Sharpe ~60 交易日(約 3 月)、3Y ~756 日、5Y ~1260 日。
+- **Increment B(未做,分開)**:把累積的 Sheet 序列接回 metrics(`fund_orchestration._span_extend_insurance_nav`
+  加 `google_sheet` 候選,「只在更長時才換」)——等真的累積出資料再做。
+⚠️ **前提**:僅在 App 能 live 抓到當日 NAV 時有效(Streamlit Cloud 也靠 NAS 代理);proxy 死時該次不累積(§1 不偽造)。
+
 ## 🩹 2026-07-22 Track 1 修 CI TDCC 欄位名 v19.358 — 5 檔境外 NAV 每天累積一筆(user「做 Track 1」)
 
 背景:歷史 NAV 挖不到(run #71 證實 AllianzGI/CnYES/MoneyDJ/Yahoo 在 GitHub 美國 IP 全掛),

@@ -153,6 +153,18 @@ def render_fund_grp_health_tab() -> None:
 
     rows = _run_batch_health(codes, principal_twd, "", warn_gap)
 
+    # v19.359 Track 2:健診批次抓成功 → 把各檔當日最新 NAV append 進 Google Sheet
+    # nav_history 分頁(一鍵累積全部持倉,從現在累積歷史序列)。冪等 + 非致命。
+    try:
+        from ui.helpers.nav_history_hook import record_batch_nav_points
+        record_batch_nav_points(
+            [(r["code"], r["_fund_raw"]) for r in rows
+             if r.get("ok") and r.get("_fund_raw")],
+            source="健診",
+        )
+    except Exception:
+        pass  # 記錄失敗不影響主流程(helper 內已顯示提示)
+
     # v19.189：逐檔財務健診（4 大功能 + 健診摘要表 PK + 健診卡）移到「健診總表」上方
     #（user 要求：易讀的摘要 PK + 健診卡應先看到，逐欄 🧮 總表移其下）。
     # _funds_extra 由 _build_fund_dict 包裝，下方「健診總表」與「進階分析」共用同一份。
