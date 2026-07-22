@@ -90,17 +90,54 @@ def test_proxy_on_message_does_not_blame_missing_proxy(monkeypatch, capsys):
     assert "未設" not in out and "未啟用 proxy" not in out
 
 
-def test_sitca_zero_rows_prints_diagnosis(monkeypatch, capsys):
-    """v19.348 §5:SITCA 0 筆時印診斷探針(status/__VIEWSTATE/命中數/樣本)。"""
-    class _FakeResp:
-        status_code = 200
-        # 模擬 ASP.NET 空表單:有 __VIEWSTATE、無任何日期-淨值列
-        text = "<html><input name='__VIEWSTATE' value='xxx'/>查無資料</html>"
-        def raise_for_status(self):
-            return None
+# ── v19.349：SITCA 改 ASP.NET postback(GET 表單→POST) ──
+def _sitca_form_html() -> str:
+    """模擬 SITCA IN2213 查詢表單頁(隱藏欄位 + 基金代碼/日期/查詢鈕,帶 ctl00 前綴)。"""
+    return (
+        "<html><body><form action='IN2213.aspx' method='post'>"
+        "<input type='hidden' name='__VIEWSTATE' value='vs'/>"
+        "<input type='hidden' name='__EVENTVALIDATION' value='ev'/>"
+        "<input type='text' name='ctl00$ContentPlaceHolder1$txtFundCode' value=''/>"
+        "<input type='text' name='ctl00$ContentPlaceHolder1$txtBeginDate' value=''/>"
+        "<input type='text' name='ctl00$ContentPlaceHolder1$txtEndDate' value=''/>"
+        "<input type='submit' name='ctl00$ContentPlaceHolder1$btnQuery' value='查詢'/>"
+        "</form></body></html>"
+    )
 
-    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _FakeResp())
+
+class _Resp:
+    def __init__(self, text, status=200):
+        self.text, self.status_code = text, status
+
+    def raise_for_status(self):
+        return None
+
+
+def test_sitca_post_success_parses_rows(monkeypatch):
+    """GET 表單 → POST(帶隱藏欄位 + 基金代碼吃 ctl00 前綴) → 結果頁解析出列。"""
+    result = ("<table><tr><td>2026/07/20</td><td>12.34</td></tr>"
+              "<tr><td>2026/07/19</td><td>12.30</td></tr></table>")
+    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(_sitca_form_html()))
+    _posted = {}
+
+    def _fake_post(url, data=None, **k):
+        _posted["data"] = data or {}
+        return _Resp(result)
+
+    monkeypatch.setattr(_MOD.SESSION, "post", _fake_post)
+    rows = _MOD.fetch_sitca_history("ACTI71")
+    assert len(rows) == 2 and rows[0]["date"] == "2026-07-20" and rows[0]["nav"] == 12.34
+    # 基金代碼填進「名稱含 fundcode」的欄位(吃 ctl00$ContentPlaceHolder1$ 前綴,不寫死)
+    assert any("txtFundCode" in k and v == "ACTI71" for k, v in _posted["data"].items())
+    assert _posted["data"].get("__VIEWSTATE") == "vs"  # 隱藏欄位有帶回
+
+
+def test_sitca_post_zero_rows_dumps_field_names(monkeypatch, capsys):
+    """POST 後仍 0 筆 → dump form 欄位名 + POST 診斷,供下次精修(§5)。"""
+    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(_sitca_form_html()))
+    monkeypatch.setattr(_MOD.SESSION, "post",
+                        lambda *a, **k: _Resp("<html>查無資料</html>"))
     rows = _MOD.fetch_sitca_history("ACTI71")
     out = capsys.readouterr().out
-    assert rows == []                       # 0 筆(空表單)
-    assert "⚠️診斷" in out and "__VIEWSTATE=有" in out and "查無資料字樣=是" in out
+    assert rows == []
+    assert "⚠️診斷(POST)" in out and "form欄位名" in out and "查無資料=是" in out
