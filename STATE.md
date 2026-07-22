@@ -2,6 +2,18 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave A3(slice 1):portfolio_service 百分比 parser 收 SSOT v19.373
+
+- **病灶(SSOT 查緝 #3,parser 分歧)**:`services/portfolio_service.py` 自帶 `_parse_pct`(僅 strip '%')
+  + 2 處 raw inline `float(str(x).replace("%",""))`,與 SSOT `shared.converters.safe_num`(_safe_num_ps,
+  另 strip ',' + 擋 bool/inf/nan)分歧。
+- **修**:3 處全收斂 `_safe_num_ps`(`_parse_pct` 改別名 + 2 inline 直呼)。費用率域輸出等價且更穩,
+  缺/髒值仍回 None → 下游 graceful fallback 不變。本檔 inline 百分比 parser **0 殘留**。
+- **驗**:`test_expense_ratio_custody` + `test_real_ter_fundclear` + `test_factor_availability_ssot`
+  32 綠。**唯一改動檔:`services/portfolio_service.py`**。
+- **A3 未竟(後續逐檔續收)**:`fund_fetcher.py:113 safe_float` 重複定義(30+ caller,大 blast radius,
+  需獨立謹慎處理)、`nav_metrics` / `policy/v2` / `fund_orchestration` / ui 的 inline replace 鏈。
+
 ## 🧹 2026-07-22 全域排毒 Wave A2:fund_service max_dd ÷0 guard v19.372
 
 - **A2 病灶(SSOT 查緝 #4,真 bug)**:`services/fund_service.py:491 calc_metrics` inline max_dd
