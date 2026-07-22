@@ -2,6 +2,24 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩹 2026-07-22 Track 1 修 CI TDCC 欄位名 v19.358 — 5 檔境外 NAV 每天累積一筆(user「做 Track 1」)
+
+背景:歷史 NAV 挖不到(run #71 證實 AllianzGI/CnYES/MoneyDJ/Yahoo 在 GitHub 美國 IP 全掛),
+user 決策改「從現在累積」。診斷發現 `scripts/fetch_nav_cache.py` 的 **CI 精簡實作**(不能 import
+sources.py 免拉 streamlit)解析 **TDCC 3-x** 時用**錯欄位名** → 政府 API(TDCC OpenAPI,無 IP 封鎖、
+境外基金)雖成功回應卻**恆 0 筆**,cache 停滯:
+- `fetch_tdcc_all` / `fetch_tdcc_basic`:code 用 `基金代號`(號)→ 應為 **`基金代碼`**(碼);
+- main() TDCC 解析:date 用 `淨值日期` / nav 用 `單位淨值` → 應為 **`日期`** / **`基金淨值`**。
+- 三者對齊 app 已驗證的 `repositories/fund/sources.py:_src_tdcc_meta`(2717 / 2732-2733)。
+- **效果**:5 檔境外(TLZF9/ANZ89/JFZN3/CTZP0/FLFM1)每天由 TDCC 補 **1 筆最新 NAV**,
+  既有 `merge_history`(按日期去重 + 降冪 + [:750] ~2 年)累積不洗舊 → 長期自養歷史序列,
+  解鎖 Sortino/Calmar/3Y/5Y/3-3-3。§1:抓不到仍回空不偽造;§5 冪等:同日重跑覆蓋不灌水。
+- **6 檔境內不在 TDCC**(TDCC OpenAPI 僅境外)→ Track 2(app 端每日 snapshot 寫 Google Sheet
+  `nav_history` 分頁)另案待 user 決策,本次不做。
+- **測試**:`tests/test_nav_cache_coverage_alert.py` 加 3 測(TDCC 用「基金代碼」key 得到 /
+  merge_history 累積新日期不洗舊 / 同日去重冪等)。全 17 測綠(含 CI 精簡依賴守門)。
+- ⚠️ **版本號**:並行 feature 線(07-18/07-20)已用掉 v19.353-357,本 NAV 線改跳 v19.358 避碰撞。
+
 ## 📝 2026-07-20 CLAUDE.md RSS 數目校正 v19.357 — 3 處漂移收齊(user 核准 SSOT)
 
 實際 `news_repository.FEEDS` 現為 **5 個**(MarketWatch / Yahoo Finance / CNBC Economy /
