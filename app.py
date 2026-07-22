@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.351_AllianzOnshore"
+APP_VERSION = "v19.352_OffshoreCnyes"
 
 
 # ══════════════════════════════════════════════════════
