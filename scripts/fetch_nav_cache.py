@@ -272,7 +272,21 @@ def fetch_sitca_history(code: str) -> list:
                 except ValueError:
                     pass
         rows.sort(key=lambda x: x["date"], reverse=True)
-        print(f"[SITCA] {code}: {len(rows)} 筆")
+        if rows:
+            print(f"[SITCA] {code}: {len(rows)} 筆")
+        else:
+            # v19.348 §5 可觀測 / §1 誠實:0 筆時印真因線索,讓下次真實 run(透過 NAS
+            # 代理)定位 —— 空 ASP.NET 表單(需 POST)? 查無資料? 版型改? 仍被擋?
+            _has_vs = "__VIEWSTATE" in html
+            _no_data = any(k in html for k in ("查無", "無資料", "無符合", "沒有資料"))
+            _pat_hits = len(re.findall(r"\d{4}/\d{2}/\d{2}", html))
+            _sample = re.sub(r"\s+", " ", html[:280])
+            print(
+                f"[SITCA] {code}: 0 筆 ⚠️診斷 status={r.status_code} len={len(html)} "
+                f"__VIEWSTATE={'有(ASP.NET,GET恐不觸發查詢→需POST)' if _has_vs else '無'} "
+                f"查無資料字樣={'是' if _no_data else '否'} 日期樣式命中={_pat_hits} "
+                f"body樣本='{_sample}'"
+            )
         return rows
     except Exception as e:
         print(f"[SITCA] {code} 失敗: {e}")
@@ -415,13 +429,26 @@ def _emit_coverage_alert(summary: list) -> dict:
     no_data = [r["code"] for r in summary if int(r.get("count") or 0) == 0]
     frac = (len(fresh) / total) if total else 1.0
     low = total > 0 and frac < 0.5
+    _proxy_on = bool(_PROXY_URL)
     if low:
+        # v19.348 §1:訊息依「代理實際狀態」誠實分流,不再無腦甩鍋 PROXY_URL。
+        # (舊版不論 proxy 有無開都印「PROXY_URL 未生效」→ 誤導,proxy 明明啟用了。)
+        if _proxy_on:
+            _cause = (
+                f"NAS proxy **已啟用**（{_PROXY_URL.rsplit('@', 1)[-1]}）但來源仍幾乎全失敗 → "
+                f"排除『沒設代理』;請查 (1) NAS Squid 是否可達/逾時 "
+                f"(2) 來源端點是否改版(SITCA IN2213 GET→需 POST?、MoneyDJ 版型、TDCC API)。"
+                f"看各來源 fetcher 的診斷 log 定位。"
+            )
+        else:
+            _cause = (
+                f"**未啟用 proxy**(PROXY_URL 未設)→ GitHub Actions 美國 IP 極可能被台灣站點"
+                f"(TDCC/SITCA/MoneyDJ)封鎖。請至 repo Settings → Secrets and variables → "
+                f"Actions 設 PROXY_URL(NAS Squid,與 app 同一把)。"
+            )
         msg = (
             f"NAV 快取覆蓋過低:{total} 檔僅 {len(fresh)} 檔本次抓到新資料"
-            f"({len(no_data)} 檔完全無快取)。最可能原因:GitHub Actions 美國 IP 被台灣站點"
-            f"(TDCC/SITCA/MoneyDJ)封鎖、PROXY_URL secret 未生效 → fetch 全敗只重存舊快取。"
-            f"請至 repo Settings → Secrets and variables → Actions 設 PROXY_URL"
-            f"(NAS Squid,與 app 同一把),或補 MORNINGSTAR_SECID_MAP(美國可存取源)。"
+            f"({len(no_data)} 檔完全無快取)。{_cause}"
         )
         # GitHub Actions annotation:顯示在 run 頁 + PR checks(單行,去換行)
         print(f"::warning title=NAV 快取覆蓋過低::{msg.replace(chr(10), ' ')}")
@@ -440,7 +467,7 @@ def _emit_coverage_alert(summary: list) -> dict:
     else:
         print(f"[coverage] ✅ {len(fresh)}/{total} 檔本次有新資料")
     return {"total": total, "fresh": fresh, "no_data": no_data,
-            "frac_fresh": round(frac, 3), "low": low}
+            "frac_fresh": round(frac, 3), "low": low, "proxy_on": _proxy_on}
 
 
 def main():

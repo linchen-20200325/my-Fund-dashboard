@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.347_LowBaseScreener"
+APP_VERSION = "v19.348_NavCacheDiag"
 
 
 # ══════════════════════════════════════════════════════

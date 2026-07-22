@@ -63,3 +63,44 @@ def test_writes_step_summary_when_env_set(tmp_path, monkeypatch, capsys):
     assert step.exists()
     body = step.read_text(encoding="utf-8")
     assert "NAV 快取覆蓋過低" in body and "C1" in body  # C1 = 完全無快取(count 0)那檔
+
+
+# ── v19.348：警告訊息依「代理實際狀態」誠實分流(修舊版無腦甩鍋 PROXY_URL 的誤導) ──
+_LOW_SUMMARY = ([{"code": "TLZF9", "count": 10, "fresh": False}]
+                + [{"code": f"C{i}", "count": 0, "fresh": False} for i in range(10)])
+
+
+def test_proxy_off_message_blames_missing_proxy(monkeypatch, capsys):
+    """未設 PROXY_URL → 訊息指向『設 PROXY_URL』且 proxy_on=False。"""
+    monkeypatch.setattr(_MOD, "_PROXY_URL", "")
+    r = _MOD._emit_coverage_alert(_LOW_SUMMARY)
+    out = capsys.readouterr().out
+    assert r["proxy_on"] is False
+    assert "未啟用 proxy" in out and "設 PROXY_URL" in out
+
+
+def test_proxy_on_message_does_not_blame_missing_proxy(monkeypatch, capsys):
+    """PROXY_URL 已設(代理啟用)但覆蓋仍低 → 不可再說『未設代理』,要指向來源/NAS 可達性。"""
+    monkeypatch.setattr(_MOD, "_PROXY_URL", "http://u:p@nas.example:3128")
+    r = _MOD._emit_coverage_alert(_LOW_SUMMARY)
+    out = capsys.readouterr().out
+    assert r["proxy_on"] is True
+    assert "已啟用" in out
+    # 關鍵回歸:代理已開時，不得再誤導成「未設 PROXY_URL / 沒設代理」
+    assert "未設" not in out and "未啟用 proxy" not in out
+
+
+def test_sitca_zero_rows_prints_diagnosis(monkeypatch, capsys):
+    """v19.348 §5:SITCA 0 筆時印診斷探針(status/__VIEWSTATE/命中數/樣本)。"""
+    class _FakeResp:
+        status_code = 200
+        # 模擬 ASP.NET 空表單:有 __VIEWSTATE、無任何日期-淨值列
+        text = "<html><input name='__VIEWSTATE' value='xxx'/>查無資料</html>"
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _FakeResp())
+    rows = _MOD.fetch_sitca_history("ACTI71")
+    out = capsys.readouterr().out
+    assert rows == []                       # 0 筆(空表單)
+    assert "⚠️診斷" in out and "__VIEWSTATE=有" in out and "查無資料字樣=是" in out
