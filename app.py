@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.371_RefactorA1_ZscoreSSOT"
+APP_VERSION = "v19.372_RefactorA2_MaxDdGuard"
 
 
 # ══════════════════════════════════════════════════════

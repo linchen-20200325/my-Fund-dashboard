@@ -2,6 +2,21 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave A2:fund_service max_dd ÷0 guard v19.372
+
+- **A2 病灶(SSOT 查緝 #4,真 bug)**:`services/fund_service.py:491 calc_metrics` inline max_dd
+  `(cum-cummax)/cummax` **無 ÷0 guard**(對比 SSOT `portfolio_service.compute_max_drawdown` 有
+  `(s<=0)` 防線)。停售/剛成立/資料異常使 cum≤0(§4.6 邊界)→ 產生 >100% 假回撤(實測 -163%)
+  或 inf/NaN 灌入 KPI + 連動污染 calmar。
+- **修(behavior-preserving)**:加 `len>=2 & (cum>0).all() & (cummax>0).all()` guard,退化回 None
+  (對齊本函式 Sharpe/Sortino/Calmar 既有 §1 防線;calmar:516 已 None-safe;跨檔消費全走
+  `.get`+`_safe_float`)。非退化算式逐位元相同(cummax 只算一次)→ max_dd 數值零變化。
+- **為何不直接改呼 compute_max_drawdown**:本函式 max_dd 建於 `cum=(1+log_ret).cumprod()`
+  (log_ret 為 log 報酬),與 SSOT 直接吃 NAV 序列 **basis 不同**,swap 會改數值 → §-1/§req1 不做,
+  只補 guard(SSOT 收口留待 basis 統一的獨立議題)。
+- **驗**:`test_fund_service_advanced_metrics` + `test_fund_load_enriched` 17 綠;等價驗算
+  normal old==new(-8.84)、degenerate old -163% → new None。**唯一改動檔:`services/fund_service.py`**。
+
 ## 🧹 2026-07-22 全域排毒 Wave A1:multi_factor z-score 收 SSOT v19.371
 
 - **背景**:4 維並行深掃(架構越權 / SSOT / 死碼 / 肥大 god-file)後 user 同意藍圖,進實作階段,
