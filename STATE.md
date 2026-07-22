@@ -2,6 +2,20 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-22 全域排毒 Wave B2(slice 3,**收官**):4 thin fetcher 登 EX-PASSTHRU-1 v19.377
+
+- **病灶(Rule 4)**:`fred_get_next_release_date` ×2(`data_registry` / `tab5`)、`fetch_stock_news`
+  ×2(`ai.py` / `tab2`)UI 直呼 L1 fetcher。
+- **修(user 核准「混合」案:此 4 處為 thin pass-through,無 L2 業務可上提,建 facade =
+  §8.1 step 6「用不到的抽象」→ 登例外)**:§8.2.A EX-PASSTHRU-1 補登 2 fetcher 群(**6 → 8 組**)
+  + 4 site 加註解指回例外表。`fetch_stock_news` 與**已登錄兄弟** `fetch_market_news` 一致處理。
+- **驗**:4 檔 syntax OK(純註解 + import 別名不變,零邏輯改動)。
+  §8.2 硬規則 4 違憲 **4 → 0**。
+- **B2 收官**:7 處 Rule 4 違憲全清 —— B2a facade×2(hot_money)/ B2b facade×1(macro_compass)/
+  B2c 例外×4。**硬規則 4 違憲 7 → 0**。
+- **改動檔:`data_registry.py` / `tab5_data_guard.py` / `ai.py` / `tab2_single_fund.py`(註解)
+  + `CLAUDE.md`(§8.2.A)**。
+
 ## 🧹 2026-07-22 全域排毒 Wave B2(slice 2):macro_compass L3→L1 上提 L2 facade v19.376
 
 - **病灶(Rule 4)**:`ui/components/macro_compass_top.py` `_do_fetch` 直接

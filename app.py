@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.376_RefactorB2b_CompassFacade"
+APP_VERSION = "v19.377_RefactorB2c_ExPassthru"
 
 
 # ══════════════════════════════════════════════════════

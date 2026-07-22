@@ -228,6 +228,7 @@ def _render_per_fund_news_expanders(funds: list) -> None:
         return
 
     try:
+        # EX-PASSTHRU-1(v19.377):兄弟 fetch_market_news 已登錄,同屬 self-contained news fetcher(見 CLAUDE.md §8.2.A)
         from repositories.news_repository import fetch_stock_news
     except Exception as e:
         st.caption(f"⬜ 新聞模組載入失敗:{type(e).__name__}: {e}")
