@@ -133,3 +133,9 @@ CPI_MOM_STRONG_DROP_PCT: float = -0.3
 CPI_MOM_MILD_DROP_PCT: float = -0.1
 CPI_MOM_FLAT_MAX_PCT: float = 0.1
 CPI_MOM_MILD_RISE_PCT: float = 0.3
+
+# ── nav_history 累積序列覆蓋門檻(fund_service.assess_series_coverage,v19.360 B+②)──
+# App 端累積(v19.359 Track 2)為不規則取樣;年化指標(×√252)假設每點=1 交易日,
+# 序列稀疏時會失真 → §1 寧可回 None 不給假精確。
+NAV_HIST_COVERAGE_MIN: float = 0.6      # 實際點數 / 預期交易日(span×252/365)下限
+NAV_HIST_MAX_GAP_DAYS: int = 14         # 相鄰兩點最大缺口(日曆日;台灣長假 ~9-10 天)

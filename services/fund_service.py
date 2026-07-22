@@ -693,6 +693,61 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
 
 
 # ── v19.240 R8 EX-L1ORCH-1 升級:L1 orchestrator 業務邏輯上提 ──────
+def assess_series_coverage(s: pd.Series) -> dict:
+    """v19.360 ②:序列覆蓋診斷 — 年化指標(×√252)假設每點=1 交易日,稀疏序列會失真。
+
+    回傳 {"coverage": float, "max_gap_days": int|None, "sparse": bool}:
+    - coverage    = 實際點數 / 預期交易日(span_days × 252/365),上限 1.0
+    - max_gap_days = 相鄰兩點最大缺口(日曆日)
+    - sparse      = coverage < NAV_HIST_COVERAGE_MIN 或 max_gap > NAV_HIST_MAX_GAP_DAYS
+    門檻 SSOT:shared/signal_thresholds.py(§3.3 無 inline magic)。
+    """
+    from shared.signal_thresholds import (
+        NAV_HIST_COVERAGE_MIN, NAV_HIST_MAX_GAP_DAYS, TRADING_DAYS_PER_YEAR)
+
+    if s is None or len(s) < 2:
+        return {"coverage": 0.0, "max_gap_days": None, "sparse": True}
+    span_days = (s.index[-1] - s.index[0]).days
+    if span_days <= 0:
+        return {"coverage": 0.0, "max_gap_days": None, "sparse": True}
+    expected = span_days * TRADING_DAYS_PER_YEAR / 365.0
+    coverage = min(1.0, len(s) / expected) if expected > 0 else 0.0
+    gaps = s.index.to_series().diff().dt.days.dropna()
+    max_gap = int(gaps.max()) if len(gaps) else None
+    sparse = coverage < NAV_HIST_COVERAGE_MIN or (max_gap or 0) > NAV_HIST_MAX_GAP_DAYS
+    return {"coverage": round(float(coverage), 3), "max_gap_days": max_gap,
+            "sparse": bool(sparse)}
+
+
+def _merge_nav_history_series(s_live: pd.Series, code: str) -> tuple:
+    """v19.360 B:合併 nav_history 累積/匯入序列(union keep-last,**live 優先**)。
+
+    L2→L2(services.nav_history_gs),不碰 L1(§8.2;避免重蹈 EX-L1ORCH-1)。
+    - Sheet 無資料 / 未啟用 → 回 (s_live, None) 行為與現在完全一致
+    - Sheet 讀失敗 → fail-soft:log + 回 (s_live, trace{success:False})(不炸整個健診)
+    - 有新增點 → 回 (merged, trace{success:True, added:N})
+    """
+    try:
+        from services.nav_history_gs import load_series
+        s_hist = load_series(code)
+    except Exception as e:  # NavHistoryError 等 — 讀失敗退回 live-only(§4.6 降級鏈)
+        print(f"[nav_history] ⚠️ {code} 讀取失敗,退回 live-only:{e}")
+        return s_live, {"source": "nav_history_merge", "success": False,
+                        "error": str(e)[:120]}
+    if s_hist is None or len(s_hist) == 0:
+        return s_live, None
+    # union keep-last:hist 在前、live 在後 → 同日 live 蓋 hist(live 為權威新抓)
+    merged = pd.concat([s_hist, s_live]).groupby(level=0).last().sort_index()
+    added = len(merged) - len(s_live)
+    if added <= 0:  # hist 全被 live 涵蓋 → 不動原序列(保留 live attrs)
+        return s_live, None
+    merged.attrs = dict(getattr(s_live, "attrs", {}) or {})
+    merged.attrs["nav_history_merged"] = f"+{added} pts from {s_hist.attrs.get('source', 'nav_history')}"
+    print(f"[nav_history] 🗂️ {code} 併入累積序列 +{added} 筆"
+          f"(live {len(s_live)} → merged {len(merged)})")
+    return merged, {"source": "nav_history_merge", "success": True, "added": added}
+
+
 def finalize_fund_metrics(result: dict) -> dict:
     """v19.240 R8 EX-L1ORCH-1 退役:把原 L1 fund_orchestration._finish_metrics +
     fx_and_main.fetch_fund_by_key 收尾 + fund_orchestration.fetch_fund_from_moneydj_url
@@ -724,6 +779,16 @@ def finalize_fund_metrics(result: dict) -> dict:
             {"source": "nav_series", "success": False, "error": "無淨值序列"})
         return result
 
+    # v19.360 B:合併 nav_history 累積/匯入序列(union keep-last,live 優先)。
+    # 放在 len<10 gate 之前 → 短 live 序列可被累積歷史「救回」進 metrics 計算。
+    _hist_trace = None
+    _s_merged, _hist_trace = _merge_nav_history_series(s, code)
+    if _hist_trace is not None:
+        result["source_trace"].append(_hist_trace)
+        if _hist_trace.get("success"):
+            s = _s_merged
+            result["series"] = s
+
     if len(s) < 10:
         result["source_trace"].append(
             {"source": "nav_series", "success": False,
@@ -738,6 +803,34 @@ def finalize_fund_metrics(result: dict) -> dict:
             combined_override["year_low_nav"] = result["year_low_nav"]
         result["metrics"] = calc_metrics(s, divs, risk_override=combined_override)
         result["source_trace"].append({"source": "calc_metrics", "success": True})
+
+        # v19.360 ②:缺口偵測 + 誠實降級 — 只在「真的併入了累積歷史」時啟動
+        #(純 live 序列走既有路,不重審 → 零回歸風險)。稀疏時**只砍自算**年化值:
+        # wb07 權威值(MoneyDJ 用完整日資料算)不受我們序列稀疏影響,保留。
+        if _hist_trace and _hist_trace.get("success"):
+            _cov = assess_series_coverage(s)
+            _m = result["metrics"]
+            _m["nav_coverage"] = _cov
+            if _cov["sparse"]:
+                _killed = []
+                for _k in ("sortino", "calmar"):        # 永遠自算 → 稀疏必砍
+                    if _m.get(_k) is not None:
+                        _m[_k] = None
+                        _killed.append(_k)
+                if _m.get("sharpe") is not None and _m.get("sharpe_source") == "self_calc":
+                    _m["sharpe"] = None
+                    _killed.append("sharpe")
+                if _m.get("std_source") == "nav":       # 自算年化 σ → 稀疏必砍
+                    for _k in ("std_1y", "std_2y", "std_3y", "std_5y"):
+                        if _m.get(_k) is not None:
+                            _m[_k] = None
+                            _killed.append(_k)
+                _m["is_sparse"] = True
+                _m["sparse_reason"] = (
+                    f"累積序列稀疏(覆蓋 {_cov['coverage']:.0%}、最大缺口 "
+                    f"{_cov['max_gap_days']} 天)→ 年化指標不給假精確(§1):"
+                    f"{', '.join(_killed) if _killed else '無自算值需砍'}")
+                print(f"[nav_history] ⬜ {code} {_m['sparse_reason']}")
 
         # v19.308：把 MoneyDJ 現成「成立日」帶進 metrics，讓只吃 metrics 的 consumer
         #（check_333_fund / mk_dashboard 成立年）免依賴本地長 NAV 歷史即可算成立年。
