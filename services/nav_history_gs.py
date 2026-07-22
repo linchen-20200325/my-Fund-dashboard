@@ -184,4 +184,30 @@ def load_points(code: str | None = None, *, _sheet: Any = None) -> list[dict]:
     return out
 
 
-__all__ = ["append_point", "append_points", "load_points", "is_enabled", "NavHistoryError"]
+def load_series(code: str, *, _sheet: Any = None):
+    """v19.360 Increment B:讀 nav_history 累積點 → pd.Series(DatetimeIndex→float)。
+
+    供 L2 fund_service 合併進 metrics 計算(消費端接線)。
+    - 同日重複 keep-last、昇冪排序(§4.2 monotonic + unique)
+    - provenance:attrs["source"]="GoogleSheet:nav_history:{code}" + attrs["fetched_at"]
+    - 無資料 / 未啟用 → 空 Series(§1 不偽造);真 I/O 失敗 → NavHistoryError 上拋
+      (由 caller 決定 fail-soft 退回 live-only)
+    """
+    import pandas as pd
+
+    pts = load_points(code, _sheet=_sheet)  # 未啟用/無 tab → [];I/O 失敗 → raise
+    if not pts:
+        return pd.Series(dtype=float)
+    idx = pd.to_datetime([p["date"] for p in pts], errors="coerce")
+    s = pd.Series([p["nav"] for p in pts], index=idx, dtype=float)
+    s = s[s.index.notna()]                       # 壞日期顯式丟棄(load_points 已濾 nav<=0)
+    if s.empty:
+        return pd.Series(dtype=float)
+    s = s.groupby(s.index).last().sort_index()   # 同日 keep-last + 昇冪
+    s.attrs["source"] = f"GoogleSheet:nav_history:{str(code).strip().upper()}"
+    s.attrs["fetched_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    return s
+
+
+__all__ = ["append_point", "append_points", "load_points", "load_series",
+           "is_enabled", "NavHistoryError"]

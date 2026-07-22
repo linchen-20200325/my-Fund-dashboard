@@ -2,6 +2,26 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🔌 2026-07-22 Increment B+② 累積序列接回 metrics v19.360 — 消費端總開關(user 核准 B+A+② 組合的 PR-1)
+
+策略體檢(artifact 610d949e)後 user 核准「B 引擎 + A 油 + ② 安全帶」。本 PR = B+②;A(CSV 匯入)為 PR-2。
+- **B 消費端接線**(§8.2 改掛 **L2**,避免 gap-scan 原建議掛 L1 `fund_orchestration` 重蹈 EX-L1ORCH-1 上行違憲):
+  - `nav_history_gs.load_series(code)`(新):Sheet 累積點 → pd.Series(昇冪+同日 keep-last+provenance attrs)
+  - `fund_service._merge_nav_history_series`:union keep-last、**live 優先**(撞日不被舊累積蓋);
+    Sheet 空/未啟用 → 行為與現在完全一致;讀失敗 → **fail-soft** 退 live-only + source_trace 記錄(§4.6 降級鏈)
+  - 掛在 `finalize_fund_metrics` **len<10 gate 之前** → 短 live 序列可被累積歷史救回進 metrics
+- **② 缺口偵測 + 誠實降級**:`assess_series_coverage`(coverage=點數/預期交易日 span×252/365;max_gap 日曆日);
+  門檻 SSOT `shared/signal_thresholds.py`:`NAV_HIST_COVERAGE_MIN=0.6` / `NAV_HIST_MAX_GAP_DAYS=14`(台灣長假 ~9-10 天)。
+  稀疏 → **只砍自算年化值**(sortino/calmar 恆自算、sharpe 僅 `sharpe_source=self_calc`、std 僅 `std_source=nav`),
+  **wb07 權威值保留**(MoneyDJ 用完整日資料算,不受我們序列稀疏影響);metrics 加 `nav_coverage`/`is_sparse`/`sparse_reason`(§1)。
+  **只在真的併入累積歷史時啟動** → 純 live 序列零回歸風險。
+- **測試** `tests/test_nav_history_consume.py` 12(load_series 排序去重 provenance / coverage 密集·低覆蓋·大缺口·短序列 /
+  merge live優先·空hist·讀失敗 fail-soft / 端到端:短live被救回·稀疏砍自算·live-only 不變);
+  鄰近迴歸全跑(load_enriched/total_return/review_fixes 341+344/sigma_band/advanced_metrics)共 **83 綠**。
+  ⚠️ 測試 import 序需 prime `fund_fetcher`(既有 fund_service↔fund_fetcher latent 循環,同 test_fund_load_enriched 註記)。
+- **效果**:v19.359 累積 + 未來 PR-2 匯入的歷史,現在**真的會流進** Sortino/Calmar/3Y/5Y/低基期計算。
+- **PR-2(A)待做**:CSV(保單對帳單歷史)→ `nav_history_gs.append_points` 批次匯入 + Tab5 上傳介面。
+
 ## 🗂️ 2026-07-22 Track 2 App 端 NAV 累積到 Google Sheets v19.359 — 從現在累積(user 選 Track 2)
 
 **Track 1 驗證後轉向**:run #557 log 實證 v19.358 修對了 TDCC 3-2(0→5251 筆),但 **3-4 淨值端點
