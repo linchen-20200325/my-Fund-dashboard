@@ -2,6 +2,30 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 💰 2026-07-22 真實 TER(FundClear fetcher)v19.370 —(user 點名續做「真實 TER」)
+
+- **背景**:v19.368 費用率僅到「經理+保管」估計(mgmt+custody_est),缺官方揭露的年度
+  **總費用率(TER / 經常性費用 / OCF)**。此項原標「⏸️ 卡環境(需台灣網路)」,user 明確
+  點名續做 → §-1 允許動工。
+- **關鍵洞察(比照 v19.368)**:真 TER 若有揭露,就在**已抓回的同一份回應**裡——FundClear
+  `GetFundBasicInfo` JSON 或 MoneyDJ 基本頁 `rows_map`——只是沒抽。**零新增 HTTP**。
+- **L1 抽(5 點,additive)**:
+  - `_src_fundclear_meta`:JSON 多候選欄位(`TotalExpenseRatio`/`OngoingCharges(Figure)`/
+    `TER`/`OCF`/… + camelCase + `總費用率`/`經常性費用`)→ `meta["expense_ratio"]`(比照
+    既有 `inception_date` 7 變體防禦式抓法);§3.2 (0,10]% 才收。
+  - 3 個 `rows_map` 站點(sources.py MoneyDJ ×2 + AllianzGI)+ 1 orchestration →
+    `total_expense_ratio`(key 變體 總費用率(%)/總開支比率(%)/經常性費用(%))。
+- **L2 消費**:`calc_fund_factor_score` 費用率優先序插入「揭露 TER」層(§2.1 官方揭露 > 估計):
+  顯式/metrics → **disclosed_ter(top-level expense_ratio 或 moneydj_raw.total_expense_ratio,
+  (0,10]% guard)** → mgmt+custody_est → mgmt_only_est。`get_factor_availability` 同步鏡射
+  (✅/❌ ↔ 納入 1-1)。
+- **§1 誠實降級**:欄位缺(最常見)/ 髒值 / 越界 → 一律 graceful fallback 回估計,零回歸;
+  沙盒 403 打不到 fundclear.com.tw,**欄位名為多候選推測**,實機由台灣網路驗證(命中即真 TER,
+  未命中維持 v19.368 估計)。
+- **測試** `tests/test_real_ter_fundclear.py` 11(揭露優先 ×2 / metrics 仍最高 / 越界+0+髒值
+  退估計 / v19.368 行為不變 / 百分比非 ratio / availability 鏡射 / L1 source-lock)。
+- **分層**:L1 抽 + L2 純函式消費,零新模組 / 零新 EX-* / 無 L1→L2。§8.2 零違憲。
+
 ## ✅ 2026-07-22 F-SCHEMA-1 餘量 + CPI 文件更正 v19.369 —(序列 8/8,**未結案序列全數完成**)
 
 - **CPI「剩 2 處 inline」查證 = 過時記載**:(1) score lambda 現於

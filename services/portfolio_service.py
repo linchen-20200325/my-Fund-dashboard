@@ -142,11 +142,15 @@ def calc_fund_factor_score(fund_data: Dict,
             pass
 
     # ── 6. 費用率（Expense Ratio，權重 10，越低越好）───────────────────
-    # v19.191:第 3 fallback 走 moneydj_raw.mgmt_fee(同源於 Tab2 TER 卡 L1000)。
-    # v19.368 7/8:升級 — 保管費(custody_fee)已隨基本頁同表抽回,經理+保管 = TER 兩大
-    # 主成分 → 兩者齊 → `mgmt+custody` 估計(比單經理費更接近真 TER);僅經理 → 原行為。
-    # §1:est 為兩個真實揭露值之和,顯式標 source(非捏造);真 TER(FundClear 年度費用)
-    # 端點待台灣網路驗證(沙盒 403),見 STATE v19.368。
+    # 優先序(§2.1 分級:官方揭露真值 > 估計):
+    #   1. 顯式 arg / metrics.expense_ratio(真值)
+    #   2. v19.370 揭露 TER:top-level expense_ratio(FundClear GetFundBasicInfo)
+    #      或 moneydj_raw.total_expense_ratio(MoneyDJ 基本頁「總費用率」)→ "disclosed_ter"
+    #   3. v19.368 mgmt+custody 估計(經理+保管兩費相加,近似 TER 兩大主成分)
+    #   4. v19.191 mgmt 單費估計
+    # §1:估計為真實揭露值之和/單值,顯式標 source(非捏造);揭露 TER 端點/欄位名
+    # 須台灣網路實機驗證(沙盒 403 打不到 fundclear.com.tw),多候選 or 鏈 + 缺則
+    # graceful fallback,見 STATE v19.370。
     def _parse_pct(v):
         if v is None or v == "":
             return None
@@ -157,8 +161,18 @@ def calc_fund_factor_score(fund_data: Dict,
 
     er = expense_ratio or m.get("expense_ratio")
     er_src = "metrics" if er is not None else None
+    _mj = fund_data.get("moneydj_raw") or {}
     if er is None:
-        _mj = fund_data.get("moneydj_raw") or {}
+        # v19.370 真實 TER:揭露的年度總費用率(FundClear GetFundBasicInfo /
+        # MoneyDJ 基本頁「總費用率」)為真值,優先於「經理+保管」估計(§2.1 分級精神:
+        # 官方揭露 > 兩費相加估計)。top-level expense_ratio 來自 _src_fundclear_meta;
+        # moneydj_raw.total_expense_ratio 來自基本頁 rows_map。§3.2 (0,10]% 才收。
+        _disc = _parse_pct(fund_data.get("expense_ratio"))
+        if _disc is None:
+            _disc = _parse_pct(_mj.get("total_expense_ratio"))
+        if _disc is not None and 0 < _disc <= 10:
+            er, er_src = _disc, "disclosed_ter"
+    if er is None:
         _mgmt = _parse_pct(_mj.get("mgmt_fee"))
         _cust = _parse_pct(_mj.get("custody_fee"))
         if _mgmt is not None and _cust is not None:
@@ -263,8 +277,19 @@ def get_factor_availability(fund_data: Dict,
         except (TypeError, ValueError):
             pass
 
-    # ── ExpenseRatio(對齊 line 149-164)──
+    # ── ExpenseRatio(對齊 calc_fund_factor_score 費用率區塊)──
     er = expense_ratio or m.get("expense_ratio")
+    if er is None:
+        # v19.370:揭露 TER(FundClear top-level / MoneyDJ total_expense_ratio)優先於估計
+        for _cand in (fund_data.get("expense_ratio"), mj_raw.get("total_expense_ratio")):
+            if _cand not in (None, ""):
+                try:
+                    _v = float(str(_cand).replace("%", "").strip())
+                    if 0 < _v <= 10:
+                        er = _v
+                        break
+                except (ValueError, TypeError):
+                    pass
     if er is None:
         mj_fee_raw = mj_raw.get("mgmt_fee")
         if mj_fee_raw:

@@ -164,6 +164,21 @@ def _src_fundclear_meta(code: str) -> dict:
             meta["nav_latest"]  = safe_float(info.get("LatestNAV") or info.get("latestNav"))
             nav_d = (info.get("LatestNAVDate") or info.get("navDate") or "")
             meta["nav_date"]    = str(nav_d)[:10] if nav_d else ""
+            # v19.370 真實 TER(FundClear fetcher):同一 GetFundBasicInfo 回應補抽
+            # 「總費用率 / 經常性費用(OCF)」— 境外基金公開說明書/KIID 揭露的年度總內扣。
+            # 零新增 HTTP;欄位名未知 → 多候選 or 鏈(比照 inception_date 既有防禦式抓法);
+            # §3.2 合理性:TER 落在 (0, 10]% 才收,否則視為髒值顯式丟棄(§1 不造假)。
+            _ter_raw = (info.get("TotalExpenseRatio") or info.get("ExpenseRatio") or
+                        info.get("OngoingCharges") or info.get("OngoingChargesFigure") or
+                        info.get("TER") or info.get("OCF") or info.get("AnnualExpenseRatio") or
+                        info.get("totalExpenseRatio") or info.get("expenseRatio") or
+                        info.get("ongoingCharges") or info.get("ter") or info.get("ocf") or
+                        info.get("總費用率") or info.get("經常性費用") or
+                        info.get("總開支比率") or "")
+            _ter_v = safe_float(str(_ter_raw).replace("%", "").strip()) if _ter_raw != "" else None
+            if _ter_v is not None and 0 < _ter_v <= 10:
+                meta["expense_ratio"] = _ter_v          # 揭露 TER(%),消費端優先於估計
+                meta["expense_ratio_source"] = "FundClear:GetFundBasicInfo"
             # 成立日期（FundClear 可能欄位名稱不一）
             _inc_raw = (info.get("EstablishDate") or info.get("InceptionDate") or
                         info.get("LaunchDate") or info.get("FundCreationDate") or
@@ -463,6 +478,13 @@ def _src_allianzgi_meta(code: str) -> dict:
                         _cust_v = safe_float(_cust_raw.replace("%", "").strip())
                         if _cust_v is not None:
                             meta["custody_fee"] = _cust_v
+                    # v19.370 真實 TER:同表若揭露「總費用率」→ 收真值(消費端優先於估計)
+                    _ter_raw = (rows_map.get("總費用率") or rows_map.get("總開支比率") or
+                                rows_map.get("經常性費用") or "")
+                    if _ter_raw:
+                        _ter_v = safe_float(_ter_raw.replace("%", "").strip())
+                        if _ter_v is not None and 0 < _ter_v <= 10:
+                            meta["total_expense_ratio"] = _ter_v
                     if meta.get("fund_name"):
                         print(f"[src_allianz_meta] ✅ {code}: {meta['fund_name'][:20]}")
                         # F-PROV-1 phase 15 v19.101 — provenance(schema-additive)
@@ -2159,6 +2181,11 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
                 out["custody_fee"]  = (rows_map.get("最高保管費(%)") or
                                        rows_map.get("保管費(%)") or
                                        rows_map.get("保管費", ""))
+                # v19.370 真實 TER:同表若揭露「總費用率」→ 收真值(消費端優先於估計)
+                out["total_expense_ratio"] = (rows_map.get("總費用率(%)") or
+                                              rows_map.get("總費用率") or
+                                              rows_map.get("總開支比率(%)") or
+                                              rows_map.get("經常性費用(%)") or "")
             # 最新淨值 + 年高低（日期格式行）
             for row in tbl.find_all("tr"):
                 cells = row.find_all("td")
@@ -2480,6 +2507,11 @@ def _src_tcb_meta(code: str) -> dict:
                         meta["custody_fee"] = (rows_map.get("最高保管費(%)") or
                                                rows_map.get("保管費(%)") or
                                                rows_map.get("保管費", ""))
+                        # v19.370 真實 TER:同表若揭露「總費用率」→ 收真值(消費端優先於估計)
+                        meta["total_expense_ratio"] = (rows_map.get("總費用率(%)") or
+                                                       rows_map.get("總費用率") or
+                                                       rows_map.get("總開支比率(%)") or
+                                                       rows_map.get("經常性費用(%)") or "")
                         # v18.19: 補三個 Tab5「基本資料」診斷需用的獨立欄位
                         meta["investment_target"] = rows_map.get("投資標的", "").replace(" ", "")
                         meta["fund_region"]       = rows_map.get("投資區域", "").replace(" ", "")

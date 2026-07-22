@@ -714,6 +714,11 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 result["custody_fee"]     = (rows_map.get("最高保管費(%)") or
                                              rows_map.get("保管費(%)") or
                                              rows_map.get("保管費", ""))
+                # v19.370 真實 TER:同表若揭露「總費用率」→ 收真值(消費端優先於估計)
+                result["total_expense_ratio"] = (rows_map.get("總費用率(%)") or
+                                                 rows_map.get("總費用率") or
+                                                 rows_map.get("總開支比率(%)") or
+                                                 rows_map.get("經常性費用(%)") or "")
                 result["is_esg"]          = rows_map.get("是否為ESG", "")
                 # v19.308：MoneyDJ 現成「成立日期」→ 供成立年計算免依賴本地長歷史
                 #（Cloud IP 被擋、NAV 只抓到近 1 月時，成立年仍能正確）。抓不到則不設，
