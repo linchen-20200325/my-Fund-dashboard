@@ -346,6 +346,97 @@ def fetch_sitca_history(code: str) -> list:
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 資料來源 4b：CnYES 鉅亨網（境外基金主要來源,直接用內部碼,無需 ISIN）— v19.352
+# ══════════════════════════════════════════════════════════════════════
+# 鏡像 app 的 repositories/fund/nav_metrics._fetch_nav_cnyes 之 API 路徑 + 解析
+# (CI 精簡環境不能 import 該檔——會拉 streamlit——故平行精簡實作)。
+# 安聯境外基金(原廠 AllianzGI API 也可抓;見 MORNINGSTAR_SECID_MAP 註解)。
+_ALLIANZ_OFFSHORE_CODES = {"TLZF9", "ANZ89"}  # Allianz Income and Growth AMg7/AM USD
+
+
+def _cnyes_walk_nav_items(obj, depth: int = 0) -> list:
+    """遞迴在 nested JSON 找 NAV items list(含 date + nav 的 dict 陣列)。鏡像 app _walk_for_nav_items。"""
+    if depth > 10:
+        return []
+    if isinstance(obj, list) and obj and isinstance(obj[0], dict):
+        keys = set(obj[0].keys())
+        date_keys = {"date", "nav_date", "publishDate", "trade_date", "Date",
+                     "d", "time", "ts", "timestamp"}
+        val_keys = {"nav", "netAssetValue", "value", "price", "close", "Nav", "Price", "v"}
+        if (keys & date_keys) and (keys & val_keys):
+            return obj
+    if isinstance(obj, dict):
+        for v in obj.values():
+            r = _cnyes_walk_nav_items(v, depth + 1)
+            if r:
+                return r
+    elif isinstance(obj, list):
+        for v in obj:
+            r = _cnyes_walk_nav_items(v, depth + 1)
+            if r:
+                return r
+    return []
+
+
+def _cnyes_parse_items(items: list) -> list:
+    """JSON items → [{date,nav}](寬容欄位名 + Unix ms/s timestamp)。鏡像 app _parse_nav_json_items。"""
+    out, seen = [], set()
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        d = (it.get("date") or it.get("nav_date") or it.get("publishDate")
+             or it.get("trade_date") or it.get("d") or it.get("Date")
+             or it.get("time") or it.get("ts") or it.get("timestamp"))
+        v = (it.get("nav") or it.get("netAssetValue") or it.get("value")
+             or it.get("price") or it.get("close") or it.get("v")
+             or it.get("Nav") or it.get("Price"))
+        if d is None or v is None:
+            continue
+        try:
+            if isinstance(d, (int, float)):
+                _n = float(d)
+                if _n > 1e12:
+                    ds = datetime.datetime.utcfromtimestamp(_n / 1000).strftime("%Y-%m-%d")
+                elif _n > 1e9:
+                    ds = datetime.datetime.utcfromtimestamp(_n).strftime("%Y-%m-%d")
+                else:
+                    ds = str(d)[:10]
+            else:
+                ds = str(d)[:10].replace("/", "-")
+            vf = float(v)
+            if vf > 0 and ds and ds not in seen:
+                seen.add(ds)
+                out.append({"date": ds, "nav": vf})
+        except (ValueError, TypeError):
+            continue
+    out.sort(key=lambda x: x["date"], reverse=True)
+    return out
+
+
+def fetch_cnyes_history(code: str) -> list:
+    """CnYES 鉅亨網境外基金歷史 NAV(app 標定的境外主要來源,**直接用內部碼**)。
+    §1:抓不到回 [](不偽造)。⚠️ 沙盒測不了(CnYES 擋非台灣 IP),需 NAS 代理真實 run 確認。
+    """
+    _hdr = {"Referer": f"https://fund.cnyes.com/detail/{code}/Nav"}
+    for url in (f"https://api.cnyes.com/media/api/v1/fund/{code}/nav",
+                f"https://api.cnyes.com/media/api/v1/fund/{code}/nav-history",
+                f"https://api.cnyes.com/media/api/v1/fund/nav/history?code={code}",
+                f"https://api.cnyes.com/fund/v1/funds/{code}/nav"):
+        try:
+            r = SESSION.get(url, headers=_hdr, timeout=20)
+            if r is None or r.status_code != 200:
+                continue
+            out = _cnyes_parse_items(_cnyes_walk_nav_items(r.json()))
+            if len(out) >= 30:
+                print(f"[CnYES] {code}: {len(out)} 筆 ({url.rsplit('/', 1)[-1][:24]})")
+                return out
+        except Exception as e:
+            print(f"[CnYES] {code} {url.rsplit('/', 1)[-1][:20]} err: {str(e)[:60]}")
+    print(f"[CnYES] {code}: 0 筆 ⚠️ CnYES API 皆無資料")
+    return []
+
+
+# ══════════════════════════════════════════════════════════════════════
 # 資料來源 5：Yahoo Finance（境外基金，需 Morningstar secId 映射）
 # ══════════════════════════════════════════════════════════════════════
 # 已知 Morningstar secId 映射
@@ -586,6 +677,22 @@ def main():
                         print(f"  TDCC: {d} → {n}")
                 except (ValueError, AttributeError):
                     pass
+
+            # 1b. CnYES 境外歷史（app 標定的境外主要來源，直接用內部碼）— v19.352
+            if len(existing_history) + len(new_rows) < 30:
+                hist = fetch_cnyes_history(code)
+                if hist:
+                    new_rows = merge_history(new_rows, hist)
+                    source_used = "cnyes"
+                time.sleep(0.5)
+
+            # 1c. 安聯境外（TLZF9/ANZ89）：走原廠 AllianzGI GetFundNav（最權威）— v19.352
+            if len(existing_history) + len(new_rows) < 30 and code in _ALLIANZ_OFFSHORE_CODES:
+                hist = fetch_allianzgi_history(code)
+                if hist:
+                    new_rows = merge_history(new_rows, hist)
+                    source_used = "allianzgi"
+                time.sleep(0.5)
 
             # 2. Yahoo Finance（Morningstar secId.F，GitHub Actions 可存取）
             if len(existing_history) + len(new_rows) < 30 and code in MORNINGSTAR_SECID_MAP:

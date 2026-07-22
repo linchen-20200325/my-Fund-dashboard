@@ -139,3 +139,45 @@ def test_allianzgi_empty_returns_empty_list(monkeypatch):
                         lambda *a, **k: _Resp(text="<html></html>", status=200))
     rows = _MOD.fetch_allianzgi_history("ACTI71")
     assert rows == []
+
+
+# ── v19.352：境外基金加 CnYES(境外主要來源,直接用內部碼) ──
+def test_cnyes_parse_items_field_variants_and_timestamp():
+    """_cnyes_parse_items:寬容欄位名 + Unix ms timestamp;去重 + 降冪。"""
+    items = [
+        {"date": "2026/07/20", "nav": "12.34"},          # 斜線 + 字串
+        {"Date": "2026-07-19", "Nav": 12.30},            # 大寫欄位
+        {"timestamp": 1_768_000_000_000, "value": 12.5}, # ms epoch → 轉日期
+        {"date": "2026-07-20", "nav": 99},               # 同日重複 → 去重
+        {"date": "2026-07-18", "nav": 0},                # nav<=0 → 丟
+    ]
+    out = _MOD._cnyes_parse_items(items)
+    assert out[0]["date"] >= out[-1]["date"]              # 降冪
+    _dates = [r["date"] for r in out]
+    assert _dates.count("2026-07-20") == 1                # 去重
+    assert all(r["nav"] > 0 for r in out)                # 無 0/負
+
+
+def test_cnyes_fetch_walks_nested_json(monkeypatch):
+    """fetch_cnyes_history:GET API → 遞迴找 nested nav list → 解析(≥30 才短路)。"""
+    import datetime as _dt
+    _base = _dt.date(2026, 1, 1)
+    nested = {"data": {"items": [
+        {"date": (_base + _dt.timedelta(days=i)).strftime("%Y-%m-%d"), "nav": 10 + i * 0.01}
+        for i in range(60)]}}   # 60 個唯一日期(> 30 門檻)
+    _got = {}
+
+    def _fake_get(url, **k):
+        _got["url"] = url
+        return _Resp(payload=nested)
+
+    monkeypatch.setattr(_MOD.SESSION, "get", _fake_get)
+    rows = _MOD.fetch_cnyes_history("JFZN3")
+    assert len(rows) >= 28 and all("date" in r and "nav" in r for r in rows)
+    assert "api.cnyes.com" in _got["url"] and "JFZN3" in _got["url"]  # 直接用內部碼
+
+
+def test_cnyes_fetch_empty_returns_empty(monkeypatch):
+    """CnYES API 全無資料 → 回 [](§1)。"""
+    monkeypatch.setattr(_MOD.SESSION, "get", lambda *a, **k: _Resp(status=404))
+    assert _MOD.fetch_cnyes_history("CTZP0") == []
