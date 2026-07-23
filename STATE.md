@@ -2,6 +2,18 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-23 收尾 (b)+(c):utcnow deprecation 修 + edu 教學表加 SSOT 交叉引用 v19.386
+
+user 追問「還有沒有可優化/缺點」→ 據實列出後選 (b)+(c):
+
+- **(b) deprecation 修**:`services/fund_screening.py:53,118` 2 處 `pd.Timestamp.utcnow()`(pandas 已標
+  deprecated)→ `pd.Timestamp.now('UTC')`(對齊 `repositories/macro/fred.py:273` 既有寫法)。
+  行為 byte-equivalent(naive UTC midnight,old==new 實測),screening 18 綠。
+- **(c) 教學表 SSOT 交叉引用**(user 選「加註解」非「SSOT 化」,不違 F-GRAY-4 by-design):
+  `ui/components/macro_card_edu.py` docstring 加「SSOT 門檻對照」全表 + SAHM/PMI/CPI/HY_SPREAD/VIX
+  5 表加 inline `# SSOT:` 指標。**純註解、敘事零改動**(HY 仍 4 教學級含崩潰、VIX 5 級);
+  消除「不知教學數字與 SSOT 有關聯」的靜默漂移隱患,但不綁死敘事。drift 守衛 + edu 48 綠。
+
 ## 🩺 2026-07-23 稽核清單「全做」批次 T1~T4 v19.385 —(多 Agent 分工 + UAT 閉環)
 
 user「全做」團隊稽核殘留清單。逐項**先查證再動**(§8.4 / PROCESS §6),據實三態分流:
