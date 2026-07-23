@@ -2,6 +2,46 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-23 團隊交叉稽核修復 ①b:macro Sahm/CFNAI/VIX inline literals → SSOT v19.383
+
+- **背景**:接續 ①(`_trend` 真 bug),收 `services/macro/` 快照/拐點層殘留的 inline magic number
+  (§3.3 反捏造),並補一個 SSOT 漂移。
+- **turning_points.py `_calc_sahm`/`_calc_lei`**:邏輯 `0.5`/`-0.7` → SSOT
+  `SAHM_RECESSION_THRESHOLD`(0.5)/ `CFNAI_RECESSION_THRESHOLD`(-0.7);note 字串一併插值常數
+  (對齊 sibling `us_indicators` 既有寫法,防敘事漂移)。**值等價、行為零變**;`0.3` 安全區地板
+  無 SSOT 家、保留字面。
+- **us_indicators.py VIX**:紅界 `>30` → `_MB_VIX_RED`(值等價);**綠界 `<18` → `_MB_VIX_YELLOW`(22)**
+  —— 這是**行為變更**:VIX∈[18,22) 由 🟡/score 0 → 🟢/score +1,收斂 F-GRAY-4「全站 yellow 統一 22」
+  的第 4 個散落 straggler(C2 系列 v19.157-160 只收了 risk_radar/beginner_view/macro_validation 三站)。
+  signal 過樂觀地板 `<15` 語意不同(非 yellow/red)、保留。
+- **驗**:byte-compile OK;常數插值顯示等同(`0.5`/`-0.7`/`<22平靜 | >30恐慌`);
+  `test_card_threshold_drift`+`test_cross_site_cutoffs`+macro SSOT 套件 **72 綠**、turning_points 相關
+  **37 綠**;直接功能驗證 VIX 邊界 + Sahm 分支符合預期。改動:`turning_points.py` + `us_indicators.py`。
+
+## 🩺 2026-07-23 團隊交叉稽核修復 ②:portfolio_service max_dd `or "0"` 除假 v19.382
+
+- **病灶(架構師 §2.3,§1 反捏造)**:`services/portfolio_service.py:108,248`
+  `float((rt.get("最大回撤") or "0").replace("%",""))` —— 缺資料時 `or "0"` **捏造 0% 回撤 →
+  MaxDrawdown 假滿分**。就在上輪「已掃」檔(A3a 只收費用率鏈,漏這兩處)。
+- **修**:兩處改 SSOT `safe_num`(缺/髒值 → None → 該因子誠實跳過,不虛構 + 收 SSOT)。
+- **自修迴圈(1 輪)**:守門 test `test_maxdd_defaults_via_zero_string` 原本**鎖的是舊捏造行為**
+  (空 fd → MaxDrawdown available=True),QA 攔下 → 改鎖誠實行為(缺 → 不可用 / 有真值 → 可用)+
+  class docstring 註明 Sharpe(`or 0` 中性)vs MaxDrawdown(已除假)語意分家。
+- **驗**:`safe_num` 空/None→None、`%` 正常解析;`test_factor_availability_ssot` + `expense` +
+  `real_ter` **32 綠**。改動:`services/portfolio_service.py` + `tests/test_factor_availability_ssot.py`。
+
+## 🩺 2026-07-23 團隊交叉稽核修復 ①:macro _trend 真 bug 收 SSOT v19.381
+
+- **背景**:四角色交叉稽核(PM/架構/工程/QA)在剛清完的 main 上,發現殘債集中在上輪沒掃到的
+  `services/macro/` 快照層 —— 藏著**一個真 bug**(架構師 §1.1 HIGH)。
+- **真 bug**:`services/macro/_helpers.py:_trend()` 是 SSOT `math_utils.trend_arrow()` 的分歧複製,
+  **少了「末點同向」guard** → 對 `[1,2,3,4,3.5]` 誤判「持續上升 ↑」而非「最近回落 ↘」,污染
+  `us_indicators` ~18 快照面板的趨勢標籤。
+- **修**:`_trend` 委派 SSOT `trend_arrow`(即修 bug + 消 DRY);`_spread_series` 一併委派 SSOT
+  `spread_series`(逐行等價,消第二份平行 yield-spread 對齊)。L2→L1 純 util,無循環。
+- **驗**:bug case 現回「最近回落 ↘」、正常上升/反彈皆正確;`_spread_series` 回 Series 等價;
+  `test_macro_core` + `test_d5_macro_ssot` **53 綠**。唯一改動:`services/macro/_helpers.py`。
+
 ## 🩺 2026-07-22 nav_history 開表錯誤可行動化 v19.380 —(user 匯入炸「空白錯誤」)
 
 - **病灶**:user secrets 設好、`status()` 綠,但匯入時 `_get_sheet` 開表階段炸,UI 顯示

@@ -85,8 +85,8 @@ def _detect_inflection(indicators):
 
     vix_v = _chk("VIX")
     if vix_v:
-        if vix_v > 30: signals.append({"type":"buy","text":f"VIX {vix_v:.1f} 恐慌高位 — 逢低加碼時機"}); score += 2
-        elif vix_v < 15: signals.append({"type":"warn","text":f"VIX {vix_v:.1f} 過低，市場過樂觀"}); score -= 1
+        if vix_v > _MB_VIX_RED: signals.append({"type":"buy","text":f"VIX {vix_v:.1f} 恐慌高位 — 逢低加碼時機"}); score += 2
+        elif vix_v < 15: signals.append({"type":"warn","text":f"VIX {vix_v:.1f} 過低，市場過樂觀"}); score -= 1  # 15=過樂觀地板,與 yellow/red SSOT 不同語意,保留
 
     jb_v = _chk("JOBLESS"); jb_p = _chk("JOBLESS","prev")
     if jb_v and jb_p:
@@ -540,10 +540,12 @@ def fetch_all_indicators(fred_api_key):
         s_m = s_vix.resample("W").last().tail(260)
         R["VIX"] = dict(name="VIX 恐慌指數", value=v, prev=p, unit="", type="同時",
             date=s_vix.index[-1].strftime("%Y-%m-%d"),
-            desc="<18平靜 | >30恐慌=逢低加碼時機",
-            signal="🟢" if v<18 else ("🔴" if v>30 else "🟡"),
-            color=MATERIAL_GREEN if v<18 else (MATERIAL_RED if v>30 else MATERIAL_ORANGE),
-            score=1 if v<18 else (-1 if v>30 else 0),
+            # v19.383:calm/warning 綠界 18→22 收 SSOT `_MB_VIX_YELLOW`,對齊 F-GRAY-4「全站 yellow 統一 22」
+            # (原 <18 為 C2 系列(v19.157-160)未收的第 4 個散落 straggler;紅界 30 本即等於 `_MB_VIX_RED`)。
+            desc=f"<{_MB_VIX_YELLOW:.0f}平靜 | >{_MB_VIX_RED:.0f}恐慌=逢低加碼時機",
+            signal="🟢" if v<_MB_VIX_YELLOW else ("🔴" if v>_MB_VIX_RED else "🟡"),
+            color=MATERIAL_GREEN if v<_MB_VIX_YELLOW else (MATERIAL_RED if v>_MB_VIX_RED else MATERIAL_ORANGE),
+            score=1 if v<_MB_VIX_YELLOW else (-1 if v>_MB_VIX_RED else 0),
             weight=1, series=s_m)
 
     # ── CPI ──────────────────────────────────────────────────────────

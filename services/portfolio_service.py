@@ -105,8 +105,9 @@ def calc_fund_factor_score(fund_data: Dict,
     from shared.signal_thresholds import MAX_DRAWDOWN_ZERO_SCORE_PCT
     maxdd = m.get("max_drawdown")
     if maxdd is None:
-        try: maxdd = float((rt.get("最大回撤") or "0").replace("%", ""))
-        except Exception: maxdd = None
+        # v19.381 §1 除假:原 `or "0"` 在缺資料時捏造 0% 回撤 → MaxDrawdown 假滿分。
+        # 改 SSOT safe_num:缺/髒值 → None(該因子誠實跳過,不虛構)。
+        maxdd = _safe_num_ps(rt.get("最大回撤"))
     if maxdd is not None:
         try:
             maxdd_f = float(maxdd)
@@ -244,10 +245,8 @@ def get_factor_availability(fund_data: Dict,
     # ── MaxDrawdown(對齊 line 108-121)──
     maxdd = m.get("max_drawdown")
     if maxdd is None:
-        try:
-            maxdd = float((rt.get("最大回撤") or "0").replace("%", ""))
-        except Exception:
-            maxdd = None
+        # v19.381 §1 除假:同上,缺資料回 None 而非捏造 0%(SSOT safe_num)。
+        maxdd = _safe_num_ps(rt.get("最大回撤"))
     if maxdd is not None:
         try:
             float(maxdd)

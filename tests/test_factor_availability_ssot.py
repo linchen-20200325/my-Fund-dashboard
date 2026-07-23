@@ -121,9 +121,10 @@ class TestSortinoCalmarV193:
 
 
 class TestSharpeMaxDDDefaultsV193:
-    """SSOT 中 Sharpe / MaxDD 走 `or 0` 預設 → availability 永遠 True(除非源是 non-numeric string)。
+    """Sharpe 走 `or 0` **中性**預設 → availability 永遠 True(除非源是 non-numeric string)。
 
-    本組 test 鎖定這個「`or 0` 預設行為」的 SSOT 對齊,避免未來重構時走岔。"""
+    v19.381 §1 除假:MaxDrawdown 原 `or "0"` 會捏造 0% 回撤 = **假滿分**(非中性),已改 SSOT
+    safe_num → 缺資料回 None(誠實不可用)。故 MaxDrawdown 與 Sharpe 語意分家,見下方 test。"""
 
     def test_sharpe_defaults_to_zero(self):
         fd = {"metrics": {}}
@@ -137,10 +138,16 @@ class TestSharpeMaxDDDefaultsV193:
         assert avail["Sharpe"] is False
         assert _factor_in_score(fd, "Sharpe") is False
 
-    def test_maxdd_defaults_via_zero_string(self):
+    def test_maxdd_missing_not_available_v19381(self):
+        # v19.381 §1 除假:缺資料不再捏造 0% 回撤(原 `or "0"` = 假滿分)→ MaxDrawdown 誠實不可用。
         fd = {"metrics": {}}
         avail = get_factor_availability(fd)
-        assert avail["MaxDrawdown"] is True
+        assert avail["MaxDrawdown"] is False
+        assert _factor_in_score(fd, "MaxDrawdown") is False
+        # 有真值時照常可用 + 納入評分
+        fd2 = {"metrics": {"max_drawdown": -12.0}}
+        assert get_factor_availability(fd2)["MaxDrawdown"] is True
+        assert _factor_in_score(fd2, "MaxDrawdown") is True
 
 
 class TestSSotConsistencyV193:

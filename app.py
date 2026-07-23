@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.380_NavHistOpenErr"
+APP_VERSION = "v19.383_MacroLiteralsSSOT"
 
 
 # ══════════════════════════════════════════════════════
