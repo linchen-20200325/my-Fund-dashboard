@@ -15,6 +15,7 @@ from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC
 from services.macro._helpers import (  # noqa: F401
     FRED_AMTMNO, FRED_CFNAI, FRED_DGS10, FRED_DGS2, FRED_HY_SPREAD,
     FRED_MNFCTRIRSA, FRED_SAHM, FRED_T10Y2Y,
+    SAHM_RECESSION_THRESHOLD, CFNAI_RECESSION_THRESHOLD,  # v19.383 §3.3 反捏造:收 inline 0.5/-0.7 → SSOT
     _trend, _safe_last,
 )
 
@@ -198,19 +199,19 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             cur = float(s.iloc[-1]); prev = float(s.iloc[-2])
             max12 = float(s.tail(12).max())
             trend = [round(v, 2) for v in s.tail(8).tolist()]
-            if max12 >= 0.5 and cur < 0.5:
+            if max12 >= SAHM_RECESSION_THRESHOLD and cur < SAHM_RECESSION_THRESHOLD:
                 sig, col, ic = "🚀 衰退警報解除", MATERIAL_GREEN, "🚀"
-                note = (f"近 12 月高點 {max12:.2f}（觸發過 0.5）→ 最新 {cur:.2f}"
+                note = (f"近 12 月高點 {max12:.2f}（觸發過 {SAHM_RECESSION_THRESHOLD}）→ 最新 {cur:.2f}"
                         f"｜歷史經驗：解除後 12 月內為股市底部布局期")
-            elif cur >= 0.5:
+            elif cur >= SAHM_RECESSION_THRESHOLD:
                 sig, col, ic = "🔴 衰退警報中", MATERIAL_RED, "🔴"
-                note = f"{cur:.2f} ≥ 0.5，失業率上升訊號"
+                note = f"{cur:.2f} ≥ {SAHM_RECESSION_THRESHOLD}，失業率上升訊號"
             elif cur < 0.3:
                 sig, col, ic = "🟢 安全區", MATERIAL_GREEN, "🟢"
                 note = f"{cur:.2f} < 0.3，無衰退訊號"
             else:
                 sig, col, ic = "🟡 警戒中", MATERIAL_ORANGE, "🟡"
-                note = f"{cur:.2f}，介於 0.3~0.5（接近觸發）"
+                note = f"{cur:.2f}，介於 0.3~{SAHM_RECESSION_THRESHOLD}（接近觸發）"
             return "sahm_rule", {
                 "signal": sig, "color": col, "icon": ic,
                 "value": round(cur, 2), "prev": round(prev, 2),
@@ -237,12 +238,12 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             elif cur > 0:
                 sig, col, ic = "🟢 擴張中", MATERIAL_GREEN, "🟢"
                 note = f"3M MA {cur:+.2f}（正值），景氣正常擴張"
-            elif cur < -0.7:
+            elif cur < CFNAI_RECESSION_THRESHOLD:
                 sig, col, ic = "🔴 衰退預警", MATERIAL_RED, "🔴"
-                note = f"3M MA {cur:+.2f} < -0.7，強烈衰退訊號"
+                note = f"3M MA {cur:+.2f} < {CFNAI_RECESSION_THRESHOLD}，強烈衰退訊號"
             elif cur < 0:
                 sig, col, ic = "🟡 動能轉弱", MATERIAL_ORANGE, "🟡"
-                note = f"3M MA {cur:+.2f}（負值但 > -0.7），待觀察"
+                note = f"3M MA {cur:+.2f}（負值但 > {CFNAI_RECESSION_THRESHOLD}），待觀察"
             else:
                 sig, col, ic = "📊 持平", TRAFFIC_NEUTRAL, "📊"
                 note = f"3M MA {cur:+.2f}"

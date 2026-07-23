@@ -2,6 +2,22 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-23 團隊交叉稽核修復 ①b:macro Sahm/CFNAI/VIX inline literals → SSOT v19.383
+
+- **背景**:接續 ①(`_trend` 真 bug),收 `services/macro/` 快照/拐點層殘留的 inline magic number
+  (§3.3 反捏造),並補一個 SSOT 漂移。
+- **turning_points.py `_calc_sahm`/`_calc_lei`**:邏輯 `0.5`/`-0.7` → SSOT
+  `SAHM_RECESSION_THRESHOLD`(0.5)/ `CFNAI_RECESSION_THRESHOLD`(-0.7);note 字串一併插值常數
+  (對齊 sibling `us_indicators` 既有寫法,防敘事漂移)。**值等價、行為零變**;`0.3` 安全區地板
+  無 SSOT 家、保留字面。
+- **us_indicators.py VIX**:紅界 `>30` → `_MB_VIX_RED`(值等價);**綠界 `<18` → `_MB_VIX_YELLOW`(22)**
+  —— 這是**行為變更**:VIX∈[18,22) 由 🟡/score 0 → 🟢/score +1,收斂 F-GRAY-4「全站 yellow 統一 22」
+  的第 4 個散落 straggler(C2 系列 v19.157-160 只收了 risk_radar/beginner_view/macro_validation 三站)。
+  signal 過樂觀地板 `<15` 語意不同(非 yellow/red)、保留。
+- **驗**:byte-compile OK;常數插值顯示等同(`0.5`/`-0.7`/`<22平靜 | >30恐慌`);
+  `test_card_threshold_drift`+`test_cross_site_cutoffs`+macro SSOT 套件 **72 綠**、turning_points 相關
+  **37 綠**;直接功能驗證 VIX 邊界 + Sahm 分支符合預期。改動:`turning_points.py` + `us_indicators.py`。
+
 ## 🩺 2026-07-23 團隊交叉稽核修復 ②:portfolio_service max_dd `or "0"` 除假 v19.382
 
 - **病灶(架構師 §2.3,§1 反捏造)**:`services/portfolio_service.py:108,248`
