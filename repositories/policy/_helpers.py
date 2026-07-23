@@ -12,6 +12,13 @@ from typing import Any, Iterable, Optional
 
 import pandas as pd
 
+# v19.385 T2a:gspread 429 偵測 + 退避迴圈收 L0 infra(與 snapshot_repository 去重)。
+# 保留私名 `_is_quota_error` 供既有 caller / test(from policy_repository import _is_quota_error)。
+from infra.gspread_retry import (
+    is_quota_error as _is_quota_error,
+    with_quota_retry as _shared_quota_retry,
+)
+
 
 REQUIRED_COLS: tuple[str, ...] = (
     "policy_id",
@@ -52,18 +59,12 @@ class PolicySheetError(Exception):
     """所有 policy_store 對外丟出的錯誤都用這個 class。"""
 
 
-# v18.152：Google Sheets API 429 配額退避（與 snapshot_repository 一致）
-# 每 user 每分鐘 60 reads，v2 編輯介面進場一次就 1 + 2N reads（N=保單數），
-# 容易爆配額。本層所有 gspread 呼叫應走 _with_quota_retry。
-# v18.253：起點 1→2s（給 Google quota 視窗多一拍 reset 時間），總等待 15s→30s
+# v18.152：Google Sheets API 429 配額退避。每 user 每分鐘 60 reads，v2 編輯介面進場
+# 一次就 1 + 2N reads（N=保單數），容易爆配額。本層所有 gspread 呼叫應走 _with_quota_retry。
+# v18.253：起點 1→2s（給 Google quota 視窗多一拍 reset），總等待 15s→30s。
+# v19.385 T2a：偵測 + 迴圈收 infra.gspread_retry；退避節奏 _QUOTA_BACKOFFS 仍本層專屬
+# （30s，snapshot 為 15s，值不同不合併，§8.4）。
 _QUOTA_BACKOFFS: tuple[float, ...] = (2.0, 4.0, 8.0, 16.0)
-
-
-def _is_quota_error(exc: BaseException) -> bool:
-    """偵測 gspread 429 / RESOURCE_EXHAUSTED；不依賴 gspread.exceptions 細節容版差。"""
-    msg = str(exc)
-    return ("429" in msg or "Quota exceeded" in msg or "RATE_LIMIT" in msg
-            or "RESOURCE_EXHAUSTED" in msg)
 
 
 def _is_worksheet_not_found(exc: BaseException) -> bool:
@@ -79,20 +80,8 @@ def _is_worksheet_not_found(exc: BaseException) -> bool:
 
 
 def _with_quota_retry(call, *args, **kwargs):
-    """包裝 gspread 呼叫：遇 429 退避重試；非配額錯誤立即拋。"""
-    import time as _t
-    last_err: BaseException | None = None
-    for attempt, delay in enumerate(_QUOTA_BACKOFFS):
-        try:
-            return call(*args, **kwargs)
-        except Exception as e:  # noqa: BLE001 — gspread 例外類型隨版本變
-            last_err = e
-            is_last = attempt == len(_QUOTA_BACKOFFS) - 1
-            if not _is_quota_error(e) or is_last:
-                raise
-            _t.sleep(delay)
-    if last_err is not None:
-        raise last_err
+    """policy 層 gspread 退避（節奏 _QUOTA_BACKOFFS=30s）；邏輯委派 infra.gspread_retry。"""
+    return _shared_quota_retry(call, *args, backoffs=_QUOTA_BACKOFFS, **kwargs)
 
 
 # ──────────────────────────────────────────────────────────────────────
