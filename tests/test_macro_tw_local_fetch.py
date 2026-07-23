@@ -307,25 +307,5 @@ class TestFetchForeignConsecutiveDays:
         assert r['error'] is not None
         assert 'JSON' in r['error']
 
-
-# ════════════════════════════════════════════════════════════════════════════
-# §5 共用 helper smoke test
-# ════════════════════════════════════════════════════════════════════════════
-class TestSharedHelper:
-    def setup_method(self):
-        _clear_caches()
-
-    def test_indicator_fuzzy_match_fallback(self):
-        # v19.355:出口改走海關源後,fuzzy match 改直接測共用 helper
-        # _finmind_macro_series(仍供 fetch_tw_pmi_local 等使用)。
-        # 變形 indicator key（含關鍵字但格式不同）→ 應走 contains fallback。
-        rows = [{'date': f'2026-{i+1:02d}-01',
-                 'indicator': '臺灣出口年增率_月底',  # 模糊比對
-                 'value': v}
-                for i, v in enumerate([1.0, 2.0, 3.0])]
-        with patch.object(fetch_mod, 'fetch_url',
-                          return_value=_fake_response(rows)):
-            sub = fetch_mod._finmind_macro_series(('出口年增率',),
-                                                  months_back=6, token='x')
-        assert sub is not None
-        assert list(sub['value']) == [1.0, 2.0, 3.0]
+# v19.385 T1:§5 `TestSharedHelper` 隨 `_finmind_macro_series` 拔毒一併移除(孤兒測試,
+# 只測已刪的 dead helper;其註解「仍供 fetch_tw_pmi_local 使用」為 stale — PMI 早改 9 源賽跑)。
