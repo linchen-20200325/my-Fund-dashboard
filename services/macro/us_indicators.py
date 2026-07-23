@@ -43,6 +43,12 @@ from services.macro._helpers import (  # noqa: F401
 
 _INDICATOR_SNAPSHOT: dict = {}
 
+# v19.384(user 2026-07-23 拍板回退 v19.383):VIX 快照卡「平靜」綠界**刻意保持 18**,
+# 嚴於全站 cross-site SSOT yellow=22(`_MB_VIX_RED` 紅界仍走 SSOT 30)。此為 snapshot 層
+# 獨立校準,**非** F-GRAY-4「全站 yellow 統一 22」的漏網 —— 稽核時勿逕改為 `_MB_VIX_YELLOW`。
+# 具名常數化以免 §3.3 inline magic + 防未來重複改動。
+_VIX_SNAPSHOT_CALM = 18.0
+
 
 def _detect_inflection(indicators):
     signals = []; score = 0
@@ -540,12 +546,12 @@ def fetch_all_indicators(fred_api_key):
         s_m = s_vix.resample("W").last().tail(260)
         R["VIX"] = dict(name="VIX 恐慌指數", value=v, prev=p, unit="", type="同時",
             date=s_vix.index[-1].strftime("%Y-%m-%d"),
-            # v19.383:calm/warning 綠界 18→22 收 SSOT `_MB_VIX_YELLOW`,對齊 F-GRAY-4「全站 yellow 統一 22」
-            # (原 <18 為 C2 系列(v19.157-160)未收的第 4 個散落 straggler;紅界 30 本即等於 `_MB_VIX_RED`)。
-            desc=f"<{_MB_VIX_YELLOW:.0f}平靜 | >{_MB_VIX_RED:.0f}恐慌=逢低加碼時機",
-            signal="🟢" if v<_MB_VIX_YELLOW else ("🔴" if v>_MB_VIX_RED else "🟡"),
-            color=MATERIAL_GREEN if v<_MB_VIX_YELLOW else (MATERIAL_RED if v>_MB_VIX_RED else MATERIAL_ORANGE),
-            score=1 if v<_MB_VIX_YELLOW else (-1 if v>_MB_VIX_RED else 0),
+            # v19.384:綠界回退 22→18(user 拍板),用具名 `_VIX_SNAPSHOT_CALM`(snapshot 層獨立校準,
+            # 見上方常數註解);紅界維持 SSOT `_MB_VIX_RED`。
+            desc=f"<{_VIX_SNAPSHOT_CALM:.0f}平靜 | >{_MB_VIX_RED:.0f}恐慌=逢低加碼時機",
+            signal="🟢" if v<_VIX_SNAPSHOT_CALM else ("🔴" if v>_MB_VIX_RED else "🟡"),
+            color=MATERIAL_GREEN if v<_VIX_SNAPSHOT_CALM else (MATERIAL_RED if v>_MB_VIX_RED else MATERIAL_ORANGE),
+            score=1 if v<_VIX_SNAPSHOT_CALM else (-1 if v>_MB_VIX_RED else 0),
             weight=1, series=s_m)
 
     # ── CPI ──────────────────────────────────────────────────────────

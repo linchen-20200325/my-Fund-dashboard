@@ -529,6 +529,10 @@ except ImportError:
     C2 series(v19.157 risk_radar / v19.158 macro_beginner_view / v19.159 macro_validation
     + calibration JSON bounds / v19.160 macro_service alert + SPEC §16.1 結案)全站 yellow
     統一 SSOT 22 / panic 30。`tests/test_cross_site_cutoffs.py` 守 3 site 全員 22 + universal 30。
+    ⚠️ **已知例外(v19.383→384 回退)**:`services/macro/us_indicators.py:_VIX_SNAPSHOT_CALM=18.0`
+    —— 快照卡「平靜」綠界 user 2026-07-23 拍板**刻意保持 18**(嚴於全站 22),屬 snapshot 層獨立
+    校準,**非漏網**,已具名常數化並註解「稽核勿逕改」。紅界/其餘全站消費者(含 :1084 VIX>22 alert)
+    仍走 SSOT `_MB_VIX_RED`(30)/ `_MB_VIX_YELLOW`(22)。
   - **HY_SPREAD(已收 90%)**:`shared/macro_thresholds_v2.py:HY_SPREAD_THRESHOLDS` schema 落地,
     5 個 multi-purpose section(stoplight / score_function / portfolio_advisor / beginner_panic /
     inflection_detection)各自 SSOT;`ui/helpers/macro/beginner_view.py` 用 `_HY_THR` import;
