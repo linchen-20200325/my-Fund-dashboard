@@ -2,6 +2,17 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-23 回退 VIX 快照卡綠界 22→18(user 拍板) v19.384
+
+- **緣由**:①b(v19.383)把 `us_indicators` VIX 快照卡「平靜」綠界 18→22 收斂全站 SSOT;user
+  複核後決定**只回退這一項**(其餘 Sahm/CFNAI→SSOT、VIX 紅界→`_MB_VIX_RED` 皆值等價、保留)。
+- **修**:新增具名常數 `_VIX_SNAPSHOT_CALM=18.0`(snapshot 層獨立校準),VIX 卡 desc/signal/color/score
+  綠界改用它;紅界維持 SSOT `_MB_VIX_RED`(30)。**不**用 bare `18` 避 §3.3 inline magic + 防未來
+  稽核重複改動;常數註解 + CLAUDE.md F-GRAY-4 記為「已知例外(非漏網)」。
+- **未受影響**:`us_indicators.py:1084` VIX>22 alert banner 仍走 SSOT `_MB_VIX_YELLOW`(全站消費者不動)。
+- **驗**:byte-compile OK;直接功能驗證 VIX∈[18,22) 回到 🟡/score 0、<18→🟢、>30→🔴;
+  `test_cross_site_cutoffs`(不覆蓋此卡)+ macro SSOT 套件仍綠。改動:`us_indicators.py` + CLAUDE.md。
+
 ## 🩺 2026-07-23 團隊交叉稽核修復 ①b:macro Sahm/CFNAI/VIX inline literals → SSOT v19.383
 
 - **背景**:接續 ①(`_trend` 真 bug),收 `services/macro/` 快照/拐點層殘留的 inline magic number
