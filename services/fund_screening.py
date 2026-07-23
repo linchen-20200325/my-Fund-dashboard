@@ -50,7 +50,7 @@ def fund_inception_years(inception_date, series=None) -> "float | None":
         first = pd.Timestamp(s.index[0])
         if first.tzinfo is not None:
             first = first.tz_localize(None)
-        _today = pd.Timestamp.utcnow().tz_localize(None).normalize()
+        _today = pd.Timestamp.now('UTC').tz_localize(None).normalize()
         years = (_today - first).days / 365.25
         if len(s) < 90 and years < 0.5:
             return None  # 序列太短，無法可信估算成立日（Cloud 長歷史被擋時常見）
@@ -115,7 +115,7 @@ def check_333_fund(
     if hasattr(s.index, 'tz') and s.index.tz is not None:
         s.index = s.index.tz_localize(None)
 
-    today = pd.Timestamp.utcnow().tz_localize(None).normalize()
+    today = pd.Timestamp.now('UTC').tz_localize(None).normalize()
 
     # ── C1：成立年數（v19.308：優先 MoneyDJ 現成成立日，缺則 NAV 最早日推算）──
     _inception = (metrics or {}).get("inception_date")

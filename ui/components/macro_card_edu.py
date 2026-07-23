@@ -14,6 +14,24 @@ Fund repo 的指標 key 來自 `macro_engine.fetch_all_indicators()`，與 stock
 
 CANONICAL SOURCE: my-fund-dashboard/shared/macro_card_edu.py
 （stock 端維持自有 `data_registry.EDU_GUIDE`，本檔不 sync 到 stock）
+
+────────────────────────────────────────────────────────────────────────────
+SSOT 門檻對照（F-GRAY-4 by-design）
+  本檔 `how_to_read` 為**教學敘事**，刻意**不** SSOT 化（多級敘事收成 logic 常數會綁死、
+  遺失教學層級，見 CLAUDE.md §8.3 F-GRAY-4）。但其門檻數字**應與下列權威 SSOT 一致**；
+  改 SSOT 時請一併校對本檔對應表（v19.386 加此交叉引用，避免「不知有關聯」的靜默漂移）：
+    SAHM        → shared/signal_thresholds.SAHM_RECESSION_THRESHOLD (0.5)
+    LEI(CFNAI)  → shared/signal_thresholds.CFNAI_RECESSION_THRESHOLD (-0.7)
+    PMI         → shared/macro_thresholds_v2.PMI_THRESHOLDS
+    CPI         → shared/macro_thresholds_v2.CPI_YOY_THRESHOLDS
+    HY_SPREAD   → shared/macro_thresholds_v2.HY_SPREAD_THRESHOLDS
+    M2 / FED_BS → shared/macro_thresholds_v2.{M2_THRESHOLDS, FED_BS_THRESHOLDS}
+    VIX         → shared/macro_buckets._VIX_YELLOW(22) / _VIX_RED(30)；
+                  快照卡另有 services/macro/us_indicators._VIX_SNAPSHOT_CALM(18, snapshot 例外)
+    其餘(SLOOS / YIELD_* / JOBLESS / CONT_CLAIMS / NFP / PERMIT_HOUSING / CONSUMER_CONF /
+    INFL_EXP_5Y 等) → repositories/macro_repository.MACRO_THRESHOLDS
+                       (漂移由 tests/test_card_threshold_drift.py 守衛 8 個重複 key)
+────────────────────────────────────────────────────────────────────────────
 """
 from __future__ import annotations
 
@@ -21,6 +39,7 @@ MACRO_EDU: dict[str, dict] = {
     # ══════════════════════════════════════════════════════════════════
     # ① 領先指標（Leading）── 衰退/復甦最早的訊號
     # ══════════════════════════════════════════════════════════════════
+    # SSOT 門檻: shared/signal_thresholds.SAHM_RECESSION_THRESHOLD (0.5) — 敘事勿與其漂移
     "SAHM": {
         "meaning": "薩姆規則：失業率「3 個月平均」減去「過去 12 個月最低值」的差值。"
                    "≥ 0.5pp 時，歷史上 100% 命中衰退（自 1949 以來無誤判）。",
@@ -51,6 +70,7 @@ MACRO_EDU: dict[str, dict] = {
         "upstream": "Fed 利率上升、銀行壞帳率攀升、經濟前景轉壞",
         "downstream": "信貸緊縮 → 企業 CapEx 縮減 → 失業率上升 → 衰退確認",
     },
+    # SSOT 門檻: shared/macro_thresholds_v2.PMI_THRESHOLDS — 敘事勿與其漂移
     "PMI": {
         "meaning": "ISM 製造業採購經理人指數。採購主管對訂單/生產/就業/庫存問卷。"
                    "領先 GDP 約 3-6 個月，景氣循環最重要的領先指標。",
@@ -145,6 +165,7 @@ MACRO_EDU: dict[str, dict] = {
     # ══════════════════════════════════════════════════════════════════
     # ② 同時 / 落後指標（Coincident / Lagging）── 確認趨勢
     # ══════════════════════════════════════════════════════════════════
+    # SSOT 門檻: shared/macro_thresholds_v2.CPI_YOY_THRESHOLDS — 敘事勿與其漂移
     "CPI": {
         "meaning": "消費者物價指數年增率（YoY）。Fed 升降息最看重的通膨溫度計。"
                    "目標 2%，>4% 升息壓力大、股債雙殺；高位回落 = 利多拐點。",
@@ -294,6 +315,7 @@ MACRO_EDU: dict[str, dict] = {
     # ══════════════════════════════════════════════════════════════════
     # ④ 金融壓力指標（Financial Stress）── 信用 / 恐慌
     # ══════════════════════════════════════════════════════════════════
+    # SSOT 門檻: shared/macro_thresholds_v2.HY_SPREAD_THRESHOLDS — 敘事(含 >10% 崩潰教學級)勿與其漂移
     "HY_SPREAD": {
         "meaning": "高收益債（垃圾債）相對美國公債的選擇權調整利差（OAS）。"
                    "代表市場對信用風險的定價，是金融壓力最敏感的即時溫度計。",
@@ -309,6 +331,7 @@ MACRO_EDU: dict[str, dict] = {
         "upstream": "違約率預期、Fed 流動性、企業獲利前景",
         "downstream": "高收益債 ETF 跌、新發債困難、CCC 級違約上升、股市風險溢酬",
     },
+    # SSOT 門檻: shared/macro_buckets._VIX_YELLOW(22)/_VIX_RED(30);快照卡 _VIX_SNAPSHOT_CALM(18) — 勿漂移
     "VIX": {
         "meaning": "CBOE 用 S&P 500 選擇權隱含波動度算出的「華爾街恐慌指數」。"
                    "< 18 平靜；> 30 恐慌（通常已是底部區）。逆向指標。",
