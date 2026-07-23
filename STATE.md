@@ -2,6 +2,26 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-23 稽核清單「全做」批次 T1~T4 v19.385 —(多 Agent 分工 + UAT 閉環)
+
+user「全做」團隊稽核殘留清單。逐項**先查證再動**(§8.4 / PROCESS §6),據實三態分流:
+
+- **T1 死碼(改)**:`repositories/macro_tw_local_repository.py:_finmind_macro_series` 0 production
+  caller(NDC→business_indicator / PMI→9 源賽跑 / export→海關 6053),連 2 dead 常數
+  (_NDC_SIGNAL_KEYS/_TW_PMI_KEYS)+ 孤兒測試一併拔;18 綠。
+- **T2a DRY(改)**:policy/_helpers + snapshot_repository 逐字重複的 gspread 429 退避收
+  `infra/gspread_retry.py` 共用;**退避節奏值不同**(policy 30s / snapshot 15s)保留為參數不合併
+  (§8.4);re-export 私名鏈不破,policy/ledger/snapshot 140 綠。
+- **T2b DRY(改)**:`repositories/fund/sources.py` 4 處 `safe_float(x.replace("%",""))` 手動剝%
+  反模式 → SSOT `safe_num`;10 費用域輸入等價全 MATCH,real_ter/sources 158 綠。
+- **T3a 死碼(WONTFIX-查證)**:`calibration/multi_factor.py` 18 defs **逐一查 caller 全部有用**
+  (_zscore/_normalize/_filter_events 皆內部呼叫,其餘 2~12 external),無死函式,不改。
+- **T3b 越權(WONTFIX-查證)**:hot_money L1(EX-CACHE-1 合規)/ L2(純 facade)/ L3(走 service)
+  分層乾淨,P0-4-A 拆檔後無 scope creep,不改。
+- **T4 文件(改)**:`PROCESS.md` v2.0→v3.0,加 §6 動態重規劃 / §7 全自動自修迴圈 / §8 多 Agent+UAT。
+
+驗:各項 commit 前自審 + 對應測試綠;獨立 QA Auditor + UAT subagent 二次把關(見 PR)。
+
 ## 🩺 2026-07-23 回退 VIX 快照卡綠界 22→18(user 拍板) v19.384
 
 - **緣由**:①b(v19.383)把 `us_indicators` VIX 快照卡「平靜」綠界 18→22 收斂全站 SSOT;user

@@ -21,11 +21,15 @@ from __future__ import annotations
 from typing import Any, Callable
 import datetime as _dt
 import json as _json
-import time as _time
 
 import pandas as pd
 
 from repositories.policy_repository import PolicySheetError
+# v19.385 T2a:gspread 429 偵測 + 退避收 L0 infra(與 policy/_helpers 去重)。
+from infra.gspread_retry import (
+    is_quota_error as _is_quota_error,
+    with_quota_retry as _shared_quota_retry,
+)
 
 
 T7_STATE_TAB = "_T7_State"
@@ -55,33 +59,15 @@ SNAPSHOT_COLS: tuple[str, ...] = (
 )
 
 # v18.73: Sheets 429 指數退避 — Google Sheets API per-user 60 reads/min，
-# delete_rows/append_row 迴圈很容易爆。逐次重試 1s/2s/4s/8s 共 4 次。
+# delete_rows/append_row 迴圈很容易爆。逐次重試 1/2/4/8s 共 4 次（總 15s）。
+# v19.385 T2a：偵測 + 迴圈收 infra.gspread_retry（與 policy/_helpers 去重）；退避節奏
+# _QUOTA_BACKOFFS 仍本層專屬（15s，policy 為 30s，值不同不合併，§8.4）。
 _QUOTA_BACKOFFS: tuple[float, ...] = (1.0, 2.0, 4.0, 8.0)
 
 
-def _is_quota_error(exc: BaseException) -> bool:
-    """偵測 gspread 429 / RESOURCE_EXHAUSTED。不依賴 gspread.exceptions 細節以容版差。"""
-    msg = str(exc)
-    return ("429" in msg or "Quota exceeded" in msg or "RATE_LIMIT" in msg
-            or "RESOURCE_EXHAUSTED" in msg)
-
-
 def _with_quota_retry(call: Callable, *args, **kwargs):
-    """包裝 gspread 呼叫：遇 429 退避重試；非配額錯誤立即拋。"""
-    last_err: BaseException | None = None
-    for attempt, delay in enumerate(_QUOTA_BACKOFFS):
-        try:
-            return call(*args, **kwargs)
-        except Exception as e:  # noqa: BLE001 — gspread 例外類型隨版本變
-            last_err = e
-            is_last = attempt == len(_QUOTA_BACKOFFS) - 1
-            if not _is_quota_error(e) or is_last:
-                raise
-            _time.sleep(delay)
-    # unreachable — 最後一次失敗已 raise
-    if last_err is not None:
-        raise last_err
-    return None
+    """snapshot 層 gspread 退避（節奏 _QUOTA_BACKOFFS=15s）；邏輯委派 infra.gspread_retry。"""
+    return _shared_quota_retry(call, *args, backoffs=_QUOTA_BACKOFFS, **kwargs)
 
 
 # ──────────────────────────────────────────────────────────────────────

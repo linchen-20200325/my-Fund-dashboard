@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.384_VixSnapshotCalm18Revert"
+APP_VERSION = "v19.385_AuditBatchT1toT4"
 
 
 # ══════════════════════════════════════════════════════

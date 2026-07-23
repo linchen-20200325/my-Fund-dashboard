@@ -35,72 +35,10 @@ __version__ = "1.0.0"
 # v19.223 P1-2:FinMind URL 收口至 shared/api_endpoints.py SSOT
 from shared.api_endpoints import FINMIND_BASE
 
-# FinMind TaiwanMacroEconomics 指標關鍵字（含模糊比對 fallback）
-# ⚠️ v19.342 診斷:dataset `TaiwanMacroEconomics` 在 FinMind **不存在**(SDK 2.0.4
-#    Dataset 枚舉 + 官方文件皆無此名;真名為 `TaiwanBusinessIndicator`,寬表)。
-#    → fetch_ndc_signal_history 已改走 _finmind_business_indicator(TBI 寬表)。
-#    → fetch_tw_pmi_local 仍掛死源(FinMind 無 PMI dataset 可替換),恆回
-#      error='...無資料'。fetch_tw_export_yoy 已於 v19.355 改走海關 opendata
-#      6053(見下方 _customs_export_yoy_points),`_EXPORT_YOY_KEYS` 隨之移除。
-_NDC_SIGNAL_KEYS = ('景氣對策信號(分)', '景氣對策信號')
-_TW_PMI_KEYS     = ('製造業採購經理人指數', '製造業 PMI', 'PMI')
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# 共用 FinMind macro series helper（鏡像 stock tw_macro.py:322）
-# ════════════════════════════════════════════════════════════════════════════
-def _finmind_macro_series(indicator_keys: tuple,
-                          months_back: int = 18,
-                          token: str = "") -> Optional[pd.DataFrame]:
-    """抓 FinMind TaiwanMacroEconomics 指定指標月頻歷史。
-
-    Returns
-    -------
-    pd.DataFrame[date, value] | None
-        由舊到新排序；找不到資料或 HTTP 失敗回 None。
-    """
-    today    = _dt.date.today()
-    end_dt   = today.strftime("%Y-%m-%d")
-    start_dt = (today - _dt.timedelta(days=int(months_back * 31))).strftime("%Y-%m-%d")
-    params: dict = {
-        'dataset':    'TaiwanMacroEconomics',
-        'start_date': start_dt,
-        'end_date':   end_dt,
-    }
-    if token:
-        params['token'] = token
-    r = fetch_url(FINMIND_BASE, params=params, timeout=15)
-    if r is None:
-        return None
-    try:
-        rows = r.json().get('data', [])
-    except Exception as e:
-        # v19.184 F-MED:加 stderr log(§3.3 反捏造)
-        import sys as _sys
-        print(f'[macro_tw_local_fetch] FinMind JSON parse fail: '
-              f'{type(e).__name__}: {e}', file=_sys.stderr)
-        return None
-    if not rows:
-        return None
-    df = pd.DataFrame(rows)
-    cand_col = next((c for c in ('indicator', 'name', 'metric')
-                     if c in df.columns), None)
-    val_col  = next((c for c in ('value', 'data') if c in df.columns), None)
-    if cand_col is None or val_col is None or 'date' not in df.columns:
-        return None
-    mask = df[cand_col].astype(str).isin(indicator_keys)
-    if not mask.any():
-        mask = df[cand_col].astype(str).apply(
-            lambda x: any(k in x for k in indicator_keys))
-    if not mask.any():
-        return None
-    sub = df.loc[mask, ['date', val_col]].copy()
-    sub.columns = ['date', 'value']
-    sub['value'] = pd.to_numeric(sub['value'], errors='coerce')
-    sub = sub.dropna().sort_values('date').reset_index(drop=True)
-    if sub.empty:
-        return None
-    return sub
+# v19.385 T1 拔毒:`_finmind_macro_series` + `_NDC_SIGNAL_KEYS` / `_TW_PMI_KEYS`
+# 三者為 dataset `TaiwanMacroEconomics`(FinMind 不存在,v19.342 查證)遺留,production
+# 0 caller 已刪(NDC → `_finmind_business_indicator`;PMI → `tw_pmi_repository` 9 源賽跑;
+# export → 海關 opendata 6053)。各 fetcher 現況見其自身 docstring。
 
 
 def _finmind_business_indicator(months_back: int = 18,
