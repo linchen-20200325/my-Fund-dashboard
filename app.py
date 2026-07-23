@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.381_MacroTrendSSOTbug"
+APP_VERSION = "v19.382_MaxDdDefabSSOT"
 
 
 # ══════════════════════════════════════════════════════

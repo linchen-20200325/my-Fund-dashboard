@@ -2,6 +2,18 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-23 團隊交叉稽核修復 ②:portfolio_service max_dd `or "0"` 除假 v19.382
+
+- **病灶(架構師 §2.3,§1 反捏造)**:`services/portfolio_service.py:108,248`
+  `float((rt.get("最大回撤") or "0").replace("%",""))` —— 缺資料時 `or "0"` **捏造 0% 回撤 →
+  MaxDrawdown 假滿分**。就在上輪「已掃」檔(A3a 只收費用率鏈,漏這兩處)。
+- **修**:兩處改 SSOT `safe_num`(缺/髒值 → None → 該因子誠實跳過,不虛構 + 收 SSOT)。
+- **自修迴圈(1 輪)**:守門 test `test_maxdd_defaults_via_zero_string` 原本**鎖的是舊捏造行為**
+  (空 fd → MaxDrawdown available=True),QA 攔下 → 改鎖誠實行為(缺 → 不可用 / 有真值 → 可用)+
+  class docstring 註明 Sharpe(`or 0` 中性)vs MaxDrawdown(已除假)語意分家。
+- **驗**:`safe_num` 空/None→None、`%` 正常解析;`test_factor_availability_ssot` + `expense` +
+  `real_ter` **32 綠**。改動:`services/portfolio_service.py` + `tests/test_factor_availability_ssot.py`。
+
 ## 🩺 2026-07-23 團隊交叉稽核修復 ①:macro _trend 真 bug 收 SSOT v19.381
 
 - **背景**:四角色交叉稽核(PM/架構/工程/QA)在剛清完的 main 上,發現殘債集中在上輪沒掃到的
