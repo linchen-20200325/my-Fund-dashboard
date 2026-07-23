@@ -25,6 +25,9 @@ from infra.cache import (  # noqa: F401
 )
 from shared.fred_series import FRED_CHF_USD, FRED_CNH_USD, FRED_EUR_USD, FRED_JPY_USD
 from shared.ttls import TTL_5MIN, TTL_15MIN, TTL_30MIN
+# v19.385 T2b:%-欄位(費用/TER)解析收 SSOT safe_num(內建 strip '%'/','+ 排 bool),
+# 取代手動 safe_float(x.replace("%","").strip()) 反模式。純數值欄位仍用 safe_float(語意分工,見 shared/converters)。
+from shared.converters import safe_num
 from fund_fetcher import (  # noqa: F401
     safe_float, fetch_url_with_retry, is_valid_moneydj_page,
     HDR, HDR_JSON, PORTAL_CFG, TCB_BASE, _INSURANCE_SUBDOMAIN_HINTS,
@@ -175,7 +178,7 @@ def _src_fundclear_meta(code: str) -> dict:
                         info.get("ongoingCharges") or info.get("ter") or info.get("ocf") or
                         info.get("總費用率") or info.get("經常性費用") or
                         info.get("總開支比率") or "")
-            _ter_v = safe_float(str(_ter_raw).replace("%", "").strip()) if _ter_raw != "" else None
+            _ter_v = safe_num(_ter_raw)
             if _ter_v is not None and 0 < _ter_v <= 10:
                 meta["expense_ratio"] = _ter_v          # 揭露 TER(%),消費端優先於估計
                 meta["expense_ratio_source"] = "FundClear:GetFundBasicInfo"
@@ -469,20 +472,20 @@ def _src_allianzgi_meta(code: str) -> dict:
                     _fee_raw = (rows_map.get("最高經理費") or rows_map.get("經理費") or
                                 rows_map.get("管理費") or "")
                     if _fee_raw:
-                        _fee_v = safe_float(_fee_raw.replace("%", "").strip())
+                        _fee_v = safe_num(_fee_raw)
                         if _fee_v is not None:
                             meta["mgmt_fee"] = _fee_v
                     # v19.368 7/8:保管費(TER 估計第 2 主成分)
                     _cust_raw = (rows_map.get("最高保管費") or rows_map.get("保管費") or "")
                     if _cust_raw:
-                        _cust_v = safe_float(_cust_raw.replace("%", "").strip())
+                        _cust_v = safe_num(_cust_raw)
                         if _cust_v is not None:
                             meta["custody_fee"] = _cust_v
                     # v19.370 真實 TER:同表若揭露「總費用率」→ 收真值(消費端優先於估計)
                     _ter_raw = (rows_map.get("總費用率") or rows_map.get("總開支比率") or
                                 rows_map.get("經常性費用") or "")
                     if _ter_raw:
-                        _ter_v = safe_float(_ter_raw.replace("%", "").strip())
+                        _ter_v = safe_num(_ter_raw)
                         if _ter_v is not None and 0 < _ter_v <= 10:
                             meta["total_expense_ratio"] = _ter_v
                     if meta.get("fund_name"):
