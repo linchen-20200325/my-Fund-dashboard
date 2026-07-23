@@ -2,6 +2,18 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-23 團隊交叉稽核修復 ①:macro _trend 真 bug 收 SSOT v19.381
+
+- **背景**:四角色交叉稽核(PM/架構/工程/QA)在剛清完的 main 上,發現殘債集中在上輪沒掃到的
+  `services/macro/` 快照層 —— 藏著**一個真 bug**(架構師 §1.1 HIGH)。
+- **真 bug**:`services/macro/_helpers.py:_trend()` 是 SSOT `math_utils.trend_arrow()` 的分歧複製,
+  **少了「末點同向」guard** → 對 `[1,2,3,4,3.5]` 誤判「持續上升 ↑」而非「最近回落 ↘」,污染
+  `us_indicators` ~18 快照面板的趨勢標籤。
+- **修**:`_trend` 委派 SSOT `trend_arrow`(即修 bug + 消 DRY);`_spread_series` 一併委派 SSOT
+  `spread_series`(逐行等價,消第二份平行 yield-spread 對齊)。L2→L1 純 util,無循環。
+- **驗**:bug case 現回「最近回落 ↘」、正常上升/反彈皆正確;`_spread_series` 回 Series 等價;
+  `test_macro_core` + `test_d5_macro_ssot` **53 綠**。唯一改動:`services/macro/_helpers.py`。
+
 ## 🩺 2026-07-22 nav_history 開表錯誤可行動化 v19.380 —(user 匯入炸「空白錯誤」)
 
 - **病灶**:user secrets 設好、`status()` 綠,但匯入時 `_get_sheet` 開表階段炸,UI 顯示

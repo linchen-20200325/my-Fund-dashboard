@@ -8,6 +8,8 @@ import pandas as pd, numpy as np, math
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor as _TPE_macro
 from repositories.macro_repository import fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch
+# v19.381:趨勢/利差計算收斂 SSOT(repositories.macro.math_utils),消除本檔分歧複製
+from repositories.macro.math_utils import trend_arrow as _trend_arrow, spread_series as _spread_series_ssot
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     SAHM_RECESSION_THRESHOLD,
     CFNAI_RECESSION_THRESHOLD,
@@ -126,12 +128,10 @@ def _yf_s(ticker, period="2y"):
     return fetch_yf_close(ticker, range_=period)
 
 def _trend(vals):
-    if len(vals) < 3: return ""
-    diffs = [vals[i]-vals[i-1] for i in range(1, len(vals))]
-    pos = sum(1 for d in diffs if d > 0); neg = sum(1 for d in diffs if d < 0)
-    if pos >= len(diffs)-1: return "持續上升 ↑"
-    if neg >= len(diffs)-1: return "持續下降 ↓"
-    return "最近反彈 ↗" if diffs[-1] > 0 else "最近回落 ↘"
+    # v19.381:收斂 SSOT `math_utils.trend_arrow`。原本檔自帶一份**少了「末點同向」guard**
+    # (`pos>=len-1` 但未查 `diffs[-1]>0`)→ 對 [1,2,3,4,3.5] 誤判「持續上升 ↑」而非「最近回落 ↘」,
+    # 污染 us_indicators ~18 快照面板(架構師稽核 §1.1 HIGH)。委派 SSOT 即修 bug + 消 DRY。
+    return _trend_arrow(vals)
 
 def _safe_last(df, n=2):
     if df.empty or len(df) < n: return [None]*n
@@ -139,26 +139,9 @@ def _safe_last(df, n=2):
     return [v[-i] for i in range(1, n+1)]
 
 def _spread_series(df_long, df_short, n_pts=60):
-    if df_long.empty or df_short.empty: return pd.Series(dtype=float)
-    dl = df_long[["date","value"]].set_index("date").rename(columns={"value":"v_l"}).copy()
-    ds = df_short[["date","value"]].set_index("date").rename(columns={"value":"v_s"}).copy()
-    # W5-2 §1: 月底重採後 ffill 補缺月(同 macro_repository._spread_series 註解),加 log
-    dl_m = dl.resample("ME").last()
-    ds_m = ds.resample("ME").last()
-    _dl_ffill = int(dl_m["v_l"].isna().sum())
-    _ds_ffill = int(ds_m["v_s"].isna().sum())
-    dl_m = dl_m.ffill()
-    ds_m = ds_m.ffill()
-    if _dl_ffill or _ds_ffill:
-        print(f"[macro_service _spread_series] ffill v_l={_dl_ffill}, v_s={_ds_ffill} 個月份")
-    merged = dl_m.join(ds_m, how="inner").dropna()
-    if merged.empty:
-        dl2 = df_long[["date","value"]].rename(columns={"value":"v_l"}).sort_values("date")
-        ds2 = df_short[["date","value"]].rename(columns={"value":"v_s"}).sort_values("date")
-        m = pd.merge_asof(dl2, ds2, on="date", tolerance=pd.Timedelta("40d"), direction="backward").dropna()
-        m = m.set_index("date")
-        return (m["v_l"] - m["v_s"]).tail(n_pts)
-    return (merged["v_l"] - merged["v_s"]).tail(n_pts)
+    # v19.381:收斂 SSOT `math_utils.spread_series`(逐行等價:同 ME 重採 + ffill 補缺月 + inner-join
+    # + merge_asof 40d 回溯 fallback + tail(n_pts))。消除第二份平行 yield-spread 對齊實作(架構師 §1.2)。
+    return _spread_series_ssot(df_long, df_short, n_pts)
 
 def recession_probability(spread_10y3m):
     """用 10Y-3M 利差做 logistic 回歸估算衰退機率"""
