@@ -601,12 +601,12 @@ def render_single_fund_tab() -> None:
                 if _div_dates:
                     fig_n.add_trace(go.Scatter(
                         x=_div_dates, y=_div_navs,
-                        mode="markers+text",
+                        # v19.392 V4b:去每點 💰 標籤(月配 3 年 30+ 個重疊,dataviz #5)。所有配息點
+                        # 仍以三角標記全數呈現,配息金額改由 hover(%{text})顯示 —— 零資料遺失。
+                        mode="markers",
                         name="配息日",
                         marker=dict(symbol="triangle-up", size=10, color="#ffd600"),
                         text=_div_texts,
-                        textposition="top center",
-                        textfont=dict(size=9, color="#ffd600"),
                         hovertemplate="%{text}<br>淨值：%{y:.4f}<extra></extra>"))
 
                 # ── MK v3.2 買賣水平線（回歸中樞 ± kσ；σ=近1年淨值統計標準差）────
