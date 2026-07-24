@@ -24,6 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
     BG_DARK_AMBER_1,
     BG_DARK_AMBER_2,
@@ -392,7 +393,11 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     try:
         _mj = _f.get("moneydj_raw", {}) or {}
         _metrics = _f.get("metrics", {}) or {}
-        _tret = float(_mj.get("perf", {}).get("1Y") or _metrics.get("ret_1y") or 0)
+        # v19.399 §1:缺 1Y 含息報酬保留 None(不 `or 0` 捏造 0% → dividend_safety 假吃本金);
+        # dividend_safety 對 None 有「無報酬資料」grey 誠實分支(portfolio_service.py:341)。
+        _tret = safe_num(_mj.get("perf", {}).get("1Y"))
+        if _tret is None:
+            _tret = safe_num(_metrics.get("ret_1y"))
         _dyld = float(_mj.get("moneydj_div_yield") or _metrics.get("annual_div_rate") or 0)
         if _dyld > 0:
             from fund_fetcher import div_safety_check

@@ -24,6 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import BG_DARK_GREEN_3, BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, BG_DARK_RED_3, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL, WARN_AMBER, WHITE
 
 from infra.oauth import (
@@ -1360,7 +1361,7 @@ def render_portfolio_tab() -> None:
                             _tret_v, _ = compute_1y_total_return({
                                 "metrics": _m, "moneydj_raw": _mj_e,
                             })
-                            _tret = float(_tret_v or 0)
+                            _tret = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
                             _dyld = float(_mj_e.get("moneydj_div_yield")
                                           or _m.get("annual_div_rate") or 0)
                             if _dyld > 0:
@@ -1413,7 +1414,7 @@ def render_portfolio_tab() -> None:
                         _tret_v, _ = compute_1y_total_return({
                             "metrics": _metrics, "moneydj_raw": _mj,
                         })
-                        _tret = float(_tret_v or 0)
+                        _tret = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
                         # v19.272 Phase 2 TOP 1:adr 走 SSOT 3 層 fallback chain(原行內 2 層收斂)
                         from services.health.dividend import _resolve_adr_with_fallback
                         _dyld_v, _ = _resolve_adr_with_fallback({
@@ -2039,7 +2040,7 @@ def render_portfolio_tab() -> None:
                     _tret_v, _ = compute_1y_total_return({
                         "metrics": _m_local, "moneydj_raw": _mj_local,
                     })
-                    _tret_l = float(_tret_v or 0)
+                    _tret_l = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
                     _dyld_l = float(_mj_local.get("moneydj_div_yield")
                                      or _m_local.get("annual_div_rate") or 0)
                     if _dyld_l > 0:
