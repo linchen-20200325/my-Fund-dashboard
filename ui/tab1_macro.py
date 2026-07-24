@@ -333,9 +333,13 @@ def render_indicator_map() -> None:
             color="rgba(189, 195, 199, 0.4)",
         ),
     )])
+    # v19.395 V3:補暗底 + 字色 —— 原 update_layout 無 paper_bgcolor / font color,
+    # Sankey 節點標籤走 Plotly 預設深色字,在深色 UI 幾乎黑字黑底不可讀
+    # (audit DEFECT-DARKMODE)。node_colors 升息劇本升級漸層為刻意語意色,保留。
     fig.update_layout(
         height=220, margin=dict(l=0, r=0, t=8, b=4),
-        font=dict(size=10),
+        font=dict(size=10, color=GH_FG_PRIMARY),
+        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
     )
     st.plotly_chart(fig, use_container_width=True)
 

@@ -2,6 +2,19 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 可視化優化 V3-viz 修 3 真實渲染缺陷(暗底 + hover) v19.395
+
+視覺化 audit(Explore agent 掃全 ui/ 23 chart site,分 DEFECT-*/ALREADY-FINE 桶)點名的
+**真缺陷**(非機械式接線,只動確有問題者;6 個 height 不一致渲染正常 → §-1 不動):
+1. `tab1_macro.py:325` Sankey(升息劇本因果鏈)—— update_layout 無 paper_bgcolor / font color,
+   節點標籤走 Plotly 預設深色字 = 深色 UI 黑字黑底不可讀 → 補 `paper_bgcolor=STREAMLIT_BG` +
+   `font color=GH_FG_PRIMARY`。node_colors 升級漸層為刻意語意色,保留。
+2. `mk_dashboard.py:544` 衛星淨值疊圖(N 條線)—— 無 hovermode → 補 `hovermode="x unified"`。
+3. `tab_fund_grp_health.py:910` 多基金 3 序列分組長條 —— 無 hovermode → 補 `hovermode="x unified"`。
+
+驗:三檔 AST OK;git diff 純 update_layout 屬性新增(+11/-1,零 trace/data 行改動,
+x/y/text/value 全未動);tab1_macro + grp_health 31 綠;AppTest 綠後 merge。
+
 ## 🩺 2026-07-24 可視化優化 V3-§1 修 dividend.py 漏網 max(_r,0.5) 地板 v19.394
 
 視覺化 audit(Explore agent 掃全 ui/ 23 chart site)發現:V1 已在 `tab3_portfolio.py:2245`
