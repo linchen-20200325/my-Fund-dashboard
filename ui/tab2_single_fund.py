@@ -1819,7 +1819,7 @@ def render_single_fund_tab() -> None:
                     )
                     _ai_fd_pct, _ = _calc_data_health()
                     if _ai_fd_pct < 50:
-                        st.caption(f"🔴 總經資料完整率 {_ai_fd_pct}%：建議先到「🌐 總經」按全量抓取，"
+                        st.caption(f"🔴 總經資料完整率 {_ai_fd_pct}%：建議先到「🌐 市場定調」按全量抓取，"
                                    "AI 才有景氣位階背景（仍可直接生成、僅準確度略降）。")
                     elif _ai_fd_pct < 80:
                         st.caption(f"🟡 資料完整率 {_ai_fd_pct}%，AI 參考性略降。")
