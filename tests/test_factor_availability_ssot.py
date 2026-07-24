@@ -121,16 +121,26 @@ class TestSortinoCalmarV193:
 
 
 class TestSharpeMaxDDDefaultsV193:
-    """Sharpe 走 `or 0` **中性**預設 → availability 永遠 True(除非源是 non-numeric string)。
+    """Sharpe 與 MaxDrawdown 缺資料時皆**誠實不可用**(對齊其餘 4 因子)。
 
-    v19.381 §1 除假:MaxDrawdown 原 `or "0"` 會捏造 0% 回撤 = **假滿分**(非中性),已改 SSOT
-    safe_num → 缺資料回 None(誠實不可用)。故 MaxDrawdown 與 Sharpe 語意分家,見下方 test。"""
+    v19.381 §1 除假:MaxDrawdown 原 `or "0"` 捏造 0% 回撤 = 假滿分,改 SSOT safe_num → 缺回 None。
+    v19.397 §1 除假:Sharpe 原 `or 0` 捏造 Sharpe=0 → 假中性 50 分仍計入權重 25(§1 造假:
+    「Sharpe 未知」被當成「Sharpe=0」納入評分)。已改 None-honest → 缺資料誠實跳過、不納入評分,
+    calc 與 availability 兩端一致;真值(含 0.0)照常有效。故兩因子語意收斂一致,見下方 test。"""
 
-    def test_sharpe_defaults_to_zero(self):
+    def test_sharpe_missing_not_available_v19397(self):
+        # v19.397 §1:缺 Sharpe → 誠實不可用、不納入評分(原 `or 0` 捏造 0 = 假中性 50 分)。
         fd = {"metrics": {}}
         avail = get_factor_availability(fd)
-        assert avail["Sharpe"] is True, "Sharpe SSOT 用 `or 0` → 永遠可納入"
-        assert _factor_in_score(fd, "Sharpe") is True
+        assert avail["Sharpe"] is False
+        assert _factor_in_score(fd, "Sharpe") is False
+        # 有真值時照常可用 + 納入評分;真值 0.0 亦為有效(不再被 `or` 誤判為缺而跳過)
+        fd2 = {"metrics": {"sharpe": 1.5}}
+        assert get_factor_availability(fd2)["Sharpe"] is True
+        assert _factor_in_score(fd2, "Sharpe") is True
+        fd3 = {"metrics": {"sharpe": 0.0}}
+        assert get_factor_availability(fd3)["Sharpe"] is True
+        assert _factor_in_score(fd3, "Sharpe") is True
 
     def test_sharpe_non_numeric_string_fails(self):
         fd = {"metrics": {"sharpe": "abc"}}

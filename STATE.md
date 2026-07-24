@@ -2,6 +2,25 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 §1 假替代值獵捕 #2 — 修 portfolio_service Sharpe `or 0` v19.397
+
+獵捕確認 5 違憲的第 2 修(HIGH)。`services/portfolio_service.py` 基金 4D 評分:
+- `calc_fund_factor_score:82` `float(rt.get("Sharpe") or m.get("sharpe") or 0)` —— 缺 Sharpe
+  被 `or 0` 捏造成 0 → 過 `is not None` 守 → 假中性 **50 分計入權重 25** 進基金評等。
+  其餘 5 因子(Sortino/MaxDD/Calmar/Alpha/ExpenseRatio)皆 `is not None` 誠實跳過;Sharpe 是
+  唯一 outlier(v19.381 修 MaxDD `or "0"` 同類時漏網)。
+- `get_factor_availability:231` twin(v19.193 設計就是要跟 calc 端 1-1 對齊):`float(... or 0)`
+  恆不 raise → `avail["Sharpe"]` **恆 True**,Tab2「📊 進階指標」永遠假報 ✅ Sharpe 可用。
+
+修:兩端改 `is None`(非 `or`)兩源 fallback + None 誠實跳過。真值(含 0.0)照常有效且不再被
+`or` 誤跳;缺 → 因子不納入、grade 於剩餘權重重新常態化(非捏造 50)。連帶更新
+`test_factor_availability_ssot.py`:原 `test_sharpe_defaults_to_zero`(鎖死 `avail 恆 True` 的
+bug-locking test)改 `test_sharpe_missing_not_available_v19397`(缺→False + 真值/0.0→True)。
+
+驗:AST OK;factor availability 17 綠 + 廣義 factor/portfolio 185 綠;跨因子對齊 test
+(calc set == availability set)仍綠(fix 保持兩端對稱)。AppTest + 獨立 QA 綠後 merge。
+其餘 2 待修:div_safety_check verdict cluster(MED)、financial_repository 三率 `_diff` 假 0(MED)。
+
 ## 🩺 2026-07-24 §1 假替代值獵捕 — 修 Tab1「假吃本金紅燈」 v19.396
 
 viz audit 意外挖到 dividend floor 後,派 3 AI(services/ui/repositories)平行獵捕同類

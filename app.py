@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.396_S1_FakeEatPrincipalFix"
+APP_VERSION = "v19.397_S1_SharpeFakeZeroFix"
 
 
 # ══════════════════════════════════════════════════════
