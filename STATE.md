@@ -2,6 +2,18 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 可視化優化 V3a inline-hex → SSOT(byte-identical) v19.389 —(整包第 3 期起步)
+
+V3 逐 Tab 接線第一刀,只做**可證明零視覺變化**的 inline-hex → SSOT 常數(稽核 ② 收斂):
+- `ui/tab1_macro.py:271-275` 趨勢箭頭 `#22c55e/#ef4444/#888888` → `TRAFFIC_GREEN/RED/NEUTRAL`(已 import)
+- `ui/components/macro_compass_top.py:28-32` 同 3 色 → TRAFFIC_*(補 import)
+- `ui/helpers/macro/key_alerts.py:27-29` chip `#161b22/#30363d/#e6edf3` → `GH_BG_CARD/GH_BORDER/GH_FG_PRIMARY`(補 import)
+
+驗:**byte-identity 證明**(常數 == 舊 hex 逐一 assert)→ 渲染輸出零變化,故資料誠信閘門
+trivially 滿足(無渲染差可查);compile OK;key_alerts/compass/macro/tab1 相關 103 綠。
+其餘非 byte-identical 的收斂(Tab5 MATERIAL→TRAFFIC 燈號、22 圖 apply_dark_template、tile/表格)
+留 V3b+ 逐 Tab 做,各配獨立資料誠信 QA。
+
 ## 🩺 2026-07-24 可視化優化 V2 SSOT 4 元件骨幹 v19.388 —(整包第 2 期)
 
 建 4 個共用元件(`ui/components/`),**全新、inert(尚無 caller)** → 零 app 行為變動;

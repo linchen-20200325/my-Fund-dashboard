@@ -268,11 +268,11 @@ def _render_macro_indicator_card(title: str, signal: str, color: str,
             if _prv != 0:
                 _chg = (_cur - _prv) / abs(_prv)
                 if _chg > 0.02:
-                    _arr_html = '<span style="font-size:11px;color:#22c55e;margin-left:5px;">↑</span>'
+                    _arr_html = f'<span style="font-size:11px;color:{TRAFFIC_GREEN};margin-left:5px;">↑</span>'
                 elif _chg < -0.02:
-                    _arr_html = '<span style="font-size:11px;color:#ef4444;margin-left:5px;">↓</span>'
+                    _arr_html = f'<span style="font-size:11px;color:{TRAFFIC_RED};margin-left:5px;">↓</span>'
                 else:
-                    _arr_html = '<span style="font-size:10px;color:#888888;margin-left:5px;">→</span>'
+                    _arr_html = f'<span style="font-size:10px;color:{TRAFFIC_NEUTRAL};margin-left:5px;">→</span>'
         except Exception:
             pass
     _st_c.markdown(
