@@ -2,6 +2,24 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧹 2026-07-24 儀表板 IA 重分類 Phase 0 — 刪 ~500 行死面板 v19.401
+
+user 核准「6→5 分頁重新分類」大工程(§8.4 分階段,每階段獨立 PR + 獨立稽核 AI 驗資料再合併)。
+三 AI 平行調查(IA 全圖測繪 / 跨頁重複獵人 / 工作流稽核)→ 視覺提案 artifact → user 拍板:
+接受 6→5 方向(市場定調→組合健診→個基深掘→配置&帳本→參考/診斷)、一路做到 Phase 0→4、
+資料診斷+說明書合區。**原則(user 定)**:決策資料各自獨立圖表化+說明,只有參考資料才收攏;
+去重≠合併資料(清「同結論算三套互相打架」是修 bug)。
+
+**Phase 0(零風險減負)**:`ui/tab1_macro.py` 三個 **0-caller 死面板**整塊拔除(:518-1016,499 行):
+- `_render_macro_navigator`(v19.45 導航卡)/ `_render_beginner_dashboard`(雙速合議)/
+  `_render_tw_local_dashboard`(台股本地視角)—— 全非 `render_macro_tab` render path,
+  僅定義未被呼叫(全庫 grep 證實 0 production caller,只有孤兒測試 + STATE 歷史 + stale 註解)。
+- 連動:孤兒測試 `tests/test_tab1_tw_local_section.py` git rm;`:449` stale 註解(cross-ref 已刪 fn)清掉。
+
+**驗**:py_compile OK;全庫 grep 0 殘留引用;tab1_macro 單元 13 綠 2 skip;AppTest 16/16 綠
+(headless render 全 tab 含總經);render/smoke 綠。tab1_macro 1580→1082 行(−498)。
+**無行為變更**(刪的是從不 render 的死碼)。
+
 ## 🩺 2026-07-24 §1/§8 follow-up — 啟用 tab1 逐檔決策矩陣「吃本金」死訊號 v19.400
 
 v19.399 QA 揪出的 follow-up(user 核准「要」)。`tab1_macro.py:403`
