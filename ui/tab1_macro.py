@@ -472,7 +472,7 @@ def _render_china_drag_panel(phase_dict: dict | None,
     # ── 渲染:4-column 唯讀卡 ──────────────────────────────────────
     st.markdown(
         f'<div style="border-left:4px solid {_regime_color};padding:8px 12px;'
-        f'background:#fafafa;margin:8px 0;border-radius:4px;">'
+        f'background:{GH_BG_CARD};margin:8px 0;border-radius:4px;">'  # v19.387 V1:#fafafa 淺底孤島→深色卡(原淺字白底不可讀)
         f'<b>🇨🇳 中國拖累 China Drag</b>  '
         f'<span style="color:{_regime_color};font-weight:bold;">{_regime_label}</span>'
         f'{("  ⚠️ " + _fx_alert) if _fx_alert else ""}'

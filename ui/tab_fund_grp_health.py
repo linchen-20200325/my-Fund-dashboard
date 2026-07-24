@@ -16,6 +16,7 @@ from __future__ import annotations
 import streamlit as st
 
 from shared.colors import GH_BG_PRIMARY, GH_FG_SECONDARY, GRAY_55, INFO_BLUE, TRAFFIC_GREEN
+from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None(不畫成 0% 假柱)
 
 _MAX_CODES = 10
 _DEFAULT_CCY = "USD"
@@ -901,9 +902,11 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                 _div_key = f"配息率% ({_basis})"
                 _ret_key = f"含息% ({_basis})"
                 _nav_key = f"淨值% ({_basis})"
-                _div_r  = [float(r.get(_div_key) or 0) for r in ok_rows]
-                _ret_r  = [float(r.get(_ret_key) or 0) for r in ok_rows]
-                _nav_r  = [float(r.get(_nav_key) or 0) for r in ok_rows]
+                # v19.387 V1 §1:缺值保留 None → Plotly 該柱留缺口(誠實),不再 `or 0` 畫成
+                # 與「真實 0%」無法區分的假柱。基準切換(v19.304)已解全 0,此處補單檔 None。
+                _div_r  = [safe_num(r.get(_div_key)) for r in ok_rows]
+                _ret_r  = [safe_num(r.get(_ret_key)) for r in ok_rows]
+                _nav_r  = [safe_num(r.get(_nav_key)) for r in ok_rows]
                 _fig = _go.Figure()
                 _fig.add_trace(_go.Bar(x=_codes, y=_div_r, name=f"配息率%({_basis})🧮", marker_color="#f0883e"))
                 _fig.add_trace(_go.Bar(x=_codes, y=_ret_r, name=f"含息%({_basis})🧮",  marker_color=TRAFFIC_GREEN))
@@ -929,9 +932,9 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                     {
                         "代號": r["code"],
                         "基金名": r.get("基金名", ""),
-                        _ret_key: float(r.get(_ret_key) or 0),
-                        _div_key: float(r.get(_div_key) or 0),
-                        _nav_key: float(r.get(_nav_key) or 0),
+                        _ret_key: safe_num(r.get(_ret_key)),  # v19.387 §1:缺值 → 空格(NumberColumn),非 0
+                        _div_key: safe_num(r.get(_div_key)),
+                        _nav_key: safe_num(r.get(_nav_key)),
                     }
                     for r in ok_rows
                 ])

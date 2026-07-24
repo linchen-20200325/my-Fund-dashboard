@@ -2,6 +2,25 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-23 可視化優化 V1 資料誠信 §1 v19.387 —(整包 V1→V4 之第 1 期)
+
+user 核准「整包做」跨全 Tab 可視化優化(5-agent 稽核 → 去重 → 預覽 → 確認閘門通過)。
+V1 先收最高優先的 §1「缺值畫成健康」3 破口 + 破圖 + 手冊內容:
+
+- **Tab1 戰情室 gauge**(`inflection.py:93-95,130+`):SAHM/SLOOS/ADL 缺值原 `float(... or 0)`
+  → 指針停 0.00 顯示「🟢安全/🟡持平」。改 `safe_num` 保留 None,None → 渲染「⬜ 資料不足」
+  占位不畫指針(新 `_gauge_missing` helper),有值才進 gauge。
+- **Tab3 含息報酬長條**(`portfolio.py:2239`):移除 `max(_r, 0.5)` 高度地板 —— 原把吃本金負報酬
+  硬拉成正向長條、標籤卻標真負值。改用真實 `_rc_ret`,負值向下、0 基準線、吃本金已標紅。
+- **健診多基金比較圖**(`fund_grp_health.py:904-906,932-934`):`float(... or 0)` → `safe_num`,
+  單檔缺值 → Plotly 留缺口 / 表格空格(誠實),不再與真實 0% 無法區分。
+- **破圖**:`tab1_macro.py:475` 深色殼中 `#fafafa` 淺底孤島(淺字白底不可讀)→ `GH_BG_CARD`。
+- **手冊內容錯誤**:`tab6_manual.py:93` 列了不存在的 dataset `TaiwanMacroEconomics`(v19.342 判定)
+  → 更正為 NDC=TaiwanBusinessIndicator / TW PMI=9 源賽跑。
+
+驗:5 檔 compile OK;§1 假值 pattern 已清;go.Bar 接受 None y 留缺口不崩;macro/health 146 綠;
+AppTest 全 tab 渲染(見 PR CI)。改動純 UI 誠信,無業務邏輯變動。
+
 ## 🩺 2026-07-23 收尾 (b)+(c):utcnow deprecation 修 + edu 教學表加 SSOT 交叉引用 v19.386
 
 user 追問「還有沒有可優化/缺點」→ 據實列出後選 (b)+(c):
