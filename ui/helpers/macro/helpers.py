@@ -40,6 +40,32 @@ from services.macro_composite_score import (  # noqa: F401
 
 
 # ══════════════════════════════════════════════════════
+# HELPER: format_phase_score — 景氣位階字卡文字 SSOT（v19.403 Phase 2 DUP-3）
+# calc_macro_phase 的 score 為 0-10 循環評分(us_indicators.py round(max(0,min(10,·)),1)),
+# **恆 ≥ 0** → 禁用帶正負號格式(`:+.1f`)。原 tab_fund_grp_health.py 誤用 +.1f 顯示
+# 「+6.5」,與 hero 的「23 指標淨分(genuinely signed)」撞臉。本 SSOT 收單一格式消歧義。
+# ══════════════════════════════════════════════════════
+def format_phase_score(phase_info: dict | None) -> str:
+    """回景氣位階 SSOT 文字：`{phase} {score:.1f}/10`(score 恆 0-10,不帶正負號)。
+
+    - phase_info 非 dict / 無 phase → 回 ""(交由 caller 決定 fallback 文字)
+    - 有 phase 但 score 為 None → 回 phase(不捏造 0.0 分,§1)
+    """
+    if not isinstance(phase_info, dict):
+        return ""
+    phase = phase_info.get("phase")
+    if not phase:
+        return ""
+    score = phase_info.get("score")
+    if score is None:
+        return str(phase)
+    try:
+        return f"{phase} {float(score):.1f}/10"
+    except (TypeError, ValueError):
+        return str(phase)
+
+
+# ══════════════════════════════════════════════════════
 # HELPER: 四大類別健康度（v17.4）
 # ══════════════════════════════════════════════════════
 _CATEGORY_MAP = {

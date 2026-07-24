@@ -507,10 +507,11 @@ def render_single_fund_tab() -> None:
                     _sig_style = sig["sig_style"]
                     # v19.273 Phase 2 TOP 2.1:卡片外框走 gh_card chrome SSOT(byte-identical)
                     from ui.components.cards import gh_card
+                    from ui.helpers.macro_helpers import format_phase_score  # v19.403 景氣位階 SSOT
                     st.markdown(gh_card(
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>資產屬性</div><div style='font-size:14px;font-weight:700;color:{INFO_BLUE}'>{sig['asset_class']}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>策略3 操作訊號</div><span style='{_sig_style};padding:4px 12px;border-radius:20px;font-size:13px;font-weight:700;display:inline-block'>{sig['label']}</span></div>"
-                        f"<div style='flex:1'><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>景氣位階（{phase_info_s['phase']} {phase_info_s['score']}/10）</div>"
+                        f"<div style='flex:1'><div style='color:{TRAFFIC_NEUTRAL};font-size:11px'>景氣位階（{format_phase_score(phase_info_s)}）</div>"
                         f"<div style='font-size:12px;color:{GH_FG_SECONDARY}'>{sig['reason']}</div></div>",
                         radius=10, padding="14px 18px", margin="8px 0",
                         extra="display:flex;align-items:center;gap:16px;flex-wrap:wrap",

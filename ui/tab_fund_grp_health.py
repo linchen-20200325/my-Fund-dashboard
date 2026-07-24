@@ -95,7 +95,6 @@ def render_fund_grp_health_tab() -> None:
     _phase_info = st.session_state.get("phase_info") or {}
     _phase_name = _phase_info.get("phase", "")
     if _phase_name:
-        _score = _phase_info.get("score", 0)
         _phase_lower = _phase_name.lower()
         if any(k in _phase_lower for k in ("多頭", "擴張", "bull", "expansion")):
             _phase_icon, _phase_tip = "🟢", "多頭期：健診標準可適度放寬，重點看含息報酬能否跑贏通膨。"
@@ -103,8 +102,12 @@ def render_fund_grp_health_tab() -> None:
             _phase_icon, _phase_tip = "🔴", "防禦期：吃本金判定應從嚴看待；股票型基金承壓，配息穩定性更重要。"
         else:
             _phase_icon, _phase_tip = "🟡", "過渡期：健診結果請搭配個別基金趨勢判斷。"
+        # v19.403 Phase 2 DUP-3:景氣位階字卡走 format_phase_score SSOT。
+        # 原「評分 {_score:+.1f}」(如 +6.5)誤用正負號 —— phase score 恆 0-10,
+        # 與 hero 的 23 指標淨分(genuinely signed)撞臉;改「{phase} {score}/10」統一。
+        from ui.helpers.macro_helpers import format_phase_score
         st.info(
-            f"📊 當前總經 Phase：{_phase_icon} **{_phase_name}**（評分 {_score:+.1f}）"
+            f"📊 當前總經 Phase：{_phase_icon} **{format_phase_score(_phase_info)}**"
             f"　{_phase_tip}"
         )
     else:
