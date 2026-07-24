@@ -22,6 +22,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None,不再 `or 0`
 from services.macro import (
     backtest_turning_points,
     detect_turning_points,
@@ -90,11 +91,22 @@ def render_inflection_alert_section(
     _sahm_d  = ind.get("SAHM")  or {}
     _sloos_d = ind.get("SLOOS") or {}
     _adl_d   = ind.get("ADL")   or {}
-    _sahm_v  = float(_sahm_d.get("value")  or 0)
-    _sloos_v = float(_sloos_d.get("value") or 0)
-    _adl_v   = float(_adl_d.get("value")   or 0)
+    # v19.387 V1 §1:缺值保留 None(不再 `or 0` 把「沒資料」畫成 0.00 綠燈=偽裝健康)
+    _sahm_v  = safe_num(_sahm_d.get("value"))
+    _sloos_v = safe_num(_sloos_d.get("value"))
+    _adl_v   = safe_num(_adl_d.get("value"))
 
     _gg1, _gg2, _gg3 = st.columns(3)
+
+    def _gauge_missing(title):
+        # v19.387 V1 §1:缺值不畫指針,誠實顯示占位(取代 0.00 綠燈)
+        st.markdown(
+            f"<div style='text-align:center;min-height:200px;display:flex;flex-direction:column;"
+            f"justify-content:center;border:1px dashed {GH_BORDER};border-radius:8px;"
+            f"background:{GH_BG_CARD};color:{GRAY_66}'>"
+            f"<div style='font-size:15px'>⬜ 資料不足</div>"
+            f"<div style='font-size:11px;margin-top:4px'>{title}</div></div>",
+            unsafe_allow_html=True)
 
     def _make_gauge(val, title, suffix, rng, thresholds, danger_above=True):
         """thresholds: [(limit, color_hex), ...] 從低到高"""
@@ -128,48 +140,56 @@ def render_inflection_alert_section(
         return f
 
     with _gg1:
-        st.plotly_chart(_make_gauge(
-            _sahm_v, "薩姆規則<br>衰退機率", "pp", [0, 1.0],
-            [(0.3, BG_DARK_GREEN_GAUGE), (0.5, BG_DARK_AMBER_1), (1.0, BG_DARK_RED_1)],
-            danger_above=True), use_container_width=True)
-        _sahm_sig = ("🔴 **衰退觸發** ≥0.5" if _sahm_v >= 0.5
-                     else "🟡 警戒區 ≥0.3" if _sahm_v >= 0.3
-                     else "🟢 安全 <0.3")
-        st.markdown(f"<div style='text-align:center;font-size:12px'>{_sahm_sig}</div>",
-                    unsafe_allow_html=True)
-        if not _sahm_d:
+        if _sahm_v is None:
+            _gauge_missing("薩姆規則 · 衰退機率")
             st.caption("⚠️ FRED SAHMREALTIME 未取得（API Key 或網路）")
+        else:
+            st.plotly_chart(_make_gauge(
+                _sahm_v, "薩姆規則<br>衰退機率", "pp", [0, 1.0],
+                [(0.3, BG_DARK_GREEN_GAUGE), (0.5, BG_DARK_AMBER_1), (1.0, BG_DARK_RED_1)],
+                danger_above=True), use_container_width=True)
+            _sahm_sig = ("🔴 **衰退觸發** ≥0.5" if _sahm_v >= 0.5
+                         else "🟡 警戒區 ≥0.3" if _sahm_v >= 0.3
+                         else "🟢 安全 <0.3")
+            st.markdown(f"<div style='text-align:center;font-size:12px'>{_sahm_sig}</div>",
+                        unsafe_allow_html=True)
         # T2: Tooltip
         with st.expander("ℹ️ 薩姆規則說明", expanded=False):
             st.markdown("**薩姆規則（Sahm Rule）**：當失業率的3個月滾動平均比過去12個月最低點高出 ≥0.5 百分點，代表美國進入衰退。⚠️ 新手白話：儀表板紅色時，代表景氣已經轉壞，建議降低高風險基金比重。")
 
     with _gg2:
-        st.plotly_chart(_make_gauge(
-            _sloos_v, "SLOOS 放貸寬鬆度<br>銀行信貸標準", "%", [-30, 60],
-            [(-5, BG_DARK_GREEN_GAUGE), (20, BG_DARK_AMBER_1), (60, BG_DARK_RED_1)],
-            danger_above=True), use_container_width=True)
-        _sloos_sig = ("🔴 **銀行緊縮** >20%" if _sloos_v > 20
-                      else "🟡 中性偏緊 >0%" if _sloos_v > 0
-                      else "🟢 信貸寬鬆 <0%")
-        st.markdown(f"<div style='text-align:center;font-size:12px'>{_sloos_sig}</div>",
-                    unsafe_allow_html=True)
-        if not _sloos_d:
+        if _sloos_v is None:
+            _gauge_missing("SLOOS · 銀行信貸標準")
             st.caption("⚠️ FRED DRTSCILM 未取得")
+        else:
+            st.plotly_chart(_make_gauge(
+                _sloos_v, "SLOOS 放貸寬鬆度<br>銀行信貸標準", "%", [-30, 60],
+                [(-5, BG_DARK_GREEN_GAUGE), (20, BG_DARK_AMBER_1), (60, BG_DARK_RED_1)],
+                danger_above=True), use_container_width=True)
+            _sloos_sig = ("🔴 **銀行緊縮** >20%" if _sloos_v > 20
+                          else "🟡 中性偏緊 >0%" if _sloos_v > 0
+                          else "🟢 信貸寬鬆 <0%")
+            st.markdown(f"<div style='text-align:center;font-size:12px'>{_sloos_sig}</div>",
+                        unsafe_allow_html=True)
         # T2: Tooltip
         with st.expander("ℹ️ SLOOS 說明", expanded=False):
             st.markdown("**SLOOS（銀行放貸標準）**：美聯儲季度調查，正值=銀行收緊放貸（壞），負值=銀行放寬放貸（好）。⚠️ 新手白話：儀表板紅色時，代表銀行不願貸款，企業融資困難，景氣降溫訊號。")
 
     with _gg3:
         # ADL = RSP/SPY 市場寬度 (% MoM change, negative = narrowing breadth = bad)
-        st.plotly_chart(_make_gauge(
-            _adl_v, "市場健康度<br>RSP/SPY 廣度", "%", [-10, 10],
-            [(-5, BG_DARK_RED_1), (0, BG_DARK_AMBER_1), (5, BG_DARK_GREEN_GAUGE)],
-            danger_above=False), use_container_width=True)
-        _adl_sig = ("🟢 市場廣度健康" if _adl_v > 2
-                    else "🔴 **廣度收窄** 虛假繁榮" if _adl_v < -2
-                    else "🟡 市場廣度持平")
-        st.markdown(f"<div style='text-align:center;font-size:12px'>{_adl_sig}</div>",
-                    unsafe_allow_html=True)
+        if _adl_v is None:
+            _gauge_missing("市場廣度 · RSP/SPY")
+            st.caption("⚠️ RSP/SPY 廣度未取得")
+        else:
+            st.plotly_chart(_make_gauge(
+                _adl_v, "市場健康度<br>RSP/SPY 廣度", "%", [-10, 10],
+                [(-5, BG_DARK_RED_1), (0, BG_DARK_AMBER_1), (5, BG_DARK_GREEN_GAUGE)],
+                danger_above=False), use_container_width=True)
+            _adl_sig = ("🟢 市場廣度健康" if _adl_v > 2
+                        else "🔴 **廣度收窄** 虛假繁榮" if _adl_v < -2
+                        else "🟡 市場廣度持平")
+            st.markdown(f"<div style='text-align:center;font-size:12px'>{_adl_sig}</div>",
+                        unsafe_allow_html=True)
         # T2: Tooltip
         with st.expander("ℹ️ 市場廣度說明", expanded=False):
             st.markdown("**RSP/SPY 廣度（市場廣度）**：RSP = 等權重標普500，SPY = 市值加權。RSP/SPY 比值上升 = 中小型股參與行情（健康），下降 = 只有大型股撐盤（虛胖）。⚠️ 新手白話：紅色時代表漲幅集中少數大股，市場不穩健，小心追高。")

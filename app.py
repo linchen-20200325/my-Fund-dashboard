@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.386_UtcnowFix_EduSSotXref"
+APP_VERSION = "v19.387_VizV1_DataHonesty"
 
 
 # ══════════════════════════════════════════════════════

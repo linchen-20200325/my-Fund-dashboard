@@ -90,7 +90,7 @@ def render_manual_tab() -> None:
              "On-demand(無 cache)",
              "GEMINI_KEY 未設 → AI 區塊跳過(不擋畫面)"),
             ("🇹🇼 FinMind macro",    "🌐 Tab1(輔助)",
-             "FinMind TaiwanMacroEconomics(PMI / NDC)",
+             "NDC 景氣燈號:FinMind TaiwanBusinessIndicator｜TW PMI:9 源賽跑",  # v19.387 V1:更正 — TaiwanMacroEconomics 不存在(v19.342)
              "月後 5-10 天",
              "FinMind quota 用罄 → 跳過(非主源)"),
             ("📊 AAII Sentiment",    "🌐 Tab1(F-H1)",
