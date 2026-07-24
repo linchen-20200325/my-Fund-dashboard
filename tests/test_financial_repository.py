@@ -101,6 +101,45 @@ def test_fetch_three_ratios_happy_path():
     assert out["net_margin_diff"] == 3.0
 
 
+def test_fetch_three_ratios_missing_gross_profit_diff_none_v19398():
+    """v19.398 §1:財報缺 Gross Profit 行(金融股常態)→ gross_margin 兩季皆 None,
+    gross_margin_diff **回 None(非捏造 0.0)**;有資料的 op/net diff 照常算。"""
+    qf_no_gp = pd.DataFrame(
+        {
+            pd.Timestamp("2025-09-30"): [1000.0, 250.0, 180.0],
+            pd.Timestamp("2025-06-30"): [800.0,  180.0, 120.0],
+        },
+        index=["Total Revenue", "Operating Income", "Net Income"],
+    )
+    fake_tkr = MagicMock()
+    fake_tkr.quarterly_income_stmt = qf_no_gp
+    with patch("yfinance.Ticker", return_value=fake_tkr):
+        out = fr.fetch_stock_three_ratios("國泰金")
+    assert out is not None
+    assert out["gross_margin_new"] is None
+    assert out["gross_margin_old"] is None
+    assert out["gross_margin_diff"] is None, "缺毛利率不可捏造 0.0"
+    assert out["op_margin_diff"] == 2.5    # 25.0 - 22.5
+    assert out["net_margin_diff"] == 3.0   # 18.0 - 15.0
+
+
+def test_evaluate_three_ratios_skips_none_diff_v19398():
+    """v19.398 §1:三率任一 None(如金融股缺毛利率)→ 該股不計入 valid_stocks / 動能均值,
+    不再以捏造 0 充當「持平」拉平 verdict。全缺 → 誠實訊息。"""
+    from services.precision_service import PrecisionStrategyEngine
+    eng = PrecisionStrategyEngine()
+    holdings = [
+        {"stock": "A",  "gross_margin_diff": 1.0, "op_margin_diff": 1.0, "net_margin_diff": 1.0},   # sum 3
+        {"stock": "銀行", "gross_margin_diff": None, "op_margin_diff": 0.0, "net_margin_diff": 0.0},  # gross None → skip
+    ]
+    # 新 §1:銀行(缺毛利率)跳過 → 只 A 計入 → avg 3 > 2 → 🟢 強勢
+    # (舊 bug:銀行以 0 充數 → (3+0)/2=1.5 → 🟡 持平,verdict 被假資料拉平)
+    assert "強勢" in eng.evaluate_fund_three_ratios(holdings)
+    # 全持倉皆缺完整三率 → 誠實「無法檢核」,非「持平」也非舊「格式異常」
+    all_missing = [{"stock": "銀行A", "gross_margin_diff": None, "op_margin_diff": 1.0, "net_margin_diff": 1.0}]
+    assert "無法檢核" in eng.evaluate_fund_three_ratios(all_missing)
+
+
 def test_fetch_three_ratios_unresolvable_ticker():
     """名稱無法解析成 ticker → 直接回 None，不呼叫 yfinance。"""
     with patch("yfinance.Ticker") as mock_yf:
