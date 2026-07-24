@@ -77,15 +77,20 @@ def calc_fund_factor_score(fund_data: Dict,
     pf = fund_data.get("perf", {}) or {}
 
     # ── 1. Sharpe Ratio（權重 25）──────────────────────────────────────
-    sharpe = None
-    try:
-        sharpe = float(rt.get("Sharpe") or m.get("sharpe") or 0)
-    except (TypeError, ValueError):
-        sharpe = None
+    # v19.397 §1 除假:原 `or 0` 在缺資料時捏造 Sharpe=0 → 假中性 50 分仍計入權重 25
+    # (與 v19.381 MaxDrawdown `or "0"` 同類漏網;其餘 5 因子皆 None 誠實跳過)。
+    # 改 None-honest:缺 → 該因子誠實跳過,不虛構;`is None`(非 `or`)讓真值 0.0 亦視為有效。
+    sharpe = rt.get("Sharpe")
+    if sharpe is None:
+        sharpe = m.get("sharpe")
     if sharpe is not None:
-        s = min(max((sharpe + 1) / 2 * 100, 0), 100)   # -1~+1 → 0~100
-        factors["Sharpe"] = {"value": sharpe, "score": round(s, 1), "weight": 25}
-        total_s += s * 25; total_w += 25
+        try:
+            sharpe = float(sharpe)
+            s = min(max((sharpe + 1) / 2 * 100, 0), 100)   # -1~+1 → 0~100
+            factors["Sharpe"] = {"value": sharpe, "score": round(s, 1), "weight": 25}
+            total_s += s * 25; total_w += 25
+        except (TypeError, ValueError):
+            pass
 
     # ── 2. Sortino Ratio（權重 15）─────────────────────────────────────
     sortino = m.get("sortino")
@@ -227,11 +232,16 @@ def get_factor_availability(fund_data: Dict,
              "Calmar": False, "Alpha": False, "ExpenseRatio": False}
 
     # ── Sharpe(對齊 line 82-90)──
-    try:
-        float(rt.get("Sharpe") or m.get("sharpe") or 0)
-        avail["Sharpe"] = True
-    except (TypeError, ValueError):
-        pass
+    # v19.397 §1:與 calc 端一致 —— 缺 → False(不再 `or 0` 恆 True 假報「可用」)。
+    _sharpe_av = rt.get("Sharpe")
+    if _sharpe_av is None:
+        _sharpe_av = m.get("sharpe")
+    if _sharpe_av is not None:
+        try:
+            float(_sharpe_av)
+            avail["Sharpe"] = True
+        except (TypeError, ValueError):
+            pass
 
     # ── Sortino(對齊 line 93-101)──
     sortino = m.get("sortino")
