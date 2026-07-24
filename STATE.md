@@ -2,6 +2,24 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🎯 2026-07-24 儀表板 IA 重分類 Phase 2 — 景氣位階字卡 SSOT(DUP-3) v19.403
+
+Phase 2(跨頁去重)。設計 AI 掃 3 候選,誠實結論:**只有 A 是真去重**。
+- **B/C 判 WONTFIX(不同資料,不併)**:戰情室 3 表(核心/波段/3-3-3)為不同 row/sort/styling/
+  aux 的**不同資料**(radio 已於 v18.163 收斂該困惑);總經頁 VIX/薩姆/composite 多為互補
+  (sparkline vs gauge vs 門檻卡,部分作者已註記 complementary)→ 合併會毀掉區別,違反 user
+  「不要合起來」+ §-1,不做(唯一 soft-dup:hero raw-composite vs realtime weighted-composite,
+  留 Phase 4 評估)。
+- **A 實作(唯一乾淨去重,含真 bug)**:景氣位階 score 為 `calc_macro_phase` 0-10 循環評分
+  (恆 ≥ 0),`ui/tab_fund_grp_health.py:107` 誤用 `{:+.1f}` 顯示「+6.5」,與 hero 的 23 指標
+  **淨分**(genuinely signed)撞臉。新 SSOT `ui/helpers/macro/helpers.format_phase_score`
+  (單一格式 `{phase} {score:.1f}/10`,禁正負號,缺分不捏 0)+ 遷 `tab2:513`(byte-identical)
+  + 修 `tab_fund_grp_health:107`(消 +6.5 假號)。`signals`/`beginner_view`/`linkage` 本已
+  `/10` 一致(各有 bold/parens/color chrome + default),不強遷(§-1 避免無謂 churn)。
+
+驗:6 新回歸測試(`test_phase_score_format_v19403`)綠;既有 48 綠 2 skip;py_compile 全綠;
+AppTest;獨立稽核 AI。**行為變更**:健診頁景氣字卡由「+6.5」→「擴張 6.5/10」(消誤導正負號)。
+
 ## 🔴 2026-07-24 儀表板 IA 重分類 Phase 1 — §1 吃本金 verdict SSOT 收斂 v19.402
 
 Phase 1(§1 修 bug,最高優先)。深掘 AI 測繪確認:「吃本金」verdict 散落多處、演算法/輸入不
