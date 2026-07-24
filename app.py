@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.393_VizV4c_Donut2Slice"
+APP_VERSION = "v19.394_VizV3_DivFloorFix"
 
 
 # ══════════════════════════════════════════════════════

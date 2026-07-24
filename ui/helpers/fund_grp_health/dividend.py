@@ -77,10 +77,12 @@ def _render_dividend_matrix(funds: list) -> None:
             _rc_colors.append(MATERIAL_GREEN)
 
     fig_rc = go.Figure()
-    _rc_ret_vis = [max(_r, 0.5) if (_d > 0 and _r < _d) else _r
-                   for _r, _d in zip(_rc_ret, _rc_div)]
+    # v19.394 V3 §1:含息報酬長條用真實值 _rc_ret(移除 max(_r,0.5) 地板 ——
+    # 原本把吃本金的負報酬硬拉成正向長條、標籤卻標真負值,視覺與數據矛盾;
+    # 與 tab3_portfolio.py:2245 canonical 版對齊)。負報酬向下、以 0 基準線呈現;
+    # 顏色 _rc_colors 已把吃本金標紅。
     fig_rc.add_trace(go.Bar(
-        x=_rc_names, y=_rc_ret_vis,
+        x=_rc_names, y=_rc_ret,
         name="含息報酬率(1Y)%",
         marker_color=_rc_colors,
         text=[f"{v:.1f}%" for v in _rc_ret],
@@ -97,7 +99,7 @@ def _render_dividend_matrix(funds: list) -> None:
             marker=dict(symbol="diamond", size=8, color=MATERIAL_RED),
             hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
     fig_rc.add_hline(y=0, line_color=GRAY_55, line_width=1)
-    _y_max = max(max(_rc_ret_vis, default=10), max(_rc_div, default=10)) * 1.35
+    _y_max = max(max(_rc_ret, default=10), max(_rc_div, default=10)) * 1.35
     for _i, (_r, _d, _n, _real) in enumerate(
         zip(_rc_ret, _rc_div, _rc_names, _rc_real)
     ):
