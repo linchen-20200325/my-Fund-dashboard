@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.399_S1_DivSafetyFakeZeroFix"
+APP_VERSION = "v19.400_S1_Tab1DivSignalActivate"
 
 
 # ══════════════════════════════════════════════════════

@@ -400,7 +400,12 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
             _tret = safe_num(_metrics.get("ret_1y"))
         _dyld = float(_mj.get("moneydj_div_yield") or _metrics.get("annual_div_rate") or 0)
         if _dyld > 0:
-            from fund_fetcher import div_safety_check
+            # v19.400 §1/§8:原 `from fund_fetcher import div_safety_check` 為 broken import
+            # (fund_fetcher 未 export 該名 → ImportError 被下方 except 吞 → tab1 逐檔決策矩陣
+            # 「吃本金」訊號長期 dead,div_info 恆 None)。改指 SSOT services.portfolio_service
+            # (對齊 tab3:67),啟用 tab1 誠實訊號:缺 ret_1y(_tret=None)→ grey「無報酬資料」,
+            # 真吃本金 → red;decision_matrix 僅對 alert=="red" bump 動作,grey/None 不觸發(§1)。
+            from services.portfolio_service import dividend_safety as div_safety_check
             div_info = div_safety_check(_tret, _dyld)
     except Exception:
         div_info = None

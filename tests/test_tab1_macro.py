@@ -247,3 +247,23 @@ def test_macro_ready_flag_pattern_used():
 
     v19.39 PR1C：panel archived。test_no_st_stop_in_render_macro_tab 仍守住 st.stop 禁令。
     """
+
+
+def test_enrich_fund_for_decision_div_signal_live_v19400():
+    """v19.400 §1/§8:tab1 逐檔決策矩陣的「吃本金」訊號啟用。
+
+    原 line 403 `from fund_fetcher import div_safety_check` 為 broken import
+    (fund_fetcher 未 export → ImportError 被 except 吞 → div_info 恆 None,訊號長期 dead)。
+    改指 services.portfolio_service 後,鎖死誠實語意:
+      - 缺 1Y 含息報酬 → grey「無報酬資料」(非假吃本金 red;decision_matrix 僅 red bump)
+      - 真吃本金(0% 含息 < 配息)→ red
+      - 覆蓋充分(含息 > 配息)→ green
+    若 import 再被改回壞掉 → div_info 恆 None → 本測試三條 assert 全炸,守住不回歸。"""
+    from ui.tab1_macro import _enrich_fund_for_decision
+    miss = _enrich_fund_for_decision({"code": "X", "metrics": {"annual_div_rate": 5.0}})
+    assert miss["dividend_info"] is not None, "import 修好後 div_info 不應恆 None"
+    assert miss["dividend_info"].get("alert_level") == "grey"
+    eat = _enrich_fund_for_decision({"code": "Y", "metrics": {"ret_1y": 0.0, "annual_div_rate": 5.0}})
+    assert eat["dividend_info"].get("alert_level") == "red"
+    ok = _enrich_fund_for_decision({"code": "Z", "metrics": {"ret_1y": 8.0, "annual_div_rate": 5.0}})
+    assert ok["dividend_info"].get("alert_level") == "green"
