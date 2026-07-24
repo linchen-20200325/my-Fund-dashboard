@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
+from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW  # v19.390 V3b:燈號收 TRAFFIC SSOT
 
 from infra.proxy import get_proxy_config
 from shared.converters import safe_float as _safe_float
@@ -196,11 +196,11 @@ def render_data_guard_tab() -> None:
             return ("⬜", GRAY_66)
         _r = have / total
         if _r >= 0.85:
-            return ("🟢", MATERIAL_GREEN)
+            return ("🟢", TRAFFIC_GREEN)
         elif _r >= 0.5:
-            return ("🟡", MATERIAL_ORANGE)
+            return ("🟡", TRAFFIC_YELLOW)   # v19.390 V3b:🟡 燈原配 MATERIAL_ORANGE(橘)→ 修為 TRAFFIC 黃,icon/色一致
         else:
-            return ("🔴", MATERIAL_RED)
+            return ("🔴", TRAFFIC_RED)
 
     _t1_emoji, _t1_color = _tab_status(_macro_have, _macro_total)
     _t2_emoji, _t2_color = (
@@ -363,9 +363,9 @@ def render_data_guard_tab() -> None:
                     inactive_label: str = "尚未使用"):
         if used and ok_n > 0:
             tail = f" / {total}" if total else ""
-            return ("🟢", f"已抓 {ok_n}{tail}", MATERIAL_GREEN)
+            return ("🟢", f"已抓 {ok_n}{tail}", TRAFFIC_GREEN)
         if used:
-            return ("🟡", "已呼叫但無資料", MATERIAL_ORANGE)
+            return ("🟡", "已呼叫但無資料", TRAFFIC_YELLOW)   # v19.390 V3b:🟡↔黃 一致
         return ("⬜", inactive_label, GRAY_66)
 
     _RAW_TABLE = [
@@ -940,7 +940,7 @@ def render_data_guard_tab() -> None:
         f"</div>"
     )
     for _kr in _key_rows:
-        _src_color = (MATERIAL_GREEN if _kr["source"] != "(無)" else MATERIAL_RED)
+        _src_color = (TRAFFIC_GREEN if _kr["source"] != "(無)" else TRAFFIC_RED)  # v19.390 V3b:來源燈收 TRAFFIC
         _bg = BG_DARK_GREEN_1 if _kr["source"] != "(無)" else BG_DARK_RED_2
         _kt_html += (
             f"<div style='display:grid;grid-template-columns:1.4fr 1fr 1.6fr 1.4fr;"

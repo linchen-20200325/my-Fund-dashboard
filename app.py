@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.389_VizV3a_InlineHexSweep"
+APP_VERSION = "v19.390_VizV3b_Tab5Lights"
 
 
 # ══════════════════════════════════════════════════════
