@@ -493,7 +493,7 @@ def _render_china_drag_panel(phase_dict: dict | None,
     )
     _c1, _c2, _c3, _c4 = st.columns(4)
     with _c1:
-        st.metric("主分(總經)", f"{_main_score_10:+.2f} / 10")
+        st.metric("主分(總經)", f"{_main_score_10:.2f} / 10")  # v19.403 §1:phase score 0-10 恆非負→去 + 號
     with _c2:
         if _china_score is None:
             st.metric("中國副盤", "—")
@@ -503,7 +503,7 @@ def _render_china_drag_panel(phase_dict: dict | None,
         st.metric("乘子", f"{_multiplier:.3f}",
                   help="0.7~1.0,中國越差扣得越多,只懲罰不加成")
     with _c4:
-        st.metric("折扣後主分", f"{_composite_10:+.2f} / 10",
+        st.metric("折扣後主分", f"{_composite_10:.2f} / 10",  # v19.403 §1:去 + 號(delta 仍帶號)
                   delta=f"{_composite_10 - _main_score_10:+.2f}",
                   delta_color="inverse")
     st.caption(

@@ -17,8 +17,14 @@ Phase 2(跨頁去重)。設計 AI 掃 3 候選,誠實結論:**只有 A 是真去
   + 修 `tab_fund_grp_health:107`(消 +6.5 假號)。`signals`/`beginner_view`/`linkage` 本已
   `/10` 一致(各有 bold/parens/color chrome + default),不強遷(§-1 避免無謂 churn)。
 
+**獨立稽核 AI 加碼揪出第 4 站同類 bug**(原不在 3 站掃描範圍,一併修):`ui/tab1_macro.py:496/506`
+「中國拖累」唯讀面板的「主分(總經)/折扣後主分」metric 用 `{:+.2f}` 顯示 0-10 phase score
+(如「+6.50 / 10」)—— 同屬 §1 誤導正負號。修:值去 + 號(`{:.2f} / 10`);`delta`(genuinely
+signed change)保留帶號。至此 phase score 全站無誤導正負號。
+
 驗:6 新回歸測試(`test_phase_score_format_v19403`)綠;既有 48 綠 2 skip;py_compile 全綠;
-AppTest;獨立稽核 AI。**行為變更**:健診頁景氣字卡由「+6.5」→「擴張 6.5/10」(消誤導正負號)。
+AppTest 16/16;獨立稽核 AI PASS(6/6 + 加碼發現)。**行為變更**:健診頁景氣字卡「+6.5」→
+「擴張 6.5/10」;中國拖累面板「+6.50 / 10」→「6.50 / 10」(皆消誤導正負號)。
 
 ## 🔴 2026-07-24 儀表板 IA 重分類 Phase 1 — §1 吃本金 verdict SSOT 收斂 v19.402
 
