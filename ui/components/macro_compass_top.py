@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_PRIMARY  # v19.254 B1 GH_* SSOT
+from shared.colors import TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED  # v19.389 V3a:趨勢箭頭色收 SSOT
 
 import pandas as pd
 import streamlit as st
@@ -25,11 +26,11 @@ def _trend_dir(series: list, lookback: int = 20, threshold_pct: float = 0.03):
             return '', ''
         chg = (cur - prv) / abs(prv)
         if chg > threshold_pct:
-            return f'<span style="font-size:11px;color:#22c55e;margin-left:5px;">↑ 1M</span>', '↑'
+            return f'<span style="font-size:11px;color:{TRAFFIC_GREEN};margin-left:5px;">↑ 1M</span>', '↑'
         elif chg < -threshold_pct:
-            return f'<span style="font-size:11px;color:#ef4444;margin-left:5px;">↓ 1M</span>', '↓'
+            return f'<span style="font-size:11px;color:{TRAFFIC_RED};margin-left:5px;">↓ 1M</span>', '↓'
         else:
-            return f'<span style="font-size:11px;color:#888888;margin-left:5px;">→ 1M</span>', '→'
+            return f'<span style="font-size:11px;color:{TRAFFIC_NEUTRAL};margin-left:5px;">→ 1M</span>', '→'
     except Exception:
         return '', ''
 

@@ -8,7 +8,10 @@ shared/colors SSOT)。資料來自 L2 services/macro/daily_key_alerts;本檔
 """
 from __future__ import annotations
 
-from shared.colors import TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW
+from shared.colors import (  # v19.389 V3a:chip 底/框/字色收 GH_* SSOT(inline hex 為精確複本)
+    GH_BG_CARD, GH_BORDER, GH_FG_PRIMARY,
+    TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW,
+)
 
 
 def key_alerts_banner(result: dict) -> str:
@@ -24,9 +27,9 @@ def key_alerts_banner(result: dict) -> str:
     _bg = '#2d1b1b' if _n_red else '#2d2208'
     _chips = ''.join(
         f'<span title="{i.get("detail", "")}" '
-        f'style="display:inline-block;background:#161b22;border:1px solid #30363d;'
+        f'style="display:inline-block;background:{GH_BG_CARD};border:1px solid {GH_BORDER};'
         f'border-radius:6px;padding:2px 8px;margin:2px 6px 2px 0;font-size:12px;'
-        f'color:#e6edf3;cursor:help;">{i.get("emoji", "")} {i.get("text", "")}</span>'
+        f'color:{GH_FG_PRIMARY};cursor:help;">{i.get("emoji", "")} {i.get("text", "")}</span>'
         for i in items)
     return (f'<div style="background:{_bg};border-left:3px solid {_bc};'
             'border-radius:0 6px 6px 0;padding:8px 14px;margin:4px 0 10px 0;">'
