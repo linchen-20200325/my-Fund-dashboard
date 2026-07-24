@@ -1181,12 +1181,24 @@ def render_single_fund_tab() -> None:
                             st.markdown(f"<div style='display:flex;justify-content:space-between;padding:4px 10px;background:{GH_BG_CARD};border-radius:6px;margin:2px 0'><span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_dt}</span><span style='font-weight:700'>{_amt}</span><span style='color:{MATERIAL_ORANGE};font-size:11px'>{_yld}</span></div>", unsafe_allow_html=True)
 
                         # ── 🚨 吃本金警示（Core Protocol Ch.3.2）──
-                        _tr1y = m.get("ret_1y")  # 含息總報酬率近 1 年（%）
+                        # v19.402 §1 修:改吃「含息總報酬」(compute_1y_total_return SSOT),
+                        # 不再用 m["ret_1y"](純 NAV 不含息)→ 消除與上方「吃本金檢查」KPI
+                        # 橫幅同頁 🟢/🔴 自打臉。警示框 + 講義卡共用同一 dividend_safety
+                        # verdict,永不互相矛盾(講義卡色/標籤亦改讀 _ds,不再 inline 門檻)。
+                        from ui.helpers.macro_helpers import (
+                            compute_1y_total_return as _c1ytr_ep,
+                        )
+                        _tr1y, _tr1y_src = _c1ytr_ep({
+                            "metrics": m,
+                            "moneydj_raw": mj_raw,
+                            "series": s,
+                            "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                        })
                         if _tr1y is not None and _adr > 0:
                             _ds = div_safety_check(
                                 total_return=float(_tr1y),
                                 dividend_yield=float(_adr),
-                                nav_change=float(m.get("ret_1y", 0) or 0),
+                                nav_change=float(_tr1y),
                             )
                             _al = _ds.get("alert_level","grey")
                             _bg = {"red":BG_DARK_RED_1,"yellow":BG_DARK_AMBER_1,"green":BG_DARK_GREEN_1}.get(_al,CHIP_BG_NEAR_BLACK)
@@ -1199,17 +1211,13 @@ def render_single_fund_tab() -> None:
                                 + (f"<div style='color:{MATERIAL_ORANGE};font-size:10px;margin-top:4px'>{_ds['nav_warning']}</div>" if _ds.get("nav_warning") else "")
                                 + "</div>", unsafe_allow_html=True)
 
-                        # ── 📖 配息覆蓋率講義卡（MK 郭俊宏《以息養股》）──
-                        _tr1y_f = float(_tr1y) if _tr1y is not None else None
-                        _adr_f  = float(_adr)  if _adr  else 0.0
-                        if _tr1y_f is not None and _adr_f > 0:
-                            _cov = _tr1y_f / _adr_f
-                            _cov_c = MATERIAL_GREEN if _cov >= 1.0 else (MATERIAL_ORANGE if _cov >= 0.8 else MATERIAL_RED)
-                            _cov_label = (
-                                "🟢 安全 — 報酬足以支撐配息，無吃本金疑慮" if _cov >= 1.0 else
-                                "🟡 注意 — 輕微侵蝕，需觀察趨勢" if _cov >= 0.8 else
-                                "🔴 警示 — 嚴重吃本金，領息賠價差"
-                            )
+                            # ── 📖 配息覆蓋率講義卡（MK 郭俊宏《以息養股》）──
+                            # v19.402:色/標籤改讀同一 _ds(SSOT gap 判定),不再 inline
+                            # coverage-ratio 門檻(1.0/0.8)→ 與上方警示框永遠一致。
+                            _cov = _ds.get("coverage")
+                            _cov_txt = f"{_cov:.2f}" if isinstance(_cov, (int, float)) else "—"
+                            _cov_c = {"red":MATERIAL_RED,"yellow":MATERIAL_ORANGE,
+                                      "green":MATERIAL_GREEN}.get(_al, TRAFFIC_NEUTRAL)
                             st.markdown(
                                 f"<div style='background:{GH_BG_PRIMARY};border:1px dashed {GH_BORDER};"
                                 f"border-radius:10px;padding:10px 14px;margin-top:8px'>"
@@ -1219,14 +1227,14 @@ def render_single_fund_tab() -> None:
                                 f"border-left:2px solid {GRAY_44};padding-left:8px;margin-bottom:8px'>"
                                 f"「高殖利率不等於高報酬，必須確認是否吃本金。」</div>"
                                 f"<div style='font-family:monospace;font-size:12px;color:{GH_FG_PRIMARY};margin-bottom:6px'>"
-                                f"Coverage = TR₁Y ÷ 年化配息率<br>"
+                                f"Coverage = TR₁Y(含息) ÷ 年化配息率<br>"
                                 f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
-                                f"= {_tr1y_f:.1f}% ÷ {_adr_f:.2f}%"
-                                f" = <span style='color:{_cov_c};font-weight:700;font-size:14px'>{_cov:.2f}</span></div>"
+                                f"= {float(_tr1y):.1f}% ÷ {float(_adr):.2f}%"
+                                f" = <span style='color:{_cov_c};font-weight:700;font-size:14px'>{_cov_txt}</span></div>"
                                 f"<div style='color:{_cov_c};font-size:12px;font-weight:600;margin-bottom:6px'>"
-                                f"{_cov_label}</div>"
+                                f"{_ds['status']}</div>"
                                 f"<div style='color:{GRAY_55};font-size:10px'>"
-                                f"Coverage ≥ 1.0 = 安全 ｜ 0.8–1.0 = 注意 ｜ &lt; 0.8 = 高警示</div>"
+                                f"含息報酬 ≥ 配息率 = 🟢 安全 ｜ 差距 ≤ 2% = 🟡 接近門檻 ｜ 差距 &gt; 2% = 🔴 吃本金</div>"
                                 f"</div>", unsafe_allow_html=True)
 
                     else:
