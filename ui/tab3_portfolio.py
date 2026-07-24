@@ -2227,17 +2227,21 @@ def render_portfolio_tab() -> None:
                 _rc_src.append(_src_label if _is_real else "資料不足")
 
             if _rc_names:
-                # v18.48 顏色：未有 1Y 真實值 → 灰（資料不足），避免誤判為吃本金
-                _rc_colors = []
+                # v19.402 §1:改走 SSOT dividend_safety(gap 判定 綠/黃/紅),取代原
+                # inline 1.2× coverage 門檻 → 與全站(Tab2 警示框 / 健診 3 表)一致,不再打架。
+                # 資料不足(_real=False)/ 無配息(_d≤0)→ dividend_safety 回 grey,誠實不誤判。
+                # L3→L2 呼叫(portfolio_service),同時修掉原 inline 分類的 §8.2 越權。
+                # (div_safety_check 即 dividend_safety,已於檔頭 module 級 import,不重複)
+                _LVL_COLOR = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
+                              "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}
+                _rc_levels = []
                 for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
                     if not _real:
-                        _rc_colors.append(TRAFFIC_NEUTRAL)       # 資料不足 → 灰
-                    elif _d > 0 and _r < _d:
-                        _rc_colors.append(MATERIAL_RED)   # 吃本金 → 紅
-                    elif _d > 0 and _r < _d * 1.2:
-                        _rc_colors.append(MATERIAL_ORANGE)   # 邊緣 → 橙
+                        _rc_levels.append("grey")            # 1Y 資料不足 → 灰
                     else:
-                        _rc_colors.append(MATERIAL_GREEN)   # 健康 → 綠
+                        _rc_levels.append(
+                            div_safety_check(_r, _d).get("alert_level", "grey"))
+                _rc_colors = [_LVL_COLOR.get(_lv, TRAFFIC_NEUTRAL) for _lv in _rc_levels]
 
                 fig_rc = go.Figure()
                 # v19.387 V1 §1:含息報酬長條用真實值 _rc_ret(移除 max(_r,0.5) 地板 ——
@@ -2263,10 +2267,11 @@ def render_portfolio_tab() -> None:
                         hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
                 # 零基準線
                 fig_rc.add_hline(y=0, line_color=GRAY_55, line_width=1)
-                # ── 吃本金：背景色塊 + 標註（v18.48 只在 1Y 真實值有取到時才標）──
+                # ── 吃本金：背景色塊 + 標註（v19.402:紅框依 SSOT red 判定,gap>2%,
+                #    與長條顏色同源;gap 0~2% 為 SSOT yellow → 橙條但不標「吃本金」）──
                 _y_max = max(max(_rc_ret, default=10), max(_rc_div, default=10)) * 1.35
-                for _i, (_r, _d, _n, _real) in enumerate(zip(_rc_ret, _rc_div, _rc_names, _rc_real)):
-                    if _real and _d > 0 and _r < _d:
+                for _i, (_r, _d, _n, _real, _lv) in enumerate(zip(_rc_ret, _rc_div, _rc_names, _rc_real, _rc_levels)):
+                    if _lv == "red":
                         fig_rc.add_vrect(
                             x0=_i - 0.45, x1=_i + 0.45,
                             fillcolor="rgba(244,67,54,0.08)",

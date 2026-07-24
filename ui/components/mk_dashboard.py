@@ -3,7 +3,7 @@
 # 重構目標：以「決策導向」呈現核心衛星 / 健康度 / 買賣區間，新手也能看懂。
 #
 # v18.12 增量（對齊 MK Phase 3 共同基金規格）：
-# - 核心新增 Principal_Erosion 紅燈：連續 3 個月每月含息報酬皆為負（持續吃本金）
+# - 核心新增 Principal_Erosion 紅燈：連續 3 個月淨值滾動報酬皆為負（動能轉弱，非配息吃本金）
 # - 核心新表格欄：年化波動(1Y%)，並依 <10/15/20% 三段標示低中高波動
 # - 衛星新增 Benchmark_Lag 黃燈：連續兩季落後基準（預設 SPY，可切 QQQ）
 # - 衛星新增「淨值 vs 基準」對比折線圖（同期歸一化）
@@ -44,16 +44,19 @@ def tag_mk_class(fund: dict) -> str:
 def tag_health_check(fund: dict) -> str:
     """Health_Check：Sharpe_Warning / Warning / Weak / Healthy / N/A。
 
-    規則（v18.11 同步 MK 規格三條紅綠燈）：
+    規則（v18.11 同步 MK 規格三條紅綠燈；v19.402 §1 修 B 輸入）：
       A. sharpe < 0                        → Sharpe_Warning（承擔風險卻沒賺錢，最強警訊）
-      B. ret_1y < annual_div_rate          → Warning（賺息賠本／吃本金）
+      B. 含息總報酬 < annual_div_rate      → Warning（賺息賠本／吃本金）
       C. nav < ma60 且 ma20 < ma60         → Weak（跌破季線且下彎）
       其他                                  → Healthy
     缺欄 → N/A，避免 crash。
+
+    v19.402 §1:B 條改吃「含息總報酬」(compute_1y_total_return SSOT)+
+    classify_eating_principal,不再用 m["ret_1y"](純 NAV 不含息)→ 與全站
+    dividend_safety 同源,消除假吃本金警示(見 STATE v19.402)。
     """
     m = fund.get("metrics") or {}
     sharpe = m.get("sharpe")
-    ret_1y = m.get("ret_1y")
     div_rate = m.get("annual_div_rate")
     nav = m.get("nav")
     ma60 = m.get("ma60")
@@ -66,11 +69,15 @@ def tag_health_check(fund: dict) -> str:
         except (TypeError, ValueError):
             pass
 
-    if ret_1y is None or div_rate is None or nav is None or ma60 is None:
+    # v19.402 §1:吃本金判定改吃含息總報酬(module-level compute_1y_total_return SSOT),
+    # 對齊 Tab2 警示框 / 健診矩陣。classify_eating_principal 為 L2 pure core。
+    from services.health.dividend import classify_eating_principal
+    _tr1y, _ = compute_1y_total_return(fund)
+    if _tr1y is None or div_rate is None or nav is None or ma60 is None:
         return "N/A"
 
     try:
-        if float(ret_1y) < float(div_rate):
+        if classify_eating_principal(float(_tr1y), float(div_rate)).is_eating:
             return "Warning"
         if ma20 is not None and float(nav) < float(ma60) and float(ma20) < float(ma60):
             return "Weak"
@@ -101,8 +108,10 @@ def tag_momentum(fund: dict) -> str:
 def tag_principal_erosion(fund: dict) -> str:
     """Principal_Erosion（核心專用）：Eroding / OK / N/A。
 
-    MK 規格：「淨值漲跌 + 累計配息」整體含息報酬為負且**持續三個月**。
-    實作：用 series 算近 3 個 22d 滾動報酬（month_n1/n2/n3），三段皆 < 0 → Eroding。
+    ⚠️ v19.402 正名:本訊號實為「淨值連續下跌動能」,**非配息覆蓋/吃本金**。
+    實作用 series 算近 3 個 22d 滾動**純 NAV 報酬**（month_n1/n2/n3），三段皆 < 0
+    → Eroding。與「吃本金」(含息總報酬 vs 配息率,見 tag_health_check B /
+    dividend_safety)是**不同訊號**,勿混用(回傳字串維持 Eroding/OK/N/A 不變)。
     缺 series 或長度不足 → N/A，零新 API。
     """
     s = fund.get("series")
@@ -309,7 +318,7 @@ def _verdict_text(mk_class: str, health: str, momentum: str, zone: str,
     if health == "Sharpe_Warning":
         return "🔴 夏普<0，承擔風險卻沒賺錢"
     if mk_class == "Core" and principal == "Eroding":
-        return "🔴 連續 3 月含息報酬負，嚴重吃本金"
+        return "🔴 淨值連續 3 月下跌（動能轉弱）"
     if health == "Warning":
         return "🔴 賺息賠本，建議檢視換股"
     if health == "Weak":

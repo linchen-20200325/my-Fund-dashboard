@@ -65,16 +65,19 @@ def _render_dividend_matrix(funds: list) -> None:
     if not _rc_names:
         return
 
-    _rc_colors = []
+    # v19.402 §1:改走 SSOT dividend_safety(gap 判定),取代 inline 1.2× coverage
+    # 門檻 → 與 tab3_portfolio canonical 版 + 全站一致(L3→L2,修 §8.2 inline 分類)。
+    from services.portfolio_service import dividend_safety
+    _LVL_COLOR = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
+                  "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}
+    _rc_levels = []
     for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
         if not _real:
-            _rc_colors.append(TRAFFIC_NEUTRAL)
-        elif _d > 0 and _r < _d:
-            _rc_colors.append(MATERIAL_RED)
-        elif _d > 0 and _r < _d * 1.2:
-            _rc_colors.append(MATERIAL_ORANGE)
+            _rc_levels.append("grey")
         else:
-            _rc_colors.append(MATERIAL_GREEN)
+            _rc_levels.append(
+                dividend_safety(_r, _d).get("alert_level", "grey"))
+    _rc_colors = [_LVL_COLOR.get(_lv, TRAFFIC_NEUTRAL) for _lv in _rc_levels]
 
     fig_rc = go.Figure()
     # v19.394 V3 §1:含息報酬長條用真實值 _rc_ret(移除 max(_r,0.5) 地板 ——
@@ -100,10 +103,10 @@ def _render_dividend_matrix(funds: list) -> None:
             hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
     fig_rc.add_hline(y=0, line_color=GRAY_55, line_width=1)
     _y_max = max(max(_rc_ret, default=10), max(_rc_div, default=10)) * 1.35
-    for _i, (_r, _d, _n, _real) in enumerate(
-        zip(_rc_ret, _rc_div, _rc_names, _rc_real)
+    for _i, (_r, _d, _n, _real, _lv) in enumerate(
+        zip(_rc_ret, _rc_div, _rc_names, _rc_real, _rc_levels)
     ):
-        if _real and _d > 0 and _r < _d:
+        if _lv == "red":
             fig_rc.add_vrect(
                 x0=_i - 0.45, x1=_i + 0.45,
                 fillcolor="rgba(244,67,54,0.08)",

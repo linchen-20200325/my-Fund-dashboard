@@ -2,6 +2,31 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🔴 2026-07-24 儀表板 IA 重分類 Phase 1 — §1 吃本金 verdict SSOT 收斂 v19.402
+
+Phase 1(§1 修 bug,最高優先)。深掘 AI 測繪確認:「吃本金」verdict 散落多處、演算法/輸入不
+一致 → 同一檔基金在**同一頁**上下打架(單一基金頁 KPI 橫幅 🟢 vs 正下方警示框/講義卡 🔴)。
+根因:警示框/講義卡/戰情室把 `m["ret_1y"]`(純 NAV 不含息)餵進「應吃含息總報酬」的槽。
+
+**修(4 檔,全走 SSOT `compute_1y_total_return` + `dividend_safety`/`classify_eating_principal`)**:
+- `ui/tab2_single_fund.py` 吃本金警示框 + 配息覆蓋率講義卡:改吃含息總報酬,兩卡共用同一
+  `dividend_safety` verdict → 永不互相矛盾;講義卡色/標籤改讀 `_ds`(不再 inline 1.0/0.8
+  coverage 門檻)。
+- `ui/tab3_portfolio.py` + `ui/helpers/fund_grp_health/dividend.py` 真實收益矩陣(clone×2):
+  inline 1.2× coverage 門檻 → 改走 SSOT `dividend_safety` 3 色(gap 判定),與全站一致
+  (user 核准全對齊 SSOT);同時修 L3 inline 分類的 §8.2 越權(改 L3→L2 呼叫)。
+- `ui/components/mk_dashboard.py` `tag_health_check` B 條:`ret_1y < div` →
+  `classify_eating_principal`(含息總報酬)。
+
+**正名(不同訊號,不併)**:`tag_principal_erosion`(連續 3 月 NAV 滾動下跌)實為淨值動能/
+回撤訊號,非配息覆蓋 → verdict 文字「連續 3 月含息報酬負,嚴重吃本金」改「淨值連續 3 月下跌
+(動能轉弱)」;docstring 正名(原誤稱含息);回傳字串 Eroding/OK/N/A 不變(consumer 相容)。
+
+**驗**:5 新回歸測試(`test_eating_principal_ssot_v19402`)綠;既有 69 綠 2 skip
+(mk_ssot / fund_dividend_health / tab1_macro);py_compile 全綠;AppTest 16/16;獨立稽核 AI 驗數據。
+**行為變更**:矩陣 gap 0~2% 由紅/橙轉黃(SSOT 對齊,user 拍板)、缺含息總報酬時吃本金判定
+誠實 skip 而非用純 NAV 假判(§1)。
+
 ## 🧹 2026-07-24 儀表板 IA 重分類 Phase 0 — 刪 ~500 行死面板 v19.401
 
 user 核准「6→5 分頁重新分類」大工程(§8.4 分階段,每階段獨立 PR + 獨立稽核 AI 驗資料再合併)。
