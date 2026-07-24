@@ -154,16 +154,20 @@ class PrecisionStrategyEngine:
             return "無法解析持倉，跳過三率檢核"
         total_momentum, valid_stocks = 0.0, 0
         for stock_data in fund_holdings:
+            gd = stock_data.get("gross_margin_diff")
+            od = stock_data.get("op_margin_diff")
+            nd = stock_data.get("net_margin_diff")
+            # v19.398 §1:三率任一缺(margin 源缺,如金融股無毛利率行 → diff=None)→ 該股
+            # 三率動能不可算,誠實跳過;不以捏造 0 充當「持平」灌水 valid_stocks / 拉平均值。
+            if gd is None or od is None or nd is None:
+                continue
             try:
-                gd = float(stock_data.get("gross_margin_diff", 0.0))
-                od = float(stock_data.get("op_margin_diff",    0.0))
-                nd = float(stock_data.get("net_margin_diff",   0.0))
-                total_momentum += gd + od + nd
+                total_momentum += float(gd) + float(od) + float(nd)
                 valid_stocks   += 1
             except (ValueError, TypeError):
                 continue
         if valid_stocks == 0:
-            return "持倉三率數據格式異常"
+            return "⬜ 無持倉具備完整三率數據（如金融股缺毛利率行），無法檢核三率動能"
         avg = total_momentum / valid_stocks
         if avg > 2.0:
             return "🟢 核心持倉三率強勢雙升，具備實質基本面防護"

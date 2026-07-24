@@ -2,6 +2,21 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 §1 假替代值獵捕 #3 — 修三率 `_diff` 缺 margin 捏造 0 持平 v19.398
+
+獵捕確認 5 違憲的第 3 修(MED,跨 L1+L2)。三率(毛/營/淨利率)穿透掃描:
+- **L1** `repositories/financial_repository.py:142` `_diff`:某季 margin 缺(金融股常態 —— yfinance
+  無 Gross Profit 行 → gross_margin=None)→ 原 `else 0.0` 捏造「QoQ 持平」。改回 **None**。
+- **L2** `services/precision_service.py:evaluate_fund_three_ratios`:原 `float(get(k, 0.0))` 把捏造 0
+  當有效值 → **valid_stocks 灌水 + 動能均值被拉平**(金融股全被當「持平」稀釋 verdict)。改
+  `is None` 顯式跳過;全缺 → 誠實訊息「⬜ 無持倉具備完整三率數據…無法檢核」(原「格式異常」誤導)。
+- 顯示端 `three_ratio_row_html` `_fmt/_color` 本就對 None 顯示 "N/A"/中性 → L1 改 None 後自動由
+  假「+0.0%」變誠實 "N/A";`tab2:671-673` mini_shield sum 用 `or 0`,None→0 數值不變、不崩。
+
+驗:三檔 AST OK;financial_repo + precision + provenance 29 綠(含 2 新 regression:
+缺毛利率→diff None、None 檔跳過不拉平 verdict)。AppTest + 獨立 QA 綠後 merge。
+其餘 1 待修:div_safety_check verdict cluster(MED,tab1_macro:395 + tab3 ×3)。
+
 ## 🩺 2026-07-24 §1 假替代值獵捕 #2 — 修 portfolio_service Sharpe `or 0` v19.397
 
 獵捕確認 5 違憲的第 2 修(HIGH)。`services/portfolio_service.py` 基金 4D 評分:

@@ -139,9 +139,13 @@ def fetch_stock_three_ratios(holding_name: str) -> dict | None:
         if len(quarters) < 2:
             return None
 
-        def _diff(key: str) -> float:
+        def _diff(key: str) -> "float | None":
+            # v19.398 §1:某季 margin 缺(如金融股無毛利率行 → gross_margin=None)→ 回 None,
+            # 不捏造 0.0「持平」。原 `else 0.0` 讓下游 evaluate_fund_three_ratios 把「缺資料」
+            # 當「QoQ 持平」灌水 valid_stocks + 拉平動能均值(§1 造假)。缺值誠實留 None,
+            # 下游按 None 誠實跳過;three_ratio_row_html 亦改顯示 "N/A"(原 +0.0%)。
             v0, v1 = quarters[0].get(key), quarters[1].get(key)
-            return round(v0 - v1, 2) if (v0 is not None and v1 is not None) else 0.0
+            return round(v0 - v1, 2) if (v0 is not None and v1 is not None) else None
 
         # F-PROV-1 phase 18 v19.156 — provenance(schema-additive)
         return {
