@@ -2,6 +2,25 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 §1 假替代值獵捕 — 修 Tab1「假吃本金紅燈」 v19.396
+
+viz audit 意外挖到 dividend floor 後,派 3 AI(services/ui/repositories)平行獵捕同類
+§1 造假(預設懷疑、只報 live+真掩蓋+未豁免)。**查證確認 5 個真違憲**,本刀先修
+最高影響 + 最自包含的 **Tab1「缺 ret_1y → `or 0` 捏造 0% → 假吃本金/本金侵蝕」** 2 site:
+- `tab1_macro_inflection.py:226` 持倉紅綠燈:`float(ret_1y or 0)` → 缺資料時 0 < 配息率
+  觸發假 🔴「吃本金:含息 0.0% < 配息 X%」。改 `safe_num`(缺→None)+ `is not None` 守 +
+  新增 ⬜「1Y 資料不足,無法判定吃本金」誠實分支。
+- `tab1_macro_longterm.py:287` 資本防線 bar:`float(ret_1y or 0)` → 缺→0% 紅柱「🚨 本金侵蝕」。
+  改 `safe_num` + 上色/標籤/customdata/_eroded stash 全判 None(缺→TRAFFIC_NEUTRAL 柱 + 「—」+
+  「⬜ 1Y 資料不足」),真值路徑零變化。
+
+其餘 3 待修(據實登記,後續逐一):#3 tab1_macro:395 + tab3:1416/1363/2042 div_safety_check
+verdict cluster(MED);#4 portfolio_service Sharpe `or 0`+twin(HIGH,同 v19.381 MaxDrawdown 漏網);
+#5 financial_repository `_diff` 三率假 0 持平(MED)。
+
+驗:兩檔 AST OK;全部 _pf_ret1y/_def_tr1y use 逐一守 None(無 None<x / .1f(None) 崩);
+tab1 測試 + AppTest + 獨立 QA 綠後 merge。
+
 ## 🩺 2026-07-24 可視化優化 V3-viz 修 3 真實渲染缺陷(暗底 + hover) v19.395
 
 視覺化 audit(Explore agent 掃全 ui/ 23 chart site,分 DEFECT-*/ALREADY-FINE 桶)點名的

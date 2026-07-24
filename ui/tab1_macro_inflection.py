@@ -223,7 +223,7 @@ def render_inflection_alert_section(
             _pf_s1    = float(_pf_m.get("sell1") or 0)  # 中樞+1σ
             _pf_bbd   = float(_pf_m.get("bb_lower") or 0)
             _pf_bbu   = float(_pf_m.get("bb_upper") or 0)
-            _pf_ret1y = float(_pf_m.get("ret_1y") or 0)
+            _pf_ret1y = safe_num(_pf_m.get("ret_1y"))  # v19.396 §1:缺不捏造 0(否則假觸發吃本金紅燈)
             _pf_adr   = float(_pf_m.get("annual_div_rate") or 0)
             _pf_core  = "🛡️ 核" if _pf.get("is_core") else "⚡ 衛"
             # 燈號判定（v18.6: σ + 布林雙確認 升級）
@@ -233,7 +233,7 @@ def render_inflection_alert_section(
                            and _pf_bbd > 0 and _pf_nav <= _pf_bbd)
             _double_sell = (_pf_s1 > 0 and _pf_nav > 0 and _pf_nav >= _pf_s1
                             and _pf_bbu > 0 and _pf_nav >= _pf_bbu)
-            if _pf_adr > 0 and _pf_ret1y < _pf_adr:
+            if _pf_adr > 0 and _pf_ret1y is not None and _pf_ret1y < _pf_adr:
                 _tl_icon, _tl_bg, _tl_bc = "🔴", BG_DARK_RED_2, MATERIAL_RED
                 _tl_reason = f"吃本金警示：含息報酬 {_pf_ret1y:.1f}% < 配息率 {_pf_adr:.1f}%"
             elif _double_buy:
@@ -248,6 +248,10 @@ def render_inflection_alert_section(
             elif _pf_b1 > 0 and _pf_nav > 0 and _pf_nav <= _pf_b1:
                 _tl_icon, _tl_bg, _tl_bc = "🟡", BG_DARK_AMBER_3, MATERIAL_ORANGE
                 _tl_reason = f"小跌小買訊號 NAV {_pf_nav:.4f} ≤ 買1({_pf_b1:.4f})"
+            elif _pf_adr > 0 and _pf_ret1y is None:
+                # v19.396 §1:配息>0 但缺 1Y 含息報酬 → 誠實「資料不足」,不捏造 0% 假吃本金
+                _tl_icon, _tl_bg, _tl_bc = "⬜", GH_BG_CARD, GRAY_55
+                _tl_reason = f"1Y 含息報酬資料不足，無法判定吃本金（配息率 {_pf_adr:.1f}%）"
             elif not _pf_m:
                 _tl_icon, _tl_bg, _tl_bc = "⬜", GH_BG_CARD, GRAY_55
                 _tl_reason = "資料尚未載入"

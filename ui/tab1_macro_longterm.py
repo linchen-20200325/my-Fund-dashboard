@@ -22,6 +22,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shared.converters import safe_num  # v19.396 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
     GH_BG_CARD,
     GH_BG_PRIMARY,
@@ -284,18 +285,20 @@ def render_long_term_section(
         if _pf_def:
             st.markdown("#### 💰 資本防線 — 含息報酬 vs 配息率")
             _def_names = [f.get("fund_name") or f.get("code","?") for f in _pf_def]
-            _def_tr1y  = [float((f.get("metrics") or f.get("m") or {}).get("ret_1y") or 0) for f in _pf_def]
+            # v19.396 §1:缺 1Y 含息報酬保留 None(不捏造 0% 假紅柱/假本金侵蝕);
+            # 下方上色 / 標籤 / customdata / stash 皆判 None → 誠實留缺口。
+            _def_tr1y  = [safe_num((f.get("metrics") or f.get("m") or {}).get("ret_1y")) for f in _pf_def]
             _def_adr   = [float((f.get("metrics") or f.get("m") or {}).get("annual_div_rate") or 0) for f in _pf_def]
-            _def_colors = [MATERIAL_RED if tr < adr else MATERIAL_GREEN
+            _def_colors = [TRAFFIC_NEUTRAL if tr is None else (MATERIAL_RED if tr < adr else MATERIAL_GREEN)
                            for tr, adr in zip(_def_tr1y, _def_adr)]
             _def_fig = go.Figure()
             _def_fig.add_trace(go.Bar(
                 x=_def_names, y=_def_tr1y,
                 marker_color=_def_colors,
-                text=[f"{v:.1f}%" for v in _def_tr1y],
+                text=["—" if v is None else f"{v:.1f}%" for v in _def_tr1y],
                 textposition="outside",
                 name="含息報酬率 TR1Y",
-                customdata=list(zip(_def_adr, ["🚨 本金侵蝕" if tr < adr else "" for tr, adr in zip(_def_tr1y, _def_adr)])),
+                customdata=list(zip(_def_adr, ["⬜ 1Y 資料不足" if tr is None else ("🚨 本金侵蝕" if tr < adr else "") for tr, adr in zip(_def_tr1y, _def_adr)])),
                 hovertemplate="<b>%{x}</b><br>TR1Y: %{y:.1f}%<br>配息率: %{customdata[0]:.1f}%<br>%{customdata[1]}<extra></extra>",
             ))
             _def_fig.add_trace(go.Scatter(
@@ -320,7 +323,7 @@ def render_long_term_section(
             try:
                 _eroded = [(n, tr, adr) for n, tr, adr
                            in zip(_def_names, _def_tr1y, _def_adr)
-                           if tr < adr]
+                           if tr is not None and tr < adr]
                 st.session_state["_macro_capital_line"] = {
                     "n_funds": len(_def_names),
                     "n_eroded": len(_eroded),
