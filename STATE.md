@@ -2,6 +2,16 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 可視化優化 V4a 拆全 app 唯一雙軸違規 v19.391 —(user 部署驗方向 OK 後續)
+
+`tab6_manual.py:731` 歷史對照圖原用 `make_subplots(specs=[[{"secondary_y":True}]])` 把薩姆規則
+(pp)放左軸、SLOOS(%)放右軸 —— 全 app 唯一 dual-axis(dataviz #2 硬規則;不同尺度共軸會扭曲
+交叉點/相對高低)。改 `make_subplots(rows=2, shared_xaxes=True)` 上下兩 subplot 共用時間軸,
+各自單位;SAHM→row1(+0.5 觸發線)、SLOOS→row2、危機陰影 `row="all"` 跨兩圖。
+
+驗:compile OK;`secondary_y` 已零殘留;plotly 2-row subplot API 煙霧測試 + **SAHM/SLOOS 資料值
+原樣保留**(只換版面,不動資料);render 仍在 try/except 安全網內。獨立 QA 確認後 merge。
+
 ## 🩺 2026-07-24 可視化優化 V3b Tab5 燈號 MATERIAL→TRAFFIC + 修 🟡 錯配 v19.390
 
 Tab5 資料看板 3 個狀態燈 helper 由 MATERIAL_* → TRAFFIC SSOT(稽核 ②;Tab5 對狀態色最 CRITICAL):
