@@ -572,6 +572,9 @@ def _render_benchmark_chart(sat_df: pd.DataFrame, portfolio_funds: list,
         paper_bgcolor=GH_BG_PRIMARY, plot_bgcolor=GH_BG_PRIMARY,
         font=dict(color="#ddd"),
         xaxis=dict(gridcolor="#222"), yaxis=dict(gridcolor="#222"),
+        # v19.395 V3:多條衛星淨值疊圖 → unified hover,一次讀同日全基金值
+        # (audit DEFECT-NOHOVER);原無 hovermode,逐線 hover 難對齊。
+        hovermode="x unified",
     )
     st.plotly_chart(fig, use_container_width=True, key="mk_sat_bench")
     st.caption(

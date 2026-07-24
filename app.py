@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.394_VizV3_DivFloorFix"
+APP_VERSION = "v19.395_VizV3_DarkmodeHover"
 
 
 # ══════════════════════════════════════════════════════

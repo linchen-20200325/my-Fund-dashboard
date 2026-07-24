@@ -920,6 +920,9 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                     font=dict(color=GH_FG_SECONDARY),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
                     margin=dict(l=20, r=20, t=70, b=20),
+                    # v19.395 V3:3 序列分組長條 → unified hover,同基金三值一次讀
+                    # (audit DEFECT-NOHOVER);原無 hovermode。
+                    hovermode="x unified",
                 )
                 st.plotly_chart(_fig, use_container_width=True)
                 if not _all_annual:
