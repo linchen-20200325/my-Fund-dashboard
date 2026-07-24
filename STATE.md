@@ -2,6 +2,15 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 可視化優化 V4c 核心/衛星甜甜圈 N 片→2 片 v19.393
+
+`tab3_portfolio.py:1753` hero donut 原每檔基金一片(N 片)但只藍(核心)/橙(衛星)2 色 →
+同色 wedge 糊成一片不可讀(多切片圓餅反模式)。聚合成「核心 vs 衛星」2 片(與 :1322 保單級
+donut 一致);per-fund 明細見下方持倉健診表。
+
+驗:compile OK;**資料誠信** — 聚合總額 = Σ 全部 invest_twd(200k==200k 實測,零遺失)、
+核心占比與中心 annotation 一致;portfolio/tab3 68 綠。AppTest + 獨立 QA 確認後 merge。
+
 ## 🩺 2026-07-24 可視化優化 V4b Tab2 配息點去每點標籤 v19.392
 
 `tab2_single_fund.py:602` 配息點原 `mode="markers+text"` 在每個除息點印「💰 配息 X」→ 月配基金

@@ -1741,11 +1741,15 @@ def render_portfolio_tab() -> None:
             f"</div></div>", unsafe_allow_html=True)
 
         # ── 核心/衛星甜甜圈（P1.3 縮成單列 mini chart）──────────────
-        _dn_labels = [
-            (f.get("code","?")[:8] + " 🛡️" if f.get("is_core") else f.get("code","?")[:8] + " ⚡")
-            for f in _pf_loaded]
-        _dn_values = [max(f.get("invest_twd", 0) or 0, 0) for f in _pf_loaded]
-        _dn_colors = [MD_BLUE_300 if f.get("is_core") else MATERIAL_ORANGE for f in _pf_loaded]
+        # v19.393 V4c:原 N 檔基金 = N 片但只藍/橙 2 色 → 同色 wedge 糊成一片不可讀(dataviz
+        # 多切片圓餅反模式)。聚合成「核心 vs 衛星」2 片(與 :1322 保單級 donut 一致);
+        # 總額 = Σ invest_twd 不變、核心% 不變,per-fund 明細見下方持倉健診表。
+        _core_amt = sum(max(f.get("invest_twd", 0) or 0, 0) for f in _pf_loaded if f.get("is_core"))
+        _sat_amt  = sum(max(f.get("invest_twd", 0) or 0, 0) for f in _pf_loaded if not f.get("is_core"))
+        _n_core   = sum(1 for f in _pf_loaded if f.get("is_core"))
+        _dn_labels = [f"🛡️ 核心 · {_n_core} 檔", f"⚡ 衛星 · {len(_pf_loaded) - _n_core} 檔"]
+        _dn_values = [_core_amt, _sat_amt]
+        _dn_colors = [MD_BLUE_300, MATERIAL_ORANGE]
         _alert     = abs(_diff) > 10
         _bg_c      = "#1a0808" if _alert else STREAMLIT_BG
         fig_dn = go.Figure()
