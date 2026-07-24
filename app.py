@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.391_VizV4a_DualAxisSplit"
+APP_VERSION = "v19.392_VizV4b_DivLabels"
 
 
 # ══════════════════════════════════════════════════════

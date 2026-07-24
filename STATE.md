@@ -2,6 +2,15 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 可視化優化 V4b Tab2 配息點去每點標籤 v19.392
+
+`tab2_single_fund.py:602` 配息點原 `mode="markers+text"` 在每個除息點印「💰 配息 X」→ 月配基金
+3 年 30+ 個重疊標籤(dataviz #5 反模式)。改 `mode="markers"`:所有配息點仍以三角標記**全數
+呈現**,金額改由 hover(`%{text}` 保留)顯示 —— **零資料遺失**,只去標籤 spam。
+
+驗:compile OK;功能測試確認 3 點全保留 + text 供 hover + mode=markers。CI AppTest 為渲染閘門。
+(Tab1/Tab3 的少類別 bar outside-label 不屬「dense 每點」反模式,保留不動。)
+
 ## 🩺 2026-07-24 可視化優化 V4a 拆全 app 唯一雙軸違規 v19.391 —(user 部署驗方向 OK 後續)
 
 `tab6_manual.py:731` 歷史對照圖原用 `make_subplots(specs=[[{"secondary_y":True}]])` 把薩姆規則
