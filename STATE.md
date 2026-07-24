@@ -2,6 +2,18 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 可視化優化 V3-§1 修 dividend.py 漏網 max(_r,0.5) 地板 v19.394
+
+視覺化 audit(Explore agent 掃全 ui/ 23 chart site)發現:V1 已在 `tab3_portfolio.py:2245`
+移除的 `max(_r,0.5)` 視覺地板,在 `ui/helpers/fund_grp_health/dividend.py:80`
+`_render_dividend_matrix`(live path,`render_fund_grp_health_extras` → __init__.py:65)有**漏網副本** —
+負含息報酬被硬拉成 +0.5% 正向長條、標籤卻標真負值 = §1 視覺造假。移除 `_rc_ret_vis`,
+bar 改 `y=_rc_ret`,`_y_max` 同步改讀真實值;yaxis range 已 `min(0, min(_rc_ret))-2` 容負值。
+與 tab3 canonical 版行為對齊。
+
+驗:AST OK;grep `_rc_ret_vis` 零殘留;grp_health 42 綠;獨立 QA 8/8 check PASS
+(bar=標籤=hover=顏色四者一致、負值誠實向下、無 NameError)。AppTest 綠後 merge。
+
 ## 🩺 2026-07-24 可視化優化 V4c 核心/衛星甜甜圈 N 片→2 片 v19.393
 
 `tab3_portfolio.py:1753` hero donut 原每檔基金一片(N 片)但只藍(核心)/橙(衛星)2 色 →
