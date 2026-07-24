@@ -45,7 +45,7 @@ from infra.oauth import (
     build_authorize_url,
 )
 
-APP_VERSION = "v19.403_IA_P2_PhaseScoreSSOT"
+APP_VERSION = "v19.404_IA_P3_HowToRead"
 
 
 # ══════════════════════════════════════════════════════
