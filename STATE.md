@@ -2,6 +2,23 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 §1/§8 follow-up — 啟用 tab1 逐檔決策矩陣「吃本金」死訊號 v19.400
+
+v19.399 QA 揪出的 follow-up(user 核准「要」)。`tab1_macro.py:403`
+`from fund_fetcher import div_safety_check` 為 **broken import**(fund_fetcher 未 export,
+實測 hasattr=False)→ ImportError 被 `except Exception: div_info=None` 吞 → tab1 逐檔決策矩陣
+「吃本金」訊號**長期 dead**(div_info 恆 None)。改指 SSOT `services.portfolio_service`(對齊 tab3:67)。
+
+**為何現在啟用安全**:v19.399 已把該站 `_tret` 改 `safe_num`(缺→None);啟用後
+`div_safety_check(None, dyld)` → grey「無報酬資料」;`decision_matrix._action_after_individual_signals`
+**僅對 `alert=="red"` bump 動作**(:100),grey/None/yellow/green 皆不觸發 → 缺資料不會假觸發吃本金動作(§1)。
+真吃本金(0%<配息)→ red → 正確 bump;覆蓋充分 → green。同時消掉「壞 import 被靜默吞」§1/§8 smell。
+
+驗:AST OK;import 實測 resolves;runtime dividend_safety(None→grey / 0.0→red / 8.0→green)確認;
+新 regression `test_enrich_fund_for_decision_div_signal_live_v19400`(三態 + 守 import 不回歸)綠;
+tab1_macro + decision_matrix + realtime 49 綠;consumer `verdict_to_actions`(:164 `f.get(...) or {}`)
+本就 dict/None-safe。AppTest + 獨立 QA 綠後 merge。
+
 ## 🩺 2026-07-24 §1 假替代值獵捕 #4(收官)— 修 div_safety_check verdict cluster v19.399
 
 獵捕確認 5 違憲的**最後 1 修**(MED,4 site)。缺 1Y 含息報酬(`ret_1y`)被 `float(_tret_v or 0)`
