@@ -2,6 +2,37 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 §1 假替代值獵捕 #4(收官)— 修 div_safety_check verdict cluster v19.399
+
+獵捕確認 5 違憲的**最後 1 修**(MED,4 site)。缺 1Y 含息報酬(`ret_1y`)被 `float(_tret_v or 0)`
+捏造成 0 → 傳給 `dividend_safety(0, dyld)` → gap=dyld>0 → 假吃本金 red/yellow verdict,再餵進
+逐檔決策矩陣 / recommend_policy / advise_fund 決策文字(§1 造假)。
+
+**根因**:`dividend_safety`(portfolio_service.py:313)**本就對 None 有誠實分支**
+(`classify_eating_principal.is_data_missing` → alert_level=grey「無報酬資料」),但 4 個 call site
+在呼叫**前**先 `or 0` 把 None 壓成 0.0,None 永遠到不了那個誠實分支 → 假 red。與 tab2:1185
+正確兄弟(`if _tr1y is not None and _adr > 0`)對照即知漏網。
+
+**修**(4 site 皆改 `safe_num` 保 None,交 dividend_safety 誠實處理;真值含 0.0 照常正確標吃本金):
+- **`tab3_portfolio.py:1364` / `:1417` / `:2043`(3 site,LIVE 生效)**:import 正確
+  (`from services.portfolio_service import dividend_safety as div_safety_check`),QA 實測 None→grey、
+  真 0.0→red,下游 `advise_fund`(`(dividend_info or {}).get`)/ `recommend_policy`(docstring 明列
+  None 視為不計)本就 None-safe。
+- **`tab1_macro.py:395`(safe_num correct-in-place,但目前 INERT)**:QA 揪出 line 403
+  `from fund_fetcher import div_safety_check` 為 **pre-existing broken import**(`fund_fetcher` 未 export
+  該名,實測 `hasattr=False`)→ ImportError 被 `except Exception: div_info=None` 吞 → tab1 該路徑
+  div_info 恆 None,本次 safe_num 修正暫不生效。**非本 diff 引入**(import 為 HEAD context 行)。
+  留 follow-up(見下)。
+
+驗:兩檔 AST OK;全部 `_tret`/`_tret_l` use 僅 def + div_safety_check arg(Optional[float]);
+tab1/tab3/policy_advisor 47 綠 + AppTest 16 綠 + 獨立 QA PASS(3 tab3 LIVE)。
+
+**Follow-up(據實登記,§8 分開提案)**:tab1_macro.py:403 broken import 改指 `services.portfolio_service`
+(對齊 tab3:67)→ 同時(a)啟用 tab1 safe_num 誠實 div 訊號、(b)消 swallowed ImportError §1/§8 smell。
+屬「啟用長期 dead 訊號」的行為變更,需查 `verdict_to_actions`/dashboard renderer 對 live dividend_info
+的處理 + 獨立 QA,故拆為獨立 slice 不併入本 §1 除假 PR。**5 獵捕:4 LIVE 修訖(#1 Tab1紅燈 /
+#2 Sharpe / #3 三率 / #4 tab3 div×3)+ tab1 div 入點待 follow-up 啟用**。
+
 ## 🩺 2026-07-24 §1 假替代值獵捕 #3 — 修三率 `_diff` 缺 margin 捏造 0 持平 v19.398
 
 獵捕確認 5 違憲的第 3 修(MED,跨 L1+L2)。三率(毛/營/淨利率)穿透掃描:
