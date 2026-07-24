@@ -286,11 +286,12 @@ def render_inflection_alert_section(
     _l1_checks = [
         f"確認核心部位是否符合 AI 建議：股 {_l1_stock}% / 債 {_l1_bond}% / 現金 {_l1_cash}%",
     ]
-    if _sahm_v >= 0.5:
+    # v19.387 V1 §1:缺值(safe_num→None)不觸警(既不崩、也不對「沒資料」誤報衰退/緊縮警報)
+    if _sahm_v is not None and _sahm_v >= 0.5:
         _l1_checks.append(f"⚠️ **薩姆衰退警報已觸發**（{_sahm_v:.2f}pp）：暫停衛星加碼，保留防守型部位")
-    if _sloos_v > 20:
+    if _sloos_v is not None and _sloos_v > 20:
         _l1_checks.append(f"📊 **銀行緊縮偵測**（SLOOS {_sloos_v:.1f}%）：高收益債基金降至 10% 以下")
-    if _adl_v < -2:
+    if _adl_v is not None and _adl_v < -2:
         _l1_checks.append(f"🌍 **市場廣度警示**（RSP/SPY {_adl_v:.2f}%）：減少主題/集中型基金")
     _l1_checks.append("定期定額不停扣（除非景氣位階進入「高峰」且 VIX < 15）")
     _l1_checks.append(f"本週核心原則：景氣「{ph}」，{(advice or '均衡配置，嚴守紀律')[:40]}。")
