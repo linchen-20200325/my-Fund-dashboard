@@ -2,6 +2,17 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 可視化優化 V3b Tab5 燈號 MATERIAL→TRAFFIC + 修 🟡 錯配 v19.390
+
+Tab5 資料看板 3 個狀態燈 helper 由 MATERIAL_* → TRAFFIC SSOT(稽核 ②;Tab5 對狀態色最 CRITICAL):
+- `_tab_status`(:199-203)覆蓋率燈、`_src_status`(:366-368)來源燈、key-rows 來源色(:943)。
+- **真 bug 修**:🟡 燈原配 `MATERIAL_ORANGE`(橘 #ff9800),與 emoji(黃)不一致 → 改
+  `TRAFFIC_YELLOW`(黃 #eab308),icon/色一致。
+- **狀態→燈的判定(threshold 邏輯)完全未動** → 哪個項目亮哪個燈=零變化,只換 hex(§1 資料誠信)。
+  非燈號的 MATERIAL 用途(頻率標籤色 :455、延遲圖序列/門檻線)保留為資料 accent,留 V4 評估。
+
+驗:compile OK;state→color 對映驗證(🟡 橘→黃);data_guard/tab5/cross_site 50 綠。獨立 QA 確認後 merge。
+
 ## 🩺 2026-07-24 可視化優化 V3a inline-hex → SSOT(byte-identical) v19.389 —(整包第 3 期起步)
 
 V3 逐 Tab 接線第一刀,只做**可證明零視覺變化**的 inline-hex → SSOT 常數(稽核 ② 收斂):
