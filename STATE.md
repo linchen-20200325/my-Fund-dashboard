@@ -2,6 +2,24 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📊 2026-07-24 儀表板 IA 重分類 Phase 3 — 補「怎麼看」讀法 v19.404
+
+Phase 3(視覺化 + 說明)。設計 AI 誠實結論:**本 app 已高度圖表化 + 多有解讀線**(資產成長曲線 /
+donut / 真實收益矩陣 / 相關性 heatmap / 健診 3 表 / 戰情室 per-col help= / 3 macro gauge signal 線
+等)。Bucket 2(數字牆 → 圖)誠實**無 must-do**(全已圖表化 or 本該用表精確多欄比較)→ 不做機械式
+chart sweep(§-1;硬加圖 = busywork)。
+
+**唯 2 個真缺口(補 `st.caption`「怎麼看」,純加性零資料變更)**:
+- `ui/tab2_single_fund.py:665` 旗艦「三合一趨勢診斷圖」(全頁最常盯:NAV + 布林 ±2σ + MA20/60 +
+  6 條買賣 σ 線 + 配息三角)原**無**整圖解讀線 → 補「藍線=淨值 / 買賣線區 / 布林下軌超跌 /
+  MA 趨勢 / 黃三角配息」。
+- `ui/tab2_single_fund.py:~816` HWM σ 絕對位階卡原無 action line,但其 group-health 孿生版
+  (`ui/helpers/fund_grp_health/risk.py:19-20`)有 → 補齊消單一基金 vs 組合視角不一致:
+  「≤ −2σ 深跌可分批承接 / ≥ +1σ 過熱;絕對位階(對歷史高點)vs 相對中樞互補」。
+
+驗:py_compile OK;AppTest headless render。**純加性**(2 個 st.caption,無邏輯/資料變更)→
+無資料可驗故無獨立 data-QA 之必要,AppTest render gate 即足。
+
 ## 🎯 2026-07-24 儀表板 IA 重分類 Phase 2 — 景氣位階字卡 SSOT(DUP-3) v19.403
 
 Phase 2(跨頁去重)。設計 AI 掃 3 候選,誠實結論:**只有 A 是真去重**。

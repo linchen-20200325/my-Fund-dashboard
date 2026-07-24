@@ -663,6 +663,12 @@ def render_single_fund_tab() -> None:
                 # 左側主圖放入 column 中
                 with _v5_chart_col:
                     st.plotly_chart(fig_n, use_container_width=True)
+                    # v19.404 Phase 3:旗艦三合一圖補「怎麼看」(原無解讀線,新手看不懂整張圖)
+                    st.caption(
+                        "💡 **怎麼看**:藍線=淨值。碰綠色買線(中樞−σ)=分批進場區、碰紅/橘賣線"
+                        "(中樞+σ)=停利區;跌破布林下軌=短期超跌;MA20/MA60 向上=中期趨勢健康,"
+                        "黃三角=配息日。"
+                    )
 
                 # ── 右側側邊：持倉三率動能柱（僅在掃描後顯示）─────────────
                 if _v5_mini_col is not None:
@@ -814,6 +820,12 @@ def render_single_fund_tab() -> None:
                                 f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>"
                                 f"σ = HWM × 年化日報酬標準差（{len(s)} 筆淨值計算）</div>"
                                 f"</div>", unsafe_allow_html=True)
+                            # v19.404 Phase 3:補讀法(對齊 risk.py:19-20 group 版,消單一基金缺口)
+                            st.caption(
+                                "💡 **怎麼看**:σ 位階 ≤ −2σ = 距歷史高點深跌,基本面若健康可分批"
+                                "承接;≥ +1σ = 接近前高偏過熱。此為「絕對位階」(對歷史高點),"
+                                "與上方買賣線的「相對中樞」互補。"
+                            )
                     except Exception:
                         pass  # smoke-allow-pass
 
