@@ -35,7 +35,7 @@ def render_manual_tab() -> None:
                      expanded=True):
         st.caption(
             "本系統 4 個資料 Tab 用到的所有資料來源,按「**資料項目 → 用在哪個 Tab → 來源 / endpoint "
-            "→ refresh / 發布延遲 → 失敗 fallback**」整理。**任一筆失敗都會在 🔭 資料診斷 Tab "
+            "→ refresh / 發布延遲 → 失敗 fallback**」整理。**任一筆失敗都會在 🔭 資料診斷(「參考 / 診斷」分頁內) "
             "用紅燈標出**。對照 `CLAUDE.md §2.1 SSOT` 5-Tier 權威分級。"
         )
 
@@ -130,7 +130,7 @@ def render_manual_tab() -> None:
         st.caption(
             "**📖 對應憲法**:`CLAUDE.md §2.1 SSOT`(5-Tier 權威分級)、`§2.3 PIT`(發布延遲表)、"
             "`§2.4 Freshness`(TTL 對照)、`§4.6` 領域邊界(基金特有狀態)。"
-            " **任一筆紅燈 → 🔭 資料診斷 Tab 找對應 fetcher 修。**"
+            " **任一筆紅燈 → 🔭 資料診斷(「參考 / 診斷」分頁內)找對應 fetcher 修。**"
         )
     # ════════════════════════════════════════════════════════════
 
@@ -186,7 +186,7 @@ def render_manual_tab() -> None:
             _df_fh = _hist_df()
         if _df_fh.empty:
             st.info(
-                "尚未查過任何基金。在「🔍 單一基金」抓取後 / 「📦 組合基金」載入後，"
+                "尚未查過任何基金。在「🔍 個基深掘」抓取後 / 「📦 組合基金」載入後，"
                 "代號與名稱會自動寫入此清單。"
             )
         else:

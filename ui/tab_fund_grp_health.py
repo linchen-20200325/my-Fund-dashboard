@@ -86,6 +86,8 @@ def _dedup_rows_by_code(rows: "list[dict]") -> "list[dict]":
 def render_fund_grp_health_tab() -> None:
     """渲染 💊 基金組合健診 Tab（v19.37 新增）。"""
     st.markdown("### 💊 基金組合健診")
+    from ui.helpers.story_nav import render_story_nav
+    render_story_nav("health")  # v19.405 Phase 4:健診為決策動線第 2 站
     st.caption(
         "對 **100 萬 TWD** 為基準，模擬持有期間每次配息折算 TWD 金額並判定吃本金。"
         "🧮 = 本系統自行換算（非 MoneyDJ/Cnyes 直給）。"
@@ -111,7 +113,7 @@ def render_fund_grp_health_tab() -> None:
             f"　{_phase_tip}"
         )
     else:
-        st.caption("💡 先至「🌐 總經」Tab 載入資料，健診結果將顯示對應市場環境說明。")
+        st.caption("💡 先至「🌐 市場定調」Tab 載入資料，健診結果將顯示對應市場環境說明。")
 
     # v19.302: 從組合配置帶入基金代號（讀 portfolio_funds session_state）
     _pf_raw = st.session_state.get("portfolio_funds") or []

@@ -1,17 +1,18 @@
-"""ui/helpers/story_nav.py — v18.193：故事化動線「敘事導覽列」
+"""ui/helpers/story_nav.py — 決策動線「敘事導覽列」(v19.405 Phase 4 對齊 6→5 分頁)
 
-v5.0 Task2.2：讓使用者順著 spec 敘事閱讀 —
-🌐 總經環境 → 📊 核心/衛星配置 → 🔍 單一基金深掘。
-三個敘事 tab 頂部各放一行麵包屑、highlight 目前所在站，建立連貫敘事。
-純展示、零資料依賴；內容（`story_nav_markdown`）與渲染分離以便單元測試。
+讓使用者順著決策動線閱讀 —
+🌐 市場定調 → 💊 組合健診 → 🔍 個基深掘 → 📊 配置 & 帳本。
+各決策 tab 頂部放一行麵包屑、highlight 目前所在站,建立連貫動線。
+純展示、零資料依賴;內容(`story_nav_markdown`)與渲染分離以便單元測試。
 """
 from __future__ import annotations
 
-# 故事三站：key → (emoji+標籤, 這站在幹嘛)
+# 決策動線四站：key → (emoji+標籤, 這站在幹嘛)。v19.405 Phase 4:對齊 app.py 6→5 分頁順序。
 _STEPS: tuple[tuple[str, str, str], ...] = (
-    ("macro",     "① 🌐 總經環境",     "看懂景氣位階與拐點"),
-    ("portfolio", "② 📊 核心/衛星配置", "決定資產怎麼擺"),
-    ("fund",      "③ 🔍 單一基金深掘",  "挑出 / 汰換每一檔"),
+    ("macro",     "① 🌐 市場定調",    "看懂景氣位階,決定加碼或防禦"),
+    ("health",    "② 💊 組合健診",    "先看手上哪幾檔健康 / 吃本金"),
+    ("fund",      "③ 🔍 個基深掘",     "被點名的那檔,細看買賣點"),
+    ("portfolio", "④ 📊 配置 & 帳本",  "記帳 + 再平衡,調整持倉"),
 )
 _VALID = {s[0] for s in _STEPS}
 

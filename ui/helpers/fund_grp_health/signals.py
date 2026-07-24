@@ -26,7 +26,7 @@ def _render_mk_signal_table(funds: list) -> None:
 
     _phase_info = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
     if not _phase_info:
-        st.caption("⬜ 需先到 🌐 總經 Tab 點選「載入總經資料」,才能算景氣位階 + MK 操作訊號")
+        st.caption("⬜ 需先到 🌐 市場定調 Tab 點選「載入總經資料」,才能算景氣位階 + MK 操作訊號")
         return
 
     try:

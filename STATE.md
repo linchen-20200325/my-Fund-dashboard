@@ -2,6 +2,29 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🗂️ 2026-07-24 儀表板 IA 重分類 Phase 4 — 6→5 分頁決策動線重組 + 參考合區 v19.405
+
+Phase 4(重新分類,收官)。`app.py` 分頁改照「決策動線」重排 + 命名,支援型的「資料診斷 +
+說明書」合成一個「參考 / 診斷」分頁(user 核准合區),**6 → 5 分頁**。
+
+**新結構(決策動線)**:
+① 🌐 市場定調(原總經)→ ② 💊 組合健診(原第 3,**提前**)→ ③ 🔍 個基深掘(原單一基金)→
+④ 📊 配置 & 帳本(原組合配置)→ ⑤ 📖 參考 / 診斷(資料診斷 + 說明書,inner st.tabs 分隔)。
+
+**改動**:
+- `app.py`:6→5 `st.tabs` 重排 + relabel;參考/診斷用巢狀 `st.tabs`(🔭 資料診斷 | 📖 說明書)。
+- `ui/helpers/story_nav.py`:麵包屑改 **4 站決策動線**(市場定調→組合健診→個基深掘→配置&帳本);
+  新增 health 站;`tests/test_story_nav.py` 對齊。健診 tab 補 `render_story_nav("health")`。
+- 6 處跨頁 nav 提示對齊新標籤(signals / tab_fund_grp_health / tab2 / t7_ledger / tab6×2)。
+
+**保守範圍(§8.4)**:本 PR 只做「重排 + 命名 + 參考合區」(結構層),**未**做 5,400-LOC 決策
+分頁間的深度 section 搬移(戰情室 / PK / AI 收斂等)—— 該部分最動 user 工作流,留給 user 看過
+5-tab 成果後再決定是否續做。
+
+驗:py_compile 全綠;`test_story_nav`(5)+ `test_tab6_manual` + app_smoke 103 綠 1 skip;
+AppTest 16/16(全 tab 仍 render);獨立稽核 AI 驗結構完整(6 原 tab 內容全保留、無遺失)。
+**行為變更**:分頁數 6→5、順序/名稱改決策動線、診斷+說明書變巢狀子分頁。
+
 ## 📊 2026-07-24 儀表板 IA 重分類 Phase 3 — 補「怎麼看」讀法 v19.404
 
 Phase 3(視覺化 + 說明)。設計 AI 誠實結論:**本 app 已高度圖表化 + 多有解讀線**(資產成長曲線 /
