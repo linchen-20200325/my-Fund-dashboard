@@ -2,6 +2,23 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🩺 2026-07-24 可視化優化 V2 SSOT 4 元件骨幹 v19.388 —(整包第 2 期)
+
+建 4 個共用元件(`ui/components/`),**全新、inert(尚無 caller)** → 零 app 行為變動;
+V3 才逐 Tab 接線。收斂稽核 ②③④⑤ 的系統級分歧:
+
+- **`status.py`** `status_color(level)`:TRAFFIC 為唯一 status SSOT(收 TRAFFIC/MATERIAL
+  雙套 + inline hex);恆帶 emoji+label(dataviz #4)。MATERIAL_* 降為資料 accent。
+- **`chart_factory.py`** `apply_dark_template()` + 高度/邊距尺標 + `PLOTLY_CONFIG` +
+  `sparkline_fig`/`signed_bar_fig` preset:收 22 圖的 5 背景/20 margin/18 高度漂移。
+  `signed_bar_fig` 依號上色、**缺值 None 留缺口不補 0**(§1)。
+- **`stat_tile.py`** `stat_tile()`:以 `gh_card` 為底,收 8 種手刻 tile;value=None→「—」。
+- **`tables.py`** `styled_dataframe()`/`num_col()`:統一表格入口,不改 df 內容。
+
+驗(總監指令:資料誠信):`tests/test_viz_components.py` **15 綠**,鎖定「值不遺失/不竄改」——
+signed_bar 保留原 y(含 None 不變 0)、stat_tile 原樣呈現 value、狀態色對映正確。
+merge 前另派獨立 QA 稽核 subagent 確認。
+
 ## 🩺 2026-07-23 可視化優化 V1 資料誠信 §1 v19.387 —(整包 V1→V4 之第 1 期)
 
 user 核准「整包做」跨全 Tab 可視化優化(5-agent 稽核 → 去重 → 預覽 → 確認閘門通過)。
