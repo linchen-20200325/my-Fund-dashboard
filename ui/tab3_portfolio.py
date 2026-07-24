@@ -2231,7 +2231,7 @@ def render_portfolio_tab() -> None:
                 # inline 1.2× coverage 門檻 → 與全站(Tab2 警示框 / 健診 3 表)一致,不再打架。
                 # 資料不足(_real=False)/ 無配息(_d≤0)→ dividend_safety 回 grey,誠實不誤判。
                 # L3→L2 呼叫(portfolio_service),同時修掉原 inline 分類的 §8.2 越權。
-                from services.portfolio_service import dividend_safety
+                # (div_safety_check 即 dividend_safety,已於檔頭 module 級 import,不重複)
                 _LVL_COLOR = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
                               "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}
                 _rc_levels = []
@@ -2240,7 +2240,7 @@ def render_portfolio_tab() -> None:
                         _rc_levels.append("grey")            # 1Y 資料不足 → 灰
                     else:
                         _rc_levels.append(
-                            dividend_safety(_r, _d).get("alert_level", "grey"))
+                            div_safety_check(_r, _d).get("alert_level", "grey"))
                 _rc_colors = [_LVL_COLOR.get(_lv, TRAFFIC_NEUTRAL) for _lv in _rc_levels]
 
                 fig_rc = go.Figure()

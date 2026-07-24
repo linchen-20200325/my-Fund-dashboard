@@ -1188,7 +1188,7 @@ def render_single_fund_tab() -> None:
                         from ui.helpers.macro_helpers import (
                             compute_1y_total_return as _c1ytr_ep,
                         )
-                        _tr1y, _tr1y_src = _c1ytr_ep({
+                        _tr1y, _ = _c1ytr_ep({
                             "metrics": m,
                             "moneydj_raw": mj_raw,
                             "series": s,
