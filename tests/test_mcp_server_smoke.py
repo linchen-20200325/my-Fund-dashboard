@@ -80,6 +80,19 @@ def test_error_envelope_catches_raise_as_structured():
     json.dumps(env)
 
 
+def test_error_envelope_redirects_fn_stdout_to_stderr(capsys):
+    """stdio 安全:fn 內的 print() 不可落到 stdout(會毀 MCP JSON-RPC protocol),須改走 stderr。"""
+    def _noisy():
+        print("[macro_core/PMI] 模擬 fetcher 診斷")  # L1 fetcher 常見的 stdout print
+        return {"score": 1}
+
+    env = error_envelope(_noisy)
+    captured = capsys.readouterr()
+    assert "模擬 fetcher 診斷" not in captured.out   # stdout 乾淨 → protocol 安全
+    assert "模擬 fetcher 診斷" in captured.err        # 診斷落到 stderr
+    assert env == {"ok": True, "data": {"score": 1}}
+
+
 # ─────────────────── build_macro_snapshot fail-loud ─────────────
 def test_missing_fred_key_raises(monkeypatch):
     """輸入#1:缺 key → raise(§1 不回半空假分數)。"""
