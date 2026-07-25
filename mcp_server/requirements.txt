@@ -1,0 +1,10 @@
+# MCP server(PoC)專用依賴 —— 刻意與主 requirements.txt 隔離。
+#
+# 理由:Streamlit Cloud 部署的 app 本身**不需要** fastmcp(MCP server 是另一個
+# 本地 process)。把它塞進主 requirements.txt 會平白膨脹雲端部署且拖慢冷啟動。
+# 需要跑 MCP server 時才:  pip install -r mcp_server/requirements.txt
+#
+# 注意:本檔**不** re-pin 主 app 的套件(pandas / numpy / streamlit ...);
+# MCP server 與 app 共用同一個 venv 時,主 requirements.txt 已提供那些。
+
+fastmcp>=2.7,<3.0
