@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import math
 import sys
@@ -85,7 +86,11 @@ def error_envelope(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> dict:
     而是誠實把錯誤內容回給 AItool caller,讓對話端看得到「為什麼沒數字」。
     """
     try:
-        result = fn(*args, **kwargs)
+        # L1 fetcher 用 print() 印診斷(如 "[macro_core/PMI/...]")→ 落到 stdout。
+        # stdio MCP 的 stdout **專供 JSON-RPC protocol frame**,任何雜訊都會毀掉協定。
+        # 執行期間把 stdout 導向 stderr;FastMCP 的 protocol 在工具「回傳後」才寫,不受影響。
+        with contextlib.redirect_stdout(sys.stderr):
+            result = fn(*args, **kwargs)
     except Exception as e:  # noqa: BLE001 — 邊界層:所有例外翻成結構化信封回報
         # §3.3:except 至少要 log + 回 fail token。stdio MCP 的 stdout 走協定,
         # log **必須**走 stderr,否則污染 protocol frame。

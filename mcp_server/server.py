@@ -22,8 +22,16 @@ Claude Desktop 設定(claude_desktop_config.json)範例:
 """
 from __future__ import annotations
 
+import contextlib
+import sys
+
 from mcp_server._serialize import error_envelope
-from mcp_server.tools_macro import build_macro_snapshot
+
+# import tools_macro 會連帶 import services.macro → streamlit,啟動時 streamlit 可能
+# 印 config 警告到 stdout。stdio MCP 的 stdout 專供 protocol,故 import 期間把 stdout
+# 導向 stderr(protocol 尚未開始寫,安全);import 完 stdout 自動還原給 FastMCP。
+with contextlib.redirect_stdout(sys.stderr):
+    from mcp_server.tools_macro import build_macro_snapshot
 
 try:
     from fastmcp import FastMCP
