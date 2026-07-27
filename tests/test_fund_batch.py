@@ -179,3 +179,12 @@ def test_div_freq_unknown_is_none(monkeypatch):
     row = analyze_fund_row("ACCP138")
     assert row["div_freq"] is None          # 非 12/4/2/1 → None,不腦補
     _assert_full_keys(row)
+
+
+def test_zh_labels_cover_all_columns_and_statuses():
+    """中文標題 / 狀態標籤必須覆蓋所有欄位與 status(新增欄漏標題會被此測抓到)。"""
+    from services import fund_batch as fb
+    assert set(fb.COLUMN_LABELS_ZH) == set(fb.ROW_COLUMNS)   # 無漏、無多
+    statuses = {fb.STATUS_OK, fb.STATUS_PARTIAL, fb.STATUS_NO_NAV,
+                fb.STATUS_FETCH_FAIL, fb.STATUS_UNKNOWN_CODE}
+    assert statuses <= set(fb.STATUS_LABELS_ZH)

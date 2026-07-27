@@ -45,6 +45,44 @@ STATUS_UNKNOWN_CODE = "unknown_code"  # 空白 / 無效代號
 
 _DIV_FREQ_LABEL = {12: "月配", 4: "季配", 2: "半年配", 1: "年配"}
 
+# 顯示 / 下載用中文欄名(SSOT;內部 dict key 仍用英文,只在輸出層改名)
+COLUMN_LABELS_ZH: dict[str, str] = {
+    "code": "代號",
+    "name": "名稱",
+    "status": "狀態",
+    "note": "備註",
+    "currency": "計價幣別",
+    "nav": "最新淨值(原幣)",
+    "nav_date": "淨值日期",
+    "nav_points": "資料筆數",
+    "ret_1m_pct": "近1月報酬%",
+    "ret_3m_pct": "近3月報酬%",
+    "ret_6m_pct": "近6月報酬%",
+    "ret_1y_pct": "近1年報酬%",
+    "ret_1y_total_pct": "近1年含息報酬%",
+    "ret_3y_ann_pct": "近3年年化%",
+    "ret_5y_ann_pct": "近5年年化%",
+    "sharpe": "夏普值",
+    "sortino": "索提諾值",
+    "calmar": "卡瑪值",
+    "vol_1y_pct": "年化波動%",
+    "max_drawdown_pct": "最大回撤%",
+    "div_yield_pct": "配息年化率%",
+    "div_freq": "配息頻率",
+    "mgmt_fee": "經理費",
+    "data_source": "資料來源",
+    "is_sparse": "序列稀疏",
+}
+
+# status 值 → 中文標籤(顯示 / 下載用)
+STATUS_LABELS_ZH: dict[str, str] = {
+    STATUS_OK: "✅ 成功",
+    STATUS_PARTIAL: "🟡 部分",
+    STATUS_NO_NAV: "⬜ 無淨值",
+    STATUS_FETCH_FAIL: "❌ 抓取失敗",
+    STATUS_UNKNOWN_CODE: "⚠️ 無效代號",
+}
+
 
 def _num(v: Any) -> "float | None":
     """§1:數值化,NaN / inf / bool / 無法轉 → None(絕不偽造成 0)。收口 SSOT safe_num。"""

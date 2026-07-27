@@ -20,12 +20,19 @@ import re
 import pandas as pd
 import streamlit as st
 
-from services.fund_batch import ROW_COLUMNS, analyze_fund_row
+from services.fund_batch import (
+    COLUMN_LABELS_ZH,
+    ROW_COLUMNS,
+    STATUS_LABELS_ZH,
+    analyze_fund_row,
+)
 
 # session_state 命名空間
 _K_CODES = "batch_codes"      # list[str] 目標代號(依上傳順序)
 _K_ROWS = "batch_rows"        # dict[str, row] 已完成結果(續跑用)
 _K_RUN_AT = "batch_run_at"    # str 本次執行時間(台北)
+_K_RUN_ID = "batch_run_id"    # str 目前清單的 checkpoint run_id(換清單即變 → 重置記憶體)
+_K_DISK_OFF = "batch_disk_off"  # bool 磁碟續存失敗 → 降級只記憶體(只警告一次)
 
 # 解析用:代號寬鬆樣式 + 常見表頭字(過濾掉,避免當成基金碼硬抓)
 _CODE_RE = re.compile(r"^[A-Z0-9]{3,20}$")
@@ -62,13 +69,28 @@ def _parse_codes(raw: str) -> list[str]:
     return out
 
 
+def _persist(run_id: str, codes: list[str], rows: dict) -> None:
+    """磁碟續存;失敗 → 降級成只記憶體(警告一次,不中斷跑批)。§1:不靜默、不假裝。"""
+    if st.session_state.get(_K_DISK_OFF):
+        return
+    from repositories import batch_checkpoint as bc
+    try:
+        bc.save(run_id, codes, rows)
+    except Exception as e:  # noqa: BLE001 — 磁碟不可寫(如 Cloud 唯讀)→ 降級,不炸跑批
+        st.session_state[_K_DISK_OFF] = True
+        st.warning(f"⚠️ 磁碟續存失敗,本次改為只存記憶體(關分頁會消失):"
+                   f"{type(e).__name__}: {str(e)[:80]}")
+
+
 def _run_batch(codes: list[str], retry_failed: bool) -> None:
     """逐檔跑(進度條)。已完成的跳過(續跑);retry_failed=True 時失敗檔重抓。
 
-    每完成一檔立刻寫進 session_state → 中斷後再按可續跑。
+    每完成一檔立刻寫進 session_state **+ 磁碟 checkpoint** → 關分頁 / 重啟後仍可續跑。
     """
+    from repositories import batch_checkpoint as bc
     rows: dict = st.session_state.setdefault(_K_ROWS, {})
     st.session_state[_K_RUN_AT] = _dt.datetime.now(_TW_TZ).strftime("%Y-%m-%d %H:%M")
+    run_id = bc.compute_run_id(codes)
 
     # 決定本輪要處理哪些(未做的 + 選擇性重試失敗的)
     todo = [
@@ -85,6 +107,7 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
     for i, code in enumerate(todo, start=1):
         live.markdown(f"⏳ 處理中 **{i}/{total}**:`{code}` …")
         rows[code] = analyze_fund_row(code)   # L2:失敗也回一列,不外拋
+        _persist(run_id, codes, rows)         # 每檔落地(續存後盾)
         bar.progress(i / total)
     bar.empty()
     live.markdown(f"✅ 本輪完成 **{total}** 檔。")
@@ -102,7 +125,7 @@ def render_batch_analysis_tab() -> None:
     st.caption(
         "上傳或貼上基金代號清單 → 逐檔跑報酬/風險/配息分析 → 下載 CSV。"
         "每檔要抓 NAV/配息/績效(T+1~T+3、含 fallback chain),**400 檔約 15~25 分鐘**;"
-        "可中斷後再按「繼續」續跑(已完成的會快取跳過)。"
+        "**每檔即時存磁碟** → 關分頁 / 伺服器重啟也不白費,重進上傳同一份清單自動接續。"
     )
 
     # ── 輸入:上傳 CSV/TXT 或貼上 ──────────────────────────────
@@ -129,8 +152,24 @@ def render_batch_analysis_tab() -> None:
 
     if not codes:
         st.info("👆 請上傳或貼上基金代號清單。範例代號:`ACCP138`(保單連結)、`0050`(境內)。")
-        _render_existing_results()   # 若上次跑過,仍可看/下載
+        _render_recent_checkpoints()  # 磁碟上的舊批次 → 可讀回看/下載
+        _render_existing_results()    # 若本 session 已載入,仍可看/下載
         return
+
+    # 換了清單(或剛開分頁 / 重啟後)→ 重置記憶體並嘗試從磁碟讀回該清單進度
+    from repositories import batch_checkpoint as bc
+    run_id = bc.compute_run_id(codes)
+    if st.session_state.get(_K_RUN_ID) != run_id:
+        st.session_state[_K_RUN_ID] = run_id
+        st.session_state.pop(_K_DISK_OFF, None)
+        ckpt = bc.load(run_id)
+        if ckpt:
+            st.session_state[_K_ROWS] = dict(ckpt.get("rows") or {})
+            st.session_state[_K_RUN_AT] = ckpt.get("updated_at", "—")
+            st.success(f"🔁 已從磁碟讀回上次進度:{len(st.session_state[_K_ROWS])} 檔"
+                       f"(更新於 {ckpt.get('updated_at', '—')})")
+        else:
+            st.session_state[_K_ROWS] = {}
 
     st.session_state[_K_CODES] = codes
     rows: dict = st.session_state.get(_K_ROWS, {})
@@ -152,14 +191,43 @@ def render_batch_analysis_tab() -> None:
         clear = st.button("🗑️ 清除重來", use_container_width=True, key="batch_clear")
 
     if clear:
-        st.session_state.pop(_K_ROWS, None)
-        st.session_state.pop(_K_RUN_AT, None)
+        bc.delete(run_id)                      # 連磁碟 checkpoint 一起清
+        for _k in (_K_ROWS, _K_RUN_AT, _K_RUN_ID, _K_DISK_OFF):
+            st.session_state.pop(_k, None)
         st.rerun()
 
     if go or retry:
         _run_batch(codes, retry_failed=bool(retry))
 
     _render_existing_results()
+
+
+def _render_recent_checkpoints() -> None:
+    """列磁碟上的舊批次存檔,讓使用者不必重上傳即可讀回看/下載(關分頁/重啟後救援)。"""
+    from repositories import batch_checkpoint as bc
+    recent = bc.list_recent()
+    if not recent:
+        return
+    st.divider()
+    st.markdown("### 💾 磁碟上的批次存檔(關分頁 / 重啟後可讀回)")
+    st.caption("讀回後可直接下載;要**續跑**請重新上傳同一份清單(會自動接續)。")
+    for r in recent:
+        col1, col2 = st.columns([5, 1])
+        col1.markdown(
+            f"`{r['run_id']}`　·　**{r['n_done']}/{r['n_codes']}** 檔　·　"
+            f"更新於 {r['updated_at'] or '—'}"
+        )
+        if col2.button("📂 讀回", key=f"batch_load_{r['run_id']}", use_container_width=True):
+            ckpt = bc.load(r["run_id"])
+            if ckpt:
+                st.session_state[_K_ROWS] = dict(ckpt.get("rows") or {})
+                st.session_state[_K_CODES] = (
+                    ckpt.get("codes") or list((ckpt.get("rows") or {}).keys()))
+                st.session_state[_K_RUN_AT] = ckpt.get("updated_at", "—")
+                st.session_state[_K_RUN_ID] = r["run_id"]
+                st.rerun()
+            else:
+                st.error("讀回失敗:存檔可能已損毀或被刪除。")
 
 
 def _render_existing_results() -> None:
@@ -192,14 +260,19 @@ def _render_existing_results() -> None:
         st.caption("失敗/無資料的檔仍完整列在表裡(status + note 標明原因、數值留白),"
                    "**不會靜默丟棄或填假值**(§1)。可按「🔁 重試失敗檔」重抓。")
 
-    # ── 表格 ───────────────────────────────────────────────
-    st.dataframe(df, use_container_width=True, height=420, hide_index=True)
+    # ── 中文標題 + 中文狀態(顯示 / 下載共用;內部 df 仍英文供邏輯)──────
+    df_zh = df.copy()
+    df_zh["status"] = df_zh["status"].map(lambda s: STATUS_LABELS_ZH.get(s, s))
+    df_zh = df_zh.rename(columns=COLUMN_LABELS_ZH)
 
-    # ── 下載 CSV(utf-8-sig,Excel 直開中文正常)──────────────
+    # ── 表格 ───────────────────────────────────────────────
+    st.dataframe(df_zh, use_container_width=True, height=420, hide_index=True)
+
+    # ── 下載 CSV(utf-8-sig,Excel 直開中文標題正常)──────────────
     fname_ts = (run_at or "").replace("-", "").replace(":", "").replace(" ", "_") or "export"
     st.download_button(
         "⬇️ 下載分析結果 CSV",
-        df.to_csv(index=False).encode("utf-8-sig"),
+        df_zh.to_csv(index=False).encode("utf-8-sig"),
         file_name=f"fund_batch_{fname_ts}.csv",
         mime="text/csv",
         use_container_width=True,
@@ -208,12 +281,12 @@ def _render_existing_results() -> None:
 
     with st.expander("ℹ️ 欄位說明 / 這張表沒有什麼", expanded=False):
         st.markdown(
-            "- **報酬欄 `*_pct`** 為百分比;`ret_*_pct` 為**純 NAV 報酬**,"
-            "`ret_1y_total_pct` 為**含息**;`ret_3y/5y_ann_pct` 為年化。\n"
-            "- **`vol_1y_pct`** = 年化標準差;**`max_drawdown_pct`** = 最大回撤;"
-            "**`nav`** 為**原幣**淨值(見 `currency` 欄,未換算 TWD)。\n"
-            "- **`div_yield_pct`** = 配息年化率(≠ 含息報酬);**`mgmt_fee`** = 經理費。\n"
-            "- **`data_source`** = 命中的來源;**`is_sparse`** = 序列稀疏(年化值已誠實砍掉)。\n"
+            "- **報酬欄**皆為百分比;「近1月/3月/6月/1年報酬%」為**純 NAV 報酬**,"
+            "「近1年含息報酬%」含配息;「近3年/5年年化%」為年化。\n"
+            "- **「年化波動%」** = 年化標準差;**「最大回撤%」**;"
+            "**「最新淨值」** 為**原幣**(見「計價幣別」欄,未換算 TWD)。\n"
+            "- **「配息年化率%」** = 配息率(≠ 含息報酬);**「經理費」**。\n"
+            "- **「資料來源」** = 命中的來源;**「序列稀疏」** = True 時年化值已誠實砍掉。\n"
             "- ⚠️ **不含**:AI 跨檔評論、逐檔持股明細 —— 屬小 N 深看功能,"
             "請到「💊 組合健診」分頁對篩選出的一小撮基金做。"
         )

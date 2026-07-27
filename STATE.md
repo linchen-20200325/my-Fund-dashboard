@@ -2,6 +2,30 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 💾 2026-07-27 批次分析:磁碟續存 + 中文欄名 v19.407
+
+user 實跑 465 檔後兩個需求:(1) 跑到一半關分頁 / 伺服器重啟不白費;(2) 表格標題要中文。
+
+**磁碟續存(§8 對齊後動工)**:
+- **L1 新增** `repositories/batch_checkpoint.py`:本地 JSON CRUD —— `compute_run_id(codes)`
+  (sha1 前 12,順序/大小寫/重複無關 → 同清單同檔)、`save`(temp + `os.replace` 原子寫)、
+  `load`(壞檔 → log + None,可重跑不炸)、`delete`、`list_recent`。無 HTTP、無 cache。
+- **L3** `ui/tab_batch_analysis.py`:跑迴圈每檔算完即 `save` 落地;進分頁偵測 run_id 變化
+  → 從磁碟讀回續跑;無上傳時列「💾 磁碟上的批次存檔」可讀回看/下載;「清除」連磁碟刪。
+  磁碟寫失敗(如 Cloud 唯讀)→ 降級只記憶體 + 警告一次(§1 不靜默、不假裝)。
+- **例外登記**:`ui/tab_batch_analysis.py` 直呼 L1 `batch_checkpoint` = 本地持久化(無 cache/HTTP)
+  → 補登 CLAUDE.md §8.2.A **EX-CRUD-1**(同 policy/snapshot/ledger 精神)。
+- `.gitignore` 加 `data_cache/batch/`(使用者 run-state,非 repo 資產)。
+- ⚠️ 持久性依部署:本機/NAS = 完全持久;Streamlit Cloud 檔案系統暫時,redeploy 會清
+  (仍涵蓋關分頁/session 逾時)。
+
+**中文欄名**:`services/fund_batch.py` 加 `COLUMN_LABELS_ZH`(25 欄)+ `STATUS_LABELS_ZH`
+SSOT;**內部 dict key 仍英文**(邏輯不動),只在顯示 / 下載層 rename + 狀態值中文化。
+統計計數仍走英文 df(正確)。
+
+驗:新增 test_batch_checkpoint.py(12,含 §6 三大易錯:壞檔容錯 / run_id 穩定 / 原子覆寫 +
+L2 列穿過 checkpoint 無損整合測)+ 中文標題覆蓋不變量測;全 batch 測試 29 綠。
+
 ## 📦 2026-07-27 批次基金分析分頁 — 上傳清單 → 逐檔跑 → 下載 CSV v19.406 (PR #598)
 
 user 有 ~400 檔基金標的,要「上傳標的 → 提供分析 → 下載」。現有「組合健診」引擎已具全套逐檔
