@@ -44,6 +44,51 @@ def test_missing_series_gets_dash():
     assert "NAV 不足" in combined["B002"]["HWM 位階"]
 
 
+def test_build_unified_health_df_join_dedup_order():
+    """①②③+extra 依 code join 成一張:去重、缺欄 None、末段接 base ③ 欄。"""
+    import pandas as pd
+
+    from ui.helpers.fund_grp_health.unified import build_unified_health_df
+
+    base = pd.DataFrame([
+        {"code": "A1", "基金名": "甲", "ccy": "USD", "配息率% (全期實際)": 4.3,
+         "吃本金燈號 (1Y · MK)": "🟢 健康", "MK 3-3-3 篩": "✅ 通過"},
+        {"code": "A2", "基金名": "乙", "ccy": "USD", "配息率% (全期實際)": 4.7,
+         "吃本金燈號 (1Y · MK)": "🟢 健康", "MK 3-3-3 篩": "✅ 通過"},
+    ])
+    health = {"A1": {"4D Grade": "B", "4D Score": 66.3, "Sharpe 1Y": 0.2, "基金類別": "平衡型"}}
+    div = {"A1": {"1Y 含息 %": 8.78, "每月配息 (TWD)": 6206, "換標的建議": "🟢 保留"}}
+    extra = {"A1": {"現價": "12.47", "σ (年化%)": "12.0", "操作訊號": "🟡 持有"}}
+
+    df = build_unified_health_df(base, health, div, extra)
+    cols = list(df.columns)
+    # 無重複欄名
+    assert len(cols) == len(set(cols))
+    # 順序:身分 → ① → ② → extra → base ③ 末段
+    assert cols[0] == "code" and cols[1] == "基金名"
+    assert cols.index("4D Grade") < cols.index("1Y 含息 %") < cols.index("現價")
+    assert cols.index("現價") < cols.index("配息率% (全期實際)")   # base 末段
+    r1 = df[df["code"] == "A1"].iloc[0]
+    assert r1["4D Grade"] == "B" and r1["每月配息 (TWD)"] == 6206 and r1["現價"] == "12.47"
+    # 缺料檔 A2:①②extra 皆缺(None/NaN,渲染為空白),但 base 欄仍在
+    r2 = df[df["code"] == "A2"].iloc[0]
+    assert pd.isna(r2["4D Grade"]) and r2["配息率% (全期實際)"] == 4.7
+
+
+def test_empty_source_group_is_dropped():
+    """來源整組空(如 Tab3 不傳 extra)→ 該組欄整批不出現(避免一排空白欄)。"""
+    import pandas as pd
+
+    from ui.helpers.fund_grp_health.unified import build_unified_health_df
+
+    base = pd.DataFrame([{"code": "A1", "基金名": "甲", "ccy": "USD"}])
+    df = build_unified_health_df(base, {"A1": {"4D Grade": "B"}}, {}, {})  # div+extra 空
+    cols = list(df.columns)
+    assert "4D Grade" in cols                              # health 有 → 在
+    assert "現價" not in cols and "σ (年化%)" not in cols   # extra 空 → 整組不出現
+    assert "每月配息 (TWD)" not in cols                     # div 空 → 整組不出現
+
+
 def test_no_phase_signal_is_dash_but_levels_present():
     f = _fund("C003", metrics={"nav": 110.0, "buy1": 95, "buy3": 90})
     cols, combined = build_merged_extra_columns([f], phase="", score=None)

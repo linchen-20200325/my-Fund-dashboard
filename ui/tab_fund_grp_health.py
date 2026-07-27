@@ -607,8 +607,6 @@ def _render_health_3tables(rows: list[dict],
     import pandas as pd
     from streamlit import column_config as _cc
     from services.health.report import (
-        DIVIDEND_COLUMNS,
-        HEALTH_COLUMNS,
         build_dividend_summary_row,
         build_health_analysis_row,
     )
@@ -682,24 +680,8 @@ def _render_health_3tables(rows: list[dict],
             "↓ 完整指標見下方 ① 健康分析 / ② 配息相關表。"
         )
 
-    # ── 表 ① 健康分析(4D Grade + 6 進階指標 + 3-3-3)──────────────
-    st.markdown("#### 🩺 ① 健康分析表（4D Grade + 6 進階指標 + MK 3-3-3）")
-    st.caption(
-        "**4D Grade** 為基金健康度評等 SSOT(配息覆蓋 / Sharpe / 走勢 / 低波動 4 維)。"
-        "Sortino / Calmar / Alpha / 費用率為進階指標(無評等,僅供對照)。"
-        "Max DD / 3Y/5Y 年化 / 3-3-3 篩為長線挑核心資產輔助。"
-    )
-    # v19.330:_health_rows 已於本函式頂部(配置檢查前)建好,此處直接用不重算。
-    _health_df = pd.DataFrame(_health_rows)
-    # v19.191:None → NaN for numeric cols(pandas object dtype 會顯示「None」字面值,
-    # NaN 走 NumberColumn format 後顯示「—」/ 空白)。caller 拿 dict → DataFrame 默認 object
-    # dtype,需顯式 to_numeric 轉。
-    _health_num_cols = ["4D Score", "Sharpe 1Y", "Sortino", "Calmar",
-                        "Alpha %", "費用率 %", "Max DD %",
-                        "3Y 年化 %", "5Y 年化 %"]
-    for _nc in _health_num_cols:
-        if _nc in _health_df.columns:
-            _health_df[_nc] = pd.to_numeric(_health_df[_nc], errors="coerce")
+    # v19.411:① 健康分析表不再單獨渲染,欄位已併入「健診大表」。僅保留 _health_cfg(數值格式)
+    # 供合併表 column_config 重用;數值 coerce 交由 build_unified_health_df 統一處理。
     _health_cfg = {
         "code": _cc.TextColumn("代號", width="small"),
         "基金名": _cc.TextColumn("基金名", width="medium"),
@@ -727,28 +709,7 @@ def _render_health_3tables(rows: list[dict],
         "MK 3-3-3": _cc.TextColumn("MK 3-3-3",
             help="成立 ≥ 3 年 + 過去 3 年平均年化 > 7% → 通過"),
     }
-    st.dataframe(
-        _health_df[HEALTH_COLUMNS], use_container_width=True, hide_index=True,
-        column_config={k: v for k, v in _health_cfg.items() if k in _health_df.columns},
-    )
-
-    # ── 表 ② 配息相關(adr + 1Y 含息 + 吃本金 + 換標的建議)─────
-    st.markdown("#### 💰 ② 配息相關表（含吃本金燈號 + MK 換標的建議）")
-    st.caption(
-        "**吃本金燈號 (1Y·MK)** 採郭俊宏老師 1Y 體檢:近一年含息報酬 < 年化配息率 → 🔴 吃本金。"
-        "**換標的建議**走 MK 4 規則心型警結合:"
-        "(a) 吃本金且持有 ≥ 1 年 / (b) 4D Grade F / "
-        "(c) 3-3-3 未通過且持有 ≥ 3 年 / (d) Sharpe<0 且 max_dd<-30%。"
-        "任一中 → 🔴 換 / 1-2 觀察 → 🟡 / 全未中 → 🟢。"
-    )
-    # v19.315:_div_rows 已於頂部「淘汰候選紅區」建好,此處共用不重算(SSOT)。
-    _div_df = pd.DataFrame(_div_rows)
-    # v19.191:None → NaN for numeric cols(同 ① 表 None → NaN 邏輯)
-    # v19.324:每月配息單位數(真實記錄版)加入 numeric 欄(None → NaN → 顯示空白)
-    _div_num_cols = ["1Y 含息 %", "年化配息率 %", "每月配息 (TWD)", "每月配息單位數"]
-    for _nc in _div_num_cols:
-        if _nc in _div_df.columns:
-            _div_df[_nc] = pd.to_numeric(_div_df[_nc], errors="coerce")
+    # v19.411:② 配息相關表不再單獨渲染,欄位併入健診大表;保留 _div_cfg 供格式重用。
     _div_cfg = {
         "code": _cc.TextColumn("代號", width="small"),
         "基金名": _cc.TextColumn("基金名", width="medium"),
@@ -772,19 +733,37 @@ def _render_health_3tables(rows: list[dict],
         "換標的建議": _cc.TextColumn("換標的建議",
             help="MK 4 規則綜合判定(hover 看細節)"),
     }
-    st.dataframe(
-        _div_df[DIVIDEND_COLUMNS], use_container_width=True, hide_index=True,
-        column_config={k: v for k, v in _div_cfg.items() if k in _div_df.columns},
-    )
+    # v19.411:② 表 dataframe 移除(併入健診大表)。
 
-    # ── 表 ③ 實際購買配息結果(既有大表 — 不動,只改 section title)──
-    st.markdown("#### 📦 ③ 實際購買配息結果（持有 meta + 累積 TWD 配息 + 全期實際/年化）")
-    # v19.292 FIX: funds_extra=None → 不在此重複渲染 PK体检表 + 健診摘要表
-    # (表 ① ② 已涵蓋健康分析資訊;PK 體檢由外層 render_fund_grp_health_extras 統一提供)
-    _render_health_table(rows, funds_extra=None)
+    # ── 📊 健診大表(①②③ + σ/風險/MK 去重複合併成一張)── v19.411 ──
+    st.markdown("#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）")
+    st.caption("原「① 健康分析 / ② 配息相關 / ③ 實際購買結果」三表已合併去重複。"
+               "評分(4D Grade)/ 每月配息 / σ 位階 / MK 買賣點皆在此一張表內。")
+    # ①② by-code 資料 + σ/風險/MK,全部傳給 _render_health_table 併成一張大表。
+    _health_by_code = {str(r.get("code")): r for r in _health_rows if r.get("code")}
+    _div_by_code = {str(r.get("code")): {k: v for k, v in r.items() if not str(k).startswith("_")}
+                    for r in _div_rows if r.get("code")}
+    _extra_by_code: dict = {}
+    if funds_extra:
+        try:
+            from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
+            _pi3 = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
+            _, _extra_by_code = build_merged_extra_columns(
+                funds_extra, (_pi3 or {}).get("phase") or "", (_pi3 or {}).get("score"))
+        except Exception:  # noqa: BLE001 — σ/風險/MK 併入失敗不擋大表
+            _extra_by_code = {}
+    _render_health_table(rows, funds_extra=None,
+                         health_by_code=_health_by_code,
+                         div_by_code=_div_by_code,
+                         extra_by_code=_extra_by_code,
+                         extra_cfg={**_health_cfg, **_div_cfg})
 
 
-def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> None:
+def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
+                         health_by_code: dict | None = None,
+                         div_by_code: dict | None = None,
+                         extra_by_code: dict | None = None,
+                         extra_cfg: dict | None = None) -> None:
     if not rows:
         return
     import pandas as pd
@@ -817,21 +796,16 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
             {k: v for k, v in r.items() if not k.startswith("_")}
             for r in ok_rows
         ])
-        # v19.408:HWM σ / 風險對比 / MK 買賣點 三張逐檔表「去重複合併」進健診總表
-        # (user 2026-07-27 要求;原 3 張分散表移除,改在此併成一張寬表)。相關性矩陣 /
-        # 真實收益圖 / Bollinger / 持股維持獨立。缺值由來源填 '—'(§1 不偽造)。
-        if funds_extra:
+        # v19.411:① 健康分析 + ② 配息相關 + ③ 本表 + σ/風險/MK「去重複合併」成一張大表
+        # (user 2026-07-27 要求)。原 ①② 分散表移除,一律併入本表。相關性矩陣 / 真實收益圖 /
+        # Bollinger / 持股維持獨立。缺欄留 None(§1 不偽造)。
+        if health_by_code or div_by_code or extra_by_code:
             try:
-                from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
-                _pi = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
-                _new_cols, _combined = build_merged_extra_columns(
-                    funds_extra, (_pi or {}).get("phase") or "", (_pi or {}).get("score"))
-                _codes = df["code"].tolist() if "code" in df.columns else []
-                for _k in _new_cols:
-                    if _k not in df.columns:
-                        df[_k] = [_combined.get(_c, {}).get(_k, "—") for _c in _codes]
+                from ui.helpers.fund_grp_health.unified import build_unified_health_df
+                df = build_unified_health_df(
+                    df, health_by_code or {}, div_by_code or {}, extra_by_code or {})
             except Exception as _e_merge:  # noqa: BLE001 — 合併失敗不擋健診總表
-                st.caption(f"⬜ 風險/σ/MK 欄併入健診總表失敗:"
+                st.caption(f"⬜ ①②③ 合併大表失敗:"
                            f"[{type(_e_merge).__name__}] {str(_e_merge)[:80]}")
         # v19.189：逐檔財務健診（4 大功能 + 健診摘要表 PK + 健診卡）插在健診總表上方。
         # user 要求易讀的摘要 PK + 健診卡先看到（原在下方「進階分析」區塊）。
@@ -899,9 +873,11 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
                      "✅ 通過 / ❌ 未通過 / ⬜ 資料不足。3 年平均年化由 metrics.ret_3y(累計)"
                      "用 (1+R)^(1/3)-1 換算。本欄為長線輔助,非吃本金主判定。"),
         }
+        # v19.411:合併表 column_config = ③ 本表 + ①② 傳入格式(extra_cfg)。
+        _full_cfg = {**_col_cfg, **(extra_cfg or {})}
         st.dataframe(
             df, use_container_width=True, hide_index=True,
-            column_config={k: v for k, v in _col_cfg.items() if k in df.columns},
+            column_config={k: v for k, v in _full_cfg.items() if k in df.columns},
         )
 
         # v19.69 J1：多基金績效比較圖

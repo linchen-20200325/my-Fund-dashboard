@@ -2,6 +2,30 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧬 2026-07-27 組合健診①②③合表 + 批次評分/每月配息 + AI 落地磁碟 v19.410-412
+
+user 一輪三需求(多 agent 交叉驗證後落地)。
+
+**v19.412 批次大表**:`services/fund_batch.py` `analyze_fund_row` 補「評分(4D Grade/Score)」+
+「每月配息(基準 100 萬 TWD)」欄 —— 復用組合健診 SSOT `build_health_analysis_row` /
+`build_dividend_summary_row`;每檔 FX 走 `get_latest_fx`(cached);算不出留 None(§1)。
+`COLUMN_LABELS_ZH` 同步中文標題。`BATCH_PRINCIPAL_TWD=1_000_000`。
+
+**v19.411 組合健診 ①②③ 合併大表**:① 健康分析 + ② 配息相關 + ③ 健診總表 + σ/風險/MK
+去重複併成**一張寬表**(40 欄)。`ui/helpers/fund_grp_health/unified.py:build_unified_health_df`
+(純函式,`_UNIFIED_FRONT` 欄序 spec + `_UNIFIED_NUMERIC` 數值轉換,同義欄擇一去重);
+`tab_fund_grp_health` 移除 ①② 獨立 render、by-code 傳入合併。相關性矩陣/真實收益圖/
+Bollinger/持股維持獨立。
+
+**v19.410 AI 落地磁碟(reboot 不消失)**:`repositories/ai_cache.py`(EX-CRUD-1 本地 JSON,
+原子寫 + 上限汰舊);`ui/helpers/ai_summary.py` session 無 cache 時從磁碟讀回,keyed by
+tab + **snapshot + headlines + stale_note** 內容 hash(資料/新聞變 → key 變 → 不回顯過期 AI,
+對抗式驗證修補);`.gitignore` 加 `data_cache/ai_cache.json`。**已知限**:snapshot 依賴
+reboot 會清的 session_state,故 reboot 後需先重載資料才命中;Streamlit Cloud FS 重啟即清。
+
+驗:多 agent 對抗式交叉驗證(①②③ 去重正確性 / AI staleness+§1);新增
+test_ai_cache / test_grp_health_unified_merge + 批次評分欄測試;全非-slow 套件綠。
+
 ## 🐛 2026-07-27 hotfix:批次分析 Series truthiness ValueError v19.409
 
 user 實跑批次分析時某檔(ACYT226)炸 `ValueError: truth value of a Series is ambiguous`。

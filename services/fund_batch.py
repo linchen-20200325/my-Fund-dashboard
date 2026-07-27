@@ -23,6 +23,8 @@ from typing import Any
 ROW_COLUMNS: list[str] = [
     # 身分 / 狀態
     "code", "name", "status", "note", "currency",
+    # 評分(4D 健康度,復用組合健診 SSOT)
+    "grade_4d", "score_4d",
     # 淨值
     "nav", "nav_date", "nav_points",
     # 報酬(純 NAV,%);ret_1y_total_pct = 含息
@@ -30,11 +32,14 @@ ROW_COLUMNS: list[str] = [
     "ret_3y_ann_pct", "ret_5y_ann_pct",
     # 風險
     "sharpe", "sortino", "calmar", "vol_1y_pct", "max_drawdown_pct",
-    # 配息 / 費用
-    "div_yield_pct", "div_freq", "mgmt_fee",
+    # 配息 / 費用(monthly_div_twd = 以 100 萬 TWD 為基準的每月配息)
+    "div_yield_pct", "monthly_div_twd", "div_freq", "mgmt_fee",
     # 血緣(§2.2)
     "data_source", "is_sparse",
 ]
+
+# 批次每月配息基準本金(TWD)—— 對齊組合健診 DEFAULT_PRINCIPAL_TWD,可比較
+BATCH_PRINCIPAL_TWD = 1_000_000.0
 
 # status 分類(誠實標示每檔結局)
 STATUS_OK = "ok"                 # 指標算成功
@@ -52,6 +57,8 @@ COLUMN_LABELS_ZH: dict[str, str] = {
     "status": "狀態",
     "note": "備註",
     "currency": "計價幣別",
+    "grade_4d": "評分(4D)",
+    "score_4d": "健康分數",
     "nav": "最新淨值(原幣)",
     "nav_date": "淨值日期",
     "nav_points": "資料筆數",
@@ -68,6 +75,7 @@ COLUMN_LABELS_ZH: dict[str, str] = {
     "vol_1y_pct": "年化波動%",
     "max_drawdown_pct": "最大回撤%",
     "div_yield_pct": "配息年化率%",
+    "monthly_div_twd": "每月配息(基準100萬)",
     "div_freq": "配息頻率",
     "mgmt_fee": "經理費",
     "data_source": "資料來源",
@@ -181,5 +189,23 @@ def analyze_fund_row(code: str) -> dict:
     if _sparse and metrics.get("sparse_reason"):
         # finalize 已把稀疏期的年化自算值砍成 None;此處把原因寫進 note 供閱讀
         row["note"] = str(metrics.get("sparse_reason"))[:150]
+
+    # v19.412:評分(4D) + 每月配息(100 萬基準)—— 復用組合健診 SSOT builder,單檔失敗不擋整列
+    try:
+        from services.health.report import build_health_analysis_row
+        _h = build_health_analysis_row(fd, code)
+        row["grade_4d"] = _h.get("4D Grade")
+        row["score_4d"] = _num(_h.get("4D Score"))
+    except Exception:  # noqa: BLE001 — 評分算不出 → 留 None,不擋核心列
+        pass
+    try:
+        from services.fund_service import get_latest_fx
+        from services.health.report import build_dividend_summary_row
+        _fx = 1.0 if ccy == "TWD" else (get_latest_fx(f"{ccy}TWD=X") or None)
+        if _fx:
+            _d = build_dividend_summary_row(fd, code, principal_twd=BATCH_PRINCIPAL_TWD, fx=_fx)
+            row["monthly_div_twd"] = _num(_d.get("每月配息 (TWD)"))
+    except Exception:  # noqa: BLE001 — FX/配息算不出 → 留 None(§1 不偽造)
+        pass
 
     return row

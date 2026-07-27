@@ -61,6 +61,8 @@ def _patch(monkeypatch, fd_or_exc):
             raise fd_or_exc
         return fd_or_exc
     monkeypatch.setattr("services.moneydj_fetcher.auto_fetch_moneydj", _fn, raising=True)
+    # v19.412:評分/每月配息會呼 get_latest_fx → 測試 mock 掉避免真網路(否則逾時拖慢)
+    monkeypatch.setattr("services.fund_service.get_latest_fx", lambda *a, **k: 32.0, raising=True)
 
 
 # ───────────────────── 不變量:key 集合恆完整 ─────────────────────
@@ -163,6 +165,10 @@ def test_happy_path_flatten(monkeypatch):
     assert row["data_source"] == "moneydj"
     assert row["nav_points"] == 400
     assert row["nav_date"] == "2025-02-03"  # date_range 2024-01-01 + 399 天
+    # v19.412 評分 + 每月配息(復用 SSOT;mock 資料下型別須正確、算不出留 None)
+    assert row["grade_4d"] is None or isinstance(row["grade_4d"], str)
+    assert row["score_4d"] is None or isinstance(row["score_4d"], float)
+    assert row["monthly_div_twd"] is None or isinstance(row["monthly_div_twd"], float)
     _assert_full_keys(row)
 
 
