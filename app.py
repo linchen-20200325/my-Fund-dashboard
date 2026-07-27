@@ -35,6 +35,7 @@ from ui.tab6_manual import render_manual_tab
 # 自 v19.31 起即註解停用、進不去;user 確認不用 → 整功能拔除(2798 LOC)。
 # 註:services/crisis_backtest.py(CrisisEvent/detect_crisis_events)保留,macro/calibration 仍用。
 from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
+from ui.tab_batch_analysis import render_batch_analysis_tab  # noqa: E402
 from fund_fetcher  import (
     get_proxy_config,
 )
@@ -176,8 +177,8 @@ from ui.components.macro_compass_top import render_macro_compass
 # 支援型的「資料診斷 + 說明書」合成一個「參考 / 診斷」分頁(user 核准合區)。
 # 決策動線:① 市場定調(加碼/防禦)→ ② 組合健診(哪幾檔健康/吃本金)→
 #          ③ 個基深掘(細看被點名的那檔)→ ④ 配置 & 帳本(記帳/再平衡)→ ⑤ 參考/診斷。
-tab_macro, tab_health, tab_single, tab_portfolio, tab_ref = st.tabs(
-    ["🌐 市場定調", "💊 組合健診", "🔍 個基深掘",
+tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_ref = st.tabs(
+    ["🌐 市場定調", "💊 組合健診", "📦 批次分析", "🔍 個基深掘",
      "📊 配置 & 帳本", "📖 參考 / 診斷"])
 
 # ══════════════════════════════════════════════════════
@@ -195,6 +196,13 @@ with tab_macro:
 # ══════════════════════════════════════════════════════
 with tab_health:
     render_fund_grp_health_tab()
+
+# ══════════════════════════════════════════════════════
+# TAB ②-B — 📦 批次分析（工具:一次上傳大量代號 → 報酬/風險/配息表 → 下載 CSV)
+# 與「組合健診」同為基金分析,但規模不同:健診 ≤10 檔深看,批次為 400 檔淺掃導出。
+# ══════════════════════════════════════════════════════
+with tab_batch:
+    render_batch_analysis_tab()
 
 # ══════════════════════════════════════════════════════
 # TAB ③ — 🔍 個基深掘（決策動線第 3 站:被健診點名的那檔,細看買賣點）
