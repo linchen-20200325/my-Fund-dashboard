@@ -87,24 +87,13 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
         _render_correlation_matrix(funds)
     except Exception as e:
         st.caption(f"⬜ 相關性矩陣渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
-    try:
-        _render_hwm_sigma_table(funds)
-    except Exception as e:
-        st.caption(f"⬜ HWM σ 表渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
-    try:
-        _render_risk_compare_table(funds)
-    except Exception as e:
-        st.caption(f"⬜ 風險表渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
+    # v19.408：HWM σ 表 + 風險對比表已「去重複」併入健診總表(一張寬表),此處不再單獨渲染。
     try:
         _render_oversold_badges(funds)
     except Exception as e:
         st.caption(f"⬜ 超跌警示渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
 
-    # v19.121 P1 視覺 — MK 買賣點對比 + Bollinger 可展開詳圖
-    try:
-        _render_mk_signal_table(funds)
-    except Exception as e:
-        st.caption(f"⬜ MK 買賣點對比渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
+    # v19.121 P1 視覺 — Bollinger 可展開詳圖(MK 買賣點表 v19.408 已併入健診總表)
     try:
         _render_bollinger_expanders(funds)
     except Exception as e:

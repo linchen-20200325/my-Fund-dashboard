@@ -817,6 +817,22 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None) -> N
             {k: v for k, v in r.items() if not k.startswith("_")}
             for r in ok_rows
         ])
+        # v19.408:HWM σ / 風險對比 / MK 買賣點 三張逐檔表「去重複合併」進健診總表
+        # (user 2026-07-27 要求;原 3 張分散表移除,改在此併成一張寬表)。相關性矩陣 /
+        # 真實收益圖 / Bollinger / 持股維持獨立。缺值由來源填 '—'(§1 不偽造)。
+        if funds_extra:
+            try:
+                from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
+                _pi = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
+                _new_cols, _combined = build_merged_extra_columns(
+                    funds_extra, (_pi or {}).get("phase") or "", (_pi or {}).get("score"))
+                _codes = df["code"].tolist() if "code" in df.columns else []
+                for _k in _new_cols:
+                    if _k not in df.columns:
+                        df[_k] = [_combined.get(_c, {}).get(_k, "—") for _c in _codes]
+            except Exception as _e_merge:  # noqa: BLE001 — 合併失敗不擋健診總表
+                st.caption(f"⬜ 風險/σ/MK 欄併入健診總表失敗:"
+                           f"[{type(_e_merge).__name__}] {str(_e_merge)[:80]}")
         # v19.189：逐檔財務健診（4 大功能 + 健診摘要表 PK + 健診卡）插在健診總表上方。
         # user 要求易讀的摘要 PK + 健診卡先看到（原在下方「進階分析」區塊）。
         if funds_extra:

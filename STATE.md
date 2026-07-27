@@ -2,6 +2,37 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🐛 2026-07-27 hotfix:批次分析 Series truthiness ValueError v19.409
+
+user 實跑批次分析時某檔(ACYT226)炸 `ValueError: truth value of a Series is ambiguous`。
+
+**根因**:`services/fund_batch.py:analyze_fund_row` 用 `not fd.get("series")` 判斷序列有無;
+當 fallback chain 回來的 `fd` **同時帶 `error` + 非空 pandas Series** 時,`not <Series>`
+觸發 `Series.__bool__` → ValueError,整個批次分頁崩掉。原測試未覆蓋「error + series 並存」。
+
+**修**:改先 `_series is not None and len(_series) > 0` 安全判斷;有非空序列即照常分析
+(error 不擋)。補回歸測試 `test_fd_with_error_and_series_does_not_raise`(重現 error+Series
+情境,驗不 raise + status=ok)。
+
+## 🧬 2026-07-27 組合健診:3 表去重複併入健診總表 v19.408
+
+user 要求:組合健診原本對同一批基金重複畫多張逐檔表,去重複合併成一張大表。
+
+盤點後:真正的逐檔**表格**有 HWM σ / 風險對比 / MK 買賣點 3 張(「真實收益矩陣」實為
+plotly 圖、相關性為 N×N 矩陣、Bollinger 為圖 —— 皆非逐檔表,維持獨立)。
+
+**改動**:
+- 各表抽出**單一 data 函式**(keyed by code,行為不變、原獨立 render 改薄殼委派):
+  `risk.hwm_sigma_by_code` / `risk.risk_compare_by_code` / `signals.mk_signal_by_code`。
+- 新 `ui/helpers/fund_grp_health/unified.py:build_merged_extra_columns`(純函式,無 st)
+  把 3 組 join 成寬表欄位,「現價」等重複欄**先到先得去重**。
+- `tab_fund_grp_health._render_health_table`:df 建好後併入上述欄位(缺值 '—',§1 不偽造)。
+- `fund_grp_health/__init__.py`:移除 3 張分散表的獨立 render(超跌 badges / Bollinger /
+  相關性 / 真實收益圖 / AI / 新聞保留)。
+
+驗:新增 test_grp_health_unified_merge.py(現價去重 / 缺料 '—' / 無 phase 訊號 '—' / 欄序)+
+既有 fund_grp_health 測試零回歸。
+
 ## 💾 2026-07-27 批次分析:磁碟續存 + 中文欄名 v19.407
 
 user 實跑 465 檔後兩個需求:(1) 跑到一半關分頁 / 伺服器重啟不白費;(2) 表格標題要中文。
