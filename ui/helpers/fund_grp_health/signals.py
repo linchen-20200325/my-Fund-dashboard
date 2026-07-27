@@ -43,30 +43,57 @@ def _render_mk_signal_table(funds: list) -> None:
         "**買 3 / 賣 3** = -3σ / +3σ(極端)。現價落在哪一段以紅綠標示。"
     )
 
-    _rows = []
+    _data = mk_signal_by_code(funds, _phase, _score)
+    _rows = [
+        {"基金": f"{(_f.get('name') or _f.get('code', '?'))[:20]} ({_f.get('code', '?')})",
+         **_data.get(_f.get("code", "?"), {})}
+        for _f in funds
+    ]
+    try:
+        import pandas as pd
+        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+        _has_sig = sum(1 for r in _rows if r.get("操作訊號", "—") != "—")
+        if _has_sig < len(_rows):
+            st.caption(
+                f"⬜ {len(_rows) - _has_sig} / {len(_rows)} 檔基金 MK 訊號計算失敗"
+                "(可能 metrics 缺 buy/sell levels)"
+            )
+    except Exception as e:  # noqa: BLE001
+        st.caption(f"⬜ MK 表渲染失敗:{type(e).__name__}: {e}")
+
+
+def mk_signal_by_code(funds: list, phase: str, score) -> dict:
+    """⑩ MK 買賣點逐檔欄位(keyed by code)。供健診總表合併 + 標準表共用(單一資料源)。
+
+    phase/score 由呼叫端從 st.session_state.phase_info 取;缺 → 訊號欄 '—',
+    但買賣水平線 / 現價位階仍計算(不依景氣)。缺項 '—' 不偽造(§1)。
+    """
+    try:
+        from ui.helpers.macro_helpers import mk_fund_signal
+    except Exception:  # noqa: BLE001
+        mk_fund_signal = None
+
+    out: dict = {}
     for _f in funds:
         _code = _f.get("code", "?")
-        _name = (_f.get("name") or _code)[:20]
         _m = _f.get("metrics") or {}
         _mj = _f.get("moneydj_raw") or {}
 
-        # MK signal(依景氣階段)
-        try:
-            _sig = mk_fund_signal(_f, _phase, _score)
-            _asset_class = _sig.get("asset_class", "—")
-            _sig_label = _sig.get("label", "—")
-        except Exception:
-            _asset_class = "—"
-            _sig_label = "—"
+        _asset_class = _sig_label = "—"
+        if mk_fund_signal is not None and phase:
+            try:
+                _sig = mk_fund_signal(_f, phase, score)
+                _asset_class = _sig.get("asset_class", "—")
+                _sig_label = _sig.get("label", "—")
+            except Exception:  # noqa: BLE001
+                pass
 
-        # 買賣水平線
         _b1 = _safe_num(_m.get("buy1") or _mj.get("buy1"))
         _b3 = _safe_num(_m.get("buy3") or _mj.get("buy3"))
         _s1 = _safe_num(_m.get("sell1") or _mj.get("sell1"))
         _s3 = _safe_num(_m.get("sell3") or _mj.get("sell3"))
         _nav = _safe_num(_m.get("nav") or _mj.get("nav_latest"))
 
-        # 現價區段判定(red=超跌, green=超漲, blue=區間內)
         if _nav is None:
             _zone = "—"
         elif _b3 is not None and _nav <= _b3:
@@ -80,8 +107,7 @@ def _render_mk_signal_table(funds: list) -> None:
         else:
             _zone = "⚪ 區間內"
 
-        _rows.append({
-            "基金": f"{_name} ({_code})",
+        out[_code] = {
             "資產屬性": _asset_class,
             "操作訊號": _sig_label,
             "買 3 (深跌)": f"{_b3:.2f}" if _b3 is not None else "—",
@@ -90,19 +116,8 @@ def _render_mk_signal_table(funds: list) -> None:
             "賣 1 (小漲)": f"{_s1:.2f}" if _s1 is not None else "—",
             "賣 3 (大漲)": f"{_s3:.2f}" if _s3 is not None else "—",
             "現價位階": _zone,
-        })
-
-    try:
-        import pandas as pd
-        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
-        _has_sig = sum(1 for r in _rows if r["操作訊號"] != "—")
-        if _has_sig < len(_rows):
-            st.caption(
-                f"⬜ {len(_rows) - _has_sig} / {len(_rows)} 檔基金 MK 訊號計算失敗"
-                "(可能 metrics 缺 buy/sell levels)"
-            )
-    except Exception as e:
-        st.caption(f"⬜ MK 表渲染失敗:{type(e).__name__}: {e}")
+        }
+    return out
 
 
 def _render_bollinger_expanders(funds: list) -> None:
