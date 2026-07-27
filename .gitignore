@@ -21,6 +21,8 @@ cache/fund_history.json
 cache/nav_history/
 # 批次分析磁碟續存 checkpoint（使用者 run-state，非 repo 資產）
 data_cache/batch/
+# AI 白話總體檢磁碟續存（使用者 run-state，reboot 後回顯用；非 repo 資產）
+data_cache/ai_cache.json
 # 例外：範本檔需要 commit 進 repo
 !templates/*.csv
 !templates/*.xlsx

@@ -59,6 +59,25 @@ def render_ai_summary_widget(
         _cache_key = f"{tab_key}_ai_struct"
         _cached = st.session_state.get(_cache_key)
 
+        # v19.410:磁碟後盾 —— session_state 被 reboot 清空後,若磁碟有「同一份 snapshot」
+        # 的 AI 結果就讀回(keyed by tab+snapshot hash;資料變了 → key 變 → miss → 重生成,
+        # 不回顯過期 AI)。修「reboot 後各 Tab AI 總結都不見了」。
+        from repositories import ai_cache  # noqa: PLC0415
+        # key 須涵蓋所有「餵給 AI 的輸入」:snapshot + 新聞標題 + stale 註記。否則
+        # 「snapshot 同、新聞已更新」會命中同 key → 回顯分析舊新聞的舊 AI(對抗式驗證發現)。
+        _key_material = "\n---\n".join([
+            snapshot,
+            "\n".join(str(h) for h in (headlines or [])),
+            stale_note or "",
+        ])
+        _disk_key = ai_cache.make_key(tab_key, _key_material)
+        _from_disk = False
+        if not _cached:
+            _cached = ai_cache.load(_disk_key)
+            if _cached:
+                st.session_state[_cache_key] = _cached
+                _from_disk = True
+
         _btn_label = "🔄 重新生成" if _cached else "▶️ 生成白話總體檢"
         run = st.button(_btn_label, key=f"{tab_key}_ai_run",
                         use_container_width=True, type="primary")
@@ -93,10 +112,17 @@ def render_ai_summary_widget(
                     return
             st.session_state["_gemini_key_cursor"] = (_cur + 1) % _n_keys
             st.session_state[_cache_key] = _cached
+            # v19.410:落地磁碟 → reboot 後同一份資料的 AI 可直接讀回(§1:寫失敗只降級,不炸)
+            try:
+                ai_cache.save(_disk_key, _cached)
+            except Exception as _e_save:  # noqa: BLE001
+                print(f"[ai_cache] 落地失敗(改只記憶體):{type(_e_save).__name__}: {_e_save}")
 
         if not _cached:
             return
 
+        if _from_disk:
+            st.caption("💾 這份 AI 總結由磁碟續存讀回(reboot 前生成)。資料有更新請按「🔄 重新生成」。")
         st.markdown(_cached)
         _n_sec = len([s for s in (sections or []) if str(s).strip()])
         _key_note = f"{_n_keys} 把 key 輪替" if _n_keys > 1 else "Gemini"
