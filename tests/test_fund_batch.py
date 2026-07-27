@@ -107,6 +107,19 @@ def test_fetch_raises_is_caught_as_fetch_fail(monkeypatch):
     _assert_full_keys(row)
 
 
+def test_fd_with_error_and_series_does_not_raise(monkeypatch):
+    """production bug(v19.409):fd 同時有 error + pandas Series。
+
+    舊碼 `not fd.get("series")` 對 Series 觸發 __bool__ ambiguous ValueError。
+    修後:有非空序列就照常分析(error 不擋),status=ok,不外拋。
+    """
+    _patch(monkeypatch, _fd(error="部分 page_type 失敗但仍有淨值序列"))
+    row = analyze_fund_row("ACYT226")   # 不可 raise
+    assert row["status"] == STATUS_OK
+    assert row["nav"] == 104.0
+    _assert_full_keys(row)
+
+
 def test_no_nav_series_is_no_nav(monkeypatch):
     _patch(monkeypatch, _fd(series=None, error=None))
     row = analyze_fund_row("ACCP138")

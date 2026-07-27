@@ -123,13 +123,18 @@ def analyze_fund_row(code: str) -> dict:
         return _empty_row(code, status=STATUS_FETCH_FAIL,
                           note=f"{type(e).__name__}: {str(e)[:80]}")
 
-    if not fd or (fd.get("error") and not fd.get("series")):
+    # v19.409 hotfix:fd["series"] 常是 pandas Series,**不可**用 `not <Series>`
+    # 判真假(觸發 Series.__bool__「ambiguous truth value」ValueError)。當某檔 fallback
+    # 回來同時帶 error + 非空 series 時舊寫法即炸。改先用 `is None` / `len()` 安全判斷。
+    _series = fd.get("series") if isinstance(fd, dict) else None
+    _has_series = _series is not None and len(_series) > 0
+    if not fd or (fd.get("error") and not _has_series):
         note = (fd or {}).get("error") or "無資料"
         return _empty_row(code, status=STATUS_FETCH_FAIL, note=str(note)[:100])
 
-    s = fd.get("series")
+    s = _series
     name = fd.get("fund_name") or fd.get("full_key") or code
-    if s is None or len(s) == 0:
+    if not _has_series:
         return _empty_row(code, name, status=STATUS_NO_NAV, note="無淨值序列(停售/清算/子網域封鎖?)")
 
     metrics = fd.get("metrics") or {}
