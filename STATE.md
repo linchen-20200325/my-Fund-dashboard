@@ -2,6 +2,30 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📦 2026-07-27 批次基金分析分頁 — 上傳清單 → 逐檔跑 → 下載 CSV v19.406 (PR #598)
+
+user 有 ~400 檔基金標的,要「上傳標的 → 提供分析 → 下載」。現有「組合健診」引擎已具全套逐檔
+分析但**寫死 10 檔上限**且即時 render。本 PR 新增「📦 批次分析」分頁,把同一套 L2 引擎放大到
+批次規模並支援上傳→下載(§7/§8 對齊後 user 核准「批次表純數值 + AI 另開小 N」切分方案才動工)。
+
+**新增**:
+- **L2** `services/fund_batch.py`:`analyze_fund_row(code)` 復用 `auto_fetch_moneydj` +
+  `calc_metrics` 欄位,攤平成一列 flat dict(25 欄)+ `status`。純函式無 I/O,可獨立單元測試。
+  §4.1 欄名編碼單位(`ret_*_pct` 純 NAV / `ret_1y_total_pct` 含息 / `vol_1y_pct` 年化σ /
+  `nav` 原幣 / `max_drawdown_pct`)。
+- **L3** `ui/tab_batch_analysis.py`:上傳 CSV/貼上 → `_parse_codes` 去重解析 → `st.progress`
+  逐檔 → `session_state` 累積(中斷可續跑)→ 成功/部分/失敗摘要 → `download_button` CSV(utf-8-sig)。
+- `app.py`:註冊分頁於「組合健診」與「個基深掘」之間(5→6 分頁)。
+
+**§1 誠實**:400 檔必有失敗(停售/403/無 NAV),失敗檔完整入表帶 `status`+`note`+數值留白
+(**絕不填 0 / 靜默丟棄**),可「🔁 重試失敗檔」。
+
+**刻意不做(§8.1 step 6 + §EX-AI-1)**:AI 跨檔評論 / 逐檔持股明細不入批次表(小 N by design;
+AI 回散文非資料;400 次 LLM 不可行)→ UI 導引至組合健診分頁。**零新增部署依賴**(CSV 走既有 pattern)。
+
+驗:新增 16 tests(§6 三大易錯輸入:未知碼 / 全來源失敗 / NaN 指標 + 欄位不變量 + 解析器邊界)
+全綠;全非-slow 套件 **2712 passed / 0 failed**;CI Fast checks + Schema gate 綠。
+
 ## 🗂️ 2026-07-24 儀表板 IA 重分類 Phase 4 — 6→5 分頁決策動線重組 + 參考合區 v19.405
 
 Phase 4(重新分類,收官)。`app.py` 分頁改照「決策動線」重排 + 命名,支援型的「資料診斷 +
