@@ -38,6 +38,7 @@ from ui.helpers.fund_grp_health.ai import (
     _render_per_fund_news_expanders,
     _render_per_fund_three_ratio_expanders,
 )
+from ui.helpers.fund_grp_health.rotation import render_rotation_section  # v19.415 輪動配對
 
 
 def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
@@ -92,6 +93,12 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
         _render_oversold_badges(funds)
     except Exception as e:
         st.caption(f"⬜ 超跌警示渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
+
+    # v19.415 — 🔄 輪動配對建議(賣高基期 → 買低基期健康同類)
+    try:
+        render_rotation_section(funds)
+    except Exception as e:
+        st.caption(f"⬜ 輪動配對建議渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
 
     # v19.121 P1 視覺 — Bollinger 可展開詳圖(MK 買賣點表 v19.408 已併入健診總表)
     try:

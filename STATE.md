@@ -2,6 +2,38 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🔄 2026-07-28 輪動配對建議(賣高基期 → 買低基期健康)v19.415
+
+user 描述均值回歸輪動策略(高基期換低基期賺差價),問「能找到這樣的標的嗎」。答:可(工具已有
+「選基金(低基期)」screener + 大表 σ 位階欄),並依 user 核准新增**輪動配對建議表**。
+
+- **L2** `services/rotation.py`(純邏輯):`classify_base`(σ rank 分高/低基期)+ `is_healthy_buy`
+  (4D≠F + 非吃本金 + 操盤評分≥門檻,避免接刀)+ `revert_upside_pct`(距 HWM% → 回高點潛在漲幅)
+  + `suggest_rotation_pairs`(高基期配**不同基金類別**最深跌健康買方 —— 跨產業/性質輪動)。
+- **L3** `ui/helpers/fund_grp_health/rotation.py`:`render_rotation_section` 組每檔資料
+  (build_merged_extra_columns + build_health_analysis_row + check_eating_principal_1y_mk)→
+  配對表 + σ 門檻/評分滑桿。併入 `render_fund_grp_health_extras`(超跌警示後)。
+- **§1 誠實**:低基期 ≠ 一定回漲 —— 買方過濾避免接刀;無合適配對誠實顯示「同類無健康低基期」。
+  「潛在差價%」= 買方回自己期間高點的漲幅(參考非保證)。
+- 依賴 v19.414 操盤評分(同 PR #603 分支)。多 agent 稽核(邏輯/§1/分層)。
+
+## 🎯 2026-07-28 經理人操作評分:上/下檔捕捉率(vs 大盤)v19.414
+
+user 要比較基金歷年大跌/大漲 vs 大盤的表現(= 經理人操作能力)。實作標準**上/下檔捕捉率**:
+
+- **L2** `services/capture_ratio.py`(純數學):基金 NAV 與大盤**月報酬**對齊,分大盤漲月/跌月
+  複利 → **上檔捕捉%**(越高越好:追漲)/ **下檔捕捉%**(越低=越抗跌)/ **操盤評分**
+  clamp(50+(上檔−下檔)/2, 0, 100)。`benchmark_for_currency`:TWD→台股(TWII)/ 其餘→
+  S&P500(SPX)。任一組月數 < 6 → None(§1 不假精確)。
+- **L3** `ui/helpers/fund_grp_health/capture.py`:`capture_by_code` 抓基準(`fetch_market_series`;
+  success-only module 快取 → 400 檔批次只抓 SPX+TWII 2 次)逐檔算 → 併進 `build_merged_extra_columns`。
+- **兩張大表自動繼承 3 欄**(組合健診 + 批次;`_UNIFIED_FRONT` + `_UNIFIED_NUMERIC` 各加 3)。
+
+⚠️ 已知簡化:EUR 等非 USD/TWD 原幣基金比 SPX(USD)有 FX 噪音。
+
+驗:test_capture_ratio(含 user 例子:大盤−50/基金−10 → 下檔20%/評分88;比大盤慘 → 22 分)+
+整合測;**多 agent 稽核**(數學正確性 + 整合/分層/§1,user 要求)。
+
 ## 📊 2026-07-28 批次表 = 組合健診大表(process_one_fund 下沉 L2 共用引擎)v19.413
 
 user 要求批次分析表**完全 copy 組合健診那張合併大表**。

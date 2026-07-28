@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -36,6 +37,12 @@ def _mock(monkeypatch):
                         lambda c, *a, **k: _fd(), raising=True)
     monkeypatch.setattr("services.fund_service.get_latest_fx",
                         lambda *a, **k: 32.0, raising=True)
+    # 種入基準快取 → capture_by_code 不打網路(否則逾時拖慢)
+    import ui.helpers.fund_grp_health.capture as _cap
+    _d = pd.date_range("2020-01-31", periods=60, freq="ME")
+    _b = pd.Series(100 * np.cumprod([1.0] + [1.005] * 59), index=_d)
+    monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", _b)
+    monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", _b)
 
 
 def test_ok_row_full_columns_and_json_safe(_mock):
