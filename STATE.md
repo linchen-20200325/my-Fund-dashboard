@@ -9,7 +9,7 @@ user 描述均值回歸輪動策略(高基期換低基期賺差價),問「能找
 
 - **L2** `services/rotation.py`(純邏輯):`classify_base`(σ rank 分高/低基期)+ `is_healthy_buy`
   (4D≠F + 非吃本金 + 操盤評分≥門檻,避免接刀)+ `revert_upside_pct`(距 HWM% → 回高點潛在漲幅)
-  + `suggest_rotation_pairs`(高基期配**同基金類別**最深跌健康買方)。
+  + `suggest_rotation_pairs`(高基期配**不同基金類別**最深跌健康買方 —— 跨產業/性質輪動)。
 - **L3** `ui/helpers/fund_grp_health/rotation.py`:`render_rotation_section` 組每檔資料
   (build_merged_extra_columns + build_health_analysis_row + check_eating_principal_1y_mk)→
   配對表 + σ 門檻/評分滑桿。併入 `render_fund_grp_health_extras`(超跌警示後)。

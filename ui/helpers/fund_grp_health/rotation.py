@@ -50,9 +50,10 @@ def render_rotation_section(funds: list) -> None:
     from services.rotation import suggest_rotation_pairs
 
     st.divider()
-    st.markdown("### 🔄 輪動配對建議(賣高基期 → 買低基期健康)")
-    st.caption("均值回歸輪動:把貼近高點的基金換進**同類、深跌但體質健康**的基金賺差價。"
-               "⚠️ 低基期**不一定**回漲 —— 買方已過濾(4D≠F + 非吃本金 + 操盤評分達標)避免接刀。")
+    st.markdown("### 🔄 輪動配對建議(賣高基期 → 買**別類**低基期健康)")
+    st.caption("跨產業/性質輪動:賣掉貼近高點的基金,換進**不同類別**、深跌但體質健康的基金"
+               "(分散 + 賺回歸差價)。⚠️ 低基期**不一定**回漲 —— 買方已過濾"
+               "(4D∈A/B/C + 非吃本金 + 操盤評分達標)避免接刀。")
 
     c1, c2, c3 = st.columns(3)
     _sell = c1.slider("高基期門檻(σ rank ≥)", -2.0, 0.5, -0.5, 0.1, key="rot_sell",
@@ -76,10 +77,11 @@ def render_rotation_section(funds: list) -> None:
     import pandas as pd
     _disp = [{
         "賣出(高基期)": f"{p['sell_name']} ({p['sell_code']})",
+        "賣方類別": p["sell_cat"] or "—",
         "賣方 σ": p["sell_sigma"],
-        "類別": p["cat"] or "—",
-        "建議換進(低基期健康)": (f"{p['buy_name']} ({p['buy_code']})"
-                                 if p["buy_code"] else "⚪ 同類無健康低基期標的"),
+        "建議換進(別類低基期健康)": (f"{p['buy_name']} ({p['buy_code']})"
+                                     if p["buy_code"] else "⚪ 無不同類健康低基期標的"),
+        "買方類別": p.get("buy_cat") or "—",
         "買方 σ": p["buy_sigma"],
         "買方 4D": p["buy_grade"],
         "買方操盤評分": p["buy_score"],
@@ -88,5 +90,5 @@ def render_rotation_section(funds: list) -> None:
 
     st.dataframe(pd.DataFrame(_disp), use_container_width=True, hide_index=True)
     _n_ok = sum(1 for p in _pairs if p["buy_code"])
-    st.caption(f"共 {len(_pairs)} 檔高基期;其中 **{_n_ok}** 檔有同類健康低基期可換。"
+    st.caption(f"共 {len(_pairs)} 檔高基期;其中 **{_n_ok}** 檔有**不同類別**健康低基期可換。"
                "「潛在差價%」= 買方回到自己期間高點的漲幅(僅參考,非保證)。")

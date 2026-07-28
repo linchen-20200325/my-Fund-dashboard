@@ -63,10 +63,11 @@ def revert_upside_pct(dist_hwm_pct) -> "float | None":
 
 def suggest_rotation_pairs(fund_rows, sell_sigma: float = -0.5, buy_sigma: float = -1.5,
                            min_score: float = 50.0) -> list:
-    """回傳配對建議 list[dict](每個高基期賣方一列;配同「基金類別」最深跌的健康買方)。
+    """回傳配對建議 list[dict](每個高基期賣方一列;配**不同**基金類別最深跌的健康買方)。
 
+    **跨產業/性質輪動**:賣掉某類別的高基期,換進**別類別**深跌但健康的標的(分散 + 賺回歸差價)。
     fund_rows 每檔需含:code / name(或 基金名)/ 基金類別 / σ rank / 4D Grade /
-    吃本金燈號 / 操盤評分 / 距 HWM %。無同類健康買方 → buy_* 為 None(誠實)。
+    吃本金燈號 / 操盤評分 / 距 HWM %。無「不同類」健康買方 → buy_* 為 None(誠實)。
     """
     rows = [r for r in (fund_rows or []) if isinstance(r, dict) and r.get("code")]
     sells = [r for r in rows if classify_base(r.get("σ rank"), sell_sigma, buy_sigma) == "high"]
@@ -77,18 +78,21 @@ def suggest_rotation_pairs(fund_rows, sell_sigma: float = -0.5, buy_sigma: float
     out = []
     for s in sells:
         _cat = str(s.get("基金類別") or "").strip()
+        # 跨類別:買方類別須存在、且與賣方**不同**(不同產業/性質輪動)
         cands = [b for b in buys if b["code"] != s["code"]
-                 and _cat and str(b.get("基金類別") or "").strip() == _cat]
+                 and str(b.get("基金類別") or "").strip()
+                 and str(b.get("基金類別") or "").strip() != _cat]
         cands.sort(key=lambda b: (_sigma(b.get("σ rank")) if _sigma(b.get("σ rank")) is not None else 0.0))
         best = cands[0] if cands else None       # σ rank 最負(跌最深 = 差價空間大)
         out.append({
             "sell_code": s["code"],
             "sell_name": s.get("name") or s.get("基金名") or s["code"],
             "sell_sigma": _sigma(s.get("σ rank")),
-            "cat": _cat,
+            "sell_cat": _cat,
             "buy_code": best["code"] if best else None,
             "buy_name": (best.get("name") or best.get("基金名") or best["code"]) if best else None,
             "buy_sigma": _sigma(best.get("σ rank")) if best else None,
+            "buy_cat": str(best.get("基金類別") or "").strip() if best else None,
             "buy_grade": best.get("4D Grade") if best else None,
             "buy_score": _num(best.get("操盤評分")) if best else None,
             "potential_pct": revert_upside_pct(best.get("距 HWM %")) if best else None,

@@ -18,43 +18,47 @@ def _f(code, cat, sig, grade="B", eat="🟢 健康", score=70, dist="-18%"):
             "4D Grade": grade, "吃本金燈號": eat, "操盤評分": score, "距 HWM %": dist}
 
 
-def test_basic_pairing_same_category_healthy():
-    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "股票型", "-2.0σ")]
+def test_cross_category_pairing_healthy():
+    """跨類別:賣 股票型高基期 → 買 債券型低基期健康。"""
+    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "債券型", "-2.0σ")]
     pairs = suggest_rotation_pairs(pool)
     assert len(pairs) == 1
     assert pairs[0]["sell_code"] == "A" and pairs[0]["buy_code"] == "B"
+    assert pairs[0]["sell_cat"] == "股票型" and pairs[0]["buy_cat"] == "債券型"
     assert abs(pairs[0]["potential_pct"] - 22.0) < 0.5   # -18% 回高點 ≈ +22%
 
 
+def test_same_category_not_paired():
+    """同類別不算輪動(要換不同產業/性質)→ 無配對。"""
+    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "股票型", "-2.0σ")]
+    assert suggest_rotation_pairs(pool)[0]["buy_code"] is None
+
+
 def test_unhealthy_buy_excluded_4d_f():
-    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "股票型", "-2.0σ", grade="F")]
+    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "債券型", "-2.0σ", grade="F")]
     assert suggest_rotation_pairs(pool)[0]["buy_code"] is None   # 賣方在,但無健康買方
 
 
 def test_eat_principal_buy_excluded():
-    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "股票型", "-2.0σ", eat="🔴 吃本金")]
+    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "債券型", "-2.0σ", eat="🔴 吃本金")]
     assert suggest_rotation_pairs(pool)[0]["buy_code"] is None
 
 
 def test_low_score_buy_excluded():
-    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "股票型", "-2.0σ", score=30)]
-    assert suggest_rotation_pairs(pool)[0]["buy_code"] is None
-
-
-def test_different_category_not_paired():
-    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "債券型", "-2.0σ")]
+    pool = [_f("A", "股票型", "-0.2σ"), _f("B", "債券型", "-2.0σ", score=30)]
     assert suggest_rotation_pairs(pool)[0]["buy_code"] is None
 
 
 def test_no_high_base_no_pairs():
-    pool = [_f("A", "股票型", "-2.0σ"), _f("B", "股票型", "-2.5σ")]
+    pool = [_f("A", "股票型", "-2.0σ"), _f("B", "債券型", "-2.5σ")]
     assert suggest_rotation_pairs(pool) == []       # 無高基期賣方
 
 
-def test_deepest_buy_chosen():
+def test_deepest_buy_chosen_cross_category():
+    """跨類別買方裡選跌最深的。"""
     pool = [_f("A", "股票型", "-0.2σ"),
-            _f("B", "股票型", "-1.6σ"), _f("C", "股票型", "-2.8σ")]
-    assert suggest_rotation_pairs(pool)[0]["buy_code"] == "C"   # 跌最深
+            _f("B", "債券型", "-1.6σ"), _f("C", "貨幣型", "-2.8σ")]
+    assert suggest_rotation_pairs(pool)[0]["buy_code"] == "C"   # 跌最深(不同類)
 
 
 def test_classify_base_thresholds():
@@ -86,8 +90,8 @@ def test_is_healthy_buy_fail_closed():
 
 
 def test_missing_data_buy_not_recommended():
-    """低基期但資料不足的深跌檔,不得被推薦為『低基期健康』(接刀)。"""
+    """低基期但資料不足的深跌檔(不同類),仍不得被推薦(接刀)—— 由健康過濾擋,非類別。"""
     pool = [_f("A", "股票型", "-0.2σ"),
-            {"code": "B", "name": "B", "基金類別": "股票型", "σ rank": "-2.5σ",
+            {"code": "B", "name": "B", "基金類別": "債券型", "σ rank": "-2.5σ",
              "4D Grade": "—", "吃本金燈號": "", "操盤評分": None, "距 HWM %": "-30%"}]
     assert suggest_rotation_pairs(pool)[0]["buy_code"] is None
