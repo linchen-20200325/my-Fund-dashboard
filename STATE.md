@@ -2,6 +2,15 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-07-28 PR #603 已 merge 到 main + 新常數收 SSOT v19.416
+
+- **#603 merged**(squash `82266b3`;CI 3 job 全綠:Fast/Schema gate/Slow)= 操盤評分(v19.414)
+  + 跨類別輪動(v19.415)上線。
+- **SSOT 收口**(§3.3 反捏造):兩新模組 5 個 policy 常數下沉 `shared/signal_thresholds.py` —
+  `CAPTURE_MIN_MONTHS`(6)/ `CAPTURE_SCORE_BASE`(50)/ `ROTATION_SELL_SIGMA`(−0.5)/
+  `ROTATION_BUY_SIGMA`(−1.5)/ `ROTATION_BUY_MIN_SCORE`(50),`capture_ratio.py` + `rotation.py`
+  改 import SSOT 作為預設值(值不變,test 全綠)。同步修 `rotation.py` module docstring 殘留「同類」。
+
 ## 🔄 2026-07-28 輪動配對建議(賣高基期 → 買低基期健康)v19.415
 
 user 描述均值回歸輪動策略(高基期換低基期賺差價),問「能找到這樣的標的嗎」。答:可(工具已有
@@ -13,7 +22,7 @@ user 描述均值回歸輪動策略(高基期換低基期賺差價),問「能找
 - **L3** `ui/helpers/fund_grp_health/rotation.py`:`render_rotation_section` 組每檔資料
   (build_merged_extra_columns + build_health_analysis_row + check_eating_principal_1y_mk)→
   配對表 + σ 門檻/評分滑桿。併入 `render_fund_grp_health_extras`(超跌警示後)。
-- **§1 誠實**:低基期 ≠ 一定回漲 —— 買方過濾避免接刀;無合適配對誠實顯示「同類無健康低基期」。
+- **§1 誠實**:低基期 ≠ 一定回漲 —— 買方過濾避免接刀;無合適配對誠實顯示「無不同類健康低基期標的」。
   「潛在差價%」= 買方回自己期間高點的漲幅(參考非保證)。
 - 依賴 v19.414 操盤評分(同 PR #603 分支)。多 agent 稽核(邏輯/§1/分層)。
 

@@ -1,14 +1,22 @@
 """services/rotation.py — 輪動配對建議(賣高基期 → 買低基期健康標的)v19.415。
 
-均值回歸輪動:把「貼近高點(高基期)」的基金,配對換進「深跌但體質健康(低基期)」的
-**同類**基金,賺回歸差價;等買進的漲回高基期再換。純函式:輸入每檔已算好的
+跨產業/性質輪動:把「貼近高點(高基期)」的基金,配對換進「深跌但體質健康(低基期)」的
+**不同類別**基金(分散 + 賺回歸差價);等買進的漲回高基期再換。純函式:輸入每檔已算好的
 σ rank / 基金類別 / 4D Grade / 吃本金燈號 / 操盤評分 / 距 HWM %,輸出配對建議。
 
 §1 誠實:低基期 **≠ 一定回漲**(可能是價值陷阱/接刀)—— 買方**必須通過健康過濾**
 (4D ≠ F + 吃本金非吃本金 + 操盤評分 ≥ 門檻)才推薦;無合適配對 → 回空,不硬湊。
 σ rank = 現價在期間高點下方第幾個 σ(負值愈深愈低基期),已標準化無量綱陷阱。
+
+σ 切點 + 健康門檻走 shared/signal_thresholds SSOT(§3.3 反捏造)。
 """
 from __future__ import annotations
+
+from shared.signal_thresholds import (
+    ROTATION_BUY_MIN_SCORE,
+    ROTATION_BUY_SIGMA,
+    ROTATION_SELL_SIGMA,
+)
 
 
 def _num(v):
@@ -23,7 +31,8 @@ def _sigma(v):
     return _num(str(v).replace("σ", "").strip())
 
 
-def classify_base(sigma_rank, sell_sigma: float = -0.5, buy_sigma: float = -1.5) -> str:
+def classify_base(sigma_rank, sell_sigma: float = ROTATION_SELL_SIGMA,
+                  buy_sigma: float = ROTATION_BUY_SIGMA) -> str:
     """依 σ rank 分基期:high(≥ sell_sigma,貼近高點=賣)/ low(≤ buy_sigma,深跌=買)/ mid / unknown。"""
     v = _sigma(sigma_rank)
     if v is None:
@@ -35,7 +44,7 @@ def classify_base(sigma_rank, sell_sigma: float = -0.5, buy_sigma: float = -1.5)
     return "mid"
 
 
-def is_healthy_buy(row: dict, min_score: float = 50.0) -> bool:
+def is_healthy_buy(row: dict, min_score: float = ROTATION_BUY_MIN_SCORE) -> bool:
     """買方健康過濾 —— **fail-closed**:必須有明確健康訊號才推薦(§1 避免把「資料不足」
     當健康 → 接刀)。條件:4D Grade 為明確好評等(A/B/C)+ 吃本金燈號為明確健康燈
     (🟢/🟡,非吃本金、非空/資料不足)+ 操盤評分若有值須達門檻(缺值不硬擋,因短歷史常缺)。
@@ -61,8 +70,9 @@ def revert_upside_pct(dist_hwm_pct) -> "float | None":
     return round(-d / (1.0 + d / 100.0), 1)
 
 
-def suggest_rotation_pairs(fund_rows, sell_sigma: float = -0.5, buy_sigma: float = -1.5,
-                           min_score: float = 50.0) -> list:
+def suggest_rotation_pairs(fund_rows, sell_sigma: float = ROTATION_SELL_SIGMA,
+                           buy_sigma: float = ROTATION_BUY_SIGMA,
+                           min_score: float = ROTATION_BUY_MIN_SCORE) -> list:
     """回傳配對建議 list[dict](每個高基期賣方一列;配**不同**基金類別最深跌的健康買方)。
 
     **跨產業/性質輪動**:賣掉某類別的高基期,換進**別類別**深跌但健康的標的(分散 + 賺回歸差價)。

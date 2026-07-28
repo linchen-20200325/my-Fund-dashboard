@@ -144,3 +144,17 @@ NAV_HIST_MAX_GAP_DAYS: int = 14         # 相鄰兩點最大缺口(日曆日;台
 # F-RECON-1 最後一項:健康度雙演算法對帳。第二演算法 = 不加權多空投票
 # net_ratio=(n_pos-n_neg)/n_valid;|net_ratio| <= 本帶寬 → 方向視為中性(60/40 不算決定性)
 COMPOSITE_VOTE_NEUTRAL_BAND: float = 0.2
+
+# ── 上/下檔捕捉率 + 操盤評分(services/capture_ratio.py,v19.414)──────
+# 大盤上漲月 / 下跌月任一組月數 < 本值 → 三值 None(§4.6 短歷史不給假精確)
+CAPTURE_MIN_MONTHS: int = 6
+# 操盤評分中心 = 上下檔捕捉率相等時的基準分:score = clamp(BASE + (上檔 − 下檔)/2, 0, 100)
+CAPTURE_SCORE_BASE: float = 50.0
+
+# ── 輪動配對 σ 基期切點 + 買方健康門檻(services/rotation.py,v19.415)──
+# σ rank = 現價在期間高點下方第幾個 σ(負值愈深愈低基期)。跨產業/性質輪動:
+# σ rank ≥ SELL_SIGMA → 高基期(貼近高點=賣);≤ BUY_SIGMA → 低基期(深跌=買)
+ROTATION_SELL_SIGMA: float = -0.5
+ROTATION_BUY_SIGMA: float = -1.5
+# 買方健康過濾:操盤評分若有值須 ≥ 本門檻才推薦(fail-closed,§1 避免接刀)
+ROTATION_BUY_MIN_SCORE: float = 50.0

@@ -284,7 +284,7 @@
 | `SCORE_RULES`(macro evaluation) | weights + lambdas | services/macro_validation.py:35-84 | ✅ SSOT + JSON override(macro_thresholds_global.json) |
 | Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | services/macro_weights_store.py:363-364 | ✅ SSOT + active.json override |
 | ~~Valuation `FORWARD_PE_MEAN/STD`、`GDP_TREND/_STD`~~ | ~~16.5/3.0/2.3/1.5~~ | ~~services/valuation.py:33-38~~ | **v19.251 退役**(0 production caller,Forward P/E 改 shared/macro_buckets.py:150-153 inline literal) |
-| `signal_thresholds.*`(31 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT / CPI YoY+MoM zones 等 | shared/signal_thresholds.py v19.75 | ✅ SSOT(W2+W3a+W5-4 已遷移 12 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability / macro_tw_local CPI zones) |
+| `signal_thresholds.*`(36 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT / CPI YoY+MoM zones / capture min_months+score base / rotation σ 切點+健康門檻 等 | shared/signal_thresholds.py v19.75(v19.416 +5) | ✅ SSOT(W2+W3a+W5-4 已遷移 12 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability / macro_tw_local CPI zones;v19.416 +2:capture_ratio / rotation) |
 | ~~Allocation phase params~~ | ~~DRIP/CASH/STAY 4×3 matrix~~ | ~~services/allocation_simulator.py:34-97~~ | ~~EX-POLICY-1~~ **v19.212 P0-3-#4 整檔拔毒**(866 LOC,production 0 caller) |
 
 ❌ 標記 **0 項**(W3b/W5-4 已收斂)、⚠️ **0 項**(F-H4 v19.76 結案,v19.212 EX-POLICY-1 對象拔毒退役)。

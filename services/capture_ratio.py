@@ -18,6 +18,8 @@ import sys
 
 import pandas as pd
 
+from shared.signal_thresholds import CAPTURE_MIN_MONTHS, CAPTURE_SCORE_BASE
+
 _BLANK: dict = {"upside": None, "downside": None, "score": None, "n_up": 0, "n_down": 0}
 
 
@@ -48,7 +50,7 @@ def _monthly_returns(nav) -> "pd.Series | None":
     return r if len(r) >= 2 else None
 
 
-def compute_capture(fund_nav, benchmark_nav, min_months: int = 6) -> dict:
+def compute_capture(fund_nav, benchmark_nav, min_months: int = CAPTURE_MIN_MONTHS) -> dict:
     """基金 NAV vs 基準 NAV → {upside, downside, score, n_up, n_down}。
 
     大盤上漲月 / 下跌月分組複利;任一組月數 < min_months → 三值 None(§1 不假精確)。
@@ -79,7 +81,7 @@ def compute_capture(fund_nav, benchmark_nav, min_months: int = 6) -> dict:
         dc = round(dn_f / dn_b * 100.0, 1) if dn_b < 0 else None   # 兩負相除 → 正
         score = None
         if uc is not None and dc is not None:
-            score = round(max(0.0, min(100.0, 50.0 + (uc - dc) / 2.0)))
+            score = round(max(0.0, min(100.0, CAPTURE_SCORE_BASE + (uc - dc) / 2.0)))
 
         return {"upside": uc, "downside": dc, "score": score,
                 "n_up": n_up, "n_down": n_down}
