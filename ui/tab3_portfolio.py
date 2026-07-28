@@ -2371,9 +2371,26 @@ def render_portfolio_tab() -> None:
                     _prog_h.empty()
                 # v19.330:🧭 核心/衛星配置檢查已下沉共用 _render_health_3tables(兩 tab 齊顯示),
                 # 不再於此 inline(避免重複 + 只在 Tab3 出現)。
-                _render_health_tbl(
-                    [r for r in _health_results if r is not None]
-                )
+                _ok_health = [r for r in _health_results if r is not None]
+                _render_health_tbl(_ok_health)
+
+                # v19.418 — 🔄 輪動配對建議(持倉健診也顯示;user 2026-07-28 要求兩邊都要)。
+                # 用實際持倉重組 rich fund dict 餵 render_rotation_section;widget key 用
+                # 'pf_rot_' 前綴避免與健檢 Tab 的 'rot_' 滑桿在同一 st.tabs run 撞鍵。
+                try:
+                    from ui.helpers.fund_grp_health._utils import _build_fund_dict
+                    from ui.helpers.fund_grp_health.rotation import render_rotation_section
+                    _funds_rot = [
+                        _build_fund_dict(_r["_fund_raw"], _r["code"], _DEFAULT_PRINC)
+                        for _r in _ok_health
+                        if _r.get("ok") and _r.get("_fund_raw")
+                    ]
+                    render_rotation_section(_funds_rot, key_prefix="pf_rot_")
+                except Exception as _e_rot:
+                    st.caption(
+                        f"⬜ 輪動配對建議渲染失敗:"
+                        f"{type(_e_rot).__name__}: {str(_e_rot)[:80]}"
+                    )
             except Exception as _e_ph:
                 st.caption(
                     f"⬜ 持倉健診總表渲染失敗:"

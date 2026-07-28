@@ -113,7 +113,23 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
         return
 
     if not _pairs:
-        st.info("目前無「高基期」持有基金 —— 沒有需要輪動賣出的標的(可放寬高基期門檻 σ)。")
+        # 誠實揭露「為何無配對」+ 每檔目前基期,讓使用者知道現況、可調滑桿(§1)
+        from services.rotation import classify_base
+        _lbl = {"high": "🔴 高基期(可賣)", "low": "🟢 低基期(可買)",
+                "mid": "⚪ 中性", "unknown": "⬜ σ 資料不足"}
+        _status = [
+            f"{r.get('name') or r.get('code')} {r.get('σ rank') or '—'}"
+            f"({_lbl.get(classify_base(r.get('σ rank'), _sell, _buy), '?')})"
+            for r in rows
+        ]
+        if len(rows) < 2:
+            st.info("輪動配對需要**至少 2 檔**基金(要有可賣的高基期 + 可買的別類低基期);"
+                    "目前這組不足 2 檔。")
+        else:
+            st.info("目前**沒有貼近高點的「高基期」持有基金** → 沒有需要輪動賣出的標的。"
+                    "可把上方「高基期門檻」滑桿**往左放寬**(納入更多賣方候選);"
+                    "若仍無,代表現在沒有適合換出的標的(這是正常的誠實結果)。")
+        st.caption("目前各檔基期:" + "　·　".join(_status))
         return
 
     import pandas as pd
@@ -147,15 +163,29 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
         )
 
 
-def render_rotation_section(funds: list) -> None:
-    """🔄 組合健診分頁:輪動配對表 —— 由 rich fund 物件重組每檔資料。"""
-    if not funds or len(funds) < 2:
+def render_rotation_section(funds: list, *, key_prefix: str = "rot_") -> None:
+    """🔄 輪動配對表 —— 由 rich fund 物件重組每檔資料(組合健診 + 持倉健診共用)。
+
+    只要有基金就渲染區塊(標題永遠出現);組資料失敗 / 不足 2 檔 / 無高基期,
+    都在區塊內顯示明確原因,**不靜默消失**(user 2026-07-28 回報「看不到配對表」)。
+
+    key_prefix:兩個 tab 在同一 st.tabs run 都會執行 → 滑桿 widget key 須唯一,
+    健診 Tab 用 'rot_'、Tab3 持倉健診用 'pf_rot_'(避免 StreamlitDuplicateElementKey)。
+    """
+    if not funds:
         return
-    _render_pairs_ui(_assemble_rows(funds), key_prefix="rot_", offer_download=False)
+    try:
+        rows = _assemble_rows(funds)
+    except Exception as e:  # noqa: BLE001
+        st.divider()
+        st.markdown("### 🔄 輪動配對建議(賣高基期 → 買**別類**低基期健康)")
+        st.caption(f"⬜ 輪動配對資料組建失敗:[{type(e).__name__}] {str(e)[:80]}")
+        return
+    _render_pairs_ui(rows, key_prefix=key_prefix, offer_download=False)
 
 
 def render_rotation_section_from_df(df) -> None:
     """🔄 批次分頁:用已算好的組合健診大表 df 渲染輪動配對(不重抓)+ 獨立 CSV 下載。"""
-    if df is None or len(df) < 2:
+    if df is None or getattr(df, "empty", True):
         return
     _render_pairs_ui(rows_from_batch_df(df), key_prefix="batch_rot_", offer_download=True)
