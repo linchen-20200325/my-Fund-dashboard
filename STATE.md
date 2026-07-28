@@ -2,6 +2,21 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🔄 2026-07-28 輪動配對表補進批次分頁(畫面表 + 獨立 CSV)v19.417
+
+user 回報:批次下載大表看不到輪動配對表。原因 = 配對表是**跨檔推導**的另一種表(賣→買
+一列),塞不進「每檔一列」的大表 CSV;且先前只接到組合健診分頁,漏接批次。
+
+- **共用化** `ui/helpers/fund_grp_health/rotation.py`:抽出 `_render_pairs_ui(rows, *, key_prefix,
+  offer_download)`(σ/評分滑桿 + 配對表 + 選配 CSV)。兩入口共用:
+  - `render_rotation_section(funds)`(組合健診,rich fund 物件)key_prefix=`rot_`
+  - `render_rotation_section_from_df(df)`(批次,**直接讀大表 df 不重抓**)key_prefix=`batch_rot_`
+    + **獨立「輪動配對建議.csv」下載**。`rows_from_batch_df` 對映欄名(`吃本金燈號 (1Y · MK)`→
+    `吃本金燈號`),`_cell` 把失敗檔 NaN→None(不污染類別/σ)。
+- **L3** `ui/tab_batch_analysis.py`:下載鈕後呼叫 `render_rotation_section_from_df(df)`。
+- σ rank / 距 HWM % 在大表為預格式化字串(unified 不轉 numeric),rotation `_sigma/_num` 自剝單位。
+- 驗:`test_rotation_batch_df`(4:欄映射 / 跨類配對 / NaN 不污染 / name fallback)+ test_rotation(12)。
+
 ## ✅ 2026-07-28 PR #603 已 merge 到 main + 新常數收 SSOT v19.416
 
 - **#603 merged**(squash `82266b3`;CI 3 job 全綠:Fast/Schema gate/Slow)= 操盤評分(v19.414)

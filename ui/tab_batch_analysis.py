@@ -298,6 +298,10 @@ def _render_existing_results() -> None:
         key="batch_download",
     )
 
+    # ── 🔄 輪動配對建議(跨類別;讀上表 σ/操盤評分/類別,不重抓)+ 獨立 CSV 下載 ──
+    from ui.helpers.fund_grp_health.rotation import render_rotation_section_from_df
+    render_rotation_section_from_df(df)
+
     with st.expander("ℹ️ 欄位說明 / 這張表沒有什麼", expanded=False):
         st.markdown(
             "- 本表 = **組合健診大表**(①健康分析 + ②配息相關 + ③實際購買結果 + σ/風險/MK)。\n"

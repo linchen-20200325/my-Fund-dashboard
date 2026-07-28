@@ -38,7 +38,10 @@ from ui.helpers.fund_grp_health.ai import (
     _render_per_fund_news_expanders,
     _render_per_fund_three_ratio_expanders,
 )
-from ui.helpers.fund_grp_health.rotation import render_rotation_section  # v19.415 輪動配對
+from ui.helpers.fund_grp_health.rotation import (  # v19.415 輪動配對;v19.417 批次 df 入口
+    render_rotation_section,
+    render_rotation_section_from_df,
+)
 
 
 def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
