@@ -477,6 +477,10 @@ def _render_health_3tables(rows: list[dict],
 
     # v19.411:① 健康分析表不再單獨渲染,欄位已併入「健診大表」。僅保留 _health_cfg(數值格式)
     # 供合併表 column_config 重用;數值 coerce 交由 build_unified_health_df 統一處理。
+    from shared.signal_thresholds import (  # v19.419 捕捉率 help 文字用(SSOT,非 magic)
+        CAPTURE_MIN_MONTHS as _CAP_MIN,
+        CAPTURE_ROBUST_MONTHS as _CAP_ROB,
+    )
     _health_cfg = {
         "code": _cc.TextColumn("代號", width="small"),
         "基金名": _cc.TextColumn("基金名", width="medium"),
@@ -503,6 +507,15 @@ def _render_health_3tables(rows: list[dict],
         "5Y 年化 %": _cc.NumberColumn("5Y 年化 %", format="%.2f %%"),
         "MK 3-3-3": _cc.TextColumn("MK 3-3-3",
             help="成立 ≥ 3 年 + 過去 3 年平均年化 > 7% → 通過"),
+        # v19.414 經理人操作能力;v19.419 放寬門檻 6→3(help 註明參考值,§1 誠實)
+        "上檔捕捉%": _cc.NumberColumn("上檔捕捉%", format="%.1f %%",
+            help=("大盤上漲月:基金複利 / 大盤複利 × 100(越高 = 越追得上漲)。"
+                  f"需漲、跌月各 ≥ {_CAP_MIN} 才算;{_CAP_MIN}–{_CAP_ROB - 1} 月為參考值。")),
+        "下檔捕捉%": _cc.NumberColumn("下檔捕捉%", format="%.1f %%",
+            help="大盤下跌月:基金複利 / 大盤複利 × 100(越低 = 越抗跌)。"),
+        "操盤評分": _cc.NumberColumn("操盤評分", format="%d",
+            help=("經理人操作評分 clamp(50 +(上檔 − 下檔)/2, 0, 100)。"
+                  f"需漲、跌月各 ≥ {_CAP_MIN};{_CAP_MIN}–{_CAP_ROB - 1} 月為參考值(低信心)。")),
     }
     # v19.411:② 配息相關表不再單獨渲染,欄位併入健診大表;保留 _div_cfg 供格式重用。
     _div_cfg = {

@@ -50,8 +50,36 @@ def test_user_example_50pct_crash():
 
 def test_insufficient_months_returns_none():
     fund = _nav([0] + [0.03] * 12 + [-0.008] * 12)
-    r = compute_capture(fund.head(8), _BENCH.head(8))
+    r = compute_capture(fund.head(8), _BENCH.head(8))    # 8 點全漲月,跌月 0 < 3 → 留白
     assert r["upside"] is None and r["downside"] is None and r["score"] is None
+
+
+def _short(dates_n, ups, downs, down_ret):
+    dates = pd.date_range("2022-01-31", periods=dates_n, freq="ME")
+    bench = pd.Series(100 * np.cumprod([1 + x for x in [0] + [0.03] * ups + [-0.04] * downs]), index=dates)
+    fund = pd.Series(100 * np.cumprod([1 + x for x in [0] + [0.03] * ups + [down_ret] * downs]), index=dates)
+    return fund, bench
+
+
+def test_relaxed_min_3_months_gives_score():
+    """v19.419:漲、跌月各 3 → 有分(門檻 6→3),且標 low_confidence(3–5 月參考值)。"""
+    fund, bench = _short(7, 3, 3, -0.008)
+    r = compute_capture(fund, bench)
+    assert r["score"] is not None
+    assert r["n_up"] == 3 and r["n_down"] == 3
+    assert r["low_confidence"] is True
+
+
+def test_two_months_still_none():
+    """各 2 月仍 < 3 → 留白(不假造)。"""
+    fund, bench = _short(5, 2, 2, -0.008)
+    assert compute_capture(fund, bench)["score"] is None
+
+
+def test_robust_months_not_low_confidence():
+    """漲、跌月各 ≥ 6 → low_confidence False(穩健)。"""
+    r = compute_capture(_nav([0] + [0.03] * 12 + [-0.008] * 12), _BENCH)
+    assert r["score"] is not None and r["low_confidence"] is False
 
 
 def test_none_inputs():

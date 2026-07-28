@@ -18,9 +18,14 @@ import sys
 
 import pandas as pd
 
-from shared.signal_thresholds import CAPTURE_MIN_MONTHS, CAPTURE_SCORE_BASE
+from shared.signal_thresholds import (
+    CAPTURE_MIN_MONTHS,
+    CAPTURE_ROBUST_MONTHS,
+    CAPTURE_SCORE_BASE,
+)
 
-_BLANK: dict = {"upside": None, "downside": None, "score": None, "n_up": 0, "n_down": 0}
+_BLANK: dict = {"upside": None, "downside": None, "score": None,
+                "n_up": 0, "n_down": 0, "low_confidence": False}
 
 
 def benchmark_for_currency(ccy: str) -> str:
@@ -51,9 +56,11 @@ def _monthly_returns(nav) -> "pd.Series | None":
 
 
 def compute_capture(fund_nav, benchmark_nav, min_months: int = CAPTURE_MIN_MONTHS) -> dict:
-    """基金 NAV vs 基準 NAV → {upside, downside, score, n_up, n_down}。
+    """基金 NAV vs 基準 NAV → {upside, downside, score, n_up, n_down, low_confidence}。
 
     大盤上漲月 / 下跌月分組複利;任一組月數 < min_months → 三值 None(§1 不假精確)。
+    `low_confidence`=True 當有分數但漲/跌月任一 < CAPTURE_ROBUST_MONTHS(3–5 月樣本少較噪,
+    v19.419 放寬門檻後誠實標記,供 UI 提示「參考值」)。
     """
     if fund_nav is None or benchmark_nav is None:
         return dict(_BLANK)
@@ -83,8 +90,9 @@ def compute_capture(fund_nav, benchmark_nav, min_months: int = CAPTURE_MIN_MONTH
         if uc is not None and dc is not None:
             score = round(max(0.0, min(100.0, CAPTURE_SCORE_BASE + (uc - dc) / 2.0)))
 
+        _low_conf = (n_up < CAPTURE_ROBUST_MONTHS) or (n_down < CAPTURE_ROBUST_MONTHS)
         return {"upside": uc, "downside": dc, "score": score,
-                "n_up": n_up, "n_down": n_down}
+                "n_up": n_up, "n_down": n_down, "low_confidence": _low_conf}
     except Exception as e:  # noqa: BLE001 — 計算異常 → 誠實 None,不假精確(§1)
         print(f"[capture_ratio] 計算失敗: {type(e).__name__}: {e}", file=sys.stderr)
         return dict(_BLANK)

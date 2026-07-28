@@ -145,9 +145,12 @@ NAV_HIST_MAX_GAP_DAYS: int = 14         # 相鄰兩點最大缺口(日曆日;台
 # net_ratio=(n_pos-n_neg)/n_valid;|net_ratio| <= 本帶寬 → 方向視為中性(60/40 不算決定性)
 COMPOSITE_VOTE_NEUTRAL_BAND: float = 0.2
 
-# ── 上/下檔捕捉率 + 操盤評分(services/capture_ratio.py,v19.414)──────
-# 大盤上漲月 / 下跌月任一組月數 < 本值 → 三值 None(§4.6 短歷史不給假精確)
-CAPTURE_MIN_MONTHS: int = 6
+# ── 上/下檔捕捉率 + 操盤評分(services/capture_ratio.py,v19.414;v19.419 放寬)──────
+# 大盤上漲月 / 下跌月任一組月數 < 本值 → 三值 None(§4.6 短歷史不給假精確)。
+# v19.419:user 2026-07-28 核准 6→3(貼近高點/短歷史的基金跌月常 <6 → 全留白)。
+# 3–5 月為「參考值」(下檔捕捉樣本少較噪),≥ ROBUST 才算穩健(表註明,§1 誠實)。
+CAPTURE_MIN_MONTHS: int = 3
+CAPTURE_ROBUST_MONTHS: int = 6      # 漲跌月各 ≥ 本值 = 穩健;3–5 = 參考值(low confidence)
 # 操盤評分中心 = 上下檔捕捉率相等時的基準分:score = clamp(BASE + (上檔 − 下檔)/2, 0, 100)
 CAPTURE_SCORE_BASE: float = 50.0
 

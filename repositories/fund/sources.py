@@ -2124,6 +2124,19 @@ def parse_moneydj_input(user_input: str) -> dict:
 
 
 
+def _pick_fund_category(rows_map: dict) -> str:
+    """MoneyDJ 頁面 rows_map → 乾淨「基金類別」。
+
+    v19.419 修:原本 `投資標的優先` 會把**公開說明書描述**(長句,如「本基金投資於中華民國
+    境內之有價證券…」)當類別。實際「基金類型」(平衡型/債券型/股票型…)才是類別;「投資標的」
+    多為短分類標籤、但部分基金填長描述。故:投資標的**僅在夠短(≤15字,像標籤)時**採用,
+    否則退回基金類型;都不合則空。避免長描述污染 UI 與輪動跨類別配對。
+    """
+    _it = (rows_map.get("投資標的") or "").strip()
+    _ct = (rows_map.get("基金類型") or "").strip()
+    return (_it if 0 < len(_it) <= 15 else "") or _ct
+
+
 def _src_direct_moneydj_url(full_url: str) -> dict:
     """
     直接抓使用者提供的完整 MoneyDJ 頁面。
@@ -2178,7 +2191,7 @@ def _src_direct_moneydj_url(full_url: str) -> dict:
                 out["risk_level"]   = rows_map.get("風險報酬等級", "").replace(" ", "")
                 out["dividend_freq"]= rows_map.get("配息頻率", "").replace(" ", "")
                 out["fund_scale"]   = rows_map.get("基金規模", "")
-                out["category"]     = rows_map.get("投資標的", rows_map.get("基金類型", ""))
+                out["category"]     = _pick_fund_category(rows_map)
                 out["mgmt_fee"]     = rows_map.get("最高經理費(%)", "")
                 # v19.368 7/8:同表補抽保管費 → TER 估計第 2 主成分(零新增 HTTP)
                 out["custody_fee"]  = (rows_map.get("最高保管費(%)") or
@@ -2504,7 +2517,7 @@ def _src_tcb_meta(code: str) -> dict:
                         meta["risk_level"]  = rows_map.get("風險報酬等級", "").replace(" ", "")
                         meta["dividend_freq"] = rows_map.get("配息頻率", "").replace(" ", "")
                         meta["fund_scale"]  = rows_map.get("基金規模", "")
-                        meta["category"]    = rows_map.get("投資標的", rows_map.get("基金類型", ""))
+                        meta["category"]    = _pick_fund_category(rows_map)
                         meta["mgmt_fee"]    = rows_map.get("最高經理費(%)", "")
                         # v19.368 7/8:同表補抽保管費(TER 估計第 2 主成分)
                         meta["custody_fee"] = (rows_map.get("最高保管費(%)") or
