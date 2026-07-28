@@ -5,9 +5,21 @@
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+import pytest
 
 from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
+
+
+@pytest.fixture(autouse=True)
+def _seed_benchmark(monkeypatch):
+    """種入基準快取 → capture_by_code 不打網路(v19.414)。"""
+    import ui.helpers.fund_grp_health.capture as _cap
+    _d = pd.date_range("2020-01-31", periods=60, freq="ME")
+    _b = pd.Series(100 * np.cumprod([1.0] + [1.005] * 59), index=_d)
+    monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", _b)
+    monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", _b)
 
 
 def _fund(code, *, series=True, metrics=None):

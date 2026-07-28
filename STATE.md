@@ -2,6 +2,23 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🎯 2026-07-28 經理人操作評分:上/下檔捕捉率(vs 大盤)v19.414
+
+user 要比較基金歷年大跌/大漲 vs 大盤的表現(= 經理人操作能力)。實作標準**上/下檔捕捉率**:
+
+- **L2** `services/capture_ratio.py`(純數學):基金 NAV 與大盤**月報酬**對齊,分大盤漲月/跌月
+  複利 → **上檔捕捉%**(越高越好:追漲)/ **下檔捕捉%**(越低=越抗跌)/ **操盤評分**
+  clamp(50+(上檔−下檔)/2, 0, 100)。`benchmark_for_currency`:TWD→台股(TWII)/ 其餘→
+  S&P500(SPX)。任一組月數 < 6 → None(§1 不假精確)。
+- **L3** `ui/helpers/fund_grp_health/capture.py`:`capture_by_code` 抓基準(`fetch_market_series`;
+  success-only module 快取 → 400 檔批次只抓 SPX+TWII 2 次)逐檔算 → 併進 `build_merged_extra_columns`。
+- **兩張大表自動繼承 3 欄**(組合健診 + 批次;`_UNIFIED_FRONT` + `_UNIFIED_NUMERIC` 各加 3)。
+
+⚠️ 已知簡化:EUR 等非 USD/TWD 原幣基金比 SPX(USD)有 FX 噪音。
+
+驗:test_capture_ratio(含 user 例子:大盤−50/基金−10 → 下檔20%/評分88;比大盤慘 → 22 分)+
+整合測;**多 agent 稽核**(數學正確性 + 整合/分層/§1,user 要求)。
+
 ## 📊 2026-07-28 批次表 = 組合健診大表(process_one_fund 下沉 L2 共用引擎)v19.413
 
 user 要求批次分析表**完全 copy 組合健診那張合併大表**。
