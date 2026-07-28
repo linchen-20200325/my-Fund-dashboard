@@ -171,6 +171,27 @@ BATCH_NUMERIC_COLUMNS: list = _UNIFIED_NUMERIC + [
 ]
 
 
+def _jsonify(v):
+    """把值收成 JSON-safe primitive(numpy/Timestamp 漏網 → native;NaN/inf → None)。"""
+    import datetime as _dt2
+    import math as _m
+    import numpy as _np
+    import pandas as _pd
+    if isinstance(v, _np.bool_):
+        return bool(v)
+    if isinstance(v, _np.integer):
+        return int(v)
+    if isinstance(v, (_np.floating, float)):
+        f = float(v)
+        return None if (_m.isnan(f) or _m.isinf(f)) else f
+    if isinstance(v, (_pd.Timestamp, _dt2.datetime, _dt2.date)):
+        try:
+            return v.isoformat()
+        except Exception:  # noqa: BLE001
+            return str(v)
+    return v
+
+
 def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
                             phase: str = "", score=None) -> dict:
     """批次:單檔 → 一列「組合健診大表」flat row(欄 = BATCH_UNIFIED_COLUMNS,JSON-safe)。
@@ -201,27 +222,33 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
         return _blank("❌ 抓取失敗", str(base.get("error", ""))[:100], name=base.get("基金名"))
 
     fd = base.get("_fund_raw") or {}
+    import sys as _sys
     from services.health.report import build_dividend_summary_row, build_health_analysis_row
     try:
         _health = build_health_analysis_row(fd, code)
-    except Exception:  # noqa: BLE001
+    except Exception as _e:  # noqa: BLE001 — ① 算不出 → 該組欄留空(§3.3 至少 log)
         _health = {}
+        print(f"[batch] {code} ① 健康分析失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
     try:
         _div = {k: v for k, v in build_dividend_summary_row(
                     fd, code, principal_twd=principal_twd, fx=base.get("fx_spot")).items()
                 if not str(k).startswith("_")}
-    except Exception:  # noqa: BLE001
+    except Exception as _e:  # noqa: BLE001
         _div = {}
+        print(f"[batch] {code} ② 配息相關失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
     try:
         from ui.helpers.fund_grp_health._utils import _build_fund_dict
         _, _extra_map = build_merged_extra_columns(
             [_build_fund_dict(fd, code, principal_twd)], phase, score)
         _extra = _extra_map.get(code, {})
-    except Exception:  # noqa: BLE001
+    except Exception as _e:  # noqa: BLE001
         _extra = {}
+        print(f"[batch] {code} σ/風險/MK 失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
 
     _row = build_unified_row(base, _health, _div, _extra)
-    out = {c: _row.get(c) for c in BATCH_UNIFIED_COLUMNS}
+    # JSON-safe 收口:防 builder 偶發 numpy/Timestamp 漏進 → 讓 checkpoint json.dump 不炸
+    # (否則整輪 20-30 分靜默降級只記憶體;還原舊 flat 路徑的 safe_num 保證)。
+    out = {c: _jsonify(_row.get(c)) for c in BATCH_UNIFIED_COLUMNS}
     out["code"] = code
     out["狀態"] = "✅ 成功"
     out["備註"] = None
