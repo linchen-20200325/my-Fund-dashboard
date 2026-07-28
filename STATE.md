@@ -2,6 +2,19 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🐛 2026-07-28 基金類別 bug + 捕捉率門檻放寬 v19.419
+
+user 回報配對表「後面數值都空」「操盤評分也空」。查因 3 件:
+
+- **基金類別 bug(修)**:`repositories/fund/sources.py` 兩處 `rows_map.get("投資標的", …)` 把
+  **公開說明書長描述**當類別(污染 UI + 輪動跨類配對)。抽 `_pick_fund_category`:投資標的
+  僅在 ≤15 字(像標籤)時採用,否則退基金類型,都不合則空。test 6。
+- **捕捉率/操盤評分空(放寬)**:原需漲、跌月**各 ≥6**;貼近高點/短歷史基金跌月常 <6 → 全留白。
+  user 核准 `CAPTURE_MIN_MONTHS` 6→3(SSOT)+ 新增 `CAPTURE_ROBUST_MONTHS`=6;compute_capture
+  回 `low_confidence`(3–5 月標參考值)。help tooltip(健診大表 `_health_cfg`)+ 批次欄位說明註明。
+- **配對買方全 None(誠實,非 bug)**:這組基金全高基期(σ −0.36~0)→ 無跌深低基期可買。
+  買方「更大池」user 選**之後做**(現況只在載入基金裡配對)。
+
 ## 🔄 2026-07-28 輪動配對表:持倉健診也顯示 + 空態不再靜默 v19.418
 
 user 回報「組合健診看不到配對表」。查因 = 兩問題:(1) 無高基期時只有 info、<2 檔時**靜默
