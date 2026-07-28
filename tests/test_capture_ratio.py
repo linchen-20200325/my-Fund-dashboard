@@ -67,6 +67,16 @@ def test_benchmark_for_currency():
     assert benchmark_for_currency("台幣") == "TWII"
 
 
+def test_gap_month_return_dropped():
+    """F-CAP-2:NAV 缺月(停售/新基金)→ 跨缺口的假單月報酬須丟棄,不當 1 個月算。"""
+    from services.capture_ratio import _monthly_returns
+    idx = pd.to_datetime(["2022-01-31", "2022-03-31", "2022-04-30", "2022-05-31"])
+    r = _monthly_returns(pd.Series([100, 90, 91, 92], index=idx))
+    months = [str(d)[:7] for d in r.index]
+    assert "2022-03" not in months            # 橫跨 Feb 缺口 → 丟(否則會被當 -10% 單月)
+    assert "2022-04" in months and "2022-05" in months
+
+
 def test_score_clamped_0_100():
     """極端抗跌(下跌月反而賺)→ 評分不超過 100。"""
     fund = _nav([0] + [0.05] * 12 + [0.01] * 12)   # 大盤跌月基金還漲

@@ -42,7 +42,9 @@ def _monthly_returns(nav) -> "pd.Series | None":
     s = s[s.index.notna()].sort_index()
     if s.empty:
         return None
-    r = s.resample("ME").last().dropna().pct_change().dropna()
+    # F-CAP-2:**不**在 pct_change 前 dropna —— 缺月(停售/新基金)→ resample 產 NaN →
+    # 跨缺口報酬變 NaN → 一併 dropna 丟掉「橫跨缺月的假單月報酬」(§1 不 ffill 偽造)。
+    r = s.resample("ME").last().pct_change().dropna()
     return r if len(r) >= 2 else None
 
 
@@ -72,18 +74,15 @@ def compute_capture(fund_nav, benchmark_nav, min_months: int = 6) -> dict:
         dn_b = float((1 + rb[down]).prod() - 1)   # 大盤下跌月複利(< 0)
         dn_f = float((1 + rf[down]).prod() - 1)   # 基金於同月複利
 
-        uc = (up_f / up_b * 100.0) if up_b > 0 else None
-        dc = (dn_f / dn_b * 100.0) if dn_b < 0 else None   # 兩負相除 → 正
+        # F-CAP-3:先 round 捕捉率,評分再從「顯示值」算 → 使用者拿表上數字重算不會差 1。
+        uc = round(up_f / up_b * 100.0, 1) if up_b > 0 else None
+        dc = round(dn_f / dn_b * 100.0, 1) if dn_b < 0 else None   # 兩負相除 → 正
         score = None
         if uc is not None and dc is not None:
-            score = max(0.0, min(100.0, 50.0 + (uc - dc) / 2.0))
+            score = round(max(0.0, min(100.0, 50.0 + (uc - dc) / 2.0)))
 
-        return {
-            "upside": round(uc, 1) if uc is not None else None,
-            "downside": round(dc, 1) if dc is not None else None,
-            "score": round(score) if score is not None else None,
-            "n_up": n_up, "n_down": n_down,
-        }
+        return {"upside": uc, "downside": dc, "score": score,
+                "n_up": n_up, "n_down": n_down}
     except Exception as e:  # noqa: BLE001 — 計算異常 → 誠實 None,不假精確(§1)
         print(f"[capture_ratio] 計算失敗: {type(e).__name__}: {e}", file=sys.stderr)
         return dict(_BLANK)
