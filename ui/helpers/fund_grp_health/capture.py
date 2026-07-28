@@ -29,23 +29,28 @@ def capture_by_code(funds: list) -> dict:
     from services.capture_ratio import benchmark_for_currency, compute_capture
     from services.currency import normalize_ccy
 
+    import sys
+
     out: dict = {}
     for _f in funds:
         _code = _f.get("code", "?")
         _blank = {"上檔捕捉%": None, "下檔捕捉%": None, "操盤評分": None}
-        _series = _f.get("series")
-        if _series is None or len(_series) < 3:        # 基本 sanity;有效性交給 compute_capture 月數把關
+        try:
+            _series = _f.get("series")
+            if _series is None or len(_series) < 3:      # 基本 sanity;有效性交給 compute_capture 月數把關
+                out[_code] = _blank
+                continue
+            _ccy = normalize_ccy(_f.get("currency"), default="")
+            if not _ccy:            # 無幣別 → 無法選基準 → None(不默認 SPX 錯配 TWD 基金,§1)
+                out[_code] = _blank
+                continue
+            _bench = _benchmark_nav(benchmark_for_currency(_ccy))
+            if _bench is None or len(_bench) == 0:
+                out[_code] = _blank
+                continue
+            _r = compute_capture(_series, _bench)
+            out[_code] = {"上檔捕捉%": _r["upside"], "下檔捕捉%": _r["downside"], "操盤評分": _r["score"]}
+        except Exception as _e:  # noqa: BLE001 — 單檔失敗不拖垮整組 extra 欄
+            print(f"[capture] {_code} 失敗: {type(_e).__name__}: {_e}", file=sys.stderr)
             out[_code] = _blank
-            continue
-        _mkt = benchmark_for_currency(normalize_ccy(_f.get("currency"), default=""))
-        _bench = _benchmark_nav(_mkt)
-        if _bench is None or len(_bench) == 0:
-            out[_code] = _blank
-            continue
-        _r = compute_capture(_series, _bench)
-        out[_code] = {
-            "上檔捕捉%": _r["upside"],
-            "下檔捕捉%": _r["downside"],
-            "操盤評分": _r["score"],
-        }
     return out
