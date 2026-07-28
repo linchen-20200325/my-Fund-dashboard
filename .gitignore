@@ -19,6 +19,7 @@ temp/
 # runtime cache（Streamlit 容器重啟即清空 / 測試可能寫入 → 不入 repo）
 cache/fund_history.json
 cache/nav_history/
+cache/nav/
 # 批次分析磁碟續存 checkpoint（使用者 run-state，非 repo 資產）
 data_cache/batch/
 # AI 白話總體檢磁碟續存（使用者 run-state，reboot 後回顯用；非 repo 資產）

@@ -68,6 +68,29 @@ _UNIFIED_FRONT: list = [
 ]
 
 
+def _unified_columns(base_cols: list) -> tuple:
+    """依 base 欄名算出 (最終欄序, 各欄來源) —— build_unified_health_df / build_unified_row 共用。"""
+    front_names = {c for c, _ in _UNIFIED_FRONT}
+    # 排除 code/基金名(前置)+ ok(process_one_fund 內部旗標,恆 True 不必顯示)
+    remaining_base = [c for c in base_cols
+                      if c not in ("code", "基金名", "ok") and c not in front_names]
+    columns = ["code", "基金名"] + [c for c, _ in _UNIFIED_FRONT] + remaining_base
+    col_source = {"code": "base", "基金名": "base"}
+    for c, s in _UNIFIED_FRONT:
+        col_source[c] = s
+    for c in remaining_base:
+        col_source[c] = "base"
+    return columns, col_source
+
+
+def build_unified_row(base_row: dict, health_row: dict, div_row: dict, extra_row: dict) -> dict:
+    """單檔版 build_unified_health_df:①②③+extra 併成一列 flat dict(去 base 底線私有欄)。"""
+    base = {k: v for k, v in (base_row or {}).items() if not str(k).startswith("_")}
+    columns, col_source = _unified_columns(list(base.keys()))
+    src = {"base": base, "health": health_row or {}, "div": div_row or {}, "extra": extra_row or {}}
+    return {col: src[col_source[col]].get(col) for col in columns}
+
+
 def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
                             extra_by_code: dict):
     """把 ①②③ + σ/風險/MK 依 code join 成一張去重複寬表(§1:缺欄留 None)。
@@ -124,3 +147,111 @@ _UNIFIED_NUMERIC: list = [
     "Max DD %", "3Y 年化 %", "5Y 年化 %",
     "1Y 含息 %", "年化配息率 %", "每月配息 (TWD)", "每月配息單位數",
 ]
+
+
+# ── 批次分析:每檔跑成一列「組合健診大表」flat row(JSON-safe → 可存 checkpoint)v19.413 ──
+# process_one_fund 回傳的非底線 base 欄(供 failed 檔也對齊完整欄位)
+_BATCH_BASE_KEYS: list = [
+    "code", "基金名", "幣別偵測", "ccy", "fx_spot", "principal_ccy 🧮", "units 🧮",
+    "配息次數", "累積 TWD 配息 🧮", "年均配息 TWD 🧮",
+    "配息率% (全期實際)", "淨值% (全期實際)", "含息% (全期實際)",
+    "配息率% (年化)", "淨值% (年化)", "含息% (年化)",
+    "吃本金燈號 (1Y · MK)", "MK 3-3-3 篩", "MK 倉位", "最高經理費%", "配息頻率", "換匯資訊 🧮",
+]
+# 批次寬表固定欄序:code, 基金名, 狀態, 備註 → ①②extra(FRONT)→ base 末段
+_batch_data_cols, _ = _unified_columns(_BATCH_BASE_KEYS)
+BATCH_UNIFIED_COLUMNS: list = (
+    ["code", "基金名", "狀態", "備註"]
+    + [c for c in _batch_data_cols if c not in ("code", "基金名")]
+)
+# 批次寬表需轉 numeric 的欄(供 UI NumberColumn;含批次獨有 fx_spot 等 base 數值)
+BATCH_NUMERIC_COLUMNS: list = _UNIFIED_NUMERIC + [
+    "fx_spot", "principal_ccy 🧮", "units 🧮", "配息次數",
+    "累積 TWD 配息 🧮", "年均配息 TWD 🧮",
+    "配息率% (全期實際)", "淨值% (全期實際)", "含息% (全期實際)",
+    "配息率% (年化)", "淨值% (年化)", "含息% (年化)",
+]
+
+
+def _jsonify(v):
+    """把值收成 JSON-safe primitive(numpy/Timestamp 漏網 → native;NaN/inf → None)。"""
+    import datetime as _dt2
+    import math as _m
+    import numpy as _np
+    import pandas as _pd
+    if isinstance(v, _np.bool_):
+        return bool(v)
+    if isinstance(v, _np.integer):
+        return int(v)
+    if isinstance(v, (_np.floating, float)):
+        f = float(v)
+        return None if (_m.isnan(f) or _m.isinf(f)) else f
+    if isinstance(v, (_pd.Timestamp, _dt2.datetime, _dt2.date)):
+        try:
+            return v.isoformat()
+        except Exception:  # noqa: BLE001
+            return str(v)
+    return v
+
+
+def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
+                            phase: str = "", score=None) -> dict:
+    """批次:單檔 → 一列「組合健診大表」flat row(欄 = BATCH_UNIFIED_COLUMNS,JSON-safe)。
+
+    走 process_one_fund(L2)+ ①`build_health_analysis_row` ②`build_dividend_summary_row`
+    + σ/風險/MK `build_merged_extra_columns` → `build_unified_row`。
+    §1 fail-loud:失敗回「狀態 != 成功」列(數值留 None,不填假值);整檔不外拋。
+    """
+    code = (code or "").strip().upper()
+
+    def _blank(status, note, name=None):
+        r = {c: None for c in BATCH_UNIFIED_COLUMNS}
+        r["code"] = code
+        r["基金名"] = name
+        r["狀態"] = status
+        r["備註"] = note
+        return r
+
+    if not code:
+        return _blank("⚠️ 無效代號", "空白代號")
+
+    from services.fund_row import process_one_fund
+    try:
+        base = process_one_fund(code, principal_twd)
+    except Exception as e:  # noqa: BLE001 — 單檔炸掉收成失敗列
+        return _blank("❌ 抓取失敗", f"{type(e).__name__}: {str(e)[:80]}")
+    if not base.get("ok"):
+        return _blank("❌ 抓取失敗", str(base.get("error", ""))[:100], name=base.get("基金名"))
+
+    fd = base.get("_fund_raw") or {}
+    import sys as _sys
+    from services.health.report import build_dividend_summary_row, build_health_analysis_row
+    try:
+        _health = build_health_analysis_row(fd, code)
+    except Exception as _e:  # noqa: BLE001 — ① 算不出 → 該組欄留空(§3.3 至少 log)
+        _health = {}
+        print(f"[batch] {code} ① 健康分析失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
+    try:
+        _div = {k: v for k, v in build_dividend_summary_row(
+                    fd, code, principal_twd=principal_twd, fx=base.get("fx_spot")).items()
+                if not str(k).startswith("_")}
+    except Exception as _e:  # noqa: BLE001
+        _div = {}
+        print(f"[batch] {code} ② 配息相關失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
+    try:
+        from ui.helpers.fund_grp_health._utils import _build_fund_dict
+        _, _extra_map = build_merged_extra_columns(
+            [_build_fund_dict(fd, code, principal_twd)], phase, score)
+        _extra = _extra_map.get(code, {})
+    except Exception as _e:  # noqa: BLE001
+        _extra = {}
+        print(f"[batch] {code} σ/風險/MK 失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
+
+    _row = build_unified_row(base, _health, _div, _extra)
+    # JSON-safe 收口:防 builder 偶發 numpy/Timestamp 漏進 → 讓 checkpoint json.dump 不炸
+    # (否則整輪 20-30 分靜默降級只記憶體;還原舊 flat 路徑的 safe_num 保證)。
+    out = {c: _jsonify(_row.get(c)) for c in BATCH_UNIFIED_COLUMNS}
+    out["code"] = code
+    out["狀態"] = "✅ 成功"
+    out["備註"] = None
+    return out

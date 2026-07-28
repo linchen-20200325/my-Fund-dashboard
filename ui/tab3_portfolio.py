@@ -2322,10 +2322,8 @@ def render_portfolio_tab() -> None:
                     "**② 配息相關**:adr + 1Y 含息 + 吃本金燈號(1Y·MK)+ **MK 4 規則換標的建議**。"
                     "**③ 實際購買結果**:per-fund 用 invest_twd 為本金(未填預設 100 萬 TWD)。"
                 )
-                from ui.tab_fund_grp_health import (
-                    process_one_fund as _proc_health,
-                    _render_health_3tables as _render_health_tbl,
-                )
+                from services.fund_row import process_one_fund as _proc_health  # v19.413 下沉 L2
+                from ui.tab_fund_grp_health import _render_health_3tables as _render_health_tbl
                 from concurrent.futures import (
                     ThreadPoolExecutor as _TPE_h,
                     as_completed as _ac_h,

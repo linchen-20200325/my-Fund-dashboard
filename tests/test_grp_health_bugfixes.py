@@ -10,6 +10,8 @@ C. 總經 tab「持倉紅綠燈」同一檔列出 2-3 次（portfolio_funds 重�
 from __future__ import annotations
 
 _GRP = "ui/tab_fund_grp_health.py"
+# v19.413:process_one_fund 下沉 L2 → services/fund_row.py
+_FROW = "services/fund_row.py"
 # B1 v19.205 / P2-7:ui/helpers/fund_checkup.py 已搬 ui/helpers/fund/checkup.py
 _CHK = "ui/helpers/fund/checkup.py"
 # v19.262 P3-A6: 持倉紅綠燈隨拐點警報整 section 抽至 ui/tab1_macro_inflection.py
@@ -41,8 +43,11 @@ class TestPerfChartKeys:
         assert "年化淨值% 🧮" not in src
 
     def test_process_one_fund_emits_both_bases(self):
-        """確認 row dict 同時有「(年化)」+「(全期實際)」兩套鍵（v19.180 拆欄 + v19.304 需 fallback）。"""
-        src = _src(_GRP)
+        """確認 row dict 同時有「(年化)」+「(全期實際)」兩套鍵（v19.180 拆欄 + v19.304 需 fallback）。
+
+        v19.413:process_one_fund 已下沉 L2 → 讀 services/fund_row.py。
+        """
+        src = _src(_FROW)
         assert '"配息率% (年化)": s[' in src
         assert '"含息% (年化)": s[' in src
         assert '"淨值% (年化)": s[' in src

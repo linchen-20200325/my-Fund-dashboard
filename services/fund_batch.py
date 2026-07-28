@@ -1,5 +1,11 @@
 """services/fund_batch.py — 批次基金分析 L2 攤平器(400 檔上傳→逐檔 → 表格列)。
 
+⚠️ **RETAINED-LEGACY(v19.413)**:批次分頁已改用「組合健診大表」引擎
+`ui.helpers.fund_grp_health.unified.build_batch_unified_row`,本模組 `analyze_fund_row`
++ 舊 flat schema(`ROW_COLUMNS` / `COLUMN_LABELS_ZH`)**production 0 caller**,僅 test
+覆蓋。**保留不刪**(§-1 不主動拔;`tests/test_fund_batch.py` 續驗其單檔攤平契約)。
+新功能請改 `build_batch_unified_row`,**勿再擴充本檔**避免兩套 batch schema 分歧。
+
 單一職責:給「一個基金代號」,呼既有單檔引擎 `auto_fetch_moneydj`(內部走
 enriched wrapper → `finalize_fund_metrics` → `calc_metrics`),把回傳結構
 **攤平成一列 flat dict** + `status`,供 L3 批次 UI 累積成表下載。

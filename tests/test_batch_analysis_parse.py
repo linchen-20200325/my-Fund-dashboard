@@ -5,7 +5,20 @@ _parse_codes 是批次 UI 唯一非平凡邏輯,§6 對其最易錯輸入上鎖:
 """
 from __future__ import annotations
 
-from ui.tab_batch_analysis import _parse_codes
+from ui.tab_batch_analysis import _is_fail, _parse_codes, _rows_compatible
+
+
+def test_rows_compatible_new_vs_old_schema():
+    """v19.413:舊 flat-schema 存檔(有 status 無 狀態)須判為不相容 → 讀回時忽略。"""
+    assert _rows_compatible({"A": {"狀態": "✅ 成功", "code": "A"}})       # 新 schema
+    assert not _rows_compatible({"A": {"status": "ok", "code": "A"}})       # 舊 flat
+    assert not _rows_compatible({})                                          # 空
+    assert not _rows_compatible({"A": {"狀態": "✅"}, "B": {"status": "ok"}})  # 混 → 不相容
+
+
+def test_is_fail():
+    assert _is_fail({"狀態": "❌ 抓取失敗"}) and _is_fail({"狀態": "⚠️ 無效代號"})
+    assert not _is_fail({"狀態": "✅ 成功"}) and not _is_fail({})
 
 
 def test_empty_and_none():

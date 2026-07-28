@@ -2,6 +2,27 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📊 2026-07-28 批次表 = 組合健診大表(process_one_fund 下沉 L2 共用引擎)v19.413
+
+user 要求批次分析表**完全 copy 組合健診那張合併大表**。
+
+- **`services/fund_row.py`(新,§8.2 修正)**:`process_one_fund` 從 `ui/tab_fund_grp_health.py`
+  下沉 L2(純 worker、無 st)。原檔 + `tab3_portfolio` 改 import;`_process_one_fund` alias
+  保留;順帶把 `not <Series>` 改 `len()` 安全判斷(根治同類 truthiness 崩潰);清死 import。
+- **`ui/helpers/fund_grp_health/unified.py`**:`build_batch_unified_row(code, principal, phase,
+  score)` = process_one_fund + ①`build_health_analysis_row` + ②`build_dividend_summary_row`
+  + σ/風險/MK → 一列 flat row(`BATCH_UNIFIED_COLUMNS` 58 欄,JSON-safe via `_jsonify`)。
+  100 萬 TWD 基準。`_unified_columns` 排除 vestigial `ok` 欄。
+- **`ui/tab_batch_analysis.py`**:改用 build_batch_unified_row(讀 `phase_info` → 資產屬性/
+  操作訊號 對齊健診);狀態欄「✅成功/❌抓取失敗/⚠️無效代號」;舊 flat-schema checkpoint
+  相容防護 `_rows_compatible`(讀回偵測不符即忽略,避免欄位錯位)。
+- **`services/fund_batch.py`** 標 RETAINED-LEGACY(analyze_fund_row production 0 caller)。
+
+**多 agent 交叉驗證**(user 要求「其他 AI 互相確認」):2 個獨立對抗 agent 各查等價性 /
+分層 / §1 / 舊存檔 —— findings 全修(JSON-safe 收口、§3.3 log、phase/score 漏傳、舊存檔防護)。
+單檔對拍 56 共享欄零差異。驗:新增 test_batch_unified_row(含漂移鎖)等;全非-slow 套件 +
+AppTest 綠;drift-lock test 隨 process_one_fund 位移更新讀 `services/fund_row.py`。
+
 ## 🧬 2026-07-27 組合健診①②③合表 + 批次評分/每月配息 + AI 落地磁碟 v19.410-412
 
 user 一輪三需求(多 agent 交叉驗證後落地)。
