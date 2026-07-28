@@ -70,7 +70,24 @@ def test_revert_upside():
     assert revert_upside_pct(None) is None
 
 
-def test_is_healthy_buy():
+def test_is_healthy_buy_positive():
     assert is_healthy_buy({"4D Grade": "C", "吃本金燈號": "🟢 健康", "操盤評分": 55})
+    assert is_healthy_buy({"4D Grade": "B", "吃本金燈號": "🟡 警示", "操盤評分": None})  # 🟡 + 缺評分 → 允許
+
+
+def test_is_healthy_buy_fail_closed():
+    """§1 fail-closed:資料不足不得當健康(接刀防護)。"""
+    assert not is_healthy_buy({})                                        # 全缺 → 擋
+    assert not is_healthy_buy({"4D Grade": "—", "吃本金燈號": "", "操盤評分": None})  # 403 深跌缺料
+    assert not is_healthy_buy({"4D Grade": "B", "吃本金燈號": "⚪ 資料不足"})  # 無健康燈 → 擋
+    assert not is_healthy_buy({"4D Grade": "D", "吃本金燈號": "🟢 健康"})      # D 評等 → 擋
     assert not is_healthy_buy({"4D Grade": "F"})
     assert not is_healthy_buy({"操盤評分": 20})
+
+
+def test_missing_data_buy_not_recommended():
+    """低基期但資料不足的深跌檔,不得被推薦為『低基期健康』(接刀)。"""
+    pool = [_f("A", "股票型", "-0.2σ"),
+            {"code": "B", "name": "B", "基金類別": "股票型", "σ rank": "-2.5σ",
+             "4D Grade": "—", "吃本金燈號": "", "操盤評分": None, "距 HWM %": "-30%"}]
+    assert suggest_rotation_pairs(pool)[0]["buy_code"] is None

@@ -36,13 +36,19 @@ def classify_base(sigma_rank, sell_sigma: float = -0.5, buy_sigma: float = -1.5)
 
 
 def is_healthy_buy(row: dict, min_score: float = 50.0) -> bool:
-    """買方健康過濾(避免接刀):4D ≠ F + 吃本金燈號非「吃本金」+ 操盤評分 ≥ 門檻(有值時)。"""
-    if str((row or {}).get("4D Grade") or "").strip().upper() == "F":
+    """買方健康過濾 —— **fail-closed**:必須有明確健康訊號才推薦(§1 避免把「資料不足」
+    當健康 → 接刀)。條件:4D Grade 為明確好評等(A/B/C)+ 吃本金燈號為明確健康燈
+    (🟢/🟡,非吃本金、非空/資料不足)+ 操盤評分若有值須達門檻(缺值不硬擋,因短歷史常缺)。
+    """
+    r = row or {}
+    _grade = str(r.get("4D Grade") or "").strip().upper()
+    if _grade not in ("A", "B", "C"):        # D/F/缺(—/空)→ 擋(不推無把握的)
         return False
-    if "吃本金" in str((row or {}).get("吃本金燈號") or ""):
+    _eat = str(r.get("吃本金燈號") or "")
+    if ("吃本金" in _eat) or not ("🟢" in _eat or "🟡" in _eat):  # 需明確健康燈;空/資料不足 → 擋
         return False
-    _sc = _num((row or {}).get("操盤評分"))
-    if _sc is not None and _sc < min_score:
+    _sc = _num(r.get("操盤評分"))
+    if _sc is not None and _sc < min_score:  # 操盤評分有值才要求達標(缺值 = 短歷史,已由上兩項把關)
         return False
     return True
 
@@ -50,7 +56,7 @@ def is_healthy_buy(row: dict, min_score: float = 50.0) -> bool:
 def revert_upside_pct(dist_hwm_pct) -> "float | None":
     """距 HWM %(負)→ 回到期間高點的潛在漲幅%。例:−15% → +17.6%。非負/缺 → None。"""
     d = _num(dist_hwm_pct)
-    if d is None or d >= 0:
+    if d is None or d >= 0 or d <= -100:      # d<=-100 → 分母 0(清算基金 NAV=0)→ None,不除零
         return None
     return round(-d / (1.0 + d / 100.0), 1)
 
