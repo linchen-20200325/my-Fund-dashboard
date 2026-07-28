@@ -97,7 +97,7 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
     except Exception as e:
         st.caption(f"⬜ 超跌警示渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
 
-    # v19.415 — 🔄 輪動配對建議(賣高基期 → 買低基期健康同類)
+    # v19.415 — 🔄 輪動配對建議(賣高基期 → 買**別類**低基期健康;v19.418 空態不再靜默)
     try:
         render_rotation_section(funds)
     except Exception as e:

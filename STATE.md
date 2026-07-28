@@ -2,6 +2,20 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🔄 2026-07-28 輪動配對表:持倉健診也顯示 + 空態不再靜默 v19.418
+
+user 回報「組合健診看不到配對表」。查因 = 兩問題:(1) 無高基期時只有 info、<2 檔時**靜默
+return 什麼都沒有**;(2) 配對表只接在「💊 基金組合健診」Tab,**Tab3 持倉健診沒接**。
+
+- **空態不再靜默**(`_render_pairs_ui` / `render_rotation_section`):標題永遠顯示;無配對時列
+  **每檔目前基期**(🔴高/🟢低/⚪中/⬜σ不足 + σ值)+ 明確原因(可放寬滑桿 / 不足 2 檔 / 誠實無標的);
+  組資料失敗也顯示標題 + 錯誤(不再被外層 try 吞成小 caption)。
+- **持倉健診接上**(`ui/tab3_portfolio.py` 持倉健診總表後):用實際持倉重組 rich fund dict 呼叫
+  `render_rotation_section(_funds_rot, key_prefix="pf_rot_")`。**兩 tab 在同一 st.tabs run 都執行 →
+  滑桿 widget key 必須唯一**,健檢 Tab='rot_' / 持倉健診='pf_rot_'(避免 DuplicateElementKey)。
+  故 `render_rotation_section` 加 `key_prefix` 參數。
+- user 2026-07-28 核准「兩邊都要」。
+
 ## 🔄 2026-07-28 輪動配對表補進批次分頁(畫面表 + 獨立 CSV)v19.417
 
 user 回報:批次下載大表看不到輪動配對表。原因 = 配對表是**跨檔推導**的另一種表(賣→買
