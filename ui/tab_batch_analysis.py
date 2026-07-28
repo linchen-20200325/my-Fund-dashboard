@@ -1,16 +1,14 @@
 """ui/tab_batch_analysis.py — 批次基金分析分頁(上傳 400 檔 → 逐檔跑 → 下載 CSV)。
 
-L3 delivery surface。單一職責:收一份代號清單(上傳 CSV / 貼上)→ 對每檔呼
-L2 `services.fund_batch.analyze_fund_row` → 進度條逐檔累積到 session_state
-(可中斷續跑)→ 成功/失敗摘要 → 下載 CSV(utf-8-sig,Excel 直開)。
+L3 delivery surface。單一職責:收一份代號清單(上傳 CSV / 貼上)→ 每檔跑
+`build_batch_unified_row`(= 與「組合健診」同一張 40 欄大表)→ 進度條逐檔累積到
+session_state(可中斷續跑、磁碟續存)→ 成功/失敗摘要 → 下載 CSV(utf-8-sig)。
 
-架構(§8.2):L3 → L2 `services.fund_batch`(→ `services.moneydj_fetcher` → L1)。
-不直呼 L1、無上行 import。
+v19.413:批次表**完全等同組合健診大表**(①健康分析 + ②配息相關 + ③實際購買結果 +
+σ/風險/MK),共用 `process_one_fund`(L2)+ 同一組 SSOT builder。每檔以 100 萬 TWD 為基準。
 
-§1 誠實:400 檔必有失敗(停售/403/無 NAV),失敗檔完整留在表裡帶 `status`+`note`,
-數值留白(絕不填 0),下載檔可追溯。AI 跨檔評論 / 持股明細**刻意不在批次表**
-(小 N by design + §EX-AI-1 AI 回散文非資料)—— 篩出想深看的一小撮後,到
-「組合健診」分頁做 AI 比較。
+§1 誠實:400 檔必有失敗(停售/403/無 NAV),失敗檔完整留在表裡帶「狀態 + 備註」,
+數值留白(絕不填 0),下載檔可追溯。AI 跨檔評論 / 持股明細不在批次表(小 N,見組合健診)。
 """
 from __future__ import annotations
 
@@ -20,11 +18,10 @@ import re
 import pandas as pd
 import streamlit as st
 
-from services.fund_batch import (
-    COLUMN_LABELS_ZH,
-    ROW_COLUMNS,
-    STATUS_LABELS_ZH,
-    analyze_fund_row,
+from ui.helpers.fund_grp_health.unified import (
+    BATCH_NUMERIC_COLUMNS,
+    BATCH_UNIFIED_COLUMNS,
+    build_batch_unified_row,
 )
 
 # session_state 命名空間
@@ -39,8 +36,17 @@ _CODE_RE = re.compile(r"^[A-Z0-9]{3,20}$")
 _HEADER_TOKENS = {"CODE", "SYMBOL", "TICKER", "代號", "基金代號", "基金代碼", "標的", "標的代號"}
 _TW_TZ = _dt.timezone(_dt.timedelta(hours=8))
 
-# 失敗類(可「重試失敗檔」的 status)
-_FAIL_STATUSES = {"fetch_fail", "no_nav"}
+def _is_fail(row: dict) -> bool:
+    """該檔是否失敗 / 無效(可重試)。狀態欄含「失敗」或「無效」。"""
+    _s = str((row or {}).get("狀態", ""))
+    return ("失敗" in _s) or ("無效" in _s)
+
+
+def _rows_compatible(rows: dict) -> bool:
+    """新 schema 檢查:每列須有「狀態」欄。v19.413 批次表升級為組合健診大表後,
+    舊版 flat-schema 存檔(status/note/nav…)不相容 → 讀回時忽略,避免欄位錯位。"""
+    vals = list((rows or {}).values())
+    return bool(vals) and all(isinstance(r, dict) and "狀態" in r for r in vals)
 
 
 def _parse_codes(raw: str) -> list[str]:
@@ -95,7 +101,7 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
     # 決定本輪要處理哪些(未做的 + 選擇性重試失敗的)
     todo = [
         c for c in codes
-        if c not in rows or (retry_failed and rows[c].get("status") in _FAIL_STATUSES)
+        if c not in rows or (retry_failed and _is_fail(rows[c]))
     ]
     if not todo:
         st.info("沒有待處理的代號(全部已完成)。如要全部重來,請按「🗑️ 清除重來」。")
@@ -106,7 +112,7 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
     total = len(todo)
     for i, code in enumerate(todo, start=1):
         live.markdown(f"⏳ 處理中 **{i}/{total}**:`{code}` …")
-        rows[code] = analyze_fund_row(code)   # L2:失敗也回一列,不外拋
+        rows[code] = build_batch_unified_row(code)  # 組合健診大表單檔列;失敗也回一列不外拋
         _persist(run_id, codes, rows)         # 每檔落地(續存後盾)
         bar.progress(i / total)
     bar.empty()
@@ -114,18 +120,22 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
 
 
 def _build_df(codes: list[str], rows: dict) -> pd.DataFrame:
-    """依上傳順序組 DataFrame,欄位固定 ROW_COLUMNS。只納入已完成的檔。"""
+    """依上傳順序組 DataFrame(= 組合健診大表 40 欄)。只納入已完成的檔;數值欄轉 numeric。"""
     data = [rows[c] for c in codes if c in rows]
-    df = pd.DataFrame(data, columns=ROW_COLUMNS)
+    df = pd.DataFrame(data, columns=BATCH_UNIFIED_COLUMNS)
+    for _c in BATCH_NUMERIC_COLUMNS:
+        if _c in df.columns:
+            df[_c] = pd.to_numeric(df[_c], errors="coerce")
     return df
 
 
 def render_batch_analysis_tab() -> None:
     st.markdown("## 📦 批次基金分析")
     st.caption(
-        "上傳或貼上基金代號清單 → 逐檔跑報酬/風險/配息分析 → 下載 CSV。"
-        "每檔要抓 NAV/配息/績效(T+1~T+3、含 fallback chain),**400 檔約 15~25 分鐘**;"
-        "**每檔即時存磁碟** → 關分頁 / 伺服器重啟也不白費,重進上傳同一份清單自動接續。"
+        "上傳或貼上基金代號清單 → 每檔跑**與「組合健診」同一張大表**(評分/報酬/風險/配息/"
+        "σ位階/MK 買賣點,以 100 萬 TWD 為基準)→ 下載 CSV。每檔抓 NAV/配息/績效"
+        "(T+1~T+3、含 fallback chain),**400 檔約 20~30 分鐘**;**每檔即時存磁碟** → "
+        "關分頁 / 伺服器重啟也不白費,重進上傳同一份清單自動接續。"
     )
 
     # ── 輸入:上傳 CSV/TXT 或貼上 ──────────────────────────────
@@ -163,10 +173,16 @@ def render_batch_analysis_tab() -> None:
         st.session_state[_K_RUN_ID] = run_id
         st.session_state.pop(_K_DISK_OFF, None)
         ckpt = bc.load(run_id)
-        if ckpt:
-            st.session_state[_K_ROWS] = dict(ckpt.get("rows") or {})
+        _ck_rows = dict(ckpt.get("rows") or {}) if ckpt else {}
+        if _ck_rows and not _rows_compatible(_ck_rows):
+            # 舊版 flat-schema 存檔 → 忽略,提示重跑(表格已升級為組合健診大表)
+            st.session_state[_K_ROWS] = {}
+            st.info("偵測到**舊版格式**的批次存檔,已忽略 —— 批次表已升級為「組合健診大表」,"
+                    "請重新分析(舊存檔可按「🗑️ 清除重來」刪除)。")
+        elif _ck_rows:
+            st.session_state[_K_ROWS] = _ck_rows
             st.session_state[_K_RUN_AT] = ckpt.get("updated_at", "—")
-            st.success(f"🔁 已從磁碟讀回上次進度:{len(st.session_state[_K_ROWS])} 檔"
+            st.success(f"🔁 已從磁碟讀回上次進度:{len(_ck_rows)} 檔"
                        f"(更新於 {ckpt.get('updated_at', '—')})")
         else:
             st.session_state[_K_ROWS] = {}
@@ -174,7 +190,7 @@ def render_batch_analysis_tab() -> None:
     st.session_state[_K_CODES] = codes
     rows: dict = st.session_state.get(_K_ROWS, {})
     done = sum(1 for c in codes if c in rows)
-    est_min = max(1, round(len(codes) * 4 / 60))   # 粗估 ~4s/檔
+    est_min = max(1, round(len(codes) * 5 / 60))   # 粗估 ~5s/檔(含完整健診計算)
     st.markdown(
         f"**解析到 {len(codes)} 檔**(去重後)　·　已完成 {done} 檔　·　"
         f"預估首次全跑約 {est_min} 分鐘"
@@ -219,15 +235,19 @@ def _render_recent_checkpoints() -> None:
         )
         if col2.button("📂 讀回", key=f"batch_load_{r['run_id']}", use_container_width=True):
             ckpt = bc.load(r["run_id"])
-            if ckpt:
-                st.session_state[_K_ROWS] = dict(ckpt.get("rows") or {})
+            _ck_rows = dict(ckpt.get("rows") or {}) if ckpt else {}
+            if not ckpt:
+                st.error("讀回失敗:存檔可能已損毀或被刪除。")
+            elif _ck_rows and not _rows_compatible(_ck_rows):
+                st.warning("此存檔為**舊版格式**(批次表已升級為組合健診大表),無法讀回;"
+                           "請重新上傳清單分析。")
+            else:
+                st.session_state[_K_ROWS] = _ck_rows
                 st.session_state[_K_CODES] = (
-                    ckpt.get("codes") or list((ckpt.get("rows") or {}).keys()))
+                    ckpt.get("codes") or list(_ck_rows.keys()))
                 st.session_state[_K_RUN_AT] = ckpt.get("updated_at", "—")
                 st.session_state[_K_RUN_ID] = r["run_id"]
                 st.rerun()
-            else:
-                st.error("讀回失敗:存檔可能已損毀或被刪除。")
 
 
 def _render_existing_results() -> None:
@@ -241,38 +261,31 @@ def _render_existing_results() -> None:
     if df.empty:
         return
 
-    # ── 摘要(§1:成功 / 部分 / 失敗 一目了然)────────────────
+    # ── 摘要(§1:成功 / 失敗 一目了然)────────────────
     n = len(df)
-    n_ok = int((df["status"] == "ok").sum())
-    n_partial = int((df["status"] == "partial").sum())
-    n_nonav = int((df["status"] == "no_nav").sum())
-    n_fail = int((df["status"] == "fetch_fail").sum())
+    _status = df["狀態"].astype(str)
+    n_ok = int(_status.str.contains("成功").sum())
+    n_fail = n - n_ok
     run_at = st.session_state.get(_K_RUN_AT, "—")
 
     st.divider()
-    st.markdown(f"### 📊 分析結果　·　執行時間(台北):{run_at}")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("✅ 成功", n_ok)
-    m2.metric("🟡 部分(序列短/稀疏)", n_partial)
-    m3.metric("⬜ 無 NAV(停售/403)", n_nonav)
-    m4.metric("❌ 抓取失敗", n_fail)
-    if n_fail or n_nonav:
-        st.caption("失敗/無資料的檔仍完整列在表裡(status + note 標明原因、數值留白),"
+    st.markdown(f"### 📊 分析結果(組合健診大表)　·　執行時間(台北):{run_at}")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("檔數", n)
+    m2.metric("✅ 成功", n_ok)
+    m3.metric("❌ 失敗 / 無效", n_fail)
+    if n_fail:
+        st.caption("失敗的檔仍完整列在表裡(狀態 + 備註標明原因、數值留白),"
                    "**不會靜默丟棄或填假值**(§1)。可按「🔁 重試失敗檔」重抓。")
 
-    # ── 中文標題 + 中文狀態(顯示 / 下載共用;內部 df 仍英文供邏輯)──────
-    df_zh = df.copy()
-    df_zh["status"] = df_zh["status"].map(lambda s: STATUS_LABELS_ZH.get(s, s))
-    df_zh = df_zh.rename(columns=COLUMN_LABELS_ZH)
-
-    # ── 表格 ───────────────────────────────────────────────
-    st.dataframe(df_zh, use_container_width=True, height=420, hide_index=True)
+    # ── 表格(欄位已是中文,與組合健診大表同款;橫向可滾動)──────────
+    st.dataframe(df, use_container_width=True, height=460, hide_index=True)
 
     # ── 下載 CSV(utf-8-sig,Excel 直開中文標題正常)──────────────
     fname_ts = (run_at or "").replace("-", "").replace(":", "").replace(" ", "_") or "export"
     st.download_button(
         "⬇️ 下載分析結果 CSV",
-        df_zh.to_csv(index=False).encode("utf-8-sig"),
+        df.to_csv(index=False).encode("utf-8-sig"),
         file_name=f"fund_batch_{fname_ts}.csv",
         mime="text/csv",
         use_container_width=True,
@@ -281,12 +294,11 @@ def _render_existing_results() -> None:
 
     with st.expander("ℹ️ 欄位說明 / 這張表沒有什麼", expanded=False):
         st.markdown(
-            "- **報酬欄**皆為百分比;「近1月/3月/6月/1年報酬%」為**純 NAV 報酬**,"
-            "「近1年含息報酬%」含配息;「近3年/5年年化%」為年化。\n"
-            "- **「年化波動%」** = 年化標準差;**「最大回撤%」**;"
-            "**「最新淨值」** 為**原幣**(見「計價幣別」欄,未換算 TWD)。\n"
-            "- **「配息年化率%」** = 配息率(≠ 含息報酬);**「經理費」**。\n"
-            "- **「資料來源」** = 命中的來源;**「序列稀疏」** = True 時年化值已誠實砍掉。\n"
-            "- ⚠️ **不含**:AI 跨檔評論、逐檔持股明細 —— 屬小 N 深看功能,"
-            "請到「💊 組合健診」分頁對篩選出的一小撮基金做。"
+            "- 本表 = **組合健診大表**(①健康分析 + ②配息相關 + ③實際購買結果 + σ/風險/MK)。\n"
+            "- **評分**:4D Grade / 4D Score;**每月配息 / 累積 TWD 配息 / 原幣本金 / 單位** 皆以"
+            "**100 萬 TWD 為基準**(FX 換算,見「換匯資訊 🧮」欄)。\n"
+            "- **報酬**:1Y 含息(wb01 官方)/ 3Y·5Y 年化 / 全期實際·年化;**風險**:Sharpe /"
+            "Sortino / Calmar / Max DD / σ 位階(HWM);**買賣點**:MK 買 3~賣 3 + 現價位階。\n"
+            "- **吃本金燈號 / 換標的建議 / MK 3-3-3** 判定與組合健診同源(SSOT)。\n"
+            "- ⚠️ **不含**:AI 跨檔評論、逐檔持股明細 —— 小 N 深看功能,請到「💊 組合健診」做。"
         )
