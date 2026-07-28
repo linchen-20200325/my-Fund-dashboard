@@ -71,7 +71,9 @@ _UNIFIED_FRONT: list = [
 def _unified_columns(base_cols: list) -> tuple:
     """依 base 欄名算出 (最終欄序, 各欄來源) —— build_unified_health_df / build_unified_row 共用。"""
     front_names = {c for c, _ in _UNIFIED_FRONT}
-    remaining_base = [c for c in base_cols if c not in ("code", "基金名") and c not in front_names]
+    # 排除 code/基金名(前置)+ ok(process_one_fund 內部旗標,恆 True 不必顯示)
+    remaining_base = [c for c in base_cols
+                      if c not in ("code", "基金名", "ok") and c not in front_names]
     columns = ["code", "基金名"] + [c for c, _ in _UNIFIED_FRONT] + remaining_base
     col_source = {"code": "base", "基金名": "base"}
     for c, s in _UNIFIED_FRONT:

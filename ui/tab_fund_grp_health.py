@@ -206,9 +206,8 @@ def render_fund_grp_health_tab() -> None:
             )
 
 
-# v19.76 K3：原 32 行 _auto_fetch_moneydj 已遷移至 services.moneydj_fetcher，
-# tab2/tab5 共用同一份 fallback chain（避免兩 Tab 對同檔基金路徑不一致）。
-from services.moneydj_fetcher import auto_fetch_moneydj as _auto_fetch_moneydj  # noqa: F401
+# v19.413:_auto_fetch_moneydj 隨 process_one_fund 下沉 services/fund_row.py 後,本檔已無 caller,
+# 死 import 移除(fallback chain 仍集中於 services.moneydj_fetcher.auto_fetch_moneydj)。
 
 
 # v19.413:process_one_fund 下沉 L2(services/fund_row.py),健診 + 批次共用同引擎。

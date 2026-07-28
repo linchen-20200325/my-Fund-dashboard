@@ -62,6 +62,18 @@ def test_fetch_fail_row(monkeypatch):
     assert set(r.keys()) == set(BATCH_UNIFIED_COLUMNS)
 
 
+def test_batch_base_keys_covers_process_one_fund(_mock):
+    """漂移鎖:process_one_fund 若新增顯示欄卻沒同步 _BATCH_BASE_KEYS,批次表會靜默漏欄。"""
+    from services.fund_row import process_one_fund
+
+    from ui.helpers.fund_grp_health.unified import _BATCH_BASE_KEYS
+    base = process_one_fund("ACCP138", 1_000_000.0)
+    assert base.get("ok")
+    actual = {k for k in base if not str(k).startswith("_") and k != "ok"}
+    missing = actual - set(_BATCH_BASE_KEYS)
+    assert not missing, f"process_one_fund 新增欄未同步 _BATCH_BASE_KEYS: {missing}"
+
+
 def test_columns_have_key_groups():
     # 欄序:身分/狀態 → ① 評分 → ② 配息 → extra σ/MK → base ③ 末段
     cols = BATCH_UNIFIED_COLUMNS

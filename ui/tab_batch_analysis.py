@@ -107,12 +107,18 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
         st.info("沒有待處理的代號(全部已完成)。如要全部重來,請按「🗑️ 清除重來」。")
         return
 
+    # v19.413:讀景氣位階(同組合健診)→ 讓「資產屬性 / 操作訊號」欄能算真值,而非永遠「—」
+    _pi = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
+    _phase = (_pi or {}).get("phase") or ""
+    _score = (_pi or {}).get("score")
+
     bar = st.progress(0.0)
     live = st.empty()
     total = len(todo)
     for i, code in enumerate(todo, start=1):
         live.markdown(f"⏳ 處理中 **{i}/{total}**:`{code}` …")
-        rows[code] = build_batch_unified_row(code)  # 組合健診大表單檔列;失敗也回一列不外拋
+        # 組合健診大表單檔列;失敗也回一列不外拋。phase/score 對齊健診 tab
+        rows[code] = build_batch_unified_row(code, phase=_phase, score=_score)
         _persist(run_id, codes, rows)         # 每檔落地(續存後盾)
         bar.progress(i / total)
     bar.empty()
