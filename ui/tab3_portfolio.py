@@ -2372,20 +2372,22 @@ def render_portfolio_tab() -> None:
                 # v19.330:🧭 核心/衛星配置檢查已下沉共用 _render_health_3tables(兩 tab 齊顯示),
                 # 不再於此 inline(避免重複 + 只在 Tab3 出現)。
                 _ok_health = [r for r in _health_results if r is not None]
-                _render_health_tbl(_ok_health)
+                # v19.420 F-BM-3:持倉健診也帶「分析 extra 欄組」(σ/HWM/MK 買賣點 / 上下檔捕捉率 /
+                # 操盤評分 / vs 大盤%)—— 先前 Tab3 未傳 funds_extra → 整組欄缺席(稽核 A2#1 抓到)。
+                # 用實際持倉重組 rich fund dict 傳入;show_screener 維持 False(不與健檢 Tab 撞 widget key)。
+                from ui.helpers.fund_grp_health._utils import _build_fund_dict
+                _funds_extra = [
+                    _build_fund_dict(_r["_fund_raw"], _r["code"], _DEFAULT_PRINC)
+                    for _r in _ok_health
+                    if _r.get("ok") and _r.get("_fund_raw")
+                ]
+                _render_health_tbl(_ok_health, funds_extra=_funds_extra)
 
                 # v19.418 — 🔄 輪動配對建議(持倉健診也顯示;user 2026-07-28 要求兩邊都要)。
-                # 用實際持倉重組 rich fund dict 餵 render_rotation_section;widget key 用
-                # 'pf_rot_' 前綴避免與健檢 Tab 的 'rot_' 滑桿在同一 st.tabs run 撞鍵。
+                # 重用 _funds_extra;widget key 用 'pf_rot_' 前綴避免與健檢 Tab 的 'rot_' 撞鍵。
                 try:
-                    from ui.helpers.fund_grp_health._utils import _build_fund_dict
                     from ui.helpers.fund_grp_health.rotation import render_rotation_section
-                    _funds_rot = [
-                        _build_fund_dict(_r["_fund_raw"], _r["code"], _DEFAULT_PRINC)
-                        for _r in _ok_health
-                        if _r.get("ok") and _r.get("_fund_raw")
-                    ]
-                    render_rotation_section(_funds_rot, key_prefix="pf_rot_")
+                    render_rotation_section(_funds_extra, key_prefix="pf_rot_")
                 except Exception as _e_rot:
                     st.caption(
                         f"⬜ 輪動配對建議渲染失敗:"
