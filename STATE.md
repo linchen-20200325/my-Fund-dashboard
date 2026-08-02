@@ -2,6 +2,28 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📈 2026-07-28 基金 vs 大盤比較(疊圖 + vs 大盤% 欄;3 agent 稽核)v19.420
+
+user 要「與大盤的比較」。對齊(§7/§8)後:**純淨值 vs 純指數**(公平不含息,user 拍板)、
+窗口**近 1 年**(不足→全期標記)、大盤 TWD→TWII / 其餘→SPX(沿用捕捉率,不重抓)。
+
+- **L2** `services/benchmark_compare.py`(純數學):`excess_return`(近1Y純價格報酬差 %)+
+  `rebased_pair`(重設基期=100 疊圖 DataFrame)+ SSOT `BENCHMARK_WINDOW_DAYS`=365。test 11。
+- **L3 欄**:vs 大盤% **併入 `capture_by_code`**(F-BM-2:與捕捉率共用同一次基準抓取,不另開
+  第二個 N-pass;基準失敗不放大成 2×N)→ `build_merged_extra_columns` →
+  **組合 / 持倉 / 批次大表**都有「vs 大盤%」欄(`_UNIFIED_FRONT`+`_UNIFIED_NUMERIC`;health 大表 help + 批次欄位說明)。
+- **L3 疊圖**:Tab2 NAV 走勢圖後加「📈 vs 大盤」疊圖 + 跑贏/輸百分點 caption。
+- **🤖 3 agent 稽核修正**:
+  - **F-BM-1(HIGH)**:原各自 forward-slice → grid 不同時算出**假超額**(一檔等於大盤卻顯示 ±%)。
+    改**以共同交易日為錨**(intersection,同一組日期量兩邊)+ tz-aware/naive 統一 + 重複日 dedup +
+    excess 由已 round 分量相減(顯示對得起來)。
+  - **F-BM-2(MED-HIGH)**:vs 大盤% 併入 capture,消除基準失敗時 2×N 重抓放大。
+  - **A2#1(HIGH)**:**Tab3 持倉健診原未傳 `funds_extra` → 整組 extra 欄(σ/捕捉/vs大盤)缺席**;
+    改 Tab3 也建 funds_extra 傳入(先前 capture 欄也一併補上)。
+  - **Tab2**:基準抓不到 → 明講「暫取不到大盤資料」不靜默省略(§1);except 補 stderr;標題窗口
+    改動態(近1年/全期一致);非 TWD/USD 補匯率噪音 caveat。
+- §1:無幣別/基準抓失敗/共同期間不足 → 留白;疊圖 outer join 缺格斷點不 ffill。
+
 ## 🐛 2026-07-28 基金類別 bug + 捕捉率門檻放寬 v19.419
 
 user 回報配對表「後面數值都空」「操盤評分也空」。查因 3 件:

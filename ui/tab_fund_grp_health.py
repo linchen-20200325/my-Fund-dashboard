@@ -516,6 +516,10 @@ def _render_health_3tables(rows: list[dict],
         "操盤評分": _cc.NumberColumn("操盤評分", format="%d",
             help=("經理人操作評分 clamp(50 +(上檔 − 下檔)/2, 0, 100)。"
                   f"需漲、跌月各 ≥ {_CAP_MIN};{_CAP_MIN}–{_CAP_ROB - 1} 月為參考值(低信心)。")),
+        # v19.420 vs 大盤%(近1Y純價格報酬差;純淨值對純指數,公平不含息)
+        "vs 大盤%": _cc.NumberColumn("vs 大盤%", format="%+.1f %%",
+            help=("近 1 年**純價格**報酬 − 大盤(TWD→台股 / 其餘→S&P500)。"
+                  "正 = 跑贏。純淨值對純指數(公平,兩邊都不含息);歷史不足 1 年 → 用全期。")),
     }
     # v19.411:② 配息相關表不再單獨渲染,欄位併入健診大表;保留 _div_cfg 供格式重用。
     _div_cfg = {

@@ -1,11 +1,13 @@
-"""ui/helpers/fund_grp_health/capture.py — 逐檔上/下檔捕捉率 + 操盤評分(v19.414)。
+"""ui/helpers/fund_grp_health/capture.py — 逐檔上/下檔捕捉率 + 操盤評分 + vs 大盤%(v19.414;v19.420)。
 
 供**健診大表 + 批次大表共用**(併入 `build_merged_extra_columns`)。每檔基金 NAV 與
-「依幣別選定的大盤基準」(TWD→TWII、其餘→SPX)算捕捉率 + 操盤評分。基準序列只抓一次
-(module 級 success-only 快取;400 檔批次不重抓),抓失敗不快取 → 下次重試。
+「依幣別選定的大盤基準」(TWD→TWII、其餘→SPX)算:上/下檔捕捉率 + 操盤評分(v19.414)
+**及 vs 大盤%**(v19.420 近1年純價格報酬差)。四值**共用同一次基準抓取**(F-BM-2:vs大盤%
+併入本 fetcher,不另開第二個 N-pass,基準失敗時不放大成 2×N),基準序列 module 級
+success-only 快取(400 檔批次每市場只抓一次),抓失敗不快取 → 下次重試。
 
-架構:L3 orchestrator → L2 `services.capture_ratio`(純數學)+ `services.crisis_backtest`
-(基準抓取)。§1:缺料 / 基準抓不到 / 月數不足 → None(不假精確)。
+架構:L3 orchestrator → L2 `services.capture_ratio` + `services.benchmark_compare`(純數學)
++ `services.crisis_backtest`(基準抓取)。§1:缺料 / 基準抓不到 / 月數不足 → None(不假精確)。
 """
 from __future__ import annotations
 
@@ -25,7 +27,12 @@ def _benchmark_nav(market: str):
 
 
 def capture_by_code(funds: list) -> dict:
-    """每檔 → {上檔捕捉%, 下檔捕捉%, 操盤評分}(keyed by code)。缺料/基準/月數不足 → None。"""
+    """每檔 → {上檔捕捉%, 下檔捕捉%, 操盤評分, vs 大盤%}(keyed by code)。缺料/基準/月數不足 → None。
+
+    四值**共用同一次基準抓取**(F-BM-2:vs 大盤% 不另開第二個 N-pass fetcher,基準失敗時
+    不放大成 2×N 呼叫)。
+    """
+    from services.benchmark_compare import excess_return
     from services.capture_ratio import benchmark_for_currency, compute_capture
     from services.currency import normalize_ccy
 
@@ -34,10 +41,10 @@ def capture_by_code(funds: list) -> dict:
     out: dict = {}
     for _f in funds:
         _code = _f.get("code", "?")
-        _blank = {"上檔捕捉%": None, "下檔捕捉%": None, "操盤評分": None}
+        _blank = {"上檔捕捉%": None, "下檔捕捉%": None, "操盤評分": None, "vs 大盤%": None}
         try:
             _series = _f.get("series")
-            if _series is None or len(_series) < 3:      # 基本 sanity;有效性交給 compute_capture 月數把關
+            if _series is None or len(_series) < 3:      # 基本 sanity;有效性交給下游月數/共同日把關
                 out[_code] = _blank
                 continue
             _ccy = normalize_ccy(_f.get("currency"), default="")
@@ -48,8 +55,10 @@ def capture_by_code(funds: list) -> dict:
             if _bench is None or len(_bench) == 0:
                 out[_code] = _blank
                 continue
-            _r = compute_capture(_series, _bench)
-            out[_code] = {"上檔捕捉%": _r["upside"], "下檔捕捉%": _r["downside"], "操盤評分": _r["score"]}
+            _r = compute_capture(_series, _bench)                # v19.414 捕捉率(月頻分組)
+            _ex = excess_return(_series, _bench)                 # v19.420 vs 大盤%(近1Y純價格,同一 _bench)
+            out[_code] = {"上檔捕捉%": _r["upside"], "下檔捕捉%": _r["downside"],
+                          "操盤評分": _r["score"], "vs 大盤%": _ex["excess_pct"]}
         except Exception as _e:  # noqa: BLE001 — 單檔失敗不拖垮整組 extra 欄
             print(f"[capture] {_code} 失敗: {type(_e).__name__}: {_e}", file=sys.stderr)
             out[_code] = _blank

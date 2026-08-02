@@ -154,6 +154,10 @@ CAPTURE_ROBUST_MONTHS: int = 6      # 漲跌月各 ≥ 本值 = 穩健;3–5 = �
 # 操盤評分中心 = 上下檔捕捉率相等時的基準分:score = clamp(BASE + (上檔 − 下檔)/2, 0, 100)
 CAPTURE_SCORE_BASE: float = 50.0
 
+# ── 基金 vs 大盤比較:純價格報酬差 + 疊圖窗口(services/benchmark_compare.py,v19.420)──
+# 近 1 年(日曆日,asof 對齊不規則 NAV);共同歷史 < 本值 → 用全期並標 full_period(§1)
+BENCHMARK_WINDOW_DAYS: int = 365
+
 # ── 輪動配對 σ 基期切點 + 買方健康門檻(services/rotation.py,v19.415)──
 # σ rank = 現價在期間高點下方第幾個 σ(負值愈深愈低基期)。跨產業/性質輪動:
 # σ rank ≥ SELL_SIGMA → 高基期(貼近高點=賣);≤ BUY_SIGMA → 低基期(深跌=買)

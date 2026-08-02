@@ -706,6 +706,56 @@ def render_single_fund_tab() -> None:
                         else:
                             st.markdown("🟡 **三率持平**<br>搭配布林研判", unsafe_allow_html=True)
 
+                # ── 📈 vs 大盤(純價格,重設基期=100 疊圖)── v19.420 user 要求 ──
+                try:
+                    import sys as _sys_b
+                    from services.benchmark_compare import excess_return, rebased_pair
+                    from services.capture_ratio import benchmark_for_currency
+                    from services.currency import normalize_ccy
+                    from ui.helpers.fund_grp_health.capture import _benchmark_nav
+                    _ccy_b = normalize_ccy(fd.get("currency"), default="")
+                    if s is not None and len(s) >= 2 and _ccy_b:
+                        _bmk = benchmark_for_currency(_ccy_b)
+                        _bser = _benchmark_nav(_bmk)
+                        if _bser is None or len(_bser) == 0:
+                            # §1:基準抓不到 → 明講,不靜默省略(否則 user 以為功能壞掉)
+                            st.caption(f"⬜ 暫時取不到大盤（{_bmk}）資料 → 無法比較(稍後重試)。")
+                        else:
+                            _pair = rebased_pair(s, _bser)
+                            _ex = excess_return(s, _bser)
+                            _exv = _ex.get("excess_pct")
+                            if _pair is None or _pair.empty or _exv is None:
+                                st.caption("⬜ 基金與大盤共同期間不足 → 暫無法比較(§1 不假造)。")
+                            else:
+                                _win = "全期" if _ex.get("full_period") else "近1年"
+                                st.markdown(f"### 📈 vs 大盤（{_bmk}，{_win}純價格）")
+                                _fig_b = go.Figure()
+                                _fig_b.add_trace(go.Scatter(
+                                    x=_pair.index, y=_pair["基金"], name="基金",
+                                    line=dict(color=MATERIAL_GREEN, width=2)))
+                                _fig_b.add_trace(go.Scatter(
+                                    x=_pair.index, y=_pair["大盤"], name=f"大盤 {_bmk}",
+                                    line=dict(color=GRAY_66, width=1.5, dash="dot")))
+                                _fig_b.update_layout(
+                                    paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                                    font_color=GH_FG_PRIMARY, height=300,
+                                    margin=dict(t=10, b=10, l=5, r=5),
+                                    hovermode="x unified", yaxis_title="重設基期 = 100",
+                                    legend=dict(orientation="h", yanchor="bottom", y=1.02))
+                                st.plotly_chart(_fig_b, use_container_width=True)
+                                _emo = ("🟢 跑贏" if _exv > 0 else
+                                        ("🔴 跑輸" if _exv < 0 else "⚪ 持平"))
+                                _fx = ("" if _ccy_b in ("TWD", "USD")
+                                       else f"⚠️ {_ccy_b} 原幣 vs 美股指數有匯率噪音。")
+                                st.caption(
+                                    f"{_emo}大盤 **{_exv:+.1f} 個百分點**（{_win}純價格:"
+                                    f"基金 {_ex['fund_pct']:+.1f}% vs 大盤 "
+                                    f"{_ex['bench_pct']:+.1f}%）。純淨值對純指數,兩邊皆不含息。{_fx}")
+                except Exception as _e_bmk:  # noqa: BLE001 — 疊圖失敗不擋下方信號
+                    print(f"[tab2 vs大盤] {type(_e_bmk).__name__}: {_e_bmk}",
+                          file=_sys_b.stderr)
+                    st.caption(f"⬜ vs 大盤圖失敗:[{type(_e_bmk).__name__}] {str(_e_bmk)[:60]}")
+
                 st.markdown("### ② 買賣點信號（標準差策略）")
                 # ── MK 標準差買賣點分析 v3.0（3 買 + 3 賣 + 接近度）──
                 _m_buy1 = m.get("buy1"); _m_buy2 = m.get("buy2"); _m_buy3 = m.get("buy3")

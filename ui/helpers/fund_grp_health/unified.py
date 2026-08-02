@@ -26,7 +26,7 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tupl
         hwm_sigma_by_code(funds),
         risk_compare_by_code(funds),
         mk_signal_by_code(funds, phase, score),
-        capture_by_code(funds),   # v19.414 上/下檔捕捉率 + 操盤評分
+        capture_by_code(funds),      # v19.414 上/下檔捕捉率 + 操盤評分;v19.420 + vs 大盤%(同一基準)
     ]
     combined: dict = {}
     col_order: list[str] = []
@@ -64,8 +64,9 @@ _UNIFIED_FRONT: list = [
     # σ 位階 / MK 買賣點(extra;Sharpe/Sortino/Calmar/Alpha 已由 ① 提供故此處不重列)
     ("現價", "extra"), ("HWM", "extra"), ("距 HWM %", "extra"), ("σ rank", "extra"),
     ("HWM 位階", "extra"), ("σ (年化%)", "extra"), ("Beta", "extra"),
-    # 經理人操作能力(v19.414;上/下檔捕捉率 vs 大盤 + 操盤評分)
+    # 經理人操作能力(v19.414;上/下檔捕捉率 vs 大盤 + 操盤評分)+ vs 大盤%(v19.420)
     ("上檔捕捉%", "extra"), ("下檔捕捉%", "extra"), ("操盤評分", "extra"),
+    ("vs 大盤%", "extra"),
     ("資產屬性", "extra"), ("操作訊號", "extra"),
     ("買 3 (深跌)", "extra"), ("買 1 (小跌)", "extra"),
     ("賣 1 (小漲)", "extra"), ("賣 3 (大漲)", "extra"), ("現價位階", "extra"),
@@ -151,6 +152,7 @@ _UNIFIED_NUMERIC: list = [
     "Max DD %", "3Y 年化 %", "5Y 年化 %",
     "1Y 含息 %", "年化配息率 %", "每月配息 (TWD)", "每月配息單位數",
     "上檔捕捉%", "下檔捕捉%", "操盤評分",   # v19.414 經理人操作能力
+    "vs 大盤%",                            # v19.420 近1Y純價格報酬差
 ]
 
 
