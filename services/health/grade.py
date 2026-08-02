@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from shared.colors import CAUTION_YELLOW, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL
-from shared.signal_thresholds import GRADE_CUTOFFS_4D
+from shared.signal_thresholds import GRADE_4D_MIN_FACTORS, GRADE_CUTOFFS_4D
 
 
 # v19.222 P1-1:_safe_float 收口至 shared/converters.py SSOT
@@ -91,8 +91,12 @@ def _score_trend(ma_dir: Optional[str], tr1y_pct: Optional[float]) -> Optional[i
 
 
 def _score_volatility(sigma_pct: Optional[float]) -> Optional[int]:
-    """低波動性 0-100。σ < 10 → 90 / < 15 → 75 / < 20 → 55 / < 30 → 35 / ≥ 30 → 15"""
-    if sigma_pct is None:
+    """低波動性 0-100。σ < 10 → 90 / < 15 → 75 / < 20 → 55 / < 30 → 35 / ≥ 30 → 15
+
+    v19.422:σ ≤ 0 視為**無效/偽造**(真實年化 σ 恆 > 0;稽核 Bug1 發現無歷史基金 σ fallback=0
+    → 被評「最低風險 90 分」)→ 回 None 不計分。
+    """
+    if sigma_pct is None or sigma_pct <= 0:
         return None
     if sigma_pct < 10:
         return 90
@@ -164,7 +168,15 @@ def compute_4d_health(
     f_vol = _score_volatility(_safe_float(sigma_pct))
 
     scores = [x for x in (f_cov, f_sh, f_tr, f_vol) if x is not None]
-    overall = (sum(scores) / len(scores)) if scores else None
+    # v19.422 §1 修(稽核 Bug1):資料不足不硬給評等。原本只平均「算得出來的維度」、無最低數把關
+    # → 單一維度(如僅 σ→90)就評 A「健康優質」,把資料稀疏基金排在完整分析基金之上。
+    # 需 **≥ GRADE_4D_MIN_FACTORS 維度 且 至少一個核心維度(配息 or Sharpe)**,否則 score=None
+    # → grade「—」「資料不足以評等」(user 2026-07-28 拍板)。
+    _core_present = (f_cov is not None) or (f_sh is not None)
+    if len(scores) >= GRADE_4D_MIN_FACTORS and _core_present:
+        overall = sum(scores) / len(scores)
+    else:
+        overall = None
     grade, color, verdict = _grade_from_score(overall)
 
     return {

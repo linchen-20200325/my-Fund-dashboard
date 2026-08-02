@@ -900,35 +900,14 @@ def render_single_fund_tab() -> None:
                         "metrics": m,
                         "dividends": divs,
                     })
-                    _rm = (mj_raw.get("risk_metrics") or {})
-                    _g_sharpe = m.get("sharpe") or (
-                        ((_rm.get("risk_table") or {}).get("一年") or {}).get("Sharpe")
-                    )
-                    _g_sigma = m.get("std_1y") or (
-                        ((_rm.get("risk_table") or {}).get("一年") or {}).get("標準差")
-                    )
-
-                    # 60d MA 方向(UI 端算,因需 nav series 而非純 metrics)
-                    _g_ma_dir = None
-                    try:
-                        import pandas as _pd_g2
-                        if s is not None and hasattr(s, "dropna"):
-                            _ss_t = s.dropna()
-                            if len(_ss_t) >= 3:
-                                _last_t = _ss_t.index[-1]
-                                _60d_ago = _last_t - _pd_g2.Timedelta(days=60)
-                                _recent = _ss_t[_ss_t.index >= _60d_ago]
-                                if len(_recent) >= 2:
-                                    _v_start = float(_recent.iloc[0])
-                                    _v_end = float(_recent.iloc[-1])
-                                    if _v_start > 0:
-                                        _g_ma_dir = "up" if _v_end > _v_start else "down"
-                    except Exception:
-                        pass  # smoke-allow-pass — MA 方向估算失敗不影響其他維度
-
+                    # v19.422 Bug2 修:總覽卡對齊 SSOT(build_health_analysis_row / 大表)——
+                    # 只用 m.get(移除 risk_table fallback)+ ma_dir=None。原本卡片多算了 60日均線方向
+                    # 並多餵 risk_table Sharpe/σ → 走勢分 85 vs SSOT 70 → 同一檔顯示 A vs B(稽核 Bug2)。
+                    _g_sharpe = m.get("sharpe")
+                    _g_sigma = m.get("std_1y")
                     _4d = compute_4d_health(
                         tr1y_pct=_g_tr1y, adr_pct=_g_dy,
-                        sharpe=_g_sharpe, sigma_pct=_g_sigma, ma_dir=_g_ma_dir,
+                        sharpe=_g_sharpe, sigma_pct=_g_sigma, ma_dir=None,
                     )
                     _d1_cov = _4d["factors"]["coverage"]
                     _d2_sh = _4d["factors"]["sharpe"]

@@ -2,6 +2,20 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🐛 2026-07-28 4D 評分 SSOT 不一致修正(2 agent 稽核)v19.422
+
+user 回報:大表 4D=A/90(8檔全90)、Tab2 同頁 總覽卡 A/82 vs 健康分析 B/78.75 不一致。
+2 agent 深挖 + user 拍板修:
+
+- **Bug1(§1 違反)**:`compute_4d_health` 只平均「算得出的維度」、無最低數把關 → 資料稀疏基金
+  (只有 σ<10→90)單維度評 **A「健康優質」**,排在完整分析 B 級之上。查證:exact-90 只可能來自
+  「僅波動維度」。**修**:需 `GRADE_4D_MIN_FACTORS`=2 維度 且 ≥1 核心維度(配息 or Sharpe),
+  否則「⬜ 資料不足以評等」;`_score_volatility` σ≤0(無效/偽造 fallback)→ None 不計分。
+- **Bug2(§2.1 SSOT)**:Tab2 總覽卡自算 60日均線方向 + 多餵 risk_table Sharpe/σ → 走勢 85 vs
+  SSOT 70 → 同檔 A vs B。**修**:總覽卡對齊 SSOT(`build_health_analysis_row`)—— 只用 m.get、
+  ma_dir=None(user 選最小衝擊)。大表/Tab3/輪動/批次原本就是 SSOT(B),不動。
+- 驗:`test_grade_4d_guard` 7 + `test_fund_health_report` 15;σ-only→資料不足、full 4→B/78.75 不變。
+
 ## 📊 2026-07-28 組合分析 ①:組合績效 v19.421
 
 user 要「效率前緣 + 績效 + 景氣位階配置建議」。對齊(§7/§8):3 塊(①績效 ②效率前緣
