@@ -2,6 +2,18 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 📊 2026-07-28 組合分析 ①:組合績效 v19.421
+
+user 要「效率前緣 + 績效 + 景氣位階配置建議」。對齊(§7/§8):3 塊(①績效 ②效率前緣
+③景氣配置=依基金屬性自動標籤,不硬編%矩陣)。**先做 ①**(最安全、②③地基)。
+
+- **L2** `services/portfolio_performance.py`(純數學):`portfolio_returns`(各 NAV+權重 → 組合日報酬,
+  **共同交易日對齊**、固定權重日再平衡、缺料/0權重排除)+ `performance_metrics`(年化幾何報酬 /
+  σ×√252 / Sharpe / 最大回撤)+ `contribution_by_fund`(權重×報酬拆解)。test 7。
+- **L3** `ui/helpers/portfolio_perf.py`:Tab3 持倉重用 `_funds_extra`(不重抓)→ 4 KPI + 貢獻表。
+- §1:rf 明示、固定權重假設明示、排除清單顯示、無 ffill。
+- **②③ 待續**(各自 L2+L3+稽核+PR)。效率前緣附「歷史≠未來」caveat;景氣配置全透明標理由。
+
 ## 📈 2026-07-28 基金 vs 大盤比較(疊圖 + vs 大盤% 欄;3 agent 稽核)v19.420
 
 user 要「與大盤的比較」。對齊(§7/§8)後:**純淨值 vs 純指數**(公平不含息,user 拍板)、

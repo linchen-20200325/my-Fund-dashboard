@@ -40,6 +40,17 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tupl
             for _k in _cols:
                 if _k not in col_order:
                     col_order.append(_k)
+
+    # v19.421 —「基期」標籤欄:由 σ rank 分高/中/低(reuse rotation.classify_base),
+    # 讓 user 一眼看出高基期(貼近高點)/ 低基期(跌深)標的,不必自己讀 σ 數字。
+    from services.rotation import classify_base
+    from shared.signal_thresholds import ROTATION_BUY_SIGMA, ROTATION_SELL_SIGMA
+    _BASE_LBL = {"high": "🔴 高基期", "low": "🟢 低基期", "mid": "⚪ 中性", "unknown": "⬜ 資料不足"}
+    for _slot in combined.values():
+        _slot["基期"] = _BASE_LBL[
+            classify_base(_slot.get("σ rank"), ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA)]
+    if "基期" not in col_order:
+        col_order.append("基期")
     return col_order, combined
 
 
@@ -63,6 +74,7 @@ _UNIFIED_FRONT: list = [
     ("吃本金燈號 (1Y · MK)", "base"), ("換標的建議", "div"), ("MK 3-3-3 篩", "base"),
     # σ 位階 / MK 買賣點(extra;Sharpe/Sortino/Calmar/Alpha 已由 ① 提供故此處不重列)
     ("現價", "extra"), ("HWM", "extra"), ("距 HWM %", "extra"), ("σ rank", "extra"),
+    ("基期", "extra"),   # v19.421 高/中/低基期標籤(由 σ rank 分類,一眼可讀)
     ("HWM 位階", "extra"), ("σ (年化%)", "extra"), ("Beta", "extra"),
     # 經理人操作能力(v19.414;上/下檔捕捉率 vs 大盤 + 操盤評分)+ vs 大盤%(v19.420)
     ("上檔捕捉%", "extra"), ("下檔捕捉%", "extra"), ("操盤評分", "extra"),
