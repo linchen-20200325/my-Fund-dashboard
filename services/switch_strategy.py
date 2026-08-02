@@ -60,20 +60,23 @@ def switch_score(tr1y_pct, sharpe, maxdd_pct, vs_market_pct) -> "int | None":
     return _score
 
 
-def switch_signal(tr1y_pct, sharpe, eat_status, vs_market_pct, dist_hwm_pct, score) -> str:
-    """紅/黃/綠/灰燈。優先序:灰(資料不足) > 紅 > 綠 > 黃(其餘皆觀望)。
+def switch_signal(tr1y_pct, sharpe, eat_status, score) -> str:
+    """紅/黃/綠/灰燈。優先序:紅(嚴重吃本金) > 灰(資料不足) > 紅(含息<0且Sharpe<0) > 綠 > 黃。
 
-    - 🔴:(1Y含息 < 0 且 Sharpe < 0) 或 吃本金含「嚴重」。
+    - 🔴:吃本金含「嚴重」(**不需分數** —— 明確壞資料再少也要示警,§1;稽核 Finding 1 修:
+      不被灰燈蓋掉),或(1Y含息 < 0 且 Sharpe < 0)。
+    - ⬜:分 None 或 Sharpe/含息 缺(且非嚴重)。
     - 🟢:分 ≥ GREEN 且 吃本金「健康」。
-    - 🟡:其餘(含明確條件:vs大盤%<0 且 距HWM%<門檻 / 分<YELLOW → 皆落此)。
-    - ⬜:分 None 或 Sharpe/含息 缺。
+    - 🟡:其餘一律觀望(非紅/綠/灰;明確黃燈條件皆為「非綠」子集,故不另設門檻)。
     """
+    _eat = str(eat_status or "")
+    if "嚴重" in _eat:
+        return RED
     _tr = _num(tr1y_pct)
     _sh = _num(sharpe)
     if score is None or _tr is None or _sh is None:
         return GRAY
-    _eat = str(eat_status or "")
-    if (_tr < 0 and _sh < 0) or ("嚴重" in _eat):
+    if _tr < 0 and _sh < 0:
         return RED
     if score >= SWITCH_GREEN_SCORE and "健康" in _eat:
         return GREEN

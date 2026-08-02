@@ -14,9 +14,9 @@ SWITCH_MAXDD_TIERS: list = [(-15.0, 20), (-25.0, 10)]           # Max DD %(負�
 SWITCH_ALPHA_POINTS: int = 15                                    # vs 大盤% > 0 → 15,否則 0
 
 # ── 燈號門檻 ──
+# 註:非紅/綠/灰 一律歸黃(觀望)—— 明確黃燈條件(分<60 / vs大盤<0&距HWM<-20)皆為「非綠」
+# 子集,故不另設門檻常數(稽核 Finding 2:避免宣告卻不用的死常數 + 誤導文檔)。
 SWITCH_GREEN_SCORE: int = 70            # 分 ≥ 此 且 吃本金「健康」→ 🟢
-SWITCH_YELLOW_SCORE: int = 60           # 分 < 此 → 🟡(明確黃燈條件之一)
-SWITCH_YELLOW_HWM_PCT: float = -20.0    # 距 HWM% < 此 且 vs大盤% < 0 → 🟡
 
 # ── 替換引擎 argmax 權重 + 候選限制(同資產類別「一對一替換」)──
 SWITCH_REPLACE_W_SHARPE: float = 0.4

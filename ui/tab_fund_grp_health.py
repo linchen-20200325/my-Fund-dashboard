@@ -525,6 +525,13 @@ def _render_health_3tables(rows: list[dict],
             help=("現價 vs 期間高點的 σ 位階:🔴 高基期(σ ≥ −0.5,貼近高點、偏貴)/ "
                   "⚪ 中性 / 🟢 低基期(σ ≤ −1.5,跌深、可能均值回歸)/ ⬜ 資料不足。"
                   "可點欄排序,一次挑出所有高基期或低基期標的。")),
+        # v19.423 換標決策(策略燈號 + 策略分;獨立於 4D,專為買賣/換標設計)
+        "策略燈號": _cc.TextColumn("策略燈號", width="small",
+            help=("換標燈號:🔴 賣出/平轉(1Y含息<0 且 Sharpe<0,或 嚴重吃本金)/ 🟡 觀望 / "
+                  "🟢 續抱加碼(分≥70 且 吃本金健康)/ ⬜ 資料不足。可篩選一次挑出所有紅燈檔。")),
+        "換標策略分": _cc.NumberColumn("換標策略分", format="%d",
+            help=("換標策略分 0-100(1Y含息35 + Sharpe30 + MaxDD20 + vs大盤15)。"
+                  "**獨立於 4D 健康度**,專為換標決策設計;缺 Sharpe/含息 → 留白(灰燈)。")),
     }
     # v19.411:② 配息相關表不再單獨渲染,欄位併入健診大表;保留 _div_cfg 供格式重用。
     _div_cfg = {
@@ -696,6 +703,13 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             df, use_container_width=True, hide_index=True,
             column_config={k: v for k, v in _full_cfg.items() if k in df.columns},
         )
+
+        # v19.423 — 🔀 換標決策(大盤 regime banner + 紅燈檔一對一替換);組合/持倉共用此表
+        try:
+            from ui.helpers.fund_grp_health.switch_section import render_switch_section
+            render_switch_section(df.to_dict("records"))
+        except Exception as _e_sw:  # noqa: BLE001 — 換標區塊失敗不擋大表
+            st.caption(f"⬜ 換標決策區塊失敗:[{type(_e_sw).__name__}] {str(_e_sw)[:80]}")
 
         # v19.69 J1：多基金績效比較圖
         if len(ok_rows) >= 2:

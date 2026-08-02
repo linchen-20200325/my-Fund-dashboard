@@ -79,6 +79,7 @@ _UNIFIED_FRONT: list = [
     # 經理人操作能力(v19.414;上/下檔捕捉率 vs 大盤 + 操盤評分)+ vs 大盤%(v19.420)
     ("上檔捕捉%", "extra"), ("下檔捕捉%", "extra"), ("操盤評分", "extra"),
     ("vs 大盤%", "extra"),
+    ("策略燈號", "extra"), ("換標策略分", "extra"),   # v19.423 換標決策(post-merge 覆寫)
     ("資產屬性", "extra"), ("操作訊號", "extra"),
     ("買 3 (深跌)", "extra"), ("買 1 (小跌)", "extra"),
     ("賣 1 (小漲)", "extra"), ("賣 3 (大漲)", "extra"), ("現價位階", "extra"),
@@ -106,6 +107,23 @@ def build_unified_row(base_row: dict, health_row: dict, div_row: dict, extra_row
     columns, col_source = _unified_columns(list(base.keys()))
     src = {"base": base, "health": health_row or {}, "div": div_row or {}, "extra": extra_row or {}}
     return {col: src[col_source[col]].get(col) for col in columns}
+
+
+def compute_switch_columns(row: dict) -> dict:
+    """由已合併/攤平的 row 推導換標策略欄(cross-source:含息 div + Sharpe/MaxDD health +
+    vs大盤 extra + 吃本金 base)→ {換標策略分, 策略燈號}。v19.423。
+
+    兩條大表 build 路徑共用(健診 build_unified_health_df + 批次 build_batch_unified_row)。
+    """
+    from services.switch_strategy import switch_score, switch_signal
+
+    _tr = row.get("1Y 含息 %")
+    _sh = row.get("Sharpe 1Y")
+    _dd = row.get("Max DD %")
+    _vm = row.get("vs 大盤%")
+    _eat = row.get("吃本金燈號 (1Y · MK)")
+    _sc = switch_score(_tr, _sh, _dd, _vm)
+    return {"換標策略分": _sc, "策略燈號": switch_signal(_tr, _sh, _eat, _sc)}
 
 
 def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
@@ -155,6 +173,12 @@ def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
     for _c in _UNIFIED_NUMERIC:
         if _c in df.columns:
             df[_c] = pd.to_numeric(df[_c], errors="coerce")
+
+    # v19.423 — 換標策略欄(cross-source,須 numeric coerce 後才拿得到乾淨 Sharpe/MaxDD/vs大盤)
+    if not df.empty:
+        _sw = [compute_switch_columns(_rec) for _rec in df.to_dict("records")]
+        df["換標策略分"] = [x["換標策略分"] for x in _sw]
+        df["策略燈號"] = [x["策略燈號"] for x in _sw]
     return df
 
 
@@ -165,6 +189,7 @@ _UNIFIED_NUMERIC: list = [
     "1Y 含息 %", "年化配息率 %", "每月配息 (TWD)", "每月配息單位數",
     "上檔捕捉%", "下檔捕捉%", "操盤評分",   # v19.414 經理人操作能力
     "vs 大盤%",                            # v19.420 近1Y純價格報酬差
+    "換標策略分",                          # v19.423 換標策略分(策略燈號為文字不轉)
 ]
 
 
@@ -267,6 +292,8 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
         print(f"[batch] {code} σ/風險/MK 失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
 
     _row = build_unified_row(base, _health, _div, _extra)
+    # v19.423 — 換標策略欄(cross-source,由已組好的 _row 推導;與健診大表同一 compute)
+    _row.update(compute_switch_columns(_row))
     # JSON-safe 收口:防 builder 偶發 numpy/Timestamp 漏進 → 讓 checkpoint json.dump 不炸
     # (否則整輪 20-30 分靜默降級只記憶體;還原舊 flat 路徑的 safe_num 保證)。
     out = {c: _jsonify(_row.get(c)) for c in BATCH_UNIFIED_COLUMNS}

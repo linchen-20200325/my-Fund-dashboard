@@ -37,30 +37,47 @@ def test_score_optional_missing_ok():
 
 # ── 燈號 ────────────────────────────────────────────────
 def test_signal_red_both_negative():
-    assert switch_signal(-5.0, -0.3, "🟡 警示", 1.0, -5.0, 20) == RED
+    assert switch_signal(-5.0, -0.3, "🟡 警示", 20) == RED
 
 
 def test_signal_red_severe_eat():
-    assert switch_signal(3.0, 0.6, "🔴 嚴重的吃本金", 1.0, -5.0, 60) == RED
+    assert switch_signal(3.0, 0.6, "🔴 嚴重的吃本金", 60) == RED
+
+
+def test_signal_red_severe_even_without_score():
+    # 稽核 Finding 1:嚴重吃本金 = 明確賣出,即使 Sharpe/含息/分 皆缺 也是紅燈(不被灰燈蓋)
+    assert switch_signal(None, None, "🔴 嚴重的吃本金(報酬為負)", None) == RED
 
 
 def test_signal_green():
-    assert switch_signal(8.0, 1.0, "🟢🟢 健康", 5.0, -3.0, 85) == GREEN
+    assert switch_signal(8.0, 1.0, "🟢🟢 健康", 85) == GREEN
 
 
 def test_signal_gray_insufficient():
-    assert switch_signal(8.0, 1.0, "健康", 5.0, -3.0, None) == GRAY
-    assert switch_signal(None, 1.0, "健康", 5.0, -3.0, 80) == GRAY
+    assert switch_signal(8.0, 1.0, "健康", None) == GRAY
+    assert switch_signal(None, 1.0, "健康", 80) == GRAY
 
 
 def test_signal_yellow_default():
     # 非紅(tr>0)、非綠(分<70)、非灰 → 黃
-    assert switch_signal(3.0, 0.5, "🟡 警示", -2.0, -25.0, 55) == YELLOW
+    assert switch_signal(3.0, 0.5, "🟡 警示", 55) == YELLOW
 
 
 def test_signal_high_score_but_not_healthy_is_yellow():
     # 分高但吃本金非健康 → 不綠 → 黃
-    assert switch_signal(8.0, 1.0, "🟡 警示", 5.0, -3.0, 85) == YELLOW
+    assert switch_signal(8.0, 1.0, "🟡 警示", 85) == YELLOW
+
+
+def test_compute_switch_columns_reads_real_column_names():
+    """稽核 Finding 6:鎖 cross-source 欄名契約 —— 欄名改掉 → 訊號靜默降級,此測試會抓到。"""
+    from ui.helpers.fund_grp_health.unified import compute_switch_columns
+    _row = {"1Y 含息 %": -5.0, "Sharpe 1Y": -0.3, "Max DD %": -20.0,
+            "vs 大盤%": -2.0, "吃本金燈號 (1Y · MK)": "🔴 嚴重的吃本金", "距 HWM %": "-25%"}
+    assert compute_switch_columns(_row)["策略燈號"] == RED
+    _good = {"1Y 含息 %": 8.0, "Sharpe 1Y": 1.0, "Max DD %": -10.0, "vs 大盤%": 5.0,
+             "吃本金燈號 (1Y · MK)": "🟢 健康"}
+    _r = compute_switch_columns(_good)
+    assert _r["換標策略分"] == 100 and _r["策略燈號"] == GREEN
 
 
 # ── 替換引擎(同類別 argmax)────────────────────────────
