@@ -2,6 +2,15 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🧭 2026-07-28 組合分析 ③:景氣位階適配 L3 接線 v19.425
+
+③ L2(v19.424 commit)已建。L3 接上:
+- 「景氣適配」(✅順風/⚠️逆風/⚪全景氣/⬜無法判定)+「適配傾向」(best-fit 景氣)兩欄 →
+  `compute_regime_fit_column` post-merge → **組合/持倉/批次三張大表**(`build_unified_health_df`
+  加 `current_regime` 參數;`build_batch_unified_row` 用既有 `phase`)。phase 讀 session phase_info。
+- 🧭 景氣適配摘要區(當前景氣 + 順/逆/全景氣/無法判定 計數 + 逆風清單)三張。
+- **參考傾向、非買賣建議、非 % 配置**(§1);景氣未偵測 / 缺類別 → ⬜。
+
 ## 🎯 2026-07-28 組合分析 ②:效率前緣診斷(design + 稽核 agent)v19.424
 
 user 要「效率前緣」。**design agent 出規格** → 建。**教學診斷、非投資建議**(§1 重 caveat:

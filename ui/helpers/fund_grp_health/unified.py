@@ -80,6 +80,7 @@ _UNIFIED_FRONT: list = [
     ("上檔捕捉%", "extra"), ("下檔捕捉%", "extra"), ("操盤評分", "extra"),
     ("vs 大盤%", "extra"),
     ("策略燈號", "extra"), ("換標策略分", "extra"),   # v19.423 換標決策(post-merge 覆寫)
+    ("景氣適配", "extra"), ("適配傾向", "extra"),      # v19.425 景氣位階適配(post-merge 覆寫)
     ("資產屬性", "extra"), ("操作訊號", "extra"),
     ("買 3 (深跌)", "extra"), ("買 1 (小跌)", "extra"),
     ("賣 1 (小漲)", "extra"), ("賣 3 (大漲)", "extra"), ("現價位階", "extra"),
@@ -126,8 +127,23 @@ def compute_switch_columns(row: dict) -> dict:
     return {"換標策略分": _sc, "策略燈號": switch_signal(_tr, _sh, _eat, _sc)}
 
 
+def compute_regime_fit_column(row: dict, current_regime) -> dict:
+    """由 row(基金類別/核心衛星/上下檔捕捉)+ 當前景氣 → {景氣適配, 適配傾向}。v19.425。
+
+    景氣適配 = ✅順風/⚠️逆風/⚪全景氣/⬜無法判定;適配傾向 = best_fit 景氣(全景氣/—)。
+    景氣為 calc_macro_phase 的 phase(衰退/復甦/擴張/高峰,已 cache 於 phase_info)。
+    """
+    from services.regime_fit import tag_regime_fit
+
+    _t = tag_regime_fit(row.get("基金類別"), row.get("核心/衛星"),
+                        row.get("上檔捕捉%"), row.get("下檔捕捉%"), current_regime)
+    _best = _t["best_fit_regimes"]
+    _tend = "全景氣" if _best == ["ALL"] else ("、".join(_best) if _best else "—")
+    return {"景氣適配": _t["fit_vs_current"], "適配傾向": _tend}
+
+
 def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
-                            extra_by_code: dict):
+                            extra_by_code: dict, current_regime=None):
     """把 ①②③ + σ/風險/MK 依 code join 成一張去重複寬表(§1:缺欄留 None)。
 
     - base_df:③ 健診總表 DataFrame(含 code 欄 + 全期實際/年化 self-calc + 持有 meta)。
@@ -176,9 +192,14 @@ def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
 
     # v19.423 — 換標策略欄(cross-source,須 numeric coerce 後才拿得到乾淨 Sharpe/MaxDD/vs大盤)
     if not df.empty:
-        _sw = [compute_switch_columns(_rec) for _rec in df.to_dict("records")]
+        _recs = df.to_dict("records")
+        _sw = [compute_switch_columns(_rec) for _rec in _recs]
         df["換標策略分"] = [x["換標策略分"] for x in _sw]
         df["策略燈號"] = [x["策略燈號"] for x in _sw]
+        # v19.425 — 景氣適配欄(依資產屬性 + 捕捉 對照當前景氣)
+        _rf = [compute_regime_fit_column(_rec, current_regime) for _rec in _recs]
+        df["景氣適配"] = [x["景氣適配"] for x in _rf]
+        df["適配傾向"] = [x["適配傾向"] for x in _rf]
     return df
 
 
@@ -294,6 +315,8 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
     _row = build_unified_row(base, _health, _div, _extra)
     # v19.423 — 換標策略欄(cross-source,由已組好的 _row 推導;與健診大表同一 compute)
     _row.update(compute_switch_columns(_row))
+    # v19.425 — 景氣適配欄(phase 即當前景氣位階,批次已帶入)
+    _row.update(compute_regime_fit_column(_row, phase))
     # JSON-safe 收口:防 builder 偶發 numpy/Timestamp 漏進 → 讓 checkpoint json.dump 不炸
     # (否則整輪 20-30 分靜默降級只記憶體;還原舊 flat 路徑的 safe_num 保證)。
     out = {c: _jsonify(_row.get(c)) for c in BATCH_UNIFIED_COLUMNS}

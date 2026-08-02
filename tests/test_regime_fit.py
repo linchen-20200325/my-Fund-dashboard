@@ -97,3 +97,24 @@ def test_never_raises_on_garbage():
     for args in [(None, None, None, None, None), (123, [], "x", {}, object()), ("股", "核心", "a", "b", "z")]:
         r = tag_regime_fit(*args)
         assert r["fit_vs_current"] in ("✅ 順風", "⚠️ 逆風", "⚪ 全景氣", "⬜ 無法判定")
+
+
+# ── 稽核 Finding1:平衡關鍵字不得誤吞單一資產債券基金 ──────────
+def test_bond_with_leaky_keyword_not_all_weather():
+    for _cat in ("目標到期債券", "全球債券組合基金", "新興市場債券組合", "多重收益債券"):
+        b = asset_bucket(_cat)[0]
+        assert b == "防禦債", f"{_cat} 應為防禦債,誤判為 {b}"
+    # 真平衡仍是 ALL
+    assert asset_bucket("股債均衡基金")[0] == "平衡多重"
+    assert asset_bucket("全球多重資產")[0] == "平衡多重"
+    assert asset_bucket("目標日期2050基金")[0] == "平衡多重"     # 目標日期(≠目標到期)= 多資產
+
+
+# ── 稽核 Finding6:cross-source 欄名契約(改欄名 → 靜默降級,此測會抓)──────
+def test_compute_regime_fit_column_reads_real_names():
+    from ui.helpers.fund_grp_health.unified import compute_regime_fit_column
+    _row = {"基金類別": "全球投資等級債券", "核心/衛星": "🟠 衛星", "上檔捕捉%": 40, "下檔捕捉%": 60}
+    _r = compute_regime_fit_column(_row, "衰退")
+    assert _r["景氣適配"] == "✅ 順風" and "衰退" in _r["適配傾向"]
+    _bad = {"基金類別 (renamed)": "全球投資等級債券", "核心/衛星": "衛星"}   # 欄名改掉
+    assert compute_regime_fit_column(_bad, "衰退")["景氣適配"] == "⬜ 無法判定"

@@ -532,6 +532,13 @@ def _render_health_3tables(rows: list[dict],
         "換標策略分": _cc.NumberColumn("換標策略分", format="%d",
             help=("換標策略分 0-100(1Y含息35 + Sharpe30 + MaxDD20 + vs大盤15)。"
                   "**獨立於 4D 健康度**,專為換標決策設計;缺 Sharpe/含息 → 留白(灰燈)。")),
+        # v19.425 景氣適配(依資產屬性+捕捉對照當前景氣;參考傾向非買賣建議)
+        "景氣適配": _cc.TextColumn("景氣適配", width="small",
+            help=("依資產類別 + 抗跌/追漲能力,對照**當前景氣位階**(頁首 Phase):✅ 順風 / "
+                  "⚠️ 逆風 / ⚪ 全景氣(核心/平衡)/ ⬜ 無法判定(缺類別或景氣未偵測)。"
+                  "**參考傾向,非買賣建議、非 % 配置**。")),
+        "適配傾向": _cc.TextColumn("適配傾向", width="small",
+            help="此基金資產屬性最適合的景氣位階(復甦/擴張/高峰/衰退;全景氣=平衡多重)。"),
     }
     # v19.411:② 配息相關表不再單獨渲染,欄位併入健診大表;保留 _div_cfg 供格式重用。
     _div_cfg = {
@@ -626,8 +633,11 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         if health_by_code or div_by_code or extra_by_code:
             try:
                 from ui.helpers.fund_grp_health.unified import build_unified_health_df
+                _regime = (st.session_state.get("phase_info") or {}).get("phase") \
+                    if hasattr(st, "session_state") else None       # v19.425 當前景氣位階
                 df = build_unified_health_df(
-                    df, health_by_code or {}, div_by_code or {}, extra_by_code or {})
+                    df, health_by_code or {}, div_by_code or {}, extra_by_code or {},
+                    current_regime=_regime)
             except Exception as _e_merge:  # noqa: BLE001 — 合併失敗不擋健診總表
                 st.caption(f"⬜ ①②③ 合併大表失敗:"
                            f"[{type(_e_merge).__name__}] {str(_e_merge)[:80]}")
@@ -710,6 +720,13 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             render_switch_section(df.to_dict("records"))
         except Exception as _e_sw:  # noqa: BLE001 — 換標區塊失敗不擋大表
             st.caption(f"⬜ 換標決策區塊失敗:[{type(_e_sw).__name__}] {str(_e_sw)[:80]}")
+
+        # v19.425 — 🧭 景氣位階適配摘要
+        try:
+            from ui.helpers.fund_grp_health.regime_section import render_regime_fit_section
+            render_regime_fit_section(df.to_dict("records"))
+        except Exception as _e_rf:  # noqa: BLE001
+            st.caption(f"⬜ 景氣適配區塊失敗:[{type(_e_rf).__name__}] {str(_e_rf)[:80]}")
 
         # v19.69 J1：多基金績效比較圖
         if len(ok_rows) >= 2:
