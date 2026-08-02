@@ -2,6 +2,19 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🎯 2026-07-28 組合分析 ②:效率前緣診斷(design + 稽核 agent)v19.424
+
+user 要「效率前緣」。**design agent 出規格** → 建。**教學診斷、非投資建議**(§1 重 caveat:
+歷史平均當預期報酬預測力弱 + 樣本共變異數噪音被最佳化放大成極端不穩權重 error maximization)。
+
+- **L2** `services/portfolio_frontier.py`(scipy SLSQP,純數學):`efficient_frontier_diagnostic`
+  一站式 —— 對齊共同交易日(重用 portfolio_performance._clean_nav)→ 年化 μ/Σ → 前緣(target grid,
+  非收斂跳過不外插)+ max-Sharpe + min-var + 蒙地卡羅隨機雲(Dirichlet 向量化)+ current 落點。
+  近奇異 → 微脊 + ridge_applied 旗標;<2檔/短史/無共同日 → ok=False;退化μ/低信賴 旗標。test 13。
+- **L3** `ui/helpers/portfolio_perf.py::render_efficient_frontier`:Tab3 持倉,plotly 雲(Sharpe 著色)
+  + 前緣線 + 目前組合★ + max-Sharpe◆/min-var■ + 「示範權重切勿照做」+ 旗標 caption。caveat 先於圖。
+- SSOT `FRONTIER_*` 9 常數(signal_thresholds)。③ 景氣配置 design 完成待建。
+
 ## 🔀 2026-07-28 換標決策引擎(策略燈號 + 一對一替換 + regime)v19.423
 
 user spec:健康度評分→燈號→一對一替換→大盤 regime。**決定**:獨立「換標策略分」(不混 4D)、

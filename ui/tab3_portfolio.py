@@ -2394,13 +2394,17 @@ def render_portfolio_tab() -> None:
                         f"{type(_e_rot).__name__}: {str(_e_rot)[:80]}"
                     )
 
-                # v19.421 — 📊 組合績效(① 塊;效率前緣/景氣配置後續同區塊補)。重用 _funds_extra。
+                # v19.421 — 📊 組合績效(①);v19.424 — 🎯 效率前緣(②)。重用 _funds_extra。
                 try:
-                    from ui.helpers.portfolio_perf import render_portfolio_performance
+                    from ui.helpers.portfolio_perf import (
+                        render_efficient_frontier,
+                        render_portfolio_performance,
+                    )
                     render_portfolio_performance(_funds_extra)
+                    render_efficient_frontier(_funds_extra)
                 except Exception as _e_pp:
                     st.caption(
-                        f"⬜ 組合績效渲染失敗:"
+                        f"⬜ 組合分析(績效/前緣)渲染失敗:"
                         f"{type(_e_pp).__name__}: {str(_e_pp)[:80]}"
                     )
             except Exception as _e_ph:

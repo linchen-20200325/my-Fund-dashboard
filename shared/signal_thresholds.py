@@ -161,6 +161,17 @@ CAPTURE_SCORE_BASE: float = 50.0
 # 近 1 年(日曆日,asof 對齊不規則 NAV);共同歷史 < 本值 → 用全期並標 full_period(§1)
 BENCHMARK_WINDOW_DAYS: int = 365
 
+# ── 效率前緣診斷(services/portfolio_frontier.py,v19.424;教學非建議)────────────
+FRONTIER_RF_ANNUAL: float = 0.0        # 無風險利率(年,decimal);與 performance_metrics 一致
+FRONTIER_N_RANDOM: int = 3000          # 蒙地卡羅隨機組合雲點數(向量化)
+FRONTIER_GRID_SIZE: int = 40           # 效率前緣目標報酬格點數(min μ → max μ)
+FRONTIER_MIN_OBS: int = 60             # 共同交易日 < 本值 → 不計算(§1 樣本太少不給假精確)
+FRONTIER_ROBUST_OBS: int = 252         # < 本值(1 年)→ low_confidence 旗標
+FRONTIER_RANDOM_SEED: int = 42         # 隨機雲種子(可重現,§5)
+FRONTIER_COND_MAX: float = 1e10        # cond(Σ) > 本值 → near_singular 旗標 + 微脊
+FRONTIER_RIDGE_EPS: float = 1e-8       # 微脊 = eps × mean(diag Σ);僅 near_singular 加,ridge_applied 揭露
+FRONTIER_MU_SPREAD_MIN: float = 1e-6   # max(μ)−min(μ) < 本值 → mu_degenerate(前緣退化單點)
+
 # ── 輪動配對 σ 基期切點 + 買方健康門檻(services/rotation.py,v19.415)──
 # σ rank = 現價在期間高點下方第幾個 σ(負值愈深愈低基期)。跨產業/性質輪動:
 # σ rank ≥ SELL_SIGMA → 高基期(貼近高點=賣);≤ BUY_SIGMA → 低基期(深跌=買)
