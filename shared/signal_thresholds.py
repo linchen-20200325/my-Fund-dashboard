@@ -71,6 +71,9 @@ MJ_FRESH_DAYS_YELLOW: int = 7
 
 # ── 基金健康度 4D 評分 Grade cutoffs(services/fund_health.py,v19.177 #4B)──
 GRADE_CUTOFFS_4D: tuple[int, int, int, int] = (80, 65, 50, 35)
+# v19.422 §1:4D 評等最低維度數 —— 不足(或缺配息+Sharpe 兩核心維度)→「資料不足以評等」,
+# 不再用單一維度(如僅 σ)硬給 A(稽核 Bug1:資料稀疏基金被評「健康優質」排在完整分析之上)
+GRADE_4D_MIN_FACTORS: int = 2
 # A ≥ 80 / B ≥ 65 / C ≥ 50 / D ≥ 35 / F < 35。
 # 全站個檔基金健康度評等 SSOT(Tab2 KPI 卡 / Tab3 fund 評等共用),
 # 取代 portfolio_service 6 因子 (75, 55, 40) 三級制(已 deprecated for grading,

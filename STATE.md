@@ -2,6 +2,32 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🐛 2026-07-28 4D 評分 SSOT 不一致修正(2 agent 稽核)v19.422
+
+user 回報:大表 4D=A/90(8檔全90)、Tab2 同頁 總覽卡 A/82 vs 健康分析 B/78.75 不一致。
+2 agent 深挖 + user 拍板修:
+
+- **Bug1(§1 違反)**:`compute_4d_health` 只平均「算得出的維度」、無最低數把關 → 資料稀疏基金
+  (只有 σ<10→90)單維度評 **A「健康優質」**,排在完整分析 B 級之上。查證:exact-90 只可能來自
+  「僅波動維度」。**修**:需 `GRADE_4D_MIN_FACTORS`=2 維度 且 ≥1 核心維度(配息 or Sharpe),
+  否則「⬜ 資料不足以評等」;`_score_volatility` σ≤0(無效/偽造 fallback)→ None 不計分。
+- **Bug2(§2.1 SSOT)**:Tab2 總覽卡自算 60日均線方向 + 多餵 risk_table Sharpe/σ → 走勢 85 vs
+  SSOT 70 → 同檔 A vs B。**修**:總覽卡對齊 SSOT(`build_health_analysis_row`)—— 只用 m.get、
+  ma_dir=None(user 選最小衝擊)。大表/Tab3/輪動/批次原本就是 SSOT(B),不動。
+- 驗:`test_grade_4d_guard` 7 + `test_fund_health_report` 15;σ-only→資料不足、full 4→B/78.75 不變。
+
+## 📊 2026-07-28 組合分析 ①:組合績效 v19.421
+
+user 要「效率前緣 + 績效 + 景氣位階配置建議」。對齊(§7/§8):3 塊(①績效 ②效率前緣
+③景氣配置=依基金屬性自動標籤,不硬編%矩陣)。**先做 ①**(最安全、②③地基)。
+
+- **L2** `services/portfolio_performance.py`(純數學):`portfolio_returns`(各 NAV+權重 → 組合日報酬,
+  **共同交易日對齊**、固定權重日再平衡、缺料/0權重排除)+ `performance_metrics`(年化幾何報酬 /
+  σ×√252 / Sharpe / 最大回撤)+ `contribution_by_fund`(權重×報酬拆解)。test 7。
+- **L3** `ui/helpers/portfolio_perf.py`:Tab3 持倉重用 `_funds_extra`(不重抓)→ 4 KPI + 貢獻表。
+- §1:rf 明示、固定權重假設明示、排除清單顯示、無 ffill。
+- **②③ 待續**(各自 L2+L3+稽核+PR)。效率前緣附「歷史≠未來」caveat;景氣配置全透明標理由。
+
 ## 📈 2026-07-28 基金 vs 大盤比較(疊圖 + vs 大盤% 欄;3 agent 稽核)v19.420
 
 user 要「與大盤的比較」。對齊(§7/§8)後:**純淨值 vs 純指數**(公平不含息,user 拍板)、
