@@ -2,6 +2,19 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 🔀 2026-07-28 換標決策引擎 L2(v19.423,L3 待接)
+
+user spec:健康度評分→燈號→一對一替換→大盤 regime。**決定**:獨立「換標策略分」(不混 4D)、
+選股訊號用 **vs 大盤%**、資料不足→灰燈、替換=**同資產類別**(輪動則跨類別)。
+
+- **SSOT** `shared/switch_thresholds.py`:策略分 tier + 燈號門檻 + 替換 argmax 權重 + regime 比例。
+- **L2** `services/switch_strategy.py`(純函式):`switch_score`(35/30/20/15;缺核心→None)+
+  `switch_signal`(🔴/🟡/🟢/⬜,優先序 灰>紅>綠>黃)+ `replacement_candidate`(同類 argmax
+  Sharpe·0.4+含息·0.4+Sortino·0.2,限綠燈/健康+Sharpe≥0.5+費用<1.5%+總報酬>0)+
+  `market_regime_alert`(同池>80% Sharpe 負→系統性風險暫緩)+ `execution_advice`。test 19。
+- **L3 待接**:策略燈號+策略分兩欄(build_unified_health_df + build_batch_unified_row 兩路,
+  cross-source post-merge)三張大表;替換建議區 + regime banner 三張。
+
 ## 🐛 2026-07-28 4D 評分 SSOT 不一致修正(2 agent 稽核)v19.422
 
 user 回報:大表 4D=A/90(8檔全90)、Tab2 同頁 總覽卡 A/82 vs 健康分析 B/78.75 不一致。
