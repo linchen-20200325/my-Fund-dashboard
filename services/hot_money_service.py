@@ -11,6 +11,15 @@ import ...`,屬未登錄的 L3→L1 直呼。本 facade 提供 L2 取數入口,�
 from __future__ import annotations
 
 
+def fetch_usdtwd_frame(days: int):
+    """USDTWD 序列 L2 facade → L1 `fetch_usdtwd_series`(v19.426 匯率位階用,避免整組熱錢抓取)。
+
+    → (df[date, usdtwd], err)。err 非空 / df 空 = fail-loud 旗標(§1)。lazy import 同本檔慣例。
+    """
+    from repositories.hot_money_repository import fetch_usdtwd_series
+    return fetch_usdtwd_series(days)
+
+
 def fetch_hot_money_frames(days: int, token: str = ""):
     """取外資淨買賣超序列 + USDTWD 匯率序列(L2 facade → L1 hot_money_repository)。
 

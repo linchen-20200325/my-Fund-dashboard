@@ -2,6 +2,19 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## 💱 2026-07-28 淨值 × 匯率 二維買賣切換(design agent)v19.426
+
+user:外幣基金應有「淨值高低 + 匯率高低」買賣切換。design agent 出規格 → 建。
+
+- **匯率位階**:USDTWD 現值相對**近一年均值**的 z-score(非 HWM —— 匯率對稱均值回歸,買低賣高兩向都量)。
+  z 負=USDTWD 低=台幣強=進場有利(與 NAV σ rank 同向)。切點 ±0.7σ(SSOT `FX_*`)。
+- **L2** `services/nav_fx_switch.py`(純):`fx_regime`(強/中/弱,缺料/σ=0→None)+ `nav_fx_signal`
+  (3×3 只兩角有向:低+強=🟢雙便宜進場 / 高+弱=🔴雙貴出場,其餘 ⚪;缺軸 → ⬜)。test 16。
+- **L3**:`fx_regime.py` fetch-once(USDTWD module cache,400 檔只抓一次;走 L2 facade
+  `hot_money_service.fetch_usdtwd_frame` 不直呼 L1)+ `compute_nav_fx_column` post-merge →
+  「匯率位階」+「淨值×匯率」兩欄 → 組合/持倉/批次三張大表。台幣計價 ➖;非 USD/缺料 → ⬜(§1)。
+- **Phase 1 只 USD**(唯一有歷史 fetcher);EUR/JPY 待 user 點名(§-1)。匯率難預測 → 參考傾向非擇時保證。
+
 ## ✅ 2026-07-28 存檔:組合分析 ①②③ + 換標決策引擎 全上線 main
 
 本輪(user 連續要求,全用「總管派 design agent 出規格 → 建 → 稽核 agent 對抗式驗 → 修」流程):

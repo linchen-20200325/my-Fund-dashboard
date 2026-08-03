@@ -172,6 +172,17 @@ FRONTIER_COND_MAX: float = 1e10        # cond(Σ) > 本值 → near_singular 旗
 FRONTIER_RIDGE_EPS: float = 1e-8       # 微脊 = eps × mean(diag Σ);僅 near_singular 加,ridge_applied 揭露
 FRONTIER_MU_SPREAD_MIN: float = 1e-6   # max(μ)−min(μ) < 本值 → mu_degenerate(前緣退化單點)
 
+# ── 匯率位階 σ 切點 + 回看窗(services/nav_fx_switch.py,v19.426)──
+# USDTWD 現值相對「近一年均值」的 z-score。sign convention(§4.1):
+#   z 負 = USDTWD 低於均值 = 台幣強(TWD→USD 換匯便宜)= 進場有利
+#   z 正 = USDTWD 高於均值 = 台幣弱(換回 TWD 划算)      = 出場有利
+# 與 NAV σ rank 同向:兩軸皆「愈負 = 愈進場有利」。
+FX_REGIME_WINDOW_DAYS: int = 365   # 回看窗(日曆日;≈250 交易日,對齊 NAV 252 lookback)
+FX_REGIME_MIN_OBS: int = 60        # 有效點 < 此 → ⬜ 無法判定(§1 短歷史不假精確)
+FX_REGIME_ROBUST_OBS: int = 180    # < 此 → low-confidence(仍顯示,標「*」參考)
+FX_STRONG_TWD_SIGMA: float = -0.7  # z ≤ 此 → 台幣強
+FX_WEAK_TWD_SIGMA: float = 0.7     # z ≥ 此 → 台幣弱
+
 # ── 輪動配對 σ 基期切點 + 買方健康門檻(services/rotation.py,v19.415)──
 # σ rank = 現價在期間高點下方第幾個 σ(負值愈深愈低基期)。跨產業/性質輪動:
 # σ rank ≥ SELL_SIGMA → 高基期(貼近高點=賣);≤ BUY_SIGMA → 低基期(深跌=買)
