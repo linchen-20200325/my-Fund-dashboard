@@ -410,7 +410,6 @@ def _render_health_3tables(rows: list[dict],
     # v19.322 SSOT 去重(顯示層 chokepoint):健診 Tab + Tab3 embed 皆經此;同 code 多筆
     # (多保單持同檔)只留第一筆 → 持有 meta / 配息事件 / 比較圖三表不再重複列。
     rows = _dedup_rows_by_code(rows)
-    import pandas as pd
     from streamlit import column_config as _cc
     from services.health.report import (
         build_dividend_summary_row,

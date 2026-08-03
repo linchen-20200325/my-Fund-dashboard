@@ -83,7 +83,7 @@ def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame,
     df = pd.DataFrame(rows)
     name_col = next((c for c in ("name", "institutional_investors") if c in df.columns), None)
     if name_col is None:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), f"FinMind 缺類別欄"
+        return pd.DataFrame(columns=["date", "foreign_net_yi"]), "FinMind 缺類別欄"
     mask = df[name_col].astype(str).str.contains("Foreign|外資", case=False, na=False, regex=True)
     fdf = df.loc[mask].copy()
     if fdf.empty:
