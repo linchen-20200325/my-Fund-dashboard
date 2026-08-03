@@ -302,6 +302,20 @@ def _render_existing_results() -> None:
     from ui.helpers.fund_grp_health.rotation import render_rotation_section_from_df
     render_rotation_section_from_df(df)
 
+    # ── 🔀 換標決策(策略燈號已在上表;此區 regime banner + 紅燈檔一對一替換)── v19.423 ──
+    try:
+        from ui.helpers.fund_grp_health.switch_section import render_switch_section
+        render_switch_section(df.to_dict("records"))
+    except Exception as _e_sw:  # noqa: BLE001
+        st.caption(f"⬜ 換標決策區塊失敗:[{type(_e_sw).__name__}] {str(_e_sw)[:80]}")
+
+    # ── 🧭 景氣位階適配摘要 ── v19.425 ──
+    try:
+        from ui.helpers.fund_grp_health.regime_section import render_regime_fit_section
+        render_regime_fit_section(df.to_dict("records"))
+    except Exception as _e_rf:  # noqa: BLE001
+        st.caption(f"⬜ 景氣適配區塊失敗:[{type(_e_rf).__name__}] {str(_e_rf)[:80]}")
+
     with st.expander("ℹ️ 欄位說明 / 這張表沒有什麼", expanded=False):
         st.markdown(
             "- 本表 = **組合健診大表**(①健康分析 + ②配息相關 + ③實際購買結果 + σ/風險/MK)。\n"
@@ -317,5 +331,11 @@ def _render_existing_results() -> None:
             "歷史不足 1 年 → 用全期。\n"
             "- **基期**:🔴 高基期(σ≥−0.5 貼近高點)/ ⚪ 中性 / 🟢 低基期(σ≤−1.5 跌深)——"
             "可篩選一次挑出所有高/低基期標的(門檻同輪動配對)。\n"
+            "- **策略燈號 / 換標策略分**:換標決策(獨立於 4D)—— 🔴 賣出/平轉、🟡 觀望、"
+            "🟢 續抱加碼、⬜ 資料不足;分 = 1Y含息35+Sharpe30+MaxDD20+vs大盤15。下方「🔀 換標決策」"
+            "區給紅燈檔的同類一對一替換建議 + 大盤 regime 提醒。\n"
+            "- **景氣適配 / 適配傾向**:依資產屬性 + 抗跌/追漲對照**當前景氣位階**——"
+            "✅順風 / ⚠️逆風 / ⚪全景氣 / ⬜無法判定(參考傾向,非買賣建議、非%配置)。"
+            "⚠️ 批次表的景氣適配**以各檔跑批當下的景氣位階為準**;若景氣位階變動請重跑。\n"
             "- ⚠️ **不含**:AI 跨檔評論、逐檔持股明細 —— 小 N 深看功能,請到「💊 組合健診」做。"
         )
