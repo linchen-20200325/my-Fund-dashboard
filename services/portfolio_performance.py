@@ -94,36 +94,64 @@ def portfolio_returns(nav_by_code: dict, weights: dict):
     return _port, list(cleaned.keys()), _w, excluded
 
 
+def metrics_from_return_series(daily_returns, rf_annual: float = 0.0) -> dict:
+    """日報酬 Series → 風險調整指標(組合層 SSOT)。<2 有效點 → 全 None。
+
+    CAGR = 幾何((1+累積)^(252/n)−1);波動 = std(ddof=1)×√252;Sharpe =(CAGR−rf)/波動
+    (波動=0 → None,§1 不硬除);最大回撤 = min(累積/前高−1);Calmar = CAGR/|MaxDD|
+    (無回撤 → None,不除零)。start/end 由序列 index 首末日期。
+    """
+    _s = pd.Series(daily_returns).dropna()
+    _n = len(_s)
+    _blank = {"cagr_pct": None, "ann_vol_pct": None, "sharpe": None,
+              "max_drawdown_pct": None, "calmar": None, "n_days": _n,
+              "start": None, "end": None}
+    if _n < 2:
+        return _blank
+    _tpy = TRADING_DAYS_PER_YEAR
+
+    _cum = float((1.0 + _s).prod())             # 累積乘積(= 期末/期初)
+    _cagr = _cum ** (_tpy / _n) - 1.0 if _cum > 0 else None
+    _ann_vol = float(_s.std(ddof=1)) * np.sqrt(_tpy)
+    _sharpe = ((_cagr - rf_annual) / _ann_vol
+               if (_cagr is not None and _ann_vol and _ann_vol > 0) else None)
+
+    _curve = (1.0 + _s).cumprod()
+    _dd = float((_curve / _curve.cummax() - 1.0).min())
+    _calmar = (_cagr / abs(_dd)) if (_cagr is not None and _dd < 0) else None
+
+    return {
+        "cagr_pct": round(_cagr * 100.0, 2) if _cagr is not None else None,
+        "ann_vol_pct": round(_ann_vol * 100.0, 2),
+        "sharpe": round(_sharpe, 2) if _sharpe is not None else None,
+        "max_drawdown_pct": round(_dd * 100.0, 2),
+        "calmar": round(_calmar, 2) if _calmar is not None else None,
+        "n_days": _n,
+        "start": str(_s.index[0].date()) if hasattr(_s.index[0], "date") else str(_s.index[0]),
+        "end": str(_s.index[-1].date()) if hasattr(_s.index[-1], "date") else str(_s.index[-1]),
+    }
+
+
 def performance_metrics(nav_by_code: dict, weights: dict, rf_annual: float = 0.0) -> dict:
     """組合績效:{年化報酬% / 年化波動% / Sharpe / 最大回撤% / n_days / start / end / …}。
 
-    年化報酬 = 幾何((1+累積)^(252/n)−1);波動 = 日報酬 std(ddof=1)×√252;
-    Sharpe =(年化報酬 − rf)/ 年化波動(波動=0 → None,§1 不硬除);最大回撤 = min(累積/前高−1)。
+    數學收口至 `metrics_from_return_series`(SSOT);本函式維持既有出口鍵名 + 組合層欄位
+    (n_funds_used / excluded / assumption),向後相容零變化。
     """
     _res = portfolio_returns(nav_by_code, weights)
     if _res is None:
         return dict(_BLANK)
     _port, _used, _w, _excluded = _res
-    _n = len(_port)
-    _tpy = TRADING_DAYS_PER_YEAR
-
-    _cum = float((1.0 + _port).prod())          # 累積乘積(= 期末/期初)
-    _ann_ret = _cum ** (_tpy / _n) - 1.0 if _cum > 0 else None
-    _ann_vol = float(_port.std(ddof=1)) * np.sqrt(_tpy) if _n >= 2 else None
-    _sharpe = ((_ann_ret - rf_annual) / _ann_vol
-               if (_ann_ret is not None and _ann_vol and _ann_vol > 0) else None)
-
-    _curve = (1.0 + _port).cumprod()
-    _dd = float((_curve / _curve.cummax() - 1.0).min())
+    _base = metrics_from_return_series(_port, rf_annual)
 
     return {
-        "ann_return_pct": round(_ann_ret * 100.0, 2) if _ann_ret is not None else None,
-        "ann_vol_pct": round(_ann_vol * 100.0, 2) if _ann_vol is not None else None,
-        "sharpe": round(_sharpe, 2) if _sharpe is not None else None,
-        "max_drawdown_pct": round(_dd * 100.0, 2),
-        "n_days": _n,
-        "start": str(_port.index[0].date()),
-        "end": str(_port.index[-1].date()),
+        "ann_return_pct": _base["cagr_pct"],
+        "ann_vol_pct": _base["ann_vol_pct"],
+        "sharpe": _base["sharpe"],
+        "max_drawdown_pct": _base["max_drawdown_pct"],
+        "n_days": _base["n_days"],
+        "start": _base["start"],
+        "end": _base["end"],
         "n_funds_used": len(_used),
         "excluded": _excluded,
         "rf_annual": rf_annual,

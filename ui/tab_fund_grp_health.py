@@ -193,6 +193,17 @@ def render_fund_grp_health_tab() -> None:
     # v19.347：健檢 Tab 開「🎯 選基金（低基期）」;Tab3 持倉健診不開(預設 False)。
     _render_health_3tables(rows, funds_extra=_funds_extra, show_screener=True)
 
+    # v19.427:🔁 配置回測(哪套配置效益最高 + 三輸出)。重用 _funds_extra(原幣 NAV + 幣別),
+    # 走 L2 services.allocation_backtest;抓失敗/資料不足由 section 內誠實顯示,不拖垮整頁(§1)。
+    if _funds_extra:
+        try:
+            from ui.helpers.fund_grp_health.backtest_section import render_allocation_backtest_section
+            render_allocation_backtest_section(_funds_extra)
+        except Exception as _e_bt:
+            st.caption(
+                f"⬜ 配置回測區塊渲染失敗:[{type(_e_bt).__name__}] {str(_e_bt)[:80]}"
+            )
+
     # v19.58 — 其餘進階貼圖區塊（真實收益矩陣 + 投資試算 + 持股 + 多檔比較 + AI…）。
     # 基金體檢 PK + 4 大健診卡已上移至健診總表之前，不再由此區塊渲染（避免上下重複）。
     if _funds_extra:
