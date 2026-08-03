@@ -76,6 +76,8 @@ def render_allocation_backtest_section(funds: list) -> None:
     st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
     st.success(f"🏆 效益最高:**{STRATEGY_LABELS[_res['winner']]}**"
                "(依 Sharpe→Calmar→CAGR 排名;in-sample,勿當未來保證)")
+    if not _res["flags"].get("s4_trained"):
+        st.caption("⚠️ S4 效率前緣訓練不足/未收斂 → 已退回**等權**(排名中 S4 列等同 S0,僅供對照)。")
 
     # ── 淨值曲線疊圖 ──
     try:
@@ -90,8 +92,8 @@ def render_allocation_backtest_section(funds: list) -> None:
                            margin=dict(t=10, b=10, l=5, r=5),
                            legend=dict(orientation="h", yanchor="bottom", y=1.02))
         st.plotly_chart(_fig, use_container_width=True)
-    except Exception:  # noqa: BLE001 — 圖失敗不擋數據
-        pass
+    except Exception as _e_fig:  # noqa: BLE001 — 圖失敗不擋數據(排名表已在上方渲染)
+        st.caption(f"⬜ 淨值疊圖繪製失敗(數據不受影響):[{type(_e_fig).__name__}]")
 
     # ── 匯率方向裁決(S1 現行 vs S2 反向)──
     st.markdown("**🧭 匯率方向裁決(S1 現行方向 vs S2 反向)**：" + _res["verdict_s1_vs_s2"]["wording"])

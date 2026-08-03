@@ -25,6 +25,7 @@ import pandas as pd
 
 from shared.signal_thresholds import (
     BACKTEST_COST_BPS,
+    BACKTEST_FX_ASOF_TOLERANCE_DAYS,
     BACKTEST_FX_SPREAD_BPS,
     BACKTEST_MIN_COMMON_DAYS,
     BACKTEST_NEW_FUND_MIN_DAYS,
@@ -62,8 +63,8 @@ def _norm_ccy(ccy) -> str:
         _c = normalize_ccy(ccy)
         if _c:
             return str(_c).upper()
-    except Exception:  # noqa: BLE001 — normalize 不可用 → 退化
-        pass
+    except ImportError:                          # 僅 normalize_ccy 不可用時退化本地映射;
+        pass                                     # 非 ImportError(真 bug)不吞,往上拋(§3.3)
     _s = str(ccy or "").strip().upper()
     _map = {"美元": "USD", "美金": "USD", "台幣": "TWD", "新台幣": "TWD", "TWD": "TWD", "USD": "USD"}
     return _map.get(str(ccy or "").strip(), _map.get(_s, _s))
@@ -106,7 +107,7 @@ def to_twd_total_return_series(nav_series, ccy: str, fx_series=None) -> "pd.Seri
     _left = pd.DataFrame({"date": _nav.index, "nav": _nav.to_numpy()}).sort_values("date")
     _right = pd.DataFrame({"date": _fx.index, "fx": _fx.to_numpy()}).sort_values("date")
     _m = pd.merge_asof(_left, _right, on="date", direction="backward",
-                       tolerance=pd.Timedelta(days=7))
+                       tolerance=pd.Timedelta(days=BACKTEST_FX_ASOF_TOLERANCE_DAYS))
     _m = _m.dropna(subset=["fx"])                      # 無 on-or-before 匯率(容差外)→ 丟,不 ffill
     if len(_m) < 2:
         return None
@@ -195,16 +196,20 @@ def _flip_fx(label):
 
 
 def _sigma_rank_at(orig_series, t) -> "float | None":
-    """原幣序列截至 t → σ rank(現價在 HWM 下方第幾 σ)。<30 點或報酬不足 → None(PIT-safe)。"""
+    """原幣序列截至 t → σ rank(現價在 HWM 下方第幾 σ)。PIT-safe(只用 ≤ t 的資料)。
+
+    §1 誠實:短史 / 報酬不足(委派 calc_hwm_sigma_levels 內部下限,不重複 magic number)/
+    **σ_abs=0(NAV 走平・停售清算)→ sigma_rank 為未定義的 0.0** → 一律 None,
+    **絕不**把 0.0 當「高基期」餵給 classify_base 產出假 SELL(稽核 v19.427 HIGH)。
+    """
     from services.precision_service import calc_hwm_sigma_levels
-    _s = orig_series.loc[:t]
-    if len(_s) < 30:
-        return None
-    _lv = calc_hwm_sigma_levels(_s)
+    _lv = calc_hwm_sigma_levels(orig_series.loc[:t])
     if not isinstance(_lv, dict) or "error" in _lv:
         return None
-    _sr = _lv.get("sigma_rank")
-    return float(_sr) if _sr is not None else None
+    _sr, _sa = _lv.get("sigma_rank"), _lv.get("sigma_abs")
+    if _sr is None or _sa is None or _sa <= 0:      # σ_abs≤0 → 統計退化,誠實回 None(不捏造)
+        return None
+    return float(_sr)
 
 
 def strategy_weights_at(strategy_id: str, t, orig_by_code: dict, twd_df, fx_series,

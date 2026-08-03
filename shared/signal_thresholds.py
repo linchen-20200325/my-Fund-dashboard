@@ -202,3 +202,4 @@ BACKTEST_TILT_SELL: float = 0.5         # sell tier 相對等權縮小倍數(不
 BACKTEST_MIN_COMMON_DAYS: int = 60      # 共同交易日 < 此 → 不回測(對齊 FRONTIER_MIN_OBS,§1)
 BACKTEST_NEW_FUND_MIN_DAYS: int = 252   # 共同窗 < 此(1 年)→ low_confidence 旗標
 BACKTEST_FX_FETCH_DAYS: int = 3650      # 抓 USDTWD 歷史天數(~10y);回測窗自然被 NAV 重疊期封頂
+BACKTEST_FX_ASOF_TOLERANCE_DAYS: int = 7  # FX 對 NAV as-of 對齊容差(日曆日);超過 → 該 NAV 點無匯率丟棄(§1 不 ffill)

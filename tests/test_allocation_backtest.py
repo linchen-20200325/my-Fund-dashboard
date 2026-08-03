@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from services.allocation_backtest import (
+    _sigma_rank_at,
     backtest_allocations,
     build_aligned_matrices,
     current_actions_from_signals,
@@ -124,6 +125,15 @@ def test_halted_fund_no_crash_finite():
     for sid in res["ranking"]:
         m = res["results"][sid]["metrics"]
         assert m["n_days"] > 0 and np.isfinite(m["max_drawdown_pct"])   # 有限,不 NaN 爆掉
+
+
+# ── ⑤ 最兇輸入 2b:σ=0 走平基金 → 誠實 None,不捏造 SELL(稽核 v19.427 HIGH)──
+def test_sigma_zero_flat_fund_not_fabricated_sell():
+    flat = pd.Series([50.0] * 300, index=_D[:300])       # 完全走平(停售/清算)→ σ_abs=0
+    assert _sigma_rank_at(flat, _D[299]) is None          # §1:σ=0 → None,不回未定義的 0.0
+    twd_df = pd.DataFrame({"F": flat})
+    _, sig = strategy_weights_at("S3", _D[299], {"F": flat}, twd_df, None)
+    assert sig["F"]["nav_level"] == "unknown" and sig["F"]["tier"] == "watch"   # 不得判 sell
 
 
 # ── ⑤ 最兇輸入 3:S1 ↔ S2 是真極性翻轉(非 no-op)───────────
