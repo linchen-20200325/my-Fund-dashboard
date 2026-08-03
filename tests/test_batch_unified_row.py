@@ -43,6 +43,13 @@ def _mock(monkeypatch):
     _b = pd.Series(100 * np.cumprod([1.0] + [1.005] * 59), index=_d)
     monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", _b)
     monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", _b)
+    # stub USDTWD 抓取 → fx_regime_by_ccy 不打網路(v19.426 稽核 Finding2)
+    import ui.helpers.fund_grp_health.fx_regime as _fr
+    _fr._FX_REGIME_CACHE.clear()
+    _fxd = pd.DataFrame({"date": pd.date_range("2023-01-02", periods=250, freq="B"),
+                         "usdtwd": np.linspace(30.0, 33.0, 250)})
+    monkeypatch.setattr("services.hot_money_service.fetch_usdtwd_frame",
+                        lambda days: (_fxd, ""), raising=True)
 
 
 def test_ok_row_full_columns_and_json_safe(_mock):
@@ -53,6 +60,14 @@ def test_ok_row_full_columns_and_json_safe(_mock):
     # ①②③+extra 各有代表欄(至少能算出來)
     assert "4D Grade" in r and "每月配息 (TWD)" in r and "現價" in r and "含息% (全期實際)" in r
     json.dumps(r)                                           # JSON-safe → checkpoint 可存
+
+
+def test_nav_fx_columns_wired_real_path(_mock):
+    """稽核 Finding2:走真實 build 路徑驗 ccy/σ rank 欄名契約 —— 斷了會變 ⬜,此測會抓到。"""
+    r = build_batch_unified_row("ACCP138")
+    # spot 32 vs series 30~33(mean≈31.5)→ |z|<0.7 → 中性(非 ⬜ = ccy/FX 有接上)
+    assert r["匯率位階"] == "中性"
+    assert r["淨值×匯率"] in ("🟢 雙便宜(進場佳)", "🔴 雙貴(出場佳)", "⚪ 觀望", "⬜ 無法判定")
 
 
 def test_empty_code_is_invalid(_mock):
