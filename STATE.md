@@ -2,6 +2,14 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-07-28 存檔:淨值 × 匯率 二維買賣切換 上線 main(#612 merged)
+
+- **#612 merged**(squash `1938d4f`;CI 必要檢查全綠):v19.426 淨值×匯率 二維買賣切換上線。
+- 三張大表(組合/持倉/批次)新增「匯率位階」+「淨值×匯率」欄(外幣 USD 基金;台幣計價 ➖)。
+  匯率位階 = USDTWD z-score vs 近1年均值(台幣強/中/弱);× 淨值基期 → 🟢雙便宜進場 / 🔴雙貴出場 / ⚪觀望。
+- design agent 出規格 + 稽核 agent 判 ship-worthy + 修 3 findings(FX 快取 TTL / 測試不打網路 + 契約 / as-of-run 註記)。
+- 誠信護欄:匯率難預測 → 參考傾向非擇時保證;缺料/非USD → ⬜;台幣計價 → ➖(§1)。
+
 ## 💱 2026-07-28 淨值 × 匯率 二維買賣切換(design agent)v19.426
 
 user:外幣基金應有「淨值高低 + 匯率高低」買賣切換。design agent 出規格 → 建。
