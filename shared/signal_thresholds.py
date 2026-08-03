@@ -190,3 +190,16 @@ ROTATION_SELL_SIGMA: float = -0.5
 ROTATION_BUY_SIGMA: float = -1.5
 # 買方健康過濾:操盤評分若有值須 ≥ 本門檻才推薦(fail-closed,§1 避免接刀)
 ROTATION_BUY_MIN_SCORE: float = 50.0
+
+# ── 配置回測(services/allocation_backtest.py,v19.427)──────────────────
+# 給 N 檔基金 + 歷史,回測數套配置/切換策略在「台幣總報酬」下表現,排名效益最高者。
+# 反 lookahead(§2.3):每個再平衡日只用截至當日資料算訊號;成本內含避免切換被高估(§1 誠實)。
+BACKTEST_REBALANCE_FREQ: str = "ME"     # 月頻(月底最後交易日)再平衡;closed/label 右閉不引未來
+BACKTEST_COST_BPS: float = 20.0         # 申購/贖回/轉換 一次性成本(bps),按換手率收
+BACKTEST_FX_SPREAD_BPS: float = 30.0    # TWD↔外幣 換匯點差(bps),按外幣部位換手率額外收
+BACKTEST_TILT_BUY: float = 1.5          # buy tier 相對等權放大倍數(非全進,避免單檔爆權重)
+BACKTEST_TILT_SELL: float = 0.5         # sell tier 相對等權縮小倍數(不歸零,避免全空)
+BACKTEST_MIN_COMMON_DAYS: int = 60      # 共同交易日 < 此 → 不回測(對齊 FRONTIER_MIN_OBS,§1)
+BACKTEST_NEW_FUND_MIN_DAYS: int = 252   # 共同窗 < 此(1 年)→ low_confidence 旗標
+BACKTEST_FX_FETCH_DAYS: int = 3650      # 抓 USDTWD 歷史天數(~10y);回測窗自然被 NAV 重疊期封頂
+BACKTEST_FX_ASOF_TOLERANCE_DAYS: int = 7  # FX 對 NAV as-of 對齊容差(日曆日);超過 → 該 NAV 點無匯率丟棄(§1 不 ffill)

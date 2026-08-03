@@ -83,7 +83,7 @@ def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame,
     df = pd.DataFrame(rows)
     name_col = next((c for c in ("name", "institutional_investors") if c in df.columns), None)
     if name_col is None:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), f"FinMind 缺類別欄"
+        return pd.DataFrame(columns=["date", "foreign_net_yi"]), "FinMind 缺類別欄"
     mask = df[name_col].astype(str).str.contains("Foreign|外資", case=False, na=False, regex=True)
     fdf = df.loc[mask].copy()
     if fdf.empty:
@@ -117,8 +117,10 @@ def fetch_usdtwd_series(days: int) -> tuple[pd.DataFrame, str]:
     """
     try:
         from repositories.macro_repository import fetch_yf_close
-        # range_ 換算：days 60-180 → 1y / 365 → 2y
-        range_ = "2y" if days > 365 else "1y" if days > 90 else "6mo"
+        # range_ 換算：days ≤365 保持原行為(6mo/1y/2y);>365 才解鎖更長區間
+        # (v19.427 配置回測需滿 NAV 重疊期,單向擴充不改既有 caller —— 現有 caller 全 days≤365)
+        range_ = ("max" if days > 3650 else "10y" if days > 1825 else "5y" if days > 730
+                  else "2y" if days > 365 else "1y" if days > 90 else "6mo")
         series = fetch_yf_close("USDTWD=X", range_=range_, interval="1d")
     except Exception as e:
         return pd.DataFrame(columns=["date", "usdtwd"]), f"USDTWD 抓取失敗：{e}"
