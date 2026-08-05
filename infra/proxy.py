@@ -225,24 +225,20 @@ def fetch_url(
                 _t.sleep(_rnd.uniform(2.5, 6.0))
                 continue
             if r.status_code == 429:
+                # ⚠️ v19.425 已查證但**未動**的同型問題（待 user 裁示，§-1）：
+                #   預設 retries=3、backoff=(2,4,8) → attempt 2（最後一次）時
+                #   `_rl_atmp=2 < 3` 仍成立 → sleep **8 秒** → continue → for 迴圈
+                #   當場耗盡，那 8 秒沒有任何 retry 在等它（三個分支裡最大的淨損失；
+                #   也因此下方 `_rl_atmp >= len(...)` 的放棄分支在預設 retries=3
+                #   永遠走不到）。**不改的理由**：`tests/test_proxy_infra.py::
+                #   test_fetch_url_429_exhausts_returns_none_with_full_backoff_sequence`
+                #   把 `sleeps == [2.0, 4.0, 8.0]` 釘成契約（v18.277 對齊 cron job），
+                #   改行為必須同步改那個測試 = 契約變更，需明確核准。
                 if _rl_atmp < len(_RATE_LIMIT_BACKOFF_SEC):
                     _sleep_s = _RATE_LIMIT_BACKOFF_SEC[_rl_atmp]
-                    # 【v19.425 修：最後一次 attempt 後不再退避】
-                    # 預設 retries=3、backoff=(2,4,8) → attempt 2（最後一次）時
-                    # `_rl_atmp=2 < 3` 成立 → sleep **8 秒** → continue → for 迴圈
-                    # 當場耗盡，那 8 秒沒有任何 retry 在等它，是三個分支裡最大的
-                    # 淨損失。（也因此 `_rl_atmp >= len(...)` 的放棄分支在預設
-                    # retries=3 下其實永遠走不到。）
-                    # 只拿掉 sleep、**不改控制流**（仍 `continue`）—— 若同一 URL
-                    # 先前發生過 Timeout/ProxyError，下方 `_tmo/_perr > 0` 的
-                    # 降級直連仍有機會救回來，不可在此提前 return。
-                    if attempt < retries - 1:
-                        print(f"[proxy] 429 Rate Limit — sleep {_sleep_s}s before retry "
-                              f"({_rl_atmp + 1}/{len(_RATE_LIMIT_BACKOFF_SEC)}): {_url_log[:80]}")
-                        _t.sleep(_sleep_s)
-                    else:
-                        print(f"[proxy] 429 Rate Limit — 已無重試次數 "
-                              f"(attempt {attempt + 1}/{retries})，不再退避：{_url_log[:80]}")
+                    print(f"[proxy] 429 Rate Limit — sleep {_sleep_s}s before retry "
+                          f"({_rl_atmp + 1}/{len(_RATE_LIMIT_BACKOFF_SEC)}): {_url_log[:80]}")
+                    _t.sleep(_sleep_s)
                     _rl_atmp += 1
                     continue
                 print(f"[proxy] 429 已重試 {_rl_atmp} 次仍 rate-limited，放棄：{_url_log[:80]}")

@@ -31,6 +31,22 @@ v19.405（QA Reject 後補洞）— 上面第 4 項當時**只在 `calc_macro_ph
 7. `TestAggregationContracts` — `coerce_weight` / `is_superseded` 兩條契約的語意分工
 另補：LEI 拐點的 `ma3` / `ma3_prev` 降級必須 all-or-nothing（§4.1 不得混基準）、
 NFP tier 門檻的出處誠實標註、NFP tier 配色收 `shared/colors.py` SSOT。
+
+──────────────────────────────────────────────────────────────
+v19.425（第二次 QA 稽核補洞）— v19.405 只補了「不吃 weight 的路徑」中的兩條
+（`calc_macro_phase_zpct` / `collect_key_alerts`），漏了**第三條**：
+`reconcile_composite_score`（健康度雙演算法對帳的投票側）同樣只看 score 正負號、
+完全不讀 weight，卻連 `_` 前綴 meta 與 `superseded_by` 兩道守衛都沒有 ——
+而它有兩個 production reader（`ui/tab1_macro.py:981` 對帳 chip、
+`mcp_server/tools_macro.py:72`）。本檔新增：
+8. `TestReconcileDedupAndMetaGuards` — 對帳投票的去重 + meta 分母污染，
+   含「雙算足以在中性帶邊界翻掉 dir_vote」的邊界證明
+9. `TestMetaKeyExcludedFromScoring` 增 2 條 — 血緣側車不得把 meta 寫成指標
+   （§2.2 血緣不含虛構條目；`calculate_composite_score(provenance_out=...)`）
+10. `TestAggregationContracts` 增 2 條 — `_` 前綴述詞收 SSOT（`is_meta_key`）
+    + 5 條聚合／血緣路徑不得再各自 inline `startswith("_")` 的漂移鎖
+11. `is_scored` **刪除**（0 production reader、與 `superseded_by` 同義的第二份
+    編碼）→ `test_is_scored_stays_deleted` 防復活。
 """
 from __future__ import annotations
 
@@ -746,7 +762,11 @@ class TestReconcileDedupAndMetaGuards:
             ind[f"FILLER_{i}"] = {"score": 0, "weight": 1}
         r = self._recon(ind)
         assert r["n_zero"] == n_fill
-        assert r["vote_net_ratio"] == pytest.approx(1.0 / (1 + n_fill))
+        # production 端 `vote_net_ratio` 有 round(...,3),不可拿未 round 的 1/3 直比
+        # (pytest.approx 預設 rel=1e-6,0.333 vs 0.33333… 差 3.3e-4 會紅)。
+        # 期望值用**公式再 round**,不寫死 0.333 字面值(§3.3 反捏造)。
+        assert r["vote_net_ratio"] == pytest.approx(
+            round(1.0 / (1 + n_fill), 3), abs=1e-9)
         assert r["dir_vote"] == "pos", (
             f"去重後方向仍是 {r['dir_vote']}（修正前為 'neu'）：{r}")
 
@@ -791,7 +811,7 @@ class TestReconcileDedupAndMetaGuards:
         ind.pop("M2")
         r = self._recon(ind)
         assert (r["n_pos"], r["n_neg"]) == (0, 1), r
-        assert not r["skipped"]
+        assert r["vote_net_ratio"] == pytest.approx(-1.0)
 
     def test_no_data_path_keeps_contract(self):
         """全 meta / 空 dict → status='no_data'，且不得偽造 net_ratio（§1）。"""
@@ -801,10 +821,12 @@ class TestReconcileDedupAndMetaGuards:
         assert r["n_pos"] == r["n_neg"] == r["n_zero"] == 0
 
     def test_reader_contract_keys_present(self):
-        """production reader 讀的欄位不得消失（修正前也綠 —— 這是防我自己改壞）。
+        """production reader 讀的欄位不得消失（`skipped` 是 v19.425 新增，故修正前紅）。
 
         ui/tab1_macro.py:982-988 讀 status / note / n_pos / n_neg / vote_net_ratio；
-        mcp_server/tools_macro.py:85 把整份 dict 放進 `reconciliation`。
+        mcp_server/tools_macro.py:85 把整份 dict 放進 `reconciliation` 交給
+        `to_json_safe` —— 新增欄位必須是 JSON-safe 型別。
+        既有 9 個欄位一個都不能少（schema-additive，不是 schema-breaking）。
         """
         r = self._recon(_m2_pair(True))
         for k in ("weighted_total", "vote_net_ratio", "n_pos", "n_neg", "n_zero",
@@ -858,8 +880,11 @@ class TestAggregationContracts:
                 code = "\n".join(ln for ln in src.splitlines()
                                  if not ln.lstrip().startswith("#"))
                 if 'startswith("_")' in code or "startswith('_')" in code:
-                    offenders.append(f"{mod.__name__}.{fn}")
-                if "is_meta_key" not in code and "_is_meta_key" not in code:
+                    offenders.append(f"{mod.__name__}.{fn}（仍 inline）")
+                # 比對**呼叫形式** `is_meta_key(` 而非裸名字 —— docstring 裡以
+                # 反引號引述 `is_meta_key` 的說明文字不該讓斷言矇混通過。
+                # （`_is_meta_key(` 這個 alias 也含此子字串，兩種寫法都吃得到。）
+                if "is_meta_key(" not in code:
                     offenders.append(f"{mod.__name__}.{fn}（沒接上述詞）")
         assert not offenders, (
             "meta 守衛未收 SSOT（services.macro.composite_score.is_meta_key）："

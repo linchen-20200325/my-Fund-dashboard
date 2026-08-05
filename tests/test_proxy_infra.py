@@ -331,6 +331,51 @@ def test_fetch_url_proxy_error_fails_fast_without_sleep():
     assert calls[-1] == {}, "最後一次必須是降級直連(proxies={})"
 
 
+def test_fetch_url_timeout_no_sleep_after_last_attempt():
+    """Timeout 分支:最後一次 attempt 之後不該再 sleep。
+
+    **修正前會紅**:`sleeps == [2.0, 2.0, 2.0]` —— 第 3 次(最後一次)睡完 2 秒,
+    迴圈當場耗盡,那 2 秒沒有任何 retry 在等它,是純淨損失。
+
+    ⚠️ 與 ProxyError 的差異(刻意保留重試):Timeout **不是**確定性失敗
+    (對端可能只是暫時忙),所以只砍掉最後一次的空睡,不改成立刻 break。
+    """
+    sleeps: list = []
+
+    class _FakeSess:
+        def get(self, *a, **kw):
+            raise requests.exceptions.Timeout()
+
+    with patch.object(ip, "make_retry_session", return_value=_FakeSess()), \
+         patch.object(ip, "get_proxy_config", return_value=None), \
+         patch("time.sleep", side_effect=sleeps.append):
+        assert ip.fetch_url("https://example.com/x", retries=3) is None
+
+    assert sleeps == [2.0, 2.0], f"最後一次 attempt 後不該再 sleep,實際 {sleeps}"
+
+
+def test_fetch_url_403_no_sleep_before_break():
+    """403 分支:`_block >= 2` 要 break 的那一次不該先睡。
+
+    **修正前會紅**:sleeps 有 2 筆 —— 第 2 次 403 睡完 2.5~6s 才 break,
+    但接手的是**降級直連**(`proxies={}`,不同出口 IP,與 proxy 端的封鎖狀態
+    無共享),等待對端解除封鎖這件事在此毫無意義。
+    對照組:ProxyError 分支本來就 0 sleep 直接降級,行為現在對齊。
+    """
+    sleeps: list = []
+
+    class _FakeSess:
+        def get(self, *a, **kw):
+            return _StatusResp(403)
+
+    with patch.object(ip, "make_retry_session", return_value=_FakeSess()), \
+         patch.object(ip, "get_proxy_config", return_value=None), \
+         patch("time.sleep", side_effect=sleeps.append):
+        assert ip.fetch_url("https://example.com/x", retries=3) is None
+
+    assert len(sleeps) == 1, f"_block>=2 的那次不該 sleep,實際 {sleeps}"
+
+
 # ════════════════════════════════════════════════════════════
 # 狀態碼黑洞修補 — 402 / 403 / 收尾 log
 #

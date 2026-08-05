@@ -157,6 +157,14 @@ def switch_score(tr1y_pct, sharpe, maxdd_pct, vs_market_pct, *,
         print(f"[switch_strategy] 換標策略分部分覆蓋:缺 {'/'.join(_missing)} → "
               f"分母 {_total}→{_avail},earned={_earned} → score={_score}"
               f"(悲觀下界 {_earned} vs 綠燈門檻 {SWITCH_GREEN_SCORE})", file=_sys.stderr)
+    # ⚠️ 這一行曾經漏掉,整組覆蓋率修正因此**完全失效**:`_cov` 算得再對,沒回寫
+    # 呼叫端拿到的仍是空 dict → `switch_signal` 的 `_coverage_blocks_green({})`
+    # 讀不到 `rescaled` → 回 False → 綠燈照給,缺資料的檔仍拿到「可加碼」建議。
+    # 早期 return 路徑(核心維缺值,:119-120)有寫、主路徑漏寫 —— 單邊接線是最難用
+    # 肉眼發現的失效模式(程式碼看起來完整、log 也印得出來,只是沒傳出去)。
+    # 由 tests/test_switch_strategy.py::test_score_optional_missing_ok 等 14 條釘住。
+    if coverage_out is not None:
+        coverage_out.update(_cov)
     return _score
 
 

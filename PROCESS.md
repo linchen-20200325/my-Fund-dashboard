@@ -21,6 +21,20 @@
 
 ## §4 鋼鐵自省與交付 (Audit & Auto-Delivery)
 - **強制驗證機制**：修改後必須通過 Type check 與 Lint，確認無誤後輸出簡短報告：[邏輯]、[邊界]、[效能]、[Debug]。
+- **接線驗證 (Wiring Test) — v19.428 新增**：新增**側車容器 / 旗標 / provenance 欄位 / meta dict**（如 `coverage_out=` / `provenance_out=` / `risk_metric_meta` / `superseded_by`）時，**必須同批附一條「production caller 真的讀到它」的測試**，不得只測產生端。
+  - **判準**：這條測試要能在「產生端完全正確、但沒接出去」時**變紅**。若拿掉呼叫端那一行而測試仍綠 → 這條測試無效，重寫。
+  - **為什麼獨立成條**：以下四個案例全部通過 lint、通過既有單元測試、每一段單獨看都正確，卻**完全沒有效果**，只有端到端接線測試會紅 ——
+
+    | 案例 | 程式碼看起來 | 實際 |
+    |---|---|---|
+    | M2 去重 | `weight = 0` | 呼叫端 `float(v.get("weight",1) or 1)` → `0 or 1` = 1，**falsy 回退還原了權重** |
+    | 風險指標期間修正 | 提高本地自算樣本門檻 | 值優先取 wb07 官方欄位，門檻只影響一個沒人讀的 meta → **畫面數字零變化** |
+    | 換標分 `coverage_out` | 側車算得完整、log 也印得出來 | **漏 `coverage_out.update(_cov)` 一行**，呼叫端拿到空 dict → 綠燈閘門讀不到 `rescaled` → 缺資料的基金照樣拿到「可加碼」建議 |
+    | ruff 未定義名白名單 | 死碼地雷已刪除 | `_KNOWN_FALSE_POSITIVES` 沒同步清 → 變成**指向不存在程式碼的永久豁免**，日後同型錯誤被靜默放行 |
+
+  - **共同形狀**：四次都不是「算錯」，而是**算對了但沒接出去**。這類缺陷對 lint / type check / 產生端單元測試**全部免疫**，是本 repo 迄今重工成本最高的失效模式。
+  - **稽核落地**：`grep` 該欄位名，若 production 端 **0 consumer**，等同 §1「填補須帶旗標」未達標，**不得算完成**；同時檢查它是不是 `CLAUDE.md §8.1 step 6` 的「用不到的抽象」（若確實不需要 → 刪除，而不是留著假裝有揭露）。
+  - **例外登記**：若刻意分兩波交付（本波只產生、下波才接線），必須在 PR 描述**明寫「本波 0 consumer，接線於 X」**，否則視為未完成。
 - **環境與效能**：限用 `.py` 腳本（禁 `.ipynb`），維護 `requirements.txt`。確保 `st.cache_data` 的正確使用。
 - **自動交付與合併 (Auto-Ship)**：功能完成後，必須使用 `gh pr create --fill` 建立請求，並**主動執行** `gh pr merge <PR號碼> --merge --delete-branch`。
 - **合併後驗證與存檔**：合併後必須自動 `git checkout main && git pull`，使用 `git status` 與 `git log -1` 驗證合併成功，最後自動更新 `STATE.md` 的進度。嚴禁在未驗證成功的情況下回報完成。
