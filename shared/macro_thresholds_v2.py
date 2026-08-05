@@ -31,6 +31,32 @@ HY_SPREAD_THRESHOLDS = {
         "tight_below": 4.0,    # v < 4 → +2 (信用利差收斂,利多)
         "wide_above": 6.0,     # v > 6 → -2 (信用利差走闊,利空)
     },
+    "complacency": {
+        # ⚠️ 2026-08-05 稽核新增 — 「極緊利差 = 自滿」**上緣**罰則。
+        #
+        # 問題:`score_function` 只有下緣 `tight_below`,語意是「v < 4% 一律 +2 滿分」,
+        #   **沒有上緣**。實測 2026-08-03 OAS = 2.78% → 拿到最強多頭分。但極緊利差在
+        #   歷史上是「風險定價失效 / 景氣末期自滿」而非「信用健康」。
+        #
+        # 可查證依據:ICE BofA US High Yield Index OAS(FRED `BAMLH0A0HYM2`,
+        #   1996-12-31 起)全序列最低 **2.41%,發生於 2007-06-05** —— 距 GFC 信用
+        #   市場崩解不到一年、距 2007-08 quant quake 約 2 個月。
+        #
+        # 門檻取法 = **DESIGN**(沿用 `shared/macro_buckets.py:23-26` 標註慣例:
+        #   無單一官方線,為判讀而訂,已具名 + 文件化)。取全序列地板 2.41% + 0.6pp
+        #   緩衝 ⇒ 3.0% 為「自滿帶」上緣。
+        #   ⚠️ **更嚴謹的做法是跑 BAMLH0A0HYM2 全序列分位數(例:P5 / P10)校準**;
+        #   本次交付環境無法執行統計(沙箱不可用),依 §1 不臆測分位數值,先用可查證的
+        #   歷史地板 + 具名緩衝。user 核准啟用後可回填分位數,屆時只改本區塊。
+        #
+        # 罰則設計刻意保守:命中 → 由 +w 降為 +0.5w(**降半檔,不翻負**)。理由:極緊
+        #   利差本身仍代表「當下無信用壓力」,只是不該拿滿分;直接翻負會把「現況良好」
+        #   誤報成「現在有事」,違 §1 誠實原則。
+        "historic_low_pct": 2.41,          # 全序列最低(可查證)
+        "historic_low_date": "2007-06-05",  # 同上
+        "complacency_below": 3.0,           # v <= 此 → 自滿帶(DESIGN = 地板 + 0.6pp)
+        "complacency_score_ratio": 0.5,     # 滿分 ×0.5(降半檔)
+    },
     "portfolio_advisor": {
         # services/portfolio_service.py:342,345 投組風險建議
         # 注意:warn 閾值與 stoplight (4.0) 不同 — 投組建議更寬容
@@ -201,6 +227,26 @@ PMI_THRESHOLDS = {
         "contraction_below": 49.5,
     },
 }
+
+# ── PMI 連續評分尺度(2026-08-05 稽核;`MACRO_SCORE_V2_FLAGS["pmi_continuous"]` 用)──
+#
+# **不是新常數** —— 由同一個 `score_function` section 既有兩條 SSOT **相減推導**
+# (expansion_above 50 − recession_below 45 = 5.0)。這樣寫的用意有二:
+#   (1) 避開 §3.3 inline magic number;
+#   (2) 未來若有人調整階梯門檻,連續版尺度**自動跟著走**,不會漂移成兩套。
+#
+# 連續評分式:s(v) = w · tanh((v − expansion_above) / continuous_scale)
+#   v = 50(expansion_above)     → 0        ← 與階梯的「翻正點」完全一致
+#   v = 45(recession_below)     → −0.762w  ← 落在階梯 −0.5w 與 −w 之間,平滑接合
+#   v = 55.6(2026-07 實測真值)   → +0.808w
+#   v = 63.8(修正前錯值)         → +0.992w  ← 階梯下兩者同為 +w,連續版可分辨
+#   |v − 50| ≥ 3×scale(=15,PMI ≤35 / ≥65)→ 飽和至 ±w,對齊 CLAUDE.md §3.2
+#                                            PMI 合理範圍 [30, 70]
+# 解析度效果:49.9 → 50.1 的分數變動由階梯的 1.5w(PMI w=2 時 = 3 分)降為 0.04w。
+PMI_THRESHOLDS["score_function"]["continuous_scale"] = (
+    PMI_THRESHOLDS["score_function"]["expansion_above"]
+    - PMI_THRESHOLDS["score_function"]["recession_below"]
+)
 
 
 # ── M2(貨幣供給 YoY)— US, % ─────────────────────────────────────────

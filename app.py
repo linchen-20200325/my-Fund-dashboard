@@ -60,6 +60,16 @@ body,.stApp{{background:{STREAMLIT_BG};color:{GH_FG_PRIMARY}}}
 .signal-sell{{background:#3a1010;color:{TRAFFIC_RED};border:1px solid {TRAFFIC_RED};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
 .signal-hold{{background:#1a3450;color:{INFO_BLUE};border:1px solid {INFO_BLUE};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
 .signal-switch{{background:#3a2a10;color:#f0b132;border:1px solid #f0b132;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}}
+/* ── sticky 頂層 tab bar(2026-08-05 稽核 必修 5)──────────────────────────
+   Tab1 從頂捲到底需 60+ 次滾輪,tab bar 不 sticky → 換分頁要整路捲回去。
+   ⚠️ Streamlit 內部 DOM(data-testid / data-baseweb)**無公開契約**,升版可能改名。
+   故只用「選不到就什麼都不發生」的純 CSS(不寫任何 JS、不改寬度,失效 = 回到現況)。
+   第 2 條規則把**巢狀** st.tabs(參考 / 診斷內的子頁)還原 static —— 否則子分頁列
+   也會黏在畫面上互相打架。用 descendant(非 `>`)寫法,不假設 tab-list 是直接子節點。
+   background 吃 STREAMLIT_BG SSOT(禁寫死 hex);top/z-index 為 CSS 佈局數值
+   (同本區 .card 的 padding 慣例),top 取 Streamlit 固定 header 高度。 */
+div[data-testid="stTabs"] div[data-baseweb="tab-list"]{{position:sticky;top:3.75rem;z-index:100;background:{STREAMLIT_BG};border-bottom:1px solid {GH_BORDER}}}
+div[data-testid="stTabs"] div[data-testid="stTabs"] div[data-baseweb="tab-list"]{{position:static;background:transparent;border-bottom:none}}
 </style>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════
@@ -177,9 +187,14 @@ from ui.components.macro_compass_top import render_macro_compass
 # 支援型的「資料診斷 + 說明書」合成一個「參考 / 診斷」分頁(user 核准合區)。
 # 決策動線:① 市場定調(加碼/防禦)→ ② 組合健診(哪幾檔健康/吃本金)→
 #          ③ 個基深掘(細看被點名的那檔)→ ④ 配置 & 帳本(記帳/再平衡)→ ⑤ 參考/診斷。
+# 2026-08-05 稽核 必修 2:決策動線四站的分頁名改吃 `ui/helpers/story_nav._STEPS`
+# SSOT(`tab_label()` 去掉 ①②③④ 序號)。原本 app.py 與 story_nav 各寫死一份,
+# 導致各 Tab 的「請至 X 分頁」指路文案改名後對不上(§3.3 反捏造)。
+# 「📦 批次分析 / 📖 參考 / 診斷」不在決策動線 4 站內(工具 / 支援型)→ 保留字面。
+from ui.helpers.story_nav import tab_label as _tab_label
 tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_ref = st.tabs(
-    ["🌐 市場定調", "💊 組合健診", "📦 批次分析", "🔍 個基深掘",
-     "📊 配置 & 帳本", "📖 參考 / 診斷"])
+    [_tab_label("macro"), _tab_label("health"), "📦 批次分析", _tab_label("fund"),
+     _tab_label("portfolio"), "📖 參考 / 診斷"])
 
 # ══════════════════════════════════════════════════════
 # TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）

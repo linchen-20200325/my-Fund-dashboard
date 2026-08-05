@@ -260,10 +260,17 @@ def render_portfolio_tab() -> None:
                         _fail_cnt = (_df_333["整體"] == "❌").sum()
                         _unk_cnt  = (_df_333["整體"] == "❓").sum()
                         _total    = len(_df_333)
+                        # 2026-08-05 稽核 🔴 必修 2(同型延伸):原寫死「由 Tab2 個別查詢」
+                        # —— 個基深掘早已不是第 2 個分頁,序號寫死 = 與 :292 同一顆地雷。
+                        # 一併收 story_nav.tab_label SSOT。
+                        from ui.helpers.story_nav import (  # noqa: PLC0415
+                            tab_label as _tab_label_333,
+                        )
                         st.info(
                             f"共 {_total} 檔　✅ 通過 {_pass_cnt} 檔　"
                             f"❌ 未通過 {_fail_cnt} 檔　❓ 資料不足 {_unk_cnt} 檔　"
-                            f"（③同儕排名由 Tab2 個別查詢，組合批次僅評 ①②）",
+                            f"（③同儕排名請至「{_tab_label_333('fund')}」分頁個別查詢，"
+                            f"組合批次僅評 ①②）",
                             icon="📊",
                         )
                     else:
@@ -280,6 +287,11 @@ def render_portfolio_tab() -> None:
         # v19.334 user 指示「說明縮小,不需要這麼大」:48px 圖示+置中大標+28px padding
         # 的整屏卡 + 3 個 st.info 步驟框 → 收成單張緊湊卡(標題行+兩行說明),
         # 資訊不減、高度約原本 1/4。
+        # 2026-08-05 稽核 🔴 必修 2:原寫死 Tab2「單檔基金」—— 該分頁名不存在,
+        # 且它早已不是第 2 個分頁(app.py 現為 5 分頁,個基深掘排第 4)。分頁名
+        # SSOT = ui/helpers/story_nav._STEPS(tab_label 去序號導出);序號一併拿掉
+        # ——序號會隨分頁增刪漂移,寫死等於埋下同型地雷。
+        from ui.helpers.story_nav import tab_label as _tab_label  # noqa: PLC0415
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
             f"border:1px solid {GH_BORDER};border-radius:8px;"
@@ -289,7 +301,7 @@ def render_portfolio_tab() -> None:
             f"<span style='color:{GRAY_AA};font-size:11px;font-weight:400'>"
             f"　— 加入基金後顯示 MK 戰情室、組合健康儀表、3-3-3 篩選</span></div>"
             f"<div style='color:{GRAY_AA};font-size:12px;line-height:1.7'>"
-            f"🔍 <b style='color:{TRAFFIC_NEUTRAL}'>Tab2「單檔基金」</b>搜尋 → 按「➕ 加入組合」；"
+            f"🔍 <b style='color:{TRAFFIC_NEUTRAL}'>「{_tab_label('fund')}」分頁</b>搜尋 → 按「➕ 加入組合」；"
             f"📥 或在下方「➕ 加入基金」輸入代碼點「📡 載入」；"
             f"也可從 Google Sheet 讀回已存組合。🎯 組合有資料後，分析自動出現在頁面頂部。"
             f"</div></div>",

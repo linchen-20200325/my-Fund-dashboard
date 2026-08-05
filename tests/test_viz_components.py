@@ -12,7 +12,7 @@ from ui.components.chart_factory import (
     HEIGHTS, PLOTLY_CONFIG, apply_dark_template, signed_bar_fig, sparkline_fig,
 )
 from ui.components.stat_tile import stat_tile
-from ui.components.status import status_chip, status_color, status_hex
+from ui.components.status import status_chip, status_color
 
 
 class TestStatusColor:
@@ -34,8 +34,10 @@ class TestStatusColor:
             s = status_color(lv)
             assert s.emoji and s.label
 
-    def test_status_hex_shortcut(self):
-        assert status_hex("bad") == TRAFFIC_RED
+    def test_status_color_hex_maps_to_traffic_ssot(self):
+        """v19.429:`status_hex()` 已刪(0 consumer,PROCESS.md §4)。
+        hex 取值改走 `status_color(x).hex`,本測試接手守住 SSOT 對應。"""
+        assert status_color("bad").hex == TRAFFIC_RED
 
     def test_status_chip_has_icon_and_hex(self):
         html = status_chip("配息覆蓋", "ok", sublabel="96%")

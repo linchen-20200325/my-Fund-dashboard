@@ -346,6 +346,14 @@ def render_indicator_map() -> None:
 # ════════════════════════════════════════════════
 # v19.15：即時訊號燈 + 決策矩陣
 # ════════════════════════════════════════════════
+# 2026-08-05 稽核 🟢 選作 7 裁決:**保留 inline,不收 shared/colors.py**。
+# 本組是 Tailwind 800/900 級「深底 + 淺字」成對 badge 色(對比比由 pair 決定),
+# shared/colors.py 現有 40 個常數裡沒有語意對得上的 —— dark red 只有
+# BG_DARK_RED_1/2/3(#2a0a0a/#1a0606/#3a0a0a,比 #7f1d1d 暗一個量級),
+# 前景 MD_RED_A100(#ff8a80)/MD_ORANGE_300(#ffb74d)則是不同色相的 Material 調。
+# 硬換 = 改動畫面顏色且拆散成對關係;`shared/colors.py` 又不在本次所有權內不得新增常數。
+# 依 `CLAUDE.md §8.3` 對 `macro_card_edu.py` 的裁決精神(對不上就別硬收)登記保留。
+# **升級條件**:user 要求擴充 shared/colors.py 的 Tailwind badge pair 色階時再收。
 _ACTION_BADGE_BG = {
     "持有": "#374151",
     "加碼": "#7f1d1d",
@@ -566,7 +574,10 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
     actions = dash.get("fund_actions") or []
     summary = dash.get("actions_summary") or {}
     if not actions:
-        st.info("ℹ️ 尚無已載入基金 — 至「📦 投資組合」載入後本表會自動填入")
+        # 2026-08-05 稽核 🔴 必修 2:原寫死「📦 投資組合」—— app.py 沒有這個分頁,
+        # 指路文案指向不存在的地方。分頁名 SSOT = ui/helpers/story_nav._STEPS。
+        from ui.helpers.story_nav import tab_label as _tab_label  # noqa: PLC0415
+        st.info(f"ℹ️ 尚無已載入基金 — 至「{_tab_label('portfolio')}」載入後本表會自動填入")
         return
 
     n_total = summary.get("n_total", 0)
@@ -574,10 +585,28 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
     n_hold = summary.get("n_hold", 0)
     n_reduce = summary.get("n_reduce", 0)
     n_exit = summary.get("n_exit", 0)
-    st.caption(
-        f"📋 {n_total} 檔分析 → "
-        f"加碼 **{n_add}** / 持有 **{n_hold}** / 減倉 **{n_reduce}** / 全撤 **{n_exit}**"
+    # 2026-08-05 稽核 🟡 必修 5(a):4 個動作計數改吃 `ui/components/stat_tile.py`
+    # (其狀態色再走 `ui/components/status.py` 的 TRAFFIC SSOT)。這兩個元件
+    # v19.388 建立後 production **0 consumer**(`PROCESS.md §4` 稽核落地條款),
+    # 本處為第一個真實 caller。**不做全站 migrate**(97 個 st.metric + 8 種手刻
+    # tile = 數千行 churn,§8.1 step 6 反例)。
+    # 「持有」刻意 status=None:status_color 的 ⬜ 語意是「資料不足」,
+    # 拿來標「維持原配置」會誤導(§1 誠實)。
+    from ui.components.stat_tile import stat_tile  # noqa: PLC0415
+    st.caption(f"📋 共 {n_total} 檔分析")
+    _act_tiles = (
+        ("加碼", n_add,    "ok",      "跌深 + 多頭"),
+        ("持有", n_hold,   None,      "維持原配置"),
+        ("減倉", n_reduce, "caution", "保守化"),
+        ("全撤", n_exit,   "bad",     "出清"),
     )
+    for _col_act, (_lbl_act, _n_act, _lv_act, _sub_act) in zip(
+            st.columns(len(_act_tiles)), _act_tiles):
+        with _col_act:
+            st.markdown(
+                stat_tile(_n_act, _lbl_act, status=_lv_act,
+                          sublabel=_sub_act, value_suffix=" 檔"),
+                unsafe_allow_html=True)
 
     # 用 DataFrame 渲染（無 plotly / 純 markdown 風險）
     import pandas as _pd
@@ -599,11 +628,11 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
         fg = _ACTION_BADGE_FG.get(action, GH_FG_PRIMARY)
         return [f"background-color: {bg}; color: {fg};" if c == "建議" else "" for c in row.index]
 
-    st.dataframe(
-        df.style.apply(_row_style, axis=1),
-        use_container_width=True,
-        hide_index=True,
-    )
+    # 2026-08-05 稽核 🟡 必修 5(a):表格走 `ui/components/tables.styled_dataframe`
+    # (預設 hide_index=True + use_container_width=True,與原呼叫**逐參數等值**,
+    # 不改 df 內容/列數/欄數)。同為 v19.388 建立後 0 consumer 的元件。
+    from ui.components.tables import styled_dataframe  # noqa: PLC0415
+    styled_dataframe(df.style.apply(_row_style, axis=1))
 
     # v19.22.1 hotfix：本函式可能被外層 expander 包覆（render_macro_tab L716），
     # Streamlit 禁止 nested expanders → 沿用 v17.2 慣例改用 st.container(border=True)
@@ -957,7 +986,7 @@ def render_macro_tab() -> None:
         # 與下方五桶 bar 互補不重複:此為「多空加權淨分」,五桶燈1為「景氣循環階段(0-10 phase)」。
         try:
             from ui.helpers.macro_helpers import (
-                calculate_composite_score, composite_verdict,
+                calculate_composite_score, composite_verdict, format_phase_score,
             )
             _comp_score = calculate_composite_score(ind)
             _cv_icon, _cv_level, _cv_color, _cv_action = composite_verdict(_comp_score)
@@ -968,24 +997,52 @@ def render_macro_tab() -> None:
                 f"<div style='flex-shrink:0;text-align:center;min-width:96px'>"
                 f"<div style='font-size:11px;color:{GH_FG_MUTED};letter-spacing:1px'>綜合健康度</div>"
                 f"<div style='font-size:42px;font-weight:900;color:{_cv_color};line-height:1.1'>{_comp_score:+.1f}</div>"
-                f"<div style='font-size:10px;color:#484f58'>23 指標加權淨分<br>🌎 美股 / 全球總經</div>"
+                # 2026-08-05 稽核 🟡 必修 3:副標明示這是「強度」而非「位階」;
+                # 選作 7:inline `#484f58` 換 shared/colors.GH_FG_MUTED(語意同為
+                # hero 副標次要說明文字,且原色在暗底對比 ~2:1 幾乎讀不到)。
+                f"<div style='font-size:10px;color:{GH_FG_MUTED}'>23 指標加權淨分（多空<b>強度</b>）"
+                f"<br>🌎 美股 / 全球總經</div>"
                 f"</div>"
                 f"<div style='flex:1;min-width:0'>"
                 f"<div style='font-size:22px;font-weight:900;color:{_cv_color}'>{_cv_icon} {_cv_level}</div>"
                 f"<div style='font-size:13px;color:{GH_FG_SECONDARY};margin-top:4px;line-height:1.5'>{_cv_action}</div>"
                 f"</div></div>",
                 unsafe_allow_html=True)
+            # 2026-08-05 稽核 🟡 必修 3:兩套評分尺度並列(本卡 23 指標加權淨分 vs
+            # 下方五桶「🌳 長期」的 0-10 景氣位階)只隔 23 行,使用者不知該信哪個。
+            # **刻意不合併**:方法學不同(強度 vs 位階),且 6+ consumer 吃 phase.score;
+            # 改為顯式對照揭露。位階文字走 SSOT `format_phase_score`(同 Tab② 組合健診)。
+            _phase_txt = format_phase_score(phase)
+            st.caption(
+                f"📐 兩個分數不同義,別互相換算 ——　"
+                f"**上方 {_comp_score:+.1f}** ＝ 多空**強度**(23 指標 Σ score×weight,有正負);"
+                + (f"　**下方五桶「🌳 長期」的 {_phase_txt}** ＝ 景氣**位階**"
+                   "(0-10 循環評分,恆非負)。" if _phase_txt else
+                   "　下方五桶「🌳 長期」＝ 景氣**位階**(0-10 循環評分,恆非負)。")
+            )
             # v19.367 6/8:F-RECON-1 健康度雙演算法對帳 chip(§4.3 — 加權淨分 vs 不加權多空投票)
             try:
                 from services.macro.composite_score import reconcile_composite_score
                 _rc = reconcile_composite_score(ind)
+                # 2026-08-05 稽核 🟡 必修 5(a):這段程式的註解自己就叫「對帳 chip」,
+                # 卻是手刻 emoji 的 st.caption。改吃 `ui/components/status.status_chip`
+                # (v19.388 建立後 production 0 consumer)—— dataviz #4:狀態恆帶
+                # emoji + 文字 + 狀態色,不靠顏色單獨編碼。
+                # `note` 走 html.escape:chip 是 unsafe_allow_html,服務層字串若含
+                # `<` / `>` 會被當標籤吃掉(同 tab1_macro_midcycle._card_note 的既有處置)。
+                from html import escape as _esc_rc  # noqa: PLC0415
+                from ui.components.status import status_chip  # noqa: PLC0415
                 if _rc["status"] == "disagree":
-                    st.caption(f"⚠️ 對帳:{_rc['note']}"
-                               f"(投票 {_rc['n_pos']}多/{_rc['n_neg']}空,"
-                               f"net {_rc['vote_net_ratio']:+.2f})")
+                    st.markdown(status_chip(
+                        f"對帳:{_esc_rc(str(_rc['note']))}", "warn",
+                        sublabel=(f"投票 {_rc['n_pos']}多/{_rc['n_neg']}空,"
+                                  f"net {_rc['vote_net_ratio']:+.2f}")),
+                        unsafe_allow_html=True)
                 elif _rc["status"] == "agree":
-                    st.caption(f"✅ 對帳:加權淨分與多空投票同向"
-                               f"({_rc['n_pos']}多/{_rc['n_neg']}空)")
+                    st.markdown(status_chip(
+                        "對帳:加權淨分與多空投票同向", "ok",
+                        sublabel=f"{_rc['n_pos']}多/{_rc['n_neg']}空"),
+                        unsafe_allow_html=True)
                 # neutral_mix / no_data → 不顯示(弱訊號不佔版面)
             except Exception:  # noqa: BLE001 — 對帳 chip 非致命
                 pass
@@ -1016,6 +1073,27 @@ def render_macro_tab() -> None:
 
             # v19.134 物理重排:60/40 col layout 已移除,sections 按四時域分組連續
 
+            # ══════════════════════════════════════════════════════════
+            # 📋 即時訊號 + 決策矩陣 桶
+            # ⚠️ 2026-08-05 稽核 🟡 必修 4 —— **本區塊第三次搬家**,動前先讀完:
+            #   - v19.41:原在 tab 外(擋在總經前),因 user 反饋「總經放在最上方」下移;
+            #   - v19.42:Tab① 內的 tab strip 因同一理由被消滅。
+            #   本次(第三次)從全頁最底部倒數第二區 → 上移到五桶 bar 之後、四時域之前,
+            #   並改 expanded=True。**不違反 v19.41 那條指示**:hero 卡 + 五桶 bar
+            #   (即「總經」)仍在最上方,本區塊只是插在總覽與細節之間。
+            #   理由:這是全頁唯一給出「所以呢」(逐檔 加碼/持有/減倉/全撤 + 目標權重)
+            #   的區塊,埋在 13 個一級區塊之後 + 預設收合 = 算對了但使用者看不到。
+            #   風險:若 user 再次反饋「總經要在最上面」,回退方式是把本區塊整段移回
+            #   `render_inflection_alert_section` 之後(見 git history v19.41 位置)。
+            # ══════════════════════════════════════════════════════════
+            st.markdown("## 📋 即時訊號 + 決策矩陣")
+            st.caption("先給結論 ｜ verdict 路徑 + 逐檔行動建議（推導細節見下方四時域）")
+            with st.expander(
+                "🔬 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
+                expanded=True,
+            ):
+                _render_realtime_decision_dashboard(ind)
+            st.divider()
 
             # ══════════════════════════════════════════════════════════
             # v19.134 — 🌳 長期座標 桶(物理重排,連續區塊)
@@ -1046,22 +1124,6 @@ def render_macro_tab() -> None:
             from ui.tab1_macro_inflection import render_inflection_alert_section
             render_inflection_alert_section(ind, phase=phase, fred_key=FRED_KEY, show_l3=_show_l3)
 
-            # ══════════════════════════════════════════════════════════
-            # v19.134 — 📋 即時訊號 + 決策矩陣 桶(物理重排,連續區塊)
-            # ══════════════════════════════════════════════════════════
-            st.divider()
-            st.markdown("## 📋 即時訊號 + 決策矩陣")
-            st.caption("跨時域殿後 ｜ verdict 路徑 + 逐檔行動建議")
-
-
-            # ── v19.41 ③ 🔬 即時訊號決策矩陣（v19.15 verdict + 逐檔行動建議） ──
-            # 原位於 tab 外（L799），下移至 tab 內結尾 → 讓 ① 戰情室（總經）成為 tab 首屏
-            st.divider()
-            with st.expander(
-                "③ 🔬 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
-                expanded=False,
-            ):
-                _render_realtime_decision_dashboard(ind)
             # ── AI 結構化總經摘要 ── L3 only
 
             # ══════════════════════════════════════════════════════════

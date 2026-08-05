@@ -110,8 +110,30 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
         for k, v in ind.items():
             if isinstance(v, dict) and "value" in v:
                 _sig = v.get("signal", "")
-                lines.append(f"  - {k}：{v.get('value')} {v.get('unit', '')}"
+                # 2026-08-05 稽核 🔴 必修 1(§1 Fail Loud / 反造假):
+                # 原本寫 dict key(`PMI`)→ Gemini 收到「- PMI：63.8」,把
+                # **Phil Fed 擴散指數轉換出來的代理值**當官方 ISM PMI 論述
+                # (官方 2026-07 實際 55.6;63.8 若為真是 1983 年來最高)。
+                # 服務層 `services/macro/us_indicators.py:481-494` 早已備妥
+                # name / is_proxy / proxy_note / source,但 prompt 端
+                # **0 consumer**(`PROCESS.md §4`「算對了但沒接出去」)。
+                # 這裡改吃服務層 name(身分 SSOT)+ 顯式 [PROXY] 標記。
+                # 旗標優先於文案:不靠 name 裡剛好有「替代」二字判斷
+                # (同 `ui/tab1_macro_midcycle._card_title` 的既有裁決)。
+                _nm = str(v.get("name") or "").strip() or k
+                _is_proxy = bool(v.get("is_proxy"))
+                _tag = "[PROXY 代理值] " if _is_proxy else ""
+                lines.append(f"  - {_tag}{_nm}：{v.get('value')} {v.get('unit', '')}"
                              f"{(' / ' + str(_sig)) if _sig else ''}".rstrip())
+                if _is_proxy:
+                    _pn = str(v.get("proxy_note") or "").strip()
+                    _src = str(v.get("source") or "").strip()
+                    _meta = "；".join(p for p in (
+                        f"資料源 {_src}" if _src else "", _pn) if p)
+                    lines.append(
+                        "    ⚠️ 上一項為**代理值**，不是該指標的官方本尊讀數，"
+                        "敘述時必須註明「替代指標」，禁止當官方數據引用"
+                        + (f"（{_meta}）" if _meta else ""))
             elif isinstance(v, (int, float, str)) and v not in (None, ""):
                 lines.append(f"  - {k}：{v}")
     try:

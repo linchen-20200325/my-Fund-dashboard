@@ -56,6 +56,12 @@ _MACRO_SCORE_HEALTHY_MIN: float = 6.0   # ≥ 6 → 擴張區(中間 3~6 為警�
 # 數值不變(panic=8 / warn=5,仍為新手保守版),改 import shared/macro_thresholds_v2。
 from shared.macro_buckets import _VIX_RED as _MB_VIX_RED, _VIX_YELLOW as _MB_VIX_YELLOW
 from shared.colors import TRAFFIC_NEUTRAL  # v19.252 Phase 4A:gray 走 SSOT
+# 2026-08-05 稽核 🟡 必修 5:燈號 emoji 收 ui/components/status.py `_TABLE` SSOT。
+# 本檔原本自己維護「兩份」{"green":"🟢","yellow":"🟡","red":"🔴"} 對照表
+# (四時域 + 五桶各一份)= 全站第三、四份燈號文字來源。**只收 emoji、不動色值**:
+# status.py 的 hex 是 TRAFFIC_*,本 bar 現用 MATERIAL_*,換色 = user 沒要求的視覺
+# 變更(§-1),留待 user 指示;emoji 完全等值故零風險先收。
+from ui.components.status import status_color as _status_ssot
 
 _VIX_PANIC_THRESHOLD: float = _MB_VIX_RED      # = 30,恐慌(全員一致)
 _VIX_WARNING_THRESHOLD: float = _MB_VIX_YELLOW # = 22,警戒(C2-B v19.158 收 SSOT)
@@ -65,6 +71,13 @@ _HY_SPREAD_WARN_THRESHOLD: float = _HY_THR["beginner_panic"]["warn_above"]    # 
 
 # UI 顏色(沿用 MATERIAL_*)
 _C_GREEN, _C_YELLOW, _C_RED = MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+
+# 燈號 emoji **單一來源** — 本檔原本在 3 個函式內各寫一份 {"green":"🟢",...},
+# 是 `ui/components/status.py::_TABLE` 之外的第 2~4 份燈號文字。收成一份、且由
+# status.py 導出(green→ok / yellow→warn / red→bad / gray→unknown 走 `_ALIASES`)。
+_LEVEL_EMOJI: dict[str, str] = {
+    _lv: _status_ssot(_lv).emoji for _lv in ("green", "yellow", "red", "gray")
+}
 
 
 # ════════════════════════════════════════════════════════════════
@@ -103,7 +116,12 @@ def compute_traffic_lights(
         except Exception:
             phase_info = {}
 
-    _macro_score = float(phase_info.get("score") or 5.0)
+    # ⚠️ 顯式 None 判斷,**不可**用 `or 5.0`:`calc_macro_phase` 的 clamp 下界是 0.0
+    # (極端衰退),而 `0.0 or 5.0` 在 Python 回 5.0 → 最危險的讀數被靜默回退成中性,
+    # 燈號由 🔴 危險變成 🟡 轉折。與本檔 `compute_four_horizon_summary` 同一個修正
+    # (PROCESS.md §4「算對了但沒接出去」同型:同檔同 bug 相隔 267 行,前一輪只修下面那個)。
+    _score_raw = phase_info.get("score")
+    _macro_score = 5.0 if _score_raw is None else float(_score_raw)
     _phase_label = phase_info.get("phase") or "未定"
 
     # ── helper:從 indicators 撈某 key 的 value
@@ -274,7 +292,7 @@ def compute_traffic_lights(
 
     # ════════════════════════════════════════════
     _level_to_color = {"green": _C_GREEN, "yellow": _C_YELLOW, "red": _C_RED}
-    _level_to_emoji = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
+    _level_to_emoji = _LEVEL_EMOJI   # status.py `_TABLE` SSOT(見模組頂部)
 
     return {
         "light1_health": {
@@ -364,10 +382,14 @@ def compute_four_horizon_summary(
             return None
 
     _level_to_color = {"green": _C_GREEN, "yellow": _C_YELLOW, "red": _C_RED}
-    _level_to_emoji = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
+    _level_to_emoji = _LEVEL_EMOJI   # status.py `_TABLE` SSOT(見模組頂部)
 
     # ═══ 🌳 長期:regime ═══
-    _macro_score = float(phase_info.get("score") or 5.0)
+    # §1 / `PROCESS.md §4`「M2 去重」同型:原 `phase_info.get("score") or 5.0` 在
+    # score=0.0(極端衰退,calc_macro_phase 的 clamp 下界)時 falsy 回退成中性 5.0,
+    # 桶色被誤判為 yellow「轉折中」。改顯式 None 判斷,0.0 照實用。
+    _score_raw = phase_info.get("score")
+    _macro_score = 5.0 if _score_raw is None else float(_score_raw)
     _phase_name = phase_info.get("phase") or "未定"
     if _macro_score >= _MACRO_SCORE_HEALTHY_MIN:
         _long_level, _long_label = "green", "擴張 / 復甦"
@@ -375,7 +397,16 @@ def compute_four_horizon_summary(
         _long_level, _long_label = "red", "高峰 / 衰退"
     else:
         _long_level, _long_label = "yellow", "轉折中"
-    _long_headline = f"{_phase_name} ({_macro_score:.1f}/10)"
+    # 2026-08-05 稽核 🟡 必修 3 前置:原本自己 f-string 組「擴張 (6.8/10)」,
+    # 沒吃 v19.403 DUP-3 建的 SSOT `format_phase_score`(格式還多了一層括號)。
+    # 兩套評分尺度(hero 的 23 指標加權淨分 vs 本桶的 0-10 景氣位階)撞臉的根因就是
+    # 「位階字卡格式各寫各的」;此處收 SSOT,格式與 Tab② 組合健診一致。
+    # phase 缺失時 SSOT 回 ""(不捏造)→ 退回本地 fallback 保住桶內有字。
+    # lazy import:`ui.helpers.macro.helpers` 會連帶拉進 `services.macro` 整包,
+    # 本檔既有慣例(:351 的 calc_macro_phase)就是延後到用時才 import。
+    from ui.helpers.macro.helpers import format_phase_score  # noqa: PLC0415
+    _long_headline = (format_phase_score(phase_info)
+                      or f"{_phase_name} {_macro_score:.1f}/10")
 
     # ═══ 📈 中期:景氣循環 ═══
     _pmi = _v("PMI") or _v("US_PMI")
@@ -536,7 +567,7 @@ def compute_five_bucket_summary(
 
     _level_to_color = {"green": _C_GREEN, "yellow": _C_YELLOW, "red": _C_RED,
                        "gray": TRAFFIC_NEUTRAL}  # v19.252 Phase 4A:SSOT
-    _level_to_emoji = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⬜"}
+    _level_to_emoji = _LEVEL_EMOJI   # status.py `_TABLE` SSOT(含 gray→⬜)
 
     if news_items is None:
         _summary["news"] = {

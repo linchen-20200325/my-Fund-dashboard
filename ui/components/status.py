@@ -13,6 +13,24 @@ level 語意(容錯別名見 `_ALIASES`):
     caution     → 🟠 橘   次級警示、邊緣
     bad / crit  → 🔴 紅   危險、吃本金、觸發
     unknown     → ⬜ 灰   缺資料 / disabled(§1 誠實)
+
+2026-08-05 稽核 🟡 必修 5 裁決(`PROCESS.md §4` 0-consumer 條款)= **保留 + 接線**。
+理由:`_TABLE` 是全站燈號「emoji + 文字」的語意 SSOT,刪了會讓各處重新各寫一份
+(稽核當下已經有 3 份複本)。已接的 production consumer:
+  1. `ui/helpers/macro/beginner_view.py::_LEVEL_EMOJI` — 四時域 / 五桶 bar 的燈號
+     emoji 收本檔 SSOT(原本 3 個函式各自維護一份 {"green":"🟢",...})。
+     ⚠️ **只收 emoji、未收 hex**:該 bar 現用 `MATERIAL_*`,換成本檔的 `TRAFFIC_*`
+     會改動畫面顏色 = user 未要求的視覺變更(`CLAUDE.md §-1`),留待 user 拍板。
+  2. `ui/tab1_macro.py::_render_realtime_decision_dashboard` — 經 `stat_tile()`
+     的 `status=` 參數使用(加碼 ok / 減倉 caution / 全撤 bad)。
+  3. `ui/tab1_macro.py` 綜合健康度 hero 下方的 F-RECON-1 **對帳 chip** —
+     原本是手刻 emoji 的 `st.caption`,改吃 `status_chip()`。
+
+✅ **0-consumer 已清零(v19.429)**:`status_hex()` 已刪除。它是 `status_color(x).hex`
+   的 2 行取值糖、production 0 caller;前一輪以「四個 Coder 平行作業期間不宜刪公開
+   helper」暫留,該理由在合併時已失效(全 repo 無任何 caller)。依 `PROCESS.md §4`
+   「0 consumer → 接線或刪除,不得留著假裝有揭露」處置。需要 hex 直接用
+   `status_color(level).hex`。
 """
 from __future__ import annotations
 
@@ -61,9 +79,10 @@ def status_color(level, *, default: str = "unknown") -> Status:
     return _TABLE[key]
 
 
-def status_hex(level) -> str:
-    """快捷:只要 hex 色。"""
-    return status_color(level).hex
+# v19.429 刪除 `status_hex(level)` —— `status_color(x).hex` 的 2 行糖,production
+# 0 consumer。依 PROCESS.md §4「0 consumer 等同未達標;若確實不需要 → 刪除,而不是
+# 留著假裝有揭露」。前一輪以「平行作業期間不宜刪公開 helper」暫留,該理由在合併時
+# 已失效(全 repo 無任何 caller)。需要 hex 請直接用 `status_color(level).hex`。
 
 
 def status_chip(label: str, level, *, sublabel: str = "") -> str:

@@ -16,6 +16,27 @@ _STEPS: tuple[tuple[str, str, str], ...] = (
 )
 _VALID = {s[0] for s in _STEPS}
 
+# 導覽列標籤帶 ①②③④ 序號(動線第幾站),`st.tabs` 的分頁名不帶 —— 兩者只差前綴,
+# 故用同一份 `_STEPS` 導出,避免 app.py 與本檔各自維護一份而漂移(2026-08-05 稽核
+# 必修 2:三處指路文案指向不存在的分頁名,根因就是「標籤沒有 SSOT」)。
+_ORDINAL_PREFIXES = "①②③④⑤⑥⑦⑧⑨⑩"
+
+
+def tab_label(key: str) -> str:
+    """回傳該站的 **st.tabs 分頁名**(去掉 ①②③④ 序號前綴)。
+
+    `app.py` 的 `st.tabs([...])` 與各 Tab 內「請至 X 分頁」指路文案共用本函式,
+    確保畫面上的分頁名與文案永遠同一份來源(§3.3 反捏造:不得各自寫死字串)。
+
+    §1 Fail Loud:未知 key 直接 `KeyError`,**不回退**成空字串或猜測名稱 ——
+    回退只會讓「指到不存在的分頁」這類 bug 再次靜默發生。
+    """
+    for _k, _label, _ in _STEPS:
+        if _k == key:
+            return _label.lstrip(_ORDINAL_PREFIXES).strip()
+    raise KeyError(
+        f"story_nav.tab_label: 未知的決策動線 key '{key}';合法值 = {sorted(_VALID)}")
+
 
 def story_nav_markdown(current: str) -> str:
     """組敘事麵包屑 markdown（純函式、可測）。current 為目前站 key。

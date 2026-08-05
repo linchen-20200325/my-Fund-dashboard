@@ -165,9 +165,23 @@ class _MockResp:
         self.text = text
 
 
+def _aaii_html(bull: float, neutral: float, bear: float, week: str = "7/29/2026") -> str:
+    """AAII 官網「Week Ending | Bullish | Neutral | Bearish」表格 fixture。
+
+    2026-08-05 稽核後 parser 改吃 get_text 純文字 + 三欄表格結構 + 三條不變量
+    (各欄 [0,100] / 三欄和 ≈ 100 / |bull−bear| ≤ 60),原本
+    `"<p>Bullish 35.0%</p><p>Bearish 30.0%</p>"` 這種沒有週結日、沒有 neutral 欄的
+    片段已不符官網真實結構,故三個 fixture 一併改成表格(數值與斷言不變)。
+    """
+    return ("<table><thead><tr><th>Week Ending</th><th>Bullish</th>"
+            "<th>Neutral</th><th>Bearish</th></tr></thead><tbody>"
+            f"<tr><td>{week}</td><td>{bull}%</td><td>{neutral}%</td><td>{bear}%</td></tr>"
+            "</tbody></table>")
+
+
 def test_aaii_neutral():
     """中性 spread(5%)→ ➖ 情緒中性 label。"""
-    html = "<p>Bullish 35.0%</p><p>Bearish 30.0%</p>"
+    html = _aaii_html(35.0, 35.0, 30.0)
     with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, html)):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()
@@ -179,7 +193,7 @@ def test_aaii_neutral():
 
 def test_aaii_extreme_bull_inverse():
     """spread > 20 → 反指標賣訊號。"""
-    html = "Bullish 55.0% ... Bearish 25.0%"
+    html = _aaii_html(55.0, 20.0, 25.0)
     with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, html)):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()
@@ -189,7 +203,7 @@ def test_aaii_extreme_bull_inverse():
 
 def test_aaii_extreme_bear_inverse():
     """spread < -20 → 反指標買訊號。"""
-    html = "Bullish 20.0% xxx Bearish 50.0%"
+    html = _aaii_html(20.0, 30.0, 50.0)
     with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, html)):
         ule.fetch_aaii_sentiment.cache_clear()
         r = ule._aaii_with_judgment()

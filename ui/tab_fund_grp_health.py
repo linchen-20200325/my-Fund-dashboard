@@ -45,6 +45,44 @@ def _pick_comparison_basis(rows: "list[dict]") -> str:
     return "年化" if _all_annual else "全期實際"
 
 
+_SHARPE_SRC_COL = "Sharpe 來源"
+
+
+def _fold_uniform_sharpe_source(df):
+    """本批「Sharpe 來源」全同 → 從 df 剔除該欄,回 `(df, 唯一來源標籤)`;否則 `(df, None)`。
+
+    背景(2026-08-05 稽核 🟢 選作 6):健診大表 48+ 欄,`Sharpe 來源` 逐列都印,
+    10 檔全是 `wb07 1Y(官方)` 時整欄零資訊量,卻佔掉一個欄寬。
+
+    **刻意只做在呈現層**:
+    - 不動 `ui/helpers/fund_grp_health/unified._UNIFIED_FRONT` 欄序常數
+      (`tests/test_risk_metric_disclosure.py:329-330` 斷言旗標欄必須緊貼被標註欄),
+      也不動批次大表 `BATCH_UNIFIED_COLUMNS`(固定欄序 → checkpoint 相容)。
+    - 不加側車 dict:唯一 consumer 就是本檔表下的 caption,多包一層 = `CLAUDE.md`
+      §8.1 step 6 的「用不到的抽象」,且會踩 `PROCESS.md §4` 的 0-consumer 陷阱。
+
+    **保守條件**(§2.2 揭露不得被折疊掉):任一列缺值 / 出現 >1 種來源 → 原樣保留。
+    混期(wb07 6M 混 1Y)正是本欄存在的理由,絕不可收合。
+    """
+    # ⚠️ 不可寫 `list(getattr(df, "columns", []) or [])` —— pandas `Index` 沒有定義
+    #    __bool__,`Index or []` 會 raise
+    #    `ValueError: The truth value of a Index is ambiguous`。
+    #    (空 df 一樣會炸,因為 `or` 先對 Index 求真值才輪到短路。)
+    if df is None:
+        return df, None
+    if _SHARPE_SRC_COL not in list(getattr(df, "columns", [])):
+        return df, None
+    _vals = list(df[_SHARPE_SRC_COL])
+    if not _vals:
+        return df, None
+    if any(v is None or str(v).strip() == "" or str(v) == "nan" for v in _vals):
+        return df, None            # 有缺值 = 不是「全同」,照常常駐
+    _uniq = {str(v) for v in _vals}
+    if len(_uniq) != 1:
+        return df, None            # 真混期 → 逐列顯示
+    return df.drop(columns=[_SHARPE_SRC_COL]), _uniq.pop()
+
+
 def _dedup_upper(seq) -> "list[str]":
     """代號清單 order-preserving 去重 + 大寫正規化 —— SSOT:本 Tab 代號唯一化只此一處。
 
@@ -113,7 +151,10 @@ def render_fund_grp_health_tab() -> None:
             f"　{_phase_tip}"
         )
     else:
-        st.caption("💡 先至「🌐 市場定調」Tab 載入資料，健診結果將顯示對應市場環境說明。")
+        # 2026-08-05 稽核 必修 2:指路文案的分頁名走 story_nav SSOT,分頁改名時
+        # 這行自動跟著改(原先三處同型文案寫死舊名 → 指到不存在的分頁)。
+        from ui.helpers.story_nav import tab_label as _tab_label
+        st.caption(f"💡 先至「{_tab_label('macro')}」Tab 載入資料，健診結果將顯示對應市場環境說明。")
 
     # v19.302: 從組合配置帶入基金代號（讀 portfolio_funds session_state）
     _pf_raw = st.session_state.get("portfolio_funds") or []
@@ -728,8 +769,35 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         n_good = sum(1 for r in ok_rows if "健康" in str(r.get(_mk_col, "")))
         total_twd = sum(float(r.get("累積 TWD 配息 🧮", 0) or 0) for r in ok_rows)
 
+        # 2026-08-05 稽核 🟡 必修 4:失敗摘要前置。
+        # 原本「❌ 抓取失敗」區在本行之後 **226 行**(中間隔淘汰候選 / 48+ 欄健診大表 /
+        # PK / 換標決策 / 景氣適配 / 相關性矩陣 / 比較圖 / 逐檔配息明細),而 KPI
+        # 「檢查檔數」只算成功數 —— 輸入 2 檔只成功 1 檔時,畫面顯示「1」且完全不提
+        # 另一檔怎麼了,要捲很久才看得到原因(§1 缺料必須當場講清楚)。
+        # 下方「#### ❌ 抓取失敗」明細區保留不動,此處只做「先講一句」。
+        if err_rows:
+            st.error(
+                f"❌ 有 {len(err_rows)} / {len(ok_rows) + len(err_rows)} 檔抓取失敗，"
+                f"**未納入下方所有統計與表格**：\n\n"
+                + "\n".join(
+                    f"- **{r.get('code', '?')}**：{r.get('error', '?')}"
+                    for r in err_rows
+                )
+            )
+
         k1, k2, k3, k4, k5 = st.columns(5)
-        k1.metric("檢查檔數", len(ok_rows))
+        # delta 顯示本次少掉幾檔,讓「1」不再像是全部成功。
+        # ⚠️ 這裡**刻意使用 Streamlit 預設的 normal 配色**(不傳 delta_color):
+        #   normal(預設) → 負值紅、正值綠
+        #   反轉模式     → 負值**綠**、正值紅   ← 那是給「成本下降是好事」用的
+        # 抓取失敗是壞消息,必須是紅色。前一版誤用反轉模式,把「少掉一檔」渲染成
+        # 綠色好消息,方向與本修正目的完全相反。
+        # 📌 本註解**刻意不寫出反轉模式的參數字面值** ——
+        #    `tests/test_grp_health_failure_summary.py::test_failed_delta_is_not_rendered_green`
+        #    對整檔做子字串掃描,註解裡出現該字串等於自己讓自己紅
+        #    (同 PROCESS.md §4「測試把錯誤制度化」的鄰近陷阱)。
+        k1.metric("檢查檔數", len(ok_rows),
+                  delta=(f"-{len(err_rows)}" if err_rows else None))
         k2.metric("🟢 健康", n_good)
         k3.metric("🟡 警示", n_warn)
         k4.metric("🔴 吃本金", n_eat)
@@ -753,6 +821,9 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             except Exception as _e_merge:  # noqa: BLE001 — 合併失敗不擋健診總表
                 st.caption(f"⬜ ①②③ 合併大表失敗:"
                            f"[{type(_e_merge).__name__}] {str(_e_merge)[:80]}")
+        # 2026-08-05 稽核 🟢 選作 6:本批 Sharpe 來源全同 → 該欄逐列重複、零資訊量,
+        # 由 df 收合成表下一行 caption(§2.2 揭露不減少,只是從 48 欄裡挪出來講一次)。
+        df, _sharpe_src_uniform = _fold_uniform_sharpe_source(df)
         # v19.189：逐檔財務健診（4 大功能 + 健診摘要表 PK + 健診卡）插在健診總表上方。
         # user 要求易讀的摘要 PK + 健診卡先看到（原在下方「進階分析」區塊）。
         if funds_extra:
@@ -776,6 +847,12 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             "兩欄皆**僅供歷史參考**,不參與燈號判定。"
             "📊 **長線挑核心資產**請另參 3-3-3 原則:成立 ≥ 3 年 + 3 年平均年化 > 7%。"
         )
+        if _sharpe_src_uniform:
+            st.caption(
+                f"📎 本批 **Sharpe 來源全部相同**:「{_sharpe_src_uniform}」"
+                f"—— 該欄逐列同值故已收合;只要出現混期(如部分檔只有 wb07 6M)"
+                f"就會自動回到表內逐列顯示。"
+            )
         # v19.77 L1：column_config 數值格式化（百分號 / 千分位）+ 欄寬調整
         from streamlit import column_config as _cc
         _col_cfg = {

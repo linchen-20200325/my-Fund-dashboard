@@ -68,6 +68,23 @@ FRED_BSCICP02: str = "BSCICP02USM460S"  # OECD business confidence US
 # ── Regional Fed surveys ───────────────────────────────────────────
 FRED_PHILLY_FED: str = "GACDFSA066MSFRBPHI"  # Philadelphia Fed manufacturing
 
+# Phil Fed 擴散指數 → 「PMI 刻度」換算常數(唯一消費端:
+# repositories/macro/alternate.fetch_ism_pmi 方案 6 替代計):
+#     PMI_eq = PHILLY_FED_PMI_BASE + diffusion / PHILLY_FED_TO_PMI_DIVISOR
+#
+# ⚠️ 來源與侷限(§3.3 反捏造 — 據實登記,勿當成有出處的統計係數):
+#   1. 這個 3.0 **不是**官方公式,也不是任何已發表的回歸估計,而是把 ±50 區間的
+#      擴散指數線性壓進 33~67 這個「看起來像 PMI」的區間的刻度對映常數,**無出處可引用**。
+#   2. 兩個指標母體本就不同:Phil Fed 是**單一聯準區、約 250 家廠商**對「本月 vs 上月」
+#      的變化擴散指數;ISM 是**全國 16 大產業**的複合指數。相關性宣稱不可過度延伸。
+#   3. 實證反例(2026-07):Phil Fed 由 10.3 跳到 41.4(+31.1),同月官方 ISM 只由
+#      53.3 到 55.6(+2.3);換算值 50 + 41.4/3 = 63.8,若當成 ISM PMI 讀將是 1983 年
+#      以來最高讀數 —— 與事實不符。
+#   → 結論:轉換值**只能看方向,不可當 ISM PMI 的水準值讀**;消費端必須靠
+#     `is_proxy=True` + label 後綴揭露,值域檢查(30~70)攔不住這類錯誤。
+PHILLY_FED_PMI_BASE: float = 50.0
+PHILLY_FED_TO_PMI_DIVISOR: float = 3.0
+
 # ── Financial conditions / Leading indicators ─────────────────────
 FRED_NFCI: str = "NFCI"            # Chicago Fed National Financial Conditions
 FRED_LEI: str = "USSLIND"          # St. Louis Fed leading index (deprecated; legacy ref)

@@ -1,5 +1,28 @@
 """Streamlit headless e2e — Phase B（playwright smoke + pixel-diff baseline）.
 
+╔══════════════════════════════════════════════════════════════════════════╗
+║ ⚠️ v19.429 現況：本檔**實質未啟用**，不提供任何視覺回歸保護。              ║
+║                                                                          ║
+║ 三道關卡任一即整組 skip：                                                 ║
+║   1. `pytest.importorskip("playwright.sync_api")`（本檔 :36）             ║
+║   2. `browser_context` fixture — 需 `playwright install chromium`         ║
+║   3. 需 localhost:8501 有 streamlit 在跑                                  ║
+║ CI 兩條 lane 都跑不到：fast lane `-m "not slow"` 排除；slow lane 雖裝     ║
+║ requirements-dev.txt，但未裝 chromium、未起 server。                      ║
+║                                                                          ║
+║ ⛔ 而且 `tests/__snapshots__/` **不存在** —— 從未 commit 任何 baseline    ║
+║    PNG。即使三道關卡全通過，pixel diff 也無基準可比，第一次跑只是寫檔。    ║
+║                                                                          ║
+║ ⇒ **改 UI 不需要更新 baseline**。下方「執行流程」是「若要啟用」的步驟，    ║
+║    不是「現在的例行流程」，請勿誤讀（曾有多份稽核報告據此誤報「5 張      ║
+║    baseline 需 --update-snapshots」，實際上那 5 張檔案並不存在）。        ║
+║                                                                          ║
+║ 要真正啟用需一次補齊：pip install playwright + playwright install        ║
+║ chromium + 起 streamlit + `--update-snapshots` 產生並 **commit** baseline ║
+║ + CI workflow 補上述步驟。屬 `CLAUDE.md §-1`「沒具體需求不要動」，        ║
+║ 等實際有視覺回歸需求再評估。                                              ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
 骨架版本（v18.99 / 升級為 pytest-playwright-snapshot pixel diff
          v18.103 / 加 Phase B-3 跨 viewport 響應式驗證）：
   - Phase A：streamlit.testing.v1.AppTest（已有 7 場景於 test_app_apptest.py）

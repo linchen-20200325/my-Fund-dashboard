@@ -142,9 +142,18 @@ class TestDefiLlamaValidator:
 # v19.267 D8 #5 — AAII sentiment dict
 # ════════════════════════════════════════════════════════════════
 def _aaii_success(source="AAII:sentimentsurvey", bull=40.5, bear=25.2,
-                  with_fetched_at=True, unit="%"):
-    d = {"value": bull - bear, "unit": unit, "bull": bull, "bear": bear,
-         "date": "weekly", "url_used": "https://...", "source": source}
+                  neutral=None, with_fetched_at=True, unit="%",
+                  date="2026-07-29"):
+    """合法 AAII 成功 dict。
+
+    稽核修正後的契約:多了 `neutral`(三欄互斥選項,和 ≈ 100)與 ISO 週結日
+    (原本的 "weekly" 硬編碼違反 §2.3 PIT,已不合規)。
+    """
+    if neutral is None:
+        neutral = round(100.0 - bull - bear, 1)
+    d = {"value": round(bull - bear, 1), "unit": unit, "bull": bull,
+         "neutral": neutral, "bear": bear,
+         "date": date, "url_used": "https://...", "source": source}
     if with_fetched_at:
         d["fetched_at"] = "2026-06-30T10:00:00+00:00"
     return d
@@ -209,6 +218,44 @@ class TestAaiiValidator:
              "fetched_at": "2026-06-30T10:00:00+00:00"}
         with pytest.raises(ValueError, match="value/bull/bear"):
             validate_aaii_sentiment(d)
+
+    # ── 稽核修正(2026-08-05):三欄不變量 + PIT 週結日 ──────────────
+    # 舊 schema 只驗 bull/bear ∈ [0,100] → 線上的 bull=50.0 / bear=0.0 完全合規
+    # 通過,畫面顯示 +50.00「極度貪婪」;官網當週實際 bull 31.0 / bear 42.1
+    # (spread −11.1)。以下 6 條就是補上去的攔截線。
+    def test_missing_neutral_raises(self):
+        d = _aaii_success()
+        d.pop("neutral")
+        with pytest.raises(ValueError, match="neutral"):
+            validate_aaii_sentiment(d)
+
+    def test_sum_not_100_raises(self):
+        """線上實際垃圾值 bull=50.0 / bear=0.0 / neutral=0.0 必須被擋下。"""
+        d = _aaii_success(bull=50.0, bear=0.0, neutral=0.0)
+        with pytest.raises(ValueError, match=r"bull\+neutral\+bear"):
+            validate_aaii_sentiment(d)
+
+    def test_spread_over_60_raises(self):
+        d = _aaii_success(bull=70.0, bear=5.0, neutral=25.0)
+        with pytest.raises(ValueError, match="bull−bear"):
+            validate_aaii_sentiment(d)
+
+    def test_value_inconsistent_with_bull_minus_bear_raises(self):
+        d = _aaii_success()
+        d["value"] = d["bull"] - d["bear"] + 5.0
+        with pytest.raises(ValueError, match="不一致"):
+            validate_aaii_sentiment(d)
+
+    def test_weekly_placeholder_date_raises(self):
+        """§2.3 PIT:'weekly' 這種無時點字串連「是不是上週的」都判斷不了。"""
+        d = _aaii_success(date="weekly")
+        with pytest.raises(ValueError, match="date"):
+            validate_aaii_sentiment(d)
+
+    def test_real_week_ending_date_passes(self):
+        """官網 2026-07-29 當週真實數字必須合規通過。"""
+        d = _aaii_success(bull=31.0, bear=42.1, neutral=26.9, date="2026-07-29")
+        assert validate_aaii_sentiment(d) is d
 
 
 # ════════════════════════════════════════════════════════════════

@@ -1,0 +1,441 @@
+"""2026-08-05 稽核 — Tab① 總經 UI 六項必修的守衛 + **接線驗證**(`PROCESS.md §4`)。
+
+覆蓋:
+  必修 1  PMI 代理值必須帶標記進 AI prompt(§1 反造假)
+  必修 2  三處指路文案改吃 `story_nav.tab_label()`(分頁名 SSOT)
+  必修 3  兩套評分尺度消歧義 + 位階字卡收 `format_phase_score` SSOT
+  必修 4  決策矩陣位置(五桶 bar 之後、四時域之前)+ 預設展開
+  必修 5  status / stat_tile / tables 三元件的 0-consumer 裁決
+  必修 6  SPEC §1-B 與單軌實作對齊
+
+⚠️ 設計準則(`PROCESS.md §4`):本 repo 已四次出現「算對了但沒接出去」。
+   因此凡是「服務層/元件早就備妥、只差 caller」的項目,本檔一律**檢查呼叫端**
+   (AST 找 Call 節點 / 比對 caller 實際輸出),而不是只檢查函式本身能不能跑 ——
+   後者在 caller 沒改時照樣綠,等於沒測。
+   每條 test 的 docstring 標明「修正前紅在哪」。
+"""
+from __future__ import annotations
+
+import ast
+import sys
+from pathlib import Path
+
+import pytest
+
+_ROOT = Path(__file__).resolve().parents[1]
+_TAB1 = _ROOT / "ui" / "tab1_macro.py"
+_TAB1_INFL = _ROOT / "ui" / "tab1_macro_inflection.py"
+_TAB3 = _ROOT / "ui" / "tab3_portfolio.py"
+_TAB6 = _ROOT / "ui" / "tab6_manual.py"
+_BEGINNER = _ROOT / "ui" / "helpers" / "macro" / "beginner_view.py"
+_SPEC = _ROOT / "SPEC.md"
+
+
+# ══════════════════════════════════════════════════════════════
+# 共用 AST 工具
+# ══════════════════════════════════════════════════════════════
+def _tree(path: Path) -> ast.AST:
+    return ast.parse(path.read_text(encoding="utf-8"))
+
+
+def _fn_name(call: ast.Call) -> str:
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    return str(getattr(call.func, "attr", ""))
+
+
+def _is_alias_of(call: ast.Call, fname: str) -> bool:
+    """本 repo 慣用 `from x import f as _f` / `as _f_v19xxx` 的 lazy import 別名,
+    因此以「去底線前綴後 startswith」判定,避免別名一改測試就瞎。"""
+    return _fn_name(call).lstrip("_").startswith(fname)
+
+
+def _call_first_str_args(path: Path, fname: str) -> set[str]:
+    """回傳該檔內所有 `fname(...)`(含別名)呼叫的第一個字串引數。"""
+    out: set[str] = set()
+    for node in ast.walk(_tree(path)):
+        if isinstance(node, ast.Call) and _is_alias_of(node, fname):
+            if node.args and isinstance(node.args[0], ast.Constant) \
+                    and isinstance(node.args[0].value, str):
+                out.add(node.args[0].value)
+    return out
+
+
+def _is_called(path: Path, fname: str) -> bool:
+    return any(isinstance(n, ast.Call) and _is_alias_of(n, fname)
+               for n in ast.walk(_tree(path)))
+
+
+def _string_constants(path: Path) -> list[str]:
+    """只取**字串字面值**(不含 `#` 註解)—— 讓「註解裡引述舊文案」不會誤判為未修。"""
+    return [n.value for n in ast.walk(_tree(path))
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
+# ══════════════════════════════════════════════════════════════
+# 必修 1 — PMI 代理值進 AI prompt 必須帶標記
+# ══════════════════════════════════════════════════════════════
+class _FakeSessionState(dict):
+    def __getattr__(self, k):
+        return self.get(k)
+
+    def __setattr__(self, k, v):
+        self[k] = v
+
+
+@pytest.fixture()
+def _mock_ss(monkeypatch):
+    import streamlit as st
+    monkeypatch.setattr(st, "session_state", _FakeSessionState({}))
+
+
+_PROXY_PMI = {
+    # 形狀對齊 services/macro/us_indicators.py:483-495 的 R["PMI"]
+    "name": "ISM 製造業 PMI（Phil Fed 替代）",
+    "value": 63.8,
+    "unit": "",
+    "signal": "🟢",
+    "source": "FRED:GACDFSA066MSFRBPHI:proxy",
+    "is_proxy": True,
+    "proxy_note": "Phil Fed 擴散指數轉換為 PMI 刻度",
+}
+
+
+class TestProxyReachesAiPrompt:
+    """§1:代理值不可以官方本尊之名進 Gemini prompt。"""
+
+    def test_proxy_name_note_and_source_all_in_prompt(self, _mock_ss):
+        """**修正前必紅** —— 原本 prompt 寫的是 dict key「PMI」,
+        `name` / `is_proxy` / `proxy_note` / `source` 四個欄位 0 consumer。"""
+        from ui.tab1_macro_ai import _build_macro_ai_snapshot
+        snap, _, _ = _build_macro_ai_snapshot({"PMI": dict(_PROXY_PMI)}, {}, {}, {}, [])
+        assert "ISM 製造業 PMI（Phil Fed 替代）" in snap, "prompt 未帶服務層 name"
+        assert "PROXY" in snap, "prompt 未標示這是代理值"
+        assert "Phil Fed 擴散指數轉換為 PMI 刻度" in snap, "proxy_note 仍 0 consumer"
+        assert "FRED:GACDFSA066MSFRBPHI:proxy" in snap, "來源未進 prompt"
+
+    def test_proxy_marker_before_the_value(self, _mock_ss):
+        """代理標記必須與數值同一行/在其前,否則 AI 可能只讀到 63.8。"""
+        from ui.tab1_macro_ai import _build_macro_ai_snapshot
+        snap, _, _ = _build_macro_ai_snapshot({"PMI": dict(_PROXY_PMI)}, {}, {}, {}, [])
+        _line = next(ln for ln in snap.splitlines() if "63.8" in ln)
+        assert "PROXY" in _line, f"數值行沒有代理標記:{_line!r}"
+
+    def test_non_proxy_indicator_not_mislabeled(self, _mock_ss):
+        """§1 反向:非代理指標不得被誤加 [PROXY](假警報同樣是失真)。"""
+        from ui.tab1_macro_ai import _build_macro_ai_snapshot
+        ind = {"VIX": {"name": "VIX 恐慌指數", "value": 18.0, "unit": "",
+                       "signal": "🟢", "is_proxy": False, "source": "Yahoo:^VIX"}}
+        snap, _, _ = _build_macro_ai_snapshot(ind, {}, {}, {}, [])
+        assert "VIX 恐慌指數" in snap
+        assert "PROXY" not in snap
+
+    def test_missing_name_falls_back_to_key(self, _mock_ss):
+        """邊界:服務層沒給 name → 退回 dict key,不得變成空白/None。"""
+        from ui.tab1_macro_ai import _build_macro_ai_snapshot
+        snap, _, _ = _build_macro_ai_snapshot({"CFNAI": {"value": -0.2}}, {}, {}, {}, [])
+        assert "CFNAI：-0.2" in snap
+
+    def test_proxy_flag_wins_over_name_wording(self, _mock_ss):
+        """旗標優先於文案:name 沒寫「替代」二字,只要 is_proxy=True 就得標記。"""
+        from ui.tab1_macro_ai import _build_macro_ai_snapshot
+        ind = {"PMI": {"name": "ISM 製造業 PMI", "value": 63.8, "is_proxy": True,
+                       "proxy_note": "", "source": ""}}
+        snap, _, _ = _build_macro_ai_snapshot(ind, {}, {}, {}, [])
+        assert "PROXY" in snap
+
+
+def test_tab6_indicator_name_not_truncated_through_proxy_label():
+    """**修正前必紅**(18 < 20) —— tab6 的 `[:18]` 會把
+    「ISM 製造業 PMI（Phil Fed 替代）」切成「…（Phil Fed 替」,
+    剛好砍掉「替代」的下半,代理值在 23 項明細表看起來像官方本尊。"""
+    import re
+    src = _TAB6.read_text(encoding="utf-8")
+    m = re.search(r'_iv\.get\("name", _ik\)[^\[]*\[:(\d+)\]', src)
+    assert m, "tab6_manual.py 找不到指標 name 截斷點(結構已變,請更新本測試)"
+    assert int(m.group(1)) >= len(_PROXY_PMI["name"]), (
+        f"截斷長度 {m.group(1)} < 代理值全名 {len(_PROXY_PMI['name'])} 字 → 標籤會被切掉")
+
+
+# ══════════════════════════════════════════════════════════════
+# 必修 2 — 三處指路文案接 story_nav.tab_label()
+# ══════════════════════════════════════════════════════════════
+# (檔案 → 該檔應呼叫的 tab_label key, 該檔不得再出現的死分頁名字面值)
+_HINT_SITES = (
+    (_TAB1,      "portfolio", "📦 投資組合"),
+    (_TAB1_INFL, "portfolio", "📊 組合基金"),
+    (_TAB3,      "fund",      "單檔基金"),
+)
+
+
+@pytest.mark.parametrize("path,key,dead", _HINT_SITES,
+                         ids=[p.name for p, _, _ in _HINT_SITES])
+def test_hint_text_wired_to_tab_label(path: Path, key: str, dead: str):
+    """**修正前必紅** —— `tab_label()` 早就存在,但這三處仍是寫死字串。
+
+    兩段都要過才算接線:
+      (a) 該檔真的有 `tab_label('<key>')` **呼叫**(不是只 import);
+      (b) 死分頁名不再出現在任何**字串字面值**裡(註解引述舊文案不算)。
+    """
+    assert key in _call_first_str_args(path, "tab_label"), (
+        f"{path.name} 沒有 tab_label('{key}') 呼叫 —— 指路文案未接 SSOT")
+    for s in _string_constants(path):
+        assert dead not in s, f"{path.name} 仍有寫死的死分頁名字面值:{s!r}"
+
+
+def test_tab3_hint_drops_stale_tab_ordinal():
+    """Tab2 序號必須拿掉 —— 個基深掘早已不是第 2 個分頁(app.py 現為 5 分頁)。"""
+    for s in _string_constants(_TAB3):
+        assert "Tab2" not in s, f"tab3_portfolio.py 仍寫死分頁序號:{s!r}"
+
+
+def test_hint_keys_exist_in_story_nav():
+    """指路用的 key 必須是 `_STEPS` 合法站別(§1:未知 key 會 KeyError 當場炸)。"""
+    from ui.helpers.story_nav import tab_label
+    for _p, _key, _dead in _HINT_SITES:
+        assert tab_label(_key)
+
+
+# ══════════════════════════════════════════════════════════════
+# 必修 3 — 兩套評分尺度消歧義
+# ══════════════════════════════════════════════════════════════
+class TestPhaseScoreSsot:
+    def test_long_bucket_headline_equals_format_phase_score(self):
+        """**修正前必紅** —— 原本自組 `擴張 (6.8/10)`(多一層括號),
+        沒吃 v19.403 DUP-3 建的 SSOT `format_phase_score`(輸出 `擴張 6.8/10`)。"""
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.helpers import format_phase_score
+        _pi = {"phase": "擴張", "score": 6.8}
+        r = compute_four_horizon_summary({}, phase_info=_pi)
+        assert r["long"]["headline"] == format_phase_score(_pi)
+
+    def test_phase_score_never_signed(self):
+        """位階恆 0-10,格式不得帶正負號(帶了就會與 hero 的有號淨分撞臉)。"""
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
+        r = compute_four_horizon_summary({}, phase_info={"phase": "擴張", "score": 6.8})
+        assert "+" not in r["long"]["headline"]
+
+    def test_score_zero_is_not_falsy_replaced_by_neutral_five(self):
+        """**修正前必紅** —— `phase_info.get("score") or 5.0` 對 score=0.0
+        (極端衰退,calc_macro_phase clamp 下界)會 falsy 回退成中性 5.0,
+        桶色被誤判成 yellow「轉折中」(`PROCESS.md §4` M2 去重同型)。"""
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
+        r = compute_four_horizon_summary({}, phase_info={"phase": "衰退", "score": 0.0})
+        assert r["long"]["level"] == "red", "score=0.0 應為紅燈,不該被回退成 5.0"
+        assert "0.0/10" in r["long"]["headline"]
+
+    def test_missing_phase_still_renders_something(self):
+        """邊界:phase 缺失 → SSOT 回 "",須有 fallback 不留空桶。"""
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
+        r = compute_four_horizon_summary({}, phase_info={})
+        assert r["long"]["headline"].strip()
+
+
+def test_hero_card_discloses_both_scales():
+    """**修正前必紅** —— hero 副標只寫「23 指標加權淨分」,
+    與 23 行外的五桶「🌳 長期 擴張 (6.8/10)」兩套尺度並列卻無對照說明。"""
+    src = _TAB1.read_text(encoding="utf-8")
+    assert _is_called(_TAB1, "format_phase_score"), (
+        "tab1_macro.py 未**呼叫** format_phase_score —— 只 import 不算接線")
+    _consts = " ".join(_string_constants(_TAB1))
+    assert "強度" in _consts, "hero 未標示這是『強度』"
+    assert "位階" in _consts, "hero 未對照『位階』"
+    assert "23 指標加權淨分" in src
+
+
+def test_two_scales_not_merged():
+    """§8:**不得**把兩個尺度合併 —— 6+ consumer 吃 phase.score。
+    hero 仍須走 calculate_composite_score,五桶仍須走 phase score。"""
+    assert _is_called(_TAB1, "calculate_composite_score")
+    from ui.helpers.macro.beginner_view import compute_four_horizon_summary
+    r = compute_four_horizon_summary({}, phase_info={"phase": "擴張", "score": 7.0})
+    assert r["long"]["level"] == "green"
+
+
+# ══════════════════════════════════════════════════════════════
+# 必修 4 — 決策矩陣位置 + 預設展開
+# ══════════════════════════════════════════════════════════════
+def test_decision_matrix_sits_between_summary_bar_and_horizons():
+    """**修正前必紅** —— 原本在全頁最底部倒數第二區(四時域全部之後)。
+
+    要求順序:五桶 bar → 📋 決策矩陣 → 🌳 長期(四時域第一桶)。
+    """
+    src = _TAB1.read_text(encoding="utf-8")
+    i_bar = src.index("render_five_bucket_bar(_5b_summary)")
+    i_matrix = src.index("_render_realtime_decision_dashboard(ind)")
+    i_long = src.index("from ui.tab1_macro_longterm import render_long_term_section")
+    assert i_bar < i_matrix, "決策矩陣跑到五桶 bar 前面了(會擋住總經,違反 v19.41 指示)"
+    assert i_matrix < i_long, "決策矩陣仍埋在四時域之後"
+
+
+def test_decision_matrix_expander_defaults_open():
+    """**修正前必紅**(原 expanded=False)—— 算好的結論預設收合等於沒揭露。"""
+    _found: list = []
+    for node in ast.walk(_tree(_TAB1)):
+        if not isinstance(node, ast.With):
+            continue
+        _body = ast.dump(ast.Module(body=list(node.body), type_ignores=[]))
+        if "_render_realtime_decision_dashboard" not in _body:
+            continue
+        for item in node.items:
+            _ctx = item.context_expr
+            if isinstance(_ctx, ast.Call) and _fn_name(_ctx) == "expander":
+                _found += [kw.value.value for kw in _ctx.keywords
+                           if kw.arg == "expanded" and isinstance(kw.value, ast.Constant)]
+    assert _found == [True], f"決策矩陣 expander 的 expanded 應為 True,實際 {_found}"
+
+
+def test_decision_matrix_heading_still_present_once():
+    """搬家不得把區塊搬丟或搬成兩份。"""
+    src = _TAB1.read_text(encoding="utf-8")
+    assert src.count('st.markdown("## 📋 即時訊號 + 決策矩陣")') == 1
+    assert src.count("_render_realtime_decision_dashboard(ind)") == 1
+
+
+def test_decision_matrix_caption_not_claiming_last_position():
+    """文案同步:原 caption 寫「跨時域殿後」,搬到前面後就變成假話。"""
+    for s in _string_constants(_TAB1):
+        assert "殿後" not in s, f"決策矩陣已上移,caption 仍寫『殿後』:{s!r}"
+
+
+# ══════════════════════════════════════════════════════════════
+# 必修 5 — 三個 v19.388 元件的 0-consumer 裁決
+# ══════════════════════════════════════════════════════════════
+class TestComponentAdjudication:
+    """`PROCESS.md §4` 稽核落地條款:0 consumer → 接線 or 刪除,不得留著假裝有揭露。"""
+
+    def test_stat_tile_has_real_production_caller(self):
+        """**修正前必紅** —— stat_tile 自 v19.388 起 production 0 caller。"""
+        assert _is_called(_TAB1, "stat_tile"), "stat_tile 仍無 production caller"
+        assert "from ui.components.stat_tile import stat_tile" in \
+            _TAB1.read_text(encoding="utf-8")
+
+    def test_styled_dataframe_has_real_production_caller(self):
+        """**修正前必紅** —— tables.styled_dataframe 自 v19.388 起 production 0 caller。"""
+        assert _is_called(_TAB1, "styled_dataframe")
+
+    def test_styled_dataframe_defaults_match_replaced_call(self, monkeypatch):
+        """接線不得改變行為:仍須 hide_index=True + use_container_width=True
+        (原呼叫就是這兩個參數,替換後若預設飄掉 = 悄悄改了畫面)。"""
+        import streamlit as _st
+        from ui.components.tables import styled_dataframe
+        _captured: dict = {}
+        monkeypatch.setattr(_st, "dataframe",
+                            lambda df, **kw: _captured.update(kw))
+        _sentinel = object()
+        styled_dataframe(_sentinel)
+        assert _captured.get("hide_index") is True
+        assert _captured.get("use_container_width") is True
+
+    def test_status_chip_has_real_production_caller(self):
+        """**修正前必紅** —— hero 下方那段程式的註解自己叫「對帳 chip」,
+        卻是手刻 emoji 的 st.caption;`status_chip()` 自 v19.388 起 0 caller。"""
+        assert _is_called(_TAB1, "status_chip")
+
+    def test_reconcile_chip_keeps_all_original_facts(self):
+        """接線不得掉資訊:對帳 chip 仍須帶 note / 多空票數 / net 比值。"""
+        _consts = " ".join(_string_constants(_TAB1))
+        assert "對帳" in _consts
+        assert "vote_net_ratio" in _TAB1.read_text(encoding="utf-8")
+        for _k in ("n_pos", "n_neg", "note"):
+            assert _k in _TAB1.read_text(encoding="utf-8"), f"對帳 chip 掉了 {_k}"
+
+    def test_status_table_is_the_single_light_emoji_source(self):
+        """**修正前必紅** —— beginner_view 原本在 3 個函式裡各寫一份
+        {"green":"🟢","yellow":"🟡","red":"🔴"},是 status.py `_TABLE` 之外的複本。"""
+        from ui.components.status import status_color
+        from ui.helpers.macro.beginner_view import _LEVEL_EMOJI
+        for _lv in ("green", "yellow", "red", "gray"):
+            assert _LEVEL_EMOJI[_lv] == status_color(_lv).emoji
+        # ⚠️ 原本這裡是 `_src.count('"green": "🟢"') == 0`,那條**修正前後都綠**、
+        #    零鑑別力(違 PROCESS.md §4「拿掉呼叫端那一行測試仍綠 → 測試無效」):
+        #    (a) 上面的值比對兩邊本來就相同;(b) 舊碼寫法是 `{"green":"🟢"}`(冒號後
+        #    無空格),字面比對抓不到。改成 AST 結構掃描,任何**形狀**的燈號 emoji
+        #    對照表 literal 都會被抓到,不受空白/引號風格影響。
+        import ast
+        _tree = ast.parse(_BEGINNER.read_text(encoding="utf-8"))
+        _dup = [
+            n for n in ast.walk(_tree)
+            if isinstance(n, ast.Dict)
+            and any(isinstance(k, ast.Constant) and k.value in ("green", "yellow", "red")
+                    for k in n.keys)
+            and any(isinstance(v, ast.Constant) and v.value in ("🟢", "🟡", "🔴")
+                    for v in n.values)
+        ]
+        assert not _dup, (
+            f"beginner_view 仍有 {len(_dup)} 份硬寫的燈號 emoji 對照表 dict literal —— "
+            "唯一來源必須是 ui/components/status.py::_TABLE")
+
+    def test_five_bucket_gray_still_renders_unknown_square(self):
+        """回歸:收 SSOT 後第 5 桶「未掃描」仍是 ⬜(§1 誠實,不能變綠)。"""
+        from ui.helpers.macro.beginner_view import compute_five_bucket_summary
+        r = compute_five_bucket_summary({}, phase_info={}, news_items=None)
+        assert r["news"]["level"] == "gray"
+        assert r["news"]["emoji"] == "⬜"
+
+    def test_num_col_deleted_not_left_as_dead_abstraction(self):
+        """**修正前必紅** —— `num_col()` 自 v19.388 起 0 caller,
+        依 §4「若確實不需要 → 刪除,而不是留著假裝有揭露」處置。"""
+        import ui.components.tables as _tables
+        assert not hasattr(_tables, "num_col"), "num_col 仍在(0 consumer 的用不到抽象)"
+
+    def test_no_stale_reference_to_deleted_num_col(self):
+        """刪除必須連引用一起清 —— 對照 `PROCESS.md §4` 第 4 個案例
+        (ruff 白名單沒同步清 → 指向不存在程式碼的永久豁免)。
+
+        用 AST 找「真的 import / 呼叫」,不掃字面文字 —— 否則 tables.py
+        docstring 裡的裁決紀錄會被誤判成殘留引用。
+        """
+        for _p in (list((_ROOT / "ui").rglob("*.py"))
+                   + list((_ROOT / "services").rglob("*.py"))):
+            try:
+                _t = ast.parse(_p.read_text(encoding="utf-8"))
+            except (SyntaxError, UnicodeDecodeError):
+                continue
+            for _n in ast.walk(_t):
+                if isinstance(_n, ast.Call) and _fn_name(_n) == "num_col":
+                    pytest.fail(f"{_p} 仍呼叫已刪除的 num_col")
+                if isinstance(_n, ast.ImportFrom) and any(
+                        a.name == "num_col" for a in _n.names):
+                    pytest.fail(f"{_p} 仍 import 已刪除的 num_col")
+
+
+# ══════════════════════════════════════════════════════════════
+# 必修 6 — SPEC §1-B 對齊單軌實作
+# ══════════════════════════════════════════════════════════════
+def _spec_section_1b() -> str:
+    _txt = _SPEC.read_text(encoding="utf-8")
+    _i = _txt.index("## §1-B")
+    _j = _txt.index("## §2 ", _i)
+    return _txt[_i:_j]
+
+
+class TestSpec1BMatchesReality:
+    def test_no_longer_specifies_beginner_expert_mode_switch(self):
+        """**修正前必紅** —— SPEC 仍規範「新手/老手雙軌 + 模式切換」,
+        但 v17.0 / v19.128 已兩次移除,矛盾的一方是 SPEC。"""
+        _sec = _spec_section_1b()
+        assert "新手/老手兼顧" not in _sec, "§1-B 標題仍寫雙軌"
+        assert "AI 輸出雙軌格式" not in _sec, "§1-B 仍要求雙軌 AI 輸出"
+        assert "（新手模式）" not in _sec and "（老手模式）" not in _sec
+
+    def test_records_both_removal_decisions_with_dates(self):
+        """§2.2 可追溯:兩次移除的版本 + user 決策日期都要在 SPEC 留痕。"""
+        _sec = _spec_section_1b()
+        for _mark in ("v17.0", "v19.128", "2026-06-25"):
+            assert _mark in _sec, f"§1-B 未記錄 {_mark}"
+
+    def test_does_not_resurrect_rejected_feature(self):
+        """§-1:SPEC 更正是「反映實況」,不是把 user 否決的功能寫回需求。"""
+        _sec = _spec_section_1b()
+        assert "單軌" in _sec
+
+    def test_documents_two_score_scales(self):
+        """必修 3 的消歧義規範要落進 SPEC,否則下一版又會有人合併兩個分數。"""
+        _sec = _spec_section_1b()
+        assert "format_phase_score" in _sec
+        assert "強度" in _sec and "位階" in _sec
+
+
+if __name__ == "__main__":
+    sys.exit(pytest.main([__file__, "-v"]))

@@ -10,12 +10,21 @@
 """
 from __future__ import annotations
 
+import datetime
+import math
+import re
+
 import pandas as pd
 
 from infra.proxy import fetch_url
 from fund_fetcher import _ttl_cache, register_cache
 from shared.colors import GH_FG_MUTED, TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW
-from shared.fred_series import FRED_BSCICP02, FRED_PHILLY_FED
+from shared.fred_series import (
+    FRED_BSCICP02,
+    FRED_PHILLY_FED,
+    PHILLY_FED_PMI_BASE,
+    PHILLY_FED_TO_PMI_DIVISOR,
+)
 from shared.ttls import TTL_5MIN, TTL_30MIN
 
 from .fred import fetch_fred
@@ -107,6 +116,142 @@ AAII_BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# ══════════════════════════════════════════════════════════════
+# AAII 三欄表格 parser(稽核修正 2026-08-05)
+#
+# 舊寫法對**原始 HTML**(`r.text`)跑 `[Bb]ullish[^0-9]{0,40}(\d{1,2}\.\d)\s*%`,
+# 會吃到 markup 裡的非調查數字(CSS 進度條 width / 圖表 JSON / 投票 widget)。
+# 現場實測:系統顯示 spread +50.00(bull 50.0 / bear 0.0),而官網當週實際是
+# bull 31.0 / neutral 26.9 / bear 42.1 → spread −11.1,**誤差 61 個百分點且符號相反**。
+#
+# 三個結構缺陷 → 三件套修法:
+#   1. 改用 `BeautifulSoup(...).get_text()` 剝除 markup(沿用同檔 PMI 分支既有寫法);
+#   2. 對齊官網 `Week Ending | Bullish | Neutral | Bearish` 表格結構:以「週結日 +
+#      緊接三個百分比」為錨,**欄序由表頭實際出現順序決定**(不寫死 bull/bear 位置);
+#   3. 三條不變量防呆(常數 SSOT 在 shared/schemas.py):各欄 ∈ [0,100]、
+#      三欄和 ≈ 100、|bull−bear| ≤ 60。任一條不過 → raise ValueError,
+#      由 caller 轉 `_err`(§1:寧可沒有數字,不可回一個能通過 schema 的垃圾數字)。
+#   4. `date` 填**真實週結日**(ISO),取代原本硬編碼的 "weekly"(§2.3 PIT:
+#      無時點字串連「這筆是不是上週的」都判斷不了)。
+# ══════════════════════════════════════════════════════════════
+# 表頭三個欄名(key → 官網英文字);欄序由各字在表頭的實際位置排出,不假設固定順序。
+_AAII_HEADER_WORDS = (("bull", "Bullish"), ("neutral", "Neutral"), ("bear", "Bearish"))
+# 官方固定欄序。`_aaii_column_order` 解析結果若與此不符 → raise(§1),
+# 因為下游三條不變量對 bull↔bear 互換完全不敏感(見該函式註解)。
+_AAII_CANONICAL_ORDER = ["bull", "neutral", "bear"]
+# 一列資料 = 週結日(M/D/YYYY)後**緊接**三個百分比(中間只允許空白)。
+# 「緊接」是關鍵:官網同頁另有「1-Year Bullish High: 49.5% Week Ending 1/14/2026」
+# 這種「先百分比後日期」的敘述,以及無日期的 Historical Averages 列,都不會誤命中。
+_AAII_ROW_RE = re.compile(
+    r"(?P<mo>\d{1,2})/(?P<dy>\d{1,2})/(?P<yr>20\d{2})\s+"
+    r"(?P<c1>\d{1,3}(?:\.\d+)?)\s*%\s+"
+    r"(?P<c2>\d{1,3}(?:\.\d+)?)\s*%\s+"
+    r"(?P<c3>\d{1,3}(?:\.\d+)?)\s*%"
+)
+# 官網「Week Ending」表格固定顯示最近 4 週;掃描上限給 12 列緩衝即足夠。
+_AAII_MAX_ROWS_SCAN: int = 12
+
+
+def _aaii_column_order(text_before_row: str) -> list[str] | None:
+    """由資料列**之前**最靠近的表頭字位置決定三欄順序。
+
+    回 ['bull','neutral','bear'] 之類的 key 順序;任一字找不到 → None(視為結構不符)。
+    用 rfind:頁面前段導覽/行銷文也會出現這些字,取「最靠近資料列的那次出現」= 表頭。
+    """
+    pos: dict[str, int] = {}
+    for key, word in _AAII_HEADER_WORDS:
+        i = text_before_row.rfind(word)
+        if i < 0:
+            return None
+        pos[key] = i
+    order = [k for k, _ in sorted(pos.items(), key=lambda kv: kv[1])]
+    if len(set(order)) != 3:
+        return None
+    # ⚠️ 欄序必須等於官方固定順序,否則 fail loud(§1)。
+    # 理由:本函式下游的三條不變量(各欄 ∈[0,100]、三欄和≈100、|bull−bear|≤60)
+    # **全部對 bull↔bear 互換不敏感** —— 加法可交換、絕對值對稱、值域對稱。
+    # 若頁面改版讓表頭相對位置變動,parser 會靜默回傳 bull/bear 顛倒的結果,
+    # spread 由 −11.1 翻成 +11.1(散戶偏空 → 極度貪婪),而四道防呆全綠。
+    # AAII 官網二十年未改欄序;真改了也該由人來看,不該由 rfind 啟發式猜。
+    if order != _AAII_CANONICAL_ORDER:
+        raise ValueError(
+            f"AAII 表頭欄序異常:解析得 {order},官方固定為 {_AAII_CANONICAL_ORDER}"
+            "(頁面可能改版 → 拒絕猜測,§1 Fail Loud)"
+        )
+    return order
+
+
+def _parse_aaii_table(html: str) -> dict:
+    """從 AAII 頁面 HTML 解析最新一週的 bull/neutral/bear + 週結日。
+
+    Returns
+    -------
+    dict  {value(spread), unit, bull, neutral, bear, date('YYYY-MM-DD')}
+
+    Raises
+    ------
+    ValueError  結構不符 / 防呆不過(§1 Fail Loud — 由 caller 轉為 _err trace)
+    """
+    from bs4 import BeautifulSoup
+
+    from shared.schemas import (
+        AAII_PCT_MAX,
+        AAII_PCT_MIN,
+        AAII_SPREAD_ABS_MAX_PCT,
+        AAII_SUM_ABS_TOL_PCT,
+        AAII_SUM_TOTAL_PCT,
+    )
+
+    txt = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
+    rows: list[tuple[datetime.date, dict[str, float]]] = []
+    for m in _AAII_ROW_RE.finditer(txt):
+        order = _aaii_column_order(txt[:m.start()])
+        if order is None:
+            continue
+        try:
+            week = datetime.date(int(m.group("yr")), int(m.group("mo")), int(m.group("dy")))
+        except ValueError:
+            continue  # 2026-13-45 之類的假日期 → 非資料列
+        vals = dict(zip(order, (float(m.group("c1")), float(m.group("c2")),
+                                float(m.group("c3")))))
+        rows.append((week, vals))
+        if len(rows) >= _AAII_MAX_ROWS_SCAN:
+            break
+    if not rows:
+        # trace 保留 "regex" 字樣:既有 fallback chain 測試以此辨識「結構沒命中」
+        raise ValueError("regex no match(找不到「週結日 + 三欄百分比」表格列)")
+
+    week, vals = max(rows, key=lambda t: t[0])
+    # PIT:週結日是**過去的週三**,不可能晚於今天(容 1 天時區差)。
+    today = datetime.date.today()
+    if week > today + datetime.timedelta(days=1):
+        raise ValueError(f"防呆不過:週結日 {week} 晚於今日 {today}(解析錯位)")
+
+    bull, neutral, bear = vals["bull"], vals["neutral"], vals["bear"]
+    for k, v in (("bull", bull), ("neutral", neutral), ("bear", bear)):
+        if not (AAII_PCT_MIN <= v <= AAII_PCT_MAX):
+            raise ValueError(
+                f"防呆不過:{k}={v} 越界 [{AAII_PCT_MIN:.0f},{AAII_PCT_MAX:.0f}]")
+    total = bull + neutral + bear
+    if not math.isclose(total, AAII_SUM_TOTAL_PCT, abs_tol=AAII_SUM_ABS_TOL_PCT):
+        raise ValueError(
+            f"防呆不過:bull+neutral+bear={total:.1f} 應 ≈ {AAII_SUM_TOTAL_PCT:.0f}"
+            f"(±{AAII_SUM_ABS_TOL_PCT});抓到的很可能不是調查值 "
+            f"(bull={bull} neutral={neutral} bear={bear} week={week})")
+    spread = bull - bear
+    if abs(spread) > AAII_SPREAD_ABS_MAX_PCT:
+        raise ValueError(
+            f"防呆不過:|bull−bear|={abs(spread):.1f} > {AAII_SPREAD_ABS_MAX_PCT:.0f} "
+            f"個百分點,超出歷史極值範圍(week={week})")
+    return {
+        "value": round(spread, 1),
+        "unit": "%",
+        "bull": bull,
+        "neutral": neutral,
+        "bear": bear,
+        "date": week.isoformat(),
+    }
+
 
 @register_cache
 @_ttl_cache(ttl_sec=TTL_30MIN, maxsize=2)
@@ -116,15 +261,18 @@ def fetch_aaii_sentiment() -> dict:
     v19.192:從單 URL 改成 3 段 fallback chain(模仿 MoneyDJ 子網域 pattern),
     補完整 Chrome UA + Accept headers,timeout 提到 20s 配合 NAS Squid 中繼。
 
+    解析與防呆見 `_parse_aaii_table`(2026-08-05 稽核修正:改吃 get_text 純文字 +
+    三欄表格結構 + 三條不變量 + 真實週結日,取代原本直接對 HTML 跑 regex 的寫法)。
+
     Returns
     -------
     dict
-        成功:{value(spread), unit, bull, bear, date, source, fetched_at, url_used}
+        成功:{value(spread), unit, bull, neutral, bear, date('YYYY-MM-DD'),
+              source, fetched_at, url_used}
         失敗:{_err: 多段 trace, source, fetched_at}(fail-loud token,L2 caller 視為錯誤狀態)
 
     F-PROV-1 v19.84 phase 3:provenance(§2.2)— 全路徑(含 _err)皆帶 source + fetched_at。
     """
-    import re as _re
     # F-PROV-1 v19.84:provenance 全路徑共享(成功/失敗 caller 都能追溯)
     _prov = {
         "source": "AAII:sentimentsurvey",
@@ -140,22 +288,13 @@ def fetch_aaii_sentiment() -> dict:
             if r.status_code != 200:
                 trace.append(f"{url.rsplit('/', 1)[-1] or 'aaii'}:HTTP {r.status_code}")
                 continue
-            m_bull = _re.search(r"[Bb]ullish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
-            m_bear = _re.search(r"[Bb]earish[^0-9]{0,40}(\d{1,2}\.\d)\s*%", r.text)
-            if not m_bull or not m_bear:
-                trace.append(f"{url.rsplit('/', 1)[-1] or 'aaii'}:regex no match")
+            try:
+                parsed = _parse_aaii_table(r.text)
+            except ValueError as pe:
+                # §1:結構不符或防呆不過 → 記 trace 換下一段,**不**回退到任何猜測值
+                trace.append(f"{url.rsplit('/', 1)[-1] or 'aaii'}:{pe}")
                 continue
-            bull = float(m_bull.group(1))
-            bear = float(m_bear.group(1))
-            return {
-                "value": bull - bear,
-                "unit": "%",
-                "bull": bull,
-                "bear": bear,
-                "date": "weekly",
-                "url_used": url,
-                **_prov,
-            }
+            return {**parsed, "url_used": url, **_prov}
         except Exception as e:
             trace.append(f"{url.rsplit('/', 1)[-1] or 'aaii'}:{type(e).__name__}")
     # 三段全失敗 → §1 Fail Loud,_err 帶完整 trace 供 user/audit 判讀
@@ -328,8 +467,14 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
         print(f'[macro_core/PMI/DBnomics] ❌ {e}')
 
     # ── 方案 6: Phil Fed 製造業擴散指數（FRED GACDFSA066MSFRBPHI）──
-    #   FRED 上仍持續更新；範圍 -50~+50；數學轉換為 PMI 等價刻度：
-    #   PMI_eq = 50 + diffusion / 3 → 區間 33~67，與 ISM PMI 歷史相關性 ~0.85。
+    #   FRED 上仍持續更新；範圍 -50~+50；線性映到 PMI 等價刻度：
+    #   PMI_eq = PHILLY_FED_PMI_BASE + diffusion / PHILLY_FED_TO_PMI_DIVISOR → 區間 33~67。
+    #   ⚠️ 稽核更正(2026-08-05)：原註解寫「與 ISM PMI 歷史相關性 ~0.85」，**過度宣稱**。
+    #     Phil Fed = 單一聯準區約 250 家廠商的「本月 vs 上月」變化擴散指數；
+    #     ISM = 全國 16 大產業複合指數，母體與構造都不同。實證反例 2026-07：
+    #     Phil Fed 10.3 → 41.4（+31.1），同月官方 ISM 只有 53.3 → 55.6（+2.3），
+    #     換算值 63.8 若當真將是 1983 年以來最高 ISM 讀數。
+    #     → 只能看方向，不可當 ISM PMI 的水準值讀；換算常數見 shared/fred_series.py。
     #   標 is_proxy=True，UI 顯示「Phil Fed 替代計」。
     if fred_api_key:
         try:
@@ -340,8 +485,10 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
                 last_date = pd.to_datetime(df['date'].iloc[-1]).date()
                 age = (today - last_date).days
                 if age <= max_age_days:
-                    # 轉換為 PMI 等價刻度
-                    df['value'] = 50.0 + df['value'] / 3.0
+                    # 轉換為 PMI 等價刻度(常數 SSOT:shared/fred_series.py,
+                    # 該處註解載明此係數無官方出處、僅作刻度對映)
+                    df['value'] = (PHILLY_FED_PMI_BASE
+                                   + df['value'] / PHILLY_FED_TO_PMI_DIVISOR)
                     v = round(float(df['value'].iloc[-1]), 1)
                     print(f'[macro_core/PMI/PhilFed] ⚠️ 採用替代計 '
                           f'PMI_eq={v} (Phil Fed Diffusion 轉換) date={last_date}')
@@ -354,9 +501,15 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
                         'fetched_at': pd.Timestamp.now('UTC').isoformat(),
                         'dates':  [str(pd.to_datetime(d).date()) for d in df['date']],
                         'values': [round(float(x), 1) for x in df['value']],
-                        'proxy_note': '⚠️ 替代指標：Phil Fed 製造業擴散指數，'
-                                      '已用 PMI_eq = 50 + diffusion/3 轉換為 PMI 刻度。'
-                                      '與 ISM PMI 歷史相關性 ~0.85。',
+                        'proxy_note': (
+                            f'⚠️ 這不是 ISM PMI：來源為費城聯準銀行製造業擴散指數'
+                            f'（單一聯準區、約 250 家廠商，問「本月 vs 上月」變化），'
+                            f'已用 PMI_eq = {PHILLY_FED_PMI_BASE:.0f} + diffusion/'
+                            f'{PHILLY_FED_TO_PMI_DIVISOR:.0f} 線性換算到 PMI 刻度。'
+                            f'該換算係數無官方出處，僅為刻度對映；ISM 為全國 16 大產業'
+                            f'複合指數，兩者波動幅度差異極大（2026-07 實例：Phil Fed '
+                            f'+31.1 而 ISM 僅 +2.3）。**只可看方向，不可當 ISM PMI 的'
+                            f'水準值讀**。'),
                     }
         except Exception as e:
             errs.append(f'PhilFed-Proxy:{type(e).__name__}')

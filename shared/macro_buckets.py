@@ -84,8 +84,33 @@ BUCKET_META = {
 # (BUCKET_ORDER / BUCKET_META 保留:test_all_specs_valid 用 BUCKET_ORDER 守 BUCKET_DANGER_SPECS taxonomy)
 
 # 新聞桶:系統性風險命中「則數」→ 燈號(對齊 Stock v18.284)
+#
+# ⚠️ 語意界線(2026-08-05 稽核釐清,誤用曾造成假警報):
+#   本組門檻吃的是 `repositories.news_repository.classify_systemic()` 打出的
+#   `is_systemic` **旗標則數**。該旗標原始用途是「排序權重」(命中者永遠排前),
+#   稽核 2026-08-05 已把旗標表由「單詞命中即算」改為三層(直接命中 / 地緣詞 AND
+#   金融詞共現 / 困境詞 AND 金融詞 AND 規模詞共現)+ 兩道否決(方向性緩和、獲利框架),
+#   旗標才具備當「風險告警」計數的資格。若日後有人放寬旗標表,**必須同步重評本門檻**,
+#   否則又會出現「頂端 banner ✅ LOW、五桶卡 🔴 系統性警報」的自相矛盾畫面。
 NEWS_SYSTEMIC_YELLOW_COUNT = 1   # ≥1 則系統性新聞 → 🟡
 NEWS_SYSTEMIC_RED_COUNT    = 2   # ≥2 則系統性新聞 → 🔴
+
+# 新聞桶:關鍵字**加權風險分** → HIGH / MEDIUM / LOW
+#   消費者:`services/macro/us_indicators.detect_systemic_risk()`
+#   演算法:total = Σ_kw  weight(kw) × min(hit_count(kw), 3),weight ∈ [1, 4]
+#
+# 2026-08-05 稽核收 SSOT:原本 10 / 5 兩個門檻是 `us_indicators.py:1757,1762`
+#   的 inline literal(違 CLAUDE.md §3.3「禁止 inline magic number」),與本檔既有
+#   `NEWS_SYSTEMIC_*_COUNT` 屬同一個「新聞桶危險門檻」語意族,故收在一起。
+#
+# 出處 = **DESIGN**(沿用本檔 L23-26 標註慣例,無官方線):
+#   `_RISK_KEYWORDS` 最高權重 4(default / bank run / bankruptcy / contagion / 崩盤 …),
+#   單一關鍵字最多計 3 次 ⇒ 單詞上限 12 分。
+#   10 分 ≈「兩個最高危詞各命中一次 + 一個中危詞」或「一個最高危詞被三篇不同新聞覆蓋」
+#          → 視為多重高危信號並存(HIGH)。
+#   5  分 ≈「一個最高危詞 + 一個低危詞」或「兩個中危詞」→ 單一壓力來源,警示但不緊急(MEDIUM)。
+NEWS_RISK_HIGH_SCORE   = 10   # total ≥ 10 → 🚨 HIGH
+NEWS_RISK_MEDIUM_SCORE = 5    # total ≥ 5  → ⚠️ MEDIUM;否則 ✅ LOW
 
 # Macro 健康評分(0-10,services.macro_validation.aggregate_score 規範)
 _MACRO_SCORE_HEALTHY_MIN = 6.0   # ≥6 結構健康

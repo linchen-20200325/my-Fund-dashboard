@@ -270,8 +270,12 @@ def render_inflection_alert_section(
     else:
         # v19.273 Phase 2 TOP 2.3:empty-state 卡外框走 gh_card chrome SSOT(byte-identical)
         from ui.components.cards import gh_card
+        # 2026-08-05 稽核 🔴 必修 2:原寫死「📊 組合基金」—— app.py 沒有這個分頁名。
+        # 分頁名 SSOT = ui/helpers/story_nav._STEPS(由 tab_label 去序號導出)。
+        from ui.helpers.story_nav import tab_label as _tab_label  # noqa: PLC0415
         st.markdown(gh_card(
-            "🚦 持倉紅綠燈：請先至「📊 組合基金」Tab 新增並載入基金，即可在此顯示即時燈號",
+            f"🚦 持倉紅綠燈：請先至「{_tab_label('portfolio')}」分頁新增並載入基金，"
+            "即可在此顯示即時燈號",
             radius=8, padding="10px 16px", margin="",
             extra=f"color:{GRAY_55};font-size:12px;text-align:center",
         ), unsafe_allow_html=True)

@@ -844,7 +844,12 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
                             _semantic = _phrases[0] if _sc_clamped > 0 else (_phrases[1] if _sc_clamped < 0 else "現況中性")
                         else:
                             _semantic = "正面訊號" if _sc_clamped > 0 else ("負面訊號" if _sc_clamped < 0 else "現況中性")
-                        _name = _iv.get("name", _ik)[:18]
+                        # 2026-08-05 稽核 🔴 必修 1 順帶:原 [:18] 會把服務層的
+                        # 代理值長名「ISM 製造業 PMI（Phil Fed 替代）」(20 字)
+                        # 切成「…（Phil Fed 替」—— 剛好砍掉「替代」二字的下半,
+                        # 讓代理值在 23 項明細表裡看起來像官方本尊(§1 反造假)。
+                        # 放寬到 32 字(現行最長 name 為 24 字,留 8 字餘裕)。
+                        _name = str(_iv.get("name", _ik) or _ik)[:32]
                         if _sc_clamped > 0:
                             _verdict = f"{_name} {_val_str} ➡️ {_semantic}，貢獻 +{_sc_clamped:.1f} 分"
                         elif _sc_clamped < 0:

@@ -22,6 +22,21 @@ from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR_V2
 from shared.signal_thresholds import (
     CFNAI_MA3_EXPANSION_THRESHOLD,
     CFNAI_TREND_GROWTH,
+    macro_score_v2_enabled as _score_v2_on,
+)
+# 2026-08-05 稽核:`detect_systemic_risk` 的 HIGH/MEDIUM 門檻原為 inline 10/5
+# (§3.3 magic number),收進新聞桶門檻族 SSOT `shared/macro_buckets.py`。
+from shared.macro_buckets import (
+    NEWS_RISK_HIGH_SCORE as _NEWS_RISK_HIGH,
+    NEWS_RISK_MEDIUM_SCORE as _NEWS_RISK_MED,
+)
+# 2026-08-05 稽核:PMI / HY / CPI 評分函式與歷史 replay 收單一實作(消除兩份拷貝漂移)。
+# 方向 L2(services.macro)→ L2(services.calibration),同層不違 §8.2;
+# `macro_score` module-level 只 import shared.* + numpy/pandas,無回頭 import,無循環。
+from services.calibration.macro_score import (
+    score_cpi as _score_cpi,
+    score_hy_spread as _score_hy_spread,
+    score_pmi as _score_pmi,
 )
 
 from services.macro._helpers import (  # noqa: F401
@@ -256,6 +271,91 @@ def _nfp_tier(cur_d: float) -> tuple[float, str, str]:
     return 0.5, "🟡", MD_AMBER_300                 # 過熱 — 強但引發 Fed 緊縮,上檔打折
 
 
+# ── 淨流動性 YoY 的「誰在抽水」分解(2026-08-05 稽核)────────────────────
+# 單位(§4.1 陷阱):WALCL / TGA = 百萬美元、RRP = 十億美元 → 換算係數**不同**。
+# 統一輸出「億美元」(1 億 = 100 百萬 = 0.1 十億),對齊 user 讀報用語。
+_MN_TO_100M = 100.0     # 百萬美元 → 億美元
+_BN_TO_100M = 0.1       # 十億美元 → 億美元
+_YOY_LOOKBACK_DAYS = 365   # 以「日曆日」回看,對週頻 WALCL/TGA 與日頻 RRP 都成立
+
+
+def _asof_year_ago(s) -> Optional[float]:
+    """回傳「最新觀測日往回 365 日曆日」當下**已公布**的值;不足回 None。
+
+    用 `s.loc[:target]` 取截止日以前的最後一筆 —— backward as-of,**不吃未來**
+    (§2.3 防 lookahead)。頻率無關:週頻 52 筆、日頻 ~252 筆都適用,不必假設列距。
+    §1:資料不足回 None,由呼叫端決定降級,不填 0 / 不 ffill。
+    """
+    try:
+        if s is None or len(s) < 2:
+            return None
+        _target = s.index[-1] - pd.Timedelta(days=_YOY_LOOKBACK_DAYS)
+        _prior = s.loc[:_target]
+        if len(_prior) == 0:
+            return None
+        return float(_prior.iloc[-1])
+    except Exception as _e:
+        print(f"[net_liq/decomp] as-of 回看失敗:{type(_e).__name__}: {_e}")
+        return None
+
+
+def _net_liq_decomposition(df_walcl, df_rrp, df_tga) -> str:
+    """淨流動性 YoY 的組成分解字串(億美元);任一組件缺 → 回 ""(§1 不編數字)。
+
+    **為什麼需要這段**(2026-08-05 稽核 🔴 必修 2):v19.193 起評分格的輸入已從
+    毛額 WALCL 換成淨流動性(WALCL − RRP − TGA),但**卡片文案沒跟著換**。實測
+    2026-07-29 淨流動性 YoY = −4.77%,畫面敘述成「急速縮表」—— 事實是 Fed 資產
+    (WALCL 毛額)YoY **+1.44%(增加約 956 億美元)**,跌幅幾乎全部來自 TGA 由
+    3,705 億重建到 9,108 億(+5,403 億)。那是財政部發債補庫存造成的**機械性、
+    暫時性抽水**,不是 QT。把「是誰在抽水」寫進 desc,讓卡片不能再被讀成縮表。
+
+    只回字串、不回 dict:唯一消費端就是 `R["FED_BS"]["desc"]`(UI 直接渲染),
+    多包一層 side-car dict 沒有第二個 consumer = `CLAUDE.md §8.1 step 6` 的
+    「用不到的抽象」,且會踩 `PROCESS.md §4` 的 0-consumer 陷阱。
+    """
+    try:
+        if df_walcl is None or df_rrp is None or df_tga is None:
+            return ""
+        if getattr(df_walcl, "empty", True) or getattr(df_rrp, "empty", True) \
+                or getattr(df_tga, "empty", True):
+            return ""
+        _parts = []
+
+        def _series(_df):
+            _s = _df[["date", "value"]].dropna().copy()
+            _s["date"] = pd.to_datetime(_s["date"])
+            _s = _s.sort_values("date").set_index("date")["value"]
+            return _s
+
+        _w = _series(df_walcl)
+        _w_prev = _asof_year_ago(_w)
+        if _w_prev is not None and abs(_w_prev) > 0:
+            _w_now = float(_w.iloc[-1])
+            _w_yoy = (_w_now / _w_prev - 1.0) * 100.0
+            _w_d = (_w_now - _w_prev) / _MN_TO_100M
+            _parts.append(f"Fed資產 {_w_yoy:+.2f}%({_w_d:+,.0f} 億)")
+
+        _t = _series(df_tga)
+        _t_prev = _asof_year_ago(_t)
+        if _t_prev is not None:
+            _t_d = (float(_t.iloc[-1]) - _t_prev) / _MN_TO_100M
+            # 淨流動性 = W − R − T ⇒ TGA 增加 = 抽水
+            _parts.append(f"TGA {_t_d:+,.0f} 億({'抽水' if _t_d > 0 else '釋水'})")
+
+        _r = _series(df_rrp)
+        _r_prev = _asof_year_ago(_r)
+        if _r_prev is not None:
+            _r_d = (float(_r.iloc[-1]) - _r_prev) / _BN_TO_100M
+            _parts.append(f"RRP {_r_d:+,.0f} 億({'抽水' if _r_d > 0 else '釋水'})")
+
+        if not _parts:
+            return ""
+        return "近1年分解:" + " / ".join(_parts)
+    except Exception as _e:
+        print(f"[net_liq/decomp] 分解失敗,desc 不附分解:{type(_e).__name__}: {_e}")
+        return ""
+
+
 def fetch_all_indicators(fred_api_key):
     R = {}
 
@@ -285,7 +385,12 @@ def fetch_all_indicators(fred_api_key):
     #   舊版直接拿 FRED NAPM 末筆值，會誤用 2016-08 停更後的死值欺騙 UI；
     #   改呼叫 macro_core.fetch_ism_pmi()，備援順序：
     #   NAPM/ISPMANPMI（時效檢查）→ MacroMicro → ISM World → DBnomics →
-    #   Phil Fed Diffusion（轉 PMI 刻度，相關性 0.85）→ OECD US BCI（最後手段）
+    #   Phil Fed Diffusion（轉 PMI 刻度，**代理值非本尊**）→ OECD US BCI（最後手段）
+    #   ⚠️ 舊註解寫「相關性 0.85」為過度宣稱，已刪：Phil Fed 是單一聯準區約 250 家
+    #      廠商的月變化擴散指數，ISM 是全國 16 大產業複合指數。實證反例 2026-07：
+    #      Phil Fed 10.3→41.4（+31.1），ISM 53.3→55.6（+2.3）。命中此段時
+    #      `is_proxy=True`，UI/AI prompt 必須顯示代理標記（§1）。
+    #      同一句宣稱已於 repositories/macro/alternate.py 一併更正。
     pmi = fetch_ism_pmi(fred_api_key)
     if pmi.get("value") is not None:
         v = float(pmi["value"])
@@ -371,7 +476,11 @@ def fetch_all_indicators(fred_api_key):
             # 包括 Phil Fed 已轉換為 PMI 刻度，與真 ISM PMI 同 50 榮枯線
             signal_g = v > 50
             signal_r = v < 45
-            score = 2 if v >= 50 else (-2 if v < 45 else -1)
+            # 2026-08-05 稽核:原 inline `2 if v>=50 else (-2 if v<45 else -1)` 收
+            # `services.calibration.macro_score.score_pmi`(與歷史 replay 同一實作)。
+            # 旗標 OFF → 逐點等值;ON → 連續 tanh(見該函式 docstring 的參數論證)。
+            # signal/color 維持階梯(stoplight 與 score 語意分離,F-GRAY-4 既有裁決)。
+            score = _score_pmi(v, max_abs=2.0)
             desc = (f"50 為榮枯線，>50 擴張，<50 收縮 | 最核心領先指標 | "
                     f"資料源：{pmi.get('label', src_label)}")
             name = ("ISM 製造業 PMI（Phil Fed 替代）" if is_proxy
@@ -494,14 +603,22 @@ def fetch_all_indicators(fred_api_key):
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(2500)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
+        # 2026-08-05 稽核:score 收 `score_hy_spread` SSOT。旗標 OFF → 與原
+        # `2 if v<4 else (-2 if v>6 else 0)` 逐點等值;ON → 追加「極緊=自滿」上緣罰則
+        # (原評分只有下緣、下不封底,2.78% 這種循環極緊水位會拿最強多頭分)。
+        _hy_compl_on = _score_v2_on("hy_complacency")
+        _hy_compl_lo = float(_HY_THR_V2["complacency"]["complacency_below"])
         R["HY_SPREAD"] = dict(
             name="HY 信用利差 (OAS)", value=round(v,2), prev=round(p,2),
             unit="%", type="金融壓力", date=str(df.iloc[-1]["date"])[:7],
-            desc="<4%樂觀 | 4~6%中性 | >6%風險 | 擴大=逃離高風險資產",
+            desc=(f"≤{_hy_compl_lo:.0f}%極緊(自滿→降半檔) | <4%樂觀 | 4~6%中性 | "
+                  ">6%風險 | 擴大=逃離高風險資產"
+                  if _hy_compl_on else
+                  "<4%樂觀 | 4~6%中性 | >6%風險 | 擴大=逃離高風險資產"),
             trend=_trend(s.tolist()[-6:]),
             signal="🟢" if v<4 else ("🔴" if v>6 else "🟡"),
             color=MATERIAL_GREEN if v<4 else (MATERIAL_RED if v>6 else MATERIAL_ORANGE),
-            score=2 if v<4 else (-2 if v>6 else 0),
+            score=_score_hy_spread(v, max_abs=2.0),
             weight=2, series=s)
 
     # ── M2 ───────────────────────────────────────────────────────────
@@ -660,7 +777,15 @@ def fetch_all_indicators(fred_api_key):
         if len(_nl) >= 53:                               # YoY 需 shift(52)+1
             _s_lvl = _nl
             _fedbs_name = "淨流動性 (YoY)"
-            _fedbs_desc = "Fed資產−RRP−TGA=真正進股市的錢；增=利多 | 減=壓力（升級自 Fed 資產）"
+            # 2026-08-05 稽核 🔴 必修 2:desc 必須寫清楚「跌的是誰」——
+            # 淨流動性轉負常常來自 TGA 重建(財政部發債補庫存,機械性/暫時性),
+            # 與 Fed 主動 QT 是兩回事,不附分解就會被讀成「急速縮表」(實測誤讀)。
+            _fedbs_desc = ("Fed資產−RRP−TGA=真正進股市的錢；增=利多 | 減=壓力"
+                           "（升級自 Fed 資產；⚠️ 本格已非毛額 WALCL，"
+                           "數字轉負≠Fed 縮表，須看下方分解）")
+            _fedbs_decomp = _net_liq_decomposition(df, _df_rrp, _df_tga)
+            if _fedbs_decomp:
+                _fedbs_desc = f"{_fedbs_desc}｜{_fedbs_decomp}"
     except Exception as _e_nl:
         print(f"[fetch_all_indicators/net_liq] fallback gross WALCL: {type(_e_nl).__name__}: {_e_nl}")
     if _s_lvl is None and len(df) >= 53:
@@ -710,13 +835,19 @@ def fetch_all_indicators(fred_api_key):
             v = float(s24.iloc[-1])
             p = float(s24.iloc[-2]) if len(s24) >= 2 else None
             t = _trend(s24.tolist()[-6:])
+            # 2026-08-05 稽核:score 收 `score_cpi` SSOT。旗標 OFF → 與原
+            # `1 if 1<v<2.5 else (-1 if v>4 else 0)` 逐點等值(max_abs 保持 1.0,
+            # 避免動到 causal_sankey / composite_score / explain 等**讀原始 score**
+            # 的消費者);ON → 中間帶 [2.5, 4.0] 線性遞減罰則(原為完全免罰走廊)。
+            _cpi_graded_on = _score_v2_on("cpi_graded")
             R["CPI"] = dict(name="CPI 通膨率 (YoY)", value=round(v,2),
                 prev=round(p,2) if p is not None else None,
                 unit="%", type="落後", date=str(df.iloc[-1]["date"])[:7],
-                desc="目標2% | 高位回落=利多拐點", trend=t,
+                desc=("目標2% | 2.5~4% 高於目標(遞減扣分) | 高位回落=利多拐點"
+                      if _cpi_graded_on else "目標2% | 高位回落=利多拐點"), trend=t,
                 signal="🟢" if 1<v<2.5 else ("🔴" if v>4 else "🟡"),
                 color=MATERIAL_GREEN if 1<v<2.5 else (MATERIAL_RED if v>4 else MATERIAL_ORANGE),
-                score=1 if 1<v<2.5 else (-1 if v>4 else 0),
+                score=_score_cpi(v, max_abs=1.0),
                 weight=0.5, series=s24)
 
     # ── Fed Rate ──────────────────────────────────────────────────────
@@ -1707,11 +1838,20 @@ def detect_systemic_risk(news_items: list) -> dict:
       "advice":      str,
     }
     算法：
-      sub_score_i = keyword_weight_i × hit_count_i
+      sub_score_i = keyword_weight_i × min(hit_count_i, 3)
       total_score = Σ sub_score_i
-      HIGH   : score ≥ 10（多重高危信號，建議立即降低風險暴露）
-      MEDIUM : score ≥ 5 （警示狀態，密切追蹤）
-      LOW    : score <  5 （暫無系統性異常）
+      HIGH   : score ≥ NEWS_RISK_HIGH_SCORE   （多重高危信號，建議立即降低風險暴露）
+      MEDIUM : score ≥ NEWS_RISK_MEDIUM_SCORE（警示狀態，密切追蹤）
+      LOW    : 其餘                            （暫無系統性異常）
+      ↑ 門檻 SSOT = `shared/macro_buckets.py`（2026-08-05 稽核由 inline 10/5 收編）
+
+    ⚠️ 與 `repositories.news_repository.classify_systemic()` 的分工（2026-08-05 稽核釐清）
+    ─────────────────────────────────────────────────────────────────────────
+    本函式 = **加權風險分**（44 個詞、權重 1~4），輸出 HIGH/MEDIUM/LOW 供「風險告警」。
+    news_repository 的 `is_systemic` = **旗標**，原始用途是排序（命中者永遠排前）。
+    兩者**不是同一件事**，也不共用詞表；歷史上曾有 UI 直接把旗標命中「則數」渲染成
+    「🔴 系統性警報」，同畫面與本函式的 ✅ LOW 自相矛盾（2026-08-04/05 實測 6 則假警報）。
+    若要做風險告警，優先吃本函式的 `risk_level`；旗標只回答「這則該不該排前面」。
     """
     import re as _re
 
@@ -1754,12 +1894,15 @@ def detect_systemic_risk(news_items: list) -> dict:
     hit_titles = hit_titles[:5]
 
     # 風險等級判定
-    if total_score >= 10:
+    # 2026-08-05 稽核:原 inline `>= 10` / `>= 5`(§3.3 magic number)收 SSOT
+    # `shared.macro_buckets.NEWS_RISK_HIGH_SCORE / NEWS_RISK_MEDIUM_SCORE`,
+    # 與同族的 `NEWS_SYSTEMIC_*_COUNT` 並列(門檻取法論證見該檔註解)。
+    if total_score >= _NEWS_RISK_HIGH:
         level  = "HIGH"
         color  = MATERIAL_RED
         icon   = "🚨"
         advice = "偵測到多重高危信號，建議立即提高現金比重，核心部位 ≥80%，衛星部位設停損"
-    elif total_score >= 5:
+    elif total_score >= _NEWS_RISK_MED:
         level  = "MEDIUM"
         color  = MATERIAL_ORANGE
         icon   = "⚠️"

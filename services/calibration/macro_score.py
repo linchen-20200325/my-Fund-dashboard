@@ -26,10 +26,13 @@
 """
 from __future__ import annotations
 
+import math
 from typing import Callable
 
 import numpy as np
 import pandas as pd
+
+from shared.signal_thresholds import macro_score_v2_enabled
 
 # v19.217 P0-3-#8:shared.fred_series 整 import 區隨 fetch_real_macro_factors_monthly 拔毒移除
 from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.169 + v19.179 PMI + v19.184 M2/FedBS + v19.269 CPI
@@ -59,20 +62,137 @@ _CPI_IDEAL_LOW = _CPI_THR["score_function"]["ideal_low"]          # 1.0
 _CPI_IDEAL_HIGH = _CPI_THR["score_function"]["ideal_high"]        # 2.5
 _CPI_ELEVATED = _CPI_THR["score_function"]["elevated_above"]      # 4.0
 
+# 2026-08-05 稽核 v2 評分用 SSOT(旗標 OFF 時完全不參與計算)
+_PMI_CONT_SCALE = _PMI_THR["score_function"]["continuous_scale"]  # 5.0 = 50 − 45(推導)
+_HY_COMPLACENCY = _HY_THR["complacency"]["complacency_below"]     # 3.0
+_HY_COMPLACENCY_RATIO = _HY_THR["complacency"]["complacency_score_ratio"]  # 0.5
+
+
+# ════════════════════════════════════════════════════════════════
+# 評分純函式 SSOT(2026-08-05 稽核)
+# ────────────────────────────────────────────────────────────────
+# 本區三個 `score_*` 是 **production(`services/macro/us_indicators.fetch_all_indicators`)
+# 與歷史 replay(本檔 `FACTORS`)共用的唯一實作**。稽核前兩邊各寫一份 inline 三元式,
+# 是「同邏輯兩份拷貝」的典型漂移溫床(本檔頂部 docstring 原本就自承「與 fetch_all_indicators
+# 同邏輯」—— 靠註解維持一致 = 遲早不一致)。收成單一實作後,任何門檻/形狀改動兩邊同步。
+#
+# `max_abs` = 該因子在呼叫端的滿分絕對值(= weight)。傳入而非硬編,理由:
+#   同一個 CPI 因子在 `FACTORS` 表 weight=1.0、在 `fetch_all_indicators` weight=0.5,
+#   兩邊 legacy 行為都必須逐位元保留(見各 scorer 的「legacy 對照」註解)。
+#
+# 旗標語意見 `shared/signal_thresholds.MACRO_SCORE_V2_FLAGS`。**預設全 OFF → 三個
+# 函式回傳值與稽核前的 inline 三元式完全相同**(有測試逐點守)。
+# ════════════════════════════════════════════════════════════════
+def score_pmi(v: float, *, max_abs: float = 2.0) -> float:
+    """ISM PMI → macro score。
+
+    legacy(階梯,旗標 OFF)
+        v >= 50 → +max_abs / v < 45 → -max_abs / 其餘 → -max_abs/2
+        對照 `fetch_all_indicators`:`2 if v >= 50 else (-2 if v < 45 else -1)`(max_abs=2)
+
+    v2(連續,`pmi_continuous`)
+        s(v) = max_abs · tanh((v − expansion_above) / continuous_scale)
+
+        為什麼要改:階梯在 50 切一刀 ⇒ PMI 63.8(錯值)與 55.6(真值)同樣拿滿分,
+        修好資料**分數卻一動也不動**;反之 49.9 → 50.1 只差 0.2 卻跳 1.5×max_abs。
+        「對雜訊超敏感、對真實變化完全遲鈍」是階梯函數的結構性缺陷。
+
+        為什麼分母是 continuous_scale(=5):它**不是拍腦袋的新數字**,而是
+        `expansion_above(50) − recession_below(45)` 相減推導 —— 意義是「從枯榮線走到
+        深度收縮線的距離 = 1 個特徵尺度」。三個直接後果:
+          (a) v=50 → 0,與階梯翻正點對齊(不引入新的中性點);
+          (b) v=45 → tanh(−1)·max_abs = −0.762·max_abs,落在階梯的 −0.5 與 −1 倍之間,
+              等於把原本那道跳斷平滑接起來,不製造新的方向性偏誤;
+          (c) 3×scale = 15 ⇒ PMI ≤35 / ≥65 已飽和,恰好覆蓋 CLAUDE.md §3.2 的
+              PMI 合理範圍 [30, 70],飽和點不會落在常見值域內把訊息壓平。
+        若改用更小的分母(如 2)會在 50 附近過度陡峭(退化回階梯);更大(如 10)則
+        整條曲線被壓扁,實務區間拿不到滿分,兩者都比 5 差。
+    """
+    v = float(v)
+    if macro_score_v2_enabled("pmi_continuous"):
+        return float(max_abs) * math.tanh((v - _PMI_EXPANSION) / _PMI_CONT_SCALE)
+    if v >= _PMI_EXPANSION:
+        return float(max_abs)
+    if v < _PMI_RECESSION:
+        return -float(max_abs)
+    return -float(max_abs) / 2.0
+
+
+def score_hy_spread(v: float, *, max_abs: float = 2.0) -> float:
+    """HY OAS(%) → macro score。
+
+    legacy(旗標 OFF)
+        v < 4 → +max_abs / v > 6 → -max_abs / 其餘 0
+        對照 `fetch_all_indicators`:`2 if v<4 else (-2 if v>6 else 0)`(max_abs=2)
+
+    v2(`hy_complacency`)
+        再加一道**上緣**:v <= complacency_below(3.0) → +max_abs × 0.5
+
+        為什麼要改:legacy 只有下緣,語意等同「利差越小越好、下不封底」。2026-08-03
+        實測 2.78% 拿到最強多頭分,但那是循環極緊水位 —— 歷史上極緊利差是「風險
+        定價失效 / 景氣末期自滿」,全序列最低 2.41% 就發生在 2007-06(GFC 前夕)。
+        與 CPI 中間帶免罰疊加後,模型會在「最該提高警覺」的時點給出最高分。
+        罰則刻意只降半檔不翻負(見 `HY_SPREAD_THRESHOLDS["complacency"]` 註解)。
+    """
+    v = float(v)
+    if v > _HY_WIDE:
+        return -float(max_abs)
+    if v < _HY_TIGHT:
+        if macro_score_v2_enabled("hy_complacency") and v <= _HY_COMPLACENCY:
+            return float(max_abs) * float(_HY_COMPLACENCY_RATIO)
+        return float(max_abs)
+    return 0.0
+
+
+def score_cpi(v: float, *, max_abs: float = 1.0) -> float:
+    """CPI YoY(%) → macro score。
+
+    legacy(旗標 OFF)
+        1 < v < 2.5 → +max_abs / v > 4 → -max_abs / 其餘 0
+        對照 `fetch_all_indicators`:`1 if 1<v<2.5 else (-1 if v>4 else 0)`(max_abs=1)
+
+    v2(`cpi_graded`)
+        中間帶 [ideal_high(2.5), elevated_above(4.0)] 由「完全免罰」改**線性遞減罰則**:
+            s(v) = -max_abs × (v − 2.5) / (4.0 − 2.5)
+        端點連續:v=2.5 → 0(接住 legacy)、v=4.0 → -max_abs(接住 legacy 的過熱扣分)。
+
+        為什麼要改:目標 2%,實測 2026-06 為 +3.46% —— 高於目標近 1.5pp,卻正好落在
+        [2.5, 4.0] 這條**無罰則走廊**,得分 0。等於「只要沒惡化到 4%,通膨偏高完全
+        不需要付出代價」,是模型順週期性的來源之一。
+
+        ⚠️ 與 `calc_macro_phase` 夾擠的交互作用:該處會做 `s = max(-w, min(w, s))`,
+        而 CPI 在 `fetch_all_indicators` 的 weight = 0.5、max_abs = 1.0 ⇒ 斜坡在
+        v ≈ 3.25 就被夾到 -0.5 飽和,3.25 以上邊際罰則為 0。**這是既有夾擠規則的
+        後果不是本函式的 bug**(legacy 的 ±1 同樣被夾成 ±0.5)。要讓斜坡在整段
+        [2.5, 4.0] 都有效,需把 CPI weight 提到 1.0 —— 那會改變權重總和與所有歷史
+        分數,屬另一個「需 user 拍板」項,本次**不動**,見交付報告提案。
+    """
+    v = float(v)
+    if _CPI_IDEAL_LOW < v < _CPI_IDEAL_HIGH:
+        return float(max_abs)
+    if v > _CPI_ELEVATED:
+        return -float(max_abs)
+    if macro_score_v2_enabled("cpi_graded") and _CPI_IDEAL_HIGH <= v <= _CPI_ELEVATED:
+        _span = float(_CPI_ELEVATED) - float(_CPI_IDEAL_HIGH)
+        if _span > 0:
+            return -float(max_abs) * (v - float(_CPI_IDEAL_HIGH)) / _span
+    return 0.0
+
 
 # ════════════════════════════════════════════════════════════════
 # 14-factor 評分規則（與 services/macro_service.py:fetch_all_indicators 同邏輯）
+#   PMI / HY_SPREAD / CPI 三格已收上方 `score_*` 純函式 SSOT(兩邊共用同一實作)
 # ════════════════════════════════════════════════════════════════
 def _s_yield_10y2y(v):    return 2 if v > 0.5 else (-2 if v < 0 else 0)
 def _s_yield_10y3m(v):    return 2 if v > 0.5 else (-2 if v < 0 else 0)
-def _s_pmi(v):            return 2 if v >= _PMI_EXPANSION else (-2 if v < _PMI_RECESSION else -1)
-def _s_hy_spread(v):      return 2 if v < _HY_TIGHT else (-2 if v > _HY_WIDE else 0)
+def _s_pmi(v):            return score_pmi(v, max_abs=2.0)
+def _s_hy_spread(v):      return score_hy_spread(v, max_abs=2.0)
 def _s_m2(v):             return 1 if v > _M2_EASING else (-1 if v < _M2_TIGHTENING else 0)
 def _s_breadth(chg):      return 1 if chg > 0.5 else (-1 if chg < -1 else 0)
 def _s_dxy(chg_m):        return 1 if chg_m < -1 else (-1 if chg_m > 2 else 0)
 def _s_fed_bs(v):         return 1 if v > _FEDBS_EXPANSION else (-1 if v < _FEDBS_CONTRACTION else 0)
 def _s_vix(v):            return 1 if v < 18 else (-1 if v > 30 else 0)
-def _s_cpi(v):            return 1 if _CPI_IDEAL_LOW < v < _CPI_IDEAL_HIGH else (-1 if v > _CPI_ELEVATED else 0)
+def _s_cpi(v):            return score_cpi(v, max_abs=1.0)
 def _s_fedrate(v, p):     return 0.5 if v < p else (-0.5 if v > 5 else 0)
 def _s_unemp(v):          return 0.5 if v < 4.5 else (-1 if v > 6 else 0)
 def _s_ppi(v):            return 0.5 if 0 < v < 3 else (-0.5 if v > 5 else 0)

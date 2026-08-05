@@ -23,7 +23,15 @@ class _MockResp:
         self.text = text
 
 
-_GOOD_HTML = "<p>Bullish 35.0%</p><p>Bearish 30.0%</p>"
+# 稽核修正後的 parser 吃「Week Ending | Bullish | Neutral | Bearish」三欄表格
+# (舊 fixture `<p>Bullish 35.0%</p><p>Bearish 30.0%</p>` 沒有週結日與 neutral 欄,
+#  已不符官網真實結構,故同步更新;bull−bear 仍維持 5.0 讓既有斷言不變)。
+_GOOD_HTML = (
+    "<table><thead><tr><th>Week Ending</th><th>Bullish</th>"
+    "<th>Neutral</th><th>Bearish</th></tr></thead><tbody>"
+    "<tr><td>7/29/2026</td><td>35.0%</td><td>35.0%</td><td>30.0%</td></tr>"
+    "</tbody></table>"
+)
 
 
 def _clear():

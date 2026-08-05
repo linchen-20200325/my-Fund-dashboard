@@ -619,7 +619,9 @@ V3 才逐 Tab 接線。收斂稽核 ②③④⑤ 的系統級分歧:
   `sparkline_fig`/`signed_bar_fig` preset:收 22 圖的 5 背景/20 margin/18 高度漂移。
   `signed_bar_fig` 依號上色、**缺值 None 留缺口不補 0**(§1)。
 - **`stat_tile.py`** `stat_tile()`:以 `gh_card` 為底,收 8 種手刻 tile;value=None→「—」。
-- **`tables.py`** `styled_dataframe()`/`num_col()`:統一表格入口,不改 df 內容。
+- **`tables.py`** `styled_dataframe()`:統一表格入口,不改 df 內容。
+  （`num_col()` 已於 v19.429 刪除 —— production 0 caller,依 `PROCESS.md §4`
+   「0 consumer → 接線或刪除」處置;`styled_dataframe` 已接上決策矩陣表。）
 
 驗(總監指令:資料誠信):`tests/test_viz_components.py` **15 綠**,鎖定「值不遺失/不竄改」——
 signed_bar 保留原 y(含 None 不變 0)、stat_tile 原樣呈現 value、狀態色對映正確。

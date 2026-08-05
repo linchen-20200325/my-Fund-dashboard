@@ -22,9 +22,11 @@ def test_hy_spread_schema_complete():
     from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as HT
 
     # v19.245 R13:新增 inflection_detection sub-dict(us_indicators.py:98-100 信用拐點 SSOT)
+    # 2026-08-05 稽核:新增 complacency sub-dict(HY OAS 極緊上緣罰則,原 score_function
+    #   只有下緣 tight_below,2.78% 這種循環極緊水位會拿最強多頭分)
     assert set(HT.keys()) == {
         "stoplight", "score_function", "portfolio_advisor", "beginner_panic",
-        "inflection_detection",
+        "inflection_detection", "complacency",
     }
 
 

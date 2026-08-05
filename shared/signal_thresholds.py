@@ -221,3 +221,34 @@ BACKTEST_MIN_COMMON_DAYS: int = 60      # 共同交易日 < 此 → 不回測(�
 BACKTEST_NEW_FUND_MIN_DAYS: int = 252   # 共同窗 < 此(1 年)→ low_confidence 旗標
 BACKTEST_FX_FETCH_DAYS: int = 3650      # 抓 USDTWD 歷史天數(~10y);回測窗自然被 NAV 重疊期封頂
 BACKTEST_FX_ASOF_TOLERANCE_DAYS: int = 7  # FX 對 NAV as-of 對齊容差(日曆日);超過 → 該 NAV 點無匯率丟棄(§1 不 ffill)
+
+# ── ⚠️ Macro Score 評分函式 v2 開關(2026-08-05 稽核;**預設全 False = 產線行為零變化**)──
+#
+# 為什麼是開關而不是直接切換:三項改動**都會改變投資結論**(分數位移 → 可能翻位階 →
+# 建議配置改變),依 `PROCESS.md §6` 屬「⚠️ 需 user 拍板」類別。實作已完整落地(production
+# 與回測 replay 共用同一組 `services/calibration/macro_score.py` 純函式),user 只要把對應
+# 旗標改 True 即生效,可逐項對照新舊分數後再決定,**不需要再改任何邏輯**。
+#
+# 這不是 `CLAUDE.md §8.1 step 6` 的「用不到的抽象」:
+#   (a) 兩條分支都是 production 路徑,都有測試守;
+#   (b) 旗標本身就是交付物 —— 稽核要求「讓 user 對照新舊分數再決定是否啟用」;
+#   (c) 沒有多餘的類別 / 註冊表 / 策略物件,就是一個 dict + 一個讀取函式。
+#
+# 三項語意(詳見 services/calibration/macro_score.py 各 scorer docstring):
+#   pmi_continuous — PMI 由 50 切一刀的階梯改連續 tanh(修「49.9 → 50.1 跳 3 分、
+#                    55.6 與 63.8 同分」的解析度缺陷)。尺度參數由既有 SSOT 相減推導。
+#   hy_complacency — HY OAS 加**上緣**罰則(極緊利差 = 自滿,非健康;原本 <4% 一律滿分)。
+#   cpi_graded     — CPI 中間帶 [2.5%, 4.0%] 由「完全免罰」改線性遞減罰則。
+MACRO_SCORE_V2_FLAGS: dict[str, bool] = {
+    "pmi_continuous": False,
+    "hy_complacency": False,
+    "cpi_graded": False,
+}
+
+
+def macro_score_v2_enabled(name: str) -> bool:
+    """讀 `MACRO_SCORE_V2_FLAGS`(**每次呼叫即時讀**,不可在 import 時取值快取)。
+
+    未登錄的 name 一律回 False(fail-closed:不認得的旗標不啟用新行為)。
+    """
+    return bool(MACRO_SCORE_V2_FLAGS.get(str(name), False))

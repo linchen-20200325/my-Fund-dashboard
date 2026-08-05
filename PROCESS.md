@@ -35,6 +35,30 @@
   - **共同形狀**：四次都不是「算錯」，而是**算對了但沒接出去**。這類缺陷對 lint / type check / 產生端單元測試**全部免疫**，是本 repo 迄今重工成本最高的失效模式。
   - **稽核落地**：`grep` 該欄位名，若 production 端 **0 consumer**，等同 §1「填補須帶旗標」未達標，**不得算完成**；同時檢查它是不是 `CLAUDE.md §8.1 step 6` 的「用不到的抽象」（若確實不需要 → 刪除，而不是留著假裝有揭露）。
   - **例外登記**：若刻意分兩波交付（本波只產生、下波才接線），必須在 PR 描述**明寫「本波 0 consumer，接線於 X」**，否則視為未完成。
+
+- **測試自身的可執行性 (Test Liveness) — v19.429 新增**：測試若因**環境缺件**而無法執行，必須 **fail 而不是 skip**；`skip` 只保留給「這個平台/情境本來就不適用」，不得用來吸收「工具沒裝」。
+  - **判準**：把測試依賴的外部工具移除後，測試應該**變紅**。若只是變 skip 而總結仍顯示 `passed` → 這條測試等於不存在，且會製造「有測試守著」的假象。
+  - **為什麼獨立成條**：以下三條測試都寫得很認真、都 commit 進 repo、都被當成保護網，但**從來沒有真正執行過** ——
+
+    | 測試 | 表面上守什麼 | 實際狀況 |
+    |---|---|---|
+    | `tests/test_undefined_name_scan.py`（ruff F405/F821） | 全站「呼叫了但沒 import 到」的 bare name | Windows 未安裝 dev 依賴 → `FileNotFoundError`。**潛伏一顆 `Path` NameError 地雷直到 v19.424 才被抓到** |
+    | `tests/test_provenance_phase2.py`（`subprocess grep`） | 無 caller 對 `source == 'FinMind'` 嚴格比對 | Windows 無 `grep` 執行檔；且正則尾端 `['\"]\b` 的 `\b` 接在引號後 → **即使在 Linux 也永遠不匹配**，雙重空轉 |
+    | `tests/test_app_playwright.py`（pixel diff） | Tab1/Tab3 視覺回歸 | 三道關卡任一即 skip（未裝 playwright / 未裝 chromium / 未起 streamlit），CI 兩條 lane 都跑不到；**且 `tests/__snapshots__/` 從未 commit，無基準可比** |
+
+  - **共同形狀**：與 §4 上一條「算對了但沒接出去」是**同一種病的另一半** —— 那條是 production 的失敗被偽裝成成功，這條是**測試的失敗被偽裝成通過**。兩者都對 lint、type check、`pytest` 總結行完全免疫。
+  - **正確寫法（`test_undefined_name_scan.py` 已示範，v19.291 踩坑後學會）**：
+    ```python
+    try:
+        proc = subprocess.run([...], ...)
+    except FileNotFoundError as e:
+        raise AssertionError(f"ruff 未安裝或無法執行——本測試需要它才能掃描：{e}")
+    # 工具跑了但沒輸出 → 同樣不可當成「0 findings」
+    if not proc.stdout.strip():
+        raise AssertionError(f"exit={proc.returncode} 但 stdout 空，工具可能沒真的執行")
+    ```
+  - **稽核落地**：新增依賴外部工具 / 外部服務 / 基準檔的測試時，必須回答「**缺件時它是紅還是綠？**」。答「skip」→ 要嘛改成 fail，要嘛在 `pytest.ini` marker 說明與檔案 docstring **雙處**標明「本組未啟用、不提供保護」，避免下一個人誤以為有保護網（`tests/test_app_playwright.py` 為此類標記的範例）。
+  - **禁止**：把「測試 skip 了」寫進報告當作「測試通過」。統計行的 `skipped` 數字要逐項知道是誰、為什麼。
 - **環境與效能**：限用 `.py` 腳本（禁 `.ipynb`），維護 `requirements.txt`。確保 `st.cache_data` 的正確使用。
 - **自動交付與合併 (Auto-Ship)**：功能完成後，必須使用 `gh pr create --fill` 建立請求，並**主動執行** `gh pr merge <PR號碼> --merge --delete-branch`。
 - **合併後驗證與存檔**：合併後必須自動 `git checkout main && git pull`，使用 `git status` 與 `git log -1` 驗證合併成功，最後自動更新 `STATE.md` 的進度。嚴禁在未驗證成功的情況下回報完成。

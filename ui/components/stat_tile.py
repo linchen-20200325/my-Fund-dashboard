@@ -5,6 +5,13 @@
 基底,狀態色走 `status_color()`,提供單一 `stat_tile()`。
 
 §1:value=None → 顯示「—」(誠實不足),**不假造 0**;傳入值原樣呈現、不竄改。
+
+2026-08-05 稽核 🟡 必修 5 裁決(`PROCESS.md §4` 0-consumer 條款)= **保留 + 接線**。
+首個 production caller:`ui/tab1_macro.py::_render_realtime_decision_dashboard`
+的 4 個動作計數 tile(加碼 / 持有 / 減倉 / 全撤)。
+**刻意不做全站 migrate** —— 檔頭所述 ~97 個 `st.metric` + 8 種手刻 tile 全換是
+數千行 churn,屬 `CLAUDE.md §8.1 step 6`「用不到的抽象 / 過度設計」反例;
+等有第二個真實需求再逐點接。
 """
 from __future__ import annotations
 

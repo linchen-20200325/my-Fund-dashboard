@@ -20,7 +20,8 @@ CLAUDE.md §3.1 / SPEC §18 — DataFrame 邊界契約集中宣告。
 - `validate_stooq_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'stooq:' source prefix)v19.265 D7
 - `validate_cboe_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'CBOE:' source prefix)v19.265 D7
 - `validate_defillama_series(s) -> s`:wrapper(共用 YahooCloseSchema 結構 + 'DefiLlama:' source prefix)v19.267 D8 #6
-- `validate_aaii_sentiment(d) -> d`:dict wrapper(success path 驗 spread+bull+bear+source / fail path 驗 _err)v19.267 D8 #5
+- `validate_aaii_sentiment(d) -> d`:dict wrapper(success path 驗 spread+bull+neutral+bear
+  三欄和≈100 + |spread|≤60 + ISO 週結日 + source / fail path 驗 _err)v19.267 D8 #5
 - `validate_ndc_signal_dict(d) -> d`:TW 國發會景氣對策信號(success 驗 score 9-45 / fail 驗 error)v19.268 D8 #7
 - `validate_tw_pmi_dict(d) -> d`:TW 製造業 PMI(success 驗 value 0-100)v19.268 D8 #7
 - `validate_tw_export_yoy_dict(d) -> d`:TW 出口年增率(success 驗 value 浮動 %)v19.268 D8 #7
@@ -42,6 +43,8 @@ Phase 規劃(SPEC §18.3):
 """
 from __future__ import annotations
 
+import math
+import re
 from typing import Any
 
 import pandera.pandas as pa
@@ -314,11 +317,33 @@ def validate_defillama_series(s: Any) -> Any:
 # ════════════════════════════════════════════════════════════════
 # v19.267 D8 #5 — F-SCHEMA-1:AAII sentiment dict 出口契約
 # ════════════════════════════════════════════════════════════════
-# 依據(repositories/macro/alternate.py:106-155):
-#   success: {value:float, unit:'%', bull:float[0,100], bear:float[0,100],
-#             date:str, url_used:str, source:'AAII:...', fetched_at:ISO}
+# 依據(repositories/macro/alternate.py fetch_aaii_sentiment):
+#   success: {value:float, unit:'%', bull/neutral/bear:float[0,100],
+#             date:'YYYY-MM-DD'(週結日), url_used:str, source:'AAII:...', fetched_at:ISO}
 #   failure: {_err:str, source:'AAII:...', fetched_at:ISO}
 # dict 簡單 record,不用 pandera DataFrameSchema,純 Python 鍵驗證。
+
+# ── AAII 三欄調查值不變量常數(SSOT;§3.2 範圍/合理性檢查)──────────────
+# 依據 aaii.com/sentimentsurvey 官方表格語意:同一週的 Bullish / Neutral /
+# Bearish 是**同一份問卷三個互斥選項**的百分比,因此:
+#   (a) 每欄必落 [0,100];
+#   (b) 三欄相加 = 100 —— 官網各欄四捨五入到 0.1,合計偶爾出現 99.9 / 100.1,
+#       故給 ±1.0 個百分點容差(足以吸收進位,但攔得住殘缺配對);
+#   (c) |bull − bear| 的近一年極值約 ±50(官網同頁揭露 1-Year Bullish High 49.5%、
+#       1-Year Bearish High 52.0%),取 60 當「絕不可能」上限。
+# 稽核背景(2026-08-05):舊 parser 直接對原始 HTML 跑 regex,吃到 markup 裡的
+# 非調查數字(bull=50.0 / bear=0.0)→ spread +50.00,而當週實際為
+# bull 31.0 / neutral 26.9 / bear 42.1(spread −11.1)。舊 schema 只驗
+# bull/bear ∈ [0,100],該垃圾值完全合規通過 → 補上 (b)(c) 兩條後才攔得住。
+AAII_PCT_MIN: float = 0.0
+AAII_PCT_MAX: float = 100.0
+AAII_SUM_TOTAL_PCT: float = 100.0
+AAII_SUM_ABS_TOL_PCT: float = 1.0
+AAII_SPREAD_ABS_MAX_PCT: float = 60.0
+# value(spread)必須等於 bull − bear;bull/bear 保留 1 位小數、value 亦四捨五入
+# 到 1 位 → 最大偏差 0.05,取 0.15 容差(§4.3 浮點禁 ==)。
+_AAII_SPREAD_RECONCILE_ABS_TOL: float = 0.15
+_AAII_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def validate_aaii_sentiment(d: Any) -> Any:
@@ -326,8 +351,10 @@ def validate_aaii_sentiment(d: Any) -> Any:
 
     驗 schema 分兩條 path:
     - 失敗(含 _err):驗 _err 為字串 + source/fetched_at 符規
-    - 成功:驗 value(spread)/bull/bear 為 float;bull/bear ∈ [0,100];
-            unit == '%';source 以 'AAII:' 開頭;fetched_at 含 'T'
+    - 成功:驗 value(spread)/bull/neutral/bear 為 float、各欄 ∈ [0,100]、
+            三欄和 ≈ 100、|bull−bear| ≤ 60、value ≈ bull−bear;
+            unit == '%';date 為 ISO 'YYYY-MM-DD' 週結日(§2.3 PIT);
+            source 以 'AAII:' 開頭;fetched_at 含 'T'
 
     None / 空 dict 直接 pass(L2 caller 自處理 missing 狀態)。
     """
@@ -357,26 +384,59 @@ def validate_aaii_sentiment(d: Any) -> Any:
             )
         return d
 
-    # 成功 path:驗 spread / bull / bear / unit
-    if "value" not in d or "bull" not in d or "bear" not in d:
+    # 成功 path:驗 spread / bull / neutral / bear / unit / date
+    if not all(k in d for k in ("value", "bull", "bear", "neutral")):
         raise ValueError(
-            f"validate_aaii_sentiment: 成功 path 必有 value/bull/bear,實際 keys = {sorted(d.keys())}"
+            f"validate_aaii_sentiment: 成功 path 必有 value/bull/bear/neutral,"
+            f"實際 keys = {sorted(d.keys())}"
         )
-    for k in ("value", "bull", "bear"):
+    for k in ("value", "bull", "bear", "neutral"):
         v = d[k]
         if not isinstance(v, (int, float)):
             raise ValueError(
                 f"validate_aaii_sentiment: {k} 須為數值,實際 = {v!r} ({type(v).__name__})"
             )
     bull, bear = float(d["bull"]), float(d["bear"])
-    if not (0 <= bull <= 100):
-        raise ValueError(f"validate_aaii_sentiment: bull={bull} 越界 [0,100]")
-    if not (0 <= bear <= 100):
-        raise ValueError(f"validate_aaii_sentiment: bear={bear} 越界 [0,100]")
+    neutral = float(d["neutral"])
+    # (a) 各欄值域
+    for _k, _v in (("bull", bull), ("bear", bear), ("neutral", neutral)):
+        if not (AAII_PCT_MIN <= _v <= AAII_PCT_MAX):
+            raise ValueError(
+                f"validate_aaii_sentiment: {_k}={_v} 越界 "
+                f"[{AAII_PCT_MIN:.0f},{AAII_PCT_MAX:.0f}]"
+            )
+    # (b) 三欄互斥選項相加 ≈ 100(§4.3 浮點禁 ==,用 math.isclose)
+    _total = bull + neutral + bear
+    if not math.isclose(_total, AAII_SUM_TOTAL_PCT, abs_tol=AAII_SUM_ABS_TOL_PCT):
+        raise ValueError(
+            f"validate_aaii_sentiment: bull+neutral+bear={_total:.1f} 應 ≈ "
+            f"{AAII_SUM_TOTAL_PCT:.0f}(±{AAII_SUM_ABS_TOL_PCT})—— 三欄為同一份問卷的"
+            f"互斥選項,不成 100 表示抓到非調查數字(bull={bull} neutral={neutral} bear={bear})"
+        )
+    # (c) spread 絕對值上限(近一年極值約 ±50)
+    if abs(bull - bear) > AAII_SPREAD_ABS_MAX_PCT:
+        raise ValueError(
+            f"validate_aaii_sentiment: |bull−bear|={abs(bull - bear):.1f} > "
+            f"{AAII_SPREAD_ABS_MAX_PCT:.0f} 個百分點,超出歷史極值範圍"
+        )
+    # (d) value 必須真的等於 bull − bear(防產生端算錯 / 欄位錯位)
+    if not math.isclose(float(d["value"]), bull - bear,
+                        abs_tol=_AAII_SPREAD_RECONCILE_ABS_TOL):
+        raise ValueError(
+            f"validate_aaii_sentiment: value={d['value']} 與 bull−bear="
+            f"{bull - bear:.1f} 不一致(容差 {_AAII_SPREAD_RECONCILE_ABS_TOL})"
+        )
     unit = d.get("unit", "")
     if unit != "%":
         raise ValueError(
             f"validate_aaii_sentiment: unit 必為 '%'(spread 百分點),實際 = {unit!r}"
+        )
+    # (e) §2.3 PIT:date 必須是可辨識新舊的 ISO 週結日,禁 'weekly' 這種無時點字串
+    _date = str(d.get("date", ""))
+    if not _AAII_ISO_DATE_RE.match(_date):
+        raise ValueError(
+            f"validate_aaii_sentiment: date 必為 ISO 'YYYY-MM-DD' 週結日(§2.3 PIT,"
+            f"禁 'weekly' 之類無時點字串),實際 = {_date!r}"
         )
     return d
 
