@@ -826,6 +826,27 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
         )
 
 
+# ── §1 Fail-Loud 區塊邊界（2026-08-05 v19.429）──────────────────────────────
+# 總經 Tab 的四時域 section（長期／中期／短線／拐點／AI + 即時決策矩陣）原為
+# **裸呼叫**：任一 section 在特定線上資料下拋例外會連坐整個總經 Tab；且 app.py 以
+# st.tabs 單次 run 渲染全部分頁，總經（第 1 個 with 區塊）未捕捉的例外會中止整個
+# script，使其後分頁（健診／批次／個基／組合／參考）全數空白。本檔既有慣例：
+# china-drag／綜合健康度 hero／五桶 bar 三塊各自 try/except 降級；此處把同一「單塊
+# 隔離」慣例補到剩下的 section。**不吞例外**（§1）：沿用 `_friendly_error`（統一
+# 錯誤呈現 + stderr 鏡射進 Streamlit Cloud log + 可展開 traceback 供定位確切
+# file:line）；失敗的 section 就地顯示，其餘 section 與其他分頁照常渲染。
+def _safe_section(_label: str, _fn, *args, **kwargs) -> None:
+    """跑 `_fn(*args, **kwargs)`；若拋例外 → 就地 Fail-Loud 顯示 + log，不外拋。"""
+    try:
+        _fn(*args, **kwargs)
+    except Exception as _sec_e:  # noqa: BLE001 — §1 區塊隔離：顯式顯示 + log，非靜默吞
+        _friendly_error(
+            f"「{_label}」區塊渲染失敗", _sec_e,
+            hint="此區塊已隔離，其他區塊與分頁不受影響；請展開下方「🔧 技術細節」"
+                 "把 traceback（含 File \"...\", line N）截圖回報，即可精準定位根因。",
+            level="error")
+
+
 def render_macro_tab() -> None:
     """渲染總經位階評估 ＆ 拐點偵測 Tab（最大塊 ~1.8k 行）。
 
@@ -1376,7 +1397,9 @@ def render_macro_tab() -> None:
                 "🔬 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
                 expanded=True,
             ):
-                _render_realtime_decision_dashboard(ind)
+                # v19.429 §1 區塊隔離（見 _safe_section）
+                _safe_section("📋 即時訊號 + 決策矩陣",
+                              _render_realtime_decision_dashboard, ind)
             st.divider()
 
             # ══════════════════════════════════════════════════════════
@@ -1384,7 +1407,8 @@ def render_macro_tab() -> None:
             # v19.262 P3-A5:整 section 抽 ui/tab1_macro_longterm.py(-294 LOC)
             # ══════════════════════════════════════════════════════════
             from ui.tab1_macro_longterm import render_long_term_section
-            render_long_term_section(ind, fred_key=FRED_KEY, show_l3=_show_l3)
+            _safe_section("🌳 長期座標", render_long_term_section,
+                          ind, fred_key=FRED_KEY, show_l3=_show_l3)
 
             # ══════════════════════════════════════════════════════════
             # 🧭 總經指南針(v19.430 從 app.py 搬入詳細區)
@@ -1414,7 +1438,8 @@ def render_macro_tab() -> None:
             # v19.262 P3-A3:整 section 抽 ui/tab1_macro_midcycle.py(-180 LOC)
             # ══════════════════════════════════════════════════════════
             from ui.tab1_macro_midcycle import render_mid_cycle_section
-            render_mid_cycle_section(ind, show_l3=_show_l3, show_l2_plus=_show_l2_plus)
+            _safe_section("📈 中期循環", render_mid_cycle_section,
+                          ind, show_l3=_show_l3, show_l2_plus=_show_l2_plus)
 
 
             # ══════════════════════════════════════════════════════════
@@ -1422,14 +1447,16 @@ def render_macro_tab() -> None:
             # v19.262 P3-A4:整 section 抽 ui/tab1_macro_radar.py(-246 LOC)
             # ══════════════════════════════════════════════════════════
             from ui.tab1_macro_radar import render_short_radar_section
-            render_short_radar_section(fred_key=FRED_KEY, show_l3=_show_l3)
+            _safe_section("🎯 短線雷達", render_short_radar_section,
+                          fred_key=FRED_KEY, show_l3=_show_l3)
 
             # ══════════════════════════════════════════════════════════
             # v19.134 — ⚠️ 拐點警報 桶(物理重排,連續區塊)
             # v19.262 P3-A6:整 section 抽 ui/tab1_macro_inflection.py(-484 LOC)
             # ══════════════════════════════════════════════════════════
             from ui.tab1_macro_inflection import render_inflection_alert_section
-            render_inflection_alert_section(ind, phase=phase, fred_key=FRED_KEY, show_l3=_show_l3)
+            _safe_section("⚠️ 拐點警報", render_inflection_alert_section,
+                          ind, phase=phase, fred_key=FRED_KEY, show_l3=_show_l3)
 
             # ── AI 結構化總經摘要 ── L3 only
 
@@ -1440,9 +1467,8 @@ def render_macro_tab() -> None:
             # v19.261 P3-A2:🤖 AI 景氣判斷整 section 抽 ui/tab1_macro_ai.py
             from ui.tab1_macro_ai import render_ai_summary_section  # noqa: PLC0415
             _ai_mac_pct, _ = _calc_data_health(ind)
-            render_ai_summary_section(
-                ind, phase, GEMINI_KEY,
-                show_l3=_show_l3, mac_pct=_ai_mac_pct,
-            )
+            _safe_section("🤖 AI 景氣判斷總結", render_ai_summary_section,
+                          ind, phase, GEMINI_KEY,
+                          show_l3=_show_l3, mac_pct=_ai_mac_pct)
     else:
         st.info("👆 點擊「載入總經資料」開始分析")

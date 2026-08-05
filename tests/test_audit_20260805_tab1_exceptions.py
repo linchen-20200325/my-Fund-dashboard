@@ -68,10 +68,27 @@ def _line_of(marker: str) -> int:
     return _src[:_src.index(marker)].count("\n") + 1
 
 
+def _safe_section_arg_lines(fname: str) -> list:
+    """v19.429 §1 區塊隔離後,section renderer 的渲染點從 `render_x(...)`
+    變成 `_safe_section("標籤", render_x, ...)` 的**引數** —— 是 ast.Name
+    不是 ast.Call,`_calls()` 掃不到。
+
+    只認 `_safe_section` 的引數位置,**不**掃全檔 ast.Name:後者會命中
+    import alias 等非渲染點,「恰好一處」會失去鑑別力。
+    """
+    _tree = ast.parse(_TAB1.read_text(encoding="utf-8"))
+    return [_a.lineno
+            for _n in ast.walk(_tree)
+            if isinstance(_n, ast.Call) and _fn_name(_n) == "_safe_section"
+            for _a in _n.args
+            if isinstance(_a, ast.Name) and _a.id == fname]
+
+
 def _sole_call_line(fname: str) -> int:
-    _c = _calls(fname)
-    assert len(_c) == 1, f"{fname} 的呼叫應恰好一處,實際 {len(_c)} 處"
-    return _c[0].lineno
+    """渲染點行號 —— 裸呼叫與 `_safe_section` 包裹形兩種都算。"""
+    _lines = [_c.lineno for _c in _calls(fname)] + _safe_section_arg_lines(fname)
+    assert len(_lines) == 1, f"{fname} 的渲染點應恰好一處,實際 {len(_lines)} 處"
+    return _lines[0]
 
 
 # ══════════════════════════════════════════════════════════════

@@ -109,7 +109,9 @@ class TestActionLightWiredBackToTab1:
         i_light = src.index("macro_action_light(")
         i_hero = src.index("calculate_composite_score(")
         i_bar = src.index("render_evidence_table(_ev_rows)")
-        i_matrix = src.index("_render_realtime_decision_dashboard(ind)")
+        # v19.429:決策矩陣改由 `_safe_section(label, fn, ind)` 包裹(§1 區塊隔離),
+        # 位置不變 —— 錨點字串同步改為包裹後的呼叫形,保留「順序」斷言原意。
+        i_matrix = src.index("_render_realtime_decision_dashboard, ind)")
         assert i_light < i_hero, "結論燈跑到綜合健康度取數之後了"
         assert i_light < i_bar < i_matrix, (
             "結論燈不得插在 ② 依據表與決策矩陣之間(會撞既有順序鎖)")

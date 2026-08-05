@@ -202,14 +202,27 @@ tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_ref = st.tabs(
 # TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）
 # ══════════════════════════════════════════════════════
 with tab_macro:
-    # v19.430(user 2026-08-05 拍板 A 案):`render_macro_compass()` 從這裡移到
-    # `ui/tab1_macro.py` 的「🔎 詳細資料與說明」區開頭。
-    # 原因:它渲染在 `render_macro_tab()` **之前**,等於畫面最上方永遠是三張
-    # 原始值卡(VIX / 10Y / S&P 500)+ 三條折線,壓在總表上面。原始值屬「依據 /
-    # 例外」層級不是結論,與 user 指定的「最重要的總表放最上方,下方放詳細資料
-    # 與說明」相衝突。搬到詳細區後,Tab① 第一屏才真的是 ①結論 → ②依據。
-    # v18.127 B-C.5: 內容已搬到 ui/tab1_macro.py
-    render_macro_tab()
+    # §1 分頁隔離（v19.429）：st.tabs 單次 run 渲染全部分頁，總經（第 1 個 with
+    # 區塊）若拋未捕捉例外會中止整個 script → 其後所有分頁空白。外層 try 保證「總經
+    # 整體失敗不連坐其他分頁」；內層 tab1_macro._safe_section 再做 section 級細粒度
+    # 隔離。非靜默吞：friendly_error 顯式顯示 + stderr 鏡射進 Cloud log + traceback。
+    #
+    # v19.430(user 2026-08-05 拍板 A 案)— 合併 v19.429 時的衝突解法:
+    # 本處**不再**呼叫 `render_macro_compass()`。它已移入 `ui/tab1_macro.py` 的
+    # 「🔎 詳細資料與說明」區(長期座標之後)。原因:它渲染在 `render_macro_tab()`
+    # **之前**,等於畫面最上方永遠是三張原始值卡(VIX / 10Y / S&P 500)+ 三條折線,
+    # 壓在總表上面。原始值屬「依據」層級不是結論,與 user 指定的「最重要的總表放
+    # 最上方,下方放詳細資料與說明」相衝突。
+    # ⚠️ 對應的 module-level import 亦已移除 —— 在此還原呼叫會是 NameError。
+    try:
+        # v18.127 B-C.5: 內容已搬到 ui/tab1_macro.py
+        render_macro_tab()
+    except Exception as _macro_tab_e:  # noqa: BLE001 — §1 分頁隔離，非靜默吞
+        from ui.helpers.session import friendly_error as _fe_macro
+        _fe_macro("「🌐 市場定調」分頁渲染失敗", _macro_tab_e,
+                  hint="此分頁已隔離，其他分頁不受影響；請展開「🔧 技術細節」把 "
+                       "traceback（含 File \"...\", line N）回報，即可精準定位根因。",
+                  level="error")
 
 # ══════════════════════════════════════════════════════
 # TAB ② — 💊 組合健診（決策動線第 2 站:手上哪幾檔健康 / 吃本金)

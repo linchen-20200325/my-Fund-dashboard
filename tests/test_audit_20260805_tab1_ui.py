@@ -295,8 +295,11 @@ def test_decision_matrix_sits_between_summary_bar_and_horizons():
        「決策矩陣不得跑到總覽前面(擋住總經),也不得埋回四時域後面」。
     """
     src = _TAB1.read_text(encoding="utf-8")
+    # 上游錨點:F1 重構後為 ② 依據表(五桶 bar renderer 已刪)。
     i_bar = src.index("render_evidence_table(_ev_rows)")
-    i_matrix = src.index("_render_realtime_decision_dashboard(ind)")
+    # v19.429:決策矩陣呼叫改由 `_safe_section(label, fn, ind)` 包裹(§1 區塊隔離),
+    # 位置不變 —— 匹配字串同步改為包裹後的呼叫形以保留「位置」斷言原意。
+    i_matrix = src.index("_render_realtime_decision_dashboard, ind)")
     i_long = src.index("from ui.tab1_macro_longterm import render_long_term_section")
     assert i_bar < i_matrix, "決策矩陣跑到總表 ② 依據表前面了(會擋住總經,違反 v19.41 指示)"
     assert i_matrix < i_long, "決策矩陣仍埋在四時域之後"
@@ -323,7 +326,8 @@ def test_decision_matrix_heading_still_present_once():
     """搬家不得把區塊搬丟或搬成兩份。"""
     src = _TAB1.read_text(encoding="utf-8")
     assert src.count('st.markdown("## 📋 即時訊號 + 決策矩陣")') == 1
-    assert src.count("_render_realtime_decision_dashboard(ind)") == 1
+    # v19.429:呼叫改由 _safe_section 包裹,匹配包裹後的呼叫形(仍須恰好一處)。
+    assert src.count("_render_realtime_decision_dashboard, ind)") == 1
 
 
 def test_decision_matrix_caption_not_claiming_last_position():

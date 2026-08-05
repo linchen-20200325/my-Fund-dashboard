@@ -2,6 +2,16 @@
 # 死釘的 streamlit==1.45.1 早於 py3.14 支援 → 進程啟動即 Segmentation fault。
 # 升至 1.59.1(本地全套件 2,402 tests 已在 1.59.1 上驗證綠),上界防未測 minor。
 streamlit>=1.59.1,<1.60.0
+# v19.428 hotfix(2026-08-05):Starlette 1.4.0(當日發布)把 GZip 壓縮改丟 worker
+# thread,`GZipResponder.__init__` 新增**必填 keyword-only** 參數 thread_minimum_size。
+# Streamlit 1.59.1 的 `_MediaAwareGZipResponder` 繼承 GZipResponder 但呼叫時只傳
+# (app, minimum_size, compresslevel=...) 未帶該參 → 每個 request 都 TypeError →
+# 雲端全站 ASGI 崩潰(log:GZipResponder.__init__() missing 1 required keyword-only
+# argument: 'thread_minimum_size')。Streamlit 只宣告 starlette>=0.40.0 無上界,雲端
+# 遂解析到當日新出的 1.4.0。cap <1.4.0 保留 1.3.x 舊簽名(與本地驗證同源)。
+# 解禁條件:Streamlit 端 `_MediaAwareGZipResponder` 補傳 thread_minimum_size(或升
+# streamlit 到已修版本)後,即可放寬本上界。
+starlette>=0.40.0,<1.4.0
 typing-extensions>=4.13.0
 pandas>=2.1.0
 numpy>=1.24.0
