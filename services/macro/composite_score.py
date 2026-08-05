@@ -22,7 +22,7 @@ from shared.colors import (
 
 
 # ══════════════════════════════════════════════════════════════════════
-# v19.405 稽核收口:指標聚合的**兩條正交契約**(所有 aggregator 共用語意)
+# v19.405 → v19.425 稽核收口:指標聚合的**三條正交契約**(所有 aggregator 共用語意)
 # ══════════════════════════════════════════════════════════════════════
 # 1) `weight` = **評分權重**。`0` 是完全合法的值(= 本格不進任何加權分子/分母),
 #    **不是**「沒填」。因此一律用「鍵不存在 / None 才回退 1」判斷,
@@ -31,11 +31,28 @@ from shared.colors import (
 #    (v19.404 M2/M2_WEEKLY 去重被此式吃掉,QA Reject 主因)。
 # 2) `superseded_by` = **去重事實**(§2.2 provenance)。同一經濟因子有主/備兩源
 #    (M2SL 月頻 vs WM2NS 週頻)且主源已命中時,備源會標 `superseded_by="M2"`。
-#    給**不吃 weight 的路徑**用(zpct 百分位平均、今日關鍵橫幅),
-#    這些路徑用 weight 去重會破壞其方法學獨立性(F-RECON-1)。
+#    給**不吃 weight 的路徑**用,這些路徑用 weight 去重會破壞其方法學獨立性
+#    (F-RECON-1)。目前**共 3 條**:`calc_macro_phase_zpct`(百分位平均)、
+#    `collect_key_alerts`(今日關鍵橫幅)、`reconcile_composite_score`
+#    (多空投票對帳 —— v19.425 補上,前一輪漏網)。新增不吃 weight 的
+#    aggregator 時,必須同步接這條契約。
 #
 # 兩者刻意分離:weight 管「算多重」、superseded_by 管「是不是同一顆的分身」。
 # 生產端在 `services/macro/us_indicators.py` R["M2_WEEKLY"] 區塊同時輸出兩者。
+#
+# 3) `_` 前綴 key = **meta,不是指標**(v19.425 收口為共用述詞 `is_meta_key`)。
+#    `fetch_all_indicators` 除指標外還會塞 provenance meta(目前只有 `_fred_sources`)。
+#    這類 meta 沒有 `score` / `weight` 欄,任何「用 .get 取預設值」的 aggregator
+#    都會把它當成一顆「score=0 / weight=1」的指標混進分母。原本這道守衛被
+#    **各自 inline** 在 `calc_macro_phase` / `calc_macro_phase_zpct` /
+#    `_build_phase_provenance`,本模組兩條路徑則完全沒有 → v19.425 抽成本述詞,
+#    5 條聚合/血緣路徑共用同一個定義(漂移鎖見 tests/test_macro_indicator_signs.py
+#    `test_all_aggregators_share_the_meta_predicate`)。
+
+
+def is_meta_key(key) -> bool:
+    """`_` 前綴 = provenance meta 容器(如 `_fred_sources`),不得參與任何聚合。"""
+    return str(key).startswith("_")
 
 
 def coerce_weight(raw, default: float = 1.0) -> float:
@@ -104,7 +121,12 @@ def calculate_composite_score(ind: dict, *,
     _contribs: dict[str, dict] = {}
     _n: int = 0
     for k, v in ind.items():
-        if not isinstance(v, dict):
+        # v19.425:`_` 前綴 meta(如 `_fred_sources`)不是指標。
+        #   對 `total` 本來就無害(score 缺 → 0,0×1=0),但**血緣側車會謊報**:
+        #   `n_indicators` 多算 1、`contributions["_fred_sources"]` 寫進一個
+        #   不存在的「指標」條目。§2.2 血緣不得含虛構條目 —— 而 mcp_server/
+        #   tools_macro.py:63 確實有傳 provenance_out,這份假血緣會被輸出。
+        if is_meta_key(k) or not isinstance(v, dict):
             continue
         try:
             sf = float(v.get("score", 0) or 0)
@@ -151,20 +173,44 @@ def reconcile_composite_score(ind: dict) -> dict:
     狀態:同向 → "agree";一向中性 → "neutral_mix"(弱訊號,非衝突);
           一正一負 → "disagree"(⚠️ 需檢查權重配置 / 單指標暴衝)。
     純函式;ind 無效 → n_valid=0 + status="no_data"(§1 不偽造)。
+
+    v19.425 稽核收口:本迴圈是「不吃 weight 的第三條路徑」,補齊與
+    `calc_macro_phase_zpct` / `collect_key_alerts` 相同的兩道守衛(共用述詞
+    `is_meta_key` / `is_superseded`,見本模組頂部三條契約)。跳過原因寫進
+    `skipped`(schema-additive),§1 不靜默丟資料。
     """
     from shared.signal_thresholds import COMPOSITE_VOTE_NEUTRAL_BAND
 
     total = calculate_composite_score(ind)
     n_pos = n_neg = n_zero = 0
+    skipped: list[str] = []
     if isinstance(ind, dict):
-        for v in ind.values():
-            if not isinstance(v, dict):
+        for k, v in ind.items():
+            # (1) `_` 前綴 meta:`_fred_sources` 是 dict 但**沒有 `score` 鍵** →
+            #     `sf=0` → 舊碼記進 n_zero,直接把 meta 灌進 n_valid 分母。
+            #     這正是 v19.404 在 `calc_macro_phase:1231` 修過的同一個病,
+            #     本函式從未拿到那道守衛。
+            if is_meta_key(k) or not isinstance(v, dict):
+                continue
+            # (2) 同因子備源:本演算法**刻意不讀 weight**(不加權多空投票才與
+            #     主路徑正交,F-RECON-1),所以 v19.404 給 M2_WEEKLY 的
+            #     `weight=0` 對這裡完全無效 —— M2(score=+1)與 M2_WEEKLY
+            #     (score=-1,SA/NSA + 月/週取樣不同,反向是常態)會各投一票
+            #     互相抵銷:去重後該因子淨貢獻 +1,未去重則為 0,
+            #     `net_ratio` 位移 2/n_valid(n_valid≈25 → 0.08),
+            #     足以在 COMPOSITE_VOTE_NEUTRAL_BAND(0.2)邊界把
+            #     agree ↔ neutral_mix ↔ disagree 翻掉。
+            _sup = is_superseded(v, ind)
+            if _sup:
+                skipped.append(f"{k}:superseded_by={_sup}")
                 continue
             try:
                 sf = float(v.get("score", 0) or 0)
             except (TypeError, ValueError):
+                skipped.append(f"{k}:score_invalid")
                 continue
             if sf != sf:  # NaN guard
+                skipped.append(f"{k}:score_nan")
                 continue
             if sf > 0:
                 n_pos += 1
@@ -177,6 +223,7 @@ def reconcile_composite_score(ind: dict) -> dict:
         return {"weighted_total": total, "vote_net_ratio": None,
                 "n_pos": 0, "n_neg": 0, "n_zero": 0,
                 "dir_weighted": "neu", "dir_vote": "neu",
+                "skipped": skipped,
                 "status": "no_data", "note": "無有效指標,無法對帳(§1)"}
 
     net_ratio = (n_pos - n_neg) / n_valid
@@ -200,6 +247,7 @@ def reconcile_composite_score(ind: dict) -> dict:
     return {"weighted_total": total, "vote_net_ratio": round(net_ratio, 3),
             "n_pos": n_pos, "n_neg": n_neg, "n_zero": n_zero,
             "dir_weighted": dir_w, "dir_vote": dir_v,
+            "skipped": skipped,
             "status": status, "note": note}
 
 

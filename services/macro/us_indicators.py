@@ -47,7 +47,10 @@ from services.macro._helpers import (  # noqa: F401
     FRED_T10Y2Y, FRED_T5YIE, FRED_TGA, FRED_UMCSENT, FRED_UNRATE,
 )
 # v19.405:指標聚合的「去重事實」契約 SSOT(`superseded_by`)。
+# v19.425:`_` 前綴 meta 述詞一併收 SSOT(原本 4 個 aggregator 各自 inline
+#          `str(key).startswith("_")`,其中兩個漏寫 → 見 composite_score 頂部契約 3)。
 # composite_score.py 只 import shared.colors(L0),同層 L2 互 import 無循環。
+from services.macro.composite_score import is_meta_key as _is_meta_key
 from services.macro.composite_score import is_superseded as _is_superseded
 
 _INDICATOR_SNAPSHOT: dict = {}
@@ -520,7 +523,10 @@ def fetch_all_indicators(fred_api_key):
             score=1 if v>_M2_EASING else (-1 if v<_M2_TIGHTENING else 0),
             # v19.404:月頻為 M2 因子的主源;週頻 WM2NS 命中時會自我降為 weight=0
             # (見下方 M2_WEEKLY 區塊),避免同因子重複計數。
-            is_scored=True,
+            # v19.425:原有 `is_scored=True` 已刪 —— 全 repo **0 production reader**,
+            #   且主源恆為 True(= 零資訊)。去重事實一律以 `superseded_by` 揭露
+            #   (3 個真 reader:composite_score 兩條路徑 + daily_key_alerts),
+            #   兩欄併存等於同一事實兩份編碼,會漂移(§2.1 SSOT / §8.1 step 6)。
             weight=1, series=s24)
 
     # v19.49 perf: SPY / RSP / DXY 三條 yfinance 並行（原 3× 序列 → max(t)）
@@ -946,7 +952,12 @@ def fetch_all_indicators(fred_api_key):
     #   選 weight=0 而非「不輸出」，是因為 Z-Score 矩陣 / 資料看板 / 教學卡都直接讀
     #   `indicators["M2_WEEKLY"]`（`ui/tab1_macro_midcycle.py:95` 等），拔掉會讓那些
     #   面板整格消失；weight=0 只切斷評分、不動顯示。
-    #   實際採用哪一個以 `is_scored` / `superseded_by` 揭露（§2.2 provenance）。
+    #   實際採用哪一個以 `superseded_by` 揭露（§2.2 provenance；機器可讀，3 個
+    #   production reader：composite_score 的加權/投票兩條 + daily_key_alerts）
+    #   ＋ `desc` 尾綴的中文說明（人可讀，直接顯示在教學卡 / Z-Score 矩陣上）。
+    #   v19.425：原併存的 `is_scored` 已刪 —— 全 repo 0 production reader，
+    #   且恆等於 `superseded_by is None`（同一事實兩份編碼，必然漂移）。
+    #   §2.1 SSOT ＋ §8.1 step 6「用不到的抽象先不做」。
     df = _fred_iso(FRED_M2_WEEKLY, fred_api_key, 520)
     if len(df) >= 53:
         s_full = df.set_index("date")["value"]
@@ -969,7 +980,6 @@ def fetch_all_indicators(fred_api_key):
                 score=1 if v > 5 else (-1 if v < 0 else 0),
                 # 月頻命中 → weight=0（顯示保留、評分歸零）；否則遞補為 1
                 weight=(0 if _m2_monthly_hit else 1),
-                is_scored=(not _m2_monthly_hit),
                 superseded_by=("M2" if _m2_monthly_hit else None),
                 series=s24)
         # 週頻缺漏時，月頻 M2 本來就在評分內，無須額外處理（§1 不補假值）
@@ -1228,7 +1238,8 @@ def calc_macro_phase(indicators: dict) -> dict:
     # 加權加總
     total_w = 0; earned_w = 0
     for key, ind in indicators.items():
-        if str(key).startswith("_") or not isinstance(ind, dict):
+        # v19.425:述詞收 SSOT(composite_score.is_meta_key),行為與原 inline 相同
+        if _is_meta_key(key) or not isinstance(ind, dict):
             continue   # v19.404:meta(如 _fred_sources)不是指標,禁止污染權重分母
         w = ind.get("weight", 1)
         s = ind.get("score", 0)
@@ -1413,14 +1424,15 @@ def _build_phase_provenance(indicators: dict, total_w: float, earned_w: float) -
     sources = {}
     for k, ind in indicators.items():
         # v19.404:`_` 前綴為 meta(如 _fred_sources),與 calc_macro_phase 同步排除
-        if str(k).startswith("_"):
+        # v19.425:述詞收 SSOT(composite_score.is_meta_key)
+        if _is_meta_key(k):
             continue
         if isinstance(ind, dict) and ind.get("source"):
             sources[k] = str(ind["source"])
     return {
         "sources": sources,
         "contributing": len([1 for _k, ind in indicators.items()
-                             if not str(_k).startswith("_")
+                             if not _is_meta_key(_k)
                              and isinstance(ind, dict) and ind.get("score") is not None]),
         "total_weight": float(total_w),
         "earned_weight": float(earned_w),
@@ -1504,7 +1516,8 @@ def calc_macro_phase_zpct(indicators: dict) -> dict:
             continue
         # v19.404:`_` 前綴為 meta(如 _fred_sources),與主路徑同步排除。
         # (原本靠「無 value/series」被動跳過,但會污染 skipped 清單讓 audit 誤判。)
-        if str(key).startswith("_"):
+        # v19.425:述詞收 SSOT(composite_score.is_meta_key)。
+        if _is_meta_key(key):
             continue
         # v19.405 稽核修正(§2.1「第一命中即用、禁止平均」):同因子的備源不得再進來。
         #   本演算法**刻意不讀 weight**(不加權的百分位平均才與主路徑正交,F-RECON-1),

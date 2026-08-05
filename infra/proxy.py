@@ -210,16 +210,39 @@ def fetch_url(
                 # §2.1「MoneyDJ 子網域 403 走 fallback chain」是核心情境，原本零 log
                 # → 無法分辨「來源被擋」與「網路壞掉」。補 log 讓 fallback 可觀測。
                 print(f"[proxy] 403 Forbidden ({_block}/2) — 來源封鎖或需 Referer：{_url_log[:80]}")
-                _t.sleep(_rnd.uniform(2.5, 6.0))
-                if _block >= 2:
+                # 【v19.425 修：先判「還會不會再試」，再決定要不要 sleep】
+                # 原碼順序是 `sleep → if _block >= 2: break`，兩種情況白睡：
+                #   (a) `_block >= 2` → sleep 完立刻 break，那 2.5~6s 沒有任何
+                #       retry 在等它；接手的是下方**降級直連**（`proxies={}`，
+                #       走的是完全不同的出口 IP，與 proxy 端的封鎖狀態無共享），
+                #       而 ProxyError 分支本來就是 0 sleep 直接降級 —— 行為對齊。
+                #   (b) `_block == 1` 但已是最後一次 attempt → sleep 完 `continue`，
+                #       for 迴圈當場耗盡，且 `_block < 2` 連降級都不觸發 = 純浪費。
+                # sleep 的原意是「retry 前退避」，因此只在**確定還有下一輪**時睡。
+                # `_block` 計數與 break 條件均不變 → 降級判斷（`_block >= 2`）行為零改動。
+                if _block >= 2 or attempt >= retries - 1:
                     break
+                _t.sleep(_rnd.uniform(2.5, 6.0))
                 continue
             if r.status_code == 429:
                 if _rl_atmp < len(_RATE_LIMIT_BACKOFF_SEC):
                     _sleep_s = _RATE_LIMIT_BACKOFF_SEC[_rl_atmp]
-                    print(f"[proxy] 429 Rate Limit — sleep {_sleep_s}s before retry "
-                          f"({_rl_atmp + 1}/{len(_RATE_LIMIT_BACKOFF_SEC)}): {_url_log[:80]}")
-                    _t.sleep(_sleep_s)
+                    # 【v19.425 修：最後一次 attempt 後不再退避】
+                    # 預設 retries=3、backoff=(2,4,8) → attempt 2（最後一次）時
+                    # `_rl_atmp=2 < 3` 成立 → sleep **8 秒** → continue → for 迴圈
+                    # 當場耗盡，那 8 秒沒有任何 retry 在等它，是三個分支裡最大的
+                    # 淨損失。（也因此 `_rl_atmp >= len(...)` 的放棄分支在預設
+                    # retries=3 下其實永遠走不到。）
+                    # 只拿掉 sleep、**不改控制流**（仍 `continue`）—— 若同一 URL
+                    # 先前發生過 Timeout/ProxyError，下方 `_tmo/_perr > 0` 的
+                    # 降級直連仍有機會救回來，不可在此提前 return。
+                    if attempt < retries - 1:
+                        print(f"[proxy] 429 Rate Limit — sleep {_sleep_s}s before retry "
+                              f"({_rl_atmp + 1}/{len(_RATE_LIMIT_BACKOFF_SEC)}): {_url_log[:80]}")
+                        _t.sleep(_sleep_s)
+                    else:
+                        print(f"[proxy] 429 Rate Limit — 已無重試次數 "
+                              f"(attempt {attempt + 1}/{retries})，不再退避：{_url_log[:80]}")
                     _rl_atmp += 1
                     continue
                 print(f"[proxy] 429 已重試 {_rl_atmp} 次仍 rate-limited，放棄：{_url_log[:80]}")
@@ -264,7 +287,13 @@ def fetch_url(
         except requests.exceptions.Timeout:
             _tmo += 1
             print(f"[proxy] Timeout attempt {attempt+1}: {_url_log[:60]}")
-            _t.sleep(2)
+            # 【v19.425 修：最後一次 attempt 後不再 sleep】
+            # Timeout 與 ProxyError 不同 —— 對端可能只是暫時忙，重試有意義，
+            # 所以**保留**退避重試（不比照 ProxyError 立刻 break）。但最後一次
+            # attempt 之後 for 迴圈直接結束，那 2s 沒有任何 retry 在等它，
+            # 且下方 `_tmo > 0` 的降級直連會立刻接手 → 每條逾時 URL 白付 2s。
+            if attempt < retries - 1:
+                _t.sleep(2)
         except Exception as e:
             print(f"[proxy] Error: {e}")
             break

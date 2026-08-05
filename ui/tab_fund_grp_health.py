@@ -557,6 +557,10 @@ def _render_health_3tables(rows: list[dict],
         CAPTURE_MIN_MONTHS as _CAP_MIN,
         CAPTURE_ROBUST_MONTHS as _CAP_ROB,
     )
+    # 換標策略分 help 文字用的綠燈門檻(SSOT,不在 help 字串寫死 70,§3.3)
+    from shared.switch_thresholds import SWITCH_GREEN_SCORE as _SW_GREEN
+    # Sharpe 自算樣本門檻(help 文字要照實說「自算需 ≥ N 筆」,不寫死數字)
+    from services.fund_service import MIN_OBS_SHARPE_SORTINO as _MIN_SS
     _health_cfg = {
         "code": _cc.TextColumn("代號", width="small"),
         "基金名": _cc.TextColumn("基金名", width="medium"),
@@ -571,8 +575,20 @@ def _render_health_3tables(rows: list[dict],
         "4D Grade": _cc.TextColumn("4D Grade", width="small",
             help="A≥80 / B≥65 / C≥50 / D≥35 / F<35(SSOT v19.177)"),
         "4D Score": _cc.NumberColumn("4D Score", format="%.1f", width="small"),
-        "Sharpe 1Y": _cc.NumberColumn("Sharpe 1Y", format="%.2f",
-            help="自計算（NAV序列，用於4D評分）；非MoneyDJ公布值"),
+        # ⚠️ 原 help 斷言「自計算(NAV 序列);**非** MoneyDJ 公布值」—— 與事實相反:
+        #    `services/fund_service.py` 的 `_sharpe_out` 優先序是
+        #    **wb07 一年 > wb07 六個月 > 本地自算**,只要 MoneyDJ wb07 有值(境外基金常態)
+        #    這欄顯示的就是官方公布值;wb07 **六個月**命中時欄名還寫死「1Y」。
+        #    → 標籤去掉硬掛的 1Y,期間/來源改由旁邊的「Sharpe 來源」欄逐檔照實顯示。
+        "Sharpe 1Y": _cc.NumberColumn("Sharpe", format="%.2f",
+            help=("來源優先序:**MoneyDJ wb07 官方一年 > wb07 官方六個月 > 本地自算**"
+                  f"(自算需 NAV ≥ {_MIN_SS} 筆)。逐檔實際來源見右邊「Sharpe 來源」欄。"
+                  "⚠️ 同一欄可能**混不同期間**(wb07 六個月不是 1Y),跨檔比大小前請先看來源;"
+                  "4D 評分與換標策略分皆吃此值。")),
+        "Sharpe 來源": _cc.TextColumn("Sharpe 來源", width="small",
+            help=("此列 Sharpe 的**實際**來源與期間(§2.2 血緣):wb07 1Y(官方)/ "
+                  "⚠️ wb07 6M(非1Y,期間比別檔短)/ 自算 Nd(本地 NAV 序列)/ ⬜ —(無值)。"
+                  "本欄由 calc_metrics 的 risk_metric_meta 直出,不重算。")),
         "Sortino": _cc.NumberColumn("Sortino", format="%.2f"),
         "Calmar": _cc.NumberColumn("Calmar", format="%.2f"),
         "Alpha %": _cc.NumberColumn("真實收益 %", format="%.2f %%",
@@ -604,10 +620,21 @@ def _render_health_3tables(rows: list[dict],
         # v19.423 換標決策(策略燈號 + 策略分;獨立於 4D,專為買賣/換標設計)
         "策略燈號": _cc.TextColumn("策略燈號", width="small",
             help=("換標燈號:🔴 賣出/平轉(1Y含息<0 且 Sharpe<0,或 嚴重吃本金)/ 🟡 觀望 / "
-                  "🟢 續抱加碼(分≥70 且 吃本金健康)/ ⬜ 資料不足。可篩選一次挑出所有紅燈檔。")),
+                  f"🟢 續抱加碼(分≥{_SW_GREEN} 且 吃本金健康**且四維證據夠**)/ ⬜ 資料不足。"
+                  "⚠️ 缺 MaxDD / vs大盤 時,**缺的維度全以 0 計仍要 ≥ "
+                  f"{_SW_GREEN}** 才給綠燈 —— 證據不全一律降 🟡,不給加碼訊號(§1)。"
+                  "可篩選一次挑出所有紅燈檔。")),
         "換標策略分": _cc.NumberColumn("換標策略分", format="%d",
-            help=("換標策略分 0-100(1Y含息35 + Sharpe30 + MaxDD20 + vs大盤15)。"
-                  "**獨立於 4D 健康度**,專為換標決策設計;缺 Sharpe/含息 → 留白(灰燈)。")),
+            help=("滿覆蓋時 = 1Y含息35 + Sharpe30 + MaxDD20 + vs大盤15 = 0-100。"
+                  "⚠️ **分母不是固定 100**:缺 MaxDD(NAV 太短算不出)或 vs大盤 時,該維"
+                  "**退出分母**後放回 0-100(缺值≠壞值),所以 100 分可能只代表"
+                  "「有證據的 65 分裡拿滿 65」—— 實際分母/缺哪幾維請看右邊「策略分覆蓋」欄。"
+                  "**獨立於 4D 健康度**;缺 Sharpe/含息 → 留白(灰燈)。")),
+        "策略分覆蓋": _cc.TextColumn("策略分覆蓋", width="medium",
+            help=("換標策略分的**證據覆蓋率**(§1 缺值須帶旗標):✅ 100/100 = 四維齊全;"
+                  "⚠️ 65/100(缺 …) = 分母被收斂,分數只反映有證據的部分,跨檔比大小要小心;"
+                  "`·不給綠燈` = 缺的維度即使全拿 0 也跨不過綠燈門檻 → 燈號已強制降 🟡;"
+                  "⬜ 未評分 = 核心維度(1Y含息/Sharpe)缺。")),
         # v19.425 景氣適配(依資產屬性+捕捉對照當前景氣;參考傾向非買賣建議)
         "景氣適配": _cc.TextColumn("景氣適配", width="small",
             help=("依資產類別 + 抗跌/追漲能力,對照**當前景氣位階**(頁首 Phase):✅ 順風 / "

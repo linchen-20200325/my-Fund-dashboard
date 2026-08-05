@@ -1,4 +1,5 @@
-"""services/switch_strategy.py — 換標決策引擎(v19.423)。純函式,零 IO。
+"""services/switch_strategy.py — 換標決策引擎(v19.423)。純函式,零外部 IO
+(僅 §1 要求的 stderr 稽核 log;無 HTTP / 無 streamlit / 無檔案)。
 
 user 2026-07-28 spec:健康度評分 → 燈號診斷 → 一對一替換匹配 → 大盤 regime filter。
 
@@ -8,11 +9,18 @@ user 2026-07-28 spec:健康度評分 → 燈號診斷 → 一對一替換匹配 
 - **資料不足**(Sharpe 或 1Y 含息缺)→ 灰燈,不硬算分數(§1,同 4D 資料不足守衛哲學)。
 - **加分項(MaxDD / vs大盤)缺值 → 從分母移除後重正規化**,不再讓「缺資料」與
   「表現很差」在同一個分數上無法區分(§1 缺值偽裝成壞值;詳見 `switch_score` docstring)。
+- **「衡量」與「行動」分離(本次修正)**:重正規化只修好「衡量」那一半 —— 分數語意變成
+  「**有證據的維度**你拿了幾成」是誠實的,但它同時被拿去跨「加碼」門檻,結果是
+  **缺資料反而拿到最強的買進訊號**(65/65 → 100 分 → 🟢「可定期定額加碼」)。
+  因此綠燈另設**悲觀下界**閘門(見 `_coverage_blocks_green`):缺的維度全以 0 計、
+  分母不縮,仍 ≥ `SWITCH_GREEN_SCORE` 才給綠燈,否則降 🟡 觀望。
 - 替換為**同資產類別**「一對一」(user spec:同類換品質更好者);輪動則是**跨類別**,兩者不同。
 
 常數全走 `shared.switch_thresholds` SSOT(§3.3)。
 """
 from __future__ import annotations
+
+import sys as _sys
 
 from shared.converters import safe_num as _num
 from shared.switch_thresholds import (
@@ -83,6 +91,12 @@ def switch_score(tr1y_pct, sharpe, maxdd_pct, vs_market_pct, *,
     NAV < 126 點的基金整欄換標判讀消失。重正規化同樣消滅「缺 = 壞」的錯誤訊號,
     但保留可用性;殘留風險(部分覆蓋的分數可比性較弱)以 `coverage_out` 顯式揭露。
 
+    ⚠️ **本分數是「衡量」不是「行動」**:部分覆蓋時 `100` 的意思是「有證據的 65 分裡
+    你拿滿 65」,**不是**「四維全好」。行動面(綠燈/加碼)另由 `switch_signal` 的悲觀
+    下界閘門把關(`_coverage_blocks_green`),避免缺資料換到更強的買進訊號。呼叫端
+    **必須**把 `coverage_out` 一起帶去 `switch_signal(coverage=...)` 與顯示層
+    (`switch_coverage_label`),否則旗標形同虛設。
+
     Parameters
     ----------
     coverage_out : dict | None
@@ -137,19 +151,58 @@ def switch_score(tr1y_pct, sharpe, maxdd_pct, vs_market_pct, *,
                    f"缺 {'/'.join(_missing)} → 分母由 {_total} 收斂為 {_avail} 後放回"
                    f"0-{_total}(缺值不計為壞值,§1)"),
     })
-    if coverage_out is not None:
-        coverage_out.update(_cov)
+    # §1 第 2 項:任何填補 / 分母調整都要**寫入 log**(前一輪只做到「顯式呼叫」)。
+    # 只在真的重正規化時印一行,滿覆蓋(絕大多數列)不產生噪音。
+    if _cov["rescaled"]:
+        print(f"[switch_strategy] 換標策略分部分覆蓋:缺 {'/'.join(_missing)} → "
+              f"分母 {_total}→{_avail},earned={_earned} → score={_score}"
+              f"(悲觀下界 {_earned} vs 綠燈門檻 {SWITCH_GREEN_SCORE})", file=_sys.stderr)
     return _score
 
 
-def switch_signal(tr1y_pct, sharpe, eat_status, score) -> str:
+def _coverage_blocks_green(coverage) -> bool:
+    """部分覆蓋時,綠燈該不該降級 —— **悲觀下界**判準(§1「缺資料不得給更強的買進訊號」)。
+
+    問題:`switch_score` 的重正規化讓分數語意變成「有證據的維度你拿了幾成」,對「衡量」
+    誠實,但拿去跨「加碼」門檻就翻車 ——
+    1Y含息 8% + Sharpe 1.0 + MaxDD/vs大盤**全缺** → 65/65 → **100 分 → 🟢
+    「續抱,可作核心資產或定期定額加碼」**,比同樣報酬但 MaxDD 真的是 −40% 的檔(65 分,🟡)
+    還積極。而 MaxDD 為 None 的成因正是 `MIN_OBS_MAX_DRAWDOWN`(125 交易日)沒過 ——
+    新發行 / 保單子網域被封鎖只抓到短序列,**風險最不明的那一批**。
+
+    判準:把缺的維度**全部以 0 計、分母不縮**(= 悲觀下界 `earned`),仍 ≥
+    `SWITCH_GREEN_SCORE` → 綠燈成立(缺的那幾分再怎麼補都翻不掉結論,例如
+    35+30+20 = 85 只缺 vs大盤 15 分);否則降 🟡 **觀望**。
+
+    為什麼是 🟡 不是 ⬜:核心兩維(1Y 含息 / Sharpe)是**有真實證據**的,丟成灰燈
+    (「勿據此買賣」)等於把手上的資料扔掉,且會讓 Tab3 持倉健診(不供 vs大盤%)整欄
+    變灰。🟡 的處置文字「暫停定期定額加碼,觀察下季 **vs 大盤超額與下檔保護**」正好
+    就是缺的那兩維,語意完全對得上。
+
+    `coverage` 為 None(呼叫端沒帶側車)→ 回 False = 沿用舊行為;production 呼叫端
+    (`ui/helpers/fund_grp_health/unified.compute_switch_columns`)一律要帶,
+    由 `tests/test_switch_strategy.py` 的行為測試釘住。
+    """
+    if not isinstance(coverage, dict) or not coverage.get("rescaled"):
+        return False
+    _earned = coverage.get("earned")
+    return _earned is None or int(_earned) < SWITCH_GREEN_SCORE
+
+
+def switch_signal(tr1y_pct, sharpe, eat_status, score, *, coverage=None) -> str:
     """紅/黃/綠/灰燈。優先序:紅(嚴重吃本金) > 灰(資料不足) > 紅(含息<0且Sharpe<0) > 綠 > 黃。
 
     - 🔴:吃本金含「嚴重」(**不需分數** —— 明確壞資料再少也要示警,§1;稽核 Finding 1 修:
       不被灰燈蓋掉),或(1Y含息 < 0 且 Sharpe < 0)。
     - ⬜:分 None 或 Sharpe/含息 缺(且非嚴重)。
-    - 🟢:分 ≥ GREEN 且 吃本金「健康」。
+    - 🟢:分 ≥ GREEN 且 吃本金「健康」**且通過覆蓋率悲觀下界**(見 `_coverage_blocks_green`)。
     - 🟡:其餘一律觀望(非紅/綠/灰;明確黃燈條件皆為「非綠」子集,故不另設門檻)。
+
+    Parameters
+    ----------
+    coverage : dict | None
+        `switch_score(coverage_out=)` 就地填好的側車 dict。**缺 MaxDD / vs大盤 時必傳**,
+        否則綠燈閘門失效(= 缺資料換到 🟢 加碼建議,§1 違憲)。
     """
     _eat = str(eat_status or "")
     if "嚴重" in _eat:
@@ -161,8 +214,40 @@ def switch_signal(tr1y_pct, sharpe, eat_status, score) -> str:
     if _tr < 0 and _sh < 0:
         return RED
     if score >= SWITCH_GREEN_SCORE and "健康" in _eat:
+        if _coverage_blocks_green(coverage):
+            # §1 第 2 項:降級必須留痕(這是「原本會給加碼建議」的高訊號事件,不是常態噪音)
+            _miss = "/".join((coverage or {}).get("missing") or [])
+            _lb = (coverage or {}).get("earned")
+            print(f"[switch_strategy] 綠燈降黃:分數 {score} ≥ {SWITCH_GREEN_SCORE} 但覆蓋不全"
+                  f"(缺 {_miss},悲觀下界 {_lb} < {SWITCH_GREEN_SCORE})→ 不給加碼訊號(§1)",
+                  file=_sys.stderr)
+            return YELLOW
         return GREEN
     return YELLOW
+
+
+def switch_coverage_label(coverage, score=None) -> str:
+    """側車 dict → 大表可直接顯示的覆蓋率旗標字串(§1 第 3 項「輸出帶旗標」)。
+
+    前一輪 `coverage_out` 全站 **0 consumer** —— docstring 寫「以 coverage_out 顯式揭露」
+    卻沒有任何揭露管道,使用者看到 100 分完全不知道分母被收斂成 65。本函式是那條管道的
+    格式化端(渲染由 L3 大表新增「策略分覆蓋」欄)。
+
+    - 未評分(核心維度缺 / 無側車)→ ``⬜ 未評分``
+    - 全覆蓋 → ``✅ 100/100``
+    - 部分覆蓋 → ``⚠️ 85/100(缺 vs 大盤%)``
+    - 部分覆蓋且下界不足 → ``⚠️ 65/100(缺 Max DD %、vs 大盤%)·不給綠燈``
+    """
+    if not isinstance(coverage, dict) or score is None:
+        return "⬜ 未評分"
+    _av, _to = coverage.get("available"), coverage.get("total")
+    if _av is None or _to is None:
+        return "⬜ 未評分"
+    if not coverage.get("rescaled"):
+        return f"✅ {_av}/{_to}"
+    _ms = "、".join(coverage.get("missing") or []) or "?"
+    _gate = "·不給綠燈" if _coverage_blocks_green(coverage) else ""
+    return f"⚠️ {_av}/{_to}(缺 {_ms}){_gate}"
 
 
 def _is_healthy_candidate(c: dict) -> bool:

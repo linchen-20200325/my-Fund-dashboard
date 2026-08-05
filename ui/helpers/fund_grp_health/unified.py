@@ -10,6 +10,41 @@ user 要求:組合健診原本對同一批基金重複畫 3 張逐檔表(HWM σ 
 from __future__ import annotations
 
 
+def sharpe_provenance_by_code(funds: list) -> dict:
+    """{code: {"Sharpe 來源": 標籤}} —— 大表 `Sharpe 1Y` 欄的**實際**來源與期間(§2.2)。
+
+    大表原本的欄位 help 硬寫「自計算(NAV序列);非MoneyDJ公布值」,但 `m["sharpe"]` 的
+    優先序是 **wb07 一年 > wb07 六個月 > 本地自算**(`services/fund_service.py`
+    `_sharpe_out`)—— 只要 MoneyDJ wb07 有值(境外基金常態),顯示的就是官方值,斷言與事實
+    完全相反;wb07 **六個月**命中時欄名還寫死「1Y」。
+
+    值取自 `calc_metrics` 已經算好的 `metrics.risk_metric_meta.sharpe`(不重算、不推測),
+    fund dict 由 `_build_fund_dict` 包裝 → `metrics` 即 calc_metrics 產物。
+    缺 meta(舊 cache / 抓取失敗)→ `⬜ —`,**不猜**(§1)。
+
+    ⚠️ 同一欄可能混三種期間(wb07 1Y / wb07 6M / 本地 250d),跨檔比大小前必須看本欄;
+    換標策略分的 Sharpe tier 目前**未**依期間分層(§4.1 期間錯配殘留風險,見報告提案)。
+    """
+    out: dict = {}
+    for _f in (funds or []):
+        _code = str((_f or {}).get("code") or "").strip()
+        if not _code:
+            continue
+        _mt = (((_f.get("metrics") or {}).get("risk_metric_meta") or {}).get("sharpe") or {})
+        _src = _mt.get("source")
+        if _src == "wb07_1y":
+            _lbl = "wb07 1Y(官方)"
+        elif _src == "wb07_6m":
+            _lbl = "⚠️ wb07 6M(非1Y)"
+        elif _src == "self_calc":
+            _d = _mt.get("period_days")
+            _lbl = f"自算 {_d}d" if isinstance(_d, int) else "自算"
+        else:
+            _lbl = "⬜ —"
+        out[_code] = {"Sharpe 來源": _lbl}
+    return out
+
+
 def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tuple:
     """回傳 (col_order, combined)。
 
@@ -27,6 +62,7 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tupl
         risk_compare_by_code(funds),
         mk_signal_by_code(funds, phase, score),
         capture_by_code(funds),      # v19.414 上/下檔捕捉率 + 操盤評分;v19.420 + vs 大盤%(同一基準)
+        sharpe_provenance_by_code(funds),   # Sharpe 實際來源/期間(§2.2;大表原本硬說「非官方值」)
     ]
     combined: dict = {}
     col_order: list[str] = []
@@ -64,7 +100,8 @@ _UNIFIED_FRONT: list = [
     ("基金類別", "health"), ("核心/衛星", "health"), ("分類依據", "health"),
     ("4D Grade", "health"), ("4D Score", "health"),
     # ① 報酬 / 風險 6 進階指標
-    ("Sharpe 1Y", "health"), ("Sortino", "health"), ("Calmar", "health"),
+    ("Sharpe 1Y", "health"), ("Sharpe 來源", "extra"),   # 來源/期間揭露(§2.2;緊貼數值欄)
+    ("Sortino", "health"), ("Calmar", "health"),
     ("Alpha %", "health"), ("費用率 %", "health"), ("Max DD %", "health"),
     ("3Y 年化 %", "health"), ("5Y 年化 %", "health"),
     # ② 配息 official(wb01/wb05)+ 每月配息
@@ -80,6 +117,7 @@ _UNIFIED_FRONT: list = [
     ("上檔捕捉%", "extra"), ("下檔捕捉%", "extra"), ("操盤評分", "extra"),
     ("vs 大盤%", "extra"),
     ("策略燈號", "extra"), ("換標策略分", "extra"),   # v19.423 換標決策(post-merge 覆寫)
+    ("策略分覆蓋", "extra"),   # 策略分分母覆蓋率旗標(§1 第 3 項;post-merge 覆寫)
     ("景氣適配", "extra"), ("適配傾向", "extra"),      # v19.425 景氣位階適配(post-merge 覆寫)
     ("匯率位階", "extra"), ("淨值×匯率", "extra"),     # v19.426 淨值×匯率二維買賣切換(post-merge 覆寫)
     ("資產屬性", "extra"), ("操作訊號", "extra"),
@@ -113,19 +151,27 @@ def build_unified_row(base_row: dict, health_row: dict, div_row: dict, extra_row
 
 def compute_switch_columns(row: dict) -> dict:
     """由已合併/攤平的 row 推導換標策略欄(cross-source:含息 div + Sharpe/MaxDD health +
-    vs大盤 extra + 吃本金 base)→ {換標策略分, 策略燈號}。v19.423。
+    vs大盤 extra + 吃本金 base)→ {換標策略分, 策略燈號, 策略分覆蓋}。v19.423。
 
     兩條大表 build 路徑共用(健診 build_unified_health_df + 批次 build_batch_unified_row)。
+
+    **覆蓋率側車必須全程帶著**(§1 第 3 項):`coverage_out` 一路吃到
+    (a) `switch_signal(coverage=)` —— 部分覆蓋不得跨綠燈門檻換到「加碼」建議;
+    (b) 「策略分覆蓋」欄 —— 讓 user 一眼看見分母被收斂成幾分、哪幾維沒證據。
+    前一輪只做了 (0):側車存在但**全站 0 consumer**,等於沒揭露。
     """
-    from services.switch_strategy import switch_score, switch_signal
+    from services.switch_strategy import switch_coverage_label, switch_score, switch_signal
 
     _tr = row.get("1Y 含息 %")
     _sh = row.get("Sharpe 1Y")
     _dd = row.get("Max DD %")
     _vm = row.get("vs 大盤%")
     _eat = row.get("吃本金燈號 (1Y · MK)")
-    _sc = switch_score(_tr, _sh, _dd, _vm)
-    return {"換標策略分": _sc, "策略燈號": switch_signal(_tr, _sh, _eat, _sc)}
+    _cov: dict = {}
+    _sc = switch_score(_tr, _sh, _dd, _vm, coverage_out=_cov)
+    return {"換標策略分": _sc,
+            "策略燈號": switch_signal(_tr, _sh, _eat, _sc, coverage=_cov),
+            "策略分覆蓋": switch_coverage_label(_cov, _sc)}
 
 
 def compute_regime_fit_column(row: dict, current_regime) -> dict:
@@ -221,6 +267,8 @@ def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
         _sw = [compute_switch_columns(_rec) for _rec in _recs]
         df["換標策略分"] = [x["換標策略分"] for x in _sw]
         df["策略燈號"] = [x["策略燈號"] for x in _sw]
+        # 分母覆蓋率旗標(§1):Tab3 持倉健診不供 vs 大盤% → 整批部分覆蓋,此欄必須跟著出現
+        df["策略分覆蓋"] = [x["策略分覆蓋"] for x in _sw]
         # v19.425 — 景氣適配欄(依資產屬性 + 捕捉 對照當前景氣)
         _rf = [compute_regime_fit_column(_rec, current_regime) for _rec in _recs]
         df["景氣適配"] = [x["景氣適配"] for x in _rf]

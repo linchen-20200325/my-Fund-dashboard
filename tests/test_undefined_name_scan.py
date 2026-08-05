@@ -24,10 +24,18 @@ v19.340 補盲區:**加選 F821(plain undefined name)**。F405 只在「模組�
 違規不需 hasattr 動態驗證(annotation-only 用法也一併要求真的 import,
 防未來拿掉 future-annotations 或 runtime introspect 註解時爆)。
 
-已知假警報(dead code,不是真 bug,見下方 `_KNOWN_FALSE_POSITIVES`):
-- `repositories/fund/nav_metrics.py` 的 `Path`——出現在
-  `X if False else Y` 三元運算式裡,`False` 分支永遠不會被求值,是刻意寫的
-  死路佔位(下一行就是真正的 `from pathlib import Path as _Path_nh`)。
+v19.425 補「白名單自我失效」洞:`_KNOWN_FALSE_POSITIVES` 目前**是空的**。
+原本唯一一條 `("repositories/fund/nav_metrics.py", "Path")` 豁免的對象
+(`_NAV_HISTORY_CACHE_DIR = Path("cache") / "nav_history" if False else None`
+這行死碼)已於 v19.424 刪除,該檔改用 `_Path_nh`——豁免留著就變成一條
+**指向不存在程式碼的永久白名單**:該檔 1000+ 行,日後任何人誤寫裸 `Path`
+都會被它靜默放行。為根治這個病灶,本檔另加
+`test_no_stale_false_positive_entries`:掃描期間記錄每條白名單**實際被用到
+幾次**,一條都沒命中 = 豁免對象已消失,直接 fail 要求刪除。
+(順帶更正 `repositories/fund/nav_metrics.py:141-142` 的歸因敘述——那顆雷
+不是因為「測試因 Windows 缺 ruff 而長期未執行」才潛伏:本檔對
+`FileNotFoundError` 是 `raise AssertionError` 紅燈,不是靜默通過;
+真正讓它潛伏的就是這條白名單本身。該檔不在本次所有權內,僅在此記錄。)
 """
 from __future__ import annotations
 
@@ -50,9 +58,19 @@ _SCAN_TARGETS = [
 
 # (檔案路徑後綴, 名字) → 已人工確認為假警報(dead code / 不可達分支),不是真 bug。
 # 新增例外前必須先確認「真的不可達」,不可為了讓測試通過就隨便加。
-_KNOWN_FALSE_POSITIVES: set[tuple[str, str]] = {
-    ("repositories/fund/nav_metrics.py", "Path"),
-}
+#
+# ⚠️ v19.425:本集合目前**刻意保持空的**。前一條 nav_metrics.py 的 `Path` 豁免
+#    在 v19.424 刪掉死碼後就失去對象,卻繼續掛著 → 等同對整個 1000+ 行的
+#    `repositories/fund/nav_metrics.py` 開了一張裸 `Path` 的永久免死金牌。
+#    新增任何條目時,請一併確認 `test_no_stale_false_positive_entries` 會保護你:
+#    該測試會在豁免對象消失時直接 fail,不會再留下無聲的放行。
+_KNOWN_FALSE_POSITIVES: set[tuple[str, str]] = set()
+
+# 掃描期間實際命中的白名單條目(供 `test_no_stale_false_positive_entries` 判斷失效)。
+_FP_HITS: set[tuple[str, str]] = set()
+
+# `_scan()` 的 memo(ruff subprocess 只跑一次,兩個測試共用)。
+_SCAN_CACHE: dict = {}
 
 
 def _file_to_module(rel_path: str) -> str:
@@ -61,13 +79,15 @@ def _file_to_module(rel_path: str) -> str:
     return p.replace("/", ".")
 
 
-def test_no_unresolved_bare_names_in_production_code():
-    """全站掃描:任何「呼叫了但沒真的 import 到」的 bare name,直接 fail。
+def _scan() -> list[str]:
+    """跑一次 ruff + 動態解析,回傳未解析名清單;順帶把命中的白名單記進 `_FP_HITS`。
 
-    v19.287/288 那 6 個真 bug,全部都會被這個測試抓到(已用 v19.291 之前
-    的真實壞狀態手動驗證過:回退掉 fund_orchestration.py 的 import 後,
-    本測試會確實抓到 fetch_holdings/fetch_risk_metrics 等名字解析失敗)。
+    v19.425:抽成 helper 讓兩個測試共用**同一次**掃描(ruff subprocess + 逐檔
+    isolated import 是本檔最貴的操作,跑兩次沒必要);結果 memoize 在
+    `_SCAN_CACHE`,同一個 pytest process 內只跑一次。
     """
+    if "result" in _SCAN_CACHE:
+        return _SCAN_CACHE["result"]
     try:
         # v19.291 教訓:`ruff` 是獨立編譯執行檔安裝(console_script entry
         # point),不是 `python -m ruff` 可呼叫的模組 —— 用 `-m` 呼叫會直接
@@ -128,6 +148,9 @@ def test_no_unresolved_bare_names_in_production_code():
         line = f["location"]["row"]
 
         if (rel_path, name) in _KNOWN_FALSE_POSITIVES:
+            # v19.425:記錄「這條豁免今天真的有擋到東西」。沒被記錄到的條目 =
+            # 豁免對象已消失 → `test_no_stale_false_positive_entries` 會 fail。
+            _FP_HITS.add((rel_path, name))
             continue
 
         if _code == "F821":
@@ -177,8 +200,38 @@ def test_no_unresolved_bare_names_in_production_code():
                 f"解析,呼叫時會 NameError(是否忘記 import?)"
             )
 
+    _SCAN_CACHE["result"] = _unresolved
+    return _unresolved
+
+
+def test_no_unresolved_bare_names_in_production_code():
+    """全站掃描:任何「呼叫了但沒真的 import 到」的 bare name,直接 fail。
+
+    v19.287/288 那 6 個真 bug,全部都會被這個測試抓到(已用 v19.291 之前
+    的真實壞狀態手動驗證過:回退掉 fund_orchestration.py 的 import 後,
+    本測試會確實抓到 fetch_holdings/fetch_risk_metrics 等名字解析失敗)。
+    """
+    _unresolved = _scan()
     assert not _unresolved, (
         "全站掃描抓到「呼叫了但沒真的 import 到」的 bare name"
         "(跟 v19.287/288 的 fetch_holdings/fetch_risk_metrics 同一種病):\n"
         + "\n".join(_unresolved)
+    )
+
+
+def test_no_stale_false_positive_entries():
+    """v19.425:白名單條目**沒擋到任何東西** = 豁免對象已消失,必須刪掉。
+
+    真實案例:`("repositories/fund/nav_metrics.py", "Path")` 豁免的死碼
+    (`_NAV_HISTORY_CACHE_DIR = Path(...) if False else None`)在 v19.424 被
+    刪除,該檔改用 `_Path_nh`,但豁免留著沒清 —— 從那一刻起,那條白名單
+    就變成「對一個 1000+ 行檔案裡的裸 `Path` 永久靜默放行」的後門。
+    白名單只該在**當下真的有假警報**時存在,對象不在了就是死規則(§8.1 step 6)。
+    """
+    _scan()   # 確保掃描已執行(同一 process 內 memoized,不會重跑 ruff)
+    stale = _KNOWN_FALSE_POSITIVES - _FP_HITS
+    assert not stale, (
+        "以下白名單條目在本次掃描中一次都沒命中 —— 豁免對象已不存在,"
+        "留著等於對該檔該名字永久靜默放行,請直接刪除條目:\n  "
+        + "\n  ".join(f"{f} :: {n}" for f, n in sorted(stale))
     )

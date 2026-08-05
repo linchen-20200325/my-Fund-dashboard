@@ -9,6 +9,10 @@
 1. **switch_score 缺值 ≠ 壞值**(§1):`MIN_OBS_MAX_DRAWDOWN` 上調後,短歷史基金的
    Max DD 變 None,原碼固定分母 100 會讓它憑空少 20 分,與「MaxDD −40% 拿 0 分」
    在畫面上無法區分 —— 改為**只計入有資料的維度**再放回 0-100。
+   ⚠️ **但那只修好「衡量」一半**:重正規化後的 100 分被直接拿去跨綠燈門檻,結果變成
+   「缺資料 → 滿分 → 🟢 可定期定額加碼」,比資料齊全但 MaxDD −40% 的檔還積極。
+   第 5 節補上另一半:**行動面**的悲觀下界閘門 + 揭露管道真的接到大表
+   (`coverage_out` 原本全站 0 consumer = 空頭承諾)。
 2. **對帳降級須具名**(§4.3 + §1):自算 Sharpe 被 250 筆門檻擋掉時,雙演算法對帳恆為
    `a_missing`;必須在 meta 說明是「本地根本沒算」而非「兩邊不合」。
 3. **Calmar 分子分母同源**(C-4):分子原取自純價格 NAV、分母取自含息還原序列;
@@ -263,6 +267,85 @@ class TestTab2DisclosureWiring:
         # 改為從 SSOT 常數 import 渲染,不再寫死數字
         assert "MIN_OBS_SHARPE_SORTINO as _MIN_SS" in src
         assert "MIN_OBS_CALMAR as _MO_CAL" in src
+
+
+# ══════════════════════════════════════════════════════════════════
+# 5. 揭露鏈接到「健診大表」(必修 1+2+3)
+#    —— 前一輪 docstring 寫「殘留風險以 coverage_out 顯式揭露」,但揭露管道從未接上。
+# ══════════════════════════════════════════════════════════════════
+def _grp_health_src() -> str:
+    return (Path(__file__).resolve().parent.parent
+            / "ui/tab_fund_grp_health.py").read_text(encoding="utf-8")
+
+
+class TestSwitchGreenGate:
+    def test_partial_coverage_cannot_cross_green_threshold(self):
+        """**修正前必紅**:缺 MaxDD + 缺 vs大盤 → 100 分 → 🟢 加碼(線上實況)。"""
+        from services.switch_strategy import GREEN, YELLOW, switch_signal
+        cov = {}
+        _sc = switch_score(8.0, 1.0, None, None, coverage_out=cov)
+        assert _sc == 100                                    # 衡量面不變(§1 缺值≠壞值)
+        assert switch_signal(8.0, 1.0, "🟢🟢 健康", _sc, coverage=cov) == YELLOW
+        # 對照:同樣缺 vs大盤 但 MaxDD 有值且好 → 悲觀下界 85 ≥ 70 → 綠燈照給
+        cov2 = {}
+        _sc2 = switch_score(8.0, 1.0, -10.0, None, coverage_out=cov2)
+        assert switch_signal(8.0, 1.0, "🟢🟢 健康", _sc2, coverage=cov2) == GREEN
+
+    def test_coverage_label_is_the_disclosure_channel(self):
+        """側車 → 可顯示字串的格式化端(§1 第 3 項「輸出帶旗標」)。"""
+        from services.switch_strategy import switch_coverage_label
+        cov = {}
+        _sc = switch_score(8.0, 1.0, None, 5.0, coverage_out=cov)
+        _lbl = switch_coverage_label(cov, _sc)
+        assert "80/100" in _lbl and "Max DD %" in _lbl        # 分母 80、缺哪一維,都要說
+        assert switch_coverage_label({}, None) == "⬜ 未評分"
+
+
+class TestCoverageHasProductionConsumer:
+    def test_unified_passes_coverage_to_signal_and_column(self):
+        """**修正前必紅** —— QA 的核心證據:`coverage_out` 只有定義端 + 測試檔在用。
+
+        production 唯一 caller `unified.compute_switch_columns` 原本呼叫
+        `switch_score(_tr, _sh, _dd, _vm)`,側車完全沒接。
+        """
+        from ui.helpers.fund_grp_health.unified import compute_switch_columns
+        _r = compute_switch_columns({
+            "1Y 含息 %": 8.0, "Sharpe 1Y": 1.0, "Max DD %": None, "vs 大盤%": None,
+            "吃本金燈號 (1Y · MK)": "🟢🟢 健康"})
+        assert _r["策略燈號"].startswith("🟡")
+        assert "65/100" in _r["策略分覆蓋"]
+
+    def test_coverage_column_registered_in_both_table_paths(self):
+        """健診大表與批次大表**共用**欄序常數 → 一處註冊兩邊都出現(不會只修一半)。"""
+        from ui.helpers.fund_grp_health.unified import (
+            BATCH_UNIFIED_COLUMNS,
+            _UNIFIED_FRONT,
+        )
+        _front = [c for c, _ in _UNIFIED_FRONT]
+        assert "策略分覆蓋" in _front and "Sharpe 來源" in _front
+        assert "策略分覆蓋" in BATCH_UNIFIED_COLUMNS
+        assert "Sharpe 來源" in BATCH_UNIFIED_COLUMNS
+        # 旗標要**緊貼**被標註的欄,不能漂到表尾讓人看不到
+        assert _front.index("Sharpe 來源") == _front.index("Sharpe 1Y") + 1
+        assert _front.index("策略分覆蓋") == _front.index("換標策略分") + 1
+
+
+class TestGrpHealthTableCopy:
+    def test_sharpe_help_no_longer_denies_moneydj_source(self):
+        """**修正前必紅**:大表 help 斷言「非MoneyDJ公布值」與 `_sharpe_out` 優先序完全相反。"""
+        src = _grp_health_src()
+        assert "非MoneyDJ公布值" not in src
+        assert "自計算（NAV序列，用於4D評分）" not in src
+        assert "wb07" in src, "Sharpe 欄必須照實說來源優先序含 MoneyDJ wb07"
+
+    def test_switch_score_help_admits_denominator_is_not_fixed(self):
+        """**修正前必紅**:help 仍寫「0-100(…35+30+20+15)」,分母早就不是固定 100。"""
+        src = _grp_health_src()
+        assert "分母不是固定 100" in src
+        assert "策略分覆蓋" in src, "大表必須註冊覆蓋率欄的 column_config"
+        # 門檻走 SSOT 不寫死(§3.3)
+        assert "SWITCH_GREEN_SCORE as _SW_GREEN" in src
+        assert "🟢 續抱加碼(分≥70" not in src
 
 
 if __name__ == "__main__":

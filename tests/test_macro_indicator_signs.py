@@ -271,6 +271,39 @@ class TestMetaKeyExcludedFromScoring:
         r = self._phase({"PMI": {"value": 55, "weight": 2, "score": 2}, "junk": "abc"})
         assert r["score"] == pytest.approx(10.0)
 
+    def test_composite_provenance_does_not_invent_indicators(self):
+        """v19.425：血緣側車不得把 meta 當指標報（§2.2 血緣不含虛構條目）。
+
+        `calculate_composite_score` 的 `total` 本來就不受影響（meta 沒有 score →
+        0×1=0），所以這個洞在總分上看不出來；但 `provenance_out` 會寫出
+        `n_indicators` 多 1、`contributions["_fred_sources"] = {"score":0.0,
+        "weight":1.0,"weighted":0.0}` —— 一個不存在的「指標」進了血緣。
+        `mcp_server/tools_macro.py:63` 確實有傳 `provenance_out`，這份假血緣會被輸出。
+
+        修正前：n_indicators=2、contributions 含 `_fred_sources`（本測試紅）。
+        """
+        from services.macro.composite_score import calculate_composite_score
+        ind = {
+            "PMI": {"value": 55, "weight": 2, "score": 2, "source": "FRED:NAPM"},
+            "_fred_sources": {"DGS10": {"success": True, "rows": 2600}},
+        }
+        prov: dict = {}
+        total = calculate_composite_score(ind, provenance_out=prov)
+        assert total == pytest.approx(4.0)
+        assert prov["n_indicators"] == 1, (
+            f"meta 被算成一顆指標：contributions={prov['contributions']}")
+        assert "_fred_sources" not in prov["contributions"]
+        assert set(prov["contributions"]) == {"PMI"}
+
+    def test_composite_total_unaffected_by_meta(self):
+        """（修正前也綠）總分本來就安全 —— 明確記錄「這個洞只傷血緣不傷分數」，
+        避免下一輪稽核誤以為總分曾被污染而去追不存在的數字差異。"""
+        from services.macro.composite_score import calculate_composite_score
+        base = {"PMI": {"value": 55, "weight": 2, "score": 2}}
+        with_meta = dict(base, _fred_sources={"DGS10": {"success": True}})
+        assert (calculate_composite_score(with_meta)
+                == pytest.approx(calculate_composite_score(base)))
+
     def test_zpct_skips_meta_without_polluting_skipped_list(self):
         from services.macro.us_indicators import calc_macro_phase_zpct
         r = calc_macro_phase_zpct({"_fred_sources": {"DGS10": {"success": True}}})
@@ -435,10 +468,26 @@ class TestM2NotDoubleCounted:
         assert kw.get("superseded_by") is not None, (
             "M2_WEEKLY 須以 superseded_by 揭露實際採用哪一個源（§2.2 provenance）"
         )
-        assert kw.get("is_scored") is not None
 
-    def test_monthly_m2_declares_scored(self):
-        assert _indicator_kwargs()["M2"].get("is_scored") is not None
+    def test_is_scored_stays_deleted(self):
+        """v19.425：`is_scored` 已刪 —— 不得復活（§2.1 SSOT / §8.1 step 6）。
+
+        原本 M2 / M2_WEEKLY 都輸出 `is_scored`，但：
+        - 全 repo **0 production reader**（只有本測試檔在斷言它「不是 None」，
+          等於測試自己養活自己）；
+        - 值恆等於 `superseded_by is None`，是同一個事實的第二份編碼 ——
+          兩欄併存必然漂移（有人只改一邊，讀哪一邊的人得到相反結論）。
+        真正的揭露管道有兩條、都有真 reader：機器可讀 `superseded_by`
+        （composite_score 加權/投票兩條路徑 + daily_key_alerts），
+        人可讀 `desc` 尾綴（「本格僅供顯示、不計入加權分」直接顯示在卡片上）。
+        """
+        kws = _indicator_kwargs()
+        offenders = sorted(k for k, v in kws.items() if "is_scored" in v)
+        assert not offenders, (
+            f"`is_scored` 在 {offenders} 復活了 —— 這是 0 reader 的死欄位，"
+            "且與 `superseded_by` 同義。要揭露請接既有的兩條管道，"
+            "不要再開第三份編碼。"
+        )
 
     def test_zero_weight_substitute_contributes_nothing(self):
         """weight=0 的替代源不得進入分子或分母。"""
@@ -471,10 +520,10 @@ class TestM2NotDoubleCounted:
 def _m2_pair(with_substitute: bool) -> dict:
     """月頻 M2（主源，偏多）+ 週頻 M2_WEEKLY（已被取代，方向相反）。"""
     ind = {"M2": {"value": 5.5, "weight": 1, "score": 1,
-                  "name": "M2 貨幣供給 (YoY)", "is_scored": True}}
+                  "name": "M2 貨幣供給 (YoY)"}}
     if with_substitute:
         ind["M2_WEEKLY"] = {"value": 5.75, "weight": 0, "score": -1,
-                            "name": "M2 週頻 (YoY)", "is_scored": False,
+                            "name": "M2 週頻 (YoY)",
                             "superseded_by": "M2"}
     return ind
 
@@ -640,6 +689,131 @@ class TestSupersededDedupOnUnweightedPaths:
 
 
 # ══════════════════════════════════════════════════════════════
+# 4c-2. `reconcile_composite_score` — 不吃 weight 的**第三條**路徑（v19.425）
+# ══════════════════════════════════════════════════════════════
+# v19.405 的設計文件（composite_score.py 頂部契約）寫「不吃 weight 的路徑改用
+# `superseded_by` 去重」，並補到了 `calc_macro_phase_zpct` 與 `collect_key_alerts`。
+# 但 `reconcile_composite_score` 同樣**只看 score 正負號**、完全不讀 weight，
+# 卻兩道守衛都沒有：
+#   (1) M2(+1) 與 M2_WEEKLY(-1) 各投一票互相抵銷 → 該因子淨貢獻從 +1 變 0；
+#   (2) `_fred_sources` 是 dict 但無 `score` 鍵 → `sf=0` → n_zero += 1 →
+#       meta 被灌進 n_valid 分母（= v19.404 在 calc_macro_phase 修過的同一個病）。
+# production reader（會直接呈現給 user，不是死碼）：
+#   ui/tab1_macro.py:981（綜合健康度卡下方 ✅/⚠️ 對帳 chip）
+#   mcp_server/tools_macro.py:72（MCP snapshot 的 reconciliation 欄）
+class TestReconcileDedupAndMetaGuards:
+    @staticmethod
+    def _recon(ind):
+        from services.macro.composite_score import reconcile_composite_score
+        return reconcile_composite_score(ind)
+
+    def test_superseded_substitute_does_not_cancel_primary_vote(self):
+        """核心紅燈：M2(+1) / M2_WEEKLY(−1, superseded_by=M2) 的雙算。
+
+        修正前：n_pos=1, n_neg=1, n_valid=2 → net_ratio = 0.0（因子淨貢獻 0）
+        修正後：n_pos=1, n_neg=0, n_valid=1 → net_ratio = +1.0（淨貢獻 +1）
+        """
+        r = self._recon(_m2_pair(True))
+        assert (r["n_pos"], r["n_neg"], r["n_zero"]) == (1, 0, 0), (
+            f"備源仍投了票：{r}")
+        assert r["vote_net_ratio"] == pytest.approx(1.0)
+        # 與「只有月頻」完全等價 —— 備源在不加權投票裡必須是隱形的
+        base = self._recon(_m2_pair(False))
+        assert r["vote_net_ratio"] == pytest.approx(base["vote_net_ratio"])
+        assert r["dir_vote"] == base["dir_vote"]
+
+    def test_dedup_flips_vote_direction_across_neutral_band(self):
+        """雙算足以在 `COMPOSITE_VOTE_NEUTRAL_BAND` 邊界翻掉方向判定。
+
+        這條證明上一題不只是「數字差一點」——`dir_vote` 是 `status`
+        （agree / neutral_mix / disagree）的兩個輸入之一，直接決定 tab1
+        對帳 chip 顯示 ✅ 還是 ⚠️ 還是不顯示。
+        修正前：n_pos=1, n_neg=1, n_zero=2 → net=0.0 → dir_vote='neu'
+        修正後：n_pos=1, n_neg=0, n_zero=2 → net=1/3≈0.333 > 0.2 → dir_vote='pos'
+
+        （只斷言 `dir_vote` / `vote_net_ratio`，不斷言 `status` —— `status` 另一半
+        輸入 `dir_weighted` 走 `get_verdict_cutoffs()`，會被 active.json 覆蓋，
+        不該讓回歸測試依賴使用者的校準檔。）
+        """
+        from shared.signal_thresholds import COMPOSITE_VOTE_NEUTRAL_BAND as _BAND
+        n_fill = 2
+        assert (1.0 / (1 + n_fill)) > _BAND, (
+            f"fixture 需重新設計：去重後 net_ratio={1 / (1 + n_fill):.3f} "
+            f"沒有越過中性帶 {_BAND}，本測試證明不了方向翻轉"
+        )
+        ind = _m2_pair(True)
+        for i in range(n_fill):
+            ind[f"FILLER_{i}"] = {"score": 0, "weight": 1}
+        r = self._recon(ind)
+        assert r["n_zero"] == n_fill
+        assert r["vote_net_ratio"] == pytest.approx(1.0 / (1 + n_fill))
+        assert r["dir_vote"] == "pos", (
+            f"去重後方向仍是 {r['dir_vote']}（修正前為 'neu'）：{r}")
+
+    def test_substitute_skip_reason_is_recorded(self):
+        """§1 不靜默丟資料：跳過原因要寫進 `skipped`（對齊 zpct 路徑的慣例）。"""
+        r = self._recon(_m2_pair(True))
+        assert any("M2_WEEKLY:superseded_by=M2" in s for s in r["skipped"]), r
+
+    def test_meta_key_does_not_inflate_denominator(self):
+        """`_fred_sources` 不得被當成一顆 score=0 的指標計入 n_zero / n_valid。
+
+        修正前：n_pos=1, n_zero=1 → n_valid=2 → net = 0.5
+        修正後：n_pos=1, n_zero=0 → n_valid=1 → net = 1.0
+        """
+        base = {"PMI": {"value": 55, "weight": 2, "score": 2}}
+        with_meta = dict(base)
+        with_meta["_fred_sources"] = {
+            "DGS10": {"success": True, "last_date": "2026-08-01", "rows": 2600},
+            "M2SL": {"success": False, "last_date": "", "rows": 0},
+        }
+        r_meta, r_base = self._recon(with_meta), self._recon(base)
+        assert r_meta["n_zero"] == 0, f"meta 被當成 score=0 的指標：{r_meta}"
+        assert r_meta["vote_net_ratio"] == pytest.approx(1.0)
+        assert r_meta["vote_net_ratio"] == pytest.approx(r_base["vote_net_ratio"])
+        assert not any("_fred_sources" in s for s in r_meta["skipped"]), (
+            "meta 不是指標，不該出現在 skipped 診斷清單（會讓 audit 誤判成缺資料）")
+
+    def test_substitute_still_votes_when_not_superseded(self):
+        """反向護欄（修正前也綠）：月頻缺漏 → 無 `superseded_by` → 週頻照常投票。
+
+        `superseded_by` 是**執行期**條件，不是靜態 key 名單；過度去重 = §1 把
+        僅有的一筆資料丟掉。這條與下一條確保修正沒有矯枉過正。
+        """
+        ind = {"M2_WEEKLY": {"value": -0.4, "weight": 1, "score": -1}}
+        r = self._recon(ind)
+        assert (r["n_pos"], r["n_neg"]) == (0, 1)
+        assert r["vote_net_ratio"] == pytest.approx(-1.0)
+
+    def test_substitute_still_votes_when_primary_absent(self):
+        """反向護欄（修正前也綠）：`superseded_by` 指向的主源不在場（舊 cache）→ 不得丟掉備源。"""
+        ind = _m2_pair(True)
+        ind.pop("M2")
+        r = self._recon(ind)
+        assert (r["n_pos"], r["n_neg"]) == (0, 1), r
+        assert not r["skipped"]
+
+    def test_no_data_path_keeps_contract(self):
+        """全 meta / 空 dict → status='no_data'，且不得偽造 net_ratio（§1）。"""
+        r = self._recon({"_fred_sources": {"DGS10": {"success": True}}})
+        assert r["status"] == "no_data"
+        assert r["vote_net_ratio"] is None
+        assert r["n_pos"] == r["n_neg"] == r["n_zero"] == 0
+
+    def test_reader_contract_keys_present(self):
+        """production reader 讀的欄位不得消失（修正前也綠 —— 這是防我自己改壞）。
+
+        ui/tab1_macro.py:982-988 讀 status / note / n_pos / n_neg / vote_net_ratio；
+        mcp_server/tools_macro.py:85 把整份 dict 放進 `reconciliation`。
+        """
+        r = self._recon(_m2_pair(True))
+        for k in ("weighted_total", "vote_net_ratio", "n_pos", "n_neg", "n_zero",
+                  "dir_weighted", "dir_vote", "status", "note", "skipped"):
+            assert k in r, f"對帳 dict 缺欄位 {k}"
+        assert isinstance(r["skipped"], list)   # MCP 要 JSON-safe
+
+
+# ══════════════════════════════════════════════════════════════
 # 4d. `superseded_by` / `weight` 兩條契約的語意分工（v19.405）
 # ══════════════════════════════════════════════════════════════
 class TestAggregationContracts:
@@ -649,6 +823,48 @@ class TestAggregationContracts:
         assert coerce_weight(0.0) == pytest.approx(0.0)
         assert coerce_weight(None) == pytest.approx(1.0)      # 真的沒填才回退
         assert coerce_weight(2) == pytest.approx(2.0)
+
+    def test_is_meta_key_is_the_single_definition(self):
+        """v19.425：`_` 前綴 meta 述詞收 SSOT。
+
+        原本這道守衛被**各自 inline** 在 `calc_macro_phase` / `calc_macro_phase_zpct`，
+        而 `calculate_composite_score` / `reconcile_composite_score` 兩條完全沒有 ——
+        「同一條契約 4 個 aggregator、2 個漏寫」正是這輪漏網的成因。
+        """
+        from services.macro.composite_score import is_meta_key
+        assert is_meta_key("_fred_sources") is True
+        assert is_meta_key("_") is True
+        assert is_meta_key("M2") is False
+        assert is_meta_key("M2_WEEKLY") is False, "底線在字中不算 meta"
+        assert is_meta_key(123) is False          # 非 str key 不炸
+
+    def test_all_aggregators_share_the_meta_predicate(self):
+        """漂移鎖：5 條聚合／血緣路徑不得再各自 inline `startswith("_")`。
+
+        （修正前會紅：`us_indicators.py` 當時有 4 處 inline，`composite_score.py`
+        兩條路徑則完全沒有守衛。）
+        """
+        import inspect
+        from services.macro import composite_score as cs_mod
+        from services.macro import us_indicators as ui_mod
+        offenders = []
+        for mod, fns in ((cs_mod, ("calculate_composite_score",
+                                   "reconcile_composite_score")),
+                         (ui_mod, ("calc_macro_phase", "calc_macro_phase_zpct",
+                                   "_build_phase_provenance"))):
+            for fn in fns:
+                src = inspect.getsource(getattr(mod, fn))
+                # 去掉註解行後再比對（說明文字引述反例不算違規）
+                code = "\n".join(ln for ln in src.splitlines()
+                                 if not ln.lstrip().startswith("#"))
+                if 'startswith("_")' in code or "startswith('_')" in code:
+                    offenders.append(f"{mod.__name__}.{fn}")
+                if "is_meta_key" not in code and "_is_meta_key" not in code:
+                    offenders.append(f"{mod.__name__}.{fn}（沒接上述詞）")
+        assert not offenders, (
+            "meta 守衛未收 SSOT（services.macro.composite_score.is_meta_key）："
+            f"{offenders}"
+        )
 
     def test_is_superseded_requires_primary_present(self):
         from services.macro.composite_score import is_superseded
@@ -664,7 +880,6 @@ class TestAggregationContracts:
         kw = _indicator_kwargs()["M2_WEEKLY"]
         assert _num(kw["weight"]) is None, "weight 必須是條件式"
         assert kw.get("superseded_by") is not None
-        assert kw.get("is_scored") is not None
 
 
 # ══════════════════════════════════════════════════════════════
