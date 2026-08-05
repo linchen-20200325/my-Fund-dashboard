@@ -200,9 +200,20 @@ tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_ref = st.tabs(
 # TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）
 # ══════════════════════════════════════════════════════
 with tab_macro:
-    render_macro_compass()  # v19.302: 移入此處 — 僅在市場定調 Tab 顯示
-    # v18.127 B-C.5: 內容已搬到 ui/tab1_macro.py
-    render_macro_tab()
+    # §1 分頁隔離（v19.429）：st.tabs 單次 run 渲染全部分頁，總經（第 1 個 with
+    # 區塊）若拋未捕捉例外會中止整個 script → 其後所有分頁空白。外層 try 保證「總經
+    # 整體失敗不連坐其他分頁」；內層 tab1_macro._safe_section 再做 section 級細粒度
+    # 隔離。非靜默吞：friendly_error 顯式顯示 + stderr 鏡射進 Cloud log + traceback。
+    try:
+        render_macro_compass()  # v19.302: 移入此處 — 僅在市場定調 Tab 顯示
+        # v18.127 B-C.5: 內容已搬到 ui/tab1_macro.py
+        render_macro_tab()
+    except Exception as _macro_tab_e:  # noqa: BLE001 — §1 分頁隔離，非靜默吞
+        from ui.helpers.session import friendly_error as _fe_macro
+        _fe_macro("「🌐 市場定調」分頁渲染失敗", _macro_tab_e,
+                  hint="此分頁已隔離，其他分頁不受影響；請展開「🔧 技術細節」把 "
+                       "traceback（含 File \"...\", line N）回報，即可精準定位根因。",
+                  level="error")
 
 # ══════════════════════════════════════════════════════
 # TAB ② — 💊 組合健診（決策動線第 2 站:手上哪幾檔健康 / 吃本金)

@@ -336,7 +336,23 @@ def render_long_term_section(
     # ── 市場新聞（折疊）── L3 only
     # v19.139：systemic 排前 + Top 8 顯著 + 其餘 nested expander(對齊 AI 實際讀的 ≤8 則)
     if show_l3:
-        _news_items = st.session_state.get("news_items",[])
+        # §1（2026-08-05 v19.429）：`dict.get(k, default)` 的 default 只在 key 缺席
+        # 時生效；若 `news_items` 被顯式設成 None（失敗路徑會，見 tab1_macro
+        # systemic 分支），`.get("news_items", [])` 仍回 None → 下方 `n.get` 前的
+        # list 運算會拋 TypeError。改 `or []`；再濾掉非 dict 元素（線上 RSS 偶有
+        # 壞筆）並 log 受影響情形，避免 `n.get` 在 None／字串元素上炸掉。
+        _news_items = st.session_state.get("news_items") or []
+        if not isinstance(_news_items, list):
+            import logging as _lg_news  # noqa: PLC0415
+            _lg_news.getLogger(__name__).warning(
+                "news_items 非 list（%r），略過市場新聞面板", type(_news_items))
+            _news_items = []
+        _bad_news = [n for n in _news_items if not isinstance(n, dict)]
+        if _bad_news:
+            import logging as _lg_news2  # noqa: PLC0415
+            _lg_news2.getLogger(__name__).warning(
+                "news_items 含 %d 筆非 dict 壞筆，已略過", len(_bad_news))
+        _news_items = [n for n in _news_items if isinstance(n, dict)]
         if _news_items:
             _sys = [n for n in _news_items if n.get("is_systemic")]
             _gen = [n for n in _news_items if not n.get("is_systemic")]
