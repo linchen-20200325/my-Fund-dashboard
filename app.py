@@ -172,12 +172,14 @@ render_sidebar(
 
 
 # ══════════════════════════════════════════════════════
-# 🧭 總經指南針 (Top-Down Macro) — C3 v19.207 拆至 ui/components/macro_compass_top.py
+# 🧭 總經指南針 (Top-Down Macro)
+#   v19.207 C3  — 拆至 ui/components/macro_compass_top.py
+#   v19.302     — 由 app.py 移入 tab_macro（僅總經 Tab 顯示，不跨 Tab 污染）
+#   v19.430     — **本檔不再 import / 呼叫**。改由 ui/tab1_macro.py 在
+#                 「🔎 詳細資料與說明」區開頭 lazy import 呼叫（user 拍板 A 案：
+#                 原始值卡屬「依據」層級，不該壓在總表上方）。
+#                 此處僅留沿革，import 已移除以免 F401。
 # ══════════════════════════════════════════════════════
-from ui.components.macro_compass_top import render_macro_compass
-
-
-# v19.302: render_macro_compass() 移入 tab_macro — 僅在總經 Tab 顯示（不跨 Tab 污染）
 
 # ══════════════════════════════════════════════════════
 # TABS
@@ -200,7 +202,12 @@ tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_ref = st.tabs(
 # TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）
 # ══════════════════════════════════════════════════════
 with tab_macro:
-    render_macro_compass()  # v19.302: 移入此處 — 僅在市場定調 Tab 顯示
+    # v19.430(user 2026-08-05 拍板 A 案):`render_macro_compass()` 從這裡移到
+    # `ui/tab1_macro.py` 的「🔎 詳細資料與說明」區開頭。
+    # 原因:它渲染在 `render_macro_tab()` **之前**,等於畫面最上方永遠是三張
+    # 原始值卡(VIX / 10Y / S&P 500)+ 三條折線,壓在總表上面。原始值屬「依據 /
+    # 例外」層級不是結論,與 user 指定的「最重要的總表放最上方,下方放詳細資料
+    # 與說明」相衝突。搬到詳細區後,Tab① 第一屏才真的是 ①結論 → ②依據。
     # v18.127 B-C.5: 內容已搬到 ui/tab1_macro.py
     render_macro_tab()
 

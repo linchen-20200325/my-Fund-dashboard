@@ -1,11 +1,17 @@
-"""v19.124 起 / v19.128 縮減 — compute_traffic_lights 邏輯測試。
+"""v19.124 起 / v19.128 縮減 / 2026-08-05 F2 再縮 — 四時域 + 五桶 summary 邏輯測試。
 
 驗證:
-1. compute_traffic_lights 對景氣分數/階段/警訊指標正確分級
+1. compute_four_horizon_summary / compute_five_bucket_summary 分級正確
 2. 缺指標時 graceful(不 raise)
-3. SSOT 閾值正確套用(SAHM 0.5 / CFNAI -0.7)
+3. SSOT 閾值正確套用(SAHM 0.5 / CFNAI -0.7 / NEWS_SYSTEMIC_*_COUNT)
 
 v19.128 刪除:render / 教室 / 章節內容守衛 tests(對應功能已從 production 移除)
+2026-08-05 F2 刪除:三大紅綠燈那兩組 tests —— 被測函式本身已依
+`PROCESS.md §4` 0-consumer 條款從 production 移除(它 production 0 caller,
+唯一消費者就是這個檔)。**保護沒有變弱**:它與四時域 summary 重疊的三處判斷
+(景氣 0-10 分級 / 警訊觸發 / SSOT 閾值套用)在本檔
+`TestComputeFourHorizonSummary` 都有等價守衛,且那組守的是**真的在畫面上**的
+那條路徑;測一個已刪除的函式沒有意義。
 """
 from __future__ import annotations
 
@@ -54,166 +60,9 @@ def _stub_streamlit():
 # _stub_streamlit()
 
 
-# ════════════════════════════════════════════════════════════════
-# compute_traffic_lights
-# ════════════════════════════════════════════════════════════════
-
-class TestComputeTrafficLights:
-    def test_empty_indicators_no_raise(self):
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights({})
-        assert "light1_health" in r
-        assert "light2_action" in r
-        assert "light3_alert" in r
-        # 空 indicators → 預設綜合分 5 → 中性燈
-        assert r["light1_health"]["level"] == "yellow"
-
-    def test_none_indicators_no_raise(self):
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(None)
-        assert r["light1_health"]["level"] in ("green", "yellow", "red")
-
-    def test_high_score_green(self):
-        """phase_info score ≥ 6 → 健康 (green)"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {}, phase_info={"phase": "擴張", "score": 7.5},
-        )
-        assert r["light1_health"]["level"] == "green"
-        assert "健康" in r["light1_health"]["label"]
-
-    def test_low_score_red(self):
-        """phase_info score ≤ 3 → 危險 (red)"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {}, phase_info={"phase": "衰退", "score": 2.0},
-        )
-        assert r["light1_health"]["level"] == "red"
-        assert "危險" in r["light1_health"]["label"]
-
-    def test_mid_score_yellow(self):
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {}, phase_info={"phase": "減速", "score": 4.5},
-        )
-        assert r["light1_health"]["level"] == "yellow"
-        assert "轉折" in r["light1_health"]["label"]
-
-    def test_action_light_phase_mapping(self):
-        """各景氣階段映到正確操作建議"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        for _phase, _expected in [
-            ("復甦", "green"),
-            ("擴張", "green"),
-            ("高峰", "yellow"),
-            ("減速", "yellow"),
-            ("衰退", "red"),
-        ]:
-            r = compute_traffic_lights(
-                {}, phase_info={"phase": _phase, "score": 5.0},
-            )
-            assert r["light2_action"]["level"] == _expected, (
-                f"{_phase} 應對應 {_expected},實際 {r['light2_action']['level']}"
-            )
-
-    def test_alert_sahm_triggered(self):
-        """薩姆 ≥ 0.5 → 緊急警訊 (red)"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {"SAHM": {"value": 0.55}},
-            phase_info={"phase": "擴張", "score": 6.0},
-        )
-        assert r["light3_alert"]["level"] == "red"
-        assert "緊急" in r["light3_alert"]["label"]
-
-    def test_alert_vix_panic(self):
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {"VIX": {"value": 35.0}},
-            phase_info={"phase": "擴張", "score": 6.0},
-        )
-        assert r["light3_alert"]["level"] == "red"
-
-    def test_alert_vix_warning_only(self):
-        """VIX 20-30 → 黃燈(警戒)"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {"VIX": {"value": 22.0}},
-            phase_info={"phase": "擴張", "score": 6.0},
-        )
-        assert r["light3_alert"]["level"] == "yellow"
-
-    def test_alert_yield_curve_inversion(self):
-        """10Y-2Y < 0 倒掛 → 黃燈"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {"YIELD_10Y2Y": {"value": -0.5}},
-            phase_info={"phase": "擴張", "score": 6.0},
-        )
-        assert r["light3_alert"]["level"] == "yellow"
-
-    def test_alert_cfnai_recession(self):
-        """CFNAI ≤ -0.7 → 紅燈"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {"CFNAI": {"value": -0.85}},
-            phase_info={"phase": "擴張", "score": 6.0},
-        )
-        assert r["light3_alert"]["level"] == "red"
-
-    def test_alert_all_green(self):
-        """所有指標皆安全 → 綠燈"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {
-                "VIX": {"value": 12.0},
-                "HY_SPREAD": {"value": 3.0},
-                "SAHM": {"value": 0.2},
-                "YIELD_10Y2Y": {"value": 1.2},
-                "CFNAI": {"value": 0.3},
-            },
-            phase_info={"phase": "擴張", "score": 6.5},
-        )
-        assert r["light3_alert"]["level"] == "green"
-        assert "平靜" in r["light3_alert"]["label"]
-
-    def test_alert_multiple_triggers_counted(self):
-        """多個 trigger 應被計數於 headline"""
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {
-                "SAHM": {"value": 0.55},
-                "VIX": {"value": 35.0},
-                "HY_SPREAD": {"value": 9.0},
-            },
-            phase_info={"phase": "衰退", "score": 2.0},
-        )
-        assert r["light3_alert"]["level"] == "red"
-        assert "3" in r["light3_alert"]["headline"]
-
-
-class TestSSOTThresholdsApplied:
-    """驗證 SSOT 閾值正確套用,防止本檔出現 inline magic 偏離 §3.3"""
-
-    def test_sahm_threshold_from_ssot(self):
-        from shared.signal_thresholds import SAHM_RECESSION_THRESHOLD
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        # 剛好 = SSOT 閾值 → 觸發 red
-        r = compute_traffic_lights(
-            {"SAHM": {"value": SAHM_RECESSION_THRESHOLD}},
-            phase_info={"phase": "擴張", "score": 6.0},
-        )
-        assert r["light3_alert"]["level"] == "red"
-
-    def test_cfnai_threshold_from_ssot(self):
-        from shared.signal_thresholds import CFNAI_RECESSION_THRESHOLD
-        from ui.helpers.macro_beginner_view import compute_traffic_lights
-        r = compute_traffic_lights(
-            {"CFNAI": {"value": CFNAI_RECESSION_THRESHOLD}},
-            phase_info={"phase": "擴張", "score": 6.0},
-        )
-        assert r["light3_alert"]["level"] == "red"
-
+# 2026-08-05 F2:`TestComputeTrafficLights`(13 條)+ `TestSSOTThresholdsApplied`
+# (2 條)刪除 —— 被測的三大紅綠燈函式已從 production 移除(0 caller,見本檔
+# docstring)。等價保護見下方 `TestComputeFourHorizonSummary`。
 
 
 # ════════════════════════════════════════════════════════════════
@@ -315,9 +164,13 @@ class TestComputeFourHorizonSummary:
                 "SAHM": {"value": 0.2},
                 "YIELD_10Y2Y": {"value": 0.5},
                 "PMI": {"value": 52.0},
-                "CPI_YOY": {"value": 2.5},
-                "UNRATE": {"value": 4.0},
-                "CFNAI": {"value": 0.3},
+                # ⚠️ 2026-08-05:CPI / 失業率 / 領先指標三顆的 key 全部改成
+                # 服務層真的會寫入的那一個(原本餵的三個 key production 從不
+                # 存在,這條「全綠」因此是靠 3 顆缺席指標拿到的,不是靠健康讀數)。
+                # 領先指標另外指名移動平均那一欄 —— 官方衰退線是對它定義的。
+                "CPI": {"value": 2.5},
+                "UNEMPLOYMENT": {"value": 4.0},
+                "LEI": {"value": 0.3, "ma3": 0.3},
             },
             phase_info={"phase": "擴張", "score": 6.5},
         )
@@ -326,17 +179,18 @@ class TestComputeFourHorizonSummary:
         assert r["short"]["level"] == "green"
         assert r["inflection"]["level"] == "green"
 
-    def test_render_no_raise(self):
-        """render_four_horizon_bar 餵任何 summary 都不 raise"""
-        from ui.helpers.macro_beginner_view import (
-            compute_four_horizon_summary,
-            render_four_horizon_bar,
-        )
-        _summary = compute_four_horizon_summary(None)
-        render_four_horizon_bar(_summary)
+    # 2026-08-05 F1:`test_render_no_raise`(render_four_horizon_bar)刪除 ——
+    # 該 renderer 已隨五桶 bar 一併移除,四時域一覽改由總表「② 依據」表承接。
+    # 取代它的渲染守衛在 `tests/test_audit_20260805_tab1_summary.py`
+    # (`TestEvidenceTableRender`),那裡用真 streamlit + monkeypatch 攔
+    # `st.dataframe`,能驗到「表格真的收到 6 列」而不只是「沒 raise」。
 
     def test_ssot_thresholds_from_signal_thresholds(self):
-        """確認用 SSOT(SAHM_RECESSION_THRESHOLD / CFNAI_RECESSION_THRESHOLD)而非 inline magic"""
+        """確認用 SSOT(SAHM_RECESSION_THRESHOLD / CFNAI_RECESSION_THRESHOLD)而非 inline magic
+
+        ⚠️ 2026-08-05:領先指標改餵服務層真實 key + 移動平均那一欄。
+        `value` 故意放一個**不會觸發**的數 —— 若實作退回讀 `value`,本條會紅。
+        """
         from shared.signal_thresholds import (
             CFNAI_RECESSION_THRESHOLD,
             SAHM_RECESSION_THRESHOLD,
@@ -349,7 +203,7 @@ class TestComputeFourHorizonSummary:
         )
         assert r1["inflection"]["level"] == "red"
         r2 = compute_four_horizon_summary(
-            {"CFNAI": {"value": CFNAI_RECESSION_THRESHOLD}},
+            {"LEI": {"value": 0.5, "ma3": CFNAI_RECESSION_THRESHOLD}},
             phase_info={"phase": "擴張", "score": 6.0},
         )
         assert r2["inflection"]["level"] == "red"
@@ -360,7 +214,7 @@ class TestComputeFourHorizonSummary:
 # 守 SSOT 對齊 + 向下相容(4-horizon 仍可運作 + render fallback)
 # ════════════════════════════════════════════════════════════════
 class TestFiveBucketSummary:
-    """compute_five_bucket_summary / render_five_bucket_bar 守衛"""
+    """compute_five_bucket_summary 守衛(計算層;渲染層見本檔末說明)"""
 
     def test_news_gray_when_news_items_none(self):
         """news_items=None → 第 5 桶 ⬜「未掃描」(對齊 Stock 未抓 RSS 狀態)。"""
@@ -431,60 +285,16 @@ class TestFiveBucketSummary:
         assert NEWS_SYSTEMIC_RED_COUNT == 2
 
 
-class TestFiveBucketBarRender:
-    """render_five_bucket_bar 守衛(streamlit stub mock)"""
-
-    def test_renders_5_cols_with_news(self, monkeypatch):
-        """summary 含 news → 5 columns。"""
-        import ui.helpers.macro_beginner_view as mbv
-        col_counts = []
-
-        class _FakeCol:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-
-        def _fake_columns(n):
-            col_counts.append(n)
-            return [_FakeCol() for _ in range(n)]
-
-        def _fake_markdown(*a, **k):
-            return None
-
-        monkeypatch.setattr(mbv.st, "columns", _fake_columns)
-        monkeypatch.setattr(mbv.st, "markdown", _fake_markdown)
-        summary = {
-            "long": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-            "mid": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-            "short": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-            "inflection": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-            "news": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-        }
-        mbv.render_five_bucket_bar(summary)
-        assert col_counts == [5], f"應 5 columns,實際 {col_counts}"
-
-    def test_fallback_to_4_cols_when_no_news_key(self, monkeypatch):
-        """summary 無 news key(舊 4-horizon 結構)→ fallback 4 columns,不留空白。"""
-        import ui.helpers.macro_beginner_view as mbv
-        col_counts = []
-
-        class _FakeCol:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-
-        def _fake_columns(n):
-            col_counts.append(n)
-            return [_FakeCol() for _ in range(n)]
-
-        def _fake_markdown(*a, **k):
-            return None
-
-        monkeypatch.setattr(mbv.st, "columns", _fake_columns)
-        monkeypatch.setattr(mbv.st, "markdown", _fake_markdown)
-        summary = {
-            "long": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-            "mid": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-            "short": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-            "inflection": {"color": "#3fb950", "emoji": "🟢", "label": "綠", "headline": ""},
-        }
-        mbv.render_five_bucket_bar(summary)
-        assert col_counts == [4], f"無 news 應 fallback 4 columns,實際 {col_counts}"
+# 2026-08-05 F1:`TestFiveBucketBarRender`(五桶 bar 的 5 / 4 columns 守衛)刪除。
+#
+# 五桶 bar 的內容(桶數 / 燈 / 判讀 / 一句話)整批收進總表「② 依據」表格,
+# `render_five_bucket_bar` 隨之成為 production 0 consumer 並依 `PROCESS.md §4`
+# 移除 —— 測一個已刪除函式的 columns 數沒有意義。
+#
+# **保護沒有變弱**:對應守衛移到 `tests/test_audit_20260805_tab1_summary.py`,
+# 且從「畫幾個 column」升級為「表格真的收到哪幾列、每列的值是不是來自 SSOT」:
+#   - `test_rows_follow_bucket_order_and_include_all_buckets` — 5 桶一個不少
+#   - `test_missing_news_bucket_just_drops_that_row`          — 4 桶時的降級
+#   - `TestEvidenceTableRender`                               — 渲染端真的收到列
+# 計算層 `compute_five_bucket_summary` 的測試(本檔 `TestFiveBucketSummary`)
+# 完全保留,未受影響。

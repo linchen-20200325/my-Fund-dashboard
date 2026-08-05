@@ -36,13 +36,24 @@ class TestNoUnboundLocal:
         assert idx > 0, "找不到 L3 情境判斷區塊"
         # 取該區塊後 ~30 行
         block = src[idx: idx + 1500]
-        # 在第一次使用 _sahm_v / _adl_v 之前,必須有 assignment
-        for _var in ("_sahm_v", "_adl_v"):
-            _assign = block.find(f"{_var} = float")
+        # ⚠️ 2026-08-05 更新:ADL 變數由 `_adl_v = float(...value...)` 改為
+        #    `_adl_mom_pct = _safe_num(...prev...)`。這不是改名而已 ——
+        #    `value` 是 RSP÷SPY **比值**(恆為正),`prev` 才是**月變動 %**;
+        #    原本拿比值去比 `< -2` 的負數門檻,Situation B 這張警報卡自建立起
+        #    從未觸發過一次(§1 假訊號)。本測試守的是「**不得 use-before-assign**」
+        #    這個契約,故改為**釘 assignment 早於 use**,不釘變數名與取值函式,
+        #    避免下次正當改名時測試又瞎掉。
+        for _var in ("_sahm_v", "_adl_mom_pct"):
+            _assign = block.find(f"{_var} = ")
             _use = block.find(f"{_var} <")
             assert _assign > 0, f"情境判斷區未自取 {_var}"
             # assignment 必須在第一次比較使用之前
             assert _assign < _use, f"{_var} 在比較使用後才定義(use-before-assign)"
+
+        # ADL 專屬回歸鎖:必須讀 `prev`(月變動 %),讀 `value`(比值)會讓
+        # Situation B 的負數門檻恆假 —— 那正是本輪修掉的 bug。
+        assert '"ADL"' in block and '"prev"' in block, \
+            "Situation B 未讀 ADL 的 prev(月變動 %)— 讀 value(比值)會讓警報永不觸發"
 
     def test_render_macro_tab_compiles(self):
         """整檔 AST parse 成功(語法層守衛)"""

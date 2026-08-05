@@ -28,7 +28,11 @@ _REAL_INDICATORS = {
     # 拐點桶 War Room
     "SAHM": {"value": 0.3, "series": [0.1, 0.2, 0.3]},
     "SLOOS": {"value": 15.0},
-    "ADL": {"value": -1.5},
+    # ADL shape 對齊 services/macro/us_indicators.py:R["ADL"]:
+    #   value = RSP÷SPY **比值**(無因次,量級 ~0.29)、prev = **月變動 %**、unit = ""
+    # 原 fixture 只給 `value: -1.5`,同時錯在兩件事:比值不可能為負,且 UI 的
+    # 廣度儀表 / 情境警報吃的是月變動 % 不是比值 —— 測資自己就複製了 production 的量綱錯。
+    "ADL": {"value": 0.2914, "prev": -1.5, "unit": ""},
     # 中期 / 情境
     "PMI": {"value": 48.0, "prev": 49.0},
     "CPI": {"value": 3.2},
@@ -211,7 +215,10 @@ render_manual_tab()
         """v19.137 回歸:物理重排不該再出現 UnboundLocalError"""
         from streamlit.testing.v1 import AppTest
         # 用最小 indicators(只給 ADL 觸發 < -2 走入情境判斷區)
-        _min_ind = {"ADL": {"value": -3.0}, "PMI": {"value": 45.0}, "SAHM": {"value": 0.2}}
+        # ADL 的觸發量是**月變動 %**(`prev`),不是 `value` 的 RSP÷SPY 比值 —— 原 fixture
+        # 把 -3.0 放在 `value`,修正接線後就走不進 Situation B,本回歸等於空跑。
+        _min_ind = {"ADL": {"value": 0.2814, "prev": -3.0, "unit": ""},
+                    "PMI": {"value": 45.0}, "SAHM": {"value": 0.2}}
         drv = _build_driver(f'''
 st.session_state["macro_done"] = True
 st.session_state["indicators"] = {_min_ind!r}

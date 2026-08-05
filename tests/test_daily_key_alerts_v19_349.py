@@ -141,9 +141,29 @@ class TestBannerAndMount:
         assert 'title="白話說明"' in html
 
     def test_tab1_mounts_after_caption_with_loaded_guard(self):
+        """橫幅仍掛在 Tab1、且「兩源皆空不渲染」的守衛仍在。
+
+        ⚠️ 2026-08-05 F1 資訊架構重構後更新(user 拍板:「最重要的總表放最上方,
+        下方都是放詳細資料與說明」):
+          - 舊斷言 `'_ka_ind or _ka_tp' in text` 釘的是**變數名**。重構把
+            `_ka_ind` 內聯成 `ind`,守衛語意一字未變 → 改釘**契約**(兩個來源
+            都出現在同一個 if 條件裡),不釘命名。
+          - 舊斷言 `key_alerts_banner < btn_macro_load`(掛在載入按鈕之前)
+            **已被架構決策取代**:橫幅移入總表區的「③ 例外」層,位置在
+            `macro_done` 之內,自然在載入按鈕之後。改釘它落在**總表區內**
+            (在「詳細資料與說明」分界之前),這才是新架構要保護的東西。
+        """
         text = _src('ui/tab1_macro.py')
         assert 'collect_key_alerts' in text and 'key_alerts_banner' in text
-        # 未載入(兩源皆空)不渲染 — 防誤導性「無異常」
-        assert '_ka_ind or _ka_tp' in text
-        # 掛在頁首(載入按鈕之前)
-        assert text.index('key_alerts_banner') < text.index('btn_macro_load')
+        # 未載入(兩源皆空)不渲染 — 防誤導性「無異常」。釘語意不釘變數名。
+        import re
+        _guard = re.search(r'if\s+\w+\s+or\s+_ka_tp\s*:', text)
+        assert _guard, "找不到「指標或拐點任一有值才渲染」的守衛 — 未載入時會顯示誤導性「無異常」"
+        # 落在總表區內(詳細區分界之前)。
+        # ⚠️ 必須比對**完整的 heading 呼叫**,不可只找「詳細資料與說明」六個字 ——
+        #    `ui/tab1_macro.py` 有一行註解引用 user 原話「…下方都是放詳細資料與說明」,
+        #    裸字串會先命中那行註解(在橫幅之前)→ 本測試會誤判橫幅位置。
+        #    這正是本 repo 反覆踩到的「註解引述導致 source-scan 誤判」。
+        _mount = text.index('key_alerts_banner')
+        _details = text.index('st.markdown("## 🔎 詳細資料與說明")')
+        assert _mount < _details, "今日關鍵橫幅掉到詳細區了 — 它屬總表的『③ 例外』層"

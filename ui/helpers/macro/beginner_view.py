@@ -3,10 +3,18 @@
 歷史:
 - v19.124-126:三大紅綠燈 + 教室(新手模式專用)
 - v19.128:user 反饋砍掉新手 / 進階 / 教室,改採「長期 / 中期 / 短線 / 拐點」
-  四時域 summary bar。本檔保留 `compute_traffic_lights` 作為純函式運算基礎,
-  將在四時域 summary 中被重用(警訊燈邏輯對應「拐點」桶等)。
+  四時域 summary bar。
 - 已刪除:`_render_one_traffic_light` / `render_beginner_view`
   / `render_principle_classroom` / `_PRINCIPLE_CHAPTERS`(對應教室全砍指示)
+- 2026-08-05 F2:三大紅綠燈計算函式刪除(239 LOC,production 0 caller,
+  唯一消費者是 tests)。它與 `compute_four_horizon_summary` 有三處重疊判斷
+  (景氣 0-10 分級 / 美林時鐘階段對照 / 五警訊),**同檔同 bug 要修兩次**的
+  維護稅已實付一次(phase score falsy 回退那顆,相隔 267 行各修一次),
+  依 `PROCESS.md §4` 0-consumer 條款移除。
+- 2026-08-05 F1:`render_four_horizon_bar` / `render_five_bucket_bar` 兩個
+  summary bar 刪除,內容收進 `build_evidence_rows` + `render_evidence_table`
+  (② 依據表)。**計算層 `compute_four_horizon_summary` / `compute_five_bucket_summary`
+  原樣保留**,仍是該表的資料來源 —— 刪的只是那層畫面,桶數與讀數一格沒少。
 
 §3.3 SSOT
 - macro score / phase → services.macro_service.calc_macro_phase
@@ -15,7 +23,7 @@
 - 不新增 magic number
 
 §8 架構
-- L3 UI helper,純函式 compute_traffic_lights(無 streamlit 依賴 → 可單獨測試)
+- L3 UI helper;compute_* 系列為純函式(無 streamlit 依賴 → 可單獨測試)
 
 由 PR 2 (v19.125) wire 進 ui/tab1_macro.py:
     from ui.helpers.macro_beginner_view import (
@@ -32,7 +40,9 @@ from typing import Optional
 
 import streamlit as st
 
-from shared.colors import GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
+# GRAY_BB 於 2026-08-05 F1 隨兩個 summary bar 一起移除(當時唯一用處是 bar 的
+# headline 字色);② 依據表走 st.dataframe,字色由 theme 決定,不再需要色票。
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED
 from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR  # F-GRAY-4 v19.169
 from shared.signal_thresholds import (
     CFNAI_RECESSION_THRESHOLD,
@@ -54,7 +64,13 @@ _MACRO_SCORE_HEALTHY_MIN: float = 6.0   # ≥ 6 → 擴張區(中間 3~6 為警�
 # 接受「教學卡片不再提前 2 點預警」trade-off 換 SSOT 收斂。panic=30 不變。
 # F-GRAY-4 v19.169 — HY beginner_panic 改 SSOT(SPEC §16.2):
 # 數值不變(panic=8 / warn=5,仍為新手保守版),改 import shared/macro_thresholds_v2。
-from shared.macro_buckets import _VIX_RED as _MB_VIX_RED, _VIX_YELLOW as _MB_VIX_YELLOW
+from shared.macro_buckets import (
+    _VIX_RED as _MB_VIX_RED,
+    _VIX_YELLOW as _MB_VIX_YELLOW,
+    BUCKET_META as _BUCKET_META,     # 桶標籤 SSOT(見下方 `_bucket_bar_cells`)
+    BUCKET_ORDER as _BUCKET_ORDER,
+    SPECS_BY_KEY as _SPECS_BY_KEY,   # 指標 → 門檻描述 SSOT(② 表「說明」欄用)
+)
 from shared.colors import TRAFFIC_NEUTRAL  # v19.252 Phase 4A:gray 走 SSOT
 # 2026-08-05 稽核 🟡 必修 5:燈號 emoji 收 ui/components/status.py `_TABLE` SSOT。
 # 本檔原本自己維護「兩份」{"green":"🟢","yellow":"🟡","red":"🔴"} 對照表
@@ -79,250 +95,44 @@ _LEVEL_EMOJI: dict[str, str] = {
     _lv: _status_ssot(_lv).emoji for _lv in ("green", "yellow", "red", "gray")
 }
 
-
 # ════════════════════════════════════════════════════════════════
-# 紅綠燈計算(純函式,易測)
+# 桶標籤 SSOT — 順序 / emoji / 桶名走 `shared.macro_buckets`(L3 → L0,§8.2 合法下行)
+#
+# 本檔原本在 `render_four_horizon_bar` 與 `render_five_bucket_bar` 各硬寫一份
+# `_order` 清單(桶 key + emoji + 桶名 + 副標),是 registry 之外的第 2、3 份副本;
+# registry 那份反而 production 0 consumer(只有 tests 讀)。收成一份。
+#
+# ✅ 副標(`sub`)已收 SSOT(user 2026-08-05 拍板)。原本本檔有一份
+#   `_BAR_SUB_CURRENT` override 保留「畫面現行文案」,與 registry 三桶不同:
+#       long: `regime / 結構`   → `結構 / 景氣位階`
+#       mid : `景氣循環`        → `景氣循環 3-12 月`
+#       news: `系統性風險`      → `系統性風險掃描`
+#   registry 版三句都更白話、資訊量更足(`regime` 是英文行話,正是本輪
+#   「讓初學者也能明白」要消除的那種),故 user 核准直接採用 registry,
+#   override 表刪除 → 副標從此**只有一份真相**。
+#   ⚠️ 殘留:`short` 桶的 registry 值是 `即時 risk-off`,`risk-off` 同樣是英文
+#      行話。但那是 `shared/macro_buckets.py` 的 taxonomy SSOT,改它等於改
+#      全站分類名稱,超出本次範圍 —— 已登記待 user 另行裁決,**不在 UI 層偷改**。
 # ════════════════════════════════════════════════════════════════
 
-def compute_traffic_lights(
-    indicators: Optional[dict],
-    phase_info: Optional[dict] = None,
-) -> dict:
-    """三大紅綠燈純函式計算。
 
-    輸入:
-      indicators: st.session_state["indicators"] 的 macro 指標字典
-                  (key 大寫,各帶 value / score / weight / prev / z_score 等欄位)
-      phase_info: 已算好的 {"phase", "score"} dict(可選),
-                  若為 None 則本函式內部呼叫 calc_macro_phase 重算
+def _bucket_bar_cells(keys) -> list:
+    """回 [(bucket_key, "emoji 桶名", 副標), ...] —— ② 依據表的標籤來源。
 
-    回傳: dict 含 3 個子 dict,每個為 {
-        "level": "green"|"yellow"|"red",
-        "label": str (中文簡短結論),
-        "headline": str (一行白話),
-        "reasons": list[str] (推導依據,顯示在 expander 裡),
-        "principle": str (背後原理白話),
-        "color": hex string,
-        "emoji": "🟢"|"🟡"|"🔴",
-    }
+    emoji / 桶名 / 副標 / 遍歷順序**全部**由 `shared.macro_buckets.BUCKET_META`
+    決定,本檔不再保留任何 override(L3 → L0,§8.2 合法下行)。
+    未知 key → KeyError 當場炸(§1:寧可炸掉,不要靜默少畫一桶)。
     """
-    indicators = indicators or {}
+    _out = []
+    for _k in keys:
+        _m = _BUCKET_META[_k]
+        _out.append((_k, f"{_m['emoji']} {_m['title']}", _m["sub"]))
+    return _out
 
-    # ── 用既有 phase_info 或重算
-    if phase_info is None:
-        try:
-            from services.macro import calc_macro_phase
-            phase_info = calc_macro_phase(indicators) or {}
-        except Exception:
-            phase_info = {}
 
-    # ⚠️ 顯式 None 判斷,**不可**用 `or 5.0`:`calc_macro_phase` 的 clamp 下界是 0.0
-    # (極端衰退),而 `0.0 or 5.0` 在 Python 回 5.0 → 最危險的讀數被靜默回退成中性,
-    # 燈號由 🔴 危險變成 🟡 轉折。與本檔 `compute_four_horizon_summary` 同一個修正
-    # (PROCESS.md §4「算對了但沒接出去」同型:同檔同 bug 相隔 267 行,前一輪只修下面那個)。
-    _score_raw = phase_info.get("score")
-    _macro_score = 5.0 if _score_raw is None else float(_score_raw)
-    _phase_label = phase_info.get("phase") or "未定"
-
-    # ── helper:從 indicators 撈某 key 的 value
-    def _ind_val(key: str, attr: str = "value") -> Optional[float]:
-        _d = indicators.get(key) or {}
-        _v = _d.get(attr)
-        try:
-            return float(_v) if _v is not None else None
-        except (TypeError, ValueError):
-            return None
-
-    _vix = _ind_val("VIX")
-    _hy = _ind_val("HY_SPREAD")
-    _sahm = _ind_val("SAHM")
-    _y2 = _ind_val("YIELD_10Y2Y")
-    _y3 = _ind_val("YIELD_10Y3M")
-    _cfnai = _ind_val("CFNAI")
-
-    # ════════════════════════════════════════════
-    # 燈 1:景氣現在好不好?(用 macro score)
-    # ════════════════════════════════════════════
-    if _macro_score >= _MACRO_SCORE_HEALTHY_MIN:
-        _l1_level = "green"
-        _l1_label = f"健康({_phase_label})"
-        _l1_headline = (
-            f"分數 {_macro_score:.1f}/10 — 景氣處於擴張或高峰,"
-            "整體經濟動能正面。"
-        )
-    elif _macro_score <= _MACRO_SCORE_DANGER_MAX:
-        _l1_level = "red"
-        _l1_label = f"危險({_phase_label})"
-        _l1_headline = (
-            f"分數 {_macro_score:.1f}/10 — 景氣處於衰退或復甦早期,"
-            "經濟動能偏弱。"
-        )
-    else:
-        _l1_level = "yellow"
-        _l1_label = f"轉折({_phase_label})"
-        _l1_headline = (
-            f"分數 {_macro_score:.1f}/10 — 景氣處於擴張/減速交界,"
-            "方向未明。"
-        )
-
-    _l1_reasons = [
-        f"**綜合分數**:{_macro_score:.1f}/10(來自 12 個總經指標加權)",
-        f"**景氣階段**:{_phase_label}(衰退 0-2 / 復甦 3-4 / 擴張 5-7 / 高峰 8-10)",
-        "**主要依據**(權重高 → 低):",
-        "  - PMI 採購經理指數(weight 2)",
-        "  - 殖利率曲線 10Y-2Y / 10Y-3M(各 weight 2)",
-        "  - HY 高收益債利差(weight 2)",
-        "  - M2 流動性 / Fed BS / 市場廣度 RSP/SPY(各 weight 1)",
-        "  - DXY / VIX / CPI / Fed Rate / 失業率(weight 0.5-1)",
-    ]
-    _l1_principle = (
-        "綜合分數採機構級 12 指標加權:景氣循環受**實質經濟動能**(PMI / 失業率)、"
-        "**信用環境**(HY 利差 / 殖利率曲線)、**流動性**(M2 / Fed BS)、"
-        "**情緒**(VIX / 廣度)四大面向驅動。任一面向極端 → 整體分數偏離 5(中性);"
-        "歷史驗證:綜合 ≥ 6 期間 SPX 平均年報酬 +12%,≤ 3 期間平均 -8%。"
-    )
-
-    # ════════════════════════════════════════════
-    # 燈 2:該不該加碼?(用 phase + 拐點)
-    # ════════════════════════════════════════════
-    _action_map = {
-        "復甦": ("green", "建議加碼",
-                 "景氣谷底翻揚,股市歷史上此階段平均年報酬最高(+18%)。"),
-        "擴張": ("green", "持有 / 適度加碼",
-                 "景氣健康擴張,股市穩步上行,可繼續持有並逢低加碼。"),
-        "高峰": ("yellow", "獲利了結",
-                 "景氣高位,風險升高;歷史上此階段後常見回檔,建議減碼防禦。"),
-        "減速": ("yellow", "減碼防禦",
-                 "景氣動能放緩,提早調整部位降低波動。"),
-        "衰退": ("red", "降低風險",
-                 "景氣下行,股市平均報酬轉負;優先持有現金/債券,等待落底訊號。"),
-    }
-    _l2_level, _l2_label, _l2_headline = _action_map.get(
-        _phase_label, ("yellow", "觀望", "景氣階段未定,建議維持現況觀察。"),
-    )
-
-    _l2_reasons = [
-        f"**目前景氣階段**:{_phase_label}",
-        f"**建議操作**:{_l2_label}",
-        "**美林時鐘四階段股票配置歷史最佳值**:",
-        "  - 復甦:股 80% / 債 20%(成長動能最強)",
-        "  - 擴張:股 60% / 債 40%(穩健持有)",
-        "  - 高峰:股 40% / 債 60%(風險升高)",
-        "  - 衰退:股 20% / 債 80%(防禦為主)",
-    ]
-    _l2_principle = (
-        "美林時鐘把景氣 ×通膨切成 4 象限,推導出股/債/商品/現金的歷史最佳配比。"
-        "原理:**股票偏好景氣擴張期**(企業獲利成長),**債券偏好景氣放緩期**"
-        "(降息預期 → 債價上揚),**商品偏好通膨上升期**(原物料定價權)。"
-        "本系統用 PMI 趨勢 + 殖利率曲線 + 通膨綜合判斷階段。"
-    )
-
-    # ════════════════════════════════════════════
-    # 燈 3:有沒有警訊?(任一觸發 → 紅;全 OK → 綠)
-    # ════════════════════════════════════════════
-    _triggers = []   # 紅燈級
-    _warnings = []   # 黃燈級
-
-    if _sahm is not None and _sahm >= SAHM_RECESSION_THRESHOLD:
-        _triggers.append(
-            f"🔴 **薩姆規則 {_sahm:.2f}** ≥ {SAHM_RECESSION_THRESHOLD} — 衰退鎖定"
-        )
-    if _vix is not None and _vix >= _VIX_PANIC_THRESHOLD:
-        _triggers.append(f"🔴 **VIX {_vix:.1f}** ≥ {_VIX_PANIC_THRESHOLD} — 市場恐慌")
-    elif _vix is not None and _vix >= _VIX_WARNING_THRESHOLD:
-        _warnings.append(f"🟡 **VIX {_vix:.1f}** 已超過 {_VIX_WARNING_THRESHOLD} 警戒值")
-    if _hy is not None and _hy >= _HY_SPREAD_PANIC_THRESHOLD:
-        _triggers.append(
-            f"🔴 **HY 利差 {_hy:.2f}%** ≥ {_HY_SPREAD_PANIC_THRESHOLD}% — 信用危機"
-        )
-    elif _hy is not None and _hy >= _HY_SPREAD_WARN_THRESHOLD:
-        _warnings.append(f"🟡 **HY 利差 {_hy:.2f}%** 偏高")
-    if _y2 is not None and _y2 < 0:
-        _warnings.append(
-            f"🟡 **10Y-2Y 殖利率倒掛 {_y2:.2f}%** — 歷史上 6-18 月後常見衰退"
-        )
-    if _y3 is not None and _y3 < 0:
-        _warnings.append(
-            f"🟡 **10Y-3M 殖利率倒掛 {_y3:.2f}%** — 倒掛 = 衰退領先指標"
-        )
-    if _cfnai is not None and _cfnai <= CFNAI_RECESSION_THRESHOLD:
-        _triggers.append(
-            f"🔴 **CFNAI {_cfnai:.2f}** ≤ {CFNAI_RECESSION_THRESHOLD} — 全美活動指數萎縮"
-        )
-
-    if _triggers:
-        _l3_level = "red"
-        _l3_label = "緊急警訊"
-        _l3_headline = f"觸發 {len(_triggers)} 項危機指標,建議大幅減碼防禦。"
-    elif _warnings:
-        _l3_level = "yellow"
-        _l3_label = "注意警戒"
-        _l3_headline = f"出現 {len(_warnings)} 項偏離,須密切觀察。"
-    else:
-        _l3_level = "green"
-        _l3_label = "平靜"
-        _l3_headline = "未偵測到任何衰退 / 流動性 / 恐慌警訊。"
-
-    _l3_reasons = (
-        ["**🔴 觸發中**:"] + [f"  - {t}" for t in _triggers]
-        if _triggers else []
-    ) + (
-        ["**🟡 警戒中**:"] + [f"  - {w}" for w in _warnings]
-        if _warnings else []
-    ) + [
-        "",
-        "**監測規則**:",
-        f"  - 薩姆規則 ≥ {SAHM_RECESSION_THRESHOLD}:失業率上升動能鎖定衰退",
-        f"  - VIX ≥ {_VIX_PANIC_THRESHOLD}(恐慌)/ ≥ {_VIX_WARNING_THRESHOLD}(警戒)",
-        f"  - HY 利差 ≥ {_HY_SPREAD_PANIC_THRESHOLD}%(危機)/ ≥ {_HY_SPREAD_WARN_THRESHOLD}%(警戒)",
-        f"  - 殖利率曲線倒掛:10Y-2Y / 10Y-3M < 0",
-        f"  - CFNAI ≤ {CFNAI_RECESSION_THRESHOLD}:全美經濟活動萎縮",
-    ]
-    if not _triggers and not _warnings:
-        _l3_reasons.insert(0, "✅ 所有警訊指標皆位於安全區")
-
-    _l3_principle = (
-        "5 大警訊各擷取「歷史上衰退/危機前 6-18 個月會先動」的領先指標。"
-        "**薩姆規則**(克勞蒂亞・薩姆 2019 年提出):失業率 3 月均比 12 月最低點高 ≥ 0.5pp,"
-        "1949 年以來 100% 命中美國衰退。**殖利率倒掛**:10Y < 2Y/3M 是 50 年來"
-        "最準確衰退領先指標(平均提前 12 個月)。**HY 利差爆炸**:垃圾債券殖利率"
-        "與公債價差擴大 → 信用環境惡化 → 企業破產潮。**VIX 恐慌**:恐慌指數 ≥ 30 "
-        "代表 S&P 500 隱含波動率年化 ≥ 30%,投資人對未來 30 天極度不確定。"
-    )
-
-    # ════════════════════════════════════════════
-    _level_to_color = {"green": _C_GREEN, "yellow": _C_YELLOW, "red": _C_RED}
-    _level_to_emoji = _LEVEL_EMOJI   # status.py `_TABLE` SSOT(見模組頂部)
-
-    return {
-        "light1_health": {
-            "level": _l1_level,
-            "label": _l1_label,
-            "headline": _l1_headline,
-            "reasons": _l1_reasons,
-            "principle": _l1_principle,
-            "color": _level_to_color[_l1_level],
-            "emoji": _level_to_emoji[_l1_level],
-        },
-        "light2_action": {
-            "level": _l2_level,
-            "label": _l2_label,
-            "headline": _l2_headline,
-            "reasons": _l2_reasons,
-            "principle": _l2_principle,
-            "color": _level_to_color[_l2_level],
-            "emoji": _level_to_emoji[_l2_level],
-        },
-        "light3_alert": {
-            "level": _l3_level,
-            "label": _l3_label,
-            "headline": _l3_headline,
-            "reasons": _l3_reasons,
-            "principle": _l3_principle,
-            "color": _level_to_color[_l3_level],
-            "emoji": _level_to_emoji[_l3_level],
-        },
-    }
+# 2026-08-05 F2 — 三大紅綠燈計算函式已刪除(見模組 docstring 沿革)。
+# 桶燈號一律走下方 `compute_four_horizon_summary` / `compute_five_bucket_summary`,
+# 本檔不再有第二套景氣分級 / 美林時鐘對照 / 警訊判斷。
 
 
 # ════════════════════════════════════════════════════════════════
@@ -338,9 +148,11 @@ _PMI_CONTRACTION_THRESHOLD: float = _PMI_THR_V2["beginner_panic"]["contraction_b
 _CPI_OVERHEAT_THRESHOLD: float = _CPI_THR_V2["beginner_panic"]["overheat_above"]  # 4.0 (SSOT)
 _UNEMP_ELEVATED_THRESHOLD: float = 5.0     # 失業率 > 5% = 偏高
 
-# 短線震盪警戒
-_MOVE_WARNING_THRESHOLD: float = 100.0     # MOVE > 100 = 警戒
-_PCR_PANIC_THRESHOLD: float = 1.5          # Put/Call > 1.5 = 恐慌
+# 短線震盪警戒:原有兩個本地門檻常數(債市波動率 / 選擇權買賣權比)已於
+# 2026-08-05 隨其判讀式一併移除 —— 對應資料從不在本函式收到的 indicators 裡,
+# 門檻留著也沒有東西可比(理由詳見 `compute_four_horizon_summary` 短線桶註解)。
+# `shared/macro_buckets.py` 的 registry 仍保有那兩顆的 spec,供風險雷達那條
+# 獨立資料線使用;本檔不再持有第二份數值。
 
 # 拐點警報
 _SLOOS_TIGHTENING_THRESHOLD: float = 50.0  # SLOOS > 50 = 銀行收緊
@@ -356,10 +168,13 @@ def compute_four_horizon_summary(
       {
         "long":       {...},  # 🌳 長期:regime / 結構(美林時鐘 + 寬鬆度)
         "mid":        {...},  # 📈 中期:景氣循環(PMI / CPI / 失業)
-        "short":      {...},  # 🎯 短線:即時 risk-off(VIX / HY / MOVE / PCR)
+        "short":      {...},  # 🎯 短線:即時 risk-off(VIX / HY 兩顆)
         "inflection": {...},  # ⚠️ 拐點:領先警報(Sahm / 倒掛 / CFNAI / SLOOS)
       }
     每桶 dict = { level, label, headline, color, emoji }
+    mid / short / inflection 另帶 `spec_key`:headline 目前這個讀數是**哪一個
+    指標**(`shared.macro_buckets.SPECS_BY_KEY` 的 key);全綠且 headline 退化成
+    狀態詞時為 None(§1:沒有對應指標就誠實回 None,不指一個沒觸發的)。
     """
     indicators = indicators or {}
 
@@ -371,11 +186,18 @@ def compute_four_horizon_summary(
         except Exception:
             phase_info = {}
 
-    def _v(name: str):
+    def _v(name: str, field: str = "value"):
+        """indicators[name][field] → float,取不到回 None(絕不回 0)。
+
+        `field` 預設是各指標的當期值;少數指標的判讀門檻不是對當期值定義的
+        (例:領先指標的官方衰退線是對 3 月移動平均定的,服務層把它另存一欄),
+        由呼叫端指名該欄 —— 用當期值去比移動平均的門檻是 §4.1 量綱陷阱。
+        取不到 → None,讓該項**不參與判讀**;回 0 會讓缺資料偽裝成「讀數 0」。
+        """
         _d = indicators.get(name) or {}
         if not _d:
             return None
-        _val = _d.get("value")
+        _val = _d.get(field)
         try:
             return float(_val) if _val is not None else None
         except (TypeError, ValueError):
@@ -399,7 +221,7 @@ def compute_four_horizon_summary(
         _long_level, _long_label = "yellow", "轉折中"
     # 2026-08-05 稽核 🟡 必修 3 前置:原本自己 f-string 組「擴張 (6.8/10)」,
     # 沒吃 v19.403 DUP-3 建的 SSOT `format_phase_score`(格式還多了一層括號)。
-    # 兩套評分尺度(hero 的 23 指標加權淨分 vs 本桶的 0-10 景氣位階)撞臉的根因就是
+    # 兩套評分尺度(hero 的加權淨分 vs 本桶的 0-10 景氣位階)撞臉的根因就是
     # 「位階字卡格式各寫各的」;此處收 SSOT,格式與 Tab② 組合健診一致。
     # phase 缺失時 SSOT 回 ""(不捏造)→ 退回本地 fallback 保住桶內有字。
     # lazy import:`ui.helpers.macro.helpers` 會連帶拉進 `services.macro` 整包,
@@ -409,72 +231,90 @@ def compute_four_horizon_summary(
                       or f"{_phase_name} {_macro_score:.1f}/10")
 
     # ═══ 📈 中期:景氣循環 ═══
-    _pmi = _v("PMI") or _v("US_PMI")
-    _cpi = _v("CPI_YOY") or _v("US_CPI_YOY") or _v("CPI")
-    _unemp = _v("UNRATE") or _v("US_UNEMP")
-    _mid_msgs = []
+    # 2026-08-05 稽核 🔴 必修 2:每個 headline 同時帶出**它是哪一個指標**
+    # (`shared.macro_buckets.SPECS_BY_KEY` 的 spec key)。原因:headline 是動態的
+    # (先觸發者勝),② 依據表的「說明」欄若寫死某一個指標的門檻,遇到另一個指標
+    # 命中時就答非所問。改由這裡回報身分,表格層再據此查 registry 取該指標門檻
+    # —— UI 層不逆向 parse 顯示字串(那是第二份真相且一改文案就散)。
+    # 2026-08-05 稽核:失業率讀的 key 服務層從來沒產生過 → 恆 None,這一桶
+    # 實際只掃了 PMI / CPI 兩顆。key 一律以服務層寫入名為準(漂移由
+    # `tests/test_audit_20260805_tab1_wiring.py` 的 key 漂移鎖守)。
+    # 同時清掉一串同樣不存在的別名 fallback:`X or Y` 鏈裡的 Y 若永遠是 None,
+    # 它不是備援,是讓人誤以為有備援的裝飾(§1)。
+    _pmi = _v("PMI")
+    _cpi = _v("CPI")            # 服務層此格已是 YoY %,與下方過熱門檻同口徑
+    _unemp = _v("UNEMPLOYMENT")  # 失業率 %,與 _UNEMP_ELEVATED_THRESHOLD 同口徑
+    _mid_hits: list = []   # [(headline, spec_key), ...]
     if _pmi is not None and _pmi < _PMI_CONTRACTION_THRESHOLD:
-        _mid_msgs.append(f"PMI {_pmi:.1f} 收縮")
+        _mid_hits.append((f"PMI {_pmi:.1f} 收縮", "pmi"))
     if _cpi is not None and _cpi > _CPI_OVERHEAT_THRESHOLD:
-        _mid_msgs.append(f"CPI {_cpi:.1f}% 過熱")
+        _mid_hits.append((f"CPI {_cpi:.1f}% 過熱", "cpi_yoy"))
     if _unemp is not None and _unemp > _UNEMP_ELEVATED_THRESHOLD:
-        _mid_msgs.append(f"失業 {_unemp:.1f}% 偏高")
-    if len(_mid_msgs) >= 2:
+        _mid_hits.append((f"失業 {_unemp:.1f}% 偏高", "unemployment"))
+    if len(_mid_hits) >= 2:
         _mid_level, _mid_label = "red", "循環惡化"
-    elif _mid_msgs:
+    elif _mid_hits:
         _mid_level, _mid_label = "yellow", "局部走弱"
     else:
         _mid_level, _mid_label = "green", "循環健康"
-    _mid_headline = _mid_msgs[0] if _mid_msgs else "PMI/CPI/失業 三項皆健康"
+    _mid_headline = _mid_hits[0][0] if _mid_hits else "PMI/CPI/失業 三項皆健康"
+    # 全綠時 headline 是**狀態詞不是數字** → 無單一指標可指,回 None,
+    # 由表格層改用「什麼情況會變成數字」的通用規則(不硬塞一個沒觸發的門檻)。
+    _mid_spec = _mid_hits[0][1] if _mid_hits else None
 
     # ═══ 🎯 短線:即時 risk-off ═══
+    # 2026-08-05 稽核:債市波動率與選擇權買賣權比這兩顆,**服務層的指標 dict
+    # 從來沒有產生過**(它們住在風險雷達那條獨立資料線,key 與結構都不同,
+    # 不會流進本函式的 indicators)。原本兩個判讀式因此恆讀到 0 而永不觸發 ——
+    # 留著等於掛兩個沒接線的哨兵假裝有在看(§1 / `PROCESS.md §4` 0-consumer)。
+    # 判讀式與對應的本地門檻常數一併移除;要復活請先把資料接進 indicators。
     _vix = _v("VIX") or 0.0
-    _hy = _v("HY_SPREAD") or _v("HY") or 0.0
-    _move = _v("MOVE") or 0.0
-    _pcr = _v("PCR") or 0.0
-    _short_msgs = []
+    _hy = _v("HY_SPREAD") or 0.0
+    _short_hits: list = []   # [(headline, spec_key), ...] — 見中期桶的說明
     _short_severe = False
     if _vix >= _VIX_PANIC_THRESHOLD:
-        _short_msgs.append(f"VIX {_vix:.1f} 恐慌")
+        _short_hits.append((f"VIX {_vix:.1f} 恐慌", "vix"))
         _short_severe = True
     elif _vix >= _VIX_WARNING_THRESHOLD:
-        _short_msgs.append(f"VIX {_vix:.1f} 警戒")
+        _short_hits.append((f"VIX {_vix:.1f} 警戒", "vix"))
     if _hy >= _HY_SPREAD_PANIC_THRESHOLD:
-        _short_msgs.append(f"HY {_hy:.2f}% 危機")
+        _short_hits.append((f"HY {_hy:.2f}% 危機", "hy_spread"))
         _short_severe = True
     elif _hy >= _HY_SPREAD_WARN_THRESHOLD:
-        _short_msgs.append(f"HY {_hy:.2f}% 警戒")
-    if _move >= _MOVE_WARNING_THRESHOLD:
-        _short_msgs.append(f"MOVE {_move:.0f}")
-    if _pcr >= _PCR_PANIC_THRESHOLD:
-        _short_msgs.append(f"PCR {_pcr:.2f}")
-        _short_severe = True
+        _short_hits.append((f"HY {_hy:.2f}% 警戒", "hy_spread"))
     if _short_severe:
         _short_level, _short_label = "red", "極度恐慌"
-    elif _short_msgs:
+    elif _short_hits:
         _short_level, _short_label = "yellow", "短線警戒"
     else:
         _short_level, _short_label = "green", "短線平靜"
-    _short_headline = _short_msgs[0] if _short_msgs else f"VIX {_vix:.1f} 正常"
+    _short_headline = _short_hits[0][0] if _short_hits else f"VIX {_vix:.1f} 正常"
+    # 本桶**全綠時 headline 仍是數字**(VIX 讀數),故沒觸發也指得出指標身分。
+    _short_spec = _short_hits[0][1] if _short_hits else "vix"
 
     # ═══ ⚠️ 拐點:領先警報 ═══
     _sahm = _v("SAHM") or 0.0
     _y2 = _v("YIELD_10Y2Y")
     _y3 = _v("YIELD_10Y3M")
-    _cfnai = _v("CFNAI")
+    # 2026-08-05 稽核:這顆的 key 服務層也沒有 —— 它以另一個代碼寫入,
+    # 且**當期值與門檻不同口徑**:官方衰退線是對 3 月移動平均定義的,
+    # 服務層因此把移動平均另存一欄(它自己的燈號也是拿那一欄判的)。
+    # 所以這裡指名讀那一欄,而不是把當期值硬接上移動平均的門檻(§4.1)。
+    # 該欄缺席(舊 cache / 上游降級)→ None → 本項不參與判讀,不回 0 冒充讀數。
+    _cfnai = _v("LEI", "ma3")
     _sloos = _v("SLOOS")
-    _inf_triggers = []
-    _inf_warnings = []
+    _inf_triggers: list = []   # [(headline, spec_key), ...] — 見中期桶的說明
+    _inf_warnings: list = []
     if _sahm >= SAHM_RECESSION_THRESHOLD:
-        _inf_triggers.append(f"薩姆 {_sahm:.2f} 觸發")
+        _inf_triggers.append((f"薩姆 {_sahm:.2f} 觸發", "sahm"))
     if _y2 is not None and _y2 < 0:
-        _inf_warnings.append(f"10Y-2Y 倒掛 {_y2:.2f}%")
+        _inf_warnings.append((f"10Y-2Y 倒掛 {_y2:.2f}%", "yield_10y2y"))
     if _y3 is not None and _y3 < 0:
-        _inf_warnings.append(f"10Y-3M 倒掛 {_y3:.2f}%")
+        _inf_warnings.append((f"10Y-3M 倒掛 {_y3:.2f}%", "yield_10y3m"))
     if _cfnai is not None and _cfnai <= CFNAI_RECESSION_THRESHOLD:
-        _inf_triggers.append(f"CFNAI {_cfnai:.2f} 衰退")
+        _inf_triggers.append((f"CFNAI {_cfnai:.2f} 衰退", "cfnai"))
     if _sloos is not None and _sloos >= _SLOOS_TIGHTENING_THRESHOLD:
-        _inf_warnings.append(f"SLOOS {_sloos:.0f} 收緊")
+        _inf_warnings.append((f"SLOOS {_sloos:.0f} 收緊", "sloos"))
     if _inf_triggers:
         _inf_level, _inf_label = "red", "拐點鎖定"
     elif len(_inf_warnings) >= 2:
@@ -484,8 +324,15 @@ def compute_four_horizon_summary(
     else:
         _inf_level, _inf_label = "green", "拐點未現"
     _inf_msgs_all = _inf_triggers + _inf_warnings
-    _inf_headline = _inf_msgs_all[0] if _inf_msgs_all else "Sahm/倒掛/CFNAI/SLOOS 全綠"
+    _inf_headline = _inf_msgs_all[0][0] if _inf_msgs_all else "Sahm/倒掛/CFNAI/SLOOS 全綠"
+    # 全綠 → 狀態詞非數字,同中期桶處理(回 None)。
+    _inf_spec = _inf_msgs_all[0][1] if _inf_msgs_all else None
 
+    # `spec_key`:該桶 headline 目前是**哪一個指標**的讀數(registry spec key),
+    # 消費者 = `build_evidence_rows` 的「說明(這個數字怎麼讀)」欄。
+    # 🌳 長期桶刻意**不帶** spec_key:它的說明欄要揭露的是「本表切點 vs ① 結論燈
+    # 切點」的差異(稽核 🔴 必修 1),不是 registry 的單一門檻描述;帶了也沒人讀,
+    # 等於 `PROCESS.md §4` 的 0-consumer 欄位。
     return {
         "long": {
             "level": _long_level, "label": _long_label, "headline": _long_headline,
@@ -494,46 +341,27 @@ def compute_four_horizon_summary(
         "mid": {
             "level": _mid_level, "label": _mid_label, "headline": _mid_headline,
             "color": _level_to_color[_mid_level], "emoji": _level_to_emoji[_mid_level],
+            "spec_key": _mid_spec,
         },
         "short": {
             "level": _short_level, "label": _short_label, "headline": _short_headline,
             "color": _level_to_color[_short_level], "emoji": _level_to_emoji[_short_level],
+            "spec_key": _short_spec,
         },
         "inflection": {
             "level": _inf_level, "label": _inf_label, "headline": _inf_headline,
             "color": _level_to_color[_inf_level], "emoji": _level_to_emoji[_inf_level],
+            "spec_key": _inf_spec,
         },
     }
 
 
-def render_four_horizon_bar(summary: dict) -> None:
-    """頂部四時域 summary bar(4 columns × emoji+燈號+1句)。
-
-    順序鎖定:🌳 長期 → 📈 中期 → 🎯 短線 → ⚠️ 拐點
-    對齊下方四桶詳細區塊由上而下的閱讀順序。
-    """
-    _cols = st.columns(4)
-    _order = [
-        ("long",       "🌳 長期", "regime / 結構"),
-        ("mid",        "📈 中期", "景氣循環"),
-        ("short",      "🎯 短線", "即時 risk-off"),
-        ("inflection", "⚠️ 拐點", "領先警報"),
-    ]
-    for _col, (_key, _title, _sub) in zip(_cols, _order):
-        _d = summary.get(_key) or {}
-        _color = _d.get("color", TRAFFIC_NEUTRAL)
-        _emoji = _d.get("emoji", "⚪")
-        _label = _d.get("label", "—")
-        _headline = _d.get("headline", "")
-        with _col:
-            st.markdown(
-                f"""<div style="border-left:4px solid {_color};padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:6px;">
-<div style="font-size:0.78em;color:{TRAFFIC_NEUTRAL};letter-spacing:0.5px;">{_sub}</div>
-<div style="font-size:1.05em;font-weight:600;margin-top:2px;">{_emoji} {_title}: <span style="color:{_color};">{_label}</span></div>
-<div style="font-size:0.85em;color:{GRAY_BB};margin-top:4px;line-height:1.4;">{_headline}</div>
-</div>""",
-                unsafe_allow_html=True,
-            )
+# 2026-08-05 F1 — `render_four_horizon_bar` 已刪除。
+# 它自 v19.146 起就被五桶 bar 取代、production 0 caller(唯一消費者是 tests),
+# 本次五桶 bar 也一併收進「② 依據表」→ 兩個 render 函式同時 0 consumer,
+# 依 `PROCESS.md §4` 稽核落地條款(0 consumer → 接線或刪除,不得留著假裝有揭露)
+# 移除。四時域的**計算**函式 `compute_four_horizon_summary` 原樣保留並仍是
+# ② 依據表的資料來源 —— 刪的只是那層畫面,資料一格沒少。
 
 
 # ════════════════════════════════════════════════════════════════
@@ -569,11 +397,14 @@ def compute_five_bucket_summary(
                        "gray": TRAFFIC_NEUTRAL}  # v19.252 Phase 4A:SSOT
     _level_to_emoji = _LEVEL_EMOJI   # status.py `_TABLE` SSOT(含 gray→⬜)
 
+    # 新聞桶不論掃沒掃到,判讀規則恆為「系統性風險命中**則數**」→ spec_key 固定。
+    # 未掃描時附上它,讀者才知道之後那個數字要怎麼看(§1:不掃描 ≠ 沒門檻)。
     if news_items is None:
         _summary["news"] = {
             "level": "gray", "label": "未掃描",
             "headline": "尚未抓取 RSS 新聞",
             "color": _level_to_color["gray"], "emoji": _level_to_emoji["gray"],
+            "spec_key": "news_systemic",
         }
         return _summary
 
@@ -607,42 +438,242 @@ def compute_five_bucket_summary(
     _summary["news"] = {
         "level": _n_level, "label": _n_label, "headline": _n_headline,
         "color": _level_to_color[_n_level], "emoji": _level_to_emoji[_n_level],
+        "spec_key": "news_systemic",
     }
     return _summary
 
 
-def render_five_bucket_bar(summary: dict) -> None:
-    """頂部五桶 summary bar(5 columns × emoji+燈號+1句)。
+# ════════════════════════════════════════════════════════════════
+# 2026-08-05 F1 — ② 依據表(user 拍板:「結論用敘事、依據用表格」)
+#
+# 取代原本的 `render_four_horizon_bar` / `render_five_bucket_bar` 兩個 summary
+# bar:**同樣的桶、同樣的燈 / 判讀 / 一句話**,改成表格呈現,並且多兩件原本沒有的:
+#   (a) 景氣位階 與 多空強度 兩把尺**並陳且各自標明怎麼讀** —— 這兩個數字原本
+#       分屬 hero 卡與五桶 bar 兩個區塊,中間夾一行「別互相換算」的 caption,
+#       等於同一件事有三份說法;現在收成一張表、一份說法。
+#   (b) 每一列指向**下方哪一段**細節,讓「看結論 → 想知道為什麼 → 知道去哪找」
+#       這條路徑成立(初學者原本只能自己拼)。
+# 資訊只增不減:桶數 / 判讀 / 讀數 / 綜合健康度分數與白話行動全部保留。
+# ════════════════════════════════════════════════════════════════
 
-    順序鎖定:🌳 長期 → 📈 中期 → 🎯 短線 → ⚠️ 拐點 → 📰 新聞
-    對齊 Stock v18.284 五桶 bar 語意,Fund 第 5 桶為新聞(Stock 是籌碼)。
+# 桶 key → 下方細節區段的標題。這些標題由 `ui/tab1_macro_{longterm,midcycle,
+# radar,inflection}.py` 各自寫死(那幾個檔案不在本次所有權內,無法就地建 SSOT),
+# 因此本表是**鏡像**而非第二份真相;
+# `tests/test_audit_20260805_tab1_summary.py` 逐條比對真檔的 heading,
+# 任一標題改名而本表沒跟上 → 紅(對照「指路指到不存在的分頁」那個舊 bug)。
+_BUCKET_SECTION_HINT: dict[str, str] = {
+    "long":       "🌳 長期座標",
+    "mid":        "📈 中期循環",
+    "short":      "🎯 短線雷達",
+    "inflection": "⚠️ 拐點警報",
+    # 新聞明細是「🌳 長期座標」section 內的 📰 市場新聞折疊區,不是獨立一級區塊
+    "news":       "🌳 長期座標",
+}
 
-    向下相容:若 summary 沒有 "news" key(e.g. 仍用 4-horizon)→ fallback
-    為 4 columns,避免空白格。
+# 兩把尺的「怎麼讀」—— 原本散在 hero 卡副標 + 其下那行對照 caption,收成唯一來源
+_SCALE_NOTE_PHASE = "景氣位階:0-10 循環評分,恆非負"
+_STRENGTH_UNIT = "指標加權淨分(Σ score×weight,有正負)"
+_STRENGTH_FACE = "🩺 綜合健康度"
+
+# 全綠時 headline 是狀態詞而非數值,沒有單一指標可指 —— 說明欄改答「什麼情況
+# 會變成數字」。不硬塞一個沒觸發的門檻進來(那會讓讀者以為畫面正在講那顆)。
+#
+# 2026-08-05 稽核必退:原句寫「該段各指標」,是對使用者的**明示宣稱** ——
+# 而本表判讀的那幾顆,和使用者照指路捲下去看到的那一段裡陳列的指標,**不是
+# 同一組**(該段還有走另一條資料線、本表拿不到的項目)。同一個桶裡沒取到資料
+# 的項目也不參與判讀。宣稱範圍必須縮回本列真的算過的那幾顆:全綠時讀數欄本來
+# 就會把它們列出來(例:「PMI/CPI/失業 三項皆健康」),指過去即可,不另寫一份。
+_NO_SPEC_READ_RULE = (
+    "全綠 = 左邊「讀數」欄列出的那幾項都沒越過各自的警戒門檻(僅限本列算過的項目;"
+    "沒取到資料的不參與判讀,也不算過關);任一越線,本列改顯示該項讀數與門檻"
+)
+
+
+def _how_to_read(spec_key) -> str:
+    """spec key → 該指標的判讀門檻描述(`shared.macro_buckets` registry SSOT)。
+
+    2026-08-05 稽核 🔴 必修 2:② 依據表的欄名承諾「這個數字怎麼讀」,但原本只有
+    🌳 長期列真的有說明,其餘四列填的是桶副標(「景氣循環 3-12 月」之類),
+    對「PMI 48.5 收縮」「CFNAI -0.80 衰退」這種讀數答非所問。
+
+    門檻**一律查 registry**,本層不自寫任何數字(§3.3 反捏造)——
+    registry 的 `note` 欄本來就是為了描述該指標的紅黃分界而存在。
+    未知 spec key → KeyError 當場炸(§1:同 `section_hint` 的既有處置,
+    寧可炸也不要在說明欄印一段指向不存在指標的門檻)。
     """
-    _has_news = isinstance(summary.get("news"), dict) and summary["news"]
-    _order = [
-        ("long",       "🌳 長期", "regime / 結構"),
-        ("mid",        "📈 中期", "景氣循環"),
-        ("short",      "🎯 短線", "即時 risk-off"),
-        ("inflection", "⚠️ 拐點", "領先警報"),
-    ]
-    if _has_news:
-        _order.append(("news", "📰 新聞", "系統性風險"))
+    if not spec_key:
+        return _NO_SPEC_READ_RULE
+    _s = _SPECS_BY_KEY[spec_key]
+    return f"{_s.label} 門檻:{_s.note}"
 
-    _cols = st.columns(len(_order))
-    for _col, (_key, _title, _sub) in zip(_cols, _order):
-        _d = summary.get(_key) or {}
-        _color = _d.get("color", TRAFFIC_NEUTRAL)
-        _emoji = _d.get("emoji", "⚪")
-        _label = _d.get("label", "—")
-        _headline = _d.get("headline", "")
-        with _col:
-            st.markdown(
-                f"""<div style="border-left:4px solid {_color};padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:6px;">
-<div style="font-size:0.78em;color:{TRAFFIC_NEUTRAL};letter-spacing:0.5px;">{_sub}</div>
-<div style="font-size:1.05em;font-weight:600;margin-top:2px;">{_emoji} {_title}: <span style="color:{_color};">{_label}</span></div>
-<div style="font-size:0.85em;color:{GRAY_BB};margin-top:4px;line-height:1.4;">{_headline}</div>
-</div>""",
-                unsafe_allow_html=True,
-            )
+
+def _phase_cutoff_note() -> str:
+    """🌳 長期列的說明 —— 揭露「同一顆位階分數,本表與 ① 結論燈用不同切點」。
+
+    2026-08-05 稽核 🔴 必修 1:`phase["score"]` 被兩套切點判讀且在畫面上相鄰,
+    位階落在兩組門檻之間時,① 說 🟡 而 ② 的 🌳 說 🟢,使用者無從得知這不是 bug。
+    **不 harmonize**(兩套切點各有存在理由:結論燈的加碼門檻刻意較嚴),改為揭露。
+
+    四個數字全部 f-string 自各自 SSOT,本檔不留第二份字面值(§3.3):
+      - 本列切點 → 本檔 `_MACRO_SCORE_HEALTHY_MIN` / `_MACRO_SCORE_DANGER_MAX`
+      - 結論燈切點 → `services.macro.action_light` 的加碼 / 持有門檻常數
+
+    lazy import 理由同本檔既有慣例(`calc_macro_phase` / `format_phase_score`):
+    `services.macro` 是整包,模組層 import 會在 L3 helper 載入時就拉進來。
+    讀不到結論燈常數時**誠實說讀不到**,不填一個猜的數字(§1)。
+    """
+    _mine = (f"本列切點 🟢≥{_MACRO_SCORE_HEALTHY_MIN:.1f} / "
+             f"🔴<{_MACRO_SCORE_DANGER_MAX:.1f}")
+    try:
+        from services.macro.action_light import (  # noqa: PLC0415
+            _BUY_SCORE_10,
+            _HOLD_SCORE_10,
+        )
+    except (ImportError, AttributeError) as _e:  # pragma: no cover - 環境缺件才走到
+        return f"{_mine};① 結論燈切點暫讀不到（{type(_e).__name__}）"
+    return (f"{_mine};① 結論燈同一顆分數用另一組 🟢≥{_BUY_SCORE_10:.1f} / "
+            f"🟡≥{_HOLD_SCORE_10:.1f}（加碼門檻較嚴）—— 兩者不同不是錯,"
+            f"位階落在 {_MACRO_SCORE_HEALTHY_MIN:.1f}~{_BUY_SCORE_10:.1f} 之間時"
+            f"本列會亮 🟢 而結論燈仍是 🟡")
+
+
+# 表格欄位順序(caller 不得自行改名 —— 改了 DataFrame 會出現 NaN 欄)
+EVIDENCE_COLUMNS = ("面向", "判讀", "讀數", "說明（這個數字怎麼讀）", "詳細在下方哪一段")
+
+
+def section_hint(bucket_key: str) -> str:
+    """桶 key → 指路文字。未知 key 當場 KeyError(§1:不靜默指向空氣)。"""
+    return f"詳見下方「{_BUCKET_SECTION_HINT[bucket_key]}」"
+
+
+def _section_walk() -> str:
+    """② 表下方的「往下走會依序看到哪幾段」目錄字串。
+
+    2026-08-05 稽核 🟡 建議 6:指路欄塞在 `st.dataframe` 的字串格裡,dataframe
+    cell 不解析 markdown 也不產生連結(renderer 刻意不傳 column_config 的理由
+    見 `render_evidence_table` docstring,那個判斷不推翻)。使用者讀到區塊名後
+    仍要自己往下捲過好幾個一級區塊,指路準確但不可點 —— 補一份順序當目錄。
+
+    區段名**從 `_BUCKET_SECTION_HINT` 導出**(§3.3 不寫第二份);順序走
+    `BUCKET_ORDER` 這個既有 SSOT。📰 新聞的細節掛在 🌳 長期段內,兩者同名,
+    `dict.fromkeys` 去重後自然合併成一段。
+
+    ⚠️ 刻意**只列四時域這幾段**,不列詳細區裡其他一級區塊(指南針 / 中國副盤 /
+    決策矩陣):那幾段的相對位置本輪正在調整,寫進來就是一份會過期的鏡像,
+    而四時域四段自 v19.134 物理重排後連續且順序與 `BUCKET_ORDER` 一致。
+    """
+    return " → ".join(dict.fromkeys(
+        _BUCKET_SECTION_HINT[_k] for _k in _BUCKET_ORDER
+        if _k in _BUCKET_SECTION_HINT))
+
+
+def build_evidence_rows(
+    summary: Optional[dict],
+    *,
+    composite_score=None,
+    composite_icon: str = "",
+    composite_level: str = "",
+    composite_action: str = "",
+    n_indicators=None,
+) -> list[dict]:
+    """② 依據表的資料列(純函式、零 streamlit,可單獨測)。
+
+    Parameters
+    ----------
+    summary
+        `compute_five_bucket_summary()`(或 4 桶版)的輸出。缺哪一桶就少一列,
+        **不補假桶**(§1)。
+    composite_score / composite_icon / composite_level / composite_action
+        綜合健康度那一列的值,由 caller 從 `calculate_composite_score()` 與
+        `composite_verdict()` 取得後傳入 —— 本層不重算、不猜(避免第二份真相)。
+    n_indicators
+        `calculate_composite_score(..., provenance_out=)` 側車回報的實際參與筆數。
+        None → 說明欄不寫筆數(不捏造;寫死字面值那版已經漂移過一次)。
+
+    Returns
+    -------
+    list[dict],每個 dict 的 key 為 `EVIDENCE_COLUMNS`,列順序:
+    🌳 長期(景氣位階)→ 🩺 綜合健康度(多空強度)→ 📈 中期 → 🎯 短線 → ⚠️ 拐點 → 📰 新聞。
+    位階與強度**刻意相鄰**:兩把尺並陳才看得出差異(這是本表存在的主因)。
+    """
+    summary = summary or {}
+    _keys = [_k for _k in _BUCKET_ORDER
+             if isinstance(summary.get(_k), dict) and summary.get(_k)]
+    _cells = {_k: (_t, _s) for _k, _t, _s in _bucket_bar_cells(_keys)}
+
+    def _bucket_row(key: str, extra_note: str = "") -> dict:
+        _title, _sub = _cells[key]
+        _d = summary.get(key) or {}
+        _note = f"{_sub}｜{extra_note}" if extra_note else _sub
+        return dict(zip(EVIDENCE_COLUMNS, (
+            _title,
+            f'{_d.get("emoji", "⚪")} {_d.get("label", "—")}',
+            _d.get("headline", ""),
+            _note,
+            section_hint(key),
+        )))
+
+    rows: list[dict] = []
+    if "long" in _cells:
+        rows.append(_bucket_row("long", f"{_SCALE_NOTE_PHASE}｜{_phase_cutoff_note()}"))
+
+    # 綜合健康度不屬於任一桶(它是全時域指標加權),細節散在各時域的指標卡裡,
+    # 因此指路是多段並列 —— 由 `_BUCKET_SECTION_HINT` 導出,不另寫一份。
+    #
+    # 2026-08-05 稽核 🟡 必修 3:原本只列 long / mid / short 三桶,漏掉 ⚠️ 拐點。
+    # 但綜合健康度是 `Σ score×weight` 跑遍**全部**指標,而權重最高的那幾顆
+    # (10Y-2Y / 10Y-3M 各 weight 2、Sahm / SLOOS 各 1.5)細節正好住在拐點段 ——
+    # 使用者照指路去找,找不到貢獻最大的那幾個。補上 inflection。
+    _n_prefix = "" if n_indicators is None else f"{int(n_indicators)} "
+    _strength_targets = "」/「".join(
+        dict.fromkeys(_BUCKET_SECTION_HINT[_k]
+                      for _k in ("long", "mid", "short", "inflection")))
+    rows.append(dict(zip(EVIDENCE_COLUMNS, (
+        _STRENGTH_FACE,
+        f"{composite_icon} {composite_level}".strip() or "—",
+        "—" if composite_score is None else f"{float(composite_score):+.1f}",
+        "｜".join(_x for _x in (f"多空強度:{_n_prefix}{_STRENGTH_UNIT}",
+                                composite_action) if _x),
+        f"詳見下方「{_strength_targets}」的指標卡",
+    ))))
+
+    # 稽核 🔴 必修 2 的接線點:這四列原本**只傳桶副標**,說明欄等於沒說明。
+    # 現在比照 🌳 長期列傳 extra_note,內容由該列讀數的指標身分(`spec_key`)
+    # 查 registry 取得 —— 拿掉 `_how_to_read(...)` 這個引數,說明欄立刻退回副標。
+    for _k in ("mid", "short", "inflection", "news"):
+        if _k in _cells:
+            rows.append(_bucket_row(
+                _k, _how_to_read((summary.get(_k) or {}).get("spec_key"))))
+    return rows
+
+
+def render_evidence_table(rows) -> None:
+    """② 依據表渲染 —— 走 `ui/components/tables.styled_dataframe`。
+
+    不手刻 HTML、不新造色票(§3.3);燈號以 emoji + 文字同格呈現,
+    不靠顏色單獨編碼(dataviz #4)。
+
+    刻意**不**傳 `column_config`:本表全為字串欄,column_config 在此只能調欄寬,
+    卻讓渲染多依賴一個 `st.column_config` 屬性(測試 stub / 非 script 執行環境
+    不保證有)。為了欄寬多一層可失敗的依賴不划算(§8.1 step 6)。
+
+    表下註記維持**單一 `st.caption` 呼叫**(多段以換行併在同一個字串裡):
+    user 要求「不要留兩份說法」,一段一個 caption 會讓表下變成散落的註腳堆,
+    既有守衛也正是以「表下註記只有一則」為契約。新增內容一律併進這一則。
+    """
+    import pandas as _pd  # noqa: PLC0415 — 對齊本檔既有 lazy import 慣例
+    from ui.components.tables import styled_dataframe  # noqa: PLC0415
+    styled_dataframe(_pd.DataFrame(list(rows or []), columns=list(EVIDENCE_COLUMNS)))
+    st.caption(
+        "📐 兩個分數不同義,別互相換算 —— 上表「說明」欄已分別標明:"
+        f"🌳 長期 是景氣**位階**({_SCALE_NOTE_PHASE});"
+        f"🩺 綜合健康度 是多空**強度**({_STRENGTH_UNIT})。  \n"
+        # 稽核 🟡 建議 6:指路欄不可點 → 補一份往下捲的順序當目錄(區段名導出,見 `_section_walk`)
+        f"📍 往下捲依序是:{_section_walk()}。  \n"
+        # 稽核 🟢 建議 7:同一個 Tab 內,雷達圖的視覺警戒線與本表門檻不同源,
+        # 使用者照指路捲下去會看到「本表說警戒、雷達線卻畫在更上面」。
+        # **不改門檻**(user 2026-06-26 已撤銷 harmonize;視覺線刻意對齊雷達自己的
+        # 後端燈號分級,理由見 `ui/helpers/chart/danger.py`),改為誠實註記差異。
+        "⚖️ 下方各段圖上的警戒線對齊**該段自己的**燈號分級,與本表門檻可能略有差異"
+        "(例:🎯 短線雷達的 VIX 線比本表的警戒門檻高一些)—— 以本表的判讀欄為準。"
+    )

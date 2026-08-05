@@ -70,6 +70,7 @@ from services.macro import (
 )
 from ui.components.mk_clock import render_mk_clock_section
 from ui.helpers.session import (
+    D5_KEYS as _TRUST_EXPECTED_KEYS,  # v19.195 SSOT:16 個關鍵指標(④ 可信度層對差集用)
     calc_data_health as _calc_data_health_pure,
     friendly_error as _friendly_error,
 )
@@ -195,7 +196,32 @@ def _radar_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
     # 其他 key(yield_10y_shock / spx_trend_break / sox_drop / asia_overnight
     #          / us_walcl / us_hyg_lqd:delta-based,無 natural level threshold)
     # trend 為絕對 level 而判斷用 delta,無單一 natural threshold,跳過 hline
+    #
+    # ⚠️ `zs_*`(中期 Z-Score 矩陣卡)**不在本表**:它們的警戒線走
+    #    `shared.macro_buckets` SSOT,由 `_zs_danger_spec_key` + `add_danger_hlines`
+    #    在 `_make_radar_sparkline` 內接線。**請勿**在本函式另補一份 zs 門檻表
+    #    (那會變成 registry 之外的第二份真相,§3.3)。
     return []
+
+
+def _zs_danger_spec_key(spark_key: str):
+    """中期 Z-Score 卡的 `spark_key`(`zs_<INDICATOR_KEY>`)→ DangerSpec key;對不上回 None。
+
+    對應規則**只有一條**:去掉前綴後轉小寫,直接查 `shared.macro_buckets.SPECS_BY_KEY`。
+
+    **刻意不寫別名對照表**:Z-Score 矩陣的 indicator key 與 registry 的 spec key
+    大量不同名(registry 用 `cpi_yoy` / `m2_yoy` / `fed_bs_yoy` / `cfnai`,矩陣用
+    `CPI` / `M2` / `FED_BS` / `LEI`),而 ADL / DXY / PPI / JOBLESS 等在 registry
+    根本沒註冊。在 UI 層補一份別名表 = §3.3 禁止的第二份真相
+    (同 `ui/tab1_macro_midcycle._card_label` 的既有裁決)。
+    對不上 → 回 None → **誠實不畫線**(§1:寧可沒有警戒線,也不畫一條沒有 SSOT
+    背書的線)。缺哪些 spec 屬 `shared/` 所有權,需 user 裁決後在 registry 補。
+    """
+    if not isinstance(spark_key, str) or not spark_key.startswith("zs_"):
+        return None
+    from shared.macro_buckets import SPECS_BY_KEY  # noqa: PLC0415
+    _k = spark_key[3:].strip().lower()
+    return _k if _k in SPECS_BY_KEY else None
 
 
 def _make_radar_sparkline(trend: list, key: str, color: str):
@@ -227,6 +253,18 @@ def _make_radar_sparkline(trend: list, key: str, color: str):
                 annotation_position="top right",
                 annotation_font=dict(size=8, color=_color),
             )
+        # 中期 Z-Score 卡:黃/紅警戒線走 `shared.macro_buckets` registry。
+        # `add_danger_hlines` 自 v19.145 Phase B 寫好(含 10 條測試)卻 production
+        # 0 caller —— SPEC §16.2 的「Phase B 把 SSOT 套到 chart」從未接線
+        # (`PROCESS.md §4`:算對了但沒接出去)。本次接上。
+        # 這裡刻意**呼叫** helper 而非在 UI 重算門檻:門檻值、線色、標註格式
+        # (整數不補 .0 / decimals / 單位)全部只有 registry + helper 一份實作。
+        # `trend` 是該指標的**原始值**近 8 期(midcycle `_zser.tail(8)`,非 Z 值),
+        # 與 spec 同量綱,線畫在原始刻度上才成立。
+        _zs_spec_key = _zs_danger_spec_key(key)
+        if _zs_spec_key:
+            from ui.helpers.chart.danger import add_danger_hlines  # noqa: PLC0415
+            add_danger_hlines(_fig, _zs_spec_key)
         _fig.update_layout(
             height=70,
             margin=dict(l=2, r=2, t=2, b=2),
@@ -302,6 +340,128 @@ def _calc_data_health(indicators=None):
     """同 app.py wrapper。"""
     ind = indicators if indicators is not None else st.session_state.get("indicators", {})
     return _calc_data_health_pure(ind)
+
+
+def _action_light_renderer(light: str):
+    """`macro_action_light()` 的燈色 → streamlit 原生告示元件。
+
+    🟢 → `st.success` / 🔴 → `st.error` / 其餘(含 🟡 與服務層日後新增的燈)
+    → `st.warning`。**用原生元件不手刻 HTML**:告示框的底色/邊框由 theme 提供,
+    不必新造色票(§3.3),且 emoji + 文字本身就帶語意,不靠顏色單獨編碼。
+
+    未知燈色一律落到 warning(偏保守),不當成綠燈 —— §1 不下假綠燈。
+    """
+    if light == "🟢":
+        return st.success
+    if light == "🔴":
+        return st.error
+    return st.warning
+
+
+# ════════════════════════════════════════════════════════════════
+# 總表 ③ 例外層 / ④ 可信度層的判斷 —— 抽成模組層純函式
+#
+# 兩層原本整段寫在 `render_macro_tab` 內部,唯一能「驗證」的方式是掃原始碼
+# 有沒有出現某個片語 —— 而字串比對對「條件恆真」「計數恆 0」這兩類缺陷
+# **完全免疫**(`PROCESS.md §4`:拿掉呼叫端那一行仍綠 → 測試無效)。
+# 抽出後可直接餵資料斷言行為;呼叫端由 AST 呼叫檢查守著。
+# ════════════════════════════════════════════════════════════════
+
+# `detect_systemic_risk()` 契約(見該函式 docstring)把新聞風險分成三級,
+# 其中只有前兩級屬於「該警覺」。最低級是常態值 —— 把常態列進例外層,
+# 例外層就永遠有內容,使用者會學會整層忽略(§1:沒有例外時誠實說沒有)。
+# 等級字串由 `services/macro/us_indicators.py` 產生(不在本次所有權內,
+# 無法就地建常數),故本 tuple 是**鏡像**;漂移鎖以「實際呼叫服務層產生
+# 各級再比對」的方式寫在 tests/test_audit_20260805_tab1_exceptions.py。
+_NEWS_RISK_ALERT_LEVELS: tuple[str, ...] = ("HIGH", "MEDIUM")
+
+# 桶 summary 的燈號中屬於「該警覺」的兩級(green 以外)。
+_BUCKET_ALERT_LEVELS: tuple[str, ...] = ("yellow", "red")
+
+
+def _systemic_risk_is_alerting(systemic_risk) -> bool:
+    """新聞系統性風險是否達到該警覺的等級。
+
+    2026-08-05 稽核 🔴 必修 1:原本的條件是「`systemic_risk_data` 有沒有東西」。
+    但載入成功時它**一定**被寫進 session,而服務層恆回非空 dict —— 條件恆真,
+    於是平靜的日子「③ 例外」底下永遠掛著一條「✅ …最低級(評分 0)」,
+    而「沒有例外」那條敘述只有在新聞掃描整個炸掉時才跑得到(死分支)。
+    """
+    if not isinstance(systemic_risk, dict) or not systemic_risk:
+        return False
+    _lvl = str(systemic_risk.get("risk_level", "") or "").strip().upper()
+    return _lvl in _NEWS_RISK_ALERT_LEVELS
+
+
+def _exception_lines(systemic_risk, bucket_summary) -> list[str]:
+    """③ 例外層要條列的項目(純函式、零 streamlit、零 I/O)。
+
+    回傳**空 list = 真的沒有例外**,caller 據此顯示「沒有例外」那條敘述。
+    指路文字走 `beginner_view.section_hint`(§3.3 不在本層重打區段名);
+    未知桶 key 會由它當場 KeyError,不靜默指向空氣。
+    """
+    from ui.helpers.macro.beginner_view import (  # noqa: PLC0415
+        section_hint as _sec_hint,
+    )
+    _lines: list[str] = []
+    _srd = systemic_risk if isinstance(systemic_risk, dict) else {}
+    if _systemic_risk_is_alerting(_srd):
+        _lines.append(
+            f"- {_srd.get('risk_icon', '⬜')} **新聞系統性風險**："
+            f"{_srd.get('risk_level', '—')}"
+            f"（評分 {_srd.get('risk_score', '—')}）— {_sec_hint('news')}"
+            "的 📰 市場新聞")
+    _sum = bucket_summary if isinstance(bucket_summary, dict) else {}
+    for _bk in ("inflection", "news"):
+        _b = _sum.get(_bk) or {}
+        if _b.get("level") in _BUCKET_ALERT_LEVELS:
+            _lines.append(
+                f"- {_b.get('emoji', '⚪')} **{_b.get('label', '—')}**："
+                f"{_b.get('headline', '')} — {_sec_hint(_bk)}")
+    return _lines
+
+
+def _proxy_indicator_labels(indicators) -> list[str]:
+    """帶 `is_proxy` 旗標的指標顯示名(服務層 `name`,缺則退 key)。
+
+    2026-08-05 稽核 🟡 建議 5:④ 可信度層原本只報「代理值 N 筆」,使用者得
+    捲到下方 Z-Score 矩陣找 ⚠️ 前綴才知道是哪一筆。名字服務層已經給了,
+    本層不另造(§3.3)。
+    """
+    _ind = indicators if isinstance(indicators, dict) else {}
+    _out: list[str] = []
+    for _k, _v in _ind.items():
+        if str(_k).startswith("_") or not isinstance(_v, dict):
+            continue
+        if _v.get("is_proxy"):
+            _out.append(str(_v.get("name") or _k))
+    return _out
+
+
+def _missing_indicator_keys(indicators) -> list[str]:
+    """預期清單裡**沒抓到**的指標 key。
+
+    2026-08-05 稽核 🔴 必修 2:原寫法數的是「value 為 None 的筆數」,但
+    `fetch_all_indicators` 的每一個寫入點都在「值存在」的守衛裡 —— 抓失敗的
+    指標是**整個 key 不存在**,不是 value 被寫成空。於是 FRED 掛掉 5 條時,
+    ④ 可信度層依然報 0,而那一層的職責正是回答「這些數字能信嗎」(§1:
+    為了看起來完整而顯示沒有依據的數字)。
+
+    改成與**預期清單對差集**。清單走 `ui/helpers/session.D5_KEYS`
+    (v19.195 既有 SSOT,`calc_data_health` 用的同一份),UI 層不新寫第二份
+    (§3.3)。`_fred_sources` 那條候選只涵蓋 5 條 FRED 原始序列、且是
+    series id 不是指標 key,無法回答「哪幾個指標沒了」,故不採。
+
+    值仍一併檢查:key 在但值為空(理論上不會發生,服務層有守衛)也算缺,
+    寧可多報不可少報。
+    """
+    _ind = indicators if isinstance(indicators, dict) else {}
+    _out: list[str] = []
+    for _k in _TRUST_EXPECTED_KEYS:
+        _v = _ind.get(_k)
+        if not isinstance(_v, dict) or _v.get("value") is None:
+            _out.append(str(_k))
+    return _out
 
 
 def render_indicator_map() -> None:
@@ -556,12 +716,27 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
     score = dash["score"]
     action_text = dash["verdict_action_text"]
 
+    # 2026-08-05 稽核 🟡 建議 4:本大卡與總表 ② 依據表那一列是**同一個數字**
+    # (兩邊都是 `calculate_composite_score`;`compute_realtime_dashboard` 多套的
+    # 那層權重覆寫,`calculate_composite_score` 自己一進門就會先做一次)。
+    # 但兩邊名字不同、小數位還不同(2 位 vs 1 位)—— 看起來像兩個獨立判斷,
+    # 正是本輪要消滅的重複。
+    # **不刪大卡**:逐檔決策矩陣的「原因」欄與其下的動作對照表整套以 verdict
+    # 分級為前提(「衛星在極度樂觀區 → 加碼」),刪掉大卡後這張表就沒有錨點,
+    # 讀者無從得知自己在哪一級。改為**標明同源 + 統一小數位**(選項 b)。
+    # 小數位對齊 `build_evidence_rows` 那一列的一位小數。
+    try:
+        from ui.helpers.macro.beginner_view import _STRENGTH_FACE  # noqa: PLC0415
+        _same_src = f"＝ 上方總表 ② 依據表的「{_STRENGTH_FACE}」那一列"
+    except ImportError:  # 依據表 helper 缺件 → 不猜列名,只誠實說同源
+        _same_src = "＝ 上方總表 ② 依據表的綜合健康度那一列"
     st.markdown(
         f"<div style='background:linear-gradient(90deg,{color}22,{color}11);"
         f"border-left:6px solid {color};border-radius:8px;padding:14px 18px;margin:8px 0 12px'>"
-        f"<div style='font-size:13px;color:{GRAY_AA};margin-bottom:4px'>📌 當前總經 verdict</div>"
+        f"<div style='font-size:13px;color:{GRAY_AA};margin-bottom:4px'>📌 當前總經 verdict"
+        f"　<span style='font-weight:400'>{_same_src}，同一個數字、不是第二個判斷</span></div>"
         f"<div style='font-size:24px;color:{color};font-weight:700;margin-bottom:6px'>"
-        f"{icon} {level}　<span style='font-size:18px;color:{GH_FG_PRIMARY}'>score = {score:+.2f}</span></div>"
+        f"{icon} {level}　<span style='font-size:18px;color:{GH_FG_PRIMARY}'>score = {score:+.1f}</span></div>"
         f"<div style='font-size:14px;color:{GH_FG_PRIMARY};line-height:1.55'>{action_text}</div>"
         f"</div>",
         unsafe_allow_html=True,
@@ -669,16 +844,9 @@ def render_macro_tab() -> None:
     render_story_nav("macro")
     st.caption("策略3 三層指標加權方法論 v7 — 領先×2 | 中級×1 | 次級×0.5")
 
-    # ── ⚡ 今日關鍵橫幅(v19.349 第 4 步;股票 v19.108 同構)──────────
-    # 訊號層吃 indicators 各 block 的 score(SCORE_RULES SSOT)+ 拐點層吃
-    # detect_turning_points 輸出 — 零新 I/O,全讀 session。未載入(兩者皆空)
-    # 不渲染,避免誤導性「無異常」;載入後每次 rerun 自動更新。
-    _ka_ind = st.session_state.get("indicators") or {}
-    _ka_tp = st.session_state.get("_tp_v1948_top") or {}
-    if _ka_ind or _ka_tp:
-        from services.macro.daily_key_alerts import collect_key_alerts as _cka
-        from ui.helpers.macro.key_alerts import key_alerts_banner as _kab
-        st.markdown(_kab(_cka(_ka_ind, _ka_tp)), unsafe_allow_html=True)
+    # ⚡ 今日關鍵橫幅已下移至總表「③ 例外」層(2026-08-05 F1 資訊架構重構)。
+    # 它回答的是「有沒有該警覺的」,屬總表第三層;掛在載入按鈕之前時,使用者會
+    # 先看到警示才看到結論,與 user 拍板的四層閱讀順序相反。渲染邏輯本身未改。
 
     # v18.174：「🗺️ 全局指標關聯地圖」整塊搬到「說明書 §10」（純教學圖，無動態資料）
     # 函數 render_indicator_map() 保留在本檔頂層供 tab6 import 復用
@@ -847,11 +1015,189 @@ def render_macro_tab() -> None:
         # v19.128 — 四時域重組:刪除 v19.125 三層 toggle(新手/進階/專家)
         # User 2026-06-25 反饋:只保留專家,新手模式 / 進階模式 / 原理教室全刪;
         # 改為四時域(長期/中期/短線/拐點)分組架構。
-        # 詳見下方 render_four_horizon_bar + 四個分組 subheader。
+        # 2026-08-05 F1:四時域的「一覽」由總表 ② 依據表承接(原 bar renderer 已刪),
+        # 四個分組 subheader 仍在下方詳細區,順序不變。
         # ════════════════════════════════════════════════════════════
 
         ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
         alloc = phase["alloc"];  advice = phase.get("advice","")
+
+        # ════════════════════════════════════════════════════════════
+        # 🧾 總表區 —— 2026-08-05 user 拍板的資訊架構
+        #   「最重要的總表放在最上方,下方都是放詳細資料與說明」
+        #   形式選擇:混合 —— 結論用敘事、依據用表格。
+        #
+        # 四層對應初學者的自然提問順序:
+        #   ① 結論    現在該加碼還是防禦?    敘事(streamlit 原生告示元件)
+        #   ② 依據    憑什麼?                表格(兩把尺並陳 + 各桶狀態 + 指路)
+        #   ③ 例外    有沒有該警覺的?        敘事
+        #   ④ 可信度  這些數字能信嗎?        chip + 既有資料新鮮度條(一字未改)
+        #
+        # 本次「合」的界線(user 明示,不可搞混):把**講同一件事的幾個結論**
+        # 合成 1 個 —— 原本 hero 卡 / 五桶 bar / 夾在中間的對照 caption 三處
+        # 講同一批數字、三套尺度;**不**把 18 個指標合成 5 個 —— 詳細資料
+        # 一格都沒少,全數保留在下方詳細區。
+        # 回退方式:git history 有原本的 hero 卡 HTML 與五桶 bar renderer。
+        # ════════════════════════════════════════════════════════════
+        st.markdown("## 🧾 總表 — 先看這裡")
+
+        # ══ ① 結論 —— 一句話 + 理由條列(敘事)═══════════════════════
+        # `services.macro.action_light.macro_action_light` 於 v19.316 依 user
+        # 2026-07-05 核准的草案實作完成(硬衰退/恐慌 override → 景氣位階三級 →
+        # 缺位階誠實 🟡),`tests/test_macro_action_light.py` 8 條測試守著。
+        # 燈色 → `_action_light_renderer` 選 st.success / warning / error 原生元件。
+        st.markdown("### ① 結論 — 現在該加碼還是防禦")
+        try:
+            from services.macro import macro_action_light  # noqa: PLC0415
+            _al = macro_action_light(ind, phase.get("score"))
+            # 空行是 markdown 需要的:少了它,下面的 `- ` 條列不一定會被當成 list。
+            _al_lines = [f"**{_al['light']} 現在能不能買 ── {_al['action']}**", ""]
+            _al_lines += [f"- {_r}" for _r in (_al.get("reasons") or [])]
+            if _al.get("override"):
+                _al_lines.append(
+                    "- ⚠️ 安全層優先:硬衰退 / 恐慌訊號亮起時,不論景氣位階多高一律轉保守")
+            _al_lines.append(
+                "- 這是「位階 / 機率」不是「擇時」;憑什麼這樣說 → 看下面 ② 依據表,"
+                "推導細節 → 看再下方的四時域分區")
+            _action_light_renderer(_al["light"])("\n".join(_al_lines))
+        except Exception as _al_e:  # noqa: BLE001 — 結論燈失敗不得擋掉整頁總經
+            st.caption(
+                f"🚦 買賣總結燈暫無法顯示：[{type(_al_e).__name__}] {_al_e}")
+
+        # ══ ② 依據 —— 表格(兩把尺並陳 + 各桶狀態 + 每列指路)══════════
+        # 這張表取代三個原本各自為政的區塊,資料一格不少地併進來:
+        #   - 🩺 綜合健康度 hero 卡(多空加權淨分,有正負)
+        #   - 📊 五桶 summary bar(長期 / 中期 / 短線 / 拐點 / 新聞)
+        #   - 夾在兩者之間、說明「別互相換算」的那行 caption
+        # 那行 caption 現在是表格「說明」欄本身(user 要求:不要留兩份說法)。
+        st.markdown("### ② 依據 — 憑什麼這樣說")
+        _5b_summary: dict = {}
+        try:
+            from ui.helpers.macro.beginner_view import (  # noqa: PLC0415
+                build_evidence_rows,
+                compute_five_bucket_summary,
+                render_evidence_table,
+            )
+            from ui.helpers.macro.helpers import (  # noqa: PLC0415
+                calculate_composite_score,
+                composite_verdict,
+            )
+            _news_items = st.session_state.get("news_items")
+            _5b_summary = compute_five_bucket_summary(ind, phase, news_items=_news_items)
+            # 指標筆數吃 v19.270 D8 #8 的 provenance 側車(筆數隨來源命中浮動,
+            # 寫死字面值那版已經漂移過一次)。
+            _comp_prov: dict = {}
+            _comp_score = calculate_composite_score(ind, provenance_out=_comp_prov)
+            _comp_n = int(_comp_prov.get("n_indicators") or 0)
+            _cv_icon, _cv_level, _, _cv_action = composite_verdict(_comp_score)
+            _ev_rows = build_evidence_rows(
+                _5b_summary,
+                composite_score=_comp_score,
+                composite_icon=_cv_icon,
+                composite_level=_cv_level,
+                composite_action=_cv_action,
+                n_indicators=_comp_n,
+            )
+            render_evidence_table(_ev_rows)
+            # v19.367 6/8:F-RECON-1 健康度雙演算法對帳 chip
+            # (§4.3 — 加權淨分 vs 不加權多空投票),走 `ui.components.status.status_chip`
+            # (dataviz #4:狀態恆帶 emoji + 文字 + 狀態色,不靠顏色單獨編碼)。
+            # `note` 走 html.escape:chip 是 unsafe_allow_html,服務層字串若含
+            # `<` / `>` 會被當標籤吃掉(同 tab1_macro_midcycle._card_note 的既有處置)。
+            try:
+                from html import escape as _esc_rc  # noqa: PLC0415
+                from services.macro.composite_score import (  # noqa: PLC0415
+                    reconcile_composite_score,
+                )
+                from ui.components.status import status_chip  # noqa: PLC0415
+                _rc = reconcile_composite_score(ind)
+                if _rc["status"] == "disagree":
+                    st.markdown(status_chip(
+                        f"對帳:{_esc_rc(str(_rc['note']))}", "warn",
+                        sublabel=(f"投票 {_rc['n_pos']}多/{_rc['n_neg']}空,"
+                                  f"net {_rc['vote_net_ratio']:+.2f}")),
+                        unsafe_allow_html=True)
+                elif _rc["status"] == "agree":
+                    st.markdown(status_chip(
+                        "對帳:加權淨分與多空投票同向", "ok",
+                        sublabel=f"{_rc['n_pos']}多/{_rc['n_neg']}空"),
+                        unsafe_allow_html=True)
+                # neutral_mix / no_data → 不顯示(弱訊號不佔版面)
+            except Exception as _rc_e:  # noqa: BLE001 — 對帳 chip 非致命,但不吞聲
+                st.caption(f"對帳 chip 暫無法顯示：[{type(_rc_e).__name__}] {_rc_e}")
+        except Exception as _ev_e:  # noqa: BLE001 — 依據表失敗不得擋掉整頁總經
+            st.warning(f"② 依據表渲染失敗(降級)：[{type(_ev_e).__name__}] {_ev_e}")
+
+        # ══ ③ 例外 —— 敘事(今日關鍵 + 系統性風險 + 拐點 / 新聞桶)═══════
+        # 只講「該警覺的」;沒有例外時誠實說沒有,不硬擠內容(§1)。
+        st.markdown("### ③ 例外 — 有沒有該警覺的")
+        # ⚡ 今日關鍵橫幅(v19.349;股票 v19.108 同構):訊號層吃 indicators 各
+        # block 的 score(SCORE_RULES SSOT)+ 拐點層吃 detect_turning_points
+        # 輸出 — 零新 I/O,全讀 session。未載入(兩者皆空)不渲染,避免誤導性
+        # 的「無異常」。
+        _ka_tp = st.session_state.get("_tp_v1948_top") or {}
+        if ind or _ka_tp:
+            try:
+                from services.macro.daily_key_alerts import (  # noqa: PLC0415
+                    collect_key_alerts as _cka,
+                )
+                from ui.helpers.macro.key_alerts import (  # noqa: PLC0415
+                    key_alerts_banner as _kab,
+                )
+                st.markdown(_kab(_cka(ind, _ka_tp)), unsafe_allow_html=True)
+            except Exception as _ka_e:  # noqa: BLE001
+                st.caption(f"⚡ 今日關鍵橫幅暫無法顯示：[{type(_ka_e).__name__}] {_ka_e}")
+        try:
+            _exc_lines = _exception_lines(
+                st.session_state.get("systemic_risk_data"), _5b_summary)
+            if _exc_lines:
+                st.markdown("\n".join(_exc_lines))
+            else:
+                st.caption(
+                    "✅ 新聞系統性風險未達警戒等級，拐點桶與新聞桶也都不在警戒狀態；"
+                    "各桶讀數完整列在上方 ② 依據表。")
+        except Exception as _ex_e:  # noqa: BLE001
+            st.caption(f"③ 例外層暫無法顯示：[{type(_ex_e).__name__}] {_ex_e}")
+
+        # ══ ④ 可信度 —— 這些數字能信嗎(chip + 既有資料新鮮度條)═════════
+        # 新鮮度條沿用既有實作**一字未改**(它本身已是 chip 形式,含 hover
+        # tooltip 與 FRED 逐序列命中狀態);這裡只補兩件原本頂部看不到、卻直接
+        # 影響「能不能信」的事實:代理值與缺漏指標(§1 誠實揭露)。
+        # 兩個判讀都在本檔模組層的純函式裡(可餵資料驗行為),此處只負責呈現。
+        # 指標名走 `html.escape`:chip 是 unsafe_allow_html,服務層字串若含
+        # `<` / `>` 會被當標籤吃掉(同本檔對帳 chip 的既有處置)。
+        st.markdown("### ④ 可信度 — 這些數字能信嗎")
+        try:
+            from html import escape as _esc_tr  # noqa: PLC0415
+            from ui.components.status import status_chip as _chip_trust  # noqa: PLC0415
+            _n_loaded = sum(1 for _k, _v in (ind or {}).items()
+                            if not str(_k).startswith("_") and isinstance(_v, dict))
+            _proxy_names = _proxy_indicator_labels(ind)
+            _missing_keys = _missing_indicator_keys(ind)
+            _n_proxy = len(_proxy_names)
+            _n_missing = len(_missing_keys)
+            _n_expect = len(_TRUST_EXPECTED_KEYS)
+            st.markdown(
+                _chip_trust(
+                    f"代理值 {_n_proxy} 筆", "warn" if _n_proxy else "ok",
+                    sublabel=("非官方本尊，已標記："
+                              + _esc_tr("、".join(_proxy_names))
+                              if _proxy_names else "全部走官方本尊序列"))
+                + "　"
+                + _chip_trust(
+                    f"缺漏指標 {_n_missing} 筆", "warn" if _n_missing else "ok",
+                    # 分母(預期清單長度)與分子(實際缺幾個)**都從變數來**:
+                    # 原寫法把分母直接接在「未取得」前面,畫面讀起來是「16 個未
+                    # 取得」而主標寫「1 筆」,同一個 chip 自打嘴巴(§1 錯誤的數字
+                    # 比沒有數字更危險)。else 分支本來就寫對,這裡補齊 warn 分支。
+                    sublabel=(f"已載入 {_n_loaded} 筆；"
+                              f"{_n_expect} 個關鍵指標中 {_n_missing} 個未取得："
+                              + _esc_tr("、".join(_missing_keys))
+                              if _missing_keys
+                              else f"已載入 {_n_loaded} 筆；{_n_expect} 個關鍵指標全數到齊")),
+                unsafe_allow_html=True)
+        except Exception as _tr_e:  # noqa: BLE001
+            st.caption(f"可信度 chip 暫無法顯示：[{type(_tr_e).__name__}] {_tr_e}")
 
         # v19.50 ══ 📊 資料新鮮度條（總抓取時間 + age + 各區塊資料截止日）══
         _ml_upd = st.session_state.get("macro_last_update")
@@ -866,9 +1212,12 @@ def render_macro_tab() -> None:
             # 月頻閾值：≤45天🟢 / ≤75天🟠 / >75天🔴（同 CLAUDE.md §2.4）
             _src_dates = []
             _today_src = _now_tw().date()
+            # 左 = indicators dict 的 key(服務層寫入名),右 = 畫面標籤。
+            # 失業率那格兩者不同名:服務層的 key 是失業率指標名,畫面沿用 FRED
+            # series id 當標籤。原本左右都填標籤 → 這格永遠查無資料而靜默消失。
             for _k_src, _lbl_src in (("PMI", "PMI"), ("YIELD_10Y2Y", "10Y-2Y"),
                                      ("HY_SPREAD", "HY"), ("CPI", "CPI"),
-                                     ("UNRATE", "UNRATE")):
+                                     ("UNEMPLOYMENT", "UNRATE")):
                 _v_src = (ind or {}).get(_k_src) or {}
                 _d_src = str(_v_src.get("date", "")).strip()
                 if _d_src:
@@ -958,6 +1307,15 @@ def render_macro_tab() -> None:
                 )
 
 
+        # ════════════════════════════════════════════════════════════
+        # 🔎 詳細區 —— 以下全部是「總表的依據」,一個區塊都沒刪。
+        # 順序:中國副盤 → 逐檔決策矩陣 → 🌳 長期 → 🧭 指南針 → 📈 中期
+        #      (Z-Score 卡)→ 🎯 短線(10 燈雷達)→ ⚠️ 拐點 → 🤖 AI 總結。
+        # 上方 ② 依據表的「詳細在下方哪一段」欄就是指向這些區塊的標題。
+        # ════════════════════════════════════════════════════════════
+        st.divider()
+        st.markdown("## 🔎 詳細資料與說明")
+
         # ══ v19.118 中國拖累唯讀面板（China Drag）═════════════════════
         # 4 數字唯讀展示:不改變上方總經分數,僅示意 China 副盤折扣強度
         # v19.296: 改為預設摺疊 expander — 資料屬補充參考，不需預設佔版面
@@ -980,91 +1338,13 @@ def render_macro_tab() -> None:
         import contextlib as _cl_v1942
         tab_main = _cl_v1942.nullcontext()
 
-        # ══ v19.188 — 🩺 綜合健康度 hero 卡(對齊台股「綜合健康度」體驗)══
-        # user 2026-06-27:基金總經頂部補綜合健康度。
-        # 用 23 指標加權 composite(active.json 權重)+ composite_verdict 5 級白話。
-        # 與下方五桶 bar 互補不重複:此為「多空加權淨分」,五桶燈1為「景氣循環階段(0-10 phase)」。
-        try:
-            from ui.helpers.macro_helpers import (
-                calculate_composite_score, composite_verdict, format_phase_score,
-            )
-            _comp_score = calculate_composite_score(ind)
-            _cv_icon, _cv_level, _cv_color, _cv_action = composite_verdict(_comp_score)
-            st.markdown(
-                f"<div style='background:linear-gradient(135deg,{GH_BG_PRIMARY},{GH_BG_CARD});"
-                f"border:2px solid {_cv_color};border-radius:12px;padding:14px 20px;margin:0 0 12px;"
-                f"display:flex;align-items:center;gap:20px'>"
-                f"<div style='flex-shrink:0;text-align:center;min-width:96px'>"
-                f"<div style='font-size:11px;color:{GH_FG_MUTED};letter-spacing:1px'>綜合健康度</div>"
-                f"<div style='font-size:42px;font-weight:900;color:{_cv_color};line-height:1.1'>{_comp_score:+.1f}</div>"
-                # 2026-08-05 稽核 🟡 必修 3:副標明示這是「強度」而非「位階」;
-                # 選作 7:inline `#484f58` 換 shared/colors.GH_FG_MUTED(語意同為
-                # hero 副標次要說明文字,且原色在暗底對比 ~2:1 幾乎讀不到)。
-                f"<div style='font-size:10px;color:{GH_FG_MUTED}'>23 指標加權淨分（多空<b>強度</b>）"
-                f"<br>🌎 美股 / 全球總經</div>"
-                f"</div>"
-                f"<div style='flex:1;min-width:0'>"
-                f"<div style='font-size:22px;font-weight:900;color:{_cv_color}'>{_cv_icon} {_cv_level}</div>"
-                f"<div style='font-size:13px;color:{GH_FG_SECONDARY};margin-top:4px;line-height:1.5'>{_cv_action}</div>"
-                f"</div></div>",
-                unsafe_allow_html=True)
-            # 2026-08-05 稽核 🟡 必修 3:兩套評分尺度並列(本卡 23 指標加權淨分 vs
-            # 下方五桶「🌳 長期」的 0-10 景氣位階)只隔 23 行,使用者不知該信哪個。
-            # **刻意不合併**:方法學不同(強度 vs 位階),且 6+ consumer 吃 phase.score;
-            # 改為顯式對照揭露。位階文字走 SSOT `format_phase_score`(同 Tab② 組合健診)。
-            _phase_txt = format_phase_score(phase)
-            st.caption(
-                f"📐 兩個分數不同義,別互相換算 ——　"
-                f"**上方 {_comp_score:+.1f}** ＝ 多空**強度**(23 指標 Σ score×weight,有正負);"
-                + (f"　**下方五桶「🌳 長期」的 {_phase_txt}** ＝ 景氣**位階**"
-                   "(0-10 循環評分,恆非負)。" if _phase_txt else
-                   "　下方五桶「🌳 長期」＝ 景氣**位階**(0-10 循環評分,恆非負)。")
-            )
-            # v19.367 6/8:F-RECON-1 健康度雙演算法對帳 chip(§4.3 — 加權淨分 vs 不加權多空投票)
-            try:
-                from services.macro.composite_score import reconcile_composite_score
-                _rc = reconcile_composite_score(ind)
-                # 2026-08-05 稽核 🟡 必修 5(a):這段程式的註解自己就叫「對帳 chip」,
-                # 卻是手刻 emoji 的 st.caption。改吃 `ui/components/status.status_chip`
-                # (v19.388 建立後 production 0 consumer)—— dataviz #4:狀態恆帶
-                # emoji + 文字 + 狀態色,不靠顏色單獨編碼。
-                # `note` 走 html.escape:chip 是 unsafe_allow_html,服務層字串若含
-                # `<` / `>` 會被當標籤吃掉(同 tab1_macro_midcycle._card_note 的既有處置)。
-                from html import escape as _esc_rc  # noqa: PLC0415
-                from ui.components.status import status_chip  # noqa: PLC0415
-                if _rc["status"] == "disagree":
-                    st.markdown(status_chip(
-                        f"對帳:{_esc_rc(str(_rc['note']))}", "warn",
-                        sublabel=(f"投票 {_rc['n_pos']}多/{_rc['n_neg']}空,"
-                                  f"net {_rc['vote_net_ratio']:+.2f}")),
-                        unsafe_allow_html=True)
-                elif _rc["status"] == "agree":
-                    st.markdown(status_chip(
-                        "對帳:加權淨分與多空投票同向", "ok",
-                        sublabel=f"{_rc['n_pos']}多/{_rc['n_neg']}空"),
-                        unsafe_allow_html=True)
-                # neutral_mix / no_data → 不顯示(弱訊號不佔版面)
-            except Exception:  # noqa: BLE001 — 對帳 chip 非致命
-                pass
-        except Exception as _comp_e:  # noqa: BLE001
-            st.caption(f"綜合健康度卡暫無法顯示：[{type(_comp_e).__name__}] {_comp_e}")
-
-        # ══ v19.146 — 📊 五桶 summary bar(頂部一覽:長期/中期/短線/拐點/新聞)══
-        # 對齊 Stock v18.284 五桶 bar 體驗,Fund 加 📰 新聞為第 5 桶(讀 v19.144 SSOT)。
-        # news_items=None 時自動降級為 ⬜「未掃描」,點開「執行 AI 裁決」抓 RSS 後燈亮。
-        # render_five_bucket_bar 對無 news key 的 summary 會 fallback 為 4 columns,
-        # 任何異常(包括 import 失敗)走 except 降級為文字提示。
-        try:
-            from ui.helpers.macro_beginner_view import (
-                compute_five_bucket_summary,
-                render_five_bucket_bar,
-            )
-            _news_items = st.session_state.get("news_items")
-            _5b_summary = compute_five_bucket_summary(ind, phase, news_items=_news_items)
-            render_five_bucket_bar(_5b_summary)
-            st.divider()
-        except Exception as _e_5b:
-            st.warning(f"五桶 summary 渲染失敗(降級):{_e_5b}")
+        # 2026-08-05 F1:🚦 結論燈 / 🩺 綜合健康度 hero 卡 / 📊 五桶 summary bar
+        # 三段原本在這裡,已上移進本檔上方的總表區:
+        #   - 結論燈           → 「① 結論」(內容與呼叫完全相同,只換位置)
+        #   - hero 卡          → 「② 依據」表的 🩺 綜合健康度 那一列
+        #   - 五桶 bar         → 「② 依據」表的其餘各列
+        #   - 兩者之間的對照 caption → 「② 依據」表的「說明」欄 + 表下一行註記
+        # 對帳 chip 一併隨 hero 上移(它是綜合健康度的雙演算法對帳)。
 
         with tab_main:
             # v19.18: 原 ① verdict 大卡已移除（與頂部新手面板 + 進階檢視 expander 重複）
@@ -1078,13 +1358,17 @@ def render_macro_tab() -> None:
             # ⚠️ 2026-08-05 稽核 🟡 必修 4 —— **本區塊第三次搬家**,動前先讀完:
             #   - v19.41:原在 tab 外(擋在總經前),因 user 反饋「總經放在最上方」下移;
             #   - v19.42:Tab① 內的 tab strip 因同一理由被消滅。
-            #   本次(第三次)從全頁最底部倒數第二區 → 上移到五桶 bar 之後、四時域之前,
-            #   並改 expanded=True。**不違反 v19.41 那條指示**:hero 卡 + 五桶 bar
-            #   (即「總經」)仍在最上方,本區塊只是插在總覽與細節之間。
+            #   v19.4xx(第三次)從全頁最底部倒數第二區 → 上移到總覽之後、四時域之前,
+            #   並改 expanded=True。**不違反 v19.41 那條指示**:總表(即「總經」)
+            #   仍在最上方,本區塊只是插在總覽與細節之間。
             #   理由:這是全頁唯一給出「所以呢」(逐檔 加碼/持有/減倉/全撤 + 目標權重)
             #   的區塊,埋在 13 個一級區塊之後 + 預設收合 = 算對了但使用者看不到。
-            #   風險:若 user 再次反饋「總經要在最上面」,回退方式是把本區塊整段移回
-            #   `render_inflection_alert_section` 之後(見 git history v19.41 位置)。
+            #   2026-08-05 F1(第四次動線調整,位置**不變**):上游錨點由「五桶 bar」
+            #   換成總表的「② 依據表」,本區塊仍是詳細區的第一個實質區塊。
+            #   user 這次列的詳細區順序把本區塊排在拐點之後;**刻意未照做**,
+            #   理由與上一輪相同(逐檔行動是結論不是細節,埋到底部等於沒揭露),
+            #   已在交付報告列為待裁決項。若 user 拍板要下移,回退方式是把本區塊
+            #   整段移回 `render_inflection_alert_section` 之後(git history v19.41 位置)。
             # ══════════════════════════════════════════════════════════
             st.markdown("## 📋 即時訊號 + 決策矩陣")
             st.caption("先給結論 ｜ verdict 路徑 + 逐檔行動建議（推導細節見下方四時域）")
@@ -1101,6 +1385,29 @@ def render_macro_tab() -> None:
             # ══════════════════════════════════════════════════════════
             from ui.tab1_macro_longterm import render_long_term_section
             render_long_term_section(ind, fred_key=FRED_KEY, show_l3=_show_l3)
+
+            # ══════════════════════════════════════════════════════════
+            # 🧭 總經指南針(v19.430 從 app.py 搬入詳細區)
+            # user 2026-08-05 拍板 A 案:原本由 `app.py` 在 `render_macro_tab()`
+            # **之前**呼叫,等於三張原始值卡(VIX / 10Y / S&P 500)永遠壓在總表上方。
+            # 原始值是「依據」不是「結論」,故歸詳細區。
+            #
+            # 2026-08-05 稽核 🟡 建議 6(第二次調位):原落在詳細區的**第一段**,
+            # 但本元件無快取時整塊只顯示「請按右上按鈕載入」—— 使用者剛按過
+            # 「載入總經資料」、VIX 已經在 ② 依據表裡,詳細區第一句話卻要他再按
+            # 一次抓 VIX。且 ② 表沒有任何一列指向它(它是詳細區裡唯一沒被上方
+            # 提及的區塊),放在開頭等於用一個「還要再按一次」的空框擋住真正
+            # 被指路指到的四時域。下移到 🌳 長期座標之後,讓被指路的段先出現。
+            # ⚠️ 表下那行「往下捲依序是…」目錄只列四時域四段且**從桶對照表導出**,
+            # 不含指南針,故本次搬動不會讓它過期。
+            # ══════════════════════════════════════════════════════════
+            try:
+                from ui.components.macro_compass_top import (  # noqa: PLC0415
+                    render_macro_compass as _rmc,
+                )
+                _rmc()
+            except Exception as _mc_e:  # noqa: BLE001
+                st.caption(f"⬜ 總經指南針暫無法顯示：[{type(_mc_e).__name__}] {_mc_e}")
 
             # ══════════════════════════════════════════════════════════
             # v19.134 — 📈 中期循環 桶(物理重排,連續區塊)

@@ -232,20 +232,48 @@ class TestPhaseScoreSsot:
 
 
 def test_hero_card_discloses_both_scales():
-    """**修正前必紅** —— hero 副標只寫「23 指標加權淨分」,
-    與 23 行外的五桶「🌳 長期 擴張 (6.8/10)」兩套尺度並列卻無對照說明。"""
-    src = _TAB1.read_text(encoding="utf-8")
-    assert _is_called(_TAB1, "format_phase_score"), (
-        "tab1_macro.py 未**呼叫** format_phase_score —— 只 import 不算接線")
-    _consts = " ".join(_string_constants(_TAB1))
-    assert "強度" in _consts, "hero 未標示這是『強度』"
-    assert "位階" in _consts, "hero 未對照『位階』"
-    assert "23 指標加權淨分" in src
+    """**修正前必紅** —— hero 副標只寫加權淨分,
+    與 20 幾行外的五桶「🌳 長期 擴張 (6.8/10)」兩套尺度並列卻無對照說明。
+
+    ⚠️ 2026-08-05 第二輪:原本這裡還斷言副標寫死的指標筆數字面值。
+       該筆數已改吃 `provenance_out["n_indicators"]`。
+
+    ⚠️ 2026-08-05 F1 重構:hero 卡 + 五桶 bar + 中間那行對照 caption 三者
+       合併成總表「② 依據」表格,文案隨之搬到
+       `ui/helpers/macro/beginner_view.py::build_evidence_rows`。
+       原本的字串掃描(掃 `_TAB1` 的 literal)在搬家後只會抓到搬走的空殼,
+       改成**功能斷言**:直接跑 builder,驗兩把尺確實各自出現在同一張表、
+       且各自標明怎麼讀。這比字串掃描強 —— 有人把說明欄刪掉時字串掃描
+       可能因為別處還有同一個詞而不紅,功能斷言一定紅。
+    """
+    from ui.helpers.macro.beginner_view import (
+        build_evidence_rows,
+        compute_five_bucket_summary,
+    )
+    from ui.helpers.macro.helpers import format_phase_score
+    _pi = {"phase": "擴張", "score": 6.8}
+    _rows = build_evidence_rows(
+        compute_five_bucket_summary({}, phase_info=_pi, news_items=None),
+        composite_score=15.5, composite_icon="🟢", composite_level="極度樂觀",
+        composite_action="多頭市場強勁", n_indicators=25)
+    _blob = " ".join(str(_v) for _r in _rows for _v in _r.values())
+    assert "強度" in _blob, "② 依據表未標示『強度』"
+    assert "位階" in _blob, "② 依據表未對照『位階』"
+    assert "指標加權淨分" in _blob, "② 依據表掉了『指標加權淨分』說明"
+    # 位階那格必須是 SSOT 輸出,不得有人另外自組格式
+    _long = [_r for _r in _rows if _r["面向"].endswith("長期")]
+    assert _long and format_phase_score(_pi) in " ".join(_long[0].values())
+    # 接線:tab1 真的建了列並渲染(只在 helper 裡寫好不算)
+    assert _is_called(_TAB1, "build_evidence_rows")
+    assert _is_called(_TAB1, "render_evidence_table")
 
 
 def test_two_scales_not_merged():
-    """§8:**不得**把兩個尺度合併 —— 6+ consumer 吃 phase.score。
-    hero 仍須走 calculate_composite_score,五桶仍須走 phase score。"""
+    """§8:**不得**把兩個尺度合併成一個數字 —— 6+ consumer 吃 phase.score。
+
+    2026-08-05 F1 把兩者放進同一張表,那是**併陳**不是併算:
+    強度仍走 `calculate_composite_score`,位階仍走 phase score,兩條路徑各自獨立。
+    """
     assert _is_called(_TAB1, "calculate_composite_score")
     from ui.helpers.macro.beginner_view import compute_four_horizon_summary
     r = compute_four_horizon_summary({}, phase_info={"phase": "擴張", "score": 7.0})
@@ -258,13 +286,19 @@ def test_two_scales_not_merged():
 def test_decision_matrix_sits_between_summary_bar_and_horizons():
     """**修正前必紅** —— 原本在全頁最底部倒數第二區(四時域全部之後)。
 
-    要求順序:五桶 bar → 📋 決策矩陣 → 🌳 長期(四時域第一桶)。
+    要求順序:總覽 → 📋 決策矩陣 → 🌳 長期(四時域第一桶)。
+
+    ⚠️ 2026-08-05 F1 重構:上游錨點由 `render_five_bucket_bar(...)` 換成
+       `render_evidence_table(...)`。五桶 bar 的內容已整批收進總表「② 依據」
+       表格(桶數 / 判讀 / 讀數一格未少),bar renderer 隨之刪除,舊字串
+       `src.index(...)` 會 ValueError。**本測試保護的契約沒變**:
+       「決策矩陣不得跑到總覽前面(擋住總經),也不得埋回四時域後面」。
     """
     src = _TAB1.read_text(encoding="utf-8")
-    i_bar = src.index("render_five_bucket_bar(_5b_summary)")
+    i_bar = src.index("render_evidence_table(_ev_rows)")
     i_matrix = src.index("_render_realtime_decision_dashboard(ind)")
     i_long = src.index("from ui.tab1_macro_longterm import render_long_term_section")
-    assert i_bar < i_matrix, "決策矩陣跑到五桶 bar 前面了(會擋住總經,違反 v19.41 指示)"
+    assert i_bar < i_matrix, "決策矩陣跑到總表 ② 依據表前面了(會擋住總經,違反 v19.41 指示)"
     assert i_matrix < i_long, "決策矩陣仍埋在四時域之後"
 
 

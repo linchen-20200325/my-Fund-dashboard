@@ -589,10 +589,12 @@ class TestZeroWeightAcrossAllAggregationPaths:
         才跑得起來），用靜態掃描鎖住；順帶把整個 repo 一起掃，避免同一個 falsy
         回退在別處復活。
 
-        **已知待辦（不在本次所有權內）**：`ui/helpers/macro/helpers.py:109`
-        `category_score` —— production **0 caller**（全 repo 只剩 docstring／
-        BACKLOG 提及），屬死碼，本次不改，列為顯式例外。若哪天它被修好或刪掉，
-        本測試會要求同步更新這份清單。
+        **2026-08-05 稽核：豁免清單已清空**。原本唯一的例外
+        `ui/helpers/macro/helpers.py` 的 `category_score` 屬 production 0 caller
+        的死碼（「四大類別健康度」第三套指標分類法），本輪依
+        `PROCESS.md §4`「0 consumer → 接線或刪除」整組刪除，falsy 回退隨之消失。
+        本測試因此改為**全 repo 零命中**——新的回退寫法一出現就會紅，
+        不再有任何檔案享有豁免。
         """
         repo = _US_IND_PATH.resolve().parent.parent.parent
         hits = set()
@@ -607,12 +609,12 @@ class TestZeroWeightAcrossAllAggregationPaths:
                 continue          # 非本 repo 語法（第三方樣板等）→ 不管
             if _has_falsy_weight_fallback(tree):
                 hits.add(rel)
-        assert hits == {"ui/helpers/macro/helpers.py"}, (
+        assert hits == set(), (
             "weight 的 falsy 回退（Python `0 or 1 == 1`）會把刻意歸零的權重還原成 1，"
             "同因子去重當場失效。請改用 "
             "`services.macro.composite_score.coerce_weight`。\n"
             f"  目前命中：{sorted(hits)}\n"
-            "  預期只剩已登記的死碼例外 ui/helpers/macro/helpers.py"
+            "  預期 0 命中（2026-08-05 起無任何豁免）"
         )
 
 

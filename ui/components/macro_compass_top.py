@@ -4,7 +4,10 @@
 - _render_compass_card(單張指標卡 UI:值 + Phase 1 訊號燈 + 60D sparkline)
 - render_macro_compass(三大美股指標渲染:VIX 恐慌指數 × 美 10Y 殖利率 × S&P 500 vs 60MA)
 
-呼叫站:app.py 在 sidebar 之後、tabs 之前,module-level 直呼 render_macro_compass()。
+呼叫站(v19.430 起):`ui/tab1_macro.py` 的詳細區,🌳 長期座標 section 之後。
+原本掛在 app.py(sidebar 之後、tabs 之前)module-level 直呼,等於三張原始值卡
+永遠壓在 Tab① 總表最上方;user 2026-08-05 拍板原始值屬「依據」不是「結論」,
+整段搬進 Tab① 詳細區。2026-08-05 稽核 🟡 建議 6 再下移一段,理由見該呼叫站註解。
 """
 from __future__ import annotations
 from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_FG_MUTED, GH_FG_PRIMARY  # v19.254 B1 GH_* SSOT
@@ -113,5 +116,6 @@ def render_macro_compass():
 
 # v19.216 BUG-FIX:C3 commit 抽 module-level `render_macro_compass()` 呼叫時
 # 連 component 內的 call 一起搬過來,結果 component import 時自動執行一次 +
-# app.py:411 又執行一次 → button key='_compass_fetch_btn' 重複 →
-# StreamlitDuplicateElementKey。Component 應只 def 不執行,呼叫站留 app.py。
+# 當年的呼叫站(app.py)又執行一次 → button key='_compass_fetch_btn' 重複 →
+# StreamlitDuplicateElementKey。**Component 只 def 不執行**,呼叫由呼叫站負責
+# ——這條規則與呼叫站在哪一檔無關,v19.430 搬到 Tab① 後同樣適用(見本檔 docstring)。

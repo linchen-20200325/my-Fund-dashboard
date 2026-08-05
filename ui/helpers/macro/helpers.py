@@ -1,11 +1,14 @@
 """ui/helpers/macro_helpers.py — 總經健康度 / 基金 signal 純函式（v18.133）
 
-從 app.py 搬入 6 個 helper + 1 個 constant：
-- _CATEGORY_MAP（4 大類指標分組）
-- calculate_composite_score / composite_verdict（v17.3 宏觀健康度總分）
-- category_score / category_history / category_verdict（v17.4 類別健康度）
+從 app.py 搬入的 helper：
+- calculate_composite_score / composite_verdict（v17.3 宏觀健康度總分，現為 shim re-export）
+- format_phase_score（v19.403 DUP-3 景氣位階字卡文字 SSOT）
 - mk_fund_signal（基金信號）
-- _quartile_check（四分位風險檢查）
+- quartile_check（四分位風險檢查）
+
+2026-08-05 稽核 🟡 必修 5：原「四大類別健康度」一組（分類常數 + 3 個
+category_* 函式）已整組刪除 —— production 0 caller 的第三套指標分類法。
+理由見本檔下方刪除註記。
 
 設計：
 - 純函式（無 streamlit context 依賴除了 mk_fund_signal 讀 session_state）
@@ -21,7 +24,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
+from shared.colors import INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
 # F-GRAY-4 v19.269 D8 Phase 4 (#3):CPI bull_high SSOT(SPEC §16.2 inflection_detection)
 from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as _CPI_THR
 
@@ -43,7 +46,7 @@ from services.macro_composite_score import (  # noqa: F401
 # HELPER: format_phase_score — 景氣位階字卡文字 SSOT（v19.403 Phase 2 DUP-3）
 # calc_macro_phase 的 score 為 0-10 循環評分(us_indicators.py round(max(0,min(10,·)),1)),
 # **恆 ≥ 0** → 禁用帶正負號格式(`:+.1f`)。原 tab_fund_grp_health.py 誤用 +.1f 顯示
-# 「+6.5」,與 hero 的「23 指標淨分(genuinely signed)」撞臉。本 SSOT 收單一格式消歧義。
+# 「+6.5」,與 hero 的加權淨分(genuinely signed)撞臉。本 SSOT 收單一格式消歧義。
 # ══════════════════════════════════════════════════════
 def format_phase_score(phase_info: dict | None) -> str:
     """回景氣位階 SSOT 文字：`{phase} {score:.1f}/10`(score 恆 0-10,不帶正負號)。
@@ -66,109 +69,21 @@ def format_phase_score(phase_info: dict | None) -> str:
 
 
 # ══════════════════════════════════════════════════════
-# HELPER: 四大類別健康度（v17.4）
+# 2026-08-05 稽核 🟡 必修 5 — 「四大類別健康度」(v17.4)整組刪除
+#
+# 刪除對象:`_CATEGORY_MAP` 常數 + `category_score` / `category_history` /
+# `category_verdict` 三個函式。理由三條:
+#   1. **production 0 caller**:全 repo 只剩 docstring / BACKLOG 提及,
+#      `tests/test_macro_indicator_signs.py` 已明文把它登記為死碼例外。
+#      依 `PROCESS.md §4` 稽核落地條款:0 consumer → 接線或刪除,
+#      不得留著假裝有揭露;§8.1 step 6「用不到的抽象先不做」同向。
+#   2. **它是第三套指標分類法**(領先 / 同時-落後 / 流動性 / 金融壓力四大類),
+#      與現行的五桶(`shared.macro_buckets`)+ 服務層 `type` 欄並存,
+#      會讓後人以為系統真的有四大類 —— 本輪主題正是「歸類」,留著就是誤導。
+#   3. `category_score` 內含 `weight` 的 falsy 回退(`0 or 1 == 1`,會把刻意
+#      歸零的去重權重還原成 1),是全 repo 最後一處;刪除後該漂移鎖的
+#      豁免清單即可清空。
 # ══════════════════════════════════════════════════════
-_CATEGORY_MAP = {
-    "📈 領先指標": [
-        ("SAHM", True), ("SLOOS", True), ("PMI", False), ("LEI", False),
-        ("YIELD_10Y2Y", False), ("YIELD_10Y3M", False), ("PPI", True),
-        ("COPPER", False), ("ADL", False), ("JOBLESS", True),
-        ("CONT_CLAIMS", True), ("CONSUMER_CONF", False), ("PERMIT_HOUSING", False),
-    ],
-    "📍 同時 / 落後": [
-        ("CPI", True), ("INFL_EXP_5Y", True),
-        ("FED_RATE", True), ("UNEMPLOYMENT", True),
-    ],
-    "💧 流動性": [
-        ("M2", False), ("M2_WEEKLY", False), ("FED_BS", False), ("DXY", True),
-    ],
-    "⚠️ 金融壓力": [
-        ("HY_SPREAD", True), ("VIX", True),
-    ],
-}
-
-
-def category_score(ind: dict, keys: list) -> tuple[float, int, int]:
-    """回傳 (Σ score×weight, 有效資料筆數, 該類總指標數)。
-
-    v19.1 (C-2)：入口呼叫 ``apply_weight_overrides``；active 空時行為不變。
-    """
-    try:
-        from services.macro.weights_store import apply_weight_overrides
-        ind = apply_weight_overrides(ind or {})
-    except ImportError:
-        ind = ind or {}
-    total = 0.0
-    n_data = 0
-    for k, _hib in keys:
-        v = ind.get(k)
-        if not isinstance(v, dict):
-            continue
-        try:
-            s = float(v.get("score", 0) or 0)
-            w = float(v.get("weight", 1) or 1)
-        except (TypeError, ValueError):
-            continue
-        if s != s or w != w:
-            continue
-        total += s * w
-        n_data += 1
-    return round(total, 2), n_data, len(keys)
-
-
-def category_history(ind: dict, keys: list, lookback: int = 24):
-    """回傳該類別 24M 月底「方向化 Z-Score 平均」序列；資料不足回 None。"""
-    import pandas as pd
-    sigs = []
-    for k, hib in keys:
-        v = (ind or {}).get(k)
-        if not isinstance(v, dict):
-            continue
-        s = v.get("series")
-        if s is None:
-            continue
-        try:
-            ser = s if isinstance(s, pd.Series) else pd.Series(s)
-            ser = ser.dropna().tail(lookback * 5)
-            if len(ser) < 6:
-                continue
-            mu = float(ser.mean())
-            sigma = float(ser.std())
-            if sigma == 0 or sigma != sigma or mu != mu:
-                continue
-            z = (ser - mu) / sigma
-            if hib:
-                z = -z
-            try:
-                z.index = pd.to_datetime(z.index)
-                z_m = z.resample("ME").last().dropna().tail(lookback)
-            except Exception:
-                z_m = z.tail(lookback)
-            if len(z_m) >= 3:
-                sigs.append(z_m)
-        except Exception:
-            continue
-    if not sigs:
-        return None
-    df = pd.concat(sigs, axis=1)
-    out = df.mean(axis=1).dropna()
-    return out if len(out) >= 3 else None
-
-
-def category_verdict(z_now: float | None, z_trend_delta: float) -> tuple[str, str, str]:
-    """根據最新 Z 與近期變化回傳 (icon, color, 一句話)。"""
-    if z_now is None:
-        return ("⬜", TRAFFIC_NEUTRAL, "資料不足，待補")
-    if z_now <= -1.5:
-        icon, color = "🔴", MATERIAL_RED
-    elif z_now <= -0.5:
-        icon, color = "🟠", MATERIAL_ORANGE
-    elif z_now < 0.5:
-        icon, color = "🟡", MD_AMBER_300
-    else:
-        icon, color = "🟢", MD_GREEN_A200
-    direction = "改善中 📈" if z_trend_delta > 0.2 else ("惡化中 📉" if z_trend_delta < -0.2 else "持平 →")
-    return (icon, color, f"當前 Z={z_now:+.2f}（{direction}）")
 
 
 # ══════════════════════════════════════════════════════

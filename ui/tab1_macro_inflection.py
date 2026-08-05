@@ -6,13 +6,11 @@
 內容包含:
 - ① 🎯 全域導航塔(戰情室三儀表:薩姆 + SLOOS + 廣度)
 - 🚦 持倉紅綠燈(讀 portfolio_funds session_state)
-- 📋 本週操作清單(L1 新手 checklist)
 - ② 🎯 拐點偵測中心(熊市預警 月級結構訊號 5 卡)
 - 📊 歷史回測:倒掛翻正後 6/12/18M SPX 表現 expander
 
 設計:
 - 不依賴 render_macro_tab 的 closure local var,全部走參數注入
-- phase 注入後內部 derive ph / alloc / advice(原 closure 邏輯)
 - `_apply_tp_thresholds` lazy import 避循環
 - §8.2:L3 UI helper,純渲染 + session_state 讀寫
 """
@@ -70,15 +68,13 @@ def render_inflection_alert_section(
 
     Args:
         ind: indicators dict(總經指標)
-        phase: phase_info dict(由 calc_macro_phase 產出)
+        phase: phase_info dict(由 calc_macro_phase 產出)。
+            ⚠️ 2026-08-05 起本 section 已不讀它(L1 新手待辦區塊移除後無 consumer),
+            保留於簽章僅為不動呼叫端;若日後仍無 consumer 應連同呼叫端一併移除。
         fred_key: FRED API key str
         show_l3: L3 toggle(本 section 預設皆顯示;保留參數供未來細部 gating)
     """
     from ui.tab1_macro import _apply_tp_thresholds  # lazy 避循環
-
-    ph = phase["phase"]
-    alloc = phase["alloc"]
-    advice = phase.get("advice", "")
 
     st.divider()
     st.markdown("## ⚠️ 拐點警報")
@@ -94,7 +90,12 @@ def render_inflection_alert_section(
     # v19.387 V1 §1:缺值保留 None(不再 `or 0` 把「沒資料」畫成 0.00 綠燈=偽裝健康)
     _sahm_v  = safe_num(_sahm_d.get("value"))
     _sloos_v = safe_num(_sloos_d.get("value"))
-    _adl_v   = safe_num(_adl_d.get("value"))
+    # §4.1 量綱:ADL 的 `value` 是 RSP÷SPY **比值**(無因次,量級 ~0.29、恆為正),
+    # 服務層另用 `prev` 承載**月變動百分比**(該 dict 的 unit 欄標的也是空字串=無單位)。
+    # 第三個儀表整組刻度(軸域 ±10、%、燈號門檻 ±2、紅線 ±5)是為月變動 % 設計的,
+    # 原本卻餵比值 → 指針恆黏在 0.29、燈恆亮中性,不論真實廣度如何(§1 假訊號)。
+    # 變數名依 §4.1 命名規範帶單位,避免下一個人再把兩種量綱接錯。
+    _adl_mom_pct = safe_num(_adl_d.get("prev"))
 
     _gg1, _gg2, _gg3 = st.columns(3)
 
@@ -177,16 +178,16 @@ def render_inflection_alert_section(
 
     with _gg3:
         # ADL = RSP/SPY 市場寬度 (% MoM change, negative = narrowing breadth = bad)
-        if _adl_v is None:
+        if _adl_mom_pct is None:
             _gauge_missing("市場廣度 · RSP/SPY")
-            st.caption("⚠️ RSP/SPY 廣度未取得")
+            st.caption("⚠️ RSP/SPY 廣度月變動未取得")
         else:
             st.plotly_chart(_make_gauge(
-                _adl_v, "市場健康度<br>RSP/SPY 廣度", "%", [-10, 10],
+                _adl_mom_pct, "市場健康度<br>RSP/SPY 廣度（月變動）", "%", [-10, 10],
                 [(-5, BG_DARK_RED_1), (0, BG_DARK_AMBER_1), (5, BG_DARK_GREEN_GAUGE)],
                 danger_above=False), use_container_width=True)
-            _adl_sig = ("🟢 市場廣度健康" if _adl_v > 2
-                        else "🔴 **廣度收窄** 虛假繁榮" if _adl_v < -2
+            _adl_sig = ("🟢 市場廣度健康" if _adl_mom_pct > 2
+                        else "🔴 **廣度收窄** 虛假繁榮" if _adl_mom_pct < -2
                         else "🟡 市場廣度持平")
             st.markdown(f"<div style='text-align:center;font-size:12px'>{_adl_sig}</div>",
                         unsafe_allow_html=True)
@@ -281,40 +282,13 @@ def render_inflection_alert_section(
         ), unsafe_allow_html=True)
 
     # ── AI 每日一句結論（v15.2 移除：使用者反饋過於簡略）──
+    # ── L1 新手待辦區塊（2026-08-05 user 指示移除）──
+    #    移除連帶:本 section 不再需要 phase 的 phase/alloc/advice/weather_* 欄位。
+    #    `phase` 參數保留於簽章(呼叫端 ui/tab1_macro.py 不必改),語意同 `show_l3`。
     st.divider()
-
-    # ══════════════════════════════════════════════════
-    # L1 新手待辦清單（所有等級均顯示）
-    # ══════════════════════════════════════════════════
-    _w_icon2  = phase.get("weather_icon", "⛅")
-    _w_label2 = phase.get("weather_label", "多雲")
-    _l1_stock = alloc.get("股票", 50)
-    _l1_bond  = alloc.get("債券", 30)
-    _l1_cash  = alloc.get("現金", 20)
-    _l1_checks = [
-        f"確認核心部位是否符合 AI 建議：股 {_l1_stock}% / 債 {_l1_bond}% / 現金 {_l1_cash}%",
-    ]
-    # v19.387 V1 §1:缺值(safe_num→None)不觸警(既不崩、也不對「沒資料」誤報衰退/緊縮警報)
-    if _sahm_v is not None and _sahm_v >= 0.5:
-        _l1_checks.append(f"⚠️ **薩姆衰退警報已觸發**（{_sahm_v:.2f}pp）：暫停衛星加碼，保留防守型部位")
-    if _sloos_v is not None and _sloos_v > 20:
-        _l1_checks.append(f"📊 **銀行緊縮偵測**（SLOOS {_sloos_v:.1f}%）：高收益債基金降至 10% 以下")
-    if _adl_v is not None and _adl_v < -2:
-        _l1_checks.append(f"🌍 **市場廣度警示**（RSP/SPY {_adl_v:.2f}%）：減少主題/集中型基金")
-    _l1_checks.append("定期定額不停扣（除非景氣位階進入「高峰」且 VIX < 15）")
-    _l1_checks.append(f"本週核心原則：景氣「{ph}」，{(advice or '均衡配置，嚴守紀律')[:40]}。")
-    _l1_md = "\n".join(f"- [ ] {c}" for c in _l1_checks)
-    st.markdown(
-        f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BORDER};border-radius:12px;"
-        f"padding:16px 20px;margin:8px 0'>"
-        f"<div style='color:{GH_FG_PRIMARY};font-weight:700;margin-bottom:10px'>"
-        f"📋 本週操作清單（{_w_label2} {_w_icon2}）</div></div>",
-        unsafe_allow_html=True)
-    st.markdown(_l1_md)
 
     # ══════════════════════════════════════════════════
     # ── v19.18 🎯 拐點偵測中心（合併 v18.20 PMI/yield + v18.250 三件套）──
-    st.divider()
     st.markdown("### ② 🎯 拐點偵測中心（熊市預警主面板 ｜ 月級結構訊號）")
     st.caption("集中所有景氣翻轉訊號：製造業新訂單－庫存擴散 ｜ 10Y-2Y 殖利率倒掛翻正 ｜ "
                "HY 信用利差 ｜ 薩姆規則 ｜ CFNAI 領先指標 ｜ 歷史回測 ｜ 變數重要性")
