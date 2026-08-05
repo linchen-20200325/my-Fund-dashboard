@@ -40,6 +40,27 @@ _LIGHT_EMOJI: dict[str, str] = {
 from shared.converters import safe_float as _safe_float  # noqa: E402
 
 
+def _norm_date(v: Any) -> str:
+    """日期正規化 SSOT —— 截前 10 字元 + `/` → `-`。**本檔唯一日期入口**。
+
+    **為什麼必須集中(§3.3 SSOT / §1 Fail Loud)**:
+    MoneyDJ 配息表 raw cell 是**斜線格式** `"2026/01/30"`(evidence:
+    `repositories/fund/sources.py:2611` 與 `repositories/fund/fund_orchestration.py:973`
+    直接把 HTML `cols[0]` 塞進 `date` 未正規化),而 NAV 序列 key 來自 pandas
+    DatetimeIndex → **ISO** `"2026-06-22"`。ASCII `'/'`=0x2F > `'-'`=0x2D,兩種格式
+    混在一起做**字串比較**時 `"2026/01/30" < "2026-06-22"` 會回 **False**
+    → 買進日「之前」的配息濾不掉,累積配息被灌水(ex 年 ≥ buy 年時必然失效)。
+
+    此為同型 bug 第 3 次復發(v19.352 曾修 `services/health/dividend.py:273`),
+    故本檔一律走本函式,**禁止**再寫 inline `[:10]` 日期切片。
+
+    Args:
+        v: 任意日期表示(str / pandas Timestamp / None)
+    Returns:
+        `"YYYY-MM-DD"` 形式字串;無值 → `""`(caller 須自行判空,§1 不猜日期)
+    """
+    return str(v or "")[:10].replace("/", "-")
+
 
 def div_health_light_for_pair(
     ret_pct: Any,
@@ -92,7 +113,7 @@ def latest_dividend_per_unit(dividends: Any) -> Optional[float]:
     for d in dividends:
         if not isinstance(d, dict):
             continue
-        ds = str(d.get("date") or d.get("ex_date") or "")[:10].replace("/", "-")
+        ds = _norm_date(d.get("date") or d.get("ex_date"))  # 原 inline replace → 收 SSOT
         amt = _safe_float(d.get("amount"))
         if amt is None:
             amt = _safe_float(d.get("div_per_unit"))
@@ -214,8 +235,11 @@ def compute_dividend_twd_series(
     """主算式：以 N 元 TWD 為基準，逐次配息折算 TWD 金額 + 吃本金判定。
 
     Args:
-        nav_series: ``{date_iso: NAV(原幣)}`` —— 至少含買進日 / 末日
-        dividend_events: ``[{date, amount, yield_pct?}]`` amount = 配息(原幣)/單位
+        nav_series: ``{date_iso: NAV(原幣)}`` —— 至少含買進日 / 末日。
+            key 接受 ``YYYY-MM-DD`` 或 ``YYYY/MM/DD``,內部一律過 ``_norm_date`` 正規化;
+            **最早一筆 = 買進日**,早於此日的配息不計。
+        dividend_events: ``[{date, amount, yield_pct?}]`` amount = 配息(原幣)/單位。
+            ``date`` 同樣容忍斜線格式(MoneyDJ raw)—— 正規化後才與 buy_date 比較。
         fx_rate_default: spot CCY→TWD（1 單位原幣 = N TWD）
         fx_rate_by_date: ``{date_iso: ccy_to_twd}`` 歷史 FX；缺則 fallback default
         principal_twd: 投資本金 TWD（預設 100 萬）
@@ -242,9 +266,13 @@ def compute_dividend_twd_series(
     if not isinstance(nav_series, dict) or not nav_series:
         return {"ok": False, "error": "nav_series 為空", "events": []}
 
+    # NAV key 一律過 _norm_date → 與下方 ex_date 落在**同一個字串比較空間**
+    # (混格式 = §1 違憲的靜默錯誤來源);空 key 直接剔除,否則 buy_date="" 會讓
+    # 「買進日之前不計」的過濾整條失效。
     nav_items = sorted(
-        (d, _safe_float(v)) for d, v in nav_series.items()
-        if isinstance(d, str) and _safe_float(v) is not None and _safe_float(v) > 0
+        (_norm_date(d), _safe_float(v)) for d, v in nav_series.items()
+        if isinstance(d, str) and _norm_date(d)
+        and _safe_float(v) is not None and _safe_float(v) > 0
     )
     if not nav_items:
         return {"ok": False, "error": "nav_series 無有效 NAV", "events": []}
@@ -259,9 +287,11 @@ def compute_dividend_twd_series(
 
     nav_by_date = {d: v for d, v in nav_items}
 
+    # 排序鍵同樣走 _norm_date:MoneyDJ(斜線)與 FundClear(ISO)可能混在同一 list,
+    # 用 raw 字串排序會把兩群拆成兩段(`/` > `-`)導致 events 順序錯亂。
     sorted_divs = sorted(
         (e for e in (dividend_events or []) if isinstance(e, dict)),
-        key=lambda e: str(e.get("date") or "")
+        key=lambda e: _norm_date(e.get("date"))
     )
 
     events_out: list[dict] = []
@@ -270,7 +300,11 @@ def compute_dividend_twd_series(
     cumulative_units = units_held  # reinvest=True 時可成長，v19.37 鎖死
 
     for ev in sorted_divs:
-        ex_date = str(ev.get("date") or "")[:10]
+        # P0 FIX:原本 `str(...)[:10]` 未把 `/` 正規化成 `-`,MoneyDJ 斜線日期
+        # 與 ISO `buy_date` 比較恆為 False(`'/'`0x2F > `'-'`0x2D)→ 買進日之前的
+        # 配息全部漏進來(實測 ACCP138:6 筆全計 → 累積 TWD 配息 49,065,正解 8,178)。
+        # 走 _norm_date SSOT(同 latest_dividend_per_unit)。
+        ex_date = _norm_date(ev.get("date"))
         if not ex_date or ex_date < buy_date:
             continue
         amt = _safe_float(ev.get("amount"))

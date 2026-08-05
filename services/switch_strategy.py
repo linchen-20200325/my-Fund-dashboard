@@ -6,6 +6,8 @@ user 2026-07-28 spec:健康度評分 → 燈號診斷 → 一對一替換匹配 
 - 獨立「**換標策略分**」(0-100),**不混 4D 健康度**(避免又一組打架的評等,§2.1)。
 - 選股/主動能力訊號用 **vs 大盤%**(對大盤超額),**非**本專案「Alpha%」(=真實收益%,§4.1)。
 - **資料不足**(Sharpe 或 1Y 含息缺)→ 灰燈,不硬算分數(§1,同 4D 資料不足守衛哲學)。
+- **加分項(MaxDD / vs大盤)缺值 → 從分母移除後重正規化**,不再讓「缺資料」與
+  「表現很差」在同一個分數上無法區分(§1 缺值偽裝成壞值;詳見 `switch_score` docstring)。
 - 替換為**同資產類別**「一對一」(user spec:同類換品質更好者);輪動則是**跨類別**,兩者不同。
 
 常數全走 `shared.switch_thresholds` SSOT(§3.3)。
@@ -41,22 +43,102 @@ def _tier(val: float, tiers: list) -> int:
     return 0
 
 
-def switch_score(tr1y_pct, sharpe, maxdd_pct, vs_market_pct) -> "int | None":
+def _tier_max(tiers: list) -> int:
+    """該指標的滿分 = tiers 中最高得分。權重一律**從 SSOT 推導**,不在本檔另寫死
+    35/30/20 等字面值(§3.3;常數 SSOT 為 `shared/switch_thresholds.py`)。"""
+    return max((int(_p) for _c, _p in (tiers or [])), default=0)
+
+
+def _score_total() -> int:
+    """滿覆蓋時的分母 = 四個維度滿分之和(= 35+30+20+15 = 100,但由 SSOT 推)。"""
+    return (_tier_max(SWITCH_TR_TIERS) + _tier_max(SWITCH_SHARPE_TIERS)
+            + _tier_max(SWITCH_MAXDD_TIERS) + int(SWITCH_ALPHA_POINTS))
+
+
+def switch_score(tr1y_pct, sharpe, maxdd_pct, vs_market_pct, *,
+                 coverage_out: "dict | None" = None) -> "int | None":
     """換標策略分 0-100(1Y含息35 + Sharpe30 + MaxDD20 + vs大盤15)。
 
-    §1:1Y 含息 或 Sharpe 缺 → None(資料不足,不硬算)。MaxDD / vs大盤 缺 → 該項 0 分。
+    §1:1Y 含息 或 Sharpe 缺 → None(核心維度,資料不足不硬算)。
+
+    **缺值不得偽裝成壞值(本次修正)**
+    ---------------------------------
+    原碼分母固定 100:MaxDD 缺 → 該項 +0 分,與「MaxDD = −35% 所以拿 0 分」在畫面上
+    **完全無法區分**。`services/fund_service.calc_metrics` 把 max_drawdown 的樣本門檻
+    從「無」提高到 `MIN_OBS_MAX_DRAWDOWN`(125 交易日)之後,**每一檔短歷史基金的
+    換標分憑空少 20 分** —— 這正是 §1 點名的「缺值偽裝成壞值」。
+
+    修法:**分母只計入有資料的維度**,再線性放回 0-100 —
+        score = round( earned / available_max × total_max )
+    語意從「滿分 100 你拿幾分」改為「**有證據的部分**你拿了幾成」。
+    - 滿覆蓋(四維皆有值)時 `available_max == total_max`,直接回原始加總,
+      **位元等價**,既有行為零改變(可對照 test_switch_strategy 前三例)。
+    - `maxdd_pct` 缺 → 分母 80;`vs_market_pct` 缺 → 分母 85;兩者皆缺 → 分母 65。
+    - `vs_market_pct` **有值但 ≤ 0** 屬「真的沒有超額」→ 計 0 分且**留在分母**
+      (跟 MaxDD tier 落底同語意),不與缺值混為一談。
+
+    **為什麼不選「缺值 → verdict 資料不足」(§1 最嚴解)**:本函式的資料契約已由 user
+    2026-07-28 spec 拍板 —— TR/Sharpe 為**核心**(缺 → None),MaxDD/vs大盤 為**加分項**。
+    把加分項升級成硬閘門是改 spec 不是修 bug(§-1「沒具體需求不要動」),而且會讓所有
+    NAV < 126 點的基金整欄換標判讀消失。重正規化同樣消滅「缺 = 壞」的錯誤訊號,
+    但保留可用性;殘留風險(部分覆蓋的分數可比性較弱)以 `coverage_out` 顯式揭露。
+
+    Parameters
+    ----------
+    coverage_out : dict | None
+        §1「填補須帶旗標」的側車容器(opt-in,對齊 v19.270 D8 #8
+        `calculate_composite_score(provenance_out=)` 既有 pattern)。傳 dict 進來即
+        就地填入 `earned` / `available` / `total` / `coverage_pct` / `missing` /
+        `rescaled`;不傳則行為與舊版簽名完全相同。
     """
+    _cov = {
+        "earned": None, "available": None, "total": _score_total(),
+        "coverage_pct": None, "missing": [], "rescaled": False,
+        "reason": None,
+    }
     _tr = _num(tr1y_pct)
     _sh = _num(sharpe)
     if _tr is None or _sh is None:
+        _cov["missing"] = ([] if _tr is not None else ["1Y 含息 %"]) + \
+                          ([] if _sh is not None else ["Sharpe 1Y"])
+        _cov["reason"] = "核心維度缺值 → 不評分(§1)"
+        if coverage_out is not None:
+            coverage_out.update(_cov)
         return None
-    _score = _tier(_tr, SWITCH_TR_TIERS) + _tier(_sh, SWITCH_SHARPE_TIERS)
+
+    _earned = _tier(_tr, SWITCH_TR_TIERS) + _tier(_sh, SWITCH_SHARPE_TIERS)
+    _avail = _tier_max(SWITCH_TR_TIERS) + _tier_max(SWITCH_SHARPE_TIERS)
+    _missing = []
+
     _dd = _num(maxdd_pct)
     if _dd is not None:
-        _score += _tier(_dd, SWITCH_MAXDD_TIERS)
+        _earned += _tier(_dd, SWITCH_MAXDD_TIERS)
+        _avail += _tier_max(SWITCH_MAXDD_TIERS)
+    else:
+        _missing.append("Max DD %")
+
     _vm = _num(vs_market_pct)
-    if _vm is not None and _vm > 0:
-        _score += SWITCH_ALPHA_POINTS
+    if _vm is not None:
+        if _vm > 0:
+            _earned += int(SWITCH_ALPHA_POINTS)
+        _avail += int(SWITCH_ALPHA_POINTS)
+    else:
+        _missing.append("vs 大盤%")
+
+    _total = _score_total()
+    # 滿覆蓋 → 原始加總(整數,零浮點噪音);部分覆蓋 → 依可用權重放回 0-total
+    _score = _earned if _avail == _total else int(round(_earned / _avail * _total))
+
+    _cov.update({
+        "earned": _earned, "available": _avail, "total": _total,
+        "coverage_pct": round(_avail / _total * 100.0, 1),
+        "missing": _missing, "rescaled": _avail != _total,
+        "reason": (None if not _missing else
+                   f"缺 {'/'.join(_missing)} → 分母由 {_total} 收斂為 {_avail} 後放回"
+                   f"0-{_total}(缺值不計為壞值,§1)"),
+    })
+    if coverage_out is not None:
+        coverage_out.update(_cov)
     return _score
 
 

@@ -63,6 +63,11 @@ MD_AMBER_300: str = "#ffd54f"      # Material Amber 300
 MD_ORANGE_300: str = "#ffb74d"     # Material Orange 300
 MD_ORANGE_A200: str = "#ffab40"    # Material Orange A200(Z-Score 警示 |Z|≥1.5,3 處跨 2 檔)
 MD_PURPLE_500: str = "#9c27b0"     # Material Purple 500
+# v19.405 稽核收口:淡紅 accent(Material Red A100)。原以 inline hex 散落 4 處
+# (services/macro/composite_score.composite_verdict「悲觀」/ services/macro/explain.py
+#  同名函式 / services/macro/us_indicators._nfp_tier「偏冷」/ ui/tab1_macro_midcycle
+#  警示 chip 前景色)。語意 = 「負面但未到最嚴重」的第二層紅,比 MATERIAL_RED 淡。
+MD_RED_A100: str = "#ff8a80"       # Material Red A100(次級警示 / 悲觀 / 偏冷)
 
 # v19.259 Item 2 long-tail 高頻收口(各 ≥8 處跨多檔)
 INFO_BLUE: str = "#58a6ff"         # GitHub-style info blue(hold signal / link / border,17 處)

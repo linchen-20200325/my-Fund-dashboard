@@ -31,8 +31,17 @@ def test_score_missing_core_is_none():
 
 
 def test_score_optional_missing_ok():
-    # MaxDD / vs大盤 缺 → 該項 0,但仍給分(核心齊)
-    assert switch_score(8.0, 1.0, None, None) == 65           # 35+30
+    # MaxDD / vs大盤 缺 → 退出分母(缺值≠壞值,§1),核心齊 → 依可用權重放回 0-100
+    # 舊斷言 65 釘的是 bug 本身:缺值被當成「該項 0 分」,與「MaxDD=-40% 真的很差」無法區分
+    assert switch_score(8.0, 1.0, None, None) == 100          # 65/65 → 100
+
+
+def test_score_missing_not_scored_like_bad():
+    """缺值必須明顯優於壞值,否則 §1「缺值偽裝成壞值」。"""
+    _missing = switch_score(8.0, 1.0, None, 5.0)              # 缺 MaxDD
+    _bad = switch_score(8.0, 1.0, -40.0, 5.0)                 # MaxDD 真的很差
+    assert _missing is not None and _bad is not None
+    assert _missing > _bad
 
 
 # ── 燈號 ────────────────────────────────────────────────

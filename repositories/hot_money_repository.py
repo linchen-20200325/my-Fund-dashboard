@@ -70,13 +70,28 @@ def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame,
         return pd.DataFrame(columns=["date", "foreign_net_yi"]), f"FinMind 抓取失敗：{e}"
 
     if r is None:
-        return pd.DataFrame(columns=["date", "foreign_net_yi"]), "FinMind 無回應"
+        return pd.DataFrame(columns=["date", "foreign_net_yi"]), (
+            "FinMind 無回應（fetch_url 全部重試失敗；"
+            "若為 402 額度用盡，狀態碼見 [proxy] log）")
 
     try:
-        rows = r.json().get("data", []) or []
+        _payload = r.json()
     except Exception as e:
         return pd.DataFrame(columns=["date", "foreign_net_yi"]), f"FinMind JSON 解析失敗：{e}"
 
+    # 【額度用盡防偽裝 — 本次稽核母題】FinMind 免費額度用盡回
+    # {"msg": "Requests reached the upper limit.", "status": 402}，**不帶 data 欄**。
+    # 舊版 `.get("data", [])` 直接吐 [] → 被下面歸類成「無資料回傳（可能為非交易日
+    # 區間）」，於是「額度用盡」偽裝成「今天沒開盤」，資料硬停在某一天卻無人察覺。
+    # §1 Fail Loud：帶上真實 status 與 msg，不可含糊。
+    _api_status = _payload.get("status")
+    if _api_status not in (None, 200, "200"):
+        _msg = str(_payload.get("msg", ""))[:80]
+        print(f"[hot_money] ❌ FinMind {_api_status}: {_msg}")
+        return pd.DataFrame(columns=["date", "foreign_net_yi"]), \
+            f"FinMind {_api_status}: {_msg}"
+
+    rows = _payload.get("data", []) or []
     if not rows:
         return pd.DataFrame(columns=["date", "foreign_net_yi"]), "無資料回傳（可能為非交易日區間）"
 

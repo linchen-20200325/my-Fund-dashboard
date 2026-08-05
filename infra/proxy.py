@@ -156,7 +156,8 @@ def fetch_url(
       407 Auth      → 立即回傳 None，不重試
       403 ×2        → 提前跳出，降級直連
       429 Rate Limit→ exponential backoff sleep 2/4/8 秒後重試（最多 3 次）
-      ProxyError    → 降級直連
+      ProxyError    → **立刻**降級直連（不 sleep、不重試 —— proxy 連不上時
+                      重試同一個 proxy 必然重複失敗，只是白付 retries × 2s）
       無 Proxy 設定 → 直連，SSL verify=True
     """
     import time as _t
@@ -171,21 +172,44 @@ def fetch_url(
     if headers:
         _hdr.update(headers)
 
+    # 【log 遮罩 query string】§1 保守優先的資安預防。
+    # 現況查證:FinMind token 走 `params['token']`、FRED api_key 走 `params['api_key']`,
+    # 都不進 url 字串 → 目前無洩漏。但 fetch_url 是全站 30+ caller 的公用入口,任何未來
+    # 把 key 塞進 query string 的 caller 都會直接把 secret 印進 stdout,而 Streamlit Cloud
+    # 的 log 是 collaborator 可見。砍掉 `?` 之後即可根絕,且 scheme+host+path 完整保留
+    # → 除錯仍看得出「哪個來源、哪支 endpoint」,資訊價值不減。
+    _url_log = url.split("?")[0]
+
     sess     = _get_thread_session()   # v19.333 F6:複用 thread-local 連線池
     _perr    = 0
     _block   = 0
     _tmo     = 0   # v18.223：累計 proxy 逾時次數 → 逾時也要降級直連
     _rl_atmp = 0   # v18.278：429 backoff 指針，最多走完 _RATE_LIMIT_BACKOFF_SEC 序列
+    # 【狀態碼黑洞修補】原 if 鏈只處理 407/403/429/200，其餘（402 額度用盡 / 401 /
+    # 404 / 5xx）什麼都不做就進下一輪，最後 `return None` 零 log → 呼叫端只能報
+    # 「無回應」，實際狀態碼與 API msg 全部遺失（FinMind 免費額度 402 被靜默吞掉
+    # 130 天即此坑）。以下 `_last_status` 保留最後一次**看到**的狀態碼供收尾 log。
+    # ⚠️ 語意精確化：只在 `sess.get` 有回傳 Response 時更新 —— 若 attempt 1 拿 404、
+    #    attempt 2 逾時，收尾時 `_last_status` 仍是 404（最後一次「看到」的，不是最後
+    #    一次「嘗試」的結果）。收尾 log 因此用 `last_seen_status=` 具名，避免同一行
+    #    出現 `status=404, tmo=1` 時被讀 log 的人誤判「最後一次是 404」。
+    # §1 Fail Loud：不改回傳型別（維持 Response | None，零 caller 受影響），
+    # 只補可觀測性。
+    _last_status: "int | None" = None
 
     for attempt in range(retries):
         try:
             r = sess.get(url, headers=_hdr, params=params,
                          timeout=timeout, proxies=_proxy, verify=_verify)
+            _last_status = r.status_code
             if r.status_code == 407:
                 print("[proxy] 407 Auth Failed — 確認 secrets 帳密")
                 return None
             if r.status_code == 403:
                 _block += 1
+                # §2.1「MoneyDJ 子網域 403 走 fallback chain」是核心情境，原本零 log
+                # → 無法分辨「來源被擋」與「網路壞掉」。補 log 讓 fallback 可觀測。
+                print(f"[proxy] 403 Forbidden ({_block}/2) — 來源封鎖或需 Referer：{_url_log[:80]}")
                 _t.sleep(_rnd.uniform(2.5, 6.0))
                 if _block >= 2:
                     break
@@ -194,21 +218,52 @@ def fetch_url(
                 if _rl_atmp < len(_RATE_LIMIT_BACKOFF_SEC):
                     _sleep_s = _RATE_LIMIT_BACKOFF_SEC[_rl_atmp]
                     print(f"[proxy] 429 Rate Limit — sleep {_sleep_s}s before retry "
-                          f"({_rl_atmp + 1}/{len(_RATE_LIMIT_BACKOFF_SEC)}): {url[:80]}")
+                          f"({_rl_atmp + 1}/{len(_RATE_LIMIT_BACKOFF_SEC)}): {_url_log[:80]}")
                     _t.sleep(_sleep_s)
                     _rl_atmp += 1
                     continue
-                print(f"[proxy] 429 已重試 {_rl_atmp} 次仍 rate-limited，放棄：{url[:80]}")
+                print(f"[proxy] 429 已重試 {_rl_atmp} 次仍 rate-limited，放棄：{_url_log[:80]}")
                 return None
             if r.status_code == 200:
                 return r
+            # ── 未預期狀態碼（402 額度用盡 / 401 / 404 / 5xx …）─────────────
+            # 原本這裡沒有 else，直接掉出 if 鏈進下一輪重試，狀態碼與 body 全丟。
+            # §1：不可讓錯誤靜默 —— 至少要能在 log 看見「是誰、回了什麼」。
+            # body 取前 200 字：FinMind 402 的 {"msg": "...", "status": 402} 就在裡面。
+            # ⚠️ 這行在 try 內，**加 log 不可自殘**：
+            #   (a) `getattr(r, "text", "")` 的 default 只攔 AttributeError，攔不住
+            #       property getter 內部拋的例外（stream 中斷 / charset_normalizer
+            #       解碼例外 / 非標準 Response 物件）→ 例外會冒泡到下方
+            #       `except Exception: break`，把本該 retry 3 次的路徑變成立刻中斷，
+            #       且 _perr/_block/_tmo 全為 0 → 連降級直連都不觸發，直接 return None。
+            #   (b) `r.text` 對大 body 會觸發 apparent_encoding（chardet /
+            #       charset_normalizer 全文掃描）；幾 MB 的非 200 HTML 會有可觀延遲。
+            # → 改讀 bytes：`r.content` 不觸發編碼偵測，**先切片再 decode**（只解 200
+            #   bytes），`errors="replace"` 保證不拋；外層再包 try 兜住缺 content 的物件。
+            try:
+                _body = r.content[:200].decode("utf-8", errors="replace").replace("\n", " ")
+            except Exception:
+                _body = "<body unavailable>"
+            print(f"[proxy] 未預期狀態碼 {r.status_code} "
+                  f"(attempt {attempt + 1}/{retries}): {_url_log[:80]} | body={_body}")
         except requests.exceptions.ProxyError as e:
             _perr += 1
-            print(f"[proxy] ProxyError attempt {attempt+1}: {e}")
-            _t.sleep(2)
+            # 【v19.424 修:立刻 break,不 sleep 不重試】
+            # ProxyError = **proxy 本身**連不上(連線被拒 / DNS 失敗 / Squid 掛掉),
+            # 對「同一個壞掉的 proxy」重試 3 次必然重複失敗,只是白付 3×2s sleep。
+            # 本函式 docstring 的行為矩陣原本就寫「ProxyError → 降級直連」——
+            # 立刻 break 讓下方降級區塊接手,才是原設計意圖;`_perr` 已 +1,
+            # `if _proxy and (_perr > 0 ...)` 仍會觸發降級,行為不變只是快 6 秒。
+            # 實測影響:NAS proxy 離線時每個 URL 白等 6s → 28 個總經指標 + 逐檔基金
+            # 抓取累積數分鐘純睡眠;tests/test_app_apptest.py 的 _force_network_refused
+            # (刻意把 proxy 指向 127.0.0.1:9 讓它快速失敗)也因此被推過 60s timeout。
+            # ⚠️ 與 429 的差異:429 是「對端限流」,sleep 後重試同一端點有意義;
+            #    ProxyError 是「中繼站不存在」,重試沒有任何狀態會改變。
+            print(f"[proxy] ProxyError attempt {attempt+1} — 不重試,直接降級：{e}")
+            break
         except requests.exceptions.Timeout:
             _tmo += 1
-            print(f"[proxy] Timeout attempt {attempt+1}: {url[:60]}")
+            print(f"[proxy] Timeout attempt {attempt+1}: {_url_log[:60]}")
             _t.sleep(2)
         except Exception as e:
             print(f"[proxy] Error: {e}")
@@ -217,14 +272,23 @@ def fetch_url(
     # v18.223：proxy 逾時（_tmo）同樣降級直連 — 原本只有 ProxyError/403 會降級，
     # 導致「proxy 在但很慢」時每個 endpoint 逾時後直接回 None（FRED/Yahoo 本可直連救回）。
     if _proxy and (_perr > 0 or _block >= 2 or _tmo > 0):
-        print(f"[proxy] 降級直連：{url[:80]}")
+        print(f"[proxy] 降級直連：{_url_log[:80]}")
         try:
             r_dc = sess.get(url, headers=_hdr, params=params,
                             timeout=timeout, proxies={}, verify=True)
+            _last_status = r_dc.status_code   # 收尾 log 要反映「最後一次」真狀態
             if r_dc.status_code == 200:
                 print("[proxy] 直連成功")
                 return r_dc
+            print(f"[proxy] 直連非 200：status={r_dc.status_code}")
         except Exception as e_dc:
             print(f"[proxy] 直連失敗：{e_dc}")
 
+    # 收尾 log：原本這行是純 `return None`，零輸出 —— 呼叫端只知道「無回應」，
+    # 完全無法分辨 402 額度用盡 / 404 dataset 不存在 / 逾時 / proxy 壞掉。
+    # `last_seen_status` 而非 `status`：它是「最後一次**看到**的狀態碼」，逾時 /
+    # ProxyError 的 attempt 不會更新它。同一行出現 `last_seen_status=404, tmo=1` 時，
+    # 措辭本身就講清楚 404 不必然是最後一次嘗試的結果。
+    print(f"[proxy] 全部嘗試失敗（last_seen_status={_last_status}, "
+          f"perr={_perr}, block={_block}, tmo={_tmo}）：{_url_log[:80]}")
     return None

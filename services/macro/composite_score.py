@@ -16,7 +16,56 @@ ui/helpers/macro_helpers.py 保留 shim re-export 確保既有 L3 caller(app.py 
 """
 from __future__ import annotations
 
-from shared.colors import MATERIAL_GREEN, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200
+from shared.colors import (
+    MATERIAL_GREEN, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200, MD_RED_A100,
+)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v19.405 稽核收口:指標聚合的**兩條正交契約**(所有 aggregator 共用語意)
+# ══════════════════════════════════════════════════════════════════════
+# 1) `weight` = **評分權重**。`0` 是完全合法的值(= 本格不進任何加權分子/分母),
+#    **不是**「沒填」。因此一律用「鍵不存在 / None 才回退 1」判斷,
+#    **禁止** `float(v.get("weight", 1) or 1)` —— Python `0 or 1 == 1`,
+#    falsy 回退會把刻意歸零的權重「還原」成 1,去重當場失效
+#    (v19.404 M2/M2_WEEKLY 去重被此式吃掉,QA Reject 主因)。
+# 2) `superseded_by` = **去重事實**(§2.2 provenance)。同一經濟因子有主/備兩源
+#    (M2SL 月頻 vs WM2NS 週頻)且主源已命中時,備源會標 `superseded_by="M2"`。
+#    給**不吃 weight 的路徑**用(zpct 百分位平均、今日關鍵橫幅),
+#    這些路徑用 weight 去重會破壞其方法學獨立性(F-RECON-1)。
+#
+# 兩者刻意分離:weight 管「算多重」、superseded_by 管「是不是同一顆的分身」。
+# 生產端在 `services/macro/us_indicators.py` R["M2_WEEKLY"] 區塊同時輸出兩者。
+
+
+def coerce_weight(raw, default: float = 1.0) -> float:
+    """把 indicator dict 的 `weight` 欄轉 float,**保留 0**。
+
+    Raises TypeError/ValueError 由 caller 決定怎麼處理(各 aggregator 的既有
+    try/except 慣例不同,這裡不吞例外 — §1)。
+    """
+    if raw is None:
+        return float(default)
+    return float(raw)
+
+
+def is_superseded(ind: dict, container: dict | None = None) -> str | None:
+    """本指標是否為「已被主源取代的備源」→ 回傳主源 key;否則 None。
+
+    Args:
+        ind: 單一 indicator dict。
+        container: 完整 indicators dict(可選)。有傳時**額外要求主源真的在場** —
+            若主源不在(舊 cache / 測試 fixture 只塞了備源),回 None 讓備源照常
+            參與,避免把僅有的一筆資料靜默丟掉(§1 不假裝沒資料)。
+    """
+    if not isinstance(ind, dict):
+        return None
+    key = ind.get("superseded_by")
+    if not isinstance(key, str) or not key:
+        return None
+    if container is not None and not isinstance(container.get(key), dict):
+        return None
+    return key
 
 
 def calculate_composite_score(ind: dict, *,
@@ -59,7 +108,8 @@ def calculate_composite_score(ind: dict, *,
             continue
         try:
             sf = float(v.get("score", 0) or 0)
-            wf = float(v.get("weight", 1) or 1)
+            # v19.405:weight=0 合法(去重後的備源),不可被 `or 1` falsy 回退還原。
+            wf = coerce_weight(v.get("weight", 1))
         except (TypeError, ValueError):
             continue
         if sf != sf or wf != wf:  # IEEE-754 NaN guard
@@ -174,7 +224,7 @@ def composite_verdict(total_score: float) -> tuple[str, str, str, str]:
         return ("🟡", "中性", MD_AMBER_300,
                 "市場震盪整理：分批進場，避免重押單一題材")
     if total_score >= c4:
-        return ("🔴", "悲觀", "#ff8a80",
+        return ("🔴", "悲觀", MD_RED_A100,
                 "風險正在集結：拉高現金水位至 15-25%，衛星部位設停利")
     return ("🔴", "極度悲觀", MATERIAL_RED,
             "避險情緒高漲：現金 30%+，核心轉防守型（投資等級債/全球均衡）")

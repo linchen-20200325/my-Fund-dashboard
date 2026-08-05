@@ -14,9 +14,15 @@ import pandas as pd
 from repositories.macro_repository import (
     fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch,
 )
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_BLUE_300, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_BLUE_300, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, MD_RED_A100, TRAFFIC_NEUTRAL
 # v19.245 R13 F-GRAY-4 Phase A HY_SPREAD inflection 收口 SSOT
 from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR_V2
+# v19.404 CFNAI 官方非對稱門檻(衰退 -0.70 / 擴張 +0.20,皆 MA3 基準)。
+# 直接自 L0 shared 引(`services.macro._helpers` 只 re-export 了 RECESSION 那顆)。
+from shared.signal_thresholds import (
+    CFNAI_MA3_EXPANSION_THRESHOLD,
+    CFNAI_TREND_GROWTH,
+)
 
 from services.macro._helpers import (  # noqa: F401
     ENGINE_VERSION,
@@ -40,6 +46,9 @@ from services.macro._helpers import (  # noqa: F401
     FRED_PAYEMS, FRED_PERMIT, FRED_PPI, FRED_RRP, FRED_SAHM,
     FRED_T10Y2Y, FRED_T5YIE, FRED_TGA, FRED_UMCSENT, FRED_UNRATE,
 )
+# v19.405:指標聚合的「去重事實」契約 SSOT(`superseded_by`)。
+# composite_score.py 只 import shared.colors(L0),同層 L2 互 import 無循環。
+from services.macro.composite_score import is_superseded as _is_superseded
 
 _INDICATOR_SNAPSHOT: dict = {}
 
@@ -48,6 +57,19 @@ _INDICATOR_SNAPSHOT: dict = {}
 # 獨立校準,**非** F-GRAY-4「全站 yellow 統一 22」的漏網 —— 稽核時勿逕改為 `_MB_VIX_YELLOW`。
 # 具名常數化以免 §3.3 inline magic + 防未來重複改動。
 _VIX_SNAPSHOT_CALM = 18.0
+
+# ── PMI 補救/防呆常數(v19.404 稽核)──────────────────────────────
+# 歷史補救序列的時效上限:沿用主路徑 `repositories.macro.alternate.fetch_ism_pmi`
+# 的 `max_age_days=90` 契約 —— value 端已被 90 天時效檢查擋掉的死 series,
+# 沒有理由當作 series 端的「歷史結構」餵給 Z-Score / lag-correlation。
+_PMI_HIST_MAX_AGE_DAYS = 90
+# PMI 刻度值域(CLAUDE.md §3.2 合理範圍表 + `fetch_ism_pmi` 各段自帶的
+# `30 <= v <= 70` 防呆,同一契約)。落在此區間外者**必非 PMI 刻度**
+# (例:OECD US BCI ~98–102),不可用 50 榮枯線判讀。
+# ⚠️ 本區間僅作「刻度辨識」,不是「ISM 歷史實務區間」—— 收緊到實務區間需官方
+# 統計佐證,尚未取得,依 §1 維持現狀不臆測(見交付報告任務 4)。
+_PMI_SCALE_MIN = 30.0
+_PMI_SCALE_MAX = 70.0
 
 
 def _detect_inflection(indicators):
@@ -118,12 +140,27 @@ def _detect_inflection(indicators):
             signals.append({"type":"warn","text":f"薩姆規則 {sahm_v:.2f} ≥{SAHM_RECESSION_THRESHOLD} 衰退警報中"}); score -= 2
 
     # v18.250 新增：CFNAI 領先指標由負轉正（領先翻揚拐點）
-    lei_v = _chk("LEI"); lei_p = _chk("LEI","prev")
+    # v19.404 稽核修正：改吃 **CFNAI-MA3**（`ma3`/`ma3_prev`）—— 官方 ±門檻是為 MA3 校準的，
+    #   拿月度值判「由負轉正」會被 √3 倍的噪音頻繁誤觸。缺 ma3 欄（舊 cache / 測試 fixture）
+    #   時退回月度 value/prev，行為與 v19.403 相同（不 raise，§1 降級可辨識）。
+    # 同時補上官方遲滯的另一半：MA3 由 ≤ -0.70 回升越過 +0.20 = 官方「衰退結束」訊號，
+    #   原本只有單邊衰退門檻，復甦期永遠發不出解除警報（對齊同檔 SAHM 的解除拐點寫法）。
+    # v19.405 稽核修正(§4.1 量綱一致):降級必須 **all-or-nothing**。
+    #   原碼兩個 fallback 各自獨立 —— `ma3` 有值但 `ma3_prev` 為 None
+    #   (上方 :866 `len(_ma3_valid) < 2`,即 CFNAI 只夠算 1 期 MA3)時,
+    #   lei_v = **三月均值**、lei_p = **單月值**,拿兩個不同基準比「由負轉正」,
+    #   月度值波動度約 MA3 的 √3 倍 → 假拐點。改為兩欄同時具備才用 MA3,
+    #   否則整組退回月度 value/prev(同基準,行為與 v19.403 相同)。
+    lei_v = _chk("LEI","ma3"); lei_p = _chk("LEI","ma3_prev")
+    if lei_v is None or lei_p is None:
+        lei_v, lei_p = _chk("LEI"), _chk("LEI","prev")
     if lei_v is not None and lei_p is not None:
-        if lei_v > 0 and lei_p <= 0:
-            signals.append({"type":"buy","text":f"⚡ CFNAI 領先 {lei_p:+.2f}→{lei_v:+.2f} 由負轉正 — 景氣翻揚拐點"}); score += 3
+        if lei_p <= CFNAI_RECESSION_THRESHOLD and lei_v > CFNAI_MA3_EXPANSION_THRESHOLD:
+            signals.append({"type":"buy","text":f"⚡ CFNAI-MA3 {lei_p:+.2f}→{lei_v:+.2f} 突破官方擴張門檻 +{CFNAI_MA3_EXPANSION_THRESHOLD:.2f} — 衰退結束確認"}); score += 4
+        elif lei_v > CFNAI_TREND_GROWTH and lei_p <= CFNAI_TREND_GROWTH:
+            signals.append({"type":"buy","text":f"⚡ CFNAI-MA3 {lei_p:+.2f}→{lei_v:+.2f} 由負轉正 — 景氣翻揚拐點"}); score += 3
         elif lei_v < CFNAI_RECESSION_THRESHOLD:
-            signals.append({"type":"warn","text":f"CFNAI {lei_v:+.2f} < {CFNAI_RECESSION_THRESHOLD} 強烈衰退"}); score -= 2
+            signals.append({"type":"warn","text":f"CFNAI-MA3 {lei_v:+.2f} < {CFNAI_RECESSION_THRESHOLD} 強烈衰退"}); score -= 2
 
     if fed_v is not None and fed_p is not None and fed_v <= fed_p and fed_p > 0 and \
        cpi_v and cpi_v < _CPI_MK_GOLDEN_BELOW and "下降" in cpi_t:
@@ -163,6 +200,57 @@ def _yf_iso(ticker, period="2y"):
         print(f"[macro_service/fetch_all] Yahoo {ticker} 失敗,以空 Series 替代: "
               f"{type(_e_iso).__name__}: {_e_iso}")
         return pd.Series(dtype=float)
+
+
+# ── NFP 月變動 → (score, signal, color) ────────────────────────────────
+# v19.404 稽核修正:**符號整組反向**。原碼 `cur_d < 0 → score = +1.5 / 🔴`、
+# `cur_d >= 500 → score = -1.0 / 🟢` —— 非農就業月增為負(衰退訊號、紅燈)卻給正分,
+# 就業成長(綠燈)卻給負分,是全站唯一符號相反的指標。
+#
+# 全站 sign convention(§4.1):**正分 = 偏多 / 風險下降**,與 emoji 同向。
+#   evidence: `services/macro/explain.py` interpretation 7 級(v19.352 「正分 = 偏多」)、
+#             同檔 `YIELD_10Y3M score = 2 if v > 0.5 else -2`(好 = 正分)、
+#             聚合式 `norm = (earned_w + total_w) / (2 * total_w) * 10`(分數越高位階越高)。
+#
+# 幅度另同步修正:原「衰退」給 ±1.5 但 `weight=1.0` —— `calc_macro_phase` 會 clamp 到
+# ±weight,`services/macro/composite_score.calculate_composite_score` **不 clamp**,
+# 同一分數在兩條路徑不一致。現在全部 tier 的 |score| ≤ weight(1.0),兩路徑等價。
+#
+# 上檔為倒 U:250–500k 強勁(+1.0 滿分)、>500k 過熱反而打折(+0.5)——
+# 過熱會推升 Fed 緊縮預期,對風險資產不是線性利多(對齊同檔 CPI/PPI 的「區間最佳」寫法)。
+#
+# ── 門檻出處(v19.405 稽核補標;沿用 `shared/macro_buckets.py:23-26` 的標註慣例)──
+# 同一 PR 內 CFNAI 的 -0.70 / +0.20 附了 Chicago Fed 官方逐字引文 + URL;
+# 本組三個切點**沒有**同等級的來源,不得比照辦理假裝有,故據實標 DESIGN:
+#   * BLS 發布 NFP 月變動本身,**不發布**任何「冷 / 中性 / 強勁 / 過熱」分級表;
+#   * 100k 一般被市場當「損益兩平就業成長」(吸納勞動力自然增長所需)的概念值,
+#     但該值隨勞動參與率 / 移民淨流入變動,各家(Fed 官員談話、投行研究)估計並不一致,
+#     本專案**未取得**可引用的單一官方定義 → 不掛任何機構名背書;
+#   * 250k / 500k 為本專案 tier 切點,無外部來源。
+# ⚠️ 因此本組**只保證方向與幅度**(符號 = 全站 sign convention、|score| ≤ weight),
+#    **不宣稱數值權威**。要調數值需 user 指派 + 附得起的出處(§-1 不主動推)。
+# ⚠️ 禁止把本常數改標成 "SSOT:<某處>" 除非真的接上該處常數(§3.3 反捏造)。
+_NFP_TIER_SOURCE: str = "DESIGN"   # 見上方說明;非官方門檻,本專案自訂分級
+_NFP_COLD_K = 100.0     # 千人;< 100k 偏冷        (DESIGN)
+_NFP_NEUTRAL_K = 250.0  # 千人;100–250k 中性      (DESIGN)
+_NFP_STRONG_K = 500.0   # 千人;250–500k 強勁 / > 500k 過熱  (DESIGN)
+
+
+def _nfp_tier(cur_d: float) -> tuple[float, str, str]:
+    """非農新增就業月變動(千人)→ (score, signal_emoji, color)。
+
+    純函式,無 I/O。獨立出來讓 `tests/test_macro_indicator_signs.py` 能直接釘死符號。
+    """
+    if cur_d < 0:
+        return -1.0, "🔴", MATERIAL_RED            # 就業淨減 = 衰退訊號
+    if cur_d < _NFP_COLD_K:
+        # v19.405:原 inline hex,已具名收 SSOT(§3.3 色票 shared/colors.py)
+        return -0.5, "🟠", MD_RED_A100             # 偏冷
+    if cur_d < _NFP_NEUTRAL_K:
+        return 0.0, "🟡", MD_AMBER_300             # 中性
+    if cur_d < _NFP_STRONG_K:
+        return 1.0, "🟢", MD_GREEN_A200            # 強勁
+    return 0.5, "🟡", MD_AMBER_300                 # 過熱 — 強但引發 Fed 緊縮,上檔打折
 
 
 def fetch_all_indicators(fred_api_key):
@@ -211,22 +299,68 @@ def fetch_all_indicators(fred_api_key):
         #   Phase 4 lag-correlation / Phase 3-B 燈號回測仍可用 — 都看相對變化）
         # v18.119: 條件放寬「s is None or len(s) < 60」— 上游 fetch_ism_pmi 雖已改 tail(120)
         # 但 MacroMicro / ISM World 等 HTML 源仍可能回 0 期，雙保險。
+        # v19.404 稽核修正（§1 Fail Loud）：本補救路徑抓的 `ISPMANPMI` 與 `NAPM` 兩條
+        #   FRED series 都在 2016-08 ISM 收回授權後停更/下架 —— 主路徑 `fetch_ism_pmi`
+        #   有 90 天時效檢查會跳過它們，這裡卻**無時效檢查也無空值 log**：
+        #     (a) df_hist 為空（series 已下架）→ 原碼靜默什麼都不做，看不出補救失敗；
+        #     (b) df_hist 非空但末筆停在 2016 → 把一段十年前的死序列裝進 `series`，
+        #         而 `value` 是當期值 → `calc_macro_phase_zpct` 的
+        #         `z = (value - mean(series.tail(60))) / std` 與 Phase 4 lag-corr 全被污染。
+        #   改為：空 → 明確 log；過期（沿用 `fetch_ism_pmi(max_age_days=90)` 同一時效契約）
+        #   → 明確 log 並**拒絕採用**，寧可留 series=None 讓下游 `len(s)>=N` 防線跳過該格。
         if (s is None or len(s) < 60) and fred_api_key:
             try:
                 df_hist = _fred(FRED_ISM_PMI, fred_api_key, 144)
-                if not df_hist.empty:
-                    s = df_hist.set_index("date")["value"].tail(120)
-                    print(f"[PMI] series 補救：FRED ISPMANPMI 歷史 {len(s)} 期")
+                if df_hist.empty:
+                    print(f"[PMI] ⚠️ series 補救失敗：FRED {FRED_ISM_PMI} 回空 "
+                          f"(2016-08 ISM 收回授權後停更/下架)，本次不補歷史")
+                else:
+                    _hist_last = pd.to_datetime(df_hist["date"].iloc[-1])
+                    _hist_age = (pd.Timestamp.today().normalize() - _hist_last.normalize()).days
+                    if _hist_age > _PMI_HIST_MAX_AGE_DAYS:
+                        print(f"[PMI] ⚠️ series 補救**拒絕採用**：FRED {FRED_ISM_PMI} 末筆="
+                              f"{_hist_last.date()} 已停更 {_hist_age} 天 > "
+                              f"{_PMI_HIST_MAX_AGE_DAYS} 天；與當期 value 混用會污染 "
+                              f"Z-Score / lag-correlation（§1 不以死值假裝有歷史）")
+                    else:
+                        s = df_hist.set_index("date")["value"].tail(120)
+                        print(f"[PMI] series 補救：FRED {FRED_ISM_PMI} 歷史 {len(s)} 期"
+                              f"（末筆 {_hist_last.date()}，age={_hist_age}d）")
             except Exception as _e_pmi_hist:
-                print(f"[PMI] series 補救失敗：{_e_pmi_hist}")
+                print(f"[PMI] ⚠️ series 補救失敗：{type(_e_pmi_hist).__name__}: {_e_pmi_hist}")
         is_proxy = bool(pmi.get("is_proxy"))
         src_label = pmi.get("source", "?")
-        if is_proxy and src_label == "OECD-Proxy":
+        # v19.404 稽核修正：原判斷式 `src_label == "OECD-Proxy"` **永遠不成立** ——
+        #   `repositories/macro/alternate.fetch_ism_pmi` 方案 7 回傳的 `source` 實際是
+        #   `"FRED:BSCICP02USM460S:proxy"`（"OECD-Proxy" 只出現在該段的 print log 裡）。
+        #   後果：OECD 商業信心（值域 ~98–102，100 為長期平均）會掉進 else 分支，被拿
+        #   50 榮枯線判讀 → 98 > 50 → 恆給 🟢 + score=2（該指標的最高正分），且卡名被
+        #   誤標成「Phil Fed 替代」。改以 series_id / source 子字串比對（來源契約），
+        #   並加值域防呆：is_proxy 且值落在 PMI 刻度 [30,70] 之外 = 必非 PMI 刻度。
+        _pmi_sid = str(pmi.get("series_id", ""))
+        _off_pmi_scale = not (_PMI_SCALE_MIN <= v <= _PMI_SCALE_MAX)
+        _is_index100 = is_proxy and (
+            "BSCICP02" in _pmi_sid or "BSCICP02" in str(src_label)
+            or "OECD" in str(src_label).upper()
+            or _off_pmi_scale
+        )
+        # v19.404:命中來源攤在 log,方便現場對帳「顯示值到底出自哪一段備援」
+        print(f"[PMI] 採用 value={v} date={pmi.get('date', '?')} "
+              f"source={src_label} label={pmi.get('label', '')} "
+              f"series_id={_pmi_sid or '-'} is_proxy={is_proxy} "
+              f"scale={'index100' if _is_index100 else 'pmi50'}")
+        if _is_index100 and _off_pmi_scale and not (
+                "BSCICP02" in _pmi_sid or "BSCICP02" in str(src_label)
+                or "OECD" in str(src_label).upper()):
+            # §1:值不在 PMI 刻度、來源又認不出是 OECD → 刻度不明,只能保守走 index-100
+            print(f"[PMI] ⚠️ 值 {v} 不在 PMI 刻度 [{_PMI_SCALE_MIN:.0f},{_PMI_SCALE_MAX:.0f}] "
+                  f"且來源無法辨識({src_label}) — 以 index-100 刻度保守判讀,請人工確認來源")
+        if _is_index100:
             # OECD BCI 概念替代：100 為長期平均，>100 擴張、<100 收縮
             signal_g = v > 100
             signal_r = v < 99
             score = 1 if signal_g else (-1 if signal_r else 0)
-            desc = (f"⚠️ 替代指標：{pmi.get('label', 'OECD-Proxy')} | "
+            desc = (f"⚠️ 替代指標（非 PMI 刻度）：{pmi.get('label', 'OECD US BCI')} | "
                     "100 為長期平均，>100 擴張 | "
                     f"資料源：{src_label}")
             name = "ISM PMI（替代：OECD US BCI）"
@@ -384,6 +518,9 @@ def fetch_all_indicators(fred_api_key):
             signal="🟢" if v>_M2_EASING else ("🔴" if v<_M2_TIGHTENING else "🟡"),
             color=MATERIAL_GREEN if v>_M2_EASING else (MATERIAL_RED if v<_M2_TIGHTENING else MATERIAL_ORANGE),
             score=1 if v>_M2_EASING else (-1 if v<_M2_TIGHTENING else 0),
+            # v19.404:月頻為 M2 因子的主源;週頻 WM2NS 命中時會自我降為 weight=0
+            # (見下方 M2_WEEKLY 區塊),避免同因子重複計數。
+            is_scored=True,
             weight=1, series=s24)
 
     # v19.49 perf: SPY / RSP / DXY 三條 yfinance 並行（原 3× 序列 → max(t)）
@@ -718,21 +855,59 @@ def fetch_all_indicators(fred_api_key):
     #    CFNAI 月頻活躍發布，匯總 85 個月度經濟指標，z-score 標準化後
     #    平均值=0，標準差=1。三月均值 < -0.7 強烈衰退訊號。
     # 注意：CFNAI 數值意涵與 USSLIND 不同，閾值與描述已對應調整。
+    # v19.404 稽核修正（三重錯誤，全部依 Chicago Fed 官方 background PDF 校正）：
+    #   1. 門檻基準錯：-0.70 是為 **CFNAI-MA3** 校準的，原碼卻拿去砍月度 `v`。月度序列
+    #      波動度約為 MA3 的 √3 ≈ 1.7 倍 → 假衰退訊號大量增加。改以 `v_ma3` 判讀。
+    #   2. 擴張門檻缺席：官方是「衰退 -0.70 / 擴張 +0.20」的**非對稱含遲滯**設計，
+    #      原碼只有單邊（且綠界用腦補的 0.0 / desc 寫「> +0.7 強勁擴張」查無官方出處）。
+    #   3. 幅度超出 weight：原 score 可到 -2 但 weight=1 → `calc_macro_phase` 會 clamp、
+    #      `composite_score.calculate_composite_score` 不 clamp，同分數兩路徑不一致。
+    #      現在全 tier |score| ≤ weight(1.0)。
+    # 官方原文：
+    #   "an increasing likelihood of a recession has historically been associated with a
+    #    CFNAI-MA3 value below -0.70 ... a significant likelihood of an expansion has
+    #    historically been associated with a CFNAI-MA3 value above +0.20."
+    #   零點語意："A zero value for the index indicates that the national economy is
+    #    expanding at its historical trend rate of growth."
+    #   https://www.chicagofed.org/-/media/publications/cfnai/background/cfnai-background-pdf.pdf
+    #   現值(2026-06)：CFNAI = -0.02 / CFNAI-MA3 = -0.05
+    #   https://www.chicagofed.org/research/data/cfnai/current-data
+    # ⚠️ 常見誤用：-0.35 是 **CFNAI Diffusion Index**（另一條擴散序列）的擴張門檻，
+    #    與 CFNAI 水準值無關 —— 已於 `shared/macro_buckets.py` 一併移除。
+    # 【為何不改抓 FRED CFNAIMA3】下方 `s.rolling(3).mean()` 逐式等於 CFNAI-MA3 的定義
+    #   （MA3 = 月度 CFNAI 的 3 期移動平均），多抓一條 series 只是多一次 IO 與一個
+    #   新 fallback 面，對當前需求是「用不到的抽象」(§8.1 step 6)。同時 `value`/`series`
+    #   維持月度基準才與 Z-Score 矩陣（value vs series 同尺度，見
+    #   tests/test_indicator_scale_consistency.py）一致；MA3 以獨立欄位 `ma3`/`ma3_prev` 揭露。
     df = _fred_iso(FRED_CFNAI, fred_api_key, 144)
     if len(df) >= 2:
         s = df.set_index("date")["value"].tail(120)
         v = float(df.iloc[-1]["value"]); p = float(df.iloc[-2]["value"])
-        # CFNAI 三月均值（CFNAI-MA3，更可靠的衰退訊號）
-        ma3 = s.rolling(3).mean()
-        v_ma3 = float(ma3.iloc[-1]) if len(ma3.dropna()) >= 1 else v
+        # CFNAI 三月均值（CFNAI-MA3 = 官方衰退/擴張門檻的正確基準）
+        _ma3_valid = s.rolling(3).mean().dropna()
+        v_ma3 = float(_ma3_valid.iloc[-1]) if len(_ma3_valid) >= 1 else v
+        v_ma3_prev = float(_ma3_valid.iloc[-2]) if len(_ma3_valid) >= 2 else None
+        # 下方 inline 的 -0.7 / 0.0 為 SSOT `CFNAI_RECESSION_THRESHOLD` /
+        # `CFNAI_TREND_GROWTH` 的字面鏡像 —— `tests/test_card_threshold_drift.py`
+        # 要求 MACRO_THRESHOLDS["LEI"] 門檻須以字面值出現在本區塊（同 SAHM 既有慣例）；
+        # 字面值與 SSOT 的相等性由 `tests/test_macro_indicator_signs.py` 釘死。
         R["LEI"] = dict(name="CFNAI 領先指標", value=round(v,2), prev=round(p,2),
+            ma3=round(v_ma3, 2),
+            ma3_prev=(round(v_ma3_prev, 2) if v_ma3_prev is not None else None),
             unit="", type="領先", date=str(df.iloc[-1]["date"])[:7],
-            desc=f"芝加哥聯儲全國活動指數（85 指標 z-score）| 3M均值={v_ma3:+.2f} "
-                 f"| > +0.7 強勁擴張 | < -0.7 衰退預警 | PMI 替代源",
+            desc=f"芝加哥聯儲全國活動指數（85 指標 z-score）| 燈號/評分以 3M均值"
+                 f"={v_ma3:+.2f} 判讀（官方 CFNAI-MA3 基準）"
+                 f"| > +{CFNAI_MA3_EXPANSION_THRESHOLD:.2f} 擴張確認 | 0 = 歷史趨勢成長 "
+                 f"| < -0.7 衰退預警 | PMI 替代源",
             trend=_trend(df["value"].tolist()[-6:]),
-            signal="🟢" if v > 0.0 else ("🔴" if v < -0.7 else "🟡"),
-            color=MATERIAL_GREEN if v > 0.0 else (MATERIAL_RED if v < -0.7 else MATERIAL_ORANGE),
-            score=1 if v > 0.0 else (-2 if v_ma3 < -0.7 else (-1 if v < 0 else 0)),
+            signal=("🟢" if v_ma3 > CFNAI_MA3_EXPANSION_THRESHOLD
+                    else ("🔴" if v_ma3 < -0.7 else "🟡")),
+            color=(MATERIAL_GREEN if v_ma3 > CFNAI_MA3_EXPANSION_THRESHOLD
+                   else (MATERIAL_RED if v_ma3 < -0.7 else MATERIAL_ORANGE)),
+            # +1.0 官方擴張 / +0.5 高於趨勢未達擴張 / -0.5 低於趨勢 / -1.0 官方衰退
+            score=(1.0 if v_ma3 > CFNAI_MA3_EXPANSION_THRESHOLD
+                   else (-1.0 if v_ma3 < -0.7
+                         else (0.5 if v_ma3 > 0.0 else -0.5))),
             weight=1, series=s)
 
     # ── CONT_CLAIMS 持續失業金（CCSA，週頻）──────────────────────
@@ -757,6 +932,21 @@ def fetch_all_indicators(fred_api_key):
 
     # ── M2_WEEKLY 週頻 M2（WM2NS）─────────────────────────────────
     # M2 月度延遲時的補位；YoY 計算用 52 週前的數據對比
+    #
+    # v19.404 稽核修正（重複計數）：WM2NS 與 M2SL 是**同一個經濟因子**的兩種取樣，
+    #   原碼兩者各自 `weight=1` 且平行進入所有加權路徑
+    #   （`calc_macro_phase` 分子分母 / `composite_score.calculate_composite_score` /
+    #    `ui/helpers/macro/helpers._CATEGORY_MAP["💧 流動性"]` 同時列 M2 與 M2_WEEKLY），
+    #   等於同一因子被計兩次；又因 SA/NSA 與月/週取樣差異，兩者 Z 值可反向
+    #   （線上實測 M2_WEEKLY Z=+0.55 vs M2 Z=-0.11）→ 互相抵銷，流動性訊號被稀釋。
+    #   本模組 docstring 早已言明「高頻**替代**源」——「替代」的語意就是取代而非疊加。
+    #
+    #   修法（對齊 §2.1「第一命中即用、禁止平均」）：月頻 M2 命中 → 週頻降為
+    #   **顯示專用**（`weight=0` → 不進任何加權分母/分子），月頻缺漏才由週頻遞補計分。
+    #   選 weight=0 而非「不輸出」，是因為 Z-Score 矩陣 / 資料看板 / 教學卡都直接讀
+    #   `indicators["M2_WEEKLY"]`（`ui/tab1_macro_midcycle.py:95` 等），拔掉會讓那些
+    #   面板整格消失；weight=0 只切斷評分、不動顯示。
+    #   實際採用哪一個以 `is_scored` / `superseded_by` 揭露（§2.2 provenance）。
     df = _fred_iso(FRED_M2_WEEKLY, fred_api_key, 520)
     if len(df) >= 53:
         s_full = df.set_index("date")["value"]
@@ -764,14 +954,25 @@ def fetch_all_indicators(fred_api_key):
         s24 = yoy.dropna().tail(260)
         if len(s24) >= 2:
             v = float(s24.iloc[-1]); p = float(s24.iloc[-2])
+            _m2_monthly_hit = isinstance(R.get("M2"), dict)
+            if _m2_monthly_hit:
+                print("[M2] 月頻 M2SL 已命中 → M2_WEEKLY(WM2NS) 降為顯示專用 "
+                      "weight=0（同因子不重複計分）")
             R["M2_WEEKLY"] = dict(name="M2 週頻 (YoY)", value=round(v,2), prev=round(p,2),
                 unit="%", type="流動性", date=str(df.iloc[-1]["date"])[:10],
-                desc="WM2NS 週頻 | M2 月版延遲時的最即時替代 | 同樣 >5%寬鬆 / <0%緊縮",
+                desc=("WM2NS 週頻 | M2 月版延遲時的最即時替代 | 同樣 >5%寬鬆 / <0%緊縮 | "
+                      + ("⚠️ 月頻 M2 已命中，本格僅供顯示、不計入加權分"
+                         if _m2_monthly_hit else "✅ 月頻 M2 缺漏，本格遞補計分")),
                 trend=_trend(s24.tolist()[-6:]),
                 signal="🟢" if v > 5 else ("🔴" if v < 0 else "🟡"),
                 color=MATERIAL_GREEN if v > 5 else (MATERIAL_RED if v < 0 else MATERIAL_ORANGE),
                 score=1 if v > 5 else (-1 if v < 0 else 0),
-                weight=1, series=s24)
+                # 月頻命中 → weight=0（顯示保留、評分歸零）；否則遞補為 1
+                weight=(0 if _m2_monthly_hit else 1),
+                is_scored=(not _m2_monthly_hit),
+                superseded_by=("M2" if _m2_monthly_hit else None),
+                series=s24)
+        # 週頻缺漏時，月頻 M2 本來就在評分內，無須額外處理（§1 不補假值）
 
     # ── INFL_EXP_5Y 5Y 通膨預期（T5YIE，日頻）─────────────────────
     # CPI 月度延遲時的高頻補位；債市每日交易計算的 5 年期 breakeven
@@ -803,9 +1004,8 @@ def fetch_all_indicators(fred_api_key):
             score=0.5 if v > 1500 else (-0.5 if v < 1200 else 0),
             weight=0.5, series=s)
 
-    # ── NFP 非農新增就業 v19.17 ─────────────────────────────────────
+    # ── NFP 非農新增就業 v19.17（v19.404 符號修正）──────────────────
     # PAYEMS 是「就業人口總數」，市場關注的「非農新增」是月變動量（千人）
-    # direction=below：高增量 = 景氣強 = score 偏負（low risk）
     df = _fred_iso(FRED_PAYEMS, fred_api_key, 144)
     if len(df) >= 3:
         s_full = df.set_index("date")["value"]
@@ -813,26 +1013,15 @@ def fetch_all_indicators(fred_api_key):
         s_delta = s_full.diff().dropna().tail(120)
         cur_d = float(s_delta.iloc[-1])
         prev_d = float(s_delta.iloc[-2])
-        # 檔次評分：< 0 衰退 / 0-100k 偏冷 / 100-250k 中性 / 250-500k 強勁 / > 500k 過熱
-        if cur_d < 0:
-            score_nfp = 1.5      # 衰退
-            sig_nfp, col_nfp = "🔴", MATERIAL_RED
-        elif cur_d < 100:
-            score_nfp = 0.5      # 偏冷
-            sig_nfp, col_nfp = "🟠", "#ff8a80"
-        elif cur_d < 250:
-            score_nfp = 0.0      # 中性
-            sig_nfp, col_nfp = "🟡", MD_AMBER_300
-        elif cur_d < 500:
-            score_nfp = -0.5     # 強勁
-            sig_nfp, col_nfp = "🟢", MD_GREEN_A200
-        else:
-            score_nfp = -1.0     # 過熱（也可能引發 Fed 緊縮）
-            sig_nfp, col_nfp = "🟢", MATERIAL_GREEN
+        score_nfp, sig_nfp, col_nfp = _nfp_tier(cur_d)
         R["NFP"] = dict(
             name="非農新增就業（月變動）", value=round(cur_d, 0), prev=round(prev_d, 0),
             unit="千人", type="同時", date=str(df.iloc[-1]["date"])[:7],
-            desc=f"本月 {cur_d:+.0f}k | 上月 {prev_d:+.0f}k | <0 衰退 / <100k 偏冷 / 100-250k 中性 / >250k 強勁",
+            desc=(f"本月 {cur_d:+.0f}k | 上月 {prev_d:+.0f}k | "
+                  f"<0 衰退🔴 / <{_NFP_COLD_K:.0f}k 偏冷🟠 / "
+                  f"{_NFP_COLD_K:.0f}-{_NFP_NEUTRAL_K:.0f}k 中性🟡 / "
+                  f"{_NFP_NEUTRAL_K:.0f}-{_NFP_STRONG_K:.0f}k 強勁🟢 / "
+                  f">{_NFP_STRONG_K:.0f}k 過熱🟡(Fed 緊縮風險)"),
             trend=_trend(s_delta.tolist()[-6:]),
             signal=sig_nfp, color=col_nfp,
             score=score_nfp, weight=1.0,
@@ -1025,10 +1214,22 @@ def calc_macro_phase(indicators: dict) -> dict:
     ─────────────────────────────────────────────────
     最大可能 ≈ 14 → 正規化到 0~10
     景氣判斷：0~2衰退 | 3~4復甦 | 5~7擴張 | 8~10高峰
+
+    ⚠️ **`_` 前綴 key 為 meta,不參與計算**(v19.404 稽核修正)
+    `fetch_all_indicators` 除了指標外還會塞 provenance meta(目前只有 `_fred_sources`,
+    5 條 FRED series 的命中狀態 dict)。這類 meta **沒有 `weight` / `score` 欄**,
+    舊寫法 `ind.get("weight", 1)` 會給它預設 w=1 → 被當成一個「w=1 / s=0 的指標」
+    計入 `total_w` 分母,而 `earned_w` 分子拿 0 → 正規化式
+    `(earned_w + total_w) / (2*total_w)` 的分母被灌水,**所有分數被系統性拉向中性 5.0**
+    (權重總和 ~19 時,單一 meta 就讓極端分往 5.0 收斂約 0.13 分;若未來 meta 變多會更嚴重)。
+    另同時排除非 dict 值(防呆),避免 `.get` AttributeError。
+    新增 meta 一律用 `_` 前綴,自動被本迴圈與 `_build_phase_provenance` 排除。
     """
     # 加權加總
     total_w = 0; earned_w = 0
     for key, ind in indicators.items():
+        if str(key).startswith("_") or not isinstance(ind, dict):
+            continue   # v19.404:meta(如 _fred_sources)不是指標,禁止污染權重分母
         w = ind.get("weight", 1)
         s = ind.get("score", 0)
         # 確保 score 不超過 weight
@@ -1211,12 +1412,16 @@ def _build_phase_provenance(indicators: dict, total_w: float, earned_w: float) -
     import pandas as _pd
     sources = {}
     for k, ind in indicators.items():
+        # v19.404:`_` 前綴為 meta(如 _fred_sources),與 calc_macro_phase 同步排除
+        if str(k).startswith("_"):
+            continue
         if isinstance(ind, dict) and ind.get("source"):
             sources[k] = str(ind["source"])
     return {
         "sources": sources,
-        "contributing": len([1 for ind in indicators.values()
-                             if isinstance(ind, dict) and ind.get("score") is not None]),
+        "contributing": len([1 for _k, ind in indicators.items()
+                             if not str(_k).startswith("_")
+                             and isinstance(ind, dict) and ind.get("score") is not None]),
         "total_weight": float(total_w),
         "earned_weight": float(earned_w),
         "fetched_at": _pd.Timestamp.now('UTC').isoformat(),
@@ -1296,6 +1501,23 @@ def calc_macro_phase_zpct(indicators: dict) -> dict:
     skipped: list[str] = []
     for key, ind in (indicators or {}).items():
         if not isinstance(ind, dict):
+            continue
+        # v19.404:`_` 前綴為 meta(如 _fred_sources),與主路徑同步排除。
+        # (原本靠「無 value/series」被動跳過,但會污染 skipped 清單讓 audit 誤判。)
+        if str(key).startswith("_"):
+            continue
+        # v19.405 稽核修正(§2.1「第一命中即用、禁止平均」):同因子的備源不得再進來。
+        #   本演算法**刻意不讀 weight**(不加權的百分位平均才與主路徑正交,F-RECON-1),
+        #   所以 v19.404 給 M2_WEEKLY 的 `weight=0` 對這條路徑完全無效 ——
+        #   M2 與 M2_WEEKLY 兩格都有 series 且 ≥60 期 → 各佔 1/n 平均,
+        #   且兩者 Z 常反向(線上實測 M2_WEEKLY Z=+0.55 vs M2 Z=-0.11)→ 互相抵銷。
+        #   改讀**去重事實** `superseded_by`(§2.2 provenance,生產端 R["M2_WEEKLY"]
+        #   在月頻命中時才會標)。刻意不用靜態 key 名單:supersede 是**執行期條件**
+        #   (月頻缺漏時週頻要遞補計分),寫死名單會連遞補場景一起砍掉 = §1 丟資料。
+        #   跳過原因寫進 skipped,audit 看得到不是靜默。
+        _sup = _is_superseded(ind, indicators)
+        if _sup:
+            skipped.append(f"{key}:superseded_by={_sup}")
             continue
         v = ind.get("value")
         s = ind.get("series")

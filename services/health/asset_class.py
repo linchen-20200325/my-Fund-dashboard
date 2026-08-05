@@ -18,6 +18,7 @@ user 要在基金健診顯示每檔是「核心資產」還是「衛星資產」
 """
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 # ── 衛星資產關鍵字(集中 / 主題 / 單一國 / 高收益 — 命中優先於核心)──
@@ -122,12 +123,20 @@ def _pack(label: str, source: Optional[str], note: str) -> dict:
 def summarize_core_satellite_allocation(items) -> dict:
     """組合層「核心 / 衛星配置比例」彙總 SSOT + 對照目標(核心 50~80%)燈號。
 
-    以各檔**投入金額加權**(非等權),算出組合實際核心 / 衛星 / 待定佔比,
-    再與建議比例(CORE_TARGET_MIN~MAX_PCT)對照給燈號。
+    以傳入的 `weight` 加權(**本函式忠實依 caller 給的權重計算,不自行假設語意**),
+    算出組合實際核心 / 衛星 / 待定佔比,再與建議比例(CORE_TARGET_MIN~MAX_PCT)對照給燈號。
+
+    ⚠️ `weight_mode` — caller 對外陳述「加權方式」時**必須**讀此欄(§1 Fail Loud, Never Fake)
+    ============================================================================
+    呼叫端有兩種:基金健診 Tab 只有**單一本金欄位** broadcast 給全部基金(每檔 weight 相同
+    → 實際等權,結果 ≈ 檔數佔比);Tab3 持倉健診傳各檔實際 `invest_twd`(真金額加權),但
+    user 若全未填 invest_twd 也會全退預設值 → 一樣變等權。因此「是不是金額加權」**不能由
+    caller 自稱**,只能由實際權重推斷 —— 本函式回傳 `weight_mode` 讓 UI 照實說,
+    避免對 user 陳述與計算行為不符的方法論。
 
     Args:
         items: [{"label": "核心" / "衛星" / "待定", "weight": float(投入金額 TWD)}]
-               weight ≤ 0 / 非數 → 該檔略過(不計入分母)。
+               weight ≤ 0 / 非數 → 該檔略過(不計入分母,亦不參與 weight_mode 推斷)。
     Returns:
         {
           "total_weight": float,
@@ -135,18 +144,21 @@ def summarize_core_satellite_allocation(items) -> dict:
           "n_core" / "n_satellite" / "n_undetermined": int,
           "status": "🟢" / "🟡" / "🔴" / "⚪",   # 配置評估燈
           "message": str,
+          "weight_mode": "amount" / "equal" / "single" / "none",  # 見上方 ⚠️
         }
         判定:待定 > 30% → ⚪(不可靠);核心 < 50% → 🔴(衛星過重);核心 > 80% → 🟡(過保守);
         50~80% → 🟢(穩健)。無有效權重 → ⚪。
     """
     core_w = sat_w = und_w = 0.0
     n_core = n_sat = n_und = 0
+    eff_weights: list[float] = []   # 有效(>0)權重,供 weight_mode 推斷
     for it in (items or []):
         if not isinstance(it, dict):
             continue
         w = _safe_w(it.get("weight"))
         if w is None or w <= 0:
             continue
+        eff_weights.append(w)
         label = str(it.get("label") or "").strip()
         if "核心" in label:
             core_w += w
@@ -161,7 +173,8 @@ def summarize_core_satellite_allocation(items) -> dict:
     if total <= 0:
         return {"total_weight": 0.0, "core_pct": 0.0, "satellite_pct": 0.0,
                 "undetermined_pct": 0.0, "n_core": 0, "n_satellite": 0,
-                "n_undetermined": 0, "status": "⚪", "message": "無有效投入金額,無法計算配置比例"}
+                "n_undetermined": 0, "status": "⚪", "weight_mode": "none",
+                "message": "無有效投入金額,無法計算配置比例"}
     core_pct = core_w / total * 100.0
     sat_pct = sat_w / total * 100.0
     und_pct = und_w / total * 100.0
@@ -190,7 +203,32 @@ def summarize_core_satellite_allocation(items) -> dict:
         "undetermined_pct": round(und_pct, 1),
         "n_core": n_core, "n_satellite": n_sat, "n_undetermined": n_und,
         "status": status, "message": msg,
+        "weight_mode": infer_weight_mode(eff_weights),
     }
+
+
+def infer_weight_mode(weights) -> str:
+    """由**實際權重**推斷加權方式(caller 對 user 陳述方法論的唯一依據)。
+
+    Returns:
+        "none"   — 無有效權重(無法計算)
+        "single" — 僅 1 檔(加權方式不影響結果)
+        "equal"  — 全部權重相等 → 佔比 ≡ 檔數佔比,**不是**金額配置
+        "amount" — 權重不全相等 → 確實依金額加權
+
+    「全部相等 ⟺ 佔比 = 檔數佔比」為數學恆真,故本推斷不會說謊:即使 caller 傳的是
+    真實 invest_twd,只要各檔金額恰好相同,結論(=檔數佔比)仍然成立。
+    浮點比較走 math.isclose(§4.3 禁止 `==`)。
+    """
+    ws = list(weights or [])
+    if not ws:
+        return "none"
+    if len(ws) == 1:
+        return "single"
+    w0 = ws[0]
+    if all(math.isclose(w, w0, rel_tol=1e-9, abs_tol=1e-12) for w in ws[1:]):
+        return "equal"
+    return "amount"
 
 
 def _safe_w(v) -> Optional[float]:

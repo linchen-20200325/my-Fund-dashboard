@@ -164,17 +164,28 @@ class TestCalcMetricsIntegration:
         """回歸:無配息基金 → _total_return_nav(s,[]) 逐點等於 s → 風險指標零變化。
 
         以 max_drawdown 對帳:calc_metrics(s,[]) 與『直接用原始 s 算』一致。
+
+        **P0-2 更新**:cum 由 `(1+log_ret).cumprod()`(把對數報酬餵進簡單複利式,
+        系統性向下漂移 → MaxDD 高估)改為 `exp(cumsum(log_ret))`。對照演算法同步
+        改為正確式;另加一條「直接用原始價格比」的第三演算法交叉驗證(§4.3)。
         """
         vals = [10.0 * (1 + 0.001 * ((-1) ** i) + i * 0.0002) for i in range(300)]
         s = _mk_series(vals)
         # 身分保證:空配息 → 還原序列 == 原序列
         assert _total_return_nav(s, []).equals(s)
         m = calc_metrics(s, [])
-        # 直接以原始 s 重算 max_dd(對照演算法,§4.3)
+        # 對照演算法 A:log 空間 exp(cumsum)(§4.4)
         lr = np.log(s / s.shift(1)).dropna()
-        cum = (1 + lr).cumprod()
+        cum = np.exp(lr.cumsum())
         expect_dd = round(float(((cum - cum.cummax()) / cum.cummax()).min()) * 100, 2)
         assert m["max_drawdown"] == expect_dd
+        # 對照演算法 B:完全不經 log —— 直接用價格比 s/s[0](exp(cumsum) 恆等於此)。
+        # 切掉 t=0(log_ret 首點被 diff 吃掉),兩者索引才對齊。
+        px = (s / float(s.iloc[0])).iloc[1:]
+        assert np.allclose(cum.to_numpy(), px.to_numpy(), rtol=1e-12, atol=1e-12), \
+            "exp(cumsum(log_ret)) 應逐點等於 s/s[0](無漂移)"
+        expect_dd_px = round(float(((px - px.cummax()) / px.cummax()).min()) * 100, 2)
+        assert m["max_drawdown"] == expect_dd_px
 
 
 # ══════════════════════════════════════════════════════════════
@@ -189,3 +200,13 @@ class TestWiringPinned:
         assert "np.log(s_tr / s_tr.shift(1))" in src
         # 舊的原始 NAV log_ret 不應殘留在 calc_metrics 主計算路徑
         assert "log_ret = np.log(s / s.shift(1))" not in src
+
+    def test_cum_uses_exp_cumsum_not_simple_compound(self):
+        """P0-2 釘住:cum 必須是 exp(cumsum(log_ret)),不可回歸 (1+log_ret).cumprod()。"""
+        from pathlib import Path
+        src = (Path(__file__).resolve().parent.parent
+               / "services/fund_service.py").read_text(encoding="utf-8")
+        assert "cum=np.exp(log_ret.cumsum())" in src
+        # 舊賦值式不得回歸(註解裡引述舊式屬說明,故只釘「賦值」形態)
+        assert "cum=(1+log_ret).cumprod()" not in src
+        assert "cum = (1 + log_ret).cumprod()" not in src

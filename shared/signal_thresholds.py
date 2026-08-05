@@ -25,7 +25,25 @@ TRADING_DAYS_PER_YEAR: int = 252
 SAHM_RECESSION_THRESHOLD: float = 0.5
 # 失業率 3MA - 過去 12M 最低 ≥ 0.5pp → 衰退中(Fed Sahm rule 原始定義)
 CFNAI_RECESSION_THRESHOLD: float = -0.7
-# Chicago Fed National Activity Index 3MA < -0.7 → 衰退進行中
+# ⚠️ 適用對象是 **CFNAI-MA3**(三月移動平均),**不是**月度 CFNAI —— 月度序列波動度約為
+# MA3 的 √3 ≈ 1.7 倍,拿 -0.7 去砍月度值會製造大量假衰退訊號。caller 務必先算 3M MA。
+# 官方原文(Chicago Fed CFNAI background PDF, p.2):
+#   "an increasing likelihood of a recession has historically been associated with a
+#    CFNAI-MA3 value below -0.70 following a period of economic expansion."
+# https://www.chicagofed.org/-/media/publications/cfnai/background/cfnai-background-pdf.pdf
+CFNAI_MA3_EXPANSION_THRESHOLD: float = 0.20
+# 官方非對稱含遲滯設計的另一半:衰退門檻 -0.70 / 擴張門檻 +0.20(不是 ±對稱)。
+# 官方原文(同一份 background PDF):
+#   "a significant likelihood of an expansion has historically been associated with a
+#    CFNAI-MA3 value above +0.20 following a period of economic contraction."
+# ⚠️ 常被誤用的 -0.35 是 **CFNAI Diffusion Index**(擴散指標,另一條完全不同的序列)的
+#    擴張門檻 —— "Periods of economic expansion have historically been associated with
+#    values of the CFNAI Diffusion Index above -0.35." 與 CFNAI 水準值無關,禁止混用。
+# 現值參考(2026-06):CFNAI = -0.02 / CFNAI-MA3 = -0.05
+# https://www.chicagofed.org/research/data/cfnai/current-data
+CFNAI_TREND_GROWTH: float = 0.0
+# CFNAI(含 MA3)= 0 代表「經濟以歷史趨勢速度成長」;負值 = 低於趨勢,正值 = 高於趨勢。
+# 這是官方定義的零點,非設計值,供「低於趨勢」黃燈使用(介於 -0.70 與 +0.20 之間的中間帶)。
 RECESSION_LOGIT_COEF_SPREAD: float = -1.5
 RECESSION_LOGIT_COEF_INTERCEPT: float = -0.8
 # logit = SPREAD_COEF * spread_10y3m + INTERCEPT,經 sigmoid → recession probability

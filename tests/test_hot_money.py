@@ -9,12 +9,33 @@ from __future__ import annotations
 import pandas as pd
 
 # v19.196 P0-4-A:hot_money.py 拆 2 檔
-from repositories.hot_money_repository import _yf_series_to_df
+from repositories.hot_money_repository import (
+    _yf_series_to_df,
+    fetch_foreign_flow_series,
+)
 from ui.hot_money import (
     DIVERGENCE_STATES,
     STATE_TEXT,
     build_signals,
 )
+
+
+class _MockResp:
+    """requests.Response mock。
+
+    本檔原本沒有任何 HTTP mock（grep `status_code` / `def json` 皆 0 命中），
+    FinMind 抓取路徑完全沒被測到。補上具真 `status_code` + 真 body 的 stub，
+    避免用 MagicMock（`m.status_code` 會是 truthy 物件、`.get('status')` 回
+    MagicMock）讓狀態碼檢查形同虛設。
+    """
+
+    def __init__(self, payload, status: int = 200):
+        self._payload = payload
+        self.status_code = status
+        self.text = str(payload)[:500]
+
+    def json(self):
+        return self._payload
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -171,6 +192,81 @@ def test_yf_series_to_df_handles_tz_aware_index():
     out = _yf_series_to_df(series)
     assert len(out) == 3
     assert out["date"].iloc[0].tz is None
+
+
+# ────────────────────────────────────────────────────────────────────────
+# fetch_foreign_flow_series — FinMind API 狀態碼（402 額度用盡）
+# ────────────────────────────────────────────────────────────────────────
+def _patch_finmind(monkeypatch, resp):
+    """monkeypatch fund_fetcher.fetch_url_with_retry（fetcher 內 lazy import）。"""
+    import fund_fetcher
+    captured = {}
+
+    def fake(url, params=None, timeout=15, retries=2, **kw):
+        captured['url'] = url
+        captured['params'] = params
+        return resp
+
+    monkeypatch.setattr(fund_fetcher, 'fetch_url_with_retry', fake)
+    # @st.cache_data → 每測前清，避免跨測污染（各測另用相異 days 當 cache key 保險）
+    if hasattr(fetch_foreign_flow_series, 'clear'):
+        fetch_foreign_flow_series.clear()
+    return captured
+
+
+def test_foreign_flow_402_quota_exhausted_is_not_reported_as_no_data(monkeypatch):
+    """本次稽核母題的核心迴歸測試。
+
+    FinMind 免費額度用盡 → {"msg": "Requests reached the upper limit.", "status": 402}
+    且 **不帶 data 欄**。修正前 `.get("data", [])` 吐 [] → 被歸類成
+    「無資料回傳（可能為非交易日區間）」，於是「額度用盡」偽裝成「非交易日」，
+    外資買賣超硬停在某一天長達數月而系統毫無警覺。
+    """
+    payload = {'msg': 'Requests reached the upper limit.', 'status': 402}
+    _patch_finmind(monkeypatch, _MockResp(payload, status=402))
+
+    df, err = fetch_foreign_flow_series(30)
+
+    assert df.empty
+    assert '402' in err, f"錯誤訊息必須帶狀態碼 402，實際：{err!r}"
+    assert 'upper limit' in err, f"錯誤訊息必須帶 API msg，實際：{err!r}"
+    # 反向鎖：不可再被說成「非交易日」
+    assert '非交易日' not in err, f"402 被誤報成非交易日：{err!r}"
+
+
+def test_foreign_flow_401_bad_token_surfaces_status(monkeypatch):
+    payload = {'msg': 'token not valid', 'status': 401}
+    _patch_finmind(monkeypatch, _MockResp(payload, status=401))
+    df, err = fetch_foreign_flow_series(31, "bad-token")
+    assert df.empty
+    assert '401' in err
+
+
+def test_foreign_flow_empty_data_still_says_non_trading_day(monkeypatch):
+    """status=200 + data 為空 → 才是真的「非交易日區間」，訊息不可被誤改。"""
+    _patch_finmind(monkeypatch, _MockResp({'status': 200, 'data': []}))
+    df, err = fetch_foreign_flow_series(32)
+    assert df.empty
+    assert '非交易日' in err
+
+
+def test_foreign_flow_none_response_mentions_proxy_log(monkeypatch):
+    """fetch_url 全敗回 None → 訊息應指向 [proxy] log（狀態碼在那裡）。"""
+    _patch_finmind(monkeypatch, None)
+    df, err = fetch_foreign_flow_series(33)
+    assert df.empty
+    assert 'proxy' in err
+
+
+def test_foreign_flow_token_forwarded(monkeypatch):
+    """token 有傳才進 params（匿名 300 次/hr vs 具名 600 次/hr）。"""
+    cap = _patch_finmind(monkeypatch, _MockResp({'status': 200, 'data': []}))
+    fetch_foreign_flow_series(34, "tok-xyz")
+    assert cap['params'].get('token') == 'tok-xyz'
+
+    cap2 = _patch_finmind(monkeypatch, _MockResp({'status': 200, 'data': []}))
+    fetch_foreign_flow_series(35)
+    assert 'token' not in cap2['params']
 
 
 # ────────────────────────────────────────────────────────────────────────

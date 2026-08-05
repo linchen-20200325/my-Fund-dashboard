@@ -16,9 +16,24 @@ from unittest.mock import MagicMock
 from repositories import tw_macro_repository as tw_macro
 
 
-def _mock_resp(json_data):
+def _mock_resp(json_data, status: int = 200):
+    """requests.Response mock（TWSE / FinMind / CBC 共用）。
+
+    ⚠️ 原版只 stub 了 `.json()`，`m.status_code` 是個「truthy 的 MagicMock 物件」、
+    body 也不帶 `status` 欄 → 一旦 production code 開始檢查 API 狀態碼，這個 mock
+    就會讓測試量到假象（`MagicMock() == 200` 為 False、`.get('status')` 回 MagicMock）。
+    這裡把兩者補齊，讓 mock 與真實 Response 契約一致：
+      - `status_code` 為真 int
+      - dict body 自動補 `status`（FinMind 的成功/失敗都靠這欄；list body 如 CBC
+        ms1.json 不動）
+      - `text` 供 infra.proxy 未預期狀態碼 log 取用
+    """
     m = MagicMock()
+    m.status_code = status
+    if isinstance(json_data, dict) and 'status' not in json_data:
+        json_data = {**json_data, 'status': status}
     m.json.return_value = json_data
+    m.text = str(json_data)[:500]
     return m
 
 
@@ -128,6 +143,73 @@ def test_finmind_proxy_failure(monkeypatch):
     r = tw_macro.fetch_finmind_foreign_investor()
     assert r['fii_net'] is None
     assert r['error']   is not None
+
+
+# ── 402 額度用盡：本次修正的核心價值 ────────────────────────────────────
+def test_finmind_402_quota_exhausted_reports_status_not_no_data(monkeypatch):
+    """FinMind 免費額度用盡回 {"msg": ..., "status": 402} 且 **不帶 data 欄**。
+
+    修正前 `.get('data', [])` 吐 [] → 被歸類成「無 Foreign_Investor 資料」，
+    額度用盡完美偽裝成「今天沒外資資料」，資料硬停在某天而無人察覺（本次稽核母題）。
+    修正後必須帶出真實 status 與 msg。
+    """
+    payload = {'msg': 'Requests reached the upper limit.', 'status': 402}
+    monkeypatch.setattr(tw_macro, 'fetch_url',
+                        lambda *a, **kw: _mock_resp(payload, status=402))
+    r = tw_macro.fetch_finmind_foreign_investor()
+
+    err = r['error'] or ''
+    assert r['fii_net'] is None
+    assert '402' in err, f"錯誤訊息必須帶狀態碼 402，實際：{err!r}"
+    assert 'upper limit' in err, f"錯誤訊息必須帶 API msg，實際：{err!r}"
+    # 反向鎖：不可再被歸類成「沒有資料」
+    assert 'Foreign_Investor' not in err, f"402 被誤報成缺資料：{err!r}"
+
+
+def test_finmind_401_bad_token_also_surfaces_status(monkeypatch):
+    """401（token 失效）同樣走狀態碼分支，不可被當成缺資料。"""
+    payload = {'msg': 'token not valid', 'status': 401}
+    monkeypatch.setattr(tw_macro, 'fetch_url',
+                        lambda *a, **kw: _mock_resp(payload, status=401))
+    r = tw_macro.fetch_finmind_foreign_investor(token='bad-token')
+    assert '401' in (r['error'] or '')
+
+
+# ── token pass-through（匿名 300 次/hr vs 具名 600 次/hr）────────────────
+def test_finmind_token_is_forwarded_when_provided(monkeypatch):
+    """L2/L3 傳入 token → 必須進 params（否則永遠走匿名額度，最易撞 402）。
+
+    §8.2 硬規則：L1 不得自己讀 st.secrets，token 只能由上層傳入。
+    """
+    captured = {}
+
+    def fake(url, headers=None, params=None, timeout=12):
+        captured['params'] = params
+        return _mock_resp({'data': []})
+
+    monkeypatch.setattr(tw_macro, 'fetch_url', fake)
+    tw_macro.fetch_finmind_foreign_investor(token='tok-abc')
+    assert captured['params'].get('token') == 'tok-abc'
+
+
+def test_finmind_no_token_stays_anonymous(monkeypatch):
+    """未傳 token → params 不得出現 token 欄（維持既有匿名行為，向後相容）。"""
+    captured = {}
+
+    def fake(url, headers=None, params=None, timeout=12):
+        captured['params'] = params
+        return _mock_resp({'data': []})
+
+    monkeypatch.setattr(tw_macro, 'fetch_url', fake)
+    tw_macro.fetch_finmind_foreign_investor()
+    assert 'token' not in captured['params']
+
+
+def test_finmind_repository_does_not_read_st_secrets():
+    """§8.2:L1 repository 不得自己讀 st.secrets（token 必須由上層傳入）。"""
+    import inspect
+    src = inspect.getsource(tw_macro)
+    assert 'st.secrets' not in src, "L1 不得讀 st.secrets — token 應由 L2/L3 傳入"
 
 
 # ══════════════════════════════════════════════════════════════

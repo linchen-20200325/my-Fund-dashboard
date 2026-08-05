@@ -191,7 +191,10 @@ def render_fund_grp_health_tab() -> None:
     # v19.181:模組化 3 表 wrapper(健康分析 / 配息相關 / 實際購買結果)。
     # funds_extra 透給 _render_health_table 內部用(基金體檢 PK + 健診卡)。
     # v19.347：健檢 Tab 開「🎯 選基金（低基期）」;Tab3 持倉健診不開(預設 False)。
-    _render_health_3tables(rows, funds_extra=_funds_extra, show_screener=True)
+    # source_tab="health"：等權 caption 的「請到組合配置 Tab 逐檔填金額」導引只在本 Tab
+    # 成立(本 Tab 只有單一本金欄位);Tab3 embed 不傳 → 不印(見 _weight_basis_note)。
+    _render_health_3tables(rows, funds_extra=_funds_extra, show_screener=True,
+                           source_tab="health")
 
     # v19.427:🔁 配置回測(哪套配置效益最高 + 三輸出)。重用 _funds_extra(原幣 NAV + 幣別),
     # 走 L2 services.allocation_backtest;抓失敗/資料不足由 section 內誠實顯示,不拖垮整頁(§1)。
@@ -392,9 +395,64 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
     )
 
 
+# ── 🧭 配置檢查 caption「加權方式」措辭 SSOT ──────────────────────────
+# §1 Fail Loud, Never Fake:原 caption 寫死「依各檔投入本金加權」,但健診 Tab 只有
+# **單一本金欄位**(`principal_twd`)broadcast 給全部基金 → 每檔 weight 相同 → 實際是
+# **等權**(≈ 檔數佔比)。持有 90 萬核心 + 10 萬衛星會被顯示成「核心 50% / 衛星 50%」,
+# 且總計金額 = 本金 × 檔數,配置評估燈號完全失真。組合 Tab3 傳各檔 invest_twd 才是真
+# 金額加權,但 user 全未填時也會退成等權 —— 故加權方式**不可由 caller 自稱**,一律讀
+# L2 `summarize_core_satellite_allocation()` 依實際權重推斷的 `weight_mode` 照實說。
+# ⚠️ 本輪只修「說法」,不改等權行為本身(健診 Tab 逐檔金額輸入屬 UX 變更,需 user 拍板)。
+#
+# ⚠️ equal 措辭的第二層誠實性(2026-08-04 QA 條件 4):原版在 equal 尾巴接了兩句 ——
+# 一句否定金額加權的因果宣稱，一句叫 user 去「組合配置」Tab 逐檔填金額。這在
+# 「user 已在 Tab3 逐檔填完、只是每檔金額恰好相同(平均配置是常見策略)」時**兩句都假**：
+#   (1) 否定金額加權 → 錯：它就是金額加權，只是金額相同 = 修掉一個謊又種一個(§1)。
+#   (2) 叫他去填 → 對已填完的 user 下錯誤指示；且本 render 被 Tab3 共用，
+#       在 Tab3 渲染時等於叫 user 去他當下所在的地方。
+# → equal 只留數學上恆真的那半（金額相同 ⟹ 比例 = 檔數佔比，與 caller 是誰無關）；
+#   「去填金額」導引拆成 `_EQUAL_MODE_HEALTH_TAB_HINT`，僅健診 Tab 分支才接。
+_WEIGHT_MODE_NOTE: dict[str, str] = {
+    "amount": "依各檔投入本金加權，總計 {total:,.0f} TWD",
+    "equal": "⚠️ 各檔投入金額相同（每檔 {per:,.0f} TWD × {n} 檔）→ 上列比例等同**檔數佔比**",
+    "single": "僅 1 檔（{total:,.0f} TWD），加權方式不影響比例",
+    "none": "無有效投入金額，無法計算比例",
+}
+
+# 只在健診 Tab 成立的補充導引:健診 Tab 只有**單一本金欄位**(`principal_twd` broadcast
+# 給全部基金)，結構上不可能逐檔填 → 指向 Tab3 是正確且唯一的出路。Tab3 自己渲染時
+# **不得**印此句(user 已在該 Tab，且他可能只是各檔金額恰好相同)。
+_EQUAL_MODE_HEALTH_TAB_HINT = (
+    "；本 Tab 只有單一本金欄位，要依實際金額配置請到「組合配置」Tab 逐檔填投入金額"
+)
+
+
+def _weight_basis_note(csa: dict, source_tab: str | None = None) -> str:
+    """把 L2 `weight_mode` 轉成給 user 看的加權方式說明（純函式，可單元測試）。
+
+    未知 / 缺 `weight_mode` → 退 "none" 措辭（不猜、不宣稱金額加權，§1）。
+
+    Args:
+        source_tab: 呼叫端身分。僅 `"health"`（💊 基金組合健診 Tab）會在 equal 措辭
+            後接「去 Tab3 逐檔填金額」導引 —— 其餘 caller（Tab3 embed / 未宣告）一律
+            不接，避免對「已逐檔填完、只是金額相同」的 user 下錯誤指示。
+    """
+    _mode = str(csa.get("weight_mode") or "none")
+    _tmpl = _WEIGHT_MODE_NOTE.get(_mode, _WEIGHT_MODE_NOTE["none"])
+    _total = float(csa.get("total_weight") or 0.0)
+    _n = (int(csa.get("n_core") or 0) + int(csa.get("n_satellite") or 0)
+          + int(csa.get("n_undetermined") or 0))
+    _per = (_total / _n) if _n else 0.0
+    _note = _tmpl.format(total=_total, per=_per, n=_n)
+    if _mode == "equal" and source_tab == "health":
+        _note += _EQUAL_MODE_HEALTH_TAB_HINT
+    return _note
+
+
 def _render_health_3tables(rows: list[dict],
                            funds_extra: list | None = None,
-                           show_screener: bool = False) -> None:
+                           show_screener: bool = False,
+                           source_tab: str | None = None) -> None:
     """v19.181 3 表模組化渲染:① 健康分析 ② 配息相關 ③ 實際購買結果(既有 _render_health_table)。
 
     共用 SSOT row builder(`services.health.report`)讓 Tab3 也能同源渲染。
@@ -404,6 +462,11 @@ def _render_health_3tables(rows: list[dict],
         rows: process_one_fund 回傳的 row list
         funds_extra: v19.189 基金體檢 PK + 健診卡資料(透給 _render_health_table 用,
                      Tab3 caller 不傳則 None)
+        source_tab: 呼叫端身分,目前只認 `"health"`(💊 基金組合健診 Tab)。用於決定
+                    「等權 → 請去逐檔填金額」導引該不該印 —— 該句只在健診 Tab 成立
+                    (該 Tab 結構上只有單一本金欄位);Tab3 embed **不傳**(預設 None),
+                    因為 user 已在組合配置 Tab,且可能只是各檔金額恰好相同。
+                    預設 None = 不印導引,既有 caller 零行為變化。
     """
     if not rows:
         return
@@ -427,8 +490,11 @@ def _render_health_3tables(rows: list[dict],
         for _r in ok_rows
     ]
 
-    # ── 🧭 核心/衛星配置檢查(依投入本金加權 vs 核心 50~80%)── v19.330:兩 tab 共用最上方 ──
-    # 健檢 Tab 全檔本金 100 萬 = 等權(≈ 檔數佔比);組合 Tab3 為各檔實際 invest_twd 加權。
+    # ── 🧭 核心/衛星配置檢查(vs 核心 50~80%)── v19.330:兩 tab 共用最上方 ──
+    # 健檢 Tab 全檔同一本金 = 等權(≈ 檔數佔比);組合 Tab3 為各檔實際 invest_twd 加權
+    # (但各檔皆未填時亦退等權)。→ caption 的加權方式走 `_weight_basis_note(...)`
+    # 讀 L2 `weight_mode` 照實說,**禁止寫死**「依各檔投入本金加權」(§1)。
+    # source_tab 只用來決定「等權 → 去 Tab3 填金額」導引印不印(見該 helper docstring)。
     try:
         from services.health.asset_class import summarize_core_satellite_allocation
         _cs_items = []
@@ -447,7 +513,7 @@ def _render_health_3tables(rows: list[dict],
         _ca4.metric("配置評估", _csa["status"])
         st.caption(
             f"{_csa['status']} {_csa['message']}"
-            f"（依各檔投入本金加權，總計 {_csa['total_weight']:,.0f} TWD；"
+            f"（{_weight_basis_note(_csa, source_tab)}；"
             f"核心=穩健長線 / 衛星=主題追報酬 / 待定=分類不足）"
         )
     except Exception as _e_csa:

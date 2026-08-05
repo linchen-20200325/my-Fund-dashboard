@@ -26,8 +26,11 @@ class TestSharpeStdGuard:
         from services.fund_service import calc_metrics
         m = calc_metrics(_mk_series([10.0] * 300), [])
         assert m.get("sharpe") is None, f"常數 NAV Sharpe 應為 None,得到 {m.get('sharpe')}"
-        # Sortino 同樣無負報酬 → None(既有行為回歸保護)
+        # Sortino 同樣為 None(既有行為回歸保護)。
+        # P0-1 後理由改變:MAR 從隱含 0 改為 rf,常數 NAV 每點都**低於** MAR,
+        # 若無退化守衛會算出 −√252 ≈ −15.87 的假精確值 → 以 σ=0 守衛擋掉(§1)。
         assert m.get("sortino") is None
+        assert "σ=0" in (m["risk_metric_meta"]["sortino"]["reason"] or "")
 
     def test_normal_nav_sharpe_still_float(self):
         """正常波動 NAV:Sharpe 照常回浮點數(guard 不誤殺)。"""

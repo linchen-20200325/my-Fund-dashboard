@@ -18,6 +18,9 @@ from services.macro._helpers import (  # noqa: F401
 # v19.199 P1-7:_SUB_CYCLE_SPEC 在 turning_points.py 內(原檔 line 2243,落 turning_points
 # range 1759-2261),但 calc_sub_cycle_lights 在本檔用 → 跨子模組 import(無循環)
 from services.macro.turning_points import _SUB_CYCLE_SPEC  # noqa: F401
+# v19.405:weight 轉型契約 SSOT(weight=0 合法,不可 falsy 回退)。
+# composite_score.py 只 import shared.colors,無循環風險。
+from services.macro.composite_score import coerce_weight as _coerce_weight
 
 
 def _calc_zscore_safe(series, current_value=None):
@@ -616,7 +619,11 @@ def compute_cluster_signals(indicators: dict) -> list[dict]:
             if not ind:
                 continue
             try:
-                w = float(ind.get("weight", 1) or 1)
+                # v19.405:weight=0 合法(去重後的備源,如月頻 M2 命中時的 M2_WEEKLY)。
+                # 原式 `float(... or 1)` 因 Python `0 or 1 == 1` 把刻意歸零的權重
+                # 還原成 1 → 「💧 流動性」cluster 仍雙算同一經濟因子。
+                # 契約 SSOT:services/macro/composite_score.coerce_weight
+                w = _coerce_weight(ind.get("weight", 1))
                 s = float(ind.get("score", 0) or 0)
             except (TypeError, ValueError):
                 continue

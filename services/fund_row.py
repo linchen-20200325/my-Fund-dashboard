@@ -92,12 +92,23 @@ def process_one_fund(
         _metrics = fd.get("metrics") or {}
         _mk_pos = (_metrics.get("pos_label") or "—").strip() or "—"
         _mk_safety = None
+        _mk_safety_err = ""
         try:
             from services.health.dividend import check_eating_principal_1y_mk
             _mk_safety = check_eating_principal_1y_mk(fd)
-        except Exception:  # noqa: BLE001
+        except Exception as _e_mk:  # noqa: BLE001
+            # §1:原本靜默吞 → 吃本金燈號顯示「⚪ 資料不足」，把「算爆了」
+            # 偽裝成「沒資料」。補 log + 讓 verdict 說出是計算失敗。
             _mk_safety = None
-        _snap_health = "⚪ 資料不足" if _mk_safety is None else _mk_safety.get("status", "⚪ 資料不足")
+            _mk_safety_err = type(_e_mk).__name__
+            print(f"[fund_row {code}] check_eating_principal_1y_mk 失敗："
+                  f"{_mk_safety_err}: {_e_mk}")
+        if _mk_safety is not None:
+            _snap_health = _mk_safety.get("status", "⚪ 資料不足")
+        elif _mk_safety_err:
+            _snap_health = f"⚠️ 計算失敗({_mk_safety_err})"
+        else:
+            _snap_health = "⚪ 資料不足"
 
         # v19.153:MK 老師 3-3-3 原則(成立 ≥ 3 年 + 3 年平均年化 > 7% → 通過)。
         _333_emoji = "⬜"
@@ -147,8 +158,13 @@ def process_one_fund(
             elif _333_r.get("passed") is False:
                 _333_emoji = "❌"
             _333_msg = _333_r.get("message", "")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as _e_333:  # noqa: BLE001
+            # §1 教科書案例:原本 `pass` → `_333_msg` 停在初始值「資料不足」，
+            # 於是「計算炸了」被顯示成「這檔基金資料不夠」。錯誤不可偽裝成缺資料。
+            _333_emoji = "⚠️"
+            _333_msg = f"計算失敗({type(_e_333).__name__})"
+            print(f"[fund_row {code}] MK 3-3-3 計算失敗："
+                  f"{type(_e_333).__name__}: {_e_333}")
         _333_status = f"{_333_emoji} {_333_msg[:32]}" if _333_msg else _333_emoji
 
         return {

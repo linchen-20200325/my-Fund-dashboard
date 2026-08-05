@@ -14,6 +14,9 @@ v19.349(未完成清單第 4 步,user 核准;股票 repo v19.108 設計 A 同構
   自然決定「誰排前面」。
   (v19.352 修正:原判定用 `score ≥ SIGMA` 把**偏多**指標當紅色警示置頂,並把
    真正的**風險側**負分指標 continue 跳過——sign 反了。此版改吃負分側。)
+  (v19.405 修正:同因子備源`superseded_by` 已被主源取代者不進橫幅 —— 本層觸發
+   只看 score 與 weight 無關,故 v19.404 的 `weight=0` 去重對這裡無效,
+   M2 / M2_WEEKLY 會各冒一條紅級「流動性緊縮」。)
 - **拐點層**:吃 `detect_turning_points` 輸出(session `_tp_v1948_top`,
   5 組拐點,signal/icon/note 已由該 SSOT 判定)。icon ∈ {🔴,🔻,⚠️} → 紅級;
   {🟡,🚀} → 黃級(🚀 利多拐點同樣「今天該看」);{🟢,📊,⬜} = 非事件不進橫幅。
@@ -36,9 +39,22 @@ _TP_ICON_SEVERITY: dict = {
 def _indicator_items(indicators: dict | None) -> list[dict]:
     """訊號層:score ≥ SIGMA 門檻的指標 → 橫幅 item(同級依 |contribution| 降冪)。"""
     from services.macro.explain import _interpret_indicator   # 同層 L2,SSOT 敘事
+    from services.macro.composite_score import is_superseded   # 同層 L2,去重契約 SSOT
     items: list[dict] = []
-    for key, v in (indicators or {}).items():
+    _all = indicators or {}
+    for key, v in _all.items():
         if not isinstance(v, dict) or 'score' not in v:
+            continue
+        # v19.405 稽核修正:**顯示層去重**。本層的觸發條件只看 `score`
+        # (`score > -SIGMA_LOW_CUTOFF` 才排除),與 weight 無關 —— 所以
+        # v19.404 給 M2_WEEKLY 的 `weight=0` 在這裡完全沒作用:月頻 M2 與週頻
+        # M2_WEEKLY 會**各冒一條**「流動性緊縮」紅級警示(score=-1 ≤
+        # -SIGMA_HIGH_CUTOFF 0.8),只是 _rank=|−1×0|=0 被排到同級最後。
+        # 「今日最該看什麼」的橫幅把同一個經濟因子講兩次 = 誤導使用者以為
+        # 兩個獨立訊號同時亮燈。備源既已被主源取代,主源那條就代表它了。
+        # 用 `superseded_by`(去重事實)而非 weight:weight=0 也可能是 active.json
+        # 校準把某顆權重歸零,那種情況該不該顯示是另一回事,語意不可混用。
+        if is_superseded(v, _all):
             continue
         try:
             score = float(v.get('score'))

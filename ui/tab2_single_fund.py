@@ -355,6 +355,18 @@ def render_single_fund_tab() -> None:
                 _adv_5y = _m_diag.get("ret_5y_ann")
                 def _mk(v):
                     return "✅" if v is not None else "—"
+                # 必修 4:門檻文案改**直接 import SSOT 常數**渲染,不再寫死數字。
+                # 舊文案寫的樣本門檻(60)與 Calmar 的一年期退路皆已過時
+                # ⚠️ 本註解**刻意不引用舊文案原字串** —— `test_stale_threshold_copy_removed`
+                #    是對整檔原始碼做子字串掃描,註解裡引用等於自己讓自己紅。
+                # (實際 250 / 756,且 1Y fallback 已取消)→ user 看到「我有 100 筆
+                # 應該夠」但畫面顯示「—」= §1 要防的「無法察覺的矛盾」。
+                from services.fund_service import (
+                    MIN_DOWNSIDE_OBS_SORTINO as _MIN_DOWN,
+                    MIN_OBS_CALMAR as _MIN_CALMAR,
+                    MIN_OBS_MAX_DRAWDOWN as _MIN_MDD,
+                    MIN_OBS_SHARPE_SORTINO as _MIN_SS,
+                )
                 st.code(
                     f"{_pxy_line}\n"
                     f"────────────────────────\n"
@@ -370,8 +382,12 @@ def render_single_fund_tab() -> None:
                     f"page_type: {fd.get('page_type', '—')}\n"
                     f"────────────────────────\n"
                     f"📊 進階指標(對齊 calc_fund_factor_score SSOT):\n"
-                    f"  Sortino:     {_mk_bool(_avail['Sortino'])}  (需 ≥60 筆 + ≥5 筆負報酬)\n"
-                    f"  Calmar:      {_mk_bool(_avail['Calmar'])}  (需 3Y 年化 / 或 1Y 報酬 + max_dd)\n"
+                    f"  Sortino:     {_mk_bool(_avail['Sortino'])}  "
+                    f"(需 ≥{_MIN_SS} 交易日 + ≥{_MIN_DOWN} 筆低於 MAR 的報酬)\n"
+                    f"  Calmar:      {_mk_bool(_avail['Calmar'])}  "
+                    f"(需 ≥{_MIN_CALMAR} 交易日 = 3Y;**無** 1Y fallback)\n"
+                    f"  Max DD:      {_mk(_m_diag.get('max_drawdown'))}  "
+                    f"(需 ≥{_MIN_MDD} 交易日)\n"
                     f"  Alpha:       {_mk_bool(_avail['Alpha'])}  (perf.1Y 可解析;adr 預設 0)\n"
                     f"  費用率:      {_mk_bool(_avail['ExpenseRatio'])}  (arg/expense_ratio/mgmt_fee float 可解析)\n"
                     f"  3Y 年化:     {_mk(_adv_3y)}  (需 NAV ≥ 3 年,非 6F factor)\n"
@@ -973,6 +989,16 @@ def render_single_fund_tab() -> None:
                         "series": s,
                         "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
                     })
+                    # 必修 2:欄位標籤說實話 —— 線上實測「1Y 含息 = −2.71%」其實只用了
+                    # 本地 42 天序列(calc_metrics.ret_1y_window_days),硬掛「1Y」讓 user
+                    # 無從察覺它與同畫面 Sharpe(wb07 官方一年)不是同一期間(§1)。
+                    # 只在「值確實來自本地短窗」時改標;官方 wb01 真 1Y 不動。
+                    _kpi_tr_label = "1Y 含息報酬"
+                    _kpi_win_d = (m or {}).get("ret_1y_window_days")
+                    if (isinstance(_kpi_win_d, (int, float)) and _kpi_win_d < 350
+                            and any(_t in str(_kpi_tr1y_src or "")
+                                    for _t in ("本地", "NAV 序列"))):
+                        _kpi_tr_label = f"{int(_kpi_win_d)} 天含息報酬(非 1Y)"
 
                     if _kpi_adr is None or _kpi_adr <= 0:
                         _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
@@ -1017,7 +1043,7 @@ def render_single_fund_tab() -> None:
                         f"<div style='color:{_kpi_color};font-size:13px;font-weight:800;"
                         f"margin-bottom:8px'>{_kpi_title}</div>"
                         f"<div style='display:flex;gap:24px;flex-wrap:wrap'>"
-                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>1Y 含息報酬</div>"
+                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>{_kpi_tr_label}</div>"
                         f"<div style='color:{WHITE};font-weight:700;font-size:16px'>"
                         f"{(f'{_kpi_tr1y:.2f}%' if _kpi_tr1y is not None else '—')}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>年化配息率</div>"
@@ -1067,21 +1093,66 @@ def render_single_fund_tab() -> None:
                         def _fmt_num(v):
                             return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
 
+                        # ── 期間誠實化(必修 2):標籤由 risk_metric_meta 決定 ──────
+                        # 線上實測「Sharpe 1Y = 0.28」其實來自 wb07 官方欄,而同畫面的
+                        # 「1Y 含息 = −2.71%」只用了本地 42 天序列 —— 欄位硬掛「1Y」
+                        # 讓 user 無從察覺兩個數字不同期間(§1)。以下標籤一律標出
+                        # **實際**來源與窗長;wb07 六個月欄更是絕對不能再叫「1Y」。
+                        _rmm = (m or {}).get("risk_metric_meta") or {}
+
+                        def _meta_of(_k: str) -> dict:
+                            _v = _rmm.get(_k)
+                            return _v if isinstance(_v, dict) else {}
+
+                        def _lbl_with_period(base: str, key: str) -> str:
+                            _mt = _meta_of(key)
+                            _src = _mt.get("source")
+                            if not _src:
+                                return f"{base}(—)"
+                            if str(_src).startswith("wb07"):
+                                _wb_span = {"wb07_1y": "1Y", "wb07_6m": "6M"}.get(_src, "?")
+                                return f"{base} {_wb_span}(wb07)"
+                            _d = _mt.get("period_days")
+                            return (f"{base} {_d}d(自算)" if isinstance(_d, int)
+                                    else f"{base}(自算)")
+
                         st.markdown("##### 🩺 健康分析(4D Grade + 6 進階指標)")
                         cA, cB, cC, cD = st.columns(4)
                         cA.metric("4D Grade", _adv_h.get("4D Grade") or "—",
                                   help="A≥80 / B≥65 / C≥50 / D≥35 / F<35(SSOT v19.177)")
                         cB.metric("4D Score", _fmt_num(_adv_h.get("4D Score")))
-                        cC.metric("Sharpe 1Y", _fmt_num(_adv_h.get("Sharpe 1Y")),
-                                  help="自計算(NAV 序列,用於 4D 評分);見下方風險指標對帳")
-                        cD.metric("Sortino", _fmt_num(_adv_h.get("Sortino")))
+                        cC.metric(_lbl_with_period("Sharpe", "sharpe"),
+                                  _fmt_num(_adv_h.get("Sharpe 1Y")),
+                                  help=("期間/來源:"
+                                        + str(_meta_of("sharpe").get("period_label") or "—")
+                                        + ";見下方風險指標對帳"))
+                        cD.metric(_lbl_with_period("Sortino", "sortino"),
+                                  _fmt_num(_adv_h.get("Sortino")),
+                                  help=str(_meta_of("sortino").get("definition") or "—"))
 
                         cE, cF, cG, cH = st.columns(4)
-                        cE.metric("Calmar", _fmt_num(_adv_h.get("Calmar")))
+                        cE.metric(_lbl_with_period("Calmar", "calmar"),
+                                  _fmt_num(_adv_h.get("Calmar")),
+                                  help=("分子分母同源:3Y 年化含息報酬 "
+                                        f"{_meta_of('calmar').get('ret_3y_ann_tr_pct')}% / "
+                                        f"|3Y 回撤 {_meta_of('calmar').get('max_dd_3y_pct')}%|"))
                         cF.metric("真實收益 %", _fmt_pct(_adv_h.get("Alpha %")),
                                   help="含息報酬率 − 年化配息率（≠ CAPM Alpha）")
                         cG.metric("費用率 %", _fmt_pct(_adv_h.get("費用率 %")))
-                        cH.metric("Max DD %", _fmt_pct(_adv_h.get("Max DD %")))
+                        cH.metric(_lbl_with_period("Max DD %", "max_drawdown"),
+                                  _fmt_pct(_adv_h.get("Max DD %")))
+
+                        # 混期示警(必修 2):`mixed_period_warning` 原本 production
+                        # **0 reader** —— 只有 fund_service 自己與 test 讀,線上那個
+                        # 「Sharpe 1Y 0.28 vs 1Y 含息 −2.71%」的矛盾畫面照舊。此處接上。
+                        _mix_warn = _rmm.get("mixed_period_warning")
+                        if _mix_warn:
+                            st.markdown(
+                                f"<div style='font-size:11px;color:{MATERIAL_RED};"
+                                f"padding:5px 10px;background:{BG_DARK_RED_1};"
+                                f"border-radius:4px;margin:4px 0 8px 0'>"
+                                f"⚠️ {_mix_warn}</div>",
+                                unsafe_allow_html=True)
 
                         cI, cJ, cK = st.columns(3)
                         cI.metric("3Y 年化 %", _fmt_pct(_adv_h.get("3Y 年化 %")))
@@ -1103,11 +1174,38 @@ def render_single_fund_tab() -> None:
                         )
                         # v19.191:對齊「資料診斷」面板 — 進階指標各欄位「—」的原因揭露。
                         # user 看了知道是「資料源真沒提供」還是「歷史長度不足」。
+                        # 必修 4:門檻文案改吃 calc_metrics SSOT 常數 + meta reason,
+                        # 不再寫死已過時的 60 筆 / 1Y fallback(§1 無法察覺的矛盾)。
+                        from services.fund_service import (
+                            MIN_DOWNSIDE_OBS_SORTINO as _MD_SORT,
+                            MIN_OBS_CALMAR as _MO_CAL,
+                            MIN_OBS_MAX_DRAWDOWN as _MO_MDD,
+                            MIN_OBS_SHARPE_SORTINO as _MO_SS,
+                        )
+
+                        def _reason_or(key: str, default: str) -> str:
+                            return str(_meta_of(key).get("reason") or default)
+
                         _miss = []
+                        if _adv_h.get("Sharpe 1Y") is None:
+                            _miss.append(
+                                "Sharpe(" + _reason_or(
+                                    "sharpe",
+                                    f"需 wb07 官方值,或本地 NAV ≥ {_MO_SS} 交易日") + ")")
                         if _adv_h.get("Sortino") is None:
-                            _miss.append("Sortino(需 NAV ≥ 60 筆 + ≥5 筆負報酬)")
+                            _miss.append(
+                                "Sortino(" + _reason_or(
+                                    "sortino",
+                                    f"需 NAV ≥ {_MO_SS} 交易日 + ≥{_MD_SORT} 筆低於 MAR") + ")")
                         if _adv_h.get("Calmar") is None:
-                            _miss.append("Calmar(需 3Y 年化 或 1Y 報酬 + max_dd)")
+                            _miss.append(
+                                "Calmar(" + _reason_or(
+                                    "calmar",
+                                    f"需 NAV ≥ {_MO_CAL} 交易日 = 3Y,無 1Y fallback") + ")")
+                        if _adv_h.get("Max DD %") is None:
+                            _miss.append(
+                                "Max DD(" + _reason_or(
+                                    "max_drawdown", f"需 NAV ≥ {_MO_MDD} 交易日") + ")")
                         if _adv_h.get("Alpha %") is None:
                             _miss.append("真實收益(需 perf.1Y + 年化配息率)")
                         if _adv_h.get("費用率 %") is None:
@@ -1134,6 +1232,27 @@ def render_single_fund_tab() -> None:
                     # v19.336 M9:與 partial 視圖共用 _risk_1y_rows_html(原兩套同款 HTML)
                     st.markdown(_risk_1y_rows_html(risk_tbl, label_style="long"),
                                 unsafe_allow_html=True)
+                    # ── 必修 2:混期示警 + 對帳降級揭露(沿用 v19.91 chip 樣式)──
+                    # 這兩條原本 production 0 reader:`mixed_period_warning` 只有
+                    # fund_service 自己與 test 讀,所以線上「Sharpe 1Y 0.28」與
+                    # 「1Y 含息 −2.71%」的矛盾畫面完全沒被揭露(§1)。
+                    _rm_meta = (m or {}).get("risk_metric_meta") or {}
+                    _sh_meta = _rm_meta.get("sharpe") if isinstance(
+                        _rm_meta.get("sharpe"), dict) else {}
+                    _mix_w = _rm_meta.get("mixed_period_warning")
+                    if _mix_w:
+                        st.markdown(
+                            f"<div style='font-size:10px;color:{MATERIAL_RED};"
+                            f"padding:3px 10px;background:{BG_DARK_RED_1};"
+                            f"border-radius:4px;margin:2px 0 6px 0'>⚠️ {_mix_w}</div>",
+                            unsafe_allow_html=True)
+                    if _sh_meta.get("period_label"):
+                        st.markdown(
+                            f"<div style='font-size:10px;color:{TRAFFIC_NEUTRAL};"
+                            f"padding:3px 10px;background:{GH_BG_PRIMARY};"
+                            f"border-radius:4px;margin:2px 0 6px 0'>"
+                            f"🕒 Sharpe 期間:{_sh_meta['period_label']}</div>",
+                            unsafe_allow_html=True)
                     # F-RECON-1 phase 6 v19.91 — Sharpe 對帳 chip(self-calc vs MoneyDJ wb07)
                     _sh_rec = (m or {}).get("sharpe_reconcile")
                     if isinstance(_sh_rec, dict) and _sh_rec.get("status") in ("agree", "disagree", "a_missing", "b_missing"):
@@ -1148,6 +1267,16 @@ def render_single_fund_tab() -> None:
                             f"background:{GH_BG_PRIMARY};border-radius:4px;margin:2px 0 6px 0'>"
                             f"{_sh_emoji} 對帳:自算={_va_t} vs MoneyDJ wb07={_vb_t} ({_sh_rec.get('status')})"
                             f"</div>",
+                            unsafe_allow_html=True)
+                    # C-3:自算 Sharpe 被樣本門檻擋掉時,對帳恆為 a_missing —— chip 只
+                    # 顯示「⬜ a_missing」看不出是「本地根本沒算」。顯式說明降級原因,
+                    # 否則 §4.3「關鍵指標第二種算法對帳」被靜默關掉(§1)。
+                    _rec_blocked = _sh_meta.get("reconcile_blocked_reason")
+                    if _rec_blocked:
+                        st.markdown(
+                            f"<div style='font-size:10px;color:{MATERIAL_ORANGE};"
+                            f"padding:3px 10px;background:{GH_BG_PRIMARY};"
+                            f"border-radius:4px;margin:2px 0 6px 0'>ℹ️ {_rec_blocked}</div>",
                             unsafe_allow_html=True)
                     # Sharpe 持久性說明（孫慶龍老師框架）
                     # v19.338:M9(v19.336)抽 _risk_1y_rows_html 時 _sh1 定義隨 inline

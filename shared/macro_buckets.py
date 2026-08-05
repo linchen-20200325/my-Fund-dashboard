@@ -33,7 +33,8 @@ from typing import Optional
 # ── 既有 L0 SSOT 常數(直接 import,不重複宣告)──
 from shared.signal_thresholds import (
     SAHM_RECESSION_THRESHOLD,         # 0.5 — 失業率 3MA - 過去 12M 最低 ≥ 0.5pp
-    CFNAI_RECESSION_THRESHOLD,        # -0.7 — Chicago Fed 領先指標衰退門檻
+    CFNAI_RECESSION_THRESHOLD,        # -0.7 — Chicago Fed CFNAI-**MA3** 衰退門檻
+    CFNAI_TREND_GROWTH,               # 0.0 — CFNAI 官方零點(=歷史趨勢成長速度)
 )
 from shared.colors import (
     MATERIAL_GREEN as _C_GREEN,
@@ -178,10 +179,16 @@ BUCKET_DANGER_SPECS: list[DangerSpec] = [
                yellow=0.5, red=0.0, decimals=2,
                note="<0.5 接近倒掛 / <0 倒掛",
                source="SSOT:MACRO_THRESHOLDS.YIELD_10Y3M"),
-    DangerSpec("cfnai", "CFNAI 領先指標", "inflection", "", "low_bad",
-               yellow=-0.35, red=float(CFNAI_RECESSION_THRESHOLD), decimals=2,
-               note="<-0.35 走弱 / ≤-0.7 衰退",
-               source="SSOT:CFNAI_RECESSION_THRESHOLD(-0.7)+DESIGN(-0.35 警戒)"),
+    # v19.404 稽核修正:原黃線 -0.35 為**張冠李戴** —— 官方 -0.35 是 **CFNAI Diffusion
+    # Index**(擴散指標)的擴張門檻,與 CFNAI 水準值無關,對本 spec 無官方依據(§3.3 反捏造)。
+    # 改用官方零點 0.0(「CFNAI = 0 代表以歷史趨勢速度成長,負值 = 低於趨勢」)當走弱黃線,
+    # 紅線維持官方 CFNAI-MA3 < -0.70。兩條線皆為 **MA3** 基準,非月度值。
+    # 出處:https://www.chicagofed.org/-/media/publications/cfnai/background/cfnai-background-pdf.pdf
+    DangerSpec("cfnai", "CFNAI-MA3 領先指標", "inflection", "", "low_bad",
+               yellow=float(CFNAI_TREND_GROWTH), red=float(CFNAI_RECESSION_THRESHOLD), decimals=2,
+               note="<0 低於歷史趨勢成長 / ≤-0.7 衰退(皆為 3 月移動平均 CFNAI-MA3)",
+               source="SSOT:CFNAI_RECESSION_THRESHOLD(-0.7)+CFNAI_TREND_GROWTH(0.0),"
+                      "Chicago Fed CFNAI background PDF"),
     DangerSpec("sloos", "SLOOS 銀行收緊", "inflection", "%", "high_bad",
                yellow=30.0, red=50.0, decimals=1,
                note=">30% 信用條件收緊 / >50% 衰退級緊縮",

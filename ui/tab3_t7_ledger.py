@@ -123,10 +123,29 @@ def render_t7_section() -> None:
         pass   # smoke-allow-pass — UI 提示失敗不影響後續 T7 主邏輯
 
     st.markdown("### 💰 T7 帳務與再平衡試算（A / B / C）")
+    # 【能力宣告誠實化】原文寫死「帳本以記憶體保留至重新整理頁面為止」，但本檔
+    # 7 個落帳觸發點都會呼叫 `_t7_save_snapshot_to_sheets()` 寫 `_T7_State`，
+    # T7 進入時還會自動 `load_all_ledgers_snapshot` 還原 → 同一頁的 caption 與
+    # 下方 `☁️ 已從 _T7_State 自動還原…` info 互相打臉。
+    # §1 Fail Loud, Never Fake 的鏡像違規：假造「能力宣告」讓使用者不敢用一個
+    # 其實可用的功能。改為依「雲端連線是否成立」條件式渲染。
+    # 判斷條件刻意與 `_t7_get_gsheet_client_sid()`（下方 :159）的 gate 同源
+    # （cfg + tokens + sheet_id 三者齊全），差別只在此處**不**做 token refresh
+    # 的網路 I/O —— 渲染一行說明不該打外部 API。
+    _t7_cloud_on = bool(
+        _resolve_oauth_cfg()
+        and st.session_state.get("gsheet_tokens")
+        and st.session_state.get("policy_sheet_id")
+    )
+    _t7_persist_txt = (
+        "帳本會自動同步至 Google Sheet `_T7_State`／`_持倉總覽`，**重整頁面後仍在**。"
+        if _t7_cloud_on else
+        "**尚未接雲端**：帳本僅存於記憶體，**重整頁面即消失**。"
+        "登入 Google 並設定 policy sheet 後可自動同步至 `_T7_State`。"
+    )
     st.caption(
         "v1.0 加權平均會計引擎。NAV / FX 一律由 yfinance 即時抓取，"
-        "使用者只填「投入金額」與「目標權重」。帳本以記憶體保留至重新整理頁面為止——"
-        "本工具定位為「先試算、後落帳」。"
+        "使用者只填「投入金額」與「目標權重」。" + _t7_persist_txt
     )
 
     _pf_t7 = [f for f in st.session_state.portfolio_funds if f.get("loaded")]
@@ -170,9 +189,16 @@ def render_t7_section() -> None:
                     _creds_s = build_credentials_from_tokens(_t_s,
                         _cfg_s["client_id"], _cfg_s["client_secret"])
                     return get_gspread_client_from_oauth(_creds_s), _sid_s
-                except (PolicySheetError, OAuthError):
+                except (PolicySheetError, OAuthError) as _e_cli:
+                    # §1:原本兩個 except 都靜默回 (None, None)，token 過期 /
+                    # Sheet 權限被撤在畫面上與「沒登入」長得一模一樣，帳本就這樣
+                    # 悄悄停止同步。補 log，讓 console 至少看得到真因。
+                    print(f"[T7] OAuth/Sheet 取 client 失敗："
+                          f"{type(_e_cli).__name__}: {str(_e_cli)[:200]}")
                     return None, None
-                except Exception:
+                except Exception as _e_cli:
+                    print(f"[T7] 取 gspread client 未預期例外："
+                          f"{type(_e_cli).__name__}: {str(_e_cli)[:200]}")
                     return None, None
 
             def _t7_save_snapshot_to_sheets() -> str:
@@ -180,7 +206,9 @@ def render_t7_section() -> None:
                 回傳 status 字串給 success message 附在後面（成功 ' + State N 筆' / 失敗 ' ⚠️ ...'）。"""
                 _c_s, _sid_s = _t7_get_gsheet_client_sid()
                 if not _c_s:
-                    return ""
+                    # §1:原本回 "" → 落帳成功訊息後面什麼都不接，使用者以為
+                    # 「已經存到雲端了」。實際只在記憶體。誠實說明未同步。
+                    return " ⬜ 未接雲端（OAuth 未登入或 token 失效）"
                 try:
                     _funds_lookup = {fund_pk_str(f): f
                                      for f in st.session_state.get("portfolio_funds", [])}

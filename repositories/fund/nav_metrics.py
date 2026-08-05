@@ -129,7 +129,17 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
 # fetch_nav 只給 ~30-400 天，對危機回測（2018/2020/2022）資料不夠
 # ══════════════════════════════════════════════════════════════════
 
-_NAV_HISTORY_CACHE_DIR = Path("cache") / "nav_history" if False else None  # 延後 import path
+# v19.424:刪除前置的
+#   `_NAV_HISTORY_CACHE_DIR = Path("cache") / "nav_history" if False else None`
+# —— 該行為**死碼 + NameError 地雷**:
+#   (a) 條件是 `if False`,`Path(...)` 分支永遠不求值 → 執行期不炸,所以躲過了
+#       所有既有測試;
+#   (b) 但 `Path` **確實不在本模組命名空間**(頂部只 import re/requests/pandas/
+#       BeautifulSoup,`from repositories.fund.sources import *` 也沒帶進 Path)
+#       → 任何人把 `False` 改成別的條件、或把這行複製到他處,立刻 NameError;
+#   (c) 它也完全多餘 —— 下方 try/except 無論成功或失敗都會重新賦值。
+# 由 `tests/test_undefined_name_scan.py`(ruff F405/F821)抓出;該測試因 Windows
+# 缺 ruff 執行檔而長期未真正執行,這顆雷才得以潛伏。
 try:
     from pathlib import Path as _Path_nh
     _NAV_HISTORY_CACHE_DIR = _Path_nh("cache") / "nav_history"

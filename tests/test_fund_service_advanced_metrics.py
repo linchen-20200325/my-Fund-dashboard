@@ -5,9 +5,15 @@
 caller `services/portfolio_service.py:calc_fund_factor_score` 永遠拿不到。
 
 守住:
-- calc_metrics 對 ≥60 筆 NAV 序列必算 sortino + calmar
-- 短歷史(< 60 筆)→ 兩者 None(§1 Fail Loud,不偽造)
+- calc_metrics 對足夠長的 NAV 序列必算 sortino + calmar
+- 短歷史 → 兩者 None(§1 Fail Loud,不偽造)
 - expense_ratio 走 portfolio_service 的 mgmt_fee 第 3 fallback
+
+**P0-3 樣本門檻更新**(原門檻 60 筆 = ≈3 個月,卻掛在「1Y」欄位旁):
+- sharpe / sortino:≥ MIN_OBS_SHARPE_SORTINO(250 交易日)
+- max_drawdown    :≥ MIN_OBS_MAX_DRAWDOWN(125)
+- calmar          :≥ MIN_OBS_CALMAR(756 = Young 1991 的 36 個月),**取消 1Y fallback**
+不足一律 None + `risk_metric_meta[<指標>]["reason"]` 原因字串。
 """
 from __future__ import annotations
 
@@ -35,24 +41,40 @@ class TestSortinoCalmarSSOTV191:
         )
         assert isinstance(m["sortino"], float)
 
-    def test_calmar_computed_when_3y_or_1y_present(self):
-        from services.fund_service import calc_metrics
-        s = _make_nav_series(300)
+    def test_calmar_computed_when_full_3y_present(self):
+        """P0-4:Calmar 需滿 3Y(756 交易日,Young 1991)。800 筆 → 算得出。"""
+        from services.fund_service import calc_metrics, MIN_OBS_CALMAR
+        s = _make_nav_series(MIN_OBS_CALMAR + 50)
         m = calc_metrics(s, divs=[])
-        # max_dd 永遠存在(非零波動);1Y 報酬也應存在
         assert m.get("max_drawdown") is not None
-        assert m.get("calmar") is not None, (
-            "v19.191: 1Y 報酬 + max_dd 都有 應算得 calmar"
-        )
+        assert m.get("calmar") is not None, "滿 3Y 應算得 calmar"
+        _meta = m["risk_metric_meta"]["calmar"]
+        assert _meta["source"] == "self_calc"
+        assert _meta["period_days"] == MIN_OBS_CALMAR
+        assert _meta["max_dd_3y_pct"] is not None
+
+    def test_calmar_none_without_3y_history_no_1y_fallback(self):
+        """P0-4 核心:不足 3Y **不得**走 1Y fallback(Calmar_1Y ≥ Calmar_3Y 恆成立,
+        同表混排不可比)→ None + 樣本不足原因字串。"""
+        from services.fund_service import calc_metrics, MIN_OBS_CALMAR
+        s = _make_nav_series(300)          # 1Y+ 但 << 3Y
+        m = calc_metrics(s, divs=[])
+        assert m.get("calmar") is None, "不足 3Y 不可用 1Y fallback 硬算 Calmar"
+        assert m.get("calmar_source") is None
+        _r = m["risk_metric_meta"]["calmar"]["reason"]
+        assert _r and "樣本不足" in _r and f"/{MIN_OBS_CALMAR}" in _r, _r
 
     def test_short_series_sortino_calmar_none(self):
-        """< 60 筆 → sortino None;若 sharpe 也算不出 → calmar 也 None 為合理。"""
+        """遠低於門檻 → sortino / calmar / max_drawdown 全 None + 原因字串。"""
         from services.fund_service import calc_metrics
         s = _make_nav_series(40)
         m = calc_metrics(s, divs=[])
-        assert m.get("sortino") is None, (
-            "v19.191: < 60 筆 sortino 必須 None(不可偽造)"
-        )
+        assert m.get("sortino") is None, "樣本不足 sortino 必須 None(不可偽造)"
+        assert m.get("calmar") is None
+        assert m.get("max_drawdown") is None, "40 筆 < 125 → MaxDD 也不給"
+        _meta = m["risk_metric_meta"]
+        for _k in ("sortino", "max_drawdown", "calmar"):
+            assert "樣本不足" in (_meta[_k]["reason"] or ""), (_k, _meta[_k])
 
     def test_sortino_calmar_in_return_schema(self):
         """schema 守:return dict 必須有 sortino + calmar key(即使值 None)。"""
@@ -121,8 +143,10 @@ class TestEndToEndAdvancedIndicatorsV191:
 
     def test_advanced_indicators_flow_into_health_row(self):
         from services.health.report import build_health_analysis_row
-        from services.fund_service import calc_metrics
-        s = _make_nav_series(300)
+        from services.fund_service import calc_metrics, MIN_OBS_CALMAR
+        # P0-4:Calmar 需滿 3Y → e2e 樣本從 300 調到 756+(原 300 走的是已取消的
+        # 1Y fallback 路徑,不是真 Calmar)。
+        s = _make_nav_series(MIN_OBS_CALMAR + 50)
         m = calc_metrics(s, divs=[])
         fd = {
             "moneydj_raw": {"perf": {"1Y": 8.0}, "mgmt_fee": "1.20"},

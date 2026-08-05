@@ -817,18 +817,24 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
                         "📖 **怎麼看這張表**：「💡 貢獻說明」直接告訴你這檔指標目前如何影響景氣總分。"
                         "排序依 |score × weight| ＝ 對總分實際影響力，最重要的指標在最上方。"
                     )
+                    # v19.405:weight=0 合法(去重後的備源,如月頻 M2 命中時的
+                    # M2_WEEKLY)。原式 `_iv.get("weight", 1) or 1` 因 Python
+                    # `0 or 1 == 1` 把刻意歸零的權重還原成 1 → 本表仍以
+                    # |score × 1| 讓已去重的備源佔排序位。
+                    # 契約 SSOT:services/macro/composite_score.coerce_weight
+                    from services.macro.composite_score import coerce_weight as _cw
                     _rows_d = []
                     for _ik, _iv in _edu_ind.items():
                         if not isinstance(_iv, dict):
                             continue
-                        _w_raw = _iv.get("weight", 1) or 1
                         try:
-                            _w = float(_w_raw)
+                            _w = _cw(_iv.get("weight", 1))
                         except (TypeError, ValueError):
                             _w = 1.0
                         _sc_raw = _iv.get("score", 0) or 0
                         try:
-                            _sc_clamped = round(max(-_w, min(_w, float(_sc_raw))), 2)
+                            # `+ 0.0` 消 -0.0(w=0 時 clamp 會產生負零,顯示成 "-0.0")
+                            _sc_clamped = round(max(-_w, min(_w, float(_sc_raw))), 2) + 0.0
                         except (TypeError, ValueError):
                             _sc_clamped = 0.0
                         _val_raw = _iv.get("value")

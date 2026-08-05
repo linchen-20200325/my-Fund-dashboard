@@ -42,10 +42,98 @@ from fund_fetcher import (  # noqa: F401
 # ── Bug1 Fix: 無風險利率（可由 app.py 透過 set_risk_free_rate() 注入即時 FEDFUNDS）──
 _RF_ANNUAL: float = 0.04  # 預設 4%；載入總經資料後會自動更新為 FEDFUNDS 實際值
 
+_RF_ANNUAL_MAX: float = 0.25   # 25%：美國聯邦資金利率史上最高約 19-20%(1981)，留緩衝
+
 def set_risk_free_rate(rf_annual: float) -> None:
-    """注入即時無風險利率（FEDFUNDS/100）。在 fetch_all_indicators() 完成後由 app.py 呼叫。"""
+    """注入即時無風險利率（FEDFUNDS/100）。在 fetch_all_indicators() 完成後由 app.py 呼叫。
+
+    §1 Fail Loud + §4.1 單位陷阱防護
+    ---------------------------------
+    呼叫端(`app.py:119`)寫的是 `_cached_ind["FED_RATE"].get("value", 4.0) / 100`
+    —— 它**假設** value 的單位是「百分比數值」(3.63 → 0.0363)。一旦上游改回小數、
+    或塞進佔位/髒值，rf 會直接失控：
+
+      實際踩到過 — `tests/test_app_apptest.py:357` 對 23 個指標一律塞
+      `"value": 50.0` 佔位(含 FED_RATE)→ rf = 50%/年 → 該測試之後**同一個
+      process 內**所有 Sharpe / Sortino 的分子都被扣掉 50%，且
+      `_RF_ANNUAL` 是 module 全域、跑完不還原 → 跨測試污染。
+
+    rf 只出現在分子 `(r̄ − rf)`，錯了**不會拋例外、不會變 NaN**，只會讓每一檔
+    基金的風險調整後報酬一起偏移 → 是典型的「靜默全域污染」。故此處加界:
+    超出 [0, `_RF_ANNUAL_MAX`] 一律**拒絕採用並大聲 log**，保留前一個值
+    (寧可用略舊的 rf，也不要用一個明顯錯的 rf 汙染全站)。
+    """
     global _RF_ANNUAL
-    _RF_ANNUAL = max(0.0, float(rf_annual))
+    try:
+        _v = float(rf_annual)
+    except (TypeError, ValueError):
+        print(f"[fund_service] ⚠️ set_risk_free_rate 收到非數值 {rf_annual!r} — "
+              f"拒絕採用，維持 _RF_ANNUAL={_RF_ANNUAL:.4f}")
+        return
+    if not (0.0 <= _v <= _RF_ANNUAL_MAX):
+        print(f"[fund_service] ⚠️ set_risk_free_rate 收到不合理值 {_v:.4f} "
+              f"(合理區間 0 ~ {_RF_ANNUAL_MAX:.2f}) — 疑似單位錯誤(% vs 小數)或髒值，"
+              f"拒絕採用，維持 _RF_ANNUAL={_RF_ANNUAL:.4f}")
+        return
+    _RF_ANNUAL = _v
+
+
+# ── 風險指標最小樣本門檻（§1 樣本不足寧缺勿假 / §3.3 具名常數非 inline magic）──
+# 【為什麼要有門檻】原碼 sharpe/sortino 門檻僅 60 筆（≈3 個月），卻把結果掛在
+# 「1Y」欄位旁；線上實測出現「Sharpe 1Y = 0.28」與「1Y 含息 = -2.71%」並列 ——
+# 分子 = R − Rf，R=-2.71%、Rf≈3.63%（app.py 由 FED_RATE 注入 _RF_ANNUAL），
+# 分子必為負、σ 恆正 → 自算 Sharpe 不可能是 +0.28。兩個不同期間的數字被並列，
+# 使用者無從察覺矛盾。門檻與期間標籤必須同一批修，缺一不可。
+#
+# 【Lo (2002) Eq.9 標準誤】IID 假設下 SE(Ŝ) ≈ sqrt((1 + ½S²)/T)。
+#   n=42、S=0.28 → SE=0.157 → 95% CI=[-0.03, 0.59]，**跨越 0**（無方向性）。
+#   注意：即使 T=250，年化 Sharpe 的 SE 仍 ≈ 1.0（SE_ann = √252 × SE_daily
+#   ≈ sqrt((1+½S_d²)/T_years)），統計顯著性在基金常見歷史長度下**不可達**。
+#   因此門檻不以「達成顯著」為目標，而以「達成標籤宣稱的期間」為目標：
+#   欄位叫 1Y 就必須真的有 1 年資料，否則 §1 回 None + 原因字串。
+MIN_OBS_SHARPE_SORTINO: int = 250   # 250/252 = 99.2% 交易年（留 ~2 日假期容差）
+MIN_OBS_MAX_DRAWDOWN: int = 125     # ≈ 半個交易年（126）；MaxDD 是路徑統計不需年化，
+                                    # 但對窗長單調非遞減，< 半年時「窗內有沒有碰到修正」
+                                    # 的運氣成分大於基金本身風險特徵。
+MIN_OBS_CALMAR: int = 3 * TRADING_DAYS_PER_YEAR   # 756 = Young (1991) 原始定義 36 個月
+MIN_DOWNSIDE_OBS_SORTINO: int = 5   # 低於 MAR 的樣本數下限（TDD 估計可靠度）
+# ⚠️ SSOT 待遷移：以上 4 個常數語意上屬 `shared/signal_thresholds.py`
+#    （對照既有 FRONTIER_MIN_OBS / BACKTEST_MIN_COMMON_DAYS）。本次改動的檔案
+#    所有權僅限本檔 + tests/，故先在本檔具名常數化；shared 開放後應整組上移。
+
+
+def _insufficient_reason(n: int, need: int, what: str = "交易日") -> str:
+    """樣本不足原因字串（§1：回 None 必須說明為什麼，不可靜默）。"""
+    return f"樣本不足（{n}/{need} {what}）"
+
+
+def _target_downside_deviation(excess) -> float:
+    """Target Downside Deviation（TDD，Sortino 分母）。
+
+        σ_D = sqrt( (1/N) · Σ_{t=1..N} [ min(0, r_t − MAR) ]² )
+
+    Parameters
+    ----------
+    excess : array-like
+        **已扣掉 MAR 的超額報酬序列**（r − MAR），單位 = ratio（非 %）。
+
+    Returns
+    -------
+    float
+        σ_D，與 `excess` 同單位。空序列回 0.0（caller 須自行判定並回 None）。
+
+    Notes
+    -----
+    分母為**全樣本 N**：超過 MAR 的觀測值平方離差計 0，但**仍留在分母**。
+    CFA Institute（Kidd 2012, "The Sortino Ratio"）逐字點名「除以低於 MAR 的
+    筆數而非總筆數」是 *a fairly common mistake*——那算出來的是「負報酬子集合
+    繞自身平均數的樣本標準差」，不是 downside deviation。
+    以 {−1%, −2%, −3%, −5%} 為例：本式 = 3.12%，錯式 = 1.71%（低估 45%）。
+    """
+    _a = np.asarray(excess, dtype=float)
+    if _a.size == 0:
+        return 0.0
+    return float(np.sqrt(float(np.square(np.minimum(_a, 0.0)).mean())))
 
 
 # F-RECON-1 phase 3 v19.88 — Sharpe 對帳 helper(self-calc vs MoneyDJ wb07)
@@ -277,10 +365,30 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     不可重新呼叫第二份計算 / 自算覆蓋,免「同檔不同數字」散落:
 
     - `sharpe`               年化 Sharpe Ratio(優先 wb07,本算 fallback)
-    - `sortino`              年化 Sortino Ratio(下檔波動,需 ≥60 筆 + ≥5 筆負報酬)v19.191 +
-    - `calmar`               Calmar = 3Y 年化 / |max_dd|(3Y 缺則 1Y fallback)v19.191 +
+    - `sortino`              年化 Sortino Ratio(TDD 下檔離差)
+    - `calmar`               Calmar = 3Y 年化含息報酬 / |3Y 期間最大回撤|
+                             (分子分母**同一條含息還原序列 s_tr、同一個 3Y 窗**,C-4)
     - `std_1y` / std_2y / std_3y / std_5y  年化標準差(同優先序)
-    - `max_drawdown`         最大回撤 %
+    - `max_drawdown`         最大回撤 %(全序列)
+    - `risk_metric_meta`     上述 4 指標的實際期間 / 來源 / 缺值原因(P0-3)
+
+    **風險指標定義與樣本門檻(P0-3 修正,§1 + §4.1)**
+    ---------------------------------------------
+    | 指標 | 公式 | 基準(MAR/rf) | 最小樣本 | 期間 |
+    |---|---|---|---|---|
+    | Sharpe  | (r̄ − rf) / σ × √252 | rf = _RF_ANNUAL/252 | 250 交易日 | 近 1 年 |
+    | Sortino | (r̄ − MAR) / σ_D × √252,<br>σ_D = √( (1/N)·Σ[min(0, rₜ−MAR)]² ) | **MAR = rf(同 Sharpe 分子)** | 250 交易日<br>+ ≥5 筆低於 MAR | 近 1 年 |
+    | MaxDD   | min( cum/cummax − 1 ),cum = exp(cumsum(log_ret)) | — | 125 交易日 | 全序列 |
+    | Calmar  | 3Y 年化**含息**報酬 / abs(3Y 期間 MaxDD)<br>兩者同源 `cum = exp(cumsum(log s_tr))` 同窗 | — | 756 交易日 | 固定 3Y |
+
+    - **Sharpe 與 Sortino 分子完全相同**(r̄ − rf),差別只在風險量測(全域 σ vs
+      下檔 σ_D)→ **同一張表可並列比較**。(若改採 MAR=0 則兩者基準不同,
+      屆時必須加註「不可交叉比較」。)
+    - **Calmar 已取消 1Y fallback**:MaxDD 對窗長單調非遞減 ⇒ Calmar_1Y ≥ Calmar_3Y
+      恆成立,混排會系統性抬高短歷史基金。不足 3Y → None + 原因字串。
+    - 任一指標樣本不足一律回 **None + `risk_metric_meta[<指標>]["reason"]`**,
+      **禁止**靜默回 0 或硬算(§1)。
+    - 全部年化用 `TRADING_DAYS_PER_YEAR`(252 交易日,**非** 365 日曆日,§4.1)。
     - `ret_1y` / ret_3y / ret_5y  純 NAV 報酬(不含息;1Y 含息走 fund_total_return)
     - `annual_div_rate`      年化配息率(本算 fallback;主源 moneydj_div_yield wb05)
     - `div_freq_n`           配息頻率(12/4/2/1 次/年,由 div 間隔 auto-detect)
@@ -473,30 +581,101 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     bb_upper_series = bb_upper_s.dropna()
     bb_lower_series = bb_lower_s.dropna()
     rf=_RF_ANNUAL/TRADING_DAYS_PER_YEAR; r252=log_ret.tail(TRADING_DAYS_PER_YEAR) if len(log_ret)>=TRADING_DAYS_PER_YEAR else log_ret  # Bug1: rf 改用即時 FEDFUNDS
-    # v19.341(第七份 review 3-2):Sharpe 分母補 std guard — 同函式 Sortino(1e-12)/
-    # Calmar(1e-9)皆有防,唯 Sharpe 漏。常數 NAV(停售/剛成立填平值,§4.6)std=0 →
-    # inf 直流 UI。對齊 Sortino 既有 1e-12 門檻,不足回 None(§1 寧缺勿假)。
-    _std252 = float(r252.std()) if len(r252) >= 60 else 0.0
-    sharpe=round(float((r252.mean()-rf)/_std252*np.sqrt(TRADING_DAYS_PER_YEAR)),2) if (len(r252)>=60 and _std252>1e-12) else None
-    # v19.191 SSOT WRITER:Sortino(下檔波動年化)— 同 sharpe 60 筆門檻
-    # target=0,只取負報酬計 downside_std,避免 ÷0 用 1e-12 guard。
+    # ── 樣本閘門(P0-3):自算 Sharpe / Sortino 一律 ≥ MIN_OBS_SHARPE_SORTINO ──
+    # 原門檻 60 筆(≈3 個月)讓 42 天序列也能吐出掛在「1Y」旁的 Sharpe(見常數區
+    # 說明)。不足 → None + 原因字串(§1),**禁止**靜默回 0 或硬算。
+    _n252 = len(r252)
+    _sharpe_reason = None
+    _sortino_reason = None
+    if _n252 < MIN_OBS_SHARPE_SORTINO:
+        _sharpe_reason = _insufficient_reason(_n252, MIN_OBS_SHARPE_SORTINO)
+        _sortino_reason = _sharpe_reason
+    # v19.341(第七份 review 3-2):Sharpe 分母補 std guard — 同函式 Sortino/
+    # Calmar 皆有防,唯 Sharpe 漏。常數 NAV(停售/剛成立填平值,§4.6)std=0 →
+    # inf 直流 UI。不足回 None(§1 寧缺勿假)。
+    _std252 = float(r252.std()) if _n252 >= MIN_OBS_SHARPE_SORTINO else 0.0
+    sharpe = None
+    if _n252 >= MIN_OBS_SHARPE_SORTINO:
+        if _std252>1e-12:
+            sharpe = round(float((r252.mean() - rf) / _std252 * np.sqrt(TRADING_DAYS_PER_YEAR)), 2)
+        else:
+            _sharpe_reason = "σ=0(常數 NAV / 停售,§4.6)→ Sharpe 未定義"
+
+    # ── Sortino:Target Downside Deviation(TDD)─────────────────────────
+    # 【修正】原式 `r252[r252 < 0].std()` 是「負報酬**子集合**繞**自身平均數**的
+    # 樣本標準差(ddof=1)」,**不是** downside deviation。CFA Institute
+    # (Kidd 2012, "The Sortino Ratio")逐字點名此為 "a fairly common mistake":
+    # 把平方離差和除以「低於 MAR 的筆數」而非「總樣本數」。
+    # 以 {-1%,-2%,-3%,-5%} 為例:正確 TDD = 3.12%、原式 = 1.71%
+    # → TDD 低估 45%、Sortino **高估 82%**。方向恆為高估 ⇒ 下檔風險最大的基金
+    # 被評得最好,這是**排序反向**不是精度問題。
+    #
+    #   σ_D = sqrt( (1/N) · Σ_{t=1..N} [ min(0, r_t − MAR) ]² )   ← 分母為全樣本 N
+    #                                                                (超過 MAR 者計 0,
+    #                                                                 但**仍留在分母**)
+    #   Sortino = (r̄ − MAR) / σ_D × √252
+    #
+    # 【MAR 選定 = rf(日化無風險利率)】原碼分子扣 rf、分母隱含 target=0,
+    # 分子分母基準不一致。統一取 MAR = rf 的理由:
+    #  (1) Sortino & Price (1994) 原始定義分子分母用**同一個** MAR;
+    #      CFA Institute 文件確認 MAR=0 亦為合法取值,但必須前後一致。
+    #  (2) 取 MAR=rf 後,Sortino 與 Sharpe **分子完全相同**(r̄ − rf),差別只在
+    #      風險量測(全域 σ vs 下檔 σ_D)→ 同一張表可並列比較;若取 MAR=0
+    #      則兩者基準不同,不可交叉比較(需另加警語)。
+    #  (3) wb07 官方風險表**無** Sortino 欄(ui/helpers/fund_grp_health/risk.py:96),
+    #      不存在必須對齊 MAR=0 的外部錨。
+    # 【單位】r252 為日對數報酬(ratio 非 %),rf 為日簡單利率(_RF_ANNUAL/252);
+    #        年化用 √252 交易日(非 365 日曆日,§4.1)。
     sortino = None
-    if len(r252) >= 60:
-        _neg = r252[r252 < 0]
-        if len(_neg) >= 5:
-            _dstd = float(_neg.std())
-            if _dstd > 1e-12:
-                sortino = round(float((r252.mean() - rf) / _dstd * np.sqrt(TRADING_DAYS_PER_YEAR)), 2)
-    cum=(1+log_ret).cumprod()
+    if _n252 >= MIN_OBS_SHARPE_SORTINO:
+        _mar = rf                                  # MAR 與 Sharpe 分子同基準
+        _excess = r252 - _mar
+        _n_down = int((_excess < 0).sum())
+        if _std252 <= 1e-12:
+            # 退化序列守衛(對齊 Sharpe 的 v19.341 guard):總波動 = 0 表示 NAV 為
+            # 常數(停售 / 剛成立填平值,§4.6)—— 這是**資料假影**不是「零風險投資」。
+            # 此時每日報酬皆等距低於 MAR,σ_D 恰等於 |rf|,Sortino 會收斂到
+            # −√252 ≈ −15.87 這種「看起來很精確」的數字,但它只反映 rf 不反映基金。
+            # §1:寧缺勿假 → None + 原因。
+            _sortino_reason = "σ=0(常數 NAV / 停售,§4.6)→ 序列無風險資訊,Sortino 未定義"
+        elif _n_down < MIN_DOWNSIDE_OBS_SORTINO:
+            # 全正報酬 / 幾乎無下檔 → σ_D 趨近 0,Sortino → inf。§1 決策:回 **None**
+            # 而非 inf —— inf 不是「零風險」的證據,只代表這個窗口內沒出現下檔;
+            # 且 inf 會汙染 portfolio_service.calc_fund_factor_score 的排序與正規化。
+            _sortino_reason = (
+                f"低於 MAR 的樣本僅 {_n_down} 筆(需 ≥{MIN_DOWNSIDE_OBS_SORTINO})"
+                f"→ 下檔離差不可靠,不給假精確")
+        else:
+            _tdd = _target_downside_deviation(_excess.to_numpy(dtype=float))
+            if _tdd > 1e-12:
+                sortino = round(
+                    float(float(_excess.mean()) / _tdd * np.sqrt(TRADING_DAYS_PER_YEAR)), 2)
+            else:
+                _sortino_reason = "σ_D=0(全期無低於 MAR 的報酬)→ Sortino 未定義(不回 inf)"
+
+    # ── 累積淨值指數(log 空間連乘,§4.4 數值穩定性)────────────────────
+    # 【修正】原式 `(1 + log_ret).cumprod()` 把**對數**報酬餵進**簡單**報酬的複利式。
+    # 正確:cum_t = exp( Σ_{i≤t} ln(1+r_i) ) = exp(cumsum(log_ret))。
+    # 因 ln(1+x) ≤ x(等號僅 x=0),原式每一步都少算 → cum **系統性向下漂移**
+    # → **MaxDD 被高估**,且下游 Calmar 分母全部繼承此偏差
+    # (以 ACCP138 官方年化 σ=8.69% 估算,漂移約 0.38%/年,3 年 ≈ 1.1pp)。
+    # 改 exp(cumsum) 後 cum 逐點恰等於 s_tr / s_tr[0](還原淨值歸一化),零漂移。
+    cum=np.exp(log_ret.cumsum())
     # v19.372:max_dd ÷0 guard(對齊本函式 Sharpe/Sortino/Calmar 既有 §1 防線 + SSOT
     # portfolio_service.compute_max_drawdown 的 (s<=0) 語意)。停售/剛成立/資料異常使 cum
     # 或其 running-max ≤0(§4.6 邊界)→ 回撤未定義,回 None 寧缺勿假,避免 inf/NaN 汙染 KPI。
-    # 非退化路徑算式與原式逐位元相同(cummax 只算一次)→ max_dd 數值零變化。
+    # drawdown_t = cum_t / cummax_t − 1 ∈ [-1, 0];取 min 即最大回撤(負值 %)。
+    _n_cum = len(cum)
+    _maxdd_reason = None
     _cummax=cum.cummax()
-    if len(cum)>=2 and bool((cum>0).all()) and bool((_cummax>0).all()):
+    if _n_cum < MIN_OBS_MAX_DRAWDOWN:
+        max_dd=None
+        _maxdd_reason=_insufficient_reason(_n_cum, MIN_OBS_MAX_DRAWDOWN)
+    elif bool((cum>0).all()) and bool((_cummax>0).all()):
         max_dd=round(float(((cum-_cummax)/_cummax).min())*100,2)
     else:
         max_dd=None
+        _maxdd_reason="累積淨值序列含非正值(停售/資料異常,§4.6)→ 回撤未定義"
     # v19.341(第七份 review 3-2):分母補 >0 guard(第二道防線)— 本函式入口
     # pandera 已擋 nav<=0,此 guard 防未來驗證放寬/內部直呼時 ZeroDivisionError。
     def _ret(n): return round((now-float(s.iloc[-n]))/float(s.iloc[-n])*100,2) if (len(s)>=n and float(s.iloc[-n])>0) else None
@@ -517,12 +696,62 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     _ret_5y_cum = _ret(5 * TRADING_DAYS_PER_YEAR)
     _ret_3y_ann = _annualize_cum_pct(_ret_3y_cum, 3)
     _ret_5y_ann = _annualize_cum_pct(_ret_5y_cum, 5)
-    # v19.191 SSOT WRITER:Calmar = 年化報酬 / |max_drawdown|
-    # 優先 3Y 年化(較穩定),fallback 1Y 純 NAV 報酬。max_dd=0 → None(避免 ÷0)。
+    # ── Calmar:統一 36 個月(Young 1991 原始定義)= 3 × 252 = 756 交易日 ──────
+    # 【修正】原碼「3Y 年化不可得 → fallback 1Y 純 NAV 報酬」+「分母用全期 max_dd」
+    # 有兩重期間不一致:
+    #  (a) 1Y fallback:MaxDD 對窗口長度**單調非遞減**(W₁ ⊆ W₂ ⇒ |DD(W₁)| ≤ |DD(W₂)|),
+    #      故年化報酬相同時 Calmar_1Y = R/|DD_1Y| ≥ R/|DD_3Y| = Calmar_3Y **恆成立**。
+    #      同表混排 1Y 與 3Y Calmar 是兩個不可比的統計量,短歷史基金被系統性抬高,
+    #      排序無意義。且 caller `portfolio_service.calc_fund_factor_score` 是**跨基金
+    #      排序**,只加期間標籤救不了 —— 必須統一,故**取消 1Y fallback**。
+    #  (b) 分母原用「全期」max_dd:10 年歷史的基金拿 3Y 分子除以 2008 年的回撤,
+    #      同樣是期間錯配。改用**同一個 3Y 窗**的回撤(Young 定義即為同窗)。
+    # 不足 3Y → None + 原因字串(§1),不以短窗充數。
+    #  (c) **C-4 分子分母同源(本次收斂)**:原分子 `_ret_3y_ann` 來自**原始 NAV**
+    #      (純價格報酬),分母 3Y 回撤來自 `cum`(= s_tr 配息還原含息序列)。本專案
+    #      主力是月配息基金:年配息 8% 的基金 3 年純價格報酬可能 −15%(年化 −5.3%),
+    #      含息回撤卻只有 −6% → Calmar **連正負號都可能相反**。剛以「期間不一致 ⇒
+    #      排序無意義」砍掉 1Y fallback,同一式子留「基準不一致」破口即自相矛盾。
+    #      修法:分子改由**同一條 `cum` 的同一個 3Y 窗**端點推年化 —
+    #          R_ann = (cum[-1] / cum[窗首])^(1/年數) − 1
+    #      無配息基金 s_tr ≡ s → 分子與 `_ret_3y_ann` 同值(僅少一次中間 round)。
+    #      **`ret_3y_ann` 欄位語意不動**(多 caller 消費純 NAV 年化),僅 Calmar 改用
+    #      同源分子,並在 meta 揭露 `ret_3y_ann_tr_pct` 供對帳。
+    #  (d) **C-11 先 round 再除(本次修正)**:原碼把 `round(dd,2)` 拿去當除數 ——
+    #      分母被量化到 0.01pp;更糟的是真實回撤 −0.004% 會 round 成 −0.0 →
+    #      命中 `abs(...) <= 1e-9` → Calmar 被誤判為 None。除法一律用**未 round**
+    #      的 `_dd3_raw`,`round` 只用在 meta 顯示。
     calmar = None
-    _ann_for_calmar = _ret_3y_ann if _ret_3y_ann is not None else _ret(TRADING_DAYS_PER_YEAR)
-    if _ann_for_calmar is not None and max_dd is not None and abs(max_dd) > 1e-9:
-        calmar = round(float(_ann_for_calmar) / abs(float(max_dd)), 2)
+    _calmar_reason = None
+    _calmar_dd_3y = None            # 顯示用(2dp);**禁止**拿去當除數(C-11)
+    _calmar_ret_3y_ann_tr = None    # 顯示用(2dp);分子同源揭露(C-4)
+    _calmar_window_days = None
+    if len(s) < MIN_OBS_CALMAR:
+        _calmar_reason = _insufficient_reason(len(s), MIN_OBS_CALMAR)
+    else:
+        _c3 = cum.tail(MIN_OBS_CALMAR)            # 同窗:最近 36 個月的還原淨值路徑
+        _m3 = _c3.cummax()
+        _calmar_window_days = int(len(_c3))       # 期間誠實化:實際窗長(log 差分少 1 點)
+        _dd3_raw = None
+        if bool((_c3 > 0).all()) and bool((_m3 > 0).all()):
+            _dd3_raw = float(((_c3 - _m3) / _m3).min()) * 100.0
+            _calmar_dd_3y = round(_dd3_raw, 2)
+        # 分子:同一條 s_tr 還原序列 + 同一個窗 → 與分母 apples-to-apples(C-4)
+        _ret3_tr_raw = None
+        _c3_start = float(_c3.iloc[0]) if _calmar_window_days else 0.0
+        _c3_end = float(_c3.iloc[-1]) if _calmar_window_days else 0.0
+        _years3 = _calmar_window_days / TRADING_DAYS_PER_YEAR if _calmar_window_days else 0.0
+        if _c3_start > 0 and _c3_end > 0 and _years3 > 0:
+            _ret3_tr_raw = ((_c3_end / _c3_start) ** (1.0 / _years3) - 1.0) * 100.0
+            _calmar_ret_3y_ann_tr = round(_ret3_tr_raw, 2)
+        if _dd3_raw is None:
+            _calmar_reason = "3Y 累積序列含非正值(§4.6)→ 回撤未定義"
+        elif _ret3_tr_raw is None:
+            _calmar_reason = "3Y 含息還原序列端點非正 → 同源年化報酬不可得"
+        elif abs(_dd3_raw) <= 1e-9:
+            _calmar_reason = "3Y 期間最大回撤 = 0 → Calmar 未定義(不回 inf)"
+        else:
+            calmar = round(_ret3_tr_raw / abs(_dd3_raw), 2)
     # v18.53/v18.55/v18.60/v18.61/v18.65/v18.71: 境內基金 MoneyDJ wb01 不存在 → 本地計算含息
     # v18.71: 改用「還原淨值法（配息再投資複利）」— 透過 calculate_fund_total_return()
     #         比舊版「NAV 變化 + 累積配息率」（單利加總）更接近 MoneyDJ wb01 含息官方值，
@@ -638,6 +867,92 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         recent12=[d["amount"] for d in divs[:12]]
         if len(recent12)>=6:
             div_trend=round((sum(recent12[:3])/3-sum(recent12[3:6])/3)/(sum(recent12[3:6])/3)*100,1) if sum(recent12[3:6])>0 else 0
+
+    # ── 風險指標來源 / 期間 meta(§2.2 provenance + §1 期間誠實化)──────────
+    # 背景:同一列同時出現「Sharpe 1Y = 0.28」與「1Y 含息 = -2.71%」時,前者其實
+    # 來自 wb07 官方一年欄、後者來自本地 42 天序列 —— 兩個不同期間的數字被並列,
+    # 使用者無從察覺。本區塊讓 caller 能取得每個指標**實際**使用的期間與來源。
+    # 【向後相容】純新增 key(caller 全部走 dict.get(),已 grep 確認無 `**metrics`
+    # 展開 / 無固定 key set 斷言 / fund_batch.py 為顯式欄位對映)→ 零破壞。
+    _wb07_sharpe_1y = safe_float(risk_tbl.get("一年", {}).get("Sharpe"))
+    _wb07_sharpe_6m = safe_float(risk_tbl.get("六個月", {}).get("Sharpe"))
+    _sharpe_self_calc = sharpe          # 本地自算值(可能為 None)
+    # 優先序:wb07 一年 > wb07 六個月 > 本地自算。用 `is not None` 而非 `or`:
+    # 原碼 `A or B or C` 在 wb07 Sharpe **恰為 0.0** 時 falsy → 落到自算值,
+    # 但 sharpe_source 用 `is not None` 判定仍標 "wb07_1y" → **值與來源標籤不一致**
+    # (provenance 說謊,§2.2;同 portfolio_service v19.397 `or 0` 家族)。
+    if _wb07_sharpe_1y is not None:
+        _sharpe_out, _sharpe_src = _wb07_sharpe_1y, "wb07_1y"
+        _sharpe_period_days, _sharpe_period_label = None, "wb07 官方一年(期間由 MoneyDJ 定義)"
+    elif _wb07_sharpe_6m is not None:
+        _sharpe_out, _sharpe_src = _wb07_sharpe_6m, "wb07_6m"
+        _sharpe_period_days, _sharpe_period_label = None, "wb07 官方六個月"
+    elif _sharpe_self_calc is not None:
+        _sharpe_out, _sharpe_src = _sharpe_self_calc, "self_calc"
+        _sharpe_period_days, _sharpe_period_label = _n252, f"本地自算 {_n252} 交易日"
+    else:
+        _sharpe_out, _sharpe_src = None, None
+        _sharpe_period_days, _sharpe_period_label = None, None
+
+    # 混期警告:官方 Sharpe(1Y/6M)× 本地短窗報酬並列 = 使用者看不見的期間錯配。
+    _mixed_period_warning = None
+    if _sharpe_src in ("wb07_1y", "wb07_6m") and _ret_1y_window_days and _ret_1y_window_days < 350:
+        _mixed_period_warning = (
+            f"期間不一致:Sharpe 來自「{_sharpe_period_label}」,但同列 1Y 含息報酬"
+            f"只用了本地 {_ret_1y_window_days} 天序列 → 兩者非同一期間,不可交叉推論。")
+
+    # C-3:自算 Sharpe 被 MIN_OBS_SHARPE_SORTINO 擋掉時,§4.3「關鍵指標第二種算法對帳」
+    # 的 `sharpe_reconcile` 恆為 a_missing —— **對帳能力被門檻降級**,而 UI 的四態 chip
+    # 只會顯示「⬜ a_missing」,看不出是「本地根本沒算」還是「本地算了但沒值」。
+    # 此處顯式標記原因,UI 必須渲染(§1:降級不可靜默)。
+    _sharpe_reconcile_blocked = None
+    if _sharpe_self_calc is None and (_wb07_sharpe_1y is not None or _wb07_sharpe_6m is not None):
+        _sharpe_reconcile_blocked = (
+            f"雙演算法對帳停用:僅有 wb07 單源,本地自算 Sharpe 缺"
+            f"({_sharpe_reason or '原因未記錄'})→ 無第二演算法可比(§4.3)。")
+
+    _risk_metric_meta = {
+        "sharpe": {
+            "source": _sharpe_src,
+            "period_days": _sharpe_period_days,          # None = 官方值,期間非本地決定
+            "period_label": _sharpe_period_label,
+            "min_required": MIN_OBS_SHARPE_SORTINO,
+            "self_calc_value": _sharpe_self_calc,
+            "self_calc_reason": _sharpe_reason,          # 自算為何缺(即使 wb07 有值)
+            "reconcile_blocked_reason": _sharpe_reconcile_blocked,   # C-3
+        },
+        "sortino": {
+            "source": "self_calc" if sortino is not None else None,
+            "period_days": _n252 if sortino is not None else None,
+            "period_label": (f"本地自算 {_n252} 交易日" if sortino is not None else None),
+            "min_required": MIN_OBS_SHARPE_SORTINO,
+            "definition": "TDD(分母全樣本 N),MAR=rf,與 Sharpe 分子同基準",
+            "reason": _sortino_reason,
+        },
+        "max_drawdown": {
+            "source": "self_calc" if max_dd is not None else None,
+            "period_days": _n_cum if max_dd is not None else None,
+            "period_label": (f"全序列 {_n_cum} 交易日" if max_dd is not None else None),
+            "min_required": MIN_OBS_MAX_DRAWDOWN,
+            "reason": _maxdd_reason,
+        },
+        "calmar": {
+            "source": "self_calc" if calmar is not None else None,
+            # 期間誠實化:回報**實際**窗長(log 差分後比 len(s) 少 1 點),不報宣稱值
+            "period_days": _calmar_window_days if calmar is not None else None,
+            "period_label": (
+                f"3Y 同源含息窗 {_calmar_window_days} 交易日(Young 1991)"
+                if calmar is not None else None),
+            "min_required": MIN_OBS_CALMAR,
+            "max_dd_3y_pct": _calmar_dd_3y,
+            # C-4 對帳用:Calmar 分子(含息還原、同窗年化);與欄位 `ret_3y_ann`
+            # (純 NAV 價格年化)刻意不同源,高配息基金兩者差距即為配息貢獻。
+            "ret_3y_ann_tr_pct": _calmar_ret_3y_ann_tr,
+            "ret_3y_ann_price_pct": _ret_3y_ann,
+            "reason": _calmar_reason,
+        },
+        "mixed_period_warning": _mixed_period_warning,
+    }
     return dict(
         nav=now, std_multi=std_dict, std_1y=std_1y, std_2y=std_2y,
         std_multi_cn={
@@ -663,24 +978,21 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         bb_upper_series=bb_upper_series,bb_lower_series=bb_lower_series,
         std_source="wb07" if (risk_override and risk_override.get("risk_table")) else "nav",
         risk_table=risk_tbl,
-        # 夏普優先用 wb07（更精確），自算值需要60+筆
+        # 夏普優先用 wb07(更精確);自算值需 ≥ MIN_OBS_SHARPE_SORTINO 筆
         # v19.177 #5A:加 sharpe_source provenance 標記,ai_service / UI hover 顯示來源
-        sharpe=(
-            safe_float(risk_tbl.get("一年",{}).get("Sharpe")) or
-            safe_float(risk_tbl.get("六個月",{}).get("Sharpe")) or
-            sharpe
-        ),
-        sharpe_source=(
-            "wb07_1y" if safe_float(risk_tbl.get("一年", {}).get("Sharpe")) is not None
-            else "wb07_6m" if safe_float(risk_tbl.get("六個月", {}).get("Sharpe")) is not None
-            else "self_calc" if sharpe is not None
-            else None
-        ),
-        max_drawdown_source="self_calc",  # max_dd 永遠自算(cum-cummax 算式,fund_service.py:381)
+        # (P0-3:值與來源改由上方單一選擇邏輯決定,消除 `or` falsy-0 造成的標籤說謊)
+        sharpe=_sharpe_out,
+        sharpe_source=_sharpe_src,
+        # max_dd 永遠自算(exp(cumsum) − cummax 算式);None 時來源亦誠實為 None
+        max_drawdown_source=("self_calc" if max_dd is not None else None),
+        sortino_source=("self_calc" if sortino is not None else None),
+        calmar_source=("self_calc" if calmar is not None else None),
+        # P0-3:各風險指標實際期間 / 門檻 / 缺值原因(§1 + §2.2)
+        risk_metric_meta=_risk_metric_meta,
         # F-RECON-1 phase 3 v19.88 — Sharpe 雙演算法對帳(self-calc vs MoneyDJ wb07)
         sharpe_reconcile=_reconcile_sharpe_pair(
-            self_calc=sharpe,
-            moneydj=safe_float(risk_tbl.get("一年", {}).get("Sharpe")),
+            self_calc=_sharpe_self_calc,
+            moneydj=_wb07_sharpe_1y,
         ),
         # v19.191 SSOT WRITER:6F factor 進階指標(配 portfolio_service.calc_fund_factor_score)
         sortino=sortino,
@@ -849,6 +1161,25 @@ def finalize_fund_metrics(result: dict) -> dict:
                     f"累積序列稀疏(覆蓋 {_cov['coverage']:.0%}、最大缺口 "
                     f"{_cov['max_gap_days']} 天)→ 年化指標不給假精確(§1):"
                     f"{', '.join(_killed) if _killed else '無自算值需砍'}")
+                # P0-3:被砍的指標其 provenance meta 同步歸零 —— 否則 meta 仍宣稱
+                # source="self_calc"、period_days=N 而值已是 None(§2.2 provenance 說謊)。
+                _meta = _m.get("risk_metric_meta")
+                if isinstance(_meta, dict):
+                    for _k in _killed:
+                        _e = _meta.get(_k)
+                        if isinstance(_e, dict):
+                            _e["source"] = None
+                            _e["period_days"] = None
+                            _e["period_label"] = None
+                            _e["reason"] = _m["sparse_reason"]
+                    if "sharpe" in _killed and isinstance(_meta.get("sharpe"), dict):
+                        _meta["sharpe"]["self_calc_value"] = None
+                        _meta["sharpe"]["self_calc_reason"] = _m["sparse_reason"]
+                    if "sortino" in _killed or "calmar" in _killed or "sharpe" in _killed:
+                        _m["sortino_source"] = ("self_calc" if _m.get("sortino") is not None else None)
+                        _m["calmar_source"] = ("self_calc" if _m.get("calmar") is not None else None)
+                        _m["sharpe_source"] = (_m.get("sharpe_source")
+                                               if _m.get("sharpe") is not None else None)
                 print(f"[nav_history] ⬜ {code} {_m['sparse_reason']}")
 
         # v19.308：把 MoneyDJ 現成「成立日」帶進 metrics，讓只吃 metrics 的 consumer

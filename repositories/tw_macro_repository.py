@@ -113,14 +113,27 @@ def fetch_twse_breadth() -> dict:
 # FinMind 三大法人籌碼
 # ══════════════════════════════════════════════════════════════
 
-def fetch_finmind_foreign_investor(days_back: int = 7) -> dict:
+def fetch_finmind_foreign_investor(days_back: int = 7, token: str = "") -> dict:
     """
-    從 FinMind 抓最近 N 天的外資買賣超(免費 API,無需 token)。
+    從 FinMind 抓最近 N 天的外資買賣超。
+
+    ⚠️ **匿名額度風險**:`token` 預設空字串 = 走 FinMind **匿名免費層(300 次/hr)**,
+    而具名(帶 token)為 600 次/hr。本 fetcher 是全站最容易率先撞 402
+    「Requests reached the upper limit.」的點。§8.2 硬規則:L1 **不得**自己讀
+    Streamlit 的 secrets 容器 → token 必須由 L2/L3 傳入(既有 pattern 見
+    `ui/tab5_data_guard.py` / `ui/tab1_macro_longterm.py` 讀 `FINMIND_TOKEN`
+    後往下傳)。
+    ⚠️ 本段**刻意不寫出該容器的完整屬性路徑** —— `test_finmind_repository_does_not_
+    read_st_secrets` 對整個 module 原始碼做子字串掃描,docstring 裡出現等於自己讓
+    自己紅(該測試的意圖是「L1 不得**讀取**」,而非「不得**提及**」)。
 
     Parameters
     ----------
     days_back : int
         回看天數,預設 7 天。
+    token : str
+        FinMind API token,由呼叫端(L2/L3)傳入;空字串 → 匿名額度。
+        預設值保持向後相容,既有 caller 不受影響。
 
     Returns
     -------
@@ -138,20 +151,35 @@ def fetch_finmind_foreign_investor(days_back: int = 7) -> dict:
     end_dt   = today.strftime("%Y-%m-%d")
     start_dt = (today - _dt.timedelta(days=days_back)).strftime("%Y-%m-%d")
 
-    r = fetch_url(FINMIND_BASE, params={
+    _params: dict = {
         'dataset':    'TaiwanStockTotalInstitutionalInvestors',
         'start_date': start_dt,
         'end_date':   end_dt,
-    }, timeout=12)
+    }
+    if token:
+        _params['token'] = token
+    r = fetch_url(FINMIND_BASE, params=_params, timeout=12)
     if r is None:
-        result['error'] = "FinMind 抓取失敗"
+        result['error'] = ("FinMind 抓取失敗(fetch_url 全部重試失敗;"
+                           "若為 402 額度用盡,狀態碼見 [proxy] log)")
         return result
     try:
-        rows = r.json().get('data', [])
+        _payload = r.json()
     except Exception as e:
         result['error'] = f"FinMind JSON 解析失敗: {e}"
         return result
 
+    # 【額度用盡防偽裝】402/401 body 不帶 data 欄 → `.get('data', [])` 吐 [],
+    # 被下面歸類成「無 Foreign_Investor 資料」。§1:錯誤不可偽裝成缺資料。
+    # 本 fetcher 若未傳 token 走匿名 300 次/hr,最易先撞牆(見 docstring)。
+    _api_status = _payload.get('status')
+    if _api_status not in (None, 200, '200'):
+        result['error'] = (f"FinMind {_api_status}: "
+                           f"{str(_payload.get('msg', ''))[:80]}")
+        print(f"[tw_macro/FII] ❌ {result['error']}")
+        return result
+
+    rows = _payload.get('data', [])
     fi_rows = [r for r in rows if r.get('name') == 'Foreign_Investor']
     if not fi_rows:
         result['error'] = "FinMind 無 Foreign_Investor 資料"

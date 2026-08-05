@@ -90,17 +90,42 @@ class TestSchemaAdditiveNoBreaking:
 
     def test_existing_callers_dont_compare_to_short_finmind(self):
         """sanity:升級 source 字串前已掃過,無 caller 對 == 'FinMind' 做嚴格比對。
-        防本 PR 升級後悄悄破壞 downstream(若未來有人加新比對 → 即時警示)。"""
-        import subprocess
-        result = subprocess.run(
-            ["grep", "-rnE", r"source.*==.*['\"]FinMind['\"]\b", "services/", "ui/"],
-            cwd=".",
-            capture_output=True, text=True,
-        )
-        # 應該找不到任何嚴格比對(returncode != 0 = no match)
-        assert result.returncode != 0, (
+        防本 PR 升級後悄悄破壞 downstream(若未來有人加新比對 → 即時警示)。
+
+        ⚠️ v19.424 重寫,原實作有**兩個**讓本測試等於零保護的缺陷:
+
+        1. `subprocess.run(["grep", ...])` —— Windows 無 `grep` 執行檔,直接
+           `FileNotFoundError: [WinError 2]`,本測試在 Windows 上從來沒真的跑過。
+           另 `cwd="."` 依賴 pytest 的呼叫目錄,從 repo 以外啟動就掃錯地方。
+        2. 正則尾端 `['\"]\b` —— `\b` 接在**引號(非文字字元)之後**,word boundary
+           要求下一個字元是文字字元,所以 `source == 'FinMind'` 後面接行尾時
+           **永遠不匹配**。即使在 Linux 上,這條也只是空轉。
+
+        改為純 Python 掃描:跨平台、不依賴外部執行檔、路徑錨定 repo root,
+        並移除那個讓匹配失效的 `\b`(引號本身已足以界定完整字串)。
+        """
+        import re
+        from pathlib import Path
+
+        _root = Path(__file__).resolve().parent.parent
+        _pat = re.compile(r"""source.*==.*['"]FinMind['"]""")
+        _hits: list = []
+        for _sub in ("services", "ui"):
+            _dir = _root / _sub
+            if not _dir.is_dir():
+                continue
+            for _f in sorted(_dir.rglob("*.py")):
+                try:
+                    _text = _f.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                for _i, _ln in enumerate(_text.splitlines(), 1):
+                    if _pat.search(_ln):
+                        _hits.append(f"{_f.relative_to(_root)}:{_i}: {_ln.strip()}")
+
+        assert not _hits, (
             "發現對 source == 'FinMind' 嚴格比對,v19.151 升級為 "
-            "'FinMind:<dataset>' 後會 break:\n" + result.stdout
+            "'FinMind:<dataset>' 後會 break:\n" + "\n".join(_hits)
         )
 
 

@@ -42,7 +42,10 @@ from shared.api_endpoints import FINMIND_BASE
 
 
 def _finmind_business_indicator(months_back: int = 18,
-                                token: str = "") -> Optional[pd.DataFrame]:
+                                token: str = "",
+                                *,
+                                error_out: Optional[dict] = None,
+                                ) -> Optional[pd.DataFrame]:
     """抓 FinMind `TaiwanBusinessIndicator`(國發會景氣指標官方鏡像,寬表)。
 
     v19.342 新增(鏡像 stock tw_macro.fetch_business_indicator_series v19.85):
@@ -50,7 +53,22 @@ def _finmind_business_indicator(months_back: int = 18,
       date / leading / coincident / lagging / monitoring(景氣對策信號綜合分數)
       / monitoring_color(燈號)。
     失敗回 None(print log,不捏造)。
+
+    Parameters
+    ----------
+    error_out : dict | None
+        opt-in side-car 容器(§2.2 `calculate_composite_score(provenance_out=)`
+        同 pattern)。傳入 dict 時,失敗原因會寫入 `error_out['error']`,讓上層
+        `fetch_ndc_signal_history` 能把「FinMind 402 額度用盡」與「真的沒資料」
+        分開報 —— §1:錯誤不可偽裝成缺資料。傳 None 行為與舊版完全一致。
     """
+    def _fail(msg: str) -> None:
+        """統一收口:print log + 寫入 side-car,回 None。"""
+        print(f'[macro_tw_local/TBI] {msg}')
+        if error_out is not None:
+            error_out['error'] = msg
+        return None
+
     today = _dt.date.today()
     params: dict = {
         'dataset':    'TaiwanBusinessIndicator',
@@ -62,30 +80,32 @@ def _finmind_business_indicator(months_back: int = 18,
         params['token'] = token
     r = fetch_url(FINMIND_BASE, params=params, timeout=15)
     if r is None:
-        print('[macro_tw_local/TBI] ❌ FinMind TaiwanBusinessIndicator 無回應')
-        return None
+        return _fail('❌ FinMind TaiwanBusinessIndicator 無回應'
+                     '(fetch_url 全部重試失敗;若為 402 額度用盡,狀態碼見 [proxy] log)')
     try:
         _j = r.json()
     except Exception as e:
-        import sys as _sys
-        print(f'[macro_tw_local/TBI] ❌ JSON parse: {type(e).__name__}: {e}',
-              file=_sys.stderr)
-        return None
+        return _fail(f'❌ JSON parse: {type(e).__name__}: {e}')
+    # 【額度用盡防偽裝】FinMind 失敗時 body 為 {"msg": "...", "status": 402|401|...}
+    # 且 **不帶 data 欄** → 舊版 `.get('data', [])` 直接吐 [],被下游歸類成
+    # 「無資料(可能為非交易日)」。§1:額度用盡是錯誤,不是缺資料,必須帶狀態碼吼出來。
+    _api_status = _j.get('status')
+    if _api_status not in (None, 200, '200'):
+        return _fail(f"❌ FinMind {_api_status}: "
+                     f"{str(_j.get('msg', ''))[:80]}")
     rows = _j.get('data', [])
     if not rows:
-        print(f"[macro_tw_local/TBI] ⚠️ 空 data(msg={str(_j.get('msg', ''))[:80]})")
-        return None
+        return _fail(f"⚠️ 空 data(msg={str(_j.get('msg', ''))[:80]})")
     df = pd.DataFrame(rows)
     if 'date' not in df.columns or 'monitoring' not in df.columns:
-        print(f'[macro_tw_local/TBI] ❌ 欄位不符: {list(df.columns)[:8]}')
-        return None
+        return _fail(f'❌ 欄位不符: {list(df.columns)[:8]}')
     _keep = ['date'] + [c for c in ('monitoring', 'monitoring_color', 'leading')
                         if c in df.columns]
     out = df[_keep].copy()
     out['monitoring'] = pd.to_numeric(out['monitoring'], errors='coerce')
     out = out.dropna(subset=['monitoring']).sort_values('date').reset_index(drop=True)
     if out.empty:
-        return None
+        return _fail('⚠️ monitoring 欄全部非數值 → 清空後無可用列')
     return out
 
 
@@ -121,10 +141,20 @@ def fetch_ndc_signal_history(months_back: int = 12, token: str = "") -> dict:
     }
     # v19.342:改走 TaiwanBusinessIndicator 寬表(原 TaiwanMacroEconomics 長表
     # dataset 不存在,自建立起恆回「無資料」— 見檔頭 v19.342 診斷註)。
+    # side-car 收 fetcher 真實失敗原因(402 額度用盡 / 401 token 失效 / JSON 壞),
+    # §1:不可把 API 錯誤一律報成「無資料」。
+    _tbi_err: dict = {}
     sub_tbi = _finmind_business_indicator(months_back=max(months_back, 6),
-                                          token=token)
+                                          token=token, error_out=_tbi_err)
     if sub_tbi is None or len(sub_tbi) < 3:
-        result['error'] = 'FinMind TaiwanBusinessIndicator 無景氣對策信號資料'
+        _why = _tbi_err.get('error')
+        if _why:
+            result['error'] = f'FinMind TaiwanBusinessIndicator 失敗:{_why}'
+        elif sub_tbi is not None:
+            result['error'] = (f'FinMind TaiwanBusinessIndicator 僅 {len(sub_tbi)} '
+                               f'筆(拐點判讀需 ≥3 筆)')
+        else:
+            result['error'] = 'FinMind TaiwanBusinessIndicator 無景氣對策信號資料'
         return result
     if 'monitoring_color' in sub_tbi.columns:
         _c = str(sub_tbi['monitoring_color'].iloc[-1] or '').strip()
@@ -390,13 +420,23 @@ def fetch_foreign_consecutive_days(days_back: int = 30, token: str = "") -> dict
         params['token'] = token
     r = fetch_url(FINMIND_BASE, params=params, timeout=15)
     if r is None:
-        result['error'] = 'FinMind 抓取失敗'
+        result['error'] = ('FinMind 抓取失敗(fetch_url 全部重試失敗;'
+                           '若為 402 額度用盡,狀態碼見 [proxy] log)')
         return result
     try:
-        rows = r.json().get('data', [])
+        _payload = r.json()
     except Exception as e:
         result['error'] = f'FinMind JSON 解析失敗: {e}'
         return result
+    # 【額度用盡防偽裝】402/401 的 body 不帶 data 欄 → `.get('data', [])` 會吐 [],
+    # 被後面歸類成「無 Foreign_Investor 資料」。§1:錯誤不可偽裝成缺資料。
+    _api_status = _payload.get('status')
+    if _api_status not in (None, 200, '200'):
+        result['error'] = (f"FinMind {_api_status}: "
+                           f"{str(_payload.get('msg', ''))[:80]}")
+        print(f"[macro_tw_local/FII] ❌ {result['error']}")
+        return result
+    rows = _payload.get('data', [])
     fi_rows = [x for x in rows if x.get('name') == 'Foreign_Investor']
     if not fi_rows:
         result['error'] = 'FinMind 無 Foreign_Investor 資料'
