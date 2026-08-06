@@ -252,3 +252,15 @@ def macro_score_v2_enabled(name: str) -> bool:
     未登錄的 name 一律回 False(fail-closed:不認得的旗標不啟用新行為)。
     """
     return bool(MACRO_SCORE_V2_FLAGS.get(str(name), False))
+# ── 基金型態分類:震盪型 vs 成長型(services/fund_type_classifier.py,v19.428)──
+# Efficiency Ratio(Kaufman)= |淨移動| / Σ|逐日變動| ∈ [0,1];高=趨勢(成長)、低=來回震盪(均值回歸)。
+# 震盪型適合「高基期→低基期」輪動;成長型順勢、看總經出場。灰帶用資產類別打破平手(股票→成長 / 其餘→震盪)。
+TYPE_ER_GROWTH_MIN: float = 0.35    # ER ≥ 此 → 成長型
+TYPE_ER_RANGE_MAX: float = 0.20     # ER ≤ 此 → 震盪型;之間為灰帶
+TYPE_MIN_OBS: int = 60              # 有效 NAV 點 < 此 → ⬜ 無法判定(§1 短史不硬判)
+TYPE_LOOKBACK_DAYS: int = 252       # ER 回看窗(交易日;取最近 N 點,原幣 NAV)
+
+# ── 成長型賣出雙確認(services/switch_advisor.py,v19.428)──
+# 總經看衰(為主)+ 該檔跌破均線(為輔)同時成立 → 建議賣出轉現金;僅前者 → 🟡 警示(§1 缺料不觸發)
+GROWTH_MACRO_BEARISH_CUTOFF: float = -5.0  # macro composite 分數 ≤ 此 → 總經看衰(對齊 composite_verdict 悲觀界)
+GROWTH_BREAKDOWN_SMA_DAYS: int = 120       # NAV < 此日數均線 → 跌破趨勢確認(交易日)
