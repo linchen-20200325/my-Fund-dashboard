@@ -156,7 +156,9 @@ def test_tab3_with_mock_fund_renders_kpi_cards(monkeypatch: pytest.MonkeyPatch) 
         f"app.py runtime exception: {[str(e) for e in app.exception]}"
 
     metric_labels = [m.label for m in app.metric]
-    expected = ["🟢 撿便宜雷達", "🔴 留校查看", "💰 停利提醒", "⚖️ 配置比例"]
+    # 「⚖️ 配置比例」→「⚖️ 核心/衛星檔數」：該卡是**檔數**口徑，改名以免與
+    # 「① 配置總覽」的金額口徑「核心資產比例」混為一談（2026-08 稽核必修 4）。
+    expected = ["🟢 撿便宜雷達", "🔴 留校查看", "💰 停利提醒", "⚖️ 核心/衛星檔數"]
     missing = [kw for kw in expected if kw not in metric_labels]
     assert not missing, \
         f"KPI 卡 label 缺失：{missing}；實際 metrics labels: {metric_labels!r}"

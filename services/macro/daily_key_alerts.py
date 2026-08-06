@@ -20,6 +20,9 @@ v19.349(未完成清單第 4 步,user 核准;股票 repo v19.108 設計 A 同構
 - **拐點層**:吃 `detect_turning_points` 輸出(session `_tp_v1948_top`,
   5 組拐點,signal/icon/note 已由該 SSOT 判定)。icon ∈ {🔴,🔻,⚠️} → 紅級;
   {🟡,🚀} → 黃級(🚀 利多拐點同樣「今天該看」);{🟢,📊,⬜} = 非事件不進橫幅。
+- **跨層去重**(見 `collect_key_alerts`):同一個經濟因子(拐點層自報 `indicator_key`)
+  只留**較嚴重**的那一條,同級留拐點層。嚴重度不比較就會出事 —— 黃級的多頭拐點
+  會吞掉同因子的紅級風險訊號,`n_red` 少 1(2026-08-06 稽核 🔴 必修 2)。
 
 §8.2 L2 Service:純函式 in→out,零 I/O、零 streamlit。caller(L3 tab1)自
 session_state 取數傳入。失敗降級(§1):block 缺鍵/型別壞 → 跳過該項
@@ -36,12 +39,29 @@ _TP_ICON_SEVERITY: dict = {
 }
 
 
-def _indicator_items(indicators: dict | None) -> list[dict]:
-    """訊號層:score ≥ SIGMA 門檻的指標 → 橫幅 item(同級依 |contribution| 降冪)。"""
+def _indicator_items(indicators: dict | None,
+                     covered_keys: dict | None = None) -> list[dict]:
+    """訊號層:score ≥ SIGMA 門檻的指標 → 橫幅 item(同級依 |contribution| 降冪)。
+
+    `covered_keys` = `{indicator_key: 拐點層該條的 severity}` —— 拐點層**這次真的
+    要進橫幅**的那幾條各自宣告的同因子 key 及其嚴重度(2026-08-05 稽核 🔴 必修 4;
+    2026-08-06 稽核補嚴重度比較)。
+
+    去重規則:**同因子只留較嚴重的那一條;同級留拐點層**(它帶事件語意「衰退警報
+    解除」/「高位回落」與 `note` 白話,資訊量嚴格較多)。因此本層只在
+    `拐點 severity <= 本條 severity` 時才跳過。
+
+    為什麼不能無條件跳過(原實作的 bug):HY 走「🚀 高位回落」時 icon 是黃級,
+    但同一時刻 `_score_hy_spread` 對同一個 6%+ 的水位會給紅級 —— 無條件跳過會讓
+    橫幅只剩一條**帶多頭語氣的黃燈**、`n_red` 少 1,該紅的那天沒有紅燈(§1 不少報)。
+    刻意也**只認真的進橫幅的那幾條**:拐點若是 🟢 非事件,它根本沒進 `covered_keys`,
+    訊號層那條照常顯示(拐點看轉折、訊號看水位,是兩件事)。
+    """
     from services.macro.explain import _interpret_indicator   # 同層 L2,SSOT 敘事
     from services.macro.composite_score import is_superseded   # 同層 L2,去重契約 SSOT
     items: list[dict] = []
     _all = indicators or {}
+    _covered = covered_keys or {}
     for key, v in _all.items():
         if not isinstance(v, dict) or 'score' not in v:
             continue
@@ -66,6 +86,11 @@ def _indicator_items(indicators: dict | None) -> list[dict]:
         if score > -SIGMA_LOW_CUTOFF:
             continue   # score ≥ -SIGMA_LOW_CUTOFF(偏多/接近中性)= 非風險事件
         _sev = 0 if score <= -SIGMA_HIGH_CUTOFF else 1
+        # 跨層去重(嚴重度感知):拐點層同因子那條不比本條輕 → 讓它代表這個因子;
+        # 反之(拐點較輕)本條留下,`collect_key_alerts` 會反向砍掉較輕的拐點那條。
+        _tp_sev = _covered.get(key)
+        if _tp_sev is not None and _tp_sev <= _sev:
+            continue
         _val = v.get('value')
         _val_txt = ''
         if _val is not None:
@@ -80,6 +105,9 @@ def _indicator_items(indicators: dict | None) -> list[dict]:
             'detail': _interpret_indicator(score),
             'layer': 'signal',
             '_rank': abs(score * weight),   # 內部排序鍵(校準權重決定順序)
+            # 內部欄位:讓 `collect_key_alerts` 知道本條活下來的是哪個因子,
+            # 據以反向砍掉同因子但較輕的拐點那條。回傳前一律 pop 掉,不外洩。
+            '_factor_key': key,
         })
     items.sort(key=lambda i: -i['_rank'])
     for i in items:
@@ -102,6 +130,10 @@ def _turning_point_items(turning_points: dict | None) -> list[dict]:
             'text': f"{d.get('label', _key)}：{d.get('signal', '')}",
             'detail': str(d.get('note', '')),
             'layer': 'turning_point',
+            # 產生端(`services/macro/turning_points.py`)自報的同因子訊號層 key。
+            # 消費者是本檔 `collect_key_alerts` 的顯示層去重(§3.3:對照表在
+            # 產生端,不在這裡)。缺欄 / None = 沒有同因子的訊號層指標。
+            'indicator_key': d.get('indicator_key'),
         })
     return items
 
@@ -119,7 +151,35 @@ def collect_key_alerts(indicators: dict | None,
          依 severity 升冪(紅先;訊號層同級內已依校準權重排序),
          'n_red': int, 'n_yellow': int}
     """
-    items = _indicator_items(indicators) + _turning_point_items(turning_points)
+    # 2026-08-05 稽核 🔴 必修 4:兩層原本直接相加,但它們吃**同一批 FRED 序列** ——
+    # CFNAI / 薩姆 / 10Y-2Y / HY 四個因子各會冒出兩條(訊號層一條、拐點層一條),
+    # 「今日最該看什麼」把同一件事講兩次 = 誤導使用者以為兩個獨立訊號同時亮燈
+    # (與本檔對 M2 去重寫下的判準完全同一條)。對照關係由拐點層自報的
+    # `indicator_key` 提供,本層不建對照表(§3.3 第二份真相)。
+    #
+    # 2026-08-06 稽核 🔴 必修 2 —— 去重**必須帶嚴重度**,不能無腦留拐點層:
+    #   HY 90 日高點 8.0% → 現值 6.2% 且續跌時,拐點層走「🚀 信用拐點:高位回落」
+    #   (icon 黃級、語氣偏多),但同一時刻訊號層對 6.2% 這個**水位**是紅級
+    #   (`score ≤ -SIGMA_HIGH_CUTOFF`)。舊版無條件砍訊號層 → 橫幅只剩一條多頭黃燈、
+    #   `n_red` 少 1,該紅的那天沒有紅燈。這是 §1「不可少報」的直接違反。
+    # 選定策略:**同因子只留較嚴重的那一條,同級留拐點層**。
+    #   - 不退回「完全不去重」:同因子講兩次會讓 n_red 灌水(上一輪剛修好的東西)。
+    #   - 不改成「只有紅級拐點才能吞」:那會讓「黃拐點 × 黃訊號」又變成同因子兩條。
+    #   - 同級為何留拐點:它帶事件語意 + `note` 白話,資訊量嚴格較多(原判準不變)。
+    _tp_items = _turning_point_items(turning_points)
+    _covered: dict = {}
+    for _t in _tp_items:
+        _k = _t.get('indicator_key')
+        if not _k:
+            continue   # 產生端沒宣告同因子 → 不去重(消費端不猜對應)
+        _covered[_k] = min(_covered.get(_k, _t['severity']), _t['severity'])
+    _sig_items = _indicator_items(indicators, covered_keys=_covered)
+    # 反向:能活過上面那關的訊號層條目,代表它比同因子的拐點更嚴重 → 砍拐點那條。
+    _sig_wins = {i.pop('_factor_key', None) for i in _sig_items}
+    _sig_wins.discard(None)
+    _tp_items = [t for t in _tp_items
+                 if t.get('indicator_key') not in _sig_wins]
+    items = _sig_items + _tp_items
     items.sort(key=lambda i: i['severity'])   # stable:同級保留層內順序
     return {
         'items': items,

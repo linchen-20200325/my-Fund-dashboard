@@ -23,13 +23,12 @@ from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_RED_1, GH_BG
 # 為 dead import 0 caller。
 from ui.components.mk_dashboard import tag_price_zone
 
-# v19.54：TER 同類均值（沿用 tab2_single_fund L1004-1009 既有對照表，台灣基金市場常見估值）
-_TER_AVG_MAP = {
-    "股票": 1.50, "全球股票": 1.50, "科技": 1.60,
-    "亞太": 1.60, "新興市場": 1.70, "高收益": 1.00,
-    "債券": 0.80, "全球債券": 0.80, "投資等級": 0.80,
-    "平衡": 1.20, "貨幣": 0.30,
-}
+# TER 對照表已移除（原為 11 筆「類別 → 費率」寫死表，自稱台灣基金市場常見估值）。
+# 它沒有來源、沒有抓取時間、沒有樣本數、也沒有定義，卻與真的抓回來的經理費並排
+# 顯示 —— 使用者分不出哪個是查來的、哪個是編的（§1「自行估一個合理值當常數」、
+# §3.3 反捏造）。健診卡現在只呈現本檔自己的費率，不做同類比較。
+# 三個現有資料源（MoneyDJ / FundClear / TDCC）都沒有「同類型平均費用率」欄位，
+# 因此**不另找來源硬補**；要做同類對照得先定義母體再逐檔聚合（另案，§7）。
 
 _DISPLAY_COLS = [
     "代碼", "標的名稱",
@@ -194,16 +193,9 @@ def _compute_fund_health_kpis(fund: dict) -> dict:
     _inv_twd = _safe_num(fund.get("invest_twd")) or 0.0
     _monthly_div_twd = (_inv_twd * _adr / 100 / 12) if (_adr and _inv_twd > 0) else None
 
-    # 5) TER 費用率分析 — 取 mgmt_fee + category → 對照表
+    # 5) TER 費用率 — 只取本檔真實 mgmt_fee + category（無同類均值，見檔頭說明）
     _ter_val = _safe_num(mj.get("mgmt_fee"))
     _ter_cat = str(mj.get("category", "") or "")
-    _ter_avg = next(
-        (_v for _k, _v in _TER_AVG_MAP.items() if _k and _k in _ter_cat),
-        None,
-    )
-    _ter_diff = None
-    if _ter_val is not None and _ter_avg is not None:
-        _ter_diff = _ter_val - _ter_avg
 
     return {
         "adr": _adr,
@@ -213,8 +205,6 @@ def _compute_fund_health_kpis(fund: dict) -> dict:
         "monthly_div_twd": _monthly_div_twd,
         "ter_val": _ter_val,
         "ter_cat": _ter_cat,
-        "ter_avg": _ter_avg,
-        "ter_diff": _ter_diff,
     }
 
 
@@ -280,40 +270,32 @@ def _render_fund_health_card(fund: dict, k: dict) -> None:
         unsafe_allow_html=True,
     )
 
-    # ── TER 費用率分析 ──
+    # ── TER 費用率（只呈現本檔實際費率，不做同類比較；理由見檔頭 TER 註解）──
     if k["ter_val"] is not None:
         _tv = k["ter_val"]
-        _ta = k["ter_avg"]
         _tcat = k["ter_cat"]
-        _td = k["ter_diff"]
-        if _ta is not None and _td is not None:
-            _ter_c = MATERIAL_GREEN if _td <= 0 else (MATERIAL_ORANGE if _td <= 0.5 else MATERIAL_RED)
-            _vs_txt = (f"高於均值 +{_td:.2f}%" if _td > 0 else f"低於均值 {abs(_td):.2f}%")
-            _avg_html = (
-                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>同類均值</div>"
-                f"<div style='color:{TRAFFIC_NEUTRAL};font-weight:700;font-size:15px'>{_ta:.2f}%</div></div>"
-                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>費用比較</div>"
-                f"<div style='color:{_ter_c};font-weight:700;font-size:15px'>{_vs_txt}</div></div>"
-            )
-        else:
-            _ter_c, _avg_html = TRAFFIC_NEUTRAL, ""
         _ter_lbl = f" — {_tcat[:12]}" if _tcat else ""
         st.markdown(
             f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
             f"border-radius:10px;padding:8px 14px;margin:4px 0 12px 0'>"
-            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>💰 TER 費用率分析{_ter_lbl}</div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>💰 TER 費用率{_ter_lbl}</div>"
             f"<div style='display:flex;gap:18px;flex-wrap:wrap'>"
-            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>最高經理費</div>"
-            f"<div style='color:{_ter_c};font-weight:700;font-size:15px'>{_tv:.2f}%</div></div>"
-            + _avg_html +
+            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>最高經理費（MoneyDJ 基本資料頁）</div>"
+            f"<div style='color:{WHITE};font-weight:700;font-size:15px'>{_tv:.2f}%</div></div>"
             "</div>"
             f"<div style='color:{GRAY_55};font-size:10px;margin-top:4px'>"
-            "費用率愈低，長期複利效益愈佳（每降 1% TER，20 年後終值多 ~25%）</div>"
+            "費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~22%＝1.01²⁰ 複利）。"
+            "</div>"
             "</div>",
             unsafe_allow_html=True,
         )
+        st.caption(
+            "ℹ️ 這一格只有本檔自己的費率，**沒有同類均值可對照** —— MoneyDJ / FundClear / "
+            "TDCC 三個資料源都沒有「同類型基金平均費用率」欄位，也沒有可引用的公開統計。"
+            "與其擺一個看起來像查來、實際憑印象填的基準值讓你判斷貴不貴，不如誠實留白。"
+        )
     else:
-        st.caption(f"💰 TER 費用率分析 — ⬜ {_code} 缺 mgmt_fee 資料")
+        st.caption(f"💰 TER 費用率 — ⬜ {_code} 缺 mgmt_fee 資料")
 
 
 def build_checkup_dataframe(portfolio_funds: list | None) -> pd.DataFrame:
@@ -523,7 +505,8 @@ def render_fund_checkup(portfolio_funds: list | None, expanded: bool = False) ->
         )
         st.caption(
             "對照「📊 投資試算」與「② 體檢儀表板」邏輯：年化配息率取 MoneyDJ wb05 官方值；"
-            "Coverage = 1Y 含息報酬 ÷ 年化配息率；TER 對標台灣基金市場同類均值。")
+            "Coverage = 1Y 含息報酬 ÷ 年化配息率；TER 只顯示本檔實際最高經理費，"
+            "**不與任何同類基準比較**（三個資料源都沒有這個欄位，見卡片下說明）。")
 
         # v19.61：健診摘要表 — 多檔橫向 PK（同源 _compute_fund_health_kpis SSOT）
         # v19.183 Bug5：加「費用率排名 / 同類排名」欄

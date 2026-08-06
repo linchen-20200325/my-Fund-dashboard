@@ -51,18 +51,29 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
       "yield_curve": {signal, color, icon, value, prev, trend(list), label, note, source_ok},
     }
     """
+    # `indicator_key` = 本拐點與 `fetch_all_indicators` 的**哪一個 key 是同一個
+    # 經濟因子**(2026-08-05 稽核 🔴 必修 4;同本模組既有的 `superseded_by` pattern:
+    # 去重事實由**產生端**揭露,消費端不建對照表)。
+    # 消費者:`services/macro/daily_key_alerts.collect_key_alerts` —— ⚡ 今日關鍵
+    # 橫幅原本把訊號層與拐點層直接相加,同一顆 FRED 序列(CFNAI / 薩姆 / 10Y-2Y /
+    # HY)各冒一條,使用者會以為兩個獨立訊號同時亮燈。
+    # `None` = 沒有對應的訊號層指標,不是「還沒填」:`pmi_diff` 走的是新訂單−庫存
+    # 擴散(AMTMNO / MNFCTRIRSA),與 `indicators["PMI"]` 的 ISM 製造業 PMI 不同源
+    # 也不同定義,兩者同時出現不算重複(§3.3 不亂認親)。
     out: dict = {
         "pmi_diff": {
             "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "新訂單 YoY − 庫存 YoY (M3 製造業)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
+            "indicator_key": None,
         },
         "yield_curve": {
             "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "10Y − 2Y 利差 (T10Y2Y)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
+            "indicator_key": "YIELD_10Y2Y",
         },
         # v18.250 新增三組景氣反轉拐點
         "hy_spread": {
@@ -70,18 +81,21 @@ def detect_turning_points(fred_api_key: str = "") -> dict:
             "value": None, "prev": None, "trend": [],
             "label": "HY 信用利差 (BAMLH0A0HYM2)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
+            "indicator_key": "HY_SPREAD",
         },
         "sahm_rule": {
             "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "薩姆規則 (SAHMREALTIME)",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
+            "indicator_key": "SAHM",
         },
         "lei_cfnai": {
             "signal": "⬜ 資料不足", "color": TRAFFIC_NEUTRAL, "icon": "⬜",
             "value": None, "prev": None, "trend": [],
             "label": "CFNAI 領先指標 3M MA",
             "note": "FRED API 失敗或資料不足", "source_ok": False,
+            "indicator_key": "LEI",
         },
     }
 

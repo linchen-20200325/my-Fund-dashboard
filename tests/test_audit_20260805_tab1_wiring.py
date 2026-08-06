@@ -108,7 +108,11 @@ class TestActionLightWiredBackToTab1:
         src = _TAB1.read_text(encoding="utf-8")
         i_light = src.index("macro_action_light(")
         i_hero = src.index("calculate_composite_score(")
-        i_bar = src.index("render_evidence_table(_ev_rows)")
+        # ⚠️ 2026-08-06 必修 3:渲染呼叫多了 `footnotes=` 引數
+        #   (欄內放不下的長說明搬到表下 caption),原本釘死到閉括號的字串
+        #   `render_evidence_table(_ev_rows)` 會 ValueError。錨點縮到函式名 +
+        #   左括號 —— 那才是「② 依據表在這裡渲染」這個位置契約要釘的東西。
+        i_bar = src.index("render_evidence_table(")
         # v19.429:決策矩陣改由 `_safe_section(label, fn, ind)` 包裹(§1 區塊隔離),
         # 位置不變 —— 錨點字串同步改為包裹後的呼叫形,保留「順序」斷言原意。
         i_matrix = src.index("_render_realtime_decision_dashboard, ind)")

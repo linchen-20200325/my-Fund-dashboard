@@ -44,9 +44,32 @@ def _is_fail(row: dict) -> bool:
 
 def _rows_compatible(rows: dict) -> bool:
     """新 schema 檢查:每列須有「狀態」欄。v19.413 批次表升級為組合健診大表後,
-    舊版 flat-schema 存檔(status/note/nav…)不相容 → 讀回時忽略,避免欄位錯位。"""
+    舊版 flat-schema 存檔(status/note/nav…)不相容 → 讀回時忽略,避免欄位錯位。
+
+    ⚠️ 本檢查刻意**只**守「狀態」這個 schema 世代旗標,不隨每次加欄跟著收緊 ——
+    加欄(如「淨值日期 / 淨值新鮮度」)屬**向後相容的擴充**:`_build_df` 以
+    `BATCH_UNIFIED_COLUMNS` 為欄骨架建表,舊列缺鍵只會變空格,不會欄位錯位。
+    若這裡跟著擋,使用者會為了兩個新欄被迫重跑 30~40 分鐘的 400 檔批次。
+    缺欄的事實改由 `_render_stale_schema_notice` 明講(§1 不靜默)。"""
     vals = list((rows or {}).values())
     return bool(vals) and all(isinstance(r, dict) and "狀態" in r for r in vals)
+
+
+def _rows_missing_freshness(rows: dict) -> int:
+    """回傳「成功但沒有淨值新鮮度欄」的列數(= 加欄前存的舊 checkpoint)。"""
+    return sum(1 for r in (rows or {}).values()
+               if isinstance(r, dict) and not _is_fail(r) and "淨值新鮮度" not in r)
+
+
+def _render_stale_schema_notice(rows: dict) -> None:
+    """§1:讀回的舊 checkpoint 缺新欄 → 當場講清楚,不讓空白冒充「這檔沒資料」。"""
+    _n = _rows_missing_freshness(rows)
+    if _n:
+        st.caption(
+            f"ℹ️ 其中 **{_n} 檔**為新增「淨值日期 / 淨值新鮮度」欄之前跑的存檔,"
+            "該兩欄留白 —— 是**存檔較舊**,不是這些基金查不到淨值日期。"
+            "要補這兩欄請按「🗑️ 清除重來」重跑(或忽略,其餘欄位不受影響)。"
+        )
 
 
 def _parse_codes(raw: str) -> list[str]:
@@ -282,10 +305,20 @@ def _render_existing_results() -> None:
     m3.metric("❌ 失敗 / 無效", n_fail)
     if n_fail:
         st.caption("失敗的檔仍完整列在表裡(狀態 + 備註標明原因、數值留白),"
-                   "**不會靜默丟棄或填假值**(§1)。可按「🔁 重試失敗檔」重抓。")
+                   "**不會靜默丟棄或填假值**(§1)。可按「🔁 重試失敗檔」重抓;"
+                   "「備註」欄是唯一的失敗原因揭露,hover 欄名看各類原因該不該重試。")
+    _render_stale_schema_notice(rows)
 
     # ── 表格(欄位已是中文,與組合健診大表同款;橫向可滾動)──────────
-    st.dataframe(df, use_container_width=True, height=460, hide_index=True)
+    # 必修 4:原本裸 `st.dataframe(df, ...)` —— 48 個中文欄名零 tooltip,且「備註」
+    # (100 字失敗原因,§1 唯一揭露)被截成看不出是網路問題還是基金停售。
+    # 改吃與健診大表**同一份** column_config(欄寬 + 逐欄 help)。
+    from ui.helpers.fund_grp_health.columns import unified_column_config
+    _cfg = unified_column_config(batch=True)
+    st.dataframe(
+        df, use_container_width=True, height=460, hide_index=True,
+        column_config={k: v for k, v in _cfg.items() if k in df.columns},
+    )
 
     # ── 下載 CSV(utf-8-sig,Excel 直開中文標題正常)──────────────
     fname_ts = (run_at or "").replace("-", "").replace(":", "").replace(" ", "_") or "export"
@@ -319,18 +352,27 @@ def _render_existing_results() -> None:
     with st.expander("ℹ️ 欄位說明 / 這張表沒有什麼", expanded=False):
         st.markdown(
             "- 本表 = **組合健診大表**(①健康分析 + ②配息相關 + ③實際購買結果 + σ/風險/MK)。\n"
+            "- **每一欄的欄名都可以 hover 看說明**(算法、單位、缺值代表什麼、能不能跨檔比)。\n"
+            "- **淨值日期 / 淨值新鮮度**:該檔最新一筆 NAV 的日期與落後天數。基金 NAV 為"
+            "T+1~T+3 公布、週末假日不更新屬正常(🟢/🟠);**🔴 = 很可能已停售 / 清算** —— "
+            "此時同一列的 σ 位階 / 操盤評分 / 策略燈號都是用死掉的 NAV 算的,勿當現況。"
+            "點欄排序可一次挑出所有 🔴。\n"
             "- **評分**:4D Grade / 4D Score;**每月配息 / 累積 TWD 配息 / 原幣本金 / 單位** 皆以"
             "**100 萬 TWD 為基準**(FX 換算,見「換匯資訊 🧮」欄)。\n"
             "- **報酬**:1Y 含息(wb01 官方)/ 3Y·5Y 年化 / 全期實際·年化;**風險**:Sharpe /"
             "Sortino / Calmar / Max DD / σ 位階(HWM);**買賣點**:MK 買 3~賣 3 + 現價位階。\n"
             "- **吃本金燈號 / 換標的建議 / MK 3-3-3** 判定與組合健診同源(SSOT)。\n"
-            "- **上/下檔捕捉% + 操盤評分**:vs 大盤(TWD→台股 / 其餘→S&P500)分漲跌月算;"
-            "需**漲、跌月各 ≥ 3**(貼近高點/短歷史的基金跌月太少 → 留白,不假造);"
-            "**3–5 月為參考值**(下檔樣本少較噪)。\n"
-            "- **vs 大盤%**:近 1 年**純價格**報酬 − 大盤(正 = 跑贏);純淨值對純指數(公平不含息),"
-            "歷史不足 1 年 → 用全期。\n"
-            "- **基期**:🔴 高基期(σ≥−0.5 貼近高點)/ ⚪ 中性 / 🟢 低基期(σ≤−1.5 跌深)——"
-            "可篩選一次挑出所有高/低基期標的(門檻同輪動配對)。\n"
+            "- **上/下檔捕捉% + 操盤評分**:vs 大盤(TWD→台股 / **USD→S&P500**)分漲跌月算;"
+            "需**漲、跌月各 ≥ 3**(貼近高點/短歷史的基金跌月太少 → 留白,不假造)。"
+            "旁邊的「**捕捉樣本**」欄逐列標實際月數:✅ 穩健 / ⚠️ 樣本少(參考值)/ ⬜ 不足 —— "
+            "3 個跌月的 92 分不等於 40 個跌月的 92 分,排序比大小前先看這欄。\n"
+            "- **vs 大盤%**:近 1 年**純價格**報酬 − 大盤(正 = 跑贏);純淨值對純指數(公平不含息)。"
+            "「**vs 大盤期間**」欄標明實際窗口(近1年 / ⚠️ 全期)。"
+            "⚠️ **非 TWD / USD 計價(EUR/AUD/ZAR/CNH/JPY…)一律留白** —— 基金 NAV 是原幣,"
+            "直接減 USD 指數等於把匯率變動算成經理人績效,寧可不給也不給錯(§4.1)。\n"
+            "- **基期**:🔴 高基期(σ≥−0.5 貼近高點)/ ⚪ 中性 / 🟢 低基期(σ≤−1.5 跌深)/ "
+            "⬜ 資料不足(含 NAV 完全不動的停售檔)—— 可篩選一次挑出所有高/低基期標的"
+            "(門檻同輪動配對)。\n"
             "- **策略燈號 / 換標策略分**:換標決策(獨立於 4D)—— 🔴 賣出/平轉、🟡 觀望、"
             "🟢 續抱加碼、⬜ 資料不足;分 = 1Y含息35+Sharpe30+MaxDD20+vs大盤15。下方「🔀 換標決策」"
             "區給紅燈檔的同類一對一替換建議 + 大盤 regime 提醒。\n"

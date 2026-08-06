@@ -194,6 +194,11 @@ class PrecisionStrategyEngine:
         return _repo_resolve_ticker(name)
 
 
+# σ 絕對金額視為 0 的下限(§3.3 不 inline magic):語意對齊
+# `services/fund_screening.py::LOW_BASE_STD_EPS` —— 兩者都在問「這條 NAV 到底有沒有動」。
+_SIGMA_ABS_EPS = 1e-12
+
+
 def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
     """
     T5: HWM 基準 σ 絕對位階
@@ -204,6 +209,9 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
       hwm, sigma, current_nav, level_1s, level_2s, level_3s,
       dist_to_hwm_pct, sigma_rank (float, 正=在HWM上方 N個σ，負=下方),
       label, color
+
+    或 `{"error": str}` —— 資料不足 / 報酬率序列不足 / **σ≈0(NAV 完全不動)**。
+    呼叫端一律先檢查 `"error" in result` 再取值(全站既有慣例)。
     """
     import numpy as _np
     if series is None or len(series) < 30:
@@ -218,11 +226,21 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
         daily_std = float(ret.std())
         sigma_abs = hwm * daily_std * _np.sqrt(len(s))  # 對應 lookback 期間 σ
 
+        # §1 / §4.6:σ ≈ 0 只可能是「NAV 完全不動」(停售 / 清算 / 剛成立填平值)。
+        # 此時 (nav-hwm)/σ 未定義 —— 舊版回 0.0,而 0.0 ≥ -0.5 會一路被
+        # `services/rotation.py::classify_base` 判成 "high"(🔴 高基期、偏貴)並列進
+        # 輪動配對的「賣出」候選,同一頁的 label 卻寫綠字「接近 HWM」。
+        # 改為誠實回 error(既有契約,全站 caller 都已有 `"error" in r` 分支),
+        # 對齊 `services/fund_screening.py::compute_low_base`(std≈0 → is_low_base=None)
+        # 與 `services/allocation_backtest.py::_sigma_rank_at`(σ_abs≤0 → None)。
+        if sigma_abs <= _SIGMA_ABS_EPS:
+            return {"error": "NAV 無波動(σ≈0),無法定位階"}
+
         level_1s = round(hwm - 1 * sigma_abs, 4)
         level_2s = round(hwm - 2 * sigma_abs, 4)
         level_3s = round(hwm - 3 * sigma_abs, 4)
 
-        sigma_rank = (nav - hwm) / sigma_abs if sigma_abs > 0 else 0.0
+        sigma_rank = (nav - hwm) / sigma_abs
         dist_pct   = (nav - hwm) / hwm * 100 if hwm > 0 else 0.0
 
         if sigma_rank >= -0.5:

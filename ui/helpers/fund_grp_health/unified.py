@@ -114,8 +114,12 @@ _UNIFIED_FRONT: list = [
     ("基期", "extra"),   # v19.421 高/中/低基期標籤(由 σ rank 分類,一眼可讀)
     ("HWM 位階", "extra"), ("σ (年化%)", "extra"), ("Beta", "extra"),
     # 經理人操作能力(v19.414;上/下檔捕捉率 vs 大盤 + 操盤評分)+ vs 大盤%(v19.420)
+    # 「捕捉樣本」/「vs 大盤期間」= 產生端算好但一直沒接出去的兩個可信度旗標
+    # (`capture_ratio.low_confidence` / `benchmark_compare.full_period`),
+    # 緊貼各自的數值欄,讓「3 個跌月的 92 分」與「40 個跌月的 92 分」在表上分得出來(§1)。
     ("上檔捕捉%", "extra"), ("下檔捕捉%", "extra"), ("操盤評分", "extra"),
-    ("vs 大盤%", "extra"),
+    ("捕捉樣本", "extra"),
+    ("vs 大盤%", "extra"), ("vs 大盤期間", "extra"),
     ("策略燈號", "extra"), ("換標策略分", "extra"),   # v19.423 換標決策(post-merge 覆寫)
     ("策略分覆蓋", "extra"),   # 策略分分母覆蓋率旗標(§1 第 3 項;post-merge 覆寫)
     ("景氣適配", "extra"), ("適配傾向", "extra"),      # v19.425 景氣位階適配(post-merge 覆寫)
@@ -302,10 +306,18 @@ _BATCH_BASE_KEYS: list = [
     "配息率% (年化)", "淨值% (年化)", "含息% (年化)",
     "吃本金燈號 (1Y · MK)", "MK 3-3-3 篩", "MK 倉位", "最高經理費%", "配息頻率", "換匯資訊 🧮",
 ]
-# 批次寬表固定欄序:code, 基金名, 狀態, 備註 → ①②extra(FRONT)→ base 末段
+# 批次寬表固定欄序:code, 基金名, 狀態, 備註, 淨值日期, 淨值新鮮度 → ①②extra(FRONT)→ base 末段
+#
+# 「淨值日期 / 淨值新鮮度」為批次表**專屬**(§4.6):Tab② 組合健診有
+# `_render_mj_freshness_banner` 逐檔 chip 可看,400 檔的批次表不可能用 banner,
+# 沒有這兩欄就分不出「週末沒開盤」與「2023 年就停售」—— 停售檔照樣算得出 σ rank /
+# 操盤評分 / 策略燈號,在表裡與活躍基金完全同形。值由 `process_one_fund` 的
+# `_nav_date` 私有欄推導(見 build_batch_unified_row),不進健診大表以免與 banner 重複。
+_BATCH_FRESHNESS_COLUMNS: list = ["淨值日期", "淨值新鮮度"]
 _batch_data_cols, _ = _unified_columns(_BATCH_BASE_KEYS)
 BATCH_UNIFIED_COLUMNS: list = (
     ["code", "基金名", "狀態", "備註"]
+    + _BATCH_FRESHNESS_COLUMNS
     + [c for c in _batch_data_cols if c not in ("code", "基金名")]
 )
 # 批次寬表需轉 numeric 的欄(供 UI NumberColumn;含批次獨有 fx_spot 等 base 數值)
@@ -405,4 +417,10 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
     out["code"] = code
     out["狀態"] = "✅ 成功"
     out["備註"] = None
+    # §4.6 —「這檔的 NAV 停在哪一天」。build_unified_row 會濾掉底線私有欄,
+    # 故在此顯式從 base 取 `_nav_date` 補上(缺 → 誠實「⬜ 無淨值日期」,不猜)。
+    from services.fund_row import nav_freshness_label
+    _nav_d = str(base.get("_nav_date") or "").strip()
+    out["淨值日期"] = _nav_d or None
+    out["淨值新鮮度"] = nav_freshness_label(_nav_d)[0]
     return out

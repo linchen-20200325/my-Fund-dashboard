@@ -31,11 +31,16 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
 
     _lines = [f"## 組合健檢全章節快照({len(funds)} 檔基金)"]
 
-    # 取共享計算結果(避免每段重算)
+    # 取共享計算結果(避免每段重算)。**與大表同源**:1Y 含息走 fund_total_return SSOT
+    # (非 metrics.ret_1y 純 NAV),吃本金門檻走 dividend_safety(見下方逐檔迴圈註解)。
+    from services.fund_total_return import compute_1y_total_return
     from services.health.dividend import classify_eating_principal
     try:
         from services.precision_service import calc_hwm_sigma_levels
-    except Exception:
+    except Exception as _e_ps:  # noqa: BLE001
+        import sys as _sys_ps
+        print(f"[grp_health/ai] precision_service 載入失敗,snapshot 無 σ 位階:"
+              f"{type(_e_ps).__name__}: {_e_ps}", file=_sys_ps.stderr)
         calc_hwm_sigma_levels = None
 
     _per_fund = []
@@ -48,22 +53,48 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
         _m = _f.get("metrics") or {}
         _mj = _f.get("moneydj_raw") or {}
 
-        # 配息覆蓋率
-        _adr = _safe_num(_mj.get("moneydj_div_yield") or _m.get("annual_div_rate"))
-        _ret1y = _safe_num(_m.get("ret_1y_total") or _m.get("ret_1y"))
+        # 配息覆蓋率 —— **與大表同源**(2026-08-06 稽核 建議 10)。
+        # 修正前本段與大表三處不同源,於是 AI 講「3 檔吃本金」、表上只有 1 檔:
+        #   (a) adr:自己讀 wb05/metrics ⇒ 改走 `_resolve_adr_with_fallback` SSOT
+        #       (多一層 12M 歷史推算,與 ①② 表一致);
+        #   (b) 報酬:用 `metrics.ret_1y`(**純 NAV,不含息**)去判吃本金 ⇒ 改走
+        #       `compute_1y_total_return`(含息),否則配息全被當成虧損;
+        #   (c) 門檻:inline `coverage < 1.2` ⇒ 改走 `dividend_safety` 的 alert_level
+        #       (gap_pct 制,SSOT;`ui/helpers/fund_grp_health/dividend.py` 已先收)。
+        # §1:`a or b` 讓合法的 0.0 被當缺值,一律用顯式 is None。
+        from services.health.dividend import _resolve_adr_with_fallback
+        from services.portfolio_service import dividend_safety
+        try:
+            _adr, _ = _resolve_adr_with_fallback(_f)
+        except Exception as _e_adr:  # noqa: BLE001
+            import sys as _sys_adr
+            print(f"[grp_health/ai] {_code} adr 解析失敗:{type(_e_adr).__name__}: {_e_adr}",
+                  file=_sys_adr.stderr)
+            _adr = None
+        _adr = _safe_num(_adr)
+        try:
+            _ret1y, _ = compute_1y_total_return(_f)
+        except Exception as _e_tr:  # noqa: BLE001
+            import sys as _sys_tr
+            print(f"[grp_health/ai] {_code} 1Y 含息報酬失敗:{type(_e_tr).__name__}: {_e_tr}",
+                  file=_sys_tr.stderr)
+            _ret1y = None
+        _ret1y = _safe_num(_ret1y)
         _core_div = classify_eating_principal(_ret1y, _adr)
-        _div_status = "—"
+        _lvl = dividend_safety(_ret1y, _adr).get("alert_level", "grey")
         if _core_div.is_data_missing:
             _div_status = "資料不足"
         elif _core_div.is_no_dividend:
             _div_status = "無配息"
-        elif _core_div.is_eating:
+        elif _lvl == "red":
             _div_status = "🔴 吃本金"
             _eating_count += 1
-        elif _core_div.coverage_ratio is not None and _core_div.coverage_ratio < 1.2:
+        elif _lvl == "yellow":
             _div_status = "🟡 邊緣"
-        else:
+        elif _lvl == "green":
             _div_status = "🟢 健康"
+        else:
+            _div_status = "資料不足"
 
         # σ 位階
         _sigma_label = "—"
@@ -79,12 +110,19 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
                         _oversold_count += 1
                     if _sigma_rank is not None:
                         _sigma_ranks.append(_sigma_rank)
-            except Exception:
-                pass
+            except Exception as _e_sg:  # noqa: BLE001
+                # §1:原本靜默 → 這檔悄悄退出 `_sigma_ranks`,「平均 σ rank」的**分母
+                # 縮小**而 AI 讀到的整組概況不知道少算了誰。補 log,值仍誠實留 None。
+                import sys as _sys_sg
+                print(f"[grp_health/ai] {_code} σ 位階計算失敗,未計入整組平均:"
+                      f"{type(_e_sg).__name__}: {_e_sg}", file=_sys_sg.stderr)
 
-        # 風險指標
+        # 風險指標 —— 與大表「Sharpe 1Y」同一優先序(建議 10):
+        # `metrics.sharpe` 已由 calc_metrics 走完 wb07 1Y > wb07 6M > 本地自算,
+        # 這裡先讀 risk_metrics 會取到**另一個期間**的值 → AI 與表上數字對不起來。
         _rm = _f.get("risk_metrics") or _mj.get("risk_metrics") or {}
-        _sharpe = _safe_num(_rm.get("sharpe") or _m.get("sharpe"))
+        _sharpe = _safe_num(_m.get("sharpe")
+                            if _m.get("sharpe") is not None else _rm.get("sharpe"))
 
         _per_fund.append({
             "code": _code, "name": _name,
@@ -144,8 +182,16 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
                 _lines.append(f"  - {_pair[0]} ⟷ {_pair[1]}:重疊度 {_pair[2]:.3f}")
         else:
             _lines.append("- ✅ 本組合無影子基金")
-    except Exception:
-        pass
+    except Exception as _e_hov:  # noqa: BLE001
+        # §1:原本靜默 → 整個「跨檔重疊度」段落從 AI prompt 裡消失,AI 於是**完全不提**
+        # 影子基金,讀者無從得知這是「沒有重疊」還是「沒算成功」。改為誠實寫進 prompt。
+        import sys as _sys_hov
+        print(f"[grp_health/ai] 跨檔重疊度計算失敗:{type(_e_hov).__name__}: {_e_hov}",
+              file=_sys_hov.stderr)
+        _lines.append("")
+        _lines.append("### 跨檔重疊度")
+        _lines.append(f"- ⚠️ 計算失敗({type(_e_hov).__name__}),本項無資料 —— "
+                      "請勿據此宣稱「無影子基金」。")
 
     return ("\n".join(_lines), len(funds))
 

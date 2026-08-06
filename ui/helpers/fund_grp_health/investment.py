@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BORDER, GRAY_55, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, TRAFFIC_NEUTRAL
+from shared.colors import GH_BG_CARD, GH_BORDER, GRAY_55, TRAFFIC_NEUTRAL, WHITE
 
 from ui.helpers.fund_grp_health._utils import _safe_num
 
@@ -21,8 +21,13 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
     # v19.75 K2：遷移到 services/currency SSOT（mode="yf" 保留 health_extras 既有人民幣→CNH 行為）。
     from services.currency import normalize_ccy as _norm_ccy
     _ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")
-    _nav = _safe_num(_m.get("nav") or _mj.get("nav_latest"))
-    _adr = _safe_num(_mj.get("moneydj_div_yield") or _m.get("annual_div_rate"))
+    # §1:`a or b` 會把**合法的 0.0** 當成缺值往下一層退(0 是 falsy)。
+    # NAV 不可能是 0(§3.2 NAV > 0),但 annual_div_rate 為 0 是「不配息」的真實值,
+    # 用 `or` 會退成 metrics 版甚至變 None,把「確定不配息」講成「不知道」。
+    _nav = _safe_num(_m.get("nav") if _m.get("nav") is not None else _mj.get("nav_latest"))
+    _adr = _safe_num(_mj.get("moneydj_div_yield")
+                     if _mj.get("moneydj_div_yield") is not None
+                     else _m.get("annual_div_rate"))
 
     _fx = None
     if _ccy == "TWD":
@@ -33,7 +38,10 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
             _fx = get_latest_fx(f"{_ccy}TWD=X")
             if _fx is None or _fx <= 0:
                 _fx = None
-        except Exception:
+        except Exception as _e_fx:  # noqa: BLE001 — 匯率抓不到 → 留 None + log,下方顯示「—」
+            import sys as _sys_fx
+            print(f"[grp_health/investment] {_code} FX {_ccy}TWD 抓取失敗:"
+                  f"{type(_e_fx).__name__}: {_e_fx}", file=_sys_fx.stderr)
             _fx = None
 
     st.markdown(
@@ -109,7 +117,19 @@ def _render_investment_calc(fund: dict, principal_twd: float) -> None:
 
 
 def _render_holdings_block(fund: dict) -> None:
-    """⑤ TER 費用率分析 + 持股分析（從 tab2_single_fund L994-1076 移植）。"""
+    """⑤ TER 費用率 + 持股分析（從 tab2_single_fund L994-1076 移植）。
+
+    這張卡曾經還會印一欄同類平均費率與「高於／低於均值」的差值色碼，數字取自一份
+    寫死在本檔、自稱是台灣基金市場常見水準的類別對照表：沒有來源、沒有抓取時間、
+    沒有樣本數、沒有定義（算術平均？中位數？含不含保管費？母體是哪一年哪幾檔？），
+    卻和旁邊真的抓回來的經理費並排、同樣的字級與色塊 —— 使用者分不出哪一個是查來
+    的、哪一個是編的，還會據此決定要不要換掉這檔。§1 明令禁止「自行估一個合理值當
+    常數」，§3.3 反捏造亦同。整組比較欄位已移除，只留本檔自己的費率。
+
+    刻意**不去找替代來源硬補**：MoneyDJ / FundClear / TDCC 三個現有資料源都沒有
+    「同類型基金平均費用率」欄位；要做就得自行定義同類母體再逐檔抓費率聚合，那是
+    另一個功能（需先對齊 §7 四點），不在本輪範圍。
+    """
     _mj = fund.get("moneydj_raw") or {}
     _ter_raw = _mj.get("mgmt_fee", "") or ""
     _ter_cat = _mj.get("category", "") or ""
@@ -119,47 +139,31 @@ def _render_holdings_block(fund: dict) -> None:
         except (ValueError, TypeError):
             _ter_val = None
         if _ter_val is not None:
-            _ter_avg_map = {
-                "股票": 1.50, "全球股票": 1.50, "科技": 1.60,
-                "亞太": 1.60, "新興市場": 1.70, "高收益": 1.00,
-                "債券": 0.80, "全球債券": 0.80, "投資等級": 0.80,
-                "平衡": 1.20, "貨幣": 0.30,
-            }
-            _ter_avg = next(
-                (_v for _k, _v in _ter_avg_map.items() if _k in _ter_cat), None)
-            if _ter_avg is not None:
-                _ter_diff = _ter_val - _ter_avg
-                _ter_c = (MATERIAL_RED if _ter_diff > 0.3
-                          else (MATERIAL_ORANGE if _ter_diff > 0 else MATERIAL_GREEN))
-                _ter_vs = (f"高於均值 +{_ter_diff:.2f}%" if _ter_diff > 0
-                           else f"低於均值 {abs(_ter_diff):.2f}%")
-                _ter_avg_html = (
-                    f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>同類均值</div>"
-                    f"<div style='color:{TRAFFIC_NEUTRAL};font-weight:700;font-size:16px'>"
-                    f"{_ter_avg:.2f}%</div></div>"
-                    f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>費用比較</div>"
-                    f"<div style='color:{_ter_c};font-weight:700;font-size:16px'>"
-                    f"{_ter_vs}</div></div>"
-                )
-            else:
-                _ter_c, _ter_avg_html = TRAFFIC_NEUTRAL, ""
             st.markdown(
                 f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
                 "border-radius:10px;padding:10px 16px;margin:8px 0'>"
                 f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>"
-                "💰 TER 費用率分析"
+                "💰 TER 費用率"
                 + (f" — {_ter_cat[:12]}" if _ter_cat else "") + "</div>"
                 f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:6px'>"
-                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>最高經理費</div>"
-                f"<div style='color:{_ter_c};font-weight:700;font-size:16px'>"
+                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>"
+                "最高經理費（MoneyDJ 基本資料頁）</div>"
+                f"<div style='color:{WHITE};font-weight:700;font-size:16px'>"
                 f"{_ter_val:.2f}%</div></div>"
-                + _ter_avg_html +
                 "</div>"
                 f"<div style='color:{GRAY_55};font-size:10px'>"
-                "費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~25%）</div>"
+                "費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~22%"
+                "＝1.01²⁰ 複利）。</div>"
                 "</div>", unsafe_allow_html=True)
+            st.caption(
+                "ℹ️ 這一格只有本檔自己的費率，**沒有同類均值可對照**：本系統接的三個"
+                "基金資料源（MoneyDJ / FundClear / TDCC）都沒有「同類型基金平均費用率」"
+                "欄位，也沒有可引用的公開統計。與其擺一個看起來像查來、實際是憑印象填的"
+                "基準值讓你據此判斷貴不貴，不如誠實留白。要比費率請把兩檔基金並列看這一"
+                "格，或到晨星 / 投信投顧公會查同類清單。"
+            )
     else:
-        st.caption("💰 TER 費用率分析 — ⬜ 缺 mgmt_fee 資料")
+        st.caption("💰 TER 費用率 — ⬜ 缺 mgmt_fee 資料")
 
     # v19.282 SSOT:持股明細改呼共用 render(ui.helpers.holdings),不再各寫一份
     from ui.helpers.holdings import render_holdings_detail

@@ -274,8 +274,19 @@ class TestTab2DisclosureWiring:
 #    —— 前一輪 docstring 寫「殘留風險以 coverage_out 顯式揭露」,但揭露管道從未接上。
 # ══════════════════════════════════════════════════════════════════
 def _grp_health_src() -> str:
-    return (Path(__file__).resolve().parent.parent
-            / "ui/tab_fund_grp_health.py").read_text(encoding="utf-8")
+    """健診大表的**文案來源**(可能不只一個檔)。
+
+    ⚠️ 2026-08-06:欄位 help 從 `ui/tab_fund_grp_health.py` 的 inline dict 抽到
+    `ui/helpers/fund_grp_health/columns.py`(批次表與健診表共用同一份
+    column_config,原本批次表 48 欄零 tooltip)。本組測試守的是「文案有沒有照實
+    說」,不是「文案住在哪個檔」—— 兩檔一起讀,搬家不誤紅、砍掉才紅。
+    """
+    _root = Path(__file__).resolve().parent.parent
+    return "\n".join(
+        (_root / _rel).read_text(encoding="utf-8")
+        for _rel in ("ui/tab_fund_grp_health.py",
+                     "ui/helpers/fund_grp_health/columns.py")
+    )
 
 
 class TestSwitchGreenGate:

@@ -393,14 +393,33 @@ def _systemic_risk_is_alerting(systemic_risk) -> bool:
     return _lvl in _NEWS_RISK_ALERT_LEVELS
 
 
+# ② 依據表這次沒成功產出時,③ 要說的話。桶級警戒**無法判定** —— 不可沿用
+# 「都不在警戒狀態」那句(那是把「沒算出來」講成「算過了沒事」,§1)。
+_BUCKET_STATUS_UNKNOWN_LINE = (
+    "- ⬜ **桶級警戒這次無法判定**：上方 ② 依據表未成功產出（見它自己的紅字），"
+    "拐點桶／新聞桶有沒有亮燈本次沒有結果 — 請先排除 ② 的錯誤再讀本層。")
+
+# ③ 只講 ② **沒有**的東西。桶級警戒 ② 每一列都已完整寫出(燈號 / 判讀 / 讀數 /
+# 門檻 / 指路),③ 再抄一次就是同一件事說兩次(user 原則 2)——改成指出「是哪幾列」。
+_BUCKET_ALERT_POINTER_HEAD = "- 🔺 **今日例外落在上表這幾列**："
+_BUCKET_ALERT_POINTER_TAIL = (
+    " — 讀數、判讀與門檻已完整列在上方 ② 依據表的同名列，此處不重印。")
+
+
 def _exception_lines(systemic_risk, bucket_summary) -> list[str]:
     """③ 例外層要條列的項目(純函式、零 streamlit、零 I/O)。
 
     回傳**空 list = 真的沒有例外**,caller 據此顯示「沒有例外」那條敘述。
     指路文字走 `beginner_view.section_hint`(§3.3 不在本層重打區段名);
     未知桶 key 會由它當場 KeyError,不靜默指向空氣。
+
+    2026-08-05 稽核 🔴 必修 5:桶警戒原本把 ② 的 `label` + `headline` **原字串**
+    再印一次,而 ③ 就緊貼在 ② 表下方兩行 —— 同一句話上下相鄰出現兩次。
+    ③ 現在只保留 ② 沒有的東西(新聞系統性風險的**等級與評分**,那兩個數字
+    ② 的新聞列沒有),桶警戒改成一句「是哪幾列」的指路。
     """
     from ui.helpers.macro.beginner_view import (  # noqa: PLC0415
+        _bucket_bar_cells as _cells_ssot,
         section_hint as _sec_hint,
     )
     _lines: list[str] = []
@@ -412,13 +431,25 @@ def _exception_lines(systemic_risk, bucket_summary) -> list[str]:
             f"（評分 {_srd.get('risk_score', '—')}）— {_sec_hint('news')}"
             "的 📰 市場新聞")
     _sum = bucket_summary if isinstance(bucket_summary, dict) else {}
-    for _bk in ("inflection", "news"):
-        _b = _sum.get(_bk) or {}
-        if _b.get("level") in _BUCKET_ALERT_LEVELS:
-            _lines.append(
-                f"- {_b.get('emoji', '⚪')} **{_b.get('label', '—')}**："
-                f"{_b.get('headline', '')} — {_sec_hint(_bk)}")
+    _alert_keys = [_bk for _bk in ("inflection", "news")
+                   if (_sum.get(_bk) or {}).get("level") in _BUCKET_ALERT_LEVELS]
+    if _alert_keys:
+        # 桶名走 `BUCKET_META` SSOT(`_bucket_bar_cells`),③ 不重打一份桶名。
+        _faces = [_t for _k, _t, _s in _cells_ssot(_alert_keys)]
+        _lines.append(_BUCKET_ALERT_POINTER_HEAD + "、".join(_faces)
+                      + _BUCKET_ALERT_POINTER_TAIL)
     return _lines
+
+
+def _bucket_status_unavailable_line(bucket_summary) -> list[str]:
+    """② 降級(哨兵 `None`)時要補的誠實條;② 正常(dict,含空 dict)時回 []。
+
+    2026-08-05 稽核 🔴 必修 2:`_5b_summary` 原本初值是 `{}`,② 渲染整段失敗時
+    它**維持 `{}`**,`_exception_lines` 對空 dict 回 `[]`,③ 於是印出
+    「…都不在警戒狀態；各桶讀數完整列在上方 ② 依據表」—— ② 剛用紅字說自己壞了,
+    ③ 緊接著說「完整列在上方」。改用 `None` 當「② 未成功」的哨兵,兩種狀態才分得開。
+    """
+    return [] if bucket_summary is not None else [_BUCKET_STATUS_UNKNOWN_LINE]
 
 
 def _proxy_indicator_labels(indicators) -> list[str]:
@@ -706,7 +737,9 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
     if not dash.get("ready"):
         return
 
-    st.markdown("### 🎯 即時訊號 + 決策矩陣（v19.15）")
+    # 稽核 🟡 建議 10:標題原本帶內部版號「（v19.15）」—— 版號對使用者零意義,
+    # 且它是**當年新增這區塊的版本**,不是資料版本,留著只會被誤讀成資料日期。
+    st.markdown("### 🎯 即時訊號 + 決策矩陣")
     st.caption("總經 verdict 套用 active 權重後 → 5 級分檔 × 個股 σ/配息訊號 → 逐檔持有/加碼/減倉/全撤")
 
     # ── 區塊 1：頂部 verdict 大卡 ─────────────────────────────
@@ -1092,10 +1125,14 @@ def render_macro_tab() -> None:
         #   - 夾在兩者之間、說明「別互相換算」的那行 caption
         # 那行 caption 現在是表格「說明」欄本身(user 要求:不要留兩份說法)。
         st.markdown("### ② 依據 — 憑什麼這樣說")
-        _5b_summary: dict = {}
+        # 哨兵:`None` = ② 這一段**沒跑完**(下方 except 會維持它);
+        # dict(含空 dict)= ② 跑完了。③ 例外層據此區分「沒有例外」與「算不出來」
+        # (2026-08-05 稽核 🔴 必修 2;原初值是 `{}`,兩種狀態無法區分)。
+        _5b_summary = None
         try:
             from ui.helpers.macro.beginner_view import (  # noqa: PLC0415
                 build_evidence_rows,
+                build_evidence_footnotes,
                 compute_five_bucket_summary,
                 render_evidence_table,
             )
@@ -1104,7 +1141,10 @@ def render_macro_tab() -> None:
                 composite_verdict,
             )
             _news_items = st.session_state.get("news_items")
-            _5b_summary = compute_five_bucket_summary(ind, phase, news_items=_news_items)
+            # 先寫進 local:哨兵 `_5b_summary` 要到**表格真的畫出來**之後才交棒。
+            # 桶算完了但表格渲染炸掉時,③ 不能說「讀數完整列在上方 ② 依據表」
+            # —— 那張表根本不在畫面上(必修 2 的界線是「② 這一層有沒有成立」)。
+            _5b = compute_five_bucket_summary(ind, phase, news_items=_news_items)
             # 指標筆數吃 v19.270 D8 #8 的 provenance 側車(筆數隨來源命中浮動,
             # 寫死字面值那版已經漂移過一次)。
             _comp_prov: dict = {}
@@ -1112,14 +1152,21 @@ def render_macro_tab() -> None:
             _comp_n = int(_comp_prov.get("n_indicators") or 0)
             _cv_icon, _cv_level, _, _cv_action = composite_verdict(_comp_score)
             _ev_rows = build_evidence_rows(
-                _5b_summary,
+                _5b,
                 composite_score=_comp_score,
                 composite_icon=_cv_icon,
                 composite_level=_cv_level,
                 composite_action=_cv_action,
                 n_indicators=_comp_n,
             )
-            render_evidence_table(_ev_rows)
+            # 必修 3:欄內放不下的長說明(兩套切點揭露 / 完整門檻 / 全綠判讀規則 /
+            # 白話行動)由同一份 summary 導出,併進表下那一則 caption。
+            # 拿掉 `footnotes=` 這個引數 → 那幾句在畫面上完全消失(接線點)。
+            _ev_notes = build_evidence_footnotes(
+                _5b, composite_action=_cv_action)
+            render_evidence_table(_ev_rows, footnotes=_ev_notes)
+            # 表格已在畫面上 → 哨兵交棒,③ 才可以指路回這張表(見上方註解)。
+            _5b_summary = _5b
             # v19.367 6/8:F-RECON-1 健康度雙演算法對帳 chip
             # (§4.3 — 加權淨分 vs 不加權多空投票),走 `ui.components.status.status_chip`
             # (dataviz #4:狀態恆帶 emoji + 文字 + 狀態色,不靠顏色單獨編碼)。
@@ -1169,8 +1216,11 @@ def render_macro_tab() -> None:
             except Exception as _ka_e:  # noqa: BLE001
                 st.caption(f"⚡ 今日關鍵橫幅暫無法顯示：[{type(_ka_e).__name__}] {_ka_e}")
         try:
+            # 必修 2:② 沒跑完時補一條「無法判定」,`_exc_lines` 因此非空 →
+            # 下方那句「都不在警戒狀態」不會被印出來(它只在 ② 真的算完且全綠時成立)。
             _exc_lines = _exception_lines(
                 st.session_state.get("systemic_risk_data"), _5b_summary)
+            _exc_lines += _bucket_status_unavailable_line(_5b_summary)
             if _exc_lines:
                 st.markdown("\n".join(_exc_lines))
             else:
@@ -1339,8 +1389,10 @@ def render_macro_tab() -> None:
 
         # ══ v19.118 中國拖累唯讀面板（China Drag）═════════════════════
         # 4 數字唯讀展示:不改變上方總經分數,僅示意 China 副盤折扣強度
-        # v19.296: 改為預設摺疊 expander — 資料屬補充參考，不需預設佔版面
-        with st.expander("🇨🇳 中國拖累（China Drag）— 唯讀副盤參考", expanded=False):
+        # v19.296 曾改預設摺疊;2026-08-05 稽核 🟡 建議 8 改回展開 —— user 原則 1
+        # 「不要闔上的資料」:本區塊是 4 個已經算好的數字(主分 / 中國副盤 / 乘子 /
+        # 折扣後),沒有額外抓取成本,闔起來等於算了不給看。
+        with st.expander("🇨🇳 中國拖累（China Drag）— 唯讀副盤參考", expanded=True):
             try:
                 _render_china_drag_panel(phase, FRED_KEY)
             except Exception as _cd_e:  # noqa: BLE001
@@ -1393,8 +1445,10 @@ def render_macro_tab() -> None:
             # ══════════════════════════════════════════════════════════
             st.markdown("## 📋 即時訊號 + 決策矩陣")
             st.caption("先給結論 ｜ verdict 路徑 + 逐檔行動建議（推導細節見下方四時域）")
+            # 稽核 🟡 建議 10:標題原本帶內部代號「C-2」(當年的工作項編號),
+            # 對使用者是雜訊 —— 拿掉,語意不變。
             with st.expander(
-                "🔬 即時訊號 + 決策矩陣（C-2 verdict 路徑｜逐檔行動建議）",
+                "🔬 即時訊號 + 決策矩陣（verdict 路徑｜逐檔行動建議）",
                 expanded=True,
             ):
                 # v19.429 §1 區塊隔離（見 _safe_section）
@@ -1411,27 +1465,28 @@ def render_macro_tab() -> None:
                           ind, fred_key=FRED_KEY, show_l3=_show_l3)
 
             # ══════════════════════════════════════════════════════════
-            # 🧭 總經指南針(v19.430 從 app.py 搬入詳細區)
-            # user 2026-08-05 拍板 A 案:原本由 `app.py` 在 `render_macro_tab()`
-            # **之前**呼叫,等於三張原始值卡(VIX / 10Y / S&P 500)永遠壓在總表上方。
-            # 原始值是「依據」不是「結論」,故歸詳細區。
+            # 🧭 總經指南針 —— 2026-08-05 稽核 🔴 必修 6:**整塊移除**。
             #
-            # 2026-08-05 稽核 🟡 建議 6(第二次調位):原落在詳細區的**第一段**,
-            # 但本元件無快取時整塊只顯示「請按右上按鈕載入」—— 使用者剛按過
-            # 「載入總經資料」、VIX 已經在 ② 依據表裡,詳細區第一句話卻要他再按
-            # 一次抓 VIX。且 ② 表沒有任何一列指向它(它是詳細區裡唯一沒被上方
-            # 提及的區塊),放在開頭等於用一個「還要再按一次」的空框擋住真正
-            # 被指路指到的四時域。下移到 🌳 長期座標之後,讓被指路的段先出現。
-            # ⚠️ 表下那行「往下捲依序是…」目錄只列四時域四段且**從桶對照表導出**,
-            # 不含指南針,故本次搬動不會讓它過期。
+            # 沿革:v19.430 從 app.py 搬進詳細區,同日稽核 🟡 建議 6 再下移一段。
+            # 兩次都只是搬位置,沒有解決它本身的兩個問題:
+            #   (1) 三張卡全部是**重複**(user 原則 2)。逐張查證後,同一個問題在
+            #       🎯 短線雷達都有現成的燈,且雷達是主載入按鈕就一起抓好的:
+            #         · VIX          → 雷達 `vix_level`(且 ② 依據表短線列也有)
+            #         · 美 10Y 殖利率 → 雷達 `yield_10y_shock`(FRED DGS10,
+            #                            內含 vs Yahoo ^TNX 的雙源對帳 chip)
+            #         · S&P 500 vs 60MA → 雷達 `spx_trend_break`,同一支 ^GSPC、
+            #                            同一個「站上/跌破均線」語意,且列的是
+            #                            50DMA / 200DMA 兩條**有燈號分級**的線。
+            #       原稽核以為 60MA 那張「全頁獨有」;查 `services/risk_radar.py:360
+            #       _signal_spx_trend_break` 後推翻 —— 把它併進雷達會變成同一區塊
+            #       裡三個 SPX 均線讀數,反而製造新的重複。
+            #   (2) 它是**獨立按鈕**(`_compass_fetch_btn`)+ 先 `cache_clear()` 再抓,
+            #       使用者剛按完「載入總經資料」還得再按一次;沒按時整塊只是空框。
+            #       且三條路徑各自抓 VIX,畫面可能同時出現三個不同的 VIX 值。
+            # 依 `PROCESS.md §4` 0-consumer 條款,連 `ui/components/macro_compass_top.py`
+            # 一起清(見該檔;實體刪檔與其下游 L2/L1 的 0-consumer 處置見交付報告)。
+            # 回退方式:git history 有原本的呼叫與元件。
             # ══════════════════════════════════════════════════════════
-            try:
-                from ui.components.macro_compass_top import (  # noqa: PLC0415
-                    render_macro_compass as _rmc,
-                )
-                _rmc()
-            except Exception as _mc_e:  # noqa: BLE001
-                st.caption(f"⬜ 總經指南針暫無法顯示：[{type(_mc_e).__name__}] {_mc_e}")
 
             # ══════════════════════════════════════════════════════════
             # v19.134 — 📈 中期循環 桶(物理重排,連續區塊)

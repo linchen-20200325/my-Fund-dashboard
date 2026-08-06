@@ -149,6 +149,38 @@ class TestCheck333Principle:
         assert r["passed"] is None
         assert "資料不足" in r["message"]
 
+    def test_missing_3y_return_is_unknown_not_fail(self):
+        """成立 8 年、但 3 年平均年化抓不到 → ⬜ 資料不足(passed=None),**不是** ❌ 未通過。
+
+        修正前為**舊行為衝突紅**:舊版 `_r_ok = (_ret is not None and ...)` 把 None
+        折成 False → passed=False,畫面顯示「❌ 資料不足(部分缺)」——
+        欄位 help 明寫三態 ✅/❌/⬜,卻永遠走不到 ⬜。
+        同函式的「缺成立年數」路徑本來就回 None,兩條缺值路徑處置不一致。
+        """
+        r = check_333_principle(years_since_inception=8.0, ann_return_3y_pct=None)
+        assert r["passed"] is None
+        assert r["return_ok"] is None
+        assert r["years_ok"] is True
+        assert "資料不足" in r["message"]
+
+    def test_short_history_still_fails_even_without_3y_return(self):
+        """成立 1.2 年 → 有明確反證,即使缺 3 年年化仍應 ❌(不可退成 ⬜ 把爛檔洗白)。"""
+        r = check_333_principle(years_since_inception=1.2, ann_return_3y_pct=None)
+        assert r["passed"] is False
+        assert r["years_ok"] is False
+
+    def test_missing_3y_does_not_poison_core_satellite(self):
+        """下游連鎖:passed=None → 資產分類**不得**附註「未達 3-3-3」。
+
+        `services/health/asset_class.py` 只在 passed is False 時加這句並推向「待定」,
+        缺 3 年報酬的好基金因此被灌進「待定 %」，配置評估燈號跟著誤判。
+        (修正前為**舊行為衝突紅**:舊版 passed=False → note 含「未達 3-3-3」。)
+        """
+        from services.health.asset_class import classify_core_satellite
+        _p = check_333_principle(years_since_inception=8.0, ann_return_3y_pct=None)["passed"]
+        _cs = classify_core_satellite("", _p)
+        assert "未達" not in _cs["note"]
+
 
 # ──────────────────────────────────────────────────────────
 # 3. 跨 caller SSOT 守衛:fund_checkup 路徑 + tab_fund_grp_health 路徑
@@ -175,10 +207,18 @@ class TestCrossCallerSSOT:
 
     def test_old_misleading_column_removed(self):
         """v19.148:移除「燈號（全期 🧮）」這個誤導 column(語意非 1Y,但顯示風格
-        讓 user 以為與 1Y 燈號平行)。"""
-        with open("ui/tab_fund_grp_health.py",
-                  encoding="utf-8") as _f:
-            _src_grp = _f.read()
+        讓 user 以為與 1Y 燈號平行)。
+
+        ⚠️ 2026-08-06:欄位 column_config 從 `ui/tab_fund_grp_health.py` 的 inline
+        dict 抽到 `ui/helpers/fund_grp_health/columns.py`(健診表與批次表共用同一
+        份,原本批次表 48 欄零 tooltip)。本條守的是「欄名有沒有換對」,不是
+        「定義住在哪個檔」→ 兩檔一起讀,搬家不誤紅、真的被改回舊欄名才紅。
+        """
+        _src_grp = ""
+        for _rel in ("ui/tab_fund_grp_health.py",
+                     "ui/helpers/fund_grp_health/columns.py"):
+            with open(_rel, encoding="utf-8") as _f:
+                _src_grp += _f.read() + "\n"
         # 該 column 已不再寫入 row dict
         # (註解內可能還會提到,但不該是 dict key)
         # 找精確 pattern:'"燈號（全期 🧮）":' (字典 key 形)

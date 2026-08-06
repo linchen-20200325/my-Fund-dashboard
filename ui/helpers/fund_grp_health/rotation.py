@@ -147,7 +147,31 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
     } for p in _pairs]
 
     _out = pd.DataFrame(_disp)
-    st.dataframe(_out, use_container_width=True, hide_index=True)
+    from streamlit import column_config as _cc
+    st.dataframe(
+        _out, use_container_width=True, hide_index=True,
+        column_config={
+            "賣出(高基期)": _cc.TextColumn("賣出(高基期)", width="medium",
+                help="σ rank 貼近期間高點的持有基金 = 換出候選。"),
+            "賣方類別": _cc.TextColumn("賣方類別", width="small"),
+            "賣方 σ": _cc.NumberColumn("賣方 σ", format="%.2f",
+                help="賣方的 σ rank(愈接近 0 或正值 = 愈貼近高點)。"),
+            "建議換進(別類低基期健康)": _cc.TextColumn("建議換進(別類低基期健康)", width="medium",
+                help="**跨類別**輪動:只配不同基金類別、σ 跌最深、且通過健康過濾"
+                     "(4D A/B/C + 吃本金健康 + 操盤評分達門檻)的標的;沒有就誠實留 ⚪。"),
+            "買方類別": _cc.TextColumn("買方類別", width="small"),
+            "買方 σ": _cc.NumberColumn("買方 σ", format="%.2f",
+                help="買方的 σ rank(愈負 = 跌愈深 = 回歸差價空間愈大)。"),
+            "買方 4D": _cc.TextColumn("買方 4D", width="small",
+                help="買方 4D 健康等級;D/F/缺值一律不推薦(fail-closed,避免接刀)。"),
+            "買方操盤評分": _cc.NumberColumn("買方操盤評分", format="%d",
+                help="上/下檔捕捉率換算的經理人操作評分;**缺值不擋**(短歷史常缺),"
+                     "由 4D 與吃本金燈號把關。"),
+            "潛在差價%": _cc.NumberColumn("潛在差價%", format="%.1f %%",
+                help="買方回到**自己期間高點**的漲幅 —— 只是幾何回推,"
+                     "**不是預測**,低基期也可能是價值陷阱。"),
+        },
+    )
     _n_ok = sum(1 for p in _pairs if p["buy_code"])
     st.caption(f"共 {len(_pairs)} 檔高基期;其中 **{_n_ok}** 檔有**不同類別**健康低基期可換。"
                "「潛在差價%」= 買方回到自己期間高點的漲幅(僅參考,非保證)。")

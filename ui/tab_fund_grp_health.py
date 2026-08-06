@@ -371,10 +371,16 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
             "eats_principal": _eats_principal_flag(fd),
         })
 
-    st.markdown("#### 🎯 選基金（低基期進場點 · 高點−σ）")
+    st.markdown("#### 🎯 選基金（低基期進場點 · 高點−σ · 可調倍數）")
     st.caption(
         "在已載入的基金裡，找「現價 ≤ 期間高點 − N×標準差」且不吃本金的**進場候選**。"
         "低幾σ 越大 = 離高點越深。"
+    )
+    st.caption(
+        "⚠️ **本區與健診大表「基期」欄不是同一把尺**（兩者刻意不同,不是 bug）："
+        "本區的 σ 是**NAV 價位的標準差**、深度取**正數**、倍數由你選（1 或 2σ）、回看期可調；"
+        "大表「基期」欄用的是 **σ rank（負數，報酬率標準差換算）** 且固定 −1.5σ。"
+        "所以同一檔可能在這裡標 ✅ 低基期、在大表卻是 ⚪ 中性 —— 以你當下要用的門檻為準。"
     )
 
     _c1, _c2, _c3 = st.columns([1, 1, 2])
@@ -490,6 +496,92 @@ def _weight_basis_note(csa: dict, source_tab: str | None = None) -> str:
     return _note
 
 
+# ── 🧭 配置檢查「這是哪一把尺」措辭 SSOT ────────────────────────────────
+# 2026-08-06 稽核 🔴 必修 3：Tab3「組合配置」同一次捲動內會出現**兩個核心%**，
+# 而且結論方向相反（上方「核心 90%、目標 75% → 核心過重可減」vs 下方「核心 40%
+# < 50% → 衛星過重要加」）。三項口徑全不同：
+#
+#   |      | 上半頁（ui/tab3_portfolio.py hero / KPI）        | 本區（Tab3 embed）                       |
+#   | 分母 | Σ invest_twd，**未填本金者計 0**                | Σ _principal_twd，未填 / ≤0 **補 100 萬** |
+#   | 分類 | resolve_core_flag：policy_tier → is_core（二態）| classify_core_satellite：類別 + 3-3-3（三態）|
+#   | 目標 | session portfolio_core_pct（⚙️ 組合設定 slider）| CORE_TARGET_MIN/MAX_PCT（50~80 固定）     |
+#
+# 分母那條尤其致命：只要有一檔沒填本金，兩個百分比在**數學上就不可能相等**。
+#
+# 它們回答的其實是不同問題 —— 上方是「這筆錢的配置定位」（使用者自己在 Google
+# Sheet 標的），本區是「這檔基金的資產屬性」（系統依 MoneyDJ 類別 + 3-3-3 判的）。
+# 兩者都有價值，**合併成單一分類器是架構決策**（§8.1），不在本輪範圍。
+#
+# 本輪處置 = (a) + (b) 混合：
+#   (a) 兩個 Tab 都在表上方明講「本表用的是哪一把尺」；
+#   (b) 在 Tab3 embed 時，本區燈號**降為唯讀對照**，不再輸出「核心不足 / 過重」的
+#       行動建議 —— 同一頁只留一處再平衡指示（上方那處）。
+# 為什麼不是只做 (a)：光加說明救不了「兩個相反的行動建議並排」；使用者仍得在兩個
+# 都寫著「該調整」的區塊之間二選一，而那正是他無從判斷的事。
+# 為什麼不是只做 (b)：拿掉建議但不解釋，數字差異會變成「哪個算錯了」的新疑問。
+_CS_RULER_NOTE_TMPL = (
+    "📏 **本表這一欄的尺**：核心 / 衛星依**基金本身的資產屬性**判定"
+    "（MoneyDJ 基金類別關鍵字 + MK 3-3-3；判不出來的誠實留「待定」，不硬塞），"
+    "是系統推的，**不是**你在 Google Sheet 標的 `policy_tier`。"
+    "參考區間核心 {lo:.0f}~{hi:.0f}% 是本表固定的策略門檻，"
+    "不吃「⚙️ 組合設定」的核心比例 slider。"
+)
+
+_CS_PORTFOLIO_CONTRAST_NOTE = (
+    "⚖️ **本區與本頁上方的「🛡️ 核心資產比例」不是同一把尺，數字不一樣是正常的**：\n"
+    "1. **分類依據** — 上方用你在 Google Sheet 標的 `policy_tier`（缺才退基金名稱"
+    "關鍵字），只有核心 / 衛星兩態；本區用 MoneyDJ 基金類別 + MK 3-3-3，多一個「待定」。\n"
+    "2. **分母** — 上方是 Σ 投入本金，**沒填本金的那幾檔以 0 計**；本區把沒填 / 填 0 的"
+    "以 100 萬 TWD 估算後計入。只要有一檔沒填，兩個百分比就不可能相等。\n"
+    "3. **目標值** — 上方是「⚙️ 組合設定」的核心比例 slider；本區是固定參考區間。\n"
+    "→ **要不要再平衡以上方那一處為準**；本區只回答「我手上這幾檔，本質上偏穩健還是偏主題」。"
+)
+
+
+def _core_satellite_ruler_note() -> str:
+    """🧭 配置檢查的「這是哪一把尺」說明（門檻值走 L2 SSOT，不在字串裡寫死）。"""
+    from services.health.asset_class import (
+        CORE_TARGET_MAX_PCT, CORE_TARGET_MIN_PCT,
+    )
+    return _CS_RULER_NOTE_TMPL.format(lo=CORE_TARGET_MIN_PCT, hi=CORE_TARGET_MAX_PCT)
+
+
+def _core_satellite_verdict_caption(csa: dict,
+                                    source_tab: str | None = None) -> str:
+    """🧭 配置檢查的結論句（純函式，可單元測試）。
+
+    `source_tab == "health"`（💊 基金組合健診 Tab —— 該頁**只有**這一個核心%）
+    → 照常輸出 L2 `summarize_core_satellite_allocation` 的 `message`（含行動建議）。
+
+    其餘 caller（Tab3「組合配置」embed；未宣告身分的預設值也走這條）
+    → **唯讀對照**：只陳述本表口徑下的比例，不輸出 `message`（那句帶「衛星過重」/
+    「偏保守」的行動語氣），並明講行動建議只有上方一處。
+
+    預設落在唯讀側是刻意的 fail-safe：新 caller 若忘了宣告身分，寧可少給一個建議，
+    也不要讓同一頁再度出現兩個方向相反的建議。
+    """
+    from services.health.asset_class import (
+        CORE_TARGET_MAX_PCT, CORE_TARGET_MIN_PCT,
+    )
+    _status = str(csa.get("status") or "⚪")
+    if source_tab == "health":
+        return f"{_status} {csa.get('message', '')}"
+
+    def _pct(key: str) -> float:
+        try:
+            return float(csa.get(key) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    return (
+        f"{_status} 本表口徑下：核心 {_pct('core_pct'):.0f}% / "
+        f"衛星 {_pct('satellite_pct'):.0f}% / 待定 {_pct('undetermined_pct'):.0f}%"
+        f"（參考區間核心 {CORE_TARGET_MIN_PCT:.0f}~{CORE_TARGET_MAX_PCT:.0f}%）。"
+        "**本區為唯讀對照，不提供再平衡建議** —— 要不要調整，看本頁上方"
+        "「目標偏差」那一格。"
+    )
+
+
 def _render_health_3tables(rows: list[dict],
                            funds_extra: list | None = None,
                            show_screener: bool = False,
@@ -514,7 +606,6 @@ def _render_health_3tables(rows: list[dict],
     # v19.322 SSOT 去重(顯示層 chokepoint):健診 Tab + Tab3 embed 皆經此;同 code 多筆
     # (多保單持同檔)只留第一筆 → 持有 meta / 配息事件 / 比較圖三表不再重複列。
     rows = _dedup_rows_by_code(rows)
-    from streamlit import column_config as _cc
     from services.health.report import (
         build_dividend_summary_row,
         build_health_analysis_row,
@@ -531,11 +622,14 @@ def _render_health_3tables(rows: list[dict],
         for _r in ok_rows
     ]
 
-    # ── 🧭 核心/衛星配置檢查(vs 核心 50~80%)── v19.330:兩 tab 共用最上方 ──
+    # ── 🧭 核心/衛星配置檢查 ── v19.330:兩 tab 共用最上方 ──
     # 健檢 Tab 全檔同一本金 = 等權(≈ 檔數佔比);組合 Tab3 為各檔實際 invest_twd 加權
     # (但各檔皆未填時亦退等權)。→ caption 的加權方式走 `_weight_basis_note(...)`
     # 讀 L2 `weight_mode` 照實說,**禁止寫死**「依各檔投入本金加權」(§1)。
-    # source_tab 只用來決定「等權 → 去 Tab3 填金額」導引印不印(見該 helper docstring)。
+    # source_tab 現在決定三件事:(1)「等權 → 去 Tab3 填金額」導引印不印;
+    # (2) 結論句給不給行動建議;(3) 要不要印「與上方那個核心% 差在哪」的對照說明。
+    # 後兩者見 `_core_satellite_verdict_caption` / `_CS_PORTFOLIO_CONTRAST_NOTE`。
+    # 參考區間的數字一律從 `services.health.asset_class` 常數取,不在本檔字串寫死(§3.3)。
     try:
         from services.health.asset_class import summarize_core_satellite_allocation
         _cs_items = []
@@ -546,17 +640,23 @@ def _render_health_3tables(rows: list[dict],
                 "weight": _r.get("_principal_twd") or 0,
             })
         _csa = summarize_core_satellite_allocation(_cs_items)
-        st.markdown("#### 🧭 核心 / 衛星配置檢查（建議：核心 50~80%）")
+        st.markdown("#### 🧭 核心 / 衛星配置檢查（依基金資產屬性）")
+        # 先講「這是哪一把尺」再給數字 —— 兩個 Tab 都印（見上方 _CS_RULER_NOTE_TMPL）。
+        st.caption(_core_satellite_ruler_note())
         _ca1, _ca2, _ca3, _ca4 = st.columns(4)
         _ca1.metric("🟦 核心", f"{_csa['core_pct']:.0f}%", f"{_csa['n_core']} 檔")
         _ca2.metric("🟠 衛星", f"{_csa['satellite_pct']:.0f}%", f"{_csa['n_satellite']} 檔")
         _ca3.metric("⬜ 待定", f"{_csa['undetermined_pct']:.0f}%", f"{_csa['n_undetermined']} 檔")
-        _ca4.metric("配置評估", _csa["status"])
+        _ca4.metric("本表口徑評估", _csa["status"])
         st.caption(
-            f"{_csa['status']} {_csa['message']}"
+            f"{_core_satellite_verdict_caption(_csa, source_tab)}"
             f"（{_weight_basis_note(_csa, source_tab)}；"
             f"核心=穩健長線 / 衛星=主題追報酬 / 待定=分類不足）"
         )
+        # Tab3「組合配置」embed：同一頁上方另有一個口徑完全不同的核心%，
+        # 不講清楚差在哪，兩個數字會被讀成「其中一個算錯了」。
+        if source_tab != "health":
+            st.caption(_CS_PORTFOLIO_CONTRAST_NOTE)
     except Exception as _e_csa:
         st.caption(f"⬜ 核心/衛星配置檢查失敗："
                    f"{type(_e_csa).__name__}: {str(_e_csa)[:80]}")
@@ -592,132 +692,16 @@ def _render_health_3tables(rows: list[dict],
             "↓ 完整指標見下方 ① 健康分析 / ② 配息相關表。"
         )
 
-    # v19.411:① 健康分析表不再單獨渲染,欄位已併入「健診大表」。僅保留 _health_cfg(數值格式)
-    # 供合併表 column_config 重用;數值 coerce 交由 build_unified_health_df 統一處理。
-    from shared.signal_thresholds import (  # v19.419 捕捉率 help 文字用(SSOT,非 magic)
-        CAPTURE_MIN_MONTHS as _CAP_MIN,
-        CAPTURE_ROBUST_MONTHS as _CAP_ROB,
+    # v19.411:①② 表不再單獨渲染,欄位已併入「健診大表」。
+    # 2026-08-06 必修 4:原本 90 行 inline dict 抽至
+    # `ui/helpers/fund_grp_health/columns.py`,讓**批次大表(Tab③)沿用同一份設定**
+    # —— 兩張表欄位相同卻只有一張有 help/寬度,是原則 2(重複)與原則 4(多做說明)雙違。
+    from ui.helpers.fund_grp_health.columns import (
+        dividend_column_config,
+        health_column_config,
     )
-    # 換標策略分 help 文字用的綠燈門檻(SSOT,不在 help 字串寫死 70,§3.3)
-    from shared.switch_thresholds import SWITCH_GREEN_SCORE as _SW_GREEN
-    # Sharpe 自算樣本門檻(help 文字要照實說「自算需 ≥ N 筆」,不寫死數字)
-    from services.fund_service import MIN_OBS_SHARPE_SORTINO as _MIN_SS
-    _health_cfg = {
-        "code": _cc.TextColumn("代號", width="small"),
-        "基金名": _cc.TextColumn("基金名", width="medium"),
-        # v19.327:核心/衛星資產分類(類別 + MK 3-3-3 兩層,見「分類依據」欄)
-        "基金類別": _cc.TextColumn("基金類別", width="small",
-            help="MoneyDJ 投資標的 / 基金類型原始值(核心/衛星判定依據)"),
-        "核心/衛星": _cc.TextColumn("核心/衛星", width="small",
-            help="🟦 核心=廣泛分散/穩健長線(可重壓);🟠 衛星=集中/主題/高波動(小部位);"
-                 "⬜ 待定=類別+3-3-3 皆無法判定"),
-        "分類依據": _cc.TextColumn("分類依據", width="small",
-            help="類別=依基金類型;3-3-3=通過 MK 3-3-3 達核心標準;—=資料不足"),
-        "4D Grade": _cc.TextColumn("4D Grade", width="small",
-            help="A≥80 / B≥65 / C≥50 / D≥35 / F<35(SSOT v19.177)"),
-        "4D Score": _cc.NumberColumn("4D Score", format="%.1f", width="small"),
-        # ⚠️ 原 help 斷言「自計算(NAV 序列);**非** MoneyDJ 公布值」—— 與事實相反:
-        #    `services/fund_service.py` 的 `_sharpe_out` 優先序是
-        #    **wb07 一年 > wb07 六個月 > 本地自算**,只要 MoneyDJ wb07 有值(境外基金常態)
-        #    這欄顯示的就是官方公布值;wb07 **六個月**命中時欄名還寫死「1Y」。
-        #    → 標籤去掉硬掛的 1Y,期間/來源改由旁邊的「Sharpe 來源」欄逐檔照實顯示。
-        "Sharpe 1Y": _cc.NumberColumn("Sharpe", format="%.2f",
-            help=("來源優先序:**MoneyDJ wb07 官方一年 > wb07 官方六個月 > 本地自算**"
-                  f"(自算需 NAV ≥ {_MIN_SS} 筆)。逐檔實際來源見右邊「Sharpe 來源」欄。"
-                  "⚠️ 同一欄可能**混不同期間**(wb07 六個月不是 1Y),跨檔比大小前請先看來源;"
-                  "4D 評分與換標策略分皆吃此值。")),
-        "Sharpe 來源": _cc.TextColumn("Sharpe 來源", width="small",
-            help=("此列 Sharpe 的**實際**來源與期間(§2.2 血緣):wb07 1Y(官方)/ "
-                  "⚠️ wb07 6M(非1Y,期間比別檔短)/ 自算 Nd(本地 NAV 序列)/ ⬜ —(無值)。"
-                  "本欄由 calc_metrics 的 risk_metric_meta 直出,不重算。")),
-        "Sortino": _cc.NumberColumn("Sortino", format="%.2f"),
-        "Calmar": _cc.NumberColumn("Calmar", format="%.2f"),
-        "Alpha %": _cc.NumberColumn("真實收益 %", format="%.2f %%",
-            help="含息報酬率 − 年化配息率（≠ CAPM Alpha）"),
-        "費用率 %": _cc.NumberColumn("費用率 %", format="%.2f %%"),
-        "Max DD %": _cc.NumberColumn("Max DD %", format="%.2f %%"),
-        "3Y 年化 %": _cc.NumberColumn("3Y 年化 %", format="%.2f %%"),
-        "5Y 年化 %": _cc.NumberColumn("5Y 年化 %", format="%.2f %%"),
-        "MK 3-3-3": _cc.TextColumn("MK 3-3-3",
-            help="成立 ≥ 3 年 + 過去 3 年平均年化 > 7% → 通過"),
-        # v19.414 經理人操作能力;v19.419 放寬門檻 6→3(help 註明參考值,§1 誠實)
-        "上檔捕捉%": _cc.NumberColumn("上檔捕捉%", format="%.1f %%",
-            help=("大盤上漲月:基金複利 / 大盤複利 × 100(越高 = 越追得上漲)。"
-                  f"需漲、跌月各 ≥ {_CAP_MIN} 才算;{_CAP_MIN}–{_CAP_ROB - 1} 月為參考值。")),
-        "下檔捕捉%": _cc.NumberColumn("下檔捕捉%", format="%.1f %%",
-            help="大盤下跌月:基金複利 / 大盤複利 × 100(越低 = 越抗跌)。"),
-        "操盤評分": _cc.NumberColumn("操盤評分", format="%d",
-            help=("經理人操作評分 clamp(50 +(上檔 − 下檔)/2, 0, 100)。"
-                  f"需漲、跌月各 ≥ {_CAP_MIN};{_CAP_MIN}–{_CAP_ROB - 1} 月為參考值(低信心)。")),
-        # v19.420 vs 大盤%(近1Y純價格報酬差;純淨值對純指數,公平不含息)
-        "vs 大盤%": _cc.NumberColumn("vs 大盤%", format="%+.1f %%",
-            help=("近 1 年**純價格**報酬 − 大盤(TWD→台股 / 其餘→S&P500)。"
-                  "正 = 跑贏。純淨值對純指數(公平,兩邊都不含息);歷史不足 1 年 → 用全期。")),
-        # v19.421 基期標籤(由 σ rank 分類,一眼挑高/低基期標的;門檻同輪動配對)
-        "基期": _cc.TextColumn("基期", width="small",
-            help=("現價 vs 期間高點的 σ 位階:🔴 高基期(σ ≥ −0.5,貼近高點、偏貴)/ "
-                  "⚪ 中性 / 🟢 低基期(σ ≤ −1.5,跌深、可能均值回歸)/ ⬜ 資料不足。"
-                  "可點欄排序,一次挑出所有高基期或低基期標的。")),
-        # v19.423 換標決策(策略燈號 + 策略分;獨立於 4D,專為買賣/換標設計)
-        "策略燈號": _cc.TextColumn("策略燈號", width="small",
-            help=("換標燈號:🔴 賣出/平轉(1Y含息<0 且 Sharpe<0,或 嚴重吃本金)/ 🟡 觀望 / "
-                  f"🟢 續抱加碼(分≥{_SW_GREEN} 且 吃本金健康**且四維證據夠**)/ ⬜ 資料不足。"
-                  "⚠️ 缺 MaxDD / vs大盤 時,**缺的維度全以 0 計仍要 ≥ "
-                  f"{_SW_GREEN}** 才給綠燈 —— 證據不全一律降 🟡,不給加碼訊號(§1)。"
-                  "可篩選一次挑出所有紅燈檔。")),
-        "換標策略分": _cc.NumberColumn("換標策略分", format="%d",
-            help=("滿覆蓋時 = 1Y含息35 + Sharpe30 + MaxDD20 + vs大盤15 = 0-100。"
-                  "⚠️ **分母不是固定 100**:缺 MaxDD(NAV 太短算不出)或 vs大盤 時,該維"
-                  "**退出分母**後放回 0-100(缺值≠壞值),所以 100 分可能只代表"
-                  "「有證據的 65 分裡拿滿 65」—— 實際分母/缺哪幾維請看右邊「策略分覆蓋」欄。"
-                  "**獨立於 4D 健康度**;缺 Sharpe/含息 → 留白(灰燈)。")),
-        "策略分覆蓋": _cc.TextColumn("策略分覆蓋", width="medium",
-            help=("換標策略分的**證據覆蓋率**(§1 缺值須帶旗標):✅ 100/100 = 四維齊全;"
-                  "⚠️ 65/100(缺 …) = 分母被收斂,分數只反映有證據的部分,跨檔比大小要小心;"
-                  "`·不給綠燈` = 缺的維度即使全拿 0 也跨不過綠燈門檻 → 燈號已強制降 🟡;"
-                  "⬜ 未評分 = 核心維度(1Y含息/Sharpe)缺。")),
-        # v19.425 景氣適配(依資產屬性+捕捉對照當前景氣;參考傾向非買賣建議)
-        "景氣適配": _cc.TextColumn("景氣適配", width="small",
-            help=("依資產類別 + 抗跌/追漲能力,對照**當前景氣位階**(頁首 Phase):✅ 順風 / "
-                  "⚠️ 逆風 / ⚪ 全景氣(核心/平衡)/ ⬜ 無法判定(缺類別或景氣未偵測)。"
-                  "**參考傾向,非買賣建議、非 % 配置**。")),
-        "適配傾向": _cc.TextColumn("適配傾向", width="small",
-            help="此基金資產屬性最適合的景氣位階(復甦/擴張/高峰/衰退;全景氣=平衡多重)。"),
-        # v19.426 淨值×匯率二維買賣切換(外幣基金;台幣計價 ➖)
-        "匯率位階": _cc.TextColumn("匯率位階", width="small",
-            help=("USDTWD 現值相對**近一年均值**的位階(z-score):台幣強(換匯便宜,進場有利)/ "
-                  "中性 / 台幣弱(換回台幣划算,出場有利)。`*` = 樣本較短僅供參考。"
-                  "➖ 台幣計價 / ⬜ 無法判定(非美元或缺料)。**參考傾向,非擇時保證**。")),
-        "淨值×匯率": _cc.TextColumn("淨值×匯率", width="medium",
-            help=("淨值位階 × 匯率位階 二維買賣:🟢 雙便宜(淨值低+台幣強=進場佳)/ "
-                  "🔴 雙貴(淨值高+台幣弱=出場佳)/ ⚪ 觀望(一好一壞或中性)。"
-                  "➖ 台幣計價 / ⬜ 無法判定。匯率比淨值難預測 —— **非買賣建議**。")),
-    }
-    # v19.411:② 配息相關表不再單獨渲染,欄位併入健診大表;保留 _div_cfg 供格式重用。
-    _div_cfg = {
-        "code": _cc.TextColumn("代號", width="small"),
-        "基金名": _cc.TextColumn("基金名", width="medium"),
-        "1Y 含息 %": _cc.NumberColumn("1Y 含息 %", format="%.2f %%"),
-        "1Y 來源": _cc.TextColumn("1Y 來源",
-            help="wb01 / local_calc / ret_1y_total / NAV 年化"),
-        "年化配息率 %": _cc.NumberColumn("年化配息率 %", format="%.2f %%"),
-        # v19.326:每月配息金額(TWD 現金)= 最近一筆實配 × 持有單位 × 匯率(來源同「配息來源」欄)
-        "每月配息 (TWD)": _cc.NumberColumn("每月配息 (TWD)", format="%.0f",
-            help="每月實領台幣現金 = 最近一筆實際配息 × 持有單位 × 匯率。"
-                 "健診 Tab 全檔以 100 萬 TWD 為基準;Tab3 為各檔實際投入本金。"),
-        # v19.324:每月配息單位數 = 最近一筆實際配息 × 持有單位 / NAV(真實記錄優先)
-        # v19.325:真實記錄缺 → 年化配息率估算 fallback,「配息來源」欄註記真實/估算
-        "每月配息單位數": _cc.NumberColumn("每月配息單位數", format="%.2f",
-            help="= 最近一筆實際配息(原幣/單位) × 持有單位 / NAV。"
-                 "優先用 MoneyDJ 真實配息記錄;缺則以年化配息率估算(見「配息來源」欄)。"
-                 "健診 Tab 全檔以 100 萬 TWD 為基準比較;Tab3 為各檔實際投入本金。"),
-        "配息來源": _cc.TextColumn("配息來源", width="small",
-            help="真實=最近一筆實際配息記錄;估算=年化配息率÷12 攤平(季配/年配某些月實際為 0)"),
-        "吃本金燈號 (1Y·MK)": _cc.TextColumn("吃本金燈號 (1Y·MK)"),
-        "換標的建議": _cc.TextColumn("換標的建議",
-            help="MK 4 規則綜合判定(hover 看細節)"),
-    }
-    # v19.411:② 表 dataframe 移除(併入健診大表)。
+    _health_cfg = health_column_config()
+    _div_cfg = dividend_column_config()
 
     # ── 📊 健診大表(①②③ + σ/風險/MK 去重複合併成一張)── v19.411 ──
     st.markdown("#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）")
@@ -734,8 +718,14 @@ def _render_health_3tables(rows: list[dict],
             _pi3 = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
             _, _extra_by_code = build_merged_extra_columns(
                 funds_extra, (_pi3 or {}).get("phase") or "", (_pi3 or {}).get("score"))
-        except Exception:  # noqa: BLE001 — σ/風險/MK 併入失敗不擋大表
+        except Exception as _e_extra:  # noqa: BLE001 — σ/風險/MK 併入失敗不擋大表
+            # §1:原本靜默 → 大表整組 σ/HWM/MK/捕捉/換標約 20 欄一次消失,
+            # `build_unified_health_df` 的「來源整組沒供資料就不出現該批欄」設計會讓
+            # 畫面看起來「本來就沒這些欄」,user 以為功能被拿掉。改為 log + 當場說明。
             _extra_by_code = {}
+            st.caption(f"⬜ σ 位階 / 風險 / MK 買賣點 / 捕捉率 / 換標欄**整組計算失敗**,"
+                       f"本次大表不含這些欄(不是資料沒有):"
+                       f"[{type(_e_extra).__name__}] {str(_e_extra)[:80]}")
     _render_health_table(rows, funds_extra=None,
                          health_by_code=_health_by_code,
                          div_by_code=_div_by_code,
@@ -854,48 +844,14 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
                 f"就會自動回到表內逐列顯示。"
             )
         # v19.77 L1：column_config 數值格式化（百分號 / 千分位）+ 欄寬調整
+        # 2026-08-06 必修 4:設定抽至 `ui/helpers/fund_grp_health/columns.py`,
+        # 與批次大表(Tab③)同源;順道補齊 σ/MK 買賣點那批原本**完全沒有** help 的欄。
         from streamlit import column_config as _cc
-        _col_cfg = {
-            "code": _cc.TextColumn("代號", width="small"),
-            "基金名": _cc.TextColumn("基金名", width="medium"),
-            "ccy": _cc.TextColumn("幣別", width="small"),
-            "fx_spot": _cc.NumberColumn("FX", format="%.4f", width="small"),
-            "principal_ccy 🧮": _cc.NumberColumn("原幣本金 🧮", format="%,.0f"),
-            "units 🧮": _cc.NumberColumn("單位 🧮", format="%,.2f"),
-            "配息次數": _cc.NumberColumn("配息次數", format="%d", width="small"),
-            "累積 TWD 配息 🧮": _cc.NumberColumn("累積 TWD 配息 🧮", format="%,.0f"),
-            "年均配息 TWD 🧮": _cc.NumberColumn("年均配息 TWD 🧮", format="%,.0f"),
-            # v19.180:全期實際(不年化,短歷史也顯示真實累計值)
-            "配息率% (全期實際)": _cc.NumberColumn(
-                "配息率% (全期實際)", format="%.2f %%",
-                help="自買進日起累積配息 / 本金 × 100(不年化)。短歷史也顯示真實累計。verdict 不採。"),
-            "淨值% (全期實際)": _cc.NumberColumn(
-                "淨值% (全期實際)", format="%.2f %%",
-                help="自買進日起累積淨值漲跌幅(不年化)。短歷史也顯示真實累計。verdict 不採。"),
-            "含息% (全期實際)": _cc.NumberColumn(
-                "含息% (全期實際)", format="%.2f %%",
-                help="全期實際淨值% + 全期實際配息%(不年化)。短歷史也顯示真實累計。verdict 不採。"),
-            # v19.148/v19.180:年化 3 軸(< 0.5 年顯示 None,避免幻象);verdict 仍走 1Y MK SSOT
-            "配息率% (年化)": _cc.NumberColumn(
-                "配息率% (年化)", format="%.2f %%",
-                help="(累積配息 / 本金 / 持有年數)× 100。需持有 ≥ 0.5 年。verdict 不採。"),
-            "淨值% (年化)": _cc.NumberColumn(
-                "淨值% (年化)", format="%.2f %%",
-                help="累積淨值變化 / 持有年數。需持有 ≥ 0.5 年。verdict 不採。"),
-            "含息% (年化)": _cc.NumberColumn(
-                "含息% (年化)", format="%.2f %%",
-                help="年化淨值% + 年化配息%。需持有 ≥ 0.5 年。verdict 不採。"),
-            "吃本金燈號 (1Y · MK)": _cc.TextColumn(
-                "吃本金燈號 (1Y · MK)",
-                help="MK 老師 1Y 體檢:近一年含息報酬 vs MoneyDJ wb05 年化配息率。"
-                     "與下方「健診摘要表」同源 SSOT。"),
-            # v19.153:MK 3-3-3 原則(長線核心資產輔助)
-            "MK 3-3-3 篩": _cc.TextColumn(
-                "MK 3-3-3 篩",
-                help="MK 老師 3-3-3 長線挑核心資產篩選:成立 ≥ 3 年 + 過去 3 年平均年化報酬 > 7%。"
-                     "✅ 通過 / ❌ 未通過 / ⬜ 資料不足。3 年平均年化由 metrics.ret_3y(累計)"
-                     "用 (1+R)^(1/3)-1 換算。本欄為長線輔助,非吃本金主判定。"),
-        }
+        from ui.helpers.fund_grp_health.columns import (
+            base_column_config,
+            extra_column_config,
+        )
+        _col_cfg = {**base_column_config(), **extra_column_config()}
         # v19.411:合併表 column_config = ③ 本表 + ①② 傳入格式(extra_cfg)。
         _full_cfg = {**_col_cfg, **(extra_cfg or {})}
         st.dataframe(
@@ -1029,9 +985,33 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         )
         st.markdown("##### 配息事件（多檔合併）")
         if _ev_rows:
+            # 整頁其餘欄名都是中文,只有這張表直出 `compute_dividend_twd_series` 的
+            # 英文 key(units_at_event_🧮 / ccy_div_per_unit …)。補中文標籤 + help,
+            # 不改資料鍵(避免動到 L2 schema 與其他 caller)。
             st.dataframe(
                 pd.DataFrame(_ev_rows),
                 use_container_width=True, hide_index=True,
+                column_config={
+                    "代號": _cc.TextColumn("代號", width="small"),
+                    "ex_date": _cc.TextColumn("除息日", width="small",
+                        help="MoneyDJ 記錄的除息日;只列買進日之後的事件。"),
+                    "ccy_div_per_unit": _cc.NumberColumn("每單位配息(原幣)", format="%.4f",
+                        help="該次每一單位配發多少原幣。"),
+                    "units_at_event_🧮": _cc.NumberColumn("當時持有單位 🧮", format="%,.4f",
+                        help="除息當下持有的單位數(預設不再投入,故各次相同)。"),
+                    "ccy_div_total_🧮": _cc.NumberColumn("該次配息(原幣) 🧮", format="%,.2f",
+                        help="每單位配息 × 當時持有單位。"),
+                    "fx_at_ex": _cc.NumberColumn("除息日匯率", format="%.4f",
+                        help="該次換算用的 1 原幣 = ? TWD(§4.1 用當期匯率,不用今天的回填)。"),
+                    "fx_source": _cc.TextColumn("匯率來源", width="small",
+                        help="該日匯率取自歷史序列還是即期 fallback(§2.2 血緣)。"),
+                    "twd_div_🧮": _cc.NumberColumn("該次配息(TWD) 🧮", format="%,.0f",
+                        help="該次配息(原幣)× 除息日匯率。"),
+                    "nav_at_ex": _cc.NumberColumn("除息日 NAV", format="%.4f",
+                        help="除息日(或之前最近一日)的淨值;基金 NAV 週末假日不更新屬正常。"),
+                    "single_event_div_pct_🧮": _cc.NumberColumn("該次配息率 % 🧮", format="%.3f %%",
+                        help="每單位配息 ÷ 除息日 NAV × 100(單次,非年化)。"),
+                },
             )
         else:
             st.info("所有檔於買進日後皆無配息事件")

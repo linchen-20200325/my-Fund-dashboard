@@ -296,7 +296,9 @@ def test_decision_matrix_sits_between_summary_bar_and_horizons():
     """
     src = _TAB1.read_text(encoding="utf-8")
     # 上游錨點:F1 重構後為 ② 依據表(五桶 bar renderer 已刪)。
-    i_bar = src.index("render_evidence_table(_ev_rows)")
+    # ⚠️ 2026-08-06 必修 3:錨點縮到函式名 + 左括號(呼叫多了 `footnotes=` 引數,
+    #   原本釘到閉括號的字串已不存在 → ValueError)。位置契約不變。
+    i_bar = src.index("render_evidence_table(")
     # v19.429:決策矩陣呼叫改由 `_safe_section(label, fn, ind)` 包裹(§1 區塊隔離),
     # 位置不變 —— 匹配字串同步改為包裹後的呼叫形以保留「位置」斷言原意。
     i_matrix = src.index("_render_realtime_decision_dashboard, ind)")

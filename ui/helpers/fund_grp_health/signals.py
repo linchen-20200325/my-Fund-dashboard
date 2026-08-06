@@ -62,16 +62,31 @@ def _render_mk_signal_table(funds: list) -> None:
         st.caption(f"⬜ MK 表渲染失敗:{type(e).__name__}: {e}")
 
 
+def _first_num(*vals):
+    """依序取第一個**非 None** 的數值(§1:0.0 是合法值,不可用 `or` 略過)。"""
+    for _v in vals:
+        _n = _safe_num(_v)
+        if _n is not None:
+            return _n
+    return None
+
+
 def mk_signal_by_code(funds: list, phase: str, score) -> dict:
     """⑩ MK 買賣點逐檔欄位(keyed by code)。供健診總表合併 + 標準表共用(單一資料源)。
 
     phase/score 由呼叫端從 st.session_state.phase_info 取;缺 → 訊號欄 '—',
     但買賣水平線 / 現價位階仍計算(不依景氣)。缺項 '—' 不偽造(§1)。
     """
+    _import_err = ""
     try:
         from ui.helpers.macro_helpers import mk_fund_signal
-    except Exception:  # noqa: BLE001
+    except Exception as _e_imp:  # noqa: BLE001
+        # §1:原本靜默 → 全檔「操作訊號」齊 '—',看起來像「這批基金沒訊號」。
+        import sys as _sys_imp
+        print(f"[grp_health/signals] mk_fund_signal 載入失敗,全檔操作訊號留空:"
+              f"{type(_e_imp).__name__}: {_e_imp}", file=_sys_imp.stderr)
         mk_fund_signal = None
+        _import_err = f"⚠️ 訊號模組載入失敗({type(_e_imp).__name__})"
 
     out: dict = {}
     for _f in funds:
@@ -79,20 +94,28 @@ def mk_signal_by_code(funds: list, phase: str, score) -> dict:
         _m = _f.get("metrics") or {}
         _mj = _f.get("moneydj_raw") or {}
 
-        _asset_class = _sig_label = "—"
+        _asset_class = "—"
+        _sig_label = _import_err or "—"
         if mk_fund_signal is not None and phase:
             try:
                 _sig = mk_fund_signal(_f, phase, score)
                 _asset_class = _sig.get("asset_class", "—")
                 _sig_label = _sig.get("label", "—")
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as _e_sig:  # noqa: BLE001
+                # §1:原本靜默 pass → 「操作訊號」欄停在「—」,把**算爆了**偽裝成
+                # 「這檔沒訊號」。同 `services/fund_row.py` 對 MK 吃本金 / 3-3-3 的處置。
+                import sys as _sys_sig
+                print(f"[grp_health/signals] {_code} mk_fund_signal 失敗:"
+                      f"{type(_e_sig).__name__}: {_e_sig}", file=_sys_sig.stderr)
+                _sig_label = f"⚠️ 計算失敗({type(_e_sig).__name__})"
 
-        _b1 = _safe_num(_m.get("buy1") or _mj.get("buy1"))
-        _b3 = _safe_num(_m.get("buy3") or _mj.get("buy3"))
-        _s1 = _safe_num(_m.get("sell1") or _mj.get("sell1"))
-        _s3 = _safe_num(_m.get("sell3") or _mj.get("sell3"))
-        _nav = _safe_num(_m.get("nav") or _mj.get("nav_latest"))
+        # §1:`a or b` 把**合法的 0.0** 當缺值(買賣點價位理論上 >0,但 nav 由
+        # metrics 或 wb05 兩路來,顯式 is None 才不會在 0 附近悄悄換來源)。
+        _b1 = _first_num(_m.get("buy1"), _mj.get("buy1"))
+        _b3 = _first_num(_m.get("buy3"), _mj.get("buy3"))
+        _s1 = _first_num(_m.get("sell1"), _mj.get("sell1"))
+        _s3 = _first_num(_m.get("sell3"), _mj.get("sell3"))
+        _nav = _first_num(_m.get("nav"), _mj.get("nav_latest"))
 
         if _nav is None:
             _zone = "—"

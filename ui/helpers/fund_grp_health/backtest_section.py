@@ -3,18 +3,18 @@
 L3 orchestrator:從已載入持倉(rich fund dict,含 series 原幣 NAV + currency)組
 nav_by_code + ccy_by_code → 抓 USDTWD 歷史(L2 facade hot_money_service,不直呼 L1,§8.2)
 → L2 `services.allocation_backtest`(純數學回測)→ 排名表 + 勝出策略 + 匯率方向裁決 +
-三輸出(動作清單 / 賣→買配對 / 目標權重%)+ 當前訊號快照。§1 全程誠實:缺料/排除顯式顯示。
+三輸出(動作清單 / 賣→買配對 / 目標權重%)。§1 全程誠實:缺料/排除顯式顯示。
+
+本區只回答**「哪一套配置效益最高」**。逐檔的 live 買賣訊號在健診大表
+(「淨值×匯率」/「策略燈號」欄)—— 原本這裡另有一個「當前訊號快照」expander,
+取的是**回測最後一次月頻再平衡日**的 `final_signals`,卻與大表的 live spot 訊號
+共用「當前」二字,同一檔可能一邊 🟢 一邊 🔴,是重複且會打架的第二資料源,已移除。
 
 **教學非投資建議**:回測 ≠ 未來,樣本有限為方向性證據(caveat 先於結果)。
 """
 from __future__ import annotations
 
 import streamlit as st
-
-_TIER_ZH = {"buy": "🟢 進場佳", "sell": "🔴 出場佳", "watch": "⚪ 觀望",
-            "na": "⬜ 無法判定", "hold": "➖ 持有", None: "⬜ —"}
-_NAV_ZH = {"low": "低基期", "mid": "中性", "high": "高基期", "unknown": "資料不足"}
-_FX_ZH = {"strong_twd": "台幣強", "neutral": "匯率中性", "weak_twd": "台幣弱", None: "—"}
 
 
 def render_allocation_backtest_section(funds: list) -> None:
@@ -73,7 +73,22 @@ def render_allocation_backtest_section(funds: list) -> None:
         _rows.append({"排名": _rank, "策略": STRATEGY_LABELS[_sid],
                       "CAGR%": _m["cagr_pct"], "年化σ%": _m["ann_vol_pct"], "Sharpe": _m["sharpe"],
                       "最大回撤%": _m["max_drawdown_pct"], "Calmar": _m["calmar"]})
-    st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+    from streamlit import column_config as _cc
+    st.dataframe(
+        pd.DataFrame(_rows), use_container_width=True, hide_index=True,
+        column_config={
+            "排名": _cc.NumberColumn("排名", format="%d", width="small",
+                help="依 Sharpe → Calmar → CAGR 排;**in-sample**,不是未來保證。"),
+            "策略": _cc.TextColumn("策略", width="medium"),
+            "CAGR%": _cc.NumberColumn("CAGR%", format="%.2f %%",
+                help="回測期間的年化複合報酬(台幣總報酬,含換手成本)。"),
+            "年化σ%": _cc.NumberColumn("年化σ%", format="%.2f %%", help="年化波動度,越低越穩。"),
+            "Sharpe": _cc.NumberColumn("Sharpe", format="%.2f", help="每單位波動換到的報酬。"),
+            "最大回撤%": _cc.NumberColumn("最大回撤%", format="%.2f %%",
+                help="期間內從高點跌到低點的最大幅度(負值)。"),
+            "Calmar": _cc.NumberColumn("Calmar", format="%.2f", help="CAGR ÷ |最大回撤|。"),
+        },
+    )
     st.success(f"🏆 效益最高:**{STRATEGY_LABELS[_res['winner']]}**"
                "(依 Sharpe→Calmar→CAGR 排名;in-sample,勿當未來保證)")
     if not _res["flags"].get("s4_trained"):
@@ -109,7 +124,8 @@ def render_allocation_backtest_section(funds: list) -> None:
         _c3.markdown("**⚪ 觀望**\n\n" + ("、".join(_name.get(c, c) for c in _al["watch"]) or "—"))
     else:
         st.caption("本策略不擇時(等權/靜態最佳)→ 無買賣切換動作;下方為目標配置權重。"
-                   "（想看當前買/賣訊號 → 見底部「當前 淨值×匯率 訊號」)")
+                   "（想看**當前**買/賣訊號 → 見上方健診大表的「淨值×匯率」/「策略燈號」欄，"
+                   "那是即時值;回測區講的是配置效益）")
 
     if _act["sell_buy_pairs"]:
         _prows = [{"賣出": _name.get(p["sell_code"], p["sell_code"]),
@@ -118,23 +134,30 @@ def render_allocation_backtest_section(funds: list) -> None:
                    "買σ": (round(p["buy_sigma"], 2) if p["buy_sigma"] is not None else "—")}
                   for p in _act["sell_buy_pairs"]]
         st.markdown("**🔄 賣→買 配對建議**")
-        st.dataframe(pd.DataFrame(_prows), use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(_prows), use_container_width=True, hide_index=True,
+            column_config={
+                "賣出": _cc.TextColumn("賣出", width="medium",
+                    help="勝出策略在**最後一次再平衡日**判定要減碼/換出的檔。"),
+                "賣σ": _cc.TextColumn("賣σ", width="small",
+                    help="該檔當時的 σ rank(愈接近 0 = 愈貼近高點);'—' = 算不出(含 NAV 走平)。"),
+                "→ 買進": _cc.TextColumn("→ 買進", width="medium",
+                    help="配對的進場標的;無合適者誠實留「無合適標的」。"),
+                "買σ": _cc.TextColumn("買σ", width="small", help="買方當時的 σ rank(愈負 = 跌愈深)。"),
+            },
+        )
 
     _wrows = [{"基金": _name.get(c, c), "目標權重%": v}
               for c, v in sorted(_act["target_weights_pct"].items(), key=lambda kv: -kv[1])]
     st.markdown("**⚖️ 建議配置權重**")
-    st.dataframe(pd.DataFrame(_wrows), use_container_width=True, hide_index=True)
-
-    # ── 當前 淨值×匯率 訊號快照(= 已上線 live 邏輯,與 winner 無關,永遠可看)──
-    _snap = _res.get("current_signal_snapshot") or {}
-    if _snap:
-        with st.expander("📶 當前「淨值×匯率」訊號快照(現行方向・參考)", expanded=False):
-            _srows = [{"基金": _name.get(c, c),
-                       "淨值位階": _NAV_ZH.get(s.get("nav_level"), s.get("nav_level")),
-                       "σ rank": (round(s["sigma_rank"], 2) if s.get("sigma_rank") is not None else "—"),
-                       "匯率位階": _FX_ZH.get(s.get("fx_label"), "—"),
-                       "訊號": _TIER_ZH.get(s.get("tier"), s.get("tier"))}
-                      for c, s in _snap.items()]
-            st.dataframe(pd.DataFrame(_srows), use_container_width=True, hide_index=True)
-            st.caption("此快照為各檔**當前**淨值位階 × 匯率位階的現行方向 2D 訊號(不一定等於勝出策略);"
-                       "回測排名才是「哪套配置效益最高」的依據。")
+    st.dataframe(
+        pd.DataFrame(_wrows), use_container_width=True, hide_index=True,
+        column_config={
+            "基金": _cc.TextColumn("基金", width="medium"),
+            "目標權重%": _cc.NumberColumn("目標權重%", format="%.1f %%",
+                help="勝出策略在最後一次再平衡日的目標配置(總和 100%);**教學示意,非投資建議**。"),
+        },
+    )
+    # 「當前訊號快照」expander 已移除:它取的是回測**最後一次再平衡日**的 final_signals,
+    # 與健診大表的 live spot 是兩個時點,兩邊卻都寫「當前」→ 同一檔會一綠一紅。
+    # live 買賣訊號一律以大表「淨值×匯率」欄為準(單一資料源)。

@@ -484,6 +484,12 @@ def check_333_principle(years_since_inception: Optional[float],
       "message": str,
     }
 
+    三態語意(§1:缺資料 ≠ 未通過)
+    ------------------------------
+    - True  = 兩條件皆有值且皆達標
+    - False = **有明確反證**(成立年數不足,或 3 年年化有值但未達門檻)
+    - None  = 缺成立年數 / 缺 3 年年化 → 無法判定,UI 顯示 ⬜ 而非 ❌
+
     這是**長線核心資產篩選**輔助,不是吃本金判定。
     短線吃本金以 check_eating_principal_1y_mk 為準。
     """
@@ -496,15 +502,23 @@ def check_333_principle(years_since_inception: Optional[float],
     if _yrs is None:
         return {"passed": None, "years_ok": None, "return_ok": None,
                 "message": "資料不足(缺成立年數)"}
-    _y_ok = (_yrs is not None and _yrs >= THREE_THREE_THREE_MIN_YEARS)
-    _r_ok = (_ret is not None and _ret > THREE_THREE_THREE_MIN_ANN_RETURN_PCT)
-    _passed = _y_ok and _r_ok
+    _y_ok = (_yrs >= THREE_THREE_THREE_MIN_YEARS)
+    # 缺 3 年平均年化 → 「報酬 > 7%」無從判定,只能是 None;不可折成 False。
+    _r_ok = (None if _ret is None
+             else _ret > THREE_THREE_THREE_MIN_ANN_RETURN_PCT)
+    # 成立年數已達標、但 3 年平均年化抓不到(MoneyDJ wb01 三年期常缺)→ 整條原則無法判定,
+    # 與上方「缺成立年數」路徑同樣回 passed=None(⬜ 資料不足),不得回 False(❌ 未通過)。
+    # 下游 `services/health/asset_class.py` 只在 passed is False 時附註「未達 3-3-3」並
+    # 把此檔推向「待定」,因此這裡的三態必須嚴格區分,否則核心/衛星佔比會被灌水。
+    if _y_ok and _r_ok is None:
+        return {"passed": None, "years_ok": True, "return_ok": None,
+                "message": "資料不足(缺 3 年平均年化)"}
+    # 到此:_y_ok 為 False(成立年數已足以否決,不需 3 年報酬)或 _r_ok 已有明確布林值。
+    _passed = bool(_y_ok and _r_ok)
     if _passed:
         _msg = f"通過 3-3-3 ✅({_yrs:.1f} 年成立、3 年平均年化 {_ret:.1f}%)"
-    elif not _y_ok and _yrs is not None:
+    elif not _y_ok:
         _msg = f"成立 {_yrs:.1f} 年 < 3 年(MK 3-3-3 要求 ≥ 3 年)"
-    elif not _r_ok and _ret is not None:
-        _msg = f"3 年平均年化 {_ret:.1f}% ≤ 7%(MK 3-3-3 要求 > 7%)"
     else:
-        _msg = "資料不足(部分缺)"
+        _msg = f"3 年平均年化 {_ret:.1f}% ≤ 7%(MK 3-3-3 要求 > 7%)"
     return {"passed": _passed, "years_ok": _y_ok, "return_ok": _r_ok, "message": _msg}

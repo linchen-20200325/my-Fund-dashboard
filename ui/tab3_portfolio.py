@@ -127,7 +127,9 @@ def render_portfolio_tab() -> None:
     st.markdown("## 📊 組合基金管理")
     from ui.helpers.story_nav import render_story_nav
     render_story_nav("portfolio")
-    st.caption("加入多檔基金，即時計算核心/衛星配比、六因子評分、現金流估算")
+    # 「六因子評分」自 v19.177 起已不再用於評等（改 4 維健診），標題不再這樣寫，
+    # 免得使用者去說明書查一個退役模型（2026-08 稽核必修 8 同型）。
+    st.caption("加入多檔基金，即時計算核心/衛星配比（金額加權）、4 維健診評等、現金流估算")
 
     if "portfolio_funds" not in st.session_state:
         st.session_state.portfolio_funds = []
@@ -151,7 +153,9 @@ def render_portfolio_tab() -> None:
         except Exception:
             _mk_df_hero = None   # smoke-allow-pass — KPI 不影響後續功能
         _kpis_hero = compute_health_kpis(_pf_for_warroom, _mk_df_hero)
-        st.session_state["_t3_kpis_hero"] = _kpis_hero   # 供下方 expander summary 用
+        # （原本這裡把 _kpis_hero 塞進 session_state 說「供下方 expander summary 用」，
+        #   但全 repo 沒有任何讀取方 —— 純粹的死寫入，已刪除。
+        #   若日後真要跨區塊共用，請同批加上讀取端，不要先留一個沒人讀的 key。）
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
             f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
@@ -189,7 +193,8 @@ def render_portfolio_tab() -> None:
                     _rate = _fx_spot.get(_ccy_fx, 0)
                     _rate_str = f"1 {_ccy_fx} ≈ {_rate:.2f} TWD" if _rate > 0 else "匯率待抓"
                     _fx_lines.append(f"**{_ccy_fx}** {_cnt} 檔（{_pct:.0f}%）· {_rate_str}")
-                with st.expander(f"💱 FX 曝險摘要（{len(_fx_counts)} 種幣別）", expanded=False):
+                # 內容 < 6 行且含「USD 佔比過半」警告 → 收起來等於把風險藏起來（原則 1）
+                with st.expander(f"💱 FX 曝險摘要（{len(_fx_counts)} 種幣別）", expanded=True):
                     st.caption(
                         "組合中非 TWD 基金的幣別分布。台幣升值 1% 約等幅侵蝕該幣別折算績效。"
                     )
@@ -200,8 +205,14 @@ def render_portfolio_tab() -> None:
                         st.warning(
                             f"⚠️ 組合 {_usd_pct:.0f}% 為 USD 計價，台幣大幅升值時 TWD 績效將明顯縮水。"
                         )
-        except Exception:
-            pass  # smoke-allow: FX expander 非核心功能
+        except Exception as _e_fx_blk:
+            # §1：FX 曝險是風險揭露，失敗要留痕（原本 `pass` → 畫面零痕跡）
+            print(f"[tab3 FX 曝險摘要] 渲染失敗："
+                  f"[{type(_e_fx_blk).__name__}] {_e_fx_blk}")
+            st.caption(
+                f"⬜ FX 曝險摘要：本次未能產生（[{type(_e_fx_blk).__name__}]）"
+                "—— 這不代表沒有匯率風險。"
+            )
 
         st.divider()
 
@@ -218,7 +229,9 @@ def render_portfolio_tab() -> None:
 
         # v18.213：基金體檢表（郭老師「挑三揀四」PK 同類型，揪優等生 / 汰弱候選）
         from ui.helpers.fund_checkup import render_fund_checkup
-        render_fund_checkup(st.session_state.portfolio_funds)
+        # expanded=True：同一個元件在組合健檢頁是展開的，這裡收起來 = 同元件兩種行為。
+        # 體檢表是資料型內容（原則 1），統一展開。
+        render_fund_checkup(st.session_state.portfolio_funds, expanded=True)
         st.divider()
 
         # v19.xxx：MK 3-3-3 原則批次篩選（留強汰弱量化依據）
@@ -242,7 +255,10 @@ def render_portfolio_tab() -> None:
                 if f.get("series") is not None
             ]
             if _funds_333:
-                with st.expander("📋 展開 3-3-3 評估明細", expanded=True):
+                # 原本是 `expanded=True` 的 expander —— 永遠開著的殼只是多一層邊框
+                # 和一次多餘的點擊，資料型內容直接攤平（原則 1）。
+                st.caption("📋 3-3-3 評估明細")
+                with st.container():
                     _df_333 = _batch_333(_funds_333)
                     if not _df_333.empty:
                         st.dataframe(
@@ -1259,7 +1275,9 @@ def render_portfolio_tab() -> None:
                                     except PolicySheetError as _pe:
                                         st.error(f"❌ 刪除失敗：{_pe}")
 
-    with st.expander("🗂️ 保單分組視圖", expanded=True):
+    # 原 `expanded=True` expander → 拿掉殼（原則 1：資料型區塊不加永遠開著的摺疊層）
+    st.markdown("#### 🗂️ 保單分組視圖")
+    with st.container():
         _pol_funds = [f for f in st.session_state.portfolio_funds if f.get("policy_id")]
         _ungrouped = [f for f in st.session_state.portfolio_funds if not f.get("policy_id")]
 
@@ -1296,25 +1314,23 @@ def render_portfolio_tab() -> None:
             for _f in _pol_funds:
                 _by_policy.setdefault(_f.get("policy_id", "?"), []).append(_f)
 
-            def _is_core_in_policy(_f: dict) -> bool:
-                """P3：優先用 Sheet policy_tier，缺則 fallback 既有 _is_core_fund heuristic。"""
-                _t = (_f.get("policy_tier") or "").lower()
-                if _t == "core":
-                    return True
-                if _t == "satellite":
-                    return False
-                # fallback：既有 is_core flag（_is_core_fund 字串啟發）
-                return bool(_f.get("is_core"))
+            # P3 的 policy_tier→is_core 判定已上收 ui.helpers.portfolio.allocation，
+            # 讓保單級與全組合級用同一把尺（見該檔 docstring 的 4 處差異表）。
+            from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+                get_core_target_pct as _get_core_target_p,
+                resolve_core_flag as _is_core_in_policy,
+                summarize_core_satellite as _sum_cs_p,
+            )
 
-            _policy_target = st.session_state.get("portfolio_core_pct", 75)
+            _policy_target = _get_core_target_p(st.session_state)
 
             for _pid, _funds in _by_policy.items():
                 _pname = _funds[0].get("policy_name") or _pid
-                _ptot  = sum(_f.get("invest_twd", 0) or 0 for _f in _funds)
-                # P3：保單級 core/satellite 切分
-                _p_core_amt = sum(_f.get("invest_twd", 0) or 0
-                                  for _f in _funds if _is_core_in_policy(_f))
-                _p_core_pct = round(_p_core_amt / _ptot * 100.0, 1) if _ptot else 0
+                _cs_p  = _sum_cs_p(_funds, target_pct=_policy_target)
+                _ptot  = _cs_p["total_twd"]
+                _p_core_amt = _cs_p["core_twd"]
+                _p_core_pct = (round(_cs_p["core_pct"], 1)
+                               if _cs_p["core_pct"] is not None else 0)
 
                 st.markdown(
                     f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});"
@@ -1550,12 +1566,49 @@ def render_portfolio_tab() -> None:
     # ── 故事站 ① 配置總覽（v18.195 故事化 step2b：標示由上而下動線）──
     if _pf_loaded:
         st.markdown("### 📊 ① 配置總覽 — 你的組合現況")
+        # §1：Sheet 本金欄若寫成 `NT$1,000` / `1000元`，原本會靜默變 0，該檔基金
+        # 隨即在本金 / 核心% / 月配息 / 回撤權重全部消失且畫面零提示。
+        # 這裡把 L1 loader 記下的解析失敗列**彙總指名**，使用者才知道去改哪一格。
+        try:
+            from repositories.policy_repository import (  # noqa: PLC0415
+                get_invest_twd_parse_errors as _get_inv_errs,
+            )
+            _inv_errs = _get_inv_errs()
+        except Exception as _e_inv:
+            _inv_errs = []
+            print(f"[tab3] 本金解析回報讀取失敗：[{type(_e_inv).__name__}] {_e_inv}")
+        if _inv_errs:
+            _err_lines = []
+            for _e in _inv_errs[:10]:
+                _who = (_e.get("fund_code") or _e.get("fund_url")
+                        or _e.get("policy_id") or "—")
+                _err_lines.append(
+                    f"- **{_e.get('source', '')} 第 {_e.get('row', '?')} 列**"
+                    f"（{str(_who)[:40]}）：{_e.get('reason', '')}"
+                )
+            st.warning(
+                f"⚠️ **{len(_inv_errs)} 列本金格式無法解析，已以 0 計入** —— "
+                "下方「投入本金 / 核心資產比例 / 預估月配息」都會少算這幾檔。\n\n"
+                + "\n".join(_err_lines)
+                + ("\n- …（其餘 %d 列略）" % (len(_inv_errs) - 10)
+                   if len(_inv_errs) > 10 else "")
+                + "\n\n請在 Google Sheet 把該格改成**純數字**（可含千分位逗號），"
+                "例如 `1,000,000`；不要加 `NT$` / `元` / 中文數字。"
+            )
 
-    # ── v15.1 ② KPI 字卡列：總資產 / 累計報酬 / 核心% / 月配息（新手語言）──
+    # ── v15.1 ② KPI 字卡列：投入本金 / 累計報酬 / 核心% / 月配息（新手語言）──
     if _pf_loaded:
-        _tot_kpi  = sum(f.get("invest_twd",0) or 0 for f in _pf_loaded)
-        _core_kpi = sum(f.get("invest_twd",0) or 0 for f in _pf_loaded if f.get("is_core"))
-        _core_pct_kpi = round(_core_kpi/_tot_kpi*100,1) if _tot_kpi else 0
+        # 核心/衛星唯一真相：金額加權 + policy_tier 優先（見 allocation.py docstring）
+        from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+            format_core_satellite_caption as _fmt_cs_cap,
+            get_core_target_pct as _get_core_target,
+            summarize_core_satellite as _sum_cs,
+        )
+        _cs_kpi = _sum_cs(_pf_loaded,
+                          target_pct=_get_core_target(st.session_state))
+        _tot_kpi  = _cs_kpi["total_twd"]
+        _core_pct_kpi = (round(_cs_kpi["core_pct"], 1)
+                         if _cs_kpi["core_pct"] is not None else 0.0)
         # 累計報酬：以各基金 series 起點 → 當前點，按投資額加權
         _cum_ret_pct = None
         try:
@@ -1595,9 +1648,10 @@ def render_portfolio_tab() -> None:
             "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 16px'>"
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:{GRAY_AA};font-size:11px'>💰 總資產（NTD）</div>"
+            f"<div style='color:{GRAY_AA};font-size:11px'>💰 投入本金（NTD）</div>"
             f"<div style='color:{WHITE};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
-            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>{len(_pf_loaded)} 檔基金加總</div></div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
+            f"{len(_pf_loaded)} 檔手填本金加總 · 非當前市值</div></div>"
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:{GRAY_AA};font-size:11px'>📈 累計報酬</div>"
@@ -1607,23 +1661,50 @@ def render_portfolio_tab() -> None:
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:{GRAY_AA};font-size:11px'>🛡️ 核心資產比例</div>"
             f"<div style='color:{MD_BLUE_300};font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
-            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>衛星 {100-_core_pct_kpi:.1f}%</div></div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
+            f"衛星 {100-_core_pct_kpi:.1f}% · 金額加權</div></div>"
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
             f"border-radius:12px;padding:16px 18px'>"
             f"<div style='color:{GRAY_AA};font-size:11px'>💵 預估月配息</div>"
             f"<div style='color:{MD_ORANGE_300};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
-            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>依各基金配息率粗估</div></div>"
+            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
+            f"以<b>本金</b>×配息率粗估</div></div>"
             "</div>", unsafe_allow_html=True)
+        # 原則 4「多做說明」：三個最容易被誤讀的數字，一次講清楚基數是什麼。
+        st.caption(
+            "💡 **這四格的基數**：\n"
+            "1. **投入本金 ≠ 當前市值** — 本金是你在 Google Sheet 手填的 `invest_twd`"
+            "（放進去多少錢）；下方「③ 持倉戰情（T7 帳本）」的「組合當前市值 (TWD)」"
+            "＝ Σ 單位數 × 最新淨值 × 匯率（現在值多少錢）。兩者差額 = 未實現損益（± 已領配息）。\n"
+            "2. **核心資產比例** — " + _fmt_cs_cap(_cs_kpi) + "\n"
+            "3. **預估月配息** — 以**投入本金**× 年化配息率 ÷ 12 粗估；"
+            "T7 帳本那格是以**當前市值**為基數。淨值下跌時本金基數會**高估**現金流，"
+            "以 T7 的市值版為準。"
+        )
+
+        # ── 以下 4 個都是「風險揭露」元件（總經曝險 / 資料新鮮度 / 持股集中度 /
+        #    產業集中度）。原本 4 個 `except: pass` 讓它們失敗時**畫面完全沒有痕跡**
+        #    ——「沒出現」與「沒風險」長得一模一樣，是 §1 反造假的鏡像違規。
+        #    現在改成：不阻斷主流程，但一律 stderr log + 畫面留一行說明它沒跑成功。
+        def _risk_widget(_label: str, _fn) -> None:
+            try:
+                _fn()
+            except Exception as _e_w:
+                print(f"[tab3 風險揭露] {_label} 渲染失敗："
+                      f"[{type(_e_w).__name__}] {_e_w}")
+                st.caption(
+                    f"⬜ {_label}：本次未能產生（[{type(_e_w).__name__}] "
+                    f"{str(_e_w)[:80]}）—— **這不代表沒有風險**，只代表這一項沒算出來。"
+                )
 
         # ── v19.64 I1：總經 → 組合曝險聯動 banner（讀 Tab1 phase_info，跨 Tab 訊號）──
-        try:
+        def _w_macro_link() -> None:
             from ui.helpers.macro_linkage import render_macro_exposure_link
             render_macro_exposure_link(st.session_state, core_pct=_core_pct_kpi)
-        except Exception:
-            pass
+        _risk_widget("總經曝險聯動提示", _w_macro_link)
 
         # ── v19.62 E3：MoneyDJ 資料新鮮度條（組合層級，所有基金聯合統計）──
-        try:
+        def _w_freshness() -> None:
             from ui.helpers.freshness import render_mj_freshness_banner
             _fresh_items = []
             for _f in _pf_loaded:
@@ -1635,22 +1716,19 @@ def render_portfolio_tab() -> None:
                     "fetched_at": _mj.get("_moneydj_fetched_at", ""),
                 })
             render_mj_freshness_banner(_fresh_items)
-        except Exception:
-            pass
+        _risk_widget("MoneyDJ 資料新鮮度", _w_freshness)
 
         # ── v19.66 I3：穿透式持股集中度摘要（聚合各基金 top_holdings，跨區塊聯動 T5）──
-        try:
+        def _w_conc() -> None:
             from ui.helpers.concentration import render_concentration_summary
             render_concentration_summary(_pf_loaded)
-        except Exception:
-            pass
+        _risk_widget("穿透式持股集中度", _w_conc)
 
         # ── v19.74 I7：穿透式產業集中度摘要（聚合各基金 sector_alloc）──
-        try:
+        def _w_sector() -> None:
             from ui.helpers.concentration import render_sector_concentration_summary
             render_sector_concentration_summary(_pf_loaded)
-        except Exception:
-            pass
+        _risk_widget("穿透式產業集中度", _w_sector)
 
         # ── v15.1 ③ 資產成長曲線（vs 2% 無風險基準，§0 禁 ETF）─────────
         # v18.43：同 code 跨多保單會讓 _value_series.name 重複，join 時欄名衝突拋例外。
@@ -1687,7 +1765,9 @@ def render_portfolio_tab() -> None:
                 _days = (_total_curve.index - _total_curve.index[0]).days
                 _rf_curve = float(_total_curve.iloc[0]) * (1.0 + 0.02) ** (_days / 365.0)
 
-                with st.expander("📈 資產成長曲線（含 2% 無風險基準對比）", expanded=True):
+                # 原 `expanded=True` expander → 拿掉殼（原則 1）
+                st.markdown("#### 📈 資產成長曲線（含 2% 無風險基準對比）")
+                with st.container():
                     fig_curve = go.Figure()
                     fig_curve.add_trace(go.Scatter(
                         x=_total_curve.index, y=_total_curve.values,
@@ -1737,30 +1817,41 @@ def render_portfolio_tab() -> None:
                 hint="可能是某些基金的 NAV 序列太短或缺漏，等資料補齊後重試即可。")
 
     # Hero：核心/衛星配置概況
+    # v(本次)：核心/衛星四處各算各的 → 全部改吃 ui.helpers.portfolio.allocation
+    # （金額加權 + policy_tier 優先 + 目標一律 portfolio_core_pct）。
     if _pf_loaded:
-        _tot  = sum(f.get("invest_twd",0) or 0 for f in _pf_loaded)
-        _core = sum(f.get("invest_twd",0) or 0 for f in _pf_loaded if f.get("is_core"))
-        _core_pct = round(_core/_tot*100,1) if _tot else 0
-        _target   = st.session_state.get("portfolio_core_pct",75)
-        _diff     = round(_core_pct - _target, 1)
+        # 這裡刻意**不**再呼叫 `format_core_satellite_caption`：它吃的是同一份
+        # `_pf_loaded`，輸出與上方「💡 這四格的基數」第 2 點 byte-identical，
+        # 印第二次只是把同一句話貼兩遍。分母 / 級別來源的說明留在那一處
+        # （使用者第一次遇到這個百分比的地方），這裡只補它沒講的：目標值哪來的。
+        from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+            get_core_target_pct as _get_core_target2,
+            summarize_core_satellite as _sum_cs2,
+        )
+        _target   = _get_core_target2(st.session_state)
+        _cs_hero  = _sum_cs2(_pf_loaded, target_pct=_target)
+        _tot  = _cs_hero["total_twd"]
+        _core_pct = (round(_cs_hero["core_pct"], 1)
+                     if _cs_hero["core_pct"] is not None else 0.0)
+        _diff     = round(_cs_hero["diff_pct"], 1) if _cs_hero["diff_pct"] is not None else 0.0
         _dc       = MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN)
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid {GH_BORDER}'>"
-            f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · {fmt_twd(_tot)}" if _tot else "") + "</div>"
+            f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · 投入本金 {fmt_twd(_tot)}" if _tot else "") + "</div>"
             f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
             f"<div><div style='color:{MD_BLUE_300};font-size:11px'>🛡️ 核心資產</div><div style='color:{MD_BLUE_300};font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
             f"<div><div style='color:{MATERIAL_ORANGE};font-size:11px'>⚡ 衛星資產</div><div style='color:{MATERIAL_ORANGE};font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
-            f"<div><div style='color:{_dc};font-size:11px'>目標偏差</div><div style='color:{_dc};font-size:28px;font-weight:900'>{_diff:+.1f}%</div></div>"
+            f"<div><div style='color:{_dc};font-size:11px'>目標偏差（目標核心 {_target:.0f}%）</div><div style='color:{_dc};font-size:28px;font-weight:900'>{_diff:+.1f}%</div></div>"
             f"</div></div>", unsafe_allow_html=True)
 
         # ── 核心/衛星甜甜圈（P1.3 縮成單列 mini chart）──────────────
         # v19.393 V4c:原 N 檔基金 = N 片但只藍/橙 2 色 → 同色 wedge 糊成一片不可讀(dataviz
         # 多切片圓餅反模式)。聚合成「核心 vs 衛星」2 片(與 :1322 保單級 donut 一致);
         # 總額 = Σ invest_twd 不變、核心% 不變,per-fund 明細見下方持倉健診表。
-        _core_amt = sum(max(f.get("invest_twd", 0) or 0, 0) for f in _pf_loaded if f.get("is_core"))
-        _sat_amt  = sum(max(f.get("invest_twd", 0) or 0, 0) for f in _pf_loaded if not f.get("is_core"))
-        _n_core   = sum(1 for f in _pf_loaded if f.get("is_core"))
-        _dn_labels = [f"🛡️ 核心 · {_n_core} 檔", f"⚡ 衛星 · {len(_pf_loaded) - _n_core} 檔"]
+        _core_amt = _cs_hero["core_twd"]
+        _sat_amt  = _cs_hero["sat_twd"]
+        _n_core   = _cs_hero["n_core"]
+        _dn_labels = [f"🛡️ 核心 · {_n_core} 檔", f"⚡ 衛星 · {_cs_hero['n_sat']} 檔"]
         _dn_values = [_core_amt, _sat_amt]
         _dn_colors = [MD_BLUE_300, MATERIAL_ORANGE]
         _alert     = abs(_diff) > 10
@@ -1788,17 +1879,25 @@ def render_portfolio_tab() -> None:
                 font=dict(color=MD_BLUE_300))],
         )
         st.plotly_chart(fig_dn, use_container_width=True)
-        _target2 = st.session_state.get("portfolio_core_pct", 75)
-        if _alert:
+        if not _cs_hero["is_amount_weighted"]:
             st.caption(
-                f"⚠️ 配置偏離 {_diff:+.1f}%（核心 {_core_pct}% vs 目標 {_target2}%）— "
+                "⬜ 全部 %d 檔都沒填投入本金 → 無法算金額比例，上方 0%% 不代表真的沒有核心資產。"
+                % _cs_hero["n_funds"]
+            )
+        elif _alert:
+            st.caption(
+                f"⚠️ 配置偏離 {_diff:+.1f}%（核心 {_core_pct}% vs 目標 {_target:.0f}%）— "
                 f"{'核心過重，可贖回轉衛星' if _diff > 0 else '衛星過重，可獲利轉核心'}"
             )
         else:
             st.caption(
                 f"✅ 配置健康（核心 {_core_pct}% / 衛星 {100-_core_pct:.1f}%，"
-                f"偏差 {_diff:+.1f}%，目標 {_target2}%±10%）"
+                f"偏差 {_diff:+.1f}%，目標 {_target:.0f}%±10%）"
             )
+        st.caption(
+            "📐 這裡的核心% 與上方「🛡️ 核心資產比例」字卡是同一個數字（同一份持倉、"
+            "同一套算法）；分母與級別來源的說明見上方「💡 這四格的基數」第 2 點。"
+            "目標值來自下方「⚙️ 組合設定」的核心比例 slider。")
         # v18.192：教學化 — 核心/衛星 + 配息覆蓋率白話文（收合、不藏數據）
         render_metric_explainer(["core_satellite", "div_coverage"])
 
@@ -2072,23 +2171,30 @@ def render_portfolio_tab() -> None:
                 return {"text": "⏳ 建議計算失敗",
                         "code": "ERROR", "color": "grey"}
 
-        # v18.37 基金清單按保單號碼分組成 expander（預設收合）
+        # v18.37 基金清單按保單號碼分組成 expander。
         # 不再使用 v18.35 per-fund 內層 expander（外層保單 expander 已提供摺疊功能；
         # Streamlit 禁止 expander 巢狀，這裡刻意把詳細內容攤平在保單 expander 內）。
+        # 預設 **展開**（原則 1）：這一區是「我的持倉現況」主資料 —— 每檔的 NAV /
+        # 配息率 / Sharpe / σ / 建議都在裡面，收起來等於把主角藏在摺疊層後面。
         from collections import defaultdict as _dd_pf_main
+        from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+            resolve_core_flag as _core_flag_card,
+        )
         _pf_by_pid: dict = _dd_pf_main(list)
         for i, pf_item in enumerate(pf):
             _pid_main = str(pf_item.get("policy_id", "") or "").strip() or "(未綁保單)"
             _pf_by_pid[_pid_main].append((i, pf_item))
 
         for _pid_main, _items_main in _pf_by_pid.items():
-          with st.expander(f"📋 保單 **{_pid_main}**　·　{len(_items_main)} 檔基金", expanded=False):
+          with st.expander(f"📋 保單 **{_pid_main}**　·　{len(_items_main)} 檔基金", expanded=True):
             for i, pf_item in _items_main:
                 status_icon = "✅" if (pf_item.get("loaded") and not pf_item.get("load_error")) else ("❌" if pf_item.get("load_error") else "⏳")
                 m_i    = pf_item.get("metrics",{})
                 rm_i   = pf_item.get("risk_metrics",{})
                 rt_i   = rm_i.get("risk_table",{})
-                role_i = "🛡️核心" if pf_item.get("is_core") else ("⚡衛星" if pf_item.get("is_core") is False else "")
+                # 走全站唯一真相（policy_tier 優先），否則同一檔會「卡片寫衛星、
+                # KPI 卻把它算進核心」——原本這裡只讀 is_core，無視 Sheet 的 policy_tier。
+                role_i = "🛡️核心" if _core_flag_card(pf_item) else "⚡衛星"
                 _nav_i  = m_i.get("nav") or (pf_item.get("moneydj_raw") or {}).get("nav_latest","")
                 _adr_i  = (pf_item.get("moneydj_raw") or {}).get("moneydj_div_yield") or m_i.get("annual_div_rate","")
                 _sh_i   = (rt_i.get("一年") or {}).get("Sharpe","")
@@ -2393,7 +2499,13 @@ def render_portfolio_tab() -> None:
                     for _r in _ok_health
                     if _r.get("ok") and _r.get("_fund_raw")
                 ]
-                _render_health_tbl(_ok_health, funds_extra=_funds_extra)
+                # source_tab="portfolio"：本頁上方另有一個口徑完全不同的核心%
+                # （分母 / 分類 / 目標三項全不同）。宣告身分後，共用 render 會把
+                # 這一區的「🧭 核心/衛星配置檢查」降為唯讀對照 + 印出兩把尺的差異，
+                # 不再輸出與上方方向相反的再平衡建議（2026-08-06 稽核 🔴 必修 3）。
+                # 註：該 render 的預設分支就是唯讀，本參數是「講清楚」而非「開關」。
+                _render_health_tbl(_ok_health, funds_extra=_funds_extra,
+                                   source_tab="portfolio")
 
                 # v19.418 — 🔄 輪動配對建議(持倉健診也顯示;user 2026-07-28 要求兩邊都要)。
                 # 重用 _funds_extra;widget key 用 'pf_rot_' 前綴避免與健檢 Tab 的 'rot_' 撞鍵。
@@ -2449,15 +2561,27 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     if not loaded:
         return  # 組合空，不掛 widget
 
+    # 核心/衛星走全站唯一真相（金額加權 + policy_tier 優先 + 目標吃 portfolio_core_pct）。
+    # 原本這裡是「檔數比例 + 寫死 80%」，與畫面上的金額版兩套數字，AI 會照著錯的講。
+    from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+        get_core_target_pct as _get_core_target_ai,
+        resolve_core_flag as _core_flag_ai,
+        summarize_core_satellite as _sum_cs_ai,
+    )
     n_total = len(loaded)
-    n_core = sum(1 for f in loaded if f.get("is_core", True))
-    n_sat = n_total - n_core
-    core_pct = (n_core / n_total * 100) if n_total else 0
+    _target_ai = _get_core_target_ai(st.session_state)
+    _cs_ai = _sum_cs_ai(loaded, target_pct=_target_ai)
+    n_core = _cs_ai["n_core"]
+    n_sat = _cs_ai["n_sat"]
+    core_pct = _cs_ai["core_pct"]
+    _core_pct_txt = (f"{core_pct:.0f}%（金額加權）"
+                     if core_pct is not None else "—（未填投入本金，無法算金額比例）")
+    _sat_pct_txt = (f"{100 - core_pct:.0f}%" if core_pct is not None else "—")
 
     lines = [
         f"## 組合快照（{n_total} 檔）",
-        f"- 核心 {n_core} 檔（{core_pct:.0f}%）｜衛星 {n_sat} 檔（{100 - core_pct:.0f}%）",
-        "- MK 建議：核心 80% / 衛星 20%",
+        f"- 核心 {n_core} 檔 · 佔資金 {_core_pct_txt}｜衛星 {n_sat} 檔 · 佔資金 {_sat_pct_txt}",
+        f"- 使用者設定的核心目標：{_target_ai:.0f}%",
     ]
     _shown = 0
     for f in loaded[:5]:
@@ -2467,7 +2591,7 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
         sharpe = m.get("sharpe", "—")
         std_1y = m.get("std_1y", "—")
         lines.append(
-            f"- {name}（{'核心' if f.get('is_core', True) else '衛星'}）："
+            f"- {name}（{'核心' if _core_flag_ai(f) else '衛星'}）："
             f"1Y 報酬 {ret_1y}%　|　Sharpe {sharpe}　|　波動 {std_1y}%"
         )
         _shown += 1

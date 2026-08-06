@@ -7,7 +7,9 @@
 - **操盤評分** = clamp(50 + (上檔 − 下檔) / 2, 0, 100)
   例:大盤−50/基金−10(下檔20)+ 追漲(上檔100)→ 90 分;下檔120(比大盤慘)→ 40 分。
 
-§7:基準依幣別 —— TWD → 台股(TWII);其餘(USD/EUR/…)→ S&P500(SPX)。
+§7 / §4.1:基準依幣別 —— TWD → 台股(TWII);USD → S&P500(SPX);
+**其餘幣別(EUR/AUD/ZAR/CNH/JPY…)→ None(留白,不比)**。基金 NAV 是**原幣**,
+S&P 500 是 USD 計價,直接相減等於把匯率變動算成經理人績效(2026-08-06 稽核 必修 7)。
 §1:大盤上漲月 / 下跌月數任一 < min_months → None(不給假精確);計算異常 → None。
 §4.5:月底 resample(closed/label 右閉,不引未來)後對齊共同月;§4.6 短歷史誠實 None。
 純函式,零 IO(基準序列由呼叫端傳入)。
@@ -28,12 +30,34 @@ _BLANK: dict = {"upside": None, "downside": None, "score": None,
                 "n_up": 0, "n_down": 0, "low_confidence": False}
 
 
-def benchmark_for_currency(ccy: str) -> str:
-    """依計價幣別選大盤基準:TWD → TWII(台股);其餘 → SPX(S&P500)。"""
+_TWD_ALIASES = ("TWD", "NTD", "TW", "台幣", "新台幣")
+_USD_ALIASES = ("USD", "美元", "美金")
+
+
+def benchmark_for_currency(ccy: str) -> "str | None":
+    """依計價幣別選大盤基準:TWD → TWII(台股);USD → SPX(S&P500);**其餘 → None**。
+
+    §4.1 跨幣別:基金 NAV 是**原幣**,指數是自己的計價幣。EUR / AUD / ZAR / CNH / JPY
+    計價的保單連結基金若對 SPX 比,等於把「歐元兌美元變動」算進經理人的操作能力 ——
+    上/下檔捕捉率、操盤評分、vs 大盤% 全被匯率污染,再往下傳到換標策略分的
+    「vs 大盤 15 分」,足以把一檔基金推過 🔴 賣出/平轉 的門檻。
+
+    **處置選擇(必修 7)**:回 None 留白,而非「把 NAV 換算成 USD 再比」。理由 ——
+    (a) 換算需要**每日**歷史匯率序列,本站目前只有 USDTWD 一條(`fx_regime`),
+        EUR/AUD/ZAR/JPY 兌 USD 的日頻歷史沒有現成來源 → 硬做只能用即期匯率回推,
+        那是把今天的匯率套到過去,屬 §2.3 lookahead;
+    (b) 即使換到 USD,對「該不該續抱這檔歐元保單基金」而言,正確的基準也是
+        歐股指數而非 S&P 500 —— 換幣別解決不了**基準選錯**的問題;
+    (c) §1:寧可留白讓 user 知道沒證據,也不給一個把匯率當績效的數字。
+    留白後 `switch_score` 會把 vs 大盤 15 分**退出分母**(不是計 0 分),
+    並在「策略分覆蓋」欄標明,不會誤傷這些基金的評分。
+    """
     c = (ccy or "").strip().upper()
-    if c in ("TWD", "NTD", "TW", "台幣", "新台幣"):
+    if c in _TWD_ALIASES:
         return "TWII"
-    return "SPX"
+    if c in _USD_ALIASES:
+        return "SPX"
+    return None
 
 
 def _monthly_returns(nav) -> "pd.Series | None":

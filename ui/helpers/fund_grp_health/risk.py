@@ -16,8 +16,16 @@ def hwm_sigma_by_code(funds: list) -> dict:
     out: dict = {}
     try:
         from services.precision_service import calc_hwm_sigma_levels
-    except Exception:  # noqa: BLE001 — 模組載入失敗 → 全檔缺值,不炸
-        return {(_f.get("code") or "?"): {} for _f in funds}
+    except Exception as _e_imp:  # noqa: BLE001 — 模組載入失敗 → 全檔缺值,不炸
+        # 原本靜默:整組 σ/HWM 5 欄一起消失,user 只看到大表少了一整區,以為功能壞了。
+        # 補 log + 讓「HWM 位階」欄自己說出是**載入失敗**,不是這些基金沒資料(§1)。
+        import sys as _sys_imp
+        print(f"[grp_health/risk] precision_service 載入失敗,σ/HWM 欄全缺:"
+              f"{type(_e_imp).__name__}: {_e_imp}", file=_sys_imp.stderr)
+        _err = f"⬜ σ 模組載入失敗({type(_e_imp).__name__})"
+        return {(_f.get("code") or "?"): {
+            "現價": "—", "HWM": "—", "距 HWM %": "—", "σ rank": "—", "HWM 位階": _err,
+        } for _f in funds}
     for _f in funds:
         _code = _f.get("code", "?")
         _series = _f.get("series")
@@ -75,6 +83,15 @@ def _lookup_risk_table(rm: dict, *zh_keys: str):
     return None
 
 
+def _local_first(local, rm: dict, *zh_keys):
+    """本地 metrics 值優先,**只有真的缺(None)** 才退到 MoneyDJ wb07 風險表。
+
+    §1:不用 `a or b` —— 0.0 是 falsy 但為合法值(Sharpe / Alpha 恰好 0)。
+    """
+    _v = _safe_num(local)
+    return _v if _v is not None else _lookup_risk_table(rm, *zh_keys)
+
+
 def risk_compare_by_code(funds: list) -> dict:
     """⑧ 風險指標逐檔欄位(keyed by code):σ / Sharpe / Sortino / Alpha / Beta。
 
@@ -91,11 +108,15 @@ def risk_compare_by_code(funds: list) -> dict:
         _m = _f.get("metrics") or {}
         _rm = _f.get("risk_metrics") or _mj.get("risk_metrics") or {}
 
-        _sigma = _safe_num(_m.get("std_1y")) or _lookup_risk_table(_rm, "標準差", "年化標準差")
-        _sharpe = _safe_num(_m.get("sharpe")) or _lookup_risk_table(_rm, "Sharpe", "Sharpe Ratio", "夏普值")
+        # §1:`a or b` 會把**合法的 0.0** 誤當缺值退到 fallback ——
+        # Sharpe / Alpha 恰好 0.00(報酬等於無風險利率 / 零超額)是真實可能值,
+        # 用 `or` 會改抓 MoneyDJ wb07 另一個期間的數字,兩個來源在同一格悄悄互換。
+        # `_local_first` 改用顯式 `is None` 判斷,0.0 保留為 0.0。
+        _sigma = _local_first(_m.get("std_1y"), _rm, "標準差", "年化標準差")
+        _sharpe = _local_first(_m.get("sharpe"), _rm, "Sharpe", "Sharpe Ratio", "夏普值")
         _sortino = _safe_num(_m.get("sortino"))  # wb07 無此欄,本地未算 → —
-        _alpha = _safe_num(_m.get("alpha")) or _lookup_risk_table(_rm, "Alpha", "α")
-        _beta = _safe_num(_m.get("beta")) or _lookup_risk_table(_rm, "Beta", "β")
+        _alpha = _local_first(_m.get("alpha"), _rm, "Alpha", "α")
+        _beta = _local_first(_m.get("beta"), _rm, "Beta", "β")
 
         out[_code] = {
             "σ (年化%)": _fmt(_sigma), "Sharpe": _fmt(_sharpe),

@@ -59,7 +59,12 @@ def render_long_term_section(
 
     st.divider()
     st.markdown("## 🌳 長期座標")
-    st.caption("regime / 結構 ｜ 美林時鐘 + 美股流動性熱錢 + 資本防線")
+    # 2026-08-05 稽核 🟡 建議 10:副標原本寫死「regime / 結構」—— `regime` 是英文
+    # 行話,且 `shared.macro_buckets.BUCKET_META` 早已把它改成白話,總表 ② 依據表
+    # 的 🌳 那一列用的就是 registry 版,兩處對不上。改為**從同一份 SSOT 導出**,
+    # 副標從此只有一份真相(§3.3;L3 → L0 合法下行,同 beginner_view 既有做法)。
+    from shared.macro_buckets import BUCKET_META as _BM_LT  # noqa: PLC0415
+    st.caption(f"{_BM_LT['long']['sub']} ｜ 美林時鐘 + 美股流動性熱錢 + 資本防線")
 
     # ── v19.188 💵 美股流動性 6 卡片（短線雷達範本：燈號 + 值 + 白話 + mini sparkline + SPEC 線）──
     # user 2026-06-27:基金短線雷達為範本,長期桶也改成小圖+SPEC 卡片;Raw data 收進下方 expander。

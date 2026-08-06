@@ -89,10 +89,22 @@ def test_none_inputs():
 
 def test_benchmark_for_currency():
     assert benchmark_for_currency("USD") == "SPX"
-    assert benchmark_for_currency("EUR") == "SPX"
     assert benchmark_for_currency("美元") == "SPX"
     assert benchmark_for_currency("TWD") == "TWII"
     assert benchmark_for_currency("台幣") == "TWII"
+
+
+def test_benchmark_none_for_other_currencies():
+    """§4.1:非 TWD/USD → None,不可退回 SPX。
+
+    原幣 NAV 減 USD 指數報酬 = 把匯率變動算成經理人績效,再往下污染
+    上/下檔捕捉率、操盤評分、vs 大盤%,乃至換標策略分的 vs大盤 15 分。
+    (本條在修正前為**舊行為衝突紅** —— 舊版對 EUR 回 "SPX"。)
+    """
+    for _c in ("EUR", "AUD", "ZAR", "CNH", "JPY", "GBP"):
+        assert benchmark_for_currency(_c) is None, f"{_c} 不該退回 SPX"
+    assert benchmark_for_currency("") is None
+    assert benchmark_for_currency(None) is None
 
 
 def test_gap_month_return_dropped():

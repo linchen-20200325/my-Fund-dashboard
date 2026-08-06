@@ -72,10 +72,15 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
 
     st.divider()
     st.markdown("### 💼 逐檔深度分析（投資試算 + TER + 持股）")
+    st.caption("以本頁本金為基準,逐檔算出**可申購單位數 / 每月配息 TWD / 配息來源"
+               "(真實記錄 or 年化估算)**+ 總費用率與前十大持股。")
     for _f in funds:
         _code = _f.get("code", "?")
         _name = (_f.get("name") or _code)[:30]
-        with st.expander(f"💎 {_name}　·　{_code}", expanded=False):
+        # 原則 1「不要闔上的資料」:這裡面是**每檔的實際現金流數字**(不是圖、不是
+        # 按鈕),健診上限 10 檔不會爆版 —— user 開健診就是要看「這 100 萬每月拿多少」。
+        # (仍維持摺疊的是:Bollinger N 張大圖、AI 觸發鈕、純說明文 —— 那些摺疊裡沒有資料。)
+        with st.expander(f"💎 {_name}　·　{_code}", expanded=True):
             try:
                 _render_investment_calc(_f, principal_twd)
             except Exception as e:

@@ -58,8 +58,14 @@ def test_compute_health_kpis_mk_labels():
     assert out["n_take"] == 1
 
 
-def test_compute_health_kpis_ratio_label():
-    """配置比例與 80/20 落差 delta。"""
+def test_compute_health_kpis_ratio_label_is_fund_count_not_amount():
+    """ratio_label 是**檔數**口徑，且不帶任何目標值比較。
+
+    修正前會紅（舊行為衝突紅）：舊版 label 是「核心 70% / 衛星 30%」百分比，
+    且 ratio_delta 會拿檔數去比寫死的 80 —— 與「① 配置總覽」的金額版目標偏差
+    給出相反的再平衡結論。金額口徑的唯一真相在
+    ui/helpers/portfolio/allocation.summarize_core_satellite。
+    """
     funds = [{"code": f"F{i}", "loaded": True} for i in range(10)]
     mk_df = pd.DataFrame([
         *[{"MK_Class": "Core",      "Price_Zone": "Hold", "Health_Check": "OK", "Principal_Erosion": "Healthy"}] * 7,
@@ -67,15 +73,18 @@ def test_compute_health_kpis_ratio_label():
     ])
     out = compute_health_kpis(funds, mk_df)
     assert out["n_classed"] == 10
+    # pct_core / pct_sat 仍保留（檔數百分比），供其他 caller 用
     assert out["pct_core"] == 70
     assert out["pct_sat"] == 30
-    assert "核心 70%" in out["ratio_label"]
-    assert "衛星 30%" in out["ratio_label"]
-    assert "-10%" in out["ratio_delta"]   # 70 - 80 = -10
+    # label 改成檔數，且不再出現百分比或目標值
+    assert "7 檔" in out["ratio_label"]
+    assert "3 檔" in out["ratio_label"]
+    assert "%" not in out["ratio_label"]
+    assert out["ratio_delta"] is None
 
 
-def test_compute_health_kpis_ratio_at_target():
-    """80/20 完全符合時 delta 顯示『符合』。"""
+def test_compute_health_kpis_no_hardcoded_target_comparison():
+    """檔數口徑不得再與任何寫死目標比較（修正前會紅：舊版回「符合 …」字串）。"""
     funds = [{"code": f"F{i}", "loaded": True} for i in range(10)]
     mk_df = pd.DataFrame([
         *[{"MK_Class": "Core",      "Price_Zone": "Hold", "Health_Check": "OK", "Principal_Erosion": "Healthy"}] * 8,
@@ -83,7 +92,7 @@ def test_compute_health_kpis_ratio_at_target():
     ])
     out = compute_health_kpis(funds, mk_df)
     assert out["pct_core"] == 80
-    assert out["ratio_delta"] == "符合 策略3 80/20"
+    assert out["ratio_delta"] is None
 
 
 def test_compute_health_kpis_cashflow_eat_principal():

@@ -7,8 +7,43 @@
 回傳 row dict:成功含 ③ 健診總表所有欄位(持有 meta / 全期實際·年化 % / 吃本金 / MK 3-3-3
 + `_fund_raw`/`_principal_twd`/`_detail` 等底線私有欄供上層算 ①②/σ);任一步失敗回
 `{code, ok: False, error}`。§1:缺幣別 / NAV / FX 誠實回 error,不矇預設值。
+
+另含 `nav_freshness_label`(純函式):把 row 的 `_nav_date` 換成「🟢/🟠/🔴 + 落後天數」,
+供批次大表分辨「週末沒開盤」與「早就停售」(§4.6);健診 Tab 走既有 banner,不用本欄。
 """
 from __future__ import annotations
+
+
+def nav_freshness_label(nav_date_iso, today=None) -> tuple:
+    """NAV 日期 → (顯示標籤, 落後天數|None)。純函式,零 IO、零 streamlit。
+
+    §4.6:批次大表無法像 Tab② 那樣掛新鮮度 banner(400 檔不可能逐檔看 chip),
+    但「週末沒開盤(正常)」與「2023 年就停售(NAV 死掉)」在一張 48 欄的表裡長得
+    一模一樣 —— 停售基金照樣算得出 σ rank / 操盤評分 / 策略燈號。本欄把落後天數
+    攤在表上,讓 user 可排序 / 篩選。
+
+    燈號門檻走 `shared.signal_thresholds` SSOT(與 `ui/helpers/io/freshness.py`
+    的 banner 同源,§3.3 不另立 inline 數字);時區用 TW(UTC+8,§4.1)。
+    無日期 / 格式不明 → `("⬜ 無淨值日期", None)`,**不猜**(§1)。
+    """
+    import datetime as _dt
+    from shared.signal_thresholds import MJ_FRESH_DAYS_GREEN, MJ_FRESH_DAYS_YELLOW
+
+    _s = str(nav_date_iso or "").strip()
+    if not _s:
+        return ("⬜ 無淨值日期", None)
+    _tw = _dt.timezone(_dt.timedelta(hours=8))
+    _today = today or _dt.datetime.now(_tw).date()
+    try:
+        _nd = _dt.datetime.strptime(_s[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return ("⬜ 無淨值日期", None)
+    _age = (_today - _nd).days
+    if _age <= MJ_FRESH_DAYS_GREEN:
+        return (f"🟢 {_age}d", _age)
+    if _age <= MJ_FRESH_DAYS_YELLOW:
+        return (f"🟠 {_age}d", _age)
+    return (f"🔴 {_age}d(疑停售/清算)", _age)
 
 
 def process_one_fund(

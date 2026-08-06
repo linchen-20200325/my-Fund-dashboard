@@ -56,6 +56,28 @@ def _rows(indicators=None, *, phase_info=None, news_items=None):
         n_indicators=25)
 
 
+def _notes(indicators=None, *, phase_info=None, news_items=None,
+           composite_action="多頭市場強勁") -> str:
+    """表下 footnotes 併成一段 —— 2026-08-06 必修 3 之後,欄內放不下的長說明
+    (兩套切點揭露 / 完整門檻 / 全綠判讀規則 / 白話行動)住在這裡而不是格子裡。
+
+    `st.dataframe` 的字串格會截斷,實測 🌳 長期列斷在「…① 結論燈同一」——
+    也就是 §1 要求的揭露只顯示到一半。本輪把長句搬到表下同一則 caption,
+    因此原本斷言「切點在說明欄」的幾條改為斷言「切點在表下」。
+    """
+    from ui.helpers.macro.beginner_view import (
+        build_evidence_footnotes,
+        compute_five_bucket_summary,
+    )
+    _s = compute_five_bucket_summary(
+        indicators or {},
+        phase_info=_PHASE if phase_info is None else phase_info,
+        news_items=news_items,
+    )
+    return "\n".join(build_evidence_footnotes(
+        _s, composite_action=composite_action))
+
+
 def _note_col() -> str:
     """「說明」欄名從 SSOT 取(全形括號肉眼難辨,重打一次 = 埋假警報)。"""
     from ui.helpers.macro.beginner_view import EVIDENCE_COLUMNS
@@ -79,11 +101,11 @@ class TestPhaseCutoffDisclosure:
             _MACRO_SCORE_DANGER_MAX,
             _MACRO_SCORE_HEALTHY_MIN,
         )
-        _note = _row(_rows(), "長期")[_note_col()]
+        _note = _notes()
         for _v in (_MACRO_SCORE_HEALTHY_MIN, _MACRO_SCORE_DANGER_MAX,
                    _BUY_SCORE_10, _HOLD_SCORE_10):
             assert f"{float(_v):.1f}" in _note, (
-                f"說明欄沒揭露切點 {_v} —— 兩把尺的差異又變成看不見的:{_note!r}")
+                f"表下沒揭露切點 {_v} —— 兩把尺的差異又變成看不見的:{_note!r}")
 
     def test_conclusion_light_cutoff_is_read_not_retyped(self, monkeypatch):
         """§3.3 反捏造的**真檢查**:把結論燈的加碼門檻換掉,說明欄必須跟著變。
@@ -91,14 +113,27 @@ class TestPhaseCutoffDisclosure:
         若有人圖方便在文案裡寫死一份 6.5,這條會紅(說明欄仍印舊值)。
         **修正前必紅**(那句話整個不存在)。"""
         monkeypatch.setattr("services.macro.action_light._BUY_SCORE_10", 9.1)
-        _note = _row(_rows(), "長期")[_note_col()]
+        _note = _notes()
         assert "9.1" in _note, f"結論燈門檻是寫死的第二份,不是讀 SSOT:{_note!r}"
 
     def test_own_cutoff_is_read_not_retyped(self, monkeypatch):
         """同上,反向守本表自己那組切點。"""
         import ui.helpers.macro.beginner_view as _mbv
         monkeypatch.setattr(_mbv, "_MACRO_SCORE_HEALTHY_MIN", 7.3)
-        assert "7.3" in _row(_rows(), "長期")[_note_col()]
+        assert "7.3" in _notes()
+
+    def test_long_row_cell_stays_short_enough_to_survive_truncation(self):
+        """2026-08-06 必修 3(瀏覽器實測):`st.dataframe` 的字串格會截斷,
+        🌳 長期列原本斷在「…① 結論燈同一」。欄內只留短句 →
+        **修正前必紅**(舊行為與斷言衝突,非 ImportError:舊格內含 98 字的切點揭露)。
+
+        刻意不比對文案字面值(user 隨時可改字),改斷言「切點數字不在格子裡、
+        但在表下」—— 也就是這次搬家真的發生了。"""
+        from services.macro.action_light import _BUY_SCORE_10
+        _cell = _row(_rows(), "長期")[_note_col()]
+        assert f"{float(_BUY_SCORE_10):.1f}" not in _cell, (
+            f"長句還留在格子裡,會被 dataframe 截斷:{_cell!r}")
+        assert f"{float(_BUY_SCORE_10):.1f}" in _notes(), "搬出去卻沒搬到表下 = 資訊掉了"
 
     def test_scale_note_survives_alongside_the_new_disclosure(self):
         """回歸:新增揭露不得把原本「位階 / 恆非負」那句擠掉
@@ -164,11 +199,18 @@ class TestNoteMatchesTheActualReading:
         ⚠️ 2026-08-05:改餵**服務層真實的 key + 真實的欄位**。這顆的官方衰退線
         是對 3 月移動平均定義的,服務層把它另存一欄;餵當期值那一欄等於在測一條
         production 走不到、且口徑不對的路(§4.1)。
+
+        ⚠️ 2026-08-06 必修 3:欄內改放 note 的**短版**(只截掉尾端補充括號,
+        不改寫任何字);未截斷的完整 note 搬到表下 caption。兩邊都驗,
+        「短版是從 registry 截出來的」與「完整版沒掉」同時守住。
         """
         from shared.macro_buckets import SPECS_BY_KEY
-        _inf = _row(_rows({"LEI": {"value": 0.1, "ma3": -0.85}}), "拐點")
+        from ui.helpers.macro.beginner_view import _spec_threshold_short
+        _ind = {"LEI": {"value": 0.1, "ma3": -0.85}}
+        _inf = _row(_rows(_ind), "拐點")
         assert "CFNAI" in _inf["讀數"]
-        assert SPECS_BY_KEY["cfnai"].note in _inf[_note_col()]
+        assert _spec_threshold_short(SPECS_BY_KEY["cfnai"].note) in _inf[_note_col()]
+        assert SPECS_BY_KEY["cfnai"].note in _notes(_ind), "完整門檻沒出現在表下"
 
     def test_thresholds_are_read_from_registry_not_retyped(self, monkeypatch):
         """§3.3:門檻描述改在 registry,說明欄必須跟著變。
@@ -180,22 +222,38 @@ class TestNoteMatchesTheActualReading:
         assert "XX 哨兵門檻 XX" in _mid[_note_col()]
 
     def test_short_row_has_a_threshold_even_when_green(self):
-        """🎯 短線列全綠時讀數仍是數字(VIX 讀數),所以照樣指得出門檻,
-        不該退回通用規則。"""
+        """🎯 短線列**在 VIX 真的有讀數時**全綠,讀數仍是數字,照樣指得出門檻。
+
+        ⚠️ 2026-08-06 必修 1:原本這裡餵 `{}`(完全沒有 VIX)也期望指得出 VIX 門檻
+        —— 那正是被修掉的 bug:`_v("VIX") or 0.0` 讓缺值變成「VIX 0.0 正常」🟢。
+        現在改餵一個真的平靜讀數;「沒有 VIX 時會怎樣」由
+        `test_audit_20260806_tab1_honesty.py` 反向守著。
+        """
         from shared.macro_buckets import SPECS_BY_KEY
-        _short = _row(_rows(), "短線")
-        assert SPECS_BY_KEY["vix"].note in _short[_note_col()]
+        from ui.helpers.macro.beginner_view import _spec_threshold_short
+        _short = _row(_rows({"VIX": {"value": 15.0}}), "短線")
+        assert "15.0" in _short["讀數"]
+        assert _spec_threshold_short(SPECS_BY_KEY["vix"].note) in _short[_note_col()]
 
     def test_all_green_rows_explain_when_a_number_will_appear(self):
-        """全綠時讀數是**狀態詞不是數字**(「三項皆健康」/「全綠」),
-        此時說明欄答「什麼情況會變成數字」,而**不得**硬塞一個沒觸發的門檻
-        (硬塞會讓讀者以為畫面正在講那一顆)。"""
+        """全綠時讀數是**狀態詞不是數字**,此時說明欄答「什麼情況會變成數字」,
+        而**不得**硬塞一個沒觸發的門檻(硬塞會讓讀者以為畫面正在講那一顆)。
+
+        ⚠️ 2026-08-06 必修 3:76 字的完整規則在格子裡只顯示得到「…僅限本列算」,
+        因此欄內改放短指路、全文搬表下。兩邊都驗。
+        """
         from shared.macro_buckets import SPECS_BY_KEY
-        from ui.helpers.macro.beginner_view import _NO_SPEC_READ_RULE
-        _r = _rows()
+        from ui.helpers.macro.beginner_view import (
+            _NO_SPEC_READ_RULE,
+            _NO_SPEC_SHORT,
+        )
+        _ind = {"PMI": {"value": 55.0}, "SAHM": {"value": 0.1}}
+        _r = _rows(_ind)
         for _face in ("中期", "拐點"):
             _note = _row(_r, _face)[_note_col()]
-            assert _NO_SPEC_READ_RULE in _note
+            assert _NO_SPEC_SHORT in _note
+            assert _NO_SPEC_READ_RULE not in _note, "76 字全文留在格子裡會被截斷"
+        assert _notes(_ind).count(_NO_SPEC_READ_RULE) >= 2, "全文沒搬到表下 = 掉資訊"
         assert SPECS_BY_KEY["pmi"].note not in _row(_r, "中期")[_note_col()]
 
     def test_unknown_spec_key_fails_loud(self):

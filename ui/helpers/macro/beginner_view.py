@@ -158,6 +158,31 @@ _UNEMP_ELEVATED_THRESHOLD: float = 5.0     # 失業率 > 5% = 偏高
 _SLOOS_TIGHTENING_THRESHOLD: float = 50.0  # SLOOS > 50 = 銀行收緊
 
 
+def _participation(probe) -> tuple[list, list]:
+    """`probe` = ((顯示名, 值), ...) → (真的取到值的名字, 沒取到的名字)。
+
+    2026-08-05 稽核 🔴 必修 1 的共用件:桶的 headline 只能宣稱**真的算過**的那幾顆。
+    """
+    return ([_n for _n, _val in probe if _val is not None],
+            [_n for _n, _val in probe if _val is None])
+
+
+def _all_clear_headline(probe) -> str:
+    """沒有任何一項越線時的 headline —— 點名算過的、標出沒取到的(§1)。
+
+    原本三個桶各寫死一句「PMI/CPI/失業 三項皆健康」「Sahm/倒掛/CFNAI/SLOOS 全綠」,
+    但那幾顆只要有一顆沒抓到,畫面照樣宣告全員健康 —— 把「沒問到」講成「問過了沒事」。
+    缺的那幾顆改標「未取得」,讀者才分得出「沒事」與「不知道」。
+    """
+    _got, _absent = _participation(probe)
+    if not _got:
+        return "／".join(_n for _n, _ in probe) + " 皆未取得"
+    _txt = "／".join(_got) + " 皆未越線"
+    if _absent:
+        _txt += f"；{'／'.join(_absent)} 未取得"
+    return _txt
+
+
 def compute_four_horizon_summary(
     indicators: Optional[dict],
     phase_info: Optional[dict] = None,
@@ -203,7 +228,10 @@ def compute_four_horizon_summary(
         except (TypeError, ValueError):
             return None
 
-    _level_to_color = {"green": _C_GREEN, "yellow": _C_YELLOW, "red": _C_RED}
+    # gray 於 2026-08-05 稽核 🔴 必修 1 加入:一顆指標都沒取到的桶不得亮綠燈
+    # (綠 = 問過了沒事;沒問到是另一回事,§1)。色票沿用五桶版既有的 TRAFFIC_NEUTRAL。
+    _level_to_color = {"green": _C_GREEN, "yellow": _C_YELLOW, "red": _C_RED,
+                       "gray": TRAFFIC_NEUTRAL}
     _level_to_emoji = _LEVEL_EMOJI   # status.py `_TABLE` SSOT(見模組頂部)
 
     # ═══ 🌳 長期:regime ═══
@@ -236,14 +264,17 @@ def compute_four_horizon_summary(
     # (先觸發者勝),② 依據表的「說明」欄若寫死某一個指標的門檻,遇到另一個指標
     # 命中時就答非所問。改由這裡回報身分,表格層再據此查 registry 取該指標門檻
     # —— UI 層不逆向 parse 顯示字串(那是第二份真相且一改文案就散)。
-    # 2026-08-05 稽核:失業率讀的 key 服務層從來沒產生過 → 恆 None,這一桶
-    # 實際只掃了 PMI / CPI 兩顆。key 一律以服務層寫入名為準(漂移由
-    # `tests/test_audit_20260805_tab1_wiring.py` 的 key 漂移鎖守)。
-    # 同時清掉一串同樣不存在的別名 fallback:`X or Y` 鏈裡的 Y 若永遠是 None,
-    # 它不是備援,是讓人誤以為有備援的裝飾(§1)。
+    # key 一律以服務層寫入名為準(漂移由 `tests/test_audit_20260805_tab1_wiring.py`
+    # 的 key 漂移鎖守);同時清掉一串不存在的別名 fallback:`X or Y` 鏈裡的 Y 若
+    # 永遠是 None,它不是備援,是讓人誤以為有備援的裝飾(§1)。
+    # ⚠️ 2026-08-06 更正:上一輪這裡寫「失業率讀的 key 服務層從來沒產生過 → 恆 None,
+    # 這一桶實際只掃了 PMI / CPI 兩顆」——**與現況不符**。`services/macro/us_indicators.py`
+    # 的 `R["UNEMPLOYMENT"]` 確實會寫入,三顆都掃得到。留著錯註解會讓下一個人
+    # 據此刪掉正確的判讀式(這正是 §3.3 反捏造要防的「文件與程式各說各話」)。
     _pmi = _v("PMI")
     _cpi = _v("CPI")            # 服務層此格已是 YoY %,與下方過熱門檻同口徑
     _unemp = _v("UNEMPLOYMENT")  # 失業率 %,與 _UNEMP_ELEVATED_THRESHOLD 同口徑
+    _mid_probe = (("PMI", _pmi), ("CPI", _cpi), ("失業", _unemp))
     _mid_hits: list = []   # [(headline, spec_key), ...]
     if _pmi is not None and _pmi < _PMI_CONTRACTION_THRESHOLD:
         _mid_hits.append((f"PMI {_pmi:.1f} 收縮", "pmi"))
@@ -255,9 +286,12 @@ def compute_four_horizon_summary(
         _mid_level, _mid_label = "red", "循環惡化"
     elif _mid_hits:
         _mid_level, _mid_label = "yellow", "局部走弱"
-    else:
+    elif _participation(_mid_probe)[0]:
         _mid_level, _mid_label = "green", "循環健康"
-    _mid_headline = _mid_hits[0][0] if _mid_hits else "PMI/CPI/失業 三項皆健康"
+    else:
+        # §1:三顆全沒取到 ≠ 健康。綠燈的語意是「問過了沒事」,這裡是「沒問到」。
+        _mid_level, _mid_label = "gray", "資料未取得"
+    _mid_headline = _mid_hits[0][0] if _mid_hits else _all_clear_headline(_mid_probe)
     # 全綠時 headline 是**狀態詞不是數字** → 無單一指標可指,回 None,
     # 由表格層改用「什麼情況會變成數字」的通用規則(不硬塞一個沒觸發的門檻)。
     _mid_spec = _mid_hits[0][1] if _mid_hits else None
@@ -268,32 +302,52 @@ def compute_four_horizon_summary(
     # 不會流進本函式的 indicators)。原本兩個判讀式因此恆讀到 0 而永不觸發 ——
     # 留著等於掛兩個沒接線的哨兵假裝有在看(§1 / `PROCESS.md §4` 0-consumer)。
     # 判讀式與對應的本地門檻常數一併移除;要復活請先把資料接進 indicators。
-    _vix = _v("VIX") or 0.0
-    _hy = _v("HY_SPREAD") or 0.0
+    # 2026-08-05 稽核 🔴 必修 1(§1 違憲修正):原本這兩顆寫 `_v(...) or 0.0`,
+    # VIX / HY 抓不到時會變成讀數 0.0 —— 0.0 低於所有警戒門檻,於是畫面印出
+    # 「VIX 0.0 正常」🟢。**缺資料被畫成了最健康的狀態**,正是本函式內 `_v()`
+    # 的 docstring 明令禁止的事(「回 0 會讓缺資料偽裝成讀數 0」),而同檔拐點桶
+    # 的 10Y-2Y / CFNAI / SLOOS 早就用 `is not None` 寫對了 —— 漏網不是設計。
+    _vix = _v("VIX")
+    _hy = _v("HY_SPREAD")
+    _short_probe = (("VIX", _vix), ("HY 利差", _hy))
     _short_hits: list = []   # [(headline, spec_key), ...] — 見中期桶的說明
     _short_severe = False
-    if _vix >= _VIX_PANIC_THRESHOLD:
-        _short_hits.append((f"VIX {_vix:.1f} 恐慌", "vix"))
-        _short_severe = True
-    elif _vix >= _VIX_WARNING_THRESHOLD:
-        _short_hits.append((f"VIX {_vix:.1f} 警戒", "vix"))
-    if _hy >= _HY_SPREAD_PANIC_THRESHOLD:
-        _short_hits.append((f"HY {_hy:.2f}% 危機", "hy_spread"))
-        _short_severe = True
-    elif _hy >= _HY_SPREAD_WARN_THRESHOLD:
-        _short_hits.append((f"HY {_hy:.2f}% 警戒", "hy_spread"))
+    if _vix is not None:
+        if _vix >= _VIX_PANIC_THRESHOLD:
+            _short_hits.append((f"VIX {_vix:.1f} 恐慌", "vix"))
+            _short_severe = True
+        elif _vix >= _VIX_WARNING_THRESHOLD:
+            _short_hits.append((f"VIX {_vix:.1f} 警戒", "vix"))
+    if _hy is not None:
+        if _hy >= _HY_SPREAD_PANIC_THRESHOLD:
+            _short_hits.append((f"HY {_hy:.2f}% 危機", "hy_spread"))
+            _short_severe = True
+        elif _hy >= _HY_SPREAD_WARN_THRESHOLD:
+            _short_hits.append((f"HY {_hy:.2f}% 警戒", "hy_spread"))
     if _short_severe:
         _short_level, _short_label = "red", "極度恐慌"
     elif _short_hits:
         _short_level, _short_label = "yellow", "短線警戒"
-    else:
+    elif _participation(_short_probe)[0]:
         _short_level, _short_label = "green", "短線平靜"
-    _short_headline = _short_hits[0][0] if _short_hits else f"VIX {_vix:.1f} 正常"
-    # 本桶**全綠時 headline 仍是數字**(VIX 讀數),故沒觸發也指得出指標身分。
-    _short_spec = _short_hits[0][1] if _short_hits else "vix"
+    else:
+        _short_level, _short_label = "gray", "資料未取得"
+    # 本桶沒觸發時 headline 仍優先報**真實讀數**(VIX 有值就報 VIX,只有 HY 有值
+    # 就報 HY),故那兩種情況仍指得出指標身分;兩顆都缺 → 誠實說未取得,
+    # spec 回 None(不指一顆根本沒有數字的指標)。
+    if _short_hits:
+        _short_headline, _short_spec = _short_hits[0]
+    elif _vix is not None:
+        _short_headline, _short_spec = f"VIX {_vix:.1f} 正常", "vix"
+    elif _hy is not None:
+        _short_headline, _short_spec = f"HY {_hy:.2f}% 正常", "hy_spread"
+    else:
+        _short_headline, _short_spec = _all_clear_headline(_short_probe), None
 
     # ═══ ⚠️ 拐點:領先警報 ═══
-    _sahm = _v("SAHM") or 0.0
+    # 2026-08-05 稽核 🔴 必修 1:`or 0.0` 同上 —— 薩姆抓不到時變 0.0,
+    # 低於 0.5 觸發線,於是「沒抓到」被算成「安全」並計入下方全綠宣告。
+    _sahm = _v("SAHM")
     _y2 = _v("YIELD_10Y2Y")
     _y3 = _v("YIELD_10Y3M")
     # 2026-08-05 稽核:這顆的 key 服務層也沒有 —— 它以另一個代碼寫入,
@@ -303,9 +357,11 @@ def compute_four_horizon_summary(
     # 該欄缺席(舊 cache / 上游降級)→ None → 本項不參與判讀,不回 0 冒充讀數。
     _cfnai = _v("LEI", "ma3")
     _sloos = _v("SLOOS")
+    _inf_probe = (("薩姆", _sahm), ("10Y-2Y", _y2), ("10Y-3M", _y3),
+                  ("CFNAI", _cfnai), ("SLOOS", _sloos))
     _inf_triggers: list = []   # [(headline, spec_key), ...] — 見中期桶的說明
     _inf_warnings: list = []
-    if _sahm >= SAHM_RECESSION_THRESHOLD:
+    if _sahm is not None and _sahm >= SAHM_RECESSION_THRESHOLD:
         _inf_triggers.append((f"薩姆 {_sahm:.2f} 觸發", "sahm"))
     if _y2 is not None and _y2 < 0:
         _inf_warnings.append((f"10Y-2Y 倒掛 {_y2:.2f}%", "yield_10y2y"))
@@ -321,10 +377,13 @@ def compute_four_horizon_summary(
         _inf_level, _inf_label = "red", "多重警訊"
     elif _inf_warnings:
         _inf_level, _inf_label = "yellow", "拐點臨近"
-    else:
+    elif _participation(_inf_probe)[0]:
         _inf_level, _inf_label = "green", "拐點未現"
+    else:
+        _inf_level, _inf_label = "gray", "資料未取得"
     _inf_msgs_all = _inf_triggers + _inf_warnings
-    _inf_headline = _inf_msgs_all[0][0] if _inf_msgs_all else "Sahm/倒掛/CFNAI/SLOOS 全綠"
+    _inf_headline = (_inf_msgs_all[0][0] if _inf_msgs_all
+                     else _all_clear_headline(_inf_probe))
     # 全綠 → 狀態詞非數字,同中期桶處理(回 None)。
     _inf_spec = _inf_msgs_all[0][1] if _inf_msgs_all else None
 
@@ -470,9 +529,16 @@ _BUCKET_SECTION_HINT: dict[str, str] = {
     "news":       "🌳 長期座標",
 }
 
-# 兩把尺的「怎麼讀」—— 原本散在 hero 卡副標 + 其下那行對照 caption,收成唯一來源
-_SCALE_NOTE_PHASE = "景氣位階:0-10 循環評分,恆非負"
-_STRENGTH_UNIT = "指標加權淨分(Σ score×weight,有正負)"
+# 兩把尺的「怎麼讀」—— 原本散在 hero 卡副標 + 其下那行對照 caption,收成唯一來源。
+#
+# 2026-08-05 稽核 🔴 必修 3(瀏覽器實測):`st.dataframe` 的字串格會**截斷**,
+# 實測 🌳 長期列斷在「…① 結論燈同一」、🩺 斷在「…衛星部位積」——
+# 被截掉的正好是 §1 要求揭露的那幾句(兩套切點差異 / 白話行動)。
+# 處置(user 拍板):**欄內只留短句,長句搬到表下那一則 caption**;
+# 資訊一句不刪,只換位置(`build_evidence_footnotes` + `render_evidence_table`)。
+_SCALE_NOTE_PHASE = "位階 0-10 分,恆非負"          # 欄內短句
+_STRENGTH_UNIT = "指標加權淨分(有正負)"             # 欄內短句
+_STRENGTH_FORMULA = "Σ score×weight(各指標分數 × 校準權重後相加)"   # → 表下
 _STRENGTH_FACE = "🩺 綜合健康度"
 
 # 全綠時 headline 是狀態詞而非數值,沒有單一指標可指 —— 說明欄改答「什麼情況
@@ -482,24 +548,58 @@ _STRENGTH_FACE = "🩺 綜合健康度"
 # 而本表判讀的那幾顆,和使用者照指路捲下去看到的那一段裡陳列的指標,**不是
 # 同一組**(該段還有走另一條資料線、本表拿不到的項目)。同一個桶裡沒取到資料
 # 的項目也不參與判讀。宣稱範圍必須縮回本列真的算過的那幾顆:全綠時讀數欄本來
-# 就會把它們列出來(例:「PMI/CPI/失業 三項皆健康」),指過去即可,不另寫一份。
+# 就會把它們列出來(2026-08-06 必修 1 起,那句由 `_all_clear_headline` 動態組出,
+# 有值的點名、缺的標「未取得」),指過去即可,不另寫一份。
 _NO_SPEC_READ_RULE = (
     "全綠 = 左邊「讀數」欄列出的那幾項都沒越過各自的警戒門檻(僅限本列算過的項目;"
     "沒取到資料的不參與判讀,也不算過關);任一越線,本列改顯示該項讀數與門檻"
 )
+# 上句的欄內版(必修 3):dataframe 格會截斷,76 字進去只會剩半句 ——
+# 全文原樣搬到表下 caption(`build_evidence_footnotes`),此處只留指路。
+_NO_SPEC_SHORT = "讀數欄各項皆未越線"
+
+
+def _spec_threshold_short(note: str) -> str:
+    """registry `note` 的欄內版 —— **只截掉尾端的補充括號**,不改寫任何字或數字。
+
+    §3.3:短句不得手打(手打 = 第二份門檻真相,registry 一改就漂移)。
+    registry 的 note 慣例是「主門檻 + (補充說明)」,例如領先指標那條的括號說明
+    「皆為 3 月移動平均」、新聞那條的括號列出關鍵字類別 —— 括號內容屬延伸說明,
+    截掉後主門檻完整保留,**完整版**照樣出現在表下 caption(`_how_to_read_full`)。
+    沒有尾括號的 note(PMI / CPI / VIX 等)原樣回傳,一個字都沒動。
+    """
+    _n = str(note or "").strip()
+    if not _n.endswith((")", "）")):
+        return _n
+    _i = max(_n.rfind("("), _n.rfind("（"))
+    return _n[:_i].strip() if _i > 0 else _n
 
 
 def _how_to_read(spec_key) -> str:
-    """spec key → 該指標的判讀門檻描述(`shared.macro_buckets` registry SSOT)。
+    """spec key → 該指標判讀門檻的**欄內短句**(`shared.macro_buckets` registry SSOT)。
 
     2026-08-05 稽核 🔴 必修 2:② 依據表的欄名承諾「這個數字怎麼讀」,但原本只有
     🌳 長期列真的有說明,其餘四列填的是桶副標(「景氣循環 3-12 月」之類),
     對「PMI 48.5 收縮」「CFNAI -0.80 衰退」這種讀數答非所問。
 
+    2026-08-05 稽核 🔴 必修 3:原本連指標全名一起塞(`{label} 門檻:{note}`),
+    在 `st.dataframe` 裡被截斷。指標全名與完整 note 移到表下 caption
+    (`_how_to_read_full`),欄內只留門檻本身。
+
     門檻**一律查 registry**,本層不自寫任何數字(§3.3 反捏造)——
     registry 的 `note` 欄本來就是為了描述該指標的紅黃分界而存在。
     未知 spec key → KeyError 當場炸(§1:同 `section_hint` 的既有處置,
     寧可炸也不要在說明欄印一段指向不存在指標的門檻)。
+    """
+    if not spec_key:
+        return _NO_SPEC_SHORT
+    return _spec_threshold_short(_SPECS_BY_KEY[spec_key].note)
+
+
+def _how_to_read_full(spec_key) -> str:
+    """同上的**完整版**(指標全名 + 未截斷 note)—— 供表下 caption 使用。
+
+    欄內放不下的部分搬到這裡,不是刪掉(必修 3 的界線:只換位置不減資訊)。
     """
     if not spec_key:
         return _NO_SPEC_READ_RULE
@@ -615,7 +715,9 @@ def build_evidence_rows(
 
     rows: list[dict] = []
     if "long" in _cells:
-        rows.append(_bucket_row("long", f"{_SCALE_NOTE_PHASE}｜{_phase_cutoff_note()}"))
+        # 必修 3:`_phase_cutoff_note()`(98 字,兩套切點揭露)搬到表下 caption
+        # ——它在欄內會被 dataframe 截成「…① 結論燈同一」,揭露到一半等於沒揭露。
+        rows.append(_bucket_row("long", _SCALE_NOTE_PHASE))
 
     # 綜合健康度不屬於任一桶(它是全時域指標加權),細節散在各時域的指標卡裡,
     # 因此指路是多段並列 —— 由 `_BUCKET_SECTION_HINT` 導出,不另寫一份。
@@ -628,12 +730,13 @@ def build_evidence_rows(
     _strength_targets = "」/「".join(
         dict.fromkeys(_BUCKET_SECTION_HINT[_k]
                       for _k in ("long", "mid", "short", "inflection")))
+    # 必修 3:`Σ score×weight` 算式與白話行動(`composite_action`)搬到表下 ——
+    # 實測這一格斷在「…衛星部位積」,白話行動只顯示得到半句。
     rows.append(dict(zip(EVIDENCE_COLUMNS, (
         _STRENGTH_FACE,
         f"{composite_icon} {composite_level}".strip() or "—",
         "—" if composite_score is None else f"{float(composite_score):+.1f}",
-        "｜".join(_x for _x in (f"多空強度:{_n_prefix}{_STRENGTH_UNIT}",
-                                composite_action) if _x),
+        f"多空強度:{_n_prefix}{_STRENGTH_UNIT}",
         f"詳見下方「{_strength_targets}」的指標卡",
     ))))
 
@@ -647,7 +750,48 @@ def build_evidence_rows(
     return rows
 
 
-def render_evidence_table(rows) -> None:
+def build_evidence_footnotes(
+    summary: Optional[dict],
+    *,
+    composite_action: str = "",
+) -> list[str]:
+    """② 表**欄內放不下**的長說明(純函式、零 streamlit,可單獨測)。
+
+    2026-08-05 稽核 🔴 必修 3:`st.dataframe` 的字串格會截斷,而被截掉的偏偏是
+    §1 要求揭露的幾句(兩套切點差異 / 完整門檻 / 全綠判讀規則 / 白話行動)。
+    處置是**搬不是刪** —— 欄內留短句,全文集中在表下那一則 caption。
+
+    每一則的開頭是該列的「面向」(桶 emoji + 桶名,走 `_bucket_bar_cells` 的
+    `BUCKET_META` SSOT),讀者才對得回上表哪一列;§3.3 不在本層重打桶名。
+
+    Parameters
+    ----------
+    summary
+        同 `build_evidence_rows` 的輸入(五桶或四桶)。缺哪一桶就少一則。
+    composite_action
+        綜合健康度那列的白話行動,由 caller 從 `composite_verdict()` 取得後傳入
+        (本層不重算)。空字串 → 不寫(§1 不捏造)。
+    """
+    _sum = summary if isinstance(summary, dict) else {}
+    _keys = [_k for _k in _BUCKET_ORDER
+             if isinstance(_sum.get(_k), dict) and _sum.get(_k)]
+    _faces = {_k: _t for _k, _t, _s in _bucket_bar_cells(_keys)}
+
+    _out: list[str] = []
+    if "long" in _faces:
+        _out.append(f"{_faces['long']}:{_phase_cutoff_note()}")
+    _out.append(
+        f"{_STRENGTH_FACE}:{_STRENGTH_FORMULA}"
+        + (f"；白話行動 —— {composite_action}" if composite_action else ""))
+    for _k in ("mid", "short", "inflection", "news"):
+        if _k in _faces:
+            _out.append(
+                f"{_faces[_k]}:"
+                f"{_how_to_read_full((_sum.get(_k) or {}).get('spec_key'))}")
+    return _out
+
+
+def render_evidence_table(rows, footnotes=None) -> None:
     """② 依據表渲染 —— 走 `ui/components/tables.styled_dataframe`。
 
     不手刻 HTML、不新造色票(§3.3);燈號以 emoji + 文字同格呈現,
@@ -660,20 +804,34 @@ def render_evidence_table(rows) -> None:
     表下註記維持**單一 `st.caption` 呼叫**(多段以換行併在同一個字串裡):
     user 要求「不要留兩份說法」,一段一個 caption 會讓表下變成散落的註腳堆,
     既有守衛也正是以「表下註記只有一則」為契約。新增內容一律併進這一則。
+
+    `footnotes`(必修 3 新增,選填)= `build_evidence_footnotes()` 的輸出,
+    即欄內因 dataframe 截斷而放不下的完整說明。**併進同一則 caption**,
+    不另開 `st.caption`(否則上述契約破功)。None / 空 → 完全不加那一段。
     """
     import pandas as _pd  # noqa: PLC0415 — 對齊本檔既有 lazy import 慣例
     from ui.components.tables import styled_dataframe  # noqa: PLC0415
     styled_dataframe(_pd.DataFrame(list(rows or []), columns=list(EVIDENCE_COLUMNS)))
-    st.caption(
+    _cap_parts = [
         "📐 兩個分數不同義,別互相換算 —— 上表「說明」欄已分別標明:"
         f"🌳 長期 是景氣**位階**({_SCALE_NOTE_PHASE});"
-        f"🩺 綜合健康度 是多空**強度**({_STRENGTH_UNIT})。  \n"
+        f"🩺 綜合健康度 是多空**強度**({_STRENGTH_UNIT})。",
         # 稽核 🟡 建議 6:指路欄不可點 → 補一份往下捲的順序當目錄(區段名導出,見 `_section_walk`)
-        f"📍 往下捲依序是:{_section_walk()}。  \n"
+        # 稽核 🟡 建議 10:原文寫「往下捲**依序**是」,但四時域四段之間還夾著
+        # 其他一級區塊(中國副盤 / 決策矩陣),照字面往下捲會先遇到別的東西而以為走錯。
+        # 改成只宣稱「這四段彼此的先後」—— 那是 `BUCKET_ORDER` 真的保證的事;
+        # 夾在中間有哪些區塊**刻意不列**(列了就是一份會隨版面漂移的鏡像,§3.3)。
+        f"📍 這四段在下方的先後順序是:{_section_walk()}(中間另有其他區塊)。",
         # 稽核 🟢 建議 7:同一個 Tab 內,雷達圖的視覺警戒線與本表門檻不同源,
         # 使用者照指路捲下去會看到「本表說警戒、雷達線卻畫在更上面」。
         # **不改門檻**(user 2026-06-26 已撤銷 harmonize;視覺線刻意對齊雷達自己的
         # 後端燈號分級,理由見 `ui/helpers/chart/danger.py`),改為誠實註記差異。
         "⚖️ 下方各段圖上的警戒線對齊**該段自己的**燈號分級,與本表門檻可能略有差異"
-        "(例:🎯 短線雷達的 VIX 線比本表的警戒門檻高一些)—— 以本表的判讀欄為準。"
-    )
+        "(例:🎯 短線雷達的 VIX 線比本表的警戒門檻高一些)—— 以本表的判讀欄為準。",
+    ]
+    _fn = [str(_f) for _f in (footnotes or []) if str(_f).strip()]
+    if _fn:
+        # 必修 3:上表「說明」欄放不下的完整版。表格格會截字,這裡不會。
+        _cap_parts.append("🔍 上表說明欄的完整版(欄位寬度有限,長句放這裡):")
+        _cap_parts.extend(f"　・{_f}" for _f in _fn)
+    st.caption("  \n".join(_cap_parts))

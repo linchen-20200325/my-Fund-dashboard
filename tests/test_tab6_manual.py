@@ -58,7 +58,7 @@ def _build_fake_st(captured_labels: list | None = None) -> MagicMock:
             return [_FakeCM() for _ in labels]
         fake_st.tabs.side_effect = _fake_tabs
     else:
-        fake_st.tabs.return_value = [_FakeCM() for _ in range(11)]
+        fake_st.tabs.return_value = [_FakeCM() for _ in range(10)]
 
     def _fake_columns(spec):
         # st.columns 兩種呼叫：st.columns(3) 或 st.columns([1, 2, 1])
@@ -73,8 +73,13 @@ def _build_fake_st(captured_labels: list | None = None) -> MagicMock:
     return fake_st
 
 
-def test_render_calls_streamlit_tabs_with_11_subtabs():
-    """render_manual_tab 內部建立 11 個 sub-tab(v19.317 說明書瘦身:砍「12. 總經原理教室」)。"""
+def test_render_calls_streamlit_tabs_with_10_subtabs():
+    """render_manual_tab 內部建立 10 個 sub-tab。
+
+    v19.317 說明書瘦身砍「12. 總經原理教室」→ 11 個；
+    本次再砍「台股 TPI 水溫」（全站零計算零渲染的幽靈章節）→ 10 個，
+    同時「六因子評分」改名為實際生效的「健診評等 4D」。
+    """
     from ui import tab6_manual as t6
     captured_labels: list = []
     fake_st = _build_fake_st(captured_labels)
@@ -82,11 +87,34 @@ def test_render_calls_streamlit_tabs_with_11_subtabs():
     with patch.object(t6, "st", fake_st):
         t6.render_manual_tab()
 
-    assert len(captured_labels) == 11
-    for kw in ["Macro Score", "景氣天氣", "六因子", "吃本金", "再平衡",
-               "台股TPI", "核心衛星", "汰弱留強",
+    assert len(captured_labels) == 10
+    for kw in ["Macro Score", "景氣天氣", "健診評等", "吃本金", "再平衡",
+               "核心衛星", "汰弱留強",
                "Sheet 資料結構", "全局指標關聯地圖", "宏觀教學文獻"]:
         assert any(kw in lbl for lbl in captured_labels), f"missing sub-tab: {kw}"
+
+
+def test_manual_has_no_phantom_chapters():
+    """說明書不得出現「系統沒實作」的幽靈章節標題（原則 3）。
+
+    這三個字串曾經整章存在，但 grep 全 repo 只出現在說明書自己：
+    - 台股 TPI 水溫：三個權重常數只有定義→import→re-export，零計算零渲染
+    - β 係數分類的兩個標籤：畫面上沒有任何 β 標籤
+    修正前本測試會紅（舊行為衝突紅）。
+    """
+    from ui import tab6_manual as t6
+    captured_labels: list = []
+    fake_st = _build_fake_st(captured_labels)
+    _md_texts: list = []
+    fake_st.markdown.side_effect = lambda *a, **kw: _md_texts.append(
+        a[0] if a else "")
+
+    with patch.object(t6, "st", fake_st):
+        t6.render_manual_tab()
+
+    _all = "\n".join(str(t) for t in _md_texts) + "\n".join(captured_labels)
+    for _phantom in ("TPI", "定海神針", "衝鋒陷陣"):
+        assert _phantom not in _all, f"說明書仍出現零實作章節關鍵字：{_phantom}"
 
 
 @pytest.mark.skip(reason="v19.40 PR2: Tab11 宏觀教學文獻 reads _macro_ind from session_state; static-path contract no longer fully applies to tab6")

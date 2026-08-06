@@ -8,6 +8,8 @@ v1.py + v2.py 都從本檔 import,規避 P2-4 v19.199 revert 主因(`from X impo
 """
 from __future__ import annotations
 
+import math
+import sys
 from typing import Any, Iterable, Optional
 
 import pandas as pd
@@ -144,18 +146,126 @@ def _open_worksheet(client: Any, sheet_id: str, worksheet: str = DEFAULT_WORKSHE
         raise PolicySheetError(f"開啟 Sheet/{worksheet} 失敗：{e}") from e
 
 
-def _normalize_invest_twd(v: Any) -> int:
-    """容錯：'1,000' / 1000.0 / '' → int；無法解析回 0。"""
+# ──────────────────────────────────────────────────────────────────────
+# invest_twd（保單投入本金）解析 — §1 Fail Loud：不可靜默歸零
+#
+# 背景：本欄原本「無法解析一律回 0」，Sheet 打成 `NT$1,000` / `1000元` 等寫法
+# 時，該檔基金會在「投入本金」「核心%」「月配息」「回撤權重」全數消失，而畫面
+# 上零提示 —— 使用者只能一格一格對才找得出是哪一列。
+#
+# 現行處置（維持 int 回傳型別，零 caller 破壞）：
+#   1. `parse_invest_twd()` 純函式回 (值, 失敗原因)，可單測、可被上層決定 fallback
+#   2. `_normalize_invest_twd()` 失敗時 stderr log + 記進 module registry，再回 0
+#   3. `normalize_invest_twd_column()` 逐列解析並帶列號/主鍵，供 UI 彙總揭露
+# ──────────────────────────────────────────────────────────────────────
+
+# 最近一次載入的解析失敗紀錄（replace 語意：每次 loader 進場先 reset）。
+# 上限防呆：壞掉的整張表也不至於把記憶體吃光。
+_INVEST_TWD_PARSE_ERRORS: list[dict] = []
+_INVEST_TWD_ERR_CAP = 200
+
+
+def parse_invest_twd(v: Any) -> tuple[Optional[int], Optional[str]]:
+    """解析保單投入本金欄 → `(值, 失敗原因)`。
+
+    - `None` / 空字串 / 純空白 / NaN → `(0, None)`：業務語意是「這列沒填本金」，
+      **不是**解析失敗（NaN 幾乎都來自 pandas 對空儲存格的表示，報成錯誤會製造
+      大量假警報，反而讓真正的格式錯誤被淹沒）
+    - 可解析 → `(int, None)`；⚠️ 小數**無條件捨去**（1000.9 → 1000，沿用既有行為）
+    - 無法解析（含 ±inf、`NT$1,000`、`1000元`、中文數字）→ `(None, 原因字串)`：
+      呼叫端**必須**顯式決定 fallback 並向使用者揭露，禁止當成 0 靜默吞掉（§1）
+
+    單位：TWD 整數（`amount_twd`），非百分比、非原幣。
+    """
     if v is None or v == "":
-        return 0
+        return 0, None
+    raw = v
+    if isinstance(v, str):
+        v = v.replace(",", "").strip()
+        if not v:
+            return 0, None
     try:
-        if isinstance(v, str):
-            v = v.replace(",", "").strip()
-            if not v:
-                return 0
-        return int(float(v))
+        f = float(v)
     except (ValueError, TypeError):
+        return None, f"非數值（原始值：{str(raw)[:40]}）"
+    if math.isnan(f):
+        return 0, None          # 空儲存格
+    if math.isinf(f):
+        return None, f"數值無界（原始值：{str(raw)[:40]}）"
+    return int(f), None
+
+
+def reset_invest_twd_parse_errors() -> None:
+    """loader 進場時呼叫；registry 為 replace 語意（只反映最近一次載入）。"""
+    _INVEST_TWD_PARSE_ERRORS.clear()
+
+
+def get_invest_twd_parse_errors() -> list[dict]:
+    """回最近一次載入的本金解析失敗清單（copy，呼叫端改不到內部狀態）。"""
+    return list(_INVEST_TWD_PARSE_ERRORS)
+
+
+def _record_invest_twd_parse_error(rec: dict) -> None:
+    if len(_INVEST_TWD_PARSE_ERRORS) < _INVEST_TWD_ERR_CAP:
+        _INVEST_TWD_PARSE_ERRORS.append(dict(rec))
+
+
+def _normalize_invest_twd(v: Any) -> int:
+    """容錯：'1,000' / 1000.0 / '' → int。
+
+    ⚠️ 無法解析時仍回 0（維持既有 caller 契約），但**不再靜默**：
+    寫 stderr + 記進 registry，供 `get_invest_twd_parse_errors()` 彙總給使用者。
+    需要區分「填了 0」與「解析失敗」的呼叫端請改用 `parse_invest_twd()`。
+    """
+    val, err = parse_invest_twd(v)
+    if err is not None:
+        print(f"[policy/_helpers] invest_twd 解析失敗 → 以 0 計：{err}",
+              file=sys.stderr)
+        _record_invest_twd_parse_error({"raw": str(v)[:40], "reason": err})
         return 0
+    return val or 0
+
+
+def normalize_invest_twd_column(
+    df: pd.DataFrame,
+    *,
+    source: str = "",
+    id_cols: Iterable[str] = (),
+) -> list[dict]:
+    """就地把 `df['invest_twd']` 逐列解析成 int，並回報無法解析的列（§1）。
+
+    - 逐列（非 `.map`）是為了取得**列號與主鍵**，讓使用者知道要去 Sheet 改哪一格
+    - `row` 為 Google Sheet 的實際列號（header 佔第 1 列 → DataFrame index 0 = 第 2 列）
+    - 失敗列仍以 0 記錄（維持既有下游算式不炸），但同時寫入
+      `df.attrs['invest_twd_parse_errors']` 與 module registry
+
+    回傳：失敗清單（空 list = 全部可解析）。
+    """
+    if "invest_twd" not in df.columns:
+        return []
+    _ids = [c for c in id_cols if c in df.columns]
+    bad: list[dict] = []
+    vals: list[int] = []
+    for _pos, _raw in enumerate(df["invest_twd"].tolist()):
+        _v, _err = parse_invest_twd(_raw)
+        if _err is not None:
+            rec = {
+                "row": _pos + 2,
+                "source": source,
+                "raw": str(_raw)[:40],
+                "reason": _err,
+            }
+            for c in _ids:
+                rec[c] = str(df[c].iloc[_pos])
+            bad.append(rec)
+            _record_invest_twd_parse_error(rec)
+            print(f"[policy/{source or 'sheet'}] invest_twd 第 {rec['row']} 列"
+                  f"無法解析 → 以 0 計：{_err}", file=sys.stderr)
+            _v = 0
+        vals.append(_v or 0)
+    df["invest_twd"] = vals
+    df.attrs["invest_twd_parse_errors"] = bad
+    return bad
 
 
 def _normalize_fx(v: Any) -> Optional[float]:

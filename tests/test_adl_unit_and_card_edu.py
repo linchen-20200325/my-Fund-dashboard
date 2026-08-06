@@ -236,9 +236,27 @@ class TestHistoricalAnchorWiring:
             assert str(MACRO_EDU[_k].get("historical_anchor") or "").strip(), \
                 f"{_k} 沒有 historical_anchor,列進樣張只會多一行空白"
 
-    def test_pilot_is_a_subset_pending_user_signoff(self):
-        """樣張 = 3 張,不是一次全鋪 —— user 要先看效果再決定要不要鋪滿。"""
-        assert len(_EDU_ANCHOR_PILOT) < len(_ZS_KEYS)
+    def test_anchor_coverage_is_derived_from_the_matrix_not_retyped(self):
+        """2026-08-06 user 拍板鋪滿(原樣張 3 張)。
+
+        原因:卡片依 |Z| 排序,每次載入位置都不同 —— 18 張同款卡只有 3 張帶
+        歷史錨點,使用者無法歸納規則,看起來像壞掉。
+
+        鋪滿後**不可**在 UI 層另打一份 18 個 key 的清單(§3.3 第二份真相)。
+        本條守「集合恰好等於矩陣本身」:有人手打漏一個、或矩陣新增指標而清單
+        沒跟上,都會紅。
+        """
+        assert set(_EDU_ANCHOR_PILOT) == set(_ZS_KEYS)
+
+    def test_every_matrix_key_actually_has_edu_material(self):
+        """鋪滿的前提:矩陣每個 key 在 `MACRO_EDU` 都查得到錨點。
+
+        少一個 → `_card_note` 拿到 None → 那張卡靜默沒有錨點,而 caption 會
+        宣稱「全部都有」(§1 宣稱與現實不符)。
+        """
+        _missing = [k for k in _ZS_KEYS
+                    if not str((MACRO_EDU.get(k) or {}).get("historical_anchor", ""))]
+        assert not _missing, f"這些矩陣指標沒有歷史錨點語料:{_missing}"
 
     def test_ui_does_not_author_indicator_prose_of_its_own(self):
         """§8.3 F-GRAY-4:教學敘事的唯一來源是 `ui/components/macro_card_edu.py`。

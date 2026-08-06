@@ -231,41 +231,55 @@ class TestEvidenceRows:
 # B — 指路不得指到空氣(漂移鎖)
 # ══════════════════════════════════════════════════════════════
 class TestSectionHints:
-    def test_macro_compass_moved_out_of_the_summary_zone(self):
-        """**修正前必紅** —— 總經指南針原本由 `app.py` 在 `render_macro_tab()`
-        之前呼叫,三張原始值卡(VIX / 10Y / S&P 500)永遠壓在總表最上方。
+    def test_macro_compass_is_gone_with_no_stale_reference(self):
+        """2026-08-06 必修 6 —— 🧭 總經指南針**整塊移除**,且沒有殘留引用。
 
-        user 2026-08-05 拍板 A 案:原始值屬「依據 / 例外」層級不是結論,
-        應歸詳細區。兩段都要過才算搬完:
-          (a) `app.py` 不再呼叫也不再 import(留在那裡 = 沒搬,只是多一份);
-          (b) `ui/tab1_macro.py` 真的呼叫了,且位置在「詳細資料與說明」分界**之後**。
+        沿革:v19.430 從 `app.py` 搬進 Tab① 詳細區、同日再下移一段;本輪查證
+        三張卡(VIX / 美 10Y / S&P 500 vs 60MA)在 🎯 短線雷達都有現成的燈
+        (`vix_level` / `yield_10y_shock` / `spx_trend_break`,同資料源、
+        主載入按鈕就一起抓好),且指南針自己還要再按一次「📡 抓取最新」——
+        user 原則 2(重複移除)+ 原則 3(要再按一次才有資料的幽靈區塊)。
+
+        **修正前必紅**(舊行為與斷言衝突,非 ImportError):
+        修正前 `ui/tab1_macro.py` 有 `render_macro_compass` 的 import 與呼叫。
+
+        刪除必須連引用一起清(ruff 白名單那個教訓)—— 掃 `ui/` + `services/`
+        全部 import 與呼叫節點,而非只看 tab1 一檔。
         """
         import ast
-        _app = _ROOT / "app.py"
-        _app_src = _app.read_text(encoding="utf-8")
-        _app_tree = ast.parse(_app_src)
-        # (a) app.py 已無呼叫、也無 import(註解裡提及沿革不算)
-        assert not [
-            n for n in ast.walk(_app_tree)
-            if isinstance(n, ast.Call)
-            and str(getattr(n.func, "id", "") or getattr(n.func, "attr", "")) == "render_macro_compass"
-        ], "app.py 仍在呼叫 render_macro_compass —— 指南針沒真的搬走"
-        assert not [
-            n for n in ast.walk(_app_tree)
-            if isinstance(n, ast.ImportFrom)
-            and any(a.name == "render_macro_compass" for a in n.names)
-        ], "app.py 仍 import render_macro_compass —— 會是 F401 死 import"
+        for _p in (list((_ROOT / "ui").rglob("*.py"))
+                   + list((_ROOT / "services").rglob("*.py"))
+                   + [_ROOT / "app.py"]):
+            try:
+                _t = ast.parse(_p.read_text(encoding="utf-8"))
+            except (SyntaxError, UnicodeDecodeError):
+                continue
+            for _n in ast.walk(_t):
+                if isinstance(_n, ast.Call) and _fn_name(_n) == "render_macro_compass":
+                    pytest.fail(f"{_p} 仍呼叫已移除的總經指南針")
+                if isinstance(_n, ast.ImportFrom) and (
+                        _n.module or "").endswith("macro_compass_top"):
+                    pytest.fail(f"{_p} 仍 import 已移除的指南針元件")
+                if isinstance(_n, ast.ImportFrom) and any(
+                        a.name == "render_macro_compass" for a in _n.names):
+                    pytest.fail(f"{_p} 仍 import 已移除的 render_macro_compass")
 
-        # (b) tab1_macro.py 真的接手,且落在詳細區
-        _t1_src = _TAB1.read_text(encoding="utf-8")
-        assert "render_macro_compass" in _t1_src, "tab1_macro.py 沒接手指南針 —— 功能整個消失"
-        _mount = _t1_src.index("render_macro_compass")
-        # ⚠️ 必須比對**完整的 heading 呼叫**。`ui/tab1_macro.py` 有一行註解引用
-        #    user 原話「…下方都是放詳細資料與說明」,位置在檔案前段;裸字串會先命中
-        #    它,使 `_details` 變得極小 → 本斷言恆成立 = **假通過**(指南針放錯位置
-        #    也不會紅)。同型陷阱已在 test_daily_key_alerts_v19_349.py 踩過一次。
-        _details = _t1_src.index('st.markdown("## 🔎 詳細資料與說明")')
-        assert _details < _mount, "指南針落在總表區 —— 原始值卡又擋在結論前面了"
+    def test_compass_component_no_longer_exposes_a_renderer(self):
+        """元件本體的實作必須消失(留一個沒人呼叫的 renderer = `PROCESS.md §4`
+        點名的「留著假裝有揭露」)。本機此輪無法實體刪檔,故改為**檔內零實作**:
+        任何 import 會 ImportError 當場炸,而不是靜默沿用舊畫面(§1)。
+
+        **修正前必紅**(那時 `render_macro_compass` 還在)。"""
+        import ui.components.macro_compass_top as _mct
+        for _dead in ("render_macro_compass", "_render_compass_card", "_trend_dir"):
+            assert not hasattr(_mct, _dead), f"{_dead} 仍在(0 consumer 的死渲染)"
+
+    def test_the_three_compass_readings_still_exist_in_the_radar(self):
+        """刪錯東西的防護:移除的前提是「三張卡在雷達都有」——
+        那三個雷達燈必須真的還在,否則這次移除等於偷偷少掉三個讀數。"""
+        from services.risk_radar import _RADAR_KEYS
+        for _k in ("vix_level", "yield_10y_shock", "spx_trend_break"):
+            assert _k in _RADAR_KEYS, f"雷達少了 {_k} —— 指南針的替代品不存在"
 
     def test_section_hints_match_real_headings(self):
         """**修正前必紅**(對照表不存在)。

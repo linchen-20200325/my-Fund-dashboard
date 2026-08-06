@@ -54,7 +54,24 @@ def render_switch_section(rows: list) -> None:
             "換入 Sharpe": _rep.get("Sharpe 1Y") if _rep else None,
             "換入 1Y含息%": _rep.get("1Y 含息 %") if _rep else None,
         })
-    st.dataframe(pd.DataFrame(_disp), use_container_width=True, hide_index=True)
+    from streamlit import column_config as _cc
+    st.dataframe(
+        pd.DataFrame(_disp), use_container_width=True, hide_index=True,
+        column_config={
+            "賣出(🔴紅燈)": _cc.TextColumn("賣出(🔴紅燈)", width="medium",
+                help="大表「策略燈號」為 🔴 的檔(1Y含息<0 且 Sharpe<0,或嚴重吃本金)。"),
+            "類別": _cc.TextColumn("類別", width="small"),
+            "策略分": _cc.NumberColumn("策略分", format="%d",
+                help="換標策略分 0-100;**分母可能被收斂**(缺 MaxDD / vs大盤),"
+                     "詳見大表「策略分覆蓋」欄。"),
+            "建議換入(同類最佳)": _cc.TextColumn("建議換入(同類最佳)", width="medium",
+                help="**同**資產類別內取最佳者(與跨類的「輪動配對」不同);"
+                     "同類無合格標的 → ⚪,不硬湊。"),
+            "換入 Sharpe": _cc.NumberColumn("換入 Sharpe", format="%.2f",
+                help="⚠️ 期間可能混 wb07 1Y / 6M / 本地自算,見大表「Sharpe 來源」欄。"),
+            "換入 1Y含息%": _cc.NumberColumn("換入 1Y含息%", format="%.2f %%"),
+        },
+    )
     _n_ok = sum(1 for d in _disp if not str(d["建議換入(同類最佳)"]).startswith("⚪"))
     st.caption(
         f"共 {len(_reds)} 檔紅燈;其中 **{_n_ok}** 檔有同類健康替換標的。替換 = 同資產類別內 "

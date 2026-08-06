@@ -208,8 +208,12 @@ render_manual_tab()
         at = AppTest.from_string(drv, default_timeout=60)
         at.run()
         _assert_no_uncaught(at, "render_manual_tab")
-        # 12 個 sub-tab 內容應展開(>30 markdown)
-        assert len(at.markdown) > 30, "說明書 render 元素太少"
+        # ⚠️ 2026-08-06:移除「台股 TPI」幽靈章節(三個權重常數存在,但全站零計算
+        # 零渲染,說明書描述了一個不存在的功能)後 sub-tab 11 → 10,原本釘死的
+        # 30 會誤紅。本條的用意是「render 沒有早期爆掉只剩零星元素」,精確章節
+        # 清單由 tests/test_tab6_manual.py 的 sub-tab 斷言守 —— 兩條分工,
+        # 不要在這裡釘章節數。
+        assert len(at.markdown) > 20, f"說明書 render 元素太少({len(at.markdown)})"
 
     def test_render_macro_tab_unbound_regression(self):
         """v19.137 回歸:物理重排不該再出現 UnboundLocalError"""

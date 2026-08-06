@@ -154,9 +154,10 @@ def render_inflection_alert_section(
                          else "🟢 安全 <0.3")
             st.markdown(f"<div style='text-align:center;font-size:12px'>{_sahm_sig}</div>",
                         unsafe_allow_html=True)
-        # T2: Tooltip
-        with st.expander("ℹ️ 薩姆規則說明", expanded=False):
-            st.markdown("**薩姆規則（Sahm Rule）**：當失業率的3個月滾動平均比過去12個月最低點高出 ≥0.5 百分點，代表美國進入衰退。⚠️ 新手白話：儀表板紅色時，代表景氣已經轉壞，建議降低高風險基金比重。")
+        # 2026-08-05 稽核 🟡 建議 8:原本是 `st.expander(..., expanded=False)` 包
+        # 一行說明文字(user 原則 1「不要闔上的資料」)。一行字不值一次點擊,
+        # 而且三個儀表底下各掛一個摺疊殼,視覺上像有東西沒載入。改 `st.caption` 直出。
+        st.caption("ℹ️ **薩姆規則（Sahm Rule）**：當失業率的3個月滾動平均比過去12個月最低點高出 ≥0.5 百分點，代表美國進入衰退。⚠️ 新手白話：儀表板紅色時，代表景氣已經轉壞，建議降低高風險基金比重。")
 
     with _gg2:
         if _sloos_v is None:
@@ -172,9 +173,8 @@ def render_inflection_alert_section(
                           else "🟢 信貸寬鬆 <0%")
             st.markdown(f"<div style='text-align:center;font-size:12px'>{_sloos_sig}</div>",
                         unsafe_allow_html=True)
-        # T2: Tooltip
-        with st.expander("ℹ️ SLOOS 說明", expanded=False):
-            st.markdown("**SLOOS（銀行放貸標準）**：美聯儲季度調查，正值=銀行收緊放貸（壞），負值=銀行放寬放貸（好）。⚠️ 新手白話：儀表板紅色時，代表銀行不願貸款，企業融資困難，景氣降溫訊號。")
+        # 2026-08-05 稽核 🟡 建議 8:同上,摺疊殼拆掉改 caption 直出。
+        st.caption("ℹ️ **SLOOS（銀行放貸標準）**：美聯儲季度調查，正值=銀行收緊放貸（壞），負值=銀行放寬放貸（好）。⚠️ 新手白話：儀表板紅色時，代表銀行不願貸款，企業融資困難，景氣降溫訊號。")
 
     with _gg3:
         # ADL = RSP/SPY 市場寬度 (% MoM change, negative = narrowing breadth = bad)
@@ -191,9 +191,8 @@ def render_inflection_alert_section(
                         else "🟡 市場廣度持平")
             st.markdown(f"<div style='text-align:center;font-size:12px'>{_adl_sig}</div>",
                         unsafe_allow_html=True)
-        # T2: Tooltip
-        with st.expander("ℹ️ 市場廣度說明", expanded=False):
-            st.markdown("**RSP/SPY 廣度（市場廣度）**：RSP = 等權重標普500，SPY = 市值加權。RSP/SPY 比值上升 = 中小型股參與行情（健康），下降 = 只有大型股撐盤（虛胖）。⚠️ 新手白話：紅色時代表漲幅集中少數大股，市場不穩健，小心追高。")
+        # 2026-08-05 稽核 🟡 建議 8:同上,摺疊殼拆掉改 caption 直出。
+        st.caption("ℹ️ **RSP/SPY 廣度（市場廣度）**：RSP = 等權重標普500，SPY = 市值加權。RSP/SPY 比值上升 = 中小型股參與行情（健康），下降 = 只有大型股撐盤（虛胖）。⚠️ 新手白話：紅色時代表漲幅集中少數大股，市場不穩健，小心追高。")
 
     # ── 持倉紅綠燈列表（War Room Middle）──────────────────────────
     _pf_all = st.session_state.get("portfolio_funds", [])

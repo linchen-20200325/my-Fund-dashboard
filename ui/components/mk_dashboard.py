@@ -32,13 +32,24 @@ import streamlit as st
 # §1 數據標籤化 (Data Tagging)
 # ════════════════════════════════════════════════════════════
 def tag_mk_class(fund: dict) -> str:
-    """MK_Class：Core（核心）/ Satellite（衛星）。重用既有 is_core 欄位。"""
-    is_core = fund.get("is_core")
-    if is_core is True:
-        return "Core"
-    if is_core is False:
-        return "Satellite"
-    return "Unknown"
+    """MK_Class：Core（核心）/ Satellite（衛星）。
+
+    走全站唯一真相 `ui.helpers.portfolio.allocation.resolve_core_flag`
+    （Google Sheet `policy_tier` 優先 → 缺才退 `is_core` 名稱關鍵字啟發式）。
+
+    原本這裡只讀 `is_core`、完全無視 `policy_tier`：使用者在 Sheet 標了 `core`
+    的基金，在保單卡片顯示「🛡️核心」（那裡走 resolve_core_flag）、在檔數 KPI 與
+    MK 戰情室卻被算成衛星，同一檔在同一頁兩種身分。
+
+    附帶修掉的第二個坑：舊版 `is_core is None` 回 "Unknown"，而下游三處
+    （`ui/helpers/portfolio/health.py` 的核心 / 衛星檔數、本檔核心戰情室與波段
+    觀測站兩個 sub-tab）都是用 `== "Core"` / `== "Satellite"` 過濾 —— 沒有
+    `is_core` 欄位的基金會**同時從兩張表消失**，使用者看不到它去哪了。
+    `resolve_core_flag` 是二態（判不出來歸衛星），與全站金額版 KPI
+    （`summarize_core_satellite`）同一套規則，不會再有無主的第三態。
+    """
+    from ui.helpers.portfolio.allocation import resolve_core_flag
+    return "Core" if resolve_core_flag(fund) else "Satellite"
 
 
 def tag_health_check(fund: dict) -> str:
@@ -476,7 +487,9 @@ _COL_CONFIG = {
 
 def _render_core_tab(df: pd.DataFrame) -> None:
     """Sub-Tab 1：核心戰情室（以息養股）。"""
-    with st.expander("💡 策略3 白話文：這頁怎麼看？", expanded=False):
+    # 三個 sub-tab 的白話文說明原本標題逐字相同（內容不同）→ 加後綴區分，
+    # 否則使用者在分頁間切換時以為是同一段、不會再點開。
+    with st.expander("💡 策略3 白話文：核心資產這頁怎麼看？", expanded=False):
         st.markdown(
             "**核心資產的重點是『穩定領息』。**\n\n"
             "- 請留意「含息總報酬」是否大於「年化配息率」；\n"
@@ -505,7 +518,7 @@ def _render_satellite_tab(df: pd.DataFrame,
                           bench_series=None,
                           bench_ticker: str = "SPY") -> None:
     """Sub-Tab 2：波段觀測站（衛星資產）。"""
-    with st.expander("💡 策略3 白話文：這頁怎麼看？", expanded=False):
+    with st.expander("💡 策略3 白話文：衛星資產這頁怎麼看？", expanded=False):
         st.markdown(
             "**衛星資產用來衝高獲利。**\n\n"
             "- 跌到 **深綠（-2σ 超跌價）** = 加大進場；**淺綠（-1σ 便宜價）** = 分批進場；\n"
@@ -600,7 +613,7 @@ def _render_333_tab(df: pd.DataFrame) -> None:
     v18.158：① 改用 NAV index[0] 推算實際成立年資（取代脆弱的 ret_3y 存在性近似）；
     ② 三層計數改 cascade（① → ①∩② → ①∩②∩③），讓 user 一眼看出卡哪層。
     """
-    with st.expander("💡 策略3 白話文：這頁怎麼看？", expanded=False):
+    with st.expander("💡 策略3 白話文：3-3-3 換股這頁怎麼看？", expanded=False):
         st.markdown(
             "**舊標的變差想換股？依 3-3-3 法則挑：**\n\n"
             "1. **成立 ≥ 3 年**：以 NAV 起始日推算實際年資（v18.158 起改正：原以 ret_3y 存在性近似，低頻 NAV 會誤判）。\n"

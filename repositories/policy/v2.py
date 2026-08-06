@@ -34,6 +34,8 @@ from ._helpers import (
     _normalize_invest_twd,
     _row_to_list,
     _with_quota_retry,
+    normalize_invest_twd_column,
+    reset_invest_twd_parse_errors,
 )
 
 
@@ -126,7 +128,9 @@ def _records_to_policy_df(records: list) -> pd.DataFrame:
         if c not in df.columns:
             df[c] = ""
     df = df[list(ALL_COLS)].copy()
-    df["invest_twd"] = df["invest_twd"].map(_normalize_invest_twd)
+    # §1：逐列解析本金，無法解析的列帶「列號 + 主鍵」回報（不再靜默歸零）
+    normalize_invest_twd_column(
+        df, source="保單分頁", id_cols=("policy_id", "fund_url"))
     df["fx_at_buy"]  = df["fx_at_buy"].map(_normalize_fx)
     for c in ("policy_id", "policy_name", "fund_url", "invest_date",
               "currency", "notes", "policy_tier"):
@@ -730,6 +734,8 @@ def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
 
     若該 worksheet 不存在或非 v2 schema → 回空 DataFrame（11 欄 header 齊）。
     """
+    # §1：本次載入的本金解析失敗清單為 replace 語意，進場先清空
+    reset_invest_twd_parse_errors()
     empty = pd.DataFrame(columns=list(ALL_COLS_V2))
     try:
         sh = _with_quota_retry(client.open_by_key, sheet_id)
@@ -758,7 +764,9 @@ def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
     df["avg_nav_with_div"] = df["avg_nav_with_div"].map(_normalize_float)
     df["avg_fx"]           = df["avg_fx"].map(_normalize_float)
     df["amount"]           = df["amount"].map(_normalize_float)
-    df["invest_twd"]       = df["invest_twd"].map(_normalize_invest_twd)
+    # §1：逐列解析本金，無法解析的列帶「列號 + 主鍵」回報（不再靜默歸零）
+    normalize_invest_twd_column(
+        df, source=f"v2/{policy_id}", id_cols=("policy_id", "fund_code"))
     # v18.160：div_cash_pct 預設 100（全現金給付）；舊 Sheet 缺欄補 100；超界 clip
     df["div_cash_pct"]     = df["div_cash_pct"].map(_normalize_div_cash_pct)
     return df
@@ -886,6 +894,8 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
                 if not ws.title.startswith("_") and ws.title != DEFAULT_WORKSHEET]
     except Exception as e:
         raise PolicySheetError(f"列保單分頁失敗：{e}") from e
+    # §1：本次載入的本金解析失敗清單為 replace 語意（跨分頁累加），開始逐分頁前清空
+    reset_invest_twd_parse_errors()
     frames: list[pd.DataFrame] = []
     for ws in tabs:
         if not is_v2_worksheet(ws):
@@ -909,7 +919,10 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         df_one["avg_nav_with_div"] = df_one["avg_nav_with_div"].map(_normalize_float)
         df_one["avg_fx"]           = df_one["avg_fx"].map(_normalize_float)
         df_one["amount"]           = df_one["amount"].map(_normalize_float)
-        df_one["invest_twd"]       = df_one["invest_twd"].map(_normalize_invest_twd)
+        # §1：逐列解析本金，無法解析的列帶「列號 + 主鍵」回報（不再靜默歸零）
+        normalize_invest_twd_column(
+            df_one, source=f"v2/{ws.title}",
+            id_cols=("policy_id", "fund_code"))
         df_one["div_cash_pct"]     = df_one["div_cash_pct"].map(_normalize_div_cash_pct)
         frames.append(df_one)
     if not frames:

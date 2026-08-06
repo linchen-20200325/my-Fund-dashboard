@@ -68,6 +68,66 @@ def _calc_data_health(indicators=None):
     return _calc_data_health_pure(ind)
 
 
+# ── 帳本快照表欄位設定 ───────────────────────────────────────────────────
+# 這張表是使用者唯一能看到「我每一檔現在值多少、賺賠多少」的地方；沒有
+# column_config 時中文長欄名（基金名稱 / 平均買入淨值 NAV / 未實現損益 (TWD)）
+# 會被瀏覽器截斷且不換行 —— 兩檔同公司基金看起來一模一樣，無法據此決定贖回哪一檔。
+# 每欄的 help 直接寫公式（範本：ui/helpers/fund/checkup.py `_CHECKUP_COL_CONFIG`）。
+# 值全部是已格式化的字串（含 NT$ / % / —），故一律 TextColumn。
+_T7_SNAP_COL_CONFIG: dict = {
+    "保單": st.column_config.TextColumn(
+        "保單", width="small", help="該持倉綁定的保單 policy_id；「(未綁)」= 尚未指定保單"),
+    "代碼": st.column_config.TextColumn(
+        "代碼", width="small", help="基金代碼（保單商品代碼或境外基金代碼）"),
+    "基金名稱": st.column_config.TextColumn(
+        "基金名稱", width="large",
+        help="MoneyDJ / 保單分頁抓到的基金全名（顯示截斷至 28 字，滑鼠移上可看完整內容）"),
+    "幣別": st.column_config.TextColumn(
+        "幣別", width="small", help="計價幣別（原幣）。跨幣別金額一律換算成 TWD 後才加總"),
+    "持有單位": st.column_config.TextColumn(
+        "持有單位", width="small", help="目前持有單位數（買進累加、贖回扣除、配股再投入累加）"),
+    "平均買入淨值 NAV": st.column_config.TextColumn(
+        "平均買入淨值 NAV", width="medium",
+        help="加權平均買入淨值（原幣）；公式：Σ(每筆買進金額原幣) ÷ Σ(每筆買進單位數)"),
+    "含息成本": st.column_config.TextColumn(
+        "含息成本", width="medium",
+        help="扣掉已領配息後的每單位成本（原幣）。只有「已回收部分成本」時才顯示，"
+             "否則顯示 —"),
+    "平均買入匯率": st.column_config.TextColumn(
+        "平均買入匯率", width="medium",
+        help="加權平均買入匯率（1 原幣 = X TWD）；換匯用當日匯率，不回填未來匯率"),
+    "最新 NAV": st.column_config.TextColumn(
+        "最新 NAV", width="small",
+        help="最新一筆淨值（原幣）。基金淨值為 T+1~T+3 公布，週末/假日不更新屬正常"),
+    "最新 FX": st.column_config.TextColumn(
+        "最新 FX", width="small", help="最新即時匯率（1 原幣 = X TWD）"),
+    "成本基礎 (TWD)": st.column_config.TextColumn(
+        "成本基礎 (TWD)", width="medium",
+        help="淨投入金額（TWD）；公式：Σ買進 TWD − Σ贖回回收 TWD"),
+    "市值 (TWD)": st.column_config.TextColumn(
+        "市值 (TWD)", width="medium",
+        help="公式：持有單位 × 最新 NAV × 最新 FX。NAV 或 FX 抓不到時顯示 —"),
+    "未實現損益 (TWD)": st.column_config.TextColumn(
+        "未實現損益 (TWD)", width="medium",
+        help="公式：市值 (TWD) − 成本基礎 (TWD)。**不含**已領到的現金配息"),
+    "未實現損益 %": st.column_config.TextColumn(
+        "未實現損益 %", width="small",
+        help="公式：未實現損益 ÷ 成本基礎 × 100%"),
+    "累積已配息率": st.column_config.TextColumn(
+        "累積已配息率", width="medium",
+        help="成本已被配息回收幾成；公式：(平均買入淨值 − 含息成本) ÷ 平均買入淨值 × 100%"),
+    "配息率": st.column_config.TextColumn(
+        "配息率", width="small", help="MoneyDJ 年化配息率（對**淨值**的年化率）"),
+    "預估月配息 (TWD)": st.column_config.TextColumn(
+        "預估月配息 (TWD)", width="medium",
+        help="現金給付部分；公式：市值 × 配息率 × (現金給付% ÷ 100) ÷ 12"),
+    "預估月配股 (TWD)": st.column_config.TextColumn(
+        "預估月配股 (TWD)", width="medium",
+        help="再投入轉新單位部分；公式：市值 × 配息率 × ((100 − 現金給付%) ÷ 100) ÷ 12，"
+             "括號內為可換得的單位數（金額 ÷ FX ÷ NAV）"),
+}
+
+
 # ── v18.230：股數/單位分配模式 helper（A/B/C 共用） ─────────────────────────
 def _t7_has_position(pk: str) -> bool:
     """檢查 pk 是否已在主帳本有持倉。新標的 → False → 預設「目標單位數」模式。"""
@@ -1442,7 +1502,18 @@ def render_t7_section() -> None:
                         _wn = {pk: _b_entries[pk][1] for pk in _pct_pks_b}
                         if _pct_pks_b:
                             _last = _pct_pks_b[-1]
-                            _wn[_last] += (100.0 - _wsum)
+                            # 容忍帶（±0.5%）內的權重零頭一律補到最後一檔。
+                            # §1：這是「顯式填補」，必須讓使用者看見補了多少、補給誰
+                            # ——否則填 33.3×3 落帳後第三檔被無聲加 0.1%。
+                            _wgap = 100.0 - _wsum
+                            _wn[_last] += _wgap
+                            if abs(_wgap) > 1e-9:
+                                st.caption(
+                                    f"ℹ️ 權重總和為 {_wsum:.2f}%（容忍帶 ±0.5% 內）→ "
+                                    f"零頭 {_wgap:+.2f}% 已補到最後一檔 "
+                                    f"**{_label_for_pk(_last)}**，該檔實際採用 "
+                                    f"{_wn[_last]:.2f}%。"
+                                )
                             _v_post = sum(_v_curr.values()) + float(_btot)
                             _gaps = {
                                 pk: max(_v_post * _wn[pk] / 100.0 - _v_curr[pk], 0.0)
@@ -2113,7 +2184,15 @@ def render_t7_section() -> None:
                                         if not _wn:
                                             continue
                                         _last_bpk = list(_wn.keys())[-1]
-                                        _wn[_last_bpk] += (100.0 - sum(_wn.values()))
+                                        # §1：容忍帶內的零頭補到最後一檔要讓使用者看見
+                                        _wgap_c = 100.0 - sum(_wn.values())
+                                        _wn[_last_bpk] += _wgap_c
+                                        if abs(_wgap_c) > 1e-9:
+                                            st.caption(
+                                                f"ℹ️ 買方權重零頭 {_wgap_c:+.2f}% 已補到 "
+                                                f"**{_label_for_pk(_last_bpk)}**，"
+                                                f"該檔實際採用 {_wn[_last_bpk]:.2f}%。"
+                                            )
                                         _used_units = 0.0
                                         for _bpk, _w in _wn.items():
                                             if _bpk == _last_bpk:
@@ -2396,11 +2475,12 @@ def render_t7_section() -> None:
             with _panel_ph.container():
                 # ── 方案比較區（v18.4 新增，僅在有 scenarios 時顯示）─────────
                 if st.session_state.t7_scenarios:
-                    with st.expander(
-                        f"📊 方案比較（{len(st.session_state.t7_scenarios)} / "
-                        f"{_T7_SCENARIO_LIMIT}）",
-                        expanded=True,
-                    ):
+                    # 原 `expanded=True` expander → 拿掉殼（原則 1：永遠開著的摺疊層
+                    # 只是多一層邊框 + 一次多餘點擊）
+                    st.markdown(
+                        f"#### 📊 方案比較（{len(st.session_state.t7_scenarios)} / "
+                        f"{_T7_SCENARIO_LIMIT}）")
+                    with st.container():
                         _live_navfx_cache = _t7_build_navfx_cache()
                         _live_summary = _t7_summary_from_ledgers(
                             st.session_state.t7_ledgers,
@@ -2442,6 +2522,29 @@ def render_t7_section() -> None:
                         st.dataframe(
                             pd.DataFrame(_cmp_rows),
                             use_container_width=True, hide_index=True,
+                            column_config={
+                                "方案": st.column_config.TextColumn(
+                                    "方案", width="medium",
+                                    help="🟢 主帳本 = 目前實際部位；💡 = 尚未鎖定的試算方案"),
+                                "類型": st.column_config.TextColumn("類型", width="small"),
+                                "建立時間": st.column_config.TextColumn("建立時間", width="small"),
+                                "總市值 TWD": st.column_config.TextColumn(
+                                    "總市值 TWD", width="medium",
+                                    help="Σ 各檔 單位數 × 最新 NAV × 最新 FX"),
+                                "成本 TWD": st.column_config.TextColumn(
+                                    "成本 TWD", width="medium", help="Σ 各檔淨投入金額"),
+                                "未實現損益 TWD": st.column_config.TextColumn(
+                                    "未實現損益 TWD", width="medium",
+                                    help="總市值 − 成本；假設 NAV 不變"),
+                                "報酬 %": st.column_config.TextColumn(
+                                    "報酬 %", width="small", help="未實現損益 ÷ 成本"),
+                                "月配息 TWD": st.column_config.TextColumn(
+                                    "月配息 TWD", width="medium",
+                                    help="括號內為與主帳本的差距（正 = 這個方案月現金流較多）"),
+                                "說明": st.column_config.TextColumn(
+                                    "說明", width="large",
+                                    help="方案內容摘要（截斷至 60 字，滑鼠移上可看完整內容）"),
+                            },
                         )
                         st.caption(
                             "💡 月配息欄括號 = 與主帳本差距；未實現損益反映各方案買進後預估價位（NAV 不變假設）。"
@@ -2480,8 +2583,11 @@ def render_t7_section() -> None:
                             st.session_state.t7_scenarios = []
                             st.rerun()
 
-                with st.expander("📒 目前帳本 + 以息養股現金流（in-memory，隨頁面重整清空）",
-                                 expanded=True):
+                # 原 `expanded=True` expander → 拿掉殼。這是全 Tab 最重要的一張表
+                # （每檔現在值多少、賺賠多少），不該再包一層摺疊（原則 1）。
+                st.markdown("#### 📒 目前帳本 + 以息養股現金流")
+                st.caption("in-memory，隨頁面重整清空；已同步至 Google Sheet 的部分見上方存讀面板。")
+                with st.container():
                     _snap_rows = []
                     _v_total_twd = 0.0
                     _ann_total_twd = 0.0
@@ -2592,10 +2698,14 @@ def render_t7_section() -> None:
                                         "累積已配息率"]
                             )
                             st.dataframe(_styled, use_container_width=True,
-                                         hide_index=True)
-                        except Exception:
+                                         hide_index=True,
+                                         column_config=_T7_SNAP_COL_CONFIG)
+                        except Exception as _e_sty:
+                            print(f"[t7 帳本表] Styler 著色失敗，改用未著色表："
+                                  f"[{type(_e_sty).__name__}] {_e_sty}")
                             st.dataframe(_df_snap, use_container_width=True,
-                                         hide_index=True)
+                                         hide_index=True,
+                                         column_config=_T7_SNAP_COL_CONFIG)
                     # v18.70: 市值 = 0 時用 invest_twd 顯示估算值，避免「上下不同步」視覺斷層
                     _pl_total = _v_total_twd - _cost_total_twd
                     _pl_total_pct = (_pl_total / _cost_total_twd * 100.0
@@ -2637,7 +2747,10 @@ def render_t7_section() -> None:
                     _pc4.metric(
                         "📅 每月被動現金流",
                         fmt_twd(_cash_total_twd / 12),
-                        help="只算現金、不含再投入配股；= 預估年現金配息 / 12"
+                        help="只算現金、不含再投入配股；= 預估年現金配息 / 12。\n\n"
+                             "⚠️ 基數是**當前市值**（非投入本金）。Tab3 上方「① 配置總覽」"
+                             "的「預估月配息」是以**投入本金**為基數，淨值下跌時那格會偏高，"
+                             "以本格為準。"
                     )
                     _pc5.metric(
                         "🪙 預估年配股 (TWD)",

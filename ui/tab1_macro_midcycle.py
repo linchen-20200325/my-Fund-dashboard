@@ -52,10 +52,6 @@ _PMI_SITUATION_BELOW = _PMI_THR["alert_generation"]["contraction_below"]  # 50.0
 _ZS_MATRIX_LABEL = "Z-Score 矩陣"
 _ZS_TYPE_UNKNOWN = "未分類"
 
-# 歷史錨點樣張範圍(必修 2 pilot)。先做少數幾張給 user 看效果,核准後再鋪滿全表。
-# 選這三張的理由見 `_card_note` docstring 與 PR 說明;數量不寫死在文案裡(§3.3)。
-_EDU_ANCHOR_PILOT: frozenset = frozenset({"PMI", "CPI", "SLOOS"})
-
 # ── Z-Score 矩陣指標盤(SSOT)────────────────────────────────────────────────
 # spec: (key, 顯示名 fallback, 單位, 小數位, high_is_bad, z>0 白話, z<0 白話)
 # ⚠️ 「顯示名」只是 **fallback** —— 卡片標題一律優先吃 `ind[key]["name"]`
@@ -97,6 +93,16 @@ _ZS_INDICATORS: list = [
     ("DXY",          "美元指數",            "",    2,  True,  "美元走強（外幣壓力）","美元走弱（外幣受益）"),
     ("PERMIT_HOUSING","⭐ 建照核發",         "千",  0,  False, "房市領先強",        "房市領先弱"),
 ]
+
+# 歷史錨點的適用範圍。原為 3 張樣張(`{"PMI","CPI","SLOOS"}`)給 user 看效果;
+# 2026-08-05 稽核 🟡 建議 7:user 核准後**鋪滿全表**,改由 `_ZS_INDICATORS` 導出
+# (§3.3:名單只有一份,矩陣增減指標時自動跟上,不必記得改第二處)。
+#
+# `MACRO_EDU` 缺 `historical_anchor` 的 key 不會因此多出假錨點:`_card_note` 與
+# `_decoration_coverage` 兩邊的條件都是「在本名單內 **且** 語料真的有非空錨點」,
+# 缺語料者照樣不掛、也不計入覆蓋率(§1 不補假內容)。
+# 這也是覆蓋率 caption 存在的原因 —— 鋪滿名單後,覆蓋率仍誠實反映實際有幾張。
+_EDU_ANCHOR_PILOT: frozenset = frozenset(_row[0] for _row in _ZS_INDICATORS)
 
 
 def _card_title(spec_name: str, zd: dict) -> str:

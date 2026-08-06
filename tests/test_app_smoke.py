@@ -17,12 +17,18 @@ APP = ROOT / "app.py"
 # v11.0 D-19: mk_dashboard.py 搬至 ui/components/mk_dashboard.py 並改為 shim
 # expander 巢狀守門 AST 解析需指向真正含函式體的新位置
 MK = ROOT / "ui" / "components" / "mk_dashboard.py"
+# Tab2 單一基金:原本不在守門名單 → 檔內一處摺疊容器巢狀長期逃過 CI。
+# 名單本身就是保護網的邊界,漏列 = 同型錯誤永遠抓不到,故一併納管。
+TAB2 = ROOT / "ui" / "tab2_single_fund.py"
+
+# 受 T1/T2 守門的檔案清單(新增 UI 大檔時請往這裡加,不要另開測試)
+_GUARDED_FILES = [APP, MK, TAB2]
 
 
 # ════════════════════════════════════════════════════════════
 # T1. AST 編譯
 # ════════════════════════════════════════════════════════════
-@pytest.mark.parametrize("path", [APP, MK])
+@pytest.mark.parametrize("path", _GUARDED_FILES)
 def test_ast_parse_compiles(path: Path) -> None:
     ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
@@ -61,7 +67,7 @@ def _walk_with_path(tree: ast.AST):
             stack.append((child, ancestors + [node]))
 
 
-@pytest.mark.parametrize("path", [APP, MK])
+@pytest.mark.parametrize("path", _GUARDED_FILES)
 def test_no_direct_expander_nesting(path: Path) -> None:
     """同檔內 `with st.expander` 不可巢狀。"""
     tree = ast.parse(path.read_text(encoding="utf-8"))

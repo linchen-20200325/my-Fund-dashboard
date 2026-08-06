@@ -111,14 +111,43 @@ class TestExceptionLayerOnlyListsRealExceptions:
             assert _lvl in _lines[0] and "12" in _lines[0]
 
     def test_yellow_or_red_bucket_is_listed_even_when_news_is_calm(self):
-        """桶警戒與新聞風險是兩件事,任一亮起都算例外。"""
+        """桶警戒與新聞風險是兩件事,任一亮起都算例外。
+
+        ⚠️ 2026-08-06 必修 5(**修正前必紅**,舊行為與斷言衝突):
+        原本 ③ 把 ② 那一列的 `label` + `headline` **原字串**再印一次,而 ③ 就
+        緊貼在 ② 表下方兩行 —— 同一句話上下相鄰出現兩次(user 原則 2)。
+        現在改成一句「是哪幾列」的指路,桶名走 `BUCKET_META` SSOT。
+        """
+        from shared.macro_buckets import BUCKET_META
         from ui.tab1_macro import _exception_lines
+        _face = f'{BUCKET_META["inflection"]["emoji"]} {BUCKET_META["inflection"]["title"]}'
         for _lvl in ("yellow", "red"):
             _b = {"inflection": dict(_CALM_BUCKETS["inflection"], level=_lvl,
                                      headline="CFNAI -0.85 衰退"),
                   "news": _CALM_BUCKETS["news"]}
             _lines = _exception_lines(_CALM_RISK, _b)
-            assert len(_lines) == 1 and "CFNAI -0.85 衰退" in _lines[0]
+            assert len(_lines) == 1, "桶警戒應收斂成一句指路,不是逐桶各一條"
+            assert _face in _lines[0], f"指路沒說是哪一列:{_lines[0]!r}"
+            assert "CFNAI -0.85 衰退" not in _lines[0], (
+                "② 那一列的讀數又被原字串抄了一次 —— 這正是必修 5 要消滅的重複")
+
+    def test_bucket_pointer_names_come_from_the_ssot(self, monkeypatch):
+        """§3.3:桶名走 `shared.macro_buckets.BUCKET_META`,③ 不得重打一份。
+        改 SSOT 的桶名 → 指路必須跟著變。"""
+        import shared.macro_buckets as _mb
+        from ui.tab1_macro import _exception_lines
+        monkeypatch.setitem(_mb.BUCKET_META, "news",
+                            {"emoji": "🛎️", "title": "哨兵桶", "sub": "x"})
+        _b = {"inflection": _CALM_BUCKETS["inflection"],
+              "news": dict(_CALM_BUCKETS["news"], level="red")}
+        assert "🛎️ 哨兵桶" in _exception_lines(_CALM_RISK, _b)[0]
+
+    def test_both_alerting_buckets_collapse_into_one_pointer(self):
+        """兩桶同時亮 → 仍然只有一句(③ 的職責是指路,不是重印 ② 的內容)。"""
+        from ui.tab1_macro import _exception_lines
+        _b = {k: dict(v, level="red") for k, v in _CALM_BUCKETS.items()}
+        _lines = _exception_lines(_CALM_RISK, _b)
+        assert len(_lines) == 1
 
     def test_missing_or_broken_inputs_do_not_fabricate_an_exception(self):
         """§1 邊界:沒資料 ≠ 有例外。None / 空 dict / 型別不對都回空 list,
@@ -212,16 +241,28 @@ class TestExceptionLayerIsWiredUp:
 # ══════════════════════════════════════════════════════════════
 # 🟡 建議 6 — 指南針下移到 🌳 長期座標之後
 # ══════════════════════════════════════════════════════════════
-class TestCompassSitsBelowTheLongTermSection:
-    def test_compass_renders_after_the_long_term_section(self):
-        """**修正前必紅** —— 修正前指南針是詳細區的第一段,擋在被 ② 表指路
-        指到的四時域前面,而它無快取時只顯示「請按右上按鈕載入」。"""
-        assert _sole_call_line("_rmc") > _sole_call_line("render_long_term_section"), (
-            "指南針仍排在 🌳 長期座標之前")
+class TestCompassRemoved:
+    """2026-08-06 必修 6 —— 指南針從「下移一段」升級為「整塊移除」。
 
-    def test_compass_still_renders_before_the_mid_cycle_section(self):
-        """只下移一段,不是整個丟到頁尾(丟到頁尾等於變相刪除)。"""
-        assert _sole_call_line("_rmc") < _sole_call_line("render_mid_cycle_section")
+    原本這一組守的是它的**位置**(在 🌳 長期之後、📈 中期之前)。查證後
+    三張卡在 🎯 短線雷達全部有現成的燈,且它自己還要再按一次按鈕才有資料
+    → user 原則 2 + 原則 3,整塊拿掉。位置守衛隨之改成**不存在守衛**。
+    刪除的完整殘留掃描(ui/ + services/ + app.py)在
+    `test_audit_20260805_tab1_summary.py::TestSectionHints`;這裡只釘 Tab① 本身。
+    """
+
+    def test_tab1_no_longer_renders_the_compass(self):
+        """**修正前必紅**(舊行為與斷言衝突,非 ImportError):
+        修正前 `ui/tab1_macro.py` 詳細區有 `_rmc()` 這個呼叫節點。
+        用 AST 掃呼叫節點 —— 註解裡提到指南針的沿革不會造成假紅。"""
+        assert not _calls("_rmc"), "Tab① 仍在呼叫指南針"
+        assert not _calls("render_macro_compass"), "Tab① 仍在呼叫指南針"
+
+    def test_the_two_neighbouring_sections_are_untouched(self):
+        """刪錯東西的防護:它上下那兩段(🌳 長期 / 📈 中期)必須原樣還在,
+        且順序不變 —— 移除的只有夾在中間的指南針。"""
+        assert (_sole_call_line("render_long_term_section")
+                < _sole_call_line("render_mid_cycle_section"))
 
     def test_section_walk_caption_does_not_mention_the_compass(self):
         """回歸:② 表下那行「往下捲依序是…」只列四時域四段且從桶對照表導出,

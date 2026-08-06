@@ -108,6 +108,30 @@ def _get_holdings(fd: dict) -> dict:
             or {})
 
 
+def anomaly_view_state(registry: dict | None) -> tuple[str, list]:
+    """Section ⑥「資料異常清單」的三態決策（純函式，供渲染端與測試共用）。
+
+    回傳 `(state, items)`：
+    - `"empty"`      — registry 空 → **還沒量**，不可宣稱正常（§1）
+    - `"clean"`      — 有登錄資料且全部健康
+    - `"anomaly"`    — 有異常項，`items` 為排序後的 `(key, meta)`
+
+    🟡 分兩類：(a) 真延遲 (b) FRED release 期已到 +5d 內；後者屬正常 release
+    window，不列入異常。
+    """
+    if not registry:
+        return "empty", []
+    items = [(k, v) for k, v in registry.items()
+             if v.get("fresh_icon") == "🔴"
+             or (v.get("fresh_icon") == "🟡"
+                 and "release 期已到" not in (v.get("fresh_label") or ""))]
+    items.sort(key=lambda kv: (
+        0 if kv[1].get("fresh_icon") == "🔴" else 1,
+        kv[1].get("label", kv[0]),
+    ))
+    return ("anomaly" if items else "clean"), items
+
+
 def render_data_guard_tab() -> None:
     """渲染資料診斷 Tab — 全域 data_registry / API 延遲 / Phase 4-3B 狀態 /
     NAS Proxy / API Keys / 基金逐筆 / FRED next_release / 資料異常清單。
@@ -124,6 +148,13 @@ def render_data_guard_tab() -> None:
     with _d5_hdr:
         st.markdown("## 🔬 資料診斷")
         st.caption("📖 故事幕後站・資料守衛：投資決策背後的數據如何被抓取與守護 — 確認所有來源成功下載，方便排查問題")
+        st.info(
+            "🔧 **本頁大部分是維運診斷內容**（secrets / TOML 解析錯誤、NAS Proxy 連線測試、"
+            "expanding window 樣本量、FRED release schedule…）。\n\n"
+            "**一般使用只需要看兩個地方**：最上方 **⓪ 前 4 Tab 資料完整性檢查表**"
+            "（哪個 Tab 缺資料）與最下方 **⑥ 資料異常清單**（哪些資料過期）。"
+            "中間各區塊在你沒遇到問題時可以完全略過。"
+        )
     with _d5_btn:
         st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
         if st.button("🔄 重新載入總經", key="btn_d5_refresh"):
@@ -151,6 +182,24 @@ def render_data_guard_tab() -> None:
     _all_macro = list(_FRED_REQUIRED) + list(_YF_REQUIRED)
     _macro_have = sum(1 for k in _all_macro if (_src_ind.get(k) or {}).get("value") is not None)
     _macro_total = len(_all_macro)
+
+    # 缺值清單顯示用中文名。原本直接印 internal key（PMI / YIELD_10Y2Y / SLOOS…），
+    # 使用者看不懂哪個指標沒抓到、也就無從判斷該不該在意。
+    # 取數優先序：indicators dict 內建的 `name`（總經抓取時附） → 本地對照表 → key 本身。
+    _D5_ZH = {
+        "PMI": "製造業 PMI", "YIELD_10Y2Y": "殖利率利差 10Y-2Y",
+        "YIELD_10Y3M": "殖利率利差 10Y-3M", "HY_SPREAD": "高收益債信用利差",
+        "M2": "M2 貨幣供給", "FED_BS": "Fed 資產負債表",
+        "CPI": "消費者物價 CPI", "FED_RATE": "聯邦資金利率",
+        "UNEMPLOYMENT": "失業率", "PPI": "生產者物價 PPI",
+        "SAHM": "薩姆規則（衰退預警）", "SLOOS": "銀行放貸標準",
+        "VIX": "VIX 恐慌指數", "DXY": "美元指數 DXY",
+        "ADL": "市場廣度 RSP/SPY", "COPPER": "銅價（銅博士）",
+    }
+
+    def _macro_zh(key: str) -> str:
+        _nm = (_src_ind.get(key) or {}).get("name")
+        return f"{_nm or _D5_ZH.get(key, key)}（{key}）"
 
     _cf_have_nav  = bool(_src_cf and _src_cf.get("series") is not None)
     _cf_have_meta = bool(_src_cf and (_src_cf.get("fund_name") or _src_cf.get("name")))
@@ -216,7 +265,9 @@ def render_data_guard_tab() -> None:
     _tab_table = [
         ("🌐 Tab 1 總經", _t1_emoji, _t1_color,
          f"{_macro_have}/{_macro_total} 指標",
-         f"FRED 12 / Yahoo 4 ｜ 缺值:{', '.join(k for k in _all_macro if not (_src_ind.get(k) or {}).get('value')) or '無'}",
+         f"FRED {len(_FRED_REQUIRED)} / Yahoo {len(_YF_REQUIRED)} ｜ 缺值:"
+         + (', '.join(_macro_zh(k) for k in _all_macro
+                      if not (_src_ind.get(k) or {}).get('value')) or '無'),
          "若 < 85% → 按上方「重新載入總經」"),
         ("🔍 Tab 2 單一基金", _t2_emoji, _t2_color,
          f"{_single_have}/{_single_total} 欄位" if _src_cf else "未查",
@@ -370,8 +421,12 @@ def render_data_guard_tab() -> None:
 
     _RAW_TABLE = [
         # (#, 類別, 用途, 端點/Ticker, NAS Proxy, status_tuple)
+        # 端點欄原本一格塞 16 個裸 series id，擠成一團無法閱讀。改成
+        # 「幾條 + 分類舉例」，完整逐條清單在下方「FRED 下次發布日診斷」區。
         ("1️⃣", "FRED API",            "美國總經 14+ 指標",
-         "NAPM/DGS10/DGS2/DGS3MO/BAMLH0A0HYM2/M2SL/WALCL/CPIAUCSL/FEDFUNDS/UNRATE/PPIACO/UMCSENT/ICSA/HSN1F/SAHMREALTIME/DRTSCILM",
+         "16 條 series：利率/利差（DGS10, DGS2, DGS3MO）、信用（BAMLH0A0HYM2）、"
+         "流動性（M2SL, WALCL）、物價（CPIAUCSL, PPIACO）、"
+         "就業（UNRATE, ICSA, SAHMREALTIME）、其他（NAPM, FEDFUNDS, UMCSENT, HSN1F, DRTSCILM）",
          "—", _src_status(bool(_src_ind), _fred_ok, len(_FRED_INTERNAL))),
         ("2️⃣", "Yahoo Chart REST",    "市場行情 4 項",
          "^VIX  /  RSP+SPY  /  DX-Y.NYB  /  HG=F",
@@ -1239,20 +1294,23 @@ def render_data_guard_tab() -> None:
                          or os.environ.get("FRED_API_KEY",""))
             if not _diag_key:
                 st.warning("⚠️ FRED_API_KEY 未設置 → 全部會 fallback")
+            # 13 個診斷目標一律「中文名 + series id」，不再有純英文 label
+            # （原本 UNRATE / HSN1F / PERMIT / UMCSENT / M2SL / FEDFUNDS 6 個
+            #  只印 FRED 內部代號，看不懂就無從判斷該不該在意它延遲）
             _diag_targets = [
-                ("CPI", "CPIAUCSL", "monthly"),
-                ("PMI / NAPM", "NAPM", "monthly"),
-                ("UNRATE", "UNRATE", "monthly"),
-                ("CFNAI 領先指標 (LEI)", "CFNAI", "monthly"),
-                ("HSN1F", "HSN1F", "monthly"),
-                ("PERMIT", "PERMIT", "monthly"),
-                ("UMCSENT", "UMCSENT", "monthly"),
-                ("M2SL", "M2SL", "monthly"),
-                ("CCSA 持續失業金", "CCSA", "weekly"),
+                ("CPI 消費者物價指數", "CPIAUCSL", "monthly"),
+                ("PMI 製造業採購經理人指數", "NAPM", "monthly"),
+                ("失業率", "UNRATE", "monthly"),
+                ("CFNAI 芝加哥聯儲全國活動指數", "CFNAI", "monthly"),
+                ("成屋銷售", "HSN1F", "monthly"),
+                ("新屋開工許可", "PERMIT", "monthly"),
+                ("密大消費者信心", "UMCSENT", "monthly"),
+                ("M2 貨幣供給", "M2SL", "monthly"),
+                ("CCSA 續請失業金", "CCSA", "weekly"),
                 ("ICSA 初領失業金", "ICSA", "weekly"),
-                ("T10Y3M 殖利率利差", "T10Y3M", "daily"),
-                ("FEDFUNDS", "FEDFUNDS", "monthly"),
-                ("DRTSCILM SLOOS", "DRTSCILM", "quarterly"),
+                ("殖利率利差 10Y-3M", "T10Y3M", "daily"),
+                ("聯邦資金利率", "FEDFUNDS", "monthly"),
+                ("SLOOS 銀行放貸標準", "DRTSCILM", "quarterly"),
             ]
             if st.button("🔍 立即診斷（會打 API，30 天 cache）", key="btn_fred_diag"):
                 _diag_rows = []
@@ -1275,8 +1333,21 @@ def render_data_guard_tab() -> None:
                             "next_release": f"{_nrd.isoformat()} ({_status})",
                             "距今": f"{_delta:+d} 天",
                         })
-                st.dataframe(pd.DataFrame(_diag_rows),
-                             use_container_width=True, hide_index=True)
+                st.dataframe(
+                    pd.DataFrame(_diag_rows),
+                    use_container_width=True, hide_index=True,
+                    column_config={
+                        "指標": st.column_config.TextColumn("指標", width="medium"),
+                        "series_id": st.column_config.TextColumn(
+                            "series_id", width="small",
+                            help="FRED 內部代號，回報問題時附上它"),
+                        "頻率": st.column_config.TextColumn("頻率", width="small"),
+                        "next_release": st.column_config.TextColumn(
+                            "下次發布日", width="medium",
+                            help="FRED 公告的下一次資料發布日；None = API 失敗或該序列無排程"),
+                        "距今": st.column_config.TextColumn(
+                            "距今", width="small", help="正數 = 還沒到；負數 = 已過幾天"),
+                    })
                 st.caption(
                     "💡 若某指標長期 None，可能：(1) FRED 未收錄該 series 的 release schedule "
                     "(2) proxy 連線有問題 (3) series_id 拼錯。對應修正：(1) 改 fallback 閾值 "
@@ -1289,7 +1360,10 @@ def render_data_guard_tab() -> None:
     # v19.361 PR-2(A)：保單對帳單 CSV 歷史匯入 → nav_history 累積(L3→L2)
     # ══════════════════════════════════════════════════════
     st.divider()
-    with st.expander("🗂️ NAV 歷史匯入（保單對帳單 CSV → nav_history 累積）", expanded=False):
+    # expanded=True：裡面第一行就是「🔴 累積未啟用」的致命狀態燈 —— 收起來的話
+    # 使用者永遠不會知道歷史淨值根本沒在累積（原則 1）。
+    with st.expander("🗂️ NAV 歷史匯入與累積狀態（保單對帳單 CSV → nav_history）",
+                     expanded=True):
         # v19.362 ①:累積狀態燈 — 終結「secrets 沒設 = 靜默略過,以為在累積其實沒有」
         try:
             from services.nav_history_gs import status as _nh_status
@@ -1370,17 +1444,20 @@ def render_data_guard_tab() -> None:
         "超過 +5 天 → 🔴（真延遲）。FRED API 失敗才回退舊閾值。"
     )
     _anom_reg = st.session_state.get("data_registry", {})
-    # 🟡 含 (a) 真延遲 (b) FRED release 期已到 +5d 內，第二類不應視為異常
-    _anom_items = [(k, v) for k, v in _anom_reg.items()
-                   if v.get("fresh_icon") == "🔴"
-                   or (v.get("fresh_icon") == "🟡"
-                       and "release 期已到" not in (v.get("fresh_label") or ""))]
-    _anom_items.sort(key=lambda kv: (
-        0 if kv[1].get("fresh_icon") == "🔴" else 1,
-        kv[1].get("label", kv[0]),
-    ))
-    if not _anom_items:
-        st.success("✅ 全數資料源狀態正常（🟢 最新 + 🟡 release window 內）")
+    _anom_state, _anom_items = anomaly_view_state(_anom_reg)
+    if _anom_state == "empty":
+        # §1：registry 為空 = 「還沒量」，不是「量過都正常」。
+        # 診斷頁在什麼都沒載入時印大綠燈，會讓來查證數字的使用者回頭懷疑自己的判讀。
+        # 對齊 Section ② 的空 registry guard（本檔 `if not _reg:` 分支）。
+        st.info(
+            "尚未載入任何數據 → **無法判定資料是否異常**（這不等於「全部正常」）。"
+            "請先於 Tab1 按「📡 載入總經資料」，或於 Tab2 / Tab3 載入基金資料後再回本區。"
+        )
+    elif _anom_state == "clean":
+        st.success(
+            f"✅ 已登錄的 {len(_anom_reg)} 個資料源狀態全數正常"
+            "（🟢 最新 + 🟡 release window 內）"
+        )
     else:
         _anom_red = sum(1 for _, v in _anom_items if v.get("fresh_icon") == "🔴")
         _anom_yel = sum(1 for _, v in _anom_items if v.get("fresh_icon") == "🟡")

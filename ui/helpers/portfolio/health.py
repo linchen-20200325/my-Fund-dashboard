@@ -14,12 +14,17 @@ def compute_health_kpis(portfolio_funds: list | None,
     """從 portfolio_funds + 預算好的 MK dataframe 算 6 個健康度指標。
 
     回傳 dict（所有數值預設 0 / "—"，缺資料安全）：
-      # 配置維度
+      # 配置維度 —— ⚠️ 這裡是「檔數」口徑（分母 = 被 MK 歸類的檔數），
+      # **不是**配置比例。金額口徑（Σ 投入本金 + policy_tier 優先 + 目標吃
+      # portfolio_core_pct）的唯一真相在 ui/helpers/portfolio/allocation.py，
+      # Tab3「① 配置總覽」「Hero 甜甜圈」「保單分組」三處都走那支。
+      # 兩者本來就會不同（3 檔核心 = 60% 檔數，但可能持有 90% 的錢），
+      # 故此處不再與任何目標值比較，避免和金額版的「目標偏差」打架。
       n_classed:        歸類 Core/Satellite 的基金數
-      pct_core:         核心 %
-      pct_sat:          衛星 %
-      ratio_label:      "核心 71% / 衛星 29%" or "—"
-      ratio_delta:      "-9% vs 策略3 80/20" / "符合 策略3 80/20" / None
+      pct_core:         核心佔比 %（**檔數**）
+      pct_sat:          衛星佔比 %（**檔數**）
+      ratio_label:      "核心 3 檔 / 衛星 2 檔（檔數）" or "—"
+      ratio_delta:      None（保留 key 供既有 caller，恆為 None）
 
       # MK 標籤維度（來自 mk_df）
       n_buy:            🟢 撿便宜雷達（Buy_Zone / Buy_Zone_Deep）
@@ -78,12 +83,11 @@ def compute_health_kpis(portfolio_funds: list | None,
         if n_classed > 0:
             out["pct_core"] = round(n_core / n_classed * 100)
             out["pct_sat"] = round(n_sat / n_classed * 100)
-            out["ratio_label"] = (
-                f"核心 {out['pct_core']}% / 衛星 {out['pct_sat']}%"
-            )
-            _gap = out["pct_core"] - 80
-            out["ratio_delta"] = (f"{_gap:+d}% vs 策略3 80/20"
-                                   if _gap else "符合 策略3 80/20")
+            # 標題明寫「檔數」：這格是「幾檔核心 / 幾檔衛星」，不是資金配置比例。
+            out["ratio_label"] = f"核心 {n_core} 檔 / 衛星 {n_sat} 檔"
+            # 目標比較刻意留空：目標值（portfolio_core_pct）是對**金額**的，
+            # 拿來比檔數會給出與「① 配置總覽」相反的再平衡結論。
+            out["ratio_delta"] = None
 
     try:
         from ui.helpers.macro_helpers import compute_1y_total_return
@@ -126,9 +130,12 @@ def render_hero_kpi_cards(kpis: dict) -> None:
     c1, c2, c3 = st.columns(3)
     c1.metric("📊 組合基金數", f"{kpis['n_funds']} 檔",
               help="按 code 去重後的已載入基金數（同 code 跨多保單只算一次）")
-    c2.metric("⚖️ 配置比例", kpis["ratio_label"],
+    c2.metric("⚖️ 核心/衛星檔數", kpis["ratio_label"],
               delta=kpis["ratio_delta"], delta_color="off",
-              help="策略3 建議核心 80% / 衛星 20%；偏離過大代表結構失衡")
+              help=("**檔數**口徑（分母 = 被 MK 歸類的檔數），只回答「幾檔核心、幾檔衛星」。\n\n"
+                    "要看**資金**配置比例與目標偏差，請看下方「① 配置總覽」的"
+                    "「核心資產比例」卡與甜甜圈 —— 那裡是 Σ 投入本金加權，"
+                    "3 檔核心可能只佔 60% 的檔數卻佔 90% 的錢，兩個數字本來就不同。"))
     _safe_total = kpis["n_funds"] - kpis["n_na"]
     _safe_label = (f"{kpis['n_cash_ok']}/{_safe_total} 檔"
                     if _safe_total > 0 else "—")

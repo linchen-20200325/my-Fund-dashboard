@@ -19,6 +19,8 @@ import streamlit as st
 
 from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
+# §3.3 反捏造:接近警戒門檻走 shared SSOT,不在本檔另寫一份同義 literal
+from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _NEAR_PCT_SSOT
 
 from repositories.fund import (
     tdcc_search_fund,
@@ -69,7 +71,9 @@ def _render_333_fund_expander(
     """
     from services.fund_screening import check_333_fund  # EX-PASSTHRU L3→L2 直呼 service
 
-    with st.expander("🎯 MK 3-3-3 優質標的評估", expanded=False):
+    # 摺疊處置:本區塊輸出的是**結論資料**(C1/C2/C3 三條判定)而非教學文,
+    # 收起來等於把結論藏起來 → 預設展開。
+    with st.expander("🎯 MK 3-3-3 優質標的評估", expanded=True):
         st.caption(
             "**MK 郭俊宏核心篩選原則** — "
             "①成立 >3年（歷經牛熊）｜"
@@ -136,16 +140,21 @@ def _render_333_fund_expander(
             st.caption('💡 C1+C2 通過後，請至晨星確認 C3（同類前 40 名 ≈ 3 顆星以上）'
                        '，三項全過才是 MK 定義的「基優生」。')
 
-        with st.expander('📖 3-3-3 原則說明', expanded=False):
-            st.markdown(
-                '**①成立 >3 年** — 足以歷經完整牛熊循環，有資本利得作為配息後盾，'
-                '可透過歷史驗證抗跌能力。\n\n'
-                '**②3 年年化報酬 >7%** — MK 核心目標：找「7% 以上的定存替代品」。'
-                '長期穩定 7%+ 代表能透過資本利得+股息完整支付配息，不吃本金。\n\n'
-                '**③晨星 3 顆星 / 同儕前 1/3** — 晨星 3 顆星 = 同類前 40 名。'
-                '選中前段班而非頂尖，因為資優生落差大；中前段班費率、風控和績效已達標，'
-                '更有持續往上的空間。'
-            )
+        # ⚠️ 這裡**不可以**再開一層摺疊容器 —— 本函式整段已經被上方
+        # `st.expander("🎯 MK 3-3-3 優質標的評估")` 包住,Streamlit 的可摺疊容器
+        # 彼此巢狀會直接丟例外,而唯一 caller 把整段包在 try/except 裡只印 stderr,
+        # 結果是「畫面上這一區整段消失、卻沒有任何錯誤提示」。
+        # 說明文本來就不該闔上,直接平鋪。守門測試見 tests/test_app_smoke.py。
+        st.markdown('###### 📖 3-3-3 原則說明')
+        st.markdown(
+            '**①成立 >3 年** — 足以歷經完整牛熊循環，有資本利得作為配息後盾，'
+            '可透過歷史驗證抗跌能力。\n\n'
+            '**②3 年年化報酬 >7%** — MK 核心目標：找「7% 以上的定存替代品」。'
+            '長期穩定 7%+ 代表能透過資本利得+股息完整支付配息，不吃本金。\n\n'
+            '**③晨星 3 顆星 / 同儕前 1/3** — 晨星 3 顆星 = 同類前 40 名。'
+            '選中前段班而非頂尖，因為資優生落差大；中前段班費率、風控和績效已達標，'
+            '更有持續往上的空間。'
+        )
 
 
 def _risk_1y_rows_html(risk_table: dict, *, label_style: str = "short") -> str:
@@ -156,6 +165,12 @@ def _risk_1y_rows_html(risk_table: dict, *, label_style: str = "short") -> str:
     原有標籤差異(不趁機統一文案,行為 0 改變)。
     - "short":標準差(1Y)/Sharpe(1Y)…,值原樣(partial 視圖)
     - "long" :波動 σ(1Y)/…,標準差數值型加 %(complete 視圖)
+
+    去重(原則 2):"long"(complete 視圖)**刻意不出 Sharpe 列** —— 同一畫面上方的
+    「🩺 健康分析」已有一格 Sharpe,且那一格由 `_lbl_with_period()` 標出**實際期間
+    與來源**(官方一年 / 官方六個月 / 本地自算 Nd),資訊嚴格多於此處無標籤的裸數字;
+    兩個都印會讓 user 以為是兩個不同指標。partial 視圖(short)沒有上方那一格,
+    故仍保留 Sharpe 列。
     v19.347(第九份 ⑯):補「追蹤誤差 Tracking Error」列 — wb07 風險表本就解析
     此欄入 risk_table(clean_risk_table NUMERIC 集含),僅 UI 從未顯示;缺值顯 —。
     """
@@ -165,7 +180,7 @@ def _risk_1y_rows_html(risk_table: dict, *, label_style: str = "short") -> str:
     _te  = _r1y.get("Tracking Error", "—")
     if label_style == "long":
         rows = [("波動 σ(1Y)", f"{_std}%" if isinstance(_std, (int, float)) else _std),
-                ("Sharpe(1Y)", str(_sh)), ("Alpha(1Y)", str(_al)), ("Beta(1Y)", str(_be)),
+                ("Alpha(1Y)", str(_al)), ("Beta(1Y)", str(_be)),
                 ("追蹤誤差 TE(1Y)", f"{_te}%" if isinstance(_te, (int, float)) else str(_te))]
     else:
         rows = [("標準差(1Y)", _std), ("Sharpe(1Y)", _sh),
@@ -177,6 +192,34 @@ def _risk_1y_rows_html(risk_table: dict, *, label_style: str = "short") -> str:
         f"<span style='color:{TRAFFIC_NEUTRAL};font-size:12px'>{lbl}</span>"
         f"<span style='font-weight:700'>{val}</span></div>"
         for lbl, val in rows)
+
+
+# ── 雙演算法對帳 chip 文案(原則 4:畫面上不留未翻譯的英文狀態碼)───────────
+# reconcile_pair 產出的 status 是英文 enum,原本直接印在畫面上,一般使用者
+# 讀不出意思;而且「兩邊不一致」時最關鍵的資訊 —— 上方那個大數字到底採用了
+# 哪一邊(§2.1 衝突裁決結果)—— 完全沒寫出來。
+_RECON_STATUS_ZH = {
+    "agree":     "兩套算法一致",
+    "disagree":  "兩套算法不一致",
+    "a_missing": "本地自算缺值（只有單一來源可比）",
+    "b_missing": "官方值缺值（只有單一來源可比）",
+}
+_RECON_EMOJI = {"agree": "✅", "disagree": "⚠️", "a_missing": "⬜", "b_missing": "⬜"}
+_RECON_VALID = tuple(_RECON_STATUS_ZH)
+
+# 年化配息率三層 fallback chain(services.health.dividend SSOT)的中文說明。
+# 畫面上每一個年化配息率數字都要說得出自己是哪一層來的(§2.2 provenance),
+# 不可以固定寫「官方值」——實際命中第二/三層時那句話就是在說謊。
+_ADR_SRC_ZH = {
+    "moneydj_wb05": "MoneyDJ wb05 官方年化配息率",
+    "metrics_annual_div_rate": "本地自算（近期配息 × 配息頻率 ÷ 淨值）",
+    "divs_12m_sum": "本地推算（近 12 個月配息合計 ÷ 現值淨值）",
+}
+
+
+def _recon_zh(status: str) -> str:
+    """英文 status → 「表情 + 繁中說明」;未知碼原樣帶出,不吞。"""
+    return f"{_RECON_EMOJI.get(status, '⬜')} {_RECON_STATUS_ZH.get(status, status)}"
 
 
 def render_single_fund_tab() -> None:
@@ -470,6 +513,13 @@ def render_single_fund_tab() -> None:
                 # 直接顯示 data_source(哪個 SSOT 來源贏)+ nav_span_days(v19.281
                 # fund_orchestration._fetch_fund_single 算好、存在 result 裡的既有
                 # 欄位,此處純讀取顯示,不重算 — 對齊 SSOT)。
+                # §4.1 單位陷阱:基金 NAV 一律是**原幣**。ZAR / JPY 計價的基金
+                # NAV 數量級是幾十~幾百,不標幣別會被直接當成新台幣讀。
+                from services.currency import normalize_ccy as _norm_ccy_disp
+                _ccy_lbl = _norm_ccy_disp(
+                    mj_raw.get("currency") or fd.get("currency") or "", default="")
+                _ccy_sfx = f" {_ccy_lbl}" if _ccy_lbl else ""
+
                 _nav_src = mj_raw.get("data_source") or "—"
                 _nav_span_d = mj_raw.get("nav_span_days")
                 _nav_span_txt = (
@@ -481,15 +531,64 @@ def render_single_fund_tab() -> None:
                     f" ‧ 來源:`{_nav_src}`{_nav_span_txt}"
                 )
 
+                # 稀疏序列揭露(§1):fund_service 併入累積 NAV 歷史後若判定序列稀疏,
+                # 會**真的把** sortino / calmar / 自算 sharpe / std_1y~5y 打成 None。
+                # 這件事原本 production 端 0 consumer —— user 只看到欄位變「—」,
+                # 不知道是「我們主動砍掉不給假精確」而非「壞掉」。此處接出來。
+                _sparse_meta = (m or {}).get("nav_coverage") or {}
+                if (m or {}).get("is_sparse"):
+                    _sp_cov = _sparse_meta.get("coverage")
+                    _sp_gap = _sparse_meta.get("max_gap_days")
+                    _sp_extra = ""
+                    if isinstance(_sp_cov, (int, float)):
+                        _sp_extra = f"（覆蓋率 {_sp_cov:.0%}"
+                        if isinstance(_sp_gap, (int, float)):
+                            _sp_extra += f"、最大缺口 {_sp_gap} 天"
+                        _sp_extra += "）"
+                    st.warning(
+                        f"⚠️ **本檔 NAV 序列稀疏{_sp_extra}，部分年化指標已被主動移除**\n\n"
+                        f"{(m or {}).get('sparse_reason') or ''}\n\n"
+                        "說明：稀疏序列算出來的年化波動 / Sharpe / Sortino / Calmar 會是"
+                        "**假精確**（缺口愈大、年化倍率放得愈誇張），因此寧可顯示「—」也不給數字。"
+                        "MoneyDJ wb07 官方欄位用的是完整日資料，不受影響，仍會照常顯示。"
+                    )
+
                 # v19.62 E3：MoneyDJ 資料新鮮度條（單檔，鏡像 Tab5 / Stock 個股）
                 try:
-                    from ui.helpers.freshness import render_mj_freshness_banner
+                    from ui.helpers.freshness import (
+                        nav_age_emoji as _nav_age_emoji,
+                        render_mj_freshness_banner,
+                    )
+                    # 淨值日 / 抓取時戳兩個欄位是 fetcher 寫在 **moneydj_raw** 裡的
+                    # (fund_orchestration 產出),session_state.fund_data 那層字面量從來
+                    # 沒抄過去 → 這條 banner 在本 Tab 一直是「⬜ ?/—/—」。Tab⑤ 組合層
+                    # 本來就是從 moneydj_raw 取,這裡對齊它;fd 層留作向後相容 fallback。
+                    _nav_d_show = (mj_raw.get("nav_date", "")
+                                   or fd.get("nav_date", ""))
                     render_mj_freshness_banner([{
                         "code": fk or fd.get("fund_code", "?"),
                         "name": name or fk,
-                        "nav_date": fd.get("nav_date", ""),
-                        "fetched_at": fd.get("_moneydj_fetched_at", ""),
+                        "nav_date": _nav_d_show,
+                        "fetched_at": (mj_raw.get("_moneydj_fetched_at", "")
+                                       or fd.get("_moneydj_fetched_at", "")),
                     }])
+                    # 上面那條綠色「資料已載入」講的是「抓到幾筆」,不是「資料有多新」。
+                    # 停售 / 清算的基金淨值可能停在幾個月前,而下方買賣點、σ 位階、
+                    # 「可分批承接」全部照算 —— 那些結論其實是對一個過期價格下的。
+                    # 燈號一旦轉黃/紅就明講,不讓成功列獨自代表狀態。
+                    _fresh_emoji, _fresh_age = _nav_age_emoji(_nav_d_show)
+                    if _fresh_emoji == "🔴":
+                        st.error(
+                            f"🔴 **最新淨值日期為 {_nav_d_show}（距今 {_fresh_age} 天）** —— "
+                            "下方買賣點訊號、σ 位階、超跌判定都是用這個過期淨值算的，"
+                            "不代表現在的價格。基金 NAV 正常是 T+1~T+3 公布；若延遲遠超過這個範圍，"
+                            "常見原因是該檔已停售 / 清算，或這個來源不再更新。請先確認基金狀態再看下方結論。"
+                        )
+                    elif _fresh_emoji == "⬜":
+                        st.warning(
+                            "⬜ **取不到最新淨值日期** —— 無法判斷下方訊號用的是幾號的價格。"
+                            "資料來源沒有回傳淨值日欄位，請把下方結論當作參考而非即時判斷。"
+                        )
                 except Exception as _e_fresh:
                     # v19.346 §3.3:原靜默吞 — 輔助 UI 壞了不擋主流程,但須留痕
                     import sys as _sys_fr
@@ -673,7 +772,8 @@ def render_single_fund_tab() -> None:
                     font_color=GH_FG_PRIMARY, height=420,
                     margin=dict(t=15, b=30, l=40, r=20),
                     legend=dict(orientation="h", font_size=10, y=1.02),
-                    hovermode="x unified", yaxis_title="淨值")
+                    hovermode="x unified",
+                    yaxis_title=f"淨值（原幣{_ccy_sfx}）" if _ccy_lbl else "淨值（原幣）")
                 if _y_range:
                     fig_n.update_yaxes(range=_y_range)
                 # 左側主圖放入 column 中
@@ -691,36 +791,62 @@ def render_single_fund_tab() -> None:
                     with _v5_mini_col:
                         st.markdown("**📊 三率動能**")
                         _mini_shield = _shield_for_render
-                        _m_gd = sum(r.get("gross_margin_diff", 0) or 0 for r in _mini_shield)
-                        _m_od = sum(r.get("op_margin_diff",    0) or 0 for r in _mini_shield)
-                        _m_nd = sum(r.get("net_margin_diff",   0) or 0 for r in _mini_shield)
-                        _n    = max(len(_mini_shield), 1)
-                        _m_gd /= _n; _m_od /= _n; _m_nd /= _n
-                        _mini_colors = [
-                            MATERIAL_GREEN if v > 0.5 else (MATERIAL_RED if v < -0.5 else MATERIAL_ORANGE)
-                            for v in [_m_gd, _m_od, _m_nd]]
-                        fig_mini = go.Figure(go.Bar(
-                            x=["毛利率", "營益率", "淨利率"],
-                            y=[_m_gd, _m_od, _m_nd],
-                            marker_color=_mini_colors,
-                            text=[f"{v:+.1f}%" for v in [_m_gd, _m_od, _m_nd]],
-                            textposition="outside",
-                            textfont=dict(size=10)))
-                        fig_mini.add_hline(y=0, line_color=GRAY_55, line_width=1)
-                        fig_mini.update_layout(
-                            paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
-                            font_color=GH_FG_PRIMARY, height=240,
-                            margin=dict(t=10, b=10, l=5, r=5),
-                            showlegend=False,
-                            yaxis=dict(gridcolor=BG_DARK_NAVY_3, zeroline=False))
-                        st.plotly_chart(fig_mini, use_container_width=True)
-                        _tot_mom = _m_gd + _m_od + _m_nd
-                        if _tot_mom > 2:
-                            st.markdown("🟢 **三率雙升**<br>基本面防護", unsafe_allow_html=True)
-                        elif _tot_mom < -2:
-                            st.markdown("🔴 **三率衰退**<br>虛漲陷阱", unsafe_allow_html=True)
+                        # §1:原寫法 `r.get(k, 0) or 0` 把「這檔沒解析到該項比率」
+                        # 當成「變化 0%」除進分母 —— 10 檔只解析到 3 檔時,平均值被
+                        # 7 個假 0 拉平,畫面卻寫「三率持平」,user 讀成全持倉結論。
+                        # 改成:每一項各自只對**真的有值**的持股平均,分母寫在標籤上。
+                        _MINI_SPEC = [("毛利率", "gross_margin_diff"),
+                                      ("營益率", "op_margin_diff"),
+                                      ("淨利率", "net_margin_diff")]
+                        _mini_x, _mini_y, _mini_missing = [], [], []
+                        for _mlbl, _mkey in _MINI_SPEC:
+                            _vals = [float(r.get(_mkey)) for r in _mini_shield
+                                     if isinstance(r.get(_mkey), (int, float))]
+                            if _vals:
+                                _mini_x.append(f"{_mlbl}({len(_vals)})")
+                                _mini_y.append(sum(_vals) / len(_vals))
+                            else:
+                                _mini_missing.append(_mlbl)
+                        if _mini_y:
+                            _mini_colors = [
+                                MATERIAL_GREEN if v > 0.5 else (MATERIAL_RED if v < -0.5 else MATERIAL_ORANGE)
+                                for v in _mini_y]
+                            fig_mini = go.Figure(go.Bar(
+                                x=_mini_x,
+                                y=_mini_y,
+                                marker_color=_mini_colors,
+                                text=[f"{v:+.1f}%" for v in _mini_y],
+                                textposition="outside",
+                                textfont=dict(size=10)))
+                            fig_mini.add_hline(y=0, line_color=GRAY_55, line_width=1)
+                            fig_mini.update_layout(
+                                paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                                font_color=GH_FG_PRIMARY, height=240,
+                                margin=dict(t=10, b=10, l=5, r=5),
+                                showlegend=False,
+                                yaxis=dict(gridcolor=BG_DARK_NAVY_3, zeroline=False))
+                            st.plotly_chart(fig_mini, use_container_width=True)
+                        st.caption(
+                            f"已解析 {len(_mini_shield)} 檔持倉；括號內為該項**實際有值**"
+                            "的檔數（抓不到的不計入分母）。"
+                        )
+                        if _mini_missing:
+                            st.caption(f"⬜ 無任何持股取得：{'、'.join(_mini_missing)}")
+                        # 綜合判定只在三項齊備時給 —— 缺項時「合計 > 2」的門檻語意
+                        # 不成立(三項合計 vs 兩項合計不是同一把尺)。
+                        if len(_mini_y) == len(_MINI_SPEC):
+                            _tot_mom = sum(_mini_y)
+                            if _tot_mom > 2:
+                                st.markdown("🟢 **三率雙升**<br>基本面防護", unsafe_allow_html=True)
+                            elif _tot_mom < -2:
+                                st.markdown("🔴 **三率衰退**<br>虛漲陷阱", unsafe_allow_html=True)
+                            else:
+                                st.markdown("🟡 **三率持平**<br>搭配布林研判", unsafe_allow_html=True)
                         else:
-                            st.markdown("🟡 **三率持平**<br>搭配布林研判", unsafe_allow_html=True)
+                            st.markdown(
+                                "⬜ **三率綜合判定資料不足**<br>"
+                                "<span style='font-size:10px'>三項未齊，不給假結論</span>",
+                                unsafe_allow_html=True)
 
                 # ── 📈 vs 大盤(純價格,重設基期=100 疊圖)── v19.420 user 要求 ──
                 try:
@@ -732,8 +858,19 @@ def render_single_fund_tab() -> None:
                     _ccy_b = normalize_ccy(fd.get("currency"), default="")
                     if s is not None and len(s) >= 2 and _ccy_b:
                         _bmk = benchmark_for_currency(_ccy_b)
-                        _bser = _benchmark_nav(_bmk)
-                        if _bser is None or len(_bser) == 0:
+                        _bser = _benchmark_nav(_bmk) if _bmk else None
+                        if not _bmk:
+                            # §4.1 跨幣別:2026-08-06 起 `benchmark_for_currency` 對
+                            # TWD/USD 以外的幣別回 None。原因是基金 NAV 是**原幣**,
+                            # 拿原幣報酬直接減 USD 計價的 S&P 500,等於把匯率變動算成
+                            # 經理人績效 —— 一檔該年幣別貶 12% 的南非幣配息基金會被
+                            # 顯示成「跑輸大盤 12 個百分點」,進而誤觸賣出建議。
+                            # 這裡誠實留白並說明,不換算、不硬比(§1)。
+                            st.caption(
+                                f"⬜ 本基金以 {_ccy_b} 計價，本站沒有對應的可比大盤 → "
+                                "vs 大盤留白。原幣報酬直接對美股指數會把匯率變動"
+                                "算進績效，寧可不比也不給錯的數字。")
+                        elif _bser is None or len(_bser) == 0:
                             # §1:基準抓不到 → 明講,不靜默省略(否則 user 以為功能壞掉)
                             st.caption(f"⬜ 暫時取不到大盤（{_bmk}）資料 → 無法比較(稍後重試)。")
                         else:
@@ -781,7 +918,9 @@ def render_single_fund_tab() -> None:
                 # v19.331 review:safe_float 防占位字串(數值輸入行為不變;字串 → 0 走
                 # _proximity_chip 既有 nav_v<=0 → "—" 路徑,不炸不造假)
                 _m_nav_v = _safe_float(m.get("nav")) or 0
-                _NEAR = _safe_float(m.get("near_threshold_pct")) or 2.0
+                # §3.3:fallback 值改吃 shared SSOT(與 fund_service 產出 metrics
+                # 時用的是同一個常數),不在 UI 端另刻一份同義 literal。
+                _NEAR = _safe_float(m.get("near_threshold_pct")) or _NEAR_PCT_SSOT
                 def _proximity_chip(nav_v, target, is_buy):
                     """買: nav≤target 觸發；賣: nav≥target 觸發；±NEAR% 為接近區"""
                     if (not target) or nav_v <= 0:
@@ -823,7 +962,9 @@ def render_single_fund_tab() -> None:
                         f"border-radius:12px;font-size:12px;font-weight:700'>{_m_pl}</span>"
                         f"</div>"
                         + _rows
-                        + f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>現值 {_m_nav_v:.4f} ｜ 接近閾值 ±{_NEAR:.1f}%</div>",
+                        + f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>"
+                          f"現值 {_m_nav_v:.4f}{_ccy_sfx} ｜ 接近閾值 ±{_NEAR:.1f}%"
+                          f" ｜ 上表買賣點皆為原幣{_ccy_sfx or ''}計價，非新台幣</div>",
                         radius=10, padding="12px 16px", margin="10px 0",
                     ), unsafe_allow_html=True)
 
@@ -836,10 +977,10 @@ def render_single_fund_tab() -> None:
                         f"<div style='color:{MD_GREEN_A400};font-size:14px;font-weight:700;margin-bottom:8px'>"
                         f"⚡ -2σ 超跌機會卡 — 布林下軌突破！</div>"
                         f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px'>"
-                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>現值 NAV</div>"
-                        f"<div style='color:{WHITE};font-weight:700;font-size:16px'>{_m_nav_v:.4f}</div></div>"
-                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>布林下軌(-2σ)</div>"
-                        f"<div style='color:{MD_GREEN_A400};font-weight:700;font-size:16px'>{_boll_latest_low:.4f}</div></div>"
+                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>現值 NAV（原幣{_ccy_sfx}）</div>"
+                        f"<div style='color:{WHITE};font-weight:700;font-size:16px'>{_m_nav_v:.4f}{_ccy_sfx}</div></div>"
+                        f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>布林下軌(-2σ)（原幣{_ccy_sfx}）</div>"
+                        f"<div style='color:{MD_GREEN_A400};font-weight:700;font-size:16px'>{_boll_latest_low:.4f}{_ccy_sfx}</div></div>"
                         f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>跌破幅度</div>"
                         f"<div style='color:{MD_GREEN_A200};font-weight:700;font-size:16px'>"
                         f"{(_boll_latest_low - _m_nav_v) / _boll_latest_low * 100:.2f}%</div></div>"
@@ -869,19 +1010,19 @@ def render_single_fund_tab() -> None:
                                 f"<div style='color:{_hc};font-size:13px;font-weight:800;margin-bottom:10px'>"
                                 f"📐 HWM σ 絕對位階 — {_hl}</div>"
                                 f"<div style='display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px'>"
-                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>歷史最高(HWM)</div>"
-                                f"<div style='color:{WHITE};font-weight:700;font-size:16px'>{_hwm_v:.4f}</div></div>"
-                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>現值 NAV</div>"
-                                f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_nav_h:.4f}</div></div>"
+                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>歷史最高(HWM)（原幣{_ccy_sfx}）</div>"
+                                f"<div style='color:{WHITE};font-weight:700;font-size:16px'>{_hwm_v:.4f}{_ccy_sfx}</div></div>"
+                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>現值 NAV（原幣{_ccy_sfx}）</div>"
+                                f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_nav_h:.4f}{_ccy_sfx}</div></div>"
                                 f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>距 HWM</div>"
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_dist:+.2f}%</div></div>"
                                 f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>σ 位階</div>"
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_sr:+.2f}σ</div></div>"
                                 f"</div>"
                                 f"<div style='display:flex;gap:12px;flex-wrap:wrap;font-size:11px'>"
-                                f"<span style='color:{MD_GREEN_A200}'>HWM-1σ: {_l1:.4f}</span>"
-                                f"<span style='color:{MATERIAL_ORANGE}'>HWM-2σ: {_l2:.4f}</span>"
-                                f"<span style='color:{MATERIAL_RED}'>HWM-3σ: {_l3:.4f}</span>"
+                                f"<span style='color:{MD_GREEN_A200}'>HWM-1σ: {_l1:.4f}{_ccy_sfx}</span>"
+                                f"<span style='color:{MATERIAL_ORANGE}'>HWM-2σ: {_l2:.4f}{_ccy_sfx}</span>"
+                                f"<span style='color:{MATERIAL_RED}'>HWM-3σ: {_l3:.4f}{_ccy_sfx}</span>"
                                 f"</div>"
                                 f"<div style='color:{GRAY_66};font-size:10px;margin-top:6px'>"
                                 f"σ = HWM × 年化日報酬標準差（{len(s)} 筆淨值計算）</div>"
@@ -1000,6 +1141,12 @@ def render_single_fund_tab() -> None:
                                     for _t in ("本地", "NAV 序列"))):
                         _kpi_tr_label = f"{int(_kpi_win_d)} 天含息報酬(非 1Y)"
 
+                    # `nav_warning`（1Y 淨值跌破 NAV_DROP_WARNING_PCT 的獨立早期警訊）
+                    # 原本只印在下方配息區的警示框裡；那個框與本橫幅同源同輸入、
+                    # 結論逐字相同（理由見下方「配息覆蓋率講義卡」上方那段說明），
+                    # 已移除以免同頁講兩次；但它獨有的這一句必須留下來，
+                    # 否則就變成「去重把揭露一起刪掉」。
+                    _kpi_nav_warn = ""
                     if _kpi_adr is None or _kpi_adr <= 0:
                         _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
                         _kpi_title = "吃本金檢查 — ⬜ 不適用"
@@ -1036,6 +1183,7 @@ def render_single_fund_tab() -> None:
                             _kpi_msg = f"{_kpi_msg}　〔1Y 來源:{_kpi_tr1y_src}〕"
                         _kpi_cov_txt = (f"{_kpi_cov:.2f}" if _kpi_cov is not None
                                         else "—")
+                        _kpi_nav_warn = _kpi_ds.get("nav_warning") or ""
 
                     st.markdown(
                         f"<div style='background:{_kpi_bg};border:2px solid {_kpi_color};"
@@ -1054,7 +1202,9 @@ def render_single_fund_tab() -> None:
                         f"{_kpi_cov_txt}</div></div>"
                         f"</div>"
                         f"<div style='color:{GRAY_AA};font-size:11px;margin-top:6px'>{_kpi_msg}</div>"
-                        f"</div>", unsafe_allow_html=True)
+                        + (f"<div style='color:{MATERIAL_ORANGE};font-size:10px;margin-top:4px'>"
+                           f"{_kpi_nav_warn}</div>" if _kpi_nav_warn else "")
+                        + "</div>", unsafe_allow_html=True)
                 except Exception as _kpi_e:  # noqa: BLE001
                     st.caption(f"吃本金 KPI 計算異常：{str(_kpi_e)[:60]}")
 
@@ -1255,17 +1405,25 @@ def render_single_fund_tab() -> None:
                             unsafe_allow_html=True)
                     # F-RECON-1 phase 6 v19.91 — Sharpe 對帳 chip(self-calc vs MoneyDJ wb07)
                     _sh_rec = (m or {}).get("sharpe_reconcile")
-                    if isinstance(_sh_rec, dict) and _sh_rec.get("status") in ("agree", "disagree", "a_missing", "b_missing"):
-                        _sh_emoji = {"agree": "✅", "disagree": "⚠️",
-                                     "a_missing": "⬜", "b_missing": "⬜"}.get(_sh_rec.get("status"), "⬜")
-                        _sh_color = {"agree": TRAFFIC_GREEN, "disagree": TRAFFIC_RED}.get(_sh_rec.get("status"), TRAFFIC_NEUTRAL)
+                    if isinstance(_sh_rec, dict) and _sh_rec.get("status") in _RECON_VALID:
+                        _sh_st = _sh_rec.get("status")
+                        _sh_color = {"agree": TRAFFIC_GREEN, "disagree": TRAFFIC_RED}.get(_sh_st, TRAFFIC_NEUTRAL)
                         _va, _vb = _sh_rec.get("value_a"), _sh_rec.get("value_b")
                         _va_t = f"{_va:.2f}" if isinstance(_va, (int, float)) else "—"
                         _vb_t = f"{_vb:.2f}" if isinstance(_vb, (int, float)) else "—"
+                        # 衝突裁決結果要寫在畫面上(§2.1):meta.source 就是實際被採用的那一邊。
+                        _sh_used_src = str(_sh_meta.get("source") or "")
+                        if _sh_used_src.startswith("wb07"):
+                            _sh_adopt = "上方 Sharpe 採用的是 MoneyDJ wb07 官方值（第三方網站來源優先於本地自算）"
+                        elif _sh_used_src:
+                            _sh_adopt = f"上方 Sharpe 採用的是本地自算值（來源標記 {_sh_used_src}）"
+                        else:
+                            _sh_adopt = "上方 Sharpe 未標示來源，無法判斷採用哪一套"
                         st.markdown(
                             f"<div style='font-size:10px;color:{_sh_color};padding:3px 10px;"
                             f"background:{GH_BG_PRIMARY};border-radius:4px;margin:2px 0 6px 0'>"
-                            f"{_sh_emoji} 對帳:自算={_va_t} vs MoneyDJ wb07={_vb_t} ({_sh_rec.get('status')})"
+                            f"{_recon_zh(_sh_st)}｜本地自算={_va_t}　MoneyDJ wb07={_vb_t}<br/>"
+                            f"<span style='color:{TRAFFIC_NEUTRAL}'>→ {_sh_adopt}</span>"
                             f"</div>",
                             unsafe_allow_html=True)
                     # C-3:自算 Sharpe 被樣本門檻擋掉時,對帳恆為 a_missing —— chip 只
@@ -1315,47 +1473,68 @@ def render_single_fund_tab() -> None:
                 with col_b:
                     st.markdown("#### 💸 近期配息")
                     if divs and len(divs) >= 1:
-                        # v19.331 review:兩處裸 except: → SSOT safe_float(語意等價,
-                        # 不再攔截 KeyboardInterrupt/SystemExit;§3.3 bare except 違憲收斂)
-                        _mj_dy = _safe_float(mj_raw.get("moneydj_div_yield"))
-                        _adr = _mj_dy if (_mj_dy and _mj_dy > 0) else (m.get("annual_div_rate",0) or 0)
-                        _adr = _safe_float(_adr) or 0.0
-                        st.metric("年化配息率", f"{_adr:.2f}%", help="MoneyDJ wb05 官方值（優先）或自算估值")
+                        # 年化配息率改吃 services.health.dividend 那條三層 SSOT ——
+                        # 與同頁「吃本金檢查」橫幅、健康總覽卡完全同源。
+                        # 原本這裡是另一份 inline 兩層 fallback,而且末端 `or 0` 會把
+                        # 「三層都取不到」變成數值 0 印成 0.00%;但能進到這個分支的前提
+                        # 正是「這檔有配息記錄」→ 等於畫面主張「有配息、配息率是零」,
+                        # 是 §1 明令禁止的「讓流程看起來成功」。缺值一律顯示破折號。
+                        from services.health.dividend import (
+                            _resolve_adr_with_fallback as _resolve_adr_t2,
+                        )
+                        _adr, _adr_src = _resolve_adr_t2({
+                            "moneydj_raw": mj_raw,
+                            "metrics": m,
+                            "dividends": divs,
+                        })
+                        _adr_src_zh = _ADR_SRC_ZH.get(_adr_src, _adr_src or "—")
+                        if _adr is not None and _adr > 0:
+                            st.metric("年化配息率", f"{_adr:.2f}%",
+                                      help=f"實際採用來源：{_adr_src_zh}")
+                        else:
+                            st.metric(
+                                "年化配息率", "—",
+                                help="三層來源（MoneyDJ 官方值 / 本地自算 / 近 12 個月推算）皆無可用值")
+                            st.caption(
+                                "⬜ **年化配息率無法計算** —— 本檔有配息記錄，但 MoneyDJ 官方欄位、"
+                                "本地自算、近 12 個月推算三條路都取不到數字（常見原因：配息紀錄缺"
+                                "金額欄、或現值淨值未取得，除不出殖利率）。此處顯示破折號而非 0%，"
+                                "0% 會被誤讀成「這檔不配息」。"
+                            )
                         # F-RECON-1 phase 6 v19.91 — 配息殖利率對帳 chip(self-calc vs MoneyDJ)
                         _dy_rec = (m or {}).get("div_yield_reconcile")
-                        if isinstance(_dy_rec, dict) and _dy_rec.get("status") in ("agree", "disagree", "a_missing", "b_missing"):
-                            _dy_emoji = {"agree": "✅", "disagree": "⚠️",
-                                         "a_missing": "⬜", "b_missing": "⬜"}.get(_dy_rec.get("status"), "⬜")
-                            _dy_color = {"agree": TRAFFIC_GREEN, "disagree": TRAFFIC_RED}.get(_dy_rec.get("status"), TRAFFIC_NEUTRAL)
+                        if isinstance(_dy_rec, dict) and _dy_rec.get("status") in _RECON_VALID:
+                            _dy_st = _dy_rec.get("status")
+                            _dy_color = {"agree": TRAFFIC_GREEN, "disagree": TRAFFIC_RED}.get(_dy_st, TRAFFIC_NEUTRAL)
                             _dva, _dvb = _dy_rec.get("value_a"), _dy_rec.get("value_b")
                             _dva_t = f"{_dva*100:.2f}%" if isinstance(_dva, (int, float)) else "—"
                             _dvb_t = f"{_dvb*100:.2f}%" if isinstance(_dvb, (int, float)) else "—"
                             st.caption(
                                 f"<span style='color:{_dy_color};font-size:10px'>"
-                                f"{_dy_emoji} 對帳:自算={_dva_t} vs MoneyDJ={_dvb_t} ({_dy_rec.get('status')})</span>",
-                                unsafe_allow_html=True)
-                        # F-RECON-1 phase 6 v19.91 — 1Y 報酬對帳 chip(self-calc vs MoneyDJ wb01)
-                        _r1y_rec = (m or {}).get("ret_1y_reconcile")
-                        if isinstance(_r1y_rec, dict) and _r1y_rec.get("status") in ("agree", "disagree", "a_missing", "b_missing"):
-                            _r1y_emoji = {"agree": "✅", "disagree": "⚠️",
-                                          "a_missing": "⬜", "b_missing": "⬜"}.get(_r1y_rec.get("status"), "⬜")
-                            _r1y_color = {"agree": TRAFFIC_GREEN, "disagree": TRAFFIC_RED}.get(_r1y_rec.get("status"), TRAFFIC_NEUTRAL)
-                            _ra, _rb = _r1y_rec.get("value_a"), _r1y_rec.get("value_b")
-                            _ra_t = f"{_ra*100:.2f}%" if isinstance(_ra, (int, float)) else "—"
-                            _rb_t = f"{_rb*100:.2f}%" if isinstance(_rb, (int, float)) else "—"
-                            st.caption(
-                                f"<span style='color:{_r1y_color};font-size:10px'>"
-                                f"{_r1y_emoji} 1Y 報酬對帳:自算={_ra_t} vs MoneyDJ wb01={_rb_t} ({_r1y_rec.get('status')})</span>",
+                                f"{_recon_zh(_dy_st)}｜本地自算={_dva_t}　MoneyDJ={_dvb_t}<br/>"
+                                f"→ 上方年化配息率採用：{_adr_src_zh}</span>",
                                 unsafe_allow_html=True)
                         for d in divs[:6]:
                             _dt = d.get("date",""); _amt = d.get("amount",""); _yld = d.get("yield_pct","")
                             st.markdown(f"<div style='display:flex;justify-content:space-between;padding:4px 10px;background:{GH_BG_CARD};border-radius:6px;margin:2px 0'><span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_dt}</span><span style='font-weight:700'>{_amt}</span><span style='color:{MATERIAL_ORANGE};font-size:11px'>{_yld}</span></div>", unsafe_allow_html=True)
 
-                        # ── 🚨 吃本金警示（Core Protocol Ch.3.2）──
-                        # v19.402 §1 修:改吃「含息總報酬」(compute_1y_total_return SSOT),
-                        # 不再用 m["ret_1y"](純 NAV 不含息)→ 消除與上方「吃本金檢查」KPI
-                        # 橫幅同頁 🟢/🔴 自打臉。警示框 + 講義卡共用同一 dividend_safety
-                        # verdict,永不互相矛盾(講義卡色/標籤亦改讀 _ds,不再 inline 門檻)。
+                        # ── 📖 配息覆蓋率講義卡（MK 郭俊宏《以息養股》）──
+                        # 這裡原本先印一個「🚨 吃本金警示」框（status + message +
+                        # nav_warning），再印下面這張講義卡。那個警示框與本頁上方
+                        # 「吃本金檢查」KPI 橫幅**逐字同源**：adr 同一個
+                        # `_resolve_adr_with_fallback`、1Y 同一個 `compute_1y_total_return`
+                        # 同一份 payload → `div_safety_check` 的回傳必然一模一樣，
+                        # 等於同一個結論在同一頁印兩次。
+                        #
+                        # 留上方 KPI 橫幅、砍這一份，理由：
+                        #   (1) 這份被關在 `if divs and len(divs) >= 1:` 內，累積型 /
+                        #       MoneyDJ 沒配息頁的基金根本看不到，當不了單一出口；
+                        #   (2) 上方橫幅另外處理「⬜ 不適用 / ⬜ 資料不足」兩種缺值狀態，
+                        #       並附「1Y 來源」provenance，資訊量嚴格較多；
+                        #   (3) 它在主 KPI 列旁，是使用者第一眼看到的位置。
+                        # 警示框獨有的 `nav_warning` 已上移到該橫幅，揭露不減少。
+                        # 講義卡保留：它講的是**公式與門檻**（教學），不是再講一次結論；
+                        # 色/標籤仍讀同一個 `_ds`，與上方橫幅永遠一致。
                         from ui.helpers.macro_helpers import (
                             compute_1y_total_return as _c1ytr_ep,
                         )
@@ -1365,26 +1544,15 @@ def render_single_fund_tab() -> None:
                             "series": s,
                             "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
                         })
-                        if _tr1y is not None and _adr > 0:
+                        # `_adr` 現在可能是 None(SSOT 三層全失敗)→ 顯式判空,
+                        # 不能沿用舊的 `_adr > 0`(None 直接 TypeError)。
+                        if _tr1y is not None and _adr is not None and _adr > 0:
                             _ds = div_safety_check(
                                 total_return=float(_tr1y),
                                 dividend_yield=float(_adr),
                                 nav_change=float(_tr1y),
                             )
                             _al = _ds.get("alert_level","grey")
-                            _bg = {"red":BG_DARK_RED_1,"yellow":BG_DARK_AMBER_1,"green":BG_DARK_GREEN_1}.get(_al,CHIP_BG_NEAR_BLACK)
-                            _bc = {"red":MATERIAL_RED,"yellow":MATERIAL_ORANGE,"green":MATERIAL_GREEN}.get(_al,TRAFFIC_NEUTRAL)
-                            st.markdown(
-                                f"<div style='background:{_bg};border:1px solid {_bc};border-radius:8px;"
-                                f"padding:8px 12px;margin-top:8px'>"
-                                f"<div style='color:{_bc};font-weight:700;font-size:12px'>{_ds['status']}</div>"
-                                f"<div style='color:{GRAY_CC};font-size:11px;margin-top:2px'>{_ds['message']}</div>"
-                                + (f"<div style='color:{MATERIAL_ORANGE};font-size:10px;margin-top:4px'>{_ds['nav_warning']}</div>" if _ds.get("nav_warning") else "")
-                                + "</div>", unsafe_allow_html=True)
-
-                            # ── 📖 配息覆蓋率講義卡（MK 郭俊宏《以息養股》）──
-                            # v19.402:色/標籤改讀同一 _ds(SSOT gap 判定),不再 inline
-                            # coverage-ratio 門檻(1.0/0.8)→ 與上方警示框永遠一致。
                             _cov = _ds.get("coverage")
                             _cov_txt = f"{_cov:.2f}" if isinstance(_cov, (int, float)) else "—"
                             _cov_c = {"red":MATERIAL_RED,"yellow":MATERIAL_ORANGE,
@@ -1402,16 +1570,66 @@ def render_single_fund_tab() -> None:
                                 f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                                 f"= {float(_tr1y):.1f}% ÷ {float(_adr):.2f}%"
                                 f" = <span style='color:{_cov_c};font-weight:700;font-size:14px'>{_cov_txt}</span></div>"
-                                f"<div style='color:{_cov_c};font-size:12px;font-weight:600;margin-bottom:6px'>"
-                                f"{_ds['status']}</div>"
+                                # 去重(原則 2):判定字串本身由本頁上方「吃本金檢查」
+                                # KPI 橫幅負責,這裡只留公式與門檻說明(教學)。
                                 f"<div style='color:{GRAY_55};font-size:10px'>"
                                 f"含息報酬 ≥ 配息率 = 🟢 安全 ｜ 差距 ≤ 2% = 🟡 接近門檻 ｜ 差距 &gt; 2% = 🔴 吃本金</div>"
                                 f"</div>", unsafe_allow_html=True)
 
                     else:
-                        st.info("無配息記錄")
+                        st.info("無配息記錄（累積型 / 不配息基金，或 MoneyDJ 未提供配息頁）")
 
-                # ── V3-3: TER 費用率卡（對比同類均值）────────────────────
+                    # 1Y 報酬對帳 chip —— 原本被關在「有配息記錄」的分支裡,但
+                    # `ret_1y_reconcile` 是「本地自算 1Y 報酬 vs MoneyDJ wb01 官方值」
+                    # 的比對,和有沒有配息完全無關。累積型 / 不配息基金因此永遠看不到
+                    # 這條對帳,即使兩套算法差距很大(§4.3 對帳被靜默關掉)。移出來。
+                    _r1y_rec = (m or {}).get("ret_1y_reconcile")
+                    if isinstance(_r1y_rec, dict) and _r1y_rec.get("status") in _RECON_VALID:
+                        _r1y_st = _r1y_rec.get("status")
+                        _r1y_color = {"agree": TRAFFIC_GREEN, "disagree": TRAFFIC_RED}.get(_r1y_st, TRAFFIC_NEUTRAL)
+                        _ra, _rb = _r1y_rec.get("value_a"), _r1y_rec.get("value_b")
+                        _ra_t = f"{_ra*100:.2f}%" if isinstance(_ra, (int, float)) else "—"
+                        _rb_t = f"{_rb*100:.2f}%" if isinstance(_rb, (int, float)) else "—"
+                        # 畫面採用哪一個(§2.1 衝突裁決)— 與上方 KPI 橫幅同一個 SSOT。
+                        try:
+                            from ui.helpers.macro_helpers import (
+                                compute_1y_total_return as _c1ytr_rec,
+                            )
+                            _, _r1y_used_src = _c1ytr_rec({
+                                "metrics": m,
+                                "moneydj_raw": mj_raw,
+                                "series": s,
+                                "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                            })
+                        except Exception as _e_r1y_src:  # noqa: BLE001
+                            import sys as _sys_r1y
+                            print(f'[tab2/ret1y-recon] 取用來源標籤失敗: '
+                                  f'{type(_e_r1y_src).__name__}: {_e_r1y_src}',
+                                  file=_sys_r1y.stderr)
+                            _r1y_used_src = ""
+                        _r1y_adopt = (f"上方「1Y 含息報酬」採用：{_r1y_used_src}"
+                                      if _r1y_used_src and _r1y_used_src not in ("—", "metrics")
+                                      else "上方「1Y 含息報酬」未標示來源")
+                        st.caption(
+                            f"<span style='color:{_r1y_color};font-size:10px'>"
+                            f"1Y 報酬對帳：{_recon_zh(_r1y_st)}｜本地自算={_ra_t}　"
+                            f"MoneyDJ wb01={_rb_t}<br/>→ {_r1y_adopt}</span>",
+                            unsafe_allow_html=True)
+
+                # ── TER 費用率卡（只呈現本檔實際費率，不做同類比較）──────────
+                # 這張卡原本還會印一欄「同類均值 x.xx%」與「高於均值 +y.yy%」,
+                # 數字來自一份寫死在本檔、自稱是台灣基金市場常見水準的對照表：
+                # 無資料源、無抓取時間、無樣本數、無定義(是算術平均？中位數？含不含
+                # 保管費？母體是哪一年、哪幾檔？)—— 全都是憑印象填的常數,正是 §1
+                # 「自行估一個合理值當常數」與 §3.3 反捏造禁止的東西。畫面上它長得
+                # 跟旁邊真的抓來的經理費一模一樣,使用者無從分辨哪個是查來的、哪個
+                # 是編的,還會據此做「這檔太貴」的決策 —— 傷害比沒有比較更大。
+                #
+                # 處置（原則 3+4）：整組比較欄位移除，只留本檔實際費率，並把
+                # 「為什麼沒有同類比較」明講。**刻意不去找替代來源硬補**：
+                # MoneyDJ / FundClear / TDCC 三個現有基金資料源都沒有提供
+                # 「同類型基金平均費用率」欄位，要做就得自行定義同類母體再逐檔
+                # 抓費率聚合，那是另一個功能（需先對齊 §7 四點），不是這一輪的範圍。
                 _ter_raw = mj_raw.get("mgmt_fee","") or ""
                 _ter_cat = mj_raw.get("category","") or ""
                 if _ter_raw:
@@ -1420,40 +1638,26 @@ def render_single_fund_tab() -> None:
                     except (ValueError, TypeError):
                         _ter_val = None
                     if _ter_val is not None:
-                        # 類別均值對照表（台灣基金市場常見估值）
-                        _ter_avg_map = {
-                            "股票": 1.50, "全球股票": 1.50, "科技": 1.60,
-                            "亞太": 1.60, "新興市場": 1.70, "高收益": 1.00,
-                            "債券": 0.80, "全球債券": 0.80, "投資等級": 0.80,
-                            "平衡": 1.20, "貨幣": 0.30,
-                        }
-                        _ter_avg = next(
-                            (_v for _k, _v in _ter_avg_map.items() if _k in _ter_cat), None)
-                        if _ter_avg is not None:
-                            _ter_diff = _ter_val - _ter_avg
-                            _ter_c = MATERIAL_RED if _ter_diff > 0.3 else (MATERIAL_ORANGE if _ter_diff > 0 else MATERIAL_GREEN)
-                            _ter_vs = f"高於均值 +{_ter_diff:.2f}%" if _ter_diff > 0 else f"低於均值 {abs(_ter_diff):.2f}%"
-                            _ter_avg_html = (
-                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>同類均值</div>"
-                                f"<div style='color:{TRAFFIC_NEUTRAL};font-weight:700;font-size:16px'>{_ter_avg:.2f}%</div></div>"
-                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>費用比較</div>"
-                                f"<div style='color:{_ter_c};font-weight:700;font-size:16px'>{_ter_vs}</div></div>"
-                            )
-                        else:
-                            _ter_c, _ter_avg_html = TRAFFIC_NEUTRAL, ""
                         st.markdown(
                             f"<div style='background:{GH_BG_CARD};border:1px solid {GH_BORDER};"
                             f"border-radius:10px;padding:10px 16px;margin:8px 0'>"
-                            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>💰 TER 費用率分析"
+                            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-bottom:6px'>💰 TER 費用率"
                             + (f" — {_ter_cat[:12]}" if _ter_cat else "") + "</div>"
                             f"<div style='display:flex;gap:24px;flex-wrap:wrap;margin-bottom:6px'>"
-                            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>最高經理費</div>"
-                            f"<div style='color:{_ter_c};font-weight:700;font-size:16px'>{_ter_val:.2f}%</div></div>"
-                            + _ter_avg_html +
+                            f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>最高經理費（MoneyDJ 基本資料頁）</div>"
+                            f"<div style='color:{WHITE};font-weight:700;font-size:16px'>{_ter_val:.2f}%</div></div>"
                             f"</div>"
                             f"<div style='color:{GRAY_55};font-size:10px'>"
-                            f"費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~22%＝1.01²⁰ 複利）</div>"
+                            f"費用率愈低，長期複利效益愈佳（費用每降 1%，20 年後終值多 ~22%＝1.01²⁰ 複利）。"
+                            f"</div>"
                             f"</div>", unsafe_allow_html=True)
+                        st.caption(
+                            "ℹ️ **為什麼這裡沒有「同類均值」比較**：本系統目前接的三個基金資料源"
+                            "（MoneyDJ / FundClear / TDCC）都沒有提供「同類型基金平均費用率」這個欄位，"
+                            "也沒有可引用的公開統計。與其顯示一個看起來很像查來的、實際是憑印象填的"
+                            "數字讓你據此判斷貴不貴，不如誠實留白。要比較費率請直接開兩檔基金並列看"
+                            "這一格，或到晨星 / 投信投顧公會查同類清單。"
+                        )
 
                 # ── 持股分析（折疊）── v19.282 SSOT:改呼共用 render_holdings_detail;
                 # 空持股時顯示三源抓取診斷(不再靜默),expander 永遠顯示(user 要求
@@ -1488,8 +1692,10 @@ def render_single_fund_tab() -> None:
                             continue
                         _zh = _zh_holding(_nm)
                         _hold_list.append((_zh or _nm[:20], _zh or _nm))
+                    # 摺疊處置(原則 1):抓完之後就是「資料」不是「說明」,再讓 user
+                    # 多點一次才看得到不合理 → 比照上方持股分析的做法,有內容就展開。
                     with st.expander(f"📰 個股新聞面（前 {len(_hold_list)} 大持股）",
-                                     expanded=False):
+                                     expanded=bool(st.session_state.get(_ss_stk))):
                         _snc1, _snc2 = st.columns([3, 1])
                         _snc1.caption("逐一搜尋 Google News（中文，走 NAS proxy）。"
                                       "廣義 RSS 常抓不到台股/冷門股，此按鈕直接針對每檔持股搜尋。")
@@ -1539,7 +1745,11 @@ def render_single_fund_tab() -> None:
                 # ── V4: 微觀防護盾 — 前十大持倉三率檢核 ────────────────
                 _shield_tops = (_holdings.get("top_holdings") or []) if _holdings else []
                 if _shield_tops:
-                    with st.expander("🛡️ 微觀防護盾 — 持倉三率穿透檢核（V4）", expanded=False):
+                    # 摺疊處置(原則 1):掃描結果是資料,掃完就該看得到,不再要求多點一次。
+                    with st.expander(
+                        "🛡️ 微觀防護盾 — 持倉三率穿透檢核（V4）",
+                        expanded=bool(st.session_state.get(f"shield_{fk}")),
+                    ):
                         st.caption(
                             "掃描前十大持倉個股毛利率 / 營業利益率 / 淨利率 QoQ 變化，"
                             "識別「估值虛漲（PE拉高）vs 實質獲利」的 K 型分化陷阱。"
@@ -1600,26 +1810,25 @@ def render_single_fund_tab() -> None:
                     from services.currency import normalize_ccy as _norm_ccy
                     _ccy = _norm_ccy(_ccy_raw, default="TWD", mode="yf")
                     _nav_calc = m.get("nav")
-                    # v19.181 Bug 1 fix: 與 fund_checkup.py:352-353 同源 — MoneyDJ wb05
-                    # 官方年化配息率優先 → metrics.annual_div_rate fallback;
-                    # 過去單一基金頁直接吃 metrics 導致與組合體檢表算出不同月配息(7.36% vs 7.49%)。
-                    _mj_dy_raw = mj_raw.get("moneydj_div_yield")
-                    try:
-                        _mj_dy_calc = float(_mj_dy_raw) if _mj_dy_raw not in (None, "", "—") else None
-                    except (TypeError, ValueError):
-                        _mj_dy_calc = None
-                    if _mj_dy_calc and _mj_dy_calc > 0:
-                        _yield_calc = _mj_dy_calc
-                    else:
-                        _yield_calc = m.get("annual_div_rate")
+                    # 年化配息率:本區塊原本自己刻了一份兩層 fallback,和上方「近期配息」
+                    # 區塊、「吃本金檢查」橫幅各走各的 —— 同一頁三個年化配息率可能是
+                    # 三個不同數字。統一改吃 services.health.dividend 那條三層 SSOT,
+                    # 並把**實際命中的那一層**帶出來給下方 metric 的 help 用(§2.2):
+                    # 原本 help 硬寫「MoneyDJ wb05 官方年化配息率」,但值其實有可能是
+                    # 本地自算 —— 那句話會讓使用者以為這個數字有官方背書。
+                    from services.health.dividend import (
+                        _resolve_adr_with_fallback as _resolve_adr_calc,
+                    )
+                    _yield_calc, _yield_src = _resolve_adr_calc({
+                        "moneydj_raw": mj_raw,
+                        "metrics": m,
+                        "dividends": divs,
+                    })
+                    _yield_src_zh = _ADR_SRC_ZH.get(_yield_src, _yield_src or "—")
                     try:
                         _nav_calc = float(_nav_calc) if _nav_calc not in (None, "", "—") else None
                     except (TypeError, ValueError):
                         _nav_calc = None
-                    try:
-                        _yield_calc = float(_yield_calc) if _yield_calc not in (None, "", "—") else None
-                    except (TypeError, ValueError):
-                        _yield_calc = None
                     # v18.259：非 TWD 基金抓即時 FX rate（5min TTL，走 NAS proxy）
                     # v18.264：Yahoo 失敗時走 FRED 第二來源（需 FRED_API_KEY）
                     # v18.265：secrets 讀取與 FX 抓取分開 try，避免 secrets 沒設時連 Yahoo 都沒試
@@ -1663,8 +1872,11 @@ def render_single_fund_tab() -> None:
                             help="以新台幣計價的投入本金；非 TWD 基金會用即時匯率換成原幣再算單位數與配息。"
                         )
                     with _ic2:
-                        st.caption(f"NAV：{_nav_calc if _nav_calc is not None else '—'} {_ccy}")
-                        st.caption(f"年化配息率：{_yield_calc if _yield_calc is not None else '—'} %")
+                        st.caption(f"NAV（原幣 {_ccy}）：{_nav_calc if _nav_calc is not None else '—'}")
+                        if _yield_calc is not None:
+                            st.caption(f"年化配息率：{_yield_calc:.2f} %　（來源：{_yield_src_zh}）")
+                        else:
+                            st.caption("年化配息率：— （三層來源皆無值，下方不做配息試算）")
                         # v18.278：normalize 後 _ccy 已是 ISO，TWD 基金 _fx_to_twd=1.0 不顯示 FX caption
                         if _ccy == "TWD":
                             st.caption("💰 此基金以新台幣計價（FX = 1）")
@@ -1719,8 +1931,11 @@ def render_single_fund_tab() -> None:
                             _mc3.metric("每月配息單位數",
                                         f"{_mon_units:,.2f}" if _has_calc else "—",
                                         help=f"最近一筆實際配息 × 持有單位 ÷ NAV（來源：{_src_lbl2}）")
+                            # §2.2:help 必須說出**這個值實際來自哪一層**。
+                            # 原本固定寫「官方」,但走到第二/三層時值是本地算的,
+                            # 那句話等於幫自算值掛上官方背書。
                             _mc4.metric("年化配息率", f"{_yield_calc:.2f}%",
-                                        help="MoneyDJ wb05 官方年化配息率")
+                                        help=f"實際採用來源：{_yield_src_zh}")
                             if not _has_calc:
                                 st.caption("⬜ 無配息記錄且無年化配息率，無月配試算")
                             else:
@@ -1832,8 +2047,14 @@ def render_single_fund_tab() -> None:
                             # v19.73 K1：累積型用 1Y 總報酬估市值 — 改走 SSOT compute_1y_total_return
                             # 修補 v18.134 漏接點（原本只用 ret_1y_total/ret_1y 跳過 perf["1Y"] 真 1Y）
                             from ui.helpers.macro_helpers import compute_1y_total_return
-                            _ret_1y, _ = compute_1y_total_return({
-                                "metrics": m, "moneydj_raw": mj_raw,
+                            # payload 補 series / perf_source:同一頁其他三處呼叫都有帶,
+                            # 只有這裡漏 → 官方 wb01 與 NAV 序列兩條路都走不到,結果是
+                            # 上方「1Y 含息報酬」有數字、這裡「1Y 後預估市值」卻顯示「—」。
+                            _ret_1y, _ret_1y_src = compute_1y_total_return({
+                                "metrics": m,
+                                "moneydj_raw": mj_raw,
+                                "series": s,
+                                "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
                             })
                             _proj_1y = None
                             _proj_1y_twd = None
@@ -1846,12 +2067,19 @@ def render_single_fund_tab() -> None:
                             _mc2.metric("基金類型", "累積型（無配息）")
                             if _proj_1y_twd is not None:
                                 _mc3.metric("1Y 後預估市值（TWD）", f"{_proj_1y_twd:,.0f}",
-                                            f"{_ret_1y:+.2f}%")
+                                            f"{_ret_1y:+.2f}%",
+                                            help=f"近 1Y 含息報酬來源：{_ret_1y_src or '—'}")
                                 _mc4.metric("1Y 預估損益（TWD）",
                                             f"{(_proj_1y_twd - _amount_twd):+,.0f}")
                             else:
-                                _mc3.metric("1Y 後預估市值（TWD）", "—")
+                                _mc3.metric("1Y 後預估市值（TWD）", "—",
+                                            help="缺近 1Y 含息報酬（官方 wb01 與本地 NAV 序列皆取不到），不做外推")
                                 _mc4.metric("1Y 預估損益（TWD）", "—")
+                                st.caption(
+                                    "⬜ 缺「近 1Y 含息報酬」→ 不外推 1Y 後市值。"
+                                    "外推需要一個真實的年報酬率當基準，硬填 0% 或用不足一年的"
+                                    "短窗年化都會讓下面那個金額看起來像預測、實際是編的。"
+                                )
                             if _ccy != "TWD":
                                 _proj_str = (
                                     f"｜1Y 後預估 **{_proj_1y_twd:,.0f}** TWD"
@@ -1999,25 +2227,66 @@ def render_single_fund_tab() -> None:
                                   if _rt1y.get(_key) not in (None, "")]
                     if _risk_bits:
                         _snap.append("- 風險(1Y)：" + "｜".join(_risk_bits))
-                    if m.get("annual_div_rate"):
-                        _div_line = f"- 配息：年化配息率≈{m.get('annual_div_rate')}%，近期 {len(divs)} 筆"
-                        try:  # 吃本金檢查（含息總報酬 vs 配息率）— Core Protocol Ch.3.2
-                            _ds_ai = div_safety_check(
-                                total_return=m.get("ret_1y_total"),
-                                dividend_yield=m.get("annual_div_rate"),
-                                nav_change=m.get("ret_1y_total"),
-                            )
-                            _cov_ai = _ds_ai.get("coverage")
-                            if _cov_ai is not None:
-                                _div_line += (f"｜吃本金 coverage={_cov_ai:.2f}"
-                                              f"（{_ds_ai.get('alert_level','')}）")
-                        except Exception as _e_dsafe:
-                            # v19.346 §3.3:原靜默吞 — AI 快照少掉吃本金線索,留痕
-                            import sys as _sys_ds
-                            print(f'[tab2/ai-divsafety] 吃本金檢查失敗: '
-                                  f'{type(_e_dsafe).__name__}: {_e_dsafe}',
-                                  file=_sys_ds.stderr)
+                    # 配息 / 吃本金:這段餵給 AI 的數字原本直接讀 metrics 原始欄位
+                    # (ret_1y_total / annual_div_rate),繞過畫面 KPI 用的那兩個 SSOT
+                    # (compute_1y_total_return + _resolve_adr_with_fallback)。兩條路
+                    # 取到的值不同時,同一頁會出現「畫面 KPI 紅燈說吃本金、AI 解盤說
+                    # 配息覆蓋充足」的自打臉。改成與畫面完全同源。
+                    from services.health.dividend import (
+                        _resolve_adr_with_fallback as _resolve_adr_ai,
+                    )
+                    from ui.helpers.macro_helpers import (
+                        compute_1y_total_return as _c1ytr_ai,
+                    )
+                    _adr_ai, _adr_ai_src = _resolve_adr_ai({
+                        "moneydj_raw": mj_raw, "metrics": m, "dividends": divs,
+                    })
+                    _tr1y_ai, _tr1y_ai_src = _c1ytr_ai({
+                        "metrics": m,
+                        "moneydj_raw": mj_raw,
+                        "series": s,
+                        "perf_source": fd.get("perf_source") or mj_raw.get("perf_source"),
+                    })
+                    if _adr_ai is not None and _adr_ai > 0:
+                        _div_line = (
+                            f"- 配息：年化配息率≈{_adr_ai:.2f}%"
+                            f"（來源 {_ADR_SRC_ZH.get(_adr_ai_src, _adr_ai_src or '—')}）"
+                            f"，近期 {len(divs)} 筆"
+                        )
+                        if _tr1y_ai is None:
+                            _div_line += "｜吃本金：無法判定（缺 1Y 含息總報酬，禁止推測）"
+                        else:
+                            try:  # 吃本金檢查（含息總報酬 vs 配息率）— Core Protocol Ch.3.2
+                                _ds_ai = div_safety_check(
+                                    total_return=_tr1y_ai,
+                                    dividend_yield=_adr_ai,
+                                    nav_change=_tr1y_ai,
+                                )
+                                _cov_ai = _ds_ai.get("coverage")
+                                _div_line += (
+                                    f"｜1Y 含息總報酬={_tr1y_ai:.2f}%"
+                                    f"（來源 {_tr1y_ai_src or '—'}）"
+                                )
+                                if _cov_ai is not None:
+                                    _div_line += (
+                                        f"｜吃本金 coverage={_cov_ai:.2f}"
+                                        f"（{_ds_ai.get('alert_level','')}／"
+                                        f"{_ds_ai.get('status','')}）"
+                                        "｜此結論與畫面上「吃本金檢查」橫幅同源，請勿另行推翻"
+                                    )
+                            except Exception as _e_dsafe:
+                                # v19.346 §3.3:原靜默吞 — AI 快照少掉吃本金線索,留痕
+                                import sys as _sys_ds
+                                print(f'[tab2/ai-divsafety] 吃本金檢查失敗: '
+                                      f'{type(_e_dsafe).__name__}: {_e_dsafe}',
+                                      file=_sys_ds.stderr)
+                                _div_line += "｜吃本金：計算失敗，無法判定"
                         _snap.append(_div_line)
+                    elif divs:
+                        _snap.append(
+                            f"- 配息：有 {len(divs)} 筆配息記錄，但年化配息率三層來源皆無值"
+                            "→ 吃本金無法判定（不得推測）"
+                        )
                     _bs = [f"{_k}={m.get(_k)}" for _k in
                            ("buy1", "buy2", "buy3", "sell1", "sell2", "sell3",
                             "bb_upper", "bb_lower", "ma60")
@@ -2039,13 +2308,19 @@ def render_single_fund_tab() -> None:
                             print(f'[tab2/ai-hwm] σ絕對位階計算失敗: '
                                   f'{type(_e_hwm).__name__}: {_e_hwm}',
                                   file=_sys_hw.stderr)
+                    # 佔比缺值不可寫成 0% —— AI 會把「抓不到佔比」讀成「佔比極低」,
+                    # 然後在解盤裡寫「這幾檔權重很小、影響不大」(§1)。缺就明講缺。
+                    def _pct_or_unknown(v) -> str:
+                        _f = _safe_float(v)
+                        return f"{_f:.1f}%" if _f is not None else "佔比未提供"
+
                     if _tops:
                         _snap.append("- 前10大持股：" + "、".join(
                             f"{_zh_holding(str(_t.get('name',''))) or str(_t.get('name',''))[:14]}"
-                            f"({float(_t.get('pct',0) or 0):.1f}%)" for _t in _tops[:10]))
+                            f"({_pct_or_unknown(_t.get('pct'))})" for _t in _tops[:10]))
                     if _sectors:
                         _snap.append("- 產業配置：" + "、".join(
-                            f"{str(_s.get('name',''))[:8]} {float(_s.get('pct',0) or 0):.0f}%"
+                            f"{str(_s.get('name',''))[:8]} {_pct_or_unknown(_s.get('pct'))}"
                             for _s in _sectors[:5]))
                     _shield_cache_ai = st.session_state.get(f"shield_{fk}")
                     if _shield_cache_ai:
@@ -2063,16 +2338,23 @@ def render_single_fund_tab() -> None:
                         _cs_fx = _calc_stash.get("fx_to_twd")
                         _cs_fx_tag = "手動" if _calc_stash.get("fx_manual") else "Yahoo 即時"
                         if _calc_stash.get("fund_type") == "income":
-                            _cs_ann_twd = _calc_stash.get("annual_dividend_twd", 0) or 0
-                            _cs_mon_twd = _calc_stash.get("monthly_dividend_twd", 0) or 0
-                            _cs_mon_units = _calc_stash.get("monthly_dividend_units", 0) or 0
+                            # `or 0` 會把「這一格沒算出來」餵成金額 0 給 AI,AI 只能
+                            # 讀成「配息幾乎是零」。缺值一律送字面「未取得」(§1)。
+                            def _amt_or_na(v, fmt: str) -> str:
+                                _f = _safe_float(v)
+                                return format(_f, fmt) if _f is not None else "未取得"
+
+                            _cs_ann_twd = _amt_or_na(_calc_stash.get("annual_dividend_twd"), ",.0f")
+                            _cs_mon_twd = _amt_or_na(_calc_stash.get("monthly_dividend_twd"), ",.0f")
+                            _cs_mon_units = _amt_or_na(_calc_stash.get("monthly_dividend_units"), ",.2f")
+                            _cs_adr = _amt_or_na(_calc_stash.get("annual_div_rate"), ".2f")
                             _line = (
                                 f"- 投資試算：本金 {_cs_amt_twd:,.0f} TWD"
                                 f"（≈ {_cs_amt_local:,.2f} {_cs_ccy}）→ "
-                                f"{_cs_units:,.2f} 單位｜年息 ≈ {_cs_ann_twd:,.0f} TWD"
-                                f"（月 ≈ {_cs_mon_twd:,.0f} TWD"
-                                f" / 月配股 ≈ {_cs_mon_units:,.2f} 單位）"
-                                f"｜年化配息率 {_calc_stash.get('annual_div_rate',0):.2f}%"
+                                f"{_cs_units:,.2f} 單位｜年息 ≈ {_cs_ann_twd} TWD"
+                                f"（月 ≈ {_cs_mon_twd} TWD"
+                                f" / 月配股 ≈ {_cs_mon_units} 單位）"
+                                f"｜年化配息率 {_cs_adr}%"
                             )
                             if _cs_fx and _cs_ccy != "TWD":
                                 _line += f"｜TWD 換算（1 {_cs_ccy}={_cs_fx:.4f}，{_cs_fx_tag}）"

@@ -30,6 +30,8 @@ from ._helpers import (
     _open_worksheet,
     _row_to_list,
     _with_quota_retry,
+    normalize_invest_twd_column,
+    reset_invest_twd_parse_errors,
 )
 
 
@@ -38,6 +40,8 @@ def load_policies(client: Any, sheet_id: str, worksheet: str = DEFAULT_WORKSHEET
     讀回 DataFrame；REQUIRED_COLS 缺欄丟 PolicySheetError，
     OPTIONAL_COLS（policy_tier）缺欄則自動補空字串向後相容。空表回空 DataFrame。
     """
+    # §1：本次載入的本金解析失敗清單為 replace 語意，進場先清空
+    reset_invest_twd_parse_errors()
     ws = _open_worksheet(client, sheet_id, worksheet)
     try:
         records = ws.get_all_records()  # list[dict]
@@ -58,7 +62,9 @@ def load_policies(client: Any, sheet_id: str, worksheet: str = DEFAULT_WORKSHEET
             df[c] = ""
 
     df = df[list(ALL_COLS)].copy()
-    df["invest_twd"] = df["invest_twd"].map(_normalize_invest_twd)
+    # §1：逐列解析本金，無法解析的列帶「列號 + 主鍵」回報（不再靜默歸零）
+    normalize_invest_twd_column(
+        df, source="v1/Policies", id_cols=("policy_id", "fund_url"))
     df["fx_at_buy"] = df["fx_at_buy"].map(_normalize_fx)
     for c in ("policy_id", "policy_name", "fund_url", "invest_date",
               "currency", "notes", "policy_tier"):

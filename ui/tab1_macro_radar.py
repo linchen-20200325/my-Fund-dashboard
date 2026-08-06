@@ -158,7 +158,21 @@ def render_short_radar_section(
                                         key=f"radar_sp_{_key_r}",
                                         config={"displayModeBar": False})
         st.caption("📡 資料源：FRED + Yahoo Chart API（NAS proxy）｜閾值：🟢平靜 → 🟡警戒 → 🔴警報"
-                   "｜v19.133 卡片底部 sparkline 含指標特定 threshold 線")
+                   "｜卡片底部 sparkline 含指標特定 threshold 線")
+        # 2026-08-05 稽核 🔴 必修 6:🧭 總經指南針(VIX / 美 10Y / S&P 500 vs 60MA
+        # 三張卡 + 自己的「📡 抓取最新」按鈕)已整塊移除。原則 4「移除或保留都要
+        # 讓使用者看得懂」→ 在它三張卡的**去處**這裡說明,而不是留一句沒頭沒尾的
+        # 「已移除」在原位。卡片標題從上方 `_radar_cards` 這份既有清單導出,
+        # 不另寫一份(§3.3);標題改名時本句自動跟著改。
+        _compass_moved = {_k: _t for _k, _t in _radar_cards}
+        st.caption(
+            "🧭 原本另外一區的「總經指南針」已移除（它三張卡在這裡都有，"
+            "而且不必再按一次按鈕）：VIX → 本區「"
+            f"{_compass_moved['vix_level']}」；美 10Y 殖利率 → 本區「"
+            f"{_compass_moved['yield_10y_shock']}」（另附 FRED vs Yahoo 對帳）；"
+            "S&P 500 vs 60MA → 本區「"
+            f"{_compass_moved['spx_trend_break']}」（同一支 ^GSPC，改用有燈號分級的"
+            " 50DMA / 200DMA 兩條線）。")
 
 
 
@@ -185,7 +199,10 @@ def render_short_radar_section(
             _load_liquidity_factors()
             st.rerun()
     if _liq_score and show_l3:
-        with st.expander("⑤ 🌊 流動性壓力預警引擎（深水區 4 因子 ｜ lead SPX 1-3 週）", expanded=False):
+        # 2026-08-05 稽核 🟡 建議 8 改展開(user 原則 1「不要闔上的資料」):
+        # 走到這裡代表使用者**已經按過**「載入流動性壓力預警引擎」按鈕、資料也抓好了,
+        # 還要他再點一次才看得到 = 為一份他主動要的資料多設一道門。
+        with st.expander("⑤ 🌊 流動性壓力預警引擎（深水區 4 因子 ｜ lead SPX 1-3 週）", expanded=True):
             from ui.components.macro_card import make_sparkline as _mk_sl2
             from services.liquidity_engine import liquidity_verdict
             if st.button("🔄 重新抓取流動性因子", key="btn_reload_liquidity"):
