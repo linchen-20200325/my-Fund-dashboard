@@ -1149,6 +1149,10 @@ def render_macro_tab() -> None:
             # 寫死字面值那版已經漂移過一次)。
             _comp_prov: dict = {}
             _comp_score = calculate_composite_score(ind, provenance_out=_comp_prov)
+            # v19.428:persist composite 總分供跨分頁消費 —— 換股顧問成長型「總經看衰」判斷
+            # (services/switch_advisor.py 讀 session composite ≤ -5)+ macro AI 綜合分數。
+            # 此前 _comp_score 只是 local 變數、session 鍵無 producer → 消費者永遠讀 None(稽核 HIGH)。
+            st.session_state["composite_score"] = _comp_score
             _comp_n = int(_comp_prov.get("n_indicators") or 0)
             _cv_icon, _cv_level, _, _cv_action = composite_verdict(_comp_score)
             _ev_rows = build_evidence_rows(

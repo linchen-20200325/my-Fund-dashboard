@@ -248,6 +248,16 @@ def render_fund_grp_health_tab() -> None:
                 f"⬜ 配置回測區塊渲染失敗:[{type(_e_bt).__name__}] {str(_e_bt)[:80]}"
             )
 
+    # v19.428:🎯 換股池顧問(選股池 + 依持倉×池的換股建議)。選股池 CRUD 永遠可用;
+    # 換股建議按鈕觸發(避免每次重整補抓池中標的)。缺 macro/FX 由 section 內誠實降級(§1)。
+    try:
+        from ui.helpers.fund_grp_health.switch_advisor_section import render_switch_advisor_section
+        render_switch_advisor_section(_funds_extra)
+    except Exception as _e_sw:
+        st.caption(
+            f"⬜ 換股池顧問區塊渲染失敗:[{type(_e_sw).__name__}] {str(_e_sw)[:80]}"
+        )
+
     # v19.58 — 其餘進階貼圖區塊（真實收益矩陣 + 投資試算 + 持股 + 多檔比較 + AI…）。
     # 基金體檢 PK + 4 大健診卡已上移至健診總表之前，不再由此區塊渲染（避免上下重複）。
     if _funds_extra:
