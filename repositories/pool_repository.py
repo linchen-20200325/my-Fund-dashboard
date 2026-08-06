@@ -135,7 +135,7 @@ def _get_sheet():
     """開啟與 policy/macro 同一份 Google Sheet(複用 secrets),v19.428。"""
     from infra.config import require_secret
     from repositories.policy_repository import get_gspread_client
-    creds = dict(require_secret("google_service_account"))
+    creds = require_secret("google_service_account")   # str(JSON)/dict 皆可,get_gspread_client 正規化
     sheet_id = require_secret("macro_weights_sheet_id")
     return get_gspread_client(creds).open_by_key(sheet_id)
 

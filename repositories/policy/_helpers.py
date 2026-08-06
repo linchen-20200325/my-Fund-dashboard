@@ -89,14 +89,46 @@ def _with_quota_retry(call, *args, **kwargs):
 # ──────────────────────────────────────────────────────────────────────
 # 連線：lazy import，避免測試環境/未安裝套件時 import 失敗
 # ──────────────────────────────────────────────────────────────────────
-def get_gspread_client(credentials: dict) -> Any:
-    """
-    用 Service Account JSON dict 換一個已授權的 gspread Client。
+def coerce_sa_credentials(credentials) -> dict:
+    """Service Account secret 正規化 → plain dict。
 
-    credentials: 從 st.secrets["google_service_account"] 來的 dict（必含
-                 type / project_id / private_key / client_email 等欄位）
+    接受:dict / Streamlit AttrDict(Mapping,原樣轉)、**JSON 字串**(Streamlit TOML 表格
+    吃不下多行 private_key 時,改用三引號 `'''<整包 JSON>'''` 貼上;或 NAS/cron env 只能給
+    字串 → 自動 `json.loads`)。§1:字串非合法 JSON / 解析非物件 / 空值 → 丟 `PolicySheetError`
+    帶可讀原因,不靜默回空(對照 services.nav_history_gs._sa_to_dict,但這裡 fail-loud)。"""
+    if isinstance(credentials, str):
+        import json
+        _s = credentials.strip()
+        if not _s:
+            raise PolicySheetError("google_service_account 為空字串")
+        try:
+            parsed = json.loads(_s)
+        except (ValueError, TypeError) as e:
+            raise PolicySheetError(
+                f"google_service_account 是字串但非合法 JSON:{e}"
+                "（Streamlit Secrets 請用三引號 google_service_account = '''<整包 JSON>''' 貼上）"
+            ) from e
+        if not isinstance(parsed, dict):
+            raise PolicySheetError("google_service_account JSON 未解析成物件(dict)")
+        return parsed
+    try:
+        return dict(credentials)                 # dict / Streamlit AttrDict(Mapping)→ plain dict
+    except (TypeError, ValueError) as e:
+        raise PolicySheetError(
+            f"google_service_account 型別無法解析為 dict:{type(credentials).__name__}"
+        ) from e
+
+
+def get_gspread_client(credentials) -> Any:
     """
-    if not isinstance(credentials, dict) or not credentials.get("client_email"):
+    用 Service Account 憑證(dict / Mapping / **JSON 字串**)換一個已授權的 gspread Client。
+
+    credentials: st.secrets["google_service_account"] —— 字串會自動 `json.loads`
+                 (見 `coerce_sa_credentials`)。必含 type / project_id / private_key /
+                 client_email 等欄位。
+    """
+    credentials = coerce_sa_credentials(credentials)     # 接受 str(JSON)/dict/Mapping(§1 fail-loud)
+    if not credentials.get("client_email"):
         raise PolicySheetError("Service Account credentials 缺 client_email 欄位")
 
     try:
