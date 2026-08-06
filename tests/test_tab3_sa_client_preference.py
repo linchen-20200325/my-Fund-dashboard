@@ -30,8 +30,9 @@ def test_tab3_has_service_account_first_client_helper():
         "v19.302 的 _t3_sheet_client()(SA 優先決策 SSOT)不見了"
     )
     # 2) helper 優先 SA:先判 _gsa_secret,有就走 Service Account client
-    assert "if _gsa_secret:" in txt and "get_gspread_client(dict(_gsa_secret))" in txt, (
-        "_t3_sheet_client 應優先 Service Account(if _gsa_secret → get_gspread_client)"
+    assert "if _gsa_secret:" in txt and "get_gspread_client(_gsa_secret)" in txt, (
+        "_t3_sheet_client 應優先 Service Account(if _gsa_secret → get_gspread_client);"
+        "v19.429 起改傳 raw secret(str/dict 皆可,get_gspread_client 內部正規化),不再 dict() 預包"
     )
 
 

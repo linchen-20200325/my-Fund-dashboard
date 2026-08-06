@@ -118,7 +118,7 @@ def render_portfolio_tab() -> None:
     #   (前提:該 Sheet 已分享給 SA 的 client_email)。
     def _t3_sheet_client():
         if _gsa_secret:
-            return get_gspread_client(dict(_gsa_secret))
+            return get_gspread_client(_gsa_secret)
         return _get_oauth_client()
     from ui.helpers.data_registry import (
         _update_data_registry,
@@ -578,10 +578,17 @@ def render_portfolio_tab() -> None:
             st.session_state["_last_loaded_sheet_id"] = _sheet_id_q
             from ui.helpers.cloud_io import load_all_from_sheet as _auto_load
             from ui.helpers.portfolio_load import count_unloaded_funds
-            _ares = ({"ok": False, "_skipped": True} if _skip_first else
-                     _auto_load(_t3_cloud_client_q(), _sheet_id_q,
-                                st.session_state,
-                                oauth_mode=bool(_oauth_configured)))
+            if _skip_first:
+                _ares = {"ok": False, "_skipped": True}
+            else:
+                try:                       # 憑證建不起來(如 SA secret 壞)不該讓整頁崩(§1 降級)
+                    _t3_client = _t3_cloud_client_q()
+                except Exception as _ce:  # noqa: BLE001
+                    _t3_client = None
+                    _ares = {"ok": False, "error": f"雲端憑證無法建立：{_ce}"}
+                else:
+                    _ares = _auto_load(_t3_client, _sheet_id_q, st.session_state,
+                                       oauth_mode=bool(_oauth_configured))
             if _ares.get("_skipped"):
                 pass   # 首次進入保留本地持倉，不自動讀回
             elif _ares.get("ok"):
@@ -1258,7 +1265,7 @@ def render_portfolio_tab() -> None:
                                     st.warning("policy_id 與 fund_url 為必填")
                                 else:
                                     try:
-                                        _client = get_gspread_client(dict(_gsa_secret))
+                                        _client = get_gspread_client(_gsa_secret)
                                         _act = upsert_policy_row(_client, _sheet_id, _row)
                                         st.success(f"✅ {_act}")
                                     except PolicySheetError as _pe:
@@ -1268,7 +1275,7 @@ def render_portfolio_tab() -> None:
                                     st.warning("policy_id + fund_url 必填")
                                 else:
                                     try:
-                                        _client = get_gspread_client(dict(_gsa_secret))
+                                        _client = get_gspread_client(_gsa_secret)
                                         _hit = delete_policy_row(_client, _sheet_id,
                                             _row["policy_id"], _row["fund_url"])
                                         st.success("✅ 已刪除" if _hit else "ℹ️ 主鍵未命中")
