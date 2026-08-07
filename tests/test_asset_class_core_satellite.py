@@ -11,8 +11,9 @@ from __future__ import annotations
 import pytest
 
 from services.health.asset_class import (
-    CORE_TARGET_MAX_PCT,
-    CORE_TARGET_MIN_PCT,
+    COVERAGE_OK,
+    COVERAGE_UNRELIABLE,
+    UNDETERMINED_UNRELIABLE_PCT,
     classify_by_category,
     classify_core_satellite,
     summarize_core_satellite_allocation,
@@ -111,7 +112,9 @@ def test_health_row_missing_category_is_undetermined():
     assert "待定" in row["核心/衛星"]
 
 
-# ── summarize_core_satellite_allocation (v19.329) ────────
+# ── summarize_core_satellite_allocation ──────────────────
+# 2026-08-07 user 裁決:本函式**降為純資訊** —— 只算屬性分布比例 + 分類涵蓋度,
+# 不再對核心佔比高低給燈號 / 行動建議(唯一真相是 Sheet policy_tier 那條線)。
 def test_alloc_weighted_by_amount():
     """依投入金額加權(非等權):核心 80萬 / 衛星 20萬 → 核心 80%。"""
     r = summarize_core_satellite_allocation([
@@ -122,35 +125,40 @@ def test_alloc_weighted_by_amount():
     assert r["n_core"] == 1 and r["n_satellite"] == 1
 
 
-def test_alloc_green_in_target_range():
+@pytest.mark.parametrize("core_w,sat_w", [
+    (62, 38),    # 舊 🟢
+    (30, 70),    # 舊 🔴「衛星過重」
+    (90, 10),    # 舊 🟡「偏保守」
+])
+def test_alloc_never_judges_core_ratio(core_w, sat_w):
+    """**修正前必紅(行為衝突)** —— 舊碼對這三組會分別回 🟢 / 🔴 / 🟡。
+
+    核心佔比高低不再產生任何評價:只要分類涵蓋足夠,一律 `COVERAGE_OK`,
+    且 note 不得出現行動語氣。這是「同一頁不再出現兩個相反再平衡結論」的根。
+    """
     r = summarize_core_satellite_allocation([
-        {"label": "核心", "weight": 62}, {"label": "衛星", "weight": 38}])
-    assert r["status"] == "🟢"
+        {"label": "核心", "weight": core_w}, {"label": "衛星", "weight": sat_w}])
+    assert r["status"] == COVERAGE_OK
+    assert "message" not in r, "行動建議欄位不得復活"
+    for _banned in ("衛星過重", "偏保守", "配置穩健", "目標"):
+        assert _banned not in r["coverage_note"], f"coverage_note 仍帶評價字樣「{_banned}」"
 
 
-def test_alloc_red_when_satellite_overweight():
-    """核心 < 50% → 🔴(衛星過重)。"""
-    r = summarize_core_satellite_allocation([
-        {"label": "核心", "weight": 30}, {"label": "衛星", "weight": 70}])
-    assert r["status"] == "🔴" and r["core_pct"] < CORE_TARGET_MIN_PCT
-
-
-def test_alloc_yellow_when_too_conservative():
-    """核心 > 80% → 🟡(過保守)。"""
-    r = summarize_core_satellite_allocation([
-        {"label": "核心", "weight": 90}, {"label": "衛星", "weight": 10}])
-    assert r["status"] == "🟡" and r["core_pct"] > CORE_TARGET_MAX_PCT
-
-
-def test_alloc_white_when_too_many_undetermined():
-    """待定 > 30% → ⚪(不可靠)。"""
+def test_alloc_coverage_unreliable_when_too_many_undetermined():
+    """待定超標 → 分類涵蓋不足(資料品質陳述,不是配置評價)。"""
     r = summarize_core_satellite_allocation([
         {"label": "核心", "weight": 10}, {"label": "待定", "weight": 90}])
-    assert r["status"] == "⚪" and r["undetermined_pct"] > 30
+    assert r["status"] == COVERAGE_UNRELIABLE
+    assert r["undetermined_pct"] > UNDETERMINED_UNRELIABLE_PCT
+    assert "待定" in r["coverage_note"]
 
 
 def test_alloc_skips_nonpositive_weight():
-    """weight ≤ 0 / 非數 略過,不計入分母。"""
+    """weight ≤ 0 / 非數 略過,不計入分母。
+
+    **這條同時是「模擬本金不進配置比例」的地基**:呼叫端對未填金額的基金傳 0,
+    就靠這裡把它擋在分母外(見 ui/tab_fund_grp_health._render_health_3tables)。
+    """
     r = summarize_core_satellite_allocation([
         {"label": "核心", "weight": 100},
         {"label": "衛星", "weight": 0},
@@ -160,6 +168,20 @@ def test_alloc_skips_nonpositive_weight():
     assert r["n_satellite"] == 0
 
 
-def test_alloc_empty_is_white():
+def test_alloc_empty_is_coverage_unreliable():
     r = summarize_core_satellite_allocation([])
-    assert r["status"] == "⚪" and r["total_weight"] == 0.0
+    assert r["status"] == COVERAGE_UNRELIABLE and r["total_weight"] == 0.0
+    assert "message" not in r
+
+
+def test_target_range_constants_are_gone():
+    """**修正前必紅(ImportError 反向鎖)** —— 建議核心區間常數必須真的不存在。
+
+    只要 `CORE_TARGET_MIN_PCT` / `CORE_TARGET_MAX_PCT` 還留在模組裡,下一個人
+    就會把它接回畫面,兩把尺的打架就會復發。用 `hasattr` 而非 import 失敗,
+    是為了讓失敗訊息直接指出是哪個常數復活。
+    """
+    import services.health.asset_class as _ac
+    for _name in ("CORE_TARGET_MIN_PCT", "CORE_TARGET_MAX_PCT"):
+        assert not hasattr(_ac, _name), (
+            f"{_name} 復活了 —— 本表已降為純資訊,不得再持有建議核心佔比")

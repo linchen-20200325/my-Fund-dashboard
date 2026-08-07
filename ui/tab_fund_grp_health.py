@@ -359,13 +359,24 @@ def _eats_principal_flag(fd: dict) -> "bool | None":
 
 
 def _render_low_base_screener(ok_rows: list[dict]) -> None:
-    """🎯 選基金（低基期進場點）— v19.347。
+    """🎯 選基金（低基期進場點）。
 
-    在「已載入的基金」裡找進場候選：現價落在「期間高點 − N×標準差」之下（低基期）
-    且不吃本金，可依幣別/類別篩。**重用組合健診已抓的 NAV**，不新增外部抓取。
+    在「已載入的基金」裡找進場候選：σ rank ≤ 買點門檻（低基期）且不吃本金，
+    可依幣別/類別篩。**重用組合健診已抓的 NAV**，不新增外部抓取。
     L3 render；篩選邏輯全在 `services.fund_screening`（L2 純函式）。
+
+    2026-08-07 user 拍板「低基期全站統一用 HWM σ rank」後本區的三個變化：
+      1. σ 改**負數**（σ rank，愈負愈低基期），不再是舊的「低幾σ」正數深度；
+      2. σ 倍數選擇器（1 / 2σ）拿掉 —— 門檻走 `ROTATION_BUY_SIGMA` SSOT。
+         使用者仍看得到每檔的 σ rank 數值與 4 級 HWM 位階，資訊沒有變少，
+         少的只是「在 UI 裡另外寫一組門檻數字」的機會（§3.3 / §8.1 step 6）；
+      3. 回看期選擇器（1/2/3 年）拿掉 —— σ_abs 隨 √n 縮放，換窗口就換一把尺，
+         留著等於把剛消滅的分歧原樣搬回來。窗口固定 = 大表口徑。
     """
-    from services.fund_screening import screen_funds  # L2 純函式
+    from services.fund_screening import (  # L2 純函式
+        LOW_BASE_MIN_POINTS,
+        screen_funds,
+    )
 
     # 1) 由已載入 row 的 _fund_raw 組 items（series/幣別/類別 + 吃本金布林）
     items = []
@@ -381,54 +392,59 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
             "eats_principal": _eats_principal_flag(fd),
         })
 
-    st.markdown("#### 🎯 選基金（低基期進場點 · 高點−σ · 可調倍數）")
+    from shared.signal_thresholds import ROTATION_BUY_SIGMA, ROTATION_SELL_SIGMA
+
+    st.markdown("#### 🎯 選基金（低基期進場點 · HWM σ rank）")
     st.caption(
-        "在已載入的基金裡，找「現價 ≤ 期間高點 − N×標準差」且不吃本金的**進場候選**。"
-        "低幾σ 越大 = 離高點越深。"
+        f"在已載入的基金裡，找 **σ rank ≤ {ROTATION_BUY_SIGMA:+.1f}σ**（現價落在期間"
+        "高點下方那麼多個 σ）且不吃本金的**進場候選**。σ rank 是**負數**，"
+        "**愈負 = 離高點愈深 = 基期愈低**。"
     )
     st.caption(
-        "⚠️ **本區與健診大表「基期」欄不是同一把尺**（兩者刻意不同,不是 bug）："
-        "本區的 σ 是**NAV 價位的標準差**、深度取**正數**、倍數由你選（1 或 2σ）、回看期可調；"
-        "大表「基期」欄用的是 **σ rank（負數，報酬率標準差換算）** 且固定 −1.5σ。"
-        "所以同一檔可能在這裡標 ✅ 低基期、在大表卻是 ⚪ 中性 —— 以你當下要用的門檻為準。"
+        f"✅ **與健診大表「基期」欄同一把尺**：同一支 `calc_hwm_sigma_levels` σ rank + "
+        f"同一組門檻（買 {ROTATION_BUY_SIGMA:+.1f}σ / 賣 {ROTATION_SELL_SIGMA:+.1f}σ，"
+        "SSOT `shared/signal_thresholds.py`）+ 同一個回看窗。"
+        "本區標 🟢 低基期的，大表「基期」欄一定也是 🟢。"
     )
 
-    _c1, _c2, _c3 = st.columns([1, 1, 2])
-    _n = _c1.radio("低基期 σ 倍數", [1, 2], horizontal=True, key="lb_nsigma",
-                   help="門檻 = 期間高點 − N×標準差；N 越大越嚴（要跌更深才算低基期）。")
-    _lb_years = _c2.radio("回看期間", ["1年", "2年", "3年"], key="lb_years",
-                          help="以交易日計：1年≈252、2年≈504、3年≈756。")
-    _lookback = {"1年": 252, "2年": 504, "3年": 756}[_lb_years]
+    # σ 倍數 / 回看期兩個 radio 已移除（見 docstring 2、3）→ 這裡只剩維度濾鏡，
+    # 不再需要三欄排版。
     _all_ccy = sorted({it["currency"] for it in items if it["currency"]})
     _all_cat = sorted({it["category"] for it in items if it["category"]})
-    _sel_ccy = _c3.multiselect("幣別（外幣/台幣）", _all_ccy, default=_all_ccy, key="lb_ccy")
-    _sel_cat = _c3.multiselect("基金類別", _all_cat, default=_all_cat, key="lb_cat")
+    _sel_ccy = st.multiselect("幣別（外幣/台幣）", _all_ccy, default=_all_ccy, key="lb_ccy")
+    _sel_cat = st.multiselect("基金類別", _all_cat, default=_all_cat, key="lb_cat")
     _cc1, _cc2 = st.columns(2)
     _only_eat = _cc1.checkbox("只留不吃本金（MK 綠/黃燈）", value=True, key="lb_noeat")
     _only_low = _cc2.checkbox("只留低基期", value=True, key="lb_onlylow")
 
     # 2) L2 純函式篩選（多選清空 → None = 不篩該維度，避免空表困惑）
+    #    lookback / 門檻一律走 L2 預設 = SSOT，UI 不再持有第二組數字（§3.3）。
     rows = screen_funds(
-        items, n_sigma=float(_n), lookback=_lookback,
+        items,
         only_low_base=_only_low, only_no_eat=_only_eat,
         currencies=(set(_sel_ccy) or None),
         categories=(set(_sel_cat) or None),
     )
     if not rows:
-        st.info("目前沒有符合條件的基金——可放寬 σ / 回看期間，或取消『只留』勾選。")
+        st.info("目前沒有符合條件的基金——可取消『只留低基期』看全部基期分布，"
+                "或放寬幣別 / 類別篩選。")
         return
 
     import pandas as pd
     from streamlit import column_config as _cc
     _eat_map = {True: "🔴 吃本金", False: "🟢 不吃", None: "❓ 未知"}
-    _lb_map = {True: "✅ 低基期", False: "— 非低基期", None: "⚪ 無法判定"}
+    # 與 ui/helpers/fund_grp_health/unified.py 的「基期」欄同一組標籤語意
+    _base_map = {"low": "🟢 低基期", "mid": "⚪ 中性",
+                 "high": "🔴 高基期", "unknown": "⬜ 資料不足"}
     _df = pd.DataFrame([{
         "代號": r["code"], "基金名": r["name"],
         "類別": r["category"] or "—", "幣別": r["currency"] or "—",
-        "現價": r["current"], "期間高點": r["high"],
-        "門檻(高點−σ)": r["threshold"],
-        "低幾σ": r["sigma_below_high"],
-        "低基期": _lb_map.get(r["is_low_base"], "⚪"),
+        "現價": r["current"], "期間高點(HWM)": r["hwm"],
+        "距 HWM %": r["dist_to_hwm_pct"],
+        "σ rank": r["sigma_rank"],
+        f"買點門檻({ROTATION_BUY_SIGMA:+.1f}σ)": r["buy_threshold_nav"],
+        "基期": _base_map.get(r["base"], "⬜ 資料不足"),
+        "HWM 位階": r["hwm_label"],
         "吃本金": _eat_map.get(r["eats_principal"], "❓ 未知"),
         "樣本數": r["n_points"],
         "可信度": "✅" if r["reliable"] else "⚠️ 低",
@@ -437,14 +453,18 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
         _df, use_container_width=True, hide_index=True,
         column_config={
             "現價": _cc.NumberColumn(format="%.2f"),
-            "期間高點": _cc.NumberColumn(format="%.2f"),
-            "門檻(高點−σ)": _cc.NumberColumn(format="%.2f"),
-            "低幾σ": _cc.NumberColumn(format="%.2f σ"),
+            "期間高點(HWM)": _cc.NumberColumn(format="%.2f"),
+            "距 HWM %": _cc.NumberColumn(format="%+.2f%%"),
+            "σ rank": _cc.NumberColumn(
+                format="%+.2f σ",
+                help="負數；愈負 = 現價離期間高點愈深 = 基期愈低。"),
+            f"買點門檻({ROTATION_BUY_SIGMA:+.1f}σ)": _cc.NumberColumn(format="%.2f"),
         },
     )
     st.caption(
-        f"共 {len(rows)} 檔符合（依「低幾σ」深→淺排序）。門檻/σ 以「{_lb_years}」窗 × {_n}σ 計算；"
-        "停售/NAV 幾乎不動者（std≈0）標『無法判定』不硬湊（§1）；樣本 < 60 筆標『可信度低』。"
+        f"共 {len(rows)} 檔（依 σ rank 由**負到正**排序 = 跌最深的在最上面）。"
+        f"停售 / NAV 完全不動（σ≈0）者無法定位階，標『⬜ 資料不足』並**排除在低基期"
+        f"候選之外**，不會被推薦（§1）；樣本 < {LOW_BASE_MIN_POINTS} 筆標『可信度低』。"
     )
     st.download_button(
         "⬇️ 下載選基金清單 CSV", _df.to_csv(index=False).encode("utf-8-sig"),
@@ -511,71 +531,120 @@ def _weight_basis_note(csa: dict, source_tab: str | None = None) -> str:
 # 而且結論方向相反（上方「核心 90%、目標 75% → 核心過重可減」vs 下方「核心 40%
 # < 50% → 衛星過重要加」）。三項口徑全不同：
 #
+# 當時（=已修掉的舊狀態）三項口徑全不同：
 #   |      | 上半頁（ui/tab3_portfolio.py hero / KPI）        | 本區（Tab3 embed）                       |
-#   | 分母 | Σ invest_twd，**未填本金者計 0**                | Σ _principal_twd，未填 / ≤0 **補 100 萬** |
+#   | 分母 | Σ invest_twd，未填本金者計 0                    | Σ _principal_twd，未填 / ≤0 補模擬本金    |
 #   | 分類 | resolve_core_flag：policy_tier → is_core（二態）| classify_core_satellite：類別 + 3-3-3（三態）|
-#   | 目標 | session portfolio_core_pct（⚙️ 組合設定 slider）| CORE_TARGET_MIN/MAX_PCT（50~80 固定）     |
+#   | 目標 | session portfolio_core_pct（⚙️ 組合設定 slider）| L2 的建議核心區間（固定）                 |
 #
 # 分母那條尤其致命：只要有一檔沒填本金，兩個百分比在**數學上就不可能相等**。
 #
 # 它們回答的其實是不同問題 —— 上方是「這筆錢的配置定位」（使用者自己在 Google
 # Sheet 標的），本區是「這檔基金的資產屬性」（系統依 MoneyDJ 類別 + 3-3-3 判的）。
-# 兩者都有價值，**合併成單一分類器是架構決策**（§8.1），不在本輪範圍。
+# 兩者都有價值，**合併成單一分類器是架構決策**（§8.1），user 裁決是不合併、但降級。
 #
-# 本輪處置 = (a) + (b) 混合：
-#   (a) 兩個 Tab 都在表上方明講「本表用的是哪一把尺」；
-#   (b) 在 Tab3 embed 時，本區燈號**降為唯讀對照**，不再輸出「核心不足 / 過重」的
-#       行動建議 —— 同一頁只留一處再平衡指示（上方那處）。
-# 為什麼不是只做 (a)：光加說明救不了「兩個相反的行動建議並排」；使用者仍得在兩個
-# 都寫著「該調整」的區塊之間二選一，而那正是他無從判斷的事。
-# 為什麼不是只做 (b)：拿掉建議但不解釋，數字差異會變成「哪個算錯了」的新疑問。
-_CS_RULER_NOTE_TMPL = (
+# 現況（2026-08-07 後）：分母兩邊都只計實際填過的本金（模擬本金 weight=0 擋掉），
+# 目標值本區已無，只剩「分類依據」一項差異 —— 那一項正是兩區各自的存在理由。
+#
+# 2026-08-07 user 拍板（本輪把上一輪只做在 Tab3 的降級推到**兩個 Tab**）：
+#   「你在 Sheet 標的級別是唯一真相。健診那份（依基金屬性判定）降為純資訊，
+#     不再給『核心不足 / 過重』的配置建議。」
+# 上一輪只在 Tab3 embed 降級，健診 Tab 仍照輸出 L2 的行動建議 —— 那等於同一套
+# 屬性分類器在 A 頁是「建議」、在 B 頁是「參考」，使用者換個 Tab 就換一套結論。
+# 現在無論哪個 caller，這一區一律只陳述比例 + 指向唯一有行動建議的那一格。
+# 連帶把 L2 的建議核心區間常數整組移除（見 services/health/asset_class.py），
+# 因為只要那組目標還在，下一個人就會再把它接回畫面。
+_CS_RULER_NOTE = (
     "📏 **本表這一欄的尺**：核心 / 衛星依**基金本身的資產屬性**判定"
     "（MoneyDJ 基金類別關鍵字 + MK 3-3-3；判不出來的誠實留「待定」，不硬塞），"
     "是系統推的，**不是**你在 Google Sheet 標的 `policy_tier`。"
-    "參考區間核心 {lo:.0f}~{hi:.0f}% 是本表固定的策略門檻，"
-    "不吃「⚙️ 組合設定」的核心比例 slider。"
+    "本表**不設**建議核心佔比、也不評價你的配置 —— 它只回答「我手上這幾檔，"
+    "本質上偏穩健還是偏主題」。"
 )
 
 _CS_PORTFOLIO_CONTRAST_NOTE = (
     "⚖️ **本區與本頁上方的「🛡️ 核心資產比例」不是同一把尺，數字不一樣是正常的**：\n"
     "1. **分類依據** — 上方用你在 Google Sheet 標的 `policy_tier`（缺才退基金名稱"
     "關鍵字），只有核心 / 衛星兩態；本區用 MoneyDJ 基金類別 + MK 3-3-3，多一個「待定」。\n"
-    "2. **分母** — 上方是 Σ 投入本金，**沒填本金的那幾檔以 0 計**；本區把沒填 / 填 0 的"
-    "以 100 萬 TWD 估算後計入。只要有一檔沒填，兩個百分比就不可能相等。\n"
-    "3. **目標值** — 上方是「⚙️ 組合設定」的核心比例 slider；本區是固定參考區間。\n"
-    "→ **要不要再平衡以上方那一處為準**；本區只回答「我手上這幾檔，本質上偏穩健還是偏主題」。"
+    "2. **分母** — 兩邊都是 Σ 你實際填過的投入本金：**沒填本金的那幾檔兩邊都不進比例**"
+    "（本區為了試算配息會給它們 100 萬 TWD 的模擬本金，但那個金額**不進**這裡的百分比）。\n"
+    "3. **目標值** — 上方是「⚙️ 組合設定」的核心比例 slider；本區**沒有**目標值，不做達標判定。\n"
+    "→ **要不要再平衡一律以上方那一處為準**；本區純資訊。"
 )
 
 
 def _core_satellite_ruler_note() -> str:
-    """🧭 配置檢查的「這是哪一把尺」說明（門檻值走 L2 SSOT，不在字串裡寫死）。"""
-    from services.health.asset_class import (
-        CORE_TARGET_MAX_PCT, CORE_TARGET_MIN_PCT,
-    )
-    return _CS_RULER_NOTE_TMPL.format(lo=CORE_TARGET_MIN_PCT, hi=CORE_TARGET_MAX_PCT)
+    """🧭 屬性分布的「這是哪一把尺」說明。
+
+    本表已無任何門檻 / 目標值可帶（見上方註解），故為固定字串；保留函式形式是因為
+    render 端與測試都以呼叫點接線，改成常數會讓接線測試失去著力點。
+    """
+    return _CS_RULER_NOTE
+
+
+# 兩個 Tab 共用的唯讀措辭；差別只在「唯一有行動建議的那一格」在哪裡。
+_CS_READONLY_TMPL = (
+    "{status} 本表口徑下：核心 {core:.0f}% / 衛星 {sat:.0f}% / 待定 {und:.0f}%"
+    "（依**基金資產屬性**判定）。**本區為唯讀對照、純資訊，不提供再平衡建議**"
+    " —— 核心 / 衛星要不要調整，{where}"
+)
+_CS_WHERE_PORTFOLIO = (
+    "看本頁上方「🛡️ 核心資產比例 / 目標偏差」那一格（那裡吃你在 Google Sheet "
+    "標的 `policy_tier` + ⚙️ 組合設定的目標）。"
+)
+_CS_WHERE_HEALTH = (
+    "看「組合配置」Tab 的「🛡️ 核心資產比例 / 目標偏差」那一格（那裡吃你在 Google "
+    "Sheet 標的 `policy_tier`）—— 本 Tab 只有代號與單一本金，讀不到你標的配置定位。"
+)
+
+
+def _core_satellite_items(health_rows: list, ok_rows: list) -> tuple:
+    """把 (① 健康分析 row, 健診 row) 配對成 L2 需要的 `[{label, weight}]`（純函式）。
+
+    回傳 `(items, n_simulated_principal)`。
+
+    ⚠️ **模擬本金不進配置比例**（2026-08-07 user 裁決第 4 點）：
+    呼叫端（`ui/tab3_portfolio.py` 持倉健診）對「使用者從未填過 `invest_twd`」的
+    基金會補一筆 100 萬 TWD，好讓逐檔配息試算算得出「每月配息 TWD」——
+    那個金額**是模擬值**，不是他的錢。若讓它進百分比分母：
+      (a) 一檔沒填就能把屬性比例整個帶偏；
+      (b) 混合情況下 `weight_mode` 會推斷成 "amount"，caption 於是會宣稱這是依各檔
+          實際金額算出來的、並印出一個含模擬金額的總計 —— 用捏造的數字背書一句
+          假陳述（§1）。
+    故這裡一律傳 weight=0；L2 `summarize_core_satellite_allocation` 對 weight ≤ 0
+    的項目直接略過（不計分母、不參與加權方式推斷）。
+
+    健診 Tab 走的是使用者自己輸入的單一本金 broadcast，**不帶**這個旗標，
+    行為與過去完全相同（全等權，caption 照 `weight_mode` 說是等權）。
+    """
+    items: list = []
+    n_sim = 0
+    for _hr, _r in zip(health_rows or [], ok_rows or []):
+        _lbl = ((_hr or {}).get("核心/衛星") or "").split()
+        _is_sim = bool((_r or {}).get("_principal_is_default"))
+        if _is_sim:
+            n_sim += 1
+        items.append({
+            "label": _lbl[-1] if _lbl else "待定",
+            "weight": 0 if _is_sim else ((_r or {}).get("_principal_twd") or 0),
+        })
+    return items, n_sim
 
 
 def _core_satellite_verdict_caption(csa: dict,
                                     source_tab: str | None = None) -> str:
-    """🧭 配置檢查的結論句（純函式，可單元測試）。
+    """🧭 屬性分布的結論句（純函式，可單元測試）—— **兩個 Tab 都唯讀**。
 
-    `source_tab == "health"`（💊 基金組合健診 Tab —— 該頁**只有**這一個核心%）
-    → 照常輸出 L2 `summarize_core_satellite_allocation` 的 `message`（含行動建議）。
+    只陳述本表口徑下的三態比例，永遠不輸出「核心不足 / 衛星過重 / 偏保守」這類
+    行動語氣。`source_tab` 現在只決定「唯一有行動建議的那一格在哪裡」的指路措辭
+    （Tab3 embed → 本頁上方；健診 Tab → 「組合配置」Tab），不再決定給不給建議。
 
-    其餘 caller（Tab3「組合配置」embed；未宣告身分的預設值也走這條）
-    → **唯讀對照**：只陳述本表口徑下的比例，不輸出 `message`（那句帶「衛星過重」/
-    「偏保守」的行動語氣），並明講行動建議只有上方一處。
-
-    預設落在唯讀側是刻意的 fail-safe：新 caller 若忘了宣告身分，寧可少給一個建議，
-    也不要讓同一頁再度出現兩個方向相反的建議。
+    分類涵蓋不足（待定佔比過高）時，把 L2 的 `coverage_note` 接出來 —— 那是**資料
+    品質**陳述（「補上基金分類才讀得準」），不是配置建議，屬 §1 必須講的缺料揭露。
     """
-    from services.health.asset_class import (
-        CORE_TARGET_MAX_PCT, CORE_TARGET_MIN_PCT,
-    )
-    _status = str(csa.get("status") or "⚪")
-    if source_tab == "health":
-        return f"{_status} {csa.get('message', '')}"
+    from services.health.asset_class import COVERAGE_UNRELIABLE
+
+    _status = str(csa.get("status") or COVERAGE_UNRELIABLE)
 
     def _pct(key: str) -> float:
         try:
@@ -583,13 +652,17 @@ def _core_satellite_verdict_caption(csa: dict,
         except (TypeError, ValueError):
             return 0.0
 
-    return (
-        f"{_status} 本表口徑下：核心 {_pct('core_pct'):.0f}% / "
-        f"衛星 {_pct('satellite_pct'):.0f}% / 待定 {_pct('undetermined_pct'):.0f}%"
-        f"（參考區間核心 {CORE_TARGET_MIN_PCT:.0f}~{CORE_TARGET_MAX_PCT:.0f}%）。"
-        "**本區為唯讀對照，不提供再平衡建議** —— 要不要調整，看本頁上方"
-        "「目標偏差」那一格。"
+    _out = _CS_READONLY_TMPL.format(
+        status=_status,
+        core=_pct("core_pct"), sat=_pct("satellite_pct"),
+        und=_pct("undetermined_pct"),
+        where=(_CS_WHERE_HEALTH if source_tab == "health" else _CS_WHERE_PORTFOLIO),
     )
+    if _status == COVERAGE_UNRELIABLE:
+        _note = str(csa.get("coverage_note") or "").strip()
+        if _note:
+            _out += f"（⚠️ {_note}）"
+    return _out
 
 
 def _render_health_3tables(rows: list[dict],
@@ -632,43 +705,45 @@ def _render_health_3tables(rows: list[dict],
         for _r in ok_rows
     ]
 
-    # ── 🧭 核心/衛星配置檢查 ── v19.330:兩 tab 共用最上方 ──
+    # ── 🧭 核心/衛星「資產屬性分布」── v19.330 起兩 tab 共用最上方 ──
     # 健檢 Tab 全檔同一本金 = 等權(≈ 檔數佔比);組合 Tab3 為各檔實際 invest_twd 加權
     # (但各檔皆未填時亦退等權)。→ caption 的加權方式走 `_weight_basis_note(...)`
     # 讀 L2 `weight_mode` 照實說,**禁止寫死**「依各檔投入本金加權」(§1)。
-    # source_tab 現在決定三件事:(1)「等權 → 去 Tab3 填金額」導引印不印;
-    # (2) 結論句給不給行動建議;(3) 要不要印「與上方那個核心% 差在哪」的對照說明。
-    # 後兩者見 `_core_satellite_verdict_caption` / `_CS_PORTFOLIO_CONTRAST_NOTE`。
-    # 參考區間的數字一律從 `services.health.asset_class` 常數取,不在本檔字串寫死(§3.3)。
+    # source_tab 現在只決定兩件事:(1)「等權 → 去 Tab3 填金額」導引印不印;
+    # (2) 指路句要指向哪一格。**給不給行動建議已不再是選項** —— 兩個 Tab 一律唯讀
+    # (見 `_core_satellite_verdict_caption` 上方註解的 2026-08-07 拍板)。
     try:
         from services.health.asset_class import summarize_core_satellite_allocation
-        _cs_items = []
-        for _hr, _r in zip(_health_rows, ok_rows):
-            _lbl = (_hr.get("核心/衛星") or "").split()
-            _cs_items.append({
-                "label": _lbl[-1] if _lbl else "待定",
-                "weight": _r.get("_principal_twd") or 0,
-            })
+        # label × weight 配對 + 模擬本金剔除全在 `_core_satellite_items`(純函式,
+        # 可單元測試);本 render 只負責畫。
+        _cs_items, _n_sim_princ = _core_satellite_items(_health_rows, ok_rows)
         _csa = summarize_core_satellite_allocation(_cs_items)
-        st.markdown("#### 🧭 核心 / 衛星配置檢查（依基金資產屬性）")
-        # 先講「這是哪一把尺」再給數字 —— 兩個 Tab 都印（見上方 _CS_RULER_NOTE_TMPL）。
+        st.markdown("#### 🧭 核心 / 衛星資產屬性分布（純資訊，不評價配置）")
+        # 先講「這是哪一把尺」再給數字 —— 兩個 Tab 都印（見上方 _CS_RULER_NOTE）。
         st.caption(_core_satellite_ruler_note())
         _ca1, _ca2, _ca3, _ca4 = st.columns(4)
         _ca1.metric("🟦 核心", f"{_csa['core_pct']:.0f}%", f"{_csa['n_core']} 檔")
         _ca2.metric("🟠 衛星", f"{_csa['satellite_pct']:.0f}%", f"{_csa['n_satellite']} 檔")
         _ca3.metric("⬜ 待定", f"{_csa['undetermined_pct']:.0f}%", f"{_csa['n_undetermined']} 檔")
-        _ca4.metric("本表口徑評估", _csa["status"])
+        _ca4.metric("分類涵蓋度", _csa["status"],
+                    help="只回答「待定佔比是否低到讓上列比例讀得準」，"
+                         "**不是**配置好壞評價 —— 本表不評價配置。")
         st.caption(
             f"{_core_satellite_verdict_caption(_csa, source_tab)}"
             f"（{_weight_basis_note(_csa, source_tab)}；"
             f"核心=穩健長線 / 衛星=主題追報酬 / 待定=分類不足）"
         )
-        # Tab3「組合配置」embed：同一頁上方另有一個口徑完全不同的核心%，
+        if _n_sim_princ:
+            st.caption(
+                f"ℹ️ 另有 **{_n_sim_princ} 檔未填投入本金**，系統給了模擬本金以便"
+                "試算配息，但**未計入上列比例分母**（捏造的金額不進百分比）。"
+            )
+        # Tab3「組合配置」embed：同一頁上方另有一個分類依據不同的核心%，
         # 不講清楚差在哪，兩個數字會被讀成「其中一個算錯了」。
         if source_tab != "health":
             st.caption(_CS_PORTFOLIO_CONTRAST_NOTE)
     except Exception as _e_csa:
-        st.caption(f"⬜ 核心/衛星配置檢查失敗："
+        st.caption(f"⬜ 核心/衛星資產屬性分布計算失敗："
                    f"{type(_e_csa).__name__}: {str(_e_csa)[:80]}")
 
     # ── 🎯 選基金（低基期進場點）── v19.347：僅健檢 Tab 顯示(show_screener),

@@ -194,8 +194,10 @@ class PrecisionStrategyEngine:
         return _repo_resolve_ticker(name)
 
 
-# σ 絕對金額視為 0 的下限(§3.3 不 inline magic):語意對齊
-# `services/fund_screening.py::LOW_BASE_STD_EPS` —— 兩者都在問「這條 NAV 到底有沒有動」。
+# σ 絕對金額視為 0 的下限(§3.3 不 inline magic):問的是「這條 NAV 到底有沒有動」。
+# 2026-08-07 起這是全站唯一一份 —— `services/fund_screening.py` 原本有一份語意
+# 對等的 `LOW_BASE_STD_EPS`(另一套低基期演算法),該套演算法已隨「低基期統一用
+# HWM σ rank」拔除,那份常數同步刪除,不留無主的第二個門檻。
 _SIGMA_ABS_EPS = 1e-12
 
 
@@ -231,8 +233,10 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
         # `services/rotation.py::classify_base` 判成 "high"(🔴 高基期、偏貴)並列進
         # 輪動配對的「賣出」候選,同一頁的 label 卻寫綠字「接近 HWM」。
         # 改為誠實回 error(既有契約,全站 caller 都已有 `"error" in r` 分支),
-        # 對齊 `services/fund_screening.py::compute_low_base`(std≈0 → is_low_base=None)
-        # 與 `services/allocation_backtest.py::_sigma_rank_at`(σ_abs≤0 → None)。
+        # 對齊 `services/allocation_backtest.py::_sigma_rank_at`(σ_abs≤0 → None)。
+        # ⚠️ 這條 error 同時是「🎯 選基金」篩選器的停售基金防線:
+        # `services/fund_screening.compute_base_state` 收到 error 就回 base="unknown",
+        # `screen_funds(only_low_base=True)` 據此濾掉 —— 停售基金永遠不會被推薦進場。
         if sigma_abs <= _SIGMA_ABS_EPS:
             return {"error": "NAV 無波動(σ≈0),無法定位階"}
 

@@ -25,6 +25,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[1]
 _TAB1 = _ROOT / "ui" / "tab1_macro.py"
 _BEGINNER = _ROOT / "ui" / "helpers" / "macro" / "beginner_view.py"
+_RADAR = _ROOT / "ui" / "tab1_macro_radar.py"
 
 # ⚠️ 刻意**不寫** `pytest.importorskip("plotly")`(`PROCESS.md §4` 測試自身可執行性):
 #    plotly 是本 repo 的硬依賴(`ui/tab1_macro.py` module 頂部就 import),
@@ -99,6 +100,10 @@ class TestActionLightWiredBackToTab1:
 
         且**不可**插進「② 依據表 → 決策矩陣」之間 ——
         那段順序由 test_audit_20260805_tab1_ui.py 鎖死,插進去會撞。
+
+        ⚠️ 2026-08-07「四時域優先」重排:決策矩陣下移到四時域之後,`i_matrix`
+           因此變大,本條三個不等式**全部照舊成立、一字未改**。真正把決策矩陣
+           釘在新位置的是 tab1_macro_ui 那檔的三向斷言;這裡只守結論燈的上界。
 
         ⚠️ 2026-08-05 F1 重構:hero 卡與五桶 bar 併成總表「② 依據」表格,
            錨點字串隨之改為 `render_evidence_table(...)`;
@@ -305,10 +310,14 @@ class TestBucketBarLabelsUseSsot:
         #      mid : `景氣循環`      → `景氣循環 3-12 月`(補上時間尺度)
         #      news: `系統性風險`    → `系統性風險掃描`(講清楚是「掃描」不是「已發生」)
         #    golden 鎖本身保留:日後任何人再順手改副標,仍要先拿到 user 拍板。
+        # ⚠️ 2026-08-07 user 拍板(**修正前必紅,舊行為與斷言衝突,非 ImportError**):
+        #    🎯 短線副標最後一句英文行話改中文,語意不變(VIX + HY 利差量的就是
+        #    市場當下撤離風險資產的力道)。這同樣是**核准過的**變更,不是漂移;
+        #    golden 鎖續留 —— 沒拿到 user 拍板就改副標,照樣在這裡紅。
         assert _bucket_bar_cells(BUCKET_ORDER) == [
             ("long",       "🌳 長期", "結構 / 景氣位階"),
             ("mid",        "📈 中期", "景氣循環 3-12 月"),
-            ("short",      "🎯 短線", "即時 risk-off"),
+            ("short",      "🎯 短線", "即時避險情緒"),
             ("inflection", "⚠️ 拐點", "領先警報"),
             ("news",       "📰 新聞", "系統性風險掃描"),
         ]
@@ -342,6 +351,30 @@ class TestBucketBarLabelsUseSsot:
             assert _cells[_k][2] == f"哨兵副標{_k}", (
                 f"{_k} 桶的副標沒跟著 registry 走 —— UI 層另有一份本地覆蓋")
             monkeypatch.undo()
+
+    def test_short_radar_subtitle_reads_the_registry_not_a_second_copy(self):
+        """🎯 短線那一段自己的副標,必須與 ② 依據表 🎯 那一列同源。
+
+        **修正前必紅**(舊行為與斷言衝突,非 ImportError):`ui/tab1_macro_radar.py`
+        原本把同一句副標**再寫死一份**。兩份分開演化的後果在 2026-08-07 user 拍板
+        把該句英文行話改中文時具體發生了 —— 只改 registry 會讓同一個 Tab 裡上下
+        兩處一個中文一個英文。
+
+        兩道斷言各守一半(`PROCESS.md §4`:只驗一半就是「算對了但沒接出去」):
+          (a) 該檔不得再有任何字串字面值**包含**那句副標 → 有人重新寫死就紅;
+          (b) 該檔真的從 registry 取那一格 → 把讀 registry 那一行拿掉也會紅。
+        (a) 刻意用**子字串**而非 exact:副標是被 f-string 串進一句更長的話裡的,
+        exact 比對會漏掉「寫死在長句中」這個實際發生過的形態。
+        """
+        from shared.macro_buckets import BUCKET_META
+        _sub = BUCKET_META["short"]["sub"]
+        _hard = [s for s in _exact_string_constants(_RADAR) if _sub in s]
+        assert not _hard, (
+            f"tab1_macro_radar.py 仍寫死一份 🎯 短線副標:{_hard!r} —— "
+            "唯一來源必須是 shared/macro_buckets.BUCKET_META")
+        _reads = [n for n in ast.walk(_tree(_RADAR)) if isinstance(n, ast.Subscript)
+                  and isinstance(n.slice, ast.Constant) and n.slice.value == "sub"]
+        assert _reads, "tab1_macro_radar.py 沒有從 registry 取副標 —— 接線掉了"
 
     def test_four_horizon_bar_excludes_news_bucket(self):
         """四時域 bar 只有 4 桶,新聞是五桶 bar 才有的第 5 桶。"""

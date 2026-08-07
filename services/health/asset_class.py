@@ -48,12 +48,19 @@ CORE_KEYWORDS: tuple[str, ...] = (
 
 _EMOJI = {"核心": "🟦", "衛星": "🟠", "待定": "⬜"}
 
-# ── 核心 / 衛星「建議配置比例」目標(可調 SSOT)──
-# 依 user 提供之核心-衛星策略表:核心持股 50~80%(穩定成長)、衛星持股 20~50%(超額報酬)。
-CORE_TARGET_MIN_PCT: float = 50.0
-CORE_TARGET_MAX_PCT: float = 80.0
-# 待定佔比超過此門檻 → 判「分類不足,比例不可靠」(不硬給燈號,§1)
+# ── 待定(無法分類)佔比上限 —— 純**資料品質**門檻,不是配置評價 ──────────
+# 2026-08-07 user 拍板:核心 / 衛星「該不該調整」全站唯一真相是 Google Sheet 的
+# `policy_tier`(走 `ui/helpers/portfolio/allocation.summarize_core_satellite`)。
+# 本模組回答的是**另一個問題** ——「這檔基金的資產屬性偏穩健還是偏主題」——
+# 屬純資訊,**不得**再輸出行動建議,也不再持有任何「建議核心佔比」目標值。
+# 原本這裡有一組建議區間常數(核心 50~80%),已於本次連同其 4 級燈號一起移除:
+# 只要這一層還留著一組目標,同一頁就會再度出現兩個方向相反的再平衡結論
+# (使用者實際遇到的症狀:上方說「核心過重可減」、下方說「衛星過重要加」)。
 UNDETERMINED_UNRELIABLE_PCT: float = 30.0
+
+# 分類涵蓋度狀態碼(⚠️ 不是配置評價燈號):只回答「待定佔比是否低到讓比例可讀」。
+COVERAGE_OK: str = "🔵"
+COVERAGE_UNRELIABLE: str = "⚪"
 
 
 def classify_by_category(category: Optional[str]) -> Optional[str]:
@@ -121,10 +128,20 @@ def _pack(label: str, source: Optional[str], note: str) -> dict:
 
 
 def summarize_core_satellite_allocation(items) -> dict:
-    """組合層「核心 / 衛星配置比例」彙總 SSOT + 對照目標(核心 50~80%)燈號。
+    """組合層「**基金資產屬性**分布」彙總(核心 / 衛星 / 待定佔比)—— 純資訊。
+
+    ⚠️ **本函式不評價配置、不給行動建議**(2026-08-07 user 拍板)
+    ================================================================
+    「核心佔比該不該調整」的唯一真相是使用者在 Google Sheet 標的 `policy_tier`,
+    走 `ui/helpers/portfolio/allocation.summarize_core_satellite`(金額加權 + 目標
+    吃 `portfolio_core_pct`)。本函式分類依據完全不同(MoneyDJ 基金類別關鍵字 +
+    MK 3-3-3),回答的是「我手上這幾檔本質上偏穩健還是偏主題」。兩者並列時若都給
+    建議,同一頁就會出現兩個方向相反的結論,而使用者無從判斷該聽哪一個。
+    故本函式只回傳**比例 + 分類涵蓋度**,不再輸出「核心不足 / 衛星過重 / 該調整」
+    這類 `message`,也不再持有任何建議核心佔比目標值。
 
     以傳入的 `weight` 加權(**本函式忠實依 caller 給的權重計算,不自行假設語意**),
-    算出組合實際核心 / 衛星 / 待定佔比,再與建議比例(CORE_TARGET_MIN~MAX_PCT)對照給燈號。
+    算出核心 / 衛星 / 待定佔比。
 
     ⚠️ `weight_mode` — caller 對外陳述「加權方式」時**必須**讀此欄(§1 Fail Loud, Never Fake)
     ============================================================================
@@ -137,17 +154,19 @@ def summarize_core_satellite_allocation(items) -> dict:
     Args:
         items: [{"label": "核心" / "衛星" / "待定", "weight": float(投入金額 TWD)}]
                weight ≤ 0 / 非數 → 該檔略過(不計入分母,亦不參與 weight_mode 推斷)。
+               呼叫端若對某檔用的是「模擬本金」(使用者從未填過的預設值),**必須**
+               傳 0 把它擋在分母外 —— 捏造的金額不得影響對外顯示的百分比(§1)。
     Returns:
         {
           "total_weight": float,
           "core_pct" / "satellite_pct" / "undetermined_pct": float(0~100,佔總權重,三者和≈100),
           "n_core" / "n_satellite" / "n_undetermined": int,
-          "status": "🟢" / "🟡" / "🔴" / "⚪",   # 配置評估燈
-          "message": str,
+          "status": COVERAGE_OK / COVERAGE_UNRELIABLE,   # **分類涵蓋度**,不是配置評價
+          "coverage_note": str,   # 只講資料品質(待定太多 / 無有效權重),不含行動建議
           "weight_mode": "amount" / "equal" / "single" / "none",  # 見上方 ⚠️
         }
-        判定:待定 > 30% → ⚪(不可靠);核心 < 50% → 🔴(衛星過重);核心 > 80% → 🟡(過保守);
-        50~80% → 🟢(穩健)。無有效權重 → ⚪。
+        判定:無有效權重 或 待定 > `UNDETERMINED_UNRELIABLE_PCT` → `COVERAGE_UNRELIABLE`;
+        其餘 → `COVERAGE_OK`。**不對核心佔比高低作任何評價。**
     """
     core_w = sat_w = und_w = 0.0
     n_core = n_sat = n_und = 0
@@ -173,28 +192,22 @@ def summarize_core_satellite_allocation(items) -> dict:
     if total <= 0:
         return {"total_weight": 0.0, "core_pct": 0.0, "satellite_pct": 0.0,
                 "undetermined_pct": 0.0, "n_core": 0, "n_satellite": 0,
-                "n_undetermined": 0, "status": "⚪", "weight_mode": "none",
-                "message": "無有效投入金額,無法計算配置比例"}
+                "n_undetermined": 0, "status": COVERAGE_UNRELIABLE,
+                "weight_mode": "none",
+                "coverage_note": "無有效投入金額,無法計算屬性分布比例"}
     core_pct = core_w / total * 100.0
     sat_pct = sat_w / total * 100.0
     und_pct = und_w / total * 100.0
 
+    # 只判「分類涵蓋度」(資料品質),不判配置好壞 —— 見 docstring ⚠️。
     if und_pct > UNDETERMINED_UNRELIABLE_PCT:
-        status = "⚪"
-        msg = (f"待定 {und_pct:.0f}% 過多(> {UNDETERMINED_UNRELIABLE_PCT:.0f}%),"
-               f"配置比例不可靠 — 請補基金分類再判讀")
-    elif core_pct < CORE_TARGET_MIN_PCT:
-        status = "🔴"
-        msg = (f"核心僅 {core_pct:.0f}% < 目標 {CORE_TARGET_MIN_PCT:.0f}%,"
-               f"衛星過重({sat_pct:.0f}%)— 追超額報酬但波動 / 風險偏高")
-    elif core_pct > CORE_TARGET_MAX_PCT:
-        status = "🟡"
-        msg = (f"核心 {core_pct:.0f}% > {CORE_TARGET_MAX_PCT:.0f}%,偏保守 — "
-               f"衛星僅 {sat_pct:.0f}%,較少超額報酬機會")
+        status = COVERAGE_UNRELIABLE
+        note = (f"待定 {und_pct:.0f}% 過多(> {UNDETERMINED_UNRELIABLE_PCT:.0f}%),"
+                f"下列屬性比例僅供參考 — 補上基金分類後才讀得準")
     else:
-        status = "🟢"
-        msg = (f"核心 {core_pct:.0f}% 落在建議 {CORE_TARGET_MIN_PCT:.0f}~"
-               f"{CORE_TARGET_MAX_PCT:.0f}% 區間,配置穩健")
+        status = COVERAGE_OK
+        note = (f"待定 {und_pct:.0f}%(≤ {UNDETERMINED_UNRELIABLE_PCT:.0f}%),"
+                f"屬性分類涵蓋足夠")
 
     return {
         "total_weight": round(total, 0),
@@ -202,7 +215,7 @@ def summarize_core_satellite_allocation(items) -> dict:
         "satellite_pct": round(sat_pct, 1),
         "undetermined_pct": round(und_pct, 1),
         "n_core": n_core, "n_satellite": n_sat, "n_undetermined": n_und,
-        "status": status, "message": msg,
+        "status": status, "coverage_note": note,
         "weight_mode": infer_weight_mode(eff_weights),
     }
 

@@ -280,59 +280,95 @@ def batch_333_funds(
 
 
 # ════════════════════════════════════════════════════════════════════════
-# v19.347 低基期進場點篩選（「選基金清單」— user 2026-07 需求）
+# 低基期進場點篩選（「🎯 選基金」清單）
 # ════════════════════════════════════════════════════════════════════════
-# 常數 SSOT（§3.3 反捏造：不 inline magic）
+# 2026-08-07 user 拍板：**低基期全站統一用 HWM σ rank**（健診大表「基期」欄那把尺）。
+#
+# 原本這裡是另一套演算法（`高點 − N×NAV 標準差`，深度取**正數**、倍數由使用者選
+# 1 或 2σ、回看期可選 1/2/3 年），與大表的 σ rank（**負數**、報酬率標準差換算、
+# 門檻固定 `ROTATION_BUY_SIGMA`）互相獨立 —— 同一檔可能在這裡標「✅ 低基期」、
+# 在大表標「⚪ 中性」，使用者照這裡買進，回頭卻看到系統自己說不是低基期。
+#
+# 統一後的口徑（§4.1 σ sign convention：**一律負數，愈負愈低基期**）：
+#   σ rank = (現價 − 期間 HWM) / σ_abs      ← services/precision_service.calc_hwm_sigma_levels
+#   低基期 ⇔ σ rank ≤ ROTATION_BUY_SIGMA    ← services/rotation.classify_base
+# 兩邊呼叫同一組函式 + 同一組 shared/signal_thresholds 常數，**不可能再分歧**。
 LOW_BASE_LOOKBACK_DEFAULT = 252   # 回看窗（交易日，1Y ≈ 252，非 365 日曆日）
+# ⚠️ 必須等於 `calc_hwm_sigma_levels` 的 lookback 預設值 —— 大表走預設、本模組顯式
+# 傳入，兩者不同就會讓同一檔在兩處算出不同的 σ rank（σ_abs 隨 √n 縮放）。
+# 漂移由 tests/test_fund_screener_low_base.py 的 inspect 漂移鎖守住。
 LOW_BASE_MIN_POINTS = 60          # 可信度門檻：低於此樣本數 → reliable=False
-LOW_BASE_STD_EPS = 1e-12          # std 視為 0 的下限（§1：NAV 幾乎不動 → 不判定）
+
+# 基期狀態 → 給 UI 的說明字串（label 本身由 L3 決定，這裡只給中性描述）
+_BASE_NOTE = {
+    "low": "低基期（σ rank ≤ 買點門檻）",
+    "mid": "中性（介於買賣門檻之間）",
+    "high": "高基期（貼近期間高點）",
+    "unknown": "資料不足，無法定位階",
+}
 
 
-def compute_low_base(
+def compute_base_state(
     nav_series: "pd.Series | None",
     *,
-    n_sigma: float = 1.0,
     lookback: int = LOW_BASE_LOOKBACK_DEFAULT,
     min_points: int = LOW_BASE_MIN_POINTS,
+    buy_sigma: "float | None" = None,
+    sell_sigma: "float | None" = None,
 ) -> dict:
-    """低基期偵測（純計算）：現價是否落在「期間高點 − N×標準差」之下。
+    """基期定位（純計算）—— **與健診大表「基期」欄同一把尺**。
 
-    數學式（對 **NAV 價位**，非報酬率；user 指定「高點−標準差×N」）:
-        s   = nav_series 最後 lookback 筆（升序、去 NaN）
-        high= s.max()
-        std = s.std(ddof=1)              # 樣本標準差
-        cur = s.iloc[-1]
-        thr = high − n_sigma × std
-        低基期  ⇔  cur ≤ thr
-        σ 深度  = (high − cur) / std     # 現價低於「高點」幾個標準差
+    數學式（σ sign convention 見 §4.1：**負值愈深愈低基期**）:
+        s        = nav_series 最後 lookback 筆（升序、去 NaN）
+        HWM      = s.max()
+        σ_abs    = HWM × std(日報酬率) × √len(s)
+        σ rank   = (現價 − HWM) / σ_abs          ≤ 0（現價必在窗內高點之下）
+        低基期  ⇔ σ rank ≤ buy_sigma（預設 ROTATION_BUY_SIGMA = −1.5）
+        高基期  ⇔ σ rank ≥ sell_sigma（預設 ROTATION_SELL_SIGMA = −0.5）
 
-    §1 Fail Loud 守則（不硬湊）:
-      - len(s) < min_points → reliable=False（仍給值但標記「可信度低」）
-      - std ≤ LOW_BASE_STD_EPS（NAV 幾乎不動 / 停售 / 剛成立填平值，§4.6 邊界）
-        → **無法判定**：is_low_base / sigma_below_high / threshold 皆 None，
-        絕不把「std≈0 使門檻=high、現價恆≤high」誤判成全部低基期。
+    σ rank 與分類皆**不自行實作**：值走 `services.precision_service.calc_hwm_sigma_levels`
+    （大表同一支），切點走 `services.rotation.classify_base` + `shared.signal_thresholds`
+    常數（§3.3 不 inline magic）。本函式只負責 NAV 前處理 + 樣本數揭露 + 打包。
+
+    §1 Fail Loud 邊界（**停售 / 清算基金絕不可被推薦**）:
+      - NAV 不足 30 筆 / 報酬率序列不足 / **σ_abs ≈ 0（NAV 完全不動）**
+        → `calc_hwm_sigma_levels` 回 `{"error": ...}` → 本函式回
+        `base="unknown"` / `is_low_base=None` / `sigma_rank=None`，
+        原因原字轉載到 `note`。停售基金 NAV 長期不動正是 σ≈0 的典型，
+        絕不會落進 "low" → `screen_funds(only_low_base=True)` 一定濾掉它。
+      - len(s) < min_points → reliable=False（仍給值但標「可信度低」）
 
     Parameters
     ----------
     nav_series : pd.Series  NAV 序列，index=DatetimeIndex，values=float（>0）
-    n_sigma    : float      標準差倍數（user 要 1 或 2；接受任意正數）
-    lookback   : int        回看窗（交易日數）
+    lookback   : int        回看窗（交易日數）；**必須與大表一致**，見常數註解
     min_points : int        可信度門檻樣本數
+    buy_sigma / sell_sigma  : float | None  None → 走 shared/signal_thresholds SSOT
 
     Returns
     -------
     dict:
-        high / std / current / threshold : float | None
-        is_low_base      : bool | None   (None = std≈0 無法判定)
-        sigma_below_high : float | None  現價低於高點的 σ 數（≥0）
-        n_points         : int           實際採用的樣本數
-        reliable         : bool          n_points ≥ min_points
-        note             : str           狀態說明（供 UI 顯示）
+        sigma_rank        : float | None  現價在 HWM 下方第幾個 σ（**負數**）
+        base              : "low" / "mid" / "high" / "unknown"
+        is_low_base       : bool | None   (None = 無法定位階)
+        hwm / current / dist_to_hwm_pct : float | None
+        buy_threshold_nav : float | None  σ rank 剛好等於 buy_sigma 的 NAV 價位
+        hwm_label         : str           precision_service 的 4 級位階標籤
+        n_points          : int           實際採用的樣本數
+        reliable          : bool          n_points ≥ min_points
+        note              : str           狀態說明（供 UI 顯示）
+        buy_sigma / sell_sigma : float    本次實際採用的門檻（揭露，不讓 UI 自己猜）
     """
+    from shared.signal_thresholds import ROTATION_BUY_SIGMA, ROTATION_SELL_SIGMA
+    _buy = float(ROTATION_BUY_SIGMA if buy_sigma is None else buy_sigma)
+    _sell = float(ROTATION_SELL_SIGMA if sell_sigma is None else sell_sigma)
+
     out: dict = {
-        "high": None, "std": None, "current": None, "threshold": None,
-        "is_low_base": None, "sigma_below_high": None,
+        "sigma_rank": None, "base": "unknown", "is_low_base": None,
+        "hwm": None, "current": None, "dist_to_hwm_pct": None,
+        "buy_threshold_nav": None, "hwm_label": "—",
         "n_points": 0, "reliable": False, "note": "",
+        "buy_sigma": _buy, "sell_sigma": _sell,
     }
 
     if nav_series is None:
@@ -355,42 +391,50 @@ def compute_low_base(
     s = s.tail(int(lookback))
     n = len(s)
     out["n_points"] = n
-    out["reliable"] = n >= min_points
+    out["reliable"] = n >= int(min_points)
 
-    high = float(s.max())
-    cur = float(s.iloc[-1])
-    std = float(s.std(ddof=1)) if n >= 2 else 0.0
-    out["high"] = round(high, 4)
-    out["current"] = round(cur, 4)
+    from services.precision_service import calc_hwm_sigma_levels
+    from services.rotation import classify_base
 
-    if std <= LOW_BASE_STD_EPS:
-        # §1：NAV 幾乎不動 → 標準差無意義,不判定（不回傳誤導的門檻/旗標）
-        out["std"] = round(std, 6)
-        out["note"] = "NAV 幾乎不變動，無法判定低基期（std≈0）"
+    _r = calc_hwm_sigma_levels(s, lookback=int(lookback))
+    if _r.get("error"):
+        # 停售 / 剛成立 / NAV 不動 → 誠實不判定（§1），note 保留上游原因字樣
+        out["note"] = str(_r["error"])
         return out
 
-    thr = high - n_sigma * std
-    out["std"] = round(std, 4)
-    out["threshold"] = round(thr, 4)
-    out["is_low_base"] = bool(cur <= thr)
-    out["sigma_below_high"] = round((high - cur) / std, 2)
+    _hwm = _r.get("hwm")
+    _sigma_abs = _r.get("sigma_abs")
+    out["sigma_rank"] = _r.get("sigma_rank")
+    out["hwm"] = _hwm
+    out["current"] = _r.get("current_nav")
+    out["dist_to_hwm_pct"] = _r.get("dist_to_hwm_pct")
+    out["hwm_label"] = _r.get("label") or "—"
+    if _hwm is not None and _sigma_abs:
+        # buy_sigma 是**負數**：用加法保持符號一致，不寫 `hwm − |buy|×σ`，
+        # 否則有人把常數改成正數時整條線會靜默反向（§4.1）。
+        out["buy_threshold_nav"] = round(_hwm + _buy * _sigma_abs, 4)
+
+    _base = classify_base(out["sigma_rank"], _sell, _buy)
+    out["base"] = _base
+    out["is_low_base"] = None if _base == "unknown" else (_base == "low")
     if not out["reliable"]:
         out["note"] = f"樣本僅 {n} 筆（<{min_points}），可信度低"
     else:
-        out["note"] = "低基期" if out["is_low_base"] else "非低基期"
+        out["note"] = _BASE_NOTE.get(_base, "")
     return out
 
 
 def screen_funds(
     items: list[dict],
     *,
-    n_sigma: float = 1.0,
     lookback: int = LOW_BASE_LOOKBACK_DEFAULT,
     min_points: int = LOW_BASE_MIN_POINTS,
     only_low_base: bool = True,
     only_no_eat: bool = True,
     currencies: "set[str] | None" = None,
     categories: "set[str] | None" = None,
+    buy_sigma: "float | None" = None,
+    sell_sigma: "float | None" = None,
 ) -> list[dict]:
     """「選基金清單」：對已載入基金套低基期 + 不吃本金 + 幣別/類別濾鏡（純函式）。
 
@@ -400,16 +444,18 @@ def screen_funds(
         code (str), name (str), series (pd.Series NAV),
         currency (str), category (str),
         eats_principal (bool | None)   # True=吃本金 / False=不吃 / None=未知
-    n_sigma / lookback / min_points : 傳入 compute_low_base
-    only_low_base : True → 僅保留 is_low_base 為 True
+    lookback / min_points / buy_sigma / sell_sigma : 傳入 compute_base_state
+    only_low_base : True → 僅保留 `base == "low"`（**無法定位階者一併排除** ——
+                    停售 / NAV 不動的基金 σ rank 為 None，不得混進進場候選，§1）
     only_no_eat   : True → 僅保留 eats_principal 明確為 False（不吃本金）
     currencies    : None=全部；否則僅保留 currency ∈ 此集合
     categories    : None=全部；否則僅保留 category ∈ 此集合
 
     Returns
     -------
-    list[dict]（已依 σ 深度由深至淺排序）：每列含 code / name / currency /
-    category / eats_principal + compute_low_base 全欄位。**去重同 code**（一檔一列）。
+    list[dict]（依 **σ rank 由負至正**排序 = 跌最深的在最前，無法定位階者排最後）：
+    每列含 code / name / currency / category / eats_principal +
+    compute_base_state 全欄位。**去重同 code**（一檔一列）。
     """
     rows: list[dict] = []
     seen: set = set()
@@ -424,7 +470,7 @@ def screen_funds(
         cat = str(it.get("category", "") or "").strip()
         eats = it.get("eats_principal", None)
 
-        # 濾鏡（低基期以外的先擋，省 compute）
+        # 濾鏡（基期以外的先擋，省 compute）
         if currencies is not None and ccy not in currencies:
             continue
         if categories is not None and cat not in categories:
@@ -432,11 +478,11 @@ def screen_funds(
         if only_no_eat and eats is not False:  # 僅保留「明確不吃本金」
             continue
 
-        lb = compute_low_base(
-            it.get("series"), n_sigma=n_sigma,
-            lookback=lookback, min_points=min_points,
+        lb = compute_base_state(
+            it.get("series"), lookback=lookback, min_points=min_points,
+            buy_sigma=buy_sigma, sell_sigma=sell_sigma,
         )
-        if only_low_base and lb.get("is_low_base") is not True:
+        if only_low_base and lb.get("base") != "low":
             continue
 
         rows.append({
@@ -445,7 +491,7 @@ def screen_funds(
             **lb,
         })
 
-    # σ 深度由深至淺（None 排最後）
-    rows.sort(key=lambda r: (r.get("sigma_below_high") is None,
-                             -(r.get("sigma_below_high") or 0.0)))
+    # σ rank 遞增（愈負 = 跌愈深 = 排愈前）；None（無法定位階）一律排最後
+    rows.sort(key=lambda r: (r.get("sigma_rank") is None,
+                             r.get("sigma_rank") if r.get("sigma_rank") is not None else 0.0))
     return rows

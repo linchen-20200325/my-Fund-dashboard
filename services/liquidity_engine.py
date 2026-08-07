@@ -373,7 +373,7 @@ def fetch_liquidity_factors(fred_api_key: str = "") -> dict:
 def _tier(score: float) -> tuple:
     """壓力分數 → (分級, signal, color, 研判文字)。"""
     if score >= 2.0:
-        return "流動性危機", "🔴", MATERIAL_RED, "美元荒/避險平倉/波動率背離同時引爆，risk-off 去槓桿"
+        return "流動性危機", "🔴", MATERIAL_RED, "美元荒/避險平倉/波動率背離同時引爆，避險轉向去槓桿"
     if score >= 1.0:
         return "警戒", "🟠", "#ff6d00", "壓力升溫，留意資金面轉向與槓桿回收"
     if score >= 0.5:
@@ -479,7 +479,7 @@ def liquidity_verdict(score_entry: "dict | None", factors: "dict | None" = None)
             parts.append(f"鏈上子彈水位中性（SSR Z {sz:+.2f}）。")
 
     if val >= 2.0:
-        parts.append("⚠️ 美元/避險/波動率多軌同時緊繃，留意 risk-off 去槓桿向風險資產傳導"
+        parts.append("⚠️ 美元/避險/波動率多軌同時緊繃，留意避險轉向去槓桿向風險資產傳導"
                      "（時滯約數日至數週），宜降槓桿、備現金。")
     elif val >= 1.0:
         parts.append("壓力升溫但未失控，建議降低槓桿、提高現金緩衝並緊盯主導因子。")

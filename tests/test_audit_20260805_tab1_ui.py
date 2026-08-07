@@ -4,7 +4,10 @@
   必修 1  PMI 代理值必須帶標記進 AI prompt(§1 反造假)
   必修 2  三處指路文案改吃 `story_nav.tab_label()`(分頁名 SSOT)
   必修 3  兩套評分尺度消歧義 + 位階字卡收 `format_phase_score` SSOT
-  必修 4  決策矩陣位置(五桶 bar 之後、四時域之前)+ 預設展開
+  必修 4  詳細區版面順序 + 決策矩陣預設展開
+          (2026-08-07 user 拍板「四時域優先」:長期 → 中期 → 短線 → 拐點 →
+           決策矩陣;原本的「決策矩陣在四時域之前」已被此拍板取代,
+           但「不得跑到總表前面」那條上界一字未動)
   必修 5  status / stat_tile / tables 三元件的 0-consumer 裁決
   必修 6  SPEC §1-B 與單軌實作對齊
 
@@ -70,6 +73,60 @@ def _string_constants(path: Path) -> list[str]:
     """只取**字串字面值**(不含 `#` 註解)—— 讓「註解裡引述舊文案」不會誤判為未修。"""
     return [n.value for n in ast.walk(_tree(path))
             if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
+# ── 版面位置專用:一律走 AST + lineno,不用 `src.index()` ──────────────
+# 理由與本檔既有慣例相同:`index()` 會被註解裡引述的區塊名 / 函式名提前命中,
+# 使「順序」斷言變成恆真的假通過(本 repo 已踩過同型陷阱兩次)。
+def _render_line(fname: str) -> int:
+    """`ui/tab1_macro.py` 內某個 renderer 的**唯一**渲染點行號。
+
+    兩種形式都算:裸呼叫 `fname(...)`,以及 v19.429 §1 區塊隔離後的
+    `_safe_section("標籤", fname, ...)` —— 後者 renderer 是 `ast.Name` 引數
+    而不是 `ast.Call`,只掃 Call 會整個漏掉。刻意**只認 `_safe_section` 的引數
+    位置**,不掃全檔 `ast.Name`:後者會命中 import alias,「恰好一處」就失去
+    鑑別力(同 `test_audit_20260805_tab1_exceptions.py` 的做法)。
+    """
+    _t = _tree(_TAB1)
+    _lines = [n.lineno for n in ast.walk(_t)
+              if isinstance(n, ast.Call) and _fn_name(n) == fname]
+    _lines += [a.lineno for n in ast.walk(_t)
+               if isinstance(n, ast.Call) and _fn_name(n) == "_safe_section"
+               for a in n.args if isinstance(a, ast.Name) and a.id == fname]
+    assert len(_lines) == 1, f"{fname} 的渲染點應恰好一處,實際 {len(_lines)} 處"
+    return _lines[0]
+
+
+def _md_heading_line(text: str) -> int:
+    """`st.markdown("<text>")` 這個呼叫節點的行號(恰好一處)。"""
+    _hits = [n.lineno for n in ast.walk(_tree(_TAB1))
+             if isinstance(n, ast.Call) and _fn_name(n) == "markdown"
+             and n.args and isinstance(n.args[0], ast.Constant)
+             and n.args[0].value == text]
+    assert len(_hits) == 1, f"{text!r} 這個標題應恰好一處,實際 {len(_hits)} 處"
+    return _hits[0]
+
+
+def _block_openers_between(lo: int, hi: int) -> list[str]:
+    """落在 (lo, hi) 之間的「一級區塊開頭」——
+    `st.markdown("## …")` 標題與 `st.expander(…)` 面板兩種都算(後者是本檔
+    中國副盤那類沒有 `##` 標題、卻確實佔一整段版面的區塊)。"""
+    _out: list[str] = []
+    for _n in ast.walk(_tree(_TAB1)):
+        if not (isinstance(_n, ast.Call) and lo < _n.lineno < hi
+                and _n.args and isinstance(_n.args[0], ast.Constant)
+                and isinstance(_n.args[0].value, str)):
+            continue
+        if _fn_name(_n) == "expander":
+            _out.append(_n.args[0].value)
+        elif _fn_name(_n) == "markdown" and _n.args[0].value.startswith("## "):
+            _out.append(_n.args[0].value)
+    return _out
+
+
+# 四時域四段的 renderer(順序即 `shared.macro_buckets.BUCKET_ORDER` 去掉新聞桶)
+_HORIZON_RENDERERS = ("render_long_term_section", "render_mid_cycle_section",
+                      "render_short_radar_section", "render_inflection_alert_section")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -281,30 +338,62 @@ def test_two_scales_not_merged():
 
 
 # ══════════════════════════════════════════════════════════════
-# 必修 4 — 決策矩陣位置 + 預設展開
+# 必修 4 — 詳細區版面順序(四時域優先)+ 決策矩陣預設展開
 # ══════════════════════════════════════════════════════════════
-def test_decision_matrix_sits_between_summary_bar_and_horizons():
-    """**修正前必紅** —— 原本在全頁最底部倒數第二區(四時域全部之後)。
+def test_detail_zone_opens_with_the_first_horizon_section():
+    """**修正前必紅**(舊行為與斷言衝突,非 ImportError)。
 
-    要求順序:總覽 → 📋 決策矩陣 → 🌳 長期(四時域第一桶)。
-
-    ⚠️ 2026-08-05 F1 重構:上游錨點由 `render_five_bucket_bar(...)` 換成
-       `render_evidence_table(...)`。五桶 bar 的內容已整批收進總表「② 依據」
-       表格(桶數 / 判讀 / 讀數一格未少),bar renderer 隨之刪除,舊字串
-       `src.index(...)` 會 ValueError。**本測試保護的契約沒變**:
-       「決策矩陣不得跑到總覽前面(擋住總經),也不得埋回四時域後面」。
+    ② 依據表每一列都寫「詳細在下方哪一段」,表下還附一份四段的目錄;但改排前
+    往下捲第一個撞到的是兩個目錄**沒提**的區塊(唯讀副盤 + 決策矩陣),
+    指路與版面對不上。2026-08-07 user 拍板「四時域優先」後,詳細區分界之後
+    的第一個一級區塊必須就是第一個時域。
     """
-    src = _TAB1.read_text(encoding="utf-8")
-    # 上游錨點:F1 重構後為 ② 依據表(五桶 bar renderer 已刪)。
-    # ⚠️ 2026-08-06 必修 3:錨點縮到函式名 + 左括號(呼叫多了 `footnotes=` 引數,
-    #   原本釘到閉括號的字串已不存在 → ValueError)。位置契約不變。
-    i_bar = src.index("render_evidence_table(")
-    # v19.429:決策矩陣呼叫改由 `_safe_section(label, fn, ind)` 包裹(§1 區塊隔離),
-    # 位置不變 —— 匹配字串同步改為包裹後的呼叫形以保留「位置」斷言原意。
-    i_matrix = src.index("_render_realtime_decision_dashboard, ind)")
-    i_long = src.index("from ui.tab1_macro_longterm import render_long_term_section")
-    assert i_bar < i_matrix, "決策矩陣跑到總表 ② 依據表前面了(會擋住總經,違反 v19.41 指示)"
-    assert i_matrix < i_long, "決策矩陣仍埋在四時域之後"
+    _detail = _md_heading_line("## 🔎 詳細資料與說明")
+    _lines = [_render_line(_f) for _f in _HORIZON_RENDERERS]
+    assert _detail < min(_lines), "四時域跑到詳細區分界前面了"
+    _between = _block_openers_between(_detail, min(_lines))
+    assert not _between, f"第一個時域之前還夾著一級區塊:{_between}"
+
+
+def test_the_four_horizon_sections_stay_in_order_and_contiguous():
+    """② 表下那份目錄現在直接宣稱「往下捲會依序看到這四段」——
+    本條就是那句話的**接線鎖**(`PROCESS.md §4`:文案宣稱的事要有東西守著)。
+
+    **修正前會不會紅**:不會(改排前四段本來就已相鄰)。本條是**新增的回歸鎖**:
+    改排讓「連續」從巧合變成目錄明講的承諾,日後任何人往中間插一個區塊,
+    目錄就會變成假話 —— 這裡先紅,而不是等使用者捲下去才發現。
+    """
+    _lines = [_render_line(_f) for _f in _HORIZON_RENDERERS]
+    assert _lines == sorted(_lines), (
+        f"四時域順序跑掉了(應為 長期 → 中期 → 短線 → 拐點):{_lines}")
+    _between = _block_openers_between(_lines[0], _lines[-1])
+    assert not _between, f"四時域四段中間夾了別的一級區塊:{_between}"
+
+
+def test_decision_matrix_sits_after_the_horizons_and_before_the_ai_summary():
+    """**修正前必紅**(舊行為與斷言衝突,非 ImportError)——
+    改排前本區塊在四時域**之前**,舊斷言守的正是相反方向。
+
+    2026-08-07 user 拍板「四時域優先」:長期 → 中期 → 短線 → 拐點 → 決策矩陣。
+    本條同時守**三個**方向,少任何一條位置契約就會鬆掉:
+      (a) 不得跑到總表 ② 依據表前面(會擋住總經,違反 v19.41 那條指示)——
+          與舊版一字不改,那條指示沒有被本次拍板推翻;
+      (b) 必須在最後一個時域之後(舊版守的是反向,隨拍板翻轉);
+      (c) 必須在 🤖 AI 總結**之前**。這是新加的下界 —— 舊版的「不得埋回底部」
+          原意本來由 (b) 的反向不等式承擔,翻轉後若不補 (c),整條下界就消失,
+          有人把它挪到全頁最後一區也不會紅。
+
+    ⚠️ 錨點全部走 AST + lineno(見 `_render_line`),不用 `src.index()`:
+       本檔守的三個區塊名在 `ui/tab1_macro.py` 的沿革註解裡都被引述過,
+       字串比對會提前命中註解而變成假通過。
+    """
+    _bar = _render_line("render_evidence_table")
+    _matrix = _render_line("_render_realtime_decision_dashboard")
+    _last_horizon = _render_line(_HORIZON_RENDERERS[-1])
+    _ai = _render_line("render_ai_summary_section")
+    assert _bar < _matrix, "決策矩陣跑到總表 ② 依據表前面了(會擋住總經,違反 v19.41 指示)"
+    assert _last_horizon < _matrix, "決策矩陣還在四時域之前(user 拍板四時域優先)"
+    assert _matrix < _ai, "決策矩陣被挪到 AI 總結之後 —— 逐檔行動不得埋在全頁最末"
 
 
 def test_decision_matrix_expander_defaults_open():
@@ -333,9 +422,41 @@ def test_decision_matrix_heading_still_present_once():
 
 
 def test_decision_matrix_caption_not_claiming_last_position():
-    """文案同步:原 caption 寫「跨時域殿後」,搬到前面後就變成假話。"""
+    """文案同步:原 caption 寫「跨時域殿後」,搬到前面後就變成假話。
+
+    2026-08-07「四時域優先」重排後本條**仍然成立且仍有鑑別力**:本區塊後面還接
+    唯讀副盤與 AI 總結兩段,它不是最後一段,那句宣稱照樣是假話。
+    """
     for s in _string_constants(_TAB1):
         assert "殿後" not in s, f"決策矩陣已上移,caption 仍寫『殿後』:{s!r}"
+
+
+def _first_caption_after(lineno: int) -> str:
+    """`lineno` 之後第一個 `st.caption("…")` 的字面文案(AST,不吃註解)。
+
+    相鄰字串字面值由 parser 併成同一個 `ast.Constant`,所以跨行寫的 caption
+    也拿得到完整一句。
+    """
+    _caps = sorted((n.lineno, n.args[0].value) for n in ast.walk(_tree(_TAB1))
+                   if isinstance(n, ast.Call) and _fn_name(n) == "caption"
+                   and n.args and isinstance(n.args[0], ast.Constant)
+                   and isinstance(n.args[0].value, str) and n.lineno > lineno)
+    assert _caps, f"line {lineno} 之後找不到任何 caption"
+    return _caps[0][1]
+
+
+def test_decision_matrix_caption_points_the_right_way():
+    """**修正前必紅**(舊行為與斷言衝突,非 ImportError)——
+    原 caption 寫「推導細節見**下方**四時域」。本區塊搬到四時域之後,那四段
+    改在它**上面**,同一句話就把讀者往錯的方向指(§1 的同族:錯的指引比沒有更糟)。
+
+    只驗**方位詞與指涉對象**,不釘整句文案 —— user 改字不該誤紅,
+    指錯方向或整個不再指回推導依據才該紅。
+    """
+    _cap = _first_caption_after(_md_heading_line("## 📋 即時訊號 + 決策矩陣"))
+    assert "四時域" in _cap, f"決策矩陣 caption 沒有指回推導依據:{_cap!r}"
+    assert "上方" in _cap and "下方" not in _cap, (
+        f"決策矩陣現在排在四時域之後,caption 卻仍往下指:{_cap!r}")
 
 
 # ══════════════════════════════════════════════════════════════

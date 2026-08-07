@@ -2,6 +2,37 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-08-07 存檔:六 Tab 誠實度總整理 + user 拍板四項收斂
+
+本輪主軸是 **§1「畫面不能說謊」**。四個平行 Coder 盤點六個 Tab、兩輪獨立稽核、user 三條原則
+(不要闔上的資料 / 重複的移除 / 抓不到又不影響判斷的移除 / 多做說明),最後 user 拍板四個決策。
+
+**⚠️ 本輪取代了下列既有沿革條目**(那些條目仍保留為歷史紀錄,但**描述的行為已不存在**):
+- `v19.347 選基金(低基期)`:`compute_low_base`(高點−N×std,σ 深度為**正數**)+ σ 倍數(1/2)
+  + 回看期(1/2/3年)選單 **全部刪除**。統一走 `precision_service.calc_hwm_sigma_levels`
+  的 σ rank(**負數**)+ `rotation.classify_base` 門檻。原因:同一檔在 screener 標 ✅ 低基期、
+  在大表標 ⚪ 中性,使用者照 screener 買進後回頭發現系統自己說「不是低基期」。
+  回看期選單一併拔掉 —— σ_abs 隨 √n 縮放,換窗口就換一把尺,是同一個 bug 的另一個入口。
+- `v19.329 核心/衛星配置檢查`:`CORE_TARGET_MIN/MAX_PCT`(50/80)**整組刪除**,4 級評價燈號
+  → 只剩分類涵蓋度二態。user 拍板「以 Google Sheet 的 `policy_tier` 為唯一真相」,
+  依基金屬性判定的那條線降為**純資訊、不再給配置建議**。原因:同一頁往下捲會出現
+  「核心 90%,目標 75%,過重該減」與「🔴 核心僅 40% < 目標 50%,衛星過重」兩個相反結論。
+
+**user 拍板四項**:(A1) 核心/衛星以 `policy_tier` 為準、(A2) Macro Score 評分解析度先不動
+(階梯函式穩定可解釋,代價是資料再準也反映不出來)、(A4) 詳細區改「四時域優先」
+(🌳→📈→🎯→⚠️ 連續,決策矩陣移到其後)、(A5) 低基期統一 HWM σ rank。
+另 `risk-off` → 「即時避險情緒」(查證無跨 repo 對齊要求)。
+
+**同輪修掉的線上事故**:Tab⑤ 讀 Google Sheet 崩在 `ValueError` 且訊息被 Streamlit Cloud
+遮蔽(零線索紅框)。根因是呼叫端 `get_gspread_client(dict(_gsa_secret))` —— secrets 若寫成
+JSON 字串,`dict("...")` 在進入函式前就炸,函式自己的防護來不及跑。形狀正規化收進
+`_coerce_sa_credentials`(Mapping / JSON 字串都吃,訊息不回聲 private_key)。
+
+**其他**:移除總經指南針(三張卡在依據表與雷達都已有且需二次點擊)、⚡ 橫幅跨層去重
+(同因子取較嚴重者)、說明書三個幽靈章節(TPI / β 分類 / 汰弱 60 分公式)、三份憑印象填的
+TER 同類均值對照表、四個零寫入端的 AI 摘要章節。`CLAUDE.md §3.1 / §4.6` 兩條幽靈規範
+(描述從未存在的 `weight` / `snapshot_at` schema)已更正。
+
 ## ✅ 2026-08-06 存檔:換股池顧問(選股池 + ER 型態分類 + 分流換股建議)上線 main(#617 merged)
 
 - **#617 merged**(squash `9849357`;CI 全綠 Fast/Schema/AppTest;全套件 3615 passed):v19.428 換股池顧問上線。

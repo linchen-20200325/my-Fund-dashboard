@@ -110,13 +110,18 @@ def test_skipped_weights_do_not_affect_mode():
 
 
 def test_existing_amount_weighted_contract_unchanged():
-    """回歸:既有 test_asset_class_core_satellite.py 的金額加權契約不得被破壞。"""
+    """回歸:既有 test_asset_class_core_satellite.py 的金額加權契約不得被破壞。
+
+    2026-08-07:`status` 已由「配置評價燈」改為「分類涵蓋度」(本表降為純資訊),
+    故這裡改斷言 COVERAGE_OK;金額加權本身的契約(80/20 + amount)不變。
+    """
+    from services.health.asset_class import COVERAGE_OK
     r = summarize_core_satellite_allocation([
         {"label": "🟦 核心", "weight": 800_000},
         {"label": "🟠 衛星", "weight": 200_000},
     ])
     assert r["core_pct"] == 80.0 and r["satellite_pct"] == 20.0
-    assert r["status"] == "🟢" and r["weight_mode"] == "amount"
+    assert r["status"] == COVERAGE_OK and r["weight_mode"] == "amount"
 
 
 # ── L3 caption 措辭誠實性 ────────────────────────────────────

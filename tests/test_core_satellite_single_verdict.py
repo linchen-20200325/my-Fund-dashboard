@@ -13,8 +13,10 @@
 2. **MK 戰情室**（必修 6 附帶）：`tag_mk_class` 原本只讀 `is_core`、無視
    `policy_tier` —— Sheet 標 `core` 的基金在保單卡片顯示「🛡️核心」，在檔數 KPI
    與 MK 戰情室卻算成衛星。
-3. **兩把尺**（必修 3）：Tab3 同一次捲動內有兩個口徑不同的核心%，下方那個原本還
-   給方向相反的行動建議。現在下方降為唯讀對照 + 明講差異。
+3. **兩把尺**（必修 3 → 2026-08-07 user 裁決收尾）：Tab3 同一次捲動內有兩個口徑
+   不同的核心%，下方那個原本還給方向相反的行動建議。上一輪只降級了 Tab3 embed；
+   本輪 user 拍板「Sheet `policy_tier` 是唯一真相，健診那份降為純資訊」——
+   **兩個 Tab 都唯讀**、L2 的建議核心區間常數整組移除、模擬本金不進比例分母。
 
 修正前紅的類型都標在各條 docstring；`ImportError 紅` 一律另外註明，因為那只證明
 「函式存在」，不證明「有人呼叫它」。
@@ -209,16 +211,44 @@ _CSA_RED = {
 
 
 class TestDualRulerCaption:
-    def test_health_tab_keeps_the_actionable_message(self):
-        """💊 健診 Tab 全頁只有這一個核心% → 照常給行動建議（行為不變）。"""
-        from ui.tab_fund_grp_health import _core_satellite_verdict_caption
-        _cap = _core_satellite_verdict_caption(_CSA_RED, "health")
-        assert _CSA_RED["message"] in _cap
-        assert _CSA_RED["status"] in _cap
+    def test_verdict_points_to_the_single_source_of_truth(self):
+        """兩個 Tab 都要指路到「唯一有行動建議的那一格」，但指的地方不同。
 
-    @pytest.mark.parametrize("source_tab", [None, "portfolio"])
+        **修正前必紅（行為衝突）**：健診 Tab 舊版根本沒有指路句 —— 它自己就在
+        給建議（`if source_tab == "health": return f"{status} {csa['message']}"`）。
+        """
+        from ui.tab_fund_grp_health import _core_satellite_verdict_caption
+        _embed = _core_satellite_verdict_caption(_CSA_RED, "portfolio")
+        _health = _core_satellite_verdict_caption(_CSA_RED, "health")
+        assert "上方" in _embed, "Tab3 embed 沒指出行動建議在本頁上方"
+        assert "上方" not in _health, (
+            "健診 Tab 沒有「上方那一格」—— 指過去會讓使用者找一個不存在的東西")
+        assert "組合配置" in _health, "健診 Tab 應指向組合配置 Tab"
+        for _cap in (_embed, _health):
+            assert "policy_tier" in _cap, "沒講唯一真相是 Sheet 標的級別"
+
+    def test_verdict_surfaces_coverage_note_only_when_unreliable(self):
+        """分類涵蓋不足時要把 L2 的資料品質說明接出來（§1 缺料揭露）。
+
+        **修正前必紅（KeyError/行為紅）**：`coverage_note` 是本輪新增欄位，
+        舊版沒有；若只產生不接出去，就是 `PROCESS.md §4` 點名的失效模式。
+        """
+        from services.health.asset_class import COVERAGE_OK, COVERAGE_UNRELIABLE
+        from ui.tab_fund_grp_health import _core_satellite_verdict_caption
+        _bad = {**_CSA_RED, "status": COVERAGE_UNRELIABLE,
+                "coverage_note": "待定 45% 過多"}
+        assert "待定 45% 過多" in _core_satellite_verdict_caption(_bad, "health")
+        _ok = {**_CSA_RED, "status": COVERAGE_OK,
+               "coverage_note": "待定 5%,屬性分類涵蓋足夠"}
+        assert "待定 5%" not in _core_satellite_verdict_caption(_ok, "health")
+
+    @pytest.mark.parametrize("source_tab", [None, "portfolio", "health"])
     def test_embedded_verdict_is_read_only(self, source_tab):
-        """**修正前必紅（行為衝突）** —— Tab3 embed 時不得再輸出行動建議。
+        """**修正前必紅（行為衝突）** —— `source_tab="health"` 那一組。
+
+        上一輪只把 Tab3 embed 降為唯讀，健診 Tab 仍照印 L2 的行動建議；同一套
+        屬性分類器在 A 頁是「建議」、在 B 頁是「參考」，換個 Tab 就換一套結論。
+        2026-08-07 user 裁決：這一份**一律**降為純資訊。原本的情境仍成立 ——
 
         上方 Hero 卡剛說「核心過重，可贖回轉衛星」，下方這一區說「衛星過重」，
         同一次捲動內兩個方向相反的建議，使用者只能二選一，而那正是他無從判斷的。
@@ -232,30 +262,35 @@ class TestDualRulerCaption:
         for _banned in ("衛星過重", "偏保守"):
             assert _banned not in _cap, f"仍留行動語氣「{_banned}」"
         assert "唯讀" in _cap, "沒告訴使用者這一區是唯讀對照"
-        assert "上方" in _cap, "沒指出行動建議在哪一處"
         # 數字本身仍要在（降級的是建議，不是揭露）
         assert "40" in _cap and "35" in _cap and "25" in _cap
 
-    def test_ruler_note_states_which_ruler_and_uses_ssot_numbers(self):
-        """表上方必須先講「這是哪一把尺」，門檻值從 L2 常數取，不在 UI 寫死。"""
-        from services.health.asset_class import (
-            CORE_TARGET_MAX_PCT, CORE_TARGET_MIN_PCT,
-        )
+    def test_ruler_note_states_which_ruler_and_carries_no_target(self):
+        """**修正前必紅（行為衝突）** —— 舊版在這句裡印「參考區間核心 50~80%」。
+
+        把一個建議區間印在「核心 40%」旁邊，即使不寫「該調整」也已經是隱含評價；
+        user 裁決本表不設目標，所以這句話裡不得再出現任何建議佔比。
+        """
         from ui.tab_fund_grp_health import _core_satellite_ruler_note
         _note = _core_satellite_ruler_note()
         assert "3-3-3" in _note and "類別" in _note, "沒講分類依據"
         assert "policy_tier" in _note, "沒講它**不是**使用者標的那一把尺"
-        assert f"{CORE_TARGET_MIN_PCT:.0f}~{CORE_TARGET_MAX_PCT:.0f}%" in _note, (
-            "參考區間應由 `services/health/asset_class` 常數帶出（§3.3 不寫死）")
+        assert "參考區間" not in _note, "本表已無目標值，不得再帶建議佔比區間"
+        assert "不設" in _note, "應明講本表不設建議核心佔比"
 
     def test_contrast_note_covers_all_three_differences(self):
-        """三項差異（分母 / 分類 / 目標）都要講 —— 少講一項，數字差就變成「誰算錯」。"""
+        """三項差異（分母 / 分類 / 目標）都要講 —— 少講一項，數字差就變成「誰算錯」。
+
+        **修正前必紅（行為衝突）**：分母那一項本輪改了語意 —— 兩邊現在**同樣只計
+        使用者實際填過的本金**，未填者的 100 萬模擬本金不進比例。舊文案（「本區把
+        沒填的以 100 萬估算後計入」）現在是一句準確描述舊行為的假話。
+        """
         from ui.tab_fund_grp_health import _CS_PORTFOLIO_CONTRAST_NOTE as _n
         assert "分母" in _n and "分類依據" in _n and "目標值" in _n
         assert "policy_tier" in _n
-        assert "0 計" in _n and "100 萬" in _n, (
-            "分母差異是致命的那一項：一邊未填算 0、一邊補 100 萬 → "
-            "只要有一檔沒填，兩個百分比數學上不可能相等")
+        assert "100 萬" in _n and "不進" in _n, (
+            "必須講清楚 100 萬模擬本金不進配置比例")
+        assert "估算後計入" not in _n, "舊分母描述殘留 = 對使用者說謊"
 
 
 class TestDualRulerWiring:
@@ -315,3 +350,92 @@ class TestDualRulerWiring:
             _st = _kwarg(_c, "source_tab")
             assert isinstance(_st, ast.Constant) and _st.value == "portfolio", (
                 f"行 {_c.lineno}：Tab3 embed 未宣告 source_tab=\"portfolio\"")
+
+
+# ══════════════════════════════════════════════════════════════
+# 5. 模擬本金不進配置比例（user 裁決第 4 點）
+#
+# `ui/tab3_portfolio.py` 對「使用者從未填過 invest_twd」的基金補 100 萬，好讓
+# 逐檔配息試算算得出「每月配息 TWD」。那筆錢是模擬值，不是他的錢 —— 若進了
+# 屬性比例分母，一檔沒填就能把比例整個帶偏，而且 `weight_mode` 會推斷成
+# "amount"，caption 於是用捏造的金額背書「依各檔投入本金加權，總計 X TWD」。
+# ══════════════════════════════════════════════════════════════
+_HEALTH_ROWS = [{"核心/衛星": "🟦 核心"}, {"核心/衛星": "🟠 衛星"}]
+
+
+class TestSimulatedPrincipalExcludedFromRatio:
+    def test_simulated_principal_gets_zero_weight(self):
+        """**修正前必紅（行為衝突）** —— 舊碼直接用 `_principal_twd`。
+
+        使用者只填了核心那檔 20 萬、衛星那檔沒填（被補 100 萬）：
+        舊行為 → 核心 20/120 ≈ 17%；正確 → 分母只有真實的 20 萬 → 核心 100%。
+        """
+        from ui.tab_fund_grp_health import _core_satellite_items
+        _rows = [
+            {"_principal_twd": 200_000.0},
+            {"_principal_twd": 1_000_000.0, "_principal_is_default": True},
+        ]
+        _items, _n_sim = _core_satellite_items(_HEALTH_ROWS, _rows)
+        assert _n_sim == 1
+        assert _items[1]["weight"] == 0, "模擬本金仍被計入分母"
+        assert _items[0]["weight"] == 200_000.0
+
+    def test_excluded_weight_keeps_the_ratio_and_mode_honest(self):
+        """端到端：接進 L2 後，比例與 `weight_mode` 都不得被模擬金額汙染。"""
+        from services.health.asset_class import summarize_core_satellite_allocation
+        from ui.tab_fund_grp_health import _core_satellite_items
+        _rows = [
+            {"_principal_twd": 200_000.0},
+            {"_principal_twd": 1_000_000.0, "_principal_is_default": True},
+        ]
+        _csa = summarize_core_satellite_allocation(
+            _core_satellite_items(_HEALTH_ROWS, _rows)[0])
+        assert _csa["core_pct"] == 100.0
+        assert _csa["total_weight"] == 200_000.0
+        assert _csa["weight_mode"] == "single", (
+            "只剩一筆真實金額卻被推斷成 amount → caption 會謊稱金額加權")
+
+    def test_health_tab_broadcast_principal_unaffected(self):
+        """健診 Tab 走使用者輸入的單一本金 broadcast，**不帶**旗標 → 行為零變化。"""
+        from ui.tab_fund_grp_health import _core_satellite_items
+        _rows = [{"_principal_twd": 1_000_000.0}, {"_principal_twd": 1_000_000.0}]
+        _items, _n_sim = _core_satellite_items(_HEALTH_ROWS, _rows)
+        assert _n_sim == 0
+        assert [i["weight"] for i in _items] == [1_000_000.0, 1_000_000.0]
+
+    def test_missing_label_falls_back_to_undetermined(self):
+        """缺「核心/衛星」欄 → 待定（§1 不亂扣），不是靜默歸核心。"""
+        from ui.tab_fund_grp_health import _core_satellite_items
+        _items, _ = _core_satellite_items([{}, {"核心/衛星": ""}],
+                                          [{"_principal_twd": 1}, {"_principal_twd": 1}])
+        assert [i["label"] for i in _items] == ["待定", "待定"]
+
+
+class TestSimulatedPrincipalWiring:
+    """接線（`PROCESS.md §4`）：旗標與消費端必須同批存在，缺一即無效。"""
+
+    def test_render_delegates_item_building_to_the_helper(self, grp_tree) -> None:
+        """**修正前必紅（AST 找不到 `_core_satellite_items`）**。
+
+        拿掉 render 那一行呼叫（改回 inline 迴圈直接吃 `_principal_twd`），本條紅。
+        """
+        _fn = _func_def(grp_tree, "_render_health_3tables")
+        _names = {n.func.id for n in ast.walk(_fn)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+        assert "_core_satellite_items" in _names, (
+            "render 沒走 items helper —— 模擬本金剔除等於沒接出去")
+
+    def test_tab3_actually_stamps_the_flag(self, tab3_tree) -> None:
+        """**修正前必紅（AST 找不到該欄位寫入）** —— 產生端的另一半。
+
+        helper 讀得再對，Tab3 不 stamp 旗標就永遠讀到 None，模擬本金照樣進分母。
+        一律走 AST（`ast.Subscript` 的字面 slice），不用 `re.search` 掃原始碼 ——
+        本 repo 有過測試被自己的註解騙過的紀錄。
+        """
+        _field = "_principal" + "_is_default"      # 不讓字面值單獨出現在掃描面
+        _writes = [n for n in ast.walk(tab3_tree)
+                   if isinstance(n, ast.Subscript)
+                   and isinstance(n.slice, ast.Constant)
+                   and n.slice.value == _field
+                   and isinstance(n.ctx, ast.Store)]
+        assert _writes, "Tab3 未把「這檔用的是模擬本金」旗標寫回 row"

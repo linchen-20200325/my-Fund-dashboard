@@ -59,11 +59,17 @@ def render_short_radar_section(
 
     st.divider()
     st.markdown("## 🎯 短線雷達")
-    st.caption("即時 risk-off ｜ 10 燈雷達 + 流動性壓力預警")
+    # 2026-08-07:副標原本在本檔寫死一份,與總表 ② 依據表 🎯 那一列是同一句話的
+    # 第二份副本 —— user 拍板把那句英文行話改中文時,只改 registry 會讓兩處對不上。
+    # 改為**從同一份 SSOT 導出**(§3.3;L3 → L0 合法下行,同 tab1_macro_longterm 做法)。
+    from shared.macro_buckets import BUCKET_META as _BM_SR  # noqa: PLC0415
+    st.caption(f"{_BM_SR['short']['sub']} ｜ 10 燈雷達 + 流動性壓力預警")
 
     # ── v19.20 ⚡ 短線風險雷達（10 燈 1-day 急殺早期警報）──
     st.divider()
-    st.markdown("### ④ ⚡ 短線風險雷達（24H Risk-Off Velocity Radar ｜ 日級急殺確認）")
+    # 2026-08-07:小標原本夾一段英文引擎名,與同段上方剛改成中文的副標並存
+    # (同一個概念一邊中文一邊英文)。改為中文直譯,語意不變。
+    st.markdown("### ④ ⚡ 短線風險雷達（24H 避險轉向速度 ｜ 日級急殺確認）")
     st.caption("10 個 1-day 動量／情緒／位階訊號 — 補拐點偵測中心（月～季級慢）之短缺，"
                "捕捉 1-day 急殺前的早期警報："
                "VIX 級距+期限結構 ｜ HY 信用日變化 ｜ 10Y 殖利率衝擊 ｜ MOVE 債券恐慌 ｜ "

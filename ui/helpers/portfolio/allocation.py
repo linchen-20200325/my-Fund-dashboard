@@ -19,17 +19,22 @@
 3. **目標一律 `portfolio_core_pct`**（session，預設見 `ui/helpers/session.py`），
    不得在各處寫死。
 
-⚠️ **本模組管不到的第 5 個顯示點**（2026-08-06 稽核補記，之前這份 docstring 宣稱
-「全部收斂」是不準確的）：Tab⑤ 下半頁的 💊 持倉健診會 embed
-`ui/tab_fund_grp_health._render_health_3tables`，其中「🧭 核心 / 衛星配置檢查」走的是
-**另一把尺** —— `services/health/asset_class.classify_core_satellite`
-（MoneyDJ 基金類別 + MK 3-3-3，三態含「待定」）、分母是 `_principal_twd`
-（未填 / ≤0 補 100 萬）、目標是 `CORE_TARGET_MIN/MAX_PCT`（50~80 固定）。
+⚠️ **第 5 個顯示點的處置**（2026-08-06 稽核點名 → 2026-08-07 user 拍板）：
+Tab⑤ 下半頁的 💊 持倉健診會 embed `ui/tab_fund_grp_health._render_health_3tables`，
+其中「🧭 核心 / 衛星」走的是**另一把尺** ——
+`services/health/asset_class.classify_core_satellite`（MoneyDJ 基金類別 + MK 3-3-3，
+三態含「待定」）。
 
 那不是漏收，是**不同問題**：本模組回答「這筆錢的配置定位」（使用者自己在 Sheet
-標的），那一區回答「這檔基金的資產屬性」（系統依類別 + 3-3-3 判的）。合併成單一
-分類器是架構決策（`CLAUDE.md §8.1`），未經核准不得自行合併。目前的處置是讓那一區
-在 Tab⑤ 內降為**唯讀對照**並明講兩把尺的差異，全頁只保留這裡這一處行動建議。
+標的），那一區回答「這檔基金的資產屬性」（系統依類別 + 3-3-3 判的）。user 的裁決是
+**不合併、但降級**：那一區保留（看得出手上的東西實際偏股還是偏債），但
+
+1. **不再輸出任何配置行動建議**（原本的「核心不足 / 衛星過重」4 級燈號連同其
+   建議核心區間常數已從 `services/health/asset_class.py` 移除）；
+2. **分母對齊**：那一區也只計使用者實際填過的投入本金 —— 未填者由 caller 補的
+   100 萬「模擬本金」只服務逐檔配息試算，以 weight=0 擋在配置比例外。
+
+→ 全站「配置比例 + 該不該再平衡」只有本模組這一個來源。
 
 單位約定（CLAUDE.md §4.1）：`*_twd` 為 TWD 金額、`*_pct` 為 0~100 百分比
 （**不是** 0~1 小數）、`n_*` 為檔數。

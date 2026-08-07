@@ -275,7 +275,7 @@ def _hyg_lqd_ratio() -> dict:
         elif delta_pct > -1:
             color, label = TRAFFIC_YELLOW, "➖ 持平"
         else:
-            color, label = TRAFFIC_RED, "🔴 risk-off / 熱錢撤離"
+            color, label = TRAFFIC_RED, "🔴 避險轉向 / 熱錢撤離"
         return {
             "value": cur,
             "unit": "",

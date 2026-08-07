@@ -75,7 +75,11 @@ BUCKET_ORDER = ["long", "mid", "short", "inflection", "news"]
 BUCKET_META = {
     "long":       {"emoji": "🌳", "title": "長期",     "sub": "結構 / 景氣位階"},
     "mid":        {"emoji": "📈", "title": "中期",     "sub": "景氣循環 3-12 月"},
-    "short":      {"emoji": "🎯", "title": "短線",     "sub": "即時 risk-off"},
+    # 2026-08-07 user 拍板:本欄原為英文行話,已改中文。語意不變(VIX + HY 利差
+    # 反映的就是市場當下把錢從風險資產撤出的力道),只換說法讓初學者讀得懂。
+    # 本欄是 taxonomy SSOT,`scripts/sync_to_stock.sh` 的同步清單**不含本檔**
+    # (只同步 `__init__.py` + `colors.py`),故本次改動不跨 repo。
+    "short":      {"emoji": "🎯", "title": "短線",     "sub": "即時避險情緒"},
     "inflection": {"emoji": "⚠️", "title": "拐點",     "sub": "領先警報"},
     "news":       {"emoji": "📰", "title": "新聞",     "sub": "系統性風險掃描"},
 }
@@ -173,7 +177,7 @@ BUCKET_DANGER_SPECS: list[DangerSpec] = [
                note=">+1σ 偏貴 / >+2σ 過熱",
                source="DESIGN:FactSet/Yardeni 25Y 統計 PE_MEAN=16.5 σ=3.0(v19.251 valuation.py 退役後 inline literal)"),
 
-    # ── 🎯 短線急殺:即時 risk-off ──
+    # ── 🎯 短線急殺:即時避險情緒 ──
     DangerSpec("vix", "VIX 恐慌指數", "short", "", "high_bad",
                yellow=_VIX_YELLOW, red=_VIX_RED, decimals=1,
                note="≥22 警戒 / ≥30 危機",

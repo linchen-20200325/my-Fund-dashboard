@@ -2438,7 +2438,8 @@ def render_portfolio_tab() -> None:
                     "與「基金組合健診」Tab 完全同源(v19.181 模組化 3 表)。"
                     "**① 健康分析**:4D Grade + Sharpe/Sortino/Calmar/Alpha/Expense/MaxDD + 3Y/5Y 年化 + 3-3-3 篩。"
                     "**② 配息相關**:adr + 1Y 含息 + 吃本金燈號(1Y·MK)+ **MK 4 規則換標的建議**。"
-                    "**③ 實際購買結果**:per-fund 用 invest_twd 為本金(未填預設 100 萬 TWD)。"
+                    "**③ 實際購買結果**:per-fund 用 invest_twd 為本金"
+                    "(未填者給 100 萬 TWD 模擬本金,**僅供配息試算,不進核心/衛星比例**)。"
                 )
                 from services.fund_row import process_one_fund as _proc_health  # v19.413 下沉 L2
                 from ui.tab_fund_grp_health import _render_health_3tables as _render_health_tbl
@@ -2447,8 +2448,15 @@ def render_portfolio_tab() -> None:
                     as_completed as _ac_h,
                 )
                 _warn_gap_h = 2.0  # SSOT 對齊 fund_dividend_calculator.DEFAULT_WARN_GAP_PCT
+                # ⚠️ 模擬本金（2026-08-07 user 裁決的第 4 點）：未填 invest_twd 的基金
+                # 仍需要一個本金才算得出「每月配息 TWD / 實際購買結果」，故保留 100 萬
+                # 預設 —— 拿掉它會讓那幾檔的配息試算靜默變 0（比沒有數字更危險，§1）。
+                # 但它**僅供試算，不進配置比例**：下面逐檔記 `_principal_is_default`，
+                # 共用 render 會把這幾檔以 weight=0 擋在「核心/衛星屬性分布」分母外。
                 _DEFAULT_PRINC = 1_000_000.0
                 _health_results: list = [None] * len(_loaded_pf)
+                # index → 該檔的本金是不是模擬值（使用者從未填過金額）
+                _princ_is_sim: list = [False] * len(_loaded_pf)
                 _prog_h = st.progress(0.0, text="📥 持倉健診計算中…")
                 try:
                     with _TPE_h(max_workers=min(len(_loaded_pf), 4)) as _exh:
@@ -2458,11 +2466,14 @@ def render_portfolio_tab() -> None:
                             _fd_h = _fh.get("moneydj_raw") or None
                             _inv = _fh.get("invest_twd")
                             try:
-                                _principal_h = (float(_inv) if _inv
-                                                else _DEFAULT_PRINC)
+                                _principal_h = float(_inv) if _inv else 0.0
                             except (TypeError, ValueError):
-                                _principal_h = _DEFAULT_PRINC
-                            if _principal_h <= 0:
+                                _principal_h = 0.0
+                            # 先判「有沒有真實金額」再補預設 —— 不用浮點 == 反推
+                            # 是否等於預設值（§4.3 禁止 `==` 比浮點；且真的填了
+                            # 100 萬的人不該被誤標成模擬本金）。
+                            _princ_is_sim[_ih] = _principal_h <= 0
+                            if _princ_is_sim[_ih]:
                                 _principal_h = _DEFAULT_PRINC
                             _futs_h[_exh.submit(
                                 _proc_health, _code_h, _principal_h,
@@ -2489,6 +2500,12 @@ def render_portfolio_tab() -> None:
                     _prog_h.empty()
                 # v19.330:🧭 核心/衛星配置檢查已下沉共用 _render_health_3tables(兩 tab 齊顯示),
                 # 不再於此 inline(避免重複 + 只在 Tab3 出現)。
+                # 把「這檔用的是模擬本金」旗標接到 row 上（§1 揭露）：共用 render
+                # 讀它決定該檔要不要進配置比例分母。產生端算對了但沒接出去 =
+                # PROCESS.md §4 點名的最貴失效模式，故旗標與消費端同批交付。
+                for _idx_ps, _row_ps in enumerate(_health_results):
+                    if isinstance(_row_ps, dict) and _princ_is_sim[_idx_ps]:
+                        _row_ps["_principal_is_default"] = True
                 _ok_health = [r for r in _health_results if r is not None]
                 # v19.420 F-BM-3:持倉健診也帶「分析 extra 欄組」(σ/HWM/MK 買賣點 / 上下檔捕捉率 /
                 # 操盤評分 / vs 大盤%)—— 先前 Tab3 未傳 funds_extra → 整組欄缺席(稽核 A2#1 抓到)。
@@ -2499,11 +2516,11 @@ def render_portfolio_tab() -> None:
                     for _r in _ok_health
                     if _r.get("ok") and _r.get("_fund_raw")
                 ]
-                # source_tab="portfolio"：本頁上方另有一個口徑完全不同的核心%
-                # （分母 / 分類 / 目標三項全不同）。宣告身分後，共用 render 會把
-                # 這一區的「🧭 核心/衛星配置檢查」降為唯讀對照 + 印出兩把尺的差異，
-                # 不再輸出與上方方向相反的再平衡建議（2026-08-06 稽核 🔴 必修 3）。
-                # 註：該 render 的預設分支就是唯讀，本參數是「講清楚」而非「開關」。
+                # source_tab="portfolio"：本頁上方另有一個**分類依據不同**的核心%
+                # （2026-08-07 後分母與目標值差異已消：模擬本金不進比例、本區不設
+                # 目標）。共用 render 的「🧭 核心/衛星資產屬性分布」在**兩個 Tab**
+                # 都已是唯讀純資訊，本參數只決定指路句要指向哪一格 ——
+                # 這裡指「本頁上方」，健診 Tab 指「組合配置」Tab。
                 _render_health_tbl(_ok_health, funds_extra=_funds_extra,
                                    source_tab="portfolio")
 
