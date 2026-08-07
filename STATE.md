@@ -2,6 +2,23 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-08-06 存檔:換股池顧問(選股池 + ER 型態分類 + 分流換股建議)上線 main(#617 merged)
+
+- **#617 merged**(squash `9849357`;CI 全綠 Fast/Schema/AppTest;全套件 3615 passed):v19.428 換股池顧問上線。
+- user:存**選股池** → 讀**帳本持倉** → 逐檔建議換不換、從池中選一支,依總類分流 + 配合匯率、盡量賺。
+- **分流**:震盪型 貼近高基期 → 池中「低基期 · 健康(不接刀)· 優先震盪」配對換股(賺回歸);
+  成長型 **總經看衰(composite ≤ -5)+ 跌破 120 日均線 雙確認** → 賣出轉現金(僅看衰 → 🟡 警示)。
+- **型態判定**(user 選行為統計):Kaufman Efficiency Ratio `|淨移動|/Σ|逐日變動|` ∈ [0,1];
+  高 = 成長 / 低 = 震盪 / 灰帶用資產類別打破(股票→成長)/ <60 點 → 無法判定;**手動 override 優先**。
+- **分層**:L0 `signal_thresholds` +6 SSOT / L2 `fund_type_classifier`(12 測)/ L1 `pool_repository`
+  GS+本地雙後端(8 測;EX-CRUD-1 登錄)/ L2 `switch_advisor` 分流編排重用既有 primitive(10 測)/
+  L3 `switch_advisor_section` + 組合健診 hook(選股池 CRUD + 按鈕觸發建議)。
+- **3 平行稽核 agent**:分類/顧問數學 CLEAN、fail-loud/SSOT/分層 CLEAN、整合誠實抓 **1 HIGH** ——
+  成長型讀 `session_state["composite_score"]` 但該鍵**無 producer** → 觸發器永遠 dead;**已修**
+  (`tab1_macro` 補寫 producer,順帶修復 `tab1_macro_ai` 孤兒消費者)。
+- 誠信護欄:**不保證每筆賺**(紀律工具);同幣別 A→B 換股 FX 近中性(僅跨台幣現金進出受匯率影響);
+  缺條件/缺料/短史 → 誠實持有/資料不足,不硬湊(§1)。⚠️ 成長型賣出需先開過總經分頁(composite 才算出)。
+
 ## ✅ 2026-07-28 存檔:淨值 × 匯率 二維買賣切換 上線 main(#612 merged)
 
 - **#612 merged**(squash `1938d4f`;CI 必要檢查全綠):v19.426 淨值×匯率 二維買賣切換上線。
