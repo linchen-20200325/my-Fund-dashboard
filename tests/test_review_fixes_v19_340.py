@@ -20,7 +20,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -95,8 +94,18 @@ class TestScanNetCoversF821:
             "掃描網必須同時選 F405+F821 — 無 star-import 模組的漏搬 import 只有 F821 看得見"
 
     def test_repo_is_f821_clean_now(self):
-        """修復後全 production 目標須 0 個 F821(掃描網主測試的前置健檢,
-        用同一組 targets;ruff 不可用時 skip — 主掃描測試會給更明確的錯誤)。"""
+        """修復後全 production 目標須 0 個 F821(掃描網主測試的前置健檢,同一組 targets)。
+
+        2026-08-07:原本 `ruff` 不在時走 `pytest.skip`,正是 `PROCESS.md §4`
+        「測試自身的可執行性」點名的型態 —— 環境缺件把**測試的失敗偽裝成通過**,
+        總結行只會多一個 skipped,沒人會發現這條防護網從來沒真的跑過。
+        改為比照姊妹檔 `tests/test_undefined_name_scan.py`:缺件 / 逾時 /
+        非預期 exit code / 工具跑了卻沒輸出,一律 `AssertionError` 紅燈。
+
+        **修正前會不會紅**:在**有裝 ruff** 的環境,修正前後都綠(行為不變);
+        在**沒裝 ruff** 的環境(本 repo 的 Windows 開發機),修正前是靜默 skip、
+        修正後直接紅 —— 這正是本次要修的差別。
+        """
         import json
         import subprocess
         try:
@@ -105,9 +114,27 @@ class TestScanNetCoversF821:
                  "repositories", "services", "ui", "infra", "shared",
                  "app.py", "fund_fetcher.py"],
                 cwd=REPO, capture_output=True, text=True, timeout=60)
-        except FileNotFoundError:
-            pytest.skip("ruff 未安裝(requirements-dev)")
-        findings = json.loads(proc.stdout or "[]")
+        except FileNotFoundError as e:
+            raise AssertionError(
+                f"ruff 未安裝或無法執行——本測試需要 ruff 才能掃描,"
+                f"請確認 requirements-dev.txt 已安裝:{e}")
+        except subprocess.TimeoutExpired:
+            raise AssertionError("ruff F821 掃描逾時(60s),請檢查 ruff 是否卡住")
+
+        # exit 0 = 無 finding,1 = 有 finding;其他為真的執行錯誤
+        if proc.returncode not in (0, 1):
+            raise AssertionError(
+                f"ruff 執行失敗(exit={proc.returncode}):"
+                f"stdout={proc.stdout[:300]!r} stderr={proc.stderr[:300]!r}")
+        if not proc.stdout.strip():
+            raise AssertionError(
+                f"ruff 回傳 exit={proc.returncode} 但 stdout 是空的,不能當成"
+                f"「0 個 finding」:stderr={proc.stderr[:300]!r}")
+        try:
+            findings = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            raise AssertionError(f"ruff JSON 輸出無法解析:{proc.stdout[:500]}")
+
         assert findings == [], \
             "production 程式碼存在 F821 未定義名:\n" + "\n".join(
                 f"{f['filename']}:{f['location']['row']} {f['message']}"

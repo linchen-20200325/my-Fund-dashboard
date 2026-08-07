@@ -225,5 +225,22 @@ def test_full_backtest_actions_and_verdict_shape():
     assert res["ok"] and set(res["ranking"]) == {"S0", "S1", "S2", "S3", "S4"}
     assert res["winner"] == res["ranking"][0]
     assert abs(sum(res["actions"]["target_weights_pct"].values()) - 100.0) < 0.1
-    assert "current_signal_snapshot" in res and set(res["current_signal_snapshot"]) <= set(nav)
     assert "s1_sharpe" in res["verdict_s1_vs_s2"]
+    # 各策略自己的最終訊號仍在(回測結果本體),只有另外攤平那份 0-consumer 快照被移除。
+    assert "final_signals" in res["results"]["S1"]
+
+
+def test_full_backtest_has_no_orphan_signal_snapshot_field():
+    """2026-08-07:回測結果不得再回傳那份沒人讀的 live 訊號側車欄位。
+
+    它與健診大表的同名數字取自**不同時點**(S1 最後再平衡日 vs 當下),UI 消費端
+    移除後就成了 0 consumer 的側車(`PROCESS.md §4`)。
+
+    **修正前會不會紅**:會 —— 修正前該 key 存在於回傳 dict。
+    """
+    nav = {c: _series(0.0003, 0.011, seed=70 + i, n=440) for i, c in enumerate(["A", "B", "C", "D"])}
+    ccy = {"A": "USD", "B": "USD", "C": "美元", "D": "TWD"}
+    res = backtest_allocations(nav, ccy, fx_series=_fx(n=440))
+    assert res["ok"]
+    _orphan = [k for k in res if "signal_snapshot" in k]
+    assert not _orphan, f"回測結果仍帶 0-consumer 訊號快照欄位:{_orphan}"

@@ -264,15 +264,54 @@ class TestSectionHints:
                         a.name == "render_macro_compass" for a in _n.names):
                     pytest.fail(f"{_p} 仍 import 已移除的 render_macro_compass")
 
-    def test_compass_component_no_longer_exposes_a_renderer(self):
-        """元件本體的實作必須消失(留一個沒人呼叫的 renderer = `PROCESS.md §4`
-        點名的「留著假裝有揭露」)。本機此輪無法實體刪檔,故改為**檔內零實作**:
-        任何 import 會 ImportError 當場炸,而不是靜默沿用舊畫面(§1)。
+    def test_compass_modules_are_not_importable_at_all(self):
+        """L3 元件與 L2 facade 都不得再 import 成功。
 
-        **修正前必紅**(那時 `render_macro_compass` 還在)。"""
-        import ui.components.macro_compass_top as _mct
-        for _dead in ("render_macro_compass", "_render_compass_card", "_trend_dir"):
-            assert not hasattr(_mct, _dead), f"{_dead} 仍在(0 consumer 的死渲染)"
+        沿革:上一版斷言的是「檔還在、但 attribute 都不見」。那仍留下一個
+        import 得到的空殼模組 —— `PROCESS.md §4` 點名的「留著假裝有揭露」。
+        本版改成「import 一律炸」,並刻意用 `ImportError` 這個**父類別**:
+          · 現況(工具鏈無法實體刪檔,檔內主動 raise) → ImportError
+          · 之後真的把檔案刪掉                       → ModuleNotFoundError
+        兩者都是 ImportError 的實例,所以這條測試在「刪檔前 / 刪檔後」都成立,
+        不會因為完成收尾動作反而變紅。
+
+        **修正前會不會紅**:會。上一版的檔案 import 得到(只是沒 attribute),
+        `pytest.raises(ImportError)` 收不到例外 → Failed: DID NOT RAISE。
+        """
+        import importlib
+        for _mod in ("ui.components.macro_compass_top", "services.macro.compass"):
+            with pytest.raises(ImportError):
+                importlib.import_module(_mod)
+
+    def test_compass_l1_fetcher_is_deleted(self):
+        """L1 fetcher 也必須真的不見(整條鏈 0 consumer,不是只砍 UI 那一層)。
+
+        **修正前會不會紅**:會。修正前 `repositories.macro.alternate` 仍定義
+        該 fetcher,且經由 `repositories.macro_repository` shim 對外可見。
+        """
+        import fund_fetcher  # noqa: F401  先載解 circular import
+        import repositories.macro.alternate as _alt
+        import repositories.macro_repository as _shim
+        assert not hasattr(_alt, "fetch_macro_compass"), "L1 指南針 fetcher 仍在"
+        assert not hasattr(_shim, "fetch_macro_compass"), "shim 仍 re-export 指南針 fetcher"
+
+    def test_tab1_cache_clear_name_list_has_no_dangling_entry(self):
+        """「清 Tab1 快取」的名單不得列出已不存在的函式(清了個空號 = 假裝有清)。
+
+        走 `infra.cache._CACHE_REGISTRY` 對帳,而不是比對字面值:名單裡的每個名字
+        都必須真的是某個已註冊的 cache 函式。
+
+        **修正前會不會紅**:會。修正前名單仍含指南針 fetcher,但該函式已隨本批
+        刪除、不會出現在 registry 裡 → 差集非空。
+        """
+        import fund_fetcher  # noqa: F401  先載解 circular import
+        import repositories.macro_repository  # noqa: F401  觸發 L1 cache 註冊
+        import repositories.macro_tw_local_repository  # noqa: F401
+        from infra.cache import _CACHE_REGISTRY
+        from services.macro._helpers import _TAB1_TTL_CACHE_NAMES
+        _registered = {getattr(_fn, "__name__", "") for _fn in _CACHE_REGISTRY}
+        _dangling = set(_TAB1_TTL_CACHE_NAMES) - _registered
+        assert not _dangling, f"名單裡有清不到的空號:{sorted(_dangling)}"
 
     def test_the_three_compass_readings_still_exist_in_the_radar(self):
         """刪錯東西的防護:移除的前提是「三張卡在雷達都有」——

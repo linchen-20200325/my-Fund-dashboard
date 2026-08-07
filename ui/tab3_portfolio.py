@@ -118,7 +118,7 @@ def render_portfolio_tab() -> None:
     #   (前提:該 Sheet 已分享給 SA 的 client_email)。
     def _t3_sheet_client():
         if _gsa_secret:
-            return get_gspread_client(dict(_gsa_secret))
+            return get_gspread_client(_gsa_secret)
         return _get_oauth_client()
     from ui.helpers.data_registry import (
         _update_data_registry,
@@ -1258,7 +1258,7 @@ def render_portfolio_tab() -> None:
                                     st.warning("policy_id 與 fund_url 為必填")
                                 else:
                                     try:
-                                        _client = get_gspread_client(dict(_gsa_secret))
+                                        _client = get_gspread_client(_gsa_secret)
                                         _act = upsert_policy_row(_client, _sheet_id, _row)
                                         st.success(f"✅ {_act}")
                                     except PolicySheetError as _pe:
@@ -1268,7 +1268,7 @@ def render_portfolio_tab() -> None:
                                     st.warning("policy_id + fund_url 必填")
                                 else:
                                     try:
-                                        _client = get_gspread_client(dict(_gsa_secret))
+                                        _client = get_gspread_client(_gsa_secret)
                                         _hit = delete_policy_row(_client, _sheet_id,
                                             _row["policy_id"], _row["fund_url"])
                                         st.success("✅ 已刪除" if _hit else "ℹ️ 主鍵未命中")

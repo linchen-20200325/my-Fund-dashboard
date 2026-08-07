@@ -3,7 +3,7 @@
 結構:
 - `_helpers`:module-level imports/constants + 5 utility(_fred / _yf_s / _trend /
   _safe_last / _spread_series / recession_probability)
-- `us_indicators`:美國指標 + Phase + Regime + TW TPI + Systemic Risk(主檔大宗)
+- `us_indicators`:美國指標 + Phase + Regime + Systemic Risk(主檔大宗)
 - `turning_points`:景氣拐點偵測 + 歷史回測
 - `causal_sankey`:Sub-cycle + Sankey + Drivers + Cluster signals
 - `china`:中國 macro(信貸脈衝 / 五率 / regime / modifier)

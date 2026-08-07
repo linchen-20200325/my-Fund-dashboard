@@ -4,9 +4,9 @@
 - DefiLlama 穩定幣總市值
 - AAII Sentiment(多源 fallback chain)
 - ISM PMI(FRED + MacroMicro + ISM World + Stooq + Philly Fed + Conf Board CCI)
-- fetch_macro_compass(^VIX + ^TNX + ^GSPC 三大盤面指標)
+(原 fetch_macro_compass 已於 2026-08-05 隨 🧭 總經指南針整條鏈退役,見下方註解。)
 
-依賴 fred.fetch_fred / yf.fetch_yf_close。
+依賴 fred.fetch_fred。
 """
 from __future__ import annotations
 
@@ -18,17 +18,15 @@ import pandas as pd
 
 from infra.proxy import fetch_url
 from fund_fetcher import _ttl_cache, register_cache
-from shared.colors import GH_FG_MUTED, TRAFFIC_GREEN, TRAFFIC_RED, TRAFFIC_YELLOW
 from shared.fred_series import (
     FRED_BSCICP02,
     FRED_PHILLY_FED,
     PHILLY_FED_PMI_BASE,
     PHILLY_FED_TO_PMI_DIVISOR,
 )
-from shared.ttls import TTL_5MIN, TTL_30MIN
+from shared.ttls import TTL_30MIN
 
 from .fred import fetch_fred
-from .yf import fetch_yf_close
 
 
 # ══════════════════════════════════════════════════════════════
@@ -558,103 +556,13 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════
-# 總經指南針 (Top-Down Macro Compass) — Phase 1 規格三大指標
-#   VIX / TNX / GSPC + 60MA，固定於頁面頂部供新人秒懂市場大環境。
-#   呼叫端：app.py 的 render_macro_compass()（在 st.tabs() 之前渲染）。
-# ══════════════════════════════════════════════════════════════
-
-@register_cache
-@_ttl_cache(ttl_sec=TTL_5MIN, maxsize=8)   # v18.58: 每次 rerun 都觸發 — 避免 widget 互動連環抓
-def fetch_macro_compass(range_: str = "6mo") -> dict:
-    """Phase 1 — 一次抓 ^VIX / ^TNX / ^GSPC 三大美股指標 + GSPC 60MA。
-
-    所有抓取都走 macro_core.fetch_yf_close()（NAS proxy → Yahoo Chart REST API），
-    避開 yfinance 直連被 Streamlit Cloud IP 限流。失敗欄位填 None，UI 端優雅降級。
-
-    Returns dict:
-      vix  : {'value', 'series', 'dates', 'signal':(light, label, color)} | None
-      tnx  : 同上                                                          | None
-      gspc : 同上 + {'ma60', 'ma60_series'}                                | None
-    """
-    # F-PROV-1 v19.86 phase 5:provenance(§2.2)
-    _fetched_at = pd.Timestamp.now('UTC').isoformat()
-    out: dict = {'vix': None, 'tnx': None, 'gspc': None,
-                  'source': 'Yahoo:^VIX+^TNX+^GSPC:compass',
-                  'fetched_at': _fetched_at}
-
-    def _sig_vix(v):
-        # Phase 1 規格：>25 黃 / >30 綠（恐慌貪婪區=逢低加碼時機）
-        if v > 30: return ('🟢', '恐慌貪婪區（準備跌深就買）', TRAFFIC_GREEN)
-        if v > 25: return ('🟡', '波動加劇', TRAFFIC_YELLOW)
-        return ('🟢', '市場平靜', TRAFFIC_GREEN)
-
-    def _sig_tnx(t):
-        # 估值壓力：≥4.5% 紅 / 3.5–4.5 黃 / <3.5 綠（寬鬆）
-        if t >= 4.5: return ('🔴', '估值壓力（科技股不利）', TRAFFIC_RED)
-        if t >= 3.5: return ('🟡', '中性區', TRAFFIC_YELLOW)
-        return ('🟢', '寬鬆有利', TRAFFIC_GREEN)
-
-    def _sig_gspc(g, ma):
-        # Phase 1 規格：站上 60MA=多頭、跌破=趨勢轉弱
-        if ma is None or g is None:
-            return ('⚪', '60MA 計算中', GH_FG_MUTED)
-        if g >= ma: return ('🟢', '多頭格局（股優於債）', TRAFFIC_GREEN)
-        return ('🔴', '趨勢轉弱（提高防禦）', TRAFFIC_RED)
-
-    # ── ^VIX ────────────────────────────────────────────────
-    try:
-        s = fetch_yf_close('^VIX', range_=range_)
-        if not s.empty:
-            v = round(float(s.iloc[-1]), 2)
-            tail = s.tail(90)
-            out['vix'] = {
-                'value': v,
-                'series': [round(float(x), 2) for x in tail.tolist()],
-                'dates':  [d.strftime('%Y-%m-%d') for d in tail.index],
-                'signal': _sig_vix(v),
-            }
-    except Exception as e:
-        print(f'[macro_compass] VIX fetch failed: {e}')
-
-    # ── ^TNX ────────────────────────────────────────────────
-    try:
-        s = fetch_yf_close('^TNX', range_=range_)
-        if not s.empty:
-            t = round(float(s.iloc[-1]), 3)
-            tail = s.tail(90)
-            out['tnx'] = {
-                'value': t,
-                'series': [round(float(x), 3) for x in tail.tolist()],
-                'dates':  [d.strftime('%Y-%m-%d') for d in tail.index],
-                'signal': _sig_tnx(t),
-            }
-    except Exception as e:
-        print(f'[macro_compass] TNX fetch failed: {e}')
-
-    # ── ^GSPC + 60MA ────────────────────────────────────────
-    try:
-        s = fetch_yf_close('^GSPC', range_=range_)
-        if not s.empty:
-            g = round(float(s.iloc[-1]), 2)
-            ma60_ser = s.rolling(60).mean()
-            ma60_last = ma60_ser.dropna()
-            ma60 = round(float(ma60_last.iloc[-1]), 2) if not ma60_last.empty else None
-            tail = s.tail(90)
-            ma_tail = ma60_ser.tail(90)
-            out['gspc'] = {
-                'value': g,
-                'ma60': ma60,
-                'series': [round(float(x), 2) for x in tail.tolist()],
-                'ma60_series': [None if pd.isna(x) else round(float(x), 2) for x in ma_tail.tolist()],
-                'dates': [d.strftime('%Y-%m-%d') for d in tail.index],
-                'signal': _sig_gspc(g, ma60),
-            }
-    except Exception as e:
-        print(f'[macro_compass] GSPC fetch failed: {e}')
-
-    return out
-
-
-# ══════════════════════════════════════════════════════════════
-# 純數學工具(不需要網路,兩邊共用)
+# (已退役 2026-08-05) 總經指南針三指標 fetcher — 隨 🧭 指南針 UI 一併移除。
+#   L3 元件 → L2 facade → 本 L1 fetcher 整條鏈 production 0 consumer,
+#   依 `PROCESS.md §4` 0-consumer 條款刪除;三個讀數在 🎯 短線雷達都有現成燈號
+#   (services/risk_radar.py 的 vix_level / yield_10y_shock / spx_trend_break)。
+#   回退:git history 保有完整實作。
+#
+# (原本這下面還有一條「純數學工具」的分節橫幅,但 v19.205 B1 拆檔時內容已全部
+#  搬到 `repositories/macro/math_utils.py`,橫幅本身標的是空的 —— 一併清掉,
+#  免得下一個人以為這裡還有東西沒讀到。)
 # ══════════════════════════════════════════════════════════════

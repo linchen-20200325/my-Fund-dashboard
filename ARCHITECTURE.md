@@ -150,7 +150,7 @@ my-Fund-dashboard/
 │   ├── components/
 │   │   ├── macro_card.py / macro_card_edu.py
 │   │   ├── mk_dashboard.py / mk_clock.py
-│   │   ├── macro_compass.py        # 抽出 macro compass(C3)
+│   │   ├── macro_compass_top.py(已退役,待 git rm)
 │   │   └── (其他 component)
 │   └── helpers/
 │       ├── session.py
@@ -1045,22 +1045,55 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 ---
 
-## §6 Session State Schema（v10.0）
+## §6 Session State Schema（2026-08-07 重新查證）
 
-| Key | 型別 | 預設值 | 寫入方 | 讀取方 |
-|-----|------|--------|--------|--------|
-| `macro_done` | `bool` | `False` | Tab1 | Tab1 防重複 |
-| `indicators` | `dict[str, dict]` | `{}` | Tab1 | Tab2/3/5/AI |
-| `phase_info` | `dict` | `{}` | Tab1 | Tab2/3/AI |
-| `oas_z_score` | `dict` | `{}` | Tab1 **(v10)** | Tab1/2/AI |
-| `macro_last_update` | `datetime\|None` | `None` | Tab1 | Sidebar |
-| `macro_ai` | `str` | `""` | Tab1 AI 按鈕 | Tab1 渲染 |
-| `current_fund` | `dict\|None` | `None` | Tab2 | Tab2/Tab5 |
-| `fund_data` | `dict\|None` | `None` | Tab2 | Tab2 |
-| `portfolio_funds` | `list[dict]` | `[]` | Tab3 | Tab3/Tab5 |
-| `news_items` | `list[dict]` | `[]` | Tab1 RSS | Tab1/AI |
-| `systemic_risk_data` | `dict\|None` | `None` | Tab1 | Tab1 警示卡 |
-| `event_alerts` | `list[dict]` | `[]` | Tab1/2 **(v10)** | Tab1/2 警報卡 |
-| `data_registry` | `dict` | `{}` | `_update_data_registry()` | Tab5 |
-| `stale_indicators` | `list[str]` | `[]` | Tab5 **(v10)** | AI Prompt 注入 |
-| `api_latency_log` | `list[dict]` | `[]` | Tab1/Tab5 | Tab5 延遲圖 |
+**這張表存在的唯一理由**：改某個 key 的 schema 時，能一眼看出**還有誰會受影響**。
+所以收錄原則是：
+
+- ✅ **只收「跨 Tab 讀寫」的 key** —— 在 A 分頁（或共用 helper）寫入、在 B 分頁被讀。
+  這種才會出現「只改了寫入方，另一頁靜默失準」。
+- ❌ **不收單一分頁自用的暫存 key**（例：`tdcc_results` 只在個基深掘內寫→讀、
+  `phase_history` / `prev_phase` 只在市場定調載入流程裡用）。全部列上去會讓表變成
+  一份沒人維護的清單，反而看不出哪些是真的有跨頁風險。
+- 預設值一律以 `ui/helpers/session.py::INITIAL_SESSION_STATE` 為 SSOT，本表不再抄一份
+  （抄了就會漂移）。表內只記「誰寫、誰讀」。
+
+分頁代號依 `app.py` 決策動線（v19.405 的 6 分頁）：**①市場定調 / ②組合健診 /
+📦批次分析 / ③個基深掘 / ④配置&帳本 / ⑤參考·診斷（資料診斷＋說明書）**。
+
+| Key | 型別 | 寫入方 | 讀取方（跨分頁） |
+|-----|------|--------|------------------|
+| `macro_done` | `bool` | ① `ui/tab1_macro.py:945,1022`；⑤ `ui/tab5_data_guard.py:161`（重置為 False） | ① `tab1_macro.py:1060`；③ `tab2_single_fund.py:613`；`ui/helpers/macro/linkage.py:29`；`ui/helpers/io/freshness.py:162` |
+| `indicators` | `dict[str, dict]` | ① `ui/tab1_macro.py:1019` | ① `tab1_macro.py:341,1061`；②經 `ui/helpers/macro/helpers.py:110`；③ `tab2_single_fund.py:55`；④ `tab3_portfolio.py:81`、`tab3_t7_ledger.py:67,2806`；⑤ `tab5_data_guard.py:164,672,768`；`app.py:126`；`ui/helpers/io/data_registry.py:244` |
+| `phase_info` | `dict` | ① `ui/tab1_macro.py:1021` | ① `tab1_macro.py:1007,1063`；② `tab_fund_grp_health.py:135,718,806` + `ui/helpers/fund_grp_health/{signals,rotation,regime_section}.py`；📦 `tab_batch_analysis.py:134`；③ `tab2_single_fund.py:613`；④ `tab3_t7_ledger.py:2805`；`ui/helpers/macro/linkage.py:32` |
+| `portfolio_funds` | `list[dict]` | ④ `tab3_portfolio.py:135,1536,2073,2221`、`tab3_t7_ledger.py:1206`；`ui/helpers/portfolio/load.py:219,223`、`linkage.py:93`；`ui/helpers/cloud_io.py:287`；`ui/helpers/io/data_registry.py:54` | ① `tab1_macro.py:732`（逐檔行動建議）、`tab1_macro_longterm.py:289`、`tab1_macro_inflection.py:198`；② `tab_fund_grp_health.py:160`；③ 經 `ui/helpers/portfolio/linkage.py:28`（`tab2_single_fund.py:598` 單檔↔組合聯動）；④ 全檔多處；⑤ `tab5_data_guard.py:167,1029`；`ui/helpers/io/data_registry.py:315,675`、`freshness.py:167`、`json_backup.py:23` |
+| `news_items` | `list[dict]` | ① `ui/tab1_macro.py:1036` | ① `tab1_macro.py:1143`、`tab1_macro_longterm.py:349`、`tab1_macro_ai.py:74`；③ `tab2_single_fund.py:2389`；④ `tab3_portfolio.py:2776`；⑤ `tab5_data_guard.py:165`；`ui/helpers/io/data_registry.py:478` |
+| `systemic_risk_data` | `dict\|None` | ① `ui/tab1_macro.py:1039,1046` | ① `tab1_macro.py:1222`、`tab1_macro_ai.py:73`；`ui/helpers/macro/linkage.py:47` |
+| `macro_last_update` | `datetime\|None` | ① `ui/tab1_macro.py:1023` | ① `tab1_macro.py:911,1274`；Sidebar `ui/sidebar.py:43`；`ui/helpers/io/freshness.py:150` |
+| `fund_data` | `dict\|None` | ③ `ui/tab2_single_fund.py:268` | ③ `tab2_single_fund.py:336`；⑤ `tab5_data_guard.py:166,1031`；`ui/helpers/io/data_registry.py:282,672`、`freshness.py:183` |
+| `data_registry` | `dict` | `ui/helpers/io/data_registry.py:711`（`_update_data_registry()`，由 `app.py:265` / ①③④ 觸發） | ⑤ `tab5_data_guard.py:387,1446` |
+| `api_latency_log` | `list[dict]` | ① `ui/tab1_macro.py:1034`；⑤ `tab5_data_guard.py:711` | ⑤ `tab5_data_guard.py:724` |
+| `portfolio_core_pct` | `int`（%） | ④ `ui/tab3_portfolio.py:2298`（⚙️ 組合設定 slider） | ②＋④ 一律經 SSOT `ui/helpers/portfolio/allocation.py:46 CORE_TARGET_SESSION_KEY`（核心/衛星目標偏差全站唯一真相） |
+| `t7_ledgers` | `dict[pk, Ledger]` | ④ `ui/tab3_t7_ledger.py:228,235,296,372,447,628,782,910`；`ui/helpers/cloud_io.py:310,397` | ④ 同檔多處；`ui/helpers/cloud_io.py:48,142,194,419`；`repositories/snapshot_repository.py:119,227`（Sheet 往返） |
+| `policy_sheet_id` | `str` | Sidebar `ui/sidebar.py:224`；④ `tab3_portfolio.py:703,831` | ④ `tab3_portfolio.py:545,1009,2007`、`tab3_t7_ledger.py:172,198,242,307,484,819` |
+| `policies_df` / `policy_tabs` | `DataFrame` / `list[str]` | `ui/helpers/cloud_io.py:244,248,369,375`；④ `tab3_portfolio.py:2078`、`tab3_t7_ledger.py:873` | ④ `tab3_portfolio.py:1207,1911` |
+| `_macro_ind` | `dict` | ① `ui/tab1_macro.py:1062` | ⑤ 說明書 `ui/tab6_manual.py:791` |
+| `_macro_23items` | `dict` | ⑤ 說明書 `ui/tab6_manual.py:959` | ① `ui/tab1_macro_ai.py:239` ⚠️ **反向依賴（⑤ → ①）**：說明書算完才寫，市場定調的 AI 摘要才讀得到 |
+| `_macro_hot_money` | `dict` | `ui/hot_money.py:129,189` | ① `tab1_macro_ai.py`、`tab1_macro_longterm.py:268`；⑤ `tab5_data_guard.py:340`；`ui/helpers/io/data_registry.py:387` |
+
+**同分頁內的 stash 不列表**：`_macro_liquidity`（`tab1_macro_radar.py:221` → `tab1_macro_ai.py`）、
+`_macro_capital_line`（`tab1_macro_longterm.py:332` → 同上）、`_macro_inv_backtest`
+（`tab1_macro_inflection.py:484` → 同上）三者的寫入與讀取都在①內部，改 schema 不會波及其他分頁。
+`ui/tab1_macro_ai.py` 讀了哪些 stash、每個有沒有寫入端，由
+`tests/test_tab1_macro.py::test_every_declared_section_has_a_real_producer` 用 AST 守住。
+
+**已從本表移除的幽靈 key（2026-08-07 逐一 grep 複驗）**：
+
+| 舊 key | 查證結果 |
+|---|---|
+| `stale_indicators` | 全 repo `.py` **0 命中**，只存在於本文件。原記載「Tab5 寫、AI Prompt 讀」兩端皆不存在。 |
+| `oas_z_score` | 同上 **0 命中**。`calc_oas_z_score` 函式本身也查無定義（本文件 §5 的對應條目一併過期）。 |
+| `event_alerts` | 同上 **0 命中**。 |
+| `macro_ai` / `mj_fund_data` | 只出現在 `ui/helpers/session.py` 的初始值字典，**0 寫入、0 讀取**。AI 結果現在存在 `f"{tab_key}_ai_struct"`（`ui/helpers/ai_summary.py:59`）。 |
+| `current_fund` | **有讀無寫**：`tab5_data_guard.py:166,1031` 與 `ui/helpers/io/data_registry.py:669` 讀它，但全 repo 查無寫入端（`tab5_data_guard.py:1030` 的註解「組合基金寫入 current_fund」已過期）。三處都有 `or fund_data` 退路，故不影響畫面，但屬 `PROCESS.md §4` 的 0-producer 型態，待處置。 |
+| `composite_score` | **有讀無寫**：`ui/tab1_macro_ai.py:72` 讀它餵 AI 摘要的「綜合分數」，全 repo 查無寫入端 → 該欄位恆為 `—`。① 算好的分數在 `tab1_macro.py:1151 _comp_score`（區域變數，未 stash）。待處置。 |

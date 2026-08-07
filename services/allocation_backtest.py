@@ -465,19 +465,15 @@ def backtest_allocations(nav_by_code: dict, ccy_by_code: dict, fx_series=None, *
     actions = current_actions_from_signals(results[winner]["final_signals"],
                                            results[winner]["final_weights"])
 
-    # 參考:各檔「當前 淨值×匯率」現行方向 2D 訊號(= 已上線 live 邏輯,取自 S1 最後再平衡日),
-    # 與 winner 無關,永遠可看 —— 讓 user 不論 winner 是誰都能看到熟悉的買/賣/觀望訊號。
-    _live = results["S1"]["final_signals"] or {}
-    current_signal_snapshot = {
-        c: {"tier": s.get("tier"), "nav_level": s.get("nav_level"),
-            "fx_label": s.get("fx_label"), "sigma_rank": s.get("sigma_rank")}
-        for c, s in _live.items()
-    }
+    # (2026-08-07 移除)原本另外回傳一份「各檔當前 2D 訊號」快照給回測區的 expander。
+    # 該 expander 已下架,production 0 consumer;且它取自 S1 最後再平衡日,與健診大表的
+    # live 值是**兩個不同時點**的同名數字,同頁並列本身就是矛盾來源。
+    # 依 `PROCESS.md §4` 0-consumer 條款刪除,不留一個沒人讀的側車欄位。
+    # 需要 live 訊號請直接看健診大表(單一真相);歷史訊號在 results[sid]["final_signals"]。
 
     return {
         "ok": True, "reason": None, "results": results, "ranking": ranking, "winner": winner,
         "verdict_s1_vs_s2": verdict, "actions": actions,
-        "current_signal_snapshot": current_signal_snapshot,
         "included": included, "excluded": excluded,
         "window": {"start": str(twd_df.index[0].date()), "end": str(twd_df.index[-1].date()),
                    "n_days": _n},

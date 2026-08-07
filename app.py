@@ -172,13 +172,12 @@ render_sidebar(
 
 
 # ══════════════════════════════════════════════════════
-# 🧭 總經指南針 (Top-Down Macro)
-#   v19.207 C3  — 拆至 ui/components/macro_compass_top.py
-#   v19.302     — 由 app.py 移入 tab_macro（僅總經 Tab 顯示，不跨 Tab 污染）
-#   v19.430     — **本檔不再 import / 呼叫**。改由 ui/tab1_macro.py 在
-#                 「🔎 詳細資料與說明」區開頭 lazy import 呼叫（user 拍板 A 案：
-#                 原始值卡屬「依據」層級，不該壓在總表上方）。
-#                 此處僅留沿革，import 已移除以免 F401。
+# 🧭 總經指南針 (Top-Down Macro) — **整條鏈已於 2026-08-05 移除**。
+#   沿革:v19.207 抽成獨立元件 → v19.302 由 app.py 移入總經 Tab →
+#         v19.430 再下移到「🔎 詳細資料與說明」區 → 2026-08-05 稽核判定
+#         三張卡與 🎯 短線雷達重複、且需再按一次自己的抓取鈕才有資料,整塊刪除。
+#   L3 元件 / L2 facade / L1 fetcher 三層一併退役(PROCESS.md §4 0-consumer 條款)。
+#   本檔沒有殘留 import 或呼叫;回退方式見 git history。
 # ══════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════
@@ -207,13 +206,8 @@ with tab_macro:
     # 整體失敗不連坐其他分頁」；內層 tab1_macro._safe_section 再做 section 級細粒度
     # 隔離。非靜默吞：friendly_error 顯式顯示 + stderr 鏡射進 Cloud log + traceback。
     #
-    # v19.430(user 2026-08-05 拍板 A 案)— 合併 v19.429 時的衝突解法:
-    # 本處**不再**呼叫 `render_macro_compass()`。它已移入 `ui/tab1_macro.py` 的
-    # 「🔎 詳細資料與說明」區(長期座標之後)。原因:它渲染在 `render_macro_tab()`
-    # **之前**,等於畫面最上方永遠是三張原始值卡(VIX / 10Y / S&P 500)+ 三條折線,
-    # 壓在總表上面。原始值屬「依據」層級不是結論,與 user 指定的「最重要的總表放
-    # 最上方,下方放詳細資料與說明」相衝突。
-    # ⚠️ 對應的 module-level import 亦已移除 —— 在此還原呼叫會是 NameError。
+    # 🧭 總經指南針:整條鏈已於 2026-08-05 移除(見本檔上方沿革區塊)。此處不再有
+    # 任何指南針呼叫,元件模組本身也已退役 —— 在此還原呼叫會直接 ImportError。
     try:
         # v18.127 B-C.5: 內容已搬到 ui/tab1_macro.py
         render_macro_tab()

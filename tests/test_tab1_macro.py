@@ -72,16 +72,76 @@ def _mock_streamlit(monkeypatch, session_state: dict):
 
 
 def test_snapshot_sections_include_all_new_v255():
-    """v18.255：sections 清單包含 9 個新章節 + 校準健檢 + 既有 5 章節 + 新聞時事。"""
+    """v18.255：sections 清單包含新章節 + 校準健檢 + 既有 5 章節 + 新聞時事。
+
+    2026-08-07：移除 4 個**上游零寫入端**的章節(景氣循環羅盤 / 總經因果鏈 /
+    細項燈號回測 / 變數重要性)。它們不是「這次剛好沒資料」而是「永遠不會有資料」,
+    列在目錄裡只會讓 AI 每次多產幾段「這項目前沒資料」。判準與漂移鎖見下一條測試。
+    """
     import fund_fetcher  # noqa: F401
     from ui.tab1_macro_ai import _build_macro_ai_snapshot
     _, _, sections = _build_macro_ai_snapshot({}, {}, {}, {}, [])
-    must_have = ["景氣位階與分數", "校準健檢", "流動性壓力", "景氣循環羅盤",
+    must_have = ["景氣位階與分數", "校準健檢", "流動性壓力",
                  "23 項加扣分明細", "資本防線", "倒掛翻正歷史回測",
-                 "總經因果鏈", "細項燈號回測", "變數重要性",
                  "台股熱錢三角交叉", "新聞時事"]
     for sec in must_have:
         assert sec in sections, f"sections 缺 {sec}"
+
+
+def test_every_declared_section_has_a_real_producer():
+    """宣稱的章節數不得高於實際做得出來的章節數(§1 不誇大)。
+
+    做法:掃 `_build_macro_ai_snapshot` 這支函式,取它從 session_state 讀的每個 key,
+    再去 `ui/` 全樹找有沒有人寫這個 key。**有讀無寫** = 那一節永遠是空的,
+    卻仍列在 sections 目錄裡要 AI 逐節輸出 → 宣稱 N 節、實際做得出來的更少。
+    走 AST(讀 `st.session_state.get(...)` 的字面引數 + 找 Subscript 寫入),
+    不用 regex,免得掃到說明文字裡的同名字串。
+
+    **範圍**:只管 `_macro_*` 這一族 stash。`_cal_*`(校準健檢)刻意不納入 ——
+    那兩張校準卡是 v19.39 PR1C **主動 archive**(UI 降噪)且明文保留 stash 介面契約,
+    本檔另有測試餵它們、守它們,屬「登記在案的暫停」而非漏接。若日後那個契約也
+    決定不留,再一併收進本測試的範圍。
+
+    **修正前會不會紅**:會 —— 修正前有 4 個 `_macro_*` 讀取端零寫入者。
+    """
+    import ast
+    import pathlib
+    _root = pathlib.Path(__file__).parents[1]
+    _ai_src = (_root / "ui" / "tab1_macro_ai.py").read_text(encoding="utf-8")
+
+    # (a) 這支函式讀了哪些 `_macro_*` stash
+    _read: set[str] = set()
+    for _n in ast.walk(ast.parse(_ai_src)):
+        if (isinstance(_n, ast.Call)
+                and isinstance(_n.func, ast.Attribute) and _n.func.attr == "get"
+                and _n.args and isinstance(_n.args[0], ast.Constant)
+                and isinstance(_n.args[0].value, str)
+                and _n.args[0].value.startswith("_macro_")):
+            _read.add(_n.args[0].value)
+    assert _read, "抓不到任何 stash 讀取,結構已變請更新本測試"
+
+    # (b) ui/ 全樹誰寫了這些 key(`st.session_state["..."] = ...`)
+    _written: set[str] = set()
+    for _p in (_root / "ui").rglob("*.py"):
+        try:
+            _t = ast.parse(_p.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for _n in ast.walk(_t):
+            _targets = []
+            if isinstance(_n, ast.Assign):
+                _targets = _n.targets
+            elif isinstance(_n, (ast.AugAssign, ast.AnnAssign)):
+                _targets = [_n.target]
+            for _tg in _targets:
+                if (isinstance(_tg, ast.Subscript)
+                        and isinstance(_tg.slice, ast.Constant)
+                        and isinstance(_tg.slice.value, str)):
+                    _written.add(_tg.slice.value)
+
+    _orphan = sorted(_read - _written)
+    assert not _orphan, (
+        f"AI 摘要讀了沒人寫的 stash(對應章節永遠空):{_orphan}")
 
 
 def test_snapshot_reads_liquidity_stash(monkeypatch):

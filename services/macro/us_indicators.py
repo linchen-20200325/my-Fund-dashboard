@@ -1,4 +1,4 @@
-"""services/macro/us_indicators.py — v19.199 P1-7 美國指標 + Phase + Regime + TW TPI + Systemic Risk。
+"""services/macro/us_indicators.py — v19.199 P1-7 美國指標 + Phase + Regime + Systemic Risk。
 
 從 macro_service 主檔抽出(原 line 211-1758)。
 """
@@ -50,7 +50,6 @@ from services.macro._helpers import (  # noqa: F401
     _HY_YELLOW, _MB_VIX_RED, _MB_VIX_YELLOW,
     SAHM_RECESSION_THRESHOLD, CFNAI_RECESSION_THRESHOLD,
     RECESSION_LOGIT_COEF_SPREAD, RECESSION_LOGIT_COEF_INTERCEPT,
-    TPI_BUSINESS_WEIGHT_RATIO, TPI_FINANCIAL_WEIGHT_RATIO, TPI_MONETARY_WEIGHT_RATIO,
     _fred, _yf_s, _trend, _safe_last, _spread_series, recession_probability,
 )
 from services.macro._helpers import (  # noqa: F401

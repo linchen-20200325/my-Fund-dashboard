@@ -15,9 +15,6 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     CFNAI_RECESSION_THRESHOLD,
     RECESSION_LOGIT_COEF_SPREAD,
     RECESSION_LOGIT_COEF_INTERCEPT,
-    TPI_BUSINESS_WEIGHT_RATIO,
-    TPI_FINANCIAL_WEIGHT_RATIO,
-    TPI_MONETARY_WEIGHT_RATIO,
 )
 # C2-D v19.160 — alert 也對齊 SSOT(全站 22/30 收尾)
 from shared.macro_buckets import _VIX_RED as _MB_VIX_RED, _VIX_YELLOW as _MB_VIX_YELLOW
@@ -100,7 +97,7 @@ _TAB1_TTL_CACHE_NAMES = frozenset({
     "fetch_fred",                          # repositories/macro_repository.py
     "fetch_yf_close",                      # repositories/macro_repository.py
     "fetch_defillama_stablecoin_mcap",     # repositories/macro_repository.py
-    "fetch_macro_compass",                 # repositories/macro_repository.py
+    # (2026-08-05 移除指南針 fetcher 名:對應 L1 函式已刪,留字串名 = 永遠清不到的空號)
     "fetch_ndc_signal_history",            # services/macro_tw_local_fetch.py
     "fetch_tw_pmi_local",                  # services/macro_tw_local_fetch.py
     "fetch_tw_export_yoy",                 # services/macro_tw_local_fetch.py

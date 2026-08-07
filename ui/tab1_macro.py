@@ -1483,8 +1483,9 @@ def render_macro_tab() -> None:
             #   (2) 它是**獨立按鈕**(`_compass_fetch_btn`)+ 先 `cache_clear()` 再抓,
             #       使用者剛按完「載入總經資料」還得再按一次;沒按時整塊只是空框。
             #       且三條路徑各自抓 VIX,畫面可能同時出現三個不同的 VIX 值。
-            # 依 `PROCESS.md §4` 0-consumer 條款,連 `ui/components/macro_compass_top.py`
-            # 一起清(見該檔;實體刪檔與其下游 L2/L1 的 0-consumer 處置見交付報告)。
+            # 依 `PROCESS.md §4` 0-consumer 條款,L3 元件 / L2 facade / L1 fetcher
+            # 三層已於 2026-08-07 一併退役(元件與 facade 模組現為待 git rm 的
+            # fail-loud 佔位,L1 fetcher 實體刪除)。
             # 回退方式:git history 有原本的呼叫與元件。
             # ══════════════════════════════════════════════════════════
 

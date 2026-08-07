@@ -224,18 +224,11 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
                 lines.append(f"  - 主要推升/壓低因子：{_tc}")
             if _liq.get("verdict"):
                 lines.append(f"  - 判讀：{str(_liq['verdict'])[:200]}")
-        _comp = st.session_state.get("_macro_compass")
-        if isinstance(_comp, dict) and _comp:
-            _sahm_v = _comp.get("sahm_latest")
-            _adl_v = _comp.get("adl_latest")
-            lines.append(
-                f"- 景氣循環羅盤：薩姆規則={_sahm_v:+.2f}pp" if _sahm_v is not None
-                else "- 景氣循環羅盤：薩姆規則=—"
-            )
-            if _adl_v is not None:
-                lines[-1] += f"、RSP/SPY 廣度={_adl_v:+.2f}%MoM"
-            if _comp.get("verdict"):
-                lines.append(f"  - 研判：{_comp['verdict']}")
+        # (2026-08-07 移除)原本這裡還讀一份「景氣循環羅盤」stash。全 repo 查不到
+        # 任何寫入端(唯一的寫入者隨 🧭 總經指南針一併下架),所以該段永遠取不到值、
+        # 章節永遠是空的,卻仍掛在下方 sections 目錄裡要 AI 逐節輸出 —— 等於每次都
+        # 產出一節「這項目前沒資料」的固定噪音,並讓節數宣稱高於實際可產出的內容。
+        # 依 `PROCESS.md §4` 0-consumer 條款:讀取端與章節目錄一起清。
         _items = st.session_state.get("_macro_23items")
         if isinstance(_items, dict) and _items:
             lines.append(
@@ -281,35 +274,11 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
                     f"  - 18M 中位 {_m18:+.2f}%；歷史意義：翻正為衰退末期，"
                     f"屬股市底部累積區（1990/2000/2008/2020）"
                 )
-        _sk = st.session_state.get("_macro_sankey")
-        if isinstance(_sk, dict) and _sk and _sk.get("ok"):
-            lines.append(
-                f"- 總經因果鏈 Sankey：{_sk.get('n_strong_links', 0)} 條強相關因果路徑"
-                f"（|corr|≥0.5）"
-            )
-            if _sk.get("top_strong"):
-                _ts = "、".join(
-                    f"{s['src']}→{s['tgt']}({s['corr']:+.2f})"
-                    for s in _sk["top_strong"])
-                lines.append(f"  - 強傳導 Top3：{_ts}")
-        _sbt = st.session_state.get("_macro_subsector_bt")
-        if isinstance(_sbt, dict) and _sbt and _sbt.get("alerts"):
-            lines.append(
-                f"- 細項燈號歷史回測（target={_sbt.get('target')}、"
-                f"forward={_sbt.get('forward_months')}M）："
-            )
-            for _a in _sbt["alerts"][:3]:
-                lines.append(f"  - {str(_a)[:120]}")
-        _vi = st.session_state.get("_macro_var_importance")
-        if isinstance(_vi, dict) and _vi and _vi.get("top3"):
-            _top3_str = "、".join(
-                f"{r['name']}(|corr|={r['abs_corr']:.2f}, "
-                f"{'同向' if r.get('direction') == '+' else '反向'})"
-                for r in _vi["top3"])
-            lines.append(
-                f"- 變數重要性 Top3（預測 {_vi.get('target')} 在 {_vi.get('lag_months')}M 後變化）："
-                f"{_top3_str}"
-            )
+        # (2026-08-07 一併移除)同上,另有三段讀取端全站查無寫入者:因果鏈 Sankey /
+        # 細項燈號回測 / 變數重要性。它們與指南針屬同一種缺陷(有讀無寫),不是
+        # 「這次剛好沒資料」而是「永遠不會有資料」,故讀取端與章節目錄一併清。
+        # 判準見 tests/test_tab1_macro.py 的漂移鎖(讀了沒人寫 → 紅)。
+        # 若日後把對應產生端接回來,再連同章節目錄一起加回。
         _hm = st.session_state.get("_macro_hot_money")
         if isinstance(_hm, dict) and _hm:
             # v19.142：staleness gate — 熱錢監測在 v19.47 起被收進 📦 ARCHIVED expander,
@@ -346,11 +315,17 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
         pass   # smoke-allow-pass — 章節資料缺失不阻斷 AI 摘要
     headlines = [str(n.get("title", "") or n.get("headline", ""))
                  for n in (news or []) if isinstance(n, dict)][:8]
+    # 章節目錄 = 交給 AI 逐節輸出的維度清單(prompt 端會要求「缺資料就老實說沒資料」,
+    # 所以這裡刻意列出「這個 Tab 有哪些維度」而非「這次剛好有值的維度」—— 見
+    # tests/test_tab1_macro.py 對此設計的鎖)。
+    # 但**沒有寫入端的維度不算維度**:它不是「這次沒資料」,是永遠不會有資料。
+    # 2026-08-07 依此判準移除 4 節(景氣循環羅盤 / 總經因果鏈 / 細項燈號回測 /
+    # 變數重要性)—— 上游 stash 全站零寫入端,列進來只會讓 AI 每次多產 4 段
+    # 「這項目前沒資料」,並讓 caption 的節數高於實際做得出來的內容。
     sections = ["景氣位階與分數", "資產配置建議", "關鍵總經指標", "系統性風險",
                 "領先指標與產業燈號", "校準健檢",
-                "流動性壓力", "景氣循環羅盤", "23 項加扣分明細", "資本防線",
-                "倒掛翻正歷史回測", "總經因果鏈", "細項燈號回測",
-                "變數重要性", "台股熱錢三角交叉",
+                "流動性壓力", "23 項加扣分明細", "資本防線",
+                "倒掛翻正歷史回測", "台股熱錢三角交叉",
                 "新聞時事"]
     return "\n".join(lines), headlines, sections
 

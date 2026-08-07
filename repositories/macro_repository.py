@@ -1,7 +1,7 @@
 """v19.205 B1 shim — repositories/macro_repository.py 已拆 repositories/macro/ 子套件。
 
 原 1078 LOC god module(FRED + Yahoo Finance + China + DefiLlama + AAII + ISM PMI +
-macro_compass + 純數學工具)拆 5 子檔:
+純數學工具)拆 5 子檔:
 - repositories/macro/fred.py        (~320 LOC)
 - repositories/macro/yf.py           (~80 LOC)
 - repositories/macro/china.py        (~60 LOC)

@@ -222,11 +222,22 @@
 }
 
 # portfolio_df (Google Sheet 政策)
+# ⚠️ 2026-08-06 更正:本條原本寫的是 {fund_code, weight ∈[0,1], snapshot_at} ——
+#    那個 schema **從未存在**。實際 Sheet 沒有 `weight` 也沒有 `snapshot_at`
+#    (grep `repositories/policy/` 全套件 weight 0 命中),金額欄是 `invest_twd`。
+#    照舊條文「修正」實作 = 把對的東西改壞。Evidence:
+#    repositories/policy/_helpers.py + repositories/policy/v2.py:502
+#    + docs/POLICY_SHEETS_SETUP.md(9 欄完整 schema)
 {
+    "policy_id":    str,                      # ┐ 複合主鍵
+    "fund_url":     str,                      # ┘ (policy_id, fund_url)
     "fund_code":    str (6 digits or alpha-prefixed insurance code),
-    "weight":       float ∈ [0,1] (NOT 0~100 整數),
-    "snapshot_at":  datetime,
+    "invest_twd":   int (TWD **金額**,非權重;解析失敗須顯式回報不可靜默歸零),
+    "policy_tier":  str ∈ {"core","satellite",""} (選填,大小寫不分;空 → 退基金名啟發),
+    # 其餘欄位見 docs/POLICY_SHEETS_SETUP.md
 }
+# 權重是**算出來的**不是存的:核心/衛星比例 = Σ invest_twd 加權
+# (ui/helpers/portfolio/allocation.py),Sheet 端不存任何 0~1 權重。
 
 # macro_df (FRED / FinMind / CBC 通用)
 {"date": ..., "value": float, "source": str, "as_of": date}
@@ -404,7 +415,12 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 - **MoneyDJ 子網域 403**:Insurance/TCB/Chubb 子域故障 → fallback chain(yp010000 → yp010001 → TDCC → FundClear → Cnyes)須完整(evidence: repositories/moneydj_fetcher.py:36-108)
 - **FRED 月頻指標未發布**:next_release_date 未到 → 用上期值帶 `as_of` 標籤,**禁止**填當期日期
 - **proxy 失效 / 直連 / 407**:`infra/proxy.py` NAS Squid → 直連 → fail 降級鏈
-- **Google Sheet 政策衝突**:同 fund_code 多筆 weight → 取最新 snapshot,**禁止**平均
+- **Google Sheet 政策衝突**:主鍵是 **`(policy_id, fund_url)` 複合鍵**,同一保單同一檔基金
+  分多筆買 → `invest_twd` **加總**(evidence: `repositories/policy/v1.py:209,236-238`)。
+  ⚠️ 2026-08-06 更正:本條原本寫「同 `fund_code` 多筆 weight → **取最新 snapshot**,禁止平均」——
+  三處都與實作不符:(a) 單鍵 `fund_code` 會讓同檔基金在不同保單間互相覆蓋,複合鍵是 v18.56
+  修 bug 修出來的;(b) schema 沒有 `weight`(見 §3.1 更正);(c) schema **沒有 `snapshot_at`**,
+  「取最新」在現行 schema 下物理上做不到。加總才是正確業務語意,照舊條文改會把 bug fix 改回去。
 
 ---
 

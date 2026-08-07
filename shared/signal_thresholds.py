@@ -121,11 +121,11 @@ LIQUIDITY_CARRY_WEIGHT_RATIO: float = 0.3
 LIQUIDITY_MOVE_WEIGHT_RATIO: float = 0.3
 # liq_score = z_xccy * XCCY_W + z_carry * CARRY_W + z_move * MOVE_W,sum = 1.0
 
-# ── TPI (Taiwan Phase Indicator) 加權(macro_service.py:1343)──────
-TPI_BUSINESS_WEIGHT_RATIO: float = 0.4
-TPI_FINANCIAL_WEIGHT_RATIO: float = 0.3
-TPI_MONETARY_WEIGHT_RATIO: float = 0.3
-# tpi = z_b * B_W + z_f * F_W + z_m * M_W,sum = 1.0
+# ── (2026-08-07 移除)台股 TPI 三權重常數 ──────────────────────────
+# 說明書章節下架後全站零計算、零渲染,只剩「定義 → import → re-export」三處;
+# 且 business / financial / monetary 的切法與原章節寫的 Breadth / FII / M1B
+# 語意不符,日後若真要實作也不會沿用這組公式。依 `PROCESS.md §4` 0-consumer
+# 條款刪除,不留一組指向不存在功能的常數。
 
 # ── σ verdict cutoffs(macro_explain.py:64-76,§4.1 sign convention)
 SIGMA_VERY_HIGH_CUTOFF: float = 1.5

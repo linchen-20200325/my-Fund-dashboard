@@ -89,15 +89,72 @@ def _with_quota_retry(call, *args, **kwargs):
 # ──────────────────────────────────────────────────────────────────────
 # 連線：lazy import，避免測試環境/未安裝套件時 import 失敗
 # ──────────────────────────────────────────────────────────────────────
-def get_gspread_client(credentials: dict) -> Any:
-    """
-    用 Service Account JSON dict 換一個已授權的 gspread Client。
+def _coerce_sa_credentials(credentials: Any) -> dict:
+    """把 secrets 讀到的 Service Account 憑證正規化成 dict。
 
-    credentials: 從 st.secrets["google_service_account"] 來的 dict（必含
-                 type / project_id / private_key / client_email 等欄位）
+    secrets 實務上會出現兩種寫法,兩種都要吃:
+      1. **TOML 表格**(建議):`[google_service_account]` 底下逐欄 → Mapping
+      2. **JSON 字串**:整份 service-account JSON 塞給一個 key → str
+
+    ⚠️ 本函式的所有錯誤訊息**不得帶出 credentials 內容**(裡面有 private_key)。
+       只講「形狀不對」與「該怎麼改」。
     """
-    if not isinstance(credentials, dict) or not credentials.get("client_email"):
-        raise PolicySheetError("Service Account credentials 缺 client_email 欄位")
+    import json as _json
+
+    if credentials is None or credentials == "":
+        raise PolicySheetError(
+            "找不到 Service Account 憑證 —— secrets 的 `google_service_account` 是空的。")
+
+    # 字串形狀先攔:`dict("...")` 對字串會拋 ValueError,那正是本次線上事故的來源。
+    if isinstance(credentials, str):
+        try:
+            _parsed = _json.loads(credentials)
+        except ValueError as e:
+            raise PolicySheetError(
+                "`google_service_account` 是字串,但不是合法 JSON。"
+                "建議改成 TOML 表格:第一行寫 `[google_service_account]`,"
+                "下面逐欄列 type / project_id / private_key / client_email 等;"
+                "private_key 用三引號並保留 \\n 換行。"
+            ) from e
+        if not isinstance(_parsed, dict):
+            raise PolicySheetError(
+                "`google_service_account` 解析後不是 JSON 物件,無法當成憑證。")
+        return _parsed
+
+    # 其餘一律交給 `dict()` —— 刻意**不用** `isinstance(..., Mapping)`:
+    # Streamlit 的 `st.secrets[...]` 回的是自家 AttrDict,是否註冊為
+    # `collections.abc.Mapping` 子類屬其內部實作、無公開契約。改用 isinstance
+    # 會讓「設定正確的 TOML 表格」使用者反而壞掉。呼叫端原本就是 `dict(...)`,
+    # 沿用同一條路 = 對既有正確設定零行為改變。
+    try:
+        return dict(credentials)
+    except (TypeError, ValueError) as e:
+        raise PolicySheetError(
+            f"`google_service_account` 的型別是 {type(credentials).__name__},"
+            "無法當成 Service Account 憑證 —— 請改成 TOML 表格 "
+            "`[google_service_account]`,或整份 service-account JSON 字串。"
+        ) from e
+
+
+def get_gspread_client(credentials: Any) -> Any:
+    """
+    用 Service Account 憑證換一個已授權的 gspread Client。
+
+    credentials: `st.secrets["google_service_account"]` 的原值。
+                 Mapping 或 JSON 字串皆可(見 `_coerce_sa_credentials`);
+                 必含 type / project_id / private_key / client_email 等欄位。
+
+    ⚠️ 為什麼形狀正規化要收在這裡(§1 Fail Loud):
+       呼叫端原本寫 `get_gspread_client(dict(_gsa_secret))` —— secrets 若是字串形狀,
+       `dict("...")` 會在**進入本函式之前**就拋 ValueError,而 Streamlit Cloud 為防洩密
+       會把例外訊息整段遮蔽,使用者只看到一個沒有任何線索的紅框、也不知道該去改哪裡。
+       收進來才給得出可行動的訊息,且訊息本身不含任何憑證內容。
+    """
+    creds_map = _coerce_sa_credentials(credentials)
+    if not creds_map.get("client_email"):
+        raise PolicySheetError(
+            "Service Account credentials 缺 client_email 欄位 —— "
+            "請確認貼進 secrets 的是完整的 service-account JSON(不是 OAuth client 的那份)。")
 
     try:
         import gspread  # type: ignore
@@ -108,7 +165,7 @@ def get_gspread_client(credentials: dict) -> Any:
         ) from e
 
     try:
-        creds = Credentials.from_service_account_info(dict(credentials), scopes=list(_SCOPES))
+        creds = Credentials.from_service_account_info(creds_map, scopes=list(_SCOPES))
         return gspread.authorize(creds)
     except Exception as e:
         raise PolicySheetError(f"Service Account 授權失敗：{e}") from e

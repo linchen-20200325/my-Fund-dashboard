@@ -30,8 +30,19 @@ def test_tab3_has_service_account_first_client_helper():
         "v19.302 的 _t3_sheet_client()(SA 優先決策 SSOT)不見了"
     )
     # 2) helper 優先 SA:先判 _gsa_secret,有就走 Service Account client
-    assert "if _gsa_secret:" in txt and "get_gspread_client(dict(_gsa_secret))" in txt, (
+    #
+    # ⚠️ 2026-08-06:原斷言釘死 `get_gspread_client(dict(_gsa_secret))`。那個 `dict()`
+    #    正是線上 ValueError 的來源 —— secrets 若把 service-account 寫成 JSON 字串,
+    #    `dict("...")` 會在進入 get_gspread_client **之前**就炸,而 Streamlit Cloud 會把
+    #    訊息整段遮蔽,使用者拿不到任何線索。形狀正規化已收進
+    #    `repositories/policy/_helpers._coerce_sa_credentials`,呼叫端改直接傳原值。
+    #    本條改釘「有沒有走 SA 分支」這個契約,不釘正規化寫在哪一層。
+    assert "if _gsa_secret:" in txt and "get_gspread_client(_gsa_secret)" in txt, (
         "_t3_sheet_client 應優先 Service Account(if _gsa_secret → get_gspread_client)"
+    )
+    assert "get_gspread_client(dict(" not in txt, (
+        "呼叫端又自己做 dict() 正規化了 —— secrets 是 JSON 字串時會在進入 "
+        "get_gspread_client 前就拋 ValueError,且訊息會被 Streamlit Cloud 遮蔽"
     )
 
 

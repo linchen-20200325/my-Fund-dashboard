@@ -69,6 +69,55 @@ def test_get_gspread_client_invalid_creds_raises():
 
 
 # ──────────────────────────────────────────────────────────────────────
+# 1b. get_gspread_client：secrets 的兩種寫法都要吃（2026-08-06 線上事故）
+#
+# 線上症狀：Tab⑤ 讀 Google Sheet 整個 tab 崩在 `ValueError`，而 Streamlit Cloud
+# 為防洩密把訊息整段遮蔽 → 使用者只看到紅框、零線索。根因是呼叫端寫
+# `get_gspread_client(dict(_gsa_secret))`，secrets 若是 JSON 字串，`dict("...")`
+# 在**進入本函式之前**就炸，函式自己的 client_email 防護根本來不及跑。
+# 同 repo 的 scripts/fetch_nav_cache.py 早就對同一份憑證用 json.loads —— 同一個
+# 東西兩種寫法，只有一條路有處理。
+# ──────────────────────────────────────────────────────────────────────
+_SA_MIN = {"type": "service_account", "client_email": "x@y.iam.gserviceaccount.com"}
+
+
+def test_get_gspread_client_accepts_json_string_form():
+    """**修正前必紅**（舊版對 str 走 `isinstance(dict)` → 報 client_email，
+    訊息完全指錯方向；而真正的 caller 更早就在 dict() 炸掉）。
+
+    這裡不驗證能不能真的授權（那要打 Google），只驗證它**認得這個形狀**：
+    錯誤訊息不得再是「缺 client_email」。
+    """
+    import json
+    with pytest.raises(PolicySheetError) as _ei:
+        get_gspread_client(json.dumps(_SA_MIN))
+    assert "client_email" not in str(_ei.value), (
+        "JSON 字串形狀被誤判成缺欄位 —— 訊息會把使用者指到錯的地方")
+
+
+@pytest.mark.parametrize("bad,hint", [
+    ("not json at all", "JSON"),
+    ('["a","b"]', "物件"),
+    (None, "空"),
+    ("", "空"),
+    (12345, "型別"),
+])
+def test_get_gspread_client_bad_shapes_say_how_to_fix(bad, hint):
+    """§1：形狀不對要講「該怎麼改」，不是丟一個 ValueError 讓平台遮掉。"""
+    with pytest.raises(PolicySheetError) as _ei:
+        get_gspread_client(bad)
+    assert hint in str(_ei.value)
+
+
+def test_get_gspread_client_never_echoes_the_private_key():
+    """錯誤訊息**不得**帶出憑證內容（private_key 會被寫進 log / 畫面）。"""
+    _leaky = '{"type":"service_account","private_key":"-----BEGIN PRIVATE KEY-----SEKRIT"}'
+    with pytest.raises(PolicySheetError) as _ei:
+        get_gspread_client(_leaky)
+    assert "SEKRIT" not in str(_ei.value) and "BEGIN PRIVATE KEY" not in str(_ei.value)
+
+
+# ──────────────────────────────────────────────────────────────────────
 # 2. load_policies：空表 → 空 DataFrame（含 8 欄）
 # ──────────────────────────────────────────────────────────────────────
 def test_load_policies_empty_returns_empty_df_with_schema():
