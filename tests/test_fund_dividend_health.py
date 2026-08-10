@@ -353,8 +353,10 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         fund = self._build_fund(s, divs)
         out = check_eating_principal_1y_mk(fund)  # 不可 raise(Bug 4 核心)
         assert isinstance(out, dict)
-        # v19.175:走業界 ret_1y_total 路徑;mk_simple 退居對照欄(_tr1y_meta)
-        assert "ret_1y_total" in (out.get("_tr1y_method") or "")
+        # v19.175:走業界「本站自算含息」路徑;mk_simple 退居對照欄(_tr1y_meta)
+        # 2026-08-10:來源標籤改白話,斷言改比對 SSOT 常數(等值比對比原子字串更嚴)
+        from services.fund_total_return import SRC_SELF_TOTAL
+        assert (out.get("_tr1y_method") or "").startswith(SRC_SELF_TOTAL)
         # 對照欄仍可算出 mk_simple_value
         assert out.get("_tr1y_meta") is not None
         assert "mk_simple_value" in out["_tr1y_meta"]
@@ -368,8 +370,9 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         fund = self._build_fund(nav, divs)
         out = check_eating_principal_1y_mk(fund)
         assert isinstance(out, dict)
-        # v19.175 業界路徑(metrics.ret_1y_total = 14.5 走 ret_1y_total)
-        assert "ret_1y_total" in (out.get("_tr1y_method") or "")
+        # v19.175 業界路徑(metrics.ret_1y_total = 14.5 走本站自算含息)
+        from services.fund_total_return import SRC_SELF_TOTAL
+        assert (out.get("_tr1y_method") or "").startswith(SRC_SELF_TOTAL)
 
     def test_falls_back_to_moneydj_series_when_top_none(self):
         """top-level None → 走 moneydj_raw["series"] fallback。

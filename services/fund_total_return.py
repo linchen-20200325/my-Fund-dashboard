@@ -17,6 +17,27 @@ precedence(最權威 → 次選):
 """
 from __future__ import annotations
 
+# ── 「1Y 來源」欄 / Tab2 KPI 卡的顯示值(SSOT;呼叫端與測試一律 import)────────
+# 2026-08-10 user 拍板:這些字串會**原樣印給使用者看**,不能是內部代號。
+# 原本印的是外站網頁代號、內部欄位名與內部版號,使用者完全無從判斷這個報酬率
+# 到底是「官方公布的」還是「本站自己推算的」—— 而那正是本欄唯一的用途(§2.2)。
+#
+# 規則同「Sharpe 來源」欄:官方值以「MoneyDJ 官方」開頭、自算值以「自算」開頭,
+# 括號裡補上口徑差異(含不含配息 / 樣本只有幾天)。可靠度由高到低即宣告順序。
+SRC_OFFICIAL = "MoneyDJ 官方"                      # 官方績效表現成數字,最可信
+SRC_SELF_RESTORED = "自算（還原含息淨值）"          # 官方沒給 → 用淨值 + 配息記錄還原
+SRC_PERF_UNLABELED = "績效表（來源未標註）"         # 有績效值但沒標來源 → 誠實說不知道(§1)
+SRC_SELF_TOTAL = "自算含息"                        # 短窗時 → f"{SRC_SELF_TOTAL}（僅 N 天窗口）"
+SRC_SELF_NAV_ONLY = "自算（僅淨值，不含配息）"
+SRC_SELF_ANNUALIZED = "自算（{days} 天資料外推年化）"   # 最不可靠的一層
+SRC_NONE = "—"
+
+# Tab2 吃本金 KPI 卡用:命中任一片語 = 「這個 1Y 是本站算的,且可能不足一整年」,
+# 該卡會把欄名從「1Y 含息報酬」改標成實際天數。涵蓋範圍**刻意**與改文案前一致:
+# 還原淨值法 / 自算含息 / 外推年化 三條會改標;SRC_SELF_NAV_ONLY 本身就是完整
+# 一年的淨值變化,不在此列(改文案不順手改行為)。
+LOCAL_WINDOW_SENSITIVE_HINTS = ("還原含息淨值", "自算含息", "外推年化")
+
 
 def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
     """從 fund object 取「1Y 含息報酬率(%)」+ 來源標籤。
@@ -54,9 +75,9 @@ def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
         v = pf.get("1Y")
         if v is not None:
             _ps = str(fund_obj.get("perf_source") or mj.get("perf_source") or "").lower()
-            src = ("wb01 (MoneyDJ 官方)" if _ps == "wb01"
-                   else "本地還原淨值法 (v18.71)" if _ps == "local_calc"
-                   else "perf['1Y']")
+            src = (SRC_OFFICIAL if _ps == "wb01"
+                   else SRC_SELF_RESTORED if _ps == "local_calc"
+                   else SRC_PERF_UNLABELED)
             return float(v), src
     except (TypeError, ValueError):
         pass
@@ -66,8 +87,8 @@ def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
         v = m.get("ret_1y_total")
         if v is not None:
             _wd = m.get("ret_1y_window_days") or 365
-            src = (f"ret_1y_total (本地, {_wd}d 窗口)" if _wd < 350
-                   else "ret_1y_total (本地含息)")
+            src = (f"{SRC_SELF_TOTAL}（僅 {_wd} 天窗口）" if _wd < 350
+                   else SRC_SELF_TOTAL)
             return float(v), src
     except (TypeError, ValueError):
         pass
@@ -76,7 +97,7 @@ def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
     try:
         v = m.get("ret_1y")
         if v is not None:
-            return float(v), "ret_1y (純 NAV,不含息)"
+            return float(v), SRC_SELF_NAV_ONLY
     except (TypeError, ValueError):
         pass
 
@@ -99,10 +120,10 @@ def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
                             ret = (v_now / v_old - 1.0) * 100.0
                             # 短窗口 cap 12x 避免極端外推
                             scale = min(365.0 / d_actual, 12.0)
-                            return ret * scale, f"NAV 序列年化 ({d_actual}d 外推)"
+                            return ret * scale, SRC_SELF_ANNUALIZED.format(days=d_actual)
     except Exception as _e:
         import sys as _sys
         print(f'[fund_total_return] nav annualize fallback fail: '
               f'{type(_e).__name__}: {_e}', file=_sys.stderr)
 
-    return None, "—"
+    return None, SRC_NONE

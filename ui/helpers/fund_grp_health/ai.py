@@ -245,7 +245,6 @@ def _render_ai_cross_fund_evaluation(funds: list) -> None:
             headlines=[],
             stale_note="本快照為當下抓取的瞬時值",
             gemini_api_key=_key,
-            expanded=False,
         )
     except Exception as e:
         st.caption(f"⬜ AI widget 渲染失敗:{type(e).__name__}: {e}")

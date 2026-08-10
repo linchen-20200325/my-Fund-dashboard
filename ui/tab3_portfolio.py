@@ -59,6 +59,7 @@ from repositories.snapshot_repository import (
 )
 from services.format_helpers import fmt_twd
 from services.policy_advisor_service import (
+    VIX_PANIC_THRESHOLD as _ADVISOR_VIX_PANIC,  # 缺值提示要講出門檻,不另寫一份
     advise_fund,
     recommend_policy,
 )
@@ -97,6 +98,8 @@ def _vix_for_advice(*, note: bool = True) -> float | None:
 
     **單位**：VIX 指數點（非百分比、非小數），與 `advise_fund` 內部
     「VIX 進入恐慌區」的比較基準同尺度 —— 兩邊都是原始指數值，無需換算。
+    門檻數值本身**不在本檔寫死**：從 advisor 匯出的具名常數讀（該常數再往上
+    收 `shared/macro_buckets` 的全站 panic 線），提示文字才不會與規則漂移。
 
     **缺值處置（§1）**：跨 Tab 依賴 —— 使用者若本 session 沒開過 Tab①，
     `indicators` 根本不存在。此時回 `None`，`advise_fund` 對 `vix=None` 自有
@@ -108,7 +111,8 @@ def _vix_for_advice(*, note: bool = True) -> float | None:
     _msg = ""
     if _raw is None:
         _msg = (
-            "⬜ 尚未載入 VIX —— 「σ 深跌 **且** VIX 進入恐慌區 → 分批加碼」這條規則"
+            f"⬜ 尚未載入 VIX —— 「σ 深跌 **且** VIX ≥ {_ADVISOR_VIX_PANIC:.0f}"
+            "（恐慌區）→ 分批加碼」這條規則"
             "本次不參與下方建議的判斷（其餘規則照常）。"
             "想補上：先到 🌐 Tab① 按「📡 載入總經資料」，再回本頁。"
         )

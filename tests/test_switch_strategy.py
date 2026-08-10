@@ -221,9 +221,20 @@ def test_sharpe_provenance_column_tells_the_truth():
     """**修正前必紅**(欄根本不存在):大表 Sharpe 欄的來源必須逐檔照實顯示。
 
     大表 help 原本硬寫「非MoneyDJ公布值」,但 `m["sharpe"]` 優先序是
-    wb07 一年 > wb07 六個月 > 本地自算 —— 境外基金常態就是官方值。
+    官方一年 > 官方六個月 > 本地自算 —— 境外基金常態就是官方值。
+
+    2026-08-10:顯示值改白話(原本印外站頁面代號 + 英文期間縮寫)。斷言改吃 SSOT
+    常數而非抄字面值 —— 抄字面值等於在測試裡再寫一份文案,改文案時兩邊都要記得改。
+    **未放寬**:六個月那條原本守「帶 6M + ⚠️」,現在守「帶警告記號、講得出六個月、
+    且明講不是一年」,比原條更嚴。
     """
-    from ui.helpers.fund_grp_health.unified import sharpe_provenance_by_code
+    from ui.helpers.fund_grp_health.unified import (
+        SHARPE_SRC_OFFICIAL_1Y,
+        SHARPE_SRC_OFFICIAL_6M,
+        SHARPE_SRC_SELF_CALC,
+        SHARPE_SRC_UNKNOWN,
+        sharpe_provenance_by_code,
+    )
 
     def _f(code, meta):
         return {"code": code, "metrics": {"risk_metric_meta": {"sharpe": meta}}}
@@ -235,11 +246,38 @@ def test_sharpe_provenance_column_tells_the_truth():
         _f("D", {"source": None, "period_days": None}),
         {"code": "E"},                       # 舊 cache / 抓取失敗:無 metrics
     ])
-    assert _out["A"]["Sharpe 來源"] == "wb07 1Y(官方)"
-    assert "6M" in _out["B"]["Sharpe 來源"] and "⚠️" in _out["B"]["Sharpe 來源"]
-    assert _out["C"]["Sharpe 來源"] == "自算 250d"
-    assert _out["D"]["Sharpe 來源"] == "⬜ —" and _out["E"]["Sharpe 來源"] == "⬜ —"
+    assert _out["A"]["Sharpe 來源"] == SHARPE_SRC_OFFICIAL_1Y
+    _b = _out["B"]["Sharpe 來源"]
+    assert _b == SHARPE_SRC_OFFICIAL_6M
+    assert "⚠️" in _b, "六個月來源必須帶警告記號"
+    assert "6 個月" in _b and "非 1 年" in _b, (
+        f"期間警告不可弄丟 —— 本欄存在的理由就是「這一檔量的不是一年」:{_b!r}")
+    assert _out["C"]["Sharpe 來源"] == f"{SHARPE_SRC_SELF_CALC}　250 天"
+    assert _out["D"]["Sharpe 來源"] == SHARPE_SRC_UNKNOWN
+    assert _out["E"]["Sharpe 來源"] == SHARPE_SRC_UNKNOWN
     assert sharpe_provenance_by_code([{"name": "無 code"}]) == {}   # 邊界:無 code 不炸
+
+
+def test_sharpe_provenance_official_and_self_calc_stay_distinguishable():
+    """§2.2:這一欄唯一的用途就是讓人分得出「官方公布值」與「本站自算」。
+
+    **修正前會不會紅**:不會(舊值也分得出來)。這是把「改文案時不准把兩者搞混」
+    寫成回歸鎖 —— 上一版沒有任何測試守這件事,文案一改就可能悄悄失守。
+    """
+    from ui.helpers.fund_grp_health.unified import (
+        SHARPE_SRC_OFFICIAL_1Y,
+        SHARPE_SRC_OFFICIAL_6M,
+        SHARPE_SRC_SELF_CALC,
+        SHARPE_SRC_UNKNOWN,
+    )
+    _official = (SHARPE_SRC_OFFICIAL_1Y, SHARPE_SRC_OFFICIAL_6M)
+    for _lbl in _official:
+        assert "官方" in _lbl, f"官方來源沒說自己是官方:{_lbl!r}"
+        assert "自算" not in _lbl, f"官方來源不得出現「自算」字樣:{_lbl!r}"
+    assert "自算" in SHARPE_SRC_SELF_CALC and "官方" not in SHARPE_SRC_SELF_CALC
+    assert SHARPE_SRC_UNKNOWN not in _official
+    assert len({SHARPE_SRC_OFFICIAL_1Y, SHARPE_SRC_OFFICIAL_6M,
+                SHARPE_SRC_SELF_CALC, SHARPE_SRC_UNKNOWN}) == 4, "四種狀態不得撞值"
 
 
 # ── 替換引擎(同類別 argmax)────────────────────────────

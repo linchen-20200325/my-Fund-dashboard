@@ -7,7 +7,14 @@
   取代 v18.159 的「4 視角散文 selectbox」（已不符合「逐章節結論」需求）。
 - caller 只負責組裝 snapshot 字串 + 章節清單 + 新聞 headlines。
 - key 命名空間隔離：caller 傳 tab_key（如 "tab2"），避免多 Tab widget key 衝突。
-- 結果存 session_state[f"{tab_key}_ai_struct"]，重開 expander 不重打 API。
+- 結果存 session_state[f"{tab_key}_ai_struct"]，重整頁面不重打 API。
+- 2026-08-10：本 widget 原本整段包在摺疊容器內（Tab① 還傳 `expanded=True`）。
+  那層殼對揭露零貢獻 —— 傳 True 時它從一開始就是開的、從沒擋住任何東西，
+  只多印一次標題並留下一個誤點就把 AI 結果收起來的把手；傳 False 時則是把
+  「已經花了 10-20 秒生成、且已落地磁碟」的結論預設藏起來。改成
+  `st.markdown("#### …")` + `st.container()`（本 repo 既有 pattern），
+  標題保留在本模組內 —— 四個 caller 中有一個（Tab③）沒有自己的區塊標題，
+  標題若下放給 caller，那一個會變成沒有名字的一坨按鈕。
 
 使用範例：
     from ui.helpers.ai_summary import render_ai_summary_widget
@@ -37,9 +44,8 @@ def render_ai_summary_widget(
     headlines: Optional[list[str]] = None,
     stale_note: str = "",
     gemini_api_key: str = "",
-    expanded: bool = False,
 ) -> None:
-    """在 Tab 末尾掛一個「AI 白話總體檢」widget（逐章節結論 + 時事）。
+    """在 Tab 末尾掛一個「AI 白話總體檢」區塊（逐章節結論 + 時事）。
 
     tab_key:        widget key 命名空間（如 "tab2" / "tab3"）
     tab_label:      中文 label，傳給 AI 知道「在分析哪個 Tab」
@@ -48,9 +54,12 @@ def render_ai_summary_widget(
     headlines:      近期新聞標題，用於每節「最近新聞影響」
     stale_note:     資料新鮮度註記，可空
     gemini_api_key: secrets["GEMINI_KEY"]
-    expanded:       expander 是否預設展開
+
+    內容不再包在任何可收合容器內（見 module docstring）。`st.container()`
+    只提供版面分界，不可收合。
     """
-    with st.expander(f"🤖 AI 白話總體檢（{tab_label}）", expanded=expanded):
+    st.markdown(f"#### 🤖 AI 白話總體檢（{tab_label}）")
+    with st.container():
         if not snapshot or not snapshot.strip():
             st.caption("⚠️ 本 Tab 暫無可分析的快照資料（資料尚未載入）。")
             return
@@ -128,5 +137,5 @@ def render_ai_summary_widget(
         _key_note = f"{_n_keys} 把 key 輪替" if _n_keys > 1 else "Gemini"
         st.caption(
             f"💡 模型：{_key_note}　｜ 章節：{_n_sec} 節　"
-            f"｜ 快照長度：{len(snapshot)} chars　｜ 結果已暫存，重開不會重打 API"
+            f"｜ 快照長度：{len(snapshot)} chars　｜ 結果已暫存，重整頁面不會重打 API"
         )

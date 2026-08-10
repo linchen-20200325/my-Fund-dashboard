@@ -1141,11 +1141,17 @@ def render_single_fund_tab() -> None:
                     # 本地 42 天序列(calc_metrics.ret_1y_window_days),硬掛「1Y」讓 user
                     # 無從察覺它與同畫面 Sharpe(wb07 官方一年)不是同一期間(§1)。
                     # 只在「值確實來自本地短窗」時改標;官方 wb01 真 1Y 不動。
+                    # 2026-08-10:判定片語改吃 SSOT（來源標籤已白話化，原本比對的
+                    # 「本地」「NAV 序列」字樣不再出現）。涵蓋範圍不變 —— 常數的
+                    # docstring 明列哪三條會改標、哪一條刻意不改。
+                    from services.fund_total_return import (  # noqa: PLC0415
+                        LOCAL_WINDOW_SENSITIVE_HINTS as _LOCAL_WIN_HINTS,
+                    )
                     _kpi_tr_label = "1Y 含息報酬"
                     _kpi_win_d = (m or {}).get("ret_1y_window_days")
                     if (isinstance(_kpi_win_d, (int, float)) and _kpi_win_d < 350
                             and any(_t in str(_kpi_tr1y_src or "")
-                                    for _t in ("本地", "NAV 序列"))):
+                                    for _t in _LOCAL_WIN_HINTS)):
                         _kpi_tr_label = f"{int(_kpi_win_d)} 天含息報酬(非 1Y)"
 
                     # `nav_warning`（1Y 淨值跌破 NAV_DROP_WARNING_PCT 的獨立早期警訊）
@@ -1181,11 +1187,9 @@ def render_single_fund_tab() -> None:
                         _kpi_title = f"吃本金檢查 — {_kpi_icon} {_kpi_ds.get('status','')}"
                         _kpi_msg = _kpi_ds.get("message", "")
                         # v19.178:_src_note dict 過時清掉(舊 key 'perf'/'nav_actual'/
-                        # 'nav_annualized_*' v19.175 後皆不命中 → fallback 文字「樣本 wb01
-                        # (MoneyDJ 官方)」自相矛盾)。SSOT compute_1y_total_return 已回
-                        # 人類可讀格式("wb01 (MoneyDJ 官方)" / "本地還原淨值法 (v18.71)" /
-                        # "ret_1y_total (本地, Nd 窗口)" / "NAV 序列年化 (Nd 外推)" / "—"),
-                        # 直接顯示即可。
+                        # 'nav_annualized_*' v19.175 後皆不命中 → fallback 文字自相矛盾)。
+                        # SSOT compute_1y_total_return 已回**使用者看得懂的白話**
+                        # (官方 / 各種自算口徑 / 缺值,見該模組頂部常數),直接顯示即可。
                         if _kpi_tr1y_src and _kpi_tr1y_src not in ("metrics", "—", ""):
                             _kpi_msg = f"{_kpi_msg}　〔1Y 來源:{_kpi_tr1y_src}〕"
                         _kpi_cov_txt = (f"{_kpi_cov:.2f}" if _kpi_cov is not None

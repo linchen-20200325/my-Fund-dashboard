@@ -34,7 +34,6 @@ def render_ai_summary_section(
         mac_pct: 資料完整率 %(call site 先算好傳入,None → 內部用 0)
     """
     st.markdown("## 🤖 AI 景氣判斷總結")
-    st.caption("吃齊上方四桶資料,生成綜合白話摘要")
 
     if show_l3:
         st.divider()
@@ -60,7 +59,11 @@ def render_ai_summary_section(
     # v18.215：Tab1 改用通用「白話總體檢」widget(與 Tab2/3 一致),
     # 刪除舊七節 macro AI;吃全總經資料、逐章節白話結論 + 時事、無選單。
     # v19.38：明示 AI 總結涵蓋上方 6 個 KEEP 面板的同源資料
-    st.markdown("### 🤖 AI 景氣判斷總結")
+    # 2026-08-10:這裡原本再印一次「🤖 AI 景氣判斷總結」——與本函式開頭那個區塊標題
+    # 逐字相同,加上 widget 自己的標題,同一句話在畫面上連印三次(同型現場見
+    # `tests/test_audit_20260810_tab1_shells.py` 決策矩陣那條)。開頭那個是區塊標題
+    # (三條早退路徑也靠它),留;這一份副本移除。開頭那句短 caption 一併移除 ——
+    # 下面這段把同一件事講得更完整(逐一列出吃了哪 6 個面板),兩句並存只是重複。
     st.caption(
         "本 AI 摘要吃齊上方 **① 戰情室三儀表 / ② 拐點偵測 / ③ 即時決策矩陣 / "
         "④ 短線雷達 / ⑤ 流動性壓力 / ⑥ 美股流動性熱錢** 的同源資料"
@@ -84,7 +87,6 @@ def render_ai_summary_section(
         sections=_mac_secs,
         headlines=_mac_heads,
         gemini_api_key=gemini_key,
-        expanded=True,
     )
 
 

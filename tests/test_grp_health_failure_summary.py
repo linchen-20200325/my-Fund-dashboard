@@ -15,6 +15,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from ui.helpers.fund_grp_health.unified import (
+    SHARPE_SRC_OFFICIAL_1Y,
+    SHARPE_SRC_OFFICIAL_6M,
+    SHARPE_SRC_UNKNOWN,
+)
 from ui.tab_fund_grp_health import _fold_uniform_sharpe_source
 
 _SRC = (Path(__file__).resolve().parents[1] / "ui" / "tab_fund_grp_health.py"
@@ -71,32 +76,40 @@ class TestFailureSummaryPlacement:
 # 選作 6 — Sharpe 來源欄動態收合(df 層,常數不動)
 # ══════════════════════════════════════════════════════════════
 class TestFoldUniformSharpeSource:
+    """2026-08-10:fixture 的來源字串改吃 `unified` 的 SSOT 常數(值本身已白話化)。
+
+    收合邏輯與字面值無關,故本組**修正前後都綠** —— 這裡改的是「fixture 要長得像
+    production 真的會產出的值」,不是斷言強度。
+    """
+
     def test_uniform_source_column_dropped(self):
         _df = pd.DataFrame({"code": ["A", "B", "C"],
-                            "Sharpe 來源": ["wb07 1Y(官方)"] * 3})
+                            "Sharpe 來源": [SHARPE_SRC_OFFICIAL_1Y] * 3})
         _out, _lbl = _fold_uniform_sharpe_source(_df)
         assert "Sharpe 來源" not in _out.columns
-        assert _lbl == "wb07 1Y(官方)"
+        assert _lbl == SHARPE_SRC_OFFICIAL_1Y
         assert list(_out["code"]) == ["A", "B", "C"]      # 其餘欄不動
 
     def test_mixed_period_keeps_column(self):
         """真混期正是本欄存在的理由(§2.2)—— 絕不可收合。"""
         _df = pd.DataFrame({"code": ["A", "B"],
-                            "Sharpe 來源": ["wb07 1Y(官方)", "⚠️ wb07 6M(非1Y)"]})
+                            "Sharpe 來源": [SHARPE_SRC_OFFICIAL_1Y,
+                                            SHARPE_SRC_OFFICIAL_6M]})
         _out, _lbl = _fold_uniform_sharpe_source(_df)
         assert "Sharpe 來源" in _out.columns and _lbl is None
 
     def test_any_missing_value_keeps_column(self):
         _df = pd.DataFrame({"code": ["A", "B"],
-                            "Sharpe 來源": ["wb07 1Y(官方)", None]})
+                            "Sharpe 來源": [SHARPE_SRC_OFFICIAL_1Y, None]})
         _out, _lbl = _fold_uniform_sharpe_source(_df)
         assert "Sharpe 來源" in _out.columns and _lbl is None
 
     def test_all_unknown_is_still_uniform(self):
-        """全部 `⬜ —` 也是單一來源狀態 → 收合並在 caption 照實說『都沒有來源』。"""
-        _df = pd.DataFrame({"code": ["A", "B"], "Sharpe 來源": ["⬜ —", "⬜ —"]})
+        """全部缺值也是單一來源狀態 → 收合並在 caption 照實說『都沒有來源』。"""
+        _df = pd.DataFrame({"code": ["A", "B"],
+                            "Sharpe 來源": [SHARPE_SRC_UNKNOWN] * 2})
         _out, _lbl = _fold_uniform_sharpe_source(_df)
-        assert "Sharpe 來源" not in _out.columns and _lbl == "⬜ —"
+        assert "Sharpe 來源" not in _out.columns and _lbl == SHARPE_SRC_UNKNOWN
 
     def test_column_absent_is_noop(self):
         """Tab3 持倉健診不供 extra → 整組欄不出現,不得炸。"""

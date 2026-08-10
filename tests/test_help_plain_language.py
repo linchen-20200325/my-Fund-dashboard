@@ -399,3 +399,101 @@ def test_mk333_column_config_matches_the_column_the_table_really_has():
         "columns.py 不該留一份永遠被濾掉的『MK 3-3-3』設定(0 consumer)")
     # 產生端仍在(Tab2 metric 卡消費),不是死碼 —— 別把它一起刪了
     assert "MK 3-3-3" in HEALTH_COLUMNS
+
+
+# ── 7. 「Sharpe 來源」/「1Y 來源」兩欄的**值本身**也要白話 ─────────────────
+#
+# 上一輪把這兩欄的 `help` 白話化了,但**格子裡印的字**還是內部代號
+# (外站頁面代號 / 內部欄位名 / 內部版號)。help 要 hover 才看得到,值是**直接印在
+# 表上**的 —— 白話化只做 help 等於把最顯眼的那一半漏掉。
+#
+# ⚠️ 本組一律走 **runtime 產出值**,不掃原始碼:這兩個模組的註解與 docstring 本來
+#    就會寫出頁面代號與內部欄位名(那是給維護者看的,`_FORBIDDEN` 的設計前提也是
+#    「只管使用者看得到的字」)。掃原始碼會把註解一起判紅,逼人把維護資訊刪掉。
+
+_VALUE_FORBIDDEN: list[tuple[str, str]] = _FORBIDDEN + [
+    ("v18.", "內部版號"),
+    ("perf[", "內部欄位名"),
+]
+
+
+def _sharpe_source_values() -> list[str]:
+    """「Sharpe 來源」欄四種分支的實際產出值。"""
+    from ui.helpers.fund_grp_health.unified import sharpe_provenance_by_code
+
+    def _f(code, meta):
+        return {"code": code, "metrics": {"risk_metric_meta": {"sharpe": meta}}}
+
+    _out = sharpe_provenance_by_code([
+        _f("A", {"source": "wb07_1y", "period_days": None}),
+        _f("B", {"source": "wb07_6m", "period_days": None}),
+        _f("C", {"source": "self_calc", "period_days": 250}),
+        _f("D", {"source": None, "period_days": None}),
+    ])
+    return [_v["Sharpe 來源"] for _v in _out.values()]
+
+
+def _one_year_source_values() -> list[str]:
+    """「1Y 來源」欄全部 fallback 分支的實際產出值(含 NAV 序列外推那條)。"""
+    from services.fund_total_return import compute_1y_total_return
+
+    _idx = pd.date_range("2024-01-01", "2025-01-01", freq="D")
+    _series = pd.Series([100.0] * (len(_idx) - 1) + [110.0], index=_idx)
+    _cases = [
+        {"moneydj_raw": {"perf": {"1Y": 9.0}}, "perf_source": "wb01"},
+        {"moneydj_raw": {"perf": {"1Y": 9.0}}, "perf_source": "local_calc"},
+        {"moneydj_raw": {"perf": {"1Y": 9.0}}},                 # 來源未標註
+        {"moneydj_raw": {}, "metrics": {"ret_1y_total": 5.0}},  # 自算含息(足年)
+        {"moneydj_raw": {}, "metrics": {"ret_1y_total": 5.0,
+                                        "ret_1y_window_days": 90}},   # 短窗
+        {"moneydj_raw": {}, "metrics": {"ret_1y": 3.0}},        # 純淨值
+        {"moneydj_raw": {}, "metrics": {}, "series": _series},  # 外推年化
+        {"moneydj_raw": {}, "metrics": {}},                     # 全缺
+    ]
+    return [compute_1y_total_return(_c)[1] for _c in _cases]
+
+
+def test_source_column_values_are_plain_language():
+    """兩個「來源」欄印在格子裡的字不得含內部代號。
+
+    修正前:**舊行為衝突紅** —— 兩欄合計 6 個值帶外站頁面代號 / 內部欄位名 /
+    內部版號(Sharpe 兩個、1Y 四個)。
+    """
+    _vals = _sharpe_source_values() + _one_year_source_values()
+    # liveness(PROCESS §4):值真的產出來了才算掃過,否則本條會變成掃空集的假綠
+    assert len(set(_vals)) >= 10, (
+        f"只產出 {len(set(_vals))} 種來源值 —— fallback 分支可能沒被走到,本條會空轉:{_vals}")
+
+    _bad = [f"「{_v}」含「{_term}」({_why})"
+            for _v in _vals
+            for _term, _why in _VALUE_FORBIDDEN
+            if _term in _v]
+    assert not _bad, "以下來源欄的值仍是內部代號:\n" + "\n".join(_bad)
+
+
+def test_source_column_values_still_separate_official_from_self_calc():
+    """§2.2:這兩欄存在的**唯一**理由就是讓人分得出「官方公布值」與「本站自算」。
+
+    白話化不能把這件事洗掉 —— 若哪天有人把文案改成兩者看起來一樣,本條會紅。
+
+    修正前:**綠**(舊值也分得出來)。這是把「改文案不准弄丟血緣」寫成回歸鎖,
+    原本沒有任何測試守它。
+    """
+    _vals = _sharpe_source_values() + _one_year_source_values()
+    _official = [_v for _v in _vals if "官方" in _v]
+    _self = [_v for _v in _vals if "自算" in _v]
+
+    assert len(_official) >= 3, f"官方來源值不足(Sharpe 1Y/6M + 1Y 官方):{_vals}"
+    assert len(_self) >= 4, f"自算來源值不足:{_vals}"
+    assert not (set(_official) & set(_self)), (
+        f"同一個值同時自稱官方與自算,使用者無從判斷:{set(_official) & set(_self)}")
+
+    # 六個月那條的期間警告不可弄丟(它是跨檔比大小的陷阱)
+    _six = [_v for _v in _sharpe_source_values() if "6 個月" in _v]
+    assert len(_six) == 1 and "⚠️" in _six[0] and "非 1 年" in _six[0], (
+        f"六個月來源必須帶警告記號並明講不是一年:{_six}")
+
+    # 有數字但來源不明時,必須誠實說「不知道」,不得歸進官方(§1)
+    from services.fund_total_return import SRC_PERF_UNLABELED
+    assert SRC_PERF_UNLABELED in _vals
+    assert "官方" not in SRC_PERF_UNLABELED and "未標註" in SRC_PERF_UNLABELED

@@ -2,19 +2,32 @@
 （v11.0 C-18 從 policy_advisor.py 搬入）
 
 依據三個訊號（σ 位階、配息覆蓋率、60MA 趨勢）配合可選 VIX，短路匹配 10 條規則，
-組合出一句中文操作建議。完全純函數、零外部依賴、可獨立單測。
+組合出一句中文操作建議。完全純函數、可獨立單測；唯一的 import 是 L0 常數
+（`shared/*` 純 literal、零 I/O），無 HTTP / 無 streamlit / 無 L1 repository。
 
 設計原則（與專案 §2 精準讀寫 §4 鋼鐵自省一致）：
 - 不打 HTTP、不讀 streamlit 狀態、不抓即時資料
 - 輸入皆為已算好的中間結果（避免重複計算）
 - 規則由上往下短路匹配，確保決定性與可追溯
 
-v11.0 分層歸位：本檔屬於 Service Layer，純規則決策（零 I/O 零依賴）。
+v11.0 分層歸位：本檔屬於 Service Layer，純規則決策（零 I/O；依賴僅 L0 常數）。
 向後相容：根目錄 policy_advisor.py 保留 shim re-export，既有 caller 零修改。
 """
 from __future__ import annotations
 
 from typing import Iterable, Optional
+
+# 唯一的外部依賴：L0 常數（純 literal，零 I/O，不破壞「可獨立單測」）。
+# 規則 1 的 VIX 門檻語意 = **全站 panic 線**（SPEC §16.1 C2 系列：panic 全站統一），
+# 與 risk_radar 紅燈 / beginner_view 恐慌燈 / macro_validation crisis 同一條線，
+# 因此收 `shared.macro_buckets` 的紅界而非黃界（黃界 = 警戒，語意不同，勿誤收）。
+from shared.macro_buckets import _VIX_RED as _MB_VIX_RED
+
+
+# 規則 1「跌了就買」的恐慌門檻（§3.3 不 inline magic number）。
+# 對外公開：`ui/tab3_portfolio.py` 的缺值提示要把這個數字講給使用者聽，
+# 避免 UI 端另外寫死一份而漂移。
+VIX_PANIC_THRESHOLD: float = _MB_VIX_RED
 
 
 # 規則代碼（測試斷言用，外部勿改字串）
@@ -69,7 +82,7 @@ def advise_fund(
     cov_str = _coverage_str(dividend_info)
 
     # ── 規則 1：深度超跌 + 恐慌 → 跌了就買 ─────────────────────────
-    if rank <= -2.0 and vix is not None and vix >= 30:
+    if rank <= -2.0 and vix is not None and vix >= VIX_PANIC_THRESHOLD:
         return {
             "text": f"σ {rank:+.1f}σ 大買區 + VIX {vix:.0f} 恐慌 → 符合「跌了就買」，建議分批加碼",
             "code": DEEP_DROP_VIX_BUY,

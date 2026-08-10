@@ -9,6 +9,21 @@ user 要求:組合健診原本對同一批基金重複畫 3 張逐檔表(HWM σ 
 """
 from __future__ import annotations
 
+# ── 「Sharpe 來源」欄的顯示值(SSOT;測試與呼叫端一律 import,不得抄字面值)──────
+# 2026-08-10 user 拍板:這一欄印給使用者看,值本身必須是白話。原本印的是
+# MoneyDJ 的網頁代號 + 英文期間縮寫,使用者無從得知那是「官方公布值」還是
+# 「本站自己算的」—— 而這正是本欄存在的**唯一**理由(§2.2 血緣可辨識)。
+#
+# 三條規則:
+#   1. 官方值一律以「MoneyDJ 官方」開頭,自算值一律以「自算」開頭 → 掃一眼就分得出來。
+#   2. 期間資訊不可省(1 年 / 6 個月 / N 天),因為同一欄會混不同期間。
+#   3. 六個月那條的重點是「**期間不是一年**」,警告記號與括號註明都不可拿掉 ——
+#      拿掉就等於把跨檔比大小的陷阱藏起來。
+SHARPE_SRC_OFFICIAL_1Y = "MoneyDJ 官方　1 年"
+SHARPE_SRC_OFFICIAL_6M = "⚠️ MoneyDJ 官方　6 個月（非 1 年）"
+SHARPE_SRC_SELF_CALC = "自算"          # 有樣本天數時 → f"{SHARPE_SRC_SELF_CALC}　{N} 天"
+SHARPE_SRC_UNKNOWN = "⬜ —"
+
 
 def sharpe_provenance_by_code(funds: list) -> dict:
     """{code: {"Sharpe 來源": 標籤}} —— 大表 `Sharpe 1Y` 欄的**實際**來源與期間(§2.2)。
@@ -22,7 +37,9 @@ def sharpe_provenance_by_code(funds: list) -> dict:
     fund dict 由 `_build_fund_dict` 包裝 → `metrics` 即 calc_metrics 產物。
     缺 meta(舊 cache / 抓取失敗)→ `⬜ —`,**不猜**(§1)。
 
-    ⚠️ 同一欄可能混三種期間(wb07 1Y / wb07 6M / 本地 250d),跨檔比大小前必須看本欄;
+    顯示值走本模組頂部四個常數(SSOT)——「官方」與「自算」以開頭字樣區分,期間寫在後面。
+
+    ⚠️ 同一欄可能混三種期間(官方一年 / 官方六個月 / 本地 N 天),跨檔比大小前必須看本欄;
     換標策略分的 Sharpe tier 目前**未**依期間分層(§4.1 期間錯配殘留風險,見報告提案)。
     """
     out: dict = {}
@@ -33,14 +50,15 @@ def sharpe_provenance_by_code(funds: list) -> dict:
         _mt = (((_f.get("metrics") or {}).get("risk_metric_meta") or {}).get("sharpe") or {})
         _src = _mt.get("source")
         if _src == "wb07_1y":
-            _lbl = "wb07 1Y(官方)"
+            _lbl = SHARPE_SRC_OFFICIAL_1Y
         elif _src == "wb07_6m":
-            _lbl = "⚠️ wb07 6M(非1Y)"
+            _lbl = SHARPE_SRC_OFFICIAL_6M
         elif _src == "self_calc":
             _d = _mt.get("period_days")
-            _lbl = f"自算 {_d}d" if isinstance(_d, int) else "自算"
+            _lbl = (f"{SHARPE_SRC_SELF_CALC}　{_d} 天" if isinstance(_d, int)
+                    else SHARPE_SRC_SELF_CALC)
         else:
-            _lbl = "⬜ —"
+            _lbl = SHARPE_SRC_UNKNOWN
         out[_code] = {"Sharpe 來源": _lbl}
     return out
 

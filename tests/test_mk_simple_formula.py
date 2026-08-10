@@ -256,8 +256,10 @@ class TestCheckEatingV19175WbCompoundFirst:
         assert "吃本金" in r["status"], (
             f"預期吃本金(gap=3pp > 2pp),實際 {r['status']}"
         )
-        assert "ret_1y" in r["_tr1y_method"], (
-            f"預期走 ret_1y precedence,實際 {r['_tr1y_method']}"
+        # 2026-08-10:來源標籤已白話化,改比對 SSOT 常數(等值比對比原子字串更嚴)
+        from services.fund_total_return import SRC_SELF_NAV_ONLY
+        assert r["_tr1y_method"] == SRC_SELF_NAV_ONLY, (
+            f"預期走純淨值(不含配息)precedence,實際 {r['_tr1y_method']}"
         )
 
     def test_with_series_dividends_still_uses_wb_industry_precedence(self):
@@ -275,8 +277,9 @@ class TestCheckEatingV19175WbCompoundFirst:
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        assert "ret_1y" in r["_tr1y_method"], (
-            f"v19.175 應走業界 ret_1y precedence,實際 {r['_tr1y_method']}"
+        from services.fund_total_return import SRC_SELF_NAV_ONLY
+        assert r["_tr1y_method"] == SRC_SELF_NAV_ONLY, (
+            f"v19.175 應走業界純淨值 precedence,實際 {r['_tr1y_method']}"
         )
         # tr1y=99, adr=5 → gap=-94 → 🟢 健康
         assert "健康" in r["status"], f"預期健康,實際 {r['status']}"
@@ -302,8 +305,9 @@ class TestCheckEatingV19175WbCompoundFirst:
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
         # perf['1Y']=15 為最高優先 → tr1y=15, adr=7 → gap=-8 → 🟢 健康
-        assert "wb01" in r["_tr1y_method"], (
-            f"v19.175 應走 wb01 (perf['1Y']) 最權威,實際 {r['_tr1y_method']}"
+        from services.fund_total_return import SRC_OFFICIAL
+        assert r["_tr1y_method"] == SRC_OFFICIAL, (
+            f"v19.175 應走官方績效表(perf['1Y'])最權威,實際 {r['_tr1y_method']}"
         )
         assert "健康" in r["status"]
 
