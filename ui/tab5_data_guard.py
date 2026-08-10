@@ -1360,10 +1360,12 @@ def render_data_guard_tab() -> None:
     # v19.361 PR-2(A)：保單對帳單 CSV 歷史匯入 → nav_history 累積(L3→L2)
     # ══════════════════════════════════════════════════════
     st.divider()
-    # expanded=True：裡面第一行就是「🔴 累積未啟用」的致命狀態燈 —— 收起來的話
-    # 使用者永遠不會知道歷史淨值根本沒在累積（原則 1）。
-    with st.expander("🗂️ NAV 歷史匯入與累積狀態（保單對帳單 CSV → nav_history）",
-                     expanded=True):
+    # 裡面第一行就是「🔴 累積未啟用」的致命狀態燈 —— 收起來的話使用者永遠不會知道
+    # 歷史淨值根本沒在累積（原則 1）。原本靠「永遠展開的 expander」達成,但那層殼
+    # 對使用者只是多一圈邊框 + 一個可以把狀態燈關掉的入口。改成標題 + container,
+    # 狀態燈與匯入表單一律常駐。
+    st.markdown("### 🗂️ NAV 歷史匯入與累積狀態（保單對帳單 CSV → nav_history）")
+    with st.container():
         # v19.362 ①:累積狀態燈 — 終結「secrets 沒設 = 靜默略過,以為在累積其實沒有」
         try:
             from services.nav_history_gs import status as _nh_status

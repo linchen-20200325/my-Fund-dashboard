@@ -63,7 +63,7 @@ def _render_333_fund_expander(
     metrics: dict,
     display_name: str,
 ) -> None:
-    """MK 3-3-3 原則評估 expander（Tab2 單一基金）。
+    """MK 3-3-3 原則評估區塊（Tab2 單一基金）。
 
     C1 成立>3年 / C2 三年年化>7% / C3 同儕排名前1/3
     資料來源：nav_series (DatetimeIndex) + metrics.ret_3y_ann (MoneyDJ)。
@@ -71,9 +71,12 @@ def _render_333_fund_expander(
     """
     from services.fund_screening import check_333_fund  # EX-PASSTHRU L3→L2 直呼 service
 
-    # 摺疊處置:本區塊輸出的是**結論資料**(C1/C2/C3 三條判定)而非教學文,
-    # 收起來等於把結論藏起來 → 預設展開。
-    with st.expander("🎯 MK 3-3-3 優質標的評估", expanded=True):
+    # 摺疊處置(原則 1):本區塊輸出的是**結論資料**(C1/C2/C3 三條判定)而非教學文。
+    # 原本外面包一層「永遠展開」的摺疊殼 —— 那層殼不承載任何資訊,只多一圈邊框
+    # 與一個「可以收起來」的假暗示;真正的成本是使用者得先辨認出它是空殼。
+    # 改成純標題 + container,判定結果直接攤在版面上。
+    st.markdown("#### 🎯 MK 3-3-3 優質標的評估")
+    with st.container():
         st.caption(
             "**MK 郭俊宏核心篩選原則** — "
             "①成立 >3年（歷經牛熊）｜"
@@ -140,11 +143,11 @@ def _render_333_fund_expander(
             st.caption('💡 C1+C2 通過後，請至晨星確認 C3（同類前 40 名 ≈ 3 顆星以上）'
                        '，三項全過才是 MK 定義的「基優生」。')
 
-        # ⚠️ 這裡**不可以**再開一層摺疊容器 —— 本函式整段已經被上方
-        # `st.expander("🎯 MK 3-3-3 優質標的評估")` 包住,Streamlit 的可摺疊容器
-        # 彼此巢狀會直接丟例外,而唯一 caller 把整段包在 try/except 裡只印 stderr,
-        # 結果是「畫面上這一區整段消失、卻沒有任何錯誤提示」。
-        # 說明文本來就不該闔上,直接平鋪。守門測試見 tests/test_app_smoke.py。
+        # ⚠️ 這裡**不可以**開摺疊容器。兩個理由,拿掉外層殼之後第二個仍然成立:
+        # (1) 說明文本來就不該闔上(原則 1),直接平鋪;
+        # (2) 唯一 caller 把整段包在 try/except 裡只印 stderr,一旦這裡拋例外
+        #     (例如日後有人又在外面加一層摺疊容器造成巢狀),畫面上是「這一區
+        #     整段消失、卻沒有任何錯誤提示」。守門測試見 tests/test_app_smoke.py。
         st.markdown('###### 📖 3-3-3 原則說明')
         st.markdown(
             '**①成立 >3 年** — 足以歷經完整牛熊循環，有資本利得作為配息後盾，'
@@ -355,7 +358,11 @@ def render_single_fund_tab() -> None:
                 f"- 若連續失敗，可至「📋 保單管理」改抓 FundClear 備援"
             )
             # v18.119/120 issue 4: 抓取診斷 — 列出哪些欄位有 / 沒有 + NAS Proxy 狀態
-            with st.expander("🔍 抓取診斷細節（哪個源失敗 + NAS Proxy 狀態）", expanded=True):
+            # 摺疊處置(原則 1):這一區只在 partial 狀態出現,而 partial 的**唯一用途**
+            # 就是回答「到底哪個源失敗」。把它裝進一個永遠展開的摺疊殼,等於在最需要
+            # 被讀的診斷資訊外面多包一層裝飾邊框。改標題 + container 直接攤平。
+            st.markdown("##### 🔍 抓取診斷細節（哪個源失敗 + NAS Proxy 狀態）")
+            with st.container():
                 _mj_raw    = fd.get("moneydj_raw", {}) or {}
                 _series    = fd.get("series")
                 _series_n  = (len(_series) if _series is not None
@@ -1214,10 +1221,13 @@ def render_single_fund_tab() -> None:
                 try:
                     # v19.182:預設展開,user 第一眼就看到(原 v19.181 expanded=False 收起來
                     # 容易被忽略 — user 反饋「沒看到進階指標」)。
-                    with st.expander(
-                        "📊 進階指標(Sortino / Calmar / Alpha / Expense / 3Y-5Y / 3-3-3 / 換標的建議)",
-                        expanded=True,
-                    ):
+                    # 本次(原則 1)再進一步:「永遠展開的摺疊殼」對使用者而言與沒有殼
+                    # 無異,卻仍佔一行標題列高度並暗示「這裡可以收起來」。既然結論
+                    # 資料本來就不該闔上,直接改成標題 + container。
+                    st.markdown(
+                        "#### 📊 進階指標"
+                        "(Sortino / Calmar / Alpha / Expense / 3Y-5Y / 3-3-3 / 換標的建議)")
+                    with st.container():
                         from services.health.report import (
                             build_dividend_summary_row,
                             build_health_analysis_row,

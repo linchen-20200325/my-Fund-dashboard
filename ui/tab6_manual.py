@@ -37,8 +37,11 @@ def render_manual_tab() -> None:
     # User 2026-06-25 反饋:「說明書要把前面所用到的資料,作完整的說明」
     # 一張總表列出每筆資料 → 用在哪個 Tab → 來源 endpoint → refresh 頻率 → fallback chain
     # ════════════════════════════════════════════════════════════
-    with st.expander("⓪ 📊 資料來源完整地圖(每筆資料→Tab→endpoint→refresh→fallback)",
-                     expanded=True):
+    # 摺疊處置(原則 1):這張總表是說明書的第一張「資料在哪裡」對照表,原本包在一層
+    # 永遠展開的摺疊殼裡 —— 殼不承載資訊,只多一圈邊框和「可以收起來」的假暗示。
+    # 改成標題 + container,表格直接攤平。
+    st.markdown("### ⓪ 📊 資料來源完整地圖(每筆資料→Tab→endpoint→refresh→fallback)")
+    with st.container():
         st.caption(
             "本系統 4 個資料 Tab 用到的所有資料來源,按「**資料項目 → 用在哪個 Tab → 來源 / endpoint "
             "→ refresh / 發布延遲 → 失敗 fallback**」整理。**任一筆失敗都會在 🔭 資料診斷(「參考 / 診斷」分頁內) "
@@ -143,7 +146,10 @@ def render_manual_tab() -> None:
     # ── v18.272: 📋 曾經查過的基金清單（Tab2 + Tab3 自動記錄）─
     # ── v18.280: 加 CSV 上傳還原（reboot 後從備份 CSV merge 回來）─
     # ── v18.282: 加預設常用基金 + 手動新增表單 ─
-    with st.expander("📋 曾經查過的基金標的清單（Tab2 / Tab3 自動記錄 + 預設）", expanded=True):
+    # 摺疊處置(原則 1):同上 —— 這是一份**清單資料**(含手動新增表單與 CSV 還原),
+    # 永遠展開的殼等於沒有殼。改成標題 + container。
+    st.markdown("### 📋 曾經查過的基金標的清單（Tab2 / Tab3 自動記錄 + 預設）")
+    with st.container():
         from services.fund_history import (
             clear_history as _clear_fh,
             export_preset_funds_json as _export_preset_json,

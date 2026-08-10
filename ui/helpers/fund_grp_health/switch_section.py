@@ -68,7 +68,9 @@ def render_switch_section(rows: list) -> None:
                 help="**同**資產類別內取最佳者(與跨類的「輪動配對」不同);"
                      "同類無合格標的 → ⚪,不硬湊。"),
             "換入 Sharpe": _cc.NumberColumn("換入 Sharpe", format="%.2f",
-                help="⚠️ 期間可能混 wb07 1Y / 6M / 本地自算,見大表「Sharpe 來源」欄。"),
+                help="每多承受一分波動換到多少報酬,越高越划算。"
+                     "⚠️ 各檔的量測期間可能不一樣(官方一年 / 官方六個月 / 本站自算),"
+                     "跨檔比大小前請看大表的「Sharpe 來源」欄。"),
             "換入 1Y含息%": _cc.NumberColumn("換入 1Y含息%", format="%.2f %%"),
         },
     )

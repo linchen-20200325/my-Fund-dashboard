@@ -38,11 +38,14 @@ def _mock(monkeypatch):
     monkeypatch.setattr("services.fund_service.get_latest_fx",
                         lambda *a, **k: 32.0, raising=True)
     # 種入基準快取 → capture_by_code 不打網路(否則逾時拖慢)
+    # 快取值形狀 =(抓到的時間 monotonic 秒, series);種「現在」確保在 TTL 內不被判過期
+    import time as _t
     import ui.helpers.fund_grp_health.capture as _cap
     _d = pd.date_range("2020-01-31", periods=60, freq="ME")
     _b = pd.Series(100 * np.cumprod([1.0] + [1.005] * 59), index=_d)
-    monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", _b)
-    monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", _b)
+    _bench_now = _t.monotonic()
+    monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", (_bench_now, _b))
+    monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", (_bench_now, _b))
     # stub USDTWD 抓取 → fx_regime_by_ccy 不打網路(v19.426 稽核 Finding2)
     import ui.helpers.fund_grp_health.fx_regime as _fr
     _fr._FX_REGIME_CACHE.clear()

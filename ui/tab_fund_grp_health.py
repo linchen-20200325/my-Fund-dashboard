@@ -400,11 +400,11 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
         "高點下方那麼多個 σ）且不吃本金的**進場候選**。σ rank 是**負數**，"
         "**愈負 = 離高點愈深 = 基期愈低**。"
     )
+    # 門檻走 shared/signal_thresholds SSOT;caption 只講「同一把尺」,不對使用者報檔名。
     st.caption(
-        f"✅ **與健診大表「基期」欄同一把尺**：同一支 `calc_hwm_sigma_levels` σ rank + "
-        f"同一組門檻（買 {ROTATION_BUY_SIGMA:+.1f}σ / 賣 {ROTATION_SELL_SIGMA:+.1f}σ，"
-        "SSOT `shared/signal_thresholds.py`）+ 同一個回看窗。"
-        "本區標 🟢 低基期的，大表「基期」欄一定也是 🟢。"
+        f"✅ **與健診大表「基期」欄用同一把尺**：同一套算法、同一組門檻"
+        f"（買點 {ROTATION_BUY_SIGMA:+.1f}σ / 賣點 {ROTATION_SELL_SIGMA:+.1f}σ）、"
+        "同一段回看期間。本區標 🟢 低基期的，大表「基期」欄一定也是 🟢。"
     )
 
     # σ 倍數 / 回看期兩個 radio 已移除（見 docstring 2、3）→ 這裡只剩維度濾鏡，
@@ -462,9 +462,10 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
         },
     )
     st.caption(
-        f"共 {len(rows)} 檔（依 σ rank 由**負到正**排序 = 跌最深的在最上面）。"
-        f"停售 / NAV 完全不動（σ≈0）者無法定位階，標『⬜ 資料不足』並**排除在低基期"
-        f"候選之外**，不會被推薦（§1）；樣本 < {LOW_BASE_MIN_POINTS} 筆標『可信度低』。"
+        f"共 {len(rows)} 檔（依 σ rank 由**負到正**排序 = 跌最深的排最上面）。"
+        "停售、或淨值完全不動的基金算不出位階，標『⬜ 資料不足』並**排除在低基期候選之外**，"
+        f"不會被推薦（缺資料就誠實說缺，不硬給建議）；"
+        f"可用的淨值筆數少於 {LOW_BASE_MIN_POINTS} 筆會標『可信度低』。"
     )
     st.download_button(
         "⬇️ 下載選基金清單 CSV", _df.to_csv(index=False).encode("utf-8-sig"),
@@ -915,18 +916,19 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
         # v19.180:全期實際 / 年化兩軸並陳。短歷史也顯示真實累計值,不再 None。
         st.caption(
-            "🩺 **吃本金燈號 (1Y · MK)** 採郭俊宏 MK 老師體檢邏輯:"
-            "**近一年含息報酬 < 年化配息率 → 🔴 吃本金**(MoneyDJ wb05 官方數值)。"
-            "「**(全期實際)**」欄為持有期累計真實值(不年化),短歷史也照顯示;"
-            "「**(年化)**」欄需持有 ≥ 0.5 年才有數值(避免短歷史年化幻象)。"
-            "兩欄皆**僅供歷史參考**,不參與燈號判定。"
-            "📊 **長線挑核心資產**請另參 3-3-3 原則:成立 ≥ 3 年 + 3 年平均年化 > 7%。"
+            "🩺 **吃本金燈號 (1Y · MK)** 採郭俊宏 MK 老師的體檢邏輯:"
+            "**近一年含息報酬 < 年化配息率 → 🔴 吃本金**"
+            "(意思是配給你的錢有一部分其實是把本金退還給你;年化配息率用 MoneyDJ 官方公布值)。"
+            "「**(全期實際)**」欄是你持有這段期間的累計真實值(不換算成每年),持有很短也照顯示;"
+            "「**(年化)**」欄要持有滿 0.5 年才有數字(太短就換算成每年,會產生誇大的假象)。"
+            "這兩欄**只供你回看歷史**,不參與燈號判定。"
+            "📊 **想挑長線核心資產**請另看 3-3-3 原則:成立滿 3 年 + 過去 3 年平均每年賺 > 7%。"
         )
         if _sharpe_src_uniform:
             st.caption(
-                f"📎 本批 **Sharpe 來源全部相同**:「{_sharpe_src_uniform}」"
-                f"—— 該欄逐列同值故已收合;只要出現混期(如部分檔只有 wb07 6M)"
-                f"就會自動回到表內逐列顯示。"
+                f"📎 本批基金的 **Sharpe 全部來自同一個地方**:「{_sharpe_src_uniform}」"
+                "—— 整欄逐列都一樣、沒有資訊量,所以先收起來;"
+                "只要出現期間不一致的情況(例如有些檔只有六個月期),這一欄會自動回到表內逐列顯示。"
             )
         # v19.77 L1：column_config 數值格式化（百分號 / 千分位）+ 欄寬調整
         # 2026-08-06 必修 4:設定抽至 `ui/helpers/fund_grp_health/columns.py`,
@@ -1079,23 +1081,28 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
                 column_config={
                     "代號": _cc.TextColumn("代號", width="small"),
                     "ex_date": _cc.TextColumn("除息日", width="small",
-                        help="MoneyDJ 記錄的除息日;只列買進日之後的事件。"),
+                        help="MoneyDJ 記錄的除息日(配息當天);只列出你買進日之後的配息。"),
                     "ccy_div_per_unit": _cc.NumberColumn("每單位配息(原幣)", format="%.4f",
-                        help="該次每一單位配發多少原幣。"),
+                        help="那一次每持有 1 個單位,可以配到多少原幣。"),
                     "units_at_event_🧮": _cc.NumberColumn("當時持有單位 🧮", format="%,.4f",
-                        help="除息當下持有的單位數(預設不再投入,故各次相同)。"),
+                        help="除息當下你手上有幾個單位。本表預設配息不再投入,所以各次都一樣。"),
                     "ccy_div_total_🧮": _cc.NumberColumn("該次配息(原幣) 🧮", format="%,.2f",
-                        help="每單位配息 × 當時持有單位。"),
+                        help="每單位配息 × 當時持有單位 = 那一次總共配到多少原幣。"),
                     "fx_at_ex": _cc.NumberColumn("除息日匯率", format="%.4f",
-                        help="該次換算用的 1 原幣 = ? TWD(§4.1 用當期匯率,不用今天的回填)。"),
+                        help="那一天 1 元原幣可以換到幾元台幣。"
+                             "**刻意用當天的匯率,不是拿今天的匯率回頭套** —— "
+                             "否則會把後來的匯率變動算進過去的績效裡。"),
                     "fx_source": _cc.TextColumn("匯率來源", width="small",
-                        help="該日匯率取自歷史序列還是即期 fallback(§2.2 血緣)。"),
+                        help="這個匯率是從歷史匯率序列查到的,還是查不到、退而用現在的即期匯率 —— "
+                             "標出來讓你知道這一格有多可靠。"),
                     "twd_div_🧮": _cc.NumberColumn("該次配息(TWD) 🧮", format="%,.0f",
-                        help="該次配息(原幣)× 除息日匯率。"),
+                        help="那一次配到的原幣金額 × 除息日匯率 = 換成台幣是多少。"),
                     "nav_at_ex": _cc.NumberColumn("除息日 NAV", format="%.4f",
-                        help="除息日(或之前最近一日)的淨值;基金 NAV 週末假日不更新屬正常。"),
+                        help="除息當天(或之前最近一個有報價的日子)的淨值;"
+                             "基金淨值週末假日不更新是正常的。"),
                     "single_event_div_pct_🧮": _cc.NumberColumn("該次配息率 % 🧮", format="%.3f %%",
-                        help="每單位配息 ÷ 除息日 NAV × 100(單次,非年化)。"),
+                        help="每單位配息 ÷ 除息日淨值 × 100 = 那**一次**配了幾 %"
+                             "(單次的,不是一年的)。"),
                 },
             )
         else:

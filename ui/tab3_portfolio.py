@@ -82,6 +82,52 @@ def _calc_data_health(indicators=None):
     return _calc_data_health_pure(ind)
 
 
+# ── advise_fund 的 VIX 入參：單一取數點（原則 2 去重 + §1 缺值不捏造）──────────
+# 本頁一次 render 最多印一次「VIX 未載入」說明,用 session flag 去重;
+# render_portfolio_tab() 每次 script run 只被呼叫一次 → 在其開頭重置即可。
+_VIX_NOTE_FLAG = "_t3_vix_advice_note_shown"
+
+
+def _vix_for_advice(*, note: bool = True) -> float | None:
+    """取當前 VIX 餵給 `services.policy_advisor_service.advise_fund`。
+
+    **來源**：`st.session_state["indicators"]["VIX"]["value"]` —— 由 Tab①
+    「📡 載入總經資料」寫入的同一份 dict（唯一 writer 在 `ui/tab1_macro.py`），
+    值由 `services/macro/us_indicators.py` 產生。
+
+    **單位**：VIX 指數點（非百分比、非小數），與 `advise_fund` 內部
+    「VIX 進入恐慌區」的比較基準同尺度 —— 兩邊都是原始指數值，無需換算。
+
+    **缺值處置（§1）**：跨 Tab 依賴 —— 使用者若本 session 沒開過 Tab①，
+    `indicators` 根本不存在。此時回 `None`，`advise_fund` 對 `vix=None` 自有
+    降級分支（吃 VIX 的那條規則不成立，改走其餘規則）。**禁止**用「常見值」
+    或上次的值頂替：那會讓一條沒有依據的加碼建議看起來像有依據。
+    `note=True` 時額外印一行說明，讓使用者知道少了哪一條判斷、以及怎麼補。
+    """
+    _raw = ((st.session_state.get("indicators") or {}).get("VIX") or {}).get("value")
+    _msg = ""
+    if _raw is None:
+        _msg = (
+            "⬜ 尚未載入 VIX —— 「σ 深跌 **且** VIX 進入恐慌區 → 分批加碼」這條規則"
+            "本次不參與下方建議的判斷（其餘規則照常）。"
+            "想補上：先到 🌐 Tab① 按「📡 載入總經資料」，再回本頁。"
+        )
+    else:
+        try:
+            return float(_raw)
+        except (TypeError, ValueError) as _e_vix:
+            # §1：解析失敗要留痕，不可靜默當成「沒有 VIX」
+            print(f"[tab3 advise VIX] indicators['VIX']['value']={_raw!r} 無法轉 float："
+                  f"[{type(_e_vix).__name__}] {_e_vix}")
+            _msg = (
+                f"⬜ VIX 值無法解析（{_raw!r}）—— 恐慌加碼那條規則本次不參與判斷。"
+            )
+    if note and not st.session_state.get(_VIX_NOTE_FLAG):
+        st.session_state[_VIX_NOTE_FLAG] = True
+        st.caption(_msg)
+    return None
+
+
 def render_portfolio_tab() -> None:
     """渲染組合基金 Tab — 含 MK 戰情室 + 加入基金 + T5/T6/T7 子區。
 
@@ -89,6 +135,8 @@ def render_portfolio_tab() -> None:
     Caller 不需傳參數。
     """
     GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+    # 每次 script run 重置「VIX 未載入」提示的去重旗標（本函式一次 run 只被呼叫一次）
+    st.session_state[_VIX_NOTE_FLAG] = False
 
     # v18.140: 全部 helper 改正規 import — 徹底脫離 v18.129 sys.modules['__main__'] hack
     # v18.148: 先呼叫 refresh_oauth_state() 把 module-level snapshot 更新到 fresh，
@@ -193,8 +241,11 @@ def render_portfolio_tab() -> None:
                     _rate = _fx_spot.get(_ccy_fx, 0)
                     _rate_str = f"1 {_ccy_fx} ≈ {_rate:.2f} TWD" if _rate > 0 else "匯率待抓"
                     _fx_lines.append(f"**{_ccy_fx}** {_cnt} 檔（{_pct:.0f}%）· {_rate_str}")
-                # 內容 < 6 行且含「USD 佔比過半」警告 → 收起來等於把風險藏起來（原則 1）
-                with st.expander(f"💱 FX 曝險摘要（{len(_fx_counts)} 種幣別）", expanded=True):
+                # 內容 < 6 行且含「USD 佔比過半」警告 → 收起來等於把風險藏起來（原則 1）。
+                # 原本用「永遠展開的 expander」達成,但那層殼本身不提供任何資訊 —— 對
+                # 使用者是多一圈邊框 + 一個假的「可收合」暗示。改成標題 + container。
+                st.markdown(f"##### 💱 FX 曝險摘要（{len(_fx_counts)} 種幣別）")
+                with st.container():
                     st.caption(
                         "組合中非 TWD 基金的幣別分布。台幣升值 1% 約等幅侵蝕該幣別折算績效。"
                     )
@@ -1301,13 +1352,12 @@ def render_portfolio_tab() -> None:
         if not _pol_funds and not _ungrouped:
             st.info("尚未載入任何基金。設定 Google Sheets 後按「📡 從 Sheet 同步」即可帶入保單分組。")
         else:
-            # 取 VIX 給 advisor（已在 session 內就用快取，否則 None）
-            _vix_for_adv = None
-            try:
-                _vix_for_adv = float((st.session_state.get("compass_data") or {}).get("vix", {}).get("value")) \
-                    if (st.session_state.get("compass_data") or {}).get("vix") else None
-            except Exception:
-                _vix_for_adv = None  # smoke-allow-pass
+            # 取 VIX 給 advisor。
+            # 原本讀的是一個**全 repo 沒有任何 writer** 的 session key（唯一寫入端
+            # 是已移除的總經指南針元件），所以此處恆為 None，advise_fund 吃 VIX 的
+            # 那條規則等於長期失效卻無人察覺。改走 helper 讀 Tab① 實際寫入的
+            # `indicators`，缺值仍誠實回 None（§1）。
+            _vix_for_adv = _vix_for_advice()
 
             # 分組
             _by_policy: dict[str, list[dict]] = {}
@@ -1766,7 +1816,12 @@ def render_portfolio_tab() -> None:
                 _rf_curve = float(_total_curve.iloc[0]) * (1.0 + 0.02) ** (_days / 365.0)
 
                 # 原 `expanded=True` expander → 拿掉殼（原則 1）
-                st.markdown("#### 📈 資產成長曲線（含 2% 無風險基準對比）")
+                # 命名誠實化：這條線畫的是 `(NAV_t / NAV_0) × invest_twd` 逐檔加總 ——
+                # 起點固定等於投入本金，之後只跟著**淨值相對漲跌**縮放。
+                # 它既不是本金（本金是常數，不會有曲線），也不是市值（沒有配息、
+                # 沒有實際分批扣款時點、沒有匯率）。用「資產總額」那類字眼會被直接
+                # 讀成「我現在有多少錢」，是本頁最容易誤導的一處。
+                st.markdown("#### 📈 淨值成長模擬曲線（含 2% 無風險基準對比）")
                 with st.container():
                     fig_curve = go.Figure()
                     fig_curve.add_trace(go.Scatter(
@@ -1790,9 +1845,12 @@ def render_portfolio_tab() -> None:
                         marker=dict(size=[8,10,10,12],
                                     color=[TRAFFIC_NEUTRAL,MATERIAL_GREEN,MATERIAL_RED,WHITE],
                                     line=dict(color=STREAMLIT_BG, width=2)),
-                        text=["起點", f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
+                        # 末點原本只標一個「今」字加金額 → 最容易被讀成「我現在有
+                        # 多少錢」。改標「今日模擬」，與 y 軸／標題／下方說明同一套語彙。
+                        text=["起點（＝投入本金）",
+                              f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
                               f"低 {fmt_twd(_total_curve.loc[_lo_idx])}",
-                              f"今 {fmt_twd(_total_curve.iloc[-1])}"],
+                              f"今日模擬 {fmt_twd(_total_curve.iloc[-1])}"],
                         textposition=["top right","top center","bottom center","top left"],
                         textfont=dict(size=10, color=GH_FG_PRIMARY),
                         showlegend=False,
@@ -1803,12 +1861,19 @@ def render_portfolio_tab() -> None:
                         margin=dict(t=20, b=30, l=55, r=20),
                         legend=dict(orientation="h", y=1.05, font_size=10),
                         hovermode="x unified")
-                    fig_curve.update_yaxes(title_text="總資產 (NTD)", gridcolor=BG_DARK_NAVY_3)
+                    fig_curve.update_yaxes(title_text="模擬市值 (NTD)",
+                                           gridcolor=BG_DARK_NAVY_3)
                     fig_curve.update_xaxes(gridcolor=BG_DARK_NAVY_3)
                     st.plotly_chart(fig_curve, use_container_width=True)
                     st.caption(
                         "💡 **怎麼看**：綠線是你的組合走勢，灰虛線是「把錢放定存賺 2%」的基準。"
                         "綠線在灰線上方代表你的選擇贏過定存。")
+                    st.caption(
+                        "📐 **這條線怎麼算的**：每檔基金的**投入本金**放在它第一個有淨值的"
+                        "那天，之後只隨**淨值相對漲跌**等比例縮放，再把各檔加總。"
+                        "**它不是你戶頭現在的錢** —— 未計入配息、未計入實際分批扣款的"
+                        "買進時點、也未計入台幣兌原幣匯率；除息當天淨值跳空，這條線也會"
+                        "跟著往下。真實金額請以保單對帳單為準。")
         except Exception as _curve_e:
             # v18.43 補錯誤型別讓使用者能 debug
             _friendly_error(
@@ -2123,12 +2188,8 @@ def render_portfolio_tab() -> None:
                 _batch_load()
 
         # v18.30: 為主清單預計算 VIX（給每檔 advise_fund 用）
-        _vix_t3_main = None
-        try:
-            _vix_t3_main = float(
-                (st.session_state.get("compass_data") or {}).get("vix", {}).get("value"))
-        except Exception:
-            _vix_t3_main = None   # smoke-allow-pass — VIX 缺也能算 advice
+        # 同上：原本讀的那個 session key 0 writer → 恆 None。改吃 Tab① 的 indicators。
+        _vix_t3_main = _vix_for_advice()
 
         def _compute_advice_for(_pf_item: dict) -> dict:
             """v18.30: 從 pf_item 算出 advise_fund 需要的三組訊號 + 呼叫 advisor。

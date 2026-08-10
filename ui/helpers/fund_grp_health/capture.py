@@ -4,7 +4,9 @@
 「依幣別選定的大盤基準」(TWD→TWII、**USD→SPX、其餘無基準**)算:上/下檔捕捉率 +
 操盤評分(v19.414)**及 vs 大盤%**(v19.420 近1年純價格報酬差)。四值**共用同一次基準
 抓取**(F-BM-2:vs大盤% 併入本 fetcher,不另開第二個 N-pass,基準失敗時不放大成 2×N),
-基準序列 module 級 success-only 快取(400 檔批次每市場只抓一次),抓失敗不快取 → 下次重試。
+基準序列 module 級 success-only 快取(400 檔批次每市場只抓一次),抓失敗不快取 → 下次重試;
+**帶 TTL**(`_BENCH_TTL_SEC`,走 `shared/ttls.py` 語意常數)—— 長時間運行的 process 不再
+永遠用開站那一刻的序列(§2.4),過期重抓失敗時不回傳 stale 冒充新鮮值。
 
 另出兩個**可信度旗標欄**(2026-08-06 必修 5):
 - `捕捉樣本` ← `compute_capture` 的 `low_confidence` / `n_up` / `n_down`
@@ -17,24 +19,50 @@
 """
 from __future__ import annotations
 
+import time as _time
+
+from shared.ttls import TTL_1HOUR
+
+# 基準序列快取 TTL(§2.4「超過 TTL 應重新抓取」)。原本是**無 TTL** 的 module dict:
+# 長時間運行的 Streamlit process 會一直用開站那一刻抓到的序列,「vs 大盤%」與捕捉率的
+# 最後一點會逐日變舊而畫面上看不出來。
+# 為什麼選 TTL_1HOUR(走 shared/ttls.py 語意常數,不新造數字):
+#   (a) 基準是「10 年日線指數」,拿來當比較尺,不是即時報價;對面的基金 NAV 本身就是
+#       T+1~T+3 才公布 —— 一小時的基準延遲遠比它比較的對象新鮮。
+#   (b) 400 檔批次要跑 30~40 分鐘,一小時的窗口讓**整批**落在同一個基準快照內,
+#       同一張表的各列才可比(換成更短的 TTL 會在跑批中途換基準端點)。
+#   (c) 上游 L1 `fetch_yf_close` 自己有 10 分鐘 TTL;本層只負責把 N 檔的 fan-out
+#       收斂成一次抓取,不是第二層權威。
+_BENCH_TTL_SEC: int = TTL_1HOUR
 # 只快取「成功」的基準序列(失敗不入 → 下次重試,避免暫時性失敗永久卡 None)
+# 值 = (抓到的時間 monotonic 秒, series)
 _BENCH_CACHE: dict = {}
 
 
 def _benchmark_nav(market):
-    """抓大盤基準 NAV(10 年);成功則 module 快取。回傳 pd.Series(空 / None = 無基準)。
+    """抓大盤基準 NAV(10 年);成功則 module 快取 `_BENCH_TTL_SEC` 秒。
+
+    回傳 pd.Series(空 / None = 無基準)。
 
     `market` 為 None 時(= 幣別非 TWD/USD,`benchmark_for_currency` 誠實拒答)直接回 None,
     不打網路、也不退回 SPX(§4.1:原幣 NAV 對 USD 指數 = 把匯率當績效)。
+
+    TTL 過期後重抓;**重抓失敗不回傳過期序列**(§2.4 禁止靜默返回 stale)——
+    直接回上游的空序列,讓呼叫端的旗標欄照實顯示「基準抓取失敗」,
+    並丟掉過期項目讓下一次重試。
     """
     if market is None:
         return None
-    if market in _BENCH_CACHE:
-        return _BENCH_CACHE[market]
+    _now = _time.monotonic()
+    _hit = _BENCH_CACHE.get(market)
+    if _hit is not None and (_now - _hit[0]) < _BENCH_TTL_SEC:
+        return _hit[1]
     from services.crisis_backtest import fetch_market_series
     s = fetch_market_series(market, years=10)
     if s is not None and len(s) > 0:
-        _BENCH_CACHE[market] = s
+        _BENCH_CACHE[market] = (_now, s)
+    elif _hit is not None:
+        _BENCH_CACHE.pop(market, None)      # 過期又抓不到 → 不留 stale 冒充新鮮值
     return s
 
 

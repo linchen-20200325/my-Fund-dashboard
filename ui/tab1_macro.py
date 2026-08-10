@@ -738,7 +738,10 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
 
     # 稽核 🟡 建議 10:標題原本帶內部版號「（v19.15）」—— 版號對使用者零意義,
     # 且它是**當年新增這區塊的版本**,不是資料版本,留著只會被誤讀成資料日期。
-    st.markdown("### 🎯 即時訊號 + 決策矩陣")
+    # 2026-08-10:這一層 `###` 標題整個拿掉。呼叫端本來就有一個同名的 `##` 區塊標題,
+    # 中間隔著的 expander 外框(它自己也印一次同名標題)這次一併拆掉之後,同一句話
+    # 會連印三次、彼此只差一個 emoji。留下的 caption 講的是**推導鏈**
+    # (呼叫端那句講的是「所以我該怎麼做」),兩者不同義,不算重複故保留。
     st.caption("總經 verdict 套用 active 權重後 → 5 級分檔 × 個股 σ/配息訊號 → 逐檔持有/加碼/減倉/全撤")
 
     # ── 區塊 1：頂部 verdict 大卡 ─────────────────────────────
@@ -841,8 +844,10 @@ def _render_realtime_decision_dashboard(indicators: dict | None) -> None:
     from ui.components.tables import styled_dataframe  # noqa: PLC0415
     styled_dataframe(df.style.apply(_row_style, axis=1))
 
-    # v19.22.1 hotfix：本函式可能被外層 expander 包覆（render_macro_tab L716），
-    # Streamlit 禁止 nested expanders → 沿用 v17.2 慣例改用 st.container(border=True)
+    # v19.22.1 hotfix：本函式原本被外層摺疊容器包覆，Streamlit 禁止 nested
+    # expanders → 沿用 v17.2 慣例改用 st.container(border=True)。
+    # 2026-08-10：外層那層殼已拆除，nested 限制不再適用；此處 container 仍保留 ——
+    # 它在這裡的作用是「附註區塊的視覺分界」，本來就不是為了摺疊而存在。
     with st.container(border=True):
         st.markdown("**💡 動作對照表 + 邊界規則**")
         st.markdown(
@@ -1508,13 +1513,14 @@ def render_macro_tab() -> None:
                        "（推導依據見上方四時域）")
             # 稽核 🟡 建議 10:標題原本帶內部代號(當年的工作項編號),
             # 對使用者是雜訊 —— 拿掉,語意不變。
-            with st.expander(
-                "🔬 即時訊號 + 決策矩陣（verdict 路徑｜逐檔行動建議）",
-                expanded=True,
-            ):
-                # v19.429 §1 區塊隔離（見 _safe_section）
-                _safe_section("📋 即時訊號 + 決策矩陣",
-                              _render_realtime_decision_dashboard, ind)
+            # 2026-08-10:整個 expander 外框再拿掉。它已經是 `expanded=True`,
+            # 所以外框**不曾**藏住任何東西 —— 唯一的效果是把正上方那個 `##` 區塊
+            # 標題換句話再印一次,外加一個誤點就把算好的結論收起來的把手。
+            # (user 原則:不要闔上的資料 + 重複的移除。)不改用 container 包:
+            # 上面的 `##` 標題 + caption 已經是這一段的框,再加一層邊框只是換個殼。
+            # v19.429 §1 區塊隔離（見 _safe_section）
+            _safe_section("📋 即時訊號 + 決策矩陣",
+                          _render_realtime_decision_dashboard, ind)
 
             # ══ v19.118 中國拖累唯讀面板（China Drag）═════════════════════
             # 4 數字唯讀展示:不改變上方總經分數,僅示意 China 副盤折扣強度
@@ -1524,11 +1530,14 @@ def render_macro_tab() -> None:
             # 2026-08-07:隨「四時域優先」重排,從詳細區開頭移到此處。它是唯讀副盤
             # 參考(不進總經分數),排在四時域 → 逐檔行動這條主因果鏈之後。
             st.divider()
-            with st.expander("🇨🇳 中國拖累（China Drag）— 唯讀副盤參考", expanded=True):
-                try:
-                    _render_china_drag_panel(phase, FRED_KEY)
-                except Exception as _cd_e:  # noqa: BLE001
-                    st.caption(f"⬜ 中國副盤載入失敗：{type(_cd_e).__name__}")
+            # 2026-08-10:外框也拆掉(同上,它已是 expanded=True)。標題不必補 ——
+            # `_render_china_drag_panel` 自己第一行就畫一張帶標題 + regime 的卡,
+            # 三條早退路徑也各自帶同一個標題;外框那行字是第二份副本,
+            # 連「唯讀」這件事都與面板底下的 caption 重講一次。
+            try:
+                _render_china_drag_panel(phase, FRED_KEY)
+            except Exception as _cd_e:  # noqa: BLE001
+                st.caption(f"⬜ 中國副盤載入失敗：{type(_cd_e).__name__}")
 
             # ── AI 結構化總經摘要 ── L3 only
 

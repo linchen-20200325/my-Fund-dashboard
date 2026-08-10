@@ -1598,12 +1598,21 @@ if _logged_in_sb or (_gsa_secret and _sheet_id_secret):
 
 | 原則 | 落實 | 程式碼位置 |
 |------|------|-----------|
-| L1 總覽級 KPI | 4 顆字卡：💰總資產 / 📈累計報酬 / 🛡️核心% / 💵月配息 | `app.py` Tab3 開頭 |
-| L2 趨勢級圖表 | 平滑資產曲線（spline），對比 2% 無風險基準（§0 禁 ETF） | `app.py` Tab3 KPI 下方 |
+| L1 總覽級 KPI | 4 顆字卡：💰投入本金 / 📈累計報酬 / 🛡️核心資產比例 / 💵預估月配息 | `ui/tab3_portfolio.py` KPI 字卡列 |
+| L2 趨勢級圖表 | 淨值成長模擬曲線（spline），對比 2% 無風險基準（§0 禁 ETF） | `ui/tab3_portfolio.py` KPI 下方 |
 | L3 細節級 | 既有 T4/T5、六因子、相關矩陣等不變 | Tab3 中段 |
 | 白話解說 | 每張關鍵圖表下方 `st.caption("💡 怎麼看 ...")` | Tab1 宏觀圖、Tab3 T5、資產曲線 |
 | 友善錯誤 | `_friendly_error(title, exc, hint=, level=)` 統一 helper | `app.py` 頂部 |
 | 空狀態引導 | Tab3 無基金時顯示「👋 新手三步驟」卡 | Tab3 開頭 |
+
+> **2026-08-10 命名更正（本表原文與畫面已不同源）**：
+> 1. 第一顆 KPI 字卡早已從「總資產」改名為「**投入本金**」——它是 Google Sheet 手填的
+>    `invest_twd` 加總，**不是**當前市值。舊名會被直接讀成「我現在有多少錢」。
+> 2. L2 那條曲線同批更名為「**淨值成長模擬曲線**」，y 軸從「總資產 (NTD)」改為
+>    「模擬市值 (NTD)」。它畫的是「逐檔 `(NAV_t / NAV_0) × invest_twd` 加總」——
+>    起點等於投入本金、之後只隨淨值相對漲跌縮放，**未計入配息、實際分批扣款時點、
+>    匯率**，既不是本金也不是市值。曲線末點的標註同步由「今 NT$…」改為「今日模擬 …」。
+> 3. 位置欄的 `app.py` 為 B-C 系列抽 tab **之前**的舊路徑，一併更新為 `ui/tab3_portfolio.py`。
 
 ### 7-2 強制規範
 
@@ -1656,13 +1665,33 @@ def _friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = 
 | US10Y 殖利率 | % | <4.5 | 4.5–5 | ≥5 緊縮 | high_bad | 🔵 MACRO_THRESHOLDS.US10Y |
 | Forward P/E | 倍 | <19.5(+1σ) | 19.5–22.5 | ≥22.5(+2σ) | high_bad | 🔵 valuation.FORWARD_PE_MEAN+σ |
 
-### 🎯 短線急殺（即時 risk-off）
+### 🎯 短線（即時避險情緒）
+
+> 標題用語對齊 SSOT `shared/macro_buckets.BUCKET_META["short"]`（`title="短線"` /
+> `sub="即時避險情緒"`，2026-08-07 user 拍板去英文行話）。舊標題「短線急殺（即時 risk-off）」
+> 已與程式碼不同源，本節於 2026-08-10 更正。
+
 | 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
 |---|---|---|---|---|---|---|
 | VIX 恐慌指數 | — | <22 | 22–30 | ≥30 危機 | high_bad | 🔵 MACRO_THRESHOLDS.VIX + macro_validation |
 | HY 信用利差 OAS | % | <4 | 4–6 | ≥6 信用裂 | high_bad | 🔵 MACRO_THRESHOLDS.HY_SPREAD |
-| MOVE 債市波動 | — | <100 | 100–120 | ≥120 stress | high_bad | ⚪ 對齊 macro_beginner_view._MOVE_WARNING |
-| Put/Call 比率 | — | <1.0 | 1.0–1.5 | ≥1.5 散戶恐慌 | high_bad | ⚪ 對齊 macro_beginner_view._PCR_PANIC |
+| MOVE 債市波動 | — | <100 | 100–120 | ≥120 stress | high_bad | ⚪ `macro_buckets.DangerSpec("move")` 具名門檻 ⬜ 見下註 |
+| Put/Call 比率 | — | <1.0 | 1.0–1.5 | ≥1.5 散戶恐慌 | high_bad | ⚪ `macro_buckets.DangerSpec("pcr")` 具名門檻 ⬜ 見下註 |
+
+> ⬜ **MOVE / Put-Call 兩列的現況（2026-08-10 查證）**：
+> 1. **來源欄原本指向不存在的符號** —— 舊文寫「對齊 `macro_beginner_view._MOVE_WARNING`
+>    / `._PCR_PANIC`」，但 `ui/helpers/macro/beginner_view.py` 內這兩個常數**已不存在**
+>    （該檔現存的同類常數只剩 `_SLOOS_TIGHTENING_THRESHOLD`）。指向已刪除符號的「來源」
+>    比沒有來源更糟：它讓讀者以為有東西在守。已改指真正定義門檻的 registry 本身。
+> 2. **目前沒有資料源餵值** —— `services/macro/us_indicators.py` 產出的 `indicators`
+>    沒有 MOVE / Put-Call 這兩個 key，而 registry 是透過
+>    `ui/tab1_macro._zs_danger_spec_key`（`zs_<INDICATOR_KEY>` → 小寫查 `SPECS_BY_KEY`）
+>    被消費的 → 這兩條門檻**畫面上不會出現**。門檻定義保留在 registry 供日後接源，
+>    但本表列出它們時必須標明「尚未接線」，否則與本節開頭「桶燈號 / 圖表標準線 /
+>    本表三者同源」的宣稱互相矛盾。
+> 3. **跨所有權待辦**：`shared/macro_buckets.py:192,196` 的 `source=` 字串仍寫著
+>    `"DESIGN:對齊 macro_beginner_view._MOVE_WARNING"` / `._PCR_PANIC`，與本次更正同一顆
+>    地雷。`shared/` 不在本輪 Coder 所有權，未動。
 
 ### ⚠️ 拐點（領先警報）
 | 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |
@@ -1670,8 +1699,19 @@ def _friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = 
 | Sahm Rule | — | <0.3 | 0.3–0.5 | ≥0.5 觸發 | high_bad | 🔵 SAHM_RECESSION_THRESHOLD(0.5) + ⚪ 0.3 警戒 |
 | 10Y-2Y 殖利率差 | % | >0.5 | 0–0.5 接近倒掛 | ≤0 倒掛 | low_bad | 🔵 MACRO_THRESHOLDS.YIELD_10Y2Y |
 | 10Y-3M 殖利率差 | % | >0.5 | 0–0.5 接近倒掛 | ≤0 倒掛 | low_bad | 🔵 MACRO_THRESHOLDS.YIELD_10Y3M |
-| CFNAI 領先指標 | — | >−0.35 | −0.7–−0.35 走弱 | ≤−0.7 衰退 | low_bad | 🔵 CFNAI_RECESSION_THRESHOLD(−0.7) + ⚪ −0.35 警戒 |
+| CFNAI-MA3 領先指標 | — | >0 | −0.7–0 低於趨勢 | ≤−0.7 衰退 | low_bad | 🔵 CFNAI_RECESSION_THRESHOLD(−0.7) + CFNAI_TREND_GROWTH(0.0) |
 | SLOOS 銀行收緊 | % | <30 | 30–50 | ≥50 衰退級緊縮 | high_bad | ⚪ 對齊 macro_beginner_view._SLOOS_TIGHTENING |
+
+> 🔵 **CFNAI 黃線更正（v19.404 程式端已改，本表 2026-08-10 補齊）**：
+> 本表原本把黃線寫成 −0.35，程式端 `shared/macro_buckets.py` 的 `DangerSpec("cfnai")`
+> 早在 v19.404 就改成官方零點 **0.0**（`CFNAI_TREND_GROWTH`）。
+> **−0.35 不是 CFNAI 水準值的門檻** —— 它是 **CFNAI Diffusion Index（擴散指標）** 的擴張
+> 門檻，`shared/signal_thresholds.py` 對這個值有明文標註「屬 Diffusion Index、**禁止混用**」。
+> 兩者是不同的序列，把 Diffusion 的門檻套到水準值上沒有任何官方依據（§3.3 反捏造）。
+> 文件把它留著，等於替同一顆地雷保留一個復活入口 —— 下一個人照文件「修正」程式碼，
+> 就會把 v19.404 的修正改回去。**新增 / 調整 CFNAI 門檻一律只改
+> `shared/signal_thresholds.py` 的 `CFNAI_*` 常數，本表跟著鏡像，不得反向。**
+> 兩條線皆以 **3 個月移動平均（CFNAI-MA3）** 為基準，非單月值。
 
 ### 📰 新聞（系統性風險掃描）
 | 指標 | 單位 | 🟢 綠 | 🟡 黃線 | 🔴 紅線 | 方向 | 來源 |

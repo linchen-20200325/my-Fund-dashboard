@@ -67,9 +67,13 @@ def render_ai_summary_section(
         "（FRED 23 指標 + phase + 系統性風險 + 時事新聞），逐章節白話結論。"
     )
     from ui.helpers.ai_summary import render_ai_summary_widget  # noqa: PLC0415
+    # 綜合分數的 producer 是 `ui/tab1_macro.py` 的 ② 依據段(算完當場 stash 進
+    # session),本段是它的**消費端**;拿掉那一行 stash,這裡就會退回缺值符號。
+    # 預設值原本是空 dict —— 空 dict 走的是「dict 分支查不到 key」那條路,
+    # 與「真的沒有這個鍵」在下游混成同一種結果;改成不給預設,讓缺值就是缺值。
     _mac_snap, _mac_heads, _mac_secs = _build_macro_ai_snapshot(
         ind, phase,
-        st.session_state.get("composite_score", {}),
+        st.session_state.get("composite_score"),
         st.session_state.get("systemic_risk_data"),
         st.session_state.get("news_items", []),
     )
@@ -84,6 +88,37 @@ def render_ai_summary_section(
     )
 
 
+def _format_composite(score) -> str:
+    """把 session 拿到的總經加權淨分格式化成 prompt 用字串;拿不到 → 缺值符號。
+
+    2026-08-10:原本寫 `score or "—"`。composite 是**有正負的加權淨分**,
+    正好落在 0.0(多空完全打平)是一個真實讀數,卻會被 falsy 判成缺資料 ——
+    §1「缺值要誠實」的反面:把算出來的值謊報成沒算出來。同型缺陷見
+    `PROCESS.md §4` 表格第一列(`0 or 1` 把去重後的權重還原回去)。
+
+    小數位對齊 `build_evidence_rows` 那一列(一位),避免 AI 講的數字與畫面
+    上同一個數字的位數對不起來,讀者以為是兩個判斷。
+    """
+    import math  # noqa: PLC0415
+
+    def _num(v) -> "str | None":
+        # bool 是 int 的子型別,先擋掉(True 會變成 +1.0 這種假分數)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return None
+        # NaN / inf 不是讀數,誠實回缺值,不讓 "+nan" 進 prompt(§1)
+        return f"{float(v):+.1f}" if math.isfinite(v) else None
+
+    _direct = _num(score)
+    if _direct is not None:
+        return _direct
+    if isinstance(score, dict):        # 舊契約相容:曾以 dict 承載
+        for _k in ("total", "score", "composite", "value"):
+            _hit = _num(score.get(_k))
+            if _hit is not None:
+                return _hit
+    return "—"
+
+
 def _build_macro_ai_snapshot(ind, phase, score, srd, news):
     """v18.215：組 Tab1 總經「全資料」快照給通用白話摘要 widget。
 
@@ -92,7 +127,7 @@ def _build_macro_ai_snapshot(ind, phase, score, srd, news):
     """
     lines = ["## 總經全章節快照"]
     if isinstance(phase, dict) and phase:
-        _sc = score.get("total", "—") if isinstance(score, dict) else (score or "—")
+        _sc = _format_composite(score)
         lines.append(f"- 景氣位階：{phase.get('phase', '—')}｜綜合分數：{_sc}")
         _alloc = phase.get("allocation") or phase.get("alloc")
         if isinstance(_alloc, dict) and _alloc:

@@ -4,10 +4,12 @@
   必修 1  PMI 代理值必須帶標記進 AI prompt(§1 反造假)
   必修 2  三處指路文案改吃 `story_nav.tab_label()`(分頁名 SSOT)
   必修 3  兩套評分尺度消歧義 + 位階字卡收 `format_phase_score` SSOT
-  必修 4  詳細區版面順序 + 決策矩陣預設展開
+  必修 4  詳細區版面順序 + 決策矩陣不得掛摺疊把手
           (2026-08-07 user 拍板「四時域優先」:長期 → 中期 → 短線 → 拐點 →
            決策矩陣;原本的「決策矩陣在四時域之前」已被此拍板取代,
-           但「不得跑到總表前面」那條上界一字未動)
+           但「不得跑到總表前面」那條上界一字未動。
+           2026-08-10 再進一步:原本守「預設展開」的那條升級為「根本不准包在
+           可收合容器裡」—— 預設展開只是初始狀態,把手還在就還能被誤點收起來)
   必修 5  status / stat_tile / tables 三元件的 0-consumer 裁決
   必修 6  SPEC §1-B 與單軌實作對齊
 
@@ -107,14 +109,26 @@ def _md_heading_line(text: str) -> int:
     return _hits[0]
 
 
+# 沒有 `##` 標題、卻確實佔一整段版面的區塊,其 renderer 名字。
+# 2026-08-10:中國副盤原本是靠外框那層摺疊殼的標籤被認出來的;那層殼拆掉後
+# (它已是 expanded=True,擋不住任何東西,只是把面板自己的標題再印一次),
+# 唯一還留在原地的錨點就是這個呼叫本身 —— 不補進來的話,本 helper 會從此
+# 看不見它,「四時域之間不得插入別的區塊」那兩條守門就默默漏掉一種插入方式。
+_TITLELESS_BLOCK_RENDERERS = ("_render_china_drag_panel",)
+
+
 def _block_openers_between(lo: int, hi: int) -> list[str]:
-    """落在 (lo, hi) 之間的「一級區塊開頭」——
-    `st.markdown("## …")` 標題與 `st.expander(…)` 面板兩種都算(後者是本檔
-    中國副盤那類沒有 `##` 標題、卻確實佔一整段版面的區塊)。"""
+    """落在 (lo, hi) 之間的「一級區塊開頭」——三種都算:
+    `st.markdown("## …")` 標題、`st.expander(…)` 面板(本檔目前已無,留著擋回歸),
+    以及 `_TITLELESS_BLOCK_RENDERERS` 列的無標題區塊 renderer 呼叫。"""
     _out: list[str] = []
     for _n in ast.walk(_tree(_TAB1)):
-        if not (isinstance(_n, ast.Call) and lo < _n.lineno < hi
-                and _n.args and isinstance(_n.args[0], ast.Constant)
+        if not (isinstance(_n, ast.Call) and lo < _n.lineno < hi):
+            continue
+        if _fn_name(_n) in _TITLELESS_BLOCK_RENDERERS:
+            _out.append(_fn_name(_n))
+            continue
+        if not (_n.args and isinstance(_n.args[0], ast.Constant)
                 and isinstance(_n.args[0].value, str)):
             continue
         if _fn_name(_n) == "expander":
@@ -338,7 +352,7 @@ def test_two_scales_not_merged():
 
 
 # ══════════════════════════════════════════════════════════════
-# 必修 4 — 詳細區版面順序(四時域優先)+ 決策矩陣預設展開
+# 必修 4 — 詳細區版面順序(四時域優先)+ 決策矩陣不得掛摺疊把手
 # ══════════════════════════════════════════════════════════════
 def test_detail_zone_opens_with_the_first_horizon_section():
     """**修正前必紅**(舊行為與斷言衝突,非 ImportError)。
@@ -396,21 +410,40 @@ def test_decision_matrix_sits_after_the_horizons_and_before_the_ai_summary():
     assert _matrix < _ai, "決策矩陣被挪到 AI 總結之後 —— 逐檔行動不得埋在全頁最末"
 
 
-def test_decision_matrix_expander_defaults_open():
-    """**修正前必紅**(原 expanded=False)—— 算好的結論預設收合等於沒揭露。"""
-    _found: list = []
+# Streamlit 這幾個 primitive 都渲染成「可收合容器」(同 test_app_smoke 的清單)。
+_COLLAPSIBLE_ATTRS = ("expander", "status", "popover", "dialog")
+
+
+def test_decision_matrix_is_not_wrapped_in_a_collapsible_shell():
+    """**修正前必紅**(舊行為與斷言衝突,非 ImportError)。
+
+    本條**取代**原本那條「外框的 expanded 必須是 True」。舊條守的是
+    「算好的結論不可以預設收合」,但 `expanded=True` 只設定摺疊把手的**初始**
+    狀態,把手本身還在:使用者誤點一次,逐檔行動建議就整段消失。而且那個外框
+    自己也印一次標題,與正上方的 `##` 區塊標題是同一句話的第二份副本。
+    2026-08-10 外框整個拆掉 —— 舊條要守的東西不再存在(讀不到 `expanded` 就會
+    拿到空 list 而紅),改守更強的版本:**內容直接呈現,不得回到任何可收合容器**。
+
+    ⚠️ 一律走 AST:本檔守的區塊名在 `ui/tab1_macro.py` 的沿革註解裡被引述多次,
+       字串比對會提前命中註解變成假通過(本檔既有慣例,見 `_render_line`)。
+    """
+    _hits: list[int] = []
     for node in ast.walk(_tree(_TAB1)):
         if not isinstance(node, ast.With):
             continue
-        _body = ast.dump(ast.Module(body=list(node.body), type_ignores=[]))
-        if "_render_realtime_decision_dashboard" not in _body:
+        if not any(isinstance(_i.context_expr, ast.Call)
+                   and _fn_name(_i.context_expr) in _COLLAPSIBLE_ATTRS
+                   for _i in node.items):
             continue
-        for item in node.items:
-            _ctx = item.context_expr
-            if isinstance(_ctx, ast.Call) and _fn_name(_ctx) == "expander":
-                _found += [kw.value.value for kw in _ctx.keywords
-                           if kw.arg == "expanded" and isinstance(kw.value, ast.Constant)]
-    assert _found == [True], f"決策矩陣 expander 的 expanded 應為 True,實際 {_found}"
+        if any(isinstance(_x, ast.Name)
+               and _x.id == "_render_realtime_decision_dashboard"
+               for _x in ast.walk(node)):
+            _hits.append(node.lineno)
+    assert not _hits, (
+        f"決策矩陣又被塞進可收合容器(行 {_hits})—— 算好的逐檔行動建議"
+        "不得再掛一道摺疊把手")
+    # 反向鎖:別把外框連同內容一起刪掉。渲染點必須還在,且仍只有一處。
+    assert _render_line("_render_realtime_decision_dashboard") > 0
 
 
 def test_decision_matrix_heading_still_present_once():

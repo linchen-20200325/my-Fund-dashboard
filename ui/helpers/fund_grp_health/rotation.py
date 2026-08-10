@@ -90,20 +90,33 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
     key_prefix 讓組合健診 / 批次兩處滑桿的 session_state key 不衝突。
     """
     from services.rotation import suggest_rotation_pairs
+    # 三個滑桿的**預設值**走 SSOT(與健診大表「基期」欄、選基金篩選器同一組門檻),
+    # 不在 UI 另外寫死一組數字 —— 寫死等於在畫面上多養一把尺(§3.3)。
+    from shared.signal_thresholds import (
+        ROTATION_BUY_MIN_SCORE,
+        ROTATION_BUY_SIGMA,
+        ROTATION_SELL_SIGMA,
+    )
 
     st.divider()
     st.markdown("### 🔄 輪動配對建議(賣高基期 → 買**別類**低基期健康)")
-    st.caption("跨產業/性質輪動:賣掉貼近高點的基金,換進**不同類別**、深跌但體質健康的基金"
-               "(分散 + 賺回歸差價)。⚠️ 低基期**不一定**回漲 —— 買方已過濾"
-               "(4D∈A/B/C + 非吃本金 + 操盤評分達標)避免接刀。")
+    st.caption("跨產業 / 性質輪動:賣掉已經漲到貼近高點的基金,換進**不同類別**、跌得深"
+               "但體質仍健康的基金(順便分散,賺價格回歸的差價)。"
+               "⚠️ 跌深**不保證**會漲回來 —— 買方這邊已經先過濾過"
+               "(健康等第 A/B/C + 沒有在吃本金 + 操盤評分達標),避免接到下墜的刀。")
 
     c1, c2, c3 = st.columns(3)
-    _sell = c1.slider("高基期門檻(σ rank ≥)", -2.0, 0.5, -0.5, 0.1, key=f"{key_prefix}sell",
-                      help="現價貼近高點幾 σ 內算高基期(賣方候選)")
-    _buy = c2.slider("低基期門檻(σ rank ≤)", -3.0, -0.5, -1.5, 0.1, key=f"{key_prefix}buy",
-                     help="跌破高點幾 σ 算低基期(買方候選)")
-    _minsc = c3.slider("買方操盤評分 ≥", 0, 100, 50, 5, key=f"{key_prefix}score",
-                       help="買方經理人操盤評分門檻(避免換進操作差的)")
+    _sell = c1.slider("高基期門檻(σ rank ≥)", -2.0, 0.5, ROTATION_SELL_SIGMA, 0.1,
+                      key=f"{key_prefix}sell",
+                      help="現價離期間高點多近就算「太貴、可以賣」。"
+                           "σ 是波動的倍數,數字愈接近 0 代表愈貼近高點。")
+    _buy = c2.slider("低基期門檻(σ rank ≤)", -3.0, -0.5, ROTATION_BUY_SIGMA, 0.1,
+                     key=f"{key_prefix}buy",
+                     help="現價要跌到離高點多遠才算「夠便宜、可以買」。"
+                          "數字愈負代表跌得愈深。")
+    _minsc = c3.slider("買方操盤評分 ≥", 0, 100, int(ROTATION_BUY_MIN_SCORE), 5,
+                       key=f"{key_prefix}score",
+                       help="要換進來的基金,經理人操盤評分至少要幾分(避免換到操作更差的)。")
 
     try:
         _pairs = suggest_rotation_pairs(rows, sell_sigma=_sell, buy_sigma=_buy,

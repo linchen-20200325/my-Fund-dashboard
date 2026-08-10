@@ -191,6 +191,14 @@ def build_health_analysis_row(
     _333_passed = _333.get("passed")
     _333_emoji = "✅" if _333_passed is True else ("❌" if _333_passed is False else "⬜")
     _333_msg = (_333.get("message") or "")[:36]
+    # ⚠️ 本欄輸出的鍵是「MK 3-3-3」,**不是**健診 / 批次大表上顯示的那一欄。
+    #    大表欄序常數 `ui/helpers/fund_grp_health/unified._UNIFIED_FRONT` 登錄的是
+    #    `services/fund_row.py` 產的「MK 3-3-3 篩」,本欄在合併時會被過濾掉。
+    #    本欄仍有 production 消費者(Tab2 單一基金的 metric 卡),**不是死碼**。
+    #    兩份的「成立年數」推導不同源(本檔走 `fund_screening.fund_inception_years`,
+    #    含 `metrics.inception_date` 來源 + tz 正規化;fund_row 為 inline 版,少一個
+    #    inception 來源)—— 收斂成一份會改變部分保單代碼基金的判定結果,屬設計決策,
+    #    未經裁決前**不得**逕自對齊。
 
     # ─── 核心 / 衛星資產分類 SSOT(兩層:類別 + 3-3-3,帶來源)──────
     # v19.327:3-3-3 對保單子網域封鎖基金常「資料不足」→ 退回基金類別判定補涵蓋率。

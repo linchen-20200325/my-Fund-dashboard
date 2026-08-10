@@ -208,7 +208,11 @@ def render_short_radar_section(
         # 2026-08-05 稽核 🟡 建議 8 改展開(user 原則 1「不要闔上的資料」):
         # 走到這裡代表使用者**已經按過**「載入流動性壓力預警引擎」按鈕、資料也抓好了,
         # 還要他再點一次才看得到 = 為一份他主動要的資料多設一道門。
-        with st.expander("⑤ 🌊 流動性壓力預警引擎（深水區 4 因子 ｜ lead SPX 1-3 週）", expanded=True):
+        # 2026-08-10:摺疊殼整個拆掉。`expanded=True` 只是「預設不闔上」,把手還在,
+        # 誤點一次就把使用者主動抓來的資料收起來。標題改 `st.markdown` 直出(層級對齊
+        # 同段的 ④),外框換成 `st.container(border=True)` —— 只保留視覺分界,不可收合。
+        st.markdown("### ⑤ 🌊 流動性壓力預警引擎（深水區 4 因子 ｜ lead SPX 1-3 週）")
+        with st.container(border=True):
             from ui.components.macro_card import make_sparkline as _mk_sl2
             from services.liquidity_engine import liquidity_verdict
             if st.button("🔄 重新抓取流動性因子", key="btn_reload_liquidity"):

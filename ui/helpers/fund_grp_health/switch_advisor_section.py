@@ -101,10 +101,28 @@ def _render_pool_editor() -> None:
 
     if pool:
         import pandas as pd
+        from streamlit import column_config as _cc
         _df = pd.DataFrame([{"代號": e.code, "名稱": e.name, "類別": e.category,
                              "手動型態": e.type_override or "自動", "備註": e.note,
                              "加入日": e.added_at} for e in pool])
-        st.dataframe(_df, use_container_width=True, hide_index=True)
+        st.dataframe(
+            _df, use_container_width=True, hide_index=True,
+            column_config={
+                "代號": _cc.TextColumn("代號", width="small",
+                    help="基金代號 —— 產生換股建議時,沒載入過的會自動補抓一次。"),
+                "名稱": _cc.TextColumn("名稱", width="medium",
+                    help="選填。留白時只會看到代號。"),
+                "類別": _cc.TextColumn("類別", width="small",
+                    help="選填。填了可以幫助配對「同類別」的替換標的;留白時改用抓到的基金類別。"),
+                "手動型態": _cc.TextColumn("手動型態", width="small",
+                    help="你手動指定這檔要用哪一套規則:「震盪」= 走高低基期來回操作;"
+                         "「成長」= 看總經與趨勢決定去留;「自動」= 由系統依波動判定。"),
+                "備註": _cc.TextColumn("備註", width="large",
+                    help="給自己看的筆記(例如為什麼把它放進候選),不參與任何計算。"),
+                "加入日": _cc.TextColumn("加入日", width="small",
+                    help="加進選股池的日期,不是基金成立日。"),
+            },
+        )
     else:
         st.caption("選股池目前是空的 —— 用下方表單加入候選基金。")
 
@@ -167,7 +185,32 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
                      if a.get("switch_to") else "—"),
         "理由": a["reason"],
     } for a in _adv]
-    st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+    from streamlit import column_config as _cc
+    st.dataframe(
+        pd.DataFrame(_rows), use_container_width=True, hide_index=True,
+        column_config={
+            "基金": _cc.TextColumn("基金", width="medium",
+                help="你目前持有的基金。"),
+            "型態": _cc.TextColumn("型態", width="small",
+                help="這檔用哪一套規則判定,以及是誰決定的:"
+                     "「震盪」= 價格來回走,靠高低基期進出;"
+                     "「成長」= 長期向上,靠總經與趨勢決定去留;"
+                     "後面的小字是判定方式(你手動指定,或系統依波動自動判)。"),
+            "ER": _cc.TextColumn("ER", width="small",
+                help="效率比(Efficiency Ratio):這段期間的淨漲跌 ÷ 一路上上下下的總移動距離,"
+                     "介於 0~1。**接近 1 = 一路直線往上(成長型)**,"
+                     "**接近 0 = 上上下下走不出去(震盪型)**。"
+                     "「—」= 淨值資料不足,算不出來。"),
+            "建議": _cc.TextColumn("建議", width="medium",
+                help="換股 / 賣出轉現金 / 警示 / 續抱 / 資料不足。"
+                     "**教學參考,不是投資建議**;缺條件時一律回「續抱」或「資料不足」,不硬給動作。"),
+            "換入標的": _cc.TextColumn("換入標的", width="medium",
+                help="從你的選股池裡挑出的替換標的,括號裡是它現在離高點多遠(愈負 = 跌愈深)。"
+                     "「—」= 池子裡沒有合適的,不硬湊。"),
+            "理由": _cc.TextColumn("理由", width="large",
+                help="這個建議是依據哪幾個條件推出來的 —— 不同意就別照做,這欄的用途是讓你能反駁它。"),
+        },
+    )
 
     s = res["summary"]
     st.caption(f"持倉 {s['n_holdings']} 檔 → 換股 {s['n_switch']}・賣出轉現金 {s['n_sell_cash']}・"

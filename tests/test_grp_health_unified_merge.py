@@ -14,12 +14,18 @@ from ui.helpers.fund_grp_health.unified import build_merged_extra_columns
 
 @pytest.fixture(autouse=True)
 def _seed_benchmark(monkeypatch):
-    """種入基準快取 → capture_by_code 不打網路(v19.414)。"""
+    """種入基準快取 → capture_by_code 不打網路(v19.414)。
+
+    快取值形狀 = `(抓到的時間 monotonic 秒, series)`(TTL 化後)——
+    種入「現在」的時間戳,確保在 TTL 內、不會被判過期而去打網路。
+    """
+    import time as _t
     import ui.helpers.fund_grp_health.capture as _cap
     _d = pd.date_range("2020-01-31", periods=60, freq="ME")
     _b = pd.Series(100 * np.cumprod([1.0] + [1.005] * 59), index=_d)
-    monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", _b)
-    monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", _b)
+    _now = _t.monotonic()
+    monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", (_now, _b))
+    monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", (_now, _b))
 
 
 def _fund(code, *, series=True, metrics=None):
