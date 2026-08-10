@@ -50,10 +50,28 @@ class TestInferYearForMmdd:
         assert self._fn()(7, 11, dt.date(2026, 7, 10)) == 2025
 
     def test_call_site_uses_tw_timezone(self):
-        # 源碼守衛:MM/DD 補年份區塊必須用 UTC+8 today,不可退回裸 date.today()
+        """源碼守衛:MM/DD 補年份區塊必須用 UTC+8 today,不可退回裸 date.today()。
+
+        2026-08-11 更新 —— **caller 換人了,不是本測試失效**:
+        F5 當初的 production caller 是 `_src_allianzgi_nav` 的第 3 段
+        (ifund/tw HTML 近30日,alias `_dtt2`)。該段因「請求 URL 不帶基金代碼、
+        卻把頁面上任何淨值表當成該檔 NAV 回傳」(§1 造假)已整段刪除。
+        同一個 TW 時區修補改落在 `_src_nav_30day`(alias `_dtt`)—— 而 user 的
+        持倉現在**全部**走那條路徑,守衛的重要性只增不減。
+
+        ⚠️ 舊版第二行寫的是 `assert "_td2 = _dtt2.date.today()" not in src`。
+        `_dtt2` 這個 alias 隨第 3 段一起消失後,那行會變成**永久恆真**的
+        註解錨點(PROCESS.md §4 點名型態)—— 一併改成守新 alias。
+        """
         src = (_REPO / "repositories" / "fund" / "sources.py").read_text(encoding="utf-8")
-        assert "_dtt2.timezone(_dtt2.timedelta(hours=8))" in src
-        assert "_td2 = _dtt2.date.today()" not in src
+        assert "_dtt.timezone(_dtt.timedelta(hours=8))" in src, (
+            "_src_nav_30day 的 MM/DD 補年份必須用 TW(UTC+8)今日")
+        assert "_today = _dtt.date.today()" not in src, (
+            "不可退回裸 date.today() —— Streamlit Cloud 是 UTC，"
+            "「TW 已跨日、UTC 未跨日」的 8 小時窗會把當日條目推回去年同日（≈365 天錯置）")
+        # 補強:年份推斷必須走 SSOT 純函式,不得再 inline 一份 `today.year if ...`
+        assert "_infer_year_for_mmdd(_mo, _da, _today)" in src, (
+            "_src_nav_30day 應呼叫 SSOT 的 _infer_year_for_mmdd，不得 inline 重寫")
 
 
 # ══════════════════════════════════════════════════════════════

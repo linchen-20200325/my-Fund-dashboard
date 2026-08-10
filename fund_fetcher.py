@@ -218,6 +218,37 @@ def classify_fetch_status(fund_data: dict) -> str:
     return "failed"
 
 
+def _is_empty_value(v) -> bool:
+    """`merge_non_empty` 的空值判定 —— 陣列型別安全版。
+
+    2026-08-11 修:原本 `merge_non_empty` 直接寫 `if v in (None, "", [], {})`。
+    `in` 會逐一做 `==` 再 `bool()`,而 **pandas / numpy 物件的 `==` 是
+    elementwise**,`bool(Series)` 直接拋
+    `ValueError: The truth value of a Series is ambiguous`。
+
+    偏偏 `series`(pd.Series)正是本函式最重要的合併對象 —— 所以語意剛好反過來:
+    **「多來源抓到淨值序列」的那一刻 merge 就炸**,例外往上被
+    `repositories/fund/fund_orchestration.py` Step 2 的 `except Exception` 吞成
+    一行 log,整包多來源結果被丟棄,流程改走 legacy 爬蟲(§1 靜默失敗)。
+    而且 dict 是 in-place 改的,炸掉時 `series` 之前的 key 已合入、之後的
+    (含 `data_source` / `source_trace`)全丟 → **半合併狀態**比全丟更難 debug。
+
+    非陣列型別**刻意保留原本的 `in (None, "", [], {})` 語意**(例如 `0` /
+    `False` / 空 tuple 都算「有值」),避免這次修 bug 順手改到不相干的行為。
+    """
+    if v is None:
+        return True
+    # 陣列型(pd.Series / DataFrame / Index / np.ndarray):唯一安全的空判定是 len()。
+    # 用 `shape` 屬性做 duck-typing,免得本檔為此 import pandas/numpy。
+    if hasattr(v, "shape"):
+        try:
+            return len(v) == 0
+        except TypeError:
+            # 0-d ndarray 之類沒有 len() → 視為有值(§1 寧可留著也不要靜默丟)
+            return False
+    return v in (None, "", [], {})
+
+
 def merge_non_empty(dst: dict, src: dict) -> dict:
     """
     v13.5: 欄位級合併，只用 src 中真正有值的欄位更新 dst。
@@ -228,7 +259,7 @@ def merge_non_empty(dst: dict, src: dict) -> dict:
     if not src:
         return dst
     for k, v in src.items():
-        if v in (None, "", [], {}):
+        if _is_empty_value(v):
             continue
         dst[k] = v
     return dst

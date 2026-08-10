@@ -273,16 +273,41 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
     """
     安聯投信官網歷史淨值抓取。
     Colab IP 對 allianzgi.com 無限制，是 ACTI 系列最可靠的來源。
-    路徑：_ALLIANZ_NAV_API JSON API（2000d 歷史）→ MoneyDJ yp004002 完整歷史頁 → ifund/tw HTML（近30日）
+    路徑：_ALLIANZ_NAV_API JSON API（2000d 歷史）→ MoneyDJ yp004002 完整歷史頁
 
     JSON API 結果只在 ≥90 筆時才短路返回；若只拿到近30日資料，繼續往 MoneyDJ yp004002 嘗試，
     確保回傳序列涵蓋至少 3 個月歷史（>90 交易日），而非僅最近 30 天。
+    兩段都不足 90 筆時，回傳**兩者中較長的那一段**，並標上它自己的來源（不合併）。
+
+    ── 2026-08-11 兩項修正（§1 / §2.2）─────────────────────────────────
+    **(a) 三段共用 `rows` dict → 改成每段各自獨立。**
+    原本 `rows` 在函式開頭建立一次，第 1 段（AllianzGI JSON API）、第 2 段
+    （**MoneyDJ** tcbbankfund yp004002）、第 3 段都往同一個 dict 塞，兩個後果：
+      - 第 2 段的 `len(rows) >= 90` 算的是「API 筆數 + MoneyDJ 筆數」的聯集 →
+        回傳一條**兩個不同來源拼起來**的序列，標籤卻是單一來源。§2.1 明文
+        「衝突時上層贏，禁止平均」—— 這裡比平均更糟：是按日期 key **靜默覆寫**，
+        同一天兩源給不同值時後寫的贏，且無任何 log。
+      - 這種序列單調遞增、全正值、筆數充足，**會通過 §4.2 的全部不變量斷言** ——
+        是本 repo 最難察覺的一類假資料。
+
+    **(b) 刪除原第 3 段（ifund/tw HTML「近30日」fallback）。**
+    它請求的 `_ALLIANZ_NAV_ENDPOINT` / fund-nav-search **不帶基金代碼**，
+    整段程式碼裡 `code` 只出現在 print 字串中：請求不帶 code、解析不比對 code、
+    返回不驗證 code，卻在 `len(rows) >= 5` 時把「頁面上任何含『淨值』字樣的表格」
+    當成 `code` 這一檔的 NAV 回傳。§1「寧可炸掉，不可造假」→ 無法證明資料屬於
+    這一檔就不該回傳。`s.attrs["source"]` 標的是主機名，證明不了任何事（§2.2）。
+    近30日的需求本來就有正牌來源 `_src_nav_30day`（waterfall 2f 順位），不缺這一條。
+
+    ⚠️ (a)(b) 必須與「漏括號」同批交付：括號 bug 過去意外保證了 `rows` 進入
+    第 2/3 段時恆為空，把共用容器的問題遮蔽住；修好括號等於解鎖它。
     """
     import datetime as _dt_az
     import re as _re2
     _today_az = _dt_az.date.today()
     _start_az = (_today_az - _dt_az.timedelta(days=2000)).strftime("%Y%m%d")
-    rows = {}
+    # 每段各自獨立的容器 —— 刻意**不共用**，理由見 docstring (a)。
+    _rows_api: dict = {}
+    _rows_mj: dict = {}
 
     # ── 1. JSON API（支援 2000d 完整歷史）─────────────────────────────────────
     # 嘗試多種 request body 格式，因 Sitecore API 參數名稱不一定一致
@@ -297,7 +322,17 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
                 json=_body,
                 headers={**HDR_JSON, "Referer": "https://tw.allianzgi.com/"},
                 timeout=15,
-                proxies=_proxies, verify=_ssl_verify,
+                # 2026-08-11:此處原本寫 `proxies=_proxies, verify=_ssl_verify`
+                # —— **漏了兩對括號**,傳進去的是 infra.proxy 的**函式物件**而非
+                # 呼叫結果。requests 在 `merge_environment_settings()` 會對 proxies
+                # 呼叫 `.get()`,函式沒有 `.get` → AttributeError 在「HTTP 送出之前」
+                # 就被下面的 `except Exception` 接走,只印一行 log。
+                # 後果:本區塊(安聯官方 JSON API,ACTI/ACCP/ACDD/ACTT + TLZF9/ANZ89
+                # 唯一能拿 2000 天歷史的**非 MoneyDJ** 來源)**從未真的送出過請求**,
+                # 三種 body 格式全都在同一行掛掉。全庫其餘 15 個呼叫點都寫 `()`,
+                # 只有這行漏 —— 由 tests/test_nav_waterfall_no_overwrite.py::
+                # test_proxy_helpers_are_called_not_passed_as_functions 守(AST 掃描)。
+                proxies=_proxies(), verify=_ssl_verify(),
             )
             if not (_api_resp and _api_resp.status_code == 200):
                 continue
@@ -308,7 +343,7 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
                 _api_data.get("Items") or _api_data.get("items") or
                 (_api_data if isinstance(_api_data, list) else [])
             )
-            _rows_api: dict = {}
+            _rows_api = {}      # 每個 body 格式各自重算
             for _item in (_nav_list if isinstance(_nav_list, list) else []):
                 _dt_str = str(
                     _item.get("Date") or _item.get("date") or
@@ -332,7 +367,9 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
                 s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
                 return s
             if _rows_api:
-                rows.update(_rows_api)
+                # 2026-08-11:原為 `rows.update(_rows_api)` —— 把 API 結果倒進與
+                # 第 2 段(MoneyDJ)共用的容器,見 docstring (a)。改成留在自己的
+                # `_rows_api` 裡,由函式結尾單獨評估、單獨標來源。
                 print(f"[src_allianz] ⚠ {code} JSON API 只得 {len(_rows_api)} 筆，繼續嘗試 yp004002")
                 break  # Got some data from API; no point retrying other body formats
         except Exception as _api_e:
@@ -365,11 +402,13 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
                             v = safe_float(nv_t)
                             if v and v > 0:
                                 try:
-                                    rows[pd.Timestamp(dt_t)] = v
-                                except Exception:
-                                    pass
-            if len(rows) >= 90:
-                s = pd.Series(rows).sort_index()
+                                    _rows_mj[pd.Timestamp(dt_t)] = v
+                                except Exception as _e_mj_row:
+                                    # §1:不可靜默吞(原為 except: pass)
+                                    print(f"[src_allianz] yp004002 日期解析跳過 "
+                                          f"{dt_t}: {_e_mj_row}")
+            if len(_rows_mj) >= 90:
+                s = pd.Series(_rows_mj).sort_index()
                 print(f"[src_allianz] ✅ {code} {len(s)} 筆（MoneyDJ yp004002）")
                 s.attrs["source"] = "AllianzGI:moneydj_hist"
                 s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
@@ -378,61 +417,33 @@ def _src_allianzgi_nav(code: str) -> pd.Series:
     except Exception as _mj_e:
         print(f"[src_allianz] yp004002 fail({code}): {_mj_e}")
 
-    # ── 3. Fallback：HTML scraper（近30日）────────────────────────────────────
-    for base_url in [
-        _ALLIANZ_NAV_ENDPOINT,
-        "https://tw.allianzgi.com/zh-tw/tools/fund-nav-search",
-    ]:
-        try:
-            r = fetch_url_with_retry(base_url, timeout=15, retries=2)
-            if r is None:
-                continue
-            soup = BeautifulSoup(r.text, "lxml")
-            for tbl in soup.find_all("table"):
-                txt = tbl.get_text()
-                if "淨值" not in txt and "NAV" not in txt.upper():
-                    continue
-                for row in tbl.find_all("tr"):
-                    cells = row.find_all("td")
-                    if len(cells) >= 2:
-                        dt_txt  = cells[0].get_text(strip=True)
-                        nav_txt = cells[1].get_text(strip=True).replace(",", "")
-                        if _re2.match(r"\d{4}[/-]\d{2}[/-]\d{2}", dt_txt):
-                            v = safe_float(nav_txt)
-                            if v and v > 0:
-                                try:
-                                    rows[pd.Timestamp(dt_txt.replace("/", "-"))] = v
-                                except Exception:
-                                    pass
-                        elif _re2.match(r"\d{2}/\d{2}$", dt_txt):
-                            # MM/DD 格式（近30日頁面）補年份
-                            # v19.333 review F5:改用 TW 時區今日(§4.5 慣例)。
-                            # Streamlit Cloud 為 UTC,比 TW 慢最多 8 小時 — Allianz 頁
-                            # 若已列出「TW 已到、UTC 未到」的日期(如 TW 01/05 vs UTC 01/04),
-                            # 舊 date.today() 會把該筆推回去年同日(≈365 天錯置)。
-                            import datetime as _dtt2
-                            _td2 = _dtt2.datetime.now(
-                                _dtt2.timezone(_dtt2.timedelta(hours=8))).date()
-                            try:
-                                _mo2 = int(dt_txt.split("/")[0])
-                                _da2 = int(dt_txt.split("/")[1])
-                                _yr2 = _infer_year_for_mmdd(_mo2, _da2, _td2)
-                                _v2  = safe_float(nav_txt)
-                                if _v2 and _v2 > 0:
-                                    rows[pd.Timestamp(_dtt2.date(_yr2, _mo2, _da2))] = _v2
-                            except Exception as _e_mmdd:
-                                # §1:不可靜默吞;含 2/29 推到非閏年等日期建構失敗
-                                print(f"[src_allianz] MM/DD 條目跳過 {dt_txt}: {_e_mmdd}")
-            if len(rows) >= 5:
-                s = pd.Series(rows).sort_index()
-                print(f"[src_allianz] ✅ {code} {len(s)} 筆（{base_url[:40]}）")
-                # F-PROV-1 phase 11 v19.97 — provenance(Series.attrs)
-                _host_ay = base_url.split("/")[2] if "://" in base_url else "allianzgi"
-                s.attrs["source"] = f"AllianzGI:{_host_ay}"
-                s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-                return s
-        except Exception as e:
-            print(f"[src_allianz] {base_url[:40]}: {e}")
+    # ── 3.（2026-08-11 刪除）原「ifund / tw.allianzgi HTML 近30日」fallback ──
+    # 刪除理由見 docstring (b)：該段請求的 URL **不帶基金代碼**，`code` 在整段裡
+    # 只出現在 print 字串中，卻把「頁面上任何含『淨值』字樣的表格」當成 `code`
+    # 這一檔的 NAV 回傳 → §1 造假 + §2.2 血緣錯標。近30日的需求另有正牌來源
+    # `_src_nav_30day`（waterfall 2f 順位，URL 帶 `?a={code}`）。
+    #
+    # ── 3'. 兩段都不足 90 筆 → 回傳**較長的那一段**，標它自己的來源 ─────────
+    # 刻意**不合併** `_rows_api` 與 `_rows_mj`：兩者分屬 AllianzGI 與 MoneyDJ，
+    # 發布延遲不同（§2.3），按日期 key 混寫會產生「通過所有不變量斷言的假序列」。
+    # §2.1「衝突時上層贏，禁止平均」→ 這裡直接取單一來源，不做任何跨源填補。
+    # ⚠️ tie-break 語意:`max` 平手時取**第一個**,所以 list 順序 = 來源優先權。
+    # AllianzGI 官方 API 排在 MoneyDJ 之前(§2.1 T1/T2 高於 T3)。**重排這個 list
+    # 會靜默改變來源優先權**,不是純排版。
+    _partials = [
+        (_rows_api, "AllianzGI:JSON_API:partial"),
+        (_rows_mj,  "AllianzGI:moneydj_hist:partial"),
+    ]
+    _best_rows, _best_tag = max(_partials, key=lambda _t: len(_t[0]))
+    if len(_best_rows) >= 5:
+        s = pd.Series(_best_rows).sort_index()
+        print(f"[src_allianz] ⚠ {code} 兩段皆 <90 筆，取較長者 "
+              f"{len(s)} 筆（{_best_tag}）")
+        s.attrs["source"] = _best_tag
+        s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+        return s
+    print(f"[src_allianz] ❌ {code} 無可用資料"
+          f"（API {len(_rows_api)} 筆 / yp004002 {len(_rows_mj)} 筆）")
     return pd.Series(dtype=float)
 
 
@@ -2327,7 +2338,15 @@ def _src_nav_30day(code: str, page_type: str = "") -> pd.Series:
                 if r is None:
                     continue
                 soup = BeautifulSoup(r.text, "lxml")
-                _today = _dtt.date.today()
+                # 2026-08-11:原為 `_dtt.date.today()`(Streamlit Cloud 是 UTC)。
+                # 本頁的 MM/DD 條目要靠「今天」補年份,UTC 比 TW 慢最多 8 小時 →
+                # 「TW 已跨日、UTC 未跨日」的窗內,當日條目會被推回**去年同日**
+                # (≈365 天錯置,§4.5)。同一個 bug v19.333 F5 已在安聯路徑修過,
+                # 這條路徑漏掉 —— 而 user 8 檔持倉現在**全部**走這條。
+                # 年份推斷收 SSOT 純函式 `_infer_year_for_mmdd`(v19.333 抽出,
+                # 由 tests/test_review_fixes_v19_333.py 守)。
+                _today = _dtt.datetime.now(
+                    _dtt.timezone(_dtt.timedelta(hours=8))).date()
                 _tmp = {}
                 for tbl in soup.find_all("table"):
                     for row in tbl.find_all("tr"):
@@ -2351,10 +2370,13 @@ def _src_nav_30day(code: str, page_type: str = "") -> pd.Series:
                                 try:
                                     _mo = int(dt_txt.split("/")[0])
                                     _da = int(dt_txt.split("/")[1])
-                                    _yr = _today.year if (_mo, _da) <= (_today.month, _today.day) else _today.year - 1
+                                    _yr = _infer_year_for_mmdd(_mo, _da, _today)
                                     _tmp[pd.Timestamp(_dtt.date(_yr, _mo, _da))] = v
-                                except Exception:
-                                    pass
+                                except Exception as _e_n30:
+                                    # §1:不可靜默吞(原為 except: pass);
+                                    # 含 2/29 推到非閏年等日期建構失敗
+                                    print(f"[src_nav30] MM/DD 條目跳過 "
+                                          f"{dt_txt}: {_e_n30}")
                 if len(_tmp) >= 10:
                     rows = _tmp
                     print(f"[src_nav30] ✅ {code} {len(rows)} 筆 (page={_pg}, base={base[:30]})")
@@ -3015,7 +3037,18 @@ def fetch_fund_multi_source(code: str,
             page_type=page_type    # ← v13.4: 保留原始 page_type 傳遞
         )
         _status = classify_fetch_status(_result)
-        print(f"[orchestrator] {_candidate} → {_status} (err:{_result.get('error','')[:40]})")
+        # 2026-08-11 修:原本寫 `_result.get('error','')[:40]`。`error` 這個 key
+        # **一定存在**(`_fetch_fund_single` 的 result dict 初始化就有 `error=None`),
+        # 所以 default `''` 永遠用不到,`.get()` 回的是 `None` → `None[:40]` →
+        # **TypeError**。
+        # 語意剛好反過來:`normalize_result_state` 只在 status=="failed"(什麼都沒抓到)
+        # 時才寫錯誤字串;抓到任何資料 → "partial" → `error` 保持 None → **本行炸掉**。
+        # 也就是「抓成功就炸、抓全失敗才活」。例外往上被 fund_orchestration.py
+        # Step 2 的 `except Exception` 吞成一行「多來源異常」,整條多來源 waterfall
+        # 的結果被丟棄,實際上線的是 legacy 爬蟲的「近30日」路徑 —— 這正是
+        # user 8 檔持倉「每檔剛好 30 點」的直接成因(§1 靜默失敗)。
+        print(f"[orchestrator] {_candidate} → {_status} "
+              f"(err:{(_result.get('error') or '')[:40]})")
         if _status == "complete":
             return _attach_prov(_result, ":complete")
         if best_result is None:

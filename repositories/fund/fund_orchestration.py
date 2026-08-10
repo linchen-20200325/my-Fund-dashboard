@@ -106,6 +106,63 @@ def _span_extend_insurance_nav(
     return nav_s, nav_source, _cur_span
 
 
+def _effective_nav_len(s: "pd.Series | None") -> int:
+    """NAV 序列的**有效**筆數:唯一日期 × 非 NaN × > 0。
+
+    2026-08-11:`_adopt_if_better` 若只比 `len()`,「40 筆但只有 20 個唯一日期」
+    或「50 筆全 NaN」的髒序列會**贏過** 30 筆乾淨序列,而下游 metrics 全吃 NaN
+    —— 那是 §1 意義上更糟的失敗(看起來成功、通過所有既有不變量斷言)。
+    本函式把 §3.1「date unique」+ §3.2「NAV > 0」+ §4.2 三條不變量收進比較基準。
+    """
+    if s is None:
+        return 0
+    try:
+        _v = pd.Series(s).dropna()
+        _v = _v[_v > 0]
+        return int(_v.index.nunique()) if len(_v) else 0
+    except Exception as _e:  # noqa: BLE001 — §1 不靜默:記 log 後當 0 筆處理
+        print(f"[orchestrator] _effective_nav_len 失敗"
+              f"({type(_e).__name__}: {_e}) → 視為 0 筆")
+        return 0
+
+
+def _adopt_if_better(
+    nav_s: pd.Series, nav_source: str,
+    cand: "pd.Series | None", cand_name: str,
+) -> "tuple[pd.Series, str]":
+    """waterfall 收單一來源結果:**只在有效筆數更多時**才取代,且來源標籤同步換。
+
+    2026-08-11 修的是 `_fetch_fund_single` waterfall 2a/2b/2c/2e 四處原本寫成
+    `nav_s = _src_xxx(code)` 的**無條件覆蓋**,兩個獨立缺陷:
+
+    1. **資料遺失(§1)**:前一順位已抓到、但未達本順位門檻的序列(例如安聯官網
+       回 15 筆、門檻 20),會被下一個「回空」的來源直接抹成空 Series。
+    2. **血緣錯標(§2.2)**:`nav_source` 只在通過門檻時才更新,所以
+       `nav_s` 與 `nav_source` 可能**不同源** —— 例如 step 0 標了
+       `allianzgi_tw`,序列卻已被 2a 換成 FundClear 的 8 筆。
+
+    改成「更好才換、換就連標籤一起換」。與舊行為的差集**只有**「候選筆數 ≤
+    手上筆數」這一種情形,而那正是舊碼會丟資料的情形 —— 故對筆數而言是
+    單調不減的嚴格改善,不會讓任何原本會贏的來源改輸。
+
+    ⚠️ 刻意**只比筆數不比跨度**:跨度優先(30 筆日資料 vs 25 筆月資料誰該贏)
+    屬於 waterfall gate 的語意變更,須 user 拍板,不在本次修補範圍(§-1)。
+    既有的跨度救援仍走 `_span_extend_insurance_nav`。
+
+    ⚠️ **本函式刻意不直接用來取代 waterfall 的指派**。第一版曾把
+    `nav_s = _src_xxx(...)` 直接改成走本函式,稽核抓到那是 net-negative:
+    waterfall 的 gate(`if len(nav_s) < 10/20`)吃的就是 `nav_s`,一旦 `nav_s`
+    變成「歷來最佳」,拿到 10~19 筆就會把 2c2/2d/2e/2f/2g… **整層下游關掉**,
+    其中 2d 是 www yp004002 的 2000 天窗(可拿數百筆)。保住 15 筆卻放棄 500 筆,
+    對「3Y 年化需 756 點」是反效果。
+    現行做法:`nav_s` 與 gate 行為**完全維持原樣**,另開一條 `_best_s` 側車
+    記錄歷來最長者,waterfall 跑完再回頭救援 —— 對 gate 零影響,對資料零遺失。
+    """
+    if cand is None or _effective_nav_len(cand) <= _effective_nav_len(nav_s):
+        return nav_s, nav_source
+    return cand, cand_name
+
+
 def _fetch_fund_single(code: str, force_refresh: bool = False,
                        page_type: str = "") -> dict:
     """單一代碼的多來源抓取（由 fetch_fund_multi_source 呼叫）"""
@@ -147,25 +204,46 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         _allianz_s = _src_allianzgi_nav(_code)
         if len(_allianz_s) >= 5:
             nav_s = _allianz_s
-            nav_source = "allianzgi_tw"
+            # 2026-08-11 §1「填補須帶旗標」:`_src_allianzgi_nav` 在「JSON API 與
+            # yp004002 兩段都 <90 筆」時會回 partial 並在 attrs 標 `...:partial`,
+            # 但這裡原本硬編 `"allianzgi_tw"` 把那個旗標丟掉 —— 使用者在 Tab2
+            # banner 與批次「資料來源」欄看到的,5 筆 partial 與完整 2000 天歷史
+            # 長得一模一樣。改成把 partial 狀態帶出來(白話,不用內部代號)。
+            _az_prov = str(_allianz_s.attrs.get("source") or "")
+            nav_source = ("allianzgi_tw（僅部分歷史）"
+                          if _az_prov.endswith(":partial") else "allianzgi_tw")
+
+    # ── 2026-08-11 側車:歷來最長序列 ────────────────────────────────
+    # 2a/2b/2c/2e/2f 五處寫的是 `nav_s = _src_xxx(_code)` **無條件覆蓋** ——
+    # 前一順位已抓到、但未達本順位門檻的序列(例如安聯官網回 15 筆、2a 門檻 20)
+    # 會被下一個「回空」的來源直接抹成空 Series(§1 資料遺失)。
+    # 但那些指派同時也是 gate 的輸入,直接改成「較長者勝」會關掉整層下游來源
+    # (見 `_adopt_if_better` docstring)。故 **gate 與 nav_s 一律維持原樣**,
+    # 另存 `_best_s` 側車,waterfall 跑完再回頭救援。
+    _best_s = pd.Series(dtype=float)
+    _best_src = ""
+    _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, nav_source)
 
     # 2a. FundClear（境外最穩）
     if len(nav_s) < 20:
         nav_s = _src_fundclear_nav(_code)
         if len(nav_s) >= 20:
             nav_source = "FundClear"
+        _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "FundClear")
 
     # 2b. 鉅亨網
     if len(nav_s) < 20:
         nav_s = _src_cnyes_nav(_code)
         if len(nav_s) >= 20:
             nav_source = "cnyes"
+        _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "cnyes")
 
     # 2c. TCB MoneyDJ（子網域）
     if len(nav_s) < 20:
         nav_s = _src_tcb_nav(_code)
         if len(nav_s) >= 10:
             nav_source = "tcb_moneydj"
+        _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "tcb_moneydj")
 
     # 2c2. v6.8: 保險公司專屬 MoneyDJ 子網域（TL=台灣人壽, FL=富蘭克林 等）
     if len(nav_s) < 10:
@@ -232,6 +310,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         nav_s = _src_sitca_nav(_code)
         if len(nav_s) >= 10:
             nav_source = "sitca"
+        _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "sitca")
 
     # 2f. 近30日 nav 頁直接解析（最終 fallback，yf/yp004002 全被封鎖時使用）
     # 近30日雖然只有約25~30筆，足以計算 Sharpe/標準差
@@ -240,6 +319,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         if len(nav_s) >= 10:
             nav_source = "moneydj_nav30"
             print(f"[orchestrator] 📅 {_code} 使用近30日淨值（{len(nav_s)}筆）")
+        _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "moneydj_nav30")
 
     # 2f2. v6.18: 銀行/保險平台直連（有明確代碼映射的基金優先）
     # 使用真實 URL（華南銀行/遠東銀行/台灣人壽），非 moneydj.com domain 較不被封鎖
@@ -337,6 +417,18 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
             result.setdefault("source_trace", []).append(
                 {"source": "taiwanlife_direct", "success": False,
                  "error": "官網端點查無資料或 URL 需更新"})
+
+    # ── 2026-08-11 側車救援:把 waterfall 中途被無條件覆蓋抹掉的最長序列拿回來 ──
+    # 只在「最後留下的 nav_s 比歷來最佳短」時觸發,對其餘 case 零影響。
+    # 放在 span-extend **之前**,讓跨度救援拿到的是救回來後的較長序列。
+    if _effective_nav_len(_best_s) > _effective_nav_len(nav_s):
+        print(f"[orchestrator] ♻️ {_code} waterfall 收尾救援 "
+              f"{nav_source or '—'}({len(nav_s)}筆) → {_best_src}({len(_best_s)}筆)")
+        result.setdefault("source_trace", []).append(
+            {"source": f"{_best_src}(best-of-waterfall)", "success": True,
+             "nav_count": len(_best_s), "replaced": nav_source or "",
+             "replaced_count": len(nav_s)})
+        nav_s, nav_source = _best_s, _best_src
 
     # v19.281/v19.284 span-extend(共用 _span_extend_insurance_nav,見檔頭 SSOT 說明)
     nav_s, nav_source, _span_days = _span_extend_insurance_nav(

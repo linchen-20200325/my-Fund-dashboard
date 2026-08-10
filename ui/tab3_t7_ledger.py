@@ -1778,7 +1778,11 @@ def render_t7_section() -> None:
                                                 _new_code, existing=_existing_by_code)
                                     if not _meta.get("ok"):
                                         _top_cols[2].error(
-                                            f"⚠️ 抓不到 `{_new_code}`：{_meta.get('error', '未知')[:60]}"
+                                            # 2026-08-11:原為 `.get('error', '未知')[:60]`。
+                                            # `error` key 存在但值為 None 時,default 用不到
+                                            # → `None[:60]` TypeError(與 sources.py
+                                            # fetch_fund_multi_source 同型的漏網)。
+                                            f"⚠️ 抓不到 `{_new_code}`：{(_meta.get('error') or '未知')[:60]}"
                                         )
                                     else:
                                         _new_pk = f"{_sel_pid}::{_new_code}"
