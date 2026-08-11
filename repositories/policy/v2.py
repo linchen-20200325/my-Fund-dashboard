@@ -125,6 +125,13 @@ def _records_to_policy_df(records: list) -> pd.DataFrame:
     if not records:
         return pd.DataFrame(columns=list(ALL_COLS))
     df = pd.DataFrame(records)
+    # v19.432：中文表頭分頁(基金代號/淨投資金額/級別/幣別…)也要吃 —— 先映射到 v1 欄名,
+    # 否則下方 reindex 到 ALL_COLS 時整批中文欄被丟掉 → 該分頁基金全漏(混合 Sheet 相容)。
+    # 重用 EN_HEADERS_V2 SSOT;再把兩個 v2/v1 名稱衝突改成 v1 名(基金代號→fund_url、級別→policy_tier)。
+    # guard `en not in df.columns`:已有真英文欄的分頁不被覆蓋(no-op),既有純英文 Sheet 行為零變化。
+    _zh_to_v1 = {**EN_HEADERS_V2, "基金代號": "fund_url", "級別": "policy_tier"}
+    df = df.rename(columns={zh: en for zh, en in _zh_to_v1.items()
+                            if zh in df.columns and en not in df.columns})
     for c in ALL_COLS:
         if c not in df.columns:
             df[c] = ""
@@ -883,11 +890,33 @@ def _apply_v2_header_format(ws: Any) -> None:
         pass  # smoke-allow-pass — 配色失敗不影響資料正確性
 
 
-def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
-    """讀整本 Sheet 內所有 v2 保單分頁，合併成一張 DataFrame。
+def _v1_frame_to_v2(df_v1: pd.DataFrame) -> pd.DataFrame:
+    """把 v1/英文 schema 分頁映射到 v2 schema 欄位(混合 Sheet 相容,v19.432)。
 
-    非 v2 的 worksheet 自動跳過（caller 應先用 detect_sheet_schema_version
-    判斷整本狀態並引導升級）。
+    同一本 Sheet 可能同時有 v2(含 item_type/類型)與 v1(fund_url/policy_tier)分頁 ——
+    偵測回 v2 時,原本 `load_all_policies_v2` 會**跳過 v1 分頁 → 那些基金整批漏掉**
+    (user 2026-08-11 回報「抓不到所有基金」的直接根因)。這裡把 v1 欄位改名到 v2 名:
+      fund_url → fund_code(裸代號原樣通過 `_extract_code_from_url`)、policy_tier → tier、
+      fx_avg → avg_fx;v1 分頁全為基金列 → 補 item_type=fund。其餘同名欄(policy_id /
+      invest_twd / currency / units / avg_nav / avg_nav_with_div / div_cash_pct)直接沿用。
+    """
+    from repositories.policy.v1 import _extract_code_from_url
+    out = df_v1.copy()
+    if "fund_url" in out.columns and "fund_code" not in out.columns:
+        out["fund_code"] = out["fund_url"].map(lambda u: _extract_code_from_url(str(u)) or "")
+    _ren = {"policy_tier": "tier", "fx_avg": "avg_fx"}
+    out = out.rename(columns={k: v for k, v in _ren.items()
+                              if k in out.columns and v not in out.columns})
+    if "item_type" not in out.columns:
+        out["item_type"] = "fund"
+    return out
+
+
+def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
+    """讀整本 Sheet 內所有保單分頁，合併成一張 v2 DataFrame。
+
+    v19.432:**混合 schema 相容** —— v2 分頁(item_type/類型)照 v2 讀;v1/英文分頁
+    (fund_url/policy_tier)經 `_v1_frame_to_v2` 映射後一併納入,避免混合 Sheet 漏基金。
     """
     try:
         sh = _with_quota_retry(client.open_by_key, sheet_id)
@@ -899,8 +928,6 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
     reset_invest_twd_parse_errors()
     frames: list[pd.DataFrame] = []
     for ws in tabs:
-        if not is_v2_worksheet(ws):
-            continue
         try:
             rows = _with_quota_retry(ws.get_all_records) or []
         except Exception:
@@ -908,9 +935,14 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         if not rows:
             continue
         df_one = pd.DataFrame(rows)
-        # v18.153：中文 header → 英文 col name
-        df_one = df_one.rename(columns={zh: en for zh, en in EN_HEADERS_V2.items()
-                                          if zh in df_one.columns})
+        _cols = set(df_one.columns)
+        if ("item_type" in _cols) or ("類型" in _cols):
+            # v2 分頁：中文 header → 英文 col name
+            df_one = df_one.rename(columns={zh: en for zh, en in EN_HEADERS_V2.items()
+                                              if zh in df_one.columns})
+        else:
+            # v19.432：v1/英文 schema 分頁 → 映射到 v2 欄位(混合 Sheet 不漏基金)
+            df_one = _v1_frame_to_v2(df_one)
         for c in ALL_COLS_V2:
             if c not in df_one.columns:
                 df_one[c] = ""
