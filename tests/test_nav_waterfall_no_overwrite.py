@@ -405,3 +405,113 @@ def test_waterfall_has_final_rescue_before_span_extend():
     # 驗救援的位置**（靜默鬆弛，PROCESS.md §4 點名型態）。`max()` 要求「最後一次
     # _effective_nav_len 呼叫」仍在 span-extend 之前，才是真正想守的性質。
     assert max(_rescue) < min(_span), "收尾救援必須在 span-extend 之前"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 缺陷 ⑤ — 線上實測後追加（2026-08-11 第二輪）
+#
+# 部署後線上實測 ACCP138，畫面顯示「淨值 30 筆 ‧ 來源:direct_url ‧ 跨度 42 天」。
+# 追查發現：**診斷儀器本身在說謊** —— `_src_direct_moneydj_url`（Step 1，只抓 meta、
+# 完全不抓 NAV）把 `data_source="direct_url"` 寫進 result，害得 legacy 收尾的
+# `result.get("data_source") or "moneydj_legacy_scrape"` 那半邊 `or` 變成死碼。
+# 於是 banner 一直報 Step 1 的標籤，「多來源 waterfall 到底有沒有贏」在線上看不出來。
+# ══════════════════════════════════════════════════════════════════════
+
+def _url_orchestrator_fn() -> ast.FunctionDef:
+    _tree = ast.parse(_ORCH.read_text(encoding="utf-8"))
+    for _n in ast.walk(_tree):
+        if isinstance(_n, ast.FunctionDef) and _n.name == "fetch_fund_from_moneydj_url":
+            return _n
+    raise AssertionError("找不到 fetch_fund_from_moneydj_url")
+
+
+def test_step1_direct_url_must_not_claim_data_source():
+    """接線測試：拿掉 Step 1 的 `if _k == "data_source": continue`，本測試轉紅。
+
+    Step 1 只抓 meta，沒有資格為 NAV 序列的來源背書（§2.2）。
+    """
+    _guards = [
+        _n.lineno for _n in ast.walk(_url_orchestrator_fn())
+        if isinstance(_n, ast.Compare)
+        and isinstance(_n.left, ast.Name) and _n.left.id == "_k"
+        and any(isinstance(_c, ast.Constant) and _c.value == "data_source"
+                for _c in _n.comparators)
+    ]
+    assert _guards, (
+        "Step 1（direct_url）的欄位合併必須顯式排除 `data_source` —— "
+        "否則 legacy 收尾的 `or \"moneydj_legacy_scrape\"` 永遠是死碼，"
+        "畫面會把 legacy 爬到的序列標成 direct_url。")
+
+
+def test_multi_source_exception_logs_type_and_traceback():
+    """§1：Step 2 的 except 是整條 waterfall 的唯一出口，不得只印訊息。
+
+    只印 `{e}` 時，線上看到「每檔剛好 30 點」**無法分辨**是
+    (a) waterfall 跑完但每源都 <10 筆，還是 (b) waterfall 中途炸掉 ——
+    兩者修法完全不同。
+    """
+    _src = _ORCH.read_text(encoding="utf-8")
+    assert "type(_ms_e).__name__" in _src, "多來源例外必須印出例外型別"
+    assert "format_exc" in _src, "多來源例外必須印出 traceback"
+
+
+def test_legacy_pipeline_mmdd_uses_tw_timezone_and_ssot():
+    """legacy 的近30日補年份必須用 TW 時區 + SSOT 純函式。
+
+    v19.333 F5 修過安聯路徑、2026-08-11 修過 `_src_nav_30day`，
+    **legacy 這份是第三份** —— 而 user 的持倉現在全部走 legacy。
+    """
+    _src = _ORCH.read_text(encoding="utf-8")
+    assert "_infer_year_for_mmdd(mo, da, today)" in _src, (
+        "legacy 近30日的年份推斷必須呼叫 SSOT `_infer_year_for_mmdd`，不得 inline 重寫")
+    assert "today = _dt.date.today()" not in _src, (
+        "不可用裸 date.today() —— Streamlit Cloud 是 UTC，"
+        "「TW 已跨日、UTC 未跨日」的 8 小時窗會造成 ≈365 天錯置")
+
+
+def test_infer_year_helper_is_star_exported_to_orchestrator():
+    """接線測試：`_infer_year_for_mmdd` 必須真的能從 orchestrator 取到。
+
+    `sources.py` 用顯式 `__all__` 控制 `import *`，而 `import *` **不會**自動帶
+    底線開頭的名字。漏加 `__all__` → legacy pipeline 每次跑到那行就 NameError，
+    且會被外層 `except Exception` 吞掉（v19.248 R17 同型事故）。
+    直接 `hasattr` 檢查比掃 `__all__` 字串更貼近真實失敗模式。
+    """
+    from repositories.fund import fund_orchestration as _FO
+    from repositories.fund import sources as _SRC
+    assert "_infer_year_for_mmdd" in _SRC.__all__
+    assert hasattr(_FO, "_infer_year_for_mmdd"), (
+        "fund_orchestration 透過 `import *` 拿不到 `_infer_year_for_mmdd` → "
+        "legacy 近30日區塊會 NameError")
+
+
+def test_allianzgi_meta_verifies_the_page_belongs_to_this_fund():
+    """§1：`_src_allianzgi_meta` 的端點不帶基金代碼，必須驗證頁面真的提到該檔。
+
+    這支污染的是 **meta** —— `inception_date` 餵 MK 3-3-3 的「成立滿 3 年」、
+    `nav_latest` 餵 KPI 卡、`total_expense_ratio` 餵費用率比較，
+    比同批刪掉的 `_src_allianzgi_nav` 第 3 段更危險。
+    而呼叫條件是「境內代碼且還沒拿到 fund_name」→ user 的 AC* 持倉全中。
+    """
+    _tree = ast.parse(_SOURCES.read_text(encoding="utf-8"))
+    _fn = None
+    for _n in ast.walk(_tree):
+        if isinstance(_n, ast.FunctionDef) and _n.name == "_src_allianzgi_meta":
+            _fn = _n
+            break
+    assert _fn is not None, "找不到 _src_allianzgi_meta"
+    _body = ast.get_source_segment(_SOURCES.read_text(encoding="utf-8"), _fn) or ""
+    # ⚠️ 這裡刻意**不能**只檢查「有沒有 NotIn」——本函式原本就有一行
+    # `if "基金名稱" not in txt and "淨值" not in txt:`，那樣寫會恆真（假通過）。
+    # 必須確認 NotIn 的左運算元真的牽涉到 `code`。
+    _has_guard = []
+    for _n in ast.walk(_fn):
+        if not (isinstance(_n, ast.Compare)
+                and any(isinstance(_op, ast.NotIn) for _op in _n.ops)):
+            continue
+        if "id='code'" in ast.dump(_n.left):
+            _has_guard.append(_n.lineno)
+    assert _has_guard, (
+        "`_src_allianzgi_meta` 必須驗證回傳頁面內容真的提到該基金代碼，"
+        "否則等於把「頁面上任何淨值表」當成該檔資料回傳（§1 造假 / §2.2 血緣錯標）")
+    assert "return {}" in _body, "驗證失敗時必須回空 dict，不得回別檔的 meta"

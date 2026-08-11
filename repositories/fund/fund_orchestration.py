@@ -25,6 +25,7 @@ from fund_fetcher import (  # noqa: F401
     safe_float, fetch_url_with_retry, is_valid_moneydj_page,
     HDR, HDR_JSON, PORTAL_CFG, TCB_BASE, _INSURANCE_SUBDOMAIN_HINTS,
     normalize_result_state, merge_non_empty, classify_fetch_status,
+    _is_empty_value,
 )
 from infra.proxy import _proxies, _ssl_verify  # noqa: F401
 # v19.240 R8 EX-L1ORCH-1 退役:calc_metrics + reconcile + perf 注入業務邏輯已上提
@@ -667,9 +668,32 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     if _input_info.get("is_url") and _input_info.get("full_url"):
         _direct = _src_direct_moneydj_url(_input_info["full_url"])
         if _direct.get("fund_name") or _direct.get("nav_latest"):
+            # ── 2026-08-11 兩項修正 ────────────────────────────────────
+            # (1) §2.2 血緣：Step 1 只抓 **meta**（名稱 / 最新淨值 / 幣別 / 費用率），
+            #     **完全不抓 NAV 序列** —— 它沒有資格為 `data_source` 背書。
+            #     原本這個迴圈連 `data_source="direct_url"` 一起寫進 result，兩個連鎖後果：
+            #       (a) 下方 legacy 收尾的
+            #           `result.get("data_source") or "moneydj_legacy_scrape"`
+            #           永遠取到 `"direct_url"` → `or` 那半邊是**死碼**，legacy 爬到的
+            #           序列被標成 Step 1 的來源；
+            #       (b) 畫面 banner 顯示「來源:direct_url ‧ 跨度 42 天」，而那 30 筆
+            #           其實來自 legacy 的近30日爬蟲 —— **診斷儀器本身在說謊**，
+            #           「多來源 waterfall 到底有沒有贏」在線上完全看不出來。
+            #     故明確排除 `data_source`，改為在 source_trace 誠實登記「只給 meta」。
+            # (2) 判空改走 `_is_empty_value`：原本的 `_v not in (None, "", {}, [])`
+            #     與 merge_non_empty 是同型缺陷，遇 pd.Series 會拋
+            #     `ValueError: truth value of a Series is ambiguous`，而**這一段沒有
+            #     try 保護**（Step 2 那份有）。目前 `_src_direct_moneydj_url` 全回純量
+            #     所以炸不到，但屬於等人來踩的地雷 —— 只要有人往它的 out 加一個
+            #     series/DataFrame 欄位，整條 fetch 會炸在半合併狀態。
             for _k, _v in _direct.items():
-                if _v not in (None, "", {}, []):
+                if _k == "data_source":
+                    continue
+                if not _is_empty_value(_v):
                     result[_k] = _v
+            result.setdefault("source_trace", []).append(
+                {"source": "direct_url", "success": True, "meta_only": True,
+                 "note": "只提供 meta，未提供 NAV 序列"})
             print(f"[fetch] direct_url meta: {result.get('fund_name','')[:20]} NAV={result.get('nav_latest')}")
 
     # ── Step 2: 多來源 Orchestrator（帶 page_type）──────────────────
@@ -733,8 +757,20 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             print(f"[fetch] ⚠️ 兩個 page_type 都不足，繼續原始流程")
         else:
             print(f"[fetch] ⚠️ 不足，繼續原始流程（page:{_page_type}）")
-    except Exception as _ms_e:
-        print(f"[fetch] 多來源異常: {_ms_e}，繼續原始流程")
+    except Exception as _ms_e:  # noqa: BLE001 — 有備援流程，但不得靜默（§1）
+        # 2026-08-11:原本只印 `{_ms_e}`。這一顆 except 是**整條多來源 waterfall
+        # 的唯一出口**,一旦裡面任何地方拋例外,結果整包被丟棄、流程默默改走
+        # legacy 爬蟲(近30日,~30 筆)。而只印訊息不印型別/traceback 的後果是:
+        # 線上看到「每檔剛好 30 點」時,**無法分辨**是
+        #   (a) waterfall 跑完但每個來源都 <10 筆,還是
+        #   (b) waterfall 中途炸掉。
+        # 這兩者的修法完全不同,卻長得一模一樣。補上型別 + traceback。
+        import traceback as _tb_ms
+        print(f"[fetch] ⚠️ 多來源異常({type(_ms_e).__name__}): {_ms_e}，繼續原始流程")
+        print(_tb_ms.format_exc())
+        result.setdefault("source_trace", []).append(
+            {"source": "multi_source", "success": False,
+             "error": f"{type(_ms_e).__name__}: {_ms_e}"})
 
     # ── 判斷境內/境外基金（影響爬蟲路徑）──────────────────
     # 境內基金（投信，如聯博/安聯投信/富達投信）：
@@ -902,12 +938,21 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 print(f"[nav30] ⚠️ {code} nav 解析失敗 {_nav30_parse_fail} 筆(已過 regex 預檢)")
             # 轉換日期（MoneyDJ 近期只顯示 MM/DD，需補年份）
             import datetime as _dt
-            today = _dt.date.today()
+            # 2026-08-11:原為 `_dt.date.today()`(Streamlit Cloud 是 UTC)+ inline
+            # 重寫一份年份推斷。兩個問題:
+            #   (1) §4.5 時區:UTC 比 TW 慢最多 8 小時,「TW 已跨日、UTC 未跨日」的
+            #       窗內,當日條目會被推回**去年同日**(≈365 天錯置)→ nav_span_days
+            #       與所有年化指標一起壞,而且序列看起來完全正常(單調、正值)。
+            #   (2) §3.3 SSOT:`_infer_year_for_mmdd`(sources.py)是 v19.333 F5 為了
+            #       同一個 bug 抽出的純函式,legacy 這份卻自己 inline 重寫一遍。
+            # v19.333 F5 當時只修了安聯路徑,`_src_nav_30day` 於 2026-08-11 補修,
+            # **legacy 這份是第三份、也是最後一份** —— 而 user 的持倉現在全部走 legacy。
+            today = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date()
             parsed = {}
             for mmdd, v in nav_rows.items():
                 try:
                     mo, da = int(mmdd.split("/")[0]), int(mmdd.split("/")[1])
-                    yr = today.year if (mo, da) <= (today.month, today.day) else today.year - 1
+                    yr = _infer_year_for_mmdd(mo, da, today)
                     parsed[_dt.date(yr, mo, da)] = v
                 except Exception as e:
                     # v19.184 F-MED:加 stderr log(§3.3 反捏造)
@@ -1155,6 +1200,14 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     _snap_key = (code or result.get("full_key", "")).upper()
     if _snap_key and result.get("series") is not None and result.get("error") is None:
         # 快照不含 series（節省記憶體），保留 metrics/perf/fund_name 等輕量欄位
+        # ⚠️ 2026-08-11 稽核登記(**刻意不改**):`v not in (None, [], {})` 是與
+        # merge_non_empty 同型的判空,遇 pd.Series 會拋 ValueError。目前靠上一行
+        # 「顯式排除 `series` 這個 key」擋住 —— 是**靠記得排除**而不是型別安全,
+        # 只要 result 多出第二個 Series/DataFrame 欄位(例如未來加 benchmark 序列),
+        # 這行就會在「成功取得資料」的收尾階段炸,最容易被誤判成抓取失敗。
+        # 不改的理由(§-1):本行語意是「排除 None/[]/{} 但**保留空字串**」,
+        # 與 `_is_empty_value`(空字串也算空)不同源。直接換會靜默改變快照欄位集合,
+        # 屬於「修 bug 順手改到不相干行為」。等真的加第二個陣列欄位再一起處理。
         _FUND_SNAPSHOT[_snap_key] = {
             k: v for k, v in result.items()
             if k not in ("series",) and v not in (None, [], {})

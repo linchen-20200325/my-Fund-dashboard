@@ -60,6 +60,11 @@ __all__ = [
     "_src_yahoo_finance_nav",
     # ── 內部 helper(orchestration 用)──
     "_cnyes_parse_navs", "_cnyes_resolve_code",
+    # 2026-08-11:`_infer_year_for_mmdd`(v19.333 F5 抽出的 MM/DD 補年份純函式)
+    # 新增為 orchestration consumer —— legacy pipeline 的近30日區塊原本 inline
+    # 重寫一份且用 UTC today(§4.5 365 天錯置風險),改吃這支 SSOT。
+    # ⚠️ 不列進 __all__ 的話 `import *` 拿不到底線名 → NameError(v19.248 R17 同型)。
+    "_infer_year_for_mmdd",
     "_is_domestic_code",
     "_morningstar_search_secid",
     "_tdcc_get", "_tdcc_resolve_fund_name",
@@ -451,11 +456,40 @@ def _src_allianzgi_meta(code: str) -> dict:
     """
     安聯投信官網基本資料 + 最新淨值。
     tw.allianzgi.com 對 Colab 可用。
+
+    ── 2026-08-11 §1 / §2.2 修正：加上「這頁真的是這一檔嗎」的驗證 ──────
+    原本這裡請求的 `_ALLIANZ_NAV_ENDPOINT`（`https://ifund.allianzgi.com.tw/WebNav.aspx`）
+    **不帶基金代碼**，`code` 在整個函式裡只出現在 print 字串中：請求不帶 code、
+    解析不比對 code、回傳不驗證 code，卻把「頁面上任何含『基金名稱』或『淨值』的
+    表格」當成 `code` 這一檔的 `fund_name` / `nav_latest` / `inception_date` /
+    `mgmt_fee` / `total_expense_ratio` 回傳，還標 `source="AllianzGI:ifund_meta"`。
+
+    這比同批刪掉的 `_src_allianzgi_nav` 第 3 段更危險，因為它污染的是**meta**：
+    - `inception_date` → MK 3-3-3 的「成立滿 3 年」條件
+    - `nav_latest` → KPI 卡的最新淨值
+    - `total_expense_ratio` → 費用率比較
+    而呼叫點 `fund_orchestration.py` 的條件是
+    `if not meta.get("fund_name") and _is_domestic_code(_code)` ——
+    **對所有境內代碼觸發**，user 的 AC* 持倉全中。
+
+    修法（刻意不整段刪）：
+    1. URL 帶上 `FundCode`，給端點一個回正確資料的機會；
+    2. **回傳前驗證頁面內容真的提到 `code`**，否則一律 `{}` + 大聲 log。
+       若端點忽略 `FundCode`（很可能），驗證就會擋下來 → 退化成「沒有這個來源」，
+       而不是「回別檔基金的資料」。§1：寧可沒有，不可造假。
+    3. `is_valid_moneydj_page` 靠不住（只要頁面出現「淨值/基金/日期/績效/配息/除息」
+       任兩個中文詞就回 True），真正的守門員是第 2 點。
     """
     meta = {}
     # 優先 ifund 平台
     try:
-        r = fetch_url_with_retry(_ALLIANZ_NAV_ENDPOINT, timeout=15, retries=2)
+        _url_meta = f"{_ALLIANZ_NAV_ENDPOINT}?FundCode={code.upper().strip()}"
+        r = fetch_url_with_retry(_url_meta, timeout=15, retries=2)
+        if r and code.upper().strip() not in (r.text or "").upper():
+            # §1：無法證明這頁屬於這一檔 → 不回傳任何欄位
+            print(f"[src_allianz_meta] ⛔ {code}：ifund 頁面內容未提及此代碼，"
+                  f"拒絕當成本檔資料回傳（避免跨基金污染）")
+            return {}
         if r and is_valid_moneydj_page(r.text):
             soup = BeautifulSoup(r.text, "lxml")
             for tbl in soup.find_all("table"):
