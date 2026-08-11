@@ -169,8 +169,50 @@ def render_portfolio_tab() -> None:
     #   `oauth_mode=bool(_oauth_configured)` 決定,SA client 照樣能讀 v2 sheet
     #   (前提:該 Sheet 已分享給 SA 的 client_email)。
     def _t3_sheet_client():
+        # v19.431 存取回退(2026-08-11 線上事故 + 三 AI 對抗查證):#619 修好 SA secret 後,
+        # SA client 能建起來 → SA-first 生效,但使用者「自己 OAuth 擁有」的 sheet **未分享給 SA
+        # client_email** → open_by_key 得 403 → gspread `raise PermissionError`(無參數)→ 空白紅框。
+        # 修:SA 一律先建先試(不違反 SA-first 不變量);若開不了「這張」sheet(403/404,**非 429**)
+        # 且使用者已 OAuth 登入 → 回退 user OAuth client(本人擁有該 sheet)。OAuth client 用 session
+        # token、無 redirect → 不重現 v19.302 平台登入衝突;純 SA(未登入)使用者 _get_oauth_client()
+        # 回 None → 仍走 SA(配合 describe_sheet_exc 的可行動 403 訊息)。探測結果本 session 快取,省配額。
         if _gsa_secret:
-            return get_gspread_client(_gsa_secret)
+            _sa = get_gspread_client(_gsa_secret)
+            _sid = (st.session_state.get("policy_sheet_id") or _sheet_id_secret or "").strip()
+            if not _sid:
+                return _sa                           # 無 sheet 可探測 → 維持 SA
+            _cache = st.session_state.setdefault("_t3_sa_can_open", {})
+            if _sid not in _cache:                   # 尚未判定 → 探測一次(結果快取,省配額)
+                try:
+                    _sa.open_by_key(_sid)            # 存取探測(僅抓 metadata,1 read)
+                    _cache[_sid] = True
+                except Exception as _e:  # noqa: BLE001
+                    try:
+                        from infra.gspread_retry import is_quota_error as _iq
+                        _quota = _iq(_e)
+                    except Exception:  # noqa: BLE001
+                        _quota = "429" in str(_e)
+                    if _quota:                       # 429 暫時性 → 不快取、不回退(下次重試)
+                        return _sa
+                    _cache[_sid] = False
+            if _cache[_sid]:
+                return _sa                           # SA 開得了 → 用 SA(不碰 OAuth,免無謂 refresh)
+            # SA 開不了「這張」sheet(403/404)→ 嘗試 user OAuth(本人擁有該 sheet)。
+            # OAuth 取用**惰性 + 防呆**:token 過期/refresh 失敗不該拖垮「SA 本可服務」的讀取,
+            # 建不起來 → 退回 SA,交給下游 describe_sheet_exc 的可行動 403 訊息(§1)。
+            _oauth = None
+            try:
+                _oauth = _get_oauth_client()
+            except Exception as _oe:  # noqa: BLE001
+                import sys as _sys
+                print(f"[t3_sheet_client] OAuth client 建立失敗({type(_oe).__name__})→ 維持 SA",
+                      file=_sys.stderr)
+            if _oauth is None:
+                return _sa
+            import sys as _sys
+            print(f"[t3_sheet_client] SA 無法開啟 sheet {_sid[:12]}… → 回退 user OAuth client",
+                  file=_sys.stderr)
+            return _oauth
         return _get_oauth_client()
     from ui.helpers.data_registry import (
         _update_data_registry,

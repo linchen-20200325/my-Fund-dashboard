@@ -28,6 +28,7 @@ from ._helpers import (
     OPTIONAL_COLS,
     PolicySheetError,
     REQUIRED_COLS,
+    describe_sheet_exc,
     _is_worksheet_not_found,
     _normalize_float,
     _normalize_fx,
@@ -66,7 +67,7 @@ def list_policy_worksheets(client: Any, sheet_id: str) -> list[str]:
         sh = _with_quota_retry(client.open_by_key, sheet_id)
         names = [ws.title for ws in _with_quota_retry(sh.worksheets)]
     except Exception as e:
-        raise PolicySheetError(f"列 worksheets 失敗：{e}") from e
+        raise PolicySheetError(f"列 worksheets 失敗：{describe_sheet_exc(e, sheet_id)}") from e
     return [n for n in names
             if not n.startswith(_RESERVED_TAB_PREFIX) and n != DEFAULT_WORKSHEET]
 
@@ -191,7 +192,7 @@ def load_all_policy_worksheets(client: Any, sheet_id: str) -> pd.DataFrame:
         sh = _with_quota_retry(client.open_by_key, sheet_id)
         all_ws = _with_quota_retry(sh.worksheets)
     except Exception as e:
-        raise PolicySheetError(f"列 worksheets 失敗：{e}") from e
+        raise PolicySheetError(f"列 worksheets 失敗：{describe_sheet_exc(e, sheet_id)}") from e
 
     # 過濾出保單分頁（排除 _ 開頭系統 tab 與 legacy 單表 DEFAULT_WORKSHEET）
     policy_ws = [ws for ws in all_ws
@@ -618,7 +619,7 @@ def detect_sheet_schema_version(client: Any, sheet_id: str) -> str:
         tabs = [ws for ws in _with_quota_retry(sh.worksheets)
                 if not ws.title.startswith("_") and ws.title != DEFAULT_WORKSHEET]
     except Exception as e:
-        raise PolicySheetError(f"開啟 Sheet 失敗：{e}") from e
+        raise PolicySheetError(f"開啟 Sheet 失敗：{describe_sheet_exc(e, sheet_id)}") from e
     if not tabs:
         return "empty"
     for ws in tabs:
@@ -893,7 +894,7 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         tabs = [ws for ws in _with_quota_retry(sh.worksheets)
                 if not ws.title.startswith("_") and ws.title != DEFAULT_WORKSHEET]
     except Exception as e:
-        raise PolicySheetError(f"列保單分頁失敗：{e}") from e
+        raise PolicySheetError(f"列保單分頁失敗：{describe_sheet_exc(e, sheet_id)}") from e
     # §1：本次載入的本金解析失敗清單為 replace 語意（跨分頁累加），開始逐分頁前清空
     reset_invest_twd_parse_errors()
     frames: list[pd.DataFrame] = []

@@ -1140,6 +1140,15 @@ def finalize_fund_metrics(result: dict) -> dict:
                      "note": f"live 全敗,改用累積序列 {len(_s_merged)} 筆"})
             s = _s_merged
             result["series"] = s
+            # v19.431:併入累積序列後 series 已換成長序列 → nav_span_days 必須跟著重算,
+            # 否則 UI 標頭出現「1579 筆 · 跨度 42 天」自相矛盾(§1;span 停在 pre-merge live 值)。
+            # 從合併後 series 首末日直接算(純 pandas,無 I/O);日期軸異常不覆寫舊值、不炸主流程。
+            try:
+                if len(s) >= 2:
+                    result["nav_span_days"] = int(
+                        (pd.Timestamp(s.index.max()) - pd.Timestamp(s.index.min())).days)
+            except Exception:  # noqa: BLE001
+                pass
 
     if s is None:
         result["source_trace"].append(
