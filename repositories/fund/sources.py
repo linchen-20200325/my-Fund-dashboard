@@ -3081,8 +3081,14 @@ def fetch_fund_multi_source(code: str,
         # Step 2 的 `except Exception` 吞成一行「多來源異常」,整條多來源 waterfall
         # 的結果被丟棄,實際上線的是 legacy 爬蟲的「近30日」路徑 —— 這正是
         # user 8 檔持倉「每檔剛好 30 點」的直接成因(§1 靜默失敗)。
+        # stderr:Streamlit Cloud 的 log 面板**只顯示 stderr**,stdout 的 print
+        # 線上完全看不到。這一行是「waterfall 每個候選代碼的結果」唯一的線上訊號。
+        import sys as _sys_orch
         print(f"[orchestrator] {_candidate} → {_status} "
-              f"(err:{(_result.get('error') or '')[:40]})")
+              f"(nav={len(_result.get('series') or [])}筆 "
+              f"src={_result.get('data_source') or '—'} "
+              f"err:{(_result.get('error') or '')[:40]})",
+              file=_sys_orch.stderr)
         if _status == "complete":
             return _attach_prov(_result, ":complete")
         if best_result is None:

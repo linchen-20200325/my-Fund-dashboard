@@ -423,8 +423,10 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     # 只在「最後留下的 nav_s 比歷來最佳短」時觸發,對其餘 case 零影響。
     # 放在 span-extend **之前**,讓跨度救援拿到的是救回來後的較長序列。
     if _effective_nav_len(_best_s) > _effective_nav_len(nav_s):
+        import sys as _sys_rescue
         print(f"[orchestrator] ♻️ {_code} waterfall 收尾救援 "
-              f"{nav_source or '—'}({len(nav_s)}筆) → {_best_src}({len(_best_s)}筆)")
+              f"{nav_source or '—'}({len(nav_s)}筆) → {_best_src}({len(_best_s)}筆)",
+              file=_sys_rescue.stderr)
         result.setdefault("source_trace", []).append(
             {"source": f"{_best_src}(best-of-waterfall)", "success": True,
              "nav_count": len(_best_s), "replaced": nav_source or "",
@@ -716,8 +718,12 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         _s_ok = result.get("series") is not None and len(result.get("series", [])) >= 10
         _m_ok = result.get("fund_name") and result.get("nav_latest")
         if _s_ok:
+            # stderr:這一行是「多來源 waterfall 有沒有贏」的唯一線上訊號（見上方 stderr 註解）
+            import sys as _sys_ok
             print(f"[fetch] ✅ 主路線成功（src:{result.get('data_source','')} "
-                  f"status:{result.get('status','')} page:{_page_type}）")
+                  f"nav={len(result.get('series', []))}筆 "
+                  f"status:{result.get('status','')} page:{_page_type}）",
+                  file=_sys_ok.stderr)
             return result
         # v18.121 issue 4: series 缺失但 fund_name+nav 有 → 不再提早 return（之前 bug）
         # 自動切 alternative page_type 重試一次（境內↔境外 mapping 錯誤的 case）
@@ -756,7 +762,12 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             # 兩個 page_type 都拿不到 series → 繼續走 Step 3+ 原始 _src_* 流程
             print(f"[fetch] ⚠️ 兩個 page_type 都不足，繼續原始流程")
         else:
-            print(f"[fetch] ⚠️ 不足，繼續原始流程（page:{_page_type}）")
+            # stderr:與上面那行成對 —— 「主路線輸了」也必須線上看得見
+            import sys as _sys_ng
+            print(f"[fetch] ⚠️ 主路線不足，改走 legacy 爬蟲"
+                  f"（page:{_page_type} nav={len(result.get('series') or [])}筆 "
+                  f"name={'有' if result.get('fund_name') else '無'}）",
+                  file=_sys_ng.stderr)
     except Exception as _ms_e:  # noqa: BLE001 — 有備援流程，但不得靜默（§1）
         # 2026-08-11:原本只印 `{_ms_e}`。這一顆 except 是**整條多來源 waterfall
         # 的唯一出口**,一旦裡面任何地方拋例外,結果整包被丟棄、流程默默改走
@@ -765,9 +776,16 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         #   (a) waterfall 跑完但每個來源都 <10 筆,還是
         #   (b) waterfall 中途炸掉。
         # 這兩者的修法完全不同,卻長得一模一樣。補上型別 + traceback。
+        # ⚠️ 2026-08-11 第三輪:**必須寫 stderr**。Streamlit Cloud 的 log 面板
+        # 只顯示 stderr —— 本 repo 絕大多數診斷 print 走 stdout,線上**完全看不到**。
+        # 實測佐證:同一次抓取中,只有 `nav_metrics.py` 那幾行 `file=sys.stderr` 的
+        # `[holdings:...]` 出現在 log,`[fetch]` / `[orchestrator]` / `[src_*]` 一行都沒有。
+        # 這正是「§1 Fail Loud 寫了一堆、線上卻永遠是靜默失敗」的真正原因。
+        import sys as _sys_ms
         import traceback as _tb_ms
-        print(f"[fetch] ⚠️ 多來源異常({type(_ms_e).__name__}): {_ms_e}，繼續原始流程")
-        print(_tb_ms.format_exc())
+        print(f"[fetch] ⚠️ 多來源異常({type(_ms_e).__name__}): {_ms_e}，繼續原始流程",
+              file=_sys_ms.stderr)
+        print(_tb_ms.format_exc(), file=_sys_ms.stderr)
         result.setdefault("source_trace", []).append(
             {"source": "multi_source", "success": False,
              "error": f"{type(_ms_e).__name__}: {_ms_e}"})
@@ -1022,7 +1040,12 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                 try:
                     _s30 = _pd.Series({_pd.Timestamp(k): v for k,v in parsed.items()}).sort_index()
                     result["series"] = _s30
-                    print(f"[fetch_nav_30] ✅ {len(result['series'])} 筆（近30日）")
+                    # stderr:legacy 落到「近30日」是 user 8 檔全部 30 點的直接成因,
+                    # 這一行必須線上看得見(見上方 stderr 註解)
+                    import sys as _sys_n30
+                    print(f"[fetch_nav_30] ⚠️ {code} legacy 落到近30日 "
+                          f"{len(result['series'])} 筆 —— 長歷史來源全部失敗",
+                          file=_sys_n30.stderr)
                 except Exception as _ps_e:
                     print(f"[fetch_nav_30] 轉換失敗: {_ps_e}")
                     # 最後備援：呼叫 _src_nav_30day

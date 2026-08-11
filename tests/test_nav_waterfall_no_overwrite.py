@@ -515,3 +515,54 @@ def test_allianzgi_meta_verifies_the_page_belongs_to_this_fund():
         "`_src_allianzgi_meta` 必須驗證回傳頁面內容真的提到該基金代碼，"
         "否則等於把「頁面上任何淨值表」當成該檔資料回傳（§1 造假 / §2.2 血緣錯標）")
     assert "return {}" in _body, "驗證失敗時必須回空 dict，不得回別檔的 meta"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 缺陷 ⑥ — 診斷 print 走 stdout，Streamlit Cloud 看不到（2026-08-11 第三輪）
+#
+# 線上實測比對：同一次 ACCP138 抓取的 log 裡，只有 `nav_metrics.py` 那幾行
+# 帶 `file=sys.stderr` 的 `[holdings:...]` 出現，`[fetch]` / `[orchestrator]` /
+# `[src_*]` **一行都沒有**。Streamlit Cloud 的 log 面板只顯示 stderr。
+#
+# 這就是「§1 Fail Loud 寫了一大堆、線上卻永遠診斷不出來」的真正原因 ——
+# 訊息確實印了，只是印到一個沒人看得到的地方。
+# ══════════════════════════════════════════════════════════════════════
+
+# 這幾行是「NAV 到底走哪條路、贏還輸」的唯一線上訊號，缺一條就診斷不了。
+_MUST_BE_STDERR = [
+    ("repositories/fund/fund_orchestration.py", "多來源異常"),
+    ("repositories/fund/fund_orchestration.py", "主路線成功"),
+    ("repositories/fund/fund_orchestration.py", "主路線不足"),
+    ("repositories/fund/fund_orchestration.py", "waterfall 收尾救援"),
+    ("repositories/fund/fund_orchestration.py", "legacy 落到近30日"),
+    ("repositories/fund/sources.py", "[orchestrator] {_candidate}"),
+]
+
+
+@pytest.mark.parametrize("relpath,marker", _MUST_BE_STDERR)
+def test_critical_nav_diagnostics_go_to_stderr(relpath, marker):
+    """接線測試：把任一條關鍵診斷的 `file=sys.stderr` 拿掉，本測試轉紅。
+
+    走 AST 而非 grep —— 註解裡也寫了這些字串（本檔與 production 都有），
+    grep 版會被自己的說明文字騙過（本 repo 已有 4 次同型前科）。
+    """
+    _p = _ROOT / relpath
+    _text = _p.read_text(encoding="utf-8")
+    _tree = ast.parse(_text)
+    _hits = []
+    for _n in ast.walk(_tree):
+        if not (isinstance(_n, ast.Call) and _call_name(_n) == "print"):
+            continue
+        _seg = ast.get_source_segment(_text, _n) or ""
+        if marker not in _seg:
+            continue
+        _hits.append((_n.lineno,
+                      any(_kw.arg == "file" for _kw in _n.keywords)))
+    assert _hits, (
+        f"{relpath} 找不到含「{marker}」的 print —— "
+        "訊息被改掉或刪掉了，這條診斷線就斷了")
+    _stdout = [f"L{ln}" for ln, _has_file in _hits if not _has_file]
+    assert not _stdout, (
+        f"{relpath} {_stdout} 的「{marker}」診斷寫到 stdout —— "
+        "Streamlit Cloud 的 log 面板只顯示 stderr，線上等於沒印。"
+        "請加 `file=sys.stderr`。")
