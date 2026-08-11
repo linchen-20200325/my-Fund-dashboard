@@ -161,6 +161,17 @@ CPI_MOM_MILD_RISE_PCT: float = 0.3
 NAV_HIST_COVERAGE_MIN: float = 0.6      # 實際點數 / 預期交易日(span×252/365)下限
 NAV_HIST_MAX_GAP_DAYS: int = 14         # 相鄰兩點最大缺口(日曆日;台灣長假 ~9-10 天)
 
+# ── 「近30日」短窗判定(fund_orchestration waterfall,2026-08-11 user 拍板)──────
+# 背景:`_src_tcb_nav`(waterfall 順位 2c)抓不到長歷史時,會把 MoneyDJ 主頁上的
+# 「近30日淨值表」**掛在自己名下**回傳(sources.py 第三段)。waterfall 的 gate 只數
+# 筆數(≥10)不看跨度 → 30 筆短窗直接鎖定,後面 2c2/2d/2e… 一次都沒被試過。
+# 線上實證(ACCP138):`[fetch] ✅ 主路線成功（src:tcb_moneydj nav=30筆）`,跨度 42 天,
+# 而 3Y 年化需 756 點、Sharpe 250、MaxDD 125、σ 252 → 全數留白。
+# 判定跨度 < 本值 = 短窗 → 不讓它滿足 gate,改讓**非 MoneyDJ** 來源再試一次
+# (user 2026-08-11 拍板:不增加對 MoneyDJ 的請求數;MoneyDJ robots.txt 禁 LLM/AI 用途)。
+# 90 天 = 3 個月:近30日表(~42 天)必落在內;真長歷史(2000 天窗)遠大於此,不誤判。
+NAV_SHORT_WINDOW_MAX_DAYS: int = 90
+
 # ── Composite 對帳:不加權方向投票中性帶(macro composite_score,v19.367 6/8)──
 # F-RECON-1 最後一項:健康度雙演算法對帳。第二演算法 = 不加權多空投票
 # net_ratio=(n_pos-n_neg)/n_valid;|net_ratio| <= 本帶寬 → 方向視為中性(60/40 不算決定性)

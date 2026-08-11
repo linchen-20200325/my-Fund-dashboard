@@ -21,6 +21,7 @@ from infra.cache import (  # noqa: F401
 )
 from shared.fred_series import FRED_CHF_USD, FRED_CNH_USD, FRED_EUR_USD, FRED_JPY_USD
 from shared.ttls import TTL_5MIN, TTL_15MIN, TTL_30MIN
+from shared.signal_thresholds import NAV_SHORT_WINDOW_MAX_DAYS
 from fund_fetcher import (  # noqa: F401
     safe_float, fetch_url_with_retry, is_valid_moneydj_page,
     HDR, HDR_JSON, PORTAL_CFG, TCB_BASE, _INSURANCE_SUBDOMAIN_HINTS,
@@ -125,6 +126,32 @@ def _effective_nav_len(s: "pd.Series | None") -> int:
         print(f"[orchestrator] _effective_nav_len 失敗"
               f"({type(_e).__name__}: {_e}) → 視為 0 筆")
         return 0
+
+
+def _is_short_window_nav(s: "pd.Series | None") -> bool:
+    """這條序列是不是「近30日」短窗表(而非真正的長歷史)？
+
+    2026-08-11 user 拍板後新增。線上實證:`_src_tcb_nav`(waterfall 順位 2c)
+    在長歷史抓不到時,會把 MoneyDJ 主頁的「近30日淨值表」**掛在自己名下**回傳
+    (`sources.py` 第三段),而 waterfall 的 gate 只數筆數(≥10)不看跨度 ——
+    於是 30 筆短窗直接鎖定,後面 2c2/2d/2e… 一次都沒被試過。
+
+    判定順序:
+    1. **provenance 優先**(§2.2):`attrs["source"]` 含 `nav_30day` → 確定是短窗表。
+    2. **跨度兜底**:`attrs` 在 concat/copy 中可能掉,故再看跨度 <
+       `NAV_SHORT_WINDOW_MAX_DAYS`(90 天)。副作用是「真的很新的基金」也會被判短窗
+       —— 那是**可接受且正確**的:它同樣值得讓其他來源再試一次,而重試只走非
+       MoneyDJ 來源,不增加對 MoneyDJ 的請求。
+    """
+    if s is None or len(s) == 0:
+        return False
+    try:
+        _src = str((getattr(s, "attrs", None) or {}).get("source", ""))
+    except Exception:  # noqa: BLE001 — attrs 型別異常不該讓抓取整條掛掉
+        _src = ""
+    if "nav_30day" in _src:
+        return True
+    return _nav_span_days(s) < NAV_SHORT_WINDOW_MAX_DAYS
 
 
 def _adopt_if_better(
@@ -246,8 +273,30 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
             nav_source = "tcb_moneydj"
         _best_s, _best_src = _adopt_if_better(_best_s, _best_src, nav_s, "tcb_moneydj")
 
+    # ── 2c'. 「近30日」偽裝拆除（2026-08-11 user 拍板）─────────────────────
+    # `_src_tcb_nav` 抓不到長歷史時會把近30日表掛在自己名下回傳，而 gate 只數筆數
+    # 不看跨度 → 30 筆直接鎖定，下游全部跳過。線上實證(ACCP138)：
+    #   `[fetch] ✅ 主路線成功（src:tcb_moneydj nav=30筆）`、跨度 42 天，
+    #   而 3Y 年化需 756 點 / Sharpe 250 / MaxDD 125 / σ 252 → 全數留白。
+    #
+    # 處置：短窗**不算數** → 收進側車、清空 nav_s 讓 gate 重新打開，
+    # 但**只放行非 MoneyDJ 來源**（user 拍板：不增加對 MoneyDJ 的請求數；
+    # MoneyDJ robots.txt 明文禁止 LLM/AI 用途）。故下方 2c2 / 2d / 2f
+    # 三個 MoneyDJ 來源在本模式下一律跳過 —— 它們拿到的會是同一份短窗表。
+    # 若非 MoneyDJ 來源也全敗，函式尾端的側車救援會把這 30 筆原樣放回去，
+    # 資料零遺失、對 MoneyDJ 零額外請求。
+    _retry_non_moneydj_only = False
+    if _is_short_window_nav(nav_s):
+        import sys as _sys_sw
+        print(f"[orchestrator] 🔍 {_code} 2c 拿到的是近30日短窗"
+              f"（{len(nav_s)}筆/{_nav_span_days(nav_s)}天）→ 不算數，"
+              f"改試非 MoneyDJ 長歷史來源", file=_sys_sw.stderr)
+        _retry_non_moneydj_only = True
+        nav_s, nav_source = pd.Series(dtype=float), ""
+
     # 2c2. v6.8: 保險公司專屬 MoneyDJ 子網域（TL=台灣人壽, FL=富蘭克林 等）
-    if len(nav_s) < 10:
+    # ⚠️ MoneyDJ 網域 → 短窗重試模式下跳過（見 2c' 註解）
+    if len(nav_s) < 10 and not _retry_non_moneydj_only:
         _ins_s = _src_insurance_subdomain_nav(_code)
         if len(_ins_s) >= 10:
             nav_s = _ins_s
@@ -256,7 +305,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                 {"source": "insurance_subdomain", "success": True, "nav_count": len(_ins_s)})
 
     # 2d. www.moneydj.com（主站，最後才試，IP 限制多）
-    if len(nav_s) < 10:
+    # ⚠️ MoneyDJ 網域 → 短窗重試模式下跳過（見 2c' 註解）
+    if len(nav_s) < 10 and not _retry_non_moneydj_only:
         try:
             import datetime as _dt2
             import re as _re4
@@ -315,7 +365,9 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
 
     # 2f. 近30日 nav 頁直接解析（最終 fallback，yf/yp004002 全被封鎖時使用）
     # 近30日雖然只有約25~30筆，足以計算 Sharpe/標準差
-    if len(nav_s) < 10:
+    # ⚠️ MoneyDJ 網域 → 短窗重試模式下跳過：那份資料 2c 已經拿到並存進側車了，
+    #    再打一次是**完全重複**的請求（見 2c' 註解）。
+    if len(nav_s) < 10 and not _retry_non_moneydj_only:
         nav_s = _src_nav_30day(_code, _page_type)
         if len(nav_s) >= 10:
             nav_source = "moneydj_nav30"

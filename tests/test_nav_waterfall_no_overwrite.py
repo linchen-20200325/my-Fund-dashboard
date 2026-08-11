@@ -42,7 +42,10 @@ import pandas as pd
 import pytest
 
 from fund_fetcher import merge_non_empty
-from repositories.fund.fund_orchestration import _adopt_if_better, _effective_nav_len
+from repositories.fund.fund_orchestration import (
+    _adopt_if_better, _effective_nav_len, _is_short_window_nav,
+)
+from shared.signal_thresholds import NAV_SHORT_WINDOW_MAX_DAYS
 
 _ROOT = Path(__file__).resolve().parents[1]
 _ORCH = _ROOT / "repositories" / "fund" / "fund_orchestration.py"
@@ -610,3 +613,100 @@ def test_no_or_default_on_series_getter_anywhere():
         f"{_bad}: `.get(\"series\") or ...` 會對 pd.Series 做 bool() → "
         "ValueError: truth value of a Series is ambiguous。"
         "請改 `_s = x.get(\"series\"); len(_s) if _s is not None else 0`。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ⑦ 「近30日」偽裝拆除（2026-08-11 user 拍板：只放行非 MoneyDJ 來源）
+#
+# 線上實證（ACCP138，四批修完後）：
+#   [orchestrator] ACCP138 → partial (nav=30筆 src=tcb_moneydj err:)
+#   [fetch] ✅ 主路線成功（src:tcb_moneydj nav=30筆 status:partial page:yp010000）
+# 沒有「多來源異常」、沒有 legacy 的 fetch_nav_30 → waterfall **跑完且贏了**，
+# 但 2c 的 `_src_tcb_nav` 把近30日短窗表掛在自己名下回傳，gate 只數筆數不看跨度，
+# 於是 2c2/2d/2e… 一次都沒被試過。
+# ══════════════════════════════════════════════════════════════════════
+
+def test_short_window_detected_by_provenance():
+    """provenance 優先（§2.2）：attrs 標了 nav_30day 就是短窗，不必看跨度。"""
+    _s30 = _s(30)
+    _s30.attrs["source"] = "MoneyDJ:nav_30day:table_parse"
+    assert _is_short_window_nav(_s30) is True
+
+
+def test_short_window_detected_by_span_when_attrs_lost():
+    """attrs 在 concat/copy 中會掉，所以要有跨度兜底。"""
+    _s30 = _s(30)                       # 30 個連續日 → 跨度 29 天
+    assert not _s30.attrs.get("source")
+    assert _is_short_window_nav(_s30) is True
+
+
+def test_long_history_is_not_short_window():
+    _long = _s(400)                     # 400 個連續日 → 跨度 399 天
+    assert _is_short_window_nav(_long) is False
+
+
+@pytest.mark.parametrize("cand", [None, pd.Series(dtype=float)])
+def test_empty_is_not_short_window(cand):
+    """空序列不是「短窗」——它是「沒有」，兩者處置不同（空的本來就會往下試）。"""
+    assert _is_short_window_nav(cand) is False
+
+
+def test_short_window_threshold_comes_from_ssot():
+    """§3.3：門檻必須從 shared/signal_thresholds 引入，不得 inline。"""
+    assert NAV_SHORT_WINDOW_MAX_DAYS == 90
+    _src = _ORCH.read_text(encoding="utf-8")
+    assert "NAV_SHORT_WINDOW_MAX_DAYS" in _src
+    _tree = ast.parse(_src)
+    _inline = [
+        _n.lineno for _n in ast.walk(_tree)
+        if isinstance(_n, ast.Compare)
+        and any(isinstance(_c, ast.Constant) and _c.value == 90 for _c in _n.comparators)
+    ]
+    assert not _inline, f"L{_inline}: 跨度門檻被 inline 成 90，應吃 SSOT 常數"
+
+
+def test_moneydj_orders_are_skipped_in_non_moneydj_retry_mode():
+    """接線測試：user 拍板「不增加對 MoneyDJ 的請求數」。
+
+    短窗重試模式下，2c2（保險子網域）/ 2d（www.moneydj）/ 2f（近30日）三個
+    MoneyDJ 來源**必須**被跳過。拿掉任一個 `and not _retry_non_moneydj_only`，
+    本測試轉紅 —— 那就等於偷偷多打 MoneyDJ。
+    """
+    _fn = _waterfall_fn()
+    _src = _ORCH.read_text(encoding="utf-8")
+    _gated = []
+    for _n in ast.walk(_fn):
+        if not isinstance(_n, ast.If):
+            continue
+        _seg = ast.get_source_segment(_src, _n.test) or ""
+        if "_retry_non_moneydj_only" in _seg:
+            _gated.append(_n.lineno)
+    assert len(_gated) == 3, (
+        f"MoneyDJ 來源的跳過閘門有 {len(_gated)} 個（L{_gated}），應恰好 3 個："
+        "2c2 保險子網域 / 2d www.moneydj / 2f 近30日。"
+        "少一個 = 短窗重試時偷偷多打一次 MoneyDJ（違反 user 拍板）；"
+        "多一個 = 把非 MoneyDJ 的長歷史來源也擋掉了（等於沒修）。")
+
+
+def test_non_moneydj_sources_are_not_gated_by_retry_flag():
+    """反向：SITCA / 銀行平台 / Morningstar / Yahoo 這些**非** MoneyDJ 來源
+    不得被 `_retry_non_moneydj_only` 擋住 —— 擋住就等於這次修改毫無作用。
+    """
+    _src = _ORCH.read_text(encoding="utf-8")
+    _tree = ast.parse(_src)
+    _bad = []
+    for _n in ast.walk(_tree):
+        if not isinstance(_n, ast.If):
+            continue
+        _seg_test = ast.get_source_segment(_src, _n.test) or ""
+        if "_retry_non_moneydj_only" not in _seg_test:
+            continue
+        _seg_body = " ".join(
+            ast.get_source_segment(_src, _b) or "" for _b in _n.body)
+        for _fn_name in ("_src_sitca_nav", "_src_bank_platform_nav",
+                         "_src_morningstar_nav", "_src_yahoo_finance_nav"):
+            if _fn_name in _seg_body:
+                _bad.append(f"L{_n.lineno}:{_fn_name}")
+    assert not _bad, (
+        f"{_bad}: 非 MoneyDJ 來源被短窗重試旗標擋住了 —— "
+        "拍板的做法是「擋 MoneyDJ、放行其他」，擋錯邊等於白改")
