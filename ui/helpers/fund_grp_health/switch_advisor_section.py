@@ -45,9 +45,13 @@ def _rows_with_nav(funds: list, pool_by_code: dict) -> list:
     for r in rows:
         _c = r.get("code")
         r["nav_series"] = _nav.get(_c)
-        r["type_override"] = (pool_by_code.get(_c) or {}).get("type_override", "")
+        # v19.432 稽核修:pool_by_code 的值是 PoolEntry dataclass(**沒有 .get()**)。
+        # 原 `(pool_by_code.get(_c) or {}).get(...)` 在「持倉檔同時也在選股池」時會拋
+        # AttributeError → 被外層 except 吞掉 → 整張換股建議表靜默消失。改 getattr。
+        _pe = pool_by_code.get(_c)
+        r["type_override"] = (getattr(_pe, "type_override", "") if _pe else "") or ""
         if not r.get("基金類別"):
-            r["基金類別"] = (pool_by_code.get(_c) or {}).get("category")
+            r["基金類別"] = getattr(_pe, "category", None) if _pe else None
     return rows
 
 

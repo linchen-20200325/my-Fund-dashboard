@@ -48,10 +48,11 @@ def _holding_line(a: dict) -> str:
 
 
 def build_notification(result: dict, *, portfolio_name: "str | None" = None,
-                       as_of: "str | None" = None) -> dict:
+                       as_of: "str | None" = None, skipped: int = 0) -> dict:
     """advise_switches 結果 → {should_notify, message, n_actionable, actionable_codes}。
 
     should_notify=False 時 message 仍給一段「本週無需換股」摘要(呼叫端可選擇不送)。
+    skipped:抓不到資料、未納入評估的持倉檔數(§1 誠實帶進訊息,不讓「N 檔」看起來像全部)。
     """
     _advices = (result or {}).get("advices") or []
     _summary = (result or {}).get("summary") or {}
@@ -69,10 +70,11 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
         f"換股 {_summary.get('n_switch', 0)}｜賣轉現金 {_summary.get('n_sell_cash', 0)}｜"
         f"表現差 {_summary.get('n_underperforming', 0)}"
     )
+    _skip_note = f"\n⬜ 另有 {skipped} 檔資料不足、未評估" if skipped and skipped > 0 else ""
     _caveat = "※ 教學紀律工具,非獲利保證;請自行判斷後再決定。"
 
     if not _actionable:
-        _msg = f"{_header}\n\n✅ 本週無需換股：所有持倉續抱 / 觀察中。\n\n{_tail}\n{_caveat}"
+        _msg = f"{_header}\n\n✅ 本週無需換股：所有持倉續抱 / 觀察中。{_skip_note}\n\n{_tail}\n{_caveat}"
         return {"should_notify": False, "message": _msg[:_LINE_TEXT_MAX],
                 "n_actionable": 0, "actionable_codes": []}
 
@@ -82,7 +84,7 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
     if len(_actionable) > _MAX_DETAIL_ROWS:
         _lines.append(f"\n…另有 {len(_actionable) - _MAX_DETAIL_ROWS} 檔(開 App 看完整)")
 
-    _msg = f"{_header}\n\n" + "\n".join(_lines) + f"\n\n{_tail}\n{_caveat}"
+    _msg = f"{_header}\n\n" + "\n".join(_lines) + f"{_skip_note}\n\n{_tail}\n{_caveat}"
     if len(_msg) > _LINE_TEXT_MAX:
         _msg = _msg[:_LINE_TEXT_MAX - 1] + "…"
     return {"should_notify": True, "message": _msg, "n_actionable": len(_actionable),

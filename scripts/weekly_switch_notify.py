@@ -79,28 +79,27 @@ def _read_holdings(client, sheet_id) -> list:
     )
     try:
         _ver = detect_sheet_schema_version(client, sheet_id)
-    except Exception as _e:  # noqa: BLE001
-        _log(f"判斷 Sheet schema 失敗:{type(_e).__name__}: {_e}")
+        _codes: list = []
+        if _ver == "v2":
+            df = load_all_policies_v2(client, sheet_id)
+            for _, _r in df.iterrows():
+                if str(_r.get("item_type", "fund")).strip().lower() not in ("", "fund"):
+                    continue                      # 跳過現金等非基金列
+                _c = str(_r.get("fund_code", "") or "").strip().upper()
+                if _c:
+                    _codes.append(_c)
+        elif _ver == "v1":
+            from repositories.policy.v1 import _extract_code_from_url
+            df = load_all_policy_worksheets(client, sheet_id)
+            for _, _r in df.iterrows():
+                _c = (_extract_code_from_url(str(_r.get("fund_url", "") or "")) or "").strip().upper()
+                if _c:
+                    _codes.append(_c)
+        else:
+            _log(f"Sheet schema = {_ver}(無保單分頁)")
+    except Exception as _e:  # noqa: BLE001 — 讀帳本失敗 → 回 [](呼叫端 exit 2,§1 不拋原始 traceback)
+        _log(f"讀帳本失敗:{type(_e).__name__}: {_e}")
         return []
-
-    _codes: list = []
-    if _ver == "v2":
-        df = load_all_policies_v2(client, sheet_id)
-        for _, _r in df.iterrows():
-            if str(_r.get("item_type", "fund")).strip().lower() not in ("", "fund"):
-                continue                          # 跳過現金等非基金列
-            _c = str(_r.get("fund_code", "") or "").strip().upper()
-            if _c:
-                _codes.append(_c)
-    elif _ver == "v1":
-        from repositories.policy.v1 import _extract_code_from_url
-        df = load_all_policy_worksheets(client, sheet_id)
-        for _, _r in df.iterrows():
-            _c = (_extract_code_from_url(str(_r.get("fund_url", "") or "")) or "").strip().upper()
-            if _c:
-                _codes.append(_c)
-    else:
-        _log(f"Sheet schema = {_ver}(無保單分頁)")
     # 去重保序
     _seen: set = set()
     return [c for c in _codes if not (c in _seen or _seen.add(c))]
@@ -252,7 +251,9 @@ def main(argv=None) -> int:
     except Exception as _e:  # noqa: BLE001
         _log(f"讀選股池失敗(視為空池):{type(_e).__name__}: {_e}")
         _pool = []
-    _pool_by_code = {e.code: e for e in _pool}
+    # 稽核修:pool code 存的是「使用者輸入原樣」,持倉代碼一律 .upper() → 鍵統一大寫,
+    # 否則同一檔在帳本(大寫)與選股池(小寫)會被當兩檔(重複抓 + 對不到 type_override)。
+    _pool_by_code = {str(e.code).upper(): e for e in _pool}
 
     _held_codes = _read_holdings(client, sheet_id)
     if not _held_codes:
@@ -284,7 +285,8 @@ def main(argv=None) -> int:
                            macro_composite=_macro, underperformance_by_code=_under)
     import datetime as _dt
     _as_of = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime("%Y-%m-%d")
-    _note = build_notification(_res, as_of=_as_of)
+    _skipped = len(_held_codes) - len(_held_funds)     # 抓不到的持倉數(誠實帶進訊息)
+    _note = build_notification(_res, as_of=_as_of, skipped=_skipped)
     _log(f"該通知={_note['should_notify']}｜表現差/建議 {_note['n_actionable']} 檔"
          f"（持倉載入 {len(_held_funds)}/{len(_held_codes)}）")
 
@@ -299,6 +301,11 @@ def main(argv=None) -> int:
         _log(f"LINE 推播失敗:{_e}")
         return 1
     _log(f"LINE:{_r['reason']}(sent={_r['sent']})")
+    # 稽核修:正式跑(非 dry-run)有建議卻沒送出(多半缺 LINE_CHANNEL_TOKEN/LINE_USER_ID)
+    # → 視為失敗 exit 1(§1;否則 cron 監控會誤判成功、通知悄悄漏掉)。
+    if not args.dry_run and not _r["sent"]:
+        _log(f"有建議但 LINE 未送出({_r['reason']})→ 視為失敗")
+        return 1
     return 0
 
 

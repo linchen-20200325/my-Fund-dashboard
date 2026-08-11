@@ -77,6 +77,19 @@ def test_actionable_codes_reported():
     assert r["actionable_codes"] == ["X1"]
 
 
+def test_skipped_holdings_noted_in_message():
+    r = build_notification(_result([_adv(HOLD)]), skipped=3)   # 無建議 + 有略過
+    assert "3 檔資料不足" in r["message"]
+    cand = {"code": "B", "name": "替代", "buy_sigma": -1.5}
+    r2 = build_notification(_result([_adv(SWITCH, switch_to=cand)]), skipped=2)  # 有建議 + 有略過
+    assert "2 檔資料不足" in r2["message"]
+
+
+def test_no_skip_note_when_zero():
+    r = build_notification(_result([_adv(HOLD)]), skipped=0)
+    assert "資料不足、未評估" not in r["message"]
+
+
 def test_detail_rows_truncated_and_within_line_limit():
     cand = {"code": "B", "name": "替代", "buy_sigma": -1.5}
     advs = [_adv(SWITCH, code=f"C{i}", name=f"基金{i}", switch_to=cand) for i in range(30)]

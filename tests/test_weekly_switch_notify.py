@@ -115,6 +115,36 @@ def test_main_no_actionable_returns0_and_no_push(monkeypatch):
     assert _sent == []                                    # 無建議 → 不推
 
 
+def test_main_exit1_when_should_notify_but_not_sent(monkeypatch):
+    """稽核 FINDING 1:正式跑(非 dry-run)有建議卻沒送出(缺憑證)→ exit 1(不得誤判成功)。"""
+    _patch_main_common(monkeypatch, held=["AAA"], rich={"AAA": _rich("AAA")})
+    import infra.line_push as LP
+    import services.switch_advisor as SA
+    import services.switch_notify as SN
+    monkeypatch.setattr(SA, "advise_switches", lambda *a, **k: {"advices": [], "summary": {}, "caveat": ""})
+    monkeypatch.setattr(SN, "build_notification",
+                        lambda res, **k: {"should_notify": True, "message": "有", "n_actionable": 1})
+    monkeypatch.setattr(LP, "push_text",
+                        lambda msg, **k: {"sent": False, "reason": "缺 LINE_CHANNEL_TOKEN"})
+    assert M.main([]) == 1                                  # 非 dry-run + 有建議 + 未送 → 失敗
+
+
+def test_main_pool_code_case_normalized(monkeypatch):
+    """稽核 FINDING 5:選股池小寫代碼與帳本大寫代碼須合一(不重複抓、對得到 type_override)。"""
+    import repositories.pool_repository as P
+    monkeypatch.setattr(M, "_load_client_and_sheet", lambda: ("c", "s"))
+    monkeypatch.setattr(P, "list_pool", lambda: [_PE("b1234", type_override="震盪")])   # 小寫
+    monkeypatch.setattr(M, "_read_holdings", lambda c, s: ["B1234"])                    # 大寫
+    _got: dict = {}
+
+    def _fr(codes):
+        _got["codes"] = codes
+        return {}
+    monkeypatch.setattr(M, "_fetch_rich", _fr)
+    M.main([])
+    assert _got["codes"] == ["B1234"]                      # 合一,不出現 ['B1234','b1234']
+
+
 def test_main_actionable_dry_run_pushes(monkeypatch):
     _patch_main_common(monkeypatch, held=["AAA"], rich={"AAA": _rich("AAA")})
     import services.switch_advisor as SA
