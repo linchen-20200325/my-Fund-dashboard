@@ -118,8 +118,16 @@ class _FakeWS:
                 self.rows.append([""] * len(_HEADERS))
             self.rows[idx] = list(values[0])
 
-    def append_row(self, row, value_input_option=None):
-        self.rows.append(list(row))
+    def append_row(self, row, value_input_option="RAW"):
+        row = list(row)
+        if value_input_option == "USER_ENTERED":
+            # 模擬 Google Sheets:ISO 日期字串會被解析成日期型,get_all_values 回顯示字串
+            # (en_US → "M/D/YYYY")。用 RAW 才會保留字面值 "YYYY-MM-DD"(主鍵去重靠它)。
+            import re
+            if row and re.match(r"^\d{4}-\d{2}-\d{2}$", str(row[0])):
+                _y, _m, _d = str(row[0]).split("-")
+                row[0] = f"{int(_m)}/{int(_d)}/{_y}"
+        self.rows.append(row)
 
 
 def _gs_store_with(ws):
@@ -146,3 +154,11 @@ def test_gs_same_day_updates_in_place():
     got = store.load_snapshots()
     assert len(got) == 1 and got[0].cagr_pct == 99.0
     assert any(u for u in ws.updates if u[0].startswith("A2"))   # 走了 update 而非 append
+
+
+def test_gs_append_keeps_iso_date_literal_raw():
+    """稽核 FINDING 1 回歸:append 必須走 RAW,主鍵 date 不得被 USER_ENTERED 轉成顯示字串,
+    否則跨 session 同日會比對不到 → 重複列。_FakeWS 已模擬 USER_ENTERED 的日期強轉。"""
+    ws = _FakeWS([_HEADERS])
+    _gs_store_with(ws).append_snapshot(_snap("2026-08-11"))
+    assert ws.rows[-1][0] == "2026-08-11"                        # 字面 ISO(非 "8/11/2026")

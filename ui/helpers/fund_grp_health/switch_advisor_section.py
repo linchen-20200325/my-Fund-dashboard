@@ -138,7 +138,7 @@ def _underperf_by_code(funds: list) -> dict:
     for f in funds:
         _code = f.get("code")
         _c = _cap.get(_code) or {}
-        out[_code] = assess_underperformance(
+        out[str(_code)] = assess_underperformance(      # str 鍵對齊 advise_switches 的 str(code) 查詢
             excess_pct=_c.get("vs 大盤%"),
             full_period=str(_c.get("vs 大盤期間", "")).startswith("⚠️ 全期"),
             benchmark_label=_benchmark_label_for(f),

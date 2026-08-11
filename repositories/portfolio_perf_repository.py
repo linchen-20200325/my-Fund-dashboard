@@ -242,7 +242,10 @@ class GoogleSheetsPerfStore:
             if row and str(row[0]).strip() == snap.date:       # 同日覆蓋最新
                 ws.update(f"A{idx}:{_col(len(_HEADERS))}{idx}", [snap.to_row()])
                 return
-        ws.append_row(snap.to_row(), value_input_option="USER_ENTERED")
+        # RAW(非 USER_ENTERED):date 主鍵 "2026-08-11" 若被 Sheets 解析成日期型,
+        # get_all_values 會回顯示字串(如 "8/11/2026")→ 破壞字串比對去重 → 同日重複列。
+        # 與上面 in-place update(gspread 預設 RAW)一致,主鍵欄一律存字面值。
+        ws.append_row(snap.to_row(), value_input_option="RAW")
 
 
 # ───────────────────────── 後端選擇 + 便利函式 ─────────────────────────
