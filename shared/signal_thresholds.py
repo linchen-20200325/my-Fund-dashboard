@@ -275,3 +275,13 @@ TYPE_LOOKBACK_DAYS: int = 252       # ER 回看窗(交易日;取最近 N 點,原
 # 總經看衰(為主)+ 該檔跌破均線(為輔)同時成立 → 建議賣出轉現金;僅前者 → 🟡 警示(§1 缺料不觸發)
 GROWTH_MACRO_BEARISH_CUTOFF: float = -5.0  # macro composite 分數 ≤ 此 → 總經看衰(對齊 composite_verdict 悲觀界)
 GROWTH_BREAKDOWN_SMA_DAYS: int = 120       # NAV < 此日數均線 → 跌破趨勢確認(交易日)
+
+# ── 組合績效追蹤:趨勢重建最小覆蓋(services/portfolio_tracking.py,v19.430)──
+# 走勢由「已累積的每檔 NAV × 目前權重」重建;共同交易日太少 → 稀疏序列 ×√252 年化會失真。
+PORTFOLIO_TREND_MIN_DAYS: int = 60    # 共同交易日 < 此 → 只顯示累積曲線、抑制年化 CAGR/σ/Sharpe(§4.6;對齊 BACKTEST_MIN_COMMON_DAYS / FRONTIER_MIN_OBS,全站同一把尺)
+PORTFOLIO_TREND_ROBUST_DAYS: int = 252  # < 此(1 年)→ low_confidence 旗標(仍顯示、標「參考」;對齊 FRONTIER_ROBUST_OBS)
+
+# ── 表現差觸發:跑輸大盤門檻(services/switch_advisor.py underperformance,v19.430)──
+# excess_pct = 基金近 1 年純價格報酬 − 對應大盤近 1 年純價格報酬(百分點,§4.1;負 = 落後)。
+# 大盤依幣別:台股→加權 TWII / 美元→SPX / 其餘幣別→不比(§1 不拿原幣 NAV 比 USD 指數)。
+UNDERPERF_LAG_THRESHOLD_PCT: float = -5.0  # excess_pct < 此 → 跑輸大盤(落後逾 5pp;避免 1–2pp 雜訊誤觸,BENCHMARK_WINDOW_DAYS=365 窗)
