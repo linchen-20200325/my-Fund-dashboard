@@ -26,8 +26,16 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from services.fund_service import _merge_nav_history_series
-from services.nav_history_gs import coverage_status
+# ⚠️ prime 匯入順序（**不是多餘的 import**）：`services.fund_service` ↔ `fund_fetcher`
+# 是既有的 latent 互相 import（`fund_fetcher:285` 回頭 `from services.fund_service
+# import _RF_ANNUAL`）。把 `fund_service` 當本檔「第一個」import 會直接撞循環，
+# pytest 收集階段就 ERROR（本檔第一版就是這樣紅的）。
+# 先走自然入口 `fund_fetcher`，與 `tests/test_nav_history_consume.py:18-21`
+# 及 `tests/test_fund_load_enriched.py` 同一慣例。
+import fund_fetcher  # noqa: F401,E402
+
+from services.fund_service import _merge_nav_history_series  # noqa: E402
+from services.nav_history_gs import coverage_status  # noqa: E402
 
 _ROOT = Path(__file__).resolve().parents[1]
 _TAB5 = _ROOT / "ui" / "tab5_data_guard.py"
