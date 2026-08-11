@@ -135,7 +135,10 @@ def _get_sheet():
     """開啟與 policy/macro 同一份 Google Sheet(複用 secrets),v19.428。"""
     from infra.config import require_secret
     from repositories.policy_repository import get_gspread_client
-    creds = dict(require_secret("google_service_account"))
+    # v19.430:傳 raw secret(str/dict 皆可,get_gspread_client 內部正規化)。
+    # 不再 dict() 預包 —— secret 存成 JSON 字串時 dict("...") 會在進 get_gspread_client
+    # 前就拋 ValueError,而 Streamlit Cloud 會遮蔽訊息(同 tab3 開場崩事故)。
+    creds = require_secret("google_service_account")
     sheet_id = require_secret("macro_weights_sheet_id")
     return get_gspread_client(creds).open_by_key(sheet_id)
 

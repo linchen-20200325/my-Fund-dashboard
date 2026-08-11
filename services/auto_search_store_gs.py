@@ -48,7 +48,9 @@ def _get_sheet():
     from infra.config import require_secret
     from repositories.policy_repository import get_gspread_client
 
-    creds = dict(require_secret("google_service_account"))
+    # v19.430:傳 raw secret(str/dict 皆可,get_gspread_client 內部正規化);
+    # 不再 dict() 預包(secret 為 JSON 字串時會在進 get_gspread_client 前拋 ValueError)。
+    creds = require_secret("google_service_account")
     sheet_id = require_secret("macro_weights_sheet_id")
     client = get_gspread_client(creds)
     return client.open_by_key(sheet_id)
