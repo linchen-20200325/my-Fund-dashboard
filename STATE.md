@@ -2,6 +2,34 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-08-11 存檔:每週換股 LINE 週報(headless）+ 混合 schema Sheet 不漏基金(v19.432・PR #623)
+
+一次兩件,皆走「設計 AI → 逐塊建 + 每層自審 → 稽核 AI 對抗審 → 修 findings → 全套件綠 → CI 綠才合」。
+
+- **① 每週換股顧問 LINE 週報(headless NAS cron)**:user 要「不開 App 也能每週被通知該不該換股」。
+  Streamlit 不背景跑 → 排程走 NAS(user 拍板 LINE Messaging API + 每週一次;LINE Notify 2025/03 已停用)。
+  - **L0** `infra/line_push.py`:Messaging API push,dry-run/缺憑證不假成功,HTTP 錯誤 raise,token 不外洩。
+  - **L2** `services/switch_notify.py`(純):`advise_switches` → 該不該通知(換股/賣現金/表現差,續抱/觀察不吵)
+    + 精簡文字 + 略過數。
+  - **腳本** `scripts/weekly_switch_notify.py`:headless 讀帳本+選股池 → `process_one_fund` 抓各檔 →
+    重製 `switch_advisor_section` 三個非 UI helper(`phase=""`/`score=None` 略過唯一 `st.session_state` 讀取)→
+    跑**同一套** `advise_switches`(重用 #620)→ 有建議才推。§1 退出碼(缺 secret 2/無持倉 2/全抓失敗 1/
+    LINE 未送 1);macro 預設 None 誠實降級(成長型不觸發賣出;`--with-macro` 開)。`--dry-run` 不觸網。
+  - **文件** `docs/WEEKLY_SWITCH_NOTIFY_SETUP.md`(LINE bot + NAS crontab 逐步)。
+  - 設計走「headless 路徑對抗查證」(全 streamlit-free primitive);稽核修 4 項:LINE 未送 exit 1、
+    **App `_rows_with_nav` 對 PoolEntry `.get()` 崩(持倉入池 → 整張換股表靜默消失)改 getattr**、
+    略過數帶進訊息、代碼大小寫合一。
+
+- **② 混合 schema 政策 Sheet 不漏基金**(user 上傳真檔回報):Sheet 有 4 個中文表頭 v2 分頁 +
+  1 個英文 v1 分頁 → 含「類型」→ detect=v2 → `load_all_policies_v2` `if not is_v2_worksheet: continue`
+  跳過英文分頁 → **ALBT8 漏掉(實測真檔 7/8)**。修:非 v2 分頁改經新 `_v1_frame_to_v2` 映射
+  (fund_url→fund_code/policy_tier→tier/fx_avg→avg_fx/補 item_type=fund)一併納入;`_records_to_policy_df`
+  (v1 path)中文表頭映射到 v1 欄名(重用 `EN_HEADERS_V2` SSOT,guard `en not in` → 純英文 Sheet 零變化)。
+  兩路對稱、混合 Sheet 兩方向都不漏。稽核修:過時測試更正、v1→v2 補 schema-leak 鬼列過濾、v2 rename 加
+  en-not-in guard。**實測真檔 7→8 檔,ALBT8/TLZF9/ACTI94 全到。**
+
+- **驗證**:新測試 notify(30)+ policy 混合 schema(6)+ 更正 1;policy 套件 100 tests;全 `-m "not slow"` 3916 passed。
+
 ## ✅ 2026-08-11 存檔:兩個線上資料 bug —— Tab3 全部讀回 403 空白 + Tab2 淨值跨度/淨值日(v19.431・PR #621)
 
 user 回報兩個線上事故;三 AI 並行追根因(皆 byte-for-byte 重現)+ 稽核 AI 對抗審。**純顯示 / 存取層,不動資料與計算**。
