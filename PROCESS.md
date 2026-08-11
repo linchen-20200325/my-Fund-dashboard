@@ -59,6 +59,20 @@
     ```
   - **稽核落地**：新增依賴外部工具 / 外部服務 / 基準檔的測試時，必須回答「**缺件時它是紅還是綠？**」。答「skip」→ 要嘛改成 fail，要嘛在 `pytest.ini` marker 說明與檔案 docstring **雙處**標明「本組未啟用、不提供保護」，避免下一個人誤以為有保護網（`tests/test_app_playwright.py` 為此類標記的範例）。
   - **禁止**：把「測試 skip 了」寫進報告當作「測試通過」。統計行的 `skipped` 數字要逐項知道是誰、為什麼。
+- **線上驗收 (Deployment Verification) — 2026-08-11 新增**：改動推上 main 後，**在確認新 code 真的在線上跑之前，不得根據畫面結果判斷「功能有沒有效」**。
+  - **三步，缺一不可**：
+    1. `git log --oneline -1` 對得上 GitHub main 最上面那筆（確認 commit 真的推上去，不是只 commit 沒 push、或根本沒 staged）
+    2. **手動 Reboot app**（Streamlit Cloud → Manage app → ⋮ → Reboot app）。**自動部署對本 app 不可靠** —— 實測連續兩批 push 後 log 都沒有 `Pulling code changes`，reboot 後才生效。app 內建的「強制同步 GitHub 最新邏輯」按鈕**只查版本、不能觸發部署**（且常回「無法查 remote main（網路或 IP 限制）」）。
+    3. 觸發一次功能，到 Manage app 的 log 找**這批新增的診斷訊息**在不在。**訊息在 = 新 code 真的在跑**；訊息不在就**停止判斷功能是否有效**，回到第 2 步。
+  - **⚠️ 先決條件：診斷訊息必須寫 `stderr`。** Streamlit Cloud 的 log 面板**只顯示 stderr**，`print()` 預設的 stdout **完全看不到**。實測佐證：同一次抓取中只有帶 `file=sys.stderr` 的 `[holdings:...]` 出現，`[fetch]` / `[orchestrator]` / `[src_*]` 一行都沒有。
+    → 這代表本 repo 依 `CLAUDE.md §1` Fail Loud 寫的大量診斷，在 production **等於沒印**。新增關鍵路徑診斷時一律 `file=sys.stderr`。
+  - **為什麼獨立成條**：2026-08-11 那一輪，同一個症狀（「每檔淨值只有 30 點」）**兩次**被誤判 ——
+    | 觀察到的 | 當下的結論 | 事實 |
+    |---|---|---|
+    | 推完 code、畫面數字沒變 | 「修的方向錯了」 | 部署根本沒生效（reboot 後同一份 code 立刻見效） |
+    | log 裡找不到 `[fetch]` / `[orchestrator]` | 「這條路徑沒執行」 | 執行了，只是印到 stdout，面板看不到 |
+  - **共同形狀**：與上面兩條同一種病的第三半 —— 那兩條是 production / 測試的失敗被偽裝成成功，這條是**成功被偽裝成失敗**，代價是往正確的修法上打叉、回頭改錯地方。
+  - **斷言訊息也算**：測試紅掉時，錯誤訊息若指錯方向（例：接線測試不解 import alias，卻報「production 必須呼叫 X」），比漏測更糟 —— 它會主動把人推去改沒壞的東西。寫斷言訊息時要問：**這句話為真的前提，我驗證過了嗎？**
 - **環境與效能**：限用 `.py` 腳本（禁 `.ipynb`），維護 `requirements.txt`。確保 `st.cache_data` 的正確使用。
 - **自動交付與合併 (Auto-Ship)**：功能完成後，必須使用 `gh pr create --fill` 建立請求，並**主動執行** `gh pr merge <PR號碼> --merge --delete-branch`。
 - **合併後驗證與存檔**：合併後必須自動 `git checkout main && git pull`，使用 `git status` 與 `git log -1` 驗證合併成功，最後自動更新 `STATE.md` 的進度。嚴禁在未驗證成功的情況下回報完成。
