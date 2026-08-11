@@ -93,12 +93,17 @@ def _render_333_fund_expander(
 
         age   = r.get('c1_age_years')
         ret3y = r.get('c2_return_3y')
-        src   = r.get('c2_source', '')
+        # 2026-08-11 user 拍板刪除「（來源：…）」註記。原本直接印 c2_source 原字串，
+        # 也就是「（來源：metrics(MoneyDJ)）」—— 那是**錯的**：該值的底層
+        # `ret_3y_ann` 由 `services/fund_service.py` 從 NAV 序列自算（需 756 點），
+        # 既非 MoneyDJ 提供、也不含息（§2.2 血緣錯標）。
+        # `c2_source` 欄位本身保留（`scripts/diagnose_ret_3y_fallback.py` 仍讀它做診斷），
+        # 只是不再顯示給使用者。要恢復顯示請先讓它講的是實話。
 
         age_str = f'{age:.1f} 年' if age is not None else 'N/A'
         if ret3y is not None:
             ret_str = f'{ret3y * 100:.1f}%'
-            ret_note = f'（來源：{src}）' if src else ''
+            ret_note = ''
         else:
             ret_str  = 'N/A'
             ret_note = '（需 2.5 年以上 NAV 資料）'

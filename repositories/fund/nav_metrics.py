@@ -649,60 +649,39 @@ def fetch_div(full_key: str, portal: str = "") -> list:
 # 績效評比（wb07.djhtm）: 標準差/Sharpe/Beta/同類排名
 # ════════════════════════════════════════════════════════════
 def _fetch_domestic_perf(code: str) -> dict:
-    """
-    v14.0: 境內基金績效資料取得。
+    """境內基金官方績效 —— **2026-08-11 user 拍板：功能凍結，不再嘗試抓取。**
 
-    【重要發現】境內基金 MoneyDJ 頁面結構：
-    - yp020000.djhtm?a=BFxxxx  → 整家公司旗下所有基金清單（Sharpe 全顯示 N/A）
-    - 根本沒有 wb01/wb05/wb07  → 含息報酬率/Sharpe 不存在於境內頁面
-    - 唯一有意義的績效資料：從淨值序列自行計算（calc_metrics 會處理）
+    ── 為什麼凍結（這段是這個函式原本自己的 docstring 寫的，不是新發現）──
+    - `yp020000.djhtm?a=BFxxxx` 要的是**公司代碼**，回的是整家公司旗下**所有基金
+      的清單**，Sharpe 欄全顯示 N/A；
+    - 境內基金頁**根本沒有 wb01 / wb05 / wb07** → 含息報酬率 / Sharpe 不存在。
 
-    因此這個函式改為：嘗試抓 yp020000 的績效摘要表，
-    若抓不到有效數字（N/A），則回傳空 dict（讓 calc_metrics 自己算）。
+    而舊實作卻拿**基金代碼**去打那個需要公司代碼的頁，兩個 base 各一次 ——
+    **每檔境內基金每次抓取固定浪費 2 次 MoneyDJ 請求，結果注定是空的**。
+    （MoneyDJ 的 robots.txt 明文禁止 LLM/AI 用途，這種註定落空的請求尤其不該送。）
+
+    ── 影響範圍（誠實說明，避免下一個人重新開挖）──
+    MK 3-3-3 的 C2 要的是**含息**3 年年化，全站只有 MoneyDJ wb01 提供，而境內頁沒有。
+    因此 user 的 5 檔境內持倉（ACCP138 / ACDD01 / ACDD19 / ACTI71 / ACTI94）
+    在 3-3-3 顯示 ⬜ **不是暫時性抓取失敗，是這條路本來就不通**。
+    `nav_history` 每日累積也救不了 —— 它累的是**純 NAV**，不含息。
+
+    ── 解凍條件（找到任一即可重啟）──
+    1. 找到境內基金的**含息**報酬來源（投信官網 / TDCC / SITCA / 投信投顧公會）；
+    2. 或改用「NAV + 配息還原」自算含息總報酬，並在 3-3-3 明確標示為自算口徑
+       （與境外的 MoneyDJ 官方值不同源，§2.2 須可分辨）；
+    3. 或由 user 用對帳單 CSV 匯入含配息的還原淨值。
+
+    Returns:
+        `{}` —— 恆定。呼叫端（`fetch_performance_wb01`）行為與凍結前完全一致
+        （舊實作實測也一律回空），差別只在**不再送出那 2 次請求**。
     """
-    perf = {}
-    # 嘗試從 yp020000 抓績效（注意：需要公司代碼 BFxxxx 而非基金代碼）
-    # 實際上境內基金的 Sharpe/含息報酬 在 MoneyDJ 顯示 N/A
-    # 程式會從淨值序列自動計算，所以直接回傳空值即可
-    for base in ["https://tcbbankfund.moneydj.com/funddj",
-                 "https://www.moneydj.com/funddj"]:
-        try:
-            r = fetch_url_with_retry(
-                f"{base}/yp/yp020000.djhtm?a={code}", timeout=15)
-            if r is None:
-                continue
-            soup = BeautifulSoup(r.text, "lxml")
-            for tbl in soup.find_all("table"):
-                txt = tbl.get_text()
-                if "報酬" not in txt and "績效" not in txt:
-                    continue
-                for row in tbl.find_all("tr"):
-                    cells = [td.get_text(strip=True) for td in row.find_all("td")]
-                    if len(cells) < 2:
-                        continue
-                    for key, names in [
-                        ("1M", ["1個月","近1月"]),
-                        ("3M", ["3個月","近3月"]),
-                        ("6M", ["6個月","近6月","半年"]),
-                        ("1Y", ["1年","近1年","今年"]),
-                        ("3Y", ["3年","近3年"]),
-                    ]:
-                        if any(n in cells[0] for n in names):
-                            v = safe_float(cells[1])
-                            if v is not None:   # N/A → None → 跳過
-                                perf[key] = v
-            if perf:
-                print(f"[domestic_perf] ✅ {code} {list(perf.keys())}")
-                # v19.233 F-PROV-1 cluster C 補洞:dict 加 _source(schema-additive,
-                # caller 用 perf["1Y"] 直接 key access 不會踩到 _source key)
-                perf["_source"] = f"MoneyDJ:{base.split('//')[1].split('/')[0]}:yp020000:{code}"
-                perf["_fetched_at"] = pd.Timestamp.now('UTC').isoformat()
-                return perf
-        except Exception as e:
-            print(f"[domestic_perf] {code}: {e}")
-    # 境內基金績效需從淨值序列計算，此處不強制要求
-    print(f"[domestic_perf] {code} → 無法從頁面取得，將從淨值序列計算")
-    return perf
+    import sys as _sys_dp
+    # stderr:Streamlit Cloud 的 log 面板只顯示 stderr(PROCESS.md §4 線上驗收)
+    print(f"[domestic_perf] ⏸ {code} 境內官方績效已凍結（MoneyDJ 境內頁無 wb01 "
+          f"含息報酬；見本函式 docstring 的解凍條件）→ 不發請求，回空",
+          file=_sys_dp.stderr)
+    return {}
 
 
 def _wb_page_urls(code: str, page: str) -> list:

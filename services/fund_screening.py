@@ -132,7 +132,16 @@ def check_333_fund(
     # ── C2：3 年年化報酬率 ──────────────────────────────────────────────────
     _m = metrics or {}
 
-    # 優先用 MoneyDJ 的 ret_3y_ann（含息總報酬，已由 MoneyDJ 算好，單位 %）
+    # ⚠️ 2026-08-11 更正：這裡原本的註解寫「優先用 MoneyDJ 的 ret_3y_ann
+    #    （含息總報酬，**已由 MoneyDJ 算好**）」—— **兩點都不對**，查證如下：
+    #    (1) `ret_3y_ann` 是 `services/fund_service.py` 從 **NAV 序列自算**的
+    #        （`_ret(3 * TRADING_DAYS_PER_YEAR)` → 需要 756 個資料點），不是 MoneyDJ 給的；
+    #    (2) 它是**純 NAV**，不含息 —— 而 3-3-3 的 C2 定義要的正是含息。
+    #    真正的含息 3Y 來自 MoneyDJ wb01（`perf["3Y"]`），只有**境外**基金頁有。
+    #    境內基金（ACCP138 等）沒有 wb01 → C2 無來源，已於 2026-08-11 拍板凍結，
+    #    見 `repositories/fund/nav_metrics.py::_fetch_domestic_perf` docstring。
+    #    下方 `c2_source` 標的 'metrics(MoneyDJ)' 字串同樣是舊誤解的殘留，
+    #    但它已被健診表「②來源」欄與 Tab② 消費，改字串會動到畫面 → 另案處理。
     _ret_3y_pct = _m.get("ret_3y_ann")
     if _ret_3y_pct is not None:
         try:
@@ -269,7 +278,14 @@ def batch_333_funds(
             '①成立年':   f'{r["c1_age_years"]:.1f}年' if r['c1_age_years'] else '—',
             '①通過':     _icon(r['c1_pass']),
             '②3年年化':  _pct(r['c2_return_3y']),
-            '②來源':     r['c2_source'].replace('(MoneyDJ)', '').replace('（NAV，不含息）', '*') if r['c2_source'] else '—',
+            # 2026-08-11 user 拍板刪除「②來源」欄。原本顯示的是
+            #   r['c2_source'].replace('(MoneyDJ)','').replace('（NAV，不含息）','*')
+            # → 畫面上是 `metrics` / `nav_series*` / `—`，內部代號 + 沒解釋的星號。
+            # 更嚴重的是它**標錯來源**：`metrics` 那支的底層 `ret_3y_ann` 是
+            # `services/fund_service.py` 從 NAV 序列自算的（需 756 點），既不是
+            # MoneyDJ 給的、也不含息 —— 兩個分支其實都是自算純 NAV，
+            # 這一欄卻宣稱其中一個是官方值（§2.2 血緣錯標）。
+            # 刪掉不損失真實資訊；要恢復請先讓 c2_source 講的是實話。
             '②通過':     _icon(r['c2_pass']),
             '③同儕排名': f'前{r["c3_peer_rank_pct"]*100:.0f}%' if r['c3_peer_rank_pct'] is not None else '—',
             '③通過':     _icon(r['c3_pass']),
