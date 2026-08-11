@@ -66,6 +66,9 @@
     3. 觸發一次功能，到 Manage app 的 log 找**這批新增的診斷訊息**在不在。**訊息在 = 新 code 真的在跑**；訊息不在就**停止判斷功能是否有效**，回到第 2 步。
   - **⚠️ 先決條件：診斷訊息必須寫 `stderr`。** Streamlit Cloud 的 log 面板**只顯示 stderr**，`print()` 預設的 stdout **完全看不到**。實測佐證：同一次抓取中只有帶 `file=sys.stderr` 的 `[holdings:...]` 出現，`[fetch]` / `[orchestrator]` / `[src_*]` 一行都沒有。
     → 這代表本 repo 依 `CLAUDE.md §1` Fail Loud 寫的大量診斷，在 production **等於沒印**。新增關鍵路徑診斷時一律 `file=sys.stderr`。
+  - **⚠️ 查線上檔案內容一律用 commit-pinned URL，禁用 branch ref。** `raw.githubusercontent.com/<owner>/<repo>/**main**/<path>` 會回**過期內容** —— 2026-08-11 那一輪騙到 **4 次**，最嚴重一次差點得出「這個 commit 沒包含該檔案」的錯誤結論（實際上包含，只是 raw 的 `main` 是舊的）。
+    - **正確**：先從 commit 列表取短 SHA，再 `raw.githubusercontent.com/<owner>/<repo>/**<sha>**/<path>`。
+    - 判準：**任何「線上到底是哪一版」的問題，都要用不可變的 ref 回答**。`main` 是會動的指標，拿它當證據等於沒有證據。
   - **為什麼獨立成條**：2026-08-11 那一輪，同一個症狀（「每檔淨值只有 30 點」）**兩次**被誤判 ——
     | 觀察到的 | 當下的結論 | 事實 |
     |---|---|---|
