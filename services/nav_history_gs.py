@@ -280,6 +280,63 @@ def load_series(code: str, *, _sheet: Any = None):
     return s
 
 
+def coverage_status(codes: "list | tuple | None" = None, *, _sheet: Any = None) -> dict:
+    """每檔基金**累積了多少** —— 回 {CODE: {points, first, last, span_days}}。
+
+    2026-08-11 新增。與 `status()` 互補,兩者回答的是**不同問題**:
+      - `status()`        → 「能不能累」(兩把 secrets 設對沒)
+      - `coverage_status()` → 「累了多少」(點數 / 起訖 / 跨度)
+
+    為什麼需要它:累積機制寫入正常(畫面每次都有「本次新存 N 筆」)、狀態燈是綠的,
+    但序列可以一動不動好幾週 —— 因為累到的點還全部落在 live 的滾動窗內
+    (`fund_service._merge_nav_history_series` 的 `added <= 0` 分支)。
+    這三件事同時成立時,**畫面上沒有任何地方講得出中間的落差**,只能猜。
+    本函式就是把「累了多少」這件事變成可讀的數字(§5 可觀測)。
+
+    Args:
+        codes: 只回這些代碼(大小寫不拘)。None → 回 sheet 內全部。
+        _sheet: 測試注入用(繞過真 gspread)。
+
+    Returns:
+        `{CODE: {"points": int, "first": "YYYY-MM-DD", "last": ..., "span_days": int}}`
+        **未啟用 / tab 不存在 → 回 `{}`** —— 呼叫端須據此顯示「未啟用」而非「0 點」,
+        兩者意義完全不同(§1:不知道 ≠ 沒有)。
+        真 I/O 失敗 → `NavHistoryError` 上拋,由 UI 顯示而不是靜默留白。
+    """
+    _want = {str(c).strip().upper() for c in (codes or []) if str(c).strip()}
+    _pts = load_points(None, _sheet=_sheet)   # 一次讀完整張表,再本地分組(省 quota)
+    if not _pts:
+        return {}
+
+    _by: dict = {}
+    for _p in _pts:
+        _c = _p["code"]
+        if _want and _c not in _want:
+            continue
+        _d = _p["date"]
+        if not _d:
+            continue
+        _e = _by.setdefault(_c, {"dates": set()})
+        _e["dates"].add(_d)          # (code, date) 是主鍵,但防禦性去重
+
+    _out: dict = {}
+    for _c, _e in _by.items():
+        _ds = sorted(_e["dates"])
+        _span = 0
+        try:
+            _span = (_dt.date.fromisoformat(_ds[-1])
+                     - _dt.date.fromisoformat(_ds[0])).days
+        except (ValueError, IndexError):
+            _span = 0                 # 日期格式壞 → 跨度未知,點數仍誠實回報
+        _out[_c] = {
+            "points": len(_ds),
+            "first": _ds[0],
+            "last": _ds[-1],
+            "span_days": _span,
+        }
+    return _out
+
+
 # ── v19.361 PR-2(A):保單對帳單 CSV 歷史匯入 ──────────────────────
 _DATE_COL_HINTS = ("日期", "淨值日期", "除息日", "date", "nav_date", "時間")
 _NAV_COL_HINTS = ("淨值", "單位淨值", "基金淨值", "nav", "value", "price")

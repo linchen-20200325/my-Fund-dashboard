@@ -312,6 +312,18 @@ def render_single_fund_tab() -> None:
                 except Exception:
                     pass  # 記錄失敗不影響主流程(helper 內已顯示提示)
 
+                # ── 2026-08-11:累積「有沒有真的讓序列變長」──────────────────
+                # 上面那行只說「本次新存 N 筆」（寫入成功），但寫入成功 ≠ 序列變長。
+                # `_merge_nav_history_series` 在「累到的點還全落在 live 窗內」時
+                # 不會加長序列（added=0），而在此之前**畫面上完全看不出來** ——
+                # 使用者只會看到 Sharpe/σ/MaxDD 一直留白卻不知道進度到哪(§1/§5)。
+                _nh_tr = next(
+                    (_t for _t in (fd_raw.get("source_trace") or [])
+                     if isinstance(_t, dict) and _t.get("source") == "nav_history_merge"),
+                    None)
+                if _nh_tr and _nh_tr.get("note"):
+                    st.caption(("✅ " if _nh_tr.get("merged") else "⏳ ") + _nh_tr["note"])
+
     # ── 關鍵字搜尋（折疊）──
     with st.expander("🔍 關鍵字搜尋境外基金（TDCC / FundClear）", expanded=False):
         c_kw, c_btn = st.columns([4,1])

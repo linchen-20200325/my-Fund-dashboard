@@ -1063,12 +1063,38 @@ def _merge_nav_history_series(s_live: pd.Series, code: str) -> tuple:
     merged = pd.concat([s_hist, s_live]).groupby(level=0).last().sort_index()
     added = len(merged) - len(s_live)
     if added <= 0:  # hist 全被 live 涵蓋 → 不動原序列(保留 live attrs)
-        return s_live, None
+        # 2026-08-11:原本這裡 `return s_live, None` —— 這是**全站唯一**知道
+        # 「有累積、但還沒產生淨增益」的地方,卻把資訊整包丟掉。後果:累積機制
+        # 每天確實在寫(畫面有「本次新存 N 筆」),序列卻一動不動,而畫面上**沒有
+        # 任何地方**講得出中間的落差 → 使用者(和我)只能猜。
+        # 改成回一個資訊性 trace。
+        # ⚠️ 刻意**不設 `success` 這個 key**:呼叫端(fund_service:1108/1141)用
+        #   `_hist_trace.get("success")` 當「真的併入了累積歷史」的閘門,設了會連帶
+        #   啟動 coverage/sparse 重審 —— 那是行為變更。`merged` 才是本 trace 的語意欄。
+        try:
+            _first = str(s_hist.index.min())[:10]
+            _last = str(s_hist.index.max())[:10]
+        except Exception:  # noqa: BLE001 — 純顯示欄位,取不到不該影響取數
+            _first = _last = ""
+        return s_live, {
+            "source": "nav_history_merge",
+            "merged": False,
+            "hist_points": len(s_hist),
+            "hist_first": _first,
+            "hist_last": _last,
+            "added": 0,
+            "note": (f"累積 {len(s_hist)} 點（{_first} 起）目前全部落在本次 live 序列"
+                     f"（{len(s_live)} 筆）的日期範圍內 → 尚未產生淨增益。"
+                     f"要等最舊的累積點掉出 live 的滾動窗，序列才會開始變長。"),
+        }
     merged.attrs = dict(getattr(s_live, "attrs", {}) or {})
     merged.attrs["nav_history_merged"] = f"+{added} pts from {s_hist.attrs.get('source', 'nav_history')}"
     print(f"[nav_history] 🗂️ {code} 併入累積序列 +{added} 筆"
           f"(live {len(s_live)} → merged {len(merged)})")
-    return merged, {"source": "nav_history_merge", "success": True, "added": added}
+    return merged, {"source": "nav_history_merge", "success": True,
+                    "merged": True, "added": added,
+                    "hist_points": len(s_hist),
+                    "note": f"累積序列併入 +{added} 筆（live {len(s_live)} → {len(merged)}）"}
 
 
 def finalize_fund_metrics(result: dict) -> dict:

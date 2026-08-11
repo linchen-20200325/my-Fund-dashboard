@@ -1398,6 +1398,43 @@ def render_data_guard_tab() -> None:
                 st.error("\n\n".join(_lines))
         except Exception as _e_st:
             st.caption(f"⬜ 累積狀態檢查失敗:[{type(_e_st).__name__}] {str(_e_st)[:60]}")
+
+        # ── 2026-08-11:「累了多少」——上面那顆燈只答「能不能累」 ────────────────
+        # 為什麼要加：燈是綠的、每次抓取都有「本次新存 N 筆」、序列卻可以好幾週
+        # 一動不動 —— 因為累到的點還全部落在 live 的滾動窗內
+        # (`fund_service._merge_nav_history_series` 的 `added <= 0` 分支)。
+        # 這三件事同時成立時，畫面上原本**沒有任何地方**講得出中間的落差(§5 可觀測)。
+        try:
+            from services.nav_history_gs import coverage_status as _nh_cov
+            _cov_map = _nh_cov()          # 未啟用 / 無 tab → {}（≠ 0 點，語意不同）
+            if _cov_map:
+                import pandas as _pd_cov
+                _cov_rows = [
+                    {"代碼": _c,
+                     "累積點數": _v["points"],
+                     "最早": _v["first"],
+                     "最新": _v["last"],
+                     "涵蓋天數": _v["span_days"],
+                     "≈年": round(_v["span_days"] / 365.0, 2)}
+                    for _c, _v in sorted(_cov_map.items())
+                ]
+                st.caption(
+                    f"**目前累積：{len(_cov_map)} 檔**。"
+                    "⚠️ 「累積點數」不等於「序列變長」——當累到的點還落在 App 每次抓到的"
+                    "近期窗（約近 30 個交易日）之內時，合併後筆數不會增加。"
+                    "要等最舊的累積點掉出那個窗，序列才會開始真的加長。"
+                    "想立刻補回過去數年，用下面的 CSV 匯入。")
+                st.dataframe(_pd_cov.DataFrame(_cov_rows),
+                             hide_index=True, width="stretch")
+            else:
+                st.caption("⬜ `nav_history` 分頁目前讀不到任何累積點 —— "
+                           "可能是尚未啟用（見上方狀態燈）或分頁還沒建立。"
+                           "**這與「累積 0 點」不同**：讀不到就是不知道，不是沒有。")
+        except Exception as _e_cov:
+            # §1：讀失敗要講出來，不可留白讓人以為「沒累積」
+            st.caption(f"⬜ 累積內容讀取失敗（不影響分析）："
+                       f"[{type(_e_cov).__name__}] {str(_e_cov)[:80]}")
+
         st.caption(
             "從保險公司網站 / 對帳單下載歷史淨值 CSV，一次灌入 Google Sheet "
             "`nav_history` 分頁 —— **立刻補回過去數年**，解鎖 3Y/5Y/低基期（不必等每日累積）。"
