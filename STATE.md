@@ -2,6 +2,25 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-08-11 存檔:兩個線上資料 bug —— Tab3 全部讀回 403 空白 + Tab2 淨值跨度/淨值日(v19.431・PR #621)
+
+user 回報兩個線上事故;三 AI 並行追根因(皆 byte-for-byte 重現)+ 稽核 AI 對抗審。**純顯示 / 存取層,不動資料與計算**。
+
+- **① Tab3「全部讀回」403 空白紅框**:#619 修好 SA secret(JSON 字串)後 SA client 能建 → v19.302 SA-first
+  生效,但 user **自己 OAuth 擁有**的 sheet 未分享給 SA client_email → `open_by_key` 403 → gspread 6.x
+  `raise PermissionError`(**無參數**)→ `str()` 空 → 訊息全白(挑帳本清單走 OAuth 看得到、讀取卻走 SA = 身分錯配)。
+  修:(a) `_t3_sheet_client` **存取回退** —— SA 先建先試(SA-first 不變量不動)+ `open_by_key` 探測(session 快取);
+  SA 開不了「這張」sheet(403/404,非 429)→ **惰性 + try/except** 回退 user OAuth(本人擁有);純 SA / OAuth 建不起來
+  → 維持 SA;無 redirect → 不重現 v19.302 衝突。(b) `_helpers.describe_sheet_exc` —— bare PermissionError→**403 可行動
+  指示**/404/429,**永不空白**,接入 `policy/v2.py` 4 個 raise 點。稽核抓到並修 1 MED(eager OAuth 遇 token 過期會 crash)。
+- **② Tab2「淨值 1579 筆 · 跨度 42 天」自相矛盾**(user 誤以為「淨值沒法更新」):`nav_span_days` 停在 **pre-merge
+  live 序列**(bank_platform 30 筆≈42 天),`finalize_fund_metrics` 併入 nav_history 長序列(`累積序列併入 +1549`)時
+  只換 series 沒重算 span。修:併入後從**合併後 series 首末日**重算 nav_span_days(純 pandas);Tab2 新鮮度 banner
+  在淨值日純量欄缺時(bank_platform 不回傳)退用 series 末日(僅 DatetimeIndex)。⚠️ 三 AI 確認**資料/Sharpe/σ/年化/
+  組合追蹤全對**,只有 span 文字與淨值日 label 標錯 —— 淨值有更新到 8/10。
+- **驗證**:新測試 `test_describe_sheet_exc` / tab3 回退 source-lock / `test_nav_span_recompute`(behavioral + source-lock);
+  全 `-m "not slow"` **3880 passed**;v19.302 SA-first 3 不變量仍綠。**#621 squash merged**(`1b61b51`)。
+
 ## ✅ 2026-08-11 存檔:投資組合績效追蹤 + 表現差→選股池建議(v19.430・PR #620)
 
 user 要「定期追蹤組合績效 + 建議持有/更換/時機 + 表現差時從選股池挑替代標的」。大量**重用**既有引擎,
