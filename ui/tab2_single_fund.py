@@ -587,8 +587,14 @@ def render_single_fund_tab() -> None:
                     # (fund_orchestration 產出),session_state.fund_data 那層字面量從來
                     # 沒抄過去 → 這條 banner 在本 Tab 一直是「⬜ ?/—/—」。Tab⑤ 組合層
                     # 本來就是從 moneydj_raw 取,這裡對齊它;fd 層留作向後相容 fallback。
+                    # v19.431:bank_platform 等來源不回傳 nav_date 純量欄 → banner 一直「⬜ 取不到
+                    # 淨值日期」,但合併後 series 的 index 明明有日期(圖表橫跨數年)。缺純量時
+                    # 退用 series 末日,讓有日期的來源也能誠實顯示最新淨值日。
                     _nav_d_show = (mj_raw.get("nav_date", "")
-                                   or fd.get("nav_date", ""))
+                                   or fd.get("nav_date", "")
+                                   or (str(s.index.max().date())
+                                       if (s is not None and len(s)
+                                           and isinstance(s.index, pd.DatetimeIndex)) else ""))
                     render_mj_freshness_banner([{
                         "code": fk or fd.get("fund_code", "?"),
                         "name": name or fk,
