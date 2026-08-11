@@ -566,3 +566,47 @@ def test_critical_nav_diagnostics_go_to_stderr(relpath, marker):
         f"{relpath} {_stdout} 的「{marker}」診斷寫到 stdout —— "
         "Streamlit Cloud 的 log 面板只顯示 stderr，線上等於沒印。"
         "請加 `file=sys.stderr`。")
+
+
+def test_no_or_default_on_series_getter_anywhere():
+    """`x.get("series") or []` 一律視為 bug —— `or` 會對 pd.Series 做 `bool()`。
+
+    來歷：我在第三輪寫「讓診斷看得見」的 stderr 訊息時，順手寫了
+    `len(_result.get('series') or [])`，當場被
+    `test_multi_source_survives_partial_result_with_error_none` 抓到 ——
+    **正是本輪在 merge_non_empty 追的同一顆雷**。
+
+    這個 bug class 在本 repo 已出現 4 次（merge_non_empty / Step 1 合併 /
+    _FUND_SNAPSHOT / 這次的診斷訊息），所以升級成全 repo 靜態守門。
+    正確寫法：`_s = x.get("series"); len(_s) if _s is not None else 0`。
+    """
+    # `series` 這個 key 名在**總經**領域是 list[(date, value)]（FinMind 回傳），
+    # 不是 pd.Series —— 同名不同型。已查證 `macro_tw_local_repository.py:243`
+    # 下一行就是 `for _, v in _series[-6:]`，確定是 list of tuple。
+    # 這是唯一的合法例外，明確列出而不是把掃描範圍縮小（縮範圍會靜默漏掉新檔案）。
+    _ALLOW = {"repositories/macro_tw_local_repository.py"}
+
+    _bad = []
+    for _p in _iter_repo_py():
+        if _p.relative_to(_ROOT).as_posix() in _ALLOW:
+            continue
+        _text = _p.read_text(encoding="utf-8")
+        try:
+            _tree = ast.parse(_text)
+        except SyntaxError as _e:
+            raise AssertionError(f"{_p.relative_to(_ROOT)} 語法錯誤: {_e}") from _e
+        for _n in ast.walk(_tree):
+            if not (isinstance(_n, ast.BoolOp) and isinstance(_n.op, ast.Or)):
+                continue
+            for _v in _n.values:
+                if (isinstance(_v, ast.Call)
+                        and isinstance(_v.func, ast.Attribute)
+                        and _v.func.attr == "get"
+                        and _v.args
+                        and isinstance(_v.args[0], ast.Constant)
+                        and _v.args[0].value == "series"):
+                    _bad.append(f"{_p.relative_to(_ROOT)}:{_n.lineno}")
+    assert not _bad, (
+        f"{_bad}: `.get(\"series\") or ...` 會對 pd.Series 做 bool() → "
+        "ValueError: truth value of a Series is ambiguous。"
+        "請改 `_s = x.get(\"series\"); len(_s) if _s is not None else 0`。")

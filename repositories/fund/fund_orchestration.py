@@ -720,8 +720,11 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         if _s_ok:
             # stderr:這一行是「多來源 waterfall 有沒有贏」的唯一線上訊號（見上方 stderr 註解）
             import sys as _sys_ok
+            # 此處 `_s_ok` 已保證 series 非 None，但仍用同一種寫法保持一致
+            # （避免下一個人複製貼上時退回 `or []` 的寫法）。
+            _ser_ok = result.get("series")
             print(f"[fetch] ✅ 主路線成功（src:{result.get('data_source','')} "
-                  f"nav={len(result.get('series', []))}筆 "
+                  f"nav={len(_ser_ok) if _ser_ok is not None else 0}筆 "
                   f"status:{result.get('status','')} page:{_page_type}）",
                   file=_sys_ok.stderr)
             return result
@@ -764,8 +767,11 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         else:
             # stderr:與上面那行成對 —— 「主路線輸了」也必須線上看得見
             import sys as _sys_ng
+            # ⚠️ 同上：不可寫 `len(x.get("series") or [])`，`or` 對 Series 會炸。
+            _ser_ng = result.get("series")
             print(f"[fetch] ⚠️ 主路線不足，改走 legacy 爬蟲"
-                  f"（page:{_page_type} nav={len(result.get('series') or [])}筆 "
+                  f"（page:{_page_type} "
+                  f"nav={len(_ser_ng) if _ser_ng is not None else 0}筆 "
                   f"name={'有' if result.get('fund_name') else '無'}）",
                   file=_sys_ng.stderr)
     except Exception as _ms_e:  # noqa: BLE001 — 有備援流程，但不得靜默（§1）

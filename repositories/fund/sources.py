@@ -3084,8 +3084,14 @@ def fetch_fund_multi_source(code: str,
         # stderr:Streamlit Cloud 的 log 面板**只顯示 stderr**,stdout 的 print
         # 線上完全看不到。這一行是「waterfall 每個候選代碼的結果」唯一的線上訊號。
         import sys as _sys_orch
+        # ⚠️ `len(x.get("series") or [])` **不可以這樣寫** —— `or` 會對 pd.Series
+        # 做 `bool()` → ValueError: truth value of a Series is ambiguous。
+        # 這正是本輪在 merge_non_empty 追的同一顆雷,寫診斷訊息時自己又踩一次,
+        # 由 test_multi_source_survives_partial_result_with_error_none 當場抓到。
+        _ser_orch = _result.get("series")
+        _n_orch = len(_ser_orch) if _ser_orch is not None else 0
         print(f"[orchestrator] {_candidate} → {_status} "
-              f"(nav={len(_result.get('series') or [])}筆 "
+              f"(nav={_n_orch}筆 "
               f"src={_result.get('data_source') or '—'} "
               f"err:{(_result.get('error') or '')[:40]})",
               file=_sys_orch.stderr)
