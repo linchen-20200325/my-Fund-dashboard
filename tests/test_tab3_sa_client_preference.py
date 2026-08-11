@@ -46,6 +46,15 @@ def test_tab3_has_service_account_first_client_helper():
     )
 
 
+def test_tab3_sa_client_has_oauth_fallback_on_access_error():
+    """v19.431:SA-first 仍在,但 SA 開不了『這張』sheet(403,非 429)且使用者已 OAuth
+    登入 → 回退 user OAuth client。鎖住三要件:存取探測 open_by_key、quota 不回退、OAuth 回退。"""
+    txt = _TAB3.read_text(encoding="utf-8")
+    assert "_sa.open_by_key(" in txt, "SA 存取探測(open_by_key)不見了 → 無法偵測 403 回退"
+    assert "is_quota_error" in txt or "_quota" in txt, "429 應與 403 區分(暫時性配額不得誤切 client)"
+    assert "_t3_sa_can_open" in txt, "探測結果應本 session 快取(省配額,避免每次 rerun 重打)"
+
+
 def test_tab3_no_longer_prefers_oauth_over_service_account():
     txt = _TAB3.read_text(encoding="utf-8")
     # 舊「OAuth 優先」三元式不該再殘留在 client 決策點(這正是撞帳號根因)

@@ -61,6 +61,35 @@ class PolicySheetError(Exception):
     """所有 policy_store 對外丟出的錯誤都用這個 class。"""
 
 
+def describe_sheet_exc(e: BaseException, sheet_id: str = "") -> str:
+    """§1:把 gspread 例外轉成**永不空白且可行動**的訊息。
+
+    gspread 6.x `Client.open_by_key` 對 HTTP **403 FORBIDDEN** 會 `raise PermissionError`
+    (**無參數**)→ `str(PermissionError())` 為空字串 → 呼叫端 `f"...：{e}"` 訊息全白,
+    使用者只看到「列 worksheets 失敗:」後面沒東西,不知道發生什麼、也不知道怎麼修
+    (2026-08-11 線上事故;三 AI 對抗查證 byte-for-byte 重現)。本函式一律帶出型別名 +
+    對 403/404/429 給可行動指示,永不空白。
+    """
+    _name = type(e).__name__
+    _base = f"{_name}: {e}".rstrip("：: ").strip() or _name    # str(e) 空 → 只留型別名(不留孤冒號)
+    try:
+        from infra.gspread_retry import is_quota_error as _iq
+        _is_quota = _iq(e)
+    except Exception:  # noqa: BLE001
+        _s = str(e)
+        _is_quota = "429" in _s or "Quota exceeded" in _s
+    if isinstance(e, PermissionError) or "PermissionError" in _name:
+        _hint = "(403 權限不足:把這張 Sheet 分享給 Service Account 的 client_email(檢視即可),或確認登入帳號有存取權)"
+    elif "SpreadsheetNotFound" in _name or "NotFound" in _name:
+        _hint = "(404 找不到:確認 sheet_id 是否正確、或該檔已被刪除/移動)"
+    elif _is_quota:
+        _hint = "(429 配額超載:等 30~60 秒待配額重置再試)"
+    else:
+        _hint = ""
+    _sid = f"(ID {sheet_id[:12]}…)" if sheet_id else ""
+    return f"{_base}{_hint}{_sid}"
+
+
 # v18.152：Google Sheets API 429 配額退避。每 user 每分鐘 60 reads，v2 編輯介面進場
 # 一次就 1 + 2N reads（N=保單數），容易爆配額。本層所有 gspread 呼叫應走 _with_quota_retry。
 # v18.253：起點 1→2s（給 Google quota 視窗多一拍 reset），總等待 15s→30s。
