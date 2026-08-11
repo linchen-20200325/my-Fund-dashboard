@@ -1328,10 +1328,18 @@ def test_write_policy_v2_creates_ws_if_missing():
     new_ws.update.assert_called_once()
 
 
-def test_load_all_policies_v2_concats_only_v2_tabs():
-    """混合 sheet（v1 + v2）→ load_all_policies_v2 只回 v2 內容。"""
+def test_load_all_policies_v2_includes_v1_tabs_too():
+    """v19.432 混合 sheet（v1 + v2）→ load_all_policies_v2 **兩種 schema 分頁都吃**。
+
+    (原 test_load_all_policies_v2_concats_only_v2_tabs 斷言 len==1「只回 v2」為修前行為,
+     且僅因 ws_v1 未設 get_all_records、mock 意外回空而綠。修後 v1 分頁應被納入,不漏基金。)
+    """
     ws_v1 = MagicMock(); ws_v1.title = "policy-v1"
-    ws_v1.row_values.return_value = ["policy_id", "policy_name"]
+    ws_v1.row_values.return_value = ["policy_id", "fund_url", "invest_twd", "policy_tier", "currency"]
+    ws_v1.get_all_records.return_value = [
+        {"policy_id": "p1", "fund_url": "ALBT8", "invest_twd": 20000,
+         "policy_tier": "core", "currency": "USD"},
+    ]
     ws_v2 = MagicMock(); ws_v2.title = "policy-v2"
     ws_v2.row_values.return_value = list(ALL_COLS_V2)
     ws_v2.get_all_records.return_value = [
@@ -1344,8 +1352,9 @@ def test_load_all_policies_v2_concats_only_v2_tabs():
     client = MagicMock(); client.open_by_key.return_value = sh
 
     df = load_all_policies_v2(client, "sid")
-    assert len(df) == 1
-    assert df.iloc[0]["policy_id"] == "p2"
+    assert set(df["fund_code"]) == {"F1", "ALBT8"}      # v2 的 F1 + v1 的 ALBT8 都在(不漏)
+    _alb = df[df["fund_code"] == "ALBT8"].iloc[0]
+    assert _alb["item_type"] == "fund" and _alb["tier"] == "core"
 
 
 def test_copy_sheet_as_backup_succeeds():

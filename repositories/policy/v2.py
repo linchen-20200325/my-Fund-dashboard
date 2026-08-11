@@ -902,6 +902,15 @@ def _v1_frame_to_v2(df_v1: pd.DataFrame) -> pd.DataFrame:
     """
     from repositories.policy.v1 import _extract_code_from_url
     out = df_v1.copy()
+    # schema-leak 鬼列過濾(與 _records_to_policy_df 同一防線):header 字面值被當資料寫入的
+    # 舊產物,三欄皆等於自己欄名 → 丟掉,否則 _extract_code_from_url("fund_url")="FUND_URL"
+    # 會變幽靈基金(稽核 FINDING 2)。
+    if {"fund_url", "invest_date", "currency"}.issubset(out.columns):
+        _ghost = ((out["fund_url"].astype(str).str.lower() == "fund_url")
+                  & (out["invest_date"].astype(str).str.lower() == "invest_date")
+                  & (out["currency"].astype(str).str.lower() == "currency"))
+        if _ghost.any():
+            out = out[~_ghost].copy()
     if "fund_url" in out.columns and "fund_code" not in out.columns:
         out["fund_code"] = out["fund_url"].map(lambda u: _extract_code_from_url(str(u)) or "")
     _ren = {"policy_tier": "tier", "fx_avg": "avg_fx"}
@@ -937,9 +946,10 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         df_one = pd.DataFrame(rows)
         _cols = set(df_one.columns)
         if ("item_type" in _cols) or ("類型" in _cols):
-            # v2 分頁：中文 header → 英文 col name
+            # v2 分頁：中文 header → 英文 col name(guard `en not in`:同時有中英文欄時
+            # 不製造重複欄 → 避免 df['fund_code'] 變 DataFrame，稽核 FINDING 3)
             df_one = df_one.rename(columns={zh: en for zh, en in EN_HEADERS_V2.items()
-                                              if zh in df_one.columns})
+                                              if zh in df_one.columns and en not in df_one.columns})
         else:
             # v19.432：v1/英文 schema 分頁 → 映射到 v2 欄位(混合 Sheet 不漏基金)
             df_one = _v1_frame_to_v2(df_one)

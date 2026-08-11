@@ -91,3 +91,30 @@ def test_load_all_policies_v2_captures_both_schemas():
     _alb = df[df["fund_code"] == "ALBT8"].iloc[0]
     assert _alb["item_type"] == "fund" and _alb["tier"] == "core"
     assert int(float(_alb["invest_twd"])) == 2000
+
+
+# ── 稽核 FINDING 2:v1→v2 路徑也要擋 schema-leak 鬼列 ────────────
+def test_v1_frame_to_v2_drops_ghost_row():
+    from repositories.policy.v2 import _v1_frame_to_v2
+    df = pd.DataFrame([
+        {"policy_id": "P", "fund_url": "ALBT8", "invest_date": "2026-01-01",
+         "currency": "美元", "policy_tier": "core"},
+        {"policy_id": "fund_url", "fund_url": "fund_url", "invest_date": "invest_date",
+         "currency": "currency", "policy_tier": "policy_tier"},              # 鬼列
+    ])
+    out = _v1_frame_to_v2(df)
+    codes = set(out["fund_code"])
+    assert "ALBT8" in codes and "FUND_URL" not in codes   # 鬼列不得變幽靈基金
+
+
+# ── 稽核 FINDING 3:v2 分頁同時有中英文欄 → 不製造重複欄、不崩 ────────
+def test_load_all_policies_v2_dup_zh_en_columns_no_crash():
+    from repositories.policy.v2 import load_all_policies_v2
+    ws = _FakeWS("PA",
+                 ["保單編號", "類型", "基金代號", "fund_code", "淨投資金額", "級別"],
+                 [{"保單編號": "PA", "類型": "fund", "基金代號": "ZZZ", "fund_code": "F9",
+                   "淨投資金額": "1", "級別": "core"}])
+    df = load_all_policies_v2(_FakeClient(_FakeSheet([ws])), "sid")
+    _fc = df["fund_code"]
+    assert getattr(_fc, "ndim", 1) == 1                    # 單一 Series,非重複欄 DataFrame
+    assert "F9" in set(_fc)                                 # guard:既有英文欄勝出,不被中文覆蓋
