@@ -173,22 +173,40 @@ def test_coverage_status_bad_date_keeps_point_count_honest():
 # ③ 接線 —— 算出來了要真的接到畫面上（PROCESS.md §4）
 # ══════════════════════════════════════════════════════════════════════
 
-def _calls_named(path: Path, name: str) -> list:
+def _calls_of_imported(path: Path, module_suffix: str, symbol: str) -> list:
+    """找出「從 `<...module_suffix>` import 進來的 `symbol`」實際被呼叫的行號。
+
+    ⚠️ **必須解 alias**。本檔第一版只比對 `func.id == symbol`，而 UI 層的慣例是
+    lazy import 加短別名（`from services.nav_history_gs import coverage_status
+    as _nh_cov`），呼叫點叫 `_nh_cov()` —— 於是接線明明在，測試卻紅，錯誤訊息還
+    寫「必須呼叫 coverage_status」，把人往「production 沒接」的方向誤導。
+    測試要驗的是**接線**，不是命名風格。
+    """
     _tree = ast.parse(path.read_text(encoding="utf-8"))
+    _bound: set = set()
+    for _n in ast.walk(_tree):
+        if isinstance(_n, ast.ImportFrom) and (_n.module or "").endswith(module_suffix):
+            for _a in _n.names:
+                if _a.name == symbol:
+                    _bound.add(_a.asname or _a.name)
+    if not _bound:
+        return []
     return [_n.lineno for _n in ast.walk(_tree)
             if isinstance(_n, ast.Call)
-            and (getattr(_n.func, "id", None) == name
-                 or getattr(_n.func, "attr", None) == name)]
+            and (getattr(_n.func, "id", None) in _bound
+                 or getattr(_n.func, "attr", None) in _bound)]
 
 
 def test_tab5_actually_calls_coverage_status():
-    """接線測試：把 Tab⑤ 那段拿掉，本測試轉紅。
+    """接線測試：把 Tab⑤ 那段拿掉（或只 import 不呼叫），本測試轉紅。
 
     這正是本 repo 反覆出現的「算對了但沒接出去」——`coverage_status` 若沒有
     consumer，它就只是一個沒人看得到的函式。
     """
-    assert _calls_named(_TAB5, "coverage_status"), (
-        "Tab⑤ 必須呼叫 coverage_status —— 否則「累了多少」依然沒有任何地方顯示")
+    _hits = _calls_of_imported(_TAB5, "nav_history_gs", "coverage_status")
+    assert _hits, (
+        "Tab⑤ 沒有呼叫從 services.nav_history_gs import 進來的 coverage_status"
+        "（別名也算）—— 「累了多少」就沒有任何地方顯示")
 
 
 def test_tab2_renders_the_merge_trace():
