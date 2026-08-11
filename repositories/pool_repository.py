@@ -193,7 +193,9 @@ class GoogleSheetsPoolStore:
             if row and str(row[0]).strip() == entry.code:
                 ws.update(f"A{idx}:{_col(len(_HEADERS))}{idx}", [entry.to_row()])
                 return
-        ws.append_row(entry.to_row(), value_input_option="USER_ENTERED")
+        # RAW(非 USER_ENTERED):純數字基金代號如 "0050" 若被 Sheets 解析成數字 50,
+        # get_all_values 會回 "50" → 破壞 code 主鍵字串比對去重 → 同檔重複列(v19.430 稽核修)。
+        ws.append_row(entry.to_row(), value_input_option="RAW")
 
     def remove(self, code: str) -> None:
         code = str(code or "").strip()

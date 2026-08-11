@@ -12,6 +12,10 @@
 - **成長型**:總經看衰(為主)+ 該檔跌破均線(為輔)**雙確認** → 建議賣出轉現金;僅前者 → 🟡 警示
 - **無法判定**:誠實回「資料不足·不建議」(§1)
 
+**表現差 overlay(v19.430)**:與型態分流**獨立**的第二觸發 —— 表現差 = 跑輸大盤(`benchmark_compare`)
+**OR** 絕對虧損(`switch_strategy` 紅燈)。表現差且型態分流未給換股(且非「賣轉現金」)→ 疊加選股池
+替代標的建議(重用 `_best_candidate`)。池空 / 無合格 → 誠實「無合適替代標的」,不硬湊(§1)。
+
 ⚠️ 匯率誠實範圍:USDTWD 單一值 → 同幣別 A→B 換股 FX 近中性;匯率真正影響「成長型賣出轉台幣現金」
 與「從現金新進場」等跨台幣動作。FX 位階以資訊呈現,不假裝決定每筆同幣別換股。
 常數走 shared.signal_thresholds SSOT(§3.3)。
@@ -21,6 +25,7 @@ from __future__ import annotations
 from shared.signal_thresholds import (
     GROWTH_BREAKDOWN_SMA_DAYS,
     GROWTH_MACRO_BEARISH_CUTOFF,
+    UNDERPERF_LAG_THRESHOLD_PCT,
 )
 
 # action 詞彙
@@ -89,9 +94,72 @@ def _best_candidate(held_code: str, pool_rows: list) -> "dict | None":
             "potential_pct": revert_upside_pct(_row_get(b, "距 HWM %", "dist_hwm_pct"))}
 
 
+def _blank_underperf() -> dict:
+    """未評估 / 未表現差的預設 block(§1:缺料 = 不觸發,不臆測)。"""
+    return {"is_underperforming": False, "reasons": [], "excess_pct": None,
+            "benchmark_used": None, "full_period": False, "redlight": None,
+            "lags_benchmark": False}
+
+
+def assess_underperformance(*, fund_nav=None, benchmark_nav=None, benchmark_label=None,
+                            excess_pct=None, full_period=False,
+                            tr1y_pct=None, sharpe=None, eat_status=None,
+                            switch_score=None, switch_coverage=None,
+                            redlight=None) -> dict:
+    """「表現差」= 跑輸大盤 **OR** 絕對虧損(紅燈)。純函式,零 IO;缺料誠實不觸發(§1)。
+
+    - **跑輸大盤**:`excess_pct` < `UNDERPERF_LAG_THRESHOLD_PCT`(百分點,負 = 落後)。
+      呼叫端可直接傳算好的 `excess_pct`(+`full_period`;如大表的「vs 大盤%」,避免重抓基準);
+      或傳 `fund_nav`+`benchmark_nav` 讓本函式呼 `benchmark_compare.excess_return`。
+      無 benchmark(其餘幣別)→ excess 為 None → 不判(§F)。
+    - **絕對虧損**:`switch_strategy.switch_signal(...) == RED`(嚴重吃本金 或 1Y含息<0 且 Sharpe<0)。
+      呼叫端若已算好紅燈可直接傳 `redlight`(bool)省重算;否則傳 tr1y/sharpe/eat_status/score(+coverage)。
+
+    Returns:
+        {is_underperforming, reasons[], excess_pct, benchmark_used, full_period, redlight, lags_benchmark}
+    """
+    _reasons: list = []
+    _excess = excess_pct
+    _full = bool(full_period)
+    _lags = False
+    if _excess is None and fund_nav is not None and benchmark_nav is not None:
+        from services.benchmark_compare import excess_return
+        _er = excess_return(fund_nav, benchmark_nav)
+        _excess = _er["excess_pct"]
+        _full = bool(_er["full_period"])
+    if _excess is not None and _excess < UNDERPERF_LAG_THRESHOLD_PCT:
+        _lags = True
+        _reasons.append("跑輸大盤")
+
+    if redlight is None and (
+        eat_status is not None
+        or (tr1y_pct is not None and sharpe is not None and switch_score is not None)
+    ):
+        from services.switch_strategy import RED, switch_signal
+        redlight = (switch_signal(tr1y_pct, sharpe, eat_status, switch_score,
+                                  coverage=switch_coverage) == RED)
+    _abs = bool(redlight) if redlight is not None else False
+    if _abs:
+        _reasons.append("絕對虧損")
+
+    return {
+        "is_underperforming": bool(_lags or _abs),
+        "reasons": _reasons,
+        "excess_pct": _excess,
+        "benchmark_used": benchmark_label,
+        "full_period": _full,
+        "redlight": (bool(redlight) if redlight is not None else None),
+        "lags_benchmark": _lags,
+    }
+
+
 def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
-                   macro_composite=None) -> dict:
-    """單一持倉 → 建議 dict。型態分流:震盪(高→低換股)/ 成長(雙確認賣出)/ 無法判定。"""
+                   macro_composite=None, underperformance=None) -> dict:
+    """單一持倉 → 建議 dict。型態分流(震盪高→低換股 / 成長雙確認賣出 / 無法判定)+ 表現差 overlay。
+
+    `underperformance`:由呼叫端以 `assess_underperformance` 算好傳入(需 benchmark / 紅燈輸入)。
+    表現差時(§req 3/4/5)疊加選股池替代標的建議 —— 與型態分流獨立,不覆蓋既有動作。
+    """
     from services.fund_type_classifier import RANGE, classify_fund_type
     from services.nav_fx_switch import nav_fx_signal
     from services.rotation import classify_base
@@ -102,18 +170,17 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
     _tinfo = classify_fund_type(_nav, _cat, override=_row_get(held_row, "type_override", default=""))
     _ftype = _tinfo["type"]
 
+    _under = underperformance or _blank_underperf()
     _out = {"code": _code, "name": _name(held_row), "type": _ftype,
             "type_method": _tinfo["method"], "er": _tinfo["er"],
             "action": HOLD, "action_zh": _ACTION_ZH[HOLD], "reason": "",
-            "switch_to": None,
+            "switch_to": None, "underperformance": _under, "underperf_candidate": None,
             "signals": {"nav_level": None, "sigma_rank": None, "fx_label": fx_label,
                         "macro_composite": macro_composite, "breakdown": None}}
 
     if _ftype is None:
         _out.update(action=INSUFFICIENT, action_zh=_ACTION_ZH[INSUFFICIENT], reason=_tinfo["rationale"])
-        return _out
-
-    if _ftype == RANGE:
+    elif _ftype == RANGE:
         _nav_level = classify_base(_row_get(held_row, "σ rank", "sigma_rank"))
         _fx = nav_fx_signal(_nav_level, fx_label)
         _out["signals"].update(nav_level=_nav_level, fx_label=fx_label)
@@ -129,37 +196,59 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
         else:
             _nav_zh = {"low": "低基期", "mid": "中性", "unknown": "基期未知"}.get(_nav_level, _nav_level)
             _out.update(reason=f"震盪型 + {_nav_zh}(未貼近高點)→ 續抱,等接近高基期再評估換出。")
-        return _out
-
-    # 成長型:雙確認賣出
-    _bearish = (macro_composite is not None) and (float(macro_composite) <= GROWTH_MACRO_BEARISH_CUTOFF)
-    _bd = _breakdown_below_sma(_nav)
-    _out["signals"].update(breakdown=_bd)
-    if macro_composite is None:
-        _out.update(reason="成長型;總經分數未取得 → 暫不觸發賣出(§1 缺料不臆測)。")
-    elif _bearish and _bd is True:
-        _out.update(action=SELL_CASH, action_zh=_ACTION_ZH[SELL_CASH],
-                    reason=(f"成長型:總經看衰(composite {macro_composite:.1f} ≤ {GROWTH_MACRO_BEARISH_CUTOFF:g})"
-                            f" + 該檔跌破 {GROWTH_BREAKDOWN_SMA_DAYS} 日均線 → 雙確認,建議賣出轉台幣現金(避開下行)。"))
-    elif _bearish and _bd is None:
-        _out.update(action=WARN, action_zh=_ACTION_ZH[WARN],
-                    reason="成長型:總經看衰,但該檔均線史不足無法確認跌破 → 警示留意(未達雙確認)。")
-    elif _bearish:
-        _out.update(action=WARN, action_zh=_ACTION_ZH[WARN],
-                    reason="成長型:總經看衰(為主)但尚未跌破均線 → 🟡 警示留意,續觀察(未達雙確認賣出)。")
     else:
-        _out.update(reason="成長型:總經未看衰 → 續抱成長部位,順勢。")
+        # 成長型:雙確認賣出
+        _bearish = (macro_composite is not None) and (float(macro_composite) <= GROWTH_MACRO_BEARISH_CUTOFF)
+        _bd = _breakdown_below_sma(_nav)
+        _out["signals"].update(breakdown=_bd)
+        if macro_composite is None:
+            _out.update(reason="成長型;總經分數未取得 → 暫不觸發賣出(§1 缺料不臆測)。")
+        elif _bearish and _bd is True:
+            _out.update(action=SELL_CASH, action_zh=_ACTION_ZH[SELL_CASH],
+                        reason=(f"成長型:總經看衰(composite {macro_composite:.1f} ≤ {GROWTH_MACRO_BEARISH_CUTOFF:g})"
+                                f" + 該檔跌破 {GROWTH_BREAKDOWN_SMA_DAYS} 日均線 → 雙確認,建議賣出轉台幣現金(避開下行)。"))
+        elif _bearish and _bd is None:
+            _out.update(action=WARN, action_zh=_ACTION_ZH[WARN],
+                        reason="成長型:總經看衰,但該檔均線史不足無法確認跌破 → 警示留意(未達雙確認)。")
+        elif _bearish:
+            _out.update(action=WARN, action_zh=_ACTION_ZH[WARN],
+                        reason="成長型:總經看衰(為主)但尚未跌破均線 → 🟡 警示留意,續觀察(未達雙確認賣出)。")
+        else:
+            _out.update(reason="成長型:總經未看衰 → 續抱成長部位,順勢。")
+
+    # ── 表現差 overlay(§req 3/4/5):與型態分流獨立,不覆蓋既有動作 ──
+    if _under.get("is_underperforming"):
+        _rz = " + ".join(_under.get("reasons") or []) or "表現差"
+        _base = f" 另:{_out['reason']}" if _out["reason"] else ""
+        if _out["switch_to"] is not None:
+            _out["reason"] = f"⚠️ 表現差({_rz})。{_out['reason']}"            # 型態已給換入標的
+        elif _out["action"] == SELL_CASH:
+            _out["reason"] = f"⚠️ 表現差({_rz});已建議轉現金避開下行,先不新進場。{_out['reason']}"
+        else:
+            _uc = _best_candidate(_code, pool_rows)                          # HOLD/WARN/資料不足 → 補選股池建議
+            _out["underperf_candidate"] = _uc
+            if _uc and _uc["code"]:
+                _out["reason"] = f"⚠️ 表現差({_rz})→ 建議從選股池換入「{_uc['name']}」。{_base}"
+            else:
+                _out["reason"] = f"⚠️ 表現差({_rz}),但選股池無合適替代標的(不硬湊,§1)。{_base}"
+
     return _out
 
 
 def advise_switches(held_rows: list, pool_rows: list, *, fx_label=None,
-                    macro_composite=None) -> dict:
-    """全部持倉 → {advices:[...], summary:{...}}。§1:每筆缺條件誠實標記,不硬給動作。"""
-    _adv = [advise_holding(h, pool_rows, fx_label=fx_label, macro_composite=macro_composite)
+                    macro_composite=None, underperformance_by_code=None) -> dict:
+    """全部持倉 → {advices:[...], summary:{...}}。§1:每筆缺條件誠實標記,不硬給動作。
+
+    `underperformance_by_code`:{code → assess_underperformance(...)},由 L3 逐檔算好(需 benchmark)。
+    """
+    _ubc = underperformance_by_code or {}
+    _adv = [advise_holding(h, pool_rows, fx_label=fx_label, macro_composite=macro_composite,
+                           underperformance=_ubc.get(str(_row_get(h, "code", default=""))))
             for h in (held_rows or []) if _row_get(h, "code", default="")]
-    _counts = {}
+    _counts: dict = {}
     for a in _adv:
         _counts[a["action"]] = _counts.get(a["action"], 0) + 1
+    _n_under = sum(1 for a in _adv if a.get("underperformance", {}).get("is_underperforming"))
     return {
         "advices": _adv,
         "summary": {
@@ -169,9 +258,10 @@ def advise_switches(held_rows: list, pool_rows: list, *, fx_label=None,
             "n_warn": _counts.get(WARN, 0),
             "n_hold": _counts.get(HOLD, 0),
             "n_insufficient": _counts.get(INSUFFICIENT, 0),
+            "n_underperforming": _n_under,
             "fx_label": fx_label,
             "macro_composite": macro_composite,
         },
-        "caveat": ("換股顧問為紀律工具,非獲利保證:僅在型態 × 基期 × 總經 × 匯率條件對齊時建議動作,"
+        "caveat": ("換股顧問為紀律工具,非獲利保證:僅在型態 × 基期 × 總經 × 匯率 × 表現差條件對齊時建議動作,"
                    "缺條件一律誠實回「持有/資料不足」。回測顯示規則有正期望值 ≠ 單筆一定賺。"),
     }

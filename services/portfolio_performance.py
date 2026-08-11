@@ -104,8 +104,8 @@ def metrics_from_return_series(daily_returns, rf_annual: float = 0.0) -> dict:
     _s = pd.Series(daily_returns).dropna()
     _n = len(_s)
     _blank = {"cagr_pct": None, "ann_vol_pct": None, "sharpe": None,
-              "max_drawdown_pct": None, "calmar": None, "n_days": _n,
-              "start": None, "end": None}
+              "max_drawdown_pct": None, "calmar": None, "period_return_pct": None,
+              "n_days": _n, "start": None, "end": None}
     if _n < 2:
         return _blank
     _tpy = TRADING_DAYS_PER_YEAR
@@ -126,6 +126,7 @@ def metrics_from_return_series(daily_returns, rf_annual: float = 0.0) -> dict:
         "sharpe": round(_sharpe, 2) if _sharpe is not None else None,
         "max_drawdown_pct": round(_dd * 100.0, 2),
         "calmar": round(_calmar, 2) if _calmar is not None else None,
+        "period_return_pct": round((_cum - 1.0) * 100.0, 2),   # 期間累積報酬(= 期末/期初 − 1)
         "n_days": _n,
         "start": str(_s.index[0].date()) if hasattr(_s.index[0], "date") else str(_s.index[0]),
         "end": str(_s.index[-1].date()) if hasattr(_s.index[-1], "date") else str(_s.index[-1]),

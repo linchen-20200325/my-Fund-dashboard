@@ -2,6 +2,26 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-08-11 存檔:投資組合績效追蹤 + 表現差→選股池建議(v19.430・PR #620)
+
+user 要「定期追蹤組合績效 + 建議持有/更換/時機 + 表現差時從選股池挑替代標的」。大量**重用**既有引擎,
+只補兩件真正缺的:①走勢重建+永久快照 ②「表現差」訊號接進選股池。全部併入**組合健診 → 換股顧問**區。
+
+- **① 績效追蹤(走勢 + 永久快照)**:`services/portfolio_tracking.py`(L2 純函式)用「已累積每檔 NAV × 目前
+  權重」重建組合走勢(收口 `portfolio_performance`);**年化閘門** —— 共同交易日 <60 只給累積報酬**不年化**、
+  <252 標 low_confidence(§4.6 稀疏序列 ×√252 失真)。`repositories/portfolio_perf_repository.py`(L1,
+  EX-CRUD-1 登錄)永久快照 GS `_portfolio_perf_history` + 本地 JSON,**date 主鍵同日覆蓋**,進區 session×date
+  去重自動累積。走勢長度 = 已累積 NAV 的長度(放棄外部歷史,快照往前補真實權重路徑)。
+- **② 表現差 → 選股池**:`switch_advisor.assess_underperformance` = **跑輸大盤 −5pp OR 絕對虧損紅燈**任一;
+  overlay 與型態分流獨立,表現差且未給換股 → 補選股池替代標的(池空/無合格誠實「無合適標的」,已建議轉現金則不叫買)。
+  跑輸大盤走 `capture_by_code`「vs 大盤%」;絕對虧損走 `switch_score`+`switch_signal` SSOT(含息1Y×Sharpe 雙負)。
+- **SSOT**:`signal_thresholds` +3(`PORTFOLIO_TREND_MIN_DAYS=60` / `_ROBUST_DAYS=252` / `UNDERPERF_LAG_THRESHOLD_PCT=-5.0`)。
+  `portfolio_performance.metrics_from_return_series` 加 `period_return_pct`(additive)。
+- **稽核 AI(兩隻對抗審)**:L2 數學無 real bug;L1 抓 1 MED —— GS `append_row(USER_ENTERED)` 把主鍵欄強轉
+  (date `2026-08-11`→`8/11/2026`、**數字代號 `0050`→`50`**)破壞去重 → 重複列;兩處改 **RAW**,**順修 `pool_repository`
+  同款既有 bug**(影響台股數字代號選股池)+ 回歸鎖(FakeWS 模擬 USER_ENTERED 強轉)。
+- **驗證**:新測試 39 個;全 `-m "not slow"` 套件 **3868 passed / 7 skipped**;CI Fast/Schema/AppTest 全綠。
+
 ## ✅ 2026-08-07 存檔:六 Tab 誠實度總整理 + user 拍板四項收斂
 
 本輪主軸是 **§1「畫面不能說謊」**。四個平行 Coder 盤點六個 Tab、兩輪獨立稽核、user 三條原則
