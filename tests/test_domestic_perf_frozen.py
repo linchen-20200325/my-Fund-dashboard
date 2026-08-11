@@ -81,16 +81,26 @@ def test_freeze_reason_and_unfreeze_conditions_are_documented():
     assert "解凍條件" in _doc, "沒有解凍條件的凍結 = 永久放棄，那要另外拍板"
 
 
-def test_mk333_c2_comment_no_longer_claims_moneydj_computes_it():
+def test_mk333_c2_comment_carries_the_correction():
     """`fund_screening.py` 原本註解寫「ret_3y_ann 是含息總報酬、已由 MoneyDJ 算好」
-    —— **兩點都錯**（實際是 fund_service 從 NAV 自算、且不含息）。
+    —— **兩點都錯**（實際是 `fund_service` 從 NAV 自算、需 756 點、且不含息）。
+    這句錯註解是本輪重複開挖的起點之一，必須釘住。
 
-    錯的註解正是這輪重複開挖的起點之一，所以釘住它不許回去。
+    ⚠️ **但不能用 `assert "已由 MoneyDJ 算好" not in src`** —— 本檔第一版就是這樣寫的，
+    當場自爆：更正後的註解為了說明，**必須引用**那句錯話（「原本寫『…』—— 兩點都不對」），
+    子字串照樣在檔案裡。這是本 repo 第 5 次踩到同一類「註解錨點」陷阱，
+    前四次是斷言被自己的說明文字餵成**恆真**，這次反過來變成**恆假**。
+
+    正確的守法：守**更正說明在不在**，而不是守錯句子不存在。
+    這樣「引用後打叉」是合法的（本來就該保留脈絡），「revert 回裸主張」才會紅
+    —— 因為那時更正說明會一起消失。
     """
     _src = (_ROOT / "services" / "fund_screening.py").read_text(encoding="utf-8")
-    assert "已由 MoneyDJ 算好" not in _src, (
-        "這句話不成立：ret_3y_ann 由 services/fund_service.py 從 NAV 序列自算"
-        "（需 756 點），而且是純 NAV 不含息")
+    for _marker in ("不是 MoneyDJ 給的", "純 NAV"):
+        assert _marker in _src, (
+            f"C2 那段少了更正說明「{_marker}」—— 註解可能被 revert 回舊版。"
+            "事實：`ret_3y_ann` 由 services/fund_service.py 從 NAV 序列自算"
+            "（需 756 點），而且是純 NAV 不含息，不是 MoneyDJ 算好的含息總報酬。")
 
 
 def test_c2_source_is_no_longer_shown_to_users():

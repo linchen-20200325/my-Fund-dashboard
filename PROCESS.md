@@ -73,6 +73,14 @@
     | log 裡找不到 `[fetch]` / `[orchestrator]` | 「這條路徑沒執行」 | 執行了，只是印到 stdout，面板看不到 |
   - **共同形狀**：與上面兩條同一種病的第三半 —— 那兩條是 production / 測試的失敗被偽裝成成功，這條是**成功被偽裝成失敗**，代價是往正確的修法上打叉、回頭改錯地方。
   - **斷言訊息也算**：測試紅掉時，錯誤訊息若指錯方向（例：接線測試不解 import alias，卻報「production 必須呼叫 X」），比漏測更糟 —— 它會主動把人推去改沒壞的東西。寫斷言訊息時要問：**這句話為真的前提，我驗證過了嗎？**
+
+- **註解錨點陷阱 (Comment Anchor) — 2026-08-11 新增**：用**原始碼字串比對**寫測試時（`X in src` / `src.index()` / `re.search`），比對到的可能是**註解或 docstring**，不是實際邏輯。本 repo 已踩 **5 次**，兩個方向都有：
+  - **恆真（漏測）**：`re.search(r"st\.dataframe\(\s*\n?\s*df,.*?\)")` 命中的是上一行的說明註解 → 斷言永遠通過，實際 production 沒接 `column_config`。
+  - **恆假（誤導）**：`assert "已由 MoneyDJ 算好" not in src` —— 但**更正後的註解為了說明必須引用那句錯話**，子字串照樣在檔案裡 → 明明已經修好卻永遠紅，還把人指向「production 沒改」。
+  - **判準**：問「我要守的是**邏輯**還是**文字**？」
+    - 守邏輯 → **一律走 AST**（`ast.Call` / `ast.Compare` / `ast.ImportFrom`…）。AST 看不到註解，天生免疫。掃 keyword argument 要記得解 **import alias**（`from x import f as g` 後呼叫點叫 `g()`）。
+    - 守文字（例如「這段更正說明不許被 revert 掉」）→ **守「更正在不在」，不要守「錯的不存在」**。引用錯話以保留脈絡是合法且應該的；revert 回裸主張時，更正說明會一起消失，那才是該紅的訊號。
+  - **禁止**：對 production 原始碼寫 `assert "<某句話>" not in src` 來表達「這個錯誤觀念已修正」—— 除非你同時確定沒有任何地方需要引用它。
 - **環境與效能**：限用 `.py` 腳本（禁 `.ipynb`），維護 `requirements.txt`。確保 `st.cache_data` 的正確使用。
 - **自動交付與合併 (Auto-Ship)**：功能完成後，必須使用 `gh pr create --fill` 建立請求，並**主動執行** `gh pr merge <PR號碼> --merge --delete-branch`。
 - **合併後驗證與存檔**：合併後必須自動 `git checkout main && git pull`，使用 `git status` 與 `git log -1` 驗證合併成功，最後自動更新 `STATE.md` 的進度。嚴禁在未驗證成功的情況下回報完成。
