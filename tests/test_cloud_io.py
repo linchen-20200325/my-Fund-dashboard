@@ -433,8 +433,8 @@ def test_v1_path_unchanged_when_v1(monkeypatch):
     assert _v1_upserts == [("P1", "F1")]
 
 
-def test_v2_round_trip_keeps_13_cols(monkeypatch):
-    """v2 dump 寫的 df 含 ALL_COLS_V2 全 13 欄；load 反推保留關鍵欄位。"""
+def test_v2_round_trip_keeps_10_cols(monkeypatch):
+    """v19.436:v2 dump 寫的 df 為 ALL_COLS_V2 全 10 欄；load 反推保留關鍵欄位。"""
     from ui.helpers import cloud_io
     from repositories.policy_repository import ALL_COLS_V2
 
@@ -450,22 +450,23 @@ def test_v2_round_trip_keeps_13_cols(monkeypatch):
         {"code": "F1", "policy_id": "P1", "name": "Fund Alpha",
           "invest_twd": 300000, "currency": "USD",
           "units": 1000.0, "avg_nav": 10.0, "fx_avg": 30.0,
-          "avg_nav_with_div": 9.5, "div_cash_pct": 80.0,
+          "div_cash_pct": 80.0,
           "is_core": True}], "t7_ledgers": {}}
     cloud_io.dump_all_to_sheet("c", "s", ss)
 
     _df = _captured_df["P1"]
-    # 13 欄全在
+    # 10 欄全在,且不含退役欄
     assert set(_df.columns) == set(ALL_COLS_V2)
+    assert "item_type" not in _df.columns
+    assert "avg_nav_with_div" not in _df.columns
+    assert "amount" not in _df.columns
     _r = _df.iloc[0]
     assert _r["fund_code"] == "F1"
     assert _r["fund_name"] == "Fund Alpha"
     assert _r["units"] == 1000.0
     assert _r["avg_nav"] == 10.0
-    assert _r["avg_nav_with_div"] == 9.5
     assert _r["avg_fx"] == 30.0
     assert _r["currency"] == "USD"
     assert _r["tier"] == "core"
     assert _r["invest_twd"] == 300000
     assert _r["div_cash_pct"] == 80.0
-    assert _r["item_type"] == "fund"

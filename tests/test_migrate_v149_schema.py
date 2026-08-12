@@ -16,7 +16,7 @@ from scripts.migrate_v149_schema import (
     migrate_one_policy,
     migrate_sheet,
 )
-from repositories.policy_repository import ALL_COLS_V2, ITEM_TYPE_FUND
+from repositories.policy_repository import ALL_COLS_V2
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -118,9 +118,13 @@ def test_migrate_one_policy_writes_v2_rows_from_v1_and_t7_state():
     sh.worksheet.return_value = v1_ws
     client = MagicMock(); client.open_by_key.return_value = sh
 
-    # 用 patch 把 write 路徑分離（讓 load 用 v1_ws、write 用 write_ws）
+    # 用 patch 把 write 路徑分離（讓 load 用 v1_ws、write 用 write_ws）；
+    # v19.436:並 patch fund_name 抓取(避免打 MoneyDJ 網路 403、結果不確定)
     from unittest.mock import patch
-    with patch("scripts.migrate_v149_schema.write_policy_v2") as mock_write:
+    with patch("scripts.migrate_v149_schema.write_policy_v2") as mock_write, \
+         patch("scripts.migrate_v149_schema._fetch_fund_name_safe",
+               side_effect=lambda code: {"FIDXEQI": "富達世界股票",
+                                          "ALLNATEC": "安聯科技"}.get(code, "")):
         t7_index = {
             ("p1", "FIDXEQI"): json.dumps({"transactions": [
                 {"action": "buy", "units": 1234.5, "nav_at_action": 12.345,
@@ -135,13 +139,14 @@ def test_migrate_one_policy_writes_v2_rows_from_v1_and_t7_state():
     _args = mock_write.call_args.args
     df_passed = _args[3]
     assert len(df_passed) == 2
+    assert list(df_passed.columns) == list(ALL_COLS_V2)   # v19.436:10 欄 schema
     # 第 1 檔：用 ledger fold 結果
     row1 = df_passed.iloc[0]
     assert row1["fund_code"] == "FIDXEQI"
+    assert row1["fund_name"] == "富達世界股票"   # v19.436:從 MoneyDJ 抓,非 policy_name
     assert row1["units"] == 1234.5
     assert abs(row1["avg_nav"] - 12.345) < 0.001
     assert row1["tier"] == "core"
-    assert row1["item_type"] == ITEM_TYPE_FUND
     # 第 2 檔：t7_index 無此 key → units / avg_nav 為 0，avg_fx 用 fx_at_buy 補
     row2 = df_passed.iloc[1]
     assert row2["fund_code"] == "ALLNATEC"
