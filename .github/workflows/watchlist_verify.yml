@@ -1,0 +1,27 @@
+name: "追蹤清單 — 驗證清單 (不送 LINE)"
+
+# 純驗證用:讀公開 CSV → 解析代號 → dry-run 組訊息預覽,**永不送 LINE**(--dry-run 在 send 前就 return)。
+# 用途:改完 Google Sheet 追蹤清單後,按一下確認「代號有沒有被正確讀到、訊息長怎樣」。
+on:
+  workflow_dispatch:
+    inputs:
+      csv_url:
+        description: "追蹤清單公開 CSV 連結(留空 → 用已設的 WATCH_CSV_URL secret)"
+        required: false
+        default: ""
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Verify watchlist (parse + dry-run, 不送 LINE)
+        # 有填 csv_url 就用它,否則退用 secret。dry-run 不需要 LINE 憑證。
+        env:
+          WATCH_CSV_URL: ${{ inputs.csv_url != '' && inputs.csv_url || secrets.WATCH_CSV_URL }}
+        run: python scripts/watchlist_push.py --dry-run
