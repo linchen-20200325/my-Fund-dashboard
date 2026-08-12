@@ -73,8 +73,13 @@ def extract_items_from_csv(text: str) -> list:
             out.append(c)
 
     header = [str(h).replace("﻿", "").strip().lower() for h in rows[0]]
-    col = next((i for i, h in enumerate(header)
-                if any(k in h for k in _HEADER_KEYS)), None)
+    _keyset = {k.lower() for k in _HEADER_KEYS}
+    # 先精確比對(避免 substring 誤中:如「備考code」把 code 欄搶去 index 0 → 漏掉真「代號」欄);
+    # 精確找不到才退 substring(容「基金代號欄」這種變體)。
+    col = next((i for i, h in enumerate(header) if h in _keyset), None)
+    if col is None:
+        col = next((i for i, h in enumerate(header)
+                    if any(k in h for k in _keyset)), None)
     if col is not None:                  # 有表頭欄 → 只讀該欄(不要求含字母,尊重使用者填的)
         for r in rows[1:]:
             if col < len(r):
@@ -113,7 +118,9 @@ def _fund_line(code: str, fd: dict) -> str:
         if series is not None and len(series) > 0:
             nav = float(series.iloc[-1])
             date = str(series.index[-1])[:10]
-            if nav > 0 and date:
+            # 守 index 型別:非日期索引(RangeIndex/NaT)→ date 非 YYYY-MM-DD → 視為資料不足
+            # (§1:不把 cosmetic 的假日期配真 nav 送出)
+            if nav > 0 and re.match(r"^\d{4}-\d{2}-\d{2}$", date):
                 chg = ""
                 # 近 5 交易日漲跌(需 t 與 t-5;不足則誠實省略,不猜)
                 try:
@@ -129,8 +136,13 @@ def _fund_line(code: str, fd: dict) -> str:
     return f"• {label}:⚠️ 資料不足（抓不到 MoneyDJ 淨值）"
 
 
-def build_message(items: list, *, fetch_fn=None, as_of: str = "") -> str:
-    """逐檔抓 MoneyDJ 淨值 → 組推播文字。純資料驅動,缺料誠實標,不捏造(§1/spec §6-2)。"""
+def build_message(items: list, *, fetch_fn=None, as_of: str = "",
+                  stats_out: "dict | None" = None) -> str:
+    """逐檔抓 MoneyDJ 淨值 → 組推播文字。純資料驅動,缺料誠實標,不捏造(§1/spec §6-2)。
+
+    stats_out:opt-in 側車 dict — 若傳入,填 {"total", "missing"} 供 caller 判斷全失敗
+    (§5 可觀測;既有 caller 傳 None 行為零變化)。
+    """
     if fetch_fn is None:
         fetch_fn = _default_fetch
     _as_of = as_of or _dt.datetime.now(
@@ -140,7 +152,8 @@ def build_message(items: list, *, fetch_fn=None, as_of: str = "") -> str:
     for code in items:
         try:
             fd = fetch_fn(code)
-        except Exception:  # noqa: BLE001 — 抓取層錯誤 → 該檔標資料不足,不整批中斷
+        except Exception as _e:  # noqa: BLE001 — 抓取層錯誤 → 該檔標資料不足,不整批中斷
+            print(f"  ⚠️ {code} 抓取失敗:{type(_e).__name__}")   # §3.3 留痕(只印型別)
             fd = {}
         line = _fund_line(code, fd)
         if "資料不足" in line:
@@ -149,6 +162,9 @@ def build_message(items: list, *, fetch_fn=None, as_of: str = "") -> str:
     if _miss:
         lines += ["", f"⚠️ {_miss} 檔抓不到淨值（美國 IP 直連常擋 MoneyDJ；"
                       "可設 PROXY_URL 走 NAS 代理，或改在 NAS 端跑）。"]
+    if stats_out is not None:
+        stats_out["total"] = len(items)
+        stats_out["missing"] = _miss
     return "\n".join(lines)
 
 
@@ -157,6 +173,9 @@ def _chunks(text: str, n: int = _LINE_MAX) -> list:
     out: list = []
     buf = ""
     for line in str(text).split("\n"):
+        if len(line) > n and buf:      # 先 flush 待送 buf,避免超長行的前段插到 buf 之前(順序亂)
+            out.append(buf)
+            buf = ""
         while len(line) > n:
             out.append(line[:n])
             line = line[n:]
@@ -205,7 +224,9 @@ def main(argv=None) -> int:
         return 1
     print(f"📋 追蹤 {len(items)} 檔:{', '.join(items)}")
 
-    msg = build_message(items)
+    _stats: dict = {}
+    msg = build_message(items, stats_out=_stats)
+    _all_missing = len(items) > 0 and _stats.get("missing", 0) >= len(items)
     if args.dry_run:
         print("─" * 40 + "\n" + msg + "\n" + "─" * 40)
         return 0
@@ -213,11 +234,15 @@ def main(argv=None) -> int:
     try:
         res = send(msg)
     except Exception as e:  # noqa: BLE001 — LinePushError 等 → 非零 exit,cron 紅燈
-        print(f"❌ LINE 推播失敗:{type(e).__name__}: {str(e)[:120]}")
+        print(f"❌ LINE 推播失敗:{type(e).__name__}")     # 只印型別(§ 不洩 URL/token)
         return 1
-    if res["sent"] == 0:
-        print("⚠️ 未送出（缺 LINE_CHANNEL_TOKEN / LINE_USER_ID?）— 見上方 line_push 訊息")
+    if res["sent"] < res["chunks"]:      # 未全送(缺憑證 / 部分失敗)→ 非零
+        print("⚠️ 未全部送出（缺 LINE_CHANNEL_TOKEN / LINE_USER_ID?）— 見上方 line_push 訊息")
         return 1
+    if _all_missing:                     # 送出了但**全部**抓不到淨值 → 讓 cron 紅燈(§1 surface 系統性失敗)
+        print("⚠️ 已送通知,但全部 %d 檔都抓不到 MoneyDJ 淨值（美國 IP 被擋/代理失效?）→ 標記失敗"
+              % len(items))
+        return 2
     print(f"✅ 已送出 {res['sent']}/{res['chunks']} 則到 LINE")
     return 0
 

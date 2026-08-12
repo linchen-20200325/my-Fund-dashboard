@@ -71,6 +71,25 @@ def test_fund_line_missing_data_is_honest():
     assert "資料不足" in M._fund_line("X", {"series": pd.Series(dtype=float)})
 
 
+def test_fund_line_nonpositive_and_nan_last_are_honest():
+    """§1:nav<=0 / 末點 NaN → 資料不足,不把壞值當淨值送。"""
+    idx = pd.to_datetime(["2026-07-21", "2026-07-22"])
+    assert "資料不足" in M._fund_line("X", {"series": pd.Series([10.0, 0.0], index=idx)})
+    assert "資料不足" in M._fund_line(
+        "X", {"series": pd.Series([10.0, float("nan")], index=idx)})
+
+
+def test_fund_line_non_datetime_index_is_honest():
+    """§1:非日期索引(RangeIndex)→ 假日期不配真 nav,標資料不足。"""
+    assert "資料不足" in M._fund_line("X", {"series": pd.Series([10.0, 11.0])})
+
+
+def test_extract_exact_header_wins_over_substring_column():
+    """回歸:『備考code』不得把代號欄搶走 → 應讀精確命中的『代號』欄。"""
+    csv = "備考code,代號\nSKIP,ACCP138\nSKIP,TLZF9\n"
+    assert M.extract_items_from_csv(csv) == ["ACCP138", "TLZF9"]
+
+
 def test_build_message_counts_missing_and_never_fakes():
     def _fetch(code):
         if code == "OK":
@@ -128,3 +147,48 @@ def test_main_dry_run_happy_path(monkeypatch, capsys):
     rc = M.main(["--dry-run"])
     out = capsys.readouterr().out
     assert rc == 0 and "追蹤 1 檔" in out and "11.0000" in out
+
+
+def test_main_push_failure_returns_1(monkeypatch):
+    """§1:LINE 送出丟例外(如 LinePushError)→ main 非零(cron 紅燈)。"""
+    monkeypatch.setenv("WATCH_CSV_URL", "http://example/csv")
+    monkeypatch.setattr(M, "fetch_csv", lambda url, **k: "代號\nTLZF9\n")
+    monkeypatch.setattr(M, "_default_fetch",
+                        lambda c: _fd(c, [10.0, 11.0], ["2026-07-21", "2026-07-22"]))
+    def _boom(msg):
+        raise RuntimeError("LINE push HTTP 500")
+    monkeypatch.setattr(M, "send", _boom)
+    assert M.main([]) == 1
+
+
+def test_main_missing_creds_not_all_sent_returns_1(monkeypatch):
+    """缺 LINE 憑證 → push_text 回 sent=False → send sent<chunks → main 非零。"""
+    monkeypatch.setenv("WATCH_CSV_URL", "http://example/csv")
+    monkeypatch.setattr(M, "fetch_csv", lambda url, **k: "代號\nTLZF9\n")
+    monkeypatch.setattr(M, "_default_fetch",
+                        lambda c: _fd(c, [10.0, 11.0], ["2026-07-21", "2026-07-22"]))
+    monkeypatch.setattr(M, "send", lambda msg: {"sent": 0, "chunks": 1, "dry_run": False})
+    assert M.main([]) == 1
+
+
+def test_main_all_missing_returns_2(monkeypatch):
+    """全部抓不到 MoneyDJ 淨值 → 送了誠實通知,但 exit 2 讓 cron surface 系統性失敗。"""
+    monkeypatch.setenv("WATCH_CSV_URL", "http://example/csv")
+    monkeypatch.setattr(M, "fetch_csv", lambda url, **k: "代號\nTLZF9\nACCP138\n")
+    monkeypatch.setattr(M, "_default_fetch", lambda c: {})   # 全抓不到
+    monkeypatch.setattr(M, "send", lambda msg: {"sent": 1, "chunks": 1, "dry_run": False})
+    assert M.main([]) == 2
+
+
+def test_main_csv_failure_does_not_leak_url(monkeypatch, capsys):
+    """§ log 不洩漏:CSV 抓取失敗時,含機密的 URL 不得出現在 stdout(只印例外型別)。"""
+    _secret_url = "https://docs.google.com/spreadsheets/d/e/SECRET123/pub?output=csv"
+    monkeypatch.setenv("WATCH_CSV_URL", _secret_url)
+
+    def _boom(url, **k):
+        raise RuntimeError(f"ConnectionError to {url}")     # 例外訊息內嵌 URL
+    monkeypatch.setattr(M, "fetch_csv", _boom)
+    rc = M.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "SECRET123" not in out and _secret_url not in out
