@@ -33,6 +33,27 @@ def test_prepare_write_df_preserves_data_no_loss():
     assert out[out["fund_code"] == "ACTI71"].iloc[0]["avg_nav"] == "8.67"      # 平均成本欄保留(不清空)
 
 
+def test_import_history_to_pool_merges_new_skips_existing():
+    df = pd.DataFrame([
+        {"代號": "ACTI71", "名稱": "聯博A"},
+        {"代號": "acti94", "名稱": "聯博B"},          # 小寫 → 大寫比對後加入
+        {"代號": "TLZF9", "名稱": "已在池"},           # 已在池 → 略過不覆蓋
+        {"代號": "   ", "名稱": "空代號"},             # 空代號 → 跳過(不計)
+    ])
+    _added = []
+    r = M._import_history_to_pool(df, existing_codes={"TLZF9"},
+                                  add_fn=lambda c, n: _added.append((c, n)))
+    assert r == {"added": 2, "skipped": 1, "total": 3}
+    assert _added == [("ACTI71", "聯博A"), ("ACTI94", "聯博B")]
+
+
+def test_import_history_to_pool_dedups_within_list():
+    df = pd.DataFrame([{"代號": "X1", "名稱": "a"}, {"代號": "x1", "名稱": "b"}])   # 同代號重複
+    _added = []
+    r = M._import_history_to_pool(df, set(), lambda c, n: _added.append(c))
+    assert r["added"] == 1 and _added == ["X1"]
+
+
 def test_policy_client_and_sheet_bare_mode_degrades_not_crash():
     _c, _reason = M._policy_client_and_sheet()
     assert _c is None and isinstance(_reason, str) and "登入" in _reason   # 誠實提示,不崩

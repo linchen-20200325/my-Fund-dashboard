@@ -63,10 +63,50 @@ def _policy_client_and_sheet():
 
 # ───────────────────────── ① 選股池 ─────────────────────────
 
+def _import_history_to_pool(df, existing_codes, add_fn) -> dict:
+    """把說明書『曾經查過的基金清單』merge 進選股池。回 {added, skipped, total}。
+
+    純函式(依賴注入 add_fn(code, name),不碰 st / L1),供單元測試。合併語意:**已在池的略過、
+    不覆蓋**(保住 user 在池裡設過的型態/備註/類別);只加新代號。空代號跳過。
+    """
+    _seen = {str(c).strip().upper() for c in (existing_codes or set())}
+    _added = 0
+    _total = 0
+    for _, _row in df.iterrows():
+        _code = str(_row.get("代號") or _row.get("code") or "").strip().upper()
+        if not _code:
+            continue
+        _total += 1
+        if _code in _seen:
+            continue
+        add_fn(_code, str(_row.get("名稱") or _row.get("name") or "").strip())
+        _seen.add(_code)
+        _added += 1
+    return {"added": _added, "skipped": _total - _added, "total": _total}
+
+
 def _sec_pool():
     st.markdown("### 📁 選股池(候選基金)")
     st.caption("你的候選基金清單,供換股顧問配對。加/刪/改**即時存到 Google Sheets**(`_fund_pool` 分頁),"
                "永久保存、跨裝置,關掉重開都在。")
+
+    with st.expander("📥 從說明書『曾經查過的基金清單』匯入 / 合併進選股池"):
+        st.caption("把 Tab⑤ 說明書那份『曾經查過的基金(Tab2/Tab3 自動記錄)+ 預設清單』合併進來。"
+                   "**已在池的略過、不覆蓋**你設過的型態/備註;只加新代號。")
+        if st.button("📥 立即匯入 / 合併", use_container_width=True, key="pool_import_history"):
+            try:
+                from repositories.pool_repository import PoolEntry, add_or_update, list_pool
+                from services.fund_history import get_history_df
+                _existing = {e.code for e in list_pool()}
+                _r = _import_history_to_pool(
+                    get_history_df(), _existing,
+                    lambda code, name: add_or_update(PoolEntry(code=code, name=name)))
+                st.success(f"完成:新增 {_r['added']} 檔進選股池"
+                           f"(略過已在池 {_r['skipped']} 檔,清單共 {_r['total']} 檔)。")
+                st.rerun()
+            except Exception as _e:  # noqa: BLE001
+                _friendly("匯入基金清單失敗", _e, level="error")
+
     try:
         from ui.helpers.fund_grp_health.switch_advisor_section import _render_pool_editor
         _render_pool_editor()
