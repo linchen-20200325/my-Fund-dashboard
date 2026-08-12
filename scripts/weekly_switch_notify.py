@@ -197,7 +197,7 @@ def _underperf_by_code(funds: list) -> dict:
     from services.currency import normalize_ccy
     from services.fund_total_return import compute_1y_total_return
     from services.health.dividend import check_eating_principal_1y_mk
-    from services.switch_advisor import assess_underperformance
+    from services.switch_advisor import assess_underperformance, eat_is_red
     from services.switch_strategy import RED, switch_score, switch_signal
     from ui.helpers.fund_grp_health.capture import capture_by_code
 
@@ -224,7 +224,9 @@ def _underperf_by_code(funds: list) -> dict:
                 _dd = _m.get("max_drawdown")
             _cov: dict = {}
             _sc = switch_score(_tr, _m.get("sharpe"), _dd, _excess.get(_code), coverage_out=_cov)
-            _red = switch_signal(_tr, _m.get("sharpe"), _eat, _sc, coverage=_cov) == RED
+            # switch_signal 只認「嚴重」紅;正報酬但配息侵蝕本金(plain 🔴 吃本金)靠 eat_is_red 補
+            _red = (switch_signal(_tr, _m.get("sharpe"), _eat, _sc, coverage=_cov) == RED
+                    or eat_is_red(_eat))
         except Exception as _e:  # noqa: BLE001
             _log(f"{_code} 紅燈判定失敗:{type(_e).__name__}: {_e}")
             _red = None

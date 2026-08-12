@@ -72,19 +72,38 @@ def test_underperf_by_code_keys_str_and_flags(monkeypatch):
 
 
 def test_underperf_by_code_severe_eat_triggers_redlight(monkeypatch):
-    """吃本金燈號餵進 switch_signal → 嚴重吃本金 = 紅燈 → 表現差(即使沒跑輸大盤)。"""
+    """嚴重吃本金(含息報酬<0)→ 紅燈,即使 Sharpe≥0、沒跑輸大盤(舊碼 eat='' 會漏)。"""
     import services.fund_total_return as T
     import services.health.dividend as D
     import ui.helpers.fund_grp_health.capture as C
     monkeypatch.setattr(C, "capture_by_code",
                         lambda funds: {"AAA": {"vs 大盤%": 3.0, "vs 大盤期間": "近1年"}})  # 沒跑輸
-    monkeypatch.setattr(T, "compute_1y_total_return", lambda f: (6.0, ""))    # 含息為正
+    monkeypatch.setattr(T, "compute_1y_total_return", lambda f: (-3.0, ""))   # 含息為負(嚴重前提)
     monkeypatch.setattr(D, "check_eating_principal_1y_mk",
                         lambda f: {"status": "🔴 嚴重吃本金(報酬為負)"})
+    funds = [{"code": "AAA", "currency": "USD", "metrics": {"sharpe": 0.5}, "risk_metrics": {}}]  # Sharpe≥0
+    out = M._underperf_by_code(funds)
+    assert out["AAA"]["is_underperforming"] is True and out["AAA"]["redlight"] is True
+    assert "🔴 嚴重吃本金" in out["AAA"]["reasons"]
+
+
+def test_underperf_by_code_plain_eating_positive_return_triggers(monkeypatch):
+    """高配息掩蓋的吃本金:含息報酬>0 但<配息率(plain 🔴 吃本金,無「嚴重」)→ 仍須紅燈(稽核 HIGH)。
+
+    這正是「高配息掩蓋本金侵蝕」最陰險的一種 —— switch_signal 不認,靠 eat_is_red 補上。
+    """
+    import services.fund_total_return as T
+    import services.health.dividend as D
+    import ui.helpers.fund_grp_health.capture as C
+    monkeypatch.setattr(C, "capture_by_code",
+                        lambda funds: {"AAA": {"vs 大盤%": 3.0, "vs 大盤期間": "近1年"}})  # 沒跑輸
+    monkeypatch.setattr(T, "compute_1y_total_return", lambda f: (5.0, ""))    # 含息為正(+5%)
+    monkeypatch.setattr(D, "check_eating_principal_1y_mk",
+                        lambda f: {"status": "🔴 吃本金"})                      # 無「嚴重」,配息>報酬
     funds = [{"code": "AAA", "currency": "USD", "metrics": {"sharpe": 1.0}, "risk_metrics": {}}]
     out = M._underperf_by_code(funds)
     assert out["AAA"]["is_underperforming"] is True and out["AAA"]["redlight"] is True
-    assert "🔴 嚴重吃本金" in out["AAA"]["reasons"]     # 高配息掩蓋的吃本金不再漏報
+    assert "🔴 吃本金(配息侵蝕本金)" in out["AAA"]["reasons"]
 
 
 # ── _read_watchlist(觀察標的)────────────────────────────────

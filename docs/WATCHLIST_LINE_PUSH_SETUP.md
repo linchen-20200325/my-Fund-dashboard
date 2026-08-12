@@ -72,12 +72,12 @@ GitHub Actions 跑在**美國 IP**，MoneyDJ / 境外基金淨值從美國 IP **
 | `PROXY_URL` | 你的 NAS 代理（要美國 IP 也抓得到 MoneyDJ 才需要） | 選填(A 需要) |
 | Service Account（同 nav 累積那把） | 讓 live 抓不到時退讀已累積 `nav_history` 最近一筆 | 選填(B 想有真淨值) |
 
-**驗證**：Actions → 「追蹤清單淨值推播 (LINE)」→ **Run workflow** → `dry_run` 保持 **`true`** →
-看 log 印出「追蹤 N 檔」+ 訊息內容確認無誤 → 再跑一次填 **`false`** 實送一則到 LINE。
+**驗證清單解析**：用 `watchlist_verify.yml`（Actions → 「追蹤清單 — 驗證清單」→ Run workflow →
+貼 CSV 連結）確認代號被正確讀到 —— 這條**不送 LINE**，純檢查。
 
-**排程**：預設 `cron: "0 0 * * 1"` = **每週一 08:00 台灣**（UTC 週一 00:00）。
-要改頻率就改 `.github/workflows/watchlist_push.yml` 那行（例：每交易日早上 → `0 0 * * 1-5`）。
-⚠️ GitHub cron 是 UTC，台灣 = UTC+8，記得換算。
+**排程 / 通知**：NAV 清單推播已退役（見頁首）。追蹤清單改由「換股顧問健康週報」消費，
+其排程在 `.github/workflows/weekly_switch_notify.yml`（預設週日 18:00 台灣;要改頻率改那行 cron，
+⚠️ GitHub cron 是 UTC，台灣 = UTC+8）。設定見 `WEEKLY_SWITCH_NOTIFY_SETUP.md`。
 
 ## 3C. 跑法 C：NAS cron（台灣 IP，最穩）
 

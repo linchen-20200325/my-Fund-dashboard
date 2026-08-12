@@ -101,6 +101,17 @@ def _blank_underperf() -> dict:
             "lags_benchmark": False}
 
 
+def eat_is_red(eat_status) -> bool:
+    """吃本金燈號是否為紅 —— **兩種都算**,都值得示警(user 明確要留意吃本金):
+      - 「🔴 嚴重吃本金(報酬為負)」:含息報酬 < 0(dividend_safety 的 gap>2pp 且 報酬<0)
+      - 「🔴 吃本金」:含息報酬 ≥ 0 但 < 配息率(高配息掩蓋本金侵蝕 —— 最陰險的那種)
+    `switch_strategy.switch_signal` 只認前者(字串含「嚴重」);後者靠本函式補上,
+    否則「高配息掩蓋的吃本金」會漏報(稽核 HIGH)。無配息/資料不足 → 非紅(§1 不臆測)。
+    """
+    _e = str(eat_status or "")
+    return "🔴" in _e and "吃本金" in _e
+
+
 def assess_underperformance(*, fund_nav=None, benchmark_nav=None, benchmark_label=None,
                             excess_pct=None, full_period=False,
                             tr1y_pct=None, sharpe=None, eat_status=None,
@@ -112,7 +123,9 @@ def assess_underperformance(*, fund_nav=None, benchmark_nav=None, benchmark_labe
       呼叫端可直接傳算好的 `excess_pct`(+`full_period`;如大表的「vs 大盤%」,避免重抓基準);
       或傳 `fund_nav`+`benchmark_nav` 讓本函式呼 `benchmark_compare.excess_return`。
       無 benchmark(其餘幣別)→ excess 為 None → 不判(§F)。
-    - **絕對虧損**:`switch_strategy.switch_signal(...) == RED`(嚴重吃本金 或 1Y含息<0 且 Sharpe<0)。
+    - **絕對虧損 / 吃本金**:`switch_strategy.switch_signal(...) == RED`(嚴重吃本金[報酬<0] 或
+      1Y含息<0 且 Sharpe<0)**或** `eat_is_red(eat_status)`(正報酬但配息侵蝕本金 = plain 🔴 吃本金,
+      switch_signal 不認,補上避免漏報)。reason 依序標「🔴 嚴重吃本金 > 🔴 吃本金 > 絕對虧損」。
       呼叫端若已算好紅燈可直接傳 `redlight`(bool)省重算;否則傳 tr1y/sharpe/eat_status/score(+coverage)。
 
     Returns:
@@ -136,12 +149,19 @@ def assess_underperformance(*, fund_nav=None, benchmark_nav=None, benchmark_labe
         or (tr1y_pct is not None and sharpe is not None and switch_score is not None)
     ):
         from services.switch_strategy import RED, switch_signal
+        # switch_signal 只認「嚴重」紅;正報酬但配息侵蝕本金(plain 🔴 吃本金)靠 eat_is_red 補上
         redlight = (switch_signal(tr1y_pct, sharpe, eat_status, switch_score,
-                                  coverage=switch_coverage) == RED)
+                                  coverage=switch_coverage) == RED) or eat_is_red(eat_status)
     _abs = bool(redlight) if redlight is not None else False
     if _abs:
-        # 紅燈若來自吃本金 → 講白「嚴重吃本金」(user 明確要留意);否則籠統「絕對虧損」
-        _reasons.append("🔴 嚴重吃本金" if "嚴重" in str(eat_status or "") else "絕對虧損")
+        # 紅燈原因講白:嚴重吃本金(報酬<0)> 吃本金(正報酬但配息侵蝕本金)> 籠統絕對虧損
+        _es = str(eat_status or "")
+        if "嚴重" in _es:
+            _reasons.append("🔴 嚴重吃本金")
+        elif eat_is_red(_es):
+            _reasons.append("🔴 吃本金(配息侵蝕本金)")
+        else:
+            _reasons.append("絕對虧損")
 
     return {
         "is_underperforming": bool(_lags or _abs),
