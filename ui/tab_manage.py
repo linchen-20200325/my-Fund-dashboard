@@ -46,8 +46,10 @@ def _policy_client_and_sheet():
         )
         try:
             refresh_oauth_state()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as _re:  # noqa: BLE001 — token 刷新失敗不擋(下方 _client None 會誠實提示),但留痕(§1)
+            import sys as _sys
+            print(f"[tab_manage] refresh_oauth_state 失敗(續用現有 token):"
+                  f"{type(_re).__name__}: {_re}", file=_sys.stderr)
         _client = _get_oauth_client()
     except Exception as _e:  # noqa: BLE001
         return None, f"OAuth client 取得失敗:{type(_e).__name__}"
@@ -108,7 +110,9 @@ def _sec_portfolio():
     # 只開放「安全欄」編輯;其餘欄(平均成本 avg_nav / 份額 units / 含息成本…)**照原樣帶著、
     # 不清空**(§1 防資料流失:write_policy_v2 是整張覆寫,若只寫 5 欄會抹掉平均成本 + 現金列)。
     # 現金列(item_type=cash)也一併顯示 + 保留。
-    _editable = {"fund_code", "fund_name", "tier", "currency", "invest_twd", "div_cash_pct", "amount", "item_type"}
+    # 只開放這 6 欄編輯(對齊下方 caption);item_type / amount / 平均成本 等唯讀,避免誤打
+    # 把 fund 打成別的字 → write_policy_v2 兩邊都不認 → 整列數字被清空(稽核 FINDING 2)。
+    _editable = {"fund_code", "fund_name", "tier", "currency", "invest_twd", "div_cash_pct"}
     _labels = {
         "item_type": "類型", "fund_code": "基金代號", "fund_name": "名稱", "currency": "幣別",
         "tier": "級別", "invest_twd": "投入金額(TWD)", "div_cash_pct": "現金給付%", "amount": "現金金額",
@@ -239,8 +243,8 @@ def _preview_notify(funds):
 
 
 def _test_send():
-    try:
-        from infra.line_push import LinePushError, push_text
+    from infra.line_push import LinePushError, push_text   # import 移出 try:否則 import 失敗會
+    try:                                                    # 讓 except LinePushError 變 NameError(稽核 FINDING 3)
         _r = push_text(f"✅ 基金戰情室測試（{_today_tw()}）：你的 LINE 通報設定正確,週報會送到這裡。",
                        dry_run=False)
         if _r.get("sent"):

@@ -847,6 +847,10 @@ def write_policy_v2(
             str(r.get("tier", "") or "") if is_fund else "",
             _normalize_float(r.get("amount", 0)) if is_cash else "",
             _inv_twd if is_fund else "",
+            # v19.433 稽核修 FINDING 1:ALL_COLS_V2 有 13 欄,原本每列只 append 12 值 →
+            # div_cash_pct(現金給付%)整欄漏寫 → 重載時空值 → _normalize 變 100% → 靜默洗掉
+            # user 設過的現金給付比例(Tab④ 存檔亦中招)。補第 13 欄,保留原值。
+            _normalize_div_cash_pct(r.get("div_cash_pct", "")) if is_fund else "",
         ])
     try:
         _with_quota_retry(ws.clear)

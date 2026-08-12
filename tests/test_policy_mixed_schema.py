@@ -93,6 +93,39 @@ def test_load_all_policies_v2_captures_both_schemas():
     assert int(float(_alb["invest_twd"])) == 2000
 
 
+# ── 稽核 FINDING 1(v19.433):write_policy_v2 須寫滿 13 欄、保留 div_cash_pct ────────
+def test_write_policy_v2_emits_all_13_cols_preserving_div_cash_pct():
+    from repositories.policy.v2 import ALL_COLS_V2, write_policy_v2
+
+    _cap: dict = {}
+
+    class _WS:
+        def clear(self):
+            pass
+
+        def update(self, rng, values):
+            _cap["rows"] = values
+
+    class _SH:
+        def worksheet(self, t):
+            return _WS()
+
+    class _C:
+        def open_by_key(self, k):
+            return _SH()
+
+    df = pd.DataFrame([{
+        "policy_id": "P1", "item_type": "fund", "fund_code": "ACTI71",
+        "avg_nav": 8.67, "invest_twd": 100, "currency": "美元", "tier": "core",
+        "div_cash_pct": 20,                                   # user 設過 20% → 不可被洗成 100
+    }])
+    write_policy_v2(_C(), "sid", "P1", df)
+    _rows = _cap["rows"]
+    assert len(_rows[0]) == 13 == len(ALL_COLS_V2)            # header 13 欄
+    assert all(len(r) == 13 for r in _rows)                   # 每列也 13 欄(修前只 12)
+    assert float(_rows[1][12]) == 20.0                        # div_cash_pct(第 13 欄)保留,非 100
+
+
 # ── 稽核 FINDING 2:v1→v2 路徑也要擋 schema-leak 鬼列 ────────────
 def test_v1_frame_to_v2_drops_ghost_row():
     from repositories.policy.v2 import _v1_frame_to_v2
