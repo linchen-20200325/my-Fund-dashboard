@@ -99,7 +99,38 @@ def test_build_message_counts_missing_and_never_fakes():
     assert "追蹤清單淨值（2026-08-12）" in msg
     assert "共 2 檔" in msg
     assert "9.9000" in msg                            # OK 檔有真淨值
-    assert "資料不足" in msg and "1 檔抓不到" in msg   # BAD 誠實標,不捏造
+    assert "資料不足" in msg and "1 檔完全無資料" in msg  # BAD 誠實標,不捏造
+
+
+def test_build_message_falls_back_to_nav_history_when_live_fails():
+    """§ 美國 IP 退路:live 抓不到 → 退用 nav_history 累積最近一筆,標『累積存檔』+ 真日期。"""
+    def _fetch(code):
+        raise RuntimeError("US IP blocked")            # live 全滅
+    def _hist(code):
+        return pd.Series([8.0, 8.5], index=pd.to_datetime(["2026-08-08", "2026-08-10"]))
+    stats: dict = {}
+    msg = M.build_message(["ACCP138"], fetch_fn=_fetch, hist_fn=_hist,
+                          as_of="2026-08-12", stats_out=stats)
+    assert "8.5000" in msg and "2026-08-10" in msg     # 退路提供真實的存檔值
+    assert "累積存檔" in msg                            # 誠實標非今日 live
+    assert "資料不足" not in msg                        # 有存檔 → 不算完全無資料
+    assert stats["stale"] == 1 and stats["missing"] == 0
+
+
+def test_build_message_missing_when_both_live_and_hist_empty():
+    """live 抓不到、nav_history 也空 → 誠實「資料不足」(§1 不偽造)。"""
+    stats: dict = {}
+    msg = M.build_message(["X"], fetch_fn=lambda c: {},
+                          hist_fn=lambda c: pd.Series(dtype=float), stats_out=stats)
+    assert "資料不足" in msg and stats["missing"] == 1 and stats["stale"] == 0
+
+
+def test_build_message_hist_raises_is_non_fatal():
+    """nav_history 退路 I/O 失敗 → 不中斷整批,該檔退回資料不足。"""
+    def _hist(code):
+        raise RuntimeError("NavHistoryError")
+    msg = M.build_message(["X"], fetch_fn=lambda c: {}, hist_fn=_hist)
+    assert "資料不足" in msg                            # 退路壞掉 → 誠實標,不 crash
 
 
 # ── 切塊 / 送出 ─────────────────────────────────────────────
@@ -175,7 +206,8 @@ def test_main_all_missing_returns_2(monkeypatch):
     """全部抓不到 MoneyDJ 淨值 → 送了誠實通知,但 exit 2 讓 cron surface 系統性失敗。"""
     monkeypatch.setenv("WATCH_CSV_URL", "http://example/csv")
     monkeypatch.setattr(M, "fetch_csv", lambda url, **k: "代號\nTLZF9\nACCP138\n")
-    monkeypatch.setattr(M, "_default_fetch", lambda c: {})   # 全抓不到
+    monkeypatch.setattr(M, "_default_fetch", lambda c: {})   # live 全抓不到
+    monkeypatch.setattr(M, "_default_hist", lambda c: None)  # 存檔退路也空(hermetic)
     monkeypatch.setattr(M, "send", lambda msg: {"sent": 1, "chunks": 1, "dry_run": False})
     assert M.main([]) == 2
 

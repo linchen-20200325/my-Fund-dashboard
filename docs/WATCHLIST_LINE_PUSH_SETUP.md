@@ -18,6 +18,13 @@ GitHub Actions 跑在**美國 IP**，MoneyDJ / 境外基金淨值從美國 IP **
 
 抓不到的檔會**誠實標「⚠️ 資料不足」**，不會捏造淨值（§1）。想每檔都有真淨值 → 用 **A 或 C**。
 
+### 退路：讀已累積的 nav_history（美國 IP 也讀得到）
+即使 live MoneyDJ 抓不到，只要你設了 **Service Account** secret，程式會**退而讀你已累積的 `nav_history` 最近一筆**（走 Google Sheets API，美國 IP 讀得到），並在訊息上**誠實標「累積存檔」+ 真實日期**（不是今日 live 值，不偽造成當期）。
+
+- 需要的 secret：和 nav 累積同一把 Service Account（見下方 3A 表的 `GOOGLE_SERVICE_ACCOUNT` / `NAV_HISTORY_SHEET_ID`，實際名稱以你 `services/nav_history_gs.py::status()` 檢查的為準）。
+- 沒設 → 退路自動略過（回「資料不足」），不影響其它。
+- 這讓**跑法 B（GitHub 直連）也有真淨值可報**：live 抓不到 → 退存檔最近一筆。存檔序列稀疏，退路只報「最新一筆 + 日期」，不報近5日漲跌（避免誤導）。
+
 ---
 
 ## 1. 追蹤清單：Google Sheet 發布為公開 CSV
@@ -58,6 +65,7 @@ GitHub Actions 跑在**美國 IP**，MoneyDJ / 境外基金淨值從美國 IP **
 | `LINE_CHANNEL_TOKEN` | 同週報 | ✅ |
 | `LINE_USER_ID` | 同週報 | ✅ |
 | `PROXY_URL` | 你的 NAS 代理（要美國 IP 也抓得到 MoneyDJ 才需要） | 選填(A 需要) |
+| Service Account（同 nav 累積那把） | 讓 live 抓不到時退讀已累積 `nav_history` 最近一筆 | 選填(B 想有真淨值) |
 
 **驗證**：Actions → 「追蹤清單淨值推播 (LINE)」→ **Run workflow** → `dry_run` 保持 **`true`** →
 看 log 印出「追蹤 N 檔」+ 訊息內容確認無誤 → 再跑一次填 **`false`** 實送一則到 LINE。
