@@ -36,6 +36,7 @@ from ui.tab6_manual import render_manual_tab
 # 註:services/crisis_backtest.py(CrisisEvent/detect_crisis_events)保留,macro/calibration 仍用。
 from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
 from ui.tab_batch_analysis import render_batch_analysis_tab  # noqa: E402
+from ui.tab_manage import render_manage_tab  # noqa: E402  (📋 我的管理室,v19.433)
 from fund_fetcher  import (
     get_proxy_config,
 )
@@ -193,9 +194,9 @@ render_sidebar(
 # 導致各 Tab 的「請至 X 分頁」指路文案改名後對不上(§3.3 反捏造)。
 # 「📦 批次分析 / 📖 參考 / 診斷」不在決策動線 4 站內(工具 / 支援型)→ 保留字面。
 from ui.helpers.story_nav import tab_label as _tab_label
-tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_ref = st.tabs(
+tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_manage, tab_ref = st.tabs(
     [_tab_label("macro"), _tab_label("health"), "📦 批次分析", _tab_label("fund"),
-     _tab_label("portfolio"), "📖 參考 / 診斷"])
+     _tab_label("portfolio"), "📋 我的管理室", "📖 參考 / 診斷"])
 
 # ══════════════════════════════════════════════════════
 # TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）
@@ -246,6 +247,19 @@ with tab_single:
 with tab_portfolio:
     # v18.128 B-C.6: 內容(含 T5/T6/T7 子區)已搬到 ui/tab3_portfolio.py
     render_portfolio_tab()
+
+# ══════════════════════════════════════════════════════
+# TAB ④-B — 📋 我的管理室（v19.433:選股池 + 投資組合 + 通報 一站集中管理）
+# 不新增儲存;重用既有 L1/L2/L0(pool_repository / policy v2 讀寫 / switch_notify / line_push)。
+# ══════════════════════════════════════════════════════
+with tab_manage:
+    try:
+        render_manage_tab()
+    except Exception as _manage_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+        from ui.helpers.session import friendly_error as _fe_manage
+        _fe_manage("「📋 我的管理室」分頁渲染失敗", _manage_tab_e,
+                   hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」回報 traceback。",
+                   level="error")
 
 # ══════════════════════════════════════════════════════
 # TAB ⑤ — 📖 參考 / 診斷（支援區:資料診斷 + 說明書合區,v19.405 Phase 4）
