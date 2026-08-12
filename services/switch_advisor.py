@@ -140,7 +140,8 @@ def assess_underperformance(*, fund_nav=None, benchmark_nav=None, benchmark_labe
                                   coverage=switch_coverage) == RED)
     _abs = bool(redlight) if redlight is not None else False
     if _abs:
-        _reasons.append("絕對虧損")
+        # 紅燈若來自吃本金 → 講白「嚴重吃本金」(user 明確要留意);否則籠統「絕對虧損」
+        _reasons.append("🔴 嚴重吃本金" if "嚴重" in str(eat_status or "") else "絕對虧損")
 
     return {
         "is_underperforming": bool(_lags or _abs),

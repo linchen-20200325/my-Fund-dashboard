@@ -58,15 +58,55 @@ def test_assemble_rows_category_falls_back_to_pool(monkeypatch):
 # ── _underperf_by_code ────────────────────────────────
 def test_underperf_by_code_keys_str_and_flags(monkeypatch):
     import services.fund_total_return as T
+    import services.health.dividend as D
     import ui.helpers.fund_grp_health.capture as C
     monkeypatch.setattr(C, "capture_by_code",
                         lambda funds: {"AAA": {"vs 大盤%": -8.0, "vs 大盤期間": "近1年"}})
     monkeypatch.setattr(T, "compute_1y_total_return", lambda f: (5.0, ""))   # 不虧(紅燈另判)
+    monkeypatch.setattr(D, "check_eating_principal_1y_mk", lambda f: {"status": "🟢 健康"})
 
     funds = [{"code": "AAA", "currency": "USD", "metrics": {"sharpe": 1.0}, "risk_metrics": {}}]
     out = M._underperf_by_code(funds)
     assert "AAA" in out and out["AAA"]["is_underperforming"] is True   # 跑輸 -8 < -5
     assert out["AAA"]["benchmark_used"] == "SPX"
+
+
+def test_underperf_by_code_severe_eat_triggers_redlight(monkeypatch):
+    """吃本金燈號餵進 switch_signal → 嚴重吃本金 = 紅燈 → 表現差(即使沒跑輸大盤)。"""
+    import services.fund_total_return as T
+    import services.health.dividend as D
+    import ui.helpers.fund_grp_health.capture as C
+    monkeypatch.setattr(C, "capture_by_code",
+                        lambda funds: {"AAA": {"vs 大盤%": 3.0, "vs 大盤期間": "近1年"}})  # 沒跑輸
+    monkeypatch.setattr(T, "compute_1y_total_return", lambda f: (6.0, ""))    # 含息為正
+    monkeypatch.setattr(D, "check_eating_principal_1y_mk",
+                        lambda f: {"status": "🔴 嚴重吃本金(報酬為負)"})
+    funds = [{"code": "AAA", "currency": "USD", "metrics": {"sharpe": 1.0}, "risk_metrics": {}}]
+    out = M._underperf_by_code(funds)
+    assert out["AAA"]["is_underperforming"] is True and out["AAA"]["redlight"] is True
+    assert "🔴 嚴重吃本金" in out["AAA"]["reasons"]     # 高配息掩蓋的吃本金不再漏報
+
+
+# ── _read_watchlist(觀察標的)────────────────────────────────
+def test_read_watchlist_env_unset_returns_empty(monkeypatch):
+    monkeypatch.delenv("WATCH_CSV_URL", raising=False)
+    assert M._read_watchlist() == []
+
+
+def test_read_watchlist_parses_csv(monkeypatch):
+    monkeypatch.setenv("WATCH_CSV_URL", "http://example/csv")
+    import scripts.watchlist_push as WP
+    monkeypatch.setattr(WP, "fetch_csv", lambda url, **k: "代號\nACCP138\nTLZF9\n")
+    assert M._read_watchlist() == ["ACCP138", "TLZF9"]
+
+
+def test_read_watchlist_fetch_fail_is_non_fatal(monkeypatch):
+    monkeypatch.setenv("WATCH_CSV_URL", "http://example/csv")
+    import scripts.watchlist_push as WP
+    def _boom(url, **k):
+        raise RuntimeError("network")
+    monkeypatch.setattr(WP, "fetch_csv", _boom)
+    assert M._read_watchlist() == []                       # 失敗 → [](不擋主流程)
 
 
 # ── main() 退出碼 + 推播 ────────────────────────────────
@@ -80,6 +120,7 @@ def _patch_main_common(monkeypatch, *, held, rich):
     monkeypatch.setattr(M, "_load_client_and_sheet", lambda: ("client", "sid"))
     monkeypatch.setattr(P, "list_pool", lambda: [])
     monkeypatch.setattr(M, "_read_holdings", lambda c, s: held)
+    monkeypatch.setattr(M, "_read_watchlist", lambda: [])          # hermetic:預設無追蹤清單
     monkeypatch.setattr(M, "_fetch_rich", lambda codes: rich)
     monkeypatch.setattr(M, "_assemble_rows", lambda funds, pbc: [{"code": f["code"]} for f in funds])
     monkeypatch.setattr(M, "_underperf_by_code", lambda funds: {})
@@ -113,6 +154,39 @@ def test_main_no_actionable_returns0_and_no_push(monkeypatch):
     monkeypatch.setattr(LP, "push_text", lambda *a, **k: _sent.append(1) or {"sent": True, "reason": "ok"})
     assert M.main([]) == 0
     assert _sent == []                                    # 無建議 → 不推
+
+
+def test_main_watchlist_union_and_source_labels(monkeypatch):
+    """觀察集合 = 持倉 ∪ 追蹤清單(去重);source 標籤(持倉優先)傳進 build_notification。"""
+    _patch_main_common(monkeypatch, held=["H1"], rich={"H1": _rich("H1"), "W1": _rich("W1")})
+    monkeypatch.setattr(M, "_read_watchlist", lambda: ["W1", "H1"])   # W1 新、H1 與持倉重複
+    import infra.line_push as LP
+    import services.switch_advisor as SA
+    import services.switch_notify as SN
+    _captured = {}
+    monkeypatch.setattr(SA, "advise_switches", lambda *a, **k: {"advices": [], "summary": {}, "caveat": ""})
+
+    def _bn(res, **k):
+        _captured.update(k)
+        return {"should_notify": False, "message": "x", "n_actionable": 0}
+    monkeypatch.setattr(SN, "build_notification", _bn)
+    monkeypatch.setattr(LP, "push_text", lambda *a, **k: {"sent": True, "reason": "ok"})
+    assert M.main([]) == 0
+    assert _captured.get("source_by_code") == {"H1": "持倉", "W1": "觀察"}   # 去重 + 持倉優先
+
+
+def test_main_watchlist_only_no_holdings(monkeypatch):
+    """帳本空但追蹤清單有 → 仍跑(不再因無持倉就 exit 2)。"""
+    _patch_main_common(monkeypatch, held=[], rich={"W1": _rich("W1")})
+    monkeypatch.setattr(M, "_read_watchlist", lambda: ["W1"])
+    import infra.line_push as LP
+    import services.switch_advisor as SA
+    import services.switch_notify as SN
+    monkeypatch.setattr(SA, "advise_switches", lambda *a, **k: {"advices": [], "summary": {}, "caveat": ""})
+    monkeypatch.setattr(SN, "build_notification",
+                        lambda res, **k: {"should_notify": False, "message": "x", "n_actionable": 0})
+    monkeypatch.setattr(LP, "push_text", lambda *a, **k: {"sent": True, "reason": "ok"})
+    assert M.main([]) == 0                                  # 只有觀察標的也能跑
 
 
 def test_main_exit1_when_should_notify_but_not_sent(monkeypatch):

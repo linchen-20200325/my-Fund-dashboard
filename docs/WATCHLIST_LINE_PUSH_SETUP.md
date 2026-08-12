@@ -1,8 +1,13 @@
 # 追蹤清單 → MoneyDJ 淨值 → LINE 推播 設定手冊
 
-> 對應：`scripts/watchlist_push.py`、`.github/workflows/watchlist_push.yml`
-> 架構：**公開 CSV 追蹤清單 → 排程 → 逐檔抓 MoneyDJ 淨值 → LINE Messaging API push**
-> 特點：讀清單**零 GCP 金鑰**（公開 CSV）；LINE 沿用你週報同一組憑證。
+> ⚠️ **v19.441 起：NAV 清單推播已退役**（`watchlist_push.yml` 排程移除）。你的追蹤清單改為
+> **餵給「換股顧問健康週報」**（`WEEKLY_SWITCH_NOTIFY_SETUP.md`）—— 不再每週推一整排淨值,而是
+> **只在某檔健康出問題(嚴重吃本金 / 高基期該換 / 跑輸大盤)時通知,並附選股池建議替換**。
+> 追蹤清單的建立方式(公開 CSV + `WATCH_CSV_URL`)不變,本手冊的 §1「發布 CSV」仍適用;
+> `watchlist_verify.yml`(驗證清單解析)也保留。
+
+> 對應（歷史）：`scripts/watchlist_push.py`（CSV 解析 helper 仍被週報重用）
+> 架構（歷史）：**公開 CSV 追蹤清單 → 排程 → 逐檔抓 MoneyDJ 淨值 → LINE Messaging API push**
 
 ---
 

@@ -30,6 +30,19 @@ def _result(advices, **summary):
     return {"advices": advices, "summary": _s, "caveat": "..."}
 
 
+def test_source_tag_shown_when_source_by_code_given():
+    """source_by_code 有給 → 每檔前標 [持倉]/[觀察];不給 → 無標籤(行為零變化)。"""
+    cand = {"code": "B1", "name": "候選B"}
+    advs = [_adv(SWITCH, code="H1", name="持股一", switch_to=cand),
+            _adv(SWITCH, code="W1", name="觀察一", switch_to=cand)]
+    r = build_notification(_result(advs, n_switch=2),
+                           source_by_code={"H1": "持倉", "W1": "觀察"})
+    assert "[持倉] 持股一" in r["message"] and "[觀察] 觀察一" in r["message"]
+    # 不傳 source_by_code → 無標籤
+    r2 = build_notification(_result(advs, n_switch=2))
+    assert "[持倉]" not in r2["message"] and "• 持股一" in r2["message"]
+
+
 def test_no_actionable_should_not_notify():
     r = build_notification(_result([_adv(HOLD), _adv(WARN)]))
     assert r["should_notify"] is False and r["n_actionable"] == 0
