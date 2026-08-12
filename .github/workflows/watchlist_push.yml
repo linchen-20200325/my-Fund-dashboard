@@ -1,0 +1,40 @@
+name: "追蹤清單淨值推播 (LINE)"
+
+# ⚠️ cron 是 UTC。台灣 = UTC+8。
+#   0 0 * * 1  = 週一 00:00 UTC = 週一 08:00 台灣（每週一早上推一次）。
+#   要改頻率/時間就改這行（例如每個交易日早上 → 0 0 * * 1-5）。
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只印不送 (true/false)"
+        default: "true"
+
+concurrency:
+  group: watchlist-push
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Run watchlist push
+        env:
+          WATCH_CSV_URL: ${{ secrets.WATCH_CSV_URL }}
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          # 選填：美國 IP 抓不到 MoneyDJ 時，走 NAS 代理（infra.proxy 會自動吃）
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+        # 排程(schedule)時 inputs.dry_run 為空 → 不加旗標 → **實送**;
+        # 只有手動 dispatch 且填 true 才 --dry-run(先驗證用)。
+        run: >
+          python scripts/watchlist_push.py
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
