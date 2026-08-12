@@ -2,6 +2,30 @@
 
 > 極簡熱資料檔。完整 roadmap 見 `BACKLOG.md`；技術細節見 `ARCHITECTURE.md` / `SPEC.md` / `STRATEGY.md`。
 
+## ✅ 2026-08-12 存檔:📋 我的管理室 —— 選股池 + 投資組合 + 通報 一站管理(v19.433・PR #625)
+
+user 要 App 內集中管理頁(整合現有分散功能),並確認資料是否會存(答:存 Google Sheets、永久,
+不用每次重輸入)。設計走「設計 AI 定位重用點 → 逐塊建 + 每層自審 → 稽核 AI 對抗審 → 修 findings」。
+
+- **新頂層分頁 `ui/tab_manage.py`「📋 我的管理室」**(不新增儲存,全重用既有 L1/L2/L0):
+  - 📁 選股池:重用 `_render_pool_editor`(GS `_fund_pool` + 本地);同步從 換股顧問 **移除**該
+    編輯器呼叫(避免同一 `st.tabs` run 雙渲染 → DuplicateWidgetID;source-lock 測試守)。
+  - 💼 投資組合:`load_all_policies_v2` 一覽 + 逐保單可編輯 grid(唯一 key)+ `write_policy_v2` 存 /
+    `delete_policy_worksheet` 刪整張。OAuth client(本人擁有 Sheet);未登入/無 sheet_id 誠實提示不崩。
+  - 🔔 通報:LINE 設定狀態燈(`get_secret`)+ 預覽本週訊息(和 NAS 週報同一套 `advise_switches`+
+    `build_notification`)+ 測試發送(`push_text`)+ NAS 設定指引。誠實:每週自動送仍是 NAS。
+  - `app.py` 註冊分頁 + try/friendly_error 分頁隔離。
+- **§1 防資料流失**(關鍵):`write_policy_v2` 是**整張覆寫** → grid 顯示全欄、只開放 6 個安全欄編輯,
+  平均成本/份額/含息成本等唯讀欄照原樣帶著、現金列一併保留 → 存檔不清掉。
+- **稽核 AI findings 全處理**:
+  - **MED(既有 bug,Tab④存檔亦中招,修根)**:`write_policy_v2` 每列只 append 12 值、header 13 欄 →
+    `div_cash_pct`(現金給付%)整欄漏寫 → 重載變 100% → 靜默洗掉 user 設過的比例。補第 13 欄保留原值。
+  - LOW:`item_type`/`amount` 改唯讀(防打錯字清空整列);`_test_send` import 移出 try(防 NameError);
+    `refresh_oauth_state` 失敗留痕(§1)。
+- **驗證**:新測試 tab_manage(5)+ write_policy_v2 13欄保留(1)+ 混合 schema;全 `-m "not slow"` 3922 passed。
+- **user 端**:重新部署後最上方多「📋 我的管理室」。LINE 測試發送需在 **App secrets** 也放
+  `LINE_CHANNEL_TOKEN`/`LINE_USER_ID`(和 NAS 同一組)。
+
 ## ✅ 2026-08-11 存檔:每週換股 LINE 週報(headless）+ 混合 schema Sheet 不漏基金(v19.432・PR #623)
 
 一次兩件,皆走「設計 AI → 逐塊建 + 每層自審 → 稽核 AI 對抗審 → 修 findings → 全套件綠 → CI 綠才合」。
