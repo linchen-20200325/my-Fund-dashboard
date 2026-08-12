@@ -52,8 +52,8 @@ def test_fix_and_shrink_fixes_corrupt_names_and_rewrites(monkeypatch):
         _fetch_calls.append(code)
         return ("聯博-全球高收益債券", "USD", "satellite")
 
-    res = C.fix_and_shrink_v2_sheets(object(), "sid",
-                                     info_fetcher=_fetcher, progress_cb=None)
+    res = C.fix_and_shrink_v2_sheets(object(), "sid", info_fetcher=_fetcher,
+                                     progress_cb=None, with_backup=False)
 
     assert res["policies"] == 2
     assert res["funds"] == 2
@@ -86,6 +86,36 @@ def test_fix_and_shrink_survives_per_policy_error(monkeypatch):
     monkeypatch.setattr(C, "write_policy_v2", lambda c, s, pid, df: len(df))
 
     res = C.fix_and_shrink_v2_sheets(object(), "sid",
-                                     info_fetcher=lambda code: ("", "", ""))
+                                     info_fetcher=lambda code: ("", "", ""),
+                                     with_backup=False)
     assert res["policies"] == 1                  # 只有 OK 成功計入
     assert any("BAD" in e for e in res["errors"])
+
+
+def test_fix_and_shrink_backs_up_before_touching(monkeypatch):
+    """§1:with_backup=True → 先 copy_sheet_as_backup,backup_url 回填。"""
+    _order = []
+    monkeypatch.setattr(PR, "copy_sheet_as_backup",
+                        lambda c, s: _order.append("backup") or ("BAK", "http://bak"))
+    monkeypatch.setattr(PR, "list_policy_worksheets",
+                        lambda c, s: _order.append("list") or [])
+    res = C.fix_and_shrink_v2_sheets(object(), "sid",
+                                     info_fetcher=lambda code: ("", "", ""))
+    assert res["backup_url"] == "http://bak"
+    assert _order == ["backup", "list"]          # 備份必在列分頁之前
+
+
+def test_fix_and_shrink_aborts_when_backup_fails(monkeypatch):
+    """§1:備份失敗 → 中止,不動原本(不呼叫 list/load/write)。"""
+    _touched = []
+    monkeypatch.setattr(PR, "copy_sheet_as_backup",
+                        lambda c, s: (_ for _ in ()).throw(RuntimeError("drive down")))
+    monkeypatch.setattr(PR, "list_policy_worksheets",
+                        lambda c, s: _touched.append("list") or [])
+    monkeypatch.setattr(C, "write_policy_v2",
+                        lambda c, s, pid, df: _touched.append("write"))
+    res = C.fix_and_shrink_v2_sheets(object(), "sid",
+                                     info_fetcher=lambda code: ("", "", ""))
+    assert res["policies"] == 0
+    assert _touched == []                         # 未動原本
+    assert any("備份失敗" in e for e in res["errors"])

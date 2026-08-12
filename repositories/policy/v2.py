@@ -498,7 +498,8 @@ def create_dashboard_sheet(client: Any,
 # - v2 不需要 _Ledgers（T7 唯讀），不需要 _T7_State（資料內聯了）
 #
 # v1 → v2 migration 走 `scripts/migrate_v149_schema.py`。
-# 偵測方式：worksheet 第一列 header 含 `item_type` 即為 v2。
+# 偵測方式(v19.436):worksheet 第一列 header 含 `fund_code` / `基金代號` 即為 v2
+# (取代原 item_type 鍵;v1 用 fund_url 無 fund_code,可乾淨區分)。
 # v19.436 精簡:13 → 10 欄。移除 item_type(fund/cash 類型)、avg_nav_with_div(含息成本)、
 # amount(現金金額) —— audit 確認前二者無實質下游消費者、amount 只給現金列(user 全無現金列
 # 且無分析讀者)。保留 units/avg_nav/avg_fx 供 T7 持倉模擬(市值/損益);其餘為 user 主填。
@@ -749,9 +750,9 @@ def _normalize_div_cash_pct(v: Any) -> float:
 
 
 def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
-    """讀單張 v2 保單分頁，回 DataFrame（11 欄齊備）。
+    """讀單張 v2 保單分頁，回 DataFrame（10 欄齊備,v19.436）。
 
-    若該 worksheet 不存在或非 v2 schema → 回空 DataFrame（11 欄 header 齊）。
+    若該 worksheet 不存在或非 v2 schema → 回空 DataFrame（10 欄 header 齊）。
     """
     # §1：本次載入的本金解析失敗清單為 replace 語意，進場先清空
     reset_invest_twd_parse_errors()
@@ -797,7 +798,7 @@ def write_policy_v2(
 ) -> int:
     """整 tab 覆寫單張 v2 保單分頁（user 點「💾 存到雲端」時呼叫）。
 
-    df 缺欄會自動補空字串；多餘欄會被丟掉（只寫 ALL_COLS_V2 11 欄）。
+    df 缺欄會自動補空字串；多餘欄會被丟掉（只寫 ALL_COLS_V2 10 欄,v19.436）。
     回傳寫入列數（不含 header）。
     """
     try:

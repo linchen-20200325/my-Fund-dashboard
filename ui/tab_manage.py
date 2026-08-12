@@ -323,6 +323,8 @@ def _sec_portfolio():
         st.caption("若你的基金名稱欄顯示的是保單號(不是基金真名),按這裡:用基金代號到 MoneyDJ "
                    "重抓正確名稱,並把每張分頁精簡成 10 欄(移除沒在用的類型/含息成本/現金金額)。"
                    "會逐張重寫雲端、需數十秒;僅補空/修錯,不動你填的金額與級別。")
+        st.caption("🛡️ **動原本前會先自動複製一份整本備份**(§1 安全網;備份失敗即中止不動原本)。"
+                   "⚠️ 若舊分頁有『現金列(金額)』會一併移除 —— 需要保留的話備份副本裡還在。")
         if st.button("🔧 開始修正 + 精簡", key="manage_pf_fixnames", use_container_width=True):
             _run_fix_and_shrink(_client, _sid)
 
@@ -387,8 +389,15 @@ def _run_fix_and_shrink(client, sheet_id):
         _friendly("修正 + 精簡失敗", _e, level="error")
         return
     _bar.empty()
+    # 備份失敗 → fix_and_shrink 已中止(未動原本),只回 errors、無 policies
+    if _res.get("errors") and _res.get("policies", 0) == 0 and not _res.get("names_fixed"):
+        for _err in _res["errors"][:5]:
+            st.error(f"❌ {_err}")
+        return
     st.success(f"✅ 完成:{_res['policies']} 張保單 · {_res['funds']} 檔基金 · "
                f"修正名稱 {_res['names_fixed']} 筆。已精簡成 10 欄。")
+    if _res.get("backup_url"):
+        st.info(f"🛡️ 動手前已備份整本 Sheet:[開啟備份副本]({_res['backup_url']})")
     for _err in _res.get("errors", [])[:5]:
         st.warning(f"⚠️ {_err}")
     # 清 load_all 短快取,重載拿最新

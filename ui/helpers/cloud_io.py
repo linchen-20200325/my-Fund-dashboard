@@ -32,11 +32,11 @@ from infra.oauth import OAuthError
 def _dump_all_to_sheet_v2(client: object,
                             sheet_id: str,
                             ss: MutableMapping[str, Any]) -> dict:
-    """v18.250 PR C：v2 schema 主寫入路徑（per-policy 整 tab 覆寫 13 欄）。
+    """v18.250 PR C：v2 schema 主寫入路徑（per-policy 整 tab 覆寫 10 欄,v19.436）。
 
     portfolio_funds + t7_ledgers groupby policy_id 後組成 v2 DataFrame，
     per-policy call `write_policy_v2`。**不寫 `_T7_State` / `_持倉總覽`**
-    （v2 schema 13 欄已含 units/avg_nav/fx_avg，足以重建持倉）。
+    （v2 schema 10 欄已含 units/avg_nav/fx_avg，足以重建持倉）。
 
     成本基礎來源 priority：t7_ledger.position（權威）→ fund dict 欄位（fallback）
     """
@@ -113,23 +113,38 @@ def _row_needs_name_fix(fund_name: Any, policy_id: Any) -> bool:
 
 
 def fix_and_shrink_v2_sheets(client: object, sheet_id: str, *,
-                              info_fetcher, progress_cb=None) -> dict:
+                              info_fetcher, progress_cb=None,
+                              with_backup: bool = True) -> dict:
     """v19.436 一鍵修正 + 精簡:逐張 v2 保單分頁 ——
     (1) fund_name 被灌成 policy_id / 空 → 用 `info_fetcher(code)` 從 MoneyDJ 重抓真名
         (順帶補空的 currency / tier);
     (2) 以 10 欄 schema 整張重寫(write_policy_v2)→ **物理精簡**:舊 13 欄的
         item_type / 含息成本 / 金額 三欄自然消失。
 
+    §1 安全網:`write_policy_v2` 為 clear→update,整批重寫途中若某張失敗會留下空分頁,
+    且舊現金列(金額)在精簡時被移除 → 動原本前**先整本備份**(`copy_sheet_as_backup`)。
+    備份失敗即中止,不進行破壞性重寫(fail loud,不在無備份下清空使用者資料)。
+
     Args:
         info_fetcher: `code -> (fund_name, currency, tier)`;注入以便單元測試
                       (UI 端傳 MoneyDJ 版本)。
         progress_cb:  optional `(done:int, total:int, policy_id:str) -> None`。
+        with_backup:  True(預設)先複製整本 Sheet;測試可關。
     Returns:
-        {"policies": int, "funds": int, "names_fixed": int, "errors": list[str]}
+        {"policies", "funds", "names_fixed", "backup_url", "errors"}
     """
     from repositories.policy_repository import (  # noqa: PLC0415
-        list_policy_worksheets, load_policy_v2)
-    out: dict = {"policies": 0, "funds": 0, "names_fixed": 0, "errors": []}
+        copy_sheet_as_backup, list_policy_worksheets, load_policy_v2)
+    out: dict = {"policies": 0, "funds": 0, "names_fixed": 0,
+                 "backup_url": "", "errors": []}
+    # §1:破壞性整批重寫前先備份;備份失敗 → 中止(不在無備份下清空)
+    if with_backup:
+        try:
+            _bid, _burl = copy_sheet_as_backup(client, sheet_id)
+            out["backup_url"] = _burl
+        except Exception as _e:  # noqa: BLE001
+            out["errors"].append(f"備份失敗(已中止,未動原本):{str(_e)[:120]}")
+            return out
     try:
         _pids = list_policy_worksheets(client, sheet_id)
     except Exception as _e:  # noqa: BLE001
@@ -181,8 +196,8 @@ def dump_all_to_sheet(client: object,
                       ss: MutableMapping[str, Any]) -> dict:
     """全部寫入：portfolio_funds → 保單分頁 + t7_ledgers → _T7_State。
 
-    v18.250 PR C：開頭 detect schema 版本 — 已升級到 v2 (header 含 `item_type`)
-    → 自動走 `_dump_all_to_sheet_v2`（per-policy 整 tab 覆寫 13 欄 schema）；
+    v18.250 PR C：開頭 detect schema 版本 — 已升級到 v2 (header 含 `fund_code`,v19.436)
+    → 自動走 `_dump_all_to_sheet_v2`（per-policy 整 tab 覆寫 10 欄 schema）；
     v1 / empty / detect 失敗 → 維持下方既有 v1 path（向後相容、不破壞舊資料）。
 
     回傳 dict：
@@ -289,16 +304,16 @@ def _load_all_from_sheet_v2(client: object,
                               ss: MutableMapping[str, Any],
                               *,
                               refresh_only: bool = False) -> dict:
-    """v18.250 PR C：v2 schema 主讀回路徑（13 欄 → portfolio_funds + ledger）。
+    """v18.250 PR C：v2 schema 主讀回路徑（10 欄 → portfolio_funds + ledger,v19.436）。
 
-    從 v2 13 欄反推：
+    從 v2 10 欄反推：
     - portfolio_funds：保留 prev fund 的 metadata（name/series/dividends/metrics/
       moneydj_raw），覆蓋 units/avg_nav/avg_fx/invest_twd/div_cash_pct/is_core 等
-      持倉欄位（13 欄帶來的最新值）
+      持倉欄位（10 欄帶來的最新值）
     - t7_ledgers：對每檔 units>0 的基金，建空 Ledger + 一筆 subscribe 還原
       position snapshot（units / cost_unit / fx_avg / TWD 成本）
 
-    **trade-off**：完整 transactions 歷史不從 v2 重建（13 欄沒這個資訊）；
+    **trade-off**：完整 transactions 歷史不從 v2 重建（10 欄沒這個資訊）；
     若需歷史，仍需 `_T7_State` snapshot — 但 v2 主路徑設計上不依賴它。
     """
     from datetime import date as _date
@@ -345,7 +360,8 @@ def _load_all_from_sheet_v2(client: object,
                                        or _prev.get("currency", "USD")),
                 "units":            float(_row.get("units", 0) or 0),
                 "avg_nav":          float(_row.get("avg_nav", 0) or 0),
-                "avg_nav_with_div": float(_row.get("avg_nav_with_div", 0) or 0),
+                # v19.436:avg_nav_with_div 已非 v2 欄 → 不在此強寫 0(否則會蓋掉 `**_prev`
+                # 帶進來的舊值,T7 含息成本 pre-fill 會被清零)。由 **_prev 沿用。
                 "fx_avg":           float(_row.get("avg_fx", 0) or 0),
                 "invest_twd":       int(_row.get("invest_twd", 0) or 0),
                 "div_cash_pct":     float(_row.get("div_cash_pct", 100) or 0),
@@ -357,7 +373,7 @@ def _load_all_from_sheet_v2(client: object,
         out["kept"]    = sorted(_new_codes & _prev_codes)
         out["removed"] = sorted(_prev_codes - _new_codes)
 
-        # 從 13 欄重建 ledger snapshot
+        # 從 10 欄重建 ledger snapshot
         try:
             from services.ledger_service import Ledger as _Ledger
             _new_ledgers: dict = {}
