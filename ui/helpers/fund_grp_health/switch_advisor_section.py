@@ -98,18 +98,22 @@ def _benchmark_label_for(f: dict) -> "str | None":
         return None
 
 
-def _redlight_by_code(funds: list, excess_by_code: dict) -> dict:
+def _redlight_by_code(funds: list, excess_by_code: dict, eat_by_code: "dict | None" = None) -> dict:
     """逐檔絕對虧損紅燈(重用 switch_strategy SSOT:含息1Y × Sharpe × 最大跌幅 × vs大盤)。
 
     § 與大表同源:走 `switch_score` + `switch_signal`(RED = 含息1Y<0 且 Sharpe<0,或嚴重吃本金)。
-    本層不接吃本金字串(避免字串比對脆弱),故為大表紅燈的**保守子集**;缺料 → None(§1 不臆測)。
+    v19.441:接吃本金燈號(`eat_by_code`)→ 與 NAS 週報同一套 —— switch_signal 只認「嚴重」紅,
+    正報酬但配息侵蝕本金(plain 🔴 吃本金)靠 `eat_is_red` 補上,避免 App 預覽與實送分歧(稽核 MEDIUM)。
+    缺 eat_by_code(舊 caller)→ eat="" 保守子集;缺料 → None(§1 不臆測)。
     """
     import sys
+    _eat_map = eat_by_code or {}
     out: dict = {}
     for f in funds:
         _code = f.get("code")
         try:
             from services.fund_total_return import compute_1y_total_return
+            from services.switch_advisor import eat_is_red
             from services.switch_strategy import RED, switch_score, switch_signal
             _tr, _ = compute_1y_total_return(f)
             _m = f.get("metrics") or {}
@@ -119,9 +123,10 @@ def _redlight_by_code(funds: list, excess_by_code: dict) -> dict:
             if _dd is None:
                 _dd = _m.get("max_drawdown")
             _vm = excess_by_code.get(_code)
+            _eat = _eat_map.get(_code, "")
             _cov: dict = {}
             _sc = switch_score(_tr, _sh, _dd, _vm, coverage_out=_cov)
-            out[_code] = (switch_signal(_tr, _sh, "", _sc, coverage=_cov) == RED)
+            out[_code] = (switch_signal(_tr, _sh, _eat, _sc, coverage=_cov) == RED) or eat_is_red(_eat)
         except Exception as _e:  # noqa: BLE001 — 單檔失敗不拖垮整組;誠實 None
             print(f"[switch_advisor_section] {_code} 紅燈判定失敗:{type(_e).__name__}: {_e}",
                   file=sys.stderr)
@@ -132,12 +137,20 @@ def _redlight_by_code(funds: list, excess_by_code: dict) -> dict:
 def _underperf_by_code(funds: list) -> dict:
     """{code → assess_underperformance(...)}。跑輸大盤走 capture_by_code 的「vs 大盤%」,
     絕對虧損走 `_redlight_by_code`。兩者任一 → 表現差(§C OR)。"""
+    from services.health.dividend import check_eating_principal_1y_mk
     from services.switch_advisor import assess_underperformance
     from ui.helpers.fund_grp_health.capture import capture_by_code
 
     _cap = capture_by_code(funds)                       # {code: {vs 大盤%, vs 大盤期間, …}}
     _excess = {c: (_cap.get(c) or {}).get("vs 大盤%") for c in (_cap or {})}
-    _red = _redlight_by_code(funds, _excess)
+    # v19.441:吃本金燈號算一次,同時餵紅燈判定與 reason 標籤(與 NAS 週報同一套)
+    _eat_map: dict = {}
+    for f in funds:
+        try:
+            _eat_map[f.get("code")] = (check_eating_principal_1y_mk(f) or {}).get("status", "")
+        except Exception:  # noqa: BLE001 — 單檔吃本金判定失敗不拖垮整組
+            _eat_map[f.get("code")] = ""
+    _red = _redlight_by_code(funds, _excess, eat_by_code=_eat_map)
     out: dict = {}
     for f in funds:
         _code = f.get("code")
@@ -146,6 +159,7 @@ def _underperf_by_code(funds: list) -> dict:
             excess_pct=_c.get("vs 大盤%"),
             full_period=str(_c.get("vs 大盤期間", "")).startswith("⚠️ 全期"),
             benchmark_label=_benchmark_label_for(f),
+            eat_status=_eat_map.get(_code, ""),
             redlight=_red.get(_code),
         )
     return out

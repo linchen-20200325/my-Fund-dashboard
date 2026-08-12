@@ -56,6 +56,21 @@ def test_absolute_loss_via_explicit_redlight():
 def test_absolute_loss_via_switch_signal_severe_eat():
     r = assess_underperformance(eat_status="🔴 嚴重吃本金(報酬為負)")   # switch_signal → RED
     assert r["is_underperforming"] is True and r["redlight"] is True
+    assert "🔴 嚴重吃本金" in r["reasons"]        # 講白吃本金,不籠統「絕對虧損」
+
+
+def test_redlight_without_severe_eat_labels_generic_loss():
+    """紅燈但非吃本金(含息<0且Sharpe<0)→ reason 仍籠統「絕對虧損」。"""
+    r = assess_underperformance(tr1y_pct=-2.0, sharpe=-0.3, eat_status="", switch_score=50.0)
+    assert "絕對虧損" in r["reasons"] and "嚴重吃本金" not in "".join(r["reasons"])
+
+
+def test_plain_eating_red_positive_return_triggers_and_labels():
+    """plain 🔴 吃本金(正報酬但配息>報酬,無「嚴重」)→ 仍紅燈,reason 標「吃本金(配息侵蝕本金)」。"""
+    r = assess_underperformance(eat_status="🔴 吃本金")     # switch_signal 不認,eat_is_red 補
+    assert r["is_underperforming"] is True and r["redlight"] is True
+    assert "🔴 吃本金(配息侵蝕本金)" in r["reasons"]
+    assert "嚴重" not in "".join(r["reasons"])
 
 
 def test_absolute_loss_via_neg_return_neg_sharpe():

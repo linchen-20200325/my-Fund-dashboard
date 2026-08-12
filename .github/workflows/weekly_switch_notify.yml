@@ -1,0 +1,45 @@
+name: "換股顧問健康週報 (LINE)"
+
+# 健康守門員:每週對「持倉 ∪ 追蹤清單」跑換股顧問 —— 有檔不健康(嚴重吃本金 / 高基期該換 /
+# 成長看衰賣現金 / 跑輸大盤)才推 LINE,並附選股池建議替換。全部健康 → 靜默不吵。
+#
+# ⚠️ cron 是 UTC。台灣 = UTC+8。
+#   0 10 * * 0 = 週日 10:00 UTC = 週日 18:00 台灣(週日傍晚,NAV T+1 已更新)。
+on:
+  schedule:
+    - cron: "0 10 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只印不送 (true/false)"
+        default: "true"
+
+concurrency:
+  group: weekly-switch-notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Run weekly switch-advisor health notify
+        # 排程(schedule)時 inputs.dry_run 為空 → 不加旗標 → **實送**;
+        # 只有手動 dispatch 且填 true 才 --dry-run。
+        env:
+          google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          macro_weights_sheet_id: ${{ secrets.MACRO_WEIGHTS_SHEET_ID }}
+          WATCH_CSV_URL: ${{ secrets.WATCH_CSV_URL }}
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          # 選填:美國 IP 抓不到 MoneyDJ 時走 NAS 代理;FRED_API_KEY 啟用成長型賣出訊號
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: >
+          python scripts/weekly_switch_notify.py
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}

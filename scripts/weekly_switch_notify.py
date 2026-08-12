@@ -1,7 +1,12 @@
-"""scripts/weekly_switch_notify.py — 每週換股顧問 LINE 週報(台灣端 NAS / 本機 cron)v19.432。
+"""scripts/weekly_switch_notify.py — 每週換股顧問健康週報 LINE(NAS / 本機 / GitHub Actions cron)v19.441。
 
-不靠 user 開 App:台灣 IP 端(NAS)每週跑一次**同一套換股顧問**(services.switch_advisor,
-與「組合健診 → 換股顧問」完全相同的邏輯),有建議才推一則 LINE 給你(沒事不吵)。
+不靠 user 開 App:每週對「**持倉 ∪ 追蹤清單(觀察標的)**」跑一次**同一套換股顧問**
+(services.switch_advisor,與「組合健診 → 換股顧問」完全相同的邏輯),**有檔不健康才推 LINE**
+(沒事不吵),並附選股池建議替換。健康問題含:🔴 嚴重吃本金 / 🔄 高基期該換 / 🔴 成長看衰賣現金 /
+⚠️ 跑輸大盤。追蹤清單來源 = `WATCH_CSV_URL`(公開 CSV;未設則只跑持倉);與持倉**依代號去重**。
+
+v19.441:①觀察集合擴為 持倉 ∪ 追蹤清單;②吃本金燈號餵進 switch_signal(修好「嚴重吃本金
+不觸發」的漏洞 —— 高配息掩蓋的吃本金原本會漏報);③通知每檔標 [持倉]/[觀察] 來源。
 
 與 App 端的差異:純 headless(不啟動 Streamlit)。所有取數/計算走 streamlit-free 的
 L1/L2 primitive;**不 import** `ui/helpers/.../switch_advisor_section.py`(那層有 st.* 呼叫),
@@ -16,13 +21,15 @@ L1/L2 primitive;**不 import** `ui/helpers/.../switch_advisor_section.py`(那層
      macro_weights_sheet_id   = 政策/選股池/nav_history 共用的 Google Sheet ID
      LINE_CHANNEL_TOKEN       = LINE Messaging API channel access token
      LINE_USER_ID             = 你自己的 LINE userId
-4. cron(建議台灣時間週一傍晚,基金 NAV 多 T+1 傍晚更新):
-     30 18 * * 1  cd /path/to/my-Fund-dashboard && python scripts/weekly_switch_notify.py
+     WATCH_CSV_URL            = (選填)追蹤清單公開 CSV;未設 → 只跑持倉
+4. cron(建議台灣時間**週日傍晚**,基金 NAV 多 T+1 傍晚更新):
+     0 18 * * 0  cd /path/to/my-Fund-dashboard && python scripts/weekly_switch_notify.py
+   (或用 GitHub Actions:.github/workflows/weekly_switch_notify.yml,週日 18:00 台灣)
 5. 先手動驗證(不真的送):
      python scripts/weekly_switch_notify.py --dry-run
 
 ── 行為 ────────────────────────────────────────────────────────
-§1 Fail Loud:secrets 缺 → exit 2;無持倉代碼 → exit 2;全部抓失敗 → exit 1;
+§1 Fail Loud:secrets 缺 → exit 2;無持倉也無追蹤清單 → exit 2;全部抓失敗 → exit 1;
              單檔抓失敗 → 顯式 skip + 計數(不偽造);LINE 送失敗 → exit 1(cron 信可見)。
 成長型賣出訊號需總經 composite;headless 預設 macro=None(誠實降級,成長型不觸發賣出,
 §1 缺料不臆測)——若要成長型賣出通知,加 --with-macro(會多打 ~28 FRED series,需 FRED_API_KEY)。
@@ -105,6 +112,27 @@ def _read_holdings(client, sheet_id) -> list:
     return [c for c in _codes if not (c in _seen or _seen.add(c))]
 
 
+# ───────────────────────── 讀追蹤清單(觀察標的,headless)─────────────────────────
+
+def _read_watchlist() -> list:
+    """WATCH_CSV_URL 公開 CSV → 觀察代號(大寫去重)。未設/抓失敗 → [](§1:不擋主流程)。
+
+    重用 watchlist_push 的 CSV 解析(表頭鎖「代號」欄 / 排除純數字 / 去重),不重造。
+    """
+    import os
+    _url = os.environ.get("WATCH_CSV_URL", "").strip()
+    if not _url:
+        return []
+    try:
+        from scripts.watchlist_push import extract_items_from_csv, fetch_csv
+        _codes = extract_items_from_csv(fetch_csv(_url))
+        _log(f"追蹤清單讀到 {len(_codes)} 檔觀察標的")
+        return _codes
+    except Exception as _e:  # noqa: BLE001 — 追蹤清單抓失敗 → 只跑持倉,不整批中斷
+        _log(f"讀追蹤清單失敗(略過,只跑持倉):{type(_e).__name__}")
+        return []
+
+
 # ───────────────────────── 抓 rich fund dict(headless)─────────────────────────
 
 def _fetch_rich(codes: list) -> dict:
@@ -168,7 +196,8 @@ def _underperf_by_code(funds: list) -> dict:
     from services.capture_ratio import benchmark_for_currency
     from services.currency import normalize_ccy
     from services.fund_total_return import compute_1y_total_return
-    from services.switch_advisor import assess_underperformance
+    from services.health.dividend import check_eating_principal_1y_mk
+    from services.switch_advisor import assess_underperformance, eat_is_red
     from services.switch_strategy import RED, switch_score, switch_signal
     from ui.helpers.fund_grp_health.capture import capture_by_code
 
@@ -177,7 +206,15 @@ def _underperf_by_code(funds: list) -> dict:
     out: dict = {}
     for _f in funds:
         _code = _f.get("code")
-        # 絕對虧損紅燈(含息1Y × Sharpe × 最大跌幅 × vs大盤;eat="" → 保守子集)
+        # v19.441:吃本金燈號餵進 switch_signal → 嚴重吃本金 = 一級紅燈(user 明確要留意)。
+        # 原本傳 eat="" 讓「嚴重吃本金」分支永遠不觸發,只靠「含息<0且Sharpe<0」→ 高配息掩蓋的
+        # 吃本金會漏報。改抓 MK 1Y 吃本金 status 傳入(缺料 → "" 誠實降級,不臆測 §1)。
+        try:
+            _eat = (check_eating_principal_1y_mk(_f) or {}).get("status", "")
+        except Exception as _e:  # noqa: BLE001
+            _log(f"{_code} 吃本金判定失敗:{type(_e).__name__}")
+            _eat = ""
+        # 絕對虧損紅燈(嚴重吃本金 或 含息1Y<0且Sharpe<0;含息 × Sharpe × 最大跌幅 × vs大盤)
         try:
             _tr, _ = compute_1y_total_return(_f)
             _m = _f.get("metrics") or {}
@@ -187,7 +224,9 @@ def _underperf_by_code(funds: list) -> dict:
                 _dd = _m.get("max_drawdown")
             _cov: dict = {}
             _sc = switch_score(_tr, _m.get("sharpe"), _dd, _excess.get(_code), coverage_out=_cov)
-            _red = switch_signal(_tr, _m.get("sharpe"), "", _sc, coverage=_cov) == RED
+            # switch_signal 只認「嚴重」紅;正報酬但配息侵蝕本金(plain 🔴 吃本金)靠 eat_is_red 補
+            _red = (switch_signal(_tr, _m.get("sharpe"), _eat, _sc, coverage=_cov) == RED
+                    or eat_is_red(_eat))
         except Exception as _e:  # noqa: BLE001
             _log(f"{_code} 紅燈判定失敗:{type(_e).__name__}: {_e}")
             _red = None
@@ -196,6 +235,7 @@ def _underperf_by_code(funds: list) -> dict:
             excess_pct=_c.get("vs 大盤%"),
             full_period=str(_c.get("vs 大盤期間", "")).startswith("⚠️ 全期"),
             benchmark_label=benchmark_for_currency(normalize_ccy(_f.get("currency"), default="")),
+            eat_status=_eat,          # 讓 reason 標「🔴 嚴重吃本金」而非籠統「絕對虧損」
             redlight=_red,
         )
     return out
@@ -256,39 +296,49 @@ def main(argv=None) -> int:
     _pool_by_code = {str(e.code).upper(): e for e in _pool}
 
     _held_codes = _read_holdings(client, sheet_id)
-    if not _held_codes:
-        _log("無持倉基金代碼(帳本空或讀取失敗)→ 中止")
+    _watch_codes = _read_watchlist()
+    # 觀察集合 = 持倉 ∪ 追蹤清單(去重保序;source 標記,同檔持倉優先)
+    _source_by_code: dict = {}
+    for _c in _held_codes:
+        _source_by_code[_c] = "持倉"
+    for _c in _watch_codes:
+        _source_by_code.setdefault(_c, "觀察")
+    _observed_codes = list(_source_by_code.keys())
+    if not _observed_codes:
+        _log("無持倉也無追蹤清單代碼(帳本空 + WATCH_CSV_URL 未設/空)→ 中止")
         return 2
 
-    _all_codes = list(dict.fromkeys(_held_codes + list(_pool_by_code.keys())))
-    _log(f"持倉 {len(_held_codes)} 檔 + 選股池 {len(_pool_by_code)} 檔 → 抓 {len(_all_codes)} 檔資料…")
+    _all_codes = list(dict.fromkeys(_observed_codes + list(_pool_by_code.keys())))
+    _log(f"觀察 {len(_observed_codes)} 檔(持倉 {len(_held_codes)} + 追蹤 {len(_watch_codes)})"
+         f" + 選股池 {len(_pool_by_code)} 檔 → 抓 {len(_all_codes)} 檔資料…")
     _rich = _fetch_rich(_all_codes)
     if not _rich:
         _log("全部基金資料抓取失敗 → 中止")
         return 1
 
-    _held_funds = [_rich[c] for c in _held_codes if c in _rich]
-    if not _held_funds:
-        _log("持倉基金全部抓取失敗 → 中止")
+    _observed_funds = [_rich[c] for c in _observed_codes if c in _rich]
+    if not _observed_funds:
+        _log("觀察標的全部抓取失敗 → 中止")
         return 1
     _pool_funds = [_rich[c] for c in _pool_by_code if c in _rich]
 
-    _held_rows = _assemble_rows(_held_funds, _pool_by_code)
+    _observed_rows = _assemble_rows(_observed_funds, _pool_by_code)
     _pool_rows = _assemble_rows(_pool_funds, _pool_by_code)
-    _under = _underperf_by_code(_held_funds)
+    _under = _underperf_by_code(_observed_funds)
     _macro = _macro_composite() if args.with_macro else None
     _fx = _fx_label()
 
     from services.switch_advisor import advise_switches
     from services.switch_notify import build_notification
-    _res = advise_switches(_held_rows, _pool_rows, fx_label=_fx,
+    _res = advise_switches(_observed_rows, _pool_rows, fx_label=_fx,
                            macro_composite=_macro, underperformance_by_code=_under)
     import datetime as _dt
     _as_of = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime("%Y-%m-%d")
-    _skipped = len(_held_codes) - len(_held_funds)     # 抓不到的持倉數(誠實帶進訊息)
-    _note = build_notification(_res, as_of=_as_of, skipped=_skipped)
-    _log(f"該通知={_note['should_notify']}｜表現差/建議 {_note['n_actionable']} 檔"
-         f"（持倉載入 {len(_held_funds)}/{len(_held_codes)}）")
+    _skipped = len(_observed_codes) - len(_observed_funds)   # 抓不到的觀察標的數(誠實帶進訊息)
+    _note = build_notification(_res, as_of=_as_of, skipped=_skipped,
+                               source_by_code=_source_by_code)
+    _log(f"該通知={_note['should_notify']}｜需留意 {_note['n_actionable']} 檔"
+         f"（觀察載入 {len(_observed_funds)}/{len(_observed_codes)}）")
 
     if not _note["should_notify"] and not args.notify_empty:
         _log("本週無建議 → 不推播(--notify-empty 可強制送心跳)")
