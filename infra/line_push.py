@@ -7,7 +7,7 @@
   1. 建一個 **Messaging API** channel → 拿 **Channel access token(long-lived)**
   2. 把該 bot 官方帳號**加為好友**
   3. 拿你自己的 **userId**(webhook 事件 / 「基本資料」頁)
-環境變數(或 infra.config secrets):`LINE_CHANNEL_TOKEN`、`LINE_USER_ID`。
+環境變數(或 infra.config secrets):`LINE_CHANNEL_TOKEN`(**別名相容** `LINE_CHANNEL_ACCESS_TOKEN`)、`LINE_USER_ID`。
 
 §1 Fail-Loud:token/user_id 缺 → 不靜默假裝成功,回 sent=False + 明確 reason(cron log 看得到);
 HTTP 非 2xx → raise `LinePushError`(帶狀態碼 + LINE 回應),讓 cron 信/log 有線索,下次再試。
@@ -54,7 +54,8 @@ def push_text(text: str, *, token: "str | None" = None, user_id: "str | None" = 
     if len(_text) > _LINE_TEXT_MAX:                     # LINE 硬上限 → 截斷帶省略號(不讓 API 4xx)
         _text = _text[:_LINE_TEXT_MAX - 1] + "…"
 
-    _token = _resolve("LINE_CHANNEL_TOKEN", token)
+    # 別名相容:優先 LINE_CHANNEL_TOKEN,退 LINE_CHANNEL_ACCESS_TOKEN(spec / GitHub secret 常用後者)
+    _token = _resolve("LINE_CHANNEL_TOKEN", token) or _resolve("LINE_CHANNEL_ACCESS_TOKEN", None)
     _uid = _resolve("LINE_USER_ID", user_id)
 
     if dry_run or not _token or not _uid:
