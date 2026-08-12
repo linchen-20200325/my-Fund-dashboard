@@ -211,6 +211,41 @@ def test_extract_point_returns_none_on_insufficient(fd):
     assert _extract_point(fd) is None
 
 
+# ── v19.437 _extract_points(整段序列 SSOT)──────────────────────
+def test_extract_points_returns_whole_series():
+    from ui.helpers.nav_history_hook import _extract_points
+    fd = {"full_key": "TLZF9", "series": _mk_series(), "fund_name": "安聯"}
+    pts = _extract_points(fd)
+    assert len(pts) == 3                                     # 整段 3 點,非只末點
+    assert {p["nav_date"] for p in pts} == {"2026-07-20", "2026-07-21", "2026-07-22"}
+    assert {p["nav"] for p in pts} == {10.0, 10.5, 11.0}
+    assert all(p["code"] == "TLZF9" for p in pts)
+
+
+def test_extract_points_skips_nan_and_nonpositive():
+    """§1:NaN / nav<=0 的點顯式跳過(不猜),其餘保留。"""
+    from ui.helpers.nav_history_hook import _extract_points
+    idx = pd.to_datetime(["2026-07-20", "2026-07-21", "2026-07-22"])
+    fd = {"full_key": "X", "series": pd.Series([float("nan"), 0.0, 12.3], index=idx)}
+    pts = _extract_points(fd)
+    assert len(pts) == 1 and pts[0]["nav"] == 12.3 and pts[0]["nav_date"] == "2026-07-22"
+
+
+def test_extract_points_falls_back_to_single_when_no_series():
+    from ui.helpers.nav_history_hook import _extract_points
+    fd = {"full_key": "ANZ89", "series": None,
+          "metrics": {"nav": 9.87}, "nav_date": "2026-07-22"}
+    pts = _extract_points(fd)
+    assert len(pts) == 1 and pts[0]["nav"] == 9.87
+
+
+@pytest.mark.parametrize("fd", ["not-a-dict", {"full_key": "", "series": _mk_series()},
+                                 {"full_key": "X", "series": None, "metrics": {}}])
+def test_extract_points_returns_empty_on_insufficient(fd):
+    from ui.helpers.nav_history_hook import _extract_points
+    assert _extract_points(fd) == []
+
+
 # ── v19.362 ①:累積狀態燈(status 診斷)──────────────────────
 def test_status_disabled_in_test_env_lists_missing():
     """測試環境無 secrets → enabled=False,missing 列出缺的 secret 名(§5 可觀測)。"""

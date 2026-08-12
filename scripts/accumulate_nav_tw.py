@@ -63,9 +63,9 @@ def accumulate_once(codes: list, fetch_fn=None, append_fn=None) -> dict:
 
     fetch_fn / append_fn 可注入(測試用);單檔抓失敗顯式 skip 不中斷整批(§4.6)。
     """
-    # _extract_point 為純函式(series 末點 SSOT,同 App 端取值規則);
+    # _extract_points(v19.437)為純函式(整段序列 SSOT,同 App 端取值規則);
     # scripts/ 為 ops 入口不受 L1-L3 import 規則約束,直接復用避免第二份取值邏輯。
-    from ui.helpers.nav_history_hook import _extract_point
+    from ui.helpers.nav_history_hook import _extract_points
 
     if fetch_fn is None:
         fetch_fn = _default_fetch
@@ -74,6 +74,7 @@ def accumulate_once(codes: list, fetch_fn=None, append_fn=None) -> dict:
         append_fn = append_points
 
     points, skipped_fetch = [], []
+    funds_ok = 0
     for code in codes:
         try:
             fd = fetch_fn(code)
@@ -81,19 +82,22 @@ def accumulate_once(codes: list, fetch_fn=None, append_fn=None) -> dict:
             print(f"  ⚠️ {code} 抓取失敗:{type(e).__name__}: {str(e)[:80]}")
             skipped_fetch.append(code)
             continue
-        p = _extract_point(fd, code)
-        if p is None:
+        _pts = _extract_points(fd, code)   # v19.437:整段序列(去重交下游)
+        if not _pts:
             print(f"  ⚠️ {code} 無有效 (nav, date)(§1 不偽造,跳過)")
             skipped_fetch.append(code)
             continue
-        p["source"] = "nas_cron"
-        points.append(p)
-        print(f"  ✅ {code} {p['nav_date']} nav={p['nav']}")
+        for p in _pts:
+            p["source"] = "nas_cron"
+        points.extend(_pts)
+        funds_ok += 1
+        print(f"  ✅ {code} {len(_pts)} 點 ({_pts[0]['nav_date']}~{_pts[-1]['nav_date']})")
 
     res = append_fn(points) if points else {"written": 0, "skipped": 0}
     return {
         "total": len(codes),
-        "fetched": len(points),
+        "fetched": funds_ok,                       # 有效基金數(向後相容)
+        "points": len(points),                     # v19.437:抽到的總點數(整段)
         "written": int(res.get("written", 0)),
         "skipped_dup": len(points) - int(res.get("written", 0)),
         "skipped_fetch": skipped_fetch,
@@ -113,8 +117,8 @@ def main() -> int:
         return 2
     print(f"📋 台灣端每日累積:{len(codes)} 檔 → nav_history")
     s = accumulate_once(codes)
-    print(f"\n📊 summary:total={s['total']} fetched={s['fetched']} "
-          f"written={s['written']} dup={s['skipped_dup']} "
+    print(f"\n📊 summary:total={s['total']} funds_ok={s['fetched']} "
+          f"points={s.get('points', 0)} written={s['written']} dup={s['skipped_dup']} "
           f"fetch_fail={len(s['skipped_fetch'])}"
           f"{'(' + ', '.join(s['skipped_fetch']) + ')' if s['skipped_fetch'] else ''}")
     if s["fetched"] == 0:

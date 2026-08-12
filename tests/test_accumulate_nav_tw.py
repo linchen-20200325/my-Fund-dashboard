@@ -39,6 +39,7 @@ def _fd(code: str, navs: list, dates: list) -> dict:
 
 # ── accumulate_once 核心 ──────────────────────────────────────
 def test_accumulate_happy_path_tags_nas_cron():
+    """v19.437:存**整段**序列 — 2 檔 × 2 點 = 4 點,都標 nas_cron。"""
     captured = {}
 
     def _fetch(code):
@@ -49,10 +50,13 @@ def test_accumulate_happy_path_tags_nas_cron():
         return {"written": len(points), "skipped": 0}
 
     s = _MOD.accumulate_once(["TLZF9", "ANZ89"], fetch_fn=_fetch, append_fn=_append)
-    assert s["total"] == 2 and s["fetched"] == 2 and s["written"] == 2
+    assert s["total"] == 2 and s["fetched"] == 2          # 2 檔有效
+    assert s["points"] == 4 and s["written"] == 4          # 整段:2 檔 × 2 點
     assert all(p["source"] == "nas_cron" for p in captured["points"])
-    assert captured["points"][0]["nav"] == 10.5                    # series 末點 SSOT
-    assert captured["points"][0]["nav_date"] == "2026-07-22"
+    # 整段保留:第一檔兩點都在(不再只留末點)
+    _tlzf9 = [p for p in captured["points"] if p["code"] == "TLZF9"]
+    assert {p["nav_date"] for p in _tlzf9} == {"2026-07-21", "2026-07-22"}
+    assert {p["nav"] for p in _tlzf9} == {10.0, 10.5}
 
 
 def test_accumulate_single_failure_does_not_abort_batch():
