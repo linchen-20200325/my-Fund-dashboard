@@ -26,7 +26,6 @@ import pandas as pd
 from repositories.policy_repository import (
     PolicySheetError,
     ALL_COLS_V2,
-    ITEM_TYPE_FUND,
     DEFAULT_WORKSHEET,
     is_v2_worksheet,
     write_policy_v2,
@@ -35,6 +34,22 @@ from repositories.policy_repository import (
     _normalize_invest_twd,
     _normalize_fx,
 )
+
+
+def _fetch_fund_name_safe(fund_code: str) -> str:
+    """v19.436:用基金代號從 MoneyDJ 抓正確中文名稱(best-effort)。抓失敗回 ""。
+
+    取代舊 bug:原本 fund_name = policy_name,而 v1 寫入路徑把 policy_name 灌成
+    policy_id → 每檔基金名稱都變成保單號。改由代號重抓真名。
+    """
+    if not str(fund_code or "").strip():
+        return ""
+    try:
+        from services.fund_service import fetch_fund_from_moneydj_url_enriched
+        raw = fetch_fund_from_moneydj_url_enriched(str(fund_code).strip())
+        return str(raw.get("fund_name", "") or "").strip()
+    except Exception:
+        return ""   # 抓失敗 → 空(顯示時 fallback 用代號),不再灌 policy_id
 from repositories.snapshot_repository import T7_STATE_TAB
 
 log = logging.getLogger(__name__)
@@ -133,29 +148,28 @@ def migrate_one_policy(
         currency = str(r.get("currency", "") or "").strip() or "USD"
         invest_twd = _normalize_invest_twd(r.get("invest_twd", 0))
         tier = str(r.get("policy_tier", "") or "").strip()
-        fund_name = str(r.get("policy_name", "") or "").strip()
         if not fund_url:
             continue
+        # v19.436:fund_name 改由代號從 MoneyDJ 重抓(修 policy_name=policy_id bug)
+        fund_name = _fetch_fund_name_safe(fund_url)
 
         # 從 _T7_State.ledger_json fold 取持倉
         ledger_json = t7_state_index.get((policy_id, fund_url.upper()), "")
         folded = _fold_ledger_json(ledger_json)
 
+        # v19.436:10 欄 schema（移除 item_type / avg_nav_with_div / amount）
         v2_rows.append({
             "policy_id":        policy_id,
-            "item_type":        ITEM_TYPE_FUND,
             "fund_code":        fund_url,
             "fund_name":        fund_name,
-            "units":            folded["units"],
-            "avg_nav":          folded["avg_nav"],
-            # v18.153：含息成本 user 後續到對帳單抄；migration 預設 0（v2 編輯介面醒目提示要補）
-            "avg_nav_with_div": 0.0,
-            "avg_fx":           folded["avg_fx"] if folded["avg_fx"] > 0 else _normalize_fx(
-                                    r.get("fx_at_buy", 0)) or 0.0,
             "currency":         currency,
             "tier":             tier,
-            "amount":           "",
             "invest_twd":       invest_twd,
+            "div_cash_pct":     100,
+            "units":            folded["units"],
+            "avg_nav":          folded["avg_nav"],
+            "avg_fx":           folded["avg_fx"] if folded["avg_fx"] > 0 else _normalize_fx(
+                                    r.get("fx_at_buy", 0)) or 0.0,
         })
         stat["funds"] += 1
 

@@ -20,17 +20,18 @@ def test_today_tw_iso():
 
 
 def test_prepare_write_df_preserves_data_no_loss():
-    """§1 防資料流失:現金列 item_type 不被改 fund、唯讀欄(avg_nav)保留、新增基金列補類型。"""
+    """§1 防資料流失:回寫前處理補 policy_id、唯讀選填欄(avg_nav/units)照原樣保留不清空。
+
+    v19.436:10 欄 schema(item_type 退役) → _prepare_write_df 僅補 policy_id;
+    write_policy_v2 端會跳過無 fund_code 的列。"""
     df = pd.DataFrame([
-        {"item_type": "fund", "fund_code": "ACTI71", "avg_nav": "8.67", "invest_twd": 100},   # 既有,avg_nav 須留
-        {"item_type": "cash", "fund_code": "", "amount": "5000", "invest_twd": ""},            # 現金列須留
-        {"item_type": "", "fund_code": "NEW1", "invest_twd": 50},                              # 新增基金列(無類型)
+        {"fund_code": "ACTI71", "avg_nav": "8.67", "units": "1781", "invest_twd": 100},
+        {"fund_code": "NEW1", "invest_twd": 50},
     ])
     out = M._prepare_write_df(df, "P1")
     assert (out["policy_id"] == "P1").all()
-    assert out[out["fund_code"] == ""].iloc[0]["item_type"] == "cash"          # 現金列不被改成 fund
-    assert out[out["fund_code"] == "NEW1"].iloc[0]["item_type"] == "fund"      # 新增列補 fund
     assert out[out["fund_code"] == "ACTI71"].iloc[0]["avg_nav"] == "8.67"      # 平均成本欄保留(不清空)
+    assert out[out["fund_code"] == "ACTI71"].iloc[0]["units"] == "1781"        # 份額選填欄保留
 
 
 def test_import_history_to_pool_merges_new_skips_existing():

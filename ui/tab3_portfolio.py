@@ -1194,11 +1194,10 @@ def render_portfolio_tab() -> None:
                             else:
                                 st.dataframe(_df_v2, use_container_width=True,
                                               hide_index=True)
-                                st.caption(
-                                    f"共 {len(_df_v2)} 列；"
-                                    f"fund={len(_df_v2[_df_v2['item_type']=='fund'])}、"
-                                    f"cash={len(_df_v2[_df_v2['item_type']=='cash'])}。"
-                                )
+                                # v19.436:item_type 退役,全為基金列 → 以非空 fund_code 計數
+                                _n_fund = int((_df_v2["fund_code"].astype(str).str.strip()
+                                               != "").sum()) if "fund_code" in _df_v2 else 0
+                                st.caption(f"共 {len(_df_v2)} 列；基金 {_n_fund} 檔。")
                         except Exception as _epe:
                             st.error(f"❌ 讀 v2 失敗：[{type(_epe).__name__}] {_epe}")
 
@@ -1305,15 +1304,35 @@ def render_portfolio_tab() -> None:
                 if _pdf_cached is not None and not _pdf_cached.empty:
                     st.markdown("**📋 保單分頁清單**")
                     # v18.64: column header 改顯繁中（schema 仍英文，僅 UI 改名）
+                    # v19.436:同時涵蓋 v2(10 欄)與 v1 欄名 → 兩種 schema 載入時都有中文標籤,
+                    # 不再露出 fund_code/units 等英文原名(Streamlit 自動忽略 df 沒有的鍵)。
+                    # v2 欄:核心欄在前;units/avg_nav/avg_fx 為持倉模擬選填,標「(選填)」。
                     st.dataframe(
                         _pdf_cached, use_container_width=True, hide_index=True,
+                        column_order=[
+                            "policy_id", "fund_code", "fund_name", "currency",
+                            "tier", "invest_twd", "div_cash_pct",
+                            "units", "avg_nav", "avg_fx",
+                            # v1 欄(非 oauth 模式 fallback)
+                            "policy_name", "fund_url", "invest_date",
+                            "fx_at_buy", "notes", "policy_tier",
+                        ],
                         column_config={
+                            # v2 schema（10 欄）
                             "policy_id":    st.column_config.TextColumn("保單編號"),
+                            "fund_code":    st.column_config.TextColumn("基金代號"),
+                            "fund_name":    st.column_config.TextColumn("基金名稱"),
+                            "currency":     st.column_config.TextColumn("幣別"),
+                            "tier":         st.column_config.TextColumn("級別"),
+                            "invest_twd":   st.column_config.NumberColumn("投資金額 (TWD)"),
+                            "div_cash_pct": st.column_config.NumberColumn("現金給付%"),
+                            "units":        st.column_config.NumberColumn("持有單位數(選填)"),
+                            "avg_nav":      st.column_config.NumberColumn("平均成本(選填)"),
+                            "avg_fx":       st.column_config.NumberColumn("平均匯率(選填)"),
+                            # v1 schema（向後相容）
                             "policy_name":  st.column_config.TextColumn("保單名稱"),
                             "fund_url":     st.column_config.TextColumn("基金代碼"),
-                            "invest_twd":   st.column_config.NumberColumn("投資金額 (TWD)"),
                             "invest_date":  st.column_config.TextColumn("投資日期"),
-                            "currency":     st.column_config.TextColumn("幣別"),
                             "fx_at_buy":    st.column_config.NumberColumn("買入匯率"),
                             "notes":        st.column_config.TextColumn("備註"),
                             "policy_tier":  st.column_config.TextColumn("配置定位"),

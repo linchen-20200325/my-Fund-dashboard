@@ -309,30 +309,36 @@ def _sec_portfolio():
     st.session_state["_manage_pf_loaded"] = True
 
     from repositories.policy.v2 import ALL_COLS_V2
-    _fund_rows = _df[_df["item_type"].astype(str).str.strip().isin(["", "fund"])]
+    # v19.436:10 欄 schema 全為基金列(item_type 退役) → 以非空 fund_code 認基金列。
+    _fund_rows = _df[_df["fund_code"].astype(str).str.strip() != ""]
     if _fund_rows.empty and _df.empty:
         st.info("這本 Sheet 目前沒有任何持倉。可到 Tab④ 新增保單/基金。")
         return
     _codes = sorted({str(c).strip() for c in _fund_rows["fund_code"] if str(c).strip()})
     st.success(f"共 {len(_codes)} 檔基金 · {_df['policy_id'].nunique()} 張保單。")
 
-    # 只開放「安全欄」編輯;其餘欄(平均成本 avg_nav / 份額 units / 含息成本…)**照原樣帶著、
-    # 不清空**(§1 防資料流失:write_policy_v2 是整張覆寫,若只寫 5 欄會抹掉平均成本 + 現金列)。
-    # 現金列(item_type=cash)也一併顯示 + 保留。
-    # 只開放這 6 欄編輯(對齊下方 caption);item_type / amount / 平均成本 等唯讀,避免誤打
-    # 把 fund 打成別的字 → write_policy_v2 兩邊都不認 → 整列數字被清空(稽核 FINDING 2)。
+    # v19.436:一鍵修正基金名稱(被灌成保單號)+ 精簡 Sheet 到 10 欄。用代號從 MoneyDJ 重抓真名,
+    # 整張重寫時舊 13 欄的 item_type/含息成本/金額 自然消失(物理精簡)。
+    with st.expander("🔧 一鍵修正基金名稱 + 精簡 Sheet（10 欄）", expanded=False):
+        st.caption("若你的基金名稱欄顯示的是保單號(不是基金真名),按這裡:用基金代號到 MoneyDJ "
+                   "重抓正確名稱,並把每張分頁精簡成 10 欄(移除沒在用的類型/含息成本/現金金額)。"
+                   "會逐張重寫雲端、需數十秒;僅補空/修錯,不動你填的金額與級別。")
+        if st.button("🔧 開始修正 + 精簡", key="manage_pf_fixnames", use_container_width=True):
+            _run_fix_and_shrink(_client, _sid)
+
+    # 只開放「安全欄」編輯;units/avg_nav/avg_fx(持倉模擬選填)**照原樣帶著、不清空**
+    # (§1 防資料流失:write_policy_v2 是整張覆寫,若只寫核心欄會抹掉平均成本)。
     _editable = {"fund_code", "fund_name", "tier", "currency", "invest_twd", "div_cash_pct"}
     _labels = {
-        "item_type": "類型", "fund_code": "基金代號", "fund_name": "名稱", "currency": "幣別",
-        "tier": "級別", "invest_twd": "投入金額(TWD)", "div_cash_pct": "現金給付%", "amount": "現金金額",
-        "units": "份額(自動)", "avg_nav": "平均成本", "avg_nav_with_div": "含息成本", "avg_fx": "平均匯率",
-        "policy_id": "保單",
+        "policy_id": "保單", "fund_code": "基金代號", "fund_name": "名稱", "currency": "幣別",
+        "tier": "級別", "invest_twd": "投入金額(TWD)", "div_cash_pct": "現金給付%",
+        "units": "份額(選填)", "avg_nav": "平均成本(選填)", "avg_fx": "平均匯率(選填)",
     }
     for _pid in sorted({str(p) for p in _df["policy_id"] if str(p).strip()}):
-        _pdf = _df[_df["policy_id"].astype(str) == _pid]                 # 全列(基金 + 現金),不只 5 欄
+        _pdf = _df[_df["policy_id"].astype(str) == _pid]                 # 該保單全部基金列
         with st.expander(f"📄 保單 {_pid}（{len(_pdf)} 列）", expanded=(_df['policy_id'].nunique() == 1)):
             st.caption("可改:基金代號 / 名稱 / 幣別 / 級別 / 投入金額 / 現金給付%。刪列=移除該檔。"
-                       "平均成本、份額等**灰色欄照原樣保留**(存檔不會清掉)。")
+                       "平均成本、份額等**灰色選填欄照原樣保留**(存檔不會清掉)。")
             _cols = [c for c in ALL_COLS_V2 if c in _pdf.columns]
             _view = _pdf[_cols].reset_index(drop=True)
             _edited = st.data_editor(
@@ -349,19 +355,50 @@ def _sec_portfolio():
 
 
 def _prepare_write_df(edited_df, policy_id):
-    """編輯後的 grid → 準備給 write_policy_v2 的 df:補 policy_id;新增列(有代號但無類型)補 item_type=fund。
+    """編輯後的 grid → 準備給 write_policy_v2 的 df:補 policy_id。
 
-    §1 防資料流失:**保留每列原本的 item_type**(現金列不被改成 fund)、**保留所有唯讀欄**
-    (平均成本 avg_nav / 份額 units / …,編輯器裡帶著)。只有使用者新增、item_type 留空又填了代號的列
-    才預設為 fund。純函式(不碰 st / 網路),供單元測試鎖住此回寫前處理(§6)。
+    v19.436:10 欄 schema 全為基金列(item_type 退役)。write_policy_v2 會跳過無 fund_code
+    的空列,並保留 units/avg_nav/avg_fx 等選填欄照原樣帶著(§1 防資料流失:整張覆寫不抹掉)。
+    純函式(不碰 st / 網路),供單元測試鎖住此回寫前處理(§6)。
     """
     _out = edited_df.copy()
     _out["policy_id"] = policy_id
-    if "item_type" in _out.columns and "fund_code" in _out.columns:
-        _blank_type = _out["item_type"].astype(str).str.strip() == ""
-        _has_code = _out["fund_code"].astype(str).str.strip() != ""
-        _out.loc[_blank_type & _has_code, "item_type"] = "fund"        # 新增基金列補類型
     return _out
+
+
+def _run_fix_and_shrink(client, sheet_id):
+    """v19.436:一鍵修正基金名稱 + 精簡 Sheet。逐張進度條;完成後清快取重載。"""
+    try:
+        from ui.helpers.cloud_io import fix_and_shrink_v2_sheets
+        from ui.helpers.v2_editor import _autofill_from_moneydj
+    except Exception as _e:  # noqa: BLE001
+        _friendly("載入修正工具失敗", _e, level="error")
+        return
+    _bar = st.progress(0.0, text="準備中…")
+
+    def _cb(done, total, pid):
+        _bar.progress(done / max(total, 1), text=f"處理 {pid}（{done}/{total}）…")
+
+    try:
+        with st.spinner("逐張重抓基金名稱 + 精簡欄位(需數十秒)…"):
+            _res = fix_and_shrink_v2_sheets(
+                client, sheet_id, info_fetcher=_autofill_from_moneydj, progress_cb=_cb)
+    except Exception as _e:  # noqa: BLE001
+        _friendly("修正 + 精簡失敗", _e, level="error")
+        return
+    _bar.empty()
+    st.success(f"✅ 完成:{_res['policies']} 張保單 · {_res['funds']} 檔基金 · "
+               f"修正名稱 {_res['names_fixed']} 筆。已精簡成 10 欄。")
+    for _err in _res.get("errors", [])[:5]:
+        st.warning(f"⚠️ {_err}")
+    # 清 load_all 短快取,重載拿最新
+    try:
+        from repositories.policy.v2 import clear_load_all_ws_cache
+        clear_load_all_ws_cache()
+    except Exception:  # noqa: BLE001
+        pass
+    st.session_state["_manage_pf_loaded"] = True
+    st.rerun()
 
 
 def _save_policy(client, sheet_id, policy_id, edited_df):

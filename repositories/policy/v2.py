@@ -499,53 +499,63 @@ def create_dashboard_sheet(client: Any,
 #
 # v1 → v2 migration 走 `scripts/migrate_v149_schema.py`。
 # 偵測方式：worksheet 第一列 header 含 `item_type` 即為 v2。
+# v19.436 精簡:13 → 10 欄。移除 item_type(fund/cash 類型)、avg_nav_with_div(含息成本)、
+# amount(現金金額) —— audit 確認前二者無實質下游消費者、amount 只給現金列(user 全無現金列
+# 且無分析讀者)。保留 units/avg_nav/avg_fx 供 T7 持倉模擬(市值/損益);其餘為 user 主填。
+# 重新排序:user 主填欄在前、T7 選填欄在後。**保留原中文 header 字串**(向後相容:舊 13 欄
+# 分頁仍能被 EN_HEADERS_V2 依名映射讀回,多的 3 欄讀時自動丟棄、下次寫入即物理消失)。
 ALL_COLS_V2: tuple[str, ...] = (
     "policy_id",
-    "item_type",         # "fund" | "cash"
     "fund_code",
     "fund_name",
-    "units",
-    "avg_nav",
-    "avg_nav_with_div",  # v18.153: 平均買入「含息」單位成本（對帳單欄(10)）
-    "avg_fx",
     "currency",
     "tier",              # "core" | "satellite" | ""
-    "amount",            # cash 列才填（多幣別現金金額）
-    "invest_twd",        # 淨投資金額（對帳單欄(4)），= units × avg_nav × avg_fx
+    "invest_twd",        # 投資金額（TWD，對帳單欄(4)）
     "div_cash_pct",      # v18.160: 配息「現金給付」百分比 (0~100)；單位數% = 100 - 該值
+    "units",             # 持倉模擬選填（對帳單抄；空 → T7 不算市值）
+    "avg_nav",           # 持倉模擬選填（平均買入單位成本）
+    "avg_fx",            # 持倉模擬選填（平均買入匯率）
 )
 
+# v19.436 退役但保留常數定義:仍有 legacy caller import(cloud_io / v2_editor);
+# 新 schema 全為基金列(無現金列),item_type 不再寫入 Sheet。
 ITEM_TYPE_FUND = "fund"
 ITEM_TYPE_CASH = "cash"
 
 # v18.153：中文 header 雙向翻譯（Sheet 上顯示中文、程式內部仍用英文 col name）
+# v19.436:移除 item_type/avg_nav_with_div/amount 三欄的翻譯;**保留其餘欄原字串**
+# (EN_HEADERS_V2 依名反查,舊分頁 header 不變即可讀回)。
 ZH_HEADERS_V2: dict[str, str] = {
     "policy_id":         "保單編號",
-    "item_type":         "類型",
     "fund_code":         "基金代號",
     "fund_name":         "基金名稱",
-    "units":             "持有單位數",
-    "avg_nav":           "平均買入單位成本",
-    "avg_nav_with_div":  "平均買入含息單位成本",
-    "avg_fx":            "平均買入匯率",
     "currency":          "幣別",
     "tier":              "級別",
-    "amount":            "金額",
     "invest_twd":        "淨投資金額",
     "div_cash_pct":      "現金給付%",   # v18.160
+    "units":             "持有單位數",
+    "avg_nav":           "平均買入單位成本",
+    "avg_fx":            "平均買入匯率",
 }
 EN_HEADERS_V2: dict[str, str] = {v: k for k, v in ZH_HEADERS_V2.items()}
+# v19.436 相容別名:舊 13 欄分頁的 3 個退役中文 header,讀回時仍映到英文名(隨後 reindex
+# 到 ALL_COLS_V2 時被丟棄),避免混合期舊分頁欄被誤當資料欄。
+_LEGACY_ZH_ALIASES_V2: dict[str, str] = {
+    "類型":               "item_type",
+    "平均買入含息單位成本":  "avg_nav_with_div",
+    "金額":               "amount",
+}
 
 # v18.153：欄位填寫責任分類（給 UI + Sheet 配色用）
 # user 自行填寫（從對帳單抄）：黃底
 USER_INPUT_COLS: tuple[str, ...] = (
-    "policy_id", "fund_code", "avg_nav", "avg_nav_with_div",
-    "avg_fx", "amount", "invest_twd",
+    "policy_id", "fund_code", "invest_twd",
     "div_cash_pct",   # v18.160: user 從保險公司 APP 抄（如 80% 現金 / 20% 單位）
+    "avg_nav", "avg_fx",   # T7 持倉模擬選填
 )
 # 自動填寫（MoneyDJ 抓 / 系統算 / 系統定）：灰底（read-only signal）
 AUTO_COLS: tuple[str, ...] = (
-    "item_type", "fund_name", "units", "currency", "tier",
+    "fund_name", "currency", "tier", "units",
 )
 
 
@@ -602,8 +612,9 @@ def avg_nav_with_div_from_cumul_div_twd(
 def is_v2_worksheet(ws: Any) -> bool:
     """偵測單張 worksheet 是不是 v2 schema：
 
-    - 含 `item_type` 英文 header → v2（v18.149 以來）
-    - 含 `類型` 中文 header → v2（v18.153 中文 schema）
+    v19.436:改以 `fund_code` / `基金代號` header 判定(取代退役的 item_type/類型)。
+    v1 schema 用 `fund_url`(無 fund_code),故此鍵可乾淨區分 v1/v2;新 10 欄 schema
+    與舊 13 欄 schema 皆含 fund_code → 兩者都正確判為 v2。
     讀檔失敗 / 無 header 一律回 False（caller 走 v1 fallback 安全）。
     """
     try:
@@ -611,7 +622,7 @@ def is_v2_worksheet(ws: Any) -> bool:
     except Exception:
         return False
     cells = [str(c).strip() for c in header]
-    return "item_type" in cells or "類型" in cells
+    return "fund_code" in cells or "基金代號" in cells
 
 
 def detect_sheet_schema_version(client: Any, sheet_id: str) -> str:
@@ -761,17 +772,18 @@ def load_policy_v2(client: Any, sheet_id: str, policy_id: str) -> pd.DataFrame:
         return empty
     df = pd.DataFrame(rows)
     # v18.153：rename 中文 header → 英文 col name（向後相容雙語）
-    df = df.rename(columns={zh: en for zh, en in EN_HEADERS_V2.items()
-                              if zh in df.columns})
+    # v19.436:併入退役欄別名(類型/含息成本/金額),讓舊 13 欄分頁的中文欄先映到英文名,
+    # 隨後 reindex 到 ALL_COLS_V2(10 欄)時被丟棄 —— 不殘留中文欄。
+    _zh2en = {**EN_HEADERS_V2, **_LEGACY_ZH_ALIASES_V2}
+    df = df.rename(columns={zh: en for zh, en in _zh2en.items()
+                              if zh in df.columns and en not in df.columns})
     for c in ALL_COLS_V2:
         if c not in df.columns:
             df[c] = ""
     df = df[list(ALL_COLS_V2)].copy()
     df["units"]            = df["units"].map(_normalize_float)
     df["avg_nav"]          = df["avg_nav"].map(_normalize_float)
-    df["avg_nav_with_div"] = df["avg_nav_with_div"].map(_normalize_float)
     df["avg_fx"]           = df["avg_fx"].map(_normalize_float)
-    df["amount"]           = df["amount"].map(_normalize_float)
     # §1：逐列解析本金，無法解析的列帶「列號 + 主鍵」回報（不再靜默歸零）
     normalize_invest_twd_column(
         df, source=f"v2/{policy_id}", id_cols=("policy_id", "fund_code"))
@@ -820,37 +832,33 @@ def write_policy_v2(
         return str(v).strip() in ("", "nan", "NaN", "None")
     norm = norm[norm.apply(lambda r: not all(_cell_empty(v) for v in r), axis=1)]
 
-    # v18.153：fund 列 units 自動算（單純存便利、給 T7 模擬用；不依賴 user 手填）
+    # v19.436:10 欄 schema,全為基金列(不再有現金列)。無 fund_code 的列跳過
+    # (§1:不寫幽靈列)。units 用公式自動算(給 T7 模擬用;user override 非零則優先)。
+    # 欄序必須與 ALL_COLS_V2 完全一致。
     rows_out: list[list] = [
         [ZH_HEADERS_V2[c] for c in ALL_COLS_V2],   # 中文 header 列
     ]
     for _, r in norm.iterrows():
-        is_fund = r.get("item_type") == ITEM_TYPE_FUND
-        is_cash = r.get("item_type") == ITEM_TYPE_CASH
-        # fund 列 units 用公式自動算（若 user override 過則優先用 user 給的非零值）
-        _u_user = _normalize_float(r.get("units", 0))
+        _code = str(r.get("fund_code", "") or "").strip()
+        if not _code:
+            continue   # 跳過無代號列(舊現金列 / 空列)
         _avg_nav = _normalize_float(r.get("avg_nav", 0))
         _avg_fx  = _normalize_float(r.get("avg_fx", 0))
         _inv_twd = _normalize_invest_twd(r.get("invest_twd", 0))
+        _u_user = _normalize_float(r.get("units", 0))
         _u_calc = compute_units(_inv_twd, _avg_nav, _avg_fx)
         _u_final = _u_user if (_u_user > 0 and abs(_u_user - _u_calc) > 0.5) else _u_calc
         rows_out.append([
             str(r.get("policy_id", "") or ""),
-            str(r.get("item_type", "") or ""),
-            str(r.get("fund_code", "") or ""),
+            _code,
             str(r.get("fund_name", "") or ""),
-            _u_final if is_fund else "",
-            _avg_nav if is_fund else "",
-            _normalize_float(r.get("avg_nav_with_div", 0)) if is_fund else "",
-            _avg_fx if is_fund else "",
             str(r.get("currency", "") or ""),
-            str(r.get("tier", "") or "") if is_fund else "",
-            _normalize_float(r.get("amount", 0)) if is_cash else "",
-            _inv_twd if is_fund else "",
-            # v19.433 稽核修 FINDING 1:ALL_COLS_V2 有 13 欄,原本每列只 append 12 值 →
-            # div_cash_pct(現金給付%)整欄漏寫 → 重載時空值 → _normalize 變 100% → 靜默洗掉
-            # user 設過的現金給付比例(Tab④ 存檔亦中招)。補第 13 欄,保留原值。
-            _normalize_div_cash_pct(r.get("div_cash_pct", "")) if is_fund else "",
+            str(r.get("tier", "") or ""),
+            _inv_twd,
+            _normalize_div_cash_pct(r.get("div_cash_pct", "")),
+            _u_final,
+            _avg_nav,
+            _avg_fx,
         ])
     try:
         _with_quota_retry(ws.clear)
@@ -920,8 +928,7 @@ def _v1_frame_to_v2(df_v1: pd.DataFrame) -> pd.DataFrame:
     _ren = {"policy_tier": "tier", "fx_avg": "avg_fx"}
     out = out.rename(columns={k: v for k, v in _ren.items()
                               if k in out.columns and v not in out.columns})
-    if "item_type" not in out.columns:
-        out["item_type"] = "fund"
+    # v19.436:item_type 已退役,不再補欄(v1 分頁全為基金列,reindex 到 10 欄即可)。
     return out
 
 
@@ -949,10 +956,13 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
             continue
         df_one = pd.DataFrame(rows)
         _cols = set(df_one.columns)
-        if ("item_type" in _cols) or ("類型" in _cols):
-            # v2 分頁：中文 header → 英文 col name(guard `en not in`:同時有中英文欄時
-            # 不製造重複欄 → 避免 df['fund_code'] 變 DataFrame，稽核 FINDING 3)
-            df_one = df_one.rename(columns={zh: en for zh, en in EN_HEADERS_V2.items()
+        if ("fund_code" in _cols) or ("基金代號" in _cols):
+            # v19.436:v2 分頁改以 fund_code/基金代號 判定(item_type 已退役)。
+            # 中文 header → 英文 col name(含退役欄別名,隨後 reindex 丟棄);guard
+            # `en not in`:同時有中英文欄時不製造重複欄 → 避免 df['fund_code'] 變
+            # DataFrame(稽核 FINDING 3)。
+            _zh2en = {**EN_HEADERS_V2, **_LEGACY_ZH_ALIASES_V2}
+            df_one = df_one.rename(columns={zh: en for zh, en in _zh2en.items()
                                               if zh in df_one.columns and en not in df_one.columns})
         else:
             # v19.432：v1/英文 schema 分頁 → 映射到 v2 欄位(混合 Sheet 不漏基金)
@@ -963,9 +973,7 @@ def load_all_policies_v2(client: Any, sheet_id: str) -> pd.DataFrame:
         df_one = df_one[list(ALL_COLS_V2)].copy()
         df_one["units"]            = df_one["units"].map(_normalize_float)
         df_one["avg_nav"]          = df_one["avg_nav"].map(_normalize_float)
-        df_one["avg_nav_with_div"] = df_one["avg_nav_with_div"].map(_normalize_float)
         df_one["avg_fx"]           = df_one["avg_fx"].map(_normalize_float)
-        df_one["amount"]           = df_one["amount"].map(_normalize_float)
         # §1：逐列解析本金，無法解析的列帶「列號 + 主鍵」回報（不再靜默歸零）
         normalize_invest_twd_column(
             df_one, source=f"v2/{ws.title}",

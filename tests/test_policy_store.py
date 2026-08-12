@@ -945,16 +945,17 @@ def test_create_dashboard_sheet_raises_when_id_missing():
 # ══════════════════════════════════════════════════════════════════════
 # v18.149 Schema v2 — snapshot-only 11 欄 + 多幣別現金 + migration safety
 # ══════════════════════════════════════════════════════════════════════
-def test_v2_schema_has_13_cols_in_canonical_order():
-    """v18.160：ALL_COLS_V2 擴至 13 欄（v18.153 的 12 欄 + div_cash_pct）。"""
+def test_v2_schema_has_10_cols_in_canonical_order():
+    """v19.436:ALL_COLS_V2 精簡 13 → 10 欄(移除 item_type / avg_nav_with_div / amount),
+    並重新排序(user 主填欄在前、持倉模擬選填欄在後)。"""
     assert ALL_COLS_V2 == (
-        "policy_id", "item_type", "fund_code", "fund_name",
-        "units", "avg_nav", "avg_nav_with_div", "avg_fx", "currency",
-        "tier", "amount", "invest_twd",
-        "div_cash_pct",   # v18.160
+        "policy_id", "fund_code", "fund_name", "currency", "tier",
+        "invest_twd", "div_cash_pct",
+        "units", "avg_nav", "avg_fx",
     )
-    assert ITEM_TYPE_FUND == "fund"
-    assert ITEM_TYPE_CASH == "cash"
+    assert "item_type" not in ALL_COLS_V2
+    assert "avg_nav_with_div" not in ALL_COLS_V2
+    assert "amount" not in ALL_COLS_V2
 
 
 def test_v2_user_input_vs_auto_cols_disjoint_and_complete():
@@ -1201,29 +1202,25 @@ def test_load_policy_v2_returns_empty_when_v1_schema():
 
 
 def test_load_policy_v2_normalizes_numeric_fields():
-    """v2 worksheet (英文 header) → units/avg_nav/avg_fx/amount/invest_twd 都正規化。"""
+    """v19.436:v2 worksheet (英文 header, 10 欄) → units/avg_nav/avg_fx/invest_twd 正規化。"""
     ws = MagicMock()
     ws.row_values.return_value = list(ALL_COLS_V2)
     ws.get_all_records.return_value = [
-        {"policy_id": "p1", "item_type": "fund", "fund_code": "FIDXEQI",
-         "fund_name": "富達世界", "units": "1234.5", "avg_nav": "12.345",
-         "avg_nav_with_div": "10.1", "avg_fx": "31.2", "currency": "USD",
-         "tier": "core", "amount": "", "invest_twd": "475,000"},
-        {"policy_id": "p1", "item_type": "cash", "fund_code": "",
-         "fund_name": "", "units": "", "avg_nav": "", "avg_nav_with_div": "",
-         "avg_fx": "", "currency": "TWD", "tier": "", "amount": "500000",
-         "invest_twd": ""},
+        {"policy_id": "p1", "fund_code": "FIDXEQI", "fund_name": "富達世界",
+         "currency": "USD", "tier": "core", "invest_twd": "475,000",
+         "div_cash_pct": "80", "units": "1234.5", "avg_nav": "12.345",
+         "avg_fx": "31.2"},
     ]
     sh = MagicMock(); sh.worksheet.return_value = ws
     client = MagicMock(); client.open_by_key.return_value = sh
     df = load_policy_v2(client, "sid", "p1")
-    assert len(df) == 2
+    assert len(df) == 1
+    assert list(df.columns) == list(ALL_COLS_V2)
     assert df.iloc[0]["units"] == 1234.5
     assert df.iloc[0]["avg_nav"] == 12.345
-    assert df.iloc[0]["avg_nav_with_div"] == 10.1
+    assert df.iloc[0]["avg_fx"] == 31.2
     assert df.iloc[0]["invest_twd"] == 475000
-    assert df.iloc[1]["item_type"] == "cash"
-    assert df.iloc[1]["amount"] == 500000.0
+    assert df.iloc[0]["div_cash_pct"] == 80.0
 
 
 def test_load_policy_v2_reads_chinese_headers():
@@ -1234,17 +1231,15 @@ def test_load_policy_v2_reads_chinese_headers():
     # get_all_records 用中文 key
     ws.get_all_records.return_value = [{
         ZH_HEADERS_V2["policy_id"]: "p1",
-        ZH_HEADERS_V2["item_type"]: "fund",
         ZH_HEADERS_V2["fund_code"]: "FIDXEQI",
         ZH_HEADERS_V2["fund_name"]: "富達",
-        ZH_HEADERS_V2["units"]: "1781",
-        ZH_HEADERS_V2["avg_nav"]: "8.67",
-        ZH_HEADERS_V2["avg_nav_with_div"]: "6.97",
-        ZH_HEADERS_V2["avg_fx"]: "32.35",
         ZH_HEADERS_V2["currency"]: "USD",
         ZH_HEADERS_V2["tier"]: "core",
-        ZH_HEADERS_V2["amount"]: "",
         ZH_HEADERS_V2["invest_twd"]: "499509",
+        ZH_HEADERS_V2["div_cash_pct"]: "100",
+        ZH_HEADERS_V2["units"]: "1781",
+        ZH_HEADERS_V2["avg_nav"]: "8.67",
+        ZH_HEADERS_V2["avg_fx"]: "32.35",
     }]
     sh = MagicMock(); sh.worksheet.return_value = ws
     client = MagicMock(); client.open_by_key.return_value = sh
@@ -1252,7 +1247,7 @@ def test_load_policy_v2_reads_chinese_headers():
     # df 欄位名應該被翻成英文
     assert list(df.columns) == list(ALL_COLS_V2)
     assert df.iloc[0]["policy_id"] == "p1"
-    assert df.iloc[0]["avg_nav_with_div"] == 6.97
+    assert df.iloc[0]["avg_nav"] == 8.67
     assert df.iloc[0]["invest_twd"] == 499509
 
 
@@ -1265,7 +1260,7 @@ def test_is_v2_worksheet_detects_zh_header():
 
 
 def test_write_policy_v2_writes_zh_header_plus_rows_only_v2_cols():
-    """v18.153：整 tab 覆寫 — header 列為 ZH 翻譯；fund + cash 各 1 列。"""
+    """v19.436:整 tab 覆寫 — header 列為 ZH 翻譯(10 欄);無 fund_code 的列(舊現金列)被跳過。"""
     from repositories.policy_repository import ZH_HEADERS_V2
     ws = MagicMock()
     sh = MagicMock(); sh.worksheet.return_value = ws
@@ -1273,43 +1268,40 @@ def test_write_policy_v2_writes_zh_header_plus_rows_only_v2_cols():
 
     import pandas as pd
     df = pd.DataFrame([
-        {"policy_id": "p1", "item_type": ITEM_TYPE_FUND, "fund_code": "FIDXEQI",
+        {"policy_id": "p1", "fund_code": "FIDXEQI",
          "fund_name": "富達世界", "units": 1234.5, "avg_nav": 12.345,
-         "avg_nav_with_div": 10.1, "avg_fx": 31.2, "currency": "USD",
-         "tier": "core", "amount": "", "invest_twd": 475000,
+         "avg_fx": 31.2, "currency": "USD", "tier": "core",
+         "invest_twd": 475000, "div_cash_pct": 80,
          "extra_garbage": "ignore me"},
-        {"policy_id": "p1", "item_type": ITEM_TYPE_CASH, "currency": "TWD",
-         "amount": 500000},
+        {"policy_id": "p1", "fund_code": "", "currency": "TWD"},   # 無代號 → 跳過
     ])
     n = write_policy_v2(client, "sid", "p1", df)
-    assert n == 2
+    assert n == 1   # 只寫 1 檔基金(舊現金列無 fund_code 被跳過)
     ws.clear.assert_called_once()
     ws.update.assert_called_once()
     _addr, payload = ws.update.call_args.args
     assert _addr == "A1"
-    # header 是中文（雙向翻譯層）
+    # header 是中文（雙向翻譯層,10 欄）
     assert payload[0] == [ZH_HEADERS_V2[c] for c in ALL_COLS_V2]
-    # 兩列：fund + cash
-    assert len(payload) == 3
+    assert len(payload) == 2   # header + 1 fund 列
     # extra_garbage 被丟掉
     assert "ignore me" not in str(payload)
 
 
 def test_write_policy_v2_drops_fully_empty_rows():
-    """整列空白 row 應該被剔除。"""
+    """整列空白 / 無 fund_code 的 row 應該被剔除。"""
     ws = MagicMock()
     sh = MagicMock(); sh.worksheet.return_value = ws
     client = MagicMock(); client.open_by_key.return_value = sh
 
     import pandas as pd
     df = pd.DataFrame([
-        {"policy_id": "p1", "item_type": ITEM_TYPE_FUND, "fund_code": "X"},
-        {"policy_id": "", "item_type": "", "fund_code": ""},
-        {"policy_id": "p1", "item_type": ITEM_TYPE_CASH, "currency": "TWD",
-         "amount": 100},
+        {"policy_id": "p1", "fund_code": "X"},
+        {"policy_id": "", "fund_code": ""},
+        {"policy_id": "p1", "fund_code": "", "currency": "TWD"},   # 無代號 → 跳過
     ])
     n = write_policy_v2(client, "sid", "p1", df)
-    assert n == 2   # 空 row 被剔除
+    assert n == 1   # 只有 fund_code=X 一列
 
 
 def test_write_policy_v2_creates_ws_if_missing():
@@ -1343,9 +1335,9 @@ def test_load_all_policies_v2_includes_v1_tabs_too():
     ws_v2 = MagicMock(); ws_v2.title = "policy-v2"
     ws_v2.row_values.return_value = list(ALL_COLS_V2)
     ws_v2.get_all_records.return_value = [
-        {"policy_id": "p2", "item_type": "fund", "fund_code": "F1",
-         "fund_name": "f1", "units": 100, "avg_nav": 10, "avg_fx": 30,
-         "currency": "USD", "tier": "core", "amount": "", "invest_twd": 30000},
+        {"policy_id": "p2", "fund_code": "F1", "fund_name": "f1",
+         "currency": "USD", "tier": "core", "invest_twd": 30000,
+         "div_cash_pct": 100, "units": 100, "avg_nav": 10, "avg_fx": 30},
     ]
     ws_sys = MagicMock(); ws_sys.title = "_T7_State"
     sh = MagicMock(); sh.worksheets.return_value = [ws_v1, ws_v2, ws_sys]
@@ -1354,7 +1346,7 @@ def test_load_all_policies_v2_includes_v1_tabs_too():
     df = load_all_policies_v2(client, "sid")
     assert set(df["fund_code"]) == {"F1", "ALBT8"}      # v2 的 F1 + v1 的 ALBT8 都在(不漏)
     _alb = df[df["fund_code"] == "ALBT8"].iloc[0]
-    assert _alb["item_type"] == "fund" and _alb["tier"] == "core"
+    assert _alb["tier"] == "core"      # v19.436:item_type 已退役,只驗 tier 映射
 
 
 def test_copy_sheet_as_backup_succeeds():

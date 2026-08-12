@@ -50,7 +50,7 @@ def test_v1_frame_to_v2_maps_columns():
     assert out["fund_code"].iloc[0] == "ALBT8"          # fund_url → fund_code(裸代號原樣)
     assert out["tier"].iloc[0] == "core"                # policy_tier → tier
     assert out["avg_fx"].iloc[0] == "31.5"              # fx_avg → avg_fx
-    assert out["item_type"].iloc[0] == "fund"           # v1 全為基金列
+    # v19.436:item_type 已退役 → _v1_frame_to_v2 不再補該欄
 
 
 # ── _records_to_policy_df 中文表頭別名(v1 path)────────────
@@ -89,12 +89,12 @@ def test_load_all_policies_v2_captures_both_schemas():
     codes = {str(x).strip() for x in df["fund_code"]}
     assert "TLZF9" in codes and "ALBT8" in codes        # 兩種 schema 都吃到(不漏英文分頁)
     _alb = df[df["fund_code"] == "ALBT8"].iloc[0]
-    assert _alb["item_type"] == "fund" and _alb["tier"] == "core"
+    assert _alb["tier"] == "core"                        # v19.436:item_type 退役,驗 tier
     assert int(float(_alb["invest_twd"])) == 2000
 
 
-# ── 稽核 FINDING 1(v19.433):write_policy_v2 須寫滿 13 欄、保留 div_cash_pct ────────
-def test_write_policy_v2_emits_all_13_cols_preserving_div_cash_pct():
+# ── v19.436:write_policy_v2 寫滿 10 欄、保留 div_cash_pct(不被洗成 100)────────
+def test_write_policy_v2_emits_10_cols_preserving_div_cash_pct():
     from repositories.policy.v2 import ALL_COLS_V2, write_policy_v2
 
     _cap: dict = {}
@@ -115,15 +115,16 @@ def test_write_policy_v2_emits_all_13_cols_preserving_div_cash_pct():
             return _SH()
 
     df = pd.DataFrame([{
-        "policy_id": "P1", "item_type": "fund", "fund_code": "ACTI71",
+        "policy_id": "P1", "fund_code": "ACTI71",
         "avg_nav": 8.67, "invest_twd": 100, "currency": "美元", "tier": "core",
         "div_cash_pct": 20,                                   # user 設過 20% → 不可被洗成 100
     }])
     write_policy_v2(_C(), "sid", "P1", df)
     _rows = _cap["rows"]
-    assert len(_rows[0]) == 13 == len(ALL_COLS_V2)            # header 13 欄
-    assert all(len(r) == 13 for r in _rows)                   # 每列也 13 欄(修前只 12)
-    assert float(_rows[1][12]) == 20.0                        # div_cash_pct(第 13 欄)保留,非 100
+    _dcp_idx = list(ALL_COLS_V2).index("div_cash_pct")        # 新排序後的欄位位置
+    assert len(_rows[0]) == 10 == len(ALL_COLS_V2)            # header 10 欄
+    assert all(len(r) == 10 for r in _rows)                   # 每列也 10 欄
+    assert float(_rows[1][_dcp_idx]) == 20.0                  # div_cash_pct 保留,非 100
 
 
 # ── 稽核 FINDING 2:v1→v2 路徑也要擋 schema-leak 鬼列 ────────────

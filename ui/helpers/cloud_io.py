@@ -11,7 +11,6 @@ from typing import Any, MutableMapping
 from models.policy import fund_pk_str
 from repositories.policy_repository import (
     ALL_COLS_V2,
-    ITEM_TYPE_FUND,
     PolicySheetError,
     _is_quota_error,
     detect_sheet_schema_version,
@@ -62,22 +61,20 @@ def _dump_all_to_sheet_v2(client: object,
                        else float(_f.get("fx_avg", 0) or 0))
             _units = (float(getattr(_pos, "units", 0) or 0) if _pos
                       else float(_f.get("units", 0) or 0))
+            # v19.436:10 欄 schema — 不再寫 item_type/avg_nav_with_div/amount
             _by_policy.setdefault(_pid, []).append({
                 "policy_id":        _pid,
-                "item_type":        ITEM_TYPE_FUND,
                 "fund_code":        _code,
                 "fund_name":        str(_f.get("name", "") or ""),
-                "units":            _units,
-                "avg_nav":          _avg_nav,
-                "avg_nav_with_div": float(_f.get("avg_nav_with_div", 0) or 0),
-                "avg_fx":           _fx_avg,
                 "currency":         str(_f.get("currency", "")),
                 "tier":             ("core" if _f.get("is_core") else
                                      "satellite" if _f.get("is_core") is False
                                      else ""),
-                "amount":           0,
                 "invest_twd":       int(_f.get("invest_twd", 0) or 0),
                 "div_cash_pct":     float(_f.get("div_cash_pct", 100) or 0),
+                "units":            _units,
+                "avg_nav":          _avg_nav,
+                "avg_fx":           _fx_avg,
             })
         _written = 0
         _errors: list[str] = []
@@ -105,6 +102,77 @@ def _dump_all_to_sheet_v2(client: object,
         out["error"] = f"v2 寫入失敗：{_pe}"
     except Exception as _e:
         out["error"] = f"未預期錯誤：[{type(_e).__name__}] {_e}"
+    return out
+
+
+def _row_needs_name_fix(fund_name: Any, policy_id: Any) -> bool:
+    """v19.436:fund_name 為空、或被灌成 policy_id(舊 v1→v2 migration bug) → 需重抓真名。
+    純函式,供單元測試。"""
+    _fn = str(fund_name or "").strip()
+    return (not _fn) or (_fn == str(policy_id or "").strip())
+
+
+def fix_and_shrink_v2_sheets(client: object, sheet_id: str, *,
+                              info_fetcher, progress_cb=None) -> dict:
+    """v19.436 一鍵修正 + 精簡:逐張 v2 保單分頁 ——
+    (1) fund_name 被灌成 policy_id / 空 → 用 `info_fetcher(code)` 從 MoneyDJ 重抓真名
+        (順帶補空的 currency / tier);
+    (2) 以 10 欄 schema 整張重寫(write_policy_v2)→ **物理精簡**:舊 13 欄的
+        item_type / 含息成本 / 金額 三欄自然消失。
+
+    Args:
+        info_fetcher: `code -> (fund_name, currency, tier)`;注入以便單元測試
+                      (UI 端傳 MoneyDJ 版本)。
+        progress_cb:  optional `(done:int, total:int, policy_id:str) -> None`。
+    Returns:
+        {"policies": int, "funds": int, "names_fixed": int, "errors": list[str]}
+    """
+    from repositories.policy_repository import (  # noqa: PLC0415
+        list_policy_worksheets, load_policy_v2)
+    out: dict = {"policies": 0, "funds": 0, "names_fixed": 0, "errors": []}
+    try:
+        _pids = list_policy_worksheets(client, sheet_id)
+    except Exception as _e:  # noqa: BLE001
+        out["errors"].append(f"列保單分頁失敗:{str(_e)[:100]}")
+        return out
+    _total = len(_pids)
+    for _i, _pid in enumerate(_pids):
+        try:
+            _df = load_policy_v2(client, sheet_id, _pid)
+        except Exception as _e:  # noqa: BLE001
+            out["errors"].append(f"{_pid}: 讀取失敗 {str(_e)[:80]}")
+            if progress_cb:
+                progress_cb(_i + 1, _total, _pid)
+            continue
+        out["policies"] += 1
+        if _df is None or _df.empty:
+            if progress_cb:
+                progress_cb(_i + 1, _total, _pid)
+            continue
+        _df = _df.copy()
+        for _idx, _r in _df.iterrows():
+            _code = str(_r.get("fund_code", "") or "").strip()
+            if not _code:
+                continue
+            out["funds"] += 1
+            if _row_needs_name_fix(_r.get("fund_name", ""), _pid):
+                try:
+                    _fn, _ccy, _tier = info_fetcher(_code)
+                except Exception:  # noqa: BLE001
+                    _fn = _ccy = _tier = ""
+                if _fn:
+                    _df.at[_idx, "fund_name"] = _fn
+                    out["names_fixed"] += 1
+                if _ccy and not str(_r.get("currency", "") or "").strip():
+                    _df.at[_idx, "currency"] = _ccy
+                if _tier and not str(_r.get("tier", "") or "").strip():
+                    _df.at[_idx, "tier"] = _tier
+        try:
+            write_policy_v2(client, sheet_id, _pid, _df)
+        except Exception as _e:  # noqa: BLE001
+            out["errors"].append(f"{_pid}: 寫回失敗 {str(_e)[:80]}")
+        if progress_cb:
+            progress_cb(_i + 1, _total, _pid)
     return out
 
 
@@ -257,8 +325,8 @@ def _load_all_from_sheet_v2(client: object,
         _prev_codes = {fund_pk_str(_f) for _f in _prev_funds}
         _new_codes = set()
         for _, _row in _df.iterrows():
-            if str(_row.get("item_type", "")).strip() != ITEM_TYPE_FUND:
-                continue   # 跳過 cash 列（後續可擴）
+            # v19.436:item_type 已退役,10 欄 schema 全為基金列 → 只需跳過無主鍵的空列
+            # (原 `item_type != fund → continue` 在無 item_type 欄時會把每列都當非基金跳掉)。
             _pid = str(_row.get("policy_id", "") or "").strip()
             _code = str(_row.get("fund_code", "") or "").strip().upper()
             if not _pid or not _code:
