@@ -109,20 +109,23 @@ def _default_fetch(code: str) -> dict:
     return auto_fetch_moneydj(code) or {}
 
 
-def _fund_line(code: str, fd: dict) -> str:
-    """組單檔一行:代號 名稱:淨值(日期) ｜近5日 ±x%。抓不到 → 誠實「資料不足」(§1)。"""
+def _label(code: str, fd: dict) -> str:
     name = str((fd or {}).get("fund_name") or "").strip()
-    label = f"{code} {name}".strip() if name else code
-    series = (fd or {}).get("series")
+    return f"{code} {name}".strip() if name else code
+
+
+def _series_latest(series):
+    """序列 → (nav, date, 近5日漲跌字串)。抽不到 / nav<=0 / 非日期索引 → None(§1 不偽造)。
+
+    守 index 型別:非日期(RangeIndex/NaT)→ date 非 YYYY-MM-DD → 不把假日期配真 nav。
+    近5日需 t 與 t-5;不足則誠實省略(不猜)。
+    """
     try:
         if series is not None and len(series) > 0:
             nav = float(series.iloc[-1])
             date = str(series.index[-1])[:10]
-            # 守 index 型別:非日期索引(RangeIndex/NaT)→ date 非 YYYY-MM-DD → 視為資料不足
-            # (§1:不把 cosmetic 的假日期配真 nav 送出)
             if nav > 0 and re.match(r"^\d{4}-\d{2}-\d{2}$", date):
                 chg = ""
-                # 近 5 交易日漲跌(需 t 與 t-5;不足則誠實省略,不猜)
                 try:
                     if len(series) >= 6:
                         base = float(series.iloc[-6])
@@ -130,18 +133,49 @@ def _fund_line(code: str, fd: dict) -> str:
                             chg = f" ｜近5日 {(nav / base - 1) * 100:+.1f}%"
                 except (TypeError, ValueError):
                     chg = ""
-                return f"• {label}:{nav:.4f}（{date}）{chg}"
+                return nav, date, chg
     except Exception:  # noqa: BLE001 — 單檔壞不拖累整批
         pass
-    return f"• {label}:⚠️ 資料不足（抓不到 MoneyDJ 淨值）"
+    return None
 
 
-def build_message(items: list, *, fetch_fn=None, as_of: str = "",
+def _fund_line(code: str, fd: dict) -> str:
+    """live MoneyDJ 淨值行:代號 名稱:淨值(日期) ｜近5日 ±x%。抓不到 → 「資料不足」(§1)。"""
+    got = _series_latest((fd or {}).get("series"))
+    if got is not None:
+        nav, date, chg = got
+        return f"• {_label(code, fd)}:{nav:.4f}（{date}）{chg}"
+    return f"• {_label(code, fd)}:⚠️ 資料不足（抓不到 MoneyDJ 淨值）"
+
+
+def _hist_line(code: str, fd: dict, series) -> "str | None":
+    """live 抓不到時,退用 nav_history 累積序列**最近一筆**,誠實標『累積存檔』+ 真實日期。
+
+    §1/§2.4:這不是今日 live 值,是已累積存檔的最近一筆(帶 as_of 日期),
+    不偽造成當期;存檔序列稀疏 → 不報近5日(避免誤導)。抽不到 → None。
+    """
+    got = _series_latest(series)
+    if got is None:
+        return None
+    nav, date, _chg = got
+    return f"• {_label(code, fd)}:{nav:.4f}（{date}｜累積存檔）"
+
+
+def _default_hist(code: str):
+    """讀已累積的 nav_history 序列(Service Account;美國 IP 也讀得到)。未啟用 → 空 Series。"""
+    from services.nav_history_gs import load_series
+    return load_series(code)
+
+
+def build_message(items: list, *, fetch_fn=None, hist_fn=None, as_of: str = "",
                   stats_out: "dict | None" = None) -> str:
     """逐檔抓 MoneyDJ 淨值 → 組推播文字。純資料驅動,缺料誠實標,不捏造(§1/spec §6-2)。
 
+    hist_fn:opt-in 退路 — live 抓不到時,用它讀 nav_history 累積序列最近一筆(標『累積存檔』)。
+        傳 None → 不退(build_message 保持純注入);main() 會帶入 `_default_hist`(讀 GS)。
+        用途:GitHub Actions 美國 IP 抓不到 live MoneyDJ 時,仍能報**真實的**最近存檔淨值。
     stats_out:opt-in 側車 dict — 若傳入,填 {"total", "missing"} 供 caller 判斷全失敗
-    (§5 可觀測;既有 caller 傳 None 行為零變化)。
+        (§5 可觀測;既有 caller 傳 None 行為零變化)。
     """
     if fetch_fn is None:
         fetch_fn = _default_fetch
@@ -149,6 +183,7 @@ def build_message(items: list, *, fetch_fn=None, as_of: str = "",
         _dt.timezone(_dt.timedelta(hours=8))).date().isoformat()
     lines = [f"📈 追蹤清單淨值（{_as_of}）", f"共 {len(items)} 檔", ""]
     _miss = 0
+    _stale = 0
     for code in items:
         try:
             fd = fetch_fn(code)
@@ -156,15 +191,31 @@ def build_message(items: list, *, fetch_fn=None, as_of: str = "",
             print(f"  ⚠️ {code} 抓取失敗:{type(_e).__name__}")   # §3.3 留痕(只印型別)
             fd = {}
         line = _fund_line(code, fd)
+        if "資料不足" in line and hist_fn is not None:      # live 抓不到 → 退累積存檔
+            try:
+                _s = hist_fn(code)
+            except Exception as _e:  # noqa: BLE001 — nav_history I/O 失敗 → 放棄退路,不中斷
+                print(f"  ⚠️ {code} nav_history 退路失敗:{type(_e).__name__}")
+                _s = None
+            _hl = _hist_line(code, fd, _s)
+            if _hl is not None:
+                line = _hl
+                _stale += 1
         if "資料不足" in line:
             _miss += 1
         lines.append(line)
+    _notes = []
+    if _stale:
+        _notes.append(f"🗂️ {_stale} 檔為累積存檔的最近一筆（非今日 live；美國 IP 抓不到即時值時的退路）。")
     if _miss:
-        lines += ["", f"⚠️ {_miss} 檔抓不到淨值（美國 IP 直連常擋 MoneyDJ；"
-                      "可設 PROXY_URL 走 NAS 代理，或改在 NAS 端跑）。"]
+        _notes.append(f"⚠️ {_miss} 檔完全無資料（live 與存檔都沒有；美國 IP 直連常擋 MoneyDJ，"
+                      "可設 PROXY_URL 走 NAS 代理，或改在 NAS 端跑）。")
+    if _notes:
+        lines += [""] + _notes
     if stats_out is not None:
         stats_out["total"] = len(items)
         stats_out["missing"] = _miss
+        stats_out["stale"] = _stale
     return "\n".join(lines)
 
 
@@ -225,7 +276,8 @@ def main(argv=None) -> int:
     print(f"📋 追蹤 {len(items)} 檔:{', '.join(items)}")
 
     _stats: dict = {}
-    msg = build_message(items, stats_out=_stats)
+    # hist_fn=_default_hist:live 抓不到時退用已累積 nav_history 最近一筆(§ 美國 IP 退路)
+    msg = build_message(items, hist_fn=_default_hist, stats_out=_stats)
     _all_missing = len(items) > 0 and _stats.get("missing", 0) >= len(items)
     if args.dry_run:
         print("─" * 40 + "\n" + msg + "\n" + "─" * 40)
