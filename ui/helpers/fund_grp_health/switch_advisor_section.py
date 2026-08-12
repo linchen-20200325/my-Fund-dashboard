@@ -398,7 +398,9 @@ def render_switch_advisor_section(funds: list) -> None:
     st.divider()
     st.markdown("### 🎯 換股池顧問(選股池 + 換股建議・教學非保證)")
 
-    _render_pool_editor()
+    # v19.433:選股池的加/刪/改已移到「📋 我的管理室」分頁集中管理(避免同一 st.tabs run
+    # 兩處都渲染 _render_pool_editor → DuplicateWidgetID)。本區仍讀選股池做配對(下方按鈕)。
+    st.caption("💡 選股池的新增/刪除已搬到「📋 我的管理室」分頁集中管理;本區直接讀你的選股池做換股配對。")
 
     if not funds:
         st.info("尚未載入持倉基金 → 先在上方載入基金,再回來產生換股建議。")
