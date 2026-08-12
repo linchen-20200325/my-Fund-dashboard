@@ -85,6 +85,169 @@ def _import_history_to_pool(df, existing_codes, add_fn) -> dict:
     return {"added": _added, "skipped": _total - _added, "total": _total}
 
 
+def _render_fund_history():
+    """📋 曾經查過的基金標的清單(Tab2/Tab3 自動記錄 + 預設)。v19.435 從說明書 Tab⑤ 整段搬來管理室。
+
+    手動新增 / CSV 上傳還原 / 下載 / 清空 / 複製代號 / 升等預設,資料走 `services.fund_history`。
+    標題由呼叫端的 expander 提供(避免重複),本函式只渲染內容。
+    """
+    with st.container():
+        from services.fund_history import (
+            clear_history as _clear_fh,
+            export_preset_funds_json as _export_preset_json,
+            get_history_df as _hist_df,
+            import_from_csv as _import_fh,
+            is_preset as _is_preset,
+            promote_to_preset as _promote_preset,
+            record_fund as _rec_fh_manual,
+        )
+
+        # 手動新增表單
+        with st.form("_fh_add_form", clear_on_submit=True):
+            _add_c1, _add_c2, _add_c3 = st.columns([1, 2, 1])
+            _new_code = _add_c1.text_input(
+                "基金代號", placeholder="例：ACCP138",
+                key="_fh_new_code",
+            )
+            _new_name = _add_c2.text_input(
+                "基金名稱（可選）", placeholder="例：聯博全球高收益基金",
+                key="_fh_new_name",
+            )
+            _add_c3.markdown("&nbsp;", unsafe_allow_html=True)  # 對齊
+            _submitted = _add_c3.form_submit_button(
+                "➕ 加入清單", use_container_width=True,
+            )
+            if _submitted and _new_code.strip():
+                _rec_fh_manual(_new_code.strip(), _new_name.strip(), source="manual")
+                st.success(f"✅ 已加入 {_new_code.strip().upper()}")
+                st.rerun()
+
+        _df_fh = _hist_df()
+        _fh_up = st.file_uploader(
+            "📥 上傳之前下載的 fund_history.csv 還原紀錄（reboot 後第一件事）",
+            type=["csv"],
+            key="_fh_upload",
+            help="紀錄會與當前清單 merge：同代號疊代次數 + 聯集來源 + 取較早 first / 較晚 last",
+        )
+        if _fh_up is not None:
+            _ret = _import_fh(_fh_up.getvalue())
+            if _ret["errors"]:
+                st.error("、".join(_ret["errors"]))
+            else:
+                st.success(
+                    f"✅ 還原成功：新增 {_ret['imported']} 檔、merge {_ret['merged']} 檔。"
+                )
+            _df_fh = _hist_df()
+        if _df_fh.empty:
+            st.info(
+                "尚未查過任何基金。在「🔍 個基深掘」抓取後 / 「📦 組合基金」載入後，"
+                "代號與名稱會自動寫入此清單。"
+            )
+        else:
+            _fh_c1, _fh_c2, _fh_c3 = st.columns([2, 1, 1])
+            _fh_c1.caption(f"📊 共 **{len(_df_fh)}** 檔唯一基金（依最近查詢時間排序）")
+            _fh_csv = _df_fh.to_csv(index=False).encode("utf-8-sig")
+            _fh_c2.download_button(
+                "💾 下載 CSV",
+                _fh_csv,
+                file_name="fund_history.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="_fh_dl_csv",
+            )
+            if _fh_c3.button("🗑️ 清空紀錄", use_container_width=True, key="_fh_clear"):
+                _clear_fh()
+                st.rerun()
+            st.dataframe(_df_fh, use_container_width=True, hide_index=True)
+
+            # ── v18.290: 點代碼自動複製（手機 tap 即複製）─
+            # v18.293 hotfix: get_history_df() 欄名是中文「代號/名稱」非英文 code/name
+            # 容錯：兩個欄名都接受（避免未來改 schema 再炸）
+            _code_col = "代號" if "代號" in _df_fh.columns else (
+                "code" if "code" in _df_fh.columns else None
+            )
+            _name_col = "名稱" if "名稱" in _df_fh.columns else (
+                "name" if "name" in _df_fh.columns else None
+            )
+            if _code_col is None:
+                st.caption(f"⚠️ 找不到代號欄（df columns: {list(_df_fh.columns)}）")
+                _codes_list = []
+            else:
+                st.markdown("**📋 點下方任一代號的右側 📋 icon 即可複製**")
+                _codes_list = _df_fh[_code_col].astype(str).str.upper().tolist()
+                # 多欄並排省空間（每 4 個一排）
+                _per_row = 4
+                for _i in range(0, len(_codes_list), _per_row):
+                    _cols = st.columns(_per_row)
+                    for _j, _code in enumerate(_codes_list[_i:_i + _per_row]):
+                        with _cols[_j]:
+                            st.code(_code, language=None)
+
+            # ── v18.290: ⭐ 升等為預設（寫回 config/preset_funds.json）─
+            st.markdown("---")
+            st.markdown("**⭐ 升等為預設清單**（reboot 後仍存在）")
+            _promo_c1, _promo_c2, _promo_c3 = st.columns([2, 2, 1])
+            _candidates = [c for c in _codes_list if not _is_preset(c)]
+            if not _candidates:
+                _promo_c1.caption("✅ 清單裡所有基金都已是預設了")
+            else:
+                _sel_code = _promo_c1.selectbox(
+                    "選一檔基金",
+                    options=_candidates,
+                    key="_fh_promote_sel",
+                    label_visibility="collapsed",
+                )
+                # 取對應 name（從 df 找最新一筆）
+                _sel_name = ""
+                if _code_col and _name_col:
+                    _row_match = _df_fh[
+                        _df_fh[_code_col].astype(str).str.upper() == _sel_code
+                    ]
+                    if not _row_match.empty:
+                        _sel_name = str(_row_match.iloc[0].get(_name_col, "") or "")
+                _promo_c2.text_input(
+                    "基金名稱（會寫進 JSON）",
+                    value=_sel_name,
+                    key="_fh_promote_name",
+                    label_visibility="collapsed",
+                )
+                if _promo_c3.button(
+                    "⭐ 升等", use_container_width=True, key="_fh_promote_btn",
+                ):
+                    _r = _promote_preset(
+                        _sel_code,
+                        st.session_state.get("_fh_promote_name", _sel_name),
+                    )
+                    if _r["errors"]:
+                        st.error("、".join(_r["errors"]))
+                    elif _r["already"]:
+                        st.info(f"ℹ️ {_sel_code} 已在預設清單，名稱已更新")
+                    else:
+                        st.success(
+                            f"✅ 已升等 {_sel_code} → 預設清單共 {_r['total']} 檔。"
+                            "**記得下方按「💾 下載 preset_funds.json」並 commit 回 repo，"
+                            "否則 Cloud reboot 後會消失！**"
+                        )
+                    st.rerun()
+
+            # 下載最新 preset_funds.json 給 user commit
+            _preset_json_bytes = _export_preset_json()
+            st.download_button(
+                "💾 下載 preset_funds.json（reboot 持久化必做）",
+                _preset_json_bytes,
+                file_name="preset_funds.json",
+                mime="application/json",
+                use_container_width=True,
+                key="_fh_dl_preset_json",
+                help="升等後務必下載此檔 → 取代 repo 的 config/preset_funds.json → git commit + push",
+            )
+        st.caption(
+            "💡 **內建預設常用基金永遠在**（即使 cache 被清空也會看到，來源標 `preset`）。"
+            "user 抓過 / 手動加的紀錄存於容器內 `cache/fund_history.json`，"
+            "**Streamlit Cloud 重啟容器時這部分會清空** → 用「下載 CSV → reboot 後上傳 CSV」雙保險。"
+        )
+
+
 def _sec_pool():
     st.markdown("### 📁 選股池(候選基金)")
     st.caption("你的候選基金清單,供換股顧問配對。加/刪/改**即時存到 Google Sheets**(`_fund_pool` 分頁),"
@@ -106,6 +269,12 @@ def _sec_pool():
                 st.rerun()
             except Exception as _e:  # noqa: BLE001
                 _friendly("匯入基金清單失敗", _e, level="error")
+
+    with st.expander("📋 曾經查過的基金標的清單（Tab2/Tab3 自動記錄 + 預設）—— 上方按鈕的來源清單"):
+        try:
+            _render_fund_history()                       # v19.435 從說明書 Tab⑤ 搬來
+        except Exception as _e:  # noqa: BLE001
+            _friendly("基金標的清單載入失敗", _e)
 
     try:
         from ui.helpers.fund_grp_health.switch_advisor_section import _render_pool_editor

@@ -65,6 +65,15 @@ def test_manage_tab_registered_in_app():
     assert "📋 我的管理室" in txt and "with tab_manage:" in txt
 
 
+def test_fund_history_section_moved_from_manual_to_manage():
+    """v19.435:曾經查過的基金清單整段搬到管理室,說明書只留指路(避免 _fh_* widget 雙渲染崩)。"""
+    _t6 = (_ROOT / "ui" / "tab6_manual.py").read_text(encoding="utf-8")
+    _tm = (_ROOT / "ui" / "tab_manage.py").read_text(encoding="utf-8")
+    assert "_fh_add_form" not in _t6 and "_fh_promote_btn" not in _t6   # 說明書已無該 widget
+    assert "已搬到" in _t6                                              # 留指路
+    assert "def _render_fund_history" in _tm and "_fh_add_form" in _tm  # 管理室有整段
+
+
 def test_pool_editor_no_longer_called_in_switch_advisor_section():
     """換股顧問區不得再直接呼叫 _render_pool_editor()(已移到管理室;避免同 run 雙渲染崩)。"""
     txt = (_ROOT / "ui" / "helpers" / "fund_grp_health" / "switch_advisor_section.py").read_text(encoding="utf-8")
