@@ -762,9 +762,41 @@ def _sec_nav_backfill() -> None:
                "抓來的歷史會**併入**該基金既有序列,若級別/幣別對不上(例:你持配息級別卻抓累積級別、"
                "或幣別不同),接點會產生**跳空 → 報酬失真**。**最安全**是用在 App 目前完全抓不到"
                "淨值的基金(如 ACTI71),那時併入的是純 FundClear 單一序列,不會混。")
-    with st.expander("展開:找對應基金 → 選級別 → 下載存進 Google Sheet"):
-        _name = st.text_input("基金名稱(你持倉的中文名)", key="navbf_name",
-                              placeholder="例:聯博多元資產收益組合基金")
+    with st.expander("展開:①挑基金 → ②選級別 → ③下載存進 Google Sheet"):
+        # ① 用「現在有的資料」:載入你的持倉,從中挑(自動帶基金名稱 + 內部碼,免手打、免打錯)
+        if st.button("📇 載入我的持倉清單(從中挑基金)", key="navbf_load_holdings"):
+            try:
+                _cli_h, _sid_h = _policy_client_and_sheet()
+                if _cli_h is None:
+                    st.info(_sid_h)
+                else:
+                    from repositories.policy.v2 import load_all_policies_v2
+                    _pdf_h = load_all_policies_v2(_cli_h, _sid_h)
+                    _seen, _hold = set(), []
+                    for _r in _pdf_h.itertuples(index=False):
+                        _c = str(getattr(_r, "fund_code", "") or "").strip().upper()
+                        _nm = str(getattr(_r, "fund_name", "") or "").strip()
+                        if _c and _c not in _seen:
+                            _seen.add(_c)
+                            _hold.append({"code": _c, "name": _nm})
+                    st.session_state["navbf_holdings"] = _hold
+                    if not _hold:
+                        st.info("持倉裡沒有基金代號可挑。")
+            except Exception as _e:  # noqa: BLE001
+                _friendly("載入持倉失敗", _e, level="error")
+
+        _hold = st.session_state.get("navbf_holdings") or []
+        _fixed_code = ""
+        if _hold:
+            _hopts = {f"{h['name'] or h['code']}（{h['code']}）": h for h in _hold}
+            _hpick = _hopts.get(st.selectbox("① 從你的持倉挑一檔(自動帶名稱 + 內部碼)",
+                                             list(_hopts), key="navbf_hold_pick"))
+            _name = (_hpick["name"] or _hpick["code"]) if _hpick else ""
+            _fixed_code = _hpick["code"] if _hpick else ""
+            st.caption(f"→ 用名稱「**{_name}**」去 FundClear 找,抓到後存進內部碼「**{_fixed_code}**」。")
+        else:
+            _name = st.text_input("① 基金名稱(或先按上面『載入持倉』從清單挑)", key="navbf_name",
+                                  placeholder="例:聯博多元資產收益組合基金")
         _org = st.text_input("機構代碼(選填;知道就填可加速。例 019=安聯)", key="navbf_org",
                              placeholder="留空 = 全機構搜尋(較慢;機構清單 endpoint 部署後才驗證)")
         if st.button("🔎 找 FundClear 對應基金", key="navbf_find", disabled=not _name.strip()):
@@ -800,8 +832,12 @@ def _sec_nav_backfill() -> None:
             _cpick = _copts.get(st.selectbox(
                 "選級別 —— **選你實際持有的那個**(幣別 + 累積/配息 都要一致,否則併入會跳空失真)",
                 list(_copts), key="navbf_class_pick"))
-            _app_code = st.text_input(
-                "存進 nav_history 的**持倉內部碼**(健診以此讀回;例 ACTI71)", key="navbf_appcode")
+            if _fixed_code:
+                _app_code = _fixed_code                            # 自動帶自持倉 → 健診一定讀得回
+                st.caption(f"存進內部碼:**{_app_code}**(自動帶自你的持倉,免打錯)")
+            else:
+                _app_code = st.text_input(
+                    "存進 nav_history 的**持倉內部碼**(健診以此讀回;例 ACTI71)", key="navbf_appcode")
             if _cpick and st.button("📥 下載完整歷史 + 存進 Google Sheet", key="navbf_dl",
                                     disabled=not _app_code.strip(), use_container_width=True):
                 try:
