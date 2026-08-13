@@ -1040,7 +1040,7 @@ entry[k] = v                                    # series/dict/list 直接複製
 
 **症狀①**（user 確認）：Google Sheet 保單分頁存完沒有「含息成本」欄。
 
-**完整追蹤（不盲改）**：user 走 per-policy 分頁路徑（tab 名 = policy_id，如 QL19676552）。寫：`upsert_fund_in_policy` 偵測表頭缺 ALL_COLS 任一欄 → `ws.update("A1:K1", [list(ALL_COLS)])` 升級成 11 欄、`_row_to_list(row, ALL_COLS)` 依序輸出 11 值（`avg_nav_with_div` = K 欄）。讀：`load_policy_worksheet` reindex ALL_COLS、`sync_policies_to_portfolio_funds` 有值才帶。**全鏈正確**；legacy 單表 `upsert_policy_row` 才不強制升表頭（非 user 路徑）。此症狀已修 3 次（v18.180/183/184）。
+**完整追蹤（不盲改）**：user 走 per-policy 分頁路徑（tab 名 = policy_id，如 POLICY_A）。寫：`upsert_fund_in_policy` 偵測表頭缺 ALL_COLS 任一欄 → `ws.update("A1:K1", [list(ALL_COLS)])` 升級成 11 欄、`_row_to_list(row, ALL_COLS)` 依序輸出 11 值（`avg_nav_with_div` = K 欄）。讀：`load_policy_worksheet` reindex ALL_COLS、`sync_policies_to_portfolio_funds` 有值才帶。**全鏈正確**；legacy 單表 `upsert_policy_row` 才不強制升表頭（非 user 路徑）。此症狀已修 3 次（v18.180/183/184）。
 
 **依 §5「同錯 2 次即停機」→ 改做除錯協議（instrument，不盲改邏輯）**：
 1. `dump_all_to_sheet` 原 `except (PolicySheetError, OAuthError): continue` **靜默吞**掉 per-fund 寫入失敗 → 改成收集 `(pid/code + 原因)` 進 `out["warnings"]`。下次「📦 全部寫入」若真有寫失敗（配額 429 / 權限 / 表頭升級失敗），畫面直接顯示根因，而非默默漏欄。
@@ -1160,7 +1160,7 @@ entry[k] = v                                    # series/dict/list 直接複製
 ### §3-S 新增「人看得懂的完整成本帳本」分頁 _持倉總覽（v18.182 新增）
 
 **問題場景**（user 截圖 + JSON 備份）：v18.180/181 驗證 OK，但 user 反映「看不到 T7、帳本資料沒在 Excel，JSON 也是」。釐清：
-1. user 開 Google Sheet 看到的是預設空白分頁 `工作表1`（資料其實在保單分頁 `00031611267318` 等，user 確認「有資料」）。
+1. user 開 Google Sheet 看到的是預設空白分頁 `工作表1`（資料其實在保單分頁 `POLICY_B` 等，user 確認「有資料」）。
 2. 完整帳本（單位數/平均成本/含息成本…）只存在 `_T7_State`（一格 `Ledger.to_dict()` JSON blob、人看不懂），且 user 的 Sheet 連這分頁都沒有；保單分頁只有 `invest_twd`，沒有 position。
 
 **方案**（user 選「只存成本帳本」、暫不含市值）：新增 `repositories/snapshot_repository.py`：
@@ -1198,7 +1198,7 @@ entry[k] = v                                    # series/dict/list 直接複製
 
 ### §3-P T7「套用為起始部位」存檔全量回寫保單分頁（v18.179 修補）
 
-**問題場景**：User 截圖反饋 — 在 T7「✏️ 編輯持倉」表單輸入各基金淨投資金額後按「💾 套用為起始部位（覆蓋 T7 帳本）」存檔，新增/編輯的項目不會回寫到使用者實際讀寫的保單分頁（如 `QL19676552`），只能每次下載手改。
+**問題場景**：User 截圖反饋 — 在 T7「✏️ 編輯持倉」表單輸入各基金淨投資金額後按「💾 套用為起始部位（覆蓋 T7 帳本）」存檔，新增/編輯的項目不會回寫到使用者實際讀寫的保單分頁（如 `POLICY_A`），只能每次下載手改。
 
 **根因**（`ui/tab3_t7_ledger.py` submit handler）：存檔寫四處中只缺最關鍵的一處 —
 ①本地 `t7_ledgers`（session）✅　②`_T7_State` 快照分頁 ✅　③`_Ledgers` 交易分頁 ✅（有 pid 才寫）　④**保單分頁基金列（含 invest_twd）只在 `_pid_changes`（保單號碼改變）時才 `upsert_fund_in_policy`** ❌。同保單內編輯金額（pid 未變）的基金列永遠不更新。
@@ -1240,7 +1240,7 @@ st.columns([2,2,2,2,1])  →  st.columns([2,2,2,2,2,1])
 
 ### §3-N 保單分頁「schema 鬼列」append_row bug fix（v18.171 修補）
 
-**問題場景**：User 截圖「📋 保單分頁清單」存檔後 `QL19676552` tab 出現 3 列 `policy_name / fund_url / invest_date / currency / notes` 等 schema 英文 key 字串當資料值的鬼列。
+**問題場景**：User 截圖「📋 保單分頁清單」存檔後 `POLICY_A` tab 出現 3 列 `policy_name / fund_url / invest_date / currency / notes` 等 schema 英文 key 字串當資料值的鬼列。
 
 **根因**：`repositories/policy_repository.py` 三處 `ws.append_row(list(ALL_COLS))` 補表頭的寫法：
 - `:276` — `upsert_policy_row` 補表頭分支

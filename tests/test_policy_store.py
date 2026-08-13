@@ -451,11 +451,11 @@ def test_upsert_fund_upgrades_legacy_header_to_all_cols():
     legacy = list(REQUIRED_COLS) + ["policy_tier"]   # 9 欄舊表頭
     ws = _make_ws(all_values=[legacy])
     ws.row_values.return_value = legacy
-    sh = _make_sh_with_worksheets({"QL19676552": ws})
+    sh = _make_sh_with_worksheets({"POLICY_A": ws})
     client = _make_client_with_sh(sh)
-    upsert_fund_in_policy(client, "FAKE_ID", "QL19676552", {
-        "fund_url": "ACTI71", "policy_name": "QL19676552",
-        "invest_twd": 500143, "currency": "USD", "policy_tier": "core",
+    upsert_fund_in_policy(client, "FAKE_ID", "POLICY_A", {
+        "fund_url": "ACTI71", "policy_name": "POLICY_A",
+        "invest_twd": 100000, "currency": "USD", "policy_tier": "core",
         "div_cash_pct": 80, "avg_nav_with_div": 6.96,
     })
     _hdr = [c for c in ws.update.call_args_list
@@ -614,13 +614,13 @@ def test_ensure_policy_worksheet_existing_with_empty_row1_writes_header_to_A1_no
     # row 1 空、row 2-3 有基金資料（模擬 user 在 Sheets 手動刪過表頭的情境）
     existing_ws = _make_ws(all_values=[
         [],
-        ["QL19676552", "QL19676552", "ACTI71", "500143", "", "USD", "0", "n", "core"],
-        ["QL19676552", "QL19676552", "JFZN3",  "500143", "", "USD", "0", "n", "core"],
+        ["POLICY_A", "POLICY_A", "ACTI71", "100000", "", "USD", "0", "n", "core"],
+        ["POLICY_A", "POLICY_A", "JFZN3",  "100000", "", "USD", "0", "n", "core"],
     ])
     existing_ws.row_values.return_value = []  # row 1 空 → 觸發補表頭分支
-    sh = _make_sh_with_worksheets({"QL19676552": existing_ws})
+    sh = _make_sh_with_worksheets({"POLICY_A": existing_ws})
     client = _make_client_with_sh(sh)
-    ensure_policy_worksheet(client, "FAKE_ID", "QL19676552")
+    ensure_policy_worksheet(client, "FAKE_ID", "POLICY_A")
     # 不准 append_row（會把 schema 塞到最末列變鬼列）
     existing_ws.append_row.assert_not_called()
     # 必須 update("A1", ...) 強制把表頭放 row 1
@@ -631,20 +631,20 @@ def test_load_policy_worksheet_filters_uppercase_ghost_rows():
     """v18.172 regression — dump_all_to_sheet 會 .upper() code，鬼列回寫 Sheet
     變 "FUND_URL"（大寫）。filter 必須 case-insensitive 才擋得住。"""
     real_record = {
-        "policy_id": "QL19676552", "policy_name": "QL19676552",
-        "fund_url": "ACTI71", "invest_twd": "500143", "invest_date": "",
+        "policy_id": "POLICY_A", "policy_name": "POLICY_A",
+        "fund_url": "ACTI71", "invest_twd": "100000", "invest_date": "",
         "currency": "USD", "fx_at_buy": "0", "notes": "n", "policy_tier": "core",
     }
     ghost_upper = {
-        "policy_id": "QL19676552", "policy_name": "POLICY_NAME",
+        "policy_id": "POLICY_A", "policy_name": "POLICY_NAME",
         "fund_url": "FUND_URL", "invest_twd": "0", "invest_date": "INVEST_DATE",
         "currency": "CURRENCY", "fx_at_buy": "0", "notes": "NOTES",
         "policy_tier": "",
     }
     ws = _make_ws(records=[real_record, ghost_upper])
-    sh = _make_sh_with_worksheets({"QL19676552": ws})
+    sh = _make_sh_with_worksheets({"POLICY_A": ws})
     client = _make_client_with_sh(sh)
-    df = load_policy_worksheet(client, "FAKE_ID", "QL19676552")
+    df = load_policy_worksheet(client, "FAKE_ID", "POLICY_A")
     assert len(df) == 1                          # 大寫鬼列被濾掉
     assert df.iloc[0]["fund_url"] == "ACTI71"
 
@@ -654,8 +654,8 @@ def test_load_policy_worksheet_filters_schema_ghost_rows():
     Sheet 中 fund_url='fund_url' & invest_date='invest_date' & currency='currency'
     是 ensure_policy_worksheet 舊 append_row(ALL_COLS) bug 的指紋。"""
     real_record = {
-        "policy_id": "QL19676552", "policy_name": "QL19676552",
-        "fund_url": "ACTI71", "invest_twd": "500143", "invest_date": "",
+        "policy_id": "POLICY_A", "policy_name": "POLICY_A",
+        "fund_url": "ACTI71", "invest_twd": "100000", "invest_date": "",
         "currency": "USD", "fx_at_buy": "0", "notes": "n", "policy_tier": "core",
     }
     ghost_record = {
@@ -665,9 +665,9 @@ def test_load_policy_worksheet_filters_schema_ghost_rows():
         "policy_tier": "",
     }
     ws = _make_ws(records=[real_record, ghost_record, ghost_record])
-    sh = _make_sh_with_worksheets({"QL19676552": ws})
+    sh = _make_sh_with_worksheets({"POLICY_A": ws})
     client = _make_client_with_sh(sh)
-    df = load_policy_worksheet(client, "FAKE_ID", "QL19676552")
+    df = load_policy_worksheet(client, "FAKE_ID", "POLICY_A")
     assert len(df) == 1                          # 2 個鬼列被濾掉
     assert df.iloc[0]["fund_url"] == "ACTI71"   # 真資料保留
 
