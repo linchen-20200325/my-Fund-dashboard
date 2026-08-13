@@ -714,16 +714,25 @@ def _sec_policy_portfolio():
 
                     from repositories.policy.v2 import copy_sheet_as_backup, write_policy_v2
                     with st.spinner("整本備份中…(安全網,寫壞可還原)"):
-                        copy_sheet_as_backup(_cli, _sid)
+                        copy_sheet_as_backup(_cli, _sid)   # 失敗會 raise → 不進寫入
                     _items = list(_v2.items())
-                    _prog, _n = st.progress(0.0, text="寫入保單分頁…"), 0
+                    _prog, _n, _fail = st.progress(0.0, text="寫入保單分頁…"), 0, []
                     for _i, (_pid, _rows) in enumerate(_items):
-                        write_policy_v2(_cli, _sid, _pid, pd.DataFrame(_rows))
-                        _n += len(_rows)
+                        try:
+                            # 稽核:用 write_policy_v2 的**實際回傳列數**,不用輸入數(否則 0 寫入也報成功 §1)
+                            _n += int(write_policy_v2(_cli, _sid, _pid, pd.DataFrame(_rows)) or 0)
+                        except Exception:  # noqa: BLE001 — 記錄失敗保單,不中斷其餘(可還原備份)
+                            _fail.append(_pid)
                         _prog.progress((_i + 1) / len(_items), text=f"寫入 {_i + 1}/{len(_items)} 張保單…")
                     _prog.empty()
-                    st.success(f"✅ 已匯入 {len(_items)} 張保單、{_n} 檔到 v2 分頁(原檔已備份,檔名含 backup)。"
-                               "重整投資組合分頁就會看到。")
+                    if _n == 0:
+                        st.error("⚠️ 實際寫入 0 檔(異常,可能欄位對不上)—— 原檔已備份、未受影響,請貼畫面給我。")
+                    else:
+                        _m = (f"✅ 已匯入 {len(_items) - len(_fail)} 張保單、實際寫入 {_n} 檔"
+                              "(原檔已備份,檔名含 backup)。重整投資組合分頁就會看到。")
+                        if _fail:
+                            _m += f"　⚠️ 失敗保單:{', '.join(_fail)}(可重跑或還原備份)。"
+                        st.success(_m)
             except Exception as _e:  # noqa: BLE001
                 _friendly("匯入 Google Sheet 失敗", _e, level="error")
 

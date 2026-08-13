@@ -139,17 +139,44 @@ def test_policy_benchmark_missing_bench_excluded():
     assert abs(b["PA01"] - 20.0) < 1e-9 and b["PA02"] is None   # 美元無大盤 → 不計/None(§1)
 
 
+def test_to_v2_rows_keys_match_real_v2_schema():
+    """稽核 CRITICAL 回歸:emitted 鍵必須 ⊆ 真正的 ALL_COLS_V2(不是 v1 的 _helpers.ALL_COLS)。
+
+    v1 名(fund_url/policy_tier/fx_avg)會被 write_policy_v2 reindex 丟掉 → fund_code 空 →
+    整列跳過 → ws.clear() 清空分頁 = 毀資料。此測試守住欄名正確。
+    """
+    from repositories.policy.v2 import ALL_COLS_V2
+    rows = to_v2_rows(parse_holdings(_CSV))
+    for _pr in rows.values():
+        for r in _pr:
+            assert set(r) <= set(ALL_COLS_V2), f"非 v2 欄位: {set(r) - set(ALL_COLS_V2)}"
+
+
 def test_to_v2_rows_maps_and_groups():
-    """扁平總表 → v2 分頁 row:分組、幣別/級別正規化、欄位對映、累領配息入 notes。"""
+    """扁平總表 → v2 分頁 row:分組、幣別/級別正規化、正確欄名(fund_code/fund_name/tier/avg_fx)。"""
     rows = to_v2_rows(parse_holdings(_CSV))
     assert set(rows) == {"PA01", "PA02"}
-    _pa1 = {r["fund_url"]: r for r in rows["PA01"]}
+    _pa1 = {r["fund_code"]: r for r in rows["PA01"]}
     x = _pa1["FUNDX"]                                     # 美元/核心
-    assert x["policy_id"] == "PA01" and x["currency"] == "USD" and x["policy_tier"] == "core"
+    assert x["policy_id"] == "PA01" and x["currency"] == "USD" and x["tier"] == "core"
+    assert x["fund_name"] == "測試基金X"
     assert x["units"] == 100.0 and x["avg_nav"] == 10.0 and x["invest_twd"] == 30000.0
-    assert x["fx_avg"] == 30.0 and x["div_cash_pct"] == 100.0 and "累領配息 500" in x["notes"]
-    y = _pa1["FUNDY"]                                     # 台幣/衛星、#N/A 配息 → notes 空
-    assert y["currency"] == "TWD" and y["policy_tier"] == "satellite" and y["notes"] == ""
+    assert x["avg_fx"] == 30.0 and x["div_cash_pct"] == 100.0
+    y = _pa1["FUNDY"]                                     # 台幣/衛星
+    assert y["currency"] == "TWD" and y["tier"] == "satellite" and y["avg_fx"] == 1.0
+
+
+def test_to_v2_rows_dedupes_two_lots_same_fund():
+    """§4.6:同保單同檔多筆(多買入 lot)→ 合併一列:invest+units 加總、nav/fx 投資額加權。"""
+    csv = ("保單號碼,基金代碼,幣別,級別,持有單位數,平均成本淨值,平均匯率,投資金額(TWD)\n"
+           "PX,F1,美元,核心,100,10,30,30000\n"
+           "PX,F1,美元,核心,200,12,32,72000\n")
+    rows = to_v2_rows(parse_holdings(csv))["PX"]
+    assert len(rows) == 1                                # 合併成一列(非兩列 dup)
+    r = rows[0]
+    assert r["invest_twd"] == 102000.0 and r["units"] == 300.0
+    assert abs(r["avg_nav"] - (30000 * 10 + 72000 * 12) / 102000) < 1e-6
+    assert abs(r["avg_fx"] - (30000 * 30 + 72000 * 32) / 102000) < 1e-6
 
 
 def test_coverage_gate_below_threshold_not_ranked():
