@@ -1,0 +1,40 @@
+name: "除息行事曆 月初摘要 (LINE)"
+
+# 每月月初對「持倉 ∪ 追蹤清單」推估本月除息日 → 一則 LINE 文字摘要(方式 C)。
+# 視覺完整月曆看 App「我的管理室 → 除息行事曆」(方式 A)。
+# ⚠️ cron 是 UTC。台灣 = UTC+8。 0 0 1 * * = 每月 1 號 00:00 UTC = 1 號 08:00 台灣。
+on:
+  schedule:
+    - cron: "0 0 1 * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只印不送 (true/false)"
+        default: "true"
+
+concurrency:
+  group: dividend-calendar-notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Run monthly dividend-calendar LINE summary
+        env:
+          google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          macro_weights_sheet_id: ${{ secrets.MACRO_WEIGHTS_SHEET_ID }}
+          WATCH_CSV_URL: ${{ secrets.WATCH_CSV_URL }}
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+        run: >
+          python scripts/dividend_calendar_notify.py
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
