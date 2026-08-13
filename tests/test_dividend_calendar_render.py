@@ -56,6 +56,14 @@ def test_render_empty_month_is_honest():
     assert "無推估除息日" in html
 
 
+def test_render_shows_unpredictable_bucket():
+    """稽核 M3:節奏不規則的基金揭露在『無法推估』區,不靜默消失。"""
+    funds = [{"code": "IRR", "name": "不規則配息",
+              "dividends": [{"ex_date": d} for d in ("2025-01-10", "2025-02-20", "2025-06-05")]}]
+    html = render_month_calendar_html(build_month_calendar(funds, 2026, 8))
+    assert "無法推估" in html and "IRR" in html
+
+
 def test_render_balanced_containers():
     html = render_month_calendar_html(_cal())
     for tag in ("div", "table", "tbody"):

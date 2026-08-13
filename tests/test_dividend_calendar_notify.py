@@ -44,6 +44,19 @@ def test_main_all_fetch_fail_exit1(monkeypatch):
     assert M.main([]) == 1
 
 
+def test_main_all_fetch_returned_none_does_not_send(monkeypatch):
+    """稽核 H1:auto_fetch 失敗回 dict(dividends=None)→ funds 非空但無 list →
+    不可送「本月無除息」誤導訊息 → exit 1、完全不 push(§1)。"""
+    _patch_readers(monkeypatch, held=["AAA", "BBB"], watch=[])
+    monkeypatch.setattr(M, "_fetch_divs",
+                        lambda codes: [{"code": c, "name": c, "house": "", "dividends": None}
+                                       for c in codes])
+    import infra.line_push as LP
+    _sent = []
+    monkeypatch.setattr(LP, "push_text", lambda *a, **k: _sent.append(1) or {"sent": True})
+    assert M.main([]) == 1 and _sent == []
+
+
 def test_main_dry_run_prints_summary(monkeypatch, capsys):
     _patch_readers(monkeypatch, held=["TLZF9"], watch=["TLZF9", "JFZN3"])   # TLZF9 重複
     seen = {}

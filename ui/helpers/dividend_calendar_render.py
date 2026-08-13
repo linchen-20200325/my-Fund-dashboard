@@ -178,6 +178,15 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
         exc_html = (f'<div class="excluded"><span class="x">已排除</span>以下持有基金<b>無月配息</b>'
                     f'（累積型 / 查無配息），故不列入 —— 這是正常的，不是漏抓：{names}。</div>')
 
+    # 稽核 M3:有配息史但本月無法推估(節奏不規則 / 疑停配過舊)→ 誠實揭露,不靜默消失
+    unpredictable = cal.get("unpredictable") or []
+    unp_html = ""
+    if unpredictable:
+        names = "、".join(f'<b>{_e(x.get("code"))}</b> {_e(x.get("name"))}' for x in unpredictable)
+        unp_html = (f'<div class="excluded"><span class="x" style="color:var(--accent-ink)">無法推估</span>'
+                    f'以下基金<b>有配息史但本月推不出除息日</b>（節奏不規則 / 最近無配息疑停配），'
+                    f'請自行至基金公司網站確認：{names}。</div>')
+
     sample_badge = '<span class="badge sample">樣張 · 日期為推估</span>' if is_sample else \
                    '<span class="badge sample">日期為推估</span>'
 
@@ -197,6 +206,7 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 <th>除息</th><th>基金</th><th>所屬</th><th>入帳(估)</th><th>上次配息</th><th>年化配息</th><th>信心</th>
 </tr></thead><tbody>{rows}</tbody></table></div>
 {exc_html}
+{unp_html}
 <footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算，非官方公告。
 依公開說明書，<b>配息入帳日為除息日後一個月內</b>，實際依基金公司作業為準；
 除息日與基金營業日請以<b>基金公司網站公告</b>為準。</footer>

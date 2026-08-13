@@ -79,10 +79,6 @@ def _cadence_from_gap(med_gap: "float | None") -> str:
     return "irregular"
 
 
-def _cadence_days(cadence: str) -> "int | None":
-    return {"monthly": 30, "quarterly": 91, "semiannual": 182, "annual": 365}.get(cadence)
-
-
 def infer_schedule(dividends: list) -> dict:
     """配息史 → 節奏推估 dict。
 
@@ -105,15 +101,22 @@ def infer_schedule(dividends: list) -> dict:
 
     recent = recs[-_RECENT_N:]
     days = [r["ex"].day for r in recent]
-    ex_day = round(_stats.median(days)) if days else None
     day_std = _stats.pstdev(days) if len(days) > 1 else 0.0
+    # 稽核 M2:跨月邊界(如除息日在 31 與 1 之間游移)時中位數會給「幻影中間日」(31,1→16)。
+    # 離散大 → 改用最近一次實際除息日(較可信),並降信心,不送幻影日。
+    if days and day_std > 8:
+        ex_day = recs[-1]["ex"].day
+    else:
+        ex_day = round(_stats.median(days)) if days else None
 
     pay_gaps = [(r["pay"] - r["ex"]).days for r in recs
                 if r["pay"] is not None and (r["pay"] - r["ex"]).days >= 0]
     pay_gap = round(_stats.median(pay_gaps)) if pay_gaps else None
 
-    # confidence:月配 + 夠筆數 + 「幾號」穩 → high;已知頻率 + ≥3 筆 → medium;其餘 low
-    if cadence == "monthly" and n >= 6 and day_std is not None and day_std <= 4:
+    # confidence:「幾號」離散大 → low;月配 + 夠筆數 + 穩 → high;已知頻率 + ≥3 筆 → medium;其餘 low
+    if day_std is not None and day_std > 8:
+        conf = "low"
+    elif cadence == "monthly" and n >= 6 and day_std <= 4:
         conf = "high"
     elif cadence in ("monthly", "quarterly", "semiannual", "annual") and n >= 3:
         conf = "medium"
@@ -127,39 +130,42 @@ def infer_schedule(dividends: list) -> dict:
             "med_gap": med_gap}
 
 
-def predict_ex_for_month(schedule: dict, year: int, month: int) -> "dict | None":
-    """節奏 dict + 目標年月 → {ex_date, pay_date_est, confidence} 或 None(本月不配息)。
+_CADENCE_MONTHS = {"monthly": 1, "quarterly": 3, "semiannual": 6, "annual": 12}
 
-    月配:目標月的固定除息日(超月底取月底)。季/年配:上次除息 + 週期恰落本月才回,否則 None。
-    single/irregular/none → None(§1:節奏不明就不猜本月日期)。
+
+def predict_ex_for_month(schedule: dict, year: int, month: int) -> "dict | None":
+    """節奏 dict + 目標年月 → {ex_date, pay_date_est, confidence} 或 None(本月不配息/無法推估)。
+
+    稽核 M1/H3 修:一律以**日曆月**逐週期推進(不再加固定 91 天,避免月底漂移錯月),並查**陳舊度**:
+      - last_ex 距目標 > 3 個週期(疑停配/資料過舊)→ None(§1 不硬給高信心假日期)
+      - 2~3 個週期 → 降信心 low
+    除息日一律用 schedule['ex_day'](幾號)套目標月、超月底夾擠。single/irregular/none → None(不猜)。
     """
     cad = schedule.get("cadence")
-    conf = schedule.get("confidence", "low")
-
-    def _mk(ex: _dt.date) -> dict:
-        gap = schedule.get("pay_gap_days")
-        pay = ex + _dt.timedelta(days=gap) if isinstance(gap, int) else None
-        return {"ex_date": ex, "pay_date_est": pay, "confidence": conf}
-
-    if cad == "monthly" and schedule.get("ex_day"):
-        day = min(int(schedule["ex_day"]), _calendar.monthrange(year, month)[1])
-        return _mk(_dt.date(year, month, day))
-
-    if cad in ("quarterly", "semiannual", "annual"):
-        last_ex = schedule.get("last_ex")
-        step = _cadence_days(cad)
-        if last_ex is None or step is None:
-            return None
-        # 從上次除息往後推,找是否有一次落在目標月(±半個週期容忍拉到該月)
-        cur = last_ex
-        for _ in range(24):                # 上限保護:最多推 24 個週期
-            if cur.year == year and cur.month == month:
-                return _mk(cur)
-            if (cur.year, cur.month) > (year, month):
-                break
-            cur = cur + _dt.timedelta(days=step)
+    ex_day = schedule.get("ex_day")
+    last_ex = schedule.get("last_ex")
+    step = _CADENCE_MONTHS.get(cad)
+    if step is None or ex_day is None or last_ex is None:
         return None
 
+    cy, cm, periods = last_ex.year, last_ex.month, 0
+    for _ in range(240):                     # 上限保護(240 月 = 20 年)
+        if (cy, cm) == (year, month):
+            if periods > 3:
+                return None                  # 太久沒配 → 疑停配/資料過舊,不硬給(§1)
+            _conf = "low" if periods >= 2 else schedule.get("confidence", "low")
+            day = min(int(ex_day), _calendar.monthrange(year, month)[1])
+            ex = _dt.date(year, month, day)
+            gap = schedule.get("pay_gap_days")
+            pay = ex + _dt.timedelta(days=gap) if isinstance(gap, int) else None
+            return {"ex_date": ex, "pay_date_est": pay, "confidence": _conf}
+        if (cy, cm) > (year, month):
+            return None                      # 越過目標月(季/年配空月,或 last_ex 在目標之後)
+        cm += step
+        periods += 1
+        while cm > 12:
+            cm -= 12
+            cy += 1
     return None
 
 
@@ -169,13 +175,15 @@ def build_month_calendar(funds: list, year: int, month: int) -> dict:
     Args:
         funds: [{"code", "name", "house"(選填), "dividends": [...]}]
     Returns:
-        {year, month, events[], by_day{day:[events]}, excluded[], counts{}}
-        event = {code, name, house, ex_date, pay_date_est, confidence,
-                 last_amount, last_yield, n}
-        excluded = {code, name, reason}(無配息 = 累積型/查無)
+        {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{}}
+        event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n}
+        excluded     = {code, name, reason}(無配息 = 累積型/查無)
+        unpredictable= {code, name, reason}(有配息史但本月無法推估:節奏不規則 / 疑停配過舊)
+                       —— 稽核 M3:誠實揭露而非靜默消失。季/年配的「空月」不列此(合理不配)。
     """
     events: list = []
     excluded: list = []
+    unpredictable: list = []
     for f in funds:
         code = str((f or {}).get("code") or "").strip()
         name = str((f or {}).get("name") or code)
@@ -187,7 +195,14 @@ def build_month_calendar(funds: list, year: int, month: int) -> dict:
             continue
         pred = predict_ex_for_month(sch, year, month)
         if pred is None:
-            continue                       # 本月不配息(季/年配的空月)→ 不列也不算排除
+            if sch["cadence"] == "monthly":          # 月配卻推不出 = 陳舊/疑停配
+                unpredictable.append({"code": code, "name": name,
+                                      "reason": "最近無配息紀錄（疑停配 / 資料過舊），本月無法推估"})
+            elif sch["cadence"] in ("single", "irregular"):
+                unpredictable.append({"code": code, "name": name,
+                                      "reason": "配息節奏不規則 / 資料不足，本月無法推估"})
+            # 季/年配的空月 → 合理不配,不列也不算異常
+            continue
         events.append({"code": code, "name": name, "house": house,
                        "ex_date": pred["ex_date"], "pay_date_est": pred["pay_date_est"],
                        "confidence": pred["confidence"], "last_amount": sch["last_amount"],
@@ -198,8 +213,9 @@ def build_month_calendar(funds: list, year: int, month: int) -> dict:
     for e in events:
         by_day.setdefault(e["ex_date"].day, []).append(e)
     return {"year": year, "month": month, "events": events, "by_day": by_day,
-            "excluded": excluded,
-            "counts": {"events": len(events), "excluded": len(excluded)}}
+            "excluded": excluded, "unpredictable": unpredictable,
+            "counts": {"events": len(events), "excluded": len(excluded),
+                       "unpredictable": len(unpredictable)}}
 
 
 # ── 基金公司偵測(從基金名關鍵字;供月曆分色/分組)──────────────────
@@ -252,8 +268,11 @@ def build_summary_text(cal: dict) -> str:
             _house = f"{e.get('house')} " if e.get("house") else ""
             lines.append(f"• {_ex.month}/{_ex.day} {_house}{e.get('code')} 除息{_tag}")
     _exc = cal.get("excluded") or []
+    _unp = cal.get("unpredictable") or []
     if _exc:
         lines.append(f"（{len(_exc)} 檔累積型/無配息未列）")
+    if _unp:
+        lines.append(f"（{len(_unp)} 檔節奏不規則/疑停配,無法推估）")
     lines.append("※ 推估非官方,實際以基金公司公告為準。")
     return "\n".join(lines)
 

@@ -107,7 +107,8 @@ def test_build_calendar_groups_and_excludes():
          "dividends": _monthly_divs(day=7, n=10)},
     ]
     cal = build_month_calendar(funds, 2026, 8)
-    assert cal["counts"] == {"events": 2, "excluded": 1}
+    assert cal["counts"]["events"] == 2 and cal["counts"]["excluded"] == 1
+    assert cal["counts"]["unpredictable"] == 0
     assert set(cal["by_day"].keys()) == {7, 14}
     assert cal["by_day"][14][0]["code"] == "TLZF9"
     assert cal["excluded"][0]["code"] == "ACDD01"
@@ -119,7 +120,45 @@ def test_build_calendar_quarterly_offmonth_not_listed_not_excluded():
     funds = [{"code": "Q1", "name": "季配基金", "dividends":
               [{"ex_date": d} for d in ("2025-05-15", "2025-08-15", "2025-11-15", "2026-05-15")]}]
     cal = build_month_calendar(funds, 2026, 9)               # 9 月無配息
-    assert cal["counts"] == {"events": 0, "excluded": 0}     # 不列也不排除(誠實)
+    assert cal["counts"]["events"] == 0 and cal["counts"]["excluded"] == 0
+    assert cal["counts"]["unpredictable"] == 0               # 季配空月:不列也不算異常(誠實)
+
+
+# ── 稽核修:H3 陳舊 / M1 月底季配 / M2 跨月邊界 / M3 無法推估 bucket ──────────
+def test_stale_monthly_not_predicted_and_bucketed():
+    """H3:月配但最近一次除息離目標 >3 個月(疑停配/資料過舊)→ 不硬給日期,落 unpredictable。"""
+    s = infer_schedule(_monthly_divs(day=14, start=(2024, 1), n=12))   # 末筆 2024-12
+    assert predict_ex_for_month(s, 2026, 8) is None          # 距今 ~20 月 → None(不捏造高信心)
+    funds = [{"code": "OLD", "name": "停配月配基金", "dividends": _monthly_divs(day=14, start=(2024, 1), n=12)}]
+    cal = build_month_calendar(funds, 2026, 8)
+    assert cal["counts"]["events"] == 0 and cal["counts"]["unpredictable"] == 1
+    assert "疑停配" in cal["unpredictable"][0]["reason"]
+
+
+def test_quarterly_end_of_month_lands_correct_month():
+    """M1:季配除息在 30 號,月曆月推進不因加 91 天漂到下個月 1 號。"""
+    divs = [{"ex_date": d} for d in ("2025-01-30", "2025-04-30", "2025-07-30", "2025-10-30")]
+    s = infer_schedule(divs)
+    p = predict_ex_for_month(s, 2026, 1)                     # 下一次應落 1 月(非 5/1 之類)
+    assert p is not None and p["ex_date"].month == 1
+
+
+def test_month_boundary_days_use_last_actual_not_phantom():
+    """M2:除息日在 31 與 1 間游移 → 不給幻影中間日(16),用最近實際日 + 低信心。"""
+    divs = [{"ex_date": d} for d in
+            ("2025-05-31", "2025-07-01", "2025-07-31", "2025-09-01", "2025-09-30", "2025-11-01")]
+    s = infer_schedule(divs)
+    assert s["confidence"] == "low"                          # 離散大 → 低信心
+    assert s["ex_day"] == 1                                  # 最近一次是 11-01 → 用 1,非中位數 16
+
+
+def test_unpredictable_bucket_for_irregular():
+    """M3:有配息史但節奏不規則 → 落 unpredictable(不靜默消失、也非累積型排除)。"""
+    divs = [{"ex_date": d} for d in ("2025-01-10", "2025-02-20", "2025-06-05")]   # 亂
+    funds = [{"code": "IRR", "name": "不規則配息", "dividends": divs}]
+    cal = build_month_calendar(funds, 2026, 8)
+    assert cal["counts"]["excluded"] == 0 and cal["counts"]["events"] == 0
+    assert cal["counts"]["unpredictable"] == 1
 
 
 # ── detect_house ───────────────────────────────────────────

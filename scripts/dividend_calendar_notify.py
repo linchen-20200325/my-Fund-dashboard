@@ -65,8 +65,12 @@ def main(argv=None) -> int:
     _log(f"觀察 {len(codes)} 檔(持倉 {len(held)} + 追蹤 {len(watch)})→ 抓配息…")
 
     funds = _fetch_divs(codes)
-    if not funds:
-        _log("全部基金配息抓取失敗 → 中止")
+    # 稽核 H1:auto_fetch_moneydj 失敗時回 dict(不 raise)→ funds 非空但 dividends 全 None。
+    # 成功抓取(含累積型)dividends 會是 list([] 或有紀錄);全部都不是 list = 系統性抓取失敗
+    # → 不可送「本月無除息」誤導訊息(§1 不讓失敗看起來像成功)。
+    _fetched = sum(1 for f in funds if isinstance(f.get("dividends"), list))
+    if _fetched == 0:
+        _log("全部基金配息抓取失敗(可能 proxy/網路/美國 IP 擋 MoneyDJ)→ 不送誤導訊息,中止")
         return 1
 
     now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
