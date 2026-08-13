@@ -9,6 +9,8 @@ import datetime as _dt
 
 from services.dividend_calendar import (
     build_month_calendar,
+    build_summary_text,
+    detect_house,
     infer_schedule,
     predict_ex_for_month,
 )
@@ -118,3 +120,34 @@ def test_build_calendar_quarterly_offmonth_not_listed_not_excluded():
               [{"ex_date": d} for d in ("2025-05-15", "2025-08-15", "2025-11-15", "2026-05-15")]}]
     cal = build_month_calendar(funds, 2026, 9)               # 9 月無配息
     assert cal["counts"] == {"events": 0, "excluded": 0}     # 不列也不排除(誠實)
+
+
+# ── detect_house ───────────────────────────────────────────
+def test_detect_house_keywords():
+    assert detect_house("聯博多元資產收益組合基金AI配息(美元)") == "聯博"
+    assert detect_house("安聯收益成長基金-AMg7") == "安聯"
+    assert detect_house("摩根投資基金-多重收益基金A股") == "摩根"
+    assert detect_house("施羅德環球基金系列-環球收益成長") == "施羅德"
+    assert detect_house("某某不知名基金") == ""             # 判不出 → 空(§1 不亂猜)
+
+
+# ── build_summary_text(LINE 方式 C）─────────────────────────
+def test_summary_text_lists_events_and_excluded():
+    funds = [
+        {"code": "TLZF9", "name": "安聯收益成長", "dividends": _monthly_divs(day=14, n=12)},
+        {"code": "ACDD01", "name": "安聯台灣大壩累積", "dividends": []},
+    ]
+    # 補上 house(build_month_calendar 不自動偵測 house;caller 組裝時填,此處手動)
+    for f in funds:
+        f["house"] = detect_house(f["name"])
+    cal = build_month_calendar(funds, 2026, 8)
+    txt = build_summary_text(cal)
+    assert "民國115年8月" in txt
+    assert "8/14" in txt and "TLZF9" in txt
+    assert "1 檔累積型/無配息未列" in txt
+    assert "推估非官方" in txt
+
+
+def test_summary_text_empty_is_honest():
+    cal = build_month_calendar([], 2026, 8)
+    assert "無推估除息日" in build_summary_text(cal)

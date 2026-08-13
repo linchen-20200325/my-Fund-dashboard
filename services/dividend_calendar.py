@@ -202,4 +202,61 @@ def build_month_calendar(funds: list, year: int, month: int) -> dict:
             "counts": {"events": len(events), "excluded": len(excluded)}}
 
 
-__all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar"]
+# ── 基金公司偵測(從基金名關鍵字;供月曆分色/分組)──────────────────
+_HOUSE_MAP = [
+    (("聯博", "alliancebernstein"), "聯博"),
+    (("安聯", "allianz"), "安聯"),
+    (("摩根", "jpmorgan", "jpm", "jf "), "摩根"),
+    (("施羅德", "schroder"), "施羅德"),
+    (("瀚亞", "eastspring"), "瀚亞"),
+    (("富蘭克林", "franklin", "坦伯頓", "templeton"), "富蘭克林"),
+    (("貝萊德", "blackrock"), "貝萊德"),
+    (("高盛", "goldman"), "高盛"),
+    (("pimco", "品浩"), "PIMCO"),
+    (("野村", "nomura"), "野村"),
+    (("景順", "invesco"), "景順"),
+    (("富達", "fidelity"), "富達"),
+    (("法巴", "bnp"), "法巴"),
+    (("m&g", "安聯m&g"), "M&G"),
+    (("復華", "fh"), "復華"),
+    (("國泰", "cathay"), "國泰"),
+    (("群益",), "群益"),
+]
+
+
+def detect_house(name: str) -> str:
+    """從基金名關鍵字判斷所屬投信/投顧;判不出 → ''(caller 顯示代號即可,§1 不亂猜)。"""
+    _n = str(name or "").lower()
+    for keys, house in _HOUSE_MAP:
+        if any(k in _n for k in keys):
+            return house
+    return ""
+
+
+# ── LINE 月初摘要文字(方式 C;純字串,零 IO)──────────────────
+_CONF_ZH = {"high": "", "medium": "", "low": "（信心低）"}
+
+
+def build_summary_text(cal: dict) -> str:
+    """月曆結構 → LINE 月初提醒文字。無事件 → 誠實說本月無推估除息(§1)。"""
+    y, m = cal.get("year"), cal.get("month")
+    _roc = (y - 1911) if isinstance(y, int) else "?"
+    lines = [f"🗓️ 基金除息行事曆 · 民國{_roc}年{m}月（推估）"]
+    events = cal.get("events") or []
+    if not events:
+        lines.append("本月你的基金無推估除息日（或資料不足）。")
+    else:
+        for e in events:
+            _ex = e["ex_date"]
+            _tag = _CONF_ZH.get(e.get("confidence"), "")
+            _house = f"{e.get('house')} " if e.get("house") else ""
+            lines.append(f"• {_ex.month}/{_ex.day} {_house}{e.get('code')} 除息{_tag}")
+    _exc = cal.get("excluded") or []
+    if _exc:
+        lines.append(f"（{len(_exc)} 檔累積型/無配息未列）")
+    lines.append("※ 推估非官方,實際以基金公司公告為準。")
+    return "\n".join(lines)
+
+
+__all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
+           "detect_house", "build_summary_text"]
