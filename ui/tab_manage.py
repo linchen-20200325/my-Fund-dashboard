@@ -250,8 +250,8 @@ def _render_fund_history():
 
 def _sec_pool():
     st.markdown("### 📁 選股池(候選基金)")
-    st.caption("你的候選基金清單,供換股顧問配對。加/刪/改**即時存到 Google Sheets**(`_fund_pool` 分頁),"
-               "永久保存、跨裝置,關掉重開都在。")
+    st.caption("**這不是你的持倉** —— 是你**還沒買、考慮想換進來**的候選名單,換股顧問拿它跟你的持倉比較。"
+               "加/刪/改存到 **`_fund_pool` 分頁**(和你的保單持倉分頁**不同本清單**,不會動到持倉)。")
 
     with st.expander("📥 從說明書『曾經查過的基金清單』匯入 / 合併進選股池"):
         st.caption("把 Tab⑤ 說明書那份『曾經查過的基金(Tab2/Tab3 自動記錄)+ 預設清單』合併進來。"
@@ -287,8 +287,8 @@ def _sec_pool():
 
 def _sec_portfolio():
     st.markdown("### 💼 投資組合(持倉)")
-    st.caption("你的保單持倉,和 Tab④ 保單管理**同一本 Google Sheet**。這裡可**一覽 + 編輯金額/級別 + 刪除**,"
-               "存檔即寫回雲端、永久保存。")
+    st.caption("**這是你目前實際持有的基金**(來自你的保單 Google Sheet)。**唯讀一覽** —— "
+               "要改金額/級別或刪保單,請**直接到 Google Sheet 依範本改**(App 不再寫回、不會清空你的資料)。")
 
     if not st.button("📥 載入 / 重新整理投資組合(雲端)", use_container_width=True, key="manage_pf_load"):
         if not st.session_state.get("_manage_pf_loaded"):
@@ -317,43 +317,21 @@ def _sec_portfolio():
     _codes = sorted({str(c).strip() for c in _fund_rows["fund_code"] if str(c).strip()})
     st.success(f"共 {len(_codes)} 檔基金 · {_df['policy_id'].nunique()} 張保單。")
 
-    # v19.436:一鍵修正基金名稱(被灌成保單號)+ 精簡 Sheet 到 10 欄。用代號從 MoneyDJ 重抓真名,
-    # 整張重寫時舊 13 欄的 item_type/含息成本/金額 自然消失(物理精簡)。
-    with st.expander("🔧 一鍵修正基金名稱 + 精簡 Sheet（10 欄）", expanded=False):
-        st.caption("若你的基金名稱欄顯示的是保單號(不是基金真名),按這裡:用基金代號到 MoneyDJ "
-                   "重抓正確名稱,並把每張分頁精簡成 10 欄(移除沒在用的類型/含息成本/現金金額)。"
-                   "會逐張重寫雲端、需數十秒;僅補空/修錯,不動你填的金額與級別。")
-        st.caption("🛡️ **動原本前會先自動複製一份整本備份**(§1 安全網;備份失敗即中止不動原本)。"
-                   "⚠️ 若舊分頁有『現金列(金額)』會一併移除 —— 需要保留的話備份副本裡還在。")
-        if st.button("🔧 開始修正 + 精簡", key="manage_pf_fixnames", use_container_width=True):
-            _run_fix_and_shrink(_client, _sid)
-
-    # 只開放「安全欄」編輯;units/avg_nav/avg_fx(持倉模擬選填)**照原樣帶著、不清空**
-    # (§1 防資料流失:write_policy_v2 是整張覆寫,若只寫核心欄會抹掉平均成本)。
-    _editable = {"fund_code", "fund_name", "tier", "currency", "invest_twd", "div_cash_pct"}
+    # v19.452 唯讀:移除「🔧 一鍵修正+精簡 / 💾 存 / 🗑 刪保單」等會覆寫/刪 Sheet 的動作
+    # (user 決策改直接改 Sheet)。本區只做**一覽顯示**。
     _labels = {
         "policy_id": "保單", "fund_code": "基金代號", "fund_name": "名稱", "currency": "幣別",
         "tier": "級別", "invest_twd": "投入金額(TWD)", "div_cash_pct": "現金給付%",
         "units": "份額(選填)", "avg_nav": "平均成本(選填)", "avg_fx": "平均匯率(選填)",
     }
     for _pid in sorted({str(p) for p in _df["policy_id"] if str(p).strip()}):
-        _pdf = _df[_df["policy_id"].astype(str) == _pid]                 # 該保單全部基金列
+        _pdf = _df[_df["policy_id"].astype(str) == _pid]
         with st.expander(f"📄 保單 {_pid}（{len(_pdf)} 列）", expanded=(_df['policy_id'].nunique() == 1)):
-            st.caption("可改:基金代號 / 名稱 / 幣別 / 級別 / 投入金額 / 現金給付%。刪列=移除該檔。"
-                       "平均成本、份額等**灰色選填欄照原樣保留**(存檔不會清掉)。")
             _cols = [c for c in ALL_COLS_V2 if c in _pdf.columns]
-            _view = _pdf[_cols].reset_index(drop=True)
-            _edited = st.data_editor(
-                _view, num_rows="dynamic", use_container_width=True, hide_index=True,
-                key=f"manage_pf_editor_{_pid}",
-                disabled=[c for c in _cols if c not in _editable],       # 非安全欄唯讀(帶著不清空)
-                column_config={c: _labels.get(c, c) for c in _cols},
-            )
-            c1, c2 = st.columns([2, 1])
-            if c1.button("💾 存這張保單到雲端", key=f"manage_pf_save_{_pid}", use_container_width=True):
-                _save_policy(_client, _sid, _pid, _edited)
-            if c2.button("🗑️ 刪整張保單", key=f"manage_pf_del_{_pid}", use_container_width=True):
-                _delete_policy(_client, _sid, _pid)
+            _view = (_pdf[_cols].reset_index(drop=True)
+                     .rename(columns={c: _labels.get(c, c) for c in _cols}))
+            st.dataframe(_view, use_container_width=True, hide_index=True)
+    st.caption("唯讀顯示。要改金額/級別或刪保單,請**直接到 Google Sheet 依範本改**(App 不覆寫、不清空)。")
 
 
 def _prepare_write_df(edited_df, policy_id):
@@ -847,11 +825,19 @@ def _sec_nav_backfill() -> None:
 
 def render_manage_tab() -> None:
     st.markdown("## 📋 我的管理室")
-    st.caption("選股池、投資組合、通報 一站管理。**資料存在 Google Sheets、永久保存**,關掉重開都在,"
-               "不用每次重輸入(只有即時報價那種本來會變的才會重抓)。")
-    _sec_pool()
+    st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
+    st.info(
+        "**這一頁由上到下有 6 塊**,先看前兩塊就好:\n\n"
+        "1. 💼 **投資組合(持倉)** — 你**已經買、目前真正持有**的基金 ← 這才是「你的組合」。\n"
+        "2. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。\n"
+        "3. 📊 **保單組合分析** — 上傳保單總表做分析(只顯示,不寫回 Sheet)。\n"
+        "4. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
+        "5. 📥 **補歷史淨值** — 幫抓不到淨值的基金補歷史(根治吃本金誤判)。\n"
+        "6. 🔔 **換股通報** — 設定 LINE 每週提醒。"
+    )
+    _sec_portfolio()          # ★ v19.452:持倉最重要 → 放最前
     st.divider()
-    _sec_portfolio()
+    _sec_pool()
     st.divider()
     _sec_policy_portfolio()
     st.divider()
