@@ -39,6 +39,20 @@ SRC_NONE = "—"
 LOCAL_WINDOW_SENSITIVE_HINTS = ("還原含息淨值", "自算含息", "外推年化")
 
 
+def is_extrapolated_1y_source(source_label: str) -> bool:
+    """該 tr1y 是否為『短窗淨值 ×最多12 外推年化』(`SRC_SELF_ANNUALIZED`)。
+
+    v19.448 稽核修:這是 4 層 fallback 中**最不可靠**的一層 —— 拿幾十天淨值算個跌幅
+    再 ×最多 12 倍年化,(a) 不含配息、(b) 短窗外推會爆掉,且**根本不是真實一年報酬**。
+    ACTI71 顯示的 −38.18% 就是這條:近一年淨值其實上漲,卻被外推成大負數 → 假 🔴 嚴重。
+    吃本金判定端命中此來源時應**拒判**(⚪ 資料不足),不可拿它報紅燈(§1 Fail Loud)。
+
+    註:`SRC_SELF_NAV_ONLY`(純淨值不含配息,源#3)的「重複扣配息」是另一個較廣的議題
+    (影響多檔 + SSOT 測試),待 user 核准範圍後另行處理,本函式**不**涵蓋。
+    """
+    return "外推年化" in str(source_label or "")
+
+
 def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
     """從 fund object 取「1Y 含息報酬率(%)」+ 來源標籤。
 

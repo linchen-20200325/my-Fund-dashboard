@@ -400,3 +400,68 @@ class TestCheckEatingPrincipal1YmkAcceptsPdSeries:
         # mk_simple 對照欄仍能從 moneydj_raw.series + dividends fallback 算出
         assert out.get("_tr1y_meta") is not None
         assert "mk_simple_value" in out["_tr1y_meta"]
+
+
+# ════════════════════════════════════════════════════════════════
+# v19.448 稽核修:tr1y 非「真含息」來源(純淨值/外推年化)→ 拒判吃本金
+#   (ACTI71 −38% bug:短窗淨值 ×12 外推被當含息 → 假 🔴 嚴重)
+# ════════════════════════════════════════════════════════════════
+
+class TestTotalReturnSourceGuard:
+    def test_is_extrapolated_1y_source_classifier(self):
+        from services.fund_total_return import (
+            SRC_NONE,
+            SRC_OFFICIAL,
+            SRC_SELF_ANNUALIZED,
+            SRC_SELF_NAV_ONLY,
+            SRC_SELF_TOTAL,
+            is_extrapolated_1y_source,
+        )
+        # 外推年化(源#4,ACTI71 −38% 元凶)→ True(拒判)
+        assert is_extrapolated_1y_source(SRC_SELF_ANNUALIZED.format(days=40)) is True
+        # 其餘(官方 / 自算含息 / 純淨值源#3 / 空)→ False(surgical:源#3 暫不涵蓋)
+        assert is_extrapolated_1y_source(SRC_OFFICIAL) is False
+        assert is_extrapolated_1y_source(SRC_SELF_TOTAL) is False
+        assert is_extrapolated_1y_source(SRC_SELF_NAV_ONLY) is False
+        assert is_extrapolated_1y_source(SRC_NONE) is False
+        assert is_extrapolated_1y_source("") is False
+
+    def test_refuses_verdict_on_annualized_extrapolation(self):
+        """短窗(40 天)下跌序列 + 無官方含息 → tr1y 走外推年化 → 應拒判(灰),不報 🔴。
+
+        這正是 ACTI71 −38% 的成因:淨值近一年其實上漲,但抓不到官方含息 →
+        退到外推年化把短期回檔 ×放大成大負數 → 舊碼誤判嚴重吃本金。
+        """
+        import pandas as pd
+
+        from services.fund_total_return import (
+            compute_1y_total_return,
+            is_extrapolated_1y_source,
+        )
+        from services.health.dividend import check_eating_principal_1y_mk
+        idx = pd.date_range("2026-07-01", periods=40, freq="D")
+        s = pd.Series([10.0 - 0.03 * i for i in range(40)], index=idx)  # 40 天跌 ~12%
+        fd = {
+            "series": s,
+            "dividends": [{"date": "2026-07-15", "amount": 0.075}],
+            "metrics": {"annual_div_rate": 9.0},   # adr 有值
+            "moneydj_raw": {},
+        }
+        _tr, _method = compute_1y_total_return(fd)
+        assert is_extrapolated_1y_source(_method)       # 確認走到外推年化(源#4)
+        res = check_eating_principal_1y_mk(fd)
+        assert res is not None
+        assert res["alert_level"] == "grey"             # 拒判,不冒充紅燈
+        assert res["eating_principal"] is False
+
+    def test_official_incl_div_still_judged_normally(self):
+        """有官方 wb01 含息報酬(+17% > 配息 9%)→ 正常判定 🟢,守門不誤傷。"""
+        from services.health.dividend import check_eating_principal_1y_mk
+        fd = {
+            "moneydj_raw": {"perf": {"1Y": 17.0}, "moneydj_div_yield": 9.0},
+            "perf_source": "wb01",
+            "metrics": {},
+        }
+        res = check_eating_principal_1y_mk(fd)
+        assert res is not None
+        assert res["alert_level"] == "green"            # gap = 9 − 17 < 0 → 健康
