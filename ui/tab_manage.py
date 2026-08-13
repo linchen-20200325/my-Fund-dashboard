@@ -514,40 +514,86 @@ def _test_send():
 
 # ───────────────────────── 入口 ─────────────────────────
 
+def _divcal_gather_items():
+    """蒐集月曆基金:選股池(現抓配息)∪ 已載入持倉(dividends 現成),依代號去重。
+
+    選股池項目不帶配息 → 逐檔 auto_fetch_moneydj 現抓(帶進度);持倉直接用既有 dividends。
+    回 (items, n_pool, n_held)。
+    """
+    from services.dividend_calendar import detect_house
+    from services.moneydj_fetcher import auto_fetch_moneydj
+
+    _funds = st.session_state.get("portfolio_funds") or []
+    _held = [f for f in _funds if f.get("loaded") and not f.get("load_error")]   # 稽核 H2
+    try:
+        from repositories.pool_repository import list_pool
+        _pool = list_pool()
+    except Exception:  # noqa: BLE001
+        _pool = []
+
+    items, seen = [], set()
+    for f in _held:                                  # 持倉:dividends 現成
+        _c = str(f.get("code") or "").strip().upper()
+        if not _c or _c in seen:
+            continue
+        seen.add(_c)
+        items.append({"code": _c, "name": f.get("name") or _c,
+                      "house": detect_house(f.get("name") or ""),
+                      "dividends": f.get("dividends") or (f.get("moneydj_raw") or {}).get("dividends")})
+
+    _pool_new = [e for e in _pool if str(e.code or "").strip().upper() not in seen]
+    if _pool_new:
+        _prog = st.progress(0.0, text="抓選股池各檔配息中…")
+        for _i, e in enumerate(_pool_new):
+            _c = str(e.code or "").strip().upper()
+            try:
+                fd = auto_fetch_moneydj(_c) or {}
+                _name = fd.get("fund_name") or e.name or _c
+                items.append({"code": _c, "name": _name, "house": detect_house(_name),
+                              "dividends": fd.get("dividends")})
+            except Exception:  # noqa: BLE001 — 單檔抓失敗略過,不擋整批
+                items.append({"code": _c, "name": e.name or _c, "house": "", "dividends": None})
+            _prog.progress((_i + 1) / len(_pool_new), text=f"抓配息 {_i + 1}/{len(_pool_new)}…")
+        _prog.empty()
+    return items, len(_pool), len(_held)
+
+
 def _sec_dividend_calendar():
-    """🗓️ 除息行事曆:重用已載入的持倉基金(含 dividends)→ 本月除息/配息推估月曆(嵌入 HTML)。"""
+    """🗓️ 除息行事曆:選股池(現抓配息)∪ 已載入持倉 → 本月除息/配息推估月曆(嵌入 HTML)。"""
     import datetime as _dt
 
     st.markdown("### 🗓️ 除息行事曆")
-    st.caption("你的基金**本月除息 / 配息日推估**。用過往配息節奏推算,**非官方公告**;"
-               "累積型不配息的自動不顯示,加減基金 → 下月自動更新。")
+    st.caption("你的基金**本月除息 / 配息日推估**(選股池 + 已載入持倉)。用過往配息節奏推算,"
+               "**非官方公告**;累積型不配息的自動不顯示,加減標的 → 下月自動更新。")
 
-    _funds = st.session_state.get("portfolio_funds") or []
-    # 稽核 H2:排除「載入失敗」的檔(全站慣例 loaded and not load_error)——否則抓取失敗的檔
-    # 會被當成「累積型/無配息」誤標為「正常,不是漏抓」(§1 恰好相反)。
-    _loaded = [f for f in _funds if f.get("loaded") and not f.get("load_error")]
-    if not _loaded:
-        st.info("目前沒有『已載入成功』的基金 → 先到 Tab④/組合健診 載入基金,再回來看月曆。")
+    if st.button("🗓️ 抓選股池標的 → 產生本月除息月曆", use_container_width=True, key="divcal_gen"):
+        try:
+            _items, _np, _nh = _divcal_gather_items()
+            if not _items:
+                st.info("選股池與已載入持倉都是空的 → 先到上面『選股池』加標的,或到組合健診載入基金。")
+                st.session_state.pop("_divcal_items", None)
+            else:
+                st.session_state["_divcal_items"] = _items
+                st.session_state["_divcal_src"] = f"選股池 {_np} 檔 + 持倉 {_nh} 檔"
+        except Exception as _e:  # noqa: BLE001
+            _friendly("抓取配息失敗", _e, level="error")
+
+    _items = st.session_state.get("_divcal_items")
+    if not _items:
+        st.caption("按上面按鈕：會現抓選股池各檔配息史(約數秒~數十秒),再產生本月月曆。")
         return
 
     _now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
     try:
         import streamlit.components.v1 as _components
 
-        from services.dividend_calendar import build_month_calendar, detect_house
+        from services.dividend_calendar import build_month_calendar
         from ui.helpers.dividend_calendar_render import render_month_calendar_html
-        _items = [{
-            "code": f.get("code"),
-            "name": f.get("name") or f.get("code"),
-            "house": detect_house(f.get("name") or ""),
-            # dividends 可能在頂層或 moneydj_raw 底下(容錯)
-            "dividends": f.get("dividends") or (f.get("moneydj_raw") or {}).get("dividends"),
-        } for f in _loaded]
         _cal = build_month_calendar(_items, _now.year, _now.month)
         _html = render_month_calendar_html(_cal)
         _components.html(_html, height=900, scrolling=True)
         _c = _cal["counts"]
-        st.caption(f"本月推估除息 {_c['events']} 檔"
+        st.caption(f"來源:{st.session_state.get('_divcal_src', '')}　·　本月推估除息 {_c['events']} 檔"
                    + (f"｜{_c['excluded']} 檔累積型/無配息" if _c["excluded"] else "")
                    + (f"｜{_c['unpredictable']} 檔無法推估" if _c.get("unpredictable") else ""))
         st.download_button("⬇️ 下載本月月曆 HTML", _html,
