@@ -25,9 +25,22 @@ def render_portfolio_performance(funds: list) -> None:
     else:
         _equal = False
 
+    # v19.449 稽核 HIGH:跨幣別組合須換 TWD basis(含匯率損益),否則美元基金匯率被漏掉。
+    # 抓 USDTWD 歷史(L2 facade,不直呼 L1,§8.2);失敗 → 美元基金被排除、誠實提示(§1)。
+    _ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}
+    _fx = None
+    try:
+        from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS
+        from services.hot_money_service import fetch_usdtwd_frame
+        _fxdf, _fxerr = fetch_usdtwd_frame(BACKTEST_FX_FETCH_DAYS)
+        if _fxdf is not None and not _fxdf.empty:
+            _fx = _fxdf.set_index("date")["usdtwd"]
+    except Exception as _e_fx:  # noqa: BLE001 — 匯率抓取失敗 → 美元基金排除,不靜默造假
+        st.caption(f"⬜ USDTWD 匯率抓取失敗,美元計價基金將被排除:[{type(_e_fx).__name__}] {str(_e_fx)[:80]}")
+
     st.divider()
-    st.markdown("### 📊 組合績效(固定權重・日再平衡假設)")
-    _m = performance_metrics(_nav, _w)
+    st.markdown("### 📊 組合績效(固定權重・日再平衡假設・TWD 計價)")
+    _m = performance_metrics(_nav, _w, ccy_by_code=_ccy, fx_series=_fx)
     if _m["n_funds_used"] == 0:
         st.info("組合績效資料不足 —— 需至少 1 檔有足夠 NAV 歷史 + 正權重。")
         return
@@ -49,14 +62,14 @@ def render_portfolio_performance(funds: list) -> None:
     if _m["excluded"]:
         st.caption("⬜ 排除:" + "、".join(f"{e['code']}（{e['reason']}）" for e in _m["excluded"]))
 
-    _contrib = contribution_by_fund(_nav, _w)
+    _contrib = contribution_by_fund(_nav, _w, ccy_by_code=_ccy, fx_series=_fx)
     if _contrib:
         import pandas as pd
         _rows = [{"基金": k, "權重%": v["weight_pct"], "期間報酬%": v["fund_return_pct"],
                   "貢獻%": v["contribution_pct"]} for k, v in _contrib.items()]
         _df = pd.DataFrame(_rows).sort_values("貢獻%", ascending=False)
         st.dataframe(_df, use_container_width=True, hide_index=True)
-        st.caption("「貢獻%」= 權重 × 該檔期間純價格報酬(各檔對組合總報酬的來源拆解)。")
+        st.caption("「貢獻%」= 權重 × 該檔期間 **TWD 計價報酬(含匯率)**(各檔對組合總報酬的來源拆解)。")
 
 
 def _nav_weights_from_funds(funds: list):

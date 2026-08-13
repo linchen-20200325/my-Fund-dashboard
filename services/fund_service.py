@@ -834,6 +834,16 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
 
     annual_div=monthly_div=div_rate=0; div_stability=None; div_trend=0; div_freq_n=12
     if divs:
+        # v19.449 稽核 HIGH:非 MoneyDJ 來源(FundClear/Cnyes/TCB)配息可能「舊→新」排列,
+        # 下方 divs[:n] / recent12 全假設 index0=最新;不排序會取到最舊筆 → 年化配息率算錯、
+        # 趨勢方向相反 → 假 🔴 吃本金。此處統一「最新在前」排序一次(sorted 回新 list 不改
+        # 呼叫端;無日期者以 Timestamp.min 沉底,不 raise)。
+        def _div_dt(_d):
+            try:
+                return pd.to_datetime(_d.get("date") or _d.get("ex_date"))
+            except Exception:
+                return pd.Timestamp.min
+        divs = sorted(divs, key=_div_dt, reverse=True)
         # ── 自動偵測配息頻率（月配/季配/半年/年配）────────
         if len(divs) >= 2:
             import statistics as _st

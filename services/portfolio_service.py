@@ -707,7 +707,8 @@ def compute_max_drawdown(series: "pd.Series") -> "dict":
 
 
 def compute_portfolio_drawdown(funds_data: list,
-                               weights: "dict | None" = None) -> "dict":
+                               weights: "dict | None" = None,
+                               fx_series=None) -> "dict":
     """組合加權最大回撤 + 各年度報酬(把持倉權重套到各基金 NAV 後合成組合指數)。
 
     方法(§4.1 / §4.5):
@@ -740,16 +741,27 @@ def compute_portfolio_drawdown(funds_data: list,
         "yearly_returns": {}, "n_funds": 0, "n_obs": 0,
         "aligned_freq": "daily", "note": None,
     }
-    valid = [(f.get("code"), f.get("series")) for f in (funds_data or [])
+    valid = [(f.get("code"), f.get("series"), (f.get("currency", "") or "")) for f in (funds_data or [])
              if f.get("series") is not None and len(f.get("series")) >= 2]
     if not valid:
         return {**_empty, "note": "無有效 NAV 序列"}
 
     try:
+        # v19.449 稽核 HIGH:傳入 fx_series → 各檔先換 TWD basis(含匯率損益),否則美元
+        # 基金匯率被漏 → 回撤/年度報酬失真。缺匯率 / 非 USD·TWD → 該檔誠實排除(§1)。
+        # fx_series=None → 維持舊行為(原幣 NAV,向後相容;呼叫端未供匯率時不無聲吃掉美元檔)。
         cols = {}
-        for code, s in valid:
-            ss = s.dropna().sort_index()
-            ss = ss[ss > 0]  # NAV 必正(§3.2),非正值丟棄
+        _to_twd = None
+        if fx_series is not None:
+            from services.allocation_backtest import to_twd_total_return_series as _to_twd
+        for code, s, ccy in valid:
+            if _to_twd is not None:
+                ss = _to_twd(s, ccy, fx_series)
+                if ss is None:
+                    continue                 # 無法換 TWD(缺匯率 / 非 USD·TWD)→ 排除,不混幣別
+            else:
+                ss = s.dropna().sort_index()
+                ss = ss[ss > 0]              # NAV 必正(§3.2),非正值丟棄
             if len(ss) >= 2 and not ss.index.has_duplicates:
                 cols[code] = ss
             elif len(ss) >= 2:
