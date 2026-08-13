@@ -195,3 +195,20 @@ def test_download_and_store_point_key_contract(monkeypatch):
     assert set(_p) >= {"code", "nav", "nav_date", "fund_name", "source"}
     assert _p["code"] == "ACTI71" and _p["source"] == "fundclear_offshore"
     assert _p["nav_date"] == "2020-01-01"                          # ISO 日期字串
+
+
+def test_find_fund_candidates_scan_range(monkeypatch):
+    """scan_range>0 → 逐一掃描 001..NNN 機構(繞過機構清單 endpoint),命中機構帶進候選 + 附 organize_code。"""
+    import repositories.fundclear_offshore as fcmod
+    from services.fundclear_backfill import find_fund_candidates
+    _calls = []
+
+    def _fake_list_funds(org):
+        _calls.append(org)
+        return [{"name": "聯博多元資產收益組合基金", "value": "AA1"}] if org == "037" else []
+
+    monkeypatch.setattr(fcmod, "list_funds", _fake_list_funds)
+    got = find_fund_candidates("聯博多元資產收益組合基金", scan_range=40)
+    assert got and got[0]["value"] == "AA1"
+    assert got[0]["organize_code"] == "037"          # 掃描有帶回命中的機構代碼
+    assert "001" in _calls and "037" in _calls        # 三位補零、確實逐一掃

@@ -110,11 +110,13 @@ def _throttle() -> None:
     _last_request_ts = time.time()
 
 
-def _post_json(path: str, body: dict, *, use_cache: bool = True) -> Any:
+def _post_json(path: str, body: dict, *, use_cache: bool = True,
+               retries: int = _RETRY_MAX) -> Any:
     """POST JSON → 解析後的 JSON(dict/list)。快取命中不打網路。
 
     proxy→直連降級(對齊 infra.proxy 慣例);429/5xx 指數退避重試(FR-5)。
     冷啟動(無 cookie)若被拒,spec §7.1 建議先 GET 首頁取 cookie —— 以同一 Session 達成。
+    retries:endpoint 探測時傳小值(避免對錯路徑狂重試 + 浪費節流時間)。
     """
     _key = _cache_key(path, body)
     if use_cache:
@@ -130,7 +132,7 @@ def _post_json(path: str, body: dict, *, use_cache: bool = True) -> Any:
     _url = f"{BASE_URL}{path}"
 
     _last_exc: Exception | None = None
-    for _attempt in range(_RETRY_MAX):
+    for _attempt in range(retries):
         try:
             _throttle()   # FR-4:每次實際打網路前節流 ≥0.7s(稽核修:原本定義了卻沒呼叫)
             with requests.Session() as sess:
@@ -157,9 +159,9 @@ def _post_json(path: str, body: dict, *, use_cache: bool = True) -> Any:
             if _proxy is not None and isinstance(e, requests.exceptions.ProxyError):
                 _proxy, _verify = None, True
                 continue
-            if _attempt < _RETRY_MAX - 1:
+            if _attempt < retries - 1:
                 time.sleep(_BACKOFF_FACTOR * (2 ** _attempt))
-    raise FundclearError(f"POST {path} 失敗(重試 {_RETRY_MAX} 次):{_last_exc}") from _last_exc
+    raise FundclearError(f"POST {path} 失敗(重試 {retries} 次):{_last_exc}") from _last_exc
 
 
 # ── 解析層(純函式,可用固定 JSON fixture 離線測試,spec §9)────────────────────
@@ -217,15 +219,19 @@ def _parse_nav_history(data: Any) -> pd.DataFrame:
 
 # ── 公開 API(FR-1)────────────────────────────────────────────────────────
 def list_organizes() -> list[dict]:
-    """機構清單 `[{name, value}]`。spec §2.5 未驗證 → 依序試候選路徑,全敗 raise。"""
+    """機構清單 `[{name, value}]`。spec §2.5 未驗證 → 試候選路徑 × body 變體(retries=1,
+    避免對錯路徑狂重試),全敗 raise(呼叫端應提示 user 改填機構代碼或回報實際 endpoint)。"""
     for _ep in _EP_ORGANIZE_CANDIDATES:
-        try:
-            _got = _parse_selection(_post_json(_ep, {"all": False}))
-            if _got:
-                return _got
-        except FundclearError as e:
-            logger.info("organize 候選 %s 失敗:%s", _ep, e)
-    raise FundclearError("機構清單 endpoint 全部候選失敗(spec §2.5 需人工確認實際路徑)")
+        for _body in ({"all": False}, {"all": True}, {}):
+            try:
+                _got = _parse_selection(_post_json(_ep, _body, use_cache=False, retries=1))
+                if _got:
+                    return _got
+            except FundclearError as e:
+                logger.info("organize 候選 %s body=%s 失敗:%s", _ep, _body, e)
+    raise FundclearError(
+        "機構清單 endpoint 全部候選失敗(spec §2.5 未驗證的路徑都不對)。"
+        "請在『機構代碼』欄直接填代碼後重試(安聯=019);或用瀏覽器 F12 找出實際路徑回報給我。")
 
 
 def list_funds(organize_code: str = _ORGANIZE_DEFAULT) -> list[dict]:

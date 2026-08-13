@@ -799,6 +799,18 @@ def _sec_nav_backfill() -> None:
                                   placeholder="例:聯博多元資產收益組合基金")
         _org = st.text_input("機構代碼(選填;知道就填可加速。例 019=安聯)", key="navbf_org",
                              placeholder="留空 = 全機構搜尋(較慢;機構清單 endpoint 部署後才驗證)")
+        with st.expander("🔧 出現「機構清單 endpoint 全部候選失敗」?怎麼辦"):
+            st.markdown(
+                "FundClear 的**機構清單**那支 API 路徑還沒驗證到(規格書 §2.5 也標未驗證)。兩個解法:\n\n"
+                "**A. 直接填機構代碼(最快)**:在上面『機構代碼』欄填代碼再按找。已知 **019 = 安聯**。\n\n"
+                "**B. 幫我抓真實路徑(一勞永逸,之後就能用下拉)**:\n"
+                "1. 電腦瀏覽器開 `https://www.fundclear.com.tw/offshore/nav-profit/fund-nav?type=history`\n"
+                "2. 按 **F12** → 選 **Network(網路)** → 篩選 **Fetch/XHR**\n"
+                "3. **重新整理**頁面\n"
+                "4. 找開頭像 `common-select` 的請求,把它的 **Request URL** 貼給我\n"
+                "5. (順便)機構下拉選你的基金公司(如聯博),看新請求 payload 裡的 `organizeCode`,"
+                "那就是你的機構代碼\n\n"
+                "把 4/5 貼給我,我把實際 endpoint 寫死,你之後就不用填代碼。")
         if st.button("🔎 找 FundClear 對應基金", key="navbf_find", disabled=not _name.strip()):
             try:
                 from services.fundclear_backfill import find_fund_candidates
@@ -808,8 +820,20 @@ def _sec_nav_backfill() -> None:
                 if not st.session_state["navbf_cands"]:
                     st.warning("查無相似基金 —— 可能非 FundClear 境外基金,或需指定機構代碼。")
             except Exception as _e:  # noqa: BLE001
-                _friendly("搜尋 FundClear 失敗(部署環境才連得到;機構清單報錯請填機構代碼)",
+                _friendly("搜尋 FundClear 失敗(部署環境才連得到;機構清單報錯請填機構代碼或按下方掃描)",
                           _e, level="error")
+
+        if st.button("🔍 掃描全部機構找我的基金(機構清單抓不到時用;較慢 ~1-2 分)",
+                     key="navbf_scan", disabled=not _name.strip()):
+            try:
+                from services.fundclear_backfill import find_fund_candidates
+                with st.spinner("逐一掃描機構 001-060(~1-2 分,跑完前別關頁面)…"):
+                    st.session_state["navbf_cands"] = find_fund_candidates(
+                        _name.strip(), organize_code=None, scan_range=60)
+                if not st.session_state["navbf_cands"]:
+                    st.warning("掃描完仍查無 —— 可能非 FundClear 境外基金,或機構代碼超出 001-060 範圍。")
+            except Exception as _e:  # noqa: BLE001
+                _friendly("掃描失敗", _e, level="error")
 
         _cands = st.session_state.get("navbf_cands") or []
         if _cands:
