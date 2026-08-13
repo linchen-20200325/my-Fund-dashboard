@@ -209,4 +209,23 @@ def policy_returns(enriched: list) -> list:
     return out
 
 
-__all__ = ["parse_holdings", "summarize_by_policy", "enrich_returns", "policy_returns"]
+def policy_benchmark_1y(holdings: list, *, spx_1y_pct, twii_1y_pct) -> dict:
+    """每保單:各檔依幣別對應大盤(台幣→TWII、其餘→SPX)、按 invest_twd 加權的**近1年**大盤報酬%。
+
+    ⚠️ 近似:保單真實報酬是「持有至今(起始日未知)」,大盤是固定近1年 → 期間不對齊,僅作對照。
+    缺對應大盤(如 spx None)/ 缺投資額 → 該檔不計入分母(§1 不硬算)。回 {policy: bench_pct or None}。
+    """
+    agg: dict = {}
+    for h in holdings:
+        p = h["policy"]
+        inv = h.get("invest_twd") or 0.0
+        b = twii_1y_pct if _is_twd(h.get("currency")) else spx_1y_pct
+        d = agg.setdefault(p, {"w": 0.0, "wb": 0.0})
+        if isinstance(b, (int, float)) and inv > 0:
+            d["w"] += inv
+            d["wb"] += inv * b
+    return {p: (v["wb"] / v["w"] if v["w"] else None) for p, v in agg.items()}
+
+
+__all__ = ["parse_holdings", "summarize_by_policy", "enrich_returns", "policy_returns",
+           "policy_benchmark_1y"]

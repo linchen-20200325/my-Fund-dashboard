@@ -603,8 +603,23 @@ def _sec_dividend_calendar():
         _friendly("產生除息月曆失敗", _e, level="error")
 
 
+def _yf_1y_return(ticker: str) -> "float | None":
+    """yf 收盤 → 近1年報酬%(252 交易日;不足取全期)。無資料/失敗 → None(§1)。"""
+    try:
+        from repositories.macro.yf import fetch_yf_close
+        _s = fetch_yf_close(ticker, range_="2y")
+        if _s is None or len(_s) < 30:
+            return None
+        _last = float(_s.iloc[-1])
+        _base = float(_s.iloc[-252]) if len(_s) >= 252 else float(_s.iloc[0])
+        return (_last / _base - 1) * 100.0 if _base > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _sec_policy_portfolio():
-    """📊 保單組合分析:上傳保單總表 CSV → 依保單分組 + 真實報酬(成本 vs 現價 + 已領配息)+ 標最差。"""
+    """📊 保單組合分析:上傳保單總表 CSV → 依保單分組 + 真實報酬(成本 vs 現價 + 已領配息)+ 標最差
+    + vs 大盤(近1年近似)+ 一鍵載入健診/換股/除息。"""
     import pandas as pd
 
     from services.portfolio_csv import (
@@ -665,6 +680,9 @@ def _sec_policy_portfolio():
             except Exception:  # noqa: BLE001
                 pass
             st.session_state["_polcsv_enriched"] = enrich_returns(_hs, nav_by_code=_nav, usdtwd=_usd)
+            # vs 大盤(近1年近似):^GSPC(美股)/ ^TWII(台股)
+            st.session_state["_polcsv_bench"] = {"spx": _yf_1y_return("^GSPC"),
+                                                 "twii": _yf_1y_return("^TWII")}
         except Exception as _e:  # noqa: BLE001
             _friendly("抓現價/算報酬失敗", _e, level="error")
 
@@ -684,9 +702,12 @@ def _sec_policy_portfolio():
         st.info("按上面『💹 抓現價』才會算真實報酬 + 排名(哪組最差)。")
         return
 
+    from services.portfolio_csv import policy_benchmark_1y
     _pr = policy_returns(_en)
     _maxrank = max((p["rank"] for p in _pr if p.get("rank")), default=0)
     _n_suspect = sum(1 for h in _en if h.get("nav_suspect"))
+    _bench = st.session_state.get("_polcsv_bench") or {}
+    _pbench = policy_benchmark_1y(_hs, spx_1y_pct=_bench.get("spx"), twii_1y_pct=_bench.get("twii"))
     _rows = []
     for p in _pr:
         _r = p.get("rank")
@@ -697,8 +718,12 @@ def _sec_policy_portfolio():
             _ret = f"覆蓋不足 {p['coverage'] * 100:.0f}%"
         else:
             _ret = "資料不足"
+        _bp = _pbench.get(p["policy"])
         _rows.append({
             "燈": _lamp, "排名": _r or "—", "保單": p["policy"], "真實報酬%": _ret,
+            "大盤近1年": (f"{_bp:+.1f}%" if _bp is not None else "—"),
+            "超額(近似)": (f"{p['total_return_pct'] - _bp:+.1f}pp"
+                           if (p["total_return_pct"] is not None and _bp is not None) else "—"),
             "投資額": f"{p['invest_twd']:,.0f}",
             "現值": (f"{p['current_value_twd']:,.0f}" if p["current_value_twd"] is not None else "—"),
             "累領配息": f"{p['cum_div_twd']:,.0f}", "已估/檔數": f"{p['n_priced']}/{p['n_funds']}",
@@ -710,9 +735,36 @@ def _sec_policy_portfolio():
                    f"{_worst['total_return_pct']:+.1f}%(含息、成本 vs 現價)。")
     if _n_suspect:
         st.caption(f"⚠️ {_n_suspect} 檔現價與成本淨值比異常(疑幣別/計價單位對不上)→ 已排除不硬算(§1)。")
-    st.caption("真實報酬 =(現值 + 已領配息 − 成本)÷ 成本;現價現抓、含息;"
-               "缺現價 / 覆蓋率<60% 不排名(§1);已領配息用各檔實際值加總(不分攤)。"
-               "vs 大盤(近1年近似)為下一步。")
+    st.caption("真實報酬 =(現值 + 已領配息 − 成本)÷ 成本;現價現抓、含息;缺現價/覆蓋率<60% 不排名(§1);"
+               "配息用各檔實際值加總(不分攤)。⚠️ **超額為近似**:真實報酬是持有至今、大盤是固定近1年,期間不對齊。")
+
+    # 餵現有引擎:載入這些基金到 portfolio_funds(健診/換股/除息 都吃這個)
+    if st.button("📥 把這些基金載入 健診 / 換股 / 除息(現有引擎)", use_container_width=True, key="polcsv_load"):
+        try:
+            from services.fund_row import process_one_fund
+            from ui.helpers.fund_grp_health._utils import _build_fund_dict
+            _inv_by_code: dict = {}
+            for h in _hs:
+                _inv_by_code[h["code"]] = _inv_by_code.get(h["code"], 0.0) + (h.get("invest_twd") or 0.0)
+            _codes = sorted(_inv_by_code)
+            _funds, _prog = [], st.progress(0.0, text="載入基金中…")
+            for _i, _c in enumerate(_codes):
+                try:
+                    _r = process_one_fund(_c, _inv_by_code[_c] or 1_000_000.0)
+                    if _r.get("ok") and _r.get("_fund_raw"):
+                        _funds.append(_build_fund_dict(_r["_fund_raw"], _c, _inv_by_code[_c]))
+                except Exception:  # noqa: BLE001
+                    pass
+                _prog.progress((_i + 1) / len(_codes), text=f"載入 {_i + 1}/{len(_codes)}…")
+            _prog.empty()
+            if _funds:
+                st.session_state["portfolio_funds"] = _funds
+                st.success(f"✅ 已載入 {len(_funds)}/{len(_codes)} 檔 → 到「🗓️ 除息行事曆 / 🔔 換股通報預覽 / "
+                           "組合健診」都會用這些基金。")
+            else:
+                st.warning("全部載入失敗(抓取問題)。")
+        except Exception as _e:  # noqa: BLE001
+            _friendly("載入基金失敗", _e, level="error")
 
 
 def render_manage_tab() -> None:
