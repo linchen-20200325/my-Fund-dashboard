@@ -692,6 +692,50 @@ def _sec_policy_portfolio():
     _c2.metric("累積已領配息", f"{sum(d['cum_div_twd'] for d in _summ):,.0f} TWD")
     _c3.metric("保單數", f"{len(_summ)}")
 
+    # ── 📤 匯入到 Google Sheet(自動拆成各保單分頁 v2)→ 整個 App 都用得到 ──
+    with st.expander("📤 匯入到 Google Sheet（自動拆成各保單分頁 v2）"):
+        from services.portfolio_csv import to_v2_rows
+        st.caption("把上傳的總表**自動拆成各保單分頁**寫進你的 Google Sheet(v2),之後整個 App"
+                   "(投資組合 / 帳本 / 週報)都吃得到,不用手動碰分頁。"
+                   "⚠️ 會**覆寫同名保單分頁**;寫入前**自動整本備份**(可還原)。")
+        _v2 = to_v2_rows(_hs)
+        st.caption("將寫入:" + "、".join(f"{k}({len(v)}檔)" for k, v in _v2.items()))
+        _ok = st.checkbox("我了解會覆寫同名保單分頁(已自動備份可還原)", key="polcsv_v2_ok")
+        if st.button("📤 備份 + 匯入各保單分頁", use_container_width=True,
+                     disabled=not _ok, key="polcsv_v2_write"):
+            try:
+                from ui.helpers.oauth_state import _get_oauth_client, _sheet_id_secret
+                _cli = _get_oauth_client()
+                _sid = (st.session_state.get("policy_sheet_id") or _sheet_id_secret or "").strip()
+                if not _cli or not _sid:
+                    st.error("尚未用 Google 登入,或缺 Sheet ID → 先到「投資組合」分頁登入 Google 再回來。")
+                else:
+                    import pandas as pd
+
+                    from repositories.policy.v2 import copy_sheet_as_backup, write_policy_v2
+                    with st.spinner("整本備份中…(安全網,寫壞可還原)"):
+                        copy_sheet_as_backup(_cli, _sid)   # 失敗會 raise → 不進寫入
+                    _items = list(_v2.items())
+                    _prog, _n, _fail = st.progress(0.0, text="寫入保單分頁…"), 0, []
+                    for _i, (_pid, _rows) in enumerate(_items):
+                        try:
+                            # 稽核:用 write_policy_v2 的**實際回傳列數**,不用輸入數(否則 0 寫入也報成功 §1)
+                            _n += int(write_policy_v2(_cli, _sid, _pid, pd.DataFrame(_rows)) or 0)
+                        except Exception:  # noqa: BLE001 — 記錄失敗保單,不中斷其餘(可還原備份)
+                            _fail.append(_pid)
+                        _prog.progress((_i + 1) / len(_items), text=f"寫入 {_i + 1}/{len(_items)} 張保單…")
+                    _prog.empty()
+                    if _n == 0:
+                        st.error("⚠️ 實際寫入 0 檔(異常,可能欄位對不上)—— 原檔已備份、未受影響,請貼畫面給我。")
+                    else:
+                        _m = (f"✅ 已匯入 {len(_items) - len(_fail)} 張保單、實際寫入 {_n} 檔"
+                              "(原檔已備份,檔名含 backup)。重整投資組合分頁就會看到。")
+                        if _fail:
+                            _m += f"　⚠️ 失敗保單:{', '.join(_fail)}(可重跑或還原備份)。"
+                        st.success(_m)
+            except Exception as _e:  # noqa: BLE001
+                _friendly("匯入 Google Sheet 失敗", _e, level="error")
+
     _en = st.session_state.get("_polcsv_enriched")
     if not _en:
         st.dataframe(pd.DataFrame([{

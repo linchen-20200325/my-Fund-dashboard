@@ -209,6 +209,83 @@ def policy_returns(enriched: list) -> list:
     return out
 
 
+def _norm_ccy(c) -> str:
+    if _is_twd(c):
+        return "TWD"
+    _s = str(c or "").lower()
+    return "USD" if ("美" in str(c or "") or "usd" in _s) else str(c or "")
+
+
+def _norm_tier(t) -> str:
+    _s = str(t or "")
+    if "核心" in _s or "core" in _s.lower():
+        return "core"
+    if "衛星" in _s or "satellite" in _s.lower():
+        return "satellite"
+    return ""
+
+
+# 真正的 v2 分頁欄位(對齊 repositories.policy.v2.ALL_COLS_V2;稽核 CRITICAL:別用 _helpers.ALL_COLS
+# 那是 v1;write_policy_v2 reindex 到這 10 欄,不在此列的鍵會被丟、fund_code 空的列會被跳過)
+V2_COLS: tuple = ("policy_id", "fund_code", "fund_name", "currency", "tier",
+                  "invest_twd", "div_cash_pct", "units", "avg_nav", "avg_fx")
+
+
+def _numf(v):
+    return v if isinstance(v, (int, float)) else None
+
+
+def to_v2_rows(holdings: list) -> dict:
+    """扁平持倉 → {policy_id: [v2 row dict, ...]},供 L3 建 DataFrame 寫進 v2 保單分頁。
+
+    純函式。鍵**只用 V2_COLS**(fund_code / fund_name / tier / avg_fx —— 不是 v1 的
+    fund_url/policy_tier/fx_avg,稽核 CRITICAL 修)。§4.6:同保單同檔多筆(多買入 lot)→
+    **合併一列**:invest_twd + units 加總、avg_nav / avg_fx 以投資額加權;缺值 → "" (blank)。
+    v2 無「累積已領配息」欄 → 該值不入 Sheet(App 會自行抓配息)。
+    """
+    agg: dict = {}
+    order: list = []
+    for h in holdings:
+        p = str(h.get("policy") or "").strip()
+        code = str(h.get("code") or "").strip().upper()
+        if not p or not code:
+            continue
+        key = (p, code)
+        if key not in agg:
+            agg[key] = {"policy": p, "code": code, "name": str(h.get("name") or code),
+                        "currency": _norm_ccy(h.get("currency")), "tier": _norm_tier(h.get("tier")),
+                        "cash_pct": _numf(h.get("cash_pct")),
+                        "inv": 0.0, "units": 0.0, "has_units": False,
+                        "w_nav": 0.0, "w_fx": 0.0, "w_base": 0.0}
+            order.append(key)
+        a = agg[key]
+        inv = h.get("invest_twd") or 0.0
+        a["inv"] += inv
+        if isinstance(h.get("units"), (int, float)):
+            a["units"] += h["units"]
+            a["has_units"] = True
+        # avg_nav / avg_fx 以投資額加權(單一 lot 時 = 原值)
+        if inv > 0 and isinstance(h.get("cost_nav"), (int, float)):
+            a["w_nav"] += inv * h["cost_nav"]
+            a["w_base"] += inv
+        if inv > 0 and isinstance(h.get("fx"), (int, float)):
+            a["w_fx"] += inv * h["fx"]
+    out: dict = {}
+    for key in order:
+        a = agg[key]
+        _b = a["w_base"]
+        out.setdefault(a["policy"], []).append({
+            "policy_id": a["policy"], "fund_code": a["code"], "fund_name": a["name"],
+            "currency": a["currency"], "tier": a["tier"],
+            "invest_twd": (a["inv"] if a["inv"] else ""),
+            "div_cash_pct": (a["cash_pct"] if a["cash_pct"] is not None else ""),
+            "units": (a["units"] if a["has_units"] else ""),
+            "avg_nav": (a["w_nav"] / _b if _b else ""),
+            "avg_fx": (a["w_fx"] / _b if _b else ""),
+        })
+    return out
+
+
 def policy_benchmark_1y(holdings: list, *, spx_1y_pct, twii_1y_pct) -> dict:
     """每保單:各檔依幣別對應大盤(台幣→TWII、其餘→SPX)、按 invest_twd 加權的**近1年**大盤報酬%。
 
@@ -228,4 +305,4 @@ def policy_benchmark_1y(holdings: list, *, spx_1y_pct, twii_1y_pct) -> dict:
 
 
 __all__ = ["parse_holdings", "summarize_by_policy", "enrich_returns", "policy_returns",
-           "policy_benchmark_1y"]
+           "policy_benchmark_1y", "to_v2_rows"]
