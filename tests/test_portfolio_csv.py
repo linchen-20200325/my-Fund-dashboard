@@ -12,6 +12,7 @@ from services.portfolio_csv import (
     policy_benchmark_1y,
     policy_returns,
     summarize_by_policy,
+    to_v2_rows,
 )
 
 _CSV = (
@@ -136,6 +137,19 @@ def test_policy_benchmark_1y_weighted_by_currency():
 def test_policy_benchmark_missing_bench_excluded():
     b = policy_benchmark_1y(parse_holdings(_CSV), spx_1y_pct=None, twii_1y_pct=20.0)
     assert abs(b["PA01"] - 20.0) < 1e-9 and b["PA02"] is None   # 美元無大盤 → 不計/None(§1)
+
+
+def test_to_v2_rows_maps_and_groups():
+    """扁平總表 → v2 分頁 row:分組、幣別/級別正規化、欄位對映、累領配息入 notes。"""
+    rows = to_v2_rows(parse_holdings(_CSV))
+    assert set(rows) == {"PA01", "PA02"}
+    _pa1 = {r["fund_url"]: r for r in rows["PA01"]}
+    x = _pa1["FUNDX"]                                     # 美元/核心
+    assert x["policy_id"] == "PA01" and x["currency"] == "USD" and x["policy_tier"] == "core"
+    assert x["units"] == 100.0 and x["avg_nav"] == 10.0 and x["invest_twd"] == 30000.0
+    assert x["fx_avg"] == 30.0 and x["div_cash_pct"] == 100.0 and "累領配息 500" in x["notes"]
+    y = _pa1["FUNDY"]                                     # 台幣/衛星、#N/A 配息 → notes 空
+    assert y["currency"] == "TWD" and y["policy_tier"] == "satellite" and y["notes"] == ""
 
 
 def test_coverage_gate_below_threshold_not_ranked():

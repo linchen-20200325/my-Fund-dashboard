@@ -209,6 +209,49 @@ def policy_returns(enriched: list) -> list:
     return out
 
 
+def _norm_ccy(c) -> str:
+    if _is_twd(c):
+        return "TWD"
+    _s = str(c or "").lower()
+    return "USD" if ("美" in str(c or "") or "usd" in _s) else str(c or "")
+
+
+def _norm_tier(t) -> str:
+    _s = str(t or "")
+    if "核心" in _s or "core" in _s.lower():
+        return "core"
+    if "衛星" in _s or "satellite" in _s.lower():
+        return "satellite"
+    return ""
+
+
+def to_v2_rows(holdings: list) -> dict:
+    """扁平持倉 → {policy_id: [v2 row dict, ...]},供 L3 建 DataFrame 寫進 v2 保單分頁。
+
+    純函式(不 import pandas/schema);欄位對映見對話表。fund_url = 基金代碼(v2 主鍵);
+    累積已領配息無 v2 欄 → 併進 notes。缺值保留 None(write_policy_v2 會補空字串)。
+    """
+    out: dict = {}
+    for h in holdings:
+        p = str(h.get("policy") or "").strip()
+        code = str(h.get("code") or "").strip().upper()
+        if not p or not code:
+            continue
+        _cd = h.get("cum_div_twd")
+        row = {
+            "policy_id": p, "policy_name": p, "fund_url": code,
+            "invest_twd": h.get("invest_twd"), "invest_date": "",
+            "currency": _norm_ccy(h.get("currency")),
+            "fx_at_buy": h.get("fx"), "fx_avg": h.get("fx"),
+            "avg_nav": h.get("cost_nav"), "avg_nav_with_div": h.get("cost_incl_div"),
+            "units": h.get("units"), "div_cash_pct": h.get("cash_pct"),
+            "policy_tier": _norm_tier(h.get("tier")),
+            "notes": (f"累領配息 {_cd:.0f} TWD" if isinstance(_cd, (int, float)) else ""),
+        }
+        out.setdefault(p, []).append(row)
+    return out
+
+
 def policy_benchmark_1y(holdings: list, *, spx_1y_pct, twii_1y_pct) -> dict:
     """每保單:各檔依幣別對應大盤(台幣→TWII、其餘→SPX)、按 invest_twd 加權的**近1年**大盤報酬%。
 
@@ -228,4 +271,4 @@ def policy_benchmark_1y(holdings: list, *, spx_1y_pct, twii_1y_pct) -> dict:
 
 
 __all__ = ["parse_holdings", "summarize_by_policy", "enrich_returns", "policy_returns",
-           "policy_benchmark_1y"]
+           "policy_benchmark_1y", "to_v2_rows"]
