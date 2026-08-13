@@ -212,3 +212,16 @@ def test_find_fund_candidates_scan_range(monkeypatch):
     assert got and got[0]["value"] == "AA1"
     assert got[0]["organize_code"] == "037"          # 掃描有帶回命中的機構代碼
     assert "001" in _calls and "037" in _calls        # 三位補零、確實逐一掃
+
+
+def test_list_organizes_falls_back_to_known(monkeypatch):
+    """機構清單 endpoint 全敗 → 回退已知機構(019 安聯 / 037 聯博),不 raise(避免整段卡死)。"""
+    import repositories.fundclear_offshore as fcmod
+
+    def _boom(*a, **k):
+        raise fcmod.FundclearError("endpoint 不存在")
+
+    monkeypatch.setattr(fcmod, "_post_json", _boom)
+    got = fcmod.list_organizes()
+    _codes = {o["value"] for o in got}
+    assert "019" in _codes and "037" in _codes and len(got) == len(fcmod._KNOWN_ORGANIZES)

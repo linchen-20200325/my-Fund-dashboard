@@ -69,6 +69,13 @@ _HEADERS = {
 _OUT_COLS = ["nav_date", "nav"]
 _last_request_ts = 0.0
 
+# 已知機構代碼(spec §2.5 機構清單 endpoint 未驗證/不可達時的 fallback;user 部署實測回報)。
+# 之後可續補;找不到的機構仍可用「掃描全部機構」(find_fund_candidates scan_range)。
+_KNOWN_ORGANIZES = (
+    {"name": "安聯 Allianz (AGIF)", "value": "019"},
+    {"name": "聯博 AllianceBernstein", "value": "037"},
+)
+
 
 class FundclearError(Exception):
     """FundClear offshore 抓取失敗(§1 Fail Loud:呼叫端須看見,不靜默)。"""
@@ -229,9 +236,10 @@ def list_organizes() -> list[dict]:
                     return _got
             except FundclearError as e:
                 logger.info("organize 候選 %s body=%s 失敗:%s", _ep, _body, e)
-    raise FundclearError(
-        "機構清單 endpoint 全部候選失敗(spec §2.5 未驗證的路徑都不對)。"
-        "請在『機構代碼』欄直接填代碼後重試(安聯=019);或用瀏覽器 F12 找出實際路徑回報給我。")
+    # endpoint 全敗 → 退回已知機構 fallback(不 raise:至少 019/037 可用,其餘用掃描)
+    logger.warning("機構清單 endpoint 全部候選失敗 → 退回已知機構 fallback(%d 家)",
+                   len(_KNOWN_ORGANIZES))
+    return list(_KNOWN_ORGANIZES)
 
 
 def list_funds(organize_code: str = _ORGANIZE_DEFAULT) -> list[dict]:
