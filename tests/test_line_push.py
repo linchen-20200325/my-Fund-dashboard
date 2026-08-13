@@ -54,6 +54,20 @@ def test_missing_user_id_not_sent(monkeypatch):
     assert out["sent"] is False and "USER_ID" in out["reason"]
 
 
+def test_token_alias_access_token_env(monkeypatch):
+    """LINE_CHANNEL_TOKEN 未設但別名 LINE_CHANNEL_ACCESS_TOKEN 有 → 仍解析得 token 並送出。
+
+    對應 user GitHub secret 名為 LINE_CHANNEL_ACCESS_TOKEN(spec 命名)不必改名。
+    """
+    _clean_env(monkeypatch)                              # get_secret→None、刪 LINE_CHANNEL_TOKEN/USER_ID
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "ACCESSTOK")
+    monkeypatch.setenv("LINE_USER_ID", "Uxxx")
+    rec: list = []
+    out = push_text("hi", _poster=_poster(200, record=rec))
+    assert out["sent"] is True
+    assert rec and rec[0]["headers"]["Authorization"] == "Bearer ACCESSTOK"
+
+
 def test_empty_text_not_sent():
     out = push_text("   ", token="T", user_id="U", _poster=_poster())
     assert out["sent"] is False and "未送" in out["reason"]
