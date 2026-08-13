@@ -132,6 +132,7 @@ def _post_json(path: str, body: dict, *, use_cache: bool = True) -> Any:
     _last_exc: Exception | None = None
     for _attempt in range(_RETRY_MAX):
         try:
+            _throttle()   # FR-4:每次實際打網路前節流 ≥0.7s(稽核修:原本定義了卻沒呼叫)
             with requests.Session() as sess:
                 sess.headers.update(_HEADERS)
                 # spec §7.1:冷啟動先 GET 首頁取 session cookie,再打 API(同一 Session)

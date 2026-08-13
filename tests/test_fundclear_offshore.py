@@ -125,3 +125,73 @@ def test_rank_candidates_contains_and_filters():
 def test_rank_candidates_empty_target():
     from services.fundclear_backfill import rank_candidates
     assert rank_candidates("", [{"name": "x", "value": "1"}]) == []
+
+
+def test_throttle_enforces_min_interval(monkeypatch):
+    """FR-4:相鄰請求 <0.7s → sleep 補足(稽核修:_throttle 原本沒被呼叫)。"""
+    import repositories.fundclear_offshore as fcmod
+    _sleeps = []
+    monkeypatch.setattr(fcmod.time, "time", lambda: 100.0)          # 凍結時間
+    monkeypatch.setattr(fcmod.time, "sleep", lambda s: _sleeps.append(s))
+    fcmod._last_request_ts = 0.0
+    fcmod._throttle()                                               # 首次:elapsed 大 → 不睡
+    fcmod._throttle()                                               # 立刻再打:elapsed 0 → 睡 ~0.7
+    assert any(abs(s - fcmod._THROTTLE_SEC) < 0.05 for s in _sleeps), _sleeps
+
+
+def test_post_json_wires_throttle(monkeypatch):
+    """稽核修:_post_json 每次打網路前確實呼叫 _throttle(先前定義卻沒接)。"""
+    import requests
+
+    import repositories.fundclear_offshore as fcmod
+    _n = {"throttle": 0}
+    monkeypatch.setattr(fcmod, "_throttle", lambda: _n.__setitem__("throttle", _n["throttle"] + 1))
+    monkeypatch.setattr("infra.proxy.get_proxy_config", lambda: None)
+
+    class _Resp:
+        status_code = 200
+
+        def json(self):
+            return {"ok": True}
+
+    class _Sess:
+        headers = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, *a, **k):
+            return _Resp()
+
+        def post(self, *a, **k):
+            return _Resp()
+
+    monkeypatch.setattr(requests, "Session", lambda: _Sess())
+    out = fcmod._post_json("/x", {"a": 1}, use_cache=False)
+    assert out == {"ok": True} and _n["throttle"] >= 1
+
+
+def test_download_and_store_point_key_contract(monkeypatch):
+    """稽核 #1/#11:download_and_store 產出的 point dict key 必須符合 append_points 契約
+    (code/nav/nav_date/fund_name/source),且 code=持倉內部碼 → 健診才讀得回。"""
+    from datetime import date
+
+    import services.fundclear_backfill as bf
+    _df = pd.DataFrame({"nav_date": pd.to_datetime(["2020-01-01", "2020-01-02"]),
+                        "nav": [10.0, 10.5]})
+    _df.attrs["currency"] = "USD"
+    monkeypatch.setattr(fc, "get_nav_history", lambda *a, **k: _df)
+    _cap = {}
+    import services.nav_history_gs as gs
+    monkeypatch.setattr(gs, "append_points",
+                        lambda pts: (_cap.setdefault("pts", pts), {"written": len(pts), "skipped": 0})[1])
+    res = bf.download_and_store("019", "F", "C", "ACTI71", fund_name="X",
+                               start=date(2019, 1, 1), end=date(2021, 1, 1))
+    assert res["ok"] and res["count"] == 2 and res["currency"] == "USD"
+    _p = _cap["pts"][0]
+    assert set(_p) >= {"code", "nav", "nav_date", "fund_name", "source"}
+    assert _p["code"] == "ACTI71" and _p["source"] == "fundclear_offshore"
+    assert _p["nav_date"] == "2020-01-01"                          # ISO 日期字串

@@ -23,7 +23,6 @@ from repositories.policy_repository import (
     PolicySheetError,
     _sanitize_tab_name,
     compute_units,
-    delete_policy_worksheet,
     ensure_policy_worksheet,
     estimate_dividend_split,
     load_policy_v2,
@@ -260,11 +259,11 @@ def render_v2_section(client: Any, sheet_id: str) -> None:
     呼叫條件：caller 已確認 `detect_sheet_schema_version(...)` == "v2"。
     """
     st.markdown("---")
-    st.markdown("##### ✨ v2 編輯介面（保單與基金）")
+    st.markdown("##### 📋 v2 保單顯示（唯讀）")
     st.caption(
-        "每張保單一個分頁；可加 fund 列與多幣別現金列。"
-        "編輯後按各保單區塊的 **[💾 存到雲端]** 推上 Google Sheets。"
-        "T7 模擬器**不會寫回**，真實加碼/贖回請在此編輯或直接改 Sheet。"
+        "**唯讀顯示** —— App 不再寫回、**不會清空**你的 Google Sheet 資料（user 2026-08-13 決策）。"
+        "要新增/修改保單或基金，請**直接到 Google Sheet 依範本欄位填**（每張保單一個分頁）；"
+        "改完回這裡按 **[📥 重新讀回]** 拿最新。"
     )
 
     # 列保單（v18.152：走 60s cache）
@@ -283,26 +282,20 @@ def render_v2_section(client: Any, sheet_id: str) -> None:
             _load_policy_into_buf(client, sheet_id, pid)
         st.session_state[_KEY_V2_LOADED] = sheet_id
 
-    # Empty Sheet / 沒有保單 → 顯示 wizard 入口
+    # Empty Sheet / 沒有保單 → 唯讀模式:提示直接到 Google Sheet 建立(不在 App 寫)
     if not policy_ids:
-        st.info("ℹ️ 這本帳本還沒有任何保單。")
-        if st.button("🚀 第一次使用 — 引導建立第一張保單",
-                      key="btn_v2_first_use", type="primary",
-                      use_container_width=True):
-            st.session_state["_v2_show_wizard"] = True
-            st.rerun()
-        if st.session_state.get("_v2_show_wizard"):
-            render_first_use_wizard(client, sheet_id)
+        st.info("ℹ️ 這本帳本還沒有任何保單。請**直接到 Google Sheet 新增一個保單分頁**"
+                "(依範本欄位),再回這裡按 [📥 重新讀回]。App 不再代寫、不會清空你的資料。")
         return
 
-    # 既有保單列表
+    # 既有保單列表(唯讀顯示)
     buf = _ensure_buf()
     for pid in policy_ids:
         _render_policy_block(client, sheet_id, pid, buf.get(pid, {}))
 
-    # 新增保單區
+    # v19.451 唯讀:移除「➕ 新增保單」寫入區。新增保單請直接在 Google Sheet 開新分頁(依範本)。
     st.markdown("---")
-    _render_new_policy_section(client, sheet_id)
+    st.caption("➕ 要新增保單?請直接到 Google Sheet 建一個新分頁(依範本欄位),App 不代寫。")
 
 
 # ════════════════════════════════════════════════════════════
@@ -337,7 +330,8 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
                                           r.get("avg_fx", 0) or 0), axis=1)
         edited_fund = st.data_editor(
             fund_df,
-            num_rows="dynamic",
+            num_rows="fixed",
+            disabled=True,       # v19.451 唯讀:App 不再寫回/清空 Sheet;新增修改請直接改 Google Sheet
             use_container_width=True,
             key=f"de_fund_{policy_id}",
             column_config={
@@ -393,79 +387,13 @@ def _render_policy_block(client: Any, sheet_id: str, policy_id: str, buf_one: di
             pass
         _render_div_split_estimate(policy_id, edited_fund)
 
-        # diff 偵測 → 標記 dirty（v19.436:現金列已退役,只追蹤 fund 表）
-        if not edited_fund.equals(fund_df):
-            buf = _ensure_buf()
-            buf.setdefault(policy_id, {})
-            buf[policy_id]["fund"] = edited_fund.copy()
-            buf[policy_id]["dirty"] = True
-
-        # 動作按鈕列
-        _bc1, _bc2, _bc3, _bc4 = st.columns([2, 2, 1, 1])
-        if _bc1.button(f"💾 存到雲端", key=f"btn_save_{policy_id}",
-                        type="primary", use_container_width=True):
-            try:
-                # v18.153：存檔前對 fund_name/currency/tier 空的列 → MoneyDJ 自動帶
-                fund_df_v2 = edited_fund.copy() if not edited_fund.empty else edited_fund
-                if not fund_df_v2.empty:
-                    for _i, _r in fund_df_v2.iterrows():
-                        _fc = str(_r.get("fund_code", "") or "").strip()
-                        if not _fc:
-                            continue
-                        _need_fname = not str(_r.get("fund_name", "") or "").strip()
-                        _need_ccy = not str(_r.get("currency", "") or "").strip()
-                        _need_tier = not str(_r.get("tier", "") or "").strip()
-                        if _need_fname or _need_ccy or _need_tier:
-                            _afn, _accy, _atier = _autofill_from_moneydj(_fc)
-                            if _need_fname and _afn:
-                                fund_df_v2.at[_i, "fund_name"] = _afn
-                            if _need_ccy and _accy:
-                                fund_df_v2.at[_i, "currency"] = _accy
-                            if _need_tier and _atier:
-                                fund_df_v2.at[_i, "tier"] = _atier
-                merged = _merge_policy_df(policy_id, fund_df_v2)
-                n = write_policy_v2(client, sheet_id, policy_id, merged)
-                buf = _ensure_buf()
-                buf.setdefault(policy_id, {})["dirty"] = False
-                st.success(f"✅ 已存 {n} 列到雲端（自動帶 MoneyDJ 缺漏）")
-                # v18.152：寫入後清 cache，重讀拿雲端最新
-                _invalidate_cache(sheet_id, policy_id)
-                _load_policy_into_buf(client, sheet_id, policy_id)
-                st.rerun()
-            except PolicySheetError as e:
-                _show_quota_friendly("存檔失敗", e)
-
-        if _bc2.button(f"📥 重新讀回", key=f"btn_reload_{policy_id}",
-                        use_container_width=True,
-                        help="丟棄本地未存的改動，從雲端讀最新"):
+        # v19.451 唯讀:移除「存到雲端 / 刪除保單」寫入按鈕(避免 write_policy_v2 clear→覆寫
+        # 誤清空 Sheet;user 2026-08-13 決策)。只留「重新讀回」(純讀,從雲端拿最新)。
+        if st.button("📥 重新讀回（從雲端讀最新）", key=f"btn_reload_{policy_id}",
+                     use_container_width=True):
             _invalidate_cache(sheet_id, policy_id)
             _load_policy_into_buf(client, sheet_id, policy_id)
             st.rerun()
-
-        if _bc3.button(f"🗑️", key=f"btn_del_{policy_id}",
-                        use_container_width=True,
-                        help="刪除整張保單分頁（不可復原）"):
-            st.session_state[f"_confirm_del_{policy_id}"] = True
-
-        if st.session_state.get(f"_confirm_del_{policy_id}"):
-            st.warning(f"⚠️ 確定要刪除保單「{policy_id}」整個分頁？")
-            _dc1, _dc2 = st.columns(2)
-            if _dc1.button("✅ 確定刪除", key=f"btn_del_yes_{policy_id}",
-                            use_container_width=True):
-                try:
-                    delete_policy_worksheet(client, sheet_id, policy_id)
-                    buf = _ensure_buf()
-                    buf.pop(policy_id, None)
-                    _invalidate_cache(sheet_id)
-                    st.session_state.pop(f"_confirm_del_{policy_id}", None)
-                    st.success(f"✅ 已刪除「{policy_id}」")
-                    st.rerun()
-                except PolicySheetError as e:
-                    _show_quota_friendly("刪除失敗", e)
-            if _dc2.button("取消", key=f"btn_del_no_{policy_id}",
-                            use_container_width=True):
-                st.session_state.pop(f"_confirm_del_{policy_id}", None)
-                st.rerun()
 
 
 # ════════════════════════════════════════════════════════════
