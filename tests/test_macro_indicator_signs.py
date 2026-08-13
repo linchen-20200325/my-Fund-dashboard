@@ -97,6 +97,34 @@ def _num(node: ast.AST):
     return None
 
 
+def _ifexp_result_values(node: ast.AST) -> list:
+    """回傳 score ternary(IfExp)所有**可能結果值**(body/orelse 遞迴),
+
+    **不含** test 條件裡的門檻數字(如 `0.5 if v<4.5 else ...` 只回 score {0.5,...},
+    不回 4.5)。供 |score|≤weight 不變量檢查(v19.449 M4 follow-up)。
+    """
+    if isinstance(node, ast.IfExp):
+        return _ifexp_result_values(node.body) + _ifexp_result_values(node.orelse)
+    v = _num(node)
+    return [v] if v is not None else []
+
+
+def test_high_bad_indicators_score_within_weight():
+    """v19.449 M4:UNEMPLOYMENT/SAHM/SLOOS 的每個 score tier 必須 |score| ≤ weight。
+
+    composite_score 用 score×weight 未 clamp,calc_macro_phase 有 clamp → 破壞此不變量
+    的檔會在 composite 多算力道(修前 SAHM/SLOOS −2 vs weight 1.5、UNEMPLOYMENT −2/+1 vs 0.5)。
+    """
+    kws = _indicator_kwargs()
+    for key in ("UNEMPLOYMENT", "SAHM", "SLOOS"):
+        w = _num(kws[key]["weight"])
+        assert w is not None, f"{key} weight 非字面值"
+        vals = _ifexp_result_values(kws[key]["score"])
+        assert vals, f"{key} score 無法解析出 tier 值"
+        for sc in vals:
+            assert abs(sc) <= w + 1e-9, f"{key} score tier {sc} 超出 weight {w}(破壞 composite 一致性)"
+
+
 def _has_falsy_weight_fallback(tree: ast.AST) -> bool:
     """AST 偵測 `<x>.get("weight", <預設>) or <任何值>` 這種 falsy 回退。
 

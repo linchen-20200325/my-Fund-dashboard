@@ -50,12 +50,40 @@ def _normalize_weights(weights: dict, codes: list) -> "dict | None":
     return {c: v / _tot for c, v in _pos.items()}
 
 
-def portfolio_returns(nav_by_code: dict, weights: dict):
+def _twd_basis_nav(nav_by_code: dict, ccy_by_code, fx_series) -> tuple:
+    """各檔原幣 NAV → **TWD basis**(含匯率損益),供組合層跨幣別加權(§4.1 禁跨幣別直接平均)。
+
+    v19.449 稽核 HIGH:原本組合報酬把各檔**原幣** NAV 報酬用 **TWD** 金額加權、完全沒換匯 →
+    美元基金的匯率損益被整個漏掉(USDTWD 30→32 少算/多算數 pp),還存進永久快照。此處在算報酬前
+    先把每檔轉成 TWD 序列(USD: nav×usdtwd merge_asof;TWD: 原樣;其餘/缺匯率 → 排除,§1)。
+
+    ccy_by_code=None → 原樣回傳(向後相容:單一幣別組合或呼叫端未提供匯率時行為不變)。
+    回傳 (twd_nav_by_code, fx_excluded[])。
+    """
+    if ccy_by_code is None:
+        return dict(nav_by_code or {}), []
+    from services.allocation_backtest import to_twd_total_return_series
+    out: dict = {}
+    exc: list = []
+    for _code, _nav in (nav_by_code or {}).items():
+        _ccy = ccy_by_code.get(_code, "")
+        _twd = to_twd_total_return_series(_nav, _ccy, fx_series)
+        if _twd is None:
+            exc.append({"code": _code, "reason": f"無法換算 TWD basis(幣別 {_ccy or '?'} 或缺匯率)"})
+        else:
+            out[_code] = _twd
+    return out, exc
+
+
+def portfolio_returns(nav_by_code: dict, weights: dict, ccy_by_code=None, fx_series=None):
     """各基金 NAV + 權重 → (組合每日報酬 Series, 納入 codes, 歸一權重, 排除清單)。
 
     §1:權重非正 / NAV 不足的基金排除並回報;無共同交易日或 <2 → None。
+    v19.449:傳入 ccy_by_code + fx_series(USDTWD)→ 各檔先轉 TWD basis 再加權(含匯率損益)。
     """
     excluded: list = []
+    nav_by_code, _fx_exc = _twd_basis_nav(nav_by_code, ccy_by_code, fx_series)
+    excluded.extend(_fx_exc)
     cleaned: dict = {}
     for _code, _nav in (nav_by_code or {}).items():
         _s = _clean_nav(_nav)
@@ -133,13 +161,15 @@ def metrics_from_return_series(daily_returns, rf_annual: float = 0.0) -> dict:
     }
 
 
-def performance_metrics(nav_by_code: dict, weights: dict, rf_annual: float = 0.0) -> dict:
+def performance_metrics(nav_by_code: dict, weights: dict, rf_annual: float = 0.0,
+                        ccy_by_code=None, fx_series=None) -> dict:
     """組合績效:{年化報酬% / 年化波動% / Sharpe / 最大回撤% / n_days / start / end / …}。
 
     數學收口至 `metrics_from_return_series`(SSOT);本函式維持既有出口鍵名 + 組合層欄位
     (n_funds_used / excluded / assumption),向後相容零變化。
+    v19.449:傳入 ccy_by_code + fx_series → 各檔轉 TWD basis 再算(含匯率損益)。
     """
-    _res = portfolio_returns(nav_by_code, weights)
+    _res = portfolio_returns(nav_by_code, weights, ccy_by_code, fx_series)
     if _res is None:
         return dict(_BLANK)
     _port, _used, _w, _excluded = _res
@@ -160,17 +190,20 @@ def performance_metrics(nav_by_code: dict, weights: dict, rf_annual: float = 0.0
     }
 
 
-def contribution_by_fund(nav_by_code: dict, weights: dict) -> dict:
-    """各檔對組合報酬的貢獻 = 權重 × 該檔於共同期間純價格報酬(百分點)。keyed by code。
+def contribution_by_fund(nav_by_code: dict, weights: dict,
+                         ccy_by_code=None, fx_series=None) -> dict:
+    """各檔對組合報酬的貢獻 = 權重 × 該檔於共同期間報酬(百分點)。keyed by code。
 
     §4.5:各檔用**同一組共同交易日**的首/末量報酬(公平)。無共同期間 → {}。
+    v19.449:傳入 ccy_by_code + fx_series → 各檔用 TWD basis 報酬(含匯率損益),與加權一致。
     """
-    _res = portfolio_returns(nav_by_code, weights)
+    _res = portfolio_returns(nav_by_code, weights, ccy_by_code, fx_series)
     if _res is None:
         return {}
     _port, _used, _w, _ = _res
-    # 重算共同日(portfolio_returns 內部已對齊,但這裡要各檔總報酬)
-    cleaned = {c: _clean_nav(nav_by_code[c]) for c in _used}
+    # 重算共同日;與 portfolio_returns 一致地先轉 TWD basis(否則貢獻仍是原幣、與組合報酬不同基準)
+    _twd_nav, _ = _twd_basis_nav(nav_by_code, ccy_by_code, fx_series)
+    cleaned = {c: _clean_nav(_twd_nav[c]) for c in _used if c in _twd_nav}
     _common = None
     for _s in cleaned.values():
         _common = _s.index if _common is None else _common.intersection(_s.index)

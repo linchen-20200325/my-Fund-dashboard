@@ -167,6 +167,25 @@ def _underperf_by_code(funds: list) -> dict:
 
 # ───────────────────────── 組合績效追蹤(走勢 + 永久快照)─────────────────────────
 
+def _ccy_fx_for(funds: list):
+    """組 ccy_by_code + 抓 USDTWD 歷史(L2 facade,§8.2 不直呼 L1),供組合追蹤換 TWD basis。
+
+    v19.449 稽核 HIGH:組合走勢/快照原本用原幣報酬加權、漏匯率損益;此處備妥 ccy+fx 供換算。
+    匯率抓取失敗 → fx=None(美元基金會被 L2 誠實排除,不靜默造假,§1)。
+    """
+    _ccy = {f.get("code"): (f.get("currency", "") or "") for f in (funds or []) if f.get("code")}
+    _fx = None
+    try:
+        from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS
+        from services.hot_money_service import fetch_usdtwd_frame
+        _df, _err = fetch_usdtwd_frame(BACKTEST_FX_FETCH_DAYS)
+        if _df is not None and not _df.empty:
+            _fx = _df.set_index("date")["usdtwd"]
+    except Exception:  # noqa: BLE001 — 匯率抓取失敗 → 美元基金排除,不靜默造假
+        _fx = None
+    return _ccy, _fx
+
+
 def _maybe_snapshot(nav_by_code: dict, weights: dict, is_equal: bool, funds: list) -> None:
     """本 session 首次進入 → 寫一筆組合績效快照(往前累積;repo 依 date 去重,每天最多一列)。"""
     if st.session_state.get("_perf_snapshot_done"):
@@ -175,7 +194,9 @@ def _maybe_snapshot(nav_by_code: dict, weights: dict, is_equal: bool, funds: lis
         from repositories.portfolio_perf_repository import PerfSnapshot, append_snapshot
         from services.portfolio_tracking import build_snapshot_row
         _cost = sum(float(f.get("invest_twd") or 0) for f in funds) or None
-        _row = build_snapshot_row(nav_by_code, weights, total_cost_twd=_cost, is_equal_weight=is_equal)
+        _ccy, _fx = _ccy_fx_for(funds)
+        _row = build_snapshot_row(nav_by_code, weights, total_cost_twd=_cost,
+                                  is_equal_weight=is_equal, ccy_by_code=_ccy, fx_series=_fx)
         if _row is None:
             return                                       # 資料不足 → 不寫、不設旗標(下次資料夠再試)
         st.session_state["_perf_snapshot_done"] = True   # 已嘗試寫入即設(避免 GS 錯誤時每次 rerun 重打)
@@ -193,8 +214,9 @@ def render_portfolio_tracking(funds: list) -> None:
     if len(_nav) < 1:
         return
 
-    st.markdown("#### 📈 投資組合績效追蹤(走勢 + 快照)")
-    _t = reconstruct_trend(_nav, _w)
+    st.markdown("#### 📈 投資組合績效追蹤(走勢 + 快照・TWD 計價)")
+    _ccy, _fx = _ccy_fx_for(funds)
+    _t = reconstruct_trend(_nav, _w, ccy_by_code=_ccy, fx_series=_fx)
     if not _t["ok"]:
         st.info(f"績效走勢資料不足 —— {_t['reason']}")
         return

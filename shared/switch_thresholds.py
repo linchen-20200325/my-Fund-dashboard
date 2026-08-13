@@ -22,6 +22,9 @@ SWITCH_GREEN_SCORE: int = 70            # 分 ≥ 此 且 吃本金「健康」�
 SWITCH_REPLACE_W_SHARPE: float = 0.4
 SWITCH_REPLACE_W_RETURN: float = 0.4
 SWITCH_REPLACE_W_SORTINO: float = 0.2
+# v19.449 稽核 M2:1Y 含息 %(~0-20)先除此值 → 與 Sharpe/Sortino(~0-2)同量級,否則報酬項
+# ×0.4 會蓋過風險調整項 10:1,「換品質更好」的排名塌成純追報酬(§4.1 % vs 比率量綱陷阱)。
+SWITCH_REPLACE_RETURN_SCALE: float = 10.0
 SWITCH_REPLACE_MIN_SHARPE: float = 0.5      # 候選 Sharpe 下限
 SWITCH_REPLACE_MAX_EXPENSE_PCT: float = 1.5  # 候選費用率% 上限
 

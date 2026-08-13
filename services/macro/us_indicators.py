@@ -872,7 +872,9 @@ def fetch_all_indicators(fred_api_key):
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🟢" if v<4.5 else ("🔴" if v>6 else "🟡"),
             color=MATERIAL_GREEN if v<4.5 else (MATERIAL_RED if v>6 else MATERIAL_ORANGE),
-            score=1 if v<4.5 else (-2 if v>6 else 0),
+            # v19.449 稽核 M4:score 須滿足 |score|≤weight(否則 composite 用 score×weight 未 clamp,
+            # 比 calc_macro_phase 的 clamp 版多算一倍力道)。weight=0.5 → 封頂 ±0.5(對齊 NFP/LEI 修法)。
+            score=0.5 if v<4.5 else (-0.5 if v>6 else 0),
             weight=0.5, series=s)
 
     # ── PPI ──────────────────────────────────────────────────────────
@@ -961,7 +963,7 @@ def fetch_all_indicators(fred_api_key):
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🔴" if v >= 0.5 else ("🟡" if v >= 0.3 else "🟢"),
             color=MATERIAL_RED if v >= 0.5 else (MATERIAL_ORANGE if v >= 0.3 else MATERIAL_GREEN),
-            score=-2 if v >= 0.5 else (-0.5 if v >= 0.3 else 1),
+            score=-1.5 if v >= 0.5 else (-0.5 if v >= 0.3 else 1),  # v19.449 M4:−2→−1.5 (|score|≤weight)
             weight=1.5, series=s)
 
     # ── SLOOS 銀行放貸標準（Senior Loan Officer Survey）──────────────
@@ -977,7 +979,7 @@ def fetch_all_indicators(fred_api_key):
             trend=_trend(df["value"].tolist()[-4:]),
             signal="🔴" if v > 20 else ("🟡" if v > 0 else "🟢"),
             color=MATERIAL_RED if v > 20 else (MATERIAL_ORANGE if v > 0 else MATERIAL_GREEN),
-            score=-2 if v > 30 else (-1 if v > 20 else (0.5 if v < 0 else -0.5)),
+            score=-1.5 if v > 30 else (-1 if v > 20 else (0.5 if v < 0 else -0.5)),  # v19.449 M4:−2→−1.5
             weight=1.5, series=s)
 
     # ════════════════════════════════════════════════════════════════
@@ -1592,15 +1594,23 @@ def _build_phase_provenance(indicators: dict, total_w: float, earned_w: float) -
 #   * 不引入 scipy 依賴(用 math.erf 等價實作)
 
 # 反向指標:值越高越壞(對風險偏好的 sign 要倒過來)
+# v19.449 稽核 HIGH:原本寫 FRED series ID "ICSA"/"UNRATE",但 fetch_all_indicators
+# 實際以 dict key "JOBLESS"/"UNEMPLOYMENT" 輸出 → key 永遠對不上、z 從未翻轉 →
+# 失業率/初領失業金飆高(衰退)在 z-pct 對帳分被當**最偏多**訊號。改用真正的 indicator
+# key,並補齊同屬「高=壞」卻漏掉的 CONT_CLAIMS/SAHM/SLOOS/INFL_EXP_5Y(與 CPI/PPI 同理)。
 _ZPCT_REVERSE_KEYS = frozenset({
-    "HY_SPREAD",     # 信用利差越大越壞
-    "VIX",           # 恐慌指數越高越壞
-    "ICSA",          # 初領失業金越多越壞
-    "DXY",           # 強美元壓抑風險資產
-    "CPI",           # 通膨高 = 緊縮壓力
-    "FED_RATE",      # 利率高 = 緊縮
-    "UNRATE",        # 失業率高 = 衰退
-    "PPI",           # PPI 高 = 上游成本壓力
+    "HY_SPREAD",       # 信用利差越大越壞
+    "VIX",             # 恐慌指數越高越壞
+    "JOBLESS",         # 初領失業金越多越壞(FRED ICSA;實際 key 名)
+    "DXY",             # 強美元壓抑風險資產
+    "CPI",             # 通膨高 = 緊縮壓力
+    "FED_RATE",        # 利率高 = 緊縮
+    "UNEMPLOYMENT",    # 失業率高 = 衰退(FRED UNRATE;實際 key 名)
+    "PPI",             # PPI 高 = 上游成本壓力
+    "CONT_CLAIMS",     # 續領失業金越多越壞
+    "SAHM",            # Sahm ≥0.5 = 衰退
+    "SLOOS",           # 銀行放貸收緊越多越壞
+    "INFL_EXP_5Y",     # 通膨預期高 = 緊縮壓力(同 CPI 理)
 })
 
 # Z-pct 採樣窗口(月);<60 視為樣本不足

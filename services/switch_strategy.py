@@ -30,6 +30,7 @@ from shared.switch_thresholds import (
     SWITCH_REGIME_NEG_SHARPE_RATIO,
     SWITCH_REPLACE_MAX_EXPENSE_PCT,
     SWITCH_REPLACE_MIN_SHARPE,
+    SWITCH_REPLACE_RETURN_SCALE,
     SWITCH_REPLACE_W_RETURN,
     SWITCH_REPLACE_W_SHARPE,
     SWITCH_REPLACE_W_SORTINO,
@@ -291,7 +292,8 @@ def replacement_candidate(sell_category, candidates) -> "dict | None":
 
     def _rank(c: dict) -> float:
         return ((_num(c.get("Sharpe 1Y")) or 0.0) * SWITCH_REPLACE_W_SHARPE
-                + (_num(c.get("1Y 含息 %")) or 0.0) * SWITCH_REPLACE_W_RETURN
+                # v19.449 M2:含息 % 先除 SCALE 拉到與 Sharpe 同量級,免報酬項獨大變追報酬
+                + (_num(c.get("1Y 含息 %")) or 0.0) / SWITCH_REPLACE_RETURN_SCALE * SWITCH_REPLACE_W_RETURN
                 + (_num(c.get("Sortino")) or 0.0) * SWITCH_REPLACE_W_SORTINO)
 
     return max(_pool, key=_rank)

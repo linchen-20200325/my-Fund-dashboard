@@ -637,9 +637,12 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
         for i in range(len(codes)):
             for j in range(i + 1, len(codes)):
                 v = corr.iloc[i, j]
-                if not np.isnan(v) and abs(v) >= SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO:
+                # v19.449 稽核 M1:影子基金 = **高正相關**(走勢重疊、分散無效)。原用 abs(v)
+                # 會把**強負相關**(−0.87,互相避險 = 分散有效)也標成影子 → 反叫 user 砍掉避險檔。
+                # 只認正相關 ≥ 門檻;排序也用 x[2] 不用 abs。
+                if not np.isnan(v) and v >= SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO:
                     shadow_pairs.append((codes[i], codes[j], round(float(v), 4)))
-        shadow_pairs.sort(key=lambda x: -abs(x[2]))
+        shadow_pairs.sort(key=lambda x: -x[2])
         return {"matrix": corr, "shadow_pairs": shadow_pairs, "freq": freq_label}
     except Exception as _e_corr:
         # F-MED v19.170: silent → stderr log
@@ -707,7 +710,8 @@ def compute_max_drawdown(series: "pd.Series") -> "dict":
 
 
 def compute_portfolio_drawdown(funds_data: list,
-                               weights: "dict | None" = None) -> "dict":
+                               weights: "dict | None" = None,
+                               fx_series=None) -> "dict":
     """組合加權最大回撤 + 各年度報酬(把持倉權重套到各基金 NAV 後合成組合指數)。
 
     方法(§4.1 / §4.5):
@@ -740,16 +744,27 @@ def compute_portfolio_drawdown(funds_data: list,
         "yearly_returns": {}, "n_funds": 0, "n_obs": 0,
         "aligned_freq": "daily", "note": None,
     }
-    valid = [(f.get("code"), f.get("series")) for f in (funds_data or [])
+    valid = [(f.get("code"), f.get("series"), (f.get("currency", "") or "")) for f in (funds_data or [])
              if f.get("series") is not None and len(f.get("series")) >= 2]
     if not valid:
         return {**_empty, "note": "無有效 NAV 序列"}
 
     try:
+        # v19.449 稽核 HIGH:傳入 fx_series → 各檔先換 TWD basis(含匯率損益),否則美元
+        # 基金匯率被漏 → 回撤/年度報酬失真。缺匯率 / 非 USD·TWD → 該檔誠實排除(§1)。
+        # fx_series=None → 維持舊行為(原幣 NAV,向後相容;呼叫端未供匯率時不無聲吃掉美元檔)。
         cols = {}
-        for code, s in valid:
-            ss = s.dropna().sort_index()
-            ss = ss[ss > 0]  # NAV 必正(§3.2),非正值丟棄
+        _to_twd = None
+        if fx_series is not None:
+            from services.allocation_backtest import to_twd_total_return_series as _to_twd
+        for code, s, ccy in valid:
+            if _to_twd is not None:
+                ss = _to_twd(s, ccy, fx_series)
+                if ss is None:
+                    continue                 # 無法換 TWD(缺匯率 / 非 USD·TWD)→ 排除,不混幣別
+            else:
+                ss = s.dropna().sort_index()
+                ss = ss[ss > 0]              # NAV 必正(§3.2),非正值丟棄
             if len(ss) >= 2 and not ss.index.has_duplicates:
                 cols[code] = ss
             elif len(ss) >= 2:

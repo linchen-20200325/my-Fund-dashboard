@@ -2780,12 +2780,24 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
             compute_max_drawdown as _mdd_fn,
             calc_correlation_matrix as _corr_fn,
         )
-        _fd_for_dd = [{"code": f.get("code"), "series": f.get("series")}
+        _fd_for_dd = [{"code": f.get("code"), "series": f.get("series"),
+                       "currency": f.get("currency", "") or ""}
                       for f in loaded if f.get("series") is not None]
         # 權重 = sidebar 實際投入本金 invest_twd(缺則 0,函式內歸一;全缺 → 等權)
         _weights = {f.get("code"): (f.get("invest_twd", 0) or 0) for f in loaded}
+        # v19.449 稽核 HIGH:抓 USDTWD 歷史 → 組合回撤各檔換 TWD basis(含匯率);
+        # 缺匯率 → 美元檔被誠實排除(§1),不混幣別失真。
+        _fx_dd = None
+        try:
+            from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS
+            from services.hot_money_service import fetch_usdtwd_frame
+            _fxdf_dd, _ = fetch_usdtwd_frame(BACKTEST_FX_FETCH_DAYS)
+            if _fxdf_dd is not None and not _fxdf_dd.empty:
+                _fx_dd = _fxdf_dd.set_index("date")["usdtwd"]
+        except Exception:  # noqa: BLE001 — 匯率失敗 → 美元檔排除,不靜默造假
+            _fx_dd = None
         if _fd_for_dd:
-            _pdd = _pdd_fn(_fd_for_dd, weights=_weights)
+            _pdd = _pdd_fn(_fd_for_dd, weights=_weights, fx_series=_fx_dd)
             if _pdd.get("max_dd_pct") is not None:
                 _dd_line = (
                     f"- **📉 組合加權最大回撤**：{_pdd['max_dd_pct']:.1f}%"

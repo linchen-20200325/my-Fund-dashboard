@@ -48,7 +48,8 @@ def weights_fingerprint(weights_norm: dict) -> "tuple[str, str]":
     return _h, _js
 
 
-def reconstruct_trend(nav_by_code: dict, weights: dict, rf_annual: float = 0.0) -> dict:
+def reconstruct_trend(nav_by_code: dict, weights: dict, rf_annual: float = 0.0,
+                      ccy_by_code=None, fx_series=None) -> dict:
     """已存 NAV + 目前權重 → 組合走勢 + 當期指標(閘門後)。
 
     Returns dict:
@@ -75,7 +76,9 @@ def reconstruct_trend(nav_by_code: dict, weights: dict, rf_annual: float = 0.0) 
     if not nav_by_code:
         return {**_blank, "reason": "尚未提供任何基金 NAV —— 無法追蹤(§1)"}
 
-    _res = portfolio_returns(nav_by_code, weights)
+    # v19.449 稽核 HIGH:傳入 ccy+fx → 各檔轉 TWD basis 再重建走勢(含匯率損益);
+    # 缺 ccy/fx 時退回原幣加權(向後相容,單一幣別組合無差)。
+    _res = portfolio_returns(nav_by_code, weights, ccy_by_code, fx_series)
     if _res is None:
         return {**_blank, "reason": "無共同交易日 / 權重全非正 / NAV 不足 —— 資料不足以重建走勢(§1)"}
 
@@ -118,6 +121,8 @@ def build_snapshot_row(
     rf_annual: float = 0.0,
     today: "str | None" = None,
     recorded_at: "str | None" = None,
+    ccy_by_code=None,
+    fx_series=None,
 ) -> "dict | None":
     """當期(閘門後)指標 + 真實權重 → 快照 dict(欄位對齊 `PerfSnapshot`;不 import L1)。
 
@@ -125,7 +130,7 @@ def build_snapshot_row(
     total_cost_twd:成本基礎 Σ invest_twd(§B.2,非市值);由呼叫端算好傳入。
     today / recorded_at:預設台北今日 / UTC now,可注入以利測試(§5 可重現)。
     """
-    _t = reconstruct_trend(nav_by_code, weights, rf_annual)
+    _t = reconstruct_trend(nav_by_code, weights, rf_annual, ccy_by_code, fx_series)
     if not _t["ok"]:
         return None
 

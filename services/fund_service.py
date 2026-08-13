@@ -179,9 +179,11 @@ def calc_health_from_manual(
         return {"error": "淨值不可為 0 或負數"}
 
     annual_div      = div_per_unit * div_freq
-    div_yield_pct   = round(annual_div / nav_current * 100, 2)
+    div_yield_pct   = round(annual_div / nav_current * 100, 2)     # 殖利率:配息 ÷ **現值**(定義)
     nav_change_pct  = round((nav_current - nav_1y_ago) / nav_1y_ago * 100, 2)
-    total_return_pct = round(nav_change_pct + div_yield_pct, 2)
+    # v19.449 稽核 M3:含息報酬率 = (期末 − 期初 + 年配息) / **期初**(分母一致用期初),
+    # 不可把配息項除以現值再加(原式 nav_change 用期初、配息用現值,分母不一致 → 顯示少算)。
+    total_return_pct = round((nav_current - nav_1y_ago + annual_div) / nav_1y_ago * 100, 2)
 
     # v19.119:核心判定委派 services.health.dividend
     # (4 級分類門檻 real_return_pct ≥ 3 / ≥ 0 / < 0 保留於本 wrapper UI 需求)
@@ -834,6 +836,19 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
 
     annual_div=monthly_div=div_rate=0; div_stability=None; div_trend=0; div_freq_n=12
     if divs:
+        # v19.449 稽核 HIGH:非 MoneyDJ 來源(FundClear/Cnyes/TCB)配息可能「舊→新」排列,
+        # 下方 divs[:n] / recent12 全假設 index0=最新;不排序會取到最舊筆 → 年化配息率算錯、
+        # 趨勢方向相反 → 假 🔴 吃本金。此處統一「最新在前」排序一次(sorted 回新 list 不改
+        # 呼叫端;無日期者以 Timestamp.min 沉底,不 raise)。
+        def _div_dt(_d):
+            # 稽核 H1 follow-up:pd.to_datetime(None) 回 NaT(非 raise),故除了 except 還要 notna
+            # 顯式擋 → 真正無日期者才沉底(否則 NaT 排序不穩,可能混進「近期」slice)。
+            try:
+                _dt = pd.to_datetime(_d.get("date") or _d.get("ex_date"))
+                return _dt if pd.notna(_dt) else pd.Timestamp.min
+            except Exception:
+                return pd.Timestamp.min
+        divs = sorted(divs, key=_div_dt, reverse=True)
         # ── 自動偵測配息頻率（月配/季配/半年/年配）────────
         if len(divs) >= 2:
             import statistics as _st
@@ -1336,3 +1351,36 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     """
     from repositories.fund import get_latest_fx as _l1_impl
     return _l1_impl(currency_pair, fred_api_key)
+
+
+def get_fx_rate_by_date(currency: str) -> dict:
+    """v19.449 稽核 M6:某幣別對 TWD 的**歷史**匯率日對照 {YYYY-MM-DD: rate}。
+
+    供 `compute_dividend_twd_series` 逐筆配息 / 買入日**用當時匯率**折 TWD(§4.5 PIT),
+    取代原本一律用「今日 spot」→ 早年買的美元基金,本金/累積配息 TWD 金額會偏差(FX 30→32
+    差 ~7%)。TWD → {}(免換匯);其餘走 L1 fetch_yf_close("{ccy}TWD=X", 5y)。
+
+    密集日對照:reindex 每日 + **ffill**(FX 週末/假日沿用前一交易日 = on-or-before,無 lookahead),
+    讓 _pick_fx_for_date 的 exact-date 查找能命中落在週末的除息日。抓不到 → {}(呼叫端退 spot,§1)。
+    thin L2 facade,快取由 L1 fetch_yf_close 集中。
+    """
+    from services.currency import normalize_ccy
+    _c = normalize_ccy(currency, default="")
+    if not _c or _c == "TWD":
+        return {}
+    try:
+        import pandas as _pd
+
+        from repositories.macro.yf import fetch_yf_close
+        _s = fetch_yf_close(f"{_c}TWD=X", range_="5y")
+        if _s is None or len(_s) < 2:
+            return {}
+        _s = _s[_s > 0].sort_index()
+        _s.index = _pd.to_datetime(_s.index)
+        _daily = _s.reindex(_pd.date_range(_s.index.min(), _s.index.max(), freq="D")).ffill()
+        return {str(idx)[:10]: float(v) for idx, v in _daily.items() if v == v and v > 0}
+    except Exception as _e_fx:  # noqa: BLE001 — 歷史匯率抓不到 → 回 {},呼叫端退 spot,不 raise
+        import sys as _sys_fx
+        print(f"[get_fx_rate_by_date] {currency} 歷史匯率取得失敗:"
+              f"{type(_e_fx).__name__}: {_e_fx}", file=_sys_fx.stderr)
+        return {}
