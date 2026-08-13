@@ -637,9 +637,12 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
         for i in range(len(codes)):
             for j in range(i + 1, len(codes)):
                 v = corr.iloc[i, j]
-                if not np.isnan(v) and abs(v) >= SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO:
+                # v19.449 稽核 M1:影子基金 = **高正相關**(走勢重疊、分散無效)。原用 abs(v)
+                # 會把**強負相關**(−0.87,互相避險 = 分散有效)也標成影子 → 反叫 user 砍掉避險檔。
+                # 只認正相關 ≥ 門檻;排序也用 x[2] 不用 abs。
+                if not np.isnan(v) and v >= SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO:
                     shadow_pairs.append((codes[i], codes[j], round(float(v), 4)))
-        shadow_pairs.sort(key=lambda x: -abs(x[2]))
+        shadow_pairs.sort(key=lambda x: -x[2])
         return {"matrix": corr, "shadow_pairs": shadow_pairs, "freq": freq_label}
     except Exception as _e_corr:
         # F-MED v19.170: silent → stderr log

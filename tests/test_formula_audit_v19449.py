@@ -84,3 +84,66 @@ def test_portfolio_returns_captures_fx_for_usd_fund():
     assert ret_nofx > 3, f"無換匯應把 USD NAV +10% 計入(~+5%),實際 {ret_nofx:.2f}"
     assert ret_fx < 1, f"換匯後應反映匯率拖累(~−0.5%),實際 {ret_fx:.2f}"
     assert ret_fx < ret_nofx - 3, f"換匯應顯著降低報酬,nofx={ret_nofx:.2f} fx={ret_fx:.2f}"
+
+
+# ════════════════════════════════════════════════════════════════
+# MEDIUM 修正回歸(M1 影子負相關 / M2 換股排名量綱 / M3 手動含息分母 /
+#          M4 score≤weight / M5 benchmark TWD / item6 空幣別排除)
+# ════════════════════════════════════════════════════════════════
+
+def test_m1_shadow_flags_only_positive_correlation():
+    """M1:強**負**相關(互相避險=分散有效)不該被標影子基金;強正相關才是影子。"""
+    import numpy as np
+
+    from services.portfolio_service import calc_correlation_matrix
+    idx = pd.bdate_range("2025-01-01", periods=90)
+    ra = np.array([0.012, -0.011] * 45)
+    navA = pd.Series(100 * np.cumprod(1 + ra), index=idx)
+    navB = pd.Series(100 * np.cumprod(1 - ra), index=idx)     # 反向 → corr ≈ −1
+    res_neg = calc_correlation_matrix([{"code": "A", "series": navA}, {"code": "B", "series": navB}])
+    assert res_neg is not None
+    assert not any({p[0], p[1]} == {"A", "B"} for p in res_neg["shadow_pairs"]), "強負相關不該標影子"
+    res_pos = calc_correlation_matrix([{"code": "A", "series": navA}, {"code": "C", "series": navA * 1.0}])
+    assert any({p[0], p[1]} == {"A", "C"} for p in res_pos["shadow_pairs"]), "強正相關應標影子"
+
+
+def test_m2_replacement_ranking_not_return_dominated():
+    """M2:同類換股「品質」排名不該被報酬項獨大 → 高 Sharpe/Sortino 但報酬略低者應勝出。"""
+    from services.switch_strategy import replacement_candidate
+    _hi_quality = {"基金類別": "股票", "Sharpe 1Y": 1.5, "1Y 含息 %": 8.0, "Sortino": 2.0,
+                   "費用率 %": 1.0, "策略燈號": "🟢", "吃本金燈號 (1Y · MK)": "🟢 健康", "code": "GOOD"}
+    _hi_return = {"基金類別": "股票", "Sharpe 1Y": 0.6, "1Y 含息 %": 12.0, "Sortino": 0.8,
+                  "費用率 %": 1.0, "策略燈號": "🟢", "吃本金燈號 (1Y · MK)": "🟢 健康", "code": "CHASE"}
+    _pick = replacement_candidate("股票", [_hi_return, _hi_quality])
+    assert _pick is not None and _pick.get("code") == "GOOD", "風險調整更佳者應勝(非純追報酬)"
+
+
+def test_m3_manual_total_return_denominator():
+    """M3:含息報酬率 = (期末−期初+年配息)/期初(分母一致用期初)。"""
+    from services.fund_service import calc_health_from_manual
+    out = calc_health_from_manual(nav_current=110.0, nav_1y_ago=100.0, div_per_unit=0.5, div_freq=12)
+    # (110−100+6)/100 = 16.0%(舊式分母不一致會得 15.45%)
+    assert abs(out["total_return_pct"] - 16.0) < 0.05, out["total_return_pct"]
+
+
+def test_m5_policy_benchmark_converts_spx_to_twd():
+    """M5:非台幣基金 benchmark 應把 SPX(USD)換成 TWD basis 再比。"""
+    from services.portfolio_csv import policy_benchmark_1y
+    h = [{"policy": "P", "currency": "美元", "invest_twd": 100000}]
+    # SPX +10% USD、USDTWD +5% → TWD basis = 1.1×1.05−1 = 15.5%
+    r_fx = policy_benchmark_1y(h, spx_1y_pct=10.0, twii_1y_pct=8.0, usdtwd_1y_pct=5.0)
+    assert abs(r_fx["P"] - 15.5) < 0.1, r_fx["P"]
+    r_nofx = policy_benchmark_1y(h, spx_1y_pct=10.0, twii_1y_pct=8.0)     # 向後相容
+    assert abs(r_nofx["P"] - 10.0) < 0.1, r_nofx["P"]
+
+
+def test_item6_empty_currency_excluded_not_usd():
+    """H3 驗證 item6:空/None 幣別 → 排除(回 None),不可矇成 USD 捏造匯率損益。"""
+    from services.allocation_backtest import to_twd_total_return_series
+    idx = pd.bdate_range("2025-01-01", periods=10)
+    nav = pd.Series([10.0 + 0.1 * i for i in range(10)], index=idx)
+    fx = pd.Series([30.0] * 10, index=idx)
+    assert to_twd_total_return_series(nav, "", fx) is None
+    assert to_twd_total_return_series(nav, None, fx) is None
+    assert to_twd_total_return_series(nav, "TWD", fx) is not None
+    assert to_twd_total_return_series(nav, "USD", fx) is not None

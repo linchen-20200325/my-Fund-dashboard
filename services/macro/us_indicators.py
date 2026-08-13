@@ -872,7 +872,9 @@ def fetch_all_indicators(fred_api_key):
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🟢" if v<4.5 else ("🔴" if v>6 else "🟡"),
             color=MATERIAL_GREEN if v<4.5 else (MATERIAL_RED if v>6 else MATERIAL_ORANGE),
-            score=1 if v<4.5 else (-2 if v>6 else 0),
+            # v19.449 稽核 M4:score 須滿足 |score|≤weight(否則 composite 用 score×weight 未 clamp,
+            # 比 calc_macro_phase 的 clamp 版多算一倍力道)。weight=0.5 → 封頂 ±0.5(對齊 NFP/LEI 修法)。
+            score=0.5 if v<4.5 else (-0.5 if v>6 else 0),
             weight=0.5, series=s)
 
     # ── PPI ──────────────────────────────────────────────────────────
@@ -961,7 +963,7 @@ def fetch_all_indicators(fred_api_key):
             trend=_trend(df["value"].tolist()[-6:]),
             signal="🔴" if v >= 0.5 else ("🟡" if v >= 0.3 else "🟢"),
             color=MATERIAL_RED if v >= 0.5 else (MATERIAL_ORANGE if v >= 0.3 else MATERIAL_GREEN),
-            score=-2 if v >= 0.5 else (-0.5 if v >= 0.3 else 1),
+            score=-1.5 if v >= 0.5 else (-0.5 if v >= 0.3 else 1),  # v19.449 M4:−2→−1.5 (|score|≤weight)
             weight=1.5, series=s)
 
     # ── SLOOS 銀行放貸標準（Senior Loan Officer Survey）──────────────
@@ -977,7 +979,7 @@ def fetch_all_indicators(fred_api_key):
             trend=_trend(df["value"].tolist()[-4:]),
             signal="🔴" if v > 20 else ("🟡" if v > 0 else "🟢"),
             color=MATERIAL_RED if v > 20 else (MATERIAL_ORANGE if v > 0 else MATERIAL_GREEN),
-            score=-2 if v > 30 else (-1 if v > 20 else (0.5 if v < 0 else -0.5)),
+            score=-1.5 if v > 30 else (-1 if v > 20 else (0.5 if v < 0 else -0.5)),  # v19.449 M4:−2→−1.5
             weight=1.5, series=s)
 
     # ════════════════════════════════════════════════════════════════

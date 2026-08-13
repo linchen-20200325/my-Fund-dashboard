@@ -60,7 +60,9 @@ def _norm_ccy(ccy) -> str:
     """幣別正規化 → ISO 上碼。優先 services.currency.normalize_ccy;不可用時退化小映射。"""
     try:
         from services.currency import normalize_ccy
-        _c = normalize_ccy(ccy)
+        # v19.449 稽核(H3 驗證 item6):default="" —— 缺/空幣別**不可矇成 USD**(會對無匯率
+        # 曝險的檔捏造 FX 損益),回 "" 讓 to_twd_total_return_series 誠實排除(§1 + v19.59 原則)。
+        _c = normalize_ccy(ccy, default="")
         if _c:
             return str(_c).upper()
     except ImportError:                          # 僅 normalize_ccy 不可用時退化本地映射;

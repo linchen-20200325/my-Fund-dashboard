@@ -179,9 +179,11 @@ def calc_health_from_manual(
         return {"error": "淨值不可為 0 或負數"}
 
     annual_div      = div_per_unit * div_freq
-    div_yield_pct   = round(annual_div / nav_current * 100, 2)
+    div_yield_pct   = round(annual_div / nav_current * 100, 2)     # 殖利率:配息 ÷ **現值**(定義)
     nav_change_pct  = round((nav_current - nav_1y_ago) / nav_1y_ago * 100, 2)
-    total_return_pct = round(nav_change_pct + div_yield_pct, 2)
+    # v19.449 稽核 M3:含息報酬率 = (期末 − 期初 + 年配息) / **期初**(分母一致用期初),
+    # 不可把配息項除以現值再加(原式 nav_change 用期初、配息用現值,分母不一致 → 顯示少算)。
+    total_return_pct = round((nav_current - nav_1y_ago + annual_div) / nav_1y_ago * 100, 2)
 
     # v19.119:核心判定委派 services.health.dividend
     # (4 級分類門檻 real_return_pct ≥ 3 / ≥ 0 / < 0 保留於本 wrapper UI 需求)

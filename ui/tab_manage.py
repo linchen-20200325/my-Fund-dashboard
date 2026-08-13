@@ -682,7 +682,8 @@ def _sec_policy_portfolio():
             st.session_state["_polcsv_enriched"] = enrich_returns(_hs, nav_by_code=_nav, usdtwd=_usd)
             # vs 大盤(近1年近似):^GSPC(美股)/ ^TWII(台股)
             st.session_state["_polcsv_bench"] = {"spx": _yf_1y_return("^GSPC"),
-                                                 "twii": _yf_1y_return("^TWII")}
+                                                 "twii": _yf_1y_return("^TWII"),
+                                                 "usdtwd": _yf_1y_return("TWD=X")}  # M5:USD/TWD 近1年%
         except Exception as _e:  # noqa: BLE001
             _friendly("抓現價/算報酬失敗", _e, level="error")
 
@@ -751,7 +752,8 @@ def _sec_policy_portfolio():
     _maxrank = max((p["rank"] for p in _pr if p.get("rank")), default=0)
     _n_suspect = sum(1 for h in _en if h.get("nav_suspect"))
     _bench = st.session_state.get("_polcsv_bench") or {}
-    _pbench = policy_benchmark_1y(_hs, spx_1y_pct=_bench.get("spx"), twii_1y_pct=_bench.get("twii"))
+    _pbench = policy_benchmark_1y(_hs, spx_1y_pct=_bench.get("spx"), twii_1y_pct=_bench.get("twii"),
+                                  usdtwd_1y_pct=_bench.get("usdtwd"))  # M5:SPX 換 TWD basis
     _rows = []
     for p in _pr:
         _r = p.get("rank")
