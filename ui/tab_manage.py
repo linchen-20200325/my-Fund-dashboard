@@ -603,6 +603,109 @@ def _sec_dividend_calendar():
         _friendly("產生除息月曆失敗", _e, level="error")
 
 
+def _sec_policy_portfolio():
+    """📊 保單組合分析:上傳保單總表 CSV → 依保單分組 + 真實報酬(成本 vs 現價 + 已領配息)+ 標最差。"""
+    import pandas as pd
+
+    from services.portfolio_csv import (
+        parse_holdings,
+        policy_returns,
+        summarize_by_policy,
+    )
+    st.markdown("### 📊 保單組合分析(上傳總表)")
+    st.caption("上傳你的『保單持倉總表』CSV → 依**保單**分組、算**真實報酬**(成本 vs 現價 + 已領配息)、"
+               "標出**最差那組**。⚠️ 資料只在本次 session,**不寫進 repo/雲端**。")
+
+    _up = st.file_uploader("上傳保單總表 CSV（保單號碼 / 基金代碼 / 幣別 / 投資金額(TWD) …）",
+                           type=["csv"], key="polcsv_up")
+    if _up is not None:
+        _raw = _up.getvalue()
+        _txt = None
+        for _enc in ("utf-8-sig", "utf-8", "big5", "cp950"):
+            try:
+                _t = _raw.decode(_enc)
+                if "�" not in _t:
+                    _txt = _t
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        _txt = _txt if _txt is not None else _raw.decode("utf-8", errors="replace")
+        _hs = parse_holdings(_txt)
+        if not _hs:
+            st.error("認不出表頭(需有『保單號碼』『基金代碼』欄)或無有效資料列。")
+        else:
+            st.session_state["_polcsv_holdings"] = _hs
+            st.session_state.pop("_polcsv_enriched", None)      # 換檔 → 清舊現價
+            st.success(f"讀到 {len(_hs)} 筆持倉 · {len({h['policy'] for h in _hs})} 張保單。")
+
+    _hs = st.session_state.get("_polcsv_holdings")
+    if not _hs:
+        st.caption("上傳後顯示分組總表;再按『抓現價』算真實報酬 + 排名(哪組最差)。")
+        return
+
+    if st.button("💹 抓現價 → 算真實報酬 + 排名", use_container_width=True, key="polcsv_price"):
+        try:
+            from services.fund_service import get_latest_fx
+            from services.moneydj_fetcher import auto_fetch_moneydj
+            from services.portfolio_csv import enrich_returns
+            _codes = sorted({h["code"] for h in _hs})
+            _nav, _prog = {}, st.progress(0.0, text="抓現價中…")
+            for _i, _c in enumerate(_codes):
+                try:
+                    _s = (auto_fetch_moneydj(_c) or {}).get("series")
+                    if _s is not None and len(_s) > 0 and float(_s.iloc[-1]) > 0:
+                        _nav[_c] = float(_s.iloc[-1])
+                except Exception:  # noqa: BLE001
+                    pass
+                _prog.progress((_i + 1) / len(_codes), text=f"抓現價 {_i + 1}/{len(_codes)}…")
+            _prog.empty()
+            _usd = None
+            try:
+                _usd = get_latest_fx("USDTWD")
+            except Exception:  # noqa: BLE001
+                pass
+            st.session_state["_polcsv_enriched"] = enrich_returns(_hs, nav_by_code=_nav, usdtwd=_usd)
+        except Exception as _e:  # noqa: BLE001
+            _friendly("抓現價/算報酬失敗", _e, level="error")
+
+    _summ = summarize_by_policy(_hs)
+    _c1, _c2, _c3 = st.columns(3)
+    _c1.metric("總投資額", f"{sum(d['invest_twd'] for d in _summ):,.0f} TWD")
+    _c2.metric("累積已領配息", f"{sum(d['cum_div_twd'] for d in _summ):,.0f} TWD")
+    _c3.metric("保單數", f"{len(_summ)}")
+
+    _en = st.session_state.get("_polcsv_enriched")
+    if not _en:
+        st.dataframe(pd.DataFrame([{
+            "保單": d["policy"], "投資額(TWD)": f"{d['invest_twd']:,.0f}",
+            "核心%": (f"{d['core_pct']:.0f}%" if d["core_pct"] is not None else "—"),
+            "累領配息": f"{d['cum_div_twd']:,.0f}", "檔數": d["n_funds"],
+        } for d in _summ]), hide_index=True, use_container_width=True)
+        st.info("按上面『💹 抓現價』才會算真實報酬 + 排名(哪組最差)。")
+        return
+
+    _pr = policy_returns(_en)
+    _maxrank = max((p["rank"] for p in _pr if p.get("rank")), default=0)
+    _rows = []
+    for p in _pr:
+        _r = p.get("rank")
+        _lamp = "🔴 最差" if _r == 1 else ("🟢 最佳" if _r and _r == _maxrank else ("🟡" if _r else "⬜"))
+        _rows.append({
+            "燈": _lamp, "排名": _r or "—", "保單": p["policy"],
+            "真實報酬%": (f"{p['total_return_pct']:+.1f}%" if p["total_return_pct"] is not None else "資料不足"),
+            "投資額": f"{p['invest_twd']:,.0f}",
+            "現值": (f"{p['current_value_twd']:,.0f}" if p["current_value_twd"] is not None else "—"),
+            "累領配息": f"{p['cum_div_twd']:,.0f}", "已估/檔數": f"{p['n_priced']}/{p['n_funds']}",
+        })
+    st.dataframe(pd.DataFrame(_rows), hide_index=True, use_container_width=True)
+    _worst = next((p for p in _pr if p.get("rank") == 1), None)
+    if _worst:
+        st.warning(f"🔴 **最差組合:保單 {_worst['policy']}**，真實報酬 "
+                   f"{_worst['total_return_pct']:+.1f}%(含息、成本 vs 現價)。")
+    st.caption("真實報酬 =(現值 + 已領配息 − 成本)÷ 成本;現價現抓、含息;缺現價的檔不列入該保單分母(§1)。"
+               "vs 大盤(近1年近似)為下一步。")
+
+
 def render_manage_tab() -> None:
     st.markdown("## 📋 我的管理室")
     st.caption("選股池、投資組合、通報 一站管理。**資料存在 Google Sheets、永久保存**,關掉重開都在,"
@@ -610,6 +713,8 @@ def render_manage_tab() -> None:
     _sec_pool()
     st.divider()
     _sec_portfolio()
+    st.divider()
+    _sec_policy_portfolio()
     st.divider()
     _sec_dividend_calendar()
     st.divider()
