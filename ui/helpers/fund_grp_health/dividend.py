@@ -52,12 +52,16 @@ def _render_dividend_matrix(funds: list) -> None:
 
     # v19.402 §1:改走 SSOT dividend_safety(gap 判定),取代 inline 1.2× coverage
     # 門檻 → 與 tab3_portfolio canonical 版 + 全站一致(L3→L2,修 §8.2 inline 分類)。
+    from services.fund_total_return import is_extrapolated_1y_source
     from services.portfolio_service import dividend_safety
     _LVL_COLOR = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
                   "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}
     _rc_levels = []
-    for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
-        if not _real or _d is None:     # 缺含息報酬 **或** 缺配息率 → 無法判定,灰
+    for _r, _d, _real, _src in zip(_rc_ret, _rc_div, _rc_real, _rc_src):
+        # v19.448 稽核:缺含息報酬 **或** 缺配息率 **或** 含息報酬走「短窗外推年化」
+        # (最不可靠、外推爆掉,ACTI71 −38% bug)→ 一律無法判定,灰。
+        # 不拿外推數字報紅燈(§1)。純淨值(源#3)雙扣議題待 user 核准另處理。
+        if not _real or _d is None or is_extrapolated_1y_source(_src):
             _rc_levels.append("grey")
         else:
             _rc_levels.append(

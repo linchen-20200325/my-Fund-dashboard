@@ -423,7 +423,10 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
         return None
 
     # tr1y v19.175:統一走 SSOT compute_1y_total_return(wb01 業界複利優先)
-    from services.fund_total_return import compute_1y_total_return
+    from services.fund_total_return import (
+        compute_1y_total_return,
+        is_extrapolated_1y_source,
+    )
     tr1y, _tr1y_method = compute_1y_total_return(fund)
     if tr1y is None:
         return None
@@ -449,6 +452,24 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
             import sys as _sys_mk
             print(f'[fund_dividend_health] mk_simple compare-only calc fail: '
                   f'{type(_e_mk).__name__}: {_e_mk}', file=_sys_mk.stderr)
+
+    # v19.448 稽核守門(§1 Fail Loud):tr1y 若走「短窗外推年化」(最不可靠,ACTI71 −38% bug),
+    # 先嘗試用「還原含息(NAV+配息)」且窗口 ≥ 300 天替補;否則**拒判**顯示 ⚪ 資料不足,
+    # 絕不拿外推爆掉的數字報紅燈。
+    if is_extrapolated_1y_source(_tr1y_method):
+        _mkv = (_tr1y_meta or {}).get("mk_simple_value")
+        _win = (_tr1y_meta or {}).get("window_days")
+        if _mkv is not None and _win is not None and _win >= 300:
+            tr1y, _tr1y_method = float(_mkv), "自算含息（還原 NAV+配息）"
+        else:
+            return {
+                "status": "⚪ 資料不足", "alert_level": "grey",
+                "message": ("僅取得淨值報酬(未含配息)或不足一年,無法可靠判定吃本金;"
+                            "請改看基金官方績效頁的含息報酬"),
+                "coverage": None, "gap_pct": None, "eating_principal": False,
+                "_tr1y_method": _tr1y_method, "_adr_source": _adr_source,
+                "_tr1y_meta": _tr1y_meta, "_tr1y_window_days": _win,
+            }
 
     from services.portfolio_service import dividend_safety
     out = dividend_safety(total_return=tr1y, dividend_yield=adr, nav_change=tr1y)
