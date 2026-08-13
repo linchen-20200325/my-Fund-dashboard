@@ -52,16 +52,33 @@ def rank_candidates(target_name: str, fund_list: list, top: int = 5) -> list[dic
     return scored[:top]
 
 
+def resolve_search_name(term: str, code_name_map: dict) -> tuple[str, str]:
+    """user 想**用代碼**搜:term 命中 code_name_map(代碼→名稱)→ 回 (名稱, 代碼大寫);
+
+    否則視 term 為名稱 → 回 (term, "")。用途:拿**名稱**去 FundClear 找、拿**代碼**存回
+    nav_history(健診才讀得回)。code_name_map 由呼叫端從選股池 + 持倉組出(代碼統一大寫)。
+    """
+    _key = str(term or "").strip().upper()
+    _name = (code_name_map or {}).get(_key)
+    if _name:
+        return str(_name).strip(), _key
+    return str(term or "").strip(), ""
+
+
 def find_fund_candidates(target_name: str, organize_code: Optional[str] = None,
-                         top: int = 5) -> list[dict]:
+                         top: int = 5, scan_range: int = 0) -> list[dict]:
     """用基金名找 FundClear 候選基金 [{name, value=fundCode, organize_code, organize_name, score}]。
 
-    organize_code 給定 → 只搜該機構(快、省呼叫);None → 列舉所有機構(spec §2.5 未驗證,
-    org endpoint 失敗會 raise,呼叫端應提示 user 手動指定機構代碼)。
+    organize_code 給定 → 只搜該機構(快、省呼叫);
+    scan_range>0 → **暴力掃描** 001..{scan_range:03d} 機構(繞過抓不到的機構清單 endpoint,
+      逐一打**已驗證**的 fund-name-selection;較慢但不需正確 endpoint,適合部署環境自助);
+    否則 → 列舉所有機構(spec §2.5 未驗證,org endpoint 失敗會 raise,呼叫端提示改填代碼或掃描)。
     """
     from repositories import fundclear_offshore as fc
     if organize_code:
         orgs = [{"value": organize_code, "name": ""}]
+    elif scan_range and scan_range > 0:
+        orgs = [{"value": f"{i:03d}", "name": ""} for i in range(1, scan_range + 1)]
     else:
         orgs = fc.list_organizes()                 # 失敗 → FundclearError 往上拋(§1)
     all_funds: list[dict] = []

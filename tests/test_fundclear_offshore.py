@@ -195,3 +195,43 @@ def test_download_and_store_point_key_contract(monkeypatch):
     assert set(_p) >= {"code", "nav", "nav_date", "fund_name", "source"}
     assert _p["code"] == "ACTI71" and _p["source"] == "fundclear_offshore"
     assert _p["nav_date"] == "2020-01-01"                          # ISO 日期字串
+
+
+def test_find_fund_candidates_scan_range(monkeypatch):
+    """scan_range>0 → 逐一掃描 001..NNN 機構(繞過機構清單 endpoint),命中機構帶進候選 + 附 organize_code。"""
+    import repositories.fundclear_offshore as fcmod
+    from services.fundclear_backfill import find_fund_candidates
+    _calls = []
+
+    def _fake_list_funds(org):
+        _calls.append(org)
+        return [{"name": "聯博多元資產收益組合基金", "value": "AA1"}] if org == "037" else []
+
+    monkeypatch.setattr(fcmod, "list_funds", _fake_list_funds)
+    got = find_fund_candidates("聯博多元資產收益組合基金", scan_range=40)
+    assert got and got[0]["value"] == "AA1"
+    assert got[0]["organize_code"] == "037"          # 掃描有帶回命中的機構代碼
+    assert "001" in _calls and "037" in _calls        # 三位補零、確實逐一掃
+
+
+def test_list_organizes_falls_back_to_known(monkeypatch):
+    """機構清單 endpoint 全敗 → 回退已知機構(019 安聯 / 037 聯博),不 raise(避免整段卡死)。"""
+    import repositories.fundclear_offshore as fcmod
+
+    def _boom(*a, **k):
+        raise fcmod.FundclearError("endpoint 不存在")
+
+    monkeypatch.setattr(fcmod, "_post_json", _boom)
+    got = fcmod.list_organizes()
+    _codes = {o["value"] for o in got}
+    assert "019" in _codes and "037" in _codes and len(got) == len(fcmod._KNOWN_ORGANIZES)
+
+
+def test_resolve_search_name():
+    """v19.456:打代碼 → 用代碼↔名稱對照換成名稱去找、代碼留著存;打名稱則原樣。"""
+    from services.fundclear_backfill import resolve_search_name
+    m = {"ACTI71": "聯博多元資產收益組合基金AI配息(美元)"}
+    assert resolve_search_name("acti71", m) == ("聯博多元資產收益組合基金AI配息(美元)", "ACTI71")
+    assert resolve_search_name("聯博多元資產收益組合基金", m) == ("聯博多元資產收益組合基金", "")
+    assert resolve_search_name("", m) == ("", "")
+    assert resolve_search_name("UNKNOWN", {}) == ("UNKNOWN", "")
