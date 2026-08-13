@@ -841,8 +841,11 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         # 趨勢方向相反 → 假 🔴 吃本金。此處統一「最新在前」排序一次(sorted 回新 list 不改
         # 呼叫端;無日期者以 Timestamp.min 沉底,不 raise)。
         def _div_dt(_d):
+            # 稽核 H1 follow-up:pd.to_datetime(None) 回 NaT(非 raise),故除了 except 還要 notna
+            # 顯式擋 → 真正無日期者才沉底(否則 NaT 排序不穩,可能混進「近期」slice)。
             try:
-                return pd.to_datetime(_d.get("date") or _d.get("ex_date"))
+                _dt = pd.to_datetime(_d.get("date") or _d.get("ex_date"))
+                return _dt if pd.notna(_dt) else pd.Timestamp.min
             except Exception:
                 return pd.Timestamp.min
         divs = sorted(divs, key=_div_dt, reverse=True)
