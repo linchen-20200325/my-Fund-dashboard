@@ -9,6 +9,7 @@ from __future__ import annotations
 from services.portfolio_csv import (
     enrich_returns,
     parse_holdings,
+    policy_benchmark_1y,
     policy_returns,
     summarize_by_policy,
 )
@@ -123,6 +124,18 @@ def test_nav_unit_suspect_excluded():
     # 正常比(11/10=1.1)→ 不 suspect、有現值
     en2 = enrich_returns(hs, nav_by_code={"X": 11.0}, usdtwd=31.0)
     assert en2[0]["nav_suspect"] is False and en2[0]["current_value_twd"] is not None
+
+
+def test_policy_benchmark_1y_weighted_by_currency():
+    """vs 大盤:各檔依幣別(台幣→TWII、美元→SPX)按 invest_twd 加權。"""
+    b = policy_benchmark_1y(parse_holdings(_CSV), spx_1y_pct=10.0, twii_1y_pct=20.0)
+    # PA01:(30000×10 + 10000×20)/40000 = 12.5;PA02:全美元 → 10.0
+    assert abs(b["PA01"] - 12.5) < 1e-9 and abs(b["PA02"] - 10.0) < 1e-9
+
+
+def test_policy_benchmark_missing_bench_excluded():
+    b = policy_benchmark_1y(parse_holdings(_CSV), spx_1y_pct=None, twii_1y_pct=20.0)
+    assert abs(b["PA01"] - 20.0) < 1e-9 and b["PA02"] is None   # 美元無大盤 → 不計/None(§1)
 
 
 def test_coverage_gate_below_threshold_not_ranked():
