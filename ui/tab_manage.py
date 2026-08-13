@@ -514,6 +514,49 @@ def _test_send():
 
 # ───────────────────────── 入口 ─────────────────────────
 
+def _sec_dividend_calendar():
+    """🗓️ 除息行事曆:重用已載入的持倉基金(含 dividends)→ 本月除息/配息推估月曆(嵌入 HTML)。"""
+    import datetime as _dt
+
+    st.markdown("### 🗓️ 除息行事曆")
+    st.caption("你的基金**本月除息 / 配息日推估**。用過往配息節奏推算,**非官方公告**;"
+               "累積型不配息的自動不顯示,加減基金 → 下月自動更新。")
+
+    _funds = st.session_state.get("portfolio_funds") or []
+    # 稽核 H2:排除「載入失敗」的檔(全站慣例 loaded and not load_error)——否則抓取失敗的檔
+    # 會被當成「累積型/無配息」誤標為「正常,不是漏抓」(§1 恰好相反)。
+    _loaded = [f for f in _funds if f.get("loaded") and not f.get("load_error")]
+    if not _loaded:
+        st.info("目前沒有『已載入成功』的基金 → 先到 Tab④/組合健診 載入基金,再回來看月曆。")
+        return
+
+    _now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
+    try:
+        import streamlit.components.v1 as _components
+
+        from services.dividend_calendar import build_month_calendar, detect_house
+        from ui.helpers.dividend_calendar_render import render_month_calendar_html
+        _items = [{
+            "code": f.get("code"),
+            "name": f.get("name") or f.get("code"),
+            "house": detect_house(f.get("name") or ""),
+            # dividends 可能在頂層或 moneydj_raw 底下(容錯)
+            "dividends": f.get("dividends") or (f.get("moneydj_raw") or {}).get("dividends"),
+        } for f in _loaded]
+        _cal = build_month_calendar(_items, _now.year, _now.month)
+        _html = render_month_calendar_html(_cal)
+        _components.html(_html, height=900, scrolling=True)
+        _c = _cal["counts"]
+        st.caption(f"本月推估除息 {_c['events']} 檔"
+                   + (f"｜{_c['excluded']} 檔累積型/無配息" if _c["excluded"] else "")
+                   + (f"｜{_c['unpredictable']} 檔無法推估" if _c.get("unpredictable") else ""))
+        st.download_button("⬇️ 下載本月月曆 HTML", _html,
+                           file_name=f"除息行事曆_{_now.year}{_now.month:02d}.html",
+                           mime="text/html", use_container_width=True, key="divcal_dl")
+    except Exception as _e:  # noqa: BLE001
+        _friendly("產生除息月曆失敗", _e, level="error")
+
+
 def render_manage_tab() -> None:
     st.markdown("## 📋 我的管理室")
     st.caption("選股池、投資組合、通報 一站管理。**資料存在 Google Sheets、永久保存**,關掉重開都在,"
@@ -521,5 +564,7 @@ def render_manage_tab() -> None:
     _sec_pool()
     st.divider()
     _sec_portfolio()
+    st.divider()
+    _sec_dividend_calendar()
     st.divider()
     _sec_notify()
