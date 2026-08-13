@@ -1348,3 +1348,36 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     """
     from repositories.fund import get_latest_fx as _l1_impl
     return _l1_impl(currency_pair, fred_api_key)
+
+
+def get_fx_rate_by_date(currency: str) -> dict:
+    """v19.449 稽核 M6:某幣別對 TWD 的**歷史**匯率日對照 {YYYY-MM-DD: rate}。
+
+    供 `compute_dividend_twd_series` 逐筆配息 / 買入日**用當時匯率**折 TWD(§4.5 PIT),
+    取代原本一律用「今日 spot」→ 早年買的美元基金,本金/累積配息 TWD 金額會偏差(FX 30→32
+    差 ~7%)。TWD → {}(免換匯);其餘走 L1 fetch_yf_close("{ccy}TWD=X", 5y)。
+
+    密集日對照:reindex 每日 + **ffill**(FX 週末/假日沿用前一交易日 = on-or-before,無 lookahead),
+    讓 _pick_fx_for_date 的 exact-date 查找能命中落在週末的除息日。抓不到 → {}(呼叫端退 spot,§1)。
+    thin L2 facade,快取由 L1 fetch_yf_close 集中。
+    """
+    from services.currency import normalize_ccy
+    _c = normalize_ccy(currency, default="")
+    if not _c or _c == "TWD":
+        return {}
+    try:
+        import pandas as _pd
+
+        from repositories.macro.yf import fetch_yf_close
+        _s = fetch_yf_close(f"{_c}TWD=X", range_="5y")
+        if _s is None or len(_s) < 2:
+            return {}
+        _s = _s[_s > 0].sort_index()
+        _s.index = _pd.to_datetime(_s.index)
+        _daily = _s.reindex(_pd.date_range(_s.index.min(), _s.index.max(), freq="D")).ffill()
+        return {str(idx)[:10]: float(v) for idx, v in _daily.items() if v == v and v > 0}
+    except Exception as _e_fx:  # noqa: BLE001 — 歷史匯率抓不到 → 回 {},呼叫端退 spot,不 raise
+        import sys as _sys_fx
+        print(f"[get_fx_rate_by_date] {currency} 歷史匯率取得失敗:"
+              f"{type(_e_fx).__name__}: {_e_fx}", file=_sys_fx.stderr)
+        return {}

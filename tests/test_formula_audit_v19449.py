@@ -147,3 +147,21 @@ def test_item6_empty_currency_excluded_not_usd():
     assert to_twd_total_return_series(nav, None, fx) is None
     assert to_twd_total_return_series(nav, "TWD", fx) is not None
     assert to_twd_total_return_series(nav, "USD", fx) is not None
+
+
+def test_m6_dividend_buy_uses_historical_fx_not_spot():
+    """M6:買入日/配息用**當時匯率**折 TWD,不用今匯 spot(§4.5 PIT)。
+
+    fx_rate_by_date 有買入日歷史率 30 → 用 30(source=historical);今匯 spot=35 只在缺歷史時退用。
+    本金原幣 = 100000/30 > 100000/35 → 歷史版單位更多(不被高估的今匯壓縮)。
+    """
+    from services.health.dividend_calc import compute_dividend_twd_series
+    nav = {"2024-01-15": 10.0, "2024-06-14": 10.0, "2024-12-15": 10.0}
+    divs = [{"date": "2024-06-14", "amount": 0.5}]
+    fx_by_date = {"2024-01-15": 30.0, "2024-06-14": 31.0}
+    out_hist = compute_dividend_twd_series(nav, divs, fx_rate_default=35.0,
+                                           fx_rate_by_date=fx_by_date, principal_twd=100000)
+    out_spot = compute_dividend_twd_series(nav, divs, fx_rate_default=35.0, principal_twd=100000)
+    assert out_hist["buy_fx"] == 30.0 and out_hist["buy_fx_source"] == "historical"
+    assert out_spot["buy_fx"] == 35.0 and out_spot["buy_fx_source"] == "spot"
+    assert out_hist["principal_ccy_🧮"] > out_spot["principal_ccy_🧮"]

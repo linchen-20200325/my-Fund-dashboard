@@ -65,7 +65,7 @@ def process_one_fund(
     回傳 row dict;任一步失敗回 {ok: False, error}。
     """
     from services.moneydj_fetcher import auto_fetch_moneydj
-    from services.fund_service import get_latest_fx
+    from services.fund_service import get_fx_rate_by_date, get_latest_fx
     from services.currency import normalize_ccy  # v19.71:single source of truth
     from services.health.dividend_calc import compute_dividend_twd_series
     try:
@@ -95,14 +95,18 @@ def process_one_fund(
         # TWD 基金不打 FX API
         if ccy == "TWD":
             fx = 1.0
+            fx_by_date = None
         else:
             fx = get_latest_fx(f"{ccy}TWD=X") or 0.0
             if fx <= 0:
                 return {"code": code, "ok": False, "error": f"FX {ccy}TWD 抓不到"}
+            # v19.449 稽核 M6:歷史配息/本金用**當時匯率**折 TWD(非今匯);抓不到 → {} 退 spot(§1)。
+            fx_by_date = get_fx_rate_by_date(ccy) or None
         result = compute_dividend_twd_series(
             nav_series=nav_dict,
             dividend_events=divs,
             fx_rate_default=fx,
+            fx_rate_by_date=fx_by_date,
             principal_twd=principal_twd,
             warn_gap_pct=warn_gap,
         )
