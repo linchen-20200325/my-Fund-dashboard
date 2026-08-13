@@ -225,3 +225,13 @@ def test_list_organizes_falls_back_to_known(monkeypatch):
     got = fcmod.list_organizes()
     _codes = {o["value"] for o in got}
     assert "019" in _codes and "037" in _codes and len(got) == len(fcmod._KNOWN_ORGANIZES)
+
+
+def test_resolve_search_name():
+    """v19.456:打代碼 → 用代碼↔名稱對照換成名稱去找、代碼留著存;打名稱則原樣。"""
+    from services.fundclear_backfill import resolve_search_name
+    m = {"ACTI71": "聯博多元資產收益組合基金AI配息(美元)"}
+    assert resolve_search_name("acti71", m) == ("聯博多元資產收益組合基金AI配息(美元)", "ACTI71")
+    assert resolve_search_name("聯博多元資產收益組合基金", m) == ("聯博多元資產收益組合基金", "")
+    assert resolve_search_name("", m) == ("", "")
+    assert resolve_search_name("UNKNOWN", {}) == ("UNKNOWN", "")

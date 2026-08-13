@@ -52,6 +52,19 @@ def rank_candidates(target_name: str, fund_list: list, top: int = 5) -> list[dic
     return scored[:top]
 
 
+def resolve_search_name(term: str, code_name_map: dict) -> tuple[str, str]:
+    """user 想**用代碼**搜:term 命中 code_name_map(代碼→名稱)→ 回 (名稱, 代碼大寫);
+
+    否則視 term 為名稱 → 回 (term, "")。用途:拿**名稱**去 FundClear 找、拿**代碼**存回
+    nav_history(健診才讀得回)。code_name_map 由呼叫端從選股池 + 持倉組出(代碼統一大寫)。
+    """
+    _key = str(term or "").strip().upper()
+    _name = (code_name_map or {}).get(_key)
+    if _name:
+        return str(_name).strip(), _key
+    return str(term or "").strip(), ""
+
+
 def find_fund_candidates(target_name: str, organize_code: Optional[str] = None,
                          top: int = 5, scan_range: int = 0) -> list[dict]:
     """用基金名找 FundClear 候選基金 [{name, value=fundCode, organize_code, organize_name, score}]。

@@ -811,12 +811,31 @@ def _sec_nav_backfill() -> None:
                 "5. (順便)機構下拉選你的基金公司(如聯博),看新請求 payload 裡的 `organizeCode`,"
                 "那就是你的機構代碼\n\n"
                 "把 4/5 貼給我,我把實際 endpoint 寫死,你之後就不用填代碼。")
-        if st.button("🔎 找 FundClear 對應基金", key="navbf_find", disabled=not _name.strip()):
+        # v19.456:user 想「打代碼」→ 用選股池 + 持倉的代碼↔名稱對照,把代碼自動換成名稱去 FundClear
+        # 找、代碼留著存回 nav_history。打名稱則原樣。
+        _code_name_map = {}
+        try:
+            from repositories.pool_repository import list_pool
+            for _pe in list_pool():
+                if getattr(_pe, "code", ""):
+                    _code_name_map[str(_pe.code).strip().upper()] = getattr(_pe, "name", "") or ""
+        except Exception:  # noqa: BLE001 — 選股池讀不到不阻斷,仍可用名稱直接找
+            pass
+        for _h in (st.session_state.get("navbf_holdings") or []):
+            _code_name_map.setdefault(str(_h.get("code", "")).strip().upper(), _h.get("name", "") or "")
+        from services.fundclear_backfill import resolve_search_name
+        _search_name, _resolved_code = resolve_search_name(_name, _code_name_map)
+        if _resolved_code and _search_name != str(_name).strip():
+            _fixed_code = _resolved_code            # 打代碼 → 存回用該代碼(健診讀得回)
+            st.caption(f"🔁 代碼 **{_resolved_code}** → 名稱「**{_search_name}**」"
+                       "(拿名稱去 FundClear 找、拿代碼存回)")
+
+        if st.button("🔎 找 FundClear 對應基金", key="navbf_find", disabled=not _search_name.strip()):
             try:
                 from services.fundclear_backfill import find_fund_candidates
                 with st.spinner("搜尋 FundClear 基金清單…"):
                     st.session_state["navbf_cands"] = find_fund_candidates(
-                        _name.strip(), (_org.strip() or None))
+                        _search_name.strip(), (_org.strip() or None))
                 if not st.session_state["navbf_cands"]:
                     st.warning("查無相似基金 —— 可能非 FundClear 境外基金,或需指定機構代碼。")
             except Exception as _e:  # noqa: BLE001
@@ -824,12 +843,12 @@ def _sec_nav_backfill() -> None:
                           _e, level="error")
 
         if st.button("🔍 掃描全部機構找我的基金(機構清單抓不到時用;較慢 ~1-2 分)",
-                     key="navbf_scan", disabled=not _name.strip()):
+                     key="navbf_scan", disabled=not _search_name.strip()):
             try:
                 from services.fundclear_backfill import find_fund_candidates
                 with st.spinner("逐一掃描機構 001-060(~1-2 分,跑完前別關頁面)…"):
                     st.session_state["navbf_cands"] = find_fund_candidates(
-                        _name.strip(), organize_code=None, scan_range=60)
+                        _search_name.strip(), organize_code=None, scan_range=60)
                 if not st.session_state["navbf_cands"]:
                     st.warning("掃描完仍查無 —— 可能非 FundClear 境外基金,或機構代碼超出 001-060 範圍。")
             except Exception as _e:  # noqa: BLE001
