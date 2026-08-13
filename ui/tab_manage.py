@@ -813,6 +813,73 @@ def _sec_policy_portfolio():
             _friendly("載入基金失敗", _e, level="error")
 
 
+def _sec_nav_backfill() -> None:
+    """📥 補歷史淨值(FundClear 境外基金)→ 存進 GS nav_history → 根治「抓不到→外推→假吃本金」。"""
+    st.markdown("### 📥 補歷史淨值(FundClear 境外基金)")
+    st.caption("抓 FundClear 境外基金的**完整歷史淨值**(單次可達 ~20 年)存進 Google Sheet,"
+               "讓健診有足夠序列算**真實 1 年報酬** —— 根治「抓不到官方資料 → 外推 → 假吃本金」"
+               "(如 ACTI71 −38%)。⚠️ 用基金**名稱**比對 FundClear,請自己核對選對基金與級別。")
+    with st.expander("展開:找對應基金 → 選級別 → 下載存進 Google Sheet"):
+        _name = st.text_input("基金名稱(你持倉的中文名)", key="navbf_name",
+                              placeholder="例:聯博多元資產收益組合基金")
+        _org = st.text_input("機構代碼(選填;知道就填可加速。例 019=安聯)", key="navbf_org",
+                             placeholder="留空 = 全機構搜尋(較慢;機構清單 endpoint 部署後才驗證)")
+        if st.button("🔎 找 FundClear 對應基金", key="navbf_find", disabled=not _name.strip()):
+            try:
+                from services.fundclear_backfill import find_fund_candidates
+                with st.spinner("搜尋 FundClear 基金清單…"):
+                    st.session_state["navbf_cands"] = find_fund_candidates(
+                        _name.strip(), (_org.strip() or None))
+                if not st.session_state["navbf_cands"]:
+                    st.warning("查無相似基金 —— 可能非 FundClear 境外基金,或需指定機構代碼。")
+            except Exception as _e:  # noqa: BLE001
+                _friendly("搜尋 FundClear 失敗(部署環境才連得到;機構清單報錯請填機構代碼)",
+                          _e, level="error")
+
+        _cands = st.session_state.get("navbf_cands") or []
+        if _cands:
+            _opts = {f"{c['name']}（{c.get('organize_name') or c['organize_code']}/{c['value']}）"
+                     f" · {c['score']:.0%}": c for c in _cands}
+            _pick = _opts.get(st.selectbox("選對應基金(**核對名稱**)", list(_opts), key="navbf_pick"))
+            if _pick and st.button("取級別清單", key="navbf_classes_btn"):
+                try:
+                    from services.fundclear_backfill import list_classes_for
+                    st.session_state["navbf_classes"] = list_classes_for(
+                        _pick["organize_code"], _pick["value"])
+                    st.session_state["navbf_pick_fund"] = _pick
+                except Exception as _e:  # noqa: BLE001
+                    _friendly("取級別清單失敗", _e, level="error")
+
+        _classes = st.session_state.get("navbf_classes") or []
+        _pick_fund = st.session_state.get("navbf_pick_fund")
+        if _classes and _pick_fund:
+            _copts = {f"{c['name']}（{c['value']}）": c for c in _classes}
+            _cpick = _copts.get(st.selectbox(
+                "選級別(建議**累積 Acc**;配息級別淨值除息會下跳、低估總報酬)",
+                list(_copts), key="navbf_class_pick"))
+            _app_code = st.text_input(
+                "存進 nav_history 的**持倉內部碼**(健診以此讀回;例 ACTI71)", key="navbf_appcode")
+            if _cpick and st.button("📥 下載完整歷史 + 存進 Google Sheet", key="navbf_dl",
+                                    disabled=not _app_code.strip(), use_container_width=True):
+                try:
+                    from services.fundclear_backfill import download_and_store
+                    with st.spinner("抓完整歷史(可能數十秒)+ 寫入 Google Sheet…"):
+                        _res = download_and_store(
+                            _pick_fund["organize_code"], _pick_fund["value"],
+                            _cpick["value"], _app_code.strip(), fund_name=_pick_fund["name"])
+                    if not _res.get("ok"):
+                        st.error(f"下載失敗:{_res.get('reason')}")
+                    else:
+                        _s0, _s1 = _res["span"]
+                        st.success(
+                            f"✅ {_app_code.strip()}:抓到 {_res['count']} 筆({_s0} ~ {_s1}"
+                            f",{_res['currency']}),寫入 GS {_res['written']} 筆"
+                            f"(重複略過 {_res['skipped']})。重整健診 / 個基體檢就會用這段歷史"
+                            "算真實 1Y,不再外推誤判。")
+                except Exception as _e:  # noqa: BLE001
+                    _friendly("下載 / 寫入失敗", _e, level="error")
+
+
 def render_manage_tab() -> None:
     st.markdown("## 📋 我的管理室")
     st.caption("選股池、投資組合、通報 一站管理。**資料存在 Google Sheets、永久保存**,關掉重開都在,"
@@ -824,5 +891,7 @@ def render_manage_tab() -> None:
     _sec_policy_portfolio()
     st.divider()
     _sec_dividend_calendar()
+    st.divider()
+    _sec_nav_backfill()
     st.divider()
     _sec_notify()
