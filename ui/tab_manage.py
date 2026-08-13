@@ -686,23 +686,32 @@ def _sec_policy_portfolio():
 
     _pr = policy_returns(_en)
     _maxrank = max((p["rank"] for p in _pr if p.get("rank")), default=0)
+    _n_suspect = sum(1 for h in _en if h.get("nav_suspect"))
     _rows = []
     for p in _pr:
         _r = p.get("rank")
         _lamp = "🔴 最差" if _r == 1 else ("🟢 最佳" if _r and _r == _maxrank else ("🟡" if _r else "⬜"))
+        if p["total_return_pct"] is not None:
+            _ret = f"{p['total_return_pct']:+.1f}%"
+        elif p["n_priced"] and (p.get("coverage") or 0) < 0.6:
+            _ret = f"覆蓋不足 {p['coverage'] * 100:.0f}%"
+        else:
+            _ret = "資料不足"
         _rows.append({
-            "燈": _lamp, "排名": _r or "—", "保單": p["policy"],
-            "真實報酬%": (f"{p['total_return_pct']:+.1f}%" if p["total_return_pct"] is not None else "資料不足"),
+            "燈": _lamp, "排名": _r or "—", "保單": p["policy"], "真實報酬%": _ret,
             "投資額": f"{p['invest_twd']:,.0f}",
             "現值": (f"{p['current_value_twd']:,.0f}" if p["current_value_twd"] is not None else "—"),
             "累領配息": f"{p['cum_div_twd']:,.0f}", "已估/檔數": f"{p['n_priced']}/{p['n_funds']}",
         })
     st.dataframe(pd.DataFrame(_rows), hide_index=True, use_container_width=True)
     _worst = next((p for p in _pr if p.get("rank") == 1), None)
-    if _worst:
+    if _worst and _maxrank > 1:                     # 稽核 F4:只有 1 組可排名時不喊「最差」
         st.warning(f"🔴 **最差組合:保單 {_worst['policy']}**，真實報酬 "
                    f"{_worst['total_return_pct']:+.1f}%(含息、成本 vs 現價)。")
-    st.caption("真實報酬 =(現值 + 已領配息 − 成本)÷ 成本;現價現抓、含息;缺現價的檔不列入該保單分母(§1)。"
+    if _n_suspect:
+        st.caption(f"⚠️ {_n_suspect} 檔現價與成本淨值比異常(疑幣別/計價單位對不上)→ 已排除不硬算(§1)。")
+    st.caption("真實報酬 =(現值 + 已領配息 − 成本)÷ 成本;現價現抓、含息;"
+               "缺現價 / 覆蓋率<60% 不排名(§1);已領配息用各檔實際值加總(不分攤)。"
                "vs 大盤(近1年近似)為下一步。")
 
 

@@ -140,33 +140,43 @@ def enrich_returns(holdings: list, *, nav_by_code: dict, usdtwd: "float | None")
         nav = nav_by_code.get(code)
         units = h.get("units")
         inv = h.get("invest_twd")
+        cost_nav = h.get("cost_nav")
         fx = 1.0 if _is_twd(h.get("currency")) else usdtwd
-        cur_val = None
+        cur_val, nav_suspect = None, False
         if isinstance(nav, (int, float)) and nav > 0 and isinstance(units, (int, float)) \
                 and isinstance(fx, (int, float)) and fx > 0:
-            cur_val = units * float(nav) * float(fx)
+            # 稽核 F2 + §3.2 sanity:現價/成本淨值比異常(如台幣計價 class 對美元成本 → ~31×)=
+            # 幣別/計價單位對不上 → 不信任、標 nav_suspect、現值留 None(§1 不送 ~31× 假報酬)。
+            if isinstance(cost_nav, (int, float)) and cost_nav > 0 and not (0.2 < nav / cost_nav < 5.0):
+                nav_suspect = True
+            else:
+                cur_val = units * float(nav) * float(fx)
         tr_twd = tr_pct = None
         if cur_val is not None and isinstance(inv, (int, float)) and inv > 0:
             tr_twd = cur_val + (h.get("cum_div_twd") or 0.0) - inv
             tr_pct = tr_twd / inv * 100.0
-        out.append({**h, "current_nav": nav, "current_fx": fx,
+        out.append({**h, "current_nav": nav, "current_fx": fx, "nav_suspect": nav_suspect,
                     "current_value_twd": cur_val,
                     "total_return_twd": tr_twd, "total_return_pct": tr_pct})
     return out
 
 
-def policy_returns(enriched: list) -> list:
-    """依保單彙總真實報酬 + 排名(最差在前)。缺現價的檔不計入該保單分母(誠實,標 covered)。
+_COVERAGE_MIN = 0.6         # 稽核 F3:已估金額占比 < 60% → 覆蓋不足,不排名(不用少數檔為整組下結論)
 
+
+def policy_returns(enriched: list) -> list:
+    """依保單彙總真實報酬 + 排名(最差在前)。
+
+    稽核 F1:配息用**各檔實際**已領配息加總(不按占比分攤 —— 分攤會把未估檔的配息灌進已估分子,
+             可能反轉排名 → 誤導換股)。稽核 F3:覆蓋率 < 60% → 不排名(標覆蓋不足)。
     Returns [{policy, invest_twd, current_value_twd, cum_div_twd, total_return_twd,
-              total_return_pct, n_funds, n_priced, rank}]  依報酬%升冪(最差 rank=1)。
-    covered = 有現價的檔;若保單全無現價 → total_return_pct=None(不排名)。
+              total_return_pct, coverage, n_funds, n_priced, rank}]  依報酬%升冪(最差 rank=1)。
     """
     agg: dict = {}
     for h in enriched:
         p = h["policy"]
         d = agg.setdefault(p, {"policy": p, "invest_twd": 0.0, "cum_div_twd": 0.0,
-                               "priced_invest": 0.0, "priced_value": 0.0,
+                               "priced_invest": 0.0, "priced_value": 0.0, "priced_div": 0.0,
                                "n_funds": 0, "n_priced": 0})
         d["invest_twd"] += h.get("invest_twd") or 0.0
         d["cum_div_twd"] += h.get("cum_div_twd") or 0.0
@@ -174,22 +184,21 @@ def policy_returns(enriched: list) -> list:
         if h.get("current_value_twd") is not None and (h.get("invest_twd") or 0) > 0:
             d["priced_invest"] += h["invest_twd"]
             d["priced_value"] += h["current_value_twd"]
+            d["priced_div"] += h.get("cum_div_twd") or 0.0      # F1:實際 per-fund 配息
             d["n_priced"] += 1
     out: list = []
     for d in agg.values():
-        # 報酬用「有現價的部分」當分母(§1:沒現價的不硬算)
-        cur = d["priced_value"] if d["n_priced"] else None
+        coverage = (d["priced_invest"] / d["invest_twd"]) if d["invest_twd"] else 0.0
+        cur = d["priced_value"] if d["n_priced"] else None       # 現值:有估的部分(資訊用)
         tr_twd = tr_pct = None
-        if cur is not None and d["priced_invest"] > 0:
-            # 已領配息按有現價占比分攤,避免用全部配息除部分成本高估
-            _div = d["cum_div_twd"] * (d["priced_invest"] / d["invest_twd"]) if d["invest_twd"] else 0.0
-            tr_twd = cur + _div - d["priced_invest"]
+        if d["n_priced"] and coverage >= _COVERAGE_MIN and d["priced_invest"] > 0:
+            tr_twd = d["priced_value"] + d["priced_div"] - d["priced_invest"]
             tr_pct = tr_twd / d["priced_invest"] * 100.0
         out.append({"policy": d["policy"], "invest_twd": d["invest_twd"],
                     "current_value_twd": cur, "cum_div_twd": d["cum_div_twd"],
                     "total_return_twd": tr_twd, "total_return_pct": tr_pct,
-                    "n_funds": d["n_funds"], "n_priced": d["n_priced"]})
-    # 排名:有報酬%的升冪(最差在前),None 殿後
+                    "coverage": coverage, "n_funds": d["n_funds"], "n_priced": d["n_priced"]})
+    # 排名:有報酬%的升冪(最差在前),覆蓋不足/無估殿後
     _ranked = sorted([o for o in out if o["total_return_pct"] is not None],
                      key=lambda x: x["total_return_pct"])
     for i, o in enumerate(_ranked):

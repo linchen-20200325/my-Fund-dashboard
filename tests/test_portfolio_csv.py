@@ -94,3 +94,43 @@ def test_policy_returns_all_unpriced_no_rank():
     en = enrich_returns(parse_holdings(_CSV), nav_by_code={}, usdtwd=31.0)   # 全無現價
     pr = policy_returns(en)
     assert all(p["total_return_pct"] is None and p["rank"] is None for p in pr)
+
+
+# ── 稽核修:F1 配息不分攤 / F2 NAV 單位守衛 / F3 覆蓋率門檻 ──────────────
+def _h(code, units, cost_nav, ccy, invest, div):
+    return {"policy": "P", "code": code, "name": code, "currency": ccy, "tier": "核心",
+            "units": units, "cost_nav": cost_nav, "cost_incl_div": cost_nav, "fx": 1,
+            "invest_twd": invest, "cash_pct": 100, "cum_div_twd": div}
+
+
+def test_dividend_not_prorated_uses_actual_priced_div():
+    """F1:部分已估時,配息用『已估檔實際值』加總,不按占比分攤(分攤會把未估檔配息灌進分子)。"""
+    hs = [_h("F1", 1000, 10, "台幣", 10000, 0),      # 已估、無配息
+          _h("F2", 1000, 10, "台幣", 10000, 0),      # 已估、無配息
+          _h("F3", 1000, 10, "台幣", 10000, 9000)]   # 未估、配息 9000(不該被灌進來)
+    en = enrich_returns(hs, nav_by_code={"F1": 10.0, "F2": 10.0}, usdtwd=1.0)  # F3 無現價
+    p = policy_returns(en)[0]
+    # 已估 2 檔:現值 20000、配息 0、成本 20000 → 0%(舊分攤法會誤成 +30%)
+    assert abs(p["total_return_pct"] - 0.0) < 1e-9
+    assert abs(p["coverage"] - (20000 / 30000)) < 1e-9   # 覆蓋 66.7% ≥ 60% → 有排名
+
+
+def test_nav_unit_suspect_excluded():
+    """F2:現價/成本淨值比異常(~31×,疑台幣計價 class 對美元成本)→ 不信任、現值 None。"""
+    hs = [_h("X", 100, 10, "美元", 30000, 0)]
+    en = enrich_returns(hs, nav_by_code={"X": 310.0}, usdtwd=31.0)   # 310/10 = 31× → 異常
+    assert en[0]["nav_suspect"] is True and en[0]["current_value_twd"] is None
+    # 正常比(11/10=1.1)→ 不 suspect、有現值
+    en2 = enrich_returns(hs, nav_by_code={"X": 11.0}, usdtwd=31.0)
+    assert en2[0]["nav_suspect"] is False and en2[0]["current_value_twd"] is not None
+
+
+def test_coverage_gate_below_threshold_not_ranked():
+    """F3:已估金額覆蓋率 < 60% → 不排名(不用少數檔為整組下結論)。"""
+    hs = [_h("A", 1000, 10, "台幣", 10000, 0),       # 已估(covered 10000)
+          _h("B", 1000, 10, "台幣", 10000, 0),       # 未估
+          _h("C", 1000, 10, "台幣", 10000, 0)]       # 未估 → 覆蓋 33%
+    en = enrich_returns(hs, nav_by_code={"A": 11.0}, usdtwd=1.0)
+    p = policy_returns(en)[0]
+    assert p["total_return_pct"] is None and p["rank"] is None
+    assert p["coverage"] < 0.6 and p["n_priced"] == 1
