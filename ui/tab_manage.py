@@ -901,6 +901,45 @@ def _sec_nav_backfill() -> None:
                 except Exception as _e:  # noqa: BLE001
                     _friendly("下載 / 寫入失敗", _e, level="error")
 
+    with st.expander("📥 每日官方淨值(TDCC 11641 近7天)—— 全持倉一鍵補 / 驗證後可排每日自動"):
+        st.caption("抓政府開放資料『境外基金淨值』(近7天)→ 用**名稱**對到你**全部持倉** → 存進 nav_history。"
+                   "**近7天只能往後累積、補不了過去**(過去用上面 FundClear)。跑幾週後每檔都有序列。"
+                   "⚠️ 首次請**核對下方比對名稱**對不對,再考慮排每日自動。")
+        if st.button("📥 抓 TDCC 官方淨值 → 補全持倉", key="tdcc_acc_btn", use_container_width=True):
+            try:
+                import pandas as _pd_t
+                _cli_t, _sid_t = _policy_client_and_sheet()
+                if _cli_t is None:
+                    st.info(_sid_t)
+                else:
+                    from repositories.policy.v2 import load_all_policies_v2
+                    _pdf_t = load_all_policies_v2(_cli_t, _sid_t)
+                    _seen_t, _hold_t = set(), []
+                    for _r in _pdf_t.itertuples(index=False):
+                        _c = str(getattr(_r, "fund_code", "") or "").strip().upper()
+                        _nm = str(getattr(_r, "fund_name", "") or "").strip()
+                        if _c and _c not in _seen_t:
+                            _seen_t.add(_c)
+                            _hold_t.append({"code": _c, "name": _nm})
+                    from services.tdcc_nav_accumulate import accumulate_and_store
+                    with st.spinner("抓 TDCC 11641 + 比對 + 寫入…"):
+                        _res_t = accumulate_and_store(_hold_t)
+                    if not _res_t.get("ok"):
+                        st.error(f"失敗:{_res_t.get('reason')}")
+                    else:
+                        _rep_t = _res_t["report"]
+                        st.success(f"✅ 寫入 {_res_t['written']} 筆(重複略過 {_res_t['skipped']});"
+                                   f"對到 {len(_rep_t['matched'])} 檔、對不上 {len(_rep_t['unmatched'])} 檔。")
+                        if _rep_t["matched"]:
+                            st.caption("**比對結果(請核對名稱是否正確)**:")
+                            st.dataframe(_pd_t.DataFrame(_rep_t["matched"]),
+                                         use_container_width=True, hide_index=True)
+                        if _rep_t["unmatched"]:
+                            st.caption("⬜ 對不上(11641 近7天沒有 / 名稱差太多):"
+                                       + "、".join(_rep_t["unmatched"]))
+            except Exception as _e:  # noqa: BLE001
+                _friendly("TDCC 官方淨值累積失敗", _e, level="error")
+
 
 def render_manage_tab() -> None:
     st.markdown("## 📋 我的管理室")
