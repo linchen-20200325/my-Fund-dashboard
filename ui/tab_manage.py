@@ -860,18 +860,69 @@ def _sec_nav_backfill() -> None:
             except Exception as _e:  # noqa: BLE001
                 _friendly("載入持倉失敗", _e, level="error")
 
+        # ── 2026-08-15 user 反映：「我想要也能用代號去找」──────────────────────
+        # 其實 `resolve_search_name` 早就支援打代號（會去選股池 / 持倉查名稱），
+        # 但欄位標籤只寫「基金名稱」—— **使用者不可能知道**。而且可選的代號
+        # 明明就在選股池裡，卻沒有列出來給人挑，只能自己記或自己打。
+        #
+        # 改法：把「選股池 + 持倉」合併成一份 代號→名稱 清單直接讓你挑，
+        # 挑完仍走同一支 `resolve_search_name`（拿名稱去 FundClear 找、
+        # 拿代號存回 nav_history），邏輯零改動、只是把入口打開。
         _hold = st.session_state.get("navbf_holdings") or []
+        _pool_opts: list = []
+        try:
+            from repositories.pool_repository import list_pool
+            for _pe in list_pool():
+                _c = str(getattr(_pe, "code", "") or "").strip().upper()
+                if _c:
+                    _pool_opts.append({"code": _c,
+                                       "name": str(getattr(_pe, "name", "") or "").strip(),
+                                       "src": "選股池"})
+        except Exception as _e_pool:  # noqa: BLE001 — 選股池讀不到不擋手打
+            import sys as _sys_pool
+            print(f"[navbf] 選股池讀取失敗: {type(_e_pool).__name__}: {_e_pool}",
+                  file=_sys_pool.stderr)
+        # 持倉優先（同代號時保留持倉那筆的名稱：那是你實際持有的級別）
+        _pick_src: dict = {}
+        for _h in _hold:
+            _c = str(_h.get("code", "") or "").strip().upper()
+            if _c:
+                _pick_src[_c] = {"code": _c, "name": _h.get("name", "") or "", "src": "持倉"}
+        for _p in _pool_opts:
+            _pick_src.setdefault(_p["code"], _p)
+
         _fixed_code = ""
-        if _hold:
-            _hopts = {f"{h['name'] or h['code']}（{h['code']}）": h for h in _hold}
-            _hpick = _hopts.get(st.selectbox("① 從你的持倉挑一檔(自動帶名稱 + 內部碼)",
-                                             list(_hopts), key="navbf_hold_pick"))
-            _name = (_hpick["name"] or _hpick["code"]) if _hpick else ""
-            _fixed_code = _hpick["code"] if _hpick else ""
-            st.caption(f"→ 用名稱「**{_name}**」去 FundClear 找,抓到後存進內部碼「**{_fixed_code}**」。")
+        _name = ""
+        if _pick_src:
+            _hopts = {
+                f"{_v['code']} — {_v['name'] or '(無名稱)'}　[{_v['src']}]": _v
+                for _v in sorted(_pick_src.values(), key=lambda x: x["code"])
+            }
+            _MANUAL = "✍️ 自己打（不在清單裡）"
+            _sel = st.selectbox(
+                "① 挑基金 —— **用代號挑**（清單來自你的選股池 + 持倉）",
+                [_MANUAL] + list(_hopts), key="navbf_hold_pick",
+                help="下拉選單是「代號 — 名稱」。挑好之後，系統會拿**名稱**去 FundClear 搜尋，"
+                     "抓到的歷史則存回**你的代號**底下（健診才讀得回）。",
+            )
+            if _sel != _MANUAL:
+                _hpick = _hopts[_sel]
+                _name = _hpick["name"] or _hpick["code"]
+                _fixed_code = _hpick["code"]
+                st.caption(f"→ 用名稱「**{_name}**」去 FundClear 找,"
+                           f"抓到後存進內部碼「**{_fixed_code}**」。")
+            else:
+                _name = st.text_input(
+                    "基金名稱 **或** 代號", key="navbf_name",
+                    placeholder="例:聯博多元資產收益組合基金　或　ACTI71",
+                    help="打代號時，系統會先去選股池 / 持倉查出對應名稱再搜尋。"
+                         "代號查不到對應名稱的話，會直接把你打的字當基金名稱去找。")
         else:
-            _name = st.text_input("① 基金名稱(或先按上面『載入持倉』從清單挑)", key="navbf_name",
-                                  placeholder="例:聯博多元資產收益組合基金")
+            _name = st.text_input(
+                "① 基金名稱 **或** 代號（按上面『載入持倉』可改用清單挑）",
+                key="navbf_name",
+                placeholder="例:聯博多元資產收益組合基金　或　ACTI71",
+                help="打代號時，系統會先去選股池 / 持倉查出對應名稱再搜尋。")
         _org = st.text_input("機構代碼(選填;知道就填可加速。例 019=安聯)", key="navbf_org",
                              placeholder="留空 = 全機構搜尋(較慢;機構清單 endpoint 部署後才驗證)")
         with st.expander("🔧 出現「機構清單 endpoint 全部候選失敗」?怎麼辦"):
