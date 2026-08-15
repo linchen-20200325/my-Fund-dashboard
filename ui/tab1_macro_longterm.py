@@ -246,8 +246,18 @@ def render_long_term_section(
                     try:
                         from services.macro import clear_tab1_macro_caches
                         clear_tab1_macro_caches(session_state=st.session_state)
-                    except Exception:
-                        pass
+                    except Exception as _e_clr_lt:  # noqa: BLE001
+                        # 稽核 A10：同 tab1_macro 的第二份副本 —— 原本 `pass` 之後
+                        # 直接 `st.rerun()`，使用者按了「強制重抓」卻拿到舊快取，
+                        # 而畫面上沒有任何跡象（§1 假成功）。
+                        import sys as _sys_lt
+                        print(f"[tab1_longterm/clear_cache] "
+                              f"{type(_e_clr_lt).__name__}: {_e_clr_lt}",
+                              file=_sys_lt.stderr)
+                        st.warning(
+                            f"⚠️ 快取沒有清成功（[{type(_e_clr_lt).__name__}]）"
+                            "—— 重新載入的資料可能仍是舊的。"
+                        )
                     st.rerun()
         except Exception as _us_e:
             st.error(f"美股流動性監測渲染失敗：[{type(_us_e).__name__}] {_us_e}")

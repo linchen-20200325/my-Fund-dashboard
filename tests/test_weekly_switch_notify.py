@@ -26,14 +26,20 @@ class _PE:
 
 # ── _assemble_rows ────────────────────────────────
 def test_assemble_rows_maps_fields(monkeypatch):
+    import services.fx_regime_service as FXR
     import services.health.dividend as D
     import services.health.report as R
     import ui.helpers.fund_grp_health.unified as U
     monkeypatch.setattr(U, "build_merged_extra_columns",
                         lambda funds, phase, score: ([], {"AAA": {"σ rank": "-1.50σ",
                                                                    "距 HWM %": "-18%", "操盤評分": 72}}))
-    monkeypatch.setattr(R, "build_health_analysis_row", lambda fd, code: {"基金類別": "股票", "4D Grade": "B"})
+    # 2026-08-14 Layer 3-C:health row 多了 `fx_cv_by_ccy` kwarg(健康度第 5 維)。
+    # stub 必須吃 **kw,否則 TypeError 會被 production 的 except 吞成 `_h = {}`,
+    # 測試會紅在「基金類別對不上」而不是真正的原因。
+    monkeypatch.setattr(R, "build_health_analysis_row",
+                        lambda fd, code, **kw: {"基金類別": "股票", "4D Grade": "B"})
     monkeypatch.setattr(D, "check_eating_principal_1y_mk", lambda fd: {"status": "🟢 健康"})
+    monkeypatch.setattr(FXR, "fx_regime_by_ccy", lambda *a, **kw: {})   # 不觸網
 
     funds = [{"code": "AAA", "name": "基金A", "series": pd.Series([1.0, 2.0]), "moneydj_raw": {}}]
     r = M._assemble_rows(funds, {"AAA": _PE("AAA", type_override="震盪")})[0]
@@ -43,12 +49,14 @@ def test_assemble_rows_maps_fields(monkeypatch):
 
 
 def test_assemble_rows_category_falls_back_to_pool(monkeypatch):
+    import services.fx_regime_service as FXR
     import services.health.dividend as D
     import services.health.report as R
     import ui.helpers.fund_grp_health.unified as U
     monkeypatch.setattr(U, "build_merged_extra_columns", lambda funds, phase, score: ([], {}))
-    monkeypatch.setattr(R, "build_health_analysis_row", lambda fd, code: {})   # 無類別
+    monkeypatch.setattr(R, "build_health_analysis_row", lambda fd, code, **kw: {})  # 無類別
     monkeypatch.setattr(D, "check_eating_principal_1y_mk", lambda fd: {})
+    monkeypatch.setattr(FXR, "fx_regime_by_ccy", lambda *a, **kw: {})   # 不觸網
 
     funds = [{"code": "BBB", "name": "b", "series": None, "moneydj_raw": {}}]
     r = M._assemble_rows(funds, {"BBB": _PE("BBB", category="平衡型")})[0]

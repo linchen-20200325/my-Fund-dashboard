@@ -150,6 +150,41 @@ class TestTab2ExceptLogs:
             f"無註解裸 except:pass 違 §3.3(行號 {offenders});"
             f"允許的沉默必須帶 smoke-allow-pass 等註解說明")
 
+    def test_smoke_allow_pass_not_used_with_broad_except(self):
+        """稽核 B2(2026-08-14)：`# smoke-allow-pass` 不得替**廣義** except 背書。
+
+        為什麼加這條
+        ------------
+        上面那個 `test_no_undocumented_bare_pass` 只比對「裸 pass、下一行沒有
+        任何字」—— 也就是說**加一句註解就能通過**。實務後果：
+        `ui/tab2_single_fund.py` 的兩處 `except Exception: pass # smoke-allow-pass`
+        讓「HWM σ 位階卡」與「4D 健康總覽卡（A/B/C/D/F 大字評等）」整張靜默
+        消失，而測試一路長綠 —— 等於**由測試蓋章的違憲**。
+
+        本條的規則：`except Exception:`（廣義）不得只靠 smoke-allow-pass 靜默；
+        要嘛收窄例外型別（如 `except (ValueError, TypeError)`，代表你知道會發生
+        什麼），要嘛留痕（stderr + UI caption）。
+        """
+        lines = _src("ui/tab2_single_fund.py").splitlines()
+        offenders = []
+        for i, ln in enumerate(lines[:-1]):
+            _nxt = lines[i + 1].strip()
+            if ln.strip() == "except Exception:" and \
+                    _nxt.startswith("pass") and "smoke-allow-pass" in _nxt:
+                offenders.append(i + 1)
+        assert not offenders, (
+            f"廣義 except Exception 靠 smoke-allow-pass 靜默(行號 {offenders})。"
+            "請改成:收窄例外型別，或補 stderr log + UI caption。"
+            "（2026-08-14 稽核 A3:這正是兩張結論卡無聲消失的成因）")
+
+    def test_card_render_failures_leave_a_trace(self):
+        """稽核 A3：兩張結論卡的 render 失敗必須留痕，不得靜默。"""
+        text = _src("ui/tab2_single_fund.py")
+        for tag in ("[tab2/hwm_sigma]", "[tab2/4d_health]"):
+            assert tag in text, (
+                f"缺 {tag} stderr log —— 該卡失敗時使用者無從分辨"
+                "「這檔沒資料」與「算爆了」")
+
     def test_new_log_tags_present(self):
         text = _src("ui/tab2_single_fund.py")
         for tag in ("[tab2/freshness]", "[tab2/linkage]", "[tab2/income-calc]",

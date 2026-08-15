@@ -52,6 +52,39 @@ def _empty_fund_df() -> pd.DataFrame:
     return pd.DataFrame(columns=list(_FUND_EDIT_COLS))
 
 
+def _ccy_from_sheet(raw: Any) -> str:
+    """Sheet 的 `currency` 欄 → ISO 3 碼；**空白就回空字串，絕不猜 USD**。
+
+    稽核 J1 根因修復（2026-08-14）
+    ---------------------------------
+    原本這裡是 `str(r.get("currency", "") or "USD")` —— 相鄰的 `fund_name` 與
+    `tier` 都是 `or ""`（空就空），**獨獨這一欄無中生有一個 "USD"**。
+
+    後果（已在部署站台實測）：Sheet 的 currency 欄空白時，台幣計價的基金
+    （安聯台灣大壩 ACDD01 / 安聯台灣智慧 ACDD19，NAV 324.85 / 418.03 **台幣**）
+    被標成 USD → `checkup.py` 拿它去 `_safe_fx("USD")` 得 32.11 →
+    「原幣本金」= 294,904 ÷ 32.112 = 9,183.64、可申購單位數 = 95.86，
+    而正確值是 294,904 ÷ 324.85 = **907.8 單位** → **低估 32.1 倍**。
+    同時讓「FX 曝險摘要」印出「USD 25 檔（100%）」與一句錯誤的風險警語。
+
+    關鍵是：下游其實**守得很嚴**（`services/fund_row.py:81,90-94` 與
+    `ui/helpers/fund/checkup.py:328,365` 都用 `default=""`，抓不到就整列標失敗
+    或顯示 `—`），但它們檢查的是「有沒有值」—— 而上游已經把值填好了，
+    於是全部失效。守門必須設在注入點，也就是這裡。
+
+    三種 Sheet 內容都正確處理：
+    - 空白 / None      → `""`（下游守門接手，顯示 `—` 或整列標失敗）
+    - 中文「台幣」/「美元」→ 走 `services.currency.normalize_ccy` 正規化成 TWD / USD
+    - 已是 ISO「USD」   → 原樣保留（尊重 Sheet）
+    """
+    from services.currency import normalize_ccy  # noqa: PLC0415 — 純函式、零 IO
+    _raw = str(raw or "").strip()
+    if not _raw:
+        return ""
+    # default="" 顯式覆寫掉 normalize_ccy 自己的 "USD" 預設（services/currency.py:40）
+    return normalize_ccy(_raw, default="")
+
+
 def _split_policy_df(df: pd.DataFrame) -> pd.DataFrame:
     """v2 10 欄 df → fund 編輯視圖(9 欄)。v19.436:現金列已退役,不再分區。"""
     if df is None or df.empty:
@@ -82,7 +115,9 @@ def _merge_policy_df(policy_id: str, fund_df: pd.DataFrame) -> pd.DataFrame:
             "policy_id":        policy_id,
             "fund_code":        code,
             "fund_name":        str(r.get("fund_name", "") or ""),
-            "currency":         str(r.get("currency", "") or "USD"),
+            # 稽核 J1 根因：原 `or "USD"` 會憑空造幣別 → 台幣基金金額差 32 倍。
+            # 詳見本檔 `_ccy_from_sheet` 的 docstring。
+            "currency":         _ccy_from_sheet(r.get("currency", "")),
             "tier":             str(r.get("tier", "") or ""),
             "invest_twd":       _inv,
             "div_cash_pct":     _dcp,
@@ -477,7 +512,12 @@ def render_first_use_wizard(client: Any, sheet_id: str) -> None:
                 "policy_id":        sanitized,
                 "fund_code":        fcode,
                 "fund_name":        _fname,
-                "currency":         _ccy or "USD",
+                # 稽核 J1：同 `_ccy_from_sheet` 的理由 —— MoneyDJ 沒給計價幣別時
+                # 不可捏造 USD。寫空字串進 Sheet 是誠實的：下游 checkup / fund_row
+                # 會顯示「—」或整列標失敗，而不是拿 32.11 的匯率去乘一檔台幣基金。
+                # ⚠️ 本函式（render_first_use_wizard）目前 production 0 caller，
+                #    此修正是為了「若日後復活不會帶著地雷」，非現行路徑。
+                "currency":         _ccy_from_sheet(_ccy),
                 "tier":             _tier,
                 "invest_twd":       inv_twd,
                 "div_cash_pct":     100,

@@ -19,6 +19,11 @@ from shared.colors import GH_BG_PRIMARY, GH_FG_SECONDARY, GRAY_55, INFO_BLUE, TR
 from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None(不畫成 0% 假柱)
 
 _MAX_CODES = 10
+
+# 稽核 C2:原「吃本金閾值 %」滑桿拆除後,下游仍需要一個值。走 SSOT 常數,
+# 不在這裡寫死 2.0(§3.3);它只影響 production 0 consumer 的 `div_health_light_🧮`,
+# 但既然還在傳,就不該傳一個來路不明的數字。
+from services.health.dividend_calc import DEFAULT_WARN_GAP_PCT as _DEFAULT_WARN_GAP  # noqa: E402
 _DEFAULT_CCY = "USD"
 
 
@@ -124,7 +129,8 @@ def _dedup_rows_by_code(rows: "list[dict]") -> "list[dict]":
 def render_fund_grp_health_tab() -> None:
     """渲染 💊 基金組合健診 Tab（v19.37 新增）。"""
     st.markdown("### 💊 基金組合健診")
-    from ui.helpers.story_nav import render_story_nav
+    from ui.helpers.story_nav import render_flow_nav, render_story_nav
+    render_flow_nav("health")   # 巨觀:第 ③ 層 監控與評分
     render_story_nav("health")  # v19.405 Phase 4:健診為決策動線第 2 站
     st.caption(
         "對 **100 萬 TWD** 為基準，模擬持有期間每次配息折算 TWD 金額並判定吃本金。"
@@ -173,21 +179,29 @@ def render_fund_grp_health_tab() -> None:
     )
     # v19.59：移除「原幣別 fallback」selectbox — 幣別嚴格走 MoneyDJ wb05「計價幣別」欄抓網路。
     # MoneyDJ 抓不到 → 該檔回 error「幣別未知」（不再用人工選的 fallback 矇混）。
-    c1, c2 = st.columns(2)
-    with c1:
-        principal_twd = st.number_input(
-            "本金（TWD）",
-            min_value=10_000.0, max_value=10_000_000.0,
-            value=1_000_000.0, step=100_000.0,
-            key="fund_grp_health_principal",
-        )
-    with c2:
-        warn_gap = st.slider(
-            "吃本金閾值 %",
-            min_value=0.5, max_value=5.0, value=2.0, step=0.5,
-            key="fund_grp_health_warn_gap",
-            help="配息率 − 含息報酬率 > 此值 → 標 🔴 吃本金",
-        )
+    principal_twd = st.number_input(
+        "本金（TWD）",
+        min_value=10_000.0, max_value=10_000_000.0,
+        value=1_000_000.0, step=100_000.0,
+        key="fund_grp_health_principal",
+        help="所有基金都假設投入這個金額，才能把「每月配息」「累積配息」放在同一個尺度上比較。",
+    )
+
+    # ── 稽核 C2（2026-08-14）：拆掉「吃本金閾值 %」滑桿 ────────────────────────
+    # 它的 help 寫著「配息率 − 含息報酬率 > 此值 → 標 🔴 吃本金」，但畫面上那個 🔴
+    # 根本不是它決定的：
+    #   - 滑桿的值 → `process_one_fund(warn_gap)` → `compute_dividend_twd_series`
+    #     → 產出 `div_health_light_🧮` —— 這個欄位**全 production 0 consumer**
+    #     （只有測試在讀），沒有任何一張表、任何一個燈號用到它。
+    #   - 表上真正的「吃本金燈號 (1Y·MK)」走 `check_eating_principal_1y_mk`，
+    #     門檻取自 `shared/signal_thresholds`，與滑桿完全無關。
+    # 也就是說：使用者拖動它、以為自己在調整判定標準，畫面上一個像素都不會變。
+    #
+    # 為什麼是拆掉而不是接上：吃本金是 MK 老師的既定方法論，門檻是 SSOT 常數，
+    # 開放成滑桿等於讓使用者自己調出一個「沒有紅燈」的組合（§8.1 step 6：
+    # 用不到的抽象不留；一個騙人的控制項比沒有控制項更糟）。
+    # 下游 `warn_gap` 參數保留不動（有預設值、有測試），只是不再由 UI 餵。
+    warn_gap = _DEFAULT_WARN_GAP
 
     if not st.button("🩺 開始健診", key="fund_grp_health_btn"):
         return
@@ -701,8 +715,13 @@ def _render_health_3tables(rows: list[dict],
         return
 
     # v19.330:① 健康分析 rows 提前建(核心/衛星 label 來源)—— 供「配置檢查」+ ① 表共用,不重算。
+    # Layer 3-C:健康度第 5 維(匯率風險)需要匯率資料。**全站同一份**(L2 fetch-once),
+    # 否則同一檔基金在這裡是 5/5 的 B、在個基深掘卻是 4/5 的 C(§2.1 跨畫面一致)。
+    from services.fx_regime_service import fx_regime_by_ccy as _fxr_gh
+    _fx_map_gh = _fxr_gh() or {}
     _health_rows = [
-        build_health_analysis_row(_r.get("_fund_raw") or {}, _r.get("code", ""))
+        build_health_analysis_row(_r.get("_fund_raw") or {}, _r.get("code", ""),
+                                  fx_cv_by_ccy=_fx_map_gh)
         for _r in ok_rows
     ]
 

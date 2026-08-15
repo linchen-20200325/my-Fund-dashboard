@@ -37,9 +37,46 @@ _HEADER_TOKENS = {"CODE", "SYMBOL", "TICKER", "代號", "基金代號", "基金�
 _TW_TZ = _dt.timezone(_dt.timedelta(hours=8))
 
 def _is_fail(row: dict) -> bool:
-    """該檔是否失敗 / 無效(可重試)。狀態欄含「失敗」或「無效」。"""
+    """該檔是否失敗 / 無效。狀態欄含「失敗」或「無效」。
+
+    ⚠️ 「⚠️ 部分成功」**不算**失敗 —— 它有抓到淨值、大部分欄位算得出來,
+    只是某一組欄留白。計數與統計要把它獨立成一態(見 `split_status_counts`)。
+    要判「該不該重跑」請用 `_is_retryable`,不要用這支(稽核 A1 / 🟠-7)。
+    """
     _s = str((row or {}).get("狀態", ""))
     return ("失敗" in _s) or ("無效" in _s)
+
+
+def _is_retryable(row: dict) -> bool:
+    """該檔值不值得重跑 = 抓取失敗 / 代號無效 / **部分成功**。稽核 🟠-7。"""
+    _s = str((row or {}).get("狀態", ""))
+    return _is_fail(row) or ("部分成功" in _s)
+
+
+def split_status_counts(statuses) -> tuple:
+    """狀態欄 → (完全成功, 部分成功, 失敗/無效) 三態計數。稽核 A1(2026-08-14)。
+
+    抽成具名純函式的理由:原本是摘要區裡的三行 inline 運算,而
+    `"部分成功"` **字面含有「成功」** —— 任何人日後回頭用最直覺的
+    `str.contains("成功")` 改回去,都會把「13~22 欄沒算出來」的檔靜靜混進
+    全綠計數,而且不會有任何測試會紅。抽出來就守得住(PROCESS §4)。
+
+    Args:
+        statuses: 可迭代的狀態字串(pandas Series / list 皆可)。
+
+    Returns:
+        (n_ok, n_partial, n_fail) —— 三者相加必等於輸入長度。
+    """
+    n_ok = n_partial = n_fail = 0
+    for _s in statuses:
+        _t = str(_s or "")
+        if "部分成功" in _t:
+            n_partial += 1
+        elif "成功" in _t:
+            n_ok += 1
+        else:
+            n_fail += 1
+    return n_ok, n_partial, n_fail
 
 
 def _rows_compatible(rows: dict) -> bool:
@@ -55,21 +92,47 @@ def _rows_compatible(rows: dict) -> bool:
     return bool(vals) and all(isinstance(r, dict) and "狀態" in r for r in vals)
 
 
+# 每次為批次大表加新欄,都必須在這裡登記(欄名 → 該欄是哪一版加的說明)。
+# 理由:舊 checkpoint 讀得回來(`_rows_compatible` 只驗「狀態」這個世代旗標),
+# `_build_df` 以固定欄骨架建表 → 舊列缺鍵補成空白。空白與「這檔真的沒有」
+# 在畫面上長得一模一樣,而新欄的 help 又教使用者把空白讀成後者(§1)。
+# ⚠️ 只登記在 `_render_stale_schema_notice` 掃得到的地方沒有用 —— 加欄時
+#    請同時更新這個 tuple,否則新欄會靜靜地留白(2026-08-14 稽核 🟠-8 的成因)。
+_LATE_ADDED_COLUMNS: tuple = ("淨值新鮮度", "淨值樣本")
+
+
+def _rows_missing_late_columns(rows: dict) -> dict:
+    """{欄名: 缺該欄的成功列數} —— 只算成功列(失敗列本來就整列留白)。"""
+    out: dict = {}
+    for _col in _LATE_ADDED_COLUMNS:
+        _n = sum(1 for r in (rows or {}).values()
+                 if isinstance(r, dict) and not _is_fail(r) and _col not in r)
+        if _n:
+            out[_col] = _n
+    return out
+
+
 def _rows_missing_freshness(rows: dict) -> int:
-    """回傳「成功但沒有淨值新鮮度欄」的列數(= 加欄前存的舊 checkpoint)。"""
+    """回傳「成功但沒有淨值新鮮度欄」的列數(= 加欄前存的舊 checkpoint)。
+
+    保留供既有測試與 caller 使用;新的多欄版走 `_rows_missing_late_columns`。
+    """
     return sum(1 for r in (rows or {}).values()
                if isinstance(r, dict) and not _is_fail(r) and "淨值新鮮度" not in r)
 
 
 def _render_stale_schema_notice(rows: dict) -> None:
     """§1:讀回的舊 checkpoint 缺新欄 → 當場講清楚,不讓空白冒充「這檔沒資料」。"""
-    _n = _rows_missing_freshness(rows)
-    if _n:
-        st.caption(
-            f"ℹ️ 其中 **{_n} 檔**為新增「淨值日期 / 淨值新鮮度」欄之前跑的存檔,"
-            "該兩欄留白 —— 是**存檔較舊**,不是這些基金查不到淨值日期。"
-            "要補這兩欄請按「🗑️ 清除重來」重跑(或忽略,其餘欄位不受影響)。"
-        )
+    _missing = _rows_missing_late_columns(rows)
+    if not _missing:
+        return
+    _parts = "、".join(f"「{_c}」({_n} 檔)" for _c, _n in _missing.items())
+    st.caption(
+        f"ℹ️ 部分存檔是在新增下列欄位**之前**跑的,因此這些欄留白:{_parts}。"
+        "這是**存檔較舊**,不是這些基金查不到該項資料 —— 尤其「淨值樣本」欄留白時,"
+        "請**不要**照該欄 help 讀成「連淨值序列都沒拿到」。"
+        "要補齊請按「🗑️ 清除重來」重跑(或忽略,其餘欄位不受影響)。"
+    )
 
 
 def _parse_codes(raw: str) -> list[str]:
@@ -122,9 +185,13 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
     run_id = bc.compute_run_id(codes)
 
     # 決定本輪要處理哪些(未做的 + 選擇性重試失敗的)
+    # 稽核 🟠-7:「⚠️ 部分成功」也納入重試範圍。它不含「失敗」「無效」故 `_is_fail`
+    # 判 False —— 分類本身是對的(淨值抓到了),但如果重試放不進來,使用者就會看到
+    # 一個**自己無法處理**的狀態:唯一出路是整批清除重跑(400 檔要 2~5 小時)。
+    # 部分成功多半是暫時性的(大盤基準抓失敗 / 匯率逾時),重跑單檔通常就好了。
     todo = [
         c for c in codes
-        if c not in rows or (retry_failed and _is_fail(rows[c]))
+        if c not in rows or (retry_failed and _is_retryable(rows[c]))
     ]
     if not todo:
         st.info("沒有待處理的代號(全部已完成)。如要全部重來,請按「🗑️ 清除重來」。")
@@ -159,7 +226,10 @@ def _build_df(codes: list[str], rows: dict) -> pd.DataFrame:
 
 
 def render_batch_analysis_tab() -> None:
-    st.markdown("## 📦 批次基金分析")
+    # 稽核 H1：H1 原寫死「批次基金分析」，分頁列是「📦 批次分析」—— 同頁兩個名字。
+    from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tb
+    st.markdown(f"## {_tab_label_tb('batch')}")
+    render_flow_nav("batch")   # 巨觀:第 ② 層 基金核心分析
     st.caption(
         "上傳或貼上基金代號清單 → 每檔跑**與「組合健診」同一張大表**(評分/報酬/風險/配息/"
         "σ位階/MK 買賣點,以 100 萬 TWD 為基準)→ 下載 CSV。每檔抓 NAV/配息/績效"
@@ -219,19 +289,42 @@ def render_batch_analysis_tab() -> None:
     st.session_state[_K_CODES] = codes
     rows: dict = st.session_state.get(_K_ROWS, {})
     done = sum(1 for c in codes if c in rows)
-    est_min = max(1, round(len(codes) * 5 / 60))   # 粗估 ~5s/檔(含完整健診計算)
+    # ── 稽核 D5：估算改吃實測值 ─────────────────────────────────────────────
+    # 原本是 `len(codes) * 5 / 60`（~5s/檔），實機實測 **~45s/檔**
+    # （2026-08-14：組合健診 2 檔耗時約 90 秒，且健診是 4-worker 並行、
+    #  批次是**序列**跑，所以批次只會更慢不會更快）。
+    # 400 檔原本顯示「約 33 分鐘」，實際約 **5 小時** —— 差 9 倍。
+    # 使用者照這個數字決定要不要按下去，低報等於騙他。
+    # 給區間而不是單點：MoneyDJ 每檔要走多頁 + fallback chain，
+    # 境外基金常態要跑兩輪 page_type，離散度本來就大。
+    _SEC_PER_FUND_FAST = 20   # 快取命中 / 境內單輪
+    _SEC_PER_FUND_SLOW = 45   # 實測值：境外走完 fallback chain
+    _todo_n = max(len(codes) - done, 0)
+    _est_lo = max(1, round(_todo_n * _SEC_PER_FUND_FAST / 60))
+    _est_hi = max(1, round(_todo_n * _SEC_PER_FUND_SLOW / 60))
+    _est_txt = (f"約 {_est_lo}~{_est_hi} 分鐘" if _est_hi > _est_lo
+                else f"約 {_est_hi} 分鐘")
     st.markdown(
         f"**解析到 {len(codes)} 檔**(去重後)　·　已完成 {done} 檔　·　"
-        f"預估首次全跑約 {est_min} 分鐘"
+        f"剩餘 {_todo_n} 檔，預估 {_est_txt}"
     )
+    if _todo_n >= 100:
+        st.warning(
+            f"⚠️ 這批要跑 {_todo_n} 檔，預估 **{_est_txt}**（依實測 20~45 秒/檔推算）。"
+            "本頁是**序列**執行以避免對 MoneyDJ 造成過高請求速率，"
+            "跑的過程中請不要關閉分頁；已完成的檔會即時落地，中斷後重上傳同一份"
+            "清單可接續。"
+        )
 
     b1, b2, b3 = st.columns([2, 2, 1])
     with b1:
         go = st.button("▶️ 開始 / 繼續分析", type="primary", use_container_width=True,
                        key="batch_go")
     with b2:
-        retry = st.button("🔁 重試失敗檔", use_container_width=True, key="batch_retry",
-                          disabled=(done == 0))
+        retry = st.button("🔁 重試失敗 / 部分成功檔", use_container_width=True,
+                          key="batch_retry", disabled=(done == 0),
+                          help="重抓「❌ 抓取失敗」「⚠️ 代號無效」與「⚠️ 部分成功」的檔;"
+                               "已完全成功的不會重跑,所以通常很快。")
     with b3:
         clear = st.button("🗑️ 清除重來", use_container_width=True, key="batch_clear")
 
@@ -290,23 +383,34 @@ def _render_existing_results() -> None:
     if df.empty:
         return
 
-    # ── 摘要(§1:成功 / 失敗 一目了然)────────────────
+    # ── 摘要(§1:成功 / 部分成功 / 失敗 一目了然)────────────────
+    # 稽核 A1(2026-08-14):原本 `str.contains("成功")` 是**兩態**切法,而
+    # `unified.py` 現在會回「⚠️ 部分成功」(①/②/③/④ 其中一組算爆 → 該組欄留白)。
+    # 「部分成功」字面含「成功」,若沿用舊切法會被算進 `✅ 成功` —— 等於
+    # 把「13~22 欄沒算出來」的檔混進全綠計數,使用者永遠不會去看它的備註。
     n = len(df)
-    _status = df["狀態"].astype(str)
-    n_ok = int(_status.str.contains("成功").sum())
-    n_fail = n - n_ok
+    n_ok, n_partial, n_fail = split_status_counts(df["狀態"].astype(str))
     run_at = st.session_state.get(_K_RUN_AT, "—")
 
     st.divider()
     st.markdown(f"### 📊 分析結果(組合健診大表)　·　執行時間(台北):{run_at}")
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("檔數", n)
-    m2.metric("✅ 成功", n_ok)
-    m3.metric("❌ 失敗 / 無效", n_fail)
-    if n_fail:
+    m2.metric("✅ 完全成功", n_ok)
+    m3.metric("⚠️ 部分成功", n_partial,
+              help="有抓到淨值、但某一組欄位(健康分析 / 配息 / σ 風險 MK / 策略燈號)"
+                   "計算過程出錯而留白。留白**不代表這檔沒有這項資料**,原因寫在「備註」。")
+    m4.metric("❌ 失敗 / 無效", n_fail)
+    if n_fail or n_partial:
         st.caption("失敗的檔仍完整列在表裡(狀態 + 備註會標明原因、數值欄留白),"
-                   "**不會偷偷丟掉、也不會填假數字**。可按「🔁 重試失敗檔」重抓;"
+                   "**不會偷偷丟掉、也不會填假數字**。可按「🔁 重試失敗 / 部分成功檔」重抓;"
                    "「備註」是唯一寫出失敗原因的地方,把滑鼠移到欄名上可看哪些原因值得重試。")
+    if n_partial:
+        st.caption(f"⚠️ 其中 **{n_partial} 檔為「部分成功」** —— 淨值有抓到,但部分欄組"
+                   "計算失敗而留白。**做換標決策前請先讀該列的「備註」**,"
+                   "不要把留白讀成「這檔沒有這個特性」。"
+                   "這類失敗多半是暫時的(大盤基準抓不到 / 匯率逾時),"
+                   "按「🔁 重試失敗 / 部分成功檔」通常就會補齊。")
     _render_stale_schema_notice(rows)
 
     # ── 表格(欄位已是中文,與組合健診大表同款;橫向可滾動)──────────
@@ -362,10 +466,19 @@ def _render_existing_results() -> None:
             "+ 基期 / 風險 / 買賣點)。\n"
             "- **每一欄的欄名都可以把滑鼠移上去看說明**(怎麼算的、單位是什麼、留白代表什麼、"
             "能不能拿去跨檔比大小)。\n"
+            "- **狀態**:✅ 完全成功 / **⚠️ 部分成功** / ❌ 抓取失敗 / ⚠️ 代號無效。"
+            "「部分成功」= 淨值抓到了,但某一組欄位算到一半出錯而留白 —— "
+            "**留白不代表這檔沒有那個特性**,缺哪一組寫在「備註」。"
+            "多半是暫時性的,按「🔁 重試失敗 / 部分成功檔」通常會補齊。\n"
             "- **淨值日期 / 淨值新鮮度**:這檔最新一筆淨值是哪一天的、距今幾天。基金淨值本來就"
             "慢 1~3 天才公布、週末假日不更新,所以 🟢/🟠 都算正常;**🔴 = 很可能已停售或清算** —— "
             "此時同一列的基期 / 操盤評分 / 策略燈號都是用已經不動的舊淨值算的,別當成現況。"
             "點欄名排序可一次挑出所有 🔴。\n"
+            "- **淨值樣本**:這一列的數字是拿**幾筆淨值、橫跨幾天**算出來的。"
+            "帶 ⚠️ 表示我們只抓到很短一段歷史(常見於保單專屬網頁被擋、只讀到首頁的"
+            "「近 30 日淨值表」)—— 此時 Sharpe / 波動 / 最大回檔 / 3Y 5Y 年化**會整批留白**,"
+            "那是樣本不夠,**不是這檔沒有風險**;同列的 4D 分數仍會用剩下幾個面向給分,"
+            "別把它當完整體檢。\n"
             "- **評分**:4D 等第與分數;**每月配息 / 累積台幣配息 / 原幣本金 / 單位** 全都假設"
             "**投入 100 萬台幣**來比較(換匯過程見「換匯資訊 🧮」欄)。\n"
             "- **報酬**:近一年含息(優先抄 MoneyDJ 官方績效表)/ 3 年·5 年平均每年 / "

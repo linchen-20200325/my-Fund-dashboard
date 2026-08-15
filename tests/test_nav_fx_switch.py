@@ -111,12 +111,17 @@ def test_compute_nav_fx_column_cases():
     assert compute_nav_fx_column({"ccy": "美元", "σ rank": "-2σ"}, _m)["匯率位階"] == "台幣強"
 
 
-# ── L3 fetch-once module cache ──────────────────────────
+# ── fetch-once module cache ─────────────────────────────
+# ⚠️ 2026-08-14 Layer 3-C:快取由 `ui/helpers/fund_grp_health/fx_regime.py`(L3)
+# 下沉到 `services/fx_regime_service.py`(L2)。原因見該模組 docstring ——
+# 健康度第 5 維會改變分數,而 `services/fund_batch.py`(L2)構不到 L3 helper。
+# 內部快取字典也一併改名(`_FX_REGIME_CACHE` → `_CACHE`),並提供 `clear_cache()`,
+# 測試不必再戳私有變數。
 def test_fetch_once_dedupes_usdtwd(monkeypatch):
     import services.fund_service as _fs
+    import services.fx_regime_service as _fr
     import services.hot_money_service as _hms
-    import ui.helpers.fund_grp_health.fx_regime as _fr
-    _fr._FX_REGIME_CACHE.clear()
+    _fr.clear_cache()
     _calls = {"n": 0}
     _df = pd.DataFrame({"date": _D[:250], "usdtwd": _fx().to_numpy()})
 
@@ -127,13 +132,28 @@ def test_fetch_once_dedupes_usdtwd(monkeypatch):
     monkeypatch.setattr(_fs, "get_latest_fx", lambda pair: 31.0)
     for _ in range(5):
         _fr.fx_regime_by_ccy()
-    assert _calls["n"] == 1 and _fr._FX_REGIME_CACHE.get("USD", {}).get("regime") is not None
-    _fr._FX_REGIME_CACHE.clear()
+    assert _calls["n"] == 1, f"fetch-once 失效:抓了 {_calls['n']} 次"
+    assert _fr.fx_regime_by_ccy().get("USD", {}).get("regime") is not None
+    _fr.clear_cache()
 
 
 def test_fetch_empty_not_cached(monkeypatch):
+    import services.fx_regime_service as _fr
     import services.hot_money_service as _hms
-    import ui.helpers.fund_grp_health.fx_regime as _fr
-    _fr._FX_REGIME_CACHE.clear()
+    _fr.clear_cache()
     monkeypatch.setattr(_hms, "fetch_usdtwd_frame", lambda days: (pd.DataFrame(), "err"))
-    assert _fr.fx_regime_by_ccy() == {} and not _fr._FX_REGIME_CACHE   # 不 cache → 允許重試
+    assert _fr.fx_regime_by_ccy() == {}       # 不 cache → 允許重試
+    assert _fr.fx_regime_by_ccy() == {}       # 再叫一次仍是空(沒有把失敗結果凍住)
+    _fr.clear_cache()
+
+
+def test_l3_shim_shares_the_l2_cache():
+    """舊 import path 必須指到**同一個** function object。
+
+    若哪天有人把 L3 那個檔改回自己實作一份快取,測試 monkeypatch L2 就不會生效,
+    production 會安靜地打真網路 —— 這條把兩者釘在一起。
+    """
+    import services.fx_regime_service as _l2
+    import ui.helpers.fund_grp_health.fx_regime as _l3
+
+    assert _l3.fx_regime_by_ccy is _l2.fx_regime_by_ccy

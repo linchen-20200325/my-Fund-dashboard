@@ -31,7 +31,7 @@ def _macro_composite() -> "float | None":
 
 def _fx_label() -> "str | None":
     try:
-        from ui.helpers.fund_grp_health.fx_regime import fx_regime_by_ccy
+        from services.fx_regime_service import fx_regime_by_ccy
         return (fx_regime_by_ccy().get("USD") or {}).get("regime")
     except Exception:  # noqa: BLE001
         return None

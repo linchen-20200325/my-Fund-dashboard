@@ -115,6 +115,37 @@ def is_core_fund(fund_name: str) -> bool:
     return False
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# 稽核 E2（2026-08-14）— 「載入成功」全站只有一個定義
+# ══════════════════════════════════════════════════════════════════════════
+# `ui/helpers/portfolio/load.py` 對**抓取失敗**的基金寫的是
+# `{"loaded": True, "load_error": "…"}` —— `loaded` 只代表「這一輪跑過了」,
+# 不代表「拿到資料了」。所以只判 `f.get("loaded")` 會把失敗檔算成成功。
+#
+# 實機病徵:組合頁最上方的 KPI 卡寫「25 檔」,下面每一張分析表卻只有 8 列 ——
+# 因為 KPI 用的是 `f.get("loaded")`(`tab3_portfolio.py:1708`),
+# 表格用的是 `loaded and not load_error`。使用者會以為表格漏了 17 檔。
+# 更糟的是 T7 帳本(`tab3_t7_ledger.py:256`)也只判 `loaded`,
+# 抓失敗的基金會帶著空資料進入落帳試算。
+#
+# `ui/tab_manage.py:437-441` 的註解早就記錄過這個陷阱,但只在那一檔修對。
+# 這裡收成全站唯一入口(§2.1 SSOT)。
+def fund_is_usable(f) -> bool:
+    """這一檔基金的資料**真的拿到了**嗎?(不是只有「跑過了」)
+
+    `loaded=True` 但帶 `load_error` = 抓過但失敗 → 不可用。
+    任何要「數幾檔」或「拿來算」的地方,一律走這支,不要自己寫條件。
+    """
+    if not isinstance(f, dict):
+        return False
+    return bool(f.get("loaded")) and not f.get("load_error")
+
+
+def usable_funds(funds) -> list:
+    """從 portfolio_funds 濾出真的拿到資料的那些(順序不變)。"""
+    return [f for f in (funds or []) if fund_is_usable(f)]
+
+
 def friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = "warning") -> None:
     """v18.126 從 app.py 搬入：統一錯誤呈現 — 避免 Terminal Traceback，但保留可展開技術細節。
 

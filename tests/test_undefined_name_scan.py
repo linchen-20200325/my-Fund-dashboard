@@ -102,6 +102,16 @@ def _scan() -> list[str]:
              # 模組的漏搬 import 只會以 F821 現形 — sources.py 案例)
              "--select", "F405,F821", "--output-format=json", *_SCAN_TARGETS],
             cwd=REPO_ROOT, capture_output=True, text=True, timeout=60,
+            # 2026-08-14:**必須顯式指定 utf-8**。`text=True` 不給 encoding 時走
+            # `locale.getpreferredencoding()`,在繁中 Windows 上是 cp950 —— ruff 的
+            # JSON 輸出含原始碼片段,只要命中的那行有中文(本專案註解幾乎都是中文)
+            # 就會在 subprocess 的讀取執行緒裡拋 UnicodeDecodeError,`proc.stdout`
+            # 變成空的,下面 `json.loads(... or "[]")` 拿到空陣列 → 掃描形同虛設。
+            # 實測病徵:本檔兩條測試在 Windows 上長期紅著,錯誤訊息卻是
+            # 「'NoneType' object has no attribute 'strip'」,看起來像 production
+            # 有問題,實際上是**這個測試自己從來沒真的跑起來過**。
+            # errors="replace" 讓極端情況下也只是字元變成 �,不會整條掛掉。
+            encoding="utf-8", errors="replace",
         )
     except FileNotFoundError as e:
         raise AssertionError(
@@ -110,6 +120,17 @@ def _scan() -> list[str]:
         )
     except subprocess.TimeoutExpired:
         raise AssertionError("ruff --select F405 掃描逾時(60s),請檢查 ruff 是否卡住")
+
+    # stdout 為 None = 讀取管線本身壞了(最常見:編碼)。上面的 `.strip()` 守門
+    # 只擋得住空字串,遇到 None 會拋 `'NoneType' object has no attribute 'strip'`
+    # ——那個訊息看起來像 production 有問題,實際上是本測試自己沒跑起來,
+    # 害人往錯的方向查(§1:錯誤訊息也要誠實指向真正的原因)。
+    if proc.stdout is None:
+        raise AssertionError(
+            "ruff 的 stdout 是 None —— subprocess 讀取管線失敗,掃描沒有真的執行。"
+            "最常見原因是輸出編碼(本 repo 註解為中文,Windows 預設 cp950 會解碼失敗);"
+            f"stderr={(proc.stderr or '')[:300]!r}"
+        )
 
     # ruff exit code 1 = 有 finding(正常),0 = 無 finding,其他為真的執行錯誤
     if proc.returncode not in (0, 1):

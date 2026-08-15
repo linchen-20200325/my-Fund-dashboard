@@ -1,48 +1,23 @@
-"""ui/helpers/fund_grp_health/fx_regime.py — 匯率位階抓取(fetch-once)v19.426。
+"""ui/helpers/fund_grp_health/fx_regime.py — **已退役**，改用 `services.fx_regime_service`。
 
-抓一次 USDTWD 歷史(module 級 success-only 快取,400 檔批次不重抓)→ 算一次匯率位階,
-供 `compute_nav_fx_column` 逐檔查(keyed by 幣別)。走 L2 facade(hot_money_service /
-fund_service / nav_fx_switch),不直呼 L1(§8.2)。Phase 1 只支援 USD;缺料/失敗 → {} 允許重試。
+v19.426 原本在這裡實作匯率位階的 fetch-once module cache。
+2026-08-14 Layer 3-C 下沉到 L2（`services/fx_regime_service.py`），理由：
+
+健康度加了第 5 維（匯率風險）之後，**匯率資料會改變分數本身**。
+而 `services/fund_batch.py`（L2）也是算等第的 caller，它**構不到 L3 的 helper**
+（§8.2 禁 L2→L3）。若只有部分 caller 拿得到匯率資料，同一檔基金會在
+「組合健診」是 5/5 的 B、在「批次分析」是 4/5 的 C —— 正是這一輪一直在修的
+「跨畫面矛盾」。快取住在 L2，全站才可能拿到同一份。
+
+**本檔只保留 re-export 供舊 import path 不炸**（production 已全數改指 L2）。
+⚠️ 測試要 monkeypatch 時**請 patch `services.fx_regime_service`** ——
+patch 這裡不會生效（production 不從這裡讀），會變成安靜地打真網路。
 """
 from __future__ import annotations
 
-# {normalized_ccy: fx_regime dict};只快取成功結果(失敗不入 → 下次重試,§1)
-_FX_REGIME_CACHE: dict = {}
-_FX_CACHE_TS: dict = {"ts": 0.0}     # 上次成功計算時間(monotonic);TTL 到期則重算
-_SUPPORTED_FX = ("USD",)             # Phase 1;擴充只需加幣別 + 對應 {ccy}TWD 序列來源
+from services.fx_regime_service import (  # noqa: F401  (向後相容 re-export)
+    clear_cache,
+    fx_regime_by_ccy,
+)
 
-
-def fx_regime_by_ccy() -> dict:
-    """→ {normalized_ccy: fx_regime dict}。抓一次 USDTWD(module cache)算一次位階;缺料 → {}。
-
-    v19.426 稽核 Finding1:匯率位階是「**當前**」讀數(spot vs 近1年均值),不可永久凍結(§2.4)。
-    加 TTL(TTL_10MIN,對齊 fetch_usdtwd_series 自身 TTL)—— 一輪批次內仍幾乎只抓一次(批次 <30 分,
-    最多重算 2-3 次),但久駐 process 不會把「台幣強/弱」凍結數天。
-    """
-    import sys
-    import time as _time
-
-    from shared.ttls import TTL_10MIN
-
-    _now = _time.monotonic()
-    if _FX_REGIME_CACHE and (_now - _FX_CACHE_TS["ts"]) < TTL_10MIN:
-        return _FX_REGIME_CACHE
-    _FX_REGIME_CACHE.clear()                              # 到期 → 重算(過期不靜默沿用,§2.4)
-
-    from services.fund_service import get_latest_fx
-    from services.hot_money_service import fetch_usdtwd_frame
-    from services.nav_fx_switch import fx_regime
-    from shared.signal_thresholds import FX_REGIME_WINDOW_DAYS
-
-    try:
-        _df, _err = fetch_usdtwd_frame(FX_REGIME_WINDOW_DAYS)
-        if _err or _df is None or getattr(_df, "empty", True):
-            return {}                                        # 不 cache → 允許重試
-        _s = _df.set_index("date")["usdtwd"]
-        _r = fx_regime(_s, spot=get_latest_fx("USDTWD=X"))
-        if _r.get("regime") is not None:
-            _FX_REGIME_CACHE["USD"] = _r
-            _FX_CACHE_TS["ts"] = _now
-    except Exception as _e:  # noqa: BLE001 — 抓失敗不拖垮整表 extra 欄
-        print(f"[fx_regime] USD 失敗: {type(_e).__name__}: {_e}", file=sys.stderr)
-    return _FX_REGIME_CACHE
+__all__ = ["clear_cache", "fx_regime_by_ccy"]

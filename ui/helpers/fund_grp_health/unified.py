@@ -116,6 +116,12 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tupl
 _UNIFIED_FRONT: list = [
     # ① 分類 + 評分
     ("基金類別", "health"), ("核心/衛星", "health"), ("分類依據", "health"),
+    # 稽核 F12(2026-08-14):刻意排在 4D Grade **之前** —— 它是右邊整排數字的
+    # 可信度前提。一檔只抓到 30 筆淨值的基金,Sharpe/σ/MaxDD/3Y 5Y 會整批留白,
+    # 4D Score 卻照樣給分;沒有這一欄,那列在大表裡與正常基金完全同形。
+    ("淨值樣本", "health"),
+    # Layer 3-C(2026-08-14):同樣排在等第**之前** —— 它是那個字母的可信度前提。
+    ("評分覆蓋", "health"),
     ("4D Grade", "health"), ("4D Score", "health"),
     # ① 報酬 / 風險 6 進階指標
     ("Sharpe 1Y", "health"), ("Sharpe 來源", "extra"),   # 來源/期間揭露(§2.2;緊貼數值欄)
@@ -296,7 +302,7 @@ def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
         df["景氣適配"] = [x["景氣適配"] for x in _rf]
         df["適配傾向"] = [x["適配傾向"] for x in _rf]
         # v19.426 — 淨值×匯率二維買賣切換(fetch-once USDTWD;台幣計價 → ➖)
-        from ui.helpers.fund_grp_health.fx_regime import fx_regime_by_ccy
+        from services.fx_regime_service import fx_regime_by_ccy
         _fxm = fx_regime_by_ccy()
         _nf = [compute_nav_fx_column(_rec, _fxm) for _rec in _recs]
         df["匯率位階"] = [x["匯率位階"] for x in _nf]
@@ -400,10 +406,35 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
     fd = base.get("_fund_raw") or {}
     import sys as _sys
     from services.health.report import build_dividend_summary_row, build_health_analysis_row
+    # ── 稽核 A1（2026-08-14）：部分失敗不得標成「✅ 成功」──────────────────────
+    # 下面三段各自 `except → 該組欄留空`，然後**無條件**寫 `狀態 = "✅ 成功"`。
+    # 實際留白規模：① 失敗 = 13 欄、② 失敗 = 7 欄、③ 失敗 = 22 欄 + 7 欄降級 ⬜。
+    # 400 列的表裡，那一列看起來與正常列**一模一樣**，使用者只會讀成
+    # 「這檔沒有這些資料」，並據此做換標決策。唯一痕跡是 stderr，
+    # 而 Streamlit Cloud 上使用者根本看不到。
+    #
+    # 對照組：健診 Tab 遇到同一個失敗會當場 `st.caption` 明講
+    # 「σ 位階 / 風險 / MK 買賣點 … **整組計算失敗**，本次大表不含這些欄
+    #   (不是資料沒有)」—— 同一個引擎，批次端把這句話拿掉了。
+    #
+    # 對策：收集失敗的欄組，改標「⚠️ 部分成功」並在備註列出缺哪幾組。
+    _degraded: list[str] = []
+    # Layer 3-C:健康度第 5 維(匯率風險)需要匯率序列。抓取是 I/O,L2 的
+    # `build_health_analysis_row` 不能自己抓(§8.2),故由這裡把 L3 已經為
+    # 「匯率位階」欄抓好的那一份(module cache,400 檔只抓一次)傳進去。
+    # 抓失敗 → 傳 {} → 該維 missing → 「評分覆蓋」欄會誠實標 ⚠️(§1)。
     try:
-        _health = build_health_analysis_row(fd, code)
+        from services.fx_regime_service import fx_regime_by_ccy as _fxr_h
+        _fx_map_h = _fxr_h() or {}
+    except Exception as _e_fxh:  # noqa: BLE001
+        _fx_map_h = {}
+        print(f"[batch] {code} 匯率位階取得失敗(第 5 維留白): "
+              f"{type(_e_fxh).__name__}: {_e_fxh}", file=_sys.stderr)
+    try:
+        _health = build_health_analysis_row(fd, code, fx_cv_by_ccy=_fx_map_h)
     except Exception as _e:  # noqa: BLE001 — ① 算不出 → 該組欄留空(§3.3 至少 log)
         _health = {}
+        _degraded.append("① 健康分析(評分/報酬/風險)")
         print(f"[batch] {code} ① 健康分析失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
     try:
         _div = {k: v for k, v in build_dividend_summary_row(
@@ -411,6 +442,7 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
                 if not str(k).startswith("_")}
     except Exception as _e:  # noqa: BLE001
         _div = {}
+        _degraded.append("② 配息相關(配息率/吃本金/換標建議)")
         print(f"[batch] {code} ② 配息相關失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
     try:
         from ui.helpers.fund_grp_health._utils import _build_fund_dict
@@ -419,22 +451,39 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
         _extra = _extra_map.get(code, {})
     except Exception as _e:  # noqa: BLE001
         _extra = {}
+        _degraded.append("③ σ位階/風險/MK買賣點/捕捉率")
         print(f"[batch] {code} σ/風險/MK 失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
 
     _row = build_unified_row(base, _health, _div, _extra)
-    # v19.423 — 換標策略欄(cross-source,由已組好的 _row 推導;與健診大表同一 compute)
-    _row.update(compute_switch_columns(_row))
-    # v19.425 — 景氣適配欄(phase 即當前景氣位階,批次已帶入)
-    _row.update(compute_regime_fit_column(_row, phase))
-    # v19.426 — 淨值×匯率二維切換(module cache 去重,400 檔只抓一次 USDTWD)
-    from ui.helpers.fund_grp_health.fx_regime import fx_regime_by_ccy
-    _row.update(compute_nav_fx_column(_row, fx_regime_by_ccy()))
+    # ── 稽核 A1：post-merge 三組欄原本**不在任何 try 內** ──────────────────────
+    # 一旦這裡拋例外，會一路穿透 `_run_batch` → `render_batch_analysis_tab`
+    # → `app.py` 的 `with tab_batch:`（該 slot 沒有分頁隔離）→ **整個 App 從
+    # 批次分頁往下全白**（個基深掘 / 配置帳本 / 我的管理室 / 參考診斷一起消失）。
+    # 400 檔跑到一半炸掉更是把整輪計算結果一起帶走。
+    try:
+        # v19.423 — 換標策略欄(cross-source,由已組好的 _row 推導;與健診大表同一 compute)
+        _row.update(compute_switch_columns(_row))
+        # v19.425 — 景氣適配欄(phase 即當前景氣位階,批次已帶入)
+        _row.update(compute_regime_fit_column(_row, phase))
+        # v19.426 — 淨值×匯率二維切換(module cache 去重,400 檔只抓一次 USDTWD)
+        from services.fx_regime_service import fx_regime_by_ccy
+        _row.update(compute_nav_fx_column(_row, fx_regime_by_ccy()))
+    except Exception as _e_post:  # noqa: BLE001
+        _degraded.append("④ 策略燈號/景氣適配/匯率位階")
+        print(f"[batch] {code} post-merge 欄組失敗: "
+              f"{type(_e_post).__name__}: {_e_post}", file=_sys.stderr)
     # JSON-safe 收口:防 builder 偶發 numpy/Timestamp 漏進 → 讓 checkpoint json.dump 不炸
     # (否則整輪 20-30 分靜默降級只記憶體;還原舊 flat 路徑的 safe_num 保證)。
     out = {c: _jsonify(_row.get(c)) for c in BATCH_UNIFIED_COLUMNS}
     out["code"] = code
-    out["狀態"] = "✅ 成功"
-    out["備註"] = None
+    # 稽核 A1：三態誠實化 —— 全成功 / 部分成功(附缺哪幾組) / 抓取失敗(上方早退)
+    if _degraded:
+        out["狀態"] = "⚠️ 部分成功"
+        out["備註"] = ("以下欄組計算失敗、留白（**不是這檔沒有資料**）："
+                       + "、".join(_degraded))
+    else:
+        out["狀態"] = "✅ 成功"
+        out["備註"] = None
     # §4.6 —「這檔的 NAV 停在哪一天」。build_unified_row 會濾掉底線私有欄,
     # 故在此顯式從 base 取 `_nav_date` 補上(缺 → 誠實「⬜ 無淨值日期」,不猜)。
     from services.fund_row import nav_freshness_label

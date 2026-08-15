@@ -76,14 +76,33 @@ div[data-testid="stTabs"] div[data-testid="stTabs"] div[data-baseweb="tab-list"]
 # ══════════════════════════════════════════════════════
 # Keys & Session State
 # ══════════════════════════════════════════════════════
+# ── 2026-08-15：完全沒有 secrets 檔時,App 原本會在啟動就崩潰 ────────────────
+# `st.secrets.get(k, "")` 看起來像「取不到就回預設值」的安全寫法,但 Streamlit 在
+# **一個 secrets 檔都找不到**時,`.get()` 內部仍會去 `_parse()` → 直接
+# `raise StreamlitSecretNotFoundError`。於是新 clone 下來的專案(secrets.toml 有被
+# gitignore,本來就不會有)一跑就是滿版紅色 traceback,連「你缺什麼、去哪裡設」
+# 都沒說 —— 而本檔下面明明就有 `_check_secrets()` 專門在做那件事,只是永遠跑不到。
+#
+# 修法走既有 SSOT `infra.config.get_secret`(它 :39-48 早就 try/except 包好,
+# 且自帶 os.environ fallback)—— 不在本檔另寫一份(§2.1)。
+# §1:不是掩蓋錯誤 —— 缺 key 這件事照樣會被 `_check_secrets()` 講出來,
+# 只是改成使用者看得懂的形式,而不是崩在啟動的第 105 行。
+from infra.config import get_secret as _secret_raw  # noqa: E402
+
+
+def _secret(key: str) -> str:
+    """secret 值(str);缺 / 無 secrets 檔 → ""。env fallback 由 get_secret 內建。"""
+    return str(_secret_raw(key, "") or "")
+
+
 def _load_keys():
-    fred = st.secrets.get("FRED_API_KEY","") or os.environ.get("FRED_API_KEY","")
-    gem  = st.secrets.get("GEMINI_API_KEY","") or os.environ.get("GEMINI_API_KEY","")
+    fred = _secret("FRED_API_KEY")
+    gem  = _secret("GEMINI_API_KEY")
     if fred: os.environ["FRED_API_KEY"]   = fred
     if gem:  os.environ["GEMINI_API_KEY"] = gem
     # v18.217: 多把 Gemini key（自動輪替）— 從 secrets 鏡像到 env 供 get_gemini_keys 讀
     for _gk in (["GEMINI_API_KEYS"] + [f"GEMINI_API_KEY_{_i}" for _i in range(1, 11)]):
-        _gv = st.secrets.get(_gk, "") or os.environ.get(_gk, "")
+        _gv = _secret(_gk)
         if _gv:
             os.environ[_gk] = _gv
     # v18.218: 只設多把（GEMINI_API_KEYS / _1..）卻沒設單把 GEMINI_API_KEY 時，
@@ -97,7 +116,7 @@ def _load_keys():
     # v18.113 AI-3: 多 LLM provider fallback chain — 額外載 Anthropic / OpenAI keys
     # 有設就匯出到 env，infra/llm.py::call_llm 會自動讀；缺則該 provider 在 chain 中 skip
     for _llm_key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
-        _v = st.secrets.get(_llm_key, "") or os.environ.get(_llm_key, "")
+        _v = _secret(_llm_key)
         if _v:
             os.environ[_llm_key] = _v
     return fred, gem
@@ -124,10 +143,26 @@ _init_session_state(st.session_state)
 
 # B1 Fix: server cold restart 後 module-level _RF_ANNUAL 歸預設 4%;
 # 若 session_state 已有 FED_RATE 快取,立即同步，不等 Tab1 button click。
+#
+# 稽核 D4（2026-08-14 修）：原本是 `.get("value", 4.0) / 100`。
+# 問題有三：
+#  (1) key 存在但 value 是 None（fetch 失敗的正常型態）時，捏造一個 4% 無風險
+#      利率灌進**全站** Sharpe / Sortino —— §1 明令「錯誤的數字比沒有數字更危險」。
+#  (2) 4.0 是 `services/fund_service.py:_RF_ANNUAL` 的第二份手抄副本，未走 SSOT。
+#  (3) `None / 100` 會直接 TypeError，而這一段**不在任何 try 內** —— 一旦
+#      FED_RATE 抓到 None，整個 app 在 import 期就掛掉。
+# 改法：缺值就**不呼叫**，讓 fund_service 沿用它自己的 SSOT 預設，並寫 stderr
+# 留痕（Streamlit Cloud 的 log 面板只看得到 stderr）。
 _cached_ind = st.session_state.get("indicators", {})
-if "FED_RATE" in _cached_ind:
+_fed_v = (_cached_ind.get("FED_RATE") or {}).get("value")
+if _fed_v is not None:
     from services.fund_service import set_risk_free_rate as _set_rf
-    _set_rf(_cached_ind["FED_RATE"].get("value", 4.0) / 100)
+    _set_rf(float(_fed_v) / 100)
+elif "FED_RATE" in _cached_ind:
+    import sys as _sys_rf
+    print("[app] FED_RATE 存在但 value 為 None → 不設定無風險利率，"
+          "沿用 services.fund_service._RF_ANNUAL 預設（不捏造）",
+          file=_sys_rf.stderr)
 
 
 # v18.136: _update_data_registry 搬至 ui/helpers/data_registry.py
@@ -192,11 +227,15 @@ render_sidebar(
 # 2026-08-05 稽核 必修 2:決策動線四站的分頁名改吃 `ui/helpers/story_nav._STEPS`
 # SSOT(`tab_label()` 去掉 ①②③④ 序號)。原本 app.py 與 story_nav 各寫死一份,
 # 導致各 Tab 的「請至 X 分頁」指路文案改名後對不上(§3.3 反捏造)。
-# 「📦 批次分析 / 📖 參考 / 診斷」不在決策動線 4 站內(工具 / 支援型)→ 保留字面。
+# 2026-08-14：原本「📦 批次分析 / 📋 我的管理室 / 📖 參考 / 診斷」三個因為
+# 「不在決策動線 4 站內」而保留字面值 —— 但那理由只解釋了它們**不需要序號前綴**,
+# 不代表分頁名可以有第二份來源。實機稽核在 sidebar 又抓到三處指路文案指向不存在
+# 的分頁名(同一種病第二次發作)。故 7 個分頁名全部收進 story_nav._TAB_LABELS。
 from ui.helpers.story_nav import tab_label as _tab_label
 tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_manage, tab_ref = st.tabs(
-    [_tab_label("macro"), _tab_label("health"), "📦 批次分析", _tab_label("fund"),
-     _tab_label("portfolio"), "📋 我的管理室", "📖 參考 / 診斷"])
+    [_tab_label("macro"), _tab_label("health"), _tab_label("batch"),
+     _tab_label("fund"), _tab_label("portfolio"), _tab_label("manage"),
+     _tab_label("ref")])
 
 # ══════════════════════════════════════════════════════
 # TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）

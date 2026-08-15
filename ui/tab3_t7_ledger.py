@@ -62,6 +62,69 @@ from ui.helpers.session import (
 from ui.helpers.tw_time import tw_now_str
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# 稽核 E13（2026-08-14）— 「試算」還是「真的寫進帳本」由 emoji 開頭決定
+# ══════════════════════════════════════════════════════════════════════════
+# 原本 A/B/C 三個落帳流程各自寫 `st.radio(options=["💡 暫存為方案…", "✅ 直接套用…"])`,
+# 然後各自用 `_x_commit_mode.startswith("💡")` 判斷這一次是**試算**還是**真的動主帳本**。
+#
+# 也就是說:選項字串裡那個 💡 是唯一的安全閥。任何人為了統一文案把它換成 📝、
+# 或在前面補一個空白、或把「暫存為方案」改寫成「模擬」而順手換了 emoji ——
+# 三處判斷同時翻成 False,**使用者按「試算」會直接寫進真實帳本**,
+# 而且畫面上不會有任何異狀(成功訊息照印)。這是使用者實際部位的紀錄,
+# 不是顯示層的文案問題(§3.3 禁 inline magic;§1 錯的寫入比不寫更危險)。
+#
+# 收法:選項字串收成常數,判斷改「與常數相等」而不是「開頭長什麼樣」。
+# 這樣改文案時 radio 與判斷會**一起**改,不可能再分歧。
+# 新增第三種落帳目標時,務必同步更新 `T7_COMMIT_MODE_OPTIONS` 與本函式。
+T7_COMMIT_SCENARIO = "💡 暫存為方案（不動主帳本）"
+T7_COMMIT_APPLY = "✅ 直接套用主帳本"
+T7_COMMIT_MODE_OPTIONS: list = [T7_COMMIT_SCENARIO, T7_COMMIT_APPLY]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 稽核 E12（2026-08-14）— 表單驗證失敗不該把整個 App 打空白
+# ══════════════════════════════════════════════════════════════════════════
+# A/B/C 三個落帳流程的輸入驗證原本是 `st.error(...)` + `st.stop()`（共 6 處）。
+# `st.stop()` 中止的是**整個 script run** —— 不只 T7 這一段，
+# 連它下面的帳本面板、以及 app.py 裡排在 Tab3 之後的
+# 「📋 我的管理室」「📖 參考 / 診斷」兩個分頁**一起變空白**。
+# 使用者只是忘了填金額，畫面卻像壞掉，通常會以為是連線問題而重整（重整後輸入全沒了）。
+#
+# 改法：拋一個自訂例外，由 `render_t7_section()` 的**呼叫端**攔下來。
+# 中止範圍縮小到「T7 這一段」，其他分頁照常渲染。
+# （選這個做法而不是把三個 submit handler 各包一層 try：那三段合計約 810 行，
+#   全部往內縮一級的 diff 風險遠高於本身要修的問題，違反 §8.4「禁止自作主張大重構」。）
+class T7InputAbort(Exception):
+    """T7 表單輸入不合法 → 中止**這一次落帳流程**，不中止整個頁面。"""
+
+
+def t7_abort(message: str) -> None:
+    """顯示錯誤並中止本次 T7 流程（取代 `st.error(...)` + `st.stop()`）。"""
+    st.error(message)
+    raise T7InputAbort(message)
+
+
+def is_scenario_commit(mode_label) -> bool:
+    """這一次落帳是「暫存方案」(不動主帳本) 還是「直接套用」?
+
+    §1 fail-closed:認不得的值一律當成 **False = 直接套用**?**不行** ——
+    那會讓打錯字變成「偷偷寫進真實帳本」。反過來也不行:一律當試算會讓
+    使用者以為存檔了其實沒有。所以認不得就**顯式拋錯**,讓它在畫面上炸掉,
+    而不是安靜地選一邊(這是唯一不會默默弄壞使用者資料的處理方式)。
+    """
+    _m = str(mode_label or "")
+    if _m == T7_COMMIT_SCENARIO:
+        return True
+    if _m == T7_COMMIT_APPLY:
+        return False
+    raise ValueError(
+        f"未知的落帳目標 {_m!r} —— 選項字串與判斷邏輯已分歧。"
+        f"合法值只有 {T7_COMMIT_MODE_OPTIONS}。"
+        "在確認要寫進主帳本還是暫存方案之前,拒絕繼續(§1 Fail Loud)。"
+    )
+
+
 def _calc_data_health(indicators=None):
     """總經資料健康度 wrapper（與 tab3_portfolio.py 同邏輯，供 MK AI 區段使用）。"""
     ind = indicators if indicators is not None else st.session_state.get("indicators", {})
@@ -154,6 +217,11 @@ def render_t7_section() -> None:
     """
     GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 
+    # 稽核 D3:每輪重設「本次用了保底匯率的檔」清單。
+    # 不清會累積上一輪的殘留 —— 使用者把匯率補好之後警告還掛著,
+    # 就會學會忽略它,那個警告等於白做(§1 旗標必須反映當下真實狀態)。
+    st.session_state["_t7_fx_fabricated"] = {}
+
     # v18.140 同 render_portfolio_tab — helper 改正規 import，徹底脫離 sys.modules['__main__'] hack
     from ui.helpers.oauth_state import (
         _resolve_oauth_cfg,
@@ -208,7 +276,24 @@ def render_t7_section() -> None:
         "使用者只填「投入金額」與「目標權重」。" + _t7_persist_txt
     )
 
-    _pf_t7 = [f for f in st.session_state.portfolio_funds if f.get("loaded")]
+    # 稽核 E2:原為 `f.get("loaded")`。抓取失敗的基金也帶 `loaded=True`
+    # (失敗時寫的是 `{"loaded": True, "load_error": "…"}`),於是**沒有淨值、
+    # 沒有幣別的空殼基金會進到 A/B/C 落帳試算**,再一路走進真實帳本。
+    # 這裡是全站唯一會寫入使用者實際部位的地方,判定必須最嚴(§1)。
+    from ui.helpers.session import usable_funds as _usable_funds_t7
+    _pf_all_t7 = st.session_state.portfolio_funds or []
+    _pf_t7 = _usable_funds_t7(_pf_all_t7)
+    _n_broken_t7 = sum(1 for _f in _pf_all_t7
+                       if isinstance(_f, dict) and _f.get("loaded")
+                       and _f.get("load_error")) if _pf_all_t7 else 0
+    if _n_broken_t7:
+        # 誠實揭露為什麼下拉選單裡少了幾檔 —— 否則使用者會以為系統弄丟了他的基金
+        st.caption(
+            f"ℹ️ 有 **{_n_broken_t7} 檔**這次抓取失敗（沒有淨值或幣別），"
+            "**不會出現在下方 A/B/C 的選單裡** —— 這是刻意的，"
+            "拿空資料去算單位數與市值只會得到看起來正常的錯誤金額。"
+            "請到上方「組合管理」重新載入那幾檔。"
+        )
     if not _pf_t7:
         st.info("ℹ️ 請先在上方「組合管理」載入至少一檔基金後，再使用 A/B/C 試算。")
     else:
@@ -356,8 +441,26 @@ def render_t7_section() -> None:
                 # v18.76: 幣別保底匯率（YF 被擋 + 無 ledger 歷史時的最終救援）
                 #         讓自動估算「不再因 FX 抓不到全部 skip」；
                 #         準確匯率使用者可手動改 fx_at_buy。
+                # ── 稽核 D3(2026-08-14)：這是「填補」，§1 要求填補必須帶旗標 ──────
+                # 這張表寫死了 12 個幣別的匯率(USD 32.0 / JPY 0.21 …)。走到這裡代表
+                # 即時匯率抓不到、fund 沒帶 fx_rate、帳本也沒有平均買入匯率 ——
+                # 然後我們**憑空給一個數字**，它會直接乘進市值、未實現損益與報酬率，
+                # 而畫面上與真實抓到的匯率完全同形。原本連 log 都沒有。
+                #
+                # 這一版**不改行為**(拿掉會讓一整批部位市值歸 0 → -100% 報酬假象，
+                # 那更糟)，但補上 §1 要求的另外兩件事：寫 log ＋ 讓使用者看得到。
+                # 記進 session set，由下方帳本面板統一列出是哪幾檔在用猜的匯率。
                 if _fx <= 0 and _ccy in _FX_FALLBACK:
                     _fx = _FX_FALLBACK[_ccy]
+                    try:
+                        st.session_state.setdefault("_t7_fx_fabricated", {})[
+                            f"{_code or '?'}／{_ccy}"] = _fx
+                    except Exception:  # noqa: BLE001 — 旗標壞掉不該拖垮取價
+                        pass
+                    import sys as _sys_fxfb
+                    print(f"[t7/fx] {_code or '?'} {_ccy}TWD 即時匯率、fund.fx_rate、"
+                          f"帳本平均匯率**全部沒有** → 使用寫死的保底匯率 {_fx} "
+                          f"(市值/損益會建立在這個猜測上)", file=_sys_fxfb.stderr)
                 return float(_nav or 0.0), float(_fx or 0.0)
 
 
@@ -919,8 +1022,18 @@ def render_t7_section() -> None:
                 nav_fx_cache 仍以 pk_str 為鍵；落帳當下抓得到 NAV/FX，
                 避免 panel 渲染時抓不到 → summary 抓到 0 的 bug（v18.5 行為延續）。
                 """
+                # ── 稽核 A8（2026-08-14）：抓不到報價的部位一律排除，不再退回成本 ──
+                # 舊碼在拿不到 NAV/FX 時把 `_nav/_fx` 換成 `cost_unit/fx_avg`
+                # （成本基礎）→ 市值 = 成本 → **損益恆 0、報酬恆 0.00%**。
+                # 而同一份資料在下方帳本表走的是 `else 0` → 市值 0 → **報酬 −100%**。
+                # 同一個情境、兩個相反的答案，兩個都是編的。
+                #
+                # 改成：算不出市值的部位**連同它的成本一起排除**（分子分母同進同出，
+                # 否則報酬率會被一個沒有市值卻有成本的部位拉到 −100%），
+                # 並把「有幾檔沒算進去」帶回給呼叫端揭露。
                 _v_total = _cost_total = _ann_total = 0.0
                 _cache = nav_fx_cache or {}
+                _unpriced: list = []
                 for _pk, _l in ledgers.items():
                     if _l.position.units <= 0:
                         continue
@@ -928,30 +1041,31 @@ def render_t7_section() -> None:
                         _nav, _fx = _cache[_pk]
                     else:
                         _f = _fund_by_pk.get(_pk)
-                        if _f is None:
-                            # fallback：用 ledger 自己的 cost basis 當保守估值
-                            _nav = _l.position.cost_unit
-                            _fx  = _l.position.fx_avg
-                        else:
-                            _nav, _fx = _latest_nav_fx_t7(_f)
-                            if not (_nav and _fx):
-                                _nav = _l.position.cost_unit
-                                _fx  = _l.position.fx_avg
+                        _nav, _fx = ((None, None) if _f is None
+                                     else _latest_nav_fx_t7(_f))
+                    if not (_nav and _fx):
+                        _unpriced.append(_pk)
+                        continue
                     _dy = _dy_lookup_t7.get(_pk, 0.0)
-                    _v = _l.position.value_twd(_nav, _fx) if (_nav and _fx) else 0
+                    _v = _l.position.value_twd(_nav, _fx)
                     _cost = _l.position.net_investment_twd
                     _v_total += _v
                     _cost_total += _cost
                     _ann_total += _v * _dy / 100.0
                 _pl = _v_total - _cost_total
-                _pl_pct = (_pl / _cost_total * 100.0) if _cost_total > 0 else 0.0
+                # 分母為 0（全部都算不出來）→ 報酬率是**不知道**,不是 0.00%
+                _pl_pct = (_pl / _cost_total * 100.0) if _cost_total > 0 else None
                 return {
                     "total_value_twd": round(_v_total, 0),
                     "total_cost_twd": round(_cost_total, 0),
                     "unrealized_pl_twd": round(_pl, 0),
-                    "unrealized_pl_pct": round(_pl_pct, 2),
+                    "unrealized_pl_pct": (round(_pl_pct, 2)
+                                          if _pl_pct is not None else None),
                     "monthly_cashflow_twd": round(_ann_total / 12, 0),
                     "annual_cashflow_twd": round(_ann_total, 0),
+                    # 稽核 A8:讓呼叫端有辦法講出「這幾檔沒算進去」
+                    "n_unpriced": len(_unpriced),
+                    "unpriced_pks": _unpriced,
                 }
 
             def _t7_save_scenario(name: str, action_type: str, details: str,
@@ -1088,7 +1202,11 @@ def render_t7_section() -> None:
                     _a_new_code = ""
                     _aamt = 0
                     _aamt_unit_new = 0.0
-                    _a_new_mode_key = "twd"
+                    # 稽核 C3:原本這裡是 `_a_new_mode_key = "twd"` —— 無條件覆寫掉
+                    # form 外(上方 selectbox「投入方式」)算好的值,導致下方兩處
+                    # `if _a_new_mode_key == "units":`(🎯 目標單位數輸入框 / 換算 TWD)
+                    # **恆為死分支**:使用者選了「🎯 目標單位數」,畫面仍給「💵 預計
+                    # 投入台幣」。form 內可直接讀 form 外的變數,不需要重新指派。
                     _a_amounts: dict = {}
                     if _a_mode == "既有基金":
                         if not _a_selected_pks:
@@ -1152,12 +1270,12 @@ def render_t7_section() -> None:
                             "ℹ️ 新增基金模式必須直接套用主帳本（會永久把該檔加入組合管理清單）。"
                             "若要試算多方案，請先在 Tab3 上方「組合管理」加入基金後，回此用「既有基金」模式。"
                         )
-                        _a_commit_mode = "✅ 直接套用主帳本"
+                        _a_commit_mode = T7_COMMIT_APPLY   # 稽核 E13:走 SSOT 常數
                         _a_scenario_name = ""
                     else:
                         _a_commit_mode = st.radio(
                             "落帳目標",
-                            options=["💡 暫存為方案（不動主帳本）", "✅ 直接套用主帳本"],
+                            options=T7_COMMIT_MODE_OPTIONS,
                             horizontal=True, key="t7a_commit_mode",
                             help="暫存方案可同時保留多個（最多 5 個）並排比較；確認最佳方案後再「鎖定為主帳本」"
                         )
@@ -1173,21 +1291,18 @@ def render_t7_section() -> None:
                     if _a_mode == "新增基金":
                         _new_code_clean = _a_new_code.strip().upper()
                         if not _new_code_clean:
-                            st.error("❌ 請輸入新基金代碼或 URL。")
-                            st.stop()
+                            t7_abort("❌ 請輸入新基金代碼或 URL。")
                         if any(f["code"] == _new_code_clean for f in
                                st.session_state.portfolio_funds):
-                            st.warning(
+                            t7_abort(
                                 f"⚠️ {_new_code_clean} 已在組合中，"
                                 "請改用「既有基金」模式或先重新整理頁面。"
                             )
-                            st.stop()
                         try:
                             with st.spinner(f"📡 抓取 {_new_code_clean}..."):
                                 _new_raw = auto_fetch_moneydj(_new_code_clean)
                             if _new_raw.get("error"):
-                                st.error(f"❌ 抓取失敗：{_new_raw['error']}")
-                                st.stop()
+                                t7_abort(f"❌ 抓取失敗：{_new_raw['error']}")
                             _new_pf = {
                                 "code":       _new_code_clean,
                                 "invest_twd": 0,
@@ -1214,9 +1329,14 @@ def render_t7_section() -> None:
                             _dy_lookup_t7[_new_pk] = _get_dy_t7(_new_pf)
                             _apk = _new_pk
                             _acode = _new_code_clean
+                        except T7InputAbort:
+                            # 稽核 E12:上面 `t7_abort` 拋的是**已經顯示過訊息**的中止訊號,
+                            # 不是抓取例外。若被下面那個 `except Exception` 吞掉,
+                            # 會變成「抓取失敗」再被包成「抓取例外」印第二次,
+                            # 而且中止範圍會失效。原樣往上拋給 caller。
+                            raise
                         except Exception as _e_new:
-                            st.error(f"❌ 抓取例外：{_e_new}")
-                            st.stop()
+                            t7_abort(f"❌ 抓取例外：{_e_new}")
 
                         _afund = _aopts[_apk]
                         _anav, _afx = _latest_nav_fx_t7(_afund)
@@ -1265,9 +1385,8 @@ def render_t7_section() -> None:
                     else:
                         _a_n_valid = sum(1 for _, _v in _a_amounts.values() if _v > 0)
                         if _a_n_valid == 0:
-                            st.error("❌ 請至少選一檔基金 + 填投入金額（或目標單位數）> 0")
-                            st.stop()
-                        _is_scenario = _a_commit_mode.startswith("💡")
+                            t7_abort("❌ 請至少選一檔基金 + 填投入金額（或目標單位數）> 0")
+                        _is_scenario = is_scenario_commit(_a_commit_mode)
                         _baseline_snap_a = (_t7_snapshot_ledgers()
                                              if _is_scenario else None)
                         _bundled_lines: list = []
@@ -1429,7 +1548,7 @@ def render_t7_section() -> None:
                             _b_entries[_pk_f] = ("pct", float(_w))
                     _b_commit_mode = st.radio(
                         "落帳目標",
-                        options=["💡 暫存為方案（不動主帳本）", "✅ 直接套用主帳本"],
+                        options=T7_COMMIT_MODE_OPTIONS,
                         horizontal=True, key="t7b_commit_mode",
                     )
                     _b_scenario_name = st.text_input(
@@ -1452,7 +1571,7 @@ def render_t7_section() -> None:
                     elif _pct_pks_b and abs(_wsum - 100.0) > 0.5:
                         st.error(f"❌ % 模式檔權重總和 = {_wsum:.2f}%，超出 ± 0.5% 容忍度。")
                     else:
-                        _is_scenario_b = _b_commit_mode.startswith("💡")
+                        _is_scenario_b = is_scenario_commit(_b_commit_mode)
                         _baseline_snap_b = (_t7_snapshot_ledgers()
                                              if _is_scenario_b else None)
                         # 抓全部基金的 NAV/FX 與目前市值
@@ -1490,12 +1609,11 @@ def render_t7_section() -> None:
 
                         _remaining = float(_btot) - _units_amt_sum
                         if _remaining < -1.0:
-                            st.error(
+                            t7_abort(
                                 f"❌ 單位模式檔總額 {fmt_twd(_units_amt_sum)} > "
                                 f"投入 {fmt_twd(float(_btot))}（多 "
                                 f"{fmt_twd(-_remaining)}）"
                             )
-                            st.stop()
                         _remaining = max(_remaining, 0.0)
 
                         # % 模式檔：按缺口比例分配 _remaining
@@ -1526,13 +1644,29 @@ def render_t7_section() -> None:
                         _rows = []
                         _b_ann_total = 0.0
                         _b_rows_by_pid: dict[str, list[dict]] = {}   # v18.27 dual-write 收集
+                        _b_skipped: list = []   # 稽核 A9:有分到錢但沒落帳的檔
 
                         def _b_book(pk: str, share_twd: float, mode_tag: str) -> None:
                             """共用：subscribe + 收集 sheet rows + result row。"""
                             _n, _x, _ccy = _navfx[pk]
                             _orig = share_twd / _x if _x > 0 else 0
                             _units = _orig / _n if _n > 0 else 0
-                            if share_twd > 0 and _n > 0 and _x > 0:
+                            # ── 稽核 A9（2026-08-14）：沒落帳的列必須看得出來 ──────────
+                            # 下面的 `if share_twd > 0 and _n > 0 and _x > 0` 決定要不要
+                            # 真的 subscribe，但結果表**無條件**印出「應買 TWD 30,000」。
+                            # 於是抓不到淨值或匯率的那一檔，畫面上長得跟成功落帳的一模一樣
+                            # （只有「預估單位 0.0000」這個很難注意到的線索），
+                            # 使用者會以為錢配出去了，實際上什麼都沒發生（§1）。
+                            _booked = bool(share_twd > 0 and _n > 0 and _x > 0)
+                            if not _booked and share_twd > 0:
+                                _b_skipped.append(
+                                    f"{parse_pk(pk)[1]}（"
+                                    + ("抓不到淨值" if not _n else "")
+                                    + ("、" if (not _n and not _x) else "")
+                                    + ("抓不到匯率" if not _x else "")
+                                    + "）"
+                                )
+                            if _booked:
                                 _ledger_for(pk).subscribe(
                                     share_twd, _x, _n, _d_t7.today()
                                 )
@@ -1549,8 +1683,11 @@ def render_t7_section() -> None:
                                         "note":          f"T7 B 再平衡（{mode_tag}）",
                                     })
                             _dy_b = _dy_lookup_t7.get(pk, 0.0)
-                            _ann_b = share_twd * _dy_b / 100.0
+                            # 稽核 A9:沒落帳的錢不會產生配息,不可計進「本次加碼預估年配息」
+                            _ann_b = (share_twd * _dy_b / 100.0) if _booked else 0.0
                             _ann_acc["ann_total"] += _ann_b
+                            if _booked:
+                                _ann_acc["booked_twd"] += share_twd
                             _pid_b, _code_b = parse_pk(pk)
                             _rows.append({
                                 "保單": _pid_b or "(未綁)",
@@ -1562,14 +1699,18 @@ def render_t7_section() -> None:
                                 "目前市值 TWD": f"{_v_curr[pk]:,.0f}",
                                 "缺口 TWD": (f"{_gaps.get(pk, 0):,.0f}"
                                              if pk in _gaps else "—"),
-                                "應買 TWD": f"{share_twd:,.0f}",
-                                f"應買 {_ccy}": f"{_orig:,.2f}",
-                                "預估單位": f"{_units:,.4f}",
+                                # 稽核 A9:沒落帳就不要印一個像是已經配出去的金額
+                                "應買 TWD": (f"{share_twd:,.0f}" if _booked
+                                             else "⛔ 未落帳"),
+                                f"應買 {_ccy}": (f"{_orig:,.2f}" if _booked else "—"),
+                                "預估單位": (f"{_units:,.4f}" if _booked else "—"),
                                 "配息率": f"{_dy_b:.2f}%",
-                                "本次加碼年配息(TWD)": fmt_twd(_ann_b),
+                                "本次加碼年配息(TWD)": (fmt_twd(_ann_b) if _booked else "—"),
                             })
 
-                        _ann_acc = {"ann_total": 0.0}   # 解 nonlocal 限制
+                        _b_skipped: list = []           # 稽核 A9:沒落帳的檔
+                        # 解 nonlocal 限制;booked_twd = 稽核 A9 實際落帳金額
+                        _ann_acc = {"ann_total": 0.0, "booked_twd": 0.0}
                         # 先記錄單位模式檔
                         for _pk_u, _amt_u in _units_fixed.items():
                             _b_book(_pk_u, _amt_u, "🎯 單位")
@@ -1581,12 +1722,34 @@ def render_t7_section() -> None:
                             )
                             _b_book(_pk_g, _share_twd, "📊 %")
                         _b_ann_total = _ann_acc["ann_total"]
+                        # 稽核 A9:把「分到了錢卻沒落帳」講在表格上方,不讓使用者
+                        # 以為那幾檔的金額配出去了(§1 靜默略過 = 假成功)
+                        if _b_skipped:
+                            st.error(
+                                f"⛔ 有 **{len(_b_skipped)} 檔沒有落帳**："
+                                + "、".join(_b_skipped)
+                                + "\n\n沒有今天的淨值或匯率就換算不出單位數，"
+                                "硬配只會記進一個錯的成本。"
+                                "**這幾檔的錢沒有被投入**，下表已標「⛔ 未落帳」，"
+                                "「本次投入 TWD」與「預估年配息」也不含它們。\n\n"
+                                "請等報價恢復，或在「📝 編輯初始持倉」補上匯率後重跑。"
+                            )
                         st.dataframe(
                             pd.DataFrame(_rows),
                             use_container_width=True, hide_index=True
                         )
                         bh1, bh2, bh3 = st.columns(3)
-                        bh1.metric("本次投入 TWD", fmt_twd(float(_btot)))
+                        # 稽核 A9:顯示**實際落帳**金額,不是使用者填的目標金額。
+                        # 有檔沒落帳時兩者會不同,差額用 delta 講出來。
+                        _booked_twd = _ann_acc["booked_twd"]
+                        bh1.metric(
+                            "本次投入 TWD", fmt_twd(_booked_twd),
+                            delta=(None if abs(_booked_twd - float(_btot)) < 1.0
+                                   else f"少於填入的 {fmt_twd(float(_btot))}"),
+                            delta_color="inverse",
+                            help="實際落帳的金額。若有基金因為抓不到淨值/匯率而未落帳，"
+                                 "這裡會小於你填的投入總額。",
+                        )
                         bh2.metric(
                             "💵 預估年配息（本次加碼）",
                             fmt_twd(_b_ann_total),
@@ -1728,28 +1891,64 @@ def render_t7_section() -> None:
                                             if _exists:
                                                 st.warning(f"⚠️ `{_src_code}` 已在此保單內")
                                             else:
+                                                # ── 稽核 D2/D3(2026-08-14)：不再捏造 NAV / FX ──────
+                                                # 舊碼:`float(_src_f.get("avg_nav") or 10.0)` 與
+                                                # `float(_src_f.get("fx_avg") or 31.0)`。來源基金若沒有
+                                                # 淨值或匯率,就**憑空給 10.0 與 31.0** —— 借過來之後這兩個
+                                                # 數字會一路流進單位數、市值、換匯、未實現損益,而畫面上
+                                                # 它們與真實抓到的數字完全同形。10.0 更是基金常見的發行價,
+                                                # 看起來特別像真的。
+                                                #
+                                                # 專案在 v19.59 已經為「幣別」做過同一個決定(抓不到就
+                                                # 直接 error,不矇 USD);這裡補上 NAV 與 FX。
+                                                # 缺就擋下並說清楚要怎麼補,不讓假數字進到帳本(§1)。
                                                 _src_series = _src_f.get("series")
-                                                if _src_series is None:
-                                                    _src_series = pd.Series([
-                                                        float(_src_f.get("avg_nav") or 10.0)])
-                                                _cust_for_pid[_new_pk] = {
-                                                    "code":        _src_code,
-                                                    "name":        _src_f.get("name", _src_code),
-                                                    "currency":    _src_f.get("currency", "USD"),
-                                                    "fx_rate":     float(_src_f.get("fx_avg") or 31.0),
-                                                    "series":      _src_series,
-                                                    "dividends":   list(_src_f.get("dividends") or []),
-                                                    # v18.246: 借時也帶 metrics + moneydj_raw（dy 才算得出來）
-                                                    "metrics":     dict(_src_f.get("metrics") or {}),
-                                                    "moneydj_raw": dict(_src_f.get("moneydj_raw") or {}),
-                                                    "policy_id":   _sel_pid,
-                                                    "_is_custom_d": True,
-                                                    "_borrowed_from": _src_pid,
-                                                }
-                                                st.success(
-                                                    f"✅ 已從 `{_src_pid}` 借 `{_src_code}` 進此保單"
-                                                )
-                                                st.rerun()
+                                                _src_ccy = str(_src_f.get("currency") or "").strip()
+                                                _src_fx = _src_f.get("fx_avg")
+                                                _src_nav_scalar = _src_f.get("avg_nav")
+                                                _blockers: list = []
+                                                if _src_series is None and not _src_nav_scalar:
+                                                    _blockers.append("淨值(沒有淨值序列,也沒有平均淨值)")
+                                                if not _src_ccy:
+                                                    _blockers.append("計價幣別")
+                                                if _src_ccy and _src_ccy != "TWD" and not _src_fx:
+                                                    _blockers.append("買入匯率")
+                                                if _blockers:
+                                                    # ⚠️ 這裡**不可以**用 `st.stop()`(稽核 E12):
+                                                    # 它會中止整個 script run,連帶讓其他分頁一起空白 ——
+                                                    # 使用者只是借基金失敗,不該賠上整個畫面。
+                                                    st.error(
+                                                        f"⛔ 無法從 `{_src_pid}` 借 `{_src_code}` —— "
+                                                        f"來源缺:**{'、'.join(_blockers)}**。\n\n"
+                                                        "借過來的基金會直接參與單位數、市值與換匯計算，"
+                                                        "缺這幾項就只能用猜的，**猜出來的數字看起來會跟真的一模一樣**，"
+                                                        "所以這裡直接擋下。\n\n"
+                                                        f"請先到「🔍 個基深掘」查一次 `{_src_code}` 讓它抓到淨值與匯率，"
+                                                        "或在來源保單的「📝 編輯持倉」把買入淨值 / 匯率補上，再回來借。"
+                                                    )
+                                                else:
+                                                    if _src_series is None:
+                                                        _src_series = pd.Series(
+                                                            [float(_src_nav_scalar)])
+                                                    _cust_for_pid[_new_pk] = {
+                                                        "code":        _src_code,
+                                                        "name":        _src_f.get("name", _src_code),
+                                                        "currency":    _src_ccy,
+                                                        "fx_rate":     (1.0 if _src_ccy == "TWD"
+                                                                        else float(_src_fx)),
+                                                        "series":      _src_series,
+                                                        "dividends":   list(_src_f.get("dividends") or []),
+                                                        # v18.246: 借時也帶 metrics + moneydj_raw（dy 才算得出來）
+                                                        "metrics":     dict(_src_f.get("metrics") or {}),
+                                                        "moneydj_raw": dict(_src_f.get("moneydj_raw") or {}),
+                                                        "policy_id":   _sel_pid,
+                                                        "_is_custom_d": True,
+                                                        "_borrowed_from": _src_pid,
+                                                    }
+                                                    st.success(
+                                                        f"✅ 已從 `{_src_pid}` 借 `{_src_code}` 進此保單"
+                                                    )
+                                                    st.rerun()
                             else:
                                 # 路徑 B：全新代碼 → MoneyDJ 自動抓
                                 _top_cols = st.columns([2, 1.2, 3])
@@ -2070,8 +2269,7 @@ def render_t7_section() -> None:
 
                         _c_commit_mode = st.radio(
                             "落帳目標",
-                            options=["💡 暫存為方案（不動主帳本）",
-                                     "✅ 直接套用主帳本"],
+                            options=T7_COMMIT_MODE_OPTIONS,
                             horizontal=True, key="t7c_commit_mode",
                         )
                         _c_scenario_name = st.text_input(
@@ -2113,7 +2311,7 @@ def render_t7_section() -> None:
                                     "「⚖️ 同時」拆分也是 = 100% ± 0.5%）"
                                 )
                             else:
-                                _is_scenario_c = _c_commit_mode.startswith("💡")
+                                _is_scenario_c = is_scenario_commit(_c_commit_mode)
                                 _baseline_snap_c = (_t7_snapshot_ledgers()
                                                      if _is_scenario_c else None)
                                 # 預先抓所有涉及基金的 NAV/FX，存進 cache（鍵：pk_str）
@@ -2477,6 +2675,23 @@ def render_t7_section() -> None:
 
             # ── 帳本即時面板（最後渲染，永遠拿到最新 session_state） ────────
             with _panel_ph.container():
+                # 稽核 D3:把「這一輪有幾檔用了寫死的保底匯率」講出來。
+                # 面板是最後渲染的,此時 `_latest_nav_fx_t7` 已被上面所有流程呼叫過,
+                # 收集到的清單是完整的。放在面板**最上方** —— 下面每一個 TWD 金額
+                # 都可能建立在這些猜測上,不能等使用者自己去發現(§1 填補須帶旗標)。
+                _fx_fab = st.session_state.get("_t7_fx_fabricated") or {}
+                if _fx_fab:
+                    st.warning(
+                        "⚠️ **下面有 {n} 檔的台幣金額是用「猜的匯率」算的**：{lst}\n\n"
+                        "這幾檔的即時匯率抓不到，帳本裡也沒有你當初的買入匯率，"
+                        "系統只好用一組寫死的參考匯率頂著 —— "
+                        "**市值、未實現損益、報酬率都會跟著偏掉**，幅度看匯率差多少。\n\n"
+                        "要修正：在下方「📝 編輯持倉」把該檔的買入匯率補上，"
+                        "系統就會改用你填的值，不再用猜的。".format(
+                            n=len(_fx_fab),
+                            lst="、".join(f"`{_k}` ≈ {_v}" for _k, _v in _fx_fab.items()),
+                        )
+                    )
                 # ── 方案比較區（v18.4 新增，僅在有 scenarios 時顯示）─────────
                 if st.session_state.t7_scenarios:
                     # 原 `expanded=True` expander → 拿掉殼（原則 1：永遠開著的摺疊層
@@ -2490,6 +2705,12 @@ def render_t7_section() -> None:
                             st.session_state.t7_ledgers,
                             nav_fx_cache=_live_navfx_cache,
                         )
+
+                        # 稽核 A8:報酬率可能是 None(全部部位都算不出市值)。
+                        # 舊格式化 `f"{v:+.2f}%"` 遇到 None 會 TypeError 炸掉整個面板,
+                        # 而在此之前它顯示的是 `+0.00%` —— 把「不知道」講成「打平」。
+                        def _fmt_ret_pct(_v) -> str:
+                            return "⬜ 無法計算" if _v is None else f"{_v:+.2f}%"
                         _cmp_rows = [{
                             "方案": "🟢 主帳本 (Live)",
                             "類型": "—",
@@ -2497,7 +2718,7 @@ def render_t7_section() -> None:
                             "總市值 TWD": fmt_twd(_live_summary['total_value_twd']),
                             "成本 TWD": fmt_twd(_live_summary['total_cost_twd']),
                             "未實現損益 TWD": fmt_twd(_live_summary['unrealized_pl_twd'], sign=True),
-                            "報酬 %": f"{_live_summary['unrealized_pl_pct']:+.2f}%",
+                            "報酬 %": _fmt_ret_pct(_live_summary['unrealized_pl_pct']),
                             "月配息 TWD": fmt_twd(_live_summary['monthly_cashflow_twd']),
                             "說明": "目前實際帳本",
                         }]
@@ -2516,7 +2737,7 @@ def render_t7_section() -> None:
                                 "未實現損益 TWD": (
                                     fmt_twd(_s['unrealized_pl_twd'], sign=True)
                                 ),
-                                "報酬 %": f"{_s['unrealized_pl_pct']:+.2f}%",
+                                "報酬 %": _fmt_ret_pct(_s['unrealized_pl_pct']),
                                 "月配息 TWD": (
                                     f"{fmt_twd(_s['monthly_cashflow_twd'])} "
                                     f"({_diff_cf:+,.0f})"
@@ -2601,6 +2822,10 @@ def render_t7_section() -> None:
                     _cost_total_twd = 0.0
                     # v18.31: 追蹤未計入的基金，給 KPI 卡顯示差額來源
                     _uncounted_funds: list[str] = []
+                    # 稽核 A8:與上者**分開統計** —— 「沒有持倉」與「有持倉但今天
+                    # 抓不到報價」是兩種完全不同的狀況,處置方式也不同
+                    # (前者去補持倉,後者等報價回來或改用手動匯率)。
+                    _unpriced_funds: list[str] = []
                     for _f in _pf_t7:
                         _pk_f = fund_pk_str(_f)
                         _c = _f.get("code", "?")
@@ -2631,7 +2856,40 @@ def render_t7_section() -> None:
                                 "預估月配股 (TWD)": "—",
                             })
                             continue
-                        _v = _l.position.value_twd(_nav, _fx) if (_nav and _fx) else 0
+                        # ── 稽核 A8（2026-08-14）：抓不到報價 ≠ 市值 0 ──────────────
+                        # 舊碼 `... if (_nav and _fx) else 0`：拿不到今天的淨值或匯率時,
+                        # 這一列的市值變 0 → 未實現損益 = −成本 → **報酬 −100%**,
+                        # 而且會被加進下方總計,把整個組合的報酬率一起拉爆。
+                        # 更糟的是同一份資料在 `_t7_summary_from_ledgers` 走的是
+                        # 「退回成本基礎」→ 損益 0、報酬 0.00% —— **兩處對同一個情境
+                        # 給出完全相反的答案**(一個說賠光,一個說打平),使用者無從判斷。
+                        #
+                        # 兩個都不對:我們並不知道它現在值多少。這一列改為誠實留「—」,
+                        # 並且**不計入總計**(下方會揭露有幾檔沒計入),
+                        # 讓總報酬率建立在算得出來的那些部位上(§1 寧可留白)。
+                        if not (_nav and _fx):
+                            _unpriced_funds.append(f"{_c}({_pid_disp})")
+                            _snap_rows.append({
+                                "保單": _pid_disp,
+                                "代碼": _c, "基金名稱": _name_short,
+                                "幣別": _f.get("currency", "USD"),
+                                "持有單位": f"{_l.position.units:,.4f}",
+                                "平均買入淨值 NAV": f"{_l.position.cost_unit:.4f}",
+                                "含息成本": "—",
+                                "平均買入匯率": f"{_l.position.fx_avg:.4f}",
+                                "最新 NAV": f"{_nav:.4f}" if _nav else "⬜ 抓不到",
+                                "最新 FX": f"{_fx:.4f}" if _fx else "⬜ 抓不到",
+                                "成本基礎 (TWD)": fmt_twd(_l.position.net_investment_twd),
+                                "市值 (TWD)": "⬜ 無今日報價",
+                                "未實現損益 (TWD)": "—",
+                                "未實現損益 %": "—",
+                                "累積已配息率": "—",
+                                "配息率": f"{_dy:.2f}%" if _dy else "—",
+                                "預估月配息 (TWD)": "—",
+                                "預估月配股 (TWD)": "—",
+                            })
+                            continue
+                        _v = _l.position.value_twd(_nav, _fx)
                         _cost = _l.position.net_investment_twd
                         _pl_twd = _v - _cost
                         _pl_pct = (_pl_twd / _cost * 100.0) if _cost > 0 else 0.0
@@ -2766,8 +3024,21 @@ def render_t7_section() -> None:
                     if _pc6.button("🗑️ 重置帳本", key="t7_reset"):
                         st.session_state.t7_ledgers = {}
                         st.rerun()
+                    # 稽核 A8:有持倉、但今天抓不到淨值或匯率的那些 —— 它們的市值
+                    # 不是 0 也不是成本,是**不知道**。上面已從 KPI 與總計中排除,
+                    # 這裡把「為什麼總金額看起來少了一塊」講出來(§1 不靜默)。
+                    if _unpriced_funds:
+                        st.warning(
+                            f"⚠️ 有 **{len(_unpriced_funds)} 檔**今天抓不到最新淨值或匯率"
+                            f"（{', '.join(_unpriced_funds[:5])}"
+                            f"{'…' if len(_unpriced_funds) > 5 else ''}）—— "
+                            "**它們的市值與損益整列留白，也沒有計入上方的總市值與總報酬**。\n\n"
+                            "這是刻意的：抓不到報價時，把市值當成 0 會讓報酬變成 −100%，"
+                            "把市值當成成本又會讓損益看起來剛好打平 —— 兩種都是編出來的。"
+                            "等報價恢復，或在「📝 編輯初始持倉」補上匯率後就會自動計入。"
+                        )
                     # v18.31: KPI vs 表格差額來源說明
-                    _counted = len(_pf_t7) - len(_uncounted_funds)
+                    _counted = len(_pf_t7) - len(_uncounted_funds) - len(_unpriced_funds)
                     if _uncounted_funds:
                         st.caption(
                             f"ℹ️ KPI 已計入 **{_counted} / {len(_pf_t7)} 檔**；"
@@ -2812,15 +3083,19 @@ def render_t7_section() -> None:
                 if _mk_data_ok < 50:
                     st.warning(
                         f"🔴 總經完整率 **{_mk_data_ok}%**（&lt;50%）— "
-                        "建議先到「🌐 市場定調」按「📡 全量抓取」載入指標後再生成，"
+                        # 稽核 H2：原寫「📡 全量抓取」—— 市場定調頁**沒有這顆按鈕**
+                        # （實際是「📡 載入總經資料」/ 載入後變「🔄 更新總經資料」，
+                        #   見 ui/tab1_macro.py:930）。死指標文案。
+                        "建議先到「🌐 市場定調」按「📡 載入總經資料」載入指標後再生成，"
                         "AI 才能給景氣位階對應的換股建議。仍可勾選下方略過按鈕直接生成基礎組合分析。"
                     )
                 # v18.87: 資料來源透明化 — 明確說 AI 只看主帳本（不含 A/B/C 暫存方案）
                 # 使用者反饋「MK 老師的判斷不能抓取重新配置的資料，因為這資料只是給我
                 # 想要重新配置的參考值」— 程式碼確實已隔離，但 UI 沒講清楚使用者會擔心
-                _mk_n_funds = sum(1 for f in _pf_t7 if f.get("loaded"))
-                _mk_total_inv = sum(int(f.get("invest_twd", 0) or 0)
-                                     for f in _pf_t7 if f.get("loaded"))
+                # 稽核 E2:`_pf_t7` 上游已用 SSOT 濾過,這裡再判一次 `loaded`
+                # 是舊的、寬鬆的定義,會與上游不同步。直接數即可。
+                _mk_n_funds = len(_pf_t7)
+                _mk_total_inv = sum(int(f.get("invest_twd", 0) or 0) for f in _pf_t7)
                 _mk_n_scenarios = len(st.session_state.get("t7_scenarios", []) or [])
                 st.markdown(
                     f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BORDER};"

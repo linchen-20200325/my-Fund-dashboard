@@ -80,15 +80,54 @@ def test_total_return_1y_uses_perf_when_local_ret_1y_none():
 
 
 def test_total_return_1y_annualizes_when_short_history_no_perf():
-    """無 perf + ret_1y=None + 短序列(>30d) → 走 NAV 年化 fallback，非 None。"""
+    """無 perf + ret_1y=None + 序列跨度達外推門檻 → 走 NAV 年化 fallback，非 None。
+
+    ⚠️ 2026-08-14 稽核 E1:外推門檻由 30 天提高到
+    `RET_1Y_EXTRAPOLATE_MIN_DAYS`(180),fixture 由 150 天改為 300 天。
+    理由:150 天 ×2.4 外推出來的「一年報酬」不是量出來的,是乘出來的 ——
+    大表上 +201% 的台幣基金就是這條路。本條要守的是「**跨度夠時仍要給值**」,
+    所以窗口移到門檻之上;門檻以下改由
+    `test_total_return_1y_blank_when_history_too_short` 守。
+    """
+    from shared.signal_thresholds import RET_1Y_EXTRAPOLATE_MIN_DAYS
+    # ⚠️ `_short_nav` 的**跨度由 n(營業日)決定**,days_back 只是起點位置。
+    # 營業日 ≈ 日曆日 × 5/7,故取門檻的 1.5 倍再換算,留足餘裕。
+    _n_bd = int(RET_1Y_EXTRAPOLATE_MIN_DAYS * 1.5 * 5 / 7) + 5
     f = {
         "loaded": True, "code": "TEST2", "name": "新基金",
         "metrics": {"nav": 11.0, "ret_1y": None},
-        "series": _short_nav(days_back=150, n=80),
+        "series": _short_nav(days_back=RET_1Y_EXTRAPOLATE_MIN_DAYS * 2, n=_n_bd),
     }
+    _span = (f["series"].index[-1] - f["series"].index[0]).days
+    assert _span > RET_1Y_EXTRAPOLATE_MIN_DAYS, (
+        f"fixture 自檢失敗:跨度只有 {_span} 天,測不到要測的分支")
     df = build_mk_dataframe([f])
     assert len(df) == 1
     assert pd.notna(df.iloc[0]["含息總報酬(1Y%)"])   # 年化 fallback → 有值
+
+
+def test_total_return_1y_blank_when_history_too_short():
+    """稽核 E1 —— 跨度未達外推門檻時必須留白，不可乘出一個假的一年報酬。
+
+    **改回舊門檻(30 天)必紅**:舊碼會用 `min(365/天數, 12)` 放大，
+    150 天放大 2.4 倍、30 天放大 12 倍，兩者都會在畫面上變成一個
+    看起來完全正常、還會因為數值大而排到最前面的數字。
+    """
+    from shared.signal_thresholds import RET_1Y_EXTRAPOLATE_MIN_DAYS
+    # 同上:跨度看 n。取門檻的一半換算成營業日 → 跨度必然遠低於門檻。
+    _n_bd = int(RET_1Y_EXTRAPOLATE_MIN_DAYS * 0.5 * 5 / 7)
+    f = {
+        "loaded": True, "code": "TEST2B", "name": "剛成立的新基金",
+        "metrics": {"nav": 11.0, "ret_1y": None},
+        "series": _short_nav(days_back=RET_1Y_EXTRAPOLATE_MIN_DAYS, n=_n_bd),
+    }
+    _span = (f["series"].index[-1] - f["series"].index[0]).days
+    assert _span < RET_1Y_EXTRAPOLATE_MIN_DAYS, (
+        f"fixture 自檢失敗:跨度 {_span} 天已達門檻,測不到要測的分支")
+    df = build_mk_dataframe([f])
+    assert len(df) == 1
+    assert pd.isna(df.iloc[0]["含息總報酬(1Y%)"]), (
+        "跨度不足半年仍給出一年報酬 —— 那是外推出來的，不是量出來的")
 
 
 def test_total_return_1y_still_none_when_truly_insufficient():

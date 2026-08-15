@@ -126,6 +126,10 @@ def health_column_config() -> dict:
     from shared.switch_thresholds import SWITCH_GREEN_SCORE as _SW_GREEN
     # Sharpe 自算樣本門檻(help 文字要照實說「自算需 ≥ N 筆」,不寫死數字)
     from services.fund_service import MIN_OBS_SHARPE_SORTINO as _MIN_SS
+    # 稽核 F12「淨值樣本」欄的 ⚠️ 切點 — 與 _nav_sample_label 同源(§3.3 禁 inline)
+    from shared.signal_thresholds import NAV_SHORT_WINDOW_MAX_DAYS as _NAV_SHORT_MAX
+    # Layer 3-C「評分覆蓋」欄:最少幾維才給等第(SSOT,不在 help 寫死數字)
+    from shared.signal_thresholds import GRADE_4D_MIN_FACTORS as _GRADE_MIN_F
     return {
         "code": cc.TextColumn("代號", width="small"),
         "基金名": cc.TextColumn("基金名", width="medium"),
@@ -139,6 +143,26 @@ def health_column_config() -> dict:
         "分類依據": cc.TextColumn("分類依據", width="small",
             help="上一欄是怎麼判出來的:「類別」= 看基金類型的關鍵字;"
                  "「3-3-3」= 通過長線篩選所以算核心;「—」= 資料不足。"),
+        # 稽核 F12(2026-08-14):右邊 Sharpe / σ / Max DD / 3Y 5Y 年化留白時,
+        # 表上原本沒有任何一欄能讓使用者分辨「這檔沒這個風險」與「樣本不夠算」。
+        "淨值樣本": cc.TextColumn("淨值樣本", width="small",
+            help="這一列右邊所有數字,是拿**幾筆淨值、橫跨幾天**算出來的。"
+                 f"⚠️ = 跨度不到 {_NAV_SHORT_MAX} 天 —— 這種通常是只抓到網站首頁的"
+                 "「近 30 日淨值表」,不是這檔真的只有一個月歷史。"
+                 f"此時 Sharpe(自算需 ≥ {_MIN_SS} 筆)、σ、Max DD、3Y / 5Y 年化 "
+                 "**會整批留白**,那是樣本不足,**不代表這檔沒有波動或沒有風險**;"
+                 "同列的 4D Score 仍會用少數幾個面向給分,別把它當完整體檢。"
+                 "⬜ = 連淨值序列都沒拿到,整列數字都不可用。"),
+        # Layer 3-C(2026-08-14):等第旁邊必須看得到分母。
+        # `GRADE_4D_MIN_FACTORS` 表示湊得出 N 維就給等第 —— 沒有這一欄,
+        # 一個 2/5 撐起來的 A 和一個 5/5 的 A 在表上完全同形。
+        "評分覆蓋": cc.TextColumn("評分覆蓋", width="medium",
+            help="右邊那個等第是**靠幾個面向算出來的**。"
+                 "健康度看 5 件事:配息夠不夠、風險換到多少報酬、走勢、波動大小、匯率風險。"
+                 f"✅ = 五項齊全;⚠️ = 只有部分(括號寫缺哪幾項,最少 {_GRADE_MIN_F} 項就會給等第);"
+                 "➖ = 台幣計價,**本來就沒有匯率風險**(不是缺資料,分母已扣掉那一項)。"
+                 "**⚠️ 的等第請當參考就好** —— 兩項算出來的 A 和五項算出來的 A "
+                 "在這一欄之外看起來一模一樣。"),
         # 分數切點走 shared/signal_thresholds.GRADE_CUTOFFS_4D(SSOT,不在 help 寫死)
         "4D Grade": cc.TextColumn("4D Grade", width="small",
             help=(f"把右邊的 4D Score 換成好懂的等第:A ≥ {_GRADE_CUT[0]} 分、"
@@ -296,11 +320,16 @@ def dividend_column_config() -> dict:
         "基金名": cc.TextColumn("基金名", width="medium"),
         "1Y 含息 %": cc.NumberColumn("1Y 含息 %", format="%.2f %%",
             help="近一年**真正賺賠**多少 %:淨值漲跌 + 領到的配息一起算。"
-                 "這個數字是哪來的,看右邊「1Y 來源」欄。"),
+                 "這個數字是哪來的、可不可信,**一律看右邊「1Y 來源」欄** —— "
+                 "數字大不代表好,曾經出現過台幣基金印 +200% 的情況"
+                 "(抓錯幣別或除息切割造成),那種會在來源欄標 ⚠️。"),
         # 值來自 services/fund_total_return.compute_1y_total_return 的 source label;
         # 顯示字串的 SSOT 是該模組頂部的 SRC_* 常數(2026-08-10 已白話化)。
         # 本 help 是那組常數的說明書,改常數請同步改這裡。
-        "1Y 來源": cc.TextColumn("1Y 來源", width="small",
+        # 稽核 🟠-4/🟠-5(2026-08-14):新增 SRC_TOO_SHORT / SRC_IMPLAUSIBLE_SUFFIX
+        # 兩態必須寫進來;width 由 small 改 medium —— 警語 18 個字掛在 small 欄上
+        # 會被截掉,等於閘做了、旗標帶了,卻落在看不到的位置(同「備註」欄的教訓)。
+        "1Y 來源": cc.TextColumn("1Y 來源", width="medium",
             help="左邊那個數字是怎麼來的,可靠度由高到低:"
                  "「MoneyDJ 官方」= 直接抄官方績效表,最可信;"
                  "「自算(還原含息淨值)」= 官方沒給,本站用淨值 + 配息記錄還原;"
@@ -309,7 +338,13 @@ def dividend_column_config() -> dict:
                  "「自算(僅淨值,不含配息)」= 只算淨值漲跌、**沒把配息算進去**;"
                  "「自算(N 天資料外推年化)」= 資料最少的推估,最不可靠;"
                  "「績效表(來源未標註)」= 有數字但沒標來源,分不出官方還是自算;"
-                 "「—」= 完全沒資料。"),
+                 "「—(僅 N 天資料,不足以推算一年)」= **有淨值但歷史不到半年**,"
+                 "不夠推算一年報酬所以左邊留白 —— 這不是「這檔沒資料」,"
+                 "更不是「這檔沒賺錢」;"
+                 "「—」= 完全沒資料。"
+                 "另外,只要看到 **⚠️ 數值異常大** 的字樣,代表左邊那個數字超出"
+                 "一般基金的合理範圍(通常是幣別抓錯或除息沒還原)—— "
+                 "**先核對幣別再看結論,不要直接拿它排序挑基金**。"),
         "年化配息率 %": cc.NumberColumn("年化配息率 %", format="%.2f %%",
             help="MoneyDJ 官方公布的年化配息率 —— 用**現在的淨值**當分母算的。"
                  "⚠️ 與「配息率% (年化)」欄除的東西不同,那一欄除的是你的買進成本,"
@@ -395,14 +430,23 @@ def batch_column_config() -> dict:
     """
     cc = _cc()
     return {
+        # 稽核 A1(2026-08-14):補第四態「⚠️ 部分成功」。
+        # 舊 help 只寫三態,但 unified.py 遇到 ①~④ 欄組算爆時原本是**無條件**標
+        # 「✅ 成功」—— 那一列在 400 列裡看起來跟正常列一模一樣,使用者只會讀成
+        # 「這檔沒有這些資料」並據此換標。現在改標「⚠️ 部分成功」,help 同步說明。
         "狀態": cc.TextColumn("狀態", width="small",
-            help="✅ 成功 / ❌ 抓取失敗 / ⚠️ 代號無效。"
-                 "抓失敗的檔**仍然完整留在表裡**,數值欄留白 —— 不會偷偷丟掉,也不會填 0 充數。"),
+            help="✅ 成功 / ⚠️ 部分成功 / ❌ 抓取失敗 / ⚠️ 代號無效。"
+                 "抓失敗的檔**仍然完整留在表裡**,數值欄留白 —— 不會偷偷丟掉,也不會填 0 充數。"
+                 "「⚠️ 部分成功」= 淨值有抓到,但某一組欄位(健康分析 / 配息 / σ 風險 MK / "
+                 "策略燈號)算到一半出錯而留白 —— **留白不代表這檔沒有這項特性**,"
+                 "缺哪一組寫在「備註」。"),
         "備註": cc.TextColumn("備註", width="large",
-            help="這一檔為什麼失敗(原文最多 100 字)。"
+            help="這一檔為什麼失敗、或哪幾組欄位沒算出來(原文最多 100 字)。"
                  "看起來像連不上網站 / 找不到網址 → 多半是暫時性的,可按「🔁 重試失敗檔」;"
                  "寫「淨值抓不到」/「幣別未知」/ 被網站擋下(403)→ 多半是這檔已停售,"
-                 "或該保單專屬網頁擋了我們,**重試通常沒用**。"),
+                 "或該保單專屬網頁擋了我們,**重試通常沒用**;"
+                 "寫「以下欄組計算失敗、留白」→ 該列狀態是「⚠️ 部分成功」,"
+                 "**看數字前先讀這裡列的欄組名**。"),
         "淨值日期": cc.TextColumn("淨值日期", width="small",
             help="MoneyDJ 上這檔**最新一筆淨值是哪一天**的(不是我們去抓資料的時間)。"),
         "淨值新鮮度": cc.TextColumn("淨值新鮮度", width="medium",

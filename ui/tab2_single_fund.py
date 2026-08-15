@@ -243,8 +243,13 @@ def render_single_fund_tab() -> None:
     from ui.helpers.data_registry import _update_data_registry
     from ui.helpers.holdings import _zh_holding
 
-    st.markdown("## 🔍 單一基金深度分析")
-    from ui.helpers.story_nav import render_story_nav
+    # 稽核 H1：分頁列寫「🔍 個基深掘」(story_nav SSOT)，這裡卻寫死
+    # 「單一基金深度分析」—— 同一頁兩個名字（與 Tab④ 同型）。
+    from ui.helpers.story_nav import (
+        render_flow_nav, render_story_nav, tab_label as _tab_label_t2,
+    )
+    st.markdown(f"## {_tab_label_t2('fund')}")
+    render_flow_nav("fund")      # 巨觀:第 ② 層 基金核心分析
     render_story_nav("fund")
     st.caption("輸入 MoneyDJ 代碼或網址，即時抓取淨值 / 持股 / 配息 / 風險指標")
 
@@ -1063,8 +1068,18 @@ def render_single_fund_tab() -> None:
                                 "承接;≥ +1σ = 接近前高偏過熱。此為「絕對位階」(對歷史高點),"
                                 "與上方買賣線的「相對中樞」互補。"
                             )
-                    except Exception:
-                        pass  # smoke-allow-pass
+                    except Exception as _e_hwm:  # noqa: BLE001
+                        # 稽核 A3：原本是 `pass  # smoke-allow-pass` —— 整張
+                        # 「HWM σ 絕對位階卡」會**靜默消失**，使用者無從分辨
+                        # 「這檔沒有這個資料」與「程式算爆了」。
+                        # 與同檔其他 5 處已改成 stderr + caption 的處理方式對齊。
+                        import sys as _sys_hwm
+                        print(f"[tab2/hwm_sigma] {type(_e_hwm).__name__}: {_e_hwm}",
+                              file=_sys_hwm.stderr)
+                        st.caption(
+                            f"⬜ HWM σ 絕對位階卡渲染失敗："
+                            f"[{type(_e_hwm).__name__}] {str(_e_hwm)[:120]}"
+                            "（是計算失敗，不是這檔沒有資料）")
 
                 # ── v18.47: 📊 基金健康總覽（4 維度評分 + Overall Grade + 白話結論）──
                 # v19.177 #3A+#4B：4D 評分 + grade 全走 services.health.grade.compute_4d_health SSOT,
@@ -1135,8 +1150,18 @@ def render_single_fund_tab() -> None:
                         f"{_g_block('📊 走勢健康', _d3_tr)}"
                         f"{_g_block('🛡️ 低波動性', _d4_vol)}"
                         f"</div></div>", unsafe_allow_html=True)
-                except Exception:
-                    pass  # smoke-allow-pass — 評分卡失敗不影響後續資訊
+                except Exception as _e_4d:  # noqa: BLE001
+                    # 稽核 A3：原本是 `pass  # smoke-allow-pass — 評分卡失敗不影響
+                    # 後續資訊`。但「不影響後續資訊」不等於「可以無聲消失」——
+                    # 消失的是本頁**最大的那張結論卡**（A/B/C/D/F 綜合評等 + 4 維
+                    # 分數）。使用者只會覺得這檔沒有評等，不會知道是算失敗。
+                    import sys as _sys_4d
+                    print(f"[tab2/4d_health] {type(_e_4d).__name__}: {_e_4d}",
+                          file=_sys_4d.stderr)
+                    st.caption(
+                        f"⬜ 4D 基金健康總覽卡渲染失敗："
+                        f"[{type(_e_4d).__name__}] {str(_e_4d)[:120]}"
+                        "（是計算失敗，不是這檔沒有資料）")
 
                 # ── v18.20: 🔴 吃本金 KPI 紅綠燈（獨立 banner，主 KPI 列旁）──
                 # 不依賴 divs[] 是否有資料；只要有 ret_1y + 任一配息率來源即顯示。
@@ -1269,7 +1294,13 @@ def render_single_fund_tab() -> None:
                         }
                         # v19.186 fix:本檔局部代碼變數為 fk(L234),非 code → 修 NameError
                         _adv_code = fk or fd.get("fund_code", "?")
-                        _adv_h = build_health_analysis_row(_adv_fd, _adv_code)
+                        # Layer 3-C:第 5 維(匯率風險)—— 與大表拿同一份匯率資料,
+                        # 否則同一檔在這裡與健診大表會出現不同等第(§2.1)。
+                        from services.fx_regime_service import (
+                            fx_regime_by_ccy as _fxr_t2,
+                        )
+                        _adv_h = build_health_analysis_row(
+                            _adv_fd, _adv_code, fx_cv_by_ccy=(_fxr_t2() or {}))
                         _adv_d = build_dividend_summary_row(_adv_fd, _adv_code, principal_twd=None)
 
                         # v19.225 P1-1 leftover:inline _fmt_pct 收口至 shared/converters.fmt_pct SSOT
@@ -1505,7 +1536,14 @@ def render_single_fund_tab() -> None:
                             f"<span style='color:{_qr_color};font-weight:700'>{qr['label']}</span>"
                             + _qr_adv + "</div>", unsafe_allow_html=True)
                     # v18.192：教學化 — 風險指標白話文（收合、不藏任何數據）
-                    render_metric_explainer(["sharpe", "sigma", "alpha", "beta"])
+                    # 稽核 F1:補 mdd / div_coverage —— 這兩條在
+                    # `ui/helpers/chart/metric_explainers.py` 早就寫好了,卻**從來沒有
+                    # 任何地方呼叫**(全 repo 0 consumer)。而它們正是本頁對新手最重要
+                    # 的兩個字:「最多會虧多少」與「配息有沒有吃到本金」——
+                    # 同頁上方就有 Max DD % metric,實機也看過 Coverage 出現 -3.92
+                    # 這種一定要解釋的值。
+                    render_metric_explainer(
+                        ["sharpe", "sigma", "alpha", "beta", "mdd", "div_coverage"])
 
                 with col_b:
                     st.markdown("#### 💸 近期配息")
@@ -1922,17 +1960,57 @@ def render_single_fund_tab() -> None:
                             st.caption(f"💱 1 {_ccy} = **{_fx_to_twd:.4f}** TWD（即時匯率）")
                         else:
                             # 只有自動失敗才顯示手動 fallback
+                            # ── 稽核 D1（2026-08-14）：手動匯率預設值不可寫死 32.0 ──
+                            # 32.0 只對 USD 合理。JPY 真值 ≈0.21 → **152 倍誤差**；
+                            # ZAR ≈1.7、CNY ≈4.4 也都差一個數量級。而它一旦被採用，
+                            # 就會流進「可申購單位數 / 月配息 TWD / 1Y 預估市值」
+                            # 這些看起來像真值的數字（§1 錯的數字比沒有數字更危險）。
+                            #
+                            # 改法：預設留空（`value=None`）強制使用者自己填 ——
+                            # 沒填就**不算**，而不是拿一個憑空的數字幫他算完。
+                            # `st.number_input` 傳 value=None 會顯示空欄位（Streamlit
+                            # 1.28+ 支援），使用者輸入前 `_fx_manual_val` 為 None。
                             st.caption(f"⚠️ 無法取得 {_ccy}/TWD 即時匯率（{_fx_err}），切換手動模式：")
                             _fx_manual_val = st.number_input(
                                 f"手動填 1 {_ccy} = ? TWD",
                                 min_value=0.01, max_value=1000.0,
-                                value=32.0, step=0.1,
+                                value=None, step=0.1,
                                 key=f"_calc_fx_{fk}",
-                                help="自動 FX 抓取失敗時的 fallback；估算僅供參考",
+                                placeholder=f"請輸入 1 {_ccy} 可換多少台幣",
+                                help=(
+                                    f"自動抓取失敗時才會出現。**請填 {_ccy} 對台幣的匯率**，"
+                                    "不要沿用別的幣別 —— 例如日圓約 0.21、南非幣約 1.7、"
+                                    "美元約 32，差一個數量級下面所有金額就全錯。"
+                                    "沒填的話下方試算不會計算（不會拿預設值幫你算）。"
+                                ),
                             )
-                            _fx_to_twd = float(_fx_manual_val) if _fx_manual_val > 0 else None
+                            _fx_to_twd = (float(_fx_manual_val)
+                                          if _fx_manual_val and _fx_manual_val > 0
+                                          else None)
                             _fx_manual = True
-                    if _nav_calc and _nav_calc > 0:
+                            if _fx_to_twd is None:
+                                st.info(
+                                    f"ℹ️ 尚未填入 {_ccy}/TWD 匯率 → 下方投資試算暫不計算。"
+                                    "這是刻意的：填錯幣別的匯率會讓所有金額差好幾倍，"
+                                    "寧可不算也不給你一個錯的數字。"
+                                )
+                    # ── 稽核 D1 續（🔴 稽核駁回修正）：承諾與行為必須一致 ──────────
+                    # 上面那句 st.info 對使用者承諾「下方投資試算暫不計算……寧可不算
+                    # 也不給你一個錯的數字」。但舊的 gate 只看 `_nav_calc > 0`，
+                    # 非台幣基金在**匯率留空**時會掉進下面的 `else: _amt_local = 台幣金額`
+                    # ——等於把 100 萬台幣當成 100 萬日圓，單位數 / 月配息 / 1Y 預估市值
+                    # 三個 metric 照樣印出來（日圓差約 4.8 倍）。畫面說不算，實際算了。
+                    #
+                    # 把「有沒有換匯依據」納入 gate：台幣基金不需要匯率；非台幣基金
+                    # 沒有匯率就整塊不算（§1 寧可留白）。
+                    _fx_ready = (_ccy == "TWD") or bool(_fx_to_twd)
+                    if _nav_calc and _nav_calc > 0 and not _fx_ready:
+                        st.warning(
+                            f"⛔ 這是 **{_ccy}** 計價的基金，沒有匯率就換算不出原幣本金 —— "
+                            "上方填入匯率後，可申購單位數 / 月配息 / 1Y 預估市值才會出現。"
+                            "**這裡是刻意留白的，不是壞掉。**"
+                        )
+                    if _nav_calc and _nav_calc > 0 and _fx_ready:
                         # TWD → 原幣本金（TWD 基金維持原值）
                         if _ccy != "TWD" and _fx_to_twd:
                             _amt_local = _amount_twd / _fx_to_twd
@@ -1940,6 +2018,16 @@ def render_single_fund_tab() -> None:
                             _amt_local = float(_amount_twd)
                         _units = _amt_local / _nav_calc
                         _fx_tag = "即時（Yahoo / er-api 雙來源）" if not _fx_manual else "手動"
+                        # 稽核 D1：手動匯率必須在「完整計算公式」裡也看得見。
+                        # 原本那兩個 st.code 區塊把匯率當**裸數字**印進算式
+                        # （`= 1,000,000 ÷ 32.0000`），整塊沒有任何「手動」字樣 ——
+                        # 那是全頁最像「系統算給你的」的地方，反而最沒揭露。
+                        _fx_banner = (
+                            f"⚠️ 注意：下列 FX = {_fx_to_twd:.4f} 是**你自己填的**，"
+                            f"不是即時匯率。\n"
+                            f"   填錯幣別會讓所有金額差好幾倍（日圓 ≈0.21 / 美元 ≈32）。\n"
+                            f"────────────────────────\n"
+                        ) if (_fx_manual and _fx_to_twd) else ""
                         _mc1, _mc2, _mc3, _mc4 = st.columns(4)
                         _mc1.metric("可申購單位數", f"{_units:,.2f}")
                         if _yield_calc and _yield_calc > 0:
@@ -2048,7 +2136,7 @@ def render_single_fund_tab() -> None:
                                             f"            = {_mon_div_twd:,.0f} ÷ {_nav_calc:.4f}\n"
                                             f"            = {_mon_units:,.2f} 單位\n"
                                         )
-                                    st.code(_formula_text, language="text")
+                                    st.code(_fx_banner + _formula_text, language="text")
                                     st.caption(
                                         "⚠️ 估算假設：(1) 以最近一筆實際配息代表每月配息 "
                                         "(2) FX / NAV 以現值計 (3) 配息 100% 再投入計算配息單位。"
@@ -2193,7 +2281,8 @@ def render_single_fund_tab() -> None:
                                             f"            = {_proj_1y_twd:,.0f} − {_amount_twd:,.0f}",
                                             f"            = {(_proj_1y_twd - _amount_twd):+,.0f} TWD",
                                         ]
-                                st.code("\n".join(_formula_lines), language="text")
+                                st.code(_fx_banner + "\n".join(_formula_lines),
+                                        language="text")
                                 st.caption(
                                     "⚠️ 估算假設：(1) FX 全期不變 (2) 未來報酬等於近 1Y 含息表現 "
                                     "(3) 累積型基金不配息、收益反映在 NAV 上漲。實際結果視市場波動而定。"
@@ -2242,7 +2331,9 @@ def render_single_fund_tab() -> None:
                     )
                     _ai_fd_pct, _ = _calc_data_health()
                     if _ai_fd_pct < 50:
-                        st.caption(f"🔴 總經資料完整率 {_ai_fd_pct}%：建議先到「🌐 市場定調」按全量抓取，"
+                        # 稽核 H2:同 t7 —— 市場定調沒有叫「全量抓取」的按鈕
+                        st.caption(f"🔴 總經資料完整率 {_ai_fd_pct}%：建議先到「🌐 市場定調」"
+                                   "按「📡 載入總經資料」，"
                                    "AI 才有景氣位階背景（仍可直接生成、僅準確度略降）。")
                     elif _ai_fd_pct < 80:
                         st.caption(f"🟡 資料完整率 {_ai_fd_pct}%，AI 參考性略降。")

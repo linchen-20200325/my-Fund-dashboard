@@ -38,6 +38,15 @@ def render_sidebar(*,
     _get_oauth_client = _os._get_oauth_client
     _get_login_state = _os.get_login_state  # 修「登入互相踢掉」: state 綁定本 session
 
+    # ── 稽核 E14：指路文案改吃分頁名 SSOT ────────────────────────────────────
+    # 本檔下方三處指路寫的是「Tab3「📊 組合基金」」——**這個分頁名早就不存在**。
+    # v19.405 Phase 4 已把分頁改名並收斂到 `ui/helpers/story_nav.tab_label()`，
+    # `app.py:196-199` 也已 migrate；`story_nav.py:19-21` 的註解甚至明寫
+    # 「2026-08-05 稽核 必修 2：三處指路文案指向不存在的分頁名，根因就是
+    # 『標籤沒有 SSOT』」—— SSOT 建好了、app.py 接了，**sidebar 這三處是漏網**。
+    from ui.helpers.story_nav import tab_label as _tab_label_sb
+    _TAB_PORTFOLIO_SB = _tab_label_sb("portfolio")
+
     with st.sidebar:
         st.markdown("## 📊 基金戰情室")
         _upd = st.session_state.get("macro_last_update")
@@ -177,8 +186,17 @@ def render_sidebar(*,
                     f"session {_gr['session_keys_popped']} 鍵",
                     icon="🧹",
                 )
-            except Exception as _e_gr:
-                st.toast(f"⚠️ 全域刷新失敗：{type(_e_gr).__name__}", icon="⚠️")
+            except Exception as _e_gr:  # noqa: BLE001
+                # 稽核 H7：原本只印例外「類別名」—— 無訊息、無 stderr、無 traceback。
+                # 依 PROCESS.md，Streamlit Cloud 的 log 面板**只顯示 stderr**，
+                # 所以這個失敗在雲端等於完全查不出原因。
+                import sys as _sys_gr
+                import traceback as _tb_gr
+                print(f"[sidebar/global_refresh] {type(_e_gr).__name__}: {_e_gr}",
+                      file=_sys_gr.stderr)
+                _tb_gr.print_exc(file=_sys_gr.stderr)
+                st.toast(f"⚠️ 全域刷新失敗：{type(_e_gr).__name__}: {str(_e_gr)[:80]}",
+                         icon="⚠️")
             st.rerun()
 
         # ── v18.75 Google 帳號（從 Tab3 expander 搬上來，登入更顯眼）──
@@ -201,11 +219,11 @@ def render_sidebar(*,
                     state=_get_login_state())
                 st.link_button("🔐 用 Google 登入", _login_url_sb,
                                 use_container_width=True)
-                st.caption("登入後 Tab3 即可雲端存取保單試算表")
+                st.caption(f"登入後「{_TAB_PORTFOLIO_SB}」分頁即可雲端存取保單試算表")
         elif _gsa_secret and _sheet_id_secret:
             st.caption("ℹ️ 使用 Service Account（舊版單表）")
         else:
-            st.caption("⚙️ OAuth Client 尚未設定 — 請至 Tab3「📊 組合基金」"
+            st.caption(f"⚙️ OAuth Client 尚未設定 — 請至「{_TAB_PORTFOLIO_SB}」分頁"
                        "→ 展開「📋 保單管理」設定")
 
         # ── v18.164：工作中帳本（Sheet ID 從 Tab3 expander hoist 到 sidebar）──
@@ -237,4 +255,5 @@ def render_sidebar(*,
                 else:
                     st.caption(f"📂 ID `{_sid_sb[:14]}…`")
             elif not _sid_sb and _logged_in_sb:
-                st.caption("⚠️ 尚未指定 — 至 Tab3「✨ 新增帳本」建立或挑一本")
+                st.caption(f"⚠️ 尚未指定 — 至「{_TAB_PORTFOLIO_SB}」分頁的"
+                           "「✨ 新增帳本」建立或挑一本")

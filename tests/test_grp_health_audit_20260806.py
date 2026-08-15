@@ -84,7 +84,9 @@ def test_batch_row_actually_fills_freshness(monkeypatch):
     拿掉 build_batch_unified_row 裡寫入這兩欄的那幾行,本條就會紅。
     """
     import services.fund_row as FR
-    import ui.helpers.fund_grp_health.fx_regime as FXR
+    # 2026-08-14 Layer 3-C:production 已改從 L2 讀 —— patch L3 不會生效,
+    # 會變成安靜地打真網路(PROCESS §4 假綠)。靶點必須跟著 production 走。
+    import services.fx_regime_service as FXR
     import ui.helpers.fund_grp_health.unified as U
 
     def _fake_process_one_fund(code, principal_twd, *a, **kw):

@@ -47,8 +47,10 @@ def _mock(monkeypatch):
     monkeypatch.setitem(_cap._BENCH_CACHE, "SPX", (_bench_now, _b))
     monkeypatch.setitem(_cap._BENCH_CACHE, "TWII", (_bench_now, _b))
     # stub USDTWD 抓取 → fx_regime_by_ccy 不打網路(v19.426 稽核 Finding2)
-    import ui.helpers.fund_grp_health.fx_regime as _fr
-    _fr._FX_REGIME_CACHE.clear()
+    # 2026-08-14 Layer 3-C:快取下沉 L2(`services/fx_regime_service`),
+    # 內部字典改名並提供 `clear_cache()` —— 測試不再戳私有變數。
+    import services.fx_regime_service as _fr
+    _fr.clear_cache()
     _fxd = pd.DataFrame({"date": pd.date_range("2023-01-02", periods=250, freq="B"),
                          "usdtwd": np.linspace(30.0, 33.0, 250)})
     monkeypatch.setattr("services.hot_money_service.fetch_usdtwd_frame",

@@ -44,3 +44,7 @@ commit_msg_*.txt
 
 # Local push helper scripts (contain local paths / account names — never commit)
 *.vbs
+
+# 稽核腳本的本機輸入 / 輸出（含你的持倉代號，屬個人資料；且是一次性 run-state）
+codes.txt
+6d_coverage.txt

@@ -73,7 +73,11 @@ from ui.helpers.session import (
     friendly_error as _friendly_error,
     is_core_fund as _is_core_fund,
 )
-from ui.tab3_t7_ledger import render_t7_section
+from ui.tab3_t7_ledger import T7InputAbort, render_t7_section
+
+# 稽核 J1-b：FX 曝險摘要用的「幣別不明」桶。刻意**不是**任何 ISO 3 碼，
+# 這樣它永遠不會被誤當成真幣別去查匯率或算佔比（§1 不以捏造值充數）。
+_UNKNOWN_CCY = "（未知）"
 
 # 其他 fund_fetcher utility
 
@@ -218,8 +222,13 @@ def render_portfolio_tab() -> None:
         _update_data_registry,
     )
 
-    st.markdown("## 📊 組合基金管理")
-    from ui.helpers.story_nav import render_story_nav
+    # 稽核 H1：分頁列寫「📊 配置 & 帳本」(story_nav SSOT)，這裡卻自己寫死
+    # 「組合基金管理」—— 同一頁兩個名字。麵包屑第 4 站也是 SSOT，三者只有這裡脫隊。
+    from ui.helpers.story_nav import (
+        render_flow_nav, render_story_nav, tab_label as _tab_label_t3,
+    )
+    st.markdown(f"## {_tab_label_t3('portfolio')}")
+    render_flow_nav("portfolio")   # 巨觀:第 ③ 層 監控與評分
     render_story_nav("portfolio")
     # 「六因子評分」自 v19.177 起已不再用於評等（改 4 維健診），標題不再這樣寫，
     # 免得使用者去說明書查一個退役模型（2026-08 稽核必修 8 同型）。
@@ -263,7 +272,13 @@ def render_portfolio_tab() -> None:
         try:
             _fx_counts: dict = {}
             for _pf_fx in _pf_for_warroom:
-                _ccy = str(_pf_fx.get("currency") or "USD").strip().upper() or "USD"
+                # 稽核 J1-b：原本是 `str(...or "USD").strip().upper() or "USD"`
+                # —— **雙重** USD fallback。實測後果：兩檔台幣計價的安聯台股基金
+                # 因 Sheet currency 欄空白而被算進 USD，整段印出「USD 25 檔（100%）」
+                # 與一句「組合 100% 為 USD 計價」的**錯誤風險警語**。
+                # 風險揭露區塊拿捏造的幣別當輸入，比不揭露更糟（§1）。
+                # 改法：未知就誠實歸到「未知」桶，不併進任何幣別。
+                _ccy = str(_pf_fx.get("currency") or "").strip().upper() or _UNKNOWN_CCY
                 _fx_counts[_ccy] = _fx_counts.get(_ccy, 0) + 1
             _total_fx = sum(_fx_counts.values()) or 1
             if _fx_counts:
@@ -272,6 +287,10 @@ def render_portfolio_tab() -> None:
                 for _ccy_fx in _fx_counts:
                     if _ccy_fx == "TWD":
                         _fx_spot[_ccy_fx] = 1.0
+                        continue
+                    if _ccy_fx == _UNKNOWN_CCY:
+                        # 稽核 J1-b：未知幣別不去猜匯率、也不去打 API
+                        _fx_spot[_ccy_fx] = 0.0
                         continue
                     try:
                         from services.fund_service import get_latest_fx as _gf_fx
@@ -285,7 +304,13 @@ def render_portfolio_tab() -> None:
                 for _ccy_fx, _cnt in sorted(_fx_counts.items(), key=lambda x: -x[1]):
                     _pct = _cnt / _total_fx * 100
                     _rate = _fx_spot.get(_ccy_fx, 0)
-                    _rate_str = f"1 {_ccy_fx} ≈ {_rate:.2f} TWD" if _rate > 0 else "匯率待抓"
+                    if _ccy_fx == _UNKNOWN_CCY:
+                        # 稽核 J1-b：說清楚「查不到」與「怎麼補」，不冒充任何幣別
+                        _rate_str = ("**計價幣別不明** —— 請在 Google Sheet 的 "
+                                     "`currency` 欄補上（例：TWD / USD）")
+                    else:
+                        _rate_str = (f"1 {_ccy_fx} ≈ {_rate:.2f} TWD"
+                                     if _rate > 0 else "匯率待抓")
                     _fx_lines.append(f"**{_ccy_fx}** {_cnt} 檔（{_pct:.0f}%）· {_rate_str}")
                 # 內容 < 6 行且含「USD 佔比過半」警告 → 收起來等於把風險藏起來（原則 1）。
                 # 原本用「永遠展開的 expander」達成,但那層殼本身不提供任何資訊 —— 對
@@ -297,15 +322,29 @@ def render_portfolio_tab() -> None:
                     )
                     for _line in _fx_lines:
                         st.markdown(f"- {_line}")
+                    # 稽核 J1-b：幣別不明的檔先講清楚，否則下面那句百分比會被
+                    # 讀成「已知全貌」。原本它們被靜默併進 USD，直接造出假警語。
+                    _unk_n = _fx_counts.get(_UNKNOWN_CCY, 0)
+                    if _unk_n:
+                        st.warning(
+                            f"⚠️ 有 **{_unk_n} 檔**查不到計價幣別（Google Sheet 的 "
+                            "`currency` 欄空白，且 MoneyDJ 也沒回傳）。這幾檔**未計入**"
+                            "下方任何幣別的佔比，其匯率風險目前無法評估 —— "
+                            "請到 Sheet 補上幣別後重新載入。"
+                        )
                     _usd_pct = _fx_counts.get("USD", 0) / _total_fx * 100
                     if _usd_pct >= 50:
                         st.warning(
                             f"⚠️ 組合 {_usd_pct:.0f}% 為 USD 計價，台幣大幅升值時 TWD 績效將明顯縮水。"
+                            + (f"（此比例的分母含上述 {_unk_n} 檔幣別不明者）" if _unk_n else "")
                         )
         except Exception as _e_fx_blk:
             # §1：FX 曝險是風險揭露，失敗要留痕（原本 `pass` → 畫面零痕跡）
+            # 稽核 P2：補 file=sys.stderr —— Streamlit Cloud 的 log 面板
+            # **只顯示 stderr**，走 stdout 的 print 在雲端完全撈不到。
+            import sys as _sys_fx
             print(f"[tab3 FX 曝險摘要] 渲染失敗："
-                  f"[{type(_e_fx_blk).__name__}] {_e_fx_blk}")
+                  f"[{type(_e_fx_blk).__name__}] {_e_fx_blk}", file=_sys_fx.stderr)
             st.caption(
                 f"⬜ FX 曝險摘要：本次未能產生（[{type(_e_fx_blk).__name__}]）"
                 "—— 這不代表沒有匯率風險。"
@@ -1415,7 +1454,11 @@ def render_portfolio_tab() -> None:
                 _batch_load_top()
 
         if not _pol_funds and not _ungrouped:
-            st.info("尚未載入任何基金。設定 Google Sheets 後按「📡 從 Sheet 同步」即可帶入保單分組。")
+            # 稽核 H3：原寫「📡 從 Sheet 同步」—— 全 repo 沒有這個按鈕標籤（死指標）。
+            # 實際入口是「📋 保單管理」expander 內快速存讀面板的「📥 雲端讀取」。
+            st.info("尚未載入任何基金。設定 Google Sheets 後，"
+                    "展開上方「📋 保單管理（Google Sheets）」→ 按「📥 雲端讀取」"
+                    "即可帶入保單分組。")
         else:
             # 取 VIX 給 advisor。
             # 原本讀的是一個**全 repo 沒有任何 writer** 的 session key（唯一寫入端
@@ -1662,7 +1705,10 @@ def render_portfolio_tab() -> None:
                     )
 
     # ── v18.46 緊湊歡迎條（單列三步驟，不再佔大面積）────────────────────
-    _pf_loaded = [f for f in st.session_state.portfolio_funds if f.get("loaded")]
+    # 稽核 E2:原為 `f.get("loaded")` —— 抓失敗的基金也是 loaded=True,
+    # 於是最上方 KPI 卡寫「25 檔」、下面每張表只有 8 列。走 SSOT 判定。
+    from ui.helpers.session import usable_funds as _usable_funds_e2
+    _pf_loaded = _usable_funds_e2(st.session_state.portfolio_funds)
     if not _pf_loaded:
         st.markdown(
             f"<div style='background:{BG_DARK_NAVY_1};border:1px dashed {MD_BLUE_300};border-radius:8px;"
@@ -2573,6 +2619,29 @@ def render_portfolio_tab() -> None:
                     ThreadPoolExecutor as _TPE_h,
                     as_completed as _ac_h,
                 )
+                # ── 稽核 N1-b：持倉健診改「首次自動 + 快取 + 重算鈕」───────────────
+                # 原本這整段沒有任何守門（唯一條件是 `if _loaded_pf:`），於是**每一次
+                # rerun** 都對全部持倉重跑 ThreadPool × process_one_fund（內含 FX / NAV
+                # 網路 I/O）。25 檔實測：rerun 起算 17 秒後 `WebSocket onclose`，畫面
+                # 永久凍結（2026-08-14 實機兩次重現）。
+                # 對策：以持倉指紋（代號 + 投入金額 + 序列長度）為 key 快取結果；
+                # 指紋不變就直接複用，變了才重算。另給一顆顯式「重新計算」。
+                # ⚠️ 指紋刻意不含時間 —— 「同一組持倉」在同一 session 內不該因為
+                # 你按了別的按鈕就重抓一次（那正是本 bug 的成因）。要最新值請按重算。
+                def _pf_health_fingerprint(_funds: list) -> str:
+                    _parts = []
+                    for _f in _funds:
+                        _s = _f.get("series")
+                        try:
+                            _n = len(_s) if _s is not None else 0
+                        except TypeError:
+                            _n = 0
+                        _parts.append(
+                            f"{str(_f.get('code', '') or '').upper()}"
+                            f"|{_f.get('invest_twd') or 0}|{_n}"
+                        )
+                    return ";".join(sorted(_parts))
+
                 _warn_gap_h = 2.0  # SSOT 對齊 fund_dividend_calculator.DEFAULT_WARN_GAP_PCT
                 # ⚠️ 模擬本金（2026-08-07 user 裁決的第 4 點）：未填 invest_twd 的基金
                 # 仍需要一個本金才算得出「每月配息 TWD / 實際購買結果」，故保留 100 萬
@@ -2583,47 +2652,83 @@ def render_portfolio_tab() -> None:
                 _health_results: list = [None] * len(_loaded_pf)
                 # index → 該檔的本金是不是模擬值（使用者從未填過金額）
                 _princ_is_sim: list = [False] * len(_loaded_pf)
-                _prog_h = st.progress(0.0, text="📥 持倉健診計算中…")
-                try:
-                    with _TPE_h(max_workers=min(len(_loaded_pf), 4)) as _exh:
-                        _futs_h = {}
-                        for _ih, _fh in enumerate(_loaded_pf):
-                            _code_h = str(_fh.get("code", "") or "").strip().upper()
-                            _fd_h = _fh.get("moneydj_raw") or None
-                            _inv = _fh.get("invest_twd")
-                            try:
-                                _principal_h = float(_inv) if _inv else 0.0
-                            except (TypeError, ValueError):
-                                _principal_h = 0.0
-                            # 先判「有沒有真實金額」再補預設 —— 不用浮點 == 反推
-                            # 是否等於預設值（§4.3 禁止 `==` 比浮點；且真的填了
-                            # 100 萬的人不該被誤標成模擬本金）。
-                            _princ_is_sim[_ih] = _principal_h <= 0
-                            if _princ_is_sim[_ih]:
-                                _principal_h = _DEFAULT_PRINC
-                            _futs_h[_exh.submit(
-                                _proc_health, _code_h, _principal_h,
-                                "", _warn_gap_h, _fd_h,
-                            )] = _ih
-                        _done_h = 0
-                        _n_h = len(_loaded_pf)
-                        for _futh in _ac_h(_futs_h):
-                            _ih2 = _futs_h[_futh]
-                            try:
-                                _health_results[_ih2] = _futh.result()
-                            except Exception as _eh:
-                                _health_results[_ih2] = {
-                                    "code": _loaded_pf[_ih2].get("code", "?"),
-                                    "ok": False,
-                                    "error": f"{type(_eh).__name__}: {_eh}",
-                                }
-                            _done_h += 1
-                            _prog_h.progress(
-                                _done_h / _n_h,
-                                text=f"📥 已完成 {_done_h}/{_n_h} 檔…",
-                            )
-                finally:
-                    _prog_h.empty()
+
+                # 稽核 N1-b：快取查核（詳見上方 `_pf_health_fingerprint` 的說明）
+                _pf_fp_h = _pf_health_fingerprint(_loaded_pf)
+                _cache_h = st.session_state.get("_pf_health_cache") or {}
+                _force_h = bool(st.session_state.pop("_pf_health_force", False))
+                _hit_h = (
+                    (not _force_h)
+                    and _cache_h.get("fp") == _pf_fp_h
+                    and len(_cache_h.get("rows") or []) == len(_loaded_pf)
+                )
+                _c1_h, _c2_h = st.columns([4, 1])
+                if _c2_h.button("🔄 重新計算", key="pf_health_recalc",
+                                use_container_width=True,
+                                help="重新抓取每檔的即時 NAV / 匯率並重算健診。"
+                                     "平常不需要按 —— 持倉沒變動時本區直接沿用本次 "
+                                     "session 已算好的結果，避免每次操作都重跑一輪。"):
+                    st.session_state["_pf_health_force"] = True
+                    st.rerun()
+
+                if _hit_h:
+                    _health_results = list(_cache_h["rows"])
+                    _princ_is_sim = list(_cache_h["sim"])
+                    _c1_h.caption(
+                        f"✅ 沿用本次 session 已算好的健診結果（{len(_loaded_pf)} 檔，"
+                        f"算於 {_cache_h.get('at', '—')}）。持倉金額或檔數變動會自動重算；"
+                        "要抓最新淨值請按右邊「🔄 重新計算」。"
+                    )
+                else:
+                    _prog_h = st.progress(0.0, text="📥 持倉健診計算中…")
+                    try:
+                        with _TPE_h(max_workers=min(len(_loaded_pf), 4)) as _exh:
+                            _futs_h = {}
+                            for _ih, _fh in enumerate(_loaded_pf):
+                                _code_h = str(_fh.get("code", "") or "").strip().upper()
+                                _fd_h = _fh.get("moneydj_raw") or None
+                                _inv = _fh.get("invest_twd")
+                                try:
+                                    _principal_h = float(_inv) if _inv else 0.0
+                                except (TypeError, ValueError):
+                                    _principal_h = 0.0
+                                # 先判「有沒有真實金額」再補預設 —— 不用浮點 == 反推
+                                # 是否等於預設值（§4.3 禁止 `==` 比浮點；且真的填了
+                                # 100 萬的人不該被誤標成模擬本金）。
+                                _princ_is_sim[_ih] = _principal_h <= 0
+                                if _princ_is_sim[_ih]:
+                                    _principal_h = _DEFAULT_PRINC
+                                _futs_h[_exh.submit(
+                                    _proc_health, _code_h, _principal_h,
+                                    "", _warn_gap_h, _fd_h,
+                                )] = _ih
+                            _done_h = 0
+                            _n_h = len(_loaded_pf)
+                            for _futh in _ac_h(_futs_h):
+                                _ih2 = _futs_h[_futh]
+                                try:
+                                    _health_results[_ih2] = _futh.result()
+                                except Exception as _eh:
+                                    _health_results[_ih2] = {
+                                        "code": _loaded_pf[_ih2].get("code", "?"),
+                                        "ok": False,
+                                        "error": f"{type(_eh).__name__}: {_eh}",
+                                    }
+                                _done_h += 1
+                                _prog_h.progress(
+                                    _done_h / _n_h,
+                                    text=f"📥 已完成 {_done_h}/{_n_h} 檔…",
+                                )
+                    finally:
+                        _prog_h.empty()
+                    # 只有真的算完才寫快取（失敗列本身也是有效結果，會帶 ok=False）
+                    st.session_state["_pf_health_cache"] = {
+                        "fp":   _pf_fp_h,
+                        "rows": list(_health_results),
+                        "sim":  list(_princ_is_sim),
+                        # 走 ui.helpers.tw_time SSOT（檔頭已 import），不自建 tz
+                        "at":   tw_now_str("%H:%M:%S"),
+                    }
                 # v19.330:🧭 核心/衛星配置檢查已下沉共用 _render_health_3tables(兩 tab 齊顯示),
                 # 不再於此 inline(避免重複 + 只在 Tab3 出現)。
                 # 把「這檔用的是模擬本金」旗標接到 row 上（§1 揭露）：共用 render
@@ -2686,7 +2791,19 @@ def render_portfolio_tab() -> None:
     # T7 為自含函式、讀 session_state，置於所有 載入/加入 區塊之後 → 資料齊全、零依賴風險。
     # ── T7 帳務 + AI 深度組合建議 ── (v18.144 抽至 ui/tab3_t7_ledger.py)
     st.markdown("### 💼 ③ 持倉戰情（T7 帳本）")
-    render_t7_section()
+    # 稽核 E12（2026-08-14）：T7 的表單驗證原本用 `st.stop()`（6 處），
+    # 那會中止**整個 script run** —— 連排在 Tab3 之後的「📋 我的管理室」
+    # 「📖 參考 / 診斷」兩個分頁都跟著空白。使用者只是忘了填金額，
+    # 畫面卻像壞掉，多半會以為是連線問題而重整（重整後輸入全沒了）。
+    # 改成攔自訂例外：中止範圍縮到 T7 這一段，其他分頁照常渲染。
+    # `t7_abort()` 在拋之前已經顯示過 st.error，這裡只補一句「其餘分頁不受影響」。
+    try:
+        render_t7_section()
+    except T7InputAbort:
+        st.caption(
+            "ℹ️ 上面那個錯誤只中止了「持倉戰情」這一段的試算 —— "
+            "修正後重新送出即可，**其他分頁不受影響**。"
+        )
 
     # ── T7 已移至 T5 之前（v18.194 故事化：持倉戰情 → 重疊診斷）──
 
@@ -2703,6 +2820,66 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     loaded = [f for f in pf if f.get("loaded") and not f.get("load_error")]
     if not loaded:
         return  # 組合空，不掛 widget
+
+    # ── 稽核 N1-a：AI 快照記憶化 ─────────────────────────────────────────────
+    # 本函式在呼叫 render_ai_summary_widget 之前，會先把整份 snapshot 算完：
+    # build_mk_dataframe / compute_health_kpis / build_checkup_dataframe /
+    # fetch_usdtwd_frame（**網路**）/ 逐檔 compute_max_drawdown / 相關性矩陣 /
+    # 每個幣別一次 get_latest_fx（**網路**）。而它原本是**無條件執行**的 ——
+    # 也就是說使用者根本還沒按「生成白話總體檢」，成本就已經付掉了，而且
+    # **每一次 rerun 都付一次**（`st.tabs` 單次 run 會渲染全部分頁）。
+    # 25 檔實測：rerun 起算 17 秒後 `WebSocket onclose`，畫面永久凍結。
+    #
+    # 對策：以「會影響 snapshot 內容的輸入」做指紋，同指紋直接複用上次結果。
+    # 不改 render_ai_summary_widget 的介面（它被 Tab2 等共用，且它自己的
+    # 磁碟快取仍需要完整 snapshot 當 key material）。
+    _ai_fp_parts = []
+    for _f_fp in loaded:
+        _s_fp = _f_fp.get("series")
+        try:
+            _n_fp = len(_s_fp) if _s_fp is not None else 0
+        except TypeError:
+            _n_fp = 0
+        _ai_fp_parts.append(
+            f"{str(_f_fp.get('code', '') or '').upper()}"
+            f"|{_f_fp.get('invest_twd') or 0}|{_n_fp}"
+            f"|{str(_f_fp.get('currency', '') or '')}"
+        )
+    _news_fp = st.session_state.get("news_items", []) or []
+    # 獨立稽核 額-2：以下兩項也會改變 snapshot 內容，不進指紋會讓 AI 拿舊快照講話：
+    #  (1) 核心目標 %（下方 `_get_core_target_ai(st.session_state)` 讀它）
+    #  (2) v2 編輯緩衝的 div_cash_pct / avg_nav / avg_fx / invest_twd
+    #      （下方配息現金/單位拆分估算直接吃這幾欄）
+    # 兩者都是純 session 記憶體讀取，零 I/O 成本。
+    _core_tgt_fp = st.session_state.get("portfolio_core_pct")
+    _v2_buf_fp = st.session_state.get("_v2_buf") or {}
+    _v2_sig_parts: list[str] = []
+    for _pid_fp in sorted(str(k) for k in _v2_buf_fp):
+        _entry_fp = _v2_buf_fp.get(_pid_fp) or {}
+        _df_fp = _entry_fp.get("fund") if isinstance(_entry_fp, dict) else None
+        if _df_fp is None or getattr(_df_fp, "empty", True):
+            continue
+        for _col_fp in ("fund_code", "invest_twd", "div_cash_pct",
+                        "avg_nav", "avg_fx"):
+            if _col_fp in _df_fp.columns:
+                _v2_sig_parts.append(f"{_pid_fp}.{_col_fp}={list(_df_fp[_col_fp])}")
+    import hashlib as _hl_fp
+    _v2_digest = _hl_fp.sha1(
+        "|".join(_v2_sig_parts).encode("utf-8", "replace")
+    ).hexdigest()[:12] if _v2_sig_parts else "-"
+    _ai_fp = (";".join(sorted(_ai_fp_parts))
+              + f"#news={len(_news_fp)}#core={_core_tgt_fp}#v2={_v2_digest}")
+    _ai_cache_t3 = st.session_state.get("_tab3_ai_snap") or {}
+    if _ai_cache_t3.get("fp") == _ai_fp:
+        render_ai_summary_widget(
+            tab_key="tab3",
+            tab_label="組合戰情室",
+            snapshot=_ai_cache_t3["snapshot"],
+            sections=_ai_cache_t3["sections"],
+            headlines=_ai_cache_t3["headlines"],
+            gemini_api_key=gemini_key,
+        )
+        return
 
     # 核心/衛星走全站唯一真相（金額加權 + policy_tier 優先 + 目標吃 portfolio_core_pct）。
     # 原本這裡是「檔數比例 + 寫死 80%」，與畫面上的金額版兩套數字，AI 會照著錯的講。
@@ -2932,17 +3109,25 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     headlines = [str(n.get("title", "") or n.get("headline", ""))
                  for n in _filter_news(_t3_news_all, _dom_cls)
                  if isinstance(n, dict)][:8]
+    _sections_t3 = [
+        "組合配置與健康度",
+        "各檔基金體檢（MK 戰情室）",
+        "與同類比較（優等生 / 汰弱候選）",
+        "配息現金流",
+        "新聞時事影響",
+    ]
+    # 稽核 N1-a：算完才寫快取（見本函式開頭的說明）。下次同指紋直接走 early-return。
+    st.session_state["_tab3_ai_snap"] = {
+        "fp":        _ai_fp,
+        "snapshot":  snapshot,
+        "sections":  _sections_t3,
+        "headlines": headlines,
+    }
     render_ai_summary_widget(
         tab_key="tab3",
         tab_label="組合戰情室",
         snapshot=snapshot,
-        sections=[
-            "組合配置與健康度",
-            "各檔基金體檢（MK 戰情室）",
-            "與同類比較（優等生 / 汰弱候選）",
-            "配息現金流",
-            "新聞時事影響",
-        ],
+        sections=_sections_t3,
         headlines=headlines,
         gemini_api_key=gemini_key,
     )

@@ -28,8 +28,12 @@ def compute_lookthrough_concentration(portfolio_funds) -> dict:
     回傳 {top_stocks: [(disp_name, exposure_pct, fund_count)], max_exposure,
           n_with_holdings, n_funds}。
     """
-    _funds = [f for f in (portfolio_funds or [])
-              if isinstance(f, dict) and f.get("loaded")]
+    # 稽核 E2:原為 `f.get("loaded")` —— 抓失敗的基金也是 loaded=True。
+    # 它們沒有 holdings,會被算進分母 `n_funds` 卻不進分子 → **集中度被低估**,
+    # 而集中度低估正是這個函式最不該犯的錯(它存在的理由就是示警)。
+    # 走 SSOT 判定;`ui.helpers.session` 不 import streamlit,本檔仍是純函式。
+    from ui.helpers.session import usable_funds as _usable_funds_conc
+    _funds = _usable_funds_conc(portfolio_funds)
     _hold_funds = []
     for _f in _funds:
         _tops = (((_f.get("moneydj_raw") or {}).get("holdings") or {})
@@ -133,8 +137,12 @@ def compute_lookthrough_sectors(portfolio_funds) -> dict:
     回傳 {top_sectors: [(disp_name, exposure_pct, fund_count)], max_exposure,
           n_with_sectors, n_funds}。
     """
-    _funds = [f for f in (portfolio_funds or [])
-              if isinstance(f, dict) and f.get("loaded")]
+    # 稽核 E2:原為 `f.get("loaded")` —— 抓失敗的基金也是 loaded=True。
+    # 它們沒有 holdings,會被算進分母 `n_funds` 卻不進分子 → **集中度被低估**,
+    # 而集中度低估正是這個函式最不該犯的錯(它存在的理由就是示警)。
+    # 走 SSOT 判定;`ui.helpers.session` 不 import streamlit,本檔仍是純函式。
+    from ui.helpers.session import usable_funds as _usable_funds_conc
+    _funds = _usable_funds_conc(portfolio_funds)
     _sec_funds = []
     for _f in _funds:
         _secs = (((_f.get("moneydj_raw") or {}).get("holdings") or {})

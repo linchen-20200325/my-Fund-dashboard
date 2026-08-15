@@ -40,6 +40,31 @@ from shared.fred_series import (
 )
 
 
+# ── 稽核 N1-e：registry 只留「抽查用的最新幾筆」，不再存完整 Series ──────────
+# 原本每個 indicator / 每檔基金都把**排序後的完整 pandas Series** 塞進
+# `st.session_state["data_registry"]`，而唯一的消費端是 Tab5「🔍 資料抽查快照
+# (Snapshot Viewer)」的 `.head(5)`。25 檔持倉 + 25 個總經指標時，這份 payload
+# 會隨每次 rerun 一起被 Streamlit 序列化 —— 實測 rerun 起算 17 秒後
+# `WebSocket onclose`、畫面永久凍結（2026-08-14 實機兩次重現）。
+# 對策：只保留最新 N 筆。真實筆數本來就另存在 entry 的 `count` 欄，顯示端改讀它，
+# 畫面上的「共 N 筆」不會失真。
+_SNAP_HEAD_N = 5   # 與 tab5_data_guard Snapshot Viewer 的 head(5) 對齊
+
+
+# ── 稽核 C1：🟡 的兩種語意需要一個共用標記 ─────────────────────────────────
+# 🟡 分兩類：(a) 真延遲 (b) FRED release window 內的正常 lag。
+# `tab5_data_guard.anomaly_view_state` 要把 (b) 排除在「資料異常清單」外，
+# 原本用中文字串比對 `"release 期已到" not in fresh_label` —— 但 `_freshness`
+# 產生的 🟡 label 實際是 `"release lag N 天（預期 …）"`，兩邊字面值**從來沒對上**
+# （已窮舉 `_freshness` 全部 14 種 return label 確認）。
+# 條件恆真 ⇒ 每次 FRED 月度指標發布後的 +2~+5 天，一批完全正常的 🟡 被列進異常，
+# 而 `st.success("✅ 全數正常")` 永遠不會出現 —— 且 UI 上還白紙黑字寫著
+# 「release window 內的 🟡 已自動排除」。使用者因此被訓練成忽略異常清單。
+# 對策：字串前綴收成單一常數，產生端與判定端共用，並由
+# `tests/test_release_window_label.py` 鎖住漂移。
+RELEASE_WINDOW_LABEL_PREFIX = "release lag"
+
+
 def _sync_invest_twd_from_ledgers() -> None:
     """v18.52: 落帳後把 ledger.net_investment_twd 灌回 portfolio_funds[i].invest_twd，
     讓上方 KPI / 月配息估算 / 圓餅圖共用同一筆「實際投入」資料源。
@@ -182,10 +207,13 @@ def _update_data_registry():
                         return ("🟢",
                                 f"今日/隔日 release（{nrd.isoformat()}，發布前正常 lag）",
                                 MATERIAL_GREEN)
-                    # +2~+5: 微 lag，仍可接受 → 🟡
+                    # +2~+5: 微 lag，仍可接受 → 🟡（release window 內，**不算異常**）
+                    # 稽核 C1：前綴走 RELEASE_WINDOW_LABEL_PREFIX SSOT，
+                    # 讓 anomaly_view_state 判得到（見該常數的說明）。
                     if delta_to_release <= 5:
                         return ("🟡",
-                                f"release lag {delta_to_release} 天（預期 {nrd.isoformat()}）",
+                                f"{RELEASE_WINDOW_LABEL_PREFIX} {delta_to_release} 天"
+                                f"（預期 {nrd.isoformat()}）",
                                 MATERIAL_ORANGE)
                     return ("🔴",
                             f"真延遲 {delta_to_release} 天（預期 {nrd.isoformat()}）",
@@ -257,11 +285,13 @@ def _update_data_registry():
         sorted_s = None
         if series is not None:
             try:
-                s = pd.Series(series).dropna().sort_index(ascending=False)
+                s = pd.Series(series).dropna()
                 count = len(s)
                 if count > 0:
-                    latest_date = str(s.index[0])[:10]
-                sorted_s = s
+                    # 最新日直接取 index.max()，不倚賴排序成功（§1：少一個失敗面）
+                    latest_date = str(s.index.max())[:10]
+                    # 稽核 N1-e：只留最新 N 筆（見檔頭 _SNAP_HEAD_N 說明）
+                    sorted_s = s.sort_index(ascending=False).head(_SNAP_HEAD_N)
             except Exception:
                 pass  # smoke-allow-pass
         freq = _FREQ.get(key, "monthly")
@@ -288,11 +318,13 @@ def _update_data_registry():
         sorted_s = None
         if s is not None:
             try:
-                s2 = pd.Series(s).dropna().sort_index(ascending=False)
+                s2 = pd.Series(s).dropna()
                 count = len(s2)
                 if count > 0:
-                    latest_date = str(s2.index[0])[:10]
-                sorted_s = s2
+                    # 最新日直接取 index.max()，不倚賴排序成功（§1：少一個失敗面）
+                    latest_date = str(s2.index.max())[:10]
+                    # 稽核 N1-e：只留最新 N 筆（見檔頭 _SNAP_HEAD_N 說明）
+                    sorted_s = s2.sort_index(ascending=False).head(_SNAP_HEAD_N)
             except Exception:
                 pass  # smoke-allow-pass
         icon, flabel, fcolor = _freshness(latest_date, "nav")
@@ -322,11 +354,13 @@ def _update_data_registry():
         sorted_s = None
         if s is not None:
             try:
-                s2 = pd.Series(s).dropna().sort_index(ascending=False)
+                s2 = pd.Series(s).dropna()
                 count = len(s2)
                 if count > 0:
-                    latest_date = str(s2.index[0])[:10]
-                sorted_s = s2
+                    # 最新日直接取 index.max()，不倚賴排序成功（§1：少一個失敗面）
+                    latest_date = str(s2.index.max())[:10]
+                    # 稽核 N1-e：只留最新 N 筆（見檔頭 _SNAP_HEAD_N 說明）
+                    sorted_s = s2.sort_index(ascending=False).head(_SNAP_HEAD_N)
             except Exception:
                 pass  # smoke-allow-pass
         icon, flabel, fcolor = _freshness(latest_date, "nav")
@@ -349,17 +383,30 @@ def _update_data_registry():
     # 由 ui/tab1_macro.py 在抓取後 stash 至 _macro_tw_local。
     _tw_local = st.session_state.get("_macro_tw_local") or {}
     if isinstance(_tw_local, dict) and _tw_local:
+        # ── 稽核 E4：來源名稱改讀 fetcher 真實血緣 ───────────────────────────
+        # 原本三處都寫死 `"FinMind TaiwanMacroEconomics"` —— 這個 dataset
+        # **FinMind 根本不存在**（v19.342 查證；`repositories/macro_tw_local_repository.py`
+        # 檔頭 v19.385 T1 也已註明並把三個 fetcher 全部改掉了）。
+        # 也就是說資料診斷頁一直在對使用者顯示一個假的 API 名稱。
+        # 三個 fetcher 各自都已經回傳正確的 `source`：
+        #   NDC     → 'FinMind:TaiwanBusinessIndicator'
+        #   TW PMI  → 9 源賽跑實際命中源（'CIER-EN' / 'data.gov.tw' / …）
+        #   出口 YoY → 'Customs:Export6053(海關新臺幣出口總值)'
+        # 直接讀它，順便杜絕未來再漂移；fallback 用各 fetcher 的現行實際值，
+        # 不再退回舊假名。
         _tw_specs = [
             ("總經_TW_PMI", "🇹🇼 台灣製造業 PMI",
-             "FinMind TaiwanMacroEconomics",
+             _tw_local.get("tw_pmi", {}).get("source") or "TW PMI 9 源賽跑",
              _tw_local.get("tw_pmi", {}).get("value"),
              _tw_local.get("tw_pmi", {}).get("date", ""), "monthly"),
             ("總經_NDC_SIGNAL", "🇹🇼 NDC 景氣對策信號",
-             "FinMind TaiwanMacroEconomics",
+             _tw_local.get("ndc_signal", {}).get("source")
+             or "FinMind:TaiwanBusinessIndicator",
              _tw_local.get("ndc_signal", {}).get("score"),
              _tw_local.get("ndc_signal", {}).get("date", ""), "monthly"),
             ("總經_TW_EXPORT_YOY", "🇹🇼 台灣出口 YoY",
-             "FinMind TaiwanMacroEconomics",
+             _tw_local.get("tw_export", {}).get("source")
+             or "Customs:Export6053(海關新臺幣出口總值)",
              _tw_local.get("tw_export", {}).get("yoy"),
              _tw_local.get("tw_export", {}).get("date", ""), "monthly"),
             ("總經_TW_FI_STREAK", "🇹🇼 外資連續日數",
@@ -414,6 +461,27 @@ def _update_data_registry():
             "fresh_icon":  _hm_ic,
             "fresh_label": _hm_fl,
             "fresh_color": _hm_fc,
+        }
+
+    # ── 2026-08-14：USD/TWD 獨立條目（流程圖第 ① 層的一級訊號）─────────────────
+    # 原本 USDTWD 只以「熱錢三角」的一部分存在（`_macro_hot_money`），而熱錢面板
+    # 自 v19.47 起是 ARCHIVED、不在流程圖任何一層。後果：FinMind 外資一掛，
+    # 匯率跟著凍住（實機看到 140 天前），而使用者流程圖裡它是第 ① 層的一級訊號。
+    # `ui/hot_money.py::refresh_hot_money_data` 已把匯率落地解耦到 `_macro_usdtwd`，
+    # 這裡是它的消費端（PROCESS.md §4 0-consumer 條款：產生端與消費端同批交付）。
+    _fxs = st.session_state.get("_macro_usdtwd") or {}
+    if isinstance(_fxs, dict) and _fxs.get("date"):
+        _fx_ic, _fx_fl, _fx_co = _freshness(_fxs.get("date", ""), "daily")
+        reg["總經_USDTWD_TREND"] = {
+            "label":       "💱 USD/TWD 匯率走勢（獨立更新）",
+            "source":      _fxs.get("source") or "Yahoo USDTWD=X",
+            "latest_date": _fxs.get("date", ""),
+            "count":       1,
+            "series":      None,
+            "freq":        "daily",
+            "fresh_icon":  _fx_ic,
+            "fresh_label": _fx_fl,
+            "fresh_color": _fx_co,
         }
 
     # v19.140 §3a 短線風險雷達 10 燈（services.risk_radar.detect_risk_radar）
@@ -556,7 +624,12 @@ def _update_data_registry():
                 _ld, _ic, _lb, _co = _sub_fresh()
                 reg[f"{prefix}_{fn}_前十大持股"] = {
                     "label":       f"{fn} 前十大持股",
-                    "source":      "MoneyDJ yp004002",
+                    # 稽核 E5：原寫 `yp004002` —— 那是 **NAV 歷史頁**不是持股頁
+                    # （fund_orchestration.py:332,1052-1055 用它抓淨值序列）。
+                    # 比 tab6 的 `wh06_3`（純捏造）更誤導：它指向一個真實存在
+                    # 但用途完全不同的端點，照它去排查會查錯頁。
+                    # 真實持股頁見 repositories/fund/nav_metrics.py:977。
+                    "source":      "MoneyDJ yp013000(境內)/yp013001(境外)",
                     "latest_date": _ld,
                     "count":       len(_tops),
                     "series":      None,
@@ -569,7 +642,12 @@ def _update_data_registry():
                 _ld, _ic, _lb, _co = _sub_fresh()
                 reg[f"{prefix}_{fn}_產業配置"] = {
                     "label":       f"{fn} 產業配置",
-                    "source":      "MoneyDJ yp004002",
+                    # 稽核 E5：原寫 `yp004002` —— 那是 **NAV 歷史頁**不是持股頁
+                    # （fund_orchestration.py:332,1052-1055 用它抓淨值序列）。
+                    # 比 tab6 的 `wh06_3`（純捏造）更誤導：它指向一個真實存在
+                    # 但用途完全不同的端點，照它去排查會查錯頁。
+                    # 真實持股頁見 repositories/fund/nav_metrics.py:977。
+                    "source":      "MoneyDJ yp013000(境內)/yp013001(境外)",
                     "latest_date": _ld,
                     "count":       len(_sects),
                     "series":      None,

@@ -146,30 +146,51 @@ def _radar_threshold_lines(key: str) -> list[tuple[float, str, str, str]]:
     對齊 services/risk_radar.py 內部判斷邊界。
     無 natural threshold 的 key 回傳空 list。
     """
+    # ── 稽核 E11（2026-08-14）：門檻改 import services.risk_radar SSOT ──────────
+    # 原本這裡手抄了一份門檻，註解還綁死他檔行號（`# services L103-L105`）。
+    # 實測 5 組裡 3 組已漂移：VIX 黃 25(SSOT 22)、PCR 紅 1.5(SSOT 1.2)、
+    # sector_rotation 更是連**量綱**都錯（畫成比值，實際是百分點差）。
+    # service 端已於同批把門檻提升為 `RADAR_*` 模組常數，這裡直接吃它。
+    from services.risk_radar import (
+        RADAR_MOVE_RED, RADAR_MOVE_YELLOW,
+        RADAR_PCR_RED, RADAR_PCR_YELLOW,
+        RADAR_SECTOR_GAP_RED_PP, RADAR_SECTOR_GAP_YELLOW_PP,
+        RADAR_VIX_RED, RADAR_VIX_TS_RED, RADAR_VIX_TS_YELLOW, RADAR_VIX_YELLOW,
+    )
+
     if key == "vix_level":
-        # services L103-L105:cur >= 30 紅 / cur >= 25 黃
-        return [(25.0, "dot", TRAFFIC_YELLOW, "警戒 25"),
-                (30.0, "dash", TRAFFIC_RED, "恐慌 30")]
+        return [(RADAR_VIX_YELLOW, "dot", TRAFFIC_YELLOW,
+                 f"警戒 {RADAR_VIX_YELLOW:.0f}"),
+                (RADAR_VIX_RED, "dash", TRAFFIC_RED,
+                 f"恐慌 {RADAR_VIX_RED:.0f}")]
     if key == "vix_term_struct":
-        # services L341-L343:cur >= 1.10 紅 / cur >= 1.00 黃 (backwardation = panic)
-        return [(1.00, "dot", TRAFFIC_YELLOW, "倒掛 1.00"),
-                (1.10, "dash", TRAFFIC_RED, "極端 1.10")]
+        return [(RADAR_VIX_TS_YELLOW, "dot", TRAFFIC_YELLOW,
+                 f"倒掛 {RADAR_VIX_TS_YELLOW:.2f}"),
+                (RADAR_VIX_TS_RED, "dash", TRAFFIC_RED,
+                 f"極端 {RADAR_VIX_TS_RED:.2f}")]
     if key == "hy_oas_delta":
         # trend 顯示 HY OAS level %;對齊拐點桶 6/8% threshold(SSOT MACRO_THRESHOLDS)
         return [(_HY_WARN_THRESHOLD, "dot", TRAFFIC_YELLOW, f"警戒 {_HY_WARN_THRESHOLD}%"),
                 (_HY_CRISIS_THRESHOLD, "dash", TRAFFIC_RED, f"危機 {_HY_CRISIS_THRESHOLD}%")]
     if key == "move_level":
-        # services L426-L428:cur >= 130 紅 / cur >= 110 黃
-        return [(110.0, "dot", TRAFFIC_YELLOW, "警戒 110"),
-                (130.0, "dash", TRAFFIC_RED, "高 130")]
+        return [(RADAR_MOVE_YELLOW, "dot", TRAFFIC_YELLOW,
+                 f"警戒 {RADAR_MOVE_YELLOW:.0f}"),
+                (RADAR_MOVE_RED, "dash", TRAFFIC_RED,
+                 f"高 {RADAR_MOVE_RED:.0f}")]
     if key == "sector_rotation":
-        # services L532-L534:cur >= 1.20 紅(XLP/XLY)/ cur >= 1.00 黃
-        return [(1.00, "dot", TRAFFIC_YELLOW, "防禦領 1.00"),
-                (1.20, "dash", TRAFFIC_RED, "極防禦 1.20")]
+        # ⚠️ 量綱修正：本訊號的 value 是「防禦 30D 報酬 − 攻擊 30D 報酬」的
+        #    **百分點差**（`risk_radar._signal_sector_rotation` 的 `gap`），
+        #    不是 XLP/XLY 的比值。原本畫在 1.00 / 1.20 等於拿比值的刻度去標
+        #    百分點的軸（實機觀測值 −0.84 就落在兩條線下方、看起來永遠安全）。
+        return [(RADAR_SECTOR_GAP_YELLOW_PP, "dot", TRAFFIC_YELLOW,
+                 f"防禦領先 +{RADAR_SECTOR_GAP_YELLOW_PP:.0f}pp"),
+                (RADAR_SECTOR_GAP_RED_PP, "dash", TRAFFIC_RED,
+                 f"資金撤離 +{RADAR_SECTOR_GAP_RED_PP:.0f}pp")]
     if key == "put_call_ratio":
-        # PCR > 1.0 較看空,> 1.5 極端恐慌(教學常見值)
-        return [(1.00, "dot", TRAFFIC_YELLOW, "看空 1.0"),
-                (1.50, "dash", TRAFFIC_RED, "恐慌 1.5")]
+        return [(RADAR_PCR_YELLOW, "dot", TRAFFIC_YELLOW,
+                 f"看空 {RADAR_PCR_YELLOW:.2f}"),
+                (RADAR_PCR_RED, "dash", TRAFFIC_RED,
+                 f"恐慌 {RADAR_PCR_RED:.2f}")]
     # v19.188 — 🌳 長期座標桶 美股流動性卡片 SPEC 線
     # cut-off 全部 import 自 services.us_liquidity_engine（與各 fetcher 的 color/label 同源 SSOT）
     if key in ("us_hy_oas", "us_m2_yoy", "us_rrp", "us_aaii"):
@@ -898,7 +919,9 @@ def render_macro_tab() -> None:
 
     st.markdown("## 🌐 總經位階評估 ＆ 拐點偵測")
 
-    from ui.helpers.story_nav import render_story_nav
+    # 2026-08-14：流程層導覽（巨觀:我在系統的哪一層）+ 決策動線（微觀:下一站去哪）
+    from ui.helpers.story_nav import render_flow_nav, render_story_nav
+    render_flow_nav("macro")
     render_story_nav("macro")
     st.caption("策略3 三層指標加權方法論 v7 — 領先×2 | 中級×1 | 次級×0.5")
 
@@ -944,8 +967,22 @@ def render_macro_tab() -> None:
                     f"st_cache {_clr['st_cache_cleared']} 條 / "
                     f"session {_clr['session_keys_popped']} 鍵",
                     icon="🆕")
-            except Exception:
-                pass
+            except Exception as _e_clr:  # noqa: BLE001
+                # 稽核 A10：原本是 `pass` —— 清快取失敗被完全吞掉，**但下面兩行
+                # 照樣把 macro_done 設 False、_do_load 設 True**，於是使用者按了
+                # 「強制重抓最新（清快取）」，拿到的其實是舊快取的資料，畫面卻
+                # 一路跑到「✅ 已抓取 N 個指標」。這是最典型的「假成功」（§1）。
+                # 改法：留痕 + 明說快取沒清掉，讓使用者知道這次不是真的最新。
+                import sys as _sys_clr
+                import traceback as _tb_clr
+                print(f"[tab1_macro/clear_cache] {type(_e_clr).__name__}: {_e_clr}",
+                      file=_sys_clr.stderr)
+                _tb_clr.print_exc(file=_sys_clr.stderr)
+                st.warning(
+                    f"⚠️ **快取沒有清成功**（[{type(_e_clr).__name__}] "
+                    f"{str(_e_clr)[:100]}）—— 下面重新載入的資料**可能仍來自舊快取**，"
+                    "不保證是最新。請改用左側「🧹 全域刷新」，或稍後再試。"
+                )
             st.session_state.macro_done = False
             _do_load = True  # 同流程跑下方 spinner block
         if _do_load:
@@ -1025,8 +1062,19 @@ def render_macro_tab() -> None:
                     st.session_state.phase_info        = phase
                     st.session_state.macro_done        = True
                     st.session_state.macro_last_update = _now_tw()
-                    if "FED_RATE" in ind:
-                        set_risk_free_rate(ind["FED_RATE"].get("value",4.0) / 100)
+                    # 稽核 D4：與 app.py 同一個 bug 的第二份副本。
+                    # 原 `.get("value",4.0)/100` 會在 value 為 None 時
+                    # (a) 捏造 4% 無風險利率灌進全站 Sharpe/Sortino（§1）、
+                    # (b) 手抄 services.fund_service._RF_ANNUAL 的值（非 SSOT）、
+                    # (c) `None/100` 直接 TypeError。缺值改不呼叫 + 寫 stderr。
+                    _fed_v_t1 = (ind.get("FED_RATE") or {}).get("value")
+                    if _fed_v_t1 is not None:
+                        set_risk_free_rate(float(_fed_v_t1) / 100)
+                    elif "FED_RATE" in ind:
+                        import sys as _sys_rf_t1
+                        print("[tab1_macro] FED_RATE 存在但 value 為 None → "
+                              "不設定無風險利率，沿用 SSOT 預設（不捏造）",
+                              file=_sys_rf_t1.stderr)
                     _update_data_registry()
                     _lat_log = st.session_state.get("api_latency_log", [])
                     _lat_log.append({

@@ -29,6 +29,7 @@ from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_D
 from infra.proxy import get_proxy_config
 from shared.converters import safe_float as _safe_float
 from shared.signal_thresholds import TRADING_DAYS_PER_YEAR as _TD_1Y
+from shared.ttls import TTL_5MIN  # 稽核 N1-d:TTL 走 SSOT,不在本檔寫死秒數
 from ui.helpers.session import (
     parse_indicator_date as _parse_indicator_date,  # noqa: F401 — re-export for tests
 )
@@ -38,6 +39,39 @@ _TW_TZ = ZoneInfo("Asia/Taipei")
 
 def _now_tw():
     return datetime.datetime.now(_TW_TZ)
+
+
+# ── 稽核 N1-d：nav_history 狀態查詢加 TTL 快取 ────────────────────────────────
+# 原碼在「🗂️ NAV 歷史匯入與累積狀態」區塊直接呼叫 `nav_history_gs.status()` 與
+# `coverage_status()`，兩者：
+#   (a) 都會建 Service Account client + 讀 Google Sheets（`coverage_status` 讀整張
+#       `nav_history` 分頁）；
+#   (b) 服務層**沒有任何 cache**；
+#   (c) 該區塊 v19.362 刻意從 expander 改成 `st.container()` —— 理由正確（狀態燈
+#       不該可被收起來），但副作用是它變成**無條件執行**；
+#   (d) `app.py:205` 自承「st.tabs 單次 run 渲染全部分頁」。
+# 四者相乘 = 使用者在任何分頁做任何一次互動，都會打兩次 Google Sheets。
+# 25 檔實測：rerun 起算 17 秒後 `WebSocket onclose`（2026-08-14 實機兩次重現）。
+#
+# 對策：在 L3 加薄快取層（TTL 走 shared/ttls.py SSOT，不寫死秒數）。狀態燈本身
+# 仍常駐顯示 —— 這裡只擋掉「每次互動都重打 API」，不改變任何顯示語意。
+# 寫入路徑（import_csv_text）成功後會顯式清這兩個快取，避免顯示舊的累積點數。
+@st.cache_data(ttl=TTL_5MIN, show_spinner=False)
+def _cached_nh_status() -> dict:
+    from services.nav_history_gs import status as _s
+    return _s()
+
+
+@st.cache_data(ttl=TTL_5MIN, show_spinner=False)
+def _cached_nh_coverage() -> dict:
+    from services.nav_history_gs import coverage_status as _c
+    return _c()
+
+
+def _clear_nh_caches() -> None:
+    """匯入寫入後呼叫 —— 否則畫面會顯示寫入前的累積點數（§1 不顯示過期值）。"""
+    _cached_nh_status.clear()
+    _cached_nh_coverage.clear()
 
 # v19.339(第五份 review):刪死碼 _calc_data_health wrapper + calc_data_health
 # import — 本檔 0 呼叫(⓪/②區直接數 indicators),tab1/2/3 各有自己的 wrapper。
@@ -118,13 +152,28 @@ def anomaly_view_state(registry: dict | None) -> tuple[str, list]:
 
     🟡 分兩類：(a) 真延遲 (b) FRED release 期已到 +5d 內；後者屬正常 release
     window，不列入異常。
+
+    稽核 C1（2026-08-14 修）
+    -----------------------
+    原本 (b) 的排除條件是 `"release 期已到" not in fresh_label`，但
+    `data_registry._freshness` 產生的 🟡 label 實際是
+    `"release lag N 天（預期 YYYY-MM-DD）"` —— **兩邊字面值從來沒對上**
+    （已窮舉 `_freshness` 全部 14 種 return label 逐一比對確認）。
+    條件恆為 True ⇒ 每次 FRED 月度指標發布後的 +2~+5 天，一批完全正常的 🟡
+    會被列進「資料異常清單」，而 `st.success("✅ 全數正常")` 永遠不出現；
+    同時本頁下方還白紙黑字寫著「release window 內的 🟡 已自動排除」。
+    改吃 `RELEASE_WINDOW_LABEL_PREFIX` SSOT，由
+    `tests/test_release_window_label.py` 鎖住兩端漂移。
     """
+    from ui.helpers.io.data_registry import RELEASE_WINDOW_LABEL_PREFIX
+
     if not registry:
         return "empty", []
     items = [(k, v) for k, v in registry.items()
              if v.get("fresh_icon") == "🔴"
              or (v.get("fresh_icon") == "🟡"
-                 and "release 期已到" not in (v.get("fresh_label") or ""))]
+                 and not str(v.get("fresh_label") or "").startswith(
+                     RELEASE_WINDOW_LABEL_PREFIX))]
     items.sort(key=lambda kv: (
         0 if kv[1].get("fresh_icon") == "🔴" else 1,
         kv[1].get("label", kv[0]),
@@ -432,7 +481,10 @@ def render_data_guard_tab() -> None:
          "^VIX  /  RSP+SPY  /  DX-Y.NYB  /  HG=F",
          "—", _src_status(bool(_src_ind), _yf_ok, len(_YF_KEYS))),
         ("3️⃣", "MoneyDJ wb01/05/07",  "基金績效 / 配息率 / 風險評比 / TER",
-         "yp401000.djhtm (wb01)  /  yp405000.djhtm (wb05)  /  yp407000.djhtm (wb07)",
+         # 稽核 E5：原寫 yp401000 / yp405000 / yp407000 —— 這三個檔名**全 repo
+         # 零命中**，是捏造的。真實路徑見 repositories/fund/nav_metrics.py:741,825
+         # 與 sources.py:2136,2639-2641（境內配息另走 funddividend）。
+         "/w/wb/wb01.djhtm  /  /yp/wb05.djhtm（境內 funddividend）  /  /yp/wb07.djhtm",
          "✅", _src_status(_fund_n > 0, _fund_n)),
         ("4️⃣", "MoneyDJ NAV 頁",      "每日淨值歷史",
          "tcbbankfund.moneydj.com  /  funddj NAV 頁",
@@ -639,8 +691,12 @@ def render_data_guard_tab() -> None:
         with st.expander("🔍 資料抽查快照 (Snapshot Viewer)", expanded=False):
             _snap_keys = [k for k, v in _reg.items() if v.get("series") is not None and v.get("count", 0) > 0]
             if _snap_keys:
+                # 稽核 N1-e：筆數走 data_registry 的 _SNAP_HEAD_N SSOT，
+                # 不在本檔手抄「5」（原本 selectbox 標籤 / head(5) / caption
+                # 各寫死一次，改常數不會連動 = §3.3 要防的第二份真相）。
+                from ui.helpers.io.data_registry import _SNAP_HEAD_N as _SNAP_N
                 _snap_sel = st.selectbox(
-                    "選擇資料源查看原始資料（head 5，降冪排序）",
+                    f"選擇資料源查看原始資料（head {_SNAP_N}，降冪排序）",
                     _snap_keys,
                     key="reg_snap_sel",
                 )
@@ -651,11 +707,14 @@ def render_data_guard_tab() -> None:
                         _snap_df = pd.DataFrame({
                             "日期":  _snap_s.index.astype(str),
                             "數值":  _snap_s.values,
-                        }).head(5)
+                        }).head(_SNAP_N)
                         st.dataframe(_snap_df, use_container_width=True, hide_index=True)
                         st.caption(
                             f"資料鍵值：{_snap_sel}　頻率：{_snap_fq}　｜　"
-                            f"共 {len(_snap_s)} 筆（已依時間降冪排序，顯示最新 5 筆）"
+                            # 稽核 N1-e：registry 只留最新 N 筆(payload 瘦身),
+                            # 總筆數改讀 entry 既有的 `count`,顯示語意不變。
+                            f"共 {_reg[_snap_sel].get('count', len(_snap_s))} 筆"
+                            f"（已依時間降冪排序，顯示最新 {_SNAP_N} 筆）"
                         )
                     except Exception as _snap_e:
                         st.error(f"無法顯示快照：{_snap_e}")
@@ -789,9 +848,49 @@ def render_data_guard_tab() -> None:
 
             # ── B. Phase 3-B 7 子領域樣本量 ────────────────────────
             st.markdown("**B. Phase 3-B 7 子領域燈號回測樣本量**")
-            try:
-                from services.macro import backtest_sub_cycle_lights as _d5_bt
-                _d5_bt_out = _d5_bt(_d5_ind, target_key="LEI", window=60, forward_months=3)
+            # ── 稽核 N1-c：改為按鈕觸發（原本無條件執行）───────────────────────
+            # 原碼直接呼叫 `backtest_sub_cycle_lights(window=60)`：7 子領域 ×
+            # 60 月 expanding window，而 `services/macro/causal_sankey.py` 內
+            # **沒有任何 cache decorator**。關鍵是兩件事疊在一起：
+            #   (1) `st.expander` 收合**不會**阻止 body 執行；
+            #   (2) `app.py:205` 自承「st.tabs 單次 run 渲染全部分頁」。
+            # → 使用者停在任何一頁、做任何一次互動，都會付一次這個成本。
+            # 25 檔實測：rerun 起算 17 秒後 `WebSocket onclose`（2026-08-14 實機）。
+            # 對策：按鈕觸發 + session 暫存，與本頁其他重運算探針（🔍 跑 FX 來源
+            # 診斷 / 🔍 立即診斷）的既有慣例一致，不新造 pattern。
+            if st.button("▶️ 執行 Phase 3-B 回測（7 子領域 × 60 月，需數秒）",
+                         key="btn_d5_p3b",
+                         help="本區屬維運診斷，**預設不自動計算** —— 它沒有快取，"
+                              "而 Streamlit 每次互動都會重跑整份 script（含收合的 "
+                              "expander），自動執行會拖垮全站回應。按一次算一次，"
+                              "結果留在本次 session。"):
+                try:
+                    from services.macro import backtest_sub_cycle_lights as _d5_bt
+                    with st.spinner("Phase 3-B 回測計算中…"):
+                        st.session_state["_d5_p3b_out"] = _d5_bt(
+                            _d5_ind, target_key="LEI", window=60, forward_months=3)
+                except Exception as _e_d5_bt:
+                    import sys as _sys_p3b
+                    import traceback as _tb_p3b
+                    print(f"[tab5/phase3b] {type(_e_d5_bt).__name__}: {_e_d5_bt}",
+                          file=_sys_p3b.stderr)
+                    _tb_p3b.print_exc(file=_sys_p3b.stderr)
+                    # 稽核 §1：失敗要留成「失敗」，不可存 None ——
+                    # 存 None 會讓下一輪 rerun 讀到後印「⬜ 尚未執行」，
+                    # 把「算爆了」偽裝成「你還沒按」（掩蓋問題 = 違憲）。
+                    st.session_state["_d5_p3b_out"] = {
+                        "_error": f"[{type(_e_d5_bt).__name__}] {str(_e_d5_bt)[:200]}"
+                    }
+            _d5_bt_out = st.session_state.get("_d5_p3b_out")
+            if _d5_bt_out is None:
+                st.caption("⬜ 尚未執行 —— 按上方按鈕才會計算（避免每次操作都重跑一輪 60 月回測）。")
+            elif isinstance(_d5_bt_out, dict) and _d5_bt_out.get("_error"):
+                st.error(
+                    f"❌ Phase 3-B 回測**失敗**（這不是「尚未執行」）："
+                    f"{_d5_bt_out['_error']}　·　完整 traceback 見 Cloud log 的 "
+                    "`[tab5/phase3b]`。可再按一次上方按鈕重試。"
+                )
+            else:
                 _d5_bt_rows = []
                 for c in _d5_bt_out:
                     _d5_bt_rows.append({
@@ -809,8 +908,6 @@ def render_data_guard_tab() -> None:
                     f"⚙️ Phase 3-B 設計：window=60 月 expanding，需子領域內**至少 1 個指標** "
                     f"series 月頻 ≥ 60 期才有結論。目前 {_d5_ok_count}/7 子領域有結論。"
                 )
-            except Exception as _e_d5_bt:
-                st.caption(f"⚠️ Phase 3-B 狀態檢測失敗：{str(_e_d5_bt)[:80]}")
 
             # ── C. PMI 源診斷（issue 3 修復後的可觀測性） ─────────
             st.markdown("**C. PMI 來源診斷**")
@@ -1368,8 +1465,8 @@ def render_data_guard_tab() -> None:
     with st.container():
         # v19.362 ①:累積狀態燈 — 終結「secrets 沒設 = 靜默略過,以為在累積其實沒有」
         try:
-            from services.nav_history_gs import status as _nh_status
-            _ni_st = _nh_status()
+            # 稽核 N1-d:改走本檔頂部的 TTL 快取包裝(顯示語意不變,只擋重複打 API)
+            _ni_st = _cached_nh_status()
             if _ni_st["enabled"]:
                 st.caption("🟢 **累積狀態:已啟用** — App 抓到的淨值會自動累積到 "
                            "Google Sheet `nav_history` 分頁")
@@ -1405,8 +1502,8 @@ def render_data_guard_tab() -> None:
         # (`fund_service._merge_nav_history_series` 的 `added <= 0` 分支)。
         # 這三件事同時成立時，畫面上原本**沒有任何地方**講得出中間的落差(§5 可觀測)。
         try:
-            from services.nav_history_gs import coverage_status as _nh_cov
-            _cov_map = _nh_cov()          # 未啟用 / 無 tab → {}（≠ 0 點，語意不同）
+            # 稽核 N1-d:同上,改走 TTL 快取包裝(這支會讀整張 nav_history 分頁,最貴)
+            _cov_map = _cached_nh_coverage()   # 未啟用 / 無 tab → {}（≠ 0 點，語意不同）
             if _cov_map:
                 import pandas as _pd_cov
                 _cov_rows = [
@@ -1459,6 +1556,9 @@ def render_data_guard_tab() -> None:
                     st.error("❌ Google Sheets 未設定（google_service_account / "
                              "macro_weights_sheet_id secrets）→ 無法匯入。")
                 elif _ni_res["written"] > 0:
+                    # 稽核 N1-d:剛寫進去 → 立刻讓上方「累積狀態 / 累了多少」失效重讀,
+                    # 否則 TTL 內會顯示寫入前的點數（§1 不顯示過期值）。
+                    _clear_nh_caches()
                     st.success(
                         f"✅ 匯入完成：{_ni_res['rows']} 列 → 解析 {_ni_res['parsed']} 筆 → "
                         f"**新寫入 {_ni_res['written']} 筆**"

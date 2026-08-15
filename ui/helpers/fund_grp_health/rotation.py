@@ -26,12 +26,17 @@ def _assemble_rows(funds: list) -> list:
     _, _extra = build_merged_extra_columns(
         funds, (_pi or {}).get("phase") or "", (_pi or {}).get("score"))
 
+    # Layer 3-C:第 5 維(匯率風險)會改變分數 → 必須與大表拿同一份匯率資料,
+    # 否則同一檔在輪動配對與健診大表會出現不同等第(§2.1)。
+    from services.fx_regime_service import fx_regime_by_ccy as _fxr_rot
+    _fx_map_rot = _fxr_rot() or {}
+
     rows = []
     for _f in funds:
         _code = _f.get("code", "?")
         _fd = _f.get("moneydj_raw") or _f
         try:
-            _h = build_health_analysis_row(_fd, _code)
+            _h = build_health_analysis_row(_fd, _code, fx_cv_by_ccy=_fx_map_rot)
         except Exception:  # noqa: BLE001
             _h = {}
         try:

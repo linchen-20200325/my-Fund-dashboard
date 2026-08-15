@@ -198,8 +198,12 @@ def analyze_fund_row(code: str) -> dict:
 
     # v19.412:評分(4D) + 每月配息(100 萬基準)—— 復用組合健診 SSOT builder,單檔失敗不擋整列
     try:
+        from services.fx_regime_service import fx_regime_by_ccy as _fxr_fb
         from services.health.report import build_health_analysis_row
-        _h = build_health_analysis_row(fd, code)
+        # Layer 3-C:第 5 維(匯率風險)。快取住在 L2 就是為了讓這裡也拿得到 ——
+        # 本模組是 L2,構不到 L3 的 helper(§8.2),若少傳會讓同一檔基金
+        # 在批次與健診出現不同等第。
+        _h = build_health_analysis_row(fd, code, fx_cv_by_ccy=(_fxr_fb() or {}))
         row["grade_4d"] = _h.get("4D Grade")
         row["score_4d"] = _num(_h.get("4D Score"))
     except Exception:  # noqa: BLE001 — 評分算不出 → 留 None,不擋核心列

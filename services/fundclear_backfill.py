@@ -101,13 +101,102 @@ def list_classes_for(organize_code: str, fund_code: str) -> list[dict]:
     return fc.list_classes(organize_code, fund_code)
 
 
+def analyze_backfill_conflict(app_code: str, points: list) -> dict:
+    """寫入前的衝突偵測（稽核 E6，2026-08-14）。
+
+    回 `{n_existing, n_overlap, n_conflict, samples, verdict}`。
+
+    **為什麼一定要有這一步**：`nav_history` 的去重鍵只有 `(code, date)`。
+    同一檔基金常有多個級別（美元累積 / 美元配息 / 歐元避險…），淨值完全不同。
+    一旦選錯級別寫進去，**正確級別的淨值會被當成重複而永遠寫不進來** ——
+    而錯的那份會被健診拿去算 1Y 報酬、Sharpe、σ。而那個分頁在說明書上是
+    「🚨 絕對不要刪…無法從任何來源重建」。
+
+    判定邏輯：比對重疊日期的淨值。同級別的差異只該來自四捨五入；
+    差超過 `NAV_BACKFILL_CONFLICT_REL_TOL` 幾乎必然是不同級別。
+
+    verdict:
+      - `"clean"`     沒有重疊 → 純新增，安全
+      - `"duplicate"` 有重疊但數值一致 → 重複下載，寫進去也只會被略過
+      - `"conflict"`  有重疊且數值不同 → **極可能選錯級別**，應擋下
+      - `"unknown"`   讀不到既有資料（GS 未啟用等）→ 不宣稱安全（§1）
+    """
+    from shared.signal_thresholds import NAV_BACKFILL_CONFLICT_REL_TOL
+
+    _blank = {"n_existing": 0, "n_overlap": 0, "n_conflict": 0,
+              "samples": [], "verdict": "unknown"}
+    try:
+        from services.nav_history_gs import load_points
+        _existing = load_points(app_code) or []
+    except Exception as _e:  # noqa: BLE001
+        import sys as _sys
+        print(f"[fundclear_backfill] 衝突偵測讀不到既有 nav_history: "
+              f"{type(_e).__name__}: {_e}", file=_sys.stderr)
+        return {**_blank, "reason": f"{type(_e).__name__}: {_e}"}
+
+    _old = {}
+    for _p in _existing:
+        _d = str(_p.get("date") or _p.get("nav_date") or "")[:10]
+        try:
+            _v = float(_p.get("nav"))
+        except (TypeError, ValueError):
+            continue
+        if _d and _v > 0:
+            _old[_d] = _v
+    if not _old:
+        # 讀得到但一筆都沒有 → 這檔還沒累積過 → 純新增
+        return {**_blank, "verdict": "clean"}
+
+    _overlap: list = []
+    _conflict: list = []
+    for _p in points:
+        _d = str(_p.get("nav_date") or "")[:10]
+        _v = _p.get("nav")
+        if _d not in _old:
+            continue
+        _overlap.append(_d)
+        try:
+            _new = float(_v)
+        except (TypeError, ValueError):
+            continue
+        _ref = _old[_d]
+        if _ref > 0 and abs(_new - _ref) / _ref > NAV_BACKFILL_CONFLICT_REL_TOL:
+            _conflict.append({"date": _d, "existing": _ref, "incoming": _new,
+                              "diff_pct": (_new - _ref) / _ref * 100.0})
+
+    _verdict = ("conflict" if _conflict
+                else "duplicate" if _overlap else "clean")
+    return {
+        "n_existing": len(_old),
+        "n_overlap": len(_overlap),
+        "n_conflict": len(_conflict),
+        # 只回前幾筆給 UI 顯示 —— 使用者要的是「看一眼就知道差多少」,不是全部倒出來
+        "samples": sorted(_conflict, key=lambda x: x["date"])[:5],
+        "verdict": _verdict,
+    }
+
+
 def download_and_store(organize_code: str, fund_code: str, class_code: str,
                        app_code: str, fund_name: str = "",
-                       start: Optional[date] = None, end: Optional[date] = None) -> dict:
-    """抓完整歷史 → 寫 GS nav_history。回 {ok, count, currency, span, written, skipped, reason}。
+                       start: Optional[date] = None, end: Optional[date] = None,
+                       *, dry_run: bool = False) -> dict:
+    """抓完整歷史 →（可選）寫 GS nav_history。
+
+    回 `{ok, count, currency, span, written, skipped, conflict, dry_run, reason}`。
 
     app_code:持倉端的內部碼(如 ACTI71)—— nav_history 以此為 key,才會被健診讀回。
     §1:查無資料 → ok=False + reason(不靜默寫空)。
+
+    dry_run（稽核 E6，2026-08-14）
+    -----------------------------
+    True → **只抓不寫**，回傳含 `conflict` 衝突分析供 UI 預覽。
+    原本這支是「按一下就把數千筆寫進一個無法重建的分頁」，中間沒有任何確認；
+    而去重鍵只有 `(code, date)`，選錯級別寫進去之後正確資料就永遠進不來了。
+    現在 UI 走「① 預覽 → 看衝突分析 → ② 確認寫入」兩段。
+
+    ⚠️ 非 dry-run 時若偵測到 `conflict`，**本函式仍會擋下不寫**（fail-closed）——
+    確認鈕的責任是「使用者看過了」，不是「跳過安全檢查」。
+    要覆蓋既有資料請先處理 Sheet 上那幾列（本函式不做刪除：§1 不代使用者毀資料）。
     """
     from repositories import fundclear_offshore as fc
     _start = start or date(2000, 1, 1)             # spec §3.5:早於成立日不報錯,只回實際區間
@@ -122,17 +211,31 @@ def download_and_store(organize_code: str, fund_code: str, class_code: str,
                "fund_name": fund_name, "source": "fundclear_offshore"}
               for r in df.itertuples(index=False)]   # itertuples(非 iterrows)符 NFR-2
 
-    from services.nav_history_gs import append_points
-    _res = append_points(points)
-    return {
+    _base = {
         "ok": True,
         "count": int(len(df)),
         "currency": _currency,
         "span": (str(df["nav_date"].min())[:10], str(df["nav_date"].max())[:10]),
-        "written": _res.get("written"),
-        "skipped": _res.get("skipped"),
+        "conflict": analyze_backfill_conflict(app_code, points),
+        "dry_run": bool(dry_run),
+        "written": 0,
+        "skipped": 0,
     }
+    if dry_run:
+        return _base
+
+    if _base["conflict"].get("verdict") == "conflict":
+        # fail-closed:重疊日的淨值對不上 = 幾乎必然是不同級別。
+        # 寫進去會讓正確資料**永久**進不來,而且健診會拿錯的算報酬(§1)。
+        return {**_base, "ok": False,
+                "reason": "偵測到淨值衝突（極可能選錯級別）—— 已擋下未寫入"}
+
+    from services.nav_history_gs import append_points
+    _res = append_points(points)
+    return {**_base,
+            "written": _res.get("written"),
+            "skipped": _res.get("skipped")}
 
 
 __all__ = ["rank_candidates", "find_fund_candidates", "list_classes_for",
-           "download_and_store"]
+           "analyze_backfill_conflict", "download_and_store"]

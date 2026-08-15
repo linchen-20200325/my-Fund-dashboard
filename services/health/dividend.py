@@ -400,7 +400,8 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
             1. perf["1Y"] (wb01 MoneyDJ 官方,業界複利)— 最權威
             2. ret_1y_total (本地含息計算)
             3. ret_1y (純 NAV,不含息)
-            4. NAV 序列年化外推 (≥30d 才用,scale cap 12x)
+            4. NAV 序列年化外推 (跨度須 ≥ RET_1Y_EXTRAPOLATE_MIN_DAYS,倍數走 SSOT cap;
+               2026-08-14 稽核 E1 前是「≥30d、cap 12x」—— 30 天 ×12 會印出 +201% 的假一年報酬)
 
         v19.149 的 MK 嚴格簡單單利路徑改為「對照欄」備援(`_tr1y_mk_simple_meta`),
         不再參與燈號判定 — 避免 Tab2(wb01)/ 健診總表(mk_simple)同檔結論相反。
@@ -426,10 +427,33 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     from services.fund_total_return import (
         compute_1y_total_return,
         is_extrapolated_1y_source,
+        is_too_short_1y_source,
     )
     tr1y, _tr1y_method = compute_1y_total_return(fund)
     if tr1y is None:
-        return None
+        # ── 稽核 E1 + 🟠-3：兩種「沒有 tr1y」必須分開 ──────────────────────────
+        # E1 把「跨度 < 半年 → ×12 外推」改成「跨度 < 半年 → 不給值」,原本走
+        # 下方 `is_extrapolated_1y_source` 拒判分支(**會回 grey dict、會帶 adr**)
+        # 的那一整批基金,全部改道到這裡的 `return None`。
+        # 後果:`replacement.py` 拿不到 `_adr_pct` → 4D 少一維 → 規則 (b) 失效,
+        # 且 `eat_status` 由「⚪ 資料不足」變成空字串 → `_has_any_signal` 翻 False
+        # → 換標的建議從 🟢 保留掉成 ⬜ 資料不足。等於修一個洞開一個洞。
+        #
+        # 分法:
+        #   連 NAV 序列都沒有 → 維持回 None(既有契約,`test_data_missing_returns_none` 守著)
+        #   有序列、只是太短   → 與外推拒判同一種處境,回 grey dict 並帶 adr
+        if not is_too_short_1y_source(_tr1y_method):
+            return None
+        return {
+            "status": "⚪ 資料不足", "alert_level": "grey",
+            "message": ("這檔的淨值歷史不足半年,無法算出可靠的一年含息報酬 —— "
+                        "**不是它沒有配息或不吃本金,是我們還沒有足夠的資料去判斷**。"
+                        "請改看基金官方績效頁的含息報酬"),
+            "coverage": None, "gap_pct": None, "eating_principal": False,
+            "_tr1y_method": _tr1y_method, "_adr_source": _adr_source,
+            "_adr_pct": adr,
+            "_tr1y_meta": None, "_tr1y_window_days": None,
+        }
 
     # 對照欄:MK 嚴格簡單單利(若 series + dividends 可用)仍計算供 UI 對照顯示,
     # 但 不再 參與燈號判定。
@@ -468,17 +492,40 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
                             "請改看基金官方績效頁的含息報酬"),
                 "coverage": None, "gap_pct": None, "eating_principal": False,
                 "_tr1y_method": _tr1y_method, "_adr_source": _adr_source,
+                "_adr_pct": adr,   # 稽核 C4:早退路徑也要帶 adr 值(見下方主 return)
                 "_tr1y_meta": _tr1y_meta, "_tr1y_window_days": _win,
             }
 
     from services.portfolio_service import dividend_safety
-    out = dividend_safety(total_return=tr1y, dividend_yield=adr, nav_change=tr1y)
+    # ── 稽核 E3：nav_change 傳錯值（2026-08-14 修）────────────────────────────
+    # 原本是 `nav_change=tr1y` —— 把**含息報酬**當成**淨值變化**傳進去。
+    # `dividend_safety` 只用這個參數驅動一個獨立警語：
+    #     if nav_change < NAV_DROP_WARNING_PCT: "⚠️ 淨值下跌 X%,配息源頭值得確認"
+    # 傳含息報酬的後果與該警語的設計目的**完全相反**：
+    #     NAV −6%、配息 8% → tr1y = +2% → `+2 < −5` 為 False → **不觸發**
+    #     （正確應傳 −6.0 → 觸發）
+    # 也就是「配息愈高，淨值崩跌的警示愈不可能出現」——而這正是它要抓的情境。
+    # 而且警語文案寫的是「淨值下跌 X%」，X 卻印含息報酬，數字本身也是錯的。
+    # 正確值 `nav_change_pct` 就在同函式 local scope 的 `_tr1y_meta` 裡。
+    # 取不到時傳 None（= 不做這項交叉驗證），不拿別的數字頂替（§1）。
+    _nav_chg = (_tr1y_meta or {}).get("nav_change_pct")
+    out = dividend_safety(total_return=tr1y, dividend_yield=adr,
+                          nav_change=_nav_chg)
     if isinstance(out, dict):
         out["_tr1y_method"] = _tr1y_method
         out["_tr1y_window_days"] = (_tr1y_meta.get("window_days")
                                     if _tr1y_meta else None)
         out["_tr1y_meta"] = _tr1y_meta
         out["_adr_source"] = _adr_source  # v19.177 — adr 來源 SSOT 標記
+        # 稽核 C4（2026-08-14）：把 adr **值**也帶出去。
+        # 本函式內部早就用 `_resolve_adr_with_fallback` 算好 adr（3 層 chain SSOT），
+        # 卻只回傳了「來源標記」沒回傳「值」。於是
+        # `services/health/replacement.py:125` 用 `.get("annual_div_rate_pct")`
+        # 撈一個**不存在的 key** → adr 恆 None → `compute_4d_health` 少了「配息
+        # 健康度」這一維 → 換標建議規則 (b) 用的 4D 與健診大表顯示的 4D **不同源**，
+        # 且無 Sharpe 的檔會直接落到 grade `—`、規則 (b) 完全失效。
+        # 讓呼叫端重算一次 adr 會產生第二條 chain（§3.3），所以修在源頭。
+        out["_adr_pct"] = adr
     return out
 
 

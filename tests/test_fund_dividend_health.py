@@ -427,10 +427,17 @@ class TestTotalReturnSourceGuard:
         assert is_extrapolated_1y_source("") is False
 
     def test_refuses_verdict_on_annualized_extrapolation(self):
-        """短窗(40 天)下跌序列 + 無官方含息 → tr1y 走外推年化 → 應拒判(灰),不報 🔴。
+        """短窗下跌序列 + 無官方含息 → tr1y 走外推年化 → 應拒判(灰),不報 🔴。
 
         這正是 ACTI71 −38% 的成因:淨值近一年其實上漲,但抓不到官方含息 →
         退到外推年化把短期回檔 ×放大成大負數 → 舊碼誤判嚴重吃本金。
+
+        ⚠️ 2026-08-14 稽核 E1 後 fixture 從 40 天改為 200 天:
+        外推門檻由 30 天提高到 `RET_1Y_EXTRAPOLATE_MIN_DAYS`(180),40 天現在
+        **根本拿不到值**(回 None + `SRC_TOO_SHORT`),已經走不到「外推年化」這條路。
+        本條要守的是「**走得到外推年化時仍須拒判**」,所以窗口改成剛好落在
+        [門檻, 365) 這個仍會外推的區間 —— 拒判護欄本身完全沒有放寬。
+        40 天那個情境改由下一條 `test_too_short_window_returns_nothing` 接手。
         """
         import pandas as pd
 
@@ -439,20 +446,50 @@ class TestTotalReturnSourceGuard:
             is_extrapolated_1y_source,
         )
         from services.health.dividend import check_eating_principal_1y_mk
-        idx = pd.date_range("2026-07-01", periods=40, freq="D")
-        s = pd.Series([10.0 - 0.03 * i for i in range(40)], index=idx)  # 40 天跌 ~12%
+        idx = pd.date_range("2026-01-01", periods=200, freq="D")
+        s = pd.Series([10.0 - 0.006 * i for i in range(200)], index=idx)  # 200 天跌 ~12%
         fd = {
             "series": s,
-            "dividends": [{"date": "2026-07-15", "amount": 0.075}],
+            "dividends": [{"date": "2026-03-15", "amount": 0.075}],
             "metrics": {"annual_div_rate": 9.0},   # adr 有值
             "moneydj_raw": {},
         }
         _tr, _method = compute_1y_total_return(fd)
-        assert is_extrapolated_1y_source(_method)       # 確認走到外推年化(源#4)
+        assert is_extrapolated_1y_source(_method)       # 確認仍走到外推年化(源#4)
         res = check_eating_principal_1y_mk(fd)
         assert res is not None
         assert res["alert_level"] == "grey"             # 拒判,不冒充紅燈
         assert res["eating_principal"] is False
+
+    def test_too_short_window_returns_nothing_and_still_refuses(self):
+        """稽核 E1 —— 40 天(ACTI71 原始情境)現在連值都不該給,且仍須拒判。
+
+        舊行為:40 天 × min(365/40, 12) = ×9.1 外推 → 一個大負數 → 誤報 🔴。
+        新行為:跨度未達半年 → `(None, SRC_TOO_SHORT)`,來源欄寫出只有幾天資料。
+        兩者的共同要求不變:**不可以據此報紅燈**。
+        """
+        import pandas as pd
+
+        from services.fund_total_return import compute_1y_total_return
+        from services.health.dividend import check_eating_principal_1y_mk
+        idx = pd.date_range("2026-07-01", periods=40, freq="D")
+        s = pd.Series([10.0 - 0.03 * i for i in range(40)], index=idx)
+        fd = {
+            "series": s,
+            "dividends": [{"date": "2026-07-15", "amount": 0.075}],
+            "metrics": {"annual_div_rate": 9.0},
+            "moneydj_raw": {},
+        }
+        _tr, _method = compute_1y_total_return(fd)
+        assert _tr is None, f"39 天資料仍被外推成 {_tr} —— 那是乘出來的不是量出來的"
+        assert "不足以推算一年" in _method
+        res = check_eating_principal_1y_mk(fd)
+        assert res is not None
+        assert res["alert_level"] == "grey"
+        assert res["eating_principal"] is False
+        # 稽核 🟠-3:tr1y 缺席時 adr 明明算得出來,不可連它一起丟掉
+        assert res.get("_adr_pct") is not None, (
+            "tr1y 早退路徑漏傳 _adr_pct → 換標建議規則 (b) 對這批基金恆失效")
 
     def test_official_incl_div_still_judged_normally(self):
         """有官方 wb01 含息報酬(+17% > 配息 9%)→ 正常判定 🟢,守門不誤傷。"""

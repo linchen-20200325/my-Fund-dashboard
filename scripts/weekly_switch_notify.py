@@ -167,7 +167,10 @@ def _assemble_rows(funds: list, pool_by_code: dict) -> list:
         _code = _f.get("code", "?")
         _fd = _f.get("moneydj_raw") or _f
         try:
-            _h = build_health_analysis_row(_fd, _code)
+            # Layer 3-C:第 5 維(匯率風險)—— NAS 週報的等第必須與 App 上一致
+            from services.fx_regime_service import fx_regime_by_ccy as _fxr_wk
+            _h = build_health_analysis_row(_fd, _code,
+                                           fx_cv_by_ccy=(_fxr_wk() or {}))
         except Exception:  # noqa: BLE001
             _h = {}
         try:
@@ -264,7 +267,7 @@ def _macro_composite() -> "float | None":
 
 def _fx_label() -> "str | None":
     try:
-        from ui.helpers.fund_grp_health.fx_regime import fx_regime_by_ccy
+        from services.fx_regime_service import fx_regime_by_ccy
         return (fx_regime_by_ccy().get("USD") or {}).get("regime")
     except Exception as _e:  # noqa: BLE001
         _log(f"fx_regime 取得失敗 → None:{type(_e).__name__}: {_e}")

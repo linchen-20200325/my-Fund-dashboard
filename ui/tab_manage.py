@@ -418,14 +418,27 @@ def _delete_policy(client, sheet_id, policy_id):
 
 def _sec_notify():
     st.markdown("### 🔔 換股通報(LINE)")
-    from infra.config import get_secret
-    _ok = bool(get_secret("LINE_CHANNEL_TOKEN")) and bool(get_secret("LINE_USER_ID"))
+    # ── 稽核 E10：燈號假陰性 ────────────────────────────────────────────────
+    # 原本只檢查 `LINE_CHANNEL_TOKEN`，但 `infra/line_push.py:58` 明確支援別名
+    # `LINE_CHANNEL_ACCESS_TOKEN`（該檔 :10 註明「GitHub secret 常用後者」）。
+    # 只設別名時：燈號顯示 🔴「尚未設定」，而且下方 `if _ok and st.button(...)`
+    # 會**短路 → 測試按鈕整顆不渲染** —— 功能完好卻既說壞掉、又不給你測。
+    # 改用與 push_text 完全相同的別名解析，避免兩邊各判各的。
+    from infra.line_push import _resolve as _line_resolve
+    _line_token = (_line_resolve("LINE_CHANNEL_TOKEN", None)
+                   or _line_resolve("LINE_CHANNEL_ACCESS_TOKEN", None))
+    _ok = bool(_line_token) and bool(_line_resolve("LINE_USER_ID", None))
     st.caption(("🟢 LINE 憑證已設定" if _ok else
                 "🔴 LINE 尚未設定(App secrets 缺 LINE_CHANNEL_TOKEN / LINE_USER_ID → 只能預覽,不能測試發送)")
                + "　·　⚠️ **每週自動推播是你 NAS 的排程在跑**,本頁只負責預覽 + 測試發送。")
 
     _funds = st.session_state.get("portfolio_funds") or []
-    _loaded = [f for f in _funds if f.get("loaded")]
+    # 稽核 E9：原本只看 `loaded` —— 但 `ui/helpers/portfolio/load.py:219-221` 會
+    # 對抓取失敗的基金寫入 `{"loaded": True, "load_error": "..."}`，所以抓失敗的
+    # 檔一樣會被算進通報觀察集合。全 repo 其他 8 個消費端都用
+    # `loaded and not load_error`（含本檔 `_divcal_gather_items` 的「稽核 H2」），
+    # **這裡是唯一漏網**。
+    _loaded = [f for f in _funds if f.get("loaded") and not f.get("load_error")]
 
     if st.button("👁️ 預覽本週會送的通報訊息", use_container_width=True, key="manage_notify_preview"):
         _preview_notify(_loaded)
@@ -459,8 +472,11 @@ def _preview_notify(funds):
             _underperf_by_code,
         )
         pool = list_pool()
-        _pbc = {e.code: e for e in pool}
-        with st.spinner("計算本週通報預覽(和 NAS 週報同一套邏輯)…"):
+        # 稽核 E8(d)：key 未正規化 → 選股池代碼若為小寫就對不到 type_override /
+        # category。`scripts/weekly_switch_notify.py:296` 早就 `.upper()` 了
+        # （且標了「稽核修」），本頁保留著同一個已修過的 bug。
+        _pbc = {str(e.code or "").strip().upper(): e for e in pool}
+        with st.spinner("計算本週通報預覽…"):
             _held = _rows_with_nav(funds, _pbc)
             _cands = _pool_rows(pool, funds)
             _res = advise_switches(_held, _cands, fx_label=_fx_label(),
@@ -469,8 +485,32 @@ def _preview_notify(funds):
             _note = build_notification(_res, as_of=_today_tw(),
                                        skipped=max(0, len(funds) - len(_held)))
         st.text_area("本週會送的訊息(預覽,不會真的送)", _note["message"], height=260)
-        st.caption(f"該通知={_note['should_notify']}｜換股/表現差建議 {_note['n_actionable']} 檔。"
-                   "（沒建議時 NAS 週報不會吵你;此處僅預覽。）")
+        # ── 稽核 E8：原文案宣稱「和 NAS 週報同一套邏輯」，實測 6 項差異 ──────────
+        # (a) 觀察集合：本頁只看 session 已載入持倉；NAS 讀 Sheet 持倉 ∪
+        #     WATCH_CSV_URL 追蹤清單（weekly_switch_notify.py:298-306）
+        # (b) macro composite：本頁傳 `_macro_composite()`；NAS 預設 None
+        #     （:328，除非 --with-macro）→ switch_advisor.py:225-226 讓
+        #     **成長型賣出訊號在 NAS 端結構性永不觸發**。本頁說「該賣」，NAS 不送。
+        # (c) source_by_code：本頁不傳 → 預覽看不到 [持倉]/[觀察] 標籤
+        # (d) pool key 大小寫（已於上方修）
+        # (e) skipped：本頁 `max(0, len(funds)-len(_held))`，而 `_assemble_rows`
+        #     沒有任何 continue → **恆為 0**（不是低報，是該欄位完全失效）
+        # (f) rows 組法：本頁走 rotation._assemble_rows；NAS :157-188 本地重製
+        # 治本是把 NAS 那三個函式抽成 streamlit-free 的 services/switch_pipeline.py
+        # 兩邊共用（已列 P0 待辦）；在那之前，先誠實揭露差異，不再宣稱同一套。
+        st.caption(
+            f"本週會通報 **{_note['n_actionable']}** 檔"
+            f"（should_notify={_note['should_notify']}）。沒建議時 NAS 週報不會吵你。"
+        )
+        st.info(
+            "ℹ️ **這是以「你目前已載入的持倉」試算的預覽，可能與 NAS 實際送出的不同**：\n\n"
+            "- NAS 週報的標的是 **Google Sheet 持倉 ∪ 追蹤清單（`WATCH_CSV_URL`）**，"
+            "本頁只涵蓋已載入的持倉\n"
+            "- NAS 預設**不帶總經 composite**，所以「成長型看衰 → 賣出」這類建議"
+            "只會出現在本頁預覽、**不會被送出**\n\n"
+            "要看 NAS 真正會送什麼，請在 NAS 上跑 "
+            "`python scripts/weekly_switch_notify.py --dry-run`。"
+        )
     except Exception as _e:  # noqa: BLE001
         _friendly("預覽通報失敗", _e, level="error")
 
@@ -724,7 +764,33 @@ def _sec_policy_portfolio():
                "配息用各檔實際值加總(不分攤)。⚠️ **超額為近似**:真實報酬是持有至今、大盤是固定近1年,期間不對齊。")
 
     # 餵現有引擎:載入這些基金到 portfolio_funds(健診/換股/除息 都吃這個)
-    if st.button("📥 把這些基金載入 健診 / 換股 / 除息(現有引擎)", use_container_width=True, key="polcsv_load"):
+    # ── 稽核 E7（2026-08-14）：這是**整個換掉**，不是「加進去」──────────────────
+    # 原本按下去就 `st.session_state["portfolio_funds"] = _funds` —— 靜默全覆蓋。
+    # 兩個後果：
+    #   (a) 你原本從保單分頁載入的持倉**整批消失**，而按鈕文案只說「載入」。
+    #   (b) 這裡是**按 code 跨保單加總**的，產出的項目沒有 `policy_id` ——
+    #       而全站的持倉主鍵是 `(policy_id, code)`（v18.56 修 bug 修出來的複合鍵）。
+    #       覆蓋之後，T7 帳本、配置、換股那些依賴 policy_id 的地方會抓不到保單歸屬。
+    # 這裡不改變「覆蓋」這個行為（CSV 分析本來就是另一種視角），只把代價講清楚並要求確認。
+    _cur_pf = st.session_state.get("portfolio_funds") or []
+    _cur_with_pid = sum(1 for _f in _cur_pf
+                        if isinstance(_f, dict) and _f.get("policy_id"))
+    if _cur_pf:
+        st.warning(
+            f"⚠️ 目前已載入 **{len(_cur_pf)} 檔**"
+            + (f"（其中 {_cur_with_pid} 檔有保單歸屬）" if _cur_with_pid else "")
+            + "。按下面的按鈕會**整個換成**這份 CSV 的內容，不是加進去。\n\n"
+            + ("這份 CSV 是**按基金代碼跨保單加總**的，所以載入後的項目"
+               "**沒有保單歸屬** —— 依賴保單的功能（T7 帳本、配置檢查、換股）"
+               "會看不到是哪一張保單的。要換回來，回上面重新從保單分頁載入即可"
+               "（Google Sheet 上的資料不會被動到）。" if _cur_with_pid else "")
+        )
+        _ok_overwrite = st.checkbox(
+            "我知道這會取代目前已載入的組合", key="polcsv_load_confirm")
+    else:
+        _ok_overwrite = True
+    if st.button("📥 把這些基金載入 健診 / 換股 / 除息(現有引擎)", use_container_width=True,
+                 key="polcsv_load", disabled=not _ok_overwrite):
         try:
             from services.fund_row import process_one_fund
             from ui.helpers.fund_grp_health._utils import _build_fund_dict
@@ -743,9 +809,18 @@ def _sec_policy_portfolio():
                 _prog.progress((_i + 1) / len(_codes), text=f"載入 {_i + 1}/{len(_codes)}…")
             _prog.empty()
             if _funds:
+                # 稽核 E7:標記這批**沒有保單歸屬**,讓下游分得出來(§1 不假裝完整)。
+                # 這裡是按 code 跨保單加總的,policy_id 在這個視角下本來就不存在,
+                # 但下游不該把「沒有」誤讀成「還沒填」。
+                for _f in _funds:
+                    _f.setdefault("policy_id", "")
+                    _f["_from_policy_csv"] = True
                 st.session_state["portfolio_funds"] = _funds
                 st.success(f"✅ 已載入 {len(_funds)}/{len(_codes)} 檔 → 到「🗓️ 除息行事曆 / 🔔 換股通報預覽 / "
                            "組合健診」都會用這些基金。")
+                st.caption("ℹ️ 這批是**按基金代碼跨保單加總**的，沒有保單歸屬 —— "
+                           "T7 帳本與配置檢查會看不到是哪一張保單。"
+                           "要回到分保單的視角，請從上方保單分頁重新載入。")
             else:
                 st.warning("全部載入失敗(抓取問題)。")
         except Exception as _e:  # noqa: BLE001
@@ -881,29 +956,103 @@ def _sec_nav_backfill() -> None:
             else:
                 _app_code = st.text_input(
                     "存進 nav_history 的**持倉內部碼**(健診以此讀回;例 ACTI71)", key="navbf_appcode")
-            if _cpick and st.button("📥 下載完整歷史 + 存進 Google Sheet", key="navbf_dl",
-                                    disabled=not _app_code.strip(), use_container_width=True):
+            # ── 稽核 E6（2026-08-14）：寫入前必須先預覽 ────────────────────────
+            # 原本這裡是**一顆按鈕直接寫**:抓數千筆 → 直接進 Google Sheet 的
+            # nav_history 分頁,零預覽、零確認、無 dry-run、無 rollback。
+            # 而那個分頁在說明書上標「🚨 絕對不要刪…無法從任何來源重建」。
+            #
+            # 真正致命的是去重鍵只有 `(code, date)`:同一檔基金常有多個級別
+            # (美元累積 / 美元配息 / 歐元避險…),淨值完全不同。選錯級別寫進去後,
+            # **正確級別的淨值會被當成重複而永遠寫不進來**,而錯的那份會被健診
+            # 拿去算 1Y 報酬、Sharpe、σ —— 使用者不會收到任何警告。
+            #
+            # 改成兩段:① 預覽(只抓不寫 + 比對既有資料)→ ② 看過再確認寫入。
+            _bf_key = f"{_pick_fund['value']}|{_cpick['value']}|{_app_code.strip()}"
+            if _cpick and st.button("① 🔍 預覽（只抓不寫）", key="navbf_preview",
+                                    disabled=not _app_code.strip(),
+                                    use_container_width=True):
                 try:
                     from services.fundclear_backfill import download_and_store
-                    with st.spinner("抓完整歷史(可能數十秒)+ 寫入 Google Sheet…"):
-                        _res = download_and_store(
+                    with st.spinner("抓完整歷史(可能數十秒)…尚未寫入任何資料"):
+                        _prev = download_and_store(
                             _pick_fund["organize_code"], _pick_fund["value"],
-                            _cpick["value"], _app_code.strip(), fund_name=_pick_fund["name"])
-                    if not _res.get("ok"):
-                        st.error(f"下載失敗:{_res.get('reason')}")
-                    else:
-                        _s0, _s1 = _res["span"]
-                        st.success(
-                            f"✅ {_app_code.strip()}:抓到 {_res['count']} 筆({_s0} ~ {_s1}"
-                            f",{_res['currency']}),寫入 GS {_res['written']} 筆"
-                            f"(重複略過 {_res['skipped']})。重整健診 / 個基體檢就會用這段歷史"
-                            "算真實 1Y,不再外推誤判。")
+                            _cpick["value"], _app_code.strip(),
+                            fund_name=_pick_fund["name"], dry_run=True)
+                    st.session_state["navbf_preview"] = {"key": _bf_key, "res": _prev}
                 except Exception as _e:  # noqa: BLE001
-                    _friendly("下載 / 寫入失敗", _e, level="error")
+                    _friendly("預覽失敗", _e, level="error")
+
+            _pv = st.session_state.get("navbf_preview") or {}
+            # 選項改過 → 舊預覽作廢(否則會拿 A 級別的預覽去確認 B 級別的寫入)
+            if _pv and _pv.get("key") == _bf_key:
+                _res = _pv["res"]
+                if not _res.get("ok"):
+                    st.error(f"抓取失敗:{_res.get('reason')}")
+                else:
+                    _s0, _s1 = _res["span"]
+                    _cf = _res.get("conflict") or {}
+                    _v = _cf.get("verdict")
+                    st.info(
+                        f"**預覽結果（尚未寫入）**：{_app_code.strip()} 抓到 "
+                        f"**{_res['count']} 筆**，{_s0} ~ {_s1}，計價幣別 "
+                        f"**{_res['currency']}**。\n\n"
+                        f"這一檔目前已累積 {_cf.get('n_existing', 0)} 筆；"
+                        f"其中 {_cf.get('n_overlap', 0)} 天與這次抓到的重疊。"
+                    )
+                    if _v == "conflict":
+                        _rows = "\n".join(
+                            f"- {s['date']}：已存 **{s['existing']:.4f}** vs "
+                            f"這次 **{s['incoming']:.4f}**（差 {s['diff_pct']:+.1f}%）"
+                            for s in (_cf.get("samples") or []))
+                        st.error(
+                            f"⛔ **偵測到 {_cf['n_conflict']} 天的淨值對不上 —— "
+                            "極可能選錯級別，已擋下不寫入。**\n\n"
+                            f"{_rows}\n\n"
+                            "同一檔基金常有好幾個級別（美元累積 / 美元配息 / 歐元避險…），"
+                            "淨值完全不同。**請回上一步核對幣別與配息/累積型是否與你實際持有的一致。**\n\n"
+                            "⚠️ 為什麼一定要擋：這個分頁的去重只看「代碼 + 日期」，"
+                            "**錯的資料寫進去之後，正確的就永遠寫不進來了**，"
+                            "而健診會拿錯的去算報酬率。"
+                        )
+                    elif _v == "duplicate":
+                        st.warning(
+                            "ℹ️ 這段歷史**已經在裡面了**（重疊日的淨值完全一致）。"
+                            "按下面的確認鈕不會有任何改變，也不會弄壞什麼。")
+                    elif _v == "unknown":
+                        st.warning(
+                            "⚠️ **讀不到既有資料，無法確認會不會撞到既有紀錄。**"
+                            "多半是 Google Sheet 還沒設定好。"
+                            "在確認之前建議先到「📖 參考 / 診斷」看一下累積狀態燈。")
+                    else:
+                        st.success("✅ 沒有與既有資料重疊，這是純新增，安全。")
+
+                    if _v != "conflict":
+                        st.caption("確認前請再看一眼上面的**計價幣別**與**起訖日期**是否合理。")
+                        if st.button("② ✍️ 確認寫入 Google Sheet", key="navbf_commit",
+                                     type="primary", use_container_width=True):
+                            try:
+                                from services.fundclear_backfill import download_and_store
+                                with st.spinner("寫入 Google Sheet…"):
+                                    _w = download_and_store(
+                                        _pick_fund["organize_code"], _pick_fund["value"],
+                                        _cpick["value"], _app_code.strip(),
+                                        fund_name=_pick_fund["name"])
+                                if not _w.get("ok"):
+                                    st.error(f"已擋下未寫入:{_w.get('reason')}")
+                                else:
+                                    st.success(
+                                        f"✅ {_app_code.strip()}:寫入 {_w['written']} 筆"
+                                        f"(重複略過 {_w['skipped']})。"
+                                        "重整健診 / 個基體檢就會用這段歷史算真實 1Y,不再外推誤判。")
+                                    st.session_state.pop("navbf_preview", None)
+                            except Exception as _e:  # noqa: BLE001
+                                _friendly("寫入失敗", _e, level="error")
 
 
 def render_manage_tab() -> None:
-    st.markdown("## 📋 我的管理室")
+    from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tm
+    st.markdown(f"## {_tab_label_tm('manage')}")
+    render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
     st.info(
         "**這一頁由上到下有 6 塊**,先看前兩塊就好:\n\n"

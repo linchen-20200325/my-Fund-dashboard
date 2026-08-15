@@ -71,7 +71,8 @@ def render_manual_tab() -> None:
              "即時(數秒-分鐘)",
              "個別 RSS 失敗 → 其他源繼續"),
             ("💰 基金 NAV 歷史",   "🔍 Tab2 + 💊 Tab3 + 📊 Tab4",
-             "MoneyDJ NAV 頁(yp401000 / tcbbankfund / chubb 子網域)",
+             # 稽核 E5：原寫 `yp401000` —— 全 repo 零命中，捏造。
+             "MoneyDJ NAV 頁(yp010000 / yp010001 / tcbbankfund / chubb 子網域)",
              "T+1 ~ T+3,30min cache",
              "MoneyDJ 子網域 → TDCC openapi → FundClear → cnyes"),
             ("📝 基金 Meta(經理 / 規模 / TER)", "🔍 Tab2",
@@ -83,7 +84,9 @@ def render_manual_tab() -> None:
              "1 hour",
              "MoneyDJ 失敗 → cnyes dividend API"),
             ("📦 基金前 10 大持股",  "🔍 Tab2 + 💊 Tab3",
-             "MoneyDJ wh06_3 持股明細頁",
+             # 稽核 E5：原寫 `wh06_3` —— 全 repo 零命中，捏造。
+             # 真實見 repositories/fund/nav_metrics.py:977,984-1002。
+             "MoneyDJ 持股頁 yp013000(境內) / yp013001(境外)，替代頁 wq06",
              "1 day",
              "MoneyDJ 失敗 → fund meta 內 holdings.top_holdings 欄"),
             ("💱 USDTWD 匯率",      "📊 Tab4",

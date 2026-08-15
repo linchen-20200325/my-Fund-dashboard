@@ -61,6 +61,36 @@ _RADAR_KEYS = (
 )
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# 雷達門檻 SSOT — 2026-08-14 稽核 E11
+# ══════════════════════════════════════════════════════════════════════════
+# 這些值原本全是各 signal 函式內的 inline literal，而 `ui/tab1_macro.py` 的
+# `_radar_threshold_lines()`（畫在 sparkline 上的警戒線）**手抄了第二份**，
+# 註解還綁死他檔行號（`# services L103-L105`）。實測 5 組裡 3 組已經漂移：
+#
+#   | 指標            | UI 畫的線        | 本檔實際判燈        | 後果                    |
+#   |-----------------|------------------|---------------------|-------------------------|
+#   | VIX 黃燈        | 25.0             | `_VIX_YELLOW` = 22  | v19.157 統一 22 時漏改  |
+#   | Put/Call 紅燈   | 1.50             | 1.20                | 燈亮了線還沒到          |
+#   | sector_rotation | 1.00 / 1.20 比值 | 2 / 4 **百分點**    | 值錯 + **量綱也錯**     |
+#
+# sector_rotation 那組最嚴重：它是「防禦 30D 報酬 − 攻擊 30D 報酬」的**百分點差**
+# （實機觀測值 −0.84），UI 卻當成 XLP/XLY 的**比值**畫在 1.00/1.20 —— 兩個根本
+# 不同單位的東西（§4.1 量綱陷阱）。
+#
+# 提升為模組常數，UI 直接 import。§3.3：門檻只能有一份來源。
+RADAR_VIX_YELLOW: float = float(_VIX_YELLOW)   # 22 — 全站 SSOT(shared.macro_buckets)
+RADAR_VIX_RED: float = float(_VIX_RED)         # 30
+RADAR_VIX_TS_YELLOW: float = 1.00              # VIX/VIX3M 倒掛
+RADAR_VIX_TS_RED: float = 1.10                 # 極端倒掛
+RADAR_MOVE_YELLOW: float = 110.0               # MOVE 債市波動
+RADAR_MOVE_RED: float = 130.0
+RADAR_SECTOR_GAP_YELLOW_PP: float = 2.0        # 防禦−攻擊 30D 報酬差(**百分點**)
+RADAR_SECTOR_GAP_RED_PP: float = 4.0
+RADAR_PCR_YELLOW: float = 1.00                 # CBOE Put/Call
+RADAR_PCR_RED: float = 1.20
+
+
 def _color_from(level: int) -> str:
     return {0: GREEN, 1: YELLOW, 2: RED}.get(level, GRAY)
 
@@ -106,14 +136,15 @@ def _signal_vix_level() -> dict:
         # 取代 v19.147 multi-cutoff(原 yellow=25 保守化)。1-day 雷達在 VIX 22~25
         # 區間會比舊版多閃黃 — user 已接受此 trade-off(C2 計畫風險已宣告)。
         # delta_pct 仍保留原 1-day 變化幅度作為 secondary trigger(快速急殺優先)。
-        if cur >= _VIX_RED or delta_pct >= 20:
+        if cur >= RADAR_VIX_RED or delta_pct >= 20:
             lvl = 2
-        elif cur >= _VIX_YELLOW or delta_pct >= 10:
+        elif cur >= RADAR_VIX_YELLOW or delta_pct >= 10:
             lvl = 1
         else:
             lvl = 0
         note = (f"VIX={cur:.1f}（單日 {delta_pct:+.1f}%）｜"
-                f">{_VIX_RED:.0f} 或 +20% 為紅燈;>{_VIX_YELLOW:.0f} 或 +10% 為黃燈")
+                f">{RADAR_VIX_RED:.0f} 或 +20% 為紅燈;"
+                f">{RADAR_VIX_YELLOW:.0f} 或 +10% 為黃燈")
         trend = [round(x, 2) for x in s.tail(8).tolist()]
         return _build(lvl, round(cur, 2), round(prev, 2), note,
                       "Yahoo ^VIX 日線", trend)
@@ -257,9 +288,9 @@ def _signal_vix_term_struct(fred_api_key: str | None = None) -> dict:
         ratio = df["vix"] / df["v3m"]
         cur = float(ratio.iloc[-1])
         prev = float(ratio.iloc[-2])
-        if cur >= 1.10:
+        if cur >= RADAR_VIX_TS_RED:
             lvl = 2
-        elif cur >= 1.00:
+        elif cur >= RADAR_VIX_TS_YELLOW:
             lvl = 1
         else:
             lvl = 0
@@ -342,9 +373,9 @@ def _signal_move_level() -> dict:
             return _empty("MOVE 抓取不足 2 筆", "Yahoo ^MOVE 日線")
         cur = float(s.iloc[-1])
         prev = float(s.iloc[-2])
-        if cur >= 130:
+        if cur >= RADAR_MOVE_RED:
             lvl = 2
-        elif cur >= 110:
+        elif cur >= RADAR_MOVE_YELLOW:
             lvl = 1
         else:
             lvl = 0
@@ -422,14 +453,14 @@ def _signal_sector_rotation() -> dict:
         d_avg = sum(d_rets) / len(d_rets)
         o_avg = sum(o_rets) / len(o_rets)
         gap = d_avg - o_avg
-        if gap >= 4:
+        if gap >= RADAR_SECTOR_GAP_RED_PP:
             lvl = 2
-        elif gap >= 2:
+        elif gap >= RADAR_SECTOR_GAP_YELLOW_PP:
             lvl = 1
         else:
             lvl = 0
         note = (f"30D 防禦 {d_avg:+.1f}% / 攻擊 {o_avg:+.1f}%｜差 {gap:+.1f}pp"
-                f"｜≥+4pp = 紅燈（資金撤離成長股）")
+                f"｜≥+{RADAR_SECTOR_GAP_RED_PP:.0f}pp = 紅燈（資金撤離成長股）")
         return _build(lvl, round(gap, 2), round(o_avg, 2), note,
                       "Yahoo XLP/XLU/XLV vs XLK/XLY/XLF 30D", [])
     except Exception as e:  # noqa: BLE001
@@ -464,9 +495,9 @@ def _signal_put_call_ratio() -> dict:
                 f"→ 已退出風險加權,不以舊值污染系統性風險分數", _label)
         cur = float(s.iloc[-1])
         prev = float(s.iloc[-2])
-        if cur >= 1.20:
+        if cur >= RADAR_PCR_RED:
             lvl = 2
-        elif cur >= 1.00:
+        elif cur >= RADAR_PCR_YELLOW:
             lvl = 1
         else:
             lvl = 0

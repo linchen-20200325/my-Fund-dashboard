@@ -119,8 +119,41 @@ def refresh_hot_money_data(token: str = "", days: int = 180, window: int = 5,
     from services.hot_money_service import fetch_hot_money_frames
     flow_df, fx_df, ferr, xerr = fetch_hot_money_frames(days, token)
     _errs = "；".join(e for e in (ferr, xerr) if e)
+
+    # ── 稽核（2026-08-14 實機）：USD/TWD 被台股外資綁架 ────────────────────────
+    # 實機在資料診斷頁看到「目前資料 140 天前」。根因就在這個 `or`：
+    # 外資走 FinMind（需 token / 有配額 / 對 IP 敏感），USDTWD 走 Yahoo（穩定得多）。
+    # 只要外資那條掛掉，整個 stash 就不更新 —— **連明明抓得到的匯率也一起被凍住**。
+    #
+    # 而使用者流程圖裡，「匯率走勢 USD/TWD」是第 ① 層（全球總經）的一級訊號，
+    # 台股熱錢面板則早在 v19.47 就被判定為 ARCHIVED、不在流程圖任何一層。
+    # 讓一級訊號被一個已封存面板的資料源卡死，因果完全顛倒。
+    #
+    # 改法：匯率先獨立落地（只要 fx_df 有就寫 `_macro_usdtwd`），
+    # 熱錢訊號需要兩者交集才算 —— 兩者的成敗從此解耦。
+    if not fx_df.empty:
+        try:
+            _fx_last = fx_df.sort_values("date").iloc[-1]
+            st.session_state["_macro_usdtwd"] = {
+                "date": str(pd.Timestamp(_fx_last["date"]).date()),
+                "usdtwd": float(_fx_last["usdtwd"]),
+                "source": "Yahoo USDTWD=X",
+                "_decoupled_from_flow": True,   # 供診斷頁辨識這是獨立路徑寫入的
+            }
+        except Exception as _e_fxst:  # noqa: BLE001 — 匯率落地失敗不擋熱錢主流程，但留痕
+            import sys as _sys_fxst
+            print(f"[hot_money/usdtwd_stash] {type(_e_fxst).__name__}: {_e_fxst}",
+                  file=_sys_fxst.stderr)
+
     if flow_df.empty or fx_df.empty:
-        return False, f"外資或 USDTWD 抓取為空{('（' + _errs + '）') if _errs else ''}"
+        # 誠實區分「誰掛了」，不再一句「外資或 USDTWD」讓人分不清該修哪一邊
+        _which = ("外資(FinMind)" if flow_df.empty and not fx_df.empty else
+                  "USDTWD(Yahoo)" if fx_df.empty and not flow_df.empty else
+                  "外資與 USDTWD 皆")
+        _extra = ("；USD/TWD 已獨立更新，不受影響"
+                  if flow_df.empty and not fx_df.empty else "")
+        return False, (f"{_which}抓取為空"
+                       f"{('（' + _errs + '）') if _errs else ''}{_extra}")
     sig = build_signals(flow_df, fx_df, window=window,
                         flow_thr=flow_thr, fx_thr=fx_thr)
     if sig.empty:

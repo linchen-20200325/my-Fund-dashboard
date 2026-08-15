@@ -250,12 +250,18 @@ class TestZScoreSparklineDangerLines:
             assert _shape_ys(_fig) == [], f"{_k} 不在 registry,不該畫線"
 
     def test_existing_radar_lines_unchanged(self):
-        """回歸:短線雷達既有的 inline threshold 線(與 services 分級同源)
-        不得被本次改動影響。"""
+        """回歸:短線雷達既有的 threshold 線與 services 分級同源,不得被本次改動影響。
+
+        ⚠️ 2026-08-14 稽核 E11:原本這裡寫死 `[25.0, 30.0]`,而 docstring 卻宣稱
+        「與 services 分級同源」—— v19.157 把全站 VIX 黃燈統一成 22 之後,
+        services 判 22、畫面畫 25,本條測試不但沒抓到,還把錯誤值鎖住了。
+        改成從 `services.risk_radar` 取常數,名副其實地守「同源」。
+        """
+        from services.risk_radar import RADAR_VIX_RED, RADAR_VIX_YELLOW
         from ui.tab1_macro import _make_radar_sparkline
         _fig = _make_radar_sparkline([18.0, 22.0, 26.0], "vix_level", "#888888")
         _ys = sorted(_shape_ys(_fig))
-        assert _ys == pytest.approx([25.0, 30.0])
+        assert _ys == pytest.approx(sorted([RADAR_VIX_YELLOW, RADAR_VIX_RED]))
 
 
 # ══════════════════════════════════════════════════════════════

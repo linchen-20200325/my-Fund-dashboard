@@ -122,7 +122,12 @@ def check_replacement_recommendation(
     if _4d_result is None:
         try:
             tr1y, _ = compute_1y_total_return(fd)
-            adr = (eat_result or {}).get("annual_div_rate_pct")
+            # 稽核 C4：原本撈的是 `annual_div_rate_pct` —— **這個 key 不存在**
+            # （`check_eating_principal_1y_mk` 從來沒回傳過它）。後果是 adr 恆 None
+            # → 4D 少一維「配息健康度」→ 本規則 (b) 用的 grade 與健診大表顯示的
+            # grade 不同源，而且無 Sharpe 的檔會落到 `—`、規則 (b) 整條失效。
+            # 源頭已於同批補回傳 `_adr_pct`（值），這裡改吃它。
+            adr = (eat_result or {}).get("_adr_pct")
             _4d_result = compute_4d_health(
                 tr1y_pct=tr1y,
                 adr_pct=adr,
