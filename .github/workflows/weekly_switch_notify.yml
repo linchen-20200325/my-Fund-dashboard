@@ -34,6 +34,10 @@ jobs:
         env:
           google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           macro_weights_sheet_id: ${{ secrets.MACRO_WEIGHTS_SHEET_ID }}
+          # v19.462:選股池自 v19.462 起優先存 POLICY_SHEET_ID(使用者持倉那本)的 _fund_pool 分頁。
+          # cron 讀選股池(list_pool)必須拿到同一把 sheet id,否則 App 寫 POLICY 本、cron 讀 macro 本
+          # 兩邊看不到彼此(稽核 §1)。未設 → 回退 macro_weights,行為同舊。SA 須被加為此 Sheet 編輯者。
+          POLICY_SHEET_ID: ${{ secrets.POLICY_SHEET_ID }}
           WATCH_CSV_URL: ${{ secrets.WATCH_CSV_URL }}
           # LINE token 兩種 secret 名皆可(程式 LINE_CHANNEL_TOKEN 優先,退 LINE_CHANNEL_ACCESS_TOKEN)
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
