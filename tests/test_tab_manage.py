@@ -8,8 +8,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pandas as pd
-
 import ui.tab_manage as M
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -19,19 +17,17 @@ def test_today_tw_iso():
     assert re.match(r"^\d{4}-\d{2}-\d{2}$", M._today_tw())
 
 
-def test_prepare_write_df_preserves_data_no_loss():
-    """§1 防資料流失:回寫前處理補 policy_id、唯讀選填欄(avg_nav/units)照原樣保留不清空。
+def test_portfolio_section_removed_from_manage():
+    """v19.462(user 2026-08-17:帳本已有 + 流程圖 Portfolio 歸配置&帳本):管理室移除
 
-    v19.436:10 欄 schema(item_type 退役) → _prepare_write_df 僅補 policy_id;
-    write_policy_v2 端會跳過無 fund_code 的列。"""
-    df = pd.DataFrame([
-        {"fund_code": "ACTI71", "avg_nav": "8.67", "units": "1781", "invest_twd": 100},
-        {"fund_code": "NEW1", "invest_twd": 50},
-    ])
-    out = M._prepare_write_df(df, "P1")
-    assert (out["policy_id"] == "P1").all()
-    assert out[out["fund_code"] == "ACTI71"].iloc[0]["avg_nav"] == "8.67"      # 平均成本欄保留(不清空)
-    assert out[out["fund_code"] == "ACTI71"].iloc[0]["units"] == "1781"        # 份額選填欄保留
+    「投資組合(持倉)」一覽 + 整組回寫 CRUD(`_sec_portfolio` / `_save_policy` /
+    `_delete_policy` / `_prepare_write_df` / `_run_fix_and_shrink`),不再於管理室渲染/寫回政策 Sheet。
+    """
+    for _dead in ("_sec_portfolio", "_save_policy", "_delete_policy",
+                  "_prepare_write_df", "_run_fix_and_shrink"):
+        assert not hasattr(M, _dead), f"{_dead} 應已移除(投資組合退場管理室)"
+    _tm = (_ROOT / "ui" / "tab_manage.py").read_text(encoding="utf-8")
+    assert "_sec_portfolio()" not in _tm and "write_policy_v2" not in _tm
 
 
 def test_policy_client_and_sheet_bare_mode_degrades_not_crash():
