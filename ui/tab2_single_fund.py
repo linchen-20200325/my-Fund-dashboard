@@ -1458,13 +1458,14 @@ def render_single_fund_tab() -> None:
                         )
                         _zi = nav_zscore(s)
                         _rb = rebalance_signal(s, mj_raw.get("category", ""), None)
-                        if _zi.get("z") is not None:
+                        if not _rb.get("applies", True):
+                            # 稽核 polish:Core(平衡/貨幣)先攔 → 乾淨顯示「不做 Z-Score」,不秀多餘 Z 數字
+                            st.caption(f"📐 Z-Score:{_rb.get('reason')}")
+                        elif _zi.get("z") is not None:
                             st.markdown(
                                 f"**📐 Z-Score 位階**：Z = **{_zi['z']:+.2f}**"
                                 f"（近 3 年均線 {_zi['ma']:.2f}）→ **{_rb.get('action') or '—'}**")
                             st.caption(_rb.get("reason", ""))
-                        elif not _rb.get("applies", True):
-                            st.caption(f"📐 Z-Score:{_rb.get('reason')}")
                         else:
                             st.caption(f"📐 Z-Score 位階不可算"
                                        f"（{_zi.get('status')};有效點 {_zi.get('n')}）。")
