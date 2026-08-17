@@ -126,11 +126,21 @@ def _norm_date(v: Any) -> str:
 
 
 def _clean_points(points: list[dict]) -> list[dict]:
-    """normalize + §1 過濾:code 空 / date 壞 / nav<=0 全丟(不偽造)。"""
+    """normalize + §1 過濾:code 空 / date 壞 / nav<=0 全丟(不偽造)。
+
+    §5 可觀測性(v19.461):日期被 `_norm_date` 剔除(未來日 / 月日超範圍 / 非法日)且
+    **原始 nav_date 非空**時 → 這是「有值但壞掉」的髒資料(多半上游 misparse,如 user
+    2026-08-17 ALZF9 被 parse 成 2026-10-12 未來日)。單獨計數 + log 一行,避免和去重
+    `skipped` 混算被淹沒(稽核 §5 建議)。此處只 log,過濾行為不變(仍不寫入 §1)。
+    """
     out: list[dict] = []
+    _bad_dates: list[str] = []
     for p in points:
         code = str(p.get("code") or "").strip().upper()
-        d = _norm_date(p.get("nav_date"))
+        _raw_date = p.get("nav_date")
+        d = _norm_date(_raw_date)
+        if not d and _raw_date not in (None, ""):
+            _bad_dates.append(f"{code or '?'}={_raw_date!r}")
         try:
             nav_f = float(p.get("nav"))
         except (TypeError, ValueError):
@@ -141,6 +151,11 @@ def _clean_points(points: list[dict]) -> list[dict]:
                 "fund_name": str(p.get("fund_name") or ""),
                 "source": str(p.get("source") or "app"),
             })
+    if _bad_dates:
+        import sys as _sys
+        print(f"[nav_history_gs] 剔除 {len(_bad_dates)} 筆壞/未來日期(不寫入 nav_history):"
+              f"{', '.join(_bad_dates[:10])}{' …' if len(_bad_dates) > 10 else ''}",
+              file=_sys.stderr)
     return out
 
 

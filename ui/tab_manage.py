@@ -415,20 +415,6 @@ def _sec_dividend_calendar():
         _friendly("產生除息月曆失敗", _e, level="error")
 
 
-def _yf_1y_return(ticker: str) -> "float | None":
-    """yf 收盤 → 近1年報酬%(252 交易日;不足取全期)。無資料/失敗 → None(§1)。"""
-    try:
-        from repositories.macro.yf import fetch_yf_close
-        _s = fetch_yf_close(ticker, range_="2y")
-        if _s is None or len(_s) < 30:
-            return None
-        _last = float(_s.iloc[-1])
-        _base = float(_s.iloc[-252]) if len(_s) >= 252 else float(_s.iloc[0])
-        return (_last / _base - 1) * 100.0 if _base > 0 else None
-    except Exception:  # noqa: BLE001
-        return None
-
-
 def _sec_nav_backfill() -> None:
     """📥 補歷史淨值(FundClear 境外基金)→ 存進 GS nav_history → 根治「抓不到→外推→假吃本金」。"""
     st.markdown("### 📥 補歷史淨值(FundClear 境外基金)")
