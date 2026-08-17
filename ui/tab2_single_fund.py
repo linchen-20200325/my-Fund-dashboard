@@ -1456,8 +1456,10 @@ def render_single_fund_tab() -> None:
                         from services.zscore_engine import (  # noqa: PLC0415
                             nav_zscore, rebalance_signal,
                         )
+                        from ui.helpers.macro.ndc import get_ndc_score  # noqa: PLC0415
                         _zi = nav_zscore(s)
-                        _rb = rebalance_signal(s, mj_raw.get("category", ""), None)
+                        # NDC 景氣分數接回 → 門檻動態(cache 與市場定調共用同一份,不重複抓)
+                        _rb = rebalance_signal(s, mj_raw.get("category", ""), get_ndc_score())
                         if not _rb.get("applies", True):
                             # 稽核 polish:Core(平衡/貨幣)先攔 → 乾淨顯示「不做 Z-Score」,不秀多餘 Z 數字
                             st.caption(f"📐 Z-Score:{_rb.get('reason')}")
