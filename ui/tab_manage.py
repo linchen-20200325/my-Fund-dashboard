@@ -63,219 +63,13 @@ def _policy_client_and_sheet():
 
 # ───────────────────────── ① 選股池 ─────────────────────────
 
-def _import_history_to_pool(df, existing_codes, add_fn) -> dict:
-    """把說明書『曾經查過的基金清單』merge 進選股池。回 {added, skipped, total}。
-
-    純函式(依賴注入 add_fn(code, name),不碰 st / L1),供單元測試。合併語意:**已在池的略過、
-    不覆蓋**(保住 user 在池裡設過的型態/備註/類別);只加新代號。空代號跳過。
-    """
-    _seen = {str(c).strip().upper() for c in (existing_codes or set())}
-    _added = 0
-    _total = 0
-    for _, _row in df.iterrows():
-        _code = str(_row.get("代號") or _row.get("code") or "").strip().upper()
-        if not _code:
-            continue
-        _total += 1
-        if _code in _seen:
-            continue
-        add_fn(_code, str(_row.get("名稱") or _row.get("name") or "").strip())
-        _seen.add(_code)
-        _added += 1
-    return {"added": _added, "skipped": _total - _added, "total": _total}
-
-
-def _render_fund_history():
-    """📋 曾經查過的基金標的清單(Tab2/Tab3 自動記錄 + 預設)。v19.435 從說明書 Tab⑤ 整段搬來管理室。
-
-    手動新增 / CSV 上傳還原 / 下載 / 清空 / 複製代號 / 升等預設,資料走 `services.fund_history`。
-    標題由呼叫端的 expander 提供(避免重複),本函式只渲染內容。
-    """
-    with st.container():
-        from services.fund_history import (
-            clear_history as _clear_fh,
-            export_preset_funds_json as _export_preset_json,
-            get_history_df as _hist_df,
-            import_from_csv as _import_fh,
-            is_preset as _is_preset,
-            promote_to_preset as _promote_preset,
-            record_fund as _rec_fh_manual,
-        )
-
-        # 手動新增表單
-        with st.form("_fh_add_form", clear_on_submit=True):
-            _add_c1, _add_c2, _add_c3 = st.columns([1, 2, 1])
-            _new_code = _add_c1.text_input(
-                "基金代號", placeholder="例：ACCP138",
-                key="_fh_new_code",
-            )
-            _new_name = _add_c2.text_input(
-                "基金名稱（可選）", placeholder="例：聯博全球高收益基金",
-                key="_fh_new_name",
-            )
-            _add_c3.markdown("&nbsp;", unsafe_allow_html=True)  # 對齊
-            _submitted = _add_c3.form_submit_button(
-                "➕ 加入清單", use_container_width=True,
-            )
-            if _submitted and _new_code.strip():
-                _rec_fh_manual(_new_code.strip(), _new_name.strip(), source="manual")
-                st.success(f"✅ 已加入 {_new_code.strip().upper()}")
-                st.rerun()
-
-        _df_fh = _hist_df()
-        _fh_up = st.file_uploader(
-            "📥 上傳之前下載的 fund_history.csv 還原紀錄（reboot 後第一件事）",
-            type=["csv"],
-            key="_fh_upload",
-            help="紀錄會與當前清單 merge：同代號疊代次數 + 聯集來源 + 取較早 first / 較晚 last",
-        )
-        if _fh_up is not None:
-            _ret = _import_fh(_fh_up.getvalue())
-            if _ret["errors"]:
-                st.error("、".join(_ret["errors"]))
-            else:
-                st.success(
-                    f"✅ 還原成功：新增 {_ret['imported']} 檔、merge {_ret['merged']} 檔。"
-                )
-            _df_fh = _hist_df()
-        if _df_fh.empty:
-            st.info(
-                "尚未查過任何基金。在「🔍 個基深掘」抓取後 / 「📦 組合基金」載入後，"
-                "代號與名稱會自動寫入此清單。"
-            )
-        else:
-            _fh_c1, _fh_c2, _fh_c3 = st.columns([2, 1, 1])
-            _fh_c1.caption(f"📊 共 **{len(_df_fh)}** 檔唯一基金（依最近查詢時間排序）")
-            _fh_csv = _df_fh.to_csv(index=False).encode("utf-8-sig")
-            _fh_c2.download_button(
-                "💾 下載 CSV",
-                _fh_csv,
-                file_name="fund_history.csv",
-                mime="text/csv",
-                use_container_width=True,
-                key="_fh_dl_csv",
-            )
-            if _fh_c3.button("🗑️ 清空紀錄", use_container_width=True, key="_fh_clear"):
-                _clear_fh()
-                st.rerun()
-            st.dataframe(_df_fh, use_container_width=True, hide_index=True)
-
-            # ── v18.290: 點代碼自動複製（手機 tap 即複製）─
-            # v18.293 hotfix: get_history_df() 欄名是中文「代號/名稱」非英文 code/name
-            # 容錯：兩個欄名都接受（避免未來改 schema 再炸）
-            _code_col = "代號" if "代號" in _df_fh.columns else (
-                "code" if "code" in _df_fh.columns else None
-            )
-            _name_col = "名稱" if "名稱" in _df_fh.columns else (
-                "name" if "name" in _df_fh.columns else None
-            )
-            if _code_col is None:
-                st.caption(f"⚠️ 找不到代號欄（df columns: {list(_df_fh.columns)}）")
-                _codes_list = []
-            else:
-                st.markdown("**📋 點下方任一代號的右側 📋 icon 即可複製**")
-                _codes_list = _df_fh[_code_col].astype(str).str.upper().tolist()
-                # 多欄並排省空間（每 4 個一排）
-                _per_row = 4
-                for _i in range(0, len(_codes_list), _per_row):
-                    _cols = st.columns(_per_row)
-                    for _j, _code in enumerate(_codes_list[_i:_i + _per_row]):
-                        with _cols[_j]:
-                            st.code(_code, language=None)
-
-            # ── v18.290: ⭐ 升等為預設（寫回 config/preset_funds.json）─
-            st.markdown("---")
-            st.markdown("**⭐ 升等為預設清單**（reboot 後仍存在）")
-            _promo_c1, _promo_c2, _promo_c3 = st.columns([2, 2, 1])
-            _candidates = [c for c in _codes_list if not _is_preset(c)]
-            if not _candidates:
-                _promo_c1.caption("✅ 清單裡所有基金都已是預設了")
-            else:
-                _sel_code = _promo_c1.selectbox(
-                    "選一檔基金",
-                    options=_candidates,
-                    key="_fh_promote_sel",
-                    label_visibility="collapsed",
-                )
-                # 取對應 name（從 df 找最新一筆）
-                _sel_name = ""
-                if _code_col and _name_col:
-                    _row_match = _df_fh[
-                        _df_fh[_code_col].astype(str).str.upper() == _sel_code
-                    ]
-                    if not _row_match.empty:
-                        _sel_name = str(_row_match.iloc[0].get(_name_col, "") or "")
-                _promo_c2.text_input(
-                    "基金名稱（會寫進 JSON）",
-                    value=_sel_name,
-                    key="_fh_promote_name",
-                    label_visibility="collapsed",
-                )
-                if _promo_c3.button(
-                    "⭐ 升等", use_container_width=True, key="_fh_promote_btn",
-                ):
-                    _r = _promote_preset(
-                        _sel_code,
-                        st.session_state.get("_fh_promote_name", _sel_name),
-                    )
-                    if _r["errors"]:
-                        st.error("、".join(_r["errors"]))
-                    elif _r["already"]:
-                        st.info(f"ℹ️ {_sel_code} 已在預設清單，名稱已更新")
-                    else:
-                        st.success(
-                            f"✅ 已升等 {_sel_code} → 預設清單共 {_r['total']} 檔。"
-                            "**記得下方按「💾 下載 preset_funds.json」並 commit 回 repo，"
-                            "否則 Cloud reboot 後會消失！**"
-                        )
-                    st.rerun()
-
-            # 下載最新 preset_funds.json 給 user commit
-            _preset_json_bytes = _export_preset_json()
-            st.download_button(
-                "💾 下載 preset_funds.json（reboot 持久化必做）",
-                _preset_json_bytes,
-                file_name="preset_funds.json",
-                mime="application/json",
-                use_container_width=True,
-                key="_fh_dl_preset_json",
-                help="升等後務必下載此檔 → 取代 repo 的 config/preset_funds.json → git commit + push",
-            )
-        st.caption(
-            "💡 **內建預設常用基金永遠在**（即使 cache 被清空也會看到，來源標 `preset`）。"
-            "user 抓過 / 手動加的紀錄存於容器內 `cache/fund_history.json`，"
-            "**Streamlit Cloud 重啟容器時這部分會清空** → 用「下載 CSV → reboot 後上傳 CSV」雙保險。"
-        )
-
-
 def _sec_pool():
     st.markdown("### 📁 選股池(候選基金)")
     st.caption("**這不是你的持倉** —— 是你**還沒買、考慮想換進來**的候選名單,換股顧問拿它跟你的持倉比較。"
                "加/刪/改存到 **`_fund_pool` 分頁**(和你的保單持倉分頁**不同本清單**,不會動到持倉)。")
 
-    with st.expander("📥 從說明書『曾經查過的基金清單』匯入 / 合併進選股池"):
-        st.caption("把 Tab⑤ 說明書那份『曾經查過的基金(Tab2/Tab3 自動記錄)+ 預設清單』合併進來。"
-                   "**已在池的略過、不覆蓋**你設過的型態/備註;只加新代號。")
-        if st.button("📥 立即匯入 / 合併", use_container_width=True, key="pool_import_history"):
-            try:
-                from repositories.pool_repository import PoolEntry, add_or_update, list_pool
-                from services.fund_history import get_history_df
-                _existing = {e.code for e in list_pool()}
-                _r = _import_history_to_pool(
-                    get_history_df(), _existing,
-                    lambda code, name: add_or_update(PoolEntry(code=code, name=name)))
-                st.success(f"完成:新增 {_r['added']} 檔進選股池"
-                           f"(略過已在池 {_r['skipped']} 檔,清單共 {_r['total']} 檔)。")
-                st.rerun()
-            except Exception as _e:  # noqa: BLE001
-                _friendly("匯入基金清單失敗", _e, level="error")
-
-    with st.expander("📋 曾經查過的基金標的清單（Tab2/Tab3 自動記錄 + 預設）—— 上方按鈕的來源清單"):
-        try:
-            _render_fund_history()                       # v19.435 從說明書 Tab⑤ 搬來
-        except Exception as _e:  # noqa: BLE001
-            _friendly("基金標的清單載入失敗", _e)
-
+    # v19.461:移除「曾經查過的基金清單」自動記錄 + 匯入(user 2026-08-17:介面不友善 → 全拿掉)。
+    # 選股池本身即「觀察清單 watchlist」,直接用下方編輯器加/刪代號。
     try:
         from ui.helpers.fund_grp_health.switch_advisor_section import _render_pool_editor
         _render_pool_editor()
@@ -635,198 +429,6 @@ def _yf_1y_return(ticker: str) -> "float | None":
         return None
 
 
-def _sec_policy_portfolio():
-    """📊 保單組合分析:上傳保單總表 CSV → 依保單分組 + 真實報酬(成本 vs 現價 + 已領配息)+ 標最差
-    + vs 大盤(近1年近似)+ 一鍵載入健診/換股/除息。"""
-    import pandas as pd
-
-    from services.portfolio_csv import (
-        parse_holdings,
-        policy_returns,
-        summarize_by_policy,
-    )
-    st.markdown("### 📊 保單組合分析(上傳總表)")
-    st.caption("上傳你的『保單持倉總表』CSV → 依**保單**分組、算**真實報酬**(成本 vs 現價 + 已領配息)、"
-               "標出**最差那組**。⚠️ 資料只在本次 session,**不寫進 repo/雲端**。")
-
-    _up = st.file_uploader("上傳保單總表 CSV（保單號碼 / 基金代碼 / 幣別 / 投資金額(TWD) …）",
-                           type=["csv"], key="polcsv_up")
-    if _up is not None:
-        _raw = _up.getvalue()
-        _txt = None
-        for _enc in ("utf-8-sig", "utf-8", "big5", "cp950"):
-            try:
-                _t = _raw.decode(_enc)
-                if "�" not in _t:
-                    _txt = _t
-                    break
-            except Exception:  # noqa: BLE001
-                continue
-        _txt = _txt if _txt is not None else _raw.decode("utf-8", errors="replace")
-        _hs = parse_holdings(_txt)
-        if not _hs:
-            st.error("認不出表頭(需有『保單號碼』『基金代碼』欄)或無有效資料列。")
-        else:
-            st.session_state["_polcsv_holdings"] = _hs
-            st.session_state.pop("_polcsv_enriched", None)      # 換檔 → 清舊現價
-            st.success(f"讀到 {len(_hs)} 筆持倉 · {len({h['policy'] for h in _hs})} 張保單。")
-
-    _hs = st.session_state.get("_polcsv_holdings")
-    if not _hs:
-        st.caption("上傳後顯示分組總表;再按『抓現價』算真實報酬 + 排名(哪組最差)。")
-        return
-
-    if st.button("💹 抓現價 → 算真實報酬 + 排名", use_container_width=True, key="polcsv_price"):
-        try:
-            from services.fund_service import get_latest_fx
-            from services.moneydj_fetcher import auto_fetch_moneydj
-            from services.portfolio_csv import enrich_returns
-            _codes = sorted({h["code"] for h in _hs})
-            _nav, _prog = {}, st.progress(0.0, text="抓現價中…")
-            for _i, _c in enumerate(_codes):
-                try:
-                    _s = (auto_fetch_moneydj(_c) or {}).get("series")
-                    if _s is not None and len(_s) > 0 and float(_s.iloc[-1]) > 0:
-                        _nav[_c] = float(_s.iloc[-1])
-                except Exception:  # noqa: BLE001
-                    pass
-                _prog.progress((_i + 1) / len(_codes), text=f"抓現價 {_i + 1}/{len(_codes)}…")
-            _prog.empty()
-            _usd = None
-            try:
-                _usd = get_latest_fx("USDTWD")
-            except Exception:  # noqa: BLE001
-                pass
-            st.session_state["_polcsv_enriched"] = enrich_returns(_hs, nav_by_code=_nav, usdtwd=_usd)
-            # vs 大盤(近1年近似):^GSPC(美股)/ ^TWII(台股)
-            st.session_state["_polcsv_bench"] = {"spx": _yf_1y_return("^GSPC"),
-                                                 "twii": _yf_1y_return("^TWII"),
-                                                 "usdtwd": _yf_1y_return("TWD=X")}  # M5:USD/TWD 近1年%
-        except Exception as _e:  # noqa: BLE001
-            _friendly("抓現價/算報酬失敗", _e, level="error")
-
-    _summ = summarize_by_policy(_hs)
-    _c1, _c2, _c3 = st.columns(3)
-    _c1.metric("總投資額", f"{sum(d['invest_twd'] for d in _summ):,.0f} TWD")
-    _c2.metric("累積已領配息", f"{sum(d['cum_div_twd'] for d in _summ):,.0f} TWD")
-    _c3.metric("保單數", f"{len(_summ)}")
-
-    # v19.451 唯讀:移除「📤 匯入到 Google Sheet」(write_policy_v2 = clear→覆寫,會清空同名分頁;
-    # user 2026-08-13 決策改直接在 Sheet 依範本填)。此區只保留上傳總表的**分析顯示**,不寫回。
-    st.caption("ℹ️ 這裡只做**分析顯示**,不寫回 Google Sheet。要建/改保單資料,請直接在 "
-               "Google Sheet 依範本欄位填(App 不再覆寫、不會清空你的資料)。")
-
-    _en = st.session_state.get("_polcsv_enriched")
-    if not _en:
-        st.dataframe(pd.DataFrame([{
-            "保單": d["policy"], "投資額(TWD)": f"{d['invest_twd']:,.0f}",
-            "核心%": (f"{d['core_pct']:.0f}%" if d["core_pct"] is not None else "—"),
-            "累領配息": f"{d['cum_div_twd']:,.0f}", "檔數": d["n_funds"],
-        } for d in _summ]), hide_index=True, use_container_width=True)
-        st.info("按上面『💹 抓現價』才會算真實報酬 + 排名(哪組最差)。")
-        return
-
-    from services.portfolio_csv import policy_benchmark_1y
-    _pr = policy_returns(_en)
-    _maxrank = max((p["rank"] for p in _pr if p.get("rank")), default=0)
-    _n_suspect = sum(1 for h in _en if h.get("nav_suspect"))
-    _bench = st.session_state.get("_polcsv_bench") or {}
-    _pbench = policy_benchmark_1y(_hs, spx_1y_pct=_bench.get("spx"), twii_1y_pct=_bench.get("twii"),
-                                  usdtwd_1y_pct=_bench.get("usdtwd"))  # M5:SPX 換 TWD basis
-    _rows = []
-    for p in _pr:
-        _r = p.get("rank")
-        _lamp = "🔴 最差" if _r == 1 else ("🟢 最佳" if _r and _r == _maxrank else ("🟡" if _r else "⬜"))
-        if p["total_return_pct"] is not None:
-            _ret = f"{p['total_return_pct']:+.1f}%"
-        elif p["n_priced"] and (p.get("coverage") or 0) < 0.6:
-            _ret = f"覆蓋不足 {p['coverage'] * 100:.0f}%"
-        else:
-            _ret = "資料不足"
-        _bp = _pbench.get(p["policy"])
-        _rows.append({
-            "燈": _lamp, "排名": _r or "—", "保單": p["policy"], "真實報酬%": _ret,
-            "大盤近1年": (f"{_bp:+.1f}%" if _bp is not None else "—"),
-            "超額(近似)": (f"{p['total_return_pct'] - _bp:+.1f}pp"
-                           if (p["total_return_pct"] is not None and _bp is not None) else "—"),
-            "投資額": f"{p['invest_twd']:,.0f}",
-            "現值": (f"{p['current_value_twd']:,.0f}" if p["current_value_twd"] is not None else "—"),
-            "累領配息": f"{p['cum_div_twd']:,.0f}", "已估/檔數": f"{p['n_priced']}/{p['n_funds']}",
-        })
-    st.dataframe(pd.DataFrame(_rows), hide_index=True, use_container_width=True)
-    _worst = next((p for p in _pr if p.get("rank") == 1), None)
-    if _worst and _maxrank > 1:                     # 稽核 F4:只有 1 組可排名時不喊「最差」
-        st.warning(f"🔴 **最差組合:保單 {_worst['policy']}**，真實報酬 "
-                   f"{_worst['total_return_pct']:+.1f}%(含息、成本 vs 現價)。")
-    if _n_suspect:
-        st.caption(f"⚠️ {_n_suspect} 檔現價與成本淨值比異常(疑幣別/計價單位對不上)→ 已排除不硬算(§1)。")
-    st.caption("真實報酬 =(現值 + 已領配息 − 成本)÷ 成本;現價現抓、含息;缺現價/覆蓋率<60% 不排名(§1);"
-               "配息用各檔實際值加總(不分攤)。⚠️ **超額為近似**:真實報酬是持有至今、大盤是固定近1年,期間不對齊。")
-
-    # 餵現有引擎:載入這些基金到 portfolio_funds(健診/換股/除息 都吃這個)
-    # ── 稽核 E7（2026-08-14）：這是**整個換掉**，不是「加進去」──────────────────
-    # 原本按下去就 `st.session_state["portfolio_funds"] = _funds` —— 靜默全覆蓋。
-    # 兩個後果：
-    #   (a) 你原本從保單分頁載入的持倉**整批消失**，而按鈕文案只說「載入」。
-    #   (b) 這裡是**按 code 跨保單加總**的，產出的項目沒有 `policy_id` ——
-    #       而全站的持倉主鍵是 `(policy_id, code)`（v18.56 修 bug 修出來的複合鍵）。
-    #       覆蓋之後，T7 帳本、配置、換股那些依賴 policy_id 的地方會抓不到保單歸屬。
-    # 這裡不改變「覆蓋」這個行為（CSV 分析本來就是另一種視角），只把代價講清楚並要求確認。
-    _cur_pf = st.session_state.get("portfolio_funds") or []
-    _cur_with_pid = sum(1 for _f in _cur_pf
-                        if isinstance(_f, dict) and _f.get("policy_id"))
-    if _cur_pf:
-        st.warning(
-            f"⚠️ 目前已載入 **{len(_cur_pf)} 檔**"
-            + (f"（其中 {_cur_with_pid} 檔有保單歸屬）" if _cur_with_pid else "")
-            + "。按下面的按鈕會**整個換成**這份 CSV 的內容，不是加進去。\n\n"
-            + ("這份 CSV 是**按基金代碼跨保單加總**的，所以載入後的項目"
-               "**沒有保單歸屬** —— 依賴保單的功能（T7 帳本、配置檢查、換股）"
-               "會看不到是哪一張保單的。要換回來，回上面重新從保單分頁載入即可"
-               "（Google Sheet 上的資料不會被動到）。" if _cur_with_pid else "")
-        )
-        _ok_overwrite = st.checkbox(
-            "我知道這會取代目前已載入的組合", key="polcsv_load_confirm")
-    else:
-        _ok_overwrite = True
-    if st.button("📥 把這些基金載入 健診 / 換股 / 除息(現有引擎)", use_container_width=True,
-                 key="polcsv_load", disabled=not _ok_overwrite):
-        try:
-            from services.fund_row import process_one_fund
-            from ui.helpers.fund_grp_health._utils import _build_fund_dict
-            _inv_by_code: dict = {}
-            for h in _hs:
-                _inv_by_code[h["code"]] = _inv_by_code.get(h["code"], 0.0) + (h.get("invest_twd") or 0.0)
-            _codes = sorted(_inv_by_code)
-            _funds, _prog = [], st.progress(0.0, text="載入基金中…")
-            for _i, _c in enumerate(_codes):
-                try:
-                    _r = process_one_fund(_c, _inv_by_code[_c] or 1_000_000.0)
-                    if _r.get("ok") and _r.get("_fund_raw"):
-                        _funds.append(_build_fund_dict(_r["_fund_raw"], _c, _inv_by_code[_c]))
-                except Exception:  # noqa: BLE001
-                    pass
-                _prog.progress((_i + 1) / len(_codes), text=f"載入 {_i + 1}/{len(_codes)}…")
-            _prog.empty()
-            if _funds:
-                # 稽核 E7:標記這批**沒有保單歸屬**,讓下游分得出來(§1 不假裝完整)。
-                # 這裡是按 code 跨保單加總的,policy_id 在這個視角下本來就不存在,
-                # 但下游不該把「沒有」誤讀成「還沒填」。
-                for _f in _funds:
-                    _f.setdefault("policy_id", "")
-                    _f["_from_policy_csv"] = True
-                st.session_state["portfolio_funds"] = _funds
-                st.success(f"✅ 已載入 {len(_funds)}/{len(_codes)} 檔 → 到「🗓️ 除息行事曆 / 🔔 換股通報預覽 / "
-                           "組合健診」都會用這些基金。")
-                st.caption("ℹ️ 這批是**按基金代碼跨保單加總**的，沒有保單歸屬 —— "
-                           "T7 帳本與配置檢查會看不到是哪一張保單。"
-                           "要回到分保單的視角，請從上方保單分頁重新載入。")
-            else:
-                st.warning("全部載入失敗(抓取問題)。")
-        except Exception as _e:  # noqa: BLE001
-            _friendly("載入基金失敗", _e, level="error")
-
-
 def _sec_nav_backfill() -> None:
     """📥 補歷史淨值(FundClear 境外基金)→ 存進 GS nav_history → 根治「抓不到→外推→假吃本金」。"""
     st.markdown("### 📥 補歷史淨值(FundClear 境外基金)")
@@ -1138,6 +740,109 @@ def _sec_nav_backfill() -> None:
             except Exception as _e:  # noqa: BLE001
                 _friendly("TDCC 官方淨值累積失敗", _e, level="error")
 
+    # ── v19.461：從「說明書」搬來的 🗄️ NAV 歷史資料管理（手動 CSV 上傳 / 匯出 / 增量）──
+    # user 2026-08-17：NAV 歷史管理集中到「我的管理室」。此工具走 services/nav_history_store.py
+    # （本機 cache/nav_history/{code}.json）+ 雙寫 GS nav_history，與上面 FundClear / TDCC 兩支
+    # 同屬「補歷史淨值」家族，故一併收進本區。widget key `_nh_*` 僅此處渲染（已從說明書移除）。
+    with st.expander("🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）", expanded=False):
+        from services.nav_history_store import (
+            clear_cache as _nh_clear,
+            export_nav_csv as _nh_export,
+            get_cache_status as _nh_status,
+            import_nav_csv as _nh_import,
+            incremental_update as _nh_update,
+        )
+        st.caption(
+            "💡 **架構**：user 從 CnYES / MoneyDJ 手動下載完整歷史 CSV → 上傳這裡 → "
+            "系統存進 `cache/nav_history/{code}.json`。**系統計算長期報酬 / 健診時會優先讀 cache**，"
+            "確保歷史完整。後續按「🔄 增量更新」只抓最新幾天疊代上去（不重抓 5 年）。"
+        )
+        st.caption(
+            "⚠️ 不同網站基金代碼不同！MoneyDJ 用內部碼（ACTI94）、CnYES 可能用 ISIN（LU0xxx）。"
+            "上傳後此 cache 用你自己的 code 為 key，不依賴爬蟲。"
+        )
+
+        _nh_c1, _nh_c2 = st.columns([1, 2])
+        _nh_code = _nh_c1.text_input(
+            "基金代號", placeholder="ACTI94", key="_nh_code",
+            help="這個 code 同時是 cache key + 對應 fetch_nav 增量更新時的 MoneyDJ 代碼",
+        ).strip().upper()
+        _nh_file = _nh_c2.file_uploader(
+            "📥 上傳 NAV CSV（欄位：date + nav，支援西元/民國 + 中英文欄名）",
+            type=["csv"], key="_nh_upload_csv",
+        )
+
+        if _nh_code:
+            _status = _nh_status(_nh_code)
+            if _status["exists"]:
+                st.success(
+                    f"✅ Cache 已有 {_status['count']:,} 筆 "
+                    f"({_status['date_min']} ~ {_status['date_max']}，"
+                    f"涵蓋 {_status['years_covered']} 年)"
+                )
+            else:
+                st.info(f"ℹ️ {_nh_code} 尚無 cache，請上傳 CSV 建立基底")
+
+            if _nh_file is not None:
+                _r = _nh_import(_nh_code, _nh_file.getvalue())
+                if _r["errors"]:
+                    st.error("、".join(_r["errors"]))
+                else:
+                    st.success(
+                        f"✅ 匯入成功：新增 {_r['imported']:,} 筆、覆蓋 {_r['merged']:,} 筆 "
+                        f"→ 總 {_r['total']:,} 筆 ({_r['date_min']} ~ {_r['date_max']})"
+                    )
+                    # v19.365 ④ 儲存收斂：磁碟 cache 在 Streamlit Cloud 重啟會清空 →
+                    # 雙寫進 Google Sheet nav_history（(code,date) 去重，重啟不丟；非致命）。
+                    try:
+                        from services.nav_history_gs import import_csv_text as _gs_import
+                        _g = _gs_import(
+                            _nh_code,
+                            _nh_file.getvalue().decode("utf-8-sig", errors="replace"),
+                            source="tab6_csv")
+                        if _g["enabled"] and _g["written"]:
+                            st.caption(f"🗂️ 已同步 {_g['written']} 筆到雲端 nav_history（重啟不丟）")
+                        elif not _g["enabled"]:
+                            st.caption("⬜ 雲端 nav_history 未啟用（缺 secrets）→ 本次僅存本機，"
+                                       "容器重啟會清空（詳見 Tab5 狀態燈）")
+                    except Exception as _e_gs:  # 雲端同步失敗不影響本機匯入結果
+                        st.caption(f"⬜ 雲端同步失敗（本機已存）：[{type(_e_gs).__name__}] "
+                                   f"{str(_e_gs)[:60]}")
+                    st.rerun()
+
+            _act_c1, _act_c2, _act_c3 = st.columns(3)
+            if _act_c1.button("🔄 從 MoneyDJ 增量更新", use_container_width=True,
+                              key="_nh_update_btn", disabled=not _status["exists"]):
+                with st.spinner("抓最新幾天 NAV 疊代到 cache..."):
+                    _u = _nh_update(_nh_code)
+                if _u["errors"]:
+                    st.error("、".join(_u["errors"]))
+                else:
+                    st.success(
+                        f"✅ fetch_nav 抓 {_u['fetched']} 筆，"
+                        f"merge 新增 {_u['new_rows']} 筆，總 {_u['total']:,} 筆"
+                    )
+                    st.rerun()
+
+            if _status["exists"]:
+                _csv_bytes = _nh_export(_nh_code)
+                _act_c2.download_button(
+                    "📤 下載當前 cache 為 CSV", _csv_bytes,
+                    file_name=f"nav_{_nh_code}.csv", mime="text/csv",
+                    use_container_width=True, key="_nh_dl_btn",
+                )
+                if _act_c3.button("🗑️ 清除 cache", use_container_width=True,
+                                  key="_nh_clear_btn"):
+                    _nh_clear(_nh_code)
+                    st.rerun()
+
+        st.caption(
+            "🔧 **工作流程**：① 第一次去 [CnYES](https://fund.cnyes.com) 或 "
+            "[MoneyDJ](https://www.moneydj.com/funddj/) 找到該基金 → 下載完整歷史 CSV → "
+            "上傳到此 → ② 之後每週按「🔄 增量更新」自動抓最新疊代 → "
+            "③ reboot 前按「📤 下載」備份 → reboot 後重新上傳即還原。"
+        )
+
 
 def render_manage_tab() -> None:
     from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tm
@@ -1145,19 +850,16 @@ def render_manage_tab() -> None:
     render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
     st.info(
-        "**這一頁由上到下有 6 塊**,先看前兩塊就好:\n\n"
+        "**這一頁由上到下有 5 塊**,先看前兩塊就好:\n\n"
         "1. 💼 **投資組合(持倉)** — 你**已經買、目前真正持有**的基金 ← 這才是「你的組合」。\n"
         "2. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。\n"
-        "3. 📊 **保單組合分析** — 上傳保單總表做分析(只顯示,不寫回 Sheet)。\n"
-        "4. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
-        "5. 📥 **補歷史淨值** — 幫抓不到淨值的基金補歷史(根治吃本金誤判)。\n"
-        "6. 🔔 **換股通報** — 設定 LINE 每週提醒。"
+        "3. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
+        "4. 📥 **補歷史淨值** — 幫抓不到淨值的基金補歷史(根治吃本金誤判)。\n"
+        "5. 🔔 **換股通報** — 設定 LINE 每週提醒。"
     )
     _sec_portfolio()          # ★ v19.452:持倉最重要 → 放最前
     st.divider()
     _sec_pool()
-    st.divider()
-    _sec_policy_portfolio()
     st.divider()
     _sec_dividend_calendar()
     st.divider()

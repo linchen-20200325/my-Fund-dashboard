@@ -98,16 +98,31 @@ def status() -> dict:
 
 
 def _norm_date(v: Any) -> str:
-    """轉 'YYYY-MM-DD'。接受 date/datetime/'YYYY/MM/DD'/'YYYY-MM-DD...'。壞值回 ''(§1 不猜)。"""
+    """轉 'YYYY-MM-DD'。接受 date/datetime/'YYYY/MM/DD'/'YYYY-MM-DD...'。壞值回 ''(§1 不猜)。
+
+    v19.461 資料把關(user 2026-08-17 回報 ALZF9 未來日期 2026-10-12):除 4 位數年 + 全數字,
+    另擋 **月/日範圍** 與 **未來日期**(NAV 不可能是未來;根治 TDCC/opendata `pd.to_datetime`
+    把民國年或日月顛倒誤 parse 成未來日 → 靜默存進 nav_history 的 bug)。
+    """
     if v is None or v == "":
         return ""
     if isinstance(v, (_dt.date, _dt.datetime)):
-        return v.strftime("%Y-%m-%d")
-    s = str(v).strip().replace("/", "-")[:10]
+        s = v.strftime("%Y-%m-%d")
+    else:
+        s = str(v).strip().replace("/", "-")[:10]
     parts = s.split("-")
-    if len(parts) == 3 and len(parts[0]) == 4 and all(p.isdigit() for p in parts):
-        return s
-    return ""
+    if not (len(parts) == 3 and len(parts[0]) == 4 and all(p.isdigit() for p in parts)):
+        return ""
+    _y, _m, _dd = int(parts[0]), int(parts[1]), int(parts[2])
+    if not (1 <= _m <= 12 and 1 <= _dd <= 31):     # 月/日範圍(擋日月顛倒等亂 parse)
+        return ""
+    try:
+        _today = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date()
+        if _dt.date(_y, _m, _dd) > _today:         # 未來日期 → 丟(§1 不存不可能的資料)
+            return ""
+    except ValueError:                              # 非法日期(如 2-30)→ 丟
+        return ""
+    return f"{_y:04d}-{_m:02d}-{_dd:02d}"
 
 
 def _clean_points(points: list[dict]) -> list[dict]:

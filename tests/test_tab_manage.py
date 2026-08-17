@@ -34,27 +34,6 @@ def test_prepare_write_df_preserves_data_no_loss():
     assert out[out["fund_code"] == "ACTI71"].iloc[0]["units"] == "1781"        # 份額選填欄保留
 
 
-def test_import_history_to_pool_merges_new_skips_existing():
-    df = pd.DataFrame([
-        {"代號": "ACTI71", "名稱": "聯博A"},
-        {"代號": "acti94", "名稱": "聯博B"},          # 小寫 → 大寫比對後加入
-        {"代號": "TLZF9", "名稱": "已在池"},           # 已在池 → 略過不覆蓋
-        {"代號": "   ", "名稱": "空代號"},             # 空代號 → 跳過(不計)
-    ])
-    _added = []
-    r = M._import_history_to_pool(df, existing_codes={"TLZF9"},
-                                  add_fn=lambda c, n: _added.append((c, n)))
-    assert r == {"added": 2, "skipped": 1, "total": 3}
-    assert _added == [("ACTI71", "聯博A"), ("ACTI94", "聯博B")]
-
-
-def test_import_history_to_pool_dedups_within_list():
-    df = pd.DataFrame([{"代號": "X1", "名稱": "a"}, {"代號": "x1", "名稱": "b"}])   # 同代號重複
-    _added = []
-    r = M._import_history_to_pool(df, set(), lambda c, n: _added.append(c))
-    assert r["added"] == 1 and _added == ["X1"]
-
-
 def test_policy_client_and_sheet_bare_mode_degrades_not_crash():
     _c, _reason = M._policy_client_and_sheet()
     assert _c is None and isinstance(_reason, str) and "登入" in _reason   # 誠實提示,不崩
@@ -66,13 +45,38 @@ def test_manage_tab_registered_in_app():
     assert "📋 我的管理室" in txt and "with tab_manage:" in txt
 
 
-def test_fund_history_section_moved_from_manual_to_manage():
-    """v19.435:曾經查過的基金清單整段搬到管理室,說明書只留指路(避免 _fh_* widget 雙渲染崩)。"""
+def test_fund_history_section_fully_removed():
+    """v19.461(user 2026-08-17「介面不友善→全拿掉」):曾經查過的基金清單整段**完全移除**,
+
+    說明書 + 管理室兩邊都不得再有該 widget / 渲染函式 / 指路 stub(選股池編輯器本身即 watchlist)。
+    """
     _t6 = (_ROOT / "ui" / "tab6_manual.py").read_text(encoding="utf-8")
     _tm = (_ROOT / "ui" / "tab_manage.py").read_text(encoding="utf-8")
-    assert "_fh_add_form" not in _t6 and "_fh_promote_btn" not in _t6   # 說明書已無該 widget
-    assert "已搬到" in _t6                                              # 留指路
-    assert "def _render_fund_history" in _tm and "_fh_add_form" in _tm  # 管理室有整段
+    # 說明書:無該 widget、無指路 stub
+    assert "_fh_add_form" not in _t6 and "_fh_promote_btn" not in _t6
+    assert "曾經查過" not in _t6
+    # 管理室:整段渲染函式 + widget 都已刪
+    assert "def _render_fund_history" not in _tm and "_fh_add_form" not in _tm
+    assert "_import_history_to_pool" not in _tm
+
+
+def test_nav_csv_tool_moved_to_manage():
+    """v19.461:🗄️ NAV 歷史資料管理(手動 CSV)由說明書搬到管理室(集中 NAV 補歷史)。"""
+    _t6 = (_ROOT / "ui" / "tab6_manual.py").read_text(encoding="utf-8")
+    _tm = (_ROOT / "ui" / "tab_manage.py").read_text(encoding="utf-8")
+    assert "nav_history_store" not in _t6 and "_nh_upload_csv" not in _t6   # 說明書已移出
+    assert "_nh_upload_csv" in _tm and "nav_history_store" in _tm            # 管理室已收入
+
+
+def test_mk_clock_section_not_rendered():
+    """v19.461(user 2026-08-17「這個也移除」):美林時鐘(策略3 景氣時鐘觀測站)不再於 UI 渲染。
+
+    純邏輯 classify_phase + PMI SSOT 常數留在 mk_clock.py(SSOT-lock 測試用),但不得有 render 呼叫。
+    """
+    _lt = (_ROOT / "ui" / "tab1_macro_longterm.py").read_text(encoding="utf-8")
+    _t1 = (_ROOT / "ui" / "tab1_macro.py").read_text(encoding="utf-8")
+    assert "render_mk_clock_section" not in _lt   # 呼叫 + import 都已移除
+    assert "render_mk_clock_section" not in _t1   # 死 import 也清掉
 
 
 def test_pool_editor_no_longer_called_in_switch_advisor_section():

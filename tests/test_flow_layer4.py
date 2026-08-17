@@ -2,7 +2,7 @@
 
 涵蓋:
   E6 nav_history 回填:零確認寫入 → 兩段式(預覽 → 確認)+ 衝突偵測 fail-closed
-  E7 `portfolio_funds` 靜默全覆蓋 → 明講代價 + 要求確認 + 標記無保單歸屬
+  E7 `portfolio_funds` 靜默全覆蓋(保單組合分析上傳)→ v19.461 整段移除,改守「覆蓋路徑不得復活」
 
 E8(通報預覽與 NAS 週報 6 項差異)的**治本**需要把 NAS 端三個重製函式抽成
 共用 pipeline,而它們依賴的 `build_merged_extra_columns` / `capture_by_code`
@@ -153,36 +153,29 @@ def test_ui_has_two_step_preview_then_commit():
 
 
 # ══════════════════════════════════════════════════════════════════════
-# E7 — portfolio_funds 不得靜默全覆蓋
+# E7 — portfolio_funds 不得靜默全覆蓋(v19.461:保單組合分析已整段移除)
 # ══════════════════════════════════════════════════════════════════════
-def test_overwrite_requires_confirmation():
-    """**改回舊行為必紅** —— 直接 `st.session_state["portfolio_funds"] = _funds`。
+def test_policy_csv_overwrite_path_removed():
+    """v19.461(user 2026-08-17「只移除保單組合分析、保留持倉」):
 
-    按鈕文案只說「載入」,實際是**整個換掉**;而這份 CSV 是按 code 跨保單加總的,
-    產出的項目沒有 `policy_id` —— 全站持倉主鍵是 `(policy_id, code)`
-    (v18.56 修 bug 修出來的複合鍵),覆蓋後 T7 帳本 / 配置 / 換股會抓不到保單歸屬。
+    原 E7 守的是「保單組合分析上傳總表 → 覆蓋 `portfolio_funds` 前必須確認」。
+    該功能(`_sec_policy_portfolio` + `polcsv_load` 上傳按鈕)已整段拔除 ——
+    **根本沒有覆蓋路徑了**(比「有覆蓋但要確認」更安全)。
+
+    這裡把守門意圖從「覆蓋要確認」升級成「危險的靜默全覆蓋 pattern 不得復活」:
+    tab_manage 不得再直接指派 `st.session_state["portfolio_funds"] = ...`,
+    也不得再有 `polcsv_load` 上傳按鈕。持倉唯一真相仍是政策 Sheet。
     """
-    _blk = _code_lines(_src("ui/tab_manage.py"))
-    assert "polcsv_load_confirm" in _blk, "覆蓋既有組合前沒有要求確認(稽核 E7)"
-    assert "_from_policy_csv" in _blk, (
-        "載入的項目沒有標記「無保單歸屬」—— 下游會把「沒有」誤讀成「還沒填」")
-
-    # 確認鈕必須真的接在按鈕的 disabled 上,不能只是畫一個沒有作用的 checkbox
-    _tree = ast.parse(_src("ui/tab_manage.py"))
-    _wired = False
-    for _n in ast.walk(_tree):
-        if not (isinstance(_n, ast.Call) and isinstance(_n.func, ast.Attribute)
-                and _n.func.attr == "button"):
-            continue
-        _kw = {k.arg: k.value for k in _n.keywords if k.arg}
-        if not (isinstance(_kw.get("key"), ast.Constant)
-                and _kw["key"].value == "polcsv_load"):
-            continue
-        _dis = _kw.get("disabled")
-        _wired = _dis is not None and any(
-            isinstance(_x, ast.Name) and _x.id == "_ok_overwrite"
-            for _x in ast.walk(_dis))
-    assert _wired, "確認 checkbox 沒有接上按鈕的 disabled —— 那是個裝飾品"
+    _src_tm = _src("ui/tab_manage.py")
+    _blk = _code_lines(_src_tm)
+    # 直接覆蓋 portfolio_funds 的危險寫入不得存在(讀取 .get(...) 允許)
+    import re as _re
+    assert not _re.search(r'portfolio_funds"\]\s*=[^=]', _blk), (
+        "tab_manage 又出現直接覆蓋 portfolio_funds 的路徑(E7 治本已拔,不得復活)")
+    # 保單組合分析上傳按鈕 / 函式不得復活
+    assert "polcsv_load" not in _blk, "保單組合分析上傳按鈕不得復活(user 2026-08-17 移除)"
+    assert "def _sec_policy_portfolio" not in _blk, (
+        "保單組合分析區塊函式不得復活(user 2026-08-17 移除)")
 
 
 # ══════════════════════════════════════════════════════════════════════

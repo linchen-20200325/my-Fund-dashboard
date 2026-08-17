@@ -68,7 +68,6 @@ from services.macro import (
     detect_turning_points,
     fetch_all_indicators,
 )
-from ui.components.mk_clock import render_mk_clock_section
 from ui.helpers.session import (
     D5_KEYS as _TRUST_EXPECTED_KEYS,  # v19.195 SSOT:16 個關鍵指標(④ 可信度層對差集用)
     calc_data_health as _calc_data_health_pure,
