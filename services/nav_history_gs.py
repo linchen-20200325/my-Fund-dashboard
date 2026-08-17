@@ -98,24 +98,49 @@ def status() -> dict:
 
 
 def _norm_date(v: Any) -> str:
-    """轉 'YYYY-MM-DD'。接受 date/datetime/'YYYY/MM/DD'/'YYYY-MM-DD...'。壞值回 ''(§1 不猜)。"""
+    """轉 'YYYY-MM-DD'。接受 date/datetime/'YYYY/MM/DD'/'YYYY-MM-DD...'。壞值回 ''(§1 不猜)。
+
+    v19.461 資料把關(user 2026-08-17 回報 ALZF9 未來日期 2026-10-12):除 4 位數年 + 全數字,
+    另擋 **月/日範圍** 與 **未來日期**(NAV 不可能是未來;根治 TDCC/opendata `pd.to_datetime`
+    把民國年或日月顛倒誤 parse 成未來日 → 靜默存進 nav_history 的 bug)。
+    """
     if v is None or v == "":
         return ""
     if isinstance(v, (_dt.date, _dt.datetime)):
-        return v.strftime("%Y-%m-%d")
-    s = str(v).strip().replace("/", "-")[:10]
+        s = v.strftime("%Y-%m-%d")
+    else:
+        s = str(v).strip().replace("/", "-")[:10]
     parts = s.split("-")
-    if len(parts) == 3 and len(parts[0]) == 4 and all(p.isdigit() for p in parts):
-        return s
-    return ""
+    if not (len(parts) == 3 and len(parts[0]) == 4 and all(p.isdigit() for p in parts)):
+        return ""
+    _y, _m, _dd = int(parts[0]), int(parts[1]), int(parts[2])
+    if not (1 <= _m <= 12 and 1 <= _dd <= 31):     # 月/日範圍(擋日月顛倒等亂 parse)
+        return ""
+    try:
+        _today = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date()
+        if _dt.date(_y, _m, _dd) > _today:         # 未來日期 → 丟(§1 不存不可能的資料)
+            return ""
+    except ValueError:                              # 非法日期(如 2-30)→ 丟
+        return ""
+    return f"{_y:04d}-{_m:02d}-{_dd:02d}"
 
 
 def _clean_points(points: list[dict]) -> list[dict]:
-    """normalize + §1 過濾:code 空 / date 壞 / nav<=0 全丟(不偽造)。"""
+    """normalize + §1 過濾:code 空 / date 壞 / nav<=0 全丟(不偽造)。
+
+    §5 可觀測性(v19.461):日期被 `_norm_date` 剔除(未來日 / 月日超範圍 / 非法日)且
+    **原始 nav_date 非空**時 → 這是「有值但壞掉」的髒資料(多半上游 misparse,如 user
+    2026-08-17 ALZF9 被 parse 成 2026-10-12 未來日)。單獨計數 + log 一行,避免和去重
+    `skipped` 混算被淹沒(稽核 §5 建議)。此處只 log,過濾行為不變(仍不寫入 §1)。
+    """
     out: list[dict] = []
+    _bad_dates: list[str] = []
     for p in points:
         code = str(p.get("code") or "").strip().upper()
-        d = _norm_date(p.get("nav_date"))
+        _raw_date = p.get("nav_date")
+        d = _norm_date(_raw_date)
+        if not d and _raw_date not in (None, ""):
+            _bad_dates.append(f"{code or '?'}={_raw_date!r}")
         try:
             nav_f = float(p.get("nav"))
         except (TypeError, ValueError):
@@ -126,6 +151,11 @@ def _clean_points(points: list[dict]) -> list[dict]:
                 "fund_name": str(p.get("fund_name") or ""),
                 "source": str(p.get("source") or "app"),
             })
+    if _bad_dates:
+        import sys as _sys
+        print(f"[nav_history_gs] 剔除 {len(_bad_dates)} 筆壞/未來日期(不寫入 nav_history):"
+              f"{', '.join(_bad_dates[:10])}{' …' if len(_bad_dates) > 10 else ''}",
+              file=_sys.stderr)
     return out
 
 

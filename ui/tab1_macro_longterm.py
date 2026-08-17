@@ -40,9 +40,6 @@ from shared.colors import (
     TRAFFIC_RED,
     TRAFFIC_YELLOW,
 )
-from ui.components.mk_clock import render_mk_clock_section
-
-
 def render_long_term_section(
     ind: dict,
     fred_key: str,
@@ -119,10 +116,8 @@ def render_long_term_section(
     except Exception as _us_card_e:  # noqa: BLE001
         st.caption(f"💵 美股流動性卡片暫時無法顯示：[{type(_us_card_e).__name__}] {_us_card_e}")
 
-    # ── MK 景氣時鐘 ＆ 資產輪動（v18.8）── L2/L3 皆顯示
-    st.divider()
-    render_mk_clock_section(ind)
-
+    # v19.461:移除「策略3 景氣時鐘觀測站（美林時鐘定位器）」區塊（user 2026-08-17:介面精簡）。
+    # classify_phase / PMI SSOT 常數留在 ui/components/mk_clock.py 供 SSOT-lock 測試用，不再於 UI 渲染。
 
     # ── 宏觀風險溫度計 + 景氣循環羅盤 + AI（僅 L3）──────────────
     import pandas as _pd_mac
