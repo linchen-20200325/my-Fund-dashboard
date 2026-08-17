@@ -1450,6 +1450,26 @@ def render_single_fund_tab() -> None:
                     # v19.336 M9:與 partial 視圖共用 _risk_1y_rows_html(原兩套同款 HTML)
                     st.markdown(_risk_1y_rows_html(risk_tbl, label_style="long"),
                                 unsafe_allow_html=True)
+                    # v19.458 ②:Z-Score 位階 + 動態再平衡訊號。Core(平衡/貨幣)跳過;
+                    # NDC 景氣分數 UI 無 live 來源 → 傳 None,退預設門檻(誠實)。s=原幣 NAV。
+                    try:
+                        from services.zscore_engine import (  # noqa: PLC0415
+                            nav_zscore, rebalance_signal,
+                        )
+                        _zi = nav_zscore(s)
+                        _rb = rebalance_signal(s, mj_raw.get("category", ""), None)
+                        if _zi.get("z") is not None:
+                            st.markdown(
+                                f"**📐 Z-Score 位階**：Z = **{_zi['z']:+.2f}**"
+                                f"（近 3 年均線 {_zi['ma']:.2f}）→ **{_rb.get('action') or '—'}**")
+                            st.caption(_rb.get("reason", ""))
+                        elif not _rb.get("applies", True):
+                            st.caption(f"📐 Z-Score:{_rb.get('reason')}")
+                        else:
+                            st.caption(f"📐 Z-Score 位階不可算"
+                                       f"（{_zi.get('status')};有效點 {_zi.get('n')}）。")
+                    except Exception as _e_z:  # noqa: BLE001 — 位階為加值卡,失敗不影響風險表
+                        st.caption(f"📐 Z-Score 計算略過:[{type(_e_z).__name__}]")
                     # ── 必修 2:混期示警 + 對帳降級揭露(沿用 v19.91 chip 樣式)──
                     # 這兩條原本 production 0 reader:`mixed_period_warning` 只有
                     # fund_service 自己與 test 讀,所以線上「Sharpe 1Y 0.28」與

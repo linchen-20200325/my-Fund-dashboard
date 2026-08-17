@@ -295,13 +295,16 @@ def _render_pool_editor() -> None:
         import pandas as pd
         from streamlit import column_config as _cc
         _df = pd.DataFrame([{"代號": e.code, "名稱": e.name, "類別": e.category,
-                             "手動型態": e.type_override or "自動", "備註": e.note,
-                             "加入日": e.added_at} for e in pool])
+                             "手動型態": e.type_override or "自動", "狀態": e.status,
+                             "備註": e.note, "加入日": e.added_at} for e in pool])
         st.dataframe(
             _df, use_container_width=True, hide_index=True,
             column_config={
                 "代號": _cc.TextColumn("代號", width="small",
                     help="基金代號 —— 產生換股建議時,沒載入過的會自動補抓一次。"),
+                "狀態": _cc.TextColumn("狀態", width="small",
+                    help="換股狀態機:WATCHING 觀察 → TRIGGERED 訊號觸發 → HOLDING 持有 → "
+                         "CLOSED 出場。目前為顯示,轉換寫入閉環為後續(v19.458)。"),
                 "名稱": _cc.TextColumn("名稱", width="medium",
                     help="選填。留白時只會看到代號。"),
                 "類別": _cc.TextColumn("類別", width="small",

@@ -341,3 +341,44 @@ PORTFOLIO_TREND_ROBUST_DAYS: int = 252  # < 此(1 年)→ low_confidence 旗標(
 # excess_pct = 基金近 1 年純價格報酬 − 對應大盤近 1 年純價格報酬(百分點,§4.1;負 = 落後)。
 # 大盤依幣別:台股→加權 TWII / 美元→SPX / 其餘幣別→不比(§1 不拿原幣 NAV 比 USD 指數)。
 UNDERPERF_LAG_THRESHOLD_PCT: float = -5.0  # excess_pct < 此 → 跑輸大盤(落後逾 5pp;避免 1–2pp 雜訊誤觸,BENCHMARK_WINDOW_DAYS=365 窗)
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 深度強化模組 SSOT(v19.458)—— 資產水位 / Z-Score 動態門檻 / 穿透時效
+# 依循「§3.3 反捏造」:以下為 DESIGN 常數(本專案自訂,無單一官方源),集中此處供調校。
+# ════════════════════════════════════════════════════════════════════════
+
+# ── 景氣對策信號(NDC monitoring 綜合分數 9~45)→ 5 燈號分界(官方 NDC 分界)──
+NDC_LIGHT_BANDS: tuple = (
+    (16, "藍",   "衰退低迷"),   # 9~16
+    (22, "黃藍", "轉向觀察"),   # 17~22
+    (31, "綠",   "穩定成長"),   # 23~31
+    (37, "黃紅", "轉熱"),       # 32~37
+    (45, "紅",   "過熱"),       # 38~45
+)
+
+# ── 模組①:composite_verdict 5 級 → 資產配置水位建議(股/債/貨幣 %,DESIGN)──
+# 與 composite_verdict.action_text 既有現金字串一致(悲觀 15–25% / 極度悲觀 30%+)。
+ALLOCATION_LADDER: dict = {
+    "極度樂觀": {"equity": 85, "bond": 10, "cash": 5},
+    "樂觀":     {"equity": 70, "bond": 20, "cash": 10},
+    "中性":     {"equity": 55, "bond": 30, "cash": 15},
+    "悲觀":     {"equity": 40, "bond": 35, "cash": 25},
+    "極度悲觀": {"equity": 25, "bond": 40, "cash": 35},
+}
+
+# ── 模組②:Z-Score 位階窗 + 依景氣燈號動態門檻(DESIGN)──
+ZSCORE_WINDOW_DAYS: int = 756          # 3 年交易日均線 + 標準差(§4.1;短史 → None 不硬算)
+ZSCORE_MIN_OBS: int = 252              # 有效 NAV 點 < 此 → 位階不可信 → None(§1)
+# 停利門檻:綠燈放寬(Z>+2.0 才停利,避免太早下車)、過熱紅燈收緊(早點停利避險)
+ZSCORE_STOP_GAIN_BY_LIGHT: dict = {"藍": 1.25, "黃藍": 1.5, "綠": 2.0, "黃紅": 1.75, "紅": 1.5}
+# 加碼門檻:衰退藍燈逢低積極(-0.75)、過熱紅燈收緊(要更低 -1.5 才加碼)
+ZSCORE_ADD_BY_LIGHT: dict = {"藍": -0.75, "黃藍": -1.0, "綠": -1.0, "黃紅": -1.25, "紅": -1.5}
+ZSCORE_STOP_GAIN_DEFAULT: float = 1.75  # 無景氣燈號時的預設停利 Z
+ZSCORE_ADD_DEFAULT: float = -1.0        # 無景氣燈號時的預設加碼 Z
+# 資產分流:這些 asset_bucket = Core(內建配置/現金,不做 Z-Score 擇時,§1 不硬套)
+ZSCORE_CORE_BUCKETS: tuple = ("平衡多重", "貨幣市場")
+
+# ── 模組④:穿透成分時效(DESIGN)──
+LOOKTHROUGH_STALE_DAYS: int = 100      # 成分 as_of 舊於此(~1 季+)→ 標「落後推估下限」(Fail-Loud)
+LOOKTHROUGH_COVERAGE_MIN: float = 0.5  # 單檔已揭露 top_holdings Σpct < 此 → 覆蓋不足,曝險為下限
