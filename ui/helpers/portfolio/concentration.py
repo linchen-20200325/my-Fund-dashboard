@@ -168,13 +168,20 @@ def render_concentration_summary(portfolio_funds) -> None:
             f"<b style='color:{GH_FG_SECONDARY}'>{_nm[:18]}{_zh_s}</b> "
             f"{_exp_pct:.1f}%{_multi}")
 
+    # v19.458 ④:揭露覆蓋率 + as_of（§1 過期 → 標「落後推估下限」,不假裝穿透完整）
+    _cov_pct = _r.get("coverage_pct")
+    _cov_meta = ""
+    if _cov_pct is not None:
+        _cov_meta = (f" · 揭露覆蓋 {_cov_pct:.0f}%"
+                     + (f"（as of {_r.get('as_of')}）" if _r.get("as_of") else "")
+                     + ("　⚠落後推估下限" if _r.get("is_stale") else ""))
     st.markdown(
         f"<div style='background:{GH_BG_PRIMARY};border-left:4px solid {_border};"
         f"border-radius:4px;padding:6px 12px;margin-bottom:8px;font-size:12px;"
         f"color:{GH_FG_MUTED};line-height:1.7'>"
         f"🎯 <b>穿透式持股集中度</b>（{_emoji} {_lvl}）"
         f"<span style='color:{GRAY_66};font-size:10px'> · 跨 {_r['n_with_holdings']} 檔基金"
-        f"看你實際押在哪些個股</span><br/>"
+        f"看你實際押在哪些個股{_cov_meta}</span><br/>"
         f"{' ｜ '.join(_items)}"
         f"</div>",
         unsafe_allow_html=True,
@@ -184,6 +191,9 @@ def render_concentration_summary(portfolio_funds) -> None:
             f"🔴 最大單一個股穿透曝險 {_max:.1f}% — 多檔基金重押同股，"
             f"分散效果打折；兩兩基金重疊度詳見下方「④ 持股重疊度診斷」"
         )
+    _cnote = _r.get("coverage_note")
+    if _cnote:                                    # 覆蓋不足 / 資料過期 → 誠實提示(§1)
+        st.caption(f"⬜ {_cnote}（基金常只公布前 N 大 → 穿透曝險是**下限**）")
 
 
 def compute_lookthrough_sectors(portfolio_funds) -> dict:

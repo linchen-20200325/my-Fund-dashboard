@@ -1223,6 +1223,19 @@ def render_macro_tab() -> None:
             render_evidence_table(_ev_rows, footnotes=_ev_notes)
             # 表格已在畫面上 → 哨兵交棒,③ 才可以指路回這張表(見上方註解)。
             _5b_summary = _5b
+            # v19.458 ①:資產水位連動(composite → 股/債/貨幣 配置水位 + 動態 Z 門檻)。
+            # NDC 景氣分數目前 UI 無 live 來源 → 傳 None,allocation_ladder 退預設門檻(誠實標明)。
+            from services.allocation_ladder import allocation_from_composite  # noqa: PLC0415
+            _al = allocation_from_composite(_comp_score)
+            if _al.get("status") == "ok":
+                _a = _al["allocation"]
+                st.markdown(
+                    f"**{_al['icon']} 建議資產水位（{_al['level']}）**："
+                    f"股票 **{_a['equity']}%** ・債券 **{_a['bond']}%** ・貨幣/現金 **{_a['cash']}%**"
+                    f"　｜　停利 Z ≥ {_al['stop_gain_z']:+.2f} ・加碼 Z ≤ {_al['add_z']:+.2f}"
+                    f"（{'景氣' + _al['light'] + '燈動態' if _al.get('light') else '預設門檻'}）")
+                st.caption("↑ 依總經健康度總分的 DESIGN 配置建議(非投資指示);"
+                           "Z 門檻供個基體檢的再平衡訊號使用。")
             # v19.367 6/8:F-RECON-1 健康度雙演算法對帳 chip
             # (§4.3 — 加權淨分 vs 不加權多空投票),走 `ui.components.status.status_chip`
             # (dataviz #4:狀態恆帶 emoji + 文字 + 狀態色,不靠顏色單獨編碼)。
