@@ -19,6 +19,60 @@ def _norm_name(s) -> str:
     return str(s or "").strip().upper()
 
 
+def _safe_pct(v) -> float:
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def lookthrough_coverage(portfolio_funds) -> dict:
+    """v19.458 深度強化④:穿透成分的**時效 + 覆蓋率**(§1 Fail-Loud)。
+
+    - coverage_pct:各檔已揭露 top_holdings Σpct 的 **invest_twd 加權平均**(基金常只公布前 10 大
+      → 覆蓋 40~60% 很常見)。覆蓋不足 → 穿透曝險是**下限**,未覆蓋部分未知。
+    - as_of:各檔 `holdings.fetched_at` **最舊**者(誠實:這是『資料抓取時間』,非基金揭露基準日)。
+    - is_stale:as_of 舊於 `LOOKTHROUGH_STALE_DAYS` → 標「落後推估下限」。
+    回 {coverage_pct, as_of, is_stale, n_with_holdings, note}。無成分 → coverage_pct=None。
+    """
+    import pandas as pd
+
+    from shared.signal_thresholds import LOOKTHROUGH_COVERAGE_MIN, LOOKTHROUGH_STALE_DAYS
+    from ui.helpers.session import usable_funds
+    _funds = usable_funds(portfolio_funds)
+    _rows = []                                   # (invest_twd, coverage_frac, fetched_at)
+    for _f in _funds:
+        _h = ((_f.get("moneydj_raw") or {}).get("holdings") or {})
+        _tops = _h.get("top_holdings") or []
+        if not _tops:
+            continue
+        _cov = sum(_safe_pct(_t.get("pct")) for _t in _tops if isinstance(_t, dict)) / 100.0
+        _cov = min(max(_cov, 0.0), 1.0)          # 揭露 pct 理論 ≤ 100%,容錯封頂/地板
+        _rows.append((float(_f.get("invest_twd", 0) or 0), _cov, _h.get("fetched_at")))
+    if not _rows:
+        return {"coverage_pct": None, "as_of": None, "is_stale": None,
+                "n_with_holdings": 0, "note": "無穿透成分資料"}
+
+    _tot = sum(r[0] for r in _rows)
+    _cov_w = (sum(r[0] * r[1] for r in _rows) / _tot if _tot > 0
+              else sum(r[1] for r in _rows) / len(_rows))     # 無金額 → 等權 fallback
+    _dates = [pd.to_datetime(r[2], errors="coerce", utc=True) for r in _rows if r[2]]
+    _dates = [d for d in _dates if pd.notna(d)]
+    _as_of = min(_dates) if _dates else None
+    _stale, _age = None, None
+    if _as_of is not None:
+        _age = int((pd.Timestamp.now(tz="UTC") - _as_of).days)
+        _stale = _age > LOOKTHROUGH_STALE_DAYS
+    _note = None
+    if _stale:
+        _note = f"成分資料已 {_age} 天未更新(> {LOOKTHROUGH_STALE_DAYS}d)→ 穿透曝險為『落後推估下限』"
+    elif _cov_w < LOOKTHROUGH_COVERAGE_MIN:
+        _note = f"僅揭露前 N 大(加權覆蓋 {_cov_w * 100:.0f}%)→ 曝險為下限,未覆蓋部分未知"
+    return {"coverage_pct": round(_cov_w * 100.0, 1),
+            "as_of": (_as_of.date().isoformat() if _as_of is not None else None),
+            "is_stale": _stale, "n_with_holdings": len(_rows), "note": _note}
+
+
 def compute_lookthrough_concentration(portfolio_funds) -> dict:
     """聚合各基金 top_holdings → 單一個股穿透總曝險 + 重複持股檔數。
 
@@ -76,8 +130,12 @@ def compute_lookthrough_concentration(portfolio_funds) -> dict:
     _ranked = sorted(_exp.items(), key=lambda kv: kv[1], reverse=True)
     _top = [(_disp.get(_k, _k), _v * 100.0, _cnt.get(_k, 1)) for _k, _v in _ranked[:5]]
     _max = _top[0][1] if _top else 0.0
+    # v19.458 ④:附上時效 + 覆蓋率(§1 資料過期 → 標「落後推估下限」);additive,舊 caller 無視新鍵
+    _cov = lookthrough_coverage(portfolio_funds)
     return {"top_stocks": _top, "max_exposure": _max,
-            "n_with_holdings": _n_with, "n_funds": len(_funds)}
+            "n_with_holdings": _n_with, "n_funds": len(_funds),
+            "coverage_pct": _cov["coverage_pct"], "as_of": _cov["as_of"],
+            "is_stale": _cov["is_stale"], "coverage_note": _cov["note"]}
 
 
 def render_concentration_summary(portfolio_funds) -> None:

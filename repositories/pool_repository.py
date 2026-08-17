@@ -17,10 +17,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 _WS_POOL = "_fund_pool"
-_HEADERS = ["code", "name", "category", "type_override", "note", "added_at"]
+# v19.458 深度強化③:+status 欄(狀態機 WATCHING→TRIGGERED→HOLDING→CLOSED),
+# additive → 舊 6 欄列經 from_row pad 後 status="" → 預設 WATCHING,向後相容。
+_HEADERS = ["code", "name", "category", "type_override", "note", "added_at", "status"]
 _CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "fund_pool"
 _LOCAL_FILE = "pool.json"
 _VALID_TYPES = ("震盪", "成長", "")     # 空 = 自動判定
+# 狀態機合法值(本地定義,不 import L2 switch_state_machine,守 §8.2 不上行依賴)
+_VALID_STATUSES = ("WATCHING", "TRIGGERED", "HOLDING", "CLOSED")
 
 
 @dataclass
@@ -31,13 +35,17 @@ class PoolEntry:
     type_override: str = ""             # 震盪 | 成長 | ""(自動)
     note: str = ""
     added_at: str = ""                  # ISO date str
+    status: str = "WATCHING"            # 狀態機:WATCHING|TRIGGERED|HOLDING|CLOSED
 
     def __post_init__(self):
         self.code = str(self.code or "").strip()
         self.type_override = self.type_override if self.type_override in _VALID_TYPES else ""
+        _st = str(self.status or "").strip().upper()
+        self.status = _st if _st in _VALID_STATUSES else "WATCHING"
 
     def to_row(self) -> list:
-        return [self.code, self.name, self.category, self.type_override, self.note, self.added_at]
+        return [self.code, self.name, self.category, self.type_override,
+                self.note, self.added_at, self.status]
 
     @classmethod
     def from_row(cls, row: list) -> "PoolEntry | None":
@@ -45,7 +53,8 @@ class PoolEntry:
             return None
         row = list(row) + [""] * (len(_HEADERS) - len(row))
         return cls(code=str(row[0]), name=str(row[1] or ""), category=str(row[2] or ""),
-                   type_override=str(row[3] or ""), note=str(row[4] or ""), added_at=str(row[5] or ""))
+                   type_override=str(row[3] or ""), note=str(row[4] or ""),
+                   added_at=str(row[5] or ""), status=str(row[6] or ""))
 
     @classmethod
     def from_dict(cls, d: dict) -> "PoolEntry":
