@@ -1223,10 +1223,12 @@ def render_macro_tab() -> None:
             render_evidence_table(_ev_rows, footnotes=_ev_notes)
             # 表格已在畫面上 → 哨兵交棒,③ 才可以指路回這張表(見上方註解)。
             _5b_summary = _5b
-            # v19.458 ①:資產水位連動(composite → 股/債/貨幣 配置水位 + 動態 Z 門檻)。
-            # NDC 景氣分數目前 UI 無 live 來源 → 傳 None,allocation_ladder 退預設門檻(誠實標明)。
+            # v19.459 ①:資產水位連動(composite → 股/債/貨幣 配置水位 + 動態 Z 門檻)。
+            # NDC 景氣對策信號(9~45)接回 → 綠燈放寬停利 / 紅燈收緊加碼;抓不到 → 退預設門檻(誠實)。
             from services.allocation_ladder import allocation_from_composite  # noqa: PLC0415
-            _al = allocation_from_composite(_comp_score)
+            from ui.helpers.macro.ndc import get_ndc_score  # noqa: PLC0415
+            _ndc = get_ndc_score()
+            _al = allocation_from_composite(_comp_score, _ndc)
             if _al.get("status") == "ok":
                 _a = _al["allocation"]
                 st.markdown(

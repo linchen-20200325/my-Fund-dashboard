@@ -147,3 +147,15 @@ def test_lookthrough_coverage_weighted_and_stale():
     _none = lookthrough_coverage([{"code": "Z", "invest_twd": 100, "loaded": True,
                                    "series": _nav([10, 10, 10]), "moneydj_raw": {}}])
     assert _none["coverage_pct"] is None
+
+
+def test_ndc_score_from_result():
+    """v19.459:NDC fetcher 結果取 score_latest(9~45);超域/非數/非dict → None(§1)。"""
+    from ui.helpers.macro.ndc import ndc_score_from_result
+    assert ndc_score_from_result({"score_latest": 25}) == 25
+    assert ndc_score_from_result({"score_latest": "23"}) == 23     # 字串數字 → int
+    assert ndc_score_from_result({"score_latest": None}) is None
+    assert ndc_score_from_result({"score_latest": 5}) is None       # <9 超域
+    assert ndc_score_from_result({"score_latest": 99}) is None      # >45 超域
+    assert ndc_score_from_result({}) is None                        # 無 key
+    assert ndc_score_from_result(None) is None                      # 非 dict
