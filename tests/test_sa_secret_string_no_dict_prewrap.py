@@ -45,8 +45,19 @@ class _FakeClient:
         return _FakeSheet()
 
 
+def _fake_get_secret(key: str, default=None):
+    # v19.462:pool_repository._pool_sheet_id 用軟讀 get_secret 決定目標 Sheet
+    # (POLICY_SHEET_ID 優先 → 回退 macro_weights_sheet_id)。此處只設 macro_weights,
+    # 讓回退命中 SHEET_ID(等價舊行為),SA 仍回字串以驗「原樣傳遞」。
+    if key == "google_service_account":
+        return _SA_JSON
+    if key == "macro_weights_sheet_id":
+        return "SHEET_ID"
+    return default
+
+
 def _patch(monkeypatch):
-    """patch require_secret + get_gspread_client,回收到的 creds list。"""
+    """patch require_secret + get_secret + get_gspread_client,回收到的 creds list。"""
     import infra.config as _cfg
     import repositories.policy_repository as _polrepo
 
@@ -57,6 +68,7 @@ def _patch(monkeypatch):
         return _FakeClient()
 
     monkeypatch.setattr(_cfg, "require_secret", _fake_require_secret)
+    monkeypatch.setattr(_cfg, "get_secret", _fake_get_secret)
     monkeypatch.setattr(_polrepo, "get_gspread_client", _stub_get_client)
     return received
 

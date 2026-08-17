@@ -2,6 +2,10 @@
 
 使用者維護的「選股池」= 一組候選基金,供換股顧問配對。雙後端(仿 auto_search_store):
 - **Google Sheets**(secrets 有設 → 主):worksheet `_fund_pool`,跨裝置同步、Cloud reboot 不掉。
+  v19.462:目標 Sheet **優先 `POLICY_SHEET_ID`(使用者持倉那本)**,回退 `macro_weights_sheet_id`
+  (見 `_pool_sheet_id`)—— user 2026-08-17 要求選股池存在自己的 Sheet、與持倉同 book,能直接在
+  Google Sheet 看/編。仍用 Service Account(App + headless cron 共讀同表);**SA 須被加為該
+  Sheet 編輯者**(同 NAV 自動累積的分享動作)。
 - **本地 JSON**(無 GS → fallback):`cache/fund_pool/pool.json`(Cloud FS ephemeral,dev/離線用)。
 
 §8.2 EX-CRUD-1:本地持久化 CRUD(讀+寫同檔、無 TTL cache、無外部 HTTP fetcher),UI 可直接 import。
@@ -132,23 +136,60 @@ class LocalJsonPoolStore:
 
 # ───────────────────────── Google Sheets 後端 ─────────────────────────
 
+def _pool_sheet_id() -> str:
+    """選股池目標 Sheet ID:**優先 `POLICY_SHEET_ID`(使用者的持倉那本)**,回退
+    `macro_weights_sheet_id`(App 內部總經表)。
+
+    v19.462(user 2026-08-17「選股池改存我自己的 Sheet」+ 明示兩本不同):使用者的持倉
+    Sheet 與 App 內部總經表是**兩本不同 Sheet**;選股池應與持倉同 book,讓 user 能在自己的
+    Sheet 直接看/加/刪候選基金。仍走 Service Account(App + headless cron 共讀同一張表)。
+    無 POLICY_SHEET_ID → 回退 macro_weights_sheet_id(向後相容既有部署,不強迫先設新 secret)。
+    """
+    from infra.config import get_secret
+    return (str(get_secret("POLICY_SHEET_ID") or "").strip()
+            or str(get_secret("macro_weights_sheet_id") or "").strip())
+
+
+def _sa_present() -> bool:
+    """Service Account secret 是否具備 client_email(dict 直讀;JSON 字串則解析,支援 env fallback)。"""
+    from infra.config import get_secret
+    _sa = get_secret("google_service_account")
+    if isinstance(_sa, dict):
+        return bool(_sa.get("client_email"))
+    if isinstance(_sa, str) and _sa.strip():
+        try:
+            return bool(json.loads(_sa).get("client_email"))
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            return False
+    return False
+
+
 def _gs_enabled() -> bool:
+    """選股池 GS 後端是否可用:SA 憑證(含 client_email)+ 目標 sheet id 都在。
+
+    v19.462:目標 sheet 改優先 `POLICY_SHEET_ID`(見 `_pool_sheet_id`),故不再沿用
+    `weights_store._gs_enabled`(那把綁 macro_weights_sheet_id)。偵測失敗 → False → 走本地。
+    """
     try:
-        from services.macro.weights_store import _gs_enabled as _en
-        return _en()
+        return bool(_sa_present() and _pool_sheet_id())
     except Exception:  # noqa: BLE001 — 偵測失敗 = 視為未啟用 → 走本地
         return False
 
 
 def _get_sheet():
-    """開啟與 policy/macro 同一份 Google Sheet(複用 secrets),v19.428。"""
+    """開啟選股池目標 Sheet(v19.462 優先 `POLICY_SHEET_ID` = 使用者持倉那本,回退 macro_weights)。
+
+    仍用 Service Account:App 與 headless cron 共讀同一張表。⚠️ **SA 信箱須被加為該 Sheet 的
+    「編輯者」**(與 NAV 自動累積同一把 SA、同一個分享動作);未分享 → `open_by_key` 失敗往上拋
+    (§1 不靜默,呼叫端 UI 顯示「讀取失敗」而非假裝空)。
+    """
     from infra.config import require_secret
     from repositories.policy_repository import get_gspread_client
     # v19.430:傳 raw secret(str/dict 皆可,get_gspread_client 內部正規化)。
-    # 不再 dict() 預包 —— secret 存成 JSON 字串時 dict("...") 會在進 get_gspread_client
-    # 前就拋 ValueError,而 Streamlit Cloud 會遮蔽訊息(同 tab3 開場崩事故)。
     creds = require_secret("google_service_account")
-    sheet_id = require_secret("macro_weights_sheet_id")
+    sheet_id = _pool_sheet_id()
+    if not sheet_id:
+        raise KeyError("選股池 GS 需要 POLICY_SHEET_ID 或 macro_weights_sheet_id secret(§1)")
     return get_gspread_client(creds).open_by_key(sheet_id)
 
 

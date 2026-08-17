@@ -18,7 +18,9 @@ L1/L2 primitive;**不 import** `ui/helpers/.../switch_advisor_section.py`(那層
 2. `pip install -r requirements.txt`(streamlit 只是被 import,不啟動)
 3. 環境變數(infra.config env fallback):
      google_service_account  = Service Account 的**完整 JSON 字串**
-     macro_weights_sheet_id   = 政策/選股池/nav_history 共用的 Google Sheet ID
+     macro_weights_sheet_id   = App 內部總經表 / nav_history 的 Google Sheet ID
+     POLICY_SHEET_ID          = 你的持倉 Sheet ID(v19.462 起選股池優先存這本的 `_fund_pool`
+                                分頁;SA 須被加為此 Sheet 編輯者。未設 → 選股池回退 macro_weights)
      LINE_CHANNEL_TOKEN       = LINE Messaging API channel access token
      LINE_USER_ID             = 你自己的 LINE userId
      WATCH_CSV_URL            = (選填)追蹤清單公開 CSV;未設 → 只跑持倉

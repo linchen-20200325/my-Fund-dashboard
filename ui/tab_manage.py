@@ -1,13 +1,15 @@
-"""ui/tab_manage.py — 📋 我的管理室(v19.433)。一站集中管理:選股池 + 投資組合 + 通報。
+"""ui/tab_manage.py — 📋 我的管理室(v19.462)。一站集中:選股池 + 除息行事曆 + 補歷史淨值 + 通報。
 
-**不新增儲存**:選股池仍存 Google Sheets `_fund_pool` 分頁、投資組合仍存政策 Sheet
-(和 Tab④ 保單管理**同一本、同源**),本頁只是它們的**集中管理介面**,全部重用既有
-L1/L2/L0(§8.1 不重造):
+**不新增儲存**:選股池存 Google Sheets `_fund_pool` 分頁,本頁只是它的**集中管理介面**,
+全部重用既有 L1/L2/L0(§8.1 不重造):
 - 📁 選股池:重用 `switch_advisor_section._render_pool_editor`(GS + 本地雙後端,永久保存)。
-- 💼 投資組合:`load_all_policies_v2` 一覽 + `write_policy_v2` / `delete_policy_worksheet`
-  刪改(寫回政策 Sheet;§8.2 EX-CRUD-1 允許 L3 直呼 L1 CRUD)。
+- 🗓️ 除息行事曆 / 📥 補歷史淨值(FundClear + TDCC + 手動 CSV)。
 - 🔔 通報:LINE 設定狀態 + 預覽本週訊息 + 測試發送 + 設定指引。**每週自動送仍是 NAS 排程**,
   本頁只負責看/測(Streamlit 不背景跑,§1 不假裝能排程)。
+
+v19.462(user 2026-08-17):移除「投資組合(持倉)一覽」—— 帳本(配置&帳本 Tab)已有,且流程圖
+把 Portfolio 歸「配置&帳本」,管理室專責 Watchlist/選股池 + 補歷史淨值(連帶退 `_sec_portfolio`
+/ `_save_policy` / `_delete_policy` / `_prepare_write_df` / `_run_fix_and_shrink` 一組寫回 CRUD)。
 
 資料永久性:寫的是 Google Sheets 不是 App 本機(Streamlit Cloud FS ephemeral)→ 關掉重開都在,
 每次開啟只是「從雲端讀回已存的資料」,不是重新輸入。
@@ -66,7 +68,9 @@ def _policy_client_and_sheet():
 def _sec_pool():
     st.markdown("### 📁 選股池(候選基金)")
     st.caption("**這不是你的持倉** —— 是你**還沒買、考慮想換進來**的候選名單,換股顧問拿它跟你的持倉比較。"
-               "加/刪/改存到 **`_fund_pool` 分頁**(和你的保單持倉分頁**不同本清單**,不會動到持倉)。")
+               "v19.462:存進**你自己持倉 Sheet(`POLICY_SHEET_ID`)裡的 `_fund_pool` 分頁**"
+               "(同一本、不同分頁,不會動到持倉;可直接在 Google Sheet 看/編)。"
+               "⚠️ 需把 Service Account 信箱加為該 Sheet 編輯者才會雲端同步,否則暫存本機。")
 
     # v19.461:移除「曾經查過的基金清單」自動記錄 + 匯入(user 2026-08-17:介面不友善 → 全拿掉)。
     # 選股池本身即「觀察清單 watchlist」,直接用下方編輯器加/刪代號。
@@ -75,137 +79,6 @@ def _sec_pool():
         _render_pool_editor()
     except Exception as _e:  # noqa: BLE001
         _friendly("選股池管理載入失敗", _e)
-
-
-# ───────────────────────── ② 投資組合 ─────────────────────────
-
-def _sec_portfolio():
-    st.markdown("### 💼 投資組合(持倉)")
-    st.caption("**這是你目前實際持有的基金**(來自你的保單 Google Sheet)。**唯讀一覽** —— "
-               "要改金額/級別或刪保單,請**直接到 Google Sheet 依範本改**(App 不再寫回、不會清空你的資料)。")
-
-    if not st.button("📥 載入 / 重新整理投資組合(雲端)", use_container_width=True, key="manage_pf_load"):
-        if not st.session_state.get("_manage_pf_loaded"):
-            st.info("按上方按鈕從雲端載入你的投資組合(避免每次重整都打 Google API)。")
-            return
-
-    _client, _sid = _policy_client_and_sheet()
-    if _client is None:
-        st.info(_sid)                                   # 這裡 _sid 是原因字串
-        return
-
-    try:
-        from repositories.policy.v2 import load_all_policies_v2
-        _df = load_all_policies_v2(_client, _sid)
-    except Exception as _e:  # noqa: BLE001
-        _friendly("讀取投資組合失敗", _e, level="error")
-        return
-    st.session_state["_manage_pf_loaded"] = True
-
-    from repositories.policy.v2 import ALL_COLS_V2
-    # v19.436:10 欄 schema 全為基金列(item_type 退役) → 以非空 fund_code 認基金列。
-    _fund_rows = _df[_df["fund_code"].astype(str).str.strip() != ""]
-    if _fund_rows.empty and _df.empty:
-        st.info("這本 Sheet 目前沒有任何持倉。可到 Tab④ 新增保單/基金。")
-        return
-    _codes = sorted({str(c).strip() for c in _fund_rows["fund_code"] if str(c).strip()})
-    st.success(f"共 {len(_codes)} 檔基金 · {_df['policy_id'].nunique()} 張保單。")
-
-    # v19.452 唯讀:移除「🔧 一鍵修正+精簡 / 💾 存 / 🗑 刪保單」等會覆寫/刪 Sheet 的動作
-    # (user 決策改直接改 Sheet)。本區只做**一覽顯示**。
-    _labels = {
-        "policy_id": "保單", "fund_code": "基金代號", "fund_name": "名稱", "currency": "幣別",
-        "tier": "級別", "invest_twd": "投入金額(TWD)", "div_cash_pct": "現金給付%",
-        "units": "份額(選填)", "avg_nav": "平均成本(選填)", "avg_fx": "平均匯率(選填)",
-    }
-    for _pid in sorted({str(p) for p in _df["policy_id"] if str(p).strip()}):
-        _pdf = _df[_df["policy_id"].astype(str) == _pid]
-        with st.expander(f"📄 保單 {_pid}（{len(_pdf)} 列）", expanded=(_df['policy_id'].nunique() == 1)):
-            _cols = [c for c in ALL_COLS_V2 if c in _pdf.columns]
-            _view = (_pdf[_cols].reset_index(drop=True)
-                     .rename(columns={c: _labels.get(c, c) for c in _cols}))
-            st.dataframe(_view, use_container_width=True, hide_index=True)
-    st.caption("唯讀顯示。要改金額/級別或刪保單,請**直接到 Google Sheet 依範本改**(App 不覆寫、不清空)。")
-
-
-def _prepare_write_df(edited_df, policy_id):
-    """編輯後的 grid → 準備給 write_policy_v2 的 df:補 policy_id。
-
-    v19.436:10 欄 schema 全為基金列(item_type 退役)。write_policy_v2 會跳過無 fund_code
-    的空列,並保留 units/avg_nav/avg_fx 等選填欄照原樣帶著(§1 防資料流失:整張覆寫不抹掉)。
-    純函式(不碰 st / 網路),供單元測試鎖住此回寫前處理(§6)。
-    """
-    _out = edited_df.copy()
-    _out["policy_id"] = policy_id
-    return _out
-
-
-def _run_fix_and_shrink(client, sheet_id):
-    """v19.436:一鍵修正基金名稱 + 精簡 Sheet。逐張進度條;完成後清快取重載。"""
-    try:
-        from ui.helpers.cloud_io import fix_and_shrink_v2_sheets
-        from ui.helpers.v2_editor import _autofill_from_moneydj
-    except Exception as _e:  # noqa: BLE001
-        _friendly("載入修正工具失敗", _e, level="error")
-        return
-    _bar = st.progress(0.0, text="準備中…")
-
-    def _cb(done, total, pid):
-        _bar.progress(done / max(total, 1), text=f"處理 {pid}（{done}/{total}）…")
-
-    try:
-        with st.spinner("逐張重抓基金名稱 + 精簡欄位(需數十秒)…"):
-            _res = fix_and_shrink_v2_sheets(
-                client, sheet_id, info_fetcher=_autofill_from_moneydj, progress_cb=_cb)
-    except Exception as _e:  # noqa: BLE001
-        _friendly("修正 + 精簡失敗", _e, level="error")
-        return
-    _bar.empty()
-    # 備份失敗 → fix_and_shrink 已中止(未動原本),只回 errors、無 policies
-    if _res.get("errors") and _res.get("policies", 0) == 0 and not _res.get("names_fixed"):
-        for _err in _res["errors"][:5]:
-            st.error(f"❌ {_err}")
-        return
-    st.success(f"✅ 完成:{_res['policies']} 張保單 · {_res['funds']} 檔基金 · "
-               f"修正名稱 {_res['names_fixed']} 筆。已精簡成 10 欄。")
-    if _res.get("backup_url"):
-        st.info(f"🛡️ 動手前已備份整本 Sheet:[開啟備份副本]({_res['backup_url']})")
-    for _err in _res.get("errors", [])[:5]:
-        st.warning(f"⚠️ {_err}")
-    # 清 load_all 短快取,重載拿最新
-    try:
-        from repositories.policy.v2 import clear_load_all_ws_cache
-        clear_load_all_ws_cache()
-    except Exception:  # noqa: BLE001
-        pass
-    st.session_state["_manage_pf_loaded"] = True
-    st.rerun()
-
-
-def _save_policy(client, sheet_id, policy_id, edited_df):
-    """編輯後的 grid → 回寫政策 Sheet(重用 write_policy_v2;§1 失敗顯示不崩)。"""
-    try:
-        from repositories.policy.v2 import write_policy_v2
-        _out = _prepare_write_df(edited_df, policy_id)
-        _n = write_policy_v2(client, sheet_id, policy_id, _out)
-        st.success(f"已存 {policy_id}:{_n} 檔寫回雲端。")
-        st.session_state["_manage_pf_loaded"] = True
-        st.rerun()
-    except Exception as _e:  # noqa: BLE001
-        _friendly(f"保單 {policy_id} 存檔失敗", _e, level="error")
-
-
-def _delete_policy(client, sheet_id, policy_id):
-    try:
-        from repositories.policy.v2 import delete_policy_worksheet
-        _ok = delete_policy_worksheet(client, sheet_id, policy_id)
-        if _ok:
-            st.success(f"已刪除整張保單 {policy_id}。")
-            st.rerun()
-        else:
-            st.warning(f"保單 {policy_id} 找不到或未刪除。")
-    except Exception as _e:  # noqa: BLE001
-        _friendly(f"保單 {policy_id} 刪除失敗", _e, level="error")
 
 
 # ───────────────────────── ③ 通報 ─────────────────────────
@@ -836,15 +709,14 @@ def render_manage_tab() -> None:
     render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
     st.info(
-        "**這一頁由上到下有 5 塊**,先看前兩塊就好:\n\n"
-        "1. 💼 **投資組合(持倉)** — 你**已經買、目前真正持有**的基金 ← 這才是「你的組合」。\n"
-        "2. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。\n"
-        "3. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
-        "4. 📥 **補歷史淨值** — 幫抓不到淨值的基金補歷史(根治吃本金誤判)。\n"
-        "5. 🔔 **換股通報** — 設定 LINE 每週提醒。"
+        "**這一頁由上到下有 4 塊**:\n\n"
+        "1. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。\n"
+        "2. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
+        "3. 📥 **補歷史淨值** — 幫抓不到淨值的基金補歷史(根治吃本金誤判)。\n"
+        "4. 🔔 **換股通報** — 設定 LINE 每週提醒。"
     )
-    _sec_portfolio()          # ★ v19.452:持倉最重要 → 放最前
-    st.divider()
+    # v19.462:移除「投資組合(持倉)」一覽(user 2026-08-17:帳本(配置&帳本 Tab)已有;
+    # 且流程圖把 Portfolio 歸「配置&帳本」,管理室專責 Watchlist/選股池 + 補歷史淨值)。
     _sec_pool()
     st.divider()
     _sec_dividend_calendar()

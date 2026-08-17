@@ -33,14 +33,22 @@
 
 前置：台灣 IP（直連即可）、`pip install -r requirements.txt`（streamlit 只是被 import，不會啟動）。
 
-### 環境變數（4 個）
+### 環境變數（5 個）
 ```bash
 export google_service_account='<你的 Service Account 完整 JSON 字串>'
-export macro_weights_sheet_id='<你的 Google Sheet ID>'   # 政策/選股池/nav_history 共用那本
+export macro_weights_sheet_id='<App 內部總經表 / nav_history 的 Google Sheet ID>'
+export POLICY_SHEET_ID='<你的持倉 Sheet ID>'   # v19.462：選股池優先存這本的 _fund_pool 分頁
 export LINE_CHANNEL_TOKEN='<A 步驟拿到的 channel access token>'
 export LINE_USER_ID='<A 步驟拿到的 你的 userId>'
 ```
-（這兩個 GS 變數你 NAS 上跑 `accumulate_nav_tw.py` 時應該已經有了，沿用即可。）
+（GS 變數你 NAS 上跑 `accumulate_nav_tw.py` 時應該已經有了，沿用即可。）
+
+> ⚠️ **v19.462：選股池位置變更**。選股池(換股顧問的候選替換來源)現在**優先存
+> `POLICY_SHEET_ID`(你的持倉那本)的 `_fund_pool` 分頁**。所以：
+> - 本 cron 必須也拿到 `POLICY_SHEET_ID`，否則它會讀到**另一本**(macro_weights)的舊/空池，
+>   週報的替換建議就對不上你在 App 裡看到的選股池。
+> - 那個 **Service Account 信箱要被加為 `POLICY_SHEET_ID` 這本 Sheet 的「編輯者」**(headless 用 SA 讀寫)。
+> - 未設 `POLICY_SHEET_ID` → 選股池回退 macro_weights 本(行為同舊版)。
 
 ### 先手動驗證（**不會真的送**，只印訊息預覽）
 ```bash
