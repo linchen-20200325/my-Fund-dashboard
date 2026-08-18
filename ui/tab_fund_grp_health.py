@@ -214,6 +214,21 @@ def render_fund_grp_health_tab() -> None:
 
     rows = _run_batch_health(codes, principal_twd, "", warn_gap)
 
+    # v19.464 深化 #2:同類四分位(3Y 年化)。所有基金都在手才算得出 → 這裡 post-pass。
+    # 邏輯在 L2 `peer_rank.peer_quartile_labels`:asset_bucket 粗桶分組 + NAV 序列重算年化
+    # (一致基礎)+ §1 樣本誠實(<4 不硬分四分位)。加值欄:非底線 key `同類四分位` 隨
+    # base_df 自動進寬表末段;失敗不擋健診表。
+    try:
+        from services.peer_rank import peer_quartile_labels
+        _peer_labels = peer_quartile_labels(rows, window_years=3.0)
+        for _pr in rows:
+            if _pr.get("ok"):
+                _pr["同類四分位"] = _peer_labels.get(_pr["code"], "無同類可比(未分類)")
+    except Exception as _e_peer:  # noqa: BLE001 — 四分位為加值欄,失敗不擋健診表
+        import sys as _sys_peer
+        print(f"[grp_health] 同類四分位計算略過:{type(_e_peer).__name__}: {_e_peer}",
+              file=_sys_peer.stderr)
+
     # v19.359 Track 2:健診批次抓成功 → 把各檔當日最新 NAV append 進 Google Sheet
     # nav_history 分頁(一鍵累積全部持倉,從現在累積歷史序列)。冪等 + 非致命。
     try:

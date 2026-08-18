@@ -12,6 +12,7 @@ from services.peer_rank import (
     annualized_return,
     peer_annualized_returns,
     peer_quartile,
+    peer_quartile_labels,
     quartile_rank,
 )
 
@@ -97,3 +98,43 @@ def test_peer_quartile_end_to_end():
     m = {c: _series(0.30 - i * 0.05, 3.0) for i, c in enumerate("ABCD")}
     r = peer_quartile("A", m, 3.0)
     assert r["n"] == 4 and r["quartile"] == "Q1" and r["window_years"] == 3.0
+
+
+# ── peer_quartile_labels(組合健診 post-pass 實際呼叫的邏輯)──────
+def test_peer_quartile_labels_groups_by_asset_bucket():
+    """4 股票同桶 → 真四分位;債券單檔 → 無同類;ok=False 不算。"""
+    rows = [
+        {"code": "A", "ok": True, "_fund_raw": {"category": "全球股票型", "series": _series(0.20, 3.0)}},
+        {"code": "B", "ok": True, "_fund_raw": {"category": "美國股票型", "series": _series(0.15, 3.0)}},
+        {"code": "C", "ok": True, "_fund_raw": {"category": "科技股票型", "series": _series(0.10, 3.0)}},
+        {"code": "D", "ok": True, "_fund_raw": {"category": "歐洲股票型", "series": _series(0.05, 3.0)}},
+        {"code": "E", "ok": True, "_fund_raw": {"category": "新興市場債券", "series": _series(0.08, 3.0)}},
+        {"code": "F", "ok": False, "_fund_raw": {}},
+    ]
+    labels = peer_quartile_labels(rows, 3.0)
+    assert "Q1" in labels["A"] and "同類 4 檔" in labels["A"]   # 股票組報酬最高 → Q1
+    assert "Q4" in labels["D"]                                  # 股票組最低 → Q4
+    assert "無同類可比" in labels["E"]                          # 防禦債單檔,不硬分
+    assert "F" not in labels                                    # ok=False 不進
+
+
+def test_peer_quartile_labels_unmapped_category_excluded():
+    """category 對不到 asset_bucket(空/亂字串)→ 不進任何組(呼叫端退無同類)。"""
+    rows = [
+        {"code": "X", "ok": True, "_fund_raw": {"category": "", "series": _series(0.1, 3.0)}},
+        {"code": "Y", "ok": True, "_fund_raw": {"category": "???亂填", "series": _series(0.1, 3.0)}},
+    ]
+    labels = peer_quartile_labels(rows, 3.0)
+    assert "X" not in labels and "Y" not in labels             # 未分類不硬歸股票(§1)
+
+
+def test_peer_quartile_labels_moneydj_raw_category_read():
+    """category 藏在 _fund_raw.moneydj_raw.category 也讀得到。"""
+    rows = [
+        {"code": "A", "ok": True, "_fund_raw": {"moneydj_raw": {"category": "全球股票型"},
+                                                "series": _series(0.2, 3.0)}},
+        {"code": "B", "ok": True, "_fund_raw": {"moneydj_raw": {"category": "美國股票型"},
+                                                "series": _series(0.1, 3.0)}},
+    ]
+    labels = peer_quartile_labels(rows, 3.0)
+    assert "A" in labels and "B" in labels and "第 1/2 名" in labels["A"]   # 2 檔 → 只給排名

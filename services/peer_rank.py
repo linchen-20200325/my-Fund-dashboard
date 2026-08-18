@@ -115,4 +115,42 @@ def peer_quartile(code, series_map: dict, window_years: float,
     return out
 
 
-__all__ = ["annualized_return", "peer_annualized_returns", "quartile_rank", "peer_quartile"]
+def _row_category(fund_raw: dict) -> str:
+    """健診 row 的 `_fund_raw` → 原始基金類別字串(MoneyDJ)。讀法同 health/report。"""
+    if not isinstance(fund_raw, dict):
+        return ""
+    return str((fund_raw.get("moneydj_raw") or {}).get("category")
+               or fund_raw.get("category") or "").strip()
+
+
+def peer_quartile_labels(rows, window_years: float = 3.0) -> dict:
+    """組合健診批次 rows(含 `_fund_raw.series` + category)→ {code: 四分位 label}。
+
+    分組用 `services.regime_fit.asset_bucket` **粗桶**(原始 category 太細會每組 <4 檔分不出
+    四分位);每桶從 NAV 序列重算年化(一致基礎:原幣、固定 window PIT 窗)→ 排名。純函式
+    (rows 為已抓好的 dict list),供 UI post-pass 呼叫、離線可直接測(§8.1 邏輯上移 L2)。
+
+    未分類(asset_bucket → None)/ 無序列 / ok=False → 不進任何組 → 該 code 不在回傳(呼叫端
+    退「無同類可比」,§1 不硬歸股票)。
+    """
+    from services.regime_fit import asset_bucket  # noqa: PLC0415 — L2 同層,lazy 避 import 序
+    groups: dict = {}
+    for r in rows or []:
+        if not (isinstance(r, dict) and r.get("ok")):
+            continue
+        fr = r.get("_fund_raw") or {}
+        bkt, _ = asset_bucket(_row_category(fr))
+        ser = fr.get("series")
+        code = r.get("code")
+        if bkt and ser is not None and code:
+            groups.setdefault(bkt, {})[str(code)] = ser
+    out: dict = {}
+    for smap in groups.values():
+        rets = peer_annualized_returns(smap, window_years)
+        for c in smap:
+            out[c] = quartile_rank(c, rets).get("label")
+    return out
+
+
+__all__ = ["annualized_return", "peer_annualized_returns", "quartile_rank",
+           "peer_quartile", "peer_quartile_labels"]
