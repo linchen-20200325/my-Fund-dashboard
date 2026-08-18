@@ -229,6 +229,28 @@ def render_fund_grp_health_tab() -> None:
         print(f"[grp_health] 同類四分位計算略過:{type(_e_peer).__name__}: {_e_peer}",
               file=_sys_peer.stderr)
 
+    # v19.465 深化:235 加碼水位(郭俊宏「235 精準加碼」基金版)。VIX 整組抓一次,每檔用
+    # 週 NAV 算 20週布林 + 4/13/52週均線 → 三取一 Max 燈。加值欄 `加碼水位` 隨寬表;失敗不擋表。
+    try:
+        from services.fund_service import get_latest_vix
+        from services.ladder235 import ladder_signal
+        _vix_now = get_latest_vix()          # None → ladder 退兩維判燈(誠實)
+        for _pr in rows:
+            if not _pr.get("ok"):
+                continue
+            _ser235 = (_pr.get("_fund_raw") or {}).get("series")
+            _lad = ladder_signal(_ser235, vix=_vix_now)
+            if _lad.get("lamp") is None:
+                _pr["加碼水位"] = "⬜ 週資料不足"
+            else:
+                _pct = int(round(_lad["deploy_pct"] * 100))
+                _pct_txt = f"(+{_pct}%)" if _pct > 0 else ""
+                _pr["加碼水位"] = f"{_lad['emoji']} {_lad['lamp']}{_pct_txt}"
+    except Exception as _e_lad:  # noqa: BLE001 — 加碼水位為加值欄,失敗不擋健診表
+        import sys as _sys_lad
+        print(f"[grp_health] 235 加碼水位計算略過:{type(_e_lad).__name__}: {_e_lad}",
+              file=_sys_lad.stderr)
+
     # v19.359 Track 2:健診批次抓成功 → 把各檔當日最新 NAV append 進 Google Sheet
     # nav_history 分頁(一鍵累積全部持倉,從現在累積歷史序列)。冪等 + 非致命。
     try:
