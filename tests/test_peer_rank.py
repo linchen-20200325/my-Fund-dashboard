@@ -128,6 +128,34 @@ def test_peer_quartile_labels_unmapped_category_excluded():
     assert "X" not in labels and "Y" not in labels             # 未分類不硬歸股票(§1)
 
 
+def _short() -> pd.Series:
+    """< PEER_MIN_OBS(50)點的短序列 → 年化算不出。"""
+    return pd.Series([100.0 + i for i in range(10)],
+                     index=pd.date_range("2024-01-01", periods=10, freq="D"))
+
+
+def test_peer_quartile_labels_self_no_valid_return_branch():
+    """桶內 ≥2 檔可算、但某檔 obs 不足 → 該檔誠實『自身無有效年化報酬』(非硬給名次)。"""
+    rows = [
+        {"code": "A", "ok": True, "_fund_raw": {"category": "全球股票型", "series": _series(0.20, 3.0)}},
+        {"code": "B", "ok": True, "_fund_raw": {"category": "美國股票型", "series": _series(0.10, 3.0)}},
+        {"code": "C", "ok": True, "_fund_raw": {"category": "科技股票型", "series": _short()}},  # obs 不足
+    ]
+    labels = peer_quartile_labels(rows, 3.0)
+    assert "第 1/2 名" in labels["A"]                       # A/B 可算 → 2 檔相對排名
+    assert "自身無有效年化報酬" in labels["C"]              # C 算不出 → 誠實退,不硬排
+
+
+def test_peer_quartile_labels_single_computable_in_bucket_no_compare():
+    """桶內只 1 檔算得出年化(其餘 obs 不足)→ 全退『無同類可比(<2 檔)』。"""
+    rows = [
+        {"code": "A", "ok": True, "_fund_raw": {"category": "全球股票型", "series": _series(0.2, 3.0)}},
+        {"code": "B", "ok": True, "_fund_raw": {"category": "美國股票型", "series": _short()}},
+    ]
+    labels = peer_quartile_labels(rows, 3.0)
+    assert "無同類可比" in labels["A"] and "無同類可比" in labels["B"]
+
+
 def test_peer_quartile_labels_moneydj_raw_category_read():
     """category 藏在 _fund_raw.moneydj_raw.category 也讀得到。"""
     rows = [
