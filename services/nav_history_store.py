@@ -18,6 +18,8 @@ User 反饋：「我先找到基金淨值歷史資料，做成 CSV 檔，存回�
 - export_nav_csv(code) → bytes (utf-8-sig BOM 給 Excel)
 - incremental_update(code) → 從 fetch_nav 抓最新幾天疊代
 - get_cache_status(code) → 顯示當前 cache 狀態
+- backfill_to_gs(codes) → 一鍵補全部缺淨值:多檔抓完整歷史(含選股池 ISIN→晨星 ~5.5 年)
+                          → 本地 cache + 雲端 nav_history(永久),逐檔誠實回報(§1)
 """
 
 from __future__ import annotations
@@ -307,3 +309,132 @@ def clear_cache(code: str) -> bool:
         except Exception:
             pass
     return False
+
+
+def backfill_to_gs(codes, *, progress_cb=None) -> dict:
+    """一鍵補全部缺淨值:多檔基金抓**完整可得歷史** → 本地 cache + 雲端 nav_history(永久)。
+
+    用途(user 2026-08-18「前面資料有缺的都要補起來」):把「持倉 ∪ 選股池」逐檔淨值一次
+    補齊並存進 Google Sheet(重開不丟)。抓取走 `auto_fetch_moneydj` **完整來源鏈**
+    —— 與「產生換股建議」同一條,含選股池填的 **ISIN → 晨星 timeseries(最多 ~5.5 年,
+    2000 天)**,故涵蓋 user 要求的「至少近 5 年」。
+
+    §1 Fail Loud:抓不到 / 清乾淨後為空 / 雲端寫入失敗 → 該檔 `error` 誠實回報,
+      **不偽造、不靜默 no-op**;呼叫端(UI)據此列出「哪幾檔抓不到」引導改用手動 CSV。
+    §2.4:GS 未啟用(缺 Service Account / 未把 SA 加為 NAV Sheet 編輯者)→ `gs_enabled=False`
+      + `gs_written=0`,UI 提示去授權(否則只存本機、容器重啟即清)。
+    §3.2/§4.2 不變量:序列清洗為「唯一日期 × 非 NaN × NAV>0 × 遞增」後才採用/寫入。
+    §5 效能:所有檔的點**收集後一次** `append_points`(讀一次去重 + 一次 append_rows),
+      省 Sheets quota(60 reads/min),不逐檔各讀一次整張表。
+
+    Args:
+        codes: 基金代號 iterable(大小寫 / 重複由本函式正規化去重,§2.1 key upper)。
+        progress_cb: 可選 callable(i, n, code) —— 每檔開抓前回呼,供 UI 更新進度條
+                     (L2 不碰 streamlit;回呼自身壞掉不擋補淨值)。
+
+    Returns:
+        {
+          "results": [{code, fetched(唯一日期筆數), date_min, date_max, error|None}, ...],
+          "gs_enabled": bool,      # 雲端是否啟用(SA + NAV_SHEET_ID)
+          "gs_written": int,       # 本次去重後真正新增到雲端的列數
+          "n_ok": int,             # 抓到淨值的檔數
+          "n_fail": int,           # 抓不到的檔數
+        }
+    """
+    import sys as _sys
+
+    from services import nav_history_gs
+    from services.moneydj_fetcher import auto_fetch_moneydj
+
+    # ── 正規化 + 去重(保序;§2.1 code 一律 upper)────────────────────────────
+    _seen: set = set()
+    uniq: list = []
+    for raw in codes or []:
+        c = str(raw or "").strip().upper()
+        if c and c not in _seen:
+            _seen.add(c)
+            uniq.append(c)
+
+    gs_on = nav_history_gs.is_enabled()
+    # §1/§3.2:未來日上限用 TW 當日(對齊 nav_history_gs._norm_date 的未來日守衛;
+    # 防上游把民國年 / 日月顛倒 misparse 成未來日污染 fetched/date_max/本地 cache)。
+    import datetime as _dt
+    _today_ts = pd.Timestamp(_dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date())
+    results: list = []
+    all_points: list = []
+    n = len(uniq)
+
+    for i, code in enumerate(uniq):
+        if progress_cb is not None:
+            try:
+                progress_cb(i, n, code)
+            except Exception:  # noqa: BLE001 — 進度回呼壞掉不該擋補淨值
+                pass
+        r = {"code": code, "fetched": 0, "date_min": None,
+             "date_max": None, "error": None}
+        # 逐檔全程 guard(§1「不擋整批」:任一檔抓取/清洗/組點爆掉 → 只記該檔 error)。
+        try:
+            fd = auto_fetch_moneydj(code)
+            s = fd.get("series") if isinstance(fd, dict) else None
+            if s is None or len(s) == 0:
+                r["error"] = str((fd.get("error") if isinstance(fd, dict) else "")
+                                 or "抓不到淨值(晨星查無 secId / MoneyDJ 掛 / ISIN 或代碼不對)")[:70]
+            else:
+                # 清洗:先驗值(非 NaN × >0)再去重,避免同日「有效+壞值」被 keep-last
+                # 留到壞值而整日丟失(§3.2 稽核 F5);再擋未來日(§1);最後唯一日期 × 遞增。
+                s = pd.Series(s).dropna()
+                s = s[s > 0]
+                s = s[s.index <= _today_ts]                       # 未來日 → 不存不可能的資料
+                s = s[~s.index.duplicated(keep="last")].sort_index()
+                if s.empty:
+                    r["error"] = "抓到序列但清乾淨後為空(全 NaN / 非正值 / 皆未來日)"
+                else:
+                    r["fetched"] = int(len(s))
+                    r["date_min"] = str(s.index.min().date())
+                    r["date_max"] = str(s.index.max().date())
+                    fund_name = (str(fd.get("fund_name") or fd.get("full_key") or "")
+                                 if isinstance(fd, dict) else "")
+                    # 本地 cache 合併(快取;雲端重啟會清 → 非致命,不擋雲端寫入)
+                    try:
+                        cached = _load_cache_series(code)
+                        merged = s if cached.empty else pd.concat([cached, s])
+                        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+                        _save_cache_series(code, merged)
+                    except Exception as e:  # noqa: BLE001 — §1 記 log 不靜默,但不致命
+                        print(f"[backfill_to_gs] {code} 本地 cache 寫入失敗(非致命):"
+                              f"{type(e).__name__}: {e}", file=_sys.stderr)
+                    # 收集雲端點(最後一次 append,省 quota)
+                    for idx, v in s.items():
+                        all_points.append({"code": code, "nav": float(v),
+                                           "nav_date": idx.date(),
+                                           "fund_name": fund_name, "source": "backfill"})
+        except Exception as e:  # noqa: BLE001 — §1 逐檔誠實回報,不擋整批
+            r["error"] = f"補抓失敗:{type(e).__name__}: {str(e)[:70]}"
+        results.append(r)
+
+    # ── 一次寫入 GS(讀一次去重 + 一次 append_rows)──────────────────────────
+    # §1/§5:抓取成功 vs 雲端寫入失敗是**兩件事**,不可混為一談 —— 寫入失敗**不覆蓋**
+    # 各檔 fetch 結果(否則 n_ok 歸零、UI 誤報「0 檔抓到」)。寫入狀態獨立走 gs_error。
+    gs_written = 0
+    gs_error = None
+    if gs_on and all_points:
+        try:
+            _res = nav_history_gs.append_points(all_points)
+            gs_written = int(_res.get("written", 0))
+        except Exception as e:  # noqa: BLE001
+            gs_error = f"雲端寫入失敗:{type(e).__name__}: {str(e)[:60]}"
+
+    if progress_cb is not None:
+        try:
+            progress_cb(n, n, "")
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {
+        "results": results,
+        "gs_enabled": gs_on,
+        "gs_written": gs_written,
+        "gs_error": gs_error,                                     # 雲端寫入失敗訊息(None=正常)
+        "n_ok": sum(1 for r in results if r["error"] is None and r["fetched"]),
+        "n_fail": sum(1 for r in results if r["error"]),
+    }

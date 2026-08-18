@@ -291,17 +291,96 @@ def _sec_dividend_calendar():
         _friendly("產生除息月曆失敗", _e, level="error")
 
 
+def _sec_nav_backfill_auto() -> None:
+    """① 一鍵自動補全部缺淨值(持倉 ∪ 選股池)→ 本地 cache + 雲端 nav_history(永久)。
+
+    代號集合 = 已載入持倉(loaded 且無 load_error)∪ 選股池,去重(§2.1 upper)。
+    抓取 + 寫入委派 L2 `services.nav_history_store.backfill_to_gs`(§8.2 L3 只編排 + 渲染)。
+    §1:抓不到的檔逐一列出引導改用下方 CSV;雲端未啟用時明講「只存本機、重啟會清」。
+    """
+    with st.expander("🔄 一鍵自動補全部缺淨值（持倉 ∪ 選股池 → 存進雲端 Sheet）", expanded=False):
+        st.caption("系統用 MoneyDJ + 你在選股池填的 **ISIN(→晨星,最多約 5.5 年)** 自動抓每一檔完整"
+                   "歷史淨值,寫進雲端 nav_history(永久、重開不丟)。抓不到的檔會誠實列出,再用下方 CSV 手動補。")
+
+        # 蒐集代號:已載入持倉 ∪ 選股池(去重 upper)
+        _funds = st.session_state.get("portfolio_funds") or []
+        _held = [str(f.get("code") or "").strip().upper()
+                 for f in _funds if f.get("loaded") and not f.get("load_error")]
+        try:
+            from repositories.pool_repository import list_pool
+            _pool = [str(e.code or "").strip().upper() for e in list_pool()]
+        except Exception as _e:  # noqa: BLE001
+            _pool = []
+            st.caption(f"⬜ 選股池讀取失敗:[{type(_e).__name__}] {str(_e)[:60]}")
+        _all, _seen = [], set()
+        for _c in _held + _pool:
+            if _c and _c not in _seen:
+                _seen.add(_c)
+                _all.append(_c)
+
+        from services.nav_history_gs import is_enabled as _gs_enabled
+        if not _gs_enabled():
+            st.warning("⬜ 雲端 nav_history 未啟用(缺 Service Account,或還沒把 SA 加為那本 NAV Sheet 的"
+                       "「編輯者」)→ 現在補的淨值**只會存本機、容器重啟就清空**。建議先完成 SA 授權"
+                       "(見 Tab5 資料看板狀態燈)再按。")
+        _n_held = len(set(_held))
+        _n_pool_only = len(set(_pool) - set(_held))
+        st.caption(f"將補抓 **{len(_all)}** 檔(持倉 {_n_held} + 選股池 {_n_pool_only},已去重)。")
+
+        if not _all:
+            st.info("目前沒有可補的基金 —— 先載入持倉,或在上方選股池加入候選(填代號 + ISIN)。")
+            return
+        if not st.button("🔄 開始補抓全部缺淨值", use_container_width=True, key="_nh_backfill_all"):
+            return
+
+        from services.nav_history_store import backfill_to_gs
+        _prog = st.progress(0.0, text="準備補抓…")
+
+        def _cb(i, n, code):
+            _pct = min(i / n, 1.0) if n else 1.0
+            _prog.progress(_pct, text=(f"補抓中 {i}/{n}:{code}" if code else "寫入雲端 nav_history…"))
+
+        with st.spinner("抓歷史淨值 + 寫入雲端 nav_history…(連外抓取,檔數多會慢)"):
+            _res = backfill_to_gs(_all, progress_cb=_cb)
+        _prog.empty()
+
+        import pandas as pd
+        _rows = [{
+            "代號": r["code"],
+            "結果": (f"✅ {r['fetched']} 筆" if (r["error"] is None and r["fetched"])
+                     else f"⬜ {r['error']}"),
+            "淨值起迄": (f"{r['date_min']} ~ {r['date_max']}" if r["date_min"] else "—"),
+        } for r in _res["results"]]
+        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+
+        # §1/§5:抓到 / 雲端未啟用 / 雲端寫入失敗 三態誠實分開,不把「寫入失敗」講成「抓不到」。
+        if not _res["gs_enabled"]:
+            st.warning(f"⚠️ 已抓到 {_res['n_ok']} 檔存本機,但**雲端未啟用 → 重啟會清空**。"
+                       "把 SA 加為 NAV Sheet 編輯者後再按一次即可永久保存。")
+        elif _res.get("gs_error"):
+            st.error(f"⚠️ {_res['n_ok']} 檔**已抓到並存本機**,但**寫入雲端失敗**:{_res['gs_error']}。"
+                     "稍後再按一次重試(已抓到的會去重、不會重複寫)。")
+        else:
+            _msg = (f"✅ 完成:{_res['n_ok']} 檔抓到 → 雲端 nav_history 去重後新增 "
+                    f"**{_res['gs_written']:,}** 筆(永久,重開不丟)。")
+            if _res["n_fail"]:
+                _msg += f" ⬜ {_res['n_fail']} 檔抓不到(見上表)→ 用下方 CSV 手動補。"
+            st.success(_msg)
+
+
 def _sec_nav_backfill() -> None:
-    """🗄️ 補歷史淨值(手動 CSV 上傳)→ 存進 GS nav_history。
+    """🗄️ 補歷史淨值(① 一鍵自動補全部 + ② 手動 CSV 上傳)→ 存進 GS nav_history。
 
     v19.472:FundClear 挑基金 + TDCC 11641 兩支抓取工具**移除**(user 2026-08-18:抓不到的檔
-    改用下方「選股池(併入的基金代號對照表)」填 ISIN → 系統走晨星自動補淨值)。保留手動 CSV
+    改用「選股池(併入的基金代號對照表)」填 ISIN → 系統走晨星自動補淨值)。保留手動 CSV
     上傳(離線可用、最可靠的真備援)。
+    v19.474(user 2026-08-18「前面資料有缺的都要補起來」):加「① 一鍵自動補全部」——
+    把「持倉 ∪ 選股池」逐檔完整歷史(含 ISIN→晨星 ~5.5 年)一次抓齊寫進雲端 nav_history。
     """
-    st.markdown("### 🗄️ 補歷史淨值(手動 CSV 上傳)")
-    st.caption("抓不到淨值的基金:從 CnYES / MoneyDJ 手動下載完整歷史 CSV → 上傳這裡 → 存進 "
-               "nav_history,健診就有足夠序列算真實報酬(根治「抓不到 → 外推 → 假吃本金」)。"
-               "自動補淨值改用下方『選股池』填代號 + ISIN(系統走晨星自動抓)。")
+    st.markdown("### 🗄️ 補歷史淨值")
+    _sec_nav_backfill_auto()
+    st.caption("── 或 ── 抓不到淨值的基金:從 CnYES / MoneyDJ 手動下載完整歷史 CSV → 上傳這裡 → 存進 "
+               "nav_history,健診就有足夠序列算真實報酬(根治「抓不到 → 外推 → 假吃本金」)。")
     # v19.461→472：🗄️ NAV 歷史資料管理(手動 CSV 上傳 / 匯出 / 增量)。widget key `_nh_*` 僅此處渲染。
     with st.expander("🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）", expanded=False):
         from services.nav_history_store import (
@@ -413,7 +492,8 @@ def render_manage_tab() -> None:
         "1. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。"
         "抓不到淨值的檔在這裡填 **ISIN**,系統就走晨星自動補淨值(v19.472 併入原「對照表」)。\n"
         "2. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
-        "3. 🗄️ **補歷史淨值** — 抓不到的基金手動上傳 CSV 補歷史(根治吃本金誤判)。\n"
+        "3. 🗄️ **補歷史淨值** — 「🔄 一鍵自動補全部」把持倉＋選股池逐檔完整歷史(含 ISIN→晨星 ~5.5 年)"
+        "一次抓齊存雲端;抓不到的再手動上傳 CSV(根治吃本金誤判)。\n"
         "4. 🔔 **換股通報** — 設定 LINE 每週提醒。"
     )
     # v19.462:移除「投資組合(持倉)」一覽(user 2026-08-17:帳本(配置&帳本 Tab)已有;
