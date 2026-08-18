@@ -1384,8 +1384,15 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
     rows = {}
     _code = code.upper().strip()
 
-    # 1. 查硬編碼映射（TLZF9 等已知 secId，不需搜尋）
-    _mapped = _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
+    # 1. 查映射:v19.469 先問**使用者可自編輯的對照表**(_fund_id_map,user 提案「自己加 secId」),
+    #    再退硬編碼 _MORNINGSTAR_SECID_MAP(TLZF9 等)。你的表優先 → 可覆蓋/補新檔。
+    _user_mapped = None
+    try:
+        from repositories.id_map_repository import resolve_secid as _resolve_user_secid
+        _user_mapped = _resolve_user_secid(_code)
+    except Exception:  # noqa: BLE001 — 對照表不可用不阻斷抓取鏈(退硬編/搜尋)
+        _user_mapped = None
+    _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
     sec_id, currency_id = _mapped if _mapped[0] else ("", "USD")
 
     # 2. 若無硬編碼，嘗試 Morningstar 搜尋

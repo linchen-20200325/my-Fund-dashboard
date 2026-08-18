@@ -703,17 +703,81 @@ def _sec_nav_backfill() -> None:
         )
 
 
+def _sec_id_map() -> None:
+    """🗂️ 基金代號對照表 —— code → 晨星 secId / ISIN,解鎖 MoneyDJ 抓不到時的晨星補淨值路。"""
+    import pandas as _pd
+    st.markdown("### 🗂️ 基金代號對照表(補資料用)")
+    st.caption("台灣/MoneyDJ 內部碼(如 ALZF9)抓不到淨值時,填**晨星 secId**(和 ISIN)→ 系統改走"
+               "「晨星 secId → Yahoo chart」補淨值。加/改存進你 Sheet 的 `_fund_id_map` 分頁"
+               "(可直接在 Google Sheet 編)。⚠️ 實際抓取要在能連外的環境(部署/NAS)才生效。")
+    st.caption("💡 secId / ISIN 哪裡找:morningstar 搜基金 → 網址/頁面的 secId(F 或 0P 開頭);"
+               "ISIN 在基金公開說明書 / 對帳單(如 LU0766462157)。")
+    try:
+        from repositories.id_map_repository import (
+            IdMapEntry, add_or_update, list_id_map, remove_from_id_map,
+        )
+    except Exception as _e:  # noqa: BLE001
+        _friendly("對照表載入失敗", _e, level="error")
+        return
+
+    try:
+        _entries = list_id_map()
+    except Exception as _e:  # noqa: BLE001 — SA 未分享到你的 Sheet 等 → 誠實顯示,不假裝空
+        _friendly("對照表讀取失敗(SA 未分享到你的 Sheet?)", _e, level="error")
+        _entries = []
+
+    if _entries:
+        _rows = [{"代號": e.code, "晨星 secId": e.morningstar_secid or "⬜ 未填",
+                  "ISIN": e.isin or "—", "幣別": e.currency, "名稱": e.name,
+                  "可補淨值": "✅" if e.morningstar_secid else "⬜"} for e in _entries]
+        st.dataframe(_pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("對照表目前是空的 —— 用下方表單加入(或直接在 Google Sheet 的 `_fund_id_map` 分頁編)。")
+
+    with st.form("idmap_add", clear_on_submit=True):
+        _c1, _c2, _c3 = st.columns(3)
+        _code = _c1.text_input("基金代號(內部碼)", placeholder="ALZF9").strip().upper()
+        _sec = _c2.text_input("晨星 secId", placeholder="F00000P8WB / 0P0001J5YG").strip()
+        _isin = _c3.text_input("ISIN(選填)", placeholder="LU0766462157").strip().upper()
+        _c4, _c5 = st.columns([1, 2])
+        _ccy = _c4.text_input("幣別", value="USD").strip().upper()
+        _nm = _c5.text_input("基金名稱(選填)").strip()
+        if st.form_submit_button("➕ 加入 / 更新對照", use_container_width=True):
+            if not _code:
+                st.warning("請填基金代號")
+            else:
+                try:
+                    add_or_update(IdMapEntry(code=_code, morningstar_secid=_sec,
+                                             isin=_isin, currency=_ccy or "USD", name=_nm))
+                    st.success(f"✅ 已存 {_code}"
+                               + (f" → secId {_sec}" if _sec else "(尚未填 secId,先存代號/ISIN)"))
+                    st.rerun()
+                except Exception as _e:  # noqa: BLE001
+                    _friendly("寫入對照表失敗", _e, level="error")
+
+    if _entries:
+        _codes = [e.code for e in _entries]
+        _del = st.selectbox("🗑️ 刪除對照", ["（選一個）"] + _codes, key="idmap_del_pick")
+        if _del != "（選一個）" and st.button(f"刪除 {_del}", key="idmap_del_btn"):
+            try:
+                remove_from_id_map(_del)
+                st.rerun()
+            except Exception as _e:  # noqa: BLE001
+                _friendly("刪除失敗", _e, level="error")
+
+
 def render_manage_tab() -> None:
     from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tm
     st.markdown(f"## {_tab_label_tm('manage')}")
     render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
     st.info(
-        "**這一頁由上到下有 4 塊**:\n\n"
+        "**這一頁由上到下有 5 塊**:\n\n"
         "1. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。\n"
         "2. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
         "3. 📥 **補歷史淨值** — 幫抓不到淨值的基金補歷史(根治吃本金誤判)。\n"
-        "4. 🔔 **換股通報** — 設定 LINE 每週提醒。"
+        "4. 🗂️ **基金代號對照表** — 抓不到的檔填晨星 secId/ISIN,解鎖晨星補淨值路。\n"
+        "5. 🔔 **換股通報** — 設定 LINE 每週提醒。"
     )
     # v19.462:移除「投資組合(持倉)」一覽(user 2026-08-17:帳本(配置&帳本 Tab)已有;
     # 且流程圖把 Portfolio 歸「配置&帳本」,管理室專責 Watchlist/選股池 + 補歷史淨值)。
@@ -722,5 +786,7 @@ def render_manage_tab() -> None:
     _sec_dividend_calendar()
     st.divider()
     _sec_nav_backfill()
+    st.divider()
+    _sec_id_map()          # v19.469:基金代號對照表(補資料用,接晨星 secId 補淨值路)
     st.divider()
     _sec_notify()
