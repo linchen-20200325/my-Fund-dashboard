@@ -113,7 +113,7 @@ sidebar (ui/sidebar.py, 241 行)
 |---|---|---|
 | `tab_fund_grp_health.py:185-190` | `slider「吃本金閾值 %」` | **對畫面 100% 無效**。它產出的 `div_health_light_🧮` 全 repo **production 0 consumer**（只有 2 個測試檔）；畫面燈號走 SSOT `NEAR_DIVIDEND_WARNING_PCT=2.0`。而 slider 的 help 明確承諾「> 此值 → 標 🔴 吃本金」= **說謊** |
 | `tab3_t7_ledger.py:1091` | `selectbox「投入方式」` | form 外 `:1073/:1082` 依選擇算好 `_a_new_mode_key`，`:1091` 在 form 內**無條件洗成 `"twd"`** → `:1135` 與 `:1224` 兩處「🎯 目標單位數」分支**恆為死碼** |
-| `tab_fund_grp_health.py:762` 等 4 個 caller | 換標的建議「MK 4 規則」 | 全部不傳 `holding_years` → rule (a)(c) eligible 恆 `False`；加上 `replacement.py:126` 取不存在的 key 讓 rule (b) 對無 Sharpe 基金恆不觸發 → **4 條 hard trigger 只剩 (d) 一條穩定可用**，「🟢 保留 — MK 4 規則全未中」被系統性高發 |
+| `tab_fund_grp_health.py:762` 等 4 個 caller | 換標的建議「 4 規則」 | 全部不傳 `holding_years` → rule (a)(c) eligible 恆 `False`；加上 `replacement.py:126` 取不存在的 key 讓 rule (b) 對無 Sharpe 基金恆不觸發 → **4 條 hard trigger 只剩 (d) 一條穩定可用**，「🟢 保留 —  4 規則全未中」被系統性高發 |
 
 ### G4 🔴 硬編碼 fallback 會產生「看起來像真的」的錯誤金額
 
@@ -135,7 +135,7 @@ sidebar (ui/sidebar.py, 241 行)
 | `tab5:793-794` `backtest_sub_cycle_lights(window=60)` | 7 子領域 × 60 月 expanding z-score，包在收合 expander | ❌ `causal_sankey.py:317` 無 decorator |
 | `tab5:1371-1372` `nav_history_gs.status()` | 讀 secrets + 建 SA client，**連 expander 都沒有** | ❌ |
 | `tab5:1407-1409` `coverage_status()` | **一次 Google Sheets 網路讀取（讀整張 nav_history）** | ❌ |
-| `tab3_portfolio.py:2694 → :2745-2839` | AI snapshot 在按鈕之前全算完：MK df + checkup + **`fetch_usdtwd_frame` 網路** + 組合回撤 + 逐檔 maxDD + 相關性矩陣 + **每幣別一次 `get_latest_fx`** | ❌ |
+| `tab3_portfolio.py:2694 → :2745-2839` | AI snapshot 在按鈕之前全算完： df + checkup + **`fetch_usdtwd_frame` 網路** + 組合回撤 + 逐檔 maxDD + 相關性矩陣 + **每幣別一次 `get_latest_fx`** | ❌ |
 | `tab3_portfolio.py:2559-2626` | 持倉健診 ThreadPool(4) 對每檔跑 `process_one_fund`，**唯一守門是 `if _loaded_pf:`** | ❌ |
 | `data_registry._update_data_registry()` | `app.py:273` 在 Tab5 渲染前呼叫 → **使用者停在 Tab1 也照跑**。25 指標 + N 檔基金全量 `sort_index()` 並把排序後**完整 Series** 塞進 session_state | 冷 cache 下 **16 key × 2 = 32 次 FRED HTTP** |
 | `tab_manage.py:293-296` | gating 首次載入後失效 → 每 rerun 重打 `load_all_policies_v2`（無 TTL）+ `list_pool()`（無 cache） | ≈ **10-11 reads/rerun**，`policy\_helpers.py:93` 記載上限 60 reads/min → **5-6 次 rerun 撞頂** |
@@ -279,7 +279,7 @@ sidebar (ui/sidebar.py, 241 行)
 | 🔴 | `:185-190` | **`slider「吃本金閾值 %」` 是死控制項**（見 G3）。它產出的 `div_health_light_🧮` production **0 consumer**；help 承諾的判定完全沒發生 |
 | 🔴 | `services/health/dividend.py:475` | `dividend_safety(total_return=tr1y, dividend_yield=adr, **nav_change=tr1y**)` — **把含息報酬當淨值變化傳**。驗算：NAV −6%、配息 8% → tr1y=+2% → `+2.0 > -5.0` **不觸發**；正確傳 −6.0 應觸發。**配息愈高、NAV 崩跌警示愈不可能出現** —— 與該警示「配息可能來自本金」的設計目的完全相反。而 `_tr1y_meta["nav_change_pct"]`（純 NAV 漲跌）**就在同一個函式的 local scope 內**（`:449`） |
 | 🔴 | `services/health/replacement.py:126` | `adr = eat_result.get("annual_div_rate_pct")` — **該 key 不存在** → adr 恆 None → `grade.py:165 _score_coverage` 回 None → 規則 (b) 用的 4D 少一維，**與大表顯示的 4D 不同源**。驗算：某檔 cov=15/sh=15/tr=45/vol=55 → 大表 (15+15+45+55)/4=**32.5→F**，rule(b) (15+45+55)/3=**38.3→D** → 大表印 F、建議只給 🟡 觀察。且 `grade.py:175 _core_present` 讓**無 Sharpe 的基金 grade 恆 `—`，rule(b) 完全失效** |
-| 🔴 | `:762` 等 4 caller | **換標的建議 4 條規則有 2 條靜默停用**（未傳 `holding_years`）。合併上一條 → **4 條 hard trigger 只剩 (d)**。而 caption `:776` 明確承諾「MK 4 規則觸發」 |
+| 🔴 | `:762` 等 4 caller | **換標的建議 4 條規則有 2 條靜默停用**（未傳 `holding_years`）。合併上一條 → **4 條 hard trigger 只剩 (d)**。而 caption `:776` 明確承諾「 4 規則觸發」 |
 | 🟠 | `ui/helpers/fund/checkup.py:325,336` + `fund_row.py:128` | **「換匯資訊 🧮」標籤說謊**：前綴寫死 `1M TWD`，但金額用真實本金算。驗算：本金 500,000、fx=32.40 → 畫面顯示 `1M TWD→15,432 USD @ 32.40`（1M 應是 30,864）→ **一句話裡兩個差 2 倍的金額**。另 `tab:130` caption 也寫死「100 萬」，與 `number_input`（1萬~1000萬）衝突 |
 | 🟠 | `dividend_calc.py:365-369` vs `report.py:156` | **線性年化 vs 幾何年化同表並排**。驗算：3 年累計 +33.10% → `3Y 年化 %`（幾何）**10.00%**、`淨值% (年化)`（線性）**11.03%**，差 1.03pp；+100%/3年 → 25.99% vs 33.33%，差 **7.34pp**。欄名都叫「年化」，兩欄 help 都沒說口徑不同 |
 | 🟠 | `:918-926` caption | 宣稱「年化配息率用 **MoneyDJ 官方公布值**」，實際 adr 有 3 層 fallback。**加碼**：`dividend.py:481` 已算好 `_adr_source` 血緣，但 **production 0 consumer** —— 算了卻從不顯示（對比 tr1y 有「1Y 來源」欄照實顯示） |
@@ -355,7 +355,7 @@ sidebar (ui/sidebar.py, 241 行)
 
 | 嚴重度 | 位置 | 問題 |
 |---|---|---|
-| 🔴 | `unified.py:403-422` + `:436-437` | **部分失敗被標「✅ 成功」**。①健康分析失敗 → **13 欄留白**；②配息失敗 → **7 欄**；③σ/風險/MK 失敗 → **22 欄留白 + 7 欄降級成 ⬜**（看起來像「這檔本來就判不出」）。stderr 在 Streamlit Cloud 上使用者看不到，UI 端零揭露。**對照：健診 Tab 對同一失敗會 `st.caption` 明講「整組計算失敗，不是資料沒有」** |
+| 🔴 | `unified.py:403-422` + `:436-437` | **部分失敗被標「✅ 成功」**。①健康分析失敗 → **13 欄留白**；②配息失敗 → **7 欄**；③σ/風險/失敗 → **22 欄留白 + 7 欄降級成 ⬜**（看起來像「這檔本來就判不出」）。stderr 在 Streamlit Cloud 上使用者看不到，UI 端零揭露。**對照：健診 Tab 對同一失敗會 `st.caption` 明講「整組計算失敗，不是資料沒有」** |
 | 🔴 | `:35` + `:93-94` | `_CODE_RE = ^[A-Z0-9]{3,20}$`，不符即無聲 `continue` —— 無計數、無警告。`0050.TW`、`B-07`、2 字元代號被靜默吃掉。使用者上傳 420 行看到「解析到 380 檔」只會以為自己重複了 |
 | 🟠 | `unified.py:443` | **`淨值新鮮度` 凍結說謊** —— 建列當下算好存進 checkpoint，讀回時**不重算**。30 天前的存檔仍顯示「🟢 1d」。而 `columns.py:409` 的 help 白紙黑字寫「**今天**（台北時間）距離上面那個淨值日期幾天」= 對讀回存檔是錯的敘述 |
 | 🟠 | `unified.py:168` | **CSV 無抓取時間**。`fund_row.py:237` 確實回 `_fetched_at`（上游 `fund_orchestration.py:677` 有寫入，非空），被底線前綴過濾掉。`:441-442` 已示範顯式撈回 `_nav_date` |
@@ -372,7 +372,7 @@ sidebar (ui/sidebar.py, 241 行)
 - **無代號數量上限**（健診有 `_MAX_CODES=10`）；貼 5000 行照跑。
 - **無中止按鈕**；進度只有 `i/total`，**無 ETA、無即時成功/失敗計數**。
 - **摘要只有 3 個 metric**，但表裡已有「吃本金燈號」「4D Grade」「基期」「策略燈號」「淨值新鮮度」可彙總（健診有 5 個 KPI）。
-- **死設定**：`columns.py:334` 的 `"吃本金燈號 (1Y·MK)"`（`·` 兩側無空格）與實際欄名 `"吃本金燈號 (1Y · MK)"` 不符 → **永遠 0 consumer**。
+- **死設定**：`columns.py:334` 的 `"吃本金燈號 (1Y·)"`（`·` 兩側無空格）與實際欄名 `"吃本金燈號 (1Y · )"` 不符 → **永遠 0 consumer**。
 
 **程式碼問題**
 
@@ -470,7 +470,7 @@ sidebar (ui/sidebar.py, 241 行)
 **新手友善化調整**
 1. **一行改動補兩個最重要的名詞**：`:1508` → `render_metric_explainer(["sharpe","sigma","alpha","beta","mdd","div_coverage"])`
 2. explainer 字典補 `sortino` / `calmar` / `tracking_error` / `annualized_return`；`:1345-1347` 補 `help=`
-3. MK 3-3-3 那格 metric 加 `help=` 直接寫出三條件（不要求捲到 `:2225`）
+3.  3-3-3 那格 metric 加 `help=` 直接寫出三條件（不要求捲到 `:2225`）
 4. 手動匯率模式下，**在「📐 完整計算公式」區塊頂端加一行紅字警語**，並讓 `月配息(TWD)` / `1Y 預估市值` 兩個 metric 的 label 帶 ⚠️
 
 **介面排版與按鈕瘦身計畫**
@@ -842,7 +842,7 @@ sidebar (ui/sidebar.py, 241 行)
 逐條比對 `CLAUDE.md` / `STATE.md` / `PROCESS.md` 後，以下已由你拍板或判定 WONTFIX，本報告刻意迴避：
 
 ### 3.1 已凍結（比 WONTFIX 更強）
-**境內基金「含息 3 年年化」**（`ACCP138/ACDD01/ACDD19/ACTI71/ACTI94` 的 MK 3-3-3 恆 ⬜）。`STATE.md` 2026-08-11 原文：「**狀態：凍結，不是待辦。沒有解凍條件成立之前不要重新開挖** —— 這一項被重複調查了三次」。根因是來源不存在，已有 `tests/test_domestic_perf_frozen.py` 守「不得偷偷解凍」。
+**境內基金「含息 3 年年化」**（`ACCP138/ACDD01/ACDD19/ACTI71/ACTI94` 的  3-3-3 恆 ⬜）。`STATE.md` 2026-08-11 原文：「**狀態：凍結，不是待辦。沒有解凍條件成立之前不要重新開挖** —— 這一項被重複調查了三次」。根因是來源不存在，已有 `tests/test_domestic_perf_frozen.py` 守「不得偷偷解凍」。
 
 ### 3.2 已退役 —— 提「加回來」等於違反已決事項
 危機回測室（2798 LOC）、總經指南針、`🎯 選基金（低基期）` screener、配置模擬器、param finder、`_render_beginner_dashboard` / `_render_macro_navigator` / `_render_tw_local_dashboard`（v19.401 Phase 0，−499 行）。

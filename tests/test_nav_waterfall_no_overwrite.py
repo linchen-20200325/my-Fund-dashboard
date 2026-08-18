@@ -491,7 +491,7 @@ def test_infer_year_helper_is_star_exported_to_orchestrator():
 def test_allianzgi_meta_verifies_the_page_belongs_to_this_fund():
     """§1：`_src_allianzgi_meta` 的端點不帶基金代碼，必須驗證頁面真的提到該檔。
 
-    這支污染的是 **meta** —— `inception_date` 餵 MK 3-3-3 的「成立滿 3 年」、
+    這支污染的是 **meta** —— `inception_date` 餵  3-3-3 的「成立滿 3 年」、
     `nav_latest` 餵 KPI 卡、`total_expense_ratio` 餵費用率比較，
     比同批刪掉的 `_src_allianzgi_nav` 第 3 段更危險。
     而呼叫條件是「境內代碼且還沒拿到 fund_name」→ user 的 AC* 持倉全中。

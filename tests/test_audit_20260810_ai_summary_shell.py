@@ -1,6 +1,6 @@
 """2026-08-10 稽核 — 共用「AI 白話總體檢」widget 的摺疊空殼拆除(第 8 個同型現場)。
 
-前七個現場(Tab① 決策矩陣 / 中國拖累 / 流動性引擎、Tab② MK 3-3-3 / 抓取診斷 /
+前七個現場(Tab① 決策矩陣 / 中國拖累 / 流動性引擎、Tab②  3-3-3 / 抓取診斷 /
 進階指標、Tab③ FX 曝險、Tab⑤ NAV 匯入、Tab⑥ 兩處)已在
 `test_audit_20260810_tab1_shells.py` 與 `test_audit_20260810_tab2356_shells.py` 收掉。
 本檔補的是 **`ui/helpers/ai_summary.py`** —— 它之所以拖到最後,是因為它被四個

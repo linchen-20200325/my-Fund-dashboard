@@ -7,8 +7,8 @@ User 重申「#7-#9」+「檔案太大則分階段」→ 從最小可行 facade 
 ========================================================
 - fund_health.py             → grade.py(4D 健診評分)
 - fund_dividend_calculator.py → dividend_calc.py(配息計算純機械邏輯)
-- fund_dividend_health.py    → dividend.py(配息健診業務:EatingPrincipal / 333 / MK 規則)
-- fund_replacement_verdict.py → replacement.py(替換建議 MK 4 規則)
+- fund_dividend_health.py    → dividend.py(配息健診業務:EatingPrincipal / 333 / 規則)
+- fund_replacement_verdict.py → replacement.py(替換建議  4 規則)
 - fund_health_report.py      → report.py(健診表 row builder)
 
 caller 變更

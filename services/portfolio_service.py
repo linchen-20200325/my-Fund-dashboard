@@ -323,7 +323,7 @@ def dividend_safety(total_return: Optional[float],
         {status, coverage, gap_pct, eating_principal, alert_level, message}
 
     v19.119:核心判定委派 services.health.dividend.classify_eating_principal。
-    v19.175:5 級 coverage 門檻 → 3 色 gap_pct > 2% 制(對齊 MK 老師「化繁為簡」),
+    v19.175:5 級 coverage 門檻 → 3 色 gap_pct > 2% 制(對齊 老師「化繁為簡」),
             與健診總表 `div_health_light_for_pair()` SSOT 同源。
             「嚴重吃本金(報酬為負)」獨立旗標保留為「報酬為負」修飾,
             主分類仍走 3 色。output schema 向後相容:coverage / eating_principal
@@ -348,7 +348,7 @@ def dividend_safety(total_return: Optional[float],
                 "coverage": None, "gap_pct": None, "eating_principal": False}
 
     # v19.175:3 色制 gap_pct 門檻 — 與 fund_dividend_calculator.div_health_light_for_pair
-    # 完全同源(都委派 classify_eating_principal 的 core.gap_pct),對齊「化繁為簡」MK 原則。
+    # 完全同源(都委派 classify_eating_principal 的 core.gap_pct),對齊「化繁為簡」原則。
     from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT
     coverage = round(core.coverage_ratio, 4)
     gap_pct = round(core.gap_pct, 4)  # = div - ret;正 = 吃本金深度

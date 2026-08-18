@@ -313,7 +313,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
             base_www = "https://www.moneydj.com/funddj"
             today2 = _dt2.date.today()
             # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-            # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+            # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
             st2 = today2 - _dt2.timedelta(days=2000)
             # v13.8: page_type 互換 — 首選失敗自動換頁型重試
             _pages2 = get_page_types_to_try(
@@ -583,7 +583,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
     except Exception as _rep5:
         print(f"[orchestrator] perf_wb01: {_rep5}")
 
-    # ── Step 6: 計算 MK 指標 ────────────────────────────────────────
+    # ── Step 6: 計算 指標 ────────────────────────────────────────
     _finish_metrics(result)
 
     # ── v6.14: 保險代碼專屬提示 ─────────────────────────────────────
@@ -1039,7 +1039,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             # 再查詢整年歷史（使用查詢 endpoint）
             end_dt   = today
             # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-            # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+            # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
             start_dt = today - _dt.timedelta(days=2000)
             # v13.8: page_type 互換 — 首選失敗自動換頁型重試
             _hist_pages = get_page_types_to_try(
@@ -1206,7 +1206,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     except Exception as e:
         print(f"[fetch_div] {e}")
 
-    # ── 6. 計算 MK 指標（優先使用 wb07 標準差）────────────
+    # ── 6. 計算 指標（優先使用 wb07 標準差）────────────
     # ── 最終備援：使用 fetch_nav() 完整 TCB 多路徑爬取 ─────────────
     if result["series"] is None or len(result["series"]) < 10:
         try:

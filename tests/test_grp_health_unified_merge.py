@@ -1,7 +1,7 @@
 """tests/test_grp_health_unified_merge.py — 健診總表 3 表合併器測試(v19.408)。
 
-驗 build_merged_extra_columns:HWM σ / 風險 / MK 三組 by-code 欄位 join 成寬表,
-「現價」去重、缺料檔填 '—'、無 phase 時 MK 訊號欄 '—'、空清單不炸。
+驗 build_merged_extra_columns:HWM σ / 風險 / 三組 by-code 欄位 join 成寬表,
+「現價」去重、缺料檔填 '—'、無 phase 時 訊號欄 '—'、空清單不炸。
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def test_column_order_and_dedup_price():
     f = _fund("A001", metrics={"std_1y": 12.0, "sharpe": 1.1, "nav": 110.0,
                                "buy1": 95, "buy3": 90, "sell1": 115, "sell3": 120})
     cols, combined = build_merged_extra_columns([f], phase="擴張", score=6.0)
-    # 現價只出現一次(HWM 版優先,MK 版略過)
+    # 現價只出現一次(HWM 版優先,版略過)
     assert cols.count("現價") == 1
     # 三組欄位都在
     for _c in ("HWM", "σ rank", "Sharpe", "Beta", "操作訊號", "現價位階"):
@@ -70,9 +70,9 @@ def test_build_unified_health_df_join_dedup_order():
 
     base = pd.DataFrame([
         {"code": "A1", "基金名": "甲", "ccy": "USD", "配息率% (全期實際)": 4.3,
-         "吃本金燈號 (1Y · MK)": "🟢 健康", "MK 3-3-3 篩": "✅ 通過"},
+         "吃本金燈號 (1Y · )": "🟢 健康", " 3-3-3 篩": "✅ 通過"},
         {"code": "A2", "基金名": "乙", "ccy": "USD", "配息率% (全期實際)": 4.7,
-         "吃本金燈號 (1Y · MK)": "🟢 健康", "MK 3-3-3 篩": "✅ 通過"},
+         "吃本金燈號 (1Y · )": "🟢 健康", " 3-3-3 篩": "✅ 通過"},
     ])
     health = {"A1": {"4D Grade": "B", "4D Score": 66.3, "Sharpe 1Y": 0.2, "基金類別": "平衡型"}}
     div = {"A1": {"1Y 含息 %": 8.78, "每月配息 (TWD)": 6206, "換標的建議": "🟢 保留"}}
@@ -111,5 +111,5 @@ def test_no_phase_signal_is_dash_but_levels_present():
     f = _fund("C003", metrics={"nav": 110.0, "buy1": 95, "buy3": 90})
     cols, combined = build_merged_extra_columns([f], phase="", score=None)
     assert combined["C003"]["操作訊號"] == "—"        # 無 phase → 訊號 —
-    # 但買賣水平線不依景氣,仍計算(買1 來自 metrics.buy1,MK-sourced)
+    # 但買賣水平線不依景氣,仍計算(買1 來自 metrics.buy1,-sourced)
     assert combined["C003"]["買 1 (小跌)"] == "95.00"

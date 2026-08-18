@@ -264,7 +264,7 @@ def _is_healthy_candidate(c: dict) -> bool:
     _sh = _num(c.get("Sharpe 1Y"))
     _tr = _num(c.get("1Y 含息 %"))
     _exp = _num(c.get("費用率 %"))
-    _eat = str(c.get("吃本金燈號 (1Y · MK)") or "")
+    _eat = str(c.get("吃本金燈號 (1Y · )") or "")
     _sig = str(c.get("策略燈號") or "")
     _healthy = ("健康" in _eat) or (GREEN in _sig) or ("🟢" in _sig)
     return bool(
@@ -280,7 +280,7 @@ def replacement_candidate(sell_category, candidates) -> "dict | None":
 
     候選須通過 `_is_healthy_candidate`(綠燈/健康 + Sharpe≥0.5 + 總報酬>0 + 費用率<1.5%)。
     無同類健康候選 → None(§1 不硬湊「換到更爛的」)。candidates 每檔含
-    code/基金名/基金類別/Sharpe 1Y/1Y 含息 %/Sortino/費用率 %/策略燈號/吃本金燈號 (1Y · MK)。
+    code/基金名/基金類別/Sharpe 1Y/1Y 含息 %/Sortino/費用率 %/策略燈號/吃本金燈號 (1Y · )。
     """
     _cat = str(sell_category or "").strip()
     if not _cat:

@@ -354,7 +354,7 @@ def _total_return_nav(s: pd.Series, divs: list) -> pd.Series:
 
 def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     """
-    計算 MK 買點指標。
+    計算 買點指標。
     risk_override: fetch_risk_metrics() 回傳的 dict，
                    若存在則優先使用 wb07 的年化標準差（更精準）。
 
@@ -394,7 +394,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     - `ret_1y` / ret_3y / ret_5y  純 NAV 報酬(不含息;1Y 含息走 fund_total_return)
     - `annual_div_rate`      年化配息率(本算 fallback;主源 moneydj_div_yield wb05)
     - `div_freq_n`           配息頻率(12/4/2/1 次/年,由 div 間隔 auto-detect)
-    - `buy1` / buy2 / buy3 / sell1 / sell2 / sell3  MK 1-2-3 加碼點
+    - `buy1` / buy2 / buy3 / sell1 / sell2 / sell3   1-2-3 加碼點
 
     Reader 看到上述欄位 = 確定同源,無需 verify。
     """
@@ -422,7 +422,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     log_ret = np.log(s_tr / s_tr.shift(1)).dropna()
 
     # ── 年化標準差（各期間）─────────────────────────────
-    # MK 方法：最少 20 筆資料即可計算（降低門檻以支援短期資料）
+    # 方法：最少 20 筆資料即可計算（降低門檻以支援短期資料）
     std_dict = {}
     for yrs, lb in [(1,"1年"),(2,"2年"),(3,"3年"),(5,"5年")]:
         n = yrs * TRADING_DAYS_PER_YEAR
@@ -461,7 +461,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
                  round(log_ret.std() * np.sqrt(TRADING_DAYS_PER_YEAR) * 100, 2) if len(log_ret)>=20 else 0))
         std_1y = std_dict.get("1年", std_2y)
 
-    # ── 高低點（MK 買點基準用2年）──────────────────────
+    # ── 高低點（買點基準用2年）──────────────────────
     def _hl(n):
         sub = s.tail(n) if len(s) >= n else s
         return (round(float(sub.max()),4), str(sub.idxmax())[:10],
@@ -472,7 +472,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
     hall = round(float(s.max()),4); hall_d = str(s.idxmax())[:10]
     lall = round(float(s.min()),4); lall_d = str(s.idxmin())[:10]
 
-    # ── MK 標準差加碼買點（以年度最高/最低點為基準）──────
+    # ── 標準差加碼買點（以年度最高/最低點為基準）──────
     # 優先使用 fetch_basic 抓到的 年最高/最低淨值
     # σ_amount = (year_high - year_low) / 3
     # Buy3 ≈ year_low，買點三對應歷史最低點
@@ -503,7 +503,7 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         buy_mode  = "2年高低點σ"
         print(f"[calc_metrics] 買點模式=2年高低點σ 高={ref_high} 低={ref_low}")
 
-    # ── MK v3.2 公式（A+B v19.318）：回歸中樞 ± kσ，σ=真·淨值統計標準差 ─────────
+    # ──  v3.2 公式（A+B v19.318）：回歸中樞 ± kσ，σ=真·淨值統計標準差 ─────────
     # 沿革:v3.0 用 wb07 年化波動率(σ_abs=年高×年化σ%)→ 3σ 常超出區間、買賣點永遠觸不到;
     #   v3.1(v19.313)改區間基準 (年高-年低)/3,但「買錨年高、賣錨年低」使 買1=賣2、買2=賣1
     #   數學重疊,6 條線塌成 4 條,且 band 寬度=年區間(平靜基金仍看似過寬)。

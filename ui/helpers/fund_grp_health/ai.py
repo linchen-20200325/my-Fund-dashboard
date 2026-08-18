@@ -21,7 +21,7 @@ def _build_cross_fund_snapshot(funds: list) -> tuple[str, int]:
 
     內容:
       - 整組概況(檔數 / 平均覆蓋率 / 平均 σ rank / 超跌統計)
-      - 逐檔簡表(代號 / 名稱 / 配息率 / 覆蓋率燈號 / σ rank / MK 操作建議)
+      - 逐檔簡表(代號 / 名稱 / 配息率 / 覆蓋率燈號 / σ rank / 操作建議)
       - 跨檔影子基金清單(若有)
 
     回傳:(snapshot_str, n_funds_with_data)

@@ -322,7 +322,7 @@ class TestCoverageHasProductionConsumer:
         from ui.helpers.fund_grp_health.unified import compute_switch_columns
         _r = compute_switch_columns({
             "1Y 含息 %": 8.0, "Sharpe 1Y": 1.0, "Max DD %": None, "vs 大盤%": None,
-            "吃本金燈號 (1Y · MK)": "🟢🟢 健康"})
+            "吃本金燈號 (1Y · )": "🟢🟢 健康"})
         assert _r["策略燈號"].startswith("🟡")
         assert "65/100" in _r["策略分覆蓋"]
 

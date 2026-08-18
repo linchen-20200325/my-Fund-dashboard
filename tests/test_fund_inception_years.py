@@ -1,7 +1,7 @@
 """v19.308 回歸網 — 成立年改讀 MoneyDJ 現成成立日（SSOT fund_inception_years）。
 
 user 2026-07-04：Streamlit Cloud IP 被 MoneyDJ 擋 → 只抓到近 1 月 NAV → 成立年
-（原用 series.index[0]）算成 0.1 年、MK 3-3-3 ① 全數誤判不通過。改為「抓 MoneyDJ
+（原用 series.index[0]）算成 0.1 年、 3-3-3 ① 全數誤判不通過。改為「抓 MoneyDJ
 頁面現成的成立日期」優先，序列僅當 fallback。本檔鎖住:
 1. `fund_inception_years` 純函式：成立日優先 / 序列 fallback / 短序列不硬報。
 2. `check_333_fund` 的 C1 改讀 `metrics["inception_date"]`（免依賴本地長歷史）。

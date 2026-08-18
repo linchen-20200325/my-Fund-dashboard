@@ -113,11 +113,11 @@ CPI_YOY_THRESHOLDS = {
     },
     "inflection_detection": {
         # services/macro_service.py:208-210 高位未降警示 + 回落多頭
-        # services/macro_service.py:253 MK 黃金拐點(CPI 見頂 + Fed 降息)
+        # services/macro_service.py:253 黃金拐點(CPI 見頂 + Fed 降息)
         "warn_above": 4.0,      # > 4.0% 高位未降 警告
         "bull_low": 1.5,        # 1.5 <= v <= 3.0 回落合理多頭
         "bull_high": 3.0,
-        "mk_golden_below": 3.5, # < 3.5 + 下降 + Fed 見頂 = MK 黃金拐點
+        "mk_golden_below": 3.5, # < 3.5 + 下降 + Fed 見頂 = 黃金拐點
     },
     "regime_classification": {
         # services/macro_service.py:1447-1449

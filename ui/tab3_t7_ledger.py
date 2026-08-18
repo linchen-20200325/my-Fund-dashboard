@@ -1,6 +1,6 @@
 """ui/tab3_t7_ledger.py — T7 帳務與再平衡試算（從 ui/tab3_portfolio.py 抽出）
 
-包含 T7 區段（A/B/C 三種落帳情境 + 帳本面板 + MK 老師深度組合建議 AI），
+包含 T7 區段（A/B/C 三種落帳情境 + 帳本面板 + 老師深度組合建議 AI），
 原為 ui/tab3_portfolio.py 內 render_portfolio_tab 末段 1978 行（佔 46%）。
 
 設計：
@@ -126,7 +126,7 @@ def is_scenario_commit(mode_label) -> bool:
 
 
 def _calc_data_health(indicators=None):
-    """總經資料健康度 wrapper（與 tab3_portfolio.py 同邏輯，供 MK AI 區段使用）。"""
+    """總經資料健康度 wrapper（與 tab3_portfolio.py 同邏輯，供  AI 區段使用）。"""
     ind = indicators if indicators is not None else st.session_state.get("indicators", {})
     return _calc_data_health_pure(ind)
 
@@ -190,7 +190,7 @@ _T7_SNAP_COL_CONFIG: dict = {
              "括號內為可換得的單位數（金額 ÷ FX ÷ NAV）"),
     "衛星停利": st.column_config.TextColumn(
         "衛星停利", width="medium",
-        help="郭俊宏 80/20：衛星部位「未實現損益 %」達門檻自動停利。🔴 強制停利 ≥20%（轉回核心）／"
+        help="老師 80/20：衛星部位「未實現損益 %」達門檻自動停利。🔴 強制停利 ≥20%（轉回核心）／"
              "💰 分批停利 ≥15%／續抱 <15%。核心部位長期領息不判（—）；衛星但未填平均成本 → "
              "「⬜ 未填成本」（誠實不當 0%）"),
 }
@@ -216,7 +216,7 @@ def _t7d_fetch_fund_meta(code: str, existing=None) -> dict:
 
 
 def render_t7_section() -> None:
-    """渲染 T7 帳務試算 + MK 深度組合建議 AI 子區。
+    """渲染 T7 帳務試算 + 深度組合建議 AI 子區。
 
     從 render_portfolio_tab 末段抽出。Caller 不需傳參數，全部狀態透過 st.session_state。
     """
@@ -3079,7 +3079,7 @@ def render_t7_section() -> None:
                         )
 
 
-            # ── v18.82 MK 老師深度組合建議（AI）—— 放 _panel_ph 之外才會在 A/B/C 下方 ──
+            # ── v18.82 老師深度組合建議（AI）—— 放 _panel_ph 之外才會在 A/B/C 下方 ──
             # 使用者反饋「組合基金下方缺乏 AI 組合分析」：v18.81 expander 寫在
             # _panel_ph.container() 裡，那個 placeholder 在 A/B/C tabs 上方創建，
             # 渲染進去 = 顯示在 tabs 上方，使用者在 C tab 往下看當然看不到。
@@ -3115,7 +3115,7 @@ def render_t7_section() -> None:
                         "AI 才能給景氣位階對應的換股建議。仍可勾選下方略過按鈕直接生成基礎組合分析。"
                     )
                 # v18.87: 資料來源透明化 — 明確說 AI 只看主帳本（不含 A/B/C 暫存方案）
-                # 使用者反饋「MK 老師的判斷不能抓取重新配置的資料，因為這資料只是給我
+                # 使用者反饋「老師的判斷不能抓取重新配置的資料，因為這資料只是給我
                 # 想要重新配置的參考值」— 程式碼確實已隔離，但 UI 沒講清楚使用者會擔心
                 # 稽核 E2:`_pf_t7` 上游已用 SSOT 濾過,這裡再判一次 `loaded`
                 # 是舊的、寬鬆的定義,會與上游不同步。直接數即可。
@@ -3187,13 +3187,13 @@ def render_t7_section() -> None:
                                 _mk_ai_ind, target_key="LEI", lag_months=3, min_overlap=24,
                             )
                         except Exception as _e_drv:
-                            print(f"[MK AI] rank_macro_drivers 失敗：{_e_drv}")
+                            print(f"[ AI] rank_macro_drivers 失敗：{_e_drv}")
                         try:
                             _mk_sub = backtest_sub_cycle_lights(
                                 _mk_ai_ind, target_key="LEI", window=60, forward_months=3,
                             )
                         except Exception as _e_sub:
-                            print(f"[MK AI] backtest_sub_cycle_lights 失敗：{_e_sub}")
+                            print(f"[ AI] backtest_sub_cycle_lights 失敗：{_e_sub}")
                     with st.spinner("🤖 Gemini 分析組合中...（約 15-30 秒）"):
                         try:
                             _mk_txt = analyze_portfolio_mk_advisor(

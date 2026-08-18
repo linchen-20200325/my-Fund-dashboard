@@ -10,7 +10,7 @@
 - `base_column_config()`      ③ 實際購買結果(持有 meta / 全期實際·年化 %)
 - `health_column_config()`    ① 健康分析 + σ/捕捉/換標/景氣/匯率(原 `_health_cfg`)
 - `dividend_column_config()`  ② 配息相關(原 `_div_cfg`)
-- `extra_column_config()`     σ位階 / MK 買賣點 / 風險對比等原本**沒有** cfg 的欄
+- `extra_column_config()`     σ位階 / 買賣點 / 風險對比等原本**沒有** cfg 的欄
 - `batch_column_config()`     批次專屬:狀態 / 備註 / 淨值日期 / 淨值新鮮度
 - `unified_column_config(batch=)` 以上合併(dict 後者覆蓋前者)
 
@@ -69,7 +69,7 @@ def base_column_config() -> dict:
             "含息% (全期實際)", format="%.2f %%",
             help="把上面兩欄加起來:淨值漲跌 + 配息,就是這段期間真正賺賠了百分之幾"
                  "(**不**換算成每年)。不參與燈號判定。"),
-        # v19.148/v19.180:年化 3 軸(< 0.5 年顯示 None,避免幻象);verdict 仍走 1Y MK SSOT
+        # v19.148/v19.180:年化 3 軸(< 0.5 年顯示 None,避免幻象);verdict 仍走 1Y  SSOT
         "配息率% (年化)": cc.NumberColumn(
             "配息率% (年化·對買進成本)", format="%.2f %%",
             help="(累積配息 / **買進時的本金** / 持有年數)× 100。需持有 ≥ 0.5 年才顯示。"
@@ -83,22 +83,22 @@ def base_column_config() -> dict:
             "含息% (年化)", format="%.2f %%",
             help="平均每年的淨值% + 平均每年的配息% = 平均每年真正賺賠百分之幾。"
                  "需持有 ≥ 0.5 年才顯示。不參與燈號判定。"),
-        "吃本金燈號 (1Y · MK)": cc.TextColumn(
-            "吃本金燈號 (1Y · MK)", width="medium",
+        "吃本金燈號 (1Y · )": cc.TextColumn(
+            "吃本金燈號 (1Y · )", width="medium",
             help="「配息是不是在挖你自己的本金」:拿**近一年含息報酬**和 MoneyDJ 官方公布的"
                  "**年化配息率**比 —— 賺的比配的少,等於配息有一部分是把本金退還給你。"
                  "與下方「健診摘要表」用同一套算法,兩處不會給出不同結論。"),
-        # v19.153:MK 3-3-3 原則(長線核心資產輔助)
+        # v19.153: 3-3-3 原則(長線核心資產輔助)
         # 3 年平均年化的推導:metrics.ret_3y(3 年累計 %)開立方根 → (1+R)^(1/3)-1。
         # 內部欄位名寫在註解,help 只講白話。
-        "MK 3-3-3 篩": cc.TextColumn(
-            "MK 3-3-3 篩", width="medium",
+        " 3-3-3 篩": cc.TextColumn(
+            " 3-3-3 篩", width="medium",
             help="挑「長期抱得住的核心基金」用的門檻:成立滿 3 年以上,而且過去 3 年"
                  "**平均每年**賺超過 7%。✅ 兩項都過 / ❌ 有一項明確沒過 / "
                  "⬜ 資料不夠(查不到成立日或查不到 3 年報酬,**不算它沒過**)。"
                  "「平均每年」是把 3 年的累計報酬開立方根攤平算出來的。"
                  "這欄只是長線選股輔助,**不是**吃本金的主判定。"),
-        "MK 倉位": cc.TextColumn("MK 倉位", width="small",
+        "倉位": cc.TextColumn("倉位", width="small",
             help="MoneyDJ 頁面上直接標示的建議倉位,原樣顯示,本站不重算。"),
         "最高經理費%": cc.TextColumn("最高經理費%", width="small",
             help="公開說明書寫的經理費**上限**,原文照抄。"
@@ -133,7 +133,7 @@ def health_column_config() -> dict:
     return {
         "code": cc.TextColumn("代號", width="small"),
         "基金名": cc.TextColumn("基金名", width="medium"),
-        # v19.327:核心/衛星資產分類(類別 + MK 3-3-3 兩層,見「分類依據」欄)
+        # v19.327:核心/衛星資產分類(類別 +  3-3-3 兩層,見「分類依據」欄)
         "基金類別": cc.TextColumn("基金類別", width="small",
             help="MoneyDJ 頁面上寫的投資標的 / 基金類型原文,是判定核心或衛星的依據之一。"),
         "核心/衛星": cc.TextColumn("核心/衛星", width="small",
@@ -209,13 +209,13 @@ def health_column_config() -> dict:
                  "淨值資料太短算不出來 → 留白,此時換標策略分會把這一項排除在分母外。"),
         "3Y 年化 %": cc.NumberColumn("3Y 年化 %", format="%.2f %%",
             help="過去三年**平均每年**賺多少。本站算不出來時,改用 MoneyDJ 官方績效表的"
-                 "三年期累計報酬開立方根換算。左邊「MK 3-3-3 篩」吃這個值,"
+                 "三年期累計報酬開立方根換算。左邊「 3-3-3 篩」吃這個值,"
                  "抓不到時 3-3-3 顯示 ⬜ 資料不足(**不會**直接判它沒過)。"),
         "5Y 年化 %": cc.NumberColumn("5Y 年化 %", format="%.2f %%",
             help="過去五年**平均每年**賺多少(本站算不出來時,改用 MoneyDJ 官方績效表的"
                  "五年期累計報酬換算)。"),
-        # 「MK 3-3-3」(services/health/report.build_health_analysis_row 的欄)在大表被
-        # unified._UNIFIED_FRONT 的「MK 3-3-3 篩」取代 → 這裡曾有一份 0 consumer 的
+        # 「 3-3-3」(services/health/report.build_health_analysis_row 的欄)在大表被
+        # unified._UNIFIED_FRONT 的「 3-3-3 篩」取代 → 這裡曾有一份 0 consumer 的
         # column_config(永遠被 `k in df.columns` 濾掉)。已移除,避免留著假裝有揭露。
         # 該欄目前唯一的 production 消費者是 Tab2 的 metric 卡(不吃 column_config)。
         # v19.414 經理人操作能力;v19.419 放寬門檻 6→3(help 註明參考值,§1 誠實)
@@ -366,7 +366,7 @@ def dividend_column_config() -> dict:
             help="上兩欄的配息數字怎麼來的。「真實」= 用最近一筆實際配息記錄算,比較準;"
                  "「估算」= 查不到記錄,改用年化配息率 ÷ 12 平均攤到每個月 —— "
                  "季配 / 年配的基金某些月份其實是 0 元,估算值只是平均值,別當成每月一定領得到。"),
-        "吃本金燈號 (1Y·MK)": cc.TextColumn("吃本金燈號 (1Y·MK)", width="medium",
+        "吃本金燈號 (1Y·)": cc.TextColumn("吃本金燈號 (1Y·)", width="medium",
             help="「配息是不是在挖你自己的本金」:近一年含息報酬比不上年化配息率,"
                  "就代表配給你的錢有一部分是本金退還。與健診大表同一套算法。"),
         "換標的建議": cc.TextColumn("換標的建議", width="medium",
@@ -376,7 +376,7 @@ def dividend_column_config() -> dict:
 
 
 def extra_column_config() -> dict:
-    """σ 位階 / 風險對比 / MK 買賣點欄 —— 原本**完全沒有** column_config 的一批。
+    """σ 位階 / 風險對比 / 買賣點欄 —— 原本**完全沒有** column_config 的一批。
 
     值皆為 by-code data 函式預先格式化好的**字串**(缺 → '—'),故一律 TextColumn。
     """
@@ -437,7 +437,7 @@ def batch_column_config() -> dict:
         "狀態": cc.TextColumn("狀態", width="small",
             help="✅ 成功 / ⚠️ 部分成功 / ❌ 抓取失敗 / ⚠️ 代號無效。"
                  "抓失敗的檔**仍然完整留在表裡**,數值欄留白 —— 不會偷偷丟掉,也不會填 0 充數。"
-                 "「⚠️ 部分成功」= 淨值有抓到,但某一組欄位(健康分析 / 配息 / σ 風險 MK / "
+                 "「⚠️ 部分成功」= 淨值有抓到,但某一組欄位(健康分析 / 配息 / σ 風險 / "
                  "策略燈號)算到一半出錯而留白 —— **留白不代表這檔沒有這項特性**,"
                  "缺哪一組寫在「備註」。"),
         "備註": cc.TextColumn("備註", width="large",
@@ -461,7 +461,7 @@ def batch_column_config() -> dict:
 def unified_column_config(*, batch: bool = False) -> dict:
     """健診大表(batch=False)/ 批次大表(batch=True)的完整 column_config。
 
-    合併順序:base(③)→ health(①)→ dividend(②)→ extra(σ/MK)→ batch 專屬。
+    合併順序:base(③)→ health(①)→ dividend(②)→ extra(σ/)→ batch 專屬。
     後者覆蓋前者;`code` / `基金名` 三份定義相同故無爭議。
     呼叫端仍需自行 `{k: v for k, v in cfg.items() if k in df.columns}` 過濾。
     """

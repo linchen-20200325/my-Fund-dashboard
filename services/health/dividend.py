@@ -137,9 +137,9 @@ def classify_eating_principal(
 
 
 # ════════════════════════════════════════════════════════════════
-# v19.148 → v19.149 — MK 老師 1Y 吃本金檢查 SSOT 入口
-#   方法論:近一年含息報酬率 vs 年化配息率(郭俊宏 MK 老師體檢邏輯)
-#   v19.149 升級:含息報酬從業界複利(wb01)改為 MK 嚴格單利
+# v19.148 → v19.149 — 老師 1Y 吃本金檢查 SSOT 入口
+#   方法論:近一年含息報酬率 vs 年化配息率(老師體檢邏輯)
+#   v19.149 升級:含息報酬從業界複利(wb01)改為 嚴格單利
 #     含息_1Y = NAV 漲跌幅% + 累計配息率%
 #   wb01/ret_1y_total/ret_1y 變成 fallback,當 fund 內 raw series + dividends
 #   不可用時才使用。caller 可由 `_tr1y_method` 欄位看出實際用哪條路。
@@ -149,9 +149,9 @@ def compute_1y_total_return_mk_simple(
     dividends: Any,
     as_of_date: Optional[str] = None,
 ) -> tuple[Optional[float], dict]:
-    """v19.149 — MK 老師嚴格單利 1Y 含息報酬率 SSOT 計算。
+    """v19.149 — 老師嚴格單利 1Y 含息報酬率 SSOT 計算。
 
-    公式(MK 老師體檢邏輯):
+    公式(老師體檢邏輯):
         含息_1Y = NAV 漲跌幅% + 累計配息率%
               = (NAV_now − NAV_1Y_ago) / NAV_1Y_ago × 100
               + Σ(divs in last 1Y) / NAV_1Y_ago × 100
@@ -298,7 +298,7 @@ def compute_1y_total_return_mk_simple(
     meta["div_sum_per_unit"] = round(div_sum, 6)
     meta["div_count"] = div_count
 
-    # Step 6:套 MK 公式
+    # Step 6:套 公式
     nav_change_pct = (nav_end - nav_start) / nav_start * 100.0
     div_total_pct = (div_sum / nav_start) * 100.0 if div_sum > 0 else 0.0
     ret_pct = nav_change_pct + div_total_pct
@@ -382,12 +382,12 @@ def _resolve_adr_with_fallback(fund: dict) -> tuple[Optional[float], str]:
 
 
 def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
-    """MK 老師 1Y 吃本金檢查 SSOT 入口(v19.175 回歸 wb01 業界複利優先)。
+    """老師 1Y 吃本金檢查 SSOT 入口(v19.175 回歸 wb01 業界複利優先)。
 
-    依郭俊宏(MK)老師體檢邏輯:
+    依老師體檢邏輯:
         近一年含息總報酬率 < 年化配息率 → 🔴 吃本金
 
-    MK 老師核心精神是「善用免費理財網站直接查找數據,不要自己算複雜的數學」,
+    老師核心精神是「善用免費理財網站直接查找數據,不要自己算複雜的數學」,
     系統應以 MoneyDJ wb01 官方數字為絕對優先(SSOT),只在抓不到時才自算 fallback,
     與使用者上網查到的數字一致,避免信任危機。
 
@@ -403,7 +403,7 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
             4. NAV 序列年化外推 (跨度須 ≥ RET_1Y_EXTRAPOLATE_MIN_DAYS,倍數走 SSOT cap;
                2026-08-14 稽核 E1 前是「≥30d、cap 12x」—— 30 天 ×12 會印出 +201% 的假一年報酬)
 
-        v19.149 的 MK 嚴格簡單單利路徑改為「對照欄」備援(`_tr1y_mk_simple_meta`),
+        v19.149 的 嚴格簡單單利路徑改為「對照欄」備援(`_tr1y_mk_simple_meta`),
         不再參與燈號判定 — 避免 Tab2(wb01)/ 健診總表(mk_simple)同檔結論相反。
 
     年化配息率(adr)precedence:
@@ -414,7 +414,7 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     dividend_safety 3 色結果 dict + v19.175 欄位:
       - `_tr1y_method`: tr1y 來源(從 compute_1y_total_return 取得 source label)
       - `_tr1y_window_days`: 仍保留欄位(對齊舊 caller),compute_1y_total_return 路徑為 None
-      - `_tr1y_meta`: 仍保留欄位,內含 MK 嚴格單利對照值(若可算)便於 UI「業界 vs MK」對照顯示
+      - `_tr1y_meta`: 仍保留欄位,內含 嚴格單利對照值(若可算)便於 UI「業界 vs 」對照顯示
     或 None(資料不足:adr 缺/tr1y 缺/adr ≤ 0)
     """
     # adr v19.177:統一走 SSOT _resolve_adr_with_fallback(3 層 chain)
@@ -455,7 +455,7 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
             "_tr1y_meta": None, "_tr1y_window_days": None,
         }
 
-    # 對照欄:MK 嚴格簡單單利(若 series + dividends 可用)仍計算供 UI 對照顯示,
+    # 對照欄:嚴格簡單單利(若 series + dividends 可用)仍計算供 UI 對照顯示,
     # 但 不再 參與燈號判定。
     # v19.181 Bug 4 fix: pd.Series 的 `or` 會觸發 ambiguous truth value ValueError —
     # 改用顯式 None 檢查(`fund.get("series")` 可能回傳 pd.Series 物件)
@@ -529,7 +529,7 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     return out
 
 
-# v19.148 — 3-3-3 原則(MK 老師長線核心資產挑選輔助,非吃本金主判定)
+# v19.148 — 3-3-3 原則(老師長線核心資產挑選輔助,非吃本金主判定)
 #   成立滿 3 年 + 過去 3 年平均年化報酬 > 7% → 通過長線核心資產篩
 THREE_THREE_THREE_MIN_YEARS = 3
 THREE_THREE_THREE_MIN_ANN_RETURN_PCT = 7.0
@@ -537,7 +537,7 @@ THREE_THREE_THREE_MIN_ANN_RETURN_PCT = 7.0
 
 def check_333_principle(years_since_inception: Optional[float],
                         ann_return_3y_pct: Optional[float]) -> dict:
-    """MK 老師 3-3-3 原則 — 長線核心資產挑選輔助判定(輔助,非主吃本金).
+    """老師 3-3-3 原則 — 長線核心資產挑選輔助判定(輔助,非主吃本金).
 
     通過條件:
     - 成立 ≥ 3 年
@@ -586,7 +586,7 @@ def check_333_principle(years_since_inception: Optional[float],
     if _passed:
         _msg = f"通過 3-3-3 ✅({_yrs:.1f} 年成立、3 年平均年化 {_ret:.1f}%)"
     elif not _y_ok:
-        _msg = f"成立 {_yrs:.1f} 年 < 3 年(MK 3-3-3 要求 ≥ 3 年)"
+        _msg = f"成立 {_yrs:.1f} 年 < 3 年( 3-3-3 要求 ≥ 3 年)"
     else:
-        _msg = f"3 年平均年化 {_ret:.1f}% ≤ 7%(MK 3-3-3 要求 > 7%)"
+        _msg = f"3 年平均年化 {_ret:.1f}% ≤ 7%( 3-3-3 要求 > 7%)"
     return {"passed": _passed, "years_ok": _y_ok, "return_ok": _r_ok, "message": _msg}

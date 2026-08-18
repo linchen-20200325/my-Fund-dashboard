@@ -1,4 +1,4 @@
-"""v19.198 P1-6:⑩ MK 買賣點對比 + ⑪ Bollinger 詳圖(從 fund_grp_health_extras 主檔抽出)。"""
+"""v19.198 P1-6:⑩ 買賣點對比 + ⑪ Bollinger 詳圖(從 fund_grp_health_extras 主檔抽出)。"""
 from __future__ import annotations
 
 import streamlit as st
@@ -9,7 +9,7 @@ from ui.helpers.fund_grp_health._utils import _safe_num
 
 
 def _render_mk_signal_table(funds: list) -> None:
-    """⑩ MK 買賣點表(跨檔對比)。
+    """⑩ 買賣點表(跨檔對比)。
 
     每檔基金顯示:
       - 資產屬性(核心/衛星/混合)
@@ -22,17 +22,17 @@ def _render_mk_signal_table(funds: list) -> None:
     SSOT:ui/helpers/macro_helpers.mk_fund_signal
     """
     st.divider()
-    st.markdown("### 🎯 MK 買賣點對比(跨檔)")
+    st.markdown("### 🎯 買賣點對比(跨檔)")
 
     _phase_info = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
     if not _phase_info:
-        st.caption("⬜ 需先到 🌐 市場定調 Tab 點選「載入總經資料」,才能算景氣位階 + MK 操作訊號")
+        st.caption("⬜ 需先到 🌐 市場定調 Tab 點選「載入總經資料」,才能算景氣位階 + 操作訊號")
         return
 
     try:
         from ui.helpers.macro_helpers import mk_fund_signal
     except Exception as e:
-        st.caption(f"⬜ MK 訊號模組載入失敗:{type(e).__name__}: {e}")
+        st.caption(f"⬜ 訊號模組載入失敗:{type(e).__name__}: {e}")
         return
 
     _phase = _phase_info.get("phase") or "擴張"
@@ -55,11 +55,11 @@ def _render_mk_signal_table(funds: list) -> None:
         _has_sig = sum(1 for r in _rows if r.get("操作訊號", "—") != "—")
         if _has_sig < len(_rows):
             st.caption(
-                f"⬜ {len(_rows) - _has_sig} / {len(_rows)} 檔基金 MK 訊號計算失敗"
+                f"⬜ {len(_rows) - _has_sig} / {len(_rows)} 檔基金 訊號計算失敗"
                 "(可能 metrics 缺 buy/sell levels)"
             )
     except Exception as e:  # noqa: BLE001
-        st.caption(f"⬜ MK 表渲染失敗:{type(e).__name__}: {e}")
+        st.caption(f"⬜ 表渲染失敗:{type(e).__name__}: {e}")
 
 
 def _first_num(*vals):
@@ -72,7 +72,7 @@ def _first_num(*vals):
 
 
 def mk_signal_by_code(funds: list, phase: str, score) -> dict:
-    """⑩ MK 買賣點逐檔欄位(keyed by code)。供健診總表合併 + 標準表共用(單一資料源)。
+    """⑩ 買賣點逐檔欄位(keyed by code)。供健診總表合併 + 標準表共用(單一資料源)。
 
     phase/score 由呼叫端從 st.session_state.phase_info 取;缺 → 訊號欄 '—',
     但買賣水平線 / 現價位階仍計算(不依景氣)。缺項 '—' 不偽造(§1)。
@@ -103,7 +103,7 @@ def mk_signal_by_code(funds: list, phase: str, score) -> dict:
                 _sig_label = _sig.get("label", "—")
             except Exception as _e_sig:  # noqa: BLE001
                 # §1:原本靜默 pass → 「操作訊號」欄停在「—」,把**算爆了**偽裝成
-                # 「這檔沒訊號」。同 `services/fund_row.py` 對 MK 吃本金 / 3-3-3 的處置。
+                # 「這檔沒訊號」。同 `services/fund_row.py` 對 吃本金 / 3-3-3 的處置。
                 import sys as _sys_sig
                 print(f"[grp_health/signals] {_code} mk_fund_signal 失敗:"
                       f"{type(_e_sig).__name__}: {_e_sig}", file=_sys_sig.stderr)
@@ -256,7 +256,7 @@ def _render_bollinger_expanders(funds: list) -> None:
                         hovertemplate="%{text}<br>淨值:%{y:.4f}<extra></extra>",
                     ))
 
-                # MK 買賣水平線
+                # 買賣水平線
                 for _bv, _bl, _bc in [
                     (_safe_num(_m.get("buy1")), "買1 (中樞-1σ)", MD_GREEN_A200),
                     (_safe_num(_m.get("buy2")), "買2 (中樞-2σ)", MATERIAL_GREEN),

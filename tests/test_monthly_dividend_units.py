@@ -187,7 +187,7 @@ def test_dividend_columns_have_twd_amount_and_units():
     i_twd = DIVIDEND_COLUMNS.index("每月配息 (TWD)")
     i_unit = DIVIDEND_COLUMNS.index("每月配息單位數")
     i_src = DIVIDEND_COLUMNS.index("配息來源")
-    i_eat = DIVIDEND_COLUMNS.index("吃本金燈號 (1Y·MK)")
+    i_eat = DIVIDEND_COLUMNS.index("吃本金燈號 (1Y·)")
     assert i_adr < i_twd < i_unit < i_src < i_eat
 
 

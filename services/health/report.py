@@ -64,7 +64,7 @@ def _nav_sample_label(fd: dict) -> str:
 
 
 def _compute_holding_years(fd: dict) -> Optional[float]:
-    """從 inception_date metadata 或 NAV 序列推算「成立至今」年數(MK 3-3-3 用)。
+    """從 inception_date metadata 或 NAV 序列推算「成立至今」年數( 3-3-3 用)。
     注意:這是「基金成立年數」非「user 持有年數」。
     user 持有年數應由 caller 從 ledger 傳入。
     """
@@ -298,9 +298,9 @@ def build_health_analysis_row(
     _333_passed = _333.get("passed")
     _333_emoji = "✅" if _333_passed is True else ("❌" if _333_passed is False else "⬜")
     _333_msg = (_333.get("message") or "")[:36]
-    # ⚠️ 本欄輸出的鍵是「MK 3-3-3」,**不是**健診 / 批次大表上顯示的那一欄。
+    # ⚠️ 本欄輸出的鍵是「 3-3-3」,**不是**健診 / 批次大表上顯示的那一欄。
     #    大表欄序常數 `ui/helpers/fund_grp_health/unified._UNIFIED_FRONT` 登錄的是
-    #    `services/fund_row.py` 產的「MK 3-3-3 篩」,本欄在合併時會被過濾掉。
+    #    `services/fund_row.py` 產的「 3-3-3 篩」,本欄在合併時會被過濾掉。
     #    本欄仍有 production 消費者(Tab2 單一基金的 metric 卡),**不是死碼**。
     #    兩份的「成立年數」推導不同源(本檔走 `fund_screening.fund_inception_years`,
     #    含 `metrics.inception_date` 來源 + tz 正規化;fund_row 為 inline 版,少一個
@@ -339,7 +339,7 @@ def build_health_analysis_row(
         "Max DD %": max_dd,
         "3Y 年化 %": ret_3y_ann,
         "5Y 年化 %": ret_5y_ann,
-        "MK 3-3-3": f"{_333_emoji} {_333_msg}".strip(),
+        " 3-3-3": f"{_333_emoji} {_333_msg}".strip(),
     }
 
 
@@ -350,7 +350,7 @@ def build_dividend_summary_row(
     holding_years: Optional[float] = None,
     fx: Optional[float] = None,
 ) -> dict:
-    """配息相關 row(SSOT):adr + 1Y 含息報酬 + 吃本金燈號 (1Y·MK) + 換標的 + 每月配息單位數。
+    """配息相關 row(SSOT):adr + 1Y 含息報酬 + 吃本金燈號 (1Y·) + 換標的 + 每月配息單位數。
 
     Args:
         fd: 基金 dict
@@ -396,7 +396,7 @@ def build_dividend_summary_row(
               f'{type(e).__name__}: {e}', file=_sys.stderr)
         adr_pct, _adr_src = None, "—"
 
-    # ─── 吃本金燈號 1Y·MK SSOT ──────────────────────────
+    # ─── 吃本金燈號 1Y· SSOT ──────────────────────────
     try:
         eat_result = check_eating_principal_1y_mk(fd)
     except Exception as e:
@@ -405,15 +405,15 @@ def build_dividend_summary_row(
         eat_result = None
     eat_status = (eat_result or {}).get("status", "⚪ 資料不足")
 
-    # ─── 換標的建議 SSOT(MK 4 規則)─────────────────────
+    # ─── 換標的建議 SSOT( 4 規則)─────────────────────
     from services.health.replacement import check_replacement_recommendation
     # ── 稽核 C4（2026-08-14）：holding_years 缺就退成「成立至今年數」──────────
     # 原本直接把 `holding_years` 透傳，而**三個 production caller 都沒傳**
     # （`services/fund_batch.py:212`、`ui/tab_fund_grp_health.py:763`、
     #   `ui/tab2_single_fund.py` 的進階指標區）→ 恆為 None
     # → `check_replacement_recommendation` 的 `rule_a_eligible` / `rule_c_eligible`
-    #   永遠是 False → **MK 4 規則裡的 (a)(c) 兩條完全失效**，只剩 (b)(d)。
-    #   而畫面上的 caption 仍向使用者承諾「MK 4 規則觸發」。
+    #   永遠是 False → ** 4 規則裡的 (a)(c) 兩條完全失效**，只剩 (b)(d)。
+    #   而畫面上的 caption 仍向使用者承諾「 4 規則觸發」。
     #
     # 姊妹函式 `build_health_analysis_row:184` 早就用 `_compute_holding_years(fd)`
     # 當 fallback 了，這裡只是沒跟上 —— 同一個模組裡兩種行為。
@@ -459,7 +459,7 @@ def build_dividend_summary_row(
         "每月配息 (TWD)": _mon_div_twd,
         "每月配息單位數": _mon_div_units,
         "配息來源": _div_src,
-        "吃本金燈號 (1Y·MK)": eat_status,
+        "吃本金燈號 (1Y·)": eat_status,
         "換標的建議": f"{rep['emoji']} {rep['label']}",
         "_換標的 detail": rep.get("message", ""),
         # v19.315:raw verdict 供「淘汰候選紅區」篩選(replace)。`_` 前綴 → 不進 DIVIDEND_COLUMNS 表格。
@@ -476,7 +476,7 @@ HEALTH_COLUMNS = [
     "4D Grade", "4D Score",
     "Sharpe 1Y", "Sortino", "Calmar", "Alpha %", "費用率 %",
     "Max DD %", "3Y 年化 %", "5Y 年化 %",
-    "MK 3-3-3",
+    " 3-3-3",
 ]
 
 DIVIDEND_COLUMNS = [
@@ -486,6 +486,6 @@ DIVIDEND_COLUMNS = [
     "每月配息 (TWD)",
     "每月配息單位數",
     "配息來源",
-    "吃本金燈號 (1Y·MK)",
+    "吃本金燈號 (1Y·)",
     "換標的建議",
 ]

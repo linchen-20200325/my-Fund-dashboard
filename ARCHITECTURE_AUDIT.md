@@ -99,7 +99,7 @@ my-Fund-dashboard/
 │   │   ├── fund_history             408
 │   │   ├── fund_health_report       287   (v19.181 SSOT,共用 row builder)
 │   │   ├── fund_health.py             ?   (sub-agent 提及,需 verify 是否與其他 fund_health 打架)
-│   │   ├── fund_replacement_verdict 216   (v19.181 MK 4 規則)
+│   │   ├── fund_replacement_verdict 216   (v19.181  4 規則)
 │   │   ├── fund_total_return          ?   (新近)
 │   │   └── fund_dividend_calculator   ?   (新近)
 │   │
@@ -470,7 +470,7 @@ P2-1/P2-4/P2-5 backlog 用直接搬位置策略全部消化(P2-1 → 取消因�
 | **B2** P2-4 policy_repository 拆 3 子檔 | ✅ **完工**(本次重做成功) | 共用 `_*` 集中 `_helpers.py`,規避 v19.199 `from X import *` 不取 `_*` 死結 |
 | **C2** F-PROV-1 fetcher 補 provenance | ✅ **完工**(5 實質 + 4 docstring,8 backlog 留 complexity-justified) | scalar return + fallback chain + tuple 留 backlog |
 | **C3** app.py 549 → 471 LOC | ✅ **完工**(第一輪) | macro_compass 抽出;sidebar 抽取 abort(over-engineering) |
-| **B3** Fund Health 6 → 2 檔 SSOT 收口 | ✅ **藍圖誤判**(復核結論) | 6 檔職責不同(4D Grade / 配息 / MK 4 規則 / row builder / KPI 卡 UI / 7 子檔健診 UI),非「重複實作」;v19.181 SSOT 抽取後各檔均走 SSOT。同 C1 案例。 |
+| **B3** Fund Health 6 → 2 檔 SSOT 收口 | ✅ **藍圖誤判**(復核結論) | 6 檔職責不同(4D Grade / 配息 /  4 規則 / row builder / KPI 卡 UI / 7 子檔健診 UI),非「重複實作」;v19.181 SSOT 抽取後各檔均走 SSOT。同 C1 案例。 |
 
 ### 新增/搬遷檔案清單(2026-06-28 第三階段成果)
 

@@ -111,9 +111,9 @@ def test_m2_replacement_ranking_not_return_dominated():
     """M2:同類換股「品質」排名不該被報酬項獨大 → 高 Sharpe/Sortino 但報酬略低者應勝出。"""
     from services.switch_strategy import replacement_candidate
     _hi_quality = {"基金類別": "股票", "Sharpe 1Y": 1.5, "1Y 含息 %": 8.0, "Sortino": 2.0,
-                   "費用率 %": 1.0, "策略燈號": "🟢", "吃本金燈號 (1Y · MK)": "🟢 健康", "code": "GOOD"}
+                   "費用率 %": 1.0, "策略燈號": "🟢", "吃本金燈號 (1Y · )": "🟢 健康", "code": "GOOD"}
     _hi_return = {"基金類別": "股票", "Sharpe 1Y": 0.6, "1Y 含息 %": 12.0, "Sortino": 0.8,
-                  "費用率 %": 1.0, "策略燈號": "🟢", "吃本金燈號 (1Y · MK)": "🟢 健康", "code": "CHASE"}
+                  "費用率 %": 1.0, "策略燈號": "🟢", "吃本金燈號 (1Y · )": "🟢 健康", "code": "CHASE"}
     _pick = replacement_candidate("股票", [_hi_return, _hi_quality])
     assert _pick is not None and _pick.get("code") == "GOOD", "風險調整更佳者應勝(非純追報酬)"
 

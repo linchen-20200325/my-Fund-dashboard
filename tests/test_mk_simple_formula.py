@@ -1,6 +1,6 @@
-"""tests/test_mk_simple_formula.py — MK 老師嚴格單利 1Y 含息報酬率公式守衛(v19.149)
+"""tests/test_mk_simple_formula.py — 老師嚴格單利 1Y 含息報酬率公式守衛(v19.149)
 
-User 釐清 MK 老師體檢邏輯:
+User 釐清 老師體檢邏輯:
     含息_1Y = NAV 漲跌幅% + 累計配息率%
 
 公式:
@@ -329,7 +329,7 @@ class TestCheckEatingV19175WbCompoundFirst:
 # 5. Property:單利 公式具備加法可拆性
 # ──────────────────────────────────────────────────────────
 class TestPropertySimpleFormulaAdditivity:
-    """MK 單利的關鍵性質:nav 報酬與 div 報酬可加(不像複利會有 cross-term)。
+    """單利的關鍵性質:nav 報酬與 div 報酬可加(不像複利會有 cross-term)。
     這條 property 守:任何時候 ret = nav_change + div_total 必須成立。"""
 
     @pytest.mark.parametrize("nav_pct,div_pct", [

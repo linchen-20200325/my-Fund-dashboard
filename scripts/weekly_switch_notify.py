@@ -11,7 +11,7 @@ v19.441:①觀察集合擴為 持倉 ∪ 追蹤清單;②吃本金燈號餵進 s
 與 App 端的差異:純 headless(不啟動 Streamlit)。所有取數/計算走 streamlit-free 的
 L1/L2 primitive;**不 import** `ui/helpers/.../switch_advisor_section.py`(那層有 st.* 呼叫),
 改在本檔重製它三個非 UI helper(_assemble_rows / _pool_rows / _underperf),phase="" score=None
-(略過唯一的 st.session_state 讀取,那個值只餵 advisor 用不到的 MK 欄)。
+(略過唯一的 st.session_state 讀取,那個值只餵 advisor 用不到的 欄)。
 
 ── NAS / 本機 前置 ─────────────────────────────────────────────
 1. 台灣 IP(直連即可;PROXY_URL 有設也相容)
@@ -213,7 +213,7 @@ def _underperf_by_code(funds: list) -> dict:
         _code = _f.get("code")
         # v19.441:吃本金燈號餵進 switch_signal → 嚴重吃本金 = 一級紅燈(user 明確要留意)。
         # 原本傳 eat="" 讓「嚴重吃本金」分支永遠不觸發,只靠「含息<0且Sharpe<0」→ 高配息掩蓋的
-        # 吃本金會漏報。改抓 MK 1Y 吃本金 status 傳入(缺料 → "" 誠實降級,不臆測 §1)。
+        # 吃本金會漏報。改抓  1Y 吃本金 status 傳入(缺料 → "" 誠實降級,不臆測 §1)。
         try:
             _eat = (check_eating_principal_1y_mk(_f) or {}).get("status", "")
         except Exception as _e:  # noqa: BLE001

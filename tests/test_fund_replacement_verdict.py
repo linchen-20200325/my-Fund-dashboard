@@ -1,7 +1,7 @@
 """v19.181 — services.health.replacement 純函式單元測試。
 
-守住 MK 4 規則心型警結合判定邏輯:
-(a) 吃本金 1Y·MK 且持有 ≥ 1 年 → hard trigger
+守住  4 規則心型警結合判定邏輯:
+(a) 吃本金 1Y·且持有 ≥ 1 年 → hard trigger
 (b) 4D Grade F → hard trigger;Grade D → observe 訊號
 (c) 3-3-3 未通過且持有 ≥ 3 年 → hard trigger
 (d) Sharpe < 0 且 max_dd < -30% → hard trigger
@@ -57,7 +57,7 @@ class TestKeepVerdict:
 
 
 class TestRuleA_EatPrincipal:
-    """規則 (a):吃本金 1Y·MK 且持有 ≥ 1 年 → hard trigger。"""
+    """規則 (a):吃本金 1Y·且持有 ≥ 1 年 → hard trigger。"""
 
     def test_eat_principal_long_hold_triggers(self):
         # 構造會被 check_eating_principal_1y_mk 判吃本金的 fd:

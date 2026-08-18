@@ -4,7 +4,7 @@
 (`ui/tab_fund_grp_health.py`)但本質是 L2 業務邏輯。下沉至此讓「組合健診」與「批次分析」
 共用同一引擎產出**同一張健診大表**(§8.2:純 worker 本就該在 L2)。
 
-回傳 row dict:成功含 ③ 健診總表所有欄位(持有 meta / 全期實際·年化 % / 吃本金 / MK 3-3-3
+回傳 row dict:成功含 ③ 健診總表所有欄位(持有 meta / 全期實際·年化 % / 吃本金 /  3-3-3
 + `_fund_raw`/`_principal_twd`/`_detail` 等底線私有欄供上層算 ①②/σ);任一步失敗回
 `{code, ok: False, error}`。§1:缺幣別 / NAV / FX 誠實回 error,不矇預設值。
 
@@ -127,7 +127,7 @@ def process_one_fund(
         _buy_fx = result["buy_fx"]
         _buy_fx_info = f"1M TWD→{_p_ccy:,.0f} {ccy} @ {_buy_fx:.2f}"
 
-        # v19.148:MK 老師 1Y SSOT 吃本金檢查(跨表 verdict 一致)。
+        # v19.148:老師 1Y SSOT 吃本金檢查(跨表 verdict 一致)。
         _metrics = fd.get("metrics") or {}
         _mk_pos = (_metrics.get("pos_label") or "—").strip() or "—"
         _mk_safety = None
@@ -149,7 +149,7 @@ def process_one_fund(
         else:
             _snap_health = "⚪ 資料不足"
 
-        # v19.153:MK 老師 3-3-3 原則(成立 ≥ 3 年 + 3 年平均年化 > 7% → 通過)。
+        # v19.153:老師 3-3-3 原則(成立 ≥ 3 年 + 3 年平均年化 > 7% → 通過)。
         _333_emoji = "⬜"
         _333_msg = "資料不足"
         try:
@@ -202,7 +202,7 @@ def process_one_fund(
             # 於是「計算炸了」被顯示成「這檔基金資料不夠」。錯誤不可偽裝成缺資料。
             _333_emoji = "⚠️"
             _333_msg = f"計算失敗({type(_e_333).__name__})"
-            print(f"[fund_row {code}] MK 3-3-3 計算失敗："
+            print(f"[fund_row {code}]  3-3-3 計算失敗："
                   f"{type(_e_333).__name__}: {_e_333}")
         _333_status = f"{_333_emoji} {_333_msg[:32]}" if _333_msg else _333_emoji
 
@@ -224,9 +224,9 @@ def process_one_fund(
             "配息率% (年化)": s["annual_div_rate_pct_🧮"],
             "淨值% (年化)": s["annual_nav_return_pct_🧮"],
             "含息% (年化)": s["ret_1y_total_pct_🧮"],
-            "吃本金燈號 (1Y · MK)": _snap_health,
-            "MK 3-3-3 篩": _333_status,
-            "MK 倉位": _mk_pos,
+            "吃本金燈號 (1Y · )": _snap_health,
+            " 3-3-3 篩": _333_status,
+            "倉位": _mk_pos,
             "最高經理費%": _mgmt_fee,
             "配息頻率": _div_freq,
             "換匯資訊 🧮": _buy_fx_info,

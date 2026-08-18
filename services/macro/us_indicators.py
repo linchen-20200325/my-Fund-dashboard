@@ -181,7 +181,7 @@ def _detect_inflection(indicators):
 
     if fed_v is not None and fed_p is not None and fed_v <= fed_p and fed_p > 0 and \
        cpi_v and cpi_v < _CPI_MK_GOLDEN_BELOW and "下降" in cpi_t:
-        signals.append({"type":"buy","text":"⭐ MK黃金拐點：CPI+Fed Rate 雙雙見頂回落，勝率最高！"}); score += 5
+        signals.append({"type":"buy","text":"⭐ 黃金拐點：CPI+Fed Rate 雙雙見頂回落，勝率最高！"}); score += 5
 
     if score >= 8:   infl = {"label":"🚀 強力買進拐點","color":MATERIAL_GREEN,"desc":"多項指標同時確認，景氣最佳買點"}
     elif score >= 4: infl = {"label":"✅ 買進拐點形成","color":MD_GREEN_A200,"desc":"落後見頂 + 領先反彈，建議逢低布局"}
@@ -572,7 +572,7 @@ def fetch_all_indicators(fred_api_key):
             v = float(sp22.iloc[-1]); p = float(sp22.iloc[-2])
             R["YIELD_10Y2Y"] = dict(name="殖利率利差 10Y-2Y", value=round(v,3), prev=round(p,3),
                 unit="%", type="領先", date=str(sp22.index[-1])[:7],
-                desc="倒掛(<0)=衰退 | 由負翻正=MK黃金買點",
+                desc="倒掛(<0)=衰退 | 由負翻正=黃金買點",
                 trend=_trend(sp22.tolist()[-6:]),
                 signal="🟢" if v>0.5 else ("🔴" if v<0 else "🟡"),
                 color=MATERIAL_GREEN if v>0.5 else (MATERIAL_RED if v<0 else MATERIAL_ORANGE),
@@ -1436,7 +1436,7 @@ def calc_macro_phase(indicators: dict) -> dict:
     if rec_prob and rec_prob > 60:
         alerts.append(f"🔴 衰退機率 {rec_prob:.0f}% — 高度警戒")
 
-    # MK 拐點偵測
+    # 拐點偵測
     mk_signals = _detect_inflection(indicators)
 
     # ── 拐點轉向判斷 ─────────────────────────────────────

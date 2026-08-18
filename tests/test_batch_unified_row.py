@@ -1,6 +1,6 @@
 """tests/test_batch_unified_row.py — 批次「組合健診 40 欄大表」單檔列(v19.413)。
 
-驗 build_batch_unified_row:成功檔產出完整欄(①②③+σ/風險/MK)、JSON-safe(可存
+驗 build_batch_unified_row:成功檔產出完整欄(①②③+σ/風險/)、JSON-safe(可存
 checkpoint)、失敗檔回狀態!=成功且欄位對齊、空碼→無效代號。不打網路(mock 抓取 + fx)。
 """
 from __future__ import annotations
@@ -102,7 +102,7 @@ def test_batch_base_keys_covers_process_one_fund(_mock):
 
 
 def test_columns_have_key_groups():
-    # 欄序:身分/狀態 → ① 評分 → ② 配息 → extra σ/MK → base ③ 末段
+    # 欄序:身分/狀態 → ① 評分 → ② 配息 → extra σ/→ base ③ 末段
     cols = BATCH_UNIFIED_COLUMNS
     assert cols[:4] == ["code", "基金名", "狀態", "備註"]
     assert "4D Grade" in cols and "每月配息 (TWD)" in cols and "現價" in cols

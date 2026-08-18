@@ -1,4 +1,4 @@
-"""tests/test_compare_inception_years.py — MK 3-3-3 成立年數對照器（唯讀診斷工具）。
+"""tests/test_compare_inception_years.py —  3-3-3 成立年數對照器（唯讀診斷工具）。
 
 守三件事：
 1. **轉錄等價鎖**：`scripts/compare_inception_years.py` 裡 B 版是
@@ -111,7 +111,7 @@ def test_variant_b_matches_real_process_one_fund(case):
     fd = _fd_twd(**_CASES[case])
     row = process_one_fund(case, 1_000_000.0, fd=fd)
     assert row.get("ok") is True, f"fixture 本身跑不起來：{row.get('error')}"
-    assert row["MK 3-3-3 篩"] == variant_b_status(fd)
+    assert row[" 3-3-3 篩"] == variant_b_status(fd)
 
 
 def test_variant_b_short_series_is_data_insufficient_not_zero_years():

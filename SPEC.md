@@ -429,7 +429,7 @@ restore_from_json_bytes(raw, ss) -> {ok, n_funds, n_ledgers, error}
 compute_health_kpis(portfolio_funds, mk_df=None) -> dict
 # 12 個 field：n_classed / pct_core / pct_sat / ratio_label / ratio_delta /
 #             n_buy / n_warn / n_take / n_funds / n_cash_ok / n_eat / n_na
-# 去重 by code（同 code 跨多保單只算一次），mk_df=None 時 MK 維度回 0
+# 去重 by code（同 code 跨多保單只算一次），mk_df=None 時 維度回 0
 
 render_hero_kpi_cards(kpis) -> None
 # 渲染 6 卡（2 排 × 3 卡）；kpis["n_funds"]=0 時顯示提示「待載入基金」
@@ -660,7 +660,7 @@ GEMINI_API_KEY_2 = "帳號3key"
 **各 Tab 接線**：
 - **Tab1**：保留 `analyze_macro_structured`（7 段結構化＋新聞，已吃全 macro 資料）；移除重複的散文 widget；macro prompt 補白話風格守則。
 - **Tab2**：沿用既有完整 10 段快照，傳 `sections`（基本/績效/風險/配息/買賣點/持股產業/總經/新聞）切結構化。
-- **Tab3**：`_render_tab3_ai_summary` 快照由稀疏 4 段擴成全章節 — 加組合健康度 KPI（`compute_health_kpis`）、各檔 MK 體檢結論（`build_mk_dataframe`）、同類 PK 優等生/汰弱（`build_checkup_dataframe`），續接配息現金流＋新聞。
+- **Tab3**：`_render_tab3_ai_summary` 快照由稀疏 4 段擴成全章節 — 加組合健康度 KPI（`compute_health_kpis`）、各檔 體檢結論（`build_mk_dataframe`）、同類 PK 優等生/汰弱（`build_checkup_dataframe`），續接配息現金流＋新聞。
 
 **未動**：LLM 仍走既有 Gemini（`_gemini`，未換供應商）；T7 `analyze_portfolio_mk_advisor` 保留為「深入版」。
 
@@ -672,7 +672,7 @@ GEMINI_API_KEY_2 = "帳號3key"
 
 **需求**（user）：依郭老師「挑三揀四」法則，逐檔把基金含息報酬與**同類型平均** PK，打敗同類＝🏆 優等生（抱緊滾雪球）、明顯落後＝⚠️ 汰弱候選。
 
-**放置 / 判定基準**（user 拍板）：Tab3 expander（MK 戰情室下方，`tab3_portfolio.py:render_mk_war_room` 後）；優等生判定「以同類 1Y 為主」。
+**放置 / 判定基準**（user 拍板）：Tab3 expander（戰情室下方，`tab3_portfolio.py:render_mk_war_room` 後）；優等生判定「以同類 1Y 為主」。
 
 **新檔** `ui/helpers/fund_checkup.py`（純函式 + 單一 render，無 `@st.cache_data`）：
 
@@ -690,7 +690,7 @@ render_fund_checkup(portfolio_funds) -> None               # expander：caption 
 
 **資料邊界（誠實告知，§4）**：
 - 同類平均取自 MoneyDJ 績效評比頁 `risk_metrics.peer_compare`，約 3 成基金抓不到 → ⬜ 不評（不臆造）。
-- 郭老師另兩標準（成分股 ROE>15%/EPS 成長、規模流動性）資料源無法取得 → **未納入**並於 UI 白話文標明；買賣點細節仍在 MK 戰情室。
+- 郭老師另兩標準（成分股 ROE>15%/EPS 成長、規模流動性）資料源無法取得 → **未納入**並於 UI 白話文標明；買賣點細節仍在 戰情室。
 - 同類平均可能為年平均報酬、與本基金含息基準略有差異 → tooltip 註明「僅供方向參考」。
 
 **驗證**：AST + import + ruff `All checks passed`；mock 邏輯測試（分級門檻 / peer 抽取 / 去重 / styler html 上色）全綠；`pytest -m "not slow"` 606 passed / 1 skipped 零回歸（沙箱無瀏覽器、表格視覺未親驗）。
@@ -793,7 +793,7 @@ render_fund_checkup(portfolio_funds) -> None               # expander：caption 
 
 **Tab2 單一基金**（success path 為 flat、indent 16，4 站，全新插入）：
 - `### ① 基本資料 & 淨值趨勢`（淨值 success 卡前）
-- `### ② 買賣點信號（標準差策略）`（MK 標準差買賣點前）
+- `### ② 買賣點信號（標準差策略）`（標準差買賣點前）
 - `### ③ 風險指標 & 配息`（`col_a/col_b` 雙欄前）
 - `### ④ AI 深度解盤`（AI 區 `st.divider()` 前）
 
@@ -1852,15 +1852,15 @@ PMI_THRESHOLDS = {
 
 ---
 
-## §17 MK 老師吃本金檢查 SSOT(v19.148→v19.149)
+## §17 老師吃本金檢查 SSOT(v19.148→v19.149)
 
 ### §17.1 方法論
 
-依郭俊宏(MK)老師體檢邏輯:
+依老師體檢邏輯:
 
 > **近一年含息總報酬率 < 年化配息率 → 🔴 吃本金**
 
-「含息總報酬率」採 MK 嚴格定義(教學版,**單利**):
+「含息總報酬率」採 嚴格定義(教學版,**單利**):
 
 ```
 含息_1Y = NAV 漲跌幅% + 累計配息率%
@@ -1873,7 +1873,7 @@ PMI_THRESHOLDS = {
 `services/fund_dividend_health.check_eating_principal_1y_mk(fund)` 為**跨 tab 唯一 SSOT 入口**。
 
 **含息報酬(tr1y)precedence**(v19.149):
-1. 🥇 **MK 嚴格單利**:`compute_1y_total_return_mk_simple(series, dividends)` — 從 fund 內 raw NAV + 配息 list 直算,符合教學版定義
+1. 🥇 **嚴格單利**:`compute_1y_total_return_mk_simple(series, dividends)` — 從 fund 內 raw NAV + 配息 list 直算,符合教學版定義
 2. 🥈 業界複利 fallback:`metrics.ret_1y_total`(本地還原淨值法)→ `metrics.ret_1y`(純 NAV)— 當 fund 內缺 raw data 才用
 
 **年化配息率(adr)precedence**:
@@ -1882,16 +1882,16 @@ PMI_THRESHOLDS = {
 
 返回 dict 含 `_tr1y_method` 標記用了哪條路(`"mk_simple"` / `"metrics_fallback"`)。
 
-### §17.3 MK 單利 vs 業界複利的差異
+### §17.3 單利 vs 業界複利的差異
 
-| 指標 | MK 單利(本系統 SSOT) | MoneyDJ wb01 / 還原淨值法(業界) |
+| 指標 | 單利(本系統 SSOT) | MoneyDJ wb01 / 還原淨值法(業界) |
 |---|---|---|
 | 公式 | NAV 漲跌 + 累計配息率(加法) | (Adj_NAV_end / Adj_NAV_start − 1) 配息再投資複利 |
 | 與教科書符合 | ✅ 100% | ⚠️ 不同(複利) |
 | 通常差異 | — | 通常 **高 5-15%**(複利 reinvestment 效應) |
 | Verdict flip 風險 | — | borderline 基金(coverage 接近 1.0)可能在兩公式間翻轉 |
 
-**為何選 MK 單利**:user 引述 MK 老師時很明確指向教學版,本系統優先對齊老師原意,wb01 變對帳 reference。Borderline 翻轉是 MK 觀點下的真相(複利低估了吃本金嚴重度)。
+**為何選 單利**:user 引述 老師時很明確指向教學版,本系統優先對齊老師原意,wb01 變對帳 reference。Borderline 翻轉是 觀點下的真相(複利低估了吃本金嚴重度)。
 
 ### §17.4 跨 tab SSOT 涵蓋
 
@@ -1904,7 +1904,7 @@ PMI_THRESHOLDS = {
 
 **Phase B 候選**(v19.245 R13 復查:fund_checkup 早於 v19.150 已 migrate 至 `check_eating_principal_1y_mk` SSOT,line 166 動態 import;原 `dividend_safety as div_safety_check` 為 dead import 已清。其餘 caller `tab1_macro` / `tab2_single_fund` / `tab3_portfolio` 仍用 `dividend_safety(_tret, _dyld)` scalar 介面,**signature 不同**,migration 會引入 reshape 複雜度違 §8.1 step 6,**WONTFIX 維持**)
 
-### §17.5 3-3-3 原則(MK 老師長線輔助)
+### §17.5 3-3-3 原則(老師長線輔助)
 
 `check_333_principle(years_since_inception, ann_return_3y_pct)`:
 

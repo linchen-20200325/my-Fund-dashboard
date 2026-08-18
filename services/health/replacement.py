@@ -1,7 +1,7 @@
-"""v19.181 services — 「是否建議換標的」MK 4 規則心型警結合 SSOT 入口(L2 純函式,zero-IO)。
+"""v19.181 services — 「是否建議換標的」 4 規則心型警結合 SSOT 入口(L2 純函式,zero-IO)。
 
-依郭俊宏(MK)老師長線挑核心資產體檢方法論,定義 4 條 hard-trigger 規則:
-  (a) 吃本金 1Y·MK 且持有 ≥ 1 年
+依老師長線挑核心資產體檢方法論,定義 4 條 hard-trigger 規則:
+  (a) 吃本金 1Y·且持有 ≥ 1 年
   (b) 4D Grade F(< 35 分,嚴重警示)
   (c) 3-3-3 未通過且持有 ≥ 3 年
   (d) Sharpe < 0 且 max_dd < -30%(極差雙條件)
@@ -57,7 +57,7 @@ def check_replacement_recommendation(
     holding_years: Optional[float] = None,
     _4d_result: Optional[dict] = None,
 ) -> dict:
-    """換標的建議 SSOT 入口 — MK 4 規則心型警結合。
+    """換標的建議 SSOT 入口 —  4 規則心型警結合。
 
     Args:
         fd: 基金 dict(支援 Tab2/Tab3/健診 3 種 shape):
@@ -99,7 +99,7 @@ def check_replacement_recommendation(
     triggered: list = []
     observe: list = []
 
-    # ─── 規則 (a) — 吃本金 1Y·MK 且持有 ≥ 1 年 ───────────────
+    # ─── 規則 (a) — 吃本金 1Y·且持有 ≥ 1 年 ───────────────
     holding_y = _safe_float(holding_years)
     rule_a_eligible = (holding_y is not None
                        and holding_y >= REPLACE_RULE_A_MIN_HOLD_YEARS)
@@ -113,7 +113,7 @@ def check_replacement_recommendation(
         eat_result = None
     eat_status = (eat_result or {}).get("status", "")
     if rule_a_eligible and "吃本金" in str(eat_status):
-        triggered.append(f"(a) 持有 {holding_y:.1f} 年 + 吃本金 1Y·MK")
+        triggered.append(f"(a) 持有 {holding_y:.1f} 年 + 吃本金 1Y·")
     elif eat_result and "吃本金" in str(eat_status):
         # 持有 < 1 年也吃本金 — 計觀察分(尚未到 hard trigger)
         observe.append(f"(a*) 持有 < 1 年但吃本金(短期 NAV 波動,先觀察)")
@@ -209,7 +209,7 @@ def check_replacement_recommendation(
     elif verdict == "observe":
         msg = f"🟡 觀察 — {len(observe)} 個警示訊號:" + " / ".join(observe)
     elif verdict == "keep":
-        msg = "🟢 保留 — MK 4 規則全未中,持續持有"
+        msg = "🟢 保留 —  4 規則全未中,持續持有"
     else:
         msg = "⬜ 資料不足 — 無法判定(持有期或關鍵指標缺)"
 

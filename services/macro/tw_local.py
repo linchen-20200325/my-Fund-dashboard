@@ -1,7 +1,7 @@
 """台股本地總經視角純函式 — Phase v19.23（2026-06-07）。
 
 鏡像 stock dashboard `macro_helpers.py` 之 3 個核心函式：
-- detect_mk_golden_inflection  : MK 黃金拐點偵測（CPI YoY × Fed Funds 雙頂回落）
+- detect_mk_golden_inflection  : 黃金拐點偵測（CPI YoY × Fed Funds 雙頂回落）
 - classify_long_term_regime    : 12M 視角，景氣大循環位階
 - classify_short_term_regime   : 1Q 視角，對齊台股財報季偏向
 
@@ -13,7 +13,7 @@
 
 ⚠️ 此檔故意與 services/macro_service.py::identify_regime() 並存：
    - identify_regime  : 全球視角（PMI=US ISM, 無 TW PMI/NDC/Export）
-   - 本檔 long/short  : 台股本地視角（含 NDC/TW PMI/Export/外資連續日數/MK）
+   - 本檔 long/short  : 台股本地視角（含 NDC/TW PMI/Export/外資連續日數/）
    兩者互補，由 UI 端決定何時呼叫哪個。
 """
 from __future__ import annotations
@@ -52,7 +52,7 @@ def detect_mk_golden_inflection(
     fed_rate: Optional[float],
     fed_prev_rate: Optional[float],
 ) -> Optional[dict]:
-    """MK 黃金拐點偵測 — CPI YoY × Fed Funds Rate 雙頂回落判讀。
+    """黃金拐點偵測 — CPI YoY × Fed Funds Rate 雙頂回落判讀。
 
     參數
     ----
@@ -63,14 +63,14 @@ def detect_mk_golden_inflection(
 
     回傳
     ----
-    None  — 資料不足（任一參數為 None / 非數值）或無 MK 訊號
+    None  — 資料不足（任一參數為 None / 非數值）或無 訊號
     dict  — {'label', 'icon', 'color', 'detail', 'strength'}
             strength: 'strong'（雙明確回落）/ 'weak'（CPI 弱降+Fed 持平）
 
     判讀規則（防雜訊：±0.05ppt 視為持平）
     --------
-    - CPI 月降 ≥ 0.2ppt AND Fed 持平或月降      → ⭐ 強訊號（MK 黃金拐點 ＝ 多頭最佳買點）
-    - CPI 月降 ∈ [0.05, 0.2)ppt AND Fed 持平或月降 → ✅ 弱訊號（MK 拐點觀察中）
+    - CPI 月降 ≥ 0.2ppt AND Fed 持平或月降      → ⭐ 強訊號（黃金拐點 ＝ 多頭最佳買點）
+    - CPI 月降 ∈ [0.05, 0.2)ppt AND Fed 持平或月降 → ✅ 弱訊號（拐點觀察中）
     - 任一上升 (> 0.05ppt) 或 CPI 未降          → None（無訊號）
     """
     if cpi_yoy is None or cpi_prev_yoy is None:
@@ -93,7 +93,7 @@ def detect_mk_golden_inflection(
 
     if cpi_delta <= -0.2:
         return {
-            'label': 'MK 黃金拐點 ⭐',
+            'label': '黃金拐點 ⭐',
             'icon': '⭐',
             'color': TRAFFIC_GREEN,
             'detail': (
@@ -105,7 +105,7 @@ def detect_mk_golden_inflection(
             'strength': 'strong',
         }
     return {
-        'label': 'MK 拐點觀察中',
+        'label': '拐點觀察中',
         'icon': '✅',
         'color': TRAFFIC_YELLOW,
         'detail': (
@@ -146,7 +146,7 @@ def classify_long_term_regime(
     - Fed 方向 (20%)：月降+2 / 持平+1 / 月升-2
     - NDC (20%)：紅(≥38)+2 / 黃紅(32-37)+1 / 綠(23-31) 0 / 黃藍(17-22)-1 / 藍(<17)-2
     - PMI (20%)：≥55+2 / 52-55+1 / 50-52 0 / 48-50-1 / <48-2
-    - MK 拐點 (15%)：⭐強+2 / ✅弱+1 / None 0
+    - 拐點 (15%)：⭐強+2 / ✅弱+1 / None 0
     """
     cpi_v = _safe_float(cpi_yoy)
     fed_v = _safe_float(fed_rate)
@@ -216,14 +216,14 @@ def classify_long_term_regime(
         weighted_sum += pmi_pts * 20
         weight_total += 20
 
-    # MK 訊號：只當至少一個主指標存在時才計入，避免 MK 獨自驅動 regime
+    # 訊號：只當至少一個主指標存在時才計入，避免 獨自驅動 regime
     if weight_total > 0:
         if mk_signal is not None and isinstance(mk_signal, dict):
             _s = mk_signal.get('strength')
             mk_pts = 2 if _s == 'strong' else (1 if _s == 'weak' else 0)
         else:
             mk_pts = 0
-        components.append(('MK 拐點', mk_pts, 15))
+        components.append(('拐點', mk_pts, 15))
         weighted_sum += mk_pts * 15
         weight_total += 15
 

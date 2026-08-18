@@ -1,4 +1,4 @@
-"""tests/test_diagnose_ret_3y_fallback.py — MK 3-3-3 C2 取值鏈診斷器的回歸網。
+"""tests/test_diagnose_ret_3y_fallback.py —  3-3-3 C2 取值鏈診斷器的回歸網。
 
 守六件事
 ========
@@ -181,7 +181,7 @@ def test_current_status_equals_real_process_one_fund(case):
     fd = _REALITY_CASES[case]()
     real = process_one_fund(case, 1_000_000.0, fd=fd)
     assert real.get("ok") is True, f"fixture 跑不起來:{real.get('error')}"
-    assert diagnose_3y(fd, case)["current_status"] == real["MK 3-3-3 篩"]
+    assert diagnose_3y(fd, case)["current_status"] == real[" 3-3-3 篩"]
 
 
 def test_short_window_case_is_really_blocked_and_not_fixable_by_layer4():
@@ -228,14 +228,14 @@ def test_diagnose_never_writes_back_into_fd():
     from services.fund_row import process_one_fund
 
     fd = _fd_weekly_history()
-    before = process_one_fund("W", 1_000_000.0, fd=fd)["MK 3-3-3 篩"]
+    before = process_one_fund("W", 1_000_000.0, fd=fd)[" 3-3-3 篩"]
     metrics_before = dict(fd["metrics"])
     perf_before = dict(fd["perf"])
 
     row = diagnose_3y(fd, "W")
     assert row["hypo_ann_pct"] is not None      # 確定這條路徑真的算出東西了
 
-    after = process_one_fund("W", 1_000_000.0, fd=fd)["MK 3-3-3 篩"]
+    after = process_one_fund("W", 1_000_000.0, fd=fd)[" 3-3-3 篩"]
     assert after == before
     assert dict(fd["metrics"]) == metrics_before
     assert dict(fd["perf"]) == perf_before

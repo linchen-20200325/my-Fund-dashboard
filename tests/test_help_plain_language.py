@@ -20,7 +20,7 @@ user 原則:「多做說明 —— 讓完全不懂總經與基金的人也看得
    → 修正前:**舊行為衝突紅**(`_BENCH_CACHE` 為無 TTL 的 module dict,
      第二次呼叫永遠回第一次抓到的序列,不論隔了多久)。
 
-另加一條 column_config 覆蓋率(B9)與一條「MK 3-3-3 欄設定不得是 0 consumer」(B8)。
+另加一條 column_config 覆蓋率(B9)與一條「 3-3-3 欄設定不得是 0 consumer」(B8)。
 
 ⚠️ 維護提醒:本檔的 `_FORBIDDEN` 清單是**字面值**,production 端要避開的正是這些字。
 若哪天某個詞真的必須出現在畫面上,請連同理由一起改這裡,不要在 production 端繞過。
@@ -368,15 +368,15 @@ def test_section_tables_have_column_config(rel: Path):
     assert not _bare, f"{rel} 這幾行的 st.dataframe 沒帶 column_config:{_bare}"
 
 
-# ── 6. B8:「MK 3-3-3」欄設定不得是 0 consumer ─────────────────────────
+# ── 6. B8:「 3-3-3」欄設定不得是 0 consumer ─────────────────────────
 
 
 def test_mk333_column_config_matches_the_column_the_table_really_has():
-    """大表實際欄名是「MK 3-3-3 篩」;不得同時留一份永遠被濾掉的「MK 3-3-3」設定。
+    """大表實際欄名是「 3-3-3 篩」;不得同時留一份永遠被濾掉的「 3-3-3」設定。
 
-    背景:`services/health/report.build_health_analysis_row` 產「MK 3-3-3」,
-    但大表欄序常數 `_UNIFIED_FRONT` 登錄的是 `services/fund_row` 那份「MK 3-3-3 篩」,
-    於是 columns.py 裡那份「MK 3-3-3」column_config 被
+    背景:`services/health/report.build_health_analysis_row` 產「 3-3-3」,
+    但大表欄序常數 `_UNIFIED_FRONT` 登錄的是 `services/fund_row` 那份「 3-3-3 篩」,
+    於是 columns.py 裡那份「 3-3-3」column_config 被
     `{k: v for k, v in cfg.items() if k in df.columns}` 永遠濾掉 = 0 consumer。
     產生端**不是**死碼(Tab2 的 metric 卡仍在讀),故只移除死設定,不動資料。
 
@@ -392,13 +392,13 @@ def test_mk333_column_config_matches_the_column_the_table_really_has():
     _cfg = unified_column_config(batch=True)
     _front = [c for c, _ in _UNIFIED_FRONT]
 
-    assert "MK 3-3-3 篩" in _front and "MK 3-3-3 篩" in BATCH_UNIFIED_COLUMNS
-    assert "MK 3-3-3" not in _front, "兩份 3-3-3 同時上表會互相打架"
-    assert "MK 3-3-3 篩" in _cfg, "大表真正用的那一欄必須有 column_config"
-    assert "MK 3-3-3" not in _cfg, (
-        "columns.py 不該留一份永遠被濾掉的『MK 3-3-3』設定(0 consumer)")
+    assert " 3-3-3 篩" in _front and " 3-3-3 篩" in BATCH_UNIFIED_COLUMNS
+    assert " 3-3-3" not in _front, "兩份 3-3-3 同時上表會互相打架"
+    assert " 3-3-3 篩" in _cfg, "大表真正用的那一欄必須有 column_config"
+    assert " 3-3-3" not in _cfg, (
+        "columns.py 不該留一份永遠被濾掉的『 3-3-3』設定(0 consumer)")
     # 產生端仍在(Tab2 metric 卡消費),不是死碼 —— 別把它一起刪了
-    assert "MK 3-3-3" in HEALTH_COLUMNS
+    assert " 3-3-3" in HEALTH_COLUMNS
 
 
 # ── 7. 「Sharpe 來源」/「1Y 來源」兩欄的**值本身**也要白話 ─────────────────

@@ -246,7 +246,7 @@ def test_dead_warn_gap_slider_removed():
     """**改回舊行為必紅** —— 「吃本金閾值 %」滑桿對畫面零影響,不該留著。
 
     它產出的 `div_health_light_🧮` 全 production 0 consumer(只有測試在讀);
-    表上真正的「吃本金燈號 (1Y·MK)」走 `check_eating_principal_1y_mk`,
+    表上真正的「吃本金燈號 (1Y·)」走 `check_eating_principal_1y_mk`,
     門檻取自 shared/signal_thresholds,與滑桿無關。
     拖動它,畫面上一個像素都不會變 —— 騙人的控制項比沒有控制項更糟。
     """

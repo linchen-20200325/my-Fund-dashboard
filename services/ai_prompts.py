@@ -33,7 +33,7 @@ def build_mk_advisor_prompt(*, phase: str, score, alloc_str: str,
                             pf_snap: str, loaded_count: int,
                             tot_inv_twd: int,
                             holdings_str: str = "") -> str:
-    """組合「MK 策略3 組合深度建議」prompt（4 節，含 Phase 4 / 3-B + v18.135 持股 × 新聞引用）。
+    """組合「策略3 組合深度建議」prompt（4 節，含 Phase 4 / 3-B + v18.135 持股 × 新聞引用）。
 
     v18.135 新增 holdings_str：逐基金 top10 持股快照，要求 AI 第二節「換股建議」
     跨基金 × 新聞做底層持股級別分析（哪檔基金的 X 持股最受 Y 新聞衝擊）。

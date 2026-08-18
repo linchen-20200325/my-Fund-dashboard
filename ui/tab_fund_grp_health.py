@@ -193,11 +193,11 @@ def render_fund_grp_health_tab() -> None:
     #   - 滑桿的值 → `process_one_fund(warn_gap)` → `compute_dividend_twd_series`
     #     → 產出 `div_health_light_🧮` —— 這個欄位**全 production 0 consumer**
     #     （只有測試在讀），沒有任何一張表、任何一個燈號用到它。
-    #   - 表上真正的「吃本金燈號 (1Y·MK)」走 `check_eating_principal_1y_mk`，
+    #   - 表上真正的「吃本金燈號 (1Y·)」走 `check_eating_principal_1y_mk`，
     #     門檻取自 `shared/signal_thresholds`，與滑桿完全無關。
     # 也就是說：使用者拖動它、以為自己在調整判定標準，畫面上一個像素都不會變。
     #
-    # 為什麼是拆掉而不是接上：吃本金是 MK 老師的既定方法論，門檻是 SSOT 常數，
+    # 為什麼是拆掉而不是接上：吃本金是 老師的既定方法論，門檻是 SSOT 常數，
     # 開放成滑桿等於讓使用者自己調出一個「沒有紅燈」的組合（§8.1 step 6：
     # 用不到的抽象不留；一個騙人的控制項比沒有控制項更糟）。
     # 下游 `warn_gap` 參數保留不動（有預設值、有測試），只是不再由 UI 餵。
@@ -229,7 +229,7 @@ def render_fund_grp_health_tab() -> None:
         print(f"[grp_health] 同類四分位計算略過:{type(_e_peer).__name__}: {_e_peer}",
               file=_sys_peer.stderr)
 
-    # v19.465 深化:235 加碼水位(郭俊宏「235 精準加碼」基金版)。VIX 整組抓一次,每檔用
+    # v19.465 深化:235 加碼水位(老師「235 精準加碼」基金版)。VIX 整組抓一次,每檔用
     # 週 NAV 算 20週布林 + 4/13/52週均線 → 三取一 Max 燈。加值欄 `加碼水位` 隨寬表;失敗不擋表。
     try:
         from services.fund_service import get_latest_vix
@@ -393,7 +393,7 @@ def _render_mj_freshness_banner(ok_rows: list[dict]) -> None:
 
 
 def _eats_principal_flag(fd: dict) -> "bool | None":
-    """v19.347：從 MK 吃本金 verdict 取乾淨布林（True=吃本金 / False=不吃 / None=未知）。
+    """v19.347：從 吃本金 verdict 取乾淨布林（True=吃本金 / False=不吃 / None=未知）。
 
     走 `dividend_safety` 的 `alert_level`（red/yellow/green/grey）語意欄位,
     不解析 emoji：red→吃本金；green/yellow→不吃（黃=margin 薄但未吃）；其餘→未知。
@@ -468,7 +468,7 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
     _sel_ccy = st.multiselect("幣別（外幣/台幣）", _all_ccy, default=_all_ccy, key="lb_ccy")
     _sel_cat = st.multiselect("基金類別", _all_cat, default=_all_cat, key="lb_cat")
     _cc1, _cc2 = st.columns(2)
-    _only_eat = _cc1.checkbox("只留不吃本金（MK 綠/黃燈）", value=True, key="lb_noeat")
+    _only_eat = _cc1.checkbox("只留不吃本金（綠/黃燈）", value=True, key="lb_noeat")
     _only_low = _cc2.checkbox("只留低基期", value=True, key="lb_onlylow")
 
     # 2) L2 純函式篩選（多選清空 → None = 不篩該維度，避免空表困惑）
@@ -611,7 +611,7 @@ def _weight_basis_note(csa: dict, source_tab: str | None = None) -> str:
 # 因為只要那組目標還在，下一個人就會再把它接回畫面。
 _CS_RULER_NOTE = (
     "📏 **本表這一欄的尺**：核心 / 衛星依**基金本身的資產屬性**判定"
-    "（MoneyDJ 基金類別關鍵字 + MK 3-3-3；判不出來的誠實留「待定」，不硬塞），"
+    "（MoneyDJ 基金類別關鍵字 +  3-3-3；判不出來的誠實留「待定」，不硬塞），"
     "是系統推的，**不是**你在 Google Sheet 標的 `policy_tier`。"
     "本表**不設**建議核心佔比、也不評價你的配置 —— 它只回答「我手上這幾檔，"
     "本質上偏穩健還是偏主題」。"
@@ -620,7 +620,7 @@ _CS_RULER_NOTE = (
 _CS_PORTFOLIO_CONTRAST_NOTE = (
     "⚖️ **本區與本頁上方的「🛡️ 核心資產比例」不是同一把尺，數字不一樣是正常的**：\n"
     "1. **分類依據** — 上方用你在 Google Sheet 標的 `policy_tier`（缺才退基金名稱"
-    "關鍵字），只有核心 / 衛星兩態；本區用 MoneyDJ 基金類別 + MK 3-3-3，多一個「待定」。\n"
+    "關鍵字），只有核心 / 衛星兩態；本區用 MoneyDJ 基金類別 +  3-3-3，多一個「待定」。\n"
     "2. **分母** — 兩邊都是 Σ 你實際填過的投入本金：**沒填本金的那幾檔兩邊都不進比例**"
     "（本區為了試算配息會給它們 100 萬 TWD 的模擬本金，但那個金額**不進**這裡的百分比）。\n"
     "3. **目標值** — 上方是「⚙️ 組合設定」的核心比例 slider；本區**沒有**目標值，不做達標判定。\n"
@@ -815,7 +815,7 @@ def _render_health_3tables(rows: list[dict],
             st.caption(f"⬜ 選基金（低基期）渲染失敗："
                        f"{type(_e_lb).__name__}: {str(_e_lb)[:80]}")
 
-    # ── 🔴 淘汰候選紅區(MK 4 規則 verdict=replace)── v19.315:提到最上面,一眼看見要換的 ──
+    # ── 🔴 淘汰候選紅區( 4 規則 verdict=replace)── v19.315:提到最上面,一眼看見要換的 ──
     # 先建 ② 配息 rows(內含 _verdict),紅區與下方表 ② 共用同一份、不重算(SSOT,避免雙倍計算)。
     _div_rows = [
         build_dividend_summary_row(_r.get("_fund_raw") or {}, _r.get("code", ""),
@@ -832,7 +832,7 @@ def _render_health_3tables(rows: list[dict],
             for r in _replace
         )
         st.error(
-            f"### 🔴 淘汰候選 {len(_replace)} 檔（MK 4 規則觸發，建議換標的）\n\n"
+            f"### 🔴 淘汰候選 {len(_replace)} 檔（ 4 規則觸發，建議換標的）\n\n"
             f"{_lines}\n\n"
             "↓ 完整指標見下方 ① 健康分析 / ② 配息相關表。"
         )
@@ -848,11 +848,11 @@ def _render_health_3tables(rows: list[dict],
     _health_cfg = health_column_config()
     _div_cfg = dividend_column_config()
 
-    # ── 📊 健診大表(①②③ + σ/風險/MK 去重複合併成一張)── v19.411 ──
+    # ── 📊 健診大表(①②③ + σ/風險/去重複合併成一張)── v19.411 ──
     st.markdown("#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）")
     st.caption("原「① 健康分析 / ② 配息相關 / ③ 實際購買結果」三表已合併去重複。"
-               "評分(4D Grade)/ 每月配息 / σ 位階 / MK 買賣點皆在此一張表內。")
-    # ①② by-code 資料 + σ/風險/MK,全部傳給 _render_health_table 併成一張大表。
+               "評分(4D Grade)/ 每月配息 / σ 位階 / 買賣點皆在此一張表內。")
+    # ①② by-code 資料 + σ/風險/,全部傳給 _render_health_table 併成一張大表。
     _health_by_code = {str(r.get("code")): r for r in _health_rows if r.get("code")}
     _div_by_code = {str(r.get("code")): {k: v for k, v in r.items() if not str(k).startswith("_")}
                     for r in _div_rows if r.get("code")}
@@ -863,12 +863,12 @@ def _render_health_3tables(rows: list[dict],
             _pi3 = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
             _, _extra_by_code = build_merged_extra_columns(
                 funds_extra, (_pi3 or {}).get("phase") or "", (_pi3 or {}).get("score"))
-        except Exception as _e_extra:  # noqa: BLE001 — σ/風險/MK 併入失敗不擋大表
-            # §1:原本靜默 → 大表整組 σ/HWM/MK/捕捉/換標約 20 欄一次消失,
+        except Exception as _e_extra:  # noqa: BLE001 — σ/風險/併入失敗不擋大表
+            # §1:原本靜默 → 大表整組 σ/HWM//捕捉/換標約 20 欄一次消失,
             # `build_unified_health_df` 的「來源整組沒供資料就不出現該批欄」設計會讓
             # 畫面看起來「本來就沒這些欄」,user 以為功能被拿掉。改為 log + 當場說明。
             _extra_by_code = {}
-            st.caption(f"⬜ σ 位階 / 風險 / MK 買賣點 / 捕捉率 / 換標欄**整組計算失敗**,"
+            st.caption(f"⬜ σ 位階 / 風險 / 買賣點 / 捕捉率 / 換標欄**整組計算失敗**,"
                        f"本次大表不含這些欄(不是資料沒有):"
                        f"[{type(_e_extra).__name__}] {str(_e_extra)[:80]}")
     _render_health_table(rows, funds_extra=None,
@@ -895,9 +895,9 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         # 鏡像 Stock v18.201 D2 「FinMind last_update」設計，但 Fund 端用 banner 而非 hover
         _render_mj_freshness_banner(ok_rows)
 
-        # v19.148:SSOT 統一改用 MK 老師 1Y 標準(「吃本金燈號 (1Y · MK)」),
+        # v19.148:SSOT 統一改用 老師 1Y 標準(「吃本金燈號 (1Y · )」),
         # 與下方「健診摘要表」同源,不再與全期自算 verdict 不一致。
-        _mk_col = "吃本金燈號 (1Y · MK)"
+        _mk_col = "吃本金燈號 (1Y · )"
         n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get(_mk_col, "")))
         n_warn = sum(1 for r in ok_rows if ("警示" in str(r.get(_mk_col, ""))
                                             or "邊緣" in str(r.get(_mk_col, ""))))
@@ -942,7 +942,7 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             {k: v for k, v in r.items() if not k.startswith("_")}
             for r in ok_rows
         ])
-        # v19.411:① 健康分析 + ② 配息相關 + ③ 本表 + σ/風險/MK「去重複合併」成一張大表
+        # v19.411:① 健康分析 + ② 配息相關 + ③ 本表 + σ/風險/「去重複合併」成一張大表
         # (user 2026-07-27 要求)。原 ①② 分散表移除,一律併入本表。相關性矩陣 / 真實收益圖 /
         # Bollinger / 持股維持獨立。缺欄留 None(§1 不偽造)。
         if health_by_code or div_by_code or extra_by_code:
@@ -975,7 +975,7 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
         # v19.180:全期實際 / 年化兩軸並陳。短歷史也顯示真實累計值,不再 None。
         st.caption(
-            "🩺 **吃本金燈號 (1Y · MK)** 採郭俊宏 MK 老師的體檢邏輯:"
+            "🩺 **吃本金燈號 (1Y · )** 採老師的體檢邏輯:"
             "**近一年含息報酬 < 年化配息率 → 🔴 吃本金**"
             "(意思是配給你的錢有一部分其實是把本金退還給你;年化配息率用 MoneyDJ 官方公布值)。"
             "「**(全期實際)**」欄是你持有這段期間的累計真實值(不換算成每年),持有很短也照顯示;"
@@ -991,7 +991,7 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             )
         # v19.77 L1：column_config 數值格式化（百分號 / 千分位）+ 欄寬調整
         # 2026-08-06 必修 4:設定抽至 `ui/helpers/fund_grp_health/columns.py`,
-        # 與批次大表(Tab③)同源;順道補齊 σ/MK 買賣點那批原本**完全沒有** help 的欄。
+        # 與批次大表(Tab③)同源;順道補齊 σ/買賣點那批原本**完全沒有** help 的欄。
         from streamlit import column_config as _cc
         from ui.helpers.fund_grp_health.columns import (
             base_column_config,

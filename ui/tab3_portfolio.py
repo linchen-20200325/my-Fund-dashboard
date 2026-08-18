@@ -3,7 +3,7 @@
 從 app.py 抽出 Tab3（組合基金管理，含 T5/T6/T7 子區）的渲染邏輯 — B-C 系列最後一個。
 
 Tab3 是 6 個 tab 中**最大**（3897 行 body），原 app.py 內有兩個 `with tab3:`
-block 累積在同一 tab slot（block 1: MK 戰情室+組合管理，block 2: T5/T6/T7 持股
+block 累積在同一 tab slot（block 1: 戰情室+組合管理，block 2: T5/T6/T7 持股
 矩陣+講義+帳本）。本檔將兩 block 合併為**單一 render 函式**，行為等價。
 
 設計：
@@ -137,7 +137,7 @@ def _vix_for_advice(*, note: bool = True) -> float | None:
 
 
 def render_portfolio_tab() -> None:
-    """渲染組合基金 Tab — 含 MK 戰情室 + 加入基金 + T5/T6/T7 子區。
+    """渲染組合基金 Tab — 含 戰情室 + 加入基金 + T5/T6/T7 子區。
 
     Tab3 為 6 tab 最大塊（原 3897 行）；本函式合併 app.py 內兩個 with tab3: block。
     Caller 不需傳參數。
@@ -237,7 +237,7 @@ def render_portfolio_tab() -> None:
     if "portfolio_funds" not in st.session_state:
         st.session_state.portfolio_funds = []
 
-    # ── v18.9 MK 智能戰情室（決策導向：核心衛星×體檢×買賣區間）────────────
+    # ── v18.9 智能戰情室（決策導向：核心衛星×體檢×買賣區間）────────────
     # 已載入基金時頂部優先顯示；空組合時讓給歡迎卡。
     _pf_for_warroom = [f for f in st.session_state.portfolio_funds
                        if f.get("loaded") and not f.get("load_error")]
@@ -370,11 +370,11 @@ def render_portfolio_tab() -> None:
         render_fund_checkup(st.session_state.portfolio_funds, expanded=True)
         st.divider()
 
-        # v19.xxx：MK 3-3-3 原則批次篩選（留強汰弱量化依據）
+        # v19.xxx： 3-3-3 原則批次篩選（留強汰弱量化依據）
         st.markdown(
             f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
             f"border-left:4px solid {MD_GREEN_A200};border-radius:8px;padding:10px 14px;margin:8px 0'>"
-            f"<span style='color:{MD_GREEN_A200};font-size:15px;font-weight:900'>🔢 MK 3-3-3 原則批次篩選</span>"
+            f"<span style='color:{MD_GREEN_A200};font-size:15px;font-weight:900'>🔢  3-3-3 原則批次篩選</span>"
             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>成立>3年 ／ 3年年化>7% ／ 晨星3星(手動確認)</span>"
             "</div>",
             unsafe_allow_html=True)
@@ -451,7 +451,7 @@ def render_portfolio_tab() -> None:
             f"<div style='color:{WHITE};font-size:14px;font-weight:700;margin-bottom:4px'>"
             f"📊 歡迎使用基金組合管理"
             f"<span style='color:{GRAY_AA};font-size:11px;font-weight:400'>"
-            f"　— 加入基金後顯示 MK 戰情室、組合健康儀表、3-3-3 篩選</span></div>"
+            f"　— 加入基金後顯示 戰情室、組合健康儀表、3-3-3 篩選</span></div>"
             f"<div style='color:{GRAY_AA};font-size:12px;line-height:1.7'>"
             f"🔍 <b style='color:{TRAFFIC_NEUTRAL}'>「{_tab_label('fund')}」分頁</b>搜尋 → 按「➕ 加入組合」；"
             f"📥 或在下方「➕ 加入基金」輸入代碼點「📡 載入」；"
@@ -1893,7 +1893,7 @@ def render_portfolio_tab() -> None:
 
         # ── v15.1 ③ 資產成長曲線（vs 2% 無風險基準，§0 禁 ETF）─────────
         # v18.43：同 code 跨多保單會讓 _value_series.name 重複，join 時欄名衝突拋例外。
-        # 分析視圖按 code 去重（與 v18.34 MK 戰情室 / v18.38 真實收益矩陣策略一致）。
+        # 分析視圖按 code 去重（與 v18.34 戰情室 / v18.38 真實收益矩陣策略一致）。
         try:
             _curve_df = None
             _seen_curve: set = set()
@@ -2396,7 +2396,7 @@ def render_portfolio_tab() -> None:
                     if pf_item.get("load_error"):
                         st.caption(f"⚠️ {pf_item['load_error']}")
 
-                    # 詳細建議 + MK 訊號（攤平在保單 expander 內，不再用內層 expander）
+                    # 詳細建議 + 訊號（攤平在保單 expander 內，不再用內層 expander）
                     _can_detail = pf_item.get("loaded") and not pf_item.get("load_error")
                     if _can_detail:
                         _adv_card = _compute_advice_for(pf_item)
@@ -2412,7 +2412,7 @@ def render_portfolio_tab() -> None:
                             f"💡 {_adv_card.get('text', '—')}</div>",
                             unsafe_allow_html=True)
 
-                        # ── MK v3.0 買賣訊號迷你卡（共用 Tab2 的 metrics）──
+                        # ──  v3.0 買賣訊號迷你卡（共用 Tab2 的 metrics）──
                         if m_i:
                             _mi_b1 = m_i.get("buy1");  _mi_b2 = m_i.get("buy2");  _mi_b3 = m_i.get("buy3")
                             _mi_s1 = m_i.get("sell1"); _mi_s2 = m_i.get("sell2"); _mi_s3 = m_i.get("sell3")
@@ -2473,7 +2473,7 @@ def render_portfolio_tab() -> None:
 
         # ── 真實收益長條圖（Core Protocol v2.0 Ch.4）────────────────
         # v18.38：分析視圖按 code 去重（同基金跨多保單只算一次），
-        # 與 v18.34 MK 戰情室 / v18.36 T5 重疊度矩陣的去重策略一致。
+        # 與 v18.34 戰情室 / v18.36 T5 重疊度矩陣的去重策略一致。
         _loaded_pf_raw = [f for f in pf if f.get("loaded") and not f.get("load_error")]
         _seen_rc: set = set()
         _loaded_pf: list = []
@@ -2609,7 +2609,7 @@ def render_portfolio_tab() -> None:
                 st.caption(
                     "與「基金組合健診」Tab 完全同源(v19.181 模組化 3 表)。"
                     "**① 健康分析**:4D Grade + Sharpe/Sortino/Calmar/Alpha/Expense/MaxDD + 3Y/5Y 年化 + 3-3-3 篩。"
-                    "**② 配息相關**:adr + 1Y 含息 + 吃本金燈號(1Y·MK)+ **MK 4 規則換標的建議**。"
+                    "**② 配息相關**:adr + 1Y 含息 + 吃本金燈號(1Y·)+ ** 4 規則換標的建議**。"
                     "**③ 實際購買結果**:per-fund 用 invest_twd 為本金"
                     "(未填者給 100 萬 TWD 模擬本金,**僅供配息試算,不進核心/衛星比例**)。"
                 )
@@ -2738,7 +2738,7 @@ def render_portfolio_tab() -> None:
                     if isinstance(_row_ps, dict) and _princ_is_sim[_idx_ps]:
                         _row_ps["_principal_is_default"] = True
                 _ok_health = [r for r in _health_results if r is not None]
-                # v19.420 F-BM-3:持倉健診也帶「分析 extra 欄組」(σ/HWM/MK 買賣點 / 上下檔捕捉率 /
+                # v19.420 F-BM-3:持倉健診也帶「分析 extra 欄組」(σ/HWM/買賣點 / 上下檔捕捉率 /
                 # 操盤評分 / vs 大盤%)—— 先前 Tab3 未傳 funds_extra → 整組欄缺席(稽核 A2#1 抓到)。
                 # 用實際持倉重組 rich fund dict 傳入;show_screener 維持 False(不與健檢 Tab 撞 widget key)。
                 from ui.helpers.fund_grp_health._utils import _build_fund_dict
@@ -2918,7 +2918,7 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
     if n_total > _shown:
         lines.append(f"- …（其餘 {n_total - _shown} 檔略）")
 
-    # v18.214：吃「全章節」— 補組合健康度 KPI + 各檔 MK 體檢結論 + 同類 PK 體檢表
+    # v18.214：吃「全章節」— 補組合健康度 KPI + 各檔 體檢結論 + 同類 PK 體檢表
     try:
         from ui.components.mk_dashboard import build_mk_dataframe as _build_mk  # noqa: PLC0415
         from ui.helpers.portfolio_health import compute_health_kpis as _kpis_fn  # noqa: PLC0415
@@ -2931,11 +2931,11 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
             f"現金流安全 {_kpis['n_cash_ok']}/{_safe_tot} 檔｜吃本金 {_kpis['n_eat']} 檔"
             f"｜撿便宜 {_kpis['n_buy']} 檔｜留校查看 {_kpis['n_warn']} 檔"
             f"｜停利提醒 {_kpis['n_take']} 檔")
-        if _mk_df is not None and not _mk_df.empty and "MK體檢結論" in _mk_df.columns:
-            lines.append("- **各檔 MK 體檢結論（前5）**：")
+        if _mk_df is not None and not _mk_df.empty and "體檢結論" in _mk_df.columns:
+            lines.append("- **各檔 體檢結論（前5）**：")
             for _, _r in _mk_df.head(5).iterrows():
                 lines.append(f"  - {_r.get('代碼', '')} {_r.get('標的名稱', '')}："
-                             f"{_r.get('MK體檢結論', '')}")
+                             f"{_r.get('體檢結論', '')}")
         _chk = _chk_fn(loaded)
         if _chk is not None and not _chk.empty:
             _v = _chk["體檢判定"]
@@ -3111,7 +3111,7 @@ def _render_tab3_ai_summary(gemini_key: str) -> None:
                  if isinstance(n, dict)][:8]
     _sections_t3 = [
         "組合配置與健康度",
-        "各檔基金體檢（MK 戰情室）",
+        "各檔基金體檢（戰情室）",
         "與同類比較（優等生 / 汰弱候選）",
         "配息現金流",
         "新聞時事影響",

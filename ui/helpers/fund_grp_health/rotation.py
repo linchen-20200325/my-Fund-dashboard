@@ -84,7 +84,7 @@ def rows_from_batch_df(df) -> list:
             "σ rank": _cell(r, "σ rank"),
             "距 HWM %": _cell(r, "距 HWM %"),
             "操盤評分": _cell(r, "操盤評分"),
-            "吃本金燈號": _cell(r, "吃本金燈號 (1Y · MK)"),
+            "吃本金燈號": _cell(r, "吃本金燈號 (1Y · )"),
         })
     return rows
 

@@ -22,7 +22,7 @@ class TestHealthAnalysisRow:
         assert r["4D Grade"] == "—"
         assert r["4D Score"] is None
         assert r["Sharpe 1Y"] is None
-        assert "MK 3-3-3" in r
+        assert " 3-3-3" in r
 
     def test_full_metrics_populates_fields(self):
         fd = {
@@ -92,7 +92,7 @@ class TestDividendSummaryRow:
         assert r["code"] == "TEST"
         assert r["1Y 含息 %"] is None
         assert r["年化配息率 %"] is None
-        assert "資料不足" in r["吃本金燈號 (1Y·MK)"] or "—" in r["吃本金燈號 (1Y·MK)"]
+        assert "資料不足" in r["吃本金燈號 (1Y·)"] or "—" in r["吃本金燈號 (1Y·)"]
         assert r["換標的建議"].startswith("⬜") or "資料不足" in r["換標的建議"]
 
     def test_eat_principal_marked(self):
@@ -106,7 +106,7 @@ class TestDividendSummaryRow:
         }
         r = build_dividend_summary_row(fd, "EAT1", principal_twd=1_000_000,
                                        holding_years=2)
-        assert "吃本金" in r["吃本金燈號 (1Y·MK)"]
+        assert "吃本金" in r["吃本金燈號 (1Y·)"]
         assert r["年化配息率 %"] == 10.0
         assert r["1Y 含息 %"] == 2.0
 
@@ -197,10 +197,10 @@ class TestColumnsConstants:
     def test_health_columns_has_required(self):
         required = {"code", "基金名", "4D Grade", "Sharpe 1Y", "Sortino",
                     "Calmar", "Alpha %", "費用率 %", "Max DD %",
-                    "3Y 年化 %", "5Y 年化 %", "MK 3-3-3"}
+                    "3Y 年化 %", "5Y 年化 %", " 3-3-3"}
         assert required <= set(HEALTH_COLUMNS)
 
     def test_dividend_columns_has_required(self):
         required = {"code", "基金名", "1Y 含息 %", "年化配息率 %",
-                    "吃本金燈號 (1Y·MK)", "換標的建議"}
+                    "吃本金燈號 (1Y·)", "換標的建議"}
         assert required <= set(DIVIDEND_COLUMNS)
