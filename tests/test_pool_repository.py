@@ -64,39 +64,118 @@ def test_corrupt_local_file_returns_empty(tmp_path):
     assert LocalJsonPoolStore(base_dir=tmp_path).list_pool() == []   # 壞檔 → 空,不崩
 
 
-# ── v19.462:選股池目標 Sheet 優先 POLICY_SHEET_ID(使用者自己的持倉那本)──────
+# ── v19.472:選股池目標 Sheet = 獨立一本(POOL_SHEET_ID → baked 預設,不共用持倉)──────
 def _fake_secrets(monkeypatch, mapping):
     import infra.config as _cfg
     monkeypatch.setattr(_cfg, "get_secret", lambda k, default=None: mapping.get(k, default))
 
 
-def test_pool_sheet_id_prefers_policy_sheet(monkeypatch):
-    _fake_secrets(monkeypatch, {"POLICY_SHEET_ID": "policy_book",
-                                "macro_weights_sheet_id": "macro_book"})
-    assert P._pool_sheet_id() == "policy_book"        # 優先持倉那本(user 兩本不同 → 存自己的)
-
-
-def test_pool_sheet_id_falls_back_to_macro(monkeypatch):
-    _fake_secrets(monkeypatch, {"macro_weights_sheet_id": "macro_book"})
-    assert P._pool_sheet_id() == "macro_book"         # 無 POLICY_SHEET_ID → 回退(向後相容)
-
-
-def test_pool_sheet_id_empty_when_neither(monkeypatch):
-    _fake_secrets(monkeypatch, {})
-    assert P._pool_sheet_id() == ""
-
-
-def test_gs_enabled_needs_sa_and_sheet(monkeypatch):
-    _fake_secrets(monkeypatch, {"google_service_account": {"client_email": "sa@x.iam"},
+def test_pool_sheet_id_prefers_pool_sheet_secret(monkeypatch):
+    _fake_secrets(monkeypatch, {"POOL_SHEET_ID": "my_pool_book",
                                 "POLICY_SHEET_ID": "policy_book"})
-    assert P._gs_enabled() is True                    # SA + sheet 都在 → 啟用
+    assert P._pool_sheet_id() == "my_pool_book"       # 優先 POOL_SHEET_ID(不動持倉那本)
+
+
+def test_pool_sheet_id_falls_back_to_baked_default(monkeypatch):
+    _fake_secrets(monkeypatch, {"POLICY_SHEET_ID": "policy_book"})   # 無 POOL_SHEET_ID
+    assert P._pool_sheet_id() == P._POOL_SHEET_ID_DEFAULT            # 回退 baked,**不**回退持倉
+
+
+def test_pool_sheet_id_never_uses_policy_sheet(monkeypatch):
+    # 核心不變量(user 2026-08-18「不能共上方的 id」):即使只有 POLICY_SHEET_ID 也不採用
+    _fake_secrets(monkeypatch, {"POLICY_SHEET_ID": "policy_book"})
+    assert P._pool_sheet_id() != "policy_book"
+
+
+def test_gs_enabled_needs_sa_only_sheet_always_present(monkeypatch):
+    # baked 預設讓 sheet 恆在 → SA 為唯一 gate(v19.472)
     _fake_secrets(monkeypatch, {"google_service_account": {"client_email": "sa@x.iam"}})
-    assert P._gs_enabled() is False                   # 缺 sheet → 走本地
-    _fake_secrets(monkeypatch, {"google_service_account": {}, "POLICY_SHEET_ID": "b"})
+    assert P._gs_enabled() is True                    # 只要 SA 在 → 啟用(sheet 走 baked)
+    _fake_secrets(monkeypatch, {"google_service_account": {}})
     assert P._gs_enabled() is False                   # SA 缺 client_email → 走本地
+    _fake_secrets(monkeypatch, {})
+    assert P._gs_enabled() is False                   # 無 SA → 走本地
 
 
 def test_sa_present_accepts_json_string(monkeypatch):
     import json as _json
     _fake_secrets(monkeypatch, {"google_service_account": _json.dumps({"client_email": "sa@x.iam"})})
     assert P._sa_present() is True                     # env 字串 SA(NAS cron)也認得
+
+
+# ── v19.472:併入對照表 —— isin/currency/secid 欄 + resolve_* + set_secid(退役 id_map)──────
+def test_new_columns_roundtrip(store):
+    store.upsert(PoolEntry(code="ALZF9", isin="lu0766462157", currency="usd",
+                           morningstar_secid="F00000P8WB"))
+    e = store.list_pool()[0]
+    assert e.isin == "LU0766462157" and e.currency == "USD"   # 大寫正規化
+    assert e.morningstar_secid == "F00000P8WB"
+
+
+def test_old_row_pads_new_columns():
+    e = PoolEntry.from_row(["ALZF9", "安聯", "股票"])        # 舊 3 欄列
+    assert e.isin == "" and e.currency == "" and e.morningstar_secid == ""
+
+
+def _patch_pool_cache(monkeypatch, entries):
+    monkeypatch.setattr(P, "list_pool", lambda: entries)
+    monkeypatch.setattr(P, "_cached_pool_map", P._load_pool_map)   # 繞過 streamlit 快取
+
+
+def test_resolve_secid_hits_and_currency(monkeypatch):
+    _patch_pool_cache(monkeypatch, [PoolEntry(code="ALZF9", morningstar_secid="SEC1", currency="TWD")])
+    assert P.resolve_secid("alzf9") == ("SEC1", "TWD")            # 大小寫不分 + 帶幣別
+    _patch_pool_cache(monkeypatch, [PoolEntry(code="X", morningstar_secid="SEC2")])
+    assert P.resolve_secid("X") == ("SEC2", "USD")               # 幣別空 → 抓取退 USD
+
+
+def test_resolve_secid_none_when_no_secid(monkeypatch):
+    _patch_pool_cache(monkeypatch, [PoolEntry(code="ALZF9", isin="LU0766462157")])
+    assert P.resolve_secid("ALZF9") is None                       # 有 ISIN 沒 secId → 不算命中
+
+
+def test_resolve_isin_and_currency(monkeypatch):
+    _patch_pool_cache(monkeypatch, [PoolEntry(code="ALZF9", isin="LU0766462157", currency="TWD")])
+    assert P.resolve_isin("alzf9") == "LU0766462157"
+    assert P.resolve_currency("ALZF9") == "TWD"
+    assert P.resolve_isin("NOPE") is None and P.resolve_currency("NOPE") is None
+
+
+def test_resolvers_survive_repo_error(monkeypatch):
+    def _boom():
+        raise RuntimeError("GS down")
+    monkeypatch.setattr(P, "list_pool", _boom)
+    monkeypatch.setattr(P, "_cached_pool_map", P._load_pool_map)
+    assert P.resolve_secid("ALZF9") is None and P.resolve_isin("ALZF9") is None   # 不炸
+
+
+def test_set_secid_writes_back_keeps_isin_and_currency(monkeypatch, tmp_path):
+    store = LocalJsonPoolStore(base_dir=tmp_path)
+    store.upsert(PoolEntry(code="X", isin="TW123", currency="TWD", name="測試"))
+    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "_clear_pool_cache", lambda: None)
+    P.set_secid("x", "0P00SEC")                                   # 不傳幣別 → 沿用 TWD
+    e = store.list_pool()[0]
+    assert e.morningstar_secid == "0P00SEC" and e.isin == "TW123"
+    assert e.currency == "TWD" and e.name == "測試"               # 幣別/名稱保留
+
+
+def test_set_secid_no_op_when_code_absent(monkeypatch, tmp_path):
+    store = LocalJsonPoolStore(base_dir=tmp_path)
+    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "_clear_pool_cache", lambda: None)
+    P.set_secid("NOPE", "SEC")                                    # 不在池 → 不硬建列(§1)
+    assert store.list_pool() == []
+
+
+def test_add_remove_clear_pool_cache(monkeypatch, tmp_path):
+    _calls = []
+    monkeypatch.setattr(P, "_clear_pool_cache", lambda: _calls.append(1))
+    monkeypatch.setattr(P, "get_pool_store", lambda: LocalJsonPoolStore(base_dir=tmp_path))
+    P.add_or_update(PoolEntry(code="ALZF9", isin="LU0766462157"))
+    P.remove_from_pool("ALZF9")
+    assert _calls == [1, 1]                                       # 加/刪各清一次(立即生效)
+
+
+def test_clear_pool_cache_headless_no_crash():
+    P._clear_pool_cache()                                         # plain 版無 .clear() → 不炸

@@ -12,8 +12,8 @@
 §1 Fail Loud:資料不足(nav<=0 / date 壞 / code 空)→ **不寫**(不偽造);
              真 GS I/O 失敗 → **raise NavHistoryError**(呼叫端須看見,不靜默吞)。
 §5 冪等:`(code, date)` 去重 —— 同日重複查同檔只留 1 筆,不灌水。
-§8.2:L2 service(比照 services/auto_search_store_gs.py),複用 `macro_weights_sheet_id`
-     那本 workbook 加 `nav_history` 分頁;UI(L3)呼叫本層,**不自己開 gspread**。
+§8.2:L2 service(比照 services/auto_search_store_gs.py),存進 `_nav_sheet_id()` 那本
+     workbook(v19.472 改獨立 `NAV_SHEET_ID`)加 `nav_history` 分頁;UI(L3)呼叫本層,**不自己開 gspread**。
      GS secrets 未設(local / CI)→ 安靜 no-op,不干擾。gspread I/O 為持久化職責,
      不在 §8.2「L2 禁 requests/httpx/bs4/feedparser」清單,且有 auto_search_store_gs 先例。
 
@@ -28,6 +28,22 @@ from typing import Any
 
 _WS_NAV = "nav_history"
 _NAV_HEADERS = ["code", "date", "nav", "fund_name", "source", "recorded_at"]
+# v19.472:NAV 淨值存進**獨立一本** Google Sheet(user 2026-08-18 指定「基金淨值存取」那本)。
+#   `NAV_SHEET_ID` secret → baked 預設 → 回退舊 `macro_weights_sheet_id`(向後相容既有部署)。
+#   baked 讓 Cloud 重開不掉;⚠️ Service Account 信箱須被加為該 Sheet 的「編輯者」寫入才成功。
+_NAV_SHEET_ID_DEFAULT = "1b92nXxjGLJOOLP_Srvz2Cf69Y443Sdldp1_dWQzZncQ"
+
+
+def _nav_sheet_id() -> str:
+    """nav_history 目標 Sheet ID:`NAV_SHEET_ID` secret → baked `_NAV_SHEET_ID_DEFAULT`。
+
+    v19.472(user 2026-08-18「基金淨值存另一本」):NAV 改存**獨立一本**(見 `_NAV_SHEET_ID_DEFAULT`),
+    不再與總經權重(`macro_weights_sheet_id`)那本混。baked 讓 Cloud 重開不掉 + SA 齊備即啟用
+    (§1 主後端明確);要換本(或指回舊 macro_weights 那本以續讀既有累積)→ 設 `NAV_SHEET_ID` secret。
+    """
+    from infra.config import get_secret
+    return (str(get_secret("NAV_SHEET_ID") or "").strip()
+            or _NAV_SHEET_ID_DEFAULT)
 
 
 class NavHistoryError(Exception):
@@ -83,16 +99,16 @@ def status() -> dict:
                 diag["google_service_account"] = "no_client_email"
             else:
                 diag["google_service_account"] = "ok"
-        if not get_secret("macro_weights_sheet_id"):
-            missing.append("macro_weights_sheet_id")
-            diag["macro_weights_sheet_id"] = "absent"
+        if not _nav_sheet_id():                       # v19.472:baked 預設非空 → 恆 ok(SA 為唯一 gate)
+            missing.append("NAV_SHEET_ID")
+            diag["nav_sheet_id"] = "absent"
         else:
-            diag["macro_weights_sheet_id"] = "ok"
+            diag["nav_sheet_id"] = "ok"
         # 旁證:讀得到既有 FRED_API_KEY = st.secrets 本身有效(問題只在這兩把);
         # 讀不到 = 整份 secrets 沒生效(TOML 壞 / 放錯 App / 沒 reboot)。
         diag["st_secrets_alive"] = bool(get_secret("FRED_API_KEY"))
     except Exception as e:
-        missing = ["google_service_account", "macro_weights_sheet_id"]
+        missing = ["google_service_account", "NAV_SHEET_ID"]   # v19.472:改用 NAV 專屬 sheet id
         diag = {"error": f"{type(e).__name__}: {str(e)[:80]}"}
     return {"enabled": not missing, "missing": missing, "diag": diag}
 
@@ -160,18 +176,19 @@ def _clean_points(points: list[dict]) -> list[dict]:
 
 
 def _get_sheet():
-    """開啟 macro_weights_sheet_id 那本 workbook(複用 secrets + 認證,同 auto_search_store_gs)。
+    """開啟 NAV 專屬 workbook(`_nav_sheet_id()`;複用 SA 認證,同 auto_search_store_gs)。
 
     v19.363 ③:SA 走 _sa_to_dict — env JSON 字串(NAS cron)與 st.secrets dict 都吃;
     解析後仍空 → raise(§1 Fail Loud,部署配置錯不靜默)。
+    v19.472:目標 Sheet 改 `_nav_sheet_id()`(NAV_SHEET_ID → baked → 回退 macro_weights)。
     """
-    from infra.config import require_secret
     from repositories.policy_repository import get_gspread_client
+    from infra.config import require_secret
     creds = _sa_to_dict(require_secret("google_service_account"))
     if not creds.get("client_email"):
         raise NavHistoryError(
             "google_service_account 無法解析為含 client_email 的 dict(env 字串需為完整 SA JSON)")
-    sheet_id = require_secret("macro_weights_sheet_id")
+    sheet_id = _nav_sheet_id()
     client = get_gspread_client(creds)
     try:
         return client.open_by_key(sheet_id)

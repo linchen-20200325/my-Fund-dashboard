@@ -142,14 +142,11 @@ def test_download_supports_dry_run_and_fails_closed():
         "非 dry-run 路徑沒有擋衝突 —— 確認鈕會變成繞過安全檢查的後門")
 
 
-def test_ui_has_two_step_preview_then_commit():
-    """0-consumer 條款:服務層做了 dry-run,UI 要真的用它。"""
-    _blk = _code_lines(_src("ui/tab_manage.py"))
-    assert "dry_run=True" in _blk, "UI 沒有走預覽 —— dry_run 等於白做"
-    assert "navbf_preview" in _blk and "navbf_commit" in _blk, (
-        "UI 沒有拆成「預覽 / 確認」兩顆按鈕")
-    # 預覽必須綁定當下選項,否則會拿 A 級別的預覽去確認 B 級別的寫入
-    assert "_bf_key" in _blk, "預覽沒有綁定選項 → 換級別後舊預覽仍可確認"
+# v19.472:FundClear 挑基金補歷史 UI(含 dry-run 預覽/確認兩步)已依 user 2026-08-18 要求
+# 從管理室移除(只留手動 CSV 上傳),故原 `test_ui_has_two_step_preview_then_commit`(斷言
+# tab_manage 走 dry_run=True / navbf_preview / navbf_commit / _bf_key)隨該 UI 一併退場。
+# services/fundclear_backfill 的 dry-run 正確性仍由上方 test_download_supports_dry_run_and_fails_closed
+# 守住(該 service 已無 UI 消費者,是否整段退役另行提案,不在本次移除範圍內)。
 
 
 # ══════════════════════════════════════════════════════════════════════
