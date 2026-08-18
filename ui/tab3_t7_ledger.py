@@ -188,6 +188,11 @@ _T7_SNAP_COL_CONFIG: dict = {
         "預估月配股 (TWD)", width="medium",
         help="再投入轉新單位部分；公式：市值 × 配息率 × ((100 − 現金給付%) ÷ 100) ÷ 12，"
              "括號內為可換得的單位數（金額 ÷ FX ÷ NAV）"),
+    "衛星停利": st.column_config.TextColumn(
+        "衛星停利", width="medium",
+        help="郭俊宏 80/20：衛星部位「未實現損益 %」達門檻自動停利。🔴 強制停利 ≥20%（轉回核心）／"
+             "💰 分批停利 ≥15%／續抱 <15%。核心部位長期領息不判（—）；衛星但未填平均成本 → "
+             "「⬜ 未填成本」（誠實不當 0%）"),
 }
 
 
@@ -2826,6 +2831,23 @@ def render_t7_section() -> None:
                     # 抓不到報價」是兩種完全不同的狀況,處置方式也不同
                     # (前者去補持倉,後者等報價回來或改用手動匯率)。
                     _unpriced_funds: list[str] = []
+
+                    # v19.466 衛星停利:每檔用 resolve_core_flag 判衛星 + T7 未實現%(從成本)→ 停利燈。
+                    # 邏輯在 L2 satellite_stop_gain(§1:核心不判、未填成本誠實留白不當 0%)。
+                    from services.satellite import satellite_stop_gain as _sat_sg
+                    from ui.helpers.portfolio.allocation import resolve_core_flag as _resolve_core
+
+                    def _sat_stop_label(fund, pct):
+                        _r = _sat_sg(pct, is_satellite=(not _resolve_core(fund)))
+                        _stt = _r["status"]
+                        if _stt in ("force", "batch"):
+                            return f"{_r['emoji']} {_r['lamp']}"
+                        if _stt == "no_cost":
+                            return "⬜ 未填成本"
+                        if _stt == "hold":
+                            return "續抱"
+                        return "—"   # core:核心長期領息不停利
+
                     for _f in _pf_t7:
                         _pk_f = fund_pk_str(_f)
                         _c = _f.get("code", "?")
@@ -2854,6 +2876,7 @@ def render_t7_section() -> None:
                                 "預估月配息 (TWD)": "—",
                                 # v18.172：與 normal branch 對齊欄位
                                 "預估月配股 (TWD)": "—",
+                                "衛星停利": _sat_stop_label(_f, None),
                             })
                             continue
                         # ── 稽核 A8（2026-08-14）：抓不到報價 ≠ 市值 0 ──────────────
@@ -2887,6 +2910,7 @@ def render_t7_section() -> None:
                                 "配息率": f"{_dy:.2f}%" if _dy else "—",
                                 "預估月配息 (TWD)": "—",
                                 "預估月配股 (TWD)": "—",
+                                "衛星停利": _sat_stop_label(_f, None),
                             })
                             continue
                         _v = _l.position.value_twd(_nav, _fx)
@@ -2937,6 +2961,7 @@ def render_t7_section() -> None:
                                 if (_ann_reinv > 0 and _nav and _fx) else
                                 fmt_twd(_ann_reinv / 12)
                             ),
+                            "衛星停利": _sat_stop_label(_f, _pl_pct),
                         })
                     if _snap_rows:
                         # 紅虧綠賺：用 pandas Styler 著色（純 CSS 不依賴 matplotlib）
