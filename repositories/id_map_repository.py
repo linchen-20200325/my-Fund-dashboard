@@ -192,22 +192,21 @@ def list_id_map() -> list:
 
 def add_or_update(entry: IdMapEntry) -> None:
     get_id_map_store().upsert(entry)
-    _clear_secid_cache()          # 立即生效:清 secId 快取,不必等 TTL
+    _clear_id_map_cache()          # 立即生效:清快取,不必等 TTL
 
 
 def remove_from_id_map(code: str) -> None:
     get_id_map_store().remove(code)
-    _clear_secid_cache()
+    _clear_id_map_cache()
 
 
-# ── resolve_secid:供 sources.py 合併查表(hot path → 快取)────────────────
+# ── 查表:供 sources.py(hot path → 快取整份 code→entry)────────────────
 
-def _load_secid_map() -> dict:
-    """{code → (secId, currency)},只收有 secId 的列。讀不到 → {}(不阻斷抓取鏈,§1)。"""
+def _load_id_map_dict() -> dict:
+    """{code → IdMapEntry}。讀不到 → {}(不阻斷抓取鏈,§1)。"""
     try:
-        return {e.code: (e.morningstar_secid, e.currency)
-                for e in list_id_map() if e.morningstar_secid}
-    except Exception:  # noqa: BLE001 — 對照表不可用 → 空 map,退硬編/搜尋
+        return {e.code: e for e in list_id_map()}
+    except Exception:  # noqa: BLE001 — 對照表不可用 → 空,退硬編/搜尋
         return {}
 
 
@@ -217,40 +216,76 @@ try:  # EX-CACHE-1:App 端走 st.cache_data(跨 rerun 共享 + TTL);headless 退
     from shared.ttls import TTL_30MIN as _TTL_IDMAP
 
     @_st_idmap.cache_data(ttl=_TTL_IDMAP, show_spinner=False)
-    def _cached_secid_map() -> dict:
-        return _load_secid_map()
+    def _cached_id_map() -> dict:
+        return _load_id_map_dict()
 except Exception:  # noqa: BLE001 — 無 streamlit(headless/測試)
-    def _cached_secid_map() -> dict:
-        return _load_secid_map()
+    def _cached_id_map() -> dict:
+        return _load_id_map_dict()
 
 
-def _clear_secid_cache() -> None:
-    """使用者改對照後清 secId 快取 → **立即生效**(不必等 30 分 TTL;稽核 #3)。
+def _clear_id_map_cache() -> None:
+    """改對照後清快取 → **立即生效**(不必等 30 分 TTL;稽核 #3)。
 
-    `_cached_secid_map` 為 `@st.cache_data`(跨 rerun/session 持久,st.rerun 清不掉)→ 暖快取時
-    新加的 secId 會靜默失效最長 30 分。此處在寫入後 `.clear()`。headless plain 版無 `.clear()`
-    (本就無快取、每次讀新)→ try/except 忽略。
+    `_cached_id_map` 為 `@st.cache_data`(跨 rerun/session 持久,st.rerun 清不掉)。寫入後
+    `.clear()`;headless plain 版無 `.clear()`(本就無快取)→ try/except 忽略。
     """
     try:
-        _cached_secid_map.clear()
+        _cached_id_map.clear()
     except Exception:  # noqa: BLE001 — plain 版無 .clear();本就無快取,無需清
         pass
 
 
-def resolve_secid(code) -> "tuple[str, str] | None":
-    """使用者對照表有該 code 的**非空 secId** → (secId, currency);否則 None。
+def _entry_of(code) -> "IdMapEntry | None":
+    _c = str(code or "").strip().upper()
+    return _cached_id_map().get(_c) if _c else None
 
-    供 `repositories.fund.sources._src_morningstar_nav` 在查硬編 `_MORNINGSTAR_SECID_MAP`
-    **之前**先問使用者的表(你的優先,可覆蓋/新增)。快取由 `_cached_secid_map` 承載。
+
+def resolve_secid(code) -> "tuple[str, str] | None":
+    """對照表有該 code 的**非空 secId** → (secId, currency);否則 None(退 ISIN 搜尋/硬編)。"""
+    e = _entry_of(code)
+    return (e.morningstar_secid, e.currency) if (e and e.morningstar_secid) else None
+
+
+def resolve_isin(code) -> "str | None":
+    """對照表有該 code 的**非空 ISIN** → ISIN;否則 None。
+
+    供 `_src_morningstar_nav`:code 有 ISIN 沒 secId 時,拿 ISIN 去晨星搜 secId(比名稱準)。
+    """
+    e = _entry_of(code)
+    return (e.isin or None) if e else None
+
+
+def resolve_currency(code) -> "str | None":
+    """對照表有該 code 的計價幣別 → currency;否則 None。
+
+    供 ISIN 路徑用**使用者填的幣別**(如 TWD)抓 NAV,而非硬給 USD(稽核 v19.470 currency 修)。
+    """
+    e = _entry_of(code)
+    return (e.currency or None) if e else None
+
+
+def set_secid(code, secid, currency: str = "") -> None:
+    """回存系統以 ISIN 搜到的 secId(下次直接用、不重搜)。保留既有 ISIN/name;清快取立即生效。
+
+    §1:code 不在表 → **不硬建列**(set_secid 只回存既有 ISIN 列的 secId);空值 → 略過。
     """
     _c = str(code or "").strip().upper()
-    if not _c:
-        return None
-    return _cached_secid_map().get(_c)
+    _sec = str(secid or "").strip()
+    if not _c or not _sec:
+        return
+    store = get_id_map_store()
+    for e in store.list_id_map():
+        if e.code == _c:
+            e.morningstar_secid = _sec
+            if currency:
+                e.currency = str(currency).strip().upper()
+            store.upsert(e)
+            _clear_id_map_cache()
+            return
 
 
 __all__ = [
     "IdMapEntry", "LocalJsonIdMapStore", "GoogleSheetsIdMapStore",
     "get_id_map_store", "list_id_map", "add_or_update", "remove_from_id_map",
-    "resolve_secid",
+    "resolve_secid", "resolve_isin", "resolve_currency", "set_secid",
 ]

@@ -707,11 +707,11 @@ def _sec_id_map() -> None:
     """🗂️ 基金代號對照表 —— code → 晨星 secId / ISIN,解鎖 MoneyDJ 抓不到時的晨星補淨值路。"""
     import pandas as _pd
     st.markdown("### 🗂️ 基金代號對照表(補資料用)")
-    st.caption("台灣/MoneyDJ 內部碼(如 ALZF9)抓不到淨值時,填**晨星 secId**(和 ISIN)→ 系統改走"
-               "「晨星 secId → Yahoo chart」補淨值。加/改存進你 Sheet 的 `_fund_id_map` 分頁"
-               "(可直接在 Google Sheet 編)。⚠️ 實際抓取要在能連外的環境(部署/NAS)才生效。")
-    st.caption("💡 secId / ISIN 哪裡找:morningstar 搜基金 → 網址/頁面的 secId(F 或 0P 開頭);"
-               "ISIN 在基金公開說明書 / 對帳單(如 LU0766462157)。")
+    st.caption("台灣/MoneyDJ 內部碼(如 ALZF9)抓不到淨值時 → **你只要填「代號 + ISIN」**,系統會用"
+               "**ISIN 自動去晨星串出 secId**、再走「晨星 → Yahoo chart」補淨值(找到的 secId 會回存,"
+               "下次直接用)。存進你 Sheet 的 `_fund_id_map` 分頁,也可直接在 Google Sheet 編。")
+    st.caption("💡 **ISIN 在基金公開說明書 / 對帳單**(如 `LU0766462157`),每檔都有、你手上就有。"
+               "secId **不用填**(系統自動找);⚠️ 實際抓取要在能連外的環境(部署/NAS)才生效。")
     try:
         from repositories.id_map_repository import (
             IdMapEntry, add_or_update, list_id_map, remove_from_id_map,
@@ -727,30 +727,43 @@ def _sec_id_map() -> None:
         _entries = []
 
     if _entries:
-        _rows = [{"代號": e.code, "晨星 secId": e.morningstar_secid or "⬜ 未填",
-                  "ISIN": e.isin or "—", "幣別": e.currency, "名稱": e.name,
-                  "可補淨值": "✅" if e.morningstar_secid else "⬜"} for e in _entries]
+        def _status(e):
+            if e.morningstar_secid:
+                return "✅ 直接用 secId"
+            if e.isin:
+                return "🔎 用 ISIN 自動找"
+            return "⬜ 缺 ISIN/secId"
+        _rows = [{"代號": e.code, "ISIN": e.isin or "—",
+                  "晨星 secId": e.morningstar_secid or "(自動)",
+                  "幣別": e.currency, "名稱": e.name, "可補淨值": _status(e)} for e in _entries]
         st.dataframe(_pd.DataFrame(_rows), use_container_width=True, hide_index=True)
     else:
-        st.info("對照表目前是空的 —— 用下方表單加入(或直接在 Google Sheet 的 `_fund_id_map` 分頁編)。")
+        st.info("對照表目前是空的 —— 用下方表單填「代號 + ISIN」(或直接在 Google Sheet 的 "
+                "`_fund_id_map` 分頁編)。")
 
     with st.form("idmap_add", clear_on_submit=True):
-        _c1, _c2, _c3 = st.columns(3)
+        _c1, _c2 = st.columns(2)
         _code = _c1.text_input("基金代號(內部碼)", placeholder="ALZF9").strip().upper()
-        _sec = _c2.text_input("晨星 secId", placeholder="F00000P8WB / 0P0001J5YG").strip()
-        _isin = _c3.text_input("ISIN(選填)", placeholder="LU0766462157").strip().upper()
-        _c4, _c5 = st.columns([1, 2])
-        _ccy = _c4.text_input("幣別", value="USD").strip().upper()
-        _nm = _c5.text_input("基金名稱(選填)").strip()
+        _isin = _c2.text_input("ISIN", placeholder="LU0766462157").strip().upper()
+        _c3, _c4 = st.columns([1, 2])
+        _ccy = _c3.text_input("幣別", value="USD").strip().upper()
+        _nm = _c4.text_input("基金名稱(選填)").strip()
+        _sec = st.text_input("晨星 secId(選填,系統會用 ISIN 自動找;有的話填可跳過搜尋)",
+                             placeholder="留空即可").strip()
         if st.form_submit_button("➕ 加入 / 更新對照", use_container_width=True):
             if not _code:
                 st.warning("請填基金代號")
+            elif not (_isin or _sec):
+                st.warning("請至少填 ISIN(系統靠它自動找 secId)或直接填 secId")
             else:
                 try:
                     add_or_update(IdMapEntry(code=_code, morningstar_secid=_sec,
                                              isin=_isin, currency=_ccy or "USD", name=_nm))
-                    st.success(f"✅ 已存 {_code}"
-                               + (f" → secId {_sec}" if _sec else "(尚未填 secId,先存代號/ISIN)"))
+                    if _sec:
+                        _msg = f"✅ 已存 {_code} → secId {_sec}(直接用)"
+                    else:
+                        _msg = f"✅ 已存 {_code}(ISIN {_isin})→ 部署端會自動用 ISIN 串 secId 補淨值"
+                    st.success(_msg)
                     st.rerun()
                 except Exception as _e:  # noqa: BLE001
                     _friendly("寫入對照表失敗", _e, level="error")
