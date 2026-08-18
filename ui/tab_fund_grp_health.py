@@ -238,10 +238,13 @@ def render_fund_grp_health_tab() -> None:
         for _pr in rows:
             if not _pr.get("ok"):
                 continue
-            _ser235 = (_pr.get("_fund_raw") or {}).get("series")
-            _lad = ladder_signal(_ser235, vix=_vix_now)
+            _fr235 = _pr.get("_fund_raw") or {}
+            _ser235 = _fr235.get("series")
+            _cat235 = (_fr235.get("moneydj_raw") or {}).get("category") or _fr235.get("category")
+            _lad = ladder_signal(_ser235, vix=_vix_now, category=_cat235)
             if _lad.get("lamp") is None:
-                _pr["加碼水位"] = "⬜ 週資料不足"
+                _pr["加碼水位"] = {"core": "⚪ 不適用(內建配置)",
+                                   "lowvol": "⬜ 低波不判"}.get(_lad.get("status"), "⬜ 週資料不足")
             else:
                 _pct = int(round(_lad["deploy_pct"] * 100))
                 _pct_txt = f"(+{_pct}%)" if _pct > 0 else ""

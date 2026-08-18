@@ -117,3 +117,32 @@ def test_stop_gain_end_to_end():
     # 前 19 週平盤 + 末週跳高 → 20 週布林 z 遠大於 +3 → 強制停利
     r = ladder_signal(_wk([100] * 40 + [130]), vix=15)
     assert r["lamp"] == "強制停利" and r["z_bb"] > 3
+
+
+# ── 稽核跟進:VIX 邊界值 / reserve≤0 / Core 排除 / 低波(v19.465)──────
+def test_vix_exact_boundaries():
+    # 半開區間:30→燈三、25→燈二、20→燈一、19.9→巡航(平盤 z≈0、c≥均線)
+    assert _classify(101, 100, 100, 100, 0.0, 30)[0] == "燈三"
+    assert _classify(101, 100, 100, 100, 0.0, 25)[0] == "燈二"
+    assert _classify(101, 100, 100, 100, 0.0, 20)[0] == "燈一"
+    assert _classify(101, 100, 100, 100, 0.0, 19.9)[0] == "巡航"
+
+
+def test_reserve_non_positive_no_deploy_twd():
+    assert ladder_signal(_rising(60), vix=27, reserve_twd=0)["deploy_twd"] is None
+    assert ladder_signal(_rising(60), vix=27, reserve_twd=-5000)["deploy_twd"] is None
+
+
+def test_core_bucket_not_applicable():
+    # 貨幣市場/平衡 = Core → 不做加碼擇時(避免低波誤報極端燈,稽核 #8)
+    r = ladder_signal(_rising(60), vix=32, category="貨幣市場基金")
+    assert r["lamp"] is None and r["status"] == "core" and "不做加碼" in r["note"]
+    r2 = ladder_signal(_rising(60), vix=32, category="平衡型基金")
+    assert r2["status"] == "core"
+
+
+def test_low_vol_not_judged():
+    # 近平盤(週 σ/均值 極小)→ 布林雜訊大 → 不判燈,即使末週小跳動
+    flat = _wk([100.0 + 0.0001 * i for i in range(60)])
+    r = ladder_signal(flat, vix=15)
+    assert r["lamp"] is None and r["status"] == "lowvol" and "低波" in r["note"]

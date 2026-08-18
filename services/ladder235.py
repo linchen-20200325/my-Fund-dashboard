@@ -33,6 +33,7 @@ from shared.signal_thresholds import (
     LADDER235_MA_MONTH_W,
     LADDER235_MA_QUARTER_W,
     LADDER235_MA_YEAR_W,
+    LADDER235_MIN_CV,
     LADDER235_MIN_WEEKS,
     LADDER235_VIX_L1,
     LADDER235_VIX_L2,
@@ -120,7 +121,8 @@ def _classify(c, ma4, ma13, ma52, z_bb, vix) -> tuple:
     if r1:
         return "燈一", r1
     # 巡航
-    return "巡航", ["VIX<20、週收≥4週月線、布林 z≥-1σ(維持定期定額)"]
+    _vixtxt = "VIX<20、" if _has_vix else ""   # VIX=None 時不寫死「VIX<20」(稽核 #3)
+    return "巡航", [f"{_vixtxt}週收≥4週月線、布林 z≥-1σ(維持定期定額)"]
 
 
 def _defense_note(wk: pd.Series, c, ma13, ma52, z_bb) -> str:
@@ -135,18 +137,32 @@ def _defense_note(wk: pd.Series, c, ma13, ma52, z_bb) -> str:
 
 
 def ladder_signal(nav, vix: Optional[float] = None,
-                  reserve_twd: Optional[float] = None) -> dict:
+                  reserve_twd: Optional[float] = None,
+                  category=None) -> dict:
     """235 加碼水位燈。純函式,離線可驗。
 
     Args:
         nav: 單檔基金**日 NAV 原幣**序列(pandas Series/dict,日期索引)。
         vix: VIX 最新值(整組共用);None → 只用均線+布林兩維判燈。
         reserve_twd: 閒置加碼金 TWD(選填);有值 → 附建議本次投入 = reserve × 燈比例。
+        category: 基金類別(選填);Core 桶(平衡多重/貨幣市場)→ 不做加碼擇時(比照 Z-Score,
+            §1 避免低波近平盤標的被布林雜訊誤報極端燈;稽核 #8)。
 
     Returns: dict(lamp/emoji/color/z_bb/c/ma4/ma13/ma52/mu/sigma/vix/weeks/
              deploy_pct/deploy_twd/reasons/note/status)。
     """
     _vix = float(vix) if isinstance(vix, (int, float)) else None
+    # Core(平衡/貨幣)→ 不適用加碼擇時(內建配置;同 zscore_engine.is_core_bucket)
+    if category is not None:
+        try:
+            from services.zscore_engine import is_core_bucket  # noqa: PLC0415 — L2 同層
+            if is_core_bucket(category):
+                _b = _blank("core", 0, _vix)
+                _b["note"] = "Core(平衡多重/貨幣市場)內建股債配置,不做加碼水位擇時"
+                return _b
+        except Exception:  # noqa: BLE001 — 分類失敗 → 當非 Core 續判(較保守不漏)
+            pass
+
     wk = _weekly_close(nav)
     if wk is None or len(wk) < LADDER235_MIN_WEEKS:
         return _blank("insufficient", (0 if wk is None else len(wk)), _vix)
@@ -156,6 +172,10 @@ def ladder_signal(nav, vix: Optional[float] = None,
     sigma = float(wk.iloc[-LADDER235_BB_WINDOW_W:].std(ddof=1))
     if not (sigma > 0):                       # σ=0(20 週全同值)→ 布林無意義(§1)
         return _blank("degenerate", len(wk), _vix)
+    if mu > 0 and (sigma / mu) < LADDER235_MIN_CV:   # 低波近平盤 → 布林位階雜訊大(稽核 #8)
+        _b = _blank("lowvol", len(wk), _vix)
+        _b["note"] = f"低波標的(週 σ/均值 {sigma / mu:.4f} < {LADDER235_MIN_CV})→ 布林位階雜訊大,不判加碼燈"
+        return _b
 
     z_bb = (c - mu) / sigma
     ma4 = _ma(wk, LADDER235_MA_MONTH_W)
