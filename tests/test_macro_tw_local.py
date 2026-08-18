@@ -19,7 +19,7 @@ from shared.colors import TRAFFIC_GREEN, TRAFFIC_YELLOW
 # §1 detect_mk_golden_inflection — 12 case
 # ════════════════════════════════════════════════════════════════════════════
 class TestDetectMkGoldenInflection:
-    """MK 黃金拐點：CPI YoY × Fed Funds Rate 雙頂回落（鏡像 stock v18.169）。"""
+    """黃金拐點：CPI YoY × Fed Funds Rate 雙頂回落（鏡像 stock v18.169）。"""
 
     def test_strong_signal_cpi_drop_fed_drop(self):
         # CPI 月降 0.3ppt + Fed 月降 0.08ppt → 強訊號 ⭐
@@ -28,7 +28,7 @@ class TestDetectMkGoldenInflection:
         assert sig['strength'] == 'strong'
         assert sig['color'] == TRAFFIC_GREEN  # v19.252 Phase 4A SSOT
         assert '⭐' in sig['icon']
-        assert 'MK 黃金拐點' in sig['label']
+        assert '黃金拐點' in sig['label']
 
     def test_strong_signal_cpi_drop_fed_flat(self):
         # CPI 月降 0.25ppt + Fed 持平 → 強訊號 ⭐
@@ -43,7 +43,7 @@ class TestDetectMkGoldenInflection:
         assert sig is not None
         assert sig['strength'] == 'weak'
         assert sig['color'] == TRAFFIC_YELLOW  # v19.252 Phase 4A SSOT
-        assert 'MK 拐點觀察中' in sig['label']
+        assert '拐點觀察中' in sig['label']
 
     def test_no_signal_cpi_rising(self):
         assert detect_mk_golden_inflection(3.4, 3.0, 5.25, 5.33) is None
@@ -107,7 +107,7 @@ class TestClassifyLongTermRegime:
         assert 0.0 <= r['score'] < 1.0
 
     def test_overheat_regime_caution(self):
-        # CPI 4.5% + Fed 持平 + NDC 綠 + PMI 49 + 無 MK → 🟡 過熱
+        # CPI 4.5% + Fed 持平 + NDC 綠 + PMI 49 + 無 → 🟡 過熱
         r = classify_long_term_regime(4.5, 5.5, 5.5, 25, 49, None)
         assert r['regime'].startswith('🟡')
         assert -1.0 <= r['score'] < 0.0
@@ -125,7 +125,7 @@ class TestClassifyLongTermRegime:
         assert r['suggest_pct'] == 'N/A'
 
     def test_mk_alone_not_enough(self):
-        # MK 訊號獨自不該驅動 regime
+        # 訊號獨自不該驅動 regime
         mk = detect_mk_golden_inflection(3.0, 3.3, 5.25, 5.33)
         r = classify_long_term_regime(None, None, None, None, None, mk)
         assert r['regime'] == '⚪ 資料不足'
@@ -133,7 +133,7 @@ class TestClassifyLongTermRegime:
     def test_partial_data_works(self):
         r = classify_long_term_regime(2.0, None, None, None, 56, None)
         assert r['regime'] != '⚪ 資料不足'
-        assert len(r['components']) == 3  # CPI + PMI + MK 拐點(0)
+        assert len(r['components']) == 3  # CPI + PMI + 拐點(0)
 
     def test_components_structure(self):
         r = classify_long_term_regime(2.0, 5.0, 5.0, 27, 53, None)

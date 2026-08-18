@@ -6,7 +6,7 @@
 - `investment`:④ 投資試算 + ⑤ TER + 持股分析
 - `correlation`:⑥ 持股/產業相關性矩陣
 - `risk`:⑦ HWM σ + ⑧ 風險對比 + ⑨ -2σ 超跌警示
-- `signals`:⑩ MK 買賣點對比 + ⑪ Bollinger 詳圖
+- `signals`:⑩ 買賣點對比 + ⑪ Bollinger 詳圖
 - `ai`:⑫ AI 跨檔評論 + ⑬ 個股新聞 + ⑭ 三率穿透
 - 本 __init__:主入口 render_fund_grp_health_extras + re-export 全部子函式
 
@@ -51,7 +51,7 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
       ③ 真實收益矩陣
       ④ 投資試算（每檔 expander）
       ⑤ TER + 持股分析（每檔 expander）
-      ⑥–⑭ 多檔比較 / MK / Bollinger / AI / 新聞 / 三率
+      ⑥–⑭ 多檔比較 / / Bollinger / AI / 新聞 / 三率
 
     注意（v19.189）：① 基金體檢 PK 表 + ② 4 大健診卡（fund_checkup）已上移至
     tab_fund_grp_health._render_health_table 健診總表之前，不再由本函式渲染。
@@ -108,7 +108,7 @@ def render_fund_grp_health_extras(funds: list, principal_twd: float) -> None:
     except Exception as e:
         st.caption(f"⬜ 輪動配對建議渲染失敗：[{type(e).__name__}] {str(e)[:80]}")
 
-    # v19.121 P1 視覺 — Bollinger 可展開詳圖(MK 買賣點表 v19.408 已併入健診總表)
+    # v19.121 P1 視覺 — Bollinger 可展開詳圖(買賣點表 v19.408 已併入健診總表)
     try:
         _render_bollinger_expanders(funds)
     except Exception as e:

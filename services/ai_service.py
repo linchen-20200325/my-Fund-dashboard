@@ -6,7 +6,7 @@ AI 分析引擎 v13 — 單次呼叫 · 含風險預警快照 · 六因子評分
 公開 API：
   - assign_asset_role — 核心/衛星關鍵字分類
   - _gemini           — Gemini API 單次呼叫（thin delegate 至 infra.llm._call_gemini）
-  - analyze_portfolio_mk_advisor   — MK 智能戰情室 AI 建議
+  - analyze_portfolio_mk_advisor   — 智能戰情室 AI 建議
   - get_gemini_keys / gemini_generate — v18.217 多 key 自動輪替
 
 v11.0 分層歸位：本檔屬於 Service Layer，業務邏輯 + Gemini API 呼叫薄包。
@@ -120,7 +120,7 @@ def _format_fund_holdings(holdings) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════
-# v18.81 MK 老師深度組合建議 — 結構化「缺點 / 更換 / 配置 / 策略」
+# v18.81 老師深度組合建議 — 結構化「缺點 / 更換 / 配置 / 策略」
 # 比 analyze_global 更聚焦：
 #   - 點名具體缺點（吃本金 / 低 Sharpe / 過度集中 / NAV 過高）
 #   - 給標的更換建議（按景氣位階）

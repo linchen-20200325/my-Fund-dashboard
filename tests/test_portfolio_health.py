@@ -134,7 +134,7 @@ def test_compute_health_kpis_cashflow_na_when_no_1y_data():
 
 
 def test_compute_health_kpis_no_mk_df_only_cashflow():
-    """沒 mk_df 時 MK 標籤全 0、配置 ratio 全 0，但現金流計算仍正常。"""
+    """沒 mk_df 時 標籤全 0、配置 ratio 全 0，但現金流計算仍正常。"""
     funds = [
         {"code": "F1", "loaded": True,
          "moneydj_raw": {"moneydj_div_yield": 5.0, "perf": {"1Y": 10.0}},

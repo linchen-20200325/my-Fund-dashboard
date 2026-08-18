@@ -5,7 +5,7 @@
 
 內容包含:
 - 💵 美股流動性 6 卡片(短線雷達範本 + SPEC 線)
-- MK 景氣時鐘 & 資產輪動(L2/L3 皆顯示)
+- 景氣時鐘 & 資產輪動(L2/L3 皆顯示)
 - ⑥ 💵 美股流動性 × 熱錢監測 Raw data expander
 - 📦 ARCHIVED 台股熱錢監測(降級 archive)
 - 💰 資本防線 — 含息報酬 vs 配息率(L3 only,stash 給 AI)
@@ -45,7 +45,7 @@ def render_long_term_section(
     fred_key: str,
     show_l3: bool = True,
 ) -> None:
-    """渲染 🌳 長期座標 section(美股流動性卡 + MK 時鐘 + 資本防線 + 新聞)。
+    """渲染 🌳 長期座標 section(美股流動性卡 + 時鐘 + 資本防線 + 新聞)。
 
     Args:
         ind: indicators dict(總經指標)

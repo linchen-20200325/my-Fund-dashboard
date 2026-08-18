@@ -291,7 +291,7 @@ user 回報:批次下載大表看不到輪動配對表。原因 = 配對表是**
   offer_download)`(σ/評分滑桿 + 配對表 + 選配 CSV)。兩入口共用:
   - `render_rotation_section(funds)`(組合健診,rich fund 物件)key_prefix=`rot_`
   - `render_rotation_section_from_df(df)`(批次,**直接讀大表 df 不重抓**)key_prefix=`batch_rot_`
-    + **獨立「輪動配對建議.csv」下載**。`rows_from_batch_df` 對映欄名(`吃本金燈號 (1Y · MK)`→
+    + **獨立「輪動配對建議.csv」下載**。`rows_from_batch_df` 對映欄名(`吃本金燈號 (1Y · )`→
     `吃本金燈號`),`_cell` 把失敗檔 NaN→None(不污染類別/σ)。
 - **L3** `ui/tab_batch_analysis.py`:下載鈕後呼叫 `render_rotation_section_from_df(df)`。
 - σ rank / 距 HWM % 在大表為預格式化字串(unified 不轉 numeric),rotation `_sigma/_num` 自剝單位。
@@ -347,7 +347,7 @@ user 要求批次分析表**完全 copy 組合健診那張合併大表**。
   保留;順帶把 `not <Series>` 改 `len()` 安全判斷(根治同類 truthiness 崩潰);清死 import。
 - **`ui/helpers/fund_grp_health/unified.py`**:`build_batch_unified_row(code, principal, phase,
   score)` = process_one_fund + ①`build_health_analysis_row` + ②`build_dividend_summary_row`
-  + σ/風險/MK → 一列 flat row(`BATCH_UNIFIED_COLUMNS` 58 欄,JSON-safe via `_jsonify`)。
+  + σ/風險/→ 一列 flat row(`BATCH_UNIFIED_COLUMNS` 58 欄,JSON-safe via `_jsonify`)。
   100 萬 TWD 基準。`_unified_columns` 排除 vestigial `ok` 欄。
 - **`ui/tab_batch_analysis.py`**:改用 build_batch_unified_row(讀 `phase_info` → 資產屬性/
   操作訊號 對齊健診);狀態欄「✅成功/❌抓取失敗/⚠️無效代號」;舊 flat-schema checkpoint
@@ -368,7 +368,7 @@ user 一輪三需求(多 agent 交叉驗證後落地)。
 `build_dividend_summary_row`;每檔 FX 走 `get_latest_fx`(cached);算不出留 None(§1)。
 `COLUMN_LABELS_ZH` 同步中文標題。`BATCH_PRINCIPAL_TWD=1_000_000`。
 
-**v19.411 組合健診 ①②③ 合併大表**:① 健康分析 + ② 配息相關 + ③ 健診總表 + σ/風險/MK
+**v19.411 組合健診 ①②③ 合併大表**:① 健康分析 + ② 配息相關 + ③ 健診總表 + σ/風險/
 去重複併成**一張寬表**(40 欄)。`ui/helpers/fund_grp_health/unified.py:build_unified_health_df`
 (純函式,`_UNIFIED_FRONT` 欄序 spec + `_UNIFIED_NUMERIC` 數值轉換,同義欄擇一去重);
 `tab_fund_grp_health` 移除 ①② 獨立 render、by-code 傳入合併。相關性矩陣/真實收益圖/
@@ -399,7 +399,7 @@ user 實跑批次分析時某檔(ACYT226)炸 `ValueError: truth value of a Serie
 
 user 要求:組合健診原本對同一批基金重複畫多張逐檔表,去重複合併成一張大表。
 
-盤點後:真正的逐檔**表格**有 HWM σ / 風險對比 / MK 買賣點 3 張(「真實收益矩陣」實為
+盤點後:真正的逐檔**表格**有 HWM σ / 風險對比 / 買賣點 3 張(「真實收益矩陣」實為
 plotly 圖、相關性為 N×N 矩陣、Bollinger 為圖 —— 皆非逐檔表,維持獨立)。
 
 **改動**:
@@ -1312,7 +1312,7 @@ user 批次2 大贏面②。`ui/tab2_single_fund.py:212` 「🚀 分析」按鈕
   無跨基金污染)。
 - **同批次查證後略過(§-1,非真 bug)**:orchestrator cache(sub-fetcher 已 `@_daily_cache`,
   再加層 = 過度設計)、並行 NAV cascade(`fetch_fund_by_key` 是 fallback chain cnyes→MoneyDJ,
-  並行會改語意 fire-all)、縮 2000d NAV 窗(v19.291 為修 MK 3-3-3「成立 0.1 年」保單代碼誤判
+  並行會改語意 fire-all)、縮 2000d NAV 窗(v19.291 為修  3-3-3「成立 0.1 年」保單代碼誤判
   **刻意**延窗,縮回會 regress)。
 - **測試**:`test_tab2_single_fund` 加 `test_analyze_does_not_blanket_clear_caches` 迴歸鎖。16 passed。
 
@@ -1566,7 +1566,7 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - **大項待核准(§-1 不擅動;⭐=本輪新增)**:⭐`assert_reconciled`(對帳 disagree/
     過期 → 燈降級 🟡,把 reconcile 接進決策鏈)、⭐組合配置 Tab 複用健診
     ThreadPool 模式、⭐診斷主動巡檢+source_trace 一級欄位+保單 ledger/FX
-    常態列(P4)、⭐含息雙口徑(複利 vs MK 單利)UI 並列標註、⭐ISM PMI 補
+    常態列(P4)、⭐含息雙口徑(複利 vs 單利)UI 並列標註、⭐ISM PMI 補
     @_ttl_cache(快取失敗語意需先對齊 v19.337「失敗不快取」原則)、
     ⭐shim 債務 codemod 純刪+normalize_fund_shape 抽共用+risk_radar
     spec-driven(P5)、⭐DataManager(P5 §8 架構案)、⭐surface_anomalies/
@@ -1752,8 +1752,8 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - **架構**:L2 純函式 + L3 render,無越權;分類複用現成 SSOT 不重寫。**基金健檢 Tab 未加**(該 tab 全檔統一 100 萬 = 等權,配置比例意義有限);僅組合 Tab3(真實 invest_twd 加權)顯示。
   - **回歸網**:`tests/test_asset_class_core_satellite.py` 加 7 test(加權/綠燈區間/衛星過重紅/過保守黃/待定多白/略過非正權重/空集)累計 32;相關 health+report 全綠。
 - **v19.327 健檢 ① 表加「核心/衛星資產」+「基金類別」分類(user 回報「基金總類核心還衛星沒顯示」,2026-07-06)**:
-  - **背景**:user 要每檔顯示核心 or 衛星資產。原擬單用 MK 3-3-3(挑核心),但 user 指出「3-3-3 很多檔抓不到」(保單子網域封鎖 → 成立日/3年報酬缺 → 資料不足)。改**兩層 + 來源標記**(對齊 v19.325 配息來源精神)補涵蓋率。
-  - **判定順序(SSOT `services/health/asset_class.classify_core_satellite`)**:① 類別命中衛星關鍵字(產業/科技/新興/單一國/高收益…集中主題型)→ 🟠 衛星(角色由類別決定,覆蓋 3-3-3);② MK 3-3-3 通過 → 🟦 核心;③ 類別命中核心關鍵字(全球/平衡/多重資產/投資級債…廣泛分散)→ 🟦 核心;④ 皆無法判 → ⬜ 待定(§1 不亂扣)。關鍵字對照為可調 SSOT。
+  - **背景**:user 要每檔顯示核心 or 衛星資產。原擬單用  3-3-3(挑核心),但 user 指出「3-3-3 很多檔抓不到」(保單子網域封鎖 → 成立日/3年報酬缺 → 資料不足)。改**兩層 + 來源標記**(對齊 v19.325 配息來源精神)補涵蓋率。
+  - **判定順序(SSOT `services/health/asset_class.classify_core_satellite`)**:① 類別命中衛星關鍵字(產業/科技/新興/單一國/高收益…集中主題型)→ 🟠 衛星(角色由類別決定,覆蓋 3-3-3);②  3-3-3 通過 → 🟦 核心;③ 類別命中核心關鍵字(全球/平衡/多重資產/投資級債…廣泛分散)→ 🟦 核心;④ 皆無法判 → ⬜ 待定(§1 不亂扣)。關鍵字對照為可調 SSOT。
   - **修法**:(1) 新 L2 純函式 `services/health/asset_class.py`(`SATELLITE_KEYWORDS`/`CORE_KEYWORDS` SSOT + `classify_by_category` + `classify_core_satellite`)。(2) `report.build_health_analysis_row` 讀 `category`(MoneyDJ 投資標的)+ 呼叫分類 → row 加「基金類別」「核心/衛星」「分類依據」3 欄 + `HEALTH_COLUMNS`(排基金名後)。(3) `tab_fund_grp_health` ① 表 column_config 加 3 欄 TextColumn。組合 Tab3 共用同路徑自動同步。
   - **架構**:L2 純函式(zero-IO)+ L3 column_config,無越權。3-3-3 通過但集中型 → 仍歸衛星(角色正確);年輕廣泛型(3-3-3 未達)由類別歸核心(涵蓋率修補)。
   - **回歸網**:`tests/test_asset_class_core_satellite.py`(22:類別判定/衛星覆蓋3-3-3/廣泛型補涵蓋/待定不亂扣/row builder 整合/schema);相關 health+report 212 test 全綠。
@@ -1828,8 +1828,8 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - **回歸網**:`tests/test_macro_action_light.py`(8 test)守 3 種 override 各自觸發 / 位階 3 級 / 缺分數 unknown / 空 indicators 不炸。
   - **範圍**:新 L2 純函式 + macro `__init__` 匯出 + L3 tab1 頂部渲染 + test。誠實面:位階/機率非精準擇時(燈都附理由)。
 
-- **v19.315 健診加「淘汰候選紅區」— 把 MK 4 換標規則提到最上面(改進 #4-②,2026-07-05)**:
-  - **背景**:功能盤點改進項 —— user 要「單一/多檔基金挑出體質差的」,但既有 `check_replacement_recommendation`(MK 4 規則:吃本金≥1年 / 4D Grade F / 3-3-3 未過≥3年 / Sharpe<0且maxdd<-30%)的 verdict 只藏在 ② 配息表「換標的建議」欄裡,不夠醒目。
+- **v19.315 健診加「淘汰候選紅區」— 把  4 換標規則提到最上面(改進 #4-②,2026-07-05)**:
+  - **背景**:功能盤點改進項 —— user 要「單一/多檔基金挑出體質差的」,但既有 `check_replacement_recommendation`( 4 規則:吃本金≥1年 / 4D Grade F / 3-3-3 未過≥3年 / Sharpe<0且maxdd<-30%)的 verdict 只藏在 ② 配息表「換標的建議」欄裡,不夠醒目。
   - **修法(零新邏輯,只露出既有 SSOT)**:(1) `services/health/report.py` `build_dividend_summary_row` 加曝露 `_verdict`(raw verdict,`_` 前綴不進表格欄);(2) `ui/tab_fund_grp_health.py` `_render_health_3tables` **頂部**加「🔴 淘汰候選 N 檔」`st.error` 紅區,篩 `_verdict=="replace"` 的基金 + 觸發原因,提到 ① ② 表之前。`_div_rows` 上移一次算、紅區與表 ② 共用不重算(SSOT)。
   - **範圍**:L2 report(+1 欄)+ L3 health tab(紅區 + 去重算)+ test。因 `_render_health_3tables` 同時被健診 tab 與組合配置內嵌呼叫,紅區兩處皆顯示(一致)。
   - **回歸網**:`tests/test_replacement_red_zone.py`(3 test)守 `_verdict` key 不消失 / Sharpe<0+maxdd<-30% → replace / 指標全缺 → unknown(不假綠燈)。
@@ -1842,7 +1842,7 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - **doc-sync**:`app.py` 註解、`shared/converters.py` 過時註解、`ARCHITECTURE.md`(services + ui 樹刪 3 行)、`CLAUDE.md §2.3`(crisis_strategy_grid 參照更新)、`§8.2.A EX-PASSTHRU-1`(2 條 tab_crisis_backtest 例外退役)。歷史 changelog(STATE 舊條目 / BACKLOG F-PIT-1)為史料不動。
   - **驗證**:全庫 0 殘留真 import;保留的 crisis_backtest + 3 消費者 import smoke OK;pre-commit `--all-files`。
 
-- **v19.313 修 MK 買賣點 σ 過寬 — 改「區間基準」(年高-年低)/3(2026-07-05)**:
+- **v19.313 修 買賣點 σ 過寬 — 改「區間基準」(年高-年低)/3(2026-07-05)**:
   - **背景**:user 回報「策略3 標準差買賣點」的 -3σ 買點離現價 18.73%,「怎麼可能差異那麼大」。根因 `services/fund_service.py:325`:`std_amt = 年高 × std_1y/100`,`std_1y` = wb07「一年標準差」=**年化波動率**(~5.5~6.2%)→ 3σ ≈ 年高×3×年化σ% ≈ 18%,**常超出 2 年高低區間** → 買3/賣3 掉出真實區間(買3 比史低還低,永遠觸不到)。同檔註解 `L292`(σ=(年高-年低)/3)+ fallback(/4)本就是區間基準,主路徑卻偷換成年化 σ 才爆。
   - **修法(user 選 ①)**:`std_amt` 改 `(年高-年低)/3`(v3.0→v3.1)→ 買3=年低、賣3=年高,3 檔均分區間,band 必落區間內、訊號必觸得到。`std_1y` 仍保留供 Sharpe/波動顯示。Tab2 標籤 `σ 來源:wb07` → `σ=(年高-年低)÷3`(移除誤導,連帶清 `_m_std_src` unused)。
   - **回歸網**:`tests/test_sigma_band_range.py`(2 test)守 買3≈年低 / 賣3≈年高 / band 不掉出區間 / 三檔等距=σ。
@@ -1876,7 +1876,7 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - **範圍**:純 CI/infra(workflow yaml + test);app runtime 0 改動(APP_VERSION 仍隨版號 lockstep bump 便於書記)。
 
 - **v19.308 成立年改抓 MoneyDJ 現成成立日 — SSOT 一條龍(2026-07-04)**:
-  - **背景**:承 v19.307，成立年 / 5Y / Sortino 等仍 None,因 Cloud IP 被 MoneyDJ 擋、本地 NAV 只抓到近 1 月(成立年用 `series.index[0]` → 算成 0.1 年、MK 3-3-3 ① 全誤判)。user 明確要求「**不抓 NAV 歷史,抓 MoneyDJ 已算好的指標**」。
+  - **背景**:承 v19.307，成立年 / 5Y / Sortino 等仍 None,因 Cloud IP 被 MoneyDJ 擋、本地 NAV 只抓到近 1 月(成立年用 `series.index[0]` → 算成 0.1 年、 3-3-3 ① 全誤判)。user 明確要求「**不抓 NAV 歷史,抓 MoneyDJ 已算好的指標**」。
   - **關鍵發現**:MoneyDJ 頁面「成立日期」**部分路徑早已在抓**(`sources.py` Allianz meta),但 (1) 主 moneydj 路徑(yp010000/yp010001,即 user 那幾檔)**沒抓**;(2) 成立年計算用序列而非成立日;(3) `report._compute_holding_years` 已優先讀 inception_date 但沒人餵。
   - **修法(SSOT 一條龍,5 處)**:
     1. `repositories/fund/fund_orchestration.py`:moneydj meta table 補抓「成立日期/設立日期/成立日/基金成立日」→ `result["inception_date"]`(抓不到不設,自動 fallback)。
@@ -1898,8 +1898,8 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - tests:新增 `tests/test_fund_load_enriched.py`(7 tests:2 caller 走 enriched 守門 + `finalize_fund_metrics` 正常 series 產 metrics(含 nav) / 短 series 不假造 / None series 安全)。既有 `test_portfolio_load.py` 15 tests 續綠。
   - **下一步**:merge main + user reboot + 重新載入 → 核心戰情室「目前市價/波動/σ 帶」、健診表 Sharpe(資料夠時)恢復;長歷史欄位視 Cloud 能否抓到長 NAV 而定。
 
-- **v19.306 MK 3-3-3 批次篩選明細表去重 — SSOT 一檔一列(2026-07-04)**:
-  - **背景**:user 截圖回報 Tab3「MK 3-3-3 原則批次篩選 → 展開 3-3-3 評估明細」表出現重複列(JFZN3 / ACCP138 各兩次),底部「共 25 檔」統計含重複。
+- **v19.306  3-3-3 批次篩選明細表去重 — SSOT 一檔一列(2026-07-04)**:
+  - **背景**:user 截圖回報 Tab3「 3-3-3 原則批次篩選 → 展開 3-3-3 評估明細」表出現重複列(JFZN3 / ACCP138 各兩次),底部「共 25 檔」統計含重複。
   - **根因**:同一基金可跨多張保單存在於 `st.session_state.portfolio_funds`(policy schema 主鍵為 `(policy_id, fund_url)`,同基金不同保單合法各一筆)。`services/fund_screening.py:batch_333_funds()` 逐檔建列**未去重** → 明細列 + 「共 N 檔」統計灌水。
   - **修法(SSOT 去重)**:在 `batch_333_funds()` 迴圈加 `_seen_codes` set,以 code 一檔一列、保留首次出現順序。3-3-3 評估的是**基金內在屬性**(成立年 / 3年年化 / 同儕排名),同基金跨保單重複列 = 完全相同的雜訊,收斂為 SSOT 一檔一列。
   - **為何去重放 L2 服務層而非 UI / 源頭**:(1) `batch_333_funds` 是產出這張表的唯一 SSOT,去重放這裡則所有 caller 自動乾淨,不散落 UI;(2) **不可**在 `portfolio_funds` 源頭去重——組合層投入金額 / 配置需保留跨保單重複,只有基金內在分析才去重。
@@ -1933,8 +1933,8 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - **退化處理**：server 重啟後 session 遺失 → user 重按登入按鈕即可，是可接受行為。
   - `app.py` APP_VERSION 更新至 v19.301。
 
-- **v19.298(2026-07-03)**:MK 3-3-3 殘留根因修復 — inception_date 優先 + wb01 3Y fallback:
-  - **背景**:user 反饋「某基金成立超過 3 年但 MK 3-3-3 仍顯示不行」。v19.291 已修 timedelta 窗口(400→2000天),但仍有 2 個獨立根因未解:
+- **v19.298(2026-07-03)**: 3-3-3 殘留根因修復 — inception_date 優先 + wb01 3Y fallback:
+  - **背景**:user 反饋「某基金成立超過 3 年但  3-3-3 仍顯示不行」。v19.291 已修 timedelta 窗口(400→2000天),但仍有 2 個獨立根因未解:
     1. **`tab_fund_grp_health.py` 成立年數計算只用 NAV 序列首日**:保險子網域代碼（如 JFZN3）在 Streamlit Cloud 上因 IP 封鎖拿不到 MoneyDJ 保險子網域歷史 NAV → 序列短 → 首日偏新 → `_yrs_inc` 算出 < 3 年，即使 inception_date metadata 已在 FundClear/AllianzGI 抓到正確成立日也完全沒用到。
     2. **`ret_3y_ann` 沒有 wb01 fallback**:NAV 序列 < 756 筆時（序列太短），`calc_metrics` 算不出 `ret_3y_ann`，但 MoneyDJ wb01 的 "3Y" 欄位（三年累計報酬率）早已抓到且存在 `fd["perf"]["3Y"]`，卻從未被 `tab_fund_grp_health.py` / `services/health/report.py` / `services/health/replacement.py` 讀取當 fallback。
   - **修法（三處一致）**:
@@ -1968,8 +1968,8 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - `ui/tab5_data_guard.py`:修正 `build_signals()` 呼叫的 kwarg 名稱 (`flow_thr_yi`→`flow_thr`, `fx_thr_pct`→`fx_thr`)，消除 TypeError
   - `app.py`:APP_VERSION 字串從 `v19.45_MacroNavigator` 更新為 `v19.293_MacroNavigator`
 
-- **v19.291 MK 3-3-3「成立 0.1 年」誤判根因 + 全站自動掃描機制(2026-07-01)**:
-  - **背景**:user 截圖 JFZN3(摩根投資基金-多重收益基金 A 股)在本站 MK 3-3-3 顯示「❌ 成立 0.1 年 <3 年」,但同時提供 MoneyDJ 官網截圖證實該基金淨值歷史實際橫跨 2021/10/15~2026/06/29(近 5 年)。user 另外要求:「額外寫一個『自動檢查』的機制,以後如果又有人漏搬東西,測試會直接抓出來,不用等到你在正式環境上踩到才發現」(涵蓋資料一致性 + 程式碼健康兩面向)
+- **v19.291  3-3-3「成立 0.1 年」誤判根因 + 全站自動掃描機制(2026-07-01)**:
+  - **背景**:user 截圖 JFZN3(摩根投資基金-多重收益基金 A 股)在本站  3-3-3 顯示「❌ 成立 0.1 年 <3 年」,但同時提供 MoneyDJ 官網截圖證實該基金淨值歷史實際橫跨 2021/10/15~2026/06/29(近 5 年)。user 另外要求:「額外寫一個『自動檢查』的機制,以後如果又有人漏搬東西,測試會直接抓出來,不用等到你在正式環境上踩到才發現」(涵蓋資料一致性 + 程式碼健康兩面向)
   - **真根因**:v19.281 曾把 cnyes(`_src_cnyes_nav`)/ Morningstar(`_src_morningstar_nav`)的查詢窗口從 400 天(~13 月)延伸到 2000 天(~5.5 年),但**直接對 MoneyDJ 本身**(`yp004002.djhtm` 帶日期 A/B/C 三參數)的呼叫點漏做同樣延伸。實際 grep 全站 `timedelta(days=400)` 共 9 處全部殘留短窗口:`repositories/fund/sources.py` 7 處(`_src_fundclear_nav` / `_src_bank_platform_nav` / `_src_taiwanlife_nav` / `_src_franklin_nav` / `_src_tcb_nav` / `_src_sitca_nav` / `_src_insurance_subdomain_nav`)+ `repositories/fund/fund_orchestration.py` 2 處(`_fetch_fund_single` 的「2d. www.moneydj.com 主站」分支 + `fetch_fund_from_moneydj_url` 的「再查詢整年歷史」分支)。保單代碼(如 JFZN3)常見經這些直接 MoneyDJ 路徑取數,查詢窗口太短 → 只抓到近 1 個月資料 → `_compute_holding_years` 算出 0.1 年
   - **修法**:9 處 `timedelta(days=400)` 全改 `timedelta(days=2000)`,對齊 v19.281 cnyes/Morningstar 已做的窗口延伸,每處附註解說明沿革
   - **自動檢查機制(user 明確要求,兩面向都要)**:
@@ -1979,7 +1979,7 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
     - `requirements-dev.txt` 新增 `ruff>=0.15`(CI 環境需要能 `ruff check` 才能跑這個測試)
   - tests:`tests/test_undefined_name_scan.py`(新檔,1 test)+ `tests/test_nav_history_window.py` +1。組合套件(`test_undefined_name_scan.py` + `test_nav_history_window.py` + `test_fetch_holdings_fallback_chain.py` + `test_fund_health_report.py`)35 個全綠;用「刻意打壞 `fund_orchestration.py` 的 import → 確認新測試正確抓到 7 個壞點且不波及其他測試 → 還原 → 確認全綠」流程驗證過偵測能力與零副作用。Lint baseline 比對(stash 前後跑 `ruff check` 同 3 個檔案):111 → 111,確認未新增 lint 錯誤(既有 baseline 錯誤不在本次範圍)
   - **架構合規**:純資料層數值修正(`repositories/fund/`)+ 新增測試檔(`tests/`),無跨層 import、無新 SSOT 常數需登錄
-  - **下一步**:user 需在 production 重新查詢 JFZN3,確認 MK 3-3-3 不再顯示「成立 0.1 年」而是反映實際 ~5 年歷史;若「還有部分指標沒有看到」的問題仍存在,需要新的截圖才能進一步定位。資料一致性檢查(user「兩者都要」裡的另一半)目前由散落在 v19.287~291 各輪新增的 regression test 個別涵蓋,尚未有單一集中的資料一致性掃描機制——若之後還有類似「漏搬東西」但屬於資料層(而非程式碼層)的 bug,需與 user 進一步討論範圍再開工
+  - **下一步**:user 需在 production 重新查詢 JFZN3,確認  3-3-3 不再顯示「成立 0.1 年」而是反映實際 ~5 年歷史;若「還有部分指標沒有看到」的問題仍存在,需要新的截圖才能進一步定位。資料一致性檢查(user「兩者都要」裡的另一半)目前由散落在 v19.287~291 各輪新增的 regression test 個別涵蓋,尚未有單一集中的資料一致性掃描機制——若之後還有類似「漏搬東西」但屬於資料層(而非程式碼層)的 bug,需與 user 進一步討論範圍再開工
 
 - **v19.290 Alpha % 永遠 None 的真根因 — perf["1Y"] 沒接到已算好的 tr1y_pct(2026-07-01)**:
   - **背景**:v19.287/288 修完 fetch_holdings/fetch_risk_metrics/fetch_performance_wb01 的 import 後,production 截圖證實 Sharpe 1Y 已經抓到真實數字(0.32),但 Alpha % 仍固定顯示「—」。**user 敏銳發現**:同一頁下方「風險指標」表格另外顯示 `Alpha(1Y) = -0.12`,質疑「上下兩區塊有共同資料,為什麼一個有一個沒有」
@@ -2047,14 +2047,14 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - **下一步**:部署後看 TLZF9 banner —— 若 `來源:tcb_moneydj`(或其他短源,無 span-extend 字樣)且跨度仍短 → 代表 Morningstar/cnyes 對 TLZF9 在 production 確實查無資料,是資料源本身的限制,不再是程式邏輯漏洞;若顯示 `morningstar(span-extend)` 且跨度 > 300 天 → 這次真的修好了
 
 - **v19.283 Tab2 NAV 來源 + 跨度診斷 banner(2026-07-01)**:
-  - **背景**:user 截圖 TLZF9「MK 3-3-3 ❌ 成立 0.1 年」在 v19.281(NAV 窗口擴展 + span-extend)合併後**依然存在**,並問「請確定資料存放位置找到對的地方修改」
+  - **背景**:user 截圖 TLZF9「 3-3-3 ❌ 成立 0.1 年」在 v19.281(NAV 窗口擴展 + span-extend)合併後**依然存在**,並問「請確定資料存放位置找到對的地方修改」
   - **根因定位(讀 code 追蹤,非猜測)**:
     - `_compute_holding_years`(`services/health/report.py`)讀 `fd["series"]` 算年數 — 這條鏈路正確,問題不在計算端
     - `_fetch_fund_single`(`repositories/fund/fund_orchestration.py`,v19.281 已加 span-extend + `nav_span_days`/`data_source` 欄位)**是正確的資料存放位置**,但這兩個欄位算完後**從未在 UI 顯示** — user 和我都看不到「到底哪個來源贏、跨度多長、span-extend 有沒有觸發」,只能盲猜
     - 額外發現:`_fetch_fund_single` 中 www.moneydj.com 400 天窗口(step 2d)只在 `len(nav_s)<10` 才觸發 — 若更早的短源(如 insurance_subdomain,~1 月)以 `≥10` 筆數過關,連這條路徑都會被跳過,更凸顯「筆數把關無跨度檢查」是系統性設計缺口(v19.281 span-extend 已補在最後一關堵住,但無法補救「用哪個源」的可見性問題)
   - **修法(v19.283,純 UI 唯讀顯示,不重算,SSOT 合規)**:`ui/tab2_single_fund.py`「① 基本資料」banner 追加顯示 `mj_raw.get("data_source")` + `mj_raw.get("nav_span_days")`(換算年數)— 兩者皆 L1 orchestrator 已算好的既有欄位,L3 純讀取渲染,無新業務邏輯、無重複計算
   - tests:`tests/test_app_apptest.py::test_tab2_nav_source_banner_shows_data_source_and_span` 端到端(AppTest 真渲染)守 banner 顯示 `data_source` + `nav_span_days`。既有 Tab2 apptest 3 個全過
-  - **下一步**:部署後 user 看 Tab2 banner「來源:`X` ‧ 跨度 Y 天」即可判讀:若來源顯示 `morningstar(span-extend)`/`cnyes` 但 MK 3-3-3 仍錯 → 另有 bug;若來源仍是短源(如 `insurance_subdomain`)且跨度 < 300 天 → span-extend 在 production 未命中(可能 Morningstar/cnyes 對 TLZF9 在該環境查無資料),需要真實 production log 才能繼續往下修,而非在 sandbox 繼續猜測(proxy 403 無法驗證真實抓取)
+  - **下一步**:部署後 user 看 Tab2 banner「來源:`X` ‧ 跨度 Y 天」即可判讀:若來源顯示 `morningstar(span-extend)`/`cnyes` 但  3-3-3 仍錯 → 另有 bug;若來源仍是短源(如 `insurance_subdomain`)且跨度 < 300 天 → span-extend 在 production 未命中(可能 Morningstar/cnyes 對 TLZF9 在該環境查無資料),需要真實 production log 才能繼續往下修,而非在 sandbox 繼續猜測(proxy 403 無法驗證真實抓取)
 
 - **v19.282 持股明細 SSOT 共用 render + Tab2 常駐(2026-07-01)**:
   - **背景**:user 要求「單一基金也放持股資訊」+ 提醒守 SSOT。查核發現 Tab2(`tab2_single_fund` L1100)與 組合健檢(`fund_grp_health/investment` L156)**各有一份 byte-identical 的持股渲染** → 既有 SSOT 違規;且 Tab2 只在 `if _sectors or _tops` 才顯示,空持股靜默(user 誤以為沒功能)
@@ -2207,7 +2207,7 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
   - **P3-A3~A6**(`0fc6ef0` v19.262 PR #481 一單 4 commits + 1 fixup):
     - A3 📈 中期循環 → `ui/tab1_macro_midcycle.py`(-176 LOC,含 Z-Score 矩陣 23 指標 + L3 情境判斷卡)
     - A4 🎯 短線雷達 → `ui/tab1_macro_radar.py`(-245 LOC,10 燈雷達 + 流動性壓力預警引擎)
-    - A5 🌳 長期座標 → `ui/tab1_macro_longterm.py`(-293 LOC,美股流動性 6 卡 + MK 時鐘 + 資本防線 + 新聞)
+    - A5 🌳 長期座標 → `ui/tab1_macro_longterm.py`(-293 LOC,美股流動性 6 卡 + 時鐘 + 資本防線 + 新聞)
     - A6 ⚠️ 拐點警報 → `ui/tab1_macro_inflection.py`(-484 LOC,戰情室三儀表 + 持倉紅綠燈 + 拐點偵測中心 + 倒掛 SPX 回測)
     - fixup:3 source-string regression test(`test_grp_health_bugfixes` / `test_net_liquidity` / `test_tab1_no_unbound`)path 改新 sibling + 檔尾 EOF trim
   - **總計**:`ui/tab1_macro.py` **2963 → 1475 LOC(-1488, -50%)**,5 新檔(AI/中期/短線/長期/拐點)
@@ -2419,7 +2419,7 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
 
 - **前一版**：fix+refactor(fund) PR #280 @ 5b60ae0 v19.71 J3：修 ACCP138 FX 截圖 bug + 抽 currency normalize 共用 SSOT。**根因**：MoneyDJ 對部分保單基金（ACCP138 等）回傳 `currency='美元'`（中文）而非 ISO `'USD'`，組合健診 `_process_one_fund:153` 直接拼 `get_latest_fx('美元TWD=X')` → Yahoo/FRED/open.er-api 三鏈全敗 → 錯誤訊息洩露中文「FX 美元TWD 抓不到」。**user 實證「重複造輪子」**：3 個 Tab 各自寫了同款 `_CCY_NORMALIZE`（services/ledger_service:43 + ui/tab3_t7_ledger:241 + ui/tab2_single_fund v18.278），組合健診（Tab5）漏接 → bug。改動 3 檔 +64/-38：(1) 新增 `services/currency.py` SSOT — `CCY_NORMALIZE` dict + `normalize_ccy(raw, default="USD")` 純函式（純 dict O(1) lookup，零 IO/依賴），17 個中文→ISO 映射（美元/歐元/日圓/澳幣/紐幣/南非幣/瑞郎/新幣/加幣/英鎊/港幣/人民幣/台幣 各含正體別名）。(2) `services/ledger_service` 改 alias import 共用版（既有 `_CCY_NORMALIZE` / `_norm_ccy_pure` 名稱保留作向後相容，caller 零異動）。(3) `tab_fund_grp_health.py`：移除「原幣別 fallback」selectbox（user 要求），改 3-col → 2-col；`_process_one_fund` 套用 `normalize_ccy(fd.get("currency"))`；TWD 基金短路 `fx=1.0` 不打 API（鏡像 tab2 v18.278 設計）；fallback 寫死 `USD`。py_compile ✓ / pytest **443 passed 零回歸** / smoke **7 case**（normalize_ccy 中文+ISO+空+None+未知+default 覆蓋 / ledger_service 向後相容 / ACCP138 bug repro 確認 ccy=美元→USD）。**[邏輯]** SSOT 單一字典；組合健診中文→ISO；TWD 短路免抓 FX；fallback USD。**[邊界]** None/空→default USD；未知中文→回原值大寫不誤判；TWD 基金 fx=1.0 不誤觸 API；ledger_service alias 維持。**[效能]** O(1) dict lookup；TWD 基金省一次 HTTP；同上游 cache 不變。**[Debug]** 錯誤訊息現在顯示 ISO 碼便於排查；TWD 短路日誌清楚。**架構意義**：user 反映「資料打架/重複爬蟲」的擔憂在 currency normalize 這個小點得到實證與修復；但「請給完整 Streamlit 代碼版本」的請求被婉拒 — 兩 repo 共數百 .py 從記憶重寫必然大量幻覺且違背 user 自己提的「精準局部編輯」原則。下次撞到類似 SSOT 漏接時，先 grep 確認是否已有共用 helper 再決定抽出。User 上線驗證：reboot → 組合健診貼 ACCP138 多檔 → 應正常顯示而非 FX 抓不到。下一步候選：I5 跨 Tab 聯動延伸 / I6 ETF 投組↔總經 regime / 等 user 提新方向。
 
-- **前一版**：feat(fund) PR #279 @ 587a1e6 v19.70 J2：組合健診加入 MK 倉位 + 1Y 快算吃本金燈（user 要求「1+2：方法 A 快照吃本金 + MK 買點」雙吃本金判斷視圖）。改動 1 檔 +40/-4：(1) `_process_one_fund` 從 `fd.metrics.pos_label` 直讀 MK 倉位（大跌大買🔥/急跌穩買📈/小跌小買✅/正常波動區/小漲停利💰/急漲停利⚠️/大漲停利🔔），由 calc_metrics 既有計算（年高低 ÷ 3σ 加碼買點）；(2) 從 `nav_dict` 抓接近 365 天前 NAV 作 `nav_1y_ago`（找 ≤ 上次同期日期最近的點），`divs[0].amount` 作 `div_per_unit`，`dividend_freq` 字串映射 `_freq_map={"月配":12,"季配":4,"半年":2,"年配":1}` fallback 12，呼叫 `services.fund_service.calc_health_from_manual` 取 `health` 字串作「快算燈號（1Y）」；(3) 原「燈號 🧮」改名「燈號（全期 🧮）」，KPI 統計 `n_eat/n_warn/n_good` 同步改 key。py_compile ✓ / pytest **443 passed 零回歸**。**[邏輯]** 雙視圖互補：「燈號（全期）」= 完整持有期 TWD 回測（compute_dividend_twd_series，gap>2% 吃本金）；「快算（1Y）」= 1年快照 NAV 漲跌+配息率 vs 配息率（calc_health_from_manual，含息<配息→吃本金）；「MK 倉位」= 買賣時機（非吃本金）。**[邊界]** divs 空 / nav_1y_ago 無 / 例外 → ⚪ 資料不足（不爆）；dividend_freq 缺 → fallback 12；MK 倉位缺 → "—"；全程 try/except wrap。**[效能]** 純 in-memory dict 查找 + 既有 metrics 讀取 ~ms 級，零新增 IO。**[Debug]** 雙燈號讓 user 比對「最近 1Y 配息健康度」vs「整段持有期 TWD 損益」，MK 倉位明示是否在買賣點。設計沉澱：J 系列回應 user 對組合健診實用性疑慮，J1 補欄位（費用率/換匯/年均配息），J2 補吃本金雙視圖+MK 倉位，組合健診從「單一判斷」升級為「多角度比較」。User 上線驗證：reboot → 組合健診貼多檔代號 → 表格含「燈號（全期 🧮）」「快算燈號（1Y）」「MK 倉位」三個獨立燈號欄。下一步候選：H2 Stock 端 cold-start 效能 / I5 跨 Tab 聯動。
+- **前一版**：feat(fund) PR #279 @ 587a1e6 v19.70 J2：組合健診加入 倉位 + 1Y 快算吃本金燈（user 要求「1+2：方法 A 快照吃本金 + 買點」雙吃本金判斷視圖）。改動 1 檔 +40/-4：(1) `_process_one_fund` 從 `fd.metrics.pos_label` 直讀 倉位（大跌大買🔥/急跌穩買📈/小跌小買✅/正常波動區/小漲停利💰/急漲停利⚠️/大漲停利🔔），由 calc_metrics 既有計算（年高低 ÷ 3σ 加碼買點）；(2) 從 `nav_dict` 抓接近 365 天前 NAV 作 `nav_1y_ago`（找 ≤ 上次同期日期最近的點），`divs[0].amount` 作 `div_per_unit`，`dividend_freq` 字串映射 `_freq_map={"月配":12,"季配":4,"半年":2,"年配":1}` fallback 12，呼叫 `services.fund_service.calc_health_from_manual` 取 `health` 字串作「快算燈號（1Y）」；(3) 原「燈號 🧮」改名「燈號（全期 🧮）」，KPI 統計 `n_eat/n_warn/n_good` 同步改 key。py_compile ✓ / pytest **443 passed 零回歸**。**[邏輯]** 雙視圖互補：「燈號（全期）」= 完整持有期 TWD 回測（compute_dividend_twd_series，gap>2% 吃本金）；「快算（1Y）」= 1年快照 NAV 漲跌+配息率 vs 配息率（calc_health_from_manual，含息<配息→吃本金）；「倉位」= 買賣時機（非吃本金）。**[邊界]** divs 空 / nav_1y_ago 無 / 例外 → ⚪ 資料不足（不爆）；dividend_freq 缺 → fallback 12；倉位缺 → "—"；全程 try/except wrap。**[效能]** 純 in-memory dict 查找 + 既有 metrics 讀取 ~ms 級，零新增 IO。**[Debug]** 雙燈號讓 user 比對「最近 1Y 配息健康度」vs「整段持有期 TWD 損益」，倉位明示是否在買賣點。設計沉澱：J 系列回應 user 對組合健診實用性疑慮，J1 補欄位（費用率/換匯/年均配息），J2 補吃本金雙視圖+倉位，組合健診從「單一判斷」升級為「多角度比較」。User 上線驗證：reboot → 組合健診貼多檔代號 → 表格含「燈號（全期 🧮）」「快算燈號（1Y）」「倉位」三個獨立燈號欄。下一步候選：H2 Stock 端 cold-start 效能 / I5 跨 Tab 聯動。
 
 - **前一版**：fix+feat(fund) PR #278 @ a969967 v19.69 J1：macro KeyError 修復 + 組合健診欄位擴充。(1) Bug Fix：`tab1_macro.py:991` `phase["phase"]` KeyError 防衛 — 改 `phase = st.session_state.get("phase_info") or {}`，加 `if "phase" not in phase: st.warning + return`，消除 `phase_info` 為 None 或 `{}` 時整個 app 崩潰（此為 KeyError Traceback 截圖呈現的根因）。(2) Feat J1：組合健診 `_process_one_fund` 加 5 新欄位：`最高經理費%`（`fd.get("mgmt_fee")`，MoneyDJ 最高經理費(%)）、`配息頻率`（`fd.get("dividend_freq")`）、`年均配息 TWD🧮`（累積配息 ÷ 持有年數）、`年化淨值%🧮`（NAV 年化漲跌）、`換匯資訊🧮`（"1M TWD→X CCY @ rate"，顯示買入換匯方向）。`_render_health_table` 加 plotly 分組柱狀圖（≥2 檔才顯示）：年化配息率% / 含息年化% / 年化淨值% 三柱並排，zero 基線，容錯 try/except。改動 2 檔 +43 行。443 tests passed / py_compile ✓ / AST ✓。**[邏輯]** mgmt_fee/dividend_freq 從 fd 直讀（MoneyDJ 解析已有）；年均配息 = total_twd / max(years, 0.01)；換匯資訊用 buy_fx + principal_ccy；圖只在 ≥2 檔才渲染。**[邊界]** mgmt_fee/dividend_freq 缺 → "—"；years=0 → 除以 0.01 防炸；圖渲染失敗 → caption 不爆；phase_info None → warning + return 不爆。**[效能]** 純 in-memory 加欄 + plotly HTML ~ms 級。**[Debug]** 換匯資訊欄讓 user 一眼看「100萬TWD換多少外幣 / 用什麼匯率」；費用率 + 配息頻率對多基金橫向比較。User 上線驗證：Streamlit Cloud reboot → 總經 Tab 不再 KeyError 崩潰 → 組合健診貼多檔代號 → 表格含 5 新欄 + 比較圖。J1 收官（兩 issue 一 PR）。下一步候選：H2 Stock 端效能。
 
@@ -2468,11 +2468,11 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
 - **feat(macro) PR #256 @ 4b6c3de v19.47**：美股流動性 × 熱錢監測 + 台股熱錢降級 archive。User 反饋兩點：① Fund 以美股美元為主，⑥ 台股熱錢監測放錯位置（USD 計價境外美股基金台股本土訊號影響有限）② 詢問「美股熱錢是不是 FED 升降息？」澄清：美股熱錢 ≠ FED 升降息，FED 升降息是政策利率（上游因），美股熱錢是資金流向結果（下游果）= 流動性 + 信用 + 情緒三軸。改動：(1) 新增 `services/us_liquidity_engine.py` 220 行 + 24 case tests：6 指標 ThreadPoolExecutor 並行 — 流動性 (M2 YoY/WALCL/RRP) × 信用 (HY OAS BAMLH0A0HYM2/HYG-LQD 比) × 情緒 (AAII bull-bear scrape)；每 fetcher 獨立 try/except 失敗回 `{'_err': '...'}`；`fetch_us_liquidity_snapshot(api_key)` 一次回 6 指標 dict。(2) `ui/tab1_macro.py:1982+` 新增 ⑥ 美股流動性 × 熱錢監測 expander（6-chip 2×3 grid + 失敗 fetcher 詳情 expander 仿 Stock v18.194 fail trace）+ 既有台股熱錢從 ⑥ 編號降級為「📦 ARCHIVED — 台股熱錢監測（境外美股基金可略過）」+ caption 說明降級原因（hot_money 模組保留磁碟）；AI 摘要 caption 同步 ⑥ 台股熱錢 → ⑥ 美股流動性熱錢。AST ✓ / py_compile ✓ / ruff 新檔 All checks passed（tab1_macro 12 個 pre-existing baseline 不變動）/ pytest 24 new + 102 regression (macro_service_inflection + macro_explain + macro_score_calibration + eval_macro_consensus) 全綠。**[邏輯]** 6 指標三角獨立計算，色彩分級依各指標歷史 percentile 經驗閾值；**[邊界]** AAII regex 對頁面格式變動敏感→失敗回 `_err` 不阻斷其他 5 指標、FRED key 缺則所有 FRED 指標 silent fail；**[效能]** ThreadPoolExecutor max_workers=6 每 task 20s timeout 總 wallclock ≈ max ~3-5s；**[Debug]** 失敗詳情 expander 列每個 `_err` 讓 user 截圖直接定位 FRED key 缺/Yahoo timeout/AAII 頁面改版。下一步：user 上線確認 6 chip 渲染正常 + AAII scrape 命中率（不行 → 候選備援源 investing.com / MarketWatch）。
 
 - **perf(macro) PR #255 @ 36b68d3 v19.46**：`fetch_all_indicators` 內 DGS 3 條 + forex 3 對並行化（省 ~12s）。問題：user 反饋總經面板載入慢；Explore 確認 `services/macro_service.py` 內 26+ FRED ID + forex 全是序列抓取無並行。改動：加 `from concurrent.futures import ThreadPoolExecutor as _TPE_macro`；DGS10/DGS2/DGS3MO 三條 FRED 用 `ThreadPoolExecutor(max_workers=3)` submit→result（原 3× ~3s → 並行 max ~3s）；3 個 forex pair (EURUSD/JPY/CNH) dict-comprehension submit + 預抓 `_fx_cache` dict 餵下游 for-loop 業務邏輯不動（同省 ~6s）。函數簽名 / 回傳結構 / 呼叫端介面均不變。pytest 78 passed in 14.16s (test_macro_service_inflection + test_macro_explain + test_macro_score_calibration + tests/test_eval_macro_consensus)。預估 `fetch_all_indicators` 總時間 ~10-20s → ~5-10s（省 ~50%）。跳過項目（Explore 二次確認後撤回）：① `fetch_all_indicators` 加 `@st.cache_data` — 已是 button 觸發 + session_state 存結果，rerun 不會重打；② 雷達 ↔ 拐點 dedup — `tab1_macro.py:288/460` 已有 `_radar_v1921_top` session_state 快取已 dedup。
-- **feat(macro) PR #254 @ 0a0cbc4 v19.45**：總經導航卡 — 上方 4 欄 verdict 摘要（仿台股「震盪整理｜謹慎觀望」UX）。新增 `_render_macro_navigator(ind, phase, fred_key)` ~145 行，渲染 4-col 卡：🌍 總經 / ⚡ 短線雷達 / 🎯 拐點偵測 / 🕐 美林時鐘。資料源 zero new IO：總經=`phase_info`、短線=`summarize_radar()` via `_radar_v1921_top` cache、拐點=`detect_turning_points()` 5 訊號計票、MK=`classify_phase(ind)` 四象限。4 個 try/except 獨立 graceful；FRED key 不足 → 短線+拐點 ⬜「等待 FRED 載入」。零既有功能變動：① / ② / ④ / MK 4 個 full panel 完整保留供細節查看。tests test_risk_radar 79 passed；AST/py_compile/ruff 49=49 baseline 持平。下一步：user 上線後確認 4 卡顯示正常 → 可選後續加 sparkline / 點擊滾動到對應面板。
-- **feat(macro) PR #253 @ 26b9e16 v19.44**：上方 4 面板 reorder — MK 時鐘上移至 ② 拐點後（純切片重排 6 個 indent-12 區塊，行數 2114 持平）。新順序：① 戰情室 → ④ 短線雷達 → ② 拐點偵測 → MK 時鐘 → ⑤ 流動性 → ⑥ 熱錢 → ③ 即時 → AI。對齊 user spec「總經 / 短期 / 拐點 / 美林時鐘」。pytest 419 passed。
+- **feat(macro) PR #254 @ 0a0cbc4 v19.45**：總經導航卡 — 上方 4 欄 verdict 摘要（仿台股「震盪整理｜謹慎觀望」UX）。新增 `_render_macro_navigator(ind, phase, fred_key)` ~145 行，渲染 4-col 卡：🌍 總經 / ⚡ 短線雷達 / 🎯 拐點偵測 / 🕐 美林時鐘。資料源 zero new IO：總經=`phase_info`、短線=`summarize_radar()` via `_radar_v1921_top` cache、拐點=`detect_turning_points()` 5 訊號計票、=`classify_phase(ind)` 四象限。4 個 try/except 獨立 graceful；FRED key 不足 → 短線+拐點 ⬜「等待 FRED 載入」。零既有功能變動：① / ② / ④ /  4 個 full panel 完整保留供細節查看。tests test_risk_radar 79 passed；AST/py_compile/ruff 49=49 baseline 持平。下一步：user 上線後確認 4 卡顯示正常 → 可選後續加 sparkline / 點擊滾動到對應面板。
+- **feat(macro) PR #253 @ 26b9e16 v19.44**：上方 4 面板 reorder — 時鐘上移至 ② 拐點後（純切片重排 6 個 indent-12 區塊，行數 2114 持平）。新順序：① 戰情室 → ④ 短線雷達 → ② 拐點偵測 → 時鐘 → ⑤ 流動性 → ⑥ 熱錢 → ③ 即時 → AI。對齊 user spec「總經 / 短期 / 拐點 / 美林時鐘」。pytest 419 passed。
 - **feat(radar) PR #252 @ 68e143f v19.43**：短線雷達 fail trace 寫入 UI note → user 無需 log 即可看根因。問題：VIX 期限結構 + Put/Call 兩個 stress 早期訊號 4 層 fallback 全掛（Yahoo ^VIX3M/^VXV/^CPC/^CPCE deprecated + CBOE/stooq 失敗），Streamlit Cloud 免費版只給 build log，user 無從查根因 → 8 綠 2 ⬜ 被判平靜疑似誤判。改動：`_fetch_cboe_csv` / `_fetch_stooq_csv` 加 `trace: list[str] | None` 收集 HTTP code / 欄位不符 / No data；`_resolve_vix3m` / `_resolve_put_call` 回傳 3-tuple `(series, src, trace)`；`_signal_vix_term_struct` / `_signal_put_call_ratio` 全源失敗時把 trace join 進 note。零行為變化（fallback 順序與閾值完全保留）。tests：4 個既有 _resolve 測試 unpack 改 3-tuple + 新增 `TestFailTraceSurfacedInNote` 2 條。79 passed。下一步：user 截 ⬜ card → 看到 4 層真實失敗碼 → 對症補第 5 層備援源。
-- **feat(macro) PR #251 @ fb4622d v19.42**：拆除單一 tab 包裝 → ① 戰情室（總經）成為頁面首屏。user v19.41 後仍反饋「上方仍沒有總經 短期 拐點面板」— 根因：Streamlit 單一 tab strip + roadmap caption 擋在 ① 戰情室上方。改動：`(tab_main,) = st.tabs([...])` 改用 `contextlib.nullcontext()`，所有 `with tab_main:` 區塊保持縮排不變（零功能變動）；roadmap caption 移除，由 ①②③④⑤⑥ 編號 heading 隱含順序。新視覺流：資料 banner → ① 戰情室（總經）→ ④ 短期 → ② 拐點 → ⑤⑥ → ③ → MK 時鐘。
-- **feat(macro) PR #250 @ 016dd63 v19.41**：總經面板上移至 tab 首屏 — ③ 🔬 即時訊號決策矩陣 從戰情首頁 tab 外（L799）下移至 tab 內結尾（MK 時鐘前），讓 ① 戰情室（總經）成為 tab 首屏。新順序：① 總經 → ④ 短期 → ② 拐點 → ⑤ 流動性 → ⑥ 台股熱錢 → ③ 即時決策。caption 同步更新；指標教學手冊指引改指 📖 說明書 Tab §11 宏觀教學文獻。
+- **feat(macro) PR #251 @ fb4622d v19.42**：拆除單一 tab 包裝 → ① 戰情室（總經）成為頁面首屏。user v19.41 後仍反饋「上方仍沒有總經 短期 拐點面板」— 根因：Streamlit 單一 tab strip + roadmap caption 擋在 ① 戰情室上方。改動：`(tab_main,) = st.tabs([...])` 改用 `contextlib.nullcontext()`，所有 `with tab_main:` 區塊保持縮排不變（零功能變動）；roadmap caption 移除，由 ①②③④⑤⑥ 編號 heading 隱含順序。新視覺流：資料 banner → ① 戰情室（總經）→ ④ 短期 → ② 拐點 → ⑤⑥ → ③ → 時鐘。
+- **feat(macro) PR #250 @ 016dd63 v19.41**：總經面板上移至 tab 首屏 — ③ 🔬 即時訊號決策矩陣 從戰情首頁 tab 外（L799）下移至 tab 內結尾（時鐘前），讓 ① 戰情室（總經）成為 tab 首屏。新順序：① 總經 → ④ 短期 → ② 拐點 → ⑤ 流動性 → ⑥ 台股熱錢 → ③ 即時決策。caption 同步更新；指標教學手冊指引改指 📖 說明書 Tab §11 宏觀教學文獻。
 - **feat(macro) PR #249 @ 8293d62 v19.40 PR2**：教學面板搬遷至 📖 說明書 Tab §11 宏觀教學文獻（tab1 −361 行 / 2465→2104；tab6 +381 行 / 578→959）— §A 🎯 為什麼是這位階 / §B 📊 23指標教學手冊 / §C 📈 歷史對照圖 / §D 👉 加扣分明細（_macro_23items stash）/ §E 📊 變數重要性（_macro_var_importance stash）。stash 契約：tab1 寫入 _macro_ind，tab6 讀取並重現面板；stash 空 → 友善提示。1826 passed / 5 skipped。roadmap PR1→PR2 全部完成。
 - **feat(macro) PR #247 @ 13026cc v19.39 PR1C**：archive 8 inline 面板（−830 行 / 3296→2466）— 🌡️ 風險溫度計 4 cards / V4 複合 / 🎯 風險評分校準 / 🧮 景氣分數校準 / 🧭 景氣羅盤 / 📅 Tier A / 🔗 因果鏈 Sankey / 📊 細項燈號回測。Stash 介面契約完整保留（_macro_compass / _macro_sankey / _macro_subsector_bt / _cal_*）— AI 摘要 widget 繼續吃齊。Cleanup：移除 3 個 unused imports + sc/ph_c 變數；2 個 archive-dependent tests 改 @pytest.mark.skip。
 - **feat(macro) PR #245 @ a991f4f v19.38 PR1B**：archive 10+ inline 面板（−477 行 / 3772→3295）— 7 維獨立合議 / 7 子領域燈號 / 四大類別 / Hero 卡 / 景氣時鐘 / 天氣 / 風險警示 / 美林時鐘 / T1 事件衝擊。

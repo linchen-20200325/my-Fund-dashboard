@@ -22,7 +22,7 @@
 ⚠️ **第 5 個顯示點的處置**（2026-08-06 稽核點名 → 2026-08-07 user 拍板）：
 Tab⑤ 下半頁的 💊 持倉健診會 embed `ui/tab_fund_grp_health._render_health_3tables`，
 其中「🧭 核心 / 衛星」走的是**另一把尺** ——
-`services/health/asset_class.classify_core_satellite`（MoneyDJ 基金類別 + MK 3-3-3，
+`services/health/asset_class.classify_core_satellite`（MoneyDJ 基金類別 +  3-3-3，
 三態含「待定」）。
 
 那不是漏收，是**不同問題**：本模組回答「這筆錢的配置定位」（使用者自己在 Sheet

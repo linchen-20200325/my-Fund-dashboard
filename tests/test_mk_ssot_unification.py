@@ -1,4 +1,4 @@
-"""tests/test_mk_ssot_unification.py — MK 老師 1Y SSOT 跨 tab 一致性守衛(v19.148)
+"""tests/test_mk_ssot_unification.py — 老師 1Y SSOT 跨 tab 一致性守衛(v19.148)
 
 User 截圖回報:同一檔 FTZU8 在「健診總表(全期自算)」顯示 🔴 吃本金,
 在「健診摘要表(1Y MoneyDJ)」顯示 🟢 健康 — SSOT 違憲。
@@ -25,7 +25,7 @@ from services.health.dividend import (
 # ──────────────────────────────────────────────────────────
 class TestCheckEatingPrincipal1yMk:
     def test_nested_shape_eating(self):
-        """Nested {moneydj_raw, metrics} 形 → MK fund_checkup 路徑。"""
+        """Nested {moneydj_raw, metrics} 形 →  fund_checkup 路徑。"""
         fund = {
             "moneydj_raw": {"moneydj_div_yield": 8.0},
             "metrics": {"ret_1y": 5.0},
@@ -115,7 +115,7 @@ class TestCheckEatingPrincipal1yMk:
 
 
 # ──────────────────────────────────────────────────────────
-# 2. check_333_principle — MK 老師 3-3-3 長線輔助
+# 2. check_333_principle — 老師 3-3-3 長線輔助
 # ──────────────────────────────────────────────────────────
 class TestCheck333Principle:
     def test_pass_when_years_ge_3_and_return_gt_7(self):
@@ -202,7 +202,7 @@ class TestCrossCallerSSOT:
         # 只守 tab_fund_grp_health.py:_process_one_fund 不再 import 它做 verdict
         assert "from services.fund_service import calc_health_from_manual" not in _src_grp, (
             "tab_fund_grp_health 不應再 import calc_health_from_manual"
-            "(v19.148 已移除自算 1Y 路徑改走 MK SSOT)"
+            "(v19.148 已移除自算 1Y 路徑改走  SSOT)"
         )
 
     def test_old_misleading_column_removed(self):
@@ -226,6 +226,6 @@ class TestCrossCallerSSOT:
             "燈號（全期 🧮）column 應已從 row dict 移除"
         )
         # 新 column 存在
-        assert '"吃本金燈號 (1Y · MK)":' in _src_grp, (
-            "新 MK SSOT column「吃本金燈號 (1Y · MK)」應存在"
+        assert '"吃本金燈號 (1Y · )":' in _src_grp, (
+            "新  SSOT column「吃本金燈號 (1Y · )」應存在"
         )

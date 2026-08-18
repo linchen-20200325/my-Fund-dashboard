@@ -166,7 +166,7 @@ class TestComputeHoldingYearsSeriesTruthValueBugV191:
     根因:pandas Series 在 boolean context 會 raise
     『The truth value of a Series is ambiguous』。
     `fd.get("series") or other` 在 series 是非空 Series 時就會炸,
-    except 吞掉 → _compute_holding_years 永遠回 None → MK 3-3-3 全站「資料不足」。
+    except 吞掉 → _compute_holding_years 永遠回 None →  3-3-3 全站「資料不足」。
     """
 
     def test_non_empty_series_does_not_raise(self):

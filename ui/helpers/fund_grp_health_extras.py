@@ -6,7 +6,7 @@
 - `investment.py`(212 LOC)— ④ 投資試算 + ⑤ TER/持股
 - `correlation.py`(120 LOC)— ⑥ 相關性矩陣
 - `risk.py`(205 LOC)— ⑦ HWM σ + ⑧ 風險對比 + ⑨ -2σ 警示
-- `signals.py`(257 LOC)— ⑩ MK + ⑪ Bollinger
+- `signals.py`(257 LOC)— ⑩ + ⑪ Bollinger
 - `ai.py`(426 LOC)— ⑫ AI 跨檔 + ⑬ 個股新聞 + ⑭ 三率穿透
 - `__init__.py`(127 LOC)— 主入口 render_fund_grp_health_extras + re-export 全部
 

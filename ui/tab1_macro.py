@@ -1459,7 +1459,7 @@ def render_macro_tab() -> None:
         st.divider()
         st.markdown("## 🔎 詳細資料與說明")
 
-        # v19.41 MOVED: ③ 🔬 即時訊號 + 決策矩陣 已移至 tab 內結尾（MK 時鐘前）
+        # v19.41 MOVED: ③ 🔬 即時訊號 + 決策矩陣 已移至 tab 內結尾（時鐘前）
         # 改動原因：user 反饋「總經、短期、拐點 三個面板 — 總經放在最上方」，
         # ③ expander 原位於 tab 外擋在 ① 戰情室（總經）之前，下移後 tab 首屏即為總經面板
 

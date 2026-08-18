@@ -109,7 +109,7 @@ def _src_fundclear_nav(code: str) -> pd.Series:
         import datetime as _dt
         end_d = _dt.date.today()
         # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-        # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+        # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
         start_d = end_d - _dt.timedelta(days=2000)
         url = (
             f"https://www.fundclear.com.tw/SmartFundAPI/api/FundAjax/GetFundNAV"
@@ -465,7 +465,7 @@ def _src_allianzgi_meta(code: str) -> dict:
     `mgmt_fee` / `total_expense_ratio` 回傳，還標 `source="AllianzGI:ifund_meta"`。
 
     這比同批刪掉的 `_src_allianzgi_nav` 第 3 段更危險，因為它污染的是**meta**：
-    - `inception_date` → MK 3-3-3 的「成立滿 3 年」條件
+    - `inception_date` →  3-3-3 的「成立滿 3 年」條件
     - `nav_latest` → KPI 卡的最新淨值
     - `total_expense_ratio` → 費用率比較
     而呼叫點 `fund_orchestration.py` 的條件是
@@ -1218,7 +1218,7 @@ def _src_bank_platform_nav(base_code: str) -> "pd.Series":
 
     end_d   = _dt_bp.date.today()
     # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
     start_d = end_d - _dt_bp.timedelta(days=2000)
     _hdrs_bp = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -1753,7 +1753,7 @@ def _src_taiwanlife_nav(code: str) -> "pd.Series":
     _code = code.upper().strip()
     end_d   = _dt_tl.date.today()
     # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
     start_d = end_d - _dt_tl.timedelta(days=2000)
 
     _hdrs_tl = {
@@ -1901,7 +1901,7 @@ def _src_franklin_nav(code: str) -> "pd.Series":
     # Step 3: Franklin TW nav endpoint（備用，部分基金有效）
     end_d   = _dt.date.today()
     # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
     start_d = end_d - _dt.timedelta(days=2000)
     _nav_urls = [
         f"https://www.franklintempleton.com.tw/api/fund/nav?code={_code}"
@@ -2440,7 +2440,7 @@ def _src_tcb_nav(code: str) -> pd.Series:
     from repositories.fund.nav_metrics import _parse_nav_html
     today = _dt.date.today()
     # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
     start = today - _dt.timedelta(days=2000)
 
     # ── 優先嘗試原始 wf01/wb02 路徑（境內/境外通用，子網域限制最少）
@@ -2743,7 +2743,7 @@ def _src_sitca_nav(code: str) -> pd.Series:
         import datetime as _dt
         today = _dt.date.today()
         # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-        # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+        # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
         start = today - _dt.timedelta(days=2000)
         url = (f"https://www.sitca.org.tw/ROC/Industry/IN2213.aspx"
                f"?txtFundCode={code}"
@@ -3130,7 +3130,7 @@ def _src_insurance_subdomain_nav(code: str) -> pd.Series:
     from repositories.fund.nav_metrics import _parse_nav_html
     today = _dt.date.today()
     # v19.291:400d(~13 月)→ 2000d(~5.5 年),對齊 v19.281 cnyes/Morningstar 已做的窗口延伸
-    # ——本函式先前漏做,是保單代碼(如 JFZN3)MK 3-3-3「成立 0.1 年」誤判的根因之一
+    # ——本函式先前漏做,是保單代碼(如 JFZN3) 3-3-3「成立 0.1 年」誤判的根因之一
     start = today - _dt.timedelta(days=2000)
 
     for portal in portals:

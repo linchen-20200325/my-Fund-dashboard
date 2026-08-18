@@ -1,8 +1,8 @@
 # mk_dashboard.py — v18.12
-# MK郭俊宏存股策略「智能戰情室」
+# 老師存股策略「智能戰情室」
 # 重構目標：以「決策導向」呈現核心衛星 / 健康度 / 買賣區間，新手也能看懂。
 #
-# v18.12 增量（對齊 MK Phase 3 共同基金規格）：
+# v18.12 增量（對齊  Phase 3 共同基金規格）：
 # - 核心新增 Principal_Erosion 紅燈：連續 3 個月淨值滾動報酬皆為負（動能轉弱，非配息吃本金）
 # - 核心新表格欄：年化波動(1Y%)，並依 <10/15/20% 三段標示低中高波動
 # - 衛星新增 Benchmark_Lag 黃燈：連續兩季落後基準（預設 SPY，可切 QQQ）
@@ -11,7 +11,7 @@
 # v18.11 增量：
 # - 補三紅綠燈：夏普<0 紅燈 / 衛星 1M+3M 雙負黃燈 / -2σ 深綠超跌價
 # - 表格加欄：夏普值、-2σ超跌價、衛星 1M/3M 動能、Sparkline 走勢迷你圖
-# - KPI 卡新增「核心/衛星配置比例 vs MK 建議 80/20」
+# - KPI 卡新增「核心/衛星配置比例 vs 建議 80/20」
 #
 # 設計原則（呼應 CLAUDE.md §2 §4）：
 # - 純函式、無 @st.cache_data（STATE.md 鐵律）
@@ -39,7 +39,7 @@ def tag_mk_class(fund: dict) -> str:
 
     原本這裡只讀 `is_core`、完全無視 `policy_tier`：使用者在 Sheet 標了 `core`
     的基金，在保單卡片顯示「🛡️核心」（那裡走 resolve_core_flag）、在檔數 KPI 與
-    MK 戰情室卻被算成衛星，同一檔在同一頁兩種身分。
+    戰情室卻被算成衛星，同一檔在同一頁兩種身分。
 
     附帶修掉的第二個坑：舊版 `is_core is None` 回 "Unknown"，而下游三處
     （`ui/helpers/portfolio/health.py` 的核心 / 衛星檔數、本檔核心戰情室與波段
@@ -55,7 +55,7 @@ def tag_mk_class(fund: dict) -> str:
 def tag_health_check(fund: dict) -> str:
     """Health_Check：Sharpe_Warning / Warning / Weak / Healthy / N/A。
 
-    規則（v18.11 同步 MK 規格三條紅綠燈；v19.402 §1 修 B 輸入）：
+    規則（v18.11 同步 規格三條紅綠燈；v19.402 §1 修 B 輸入）：
       A. sharpe < 0                        → Sharpe_Warning（承擔風險卻沒賺錢，最強警訊）
       B. 含息總報酬 < annual_div_rate      → Warning（賺息賠本／吃本金）
       C. nav < ma60 且 ma20 < ma60         → Weak（跌破季線且下彎）
@@ -175,7 +175,7 @@ def _quarter_rets_from_series(s) -> Optional[tuple]:
 def tag_benchmark_lag(fund: dict, bench_series) -> str:
     """Benchmark_Lag（衛星）：Lag / OK / N/A。
 
-    MK 規格：「連續兩季落後大盤」→ 🟡 績效落後警訊。
+    規格：「連續兩季落後大盤」→ 🟡 績效落後警訊。
     衛星 q1, q2 兩季季報酬皆 < 基準同期 → Lag。
     bench_series 取不到時回 N/A，不阻斷其他標籤。
     """
@@ -280,7 +280,7 @@ def build_mk_dataframe(portfolio_funds: list, bench_series=None) -> pd.DataFrame
             "Price_Zone": zone,
             "Principal_Erosion": principal,
             "Benchmark_Lag": bench_lag,
-            "MK體檢結論": _verdict_text(mk_class, health, momentum, zone,
+            "體檢結論": _verdict_text(mk_class, health, momentum, zone,
                                        principal=principal, bench_lag=bench_lag),
             # 隱藏欄（給篩選用）
             "_std_1y": _safe_float(m.get("std_1y")),
@@ -427,20 +427,20 @@ _CORE_COLS = [
     "代碼", "標的名稱", "走勢(60D)", "目前市價",
     "含息總報酬(1Y%)", "年化配息率(%)", "夏普值", "年化波動(1Y%)",
     "便宜價(-1σ)", "超跌價(-2σ)", "停利價(+2σ)", "季線(60MA)",
-    "MK體檢結論",
+    "體檢結論",
 ]
 
 _SAT_COLS = [
     "代碼", "標的名稱", "走勢(60D)", "目前市價",
     "含息總報酬(1Y%)", "夏普值", "近1M(%)", "近3M(%)",
     "便宜價(-1σ)", "超跌價(-2σ)", "停利價(+2σ)",
-    "MK體檢結論",
+    "體檢結論",
 ]
 
 _333_COLS = [
     "代碼", "標的名稱", "走勢(60D)", "目前市價",
     "含息總報酬(1Y%)", "年化配息率(%)", "夏普值", "年化波動(1Y%)",
-    "便宜價(-1σ)", "超跌價(-2σ)", "MK體檢結論",
+    "便宜價(-1σ)", "超跌價(-2σ)", "體檢結論",
 ]
 
 _COL_CONFIG = {
@@ -479,8 +479,8 @@ _COL_CONFIG = {
     "季線(60MA)": st.column_config.NumberColumn(
         "季線(60MA)", format="%.2f",
         help="60 日移動平均，跌破且下彎代表中期趨勢轉弱"),
-    "MK體檢結論": st.column_config.TextColumn(
-        "MK體檢結論",
+    "體檢結論": st.column_config.TextColumn(
+        "體檢結論",
         help="融合 Health_Check + Momentum + Price_Zone 的白話文建議"),
 }
 
@@ -664,7 +664,7 @@ def _render_333_tab(df: pd.DataFrame) -> None:
 # §3 主入口
 # ════════════════════════════════════════════════════════════
 def render_mk_war_room(portfolio_funds: Optional[list] = None) -> None:
-    """掛在 Tab3 頂部的「MK 智能戰情室」面板。"""
+    """掛在 Tab3 頂部的「智能戰情室」面板。"""
     st.markdown("### 🎯 策略3 智能戰情室")
     st.caption(
         "依 策略3 存股法（核心衛星 × 以息養股 × 標準差找買點）"

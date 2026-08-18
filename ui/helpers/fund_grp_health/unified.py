@@ -1,6 +1,6 @@
 """ui/helpers/fund_grp_health/unified.py — 健診總表寬表合併器(v19.408)。
 
-user 要求:組合健診原本對同一批基金重複畫 3 張逐檔表(HWM σ / 風險對比 / MK 買賣點),
+user 要求:組合健診原本對同一批基金重複畫 3 張逐檔表(HWM σ / 風險對比 / 買賣點),
 去重複合併進「健診總表」成一張大表。本模組提供純函式合併器(無 streamlit,可單元測試):
 把 3 組 by-code 欄位 join 成 (欄序, code→欄值),現價等重複欄「先到先得」去重。
 
@@ -66,10 +66,10 @@ def sharpe_provenance_by_code(funds: list) -> dict:
 def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tuple:
     """回傳 (col_order, combined)。
 
-    - col_order:list[str],新欄依 HWM σ → 風險 → MK 出現順序、去重後的欄名。
-    - combined:dict[code -> {欄名: 值}],同名欄「先到先得」(如「現價」HWM 版優先,MK 版略過)。
+    - col_order:list[str],新欄依 HWM σ → 風險 → 出現順序、去重後的欄名。
+    - combined:dict[code -> {欄名: 值}],同名欄「先到先得」(如「現價」HWM 版優先,版略過)。
 
-    phase/score 給 MK 訊號用(由呼叫端從 session_state.phase_info 取);缺則 MK 訊號欄 '—'。
+    phase/score 給 訊號用(由呼叫端從 session_state.phase_info 取);缺則 訊號欄 '—'。
     """
     from ui.helpers.fund_grp_health.capture import capture_by_code
     from ui.helpers.fund_grp_health.risk import hwm_sigma_by_code, risk_compare_by_code
@@ -110,9 +110,9 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tupl
 
 # 合併大表(①②③ 去重複)欄序 + 各欄來源(SSOT)。v19.411。
 # source:health(① 4D/6F/3-3-3)/ div(② 配息 official + 每月配息 + 換標的)/
-#         extra(σ/HWM/MK 買賣點,build_merged_extra_columns 產物)/ base(③ 健診總表本身)。
+#         extra(σ/HWM/買賣點,build_merged_extra_columns 產物)/ base(③ 健診總表本身)。
 # 去重原則:同一指標只留一份 —— Sharpe/Sortino/Calmar/Alpha 用 ①(extra 版略);
-# 吃本金/MK 3-3-3 用 ③(base;②①的同義欄略);現價由 extra 提供。
+# 吃本金/ 3-3-3 用 ③(base;②①的同義欄略);現價由 extra 提供。
 _UNIFIED_FRONT: list = [
     # ① 分類 + 評分
     ("基金類別", "health"), ("核心/衛星", "health"), ("分類依據", "health"),
@@ -132,8 +132,8 @@ _UNIFIED_FRONT: list = [
     ("1Y 含息 %", "div"), ("1Y 來源", "div"), ("年化配息率 %", "div"),
     ("每月配息 (TWD)", "div"), ("每月配息單位數", "div"), ("配息來源", "div"),
     # 判定(吃本金/換標的/3-3-3)
-    ("吃本金燈號 (1Y · MK)", "base"), ("換標的建議", "div"), ("MK 3-3-3 篩", "base"),
-    # σ 位階 / MK 買賣點(extra;Sharpe/Sortino/Calmar/Alpha 已由 ① 提供故此處不重列)
+    ("吃本金燈號 (1Y · )", "base"), ("換標的建議", "div"), (" 3-3-3 篩", "base"),
+    # σ 位階 / 買賣點(extra;Sharpe/Sortino/Calmar/Alpha 已由 ① 提供故此處不重列)
     ("現價", "extra"), ("HWM", "extra"), ("距 HWM %", "extra"), ("σ rank", "extra"),
     ("基期", "extra"),   # v19.421 高/中/低基期標籤(由 σ rank 分類,一眼可讀)
     ("HWM 位階", "extra"), ("σ (年化%)", "extra"), ("Beta", "extra"),
@@ -194,7 +194,7 @@ def compute_switch_columns(row: dict) -> dict:
     _sh = row.get("Sharpe 1Y")
     _dd = row.get("Max DD %")
     _vm = row.get("vs 大盤%")
-    _eat = row.get("吃本金燈號 (1Y · MK)")
+    _eat = row.get("吃本金燈號 (1Y · )")
     _cov: dict = {}
     _sc = switch_score(_tr, _sh, _dd, _vm, coverage_out=_cov)
     return {"換標策略分": _sc,
@@ -243,10 +243,10 @@ def compute_nav_fx_column(row: dict, fx_map: dict) -> dict:
 
 def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
                             extra_by_code: dict, current_regime=None):
-    """把 ①②③ + σ/風險/MK 依 code join 成一張去重複寬表(§1:缺欄留 None)。
+    """把 ①②③ + σ/風險/依 code join 成一張去重複寬表(§1:缺欄留 None)。
 
     - base_df:③ 健診總表 DataFrame(含 code 欄 + 全期實際/年化 self-calc + 持有 meta)。
-    - health_by_code / div_by_code / extra_by_code:①/②/σ風險MK 的 {code: {欄:值}}。
+    - health_by_code / div_by_code / extra_by_code:①/②/σ風險的 {code: {欄:值}}。
 
     欄序:code, 基金名 → _UNIFIED_FRONT(①②+extra 去重)→ 其餘 base ③ 欄(持有 meta,末端)。
     回傳新 DataFrame(欄固定、依 base_df 的 code 順序)。
@@ -310,7 +310,7 @@ def build_unified_health_df(base_df, health_by_code: dict, div_by_code: dict,
     return df
 
 
-# ①② 併入後需轉 numeric 的欄(extra σ/MK 欄為預格式化字串,保持字串不轉)
+# ①② 併入後需轉 numeric 的欄(extra σ/欄為預格式化字串,保持字串不轉)
 _UNIFIED_NUMERIC: list = [
     "4D Score", "Sharpe 1Y", "Sortino", "Calmar", "Alpha %", "費用率 %",
     "Max DD %", "3Y 年化 %", "5Y 年化 %",
@@ -328,7 +328,7 @@ _BATCH_BASE_KEYS: list = [
     "配息次數", "累積 TWD 配息 🧮", "年均配息 TWD 🧮",
     "配息率% (全期實際)", "淨值% (全期實際)", "含息% (全期實際)",
     "配息率% (年化)", "淨值% (年化)", "含息% (年化)",
-    "吃本金燈號 (1Y · MK)", "MK 3-3-3 篩", "MK 倉位", "最高經理費%", "配息頻率", "換匯資訊 🧮",
+    "吃本金燈號 (1Y · )", " 3-3-3 篩", "倉位", "最高經理費%", "配息頻率", "換匯資訊 🧮",
 ]
 # 批次寬表固定欄序:code, 基金名, 狀態, 備註, 淨值日期, 淨值新鮮度 → ①②extra(FRONT)→ base 末段
 #
@@ -379,7 +379,7 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
     """批次:單檔 → 一列「組合健診大表」flat row(欄 = BATCH_UNIFIED_COLUMNS,JSON-safe)。
 
     走 process_one_fund(L2)+ ①`build_health_analysis_row` ②`build_dividend_summary_row`
-    + σ/風險/MK `build_merged_extra_columns` → `build_unified_row`。
+    + σ/風險/`build_merged_extra_columns` → `build_unified_row`。
     §1 fail-loud:失敗回「狀態 != 成功」列(數值留 None,不填假值);整檔不外拋。
     """
     code = (code or "").strip().upper()
@@ -414,7 +414,7 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
     # 而 Streamlit Cloud 上使用者根本看不到。
     #
     # 對照組：健診 Tab 遇到同一個失敗會當場 `st.caption` 明講
-    # 「σ 位階 / 風險 / MK 買賣點 … **整組計算失敗**，本次大表不含這些欄
+    # 「σ 位階 / 風險 / 買賣點 … **整組計算失敗**，本次大表不含這些欄
     #   (不是資料沒有)」—— 同一個引擎，批次端把這句話拿掉了。
     #
     # 對策：收集失敗的欄組，改標「⚠️ 部分成功」並在備註列出缺哪幾組。
@@ -451,8 +451,8 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
         _extra = _extra_map.get(code, {})
     except Exception as _e:  # noqa: BLE001
         _extra = {}
-        _degraded.append("③ σ位階/風險/MK買賣點/捕捉率")
-        print(f"[batch] {code} σ/風險/MK 失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
+        _degraded.append("③ σ位階/風險/買賣點/捕捉率")
+        print(f"[batch] {code} σ/風險/失敗: {type(_e).__name__}: {_e}", file=_sys.stderr)
 
     _row = build_unified_row(base, _health, _div, _extra)
     # ── 稽核 A1：post-merge 三組欄原本**不在任何 try 內** ──────────────────────

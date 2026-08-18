@@ -6,7 +6,7 @@
 資料邊界（誠實告知，呼應 CLAUDE.md §4）：
   - 同類平均取自 MoneyDJ 績效評比頁 risk_metrics.peer_compare，約 3 成基金抓不到 → 標 ⬜ 不評。
   - 郭老師另兩項標準（成分股 ROE>15%/EPS 成長、規模流動性）資料源無法取得 → 不納入。
-  - 買賣點（標準差／布林）沿用 MK 戰情室既算欄位，僅在本表附「買點」燈號。
+  - 買賣點（標準差／布林）沿用 戰情室既算欄位，僅在本表附「買點」燈號。
 純函式 + 單一 render，無 @st.cache_data（STATE.md 鐵律）。
 """
 from __future__ import annotations
@@ -162,7 +162,7 @@ def _compute_fund_health_kpis(fund: dict) -> dict:
     m = fund.get("metrics") or {}
 
     # v19.150:吃本金檢查改走 check_eating_principal_1y_mk SSOT 入口
-    # (與 tab_fund_grp_health 同源,未來 MK 公式變更只改一處)。
+    # (與 tab_fund_grp_health 同源,未來 公式變更只改一處)。
     # _adr / _tr1y 仍 expose 給其他 KPI(月配息/Coverage 顯示)使用。
     from services.health.dividend import check_eating_principal_1y_mk
 
@@ -173,7 +173,7 @@ def _compute_fund_health_kpis(fund: dict) -> dict:
         _adr = None
 
     # 2) 吃本金檢查 + tr1y 經由 SSOT 入口
-    # check_eating_principal_1y_mk 內部用 MK 嚴格單利優先(有 series + dividends 時)
+    # check_eating_principal_1y_mk 內部用 嚴格單利優先(有 series + dividends 時)
     _ds = check_eating_principal_1y_mk(fund)
 
     # 3) tr1y 給其他 KPI 顯示用(月配息 / Coverage 計算)
@@ -477,7 +477,7 @@ def render_fund_checkup(portfolio_funds: list | None, expanded: bool = False) ->
             "- **每月100萬配息(TWD)** = 100萬 × MoneyDJ wb05 年化配息率 ÷ 12："
             "用同口徑估「現金流量化能力」，方便橫向 PK。\n"
             "- ⚠️ 老師另兩項標準（成分股 ROE>15%/EPS 成長、規模流動性）資料源無法取得，未納入；"
-            "買賣點細節請見上方「MK 智能戰情室」。")
+            "買賣點細節請見上方「智能戰情室」。")
 
         _verdict = df["體檢判定"]
         n_good = int(_verdict.str.startswith("🏆").sum())

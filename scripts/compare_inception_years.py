@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/compare_inception_years.py — MK 3-3-3 兩份「成立年數」對照器（唯讀診斷）。
+"""scripts/compare_inception_years.py —  3-3-3 兩份「成立年數」對照器（唯讀診斷）。
 
 本檔**不改任何 production 判定**，只把兩套演算法對同一份 `fd` 各自算出來的
 成立年數 / 3 年年化 / 3-3-3 判定並排印出來，讓 user 決定要不要收斂。
@@ -254,7 +254,7 @@ def diagnose(fd: dict, code: str, today_local=None) -> dict:
     yrs_b = variant_b_years(fd, nav_dict, today=today_local)
 
     row_a = variant_a_row(fd, code)
-    status_a = row_a.get("MK 3-3-3") or ""
+    status_a = row_a.get(" 3-3-3") or ""
     ann_a = row_a.get("3Y 年化 %")
     status_b = variant_b_status(fd, today=today_local)
     ann_b = variant_b_ann_3y(fd)
@@ -387,7 +387,7 @@ def _fmt_years(v) -> str:
 def render_report(rows: list, show_all: bool = False) -> str:
     out: list = []
     out.append("=" * 78)
-    out.append("MK 3-3-3 成立年數 — A（health/report）vs B（fund_row）對照")
+    out.append(" 3-3-3 成立年數 — A（health/report）vs B（fund_row）對照")
     out.append(f"跑的時間：本機 {_dt.datetime.now():%Y-%m-%d %H:%M} / "
                f"UTC {_dt.datetime.now(_dt.timezone.utc):%Y-%m-%d %H:%M}")
     out.append("=" * 78)
@@ -438,7 +438,7 @@ def render_report(rows: list, show_all: bool = False) -> str:
 
 # ════════════════════════════════════════════════════════════════════════
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="MK 3-3-3 兩份成立年數對照（唯讀）")
+    ap = argparse.ArgumentParser(description=" 3-3-3 兩份成立年數對照（唯讀）")
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--live", action="store_true",
                      help="上線抓（走 production auto_fetch_moneydj）")

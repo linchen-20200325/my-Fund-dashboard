@@ -56,14 +56,14 @@ def _calc_data_health(indicators=None):
     return _calc_data_health_pure(ind)
 
 
-# ── MK 3-3-3 原則評估（v19.295）────────────────────────────────────────────
+# ──  3-3-3 原則評估（v19.295）────────────────────────────────────────────
 
 def _render_333_fund_expander(
     nav_series: "pd.Series",
     metrics: dict,
     display_name: str,
 ) -> None:
-    """MK 3-3-3 原則評估區塊（Tab2 單一基金）。
+    """ 3-3-3 原則評估區塊（Tab2 單一基金）。
 
     C1 成立>3年 / C2 三年年化>7% / C3 同儕排名前1/3
     資料來源：nav_series (DatetimeIndex) + metrics.ret_3y_ann (MoneyDJ)。
@@ -75,10 +75,10 @@ def _render_333_fund_expander(
     # 原本外面包一層「永遠展開」的摺疊殼 —— 那層殼不承載任何資訊,只多一圈邊框
     # 與一個「可以收起來」的假暗示;真正的成本是使用者得先辨認出它是空殼。
     # 改成純標題 + container,判定結果直接攤在版面上。
-    st.markdown("#### 🎯 MK 3-3-3 優質標的評估")
+    st.markdown("#### 🎯  3-3-3 優質標的評估")
     with st.container():
         st.caption(
-            "**MK 郭俊宏核心篩選原則** — "
+            "**老師核心篩選原則** — "
             "①成立 >3年（歷經牛熊）｜"
             "②3年年化報酬 >7%（真正定存替代品）｜"
             "③晨星3顆星 / 同儕前1/3（中前段班有潛力）"
@@ -111,7 +111,7 @@ def _render_333_fund_expander(
         overall = r.get('overall_pass')
         if overall is True:
             bcolor  = '#16a085'
-            verdict = '🏆 C1+C2 全過！符合 MK 3-3-3 初步篩選標準'
+            verdict = '🏆 C1+C2 全過！符合  3-3-3 初步篩選標準'
         elif overall is False:
             bcolor  = '#c0392b'
             verdict = '⚠️ 未達標 — 至少一項條件不符'
@@ -146,7 +146,7 @@ def _render_333_fund_expander(
             st.caption(f'❗ 年化報酬距 7% 目標差 {gap * 100:.1f} 個百分點')
         if r.get('c2_pass') is True and r.get('c1_pass') is True:
             st.caption('💡 C1+C2 通過後，請至晨星確認 C3（同類前 40 名 ≈ 3 顆星以上）'
-                       '，三項全過才是 MK 定義的「基優生」。')
+                       '，三項全過才是 定義的「基優生」。')
 
         # ⚠️ 這裡**不可以**開摺疊容器。兩個理由,拿掉外層殼之後第二個仍然成立:
         # (1) 說明文本來就不該闔上(原則 1),直接平鋪;
@@ -157,7 +157,7 @@ def _render_333_fund_expander(
         st.markdown(
             '**①成立 >3 年** — 足以歷經完整牛熊循環，有資本利得作為配息後盾，'
             '可透過歷史驗證抗跌能力。\n\n'
-            '**②3 年年化報酬 >7%** — MK 核心目標：找「7% 以上的定存替代品」。'
+            '**②3 年年化報酬 >7%** — 核心目標：找「7% 以上的定存替代品」。'
             '長期穩定 7%+ 代表能透過資本利得+股息完整支付配息，不吃本金。\n\n'
             '**③晨星 3 顆星 / 同儕前 1/3** — 晨星 3 顆星 = 同類前 40 名。'
             '選中前段班而非頂尖，因為資優生落差大；中前段班費率、風控和績效已達標，'
@@ -644,7 +644,7 @@ def render_single_fund_tab() -> None:
                     print(f'[tab2/linkage] 組合持倉聯動渲染失敗: '
                           f'{type(_e_link).__name__}: {_e_link}', file=_sys_lk.stderr)
 
-                # MK 訊號卡片
+                # 訊號卡片
                 phase_info_s = st.session_state.phase_info if st.session_state.macro_done else None
                 if phase_info_s:
                     sig = mk_fund_signal(fd, phase_info_s["phase"], phase_info_s["score"])
@@ -760,7 +760,7 @@ def render_single_fund_tab() -> None:
                         text=_div_texts,
                         hovertemplate="%{text}<br>淨值：%{y:.4f}<extra></extra>"))
 
-                # ── MK v3.2 買賣水平線（回歸中樞 ± kσ；σ=近1年淨值統計標準差）────
+                # ──  v3.2 買賣水平線（回歸中樞 ± kσ；σ=近1年淨值統計標準差）────
                 for bv, bl, bc in [
                     (m.get("buy1"), "買1 小跌(中樞-1σ)", MD_GREEN_A200),
                     (m.get("buy2"), "買2 急跌(中樞-2σ)", MATERIAL_GREEN),
@@ -945,7 +945,7 @@ def render_single_fund_tab() -> None:
                     st.caption(f"⬜ vs 大盤圖失敗:[{type(_e_bmk).__name__}] {str(_e_bmk)[:60]}")
 
                 st.markdown("### ② 買賣點信號（標準差策略）")
-                # ── MK 標準差買賣點分析 v3.0（3 買 + 3 賣 + 接近度）──
+                # ── 標準差買賣點分析 v3.0（3 買 + 3 賣 + 接近度）──
                 _m_buy1 = m.get("buy1"); _m_buy2 = m.get("buy2"); _m_buy3 = m.get("buy3")
                 _m_sell1 = m.get("sell1"); _m_sell2 = m.get("sell2"); _m_sell3 = m.get("sell3")
                 _m_pl = m.get("pos_label",""); _m_pc = m.get("pos_color",TRAFFIC_NEUTRAL)
@@ -1269,7 +1269,7 @@ def render_single_fund_tab() -> None:
                     st.caption(f"吃本金 KPI 計算異常：{str(_kpi_e)[:60]}")
 
                 # v19.181:📊 進階指標(入門 KPI 之外的細項 — Sortino/Calmar/Alpha/Expense
-                # /MaxDD/3Y-5Y 年化/3-3-3 篩/MK 換標的建議)— 共用 fund_health_report SSOT,
+                # /MaxDD/3Y-5Y 年化/3-3-3 篩/換標的建議)— 共用 fund_health_report SSOT,
                 # 跨 Tab3/健診 同源。
                 try:
                     # v19.182:預設展開,user 第一眼就看到(原 v19.181 expanded=False 收起來
@@ -1376,9 +1376,9 @@ def render_single_fund_tab() -> None:
                         cI, cJ, cK = st.columns(3)
                         cI.metric("3Y 年化 %", _fmt_pct(_adv_h.get("3Y 年化 %")))
                         cJ.metric("5Y 年化 %", _fmt_pct(_adv_h.get("5Y 年化 %")))
-                        cK.metric("MK 3-3-3", _adv_h.get("MK 3-3-3", "⬜"))
+                        cK.metric(" 3-3-3", _adv_h.get(" 3-3-3", "⬜"))
 
-                        st.markdown("##### 💰 換標的建議(MK 4 規則心型警結合)")
+                        st.markdown("##### 💰 換標的建議( 4 規則心型警結合)")
                         st.markdown(
                             f"**{_adv_d.get('換標的建議', '⬜ 資料不足')}**　"
                             f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>"
@@ -1386,7 +1386,7 @@ def render_single_fund_tab() -> None:
                             unsafe_allow_html=True,
                         )
                         st.caption(
-                            "MK 4 規則:(a) 吃本金且持有 ≥ 1 年 / (b) 4D Grade F / "
+                            " 4 規則:(a) 吃本金且持有 ≥ 1 年 / (b) 4D Grade F / "
                             "(c) 3-3-3 未通過且持有 ≥ 3 年 / (d) Sharpe<0 且 max_dd<-30%。"
                             "任一中 → 🔴 換 / 1-2 觀察 → 🟡 / 全未中 → 🟢。"
                             "**Tab2 單檔無 user 持有期 → (a)(c) 用基金成立年數判定**。"
@@ -1631,7 +1631,7 @@ def render_single_fund_tab() -> None:
                             _dt = d.get("date",""); _amt = d.get("amount",""); _yld = d.get("yield_pct","")
                             st.markdown(f"<div style='display:flex;justify-content:space-between;padding:4px 10px;background:{GH_BG_CARD};border-radius:6px;margin:2px 0'><span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_dt}</span><span style='font-weight:700'>{_amt}</span><span style='color:{MATERIAL_ORANGE};font-size:11px'>{_yld}</span></div>", unsafe_allow_html=True)
 
-                        # ── 📖 配息覆蓋率講義卡（MK 郭俊宏《以息養股》）──
+                        # ── 📖 配息覆蓋率講義卡（老師《以息養股》）──
                         # 這裡原本先印一個「🚨 吃本金警示」框（status + message +
                         # nav_warning），再印下面這張講義卡。那個警示框與本頁上方
                         # 「吃本金檢查」KPI 橫幅**逐字同源**：adr 同一個
@@ -2349,7 +2349,7 @@ def render_single_fund_tab() -> None:
                     else:
                         st.info("⚠️ 此基金 NAV 未取得，無法試算單位數。請先確認基本資料區是否成功抓取淨值。")
 
-                # ── MK 3-3-3 原則評估（v19.295）─────────────────────────────
+                # ──  3-3-3 原則評估（v19.295）─────────────────────────────
                 try:
                     _render_333_fund_expander(s, m, name or fk)
                 except Exception as _e333:

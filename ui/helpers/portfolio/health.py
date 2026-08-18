@@ -1,6 +1,6 @@
 """v18.163 PR：組合健康度 KPI helper（純函式）。
 
-整合 4 個 MK 標籤指標（撿便宜雷達 / 留校查看 / 停利提醒 / 配置比例）
+整合 4 個 標籤指標（撿便宜雷達 / 留校查看 / 停利提醒 / 配置比例）
 + tab3 真實收益矩陣的 4 個現金流指標，
 產出統一的 6 維度 KPI dict 給 Tab3 頂部 hero 用。
 """
@@ -11,10 +11,10 @@ import pandas as pd
 
 def compute_health_kpis(portfolio_funds: list | None,
                          mk_df: pd.DataFrame | None = None) -> dict:
-    """從 portfolio_funds + 預算好的 MK dataframe 算 6 個健康度指標。
+    """從 portfolio_funds + 預算好的  dataframe 算 6 個健康度指標。
 
     回傳 dict（所有數值預設 0 / "—"，缺資料安全）：
-      # 配置維度 —— ⚠️ 這裡是「檔數」口徑（分母 = 被 MK 歸類的檔數），
+      # 配置維度 —— ⚠️ 這裡是「檔數」口徑（分母 = 被 歸類的檔數），
       # **不是**配置比例。金額口徑（Σ 投入本金 + policy_tier 優先 + 目標吃
       # portfolio_core_pct）的唯一真相在 ui/helpers/portfolio/allocation.py，
       # Tab3「① 配置總覽」「Hero 甜甜圈」「保單分組」三處都走那支。
@@ -26,7 +26,7 @@ def compute_health_kpis(portfolio_funds: list | None,
       ratio_label:      "核心 3 檔 / 衛星 2 檔（檔數）" or "—"
       ratio_delta:      None（保留 key 供既有 caller，恆為 None）
 
-      # MK 標籤維度（來自 mk_df）
+      # 標籤維度（來自 mk_df）
       n_buy:            🟢 撿便宜雷達（Buy_Zone / Buy_Zone_Deep）
       n_warn:           🔴 留校查看（Sharpe_Warning / Warning / Weak + Core 吃本金）
       n_take:           💰 停利提醒（衛星 Take_Profit）
@@ -132,7 +132,7 @@ def render_hero_kpi_cards(kpis: dict) -> None:
               help="按 code 去重後的已載入基金數（同 code 跨多保單只算一次）")
     c2.metric("⚖️ 核心/衛星檔數", kpis["ratio_label"],
               delta=kpis["ratio_delta"], delta_color="off",
-              help=("**檔數**口徑（分母 = 被 MK 歸類的檔數），只回答「幾檔核心、幾檔衛星」。\n\n"
+              help=("**檔數**口徑（分母 = 被 歸類的檔數），只回答「幾檔核心、幾檔衛星」。\n\n"
                     "要看**資金**配置比例與目標偏差，請看下方「① 配置總覽」的"
                     "「核心資產比例」卡與甜甜圈 —— 那裡是 Σ 投入本金加權，"
                     "3 檔核心可能只佔 60% 的檔數卻佔 90% 的錢，兩個數字本來就不同。"))

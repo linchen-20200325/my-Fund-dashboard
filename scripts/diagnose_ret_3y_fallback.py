@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""scripts/diagnose_ret_3y_fallback.py — MK 3-3-3 的「3 年年化」為什麼拿不到(唯讀診斷)。
+"""scripts/diagnose_ret_3y_fallback.py —  3-3-3 的「3 年年化」為什麼拿不到(唯讀診斷)。
 
 要回答的問題
 ============
 user 的 8 檔持倉裡有 5 檔(ACCP138 / ACDD01 / ACDD19 / ACTI71 / ACTI94)的
-「MK 3-3-3 篩」停在 ⬜ 資料不足,但這 5 檔的成立年數是 7.87 / 26.34 / 18.30 /
+「 3-3-3 篩」停在 ⬜ 資料不足,但這 5 檔的成立年數是 7.87 / 26.34 / 18.30 /
 8.57 / 5.54 年,全部遠超 3 年 —— 卡住的不是 C1(成立年數)而是 C2(3 年平均
 年化報酬)。本檔把 C2 的取值鏈**逐步拆開印給人看**:每一檔停在哪一步、為什麼
 停、以及「如果補上一層用時間軸切的 fallback,這一檔會不會有救」。
@@ -445,7 +445,7 @@ def render_report(rows: list) -> str:
     out: list = []
     need = rows[0]["points_required"] if rows else points_required_for_metrics_3y()
     out.append("=" * 78)
-    out.append("MK 3-3-3 C2「3 年年化」取值鏈診斷(唯讀,零行為改動)")
+    out.append(" 3-3-3 C2「3 年年化」取值鏈診斷(唯讀,零行為改動)")
     out.append(f"跑的時間:本機 {_dt.datetime.now():%Y-%m-%d %H:%M}")
     out.append(f"步驟 1/2 的 NAV 點數門檻:{need} 點(= 3 × 每年交易日數)")
     out.append("=" * 78)
@@ -537,7 +537,7 @@ def _fmt_years(v) -> str:
 # ════════════════════════════════════════════════════════════════════════
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="MK 3-3-3 C2「3 年年化」取值鏈診斷(唯讀,不改任何判定)")
+        description=" 3-3-3 C2「3 年年化」取值鏈診斷(唯讀,不改任何判定)")
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--live", action="store_true",
                      help="上線抓(走 production auto_fetch_moneydj)")

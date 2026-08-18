@@ -240,7 +240,7 @@ def fetch_market_news(max_per_feed: int = 5) -> list:
     """
     從 RSS 抓取會影響股市、匯率、債券的國際財經新聞 + 系統性風險事件。
     v18.86：加 SYSTEMIC_RISK 關鍵字（戰爭/銀行倒閉/黑天鵝），命中者 is_systemic=True，
-            排序時 systemic 永遠在前；給 MK AI 判斷系統性風險用，
+            排序時 systemic 永遠在前；給  AI 判斷系統性風險用，
             目的：戰爭、雷曼兄弟級事件、銀行擠兌等重大利空不會被一般財經新聞淹沒。
     回傳: [{title, summary, source, published, url, is_systemic}]
 

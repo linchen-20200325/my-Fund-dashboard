@@ -5,7 +5,7 @@
 
 設計
 ----
-**5 維度**(MK 老師體檢風格 — 配息核心;第 5 維 2026-08-14 加):
+**5 維度**(老師體檢風格 — 配息核心;第 5 維 2026-08-14 加):
 1. 💵 配息健康度(Coverage) — Coverage = ret_1y_total / annual_div_rate
 2. 📈 風險調整報酬(Sharpe) — 年化 Sharpe Ratio
 3. 📊 走勢健康(MA 方向 + 報酬) — 60d MA 方向 + ret_1y

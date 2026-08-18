@@ -1,6 +1,6 @@
-"""MK 景氣時鐘觀測站（v18.10）
+"""景氣時鐘觀測站（v18.10）
 
-依「MK 郭俊宏《景氣三面向與資產配置策略》」實作美林時鐘四象限定位。
+依「老師《景氣三面向與資產配置策略》」實作美林時鐘四象限定位。
 
 整合策略：
 - 重用 app.py session_state["indicators"]（PMI / CPI / FED_RATE / VIX 等），
@@ -33,7 +33,7 @@ _MOCK_INDICATORS = {
     "FED_RATE": {"value": 4.5,  "trend": "down"},
 }
 
-# 四象限定義（按 MK 教材）
+# 四象限定義（按 教材）
 _PHASE_META = {
     "recovery":  {"zh": "復甦期", "icon": "🌱",
                   "desc": "通膨降 / 利率降 / 經濟升",
@@ -280,7 +280,7 @@ def render_macro_clock(indicators: dict) -> tuple[str, dict]:
 # ══════════════════════════════════════════════════════════════════
 
 def render_mk_clock_section(indicators: Optional[dict] = None):
-    """主入口：在 Tab1 折疊式呈現完整 MK 景氣時鐘區塊。
+    """主入口：在 Tab1 折疊式呈現完整 景氣時鐘區塊。
 
     Parameters
     ----------

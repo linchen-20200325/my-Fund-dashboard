@@ -1,12 +1,12 @@
 """services/fund_screening.py — 基金品質篩選（L2 純計算）
 
-職責（單一）：提供基金篩選純函式（MK 3-3-3 原則 + 低基期進場點）；
+職責（單一）：提供基金篩選純函式（ 3-3-3 原則 + 低基期進場點）；
 無 I/O、無 Streamlit。
 
 §8.2 分層：L2 Service — 禁止 import requests / httpx / streamlit。
 資料由 L3 UI 從 session_state 取出後傳入。
 
-MK 郭俊宏「3-3-3 原則」：
+老師「3-3-3 原則」：
   C1: 成立 > 3 年（以最早 NAV 日期推算，老標的歷經牛熊考驗）
   C2: 過去 3 年平均年化報酬率 > 7%（定存替代品，含息總報酬）
   C3: 晨星評級 3 顆星以上 / 同儕排名前 1/3（中前段班，有上升潛力）
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def fund_inception_years(inception_date, series=None) -> "float | None":
-    """v19.308 SSOT — 基金「成立至今」年數（MK 3-3-3 ① / 健診 / 戰情室共用）。
+    """v19.308 SSOT — 基金「成立至今」年數（ 3-3-3 ① / 健診 / 戰情室共用）。
 
     優先用 MoneyDJ 頁面現成的「成立日期」（inception_date，ISO 或 YYYY/MM/DD）——
     這是 user 要的「抓 MoneyDJ 已算好的」，不需本地長 NAV 歷史。缺成立日才以 NAV
@@ -68,7 +68,7 @@ def check_333_fund(
     target_annualized: float = 0.07,
     peer_top_pct: float = 1 / 3,
 ) -> dict:
-    """MK 3-3-3 原則評估（基金版）。
+    """ 3-3-3 原則評估（基金版）。
 
     Parameters
     ----------

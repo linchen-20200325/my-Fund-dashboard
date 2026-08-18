@@ -16,13 +16,13 @@ ROOT = Path(__file__).parents[1]  # v19.197 P0-3:test 遷移 tests/,改 parents[
 APP = ROOT / "app.py"
 # v11.0 D-19: mk_dashboard.py 搬至 ui/components/mk_dashboard.py 並改為 shim
 # expander 巢狀守門 AST 解析需指向真正含函式體的新位置
-MK = ROOT / "ui" / "components" / "mk_dashboard.py"
+DASHBOARD = ROOT / "ui" / "components" / "mk_dashboard.py"
 # Tab2 單一基金:原本不在守門名單 → 檔內一處摺疊容器巢狀長期逃過 CI。
 # 名單本身就是保護網的邊界,漏列 = 同型錯誤永遠抓不到,故一併納管。
 TAB2 = ROOT / "ui" / "tab2_single_fund.py"
 
 # 受 T1/T2 守門的檔案清單(新增 UI 大檔時請往這裡加,不要另開測試)
-_GUARDED_FILES = [APP, MK, TAB2]
+_GUARDED_FILES = [APP, DASHBOARD, TAB2]
 
 
 # ════════════════════════════════════════════════════════════
@@ -133,10 +133,10 @@ def test_no_crossfile_expander_nesting() -> None:
     不可在 app.py 的 `with st.expander` 內被呼叫。
 
     本測試直接針對 PR #41 故障情境設防：
-      with st.expander("🎯 MK 戰情室"):
+      with st.expander("🎯 戰情室"):
           render_mk_war_room(...)   # 此函式內含 expander 呼叫鏈
     """
-    mk_funcs = _functions_with_expander_transitive(MK)
+    mk_funcs = _functions_with_expander_transitive(DASHBOARD)
     assert "render_mk_war_room" in mk_funcs, \
         "transitive 解析應抓到 render_mk_war_room（call _render_core_tab 而含 expander）"
 

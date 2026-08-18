@@ -10,9 +10,9 @@
 ========
 1. **接線**（必修 6）：`ui/tab3_portfolio.py` 的四個消費點（保單分組 / ① KPI 卡 /
    Hero 卡 / 基金卡角色標）+ AI 快照，全部走 allocation SSOT；目標值不得寫死。
-2. **MK 戰情室**（必修 6 附帶）：`tag_mk_class` 原本只讀 `is_core`、無視
+2. **戰情室**（必修 6 附帶）：`tag_mk_class` 原本只讀 `is_core`、無視
    `policy_tier` —— Sheet 標 `core` 的基金在保單卡片顯示「🛡️核心」，在檔數 KPI
-   與 MK 戰情室卻算成衛星。
+   與 戰情室卻算成衛星。
 3. **兩把尺**（必修 3 → 2026-08-07 user 裁決收尾）：Tab3 同一次捲動內有兩個口徑
    不同的核心%，下方那個原本還給方向相反的行動建議。上一輪只降級了 Tab3 embed；
    本輪 user 拍板「Sheet `policy_tier` 是唯一真相，健診那份降為純資訊」——
@@ -151,14 +151,14 @@ def test_core_satellite_caption_printed_exactly_once(tab3_tree) -> None:
 
 
 # ══════════════════════════════════════════════════════════════
-# 3. MK 戰情室分類走同一把尺（必修 6 附帶）
+# 3. 戰情室分類走同一把尺（必修 6 附帶）
 # ══════════════════════════════════════════════════════════════
 class TestMkClassUsesTheSameRuler:
     def test_policy_tier_beats_is_core(self):
         """**修正前必紅（行為衝突）** —— 舊碼只讀 `is_core`，`policy_tier` 完全無效。
 
         使用者在 Google Sheet 標 `core` 的基金，保單卡片顯示「🛡️核心」
-        （那裡走 `resolve_core_flag`），MK 戰情室與檔數 KPI 卻算成衛星。
+        （那裡走 `resolve_core_flag`），戰情室與檔數 KPI 卻算成衛星。
         """
         from ui.components.mk_dashboard import tag_mk_class
         assert tag_mk_class({"policy_tier": "core", "is_core": False}) == "Core"

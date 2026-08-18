@@ -95,7 +95,7 @@ my-Fund-dashboard/
 │   │   ├── dividend.py
 │   │   ├── dividend_calc.py
 │   │   ├── grade.py                # 健診評等 SSOT
-│   │   ├── replacement.py          # MK 替換規則
+│   │   ├── replacement.py          # 替換規則
 │   │   └── report.py               # 健診表 row builder
 │   ├── calibration/                # 校準 subpackage(原 risk_calibration 等)
 │   │   ├── risk.py                 # 風險校準 + Fama-French 3-factor
@@ -455,7 +455,7 @@ my-fund-dashboard/
 ├── precision_engine.py     # 精準策略引擎 — σ絕對位階/複合風險溫度計
 ├── fund_ledger.py          # 通用型基金帳務引擎 (v18.0 Phase 1+2) — Ledger + FundPosition + GhostPortfolio + Switch + XIRR
 ├── proxy_helper.py         # NAS Proxy 可移植模組
-├── mk_dashboard.py         # MK 智能戰情室 — 核心戰情室/波段觀測站/3-3-3 篩選器（v18.34 dedupe by code）
+├── mk_dashboard.py         # 智能戰情室 — 核心戰情室/波段觀測站/3-3-3 篩選器（v18.34 dedupe by code）
 ├── policy_keys.py          # 保單視圖複合鍵 (policy_id, fund_code) ↔ pk_str 工具
 ├── policy_advisor.py       # 保單視圖純規則建議 — σ × 配息覆蓋 × 60MA × VIX + recommend_policy()
 ├── policy_store.py         # gspread 儲存層 — Service Account / OAuth、每保單一 worksheet API
@@ -720,7 +720,7 @@ Tab5 開啟（唯讀 + 動態計算）
 | `fetch_fund_from_moneydj_url(url)` | `str` | `dict` | 主要入口：完整基金資料（NAV/績效/配息/持股） |
 | `fetch_holdings(code)` | `str` | `dict` | MoneyDJ 持股頁 → `{sector_alloc, top_holdings, ter}` （v10 加入 TER） |
 | `fetch_market_news(max_per_feed)` | `int` | `list[dict]` | RSS 財經新聞 → `[{title, summary, source, published, url, tags}]` |
-| `calc_metrics(s, divs, risk_override)` | `pd.Series, list, dict` | `dict` | MK 買點、標準差、年化配息率 |
+| `calc_metrics(s, divs, risk_override)` | `pd.Series, list, dict` | `dict` | 買點、標準差、年化配息率 |
 
 ### 4.3 ai_engine.py（v10 新增）
 
@@ -1025,7 +1025,7 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.164 / 2026-05-21** — Sheet ID 輸入 hoist 到 sidebar +「✨ 新增帳本」互動式面板。User 截圖紅框反饋：Tab3「📋 保單管理」expander 內，OAuth 狀態 + Sheet ID 輸入並列占大半版面、「自動建立」與「從 Drive 挑」被「或者」分隔層次不一致。Sidebar 在「🔐 Google 帳號」之下新增「📋 工作中帳本」區塊（`app.py:280+`）：Sheet ID / URL 輸入 + 自動 regex 解析 `/spreadsheets/d/<id>/`、寫回 `policy_sheet_id`、顯示 `get_sheet_title` 取回的當前帳本名稱（快取 key `_t3_cur_sheet_title:<sid>`）。Tab3 expander（`ui/tab3_portfolio.py:485-544`）移除 `text_input("Google Sheet ID 或完整 URL")` 區塊，改為一行 `_sheet_id = session_state.get("policy_sheet_id") or _sheet_id_secret`；新增 `##### ✨ 新增帳本` header 統籌兩個子區塊，上半「自動建立 Sheet」（保留 `not _sheet_id` 條件避免噪音）、下半「從 Drive 挑」（移除「或者」措辭、僅在兩者皆顯示時加 `---` 分隔），版型上下並列。零作用域風險、純 UI hoist + 重組。
 
-> 🆕 **v18.163 / 2026-05-21** — Tab3 KPI 合併 hero + sub-tab 改 `segmented_control`（消除上下兩段重複占版面）。抽 `ui/helpers/portfolio_health.py` 純函式：`compute_health_kpis(portfolio_funds, mk_df=None) -> dict` 整合 MK 標籤（撿便宜/留校/停利/配置比，從 `build_mk_dataframe` 結果算）+ 現金流（基金數/健康/吃本金/資料不足，從 `compute_1y_total_return` 算），`render_hero_kpi_cards(kpis)` 渲染 6 卡（基金數 / 配置比 / 現金流安全 N/M / 撿便宜 / 留校 / 停利）放在 Tab3 頂部當 hero。`mk_dashboard.render_mk_war_room` 移除 `_render_kpi_cards` 呼叫（hero 已涵蓋）+ `st.tabs` 3 sub-tab 改 `st.segmented_control`（基金池大小寫進 label：`🛡️ 核心戰情室（N 檔）`）。`tab3_portfolio.py:2148+` 移除下方重複 4 卡 KPI。T5 重疊矩陣維持 per-policy `st.expander(expanded=False)` 收合。新測 `test_portfolio_health.py` 9 cases。
+> 🆕 **v18.163 / 2026-05-21** — Tab3 KPI 合併 hero + sub-tab 改 `segmented_control`（消除上下兩段重複占版面）。抽 `ui/helpers/portfolio_health.py` 純函式：`compute_health_kpis(portfolio_funds, mk_df=None) -> dict` 整合 標籤（撿便宜/留校/停利/配置比，從 `build_mk_dataframe` 結果算）+ 現金流（基金數/健康/吃本金/資料不足，從 `compute_1y_total_return` 算），`render_hero_kpi_cards(kpis)` 渲染 6 卡（基金數 / 配置比 / 現金流安全 N/M / 撿便宜 / 留校 / 停利）放在 Tab3 頂部當 hero。`mk_dashboard.render_mk_war_room` 移除 `_render_kpi_cards` 呼叫（hero 已涵蓋）+ `st.tabs` 3 sub-tab 改 `st.segmented_control`（基金池大小寫進 label：`🛡️ 核心戰情室（N 檔）`）。`tab3_portfolio.py:2148+` 移除下方重複 4 卡 KPI。T5 重疊矩陣維持 per-policy `st.expander(expanded=False)` 收合。新測 `test_portfolio_health.py` 9 cases。
 
 > 🆕 **v18.162 / 2026-05-21** — Tab3 快捷面板雲端動作改真執行 + 抽 `ui/helpers/cloud_io.py` helper。v18.161 的 📥/📦 panel 只是「狀態 + 請往下捲」提示牌（user 三張截圖反饋「不太順」），且「目前帳本」誤讀 `active_policy_id`。本版 4 顆按鈕全部真執行：📥/📦 panel 顯示「📂 帳本：真實 sheet name（快取在 `_t3_cur_sheet_title`）｜ 持倉檔數 ｜ 上次讀寫時間」+ 「立即執行」按鈕一鍵到位；未登入/無 sheet_id 顯示友善 warning。抽 `cloud_io.py` 純函式：`dump_all_to_sheet(client, sheet_id, ss) -> {ok, written, skipped_no_pid, n_state, warnings, error}`、`load_all_from_sheet(client, sheet_id, ss, *, oauth_mode, refresh_only=False) -> {ok, refresh_only, added, kept, removed, restored_ct, warnings, error}`，streamlit-agnostic、致命錯誤與非致命 warning 分離。下方 L863+「一鍵存讀」段瘦身呼叫同一 helper，移除 ~120 行重複邏輯，加 caption「📌 主入口在頂部快捷面板」。新測 `test_cloud_io.py` 10 cases（monkeypatch 模擬 gsheets API）。
 
@@ -1035,7 +1035,7 @@ PROXY_URL      = "http://user:pass@yourname.synology.me:3128"  # 必填，否則
 
 > 🆕 **v18.157 / 2026-05-20 (PR B.6)** — 對帳單 type B 支援（累積配息反推含息成本）。User 反饋部分保單對帳單沒有「平均買入含息單位成本」欄，但有「累積現金配息金額 (NT)」。`policy_repository.avg_nav_with_div_from_cumul_div_twd(avg_nav, avg_fx, units, cumul_div_twd)` 公式 `avg_nav − cumul_div_twd / (avg_fx × units)` clamp ≥0，user 截圖實例驗證 8.25/31.0885/3900.05/49913 → 7.838。v2 編輯介面 wizard 與 T7「編輯持倉」兩處都加 `📋 對帳單格式` radio：A 直接抄欄(10)；B 填配息金額 submit 時換算。Schema 維持 12 欄不動，純 UI 層 input mode toggle。
 
-> 🆕 **v18.236 / 2026-05-29** — 熱錢監測（外資 × 匯率 × 背離偵測）整合進 Tab1 總經。新模組 `hot_money.py` 含 `build_signals`（9 狀態向量化）+ `_yf_series_to_df` + `fetch_foreign_flow_series`（FinMind via `fund_fetcher.fetch_url_with_retry`，30min cache）+ `fetch_usdtwd_series`（複用 `repositories.macro_repository.fetch_yf_close('USDTWD=X')` 走 NAS proxy）+ `render_hot_money_section`（inline 4-slider + altair 象限圖 + 時序圖 + 背離事件清單）。`ui/tab1_macro.py:2141`（MK 景氣時鐘前）加 expander「💵 台股熱錢監測 — 三角交叉（影響你境外基金 TWD 換匯）」，FINMIND_TOKEN 從 `st.secrets` 取（可空）。`STATE_TEXT` 每個狀態加「對 USD/EUR 計價基金 TWD 換算後的影響」說明（境外基金特化）。同模組已於股票倉 PR #101 上線，本 PR 為基金倉版本。
+> 🆕 **v18.236 / 2026-05-29** — 熱錢監測（外資 × 匯率 × 背離偵測）整合進 Tab1 總經。新模組 `hot_money.py` 含 `build_signals`（9 狀態向量化）+ `_yf_series_to_df` + `fetch_foreign_flow_series`（FinMind via `fund_fetcher.fetch_url_with_retry`，30min cache）+ `fetch_usdtwd_series`（複用 `repositories.macro_repository.fetch_yf_close('USDTWD=X')` 走 NAS proxy）+ `render_hot_money_section`（inline 4-slider + altair 象限圖 + 時序圖 + 背離事件清單）。`ui/tab1_macro.py:2141`（景氣時鐘前）加 expander「💵 台股熱錢監測 — 三角交叉（影響你境外基金 TWD 換匯）」，FINMIND_TOKEN 從 `st.secrets` 取（可空）。`STATE_TEXT` 每個狀態加「對 USD/EUR 計價基金 TWD 換算後的影響」說明（境外基金特化）。同模組已於股票倉 PR #101 上線，本 PR 為基金倉版本。
 
 > 🆕 **v18.154 / 2026-05-20 (PR B.4)** — T7「編輯持倉」表單對齊 v2 schema。`ui/tab3_t7_ledger.py:537` 表單欄位 4→5：砍 `持有單位數` 輸入改 read-only 預覽（`compute_units` 自動算）、加 🟨 `淨投資金額(NT)` 與 🟨 `平均買入含息單位成本(10)`、所有 user input 加 🟨 黃色 icon。Submit 用 `_inv` 直接當 `amount_twd`（不再從 units × nav × fx 反算），同步把 `invest_twd` / `avg_nav_with_div` 寫進 `portfolio_funds[i]` 給 v2 編輯介面共用。
 

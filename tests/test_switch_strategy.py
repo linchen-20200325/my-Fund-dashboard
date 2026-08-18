@@ -177,10 +177,10 @@ def test_compute_switch_columns_reads_real_column_names():
     """稽核 Finding 6:鎖 cross-source 欄名契約 —— 欄名改掉 → 訊號靜默降級,此測試會抓到。"""
     from ui.helpers.fund_grp_health.unified import compute_switch_columns
     _row = {"1Y 含息 %": -5.0, "Sharpe 1Y": -0.3, "Max DD %": -20.0,
-            "vs 大盤%": -2.0, "吃本金燈號 (1Y · MK)": "🔴 嚴重的吃本金", "距 HWM %": "-25%"}
+            "vs 大盤%": -2.0, "吃本金燈號 (1Y · )": "🔴 嚴重的吃本金", "距 HWM %": "-25%"}
     assert compute_switch_columns(_row)["策略燈號"] == RED
     _good = {"1Y 含息 %": 8.0, "Sharpe 1Y": 1.0, "Max DD %": -10.0, "vs 大盤%": 5.0,
-             "吃本金燈號 (1Y · MK)": "🟢 健康"}
+             "吃本金燈號 (1Y · )": "🟢 健康"}
     _r = compute_switch_columns(_good)
     assert _r["換標策略分"] == 100 and _r["策略燈號"] == GREEN
     assert _r["策略分覆蓋"].endswith("100/100")   # 全覆蓋也要出旗標(欄恆在,非只在異常時冒出)
@@ -194,7 +194,7 @@ def test_compute_switch_columns_wires_coverage_into_signal():
     """
     from ui.helpers.fund_grp_health.unified import compute_switch_columns
     _partial = {"1Y 含息 %": 8.0, "Sharpe 1Y": 1.0, "Max DD %": None,
-                "vs 大盤%": None, "吃本金燈號 (1Y · MK)": "🟢🟢 健康"}
+                "vs 大盤%": None, "吃本金燈號 (1Y · )": "🟢🟢 健康"}
     _r = compute_switch_columns(_partial)
     assert _r["換標策略分"] == 100
     assert _r["策略燈號"] == YELLOW, "部分覆蓋不得走到綠燈(§1)"
@@ -212,7 +212,7 @@ def test_compute_switch_columns_handles_nan_from_dataframe():
 
     from ui.helpers.fund_grp_health.unified import compute_switch_columns
     _row = {"1Y 含息 %": 8.0, "Sharpe 1Y": 1.0, "Max DD %": np.nan,
-            "vs 大盤%": np.nan, "吃本金燈號 (1Y · MK)": "🟢🟢 健康"}
+            "vs 大盤%": np.nan, "吃本金燈號 (1Y · )": "🟢🟢 健康"}
     _r = compute_switch_columns(_row)
     assert _r["策略燈號"] == YELLOW and "65/100" in _r["策略分覆蓋"]
 
@@ -283,7 +283,7 @@ def test_sharpe_provenance_official_and_self_calc_stay_distinguishable():
 # ── 替換引擎(同類別 argmax)────────────────────────────
 def _cand(code, cat, sharpe, tr, sortino, exp=0.8, eat="🟢 健康"):
     return {"code": code, "基金類別": cat, "Sharpe 1Y": sharpe, "1Y 含息 %": tr,
-            "Sortino": sortino, "費用率 %": exp, "吃本金燈號 (1Y · MK)": eat, "策略燈號": GREEN}
+            "Sortino": sortino, "費用率 %": exp, "吃本金燈號 (1Y · )": eat, "策略燈號": GREEN}
 
 
 def test_replacement_picks_best_same_category():
