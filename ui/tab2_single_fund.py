@@ -1335,30 +1335,30 @@ def render_single_fund_tab() -> None:
                             return (f"{base} {_d}d(自算)" if isinstance(_d, int)
                                     else f"{base}(自算)")
 
-                        st.markdown("##### 🩺 健康分析(4D Grade + 6 進階指標)")
-                        cA, cB, cC, cD = st.columns(4)
-                        cA.metric("4D Grade", _adv_h.get("4D Grade") or "—",
-                                  help="A≥80 / B≥65 / C≥50 / D≥35 / F<35(SSOT v19.177)")
-                        cB.metric("4D Score", _fmt_num(_adv_h.get("4D Score")))
-                        cC.metric(_lbl_with_period("Sharpe", "sharpe"),
+                        # v19.468:移除「4D Grade / 4D Score」兩格 —— 上方「基金健康總覽大卡」
+                        # 已印同值同源(1106-1108 已對齊 build_health_analysis_row),同頁重印為
+                        # 真重複(稽核確認)。剩 9 個進階指標重排成 3×3。
+                        st.markdown("##### 🩺 進階指標(健診大卡下方細項)")
+                        cA, cB, cC = st.columns(3)
+                        cA.metric(_lbl_with_period("Sharpe", "sharpe"),
                                   _fmt_num(_adv_h.get("Sharpe 1Y")),
                                   help=("期間/來源:"
                                         + str(_meta_of("sharpe").get("period_label") or "—")
                                         + ";見下方風險指標對帳"))
-                        cD.metric(_lbl_with_period("Sortino", "sortino"),
+                        cB.metric(_lbl_with_period("Sortino", "sortino"),
                                   _fmt_num(_adv_h.get("Sortino")),
                                   help=str(_meta_of("sortino").get("definition") or "—"))
-
-                        cE, cF, cG, cH = st.columns(4)
-                        cE.metric(_lbl_with_period("Calmar", "calmar"),
+                        cC.metric(_lbl_with_period("Calmar", "calmar"),
                                   _fmt_num(_adv_h.get("Calmar")),
                                   help=("分子分母同源:3Y 年化含息報酬 "
                                         f"{_meta_of('calmar').get('ret_3y_ann_tr_pct')}% / "
                                         f"|3Y 回撤 {_meta_of('calmar').get('max_dd_3y_pct')}%|"))
-                        cF.metric("真實收益 %", _fmt_pct(_adv_h.get("Alpha %")),
+
+                        cD, cE, cF = st.columns(3)
+                        cD.metric("真實收益 %", _fmt_pct(_adv_h.get("Alpha %")),
                                   help="含息報酬率 − 年化配息率（≠ CAPM Alpha）")
-                        cG.metric("費用率 %", _fmt_pct(_adv_h.get("費用率 %")))
-                        cH.metric(_lbl_with_period("Max DD %", "max_drawdown"),
+                        cE.metric("費用率 %", _fmt_pct(_adv_h.get("費用率 %")))
+                        cF.metric(_lbl_with_period("Max DD %", "max_drawdown"),
                                   _fmt_pct(_adv_h.get("Max DD %")))
 
                         # 混期示警(必修 2):`mixed_period_warning` 原本 production
@@ -1373,10 +1373,10 @@ def render_single_fund_tab() -> None:
                                 f"⚠️ {_mix_warn}</div>",
                                 unsafe_allow_html=True)
 
-                        cI, cJ, cK = st.columns(3)
-                        cI.metric("3Y 年化 %", _fmt_pct(_adv_h.get("3Y 年化 %")))
-                        cJ.metric("5Y 年化 %", _fmt_pct(_adv_h.get("5Y 年化 %")))
-                        cK.metric(" 3-3-3", _adv_h.get(" 3-3-3", "⬜"))
+                        cG, cH, cI = st.columns(3)
+                        cG.metric("3Y 年化 %", _fmt_pct(_adv_h.get("3Y 年化 %")))
+                        cH.metric("5Y 年化 %", _fmt_pct(_adv_h.get("5Y 年化 %")))
+                        cI.metric(" 3-3-3", _adv_h.get(" 3-3-3", "⬜"))
 
                         st.markdown("##### 💰 換標的建議( 4 規則心型警結合)")
                         st.markdown(
