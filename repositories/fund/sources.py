@@ -1315,6 +1315,46 @@ def _src_bank_platform_nav(base_code: str) -> "pd.Series":
 
 # Morningstar 搜尋 secId 快取（避免重複查）
 _ms_secid_cache: dict = {}
+# v19.473:同一次搜尋順手記下晨星回傳的**基金名稱 / 幣別**（供「只填代號+ISIN,其餘自動」）。
+#   幣別藏在晨星基金名稱後綴（如 "…AMg7 USD"）—— 用它自動判幣別,免使用者填(§4.1 不硬給 USD)。
+_ms_name_cache: dict = {}
+_ms_ccy_cache: dict = {}
+
+# 幣別 token（英文碼 + 常見中文詞）→ ISO 幣別。掃描晨星基金名稱命中第一個即用。
+_CCY_FROM_NAME = {
+    "USD": "USD", "美元": "USD", "美金": "USD",
+    "TWD": "TWD", "台幣": "TWD", "新台幣": "TWD", "臺幣": "TWD",
+    "EUR": "EUR", "歐元": "EUR",
+    "HKD": "HKD", "港幣": "HKD", "港元": "HKD",
+    "AUD": "AUD", "澳幣": "AUD", "澳元": "AUD",
+    "GBP": "GBP", "英鎊": "GBP",
+    "JPY": "JPY", "日圓": "JPY", "日元": "JPY",
+    "SGD": "SGD", "新幣": "SGD",
+    "CNY": "CNY", "RMB": "CNY", "人民幣": "CNY",
+    "ZAR": "ZAR", "南非幣": "ZAR", "南非": "ZAR",
+    "CAD": "CAD", "加幣": "CAD",
+    "NZD": "NZD", "紐幣": "NZD",
+    "CHF": "CHF", "瑞郎": "CHF", "瑞士法郎": "CHF",
+}
+
+
+def _ccy_from_fund_name(name: str) -> str:
+    """從晨星基金名稱抓計價幣別(如 "…AMg7 USD" → USD);抓不到回 ""(§1 不猜,由呼叫端退 USD)。
+
+    英文碼優先用**詞邊界**比對(避免 "USDX" 之類誤中);中文詞直接 substring。
+    """
+    import re as _re_ccy
+    _n = str(name or "")
+    if not _n.strip():
+        return ""
+    _up = _n.upper()
+    for _tok, _ccy in _CCY_FROM_NAME.items():
+        if _tok.isascii() and _tok.isalpha():          # 英文碼:詞邊界
+            if _re_ccy.search(rf"\b{_tok}\b", _up):
+                return _ccy
+        elif _tok in _n:                                # 中文詞:直接 substring
+            return _ccy
+    return ""
 
 # v6.21: 已知的 Morningstar secId 硬編碼映射（跳過搜尋步驟，避免 lt.morningstar.com 封鎖）
 # secId 格式：0P 開頭的 Morningstar 全球 ID（也是 Yahoo Finance {secId}.F 的基礎）
@@ -1359,6 +1399,9 @@ def _morningstar_search_secid(query: str, currency: str = "TWD") -> str:
             fund_name_ms = results[0].get("n", "")
             print(f"[morningstar_search] '{query}' → secId={sec_id} ({fund_name_ms[:30]})")
             _ms_secid_cache[query] = sec_id
+            # v19.473:順手記名稱 + 從名稱判幣別(供 ISIN 驅動路徑自動回填,免使用者填)
+            _ms_name_cache[query] = fund_name_ms
+            _ms_ccy_cache[query] = _ccy_from_fund_name(fund_name_ms)
             return sec_id
     except Exception as _e:
         # v19.339(第五份 review Bug 5):暫時性失敗(timeout/403/JSON 壞)原本也落到
@@ -1397,8 +1440,10 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
 
     # 2a. v19.470 ISIN 驅動:仍無 secId → 用選股池那列的 **ISIN** 去晨星搜(比名稱準);
     #     搜到 set_secid 回存(下次直接用、不重搜)。user 提案「填代號+ISIN,系統自動串」。
-    #     v19.471 稽核修:用**使用者填的幣別**(如 TWD)當 currency_id 抓 NAV,不硬給 USD;
-    #     回存不傳幣別 → set_secid 沿用既有,不覆蓋使用者的 currency。
+    #     v19.471 稽核修:優先用**使用者填的幣別**當 currency_id 抓 NAV,不硬給 USD。
+    #     v19.473(user「只填代號+ISIN,其餘自動」):使用者沒填幣別時 → 用晨星回傳**基金名稱後綴**
+    #     自動判幣別(如 "…USD");並把 secId + 自動判到的**幣別 + 名稱**一起回存到選股池那列
+    #     (下次直接用、UI 表格自動顯示)。名稱既有則不覆蓋(set_secid 內部處理)。
     if not sec_id:
         try:
             from repositories.pool_repository import (  # noqa: PLC0415
@@ -1410,11 +1455,17 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
             if _isin:
                 _u_ccy = _resolve_user_ccy(_code)
                 if _u_ccy:
-                    currency_id = _u_ccy          # 用使用者填的幣別抓(§4.1 不硬給 USD)
+                    currency_id = _u_ccy          # 使用者有填 → 尊重(§4.1 不硬給 USD)
                 sec_id = _morningstar_search_secid(_isin, currency_id or "USD")
+                # 使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)
+                _auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")
+                if _auto_ccy:
+                    currency_id = _auto_ccy
                 if sec_id:
                     try:
-                        _cache_secid(_code, sec_id)   # 不傳幣別 → 沿用既有,不覆蓋(稽核修)
+                        # 回存 secId + 自動判到的幣別(空則不動既有)+ 晨星名稱(既有不覆蓋)
+                        _cache_secid(_code, sec_id, currency=_auto_ccy,
+                                     name=_ms_name_cache.get(_isin, ""))
                     except Exception:  # noqa: BLE001 — 回存失敗不影響本次抓取
                         pass
         except Exception:  # noqa: BLE001 — 對照表/搜尋不可用不阻斷(退名稱搜尋)
@@ -1517,12 +1568,20 @@ def _src_yahoo_finance_nav(code: str) -> "pd.Series":
     """
     v6.19: 透過 Yahoo Finance 取共同基金歷史淨值。
     Yahoo Finance 對 Morningstar 基金使用 {secId}.F 格式作為代碼。
-    適用：_MORNINGSTAR_SECID_MAP 中有 secId 的基金。
+    適用：**選股池**有 secId(使用者填 ISIN 後由晨星搜到並存回)或 _MORNINGSTAR_SECID_MAP 有 secId 的基金。
     Yahoo Finance 端點從美國 IP 可存取，不受台灣 IP 封鎖影響。
     """
     import json as _jy, urllib.request as _ury
     _code = code.upper().strip()
-    _mapped = _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
+    # v19.473:先問**選股池**(使用者 ISIN 驅動、由晨星搜到後存回的 secId),再退硬編表 →
+    #   Yahoo `{secId}.F` 從此對「使用者自己填 ISIN 的檔」也生效(不再只限硬編幾檔)。
+    _user_mapped = None
+    try:
+        from repositories.pool_repository import resolve_secid as _ru_secid
+        _user_mapped = _ru_secid(_code)
+    except Exception:  # noqa: BLE001 — 選股池不可用不阻斷(退硬編表)
+        _user_mapped = None
+    _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
     sec_id, currency_id = _mapped if _mapped[0] else ("", "USD")
     if not sec_id:
         return pd.Series(dtype=float)

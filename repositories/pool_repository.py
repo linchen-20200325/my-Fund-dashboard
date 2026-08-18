@@ -379,10 +379,13 @@ def resolve_currency(code) -> "str | None":
     return (e.currency or None) if e else None
 
 
-def set_secid(code, secid, currency: str = "") -> None:
-    """回存以 ISIN 搜到的 secId(下次直接用、不重搜)。保留既有 ISIN/name;清快取立即生效。
+def set_secid(code, secid, currency: str = "", name: str = "") -> None:
+    """回存以 ISIN 搜到的 secId(下次直接用、不重搜)。保留既有 ISIN;清快取立即生效。
 
-    §1:code 不在選股池 → **不硬建列**(只回存既有列的 secId);空值 → 略過。
+    v19.473(user「只填代號+ISIN,其餘自動」):也可帶自動判到的 `currency` / `name`:
+    - `currency` 非空 → 覆蓋(空 → 沿用既有,不打成 USD)。
+    - `name` 非空**且既有名稱為空** → 補上(不覆蓋使用者已填的名稱)。
+    §1:code 不在選股池 → **不硬建列**(只回存既有列的 secId);空 secId → 略過。
     """
     _c = str(code or "").strip().upper()
     _sec = str(secid or "").strip()
@@ -394,6 +397,8 @@ def set_secid(code, secid, currency: str = "") -> None:
             e.morningstar_secid = _sec
             if currency:
                 e.currency = str(currency).strip().upper()
+            if name and not e.name:          # 只在空名稱時補(不蓋使用者填的)
+                e.name = str(name).strip()
             store.upsert(e)
             _clear_pool_cache()
             return
