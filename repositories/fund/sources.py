@@ -1395,7 +1395,32 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
     _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
     sec_id, currency_id = _mapped if _mapped[0] else ("", "USD")
 
-    # 2. 若無硬編碼，嘗試 Morningstar 搜尋
+    # 2a. v19.470 ISIN 驅動:仍無 secId → 用使用者對照表的 **ISIN** 去晨星搜(比名稱準);
+    #     搜到 set_secid 回存(下次直接用、不重搜)。user 提案「填代號+ISIN,系統自動串」。
+    #     v19.471 稽核修:用**使用者填的幣別**(如 TWD)當 currency_id 抓 NAV,不硬給 USD;
+    #     回存不傳幣別 → set_secid 沿用既有,不覆蓋使用者的 currency。
+    if not sec_id:
+        try:
+            from repositories.id_map_repository import (  # noqa: PLC0415
+                resolve_currency as _resolve_user_ccy,
+                resolve_isin as _resolve_user_isin,
+                set_secid as _cache_secid,
+            )
+            _isin = _resolve_user_isin(_code)
+            if _isin:
+                _u_ccy = _resolve_user_ccy(_code)
+                if _u_ccy:
+                    currency_id = _u_ccy          # 用使用者填的幣別抓(§4.1 不硬給 USD)
+                sec_id = _morningstar_search_secid(_isin, currency_id or "USD")
+                if sec_id:
+                    try:
+                        _cache_secid(_code, sec_id)   # 不傳幣別 → 沿用既有,不覆蓋(稽核修)
+                    except Exception:  # noqa: BLE001 — 回存失敗不影響本次抓取
+                        pass
+        except Exception:  # noqa: BLE001 — 對照表/搜尋不可用不阻斷(退名稱搜尋)
+            pass
+
+    # 2b. 仍無 secId → 用名稱/代號搜尋(既有 fallback)
     if not sec_id:
         _query = fund_name.strip() if fund_name.strip() else _code
         if _query:
