@@ -1086,6 +1086,7 @@ def render_single_fund_tab() -> None:
                 # input 走 _resolve_adr_with_fallback / compute_1y_total_return SSOT。
                 # 原本 162 行 inline 邏輯(3 套 fallback chain + 4 套 score lookup + grade cutoff)
                 # 收斂到 ~30 行,全站個檔健康度評等統一同源。
+                _4d = None  # v19.463:預綁定,供下方 Z-Score 區「行動建議合成器」讀;health 失敗保持 None
                 try:
                     from services.health.dividend import _resolve_adr_with_fallback
                     from services.health.grade import compute_4d_health
@@ -1471,6 +1472,20 @@ def render_single_fund_tab() -> None:
                         else:
                             st.caption(f"📐 Z-Score 位階不可算"
                                        f"（{_zi.get('status')};有效點 {_zi.get('n')}）。")
+                        # v19.463 深化③:品質(健診 grade)× 位階(Z-Score)→ 行動建議合成器。
+                        # 不把 Z 平均進品質分(§4.1 量綱分離);合成器自身處理 Core/位階未知/
+                        # 資料不足的誠實退場(§1)。僅在健診算得出(_4d 為 dict)時附。
+                        if isinstance(_4d, dict):
+                            from services.health.action import combine_action  # noqa: PLC0415
+                            _act = combine_action(_4d, _rb)
+                            _flags_txt = ("　" + "　".join(_act["flags"])) if _act.get("flags") else ""
+                            st.markdown(
+                                f"<div style='font-size:12px;color:{_act['color']};font-weight:700;"
+                                f"padding:5px 10px;background:{GH_BG_PRIMARY};border-radius:4px;"
+                                f"margin:4px 0 8px 0'>🎯 建議動作：{_act['action']}{_flags_txt}"
+                                f"<br/><span style='font-size:10px;color:{TRAFFIC_NEUTRAL};"
+                                f"font-weight:400'>{_act['reason']}</span></div>",
+                                unsafe_allow_html=True)
                     except Exception as _e_z:  # noqa: BLE001 — 位階為加值卡,失敗不影響風險表
                         st.caption(f"📐 Z-Score 計算略過:[{type(_e_z).__name__}]")
                     # ── 必修 2:混期示警 + 對帳降級揭露(沿用 v19.91 chip 樣式)──
