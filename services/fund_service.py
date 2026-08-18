@@ -1353,6 +1353,23 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     return _l1_impl(currency_pair, fred_api_key)
 
 
+def get_latest_vix() -> "float | None":
+    """VIX 最新值(整組共用單值,供 235 加碼引擎)。thin L2 facade 包 L1 fetch_yf_close("^VIX")。
+
+    抓不到 / 無效 → None(§1;呼叫端退「無 VIX」兩維判燈,不硬給)。cache 由 L1 fetch_yf_close
+    的 @_ttl_cache 集中(§8.2:L3 不直呼 L1,走本 L2 wrapper)。
+    """
+    try:
+        from repositories.macro.yf import fetch_yf_close
+        s = fetch_yf_close("^VIX", "1y")
+        if s is None or len(s) == 0:
+            return None
+        v = float(s.iloc[-1])
+        return v if v == v and v > 0 else None    # NaN / 非正 → None
+    except Exception:  # noqa: BLE001 — VIX 為加值輸入,抓不到不阻斷 235(退兩維判燈)
+        return None
+
+
 def get_fx_rate_by_date(currency: str) -> dict:
     """v19.449 稽核 M6:某幣別對 TWD 的**歷史**匯率日對照 {YYYY-MM-DD: rate}。
 
