@@ -46,12 +46,12 @@ class _FakeClient:
 
 
 def _fake_get_secret(key: str, default=None):
-    # v19.462:pool_repository._pool_sheet_id 用軟讀 get_secret 決定目標 Sheet
-    # (POLICY_SHEET_ID 優先 → 回退 macro_weights_sheet_id)。此處只設 macro_weights,
-    # 讓回退命中 SHEET_ID(等價舊行為),SA 仍回字串以驗「原樣傳遞」。
+    # v19.472:pool_repository._pool_sheet_id 改讀 `POOL_SHEET_ID`(獨立一本 → baked 預設)。
+    # 這裡明設 POOL_SHEET_ID=SHEET_ID 讓 _FakeClient.open_by_key 命中;macro_weights 亦保留
+    # 供 auto_search / weights getter(它們走 require_secret)。SA 回字串以驗「原樣傳遞」。
     if key == "google_service_account":
         return _SA_JSON
-    if key == "macro_weights_sheet_id":
+    if key in ("POOL_SHEET_ID", "macro_weights_sheet_id"):
         return "SHEET_ID"
     return default
 

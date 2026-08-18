@@ -115,7 +115,9 @@ def test_pool_entry_status_backward_compat():
     # 舊 6 欄列(無 status)→ pad → 預設 WATCHING(向後相容)
     _old = PoolEntry.from_row(["ACTI71", "聯博", "股票", "", "", "2026-01-01"])
     assert _old.status == "WATCHING"
-    assert len(_old.to_row()) == 7                                    # 新增 status 欄
+    # v19.472:選股池併入對照表 → 再 +isin/currency/morningstar_secid,共 10 欄(仍 additive 向後相容)
+    assert len(_old.to_row()) == 10
+    assert _old.isin == "" and _old.currency == "" and _old.morningstar_secid == ""
     # 有 status 列
     _new = PoolEntry.from_row(["X", "n", "c", "", "", "d", "holding"])
     assert _new.status == "HOLDING"                                   # 正規化大寫

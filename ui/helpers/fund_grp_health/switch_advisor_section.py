@@ -294,8 +294,17 @@ def _render_pool_editor() -> None:
     if pool:
         import pandas as pd
         from streamlit import column_config as _cc
+
+        def _navfill(e):
+            if e.morningstar_secid:
+                return "✅ 直接用 secId"
+            if e.isin:
+                return "🔎 用 ISIN 自動找"
+            return "⬜ 缺 ISIN"
         _df = pd.DataFrame([{"代號": e.code, "名稱": e.name, "類別": e.category,
                              "手動型態": e.type_override or "自動", "狀態": e.status,
+                             "ISIN": e.isin or "—", "幣別": e.currency or "—",
+                             "補淨值": _navfill(e),
                              "備註": e.note, "加入日": e.added_at} for e in pool])
         st.dataframe(
             _df, use_container_width=True, hide_index=True,
@@ -312,6 +321,12 @@ def _render_pool_editor() -> None:
                 "手動型態": _cc.TextColumn("手動型態", width="small",
                     help="你手動指定這檔要用哪一套規則:「震盪」= 走高低基期來回操作;"
                          "「成長」= 看總經與趨勢決定去留;「自動」= 由系統依波動判定。"),
+                "ISIN": _cc.TextColumn("ISIN", width="small",
+                    help="國際證券識別碼(對帳單/公開說明書上有)。填了 MoneyDJ 抓不到時,系統"
+                         "會用它去晨星串出淨值(v19.472 併入對照表)。"),
+                "幣別": _cc.TextColumn("幣別", width="small", help="計價幣別(如 USD/TWD),補淨值時用。"),
+                "補淨值": _cc.TextColumn("補淨值", width="small",
+                    help="這檔能不能靠晨星補淨值:✅ 已有 secId / 🔎 有 ISIN 可自動找 / ⬜ 缺 ISIN。"),
                 "備註": _cc.TextColumn("備註", width="large",
                     help="給自己看的筆記(例如為什麼把它放進候選),不參與任何計算。"),
                 "加入日": _cc.TextColumn("加入日", width="small",
@@ -328,15 +343,39 @@ def _render_pool_editor() -> None:
         _cat = c3.text_input("類別(選填)", key="pool_cat")
         _ov = st.selectbox("型態(可留自動)", _TYPE_OPTS, key="pool_type")
         _note = st.text_input("備註(選填)", key="pool_note")
+        # v19.472:併入對照表 —— MoneyDJ 抓不到淨值的檔,填 ISIN(+幣別)即解鎖晨星補淨值路。
+        ci1, ci2 = st.columns([2, 1])
+        _isin = ci1.text_input("ISIN(選填,抓不到淨值的檔填了可補)", key="pool_isin",
+                               placeholder="LU0766462157")
+        _ccy = ci2.text_input("幣別(選填)", key="pool_ccy", placeholder="USD / TWD")
         if st.form_submit_button("➕ 加入 / 更新選股池", use_container_width=True):
             _c = (_code or "").strip()
             if not _c:
                 st.warning("請輸入基金代號。")
             else:
                 _ovv = "" if _ov.startswith("自動") else _ov
+                # v19.472 稽核修:code 已在池 → **合併**(未填的欄位保留既有),避免「只想補 ISIN
+                # 卻把名稱/類別/備註/手動型態/狀態/加入日/已找到的 secId 全清掉」的資料流失。
+                # 型態:留「自動」= 不動既有;明選 震盪/成長 才覆蓋(改型態另有「套用型態」鈕)。
+                _exist = next((e for e in pool if e.code == _c), None)
+                if _exist is not None:
+                    _entry = PoolEntry(
+                        code=_c,
+                        name=_name.strip() or _exist.name,
+                        category=_cat.strip() or _exist.category,
+                        type_override=_ovv or _exist.type_override,
+                        note=_note.strip() or _exist.note,
+                        added_at=_exist.added_at, status=_exist.status,
+                        isin=_isin.strip() or _exist.isin,
+                        currency=_ccy.strip() or _exist.currency,
+                        morningstar_secid=_exist.morningstar_secid,
+                    )
+                else:
+                    _entry = PoolEntry(code=_c, name=_name.strip(), category=_cat.strip(),
+                                       type_override=_ovv, note=_note.strip(),
+                                       isin=_isin.strip(), currency=_ccy.strip())
                 try:
-                    add_or_update(PoolEntry(code=_c, name=_name.strip(), category=_cat.strip(),
-                                            type_override=_ovv, note=_note.strip()))
+                    add_or_update(_entry)
                     st.success(f"已加入 / 更新:{_c}")
                     st.rerun()
                 except Exception as _e:  # noqa: BLE001

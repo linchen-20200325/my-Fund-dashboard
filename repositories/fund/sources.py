@@ -1384,24 +1384,24 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
     rows = {}
     _code = code.upper().strip()
 
-    # 1. 查映射:v19.469 先問**使用者可自編輯的對照表**(_fund_id_map,user 提案「自己加 secId」),
+    # 1. 查映射:v19.472 先問**選股池(_fund_pool,併入的對照表)**(user 提案「兩表共用」),
     #    再退硬編碼 _MORNINGSTAR_SECID_MAP(TLZF9 等)。你的表優先 → 可覆蓋/補新檔。
     _user_mapped = None
     try:
-        from repositories.id_map_repository import resolve_secid as _resolve_user_secid
+        from repositories.pool_repository import resolve_secid as _resolve_user_secid
         _user_mapped = _resolve_user_secid(_code)
-    except Exception:  # noqa: BLE001 — 對照表不可用不阻斷抓取鏈(退硬編/搜尋)
+    except Exception:  # noqa: BLE001 — 選股池不可用不阻斷抓取鏈(退硬編/搜尋)
         _user_mapped = None
     _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
     sec_id, currency_id = _mapped if _mapped[0] else ("", "USD")
 
-    # 2a. v19.470 ISIN 驅動:仍無 secId → 用使用者對照表的 **ISIN** 去晨星搜(比名稱準);
+    # 2a. v19.470 ISIN 驅動:仍無 secId → 用選股池那列的 **ISIN** 去晨星搜(比名稱準);
     #     搜到 set_secid 回存(下次直接用、不重搜)。user 提案「填代號+ISIN,系統自動串」。
     #     v19.471 稽核修:用**使用者填的幣別**(如 TWD)當 currency_id 抓 NAV,不硬給 USD;
     #     回存不傳幣別 → set_secid 沿用既有,不覆蓋使用者的 currency。
     if not sec_id:
         try:
-            from repositories.id_map_repository import (  # noqa: PLC0415
+            from repositories.pool_repository import (  # noqa: PLC0415
                 resolve_currency as _resolve_user_ccy,
                 resolve_isin as _resolve_user_isin,
                 set_secid as _cache_secid,

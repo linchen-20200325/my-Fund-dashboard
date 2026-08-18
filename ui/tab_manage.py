@@ -3,7 +3,9 @@
 **不新增儲存**:選股池存 Google Sheets `_fund_pool` 分頁,本頁只是它的**集中管理介面**,
 全部重用既有 L1/L2/L0(§8.1 不重造):
 - 📁 選股池:重用 `switch_advisor_section._render_pool_editor`(GS + 本地雙後端,永久保存)。
-- 🗓️ 除息行事曆 / 📥 補歷史淨值(FundClear + TDCC + 手動 CSV)。
+  v19.472:選股池併入「基金代號對照表」(填 ISIN 即解鎖晨星補淨值),且改存**獨立一本** Sheet
+  (`POOL_SHEET_ID`,不共用持倉那本)。
+- 🗓️ 除息行事曆 / 🗄️ 補歷史淨值(v19.472 移除 FundClear + TDCC 抓取,只留手動 CSV 上傳)。
 - 🔔 通報:LINE 設定狀態 + 預覽本週訊息 + 測試發送 + 設定指引。**每週自動送仍是 NAS 排程**,
   本頁只負責看/測(Streamlit 不背景跑,§1 不假裝能排程)。
 
@@ -68,8 +70,9 @@ def _policy_client_and_sheet():
 def _sec_pool():
     st.markdown("### 📁 選股池(候選基金)")
     st.caption("**這不是你的持倉** —— 是你**還沒買、考慮想換進來**的候選名單,換股顧問拿它跟你的持倉比較。"
-               "v19.462:存進**你自己持倉 Sheet(`POLICY_SHEET_ID`)裡的 `_fund_pool` 分頁**"
-               "(同一本、不同分頁,不會動到持倉;可直接在 Google Sheet 看/編)。"
+               "v19.472:存進**獨立一本 Sheet(`POOL_SHEET_ID`,與持倉不同本)的 `_fund_pool` 分頁**"
+               "(可直接在 Google Sheet 看/編)。抓不到淨值的檔在下方**填 ISIN**,系統就走晨星自動補淨值"
+               "(併入原「基金代號對照表」,兩表共用一張)。"
                "⚠️ 需把 Service Account 信箱加為該 Sheet 編輯者才會雲端同步,否則暫存本機。")
 
     # v19.461:移除「曾經查過的基金清單」自動記錄 + 匯入(user 2026-08-17:介面不友善 → 全拿掉)。
@@ -289,320 +292,17 @@ def _sec_dividend_calendar():
 
 
 def _sec_nav_backfill() -> None:
-    """📥 補歷史淨值(FundClear 境外基金)→ 存進 GS nav_history → 根治「抓不到→外推→假吃本金」。"""
-    st.markdown("### 📥 補歷史淨值(FundClear 境外基金)")
-    st.caption("抓 FundClear 境外基金的**完整歷史淨值**(單次可達 ~20 年)存進 Google Sheet,"
-               "讓健診有足夠序列算**真實 1 年報酬** —— 根治「抓不到官方資料 → 外推 → 假吃本金」"
-               "(如 ACTI71 −38%)。")
-    st.warning("⚠️ **務必選『你實際持有的那個級別』**(同幣別、同累積 Acc/配息 Dist)——"
-               "抓來的歷史會**併入**該基金既有序列,若級別/幣別對不上(例:你持配息級別卻抓累積級別、"
-               "或幣別不同),接點會產生**跳空 → 報酬失真**。**最安全**是用在 App 目前完全抓不到"
-               "淨值的基金(如 ACTI71),那時併入的是純 FundClear 單一序列,不會混。")
-    with st.expander("展開:①挑基金 → ②選級別 → ③下載存進 Google Sheet"):
-        # ① 用「現在有的資料」:載入你的持倉,從中挑(自動帶基金名稱 + 內部碼,免手打、免打錯)
-        if st.button("📇 載入我的持倉清單(從中挑基金)", key="navbf_load_holdings"):
-            try:
-                _cli_h, _sid_h = _policy_client_and_sheet()
-                if _cli_h is None:
-                    st.info(_sid_h)
-                else:
-                    from repositories.policy.v2 import load_all_policies_v2
-                    _pdf_h = load_all_policies_v2(_cli_h, _sid_h)
-                    _seen, _hold = set(), []
-                    for _r in _pdf_h.itertuples(index=False):
-                        _c = str(getattr(_r, "fund_code", "") or "").strip().upper()
-                        _nm = str(getattr(_r, "fund_name", "") or "").strip()
-                        if _c and _c not in _seen:
-                            _seen.add(_c)
-                            _hold.append({"code": _c, "name": _nm})
-                    st.session_state["navbf_holdings"] = _hold
-                    if not _hold:
-                        st.info("持倉裡沒有基金代號可挑。")
-            except Exception as _e:  # noqa: BLE001
-                _friendly("載入持倉失敗", _e, level="error")
+    """🗄️ 補歷史淨值(手動 CSV 上傳)→ 存進 GS nav_history。
 
-        # ── 2026-08-15 user 反映：「我想要也能用代號去找」──────────────────────
-        # 其實 `resolve_search_name` 早就支援打代號（會去選股池 / 持倉查名稱），
-        # 但欄位標籤只寫「基金名稱」—— **使用者不可能知道**。而且可選的代號
-        # 明明就在選股池裡，卻沒有列出來給人挑，只能自己記或自己打。
-        #
-        # 改法：把「選股池 + 持倉」合併成一份 代號→名稱 清單直接讓你挑，
-        # 挑完仍走同一支 `resolve_search_name`（拿名稱去 FundClear 找、
-        # 拿代號存回 nav_history），邏輯零改動、只是把入口打開。
-        _hold = st.session_state.get("navbf_holdings") or []
-        _pool_opts: list = []
-        try:
-            from repositories.pool_repository import list_pool
-            for _pe in list_pool():
-                _c = str(getattr(_pe, "code", "") or "").strip().upper()
-                if _c:
-                    _pool_opts.append({"code": _c,
-                                       "name": str(getattr(_pe, "name", "") or "").strip(),
-                                       "src": "選股池"})
-        except Exception as _e_pool:  # noqa: BLE001 — 選股池讀不到不擋手打
-            import sys as _sys_pool
-            print(f"[navbf] 選股池讀取失敗: {type(_e_pool).__name__}: {_e_pool}",
-                  file=_sys_pool.stderr)
-        # 持倉優先（同代號時保留持倉那筆的名稱：那是你實際持有的級別）
-        _pick_src: dict = {}
-        for _h in _hold:
-            _c = str(_h.get("code", "") or "").strip().upper()
-            if _c:
-                _pick_src[_c] = {"code": _c, "name": _h.get("name", "") or "", "src": "持倉"}
-        for _p in _pool_opts:
-            _pick_src.setdefault(_p["code"], _p)
-
-        _fixed_code = ""
-        _name = ""
-        if _pick_src:
-            _hopts = {
-                f"{_v['code']} — {_v['name'] or '(無名稱)'}　[{_v['src']}]": _v
-                for _v in sorted(_pick_src.values(), key=lambda x: x["code"])
-            }
-            _MANUAL = "✍️ 自己打（不在清單裡）"
-            _sel = st.selectbox(
-                "① 挑基金 —— **用代號挑**（清單來自你的選股池 + 持倉）",
-                [_MANUAL] + list(_hopts), key="navbf_hold_pick",
-                help="下拉選單是「代號 — 名稱」。挑好之後，系統會拿**名稱**去 FundClear 搜尋，"
-                     "抓到的歷史則存回**你的代號**底下（健診才讀得回）。",
-            )
-            if _sel != _MANUAL:
-                _hpick = _hopts[_sel]
-                _name = _hpick["name"] or _hpick["code"]
-                _fixed_code = _hpick["code"]
-                st.caption(f"→ 用名稱「**{_name}**」去 FundClear 找,"
-                           f"抓到後存進內部碼「**{_fixed_code}**」。")
-            else:
-                _name = st.text_input(
-                    "基金名稱 **或** 代號", key="navbf_name",
-                    placeholder="例:聯博多元資產收益組合基金　或　ACTI71",
-                    help="打代號時，系統會先去選股池 / 持倉查出對應名稱再搜尋。"
-                         "代號查不到對應名稱的話，會直接把你打的字當基金名稱去找。")
-        else:
-            _name = st.text_input(
-                "① 基金名稱 **或** 代號（按上面『載入持倉』可改用清單挑）",
-                key="navbf_name",
-                placeholder="例:聯博多元資產收益組合基金　或　ACTI71",
-                help="打代號時，系統會先去選股池 / 持倉查出對應名稱再搜尋。")
-        _org = st.text_input("機構代碼(選填;知道就填可加速。例 019=安聯)", key="navbf_org",
-                             placeholder="留空 = 全機構搜尋(較慢;機構清單 endpoint 部署後才驗證)")
-        with st.expander("🔧 出現「機構清單 endpoint 全部候選失敗」?怎麼辦"):
-            st.markdown(
-                "FundClear 的**機構清單**那支 API 路徑還沒驗證到(規格書 §2.5 也標未驗證)。兩個解法:\n\n"
-                "**A. 直接填機構代碼(最快)**:在上面『機構代碼』欄填代碼再按找。已知 **019 = 安聯**。\n\n"
-                "**B. 幫我抓真實路徑(一勞永逸,之後就能用下拉)**:\n"
-                "1. 電腦瀏覽器開 `https://www.fundclear.com.tw/offshore/nav-profit/fund-nav?type=history`\n"
-                "2. 按 **F12** → 選 **Network(網路)** → 篩選 **Fetch/XHR**\n"
-                "3. **重新整理**頁面\n"
-                "4. 找開頭像 `common-select` 的請求,把它的 **Request URL** 貼給我\n"
-                "5. (順便)機構下拉選你的基金公司(如聯博),看新請求 payload 裡的 `organizeCode`,"
-                "那就是你的機構代碼\n\n"
-                "把 4/5 貼給我,我把實際 endpoint 寫死,你之後就不用填代碼。")
-        # v19.456:user 想「打代碼」→ 用選股池 + 持倉的代碼↔名稱對照,把代碼自動換成名稱去 FundClear
-        # 找、代碼留著存回 nav_history。打名稱則原樣。
-        _code_name_map = {}
-        try:
-            from repositories.pool_repository import list_pool
-            for _pe in list_pool():
-                if getattr(_pe, "code", ""):
-                    _code_name_map[str(_pe.code).strip().upper()] = getattr(_pe, "name", "") or ""
-        except Exception:  # noqa: BLE001 — 選股池讀不到不阻斷,仍可用名稱直接找
-            pass
-        for _h in (st.session_state.get("navbf_holdings") or []):
-            _code_name_map.setdefault(str(_h.get("code", "")).strip().upper(), _h.get("name", "") or "")
-        from services.fundclear_backfill import resolve_search_name
-        _search_name, _resolved_code = resolve_search_name(_name, _code_name_map)
-        if _resolved_code and _search_name != str(_name).strip():
-            _fixed_code = _resolved_code            # 打代碼 → 存回用該代碼(健診讀得回)
-            st.caption(f"🔁 代碼 **{_resolved_code}** → 名稱「**{_search_name}**」"
-                       "(拿名稱去 FundClear 找、拿代碼存回)")
-
-        if st.button("🔎 找 FundClear 對應基金", key="navbf_find", disabled=not _search_name.strip()):
-            try:
-                from services.fundclear_backfill import find_fund_candidates
-                with st.spinner("搜尋 FundClear 基金清單…"):
-                    st.session_state["navbf_cands"] = find_fund_candidates(
-                        _search_name.strip(), (_org.strip() or None))
-                if not st.session_state["navbf_cands"]:
-                    st.warning("查無相似基金 —— 可能非 FundClear 境外基金,或需指定機構代碼。")
-            except Exception as _e:  # noqa: BLE001
-                _friendly("搜尋 FundClear 失敗(部署環境才連得到;機構清單報錯請填機構代碼或按下方掃描)",
-                          _e, level="error")
-
-        if st.button("🔍 掃描全部機構找我的基金(機構清單抓不到時用;較慢 ~1-2 分)",
-                     key="navbf_scan", disabled=not _search_name.strip()):
-            try:
-                from services.fundclear_backfill import find_fund_candidates
-                with st.spinner("逐一掃描機構 001-060(~1-2 分,跑完前別關頁面)…"):
-                    st.session_state["navbf_cands"] = find_fund_candidates(
-                        _search_name.strip(), organize_code=None, scan_range=60)
-                if not st.session_state["navbf_cands"]:
-                    st.warning("掃描完仍查無 —— 可能非 FundClear 境外基金,或機構代碼超出 001-060 範圍。")
-            except Exception as _e:  # noqa: BLE001
-                _friendly("掃描失敗", _e, level="error")
-
-        _cands = st.session_state.get("navbf_cands") or []
-        if _cands:
-            _opts = {f"{c['name']}（{c.get('organize_name') or c['organize_code']}/{c['value']}）"
-                     f" · {c['score']:.0%}": c for c in _cands}
-            _pick = _opts.get(st.selectbox("選對應基金(**核對名稱**)", list(_opts), key="navbf_pick"))
-            if _pick and st.button("取級別清單", key="navbf_classes_btn"):
-                try:
-                    from services.fundclear_backfill import list_classes_for
-                    st.session_state["navbf_classes"] = list_classes_for(
-                        _pick["organize_code"], _pick["value"])
-                    st.session_state["navbf_pick_fund"] = _pick
-                except Exception as _e:  # noqa: BLE001
-                    _friendly("取級別清單失敗", _e, level="error")
-
-        _classes = st.session_state.get("navbf_classes") or []
-        _pick_fund = st.session_state.get("navbf_pick_fund")
-        if _classes and _pick_fund:
-            _copts = {f"{c['name']}（{c['value']}）": c for c in _classes}
-            _cpick = _copts.get(st.selectbox(
-                "選級別 —— **選你實際持有的那個**(幣別 + 累積/配息 都要一致,否則併入會跳空失真)",
-                list(_copts), key="navbf_class_pick"))
-            if _fixed_code:
-                _app_code = _fixed_code                            # 自動帶自持倉 → 健診一定讀得回
-                st.caption(f"存進內部碼:**{_app_code}**(自動帶自你的持倉,免打錯)")
-            else:
-                _app_code = st.text_input(
-                    "存進 nav_history 的**持倉內部碼**(健診以此讀回;例 ACTI71)", key="navbf_appcode")
-            # ── 稽核 E6（2026-08-14）：寫入前必須先預覽 ────────────────────────
-            # 原本這裡是**一顆按鈕直接寫**:抓數千筆 → 直接進 Google Sheet 的
-            # nav_history 分頁,零預覽、零確認、無 dry-run、無 rollback。
-            # 而那個分頁在說明書上標「🚨 絕對不要刪…無法從任何來源重建」。
-            #
-            # 真正致命的是去重鍵只有 `(code, date)`:同一檔基金常有多個級別
-            # (美元累積 / 美元配息 / 歐元避險…),淨值完全不同。選錯級別寫進去後,
-            # **正確級別的淨值會被當成重複而永遠寫不進來**,而錯的那份會被健診
-            # 拿去算 1Y 報酬、Sharpe、σ —— 使用者不會收到任何警告。
-            #
-            # 改成兩段:① 預覽(只抓不寫 + 比對既有資料)→ ② 看過再確認寫入。
-            _bf_key = f"{_pick_fund['value']}|{_cpick['value']}|{_app_code.strip()}"
-            if _cpick and st.button("① 🔍 預覽（只抓不寫）", key="navbf_preview",
-                                    disabled=not _app_code.strip(),
-                                    use_container_width=True):
-                try:
-                    from services.fundclear_backfill import download_and_store
-                    with st.spinner("抓完整歷史(可能數十秒)…尚未寫入任何資料"):
-                        _prev = download_and_store(
-                            _pick_fund["organize_code"], _pick_fund["value"],
-                            _cpick["value"], _app_code.strip(),
-                            fund_name=_pick_fund["name"], dry_run=True)
-                    st.session_state["navbf_preview"] = {"key": _bf_key, "res": _prev}
-                except Exception as _e:  # noqa: BLE001
-                    _friendly("預覽失敗", _e, level="error")
-
-            _pv = st.session_state.get("navbf_preview") or {}
-            # 選項改過 → 舊預覽作廢(否則會拿 A 級別的預覽去確認 B 級別的寫入)
-            if _pv and _pv.get("key") == _bf_key:
-                _res = _pv["res"]
-                if not _res.get("ok"):
-                    st.error(f"抓取失敗:{_res.get('reason')}")
-                else:
-                    _s0, _s1 = _res["span"]
-                    _cf = _res.get("conflict") or {}
-                    _v = _cf.get("verdict")
-                    st.info(
-                        f"**預覽結果（尚未寫入）**：{_app_code.strip()} 抓到 "
-                        f"**{_res['count']} 筆**，{_s0} ~ {_s1}，計價幣別 "
-                        f"**{_res['currency']}**。\n\n"
-                        f"這一檔目前已累積 {_cf.get('n_existing', 0)} 筆；"
-                        f"其中 {_cf.get('n_overlap', 0)} 天與這次抓到的重疊。"
-                    )
-                    if _v == "conflict":
-                        _rows = "\n".join(
-                            f"- {s['date']}：已存 **{s['existing']:.4f}** vs "
-                            f"這次 **{s['incoming']:.4f}**（差 {s['diff_pct']:+.1f}%）"
-                            for s in (_cf.get("samples") or []))
-                        st.error(
-                            f"⛔ **偵測到 {_cf['n_conflict']} 天的淨值對不上 —— "
-                            "極可能選錯級別，已擋下不寫入。**\n\n"
-                            f"{_rows}\n\n"
-                            "同一檔基金常有好幾個級別（美元累積 / 美元配息 / 歐元避險…），"
-                            "淨值完全不同。**請回上一步核對幣別與配息/累積型是否與你實際持有的一致。**\n\n"
-                            "⚠️ 為什麼一定要擋：這個分頁的去重只看「代碼 + 日期」，"
-                            "**錯的資料寫進去之後，正確的就永遠寫不進來了**，"
-                            "而健診會拿錯的去算報酬率。"
-                        )
-                    elif _v == "duplicate":
-                        st.warning(
-                            "ℹ️ 這段歷史**已經在裡面了**（重疊日的淨值完全一致）。"
-                            "按下面的確認鈕不會有任何改變，也不會弄壞什麼。")
-                    elif _v == "unknown":
-                        st.warning(
-                            "⚠️ **讀不到既有資料，無法確認會不會撞到既有紀錄。**"
-                            "多半是 Google Sheet 還沒設定好。"
-                            "在確認之前建議先到「📖 參考 / 診斷」看一下累積狀態燈。")
-                    else:
-                        st.success("✅ 沒有與既有資料重疊，這是純新增，安全。")
-
-                    if _v != "conflict":
-                        st.caption("確認前請再看一眼上面的**計價幣別**與**起訖日期**是否合理。")
-                        if st.button("② ✍️ 確認寫入 Google Sheet", key="navbf_commit",
-                                     type="primary", use_container_width=True):
-                            try:
-                                from services.fundclear_backfill import download_and_store
-                                with st.spinner("寫入 Google Sheet…"):
-                                    _w = download_and_store(
-                                        _pick_fund["organize_code"], _pick_fund["value"],
-                                        _cpick["value"], _app_code.strip(),
-                                        fund_name=_pick_fund["name"])
-                                if not _w.get("ok"):
-                                    st.error(f"已擋下未寫入:{_w.get('reason')}")
-                                else:
-                                    st.success(
-                                        f"✅ {_app_code.strip()}:寫入 {_w['written']} 筆"
-                                        f"(重複略過 {_w['skipped']})。"
-                                        "重整健診 / 個基體檢就會用這段歷史算真實 1Y,不再外推誤判。")
-                                    st.session_state.pop("navbf_preview", None)
-                            except Exception as _e:  # noqa: BLE001
-                                _friendly("寫入失敗", _e, level="error")
-
-    with st.expander("📥 每日官方淨值(TDCC 11641 近7天)—— 全持倉一鍵補 / 驗證後可排每日自動"):
-        st.caption("抓政府開放資料『境外基金淨值』(近7天)→ 用**名稱**對到你**全部持倉** → 存進 nav_history。"
-                   "**近7天只能往後累積、補不了過去**(過去用上面 FundClear)。跑幾週後每檔都有序列。"
-                   "⚠️ 首次請**核對下方比對名稱**對不對,再考慮排每日自動。")
-        if st.button("📥 抓 TDCC 官方淨值 → 補全持倉", key="tdcc_acc_btn", use_container_width=True):
-            try:
-                import pandas as _pd_t
-                _cli_t, _sid_t = _policy_client_and_sheet()
-                if _cli_t is None:
-                    st.info(_sid_t)
-                else:
-                    from repositories.policy.v2 import load_all_policies_v2
-                    _pdf_t = load_all_policies_v2(_cli_t, _sid_t)
-                    _seen_t, _hold_t = set(), []
-                    for _r in _pdf_t.itertuples(index=False):
-                        _c = str(getattr(_r, "fund_code", "") or "").strip().upper()
-                        _nm = str(getattr(_r, "fund_name", "") or "").strip()
-                        if _c and _c not in _seen_t:
-                            _seen_t.add(_c)
-                            _hold_t.append({"code": _c, "name": _nm})
-                    from services.tdcc_nav_accumulate import accumulate_and_store
-                    with st.spinner("抓 TDCC 11641 + 比對 + 寫入…"):
-                        _res_t = accumulate_and_store(_hold_t)
-                    if not _res_t.get("ok"):
-                        st.error(f"失敗:{_res_t.get('reason')}")
-                    else:
-                        _rep_t = _res_t["report"]
-                        st.success(f"✅ 寫入 {_res_t['written']} 筆(重複略過 {_res_t['skipped']});"
-                                   f"對到 {len(_rep_t['matched'])} 檔、對不上 {len(_rep_t['unmatched'])} 檔。")
-                        if _rep_t["matched"]:
-                            st.caption("**比對結果(請核對名稱是否正確)**:")
-                            st.dataframe(_pd_t.DataFrame(_rep_t["matched"]),
-                                         use_container_width=True, hide_index=True)
-                        if _rep_t["unmatched"]:
-                            st.caption("⬜ 對不上(11641 近7天沒有 / 名稱差太多):"
-                                       + "、".join(_rep_t["unmatched"]))
-            except Exception as _e:  # noqa: BLE001
-                _friendly("TDCC 官方淨值累積失敗", _e, level="error")
-
-    # ── v19.461：從「說明書」搬來的 🗄️ NAV 歷史資料管理（手動 CSV 上傳 / 匯出 / 增量）──
-    # user 2026-08-17：NAV 歷史管理集中到「我的管理室」。此工具走 services/nav_history_store.py
-    # （本機 cache/nav_history/{code}.json）+ 雙寫 GS nav_history，與上面 FundClear / TDCC 兩支
-    # 同屬「補歷史淨值」家族，故一併收進本區。widget key `_nh_*` 僅此處渲染（已從說明書移除）。
+    v19.472:FundClear 挑基金 + TDCC 11641 兩支抓取工具**移除**(user 2026-08-18:抓不到的檔
+    改用下方「選股池(併入的基金代號對照表)」填 ISIN → 系統走晨星自動補淨值)。保留手動 CSV
+    上傳(離線可用、最可靠的真備援)。
+    """
+    st.markdown("### 🗄️ 補歷史淨值(手動 CSV 上傳)")
+    st.caption("抓不到淨值的基金:從 CnYES / MoneyDJ 手動下載完整歷史 CSV → 上傳這裡 → 存進 "
+               "nav_history,健診就有足夠序列算真實報酬(根治「抓不到 → 外推 → 假吃本金」)。"
+               "自動補淨值改用下方『選股池』填代號 + ISIN(系統走晨星自動抓)。")
+    # v19.461→472：🗄️ NAV 歷史資料管理(手動 CSV 上傳 / 匯出 / 增量)。widget key `_nh_*` 僅此處渲染。
     with st.expander("🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）", expanded=False):
         from services.nav_history_store import (
             clear_cache as _nh_clear,
@@ -703,103 +403,26 @@ def _sec_nav_backfill() -> None:
         )
 
 
-def _sec_id_map() -> None:
-    """🗂️ 基金代號對照表 —— code → 晨星 secId / ISIN,解鎖 MoneyDJ 抓不到時的晨星補淨值路。"""
-    import pandas as _pd
-    st.markdown("### 🗂️ 基金代號對照表(補資料用)")
-    st.caption("台灣/MoneyDJ 內部碼(如 ALZF9)抓不到淨值時 → **你只要填「代號 + ISIN」**,系統會用"
-               "**ISIN 自動去晨星串出 secId**、再走「晨星 → Yahoo chart」補淨值(找到的 secId 會回存,"
-               "下次直接用)。存進你 Sheet 的 `_fund_id_map` 分頁,也可直接在 Google Sheet 編。")
-    st.caption("💡 **ISIN 在基金公開說明書 / 對帳單**(如 `LU0766462157`),每檔都有、你手上就有。"
-               "secId **不用填**(系統自動找);⚠️ 實際抓取要在能連外的環境(部署/NAS)才生效。")
-    try:
-        from repositories.id_map_repository import (
-            IdMapEntry, add_or_update, list_id_map, remove_from_id_map,
-        )
-    except Exception as _e:  # noqa: BLE001
-        _friendly("對照表載入失敗", _e, level="error")
-        return
-
-    try:
-        _entries = list_id_map()
-    except Exception as _e:  # noqa: BLE001 — SA 未分享到你的 Sheet 等 → 誠實顯示,不假裝空
-        _friendly("對照表讀取失敗(SA 未分享到你的 Sheet?)", _e, level="error")
-        _entries = []
-
-    if _entries:
-        def _status(e):
-            if e.morningstar_secid:
-                return "✅ 直接用 secId"
-            if e.isin:
-                return "🔎 用 ISIN 自動找"
-            return "⬜ 缺 ISIN/secId"
-        _rows = [{"代號": e.code, "ISIN": e.isin or "—",
-                  "晨星 secId": e.morningstar_secid or "(自動)",
-                  "幣別": e.currency, "名稱": e.name, "可補淨值": _status(e)} for e in _entries]
-        st.dataframe(_pd.DataFrame(_rows), use_container_width=True, hide_index=True)
-    else:
-        st.info("對照表目前是空的 —— 用下方表單填「代號 + ISIN」(或直接在 Google Sheet 的 "
-                "`_fund_id_map` 分頁編)。")
-
-    with st.form("idmap_add", clear_on_submit=True):
-        _c1, _c2 = st.columns(2)
-        _code = _c1.text_input("基金代號(內部碼)", placeholder="ALZF9").strip().upper()
-        _isin = _c2.text_input("ISIN", placeholder="LU0766462157").strip().upper()
-        _c3, _c4 = st.columns([1, 2])
-        _ccy = _c3.text_input("幣別", value="USD").strip().upper()
-        _nm = _c4.text_input("基金名稱(選填)").strip()
-        _sec = st.text_input("晨星 secId(選填,系統會用 ISIN 自動找;有的話填可跳過搜尋)",
-                             placeholder="留空即可").strip()
-        if st.form_submit_button("➕ 加入 / 更新對照", use_container_width=True):
-            if not _code:
-                st.warning("請填基金代號")
-            elif not (_isin or _sec):
-                st.warning("請至少填 ISIN(系統靠它自動找 secId)或直接填 secId")
-            else:
-                try:
-                    add_or_update(IdMapEntry(code=_code, morningstar_secid=_sec,
-                                             isin=_isin, currency=_ccy or "USD", name=_nm))
-                    if _sec:
-                        _msg = f"✅ 已存 {_code} → secId {_sec}(直接用)"
-                    else:
-                        _msg = f"✅ 已存 {_code}(ISIN {_isin})→ 部署端會自動用 ISIN 串 secId 補淨值"
-                    st.success(_msg)
-                    st.rerun()
-                except Exception as _e:  # noqa: BLE001
-                    _friendly("寫入對照表失敗", _e, level="error")
-
-    if _entries:
-        _codes = [e.code for e in _entries]
-        _del = st.selectbox("🗑️ 刪除對照", ["（選一個）"] + _codes, key="idmap_del_pick")
-        if _del != "（選一個）" and st.button(f"刪除 {_del}", key="idmap_del_btn"):
-            try:
-                remove_from_id_map(_del)
-                st.rerun()
-            except Exception as _e:  # noqa: BLE001
-                _friendly("刪除失敗", _e, level="error")
-
-
 def render_manage_tab() -> None:
     from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tm
     st.markdown(f"## {_tab_label_tm('manage')}")
     render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
     st.info(
-        "**這一頁由上到下有 5 塊**:\n\n"
-        "1. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。\n"
+        "**這一頁由上到下有 4 塊**:\n\n"
+        "1. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。"
+        "抓不到淨值的檔在這裡填 **ISIN**,系統就走晨星自動補淨值(v19.472 併入原「對照表」)。\n"
         "2. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
-        "3. 📥 **補歷史淨值** — 幫抓不到淨值的基金補歷史(根治吃本金誤判)。\n"
-        "4. 🗂️ **基金代號對照表** — 抓不到的檔填晨星 secId/ISIN,解鎖晨星補淨值路。\n"
-        "5. 🔔 **換股通報** — 設定 LINE 每週提醒。"
+        "3. 🗄️ **補歷史淨值** — 抓不到的基金手動上傳 CSV 補歷史(根治吃本金誤判)。\n"
+        "4. 🔔 **換股通報** — 設定 LINE 每週提醒。"
     )
     # v19.462:移除「投資組合(持倉)」一覽(user 2026-08-17:帳本(配置&帳本 Tab)已有;
     # 且流程圖把 Portfolio 歸「配置&帳本」,管理室專責 Watchlist/選股池 + 補歷史淨值)。
+    # v19.472:退「基金代號對照表」獨立區 —— 併入選股池(填 ISIN 即解鎖補淨值,兩表共用一張)。
     _sec_pool()
     st.divider()
     _sec_dividend_calendar()
     st.divider()
     _sec_nav_backfill()
-    st.divider()
-    _sec_id_map()          # v19.469:基金代號對照表(補資料用,接晨星 secId 補淨值路)
     st.divider()
     _sec_notify()
