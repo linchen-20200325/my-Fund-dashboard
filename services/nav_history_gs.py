@@ -235,7 +235,11 @@ def append_points(points: list[dict], *, _sheet: Any = None) -> dict:
         seen: set = set()
         for r in existing[1:]:
             if len(r) >= 2:
-                seen.add((str(r[0]).strip().upper(), str(r[1]).strip()[:10]))
+                # v19.489:去重鍵的日期先過 _norm_date 正規化,讓 user 手填的 '2020/1/2'
+                # 與系統寫的 ISO '2020-01-02' 視為同一天(否則同日兩格式 → 重複列 + load
+                # 時系統值覆蓋 user 值)。_norm_date 回 '' 的怪日期退回原字串,不弱化既有去重。
+                _ed = _norm_date(str(r[1]).strip()) or str(r[1]).strip()[:10]
+                seen.add((str(r[0]).strip().upper(), _ed))
         recorded_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
         new_rows: list = []
         for c in clean:  # 同批內也去重(同 code+date 只留第一筆)
