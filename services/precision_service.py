@@ -226,7 +226,12 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
         if len(ret) < 20:
             return {"error": "報酬率序列不足"}
         daily_std = float(ret.std())
-        sigma_abs = hwm * daily_std * _np.sqrt(len(s))  # 對應 lookback 期間 σ
+        # v19.482 稽核 H5:原本 `sqrt(len(s))` —— len(s)=min(序列長, lookback),短歷史檔
+        # (如 40 筆)只乘 sqrt(40)≈6.3 而非 sqrt(252)≈15.9,σ_abs 縮小 ~2.5×,
+        # sigma_rank=(nav-hwm)/σ_abs 被誇大成更負 → 同樣跌幅在短檔被判「更低基期=可買」,
+        # 且 rotation 依 sigma_rank 由負到正排序 → **系統性把建議導向最不可信的短歷史檔**。
+        # docstring/comment 本就寫「× sqrt(lookback)」→ 改回固定 lookback,讓跨檔 σ 單位一致。
+        sigma_abs = hwm * daily_std * _np.sqrt(lookback)  # 固定 lookback 期間 σ(跨檔可比)
 
         # §1 / §4.6:σ ≈ 0 只可能是「NAV 完全不動」(停售 / 清算 / 剛成立填平值)。
         # 此時 (nav-hwm)/σ 未定義 —— 舊版回 0.0,而 0.0 ≥ -0.5 會一路被
