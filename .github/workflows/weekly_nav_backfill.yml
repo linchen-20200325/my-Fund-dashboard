@@ -1,0 +1,45 @@
+name: "每週 NAV 自動補齊 (nav_history)"
+
+# 每週對「持倉 ∪ 選股池」跑 backfill_to_gs,把最新可得淨值 append 進雲端 nav_history。
+# 走 GitHub Actions(**美國 IP**)—— LU 檔的 ISIN→Yahoo secId→chart 只有美國 IP 抓得到
+# (台灣 IP 被擋);TW000 檔靠 MoneyDJ 增量。與 App「一鍵補抓」同一條 L2,(code,date) 冪等。
+#
+# ⚠️ cron 是 UTC。台灣 = UTC+8。
+#   0 12 * * 0 = 週日 12:00 UTC = 週日 20:00 台灣(NAV T+1 傍晚已更新;排在健康週報 18:00 之後)。
+on:
+  schedule:
+    - cron: "0 12 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只列將補的代號,不抓取/不寫入 (true/false)"
+        default: "true"
+
+concurrency:
+  group: weekly-nav-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Run weekly NAV backfill (持倉 ∪ 選股池 → nav_history)
+        # 排程時 inputs.dry_run 為空 → 不加旗標 → **實抓實寫**;手動 dispatch 填 true 才 --dry-run。
+        env:
+          google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          # NAV_SHEET_ID:nav_history 目標本(未設走程式 baked 預設)。
+          NAV_SHEET_ID: ${{ secrets.NAV_SHEET_ID }}
+          # 讀持倉/選股池:優先 POLICY_SHEET_ID(App 寫這本的 _fund_pool),退 macro_weights。
+          POLICY_SHEET_ID: ${{ secrets.POLICY_SHEET_ID }}
+          macro_weights_sheet_id: ${{ secrets.MACRO_WEIGHTS_SHEET_ID }}
+          # 選填:美國 IP 抓不到 MoneyDJ 時走 NAS 代理。
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+        run: >
+          python scripts/weekly_nav_backfill.py
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
