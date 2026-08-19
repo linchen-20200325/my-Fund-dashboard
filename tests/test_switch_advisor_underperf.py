@@ -106,7 +106,7 @@ def _hold_row(**kw):
 
 def test_overlay_hold_attaches_pool_candidate(monkeypatch):
     monkeypatch.setattr(sa, "_best_candidate",
-                        lambda code, pool: {"code": "BBB", "name": "替代B", "type": "震盪",
+                        lambda code, pool, **_kw: {"code": "BBB", "name": "替代B", "type": "震盪",
                                             "buy_sigma": -1.8, "potential_pct": 10.0})
     out = advise_holding(_hold_row(), pool_rows=[{"code": "BBB"}], underperformance=_UNDER)
     assert out["action"] == sa.HOLD                       # 型態動作不被覆蓋
@@ -115,7 +115,7 @@ def test_overlay_hold_attaches_pool_candidate(monkeypatch):
 
 
 def test_overlay_hold_empty_pool_is_honest(monkeypatch):
-    monkeypatch.setattr(sa, "_best_candidate", lambda code, pool: None)
+    monkeypatch.setattr(sa, "_best_candidate", lambda code, pool, **_kw: None)
     out = advise_holding(_hold_row(), pool_rows=[], underperformance=_UNDER)
     assert out["underperf_candidate"] is None
     assert "無合適替代標的" in out["reason"]                # §1 不硬湊
@@ -131,7 +131,7 @@ def test_not_underperforming_no_overlay():
 def test_overlay_sell_cash_does_not_suggest_buy(monkeypatch):
     # 成長型 + 總經看衰 + 跌破均線 → SELL_CASH;表現差 overlay 不應叫買
     monkeypatch.setattr(sa, "_best_candidate",
-                        lambda code, pool: {"code": "X", "name": "不該出現", "type": "震盪",
+                        lambda code, pool, **_kw: {"code": "X", "name": "不該出現", "type": "震盪",
                                             "buy_sigma": -2.0, "potential_pct": 5.0})
     nav = _lin(20, 10, n=130)                             # 130 點下跌 → 末值 < 120日均線 → 跌破
     row = {"code": "G1", "name": "成長股", "type_override": "成長", "nav_series": nav}
@@ -144,7 +144,7 @@ def test_overlay_sell_cash_does_not_suggest_buy(monkeypatch):
 
 # ── advise_switches summary ────────────────────────
 def test_advise_switches_counts_underperforming(monkeypatch):
-    monkeypatch.setattr(sa, "_best_candidate", lambda code, pool: None)
+    monkeypatch.setattr(sa, "_best_candidate", lambda code, pool, **_kw: None)
     rows = [_hold_row(code="AAA"), _hold_row(code="CCC")]
     ubc = {"AAA": _UNDER}                                 # 只有 AAA 表現差
     res = advise_switches(rows, pool_rows=[], underperformance_by_code=ubc)
