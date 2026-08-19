@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 from pandera.errors import SchemaError
 
-from shared.schemas import MacroFredSchema, validate_fred
+from shared.schemas import validate_fred
 
 
 def _good_df(rows: int = 3) -> pd.DataFrame:
@@ -23,7 +23,7 @@ def _good_df(rows: int = 3) -> pd.DataFrame:
     return pd.DataFrame({
         "date": [base + _dt.timedelta(days=i) for i in range(rows)],
         "value": [1.0 + i * 0.1 for i in range(rows)],
-        "source": [f"FRED:CPILFESL"] * rows,
+        "source": ["FRED:CPILFESL"] * rows,
         "fetched_at": ["2026-06-26T12:00:00+00:00"] * rows,
         "realtime_start": [base + _dt.timedelta(days=i) for i in range(rows)],
     }).astype({
@@ -107,7 +107,6 @@ class TestFetchFredIntegration:
         """fetch_fred 內部 validate_fred 呼叫 — mock requests 模擬完整 happy path
         確認 schema 通過 + 不 raise(無 network)。"""
         # mock proxy fetch_url to return合法 FRED-like JSON
-        import json
 
         class _MockResp:
             def __init__(self, payload):

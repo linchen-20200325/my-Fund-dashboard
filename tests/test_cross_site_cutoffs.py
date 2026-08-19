@@ -15,7 +15,6 @@ user 改變主意,接受「日均閃黃」trade-off 換 SSOT 收斂單一值。
 2. 剩餘 sites(macro_validation 18 / macro_beginner_view 20)逐步收斂(C2-B/C 進行中)
 3. **universal panic=30 必須一致**(真 SSOT,任一處改 → CI 立擋)
 """
-import pytest
 
 
 # ──────────────────────────────────────────────────────────

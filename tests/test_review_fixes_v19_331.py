@@ -59,7 +59,7 @@ class TestPerSeriesIsolation(_PatchedIndicators):
     def test_single_series_exception_does_not_cascade(self):
         """UNRATE 炸(模擬 pandera SchemaError)→ 只犧牲失業率格,
         其後 PPI / 消費者信心等指標照常產出(原行為:全滅)。"""
-        from shared.fred_series import FRED_PPI, FRED_UNRATE, FRED_UMCSENT
+        from shared.fred_series import FRED_UNRATE
 
         def _fred_fake(sid, key, n=250):
             if sid == FRED_UNRATE:

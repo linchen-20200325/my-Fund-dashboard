@@ -14,7 +14,6 @@ import json
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from services import nav_history_gs as GS
 

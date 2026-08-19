@@ -591,9 +591,9 @@ def _emit_coverage_alert(summary: list) -> dict:
             )
         else:
             _cause = (
-                f"**未啟用 proxy**(PROXY_URL 未設)→ GitHub Actions 美國 IP 極可能被台灣站點"
-                f"(TDCC/SITCA/MoneyDJ)封鎖。請至 repo Settings → Secrets and variables → "
-                f"Actions 設 PROXY_URL(NAS Squid,與 app 同一把)。"
+                "**未啟用 proxy**(PROXY_URL 未設)→ GitHub Actions 美國 IP 極可能被台灣站點"
+                "(TDCC/SITCA/MoneyDJ)封鎖。請至 repo Settings → Secrets and variables → "
+                "Actions 設 PROXY_URL(NAS Squid,與 app 同一把)。"
             )
         msg = (
             f"NAV 快取覆蓋過低:{total} 檔僅 {len(fresh)} 檔本次抓到新資料"
@@ -656,7 +656,7 @@ def main():
             # ── 境內基金（ACTI/ACCP/ACDD）：走 AllianzGI 安聯官網（app 主力，直接用內部碼）──
             # v19.351:SITCA IN2213 確認是「公司/月份下拉月報表頁」、抓不到單檔(見 fetch_sitca_history),
             # 改走安聯官網 JSON API + MoneyDJ yp004002(境內 yp010000)。
-            print(f"  [境內基金] 走 AllianzGI（安聯官網）路徑")
+            print("  [境內基金] 走 AllianzGI（安聯官網）路徑")
             if len(existing_history) + len(new_rows) < 30:
                 hist = fetch_allianzgi_history(code)
                 if hist:

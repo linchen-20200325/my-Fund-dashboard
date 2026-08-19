@@ -15,7 +15,7 @@ import pytest
 
 import pandera.errors as pa_errors
 
-from shared.schemas import validate_foreign_flow, ForeignFlowSchema
+from shared.schemas import validate_foreign_flow
 
 
 def _mk(dates, vals):

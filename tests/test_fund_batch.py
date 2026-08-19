@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from services.fund_batch import (
     ROW_COLUMNS,

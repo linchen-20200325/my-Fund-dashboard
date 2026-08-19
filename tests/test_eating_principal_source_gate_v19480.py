@@ -4,7 +4,6 @@
 - B2 純 NAV(不含配息)被低估 → 拒判。
 - 官方 wb01 / 還原含息 ≥300 天 → 照常判定(不受影響)。
 """
-import pytest
 
 from services.fund_total_return import (
     is_nav_only_1y_source,

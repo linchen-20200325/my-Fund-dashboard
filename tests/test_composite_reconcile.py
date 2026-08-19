@@ -9,7 +9,6 @@
 """
 from __future__ import annotations
 
-import pytest
 
 from services.macro.composite_score import (
     calculate_composite_score,

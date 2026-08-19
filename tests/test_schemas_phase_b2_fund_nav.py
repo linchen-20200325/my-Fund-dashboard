@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 from pandera.errors import SchemaError
 
-from shared.schemas import FundNavSchema, validate_fund_nav, _FUND_NAV_SOURCE_PREFIXES
+from shared.schemas import validate_fund_nav, _FUND_NAV_SOURCE_PREFIXES
 
 
 def _good_nav(n: int = 5, source_prefix: str = "MoneyDJ:tcbbankfund:wf01:fetch_nav") -> pd.Series:

@@ -20,7 +20,6 @@ v18.282 key 名臆測錯),純 compile + 單元測試擋不住。本檔用 stream
 """
 from __future__ import annotations
 
-import sys
 import pytest
 
 # 真實 indicators(對齊 services/macro_service 回傳 shape)

@@ -172,7 +172,6 @@ class TestBackwardCompatV192:
 
     def test_services_layer_still_reads_value_and_unit(self):
         _clear()
-        from repositories import macro_repository as mr
         from services import us_liquidity_engine as ule
         with patch("repositories.macro.alternate.fetch_url", return_value=_MockResp(200, _GOOD_HTML)):
             ule.fetch_aaii_sentiment.cache_clear()

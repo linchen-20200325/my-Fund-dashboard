@@ -12,9 +12,7 @@ CLAUDE.md §2.2 Provenance:已有 macro_repository.fetch_fred 帶 source + fetch
 """
 from __future__ import annotations
 
-import datetime as _dt
 
-import pytest
 
 # 純靜態檢查:不實際 call fetcher(會打網路),從 source 抓出修改點驗證
 import inspect

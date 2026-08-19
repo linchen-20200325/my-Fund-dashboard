@@ -9,7 +9,6 @@ D8 #5/#6 加 AAII dict + DefiLlama Series 驗證(v19.267)。
 """
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 

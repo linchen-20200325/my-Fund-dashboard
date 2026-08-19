@@ -12,7 +12,7 @@ User 反饋:TLZF9(保單代碼)MoneyDJ 有 3-5 年資料,但本站顯示「成�
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 

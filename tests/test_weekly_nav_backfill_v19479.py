@@ -3,9 +3,7 @@
 驗證:代號蒐集(持倉 ∪ 選股池,去重 upper、單邊失敗不擋)+ main 退出碼(§1 Fail Loud)。
 不打真網路 / 不碰真 Sheet —— 全 monkeypatch。
 """
-import types
 
-import pytest
 
 import scripts.weekly_nav_backfill as W
 

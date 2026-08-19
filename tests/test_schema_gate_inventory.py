@@ -39,7 +39,7 @@ def test_all_schema_tests_in_ci_gate():
     in_ci = _parse_workflow_schema_files()
     missing = discovered - in_ci
     assert not missing, (
-        f"A1 Phase D CI gate 漂移:以下 schema test 檔在 tests/ 但未加入 pr-check.yml:\n  "
+        "A1 Phase D CI gate 漂移:以下 schema test 檔在 tests/ 但未加入 pr-check.yml:\n  "
         + "\n  ".join(sorted(missing))
         + "\n→ 編輯 .github/workflows/pr-check.yml schema-gate job 加入這些檔案。"
     )
@@ -50,7 +50,7 @@ def test_ci_gate_files_actually_exist():
     in_ci = _parse_workflow_schema_files()
     stale = {f for f in in_ci if not (TESTS_DIR / f).exists()}
     assert not stale, (
-        f"pr-check.yml schema-gate 引用的檔案不存在(typo / 已刪):\n  "
+        "pr-check.yml schema-gate 引用的檔案不存在(typo / 已刪):\n  "
         + "\n  ".join(sorted(stale))
     )
 

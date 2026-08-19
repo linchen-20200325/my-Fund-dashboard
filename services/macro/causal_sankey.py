@@ -281,7 +281,7 @@ def build_macro_sankey_dynamic(indicators: dict) -> dict:
         "values": new_values,
         "link_labels": new_labels,
         "link_corrs": link_corrs,
-        "note": base["note"] + f"；邊粗細＝動態 |corr| × 加權",
+        "note": base["note"] + "；邊粗細＝動態 |corr| × 加權",
     }
 
 

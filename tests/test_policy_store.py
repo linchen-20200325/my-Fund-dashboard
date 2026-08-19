@@ -12,7 +12,6 @@ import pytest
 from repositories.policy_repository import (
     ALL_COLS,
     ALL_COLS_V2,
-    ITEM_TYPE_CASH,
     ITEM_TYPE_FUND,
     REQUIRED_COLS,
     PolicySheetError,

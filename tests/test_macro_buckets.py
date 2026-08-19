@@ -9,7 +9,6 @@ v19.218 P0-3-#9 拔毒:`classify_danger` / `specs_for_bucket` /
 `aggregate_level` / `fmt_value` 4 fn production 0 caller 已移除,
 連動清 7 個 test。
 """
-import pytest
 
 from shared import macro_buckets as mb
 from repositories.macro_repository import MACRO_THRESHOLDS

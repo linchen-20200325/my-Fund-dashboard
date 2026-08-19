@@ -95,7 +95,8 @@ def check_replacement_recommendation(
             "perf_source": fd.get("perf_source"),
         }
     m = fd.get("metrics") or {}
-    mj = fd.get("moneydj_raw") or {}
+    # Detox(v19.487):`mj`(moneydj_raw)在 v19.485 PR-2 把 3Y 推導改走 derive_ann_3y_for_333
+    # 後已無消費者 → 移除死變數(§3.3)。
 
     triggered: list = []
     observe: list = []
@@ -117,7 +118,7 @@ def check_replacement_recommendation(
         triggered.append(f"(a) 持有 {holding_y:.1f} 年 + 吃本金 1Y·")
     elif eat_result and "吃本金" in str(eat_status):
         # 持有 < 1 年也吃本金 — 計觀察分(尚未到 hard trigger)
-        observe.append(f"(a*) 持有 < 1 年但吃本金(短期 NAV 波動,先觀察)")
+        observe.append("(a*) 持有 < 1 年但吃本金(短期 NAV 波動,先觀察)")
 
     # ─── 規則 (b) — 4D Grade F(嚴重警示)/ D 計觀察分 ─────────
     if _4d_result is None:

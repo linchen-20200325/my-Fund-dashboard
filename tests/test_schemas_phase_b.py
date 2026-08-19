@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 from pandera.errors import SchemaError
 
-from shared.schemas import YahooCloseSchema, validate_yf_close
+from shared.schemas import validate_yf_close
 
 
 def _good_series(n: int = 5, ticker: str = "^VIX") -> pd.Series:

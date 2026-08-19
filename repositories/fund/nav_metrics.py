@@ -1105,7 +1105,7 @@ def fetch_holdings(code: str) -> dict:
             # ── 前10大持股 ──
             # v19.249 R18:加「目前無資料」explicit skip 避免日後 parser 誤吃空表 garbage
             if "目前無資料" in txt and "投資名稱" in txt:
-                print(f"[holdings] top_holdings 表存在但顯示「目前無資料」(multi-asset / 透明度不足 fund 常態)")
+                print("[holdings] top_holdings 表存在但顯示「目前無資料」(multi-asset / 透明度不足 fund 常態)")
                 continue
             if "投資名稱" in txt and "比例" in txt:
                 rows = tbl.find_all("tr")
