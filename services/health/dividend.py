@@ -609,3 +609,86 @@ def check_333_principle(years_since_inception: Optional[float],
     else:
         _msg = f"3 年平均年化 {_ret:.1f}% ≤ 7%( 3-3-3 要求 > 7%)"
     return {"passed": _passed, "years_ok": _y_ok, "return_ok": _r_ok, "message": _msg}
+
+
+# ── v19.485 稽核 PR-2:3-3-3 兩個輸入的 SSOT 推導(消滅 fund_row / compare 複本)──────
+#   check_333_principle 的三態邏輯本就正確;bug 全在**餵進去的輸入**(成立年數 proxy、
+#   3Y 用純NAV)。這裡把輸入推導收成單一權威,三個消費端(fund_row / report verdict /
+#   compare 診斷)共用,parity 自動成立。
+
+def _annualize_cum_pct(cum_pct, n_years: float):
+    """累積報酬%(如 3 年 +33%)→ 年平均年化%。P3:cum ≤ −100% → None(全損 → 年化無定義,
+    避免 `(1+cum)^(1/n)` 落入複數 / NaN)。§4.1:輸入輸出皆為 **百分數**(非小數)。"""
+    if cum_pct is None:
+        return None
+    try:
+        _c = float(cum_pct) / 100.0
+        if _c <= -1.0:                       # P3:≤ −100% → 年化無定義(複數保護)
+            return None
+        return ((1.0 + _c) ** (1.0 / float(n_years)) - 1.0) * 100.0
+    except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+        return None
+
+
+def clamp_333_proxy_years(years, from_proxy: bool,
+                          *, min_years: float = THREE_THREE_THREE_MIN_YEARS):
+    """H3(§1:短 NAV ≠ 年輕基金)。NAV 首日 proxy 是「基金年齡」的**下界**:
+    - proxy 且 years ≥ min_years → 一定 ≥ 門檻 → 照回(安全下界)
+    - proxy 且 years <  min_years → **無法反證** <3 年(可能只是本地 NAV 太短)→ None(⬜ 非 ❌)
+    - 真成立日(非 proxy)→ 精確值,原樣回。"""
+    if years is None:
+        return None
+    if from_proxy and float(years) < float(min_years):
+        return None
+    return years
+
+
+def derive_years_for_333(inception_iso, nav_first_iso, *, today=None):
+    """3-3-3 成立年數(fund_row / compare 共用;report 走自己 richer 來源 + clamp)。
+
+    回 (years|None, from_proxy)。成立日 meta 優先(精確);缺則 NAV 首日 proxy(下界,
+    已套 H3 clamp:proxy < 3 年 → None)。today 可注入(測試 / 重現)。
+    """
+    import datetime as _dt333
+    _today = today or _dt333.date.today()
+    if inception_iso:
+        try:
+            _d = _dt333.date.fromisoformat(str(inception_iso)[:10])
+            return (_today - _d).days / 365.25, False
+        except (ValueError, TypeError):
+            pass                              # 格式異常 → 落 NAV proxy
+    if nav_first_iso:
+        try:
+            _d = _dt333.date.fromisoformat(str(nav_first_iso)[:10])
+            _y = (_today - _d).days / 365.25
+            return clamp_333_proxy_years(_y, True), True
+        except (ValueError, TypeError):
+            pass
+    return None, False
+
+
+def derive_ann_3y_for_333(fd: dict, metrics: Optional[dict] = None):
+    """3-3-3 的「3 年平均年化報酬」——**含息優先**(H4,§4.1)。回 (ann_pct|None, basis)。
+
+    老師 3-3-3 的「報酬 > 7%」語意是**含息總報酬**(定存替代品)。純 NAV 年化會漏掉配息、
+    對配息型基金系統性偏低 → 假 ❌。優先序:
+      1. 含息:MoneyDJ wb01 `perf["3Y"]` 累積(含配息再投資)→ 年化 → basis="含息(wb01)"
+      2. 純NAV fallback:`metrics.ret_3y_ann` / `ret_3y_cum`(標 basis="純NAV(偏低)")
+      3. 皆缺 → (None, "—")→ check_333 回 ⬜(§1 不硬判)
+    P3 複數保護走 `_annualize_cum_pct`(cum ≤ −100% → None)。
+    """
+    _m = metrics if metrics is not None else (fd.get("metrics") or {})
+    _mj = fd.get("moneydj_raw") or fd
+    # 1) 含息優先(wb01 三年期累積 → 年化)
+    _perf = fd.get("perf") or _mj.get("perf") or {}
+    _ann_tr = _annualize_cum_pct(_safe_float(_perf.get("3Y")), 3)
+    if _ann_tr is not None:
+        return round(_ann_tr, 2), "含息(wb01)"
+    # 2) 純NAV fallback(偏低,標註)
+    _price_ann = _safe_float(_m.get("ret_3y_ann"))
+    if _price_ann is not None:
+        return round(_price_ann, 2), "純NAV(偏低)"
+    _ann_price = _annualize_cum_pct(_safe_float(_m.get("ret_3y_cum") or _m.get("ret_3y")), 3)
+    if _ann_price is not None:
+        return round(_ann_price, 2), "純NAV(偏低)"
+    return None, "—"

@@ -149,48 +149,22 @@ def process_one_fund(
         else:
             _snap_health = "⚪ 資料不足"
 
-        # v19.153:老師 3-3-3 原則(成立 ≥ 3 年 + 3 年平均年化 > 7% → 通過)。
+        # v19.153 / v19.485:老師 3-3-3(成立 ≥ 3 年 + 3 年平均年化含息 > 7%)。
+        # 兩個輸入推導收 SSOT `services.health.dividend`(H3 成立年數下界 / H4 含息優先 /
+        # P3 複數保護),與 `scripts/compare_inception_years` 天然一致(它本就鏡射本檔)。
         _333_emoji = "⬜"
         _333_msg = "資料不足"
         try:
-            from services.health.dividend import check_333_principle
-            import datetime as _dt333
-            _yrs_inc = None
+            from services.health.dividend import (
+                check_333_principle,
+                derive_ann_3y_for_333,
+                derive_years_for_333,
+            )
             _mj_raw_333 = fd.get("moneydj_raw") or fd
             _inc_meta = (fd.get("inception_date") or _mj_raw_333.get("inception_date") or "")
-            if _inc_meta:
-                try:
-                    _inc_d = _dt333.date.fromisoformat(str(_inc_meta)[:10])
-                    _yrs_inc = (_dt333.date.today() - _inc_d).days / 365.25
-                except (ValueError, TypeError):
-                    _yrs_inc = None
-            if _yrs_inc is None:
-                try:
-                    _first_iso = sorted(nav_dict.keys())[0]
-                    _first_d = _dt333.date.fromisoformat(str(_first_iso)[:10])
-                    _yrs_inc = (_dt333.date.today() - _first_d).days / 365.25
-                    if len(nav_dict) < 90 and _yrs_inc < 0.5:
-                        _yrs_inc = None
-                except (ValueError, IndexError, TypeError):
-                    _yrs_inc = None
-            _ann_3y = _metrics.get("ret_3y_ann")
-            if _ann_3y is None:
-                _ret_3y_cum = _metrics.get("ret_3y_cum") or _metrics.get("ret_3y")
-                try:
-                    if _ret_3y_cum is not None:
-                        _cum = float(_ret_3y_cum) / 100.0
-                        _ann_3y = ((1.0 + _cum) ** (1.0 / 3.0) - 1.0) * 100.0
-                except (TypeError, ValueError):
-                    _ann_3y = None
-            if _ann_3y is None:
-                _perf_333 = fd.get("perf") or _mj_raw_333.get("perf") or {}
-                _perf_3y_cum = _perf_333.get("3Y")
-                if _perf_3y_cum is not None:
-                    try:
-                        _c = float(_perf_3y_cum) / 100.0
-                        _ann_3y = round(((1.0 + _c) ** (1.0 / 3.0) - 1.0) * 100.0, 2)
-                    except (TypeError, ValueError):
-                        _ann_3y = None
+            _first_iso = sorted(nav_dict.keys())[0] if nav_dict else None
+            _yrs_inc, _ = derive_years_for_333(_inc_meta, _first_iso)   # H3:proxy<3年→None
+            _ann_3y, _ = derive_ann_3y_for_333(fd, _metrics)           # H4 含息優先 + P3
             _333_r = check_333_principle(_yrs_inc, _ann_3y)
             if _333_r.get("passed") is True:
                 _333_emoji = "✅"

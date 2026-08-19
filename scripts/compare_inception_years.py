@@ -103,50 +103,20 @@ def variant_b_years(fd: dict, nav_dict: dict, today=None):
     Args:
         today: 注入用（測試 / 重現）；None → `date.today()`（本機時區，D1 的來源）
     """
-    _today = today or _dt.date.today()
-    _yrs_inc = None
+    # v19.485:成立年數推導改呼 SSOT(H3 proxy<3年→None);B 版本就該鏡射 fund_row,
+    # 現在literal同源,parity 不再靠人工轉錄維持。today 注入供重現。
+    from services.health.dividend import derive_years_for_333
     _mj_raw_333 = fd.get("moneydj_raw") or fd
     _inc_meta = (fd.get("inception_date") or _mj_raw_333.get("inception_date") or "")
-    if _inc_meta:
-        try:
-            _inc_d = _dt.date.fromisoformat(str(_inc_meta)[:10])
-            _yrs_inc = (_today - _inc_d).days / 365.25
-        except (ValueError, TypeError):
-            _yrs_inc = None
-    if _yrs_inc is None:
-        try:
-            _first_iso = sorted(nav_dict.keys())[0]
-            _first_d = _dt.date.fromisoformat(str(_first_iso)[:10])
-            _yrs_inc = (_today - _first_d).days / 365.25
-            if len(nav_dict) < 90 and _yrs_inc < 0.5:
-                _yrs_inc = None
-        except (ValueError, IndexError, TypeError):
-            _yrs_inc = None
+    _first_iso = sorted(nav_dict.keys())[0] if nav_dict else None
+    _yrs_inc, _ = derive_years_for_333(_inc_meta, _first_iso, today=today)
     return _yrs_inc
 
 
 def variant_b_ann_3y(fd: dict):
-    """B 版 3 年年化 %（轉錄）。回傳 float 或 None。"""
-    _mj_raw_333 = fd.get("moneydj_raw") or fd
-    _metrics = fd.get("metrics") or {}
-    _ann_3y = _metrics.get("ret_3y_ann")
-    if _ann_3y is None:
-        _ret_3y_cum = _metrics.get("ret_3y_cum") or _metrics.get("ret_3y")
-        try:
-            if _ret_3y_cum is not None:
-                _cum = float(_ret_3y_cum) / 100.0
-                _ann_3y = ((1.0 + _cum) ** (1.0 / 3.0) - 1.0) * 100.0
-        except (TypeError, ValueError):
-            _ann_3y = None
-    if _ann_3y is None:
-        _perf_333 = fd.get("perf") or _mj_raw_333.get("perf") or {}
-        _perf_3y_cum = _perf_333.get("3Y")
-        if _perf_3y_cum is not None:
-            try:
-                _c = float(_perf_3y_cum) / 100.0
-                _ann_3y = round(((1.0 + _c) ** (1.0 / 3.0) - 1.0) * 100.0, 2)
-            except (TypeError, ValueError):
-                _ann_3y = None
+    """B 版 3 年年化 %（v19.485 改呼 SSOT:含息優先 + P3 複數保護,鏡射 fund_row）。"""
+    from services.health.dividend import derive_ann_3y_for_333
+    _ann_3y, _ = derive_ann_3y_for_333(fd, fd.get("metrics") or {})
     return _ann_3y
 
 
@@ -255,7 +225,12 @@ def diagnose(fd: dict, code: str, today_local=None) -> dict:
 
     row_a = variant_a_row(fd, code)
     status_a = row_a.get(" 3-3-3") or ""
-    ann_a = row_a.get("3Y 年化 %")
+    # v19.485 PR-2:3-3-3 的 verdict 3 年年化改由 SSOT `derive_ann_3y_for_333`(含息優先)
+    #   單一來源供 A(report verdict)/ B(fund_row verdict)共用 → 兩邊必然相同(不再分歧)。
+    #   ⚠️ 與顯示欄「3Y 年化 %」(row_a,純NAV chain)**刻意分開**:此處比的是 verdict 口徑,
+    #   拿顯示欄(純NAV)去比 B 的含息會製造假分歧(H4 decouple 後)。
+    from services.health.dividend import derive_ann_3y_for_333
+    ann_a, _ = derive_ann_3y_for_333(fd, fd.get("metrics") or {})   # report verdict 口徑
     status_b = variant_b_status(fd, today=today_local)
     ann_b = variant_b_ann_3y(fd)
 

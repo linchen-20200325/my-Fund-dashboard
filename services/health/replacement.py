@@ -81,6 +81,7 @@ def check_replacement_recommendation(
     from services.health.dividend import (
         check_333_principle,
         check_eating_principal_1y_mk,
+        derive_ann_3y_for_333,
     )
     from services.health.grade import compute_4d_health
     from services.fund_total_return import compute_1y_total_return
@@ -148,21 +149,10 @@ def check_replacement_recommendation(
     # ─── 規則 (c) — 3-3-3 未通過且持有 ≥ 3 年 ────────────────
     rule_c_eligible = (holding_y is not None
                        and holding_y >= REPLACE_RULE_C_MIN_HOLD_YEARS)
-    _ret_3y_ann = _safe_float(m.get("ret_3y_ann"))
-    if _ret_3y_ann is None:
-        # 舊 schema fallback:metrics.ret_3y_cum → 開根
-        _cum = _safe_float(m.get("ret_3y_cum") or m.get("ret_3y"))
-        if _cum is not None:
-            _ret_3y_ann = ((1.0 + _cum / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0
-    # v19.298 FIX: 最終 fallback — MoneyDJ wb01 perf["3Y"] 累計 → 年化
-    if _ret_3y_ann is None:
-        _perf_repl = (fd.get("perf") or (fd.get("moneydj_raw") or {}).get("perf") or {})
-        _wb01_3y = _safe_float(_perf_repl.get("3Y"))
-        if _wb01_3y is not None:
-            try:
-                _ret_3y_ann = round(((1.0 + _wb01_3y / 100.0) ** (1.0 / 3.0) - 1.0) * 100.0, 2)
-            except (ValueError, ZeroDivisionError, OverflowError):
-                pass
+    # v19.485 PR-2:3 年年化改走 SSOT `derive_ann_3y_for_333`(含息優先 + P3),與健診大表 /
+    #   Tab2 的 3-3-3 verdict **同源** —— 否則同一檔在替換判定與健診表會得到不同 3-3-3 結果
+    #   (§2.1 SSOT)。years 這裡用 **holding_y(持有年數)**,是規則 (c) 的既定語意(非成立年數)。
+    _ret_3y_ann, _ = derive_ann_3y_for_333(fd, m)
     try:
         _333 = check_333_principle(holding_y, _ret_3y_ann)
     except Exception as e:

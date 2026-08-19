@@ -51,6 +51,7 @@ from scripts.compare_inception_years import (  # noqa: E402
 from scripts.diagnose_ret_3y_fallback import (  # noqa: E402
     BASIS_NAV_ONLY,
     BASIS_TOTAL_RETURN,
+    STEP_BASIS,
     chain_steps,
     diagnose_3y,
     fd_to_snapshot,
@@ -124,14 +125,15 @@ def _fd_step1():
 # 1. 歸因對帳鎖 —— 三步帶衝突數字,順序寫錯立刻紅
 # ══════════════════════════════════════════════════════════════════════
 _ATTRIB_CASES = {
+    # v19.485 PR-2:新順序 step1 含息(perf 3Y)→ step2 ret_3y_ann → step3 cum/legacy。
     # (metrics 覆蓋, perf, 預期命中步驟)
-    "all_three_conflict": ({"ret_3y_ann": 9.0, "ret_3y_cum": 20.0,
-                            "ret_3y": 44.0}, {"3Y": 90.0}, 1),
-    "step1_missing":      ({"ret_3y_cum": 20.0}, {"3Y": 90.0}, 2),
-    "only_ret_3y_legacy": ({"ret_3y": 20.0}, {"3Y": 90.0}, 2),
-    "step12_missing":     ({}, {"3Y": 90.0}, 3),
-    "nothing_anywhere":   ({}, {}, None),
-    "perf_without_3y":    ({}, {"1Y": 12.0, "5Y": 60.0}, None),
+    "total_return_wins":       ({"ret_3y_ann": 9.0, "ret_3y_cum": 20.0,
+                                 "ret_3y": 44.0}, {"3Y": 90.0}, 1),   # 含息壓過純NAV
+    "no_perf_uses_ret_ann":    ({"ret_3y_ann": 9.0, "ret_3y_cum": 20.0}, {}, 2),
+    "no_perf_no_ann_uses_cum": ({"ret_3y_cum": 20.0}, {}, 3),
+    "no_perf_legacy_ret3y":    ({"ret_3y": 20.0}, {}, 3),
+    "nothing_anywhere":        ({}, {}, None),
+    "perf_without_3y":         ({}, {"1Y": 12.0, "5Y": 60.0}, None),
 }
 
 
@@ -156,10 +158,10 @@ def test_attribution_matches_locked_production_chain(case):
         assert row["chain_value_pct"] == pytest.approx(float(_chain), abs=1e-9)
 
 
-def test_step2_reads_both_legacy_keys():
-    """步驟 2 的兩個 key 都要吃到(ret_3y_cum 缺 → 退 ret_3y)。"""
+def test_step3_reads_both_legacy_keys():
+    """v19.485:純NAV 累積換算是**步驟 3**(新順序),兩個 key 都要吃(ret_3y_cum 缺 → 退 ret_3y)。"""
     fd = _fd(_nav(30, "B"), metrics={"ret_3y": 20.0})
-    assert chain_steps(fd)["raw_step2"] == pytest.approx(20.0)
+    assert chain_steps(fd)["raw_step3"] == pytest.approx(20.0)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -255,29 +257,32 @@ def test_time_axis_probe_does_not_mutate_metrics():
 # ══════════════════════════════════════════════════════════════════════
 # 4. 口徑揭露(§4.1)
 # ══════════════════════════════════════════════════════════════════════
-def test_step3_is_labelled_total_return_and_flagged_for_flip():
+def test_step1_is_total_return_and_not_flagged():
+    """v19.485:含息(perf 3Y)命中 = 步驟 1,口徑正確(含息),**不**觸發偏低警示。"""
     fd = _fd_wb01_rescue()
     row = diagnose_3y(fd, "WB01")
-    assert row["hit_step"] == 3
+    assert row["hit_step"] == 1
     assert row["hit_basis"] == BASIS_TOTAL_RETURN
-    assert row["basis_downgrade_risk"] is True
+    assert row["basis_downgrade_risk"] is False    # 含息是好口徑,不偏低
     assert row["perf_origin"] == "fd.perf"
 
 
-def test_step1_is_labelled_nav_only_and_not_flagged():
-    row = diagnose_3y(_fd_step1(), "S1")
-    assert row["hit_step"] == 1
+def test_step2_is_nav_only_and_flagged_when_perf_absent():
+    """v19.485:perf 缺 → 退純NAV ret_3y_ann(步驟 2)→ 偏低口徑,觸發警示。"""
+    fd = _fd(_nav(30, "B"), metrics={"ret_3y_ann": 9.0}, perf={})
+    row = diagnose_3y(fd, "S2")
+    assert row["hit_step"] == 2
     assert row["hit_basis"] == BASIS_NAV_ONLY
-    assert row["basis_downgrade_risk"] is False
-    assert row["would_apply"] is False          # 前面有值 → 第四層輪不到
+    assert row["basis_downgrade_risk"] is True     # 純NAV 偏低 → 警示
+    assert row["would_apply"] is False             # 步驟 2 有值 → 第四層輪不到
 
 
-def test_layer4_basis_differs_from_step3_basis():
-    """第四層是純 NAV、步驟 3 是含息 —— 兩者若標成同一個口徑,警示就失效了。"""
+def test_layer4_basis_differs_from_total_return_step():
+    """第四層是純 NAV、步驟 1 是含息 —— 兩者若標成同一個口徑,警示就失效了。"""
     assert BASIS_NAV_ONLY != BASIS_TOTAL_RETURN
     row = diagnose_3y(_fd_weekly_history(), "W")
     assert row["hypo_basis"] == BASIS_NAV_ONLY
-    assert row["hypo_basis"] != BASIS_TOTAL_RETURN
+    assert row["hypo_basis"] != STEP_BASIS[1]      # 步驟 1 = 含息,與第四層純NAV 不同口徑
 
 
 def test_nested_perf_origin_is_reported():
@@ -285,7 +290,7 @@ def test_nested_perf_origin_is_reported():
     fd = _fd(_nav(30, "B"), perf={}, nested_perf={"3Y": 35.44})
     row = diagnose_3y(fd, "NESTED")
     assert row["perf_origin"] == "fd.moneydj_raw.perf"
-    assert row["hit_step"] == 3
+    assert row["hit_step"] == 1                 # v19.485:含息(perf 3Y)= 步驟 1
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -391,10 +396,11 @@ def test_snapshot_roundtrip_preserves_diagnosis():
     assert a["hypo_ann_pct"] == pytest.approx(b["hypo_ann_pct"], abs=1e-9)
 
 
-def test_snapshot_keeps_perf_and_step3_value():
+def test_snapshot_keeps_perf_and_total_return_value():
+    """v19.485:含息(perf 3Y)是步驟 1;快照 round-trip 後仍命中步驟 1。"""
     fd = _fd_wb01_rescue()
     fd2 = snapshot_to_fd(fd_to_snapshot(fd))
-    assert diagnose_3y(fd2, "RT")["hit_step"] == 3
+    assert diagnose_3y(fd2, "RT")["hit_step"] == 1
 
 
 def test_old_format_snapshot_still_loads():
