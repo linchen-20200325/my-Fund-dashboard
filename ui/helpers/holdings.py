@@ -60,20 +60,19 @@ _HOLDING_ZH = {
     "TAIWAN SEMICONDUCTOR MANUFACTURING": "台積電",
     "TAIWAN SEMICONDUCTOR MFG": "台積電",
     "TSMC": "台積電", "TSM": "台積電",
-    "ASML": "艾司摩爾", "ASML HOLDING": "艾司摩爾", "ASML HOLDING NV": "艾司摩爾",
+    "ASML HOLDING NV": "ASML半導體",   # v19.487 Detox:ASML/ASML HOLDING 重複鍵 → 統一完整名(下方 region 2 已為 ASML半導體)
     "SAMSUNG ELECTRONICS": "三星電子", "SAMSUNG": "三星",
     "ALIBABA": "阿里巴巴", "ALIBABA GROUP": "阿里巴巴", "ALIBABA GROUP HOLDING": "阿里巴巴",
     "TENCENT": "騰訊", "TENCENT HOLDINGS": "騰訊",
     "TOYOTA": "豐田", "TOYOTA MOTOR": "豐田", "TOYOTA MOTOR CORP": "豐田",
     "SONY": "索尼", "SONY GROUP": "索尼", "SONY GROUP CORP": "索尼",
     "NESTLE": "雀巢", "NESTLÉ": "雀巢", "NESTLE SA": "雀巢",
-    "LVMH": "路威酩軒", "LVMH MOET HENNESSY": "路威酩軒",
+    "LVMH MOET HENNESSY": "LVMH精品",   # v19.487 Detox:LVMH 重複鍵 → 統一完整名
     "NOVO NORDISK": "諾和諾德",
-    "ROCHE": "羅氏", "ROCHE HOLDING": "羅氏", "ROCHE HOLDING AG": "羅氏",
+    "ROCHE HOLDING AG": "羅氏藥業",   # v19.487 Detox:ROCHE/ROCHE HOLDING 重複鍵 → 統一完整名
     "ASTRAZENECA": "阿斯特捷利康", "ASTRAZENECA PLC": "阿斯特捷利康",
-    "NOVARTIS": "諾華", "NOVARTIS AG": "諾華",
-    "SHELL": "殼牌", "SHELL PLC": "殼牌",
-    "HSBC": "匯豐", "HSBC HOLDINGS": "匯豐", "HSBC HOLDINGS PLC": "匯豐",
+    "HSBC HOLDINGS PLC": "匯豐控股",   # v19.487 Detox:NOVARTIS/SHELL/HSBC 重複鍵刪除,統一完整名(region 2)
+
     "TENCENT MUSIC": "騰訊音樂",
     "RELIANCE INDUSTRIES": "信實工業",
     "INFOSYS": "印孚瑟斯",
@@ -88,8 +87,7 @@ _HOLDING_ZH = {
     "FAST RETAILING": "迅銷集團(Uniqlo)",
     "MITSUBISHI": "三菱", "SUMITOMO MITSUI": "三井住友",
     "AIRBUS": "空中巴士", "AIRBUS SE": "空中巴士",
-    "SAP": "SAP", "SAP SE": "SAP",
-    "SIEMENS": "西門子", "SIEMENS AG": "西門子",
+    "SIEMENS": "西門子", "SIEMENS AG": "西門子",   # v19.487 Detox:SAP/SAP SE 重複鍵刪除,統一完整名 SAP軟體(region 2)
     "BANCO SANTANDER": "桑坦德銀行",
     "TOTALENERGIES": "道達爾能源", "TOTAL": "道達爾能源",
     # 台股
