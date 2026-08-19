@@ -310,3 +310,29 @@ def test_rescue_source_raises_isolated(monkeypatch):
     monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: _long(800))
     r = NS.backfill_to_gs(["X"])["results"][0]
     assert r["source"] == "cnyes(ISIN)" and r["error"] is None
+
+
+def test_rescue_sparse_candidate_not_adopted_over_dense(monkeypatch):
+    """稽核 F1:候選跨度略長但**點數少很多** → 不可換掉密集現有序列(3Y/5Y 年化需足點數)。"""
+    dense = _long(500)                                      # 500 筆日資料 / span 499(<730 → 觸發救援)
+    sparse_longer = _series([("2020-01-01", 10.0), ("2020-06-01", 10.1),
+                             ("2021-01-01", 10.2), ("2021-06-01", 10.3),
+                             ("2022-01-01", 10.4), ("2022-06-01", 10.5),
+                             ("2023-01-01", 10.6), ("2023-06-01", 10.7),
+                             ("2024-01-01", 10.8), ("2024-06-01", 10.9),
+                             ("2024-12-01", 11.0)])         # 11 筆(≥10)/ span ~1795(>499)但稀疏
+    _wire(monkeypatch, fetch=lambda c: {"series": dense})
+    _wire_rescue(monkeypatch, ms=sparse_longer)
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "moneydj" and r["fetched"] == 500   # 密集現有序列保住,不被稀疏候選換掉
+
+
+def test_rescue_tz_aware_candidate_handled(monkeypatch):
+    """稽核 Low:tz-aware 候選 index → _clean 轉 naive,不拋、仍可採用。"""
+    short = _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])
+    _idx = pd.date_range(end="2025-01-01", periods=800, freq="D", tz="UTC")
+    tz_series = pd.Series([10.0 + i / 100.0 for i in range(800)], index=_idx, dtype=float)
+    _wire(monkeypatch, fetch=lambda c: {"series": short})
+    _wire_rescue(monkeypatch, ms=tz_series)
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "morningstar(ISIN)" and r["fetched"] == 800

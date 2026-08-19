@@ -299,8 +299,9 @@ def _sec_nav_backfill_auto() -> None:
     §1:抓不到的檔逐一列出引導改用下方 CSV;雲端未啟用時明講「只存本機、重啟會清」。
     """
     with st.expander("🔄 一鍵自動補全部缺淨值（持倉 ∪ 選股池 → 存進雲端 Sheet）", expanded=False):
-        st.caption("系統用 MoneyDJ + 你在選股池填的 **ISIN(→晨星,最多約 5.5 年)** 自動抓每一檔完整"
-                   "歷史淨值,寫進雲端 nav_history(永久、重開不丟)。抓不到的檔會誠實列出,再用下方 CSV 手動補。")
+        st.caption("系統用 MoneyDJ + 你在選股池填的 **ISIN(→晨星,晨星若有收錄可拉多年)** 自動抓每一檔"
+                   "歷史淨值,寫進雲端 nav_history(永久、重開不丟)。**保單平台專屬基金晨星多半沒收錄**,"
+                   "那幾檔會只抓到短窗 → 結果表會誠實標「來源＋跨度」,再用下方 CSV 手動補足 5 年。")
 
         # 蒐集代號:已載入持倉 ∪ 選股池(去重 upper)
         _funds = st.session_state.get("portfolio_funds") or []

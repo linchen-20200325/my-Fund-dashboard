@@ -382,6 +382,10 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
             return pd.Series(dtype=float)
         x = pd.Series(raw).dropna()
         x = x[x > 0]
+        # tz-aware index → 轉 naive 對齊 _today_ts(稽核 Low:某些源可能回 tz-aware,
+        # 直接與 naive Timestamp 比較會拋;非 DatetimeIndex 則無 tz 屬性 → 交由呼叫端 guard)。
+        if getattr(x.index, "tz", None) is not None:
+            x.index = x.index.tz_localize(None)
         x = x[x.index <= _today_ts]
         return x[~x.index.duplicated(keep="last")].sort_index()
 
@@ -390,10 +394,16 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
         return int((x.index.max() - x.index.min()).days) if len(x) >= 2 else 0
 
     def _rescue_by_isin(code: str, s: "pd.Series", src: str) -> "tuple[pd.Series, str]":
-        """auto 抓到的跨度太短 → 用池中 ISIN 直接試晨星 / CnYES(不看保單前綴),取更長者。
+        """auto 抓到的跨度太短 → 用池中 ISIN(晨星)/ 代碼(CnYES)試長歷史,取更長者。
 
-        §1:各源獨立 guard,單源壞掉只 log、不影響已抓到的 MoneyDJ 序列;採用門檻
-        「≥10 筆 且 跨度更長」與 orchestration `_span_extend_insurance_nav` 同精神。
+        gate:池中有 ISIN 才觸發(user 「填 ISIN 解鎖補淨值」的設計)。晨星走 ISIN→secId;
+        CnYES 內部其實以**代碼**解析(不吃 ISIN),此處一併試,同精神以長歷史救回短窗。
+
+        §1:各源獨立 guard,單源壞掉只 log、不影響已抓到的 MoneyDJ 序列。
+        採用門檻(稽核 F1 修正):≥10 筆 **且 跨度嚴格更長 且 有效點數不減** —— 對齊
+        orchestration `_adopt_if_better` 的 `_effective_nav_len` 哲學,不可用「稀疏但跨度
+        略長」的候選換掉「密集」的現有序列(否則下游 3Y/5Y 年化因點數不足而失真,§1 更糟)。
+        `_clean` 已把序列正規化為唯一日期 × 有效值,故 `len` 即有效點數。
         """
         try:
             from repositories.pool_repository import resolve_isin
@@ -411,10 +421,10 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
             try:
                 _cand = _clean(_fn())
             except Exception as _e:  # noqa: BLE001 — 單源失敗 log 後跳過,不擋整檔
-                print(f"[backfill_to_gs] {code} {_name}(ISIN) 救援失敗:"
+                print(f"[backfill_to_gs] {code} {_name} 救援失敗:"
                       f"{type(_e).__name__}: {_e}", file=_sys.stderr)
                 continue
-            if len(_cand) >= 10 and _span(_cand) > _cur:
+            if len(_cand) >= 10 and _span(_cand) > _cur and len(_cand) >= len(s):
                 s, src, _cur = _cand, f"{_name}(ISIN)", _span(_cand)
         return s, src
 
