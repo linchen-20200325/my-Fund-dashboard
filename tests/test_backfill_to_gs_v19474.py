@@ -235,22 +235,39 @@ def _long(n_days, end="2025-01-01"):
     return pd.Series([10.0 + i / 100.0 for i in range(n_days)], index=idx, dtype=float)
 
 
-def _wire_rescue(monkeypatch, *, isin="LU123", ms=None, cnyes=None):
-    """接上 ISIN 救援三件套:pool_repository.resolve_isin + 晨星/CnYES source。"""
+def _wire_rescue(monkeypatch, *, isin="LU123", ms=None, cnyes=None, yahoo=None):
+    """接上 ISIN 救援:pool_repository.resolve_isin + Yahoo / 晨星 / CnYES source。
+
+    v19.477:救援加 Yahoo chart({secId}.F)為主路徑 → 測試須 patch `_src_yahoo_finance_nav`
+    (預設回空,避免打真 Yahoo 網路)。
+    """
     import repositories.fund.sources as SRC
     import repositories.pool_repository as PR
     monkeypatch.setattr(PR, "resolve_isin", lambda code: isin)
+    monkeypatch.setattr(SRC, "_src_yahoo_finance_nav",
+                        lambda code: (yahoo if yahoo is not None else pd.Series(dtype=float)))
     monkeypatch.setattr(SRC, "_src_morningstar_nav",
                         lambda code, fund_name="": (ms if ms is not None else pd.Series(dtype=float)))
     monkeypatch.setattr(SRC, "_src_cnyes_nav",
                         lambda code: (cnyes if cnyes is not None else pd.Series(dtype=float)))
 
 
-def test_rescue_morningstar_replaces_short_moneydj(monkeypatch):
-    """auto 只 ~30 天 + 池有 ISIN → 晨星長歷史(不看前綴)取代;source=morningstar(ISIN)。"""
+def test_rescue_yahoo_by_secid_replaces_short_moneydj(monkeypatch):
+    """v19.477 user 流程:auto 只 ~30 天 + 池有 ISIN/secId → Yahoo chart 長歷史取代;
+    source=yahoo(ISIN)(user 明指主路徑 code→ISIN→secId→Yahoo chart)。"""
     short = _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])   # ~29d
     _wire(monkeypatch, fetch=lambda c: {"series": short})
-    _wire_rescue(monkeypatch, ms=_long(800))                        # ~2.2yr
+    _wire_rescue(monkeypatch, yahoo=_long(1900))                    # ~5.2yr(range=10y)
+    r = NS.backfill_to_gs(["TLZF9"])["results"][0]
+    assert r["source"] == "yahoo(ISIN)"
+    assert r["fetched"] == 1900 and r["span_days"] >= 1825
+
+
+def test_rescue_morningstar_replaces_short_moneydj(monkeypatch):
+    """Yahoo 空 → 退晨星 timeseries 長歷史;source=morningstar(ISIN)。"""
+    short = _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])   # ~29d
+    _wire(monkeypatch, fetch=lambda c: {"series": short})
+    _wire_rescue(monkeypatch, ms=_long(800))                        # yahoo 空 → 晨星 ~2.2yr
     r = NS.backfill_to_gs(["ACDD19"])["results"][0]                 # AC* 前綴(原本被 gate 擋)
     assert r["source"] == "morningstar(ISIN)"
     assert r["fetched"] == 800 and r["span_days"] >= 730
