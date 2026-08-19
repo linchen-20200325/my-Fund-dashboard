@@ -418,9 +418,16 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
             return s, src
         if not _isin:
             return s, src
-        from repositories.fund.sources import _src_cnyes_nav, _src_morningstar_nav
+        # v19.477(user 提醒流程 code→ISIN→secId→**Yahoo chart** 抓 NAV):加 Yahoo 候選。
+        # `_src_yahoo_finance_nav` 用池中 secId 組 `{secId}.F` 打 Yahoo v8 chart(range=10y,
+        # 美國 IP 可用) —— 這是 user 明指的主路徑;晨星 timeseries / CnYES 為輔。三源都試,
+        # 取跨度最長者(§ 採用門檻:≥10 筆 且 跨度更長 且 點數不減)。
+        from repositories.fund.sources import (
+            _src_cnyes_nav, _src_morningstar_nav, _src_yahoo_finance_nav,
+        )
         _cur = _span(s)
-        for _name, _fn in (("morningstar", lambda: _src_morningstar_nav(code)),
+        for _name, _fn in (("yahoo", lambda: _src_yahoo_finance_nav(code)),
+                           ("morningstar", lambda: _src_morningstar_nav(code)),
                            ("cnyes", lambda: _src_cnyes_nav(code))):
             try:
                 _cand = _clean(_fn())

@@ -349,6 +349,8 @@ def _sec_nav_backfill_auto() -> None:
 
         def _src_zh(r):
             _s = r.get("source") or ""
+            if _s.startswith("yahoo"):
+                return "🌐 Yahoo(secId)"
             if _s.startswith("morningstar"):
                 return "🌐 晨星(ISIN)"
             if _s.startswith("cnyes"):

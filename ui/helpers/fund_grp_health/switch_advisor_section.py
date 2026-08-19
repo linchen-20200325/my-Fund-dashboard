@@ -385,15 +385,16 @@ def _render_pool_editor() -> None:
         # (lt.morningstar SecuritySearch)對部分保單平台基金查不到 → 無 secId 可回填 →
         # 落回 MoneyDJ 30 天短窗。這裡讓使用者手動把查到的 secId 回填進池,補淨值即改走
         # secId 直抓(`_src_morningstar_nav` 內 resolve_secid 優先)。放 expander,保持表單精簡。
-        with st.expander("🔧 進階:手動填晨星代碼 secId(某檔抓不到 5 年淨值時用)", expanded=False):
-            st.caption("晨星是用 **secId(F 開頭,如 `F000014R7W`)** 抓淨值,不是 ISIN。"
-                       "到 [morningstar.co.uk](https://www.morningstar.co.uk) 用你的 ISIN 查到該檔 → "
-                       "複製網址裡的 secId 填這裡 → 存檔後回上方按『開始補抓全部缺淨值』,系統就直接"
-                       "用 secId 去晨星抓(繞過失敗的 ISIN 搜尋)。")
+        with st.expander("🔧 進階:手動填晨星 secId(某檔抓不到 5 年淨值時用)", expanded=False):
+            st.caption("流程:**你的代號 →(選股池)ISIN →(晨星)secId →(Yahoo chart)抓 NAV**。"
+                       "到 [morningstar.co.uk](https://www.morningstar.co.uk) 用 ISIN 查到該檔,"
+                       "複製 secId 填這裡。**優先填 `0P` 開頭**(如 `0P0001J5YG`,走 Yahoo chart,"
+                       "美國 IP 最穩);`F` 開頭(如 `F000014R7W`,走晨星 timeseries)也吃。存檔後回"
+                       "上方按『開始補抓全部缺淨值』,系統就用 secId 直抓 ~10 年(繞過失敗的 ISIN 搜尋)。")
             _sc1, _sc2, _sc3 = st.columns([2, 2, 1])
             _sid_code = _sc1.selectbox("基金", _codes, key="pool_secid_code")
-            _sid_val = _sc2.text_input("晨星 secId(F 開頭)", key="pool_secid_val",
-                                       placeholder="F000014R7W")
+            _sid_val = _sc2.text_input("晨星 secId(優先 0P 開頭)", key="pool_secid_val",
+                                       placeholder="0P0001J5YG")
             _sid_ccy = _sc3.text_input("幣別", key="pool_secid_ccy", placeholder="USD")
             if st.button("💾 存晨星代碼", use_container_width=True, key="pool_secid_btn"):
                 _sv = (_sid_val or "").strip()

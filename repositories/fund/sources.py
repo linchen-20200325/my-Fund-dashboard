@@ -90,9 +90,11 @@ __all__ = [
 # v19.230 P1-2 第二輪:深層稽核確認與 scripts/fetch_nav_cache.py:fetch_morningstar_via_yf
 # 真重複(同字串,兩處 production-ish caller)→ SSOT 收口至此(production fetcher 為主,
 # scripts 從這裡 import)。symbol 為 `{secId}.F`(_src_yahoo_finance_nav L830)。
+# v19.477(user「淨值延長至 5 年」+ 提醒 code→ISIN→secId→Yahoo chart 流程):range 2y → 10y,
+# 讓 Yahoo chart({secId}.F)也能回 5 年以上(對齊其餘來源 2000d 窗口;2y 為 3Y/5Y 指標不足根因)。
 YF_MORNINGSTAR_CHART_URL = (
     "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}"
-    "?interval=1d&range=2y&includePrePost=false"
+    "?interval=1d&range=10y&includePrePost=false"
 )
 
 
