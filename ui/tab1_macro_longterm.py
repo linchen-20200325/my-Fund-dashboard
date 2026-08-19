@@ -68,10 +68,15 @@ def render_long_term_section(
     st.markdown("#### 💵 美股流動性 × 熱錢 — 流動性 × 信用 × 情緒")
     try:
         from services.us_liquidity_engine import fetch_us_liquidity_snapshot as _fetch_us_liq_cards  # noqa: PLC0415
+        # ⚠️ 2026-08-19：M2 副標原硬寫「>4%」，與引擎的判讀門檻各寫一份 → 引擎改了
+        # 文案不會跟著改（而它今天就是這樣漂掉的：引擎 4.0 / 評分 SSOT 5.0）。
+        # 改為從同一個常數 f-string 導出，文案與燈色從此不可能對不上（§3.3）。
+        from services.us_liquidity_engine import M2_YOY_LOOSE_PCT as _M2_LOOSE_LT  # noqa: PLC0415
         _us_liq_cards = _fetch_us_liq_cards(fred_key)
         # (engine_key, 卡片標題, sparkline spark_key, 白話 note)
         _us_card_specs = [
-            ("m2_yoy",  "📊 M2 YoY",        "us_m2_yoy",  "貨幣供給年增；>4% 熱錢充裕、<0 緊縮"),
+            ("m2_yoy",  "📊 M2 YoY",        "us_m2_yoy",
+             f"貨幣供給年增；>{_M2_LOOSE_LT:g}% 熱錢充裕、<0 緊縮"),
             ("walcl",   "🏦 Fed 資產負債表", "us_walcl",   "擴表=QE 放水、縮表=QT 回收"),
             ("rrp",     "💧 隔夜逆回購 RRP",  "us_rrp",     "流動性蓄水池；<100B 枯竭警示"),
             ("net_liq", "🌊 淨流動性",        "us_net_liq", "Fed資產−RRP−TGA；真正能流進股市的錢"),

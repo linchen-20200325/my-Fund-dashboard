@@ -31,6 +31,9 @@ from repositories.macro_repository import (
     fetch_yf_close,
 )
 
+# M2 判讀門檻的**真 SSOT**（F-GRAY-4 schema）。見下方 M2_YOY_LOOSE_PCT 註解。
+from shared.macro_thresholds_v2 import M2_THRESHOLDS as _M2_THRESHOLDS_SSOT
+
 # ════════════════════════════════════════════════════════════════
 # v19.188 — 美股流動性 6 指標判讀 cut-off（SSOT）
 # 同時供 ① 各 fetcher 的 color/label 判讀、② Tab1 卡片 sparkline 的 SPEC 線。
@@ -39,7 +42,26 @@ from repositories.macro_repository import (
 HY_OAS_WARN_PCT: float = 4.0       # HY OAS ≥ → 風險偏好下滑（黃）
 HY_OAS_CRISIS_PCT: float = 5.5     # HY OAS ≥ → 信用緊縮 / 熱錢撤離（紅）
 M2_YOY_HOT_PCT: float = 10.0       # M2 YoY > → 貨幣供給過熱（紅）
-M2_YOY_LOOSE_PCT: float = 4.0      # M2 YoY > → 寬鬆 / 熱錢充裕（綠）
+# ⚠️ 2026-08-19：本值原為 inline `4.0`，與 F-GRAY-4 建立的**真 SSOT**
+# （`shared/macro_thresholds_v2.M2_THRESHOLDS["score_function"]["easing_above"] = 5.0`）
+# 分歧。後果是 4% < YoY ≤ 5% 這段灰帶裡，**卡片亮綠「寬鬆 / 熱錢充裕」而綜合評分
+# 拿 0 分** —— 同一個指標，畫面說寬鬆、計分說中性。
+#
+# 實測（`data_cache/fred_indicators.parquet` M2SL，n=167 期 2012-06~2026-04）：
+#   - 落在灰帶的比例：20/167 = 12.0%
+#   - **最近 12 期：10 期落在灰帶**（2026-04 YoY +4.72% → 卡片 🟢、評分 0）
+#   ⇒ 這不是罕見邊界，是**當前的常態**。
+#
+# user 2026-08-19 裁示：**卡片向評分對齊**。改法不是把 4.0 手動改成 5.0 ——
+# 那樣下次還會再分歧一次；改為**直接從 L0 SSOT 導出**，讓分歧在結構上不可能發生。
+# （L2 Service → L0 Shared 為合法下行 import。）
+#
+# 註：`M2_YOY_HOT_PCT`（>10% 過熱紅）刻意**不動** —— 評分 SSOT 只有
+# easing/tightening 兩態，沒有「過熱」概念；卡片多這一態是它比評分豐富，
+# 不是分歧。緊縮邊界 0% 兩邊本來就一致。
+M2_YOY_LOOSE_PCT: float = float(
+    _M2_THRESHOLDS_SSOT["score_function"]["easing_above"]
+)  # = 5.0，M2 YoY > → 寬鬆 / 熱錢充裕（綠）
 RRP_DRAIN_BN: float = 100.0        # RRP < → 流動性枯竭警示（黃）
 RRP_GLUT_BN: float = 1000.0        # RRP ≥ → 流動性過剩 / QE 蓄水（藍）
 AAII_EUPHORIA_PCT: float = 20.0    # AAII spread > → 散戶過度樂觀（反指標賣訊）

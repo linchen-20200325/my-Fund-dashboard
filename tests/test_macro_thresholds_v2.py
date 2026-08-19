@@ -505,6 +505,55 @@ def test_m2_matches_macro_repository_dict():
     assert M2_THRESHOLDS["score_function"]["tightening_below"] == m2.get("red_below")
 
 
+def test_m2_card_threshold_matches_score_ssot():
+    """💵 美股流動性卡的「寬鬆」門檻必須與評分 SSOT 同源（2026-08-19 補的守衛破口）。
+
+    背景：本檔既有的 drift guard 涵蓋 `macro_repository.MACRO_THRESHOLDS` 與
+    `macro_score_calibration`，**唯獨漏了 `us_liquidity_engine`** —— 而那正是
+    真的漂掉的那一個（卡片 4.0 vs 評分 5.0）。守衛清單的破口就在 bug 所在的位置。
+
+    後果（實測 `data_cache/fred_indicators.parquet` M2SL，n=167）：
+    4% < YoY ≤ 5% 這段灰帶裡卡片亮綠「寬鬆 / 熱錢充裕」而綜合評分拿 0 分。
+    灰帶佔全樣本 12.0%，但**最近 12 期有 10 期落在裡面** —— 是當前常態不是邊界。
+    """
+    from services.us_liquidity_engine import M2_YOY_LOOSE_PCT
+    from shared.macro_thresholds_v2 import M2_THRESHOLDS
+    assert M2_YOY_LOOSE_PCT == M2_THRESHOLDS["score_function"]["easing_above"], (
+        f"卡片寬鬆線 {M2_YOY_LOOSE_PCT} ≠ 評分寬鬆線 "
+        f"{M2_THRESHOLDS['score_function']['easing_above']} —— 灰帶會再度出現："
+        "畫面說寬鬆、計分說中性")
+
+
+def test_m2_card_and_score_never_disagree_on_loose():
+    """真正的不變量：**任何** YoY 值下，「卡片判綠」與「評分給 +1」必須同進退。
+
+    比單純比兩個常數更強 —— 就算有人把常數改成同源但把某一邊的比較符號
+    從 `>` 改成 `>=`，這條也會抓到。
+    """
+    from services.us_liquidity_engine import M2_YOY_LOOSE_PCT, M2_YOY_HOT_PCT
+    from shared.macro_thresholds_v2 import M2_THRESHOLDS
+    _ease = M2_THRESHOLDS["score_function"]["easing_above"]
+    for yoy in [-2.0, 0.0, 0.5, 3.9, 4.0, 4.1, 4.72, 4.99, 5.0, 5.01, 6.0, 9.9]:
+        card_green = (yoy > M2_YOY_LOOSE_PCT) and not (yoy > M2_YOY_HOT_PCT)
+        score_plus = yoy > _ease
+        assert card_green == score_plus, (
+            f"YoY={yoy}%：卡片綠={card_green} 但評分+1={score_plus} —— 兩者必須同進退")
+
+
+def test_m2_hot_tier_is_card_only_by_design():
+    """`M2_YOY_HOT_PCT`（>10% 過熱紅）**刻意**沒有評分對應項，不是漏收。
+
+    評分 SSOT 只有 easing / tightening 兩態；卡片多一個「過熱」態是它比評分豐富。
+    這條測試存在的目的是：避免下一個讀者看到「卡片有四態、評分只有三態」，
+    誤以為是另一條待收的分歧而去「修」它。
+    """
+    from services.us_liquidity_engine import M2_YOY_HOT_PCT
+    from shared.macro_thresholds_v2 import M2_THRESHOLDS
+    assert M2_YOY_HOT_PCT == 10.0
+    assert "hot_above" not in M2_THRESHOLDS["score_function"], (
+        "評分 SSOT 長出了 hot 態 —— 若這是刻意的，請一併更新本測試與卡片邏輯")
+
+
 def test_fed_bs_matches_macro_repository_dict():
     from shared.macro_thresholds_v2 import FED_BS_THRESHOLDS
     from repositories.macro_repository import MACRO_THRESHOLDS
