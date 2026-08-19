@@ -58,6 +58,19 @@ def _name(row):
     return _row_get(row, "name", "基金名", "基金名稱") or _row_get(row, "code", default="")
 
 
+def _norm_ccy(v) -> str:
+    """計價幣別 → 正規化 ISO(未知回 '')。§4.1 跨幣別換股含匯差,由 cross_ccy 旗標標註。"""
+    if not v:
+        return ""
+    from services.currency import normalize_ccy
+    return normalize_ccy(v, default="")
+
+
+# §4.1(user 2026-08-19「標註匯差但保留」):跨計價幣別換股 = 賣/買幣別不同,
+# 動作本身被動吃到匯率變動 → 在建議理由標註提醒,但不砍掉跨幣別分散/賺價差機會。
+_CROSS_CCY_NOTE = "⚠️ 跨幣別(換股含匯差風險)"
+
+
 def _breakdown_below_sma(nav_series, window: int = GROWTH_BREAKDOWN_SMA_DAYS) -> "bool | None":
     """NAV 末值 < 近 window 點均線 → True(跌破);史不足 → None(§1 不硬判)。"""
     from services.portfolio_performance import _clean_nav
@@ -68,8 +81,11 @@ def _breakdown_below_sma(nav_series, window: int = GROWTH_BREAKDOWN_SMA_DAYS) ->
     return float(_s.iloc[-1]) < _sma
 
 
-def _best_candidate(held_code: str, pool_rows: list) -> "dict | None":
-    """從池中挑最佳換入標的:低基期 + 健康(不接刀)+ 優先震盪型;σ rank 最負(跌最深)優先。"""
+def _best_candidate(held_code: str, pool_rows: list, *, held_ccy: str = "") -> "dict | None":
+    """從池中挑最佳換入標的:低基期 + 健康(不接刀)+ 優先震盪型;σ rank 最負(跌最深)優先。
+
+    held_ccy:持倉計價幣別(選填)—— 與候選幣別不同 → 回傳 cross_ccy=True(換股含匯差,§4.1)。
+    """
     from services.fund_type_classifier import RANGE, classify_fund_type
     from services.rotation import _sigma, classify_base, is_healthy_buy, revert_upside_pct
 
@@ -89,8 +105,11 @@ def _best_candidate(held_code: str, pool_rows: list) -> "dict | None":
     _range_first.sort(key=lambda b: (_sigma(_row_get(b, "σ rank", "sigma_rank"))
                                      if _sigma(_row_get(b, "σ rank", "sigma_rank")) is not None else 0.0))
     b = _range_first[0]
+    _cand_ccy = _norm_ccy(_row_get(b, "currency", "ccy", "幣別", default=""))
     return {"code": _row_get(b, "code", default=""), "name": _name(b), "type": _btype(b),
             "buy_sigma": _sigma(_row_get(b, "σ rank", "sigma_rank")),
+            "ccy": _cand_ccy or None,
+            "cross_ccy": bool(held_ccy and _cand_ccy and held_ccy != _cand_ccy),
             "potential_pct": revert_upside_pct(_row_get(b, "距 HWM %", "dist_hwm_pct"))}
 
 
@@ -188,6 +207,7 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
     _code = str(_row_get(held_row, "code", default=""))
     _nav = _row_get(held_row, "nav_series")
     _cat = _row_get(held_row, "基金類別", "category")
+    _held_ccy = _norm_ccy(_row_get(held_row, "currency", "ccy", "幣別", default=""))
     _tinfo = classify_fund_type(_nav, _cat, override=_row_get(held_row, "type_override", default=""))
     _ftype = _tinfo["type"]
 
@@ -206,11 +226,12 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
         _fx = nav_fx_signal(_nav_level, fx_label)
         _out["signals"].update(nav_level=_nav_level, fx_label=fx_label)
         if _nav_level == "high":
-            _cand = _best_candidate(_code, pool_rows)
+            _cand = _best_candidate(_code, pool_rows, held_ccy=_held_ccy)
             if _cand and _cand["code"]:
+                _xccy = f" {_CROSS_CCY_NOTE}" if _cand.get("cross_ccy") else ""
                 _out.update(action=SWITCH, action_zh=_ACTION_ZH[SWITCH], switch_to=_cand,
                             reason=(f"震盪型 + 貼近高基期 → 換入池中低基期健康標的「{_cand['name']}」"
-                                    f"(賺回歸)。{_fx['rationale']}"))
+                                    f"(賺回歸)。{_fx['rationale']}{_xccy}"))
             else:
                 _out.update(action=HOLD, action_zh=_ACTION_ZH[HOLD],
                             reason="震盪型 + 高基期,但池中無『低基期且健康』標的可換 → 建議持有或轉現金(不硬湊,§1)。")
@@ -246,10 +267,11 @@ def advise_holding(held_row: dict, pool_rows: list, *, fx_label=None,
         elif _out["action"] == SELL_CASH:
             _out["reason"] = f"⚠️ 表現差({_rz});已建議轉現金避開下行,先不新進場。{_out['reason']}"
         else:
-            _uc = _best_candidate(_code, pool_rows)                          # HOLD/WARN/資料不足 → 補選股池建議
+            _uc = _best_candidate(_code, pool_rows, held_ccy=_held_ccy)      # HOLD/WARN/資料不足 → 補選股池建議
             _out["underperf_candidate"] = _uc
             if _uc and _uc["code"]:
-                _out["reason"] = f"⚠️ 表現差({_rz})→ 建議從選股池換入「{_uc['name']}」。{_base}"
+                _xccy = f" {_CROSS_CCY_NOTE}" if _uc.get("cross_ccy") else ""
+                _out["reason"] = f"⚠️ 表現差({_rz})→ 建議從選股池換入「{_uc['name']}」。{_xccy}{_base}"
             else:
                 _out["reason"] = f"⚠️ 表現差({_rz}),但選股池無合適替代標的(不硬湊,§1)。{_base}"
 

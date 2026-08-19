@@ -231,6 +231,7 @@ def render_fund_grp_health_tab() -> None:
 
     # v19.465 深化:235 加碼水位(老師「235 精準加碼」基金版)。VIX 整組抓一次,每檔用
     # 週 NAV 算 20週布林 + 4/13/52週均線 → 三取一 Max 燈。加值欄 `加碼水位` 隨寬表;失敗不擋表。
+    _ladder_details: list = []   # v19.484 稽核 M1:收集每檔判定理由 → 表下方可展開對照
     try:
         from services.fund_service import get_latest_vix
         from services.ladder235 import ladder_signal
@@ -249,10 +250,28 @@ def render_fund_grp_health_tab() -> None:
                 _pct = int(round(_lad["deploy_pct"] * 100))
                 _pct_txt = f"(+{_pct}%)" if _pct > 0 else ""
                 _pr["加碼水位"] = f"{_lad['emoji']} {_lad['lamp']}{_pct_txt}"
+            _ladder_details.append({
+                "name": _pr.get("基金名") or _pr.get("name") or _pr.get("code"),
+                "water": _pr.get("加碼水位", ""),
+                "reasons": list(_lad.get("reasons") or []),
+                "note": _lad.get("note") or "",
+            })
     except Exception as _e_lad:  # noqa: BLE001 — 加碼水位為加值欄,失敗不擋健診表
         import sys as _sys_lad
         print(f"[grp_health] 235 加碼水位計算略過:{type(_e_lad).__name__}: {_e_lad}",
               file=_sys_lad.stderr)
+
+    # v19.484 稽核 M1:235 每檔判定理由(reasons/note 原本算完即丟)→ 收合展開,對照寬表「加碼水位」欄。
+    if _ladder_details:
+        with st.expander("🔎 235 加碼水位:各檔判定理由(對照下方寬表「加碼水位」欄)", expanded=False):
+            st.caption("三取一 Max(最嚴重燈優先);停利獨立且優先。⚪巡航 / 🟢燈一(小跌) / "
+                       "🟡燈二(急跌) / 🔴燈三(深水) / 💰停利。缺 VIX 時僅用均線+布林兩維(誠實標註)。")
+            for _d in _ladder_details:
+                st.markdown(f"**{_d['name']}** — {_d['water'] or '—'}")
+                if _d["reasons"]:
+                    st.caption("　· " + "　· ".join(str(_r) for _r in _d["reasons"]))
+                if _d["note"]:
+                    st.caption("　" + str(_d["note"]))
 
     # v19.359 Track 2:健診批次抓成功 → 把各檔當日最新 NAV append 進 Google Sheet
     # nav_history 分頁(一鍵累積全部持倉,從現在累積歷史序列)。冪等 + 非致命。

@@ -50,6 +50,7 @@ def _assemble_rows(funds: list) -> list:
             "基金類別": _h.get("基金類別"), "4D Grade": _h.get("4D Grade"),
             "σ rank": _e.get("σ rank"), "距 HWM %": _e.get("距 HWM %"),
             "操盤評分": _e.get("操盤評分"), "吃本金燈號": _eat,
+            "currency": _f.get("currency"),   # v19.484:跨幣別換股標註(§4.1)用
         })
     return rows
 
@@ -85,6 +86,7 @@ def rows_from_batch_df(df) -> list:
             "距 HWM %": _cell(r, "距 HWM %"),
             "操盤評分": _cell(r, "操盤評分"),
             "吃本金燈號": _cell(r, "吃本金燈號 (1Y · )"),
+            "currency": _cell(r, "ccy"),   # v19.484:跨幣別換股標註(§4.1)用;大表已正規化欄
         })
     return rows
 
@@ -130,6 +132,18 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
         st.caption(f"⬜ 輪動配對計算失敗:[{type(e).__name__}] {str(e)[:80]}")
         return
 
+    # v19.484 稽核 #5:σ 資料不足(淨值史太短 / 停售 → σ rank 回不了值)的檔會被排除在
+    # 買方候選外。原本靜默剔除 → 明確標名,讓使用者知道「不是漏了它,是它現在無法評估」(§1)。
+    from services.rotation import classify_base as _classify_base
+    _insuff_names = [str(r.get("name") or r.get("code"))
+                     for r in rows
+                     if _classify_base(r.get("σ rank"), _sell, _buy) == "unknown"]
+
+    def _render_insufficient_note() -> None:
+        if _insuff_names:
+            st.caption("⬜ 未納入買方候選(σ 資料不足,通常是淨值歷史太短 / 停售 → 無法定位階):"
+                       + "、".join(_insuff_names) + "。先補足淨值歷史再評估,不硬推(§1)。")
+
     if not _pairs:
         # 誠實揭露「為何無配對」+ 每檔目前基期,讓使用者知道現況、可調滑桿(§1)
         from services.rotation import classify_base
@@ -148,6 +162,7 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
                     "可把上方「高基期門檻」滑桿**往左放寬**(納入更多賣方候選);"
                     "若仍無,代表現在沒有適合換出的標的(這是正常的誠實結果)。")
         st.caption("目前各檔基期:" + "　·　".join(_status))
+        _render_insufficient_note()
         return
 
     import pandas as pd
@@ -155,8 +170,9 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
         "賣出(高基期)": f"{p['sell_name']} ({p['sell_code']})",
         "賣方類別": p["sell_cat"] or "—",
         "賣方 σ": p["sell_sigma"],
-        "建議換進(別類低基期健康)": (f"{p['buy_name']} ({p['buy_code']})"
-                                     if p["buy_code"] else "⚪ 無不同類健康低基期標的"),
+        "建議換進(別類低基期健康)": (
+            f"{p['buy_name']} ({p['buy_code']})" + (" ⚠️跨幣別" if p.get("cross_ccy") else "")
+            if p["buy_code"] else "⚪ 無不同類健康低基期標的"),
         "買方類別": p.get("buy_cat") or "—",
         "買方 σ": p["buy_sigma"],
         "買方 4D": p["buy_grade"],
@@ -193,6 +209,12 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
     _n_ok = sum(1 for p in _pairs if p["buy_code"])
     st.caption(f"共 {len(_pairs)} 檔高基期;其中 **{_n_ok}** 檔有**不同類別**健康低基期可換。"
                "「潛在差價%」= 買方回到自己期間高點的漲幅(僅參考,非保證)。")
+    # v19.484 稽核 #3(user「標註匯差但保留」):跨幣別配對只提醒、不砍(§4.1)
+    if any(p.get("cross_ccy") for p in _pairs):
+        st.caption("⚠️ 標「跨幣別」者:賣、買計價幣別不同,換股時會**被動吃到匯率變動**;"
+                   "「潛在差價%」是買方**自身幣別**的回歸幅度,未含匯差。仍保留此配對(分散價值),"
+                   "由你自行決定是否承受匯率風險。")
+    _render_insufficient_note()
 
     if offer_download:
         st.download_button(

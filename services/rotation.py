@@ -24,6 +24,22 @@ def _num(v):
     return safe_num(v)
 
 
+def _ccy(row) -> str:
+    """讀該列計價幣別 → 正規化 ISO 字串(未知回 '')。支援 currency/ccy/幣別 別名。
+
+    §4.1:跨幣別換股會被動吃匯差 —— 由呼叫端據 cross_ccy 旗標標註(user 2026-08-19
+    核准「標註匯差但保留」,不主觀砍跨幣別分散機會)。未知幣別 → '' → 不判 cross(§1 不臆測)。
+    """
+    if not isinstance(row, dict):
+        return ""
+    from services.currency import normalize_ccy
+    for k in ("currency", "ccy", "幣別"):
+        v = row.get(k)
+        if v:
+            return normalize_ccy(v, default="")
+    return ""
+
+
 def _sigma(v):
     """σ rank 顯示字串(如 '-2.00σ')→ 數值。先去 'σ' 再 safe_num。"""
     if v is None:
@@ -94,17 +110,23 @@ def suggest_rotation_pairs(fund_rows, sell_sigma: float = ROTATION_SELL_SIGMA,
                  and str(b.get("基金類別") or "").strip() != _cat]
         cands.sort(key=lambda b: (_sigma(b.get("σ rank")) if _sigma(b.get("σ rank")) is not None else 0.0))
         best = cands[0] if cands else None       # σ rank 最負(跌最深 = 差價空間大)
+        _sell_ccy = _ccy(s)
+        _buy_ccy = _ccy(best) if best else ""
         out.append({
             "sell_code": s["code"],
             "sell_name": s.get("name") or s.get("基金名") or s["code"],
             "sell_sigma": _sigma(s.get("σ rank")),
             "sell_cat": _cat,
+            "sell_ccy": _sell_ccy or None,
             "buy_code": best["code"] if best else None,
             "buy_name": (best.get("name") or best.get("基金名") or best["code"]) if best else None,
             "buy_sigma": _sigma(best.get("σ rank")) if best else None,
             "buy_cat": str(best.get("基金類別") or "").strip() if best else None,
+            "buy_ccy": (_buy_ccy or None) if best else None,
             "buy_grade": best.get("4D Grade") if best else None,
             "buy_score": _num(best.get("操盤評分")) if best else None,
+            # 跨幣別旗標:兩邊幣別皆已知且不同 → 換股被動含匯差(§4.1;呼叫端據此標註不砍建議)
+            "cross_ccy": bool(best and _sell_ccy and _buy_ccy and _sell_ccy != _buy_ccy),
             "potential_pct": revert_upside_pct(best.get("距 HWM %")) if best else None,
         })
     return out

@@ -430,7 +430,10 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
 
     def _cand_zh(a):
         _c = a.get("switch_to") or a.get("underperf_candidate")
-        return f"{_c['name']}(σ{_c['buy_sigma']})" if _c else "—"
+        if not _c:
+            return "—"
+        _x = " ⚠️跨幣別" if _c.get("cross_ccy") else ""   # v19.484 §4.1:換股含匯差提醒(不砍建議)
+        return f"{_c['name']}(σ{_c['buy_sigma']}){_x}"
 
     _adv = res["advices"]
     _rows = [{
@@ -466,6 +469,7 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
                      "表現差時,右邊「換入標的」會從你的選股池挑替代標的。「—」= 沒有表現差 / 資料不足。"),
             "換入標的": _cc.TextColumn("換入標的", width="medium",
                 help="從你的選股池裡挑出的替換標的,括號裡是它現在離高點多遠(愈負 = 跌愈深)。"
+                     "標「⚠️跨幣別」= 它與被換出的持倉計價幣別不同,換股會被動吃到匯差(仍保留,由你決定)。"
                      "「—」= 池子裡沒有合適的,不硬湊。"),
             "理由": _cc.TextColumn("理由", width="large",
                 help="這個建議是依據哪幾個條件推出來的 —— 不同意就別照做,這欄的用途是讓你能反駁它。"),
