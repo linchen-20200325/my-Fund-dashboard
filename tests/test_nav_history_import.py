@@ -8,7 +8,6 @@
 """
 from __future__ import annotations
 
-import pytest
 
 from services import nav_history_gs as M
 

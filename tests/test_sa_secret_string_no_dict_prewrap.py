@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
 _SA_JSON = json.dumps({
     "type": "service_account",

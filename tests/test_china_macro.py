@@ -87,7 +87,7 @@ def _make_df(value: float, date: str = "2025-12-01") -> pd.DataFrame:
     return pd.DataFrame({
         "date": [pd.Timestamp(date)],
         "value": [value],
-        "source": [f"FRED:test"],
+        "source": ["FRED:test"],
         "fetched_at": ["2026-06-24T10:00:00Z"],
     })
 

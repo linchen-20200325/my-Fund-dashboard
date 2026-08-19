@@ -1109,8 +1109,8 @@ def render_macro_tab() -> None:
         # 四個分組 subheader 仍在下方詳細區,順序不變。
         # ════════════════════════════════════════════════════════════
 
-        ph    = phase["phase"]  # v19.39 PR1C: sc / ph_c 在 archive 後不再使用
-        alloc = phase["alloc"];  advice = phase.get("advice","")
+        # Detox(v19.487):ph / alloc / advice 為已刪除的 bar renderer 遺留(見上方註解
+        # 「原 bar renderer 已刪」),assign 後全程未用 → 移除死變數(§3.3)。
 
         # ════════════════════════════════════════════════════════════
         # 🧾 總表區 —— 2026-08-05 user 拍板的資訊架構

@@ -48,6 +48,6 @@ def test_app_py_only_has_render_calls_for_all_5_tabs():
         "render_data_guard_tab",
         "render_manual_tab",
     ):
-        assert f"from ui.tab" in src   # 至少有一個 ui.tab import
+        assert "from ui.tab" in src   # 至少有一個 ui.tab import
         assert fn in src, f"{fn} not found in app.py"
     assert "render_backtest_tab" not in src, "回測 Tab 應已移除，app.py 不該再引用 render_backtest_tab"

@@ -11,7 +11,6 @@ E8(通報預覽與 NAS 週報 6 項差異)的**治本**需要把 NAS 端三個�
 """
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 
 import pytest

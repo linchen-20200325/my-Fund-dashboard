@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import sys
-import types
 
 
 def _stub_modules():

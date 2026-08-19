@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 # prime 匯入順序:services.fund_service ↔ fund_fetcher 為既有 latent 互相 import
 #(fund_fetcher:285 `from services.fund_service import _RF_ANNUAL`),把 fund_service

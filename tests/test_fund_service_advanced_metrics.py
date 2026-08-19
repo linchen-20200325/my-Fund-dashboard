@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 
 def _make_nav_series(n_days: int, seed: int = 42, mu: float = 0.0003, sigma: float = 0.01):

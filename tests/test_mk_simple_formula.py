@@ -17,7 +17,6 @@ User 釐清 老師體檢邏輯:
 """
 from __future__ import annotations
 
-import datetime as _dt
 import math
 
 import pytest

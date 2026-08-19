@@ -813,7 +813,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             except Exception as _alt_e:
                 print(f"[fetch] alt page_type fallback 異常: {_alt_e}")
             # 兩個 page_type 都拿不到 series → 繼續走 Step 3+ 原始 _src_* 流程
-            print(f"[fetch] ⚠️ 兩個 page_type 都不足，繼續原始流程")
+            print("[fetch] ⚠️ 兩個 page_type 都不足，繼續原始流程")
         else:
             # stderr:與上面那行成對 —— 「主路線輸了」也必須線上看得見
             import sys as _sys_ng
@@ -1049,8 +1049,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             _hist_urls = [
                 f"{BASE}/yf/yp004002.djhtm",
                 f"{TCB_BASE}/funddj/yf/yp004002.djhtm",
-                f"https://www.moneydj.com/funddj/yf/yp004002.djhtm",
-                f"https://tcbbankfund.moneydj.com/funddj/yf/yp004002.djhtm",
+                "https://www.moneydj.com/funddj/yf/yp004002.djhtm",
+                "https://tcbbankfund.moneydj.com/funddj/yf/yp004002.djhtm",
             ]
             r2 = None
             for _hpage in _hist_pages:

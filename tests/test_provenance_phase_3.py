@@ -7,7 +7,6 @@ CLAUDE.md §2.2 — provenance 血緣追蹤對齊。本檔守:
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 
 # ════════════════════════════════════════════════════════════════

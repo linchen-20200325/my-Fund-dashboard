@@ -15,7 +15,6 @@ import pytest
 from pandera.errors import SchemaError
 
 from shared.schemas import (
-    FundDividendSchema,
     validate_fund_dividends,
     _FUND_DIVIDEND_MAX_ROWS,
 )

@@ -9,7 +9,6 @@ import sys
 import types
 
 import pandas as pd
-import pytest
 
 
 def _stub_streamlit():

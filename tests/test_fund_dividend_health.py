@@ -14,7 +14,6 @@ import math
 import pytest
 
 from services.health.dividend import (
-    EatingPrincipalCore,
     classify_eating_principal,
 )
 

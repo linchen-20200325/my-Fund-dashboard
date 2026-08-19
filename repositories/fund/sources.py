@@ -1865,9 +1865,9 @@ def probe_insurance_urls(code: str = "TLZF9") -> dict:
         f"https://fund.hncb.com.tw/w/wb/wb02.djhtm?a={_code}-1180",           # 華南銀行
         f"https://fundchannelnew2.sinotrade.com.tw/w/wb/wb01.djhtm?a={_code}-57C0060T",  # 永豐金
         f"https://fundrwd.entiebank.com.tw/w/wb/wb01.djhtm?a={_code}-24A7",    # 遠東銀行
-        f"https://fund.megabank.com.tw/w/wb/wb02.djhtm?a=ANZ89-1G11",          # 兆豐銀行
+        "https://fund.megabank.com.tw/w/wb/wb02.djhtm?a=ANZ89-1G11",          # 兆豐銀行
         # ── TDCC OpenAPI（政府 API，無封鎖）────────────────────────────────
-        f"https://openapi.tdcc.com.tw/v1/opendata/3-2",
+        "https://openapi.tdcc.com.tw/v1/opendata/3-2",
         # ── FundClear ──────────────────────────────────────────────────────
         f"https://www.fundclear.com.tw/SmartFundAPI/api/FundAjax/GetFundNAV?FundCode={_code}&StartDate=2024/01/01&EndDate=2025/01/01",
         # ── Morningstar ────────────────────────────────────────────────────
@@ -1875,8 +1875,8 @@ def probe_insurance_urls(code: str = "TLZF9") -> dict:
         # ── MoneyDJ 子網域（台新人壽，可能封鎖）─────────────────────────
         f"https://taishinlife.moneydj.com/w/wb/wb01.djhtm?a={_code}-AL001",
         # ── 富蘭克林 TW / JP Morgan TW ────────────────────────────────────
-        f"https://www.franklintempleton.com.tw/",
-        f"https://am.jpmorgan.com/tw/zh/asset-management/gim/",
+        "https://www.franklintempleton.com.tw/",
+        "https://am.jpmorgan.com/tw/zh/asset-management/gim/",
     ]
     hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "*/*"}

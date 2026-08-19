@@ -11,7 +11,6 @@ v19.148 改用 services.health.dividend.check_eating_principal_1y_mk 作為
 """
 from __future__ import annotations
 
-import pytest
 
 from services.health.dividend import (
     check_eating_principal_1y_mk,

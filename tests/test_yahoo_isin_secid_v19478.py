@@ -9,7 +9,6 @@ user 2026-08-19:「流程本來就該用代號+星辰自動查,為何要我手�
   urlopen 拋錯 各自處理(§1 暫時失敗不入負快取);cache 命中不重打。
 - `_src_yahoo_finance_nav`:池中無 secId → 走 ISIN 解析 + 回填 set_secid,再打 chart。
 """
-import io
 import json
 
 import pandas as pd
