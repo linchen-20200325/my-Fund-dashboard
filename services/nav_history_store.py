@@ -103,34 +103,71 @@ def _parse_roc_or_western_date(s: str) -> "pd.Timestamp | None":
         return None
 
 
-def _detect_columns(df: pd.DataFrame) -> tuple[str | None, str | None]:
-    """從 CSV 欄位名自動偵測 date / nav 欄。"""
+def _detect_columns(df: "pd.DataFrame") -> tuple:
+    """依**內容**偵測 date / nav 欄(不靠 header 名)。df 須以 `header=None, dtype=str` 讀入。
+
+    v19.488:改內容偵測,修「無表頭 cache-export CSV 上傳解析失敗」——
+    原本靠欄名 + 位置退路(第一欄 date、第二欄 nav)。app 自己「下載當前 cache 為 CSV」
+    產出的是**無表頭、code 開頭**的 6-7 欄格式(code,date,nav,name,source,fetched_at),
+    pandas 預設把第一列資料當表頭 → 退路挑到 code 欄當 date、date 值當 nav → 全 row 失敗。
+    改為掃每欄實際值:
+      - date 欄 = 值多數可解析為(西元/民國)日期、且非數字;多個日期欄(如 fetched_at
+        時間戳也解析成日期)取**相異值最多**者(真淨值日序列 vs 常數時間戳),平手取最左。
+      - nav 欄 = 值多數為正浮點、且非日期;排除 date 欄,取占比最高、最左。
+    有表頭的舊格式(date,nav / 日期,淨值 / 民國)仍正確:表頭字串那一列解析不出日期,
+    僅稀釋比例(門檻 0.7 容忍),且在匯入迴圈自然被 skip(§round-trip 相容)。
+    """
     if df is None or df.empty:
         return None, None
-    _lower_to_orig = {str(c).strip().lower(): c for c in df.columns}
-    # date 候選名
-    _date_candidates = ["date", "日期", "trade_date", "nav_date", "publish_date",
-                        "datetime", "time", "資料日期", "淨值日期"]
-    _nav_candidates = ["nav", "淨值", "value", "price", "close", "單位淨值",
-                       "netassetvalue", "net_asset_value", "基金淨值"]
+    _cols = list(df.columns)
 
-    _date_col = None
-    for cand in _date_candidates:
-        if cand in _lower_to_orig:
-            _date_col = _lower_to_orig[cand]
-            break
-    _nav_col = None
-    for cand in _nav_candidates:
-        if cand in _lower_to_orig:
-            _nav_col = _lower_to_orig[cand]
-            break
+    # 若第 0 列是**表頭**(含已知 date/nav 欄名 token,中英文)→ 從內容取樣排除,
+    # 避免少數列時表頭字串稀釋日期/數值占比(§header-dilution;無表頭 code-first 不受影響)。
+    _header_tokens = {
+        "date", "日期", "trade_date", "nav_date", "publish_date", "datetime",
+        "time", "資料日期", "淨值日期", "nav", "淨值", "value", "price", "close",
+        "單位淨值", "netassetvalue", "net_asset_value", "基金淨值", "code", "source",
+        "fetched_at",
+    }
+    _row0 = [str(v).strip().lower() for v in df.iloc[0].tolist()]
+    _has_header = any(tok in _header_tokens for tok in _row0)
+    _body = df.iloc[1:] if (_has_header and len(df) > 1) else df
+    _sample = _body.head(200)
 
-    # 退路：第一欄當 date、第二欄當 nav
-    if _date_col is None and len(df.columns) >= 1:
-        _date_col = df.columns[0]
-    if _nav_col is None and len(df.columns) >= 2:
-        _nav_col = df.columns[1]
-    return _date_col, _nav_col
+    def _clean(v) -> str:
+        v = str(v).strip()
+        return "" if (not v or v.lower() == "nan") else v
+
+    def _is_float(v: str) -> bool:
+        # 偵測「是否數值欄」用**任意正負浮點**——正負篩選留給匯入迴圈(v<=0 skip),
+        # 否則含少數負值/異常的 nav 欄會被誤判非數值欄(§edge:負 NAV 混入)。
+        try:
+            float(v.replace(",", ""))
+            return True
+        except (TypeError, ValueError):
+            return False
+
+    _date_frac, _date_uniq, _num_frac = {}, {}, {}
+    for c in _cols:
+        _vals = [x for x in (_clean(v) for v in _sample[c].tolist()) if x]
+        if not _vals:
+            continue
+        _dts = [_parse_roc_or_western_date(v) for v in _vals]
+        _date_frac[c] = sum(d is not None for d in _dts) / len(_vals)
+        _date_uniq[c] = len({d for d in _dts if d is not None})
+        _num_frac[c] = sum(_is_float(v) for v in _vals) / len(_vals)
+
+    # date 欄:多數為日期且非數字;平手(fetched_at 也是日期)取相異值最多、最左
+    _date_cands = [c for c in _date_frac
+                   if _date_frac[c] >= 0.7 and _num_frac.get(c, 0.0) < 0.5]
+    date_col = (max(_date_cands, key=lambda c: (_date_uniq[c], -_cols.index(c)))
+                if _date_cands else None)
+    # nav 欄:多數為正浮點且非日期;排除 date 欄,取占比最高、最左
+    _nav_cands = [c for c in _num_frac
+                  if c != date_col and _num_frac[c] >= 0.7 and _date_frac.get(c, 0.0) < 0.5]
+    nav_col = (max(_nav_cands, key=lambda c: (_num_frac[c], -_cols.index(c)))
+               if _nav_cands else None)
+    return date_col, nav_col
 
 
 def import_nav_csv(code: str, csv_bytes: bytes) -> dict:
@@ -155,11 +192,13 @@ def import_nav_csv(code: str, csv_bytes: bytes) -> dict:
         result["errors"].append("CSV 內容為空")
         return result
 
-    # 多 encoding 嘗試
+    # 多 encoding 嘗試。v19.488:header=None + dtype=str —— 無表頭 cache-export CSV
+    # 不可被 pandas 當第一列是表頭而吃掉一整列資料;欄位改由 _detect_columns 依內容判。
     df = None
     for enc in ("utf-8-sig", "utf-8", "big5", "cp950"):
         try:
-            df = pd.read_csv(io.BytesIO(csv_bytes), encoding=enc)
+            df = pd.read_csv(io.BytesIO(csv_bytes), encoding=enc,
+                             header=None, dtype=str)
             if not df.empty:
                 break
         except Exception:
@@ -169,7 +208,8 @@ def import_nav_csv(code: str, csv_bytes: bytes) -> dict:
         return result
 
     date_col, nav_col = _detect_columns(df)
-    if not date_col or not nav_col:
+    # v19.488:須用 `is None` —— 欄索引為整數,第 0 欄的 `not 0` 為 True 會誤判偵測失敗。
+    if date_col is None or nav_col is None:
         result["errors"].append(
             f"無法偵測 date/nav 欄位（找到的欄：{list(df.columns)[:6]}）"
         )
