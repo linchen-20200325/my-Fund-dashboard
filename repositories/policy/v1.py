@@ -29,7 +29,6 @@ from ._helpers import (
     _normalize_invest_twd,
     _open_worksheet,
     _row_to_list,
-    _with_quota_retry,
     normalize_invest_twd_column,
     reset_invest_twd_parse_errors,
 )

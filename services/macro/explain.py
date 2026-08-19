@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import math
-from typing import Any
 
 from shared.colors import MATERIAL_GREEN, MATERIAL_RED, MD_AMBER_300, MD_GREEN_A200, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import (  # v19.74 W2 SSOT

@@ -52,7 +52,6 @@ from shared.colors import (
     MD_GREEN_A400,
     MD_PURPLE_500,
     STREAMLIT_BG,
-    TRAFFIC_GREEN,
     TRAFFIC_NEUTRAL,
     WHITE,
 )

@@ -15,8 +15,7 @@ import streamlit as st
 st.set_page_config(page_title="基金戰情室", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
 
-import os, datetime, re
-import pandas as pd
+import os, datetime
 
 TW_TZ = datetime.timezone(datetime.timedelta(hours=8))
 def _now_tw():
@@ -37,15 +36,6 @@ from ui.tab6_manual import render_manual_tab
 from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
 from ui.tab_batch_analysis import render_batch_analysis_tab  # noqa: E402
 from ui.tab_manage import render_manage_tab  # noqa: E402  (📋 我的管理室,v19.433)
-from fund_fetcher  import (
-    get_proxy_config,
-)
-from repositories.policy_repository import (
-    get_sheet_title,
-)
-from infra.oauth import (
-    build_authorize_url,
-)
 
 APP_VERSION = "v19.405_IA_P4_TabRestructure"
 

@@ -30,7 +30,7 @@ def _render_mk_signal_table(funds: list) -> None:
         return
 
     try:
-        from ui.helpers.macro_helpers import mk_fund_signal
+        pass
     except Exception as e:
         st.caption(f"⬜ 訊號模組載入失敗:{type(e).__name__}: {e}")
         return

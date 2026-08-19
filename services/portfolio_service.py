@@ -16,7 +16,6 @@ v11.0 分層歸位：本檔屬於 Service Layer，純業務計算。
 向後相容：根目錄 portfolio_engine.py 保留 `from services.portfolio_service import *` shim，
         E 階段收尾後 shim 刪除。
 """
-import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional
 from shared.signal_thresholds import (  # v19.74 W2 SSOT

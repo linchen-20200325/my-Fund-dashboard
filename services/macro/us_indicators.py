@@ -4,17 +4,15 @@
 """
 from __future__ import annotations
 
-import math
 from concurrent.futures import ThreadPoolExecutor as _TPE_macro
 from typing import Optional
 
-import numpy as np
 import pandas as pd
 
 from repositories.macro_repository import (
-    fetch_fred, fetch_yf_close, fetch_ism_pmi, fetch_fred_batch,
+    fetch_ism_pmi, fetch_fred_batch,
 )
-from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_BLUE_300, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, MD_RED_A100, TRAFFIC_NEUTRAL
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_AMBER_300, MD_BLUE_300, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_RED_A100, TRAFFIC_NEUTRAL
 # v19.245 R13 F-GRAY-4 Phase A HY_SPREAD inflection 收口 SSOT
 from shared.macro_thresholds_v2 import HY_SPREAD_THRESHOLDS as _HY_THR_V2
 # v19.404 CFNAI 官方非對稱門檻(衰退 -0.70 / 擴張 +0.20,皆 MA3 基準)。

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
+from shared.colors import MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL, TRAFFIC_RED
 # F-GRAY-4 v19.269 D8 Phase 4 (#3):CPI bull_high SSOT(SPEC §16.2 inflection_detection)
 from shared.macro_thresholds_v2 import CPI_YOY_THRESHOLDS as _CPI_THR
 

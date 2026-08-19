@@ -37,7 +37,7 @@
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 from shared.colors import CAUTION_YELLOW, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_GREEN_A200, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import GRADE_4D_MIN_FACTORS, GRADE_CUTOFFS_4D
