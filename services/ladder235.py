@@ -28,7 +28,13 @@ from shared.colors import (
     TRAFFIC_YELLOW,
 )
 from shared.signal_thresholds import (
+    LADDER235_BB_L1,
+    LADDER235_BB_L2,
+    LADDER235_BB_L3,
+    LADDER235_BB_STOPGAIN_BATCH,
+    LADDER235_BB_STOPGAIN_FORCE,
     LADDER235_BB_WINDOW_W,
+    LADDER235_DEFENSE_LOOKBACK_W,
     LADDER235_DEPLOY_PCT,
     LADDER235_MA_MONTH_W,
     LADDER235_MA_QUARTER_W,
@@ -83,10 +89,10 @@ def _blank(status: str, wk_n: int, vix) -> dict:
 
 def _classify(c, ma4, ma13, ma52, z_bb, vix) -> tuple:
     """三取一 Max:回 (lamp, reasons)。停利優先(超漲不加碼),再由最嚴重加碼燈往下檢查。"""
-    # 停利(布林上軌;獨立且優先)
-    if z_bb > 3:
+    # 停利(布林上軌;獨立且優先)—— 切點走 SSOT(v19.483 稽核 M2,原 inline)
+    if z_bb > LADDER235_BB_STOPGAIN_FORCE:
         return "強制停利", [f"布林 z={z_bb:+.2f} > +3σ(超漲,獲利轉回核心)"]
-    if z_bb > 2:
+    if z_bb > LADDER235_BB_STOPGAIN_BATCH:
         return "分批停利", [f"布林 z={z_bb:+.2f} > +2σ(超漲,分批停利)"]
 
     _has_vix = isinstance(vix, (int, float))
@@ -94,9 +100,9 @@ def _classify(c, ma4, ma13, ma52, z_bb, vix) -> tuple:
     r3 = []
     if _has_vix and vix >= LADDER235_VIX_L3:
         r3.append(f"VIX {vix:.1f} ≥ {LADDER235_VIX_L3:.0f}")
-    if ma52 is not None and c < ma52 and z_bb < -2:
+    if ma52 is not None and c < ma52 and z_bb < LADDER235_BB_L2:
         r3.append(f"週收<52週年線 且 布林 z={z_bb:+.2f}<-2σ")
-    if z_bb < -3:
+    if z_bb < LADDER235_BB_L3:
         r3.append(f"布林 z={z_bb:+.2f} < -3σ")
     if r3:
         return "燈三", r3
@@ -106,7 +112,7 @@ def _classify(c, ma4, ma13, ma52, z_bb, vix) -> tuple:
         r2.append(f"VIX {vix:.1f} ∈ [{LADDER235_VIX_L2:.0f},{LADDER235_VIX_L3:.0f})")
     if ma13 is not None and c < ma13:
         r2.append("週收 < 13週季線")
-    if z_bb < -2:
+    if z_bb < LADDER235_BB_L2:
         r2.append(f"布林 z={z_bb:+.2f} < -2σ")
     if r2:
         return "燈二", r2
@@ -116,7 +122,7 @@ def _classify(c, ma4, ma13, ma52, z_bb, vix) -> tuple:
         r1.append(f"VIX {vix:.1f} ∈ [{LADDER235_VIX_L1:.0f},{LADDER235_VIX_L2:.0f})")
     if ma4 is not None and c < ma4:
         r1.append("週收 < 4週月線")
-    if z_bb < -1:
+    if z_bb < LADDER235_BB_L1:
         r1.append(f"布林 z={z_bb:+.2f} < -1σ")
     if r1:
         return "燈一", r1
@@ -127,11 +133,11 @@ def _classify(c, ma4, ma13, ma52, z_bb, vix) -> tuple:
 
 def _defense_note(wk: pd.Series, c, ma13, ma52, z_bb) -> str:
     """深水區防守註記(不改燈):等待共伴確認 / 落底回升信號。"""
-    if ma52 is not None and c < ma52 and z_bb >= -2:
+    if ma52 is not None and c < ma52 and z_bb >= LADDER235_BB_L2:
         return "⏳ 僅跌破年線、布林未達 -2σ → 等待共伴確認(不逕觸發深水)"
-    # 落底回升:近 8 週曾探到年線之下、現又站回季線
+    # 落底回升:近 N 週曾探到年線之下、現又站回季線(N 走 SSOT,v19.483 M2)
     if ma52 is not None and ma13 is not None and c >= ma13:
-        if float(wk.iloc[-8:].min()) < ma52:
+        if float(wk.iloc[-LADDER235_DEFENSE_LOOKBACK_W:].min()) < ma52:
             return "🔄 跌破年線後站回 13週季線 → 落底回升信號"
     return ""
 
