@@ -218,20 +218,23 @@ def test_diagnose_flags_today_basis_gap_when_no_inception():
     assert 0.5 / 365.25 < _gap < 4.0 / 365.25
 
 
-def test_diagnose_flags_sample_count_gap_on_duplicate_dates():
-    """同日重複：A 數列長度、B 數不重複日期 → 90 筆門檻兩邊踩在不同時機。
+def test_duplicate_dates_both_honest_after_h3_proxy_clamp():
+    """v19.485 稽核 H3:同日重複短序列 → **兩邊都誠實回資料不足**(無假分歧)。
 
-    這是「A 會硬報 0.x 年 ❌、B 誠實回資料不足 ⬜」的唯一已知真實觸發路徑
-    （方向與稽核表的假設相反 —— 誠實的是 B 不是 A）。
+    舊行為(bug):A(report,len(series)=100 ≥ 90)硬報 0.x 年 ❌、B 誠實回 None ⬜
+      → 兩邊分歧(且 A 對短 NAV 假報成立<3年,§1 違憲)。
+    H3 修正:成立年數 proxy < 3 年一律 None(NAV 首日只是年齡下界,短序列不能反證年輕)
+      → A、B **同源同結果**,都回 None,不再假 ❌、不再假分歧。此檔正是該 bug 的觸發形狀,
+      改為鎖「已修正」的反向斷言(對照 PR-1:測試不得繼續編碼已修掉的錯誤行為)。
     """
     base = pd.date_range(end=_today_naive(), periods=50, freq="D")
     idx = pd.DatetimeIndex(sorted(list(base) + list(base)))   # 100 筆 / 50 個日期
     fd = _fd_twd(inception=None, index=idx)
     r = diagnose(fd, "DUPDATE")
     assert r["n_series"] == 100 and r["n_nav_dict"] == 50
-    assert r["years_a"] is not None      # A：len(series)=100 ≥ 90 → 照報約 0.x 年
-    assert r["years_b"] is None          # B：不重複日期 50 < 90 且 < 0.5 年 → 資料不足
-    assert r["differs"] is True and r["reasons"]
+    assert r["years_a"] is None          # H3:A 不再硬報 0.x 年,誠實 None(⬜ 非 ❌)
+    assert r["years_b"] is None          # B 一如既往誠實 None
+    assert r["differs"] is False         # 兩邊同源同結果 → 不再有假分歧
 
 
 # ══════════════════════════════════════════════════════════════════════

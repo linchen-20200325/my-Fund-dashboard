@@ -95,12 +95,14 @@ RET_3Y_YEARS = 3
 BASIS_NAV_ONLY = "純 NAV(不含配息)"
 BASIS_TOTAL_RETURN = "含息(MoneyDJ 官方績效表)"
 
+# v19.485 PR-2:取值順序改**含息(wb01 perf)優先**,與 SSOT `derive_ann_3y_for_333` 一致
+#   (原純NAV優先=偏低口徑)。step1 含息 → step2/3 純NAV fallback(偏低,配息型會被低估)。
 STEP_LABELS = {
-    1: 'metrics["ret_3y_ann"]',
-    2: 'metrics["ret_3y_cum"] / metrics["ret_3y"]',
-    3: 'perf["3Y"](MoneyDJ 績效表)',
+    1: 'perf["3Y"](MoneyDJ 績效表・含息)',
+    2: 'metrics["ret_3y_ann"]',
+    3: 'metrics["ret_3y_cum"] / metrics["ret_3y"]',
 }
-STEP_BASIS = {1: BASIS_NAV_ONLY, 2: BASIS_NAV_ONLY, 3: BASIS_TOTAL_RETURN}
+STEP_BASIS = {1: BASIS_TOTAL_RETURN, 2: BASIS_NAV_ONLY, 3: BASIS_NAV_ONLY}
 
 # perf dict 裡的 provenance 欄(F-PROV-1 加的),列 key 時要濾掉,不然報告會很吵。
 _PERF_META_KEYS = frozenset({"source", "fetched_at", "_source", "_fetched_at"})
@@ -232,16 +234,21 @@ def chain_steps(fd: dict) -> dict:
     perf_origin = ("fd.perf" if _perf_top
                    else "fd.moneydj_raw.perf" if _perf_nested else None)
 
-    raw1 = m.get("ret_3y_ann")
+    # v19.485 PR-2:新順序 step1 含息(perf 3Y)→ step2 純NAV 直取 → step3 純NAV 累積換算,
+    # 與 SSOT `derive_ann_3y_for_333` literal 同源;年化 + round(2) 全走 SSOT `_annualize_cum_pct`
+    # 保證 `attribution_ok`(對 variant_b_ann_3y=SSOT)恆成立。
+    from services.health.dividend import _annualize_cum_pct as _ann_ssot
+    raw1 = perf.get("3Y")                              # step1 含息(wb01)
+    raw2 = m.get("ret_3y_ann")                         # step2 純NAV(直取)
     # production 用的是 `or`(不是 `is None`)—— 忠實照抄,見報告「潛在 falsy 回退」。
-    raw2 = m.get("ret_3y_cum") or m.get("ret_3y")
-    raw3 = perf.get("3Y")
+    raw3 = m.get("ret_3y_cum") or m.get("ret_3y")      # step3 純NAV(累積換算)
 
-    val1 = _num(raw1)
-    val2 = None if raw2 is None else annualize_cum_pct(raw2)
-    val3 = None if raw3 is None else annualize_cum_pct(raw3)
-    if val3 is not None:
-        val3 = round(val3, 2)   # production 這一步有 round,前兩步沒有
+    _v1 = _ann_ssot(_num(raw1), 3)
+    val1 = None if _v1 is None else round(_v1, 2)
+    _v2 = _num(raw2)
+    val2 = None if _v2 is None else round(_v2, 2)
+    _v3 = _ann_ssot(_num(raw3), 3)
+    val3 = None if _v3 is None else round(_v3, 2)
 
     hit_step, hit_value = None, None
     for _step, _v in ((1, val1), (2, val2), (3, val3)):
@@ -344,8 +351,9 @@ def diagnose_3y(fd: dict, code: str, today=None) -> dict:
         "would_apply": would_apply,
         "would_status": would_status,
         "would_change": (would_status or "")[:1] != (current_status or "")[:1],
-        # 口徑翻面風險:目前吃步驟 3(含息),日後步驟 1/2 一有值就改吃純 NAV。
-        "basis_downgrade_risk": steps["hit_step"] == 3,
+        # v19.485:口徑偏低風險 —— 命中**純 NAV**(步驟 2/3)代表「> 7%」用的是不含配息的
+        #   偏低數字,配息型會被低估;含息(步驟 1・wb01)命中則無此虞。
+        "basis_downgrade_risk": steps["hit_step"] in (2, 3),
         **facts,
         **steps,
     }
@@ -360,9 +368,10 @@ def _explain(row: dict) -> str:
     if hit is not None:
         _s = (f"步驟 {hit}({STEP_LABELS[hit]})命中 → 3 年年化 "
               f"{row['hit_value_pct']:.2f}%,口徑 = {row['hit_basis']}")
-        if hit == 3:
-            _s += (f";步驟 1、2 是空的(NAV {n} 點 vs 門檻 {need} 點)"
-                   "—— 哪天 NAV 歷史補齊,這檔會改吃步驟 1 的純 NAV 數字,會變小")
+        if hit in (2, 3):
+            _s += (f";含息(步驟 1・wb01 perf)是空的(NAV {n} 點 vs 門檻 {need} 點)"
+                   "—— 用的是不含配息的純 NAV 數字,配息型會被低估;"
+                   "哪天 MoneyDJ 績效表補上 3Y,會改吃較高的含息數字")
         return _s
 
     parts = []
@@ -505,8 +514,8 @@ def render_report(rows: list) -> str:
         else:
             out.append("                                → 判定不變,這檔不是第四層能救的")
         if r["basis_downgrade_risk"]:
-            out.append("    ⚠️ 口徑翻面風險:目前這個數字是**含息**的;NAV 歷史一補齊就會"
-                       "改吃步驟 1 的**純 NAV**,月配息基金會直接少掉三年份配息")
+            out.append("    ⚠️ 口徑偏低:目前用的是**純 NAV**(不含配息,步驟 2/3);含息(步驟 1・"
+                       "wb01 perf 3Y)缺 → 月配息基金三年份配息沒算進去,> 7% 門檻會被低估")
     out.append("─" * 78)
     out.append("")
 
@@ -515,7 +524,7 @@ def render_report(rows: list) -> str:
                f"{'  ' + ', '.join(r['code'] for r in _blocked) if _blocked else ''}")
     out.append(f"  補第四層後會改判:{len(_fixable)} 檔"
                f"{'  ' + ', '.join(r['code'] for r in _fixable) if _fixable else ''}")
-    out.append(f"  目前吃含息口徑(步驟 3):{len(_basis_risk)} 檔"
+    out.append(f"  目前吃純 NAV 偏低口徑(步驟 2/3・含息缺):{len(_basis_risk)} 檔"
                f"{'  ' + ', '.join(r['code'] for r in _basis_risk) if _basis_risk else ''}")
     out.append("")
     out.append("── 怎麼讀 ─────────────────────────────────────────────")
@@ -523,7 +532,7 @@ def render_report(rows: list) -> str:
     out.append("  「NAV 點數」是步驟 1、2 唯一的門檻 —— 它數的是**點數不是時間**,")
     out.append("  所以週更 / 月更淨值的基金,就算有 20 年歷史也永遠過不了這關。")
     out.append("  「跨度」才是時間;跨度不足 3 年 = 真的沒歷史,補幾層 fallback 都沒用。")
-    out.append(f"  口徑:步驟 1、2 = {BASIS_NAV_ONLY};步驟 3 = {BASIS_TOTAL_RETURN};")
+    out.append(f"  口徑:步驟 1 = {BASIS_TOTAL_RETURN};步驟 2、3 = {BASIS_NAV_ONLY};")
     out.append(f"        時間軸 fallback = {BASIS_NAV_ONLY}。")
     out.append("  同一張表裡混用這兩種口徑,月配息基金會被系統性低估三年份的配息 —")
     out.append("  所以真要補第四層,值必須連同口徑一起標出來(比照「1Y 來源」欄的做法)。")

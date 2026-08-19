@@ -46,8 +46,11 @@ from services.health.dividend import (
     EatingPrincipalCore,
     check_333_principle,
     check_eating_principal_1y_mk,
+    clamp_333_proxy_years,
     classify_eating_principal,
     compute_1y_total_return_mk_simple,
+    derive_ann_3y_for_333,
+    derive_years_for_333,
 )
 
 # ── replacement(替換建議) ──────────────────────────────────
@@ -71,8 +74,11 @@ __all__ = [
     "EatingPrincipalCore",
     "check_333_principle",
     "check_eating_principal_1y_mk",
+    "clamp_333_proxy_years",
     "classify_eating_principal",
     "compute_1y_total_return_mk_simple",
+    "derive_ann_3y_for_333",
+    "derive_years_for_333",
     # replacement
     "check_replacement_recommendation",
     # report

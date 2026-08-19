@@ -63,13 +63,31 @@ def _nav_sample_label(fd: dict) -> str:
     return f"{_mark}{_n} 筆 · {_span} 天"
 
 
+def _nav_first_iso(s) -> "str | None":
+    """NAV 序列 / dict → 最早一筆日期 ISO(YYYY-MM-DD);空 / 無法解析 → None。"""
+    if s is None:
+        return None
+    try:
+        if hasattr(s, "dropna"):
+            _s2 = s.dropna().sort_index()
+            return str(_s2.index[0])[:10] if len(_s2) else None
+        if isinstance(s, dict) and s:
+            return str(sorted(s.keys())[0])[:10]
+    except Exception:  # noqa: BLE001 — 取首日失敗 → None,不硬報
+        return None
+    return None
+
+
 def _compute_holding_years(fd: dict) -> Optional[float]:
     """從 inception_date metadata 或 NAV 序列推算「成立至今」年數( 3-3-3 用)。
     注意:這是「基金成立年數」非「user 持有年數」。
     user 持有年數應由 caller 從 ledger 傳入。
     """
-    # v19.308：改走 SSOT services.fund_screening.fund_inception_years（優先 MoneyDJ
-    # 現成成立日，缺則 NAV 序列推算），與 3-3-3 篩選 / 戰情室同源，不再各自實作。
+    # v19.308：優先 MoneyDJ 現成成立日,缺則 NAV 序列推算。
+    # v19.485 稽核 H3：成立年數推導改走 SSOT `services.health.dividend.derive_years_for_333`
+    #   —— NAV 首日 proxy 是「年齡下界」,proxy < 3 年 → None(⬜,不假 ❌「成立<3年」)。
+    #   成立日**來源**仍是本檔 richer 三選一(§8.3 註記:不強併 fund_row 的兩選一),
+    #   只共用 proxy 下界邏輯。
     try:
         _mj = fd.get("moneydj_raw") or {}
         _inception = (fd.get("inception_date")
@@ -78,8 +96,8 @@ def _compute_holding_years(fd: dict) -> Optional[float]:
         s = fd.get("series")
         if s is None:  # 顯式 None 判斷，避免 pandas Series.__bool__ ambiguous
             s = _mj.get("series")
-        from services.fund_screening import fund_inception_years
-        return fund_inception_years(_inception, s)
+        from services.health.dividend import derive_years_for_333
+        return derive_years_for_333(_inception, _nav_first_iso(s))[0]
     except Exception as e:
         # v19.184 F-MED:加 stderr log 不靜默(§3.3 反捏造)
         import sys as _sys
@@ -187,6 +205,7 @@ def build_health_analysis_row(
     from services.health.dividend import (
         _resolve_adr_with_fallback,
         check_333_principle,
+        derive_ann_3y_for_333,
     )
     # v19.184 F-MED:silent except 全改加 stderr log(§3.3 反捏造)
     import sys as _sys
@@ -287,10 +306,14 @@ def build_health_analysis_row(
             except (ValueError, ZeroDivisionError, OverflowError):
                 pass
 
-    # ─── 3-3-3 篩(成立年數 + 3Y 年化)SSOT ─────────────
+    # ─── 3-3-3 篩(成立年數 + 3Y 年化含息)SSOT ─────────────
+    # v19.485 H4:verdict 用**含息優先**的 3Y 年化(derive_ann_3y_for_333),與顯示欄
+    #   「3Y 年化 %」(ret_3y_ann,純NAV chain)**刻意分開** —— 顯示維持純NAV 不動,
+    #   verdict 改含息(配息型不再假 ❌)。斷開 display/verdict 耦合(上次 cascade 根因)。
     years_inception = holding_years if holding_years is not None else _compute_holding_years(fd)
+    _ann_3y_333, _basis_3y_333 = derive_ann_3y_for_333(fd, m)
     try:
-        _333 = check_333_principle(years_inception, ret_3y_ann)
+        _333 = check_333_principle(years_inception, _ann_3y_333)
     except Exception as e:
         print(f'[fund_health_report] check_333_principle fail: '
               f'{type(e).__name__}: {e}', file=_sys.stderr)
