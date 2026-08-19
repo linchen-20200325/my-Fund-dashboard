@@ -918,11 +918,11 @@ def render_macro_tab() -> None:
 
     st.markdown("## 🌐 總經位階評估 ＆ 拐點偵測")
 
-    # 2026-08-14：流程層導覽（巨觀:我在系統的哪一層）+ 決策動線（微觀:下一站去哪）
-    from ui.helpers.story_nav import render_flow_nav, render_story_nav
-    render_flow_nav("macro")
+    # 2026-08-19（user「說明欄位太多太複雜,請簡化」）:top 原疊 4 行 meta(4 層流程導覽
+    # 2 行 + 決策動線 1 行 + 加權方法論 1 行)→ 精簡為單行決策動線;方法論細節下沉,
+    # 不在最上方擋內容。render_flow_nav / 方法論 caption 移除(仍保留於 story_nav 供他頁)。
+    from ui.helpers.story_nav import render_story_nav
     render_story_nav("macro")
-    st.caption("策略3 三層指標加權方法論 v7 — 領先×2 | 中級×1 | 次級×0.5")
 
     # ⚡ 今日關鍵橫幅已下移至總表「③ 例外」層(2026-08-05 F1 資訊架構重構)。
     # 它回答的是「有沒有該警覺的」,屬總表第三層;掛在載入按鈕之前時,使用者會

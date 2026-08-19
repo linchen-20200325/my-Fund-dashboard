@@ -98,8 +98,11 @@ class TestFlowNav:
         from ui.helpers.story_nav import flow_nav_markdown
         assert "**:blue[④ 行動閉環]**" in flow_nav_markdown("L4")
 
+    # v19.476（user「說明欄位太多太複雜,請簡化」）:市場定調(macro)上方 meta 精簡,
+    # 刻意移除 render_flow_nav("macro"),只留單行決策動線 render_story_nav。故 macro 不在
+    # 本 flow_nav 接線清單;其餘 5 頁仍須接線(render_flow_nav 非死碼)。macro 的 story_nav
+    # 接線由 test_tab_is_wired_to_story_nav 另守(見下)。
     @pytest.mark.parametrize("relpath,key", [
-        ("ui/tab1_macro.py", "macro"),
         ("ui/tab2_single_fund.py", "fund"),
         ("ui/tab3_portfolio.py", "portfolio"),
         ("ui/tab_fund_grp_health.py", "health"),
@@ -111,6 +114,16 @@ class TestFlowNav:
         _src = _read(relpath)
         assert _code_lines(_src, f'render_flow_nav("{key}")'), (
             f"{relpath} 沒有呼叫 render_flow_nav(\"{key}\")"
+        )
+
+    def test_macro_kept_story_nav_after_flow_nav_removed(self):
+        """v19.476:macro 移除 flow_nav 後,仍須保留單行決策動線 story_nav(否則等於全砍)。"""
+        _src = _read("ui/tab1_macro.py")
+        assert _code_lines(_src, 'render_story_nav("macro")'), (
+            "ui/tab1_macro.py 應保留 render_story_nav(\"macro\")"
+        )
+        assert not _code_lines(_src, 'render_flow_nav("macro")'), (
+            "v19.476 已移除 macro 的 render_flow_nav"
         )
 
 
