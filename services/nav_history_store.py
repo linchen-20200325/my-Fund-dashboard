@@ -235,30 +235,136 @@ def import_nav_csv(code: str, csv_bytes: bytes) -> dict:
         )
         return result
 
+    _res = _merge_pairs_into_cache(code, new_dates, new_vals)
+    for _k in ("imported", "merged", "total", "date_min", "date_max"):
+        result[_k] = _res[_k]
+    return result
+
+
+def _merge_pairs_into_cache(code: str, new_dates: list, new_vals: list) -> dict:
+    """把 (dates, vals) 併進 `code` 的本地 cache(同日 keep-last、昇冪),回統計 dict。
+
+    v19.490:自 import_nav_csv 抽出,供單檔 / 多檔(import_nav_csv_multi)共用同一套併入邏輯。
+    """
+    res = {"imported": 0, "merged": 0, "total": 0, "date_min": None, "date_max": None}
+    if not new_dates:
+        return res
     new_s = pd.Series(new_vals, index=pd.DatetimeIndex(new_dates), dtype=float)
     new_s = new_s[~new_s.index.duplicated(keep="last")].sort_index()
     n_new_total = len(new_s)
-
-    # Merge 進 cache
     cached = _load_cache_series(code)
     if cached.empty:
         merged = new_s
-        result["imported"] = n_new_total
-        result["merged"] = 0
+        res["imported"] = n_new_total
     else:
         before_n = len(cached)
         merged = pd.concat([cached, new_s])
         merged = merged[~merged.index.duplicated(keep="last")].sort_index()
-        after_n = len(merged)
-        # 純新增 = after - before；merged 疊代 = 兩集合 intersection size
-        result["imported"] = max(0, after_n - before_n)
-        result["merged"] = max(0, n_new_total - result["imported"])
-
+        res["imported"] = max(0, len(merged) - before_n)
+        res["merged"] = max(0, n_new_total - res["imported"])
     _save_cache_series(code, merged)
-    result["total"] = len(merged)
-    result["date_min"] = str(merged.index.min().date())
-    result["date_max"] = str(merged.index.max().date())
-    return result
+    res["total"] = len(merged)
+    res["date_min"] = str(merged.index.min().date())
+    res["date_max"] = str(merged.index.max().date())
+    return res
+
+
+def _read_csv_bytes(csv_bytes: bytes):
+    """多 encoding 讀 CSV → DataFrame(header=None, dtype=str);全失敗回 None。"""
+    import io as _io
+    for enc in ("utf-8-sig", "utf-8", "big5", "cp950"):
+        try:
+            df = pd.read_csv(_io.BytesIO(csv_bytes), encoding=enc, header=None, dtype=str)
+            if not df.empty:
+                return df
+        except Exception:
+            continue
+    return None
+
+
+def _detect_code_column(df, date_col, nav_col):
+    """偵測**代號欄**(非 date/nav):值為短識別碼(≤15 字、含英數,排除長中文名 / 時間戳),
+    取最左符合者。找不到回 None(呼叫端據此要求「代號|日期|淨值」格式或退單檔上傳)。"""
+    _sample = df.head(200)
+
+    def _clean(v):
+        v = str(v).strip()
+        return "" if (not v or v.lower() == "nan") else v
+
+    for c in df.columns:
+        if c == date_col or c == nav_col:
+            continue
+        _vals = [x for x in (_clean(v) for v in _sample[c].tolist()) if x]
+        if not _vals:
+            continue
+        _short = sum(1 for v in _vals if len(v) <= 15 and any(ch.isalnum() for ch in v)) / len(_vals)
+        if _short >= 0.7:
+            return c
+    return None
+
+
+def import_nav_csv_multi(csv_bytes: bytes) -> dict:
+    """**免指定代號**:從 CSV 的代號欄自動分組,逐檔併進各自 cache(代號|日期|淨值 格式)。
+
+    回 {codes:[...], results:{code:{imported,merged,total,date_min,date_max}}, points:[...], errors:[...]}。
+    points = [{code, nav, nav_date}]:供呼叫端一次同步進雲端 nav_history(append_points)。
+    §1:代號空 / 日期壞 / nav<=0 的 row 全丟;無代號欄或無有效 row → errors。
+    """
+    out: dict = {"codes": [], "results": {}, "points": [], "errors": []}
+    if not csv_bytes:
+        out["errors"].append("CSV 內容為空")
+        return out
+    df = _read_csv_bytes(csv_bytes)
+    if df is None or df.empty:
+        out["errors"].append("CSV 解析失敗（試了 utf-8 / big5 / cp950）")
+        return out
+    date_col, nav_col = _detect_columns(df)
+    if date_col is None or nav_col is None:
+        out["errors"].append(f"無法偵測 date/nav 欄位（找到的欄:{list(df.columns)[:6]}）")
+        return out
+    code_col = _detect_code_column(df, date_col, nav_col)
+    if code_col is None:
+        out["errors"].append("找不到代號欄 —— 需 `代號|日期|淨值` 格式（每列第一欄是基金代號）")
+        return out
+
+    groups: dict = {}   # code -> ([dates], [vals])
+    for _, row in df.iterrows():
+        code = str(row.get(code_col, "")).strip().upper()
+        if not code:
+            continue
+        dt = _parse_roc_or_western_date(row.get(date_col, ""))
+        if dt is None:
+            continue
+        try:
+            v = float(str(row.get(nav_col, "")).replace(",", "").strip())
+        except (TypeError, ValueError):
+            continue
+        if v <= 0:
+            continue
+        g = groups.setdefault(code, ([], []))
+        g[0].append(dt)
+        g[1].append(v)
+        out["points"].append({"code": code, "nav": v, "nav_date": dt.strftime("%Y-%m-%d")})
+
+    if not groups:
+        out["errors"].append(
+            f"全部 row 都解析不出有效 (代號,日期,NAV)（code_col={code_col} "
+            f"date_col={date_col} nav_col={nav_col}）")
+        return out
+
+    for code, (dates, vals) in groups.items():
+        out["results"][code] = _merge_pairs_into_cache(code, dates, vals)
+        out["codes"].append(code)
+    out["codes"].sort()
+    return out
+
+
+def list_cache_codes() -> list:
+    """列出本地 cache 已有的代號(供 UI 選單:增量更新 / 下載 / 清除 目標)。"""
+    try:
+        return sorted(p.stem for p in _CACHE_DIR.glob("*.json"))
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def export_nav_csv(code: str) -> bytes:
