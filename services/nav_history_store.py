@@ -334,13 +334,23 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
 
     Returns:
         {
-          "results": [{code, fetched(唯一日期筆數), date_min, date_max, error|None}, ...],
+          "results": [{code, fetched, date_min, date_max, source, span_days, error|None}, ...],
           "gs_enabled": bool,      # 雲端是否啟用(SA + NAV_SHEET_ID)
           "gs_written": int,       # 本次去重後真正新增到雲端的列數
           "n_ok": int,             # 抓到淨值的檔數
           "n_fail": int,           # 抓不到的檔數
         }
+
+    v19.475(user 2026-08-18 回報「不是抓半年的嗎」):實測 8 檔保單平台基金全落回
+      MoneyDJ 30 天短窗 —— 根因是 `_span_extend_insurance_nav` 的長歷史救援**只對前綴在
+      `_INSURANCE_SUBDOMAIN_HINTS` 的代碼觸發**(TL/JF/… 有,AC*/AL/PY 無),user 填的
+      ISIN 對非保單前綴代碼**根本沒送去晨星**。本層加「ISIN 直驅長歷史救援」:凡池中
+      有 ISIN 且 auto 抓到的跨度 < ~2 年,就**不管前綴**直接用 ISIN 試晨星 / CnYES,取
+      跨度更長者;並逐檔回報實際 `source` + `span_days`(§5 讓 user 看得到到底抓到哪、
+      多長,不再誤以為都是 5 年)。晨星 / CnYES 若對該檔仍無資料 → 誠實留 MoneyDJ 短窗,
+      UI 引導改走手動 CSV(§1 不偽造長歷史)。
     """
+    import datetime as _dt
     import sys as _sys
 
     from services import nav_history_gs
@@ -358,56 +368,102 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
     gs_on = nav_history_gs.is_enabled()
     # §1/§3.2:未來日上限用 TW 當日(對齊 nav_history_gs._norm_date 的未來日守衛;
     # 防上游把民國年 / 日月顛倒 misparse 成未來日污染 fetched/date_max/本地 cache)。
-    import datetime as _dt
     _today_ts = pd.Timestamp(_dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date())
+    # 跨度短於此(~2 年)且池中有 ISIN → 觸發 ISIN 直驅長歷史救援(繞過保單前綴 gate)。
+    _SPAN_TARGET_DAYS = 730
     results: list = []
     all_points: list = []
     n = len(uniq)
+
+    def _clean(raw) -> "pd.Series":
+        """清洗:先驗值(非 NaN × >0)再去重(§3.2 稽核 F5:同日有效+壞值不整日丟失),
+        擋未來日(§1),最後唯一日期 × 遞增。index 非日期會拋 → 由呼叫端 guard。"""
+        if raw is None or not hasattr(raw, "__len__") or len(raw) == 0:
+            return pd.Series(dtype=float)
+        x = pd.Series(raw).dropna()
+        x = x[x > 0]
+        x = x[x.index <= _today_ts]
+        return x[~x.index.duplicated(keep="last")].sort_index()
+
+    def _span(x: "pd.Series") -> int:
+        """序列跨度(日曆日);< 2 筆回 0。"""
+        return int((x.index.max() - x.index.min()).days) if len(x) >= 2 else 0
+
+    def _rescue_by_isin(code: str, s: "pd.Series", src: str) -> "tuple[pd.Series, str]":
+        """auto 抓到的跨度太短 → 用池中 ISIN 直接試晨星 / CnYES(不看保單前綴),取更長者。
+
+        §1:各源獨立 guard,單源壞掉只 log、不影響已抓到的 MoneyDJ 序列;採用門檻
+        「≥10 筆 且 跨度更長」與 orchestration `_span_extend_insurance_nav` 同精神。
+        """
+        try:
+            from repositories.pool_repository import resolve_isin
+            _isin = resolve_isin(code)
+        except Exception as _e:  # noqa: BLE001 — 讀 ISIN 失敗不擋(退回 MoneyDJ 短窗)
+            print(f"[backfill_to_gs] {code} resolve_isin 失敗:{type(_e).__name__}: {_e}",
+                  file=_sys.stderr)
+            return s, src
+        if not _isin:
+            return s, src
+        from repositories.fund.sources import _src_cnyes_nav, _src_morningstar_nav
+        _cur = _span(s)
+        for _name, _fn in (("morningstar", lambda: _src_morningstar_nav(code)),
+                           ("cnyes", lambda: _src_cnyes_nav(code))):
+            try:
+                _cand = _clean(_fn())
+            except Exception as _e:  # noqa: BLE001 — 單源失敗 log 後跳過,不擋整檔
+                print(f"[backfill_to_gs] {code} {_name}(ISIN) 救援失敗:"
+                      f"{type(_e).__name__}: {_e}", file=_sys.stderr)
+                continue
+            if len(_cand) >= 10 and _span(_cand) > _cur:
+                s, src, _cur = _cand, f"{_name}(ISIN)", _span(_cand)
+        return s, src
 
     for i, code in enumerate(uniq):
         if progress_cb is not None:
             try:
                 progress_cb(i, n, code)
-            except Exception:  # noqa: BLE001 — 進度回呼壞掉不該擋補淨值
+            except Exception:  # noqa: BLE001 — 進度回呼壞掉不該擋補抓
                 pass
-        r = {"code": code, "fetched": 0, "date_min": None,
-             "date_max": None, "error": None}
+        r = {"code": code, "fetched": 0, "date_min": None, "date_max": None,
+             "source": None, "span_days": 0, "error": None}
         # 逐檔全程 guard(§1「不擋整批」:任一檔抓取/清洗/組點爆掉 → 只記該檔 error)。
         try:
             fd = auto_fetch_moneydj(code)
-            s = fd.get("series") if isinstance(fd, dict) else None
-            if s is None or len(s) == 0:
-                r["error"] = str((fd.get("error") if isinstance(fd, dict) else "")
-                                 or "抓不到淨值(晨星查無 secId / MoneyDJ 掛 / ISIN 或代碼不對)")[:70]
+            raw = fd.get("series") if isinstance(fd, dict) else None
+            _had_raw = raw is not None and hasattr(raw, "__len__") and len(raw) > 0
+            s = _clean(raw)
+            src = "moneydj"
+            # ISIN 直驅長歷史救援:auto 跨度短 → 不管前綴,用 ISIN 試晨星 / CnYES(§v19.475)
+            if _span(s) < _SPAN_TARGET_DAYS:
+                s, src = _rescue_by_isin(code, s, src)
+            if s.empty:
+                r["error"] = (
+                    "抓到序列但清乾淨後為空(全 NaN / 非正值 / 皆未來日)" if _had_raw
+                    else str((fd.get("error") if isinstance(fd, dict) else "")
+                             or "抓不到淨值(晨星/CnYES 查無 ISIN / MoneyDJ 掛 / 代碼不對)")[:70]
+                )
             else:
-                # 清洗:先驗值(非 NaN × >0)再去重,避免同日「有效+壞值」被 keep-last
-                # 留到壞值而整日丟失(§3.2 稽核 F5);再擋未來日(§1);最後唯一日期 × 遞增。
-                s = pd.Series(s).dropna()
-                s = s[s > 0]
-                s = s[s.index <= _today_ts]                       # 未來日 → 不存不可能的資料
-                s = s[~s.index.duplicated(keep="last")].sort_index()
-                if s.empty:
-                    r["error"] = "抓到序列但清乾淨後為空(全 NaN / 非正值 / 皆未來日)"
-                else:
-                    r["fetched"] = int(len(s))
-                    r["date_min"] = str(s.index.min().date())
-                    r["date_max"] = str(s.index.max().date())
-                    fund_name = (str(fd.get("fund_name") or fd.get("full_key") or "")
-                                 if isinstance(fd, dict) else "")
-                    # 本地 cache 合併(快取;雲端重啟會清 → 非致命,不擋雲端寫入)
-                    try:
-                        cached = _load_cache_series(code)
-                        merged = s if cached.empty else pd.concat([cached, s])
-                        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
-                        _save_cache_series(code, merged)
-                    except Exception as e:  # noqa: BLE001 — §1 記 log 不靜默,但不致命
-                        print(f"[backfill_to_gs] {code} 本地 cache 寫入失敗(非致命):"
-                              f"{type(e).__name__}: {e}", file=_sys.stderr)
-                    # 收集雲端點(最後一次 append,省 quota)
-                    for idx, v in s.items():
-                        all_points.append({"code": code, "nav": float(v),
-                                           "nav_date": idx.date(),
-                                           "fund_name": fund_name, "source": "backfill"})
+                r["fetched"] = int(len(s))
+                r["date_min"] = str(s.index.min().date())
+                r["date_max"] = str(s.index.max().date())
+                r["source"] = src
+                r["span_days"] = _span(s)
+                fund_name = (str(fd.get("fund_name") or fd.get("full_key") or "")
+                             if isinstance(fd, dict) else "")
+                # 本地 cache 合併(快取;雲端重啟會清 → 非致命,不擋雲端寫入)
+                try:
+                    cached = _load_cache_series(code)
+                    merged = s if cached.empty else pd.concat([cached, s])
+                    merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+                    _save_cache_series(code, merged)
+                except Exception as e:  # noqa: BLE001 — §1 記 log 不靜默,但不致命
+                    print(f"[backfill_to_gs] {code} 本地 cache 寫入失敗(非致命):"
+                          f"{type(e).__name__}: {e}", file=_sys.stderr)
+                # 收集雲端點(最後一次 append,省 quota)
+                for idx, v in s.items():
+                    all_points.append({"code": code, "nav": float(v),
+                                       "nav_date": idx.date(),
+                                       "fund_name": fund_name, "source": "backfill"})
         except Exception as e:  # noqa: BLE001 — §1 逐檔誠實回報,不擋整批
             r["error"] = f"補抓失敗:{type(e).__name__}: {str(e)[:70]}"
         results.append(r)

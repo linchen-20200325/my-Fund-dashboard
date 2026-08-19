@@ -345,13 +345,38 @@ def _sec_nav_backfill_auto() -> None:
         _prog.empty()
 
         import pandas as pd
+
+        def _src_zh(r):
+            _s = r.get("source") or ""
+            if _s.startswith("morningstar"):
+                return "🌐 晨星(ISIN)"
+            if _s.startswith("cnyes"):
+                return "🌐 CnYES(ISIN)"
+            if _s == "moneydj":
+                return "📄 MoneyDJ"
+            return "—"
+
+        def _span_zh(r):
+            _d = r.get("span_days") or 0
+            if not _d:
+                return ""
+            _y = _d / 365.25
+            return f"（約 {_y:.1f} 年）" if _y >= 1 else f"（約 {_d} 天）"
+
         _rows = [{
             "代號": r["code"],
-            "結果": (f"✅ {r['fetched']} 筆" if (r["error"] is None and r["fetched"])
+            "結果": (f"✅ {r['fetched']} 筆{_span_zh(r)}" if (r["error"] is None and r["fetched"])
                      else f"⬜ {r['error']}"),
+            "來源": _src_zh(r) if (r["error"] is None and r["fetched"]) else "—",
             "淨值起迄": (f"{r['date_min']} ~ {r['date_max']}" if r["date_min"] else "—"),
         } for r in _res["results"]]
         st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+        # 跨度短提醒(§1 誠實):抓到但 < 1 年 → 多半是 MoneyDJ 短窗,長歷史源沒收錄該檔
+        _short = [r["code"] for r in _res["results"]
+                  if r["error"] is None and r["fetched"] and (r.get("span_days") or 0) < 365]
+        if _short:
+            st.info(f"⚠️ 這幾檔只抓到 **不到 1 年**（多半是保單平台專屬基金,晨星/CnYES 沒收錄 → "
+                    f"落回 MoneyDJ 短窗）:{'、'.join(_short)}。要 5 年請用下方**手動 CSV** 補。")
 
         # §1/§5:抓到 / 雲端未啟用 / 雲端寫入失敗 三態誠實分開,不把「寫入失敗」講成「抓不到」。
         if not _res["gs_enabled"]:

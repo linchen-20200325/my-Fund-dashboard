@@ -224,3 +224,89 @@ def test_backfill_empty_codes(monkeypatch):
     out = NS.backfill_to_gs([])
     assert out["results"] == [] and out["n_ok"] == 0 and out["gs_written"] == 0
     assert calls == []
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# v19.475:ISIN 直驅長歷史救援(繞過保單前綴 gate;user 回報「不是抓半年的嗎」)
+# ══════════════════════════════════════════════════════════════════════════
+def _long(n_days, end="2025-01-01"):
+    """n_days 筆日資料的長序列(span ≈ n_days-1 天)。"""
+    idx = pd.date_range(end=end, periods=n_days, freq="D")
+    return pd.Series([10.0 + i / 100.0 for i in range(n_days)], index=idx, dtype=float)
+
+
+def _wire_rescue(monkeypatch, *, isin="LU123", ms=None, cnyes=None):
+    """接上 ISIN 救援三件套:pool_repository.resolve_isin + 晨星/CnYES source。"""
+    import repositories.fund.sources as SRC
+    import repositories.pool_repository as PR
+    monkeypatch.setattr(PR, "resolve_isin", lambda code: isin)
+    monkeypatch.setattr(SRC, "_src_morningstar_nav",
+                        lambda code, fund_name="": (ms if ms is not None else pd.Series(dtype=float)))
+    monkeypatch.setattr(SRC, "_src_cnyes_nav",
+                        lambda code: (cnyes if cnyes is not None else pd.Series(dtype=float)))
+
+
+def test_rescue_morningstar_replaces_short_moneydj(monkeypatch):
+    """auto 只 ~30 天 + 池有 ISIN → 晨星長歷史(不看前綴)取代;source=morningstar(ISIN)。"""
+    short = _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])   # ~29d
+    _wire(monkeypatch, fetch=lambda c: {"series": short})
+    _wire_rescue(monkeypatch, ms=_long(800))                        # ~2.2yr
+    r = NS.backfill_to_gs(["ACDD19"])["results"][0]                 # AC* 前綴(原本被 gate 擋)
+    assert r["source"] == "morningstar(ISIN)"
+    assert r["fetched"] == 800 and r["span_days"] >= 730
+
+
+def test_rescue_falls_to_cnyes_when_morningstar_empty(monkeypatch):
+    short = _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])
+    _wire(monkeypatch, fetch=lambda c: {"series": short})
+    _wire_rescue(monkeypatch, ms=pd.Series(dtype=float), cnyes=_long(900))
+    r = NS.backfill_to_gs(["ALBT8"])["results"][0]
+    assert r["source"] == "cnyes(ISIN)" and r["span_days"] >= 730
+
+
+def test_rescue_skipped_when_no_isin(monkeypatch):
+    short = _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])
+    _wire(monkeypatch, fetch=lambda c: {"series": short})
+    _wire_rescue(monkeypatch, isin="", ms=_long(800))              # 無 ISIN → 不救援
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "moneydj" and r["fetched"] == 2
+
+
+def test_rescue_skipped_when_moneydj_already_long(monkeypatch):
+    """auto 已 > 2 年 → 不觸發救援(不白呼叫晨星)。"""
+    import repositories.fund.sources as SRC
+    import repositories.pool_repository as PR
+    called = {"ms": 0}
+
+    def _ms(code, fund_name=""):
+        called["ms"] += 1
+        return _long(2000)
+    _wire(monkeypatch, fetch=lambda c: {"series": _long(800)})     # auto 已 ~2.2yr(>730)
+    monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU1")
+    monkeypatch.setattr(SRC, "_src_morningstar_nav", _ms)
+    monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "moneydj" and called["ms"] == 0
+
+
+def test_rescue_candidate_shorter_not_adopted(monkeypatch):
+    """候選比 auto 短 → 不採用(單調不減,§ 與 orchestration 同精神)。"""
+    _wire(monkeypatch, fetch=lambda c: {"series": _long(400)})     # ~399d(<730 → 觸發救援)
+    _wire_rescue(monkeypatch, ms=_long(300))                       # 更短 → 不換
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "moneydj" and r["fetched"] == 400
+
+
+def test_rescue_source_raises_isolated(monkeypatch):
+    """晨星救援拋錯 → 只 log,CnYES 接手,不擋整檔(§1)。"""
+    import repositories.fund.sources as SRC
+    import repositories.pool_repository as PR
+    _wire(monkeypatch, fetch=lambda c: {"series": _series([("2024-12-01", 10.0), ("2024-12-30", 10.5)])})
+    monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU1")
+
+    def _boom(code, fund_name=""):
+        raise RuntimeError("morningstar 403")
+    monkeypatch.setattr(SRC, "_src_morningstar_nav", _boom)
+    monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: _long(800))
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "cnyes(ISIN)" and r["error"] is None
