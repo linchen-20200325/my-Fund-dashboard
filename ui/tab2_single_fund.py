@@ -1220,10 +1220,15 @@ def render_single_fund_tab() -> None:
                         _kpi_msg = "缺含息總報酬（1Y），無法計算 Coverage"
                         _kpi_cov_txt = "—"
                     else:
+                        # v19.480 稽核 H2:原本 `nav_change=_kpi_tr1y` 把**含息報酬**當
+                        # **淨值變化**傳 → 淨值下跌警語(nav_change < 門檻)在「高配息掩蓋
+                        # 淨值下跌」時反而不觸發(正該示警的情境),且警語印的數字也是錯的。
+                        # 真正的 nav_change_pct 不在此 scope → 傳 None(不做該交叉驗證,§1),
+                        # 與 SSOT `check_eating_principal_1y_mk`(dividend.py:511)一致。
                         _kpi_ds = div_safety_check(
                             total_return=_kpi_tr1y,
                             dividend_yield=_kpi_adr,
-                            nav_change=_kpi_tr1y,
+                            nav_change=None,
                         )
                         _kpi_al = _kpi_ds.get("alert_level", "grey")
                         _kpi_cov = _kpi_ds.get("coverage")

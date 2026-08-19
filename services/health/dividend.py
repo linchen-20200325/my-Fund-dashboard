@@ -427,6 +427,8 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     from services.fund_total_return import (
         compute_1y_total_return,
         is_extrapolated_1y_source,
+        is_nav_only_1y_source,
+        is_partial_window_1y_source,
         is_too_short_1y_source,
     )
     tr1y, _tr1y_method = compute_1y_total_return(fund)
@@ -477,10 +479,15 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
             print(f'[fund_dividend_health] mk_simple compare-only calc fail: '
                   f'{type(_e_mk).__name__}: {_e_mk}', file=_sys_mk.stderr)
 
-    # v19.448 稽核守門(§1 Fail Loud):tr1y 若走「短窗外推年化」(最不可靠,ACTI71 −38% bug),
-    # 先嘗試用「還原含息(NAV+配息)」且窗口 ≥ 300 天替補;否則**拒判**顯示 ⚪ 資料不足,
-    # 絕不拿外推爆掉的數字報紅燈。
-    if is_extrapolated_1y_source(_tr1y_method):
+    # v19.448 + v19.480 稽核守門(§1 Fail Loud):tr1y 若來自**不可信基準**,先嘗試用
+    # 「還原含息(NAV+配息)」且窗口 ≥ 300 天替補;否則**拒判**顯示 ⚪ 資料不足,絕不拿它報紅燈。
+    # 三種不可信基準(全部與「年化配息率」比會系統性報假 🔴,重災區 = 境內短歷史檔):
+    #   ① 短窗外推年化(is_extrapolated,ACTI71 −38% bug,v19.448)
+    #   ② 短窗**累積**含息(is_partial_window,B1:N 天累積 vs 年化配息率,期間不對齊 §4.1)
+    #   ③ 純 NAV 不含配息(is_nav_only,B2:被除息扣掉、配息沒加回 → 低估 → 假 🔴)
+    if (is_extrapolated_1y_source(_tr1y_method)
+            or is_partial_window_1y_source(_tr1y_method)
+            or is_nav_only_1y_source(_tr1y_method)):
         _mkv = (_tr1y_meta or {}).get("mk_simple_value")
         _win = (_tr1y_meta or {}).get("window_days")
         if _mkv is not None and _win is not None and _win >= 300:
@@ -488,8 +495,9 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
         else:
             return {
                 "status": "⚪ 資料不足", "alert_level": "grey",
-                "message": ("僅取得淨值報酬(未含配息)或不足一年,無法可靠判定吃本金;"
-                            "請改看基金官方績效頁的含息報酬"),
+                "message": ("只取得「淨值報酬(未含配息)」或「不足一年的含息報酬」,拿去跟"
+                            "年化配息率比會期間不對齊、系統性誤報吃本金 —— 故**不判定**;"
+                            "請改看基金官方績效頁的一年含息報酬(或補足一年以上淨值)"),
                 "coverage": None, "gap_pct": None, "eating_principal": False,
                 "_tr1y_method": _tr1y_method, "_adr_source": _adr_source,
                 "_adr_pct": adr,   # 稽核 C4:早退路徑也要帶 adr 值(見下方主 return)

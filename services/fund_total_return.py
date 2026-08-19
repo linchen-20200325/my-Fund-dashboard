@@ -122,6 +122,28 @@ def is_too_short_1y_source(source_label: str) -> bool:
     return "不足以推算一年" in str(source_label or "")
 
 
+def is_partial_window_1y_source(source_label: str) -> bool:
+    """該 tr1y 是不是「自算含息、但只有 N 天窗口(< 一年)」的**累積**值?
+
+    v19.480 稽核 B1:source #2(`SRC_SELF_TOTAL`)在窗口 < 350 天時回的是「N 天**累積**
+    含息報酬」——**不是年化**。吃本金判定拿它跟「**年化**配息率」比 = 期間不對齊(§4.1),
+    對境內短歷史檔系統性報假 🔴。命中此源 → 吃本金端應**拒判**(⚪),與外推年化同處置。
+    (label 形如「自算含息（僅 200 天窗口）」;`SRC_TOO_SHORT` 那種回 None、不在此列。)
+    """
+    _s = str(source_label or "")
+    return "天窗口" in _s
+
+
+def is_nav_only_1y_source(source_label: str) -> bool:
+    """該 tr1y 是不是「純淨值變化、**不含配息**」(source #3 `SRC_SELF_NAV_ONLY`)?
+
+    v19.480 稽核 B2:純 NAV 被除息日的下跳「扣掉」配息、卻從未把配息加回,對配息型基金
+    系統性低估 → 幾乎必然 < 年化配息率 → 假 🔴(甚至「嚴重吃本金(報酬為負)」)。吃本金端
+    命中此源 → 拒判(⚪),不拿不含息的數字報紅燈(§1)。
+    """
+    return "不含配息" in str(source_label or "")
+
+
 def compute_1y_total_return(fund_obj: dict) -> tuple[float | None, str]:
     """從 fund object 取「1Y 含息報酬率(%)」+ 來源標籤。
 
