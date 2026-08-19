@@ -1566,11 +1566,59 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
     return pd.Series(dtype=float)
 
 
+# ISIN → Yahoo secId 快取(避免重複打 Yahoo search)
+_yf_isin_secid_cache: dict = {}
+
+
+def _yahoo_search_secid_by_isin(isin: str) -> str:
+    """用 ISIN 問 Yahoo Finance search API → 回 Morningstar 基金 secId(Yahoo `{secId}.F`
+    的 `0P…` 部分)。查無 / 失敗回 ""。
+
+    v19.478(user 2026-08-19「流程本來就該用代號+星辰自動查,為何要我手填」):
+    流程 code→ISIN→secId→Yahoo chart 的中間棒「晨星 SecuritySearch」從雲端搜不到 →
+    改用 **Yahoo 自己的 search**(v1/finance/search):直接吃 ISIN、對到唯一 symbol
+    (**無級別歧義** —— 手動查最卡的就是分不清 A/AP/MF2 哪個級別,Yahoo 用 ISIN 一對一解決),
+    且從美國 IP(Streamlit Cloud)可達(同 chart 端點,已由 TLZF9 實測)。這一步讓
+    「填代號+ISIN → 系統自動補 5 年」全自動,免手填 secId。
+    暫時性失敗(timeout/JSON 壞)不入負快取(對齊 `_morningstar_search_secid` v19.339)。
+    """
+    import json as _js, urllib.parse as _ups, urllib.request as _us
+    _isin = str(isin or "").strip().upper()
+    if not _isin:
+        return ""
+    if _isin in _yf_isin_secid_cache:
+        return _yf_isin_secid_cache[_isin]
+    try:
+        url = ("https://query1.finance.yahoo.com/v1/finance/search"
+               f"?q={_ups.quote(_isin)}&quotesCount=10&newsCount=0")
+        hdrs = {
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                           "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+            "Accept": "application/json",
+        }
+        req = _us.Request(url, headers=hdrs)
+        with _us.urlopen(req, timeout=12) as resp:
+            data = _js.loads(resp.read())
+        for _q in (data.get("quotes") or []):
+            _sym = str(_q.get("symbol") or "").strip()
+            # Morningstar 基金 Yahoo symbol = `{0P…}.F`(_src_yahoo_finance_nav 用此格式)
+            if _sym.endswith(".F") and _sym[:-2].upper().startswith("0P"):
+                _sec = _sym[:-2]
+                print(f"[yahoo_isin_search] '{_isin}' → {_sym} (secId={_sec})")
+                _yf_isin_secid_cache[_isin] = _sec
+                return _sec
+    except Exception as _e:  # noqa: BLE001 — 暫時性失敗不入負快取,下次重試
+        print(f"[yahoo_isin_search] '{_isin}': {_e}")
+        return ""
+    _yf_isin_secid_cache[_isin] = ""   # HTTP 200 但查無 `.F` symbol = 確定性負結果
+    return ""
+
+
 def _src_yahoo_finance_nav(code: str) -> "pd.Series":
     """
     v6.19: 透過 Yahoo Finance 取共同基金歷史淨值。
     Yahoo Finance 對 Morningstar 基金使用 {secId}.F 格式作為代碼。
-    適用：**選股池**有 secId(使用者填 ISIN 後由晨星搜到並存回)或 _MORNINGSTAR_SECID_MAP 有 secId 的基金。
+    適用：**選股池**有 secId(或由 ISIN 自動解析),或 _MORNINGSTAR_SECID_MAP 有 secId 的基金。
     Yahoo Finance 端點從美國 IP 可存取，不受台灣 IP 封鎖影響。
     """
     import json as _jy, urllib.request as _ury
@@ -1585,6 +1633,24 @@ def _src_yahoo_finance_nav(code: str) -> "pd.Series":
         _user_mapped = None
     _mapped = _user_mapped or _MORNINGSTAR_SECID_MAP.get(_code, ("", "USD"))
     sec_id, currency_id = _mapped if _mapped[0] else ("", "USD")
+    # v19.478:池中無 secId → 用 ISIN 問 Yahoo search 自動解析 secId(無級別歧義,雲端可達)
+    #   → 回填選股池(下次即時 + UI 顯示)。這讓「代號+ISIN → 自動補 5 年」免手填 secId。
+    if not sec_id:
+        try:
+            from repositories.pool_repository import (
+                resolve_isin as _ru_isin, set_secid as _wb_secid,
+            )
+            _isin = _ru_isin(_code)
+            if _isin:
+                _found = _yahoo_search_secid_by_isin(_isin)
+                if _found:
+                    sec_id = _found
+                    try:
+                        _wb_secid(_code, _found)   # 回填:下次直接用、UI 表格顯示
+                    except Exception as _wbe:  # noqa: BLE001 — 回填失敗不阻斷本次抓取
+                        print(f"[src_yahoo] {_code} 回填 secId 失敗(非致命):{_wbe}")
+        except Exception as _re:  # noqa: BLE001 — 選股池/解析不可用不阻斷
+            print(f"[src_yahoo] {_code} ISIN→Yahoo secId 解析失敗:{_re}")
     if not sec_id:
         return pd.Series(dtype=float)
 
