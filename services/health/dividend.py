@@ -381,6 +381,12 @@ def _resolve_adr_with_fallback(fund: dict) -> tuple[Optional[float], str]:
     return None, "—"
 
 
+# v19.480 稽核 2b:吃本金「還原含息」替補的最短窗口(天)。低於此 → 拒判 ⚪,不拿短窗
+# 累積含息去比年化配息率(期間不對齊)。具名常數(§3.3 不 inline);300 天 ≈ 10 個月,
+# 已足以讓還原含息的期間偏差 < ~18%,且比 RET_1Y_EXTRAPOLATE_MIN_DAYS(180)嚴。
+_EATING_RESTORE_MIN_WINDOW_DAYS = 300
+
+
 def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
     """老師 1Y 吃本金檢查 SSOT 入口(v19.175 回歸 wb01 業界複利優先)。
 
@@ -490,7 +496,12 @@ def check_eating_principal_1y_mk(fund: dict) -> Optional[dict]:
             or is_nav_only_1y_source(_tr1y_method)):
         _mkv = (_tr1y_meta or {}).get("mk_simple_value")
         _win = (_tr1y_meta or {}).get("window_days")
-        if _mkv is not None and _win is not None and _win >= 300:
+        # v19.480 稽核 2a:只有 window_days 夠長**不足以**信任還原值 —— 若 dividends 是空 list
+        # 或全落在窗外,mk_simple 只是純 NAV(div_count=0),relabel 成「還原含息」等於把 B2
+        # 洗白後放行報 🔴。必須確認**真的把配息加回來了**(div_count>0)才採用,否則落 ⚪。
+        _divc = (_tr1y_meta or {}).get("div_count") or 0
+        if (_mkv is not None and _win is not None
+                and _win >= _EATING_RESTORE_MIN_WINDOW_DAYS and _divc > 0):
             tr1y, _tr1y_method = float(_mkv), "自算含息（還原 NAV+配息）"
         else:
             return {

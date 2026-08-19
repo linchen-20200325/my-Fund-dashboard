@@ -66,6 +66,33 @@ def test_official_wb01_source_still_judges_normally():
     assert res.get("eating_principal") is False
 
 
+def test_nav_only_empty_dividends_not_laundered_as_restored():
+    """稽核 2a:純 NAV + ≥300 天 series 但 **dividends 空**(div_count=0)→ mk_simple 只是純
+    NAV,不可 relabel 成「還原含息」放行 🔴 → 應拒判 ⚪(還原必須真的把配息加回)。"""
+    fund = {
+        "moneydj_div_yield": 6.0,
+        "metrics": {"ret_1y": 2.0},                                # 純 NAV 源
+        "series": {"2025-06-26": 100.0, "2026-06-26": 102.0},      # 365 天,純漲 2%
+        "dividends": [],                                            # 空 → div_count=0
+    }
+    res = check_eating_principal_1y_mk(fund)
+    assert _grey(res), res
+    assert "還原" not in (res.get("_tr1y_method") or "")            # 未被洗成還原含息
+
+
+def test_nav_only_with_real_dividends_is_restored():
+    """對照:同上但 dividends 有值(div_count>0)→ 還原含息替補 → 可判定(不再 ⚪)。"""
+    fund = {
+        "moneydj_div_yield": 3.0,
+        "metrics": {"ret_1y": 2.0},
+        "series": {"2025-06-26": 100.0, "2026-06-26": 102.0},      # NAV +2%
+        "dividends": [{"date": "2026-01-01", "amount": 5.0}],      # +5% 配息 → 含息 ~7%
+    }
+    res = check_eating_principal_1y_mk(fund)
+    assert res is not None and res.get("alert_level") != "grey"    # 有真配息 → 可判定
+    assert "還原" in (res.get("_tr1y_method") or "")
+
+
 def test_official_wb01_genuine_eating_still_red():
     """官方 wb01 含息 1% vs 配息 8% → 真吃本金 → 仍 🔴(gate 不誤殺真紅燈)。"""
     fund = {"perf": {"1Y": 1.0}, "perf_source": "wb01",

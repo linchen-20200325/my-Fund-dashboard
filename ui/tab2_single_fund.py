@@ -1195,6 +1195,9 @@ def render_single_fund_tab() -> None:
                     # docstring 明列哪三條會改標、哪一條刻意不改。
                     from services.fund_total_return import (  # noqa: PLC0415
                         LOCAL_WINDOW_SENSITIVE_HINTS as _LOCAL_WIN_HINTS,
+                        is_extrapolated_1y_source as _is_extrap_src,
+                        is_nav_only_1y_source as _is_navonly_src,
+                        is_partial_window_1y_source as _is_partwin_src,
                     )
                     _kpi_tr_label = "1Y 含息報酬"
                     _kpi_win_d = (m or {}).get("ret_1y_window_days")
@@ -1218,6 +1221,18 @@ def render_single_fund_tab() -> None:
                         _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
                         _kpi_title = "吃本金檢查 — ⬜ 資料不足"
                         _kpi_msg = "缺含息總報酬（1Y），無法計算 Coverage"
+                        _kpi_cov_txt = "—"
+                    elif (_is_navonly_src(_kpi_tr1y_src)
+                          or _is_partwin_src(_kpi_tr1y_src)
+                          or _is_extrap_src(_kpi_tr1y_src)):
+                        # v19.480 稽核 3a:與健診表 SSOT gate 一致 —— 純NAV(不含配息)/短窗
+                        # 累積/外推年化拿去比年化配息率會誤判,拒判 ⚪(否則同檔 Tab2 🔴 vs
+                        # 健診表 ⚪ 分歧,PHASE1_AUDIT_DELTA 列為真 bug)。
+                        _kpi_icon, _kpi_color, _kpi_bg = "⬜", TRAFFIC_NEUTRAL, GH_BG_CARD
+                        _kpi_title = "吃本金檢查 — ⚪ 資料不足"
+                        _kpi_msg = ("只取得「純淨值(未含配息)」或「不足一年的含息報酬」,"
+                                    f"拿去比年化配息率會期間不對齊、誤報吃本金 —— 故不判定"
+                                    f"（1Y 來源:{_kpi_tr1y_src}）;請改看基金官方績效頁的一年含息報酬")
                         _kpi_cov_txt = "—"
                     else:
                         # v19.480 稽核 H2:原本 `nav_change=_kpi_tr1y` 把**含息報酬**當
