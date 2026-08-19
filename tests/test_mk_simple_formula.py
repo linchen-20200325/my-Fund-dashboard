@@ -242,10 +242,10 @@ class TestEdgeCases:
 class TestCheckEatingV19175WbCompoundFirst:
     """v19.175 契約:tr1y 主源走 wb01 業界複利優先(對齊 Tab2/Tab3 SSOT)。"""
 
-    def test_metrics_ret_1y_only_uses_ret_1y_path(self):
-        """fund 只有 metrics.ret_1y(無 perf / 無 series)→ tr1y 走 ret_1y precedence。
-
-        v19.175:gap = 7 - 4 = 3pp > 2pp 警戒線 → 🔴 吃本金(3 色制)。
+    def test_metrics_ret_1y_only_refuses_verdict_v19480(self):
+        """v19.480 稽核 B2:fund 只有 metrics.ret_1y(純 NAV、不含配息,且無 series 可還原)
+        → 吃本金端**拒判 ⚪**,絕不拿不含配息的數字報 🔴(純 NAV 被除息扣掉、配息沒加回,
+        對配息型基金系統性低估 → 假吃本金)。source 仍偵測為 SRC_SELF_NAV_ONLY。
         """
         fund = {
             "moneydj_div_yield": 7.0,
@@ -253,41 +253,35 @@ class TestCheckEatingV19175WbCompoundFirst:
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        assert "吃本金" in r["status"], (
-            f"預期吃本金(gap=3pp > 2pp),實際 {r['status']}"
+        assert r["alert_level"] == "grey" and not r["eating_principal"], (
+            f"純 NAV 不含配息 → 應拒判 ⚪ 資料不足,實際 {r['status']}"
         )
-        # 2026-08-10:來源標籤已白話化,改比對 SSOT 常數(等值比對比原子字串更嚴)
         from services.fund_total_return import SRC_SELF_NAV_ONLY
         assert r["_tr1y_method"] == SRC_SELF_NAV_ONLY, (
-            f"預期走純淨值(不含配息)precedence,實際 {r['_tr1y_method']}"
+            f"source 仍應偵測為純淨值(不含配息),實際 {r['_tr1y_method']}"
         )
 
-    def test_with_series_dividends_still_uses_wb_industry_precedence(self):
-        """v19.175:fund 有 series + dividends 也不再以 mk_simple 為主源。
-
-        precedence:perf['1Y'] > ret_1y_total > ret_1y > NAV 外推。
-        本 case:metrics.ret_1y=99(business path)→ tr1y=99, adr=5 → 健康。
-        mk_simple 算出的 13% 退居 `_tr1y_meta.mk_simple_value` 對照欄。
+    def test_nav_only_with_long_series_uses_restored_total_return_v19480(self):
+        """v19.480 稽核 B2:純 NAV 基準命中 gate,但有 **≥300 天 series** → 改用「還原含息」
+        (mk_simple=13,NAV+配息)替補,而非純 NAV 的 99 → 健康(13 > 5)。這比原本直接
+        用不含息的 99 更正確(含息 vs 不含息),且仍非拒判(有可信含息可替補)。
         """
         fund = {
             "moneydj_div_yield": 5.0,
-            "metrics": {"ret_1y": 99.0},  # v19.175 走業界路徑
-            "series": {"2025-06-26": 100.0, "2026-06-26": 110.0},
+            "metrics": {"ret_1y": 99.0},  # 純 NAV 源(不含配息)→ 觸發 gate
+            "series": {"2025-06-26": 100.0, "2026-06-26": 110.0},  # 365 天 ≥300 → 可還原
             "dividends": [{"date": "2026-01-01", "amount": 3.0}],
         }
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
-        from services.fund_total_return import SRC_SELF_NAV_ONLY
-        assert r["_tr1y_method"] == SRC_SELF_NAV_ONLY, (
-            f"v19.175 應走業界純淨值 precedence,實際 {r['_tr1y_method']}"
+        assert r["_tr1y_method"] == "自算含息（還原 NAV+配息）", (
+            f"應改用還原含息替補純 NAV,實際 {r['_tr1y_method']}"
         )
-        # tr1y=99, adr=5 → gap=-94 → 🟢 健康
-        assert "健康" in r["status"], f"預期健康,實際 {r['status']}"
-        # mk_simple 對照值仍計算並保留於 _tr1y_meta
+        # 含息 13, adr 5 → gap=-8 → 🟢 健康
+        assert "健康" in r["status"], f"含息 13 > 配息 5 → 健康,實際 {r['status']}"
         assert r["_tr1y_meta"] is not None
-        assert "mk_simple_value" in r["_tr1y_meta"]
         assert math.isclose(r["_tr1y_meta"]["mk_simple_value"], 13.0, abs_tol=0.01), (
-            f"對照欄 mk_simple_value 應算出 13%(10 + 3),實際 {r['_tr1y_meta']['mk_simple_value']}"
+            f"還原含息應算出 13%(10 + 3),實際 {r['_tr1y_meta']['mk_simple_value']}"
         )
 
     def test_nested_shape_with_perf_1y_wins(self):

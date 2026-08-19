@@ -27,7 +27,9 @@ class TestCheckEatingPrincipal1yMk:
     def test_nested_shape_eating(self):
         """Nested {moneydj_raw, metrics} 形 →  fund_checkup 路徑。"""
         fund = {
-            "moneydj_raw": {"moneydj_div_yield": 8.0},
+            # v19.480:吃本金判定改拒收純 NAV(不含配息)基準 → 含息須由可信源(wb01)給。
+            "moneydj_raw": {"moneydj_div_yield": 8.0,
+                            "perf": {"1Y": 5.0}, "perf_source": "wb01"},
             "metrics": {"ret_1y": 5.0},
         }
         r = check_eating_principal_1y_mk(fund)
@@ -38,6 +40,7 @@ class TestCheckEatingPrincipal1yMk:
         """Flat {moneydj_div_yield, metrics} 形(_auto_fetch_moneydj 直回)。"""
         fund = {
             "moneydj_div_yield": 8.0,
+            "perf": {"1Y": 5.0}, "perf_source": "wb01",   # v19.480:含息走可信源
             "metrics": {"ret_1y": 5.0},
         }
         r = check_eating_principal_1y_mk(fund)
@@ -58,7 +61,9 @@ class TestCheckEatingPrincipal1yMk:
 
     def test_metrics_fallback_when_moneydj_missing(self):
         """moneydj_div_yield 缺 → metrics.annual_div_rate fallback。"""
-        fund = {"metrics": {"ret_1y": 10.0, "annual_div_rate": 5.0}}
+        # v19.480:含息走可信源(wb01);adr 仍測 metrics.annual_div_rate fallback。
+        fund = {"perf": {"1Y": 10.0}, "perf_source": "wb01",
+                "metrics": {"annual_div_rate": 5.0}}
         r = check_eating_principal_1y_mk(fund)
         assert r is not None
         assert "健康" in r["status"], f"含息 10 > 配息 5 → 應健康,實際 {r['status']}"
@@ -72,7 +77,8 @@ class TestCheckEatingPrincipal1yMk:
         測試確保走 mj 主源(若答案是吃本金 → 證明用對 mj)。
         """
         fund = {
-            "moneydj_raw": {"moneydj_div_yield": 8.0},
+            "moneydj_raw": {"moneydj_div_yield": 8.0,
+                            "perf": {"1Y": 5.0}, "perf_source": "wb01"},  # v19.480 可信含息
             "metrics": {"ret_1y": 5.0, "annual_div_rate": 3.0},  # metrics=3 是誤導陷阱
         }
         r = check_eating_principal_1y_mk(fund)
@@ -107,7 +113,8 @@ class TestCheckEatingPrincipal1yMk:
     def test_uses_canonical_classify_eating_principal(self):
         """SSOT 守:本 helper 結論必須與 canonical classify_eating_principal 一致。
         防有人未來繞過 canonical 自己另算。"""
-        fund = {"moneydj_div_yield": 7.0, "metrics": {"ret_1y": 4.0}}
+        # v19.480:含息走可信源(wb01);純 NAV 基準已改由 gate 拒判,不能拿來測 canonical 一致。
+        fund = {"moneydj_div_yield": 7.0, "perf": {"1Y": 4.0}, "perf_source": "wb01"}
         r = check_eating_principal_1y_mk(fund)
         core = classify_eating_principal(4.0, 7.0)
         assert core.is_eating is True
