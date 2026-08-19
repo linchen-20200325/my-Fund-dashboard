@@ -415,8 +415,9 @@ def _sec_nav_backfill() -> None:
             clear_cache as _nh_clear,
             export_nav_csv as _nh_export,
             get_cache_status as _nh_status,
-            import_nav_csv as _nh_import,
+            import_nav_csv_multi as _nh_import_multi,
             incremental_update as _nh_update,
+            list_cache_codes as _nh_codes,
         )
         st.caption(
             "💡 **架構**：user 從 CnYES / MoneyDJ 手動下載完整歷史 CSV → 上傳這裡 → "
@@ -424,83 +425,71 @@ def _sec_nav_backfill() -> None:
             "確保歷史完整。後續按「🔄 增量更新」只抓最新幾天疊代上去（不重抓 5 年）。"
         )
         st.caption(
-            "⚠️ 不同網站基金代碼不同！MoneyDJ 用內部碼（ACTI94）、CnYES 可能用 ISIN（LU0xxx）。"
-            "上傳後此 cache 用你自己的 code 為 key，不依賴爬蟲。"
+            "⚠️ 代號讀自 CSV **第一欄**（不用手打）。不同網站基金代碼不同（MoneyDJ 內部碼 ACTI94、"
+            "CnYES 可能用 ISIN LU0xxx）—— 你在 CSV 用哪個 code，cache 就用哪個當 key，增量更新才對得上。"
         )
 
-        _nh_c1, _nh_c2 = st.columns([1, 2])
-        _nh_code = _nh_c1.text_input(
-            "基金代號", placeholder="ACTI94", key="_nh_code",
-            help="這個 code 同時是 cache key + 對應 fetch_nav 增量更新時的 MoneyDJ 代碼",
-        ).strip().upper()
-        _nh_file = _nh_c2.file_uploader(
-            "📥 上傳 NAV CSV（欄位：date + nav，支援西元/民國 + 中英文欄名）",
+        # v19.490（user 2026-08-19「移除基金代號欄，代號由 CSV 帶入」）:上傳讀 CSV 代號欄自動分檔,
+        # 多檔可放同一個 CSV（代號欄區分）。逐檔動作(增量/下載/清除)改用下方 cache 選單挑代號。
+        _nh_file = st.file_uploader(
+            "📥 上傳 NAV CSV（格式:**代號 ｜ 日期 ｜ 淨值**，無表頭亦可；日期西元/民國都吃；"
+            "多檔可放同一個 CSV，用代號欄自動分檔）",
             type=["csv"], key="_nh_upload_csv",
         )
+        if _nh_file is not None:
+            _mr = _nh_import_multi(_nh_file.getvalue())
+            if _mr["errors"]:
+                st.error("、".join(_mr["errors"]))
+            else:
+                _lines = [
+                    f"**{c}** {_mr['results'][c]['total']:,} 筆"
+                    f"（{_mr['results'][c]['date_min']}~{_mr['results'][c]['date_max']}）"
+                    for c in _mr["codes"]
+                ]
+                st.success(f"✅ 匯入 {len(_mr['codes'])} 檔 → " + "　·　".join(_lines))
+                # 雙寫雲端 nav_history（永久，重啟不丟；跨日期格式去重；非致命）
+                try:
+                    from services.nav_history_gs import append_points as _gs_append
+                    _g = _gs_append(_mr["points"])
+                    if _g.get("written"):
+                        st.caption(f"🗂️ 已同步 {_g['written']} 筆到雲端 nav_history（重啟不丟）")
+                    elif _g.get("skipped"):
+                        st.caption("🗂️ 雲端 nav_history 已是最新（全部去重、無新增）")
+                except Exception as _e_gs:   # noqa: BLE001 — 雲端同步失敗不影響本機匯入
+                    st.caption(f"⬜ 雲端同步略過（本機已存）：[{type(_e_gs).__name__}] {str(_e_gs)[:60]}")
+                st.rerun()
 
-        if _nh_code:
-            _status = _nh_status(_nh_code)
+        # 逐檔動作:增量更新 / 下載 / 清除 —— 從已建立的 cache 選一檔（取代原手打代號）
+        _codes = _nh_codes()
+        if _codes:
+            _sel = st.selectbox("已建立的 cache（選一檔做增量更新 / 下載備份 / 清除）",
+                                _codes, key="_nh_sel")
+            _status = _nh_status(_sel)
             if _status["exists"]:
                 st.success(
-                    f"✅ Cache 已有 {_status['count']:,} 筆 "
-                    f"({_status['date_min']} ~ {_status['date_max']}，"
-                    f"涵蓋 {_status['years_covered']} 年)"
+                    f"✅ {_sel}:{_status['count']:,} 筆 "
+                    f"({_status['date_min']} ~ {_status['date_max']}，涵蓋 {_status['years_covered']} 年)"
                 )
-            else:
-                st.info(f"ℹ️ {_nh_code} 尚無 cache，請上傳 CSV 建立基底")
-
-            if _nh_file is not None:
-                _r = _nh_import(_nh_code, _nh_file.getvalue())
-                if _r["errors"]:
-                    st.error("、".join(_r["errors"]))
-                else:
-                    st.success(
-                        f"✅ 匯入成功：新增 {_r['imported']:,} 筆、覆蓋 {_r['merged']:,} 筆 "
-                        f"→ 總 {_r['total']:,} 筆 ({_r['date_min']} ~ {_r['date_max']})"
-                    )
-                    # v19.365 ④ 儲存收斂：磁碟 cache 在 Streamlit Cloud 重啟會清空 →
-                    # 雙寫進 Google Sheet nav_history（(code,date) 去重，重啟不丟；非致命）。
-                    try:
-                        from services.nav_history_gs import import_csv_text as _gs_import
-                        _g = _gs_import(
-                            _nh_code,
-                            _nh_file.getvalue().decode("utf-8-sig", errors="replace"),
-                            source="tab6_csv")
-                        if _g["enabled"] and _g["written"]:
-                            st.caption(f"🗂️ 已同步 {_g['written']} 筆到雲端 nav_history（重啟不丟）")
-                        elif not _g["enabled"]:
-                            st.caption("⬜ 雲端 nav_history 未啟用（缺 secrets）→ 本次僅存本機，"
-                                       "容器重啟會清空（詳見 Tab5 狀態燈）")
-                    except Exception as _e_gs:  # 雲端同步失敗不影響本機匯入結果
-                        st.caption(f"⬜ 雲端同步失敗（本機已存）：[{type(_e_gs).__name__}] "
-                                   f"{str(_e_gs)[:60]}")
-                    st.rerun()
-
             _act_c1, _act_c2, _act_c3 = st.columns(3)
-            if _act_c1.button("🔄 從 MoneyDJ 增量更新", use_container_width=True,
-                              key="_nh_update_btn", disabled=not _status["exists"]):
+            if _act_c1.button("🔄 從 MoneyDJ 增量更新", use_container_width=True, key="_nh_update_btn"):
                 with st.spinner("抓最新幾天 NAV 疊代到 cache..."):
-                    _u = _nh_update(_nh_code)
+                    _u = _nh_update(_sel)
                 if _u["errors"]:
                     st.error("、".join(_u["errors"]))
                 else:
-                    st.success(
-                        f"✅ fetch_nav 抓 {_u['fetched']} 筆，"
-                        f"merge 新增 {_u['new_rows']} 筆，總 {_u['total']:,} 筆"
-                    )
+                    st.success(f"✅ fetch_nav 抓 {_u['fetched']} 筆，merge 新增 {_u['new_rows']} 筆，"
+                               f"總 {_u['total']:,} 筆")
                     st.rerun()
-
-            if _status["exists"]:
-                _csv_bytes = _nh_export(_nh_code)
-                _act_c2.download_button(
-                    "📤 下載當前 cache 為 CSV", _csv_bytes,
-                    file_name=f"nav_{_nh_code}.csv", mime="text/csv",
-                    use_container_width=True, key="_nh_dl_btn",
-                )
-                if _act_c3.button("🗑️ 清除 cache", use_container_width=True,
-                                  key="_nh_clear_btn"):
-                    _nh_clear(_nh_code)
-                    st.rerun()
+            _act_c2.download_button(
+                "📤 下載當前 cache 為 CSV", _nh_export(_sel),
+                file_name=f"nav_{_sel}.csv", mime="text/csv",
+                use_container_width=True, key="_nh_dl_btn",
+            )
+            if _act_c3.button("🗑️ 清除 cache", use_container_width=True, key="_nh_clear_btn"):
+                _nh_clear(_sel)
+                st.rerun()
+        else:
+            st.caption("尚無任何 cache —— 上傳一個「代號｜日期｜淨值」CSV 建立基底。")
 
         st.caption(
             "🔧 **工作流程**：① 第一次去 [CnYES](https://fund.cnyes.com) 或 "
