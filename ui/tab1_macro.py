@@ -26,29 +26,15 @@ import streamlit as st
 
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
-    BG_DARK_AMBER_1,
-    BG_DARK_AMBER_2,
-    BG_DARK_NAVY_4,
-    BG_DARK_RED_1,
-    BG_DARK_RED_2,
     GH_BG_CARD,
     GH_BG_PRIMARY,
     GH_BORDER,
     GH_FG_MUTED,
     GH_FG_PRIMARY,
     GH_FG_SECONDARY,
-    GRAY_44,
     GRAY_55,
-    GRAY_66,
     GRAY_AA,
-    MATERIAL_GREEN,
-    MATERIAL_ORANGE,
-    MATERIAL_RED,
-    MD_AMBER_300,
-    MD_BLUE_300,
-    MD_GREEN_A400,
     MD_ORANGE_A200,
-    MD_PURPLE_500,
     STREAMLIT_BG,
     TRAFFIC_GREEN,
     TRAFFIC_NEUTRAL,
@@ -62,7 +48,6 @@ from fund_fetcher import (
     set_risk_free_rate,
 )
 from services.macro import (
-    backtest_turning_points,
     calc_macro_phase,
     detect_systemic_risk,
     detect_turning_points,

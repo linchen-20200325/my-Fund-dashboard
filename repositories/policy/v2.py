@@ -18,16 +18,14 @@ V2 schema:每張保單獨立 worksheet(policy_id 為 tab name),既支援巢狀�
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
 from ._helpers import (
     ALL_COLS,
     DEFAULT_WORKSHEET,
-    OPTIONAL_COLS,
     PolicySheetError,
-    REQUIRED_COLS,
     describe_sheet_exc,
     _is_worksheet_not_found,
     _normalize_float,

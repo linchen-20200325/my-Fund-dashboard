@@ -27,7 +27,6 @@ import pandas as pd
 from repositories.policy_repository import PolicySheetError
 # v19.385 T2a:gspread 429 偵測 + 退避收 L0 infra(與 policy/_helpers 去重)。
 from infra.gspread_retry import (
-    is_quota_error as _is_quota_error,
     with_quota_retry as _shared_quota_retry,
 )
 

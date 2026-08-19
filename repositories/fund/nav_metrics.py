@@ -17,8 +17,6 @@ from infra.cache import (  # noqa: F401
     _cache_load_nav, _cache_save_nav, _cache_load_div, _cache_save_div,
     _cache_load_meta, _cache_save_meta,
 )
-from shared.fred_series import FRED_CHF_USD, FRED_CNH_USD, FRED_EUR_USD, FRED_JPY_USD
-from shared.ttls import TTL_5MIN, TTL_15MIN, TTL_30MIN
 from fund_fetcher import (  # noqa: F401
     safe_float, fetch_url_with_retry, is_valid_moneydj_page,
     HDR, HDR_JSON, PORTAL_CFG, TCB_BASE, _INSURANCE_SUBDOMAIN_HINTS,

@@ -13,7 +13,6 @@ P1-5 拆檔後 `fund_orchestration.py:32` 的 `from sources import *` 無法載�
 """
 from __future__ import annotations
 
-import re
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -23,8 +22,6 @@ from infra.cache import (  # noqa: F401
     _cache_load_nav, _cache_save_nav, _cache_load_div, _cache_save_div,
     _cache_load_meta, _cache_save_meta,
 )
-from shared.fred_series import FRED_CHF_USD, FRED_CNH_USD, FRED_EUR_USD, FRED_JPY_USD
-from shared.ttls import TTL_5MIN, TTL_15MIN, TTL_30MIN
 # v19.385 T2b:%-欄位(費用/TER)解析收 SSOT safe_num(內建 strip '%'/','+ 排 bool),
 # 取代手動 safe_float(x.replace("%","").strip()) 反模式。純數值欄位仍用 safe_float(語意分工,見 shared/converters)。
 from shared.converters import safe_num

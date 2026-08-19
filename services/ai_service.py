@@ -346,7 +346,6 @@ def analyze_portfolio_mk_advisor(api_key: str, portfolio_funds: list,
 # Every Streamlit error intercepted -> LLM reflection -> AI_Error_Ledger.md
 # [Tutorial] This is the AI memory system. Dashboard errors are auto-analyzed.
 # ====================================================
-import os as _os_el, traceback as _tb_el, datetime as _dt_el
 
 # ── v18.217 多 Gemini key 自動輪替（分散免費額度 + 防斷）──────────
 def get_gemini_keys() -> list[str]:

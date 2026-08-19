@@ -7,10 +7,7 @@
 """
 from __future__ import annotations
 
-import re
-import requests
 import pandas as pd
-from bs4 import BeautifulSoup
 
 from infra.cache import (  # noqa: F401
     _ttl_cache, register_cache, _CACHE_DIR, _FUND_SNAPSHOT, _cache_path,
@@ -18,7 +15,7 @@ from infra.cache import (  # noqa: F401
     _cache_load_meta, _cache_save_meta,
 )
 from shared.fred_series import FRED_CHF_USD, FRED_CNH_USD, FRED_EUR_USD, FRED_JPY_USD
-from shared.ttls import TTL_5MIN, TTL_15MIN, TTL_30MIN
+from shared.ttls import TTL_5MIN
 from fund_fetcher import (  # noqa: F401
     safe_float, fetch_url_with_retry, is_valid_moneydj_page,
     HDR, HDR_JSON, PORTAL_CFG, TCB_BASE, _INSURANCE_SUBDOMAIN_HINTS,

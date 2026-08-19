@@ -15,7 +15,7 @@ from typing import Optional
 import plotly.graph_objects as go
 import streamlit as st
 
-from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GRAY_44, GRAY_AA, MATERIAL_GREEN, MD_DEEP_ORANGE_400, TRAFFIC_NEUTRAL, WHITE
+from shared.colors import GH_BG_PRIMARY, GRAY_44, GRAY_AA, MATERIAL_GREEN, MD_DEEP_ORANGE_400, TRAFFIC_NEUTRAL, WHITE
 # F-GRAY-4 v19.179 PR-3:PMI mk_tolerance SSOT
 from shared.macro_thresholds_v2 import PMI_THRESHOLDS as _PMI_THR_V2
 _PMI_MK_EXPANSION = _PMI_THR_V2["mk_tolerance"]["expansion_above"]    # 50.5
