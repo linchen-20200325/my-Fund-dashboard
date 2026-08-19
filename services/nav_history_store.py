@@ -345,8 +345,9 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
       MoneyDJ 30 天短窗 —— 根因是 `_span_extend_insurance_nav` 的長歷史救援**只對前綴在
       `_INSURANCE_SUBDOMAIN_HINTS` 的代碼觸發**(TL/JF/… 有,AC*/AL/PY 無),user 填的
       ISIN 對非保單前綴代碼**根本沒送去晨星**。本層加「ISIN 直驅長歷史救援」:凡池中
-      有 ISIN 且 auto 抓到的跨度 < ~2 年,就**不管前綴**直接用 ISIN 試晨星 / CnYES,取
-      跨度更長者;並逐檔回報實際 `source` + `span_days`(§5 讓 user 看得到到底抓到哪、
+      有 ISIN 且 auto 抓到的跨度 **< ~5 年(目標,user 2026-08-18)**,就**不管前綴**直接
+      用 ISIN 試晨星 / CnYES,取跨度更長者;並逐檔回報實際 `source` + `span_days`(§5
+      讓 user 看得到到底抓到哪、
       多長,不再誤以為都是 5 年)。晨星 / CnYES 若對該檔仍無資料 → 誠實留 MoneyDJ 短窗,
       UI 引導改走手動 CSV(§1 不偽造長歷史)。
     """
@@ -369,8 +370,11 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
     # §1/§3.2:未來日上限用 TW 當日(對齊 nav_history_gs._norm_date 的未來日守衛;
     # 防上游把民國年 / 日月顛倒 misparse 成未來日污染 fetched/date_max/本地 cache)。
     _today_ts = pd.Timestamp(_dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date())
-    # 跨度短於此(~2 年)且池中有 ISIN → 觸發 ISIN 直驅長歷史救援(繞過保單前綴 gate)。
-    _SPAN_TARGET_DAYS = 730
+    # 目標跨度 5 年(user 2026-08-18「淨值等相關資料延長至 5 年」):auto 抓到 < ~5 年
+    # 且池中有 ISIN → 觸發 ISIN 直驅長歷史救援(繞過保單前綴 gate),試把歷史補到 5 年。
+    # 1825 天 < 各來源抓取視窗 2000 天(~5.5 年),故 5 年目標可達;採用門檻的「點數不減」
+    # 護欄(稽核 F1)確保拉高門檻不會用稀疏候選換掉密集現有序列。
+    _SPAN_TARGET_DAYS = 1825
     results: list = []
     all_points: list = []
     n = len(uniq)

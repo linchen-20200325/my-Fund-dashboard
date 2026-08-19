@@ -273,20 +273,32 @@ def test_rescue_skipped_when_no_isin(monkeypatch):
 
 
 def test_rescue_skipped_when_moneydj_already_long(monkeypatch):
-    """auto 已 > 2 年 → 不觸發救援(不白呼叫晨星)。"""
+    """auto 已 > 5 年目標(1825 天)→ 不觸發救援(不白呼叫晨星)。"""
     import repositories.fund.sources as SRC
     import repositories.pool_repository as PR
     called = {"ms": 0}
 
     def _ms(code, fund_name=""):
         called["ms"] += 1
-        return _long(2000)
-    _wire(monkeypatch, fetch=lambda c: {"series": _long(800)})     # auto 已 ~2.2yr(>730)
+        return _long(2200)
+    _wire(monkeypatch, fetch=lambda c: {"series": _long(2000)})    # auto 已 ~5.5yr(>1825)
     monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU1")
     monkeypatch.setattr(SRC, "_src_morningstar_nav", _ms)
     monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
     r = NS.backfill_to_gs(["X"])["results"][0]
     assert r["source"] == "moneydj" and called["ms"] == 0
+
+
+def test_rescue_triggers_for_sub5yr_extends_toward_5yr(monkeypatch):
+    """user「延長至 5 年」:auto 只 ~2.2 年(> 舊 730 門檻)→ 新 5 年目標仍會去補到更長。"""
+    import repositories.fund.sources as SRC
+    import repositories.pool_repository as PR
+    _wire(monkeypatch, fetch=lambda c: {"series": _long(800)})     # ~2.2yr(舊門檻不救、新門檻要救)
+    monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU1")
+    monkeypatch.setattr(SRC, "_src_morningstar_nav", lambda code, fund_name="": _long(1900))  # ~5.2yr
+    monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: pd.Series(dtype=float))
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "morningstar(ISIN)" and r["span_days"] >= 1825
 
 
 def test_rescue_candidate_shorter_not_adopted(monkeypatch):
