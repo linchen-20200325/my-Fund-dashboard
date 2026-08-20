@@ -92,15 +92,7 @@ FRED_LEI: str = "USSLIND"          # St. Louis Fed leading index (deprecated; le
 # ── Volatility ─────────────────────────────────────────────────────
 FRED_VXVCLS: str = "VXVCLS"        # CBOE 3M volatility
 
-# ── China macro (v19.113 方向 B 補完) ─────────────────────────────
-# 來源:FRED 收錄 OECD MEI / IMF IFS 中國資料。
-# 注意:本批 ID 為 OECD 月頻發布(~月後 60 天延遲),較 US 月頻指標慢。
-# DEXCHUS(CNY/USD)既有 FRED_CNH_USD 常數,本批不重複定義。
-FRED_CHN_OECD_CLI: str = "CHNLOLITONOSTSAM"   # OECD 中國綜合領先指標(PMI 替代,trend=100)
-FRED_CHN_CPI: str = "CPALTT01CNM659N"         # OECD 中國 CPI 年增率(% YoY,transformation=GY)
-# ⚠️ v19.115 校正:此 series 實為 **M3 broad money level**(兆 CNY),非 YoY %
-# 命名仍保留 FRED_CHN_M2 因 user 角度即「廣義貨幣」(M3 與 M2 在中國信貸脈衝
-# 視角等效);FRED 無乾淨 SA 的中國 M2 series。
-# 下游 china_macro_snapshot 須 pct_change(12)*100 後才能進 YoY scorer。
-FRED_CHN_M2: str = "MABMM301CNM189S"          # 中國 M3 廣義貨幣 level(信貸脈衝 proxy,須 pct_change(12) 轉 YoY)
-FRED_CHN_PMI: str = "BSCICP03CNM665S"         # OECD 中國商業信心(PMI proxy)
+# ── China macro(v19.493 退役)──────────────────────────────────────
+# 中國拖累 China Drag 面板於 v19.493 移除(底層 OECD series 多已停更、且為唯讀不進主分),
+# 連帶 CLI/CPI/M2/PMI 四條 China FRED 常數退役。**FRED_CNH_USD(DEXCHUS)保留**(第 37 行),
+# 仍供 repositories/fund/fx_and_main.py 的 CNH/CNY→USD 匯率換算使用。

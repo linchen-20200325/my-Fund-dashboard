@@ -11,9 +11,9 @@ dir+globals re-export 涵蓋 _* 私函,確保既有 `from repositories.macro_rep
 """
 from __future__ import annotations
 
-from . import alternate, china, fred, math_utils, yf
+from . import alternate, fred, math_utils, yf
 
-for _mod in (fred, yf, china, alternate, math_utils):
+for _mod in (fred, yf, alternate, math_utils):
     for _name in dir(_mod):
         if not _name.startswith('__'):
             globals()[_name] = getattr(_mod, _name)

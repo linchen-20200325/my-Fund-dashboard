@@ -1,7 +1,6 @@
 """v19.492 軌B:健診表標籤正名 / 中國顯示層修 / 對帳旗標 / 口徑明示。
 
 稽核改善方案(7-AI 交叉評審後)的低風險批:
-- 中國面板 `_china_regime_color`:classify_china_regime 不回 color 鍵 → 從 regime emoji 推色(顯示層,不碰 :672 傳參)。
 - `reconcile_by_code`:Sharpe/1Y/配息率 三組雙演算法對帳 → 決策面一欄 worst-of-3 旗標。
 - 吃本金欄 drift-lock:合併大表只准出現 1 個吃本金欄變體(防空白對齊觸發重複)。
 """
