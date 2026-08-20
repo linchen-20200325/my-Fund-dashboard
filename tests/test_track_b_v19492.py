@@ -1,25 +1,10 @@
 """v19.492 軌B:健診表標籤正名 / 中國顯示層修 / 對帳旗標 / 口徑明示。
 
 稽核改善方案(7-AI 交叉評審後)的低風險批:
-- 中國面板 `_china_regime_color`:classify_china_regime 不回 color 鍵 → 從 regime emoji 推色(顯示層,不碰 :672 傳參)。
 - `reconcile_by_code`:Sharpe/1Y/配息率 三組雙演算法對帳 → 決策面一欄 worst-of-3 旗標。
 - 吃本金欄 drift-lock:合併大表只准出現 1 個吃本金欄變體(防空白對齊觸發重複)。
 """
 import pytest
-
-
-# ── 中國 regime 顏色(顯示層修)──────────────────────────────────────────
-def test_china_regime_color_from_emoji():
-    from shared.colors import TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
-    from ui.tab1_macro import _china_regime_color
-    assert _china_regime_color("🟢 擴張") == TRAFFIC_GREEN
-    assert _china_regime_color("🟡 減速") == TRAFFIC_YELLOW
-    assert _china_regime_color("🔴 衰退/緊縮") == TRAFFIC_RED
-    assert _china_regime_color("⚪ 中性") == TRAFFIC_NEUTRAL       # 中性 → 中性色
-    assert _china_regime_color("⬜ 資料不足") == TRAFFIC_NEUTRAL   # 資料不足 → 中性色(非 None)
-    assert _china_regime_color("—") == TRAFFIC_NEUTRAL
-    assert _china_regime_color("") == TRAFFIC_NEUTRAL
-    assert _china_regime_color(None) == TRAFFIC_NEUTRAL          # §1 不炸、退中性
 
 
 # ── 對帳 worst-of-3 旗標 ────────────────────────────────────────────────

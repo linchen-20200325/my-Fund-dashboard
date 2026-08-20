@@ -62,10 +62,6 @@ def render_manual_tab() -> None:
              "FRED(SAHMREALTIME / DRTSCILM / ICSA / HSN1F / PERMIT)",
              "週/月頻 ｜ 月後 ~5-30 天",
              "FRED 主源,無備援(失敗會在拐點偵測 ⚠️ 卡顯示)"),
-            ("🇨🇳 中國拖累 modifier", "🌐 Tab1",
-             "FRED(CNCPIALLMINMEI / IRLTCT01CNM156N / MYAGM3CNM189N / XTEXVA01CNM664S)",
-             "月頻,90 天 cache fallback",
-             "全敗 → modifier = 1.0 中性"),
             ("📰 RSS 新聞(5 source)", "🌐 Tab1 + Tab3",
              "MarketWatch / Yahoo Finance / CNBC × 2 / BBC World",  # v19.295: FT/Investing.com/Bloomberg removed (blocked/subscription)
              "即時(數秒-分鐘)",

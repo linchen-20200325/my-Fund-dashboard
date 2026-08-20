@@ -6,7 +6,6 @@
 - `us_indicators`:美國指標 + Phase + Regime + Systemic Risk(主檔大宗)
 - `turning_points`:景氣拐點偵測 + 歷史回測
 - `causal_sankey`:Sub-cycle + Sankey + Drivers + Cluster signals
-- `china`:中國 macro(信貸脈衝 / 五率 / regime / modifier)
 - 本 __init__:clear_tab1_macro_caches + re-export 全部公開 fn
 
 30+ caller 透過 services/macro_service.py shim re-export 取得 fn,patch path 不需改。
@@ -69,23 +68,6 @@ from services.macro.causal_sankey import (  # noqa: F401
     rank_macro_drivers,
     summarize_cluster_consensus,
 )
-from services.macro.china import (  # noqa: F401
-    CHINA_MODIFIER_FLOOR,
-    CHINA_MODIFIER_RANGE,
-    _classify_zone,
-    _score_cli,
-    _score_cpi,
-    _score_m2,
-    _score_pmi,
-    _score_usdcny,
-    apply_china_modifier,
-    calc_china_credit_impulse_proxy,
-    china_macro_snapshot,
-    classify_china_regime,
-    compute_china_subscore,
-    get_china_snapshot,
-)
-
 
 
 def clear_tab1_macro_caches(session_state=None) -> dict:
