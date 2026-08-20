@@ -64,6 +64,7 @@ __all__ = [
     "_infer_year_for_mmdd",
     "_is_domestic_code",
     "_morningstar_search_secid",
+    "_morningstar_screener_secid",     # v19.491:ISIN → secId 精確 screener 解析(同 host/token)
     "_tdcc_get", "_tdcc_resolve_fund_name",
     # v19.288 F405 掃描補洞:兩個 dict 常數先前未列進 __all__,
     # fund_orchestration.py 靠 `import *` 拿不到 → 對應 if 判斷式
@@ -1318,6 +1319,9 @@ _ms_secid_cache: dict = {}
 #   幣別藏在晨星基金名稱後綴（如 "…AMg7 USD"）—— 用它自動判幣別,免使用者填(§4.1 不硬給 USD)。
 _ms_name_cache: dict = {}
 _ms_ccy_cache: dict = {}
+# v19.491:ISIN → secId 走 Morningstar **screener**(精確 ISIN filter)的正/負快取。
+#   與 SecuritySearch(_ms_secid_cache)分開,鍵一律大寫 ISIN。
+_ms_screener_cache: dict = {}
 
 # 幣別 token（英文碼 + 常見中文詞）→ ISO 幣別。掃描晨星基金名稱命中第一個即用。
 _CCY_FROM_NAME = {
@@ -1414,6 +1418,169 @@ def _morningstar_search_secid(query: str, currency: str = "TWD") -> str:
     return ""
 
 
+# v19.491:ISIN → secId 走 Morningstar **screener** 端點(user 2026-08-20 提案)。
+_MS_SCREENER_TOKEN = "klr5zyak8x"          # 與 NAV timeseries(_src_morningstar_nav 3b)同一把
+# 宇宙用 Morningstar `FO<ISO-3166-alpha3>$$ALL` 註冊地慣例。精確 ISIN filter → 錯宇宙只回空、
+# 不會誤中別檔,故可逐一試到命中即止(§1 不猜、不誤配)。排序:離岸盧森堡/愛爾蘭(你的保單
+# 平台檔的**真正註冊地**,LU…/IE… 幾乎都在這)→ 台灣境內 → 美/英/港/星(常見計價地)。
+# v19.491 稽核(API-shape agent)更正:原 "FOEUR$$ALL" 不合 FO<ISO3> 慣例(EUR 非國碼)且漏了
+#   FOLUX/FOIRL —— LU 離岸基金正住那兩個 → 補上並前置、拿掉可疑的 FOEUR(避免對自己要救的檔回空)。
+_MS_SCREENER_UNIVERSES = ("FOLUX$$ALL", "FOIRL$$ALL", "FOTWN$$ALL", "FOUSA$$ALL",
+                          "FOGBR$$ALL", "FOHKG$$ALL", "FOSGP$$ALL")
+# v19.491 稽核後補:screener 走**雙 host 備援**(user 2026-08-20 手機對 tools.morningstar.co.uk
+#   回 DNS_PROBE_FINISHED_NXDOMAIN → 該 host 在某些網路/DNS 解不到)。tools 主(與 NAV timeseries
+#   同,美國 IP 可達)、lt 備(SecuritySearch 同 host,DNS 較穩);連線層失敗跳下個 host。
+_MS_SCREENER_HOSTS = (
+    "https://tools.morningstar.co.uk/api/rest.svc",   # 主(= _MS_TOOLS_REST,NAV timeseries 同)
+    "https://lt.morningstar.com/api/rest.svc",         # 備(lt SecuritySearch 同 host)
+)
+_MS_SCREENER_ROW_KEYS = ("rows", "results", "securities", "data")   # 可辨識的 row 容器鍵
+_MS_SCREENER_SECID_KEYS = ("SecId", "secId", "SecID", "secid")      # 載重欄位大小寫容錯
+_MS_SCREENER_NAME_KEYS = ("Name", "name", "LegalName", "legalName")
+_MS_SCREENER_ISIN_KEYS = ("ISIN", "isin", "Isin")
+_MS_SCREENER_CCY_KEYS = ("PriceCurrency", "BaseCurrency", "Currency")  # 依序取(§4.1 幣別不硬給)
+
+
+def _screener_extract_rows(data) -> list:
+    """從 screener JSON 取出 row list。晨星標準回 {"total":N,"rows":[...]},但不同版本/宇宙
+    偶回 list 或 {"results":[...]} —— 因本沙盒無法連外實測 shape,防禦性多形容忍(§1 不硬解:
+    非預期結構回 [] 讓上層退回 SecuritySearch/Yahoo,不炸、不假裝命中)。
+    """
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for _k in _MS_SCREENER_ROW_KEYS:
+            _v = data.get(_k)
+            if isinstance(_v, list):
+                return _v
+    return []
+
+
+def _screener_shape_recognized(data) -> bool:
+    """回應是否為「可辨識的 screener 形狀」:bare list,或 dict 帶已知 row 容器鍵(值為 list)。
+
+    非可辨識(如 {"error":...} 軟錯誤 body / rate-limit 字串 / None)→ False → 上層視為**異常**,
+    **不入負快取**(§1:讓欄位名/端點錯誤在生產日誌現形,而非被當「確定查無」永久藏住)。
+    """
+    if isinstance(data, list):
+        return True
+    if isinstance(data, dict):
+        return any(isinstance(data.get(_k), list) for _k in _MS_SCREENER_ROW_KEYS)
+    return False
+
+
+def _screener_row_get(row: dict, keys) -> str:
+    """從 screener row 取 keys 中第一個非空欄 → str(strip);全無 → ""。容忍大小寫變體。"""
+    for _k in keys:
+        _v = row.get(_k)
+        if _v not in (None, ""):
+            return str(_v).strip()
+    return ""
+
+
+def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
+    """用 Morningstar **screener** 以精確 `filters=ISIN:IN:<isin>` 解析 secId(比 SecuritySearch
+    模糊名稱搜尋準;保單平台基金常是後者查不到才卡住)。回傳晨星 **F 型 secId**(可直接餵
+    `_MS_TOOLS_REST/timeseries_price`,與本檔 3a NAV 主路徑同 host + 同 token),查無 / 失敗回 ""。
+
+    多宇宙嘗試(FOLUX/FOIRL 離岸 → FOTWN 台灣 → …):精確 ISIN filter 讓錯宇宙只回空、**不誤中別檔**,
+    逐一試到命中即止。命中順手記名稱 + **screener 直接回的幣別**(比從名稱後綴猜準;猜為 fallback),
+    供 `_src_morningstar_nav` ISIN 路徑自動回填選股池(§4.1 不硬給 USD)。
+
+    §1 快取策略(對齊 `_morningstar_search_secid` / `_yahoo_search_secid_by_isin`):
+      - 暫時性失敗(timeout / 連線 / JSON 壞)**不入負快取** → 下次可重試。
+      - 回應形狀非預期 或 有 rows 卻抽不到 SecId(疑欄位名不符)= **解析異常** → 不負快取 + 大聲 log。
+      - 唯有「全宇宙皆乾淨查無」(可辨識形狀 + rows 空)才負快取(避免重複打)。
+
+    ⚠️ 本沙盒代理封鎖 tools.morningstar.co.uk(連既有 NAV 端點都 403),故 shape 未能連外實測;
+       設計為**純附加 + 命中才回非空**,任何非預期 → 回 "" 讓上層退回既有解析鏈(零回歸風險)。
+       上面「解析異常不負快取 + log」即為:萬一實測欄位名/宇宙與此不符,能在真環境日誌現形。
+    """
+    _isin = str(isin or "").strip().upper()
+    if not _isin:
+        return ""
+    if _isin in _ms_screener_cache:
+        return _ms_screener_cache[_isin]
+
+    import json as _j, urllib.error as _uerr, urllib.parse as _up, urllib.request as _ur
+    _hdrs = {
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://tools.morningstar.co.uk/",
+    }
+    _dp = _up.quote("SecId|Name|ISIN|PriceCurrency|BaseCurrency")
+    _ccy = str(currency or "USD").strip().upper() or "USD"
+    _transient = False       # timeout/連線/JSON 壞 → 可重試,不負快取
+    _anomaly = False         # 形狀非預期 / 有 rows 抽不到 SecId → 疑欄位錯,不負快取 + 現形
+    _logged_sample = False
+    for _host in _MS_SCREENER_HOSTS:
+        _hlabel = _host.split("//", 1)[-1].split("/", 1)[0]     # host 顯示名(日誌用)
+        for _uni in _MS_SCREENER_UNIVERSES:
+            url = (
+                f"{_host}/{_MS_SCREENER_TOKEN}/security/screener"
+                f"?page=1&pageSize=10&outputType=json&version=1&languageId=en-GB"
+                f"&currencyId={_up.quote(_ccy)}&universeIds={_up.quote(_uni)}"
+                f"&securityDataPoints={_dp}"
+                f"&filters=ISIN%3AIN%3A{_up.quote(_isin)}"
+            )
+            try:
+                req = _ur.Request(url, headers=_hdrs)
+                with _ur.urlopen(req, timeout=12) as resp:
+                    data = _j.loads(resp.read())
+            except _uerr.HTTPError as _e:       # 有回應但狀態壞(可能 universe-specific)→ 試下個宇宙
+                print(f"[ms_screener] {_isin} @ {_hlabel}/{_uni}: HTTP {_e.code}")
+                _transient = True
+                continue
+            except (_uerr.URLError, OSError) as _e:  # DNS/連線層(NXDOMAIN 等)→ 整個 host 不通,跳下個 host
+                print(f"[ms_screener] {_isin} @ {_hlabel} 連線失敗(跳下個 host):{_e}")
+                _transient = True
+                break
+            except Exception as _e:  # noqa: BLE001 — JSON 壞等 → 試下個宇宙(§1 不入負快取)
+                print(f"[ms_screener] {_isin} @ {_hlabel}/{_uni}: {_e}")
+                _transient = True
+                continue
+            if not _screener_shape_recognized(data):
+                # HTTP 200 但非 screener 形狀(軟錯誤 / rate-limit body)→ 異常,不當「確定查無」(§1)
+                _anomaly = True
+                if not _logged_sample:
+                    print(f"[ms_screener] ⚠️ {_isin} @ {_hlabel}/{_uni} 回應非預期形狀"
+                          f"(不負快取):{str(data)[:180]}")
+                    _logged_sample = True
+                continue
+            _rows = _screener_extract_rows(data)
+            for _r in _rows:
+                if not isinstance(_r, dict):
+                    continue
+                _sec = _screener_row_get(_r, _MS_SCREENER_SECID_KEYS)
+                _got_isin = _screener_row_get(_r, _MS_SCREENER_ISIN_KEYS).upper()
+                # 雙保險:screener filter 已限定 ISIN,仍比對回傳 ISIN 欄(有回才比;沒回就信 filter)
+                if _sec and (not _got_isin or _got_isin == _isin):
+                    _name = _screener_row_get(_r, _MS_SCREENER_NAME_KEYS)
+                    _rccy = _screener_row_get(_r, _MS_SCREENER_CCY_KEYS).upper()
+                    print(f"[ms_screener] ✅ {_isin} @ {_hlabel}/{_uni} → secId={_sec} "
+                          f"({_name[:30]}, {_rccy})")
+                    _ms_screener_cache[_isin] = _sec
+                    _ms_secid_cache[_isin] = _sec          # 與 SecuritySearch 共用正快取
+                    if _name:
+                        _ms_name_cache[_isin] = _name
+                    # screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)
+                    _ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)
+                    return _sec
+            # 本宇宙未命中。有 rows 卻抽不到合格 SecId → 解析異常(疑欄位名不符)→ 不負快取 + 現形
+            if _rows:
+                _anomaly = True
+                if not _logged_sample:
+                    _first = next((r for r in _rows if isinstance(r, dict)), None)
+                    print(f"[ms_screener] ⚠️ {_isin} @ {_hlabel}/{_uni} 有 {len(_rows)} rows 但抽不到 "
+                          f"SecId(不負快取,疑欄位名不符):keys={list(_first.keys()) if _first else None}")
+                    _logged_sample = True
+    # 全 host×宇宙跑完:唯「無暫時失敗 且 無解析異常」(= 皆乾淨查無)才負快取
+    if not _transient and not _anomaly:
+        _ms_screener_cache[_isin] = ""
+    return ""
+
+
 def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
     """
     v6.19: 從 Morningstar 全球 API 取歷史淨值。
@@ -1455,7 +1622,10 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
                 _u_ccy = _resolve_user_ccy(_code)
                 if _u_ccy:
                     currency_id = _u_ccy          # 使用者有填 → 尊重(§4.1 不硬給 USD)
-                sec_id = _morningstar_search_secid(_isin, currency_id or "USD")
+                # v19.491:先走 **screener**(精確 ISIN filter,同 host + 同 token,保單平台更準),
+                #   查無 / 端點不可用才退回既有 SecuritySearch(純附加、零回歸)。
+                sec_id = (_morningstar_screener_secid(_isin, currency_id or "USD")
+                          or _morningstar_search_secid(_isin, currency_id or "USD"))
                 # 使用者沒填幣別 → 用晨星名稱自動判(命中才覆蓋 currency_id,免硬給 USD)
                 _auto_ccy = "" if _u_ccy else _ms_ccy_cache.get(_isin, "")
                 if _auto_ccy:
@@ -1536,7 +1706,8 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
         print(f"[src_morningstar] {_code} UK timeseries: {_e2}")
 
     # 3b. 備援端點：lt.morningstar.com（token 在 path，secId 在 query param）
-    _tokens = ["klr5zyak8x", "j2uwuwirjh"]
+    # v19.491:第一把收斂到 _MS_SCREENER_TOKEN(同一把 klr5zyak8x),token 輪替只改一處(§3.3 DRY)。
+    _tokens = [_MS_SCREENER_TOKEN, "j2uwuwirjh"]
     for _tok in _tokens:
         url_lt = (
             f"https://lt.morningstar.com/api/rest.svc/timeseries_price/{_tok}"
