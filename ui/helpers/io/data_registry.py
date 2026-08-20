@@ -28,6 +28,7 @@ from shared.fred_series import (
     FRED_M2,
     FRED_M2_WEEKLY,
     FRED_NAPM,
+    FRED_PAYEMS,
     FRED_PERMIT,
     FRED_PPI,
     FRED_SAHM,
@@ -91,6 +92,13 @@ def _update_data_registry():
         "DXY":          "daily",
         "ADL":          "daily",
         "COPPER":       "daily",
+        # ── 2026-08-20 補登:這 3 條 cross-rate 原本**不在本表**,落 `.get(key,"monthly")`
+        #    的 default ⇒ 日頻匯率被用月頻門檻(60 天綠 / 90 天黃)判讀 ⇒
+        #    **45 天沒更新的匯率顯示 🟢「本/上月」**。三條各帶 weight=1 進綜合評分。
+        #    與本次「讓診斷看得見缺席」同一個病:診斷有列、但那一列說的是錯的。
+        "EURUSD":       "daily",
+        "USDJPY":       "daily",
+        "USDCNH":       "daily",
         # 日頻（FRED 每交易日）
         "YIELD_10Y2Y":  "daily",
         "YIELD_10Y3M":  "daily",
@@ -114,6 +122,10 @@ def _update_data_registry():
         "PPI":          "monthly",
         "CONSUMER_CONF":"monthly",
         "NEW_HOME":     "monthly",
+        # 值與 default 相同,但**顯式寫出**:倚賴 default 代表沒有人做過分類決定,
+        # 而 NFP 同日已接進 `_FRED_SERIES_MAP`(走 next_release_date),
+        # 兩者應該一起是顯式的。`tests/test_indicator_inventory.py` 釘住此原則。
+        "NFP":          "monthly",
         # v16.1 高頻替代源（月頻）
         "LEI":          "monthly",     # CFNAI 月頻領先指標（USSLIND 已停更）
         "PERMIT_HOUSING":"monthly",    # PERMIT 月頻建照
@@ -140,6 +152,12 @@ def _update_data_registry():
         "NEW_HOME":     FRED_HSN1F,       # 隔月 ~25 日
         "LEI":          FRED_CFNAI,       # 對齊 macro_engine.py 實際抓的 series
         "PERMIT_HOUSING":FRED_PERMIT,
+        # ── 2026-08-20 補登:NFP 原本**不在本表** ⇒ 拿不到 `next_release_date`
+        #    ⇒ 退回 60/90 天門檻。但 PAYEMS 觀測日標月初、發布約 +5 週,
+        #    下一筆到達前的正常 age 會超過 60 天 ⇒ **每個發布週期尾段必出現一次
+        #    假黃燈**。方向是「過度警示」(比漏警示安全),但它會訓練使用者
+        #    忽略黃燈 —— 那才是真正的傷害。
+        "NFP":          FRED_PAYEMS,
         "SAHM":         FRED_SAHM,
         "SLOOS":        FRED_DRTSCILM,
         "JOBLESS":      FRED_ICSA,
@@ -270,6 +288,7 @@ def _update_data_registry():
 
     # 1. 總經指標 series (macro_engine indicators)
     ind = st.session_state.get("indicators") or {}
+    _seen_macro_keys: set[str] = set()
     for key, data in ind.items():
         # v19.140: 過濾 _ 前綴 meta 鍵(慣例:internal bookkeeping)。
         # 目前只 _fred_sources(macro_service.py:399,AI prompt 用的命中源 dict),
@@ -294,6 +313,7 @@ def _update_data_registry():
                     sorted_s = s.sort_index(ascending=False).head(_SNAP_HEAD_N)
             except Exception:
                 pass  # smoke-allow-pass
+        _seen_macro_keys.add(str(key))
         freq = _FREQ.get(key, "monthly")
         icon, flabel, fcolor = _freshness(latest_date, freq, indicator_key=key)
         reg[f"總經_{key}"] = {
@@ -306,6 +326,41 @@ def _update_data_registry():
             "fresh_icon":  icon,
             "fresh_label": flabel,
             "fresh_color": fcolor,
+        }
+
+    # ── 1b. 缺席的總經指標(2026-08-20 稽核:診斷必須看得見「沒來的」)──────────
+    # 本迴圈以前只列舉 `indicators` 裡**已經存在**的 key。而 `fetch_all_indicators`
+    # 抓失敗時 key 根本不會寫進去 ⇒ 失敗的指標不產生任何一列 ⇒ 「異常清單」
+    # 印「✅ 已登錄的 N 個資料源狀態全數正常」⇒ **失敗越多畫面越綠**。
+    #
+    # 改為與生產端宣告的契約做差集。清單 SSOT 在生產端
+    # (`services.macro.us_indicators.EXPECTED_INDICATOR_KEYS`),**不在本檔另抄一份**
+    # —— 抄一份就是下一次漂移的種子;漂移鎖見 `tests/test_indicator_inventory.py`。
+    #
+    # L3 UI → L2 Service 為合法下行 import(§8.2)。lazy import 避免 module load
+    # 時拉整條 macro 依賴鏈。
+    try:
+        from services.macro.us_indicators import (  # noqa: PLC0415
+            EXPECTED_INDICATOR_KEYS as _EXPECTED_MACRO_KEYS,
+        )
+    except ImportError as _e_exp:
+        # §1:契約讀不到就明講,不要靜默跳過整段缺席偵測。
+        print(f"[data_registry] ⚠️ 無法載入指標契約,缺席偵測停用:"
+              f"{type(_e_exp).__name__}: {_e_exp}")
+        _EXPECTED_MACRO_KEYS = ()
+    for _miss in sorted(set(_EXPECTED_MACRO_KEYS) - _seen_macro_keys):
+        reg[f"總經_{_miss}"] = {
+            "label":       f"{_miss}（未取得）",
+            "source":      "FRED/yfinance",
+            # ⚠️ 這裡**刻意不填日期**。填 "N/A" 以外的任何東西(尤其 today)都會讓
+            #    `_freshness` 算出一個看起來合理的新鮮度 —— 那正是本次要修的病。
+            "latest_date": "N/A",
+            "count":       0,
+            "series":      None,
+            "freq":        _FREQ.get(_miss, "monthly"),
+            "fresh_icon":  "🔴",
+            "fresh_label": "未取得（本次抓取未產生此指標）",
+            "fresh_color": MATERIAL_RED,
         }
 
     # 2. 單一基金淨值 series
