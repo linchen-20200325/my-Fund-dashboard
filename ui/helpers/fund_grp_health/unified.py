@@ -63,6 +63,42 @@ def sharpe_provenance_by_code(funds: list) -> dict:
     return out
 
 
+_RECONCILE_KEYS = ("sharpe_reconcile", "ret_1y_reconcile", "div_yield_reconcile")
+
+
+def reconcile_by_code(funds: list) -> dict:
+    """{code: {"對帳": worst-of-3 標籤}} —— Sharpe / 1Y報酬 / 配息率 三組雙演算法對帳的最差態。
+
+    §4.3:個基深掘頁(單一基金)有逐項 agree/disagree chip,但批次 / 健檢 / 帳本大表原本沒有 →
+    400 檔換標決策拿的是**未經「自算 vs MoneyDJ 官方值」交叉驗證**的單一數字。本欄接出
+    `calc_metrics` / `finalize_fund_metrics` **已算好**的三組 reconcile(`metrics.sharpe_reconcile`
+    / `ret_1y_reconcile` / `div_yield_reconcile`,§1 不重算、不新抓),取最差態當決策面旗標:
+      - 任一組 `disagree` → **⚠️ 有矛盾**(自算與官方差距大;跳個基深掘頁看逐項)
+      - 無矛盾且至少一組 `agree` → **✅ 一致**(全部可對且相符)/ **✅ 部分**(其餘單源無對照)
+      - 三組皆無法對帳(單源 / 缺值:a_missing / b_missing / both_missing)→ **⬜ 單源**
+      - 完全無 metrics(舊 cache / 抓取失敗)→ **⬜ —**(不猜,§1)
+    """
+    out: dict = {}
+    for _f in (funds or []):
+        _code = str((_f or {}).get("code") or "").strip()
+        if not _code:
+            continue
+        _m = (_f.get("metrics") or {})
+        _states = [(_m.get(_k) or {}).get("status")
+                   for _k in _RECONCILE_KEYS if isinstance(_m.get(_k), dict)]
+        _states = [s for s in _states if s]
+        if not _states:
+            _lbl = "⬜ —"
+        elif "disagree" in _states:
+            _lbl = "⚠️ 有矛盾"
+        elif "agree" in _states:
+            _lbl = "✅ 一致" if all(s == "agree" for s in _states) else "✅ 部分"
+        else:
+            _lbl = "⬜ 單源"
+        out[_code] = {"對帳": _lbl}
+    return out
+
+
 def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tuple:
     """回傳 (col_order, combined)。
 
@@ -81,6 +117,7 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tupl
         mk_signal_by_code(funds, phase, score),
         capture_by_code(funds),      # v19.414 上/下檔捕捉率 + 操盤評分;v19.420 + vs 大盤%(同一基準)
         sharpe_provenance_by_code(funds),   # Sharpe 實際來源/期間(§2.2;大表原本硬說「非官方值」)
+        reconcile_by_code(funds),    # v19.492 §4.3 雙演算法對帳旗標(worst-of-3;決策面缺口補上)
     ]
     combined: dict = {}
     col_order: list[str] = []
@@ -131,8 +168,9 @@ _UNIFIED_FRONT: list = [
     # ② 配息 official(wb01/wb05)+ 每月配息
     ("1Y 含息 %", "div"), ("1Y 來源", "div"), ("年化配息率 %", "div"),
     ("每月配息 (TWD)", "div"), ("每月配息單位數", "div"), ("配息來源", "div"),
-    # 判定(吃本金/換標的/3-3-3)
+    # 判定(吃本金/換標的/3-3-3/對帳)
     ("吃本金燈號 (1Y · )", "base"), ("換標的建議", "div"), (" 3-3-3 篩", "base"),
+    ("對帳", "extra"),   # v19.492 雙演算法對帳旗標(worst-of-3;⚠️ 命中跳個基頁看逐項)
     # σ 位階 / 買賣點(extra;Sharpe/Sortino/Calmar/Alpha 已由 ① 提供故此處不重列)
     ("現價", "extra"), ("HWM", "extra"), ("距 HWM %", "extra"), ("σ rank", "extra"),
     ("基期", "extra"),   # v19.421 高/中/低基期標籤(由 σ rank 分類,一眼可讀)
