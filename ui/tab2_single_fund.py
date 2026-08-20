@@ -1489,10 +1489,11 @@ def render_single_fund_tab() -> None:
                                 f"**📐 Z-Score 位階**：Z = **{_zi['z']:+.2f}**"
                                 f"（近 3 年均線 {_zi['ma']:.2f}）→ **{_rb.get('action') or '—'}**")
                             st.caption(_rb.get("reason", ""))
-                            # v19.492 口徑明示(P2-B):此頁位階與健診/批次大表用不同口徑,避免跨頁誤比
-                            st.caption("ℹ️ 此頁位階＝**Z-Score(近 3 年常態分布)**;健診 / 批次大表的"
-                                       "「σ rank / 基期」是**距 252 日高點的 σ**。兩套口徑不同、"
-                                       "同一檔可能給不同的貴 / 便宜結論,**不可直接互比**。")
+                            # v19.492 口徑明示(P2-B);v19.494 用詞收緊:此「區」非整「頁」——
+                            # 本頁上方「HWM σ 絕對位階卡」才與大表 σ rank 同口徑、可互比。
+                            st.caption("ℹ️ **此區的 Z-Score 位階**＝近 3 年常態分布;健診 / 批次大表的"
+                                       "「σ rank / 基期」是**距 252 日高點的 σ**(= 本頁上方 HWM σ 卡同口徑)。"
+                                       "Z-Score 與 σ rank 兩套口徑不同、同一檔可能給不同貴 / 便宜結論,**不可直接互比**。")
                         else:
                             st.caption(f"📐 Z-Score 位階不可算"
                                        f"（{_zi.get('status')};有效點 {_zi.get('n')}）。")
@@ -1510,6 +1511,10 @@ def render_single_fund_tab() -> None:
                                 f"<br/><span style='font-size:10px;color:{TRAFFIC_NEUTRAL};"
                                 f"font-weight:400'>{_act['reason']}</span></div>",
                                 unsafe_allow_html=True)
+                            # v19.494 口徑明示(#3):🎯 建議動作 與大表「換標策略分」是不同引擎
+                            st.caption("ℹ️ 「🎯 建議動作」＝**4D 品質 × Z-Score 位階**合成;健診 / 批次大表的"
+                                       "「換標策略分 / 策略燈號」走**報酬 / 風險 / vs大盤 加權**,是不同引擎,"
+                                       "同一檔兩頁可能給不同結論,別跨頁互比。")
                     except Exception as _e_z:  # noqa: BLE001 — 位階為加值卡,失敗不影響風險表
                         st.caption(f"📐 Z-Score 計算略過:[{type(_e_z).__name__}]")
                     # ── 必修 2:混期示警 + 對帳降級揭露(沿用 v19.91 chip 樣式)──
