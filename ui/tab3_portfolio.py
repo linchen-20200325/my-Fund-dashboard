@@ -2683,6 +2683,16 @@ def render_portfolio_tab() -> None:
                     _prog_h = st.progress(0.0, text="📥 持倉健診計算中…")
                     try:
                         with _TPE_h(max_workers=min(len(_loaded_pf), 4)) as _exh:
+                            # v19.497:選股池自填名(比持倉抓取名更可能有真名,如 ALZF9)。
+                            # §1:池讀失敗不擋健診(guard → 空 map)。EX-CRUD-1 允許 L3 直呼。
+                            _pool_name_h: dict = {}
+                            try:
+                                from repositories.pool_repository import list_pool as _lp_h
+                                _pool_name_h = {str(_e.code).upper(): (_e.name or "")
+                                                for _e in (_lp_h() or []) if _e.name}
+                            except Exception as _e_ph:  # noqa: BLE001
+                                print(f"[tab3 持倉健診] 選股池名稱查詢略過:"
+                                      f"{type(_e_ph).__name__}: {_e_ph}")
                             _futs_h = {}
                             for _ih, _fh in enumerate(_loaded_pf):
                                 _code_h = str(_fh.get("code", "") or "").strip().upper()
@@ -2698,9 +2708,11 @@ def render_portfolio_tab() -> None:
                                 _princ_is_sim[_ih] = _principal_h <= 0
                                 if _princ_is_sim[_ih]:
                                     _principal_h = _DEFAULT_PRINC
+                                # name_hint:池名優先(ALZF9 類真名只存在池),退持倉名(可能亦為代號)
+                                _nh_h = _pool_name_h.get(_code_h) or (_fh.get("name") or "")
                                 _futs_h[_exh.submit(
                                     _proc_health, _code_h, _principal_h,
-                                    "", _warn_gap_h, _fd_h,
+                                    "", _warn_gap_h, _fd_h, _nh_h,   # v19.497 name_hint
                                 )] = _ih
                             _done_h = 0
                             _n_h = len(_loaded_pf)

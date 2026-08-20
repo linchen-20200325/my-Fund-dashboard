@@ -74,7 +74,7 @@ def _patch_batch_all_ok(monkeypatch):
     monkeypatch.setattr(_fr, "process_one_fund",
                         lambda code, principal_twd=1_000_000.0, **kw: _fake_base(code))
     monkeypatch.setattr(_u, "_build_fund_dict",
-                        lambda fd, code, principal_twd=None: {"code": code})
+                        lambda fd, code, principal_twd=None, **kw: {"code": code})
     monkeypatch.setattr(_rep, "build_health_analysis_row", lambda fd, code, **kw: {})
     monkeypatch.setattr(_rep, "build_dividend_summary_row", lambda fd, code, **kw: {})
     monkeypatch.setattr(U, "build_merged_extra_columns",

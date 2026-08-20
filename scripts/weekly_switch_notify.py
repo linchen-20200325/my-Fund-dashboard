@@ -137,16 +137,22 @@ def _read_watchlist() -> list:
 
 # ───────────────────────── 抓 rich fund dict(headless)─────────────────────────
 
-def _fetch_rich(codes: list) -> dict:
-    """codes → {code: rich fund dict}。單檔抓失敗顯式 skip + log(§1 不偽造)。"""
+def _fetch_rich(codes: list, name_by_code: "dict | None" = None) -> dict:
+    """codes → {code: rich fund dict}。單檔抓失敗顯式 skip + log(§1 不偽造)。
+
+    name_by_code:{code: 選股池自填名} → 線上抓不到真名(如 ALZF9)時 LINE 週報
+    顯示池名而非代號(v19.497)。
+    """
     from services.fund_row import process_one_fund
     from ui.helpers.fund_grp_health._utils import _build_fund_dict
+    _nbc = name_by_code or {}
     out: dict = {}
     for _c in codes:
+        _nh = str(_nbc.get(_c, "") or "").strip()
         try:
-            _r = process_one_fund(_c, _PRINCIPAL)
+            _r = process_one_fund(_c, _PRINCIPAL, name_hint=_nh)
             if _r.get("ok") and _r.get("_fund_raw"):
-                out[_c] = _build_fund_dict(_r["_fund_raw"], _c, _PRINCIPAL)
+                out[_c] = _build_fund_dict(_r["_fund_raw"], _c, _PRINCIPAL, name_hint=_nh)
             else:
                 _log(f"略過 {_c}:{_r.get('error') or '抓取未成功'}")
         except Exception as _e:  # noqa: BLE001
@@ -314,9 +320,11 @@ def main(argv=None) -> int:
         return 2
 
     _all_codes = list(dict.fromkeys(_observed_codes + list(_pool_by_code.keys())))
+    # v19.497:選股池自填名 → name_hint,線上抓不到真名(ALZF9 類)時週報顯示池名不顯示代號。
+    _name_by_code = {_c: (getattr(_e, "name", "") or "") for _c, _e in _pool_by_code.items()}
     _log(f"觀察 {len(_observed_codes)} 檔(持倉 {len(_held_codes)} + 追蹤 {len(_watch_codes)})"
          f" + 選股池 {len(_pool_by_code)} 檔 → 抓 {len(_all_codes)} 檔資料…")
-    _rich = _fetch_rich(_all_codes)
+    _rich = _fetch_rich(_all_codes, name_by_code=_name_by_code)
     if not _rich:
         _log("全部基金資料抓取失敗 → 中止")
         return 1

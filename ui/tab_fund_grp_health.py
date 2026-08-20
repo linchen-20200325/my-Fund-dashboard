@@ -373,13 +373,22 @@ def _run_batch_health(
     n = len(codes)
     if n == 0:
         return []
+    # v19.497:選股池自填名 → name_hint。貼上的代號若是池成員(如 ALZF9,線上抓不到真名),
+    # 主健診表顯示池名而非代號。§1:池讀失敗不擋健診(guard → 空 map,退代號)。EX-CRUD-1 允許 L3 直呼。
+    _name_map: dict = {}
+    try:
+        from repositories.pool_repository import list_pool
+        _name_map = {str(e.code).upper(): (e.name or "") for e in (list_pool() or []) if e.name}
+    except Exception as _e_pool:  # noqa: BLE001
+        print(f"[grp_health] 選股池名稱查詢略過:{type(_e_pool).__name__}: {_e_pool}")
     prog = st.progress(0.0, text="📥 並行抓取資料中…")
     _results: list = [None] * n
     _workers = min(n, 4)
     try:
         with ThreadPoolExecutor(max_workers=_workers) as _ex:
             _futs = {
-                _ex.submit(process_one_fund, _c, principal_twd, ccy_hint, warn_gap): _i
+                _ex.submit(process_one_fund, _c, principal_twd, ccy_hint, warn_gap,
+                           None, _name_map.get(str(_c).upper(), "")): _i
                 for _i, _c in enumerate(codes)
             }
             _done = 0

@@ -52,6 +52,7 @@ def process_one_fund(
     ccy_hint: str = "",
     warn_gap: float = 0.0,
     fd: dict | None = None,
+    name_hint: str = "",
 ) -> dict:
     """單檔健診 worker(純 IO + 計算,無 st 呼叫 → 可並行)。
 
@@ -61,6 +62,10 @@ def process_one_fund(
         ccy_hint: legacy hint(v19.59 後不再使用,留簽名相容)
         warn_gap: 配息率超出含息報酬率多少 → 警示燈
         fd: 預先抓好的 fd(`auto_fetch_moneydj` 結果);None → 本函式自行抓。
+        name_hint: 呼叫端已知的基金名(選股池 / 政策表 name 欄)。當**線上解析不出**
+            真名(如 "AL" 系保單平台代碼 —— 前綴不在境內表也不在保單子網域提示,
+            6 個 meta 源全命不中)時,用它顯示,而非把**代號**當名字。§1:name_hint
+            為使用者/上游既有資料,非臆測;都沒有才退代號(full_key)。
 
     回傳 row dict;任一步失敗回 {ok: False, error}。
     """
@@ -79,7 +84,16 @@ def process_one_fund(
         divs = fd.get("dividends") or []
         # v19.71:MoneyDJ 對部分基金回傳中文「美元」而非 ISO「USD」→ normalize 正規化。
         ccy_auto = normalize_ccy(fd.get("currency"), default="")
-        fund_name = fd.get("fund_name", "") or fd.get("full_key", "")
+        # v19.497:名稱三段 fallback —— 線上真名 → 呼叫端已知名(name_hint) → 代號。
+        # 原本只有「真名 or full_key(代號)」,於是 "AL" 系保單平台代碼(名字 6 源全
+        # 命不中)就把代號當名字顯示(user 2026-08-20 回報 ALZF9)。此處補 name_hint
+        # 中間層;並防「某源把 fund_name 填成代號本身」→ 視同無真名續退 name_hint。
+        _fetched_name = (fd.get("fund_name") or "").strip()
+        _code_up = (code or "").strip().upper()
+        if _fetched_name and _fetched_name.upper() != _code_up:
+            fund_name = _fetched_name
+        else:
+            fund_name = (name_hint or "").strip() or fd.get("full_key", "")
         if not _has_series:
             return {"code": code, "ok": False, "error": "NAV 抓不到"}
         nav_dict = {

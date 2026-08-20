@@ -418,19 +418,23 @@ def _jsonify(v):
 
 
 def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
-                            phase: str = "", score=None) -> dict:
+                            phase: str = "", score=None, name_hint: str = "") -> dict:
     """批次:單檔 → 一列「組合健診大表」flat row(欄 = BATCH_UNIFIED_COLUMNS,JSON-safe)。
 
     走 process_one_fund(L2)+ ①`build_health_analysis_row` ②`build_dividend_summary_row`
     + σ/風險/`build_merged_extra_columns` → `build_unified_row`。
     §1 fail-loud:失敗回「狀態 != 成功」列(數值留 None,不填假值);整檔不外拋。
+
+    name_hint:呼叫端已知的基金名(選股池 / 政策表)。線上解析不出真名時用它,
+    連**失敗列**也帶名,而非顯示代號(v19.497 ALZF9)。
     """
     code = (code or "").strip().upper()
+    _nh = (name_hint or "").strip()
 
     def _blank(status, note, name=None):
         r = {c: None for c in BATCH_UNIFIED_COLUMNS}
         r["code"] = code
-        r["基金名"] = name
+        r["基金名"] = name or _nh or None      # 抓取失敗也優先顯示已知名,退 None(不填代號)
         r["狀態"] = status
         r["備註"] = note
         return r
@@ -440,7 +444,7 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
 
     from services.fund_row import process_one_fund
     try:
-        base = process_one_fund(code, principal_twd)
+        base = process_one_fund(code, principal_twd, name_hint=_nh)
     except Exception as e:  # noqa: BLE001 — 單檔炸掉收成失敗列
         return _blank("❌ 抓取失敗", f"{type(e).__name__}: {str(e)[:80]}")
     if not base.get("ok"):
@@ -490,7 +494,7 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
     try:
         from ui.helpers.fund_grp_health._utils import _build_fund_dict
         _, _extra_map = build_merged_extra_columns(
-            [_build_fund_dict(fd, code, principal_twd)], phase, score)
+            [_build_fund_dict(fd, code, principal_twd, name_hint=_nh)], phase, score)
         _extra = _extra_map.get(code, {})
     except Exception as _e:  # noqa: BLE001
         _extra = {}
