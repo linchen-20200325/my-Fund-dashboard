@@ -1489,6 +1489,10 @@ def render_single_fund_tab() -> None:
                                 f"**📐 Z-Score 位階**：Z = **{_zi['z']:+.2f}**"
                                 f"（近 3 年均線 {_zi['ma']:.2f}）→ **{_rb.get('action') or '—'}**")
                             st.caption(_rb.get("reason", ""))
+                            # v19.492 口徑明示(P2-B):此頁位階與健診/批次大表用不同口徑,避免跨頁誤比
+                            st.caption("ℹ️ 此頁位階＝**Z-Score(近 3 年常態分布)**;健診 / 批次大表的"
+                                       "「σ rank / 基期」是**距 252 日高點的 σ**。兩套口徑不同、"
+                                       "同一檔可能給不同的貴 / 便宜結論,**不可直接互比**。")
                         else:
                             st.caption(f"📐 Z-Score 位階不可算"
                                        f"（{_zi.get('status')};有效點 {_zi.get('n')}）。")

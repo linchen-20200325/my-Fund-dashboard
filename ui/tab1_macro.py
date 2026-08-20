@@ -621,6 +621,24 @@ def _enrich_fund_for_decision(_f: dict) -> dict:
     }
 
 
+def _china_regime_color(label: str) -> str:
+    """從 regime 標籤的 emoji 前綴推 traffic 色。
+
+    v19.492:`classify_china_regime` 只回 {regime, fx_alert, reason},**不含 color 鍵**
+    (services/macro/china.py),故舊碼 `_regime.get("color")` 恆 None → CSS `solid None` 被
+    瀏覽器忽略、卡片邊框/字色跑掉。色屬 L3 呈現層,在 UI 依 regime emoji 推導(L2 不沾 hex)。
+    ⚠️ 純顯示修復,**不改** regime 判定本身(過期資料層問題另案)。
+    """
+    _l = str(label or "")
+    if _l.startswith("🟢"):
+        return TRAFFIC_GREEN
+    if _l.startswith("🟡"):
+        return TRAFFIC_YELLOW
+    if _l.startswith("🔴"):
+        return TRAFFIC_RED
+    return TRAFFIC_NEUTRAL          # ⚪ 中性 / ⬜ 資料不足 / — 皆走中性
+
+
 def _render_china_drag_panel(phase_dict: dict | None,
                              fred_api_key: str = "") -> None:
     """v19.118 中國拖累唯讀面板 — 4 個數字 + regime + FX 警示。
@@ -671,8 +689,10 @@ def _render_china_drag_panel(phase_dict: dict | None,
     _china_score = _china_sub.get("score") if _china_sub else None
     _regime = classify_china_regime(_china_sub) if _china_sub else None
     _regime_label = _regime.get("regime") if _regime else "—"
-    _regime_color = _regime.get("color") if _regime else TRAFFIC_NEUTRAL
-    _fx_alert = _regime.get("fx_alert") if _regime else None
+    # v19.492 §1 顯示修:classify_china_regime 不回 color 鍵 → 舊碼恆 None → 邊框跑成 solid None。
+    #   改由 regime emoji 前綴推色(不碰 :672 傳參 → 零 §2.4 風險,regime 判定本身不動)。
+    _regime_color = _china_regime_color(_regime_label)
+    _fx_alert = bool(_regime.get("fx_alert")) if _regime else False
 
     # 將 main 從 0-10 scale 升到 0-100 餵 modifier(modifier 要求 0-100)
     _mod = apply_china_modifier(_main_score_10 * 10.0, _china_score)
@@ -690,7 +710,8 @@ def _render_china_drag_panel(phase_dict: dict | None,
         f'background:{GH_BG_CARD};margin:8px 0;border-radius:4px;">'  # v19.387 V1:#fafafa 淺底孤島→深色卡(原淺字白底不可讀)
         f'<b>🇨🇳 中國拖累 China Drag</b>  '
         f'<span style="color:{_regime_color};font-weight:bold;">{_regime_label}</span>'
-        f'{("  ⚠️ " + _fx_alert) if _fx_alert else ""}'
+        # v19.492 §1 顯示修:fx_alert 是 bool,舊碼 "  ⚠️ " + bool 會 TypeError(regime 修好後才引爆)
+        f'{"  ⚠️ 人民幣急貶(USDCNY>7.4)" if _fx_alert else ""}'
         f'</div>',
         unsafe_allow_html=True,
     )
