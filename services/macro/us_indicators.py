@@ -65,6 +65,47 @@ from services.macro._helpers import (  # noqa: F401
 from services.macro.composite_score import is_meta_key as _is_meta_key
 from services.macro.composite_score import is_superseded as _is_superseded
 
+# ════════════════════════════════════════════════════════════════════════
+# `fetch_all_indicators` 的**產出契約** —— 診斷頁靠它辨認「缺席」
+# ════════════════════════════════════════════════════════════════════════
+# 2026-08-20 稽核發現的結構缺陷:`fetch_all_indicators` 對每個指標都是
+# 「抓到才寫 key」(例:`if pmi.get("value") is not None: R["PMI"] = ...`),
+# 抓失敗時 **key 直接不存在**。而 `ui/helpers/io/data_registry` 是
+# **列舉既有 stash**、不是比對應有清單 ⇒ 抓失敗的指標不會產生任何一列 ⇒
+# 「異常清單」印出「✅ 已登錄的 N 個資料源狀態全數正常」。
+#
+#   ⇒ **失敗越多、N 越小、畫面越綠。** 這是「缺資料偽裝成正常」的最上游形態,
+#     且它會系統性放大所有其他監控缺口(§1)。
+#
+# 本常數把「應該有哪些」從隱性(散在 28 個 `R[...] = ` 賦值裡)變成顯性契約,
+# 讓消費端能算出差集。**這是給診斷用的清單,不是給計分用的** ——
+# 缺席代表「這次沒抓到」,不代表「本系統沒有這個指標」。
+#
+# ⚠️ 新增/刪除指標時**必須**同步本元組,否則 `tests/test_indicator_inventory.py`
+#    的 AST 漂移鎖會紅燈(它直接掃本檔的 `R[...]` 賦值比對)。
+EXPECTED_INDICATOR_KEYS: tuple[str, ...] = (
+    # 領先 / 循環
+    "PMI", "LEI", "NFP", "PERMIT_HOUSING", "NEW_HOME", "CONSUMER_CONF",
+    # 通膨
+    "CPI", "PPI", "INFL_EXP_5Y",
+    # 就業
+    "UNEMPLOYMENT", "JOBLESS", "CONT_CLAIMS", "SAHM",
+    # 貨幣 / 流動性
+    "M2", "M2_WEEKLY", "FED_BS", "FED_RATE", "SLOOS",
+    # 利率 / 信用
+    "YIELD_10Y2Y", "YIELD_10Y3M", "HY_SPREAD",
+    # 市場 / 匯率 / 商品
+    "VIX", "DXY", "ADL", "COPPER", "EURUSD", "USDJPY", "USDCNH",
+)
+"""`fetch_all_indicators` 承諾**嘗試**產出的 28 個 key(不含 `_` 前綴 meta 鍵)。
+
+用途:讓 `data_registry` 能做 `EXPECTED - present` 的差集,把「應該有但沒來」
+的指標顯式列成 🔴,而不是靜靜地不存在。
+
+**不是**「一定會有」的保證 —— 外部來源失敗時該 key 就是不會出現,
+這正是本常數要讓它可見的東西。
+"""
+
 _INDICATOR_SNAPSHOT: dict = {}
 
 # v19.384(user 2026-07-23 拍板回退 v19.383):VIX 快照卡「平靜」綠界**刻意保持 18**,

@@ -141,7 +141,18 @@ def render_sidebar_data_health(session_state, now_tw=None) -> None:
     _domain_emojis: list = []
 
     # ── 總經 FRED ──
+    # ⚠️ 2026-08-20:原本只讀 `session_state["_fred_sources"]`,而**全 repo 沒有任何
+    #    地方寫那個頂層 key** —— `us_indicators` 是寫成 `R["_fred_sources"]`,
+    #    也就是塞在 `indicators` dict **裡面**(`_` 前綴 = provenance meta)。
+    #    於是這個 if 恆為 False,一路掉到 `elif macro_done` 的「🟢 總經已載入」,
+    #    而 `macro_done` 只要 `ind` 非空就設 True(`tab1_macro.py:1047`,不看成功幾個)。
+    #    ⇒ **28 個指標只命中 1 個,側欄照樣顯示 🟢。**
+    #    改為從實際存放處讀;保留頂層 key 為第一順位,若日後真的有人寫就自動生效。
     _fred = session_state.get("_fred_sources") or {}
+    if not _fred:
+        _ind_fs = session_state.get("indicators")
+        if isinstance(_ind_fs, dict):
+            _fred = _ind_fs.get("_fred_sources") or {}
     if _fred:
         _ok = sum(1 for v in _fred.values() if (v or {}).get("success"))
         _tot = len(_fred)
@@ -160,8 +171,12 @@ def render_sidebar_data_health(session_state, now_tw=None) -> None:
         _domain_emojis.append(_emoji)
         _lines.append(f"{_emoji} 總經 FRED {_ok}/{_tot} 命中{_age_txt}")
     elif session_state.get("macro_done"):
-        _domain_emojis.append("🟢")
-        _lines.append("🟢 總經已載入")
+        # ⚠️ 拿不到命中率時**不得宣稱健康**。`macro_done=True` 只證明「跑過了」,
+        #    不證明「抓到了」—— 它在 `indicators` 非空時就設 True,而 28 個指標
+        #    只成功 1 個時 `indicators` 也是非空的。用 ⬜ 誠實說「已跑但未知命中率」,
+        #    不要用 🟢 讓它進入 `_domain_emojis` 的整體綠燈統計(§1)。
+        _domain_emojis.append("⬜")
+        _lines.append("⬜ 總經已載入（命中率未知）")
 
     # ── 組合基金 NAV（portfolio_funds）──
     _pf = session_state.get("portfolio_funds") or []
