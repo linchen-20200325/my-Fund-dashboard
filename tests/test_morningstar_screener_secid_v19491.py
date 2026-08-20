@@ -122,7 +122,7 @@ def test_multi_universe_fallthrough_first_empty_second_hits(monkeypatch):
 
 def test_all_universes_empty_negative_cached(monkeypatch):
     # 全宇宙皆 HTTP 200 但查無 → 確定性負快取
-    _patch_urlopen_seq(monkeypatch, [{"total": 0, "rows": []}] * len(S._MS_SCREENER_UNIVERSES))
+    _patch_urlopen_seq(monkeypatch, [{"total": 0, "rows": []}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)))
     assert S._morningstar_screener_secid("LU9999999999") == ""
     assert S._ms_screener_cache["LU9999999999"] == ""               # 負快取
 
@@ -130,7 +130,7 @@ def test_all_universes_empty_negative_cached(monkeypatch):
 def test_transient_failure_not_negative_cached(monkeypatch):
     # 全宇宙都拋(timeout)→ 暫時性失敗 → **不入負快取**(可重試)
     _patch_urlopen_seq(monkeypatch,
-                       [TimeoutError("boom")] * len(S._MS_SCREENER_UNIVERSES))
+                       [TimeoutError("boom")] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)))
     assert S._morningstar_screener_secid("LU2023250330") == ""
     assert "LU2023250330" not in S._ms_screener_cache               # 未負快取
 
@@ -147,9 +147,31 @@ def test_mixed_transient_then_hit_returns_secid(monkeypatch):
 def test_isin_mismatch_row_skipped(monkeypatch):
     # 回傳 row 的 ISIN 欄與查詢不符 → 跳過(雙保險防宇宙別名誤配),全宇宙無合格 → ""
     _payloads = [{"rows": [{"SecId": "FWRONG", "ISIN": "XX0000000000"}]}] \
-        * len(S._MS_SCREENER_UNIVERSES)
+        * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
     _patch_urlopen_seq(monkeypatch, _payloads)
     assert S._morningstar_screener_secid("LU2023250330") == ""
+
+
+def test_host_fallback_second_host_hits(monkeypatch):
+    # 主 host 連不上(NXDOMAIN 類連線層錯)→ break 到備 host 命中(v19.491 雙 host 備援)
+    _patch_urlopen_seq(monkeypatch, [
+        OSError("nxdomain"),                            # host1/uni1 → 連線失敗 → 跳 host2
+        {"rows": [{"SecId": "FH2", "ISIN": "LU5"}]},    # host2/uni1 → 命中
+    ])
+    assert S._morningstar_screener_secid("LU5") == "FH2"
+
+
+def test_connection_error_breaks_host_not_all_universes(monkeypatch):
+    # 連線層錯 → 該 host 只試 1 次就跳(不硬打 7 個宇宙);兩 host 各 1 次 = 2 次 urlopen
+    _calls = {"n": 0}
+
+    def _boom(*a, **k):
+        _calls["n"] += 1
+        raise OSError("nxdomain")
+    monkeypatch.setattr("urllib.request.urlopen", _boom)
+    assert S._morningstar_screener_secid("LU5") == ""
+    assert _calls["n"] == len(S._MS_SCREENER_HOSTS)     # 每 host 只打 1 次(連線死不硬試宇宙)
+    assert "LU5" not in S._ms_screener_cache            # 連線層 = 暫時 → 不負快取
 
 
 def test_cache_hit_skips_network(monkeypatch):
@@ -262,7 +284,7 @@ def test_negative_cache_hit_skips_network(monkeypatch):
 
 def test_empty_then_transient_not_negative_cached(monkeypatch):
     # 前宇宙乾淨查無、後宇宙暫時失敗、全程無命中 → 不負快取(可重試;§1 混合序不誤鎖)
-    _seq = [{"total": 0, "rows": []}] + [TimeoutError("boom")] * (len(S._MS_SCREENER_UNIVERSES) - 1)
+    _seq = [{"total": 0, "rows": []}] + [TimeoutError("boom")] * ((len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES)) - 1)
     _patch_urlopen_seq(monkeypatch, _seq)
     assert S._morningstar_screener_secid("LU5") == ""
     assert "LU5" not in S._ms_screener_cache
@@ -270,7 +292,7 @@ def test_empty_then_transient_not_negative_cached(monkeypatch):
 
 def test_rows_present_no_secid_is_anomaly_not_cached(monkeypatch):
     # 全宇宙都「有 rows 卻抽不到 SecId」(疑欄位名不符)→ 異常 → **不負快取**(讓錯誤現形)
-    _payloads = [{"rows": [{"WrongKey": "F1", "ISIN": "LU5"}]}] * len(S._MS_SCREENER_UNIVERSES)
+    _payloads = [{"rows": [{"WrongKey": "F1", "ISIN": "LU5"}]}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
     _patch_urlopen_seq(monkeypatch, _payloads)
     assert S._morningstar_screener_secid("LU5") == ""
     assert "LU5" not in S._ms_screener_cache               # 異常 → 未負快取
@@ -278,7 +300,7 @@ def test_rows_present_no_secid_is_anomaly_not_cached(monkeypatch):
 
 def test_unrecognized_shape_is_anomaly_not_cached(monkeypatch):
     # 全宇宙都回非 screener 形狀(軟錯誤 body)→ 異常 → 不負快取(§1 不當「確定查無」)
-    _payloads = [{"error": "rate limited"}] * len(S._MS_SCREENER_UNIVERSES)
+    _payloads = [{"error": "rate limited"}] * (len(S._MS_SCREENER_HOSTS) * len(S._MS_SCREENER_UNIVERSES))
     _patch_urlopen_seq(monkeypatch, _payloads)
     assert S._morningstar_screener_secid("LU5") == ""
     assert "LU5" not in S._ms_screener_cache

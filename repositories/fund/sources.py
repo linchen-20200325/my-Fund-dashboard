@@ -1427,6 +1427,13 @@ _MS_SCREENER_TOKEN = "klr5zyak8x"          # 與 NAV timeseries(_src_morningstar
 #   FOLUX/FOIRL —— LU 離岸基金正住那兩個 → 補上並前置、拿掉可疑的 FOEUR(避免對自己要救的檔回空)。
 _MS_SCREENER_UNIVERSES = ("FOLUX$$ALL", "FOIRL$$ALL", "FOTWN$$ALL", "FOUSA$$ALL",
                           "FOGBR$$ALL", "FOHKG$$ALL", "FOSGP$$ALL")
+# v19.491 稽核後補:screener 走**雙 host 備援**(user 2026-08-20 手機對 tools.morningstar.co.uk
+#   回 DNS_PROBE_FINISHED_NXDOMAIN → 該 host 在某些網路/DNS 解不到)。tools 主(與 NAV timeseries
+#   同,美國 IP 可達)、lt 備(SecuritySearch 同 host,DNS 較穩);連線層失敗跳下個 host。
+_MS_SCREENER_HOSTS = (
+    "https://tools.morningstar.co.uk/api/rest.svc",   # 主(= _MS_TOOLS_REST,NAV timeseries 同)
+    "https://lt.morningstar.com/api/rest.svc",         # 備(lt SecuritySearch 同 host)
+)
 _MS_SCREENER_ROW_KEYS = ("rows", "results", "securities", "data")   # 可辨識的 row 容器鍵
 _MS_SCREENER_SECID_KEYS = ("SecId", "secId", "SecID", "secid")      # 載重欄位大小寫容錯
 _MS_SCREENER_NAME_KEYS = ("Name", "name", "LegalName", "legalName")
@@ -1495,7 +1502,7 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
     if _isin in _ms_screener_cache:
         return _ms_screener_cache[_isin]
 
-    import json as _j, urllib.parse as _up, urllib.request as _ur
+    import json as _j, urllib.error as _uerr, urllib.parse as _up, urllib.request as _ur
     _hdrs = {
         "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
@@ -1507,56 +1514,68 @@ def _morningstar_screener_secid(isin: str, currency: str = "USD") -> str:
     _transient = False       # timeout/連線/JSON 壞 → 可重試,不負快取
     _anomaly = False         # 形狀非預期 / 有 rows 抽不到 SecId → 疑欄位錯,不負快取 + 現形
     _logged_sample = False
-    for _uni in _MS_SCREENER_UNIVERSES:
-        url = (
-            f"{_MS_TOOLS_REST}/{_MS_SCREENER_TOKEN}/security/screener"
-            f"?page=1&pageSize=10&outputType=json&version=1&languageId=en-GB"
-            f"&currencyId={_up.quote(_ccy)}&universeIds={_up.quote(_uni)}"
-            f"&securityDataPoints={_dp}"
-            f"&filters=ISIN%3AIN%3A{_up.quote(_isin)}"
-        )
-        try:
-            req = _ur.Request(url, headers=_hdrs)
-            with _ur.urlopen(req, timeout=12) as resp:
-                data = _j.loads(resp.read())
-        except Exception as _e:  # noqa: BLE001 — 單宇宙失敗記為暫時性,續試下個宇宙(§1 不入負快取)
-            print(f"[ms_screener] {_isin} @ {_uni}: {_e}")
-            _transient = True
-            continue
-        if not _screener_shape_recognized(data):
-            # HTTP 200 但非 screener 形狀(軟錯誤 / rate-limit body)→ 異常,不當「確定查無」(§1)
-            _anomaly = True
-            if not _logged_sample:
-                print(f"[ms_screener] ⚠️ {_isin} @ {_uni} 回應非預期形狀(不負快取):{str(data)[:180]}")
-                _logged_sample = True
-            continue
-        _rows = _screener_extract_rows(data)
-        for _r in _rows:
-            if not isinstance(_r, dict):
+    for _host in _MS_SCREENER_HOSTS:
+        _hlabel = _host.split("//", 1)[-1].split("/", 1)[0]     # host 顯示名(日誌用)
+        for _uni in _MS_SCREENER_UNIVERSES:
+            url = (
+                f"{_host}/{_MS_SCREENER_TOKEN}/security/screener"
+                f"?page=1&pageSize=10&outputType=json&version=1&languageId=en-GB"
+                f"&currencyId={_up.quote(_ccy)}&universeIds={_up.quote(_uni)}"
+                f"&securityDataPoints={_dp}"
+                f"&filters=ISIN%3AIN%3A{_up.quote(_isin)}"
+            )
+            try:
+                req = _ur.Request(url, headers=_hdrs)
+                with _ur.urlopen(req, timeout=12) as resp:
+                    data = _j.loads(resp.read())
+            except _uerr.HTTPError as _e:       # 有回應但狀態壞(可能 universe-specific)→ 試下個宇宙
+                print(f"[ms_screener] {_isin} @ {_hlabel}/{_uni}: HTTP {_e.code}")
+                _transient = True
                 continue
-            _sec = _screener_row_get(_r, _MS_SCREENER_SECID_KEYS)
-            _got_isin = _screener_row_get(_r, _MS_SCREENER_ISIN_KEYS).upper()
-            # 雙保險:screener filter 已限定 ISIN,仍比對回傳 ISIN 欄(有回才比;沒回就信 filter)
-            if _sec and (not _got_isin or _got_isin == _isin):
-                _name = _screener_row_get(_r, _MS_SCREENER_NAME_KEYS)
-                _rccy = _screener_row_get(_r, _MS_SCREENER_CCY_KEYS).upper()
-                print(f"[ms_screener] ✅ {_isin} @ {_uni} → secId={_sec} ({_name[:30]}, {_rccy})")
-                _ms_screener_cache[_isin] = _sec
-                _ms_secid_cache[_isin] = _sec          # 與 SecuritySearch 共用正快取
-                if _name:
-                    _ms_name_cache[_isin] = _name
-                # screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)
-                _ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)
-                return _sec
-        # 到這 = 本宇宙未命中。有 rows 卻抽不到合格 SecId → 解析異常(疑欄位名不符)→ 不負快取 + 現形
-        if _rows:
-            _anomaly = True
-            if not _logged_sample:
-                _first = next((r for r in _rows if isinstance(r, dict)), None)
-                print(f"[ms_screener] ⚠️ {_isin} @ {_uni} 有 {len(_rows)} rows 但抽不到 SecId"
-                      f"(不負快取,疑欄位名不符):keys={list(_first.keys()) if _first else None}")
-                _logged_sample = True
-    # 全宇宙跑完:唯「無暫時失敗 且 無解析異常」(= 各宇宙皆乾淨查無)才負快取
+            except (_uerr.URLError, OSError) as _e:  # DNS/連線層(NXDOMAIN 等)→ 整個 host 不通,跳下個 host
+                print(f"[ms_screener] {_isin} @ {_hlabel} 連線失敗(跳下個 host):{_e}")
+                _transient = True
+                break
+            except Exception as _e:  # noqa: BLE001 — JSON 壞等 → 試下個宇宙(§1 不入負快取)
+                print(f"[ms_screener] {_isin} @ {_hlabel}/{_uni}: {_e}")
+                _transient = True
+                continue
+            if not _screener_shape_recognized(data):
+                # HTTP 200 但非 screener 形狀(軟錯誤 / rate-limit body)→ 異常,不當「確定查無」(§1)
+                _anomaly = True
+                if not _logged_sample:
+                    print(f"[ms_screener] ⚠️ {_isin} @ {_hlabel}/{_uni} 回應非預期形狀"
+                          f"(不負快取):{str(data)[:180]}")
+                    _logged_sample = True
+                continue
+            _rows = _screener_extract_rows(data)
+            for _r in _rows:
+                if not isinstance(_r, dict):
+                    continue
+                _sec = _screener_row_get(_r, _MS_SCREENER_SECID_KEYS)
+                _got_isin = _screener_row_get(_r, _MS_SCREENER_ISIN_KEYS).upper()
+                # 雙保險:screener filter 已限定 ISIN,仍比對回傳 ISIN 欄(有回才比;沒回就信 filter)
+                if _sec and (not _got_isin or _got_isin == _isin):
+                    _name = _screener_row_get(_r, _MS_SCREENER_NAME_KEYS)
+                    _rccy = _screener_row_get(_r, _MS_SCREENER_CCY_KEYS).upper()
+                    print(f"[ms_screener] ✅ {_isin} @ {_hlabel}/{_uni} → secId={_sec} "
+                          f"({_name[:30]}, {_rccy})")
+                    _ms_screener_cache[_isin] = _sec
+                    _ms_secid_cache[_isin] = _sec          # 與 SecuritySearch 共用正快取
+                    if _name:
+                        _ms_name_cache[_isin] = _name
+                    # screener 直接回幣別 → 優先;無則退名稱後綴猜(§4.1 不硬給)
+                    _ms_ccy_cache[_isin] = _rccy or _ccy_from_fund_name(_name)
+                    return _sec
+            # 本宇宙未命中。有 rows 卻抽不到合格 SecId → 解析異常(疑欄位名不符)→ 不負快取 + 現形
+            if _rows:
+                _anomaly = True
+                if not _logged_sample:
+                    _first = next((r for r in _rows if isinstance(r, dict)), None)
+                    print(f"[ms_screener] ⚠️ {_isin} @ {_hlabel}/{_uni} 有 {len(_rows)} rows 但抽不到 "
+                          f"SecId(不負快取,疑欄位名不符):keys={list(_first.keys()) if _first else None}")
+                    _logged_sample = True
+    # 全 host×宇宙跑完:唯「無暫時失敗 且 無解析異常」(= 皆乾淨查無)才負快取
     if not _transient and not _anomaly:
         _ms_screener_cache[_isin] = ""
     return ""
