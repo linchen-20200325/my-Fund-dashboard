@@ -14,6 +14,7 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
+from shared.ttls import TTL_1HOUR
 from infra.cache import (  # noqa: F401
     _ttl_cache, register_cache, _CACHE_DIR, _FUND_SNAPSHOT, _cache_path,
     _cache_load_nav, _cache_save_nav, _cache_load_div, _cache_save_div,
@@ -635,6 +636,52 @@ def _finish_metrics(result: dict):
           f"warning={str(result.get('warning',''))[:40]}")
 
 
+@register_cache
+@_ttl_cache(ttl_sec=TTL_1HOUR)
+def _holdings_ttl(code: str) -> dict:
+    """v19.499 稽核 Finding 1 緩解:fetch_holdings 的 @_daily_cache 依 R23 **不快取
+    all_failed / 空結果**(設計:失敗要能重試)。但主路線提早 return 無外層 TTL cache,
+    故抓不到持股的 FoF/保單基金會在**每次組合載入**重跑完整多 URL 嘗試(user 回報的
+    PYZW3/ACCP138 這類)。此處加一層 **1 小時 TTL**(連失敗結果也存)→ 同一小時內不重抓、
+    逾時自動重試(不違 R23「失敗最終要能重試」精神);成功結果本身已被 fetch_holdings
+    @_daily_cache 保存,外層 miss 時內層日快取直接命中(0 HTTP)。@register_cache → 全域刷新可清。
+    """
+    return fetch_holdings(code)
+
+
+def _ensure_holdings(result: dict, code: str) -> None:
+    """v19.499:多來源主路線(fetch_fund_multi_source)不抓持股,而
+    fetch_fund_from_moneydj_url 的 _s_ok(L780)/ alt page_type(L809)兩個提早
+    return 都在 legacy 的 fetch_holdings(L1144/L1239)之前 → 這些基金
+    result["holdings"] 停在裸 {}(無 source / 無 diag),Tab2 持股面板顯示
+    「來源=—、無 diag」(user 2026-08-20 回報 PYZW3/JFZN3/ACCP138…)。此 helper
+    在那兩個 return 前補抓一次(SSOT,單一實作)。
+
+    設計(§1/§2):
+    - **只在缺持股時抓**(`if result.get("holdings")` 直接 return):避免與 legacy
+      L1144/L1239 重複抓,並保證本 helper 冪等、可被多個 return 站點安全共用。
+    - **fetch_holdings 永遠回帶 source+diag 的 dict**(nav_metrics L958,連全失敗
+      也回 {"source":"MoneyDJ:all_failed","diag":[...]}),故正常「抓不到」是回值
+      不是例外,面板照樣有 diag 可顯示;且自動吃到 v19.498 的 secId/ISIN 備源。
+    - **try/except 只擋 fetch_holdings 真的拋例外**(§1 不得靜默):此時它沒 return
+      任何 diag,故自組一個最小 diag dict 寫回,**絕不讓 holdings 停在裸 {}**。
+    """
+    if result.get("holdings"):
+        return
+    import sys as _sys_eh
+    try:
+        result["holdings"] = _holdings_ttl(code)      # 1hr 負快取,避免每次載入重抓(稽核 F1)
+    except Exception as _eh:  # noqa: BLE001 — 持股失敗不得拖垮 NAV 成功的 return(§1)
+        print(f"[fetch_holdings] {code} 拋例外:{type(_eh).__name__}: {_eh}",
+              file=_sys_eh.stderr)
+        # §2:失敗時 holdings 仍須帶 source+diag(面板才不顯示「來源=—」),不留裸 {}
+        result["holdings"] = {
+            "source": "fetch_holdings:exception",
+            "diag": [f"fetch_holdings({code}) 例外:{type(_eh).__name__}: {_eh}"],
+            "fetched_at": pd.Timestamp.now('UTC').isoformat(),
+        }
+
+
 def fetch_fund_from_moneydj_url(url: str) -> dict:
     """
     輸入任何 MoneyDJ 基金頁面網址（或純代碼如 tlzf9），
@@ -777,6 +824,9 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                   f"nav={len(_ser_ok) if _ser_ok is not None else 0}筆 "
                   f"status:{result.get('status','')} page:{_page_type}）",
                   file=_sys_ok.stderr)
+            # v19.499:主路線提早 return 前補抓持股(見 _ensure_holdings);置於上方
+            # fast-path 勝利 stderr 訊號之後 → 訊號順序 / 語意不變(§3)
+            _ensure_holdings(result, code)
             return result
         # v18.121 issue 4: series 缺失但 fund_name+nav 有 → 不再提早 return（之前 bug）
         # 自動切 alternative page_type 重試一次（境內↔境外 mapping 錯誤的 case）
@@ -806,6 +856,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                         result = normalize_result_state(result)
                         print(f"[fetch] ✅ alt page_type ({_alt_pt}) fallback 成功，"
                               f"series={len(_alt_s)}（meta 保留主路線結果）")
+                        # v19.499:alt page_type 提早 return 前補抓持股(見 _ensure_holdings)
+                        _ensure_holdings(result, code)
                         return result
                     else:
                         print(f"[fetch] alt page_type ({_alt_pt}) 仍 series=0，"
