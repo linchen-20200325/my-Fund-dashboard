@@ -1518,7 +1518,9 @@ def render_single_fund_tab() -> None:
                     except Exception as _e_z:  # noqa: BLE001 — 位階為加值卡,失敗不影響風險表
                         st.caption(f"📐 Z-Score 計算略過:[{type(_e_z).__name__}]")
 
-                    # v19.496 A1:同類相對品質分(單一頁 — 對「Tab3 持倉 ∪ 本檔」排名,四頁一致口徑)
+                    # v19.496 A1:同類相對品質分(單一頁 — 對「Tab3 持倉 ∪ 本檔」排名)。
+                    # ⚠️ 稽核修:此處不算操盤因子(捕捉率需基準抓取,單頁不另抓)→ 涵蓋面向數
+                    # 會比大表少,以「涵蓋 X% 面向」旗標誠實揭露,不宣稱與大表分數逐分可比。
                     try:
                         from ui.helpers.fund_grp_health.quality import quality_detail_for_code
                         _q_code = str(fd.get("full_key") or fd.get("fund_name") or "本檔").strip() or "本檔"

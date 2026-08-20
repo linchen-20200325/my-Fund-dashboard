@@ -74,11 +74,12 @@ def _assemble_factor_pcts(funds: list, capture_map: Optional[dict]) -> "tuple[di
     for f in funds:
         c = str(f["code"])
         _p = _pr.get(c) or {}
+        # 報酬:**純** MoneyDJ 同類官方大母體分位(0~100 越高越強)→ percentile 0最佳;
+        #   稽核 v19.496 修:**不**退小 universe return_rank —— 同一張表混兩種母體(大 vs 小)
+        #   會讓「有無官方資料」變成分數優勢(§4.1)。無官方資料 → None,退出分母(寧缺勿混)。
         _pp = _p.get("peer_percentile")
-        if isinstance(_pp, (int, float)) and not isinstance(_pp, bool):
-            _ret_pct = round((100.0 - float(_pp)) / 100.0, 4)
-        else:
-            _ret_pct = _pct_from_rank(_p.get("return_rank"), _p.get("return_n") or 0)
+        _ret_pct = (round((100.0 - float(_pp)) / 100.0, 4)
+                    if isinstance(_pp, (int, float)) and not isinstance(_pp, bool) else None)
         out[c] = {
             "報酬": _ret_pct,
             "Sharpe": _pct_small(c, _sharpe),

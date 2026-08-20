@@ -117,18 +117,23 @@ def test_default_weights_sum_100():
 
 
 # ── 模組 2:quality_score_by_code(L3 assembler + 大表接線)──────────────────
-def _fund(code, sharpe, sigma, tr1y, adr, fee, ret1y):
+def _fund(code, sharpe, sigma, tr1y, adr, fee, ret1y, peer_rank=None):
+    # peer_rank「x/50」→ MoneyDJ 同類官方大母體排名(v19.496 稽核後「報酬」因子純用此,不退小 universe)
+    _mj = {"mgmt_fee": fee, "perf": {"1Y": ret1y}}
+    if peer_rank:
+        _mj["risk_metrics"] = {"peer_compare": {"本基金": {"報酬排名": peer_rank}}}
     return {"code": code,
             "metrics": {"sharpe": sharpe, "std_1y": sigma, "ret_1y_total": tr1y,
                         "annual_div_rate": adr, "ret_1y": ret1y},
-            "moneydj_raw": {"mgmt_fee": fee, "perf": {"1Y": ret1y}}, "series": None}
+            "moneydj_raw": _mj, "series": None}
 
 
 def _abcd():
-    return [_fund("A", 1.5, 8.0, 12.0, 6.0, 1.0, 12.0),
-            _fund("B", 1.0, 12.0, 9.0, 6.0, 1.5, 9.0),
-            _fund("C", 0.5, 16.0, 6.0, 6.0, 2.0, 6.0),
-            _fund("D", 0.1, 22.0, 3.0, 6.0, 2.5, 3.0)]
+    # A 最好 → D 最差(含 MoneyDJ 同類官方排名 1/15/30/45 of 50)
+    return [_fund("A", 1.5, 8.0, 12.0, 6.0, 1.0, 12.0, peer_rank="1/50"),
+            _fund("B", 1.0, 12.0, 9.0, 6.0, 1.5, 9.0, peer_rank="15/50"),
+            _fund("C", 0.5, 16.0, 6.0, 6.0, 2.0, 6.0, peer_rank="30/50"),
+            _fund("D", 0.1, 22.0, 3.0, 6.0, 2.5, 3.0, peer_rank="45/50")]
 
 
 def test_by_code_monotonic_best_to_worst():
@@ -171,3 +176,16 @@ def test_capture_map_none_drops_操盤_gracefully():
     # 無 capture_map → 操盤因子退出分母,其餘 5 因子仍給分(§1)
     res = quality_score_by_code(_abcd(), capture_map=None)
     assert res["A"]["相對品質分"] != "⬜ 資料不足"
+
+
+def test_return_factor_pure_large_universe_no_small_fallback():
+    """v19.496 稽核修:報酬因子**純** MoneyDJ 大母體 —— 無官方排名 → 退出(None),
+    不退小 universe(§4.1 同表不混大/小母體)。"""
+    from ui.helpers.fund_grp_health.quality import _assemble_factor_pcts
+    # 兩檔皆無 peer_rank(peer_compare 缺)→ 報酬 = None(退出,非小 universe rank)
+    funds = [_fund("A", 1.5, 8, 12, 6, 1, 12), _fund("B", 0.5, 16, 6, 6, 2, 6)]
+    pcts, _ = _assemble_factor_pcts(funds, None)
+    assert pcts["A"]["報酬"] is None and pcts["B"]["報酬"] is None
+    # 有 peer_rank「1/50」(第1名)→ 報酬 percentile 0(最佳)
+    pcts2, _ = _assemble_factor_pcts([_fund("A", 1.5, 8, 12, 6, 1, 12, peer_rank="1/50")], None)
+    assert pcts2["A"]["報酬"] == 0.0
