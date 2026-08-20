@@ -1,14 +1,16 @@
-name: "每週 NAV 自動補齊 (nav_history)"
+name: "每日 NAV 自動補齊 (nav_history)"
 
-# 每週對「持倉 ∪ 選股池」跑 backfill_to_gs,把最新可得淨值 append 進雲端 nav_history。
+# v19.495(user 2026-08-20「基金淨值請於每天淨值確定後抓取」):週更 → **每日**。
+# 每天對「持倉 ∪ 選股池」跑 backfill_to_gs,把最新可得淨值 append 進雲端 nav_history。
 # 走 GitHub Actions(**美國 IP**)—— LU 檔的 ISIN→Yahoo secId→chart 只有美國 IP 抓得到
-# (台灣 IP 被擋);TW000 檔靠 MoneyDJ 增量。與 App「一鍵補抓」同一條 L2,(code,date) 冪等。
+# (台灣 IP 被擋);TW000 檔靠 MoneyDJ 增量。與 App「一鍵補抓」同一條 L2,(code,date) 冪等
+# → 每日重跑只 append 當天新確定的淨值,週末/假日無新值時是 no-op(不灌重複)。
 #
 # ⚠️ cron 是 UTC。台灣 = UTC+8。
-#   0 12 * * 0 = 週日 12:00 UTC = 週日 20:00 台灣(NAV T+1 傍晚已更新;排在健康週報 18:00 之後)。
+#   0 12 * * * = 每天 12:00 UTC = 每天 20:00 台灣(NAV T+1 傍晚已確定;排在健康週報之後)。
 on:
   schedule:
-    - cron: "0 12 * * 0"
+    - cron: "0 12 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
