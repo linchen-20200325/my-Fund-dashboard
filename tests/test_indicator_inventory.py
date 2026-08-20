@@ -170,3 +170,67 @@ class TestFrequencyClassification:
         unclassified = [k for k in EXPECTED_INDICATOR_KEYS if k not in freq]
         assert not unclassified, (
             f"這些指標沒有顯式頻率分類，靠 default 兜著：{sorted(unclassified)}")
+
+
+class TestSidebarHealthReadsRealHitRate:
+    """側欄「全局資料健康」曾經恆綠 —— 讀了一個沒有人寫的 key（2026-08-20 修）。
+
+    `freshness.render_sidebar_data_health` 讀 `session_state["_fred_sources"]`，
+    但 `us_indicators` 是寫成 `R["_fred_sources"]`（塞在 `indicators` dict 內，
+    `_` 前綴 = provenance meta）。**全 repo 沒有任何地方寫那個頂層 key。**
+
+    於是判斷式恆為 False → 掉到 `elif macro_done` 的「🟢 總經已載入」，
+    而 `macro_done` 只要 `indicators` 非空就是 True（不看成功幾個）。
+
+        ⇒ 28 個指標只命中 1 個，側欄照樣顯示 🟢。
+
+    這是「診斷在說謊」最純粹的形態：它不是漏看，是看錯地方而且看不出來。
+    """
+
+    @staticmethod
+    def _sidebar_lines(state: dict) -> list:
+        import ui.helpers.io.freshness as F
+
+        class _Cap:
+            def __init__(self): self.out = []
+            def caption(self, *a, **k): self.out.append(a[0] if a else "")
+            def markdown(self, *a, **k): self.out.append(a[0] if a else "")
+            def __getattr__(self, n): return lambda *a, **k: None
+
+        cap, orig = _Cap(), F.st
+        F.st = cap
+        try:
+            F.render_sidebar_data_health(session_state=state)
+        finally:
+            F.st = orig
+        return [str(x) for x in cap.out if "總經" in str(x)]
+
+    def _fred_sources(self, n_ok: int, n_total: int = 28) -> dict:
+        return {f"S{i}": {"success": i < n_ok} for i in range(n_total)}
+
+    def test_partial_hit_is_not_green(self):
+        """28 個只命中 1 個 → 不得是綠燈。"""
+        lines = self._sidebar_lines({
+            "indicators": {"VIX": {}, "_fred_sources": self._fred_sources(1)},
+            "macro_done": True,
+        })
+        assert lines, "側欄沒有總經那一行"
+        assert "1/28 命中" in lines[0], f"沒有讀到真實命中率：{lines[0][:120]}"
+        assert "🟢" not in lines[0], f"1/28 命中卻是綠燈：{lines[0][:120]}"
+
+    def test_full_hit_is_green(self):
+        """反向守衛：全命中必須是綠 —— 否則「一律不綠」也能讓上面那條過。"""
+        lines = self._sidebar_lines({
+            "indicators": {"VIX": {}, "_fred_sources": self._fred_sources(28)},
+            "macro_done": True,
+        })
+        assert "28/28 命中" in lines[0] and "🟢" in lines[0], lines[0][:120]
+
+    def test_unknown_hit_rate_is_not_claimed_healthy(self):
+        """拿不到命中率時只能說「已跑」，不能說「健康」。
+
+        `macro_done=True` 證明的是「跑過了」，不是「抓到了」。
+        """
+        lines = self._sidebar_lines({"indicators": {"VIX": {}}, "macro_done": True})
+        assert lines and "🟢" not in lines[0], (
+            f"命中率未知卻宣稱健康：{lines[0][:120]}")
