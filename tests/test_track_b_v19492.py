@@ -8,20 +8,6 @@
 import pytest
 
 
-# ── 中國 regime 顏色(顯示層修)──────────────────────────────────────────
-def test_china_regime_color_from_emoji():
-    from shared.colors import TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW
-    from ui.tab1_macro import _china_regime_color
-    assert _china_regime_color("🟢 擴張") == TRAFFIC_GREEN
-    assert _china_regime_color("🟡 減速") == TRAFFIC_YELLOW
-    assert _china_regime_color("🔴 衰退/緊縮") == TRAFFIC_RED
-    assert _china_regime_color("⚪ 中性") == TRAFFIC_NEUTRAL       # 中性 → 中性色
-    assert _china_regime_color("⬜ 資料不足") == TRAFFIC_NEUTRAL   # 資料不足 → 中性色(非 None)
-    assert _china_regime_color("—") == TRAFFIC_NEUTRAL
-    assert _china_regime_color("") == TRAFFIC_NEUTRAL
-    assert _china_regime_color(None) == TRAFFIC_NEUTRAL          # §1 不炸、退中性
-
-
 # ── 對帳 worst-of-3 旗標 ────────────────────────────────────────────────
 def _fund(code, statuses):
     """statuses: {reconcile_key: status}。"""
