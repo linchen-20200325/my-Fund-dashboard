@@ -1517,6 +1517,36 @@ def render_single_fund_tab() -> None:
                                        "同一檔兩頁可能給不同結論,別跨頁互比。")
                     except Exception as _e_z:  # noqa: BLE001 — 位階為加值卡,失敗不影響風險表
                         st.caption(f"📐 Z-Score 計算略過:[{type(_e_z).__name__}]")
+
+                    # v19.496 A1:同類相對品質分(單一頁 — 對「Tab3 持倉 ∪ 本檔」排名)。
+                    # ⚠️ 稽核修:此處不算操盤因子(捕捉率需基準抓取,單頁不另抓)→ 涵蓋面向數
+                    # 會比大表少,以「涵蓋 X% 面向」旗標誠實揭露,不宣稱與大表分數逐分可比。
+                    try:
+                        from ui.helpers.fund_grp_health.quality import quality_detail_for_code
+                        _q_code = str(fd.get("full_key") or fd.get("fund_name") or "本檔").strip() or "本檔"
+                        _q_cur = {"code": _q_code, "metrics": fd.get("metrics") or {},
+                                  "moneydj_raw": mj_raw, "series": fd.get("series")}
+                        _q_uni = {}
+                        for _pf in (st.session_state.get("portfolio_funds") or []):
+                            _pc = str((_pf or {}).get("code") or "").strip()
+                            if _pc:
+                                _q_uni[_pc] = _pf
+                        _q_uni[_q_code] = _q_cur          # 確保本檔在同伴組內
+                        _qd = quality_detail_for_code(_q_code, list(_q_uni.values()))
+                        if _qd and _qd.get("score") is not None:
+                            st.markdown(f"**🎖️ 同類相對品質分:{_qd['score']:.0f} / 100**"
+                                        f"　（本組 {_qd['n_group']} 檔・涵蓋 {_qd['coverage_pct']:.0f}% 面向）")
+                            _qc = _qd.get("contributions") or {}
+                            if _qc:
+                                _parts = "　".join(f"{k} {v:+.0f}"
+                                                   for k, v in sorted(_qc.items(), key=lambda x: -x[1]))
+                                st.caption(f"貢獻分解:{_parts}　—— 相對本組同伴的位置,非絕對好壞;"
+                                           "紅線(吃本金 / 3-3-3)另外看。")
+                        else:
+                            st.caption("🎖️ 同類相對品質分:⬜ 資料不足 —— 單一檔沒有同伴可相對排名,"
+                                       "請先到「配置 & 帳本」載入持倉,或改看 健檢 / 批次分頁。")
+                    except Exception as _e_q:  # noqa: BLE001 — 相對分為加值,失敗不影響其他
+                        st.caption(f"🎖️ 同類相對品質分計算略過:[{type(_e_q).__name__}]")
                     # ── 必修 2:混期示警 + 對帳降級揭露(沿用 v19.91 chip 樣式)──
                     # 這兩條原本 production 0 reader:`mixed_period_warning` 只有
                     # fund_service 自己與 test 讀,所以線上「Sharpe 1Y 0.28」與

@@ -108,16 +108,20 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tupl
     phase/score 給 訊號用(由呼叫端從 session_state.phase_info 取);缺則 訊號欄 '—'。
     """
     from ui.helpers.fund_grp_health.capture import capture_by_code
+    from ui.helpers.fund_grp_health.quality import quality_score_by_code
     from ui.helpers.fund_grp_health.risk import hwm_sigma_by_code, risk_compare_by_code
     from ui.helpers.fund_grp_health.signals import mk_signal_by_code
 
+    # v19.496:capture 算一次,同時餵「捕捉率欄」與「相對品質分」的操盤因子(不重算、不重抓基準)
+    _capture = capture_by_code(funds)
     maps = [
         hwm_sigma_by_code(funds),
         risk_compare_by_code(funds),
         mk_signal_by_code(funds, phase, score),
-        capture_by_code(funds),      # v19.414 上/下檔捕捉率 + 操盤評分;v19.420 + vs 大盤%(同一基準)
+        _capture,                    # v19.414 上/下檔捕捉率 + 操盤評分;v19.420 + vs 大盤%(同一基準)
         sharpe_provenance_by_code(funds),   # Sharpe 實際來源/期間(§2.2;大表原本硬說「非官方值」)
         reconcile_by_code(funds),    # v19.492 §4.3 雙演算法對帳旗標(worst-of-3;決策面缺口補上)
+        quality_score_by_code(funds, capture_map=_capture),  # v19.496 A1 同類相對品質分(6因子+MoneyDJ大母體錨定)
     ]
     combined: dict = {}
     col_order: list[str] = []
@@ -160,6 +164,7 @@ _UNIFIED_FRONT: list = [
     # Layer 3-C(2026-08-14):同樣排在等第**之前** —— 它是那個字母的可信度前提。
     ("評分覆蓋", "health"),
     ("4D Grade", "health"), ("4D Score", "health"),
+    ("相對品質分", "extra"),   # v19.496 A1 同類相對品質分(6因子 rank + MoneyDJ大母體錨定;peer-relative)
     # ① 報酬 / 風險 6 進階指標
     ("Sharpe 1Y", "health"), ("Sharpe 來源", "extra"),   # 來源/期間揭露(§2.2;緊貼數值欄)
     ("Sortino", "health"), ("Calmar", "health"),
