@@ -70,7 +70,6 @@ from services.macro.causal_sankey import (  # noqa: F401
 )
 
 
-
 def clear_tab1_macro_caches(session_state=None) -> dict:
     """v19.57 C1：Tab1（總經）強制重抓專用 — 只清 Tab1 owned 快取，不誤殺 Tab2~Tab5。
 
