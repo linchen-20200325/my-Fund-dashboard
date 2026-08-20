@@ -1,6 +1,6 @@
 """scripts/weekly_nav_backfill.py — 每週 NAV 自動補齊(GitHub Actions 美國 IP / NAS)v19.479。
 
-不靠 user 開 App:每週對「**持倉 ∪ 選股池**」跑一次 `backfill_to_gs`,把最新可得淨值
+不靠 user 開 App:**每天**(v19.495,原每週)對「**持倉 ∪ 選股池**」跑一次 `backfill_to_gs`,把最新可得淨值
 append 進雲端 `nav_history`(永久、重開不丟)。與 App「🔄 一鍵補抓全部缺淨值」**同一條 L2**
 (`services.nav_history_store.backfill_to_gs`),`(code, date)` 冪等去重;含 LU 檔的
 **ISIN → Yahoo secId 自動解析**(v19.478),故雲端跑一次就把 LU 檔的最新淨值也補上。
@@ -15,7 +15,8 @@ Yahoo / 晨星從**美國 IP** 可達(台灣 IP 被擋)。LU 檔要靠 `ISIN→s
     NAV_SHEET_ID           = (選填)nav_history 目標 Sheet;未設走 baked 預設
     POLICY_SHEET_ID        = 持倉 Sheet ID(讀持倉代碼;未設 → 退 macro_weights_sheet_id)
     macro_weights_sheet_id = (fallback)持倉 / 內部表 Sheet ID
-cron:.github/workflows/weekly_nav_backfill.yml(週日 20:00 台灣;NAV 多 T+1 傍晚更新)。
+cron:.github/workflows/weekly_nav_backfill.yml(**每天** 20:00 台灣;NAV 多 T+1 傍晚已確定;
+    (code,date) 冪等 → 週末/假日無新值時 no-op)。檔名沿用 weekly_*(legacy,避免動 references)。
 先手動驗證(不寫入,只列將補的代號):
     python scripts/weekly_nav_backfill.py --dry-run
 
