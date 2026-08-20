@@ -1,0 +1,36 @@
+name: "補選股池 currency(一次性,手動)"
+
+# 用基金名判計價幣,補選股池空白 currency 欄。**只手動觸發**(一次性維護,無排程)。
+# 預設 dry_run=true(只列出、不寫入);確認清單無誤後,再跑一次 dry_run=false 實寫。
+# 需 GitHub repo secrets:GOOGLE_SERVICE_ACCOUNT(須為選股池 Sheet 編輯者)+(選填)POOL_SHEET_ID。
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只列出將補的、不寫入 (true/false)"
+        default: "true"
+
+concurrency:
+  group: fill-pool-currency
+  cancel-in-progress: false
+
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Fill pool currency from fund names
+        env:
+          google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          # 選股池目標本(未設走程式 baked 預設)。
+          POOL_SHEET_ID: ${{ secrets.POOL_SHEET_ID }}
+        run: >
+          python scripts/fill_pool_currency.py
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
