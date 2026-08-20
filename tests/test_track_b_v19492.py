@@ -75,3 +75,22 @@ def test_single_eat_column_in_unified():
     _eat = [c for c in cols if "吃本金" in c]
     assert len(_eat) == 1, f"合併表應只有 1 個吃本金欄,實際 {_eat}"
     assert _eat[0] == "吃本金燈號 (1Y · )"
+
+
+# ── B-1 正名 drift-lock(v19.494 補:鎖新 header + 保留 dict key)──────────────
+def test_b1_renamed_headers_locked():
+    """B-1 正名:新顯示 header 存在,且 **dict key 保留**(改 key 會斷資料流 → 欄變空)。"""
+    import inspect
+
+    from ui.helpers.fund_grp_health import columns
+    from ui.helpers.fund_grp_health.columns import base_column_config
+
+    # 語意鎖:含息欄的顯示 label 已改「全期年化」,而 dict key「含息% (年化)」不變
+    assert base_column_config()["含息% (年化)"]["label"] == "含息% (全期年化)"
+
+    # 源碼鎖:兩個新 header 都在;兩個 load-bearing dict key 保留(防未來誤改回舊名 / 誤改 key)
+    _src = inspect.getsource(columns)
+    assert '"含息% (全期年化)"' in _src
+    assert '"年化配息率 %(對現值)"' in _src
+    assert '"含息% (年化)": cc.NumberColumn(' in _src        # dict key 保留(資料流不斷)
+    assert '"年化配息率 %": cc.NumberColumn(' in _src
