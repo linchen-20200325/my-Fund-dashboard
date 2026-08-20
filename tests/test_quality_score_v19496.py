@@ -114,3 +114,60 @@ def test_custom_weights():
 
 def test_default_weights_sum_100():
     assert math.isclose(sum(DEFAULT_WEIGHTS.values()), 100.0)
+
+
+# ── 模組 2:quality_score_by_code(L3 assembler + 大表接線)──────────────────
+def _fund(code, sharpe, sigma, tr1y, adr, fee, ret1y):
+    return {"code": code,
+            "metrics": {"sharpe": sharpe, "std_1y": sigma, "ret_1y_total": tr1y,
+                        "annual_div_rate": adr, "ret_1y": ret1y},
+            "moneydj_raw": {"mgmt_fee": fee, "perf": {"1Y": ret1y}}, "series": None}
+
+
+def _abcd():
+    return [_fund("A", 1.5, 8.0, 12.0, 6.0, 1.0, 12.0),
+            _fund("B", 1.0, 12.0, 9.0, 6.0, 1.5, 9.0),
+            _fund("C", 0.5, 16.0, 6.0, 6.0, 2.0, 6.0),
+            _fund("D", 0.1, 22.0, 3.0, 6.0, 2.5, 3.0)]
+
+
+def test_by_code_monotonic_best_to_worst():
+    from ui.helpers.fund_grp_health.quality import quality_score_by_code
+    cap = {"A": {"操盤評分": 90}, "B": {"操盤評分": 70},
+           "C": {"操盤評分": 50}, "D": {"操盤評分": 30}}
+    res = quality_score_by_code(_abcd(), capture_map=cap)
+    scores = {c: float(res[c]["相對品質分"].split(" ")[0]) for c in "ABCD"}
+    assert scores["A"] > scores["B"] > scores["C"] > scores["D"]   # 全面最好 → 分最高
+    assert "本組 4 檔" in res["A"]["相對品質分"]                    # 標樣本數
+
+
+def test_by_code_small_sample_flag():
+    from ui.helpers.fund_grp_health.quality import quality_score_by_code
+    # 3 檔 < PEER_QUARTILE_MIN_N(4)→ 「・僅參考」
+    res = quality_score_by_code(_abcd()[:3])
+    assert "僅參考" in res["A"]["相對品質分"]
+
+
+def test_by_code_missing_metrics_is_insufficient():
+    from ui.helpers.fund_grp_health.quality import quality_score_by_code
+    res = quality_score_by_code([{"code": "X", "metrics": {}, "moneydj_raw": {}}])
+    assert res["X"]["相對品質分"] == "⬜ 資料不足"
+
+
+def test_by_code_empty_and_no_code():
+    from ui.helpers.fund_grp_health.quality import quality_score_by_code
+    assert quality_score_by_code([]) == {}
+    assert quality_score_by_code([{"metrics": {}}]) == {}          # 無 code → skip
+
+
+def test_column_registered_in_schema():
+    from ui.helpers.fund_grp_health.unified import BATCH_UNIFIED_COLUMNS, _UNIFIED_FRONT
+    assert ("相對品質分", "extra") in _UNIFIED_FRONT
+    assert "相對品質分" in BATCH_UNIFIED_COLUMNS                    # 自動流入批次寬表
+
+
+def test_capture_map_none_drops_操盤_gracefully():
+    from ui.helpers.fund_grp_health.quality import quality_score_by_code
+    # 無 capture_map → 操盤因子退出分母,其餘 5 因子仍給分(§1)
+    res = quality_score_by_code(_abcd(), capture_map=None)
+    assert res["A"]["相對品質分"] != "⬜ 資料不足"
