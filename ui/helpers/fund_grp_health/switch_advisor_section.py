@@ -55,14 +55,18 @@ def _rows_with_nav(funds: list, pool_by_code: dict) -> list:
     return rows
 
 
-def _fetch_rich(code: str) -> "dict | None":
-    """池中未載入標的 → 走健診管線補抓成 rich dict(L2 process_one_fund + L3 _build_fund_dict)。"""
+def _fetch_rich(code: str, name: str = "") -> "dict | None":
+    """池中未載入標的 → 走健診管線補抓成 rich dict(L2 process_one_fund + L3 _build_fund_dict)。
+
+    name:選股池自填名 → 當作 name_hint 傳下去,線上抓不到真名(如 ALZF9)時顯示池名,
+    而非代號(v19.497)。
+    """
     try:
         from services.fund_row import process_one_fund
         from ui.helpers.fund_grp_health_extras import _build_fund_dict
-        r = process_one_fund(code, _PRINCIPAL)
+        r = process_one_fund(code, _PRINCIPAL, name_hint=name)
         if r.get("ok") and r.get("_fund_raw"):
-            return _build_fund_dict(r["_fund_raw"], code, _PRINCIPAL)
+            return _build_fund_dict(r["_fund_raw"], code, _PRINCIPAL, name_hint=name)
     except Exception as _e:  # noqa: BLE001
         st.caption(f"⬜ 池中標的 {code} 補抓失敗,略過:[{type(_e).__name__}] {str(_e)[:60]}")
     return None
@@ -74,10 +78,14 @@ def _pool_rows(pool: list, funds: list) -> list:
     _loaded = {f.get("code"): f for f in funds}
     out = []
     for e in pool:
-        _rich = _loaded.get(e.code) or _fetch_rich(e.code)
+        _rich = _loaded.get(e.code) or _fetch_rich(e.code, e.name)
         if _rich is None:
             continue
         _row = _assemble_rows([_rich])[0]
+        # v19.497:選股池自填名優先於「抓不到真名 → 代號」(ALZF9 類)。已載入路徑的
+        # _rich 來自 portfolio_funds(name 可能是代號),故在列組好後統一覆蓋。
+        if e.name and str(_row.get("name") or "").strip().upper() in ("", str(e.code).upper()):
+            _row["name"] = e.name
         _row["nav_series"] = _rich.get("series")
         _row["type_override"] = e.type_override
         if not _row.get("基金類別"):

@@ -148,7 +148,7 @@ def _patch_main_common(monkeypatch, *, held, rich):
     monkeypatch.setattr(P, "list_pool", lambda: [])
     monkeypatch.setattr(M, "_read_holdings", lambda c, s: held)
     monkeypatch.setattr(M, "_read_watchlist", lambda: [])          # hermetic:預設無追蹤清單
-    monkeypatch.setattr(M, "_fetch_rich", lambda codes: rich)
+    monkeypatch.setattr(M, "_fetch_rich", lambda codes, **kw: rich)
     monkeypatch.setattr(M, "_assemble_rows", lambda funds, pbc: [{"code": f["code"]} for f in funds])
     monkeypatch.setattr(M, "_underperf_by_code", lambda funds: {})
     monkeypatch.setattr(M, "_fx_label", lambda: None)
@@ -238,8 +238,9 @@ def test_main_pool_code_case_normalized(monkeypatch):
     monkeypatch.setattr(M, "_read_holdings", lambda c, s: ["B1234"])                    # 大寫
     _got: dict = {}
 
-    def _fr(codes):
+    def _fr(codes, **kw):
         _got["codes"] = codes
+        _got["name_by_code"] = kw.get("name_by_code")
         return {}
     monkeypatch.setattr(M, "_fetch_rich", _fr)
     M.main([])

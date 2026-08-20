@@ -202,13 +202,24 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
     _phase = (_pi or {}).get("phase") or ""
     _score = (_pi or {}).get("score")
 
+    # v19.497:選股池自填名 → name_hint。批次含池成員(如 ALZF9,線上抓不到真名)時
+    # 顯示池名而非代號。§1:池讀失敗不擋批次(guard → 空 map)。EX-CRUD-1 允許 L3 直呼。
+    _name_map: dict = {}
+    try:
+        from repositories.pool_repository import list_pool
+        _name_map = {str(e.code).upper(): (e.name or "") for e in (list_pool() or []) if e.name}
+    except Exception as _e_pool:  # noqa: BLE001
+        print(f"[batch] 選股池名稱查詢略過:{type(_e_pool).__name__}: {_e_pool}")
+
     bar = st.progress(0.0)
     live = st.empty()
     total = len(todo)
     for i, code in enumerate(todo, start=1):
         live.markdown(f"⏳ 處理中 **{i}/{total}**:`{code}` …")
         # 組合健診大表單檔列;失敗也回一列不外拋。phase/score 對齊健診 tab
-        rows[code] = build_batch_unified_row(code, phase=_phase, score=_score)
+        rows[code] = build_batch_unified_row(
+            code, phase=_phase, score=_score,
+            name_hint=_name_map.get(str(code).upper(), ""))
         _persist(run_id, codes, rows)         # 每檔落地(續存後盾)
         bar.progress(i / total)
     bar.empty()
