@@ -939,13 +939,70 @@ _MS_ASSET_LIST_KEYS = ("assetAllocation", "AssetAllocation", "allocationMap",
                        "assetAllocList", "portfolioAllocation", "breakdowns")
 
 
-def _resolve_ms_secid(code: str) -> str:
-    """保單平台代碼 → Morningstar secId(硬編表 → TDCC 名稱橋接搜尋)。查無回 ""。"""
+def _pool_secid_lookup(code: str) -> str:
+    """選股池已存的 secId / ISIN → Morningstar secId(v19.498 備源)。查無 / 池不可用回 ""。
+
+    - **1) 池直接存的 `morningstar_secid`**(user 自填 / 系統回存)—— 最準、免搜。
+    - **2) 池存 `isin` → v19.491 screener 精確解析**(`_morningstar_screener_secid`)。
+    幣別走池存 currency(空 → USD,screener 預設)。
+    §1:池讀失敗(無 SA / 網路 / 池模組不可用)一律 try/except + log,回 "" 讓上層
+    續走硬編表 / 名稱搜尋,**不因池不可用而擋掉持股**。
+    §8.2:L1 sources → L1 pool_repository(lazy import 避循環;L1→L1 允許)。
+    """
+    import sys as _sys_p
+    try:
+        from repositories.pool_repository import (
+            resolve_currency, resolve_isin, resolve_secid,
+        )
+    except Exception:  # noqa: BLE001 — 池模組不可用(理論上不會)→ 跳過備源
+        return ""
     _code = (code or "").upper().strip()
+    if not _code:
+        return ""
+    # 1) 池直接存的 secId(最準,免搜)
+    try:
+        _rs = resolve_secid(_code)
+        if _rs and _rs[0]:
+            return str(_rs[0]).strip()
+    except Exception as _e:  # noqa: BLE001
+        print(f"[ms_secid_pool] {_code} resolve_secid 失敗:{type(_e).__name__}: {_e}",
+              file=_sys_p.stderr)
+    # 2) 池存 ISIN → v19.491 screener 精確解析
+    try:
+        _isin = resolve_isin(_code) or ""
+        if _isin:
+            _ccy = (resolve_currency(_code) or "USD").upper() or "USD"
+            _sid = _morningstar_screener_secid(_isin, _ccy)
+            if _sid:
+                print(f"[ms_secid_pool] {_code} ISIN={_isin}({_ccy})→secId={_sid}",
+                      file=_sys_p.stderr)
+                return _sid
+    except Exception as _e:  # noqa: BLE001
+        print(f"[ms_secid_pool] {_code} ISIN→screener 失敗:{type(_e).__name__}: {_e}",
+              file=_sys_p.stderr)
+    return ""
+
+
+def _resolve_ms_secid(code: str) -> str:
+    """保單平台代碼 → Morningstar secId。查無回 ""。
+
+    v19.498 解析順序(高→低可信):
+      1. 選股池已存 secId(user 自填 / 系統回存,最準)  ┐ v19.498 備源:MoneyDJ 保單子
+      2. 選股池 ISIN → screener 精確解析(v19.491)      ┘ 網域對雲端美國 IP 被擋,這類
+         FoF/保單基金改用池存 secId/ISIN 走 Morningstar(host 美國 IP 可達,NAV 同源已驗)。
+      3. 硬編表 _MORNINGSTAR_SECID_MAP(TLZF9/JFZN3 等)
+      4. TDCC 名稱橋接搜尋(最不準,最後退路)
+    """
+    _code = (code or "").upper().strip()
+    # 1+2) 選股池備源(secId → ISIN screener)
+    _pool_sid = _pool_secid_lookup(_code)
+    if _pool_sid:
+        return _pool_sid
+    # 3) 硬編表
     _mapped = _MORNINGSTAR_SECID_MAP.get(_code, ("", ""))
     if _mapped[0]:
         return _mapped[0]
-    # 用 TDCC 中文名搜 Morningstar(英文名較準,但中文也試)
+    # 4) 用 TDCC 中文名搜 Morningstar(英文名較準,但中文也試)
     try:
         _name = _tdcc_resolve_fund_name(_code) or ""
     except Exception:
@@ -1040,8 +1097,9 @@ def fetch_holdings_morningstar(code: str, diag: "list | None" = None) -> dict:
         return {}
     sec_id = _resolve_ms_secid(_code)
     if not sec_id:
-        _d(f"{_code} 無 secId(映射表無 + 名稱搜尋失敗)")
-        print(f"[ms_holdings] {_code}: 無 secId(未在映射表且搜尋失敗)",
+        _d(f"{_code} 無 secId(選股池 secId/ISIN 無 + 映射表無 + 名稱搜尋失敗)"
+           " —— 到選股池補 morningstar_secid 或 isin 即可走本備源")
+        print(f"[ms_holdings] {_code}: 無 secId(池/映射表/ISIN/名稱搜尋皆失敗)",
               file=_sys_m.stderr)
         return {}
     _d(f"{_code} secId={sec_id}")
