@@ -205,6 +205,143 @@ def test_src_morningstar_falls_back_to_search_when_screener_empty(monkeypatch):
     assert len(out) == 1
 
 
+# ── v19.491 收斂(稽核隊伍 4 lens):形狀辨識 / 大小寫容錯 / 異常不負快取 / 幣別 datapoint / 接線 ──
+def test_shape_recognized():
+    assert S._screener_shape_recognized({"rows": []}) is True
+    assert S._screener_shape_recognized({"results": [{"SecId": "F1"}]}) is True
+    assert S._screener_shape_recognized([]) is True
+    assert S._screener_shape_recognized({"error": "rate limited"}) is False   # 軟錯誤 body
+    assert S._screener_shape_recognized("boom") is False
+    assert S._screener_shape_recognized(None) is False
+
+
+def test_secid_key_casing_tolerated(monkeypatch):
+    # 回傳用小寫 secId 鍵 → 仍抽得到(唯一載重欄位大小寫容錯,防永久靜默空)
+    _patch_urlopen_seq(monkeypatch, [{"rows": [{"secId": "Flower", "ISIN": "LU5"}]}])
+    assert S._morningstar_screener_secid("LU5") == "Flower"
+
+
+def test_pricecurrency_read_when_currency_absent(monkeypatch):
+    _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "EUR"}]}])
+    assert S._morningstar_screener_secid("LU5") == "F1"
+    assert S._ms_ccy_cache["LU5"] == "EUR"                 # 讀 PriceCurrency datapoint
+
+
+def test_screener_ccy_wins_over_name_suffix(monkeypatch):
+    # 名稱後綴說 USD,但 PriceCurrency 說 EUR → screener 直接回的贏(§4.1 準確優先)
+    _patch_urlopen_seq(monkeypatch, [{"rows": [
+        {"SecId": "F1", "ISIN": "LU5", "Name": "Fund USD", "PriceCurrency": "EUR"}]}])
+    S._morningstar_screener_secid("LU5")
+    assert S._ms_ccy_cache["LU5"] == "EUR"
+
+
+def test_lowercase_currency_uppercased(monkeypatch):
+    _patch_urlopen_seq(monkeypatch, [{"rows": [{"SecId": "F1", "ISIN": "LU5", "PriceCurrency": "eur"}]}])
+    S._morningstar_screener_secid("LU5")
+    assert S._ms_ccy_cache["LU5"] == "EUR"
+
+
+def test_first_valid_row_taken_skipping_invalid(monkeypatch):
+    # 非 dict / 無 SecId 的 row 跳過(不炸),取第一個合格 row(不是最後一個)
+    _patch_urlopen_seq(monkeypatch, [{"rows": [
+        "junk",                                   # 非 dict → 跳過(§1 不炸)
+        {"Name": "no secid"},                     # 無 SecId → 跳過
+        {"SecId": "FGOOD", "ISIN": "LU5"},        # 第一個合格 → 取這個
+        {"SecId": "FLATER", "ISIN": "LU5"},       # 不該取到
+    ]}])
+    assert S._morningstar_screener_secid("LU5") == "FGOOD"
+
+
+def test_negative_cache_hit_skips_network(monkeypatch):
+    # 確定查無 → 負快取 "";第二次呼叫必須**不連外**(guard 用 `in`,不是 truthy)
+    S._ms_screener_cache["LU9999999999"] = ""
+    monkeypatch.setattr("urllib.request.urlopen",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("負快取命中不該連外")))
+    assert S._morningstar_screener_secid("LU9999999999") == ""
+
+
+def test_empty_then_transient_not_negative_cached(monkeypatch):
+    # 前宇宙乾淨查無、後宇宙暫時失敗、全程無命中 → 不負快取(可重試;§1 混合序不誤鎖)
+    _seq = [{"total": 0, "rows": []}] + [TimeoutError("boom")] * (len(S._MS_SCREENER_UNIVERSES) - 1)
+    _patch_urlopen_seq(monkeypatch, _seq)
+    assert S._morningstar_screener_secid("LU5") == ""
+    assert "LU5" not in S._ms_screener_cache
+
+
+def test_rows_present_no_secid_is_anomaly_not_cached(monkeypatch):
+    # 全宇宙都「有 rows 卻抽不到 SecId」(疑欄位名不符)→ 異常 → **不負快取**(讓錯誤現形)
+    _payloads = [{"rows": [{"WrongKey": "F1", "ISIN": "LU5"}]}] * len(S._MS_SCREENER_UNIVERSES)
+    _patch_urlopen_seq(monkeypatch, _payloads)
+    assert S._morningstar_screener_secid("LU5") == ""
+    assert "LU5" not in S._ms_screener_cache               # 異常 → 未負快取
+
+
+def test_unrecognized_shape_is_anomaly_not_cached(monkeypatch):
+    # 全宇宙都回非 screener 形狀(軟錯誤 body)→ 異常 → 不負快取(§1 不當「確定查無」)
+    _payloads = [{"error": "rate limited"}] * len(S._MS_SCREENER_UNIVERSES)
+    _patch_urlopen_seq(monkeypatch, _payloads)
+    assert S._morningstar_screener_secid("LU5") == ""
+    assert "LU5" not in S._ms_screener_cache
+
+
+def test_url_has_encoded_currency_and_filter(monkeypatch):
+    _urls = []
+
+    class _R:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return json.dumps({"total": 0, "rows": []}).encode()
+
+    def _cap(req, *a, **k):
+        _urls.append(req.full_url if hasattr(req, "full_url") else req.get_full_url())
+        return _R()
+
+    monkeypatch.setattr("urllib.request.urlopen", _cap)
+    S._morningstar_screener_secid("LU5", currency="EUR")
+    _first = _urls[0]
+    assert "currencyId=EUR" in _first                       # 幣別已帶入(且 EUR 為 ASCII 不變)
+    assert "filters=ISIN%3AIN%3ALU5" in _first              # ISIN filter 精確 + 已編碼
+    assert "universeIds=FOLUX%24%24ALL" in _first           # 第一宇宙 = 盧森堡,$ 已編碼
+
+
+def test_user_currency_threaded_into_screener(monkeypatch):
+    # 接線:使用者填的幣別要傳進 screener 當 currencyId(不被吞成 USD)
+    import repositories.pool_repository as PR
+    monkeypatch.setattr(PR, "resolve_secid", lambda code: None)
+    monkeypatch.setattr(PR, "resolve_isin", lambda code: "LU2023250330")
+    monkeypatch.setattr(PR, "resolve_currency", lambda code: "EUR")
+    monkeypatch.setattr(PR, "set_secid", lambda code, secid, **k: None)
+    _seen = {}
+
+    def _screener(isin, ccy="USD"):
+        _seen["isin"], _seen["ccy"] = isin, ccy
+        return "FZ"
+    monkeypatch.setattr(S, "_morningstar_screener_secid", _screener)
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _MSResp({
+        "TimeSeries": {"Security": [{"HistoryDetail": [{"EndDate": "2024-01-02", "Value": 9.9}]}]},
+    }))
+    S._src_morningstar_nav("ZZZZ9")
+    assert _seen == {"isin": "LU2023250330", "ccy": "EUR"}   # 使用者幣別 → screener
+
+
+def test_no_isin_screener_not_called(monkeypatch):
+    # 池中無 ISIN → screener 不該被呼叫(且不炸),落回名稱搜尋
+    import repositories.pool_repository as PR
+    monkeypatch.setattr(PR, "resolve_secid", lambda code: None)
+    monkeypatch.setattr(PR, "resolve_isin", lambda code: "")     # 無 ISIN
+    monkeypatch.setattr(PR, "resolve_currency", lambda code: None)
+    monkeypatch.setattr(S, "_morningstar_screener_secid",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("無 ISIN 不該呼叫 screener")))
+    monkeypatch.setattr(S, "_morningstar_search_secid", lambda *a, **k: "")   # 名稱搜尋也空
+    out = S._src_morningstar_nav("ZZZZ9")
+    assert isinstance(out, pd.Series) and out.empty
+
+
 class _MSResp:
     """timeseries_price COMPACTJSON context-manager 假回應。"""
     def __init__(self, payload):
