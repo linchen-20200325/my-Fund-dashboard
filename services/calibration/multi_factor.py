@@ -209,7 +209,7 @@ def fetch_factor_series(
             vix = fetch_yf_close("^VIX", range_=f"{int(years)}y", interval="1d")
             if vix is None or vix.empty:
                 return _empty()
-            out = vix.dropna().pct_change(5).dropna()
+            out = vix.dropna().pct_change(5, fill_method=None).dropna()  # §1 不補值
             out.name = spec.key
             return _stamp_prov(out, "Calculated:VIX_DELTA_5D:multi_factor")
         if spec.source == "calculated" and spec.key == "HY_SPREAD_DELTA_5D":
@@ -239,7 +239,7 @@ def fetch_factor_series(
             if _before != len(df):
                 print(f"[multi_factor spy/rsp] ffill+dropna: {_before} → {len(df)} 筆")
             ratio = (df["rsp"] / df["spy"]).dropna()
-            out = ratio.pct_change(5).dropna()
+            out = ratio.pct_change(5, fill_method=None).dropna()  # §1 不補值
             out.name = spec.key
             return out
         return _empty()
@@ -380,7 +380,7 @@ def evaluate_sharpe(
     """
     if crossings.empty or returns.empty:
         return {"sharpe": 0.0, "annual_return": 0.0, "annual_vol": 0.0, "n_trades": 0}
-    rets = returns.pct_change(fwd_days).shift(-fwd_days)
+    rets = returns.pct_change(fwd_days, fill_method=None).shift(-fwd_days)  # §1 不補值
     aligned = crossings.reindex(rets.index, fill_value=0)
     trade_rets = -rets[aligned == 1].dropna()
     if trade_rets.empty:

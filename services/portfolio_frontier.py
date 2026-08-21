@@ -50,7 +50,7 @@ def aligned_returns_matrix(nav_by_code: dict):
     if _common is None or len(_common) < 2:
         return None, list(cleaned.keys()), excluded, "納入基金無共同交易日,無法對齊。"
     _nav_df = pd.DataFrame({_c: _s.loc[_common] for _c, _s in cleaned.items()}).sort_index()
-    _rdf = _nav_df.pct_change().dropna(how="any")            # 丟首列(無前值),不偽造
+    _rdf = _nav_df.pct_change(fill_method=None).dropna(how="any")  # 丟首列(無前值)+ 不補值,不偽造
     if len(_rdf) < 2:
         return None, list(cleaned.keys()), excluded, "共同交易日不足,無法算報酬。"
     return _rdf, list(_rdf.columns), excluded, None

@@ -13,8 +13,17 @@ streamlit>=1.59.1,<1.60.0
 # streamlit 到已修版本)後,即可放寬本上界。
 starlette>=0.40.0,<1.4.0
 typing-extensions>=4.13.0
-pandas>=2.1.0
-numpy>=1.24.0
+# v19.502 hotfix(2026-08-21):雲端 py3.14 未釘 pandas/numpy 上界 → 解析到當日最新
+# pandas 3.0.5 / numpy 2.5.2(CoW 預設化、str 為預設 dtype、C 擴充於 py3.14 未驗證)。
+# user 回報「每個 Tab 小按鈕壓下就整個跳出來」= 互動觸發 rerun 時 C 擴充原生崩潰
+# (segfault，try/except 抓不到,連已隔離的總經/管理室分頁也連坐)—— 與本檔既有 3 次
+# py3.14 雲端災難同型(streamlit 1.45→segfault / pyarrow 25→segfault / starlette 1.4→ASGI)。
+# 全站 4486 tests 只在 pandas 2.x 綠。2.x 唯一具 cp314 wheel 者為 2.3.3 → 釘 2.3.x 線。
+# 解禁條件:待 pandas 3.0 / numpy 2.6+ 過本地全套件再放寬。
+pandas>=2.3.3,<3.0
+# numpy cp314 wheel 自 2.3.2 起才有(≤2.2 無 → 下界必須抬到 2.3.2 保 py3.14 可裝);
+# 上界 <2.6 擋未測新版,保留 pandas 2.3.3 相容的 2.5.x 線。
+numpy>=2.3.2,<2.6
 plotly>=5.18.0
 # v19.335 hotfix:pyarrow 25.0.0(2026-07-10 當日發布)在雲端 py3.14 造成
 # segfault(與股票儀表板同源事故)— cap 回 24.x;解禁條件同股票 repo 註解。

@@ -617,7 +617,7 @@ def calc_correlation_matrix(funds_data: list) -> "dict | None":
             else:
                 cols = {code: s.sort_index().resample(freq).last() for code, s in valid}
             df = pd.concat(cols, axis=1).dropna(how="all")
-            return df.pct_change().dropna(how="all")
+            return df.pct_change(fill_method=None).dropna(how="all")  # §1 不補值
 
         # 月→週→日：挑第一個 return 列數 ≥6 的最粗頻率；都 <6 則用日頻（最 granular）
         _MIN_ROWS = 6

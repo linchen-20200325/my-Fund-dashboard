@@ -939,7 +939,7 @@ def fetch_all_indicators(fred_api_key):
     if len(s_cu) >= 22:
         now = float(s_cu.iloc[-1]); prev = float(s_cu.iloc[-22])
         chg = round((now-prev)/prev*100, 2) if prev else 0
-        monthly = s_cu.resample("ME").last().pct_change()*100
+        monthly = s_cu.resample("ME").last().pct_change(fill_method=None)*100  # §1 不補值
         R["COPPER"] = dict(name="銅博士（月漲跌）", value=chg, prev=None,
             unit="% MoM", type="領先",
             date=s_cu.index[-1].strftime("%Y-%m-%d"),

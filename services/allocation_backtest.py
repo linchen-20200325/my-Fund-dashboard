@@ -295,7 +295,7 @@ def run_strategy(strategy_id: str, orig_by_code: dict, twd_df, fx_series, *,
         wmap[t] = _w
         smap[t] = _sig
 
-    _R = twd_df.pct_change()                              # 首列 NaN(無前值),不填
+    _R = twd_df.pct_change(fill_method=None)              # 首列 NaN(無前值),不填 + 不補值
     days = common[1:]
     _rd_ns = np.array([pd.Timestamp(t).value for t in rdates])
     _day_ns = np.array([pd.Timestamp(d).value for d in days])
@@ -359,7 +359,7 @@ def _s4_train(twd_df, rf_annual: float) -> dict:
         _hist = twd_df.loc[:_t]
         if len(_hist) < FRONTIER_MIN_OBS:
             continue
-        _rdf = _hist.pct_change().dropna(how="any")
+        _rdf = _hist.pct_change(fill_method=None).dropna(how="any")  # §1 不補值
         if len(_rdf) < FRONTIER_MIN_OBS:
             continue
         _mu, _sig, _codes = annualized_moments(_rdf)

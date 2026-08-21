@@ -88,7 +88,7 @@ def align_score_with_twii(
     # 共同 index：取兩者的 union 再 ffill twii（score 不 ffill 因為已是月末打分）
     aligned = pd.DataFrame({"score": score})
     aligned = aligned.join(twii_m.rename("twii_close"), how="inner")
-    aligned["twii_mom_pct"] = aligned["twii_close"].pct_change() * 100.0
+    aligned["twii_mom_pct"] = aligned["twii_close"].pct_change(fill_method=None) * 100.0  # §1 不補值
     return aligned.dropna(subset=["score", "twii_close"])
 
 
