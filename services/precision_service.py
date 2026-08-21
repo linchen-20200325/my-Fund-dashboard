@@ -222,7 +222,7 @@ def calc_hwm_sigma_levels(series: "pd.Series", lookback: int = 252) -> dict:
         s   = series.dropna().tail(lookback)
         nav = float(s.iloc[-1])
         hwm = float(s.max())
-        ret = s.pct_change().dropna()
+        ret = s.pct_change(fill_method=None).dropna()  # §1 不補值
         if len(ret) < 20:
             return {"error": "報酬率序列不足"}
         daily_std = float(ret.std())

@@ -49,7 +49,7 @@ def build_signals(flow_df: pd.DataFrame, fx_df: pd.DataFrame,
     df = pd.merge(flow_df, fx_df, on="date", how="inner").sort_values("date").reset_index(drop=True)
     if df.empty:
         return pd.DataFrame(columns=cols)
-    df["twd_apprec"] = -df["usdtwd"].pct_change() * 100.0  # USDTWD 跌 = 台幣升 = 正
+    df["twd_apprec"] = -df["usdtwd"].pct_change(fill_method=None) * 100.0  # USDTWD 跌=台幣升=正;§1 不補值
     df["roll_flow"] = df["foreign_net_yi"].rolling(window, min_periods=1).sum()
     df["roll_apprec"] = df["twd_apprec"].rolling(window, min_periods=1).sum()
 

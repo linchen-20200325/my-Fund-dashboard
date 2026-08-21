@@ -254,28 +254,56 @@ with tab_macro:
 # 以 100 萬 TWD 為基準逐檔模擬:原幣本金 / 持有份額 / 逐期配息折算 TWD / 吃本金判定。
 # ══════════════════════════════════════════════════════
 with tab_health:
-    render_fund_grp_health_tab()
+    try:
+        render_fund_grp_health_tab()
+    except Exception as _health_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
+        from ui.helpers.session import friendly_error as _fe_health
+        _fe_health("「💊 組合健診」分頁渲染失敗", _health_tab_e,
+                   hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
+                        "(含 File \"...\", line N)回報,即可精準定位根因。",
+                   level="error")
 
 # ══════════════════════════════════════════════════════
 # TAB ②-B — 📦 批次分析（工具:一次上傳大量代號 → 報酬/風險/配息表 → 下載 CSV)
 # 與「組合健診」同為基金分析,但規模不同:健診 ≤10 檔深看,批次為 400 檔淺掃導出。
 # ══════════════════════════════════════════════════════
 with tab_batch:
-    render_batch_analysis_tab()
+    try:
+        render_batch_analysis_tab()
+    except Exception as _batch_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
+        from ui.helpers.session import friendly_error as _fe_batch
+        _fe_batch("「📦 批次分析」分頁渲染失敗", _batch_tab_e,
+                  hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
+                       "(含 File \"...\", line N)回報,即可精準定位根因。",
+                  level="error")
 
 # ══════════════════════════════════════════════════════
 # TAB ③ — 🔍 個基深掘（決策動線第 3 站:被健診點名的那檔,細看買賣點）
 # ══════════════════════════════════════════════════════
 with tab_single:
     # v18.126 B-C.4: 內容已搬到 ui/tab2_single_fund.py
-    render_single_fund_tab()
+    try:
+        render_single_fund_tab()
+    except Exception as _single_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
+        from ui.helpers.session import friendly_error as _fe_single
+        _fe_single("「🔍 個基深掘」分頁渲染失敗", _single_tab_e,
+                   hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
+                        "(含 File \"...\", line N)回報,即可精準定位根因。",
+                   level="error")
 
 # ══════════════════════════════════════════════════════
 # TAB ④ — 📊 配置 & 帳本（決策動線第 4 站:記帳 + 再平衡）
 # ══════════════════════════════════════════════════════
 with tab_portfolio:
     # v18.128 B-C.6: 內容(含 T5/T6/T7 子區)已搬到 ui/tab3_portfolio.py
-    render_portfolio_tab()
+    try:
+        render_portfolio_tab()
+    except Exception as _portfolio_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
+        from ui.helpers.session import friendly_error as _fe_portfolio
+        _fe_portfolio("「📊 配置 & 帳本」分頁渲染失敗", _portfolio_tab_e,
+                      hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
+                           "(含 File \"...\", line N)回報,即可精準定位根因。",
+                      level="error")
 
 # ══════════════════════════════════════════════════════
 # TAB ④-B — 📋 我的管理室（v19.433:選股池 + 投資組合 + 通報 一站集中管理）
@@ -296,11 +324,18 @@ with tab_manage:
 # v19.31 ARCHIVED: 📉 危機回測室,模組檔保留於磁碟,未來啟用解註即可。
 # ══════════════════════════════════════════════════════
 with tab_ref:
-    _ref_diag, _ref_manual = st.tabs(["🔭 資料診斷", "📖 說明書"])
-    with _ref_diag:
-        # v18.125 B-C.3: 內容已搬到 ui/tab5_data_guard.py
-        _update_data_registry()
-        render_data_guard_tab()
-    with _ref_manual:
-        # v18.117 B-C.1: 內容已搬到 ui/tab6_manual.py
-        render_manual_tab()
+    try:
+        _ref_diag, _ref_manual = st.tabs(["🔭 資料診斷", "📖 說明書"])
+        with _ref_diag:
+            # v18.125 B-C.3: 內容已搬到 ui/tab5_data_guard.py
+            _update_data_registry()
+            render_data_guard_tab()
+        with _ref_manual:
+            # v18.117 B-C.1: 內容已搬到 ui/tab6_manual.py
+            render_manual_tab()
+    except Exception as _ref_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
+        from ui.helpers.session import friendly_error as _fe_ref
+        _fe_ref("「📖 參考 / 診斷」分頁渲染失敗", _ref_tab_e,
+                hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
+                     "(含 File \"...\", line N)回報,即可精準定位根因。",
+                level="error")

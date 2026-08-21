@@ -75,7 +75,7 @@ def _monthly_returns(nav) -> "pd.Series | None":
         return None
     # F-CAP-2:**不**在 pct_change 前 dropna —— 缺月(停售/新基金)→ resample 產 NaN →
     # 跨缺口報酬變 NaN → 一併 dropna 丟掉「橫跨缺月的假單月報酬」(§1 不 ffill 偽造)。
-    r = s.resample("ME").last().pct_change().dropna()
+    r = s.resample("ME").last().pct_change(fill_method=None).dropna()  # §1 不補值:缺月→NaN→丟,不偽造 0%
     return r if len(r) >= 2 else None
 
 

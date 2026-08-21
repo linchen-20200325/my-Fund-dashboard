@@ -113,7 +113,7 @@ def portfolio_returns(nav_by_code: dict, weights: dict, ccy_by_code=None, fx_ser
     # 各基金於共同日的日報酬,加權求和(固定權重)
     _port = None
     for _code, _s in cleaned.items():
-        _r = _s.loc[_common].pct_change()
+        _r = _s.loc[_common].pct_change(fill_method=None)  # §1 不補值
         _contrib = _r * _w[_code]
         _port = _contrib if _port is None else _port.add(_contrib, fill_value=0.0)
     _port = _port.dropna()                      # 第一天無前值 → NaN,丟(不填 0)
