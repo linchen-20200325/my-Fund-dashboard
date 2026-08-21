@@ -31,7 +31,7 @@ def test_ccy_from_fund_name(name, expect):
 def test_set_secid_fills_empty_name_and_currency(monkeypatch, tmp_path):
     store = LocalJsonPoolStore(base_dir=tmp_path)
     store.upsert(PoolEntry(code="X", isin="LU0766462157"))   # 只有 ISIN,名稱/幣別空
-    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "get_pool_store", lambda oauth_client=None: store)
     monkeypatch.setattr(P, "_clear_pool_cache", lambda: None)
     P.set_secid("x", "F00000P8WB", currency="USD", name="Allianz Income USD")
     e = store.list_pool()[0]
@@ -43,7 +43,7 @@ def test_set_secid_fills_empty_name_and_currency(monkeypatch, tmp_path):
 def test_set_secid_does_not_overwrite_user_name(monkeypatch, tmp_path):
     store = LocalJsonPoolStore(base_dir=tmp_path)
     store.upsert(PoolEntry(code="X", isin="LU1", name="我自己取的名字"))
-    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "get_pool_store", lambda oauth_client=None: store)
     monkeypatch.setattr(P, "_clear_pool_cache", lambda: None)
     P.set_secid("X", "SEC", name="Morningstar Auto Name")
     assert store.list_pool()[0].name == "我自己取的名字"        # 使用者已填 → 不覆蓋
@@ -52,7 +52,7 @@ def test_set_secid_does_not_overwrite_user_name(monkeypatch, tmp_path):
 def test_set_secid_empty_currency_preserves(monkeypatch, tmp_path):
     store = LocalJsonPoolStore(base_dir=tmp_path)
     store.upsert(PoolEntry(code="X", isin="TW1", currency="TWD"))
-    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "get_pool_store", lambda oauth_client=None: store)
     monkeypatch.setattr(P, "_clear_pool_cache", lambda: None)
     P.set_secid("X", "SEC")                                   # 沒傳幣別 → 沿用既有 TWD
     assert store.list_pool()[0].currency == "TWD"

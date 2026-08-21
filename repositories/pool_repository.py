@@ -197,22 +197,45 @@ def _gs_enabled() -> bool:
         return False
 
 
-def _get_sheet():
+def _get_sheet(oauth_client=None):
     """開啟選股池目標 Sheet(v19.472:`POOL_SHEET_ID` secret → baked `_POOL_SHEET_ID_DEFAULT`,
     獨立一本、不共用持倉)。
 
-    仍用 Service Account:App 與 headless cron 共讀同一張表。⚠️ **SA 信箱須被加為該 Sheet 的
-    「編輯者」**(與 NAV 自動累積同一把 SA、同一個分享動作);未分享 → `open_by_key` 失敗往上拋
-    (§1 不靜默,呼叫端 UI 顯示「讀取失敗」而非假裝空)。
+    **憑證優先序(v19.508 手機友善)**:
+      1. **Service Account**(App + headless cron 共用;SA 信箱須為該 Sheet 編輯者)。
+      2. SA 缺、或 SA 開不了這本(未分享 403/404)→ **注入的使用者 OAuth client**
+         (手機免設 SA:直接用登入者身分讀寫他自己有權限的那本)。
+    ⚠️ 429/配額錯誤 = 暫時性 → **不降級**(降級會誤判 SA 壞掉),§1 往上拋。
+    兩者皆不可用 → 明確 raise(不靜默假裝空),呼叫端 UI 顯示可行動訊息。
+
+    mirror 自 `ui/tab3_portfolio._t3_sheet_client`(task #43 SA→OAuth 回退)的 L1 版:
+    決策同「SA 優先、429 不降級、OAuth 建置失敗不崩」,但 client 由 UI 注入(L1 不碰
+    session_state,守 §8.2 硬規則;pool_repository 為 EX-CRUD-1 允許 UI 直呼)。
     """
-    from infra.config import require_secret
-    from repositories.policy_repository import get_gspread_client
-    # v19.430:傳 raw secret(str/dict 皆可,get_gspread_client 內部正規化)。
-    creds = require_secret("google_service_account")
     sheet_id = _pool_sheet_id()
     if not sheet_id:   # baked 預設非空 → 正常不會到這;防禦某人把預設清空 + 沒設 secret
         raise KeyError("選股池 GS 需要 POOL_SHEET_ID secret 或 _POOL_SHEET_ID_DEFAULT(§1)")
-    return get_gspread_client(creds).open_by_key(sheet_id)
+    # ── 1) Service Account 優先(不變:App + cron 共讀同表)──
+    if _sa_present():
+        from infra.config import require_secret
+        from repositories.policy_repository import get_gspread_client
+        # v19.430:傳 raw secret(str/dict 皆可,get_gspread_client 內部正規化)。
+        sa_client = get_gspread_client(require_secret("google_service_account"))
+        try:
+            return sa_client.open_by_key(sheet_id)
+        except Exception as _e:   # noqa: BLE001 — 分流:配額暫時性 vs 真的開不了
+            from infra.gspread_retry import is_quota_error
+            # 429/配額 → 暫時性,不可降級(§1 往上拋,呼叫端稍後重試)。
+            # 無注入 OAuth 可退 → 一樣往上拋(SA 未分享是設定問題,誠實報錯)。
+            if is_quota_error(_e) or oauth_client is None:
+                raise
+            # SA 存在但開不了這本(未分享)→ 落到下面用注入的使用者 OAuth
+    # ── 2) 使用者 OAuth(SA 缺 或 SA 開不了此本 且有注入)──
+    if oauth_client is not None:
+        return oauth_client.open_by_key(sheet_id)
+    # ── 3) 兩者皆無 → 明確報錯(is_available() 正常會先擋下,此為防禦)──
+    raise RuntimeError(
+        "選股池 GS 無可用憑證:未設 Service Account,也未注入使用者 OAuth client。")
 
 
 def _col(n: int) -> str:
@@ -226,15 +249,20 @@ def _col(n: int) -> str:
 class GoogleSheetsPoolStore:
     backend_name = "google-sheets"
 
-    def __init__(self) -> None:
+    def __init__(self, oauth_client=None) -> None:
         self._sh = None
+        # v19.508:SA 缺時,UI 注入的使用者 OAuth gspread client(手機免設 SA)。
+        # None → 純 SA 行為(headless/cron 不變)。
+        self._oauth_client = oauth_client
 
     def is_available(self) -> bool:
-        return _gs_enabled()
+        # v19.508:SA **或** 注入的使用者 OAuth client 任一在 → GS 可用
+        # (sheet id 恆 baked 非空)。原僅 `_gs_enabled()`(SA-only)。
+        return bool((_sa_present() or self._oauth_client is not None) and _pool_sheet_id())
 
     def _ws(self):
         if self._sh is None:
-            self._sh = _get_sheet()
+            self._sh = _get_sheet(self._oauth_client)
         try:
             ws = self._sh.worksheet(_WS_POOL)
         except Exception:
@@ -281,31 +309,50 @@ class GoogleSheetsPoolStore:
 
 # ───────────────────────── 後端選擇 + 便利函式 ─────────────────────────
 
-def get_pool_store():
-    """GS 可用 → GS;否則本地 JSON(§1:主後端明確,不靜默雙寫)。"""
-    gs = GoogleSheetsPoolStore()
+def get_pool_store(oauth_client=None):
+    """GS 可用(SA 或注入的使用者 OAuth)→ GS;否則本地 JSON(§1:主後端明確,不靜默雙寫)。
+
+    v19.508:`oauth_client` 選填 —— UI 在 SA 缺時可注入登入者的 gspread client(手機免設 SA)。
+    headless/cron caller 不傳 → 純 SA 行為(與改動前完全一致)。
+    """
+    gs = GoogleSheetsPoolStore(oauth_client=oauth_client)
     if gs.is_available():
         return gs
     return LocalJsonPoolStore()
 
 
-def list_pool() -> list:
-    return get_pool_store().list_pool()
+def pool_backend_status(oauth_client=None) -> str:
+    """回報 `get_pool_store(oauth_client)` 會落到哪個後端,供 UI 誠實提示(§1 不靜默):
+      - `"service_account"`:SA 在 → 永久保存(App + cron 共用)。
+      - `"oauth"`:SA 缺、但有注入使用者 OAuth → 用登入者身分永久保存到雲端。
+      - `"local"`:兩者皆無 → **只存本地暫存,Cloud 重開會消失**(UI 須大聲警告)。
+
+    v19.508:防「OAuth 取不到 → 靜默落本地 → 顯示成功 → 重開消失」的 §1 破口。純函式、可單測。
+    """
+    if _sa_present():
+        return "service_account"
+    if oauth_client is not None:
+        return "oauth"
+    return "local"
 
 
-def add_or_update(entry: PoolEntry) -> None:
-    get_pool_store().upsert(entry)
+def list_pool(oauth_client=None) -> list:
+    return get_pool_store(oauth_client).list_pool()
+
+
+def add_or_update(entry: PoolEntry, oauth_client=None) -> None:
+    get_pool_store(oauth_client).upsert(entry)
     _clear_pool_cache()               # 立即生效:清補淨值查表快取,不必等 TTL
 
 
-def remove_from_pool(code: str) -> None:
-    get_pool_store().remove(code)
+def remove_from_pool(code: str, oauth_client=None) -> None:
+    get_pool_store(oauth_client).remove(code)
     _clear_pool_cache()
 
 
-def set_type_override(code: str, type_override: str) -> None:
+def set_type_override(code: str, type_override: str, oauth_client=None) -> None:
     """改某檔的手動型態(震盪/成長/空=自動)。找不到 code → 例外(§1 不靜默)。"""
-    store = get_pool_store()
+    store = get_pool_store(oauth_client)
     for e in store.list_pool():
         if e.code == str(code).strip():
             e.type_override = type_override if type_override in _VALID_TYPES else ""
@@ -379,19 +426,21 @@ def resolve_currency(code) -> "str | None":
     return (e.currency or None) if e else None
 
 
-def set_secid(code, secid, currency: str = "", name: str = "") -> None:
+def set_secid(code, secid, currency: str = "", name: str = "", oauth_client=None) -> None:
     """回存以 ISIN 搜到的 secId(下次直接用、不重搜)。保留既有 ISIN;清快取立即生效。
 
     v19.473(user「只填代號+ISIN,其餘自動」):也可帶自動判到的 `currency` / `name`:
     - `currency` 非空 → 覆蓋(空 → 沿用既有,不打成 USD)。
     - `name` 非空**且既有名稱為空** → 補上(不覆蓋使用者已填的名稱)。
     §1:code 不在選股池 → **不硬建列**(只回存既有列的 secId);空 secId → 略過。
+
+    v19.508:`oauth_client` 選填 —— headless(sources.py 補淨值)不傳走 SA;UI 可注入 OAuth。
     """
     _c = str(code or "").strip().upper()
     _sec = str(secid or "").strip()
     if not _c or not _sec:
         return
-    store = get_pool_store()
+    store = get_pool_store(oauth_client)
     for e in store.list_pool():
         if e.code.strip().upper() == _c:
             e.morningstar_secid = _sec
@@ -406,6 +455,7 @@ def set_secid(code, secid, currency: str = "", name: str = "") -> None:
 
 __all__ = [
     "PoolEntry", "LocalJsonPoolStore", "GoogleSheetsPoolStore",
-    "get_pool_store", "list_pool", "add_or_update", "remove_from_pool", "set_type_override",
+    "get_pool_store", "pool_backend_status",
+    "list_pool", "add_or_update", "remove_from_pool", "set_type_override",
     "resolve_secid", "resolve_isin", "resolve_currency", "set_secid",
 ]
