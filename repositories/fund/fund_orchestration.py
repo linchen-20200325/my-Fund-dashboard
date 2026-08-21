@@ -60,6 +60,78 @@ def _nav_span_days(_s) -> int:
         return 0
 
 
+def _pool_secid_or_isin(code: str) -> bool:
+    """v19.505:選股池是否有 morningstar secid 或 isin → 可走 Morningstar 5.5 年全歷史。
+
+    根因(user 2026-08-21 回報「週資料不足」):`_src_morningstar_nav`(池 secid/isin →
+    2000 天全歷史)在**即時健診** waterfall 只在 `_is_insurance_code` 為真時才被觸發,
+    而境內前綴(ACDD/ACCP)+ 非保單前綴(AL/PY)全被擋 → 只拿到近30日短表。批次 cron
+    (nav_history_store.backfill_to_gs)早已解除此閘門(不限前綴用 isin),即時這條漏同步。
+    本 helper 讓「池裡有 secid/isin」的基金,不管前綴都能走全歷史(§1 誠實補資料)。純讀。
+    """
+    _c = (code or "").upper().strip()
+    if not _c:
+        return False
+    try:
+        from repositories.pool_repository import resolve_isin, resolve_secid
+        _sid = resolve_secid(_c)
+        if _sid and _sid[0]:
+            return True
+        return bool(resolve_isin(_c))
+    except Exception:  # noqa: BLE001 — 池不可用不得擋抓取,退保守 False
+        return False
+
+
+def _correct_currency(cur_ccy: str, fund_name: str, code: str) -> str:
+    """v19.505:境內基金頁常缺「計價幣別」欄 → 各 meta 源 `.get("計價幣別","USD")` 一路矇
+    USD 死預設,把台幣基金當美元換匯(user 2026-08-21 回報 安聯台灣智慧/大壩)。健診幣別
+    路徑原本完全沒用名稱「台幣/台灣」也沒用池 currency。本 helper 修正,回傳修正後幣別:
+
+      名稱幣別(美元→USD / 台幣→TWD)→ 池 currency → 名稱含台灣推定 TWD(台股基金無外幣
+      字樣即台幣,同 scripts.fill_pool_currency 邏輯)。
+
+    只在 cur 為**空或 USD**(可能死預設)時修;名稱明確「美元」的組合基金(ACCP138)→
+    名稱幣別=USD、與 cur 相同不動,不會誤判台幣;真 EUR / 其他明確幣別(非空非 USD)完全
+    不動。找不到正向修正 → 原樣回傳(空 cur 交給 fund_row 誠實報「幣別未知」§1)。純讀。
+    """
+    _cur = (cur_ccy or "").upper()
+    if _cur not in ("", "USD"):
+        return _cur
+    _nm = fund_name or ""
+    try:
+        from repositories.fund.sources import _ccy_from_fund_name as _cfn
+        _name_ccy = (_cfn(_nm) or "").upper()
+    except Exception:  # noqa: BLE001
+        _name_ccy = ""
+    _pool_ccy = ""
+    try:
+        from repositories.pool_repository import resolve_currency as _rc
+        _pool_ccy = (_rc(code) or "").upper()
+    except Exception:  # noqa: BLE001 — 池不可用不得擋抓取
+        _pool_ccy = ""
+    _twn = "TWD" if ("台灣" in _nm or "臺灣" in _nm) else ""
+    _fix = _name_ccy or _pool_ccy or _twn
+    return _fix if (_fix and _fix != _cur) else _cur
+
+
+def _ensure_currency(result: dict, code: str) -> None:
+    """v19.505 稽核修:外層 `fetch_fund_from_moneydj_url` 每個 return 前對**最終 result**
+    再套一次 _correct_currency。根因(對抗式稽核 High):純代碼經 auto_fetch_moneydj 會被
+    合成 URL → is_url=True → Step 1 `_src_direct_moneydj_url` 的「計價幣別」缺欄 USD 死預設
+    被 protect loop(_saved_meta)存回,蓋掉 _fetch_fund_single 已修好的 TWD。此處在收口
+    再修一次,不管假 USD 來自 direct_url / legacy / protect loop 哪條路都收掉。冪等
+    (已是 TWD/明確幣別 → _correct_currency 早退不動)。§1:池/名稱不可用不擋回傳。"""
+    try:
+        _cur = (result.get("currency") or "").upper()
+        _new = _correct_currency(_cur, result.get("fund_name", "") or "",
+                                 (code or "").upper().strip())
+        if _new != _cur:
+            print(f"[orchestrator] 幣別收尾修 {code}: {_cur or '空'} → {_new}")
+            result["currency"] = _new
+    except Exception as _e:  # noqa: BLE001
+        print(f"[orchestrator] _ensure_currency {code}: {type(_e).__name__}: {_e}")
+
+
 def _span_extend_insurance_nav(
     code: str, nav_s: pd.Series, nav_source: str,
     fund_name: str = "", is_insurance_code: "bool | None" = None,
@@ -84,7 +156,8 @@ def _span_extend_insurance_nav(
                              any(_code.startswith(p) for p in _INSURANCE_SUBDOMAIN_HINTS))
 
     _cur_span = _nav_span_days(nav_s)
-    if is_insurance_code and 0 < _cur_span < 300:
+    # v19.505:池裡有 secid/isin 的基金(不限保單前綴)也走長歷史救援(span 在範圍內才查池,省 IO)
+    if 0 < _cur_span < 300 and (is_insurance_code or _pool_secid_or_isin(_code)):
         _long_candidates = (
             ("morningstar",
              lambda: _src_morningstar_nav(_code, fund_name=fund_name or "")),
@@ -204,7 +277,7 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
                           any(_code.startswith(p) for p in _INSURANCE_SUBDOMAIN_HINTS))
     result = dict(
         fund_name="", full_key=_code, fund_code=_code,
-        category="", risk_level="", dividend_freq="", currency="USD",
+        category="", risk_level="", dividend_freq="", currency="",  # v19.505:不矇 USD 死預設(§1)
         fund_scale="", fund_region="", fund_type="",
         moneydj_div_yield=None,
         investment_target="", fund_rating="", umbrella_fund="",
@@ -389,7 +462,8 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
 
     # 2g. v6.19: Morningstar 國際資料源（改進版：使用硬編碼 secId + 正確 currencyId）
     # TLZF9 = 0P0001J5YG (Allianz Income and Growth AMg7 USD)，已確認存在於 Morningstar
-    if len(nav_s) < 10 and _is_insurance_code:
+    # v19.505:池有 secid/isin 也走 Morningstar 全歷史(不限保單前綴,修「週資料不足」)
+    if len(nav_s) < 10 and (_is_insurance_code or _pool_secid_or_isin(_code)):
         _ms_name = result.get("fund_name") or ""
         _ms_s = _src_morningstar_nav(_code, fund_name=_ms_name)
         if len(_ms_s) >= 10:
@@ -551,6 +625,13 @@ def _fetch_fund_single(code: str, force_refresh: bool = False,
         # v13.5: 用 merge_non_empty，不讓空值覆蓋前面成功的資料
         result = merge_non_empty(result, meta)
 
+    # ── v19.505 幣別修正(§1,見 _correct_currency docstring)───────────────
+    _cur_ccy0 = (result.get("currency") or "").upper()
+    _new_ccy = _correct_currency(_cur_ccy0, result.get("fund_name", "") or "", _code)
+    if _new_ccy != _cur_ccy0:
+        print(f"[orchestrator] 幣別修正 {_code}: {_cur_ccy0 or '空'} → {_new_ccy}")
+        result["currency"] = _new_ccy
+
     # ── Step 4: 配息資料 ───────────────────────────────────────────
     divs = result.get("dividends") or []
     if not divs:
@@ -708,7 +789,8 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
     # 給 Tab5 組合健檢「資料新鮮度」banner 顯示「抓取於 / NAV 日期 / 延遲 Nd」用。
     # 純新增欄位，零影響既有 caller（讀不到的就跳過）。
     result = dict(fund_name="", full_key="", fund_code="", category="",
-                  risk_level="", dividend_freq="", currency="USD",
+                  risk_level="", dividend_freq="", currency="",  # v19.505:不矇 USD;
+                  # 空 init → protect loop 不會把假 USD 蓋回多來源解析出的真幣別(§1)
                   fund_scale="", fund_region="", fund_type="",
                   moneydj_div_yield=None,
                   investment_target="", fund_rating="", umbrella_fund="",
@@ -827,6 +909,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
             # v19.499:主路線提早 return 前補抓持股(見 _ensure_holdings);置於上方
             # fast-path 勝利 stderr 訊號之後 → 訊號順序 / 語意不變(§3)
             _ensure_holdings(result, code)
+            _ensure_currency(result, code)      # v19.505:收口修幣別(protect loop 可能蓋回假 USD)
             return result
         # v18.121 issue 4: series 缺失但 fund_name+nav 有 → 不再提早 return（之前 bug）
         # 自動切 alternative page_type 重試一次（境內↔境外 mapping 錯誤的 case）
@@ -858,6 +941,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
                               f"series={len(_alt_s)}（meta 保留主路線結果）")
                         # v19.499:alt page_type 提早 return 前補抓持股(見 _ensure_holdings)
                         _ensure_holdings(result, code)
+                        _ensure_currency(result, code)   # v19.505:收口修幣別
                         return result
                     else:
                         print(f"[fetch] alt page_type ({_alt_pt}) 仍 series=0，"
@@ -1345,6 +1429,7 @@ def fetch_fund_from_moneydj_url(url: str) -> dict:
         }
         print(f"[snapshot] 💾 {_snap_key} 快照已更新")
 
+    _ensure_currency(result, code)   # v19.505:legacy 路徑收口修幣別
     return result
 
 
