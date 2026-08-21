@@ -146,7 +146,7 @@ def test_fetch_yf_close_goes_through_proxy_helper(monkeypatch):
     timestamps = [1735689600, 1735776000, 1735862400]  # 2025-01-01..03 UTC
     closes = [28.5, 29.1, 27.8]
 
-    def fake_fetch_url(url, headers=None, params=None, timeout=15):
+    def fake_fetch_url(url, headers=None, params=None, timeout=15, **kwargs):
         captured["url"] = url
         captured["params"] = params
         mock_resp = MagicMock()
@@ -180,7 +180,7 @@ def test_fetch_yf_close_proxy_failure(monkeypatch):
 
 def test_fetch_yf_latest_batch(monkeypatch):
     timestamps = [1735862400]
-    def fake_fetch_url(url, headers=None, params=None, timeout=15):
+    def fake_fetch_url(url, headers=None, params=None, timeout=15, **kwargs):
         if "VIX" in url:
             close_val = [22.5]
         elif "DX-Y" in url:
