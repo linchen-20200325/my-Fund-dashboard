@@ -880,9 +880,24 @@ def render_macro_tab() -> None:
             # navigator + 下方面板共享 session_state cache，零重抓
             with st.spinner("📡 並行抓取 總經指標 + 新聞 + 雷達 + 拐點..."):
                 _t0_macro = _time_mod.time()
-                from concurrent.futures import ThreadPoolExecutor as _TPE_ml
+                from concurrent.futures import (
+                    ThreadPoolExecutor as _TPE_ml,
+                    TimeoutError as _FutTimeout,
+                )
                 _has_fred = bool(FRED_KEY) and len(str(FRED_KEY).strip()) >= 30
-                with _TPE_ml(max_workers=4) as _ex_ml:
+                # v19.501 §1 UI 安全網:四路 future 共用同一 wall-clock 死線,到點就 fail-loud
+                # (user 2026-08-21 回報載入卡 10 分鐘 —— NAS proxy 半死時每網址付 retries×
+                # timeout,幾十個串行呼叫累加成分鐘級,原本 .result() 無 timeout + `with` 區塊
+                # 離開時 shutdown(wait=True) 兩處都無限等)。75s 足夠 FRED batch + PMI fallback,
+                # 遠低於 10 分鐘病態;radar/tp 內部已各自 .result(timeout=15/25) 收斂。
+                _MACRO_BUDGET_SEC = 75
+                _macro_deadline = _time_mod.monotonic() + _MACRO_BUDGET_SEC
+
+                def _ml_left():
+                    return max(1.0, _macro_deadline - _time_mod.monotonic())
+
+                _ex_ml = _TPE_ml(max_workers=4)
+                try:
                     _fu_ind  = _ex_ml.submit(fetch_all_indicators, FRED_KEY)
                     _fu_news = _ex_ml.submit(fetch_market_news, max_per_feed=5)
                     if _has_fred:
@@ -895,7 +910,16 @@ def render_macro_tab() -> None:
                         _fu_radar = None
                         _fu_tp = None
                     try:
-                        ind = _fu_ind.result()
+                        ind = _fu_ind.result(timeout=_ml_left())
+                    except _FutTimeout as _te:
+                        ind = {}
+                        _friendly_error(
+                            "總經指標載入逾時", _te,
+                            hint=f"超過 {_MACRO_BUDGET_SEC}s 仍未回傳,多半是 NAS proxy 或某"
+                                 "資料來源卡住。背景執行緒會在各自 socket timeout 後自行結束,"
+                                 "本次先跳過、不假裝有資料。請按側欄「🔍 測試 Proxy 連線」"
+                                 "確認後重試。",
+                            level="error")
                     except Exception as _me:
                         ind = {}
                         _friendly_error(
@@ -904,7 +928,14 @@ def render_macro_tab() -> None:
                                  "可按側欄「🔍 測試 Proxy 連線」確認，或稍後重試。",
                             level="error")
                     try:
-                        _news = _fu_news.result()
+                        _news = _fu_news.result(timeout=_ml_left())
+                    except _FutTimeout as _nte:
+                        _news = []
+                        _friendly_error(
+                            "新聞掃描逾時", _nte,
+                            hint="部分 RSS 來源沒在預算內回來;不影響總經指標分析,"
+                                 "本次僅以指標面綜合判讀。",
+                            level="info")
                     except Exception as _ne:
                         _news = []
                         _friendly_error(
@@ -913,16 +944,29 @@ def render_macro_tab() -> None:
                             level="info")
                     if _fu_radar is not None:
                         try:
-                            _r_pre  = _fu_radar.result()
+                            _r_pre  = _fu_radar.result(timeout=_ml_left())
                             _rs_pre = summarize_radar(_r_pre)
                             st.session_state["_radar_v1921_top"] = (_r_pre, _rs_pre)
+                        except _FutTimeout:
+                            st.session_state["_radar_v1921_top"] = (None, None)
+                            st.caption("⚠️ 風險雷達逾時未回,本次略過(不影響指標判讀)。")
                         except Exception:
                             st.session_state["_radar_v1921_top"] = (None, None)
                     if _fu_tp is not None:
                         try:
-                            st.session_state["_tp_v1948_top"] = _fu_tp.result()
+                            st.session_state["_tp_v1948_top"] = _fu_tp.result(timeout=_ml_left())
+                        except _FutTimeout:
+                            st.session_state["_tp_v1948_top"] = None
+                            st.caption("⚠️ 轉折點偵測逾時未回,本次略過。")
                         except Exception:
                             st.session_state["_tp_v1948_top"] = None
+                finally:
+                    # ⚠️ 關鍵修:原 `with ... as _ex_ml:` 離開時 shutdown(wait=True) 會在上面
+                    # 每個 .result(timeout=) 之後「再次」阻塞等所有卡在 C-level socket read 的
+                    # worker 跑完 → timeout 形同虛設。改 wait=False:UI 立刻往下顯示逾時訊息;
+                    # 背景執行緒無法真正 kill(Python 先天限制),但各 fetch_url socket timeout
+                    # (5~20s,Change D 收緊)會讓它們自然收斂,不留假死。
+                    _ex_ml.shutdown(wait=False, cancel_futures=True)
                 _macro_ms = round((_time_mod.time() - _t0_macro) * 1000)
                 if not ind:
                     st.error(

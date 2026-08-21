@@ -197,10 +197,16 @@ def fetch_url(
     # 只補可觀測性。
     _last_status: "int | None" = None
 
+    # v19.501 §2 durable:scalar timeout 被 requests 分別套在 connect/read 上,但 proxy
+    # 半死時 20s 的 TCP 握手太久(user 2026-08-21 總經載入卡 10 分鐘的放大器之一)。拆成
+    # (connect, read):握手 5s 快速失敗→轉降級直連,read 保留完整秒數。呼叫端傳入的
+    # timeout(12/15/20)全部沿用,零 caller 介面改動。
+    _to = (min(5, timeout), timeout) if isinstance(timeout, (int, float)) else timeout
+
     for attempt in range(retries):
         try:
             r = sess.get(url, headers=_hdr, params=params,
-                         timeout=timeout, proxies=_proxy, verify=_verify)
+                         timeout=_to, proxies=_proxy, verify=_verify)
             _last_status = r.status_code
             if r.status_code == 407:
                 print("[proxy] 407 Auth Failed — 確認 secrets 帳密")
@@ -300,7 +306,7 @@ def fetch_url(
         print(f"[proxy] 降級直連：{_url_log[:80]}")
         try:
             r_dc = sess.get(url, headers=_hdr, params=params,
-                            timeout=timeout, proxies={}, verify=True)
+                            timeout=_to, proxies={}, verify=True)
             _last_status = r_dc.status_code   # 收尾 log 要反映「最後一次」真狀態
             if r_dc.status_code == 200:
                 print("[proxy] 直連成功")
