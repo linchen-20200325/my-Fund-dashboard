@@ -972,16 +972,22 @@ def fetch_holdings(code: str) -> dict:
         # _INSURANCE_SUBDOMAIN_HINTS portal,套到 yp013xxx 頁。
         # NAS proxy 已內建於 fetch_url_with_retry → infra.proxy.fetch_url。
         _code_up = (code or "").upper().strip()
-        _hold_page = "yp013000" if _is_domestic_code(_code_up) else "yp013001"
-        # 基線 6 URL(R21 chain)
-        _hold_urls = [
-            f"https://tcbbankfund.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
-            f"https://chubb.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
-            f"https://www.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
-            f"https://taishinlife.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}",
-            f"https://www.moneydj.com/funddj/wq/wq06.djhtm?a={code}",
-            f"https://tcbbankfund.moneydj.com/funddj/wq/wq06.djhtm?a={code}",
-        ]
+        # v19.500:不再單猜境內/境外 → **兩變體都試**(prefix 分類對組合/保單基金會猜錯:
+        # ACCP∈_DOMESTIC_PREFIXES→yp013000,但實際持股頁確認為 yp013001,見
+        # tests/test_fetch_holdings_multi_asset.py。NAV 早就兩頁都試(get_page_types_to_try),
+        # 持股卻只試一個 → user 2026-08-21 回報 ACCP138/ALZF9/PYZW3 持股全空)。較可能的
+        # 變體排前、命中即 break → happy-path 無延遲增加;失敗才多試另一變體。
+        _primary = "yp013000" if _is_domestic_code(_code_up) else "yp013001"
+        _hold_pages = [_primary, "yp013001" if _primary == "yp013000" else "yp013000"]
+        # 基線:4 host × 2 變體(變體外層,故 primary 的 4 host 先試)+ wq06 替代頁 × 2
+        _hold_urls = []
+        for _hp in _hold_pages:
+            _hold_urls.append(f"https://tcbbankfund.moneydj.com/funddj/yp/{_hp}.djhtm?a={code}")
+            _hold_urls.append(f"https://chubb.moneydj.com/funddj/yp/{_hp}.djhtm?a={code}")
+            _hold_urls.append(f"https://www.moneydj.com/funddj/yp/{_hp}.djhtm?a={code}")
+            _hold_urls.append(f"https://taishinlife.moneydj.com/funddj/yp/{_hp}.djhtm?a={code}")
+        _hold_urls.append(f"https://www.moneydj.com/funddj/wq/wq06.djhtm?a={code}")
+        _hold_urls.append(f"https://tcbbankfund.moneydj.com/funddj/wq/wq06.djhtm?a={code}")
         # v19.252 R22:依 _INSURANCE_SUBDOMAIN_HINTS 前綴展開 portal 子網域 yp013xxx 頁
         # JF→jpmorgan/jpmf/jpmfund;TL→tlife/twlife/taiwanlife;FL→franklintem/franklin;
         # CT→cathaylife/ctbclife/ctlife;NS→nanshan;FS→fubonlife;...
@@ -994,8 +1000,9 @@ def fetch_holdings(code: str) -> dict:
         _seen_p: set = set()
         _ins_portals = [p for p in _ins_portals if not (p in _seen_p or _seen_p.add(p))]
         for _p in _ins_portals:
-            _hold_urls.append(
-                f"https://{_p}.moneydj.com/funddj/yp/{_hold_page}.djhtm?a={code}")
+            for _hp in _hold_pages:                       # v19.500:子網域也兩變體都試
+                _hold_urls.append(
+                    f"https://{_p}.moneydj.com/funddj/yp/{_hp}.djhtm?a={code}")
             _hold_urls.append(
                 f"https://{_p}.moneydj.com/w/wq/wq06.djhtm?a={code}")
         r = None
@@ -1161,7 +1168,10 @@ def fetch_holdings(code: str) -> dict:
 
         # F-PROV-1 phase 13 v19.99 — provenance(schema-additive,僅實際拿到資料時寫入)
         if out:
-            out["source"] = f"MoneyDJ:yp:{_hold_page}"
+            # v19.500:兩變體都試後,provenance 記**實際命中**的那頁(_hold_page 已移除)
+            _won_page = ("yp013000" if "yp013000" in _winning_url
+                         else "yp013001" if "yp013001" in _winning_url else "wq06")
+            out["source"] = f"MoneyDJ:yp:{_won_page}"
             out["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
         # v19.276 fallback:MoneyDJ 頁抓到但無持股(multi-asset / FoF 透明度不足 /
         # parser 0 命中)→ 試 cnyes 持股 API。命中則整包以 cnyes 為準(provenance
