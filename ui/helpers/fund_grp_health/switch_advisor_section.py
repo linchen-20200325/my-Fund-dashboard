@@ -509,8 +509,14 @@ def render_switch_advisor_section(funds: list) -> None:
     render_portfolio_tracking(funds)                    # 📈 績效追蹤(走勢 + 快照)
 
     st.markdown("#### 🔁 換股建議(依你目前持倉 × 選股池 × 表現差)")
-    if not st.button("🔍 產生換股建議(會補抓池中未載入標的)", use_container_width=True,
-                     key="switch_advise_btn"):
+    # v19.504:同 tab_fund_grp_health「開始健診」修法 —— 換股建議是否已產生存 session_state,
+    # 不吃 st.button 的「僅本次 rerun 為 True」語意。原 `if not st.button(...): return` 會在
+    # 出建議後、user 一按同頁的逐檔「掃三率 / 個股新聞」鈕觸發 rerun 時回 False → 整塊換股
+    # 建議塌回「按上方按鈕」提示(user 2026-08-21「壓一下就回到這」同型)。
+    if st.button("🔍 產生換股建議(會補抓池中未載入標的)", use_container_width=True,
+                 key="switch_advise_btn"):
+        st.session_state["_switch_advise_done"] = True
+    if not st.session_state.get("_switch_advise_done"):
         st.caption("按上方按鈕產生建議(避免每次重整都補抓池中標的)。")
         return
 
