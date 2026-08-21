@@ -147,6 +147,7 @@ def fetch_url(
     params:  dict = None,
     timeout: int  = 20,
     retries: int  = 3,
+    backoff_on_429: bool = True,
 ) -> "requests.Response | None":
     """
     通用 HTTP GET（含 NAS Proxy 中繼 + 自動降級直連）。
@@ -231,6 +232,12 @@ def fetch_url(
                 _t.sleep(_rnd.uniform(2.5, 6.0))
                 continue
             if r.status_code == 429:
+                # v19.507:caller 明確要求「429 不退避」(如 Yahoo Chart:限流不會在 2/4/8s
+                # 內解除,重試純白等 ~14s/次 × 8 標的 = ~56s,是總經載入 75s 逾時的主因)→
+                # 直接回 None,那個指標誠實留空(§1)。預設 backoff_on_429=True 行為與契約測試不變。
+                if not backoff_on_429:
+                    print(f"[proxy] 429 Rate Limit — fail-fast(caller 要求不退避):{_url_log[:80]}")
+                    return None
                 # ⚠️ v19.425 已查證但**未動**的同型問題（待 user 裁示，§-1）：
                 #   預設 retries=3、backoff=(2,4,8) → attempt 2（最後一次）時
                 #   `_rl_atmp=2 < 3` 仍成立 → sleep **8 秒** → continue → for 迴圈

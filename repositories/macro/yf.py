@@ -39,6 +39,8 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
         url,
         params={"interval": interval, "range": range_},
         timeout=15,
+        backoff_on_429=False,   # v19.507:Yahoo 限流不會在 2/4/8s 內解除,重試純白等
+                                # ~14s/標的 → 總經載入 8 標的爆 75s 逾時。遇 429 直接留空(§1)。
     )
     if r is None:
         return pd.Series(dtype=float, name=ticker)
