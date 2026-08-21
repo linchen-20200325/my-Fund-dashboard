@@ -1073,6 +1073,18 @@ def _merge_nav_history_series(s_live: pd.Series, code: str) -> tuple:
         return s_live, {"source": "nav_history_merge", "success": False,
                         "error": str(e)[:120]}
     if s_hist is None or len(s_hist) == 0:
+        # v19.506 §1:讀成功但 0 點原本**靜默**回 None → user 有存 NAV 卻完全看不出為何沒被
+        # 合併(2026-08-21 事故)。多半是:SA 未啟用 / nav_history 存在「另一本 sheet」
+        # (NAV_SHEET_ID 未指到用戶那本、SA 未共用該本)/ 該代碼從沒累積。大聲 log(Cloud log
+        # 可見);行為不變(仍回 None,不影響取數),UI 端另有 Tab5「NAV 累積狀態」可自查。
+        try:
+            from services.nav_history_gs import _nav_sheet_id as _nh_sid
+            from services.nav_history_gs import is_enabled as _nh_en
+            _rz = ("SA 未啟用" if not _nh_en()
+                   else f"讀到的 nav_history sheet({str(_nh_sid())[:14]}…)裡無 {code} 的累積")
+        except Exception:  # noqa: BLE001
+            _rz = "load_series 回空"
+        print(f"[nav_history] ⬜ {code} 累積序列空（{_rz}）→ 健診只用 live {len(s_live)} 筆")
         return s_live, None
     # union keep-last:hist 在前、live 在後 → 同日 live 蓋 hist(live 為權威新抓)
     merged = pd.concat([s_hist, s_live]).groupby(level=0).last().sort_index()

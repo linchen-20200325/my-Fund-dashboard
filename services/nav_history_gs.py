@@ -29,8 +29,10 @@ from typing import Any
 _WS_NAV = "nav_history"
 _NAV_HEADERS = ["code", "date", "nav", "fund_name", "source", "recorded_at"]
 # v19.472:NAV 淨值存進**獨立一本** Google Sheet(user 2026-08-18 指定「基金淨值存取」那本)。
-#   `NAV_SHEET_ID` secret → baked 預設 → 回退舊 `macro_weights_sheet_id`(向後相容既有部署)。
-#   baked 讓 Cloud 重開不掉;⚠️ Service Account 信箱須被加為該 Sheet 的「編輯者」寫入才成功。
+#   目標本 = `NAV_SHEET_ID` secret → baked 預設(**僅此兩層,無自動回退**;v19.506 更正:
+#   原註寫「回退舊 macro_weights_sheet_id」是**誤導**,`_nav_sheet_id()` 從未做此回退。
+#   若既有累積在別本,須自行把 `NAV_SHEET_ID` secret 指過去)。
+#   baked 讓 Cloud 重開不掉;⚠️ Service Account 信箱須被加為**該本**的「編輯者」讀寫才成功。
 _NAV_SHEET_ID_DEFAULT = "1b92nXxjGLJOOLP_Srvz2Cf69Y443Sdldp1_dWQzZncQ"
 
 
