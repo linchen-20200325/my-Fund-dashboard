@@ -203,7 +203,13 @@ def render_fund_grp_health_tab() -> None:
     # 下游 `warn_gap` 參數保留不動（有預設值、有測試），只是不再由 UI 餵。
     warn_gap = _DEFAULT_WARN_GAP
 
-    if not st.button("🩺 開始健診", key="fund_grp_health_btn"):
+    # v19.504:健診已跑狀態存 session_state,不再吃 st.button 的「僅本次 rerun 為 True」語意。
+    # 原 `if not st.button(...): return` 的致命 bug(user 2026-08-21 回報「壓一下就回到這」):
+    # 出結果後,一按任何逐檔按鈕(三率穿透 / 個股新聞)就觸發 rerun → 開始健診鈕回 False →
+    # return → 整張健診結果塌回輸入表單。改存旗標:點過一次就持續渲染,逐檔按鈕不再弄丟結果。
+    if st.button("🩺 開始健診", key="fund_grp_health_btn"):
+        st.session_state["_fund_grp_health_ran"] = True
+    if not st.session_state.get("_fund_grp_health_ran"):
         return
 
     # v19.322:代號去重(SSOT _dedup_upper)—— 防同檔被多保單/手動貼多次 → 逐檔明細三表重複列
