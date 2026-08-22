@@ -319,11 +319,24 @@ def _sec_nav_backfill_auto() -> None:
                 _seen.add(_c)
                 _all.append(_c)
 
-        from services.nav_history_gs import is_enabled as _gs_enabled
-        if not _gs_enabled():
-            st.warning("⬜ 雲端 nav_history 未啟用(缺 Service Account,或還沒把 SA 加為那本 NAV Sheet 的"
-                       "「編輯者」)→ 現在補的淨值**只會存本機、容器重啟就清空**。建議先完成 SA 授權"
-                       "(見 Tab5 資料看板狀態燈)再按。")
+        # v19.509:SA 缺(手機無 Service Account)但已 Google 登入 → 用登入者身分寫雲端(永久)。
+        # 誠實顯示落點三態(service_account / oauth / local),§1 不讓 user 誤以為在永久保存。
+        _oauth = None
+        try:
+            from ui.helpers.io.oauth_state import _get_oauth_client
+            _oauth = _get_oauth_client()
+        except Exception:  # noqa: BLE001 — 未登入 / 建置失敗 → None(退 SA / 本機)
+            _oauth = None
+        from services.nav_history_gs import backend_status as _nh_backend
+        _backend = _nh_backend(_oauth)
+        if _backend == "service_account":
+            st.caption("☁️ 雲端 nav_history 已啟用（Service Account）→ 補的淨值永久保存、重開不丟。")
+        elif _backend == "oauth":
+            st.caption("☁️ 將用你的 **Google 登入**身分寫進雲端 nav_history（永久保存、重開不丟）。")
+        else:
+            st.warning("⬜ 雲端 nav_history 未啟用:**沒有 Service Account、也還沒 Google 登入** → 現在"
+                       "補的淨值**只會存本機、容器重啟就清空**。先完成 **Google 登入**(或設 Service "
+                       "Account)再按,才會永久保存。")
         _n_held = len(set(_held))
         _n_pool_only = len(set(_pool) - set(_held))
         st.caption(f"將補抓 **{len(_all)}** 檔(持倉 {_n_held} + 選股池 {_n_pool_only},已去重)。")
@@ -342,7 +355,7 @@ def _sec_nav_backfill_auto() -> None:
             _prog.progress(_pct, text=(f"補抓中 {i}/{n}:{code}" if code else "寫入雲端 nav_history…"))
 
         with st.spinner("抓歷史淨值 + 寫入雲端 nav_history…(連外抓取,檔數多會慢)"):
-            _res = backfill_to_gs(_all, progress_cb=_cb)
+            _res = backfill_to_gs(_all, progress_cb=_cb, oauth_client=_oauth)
         _prog.empty()
 
         import pandas as pd
@@ -448,15 +461,29 @@ def _sec_nav_backfill() -> None:
                 ]
                 st.success(f"✅ 匯入 {len(_mr['codes'])} 檔 → " + "　·　".join(_lines))
                 # 雙寫雲端 nav_history（永久，重啟不丟；跨日期格式去重；非致命）
+                # v19.509:SA 缺但已 Google 登入 → 用登入者身分寫雲端(手機免設 SA)。
+                _oauth_csv = None
                 try:
-                    from services.nav_history_gs import append_points as _gs_append
-                    _g = _gs_append(_mr["points"])
-                    if _g.get("written"):
-                        st.caption(f"🗂️ 已同步 {_g['written']} 筆到雲端 nav_history（重啟不丟）")
-                    elif _g.get("skipped"):
-                        st.caption("🗂️ 雲端 nav_history 已是最新（全部去重、無新增）")
-                except Exception as _e_gs:   # noqa: BLE001 — 雲端同步失敗不影響本機匯入
-                    st.caption(f"⬜ 雲端同步略過（本機已存）：[{type(_e_gs).__name__}] {str(_e_gs)[:60]}")
+                    from ui.helpers.io.oauth_state import _get_oauth_client
+                    _oauth_csv = _get_oauth_client()
+                except Exception:  # noqa: BLE001
+                    _oauth_csv = None
+                # v19.509 稽核修:先判後端 —— 缺 SA 缺 OAuth 時 append_points 會 no-op 回
+                # skipped>0,原文案「雲端已是最新」是**假的永久保存宣稱**(§1)。先誠實警告本機暫存。
+                from services.nav_history_gs import backend_status as _nh_backend
+                if _nh_backend(_oauth_csv) == "local":
+                    st.warning("⬜ 已匯入本機,但**雲端未啟用(沒 Service Account、也沒 Google 登入)"
+                               "→ 容器重啟會清空**。先完成 **Google 登入**再上傳即可永久保存。")
+                else:
+                    try:
+                        from services.nav_history_gs import append_points as _gs_append
+                        _g = _gs_append(_mr["points"], oauth_client=_oauth_csv)
+                        if _g.get("written"):
+                            st.caption(f"🗂️ 已同步 {_g['written']} 筆到雲端 nav_history（重啟不丟）")
+                        else:
+                            st.caption("🗂️ 雲端 nav_history 已是最新（全部去重、無新增）")
+                    except Exception as _e_gs:   # noqa: BLE001 — 雲端同步失敗不影響本機匯入
+                        st.caption(f"⬜ 雲端同步略過（本機已存）：[{type(_e_gs).__name__}] {str(_e_gs)[:60]}")
                 st.rerun()
 
         # 逐檔動作:增量更新 / 下載 / 清除 —— 從已建立的 cache 選一檔（取代原手打代號）

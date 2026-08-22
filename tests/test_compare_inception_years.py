@@ -170,7 +170,7 @@ def test_metrics_inception_never_written_without_toplevel(monkeypatch):
     """
     from services import nav_history_gs as GS
     from services.fund_service import finalize_fund_metrics
-    monkeypatch.setattr(GS, "load_series", lambda code: pd.Series(dtype=float))
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: pd.Series(dtype=float))
 
     result = {"series": _noisy(pd.bdate_range("2020-01-01", periods=400)),
               "dividends": [], "fund_code": "X"}
@@ -182,7 +182,7 @@ def test_metrics_inception_is_a_copy_of_toplevel(monkeypatch):
     """頂層有成立日 → metrics 拿到的是**同一個值**（副本，非獨立來源）。"""
     from services import nav_history_gs as GS
     from services.fund_service import finalize_fund_metrics
-    monkeypatch.setattr(GS, "load_series", lambda code: pd.Series(dtype=float))
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: pd.Series(dtype=float))
 
     result = {"series": _noisy(pd.bdate_range("2020-01-01", periods=400)),
               "dividends": [], "fund_code": "X",

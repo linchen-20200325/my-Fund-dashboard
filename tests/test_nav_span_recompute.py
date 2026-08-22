@@ -21,7 +21,7 @@ def test_finalize_recomputes_nav_span_from_merged_series(monkeypatch):
     # 模擬 nav_history 併入:回傳長序列 + success trace
     monkeypatch.setattr(
         FS, "_merge_nav_history_series",
-        lambda s, code: (long_s, {"source": "nav_history", "success": True,
+        lambda s, code, **_k: (long_s, {"source": "nav_history", "success": True,
                                   "note": "累積序列併入 +370 筆（live 30 → 400）"}),
     )
     result = {

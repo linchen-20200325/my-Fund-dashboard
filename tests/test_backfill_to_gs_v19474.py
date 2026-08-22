@@ -39,7 +39,10 @@ def _wire(monkeypatch, *, fetch, enabled=True, append=None):
     """接上 auto_fetch_moneydj / nav_history_gs.is_enabled / append_points 假件。"""
     import services.moneydj_fetcher as MF
     import services.nav_history_gs as GS
-    monkeypatch.setattr(MF, "auto_fetch_moneydj", fetch)
+    # v19.509:auto_fetch_moneydj 現接受 oauth_client kwarg → 包一層讓既有 fetch(c) 假件相容。
+    def _fetch_adapter(code, **_kw):
+        return fetch(code)
+    monkeypatch.setattr(MF, "auto_fetch_moneydj", _fetch_adapter)
     monkeypatch.setattr(GS, "is_enabled", lambda: enabled)
     _calls = []
 

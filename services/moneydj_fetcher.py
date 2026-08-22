@@ -37,6 +37,7 @@ def auto_fetch_moneydj(
     raw_input: str,
     *,
     return_page_type: bool = False,
+    oauth_client=None,
 ) -> Union[dict, tuple[dict, str]]:
     """自動偵測境內/境外：URL 明確指定直接用；純代碼累計嘗試所有 page_type 挑最佳。
 
@@ -52,6 +53,10 @@ def auto_fetch_moneydj(
         若 return_page_type=True：(result_dict, page_type) tuple
         若 return_page_type=False：result_dict
         無效輸入回 ({}, "") 或 {}
+
+    v19.509:`oauth_client` 選填 —— 透傳給 enriched wrapper → finalize → nav_history 讀取。
+    SA 缺(手機無 Service Account)時,由上層(健診 UI 主執行緒捕獲)傳入,讓健診讀得到 OAuth
+    寫進雲端的補回歷史。None → 純 SA/空,行為與改動前一致(cron / 其餘 caller 零影響)。
     """
     from fund_fetcher import classify_fetch_status, normalize_result_state
     # v19.240 R8 EX-L1ORCH-1 退役:走 L2 enriched wrapper(含 metrics + reconcile)
@@ -63,10 +68,10 @@ def auto_fetch_moneydj(
 
     # URL 直傳：page_type 從 URL 字面探測
     if "yp010000" in _raw:
-        _res = fetch_fund_from_moneydj_url(_raw)
+        _res = fetch_fund_from_moneydj_url(_raw, oauth_client=oauth_client)
         return (_res, "yp010000") if return_page_type else _res
     if "yp010001" in _raw:
-        _res = fetch_fund_from_moneydj_url(_raw)
+        _res = fetch_fund_from_moneydj_url(_raw, oauth_client=oauth_client)
         return (_res, "yp010001") if return_page_type else _res
 
     # 純代碼：累計嘗試所有 page_type，挑最佳結果
@@ -74,7 +79,7 @@ def auto_fetch_moneydj(
     for _pt in ("yp010000", "yp010001"):
         _url = build_moneydj_url(_raw, _pt)
         try:
-            _res = normalize_result_state(fetch_fund_from_moneydj_url(_url))
+            _res = normalize_result_state(fetch_fund_from_moneydj_url(_url, oauth_client=oauth_client))
         except Exception as _e:
             _err_res = {"error": f"{type(_e).__name__}: {_e}"}
             _attempts.append((_err_res, _pt, False, "failed"))

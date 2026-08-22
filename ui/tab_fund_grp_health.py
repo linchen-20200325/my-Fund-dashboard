@@ -387,6 +387,15 @@ def _run_batch_health(
         _name_map = {str(e.code).upper(): (e.name or "") for e in (list_pool() or []) if e.name}
     except Exception as _e_pool:  # noqa: BLE001
         print(f"[grp_health] 選股池名稱查詢略過:{type(_e_pool).__name__}: {_e_pool}")
+    # v19.509:SA 缺(手機無 Service Account)時,**主執行緒**捕獲登入者 OAuth gspread client,
+    # 傳入各 worker → 讓健診讀得到 OAuth 寫進雲端的補回歷史。worker 在 ThreadPoolExecutor
+    # 執行緒內取不到 session_state,故 client 必須由主執行緒先取好再傳(拿不到 → None → 退 SA/空)。
+    _oauth = None
+    try:
+        from ui.helpers.io.oauth_state import _get_oauth_client
+        _oauth = _get_oauth_client()
+    except Exception:  # noqa: BLE001 — 未登入 / 建置失敗 → None
+        _oauth = None
     prog = st.progress(0.0, text="📥 並行抓取資料中…")
     _results: list = [None] * n
     _workers = min(n, 4)
@@ -394,7 +403,8 @@ def _run_batch_health(
         with ThreadPoolExecutor(max_workers=_workers) as _ex:
             _futs = {
                 _ex.submit(process_one_fund, _c, principal_twd, ccy_hint, warn_gap,
-                           None, _name_map.get(str(_c).upper(), "")): _i
+                           None, _name_map.get(str(_c).upper(), ""),
+                           oauth_client=_oauth): _i
                 for _i, _c in enumerate(codes)
             }
             _done = 0

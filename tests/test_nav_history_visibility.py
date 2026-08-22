@@ -53,7 +53,7 @@ def _series(dates: list[str]) -> pd.Series:
 
 def _patch_hist(monkeypatch, s_hist: pd.Series):
     import services.nav_history_gs as _gs
-    monkeypatch.setattr(_gs, "load_series", lambda _c: s_hist, raising=True)
+    monkeypatch.setattr(_gs, "load_series", lambda _c, **_k: s_hist, raising=True)
 
 
 def test_no_net_gain_returns_informative_trace(monkeypatch):

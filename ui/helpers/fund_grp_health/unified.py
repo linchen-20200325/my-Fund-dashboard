@@ -418,7 +418,8 @@ def _jsonify(v):
 
 
 def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
-                            phase: str = "", score=None, name_hint: str = "") -> dict:
+                            phase: str = "", score=None, name_hint: str = "",
+                            oauth_client=None) -> dict:
     """批次:單檔 → 一列「組合健診大表」flat row(欄 = BATCH_UNIFIED_COLUMNS,JSON-safe)。
 
     走 process_one_fund(L2)+ ①`build_health_analysis_row` ②`build_dividend_summary_row`
@@ -444,7 +445,8 @@ def build_batch_unified_row(code: str, principal_twd: float = 1_000_000.0,
 
     from services.fund_row import process_one_fund
     try:
-        base = process_one_fund(code, principal_twd, name_hint=_nh)
+        # v19.509:oauth_client 透傳 → SA 缺時讀雲端 nav_history(批次大表也吃補回歷史)。
+        base = process_one_fund(code, principal_twd, name_hint=_nh, oauth_client=oauth_client)
     except Exception as e:  # noqa: BLE001 — 單檔炸掉收成失敗列
         return _blank("❌ 抓取失敗", f"{type(e).__name__}: {str(e)[:80]}")
     if not base.get("ok"):
