@@ -209,6 +209,25 @@ def optimize_policy_fee(monthly_fee_twd, exchange_rates: dict, funds: list) -> d
 
     eligible = [e for e in evals if e.is_sufficient and e.error is None]
 
+    # ── 台幣基金安全扣款候選 twd_fund_alt(user 2026-08-22「台幣基金也納入扣款候選」)──────
+    # 投資型保單管理費多為「贖回單位」內扣;台幣基金 fx_factor 恆 1.0 → 免匯率風險,是
+    # 「不動用外部現金也能避開匯兌」的**保單內**扣款替代。§1 誠實護欄(三位 AI 專家會審結論):
+    #   - 只從足額 + 無 error 挑,不挑物理上扣不動的(市值<管理費)。
+    #   - 排除 is_cost_estimated:成本未知 → score 是推定 1.0,不可拿假分數排名/當划算訊號。
+    #   - 排除 DANGER(score < SCORE_LOW=0.90 = 強烈避開):賣它 = 低點實現虧損,不當「安全」賣。
+    #   - **依 loss_pct 升序**挑「對部位擾動最小」者(= 市值最大),**非**依 score —— score 對
+    #     台幣基金 = 純報酬倍數 = 偏好賣獲利最大檔 = 課稅/複利最不利,與本欄「免匯率風險/低擾動」
+    #     效益是不同軸(evals 本身已按 score 降序,故此處**另行**依 loss_pct 排序,勿沿用)。
+    #   - 本欄為**平行/替代選項,非優於現金**(現金零擾動、保留複利);L3 僅在 TWD_CASH 情境
+    #     渲染、且須標明仍會贖回單位/放棄複利,0.90<=score<1.0(略低於成本)須標小幅實現虧損。
+    # L2 無條件計算(不綁 scenario)→ 可單測;None = 無合格台幣基金。
+    _twd_cands = [e for e in evals
+                  if e.currency == "TWD" and e.error is None and e.is_sufficient
+                  and not e.is_cost_estimated
+                  and e.score is not None and e.score >= SCORE_LOW]
+    _twd_cands.sort(key=lambda e: (e.loss_pct if e.loss_pct is not None else float("inf"), e.id))
+    twd_fund_alt = asdict(_twd_cands[0]) if _twd_cands else None
+
     if not eligible:                        # 情境 C:降級防禦
         recommendation, scenario, top = REC_CASH, "C", None
         annotation = ("建議直接使用【台幣現金扣款】。因所有持倉標的餘額不足以支付本月管理費 "
@@ -244,5 +263,6 @@ def optimize_policy_fee(monthly_fee_twd, exchange_rates: dict, funds: list) -> d
         "disclaimer": DISCLAIMER,           # §1 誠實護欄:UI 須顯著揭露(稅/費/複利未計入)
         "monthly_fee_twd": fee,
         "eligible_count": len(eligible),
+        "twd_fund_alt": twd_fund_alt,       # 台幣基金安全扣款候選(免匯率風險、擾動最小);None = 無
         "funds": [asdict(e) for e in evals],
     }

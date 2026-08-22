@@ -3,10 +3,13 @@
 把持倉 + T7 帳本轉成 `services.policy_fee_optimizer` 引擎輸入,依**保單**分組試算「這個月
 該從哪一檔基金扣管理費、還是直接台幣現金扣」,渲染燈號 + 推薦 + 誠實免責。
 
-設計(user 2026-08-22 兩決策):
+設計(user 2026-08-22 三決策):
   1. **依保單分組、各自輸入每月管理費**(app 無此欄位 → UI 輸入,存 session;§4.1 TWD 金額)。
   2. **沒建 T7 帳本的檔** = 缺 units / 成本基礎 → **誠實標「需 T7 帳本」排除**(§1 不用
      invest_twd 硬估、不靜默),另列清單引導使用者去 T7 建帳本解鎖評分。
+  3. **台幣基金納入扣款候選**(user「台幣基金也納入扣款候選」):TWD_CASH 情境下,若有足額、
+     成本已知、非低檔(score>=0.90)的台幣基金,渲染引擎的 `twd_fund_alt`(依 loss_pct 挑擾動
+     最小者)作「免匯率風險的保單內扣款替代」——**平行非優於現金**,現金仍首選(§1 三 AI 會審)。
 
 §8.2:`build_fee_inputs` 為**純函式**(nav/fx 由 caller 注入 → 可單測、零 I/O、零 streamlit);
      render 才做 I/O(get_latest_nav / get_latest_fx)+ streamlit,與 T7 `_latest_nav_fx_t7`
@@ -207,6 +210,22 @@ def render_fee_deduction_section(funds: list) -> None:
                 else:
                     st.info("**💵 本月建議:用台幣現金扣款**"
                             "　—— 目前沒有基金在高檔,從基金扣等於低點賤賣單位,不如付現金保住部位。")
+                    # 台幣基金安全扣款候選(user 2026-08-22「台幣基金也納入扣款候選」)。
+                    # 現金仍是首選(零擾動、保留複利);此為「保單只能內扣 / 不想動現金」時的
+                    # 免匯率風險替代,**平行非優於現金**(§1 誠實護欄,三位 AI 專家會審)。
+                    _alt = _res.get("twd_fund_alt")
+                    if _alt:
+                        _sub = ""
+                        # 0.90<=score<1.0:略低於成本 → 賣它會實現小幅虧損(非停利點);>=1.0 才是無虧損賣點。
+                        if _alt.get("score") is not None and _alt["score"] < 1.0:
+                            _sub = (f" ⚠️ 此檔目前略低於成本(評分 {_alt['score']:.2f}),從中扣款會實現"
+                                    "小幅虧損,僅省去匯率風險、非停利點。")
+                        st.markdown(
+                            f"🏦 **或改從台幣基金【{_alt['name']}】扣**:台幣計價、免匯率風險,"
+                            f"對部位擾動最小(佔比 {_alt['loss_pct']:.2f}%)。{_sub}")
+                        st.caption("(平行選項,非優於現金:付現金零擾動、保留複利;從台幣基金扣仍會贖回"
+                                   "單位、放棄該部位複利,差別只在「動用保單內部位」還是「外部現金」,"
+                                   "依手邊現金是否充裕自行取捨。)")
 
                 with st.expander("看細節(判斷理由 / 各檔燈號 / 評分拆解 / 免責)", expanded=False):
                     st.caption(_res["annotation"])
