@@ -2817,6 +2817,14 @@ def render_portfolio_tab() -> None:
             "修正後重新送出即可，**其他分頁不受影響**。"
         )
 
+    # v19.511:換扣款標的決策（依保單試算「保單管理費該從哪一檔基金扣、還是台幣現金扣」）。
+    # 放 T7 帳本之後 —— 重用 T7 的成本基礎（t7_ledgers）+ 即時 nav/fx。try/except 不炸 Tab3。
+    try:
+        from ui.helpers.portfolio.fee_deduction import render_fee_deduction_section
+        render_fee_deduction_section(st.session_state.get("portfolio_funds"))
+    except Exception as _e_feeopt:  # noqa: BLE001 — 決策區任何例外收成提示，不影響其餘分頁
+        st.caption(f"⬜ 換扣款標的決策區略過：[{type(_e_feeopt).__name__}] {str(_e_feeopt)[:80]}")
+
     # ── T7 已移至 T5 之前（v18.194 故事化：持倉戰情 → 重疊診斷）──
 
     # v18.159：通用 AI 白話文總結 widget（4 視角 selectbox）
