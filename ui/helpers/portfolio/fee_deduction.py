@@ -200,38 +200,41 @@ def render_fee_deduction_section(funds: list) -> None:
                 st.warning("本保單目前**無可評估標的**(全部缺 T7 帳本或抓不到淨值/匯率,見下方清單)。")
             else:
                 _res = optimize_policy_fee(_fee, _rates, _engine_funds)
-                _rec_zh = ("✅ 建議從基金扣款" if _res["recommendation"] == "FUND_DEDUCTION"
-                           else "💵 建議台幣現金扣款")
-                if _res["scenario"] == "A":
-                    st.success(f"{_rec_zh}　·　{_res['annotation']}")
+                # ── 一句話結論(user 2026-08-22「只要一句話結論」;細節收進下方摺疊)──
+                if _res["recommendation"] == "FUND_DEDUCTION":
+                    st.success(f"**✅ 本月建議:從【{_res['top_pick_name']}】扣款**"
+                               "　—— 該檔目前在高檔,贖回單位最少(等於高點停利)。")
                 else:
-                    st.info(f"{_rec_zh}　·　{_res['annotation']}")
+                    st.info("**💵 本月建議:用台幣現金扣款**"
+                            "　—— 目前沒有基金在高檔,從基金扣等於低點賤賣單位,不如付現金保住部位。")
 
-                import pandas as pd
+                with st.expander("看細節(判斷理由 / 各檔燈號 / 評分拆解 / 免責)", expanded=False):
+                    st.caption(_res["annotation"])
+                    import pandas as pd
 
-                def _badge_zh(fe):
-                    if fe.get("error"):
-                        return "⚠️ 資料異常"
-                    if fe.get("is_cost_estimated"):
-                        return "⬜ 成本未知"
-                    return {"SUCCESS": "🟢 高檔", "WARNING": "🟡 正常",
-                            "DANGER": "🔴 低檔"}.get(fe.get("badge_level"), "—")
+                    def _badge_zh(fe):
+                        if fe.get("error"):
+                            return "⚠️ 資料異常"
+                        if fe.get("is_cost_estimated"):
+                            return "⬜ 成本未知"
+                        return {"SUCCESS": "🟢 高檔", "WARNING": "🟡 正常",
+                                "DANGER": "🔴 低檔"}.get(fe.get("badge_level"), "—")
 
-                _rows = [{
-                    "基金": fe["name"][:20],
-                    "幣別": fe["currency"],
-                    "燈號": _badge_zh(fe),
-                    "評分 S": (f"{fe['score']:.3f}" if fe.get("score") is not None else "—"),
-                    "└基金報酬×匯兌": (
-                        f"{fe['return_factor']:.3f}×{fe['fx_factor']:.3f}"
-                        if fe.get("return_factor") is not None else "—"),
-                    "扣款佔比%": (f"{fe['loss_pct']:.2f}%" if fe.get("loss_pct") is not None else "—"),
-                    "贖回單位": (f"{fe['units_deduct']:.4f}" if fe.get("units_deduct") is not None else "—"),
-                    "市值TWD": (f"{fe['market_value_twd']:,.0f}" if fe.get("market_value_twd") is not None else "—"),
-                    "足額": ("✔ 足額" if fe.get("is_sufficient") else "✗ 不足"),
-                } for fe in _res["funds"]]
-                st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
-                st.caption(DISCLAIMER)
+                    _rows = [{
+                        "基金": fe["name"][:20],
+                        "幣別": fe["currency"],
+                        "燈號": _badge_zh(fe),
+                        "評分 S": (f"{fe['score']:.3f}" if fe.get("score") is not None else "—"),
+                        "└基金報酬×匯兌": (
+                            f"{fe['return_factor']:.3f}×{fe['fx_factor']:.3f}"
+                            if fe.get("return_factor") is not None else "—"),
+                        "扣款佔比%": (f"{fe['loss_pct']:.2f}%" if fe.get("loss_pct") is not None else "—"),
+                        "贖回單位": (f"{fe['units_deduct']:.4f}" if fe.get("units_deduct") is not None else "—"),
+                        "市值TWD": (f"{fe['market_value_twd']:,.0f}" if fe.get("market_value_twd") is not None else "—"),
+                        "足額": ("✔ 足額" if fe.get("is_sufficient") else "✗ 不足"),
+                    } for fe in _res["funds"]]
+                    st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+                    st.caption(DISCLAIMER)
 
             if _excluded:
                 _names = "、".join(f"{e['name']}({e['reason']})" for e in _excluded[:12])
