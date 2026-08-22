@@ -1373,6 +1373,14 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     return _l1_impl(currency_pair, fred_api_key)
 
 
+def get_latest_nav(fund_ticker: str) -> "float | None":
+    """v19.511 L2 facade — 包 L1 `repositories.fund.get_latest_nav`(mirror get_latest_fx R16
+    EX-PASSTHRU-1 升級)。UI(L3)不直呼 L1 fetcher,走本 thin wrapper 取最新淨值(§8.2)。
+    抓不到 → None(§1;呼叫端誠實排除,不硬給)。"""
+    from repositories.fund import get_latest_nav as _l1_impl
+    return _l1_impl(fund_ticker)
+
+
 def get_latest_vix() -> "float | None":
     """VIX 最新值(整組共用單值,供 235 加碼引擎)。thin L2 facade 包 L1 fetch_yf_close("^VIX")。
 
