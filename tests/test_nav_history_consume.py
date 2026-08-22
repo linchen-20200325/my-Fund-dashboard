@@ -105,7 +105,7 @@ def test_merge_extends_and_live_wins(monkeypatch):
     live = _series(["2026-07-21", "2026-07-22"], [11.0, 11.1])
     hist = _series(["2026-07-18", "2026-07-21"], [10.5, 99.9])  # 07-21 撞日
     hist.attrs["source"] = "GoogleSheet:nav_history:X"
-    monkeypatch.setattr(GS, "load_series", lambda code: hist)
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: hist)
     merged, trace = _merge_nav_history_series(live, "X")
     assert trace["success"] is True and trace["added"] == 1
     assert len(merged) == 3
@@ -115,7 +115,7 @@ def test_merge_extends_and_live_wins(monkeypatch):
 
 def test_merge_empty_hist_unchanged(monkeypatch):
     live = _series(["2026-07-21", "2026-07-22"])
-    monkeypatch.setattr(GS, "load_series", lambda code: pd.Series(dtype=float))
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: pd.Series(dtype=float))
     merged, trace = _merge_nav_history_series(live, "X")
     assert trace is None and merged is live
 
@@ -144,7 +144,7 @@ def test_finalize_short_live_rescued_by_dense_history(monkeypatch):
     hist = _noisy_series(hist_idx)
     hist.attrs["source"] = "GoogleSheet:nav_history:X"
     live = hist.iloc[-5:] * 1.0  # 最後 5 天當 live
-    monkeypatch.setattr(GS, "load_series", lambda code: hist)
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: hist)
     result = {"series": live, "dividends": [], "fund_code": "X"}
     finalize_fund_metrics(result)
     m = result.get("metrics") or {}
@@ -161,7 +161,7 @@ def test_finalize_sparse_history_kills_self_calc_annualized(monkeypatch):
                             for i in range(80)])   # span 316 天,coverage ≈ 0.37
     hist = _noisy_series(idx)
     live = hist.iloc[-3:] * 1.0
-    monkeypatch.setattr(GS, "load_series", lambda code: hist)
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: hist)
     result = {"series": live, "dividends": [], "fund_code": "X"}
     finalize_fund_metrics(result)
     m = result.get("metrics") or {}
@@ -175,7 +175,7 @@ def test_finalize_live_only_unchanged(monkeypatch):
     """無累積資料 → 行為與現在完全一致:無 nav_coverage、無 merge trace。"""
     idx = pd.bdate_range("2025-06-01", periods=120)
     live = _noisy_series(idx)
-    monkeypatch.setattr(GS, "load_series", lambda code: pd.Series(dtype=float))
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: pd.Series(dtype=float))
     result = {"series": live, "dividends": [], "fund_code": "X"}
     finalize_fund_metrics(result)
     m = result.get("metrics") or {}
@@ -190,7 +190,7 @@ def test_finalize_rescue_when_live_totally_fails(monkeypatch):
     hist_idx = pd.bdate_range("2025-01-01", periods=300)
     hist = _noisy_series(hist_idx)
     hist.attrs["source"] = "GoogleSheet:nav_history:X"
-    monkeypatch.setattr(GS, "load_series", lambda code: hist)
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: hist)
     result = {"series": None, "dividends": [], "fund_code": "X"}
     finalize_fund_metrics(result)
     assert result.get("series") is not None and len(result["series"]) == 300
@@ -202,7 +202,7 @@ def test_finalize_rescue_when_live_totally_fails(monkeypatch):
 
 def test_finalize_no_rescue_when_sheet_empty(monkeypatch):
     """series=None + Sheet 空 → 行為與現在完全一致(無 metrics + 無淨值序列 trace)。"""
-    monkeypatch.setattr(GS, "load_series", lambda code: pd.Series(dtype=float))
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: pd.Series(dtype=float))
     result = {"series": None, "dividends": [], "fund_code": "X"}
     finalize_fund_metrics(result)
     assert result.get("metrics") is None or not result.get("metrics")
@@ -213,7 +213,7 @@ def test_finalize_no_rescue_when_sheet_empty(monkeypatch):
 def test_finalize_rescue_too_short_no_metrics(monkeypatch):
     """series=None + Sheet 僅 5 筆 → 救回 series 但 len<10 gate 擋 metrics(§1)。"""
     hist = _noisy_series(pd.bdate_range("2026-07-14", periods=5))
-    monkeypatch.setattr(GS, "load_series", lambda code: hist)
+    monkeypatch.setattr(GS, "load_series", lambda code, **_k: hist)
     result = {"series": None, "dividends": [], "fund_code": "X"}
     finalize_fund_metrics(result)
     assert result.get("series") is not None and len(result["series"]) == 5
@@ -225,6 +225,6 @@ def test_merge_accepts_none_live():
     import services.nav_history_gs as _gs
     hist = _noisy_series(pd.bdate_range("2026-01-01", periods=20))
     import unittest.mock as _m
-    with _m.patch.object(_gs, "load_series", lambda code: hist):
+    with _m.patch.object(_gs, "load_series", lambda code, **_k: hist):
         merged, trace = _merge_nav_history_series(None, "X")
     assert len(merged) == 20 and trace["success"] is True and trace["added"] == 20

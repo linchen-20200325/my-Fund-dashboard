@@ -211,6 +211,14 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
     except Exception as _e_pool:  # noqa: BLE001
         print(f"[batch] 選股池名稱查詢略過:{type(_e_pool).__name__}: {_e_pool}")
 
+    # v19.509:SA 缺(手機無 SA)時,主執行緒捕獲登入者 OAuth client 傳入每列 build →
+    # 讓批次大表也讀得到 OAuth 寫進雲端的補回歷史(拿不到 → None → 退 SA/空)。
+    _oauth = None
+    try:
+        from ui.helpers.io.oauth_state import _get_oauth_client
+        _oauth = _get_oauth_client()
+    except Exception:  # noqa: BLE001
+        _oauth = None
     bar = st.progress(0.0)
     live = st.empty()
     total = len(todo)
@@ -219,7 +227,7 @@ def _run_batch(codes: list[str], retry_failed: bool) -> None:
         # 組合健診大表單檔列;失敗也回一列不外拋。phase/score 對齊健診 tab
         rows[code] = build_batch_unified_row(
             code, phase=_phase, score=_score,
-            name_hint=_name_map.get(str(code).upper(), ""))
+            name_hint=_name_map.get(str(code).upper(), ""), oauth_client=_oauth)
         _persist(run_id, codes, rows)         # 每檔落地(續存後盾)
         bar.progress(i / total)
     bar.empty()

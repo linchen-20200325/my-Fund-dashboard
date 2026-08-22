@@ -457,7 +457,7 @@ def clear_cache(code: str) -> bool:
     return False
 
 
-def backfill_to_gs(codes, *, progress_cb=None) -> dict:
+def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     """一鍵補全部缺淨值:多檔基金抓**完整可得歷史** → 本地 cache + 雲端 nav_history(永久)。
 
     用途(user 2026-08-18「前面資料有缺的都要補起來」):把「持倉 ∪ 選股池」逐檔淨值一次
@@ -477,6 +477,9 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
         codes: 基金代號 iterable(大小寫 / 重複由本函式正規化去重,§2.1 key upper)。
         progress_cb: 可選 callable(i, n, code) —— 每檔開抓前回呼,供 UI 更新進度條
                      (L2 不碰 streamlit;回呼自身壞掉不擋補淨值)。
+        oauth_client: v19.509 選填 —— SA 缺(手機無 Service Account)時,UI 傳入登入者
+                     gspread client → 用使用者身分把補回的歷史寫進雲端(重開不丟)。
+                     None → 純 SA(缺 SA 則 gs 未啟用,只存本地)。cron 不傳 → 行為不變。
 
     Returns:
         {
@@ -512,7 +515,8 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
             _seen.add(c)
             uniq.append(c)
 
-    gs_on = nav_history_gs.is_enabled()
+    # v19.509:SA 齊備**或**注入了使用者 OAuth → 雲端可寫(手機免設 SA)。
+    gs_on = nav_history_gs.is_enabled() or oauth_client is not None
     # §1/§3.2:未來日上限用 TW 當日(對齊 nav_history_gs._norm_date 的未來日守衛;
     # 防上游把民國年 / 日月顛倒 misparse 成未來日污染 fetched/date_max/本地 cache)。
     _today_ts = pd.Timestamp(_dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date())
@@ -595,7 +599,7 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
              "source": None, "span_days": 0, "error": None}
         # 逐檔全程 guard(§1「不擋整批」:任一檔抓取/清洗/組點爆掉 → 只記該檔 error)。
         try:
-            fd = auto_fetch_moneydj(code)
+            fd = auto_fetch_moneydj(code, oauth_client=oauth_client)
             raw = fd.get("series") if isinstance(fd, dict) else None
             _had_raw = raw is not None and hasattr(raw, "__len__") and len(raw) > 0
             s = _clean(raw)
@@ -642,7 +646,7 @@ def backfill_to_gs(codes, *, progress_cb=None) -> dict:
     gs_error = None
     if gs_on and all_points:
         try:
-            _res = nav_history_gs.append_points(all_points)
+            _res = nav_history_gs.append_points(all_points, oauth_client=oauth_client)
             gs_written = int(_res.get("written", 0))
         except Exception as e:  # noqa: BLE001
             gs_error = f"雲端寫入失敗:{type(e).__name__}: {str(e)[:60]}"

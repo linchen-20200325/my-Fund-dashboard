@@ -53,6 +53,7 @@ def process_one_fund(
     warn_gap: float = 0.0,
     fd: dict | None = None,
     name_hint: str = "",
+    oauth_client=None,
 ) -> dict:
     """單檔健診 worker(純 IO + 計算,無 st 呼叫 → 可並行)。
 
@@ -66,6 +67,10 @@ def process_one_fund(
             真名(如 "AL" 系保單平台代碼 —— 前綴不在境內表也不在保單子網域提示,
             6 個 meta 源全命不中)時,用它顯示,而非把**代號**當名字。§1:name_hint
             為使用者/上游既有資料,非臆測;都沒有才退代號(full_key)。
+        oauth_client: v19.509 選填 —— SA 缺時,健診 UI 於**主執行緒**捕獲登入者 gspread client
+            後傳入(本 worker 常在 ThreadPoolExecutor 執行緒跑,執行緒內取不到 session_state,
+            故須由主執行緒傳入)。透傳給 auto_fetch_moneydj → nav_history 讀取,讓補回的
+            雲端歷史在健診看得到。None → 純 SA/空(cron / 批次不傳 → 行為不變)。
 
     回傳 row dict;任一步失敗回 {ok: False, error}。
     """
@@ -75,7 +80,7 @@ def process_one_fund(
     from services.health.dividend_calc import compute_dividend_twd_series
     try:
         if fd is None:
-            fd = auto_fetch_moneydj(code)
+            fd = auto_fetch_moneydj(code, oauth_client=oauth_client)
         _series = fd.get("series") if isinstance(fd, dict) else None
         _has_series = _series is not None and len(_series) > 0
         if fd.get("error") and not _has_series:

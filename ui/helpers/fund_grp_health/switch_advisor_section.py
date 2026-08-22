@@ -64,7 +64,8 @@ def _fetch_rich(code: str, name: str = "") -> "dict | None":
     try:
         from services.fund_row import process_one_fund
         from ui.helpers.fund_grp_health_extras import _build_fund_dict
-        r = process_one_fund(code, _PRINCIPAL, name_hint=name)
+        # v19.509:SA 缺時用登入者 OAuth 讀雲端 nav_history(與健診同一本 → 補抓也看得到累積)。
+        r = process_one_fund(code, _PRINCIPAL, name_hint=name, oauth_client=_pool_oauth_client())
         if r.get("ok") and r.get("_fund_raw"):
             return _build_fund_dict(r["_fund_raw"], code, _PRINCIPAL, name_hint=name)
     except Exception as _e:  # noqa: BLE001

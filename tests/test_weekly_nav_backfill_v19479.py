@@ -88,7 +88,7 @@ def test_main_success_returns_0(monkeypatch):
     import services.nav_history_gs as GS
     import services.nav_history_store as NS
     monkeypatch.setattr(GS, "is_enabled", lambda: True)
-    monkeypatch.setattr(NS, "backfill_to_gs", lambda codes: {
+    monkeypatch.setattr(NS, "backfill_to_gs", lambda codes, **_k: {
         "results": [{"code": "TLZF9", "fetched": 1300, "date_min": "2021-01-01",
                      "date_max": "2026-08-18", "source": "yahoo(ISIN)", "error": None}],
         "gs_enabled": True, "gs_written": 5, "gs_error": None, "n_ok": 1, "n_fail": 0,
@@ -102,7 +102,7 @@ def test_main_all_fail_exits_1(monkeypatch):
     import services.nav_history_gs as GS
     import services.nav_history_store as NS
     monkeypatch.setattr(GS, "is_enabled", lambda: True)
-    monkeypatch.setattr(NS, "backfill_to_gs", lambda codes: {
+    monkeypatch.setattr(NS, "backfill_to_gs", lambda codes, **_k: {
         "results": [{"code": "TLZF9", "fetched": 0, "date_min": None, "date_max": None,
                      "source": None, "error": "抓不到"}],
         "gs_enabled": True, "gs_written": 0, "gs_error": None, "n_ok": 0, "n_fail": 1,

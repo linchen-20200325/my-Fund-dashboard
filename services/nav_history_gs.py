@@ -23,8 +23,23 @@ Worksheet schema `nav_history`(A1 = headers):
 """
 from __future__ import annotations
 
+import contextlib as _contextlib
 import datetime as _dt
+import threading as _threading
 from typing import Any
+
+# v19.509 稽核 mitigation:健診 tab 於主執行緒捕獲**單一** OAuth gspread client 後,傳進
+# 最多 4 個 worker 執行緒併發讀 nav_history。gspread client 底層 requests.Session **非**
+# thread-safe(SA 路徑每次 _get_sheet 建新 client 故無此問題;OAuth 路徑共用注入的同一個)。
+# 用本 lock 序列化「注入 OAuth client」的 GS I/O(唯讀為主,序列化成本遠小於 MoneyDJ 抓取,
+# 且順帶避免 4-way 併發打爆 OAuth 60 reads/min quota)。SA 路徑不鎖(本就各自新 client)。
+_OAUTH_GS_LOCK = _threading.Lock()
+
+
+def _gs_guard(oauth_client: Any, _sheet: Any):
+    """注入 OAuth client 且非測試注入 _sheet → 上鎖序列化;否則 no-op(SA / 測試路徑不序列化)。"""
+    return _OAUTH_GS_LOCK if (oauth_client is not None and _sheet is None) else _contextlib.nullcontext()
+
 
 _WS_NAV = "nav_history"
 _NAV_HEADERS = ["code", "date", "nav", "fund_name", "source", "recorded_at"]
@@ -177,32 +192,65 @@ def _clean_points(points: list[dict]) -> list[dict]:
     return out
 
 
-def _get_sheet():
-    """開啟 NAV 專屬 workbook(`_nav_sheet_id()`;複用 SA 認證,同 auto_search_store_gs)。
+def backend_status(oauth_client: Any = None) -> str:
+    """nav_history 寫入會落到哪個後端:'service_account' / 'oauth' / 'local'。
 
-    v19.363 ③:SA 走 _sa_to_dict — env JSON 字串(NAS cron)與 st.secrets dict 都吃;
-    解析後仍空 → raise(§1 Fail Loud,部署配置錯不靜默)。
-    v19.472:目標 Sheet 改 `_nav_sheet_id()`(NAV_SHEET_ID → baked → 回退 macro_weights)。
+    v19.509(user 2026-08-22「都用手機 沒有電腦」):UI 用此**誠實提示**落點 —— SA 齊備 →
+    雲端永久;SA 缺但有登入 OAuth → 雲端永久(使用者身分,mirror 選股池);兩者皆無 →
+    只存本機(容器重啟清空,UI 須警告,§1 不讓 user 誤以為在累積)。
     """
-    from repositories.policy_repository import get_gspread_client
-    from infra.config import require_secret
-    creds = _sa_to_dict(require_secret("google_service_account"))
-    if not creds.get("client_email"):
-        raise NavHistoryError(
-            "google_service_account 無法解析為含 client_email 的 dict(env 字串需為完整 SA JSON)")
+    if is_enabled():
+        return "service_account"
+    if oauth_client is not None:
+        return "oauth"
+    return "local"
+
+
+def _get_sheet(oauth_client: Any = None):
+    """開啟 NAV 專屬 workbook(`_nav_sheet_id()`)。
+
+    **憑證優先序(v19.509 手機友善,mirror 選股池 `pool_repository._get_sheet`)**:
+      1. **Service Account**(App + cron 共用;SA 走 `_sa_to_dict`,env JSON 字串與 st.secrets
+         dict 都吃;SA 信箱須為該 Sheet 編輯者)。
+      2. SA 缺、或 SA 開不了此本(未分享 403/404)→ **注入的使用者 OAuth client**
+         (手機免設 SA:用登入者身分讀寫他自己有權限的那本)。
+    ⚠️ 429/配額 = 暫時性 → **不降級**(§1 往上拋,不誤判 SA 壞)。兩者皆無 → raise。
+    v19.472:目標 Sheet = `_nav_sheet_id()`(NAV_SHEET_ID secret → baked `_NAV_SHEET_ID_DEFAULT`)。
+    """
+    from infra.config import get_secret
     sheet_id = _nav_sheet_id()
-    client = get_gspread_client(creds)
-    try:
-        return client.open_by_key(sheet_id)
-    except Exception as e:
-        # v19.380:gspread 對「SA 完全無權限存取」回 SpreadsheetNotFound(str 常為空),
-        # 原本包成 append_points 失敗:<空白> 讓 user 無從下手。改印可行動訊息 + 點名 SA/sheet。
-        raise NavHistoryError(
-            f"開表失敗（{type(e).__name__}）:服務帳戶 {creds.get('client_email', '?')} "
-            f"找不到或無權限存取 sheet_id={sheet_id!r}。請確認:"
-            f"(1) 已把該服務帳戶信箱加進這張 Sheet 的「共用 → 編輯者」;"
-            f"(2) sheet_id 是那張 Sheet 的 ID;(3) 該 GCP project 已啟用 Google Drive API。"
-        ) from e
+    # ── 1) Service Account 優先(不變:env JSON 字串 / st.secrets dict 皆吃)──
+    #    用 get_secret(非 require_secret):SA 缺時不預先 raise,好落到 OAuth 分支。
+    creds = _sa_to_dict(get_secret("google_service_account"))
+    if creds.get("client_email"):
+        from repositories.policy_repository import get_gspread_client
+        client = get_gspread_client(creds)
+        try:
+            return client.open_by_key(sheet_id)
+        except Exception as e:
+            from infra.gspread_retry import is_quota_error
+            # 429/配額 → 暫時性,不可降級;無 OAuth 可退 → 一樣拋(SA 未分享是設定問題,誠實報錯)。
+            # v19.380:gspread 對「SA 無權限」回 SpreadsheetNotFound(str 常空)→ 印可行動訊息。
+            if is_quota_error(e) or oauth_client is None:
+                raise NavHistoryError(
+                    f"開表失敗（{type(e).__name__}）:服務帳戶 {creds.get('client_email', '?')} "
+                    f"找不到或無權限存取 sheet_id={sheet_id!r}。請確認:"
+                    f"(1) 已把該服務帳戶信箱加進這張 Sheet 的「共用 → 編輯者」;"
+                    f"(2) sheet_id 是那張 Sheet 的 ID;(3) 該 GCP project 已啟用 Google Drive API。"
+                ) from e
+            # SA 存在但開不了這本 → 落到下面用注入的使用者 OAuth
+    # ── 2) 使用者 OAuth(SA 缺 或 SA 開不了此本 且有注入)──
+    if oauth_client is not None:
+        try:
+            return oauth_client.open_by_key(sheet_id)
+        except Exception as e:
+            raise NavHistoryError(
+                f"OAuth 開表失敗（{type(e).__name__}）:你登入的 Google 帳號找不到或無權限存取 "
+                f"nav_history sheet_id={sheet_id!r}。請確認這張 Sheet 是你的 Google 帳號可編輯的。"
+            ) from e
+    # ── 3) 兩者皆無 → 明確報錯(呼叫端 gate 正常會先擋,此為防禦)──
+    raise NavHistoryError(
+        "nav_history 無可用憑證:未設 Service Account,也未注入使用者 OAuth client。")
 
 
 def _get_worksheet(sh):
@@ -215,45 +263,47 @@ def _get_worksheet(sh):
         return ws
 
 
-def append_points(points: list[dict], *, _sheet: Any = None) -> dict:
+def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any = None) -> dict:
     """批次 append 多筆 nav 點:**讀一次去重 + 一次 append_rows**(省 Sheets quota;60 reads/min)。
 
     points: [{"code", "nav", "nav_date", "fund_name"(opt), "source"(opt)}]
     回傳 {"written": int, "skipped": int}。
-    §1:資料不足的點被丟;GS 未啟用(且未注入 _sheet)→ 安靜 no-op 回 written=0。
+    §1:資料不足的點被丟;GS 未啟用(SA 缺且未注入 OAuth、且未注入 _sheet)→ 安靜 no-op 回 written=0。
         真 GS I/O 失敗 → raise NavHistoryError。
     _sheet:測試注入用(繞過真 gspread)。
+    oauth_client:v19.509 —— SA 缺時 UI 注入登入者 gspread client,改用使用者身分寫雲端。
     """
     clean = _clean_points(points)
     if not clean:
         return {"written": 0, "skipped": len(points)}
-    if _sheet is None and not is_enabled():
-        return {"written": 0, "skipped": len(points)}  # local/CI 無 secrets:安靜略過
+    if _sheet is None and not is_enabled() and oauth_client is None:
+        return {"written": 0, "skipped": len(points)}  # local/CI 無 SA 無 OAuth:安靜略過
 
     try:
-        sh = _sheet if _sheet is not None else _get_sheet()
-        ws = _get_worksheet(sh)
-        existing = ws.get_all_values()  # 含 header
-        seen: set = set()
-        for r in existing[1:]:
-            if len(r) >= 2:
-                # v19.489:去重鍵的日期先過 _norm_date 正規化,讓 user 手填的 '2020/1/2'
-                # 與系統寫的 ISO '2020-01-02' 視為同一天(否則同日兩格式 → 重複列 + load
-                # 時系統值覆蓋 user 值)。_norm_date 回 '' 的怪日期退回原字串,不弱化既有去重。
-                _ed = _norm_date(str(r[1]).strip()) or str(r[1]).strip()[:10]
-                seen.add((str(r[0]).strip().upper(), _ed))
-        recorded_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
-        new_rows: list = []
-        for c in clean:  # 同批內也去重(同 code+date 只留第一筆)
-            key = (c["code"], c["date"])
-            if key in seen:
-                continue
-            seen.add(key)
-            new_rows.append([c["code"], c["date"], c["nav"],
-                             c["fund_name"], c["source"], recorded_at])
-        if new_rows:
-            ws.append_rows(new_rows, value_input_option="USER_ENTERED")
-        return {"written": len(new_rows), "skipped": len(points) - len(new_rows)}
+        with _gs_guard(oauth_client, _sheet):     # v19.509:序列化共用 OAuth client 併發讀寫
+            sh = _sheet if _sheet is not None else _get_sheet(oauth_client)
+            ws = _get_worksheet(sh)
+            existing = ws.get_all_values()  # 含 header
+            seen: set = set()
+            for r in existing[1:]:
+                if len(r) >= 2:
+                    # v19.489:去重鍵的日期先過 _norm_date 正規化,讓 user 手填的 '2020/1/2'
+                    # 與系統寫的 ISO '2020-01-02' 視為同一天(否則同日兩格式 → 重複列 + load
+                    # 時系統值覆蓋 user 值)。_norm_date 回 '' 的怪日期退回原字串,不弱化既有去重。
+                    _ed = _norm_date(str(r[1]).strip()) or str(r[1]).strip()[:10]
+                    seen.add((str(r[0]).strip().upper(), _ed))
+            recorded_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
+            new_rows: list = []
+            for c in clean:  # 同批內也去重(同 code+date 只留第一筆)
+                key = (c["code"], c["date"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                new_rows.append([c["code"], c["date"], c["nav"],
+                                 c["fund_name"], c["source"], recorded_at])
+            if new_rows:
+                ws.append_rows(new_rows, value_input_option="USER_ENTERED")
+            return {"written": len(new_rows), "skipped": len(points) - len(new_rows)}
     except NavHistoryError:
         raise
     except Exception as e:
@@ -261,29 +311,32 @@ def append_points(points: list[dict], *, _sheet: Any = None) -> dict:
 
 
 def append_point(code: str, nav: Any, nav_date: Any, fund_name: str = "",
-                 source: str = "app", *, _sheet: Any = None) -> bool:
+                 source: str = "app", *, _sheet: Any = None, oauth_client: Any = None) -> bool:
     """單筆 append(委派 append_points)。回傳 True=新寫入 / False=略過(去重/不足/未啟用)。"""
     res = append_points(
         [{"code": code, "nav": nav, "nav_date": nav_date,
           "fund_name": fund_name, "source": source}],
-        _sheet=_sheet,
+        _sheet=_sheet, oauth_client=oauth_client,
     )
     return res["written"] > 0
 
 
-def load_points(code: str | None = None, *, _sheet: Any = None) -> list[dict]:
+def load_points(code: str | None = None, *, _sheet: Any = None,
+                oauth_client: Any = None) -> list[dict]:
     """讀 nav_history(可選 code 過濾),回 [{code,date,nav,fund_name,source,recorded_at}]。
-    tab 不存在 / 未啟用 → 回 []。供 Increment B 消費端 + 去重 lookup 用。
+    tab 不存在 / 未啟用(SA 缺且無 OAuth)→ 回 []。供 Increment B 消費端 + 去重 lookup 用。
+    oauth_client:v19.509 —— SA 缺時 UI 注入登入者身分讀雲端(與寫入同一本)。
     """
-    if _sheet is None and not is_enabled():
+    if _sheet is None and not is_enabled() and oauth_client is None:
         return []
     try:
-        sh = _sheet if _sheet is not None else _get_sheet()
-        try:
-            ws = sh.worksheet(_WS_NAV)
-        except Exception:
-            return []
-        rows = ws.get_all_values()[1:]
+        with _gs_guard(oauth_client, _sheet):     # v19.509:序列化共用 OAuth client 併發讀
+            sh = _sheet if _sheet is not None else _get_sheet(oauth_client)
+            try:
+                ws = sh.worksheet(_WS_NAV)
+            except Exception:
+                return []
+            rows = ws.get_all_values()[1:]
     except Exception as e:
         raise NavHistoryError(f"nav_history load 失敗:{e}") from e
 
@@ -308,7 +361,7 @@ def load_points(code: str | None = None, *, _sheet: Any = None) -> list[dict]:
     return out
 
 
-def load_series(code: str, *, _sheet: Any = None):
+def load_series(code: str, *, _sheet: Any = None, oauth_client: Any = None):
     """v19.360 Increment B:讀 nav_history 累積點 → pd.Series(DatetimeIndex→float)。
 
     供 L2 fund_service 合併進 metrics 計算(消費端接線)。
@@ -319,7 +372,7 @@ def load_series(code: str, *, _sheet: Any = None):
     """
     import pandas as pd
 
-    pts = load_points(code, _sheet=_sheet)  # 未啟用/無 tab → [];I/O 失敗 → raise
+    pts = load_points(code, _sheet=_sheet, oauth_client=oauth_client)  # 未啟用/無 tab → [];I/O 失敗 → raise
     if not pts:
         return pd.Series(dtype=float)
     idx = pd.to_datetime([p["date"] for p in pts], errors="coerce")
@@ -333,7 +386,8 @@ def load_series(code: str, *, _sheet: Any = None):
     return s
 
 
-def coverage_status(codes: "list | tuple | None" = None, *, _sheet: Any = None) -> dict:
+def coverage_status(codes: "list | tuple | None" = None, *, _sheet: Any = None,
+                    oauth_client: Any = None) -> dict:
     """每檔基金**累積了多少** —— 回 {CODE: {points, first, last, span_days}}。
 
     2026-08-11 新增。與 `status()` 互補,兩者回答的是**不同問題**:
@@ -357,7 +411,7 @@ def coverage_status(codes: "list | tuple | None" = None, *, _sheet: Any = None) 
         真 I/O 失敗 → `NavHistoryError` 上拋,由 UI 顯示而不是靜默留白。
     """
     _want = {str(c).strip().upper() for c in (codes or []) if str(c).strip()}
-    _pts = load_points(None, _sheet=_sheet)   # 一次讀完整張表,再本地分組(省 quota)
+    _pts = load_points(None, _sheet=_sheet, oauth_client=oauth_client)   # 一次讀完整張表,再本地分組(省 quota)
     if not _pts:
         return {}
 
@@ -411,7 +465,8 @@ def _pick_col(cols: list, hints: tuple, exclude: int | None = None) -> int | Non
 
 
 def import_csv_text(code: str, csv_text: str, *, fund_name: str = "",
-                    source: str = "csv_import", _sheet: Any = None) -> dict:
+                    source: str = "csv_import", _sheet: Any = None,
+                    oauth_client: Any = None) -> dict:
     """CSV 文字 → 解析 → 批次寫入 nav_history(委派 append_points:§1 過濾 + §5 去重)。
 
     唯一能「立刻補回數年歷史」的路:user 從保險公司對帳單下載歷史淨值,一次灌入。
@@ -425,7 +480,7 @@ def import_csv_text(code: str, csv_text: str, *, fund_name: str = "",
 
     from services.nav_history_store import _parse_roc_or_western_date
 
-    enabled = _sheet is not None or is_enabled()
+    enabled = _sheet is not None or is_enabled() or oauth_client is not None
     out = {"enabled": enabled, "rows": 0, "parsed": 0, "written": 0,
            "skipped_rows": 0, "skipped_dup": 0}
 
@@ -466,11 +521,12 @@ def import_csv_text(code: str, csv_text: str, *, fund_name: str = "",
     if not points or not enabled:
         return out
 
-    res = append_points(points, _sheet=_sheet)   # (code,date) 去重 + 一次 append_rows
+    res = append_points(points, _sheet=_sheet, oauth_client=oauth_client)   # (code,date) 去重 + 一次 append_rows
     out["written"] = res["written"]
     out["skipped_dup"] = out["parsed"] - res["written"]
     return out
 
 
 __all__ = ["append_point", "append_points", "load_points", "load_series",
-           "import_csv_text", "is_enabled", "status", "NavHistoryError"]
+           "import_csv_text", "coverage_status", "is_enabled", "status",
+           "backend_status", "NavHistoryError"]

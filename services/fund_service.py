@@ -1054,8 +1054,11 @@ def assess_series_coverage(s: pd.Series) -> dict:
             "sparse": bool(sparse)}
 
 
-def _merge_nav_history_series(s_live: pd.Series, code: str) -> tuple:
+def _merge_nav_history_series(s_live: pd.Series, code: str, oauth_client=None) -> tuple:
     """v19.360 B:合併 nav_history 累積/匯入序列(union keep-last,**live 優先**)。
+
+    v19.509:`oauth_client` 選填 —— SA 缺(手機無 Service Account)時,由上層(健診 UI 主執行緒
+    捕獲後傳入)用登入者身分讀雲端 nav_history,讓補回的歷史在健診看得到。None → 純 SA/空,零改動。
 
     L2→L2(services.nav_history_gs),不碰 L1(§8.2;避免重蹈 EX-L1ORCH-1)。
     - Sheet 無資料 / 未啟用 → 回 (s_live, None) 行為與現在完全一致
@@ -1067,7 +1070,7 @@ def _merge_nav_history_series(s_live: pd.Series, code: str) -> tuple:
         s_live = pd.Series(dtype=float)
     try:
         from services.nav_history_gs import load_series
-        s_hist = load_series(code)
+        s_hist = load_series(code, oauth_client=oauth_client)
     except Exception as e:  # NavHistoryError 等 — 讀失敗退回 live-only(§4.6 降級鏈)
         print(f"[nav_history] ⚠️ {code} 讀取失敗,退回 live-only:{e}")
         return s_live, {"source": "nav_history_merge", "success": False,
@@ -1124,7 +1127,7 @@ def _merge_nav_history_series(s_live: pd.Series, code: str) -> tuple:
                     "note": f"累積序列併入 +{added} 筆（live {len(s_live)} → {len(merged)}）"}
 
 
-def finalize_fund_metrics(result: dict) -> dict:
+def finalize_fund_metrics(result: dict, oauth_client=None) -> dict:
     """v19.240 R8 EX-L1ORCH-1 退役:把原 L1 fund_orchestration._finish_metrics +
     fx_and_main.fetch_fund_by_key 收尾 + fund_orchestration.fetch_fund_from_moneydj_url
     收尾 3 處的 metric + perf 注入 + F-RECON-1 對帳 4 個 L2 業務邏輯收編進 L2,
@@ -1155,7 +1158,7 @@ def finalize_fund_metrics(result: dict) -> dict:
     # v19.366:live **全敗**(s=None)也試 — Sheet 有累積 → 純累積序列頂上(救援),
     # status 由後續 classify_fetch_status 從內容自然升級(L1 不預寫 status,已查證)。
     _hist_trace = None
-    _s_merged, _hist_trace = _merge_nav_history_series(s, code)
+    _s_merged, _hist_trace = _merge_nav_history_series(s, code, oauth_client=oauth_client)
     if _hist_trace is not None:
         result["source_trace"].append(_hist_trace)
         if _hist_trace.get("success"):
@@ -1303,19 +1306,22 @@ def finalize_fund_metrics(result: dict) -> dict:
 
 def fetch_fund_by_key_enriched(full_key: str, fund_name: str = "",
                                 portal: str = "", source: str = "",
-                                manual_nav_csv: str = "") -> dict:
+                                manual_nav_csv: str = "", oauth_client=None) -> dict:
     """v19.240 R8 L2 enriched wrapper:L1 fetch_fund_by_key(raw NAV + 配息)+
     finalize_fund_metrics(metrics + perf 注入 + reconcile)。
 
     取代原 L1 fetch_fund_by_key 收尾呼 calc_metrics 的 L1→L2 跨層 import 模式
     (EX-L1ORCH-1 退役)。
+
+    v19.509:`oauth_client` 選填 —— 透傳給 finalize → nav_history 讀取,SA 缺時用登入者
+    身分讀雲端累積(手機健診看得到補回的歷史)。None → 純 SA/空,零改動。
     """
     from repositories.fund import fetch_fund_by_key
     result = fetch_fund_by_key(full_key, fund_name, portal, source, manual_nav_csv)
-    return finalize_fund_metrics(result)
+    return finalize_fund_metrics(result, oauth_client=oauth_client)
 
 
-def fetch_fund_from_moneydj_url_enriched(url: str) -> dict:
+def fetch_fund_from_moneydj_url_enriched(url: str, oauth_client=None) -> dict:
     """v19.240 R8 L2 enriched wrapper:L1 fetch_fund_from_moneydj_url(raw)+
     finalize_fund_metrics。
 
@@ -1323,10 +1329,12 @@ def fetch_fund_from_moneydj_url_enriched(url: str) -> dict:
     (EX-L1ORCH-1 退役)。L1 cache(@_ttl_cache TTL_15MIN)由 L1 保留,本 wrapper
     每次 L1 命中 cache 後仍 re-run finalize(metrics 計算為 in-memory pandas
     vectorized 操作,成本 ~ms 級可接受)。
+
+    v19.509:`oauth_client` 選填 —— 透傳給 finalize → nav_history 讀取(同上)。
     """
     from repositories.fund import fetch_fund_from_moneydj_url
     result = fetch_fund_from_moneydj_url(url)
-    return finalize_fund_metrics(result)
+    return finalize_fund_metrics(result, oauth_client=oauth_client)
 
 
 # ── calc_dividend_estimate ───────────────────────────────────────────
