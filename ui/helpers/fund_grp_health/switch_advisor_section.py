@@ -284,6 +284,20 @@ def render_portfolio_tracking(funds: list) -> None:
 
 # ───────────────────────── 選股池 CRUD UI ─────────────────────────
 
+def _pool_oauth_client():
+    """SA 缺時,取登入者的 OAuth gspread client 讓選股池讀寫走使用者身分(手機免設 SA)。
+
+    v19.508:mirror task #43(Tab3 SA→OAuth 回退)。拿不到(未登入 / 建置失敗)→ None,
+    `pool_repository` 收到 None 即退回純 SA / 本地行為(零 regression)。L3 在此取 client、
+    注入 L1;L1 不碰 `st.session_state`,守 §8.2 硬規則。
+    """
+    try:
+        from ui.helpers.io.oauth_state import _get_oauth_client
+        return _get_oauth_client()
+    except Exception:  # noqa: BLE001 — OAuth 未設 / 建置失敗 → None(退 SA / 本地)
+        return None
+
+
 def _render_pool_editor() -> None:
     from repositories.pool_repository import (
         PoolEntry,
@@ -293,8 +307,20 @@ def _render_pool_editor() -> None:
         set_type_override,
     )
     st.markdown("#### 📁 選股池(候選基金)")
+    # v19.508:SA 缺(手機未設 Service Account)時,用登入者 OAuth 身分讀寫選股池 Sheet →
+    # 跨 reboot 永久保存(不再只落會被清空的本地暫存)。SA 在 / 未登入 → None → 行為不變。
+    _oauth = _pool_oauth_client()
+    # §1 誠實揭露落到哪個後端 —— 防「OAuth 取不到 → 靜默存本地 → 顯示成功 → 重開消失」破口。
+    from repositories.pool_repository import pool_backend_status
+    _backend = pool_backend_status(_oauth)
+    if _backend == "local":
+        st.warning("⚠️ 未偵測到 Service Account,且 Google 未登入(或登入已過期)→ 選股池"
+                   "**只會存本地暫存,App 重開就消失**。請先在上方登入 Google(或設定 "
+                   "Service Account),再新增選股池,才能永久保存。")
+    elif _backend == "oauth":
+        st.caption("☁️ 目前以你的 Google 登入身分保存選股池到雲端(跨 App 重開不會消失)。")
     try:
-        pool = list_pool()
+        pool = list_pool(oauth_client=_oauth)
     except Exception as _e:  # noqa: BLE001
         st.caption(f"⬜ 選股池讀取失敗:[{type(_e).__name__}] {str(_e)[:80]}")
         return
@@ -363,11 +389,14 @@ def _render_pool_editor() -> None:
                 else:
                     _entry = PoolEntry(code=_c, isin=_isin.strip())   # 其餘留空 → 系統自動補
                 try:
-                    add_or_update(_entry)
+                    add_or_update(_entry, oauth_client=_oauth)
                     st.success(f"已加入 / 更新:{_c}")
                     st.rerun()
                 except Exception as _e:  # noqa: BLE001
                     st.error(f"寫入失敗:[{type(_e).__name__}] {str(_e)[:80]}")
+                    if _backend == "oauth":
+                        st.caption("💡 若是權限錯(403):請確認你登入的 Google 帳號,對選股池那本 "
+                                   "Sheet 有『編輯』權限。")
 
     if pool:
         cc1, cc2 = st.columns(2)
@@ -377,13 +406,14 @@ def _render_pool_editor() -> None:
         b1, b2 = st.columns(2)
         if b1.button("✏️ 套用型態", use_container_width=True, key="pool_setbtn"):
             try:
-                set_type_override(_sel, "" if _newt.startswith("自動") else _newt)
+                set_type_override(_sel, "" if _newt.startswith("自動") else _newt,
+                                  oauth_client=_oauth)
                 st.rerun()
             except Exception as _e:  # noqa: BLE001
                 st.error(f"設定失敗:[{type(_e).__name__}] {str(_e)[:60]}")
         if b2.button("🗑️ 從池移除", use_container_width=True, key="pool_delbtn"):
             try:
-                remove_from_pool(_sel)
+                remove_from_pool(_sel, oauth_client=_oauth)
                 st.rerun()
             except Exception as _e:  # noqa: BLE001
                 st.error(f"移除失敗:[{type(_e).__name__}] {str(_e)[:60]}")
@@ -411,7 +441,8 @@ def _render_pool_editor() -> None:
                 else:
                     try:
                         from repositories.pool_repository import set_secid
-                        set_secid(_sid_code, _sv, currency=(_sid_ccy or "").strip())
+                        set_secid(_sid_code, _sv, currency=(_sid_ccy or "").strip(),
+                                  oauth_client=_oauth)
                         st.success(f"已存:{_sid_code} → {_sv}。回上方按『開始補抓全部缺淨值』試抓,"
                                    "看『來源』欄是否變 🌐 晨星、跨度是否拉長。")
                         st.rerun()
@@ -521,7 +552,8 @@ def render_switch_advisor_section(funds: list) -> None:
         return
 
     try:
-        pool = list_pool()
+        # v19.508:SA 缺時用登入者 OAuth 讀選股池(與管理室編輯器同一本 → 手機加的檔這裡也看得到)。
+        pool = list_pool(oauth_client=_pool_oauth_client())
         _pool_by_code = {e.code: e for e in pool}
         with st.spinner("計算換股建議中(補抓池中標的 + 判定表現差)…"):
             _held = _rows_with_nav(funds, _pool_by_code)

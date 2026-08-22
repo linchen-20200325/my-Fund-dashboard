@@ -45,7 +45,7 @@ def test_type_override_validation():
 
 
 def test_set_type_override(monkeypatch, store):
-    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "get_pool_store", lambda oauth_client=None: store)
     store.upsert(PoolEntry(code="Q", name="Q基金"))
     P.set_type_override("Q", "成長")
     assert store.list_pool()[0].type_override == "成長"
@@ -54,7 +54,7 @@ def test_set_type_override(monkeypatch, store):
 
 
 def test_set_type_override_missing_raises(monkeypatch, store):
-    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "get_pool_store", lambda oauth_client=None: store)
     with pytest.raises(KeyError):
         P.set_type_override("NOPE", "成長")
 
@@ -152,7 +152,7 @@ def test_resolvers_survive_repo_error(monkeypatch):
 def test_set_secid_writes_back_keeps_isin_and_currency(monkeypatch, tmp_path):
     store = LocalJsonPoolStore(base_dir=tmp_path)
     store.upsert(PoolEntry(code="X", isin="TW123", currency="TWD", name="測試"))
-    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "get_pool_store", lambda oauth_client=None: store)
     monkeypatch.setattr(P, "_clear_pool_cache", lambda: None)
     P.set_secid("x", "0P00SEC")                                   # 不傳幣別 → 沿用 TWD
     e = store.list_pool()[0]
@@ -162,7 +162,7 @@ def test_set_secid_writes_back_keeps_isin_and_currency(monkeypatch, tmp_path):
 
 def test_set_secid_no_op_when_code_absent(monkeypatch, tmp_path):
     store = LocalJsonPoolStore(base_dir=tmp_path)
-    monkeypatch.setattr(P, "get_pool_store", lambda: store)
+    monkeypatch.setattr(P, "get_pool_store", lambda oauth_client=None: store)
     monkeypatch.setattr(P, "_clear_pool_cache", lambda: None)
     P.set_secid("NOPE", "SEC")                                    # 不在池 → 不硬建列(§1)
     assert store.list_pool() == []
@@ -171,7 +171,7 @@ def test_set_secid_no_op_when_code_absent(monkeypatch, tmp_path):
 def test_add_remove_clear_pool_cache(monkeypatch, tmp_path):
     _calls = []
     monkeypatch.setattr(P, "_clear_pool_cache", lambda: _calls.append(1))
-    monkeypatch.setattr(P, "get_pool_store", lambda: LocalJsonPoolStore(base_dir=tmp_path))
+    monkeypatch.setattr(P, "get_pool_store", lambda oauth_client=None: LocalJsonPoolStore(base_dir=tmp_path))
     P.add_or_update(PoolEntry(code="ALZF9", isin="LU0766462157"))
     P.remove_from_pool("ALZF9")
     assert _calls == [1, 1]                                       # 加/刪各清一次(立即生效)
