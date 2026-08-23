@@ -342,14 +342,18 @@ def main(argv=None) -> int:
     _fx = _fx_label()
 
     from services.switch_advisor import advise_switches
-    from services.switch_notify import build_notification
+    from services.switch_notify import build_fund_status_section, build_notification
     _res = advise_switches(_observed_rows, _pool_rows, fx_label=_fx,
                            macro_composite=_macro, underperformance_by_code=_under)
     import datetime as _dt
     _as_of = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime("%Y-%m-%d")
     _skipped = len(_observed_codes) - len(_observed_funds)   # 抓不到的觀察標的數(誠實帶進訊息)
+    # user 2026-08-23:基金狀況總覽附進週報(4D 評級 / 距高點 / 吃本金燈號)。觸發不變(沒事不吵),
+    # 有觸發時訊息帶上這段;觀察集合以 _observed_rows(已成功抓到者)為準,skipped 檔仍由 _skip_note 誠實揭露。
+    _status_section = build_fund_status_section(_observed_rows, source_by_code=_source_by_code)
     _note = build_notification(_res, as_of=_as_of, skipped=_skipped,
-                               source_by_code=_source_by_code)
+                               source_by_code=_source_by_code,
+                               fund_status_section=_status_section)
     _log(f"該通知={_note['should_notify']}｜需留意 {_note['n_actionable']} 檔"
          f"（觀察載入 {len(_observed_funds)}/{len(_observed_codes)}）")
 
