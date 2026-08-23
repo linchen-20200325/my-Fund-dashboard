@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+import math
+
 from services.switch_advisor import HOLD, INSUFFICIENT, SELL_CASH, SWITCH, WARN  # noqa: F401
 
 _LINE_TEXT_MAX = 4800          # LINE 單則文字上限 ~5000,留 buffer
@@ -48,14 +50,76 @@ def _holding_line(a: dict, source: str = "") -> str:
     return "\n".join(_bits)
 
 
+def _fmt_hwm(v) -> str:
+    """距 HWM %(距高點)→ 精簡文字。數值:『距高:-8%』;字串原樣;None/空 → ''(§1 不臆造)。"""
+    if v is None:
+        return ""
+    if isinstance(v, (int, float)):
+        if math.isnan(v) or math.isinf(v):       # §1:NaN/inf 不渲染成「距高:nan%」假數字
+            return ""
+        return f"距高:{v:+.0f}%"                   # 強制帶號(下方=負);與源字串 '-8.00%' 口徑一致
+    _s = str(v).strip()
+    return f"距高:{_s}" if _s else ""
+
+
+def _status_line(r: dict, source: str = "") -> str:
+    """單檔基金狀況一行:『• [來源] 名稱 ｜4D:X ｜距高:-N% ｜🔴吃本金』。
+    缺欄位誠實省略(不臆造);全缺 → 標『資料不足』(§1)。"""
+    _name = str(r.get("name") or r.get("code") or "?")[:14]
+    _tag = f"[{source}] " if source else ""
+    _bits = [f"• {_tag}{_name}"]
+    _g = r.get("4D Grade")
+    if _g:
+        _bits.append(f"4D:{_g}")
+    _hwm_txt = _fmt_hwm(r.get("距 HWM %"))
+    if _hwm_txt:
+        _bits.append(_hwm_txt)
+    _eat = str(r.get("吃本金燈號") or "").strip()
+    if _eat.startswith("🔴") or _eat.startswith("🟡"):   # 只標警示等級(🟢/空省略,省字)
+        _bits.append(_eat)
+    if len(_bits) == 1:
+        _bits.append("資料不足")                          # §1:無任何指標 → 誠實標,不留空
+    return " ｜".join(_bits)
+
+
+def build_fund_status_section(rows: "list | None", *, source_by_code: "dict | None" = None,
+                              max_rows: int = 20) -> str:
+    """assembled rows(含 4D Grade / 距 HWM % / 吃本金燈號)→ 一段精簡「基金狀況總覽」LINE 文字。
+
+    **L2 純函式**,零 IO(rows 由 headless script 備妥)。每檔一行精簡狀況;無 rows → '' (呼叫端不附)。
+    §1:缺欄位省略、全缺標「資料不足」;超過 max_rows 收斂成「…另有 N 檔」誠實不謊報全覆蓋。
+    user 2026-08-23:附進換股週報,定期看持倉狀況。
+    """
+    _rows = [r for r in (rows or []) if r]
+    if not _rows:
+        return ""
+    _src = source_by_code or {}
+    # 標題檔數:有來源標記時拆「持倉／觀察」(§1 不讓觀察清單灌水成「你的持倉數」)。
+    _n_hold = sum(1 for r in _rows if _src.get(str(r.get("code") or "")) == "持倉")
+    _n_watch = sum(1 for r in _rows if _src.get(str(r.get("code") or "")) == "觀察")
+    if _src and (_n_hold or _n_watch):
+        _cnt = f"{len(_rows)} 檔:持倉 {_n_hold}／觀察 {_n_watch}"
+    else:
+        _cnt = f"{len(_rows)} 檔"
+    _shown = _rows[:max_rows]
+    _lines = [_status_line(r, _src.get(str(r.get("code") or ""), "")) for r in _shown]
+    _out = f"🩺 基金狀況總覽（{_cnt}）：\n" + "\n".join(_lines)
+    if len(_rows) > max_rows:
+        _out += f"\n…另有 {len(_rows) - max_rows} 檔(開 App 看完整)"
+    return _out
+
+
 def build_notification(result: dict, *, portfolio_name: "str | None" = None,
                        as_of: "str | None" = None, skipped: int = 0,
-                       source_by_code: "dict | None" = None) -> dict:
+                       source_by_code: "dict | None" = None,
+                       fund_status_section: str = "") -> dict:
     """advise_switches 結果 → {should_notify, message, n_actionable, actionable_codes}。
 
     should_notify=False 時 message 仍給一段「本週無需換股」摘要(呼叫端可選擇不送)。
     skipped:抓不到資料、未納入評估的標的檔數(§1 誠實帶進訊息,不讓「N 檔」看起來像全部)。
     source_by_code:{code: "持倉"/"觀察"}(選填);有給則每檔前面標來源。既有 caller 不傳 → 行為零變化。
+    fund_status_section:選填,`build_fund_status_section` 產出的「基金狀況總覽」文字;有給則附進訊息
+      (user 2026-08-23「基金狀況併進週報」)。空字串 → 行為零變化,不影響既有 caller。
     """
     _advices = (result or {}).get("advices") or []
     _summary = (result or {}).get("summary") or {}
@@ -76,10 +140,22 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
     )
     _skip_note = f"\n⬜ 另有 {skipped} 檔資料不足、未評估" if skipped and skipped > 0 else ""
     _caveat = "※ 教學紀律工具,非獲利保證;請自行判斷後再決定。"
+    _tailblock = f"\n\n{_tail}\n{_caveat}"
+
+    def _assemble(body: str) -> str:
+        """body + 基金狀況(吃剩餘預算)+ tail/caveat。§1:免責/摘要**永遠保留**,長 section 只截自己
+        (稽核修:原本 section 插在 caveat 前 + 尾端截斷 → 免責會被先切掉)。"""
+        _budget = _LINE_TEXT_MAX - len(body) - len(_tailblock)
+        _blk = ""
+        if fund_status_section and _budget > 4:       # 4:預留「\n\n」+「…」
+            _cand = f"\n\n{fund_status_section}"
+            _blk = _cand if len(_cand) <= _budget else (_cand[:_budget - 1] + "…")
+        _full = body + _blk + _tailblock
+        return _full if len(_full) <= _LINE_TEXT_MAX else (_full[:_LINE_TEXT_MAX - 1] + "…")
 
     if not _actionable:
-        _msg = f"{_header}\n\n✅ 本週無需換股：所有標的續抱 / 觀察中。{_skip_note}\n\n{_tail}\n{_caveat}"
-        return {"should_notify": False, "message": _msg[:_LINE_TEXT_MAX],
+        _body = f"{_header}\n\n✅ 本週無需換股：所有標的續抱 / 觀察中。{_skip_note}"
+        return {"should_notify": False, "message": _assemble(_body),
                 "n_actionable": 0, "actionable_codes": []}
 
     _lines = [f"⚠️ 本週有 {len(_actionable)} 檔需留意：", ""]
@@ -89,11 +165,9 @@ def build_notification(result: dict, *, portfolio_name: "str | None" = None,
     if len(_actionable) > _MAX_DETAIL_ROWS:
         _lines.append(f"\n…另有 {len(_actionable) - _MAX_DETAIL_ROWS} 檔(開 App 看完整)")
 
-    _msg = f"{_header}\n\n" + "\n".join(_lines) + f"{_skip_note}\n\n{_tail}\n{_caveat}"
-    if len(_msg) > _LINE_TEXT_MAX:
-        _msg = _msg[:_LINE_TEXT_MAX - 1] + "…"
-    return {"should_notify": True, "message": _msg, "n_actionable": len(_actionable),
+    _body = f"{_header}\n\n" + "\n".join(_lines) + _skip_note
+    return {"should_notify": True, "message": _assemble(_body), "n_actionable": len(_actionable),
             "actionable_codes": [str(a.get("code") or "") for a in _actionable]}
 
 
-__all__ = ["build_notification"]
+__all__ = ["build_notification", "build_fund_status_section"]
