@@ -7,9 +7,14 @@
   1. **依保單分組、各自輸入每月管理費**(app 無此欄位 → UI 輸入,存 session;§4.1 TWD 金額)。
   2. **沒建 T7 帳本的檔** = 缺 units / 成本基礎 → **誠實標「需 T7 帳本」排除**(§1 不用
      invest_twd 硬估、不靜默),另列清單引導使用者去 T7 建帳本解鎖評分。
-  3. **台幣基金納入扣款候選**(user「台幣基金也納入扣款候選」):TWD_CASH 情境下,若有足額、
-     成本已知、非低檔(score>=0.90)的台幣基金,渲染引擎的 `twd_fund_alt`(依 loss_pct 挑擾動
-     最小者)作「免匯率風險的保單內扣款替代」——**平行非優於現金**,現金仍首選(§1 三 AI 會審)。
+  3. **台幣基金納入扣款候選**(user「台幣基金也納入扣款候選」):渲染引擎 `twd_fund_alt`
+     (足額、成本已知、非低檔、依 loss_pct 挑擾動最小的台幣基金)作「免匯率風險的保單內扣款替代」。
+  4. **同保單容錯併組 + 一律點名最適標的**(user 2026-08-23):
+     - 分組鍵 `policy_id` 正規化(`_norm_policy_key`:大小寫/空白/全半形不分),同一張保單被打成
+       'P1'/'p1' 等相近字串仍併回同一組,美元+台幣標的一起比;標題顯示實際 policy_id(非「未命名」)。
+     - 一律點名引擎 `top_pick`(組內最高 S=匯率×淨值)並依分帶誠實標示(高檔停利 / 成本之上 /
+       略低於成本實現虧損 / 低檔賤賣);is_cost_estimated 先於分帶標「成本未知」。現金/台幣基金
+       退為 band-gated 次要(S<0.90 現金升強次要)。§1 三 AI 會審措辭(不用「最適」超級詞、不提「擾動最小」)。
 
 §8.2:`build_fee_inputs` 為**純函式**(nav/fx 由 caller 注入 → 可單測、零 I/O、零 streamlit);
      render 才做 I/O(get_latest_nav / get_latest_fx)+ streamlit,與 T7 `_latest_nav_fx_t7`
@@ -100,6 +105,54 @@ def build_fee_inputs(funds: list, ledgers_by_pk: dict,
     return engine_funds, excluded, rate_map
 
 
+def _norm_policy_key(policy_id) -> str:
+    """保單代號正規化(僅供**分組**用,不改底層 policy_id / fund_pk):
+    NFKC(全形→半形)+ 去頭尾/收斂內部空白 + casefold(大小寫不分)。
+    目的:同一張保單在政策表被打成 'P1' / 'p1' / '　P1 ' 等相近字串時,仍併回同一組互比
+    (user 2026-08-23 確認「同保單要一起比」);字串實質不同的 genuine 不同保單不會被誤併。
+    """
+    import unicodedata
+    s = unicodedata.normalize("NFKC", str(policy_id or ""))
+    s = " ".join(s.split())          # 收斂頭尾 + 內部連續空白
+    return s.casefold()
+
+
+def _group_funds_by_policy(funds: list) -> tuple:
+    """依保單分組(policy_id 正規化容錯併組)。**純函式**,回 (groups, untagged)。
+
+    groups: 保序 list[{key, display, funds, raw_ids}]
+      key     = 正規化分組鍵(widget key / 迭代用)
+      display = 組內第一個非空 policy_name;皆空 → 代表 policy_id(**原字串**非正規化)——
+                對齊 app 其他處 `policy_name or policy_id`(tab3_portfolio:1486),不再顯示「未命名」。
+      raw_ids = 組內出現過的原始 policy_id(去重保序);len>1 → UI 提示回 Sheet 統一。
+    untagged: 缺 policy_id(正規化後空)的檔,誠實排除,不跨保單互比(§1 不靜默混戶)。
+    """
+    groups: list = []
+    index: dict = {}          # norm_key → groups 索引
+    untagged: list = []
+    for f in funds or []:
+        _raw = str(f.get("policy_id") or "").strip()
+        _key = _norm_policy_key(_raw)
+        if not _key:
+            untagged.append(f)
+            continue
+        if _key not in index:
+            index[_key] = len(groups)
+            groups.append({"key": _key, "display": "", "funds": [], "raw_ids": []})
+        g = groups[index[_key]]
+        g["funds"].append(f)
+        if _raw and _raw not in g["raw_ids"]:
+            g["raw_ids"].append(_raw)
+        if not g["display"]:                      # 第一個非空 policy_name 勝出
+            _pn = str(f.get("policy_name") or "").strip()
+            if _pn:
+                g["display"] = _pn
+    for g in groups:                              # display 收尾:退代表 policy_id(非「未命名」)
+        if not g["display"]:
+            g["display"] = g["raw_ids"][0] if g["raw_ids"] else g["key"]
+    return groups, untagged
+
+
 # ───────────────────────── L3 render(streamlit + I/O)─────────────────────────
 
 def _make_nav_fx_fn():
@@ -150,31 +203,28 @@ def render_fee_deduction_section(funds: list) -> None:
 
     st.divider()
     st.markdown("### 🔻 換扣款標的決策(每月保單管理費要從哪扣)")
-    st.caption("定期檢視:這個月的保單管理費,該從哪一檔基金扣(挑高檔停利減損)、還是直接台幣現金扣。"
-               "**依保單各自試算**(管理費只能從同一張保單內扣)。")
+    st.caption("定期檢視:這個月的保單管理費,該從哪一檔標的扣 —— **依匯率(美元/台幣)× 淨值高低**"
+               "排出組內 S 最高的標的並點名。**依保單各自試算**(管理費只能從同一張保單內扣)。")
 
     _funds = [f for f in (funds or []) if f.get("loaded") and not f.get("load_error")]
     if not _funds:
         st.info("尚無已載入的持倉 → 先在上方載入基金再回來試算。")
         return
 
-    from services.policy_fee_optimizer import DISCLAIMER, optimize_policy_fee
+    from services.policy_fee_optimizer import (
+        SCORE_HIGH,
+        SCORE_LOW,
+        DISCLAIMER,
+        optimize_policy_fee,
+    )
 
     _ledgers = st.session_state.get("t7_ledgers", {}) or {}
     _nav_fx = _make_nav_fx_fn()
 
-    # 依保單分組(policy_id → (policy_name, [funds]))。
-    # v19.511 稽核修:缺 policy_id 的檔**不**併成一個假保單跨比 —— 不同保單的基金互比會違反
-    # 「管理費只能從同一張保單內扣」(§1 不靜默混戶),改另列提醒引導補標記。
-    _by_policy: dict = {}
-    _untagged: list = []
-    for f in _funds:
-        _pid = str(f.get("policy_id") or "").strip()
-        if not _pid:
-            _untagged.append(f)
-            continue
-        _pname = str(f.get("policy_name") or "").strip() or "(未命名保單)"
-        _by_policy.setdefault(_pid, (_pname, []))[1].append(f)
+    # 依保單分組(policy_id 正規化容錯併組;user 2026-08-23「同一張保單要一起比」)。
+    # 缺 policy_id 的檔**不**併成一個假保單跨比 —— 不同保單的基金互比會違反「管理費只能從
+    # 同一張保單內扣」(§1 不靜默混戶),改另列提醒引導補標記。
+    _groups, _untagged = _group_funds_by_policy(_funds)
 
     if _untagged:
         _un_names = "、".join(str(f.get("name") or f.get("code") or "?") for f in _untagged[:12])
@@ -182,15 +232,20 @@ def render_fee_deduction_section(funds: list) -> None:
                    f"(避免不同保單的基金被跨保單互比):{_un_names}"
                    f"{' …' if len(_untagged) > 12 else ''}。→ 在政策表補 policy_id 即可歸戶試算。")
 
-    if not _by_policy:
+    if not _groups:
         st.info("目前沒有可歸戶到保單的持倉可試算(見上方缺標記清單)。")
         return
 
-    for _pid, (_pname, _pfunds) in _by_policy.items():
-        st.markdown(f"#### 📄 {_pname}")
+    for _g in _groups:
+        _pfunds = _g["funds"]
+        st.markdown(f"#### 📄 {_g['display']}")
+        if len(_g["raw_ids"]) > 1:               # 併了相近但不同字串的 policy_id → 誠實揭露
+            st.caption("⬜ 本組已合併相近的保單代號:「" + "」「".join(_g["raw_ids"]) + "」"
+                       "(大小寫/空白/全半形差異,視為同一張保單一起比)。"
+                       "建議到政策表把 policy_id 統一,其他頁面(如保單分組)才會一致。")
         _fee = st.number_input(
             "每月保單管理費(TWD)", min_value=0.0, step=100.0, value=0.0,
-            key=f"_feeopt_fee_{_pid}",
+            key=f"_feeopt_fee_{_g['key']}",
             help="保險公司每月固定收取的管理/行政規費(台幣)。app 無此欄位,請自行輸入。",
         )
         if not (_fee > 0):
@@ -203,29 +258,54 @@ def render_fee_deduction_section(funds: list) -> None:
                 st.warning("本保單目前**無可評估標的**(全部缺 T7 帳本或抓不到淨值/匯率,見下方清單)。")
             else:
                 _res = optimize_policy_fee(_fee, _rates, _engine_funds)
-                # ── 一句話結論(user 2026-08-22「只要一句話結論」;細節收進下方摺疊)──
-                if _res["recommendation"] == "FUND_DEDUCTION":
-                    st.success(f"**✅ 本月建議:從【{_res['top_pick_name']}】扣款**"
-                               "　—— 該檔目前在高檔,贖回單位最少(等於高點停利)。")
+                # ── 一律點名組內最適標的(user 2026-08-23「找到適合扣款的標的,匯率×淨值」)──
+                # top_pick = 組內最高 S(依匯率×淨值)足額標的。誠實護欄(§1,AI 會審):
+                #   - 標題**描述性**點名(不用「最適」超級詞,虧損時避免讀成「該賣」)。
+                #   - 判斷由分帶 note 承擔;**不**提「擾動最小」(那是 loss_pct 軸=twd_fund_alt,非 S 軸)。
+                #   - is_cost_estimated 先於分帶處理:S 為推定不可當高/低檔判斷。
+                #   - 現金/台幣基金為 band-gated 次要選項;S<0.90 現金升為強次要。
+                _top = _res.get("top_pick")
+                if _top is None:
+                    # 情境 C:無足額標的 → 誠實只能現金(不點名不存在的標的)
+                    st.info("**💵 本保單目前無可扣標的**(全部餘額不足或資料異常)→ 只能用台幣現金扣款。")
                 else:
-                    st.info("**💵 本月建議:用台幣現金扣款**"
-                            "　—— 目前沒有基金在高檔,從基金扣等於低點賤賣單位,不如付現金保住部位。")
-                    # 台幣基金安全扣款候選(user 2026-08-22「台幣基金也納入扣款候選」)。
-                    # 現金仍是首選(零擾動、保留複利);此為「保單只能內扣 / 不想動現金」時的
-                    # 免匯率風險替代,**平行非優於現金**(§1 誠實護欄,三位 AI 專家會審)。
+                    _name = _top["name"]
+                    _ccy = _top.get("currency") or ""
+                    _s = _top.get("score")
+                    _rf = _top.get("return_factor")
+                    _fx = _top.get("fx_factor")
+                    _est = bool(_top.get("is_cost_estimated"))
+                    _decomp = (f"　(S={_s:.3f} = 淨值報酬 {_rf:.3f} × 匯兌 {_fx:.3f})"
+                               if (_s is not None and _rf is not None and _fx is not None) else "")
+                    _head = (f"**本月要從基金扣的話 → 【{_name}】({_ccy})**"
+                             f"　組內依匯率×淨值排序最高{_decomp}")
                     _alt = _res.get("twd_fund_alt")
-                    if _alt:
-                        _sub = ""
-                        # 0.90<=score<1.0:略低於成本 → 賣它會實現小幅虧損(非停利點);>=1.0 才是無虧損賣點。
-                        if _alt.get("score") is not None and _alt["score"] < 1.0:
-                            _sub = (f" ⚠️ 此檔目前略低於成本(評分 {_alt['score']:.2f}),從中扣款會實現"
-                                    "小幅虧損,僅省去匯率風險、非停利點。")
-                        st.markdown(
-                            f"🏦 **或改從台幣基金【{_alt['name']}】扣**:台幣計價、免匯率風險,"
-                            f"對部位擾動最小(佔比 {_alt['loss_pct']:.2f}%)。{_sub}")
-                        st.caption("(平行選項,非優於現金:付現金零擾動、保留複利;從台幣基金扣仍會贖回"
-                                   "單位、放棄該部位複利,差別只在「動用保單內部位」還是「外部現金」,"
-                                   "依手邊現金是否充裕自行取捨。)")
+                    _alt_txt = (f"或改台幣基金【{_alt['name']}】扣(免匯率風險、台幣計價)"
+                                if (_alt and _alt.get("name") != _name) else "")
+
+                    if _est:                       # 成本未知:S 推定,不可當高/低檔
+                        st.warning(_head)
+                        st.caption("⬜ 此檔成本未知,S 以持平推定(≈1.0)、非真實高/低檔;僅代表組內排序首位,"
+                                   "**不表示在成本之上**。建議先到「💼 T7 帳本」補此檔買入成本再判斷,"
+                                   "或這個月先用台幣現金扣款。" + (("　" + _alt_txt) if _alt_txt else ""))
+                    elif _s is not None and _s >= SCORE_HIGH:   # 🟢 高檔
+                        # §1:不宣稱「贖回單位相對少」——贖回單位 = F/V 只跟當前單位市值有關、與 S 無關
+                        # (engine docstring);高分只代表相對成本在高檔=順勢停利,不等於扣得單位少。
+                        st.success(_head + "　🟢 目前在高檔(成本之上),從它扣=順勢停利,是相對最佳時機。")
+                    elif _s is not None and _s >= 1.0:          # 🟡 成本之上、非高檔(1.0=損益兩平定義值)
+                        st.info(_head + "　🟡 在成本之上、但非明顯高檔;要動基金就它最划算"
+                                "(尚無未實現虧損),惟非明確停利點。")
+                        _sec = "其他選項:也可用台幣現金扣款(零擾動、保留複利)"
+                        st.caption(_sec + ((";" + _alt_txt) if _alt_txt else "") + "。")
+                    elif _s is not None and _s >= SCORE_LOW:    # 🟠 略低於成本
+                        st.warning(_head + "　🟠 已略低於成本,從它扣會實現小幅虧損(非停利點);"
+                                   "它只是組內 S 最高。")
+                        _sec = "其他選項:若手邊有現金,可優先付台幣現金(避免實現虧損、保留複利)"
+                        st.caption(_sec + ((";" + _alt_txt) if _alt_txt else "") + "。")
+                    else:                                       # 🔴 低檔(S<0.90)
+                        st.warning(_head + f"　🔴 目前在低檔,扣任何標的都在賤賣;【{_name}】只是組內相對最不差。")
+                        _sec = "建議優先用台幣現金扣款(避免低點實現虧損)"
+                        st.caption(_sec + ((";" + _alt_txt) if _alt_txt else "") + "。")
 
                 with st.expander("看細節(判斷理由 / 各檔燈號 / 評分拆解 / 免責)", expanded=False):
                     st.caption(_res["annotation"])

@@ -233,7 +233,11 @@ def optimize_policy_fee(monthly_fee_twd, exchange_rates: dict, funds: list) -> d
         annotation = ("建議直接使用【台幣現金扣款】。因所有持倉標的餘額不足以支付本月管理費 "
                       f"{fee:,.0f} 元(或資料異常),必須以台幣現金繳費。")
     else:
-        top = eligible[0]                   # 已排序 → 最高分足額標的
+        # top 選取:優先「真實成本」足額標的,避免推定 S=1.0(is_cost_estimated,cost 缺省)蓋過
+        # 已知「略低於成本」的真實標的(§1 誠實:假平價不得勝過已知資訊;twd_fund_alt 同理排除 imputed)。
+        # eligible 已依 score desc → 子集 [0] 即該子集最高分;無真實成本標的才退 imputed(UI 標「成本未知」)。
+        _elig_real = [e for e in eligible if not e.is_cost_estimated]
+        top = (_elig_real or eligible)[0]
         if top.score >= SCORE_HIGH:         # 情境 A:高檔停利扣款
             recommendation, scenario = REC_FUND, "A"
             annotation = (f"建議優先由【{top.name}】扣除。該標的目前處於高基期(評分 "
@@ -263,6 +267,7 @@ def optimize_policy_fee(monthly_fee_twd, exchange_rates: dict, funds: list) -> d
         "disclaimer": DISCLAIMER,           # §1 誠實護欄:UI 須顯著揭露(稅/費/複利未計入)
         "monthly_fee_twd": fee,
         "eligible_count": len(eligible),
+        "top_pick": (asdict(top) if top else None),  # 組內最高 S 足額標的(依匯率×淨值);None=無足額標的
         "twd_fund_alt": twd_fund_alt,       # 台幣基金安全扣款候選(免匯率風險、擾動最小);None = 無
         "funds": [asdict(e) for e in evals],
     }
