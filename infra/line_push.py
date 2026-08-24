@@ -111,4 +111,33 @@ def push_flex(contents: dict, alt_text: str, *, token: "str | None" = None,
                           dry_run=dry_run, timeout=timeout, _poster=_poster)
 
 
-__all__ = ["push_text", "push_flex", "LinePushError"]
+def push_image(original_url: str, preview_url: "str | None" = None, *,
+               caption: "str | None" = None, token: "str | None" = None,
+               user_id: "str | None" = None, dry_run: bool = False, timeout: float = 10.0,
+               _poster=None) -> dict:
+    """推一則**圖片訊息**(+ 選填 caption 文字)到指定 LINE user。
+
+    Args:
+        original_url / preview_url: LINE 圖片訊息要求兩者皆為**公開 HTTPS 網址**(PNG/JPEG;
+            original ≤10MB / preview ≤1MB;**不能夾原始 bytes**)。preview 省略 → 用 original。
+        caption: 有給則同一則 push 附一則 text(圖下方文字)。LINE 陣列任一 message 無效會整批
+            400,故 caption 走最簡 text 型別(最不易被退)。
+    Returns / Raises 同 push_text。憑證與端點與 text/flex 共用,**無需新 secret**。
+    """
+    _orig = str(original_url or "").strip()
+    _prev = str(preview_url or "").strip() or _orig
+    if not (_orig.startswith("https://") and _prev.startswith("https://")):
+        return {"sent": False, "dry_run": bool(dry_run), "status": None,
+                "reason": "圖片網址須為公開 https(LINE 圖片訊息要求)"}
+    _messages = [{"type": "image", "originalContentUrl": _orig, "previewImageUrl": _prev}]
+    _cap = str(caption or "").strip()
+    if _cap:
+        if len(_cap) > _LINE_TEXT_MAX:
+            _cap = _cap[:_LINE_TEXT_MAX - 1] + "…"
+        _messages.append({"type": "text", "text": _cap})
+    _preview = f"[圖片] {_orig}" + (f"\n{_cap}" if _cap else "")
+    return _post_messages(_messages, preview=_preview, token=token, user_id=user_id,
+                          dry_run=dry_run, timeout=timeout, _poster=_poster)
+
+
+__all__ = ["push_text", "push_flex", "push_image", "LinePushError"]
