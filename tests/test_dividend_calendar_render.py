@@ -39,8 +39,19 @@ def test_render_contains_key_data():
     assert "安聯" in html                             # 投信名(user 2026-08-24:改只顯示投信)
     assert "民國115年 8月（2026）" in html
     assert "8/14" in html or ">14<" in html          # 除息日出現(明細或格子)
-    assert "已排除" in html and "ACDD01" in html      # 排除區(仍列代號,否則不知排除了誰)
     assert "配息入帳日為除息日後一個月內" in html      # 免責聲明
+
+
+def test_no_dividend_section_removed():
+    """user 2026-08-24「沒有配息的整段移除」:累積型/查無配息基金不再佔版面。
+
+    ⚠️ `unpredictable`(有配息史但本月推不出)必須**保留** —— 語意是「可能有配息但算不出來」,
+    靜默吃掉會讓人誤判當月無事(§1);見 test_render_shows_unpredictable_bucket。
+    """
+    html = render_month_calendar_html(_cal())
+    assert "已排除" not in html
+    assert "無月配息" not in html
+    assert "ACDD01" not in html                       # 該累積型基金整段不再出現
 
 
 def test_removed_columns_gone():
@@ -123,13 +134,12 @@ def test_unknown_house_fund_still_visible_in_grid():
 
 
 # ── 同日同投信合併(user 2026-08-24「移除重複」)──────────────────────────────
-def test_same_house_same_day_merged_with_count():
+def test_same_house_same_day_merged():
     from ui.helpers.dividend_calendar_render import _dedupe_day_chips
     evs = [{"house": "安聯", "code": "TLZF9", "confidence": "high"},
            {"house": "安聯", "code": "TLZM7", "confidence": "high"}]
     out = _dedupe_day_chips(evs)
-    assert len(out) == 1                              # 兩檔安聯 → 併成一個 chip
-    assert out[0]["label"] == "安聯" and out[0]["n"] == 2      # ×2 標明有兩檔(不丟資訊)
+    assert len(out) == 1 and out[0]["label"] == "安聯"        # 兩檔安聯 → 併成一個 chip(無 ×N)
 
 
 def test_merge_keeps_low_confidence_flag():
@@ -145,7 +155,6 @@ def test_different_houses_not_merged():
     out = _dedupe_day_chips([{"house": "安聯", "code": "A", "confidence": "high"},
                              {"house": "摩根", "code": "B", "confidence": "high"}])
     assert [c["label"] for c in out] == ["安聯", "摩根"]        # 不同投信不合併、保序
-    assert all(c["n"] == 1 for c in out)
 
 
 def test_unknown_house_funds_not_merged_together():
@@ -164,8 +173,8 @@ def test_grid_renders_merged_chip_once():
     html = render_month_calendar_html(build_month_calendar(funds, 2026, 8))
     _grid = html.split('<h2 class="section-t">')[0]
     assert _grid.count("安聯") == 2                    # 圖例 1 + 格子 1(不再重複兩個格子 chip)
-    assert "×2" in _grid                               # 標明當日有兩檔(不丟資訊)
-    assert html.count("<tr>") >= 2                     # 明細表仍逐檔各一列(只是不顯示代號)
+    assert "×2" not in _grid                           # user 2026-08-24:×N 也移除
+    assert html.count("<tr>") >= 2                     # 明細表仍逐檔各一列 → 兩檔都沒被藏掉
 
 
 # ── render_month_calendar_png(截 App 那張 HTML → PNG;user 2026-08-24)──────────

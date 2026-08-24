@@ -297,6 +297,48 @@ def add_business_days(d: "_dt.date | None", n: int) -> "_dt.date | None":
     return cur
 
 
+def display_label(ev: dict) -> str:
+    """事件 → 顯示名稱:**只顯示投信名**(user 2026-08-24「我只要投信名」,代號不顯示)。
+
+    圖檔月曆 / 明細表 / LINE 文字 / Flex 四個介面**共用同一規則**(SSOT,避免各處寫法漂移)。
+    §1:判不出投信 → 退代號 → 退基金名 → 全空才「—」;**絕不回空字串**,否則該筆除息在畫面上
+    等於消失(Flex 空字串 text 更會讓整則推播 400)。
+    """
+    return (str(ev.get("house") or "").strip()
+            or str(ev.get("code") or "").strip()
+            or str(ev.get("name") or "").strip()
+            or "—")
+
+
+_CONF_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+def dedupe_events(events: list) -> list:
+    """同一天 + 同投信的多檔 → 只留一筆(user 2026-08-24「這邊重複也移除」)。
+
+    格子、明細表、LINE 文字、Flex 四處共用同一去重規則(SSOT)。保序(依原順序)。
+
+    ⚠️ **這是顯示層去重,會少掉「當天該投信有幾檔」的資訊** —— user 明確要求乾淨版面
+    (先移除 ×N,再要求明細表也去重)。完整逐檔資料未被更動,仍在 `cal["events"]` /
+    App 內頁查得到;本函式只影響呈現。
+    §1:合併後信心取**最保守**(任一檔 low → 整組 low),不把低信心洗成高信心。
+    """
+    out: list = []
+    idx: dict = {}
+    for ev in events:
+        _key = (ev.get("ex_date"), display_label(ev))
+        _hit = idx.get(_key)
+        if _hit is None:
+            idx[_key] = len(out)
+            out.append(dict(ev))
+        else:
+            _cur = out[_hit]
+            if (_CONF_RANK.get(ev.get("confidence"), 1)
+                    < _CONF_RANK.get(_cur.get("confidence"), 1)):
+                _cur["confidence"] = ev.get("confidence")     # 取較保守者
+    return out
+
+
 def pay_window(ex: "_dt.date | None") -> "tuple | None":
     """除息日 → (最早, 最晚) 入帳推估日 = 除息 + 5~7 個工作天(user 2026-08-24 經驗值)。
 
@@ -330,15 +372,14 @@ def build_summary_text(cal: dict) -> str:
         lines.append("你的基金本月無推估除息日（或資料不足）。")
     else:
         lines.append(_pay_note())
-        for e in events:
+        for e in dedupe_events(events):                # 同日同投信只列一次(user 2026-08-24)
             _ex = e["ex_date"]
             _tag = _CONF_ZH.get(e.get("confidence"), "")
-            _house = f"{e.get('house')} " if e.get("house") else ""
-            lines.append(f"• {_ex.month}/{_ex.day} 除息　{_house}{e.get('code')}{_tag}")
-    _exc = cal.get("excluded") or []
+            lines.append(f"• {_ex.month}/{_ex.day} 除息　{display_label(e)}{_tag}")
+    # user 2026-08-24「沒有配息的整段移除」→ 不再提累積型/無配息檔數(那些本來就不會配,不需提醒)。
+    # `unpredictable`(有配息史但本月推不出)**保留** —— 那是「可能有配息但我算不出來」,
+    # 靜默吃掉會讓你以為當月沒事(§1 誠實揭露)。
     _unp = cal.get("unpredictable") or []
-    if _exc:
-        lines.append(f"（{len(_exc)} 檔累積型/無配息未列）")
     if _unp:
         lines.append(f"（{len(_unp)} 檔節奏不規則/疑停配,無法推估）")
     lines.append("※ 推估非官方,實際以基金公司公告為準。")
@@ -354,14 +395,14 @@ _FLEX_MAX_ROWS = 30       # 稽核:Flex JSON ≤50KB;逐檔一列上限,其餘�
 
 
 def _flex_event_row(e: dict) -> dict:
-    """單檔一列(horizontal box):除息日 ｜ 名稱/代號。
+    """單檔一列(horizontal box):除息日 ｜ 投信名。
 
-    user 2026-08-24:到帳時間不逐檔列(改由清單上方一句統一標),故本列只有除息日 + 名稱。
-    §1/稽核:LINE 拒絕**空字串 text**(整則 Flex 400 → 全推播失敗),故名稱保證非空(退「—」)。
+    user 2026-08-24:到帳時間不逐檔列(改由清單上方一句統一標)、名稱只留投信名(代號不顯示),
+    故本列只有除息日 + 投信名。
+    §1/稽核:LINE 拒絕**空字串 text**(整則 Flex 400 → 全推播失敗),`display_label` 保證非空。
     """
     _ex = e["ex_date"]
-    _house = f"{e.get('house')} " if e.get("house") else ""
-    _name = (f"{_house}{e.get('code') or e.get('name') or ''}").strip()[:22] or "—"
+    _name = display_label(e)[:22]                     # 只顯示投信名(SSOT,與圖檔/文字一致)
     if e.get("confidence") == "low":
         _name += "（信心低）"
     _contents = [
@@ -379,8 +420,7 @@ def build_summary_flex(cal: dict) -> dict:
     """
     y, m = cal.get("year"), cal.get("month")
     _roc = (y - 1911) if isinstance(y, int) else "?"
-    events = cal.get("events") or []
-    _exc = cal.get("excluded") or []
+    events = dedupe_events(cal.get("events") or [])    # 同日同投信只列一次(user 2026-08-24)
     _unp = cal.get("unpredictable") or []
 
     _body: list = []
@@ -397,13 +437,9 @@ def build_summary_flex(cal: dict) -> dict:
             _body.append({"type": "text",
                           "text": f"…另 {len(events) - _FLEX_MAX_ROWS} 檔（開 App 看完整）",
                           "size": "xs", "color": _FLEX_SUB, "wrap": True})
-    _notes = []
-    if _exc:
-        _notes.append(f"{len(_exc)} 檔累積型/無配息未列")
+    # 「累積型/無配息」整段移除(user 2026-08-24);`unpredictable` 保留 —— 見 build_summary_text 註解
     if _unp:
-        _notes.append(f"{len(_unp)} 檔節奏不規則/疑停配")
-    if _notes:
-        _body.append({"type": "text", "text": "（" + "・".join(_notes) + "）",
+        _body.append({"type": "text", "text": f"（{len(_unp)} 檔節奏不規則/疑停配）",
                       "size": "xxs", "color": _FLEX_SUB, "wrap": True})
     _body.append({"type": "text", "text": "※ 推估非官方,實際以基金公司公告為準。",
                   "size": "xxs", "color": _FLEX_SUB, "wrap": True, "margin": "sm"})

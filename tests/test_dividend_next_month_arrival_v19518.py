@@ -60,6 +60,44 @@ def test_add_business_days_year_boundary():
     assert got > d and got.weekday() < 5                  # timedelta 跨年無縫、結果為工作日
 
 
+# ── dedupe_events:同日同投信只留一筆(user 2026-08-24「這邊重複也移除」)─────────────
+def _dev(house, code, day, conf="high"):
+    return {"house": house, "code": code, "ex_date": _dt.date(2026, 8, day), "confidence": conf}
+
+
+def test_dedupe_same_house_same_day():
+    from services.dividend_calendar import dedupe_events
+    out = dedupe_events([_dev("安聯", "TLZF9", 15), _dev("安聯", "TLZM7", 15)])
+    assert len(out) == 1 and out[0]["house"] == "安聯"
+
+
+def test_dedupe_keeps_same_house_different_days():
+    from services.dividend_calendar import dedupe_events
+    out = dedupe_events([_dev("安聯", "A", 15), _dev("安聯", "B", 20)])
+    assert len(out) == 2                                  # 不同日不可合併(會漏掉一天的除息)
+
+
+def test_dedupe_confidence_takes_most_conservative():
+    from services.dividend_calendar import dedupe_events
+    for order in ([_dev("安聯", "A", 15, "high"), _dev("安聯", "B", 15, "low")],
+                  [_dev("安聯", "B", 15, "low"), _dev("安聯", "A", 15, "high")]):
+        out = dedupe_events(order)
+        assert len(out) == 1 and out[0]["confidence"] == "low"   # §1 不把低信心洗成高
+
+
+def test_dedupe_unknown_house_not_merged():
+    from services.dividend_calendar import dedupe_events
+    out = dedupe_events([_dev("", "AAA", 15), _dev("", "BBB", 15)])
+    assert len(out) == 2                                  # 判不出投信 → 退代號,兩檔各自保留
+
+
+def test_dedupe_does_not_mutate_input():
+    from services.dividend_calendar import dedupe_events
+    evs = [_dev("安聯", "A", 15, "high"), _dev("安聯", "B", 15, "low")]
+    dedupe_events(evs)
+    assert evs[0]["confidence"] == "high"                 # 原始 events 不被就地改動
+
+
 # ── pay_window:到帳推估「區間」= 除息 +5~7 工作天(user 2026-08-24 經驗值)──────────
 def test_pay_window_is_5_to_7_business_days():
     from services.dividend_calendar import (

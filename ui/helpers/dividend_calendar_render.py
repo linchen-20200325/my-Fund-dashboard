@@ -9,6 +9,8 @@ from __future__ import annotations
 import calendar as _calendar
 import html as _html
 
+from services.dividend_calendar import dedupe_events, display_label, pay_window
+
 # 投信分色(中間調,深/淺底都看得清;判不出 → 預設灰)
 _HOUSE_COLOR = {
     "聯博": "#2e8079", "安聯": "#b5771f", "摩根": "#3f63ab", "施羅德": "#8a5680",
@@ -108,36 +110,23 @@ def _color(house: str) -> str:
 
 
 def _chip_label(ev: dict) -> str:
-    """月曆格子內的標籤:**只顯示投信名**(user 2026-08-24:「只保留投資商的名稱,移除代碼」)。
+    """月曆格子/明細表的標籤:**只顯示投信名**(user 2026-08-24)。
 
-    代號仍保留在下方「本月除息明細」表(格子求乾淨、明細求可查)。
-    §1:判不出投信(`detect_house` 回 "")→ 退顯示代號,**絕不留空白 chip** 把當日除息事件藏掉。
+    規則 SSOT 在 L2 `services.dividend_calendar.display_label` —— 圖檔、明細表、LINE 文字、
+    Flex 四個介面共用同一份,避免各寫各的而漂移。§1 保證非空(退代號 → 基金名 → 「—」)。
     """
-    return (str(ev.get("house") or "").strip()
-            or str(ev.get("code") or "").strip()
-            or "—")
+    return display_label(ev)
 
 
 def _dedupe_day_chips(evs: list) -> list:
-    """同一天同投信多檔 → 合併成**一個** chip + 「×N」(user 2026-08-24「移除重複」)。
+    """同一天同投信多檔 → 合併成**一個** chip(user 2026-08-24「移除重複」、「×2 也移除」)。
 
-    §1 合併**不丟資訊**:帶 ×N 標明當日該投信有幾檔除息,完整逐檔清單仍在下方明細表;
-    任一檔信心低 → 合併後仍標「?」(不因合併把低信心洗掉)。依原事件順序保序。
+    去重規則走 L2 `dedupe_events`(格子 / 明細表 / LINE 文字 / Flex 同一份 SSOT,不會漂移);
+    本函式只負責補上顯示用的顏色與低信心旗標。信心已由 L2 取最保守值(任一 low → low)。
     """
-    out: list = []
-    idx: dict = {}
-    for ev in evs:
-        _label = _chip_label(ev)
-        _low = ev.get("confidence") == "low"
-        _hit = idx.get(_label)
-        if _hit is None:
-            idx[_label] = len(out)
-            out.append({"label": _label, "color": _color(ev.get("house")),
-                        "n": 1, "low": _low})
-        else:
-            out[_hit]["n"] += 1
-            out[_hit]["low"] = out[_hit]["low"] or _low
-    return out
+    return [{"label": _chip_label(_ev), "color": _color(_ev.get("house")),
+             "low": _ev.get("confidence") == "low"}
+            for _ev in dedupe_events(evs)]
 
 
 def _fmt_pay_window(ex) -> str:
@@ -145,7 +134,6 @@ def _fmt_pay_window(ex) -> str:
 
     §1:算不出(ex 非日期)→ 「—」,不捏造日期。
     """
-    from services.dividend_calendar import pay_window
     _w = pay_window(ex)
     if not _w:
         return "—"
@@ -161,7 +149,6 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
     first_wd, days = _calendar.monthrange(y, m)      # first_wd: Mon=0..Sun=6
     by_day = cal.get("by_day") or {}
     events = cal.get("events") or []
-    excluded = cal.get("excluded") or []
 
     # 圖例:本月出現的投信(去重保序)
     seen, legend = set(), []
@@ -187,7 +174,6 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
             chips = '<div class="chips">' + "".join(
                 f'<span class="chip"><span class="dot" style="background:{_e(c["color"])}"></span>'
                 f'<b>{_e(c["label"])}</b>'
-                + (f'<span class="code">×{c["n"]}</span>' if c["n"] > 1 else "")
                 + ('<span class="q">?</span>' if c["low"] else "")
                 + '</span>'
                 for c in _dedupe_day_chips(evs)) + '</div>'
@@ -198,7 +184,7 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
     # 明細表(user 2026-08-24:基金欄只留投信名、拿掉代號;「上次配息」「年化配息」整欄移除;
     # 原「所屬」欄與基金欄同值 → 合併成一欄,不重複)
     rows = ""
-    for e in events:
+    for e in dedupe_events(events):                  # 同日同投信只列一次(user 2026-08-24)
         ex = e["ex_date"]
         cf_zh, cf_cls = _CONF.get(e.get("confidence"), ("—", "med"))
         rows += (
@@ -211,11 +197,10 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
     if not rows:
         rows = '<tr><td colspan="4" class="muted">本月你的基金無推估除息日（或資料不足）。</td></tr>'
 
+    # user 2026-08-24「沒有配息的整段移除」:累積型/查無配息的基金本來就不會配息,不需佔版面提醒。
+    # ⚠️ 下方 `unpredictable`(有配息史但本月推不出)**保留** —— 那是「可能有配息但算不出來」,
+    # 靜默吃掉會讓你誤以為當月沒事(§1 誠實揭露)。兩者語意不同,不可一起砍。
     exc_html = ""
-    if excluded:
-        names = "、".join(f'<b>{_e(x.get("code"))}</b> {_e(x.get("name"))}' for x in excluded)
-        exc_html = (f'<div class="excluded"><span class="x">已排除</span>以下持有基金<b>無月配息</b>'
-                    f'（累積型 / 查無配息），故不列入 —— 這是正常的，不是漏抓：{names}。</div>')
 
     # 稽核 M3:有配息史但本月無法推估(節奏不規則 / 疑停配過舊)→ 誠實揭露,不靜默消失
     unpredictable = cal.get("unpredictable") or []

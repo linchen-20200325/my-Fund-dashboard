@@ -182,8 +182,11 @@ def test_summary_text_lists_events_and_excluded():
     cal = build_month_calendar(funds, 2026, 8)
     txt = build_summary_text(cal)
     assert "民國115年8月" in txt
-    assert "8/14" in txt and "TLZF9" in txt
-    assert "1 檔累積型/無配息未列" in txt
+    # user 2026-08-24:逐檔只留投信名,代號不顯示(圖檔/明細表/文字/Flex 同一規則)
+    assert "8/14" in txt and "安聯" in txt
+    assert "TLZF9" not in txt
+    # user 2026-08-24「沒有配息的整段移除」→ 不再提累積型/無配息檔數
+    assert "累積型" not in txt and "ACDD01" not in txt
     assert "推估非官方" in txt
 
 
