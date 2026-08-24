@@ -1,7 +1,9 @@
 name: "除息行事曆 月初摘要 (LINE)"
 
-# 每月月初對「持倉 ∪ 追蹤清單」推估**下個月**除息日 + 到帳日(除息+5工作天)→ 一則 LINE 摘要(方式 C)。
-# 視覺完整月曆(本月)看 App「我的管理室 → 除息行事曆」(方式 A)。
+# 每月月初對「持倉 ∪ 追蹤清單」推估**下個月**除息日(遇六日/國定假日順延營業日)+ 到帳區間
+# (除息 +5~7 營業日)→ 推一張**月曆圖檔 + 圖下方文字清單**到 LINE。
+# 圖 = 截 App「我的管理室 → 除息行事曆」同一份 HTML,兩邊同源。
+# 產圖/發佈/推圖任一步失敗 → 自動退 Flex 彩色卡片 → 再退純文字,提醒一定送達(§1)。
 # ⚠️ cron 是 UTC。台灣 = UTC+8。 0 0 1 * * = 每月 1 號 00:00 UTC = 1 號 08:00 台灣。
 on:
   schedule:
@@ -16,6 +18,11 @@ concurrency:
   group: dividend-calendar-notify
   cancel-in-progress: false
 
+permissions:
+  # 月曆 PNG 需發佈到 push-assets 分支才能取得 LINE 可讀的公開網址(infra/asset_publish)。
+  # 沒有這行 → Contents API PUT 會 403 → 自動退回 Flex 卡片(提醒仍送達,但沒有圖)。
+  contents: write
+
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -26,8 +33,26 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
+      - name: Install Chromium + 中文字型（月曆 PNG 用）
+        # 產圖走 headless Chromium 截 App 那份 HTML(infra/html_to_png)。
+        # fonts-noto-cjk 缺 → 整張圖會變成 tofu 方塊,html_to_png 的 require_cjk 探針會擋下並
+        # 讓推播退回 Flex(§1 不推無法閱讀的圖),故字型與瀏覽器一樣該裝。
+        #
+        # ⚠️ `continue-on-error: true` 是**刻意的**(稽核 HIGH-1):本步驟會抓 ~170MB 瀏覽器,
+        # Playwright CDN / apt mirror 抖一下就整步失敗。若讓它中止 job,Python 那條
+        # 「圖 → Flex → 純文字」三段降級鏈**根本沒機會執行** → 當月完全收不到通知,
+        # 而 cron 是月排程,下次要等 30 天。這正是降級鏈要防的情境(§1)。
+        # 裝不起來時 Python 端會自己發現(html_to_png 找不到 playwright/Chromium)並退 Flex,
+        # 提醒照樣送達 —— 只是沒有圖。故本步驟為「best-effort」,不可成為硬門檻。
+        continue-on-error: true
+        run: |
+          python -m pip install 'playwright>=1.40'   # 與 requirements-dev.txt 同下限(§5 可重現)
+          python -m playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
       - name: Run monthly dividend-calendar LINE summary
         env:
+          # asset_publish 用:發佈月曆 PNG 到 push-assets 分支換取公開圖片網址
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           google_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           macro_weights_sheet_id: ${{ secrets.MACRO_WEIGHTS_SHEET_ID }}
           # 持倉自 v19.462 起存 POLICY_SHEET_ID 那本;_load_client_and_sheet 優先讀它(未設才退
