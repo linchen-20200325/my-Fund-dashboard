@@ -50,7 +50,12 @@ _CSS = """
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",-apple-system,system-ui,sans-serif;
+  /* "Noto Sans CJK TC" 為 Debian/Ubuntu `fonts-noto-cjk` 實際註冊的家族名(cron runner 用);
+     "Noto Sans TC" 是 Google Fonts 子集家族名(Debian 沒有)。少了 CJK TC 這條,runner 上所有
+     指名字型都 miss → 落到 generic sans-serif → Noto Sans CJK 預設臉是 **JP**,繁中會被畫成
+     日文漢字變體(直/骨/令 等字形不同)。明確指名 TC 才不必賭 lang 轉發。 */
+  font-family:"PingFang TC","Noto Sans CJK TC","Noto Sans TC","Microsoft JhengHei",
+              -apple-system,system-ui,sans-serif;
   line-height:1.5;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1040px;margin:0 auto;padding:clamp(16px,3.5vw,32px)}
 .tnum{font-variant-numeric:tabular-nums}

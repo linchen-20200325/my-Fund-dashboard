@@ -187,4 +187,63 @@ def test_dry_run_does_not_call_api():
     url = publish_asset(_PNG, "a/b.png", repo=_REPO, token=_TOKEN, dry_run=True,
                         _requester=_fake({}, log))
     assert log == []
-    assert "DRYRUN" in url
+    assert url.startswith("dry-run://")
+
+
+def test_dry_run_url_is_structurally_unpushable():
+    """§1 結構性防呆:dry-run 網址若長得像真的,誤用就會推出永久破圖。
+
+    回非 https scheme → `push_image` 的 https 檢查會直接擋下,不必只靠 docstring 警語。
+    """
+    from infra.line_push import push_image
+    url = publish_asset(_PNG, "a/b.png", repo=_REPO, token=_TOKEN, dry_run=True)
+    assert not url.startswith("https://")
+    r = push_image(url, token="t", user_id="u")        # 誤用 → LINE 端擋下,不會送出
+    assert r["sent"] is False and "https" in r["reason"]
+
+
+# ── 稽核修:網路層錯誤也要符合 Raises 契約 / 非 404 不可當「檔案不存在」/ 422 已存在不算失敗 ──
+def test_network_error_wrapped_as_asset_publish_error(monkeypatch):
+    """真 requester 的網路例外必須包成 AssetPublishError(對齊 infra.line_push 作法)。"""
+    import requests
+
+    def _boom(*a, **k):
+        raise requests.exceptions.ConnectionError("dns fail")
+    monkeypatch.setattr(requests, "request", _boom)
+    with pytest.raises(AssetPublishError) as ei:
+        publish_asset(_PNG, "a/b.png", repo=_REPO, token=_TOKEN)   # 走真 _default_requester
+    assert "網路錯誤" in str(ei.value)
+
+
+def test_existing_sha_non_404_raises_not_treated_as_new():
+    # 403(次級速率限制)被當成「新檔」→ PUT 少帶 sha → GitHub 422,真因被吃掉、log 誤導
+    routes = dict(_routes_branch_exists())
+    routes[("GET", f"/contents/{_PATH}")] = _Resp(403, {}, text="rate limited")
+    with pytest.raises(AssetPublishError) as ei:
+        publish_asset(_PNG, _PATH, repo=_REPO, token=_TOKEN, _requester=_fake(routes))
+    assert "403" in str(ei.value)
+
+
+def test_branch_already_exists_race_is_not_failure():
+    # GET→POST 之間別人搶先建好 → GitHub 422 "Reference already exists" = 我們要的結果
+    routes = {
+        ("GET", "/git/ref/heads/push-assets"): _Resp(404, {}),
+        ("GET", "/repos/owner/repo"): _Resp(200, {"default_branch": "main"}),
+        ("GET", "/git/ref/heads/main"): _Resp(200, {"object": {"sha": "m"}}),
+        ("POST", "/git/refs"): _Resp(422, {}, text='{"message":"Reference already exists"}'),
+        ("GET", f"/contents/{_PATH}"): _Resp(404, {}),
+        ("PUT", f"/contents/{_PATH}"): _Resp(201, {"commit": {"sha": "raced"}}),
+    }
+    url = publish_asset(_PNG, _PATH, repo=_REPO, token=_TOKEN, _requester=_fake(routes))
+    assert url.endswith("/raced/a/b.png")             # 照常發佈,不因競態丟掉出圖路徑
+
+
+def test_branch_create_other_422_still_raises():
+    routes = {
+        ("GET", "/git/ref/heads/push-assets"): _Resp(404, {}),
+        ("GET", "/repos/owner/repo"): _Resp(200, {"default_branch": "main"}),
+        ("GET", "/git/ref/heads/main"): _Resp(200, {"object": {"sha": "m"}}),
+        ("POST", "/git/refs"): _Resp(422, {}, text='{"message":"Invalid ref name"}'),
+    }
+    with pytest.raises(AssetPublishError):            # 非「已存在」的 422 仍要 fail loud
+        publish_asset(_PNG, _PATH, repo=_REPO, token=_TOKEN, _requester=_fake(routes))

@@ -17,6 +17,10 @@ from __future__ import annotations
 
 _PUSH_URL = "https://api.line.me/v2/bot/message/push"
 _LINE_TEXT_MAX = 5000          # LINE text message 硬上限
+# LINE 圖片訊息:originalContentUrl ≤10MB、**previewImageUrl ≤1MB**。`push_image` 兩者共用同一
+# 網址,故產圖端須以較嚴的 preview 上限為準。取 950KB(1MB 不論以 1,000,000 或 1,048,576 解讀
+# 都有餘裕)。LINE 協定限制 SSOT 放在本模組,產圖/呼叫端 import 使用,不各自寫死(§3.3)。
+LINE_IMAGE_PREVIEW_MAX_BYTES = 950_000
 
 
 class LinePushError(Exception):
@@ -140,4 +144,5 @@ def push_image(original_url: str, preview_url: "str | None" = None, *,
                           dry_run=dry_run, timeout=timeout, _poster=_poster)
 
 
-__all__ = ["push_text", "push_flex", "push_image", "LinePushError"]
+__all__ = ["push_text", "push_flex", "push_image", "LinePushError",
+           "LINE_IMAGE_PREVIEW_MAX_BYTES"]

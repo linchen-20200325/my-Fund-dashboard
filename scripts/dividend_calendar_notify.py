@@ -23,11 +23,6 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 
-# LINE 圖片訊息 previewImageUrl 硬上限 1MB(originalContentUrl 為 10MB)。push_image 兩者共用
-# 同一網址,故以較嚴的 preview 上限為準;留 5% 餘裕避免邊界。
-_LINE_PREVIEW_MAX = 1_000_000
-
-
 def _log(msg: str) -> None:
     print(f"[dividend_calendar_notify] {msg}", file=sys.stderr)
 
@@ -56,14 +51,15 @@ def _render_and_publish(cal: dict, year: int, month: int) -> "str | None":
     workflow 未給 `contents: write`(發佈)、網路。
     """
     try:
+        from infra.line_push import LINE_IMAGE_PREVIEW_MAX_BYTES as _MAX
         from ui.helpers.dividend_calendar_render import render_month_calendar_png
         _png = render_month_calendar_png(cal)
-        # LINE 圖片訊息:original ≤10MB、**preview ≤1MB**;push_image 兩者同一網址,故必須 ≤1MB。
-        # 明細表列數隨基金數成長,retina(scale=2)在檔數多時可能超標 → 超過就用 scale=1 重畫。
-        if len(_png) > _LINE_PREVIEW_MAX:
-            _log(f"月曆圖 {len(_png)} bytes 超過 LINE preview 上限 → 改 scale=1 重畫")
+        # LINE preview 上限(SSOT 在 infra.line_push)。明細表列數隨基金數成長,retina(scale=2)
+        # 在檔數多時可能超標 → 超過就用 scale=1 重畫;仍超標則退 Flex,不推會被 LINE 退的圖。
+        if len(_png) > _MAX:
+            _log(f"月曆圖 {len(_png)} bytes 超過 LINE preview 上限({_MAX})→ 改 scale=1 重畫")
             _png = render_month_calendar_png(cal, scale=1)
-            if len(_png) > _LINE_PREVIEW_MAX:
+            if len(_png) > _MAX:
                 _log(f"縮圖後仍 {len(_png)} bytes 超標 → 退 Flex(不推會被 LINE 退的圖)")
                 return None
     except Exception as _e:  # noqa: BLE001 — 產圖失敗(Chromium/字型/逾時)→ 退 Flex
@@ -144,10 +140,17 @@ def main(argv=None) -> int:
         except LinePushError as _e:  # noqa: BLE001 — LINE 退圖(網址不可達/格式)→ 往下退 Flex
             _log(f"圖檔推播失敗:{_e} → 退 Flex")
 
+    # Flex 有**兩種**失敗形態:raise(被 LINE 退)與 res["sent"]=False(如空內容,不 raise)。
+    # 兩種都要往下退純文字 —— 只接 exception 會讓 sent=False 直接落到最後 return 1,明明手上
+    # 有現成的 text 卻不送,提醒消失(§1 稽核 MEDIUM-LOW-5)。
+    res = None
     try:
         res = push_flex(flex["contents"], flex["alt_text"], dry_run=False)
-    except LinePushError as _e:  # noqa: BLE001 — Flex 若被 LINE 退(如版型問題)→ 退回純文字,提醒仍送達
+        if not res["sent"]:
+            _log(f"Flex 未送出({res['reason']})→ 退回純文字")
+    except LinePushError as _e:  # noqa: BLE001 — Flex 被 LINE 退(如版型問題)→ 退回純文字
         _log(f"Flex 推播失敗:{_e} → 退回純文字")
+    if res is None or not res["sent"]:
         try:
             res = push_text(text, dry_run=False)
         except LinePushError as _e2:  # noqa: BLE001

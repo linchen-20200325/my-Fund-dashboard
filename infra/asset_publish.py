@@ -47,7 +47,12 @@ def _default_requester():
     import requests
 
     def _req(method: str, url: str, *, headers=None, json=None, timeout=20.0):
-        return requests.request(method, url, headers=headers, json=json, timeout=timeout)
+        try:
+            return requests.request(method, url, headers=headers, json=json, timeout=timeout)
+        except Exception as _e:  # noqa: BLE001 — DNS/連線重置/逾時 → 統一成 AssetPublishError
+            # §1:網路層錯誤也必須符合本模組宣告的 Raises 契約(對齊 infra/line_push.py 作法),
+            # 否則 `except AssetPublishError` 的呼叫端會被 requests.* 例外打穿。訊息不含 token。
+            raise AssetPublishError(f"GitHub API 網路錯誤:{type(_e).__name__}: {_e}") from _e
     return _req
 
 
@@ -89,19 +94,34 @@ def _ensure_branch(req, repo: str, branch: str, headers: dict, timeout: float) -
         raise AssetPublishError(f"預設分支 {_base} 回應缺 object.sha")
     _mk = req("POST", f"{_API}/repos/{repo}/git/refs", headers=headers, timeout=timeout,
               json={"ref": f"refs/heads/{branch}", "sha": _sha})
-    if not _ok(_mk):
-        raise AssetPublishError(
-            f"建立分支 {branch} 失敗 HTTP {getattr(_mk, 'status_code', None)}:"
-            f"{str(getattr(_mk, 'text', ''))[:200]}")
+    if _ok(_mk):
+        return
+    # GET→POST 之間若有人搶先建好(並行 run / 手動跑),GitHub 回 422「Reference already exists」。
+    # 那是「分支已存在」= 我們要的結果,不該當失敗把出圖路徑砍掉。
+    if int(getattr(_mk, "status_code", 0) or 0) == 422 and \
+            "already exists" in str(getattr(_mk, "text", "")).lower():
+        return
+    raise AssetPublishError(
+        f"建立分支 {branch} 失敗 HTTP {getattr(_mk, 'status_code', None)}:"
+        f"{str(getattr(_mk, 'text', ''))[:200]}")
 
 
 def _existing_sha(req, repo: str, path: str, branch: str, headers: dict, timeout: float) -> str:
-    """同路徑檔案已存在 → 回其 blob sha(Contents API 覆寫時必填);不存在 → ""。"""
+    """同路徑檔案已存在 → 回其 blob sha(Contents API 覆寫時必填);**確定不存在(404)** → ""。
+
+    §1:**只有 404 才算「檔案不存在」**。403(次級速率限制)/5xx 也回 "" 會讓後續 PUT 少帶 sha,
+    GitHub 回 422「sha wasn't supplied」—— log 上看到的是 422,真因(403)卻被吃掉,誤導排查。
+    故非 404 一律 raise(與 `_ensure_branch` 同一準則)。
+    """
     _r = req("GET", f"{_API}/repos/{repo}/contents/{_up.quote(path)}?ref={_up.quote(branch)}",
              headers=headers, timeout=timeout)
     if _ok(_r):
         return str(_json(_r).get("sha") or "")
-    return ""
+    _status = int(getattr(_r, "status_code", 0) or 0)
+    if _status == 404:
+        return ""                                   # 確定是新檔
+    raise AssetPublishError(
+        f"查詢既有檔案 {path} 失敗 HTTP {_status}:{str(getattr(_r, 'text', ''))[:200]}")
 
 
 def publish_asset(data: bytes, dest_path: str, *, branch: str = _DEFAULT_BRANCH,
@@ -132,7 +152,10 @@ def publish_asset(data: bytes, dest_path: str, *, branch: str = _DEFAULT_BRANCH,
 
     _repo = _resolve("GITHUB_REPOSITORY", repo)
     if dry_run:
-        return f"{_RAW}/{_repo or 'OWNER/REPO'}/DRYRUN/{_path}"
+        # 刻意回**非 https** scheme:`push_image` 只驗 startswith("https://"),若這裡回一個長得像
+        # 真網址的字串,誤用就會推出一張永久破圖。回 dry-run:// 讓誤用在 LINE 端被擋下(結構性
+        # 防呆,不只靠 docstring 警語)。
+        return f"dry-run://{_repo or 'OWNER/REPO'}/{_path}"
     _token = _resolve("GITHUB_TOKEN", token)
     if not _repo or not _token:
         raise AssetPublishError(

@@ -166,6 +166,39 @@ def test_full_ladder_image_then_flex_then_text(monkeypatch, wired):
     assert len(wired["text"]) == 1 and "除息行事曆" in wired["text"][0]
 
 
+def test_flex_sent_false_falls_through_to_text(monkeypatch, wired):
+    """稽核 MEDIUM-LOW-5:Flex 回 sent=False(不 raise)也必須退純文字。
+
+    只接 exception 會讓 sent=False 直接落到 return 1 —— 明明手上有現成 text 卻不送,提醒消失(§1)。
+    """
+    import infra.line_push as LP
+    import ui.helpers.dividend_calendar_render as R
+
+    def _no_img(cal, **k):
+        raise RuntimeError("no chromium")
+    monkeypatch.setattr(R, "render_month_calendar_png", _no_img)
+    monkeypatch.setattr(LP, "push_flex", lambda *a, **k: {
+        "sent": False, "dry_run": False, "status": None, "reason": "空 Flex 內容,未送"})
+    assert M.main([]) == 0
+    assert len(wired["text"]) == 1                     # 沒 raise,但仍退到純文字送達
+
+
+def test_render_png_signature_accepts_scale():
+    """簽名鎖:1MB 保護會呼叫 `render_month_calendar_png(cal, scale=1)`。
+
+    若日後改名/改順序,`_render_and_publish` 的 `except Exception` 會把 TypeError 吞掉 →
+    每個月都靜默退 Flex,而 user 只看得到「沒有圖」,看不到 stderr。故直接鎖真實簽名。
+    """
+    import inspect
+
+    from ui.helpers.dividend_calendar_render import render_month_calendar_png
+    _sig = inspect.signature(render_month_calendar_png)
+    assert "scale" in _sig.parameters
+    _p = _sig.parameters["scale"]
+    assert _p.kind is inspect.Parameter.KEYWORD_ONLY and _p.default == 2
+    _sig.bind(object(), scale=1)                       # 真的綁得起來才算數
+
+
 # ── LINE preview ≤1MB:超標自動降 scale,再超標就退 Flex(不推會被 LINE 退的圖)──────
 def test_oversize_png_retried_at_scale1(monkeypatch, wired):
     _ok_publish(monkeypatch)
