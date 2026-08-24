@@ -85,6 +85,14 @@ def infer_schedule(dividends: list) -> dict:
     Returns:
         {cadence, ex_day, pay_gap_days, n, confidence, day_std,
          last_ex, last_amount, last_yield, med_gap}
+
+    ⚠️ `last_yield` / `last_amount` **不可當年化配息率/金額顯示**(v19.524 稽核):兩者都只是
+    「最近一筆」的原始值 —— (a) `yield_pct` 在 FundClear/Cnyes 來源常被上游 `or 0` 強制成 0.0,
+    顯示會變成看似真實的「0.0%」(§1 捏造);(b) MoneyDJ 來源雖為年化率,但只是該筆除息日當下的
+    點值,配息調整/淨值變動後即失真;(c) `last_amount` 是**原幣每單位**金額,本結構未帶 currency,
+    USD/TWD 混列無法辨識(§4.1 單位陷阱)。要顯示年化配息率請用全站正典
+    `services.health.dividend._resolve_adr_with_fallback`(3 層 SSOT,全站其餘頁面皆用它)。
+    月曆明細表已於 v19.524 移除這兩欄(user 指示),此處保留欄位僅為相容,**新 caller 勿直接渲染**。
         cadence ∈ {none, single, monthly, quarterly, semiannual, annual, irregular}
         confidence ∈ {none, low, medium, high}
     """
@@ -269,8 +277,10 @@ def detect_house(name: str) -> str:
 # ── LINE 月初摘要文字(方式 C;純字串,零 IO)──────────────────
 _CONF_ZH = {"high": "", "medium": "", "low": "（信心低）"}
 
-# 到帳推估:除息日 + N 工作天(user 2026-08-24)。module SSOT,不 inline magic(§3.3)。
-_PAY_BUSINESS_DAYS = 5
+# 到帳推估:除息日 + N 個**工作天**區間(user 2026-08-24 實際經驗 5~7 個工作天,故給區間不給單點)。
+# module SSOT,不 inline magic(§3.3)。
+_PAY_BIZ_DAYS_MIN = 5
+_PAY_BIZ_DAYS_MAX = 7
 
 
 def add_business_days(d: "_dt.date | None", n: int) -> "_dt.date | None":
@@ -287,16 +297,30 @@ def add_business_days(d: "_dt.date | None", n: int) -> "_dt.date | None":
     return cur
 
 
+def pay_window(ex: "_dt.date | None") -> "tuple | None":
+    """除息日 → (最早, 最晚) 入帳推估日 = 除息 + 5~7 個工作天(user 2026-08-24 經驗值)。
+
+    §1:ex 非日期 → None(caller 顯示「—」,不捏造日期)。僅跳週末、**未扣國定假日**,
+    遇連假實際到帳會更晚 —— caller 須標「推估」。純函式,零 IO。
+    """
+    if not isinstance(ex, _dt.date):
+        return None
+    return (add_business_days(ex, _PAY_BIZ_DAYS_MIN),
+            add_business_days(ex, _PAY_BIZ_DAYS_MAX))
+
+
+def _pay_note() -> str:
+    """到帳說明單行(text / Flex 共用,口徑 SSOT 一處改兩處同步)。"""
+    return (f"💰 到帳約 +{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個工作天左右"
+            "（僅跳週末、未扣國定假日,遇連假會更晚）")
+
+
 def build_summary_text(cal: dict) -> str:
     """月曆結構 → LINE 月初提醒文字。無事件 → 誠實說本月無推估除息(§1)。
 
-    user 2026-08-24:到帳時間**不逐檔列**,改在清單「上方」寫一句「到帳約 +N 個工作天左右」;
-    逐檔只列除息日 + 名稱。
-
-    ⚠️ 口徑差異(v19.523 稽核點名,待 user 裁示):本函式的 +N **工作天** 與月曆圖檔/App 明細表
-    的「入帳(估)」**不同源** —— 後者是各檔「歷史除息→發放間隔中位數」(月配常 ≈ 1 個月,見
-    `infer_schedule.pay_gap_days` 與 HTML footer「配息入帳日為除息日後一個月內」)。兩者若同時
-    出現在同一則推播會互相矛盾,PR4 接線前須擇一或分別標明來源。
+    user 2026-08-24:到帳時間**不逐檔列**,改在清單「上方」寫一句「到帳約 +5~7 個工作天左右」;
+    逐檔只列除息日 + 名稱。口徑與月曆圖檔「入帳(估)」欄**同源**(皆走 `pay_window`),
+    不再各講各的(原本圖檔用歷史發放間隔 ≈1 個月、文字用 +5 工作天,已於 v19.524 統一)。
     """
     y, m = cal.get("year"), cal.get("month")
     _roc = (y - 1911) if isinstance(y, int) else "?"
@@ -305,8 +329,7 @@ def build_summary_text(cal: dict) -> str:
     if not events:
         lines.append("你的基金本月無推估除息日（或資料不足）。")
     else:
-        lines.append(f"💰 到帳約 +{_PAY_BUSINESS_DAYS} 個工作天左右"
-                     "（僅跳週末、未扣國定假日,遇連假會更晚）")
+        lines.append(_pay_note())
         for e in events:
             _ex = e["ex_date"]
             _tag = _CONF_ZH.get(e.get("confidence"), "")
@@ -365,11 +388,8 @@ def build_summary_flex(cal: dict) -> dict:
         _body.append({"type": "text", "text": "你的基金本月無推估除息日（或資料不足）。",
                       "size": "sm", "color": _FLEX_SUB, "wrap": True})
     else:
-        # user 2026-08-24:到帳時間改在清單「上方」寫一句(不逐檔列),與純文字摘要一致。
-        # ⚠️ 與月曆圖檔「入帳(估)」欄口徑不同源,見 build_summary_text docstring 警語。
-        _body.append({"type": "text",
-                      "text": f"💰 到帳約 +{_PAY_BUSINESS_DAYS} 個工作天左右"
-                              "（僅跳週末、未扣國定假日,遇連假會更晚）",
+        # user 2026-08-24:到帳時間改在清單「上方」寫一句(不逐檔列),與純文字/圖檔同口徑。
+        _body.append({"type": "text", "text": _pay_note(),
                       "size": "xxs", "color": _FLEX_SUB, "wrap": True})
         _body.append({"type": "separator", "margin": "sm"})
         _body.extend(_flex_event_row(e) for e in events[:_FLEX_MAX_ROWS])
@@ -398,7 +418,7 @@ def build_summary_flex(cal: dict) -> dict:
         "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": _body},
     }
     _alt = (f"🗓️ 民國{_roc}年{m}月 除息行事曆"
-            f"（{len(events)} 檔・到帳=除息+{_PAY_BUSINESS_DAYS}工作天）")
+            f"（{len(events)} 檔・到帳=除息+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX}工作天）")
     return {"contents": _bubble, "alt_text": _alt}
 
 

@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from infra.line_push import push_flex  # noqa: E402
 from services.dividend_calendar import (  # noqa: E402
-    _PAY_BUSINESS_DAYS,
+    _PAY_BIZ_DAYS_MAX,
+    _PAY_BIZ_DAYS_MIN,
     add_business_days,
     build_summary_flex,
 )
@@ -102,10 +103,10 @@ def test_flex_shows_ex_house_month_and_arrival_note():
     ex = _dt.date(2026, 9, 14)
     out = build_summary_flex(_cal([_ev("TLZF9", ex, house="安聯")]))
     txt = json.dumps(out, ensure_ascii=False)
-    arr = add_business_days(ex, _PAY_BUSINESS_DAYS)
+    arr = add_business_days(ex, _PAY_BIZ_DAYS_MIN)
     assert "9/14 除息" in txt                          # 逐檔:除息日 + 名稱(不含到帳日期)
     assert f"{arr.month}/{arr.day} 到帳" not in txt     # user 2026-08-24:不再逐檔列到帳日期
-    assert "工作天左右" in txt                          # 到帳改清單上方單行說明
+    assert f"+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個工作天" in txt   # 到帳改清單上方單行區間
     assert "安聯 TLZF9" in txt                         # house + code
     assert "民國115年9月" in txt                        # 標題目標(下)月
     assert "1 檔" in out["alt_text"]                   # altText 帶檔數

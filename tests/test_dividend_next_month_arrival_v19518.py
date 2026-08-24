@@ -60,6 +60,27 @@ def test_add_business_days_year_boundary():
     assert got > d and got.weekday() < 5                  # timedelta 跨年無縫、結果為工作日
 
 
+# ── pay_window:到帳推估「區間」= 除息 +5~7 工作天(user 2026-08-24 經驗值)──────────
+def test_pay_window_is_5_to_7_business_days():
+    from services.dividend_calendar import (
+        _PAY_BIZ_DAYS_MAX,
+        _PAY_BIZ_DAYS_MIN,
+        pay_window,
+    )
+    assert (_PAY_BIZ_DAYS_MIN, _PAY_BIZ_DAYS_MAX) == (5, 7)
+    ex = _dt.date(2026, 9, 14)                            # 週一
+    lo, hi = pay_window(ex)
+    assert lo == add_business_days(ex, 5) and hi == add_business_days(ex, 7)
+    assert lo < hi                                        # 區間下界早於上界
+    assert lo.weekday() < 5 and hi.weekday() < 5          # 兩端皆落在工作日(跳週末)
+
+
+def test_pay_window_bad_date_returns_none():
+    from services.dividend_calendar import pay_window
+    assert pay_window(None) is None                       # §1 不捏造日期
+    assert pay_window("2026-09-14") is None               # 非 date 物件 → None
+
+
 # ── 陳舊度相對「現在」量,推未來月不誤降信心(v19.518 稽核 #3 修)──────────────────
 def _sched(last_ex, cad="monthly", ex_day=14, conf="high"):
     return {"cadence": cad, "ex_day": ex_day, "last_ex": last_ex,

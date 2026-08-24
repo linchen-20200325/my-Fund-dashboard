@@ -79,7 +79,7 @@ h1{font-size:clamp(22px,3.6vw,32px);margin:0;font-weight:800;letter-spacing:-.01
 .chip .q{color:var(--accent-ink);font-weight:700;font-size:11px}
 .section-t{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;margin:28px 0 12px}
 .tbl-scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:640px;font-size:14px}
+table{width:100%;border-collapse:collapse;min-width:360px;font-size:14px}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line-soft)}
 thead th{font-size:12px;letter-spacing:.04em;color:var(--ink-faint);font-weight:700;border-bottom:1px solid var(--line)}
 tbody tr:last-child td{border-bottom:none}
@@ -118,12 +118,39 @@ def _chip_label(ev: dict) -> str:
             or "—")
 
 
-def _fmt_amt(v) -> str:
-    return f"{v:.4f}" if isinstance(v, (int, float)) else "—"
+def _dedupe_day_chips(evs: list) -> list:
+    """同一天同投信多檔 → 合併成**一個** chip + 「×N」(user 2026-08-24「移除重複」)。
+
+    §1 合併**不丟資訊**:帶 ×N 標明當日該投信有幾檔除息,完整逐檔清單仍在下方明細表;
+    任一檔信心低 → 合併後仍標「?」(不因合併把低信心洗掉)。依原事件順序保序。
+    """
+    out: list = []
+    idx: dict = {}
+    for ev in evs:
+        _label = _chip_label(ev)
+        _low = ev.get("confidence") == "low"
+        _hit = idx.get(_label)
+        if _hit is None:
+            idx[_label] = len(out)
+            out.append({"label": _label, "color": _color(ev.get("house")),
+                        "n": 1, "low": _low})
+        else:
+            out[_hit]["n"] += 1
+            out[_hit]["low"] = out[_hit]["low"] or _low
+    return out
 
 
-def _fmt_pct(v) -> str:
-    return f"{v:.1f}%" if isinstance(v, (int, float)) else "—"
+def _fmt_pay_window(ex) -> str:
+    """除息日 → 入帳推估「區間」字串(如 `8/22~8/26`)。口徑 SSOT 走 L2 `pay_window`。
+
+    §1:算不出(ex 非日期)→ 「—」,不捏造日期。
+    """
+    from services.dividend_calendar import pay_window
+    _w = pay_window(ex)
+    if not _w:
+        return "—"
+    _lo, _hi = _w
+    return f"{_lo.month}/{_lo.day}~{_hi.month}/{_hi.day}"
 
 
 def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行事曆",
@@ -158,30 +185,31 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
         chips = ""
         if evs:
             chips = '<div class="chips">' + "".join(
-                f'<span class="chip"><span class="dot" style="background:{_e(_color(ev.get("house")))}"></span>'
-                f'<b>{_e(_chip_label(ev))}</b>'
-                + ('<span class="q">?</span>' if ev.get("confidence") == "low" else "")
+                f'<span class="chip"><span class="dot" style="background:{_e(c["color"])}"></span>'
+                f'<b>{_e(c["label"])}</b>'
+                + (f'<span class="code">×{c["n"]}</span>' if c["n"] > 1 else "")
+                + ('<span class="q">?</span>' if c["low"] else "")
                 + '</span>'
-                for ev in evs) + '</div>'
+                for c in _dedupe_day_chips(evs)) + '</div>'
         has = " has" if evs else ""
         cells.append(f'<div class="cell{wknd}{has}"><div class="d tnum">{d}</div>{chips}</div>')
     grid_html = "".join(cells)
 
-    # 明細表
+    # 明細表(user 2026-08-24:基金欄只留投信名、拿掉代號;「上次配息」「年化配息」整欄移除;
+    # 原「所屬」欄與基金欄同值 → 合併成一欄,不重複)
     rows = ""
     for e in events:
-        ex, pay = e["ex_date"], e.get("pay_date_est")
+        ex = e["ex_date"]
         cf_zh, cf_cls = _CONF.get(e.get("confidence"), ("—", "med"))
         rows += (
             f'<tr><td class="tnum est">{ex.month}/{ex.day}</td>'
-            f'<td class="name"><b>{_e(e.get("name"))}</b> <span class="muted tnum">{_e(e.get("code"))}</span></td>'
-            f'<td><span class="house"><span class="dot" style="background:{_e(_color(e.get("house")))}"></span>{_e(e.get("house") or "—")}</span></td>'
-            f'<td class="tnum muted">{(str(pay.month)+"/"+str(pay.day)) if pay else "—"}</td>'
-            f'<td class="tnum">{_fmt_amt(e.get("last_amount"))}</td>'
-            f'<td class="tnum">{_fmt_pct(e.get("last_yield"))}</td>'
+            f'<td class="name"><span class="house">'
+            f'<span class="dot" style="background:{_e(_color(e.get("house")))}"></span>'
+            f'<b>{_e(_chip_label(e))}</b></span></td>'
+            f'<td class="tnum muted">{_e(_fmt_pay_window(ex))}</td>'
             f'<td><span class="cf {cf_cls}">{cf_zh}</span></td></tr>')
     if not rows:
-        rows = '<tr><td colspan="7" class="muted">本月你的基金無推估除息日（或資料不足）。</td></tr>'
+        rows = '<tr><td colspan="4" class="muted">本月你的基金無推估除息日（或資料不足）。</td></tr>'
 
     exc_html = ""
     if excluded:
@@ -214,13 +242,14 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 <div class="grid">{grid_html}</div></div></div>
 <h2 class="section-t">本月除息明細（推估）</h2>
 <div class="tbl-scroll"><table><thead><tr>
-<th>除息</th><th>基金</th><th>所屬</th><th>入帳(估)</th><th>上次配息</th><th>年化配息</th><th>信心</th>
+<th>除息</th><th>基金</th><th>入帳(估)</th><th>信心</th>
 </tr></thead><tbody>{rows}</tbody></table></div>
 {exc_html}
 {unp_html}
-<footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算，非官方公告。
-依公開說明書，<b>配息入帳日為除息日後一個月內</b>，實際依基金公司作業為準；
-除息日與基金營業日請以<b>基金公司網站公告</b>為準。</footer>
+<footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算，非官方公告。<br>
+上述基金基準日皆以實際基金營業日為準。<br>
+依公開說明書規定，<b>配息入帳日為除息日後一個月內</b>，入帳時間將依實際作業為準。<br>
+本行事曆所示之營業日僅供參考，實際之基金營業日請參閱<b>基金公司網站公告</b>為準。</footer>
 </div></body></html>"""
 
 
