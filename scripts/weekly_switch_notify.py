@@ -65,9 +65,13 @@ def _load_client_and_sheet():
         _log(f"import 失敗:{type(_e).__name__}: {_e}")
         return None, None
     _sa = get_secret("google_service_account")
-    _sid = get_secret("macro_weights_sheet_id")
+    # 持倉/選股池自 v19.462 起存於 POLICY_SHEET_ID(使用者持倉本);macro_weights 為舊單本 fallback。
+    # 讀帳本(_read_holdings)應優先走 POLICY_SHEET_ID —— dry-run 實測:macro_weights 本 404、
+    # POLICY 本選股池讀得到,代表使用者持倉在 POLICY 本。未設 POLICY_SHEET_ID → 退 macro_weights
+    # (舊單本設定,行為零變化)。此 sheet_id 只餵 _read_holdings;選股池另走 list_pool() 自讀 env。
+    _sid = get_secret("POLICY_SHEET_ID") or get_secret("macro_weights_sheet_id")
     if not _sa or not _sid:
-        _log("缺 google_service_account / macro_weights_sheet_id secret")
+        _log("缺 google_service_account /（POLICY_SHEET_ID 或 macro_weights_sheet_id）secret")
         return None, None
     try:
         client = get_gspread_client(_sa)          # str/dict 皆可,內部正規化

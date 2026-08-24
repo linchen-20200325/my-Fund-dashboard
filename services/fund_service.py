@@ -29,15 +29,6 @@ from shared.signal_thresholds import (  # v19.74 W2 SSOT
     HOLDINGS_NAV_SANITY_UPPER_RATIO,
 )
 
-# v11.0 C-12：utility 暫留 fund_fetcher（待 E 階段重新評估歸屬，可能整合到 infra/）
-# 此處 partial-load 安全：fund_fetcher.py 載入到本 service 的 shim re-export 點（L370）時，
-# safe_float (L154) / clean_risk_table (L170) 已在 fund_fetcher 內定義
-from fund_fetcher import (  # noqa: F401
-    safe_float,
-    clean_risk_table,
-)
-
-
 # ── _RF_ANNUAL + set_risk_free_rate ──────────────────────────────────
 # ── Bug1 Fix: 無風險利率（可由 app.py 透過 set_risk_free_rate() 注入即時 FEDFUNDS）──
 _RF_ANNUAL: float = 0.04  # 預設 4%；載入總經資料後會自動更新為 FEDFUNDS 實際值
@@ -1429,3 +1420,16 @@ def get_fx_rate_by_date(currency: str) -> dict:
         print(f"[get_fx_rate_by_date] {currency} 歷史匯率取得失敗:"
               f"{type(_e_fx).__name__}: {_e_fx}", file=_sys_fx.stderr)
         return {}
+
+
+# ── utility 暫留 fund_fetcher(待 E 階段重新評估歸屬)——**檔尾 import** 修雙向循環（v19.517）──
+# fund_fetcher 從本模組回頭 import 多個 symbol(_RF_ANNUAL:316 / calc_health_from_manual:373 /
+# legacy 群:474 / calc_dividend_estimate:497)。headless(如 scripts/weekly_switch_notify)會
+# **先** import services.fund_service,若本檔在中途觸發 `import fund_fetcher`,那時本模組尚未定義完
+# 這些 symbol → fund_fetcher 的回頭 import 撞 ImportError(partially initialized module)。
+# 放到**檔尾**(全部 symbol 都定義完之後)才 import fund_fetcher,兩個方向都可解:
+#   - fund_service 先載:到此已備好全部 symbol,fund_fetcher 回頭 import 全數命中;
+#   - fund_fetcher 先載:其 :316 觸發本模組載入,本模組跑到此檔尾才 import fund_fetcher,
+#     此時 fund_fetcher 早已定義 safe_float/clean_risk_table(:113/:129,在 :316 之前)。
+# safe_float / clean_risk_table 僅在函式內使用,檔尾 import 不影響 module 載入。
+from fund_fetcher import clean_risk_table, safe_float  # noqa: F401,E402
