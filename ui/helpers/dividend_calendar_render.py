@@ -105,6 +105,44 @@ footer.note{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);co
 footer.note b{color:var(--ink-soft)}
 """
 
+# ── 推播圖專用覆寫(user 2026-08-24「字體太小,版面集中一點」)────────────────────────
+# 手機看 LINE 圖片時,圖會被縮到聊天氣泡寬度 → **字的視覺大小 = 字級 ÷ 圖的 CSS 寬度**。
+# 原本 820px 寬 + 14px 字,縮到手機上就變很小。故推播版:(a) 畫窄到 560px、(b) 字級加大、
+# (c) 收緊留白與格高。App 網頁版不受影響(只有 compact=True 才套用)。
+_CSS_COMPACT = """
+.wrap{max-width:100%;padding:18px 16px}
+.eyebrow{font-size:12px;margin-bottom:4px}
+h1{font-size:30px}
+.sub{font-size:15px;margin-top:6px}
+.badges{gap:7px;margin-top:10px}
+.badge{font-size:14px;padding:6px 12px}
+.legend{gap:8px 14px;margin:12px 0 14px}
+.legend li{font-size:14px;gap:6px}
+.legend .dot{width:11px;height:11px}
+/* 關鍵:解除 680px 最小寬,讓 7 欄格子縮到容器寬,不再需要橫向捲動/縮圖 */
+.cal-scroll{overflow:visible}
+.cal{min-width:0}
+.dow div{padding:9px 2px;font-size:15px;text-align:center}
+.cell{min-height:72px;padding:6px 4px;gap:3px}
+.d{font-size:15px}
+.chips{gap:3px;margin-top:1px}
+.chip{font-size:13px;padding:3px 5px;gap:4px;white-space:nowrap;justify-content:center}
+.chip .dot{width:7px;height:7px}
+.section-t{font-size:14px;margin:20px 0 10px}
+.tbl-scroll{overflow:visible}
+table{min-width:0;font-size:16px}
+th,td{padding:9px 5px}
+thead th{font-size:14px}
+.house{font-size:15px;gap:5px}
+.cf{font-size:13px;padding:2px 9px}
+footer.note{font-size:13px;margin-top:18px;padding-top:14px;line-height:1.65}
+"""
+
+
+# 推播圖 CSS 寬度:字的視覺大小 = 字級 ÷ 此寬度。窄 → 手機上字更大。
+# 560 是「7 欄格子還塞得下投信名」與「字夠大」的平衡點(再窄會擠壞格子)。
+_PUSH_WIDTH = 560
+
 
 def _e(s) -> str:
     return _html.escape(str(s if s is not None else ""))
@@ -147,8 +185,12 @@ def _fmt_pay_window(ex) -> str:
 
 
 def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行事曆",
-                               is_sample: bool = False) -> str:
-    """月曆結構 → 自成一頁 HTML 字串。"""
+                               is_sample: bool = False, compact: bool = False) -> str:
+    """月曆結構 → 自成一頁 HTML 字串。
+
+    `compact=True`:推播圖專用版型(窄幅 + 大字 + 收緊留白),見 `_CSS_COMPACT`。
+    App 網頁版用預設 False,版面完全不變。
+    """
     y, m = int(cal["year"]), int(cal["month"])
     roc = y - 1911
     first_wd, days = _calendar.monthrange(y, m)      # first_wd: Mon=0..Sun=6
@@ -221,7 +263,7 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 
     return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{_e(title)}</title>
-<style>{_CSS}</style></head><body><div class="wrap">
+<style>{_CSS}{_CSS_COMPACT if compact else ''}</style></head><body><div class="wrap">
 <header><p class="eyebrow">追蹤清單 ∪ 持倉 · 每月月初更新</p>
 <h1>{_e(title)}</h1>
 <p class="sub">依你的基金過往配息節奏，推估本月除息日與配息入帳日。加減基金 → 下月自動更新。</p>
@@ -244,7 +286,8 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 
 
 def render_month_calendar_png(cal: dict, *, title: str = "基金除息配息行事曆",
-                              is_sample: bool = False, width: int = 820, scale: int = 2) -> bytes:
+                              is_sample: bool = False, width: int = _PUSH_WIDTH,
+                              scale: int = 2) -> bytes:
     """月曆結構 → PNG bytes(headless Chromium 截 `render_month_calendar_html` 的 `.wrap`)。
 
     user 2026-08-24 選「截 App 那張最像」:重用**同一份 HTML 樣板**(App 方式 A / LINE 方式 C 單一
@@ -256,7 +299,7 @@ def render_month_calendar_png(cal: dict, *, title: str = "基金除息配息行�
         呼叫端(每月 cron)接到後退回 Flex / 純文字,提醒仍送達。
     """
     from infra.html_to_png import html_to_png
-    _html = render_month_calendar_html(cal, title=title, is_sample=is_sample)
+    _html = render_month_calendar_html(cal, title=title, is_sample=is_sample, compact=True)
     # require_cjk:本圖滿版中文 —— runner 缺中文字型會整張畫成 tofu 方塊,寧可 raise 讓呼叫端退
     # Flex/純文字,也不推一張沒人看得懂的圖(§1)。
     return html_to_png(_html, width=width, scale=scale, selector=".wrap",
