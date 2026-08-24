@@ -288,7 +288,16 @@ def add_business_days(d: "_dt.date | None", n: int) -> "_dt.date | None":
 
 
 def build_summary_text(cal: dict) -> str:
-    """月曆結構 → LINE 月初提醒文字。無事件 → 誠實說本月無推估除息(§1)。"""
+    """月曆結構 → LINE 月初提醒文字。無事件 → 誠實說本月無推估除息(§1)。
+
+    user 2026-08-24:到帳時間**不逐檔列**,改在清單「上方」寫一句「到帳約 +N 個工作天左右」;
+    逐檔只列除息日 + 名稱。
+
+    ⚠️ 口徑差異(v19.523 稽核點名,待 user 裁示):本函式的 +N **工作天** 與月曆圖檔/App 明細表
+    的「入帳(估)」**不同源** —— 後者是各檔「歷史除息→發放間隔中位數」(月配常 ≈ 1 個月,見
+    `infer_schedule.pay_gap_days` 與 HTML footer「配息入帳日為除息日後一個月內」)。兩者若同時
+    出現在同一則推播會互相矛盾,PR4 接線前須擇一或分別標明來源。
+    """
     y, m = cal.get("year"), cal.get("month")
     _roc = (y - 1911) if isinstance(y, int) else "?"
     lines = [f"🗓️ 基金除息行事曆 · 民國{_roc}年{m}月（推估）"]
@@ -296,14 +305,13 @@ def build_summary_text(cal: dict) -> str:
     if not events:
         lines.append("你的基金本月無推估除息日（或資料不足）。")
     else:
+        lines.append(f"💰 到帳約 +{_PAY_BUSINESS_DAYS} 個工作天左右"
+                     "（僅跳週末、未扣國定假日,遇連假會更晚）")
         for e in events:
             _ex = e["ex_date"]
-            _arr = add_business_days(_ex, _PAY_BUSINESS_DAYS)   # 到帳 ≈ 除息 +5 工作天(推估)
             _tag = _CONF_ZH.get(e.get("confidence"), "")
             _house = f"{e.get('house')} " if e.get("house") else ""
-            _arr_txt = f" → 約 {_arr.month}/{_arr.day} 到帳" if _arr else ""
-            lines.append(f"• {_ex.month}/{_ex.day} 除息{_arr_txt}　{_house}{e.get('code')}{_tag}")
-        lines.append(f"💰 到帳 ≈ 除息日 +{_PAY_BUSINESS_DAYS} 工作天（僅跳週末、未扣國定假日,遇連假會更晚）。")
+            lines.append(f"• {_ex.month}/{_ex.day} 除息　{_house}{e.get('code')}{_tag}")
     _exc = cal.get("excluded") or []
     _unp = cal.get("unpredictable") or []
     if _exc:
@@ -319,30 +327,25 @@ def build_summary_text(cal: dict) -> str:
 _FLEX_INK = "#1F2D3D"     # 主字(深板岩)
 _FLEX_SUB = "#8896A6"     # 次要(灰)
 _FLEX_EX = "#2E7D5B"      # 除息日(松綠)
-_FLEX_ARR = "#8896A6"     # 到帳日(灰)
 _FLEX_MAX_ROWS = 30       # 稽核:Flex JSON ≤50KB;逐檔一列上限,其餘收斂「…另 N 檔」(對齊 text 路徑)
 
 
 def _flex_event_row(e: dict) -> dict:
-    """單檔一列(horizontal box):除息日 ｜ 名稱/代號 ｜ →到帳日。
+    """單檔一列(horizontal box):除息日 ｜ 名稱/代號。
 
-    §1/稽核:LINE 拒絕**空字串 text**(整則 Flex 400 → 全推播失敗),故:名稱保證非空、
-    到帳節點僅在有值時才加(不塞空 text)。
+    user 2026-08-24:到帳時間不逐檔列(改由清單上方一句統一標),故本列只有除息日 + 名稱。
+    §1/稽核:LINE 拒絕**空字串 text**(整則 Flex 400 → 全推播失敗),故名稱保證非空(退「—」)。
     """
     _ex = e["ex_date"]
-    _arr = add_business_days(_ex, _PAY_BUSINESS_DAYS)
     _house = f"{e.get('house')} " if e.get("house") else ""
     _name = (f"{_house}{e.get('code') or e.get('name') or ''}").strip()[:22] or "—"
     if e.get("confidence") == "low":
         _name += "（信心低）"
     _contents = [
-        {"type": "text", "text": f"{_ex.month}/{_ex.day}", "size": "sm", "weight": "bold",
-         "color": _FLEX_EX, "flex": 3},
+        {"type": "text", "text": f"{_ex.month}/{_ex.day} 除息", "size": "sm", "weight": "bold",
+         "color": _FLEX_EX, "flex": 4},
         {"type": "text", "text": _name, "size": "sm", "color": _FLEX_INK, "flex": 6, "wrap": True},
     ]
-    if _arr:                                          # 到帳節點僅在有值時加(避免空字串 text → 400)
-        _contents.append({"type": "text", "text": f"→ {_arr.month}/{_arr.day} 到帳",
-                          "size": "xs", "color": _FLEX_ARR, "flex": 5, "align": "end"})
     return {"type": "box", "layout": "horizontal", "spacing": "sm", "contents": _contents}
 
 
@@ -362,16 +365,18 @@ def build_summary_flex(cal: dict) -> dict:
         _body.append({"type": "text", "text": "你的基金本月無推估除息日（或資料不足）。",
                       "size": "sm", "color": _FLEX_SUB, "wrap": True})
     else:
+        # user 2026-08-24:到帳時間改在清單「上方」寫一句(不逐檔列),與純文字摘要一致。
+        # ⚠️ 與月曆圖檔「入帳(估)」欄口徑不同源,見 build_summary_text docstring 警語。
+        _body.append({"type": "text",
+                      "text": f"💰 到帳約 +{_PAY_BUSINESS_DAYS} 個工作天左右"
+                              "（僅跳週末、未扣國定假日,遇連假會更晚）",
+                      "size": "xxs", "color": _FLEX_SUB, "wrap": True})
+        _body.append({"type": "separator", "margin": "sm"})
         _body.extend(_flex_event_row(e) for e in events[:_FLEX_MAX_ROWS])
         if len(events) > _FLEX_MAX_ROWS:              # 稽核:超上限收斂,避免 Flex JSON 超 50KB → 400
             _body.append({"type": "text",
                           "text": f"…另 {len(events) - _FLEX_MAX_ROWS} 檔（開 App 看完整）",
                           "size": "xs", "color": _FLEX_SUB, "wrap": True})
-        _body.append({"type": "separator", "margin": "md"})
-        _body.append({"type": "text",
-                      "text": f"💰 到帳 ≈ 除息日 +{_PAY_BUSINESS_DAYS} 工作天"
-                              "（僅跳週末、未扣國定假日,遇連假會更晚）",
-                      "size": "xxs", "color": _FLEX_SUB, "wrap": True, "margin": "sm"})
     _notes = []
     if _exc:
         _notes.append(f"{len(_exc)} 檔累積型/無配息未列")
@@ -392,9 +397,10 @@ def build_summary_flex(cal: dict) -> dict:
         ]},
         "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": _body},
     }
-    _alt = f"🗓️ 民國{_roc}年{m}月 除息行事曆（{len(events)} 檔・到帳=除息+5工作天）"
+    _alt = (f"🗓️ 民國{_roc}年{m}月 除息行事曆"
+            f"（{len(events)} 檔・到帳=除息+{_PAY_BUSINESS_DAYS}工作天）")
     return {"contents": _bubble, "alt_text": _alt}
 
 
 __all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
-           "detect_house", "build_summary_text"]
+           "detect_house", "build_summary_text", "build_summary_flex", "add_business_days"]

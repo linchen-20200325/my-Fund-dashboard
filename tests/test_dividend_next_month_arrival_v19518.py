@@ -2,7 +2,7 @@
 
 user 2026-08-24:每月推下個月預估配息月曆,並註記配息到帳 = 除息日 + 5 工作天。
 - add_business_days:純函式,跳週末(不含國定假日 → 到帳標「推估」)。
-- build_summary_text:每檔附「約 M/D 到帳」+ 說明列。
+- build_summary_text:到帳時間改清單「上方」單行「約 +5 工作天左右」(v19.523;不再逐檔列 M/D 到帳)。
 - dividend_calendar_notify.main:目標月改「下個月」(12 月 → 隔年 1 月)。
 """
 from __future__ import annotations
@@ -105,14 +105,21 @@ def _cal_one(ex, month=9, year=2026):
             "excluded": [], "unpredictable": [], "counts": {}}
 
 
-def test_summary_shows_arrival_ex_plus5():
+def test_summary_arrival_note_above_list_not_per_item():
+    # user 2026-08-24:到帳時間不逐檔列,改在清單「上方」一句「約 +5 個工作天左右」。
     ex = _dt.date(2026, 9, 14)
     txt = build_summary_text(_cal_one(ex))
-    arr = add_business_days(ex, 5)
     assert "除息" in txt
-    assert f"{arr.month}/{arr.day} 到帳" in txt           # 到帳 = 除息 +5 工作天
-    assert "工作天" in txt                                # 說明列(含「未扣國定假日」誠實旗標)
-    assert "未扣國定假日" in txt
+    assert "9/14 除息" in txt                             # 逐檔只列除息日 + 名稱
+    arr = add_business_days(ex, 5)
+    assert f"{arr.month}/{arr.day} 到帳" not in txt       # 不再逐檔列到帳日期
+    assert "工作天左右" in txt                            # 清單上方單行到帳說明
+    assert "未扣國定假日" in txt                          # 誠實旗標(僅跳週末)
+    # 到帳說明必須在第一檔清單列「之上」
+    lines = txt.splitlines()
+    _note_i = next(i for i, ln in enumerate(lines) if "工作天左右" in ln)
+    _list_i = next(i for i, ln in enumerate(lines) if ln.startswith("•"))
+    assert _note_i < _list_i
 
 
 def test_summary_title_shows_target_month_roc():

@@ -1,7 +1,8 @@
 """v19.519:配息月曆 LINE Flex 彩色卡片(user 2026-08-24 選 Flex,非產圖託管)。
 
 - infra.line_push.push_flex:複用 text 推播的憑證/POST,訊息型別改 {type:flex};dry-run/缺憑證誠實不送。
-- services.dividend_calendar.build_summary_flex:月曆 → Flex bubble(每檔一列 + 到帳 + 信心);純函式、JSON-safe。
+- services.dividend_calendar.build_summary_flex:月曆 → Flex bubble(每檔一列除息日 + 信心;到帳改清單
+  上方單行,v19.523);純函式、JSON-safe。
 """
 from __future__ import annotations
 
@@ -97,13 +98,14 @@ def test_flex_structure_and_json_safe():
     json.dumps(out)                                   # LINE 要求 JSON-safe → 不炸 = 通過
 
 
-def test_flex_shows_ex_arrival_house_month():
+def test_flex_shows_ex_house_month_and_arrival_note():
     ex = _dt.date(2026, 9, 14)
     out = build_summary_flex(_cal([_ev("TLZF9", ex, house="安聯")]))
     txt = json.dumps(out, ensure_ascii=False)
     arr = add_business_days(ex, _PAY_BUSINESS_DAYS)
-    assert "9/14" in txt                              # 除息日
-    assert f"{arr.month}/{arr.day} 到帳" in txt        # 到帳 = 除息 +5 工作天
+    assert "9/14 除息" in txt                          # 逐檔:除息日 + 名稱(不含到帳日期)
+    assert f"{arr.month}/{arr.day} 到帳" not in txt     # user 2026-08-24:不再逐檔列到帳日期
+    assert "工作天左右" in txt                          # 到帳改清單上方單行說明
     assert "安聯 TLZF9" in txt                         # house + code
     assert "民國115年9月" in txt                        # 標題目標(下)月
     assert "1 檔" in out["alt_text"]                   # altText 帶檔數

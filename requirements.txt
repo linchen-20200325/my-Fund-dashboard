@@ -43,6 +43,7 @@ gspread>=6.0.0
 google-auth>=2.20.0
 google-auth-oauthlib>=1.2.0
 streamlit-oauth>=0.1.14
-# v19.522:除息行事曆 PNG(infra/calendar_image)—— LINE 圖片推播需 Pillow 產圖;
-# 週報/月曆 cron 只裝 requirements.txt,故從 dev 提升為 runtime(matplotlib 仍禁,見 SPEC §16)。
+# v19.523:除息行事曆 PNG 推播改「截 App 那張 HTML」(infra/html_to_png headless Chromium),
+# 不再走 Pillow 產圖。Pillow 保留供 streamlit st.image / playwright pixel-diff 測試(matplotlib 仍禁,見 SPEC §16)。
+# 註:PNG 推播 cron 另需 playwright + `playwright install chromium` + CJK 字型(fonts-noto-cjk),於月曆 workflow 補(PR4)。
 pillow>=10.0

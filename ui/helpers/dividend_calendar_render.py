@@ -107,6 +107,17 @@ def _color(house: str) -> str:
     return _HOUSE_COLOR.get(house, _DEFAULT_COLOR)
 
 
+def _chip_label(ev: dict) -> str:
+    """月曆格子內的標籤:**只顯示投信名**(user 2026-08-24:「只保留投資商的名稱,移除代碼」)。
+
+    代號仍保留在下方「本月除息明細」表(格子求乾淨、明細求可查)。
+    §1:判不出投信(`detect_house` 回 "")→ 退顯示代號,**絕不留空白 chip** 把當日除息事件藏掉。
+    """
+    return (str(ev.get("house") or "").strip()
+            or str(ev.get("code") or "").strip()
+            or "—")
+
+
 def _fmt_amt(v) -> str:
     return f"{v:.4f}" if isinstance(v, (int, float)) else "—"
 
@@ -148,7 +159,7 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
         if evs:
             chips = '<div class="chips">' + "".join(
                 f'<span class="chip"><span class="dot" style="background:{_e(_color(ev.get("house")))}"></span>'
-                f'<b>{_e(ev.get("house") or "")}</b><span class="code">{_e(ev.get("code"))}</span>'
+                f'<b>{_e(_chip_label(ev))}</b>'
                 + ('<span class="q">?</span>' if ev.get("confidence") == "low" else "")
                 + '</span>'
                 for ev in evs) + '</div>'
@@ -213,4 +224,24 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 </div></body></html>"""
 
 
-__all__ = ["render_month_calendar_html", "_HOUSE_COLOR"]
+def render_month_calendar_png(cal: dict, *, title: str = "基金除息配息行事曆",
+                              is_sample: bool = False, width: int = 820, scale: int = 2) -> bytes:
+    """月曆結構 → PNG bytes(headless Chromium 截 `render_month_calendar_html` 的 `.wrap`)。
+
+    user 2026-08-24 選「截 App 那張最像」:重用**同一份 HTML 樣板**(App 方式 A / LINE 方式 C 單一
+    SSOT),故推播圖與 App 畫面一模一樣,不會走鐘。截圖 I/O **委派 L0** `infra.html_to_png`(本函式
+    只組合 HTML + 呼叫,不直接開瀏覽器 → 合法下行依賴)。lazy import → App 只取 HTML 時不載入 playwright。
+
+    Raises:
+        infra.html_to_png.HtmlRenderError — playwright 缺 / Chromium 無法啟動 / 逾時(§1);
+        呼叫端(每月 cron)接到後退回 Flex / 純文字,提醒仍送達。
+    """
+    from infra.html_to_png import html_to_png
+    _html = render_month_calendar_html(cal, title=title, is_sample=is_sample)
+    # require_cjk:本圖滿版中文 —— runner 缺中文字型會整張畫成 tofu 方塊,寧可 raise 讓呼叫端退
+    # Flex/純文字,也不推一張沒人看得懂的圖(§1)。
+    return html_to_png(_html, width=width, scale=scale, selector=".wrap",
+                       color_scheme="light", require_cjk=True)
+
+
+__all__ = ["render_month_calendar_html", "render_month_calendar_png", "_HOUSE_COLOR"]
