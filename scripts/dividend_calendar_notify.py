@@ -74,9 +74,12 @@ def main(argv=None) -> int:
         return 1
 
     now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
-    cal = build_month_calendar(funds, now.year, now.month)
+    # user 2026-08-24:推「下個月」預估(每月 1 號先知道下月除息 + 到帳),非本月。12 月 → 隔年 1 月。
+    _ny, _nm = (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)
+    # ref = 本月(現在)→ 陳舊度相對現在量,正常月配基金推下月不會被誤判低信心/疑停配(v19.518)。
+    cal = build_month_calendar(funds, _ny, _nm, ref_year=now.year, ref_month=now.month)
     text = build_summary_text(cal)
-    _log(f"本月推估除息 {cal['counts']['events']} 檔｜排除 {cal['counts']['excluded']} 檔")
+    _log(f"下月 {_ny}-{_nm:02d} 推估除息 {cal['counts']['events']} 檔｜排除 {cal['counts']['excluded']} 檔")
 
     if args.dry_run:
         print("─" * 40 + "\n" + text + "\n" + "─" * 40)
