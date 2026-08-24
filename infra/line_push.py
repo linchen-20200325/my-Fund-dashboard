@@ -38,22 +38,12 @@ def _resolve(name: str, override: "str | None") -> str:
     return str(os.environ.get(name, "")).strip()
 
 
-def push_text(text: str, *, token: "str | None" = None, user_id: "str | None" = None,
-              dry_run: bool = False, timeout: float = 10.0, _poster=None) -> dict:
-    """推一則 text 到指定 LINE user。
+def _post_messages(messages: list, *, preview: str, token: "str | None", user_id: "str | None",
+                   dry_run: bool, timeout: float, _poster) -> dict:
+    """共用:憑證解析 + dry-run/缺憑證 short-circuit + POST + §1 錯誤處理。
 
-    Returns:
-        {"sent": bool, "dry_run": bool, "status": int|None, "reason": str}
-    Raises:
-        LinePushError — 憑證齊全且非 dry-run 但 HTTP 非 2xx / 網路錯誤(§1 不靜默)。
+    messages:LINE messages 陣列(text / flex / image …皆可,≤5 則)。preview:dry-run/log 純文字預覽。
     """
-    _text = str(text or "").strip()
-    if not _text:
-        return {"sent": False, "dry_run": bool(dry_run), "status": None,
-                "reason": "空訊息,未送"}
-    if len(_text) > _LINE_TEXT_MAX:                     # LINE 硬上限 → 截斷帶省略號(不讓 API 4xx)
-        _text = _text[:_LINE_TEXT_MAX - 1] + "…"
-
     # 別名相容:優先 LINE_CHANNEL_TOKEN,退 LINE_CHANNEL_ACCESS_TOKEN(spec / GitHub secret 常用後者)
     _token = _resolve("LINE_CHANNEL_TOKEN", token) or _resolve("LINE_CHANNEL_ACCESS_TOKEN", None)
     _uid = _resolve("LINE_USER_ID", user_id)
@@ -61,10 +51,10 @@ def push_text(text: str, *, token: "str | None" = None, user_id: "str | None" = 
     if dry_run or not _token or not _uid:
         _why = ("dry-run" if dry_run else
                 "缺 LINE_CHANNEL_TOKEN" if not _token else "缺 LINE_USER_ID")
-        print(f"[line_push] {_why} → 不送,訊息預覽:\n{_text}")
+        print(f"[line_push] {_why} → 不送,訊息預覽:\n{preview}")
         return {"sent": False, "dry_run": bool(dry_run), "status": None, "reason": _why}
 
-    _payload = {"to": _uid, "messages": [{"type": "text", "text": _text}]}
+    _payload = {"to": _uid, "messages": messages}
     _headers = {"Authorization": f"Bearer {_token}", "Content-Type": "application/json"}
 
     _post = _poster
@@ -83,4 +73,42 @@ def push_text(text: str, *, token: "str | None" = None, user_id: "str | None" = 
     return {"sent": True, "dry_run": False, "status": int(_status), "reason": "ok"}
 
 
-__all__ = ["push_text", "LinePushError"]
+def push_text(text: str, *, token: "str | None" = None, user_id: "str | None" = None,
+              dry_run: bool = False, timeout: float = 10.0, _poster=None) -> dict:
+    """推一則 text 到指定 LINE user。
+
+    Returns:
+        {"sent": bool, "dry_run": bool, "status": int|None, "reason": str}
+    Raises:
+        LinePushError — 憑證齊全且非 dry-run 但 HTTP 非 2xx / 網路錯誤(§1 不靜默)。
+    """
+    _text = str(text or "").strip()
+    if not _text:
+        return {"sent": False, "dry_run": bool(dry_run), "status": None,
+                "reason": "空訊息,未送"}
+    if len(_text) > _LINE_TEXT_MAX:                     # LINE 硬上限 → 截斷帶省略號(不讓 API 4xx)
+        _text = _text[:_LINE_TEXT_MAX - 1] + "…"
+    return _post_messages([{"type": "text", "text": _text}], preview=_text, token=token,
+                          user_id=user_id, dry_run=dry_run, timeout=timeout, _poster=_poster)
+
+
+def push_flex(contents: dict, alt_text: str, *, token: "str | None" = None,
+              user_id: "str | None" = None, dry_run: bool = False, timeout: float = 10.0,
+              _poster=None) -> dict:
+    """推一則 **Flex Message**(彩色卡片)到指定 LINE user。
+
+    Args:
+        contents: Flex container dict(bubble / carousel),由 caller(L2)組好。
+        alt_text: 通知列 / 無法渲染 Flex 的裝置退化用純文字(LINE altText 上限 400 字)。
+    Returns / Raises 同 push_text。憑證與端點與 text 推播共用,**無需新增 secret**。
+    """
+    _alt = (str(alt_text or "").strip() or "LINE 通知")[:400]   # 非空 + LINE altText 硬上限 400
+    if not isinstance(contents, dict) or not contents:
+        return {"sent": False, "dry_run": bool(dry_run), "status": None,
+                "reason": "空 Flex 內容,未送"}
+    _msg = {"type": "flex", "altText": _alt, "contents": contents}
+    return _post_messages([_msg], preview=_alt, token=token, user_id=user_id,
+                          dry_run=dry_run, timeout=timeout, _poster=_poster)
+
+
+__all__ = ["push_text", "push_flex", "LinePushError"]

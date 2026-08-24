@@ -314,5 +314,87 @@ def build_summary_text(cal: dict) -> str:
     return "\n".join(lines)
 
 
+# ── LINE Flex 彩色卡片(user 2026-08-24;LINE 原生渲染,不需產圖/託管)──────────────
+# 顏色:LINE Flex 預設白底泡泡 → 採深字 + 綠 accent(雙主題可讀,不設 backgroundColor 避免主題陷阱)。
+_FLEX_INK = "#1F2D3D"     # 主字(深板岩)
+_FLEX_SUB = "#8896A6"     # 次要(灰)
+_FLEX_EX = "#2E7D5B"      # 除息日(松綠)
+_FLEX_ARR = "#8896A6"     # 到帳日(灰)
+_FLEX_MAX_ROWS = 30       # 稽核:Flex JSON ≤50KB;逐檔一列上限,其餘收斂「…另 N 檔」(對齊 text 路徑)
+
+
+def _flex_event_row(e: dict) -> dict:
+    """單檔一列(horizontal box):除息日 ｜ 名稱/代號 ｜ →到帳日。
+
+    §1/稽核:LINE 拒絕**空字串 text**(整則 Flex 400 → 全推播失敗),故:名稱保證非空、
+    到帳節點僅在有值時才加(不塞空 text)。
+    """
+    _ex = e["ex_date"]
+    _arr = add_business_days(_ex, _PAY_BUSINESS_DAYS)
+    _house = f"{e.get('house')} " if e.get("house") else ""
+    _name = (f"{_house}{e.get('code') or e.get('name') or ''}").strip()[:22] or "—"
+    if e.get("confidence") == "low":
+        _name += "（信心低）"
+    _contents = [
+        {"type": "text", "text": f"{_ex.month}/{_ex.day}", "size": "sm", "weight": "bold",
+         "color": _FLEX_EX, "flex": 3},
+        {"type": "text", "text": _name, "size": "sm", "color": _FLEX_INK, "flex": 6, "wrap": True},
+    ]
+    if _arr:                                          # 到帳節點僅在有值時加(避免空字串 text → 400)
+        _contents.append({"type": "text", "text": f"→ {_arr.month}/{_arr.day} 到帳",
+                          "size": "xs", "color": _FLEX_ARR, "flex": 5, "align": "end"})
+    return {"type": "box", "layout": "horizontal", "spacing": "sm", "contents": _contents}
+
+
+def build_summary_flex(cal: dict) -> dict:
+    """月曆結構 → LINE Flex 彩色卡片。**純函式,零 IO**。回 {"contents": bubble, "alt_text": str}。
+
+    無事件 → 誠實卡片說本月無推估除息(§1)。內容與 build_summary_text 一致(每檔除息 + 到帳 +5 工作天)。
+    """
+    y, m = cal.get("year"), cal.get("month")
+    _roc = (y - 1911) if isinstance(y, int) else "?"
+    events = cal.get("events") or []
+    _exc = cal.get("excluded") or []
+    _unp = cal.get("unpredictable") or []
+
+    _body: list = []
+    if not events:
+        _body.append({"type": "text", "text": "你的基金本月無推估除息日（或資料不足）。",
+                      "size": "sm", "color": _FLEX_SUB, "wrap": True})
+    else:
+        _body.extend(_flex_event_row(e) for e in events[:_FLEX_MAX_ROWS])
+        if len(events) > _FLEX_MAX_ROWS:              # 稽核:超上限收斂,避免 Flex JSON 超 50KB → 400
+            _body.append({"type": "text",
+                          "text": f"…另 {len(events) - _FLEX_MAX_ROWS} 檔（開 App 看完整）",
+                          "size": "xs", "color": _FLEX_SUB, "wrap": True})
+        _body.append({"type": "separator", "margin": "md"})
+        _body.append({"type": "text",
+                      "text": f"💰 到帳 ≈ 除息日 +{_PAY_BUSINESS_DAYS} 工作天"
+                              "（僅跳週末、未扣國定假日,遇連假會更晚）",
+                      "size": "xxs", "color": _FLEX_SUB, "wrap": True, "margin": "sm"})
+    _notes = []
+    if _exc:
+        _notes.append(f"{len(_exc)} 檔累積型/無配息未列")
+    if _unp:
+        _notes.append(f"{len(_unp)} 檔節奏不規則/疑停配")
+    if _notes:
+        _body.append({"type": "text", "text": "（" + "・".join(_notes) + "）",
+                      "size": "xxs", "color": _FLEX_SUB, "wrap": True})
+    _body.append({"type": "text", "text": "※ 推估非官方,實際以基金公司公告為準。",
+                  "size": "xxs", "color": _FLEX_SUB, "wrap": True, "margin": "sm"})
+
+    _bubble = {
+        "type": "bubble", "size": "mega",
+        "header": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": [
+            {"type": "text", "text": "🗓️ 基金除息行事曆", "weight": "bold", "size": "lg",
+             "color": _FLEX_INK, "wrap": True},
+            {"type": "text", "text": f"民國{_roc}年{m}月・推估", "size": "sm", "color": _FLEX_SUB},
+        ]},
+        "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": _body},
+    }
+    _alt = f"🗓️ 民國{_roc}年{m}月 除息行事曆（{len(events)} 檔・到帳=除息+5工作天）"
+    return {"contents": _bubble, "alt_text": _alt}
+
+
 __all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
            "detect_house", "build_summary_text"]

@@ -53,7 +53,11 @@ def main(argv=None) -> int:
         _read_holdings,
         _read_watchlist,
     )
-    from services.dividend_calendar import build_month_calendar, build_summary_text
+    from services.dividend_calendar import (
+        build_month_calendar,
+        build_summary_flex,
+        build_summary_text,
+    )
 
     client, sheet_id = _load_client_and_sheet()
     held = _read_holdings(client, sheet_id) if client else []
@@ -78,23 +82,29 @@ def main(argv=None) -> int:
     _ny, _nm = (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)
     # ref = 本月(現在)→ 陳舊度相對現在量,正常月配基金推下月不會被誤判低信心/疑停配(v19.518)。
     cal = build_month_calendar(funds, _ny, _nm, ref_year=now.year, ref_month=now.month)
-    text = build_summary_text(cal)
+    text = build_summary_text(cal)              # dry-run 預覽用(可讀純文字)
+    flex = build_summary_flex(cal)              # 實送:LINE Flex 彩色卡片(user 2026-08-24)
     _log(f"下月 {_ny}-{_nm:02d} 推估除息 {cal['counts']['events']} 檔｜排除 {cal['counts']['excluded']} 檔")
 
     if args.dry_run:
         print("─" * 40 + "\n" + text + "\n" + "─" * 40)
+        _log(f"(實送為 Flex 彩色卡片;altText:{flex['alt_text']})")
         return 0
 
-    from infra.line_push import LinePushError, push_text
+    from infra.line_push import LinePushError, push_flex, push_text
     try:
-        res = push_text(text, dry_run=False)
-    except LinePushError as _e:  # noqa: BLE001
-        _log(f"LINE 推播失敗:{_e}")
-        return 1
+        res = push_flex(flex["contents"], flex["alt_text"], dry_run=False)
+    except LinePushError as _e:  # noqa: BLE001 — Flex 若被 LINE 退(如版型問題)→ 退回純文字,提醒仍送達
+        _log(f"Flex 推播失敗:{_e} → 退回純文字")
+        try:
+            res = push_text(text, dry_run=False)
+        except LinePushError as _e2:  # noqa: BLE001
+            _log(f"純文字推播也失敗:{_e2}")
+            return 1
     if not res["sent"]:
         _log(f"未送出({res['reason']})— 缺 LINE_CHANNEL_TOKEN/ACCESS_TOKEN / LINE_USER_ID?")
         return 1
-    _log("✅ 已送出月曆摘要到 LINE")
+    _log("✅ 已送出月曆到 LINE")
     return 0
 
 
