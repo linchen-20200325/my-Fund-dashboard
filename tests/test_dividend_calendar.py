@@ -78,10 +78,17 @@ def test_predict_monthly_target_month():
 
 
 def test_predict_clamps_to_month_end():
-    """除息日 30 號 → 2 月只有 28 天 → 夾到 28(不溢位)。"""
+    """除息日 30 號 → 2 月只有 28 天 → 夾到 28(不溢位),再校正到營業日。
+
+    2026-02-28 同時是**週六 + 和平紀念日**,2/27 是補假 → 往後順延會跨到 3 月,
+    故往前抓最近營業日 2/26(週四)。夾month-end 與營業日校正兩件事都要成立。
+    """
+    from services.dividend_calendar import is_business_day
     s = infer_schedule(_monthly_divs(day=30, start=(2025, 4), n=8))
     p = predict_ex_for_month(s, 2026, 2)   # 2026 非閏年 → 28 天
-    assert p["ex_date"] == _dt.date(2026, 2, 28)
+    assert p["ex_date"].month == 2 and p["ex_date"].day <= 28      # 未溢位到 3 月
+    assert is_business_day(p["ex_date"])                           # 落在營業日
+    assert p["ex_date"] == _dt.date(2026, 2, 26)
 
 
 def test_predict_quarterly_lands_in_month():
@@ -182,8 +189,11 @@ def test_summary_text_lists_events_and_excluded():
     cal = build_month_calendar(funds, 2026, 8)
     txt = build_summary_text(cal)
     assert "民國115年8月" in txt
-    assert "8/14" in txt and "TLZF9" in txt
-    assert "1 檔累積型/無配息未列" in txt
+    # user 2026-08-24:逐檔只留投信名,代號不顯示(圖檔/明細表/文字/Flex 同一規則)
+    assert "8/14" in txt and "安聯" in txt
+    assert "TLZF9" not in txt
+    # user 2026-08-24「沒有配息的整段移除」→ 不再提累積型/無配息檔數
+    assert "累積型" not in txt and "ACDD01" not in txt
     assert "推估非官方" in txt
 
 

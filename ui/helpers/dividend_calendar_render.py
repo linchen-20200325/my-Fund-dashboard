@@ -9,6 +9,8 @@ from __future__ import annotations
 import calendar as _calendar
 import html as _html
 
+from services.dividend_calendar import dedupe_events, display_label, pay_window
+
 # 投信分色(中間調,深/淺底都看得清;判不出 → 預設灰)
 _HOUSE_COLOR = {
     "聯博": "#2e8079", "安聯": "#b5771f", "摩根": "#3f63ab", "施羅德": "#8a5680",
@@ -79,7 +81,7 @@ h1{font-size:clamp(22px,3.6vw,32px);margin:0;font-weight:800;letter-spacing:-.01
 .chip .q{color:var(--accent-ink);font-weight:700;font-size:11px}
 .section-t{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;margin:28px 0 12px}
 .tbl-scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:640px;font-size:14px}
+table{width:100%;border-collapse:collapse;min-width:360px;font-size:14px}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line-soft)}
 thead th{font-size:12px;letter-spacing:.04em;color:var(--ink-faint);font-weight:700;border-bottom:1px solid var(--line)}
 tbody tr:last-child td{border-bottom:none}
@@ -107,12 +109,36 @@ def _color(house: str) -> str:
     return _HOUSE_COLOR.get(house, _DEFAULT_COLOR)
 
 
-def _fmt_amt(v) -> str:
-    return f"{v:.4f}" if isinstance(v, (int, float)) else "—"
+def _chip_label(ev: dict) -> str:
+    """月曆格子/明細表的標籤:**只顯示投信名**(user 2026-08-24)。
+
+    規則 SSOT 在 L2 `services.dividend_calendar.display_label` —— 圖檔、明細表、LINE 文字、
+    Flex 四個介面共用同一份,避免各寫各的而漂移。§1 保證非空(退代號 → 基金名 → 「—」)。
+    """
+    return display_label(ev)
 
 
-def _fmt_pct(v) -> str:
-    return f"{v:.1f}%" if isinstance(v, (int, float)) else "—"
+def _dedupe_day_chips(evs: list) -> list:
+    """同一天同投信多檔 → 合併成**一個** chip(user 2026-08-24「移除重複」、「×2 也移除」)。
+
+    去重規則走 L2 `dedupe_events`(格子 / 明細表 / LINE 文字 / Flex 同一份 SSOT,不會漂移);
+    本函式只負責補上顯示用的顏色與低信心旗標。信心已由 L2 取最保守值(任一 low → low)。
+    """
+    return [{"label": _chip_label(_ev), "color": _color(_ev.get("house")),
+             "low": _ev.get("confidence") == "low"}
+            for _ev in dedupe_events(evs)]
+
+
+def _fmt_pay_window(ex) -> str:
+    """除息日 → 入帳推估「區間」字串(如 `8/22~8/26`)。口徑 SSOT 走 L2 `pay_window`。
+
+    §1:算不出(ex 非日期)→ 「—」,不捏造日期。
+    """
+    _w = pay_window(ex)
+    if not _w:
+        return "—"
+    _lo, _hi = _w
+    return f"{_lo.month}/{_lo.day}~{_hi.month}/{_hi.day}"
 
 
 def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行事曆",
@@ -123,7 +149,6 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
     first_wd, days = _calendar.monthrange(y, m)      # first_wd: Mon=0..Sun=6
     by_day = cal.get("by_day") or {}
     events = cal.get("events") or []
-    excluded = cal.get("excluded") or []
 
     # 圖例:本月出現的投信(去重保序)
     seen, legend = set(), []
@@ -147,36 +172,35 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
         chips = ""
         if evs:
             chips = '<div class="chips">' + "".join(
-                f'<span class="chip"><span class="dot" style="background:{_e(_color(ev.get("house")))}"></span>'
-                f'<b>{_e(ev.get("house") or "")}</b><span class="code">{_e(ev.get("code"))}</span>'
-                + ('<span class="q">?</span>' if ev.get("confidence") == "low" else "")
+                f'<span class="chip"><span class="dot" style="background:{_e(c["color"])}"></span>'
+                f'<b>{_e(c["label"])}</b>'
+                + ('<span class="q">?</span>' if c["low"] else "")
                 + '</span>'
-                for ev in evs) + '</div>'
+                for c in _dedupe_day_chips(evs)) + '</div>'
         has = " has" if evs else ""
         cells.append(f'<div class="cell{wknd}{has}"><div class="d tnum">{d}</div>{chips}</div>')
     grid_html = "".join(cells)
 
-    # 明細表
+    # 明細表(user 2026-08-24:基金欄只留投信名、拿掉代號;「上次配息」「年化配息」整欄移除;
+    # 原「所屬」欄與基金欄同值 → 合併成一欄,不重複)
     rows = ""
-    for e in events:
-        ex, pay = e["ex_date"], e.get("pay_date_est")
+    for e in dedupe_events(events):                  # 同日同投信只列一次(user 2026-08-24)
+        ex = e["ex_date"]
         cf_zh, cf_cls = _CONF.get(e.get("confidence"), ("—", "med"))
         rows += (
             f'<tr><td class="tnum est">{ex.month}/{ex.day}</td>'
-            f'<td class="name"><b>{_e(e.get("name"))}</b> <span class="muted tnum">{_e(e.get("code"))}</span></td>'
-            f'<td><span class="house"><span class="dot" style="background:{_e(_color(e.get("house")))}"></span>{_e(e.get("house") or "—")}</span></td>'
-            f'<td class="tnum muted">{(str(pay.month)+"/"+str(pay.day)) if pay else "—"}</td>'
-            f'<td class="tnum">{_fmt_amt(e.get("last_amount"))}</td>'
-            f'<td class="tnum">{_fmt_pct(e.get("last_yield"))}</td>'
+            f'<td class="name"><span class="house">'
+            f'<span class="dot" style="background:{_e(_color(e.get("house")))}"></span>'
+            f'<b>{_e(_chip_label(e))}</b></span></td>'
+            f'<td class="tnum muted">{_e(_fmt_pay_window(ex))}</td>'
             f'<td><span class="cf {cf_cls}">{cf_zh}</span></td></tr>')
     if not rows:
-        rows = '<tr><td colspan="7" class="muted">本月你的基金無推估除息日（或資料不足）。</td></tr>'
+        rows = '<tr><td colspan="4" class="muted">本月你的基金無推估除息日（或資料不足）。</td></tr>'
 
+    # user 2026-08-24「沒有配息的整段移除」:累積型/查無配息的基金本來就不會配息,不需佔版面提醒。
+    # ⚠️ 下方 `unpredictable`(有配息史但本月推不出)**保留** —— 那是「可能有配息但算不出來」,
+    # 靜默吃掉會讓你誤以為當月沒事(§1 誠實揭露)。兩者語意不同,不可一起砍。
     exc_html = ""
-    if excluded:
-        names = "、".join(f'<b>{_e(x.get("code"))}</b> {_e(x.get("name"))}' for x in excluded)
-        exc_html = (f'<div class="excluded"><span class="x">已排除</span>以下持有基金<b>無月配息</b>'
-                    f'（累積型 / 查無配息），故不列入 —— 這是正常的，不是漏抓：{names}。</div>')
 
     # 稽核 M3:有配息史但本月無法推估(節奏不規則 / 疑停配過舊)→ 誠實揭露,不靜默消失
     unpredictable = cal.get("unpredictable") or []
@@ -203,14 +227,35 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 <div class="grid">{grid_html}</div></div></div>
 <h2 class="section-t">本月除息明細（推估）</h2>
 <div class="tbl-scroll"><table><thead><tr>
-<th>除息</th><th>基金</th><th>所屬</th><th>入帳(估)</th><th>上次配息</th><th>年化配息</th><th>信心</th>
+<th>除息</th><th>基金</th><th>入帳(估)</th><th>信心</th>
 </tr></thead><tbody>{rows}</tbody></table></div>
 {exc_html}
 {unp_html}
-<footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算，非官方公告。
-依公開說明書，<b>配息入帳日為除息日後一個月內</b>，實際依基金公司作業為準；
-除息日與基金營業日請以<b>基金公司網站公告</b>為準。</footer>
+<footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算，非官方公告。<br>
+上述基金基準日皆以實際基金營業日為準。<br>
+依公開說明書規定，<b>配息入帳日為除息日後一個月內</b>，入帳時間將依實際作業為準。<br>
+本行事曆所示之營業日僅供參考，實際之基金營業日請參閱<b>基金公司網站公告</b>為準。</footer>
 </div></body></html>"""
 
 
-__all__ = ["render_month_calendar_html", "_HOUSE_COLOR"]
+def render_month_calendar_png(cal: dict, *, title: str = "基金除息配息行事曆",
+                              is_sample: bool = False, width: int = 820, scale: int = 2) -> bytes:
+    """月曆結構 → PNG bytes(headless Chromium 截 `render_month_calendar_html` 的 `.wrap`)。
+
+    user 2026-08-24 選「截 App 那張最像」:重用**同一份 HTML 樣板**(App 方式 A / LINE 方式 C 單一
+    SSOT),故推播圖與 App 畫面一模一樣,不會走鐘。截圖 I/O **委派 L0** `infra.html_to_png`(本函式
+    只組合 HTML + 呼叫,不直接開瀏覽器 → 合法下行依賴)。lazy import → App 只取 HTML 時不載入 playwright。
+
+    Raises:
+        infra.html_to_png.HtmlRenderError — playwright 缺 / Chromium 無法啟動 / 逾時(§1);
+        呼叫端(每月 cron)接到後退回 Flex / 純文字,提醒仍送達。
+    """
+    from infra.html_to_png import html_to_png
+    _html = render_month_calendar_html(cal, title=title, is_sample=is_sample)
+    # require_cjk:本圖滿版中文 —— runner 缺中文字型會整張畫成 tofu 方塊,寧可 raise 讓呼叫端退
+    # Flex/純文字,也不推一張沒人看得懂的圖(§1)。
+    return html_to_png(_html, width=width, scale=scale, selector=".wrap",
+                       color_scheme="light", require_cjk=True)
+
+
+__all__ = ["render_month_calendar_html", "render_month_calendar_png", "_HOUSE_COLOR"]

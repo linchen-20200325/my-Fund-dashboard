@@ -1,8 +1,9 @@
-"""v19.518:配息月曆推播 —— 改推「下個月」+ 到帳日註記(除息 +5 工作天)。
+"""v19.518→525:配息月曆推播 —— 推「下個月」+ 到帳區間 + 營業日校正。
 
-user 2026-08-24:每月推下個月預估配息月曆,並註記配息到帳 = 除息日 + 5 工作天。
-- add_business_days:純函式,跳週末(不含國定假日 → 到帳標「推估」)。
-- build_summary_text:每檔附「約 M/D 到帳」+ 說明列。
+user 2026-08-24:每月推下個月預估配息月曆;到帳 = 除息 + 5~7 個**營業日**(區間);
+除息日遇六日**或國定假日**一律順延至營業日(v19.525 接 `holidays` 台灣行事曆,含農曆假日 + 補假)。
+- add_business_days / roll_to_business_day:純函式,跳週末 + 國定假日。
+- build_summary_text:到帳時間改清單「上方」單行「約 +5~7 個營業日左右」(不再逐檔列 M/D 到帳)。
 - dividend_calendar_notify.main:目標月改「下個月」(12 月 → 隔年 1 月)。
 """
 from __future__ import annotations
@@ -16,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from services.dividend_calendar import add_business_days, build_summary_text  # noqa: E402
 
 
-# ── add_business_days:跳週末 ──────────────────────────────────────────────
+# ── add_business_days:跳週末 + 國定假日 ─────────────────────────────────────
 def _first_weekday_on_or_after(d, wd):
     while d.weekday() != wd:
         d += _dt.timedelta(days=1)
@@ -32,7 +33,7 @@ def test_add_business_days_friday_plus1_is_monday():
 def test_add_business_days_friday_plus5_is_next_friday():
     fri = _first_weekday_on_or_after(_dt.date(2026, 1, 1), 4)
     got = add_business_days(fri, 5)
-    assert got == fri + _dt.timedelta(days=7) and got.weekday() == 4   # 5 工作天 = 下週五
+    assert got == fri + _dt.timedelta(days=7) and got.weekday() == 4   # 5 營業日 = 下週五(該週無假日)
 
 
 def test_add_business_days_from_saturday():
@@ -58,6 +59,158 @@ def test_add_business_days_year_boundary():
     d = _dt.date(2026, 12, 30)
     got = add_business_days(d, 4)
     assert got > d and got.weekday() < 5                  # timedelta 跨年無縫、結果為工作日
+
+
+# ── roll_to_business_day:除息日遇六日**或國定假日** → 順延至營業日(user 2026-08-24)──────
+def test_roll_weekend_to_next_business_day():
+    from services.dividend_calendar import roll_to_business_day as R
+    assert R(_dt.date(2026, 8, 2)) == _dt.date(2026, 8, 3)     # 日 → 一
+    assert R(_dt.date(2026, 8, 15)) == _dt.date(2026, 8, 17)   # 六 → 一(跳兩天)
+
+
+def test_roll_weekday_unchanged():
+    from services.dividend_calendar import roll_to_business_day as R
+    for d in (_dt.date(2026, 8, 27), _dt.date(2026, 8, 31)):   # 8 月無國定假日
+        assert R(d) == d and d.weekday() < 5                   # 平日不動
+
+
+def test_roll_result_always_business_day():
+    from services.dividend_calendar import is_business_day, roll_to_business_day as R
+    d = _dt.date(2026, 1, 1)
+    for _ in range(400):
+        assert is_business_day(R(d)), (d, R(d))                # 任一天校正後恆為營業日
+        d += _dt.timedelta(days=1)
+
+
+def test_roll_keeps_month_when_forward_would_spill():
+    # 月底遇週日:順延會跨到下月 → 改往前抓上一個營業日,留在本月(否則事件掉到別月格子)
+    from services.dividend_calendar import roll_to_business_day as R
+    _last = _dt.date(2026, 5, 31)                              # 週日
+    assert _last.weekday() >= 5
+    got = R(_last)
+    assert got == _dt.date(2026, 5, 29) and got.month == 5      # 往前抓週五,仍在 5 月
+
+
+def test_roll_bad_input_passthrough():
+    from services.dividend_calendar import roll_to_business_day as R
+    assert R(None) is None                                     # §1 不捏造
+    assert R("2026-08-02") == "2026-08-02"                     # 非 date → 原樣
+
+
+# ── 國定假日(含農曆假日 + 補假)──────────────────────────────────────────────
+def test_national_holidays_are_not_business_days():
+    from services.dividend_calendar import has_holiday_calendar, is_business_day
+    if not has_holiday_calendar():
+        import pytest
+        pytest.skip("holidays 套件不可用,退化為只跳週末")
+    for d in (_dt.date(2026, 1, 1),      # 元旦(週四 —— 非週末,只有假日表抓得到)
+              _dt.date(2026, 2, 17),     # 春節(週二,農曆)
+              _dt.date(2026, 6, 19),     # 端午(週五,農曆)
+              _dt.date(2026, 9, 25),     # 中秋(週五,農曆)
+              _dt.date(2026, 2, 27)):    # 和平紀念日補假(週五)
+        assert d.weekday() < 5, f"{d} 應為平日才測得出假日表效果"
+        assert not is_business_day(d), f"{d} 是國定假日,不應算營業日"
+
+
+def test_roll_skips_lunar_new_year_block():
+    from services.dividend_calendar import has_holiday_calendar, is_business_day
+    from services.dividend_calendar import roll_to_business_day as R
+    if not has_holiday_calendar():
+        import pytest
+        pytest.skip("holidays 套件不可用")
+    got = R(_dt.date(2026, 2, 17))                    # 春節當天
+    assert got > _dt.date(2026, 2, 20) and is_business_day(got)   # 整段連假跳過
+
+
+def test_pay_window_skips_holidays():
+    from services.dividend_calendar import has_holiday_calendar, is_business_day, pay_window
+    if not has_holiday_calendar():
+        import pytest
+        pytest.skip("holidays 套件不可用")
+    lo, hi = pay_window(_dt.date(2026, 2, 13))        # 春節前最後一個營業日除息
+    assert is_business_day(lo) and is_business_day(hi)
+    assert lo > _dt.date(2026, 2, 20)                 # 到帳日必須跨過整個春節連假
+
+
+def test_pay_note_describes_actual_capability():
+    # §1:文案須與實際能力一致 —— 有假日表就不可再說「未扣國定假日」
+    from services.dividend_calendar import _pay_note, has_holiday_calendar
+    note = _pay_note()
+    if has_holiday_calendar():
+        assert "已跳過週末與國定假日" in note and "未扣國定假日" not in note
+    else:
+        assert "未扣國定假日" in note
+
+
+def test_predicted_ex_date_never_on_non_business_day():
+    from services.dividend_calendar import is_business_day, predict_ex_for_month
+    # 「幾號」逐一套 12 個月,推估出的除息日都不可落在週末/國定假日,且須留在目標月
+    for _day in range(1, 29):
+        for _m in range(1, 13):
+            pred = predict_ex_for_month(_sched(_dt.date(2026, 1, _day), ex_day=_day),
+                                        2026, _m, ref_year=2026, ref_month=_m)
+            if pred:
+                assert is_business_day(pred["ex_date"]), (_day, _m, pred["ex_date"])
+                assert pred["ex_date"].month == _m          # 校正後仍留在目標月
+
+
+# ── dedupe_events:同日同投信只留一筆(user 2026-08-24「這邊重複也移除」)─────────────
+def _dev(house, code, day, conf="high"):
+    return {"house": house, "code": code, "ex_date": _dt.date(2026, 8, day), "confidence": conf}
+
+
+def test_dedupe_same_house_same_day():
+    from services.dividend_calendar import dedupe_events
+    out = dedupe_events([_dev("安聯", "TLZF9", 15), _dev("安聯", "TLZM7", 15)])
+    assert len(out) == 1 and out[0]["house"] == "安聯"
+
+
+def test_dedupe_keeps_same_house_different_days():
+    from services.dividend_calendar import dedupe_events
+    out = dedupe_events([_dev("安聯", "A", 15), _dev("安聯", "B", 20)])
+    assert len(out) == 2                                  # 不同日不可合併(會漏掉一天的除息)
+
+
+def test_dedupe_confidence_takes_most_conservative():
+    from services.dividend_calendar import dedupe_events
+    for order in ([_dev("安聯", "A", 15, "high"), _dev("安聯", "B", 15, "low")],
+                  [_dev("安聯", "B", 15, "low"), _dev("安聯", "A", 15, "high")]):
+        out = dedupe_events(order)
+        assert len(out) == 1 and out[0]["confidence"] == "low"   # §1 不把低信心洗成高
+
+
+def test_dedupe_unknown_house_not_merged():
+    from services.dividend_calendar import dedupe_events
+    out = dedupe_events([_dev("", "AAA", 15), _dev("", "BBB", 15)])
+    assert len(out) == 2                                  # 判不出投信 → 退代號,兩檔各自保留
+
+
+def test_dedupe_does_not_mutate_input():
+    from services.dividend_calendar import dedupe_events
+    evs = [_dev("安聯", "A", 15, "high"), _dev("安聯", "B", 15, "low")]
+    dedupe_events(evs)
+    assert evs[0]["confidence"] == "high"                 # 原始 events 不被就地改動
+
+
+# ── pay_window:到帳推估「區間」= 除息 +5~7 工作天(user 2026-08-24 經驗值)──────────
+def test_pay_window_is_5_to_7_business_days():
+    from services.dividend_calendar import (
+        _PAY_BIZ_DAYS_MAX,
+        _PAY_BIZ_DAYS_MIN,
+        pay_window,
+    )
+    assert (_PAY_BIZ_DAYS_MIN, _PAY_BIZ_DAYS_MAX) == (5, 7)
+    ex = _dt.date(2026, 9, 14)                            # 週一
+    lo, hi = pay_window(ex)
+    assert lo == add_business_days(ex, 5) and hi == add_business_days(ex, 7)
+    assert lo < hi                                        # 區間下界早於上界
+    assert lo.weekday() < 5 and hi.weekday() < 5          # 兩端皆落在工作日(跳週末)
+
+
+def test_pay_window_bad_date_returns_none():
+    from services.dividend_calendar import pay_window
+    assert pay_window(None) is None                       # §1 不捏造日期
+    assert pay_window("2026-09-14") is None               # 非 date 物件 → None
 
 
 # ── 陳舊度相對「現在」量,推未來月不誤降信心(v19.518 稽核 #3 修)──────────────────
@@ -105,14 +258,21 @@ def _cal_one(ex, month=9, year=2026):
             "excluded": [], "unpredictable": [], "counts": {}}
 
 
-def test_summary_shows_arrival_ex_plus5():
+def test_summary_arrival_note_above_list_not_per_item():
+    # user 2026-08-24:到帳時間不逐檔列,改在清單「上方」一句「約 +5 個工作天左右」。
     ex = _dt.date(2026, 9, 14)
     txt = build_summary_text(_cal_one(ex))
-    arr = add_business_days(ex, 5)
     assert "除息" in txt
-    assert f"{arr.month}/{arr.day} 到帳" in txt           # 到帳 = 除息 +5 工作天
-    assert "工作天" in txt                                # 說明列(含「未扣國定假日」誠實旗標)
-    assert "未扣國定假日" in txt
+    assert "9/14 除息" in txt                             # 逐檔只列除息日 + 名稱
+    arr = add_business_days(ex, 5)
+    assert f"{arr.month}/{arr.day} 到帳" not in txt       # 不再逐檔列到帳日期
+    assert "營業日左右" in txt                            # 清單上方單行到帳說明
+    assert "基金公司作業為準" in txt                      # 誠實旗標(仍是推估)
+    # 到帳說明必須在第一檔清單列「之上」
+    lines = txt.splitlines()
+    _note_i = next(i for i, ln in enumerate(lines) if "營業日左右" in ln)
+    _list_i = next(i for i, ln in enumerate(lines) if ln.startswith("•"))
+    assert _note_i < _list_i
 
 
 def test_summary_title_shows_target_month_roc():

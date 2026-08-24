@@ -1,7 +1,8 @@
 """v19.519:配息月曆 LINE Flex 彩色卡片(user 2026-08-24 選 Flex,非產圖託管)。
 
 - infra.line_push.push_flex:複用 text 推播的憑證/POST,訊息型別改 {type:flex};dry-run/缺憑證誠實不送。
-- services.dividend_calendar.build_summary_flex:月曆 → Flex bubble(每檔一列 + 到帳 + 信心);純函式、JSON-safe。
+- services.dividend_calendar.build_summary_flex:月曆 → Flex bubble(每檔一列除息日 + 信心;到帳改清單
+  上方單行,v19.523);純函式、JSON-safe。
 """
 from __future__ import annotations
 
@@ -14,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from infra.line_push import push_flex  # noqa: E402
 from services.dividend_calendar import (  # noqa: E402
-    _PAY_BUSINESS_DAYS,
+    _PAY_BIZ_DAYS_MAX,
+    _PAY_BIZ_DAYS_MIN,
     add_business_days,
     build_summary_flex,
 )
@@ -97,14 +99,15 @@ def test_flex_structure_and_json_safe():
     json.dumps(out)                                   # LINE 要求 JSON-safe → 不炸 = 通過
 
 
-def test_flex_shows_ex_arrival_house_month():
+def test_flex_shows_ex_house_month_and_arrival_note():
     ex = _dt.date(2026, 9, 14)
     out = build_summary_flex(_cal([_ev("TLZF9", ex, house="安聯")]))
     txt = json.dumps(out, ensure_ascii=False)
-    arr = add_business_days(ex, _PAY_BUSINESS_DAYS)
-    assert "9/14" in txt                              # 除息日
-    assert f"{arr.month}/{arr.day} 到帳" in txt        # 到帳 = 除息 +5 工作天
-    assert "安聯 TLZF9" in txt                         # house + code
+    arr = add_business_days(ex, _PAY_BIZ_DAYS_MIN)
+    assert "9/14 除息" in txt                          # 逐檔:除息日 + 名稱(不含到帳日期)
+    assert f"{arr.month}/{arr.day} 到帳" not in txt     # user 2026-08-24:不再逐檔列到帳日期
+    assert f"+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個營業日" in txt   # 到帳改清單上方單行區間
+    assert "安聯" in txt and "TLZF9" not in txt        # 只留投信名,代號不顯示
     assert "民國115年9月" in txt                        # 標題目標(下)月
     assert "1 檔" in out["alt_text"]                   # altText 帶檔數
 
@@ -122,10 +125,12 @@ def test_flex_no_events_honest_and_no_arrival_note():
     assert "到帳 ≈" not in txt                          # 無事件 → 不列到帳說明
 
 
-def test_flex_excluded_unpredictable_notes():
+def test_flex_drops_excluded_keeps_unpredictable():
+    # user 2026-08-24:「沒有配息的整段移除」→ 累積型不再提;但「推不出」仍須揭露(§1)
     out = build_summary_flex(_cal([_ev("A", _dt.date(2026, 9, 2))], exc=2, unp=1))
     txt = json.dumps(out, ensure_ascii=False)
-    assert "2 檔累積型" in txt and "1 檔節奏不規則" in txt
+    assert "累積型" not in txt
+    assert "1 檔節奏不規則" in txt
 
 
 # ── 稽核修:LINE 拒空字串 text(整則 Flex 400)→ 任何 text 節點皆須非空 ──────────────
