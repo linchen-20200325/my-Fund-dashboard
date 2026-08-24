@@ -837,16 +837,19 @@ def render_macro_tab() -> None:
             st.info("💡 尚未載入總經資料，點擊下方按鈕開始")
 
         # v19.50：載入按鈕拆雙鈕 — 一般載入（吃既有 cache）／ 強制重抓（保證最新）
-        _btn_cols = st.columns([3, 2])
-        with _btn_cols[0]:
-            _btn_label = "🔄 更新總經資料" if st.session_state.macro_done else "📡 載入總經資料"
-            _do_load = st.button(_btn_label, type="primary", key="btn_macro_load")
-        with _btn_cols[1]:
-            _force_reload = st.button(
-                "🆕 強制重抓最新（清快取）",
-                key="btn_macro_force",
-                help="v19.57 C1：僅清 Tab1（總經）快取 + radar/tp session 殘留，"
-                     "其他 Tab（基金詳情/組合/模擬器）不受影響")
+        # user 2026-08-24：版面對齊 Stock 的 `tab_macro.py`（`🚀 一鍵更新全部數據`）——
+        # 改為**兩顆各自整條寬、上下排**，不再用 `st.columns([3, 2])` 擠在同一列。
+        # 這是這頁的主要動作按鈕，橫向只佔 3/5 寬時在寬螢幕上不夠顯眼，
+        # 使用者一進來常找不到而以為畫面壞了（截圖回報）。
+        _btn_label = "🔄 更新總經資料" if st.session_state.macro_done else "📡 載入總經資料"
+        _do_load = st.button(_btn_label, type="primary", key="btn_macro_load",
+                             use_container_width=True)
+        _force_reload = st.button(
+            "🆕 強制重抓最新（清快取）",
+            key="btn_macro_force",
+            use_container_width=True,
+            help="v19.57 C1：僅清 Tab1（總經）快取 + radar/tp session 殘留，"
+                 "其他 Tab（基金詳情/組合/模擬器）不受影響")
         if _force_reload:
             try:
                 from services.macro import clear_tab1_macro_caches
