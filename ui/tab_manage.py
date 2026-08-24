@@ -137,11 +137,12 @@ def _preview_notify(funds):
         from ui.helpers.fund_grp_health.switch_advisor_section import (
             _fx_label,
             _macro_composite,
+            _pool_oauth_client,
             _pool_rows,
             _rows_with_nav,
             _underperf_by_code,
         )
-        pool = list_pool()
+        pool = list_pool(oauth_client=_pool_oauth_client())   # 手機 OAuth-only:帶 client 才讀得到雲端池
         # 稽核 E8(d)：key 未正規化 → 選股池代碼若為小寫就對不到 type_override /
         # category。`scripts/weekly_switch_notify.py:296` 早就 `.upper()` 了
         # （且標了「稽核修」），本頁保留著同一個已修過的 bug。
@@ -215,7 +216,8 @@ def _divcal_gather_items():
     _held = [f for f in _funds if f.get("loaded") and not f.get("load_error")]   # 稽核 H2
     try:
         from repositories.pool_repository import list_pool
-        _pool = list_pool()
+        from ui.helpers.fund_grp_health.switch_advisor_section import _pool_oauth_client
+        _pool = list_pool(oauth_client=_pool_oauth_client())   # 手機 OAuth-only:帶 client 才讀得到雲端池
     except Exception:  # noqa: BLE001
         _pool = []
 
@@ -309,7 +311,9 @@ def _sec_nav_backfill_auto() -> None:
                  for f in _funds if f.get("loaded") and not f.get("load_error")]
         try:
             from repositories.pool_repository import list_pool
-            _pool = [str(e.code or "").strip().upper() for e in list_pool()]
+            from ui.helpers.fund_grp_health.switch_advisor_section import _pool_oauth_client
+            _pool = [str(e.code or "").strip().upper()
+                     for e in list_pool(oauth_client=_pool_oauth_client())]
         except Exception as _e:  # noqa: BLE001
             _pool = []
             st.caption(f"⬜ 選股池讀取失敗:[{type(_e).__name__}] {str(_e)[:60]}")
