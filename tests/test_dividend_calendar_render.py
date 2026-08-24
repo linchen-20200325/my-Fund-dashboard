@@ -204,3 +204,36 @@ def test_png_render_produces_valid_png_or_skips():
     except HtmlRenderError as e:                       # Chromium/playwright 缺 → skip(CI 安全)
         pytest.skip(f"Chromium/playwright 不可用,跳過真截圖:{e}")
     assert png[:8] == b"\x89PNG\r\n\x1a\n" and len(png) > 2000   # 合法 PNG、非空白
+
+
+# ── 推播圖 compact 版型(user 2026-08-24「字體太小,版面集中一點」)────────────────
+def test_compact_css_only_when_requested():
+    plain = render_month_calendar_html(_cal())
+    comp = render_month_calendar_html(_cal(), compact=True)
+    assert "min-width:0" not in plain and "min-width:680px" in plain   # App 版不變
+    assert "min-width:0" in comp                                      # 推播版解除最小寬
+
+
+def test_compact_enlarges_text_and_tightens_layout():
+    comp = render_month_calendar_html(_cal(), compact=True)
+    for rule in ("table{min-width:0;font-size:16px}",   # 表格字 14 → 16
+                 ".d{font-size:15px}",                  # 日期數字 14 → 15
+                 ".chip{font-size:13px",                # 格子內投信名 12 → 13
+                 ".cell{min-height:72px",               # 格高 92 → 72(收緊)
+                 ".wrap{max-width:100%;padding:18px 16px}"):
+        assert rule in comp, f"compact 缺規則:{rule}"
+
+
+def test_push_width_narrower_than_app():
+    # 手機上字的視覺大小 = 字級 ÷ 圖寬 → 圖畫窄才是放大字的主要手段
+    from ui.helpers.dividend_calendar_render import _PUSH_WIDTH
+    assert _PUSH_WIDTH < 820 and _PUSH_WIDTH >= 480   # 太窄會擠壞 7 欄格子
+
+
+def test_png_uses_compact_and_requires_cjk():
+    # drift-lock:推播圖必須套 compact 版型 + 開中文字型探針(缺字型寧可退 Flex)
+    import inspect
+    from ui.helpers import dividend_calendar_render as R
+    src = inspect.getsource(R.render_month_calendar_png)
+    assert "compact=True" in src
+    assert "require_cjk=True" in src
