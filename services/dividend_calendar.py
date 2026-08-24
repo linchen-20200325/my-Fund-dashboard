@@ -85,6 +85,8 @@ def infer_schedule(dividends: list) -> dict:
     Returns:
         {cadence, ex_day, pay_gap_days, n, confidence, day_std,
          last_ex, last_amount, last_yield, med_gap}
+        cadence ∈ {none, single, monthly, quarterly, semiannual, annual, irregular}
+        confidence ∈ {none, low, medium, high}
 
     ⚠️ `last_yield` / `last_amount` **不可當年化配息率/金額顯示**(v19.524 稽核):兩者都只是
     「最近一筆」的原始值 —— (a) `yield_pct` 在 FundClear/Cnyes 來源常被上游 `or 0` 強制成 0.0,
@@ -93,8 +95,6 @@ def infer_schedule(dividends: list) -> dict:
     USD/TWD 混列無法辨識(§4.1 單位陷阱)。要顯示年化配息率請用全站正典
     `services.health.dividend._resolve_adr_with_fallback`(3 層 SSOT,全站其餘頁面皆用它)。
     月曆明細表已於 v19.524 移除這兩欄(user 指示),此處保留欄位僅為相容,**新 caller 勿直接渲染**。
-        cadence ∈ {none, single, monthly, quarterly, semiannual, annual, irregular}
-        confidence ∈ {none, low, medium, high}
     """
     recs = _parse_records(dividends)
     n = len(recs)
@@ -176,7 +176,8 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
                 return None                  # 相對現在太久沒配 → 疑停配/資料過舊,不硬給(§1)
             _conf = "low" if _stale >= 2 else schedule.get("confidence", "low")
             day = min(int(ex_day), _calendar.monthrange(year, month)[1])
-            ex = _dt.date(year, month, day)
+            # 落在週末/國定假日 → 順延至下一個營業日(user 2026-08-24;跨月則往前抓)。
+            ex = roll_to_business_day(_dt.date(year, month, day))
             gap = schedule.get("pay_gap_days")
             pay = ex + _dt.timedelta(days=gap) if isinstance(gap, int) else None
             return {"ex_date": ex, "pay_date_est": pay, "confidence": _conf}
@@ -277,22 +278,87 @@ def detect_house(name: str) -> str:
 # ── LINE 月初摘要文字(方式 C;純字串,零 IO)──────────────────
 _CONF_ZH = {"high": "", "medium": "", "low": "（信心低）"}
 
-# 到帳推估:除息日 + N 個**工作天**區間(user 2026-08-24 實際經驗 5~7 個工作天,故給區間不給單點)。
+# 到帳推估:除息日 + N 個**營業日**區間(user 2026-08-24 實際經驗 5~7 天,故給區間不給單點)。
 # module SSOT,不 inline magic(§3.3)。
 _PAY_BIZ_DAYS_MIN = 5
 _PAY_BIZ_DAYS_MAX = 7
 
 
+# ── 台灣營業日:週末 + 國定假日(user 2026-08-24「節日或是六日都要順延至工作天」)──────────
+# 假日資料走 `holidays` 套件的 TW 行事曆:**農曆假日(除夕/春節/端午/中秋)逐年算出、含補假**,
+# 硬編表格做不到且會逐年過期。純計算、零網路。§4.5 原「無台灣假日表」限制自此解除。
+_HOLIDAY_MAX_SCAN = 40          # 順延掃描上限(連假最長遠不及此;防呆避免無窮迴圈)
+
+
+def _tw_holidays():
+    """回傳 TW 假日查詢物件(`date in obj`);套件不可用 → None(退化為只跳週末)。快取單例。"""
+    if not hasattr(_tw_holidays, "_cache"):
+        try:
+            import holidays as _h
+            _tw_holidays._cache = _h.country_holidays("TW")
+        except Exception as _e:  # noqa: BLE001 — 套件缺 → 誠實退化(見 _pay_note 文案會跟著改)
+            print(f"[dividend_calendar] 無 holidays 套件({type(_e).__name__}),"
+                  "營業日僅跳週末、未扣國定假日")
+            _tw_holidays._cache = None
+    return _tw_holidays._cache
+
+
+def has_holiday_calendar() -> bool:
+    """是否真的有國定假日表可用 —— 供文案誠實描述「有沒有扣國定假日」(§1 不宣稱做不到的事)。"""
+    return _tw_holidays() is not None
+
+
+def is_business_day(d: "_dt.date | None") -> bool:
+    """是否為台灣營業日:非週末**且**非國定假日(假日表不可用時,只判週末)。"""
+    if not isinstance(d, _dt.date):
+        return False
+    if d.weekday() >= 5:
+        return False
+    _h = _tw_holidays()
+    return not (_h is not None and d in _h)
+
+
+def roll_to_business_day(d: "_dt.date | None", *, keep_month: bool = True) -> "_dt.date | None":
+    """除息日落在**週末或國定假日** → 順延到下一個營業日(user 2026-08-24)。
+
+    基金不會在非營業日除息;推估用「幾號」套到目標月時很容易落在六/日或連假,故一律校正。
+
+    `keep_month=True`:若順延會**跨出原月份**(如 8/31 週日 → 9/1),改往前抓上一個營業日。
+    月曆以「當月」為單位,跨月會讓事件掉到別的月份格子裡。
+
+    ⚠️ 仍是**推估**:國定假日表為套件計算值,個別基金公司實際作業日可能再有出入。
+    非日期 → 原樣回傳(§1 不捏造)。純函式,零 IO / 零網路。
+    """
+    if not isinstance(d, _dt.date) or is_business_day(d):
+        return d
+    _fwd = d
+    for _ in range(_HOLIDAY_MAX_SCAN):
+        _fwd += _dt.timedelta(days=1)
+        if is_business_day(_fwd):
+            break
+    else:
+        return d                                   # 掃不到(異常)→ 不硬給,回原值(§1)
+    if keep_month and _fwd.month != d.month:
+        _back = d
+        for _ in range(_HOLIDAY_MAX_SCAN):
+            _back -= _dt.timedelta(days=1)
+            if is_business_day(_back):
+                return _back
+        return d
+    return _fwd
+
+
 def add_business_days(d: "_dt.date | None", n: int) -> "_dt.date | None":
-    """回傳 d 之後第 n 個**工作天**(僅跳週末六日;**不含國定假日** —— 專案無台灣假日表、
-    §4.5 無 trading-calendar lib,故遇連假實際到帳可能再晚,呼叫端須標「推估」)。
+    """回傳 d 之後第 n 個**營業日**(跳週末 **+ 國定假日**;user 2026-08-24)。
+
+    假日表不可用時退化為只跳週末(見 `has_holiday_calendar`,文案會跟著誠實改寫)。
     n<=0 或 d 非日期 → 原樣回傳(不調整)。純函式,零 IO。"""
     if d is None or not isinstance(n, int) or n <= 0:
         return d
     cur, added = d, 0
     while added < n:
         cur = cur + _dt.timedelta(days=1)
-        if cur.weekday() < 5:                # 0=Mon … 4=Fri(5/6=六日跳過)
+        if is_business_day(cur):
             added += 1
     return cur
 
@@ -340,7 +406,7 @@ def dedupe_events(events: list) -> list:
 
 
 def pay_window(ex: "_dt.date | None") -> "tuple | None":
-    """除息日 → (最早, 最晚) 入帳推估日 = 除息 + 5~7 個工作天(user 2026-08-24 經驗值)。
+    """除息日 → (最早, 最晚) 入帳推估日 = 除息 + 5~7 個**營業日**(user 2026-08-24 經驗值)。
 
     §1:ex 非日期 → None(caller 顯示「—」,不捏造日期)。僅跳週末、**未扣國定假日**,
     遇連假實際到帳會更晚 —— caller 須標「推估」。純函式,零 IO。
@@ -352,15 +418,20 @@ def pay_window(ex: "_dt.date | None") -> "tuple | None":
 
 
 def _pay_note() -> str:
-    """到帳說明單行(text / Flex 共用,口徑 SSOT 一處改兩處同步)。"""
-    return (f"💰 到帳約 +{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個工作天左右"
-            "（僅跳週末、未扣國定假日,遇連假會更晚）")
+    """到帳說明單行(text / Flex 共用,口徑 SSOT 一處改兩處同步)。
+
+    §1:括號內文案**依實際能力誠實改寫** —— 有假日表就說已扣國定假日,沒有就說沒扣,
+    不宣稱做不到的事。
+    """
+    _scope = "已跳過週末與國定假日" if has_holiday_calendar() else "僅跳週末、未扣國定假日"
+    return (f"💰 到帳約 +{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個營業日左右"
+            f"（{_scope};實際仍以基金公司作業為準）")
 
 
 def build_summary_text(cal: dict) -> str:
     """月曆結構 → LINE 月初提醒文字。無事件 → 誠實說本月無推估除息(§1)。
 
-    user 2026-08-24:到帳時間**不逐檔列**,改在清單「上方」寫一句「到帳約 +5~7 個工作天左右」;
+    user 2026-08-24:到帳時間**不逐檔列**,改在清單「上方」寫一句「到帳約 +5~7 個營業日左右」;
     逐檔只列除息日 + 名稱。口徑與月曆圖檔「入帳(估)」欄**同源**(皆走 `pay_window`),
     不再各講各的(原本圖檔用歷史發放間隔 ≈1 個月、文字用 +5 工作天,已於 v19.524 統一)。
     """
@@ -416,7 +487,7 @@ def _flex_event_row(e: dict) -> dict:
 def build_summary_flex(cal: dict) -> dict:
     """月曆結構 → LINE Flex 彩色卡片。**純函式,零 IO**。回 {"contents": bubble, "alt_text": str}。
 
-    無事件 → 誠實卡片說本月無推估除息(§1)。內容與 build_summary_text 一致(每檔除息 + 到帳 +5 工作天)。
+    無事件 → 誠實卡片說本月無推估除息(§1)。內容與 build_summary_text 一致(每檔除息 + 到帳區間說明)。
     """
     y, m = cal.get("year"), cal.get("month")
     _roc = (y - 1911) if isinstance(y, int) else "?"
@@ -454,7 +525,7 @@ def build_summary_flex(cal: dict) -> dict:
         "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": _body},
     }
     _alt = (f"🗓️ 民國{_roc}年{m}月 除息行事曆"
-            f"（{len(events)} 檔・到帳=除息+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX}工作天）")
+            f"（{len(events)} 檔・到帳=除息+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX}營業日）")
     return {"contents": _bubble, "alt_text": _alt}
 
 

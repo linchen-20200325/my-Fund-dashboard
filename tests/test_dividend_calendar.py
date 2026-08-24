@@ -78,10 +78,17 @@ def test_predict_monthly_target_month():
 
 
 def test_predict_clamps_to_month_end():
-    """除息日 30 號 → 2 月只有 28 天 → 夾到 28(不溢位)。"""
+    """除息日 30 號 → 2 月只有 28 天 → 夾到 28(不溢位),再校正到營業日。
+
+    2026-02-28 同時是**週六 + 和平紀念日**,2/27 是補假 → 往後順延會跨到 3 月,
+    故往前抓最近營業日 2/26(週四)。夾month-end 與營業日校正兩件事都要成立。
+    """
+    from services.dividend_calendar import is_business_day
     s = infer_schedule(_monthly_divs(day=30, start=(2025, 4), n=8))
     p = predict_ex_for_month(s, 2026, 2)   # 2026 非閏年 → 28 天
-    assert p["ex_date"] == _dt.date(2026, 2, 28)
+    assert p["ex_date"].month == 2 and p["ex_date"].day <= 28      # 未溢位到 3 月
+    assert is_business_day(p["ex_date"])                           # 落在營業日
+    assert p["ex_date"] == _dt.date(2026, 2, 26)
 
 
 def test_predict_quarterly_lands_in_month():

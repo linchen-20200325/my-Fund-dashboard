@@ -47,3 +47,7 @@ streamlit-oauth>=0.1.14
 # 不再走 Pillow 產圖。Pillow 保留供 streamlit st.image / playwright pixel-diff 測試(matplotlib 仍禁,見 SPEC §16)。
 # 註:PNG 推播 cron 另需 playwright + `playwright install chromium` + CJK 字型(fonts-noto-cjk),於月曆 workflow 補(PR4)。
 pillow>=10.0
+# v19.525:除息/到帳日需避開台灣國定假日(user 2026-08-24「節日或是六日都要順延至工作天」)。
+# 農曆假日(除夕/春節/端午/中秋)逐年變動且含補假,硬編表格做不到且會過期 —— 本套件逐年計算,
+# 純 Python、零網路。缺此套件時 services/dividend_calendar 會誠實退化為「只跳週末」並改寫文案。
+holidays>=0.50

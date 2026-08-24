@@ -106,7 +106,7 @@ def test_flex_shows_ex_house_month_and_arrival_note():
     arr = add_business_days(ex, _PAY_BIZ_DAYS_MIN)
     assert "9/14 除息" in txt                          # 逐檔:除息日 + 名稱(不含到帳日期)
     assert f"{arr.month}/{arr.day} 到帳" not in txt     # user 2026-08-24:不再逐檔列到帳日期
-    assert f"+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個工作天" in txt   # 到帳改清單上方單行區間
+    assert f"+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個營業日" in txt   # 到帳改清單上方單行區間
     assert "安聯" in txt and "TLZF9" not in txt        # 只留投信名,代號不顯示
     assert "民國115年9月" in txt                        # 標題目標(下)月
     assert "1 檔" in out["alt_text"]                   # altText 帶檔數
