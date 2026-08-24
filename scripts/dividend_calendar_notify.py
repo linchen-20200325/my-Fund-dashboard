@@ -23,6 +23,11 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 
+# LINE 圖片訊息 previewImageUrl 硬上限 1MB(originalContentUrl 為 10MB)。push_image 兩者共用
+# 同一網址,故以較嚴的 preview 上限為準;留 5% 餘裕避免邊界。
+_LINE_PREVIEW_MAX = 1_000_000
+
+
 def _log(msg: str) -> None:
     print(f"[dividend_calendar_notify] {msg}", file=sys.stderr)
 
@@ -41,6 +46,38 @@ def _fetch_divs(codes: list) -> list:
         except Exception as _e:  # noqa: BLE001 — 單檔抓失敗不拖累整批
             _log(f"略過 {c}:{type(_e).__name__}")
     return out
+
+
+def _render_and_publish(cal: dict, year: int, month: int) -> "str | None":
+    """月曆 → PNG → 發佈到公開分支 → 回傳可推播的圖片網址;任一步失敗 → None(呼叫端退 Flex)。
+
+    §1:**失敗一律回 None 並記 log**,絕不回猜的網址 —— 推一個抓不到的網址,LINE 端會是破圖,
+    比退回 Flex 卡片更糟。三個已知失敗點:Chromium/中文字型缺(產圖)、GITHUB_TOKEN 缺或
+    workflow 未給 `contents: write`(發佈)、網路。
+    """
+    try:
+        from ui.helpers.dividend_calendar_render import render_month_calendar_png
+        _png = render_month_calendar_png(cal)
+        # LINE 圖片訊息:original ≤10MB、**preview ≤1MB**;push_image 兩者同一網址,故必須 ≤1MB。
+        # 明細表列數隨基金數成長,retina(scale=2)在檔數多時可能超標 → 超過就用 scale=1 重畫。
+        if len(_png) > _LINE_PREVIEW_MAX:
+            _log(f"月曆圖 {len(_png)} bytes 超過 LINE preview 上限 → 改 scale=1 重畫")
+            _png = render_month_calendar_png(cal, scale=1)
+            if len(_png) > _LINE_PREVIEW_MAX:
+                _log(f"縮圖後仍 {len(_png)} bytes 超標 → 退 Flex(不推會被 LINE 退的圖)")
+                return None
+    except Exception as _e:  # noqa: BLE001 — 產圖失敗(Chromium/字型/逾時)→ 退 Flex
+        _log(f"月曆產圖失敗:{type(_e).__name__}: {_e} → 退 Flex")
+        return None
+    try:
+        from infra.asset_publish import publish_asset
+        _url = publish_asset(_png, f"dividend-calendar/{year}-{month:02d}.png",
+                             message=f"chore(assets): 除息月曆 {year}-{month:02d} [skip ci]")
+    except Exception as _e:  # noqa: BLE001 — 發佈失敗(缺 token/權限/網路)→ 退 Flex
+        _log(f"月曆圖發佈失敗:{type(_e).__name__}: {_e} → 退 Flex")
+        return None
+    _log(f"月曆圖已發佈({len(_png)} bytes):{_url}")
+    return _url
 
 
 def main(argv=None) -> int:
@@ -88,10 +125,25 @@ def main(argv=None) -> int:
 
     if args.dry_run:
         print("─" * 40 + "\n" + text + "\n" + "─" * 40)
-        _log(f"(實送為 Flex 彩色卡片;altText:{flex['alt_text']})")
+        _log(f"(實送為月曆圖檔 + 上列文字;圖失敗才退 Flex,altText:{flex['alt_text']})")
         return 0
 
-    from infra.line_push import LinePushError, push_flex, push_text
+    from infra.line_push import LinePushError, push_flex, push_image, push_text
+
+    # ── 首選:月曆 PNG 圖檔(user 2026-08-24 指定「截 App 那張」)+ 圖下方文字清單 ──────────
+    # 三段都可能失敗(產圖需 Chromium/中文字型、發佈需 GITHUB_TOKEN、LINE 需公開網址),
+    # 任一段失敗 → 退 Flex 彩色卡片 → 再退純文字。§1:提醒一定送達,不讓失敗看起來像「本月沒配息」。
+    _img_url = _render_and_publish(cal, _ny, _nm)
+    if _img_url:
+        try:
+            res = push_image(_img_url, caption=text, dry_run=False)
+            if res["sent"]:
+                _log("✅ 已送出月曆圖檔到 LINE")
+                return 0
+            _log(f"圖檔未送出({res['reason']})→ 退 Flex")
+        except LinePushError as _e:  # noqa: BLE001 — LINE 退圖(網址不可達/格式)→ 往下退 Flex
+            _log(f"圖檔推播失敗:{_e} → 退 Flex")
+
     try:
         res = push_flex(flex["contents"], flex["alt_text"], dry_run=False)
     except LinePushError as _e:  # noqa: BLE001 — Flex 若被 LINE 退(如版型問題)→ 退回純文字,提醒仍送達
