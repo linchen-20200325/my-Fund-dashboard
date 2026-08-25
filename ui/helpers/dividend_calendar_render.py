@@ -1,4 +1,4 @@
-"""ui/helpers/dividend_calendar_render.py — 除息/配息月曆 HTML 渲染(v19.443)。
+"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.530)。
 
 純字串產生器(**零 streamlit、零 IO**),吃 `services.dividend_calendar.build_month_calendar`
 的結構 → 產出自成一頁的 HTML(深/淺色皆適配)。共用於:App 內 `st.components.html` 嵌入(方式 A)、
@@ -162,7 +162,7 @@ def _chip_label(ev: dict) -> str:
 
 
 def _dedupe_day_chips(evs: list) -> list:
-    """同一天同投信多檔 → 合併成**一個** chip(user 2026-08-24「移除重複」、「×2 也移除」)。
+    """同一天(同一除息基準日)同投信多檔 → 合併成**一個** chip(user 2026-08-24「移除重複」)。
 
     去重規則走 L2 `dedupe_events`(格子 / 明細表 / LINE 文字 / Flex 同一份 SSOT,不會漂移);
     本函式只負責補上顯示用的顏色與低信心旗標。信心已由 L2 取最保守值(任一 low → low)。
@@ -173,7 +173,7 @@ def _dedupe_day_chips(evs: list) -> list:
 
 
 def _fmt_pay_window(ex) -> str:
-    """除息日 → 入帳推估「區間」字串(如 `8/22~8/26`)。口徑 SSOT 走 L2 `pay_window`。
+    """除息基準日 → 入帳推估「區間」字串(如 `8/22~8/26`)。口徑 SSOT 走 L2 `pay_window`。
 
     §1:算不出(ex 非日期)→ 「—」,不捏造日期。
     """
@@ -186,7 +186,7 @@ def _fmt_pay_window(ex) -> str:
 
 def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行事曆",
                                is_sample: bool = False, compact: bool = False) -> str:
-    """月曆結構 → 自成一頁 HTML 字串。
+    """月曆結構 → 自成一頁 HTML 字串(日期欄位一律為**除息基準日**推估值)。
 
     `compact=True`:推播圖專用版型(窄幅 + 大字 + 收緊留白),見 `_CSS_COMPACT`。
     App 網頁版用預設 False,版面完全不變。
@@ -242,7 +242,7 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
             f'<td class="tnum muted">{_e(_fmt_pay_window(ex))}</td>'
             f'<td><span class="cf {cf_cls}">{cf_zh}</span></td></tr>')
     if not rows:
-        rows = '<tr><td colspan="4" class="muted">本月你的基金無推估除息日（或資料不足）。</td></tr>'
+        rows = '<tr><td colspan="4" class="muted">本月你的基金無推估除息基準日（或資料不足）。</td></tr>'
 
     # user 2026-08-24「沒有配息的整段移除」:累積型/查無配息的基金本來就不會配息,不需佔版面提醒。
     # ⚠️ 下方 `unpredictable`(有配息史但本月推不出)**保留** —— 那是「可能有配息但算不出來」,
@@ -255,7 +255,7 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
     if unpredictable:
         names = "、".join(f'<b>{_e(x.get("code"))}</b> {_e(x.get("name"))}' for x in unpredictable)
         unp_html = (f'<div class="excluded"><span class="x" style="color:var(--accent-ink)">無法推估</span>'
-                    f'以下基金<b>有配息史但本月推不出除息日</b>（節奏不規則 / 最近無配息疑停配），'
+                    f'以下基金<b>有配息史但本月推不出除息基準日</b>（節奏不規則 / 最近無配息疑停配），'
                     f'請自行至基金公司網站確認：{names}。</div>')
 
     sample_badge = '<span class="badge sample">樣張 · 日期為推估</span>' if is_sample else \
@@ -266,19 +266,19 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 <style>{_CSS}{_CSS_COMPACT if compact else ''}</style></head><body><div class="wrap">
 <header><p class="eyebrow">追蹤清單 ∪ 持倉 · 每月月初更新</p>
 <h1>{_e(title)}</h1>
-<p class="sub">依你的基金過往配息節奏，推估本月除息日與配息入帳日。加減基金 → 下月自動更新。</p>
+<p class="sub">依你的基金過往配息節奏，推估本月除息基準日與配息入帳日。加減基金 → 下月自動更新。</p>
 <div class="badges"><span class="badge month tnum">民國{roc}年 {m}月（{y}）</span>{sample_badge}</div>
 <ul class="legend">{legend_html}</ul></header>
 <div class="cal-scroll"><div class="cal">
 <div class="dow"><div>{_DOW[0]}</div><div>{_DOW[1]}</div><div>{_DOW[2]}</div><div>{_DOW[3]}</div><div>{_DOW[4]}</div><div class="sat">{_DOW[5]}</div><div class="sun">{_DOW[6]}</div></div>
 <div class="grid">{grid_html}</div></div></div>
-<h2 class="section-t">本月除息明細（推估）</h2>
+<h2 class="section-t">本月除息基準日明細（推估）</h2>
 <div class="tbl-scroll"><table><thead><tr>
-<th>除息</th><th>基金</th><th>入帳(估)</th><th>信心</th>
+<th>除息基準日</th><th>基金</th><th>入帳(估)</th><th>信心</th>
 </tr></thead><tbody>{rows}</tbody></table></div>
 {exc_html}
 {unp_html}
-<footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算，非官方公告。<br>
+<footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算「<b>除息基準日</b>」，非官方公告。<br>
 上述基金基準日皆以實際基金營業日為準。<br>
 依公開說明書規定，<b>配息入帳日為除息日後一個月內</b>，入帳時間將依實際作業為準。<br>
 本行事曆所示之營業日僅供參考，實際之基金營業日請參閱<b>基金公司網站公告</b>為準。</footer>
