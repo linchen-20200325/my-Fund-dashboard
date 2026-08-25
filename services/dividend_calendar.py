@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import calendar as _calendar
 import datetime as _dt
-import math as _math
 import statistics as _stats
 from collections import Counter as _Counter
 from typing import Any
@@ -186,18 +185,6 @@ def _business_day_from_end(year: int, month: int, n: int) -> "_dt.date | None":
             return None
         _cur = _scan_business(_cur, forward=False)
     return _cur if (_cur is not None and (_cur.year, _cur.month) == (year, month)) else None
-
-
-def _month_end_offset_of(d: "_dt.date") -> "int | None":
-    """d 距該月最後營業日幾個**營業日**(0 = 自己就是最後營業日);對不上 → None。"""
-    _last = _last_business_day_of_month(d.year, d.month)
-    if _last is None or d > _last:
-        return None
-    _n, _cur = 0, _last
-    while _cur is not None and _cur > d and _n <= _MONTH_END_OFFSET_MAX:
-        _cur = _scan_business(_cur, forward=False)
-        _n += 1
-    return _n if _cur == d else None
 
 
 def _nth_weekday_of_month(year: int, month: int, w: int, j: int) -> "_dt.date | None":
@@ -596,6 +583,20 @@ def infer_schedule(dividends: list) -> dict:
             "med_gap": med_gap, "anchor": anchor, "phase": phase}
 
 
+def _stale_state(last_ex: "_dt.date", ref_year: int, ref_month: int, step: int) -> tuple:
+    """§7 + §13.1 陳舊度 → (stale_months, stale_periods, too_stale)。**單位一律「個月」**。
+
+    舊式左邊是「幾個配息週期」右邊是「幾個月」,step=1 時碰巧等價,step=12 時
+    `floor(1095/(30.44*12))=2` 拿去比 15 → 年配可靜默 3 年仍給日期(稽核 A11 原封不動)。
+    `ref_date` 取 ref 月的**月中**(caller 只給年月沒給日;月初/月底會系統性偏 15 天)。
+    """
+    _ref = _dt.date(ref_year, ref_month, _REF_DAY_OF_MONTH)
+    _days = max(0, (_ref - last_ex).days)
+    _months = int(_days // _DAYS_PER_MONTH)
+    return _months, _months // step, _months > min(_STALE_MAX_PERIODS * step,
+                                                   _STALE_ABS_MAX_MONTHS)
+
+
 def predict_ex_for_month(schedule: dict, year: int, month: int,
                          ref_year: "int | None" = None,
                          ref_month: "int | None" = None) -> "dict | None":
@@ -639,11 +640,8 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
     _h = (year - _ry) * 12 + (month - _rm)
 
     # §7/§13.1 陳舊度:日差 → **月數**(用 last_ex 的「日」,月初與月底不再同分)
-    _ref_date = _dt.date(_ry, _rm, _REF_DAY_OF_MONTH)
-    _days_since = max(0, (_ref_date - last_ex).days)
-    _stale_months = int(_days_since // _DAYS_PER_MONTH)
-    _stale = _stale_months // step                      # 週期數(供信心降級)
-    if _stale_months > min(_STALE_MAX_PERIODS * step, _STALE_ABS_MAX_MONTHS):
+    _stale_months, _stale, _too_stale = _stale_state(last_ex, _ry, _rm, step)
+    if _too_stale:
         return None                        # 疑停配 / 資料過舊 → 不硬給(§1)
     # §13.7.3:目標月早於最後一筆(回填過去)**允許**,但信心一律壓 low ——
     # 過去的月份該以實際紀錄為準,推估值混進歷史區間卻掛高信心會分不清「真的發生過」與「猜的」。
@@ -689,6 +687,58 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
             "horizon_months": _h, **_prov}
 
 
+# §14.2 unpredictable 的四類成因(code 給程式判讀,文字給 UI 顯示人話)
+REASON_ANCHOR_WEAK = "anchor_weak"        # 復現率不足(s < 0.80)—— 配息節奏不規則
+REASON_TOO_FEW = "too_few"                # 歷史筆數 < 3
+REASON_STALE = "stale"                    # 疑停配 / 資料過舊
+REASON_NO_ANCHOR_DAY = "no_anchor_day"    # 該月連假,無合理錨定日(位移超過 τ)
+
+_REASON_TEXT = {
+    REASON_TOO_FEW: "配息紀錄不足 3 筆，無法判斷節奏，本月不推估",
+    REASON_STALE: "最近無配息紀錄（疑停配 / 資料過舊），本月無法推估",
+    REASON_NO_ANCHOR_DAY: "本月錨定日遇連假／月底，營業日校正超出容忍範圍，不硬推日期",
+    REASON_ANCHOR_WEAK: "配息日期無穩定規律（歷史復現率不足），本月無法推估",
+}
+_REASON_TEXT_IRREGULAR = "配息節奏不規則 / 資料不足，本月無法推估"    # anchor_weak 的節奏版文案
+
+
+def _on_phase_grid(schedule: dict, month: int) -> bool:
+    """目標月是否落在該檔 cadence 的相位網格上(月配恆 True;相位未定 → False)。"""
+    _step = _CADENCE_MONTHS.get(schedule.get("cadence"))
+    if not _step:
+        return False
+    if _step == 1:
+        return True
+    _phase = schedule.get("phase")
+    return _phase is not None and month % _step == _phase
+
+
+def _unpredictable_reason(schedule: dict, year: int, month: int,
+                          ref_year: "int | None", ref_month: "int | None") -> tuple:
+    """§14.2:推不出的成因 → (reason_code, 人話)。**只在 `predict_ex_for_month` 回 None 時呼叫**。
+
+    §1:成因要說得出口 —— τ 收緊(§13.7.1)後,15 號型基金每逢農曆年必無預估,
+    畫面上會變成「某些基金每年 2 月固定不見」;user 必須分得出「系統壞了」與「這個月真推不出」。
+    判序:筆數不足 → 陳舊 → 該月無錨定日 → 復現率不足(前者成立就不必再問後者)。
+    """
+    _cad = schedule.get("cadence")
+    _step = _CADENCE_MONTHS.get(_cad)
+    _last_ex = schedule.get("last_ex")
+    if int(schedule.get("n") or 0) < _ANCHOR_MIN_RECORDS:
+        return REASON_TOO_FEW, _REASON_TEXT[REASON_TOO_FEW]
+    if _step and _last_ex is not None:
+        _ry = ref_year if ref_year is not None else year
+        _rm = ref_month if ref_month is not None else month
+        if _stale_state(_last_ex, _ry, _rm, _step)[2]:
+            return REASON_STALE, _REASON_TEXT[REASON_STALE]
+    _anchor = schedule.get("anchor")
+    if _anchor and _on_phase_grid(schedule, month) \
+            and project_anchor(_anchor, year, month) is None:
+        return REASON_NO_ANCHOR_DAY, _REASON_TEXT[REASON_NO_ANCHOR_DAY]
+    return REASON_ANCHOR_WEAK, (_REASON_TEXT_IRREGULAR if _cad in ("single", "irregular")
+                                else _REASON_TEXT[REASON_ANCHOR_WEAK])
+
+
 def build_month_calendar(funds: list, year: int, month: int,
                          ref_year: "int | None" = None,
                          ref_month: "int | None" = None) -> dict:
@@ -703,8 +753,10 @@ def build_month_calendar(funds: list, year: int, month: int,
         {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{}}
         event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n}
         excluded     = {code, name, reason}(無配息 = 累積型/查無)
-        unpredictable= {code, name, reason}(有配息史但本月無法推估:節奏不規則 / 疑停配過舊)
-                       —— 稽核 M3:誠實揭露而非靜默消失。季/年配的「空月」不列此(合理不配)。
+        unpredictable= {code, name, reason, reason_code}(有配息史但本月無法推估)
+                       reason_code ∈ {anchor_weak, too_few, stale, no_anchor_day}(§14.2),
+                       reason = 對應人話。稽核 M3 + §1:誠實揭露成因而非靜默消失;
+                       季/年配相位網格外的「空月」不列此(合理不配)。
     """
     events: list = []
     excluded: list = []
@@ -720,26 +772,11 @@ def build_month_calendar(funds: list, year: int, month: int,
             continue
         pred = predict_ex_for_month(sch, year, month, ref_year=ref_year, ref_month=ref_month)
         if pred is None:
-            # §13.7.5:推不出的成因要誠實分流到 reason,不可全掛「疑停配」(那對有錨的檔是假話)。
-            # 成因 A:錨在,相位也對,但**該月**的營業日校正超出 τ(典型:錨定日落在農曆年連假)。
-            _step = _CADENCE_MONTHS.get(sch["cadence"])
-            _on_grid = bool(_step) and (_step == 1 or (sch.get("phase") is not None
-                                                       and month % _step == sch["phase"]))
-            if _step and sch.get("anchor") and _on_grid \
-                    and project_anchor(sch["anchor"], year, month) is None:
+            # §14.2:推不出就要說得出成因(code + 人話);季/年配的**空月**是合理不配,不列。
+            _code, _why = _unpredictable_reason(sch, year, month, ref_year, ref_month)
+            if sch["cadence"] in ("single", "irregular") or _on_phase_grid(sch, month):
                 unpredictable.append({"code": code, "name": name,
-                                      "reason": "本月錨定日落在連假/月底，營業日校正超出容忍範圍，"
-                                                "不硬推日期"})
-            elif sch["cadence"] == "monthly":        # 月配卻推不出 = 無穩定錨 或 陳舊/疑停配
-                # §1 誠實:兩種成因文案分開 —— 有錨但推不出 = 陳舊;連錨都找不到 = 節奏無規律。
-                unpredictable.append({"code": code, "name": name,
-                                      "reason": ("最近無配息紀錄（疑停配 / 資料過舊），本月無法推估"
-                                                 if sch.get("anchor") else
-                                                 "配息日期無穩定規律，或最近無配息（疑停配 / 資料過舊）"
-                                                 "，本月無法推估")})
-            elif sch["cadence"] in ("single", "irregular"):
-                unpredictable.append({"code": code, "name": name,
-                                      "reason": "配息節奏不規則 / 資料不足，本月無法推估"})
+                                      "reason": _why, "reason_code": _code})
             # 季/年配的空月 → 合理不配,不列也不算異常
             continue
         events.append({"code": code, "name": name, "house": house,

@@ -253,10 +253,13 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
     unpredictable = cal.get("unpredictable") or []
     unp_html = ""
     if unpredictable:
-        names = "、".join(f'<b>{_e(x.get("code"))}</b> {_e(x.get("name"))}' for x in unpredictable)
+        # §14.2:逐檔列出**自己的**成因(節奏不規則 / 筆數不足 / 疑停配 / 本月遇連假),
+        # 不再只給一句籠統的合併說法 —— 「每年 2 月固定不見」必須看得出是連假而不是壞掉(§1)。
+        names = "；".join(
+            f'<b>{_e(x.get("code"))}</b> {_e(x.get("name"))}（{_e(x.get("reason") or "原因未提供")}）'
+            for x in unpredictable)
         unp_html = (f'<div class="excluded"><span class="x" style="color:var(--accent-ink)">無法推估</span>'
-                    f'以下基金<b>有配息史但本月推不出除息基準日</b>'
-                    f'（節奏不規則 / 最近無配息疑停配 / 本月錨定日遇連假無法校正），'
+                    f'以下基金<b>有配息史但本月推不出除息基準日</b>，'
                     f'請自行至基金公司網站確認：{names}。</div>')
 
     sample_badge = '<span class="badge sample">樣張 · 日期為推估</span>' if is_sample else \
