@@ -486,10 +486,15 @@ def test_tie_order_prefers_from_end_over_nth_weekday():
 
 
 def test_tie_broken_anchor_cannot_reach_high_confidence():
-    """§3:平手決選出來的錨,信心上限壓 medium(不管 s / k / h 多漂亮)。
+    """§3:平手決選出來的錨,**且兩個假說對該月分岔時**,信心上限壓 medium。
 
     平手代表「有兩個同樣能解釋歷史、但未來會分岔的假說」,這種不確定性
     不該被 s=1.0 洗成 high —— §11 的驗收條件是「錯了就不准掛 high」。
+
+    ⚠️ v19.531 修正 1 後本條是「**分岔**」那一半:封頂的觸發條件由「有平手旗標」
+    收緊成「有平手旗標 **且** top-2 對該目標月投影出不同日期」。本 fixture 的對手
+    (NTH_WEEKDAY_FROM_END)在目標月投影到別天,所以封頂**仍須**成立。
+    「平手但同日」那一半見下一條 —— 兩條必須同時綠,少一條都會讓封頂邏輯偏向一邊。
     """
     sched = infer_schedule(_recs(_hist_fixed(2026, 7, 8, D=10)))
     base = predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=7)
@@ -498,6 +503,65 @@ def test_tie_broken_anchor_cannot_reach_high_confidence():
     sched["anchor"]["tie_broken"] = True
     got = predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=7)
     assert got is not None and got["confidence"] in ("medium", "low")
+    _rival = sched["anchor"].get("runner_up_anchor")
+    assert isinstance(_rival, dict), "v19.531:平手封頂要能比對投影,anchor 須帶得走對手假說"
+    assert project_anchor(_rival, 2026, 8) != got["ex_date"], (
+        "fixture 前提:本條測的是**分岔**那一半;若對手投影同日,壓的就不該是這條")
+
+
+def test_tie_with_identical_projection_is_not_capped():
+    """v19.531 修正 1:平手的兩個假說對**該目標月投影出同一天** → **不封頂**。
+
+    §3 封頂要罰的是「兩個假說未來會分岔」;兩個模型指到同一天是**互相印證**,
+    當成「不確定」處罰方向剛好相反。實證(user 5 檔真實資料,總管複驗):瀚亞 ACCP138
+    的 MONTH_END 與 FIXED_DAY(31) 在近 12 筆視窗上 s 皆為 1.00、對 2026-09 同為 09/30,
+    walk-forward 12/12 全中,舊版卻只給 medium;同一批資料 low 桶命中率 94% 反而高過
+    medium 桶 85%,信心標籤成了反指標。
+
+    本 fixture 用「每月最後營業日」的合成歷史重現同一個結構:MONTH_END(0 參數)與
+    「31 號 + 往前校正」歷史上完全同分,但對這個目標月投影出同一天。
+    """
+    sched = infer_schedule(_recs(_hist_month_end(2026, 7, 12), pay_gap=7))
+    a = sched.get("anchor")
+    assert isinstance(a, dict), "§12:infer_schedule 須帶 anchor dict"
+    assert a["tie_broken"] is True, "fixture 前提:這組歷史必須落在平手決選"
+    assert a["score"] - a["runner_up"] < 0.10, "fixture 前提:前二名差距在平手窗內"
+    rival = a.get("runner_up_anchor")
+    assert isinstance(rival, dict), "v19.531:須回傳 top-2 中未被採用的那個假說供比對"
+    got = predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=7)
+    assert got is not None
+    assert project_anchor(rival, 2026, 8) == got["ex_date"], (
+        "fixture 前提:本月兩個假說必須投影同一天,否則測不到「同意」這件事")
+    assert got["confidence"] == "high", (
+        "兩個假說對本月指到同一天 = 互相印證,不該被平手封頂成 medium;"
+        f"實得 {got['confidence']}(s={a['score']}, k={a['n']}, h={got['horizon_months']})")
+
+
+def test_medium_score_cut_is_calibrated_ten_of_twelve_is_medium():
+    """§4 + v19.531 修正 2:s = 10/12 = 0.833(12 筆對 10 筆)必須是 **medium**,不是 low。
+
+    舊門檻 0.85 剛好切在 10/12=0.833 與 7/8=0.875 之間,把「穩定但視窗內帶 1~2 個
+    舊離群值」的基金全掃進 low —— 5 檔真實資料實測那一格 15 筆 100% 命中,
+    卻與「每 8 次錯 3 次」的爛錨共用同一個 low 標籤。門檻改由實測校準(網格通過區間
+    med ∈ (9/11, 10/12]),本條鎖住區間上界:10/12 必須進得了 medium。
+
+    ⚠️ 這條**不是**把門檻放寬到好看 —— 區間下界由 §13.6 硬門檻頂住
+    (`test_real5_high_confidence_error_never_exceeds_one_day`),high 桶一筆都不准多塞。
+    """
+    hist = _hist_fixed(2026, 7, 12, D=10)
+    for i in (2, 7):                       # 12 筆裡讓 2 筆偏離錨 → s 恰為 10/12
+        d = hist[i] + _dt.timedelta(days=4)
+        while not is_business_day(d):
+            d += _DAY
+        hist[i] = d
+    sched = infer_schedule(_recs(hist, pay_gap=7))
+    a = sched["anchor"]
+    assert a is not None and math.isclose(a["score"], 10 / 12, rel_tol=1e-9), (
+        f"fixture 失效:s 應為 10/12,實得 {a and a['score']}")
+    got = predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=7)
+    assert got is not None
+    assert got["confidence"] == "medium", (
+        f"s=10/12、k=12、h=1 應為 medium(v19.531 校準),實得 {got['confidence']}")
 
 
 def test_gate_thresholds_live_in_module_constants():
