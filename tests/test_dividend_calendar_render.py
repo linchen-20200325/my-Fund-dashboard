@@ -1,20 +1,26 @@
-"""除息月曆 HTML 渲染(ui/helpers/dividend_calendar_render,v19.443)。
+"""除息月曆 HTML 渲染(ui/helpers/dividend_calendar_render,v19.443;v19.530 修訂)。
 
-守:產出含關鍵資料(代號/所屬/除息日/入帳/信心)、排除區、免責聲明、深淺色 token 齊備、
-空月誠實、HTML 標籤成對(粗略)。純字串,無 streamlit。
+守:產出含關鍵資料(投信/除息基準日/入帳/信心)、排除區、免責聲明、深淺色 token 齊備、
+空月誠實、HTML 標籤成對(粗略)、**§13.8 UI 用詞 drift-lock**。純字串,無 streamlit。
+
+⚠️ **v19.530 fixture 通則**:合成配息日一律先套營業日校正(`roll_to_business_day`)——
+真實基金不會把除息基準日訂在週六或國定假日,而錨定引擎(規格 §2)是拿「投影後套 R 的值」
+去比對歷史的。字面日號寫死的舊 fixture(14 號 12 筆裡有 5 筆是週末)在現實中不存在,
+復現率必然 < 0.80 → 引擎依 §3 誠實棄權 → 月曆整個空掉,測到的不是渲染而是壞 fixture。
 """
 from __future__ import annotations
 
 import datetime as _dt
 
-from services.dividend_calendar import build_month_calendar, detect_house
+from services.dividend_calendar import build_month_calendar, detect_house, roll_to_business_day
 from ui.helpers.dividend_calendar_render import render_month_calendar_html
 
 
 def _divs(day, n=12, pay_gap=30, amount=0.05):
+    """n 筆月配紀錄(基準日錨在 day 號,落非營業日則校正 → 見檔頭通則)。"""
     y, m, out = 2025, 8, []
     for _ in range(n):
-        ex = _dt.date(y, m, day)
+        ex = roll_to_business_day(_dt.date(y, m, day))
         out.append({"ex_date": ex.isoformat(),
                     "pay_date": (ex + _dt.timedelta(days=pay_gap)).isoformat(),
                     "amount": amount, "yield_pct": 6.0})
@@ -88,8 +94,9 @@ def test_render_theme_tokens_present():
 
 
 def test_render_empty_month_is_honest():
+    """空月要誠實說「推不出」(§1),且用詞跟著 §0 改口徑為「除息**基準日**」。"""
     html = render_month_calendar_html(build_month_calendar([], 2026, 8))
-    assert "無推估除息日" in html
+    assert "無推估除息基準日" in html
 
 
 def test_render_shows_unpredictable_bucket():
@@ -104,6 +111,50 @@ def test_render_balanced_containers():
     html = render_month_calendar_html(_cal())
     for tag in ("div", "table", "tbody"):
         assert html.count(f"<{tag}") == html.count(f"</{tag}>"), f"{tag} 標籤未成對"
+
+
+# ── §13.8 UI 用詞 drift-lock:全站一律「除息基準日」(user 2026-08-25 指定)────────────
+def test_ex_record_date_wording_locked_in_four_places():
+    """§0 + §13.8:推估目標量改成**除息基準日**,四個 UI 露出點的用詞一起鎖住。
+
+    **為什麼要鎖**:MoneyDJ 配息表三欄是三個**不同**的日期 ——
+      col[0] 配息基準日(基金公司照名冊那天,本引擎的目標量)
+      col[1] 除息日    (基準日 +1~2 個營業日)
+      col[2] 發放日
+    v19.529 以前錨在 col[1],5 檔真實資料 walk-forward 命中率僅 52%;v19.530 §0 改錨 col[0]。
+    若畫面繼續寫「除息日」,user 會拿推估值去對基金公司公告的**另一個**日期,
+    差 1~2 個營業日卻找不出原因 —— 那是 §1 意義下的誤導(數字沒錯,但講的不是同一件事)。
+    用詞漂回去不會讓任何測試變紅,所以必須有這條 drift-lock 明著守。
+
+    四處 = 副標 / 明細區塊標題 / 明細表頭 / 空月文案(見 `render_month_calendar_html`)。
+    """
+    html = render_month_calendar_html(_cal())
+    # 1) header 副標
+    assert '<p class="sub">依你的基金過往配息節奏，推估本月除息基準日與配息入帳日。' in html
+    # 2) 明細區塊標題
+    assert '<h2 class="section-t">本月除息基準日明細（推估）</h2>' in html
+    # 3) 明細表頭第一欄
+    assert '<th>除息基準日</th>' in html
+    # 4) 空月文案(需要一份沒有事件的月曆才會渲染出來)
+    _empty = render_month_calendar_html(build_month_calendar([], 2026, 8))
+    assert '本月你的基金無推估除息基準日（或資料不足）。' in _empty
+
+
+def test_ex_record_date_wording_has_no_bare_ex_date_label():
+    """反向:四處露出點不得退回**裸的**「除息日」標籤(§13.8 的另一半)。
+
+    只驗「標籤位置」,不禁止全篇出現「除息日」三個字 —— footer 的公開說明書原文
+    「配息入帳日為除息日後一個月內」是 user 2026-08-24 指定的**引文**,那是基金公司的
+    口徑不是我們的欄位名,不可連坐改掉(改了會變成竄改公開說明書用語)。
+    """
+    html = render_month_calendar_html(_cal())
+    assert "<th>除息日</th>" not in html
+    assert "本月除息日明細" not in html
+    assert "推估本月除息日與配息入帳日" not in html
+    for _h in (html, render_month_calendar_html(build_month_calendar([], 2026, 8))):
+        assert "無推估除息日（或資料不足）" not in _h
+    # footer 的公開說明書引文必須原封不動留著(證明上面鎖的是欄位名,不是全域禁詞)
+    assert "配息入帳日為除息日後一個月內" in html
 
 
 # ── 格子 chip 只顯示投信名(user 2026-08-24:「只保留投資商的名稱,移除代碼」)──────────
