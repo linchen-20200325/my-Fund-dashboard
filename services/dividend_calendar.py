@@ -367,14 +367,19 @@ def detect_anchor(dates: list) -> "dict | None":
           "runner_up": float,      # s⁽²⁾
           "roll_convention": str,  # following | preceding | modified_following
           "tie_broken": bool,      # 是否因 s⁽¹⁾-s⁽²⁾ < 0.10 而依「參數較少」決選
+          "runner_up_anchor": dict|None,
+                                   # **top-2 中未被採用的那一個**假說(type/params/score/
+                                   # roll_convention/roll_inferred),可直接餵 `project_anchor`。
+                                   # v19.531:平手封頂需要它才能判斷「兩個模型是否真的分岔」——
+                                   # 只有 `runner_up` 這個純分數,分不出「同意」與「不確定」。
           "roll_inferred": bool,   # 校正方向是否真從歷史推得(False = 用預設值,§13.3 純稽核欄位,
                                    # **不**再直接決定信心 —— 壓 low 的條件改看 roll_convention)
           "n": int,                # 擬合用筆數 k(§4 信心公式的 k)
         }
 
     ⚠️ `score` 依 §12 契約回**排序後最高分 s⁽¹⁾**。當 `tie_broken=True` 時,實際採用的假說
-    是參數較少的那個(其自身分數 = `runner_up`,最多低 0.10);此時信心上限已壓 medium,
-    不會出現「用較低分假說卻宣稱 high」的情形。
+    是參數較少的那個(其自身分數 = `runner_up`,最多低 0.10);此時信心上限**視兩者是否對
+    目標月投影出同一天**而定(見 `_tie_diverges_in_month`),不再無條件壓 medium。
     """
     _ds = sorted({d for d in (dates or []) if isinstance(d, _dt.date)
                   and not isinstance(d, _dt.datetime)})
@@ -393,8 +398,10 @@ def detect_anchor(dates: list) -> "dict | None":
     _pick = _best
     if _tie and _ANCHOR_PARAM_COUNT[_second["type"]] < _ANCHOR_PARAM_COUNT[_best["type"]]:
         _pick = _second                   # §3 平手 → 取參數較少者(少過擬合)
+    _rival = _second if _pick is _best else _best      # top-2 中**沒被採用**的那一個
     return {"type": _pick["type"], "params": _pick["params"], "score": _s1, "runner_up": _s2,
             "roll_convention": _pick["roll_convention"], "tie_broken": bool(_tie),
+            "runner_up_anchor": dict(_rival),          # v19.531 平手封頂要靠它比對投影
             "roll_inferred": bool(_pick["roll_inferred"]), "n": _k}
 
 
@@ -425,6 +432,33 @@ def project_anchor(anchor: dict, year: int, month: int) -> "_dt.date | None":
     return _apply_roll(_nominal, anchor.get("roll_convention") or ROLL_MODIFIED_FOLLOWING, _y, _m)
 
 
+def _tie_diverges_in_month(anchor: dict, year: int, month: int,
+                           projected: "_dt.date | None") -> bool:
+    """平手的兩個假說,對**該目標月**是否真的投影出不同的日期(v19.531 修正 1)。
+
+    §3 的平手封頂(信心上限 medium)要罰的是「有兩個同樣能解釋歷史、但**未來會分岔**的假說」。
+    原實作只看 `tie_broken` 這個旗標,把「兩個模型對這個月**投影出同一天**」也一起罰了 ——
+    那是把「兩個模型互相印證」讀成「不確定」,方向剛好相反(實測:瀚亞 ACCP138
+    MONTH_END vs FIXED_DAY(31) 對 2026-09 同為 09/30、s=1.00 完美復現、walk-forward 12/12 全中,
+    卻只拿到 medium;同一批實測 low 桶命中率 94% > medium 桶 85%,信心標籤成了反指標)。
+
+    判定:
+      - 未平手(`tie_broken` 為假)→ False(本來就沒有封頂問題)
+      - 沒有對手資訊(手搭 anchor dict 無 `runner_up_anchor`)→ True(保守,維持舊行為)
+      - 對手投影 == 本月採用值 → **False**(兩個模型同意 → 不封頂)
+      - 對手投影為 None 或不同日 → True(真的分岔 → 維持封頂)
+
+    ⚠️ 逐月判定,不是逐檔:同一組平手假說可能 9 月同日、2 月(月長不同 / 連假)分岔,
+    分岔的那個月仍會被封頂 —— 這正是封頂原本要擋的情形。
+    """
+    if not anchor.get("tie_broken"):
+        return False
+    _rival = anchor.get("runner_up_anchor")
+    if not isinstance(_rival, dict):
+        return True                       # 無從比對 → 保守維持封頂(§1 不假裝知道)
+    return project_anchor(_rival, year, month) != projected
+
+
 def _grade_confidence(score: "float | None", k: int, horizon: int, *,
                       tie_broken: bool = False, roll_convention: "str | None" = None) -> str:
     """§4 信心 = 復現率 s + 擬合筆數 k + 預測地平線 h。**day_std 已完全移除**。
@@ -433,7 +467,8 @@ def _grade_confidence(score: "float | None", k: int, horizon: int, *,
     medium : s ≥ 0.85 且 k ≥ 4 且 h ≤ 3
     low    : 其餘
     另外三個**只降不升**的封頂(順序無關,取最保守):
-      - `tie_broken`(§3 前二名差 < 0.10 靠參數數決選)→ 上限 medium
+      - `tie_broken`(§3 前二名差 < 0.10 靠參數數決選,**且兩者對該目標月投影不同日** ——
+        v19.531 修正 1,由 caller 用 `_tie_diverges_in_month` 判完再傳進來)→ 上限 medium
       - `roll_convention == modified_following`(§5 方向混雜、未定)→ 壓 low
         ⚠️ §13.3:歷史**零偏移**不算「方向未定」,那時 convention = following → 不壓
       - `h < 0`(回填過去月份,§13.7.3)→ 壓 low(過去月份應以實際紀錄為準,不是推估)
@@ -572,6 +607,8 @@ def infer_schedule(dividends: list) -> dict:
     if anchor is None:
         conf = "low"
     else:
+        # ⚠️ 這層沒有目標月,無法做 v19.531 的「平手但同日 → 不封頂」比對 → 沿用原始
+        # `tie_broken`(保守)。真正對 user 顯示的信心由 `predict_ex_for_month` 逐月重算。
         conf = _grade_confidence(anchor["score"], anchor["n"], 0,
                                  tie_broken=anchor["tie_broken"],
                                  roll_convention=anchor["roll_convention"])
@@ -657,8 +694,10 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
         ex = project_anchor(anchor, year, month)
         if ex is None:
             return None                    # 該月無合理錨定日(含 §5 τ 上限)
+        # v19.531 修正 1:平手封頂**逐月**判定 —— 兩個假說對本月投影出同一天 = 互相印證,
+        # 不該當「不確定」罰(見 `_tie_diverges_in_month`)。
         _conf = _grade_confidence(anchor.get("score"), int(anchor.get("n") or 0), _h,
-                                  tie_broken=bool(anchor.get("tie_broken")),
+                                  tie_broken=_tie_diverges_in_month(anchor, year, month, ex),
                                   roll_convention=anchor.get("roll_convention"))
         if _backfill:
             _conf = "low"                  # §13.7.3
