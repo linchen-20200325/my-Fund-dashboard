@@ -255,7 +255,8 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
     if unpredictable:
         names = "、".join(f'<b>{_e(x.get("code"))}</b> {_e(x.get("name"))}' for x in unpredictable)
         unp_html = (f'<div class="excluded"><span class="x" style="color:var(--accent-ink)">無法推估</span>'
-                    f'以下基金<b>有配息史但本月推不出除息基準日</b>（節奏不規則 / 最近無配息疑停配），'
+                    f'以下基金<b>有配息史但本月推不出除息基準日</b>'
+                    f'（節奏不規則 / 最近無配息疑停配 / 本月錨定日遇連假無法校正），'
                     f'請自行至基金公司網站確認：{names}。</div>')
 
     sample_badge = '<span class="badge sample">樣張 · 日期為推估</span>' if is_sample else \

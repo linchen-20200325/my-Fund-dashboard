@@ -9,12 +9,14 @@
     有沒有 TW 假日,fixture 與引擎看到的是同一個世界(否則測試會變成在測假日表)。
   - `has_holiday_calendar()` —— §8 provenance 對照用。
 
-⚠️ 三個規格未明定、本檔採用的解讀(壞掉時請先看這裡,不要直接改 assert):
-  1. §3/§4 的 `k` = 近 k 筆視窗筆數;本檔所有信心測試的歷史長度都 <= 14 筆,
-     故 k == len(history)(既有慣例視窗為近 12 筆)。
-  2. §4 的 `h` 由 `ref_year`/`ref_month` 決定,本檔一律顯式傳入,不吃「今天」。
-  3. §7 門檻採「_stale > 門檻 → None」;需要兩解都成立的地方(日差測試)改用
-     「兩檔只差 last_ex 的日 → 失效月份必不同」的相對斷言,不綁絕對邊界。
+規格 v2(§13)已定案原本三處未明定之處,本檔據此改寫:§13.1 陳舊度公式改單位、
+§13.2 新增第 5 個假說 `MONTH_END_OFFSET` 與 deterministic 決選序、§13.3 ρ 的 0/0、
+§13.4 每假說各估自己的 ρ、§13.5 雙配息分母、§13.6 驗收三口徑、§13.7 六條採納。
+
+⚠️ 本檔仍有一個外部假設(壞掉時請先看這裡):§13.7.6 的 `_RECENT_N` 視窗大小未在規格
+   給定數值。本檔所有信心測試的歷史長度 <= 18 筆,讓 k == len(history) 在 12~18 任一
+   視窗值下都成立;唯一依賴視窗的 `test_fit_uses_recent_window_not_whole_history`
+   用「近 18 筆乾淨 + 更早 12 筆換過錨」的組合,對 _RECENT_N <= 18 皆成立。
 """
 from __future__ import annotations
 
@@ -38,7 +40,11 @@ from services.dividend_calendar import (
 )
 
 _DAY = _dt.timedelta(days=1)
-_ANCHOR_TYPES = {"MONTH_END", "NTH_WEEKDAY", "NTH_WEEKDAY_FROM_END", "FIXED_DAY"}
+_ANCHOR_TYPES = {"MONTH_END", "MONTH_END_OFFSET", "NTH_WEEKDAY",
+                 "NTH_WEEKDAY_FROM_END", "FIXED_DAY"}
+# §13.2 決選序:參數少者優先,同參數數依此序(deterministic)
+_TIE_ORDER = ["MONTH_END", "MONTH_END_OFFSET", "FIXED_DAY",
+              "NTH_WEEKDAY_FROM_END", "NTH_WEEKDAY"]
 _ROLLS = {"following", "preceding", "modified_following"}
 
 
@@ -84,6 +90,17 @@ def _months_ending(y: int, m: int, n: int, step: int = 1) -> list[tuple[int, int
     return list(reversed(out))
 
 
+def _bdays(y: int, m: int) -> list[_dt.date]:
+    return [_dt.date(y, m, d) for d in range(1, _md(y, m) + 1)
+            if is_business_day(_dt.date(y, m, d))]
+
+
+def _nth_last_bd(y: int, m: int, k: int) -> _dt.date | None:
+    """該月倒數第 k 個營業日(k=1 → 最後一個)。不足 k 個 → None。"""
+    b = _bdays(y, m)
+    return b[-k] if len(b) >= k else None
+
+
 def _last_bd(y: int, m: int) -> _dt.date:
     """SPEC §1 L(y,m):該月最後營業日。"""
     return _roll(_dt.date(y, m, _md(y, m)), "preceding")
@@ -115,6 +132,11 @@ def _hist_fixed(y, m, n, D=10, mode="following", step=1) -> list[_dt.date]:
 
 def _hist_month_end(y, m, n, step=1) -> list[_dt.date]:
     return [_last_bd(yy, mm) for yy, mm in _months_ending(y, m, n, step)]
+
+
+def _hist_month_end_offset(y, m, n, offset=1, step=1) -> list[_dt.date]:
+    """§13.2 MONTH_END_OFFSET(offset):每月倒數第 (offset+1) 個營業日。"""
+    return [_nth_last_bd(yy, mm, offset + 1) for yy, mm in _months_ending(y, m, n, step)]
 
 
 def _recs(dates, pay_gap: int | None = None) -> list[dict]:
@@ -197,6 +219,8 @@ def test_anchor_month_end_estimated_and_projected():
     """
     hist = _hist_month_end(2026, 7, 14)
     a = detect_anchor(hist)
+    # §13.2:倒數第 0 個營業日仍歸 MONTH_END(0 參數),不得被 MONTH_END_OFFSET(1 參數)吃掉,
+    # 否則「純月底型」會失去 0 參數的優先權,平手時反而輸給比較會過擬合的假說。
     assert a is not None and a["type"] == "MONTH_END"
     assert a["params"] is None
     assert a["score"] >= 0.95
@@ -216,10 +240,14 @@ def test_anchor_nth_weekday_estimated_and_projected():
     # 前提:倒數版索引不是常數,否則兩個 2 參數假說會平手(規格未定平手時誰贏)
     fe = {(-(-(_md(d.year, d.month) - d.day + 1) // 7)) for d in hist}
     assert len(fe) > 1, "fixture 失效:倒數索引若固定,NTH_WEEKDAY_FROM_END 會同分"
+    assert all(is_business_day(d) for d in hist), "fixture 前提:24 筆全是營業日 → 零偏移"
     a = detect_anchor(hist)
     assert a is not None and a["type"] == "NTH_WEEKDAY"
     assert tuple(a["params"]) == (2, 2)
     assert a["score"] >= 0.95
+    # §13.3:零偏移 → ρ 分母為 0 → 預設 following,並標記非從歷史推得
+    assert a["roll_convention"] == "following"
+    assert a["roll_inferred"] is False
     assert project_anchor(a, 2026, 8) == _nth_wd(2026, 8, 2, 2)
 
 
@@ -239,6 +267,8 @@ def test_anchor_nth_weekday_from_end_estimated_and_projected():
     assert a is not None and a["type"] == "NTH_WEEKDAY_FROM_END"
     assert tuple(a["params"]) == (4, 1)
     assert a["score"] >= 0.90
+    assert a["roll_inferred"] is True, "此 fixture 有 4 筆撞連假往前 → 方向是推得的"
+    assert a["roll_convention"] == "preceding"
     tgt = _nth_wd_from_end(2026, 8, 4, 1)
     assert is_business_day(tgt), "fixture 失效:目標月的錨定日本身要是營業日,兩種校正才會同解"
     assert project_anchor(a, 2026, 8) == tgt
@@ -255,6 +285,56 @@ def test_anchor_fixed_day_estimated_and_projected():
     assert a["params"] == 10
     assert a["score"] >= 0.95
     assert project_anchor(a, 2026, 8) == _fixed(2026, 8, 10)
+
+
+def test_anchor_month_end_offset_estimated_and_projected():
+    """§13.2 新假說 MONTH_END_OFFSET(n):每月倒數第 (n+1) 個營業日,1 參數。
+
+    聯博(ACTI71)的配息基準日就是這型(倒數第 2 個營業日,實測復現率 90%);
+    四假說版本對它 12/12 全棄權 —— 不是推錯,是整檔基金從月曆上消失。
+    固定日號解釋不了它:月長 28~31 天、月底遇六日與連假時日號會在 25~30 之間跳。
+    """
+    hist = _hist_month_end_offset(2026, 7, 18, offset=1)
+    assert all(d is not None for d in hist)
+    a = detect_anchor(hist)
+    assert a is not None and a["type"] == "MONTH_END_OFFSET"
+    assert a["params"] == 1
+    assert a["score"] >= 0.95
+    assert project_anchor(a, 2026, 8) == _nth_last_bd(2026, 8, 2)
+    assert project_anchor(a, 2027, 2) == _nth_last_bd(2027, 2, 2)   # 短月照樣落在月內
+
+
+def test_month_end_offset_projection_is_not_rolled_again():
+    """§13.2:投影本身已落在營業日 → **不再套 R**(避免二次校正)。
+
+    若實作寫成「月最後一天往前推 n 個日曆日再套 R」,遇到月尾連假就會整個歪掉:
+    2025-01 的倒數第 2 個營業日是 1/23(離月底 8 個日曆日),二次校正版會落在別處,
+    更糟的是會誤觸 §13.7.1 的 τ=3 而回 None —— 一整個農曆年月份的配息就此消失。
+    """
+    anchor = {"type": "MONTH_END_OFFSET", "params": 1, "score": 1.0, "runner_up": 0.0,
+              "roll_convention": "preceding", "tie_broken": False, "roll_inferred": True}
+    far = 0
+    for y in range(2024, 2031):
+        for m in range(1, 13):
+            want = _nth_last_bd(y, m, 2)
+            got = project_anchor(dict(anchor), y, m)
+            assert got == want, f"{y}-{m} 應為倒數第 2 個營業日 {want},實得 {got}"
+            if (_md(y, m) - want.day) > 3:
+                far += 1
+    assert far > 0, "fixture 失效:沒有任何月份的倒數第 2 營業日離月底 > 3 天"
+
+
+def test_month_end_offset_returns_none_when_month_lacks_enough_business_days():
+    """§13.2:該月營業日不足 n+1 個 → None(不可回退成「最後一個營業日」蒙混)。
+
+    台股月曆最少也有 14 個營業日,n ∈ {1,2,3} 時這條分支在真實日曆下踩不到;
+    但 `project_anchor` 會吃到外部傳入 / 反序列化的 anchor,越界時必須誠實回 None
+    而不是 IndexError,也不是悄悄夾到最後一個營業日。
+    """
+    assert min(len(_bdays(y, m)) for y in (2025, 2026) for m in range(1, 13)) >= 5
+    anchor = {"type": "MONTH_END_OFFSET", "params": 40, "score": 1.0, "runner_up": 0.0,
+              "roll_convention": "preceding", "tie_broken": False, "roll_inferred": True}
+    assert project_anchor(dict(anchor), 2026, 8) is None
 
 
 def test_fixed_day_param_uses_half_up_median_not_bankers_rounding():
@@ -362,6 +442,47 @@ def test_tie_prefers_fewer_parameters_and_flags_tie_broken():
     assert a["score"] - a["runner_up"] < 0.10, "此 fixture 前提就是平手"
     assert a["tie_broken"] is True
     assert a["type"] == "MONTH_END" and a["params"] is None
+
+
+def test_tie_order_prefers_month_end_offset_over_fixed_day():
+    """§13.2 決選序:同為 1 參數時 MONTH_END_OFFSET 排在 FIXED_DAY 前。
+
+    理由是月底相對錨跨不同月長更穩:選到 FIXED_DAY(30)的話,2 月(28/29 天)與
+    月底遇連假的月份就會分岔,而歷史上這兩個假說一模一樣,分岔時沒有任何訊號。
+    fixture 取「倒數第 2 個營業日恰為 30 號」的月份,兩者歷史復現率都是 1.0。
+    """
+    hist = sorted(d for d in (_nth_last_bd(y, m, 2)
+                              for y, m in _months_ending(2027, 12, 60)) if d.day == 30)[:6]
+    assert len(hist) == 6, "fixture 失效:找不到 6 個「倒數第 2 營業日 = 30 號」的月份"
+    assert all(_md(d.year, d.month) == 31 for d in hist)
+    assert not any(d == _nth_last_bd(d.year, d.month, 1) for d in hist), "不得同時是月底型"
+    a = detect_anchor(hist)
+    assert a is not None
+    assert a["score"] - a["runner_up"] < 0.10, "此 fixture 前提就是平手"
+    assert a["tie_broken"] is True
+    assert a["type"] == "MONTH_END_OFFSET" and a["params"] == 1
+
+
+def test_tie_order_prefers_from_end_over_nth_weekday():
+    """§13.2 決選序:同為 2 參數時 NTH_WEEKDAY_FROM_END 排在 NTH_WEEKDAY 前。
+
+    兩者只在「該月有 5 個星期 w」時分歧;fixture 取恰有 4 個星期三的月份,
+    第 2 個星期三 == 倒數第 3 個星期三,歷史上完全同分。基金作業慣例錨月底側,
+    所以規格定 FROM_END 勝 —— 重點是**有一個確定答案**,不是每次選模擲骰子。
+    """
+    cand = [_nth_wd(y, m, 2, 2) for y, m in _months_ending(2026, 7, 48)
+            if sum(1 for d in range(1, _md(y, m) + 1)
+                   if _dt.date(y, m, d).weekday() == 2) == 4]
+    hist = sorted(d for d in cand if is_business_day(d))[:6]
+    assert len(hist) == 6, "fixture 失效:找不到 6 個「恰 4 個星期三」的月份"
+    assert {(-(-d.day // 7)) for d in hist} == {2}
+    assert {(-(-(_md(d.year, d.month) - d.day + 1) // 7)) for d in hist} == {3}
+    a = detect_anchor(hist)
+    assert a is not None
+    assert a["score"] - a["runner_up"] < 0.10, "此 fixture 前提就是平手"
+    assert a["tie_broken"] is True
+    assert a["type"] == "NTH_WEEKDAY_FROM_END"
+    assert tuple(a["params"]) == (2, 3)
 
 
 def test_tie_broken_anchor_cannot_reach_high_confidence():
@@ -508,6 +629,7 @@ def test_roll_direction_following_is_inferred_from_history():
     assert dev >= 3 and fwd == dev, "fixture 失效:應全部往後校正"
     a = detect_anchor(hist)
     assert a is not None and a["roll_convention"] == "following"
+    assert a["roll_inferred"] is True, "§13.3:有偏移可推 → 旗標須為 True(以別於預設值)"
 
 
 def test_roll_direction_preceding_is_inferred_from_history():
@@ -517,6 +639,40 @@ def test_roll_direction_preceding_is_inferred_from_history():
     assert dev >= 3 and fwd == 0, "fixture 失效:應全部往前校正"
     a = detect_anchor(hist)
     assert a is not None and a["roll_convention"] == "preceding"
+    assert a["roll_inferred"] is True
+
+
+def test_zero_deviation_history_defaults_to_following_without_confidence_penalty():
+    """§13.3:ρ 分母為 0(歷史零偏移)→ following,且**不壓信心**。
+
+    原規格會把這種最規律的基金丟進「其餘」→ modified following + 壓 low,
+    等於懲罰完美 —— 零偏移代表該假說完美,不是資訊不足。與 §4 的 high 直接衝突。
+    """
+    hist = [_nth_wd(y, m, 2, 2) for y, m in _months_ending(2026, 7, 14)]
+    assert all(is_business_day(d) for d in hist), "fixture 前提:零偏移"
+    a = detect_anchor(hist)
+    assert a is not None and a["roll_convention"] == "following"
+    assert a["roll_inferred"] is False
+    got = predict_ex_for_month(infer_schedule(_recs(hist)), 2026, 8,
+                               ref_year=2026, ref_month=7)
+    assert got is not None and got["confidence"] == "high", "零偏移不該被壓信心"
+
+
+def test_winning_hypothesis_supplies_the_roll_convention():
+    """§13.4:每個假說各自估自己的 ρ,`roll_convention` 取**勝出假說**的那一個。
+
+    月底型的名目錨定日 L(y,m) 本身就是營業日 → MONTH_END 自己的偏移數為 0 → 依 §13.3
+    應回 following/roll_inferred=False;但同一批歷史若改用 FIXED_DAY(31) 的名目日
+    (該月最後一個日曆日)去看,偏移全部朝後 → 會得到 preceding。兩者不同,
+    正是「ρ 要跟著假說走」的證據 —— 拿錯那一個,未來投影就會被錯誤方向再校正一次。
+    """
+    hist = _hist_month_end(2026, 7, 18)
+    nominal_dev = sum(1 for d in hist if d.day != _md(d.year, d.month))
+    assert nominal_dev >= 6, "fixture 前提:以月最後一個日曆日為名目時偏移很多"
+    a = detect_anchor(hist)
+    assert a is not None and a["type"] == "MONTH_END"
+    assert a["roll_inferred"] is False, "MONTH_END 自己的名目日就是營業日 → 零偏移"
+    assert a["roll_convention"] == "following"
 
 
 def test_roll_direction_mixed_falls_back_to_modified_following_and_low_confidence():
@@ -526,14 +682,19 @@ def test_roll_direction_mixed_falls_back_to_modified_following_and_low_confidenc
     真正的除息日仍可能差好幾天 —— 這種不確定性必須顯示在信心上,不能藏起來。
     """
     hist, flip = [], 0
-    for y, m in _months_ending(2026, 7, 24):
+    for y, m in _months_ending(2026, 7, 30):
         nom = _dt.date(y, m, 15)
         if is_business_day(nom):
             hist.append(nom)
             continue
-        hist.append(_roll(nom, "following" if flip % 2 == 0 else "preceding"))
+        # 撞長連假的月份強制往前:往後會位移 > τ=3(§13.7.1 下那筆誰也解釋不了),
+        # 混進來只會讓 s 被連假雜訊拖垮,不是本條要測的東西。
+        forward = _roll(nom, "following")
+        mode = ("preceding" if (forward - nom).days > 3
+                else ("following" if flip % 2 == 0 else "preceding"))
         flip += 1
-    for window in (24, 12, 8):
+        hist.append(_roll(nom, mode))
+    for window in (30, 12, 8):
         dev, fwd = _dev_stats(hist[-window:], 15)
         assert dev >= 2 and 0.2 <= fwd / dev < 0.8, (
             f"fixture 失效:近 {window} 筆的 ρ₊={fwd}/{dev} 不夠混,方向會被判成單向")
@@ -548,21 +709,51 @@ _MODF_31 = {"type": "FIXED_DAY", "params": 31, "score": 1.0, "runner_up": 0.0,
             "roll_convention": "modified_following", "tie_broken": False}
 
 
-def test_keep_month_backward_shift_never_exceeds_tau():
-    """§5:keep_month 回退距離上限 τ=3 日曆天;超過就是「該月沒有合理錨定日」。
+def test_roll_shift_never_exceeds_tau_in_any_direction():
+    """§13.7.1:**任何方向**的校正位移 > τ(3 日曆日)→ 該月無合理錨定日 → None。
 
     稽核 A4 實測最惡 -7 天且完全靜默:連假把整個月尾吃掉時,舊版會安靜地把除息日
-    拉到一週前,畫面上看起來一樣理直氣壯。這條 property 掃 7 年份的每個月來鎖住上限。
+    拉到一週前,畫面上看起來一樣理直氣壯。原規格只寫在 keep_month(modified following),
+    但安聯型(preceding)碰到農曆年一樣被拉 7 天 —— v2 把上限擴到三個方向。
+    這條 property 掃 7 年 84 個月 × 3 種 convention。
     """
+    for conv in ("modified_following", "preceding", "following"):
+        anchor = dict(_MODF_31, roll_convention=conv)
+        for y in range(2024, 2031):
+            for m in range(1, 13):
+                nom = _dt.date(y, m, min(31, _md(y, m)))
+                got = project_anchor(dict(anchor), y, m)
+                if got is None:
+                    continue
+                assert is_business_day(got), f"{conv} {y}-{m} 投影落在非營業日 {got}"
+                assert abs((got - nom).days) <= 3, (
+                    f"{conv} {y}-{m} 位移 {(got - nom).days} 天,超過 τ=3")
+                if conv == "modified_following":
+                    assert (got.year, got.month) == (y, m), f"{y}-{m} keep_month 破功:{got}"
+
+
+def test_preceding_roll_beyond_tau_returns_none():
+    """§13.7.1:preceding 型也要受 τ 管。實測 2025-01 月底遇農曆年需回退 **7 天**。
+
+    這是測試組回報、v2 才補上的洞:原規格只擋 keep_month,安聯這種「往前抓」的基金
+    每逢農曆年就會被安靜地拉走一週,而且信心照樣掛得很高。
+    """
+    victims = []
     for y in range(2024, 2031):
         for m in range(1, 13):
-            nom = _dt.date(y, m, min(31, _md(y, m)))
-            got = project_anchor(dict(_MODF_31), y, m)
-            if got is None:
+            nom = _dt.date(y, m, _md(y, m))
+            if is_business_day(nom):
                 continue
-            assert is_business_day(got), f"{y}-{m} 投影落在非營業日 {got}"
-            assert got.month == m and got.year == y, f"{y}-{m} keep_month 破功:{got}"
-            assert (nom - got).days <= 3, f"{y}-{m} 回退 {(nom - got).days} 天 > τ=3"
+            bwd = nom
+            while not is_business_day(bwd):
+                bwd -= _DAY
+            if (nom - bwd).days > 3:
+                victims.append((y, m, (nom - bwd).days))
+    assert victims, "fixture 失效:此假日表下找不到回退 > 3 天的月份"
+    for y, m, dist in victims:
+        anchor = dict(_MODF_31, roll_convention="preceding")
+        assert project_anchor(anchor, y, m) is None, (
+            f"{y}-{m} preceding 需回退 {dist} 天(> τ=3),應回 None")
 
 
 def test_keep_month_beyond_tau_returns_none():
@@ -625,13 +816,20 @@ def test_phase_is_mode_not_last_ex_month():
     稽核 A8:一筆特別配息(年終加發)就會把整個季度網格旋轉一格 —— 2/5/8/11 變成
     3/6/9/12,之後每一季都推錯月份,而且錯得很整齊、看起來很合理。
     """
-    grid = [_fixed(y, m, 15) for y, m in _months_ending(2025, 11, 12, step=3)]  # 2/5/8/11
-    special = _fixed(2025, 12, 20)                                              # off-cycle
+    grid = [_fixed(y, m, 10) for y, m in _months_ending(2025, 11, 12, step=3)]  # 2/5/8/11
+    special = _fixed(2025, 12, 10)                                              # off-cycle
     sched = infer_schedule(_recs(sorted(grid + [special])))
+    assert sched["anchor"] is not None, (
+        "fixture 前提:特別配息與網格同日號,錨不受影響 —— 本條要隔離的是**相位**,"
+        "不是錨;若錨也跟著壞,回 None 就不知道是哪一關擋的")
     on_grid = predict_ex_for_month(sched, 2026, 2, ref_year=2025, ref_month=12)
     rotated = predict_ex_for_month(sched, 2026, 3, ref_year=2025, ref_month=12)
     assert on_grid is not None, "2 月仍在原網格上,不該因一筆特別配息而消失"
     assert rotated is None, "3 月不在原網格上;有值代表網格被 last_ex(12 月)旋轉了"
+    for off_grid in (2026, 4), (2026, 6), (2026, 9):
+        assert predict_ex_for_month(sched, off_grid[0], off_grid[1],
+                                    ref_year=2025, ref_month=12) is None, (
+            f"{off_grid} 不在 2/5/8/11 網格上")
 
 
 def test_phase_inconsistency_returns_none():
@@ -660,20 +858,45 @@ def test_irregular_cadence_returns_none_even_with_perfect_anchor():
 
 
 def test_double_dividend_month_detected_as_irregular():
-    """§6:「出現次數 != 1 的月份」佔比過高 → irregular → None。
+    """§6 + §13.5:分母 = cadence 網格上**預期有配息的月份數**,分子 = 其中出現次數 != 1 者。
 
     現行 by_day 每檔每月只掛 1 筆(§9 明說本次不做雙配息資料結構),
-    所以偵測到就必須誠實回 None,而不是silently 只顯示其中一筆。
+    偵測到就必須誠實回 None,而不是靜默只顯示其中一筆。
+    這個 fixture 刻意讓**錨仍然乾淨**(s≈0.84,穩穩過 §3 的 0.80):
+    若實作只靠 §3 的 s 閘門而沒做雙配息偵測,這條就會紅 —— 兩個閘門不可互相頂替。
     """
-    dates = []
-    for i, (y, m) in enumerate(_months_ending(2026, 7, 9)):
-        dates.append(_fixed(y, m, 10))
-        if i % 3 == 0:
-            dates.append(_fixed(y, m, 25))
-    dup = sum(1 for _, c in Counter((d.year, d.month) for d in dates).items() if c != 1)
-    assert dup / 9 > 0.15, "fixture 失效:雙配息月份佔比不夠"
+    dates, doubled = [], 0
+    for i, (y, m) in enumerate(_months_ending(2026, 7, 16)):
+        base = _fixed(y, m, 10)
+        dates.append(base)
+        if (15 - i) % 5 == 0:                       # 由新到舊每 5 個月一次雙配息
+            extra = base + _DAY
+            while not is_business_day(extra):
+                extra += _DAY
+            dates.append(extra)
+            doubled += 1
+    assert doubled / 16 > 0.15, "fixture 失效:網格月份中的雙配息佔比不足"
+    recent = sorted(dates)[-12:]
+    recent_months = Counter((d.year, d.month) for d in recent)
+    assert (sum(1 for v in recent_months.values() if v != 1) / len(recent_months)) > 0.15, (
+        "fixture 失效:近 12 筆視窗內的雙配息佔比也要過門檻")
     sched = infer_schedule(_recs(sorted(dates)))
+    assert sched["cadence"] == "irregular", "§6 原文:偵測到雙配息 → cadence 判 irregular"
     assert predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=7) is None
+
+
+def test_quarterly_grid_is_not_misjudged_irregular():
+    """§13.5 反向護欄:乾淨的季配基金**不得**被判 irregular。
+
+    這是原分母定義會踩的坑:若分母算成「歷史跨越的所有年月」,季配基金有 8/12 個月
+    是 0 次 → 佔比 0.67 → 每一檔季配都會被判不規則而整批消失。改成網格月份後,
+    季配的 12 個網格月份每個都恰好 1 次 → 佔比 0。
+    """
+    grid = [_fixed(y, m, 10) for y, m in _months_ending(2025, 11, 12, step=3)]
+    sched = infer_schedule(_recs(grid))
+    assert sched["cadence"] == "quarterly"
+    got = predict_ex_for_month(sched, 2026, 2, ref_year=2025, ref_month=11)
+    assert got is not None, "乾淨季配被誤判成不規則 → 整批季配基金會從月曆上消失"
 
 
 def test_fixed_30_day_interval_is_never_silently_predicted():
@@ -724,21 +947,116 @@ def test_stale_uses_day_difference_not_month_difference():
         "→ 代表 _stale 仍只吃月份差")
 
 
-def test_annual_fund_beyond_absolute_cap_returns_none():
-    """§7:門檻加絕對上限 `min(3*step, 15)` 個月。稽核 A11:年配基金可靜默 36 個月仍給日期。
+def test_annual_fund_silent_35_months_returns_none():
+    """§13.1:`stale_months = floor(日差 / 30.44)`,None 條件 `stale_months > min(3*step, 15)`。
 
-    年配 step=12,3 個週期 = 36 個月 —— 三年沒配息還照推,基本上就是把「已清算/已停配」
-    的基金畫在月曆上。絕對上限 15 個月把這種情況擋在信心系統之外。
+    這是原公式**單位不一致**放行的那一格:靜默 1095 天,原式 `floor(1095/(30.44*12))` = 2
+    去對門檻 15 → 放行,稽核 A11 原封不動。改成月為單位後 35 > 15 → 擋下。
+    年配基金靜默三年還照推,等於把已清算/已停配的基金畫在月曆上。
     """
     dates = [_fixed(y, 5, 20) for y in (2019, 2020, 2021, 2022, 2023)]
     sched = infer_schedule(_recs(dates))
-    assert predict_ex_for_month(sched, 2026, 5, ref_year=2026, ref_month=5) is None
+    last = _fixed(2023, 5, 20)
+    for ref in ((2026, 4), (2026, 5)):
+        gap_days = (_dt.date(ref[0], ref[1], 1) - last).days
+        assert gap_days // 31 >= 33, "fixture 前提:靜默約 35 個月"
+        assert predict_ex_for_month(sched, ref[0], 5, ref_year=ref[0],
+                                    ref_month=ref[1]) is None
+
+
+def test_quarterly_two_stale_periods_is_capped_low():
+    """§13.1:`stale_periods = floor(stale_months / step) >= 2` → 信心壓 low(但仍給日期)。
+
+    季配基金漏掉兩次配息(約 8~9 個月)還在門檻 9 個月之內,所以不該消失;
+    但「連續兩期沒出現」本身就是異常訊號,不可再用 h<=1 的理由掛 high。
+    """
+    grid = [_fixed(y, m, 10) for y, m in _months_ending(2025, 11, 12, step=3)]
+    sched = infer_schedule(_recs(grid))
+    got = predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=8)
+    assert got is not None, "8~9 個月 < 門檻 9 個月 → 不該回 None"
+    assert got["confidence"] == "low"
 
 
 def test_fresh_history_is_not_flagged_stale():
     """§7 反向:剛配完就推下個月,不可被陳舊度誤殺(否則整個月曆會空掉)。"""
     sched = _clean_sched(n=12)
     assert predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=7) is not None
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §13.7 採納測試組點名的規格漏洞
+# ══════════════════════════════════════════════════════════════════════
+def test_project_anchor_raises_on_unknown_type():
+    """§13.7.2:不認得的 `type` → **raise ValueError**,不可靜默回 None。
+
+    回 None 會與「該月無合理錨定日」撞語意:前者是程式壞了(例如舊版序列化的錨、
+    打錯字的常數),後者是業務上正常的空月。混在一起 = §1 的「讓程式不報錯」典型違憲。
+    """
+    bogus = {"type": "LAST_FRIDAY_ISH", "params": (4, 1), "score": 1.0, "runner_up": 0.0,
+             "roll_convention": "following", "tie_broken": False, "roll_inferred": True}
+    with pytest.raises(ValueError):
+        project_anchor(bogus, 2026, 8)
+
+
+def test_past_month_backfill_is_capped_low():
+    """§13.7.3:h < 0(回填過去月份)允許,但信心上限壓 low。
+
+    過去的月份應以**實際紀錄**為準;推估值放進歷史區間卻掛 high,會讓人分不清
+    畫面上的是「真的發生過」還是「我們猜的」。允許顯示、但必須標成最低可信度。
+    """
+    sched = _clean_sched(n=12)
+    got = predict_ex_for_month(sched, 2026, 5, ref_year=2026, ref_month=7)   # h = -2
+    assert got is not None, "回填過去月份應允許(不是回 None)"
+    assert got["horizon_months"] == -2
+    assert got["confidence"] == "low"
+
+
+def test_detect_anchor_does_not_assume_sorted_unique_input():
+    """§13.7.4:函式內須自行排序去重,不得假設呼叫端給的順序。
+
+    MoneyDJ 配息表是 newest-first,偶爾還有重複列;`detect_anchor` 是 public 純函式,
+    未來會被別的 caller 直接呼叫。順序敏感的 bug 只會在特定來源上出現,極難追。
+    """
+    hist = _hist_fixed(2026, 7, 12, D=10)
+    base = detect_anchor(list(hist))
+    shuffled = list(reversed(hist)) + [hist[3], hist[0]]        # 倒序 + 重複兩筆
+    got = detect_anchor(shuffled)
+    assert base is not None and got is not None
+    assert got["type"] == base["type"] and got["params"] == base["params"]
+    assert math.isclose(got["score"], base["score"], abs_tol=1e-9)
+    assert got["roll_convention"] == base["roll_convention"]
+
+
+def test_irregular_fund_lands_in_unpredictable_with_reason():
+    """§13.7.5:判 irregular 回 None 時,須落 unpredictable 桶並帶 `reason` 文字。
+
+    UI 靠 reason 顯示「為什麼沒有日期」;靜默消失會讓 user 把「算不出來」
+    誤讀成「這個月沒有配息」,那是 §1 明令禁止的假成功。
+    """
+    months = [(2025, 1), (2025, 2), (2025, 5), (2025, 6), (2025, 9),
+              (2025, 11), (2025, 12), (2026, 3), (2026, 4), (2026, 7)]
+    funds = [{"code": "IRR2", "name": "節奏不規則基金", "house": "",
+              "dividends": _recs([_fixed(y, m, 15) for y, m in months])}]
+    cal = build_month_calendar(funds, 2026, 8)
+    assert cal["counts"]["unpredictable"] == 1 and cal["counts"]["excluded"] == 0
+    reason = cal["unpredictable"][0].get("reason")
+    assert isinstance(reason, str) and reason.strip(), "unpredictable 須帶非空 reason"
+
+
+def test_fit_uses_recent_window_not_whole_history():
+    """§13.7.6:k 與擬合都只吃近 `_RECENT_N` 筆視窗,不是全史。
+
+    基金改配息日是常態(投信換作業窗口)。若拿全史擬合,改制後的新錨永遠被舊資料
+    稀釋:此處近 18 筆全在 10 號、更早 12 筆全在 25 號 —— 全史 s = 18/30 = 0.6
+    會掉出 §3 的 0.80 閘門 → 整檔變成推不出來,明明最近 18 次都準時在 10 號。
+    """
+    old = [_fixed(y, m, 25) for y, m in _months_ending(2025, 1, 12)]
+    new = [_fixed(y, m, 10) for y, m in _months_ending(2026, 7, 18)]
+    sched = infer_schedule(_recs(old + new))
+    got = predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=7)
+    assert got is not None, "近 18 筆乾淨卻推不出來 → 擬合吃到了視窗外的舊制"
+    assert got["ex_date"] == _fixed(2026, 8, 10)
+    assert got["confidence"] == "high"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -947,7 +1265,8 @@ def _walk_forward():
                 hit += 1
                 f_hit += 1
             elif got.get("confidence") == "high":
-                wrong_high.append((code, tgt.isoformat(), got["ex_date"].isoformat()))
+                wrong_high.append((code, tgt.isoformat(), got["ex_date"].isoformat(),
+                                   abs((got["ex_date"] - tgt).days)))
         per_fund[code] = (f_hit, f_pred, f_total)
     _WF_CACHE["v"] = (hit, predicted, total, wrong_high, per_fund)
     return _WF_CACHE["v"]
@@ -969,19 +1288,28 @@ def test_real5_walk_forward_accuracy():
         f"{ {k: f'{v[0]}/{v[1]}' for k, v in per_fund.items()} }")
 
 
-def test_real5_no_wrong_prediction_carries_high_confidence():
-    """§11 核心(比命中率更重要):推錯且信心 = high 的筆數必須是 **0**。
+def test_real5_high_confidence_error_never_exceeds_one_day():
+    """§13.6 硬門檻:「推錯 **且** high **且** |誤差| > 1 天」須為 0 筆。
 
-    「可以不知道,不可以錯還說有把握」。稽核 A2 的實測是 85~91% 錯誤率全掛 high ——
-    user 是照著 high 的日期在調度資金的,這種錯會直接變成真金白銀的決策錯誤。
+    原 §11 要求「0 筆錯且 high」與 §4 的 `s>=0.95`(字面就是容許 5% 對不上)數學上互斥;
+    實測那筆(安聯 2026-05,實際 05/13、推 05/14)是視窗外的一次性作業偏移,
+    該檔近 12 筆視窗內 s=1.0,門檻拉到 1.0 也擋不住。v2 改成:
+    高信心可以差 **1 個營業日**(不可建模的作業抖動,誠實);**不可以差 5 天還說有把握**。
+
+    ⚠️ 這條轉綠必須是因為口徑放寬到 1 天,**不是**因為引擎改成棄權來規避 ——
+    覆蓋率下限(test_real5_coverage_not_gamed)與逐檔覆蓋數(下面的 assert)就是那道保險。
     """
-    _hit, _pred, _total, wrong_high, _pf = _walk_forward()
-    assert wrong_high == [], (
-        f"有 {len(wrong_high)} 筆推錯卻掛 high(前 5 筆 code/實際/推估):{wrong_high[:5]}")
+    _hit, _pred, _total, wrong_high, per_fund = _walk_forward()
+    over = [w for w in wrong_high if w[3] > 1]
+    assert over == [], (
+        f"有 {len(over)} 筆推錯、掛 high 且誤差 > 1 天(code/實際/推估/誤差):{over[:5]}")
+    assert per_fund["TLZF9 安聯"][1] >= 10, (
+        "安聯的覆蓋數掉下來了 —— 這條轉綠必須來自 §13.6 的 1 天寬限,"
+        f"不是靠棄權規避:{per_fund['TLZF9 安聯']}")
 
 
 def test_real5_coverage_not_gamed():
-    """§11 反向護欄:不准靠「幾乎全部棄權」把命中率洗到 100%。
+    """§13.6 反向護欄:覆蓋率 >= 50%,不准靠「幾乎全部棄權」把命中率洗到 100%。
 
     §1 允許不給答案,但月曆的價值就是覆蓋;若引擎只敢推兩三筆,命中率再高也沒用。
     """
@@ -989,3 +1317,16 @@ def test_real5_coverage_not_gamed():
     assert predicted / total >= 0.5, (
         f"只對 {predicted}/{total} 筆敢給日期,覆蓋率過低;逐檔 "
         f"{ {k: f'{v[1]}/{v[2]}' for k, v in per_fund.items()} }")
+
+
+def test_real5_last_but_one_business_day_fund_is_covered_not_abstained():
+    """§13.2 的存在理由:聯博(倒數第 2 個營業日型)必須**被涵蓋**,不是誠實棄權。
+
+    四假說版本對這檔 12/12 全棄權 —— §1 意義上不算錯,但這檔基金會整個從月曆上消失,
+    而它的節奏其實非常規律(實測復現率 90%)。「不知道」與「沒去想」是兩回事。
+    """
+    _hit, _pred, _total, _wh, per_fund = _walk_forward()
+    hit, pred, total = per_fund["ACTI71 聯博"]
+    assert pred >= total * 0.5, (
+        f"聯博只推了 {pred}/{total} 筆;倒數第 n 個營業日假說沒有覆蓋到它")
+    assert hit / pred >= 0.80, f"聯博命中率 {hit}/{pred} 偏低,錨可能選錯"

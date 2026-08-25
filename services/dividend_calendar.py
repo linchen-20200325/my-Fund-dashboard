@@ -10,10 +10,13 @@
 
 推估方法(誠實:是**推估**,非官方公告;輸出帶 confidence + provenance):
   1. 判頻率  : **近 12 筆**相鄰間隔中位數 → 月配(≈30)/季配(≈90)/半年(≈182)/年配(≈365)/不規則;
-               gap 標準差 > 0.25×med_gap 或「同月多筆」佔比 > 0.15 → irregular(漂移/雙配息)。
-  2. 找錨    : 四個假說擇一(MONTH_END / NTH_WEEKDAY / NTH_WEEKDAY_FROM_END / FIXED_DAY),
-               以「**能重現自身歷史的比例** s」選模;s < 0.80 或筆數 < 3 → **不預測**(§1)。
-  3. 校正方向: 落非營業日時往前或往後,方向**從歷史推**(ρ ≥ 0.8),推不出 → 保守回退且壓 low。
+               gap 標準差 > 0.25×med_gap、相位一致率 < 0.8、或**網格內**(§13.5)「出現次數 != 1」
+               的月份佔比 > 0.15 → irregular(漂移 / 一月兩配 / 該配沒配)。
+  2. 找錨    : **五個**假說擇一(MONTH_END / MONTH_END_OFFSET / FIXED_DAY /
+               NTH_WEEKDAY_FROM_END / NTH_WEEKDAY),以「**能重現自身歷史的比例** s」選模;
+               s < 0.80 或筆數 < 3 → **不預測**(§1)。
+  3. 校正方向: 落非營業日時往前或往後,方向**從歷史推**(ρ ≥ 0.8);方向混雜 → 保守回退且壓 low,
+               歷史零偏移 → 預設 following 但**不**罰信心(§13.3)。任一方向位移 > 3 日 → 不預測。
   4. 推入帳日: 基準日 + 歷史「基準→發放」間隔中位數(缺 pay_date → None,不硬編)。
   5. confidence: s + 擬合筆數 k + 預測地平線 h。**`day_std` 已從公式移除**(對星期錨定無資訊)。
 
@@ -43,6 +46,7 @@ _CADENCE_MONTHS = {"monthly": 1, "quarterly": 3, "semiannual": 6, "annual": 12}
 
 # ── 錨定假說推估核心(v19.530 規格 §1~§8)——— 門檻全為 module 具名常數(§3.3 禁 inline)──
 ANCHOR_MONTH_END = "MONTH_END"                        # 每月最後營業日(0 參數)
+ANCHOR_MONTH_END_OFFSET = "MONTH_END_OFFSET"          # 每月倒數第 (n+1) 個營業日(1 參數,§13.2)
 ANCHOR_FIXED_DAY = "FIXED_DAY"                        # 固定日號 D(1 參數)
 ANCHOR_NTH_WEEKDAY = "NTH_WEEKDAY"                    # 每月第 j 個星期 w(2 參數)
 ANCHOR_NTH_WEEKDAY_FROM_END = "NTH_WEEKDAY_FROM_END"  # 每月倒數第 j 個星期 w(2 參數)
@@ -52,12 +56,14 @@ ROLL_PRECEDING = "preceding"                      # 非營業日 → 往前找
 ROLL_MODIFIED_FOLLOWING = "modified_following"    # 往後,跨月則往前(方向未定時的保守回退)
 
 # §3 平手時取「參數較少」者(少參數 = 少過擬合)
-_ANCHOR_PARAM_COUNT = {ANCHOR_MONTH_END: 0, ANCHOR_FIXED_DAY: 1,
+_ANCHOR_PARAM_COUNT = {ANCHOR_MONTH_END: 0, ANCHOR_MONTH_END_OFFSET: 1, ANCHOR_FIXED_DAY: 1,
                        ANCHOR_NTH_WEEKDAY_FROM_END: 2, ANCHOR_NTH_WEEKDAY: 2}
-# 分數 + 參數數皆相同時的決選序(deterministic,避免同分時輸出隨字典序漂移)。
-# FROM_END 排在 NTH_WEEKDAY 前:兩者只在「該月有 5 個星期 w」時分歧,而基金作業慣例錨在月底側。
-_ANCHOR_ORDER = [ANCHOR_MONTH_END, ANCHOR_FIXED_DAY,
+# 分數 + 參數數皆相同時的決選序(§13.2 定案,deterministic,避免同分時輸出隨字典序漂移):
+# MONTH_END_OFFSET 排在 FIXED_DAY 前 —— 月底**相對**錨跨不同月長(28/30/31)更穩;
+# NTH_WEEKDAY_FROM_END 排在 NTH_WEEKDAY 前 —— 兩者僅在「該月有 5 個星期 w」時分歧,基金慣例錨月底側。
+_ANCHOR_ORDER = [ANCHOR_MONTH_END, ANCHOR_MONTH_END_OFFSET, ANCHOR_FIXED_DAY,
                  ANCHOR_NTH_WEEKDAY_FROM_END, ANCHOR_NTH_WEEKDAY]
+_MONTH_END_OFFSET_MAX = 3        # §13.2 n ∈ {1,2,3}(n=0 仍歸 MONTH_END,保留 0 參數優先權)
 
 _ANCHOR_ACCEPT_MIN = 0.80        # §3 復現率 s⁽¹⁾ 未達 → 回 None(§1 不硬給)
 _ANCHOR_TIE_DELTA = 0.10         # §3 前二名差距 < 此值 → 取參數少者,且信心上限壓 medium
@@ -70,11 +76,11 @@ _CONF_HIGH_MAX_HORIZON = 1
 _CONF_MED_MIN_SCORE = 0.85       # §4 medium 三條件
 _CONF_MED_MIN_N = 4
 _CONF_MED_MAX_HORIZON = 3
-_PHASE_MIN_RATIO = 0.80          # §6 相位眾數一致率下限
+_PHASE_MIN_RATIO = 0.80          # §6 相位眾數一致率下限(未達 → 網格不成立 → 判 irregular)
 _GAP_DRIFT_MAX_RATIO = 0.25      # §6 近 k 筆 gap 標準差 / med_gap 上限(漂移偵測)
-_DUP_MONTH_MAX_RATIO = 0.15      # §6 「同月出現次數 != 1」佔比上限(雙配息偵測)
+_DUP_MONTH_MAX_RATIO = 0.15      # §6/§13.5 網格內「出現次數 != 1」月份的佔比上限(雙配息/漏配)
 _DAYS_PER_MONTH = 30.44          # §7 平均日曆月長(365.25 / 12)
-_STALE_MAX_PERIODS = 3           # §7 距 ref 超過 3 個週期 → 疑停配
+_STALE_MAX_PERIODS = 3           # §7/§13.1 疑停配門檻倍數:上限 = min(3*step, 15) **個月**
 _STALE_ABS_MAX_MONTHS = 15       # §7 絕對上限(年配基金不得靜默 36 個月仍給日期)
 _STALE_LOW_PERIODS = 2           # 距 ref >= 2 個週期 → 信心壓 low
 # §7 的 ref_date:caller 只給 (ref_year, ref_month) 沒給「日」,取**月中**當該月的代表時點 ——
@@ -172,6 +178,28 @@ def _last_business_day_of_month(year: int, month: int) -> "_dt.date | None":
     return _to_business(_dt.date(year, month, _month_days(year, month)), forward=False)
 
 
+def _business_day_from_end(year: int, month: int, n: int) -> "_dt.date | None":
+    """該月**倒數第 (n+1) 個營業日**(n=0 → 最後營業日)。該月營業日不足 → None(§13.2)。"""
+    _cur = _last_business_day_of_month(year, month)
+    for _ in range(max(0, int(n))):
+        if _cur is None:
+            return None
+        _cur = _scan_business(_cur, forward=False)
+    return _cur if (_cur is not None and (_cur.year, _cur.month) == (year, month)) else None
+
+
+def _month_end_offset_of(d: "_dt.date") -> "int | None":
+    """d 距該月最後營業日幾個**營業日**(0 = 自己就是最後營業日);對不上 → None。"""
+    _last = _last_business_day_of_month(d.year, d.month)
+    if _last is None or d > _last:
+        return None
+    _n, _cur = 0, _last
+    while _cur is not None and _cur > d and _n <= _MONTH_END_OFFSET_MAX:
+        _cur = _scan_business(_cur, forward=False)
+        _n += 1
+    return _n if _cur == d else None
+
+
 def _nth_weekday_of_month(year: int, month: int, w: int, j: int) -> "_dt.date | None":
     """該月第 j 個星期 w(w:0=一…6=日);該月不足 j 個 → None(§1 不外推到別的月)。"""
     _first_wd = _dt.date(year, month, 1).weekday()
@@ -190,10 +218,19 @@ def _nth_weekday_from_end_of_month(year: int, month: int, w: int, j: int) -> "_d
 def _anchor_nominal(a_type: str, params: Any, year: int, month: int) -> "_dt.date | None":
     """假說 + 年月 → **名目**錨定日(§5 的 a_e,未套營業日校正 R)。無合理值 → None。
 
-    MONTH_END 依定義即「最後營業日」,故其名目值本身已是營業日(R 對它是 identity)。
+    MONTH_END / MONTH_END_OFFSET 依定義即落在營業日,名目值本身已是營業日(R 對它是 identity,
+    §13.2「不再套 R」自然成立,不需特例分支)。
     """
     if a_type == ANCHOR_MONTH_END:
         return _last_business_day_of_month(year, month)
+    if a_type == ANCHOR_MONTH_END_OFFSET:
+        try:
+            _n = int(params)
+        except (TypeError, ValueError):
+            return None
+        if not 1 <= _n <= _MONTH_END_OFFSET_MAX:
+            return None
+        return _business_day_from_end(year, month, _n)
     if a_type == ANCHOR_FIXED_DAY:
         try:
             _d = int(params)
@@ -218,32 +255,42 @@ def _anchor_nominal(a_type: str, params: Any, year: int, month: int) -> "_dt.dat
 # ── §5 營業日校正 R(方向從歷史推,不硬編;跨月回退帶 τ 上限)────────────────
 def _apply_roll(nominal: "_dt.date | None", convention: str,
                 year: int, month: int) -> "_dt.date | None":
-    """名目錨定日 → 校正後日期;會**跨出目標月**或回退距離 > τ → None(§1 不給錯月/被拉開的值)。
+    """名目錨定日 → 校正後日期;跨出目標月、或**任一方向**位移 > τ → None(§1 不給錯月/被拉開的值)。
 
     - following / modified_following:先往後找營業日;preceding:先往前找。
-    - 主方向跨出目標月 → 反向回退(= 現行 `keep_month` 行為),但回退距離 > τ=3 日曆日
-      視為「該月無合理錨定日」→ None(稽核 A4:原本會靜默給一個被拉開 7 天的值)。
+    - 主方向跨出目標月 → 反向回退(= 現行 `keep_month` 行為)。
+    - **§13.7.1**:最後採用的那個方向,位移 > τ=3 日曆日 → 視為「該月無合理錨定日」→ None。
+      τ 不再只綁 keep_month 回退 —— preceding 型撞到農曆年連假同樣會被拉開 7 天(稽核 A4)。
     """
     if nominal is None:
         return None
     _fwd = convention != ROLL_PRECEDING
     _d = _to_business(nominal, forward=_fwd)
-    if _d is not None and (_d.year, _d.month) == (year, month):
-        return _d
-    _back = _to_business(nominal, forward=not _fwd)
-    if _back is None or (_back.year, _back.month) != (year, month):
+    if _d is None or (_d.year, _d.month) != (year, month):
+        _d = _to_business(nominal, forward=not _fwd)      # §5 keep_month 反向回退
+    if _d is None or (_d.year, _d.month) != (year, month):
         return None
-    if abs((_back - nominal).days) > _KEEP_MONTH_MAX_SHIFT_DAYS:
-        return None
-    return _back
+    if abs((_d - nominal).days) > _KEEP_MONTH_MAX_SHIFT_DAYS:
+        return None                                       # §13.7.1 位移過大 → 不硬給
+    return _d
 
 
 def _infer_roll_convention(dates: list, a_type: str, params: Any) -> tuple:
-    """§5:從歷史推校正方向 → (convention, inferred)。
+    """§5 / §13.3 / §13.4:從歷史推校正方向 → (convention, inferred)。
 
-    ρ₊ = |{e: e > a_e}| / |{e: e != a_e}|;ρ₊ ≥ 0.8 → following、ρ₋ ≥ 0.8 → preceding,
-    其餘(含**完全沒有偏移樣本**,即歷史從未落在非營業日 → 方向無從觀測)→ modified following
-    且 `inferred=False`,由呼叫端把信心壓 low(§5 明文:方向未定 → 不宣稱有把握)。
+    **§13.4**:ρ 依賴名目錨定日 a_e,而 a_e 是假說的函數 → **每個假說各自估自己的 ρ**,
+    再用自己的 R 算自己的 s;`roll_convention` 取勝出假說的那一個(分開估才數學自洽)。
+
+    ρ₊ = |{e: e > a_e}| / |{e: e != a_e}|
+      ρ₊ ≥ 0.8            → following
+      ρ₋ ≥ 0.8            → preceding
+      分母 = 0(**§13.3**)→ following,`inferred=False`,且**不壓信心** ——
+                            歷史零偏移代表該假說完美貼合,不是資訊不足;原字面會讓最規律的
+                            純星期錨定型基金永遠拿不到 high,與 §4 直接衝突。
+      其餘(方向混雜)     → modified following,由呼叫端壓 low(§5:方向未定不宣稱有把握)
+
+    `inferred` = 方向是否**真從歷史推得**(§13.3 純稽核欄位):零偏移與方向混雜兩種
+    「用預設值」的情形皆為 False;信心是否壓 low 改看 `roll_convention`,不看本旗標。
     """
     _up = _dn = 0
     for e in dates:
@@ -256,12 +303,12 @@ def _infer_roll_convention(dates: list, a_type: str, params: Any) -> tuple:
             _dn += 1
     _tot = _up + _dn
     if _tot == 0:
-        return ROLL_MODIFIED_FOLLOWING, False
+        return ROLL_FOLLOWING, False       # §13.3 零偏移 → 預設 following,信心不受罰
     if _up / _tot >= _ROLL_DIR_MIN_RATIO:
         return ROLL_FOLLOWING, True
     if _dn / _tot >= _ROLL_DIR_MIN_RATIO:
         return ROLL_PRECEDING, True
-    return ROLL_MODIFIED_FOLLOWING, False
+    return ROLL_MODIFIED_FOLLOWING, False   # 方向混雜 → 保守回退(亦為預設值),信心由 caller 壓 low
 
 
 def _anchor_score(dates: list, a_type: str, params: Any, convention: str) -> float:
@@ -279,25 +326,43 @@ def _anchor_score(dates: list, a_type: str, params: Any, convention: str) -> flo
     return _hit / len(dates)
 
 
-def _fit_hypotheses(dates: list) -> list:
-    """§1 參數估計 → [(type, params)] 四個候選。
+_NTH_MAX_J = 5                   # §14.1 NTH_* 的 j 候選上限(月最多 5 個同星期)
+_FIXED_DAY_MAX = 31              # §14.1 FIXED_DAY 的 D 候選上限
 
-    - `D* = floor(median(day) + 0.5)` **half-up**,不可用 `round()`
-      (banker's rounding 對 x.5 取偶,月底型會被系統性推早一天)。
-    - `w*` 取星期眾數;`j*` / `j̄*` 只在 `wd(e)=w*` 的子集上取眾數(從月初 / 從月底數)。
-    - 眾數平手 → 取較小值(deterministic,避免輸出隨插入序漂移)。
+
+def _anchor_candidates(a_type: str) -> list:
+    """§14.1 各假說的**有限候選參數集**(全部極小,窮舉零效能疑慮)。
+
+    順序 = 平手時的決選順序(同分取數值較小者:D 小 / n 小 / j 小 / w 小),
+    配合 `_best_of_type` 的「嚴格大於才換人」→ deterministic。
     """
-    _days = [d.day for d in dates]
-    _fixed = _math.floor(_stats.median(_days) + 0.5) if _days else 1
-    _wc = _Counter(d.weekday() for d in dates)
-    _w = max(_wc.items(), key=lambda kv: (kv[1], -kv[0]))[0] if _wc else 0
-    _same = [d for d in dates if d.weekday() == _w]
-    _jc = _Counter(-(-d.day // 7) for d in _same)                                   # ceil(d/7)
-    _j = max(_jc.items(), key=lambda kv: (kv[1], -kv[0]))[0] if _jc else 1
-    _jbc = _Counter(-(-(_month_days(d.year, d.month) - d.day + 1) // 7) for d in _same)
-    _jb = max(_jbc.items(), key=lambda kv: (kv[1], -kv[0]))[0] if _jbc else 1
-    return [(ANCHOR_MONTH_END, None), (ANCHOR_FIXED_DAY, _fixed),
-            (ANCHOR_NTH_WEEKDAY_FROM_END, (_w, _jb)), (ANCHOR_NTH_WEEKDAY, (_w, _j))]
+    if a_type == ANCHOR_MONTH_END:
+        return [None]                                             # 無參數
+    if a_type == ANCHOR_MONTH_END_OFFSET:
+        return list(range(1, _MONTH_END_OFFSET_MAX + 1))          # 3 個
+    if a_type == ANCHOR_FIXED_DAY:
+        return list(range(1, _FIXED_DAY_MAX + 1))                 # 31 個
+    return [(w, j) for j in range(1, _NTH_MAX_J + 1) for w in range(7)]   # 35 個
+
+
+def _best_of_type(dates: list, a_type: str) -> dict:
+    """§14.1:窮舉該假說的所有候選參數,取**復現率 s 最大**者。
+
+    §13.4 一致性:每個候選參數**各自**估自己的 ρ、用自己的 R 算自己的 s ——
+    **不可**先固定校正方向再窮舉參數(方向本身是參數的函數,先固定會拿到別人的方向)。
+
+    §14.1 廢止中位數 / 眾數 / half-up:兩者都只是「最大化 s」的粗略近似,
+    實測會在「棄權 vs 可預測」的分水嶺上給錯答案(摩根 D*=8 s=0.42 vs 窮舉 D*=7 s=0.83;
+    瀚亞 D*=30 s=0.67 vs 窮舉 D*=31 s=1.00)。窮舉後捨入問題不存在。
+    """
+    _best: dict = {}
+    for _params in _anchor_candidates(a_type):
+        _conv, _inferred = _infer_roll_convention(dates, a_type, _params)
+        _sc = _anchor_score(dates, a_type, _params, _conv)
+        if not _best or _sc > _best["score"]:      # 嚴格大於 → 同分保留先出現(數值較小)者
+            _best = {"type": a_type, "params": _params, "score": _sc,
+                     "roll_convention": _conv, "roll_inferred": _inferred}
+    return _best
 
 
 def detect_anchor(dates: list) -> "dict | None":
@@ -307,13 +372,16 @@ def detect_anchor(dates: list) -> "dict | None":
 
     Returns:
         {
-          "type": str,             # MONTH_END | NTH_WEEKDAY | NTH_WEEKDAY_FROM_END | FIXED_DAY
-          "params": tuple|int|None,# NTH_* → (w, j);FIXED_DAY → D;MONTH_END → None
+          "type": str,             # MONTH_END | MONTH_END_OFFSET | FIXED_DAY
+                                   #  | NTH_WEEKDAY_FROM_END | NTH_WEEKDAY
+          "params": tuple|int|None,# NTH_* → (w, j);FIXED_DAY → D;MONTH_END_OFFSET → n;
+                                   # MONTH_END → None
           "score": float,          # s⁽¹⁾(排序後最高分)
           "runner_up": float,      # s⁽²⁾
           "roll_convention": str,  # following | preceding | modified_following
           "tie_broken": bool,      # 是否因 s⁽¹⁾-s⁽²⁾ < 0.10 而依「參數較少」決選
-          "roll_inferred": bool,   # 校正方向是否真的從歷史推得(False → 呼叫端壓 low,§5)
+          "roll_inferred": bool,   # 校正方向是否真從歷史推得(False = 用預設值,§13.3 純稽核欄位,
+                                   # **不**再直接決定信心 —— 壓 low 的條件改看 roll_convention)
           "n": int,                # 擬合用筆數 k(§4 信心公式的 k)
         }
 
@@ -327,12 +395,7 @@ def detect_anchor(dates: list) -> "dict | None":
     if _k < _ANCHOR_MIN_RECORDS:
         return None
 
-    _cands = []
-    for _type, _params in _fit_hypotheses(_ds):
-        _conv, _inferred = _infer_roll_convention(_ds, _type, _params)
-        _cands.append({"type": _type, "params": _params,
-                       "score": _anchor_score(_ds, _type, _params, _conv),
-                       "roll_convention": _conv, "roll_inferred": _inferred})
+    _cands = [_best_of_type(_ds, _t) for _t in _ANCHOR_ORDER]      # §14.1 每型各自窮舉最佳參數
     _cands.sort(key=lambda c: (-c["score"], _ANCHOR_PARAM_COUNT[c["type"]],
                                _ANCHOR_ORDER.index(c["type"])))
     _best, _second = _cands[0], _cands[1]
@@ -351,28 +414,42 @@ def detect_anchor(dates: list) -> "dict | None":
 def project_anchor(anchor: dict, year: int, month: int) -> "_dt.date | None":
     """錨 + 目標年月 → **校正後**的除息基準日推估值(§12 API 契約)。
 
-    該月無合理錨定日(假說在該月不存在、或跨月回退超過 τ=3 日曆日)→ None(§1 不硬給)。
+    該月無合理錨定日(假說在該月不存在、或校正位移超過 τ=3 日曆日)→ None(§1 不硬給)。
     回傳值保證落在 (year, month) 當月且為營業日。
+
+    Raises:
+        ValueError — `anchor` 非 dict、`type` 不在五個假說之內、或 year/month 不合法。
+            **§13.7.2 Fail Loud**:壞掉的錨是程式錯誤,不可靜默回 None —— 那會和
+            「該月無合理錨定日」(合法的 None)混淆,讓 bug 偽裝成正常棄權。
     """
     if not isinstance(anchor, dict):
-        return None
+        raise ValueError(f"project_anchor: anchor 必須是 dict,得到 {type(anchor).__name__}")
+    _type = anchor.get("type")
+    if _type not in _ANCHOR_PARAM_COUNT:
+        raise ValueError(f"project_anchor: 不認得的錨定假說 type={_type!r};"
+                         f"合法值 {sorted(_ANCHOR_PARAM_COUNT)}")
     try:
         _y, _m = int(year), int(month)
-        if not 1 <= _m <= 12:
-            return None
-        _nominal = _anchor_nominal(anchor.get("type"), anchor.get("params"), _y, _m)
-    except (TypeError, ValueError):
-        return None
+    except (TypeError, ValueError) as _e:
+        raise ValueError(f"project_anchor: year/month 需為整數({year!r}, {month!r})") from _e
+    if not 1 <= _m <= 12:
+        raise ValueError(f"project_anchor: month 需在 1..12,得到 {month!r}")
+    _nominal = _anchor_nominal(_type, anchor.get("params"), _y, _m)
     return _apply_roll(_nominal, anchor.get("roll_convention") or ROLL_MODIFIED_FOLLOWING, _y, _m)
 
 
 def _grade_confidence(score: "float | None", k: int, horizon: int, *,
-                      tie_broken: bool = False, roll_inferred: bool = True) -> str:
+                      tie_broken: bool = False, roll_convention: "str | None" = None) -> str:
     """§4 信心 = 復現率 s + 擬合筆數 k + 預測地平線 h。**day_std 已完全移除**。
 
     high   : s ≥ 0.95 且 k ≥ 6 且 h ≤ 1
     medium : s ≥ 0.85 且 k ≥ 4 且 h ≤ 3
-    low    : 其餘;另外 tie_broken → 上限 medium(§3)、校正方向未定 → 壓 low(§5)
+    low    : 其餘
+    另外三個**只降不升**的封頂(順序無關,取最保守):
+      - `tie_broken`(§3 前二名差 < 0.10 靠參數數決選)→ 上限 medium
+      - `roll_convention == modified_following`(§5 方向混雜、未定)→ 壓 low
+        ⚠️ §13.3:歷史**零偏移**不算「方向未定」,那時 convention = following → 不壓
+      - `h < 0`(回填過去月份,§13.7.3)→ 壓 low(過去月份應以實際紀錄為準,不是推估)
     """
     if score is None:
         return "low"
@@ -384,7 +461,7 @@ def _grade_confidence(score: "float | None", k: int, horizon: int, *,
         _c = "low"
     if tie_broken and _c == "high":
         _c = "medium"
-    if not roll_inferred:
+    if roll_convention == ROLL_MODIFIED_FOLLOWING or horizon < 0:
         _c = "low"
     return _c
 
@@ -403,6 +480,33 @@ def _phase_mode(dates: list, step: int) -> tuple:
     _phase, _hits = max(_c.items(), key=lambda kv: (kv[1], -kv[0]))
     _ratio = _hits / len(dates)
     return (_phase if _ratio >= _PHASE_MIN_RATIO else None), _ratio
+
+
+def _grid_anomaly_ratio(dates: list, step: int, phase: "int | None") -> float:
+    """§13.5 雙配息/漏配偵測的比率:分母 = **依 cadence 網格預期有配息的月份數**。
+
+    分母 = 歷史跨距內滿足 `m % step == φ*` 的月份數;分子 = 這些月份中實際出現次數 **≠ 1** 者
+    (含 0 次 = 該配沒配、≥2 次 = 一個月配兩次)。**網格外的月份不計入** —— 否則季配基金有
+    8/12 個月本來就是 0 次,佔比 0.67 會讓每一檔季配都被誤判 irregular。
+    """
+    if not dates or not step or phase is None:
+        return 0.0
+    _cnt = _Counter((d.year, d.month) for d in dates)
+    _y, _m = min(dates).year, min(dates).month      # 不假設輸入已排序(§13.7.4 同精神)
+    _end = (max(dates).year, max(dates).month)
+    _denom = _num = 0
+    for _ in range(240):                       # 上限保護(240 月 = 20 年)
+        if _m % step == phase:
+            _denom += 1
+            if _cnt.get((_y, _m), 0) != 1:
+                _num += 1
+        if (_y, _m) >= _end:
+            break
+        _m += 1
+        if _m > 12:
+            _m = 1
+            _y += 1
+    return (_num / _denom) if _denom else 0.0
 
 
 def infer_schedule(dividends: list) -> dict:
@@ -446,15 +550,20 @@ def infer_schedule(dividends: list) -> dict:
     med_gap = _stats.median(gaps) if gaps else None
     cadence = _cadence_from_gap(med_gap)
 
-    # §6 漂移 / 雙配息偵測 → irregular(稽核 A10:固定 30 天間隔型 100% 錯誤且全掛 high)
+    # §6 漂移 / 雙配息偵測 → irregular。
+    # ⚠️ **不得宣稱這兩條修掉了稽核 A10**(§13.5):測試組實測「固定 30 天間隔型」的 gap 標準差
+    # 是 0.0、重複月佔比僅 2.9%,兩條規則都抓不到它 —— 真正擋下 A10 的是 §3 的 s 閘門
+    # (該型的錨定復現率遠低於 0.80)。本段擋的是**別的**東西:節奏漂移與一月兩配。
     _gap_std = _stats.pstdev(gaps) if len(gaps) > 1 else 0.0
-    _mc = _Counter((d.year, d.month) for d in _rdates)
-    _dup_ratio = sum(1 for v in _mc.values() if v != 1) / len(_mc) if _mc else 0.0
-    if cadence in _CADENCE_MONTHS:
+    _step0 = _CADENCE_MONTHS.get(cadence)
+    _phase0 = _phase_mode(_rdates, _step0)[0] if _step0 else None
+    if _step0:
         if med_gap and _gap_std > _GAP_DRIFT_MAX_RATIO * med_gap:
-            cadence = "irregular"
-        elif _dup_ratio > _DUP_MONTH_MAX_RATIO:
-            cadence = "irregular"
+            cadence = "irregular"                       # 節奏漂移
+        elif _phase0 is None:
+            cadence = "irregular"                       # §6 相位一致率 < 0.8 → 網格不成立
+        elif _grid_anomaly_ratio(_rdates, _step0, _phase0) > _DUP_MONTH_MAX_RATIO:
+            cadence = "irregular"                       # §13.5 網格內「次數 != 1」佔比過高
 
     # 退役欄位(相容保留,不參與信心):ex_day「幾號」中位數 + 離散度
     days = [d.day for d in _rdates]
@@ -467,11 +576,10 @@ def infer_schedule(dividends: list) -> dict:
     pay_gap = round(_stats.median(pay_gaps)) if pay_gaps else None
 
     _step = _CADENCE_MONTHS.get(cadence)
-    # 錨定假說吃**全史 H**(§2 復現率定義 s = |{e in H}|/|H|、§4 的 k = |H| 皆以「歷史」為母體);
-    # med_gap / 相位吃**近 12 筆**(§6 明文:頻率與相位要跟得上改配息頻率,兩者同視窗)。
-    # 兩個視窗**刻意不同**:錨(幾號/第幾個星期)多筆才穩,頻率/相位則要對「近期節奏」敏感。
-    anchor = detect_anchor([r["ex"] for r in recs]) if _step else None
-    phase = _phase_mode(_rdates, _step)[0] if _step else None
+    # §13.7.6:錨定 / med_gap / 相位**同吃近 `_RECENT_N` 筆視窗**,§3 的 k 與 §4 的 k 皆為
+    # 「擬合實際使用的筆數」= len(視窗),不是全史筆數(視窗一致才不會一邊吞筆、一邊捏筆,稽核 A7)。
+    anchor = detect_anchor(_rdates) if _step else None
+    phase = _phase0 if _step else None
 
     # 信心:節奏層先以 h=0(目標=現在)評級;`predict_ex_for_month` 會用真實地平線重算並取更保守者
     if anchor is None:
@@ -479,7 +587,7 @@ def infer_schedule(dividends: list) -> dict:
     else:
         conf = _grade_confidence(anchor["score"], anchor["n"], 0,
                                  tie_broken=anchor["tie_broken"],
-                                 roll_inferred=anchor["roll_inferred"])
+                                 roll_convention=anchor["roll_convention"])
 
     last = recs[-1]
     return {"cadence": cadence, "ex_day": ex_day, "pay_gap_days": pay_gap, "n": n,
@@ -497,19 +605,24 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
         {ex_date          : date   —— 推估**除息基準日**(非除息日、非發放日,§4.1),恆為營業日且落在目標月
          pay_date_est     : date|None —— 基準日 + 歷史「基準→發放」間隔中位數;無歷史 → None
          confidence       : "high"|"medium"|"low"
-         anchor_type      : str|None  —— 命中的錨定假說(§1 四選一)
+         anchor_type      : str|None  —— 命中的錨定假說(§1 + §13.2 五選一)
          anchor_score     : float|None—— 該假說的歷史復現率 s⁽¹⁾(§2)
          roll_convention  : str       —— 營業日校正方向(§5,從歷史推)
          holiday_calendar : "TW"|"weekend_only" —— 是否真的扣了國定假日(稽核 A12:原本 ex 側
                             降級對 caller 完全不可見,假日表缺失時準確度掉 10.2pp 卻一字不改)
          horizon_months   : int       —— 預測地平線 h = (y_tgt-y_ref)*12 + (m_tgt-m_ref)}
 
-    §7 陳舊度以**日差**量(舊版只看月份差,月初與月底算出同一個值):
-      `_stale = floor((ref月中 - last_ex).days / (30.44 * step))` 個週期;
-      超過 3 個週期 **或** 超過 `min(3*step, 15)` 個月 → None(年配基金不得靜默 36 個月);
-      >= 2 個週期 → 信心壓 low。
+    §7 + **§13.1** 陳舊度(兩邊單位統一為「**個月**」;舊式左邊是「週期數」右邊是「月數」,
+    step=12 時 floor(1095/(30.44*12))=2 拿去比 15 → 年配可靜默 3 年,A11 根本沒修到):
+      `stale_months  = floor((ref月中 - last_ex).days / 30.44)`
+      `stale_periods = floor(stale_months / step)`
+      `stale_months > min(3*step, 15)` → None(疑停配 / 資料過舊)
+      `stale_periods >= 2`             → 信心壓 low
 
     ⚠️ `ref_year/ref_month`(v19.518):陳舊度須相對「**現在**」量,不是相對目標月;未給 → 用目標年月。
+
+    ⚠️ **§13.7.3 回填過去月份**:h < 0 或目標月早於 last_ex → 仍會給日期(季/年配需落在相位網格上),
+    但信心一律壓 `low`。
 
     ⚠️ **相容路徑**:若 `schedule` **完全沒有 `anchor` 這個 key**(= 非 `infer_schedule` 產出的
     手搭 dict),退回舊的「ex_day 套目標月 + 逐週期推進」邏輯,避免打死既有外部 caller。
@@ -525,16 +638,16 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
     _rm = ref_month if ref_month is not None else month
     _h = (year - _ry) * 12 + (month - _rm)
 
-    # §7 陳舊度:日差 → 週期數 + 絕對月數上限(用 last_ex 的「日」,月初與月底不再同分)
+    # §7/§13.1 陳舊度:日差 → **月數**(用 last_ex 的「日」,月初與月底不再同分)
     _ref_date = _dt.date(_ry, _rm, _REF_DAY_OF_MONTH)
     _days_since = max(0, (_ref_date - last_ex).days)
-    _months_since = _days_since / _DAYS_PER_MONTH
-    _stale = int(_days_since // (_DAYS_PER_MONTH * step))
-    if _stale > _STALE_MAX_PERIODS or _months_since > min(_STALE_MAX_PERIODS * step,
-                                                          _STALE_ABS_MAX_MONTHS):
+    _stale_months = int(_days_since // _DAYS_PER_MONTH)
+    _stale = _stale_months // step                      # 週期數(供信心降級)
+    if _stale_months > min(_STALE_MAX_PERIODS * step, _STALE_ABS_MAX_MONTHS):
         return None                        # 疑停配 / 資料過舊 → 不硬給(§1)
-    if (year, month) < (last_ex.year, last_ex.month):
-        return None                        # 目標月早於最後一筆 → 不回填過去
+    # §13.7.3:目標月早於最後一筆(回填過去)**允許**,但信心一律壓 low ——
+    # 過去的月份該以實際紀錄為準,推估值混進歷史區間卻掛高信心會分不清「真的發生過」與「猜的」。
+    _backfill = (year, month) < (last_ex.year, last_ex.month)
 
     if "anchor" in schedule:
         anchor = schedule.get("anchor")
@@ -548,7 +661,9 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
             return None                    # 該月無合理錨定日(含 §5 τ 上限)
         _conf = _grade_confidence(anchor.get("score"), int(anchor.get("n") or 0), _h,
                                   tie_broken=bool(anchor.get("tie_broken")),
-                                  roll_inferred=bool(anchor.get("roll_inferred", True)))
+                                  roll_convention=anchor.get("roll_convention"))
+        if _backfill:
+            _conf = "low"                  # §13.7.3
         _prov = {"anchor_type": anchor.get("type"), "anchor_score": anchor.get("score"),
                  "roll_convention": anchor.get("roll_convention") or ROLL_MODIFIED_FOLLOWING}
     else:
@@ -556,21 +671,12 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
         ex_day = schedule.get("ex_day")
         if ex_day is None:
             return None
-        cy, cm = last_ex.year, last_ex.month
-        for _ in range(240):               # 上限保護(240 月 = 20 年)
-            if (cy, cm) == (year, month):
-                break
-            if (cy, cm) > (year, month):
-                return None                # 越過目標月(季/年配空月)
-            cm += step
-            while cm > 12:
-                cm -= 12
-                cy += 1
-        else:
-            return None
+        # 目標月是否落在「last_ex + n×step」的網格上(n 可為負 → §13.7.3 回填)
+        if ((year - last_ex.year) * 12 + (month - last_ex.month)) % step != 0:
+            return None                    # 季/年配空月 → 不列
         ex = roll_to_business_day(_dt.date(year, month,
                                            min(int(ex_day), _month_days(year, month))))
-        _conf = schedule.get("confidence", "low")
+        _conf = "low" if (_backfill or _h < 0) else schedule.get("confidence", "low")
         _prov = {"anchor_type": None, "anchor_score": None,
                  "roll_convention": ROLL_MODIFIED_FOLLOWING}
 
@@ -614,7 +720,17 @@ def build_month_calendar(funds: list, year: int, month: int,
             continue
         pred = predict_ex_for_month(sch, year, month, ref_year=ref_year, ref_month=ref_month)
         if pred is None:
-            if sch["cadence"] == "monthly":          # 月配卻推不出 = 無穩定錨 或 陳舊/疑停配
+            # §13.7.5:推不出的成因要誠實分流到 reason,不可全掛「疑停配」(那對有錨的檔是假話)。
+            # 成因 A:錨在,相位也對,但**該月**的營業日校正超出 τ(典型:錨定日落在農曆年連假)。
+            _step = _CADENCE_MONTHS.get(sch["cadence"])
+            _on_grid = bool(_step) and (_step == 1 or (sch.get("phase") is not None
+                                                       and month % _step == sch["phase"]))
+            if _step and sch.get("anchor") and _on_grid \
+                    and project_anchor(sch["anchor"], year, month) is None:
+                unpredictable.append({"code": code, "name": name,
+                                      "reason": "本月錨定日落在連假/月底，營業日校正超出容忍範圍，"
+                                                "不硬推日期"})
+            elif sch["cadence"] == "monthly":        # 月配卻推不出 = 無穩定錨 或 陳舊/疑停配
                 # §1 誠實:兩種成因文案分開 —— 有錨但推不出 = 陳舊;連錨都找不到 = 節奏無規律。
                 unpredictable.append({"code": code, "name": name,
                                       "reason": ("最近無配息紀錄（疑停配 / 資料過舊），本月無法推估"
