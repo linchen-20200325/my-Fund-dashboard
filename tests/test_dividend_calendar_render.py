@@ -153,8 +153,13 @@ def test_ex_record_date_wording_locked_in_four_places():
     assert '<th>預估基準日</th>' in html
     assert '<th>除息基準日</th>' not in html
     # 4) 空月文案(需要一份沒有事件的月曆才會渲染出來)
+    #    ⚠️ v19.535 待辦 3:這句原本寫死「本月」—— 與追加 7 同病(cron 每月 1 號推的是**下個月**),
+    #    改成吃徽章同一個月份變數。鎖的重點仍是「除息基準日」五個字,月份前綴走 `month_label`。
+    from services.dividend_calendar import empty_month_note
     _empty = render_month_calendar_html(build_month_calendar([], 2026, 8))
-    assert '本月你的基金無推估除息基準日（或資料不足）。' in _empty
+    assert empty_month_note(2026, 8) in _empty
+    assert '民國115年8月你的基金無推估除息基準日（或資料不足）。' in _empty
+    assert '本月你的基金無推估' not in _empty
 
 
 def test_ex_record_date_wording_has_no_bare_ex_date_label():
@@ -552,11 +557,20 @@ def test_all_unpredictable_draws_no_empty_calendar_grid():
 
 
 def test_all_unpredictable_lists_each_fund_with_last_date_and_reason():
-    """§15.4 待確認清單每列:投信名 · 上次實際基準日 · 原因。"""
+    """§15.4 待確認清單:每檔都要看得見(投信名 · 上次實際基準日)且說得出原因。
+
+    ⚠️ **v19.535 待辦 2 版面變更**(總管實看 `v534_C_all_unpred_2026-09.png` 後核准):
+    原本逐檔一列、每列各帶一次原因 —— 本 fixture 兩檔同句,C 情境 5 檔同句時等於同一句
+    印 5 遍、每列還換行成 2 行,在 560px 推播圖上佔掉大半版面。改成同句**併一組**、
+    說明提到組上方一行,列內只留「投信名 · 上次實際基準日」→ 表頭因此少一欄。
+    要守的東西**沒有放寬**:兩檔都還在、上次日期還在、原因還在(移到組說明列),
+    另見 `test_pending_list_groups_same_reason_into_one_sentence` 鎖分組結構本身。
+    """
     html = render_month_calendar_html(_cal_all_unpred())
-    assert "<th>基金</th><th>上次實際基準日</th><th>原因</th>" in html
+    assert "<th>基金</th><th>上次實際基準日</th>" in html
+    assert "<th>原因</th>" not in html                   # 全組同句 → 沒有逐列原因欄可留
     assert "2025/6/5" in html                           # 上次的**實際**基準日(完整年月日)
-    assert "對不上固定規律" in html
+    assert "對不上固定規律" in html                       # 原因仍說得出口(在組說明列)
     assert html.count('<tr class="pend">') == 2         # 兩檔都在,沒有人消失
 
 
@@ -708,3 +722,178 @@ def test_flex_all_unpredictable_card_is_not_the_empty_card():
     _txt = json.dumps(build_summary_flex(_cal_all_unpred()), ensure_ascii=False)
     assert "本月除息日推不出來" in _txt and "待確認清單" in _txt
     assert "無推估除息基準日" not in _txt
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後)——
+#   1. 「僅供參考」的日期不加粗   2. 待確認清單同句只講一次   3. 空月文案吃目標月
+#   ⚠️ 三條都只碰「顯示什麼」;引擎推估邏輯一行沒動(三口徑驗收不變)。
+# ══════════════════════════════════════════════════════════════════════
+def _cal_soft_band():
+    """推得出日期、但誤差帶是「僅供參考」的基金(歷史 5 筆 < 8 → `error_band` 為 None)。"""
+    funds = [{"code": "NEW1", "name": "安聯新發行", "dividends": _divs_ending(14, 5)}]
+    for f in funds:
+        f["house"] = detect_house(f["name"])
+    return build_month_calendar(funds, 2026, 8, ref_year=2026, ref_month=7, ref_day=20)
+
+
+def _row_with(html: str, needle: str) -> str:
+    """明細表 tbody 裡含 `needle` 的那一列(找不到 → 空字串,讓斷言指出真正的問題)。"""
+    _body = html.split("<tbody>")[1].split("</tbody>")[0]
+    _hit = [r for r in _body.split("<tr") if needle in r]
+    return ("<tr" + _hit[0]) if len(_hit) == 1 else ""
+
+
+def test_reference_only_date_is_not_bold():
+    """待辦 1 drift-lock:誤差帶「僅供參考」的列,日期**不得**再用粗體 + accent 色。
+
+    為什麼是 bug 而不是美感問題(總管 2026-08-26 實看 `v534_A_normal_2026-09.png`):
+    粗體日期會被當成**確定日期**讀,旁邊那個灰色小標籤壓不住它。圖上施羅德印「**9/30**」,
+    但它的規律是「每月最後一個星期四」= 2026-09 的 9/24 —— 那一筆很可能就是錯的。
+    它印得出來是因為引擎閘門看 in-sample 復現率,而它真正的 walk-forward 誤差帶是 ±11 天;
+    兩個訊號不一致時該信 out-of-sample 那個。**錯得看起來很確定**正是本輪要修的病。
+
+    ⚠️ 反向同樣鎖住:日期本身**照常顯示**(user 明確要求「留」,該檔 6 次裡 4 次是準的),
+    降的是字重不是資訊;誤差帶給得出數字的列也**不得**被連坐降階。
+    """
+    from ui.helpers.dividend_calendar_render import (_DATE_SOFT_CLASS, _DATE_STRONG_CLASS,
+                                                     _ERR_BAND_NA_CLASS)
+    html = render_month_calendar_html(_cal_soft_band())
+    _row = _row_with(html, "僅供參考")
+    assert _row, "找不到那一列 —— fixture 已經不是「推得出日期但誤差帶不足」的情境"
+    assert f'class="tnum {_DATE_SOFT_CLASS}"' in _row          # 降一階
+    assert f'class="tnum {_DATE_STRONG_CLASS}"' not in _row    # 粗體 accent 不得回流
+    assert "8/14" in _row                                      # 日期照留(user:「留」)
+
+    # 反向:誤差帶給得出數字的列維持強調(降階不可擴散成「全部都不強調」)
+    _ok = _row_with(render_month_calendar_html(_cal()), "±0 天")
+    assert f'class="tnum {_DATE_STRONG_CLASS}"' in _ok
+    assert _DATE_SOFT_CLASS not in _ok
+
+    # CSS 真的降了字重(只換 class 不改樣式 = 白做);且 class 名自我說明 + 註明理由
+    assert ".d-soft{color:var(--ink-soft);font-weight:400}" in html
+    assert _DATE_SOFT_CLASS == "d-soft" and _ERR_BAND_NA_CLASS == "na"
+
+
+def test_reference_only_date_class_follows_the_error_band_label():
+    """待辦 1 的另一半:字重由**誤差帶那一階**決定,不得在 L3 另做一次門檻比較。
+
+    兩邊各判一次遲早會漂 —— 有人改了 `_ERR_BAND_WEEK_MAX` 卻只改到標籤那一側,
+    畫面就會出現「僅供參考 + 粗體日期」這種自相矛盾的列,而且沒有任何測試會紅。
+    """
+    import inspect
+    from ui.helpers.dividend_calendar_render import _detail_rows_html
+    src = inspect.getsource(_detail_rows_html)
+    assert "_ERR_BAND_NA_CLASS" in src and "_DATE_SOFT_CLASS" in src
+    for _magic in ('"na"', "'na'", "_ERR_BAND_WEEK_MAX", "_ERR_BAND_DAYS_MAX"):
+        assert _magic not in src, f"字重不可自行比門檻 / 寫死 class:{_magic}"
+
+
+# ── 待辦 2:待確認清單同一句原因只講一次 ────────────────────────────────
+def _cal_all_unpred_n(n: int):
+    """n 檔**同一句**原因的全推不出月曆(v534_C 圖的縮小版:5 檔全 `anchor_weak`)。"""
+    funds = [{"code": f"IRR{i}", "name": f"{h}不規則", "dividends": list(_IRREGULAR)}
+             for i, h in enumerate(("施羅德", "摩根", "安聯", "聯博", "瀚亞")[:n])]
+    for f in funds:
+        f["house"] = detect_house(f["name"])
+    return build_month_calendar(funds, 2026, 8)
+
+
+def _cal_mixed_reasons():
+    """兩檔同句(`anchor_weak`)+ 一檔自己一句(`too_few`)→ 分組與逐列寫法並存。"""
+    funds = [{"code": "SD080", "name": "施羅德環球收益", "dividends": list(_IRREGULAR)},
+             {"code": "IRR2", "name": "摩根不規則", "dividends": list(_IRREGULAR)},
+             {"code": "NEW9", "name": "聯博新上市", "dividends": _divs_ending(14, 2)}]
+    for f in funds:
+        f["house"] = detect_house(f["name"])
+    return build_month_calendar(funds, 2026, 8, ref_year=2026, ref_month=7, ref_day=20)
+
+
+def test_pending_list_groups_same_reason_into_one_sentence():
+    """待辦 2:5 檔同原因 → 說明句**只印一次**(提到組上方),列內只留投信名 · 上次基準日。
+
+    症狀(總管實看 `v534_C_all_unpred_2026-09.png`):同一句話印 5 遍、每列還換行成 2 行,
+    在 560px 推播圖上佔掉大半版面。前一組實測「拿掉日期尾巴」高度一個像素都沒少 ——
+    因為重複的是**句子本身**,不是尾巴。
+    """
+    html = render_month_calendar_html(_cal_all_unpred_n(5))
+    _body = html.split("<tbody>")[1].split("</tbody>")[0]
+    assert _body.count("對不上固定規律") == 1              # 同一句只講一次(原本 5 遍)
+    assert _body.count('<tr class="grp">') == 1           # 一組 → 一句說明
+    assert _body.count('<tr class="pend">') == 5          # 5 檔一個都沒少
+    for _h in ("施羅德", "摩根", "安聯", "聯博", "瀚亞"):
+        assert _h in _body
+    assert "<th>原因</th>" not in html                     # 沒有逐列原因 → 不留空欄配空欄頭
+
+
+def test_pending_list_group_note_sits_above_its_rows():
+    """待辦 2 版面結構:說明句在**該組上方**,不是塞回列內或跑到表尾。"""
+    html = render_month_calendar_html(_cal_all_unpred_n(3))
+    _body = html.split("<tbody>")[1].split("</tbody>")[0]
+    assert _body.index("對不上固定規律") < _body.index('<tr class="pend">')
+    assert _body.startswith('<tr class="grp">')
+    # 組說明列橫跨整表(欄數走具名常數,不寫死數字)
+    from ui.helpers.dividend_calendar_render import _PENDING_COLS_GROUPED
+    assert f'<td colspan="{_PENDING_COLS_GROUPED}">' in _body
+
+
+def test_pending_list_single_fund_group_keeps_the_per_row_wording():
+    """待辦 2:**單檔成組不開組標題** —— 為 1 檔開一行標題,混合情境反而比原版更長。
+
+    分組是為了消掉重複,不是為了分組本身。兩檔同句 → 併組;剩下那檔自己一句 → 留在列上。
+    """
+    html = render_month_calendar_html(_cal_mixed_reasons())
+    _body = html.split("<tbody>")[1].split("</tbody>")[0]
+    assert _body.count('<tr class="grp">') == 1           # 只有那個 2 檔組有標題
+    assert _body.count('<tr class="pend">') == 3
+    assert "<th>原因</th>" in html                         # 有逐列原因 → 欄頭要對得上
+    _solo = _row_with(html, "只有 2 筆配息紀錄")
+    assert _solo and "聯博" in _solo                       # 那句話留在它自己那一列
+
+
+def test_pending_groups_never_merge_two_funds_with_different_numbers():
+    """待辦 2 的 §1 紅線:同 `reason_code` **但句子不同**(帶各自的筆數)→ **不可**併組。
+
+    只用 code 併組的話,組標題會拿其中一檔的數字代表全組 —— 把 A 檔的事實安到 B 檔頭上,
+    那是捏造。這裡兩檔都是 `too_few`,一檔 2 筆一檔 1 筆,必須各自站一行。
+    """
+    from services.dividend_calendar import group_unpredictable
+    funds = [{"code": "A2", "name": "安聯甲", "dividends": _divs_ending(14, 2)},
+             {"code": "B1", "name": "摩根乙", "dividends": _divs_ending(14, 1)}]
+    for f in funds:
+        f["house"] = detect_house(f["name"])
+    cal = build_month_calendar(funds, 2026, 8, ref_year=2026, ref_month=7, ref_day=20)
+    _unp = cal["unpredictable"]
+    assert {u["reason_code"] for u in _unp} == {"too_few"}          # 同一個 code
+    _groups = group_unpredictable(_unp)
+    assert len(_groups) == 2 and all(len(g["entries"]) == 1 for g in _groups)
+    html = render_month_calendar_html(cal)
+    _body = html.split("<tbody>")[1].split("</tbody>")[0]
+    assert '<tr class="grp">' not in _body                          # 全是單檔 → 無組標題
+    assert "只有 2 筆" in _body and "只有 1 筆" in _body              # 各自的數字都在
+
+
+# ── 待辦 3:空月文案吃徽章同一個月份變數 ─────────────────────────────────
+def test_empty_month_note_uses_target_month_not_this_month():
+    """待辦 3:`events` 與 `unpredictable` **都**空的路徑,文案不再寫死「本月」。
+
+    與 v19.534 追加 7 同病:cron 每月 1 號推的是**下個月**,徽章寫的是真正的目標月,
+    同一張圖上「本月」與「民國116年2月」自相矛盾。
+    (此路徑在推播情境不會觸發 —— 無代碼時 notify 直接 exit 2 —— 但用詞一致性仍要收:
+     HTML / LINE 文字 / Flex 三處原本各寫各的,下次改文案必漏一處。)
+    """
+    import json
+    from services.dividend_calendar import (EMPTY_MONTH_NOTE_TMPL, build_summary_flex,
+                                            build_summary_text, empty_month_note, month_label)
+    assert EMPTY_MONTH_NOTE_TMPL == "{month}你的基金無推估除息基準日（或資料不足）。"
+    assert empty_month_note(2027, 2) == "民國116年2月你的基金無推估除息基準日（或資料不足）。"
+    assert month_label(2027, 2) in empty_month_note(2027, 2)     # 與徽章同一個月份變數
+
+    _cal_empty = build_month_calendar([], 2027, 2)
+    _html = render_month_calendar_html(_cal_empty)
+    _txt = build_summary_text(_cal_empty)
+    _flex = json.dumps(build_summary_flex(_cal_empty), ensure_ascii=False)
+    for _surface in (_html, _txt, _flex):
+        assert empty_month_note(2027, 2) in _surface             # 三處同一句 SSOT
+        assert "本月無推估" not in _surface and "本月你的基金" not in _surface
+    assert "無推估除息基準日" in _html                            # §13.8 口徑仍是「基準日」

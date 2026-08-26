@@ -1,4 +1,4 @@
-"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.534)。
+"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.535)。
 
 純字串產生器(**零 streamlit、零 IO**),吃 `services.dividend_calendar.build_month_calendar`
 的結構 → 產出自成一頁的 HTML(深/淺色皆適配)。共用於:App 內 `st.components.html` 嵌入(方式 A)、
@@ -25,6 +25,13 @@ v19.534 顯示層複驗回修(總管 2026-08-26 實測 + 實看 v533 三張圖�
   追加 8  「上次 M/D」離目標月超過半年 → 帶年份(L2 `fmt_last_ex`)。
   追加 9  原因欄:版面有獨立「上次實際基準日」欄時不重複帶日期(L2 `reason_display`)。
   必改 1  誤差帶改 90 分位,頁尾配一句 `ERR_BAND_FOOTNOTE` 說明它憑什麼。
+
+v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後):
+  待辦 1  誤差帶為「僅供參考」的列,**日期不加粗**(`.d-soft`)—— 粗體日期會被讀成
+          確定日期,旁邊那個灰標籤壓不住它。日期本身照留(user 明確要求),降的是字重。
+  待辦 2  待確認清單依「同一句說明」**分組**:同句提到組上方一行,列內只留
+          「投信名 · 上次實際基準日」;單檔成組維持逐列寫法(不為 1 檔開組標題)。
+  待辦 3  空月文案的「本月」→ 實際目標月(L2 `empty_month_note`,與追加 7 同病)。
 """
 from __future__ import annotations
 
@@ -40,6 +47,9 @@ from services.dividend_calendar import (
     PENDING_SECTION_TITLE,
     dedupe_events,
     display_label,
+    empty_month_note,
+    group_has_shared_note,
+    group_unpredictable,
     holiday_calendar_note,
     is_all_unpredictable,
     month_label,
@@ -59,6 +69,13 @@ _ERR_BAND_DAYS_MAX = 2     # E <= 2       → 「±E 天」
 _ERR_BAND_WEEK_MAX = 7     # E <= 7       → 「±1 週」
 # E > 7 或 None(證據不足)→ 不給數字。§1:借用別檔的準確度填一個看似合理的 ±N = 捏造。
 _ERR_BAND_NA_TEXT = "僅供參考"
+_ERR_BAND_NA_CLASS = "na"           # 「僅供參考」那一階的 CSS class(下面的日期降階也認這個值)
+
+# ── v19.535 待辦 1:「僅供參考」的列,日期**不加粗**(總管 2026-08-26 實看 v534_A 圖後裁示)──
+# 粗體 + accent 色的日期會被當成**確定日期**讀,旁邊那個灰色小標籤壓不住它。
+# 兩個 class 成對放在這裡,是為了讓「哪一階配哪種字重」一眼看得完,不必翻 CSS 才知道。
+_DATE_STRONG_CLASS = "est"          # 誤差帶給得出數字 → 強調(accent + 700)
+_DATE_SOFT_CLASS = "d-soft"         # 誤差帶「僅供參考」→ 降一階,與標籤同權重
 
 # 投信分色(中間調,深/淺底都看得清;判不出 → 預設灰)
 _HOUSE_COLOR = {
@@ -141,6 +158,16 @@ td.name b{font-weight:700}
 .house{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft);white-space:nowrap}
 thead th{white-space:nowrap}
 .est{color:var(--accent-ink);font-weight:700}
+/* v19.535 待辦 1:誤差帶是「僅供參考」(帶寬 > 7 天 或 證據不足)的那一列,日期**降一階** ——
+   不加粗、不上 accent 色,與同列其餘欄位同字重同色階。
+   為什麼(總管 2026-08-26 實看 `v534_A_normal_2026-09.png`):粗體 + 強調色的日期會被當成
+   **確定日期**讀,旁邊那個灰色「僅供參考」小標籤壓不住它。實例:施羅德 2026-09 印 9/30,
+   但它的規律是「每月最後一個星期四」= 9/24,那一筆很可能就是錯的 —— 它之所以印得出來,
+   是因為引擎閘門看的是 in-sample 復現率,而它真正的 walk-forward 誤差帶是 ±11 天。
+   兩個訊號不一致時信 out-of-sample 那個(它才是被驗證過的表現)。§1:視覺權重必須與
+   誠實度一致,不能讓「錯得看起來很確定」。⚠️ 日期本身**照常顯示**(user 明確要求「留」,
+   且該檔 6 次裡 4 次是準的,仍有參考價值)—— 這裡降的是字重,不是資訊。 */
+.d-soft{color:var(--ink-soft);font-weight:400}
 .muted{color:var(--ink-faint)}
 /* §15.1 誤差欄:取代原本的「高/中/低」信心徽章 */
 .eb{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;display:inline-block}
@@ -154,6 +181,11 @@ thead th{white-space:nowrap}
 .pending li{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;padding:4px 10px;border-radius:8px;border:1px dashed var(--line);color:var(--ink-faint);background:transparent}
 tr.pend td{color:var(--ink-faint)}
 tr.pend td.why{white-space:normal;line-height:1.55;font-size:12.5px}
+/* v19.535 待辦 2:待確認清單的**組說明**列 —— 同一句原因只在該組上方講一次,
+   組內各列只留「投信名 · 上次實際基準日」(原本 5 檔同原因 = 同一句印 5 遍)。 */
+tr.grp td{color:var(--ink-soft);white-space:normal;line-height:1.55;font-size:12.5px;
+  padding-top:14px;border-bottom:1px solid var(--line)}
+tr.grp:first-child td{padding-top:9px}
 .ask{margin-top:12px;font-size:12.5px;color:var(--ink-faint)}
 .excluded{margin-top:16px;padding:13px 16px;background:var(--exclude-bg);border-radius:12px;border:1px solid var(--line-soft);font-size:13.5px;color:var(--ink-soft)}
 .excluded b{color:var(--ink)}
@@ -193,6 +225,7 @@ thead th{font-size:14px}
 .house{font-size:15px;gap:5px}
 .eb{font-size:13px;padding:2px 9px}
 tr.pend td.why{font-size:13px}
+tr.grp td{font-size:13px}
 .pending-lab{font-size:13px;margin-top:12px}
 .pending li{font-size:13px;padding:4px 9px}
 .ask{font-size:13px}
@@ -260,18 +293,18 @@ def _err_band_label(band) -> tuple:
     §1:證據不足時填一個看似合理的 ±N(例如全站平均)= 讓沒把握的看起來有把握,是捏造。
     """
     if band is None:
-        return _ERR_BAND_NA_TEXT, "na"
+        return _ERR_BAND_NA_TEXT, _ERR_BAND_NA_CLASS
     try:
         _b = int(band)
     except (TypeError, ValueError):
-        return _ERR_BAND_NA_TEXT, "na"          # 壞值 → 誠實退「僅供參考」,不猜
+        return _ERR_BAND_NA_TEXT, _ERR_BAND_NA_CLASS   # 壞值 → 誠實退「僅供參考」,不猜
     if _b <= _ERR_BAND_EXACT:
         return "±0 天", "exact"
     if _b <= _ERR_BAND_DAYS_MAX:
         return f"±{_b} 天", "days"
     if _b <= _ERR_BAND_WEEK_MAX:
         return "±1 週", "week"
-    return _ERR_BAND_NA_TEXT, "na"
+    return _ERR_BAND_NA_TEXT, _ERR_BAND_NA_CLASS
 
 
 def _pending_why(u: dict, *, has_date_column: bool = False,
@@ -329,8 +362,12 @@ def _detail_rows_html(events: list, unpredictable: list, *, year=None, month=Non
     for e in dedupe_events(events):                  # 同日同投信只列一次(user 2026-08-24)
         ex = e["ex_date"]
         _eb_txt, _eb_cls = _err_band_label(e.get("error_band"))
+        # v19.535 待辦 1:誤差帶「僅供參考」→ 日期降一階(不加粗、不上 accent 色),
+        # 讓視覺權重與那個標籤一致。判斷吃 `_err_band_label` 回的 class,不另做一次門檻比較
+        # —— 兩邊各判一次遲早會漂(例如只改了切點常數卻忘了字重那一側)。
+        _date_cls = (_DATE_SOFT_CLASS if _eb_cls == _ERR_BAND_NA_CLASS else _DATE_STRONG_CLASS)
         rows += (
-            f'<tr><td class="tnum est">{ex.month}/{ex.day}</td>'
+            f'<tr><td class="tnum {_date_cls}">{ex.month}/{ex.day}</td>'
             f'<td class="name"><span class="house">'
             f'<span class="dot" style="background:{_e(_color(e.get("house")))}"></span>'
             f'<b>{_e(_chip_label(e))}</b></span></td>'
@@ -347,28 +384,59 @@ def _detail_rows_html(events: list, unpredictable: list, *, year=None, month=Non
             f'<td class="why">'
             f'{_e(_pending_why(u, has_date_column=False, year=year, month=month))}</td></tr>')
     if not rows:
-        rows = ('<tr><td colspan="4" class="muted">'
-                '本月你的基金無推估除息基準日（或資料不足）。</td></tr>')
+        # v19.535 待辦 3:原本寫死「本月」—— 與追加 7 同病(cron 每月 1 號推的是**下個月**)。
+        # 文案 SSOT 在 L2 `empty_month_note`(HTML / LINE 文字 / Flex 三處同一句),
+        # 月份走 `month_label` 這一份變數,與徽章 / 副標 / 明細標題同源。
+        rows = (f'<tr><td colspan="4" class="muted">'
+                f'{_e(empty_month_note(year, month))}</td></tr>')
     return rows
 
 
-def _all_unpredictable_body(unpredictable: list) -> str:
-    """§15.4 全部推不出:**不畫空月曆格**,改逐檔一列的「待確認清單」。
+# §15.4 待確認清單的欄數:分組版型只有兩欄(原因提到組上方);混到**單檔組**時才需要
+# 第三欄放那一檔的原因。colspan 與欄頭吃同一組常數,不會一邊改一邊忘(§3.3 不寫 inline 數字)。
+_PENDING_COLS_GROUPED = 2        # 基金 ｜ 上次實際基準日
+_PENDING_COLS_WITH_REASON = 3    # 基金 ｜ 上次實際基準日 ｜ 原因(單檔組的逐列寫法)
+
+
+def _all_unpredictable_body(unpredictable: list, *, year=None, month=None) -> str:
+    """§15.4 全部推不出:**不畫空月曆格**,改「待確認清單」;同一句原因**只講一次**。
 
     空格子是最大的誤導來源 —— 一整片空白讀起來就是「這個月沒配息」,但事實是
     「這幾檔都會配,只是我算不出是哪一天」(§1 讓失敗看起來像成功)。
-    每列:投信名 · 上次實際基準日 · 原因。
+
+    v19.535 待辦 2(總管實看 `v534_C_all_unpred_2026-09.png` 後核准的版面變更):
+    原本逐檔一列、每列各帶一次原因 —— 5 檔全 `anchor_weak` 時同一句話印 5 遍,
+    每列還換行成 2 行,在 560px 推播圖上佔掉大半版面。改成:
+      · **多檔同句** → 說明句提到該組**上方一行**,組內各列只留「投信名 · 上次實際基準日」
+      · **只有一組** → 那句話就是清單上方的唯一說明(自然落在同一條規則裡)
+      · **單檔成組** → 維持逐列寫法,**不為 1 檔開一個組標題**(組標題會多佔一行;
+        在「每檔成因都不同」的情境反而比原版更長 —— 分組是為了消重複,不是為了分組)
+    ⚠️ 併組規則(含「為什麼分組鍵不是只有 reason_code」)在 L2 `group_unpredictable`。
     """
-    rows = "".join(
-        f'<tr class="pend"><td class="name"><span class="house">'
-        f'<span class="dot" style="background:{_e(_color(u.get("house")))}"></span>'
-        f'<b>{_e(display_label(u))}</b></span></td>'
-        f'<td class="tnum">{_e(_fmt_last_ex(u))}</td>'
-        f'<td class="why">{_e(_pending_why(u, has_date_column=True))}</td></tr>'
-        for u in unpredictable)
+    _groups = group_unpredictable(unpredictable, year=year, month=month)
+    # 有單檔組才需要「原因」欄;全部都是多檔組時那一欄會整欄空著 —— 留一個空欄配一個欄頭,
+    # 等於為畫面上不存在的內容保留版面(也會讓 user 以為那裡漏印了東西)。
+    _has_inline = any(not group_has_shared_note(_g) for _g in _groups)
+    _cols = _PENDING_COLS_WITH_REASON if _has_inline else _PENDING_COLS_GROUPED
+    _head = ('<th>基金</th><th>上次實際基準日</th><th>原因</th>' if _has_inline
+             else '<th>基金</th><th>上次實際基準日</th>')
+    rows = ""
+    for _g in _groups:
+        _shared = group_has_shared_note(_g)
+        if _shared:                      # 組說明:同一句只在這裡講一次
+            rows += (f'<tr class="grp"><td colspan="{_cols}">{_e(_g["reason"])}</td></tr>')
+        for u in _g["entries"]:
+            # 組內列不重複講原因;單檔組把原因留在自己那一列(混合版型才有第三欄)。
+            _why_cell = ('<td class="why"></td>' if _has_inline else '') if _shared else \
+                        f'<td class="why">{_e(_g["reason"])}</td>'
+            rows += (
+                f'<tr class="pend"><td class="name"><span class="house">'
+                f'<span class="dot" style="background:{_e(_color(u.get("house")))}"></span>'
+                f'<b>{_e(display_label(u))}</b></span></td>'
+                f'<td class="tnum">{_e(_fmt_last_ex(u))}</td>{_why_cell}</tr>')
     return (f'<h2 class="section-t">{_e(PENDING_SECTION_TITLE)}</h2>'
             f'<div class="tbl-scroll"><table><thead><tr>'
-            f'<th>基金</th><th>上次實際基準日</th><th>原因</th>'
+            f'{_head}'
             f'</tr></thead><tbody>{rows}</tbody></table></div>'
             f'<p class="ask">{_e(PENDING_ASK_NOTE)}</p>')
 
@@ -415,7 +483,7 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     legend_html = _legend_html(events, unpredictable)
 
     if _all_unp:
-        _main = _all_unpredictable_body(unpredictable)
+        _main = _all_unpredictable_body(unpredictable, year=y, month=m)
     else:
         first_wd, days = _calendar.monthrange(y, m)      # first_wd: Mon=0..Sun=6
         by_day = cal.get("by_day") or {}
