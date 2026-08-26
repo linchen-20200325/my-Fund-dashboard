@@ -29,12 +29,21 @@ def wired(monkeypatch):
     monkeypatch.setattr(W, "_read_watchlist", lambda: [])
     # 配息史須「接到現在為止」,否則推下個月時會被判為已越過目標月/疑停配 → 0 事件。
     # 故以實際 TW 當月為錨,往回產 12 個月的月配紀錄。
+    # ⚠️ v19.530:基準日一律套營業日校正(`roll_to_business_day`)—— 真實基金不會在週六/國定
+    # 假日訂除息基準日,而錨定引擎(規格 §2)是拿「投影後套 R 的值」比對歷史。寫死 14 號會有
+    # 約 5/12 筆落在週末 → 復現率 < 0.80 → 引擎依 §3 誠實棄權 → 月曆 0 事件 → caption 少掉
+    # 到帳說明那一行,本測的斷言就會紅在「壞 fixture」而不是推播鏈。
+    # ⚠️ 已知時間相依(掃 2026-2032 共 84 個月:2 個月會踩到,均為「1 月跑、目標 2 月」)——
+    # 農曆年把 2/14 推開超過 τ=3 時,`project_anchor` 依 §13.7.1 誠實回 None → 當月 0 事件。
+    # 那是引擎**正確**的棄權,不是推播鏈迴歸:真遇到請改 fixture 的錨定日,別去鬆 τ。
     import datetime as _dt
+
+    from services.dividend_calendar import roll_to_business_day
     _now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
     _hist = []
     _y, _m = _now.year, _now.month
     for _ in range(12):
-        _hist.append({"ex_date": f"{_y}-{_m:02d}-14"})
+        _hist.append({"ex_date": roll_to_business_day(_dt.date(_y, _m, 14)).isoformat()})
         _m -= 1
         if _m == 0:
             _m, _y = 12, _y - 1

@@ -112,9 +112,21 @@ def test_flex_shows_ex_house_month_and_arrival_note():
     assert "1 檔" in out["alt_text"]                   # altText 帶檔數
 
 
-def test_flex_low_confidence_marked():
+def test_flex_low_confidence_no_longer_marked():
+    """v19.534 裁示 2:逐檔名稱後綴的「（信心低）」**移除**(text 與 Flex 同步)。
+
+    ⚠️ **有意識的政策變更,不是迴歸**。前身 `test_flex_low_confidence_marked` 守的是
+    「confidence=low 要在 Flex 上看得見」,兩邊理由並陳:
+      舊(仍成立):不確定性要顯示出來,不能藏起來(§1)。
+      新(勝出,總管 2026-08-26):(a)「（信心低）」在整則訊息裡**沒有一處解釋**;
+      (b) 它與 §15.1 誤差帶**互相矛盾** —— 同一檔可能同時 confidence=low 與 error_band=0
+      (兩個訊號不同源)。**一個訊號、一個地方**:誠實訊號現在是誤差帶,它在 App 明細表。
+    ⚠️ 引擎的 `confidence` 一個字都沒動(仍是 §3 閘門與 §13.6 硬門檻的依據)——
+    見 `tests/test_dividend_anchor_v19527.py`。
+    """
     out = build_summary_flex(_cal([_ev("X", _dt.date(2026, 9, 3), conf="low")]))
-    assert "信心低" in json.dumps(out, ensure_ascii=False)
+    assert "信心低" not in json.dumps(out, ensure_ascii=False)
+    assert out["contents"]["body"]["contents"], "整張卡片不可因此變空"
 
 
 def test_flex_no_events_honest_and_no_arrival_note():
