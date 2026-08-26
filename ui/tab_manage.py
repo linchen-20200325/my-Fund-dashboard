@@ -277,7 +277,7 @@ def _sec_dividend_calendar():
     try:
         import streamlit.components.v1 as _components
 
-        from services.dividend_calendar import build_month_calendar
+        from services.dividend_calendar import build_month_calendar, is_all_unpredictable
         from ui.helpers.dividend_calendar_render import render_month_calendar_html
         # ref_day = 今天幾號(v19.532 bug 4):不傳的話 L2 會退回「月中 15 號」估陳舊度 ——
         # App 在月初開會被多算 14 天、月底開會被少算 15 天,月配基金在門檻附近會忽有忽無。
@@ -285,9 +285,19 @@ def _sec_dividend_calendar():
         _html = render_month_calendar_html(_cal)
         _components.html(_html, height=900, scrolling=True)
         _c = _cal["counts"]
-        st.caption(f"來源:{st.session_state.get('_divcal_src', '')}　·　本月推估除息 {_c['events']} 檔"
-                   + (f"｜{_c['excluded']} 檔累積型/無配息" if _c["excluded"] else "")
-                   + (f"｜{_c['unpredictable']} 檔無法推估" if _c.get("unpredictable") else ""))
+        _src = f"來源:{st.session_state.get('_divcal_src', '')}　·　"
+        if is_all_unpredictable(_cal):
+            # v19.534 裁示 3:全推不出時原本寫「本月推估除息 0 檔｜N 檔無法推估」——
+            # 「0 檔」讀起來是**這個月沒配息**,與 §15.4 圖上剛講完的「是推不出,不是沒配息」
+            # 自相矛盾(同一畫面兩個口徑)。§1:不讓「算不出來」看起來像「沒事」。
+            st.caption(_src + f"本月 {_c.get('unpredictable', 0)} 檔**都推不出除息日** —— "
+                              "是推不出,不是沒配息(見上方待確認清單)"
+                       + (f"｜{_c['excluded']} 檔累積型/無配息" if _c["excluded"] else ""))
+        else:
+            st.caption(_src + f"本月推估除息 {_c['events']} 檔"
+                       + (f"｜{_c['excluded']} 檔累積型/無配息" if _c["excluded"] else "")
+                       + (f"｜{_c['unpredictable']} 檔推不出日期(非沒配息)"
+                          if _c.get("unpredictable") else ""))
         st.download_button("⬇️ 下載本月月曆 HTML", _html,
                            file_name=f"除息行事曆_{_now.year}{_now.month:02d}.html",
                            mime="text/html", use_container_width=True, key="divcal_dl")

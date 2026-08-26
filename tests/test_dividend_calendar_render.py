@@ -133,15 +133,22 @@ def test_ex_record_date_wording_locked_in_four_places():
 
     四處 = 副標 / 明細區塊標題 / 明細表頭 / 空月文案(見 `render_month_calendar_html`)。
 
+    ⚠️ **v19.534 追加 7:副標與明細標題的「本月」改成實際目標月**(總管 2026-08-26 實看
+    `v533_B_partial_2027-02.png` 後裁示)。cron 每月 1 號推的是**下個月**,而徽章寫的是真正的
+    目標月 —— 同一張圖上「本月」與「民國116年 2月」自相矛盾。鎖的重點仍是「除息基準日」
+    這五個字連在一起,月份前綴走 `month_label` 這一份 SSOT。
+
     ⚠️ **v19.533 §15.2 例外:明細表頭改成「預估基準日」**(user 2026-08-26 明確要求
     「預估」二字要出現在**欄頭**,不可只放頁尾免責)。「基準日」三個字仍在,§13.8 要防的
     「被拿去對另一個日期(除息日)」風險不變;另外三處仍寫滿「除息基準日」。
     """
     html = render_month_calendar_html(_cal())
     # 1) header 副標
-    assert '<p class="sub">依你的基金過往配息節奏，推估本月除息基準日與配息入帳日。' in html
+    assert '<p class="sub">依你的基金過往配息節奏，推估民國115年8月的除息基準日與配息入帳日。' in html
     # 2) 明細區塊標題
-    assert '<h2 class="section-t">本月除息基準日明細（推估）</h2>' in html
+    assert '<h2 class="section-t">民國115年8月除息基準日明細（推估）</h2>' in html
+    # 追加 7 反向:畫面上不得再出現指涉目標月的「本月」(推播情境會是錯的)
+    assert "推估本月" not in html and "本月除息基準日明細" not in html
     # 3) 明細表頭第一欄(§15.2 正名,「預估」必須在欄頭)
     assert '<th>預估基準日</th>' in html
     assert '<th>除息基準日</th>' not in html
@@ -159,8 +166,8 @@ def test_ex_record_date_wording_has_no_bare_ex_date_label():
     """
     html = render_month_calendar_html(_cal())
     assert "<th>除息日</th>" not in html
-    assert "本月除息日明細" not in html
-    assert "推估本月除息日與配息入帳日" not in html
+    assert "除息日明細" not in html                       # v19.534:月份前綴改動後仍守住標籤
+    assert "除息日與配息入帳日" not in html
     for _h in (html, render_month_calendar_html(build_month_calendar([], 2026, 8))):
         assert "無推估除息日（或資料不足）" not in _h
     # footer 的公開說明書引文必須原封不動留著(證明上面鎖的是欄位名,不是全域禁詞)
@@ -203,12 +210,36 @@ def test_same_house_same_day_merged():
     assert len(out) == 1 and out[0]["label"] == "安聯"        # 兩檔安聯 → 併成一個 chip(無 ×N)
 
 
-def test_merge_keeps_low_confidence_flag():
-    # 任一檔信心低 → 合併後仍標低信心(不因合併洗掉)
+def test_merge_drops_low_confidence_display_flag():
+    """v19.534 裁示 2:合併後的 chip **不再帶低信心旗標**,格子裡也不再有「?」上標。
+
+    ⚠️ 這是**有意識的政策變更,不是迴歸**。前身 `test_merge_keeps_low_confidence_flag`
+    守的是「任一檔信心低 → 合併後仍標低信心(不因合併洗掉)」—— 那個理由當時成立,
+    現在被權衡掉,兩邊理由並陳:
+      舊(仍成立):合併會洗掉最保守的那一檔,訊號要跟著走最保守值。
+      新(勝出,總管 2026-08-26):(a)「?」在整張圖(含圖例、頁尾)**沒有任何一處解釋**;
+      (b) 它會與 §15.1 誤差帶**互相矛盾** —— 同一檔可能同時掛「?」(confidence=low)
+      與「±0 天」(error_band=0),兩個訊號不同源卻並排。**一個訊號、一個地方**:
+      誠實訊號現在是誤差帶,它在明細表(有數字、有頁尾說明、逐檔從自己的歷史算)。
+    ⚠️ 引擎的 `confidence` 一個字都沒動 —— 見
+    `test_build_month_calendar_carries_error_band_and_keeps_confidence`。
+    """
     from ui.helpers.dividend_calendar_render import _dedupe_day_chips
     out = _dedupe_day_chips([{"house": "安聯", "code": "A", "confidence": "high"},
                              {"house": "安聯", "code": "B", "confidence": "low"}])
-    assert len(out) == 1 and out[0]["low"] is True
+    assert len(out) == 1
+    assert "low" not in out[0], "低信心旗標還在 → 留著就是留一條漂回去的路"
+
+
+def test_low_confidence_question_mark_gone_from_grid():
+    """裁示 2 的畫面側:整張 HTML 不得再出現無人解釋的「?」上標與它的樣式。"""
+    funds = [{"code": "A", "name": "安聯甲", "dividends": _divs(14)},
+             {"code": "B", "name": "摩根乙", "dividends": _divs(3)}]
+    for f in funds:
+        f["house"] = detect_house(f["name"])
+    html = render_month_calendar_html(build_month_calendar(funds, 2026, 8))
+    assert '<span class="q">?</span>' not in html
+    assert ".chip .q{" not in html                       # CSS 也一起拿掉,不留半截
 
 
 def test_different_houses_not_merged():
@@ -422,11 +453,16 @@ def test_unpredictable_fund_is_not_placed_in_any_day_cell():
 
 
 def test_unpredictable_fund_shows_dashed_chip_below_grid():
-    """§15.3:月曆格**正下方**一排灰虛線 chip,寫「投信名 · 上次 M/D」。"""
+    """§15.3:月曆格**正下方**一排灰虛線 chip,寫「投信名 · 上次 M/D」。
+
+    v19.534 追加 8:上次日期離目標月超過半年 → **帶年份**。本 fixture 的目標月是 2026-08、
+    上次是 2025-06-05(差 14 個月),只寫「上次 6/5」會被讀成「兩個月前才配過」——
+    `stale` 那類基金正是「上次很久以前」,不帶年份會讓 user 低估陳舊度(§1)。
+    """
     html = render_month_calendar_html(_cal_mixed())
     assert '<ul class="pending">' in html
     _chips = html.split('<ul class="pending">')[1].split("</ul>")[0]
-    assert "施羅德 · 上次 6/5" in _chips                # 上一次的**實際**基準日
+    assert "施羅德 · 上次 2025/6/5" in _chips           # 上一次的**實際**基準日(跨年 → 帶年份)
     assert "border:1px dashed" in html                  # 灰虛線:視覺上與「已確定」區隔
     # 位置:虛線 chip 必須在月曆之後、明細表之前
     assert html.index('<div class="grid">') < html.index('<ul class="pending">')
@@ -434,25 +470,62 @@ def test_unpredictable_fund_shows_dashed_chip_below_grid():
 
 
 def test_unpredictable_fund_still_has_a_detail_row():
-    """§15.3:明細表仍列該檔一行 —— 預估基準日欄寫「—」,誤差欄寫原因人話 + 上次日期。"""
+    """§15.3:明細表仍列該檔一行 —— 預估基準日欄寫「—」,誤差欄寫原因人話 + 上次日期。
+
+    追加 9:這個版面**沒有**獨立的「上次實際基準日」欄(日期欄是「—」)→ reason 要補尾巴。
+    追加 8:目標月 2026-08 vs 上次 2025-06-05 差 14 個月 → 尾巴帶年份。
+    """
     html = render_month_calendar_html(_cal_mixed())
     _body = html.split("<tbody>")[1].split("</tbody>")[0]
     _row = [r for r in _body.split("<tr") if "施羅德" in r]
     assert len(_row) == 1, "推不出的基金在明細表消失了"
     assert ">—<" in _row[0]                             # 預估基準日 / 入帳 皆為 —
-    assert "對不上固定規律" in _row[0] and "上次是 6/5" in _row[0]
+    assert "對不上固定規律" in _row[0] and "（上次 2025/6/5）" in _row[0]
 
 
-def test_detail_row_appends_last_date_when_reason_text_lacks_it():
-    """§15.3「並附上次實際日期」:`too_few` / `no_anchor_day` 文案本身沒帶日期 → L3 補。"""
+def test_reason_tail_is_decided_by_layout_not_by_string_matching():
+    """v19.534 追加 9:reason 要不要帶「(上次 X)」由**版面**決定,判斷在 L2。
+
+    前身 `test_detail_row_appends_last_date_when_reason_text_lacks_it` 守的是
+    「文案沒帶日期 → L3 補」,方向對但不夠 —— 總管實看 `v533_C_all_unpred` 圖後點名:
+    全空版型的三欄表**已有獨立的「上次實際基準日」欄**,reason 再帶一次等於同一列講兩次,
+    5 檔同原因時是同一句話複製 5 遍,在 560px 推播圖上佔掉大半版面。
+    ⚠️ 紅線:**不可**在 L3 用字串比對去砍尾巴 —— 文案一改比對就悄悄失效。
+    """
     from ui.helpers.dividend_calendar_render import _pending_why
     _u = {"reason": "只有 2 筆配息紀錄，還看不出規律（至少要 3 筆）。",
           "reason_code": "too_few", "last_ex": _dt.date(2026, 7, 29)}
-    assert _pending_why(_u).endswith("（上次 7/29）")
-    # 文案已自帶日期的兩類不重複附
-    _u2 = {"reason": "…不硬推。上次是 7/29。", "reason_code": "anchor_weak",
-           "last_ex": _dt.date(2026, 7, 29)}
-    assert _pending_why(_u2).count("7/29") == 1
+    # 沒有獨立日期欄(明細表)→ 補;目標月同年同月附近 → 只寫 M/D
+    assert _pending_why(_u, has_date_column=False,
+                        year=2026, month=8).endswith("（上次 7/29）")
+    # 有獨立日期欄(全空版型三欄表)→ **不補**,不重複講第二次
+    assert _pending_why(_u, has_date_column=True) == _u["reason"]
+    # `stale` 的日期長在句子中間(是句子本體不是重複)→ 兩種版面都原樣輸出
+    _s = {"reason": "上次配息是 2025/03，已經 11 個月沒動靜，可能停配或資料沒更新。",
+          "reason_code": "stale", "last_ex": _dt.date(2025, 3, 14)}
+    for _hdc in (True, False):
+        assert _pending_why(_s, has_date_column=_hdc, year=2026, month=2) == _s["reason"]
+
+
+def test_reason_tail_carries_year_when_last_ex_is_far_from_target_month():
+    """追加 8:reason 尾巴的「上次 M/D」離目標月超過半年 → 帶年份(與虛線 chip 同一份規則)。"""
+    from services.dividend_calendar import _LAST_EX_YEAR_MONTHS, fmt_last_ex
+    from ui.helpers.dividend_calendar_render import _pending_why
+    _u = {"reason": "只有 2 筆配息紀錄，還看不出規律（至少要 3 筆）。",
+          "reason_code": "too_few", "last_ex": _dt.date(2026, 8, 11)}
+    assert _pending_why(_u, has_date_column=False, year=2027, month=2).endswith("（上次 2026/8/11）")
+    assert _pending_why(_u, has_date_column=False, year=2026, month=9).endswith("（上次 8/11）")
+    # 門檻是 module 具名常數(§3.3);規則 = **跨年** or 相差 > 門檻
+    assert _LAST_EX_YEAR_MONTHS == 6
+    _d = _dt.date(2026, 8, 11)
+    # 總管點名的實例:2026-08 → 2027-02 相差**剛好 6 個月**,單一個 `> 6` 會漏掉它 ——
+    # 真正讓人誤讀的是年份不同,所以跨年一律帶年份。
+    assert fmt_last_ex(_d, year=2027, month=2) == "2026/8/11"
+    assert fmt_last_ex(_d, year=2027, month=1) == "2026/8/11"       # 跨年 → 仍帶年份
+    assert fmt_last_ex(_d, year=2026, month=9) == "8/11"            # 同年近距 → 只寫 M/D
+    assert fmt_last_ex(_dt.date(2026, 2, 11), year=2026, month=12) == "2026/2/11"  # 同年遠距
+    assert fmt_last_ex(_d) == "2026/8/11"                           # 目標月不明 → 帶年份(保守)
+    assert fmt_last_ex(None, year=2026, month=9) == ""              # §1 不捏造日期
 
 
 # ── §15.4 全部推不出 → 整組換文案與版面 ────────────────────────────────
@@ -508,11 +581,93 @@ def test_pending_ask_note_present_in_both_layouts():
     assert _note not in render_month_calendar_html(_cal())
 
 
+# ── 必改 1:誤差帶改 90 分位 + 頁尾說明它憑什麼 ──────────────────────────
+def test_error_band_footnote_explains_the_number():
+    """具體數字比模糊標籤更容易被過度相信 → 必須說明它是什麼、憑什麼(§1)。
+
+    「±2 天」讀起來像個保證。頁尾這一句把它降回它真正的身分:**用該檔自己的配息史回測出來的
+    九成區間**。文案 SSOT 在 L2 `ERR_BAND_FOOTNOTE`,「約九成」與 `_ERR_BAND_QUANTILE`
+    (0.90)是同一件事的兩種寫法,不可只改一邊。
+    """
+    from services.dividend_calendar import ERR_BAND_FOOTNOTE, _ERR_BAND_QUANTILE
+    assert ERR_BAND_FOOTNOTE == "※ 誤差 = 用該檔自己的配息史回測，約九成情況落在此範圍內。"
+    assert _ERR_BAND_QUANTILE == 0.90
+    html = render_month_calendar_html(_cal())
+    assert ERR_BAND_FOOTNOTE in html
+    assert html.index("<th>誤差</th>") < html.index(ERR_BAND_FOOTNOTE)   # 說明在數字之後(頁尾)
+
+
+def test_error_band_footnote_absent_when_there_is_no_error_column():
+    """全空版型沒有「誤差」欄 → 不加那句說明,否則是在解釋畫面上不存在的東西。"""
+    from services.dividend_calendar import ERR_BAND_FOOTNOTE
+    html = render_month_calendar_html(_cal_all_unpred())
+    assert "<th>誤差</th>" not in html and ERR_BAND_FOOTNOTE not in html
+
+
+def test_error_band_ninety_percentile_changes_real_fund_labels():
+    """90 分位在**畫面上**的實際後果:摩根從「±0 天」變「±2 天」,施羅德變「僅供參考」。
+
+    這條把「分位數」與「user 真正看到的那幾個字」綁在一起 —— 只鎖常數不鎖顯示,
+    有人動了切點(`_ERR_BAND_DAYS_MAX` / `_ERR_BAND_WEEK_MAX`)一樣會悄悄漂掉。
+    """
+    from ui.helpers.dividend_calendar_render import _err_band_label
+    assert _err_band_label(2)[0] == "±2 天"        # 摩根:12 次裡差過 2 天與 4 天,不是「保證那天」
+    assert _err_band_label(0)[0] == "±0 天"        # 聯博 / 瀚亞 / 安聯
+    assert _err_band_label(11)[0] == "僅供參考"     # 施羅德:帶寬 11 > 7,給數字反而誤導
+
+
 def test_manual_override_ui_not_built_this_round():
     """§15.5 / §-1:本次**只做點名**,不做手動輸入儲存 —— 不主動擴散。"""
     html = render_month_calendar_html(_cal_all_unpred())
     for _widget in ("<input", "<form", "<button", "contenteditable"):
         assert _widget not in html
+
+
+def test_all_unpredictable_table_does_not_repeat_the_date_in_the_reason():
+    """v19.534 追加 9:三欄表已有獨立「上次實際基準日」欄 → 原因欄**不再重複**同一個日期。
+
+    總管實看 `v533_C_all_unpred` 圖後點名:第 2 欄已經印了「2026/8/14」,第 3 欄又寫
+    「上次是 8/14」;5 檔同原因時等於同一句話複製 5 遍,在 560px 推播圖上佔掉大半版面。
+    """
+    html = render_month_calendar_html(_cal_all_unpred())
+    _body = html.split("<tbody>")[1].split("</tbody>")[0]
+    assert "2025/6/5" in _body                          # 獨立欄:完整年月日(追加 8 已正確)
+    assert "上次是" not in _body and "（上次" not in _body   # 原因欄:不重複講第二次
+    assert "對不上固定規律" in _body                      # 但原因本身還在
+
+
+def test_target_month_wording_replaces_this_month_everywhere_on_the_page():
+    """v19.534 追加 7:圖上所有指涉目標月的「本月」→ **實際目標月**(走 `month_label`)。
+
+    cron 每月 1 號推的是**下個月**:徽章寫「民國116年 2月」、副標卻寫「推估本月…」,
+    同一張圖自相矛盾。此處連虛線 chip 上方那行標籤一起守(它也寫過「本月推不出日期」)。
+    """
+    from services.dividend_calendar import month_label
+    _ml = month_label(2026, 8)
+    html = render_month_calendar_html(_cal_mixed())
+    assert f'<p class="pending-lab">{_ml}推不出日期' in html
+    assert f'<h2 class="section-t">{_ml}除息基準日明細（推估）</h2>' in html
+    assert f'推估{_ml}的除息基準日與配息入帳日' in html
+    assert "本月推不出日期" not in html and "推估本月" not in html
+
+
+def test_tab_manage_caption_does_not_say_zero_when_all_unpredictable():
+    """v19.534 裁示 3:App 端 caption 與 §15.4 圖上的口徑對齊。
+
+    原本全推不出時 caption 寫「本月推估除息 **0 檔**｜N 檔無法推估」—— 圖上剛講完
+    「是推不出,不是沒配息」,底下這行又說「0 檔」,同一畫面兩個口徑(§1)。
+    這條是 source-level drift-lock:caption 走 `is_all_unpredictable` 分流,
+    且不得在該分支印「推估除息 0 檔」。
+    """
+    import pathlib as _pl
+    _raw = _pl.Path("ui/tab_manage.py").read_text(encoding="utf-8")
+    # 只看**會執行的程式碼**:註解裡引用舊文案是說明「改掉了什麼」,不是文案本身。
+    src = "\n".join(ln for ln in _raw.splitlines() if not ln.lstrip().startswith("#"))
+    assert "is_all_unpredictable(_cal)" in src, "caption 沒有走 §15.4 的分流判斷"
+    assert "都推不出除息日" in src and "是推不出,不是沒配息" in src
+    # 舊口徑不可回流:不得再出現「N 檔無法推估」這種讀起來像「這幾檔沒配息」的說法
+    assert "檔無法推估" not in src
+    assert "推不出日期(非沒配息)" in src        # 部分推不出時也要講清楚是哪一種
 
 
 # ── §15.4 LINE caption / Flex altText ────────────────────────────────
@@ -521,12 +676,17 @@ def test_line_caption_first_line_says_not_no_dividend():
 
     LINE 推播預覽只看得到前一兩行 —— 原本首行是「🗓️ 基金除息行事曆 · 民國X年Y月（推估）」,
     第二行才是「本月無推估除息基準日」,user 掃過去的結論是「這個月沒事」(§1 違憲)。
+
+    v19.534 裁示 4:首行的「本月」→ **實際目標月**。cron(每月 1 號)推的是**下個月**,
+    §15.4 規格逐字寫的「本月」在推播情境是錯的(總管 2026-08-26 認錯改規格);
+    App 端目標月 = 當月時語意仍正確,兩邊都對。
     """
     from services.dividend_calendar import build_summary_text
     _txt = build_summary_text(_cal_all_unpred())
-    assert _txt.splitlines()[0] == "⚠️ 本月 2 檔都推不出除息日 —— 是推不出，不是沒配息"
+    assert _txt.splitlines()[0] == "⚠️ 民國115年8月 有 2 檔推不出除息日 —— 是推不出，不是沒配息"
+    assert "⚠️ 本月" not in _txt                        # 「本月」不可回流(推播情境會是錯的)
     assert "無推估除息基準日" not in _txt
-    assert "施羅德 · 上次 6/5" in _txt                   # 逐檔列上次實際基準日
+    assert "施羅德 · 上次 2025/6/5" in _txt              # 逐檔列上次實際基準日(跨年 → 帶年份)
     assert "※ 這幾檔若你手上有近期的實際基準日" in _txt
 
 

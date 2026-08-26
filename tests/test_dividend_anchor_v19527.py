@@ -1786,8 +1786,15 @@ def test_error_band_matches_acceptance_walk_forward_shape():
     起手 8 筆(`_MIN_HIST`)、只用過去推下一筆、**棄權不計入誤差樣本**。
     棄權在畫面上本來就不顯示數字,把它當成 0 天誤差會把誠實棄權洗成準確度(§1)。
     這裡用真實資料逐檔比對:自己重算一次分位數,必須與函式輸出一致。
+
+    v19.534:分位數由 0.80 上調 **0.90**(總管實測後裁示,見 `_ERR_BAND_QUANTILE` 註解)。
+    本測試的公式改吃 module 常數(否則常數一改這條就假綠),數值本身由下一行明著鎖住 ——
+    兩者缺一不可:只鎖公式會漏掉「有人偷偷把分位數調回去」,只鎖數值會漏掉「口徑走樣」。
     """
     import math as _m
+    assert _dc._ERR_BAND_QUANTILE == 0.90, (
+        "誤差帶分位數被改動 —— 80 分位會讓摩根顯示「±0 天」但實際只罩住 10/12"
+        "(12 次裡差過 2 天與 4 天),畫面上的 ±0 讀起來是「保證那天」(§1)")
     for code, raw in _REAL_FUNDS.items():
         recs = [_dt.date.fromisoformat(_iso(a)) for a, _b, _c in raw][::-1]
         errs = []
@@ -1801,7 +1808,7 @@ def test_error_band_matches_acceptance_walk_forward_shape():
             assert estimate_error_band(_err_divs(recs)) is None, code
             continue
         _s = sorted(errs)
-        _h = (len(_s) - 1) * 0.80
+        _h = (len(_s) - 1) * _dc._ERR_BAND_QUANTILE
         _lo = int(_h)
         _hi = min(_lo + 1, len(_s) - 1)
         _want = int(_m.ceil(_s[_lo] + (_h - _lo) * (_s[_hi] - _s[_lo])))
@@ -1821,6 +1828,10 @@ def test_error_band_on_real_five_funds_is_plausible():
     for _c in ("JFZN3 摩根", "ACTI71 聯博", "ACCP138 瀚亞", "TLZF9 安聯"):
         assert _bands[_c] <= 2, (_c, _bands)
     assert _bands["SD080 施羅德"] > 2, _bands                     # 最亂的那檔不可被美化
+    # v19.534:90 分位後的逐檔實測值(總管 2026-08-26 裁示的驗收表)。
+    # 摩根從 0 → 2 正是這次要修的重點:它 12 次裡差過 2 天與 4 天,「±0 天」是假精確。
+    assert _bands == {"JFZN3 摩根": 2, "ACTI71 聯博": 0, "ACCP138 瀚亞": 0,
+                      "TLZF9 安聯": 0, "SD080 施羅德": 11}, _bands
 
 
 def test_build_month_calendar_carries_error_band_and_keeps_confidence():
@@ -1866,20 +1877,29 @@ def test_reason_texts_are_plain_chinese_with_numbers():
         "上次配息是 2025/03，已經 11 個月沒動靜，可能停配或資料沒更新。")
     assert _t(_dc.REASON_NO_ANCHOR_DAY, nominal=_dt.date(2026, 2, 15)) == (
         "平常在 2/15 前後除息，但這個月碰上連假，順延後差太多，不亂猜。")
+    # v19.534 追加 9:`anchor_weak` 的「上次是 M/D。」尾巴**移出文案** ——
+    # 全空版型的三欄表已有獨立「上次實際基準日」欄,同一個日期在同一列講兩次,
+    # 5 檔同原因時等於同一句話複製 5 遍。要不要補由 `reason_display` 依版面決定。
     assert _t(_dc.REASON_ANCHOR_WEAK, window=12, last_ex=_dt.date(2026, 7, 29)) == (
-        "最近 12 次除息的日子跳來跳去，對不上固定規律，不硬推。上次是 7/29。")
+        "最近 12 次除息的日子跳來跳去，對不上固定規律，不硬推。")
     # §1:術語不可回流
     _all = " ".join([_t(_dc.REASON_TOO_FEW, n=2),
                      _t(_dc.REASON_STALE, last_ex=_dt.date(2025, 3, 1), stale_months=9),
                      _t(_dc.REASON_NO_ANCHOR_DAY, nominal=_dt.date(2026, 2, 15)),
-                     _t(_dc.REASON_ANCHOR_WEAK, window=12, last_ex=_dt.date(2026, 7, 1))])
+                     _t(_dc.REASON_ANCHOR_WEAK, window=12)])
     for _jargon in ("錨定", "營業日校正", "容忍範圍", "復現率"):
         assert _jargon not in _all, f"reason 文案退回術語:{_jargon}"
 
 
 def test_reason_text_omits_date_it_does_not_have():
-    """§1:上次日期不明時**不可**掰一個 —— 整句改寫,不留半截「上次是 。」。"""
-    assert _dc._reason_text(_dc.REASON_ANCHOR_WEAK, window=5, last_ex=None).endswith("不硬推。")
-    assert "上次是" not in _dc._reason_text(_dc.REASON_ANCHOR_WEAK, window=5, last_ex=None)
+    """§1:上次日期不明時**不可**掰一個 —— 整句改寫,不留半截「上次是 。」/「平常在 前後」。
+
+    v19.534 追加 9 後 `anchor_weak` 的文案本來就不帶日期,這裡改守
+    `reason_display()` 那一層:上次日期不明 → **整個尾巴不加**,不留「（上次 ）」。
+    """
+    assert "上次" not in _dc._reason_text(_dc.REASON_ANCHOR_WEAK, window=5)
     assert _dc._reason_text(_dc.REASON_NO_ANCHOR_DAY, nominal=None, last_ex=None) == (
         "這個月碰上連假，順延後跟平常差太多，不亂猜。")
+    _u = {"reason": "只有 2 筆配息紀錄，還看不出規律（至少要 3 筆）。",
+          "reason_code": "too_few", "last_ex": None}
+    assert _dc.reason_display(_u, has_date_column=False) == _u["reason"]     # 不留空括號
