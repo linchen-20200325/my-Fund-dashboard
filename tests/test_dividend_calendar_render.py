@@ -535,13 +535,19 @@ def test_reason_tail_carries_year_when_last_ex_is_far_from_target_month():
 
 # ── §15.4 全部推不出 → 整組換文案與版面 ────────────────────────────────
 def test_all_unpredictable_swaps_title_and_subtitle():
-    """§15.4:標題改「本月除息日推不出來」,副標講清楚「會配息,只是算不出哪天」。
+    """§15.4:標題改「{目標月}除息日推不出來」,副標講清楚「會配息,只是算不出哪天」。
 
     §1:原本的全空月曆 + 「本月無推估除息基準日」讀起來就是「這個月沒配息」——
     讓失敗看起來像成功,是本檔要防的頭號誤導。
+
+    v19.536:H1 的月份由寫死的「本月」→ **實際目標月**(走 `month_label` 這一份 SSOT)。
+    v19.534 追加 7 收了副標 / 明細表標題 / chip 標籤 / LINE 首行,獨漏這個 H1 ——
+    推播每月 1 號推**下個月**,H1 寫「本月」而正下方徽章寫真正的目標月,同一張圖自相矛盾。
     """
+    from services.dividend_calendar import month_label
     html = render_month_calendar_html(_cal_all_unpred())
-    assert "<h1>本月除息日推不出來</h1>" in html
+    assert f"<h1>{month_label(2026, 8)}除息日推不出來</h1>" in html
+    assert "本月除息日推不出來" not in html          # 「本月」不可回流(推播情境會是錯的)
     assert "基金除息配息行事曆" not in html              # 不沿用原標題
     assert "你的 2 檔基金這個月都會配息" in html
     assert "系統不敢給日期" in html
@@ -581,7 +587,9 @@ def test_empty_month_with_no_funds_keeps_old_honest_wording():
     兩者混在一起會讓「你根本沒加基金」被講成「你的 0 檔基金都會配息」。
     """
     html = render_month_calendar_html(build_month_calendar([], 2026, 8))
-    assert "本月除息日推不出來" not in html
+    # v19.536:標題已月份化 → 鎖「除息日推不出來」這幾個字本身,不再綁「本月」前綴
+    # (只鎖前綴的話,標題換月份後這條護欄會靜默失效)。
+    assert "除息日推不出來" not in html
     assert "無推估除息基準日" in html
 
 
@@ -717,10 +725,13 @@ def test_flex_alt_text_drops_zero_count_when_all_unpredictable():
 
 
 def test_flex_all_unpredictable_card_is_not_the_empty_card():
-    from services.dividend_calendar import build_summary_flex
     import json
+
+    from services.dividend_calendar import build_summary_flex, month_label
     _txt = json.dumps(build_summary_flex(_cal_all_unpred()), ensure_ascii=False)
-    assert "本月除息日推不出來" in _txt and "待確認清單" in _txt
+    # v19.536:卡片標題與 HTML H1 共用同一份 SSOT(`all_unpred_title`)→ 月份也是實際目標月。
+    assert f"{month_label(2026, 8)}除息日推不出來" in _txt and "待確認清單" in _txt
+    assert "本月除息日推不出來" not in _txt
     assert "無推估除息基準日" not in _txt
 
 

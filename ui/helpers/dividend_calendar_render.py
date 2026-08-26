@@ -1,4 +1,4 @@
-"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.535)。
+"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.536)。
 
 純字串產生器(**零 streamlit、零 IO**),吃 `services.dividend_calendar.build_month_calendar`
 的結構 → 產出自成一頁的 HTML(深/淺色皆適配)。共用於:App 內 `st.components.html` 嵌入(方式 A)、
@@ -32,6 +32,9 @@ v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後):
   待辦 2  待確認清單依「同一句說明」**分組**:同句提到組上方一行,列內只留
           「投信名 · 上次實際基準日」;單檔成組維持逐列寫法(不為 1 檔開組標題)。
   待辦 3  空月文案的「本月」→ 實際目標月(L2 `empty_month_note`,與追加 7 同病)。
+
+v19.536:§15.4「全部推不出」版型的 **H1** 也吃實際目標月(L2 `all_unpred_title`)——
+追加 7 收了副標 / 明細表標題 / chip 標籤 / LINE 首行四處,獨漏這個標題常數。
 """
 from __future__ import annotations
 
@@ -41,10 +44,10 @@ import html as _html
 from services.dividend_calendar import (
     ALL_UNPRED_SUB_1,
     ALL_UNPRED_SUB_2,
-    ALL_UNPRED_TITLE,
     ERR_BAND_FOOTNOTE,
     PENDING_ASK_NOTE,
     PENDING_SECTION_TITLE,
+    all_unpred_title,
     dedupe_events,
     display_label,
     empty_month_note,
@@ -471,7 +474,10 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     # §15.4:整組換標題。只在 caller 沿用預設標題時覆寫 —— 明確指定標題的 caller(存檔 / 樣張)
     # 有自己的意圖,不代它決定。
     if _all_unp and title == _TITLE_DEFAULT:
-        title = ALL_UNPRED_TITLE
+        # v19.536:H1 原寫死「本月」—— v19.534 追加 7 把副標 / 明細表標題 / chip 標籤 /
+        # LINE 首行都換成實際目標月時獨漏這一處,推播(每月 1 號推下個月)時 H1 與正下方
+        # 的徽章互相矛盾。月份走 L2 `all_unpred_title` → `month_label`,與 `_ml` 同源。
+        title = all_unpred_title(y, m)
     # v19.534 追加 7:副標原寫「推估**本月**…」,但徽章寫的是真正的目標月,推播(每月 1 號推
     # 下個月)時同一張圖自相矛盾 —— 改用與徽章同一個月份變數(`month_label`)。
     _ml = month_label(y, m)

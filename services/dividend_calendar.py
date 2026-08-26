@@ -1,4 +1,4 @@
-"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.535)。L2 純函式,零 IO。
+"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.536)。L2 純函式,零 IO。
 
 用途:吃每檔基金的**配息歷史**,推估「本月**除息基準日** + 配息入帳日」,產生月曆結構供 L3 渲染。
 資料由 L1 抓好傳入(reuse `repositories.fund` 的 dividends);本層不碰網路、不 import streamlit。
@@ -70,6 +70,12 @@ v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後)—— **引�
           講出對其他成員不成立的話(§1)。單檔成組維持逐列寫法,不為 1 檔開組標題。
   待辦 3:`empty_month_note()` —— 空月文案的「本月」→ 實際目標月(與追加 7 同病),
           HTML / LINE 文字 / Flex 三處收成一份 SSOT。
+
+v19.536(總管 2026-08-26 裁示)—— **引擎推估邏輯一行沒動**:
+  §15.4「全部推不出」的標題常數 `ALL_UNPRED_TITLE` → `ALL_UNPRED_TITLE_TMPL` +
+  `all_unpred_title(year, month)`,月份吃實際目標月。v19.534 追加 7 收了副標 / 明細表標題 /
+  chip 標籤 / LINE caption 首行四處,**獨漏這個標題** —— 推播每月 1 號推下個月時,H1 寫
+  「本月」、正下方徽章寫真正的目標月,同一張圖自相矛盾。做法同 `empty_month_note()`。
 """
 from __future__ import annotations
 
@@ -1225,7 +1231,12 @@ def detect_house(name: str) -> str:
 # 為什麼要整組換掉:原本全空月曆 + 「本月無推估除息基準日」讀起來就是**「這個月沒配息」**,
 # 但事實是「這幾檔都會配息,只是我算不出是哪一天」—— 那是 §1 意義下「讓失敗看起來像成功」。
 # 空月曆格是最大的誤導來源(格子是空的 = 那天沒事),所以這個情境**不畫月曆**,改逐檔一列。
-ALL_UNPRED_TITLE = "本月除息日推不出來"
+# v19.536 月份化,與副標 / 明細表標題 / 虛線 chip 標籤 / LINE caption 首行同源(皆走
+# `month_label()` 這一份 SSOT,§3.3 不另造一套月份格式化)。原本寫死「本月」是 §15.4 規格的
+# 逐字文案,但 cron(每月 1 號)推的是**下個月** —— 標題寫「本月」、同一張圖的徽章 / 副標卻
+# 寫真正的目標月,自相矛盾(v19.534 追加 7 收了四處,獨漏這個 H1)。總管 2026-08-26 裁示改。
+# 做法對齊 `EMPTY_MONTH_NOTE_TMPL` / `empty_month_note()`:模板 + 一個吃 (year, month) 的函式。
+ALL_UNPRED_TITLE_TMPL = "{month}除息日推不出來"
 ALL_UNPRED_SUB_1 = "你的 {n} 檔基金這個月都會配息，只是最近的除息節奏對不上規律，系統不敢給日期。"
 ALL_UNPRED_SUB_2 = "下方列出各檔上次的實際基準日供參考，實際日期請看基金公司公告。"
 # v19.534 裁示 4:首行原寫「本月」,但 cron(每月 1 號)推的是**下個月** —— 規格 §15.4 逐字
@@ -1235,6 +1246,15 @@ ALL_UNPRED_LINE_HEAD = "⚠️ {month} 有 {n} 檔推不出除息日 —— 是�
 PENDING_SECTION_TITLE = "待確認清單"
 # §15.5:先做**點名**,不做手動輸入儲存(手動覆寫的 UI 與持久化留待 user 看過後再決定,§-1 不擴散)。
 PENDING_ASK_NOTE = "※ 這幾檔若你手上有近期的實際基準日，可以補進來提高準確度。"
+
+
+def all_unpred_title(year, month) -> str:
+    """§15.4「全部推不出」的標題(HTML H1 / LINE Flex 卡片標題共用 SSOT)。
+
+    月份走 `month_label()`,與副標 / 明細表標題 / chip 標籤 / LINE 首行是**同一個**變數。
+    """
+    return ALL_UNPRED_TITLE_TMPL.format(month=month_label(year, month))
+
 
 # ── 空月文案(`events` 與 `unpredictable` **都**空 = user 根本沒基金 / 全是累積型)────────
 # v19.535 待辦 3:原本三處各寫一句、且都寫死「本月」——與 v19.534 追加 7 同病:
@@ -1618,7 +1638,8 @@ def _flex_all_unpredictable(cal: dict, month, unp: list) -> dict:
     _bubble = {
         "type": "bubble", "size": "mega",
         "header": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": [
-            {"type": "text", "text": f"⚠️ {ALL_UNPRED_TITLE}", "weight": "bold", "size": "lg",
+            {"type": "text", "text": f"⚠️ {all_unpred_title(cal.get('year'), month)}",
+             "weight": "bold", "size": "lg",
              "color": _FLEX_INK, "wrap": True},
             {"type": "text", "text": f"{month_label(cal.get('year'), month)}・{PENDING_SECTION_TITLE}",
              "size": "sm", "color": _FLEX_SUB},
@@ -1691,7 +1712,7 @@ __all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
            # §15 顯示層:誤差帶 + 「全部推不出」的文案 SSOT(L3 / LINE 共用)
            "estimate_error_band", "is_all_unpredictable", "pending_line",
            "reason_needs_last_date", "reason_display", "fmt_last_ex", "month_label",
-           "ALL_UNPRED_TITLE", "ALL_UNPRED_SUB_1",
+           "ALL_UNPRED_TITLE_TMPL", "all_unpred_title", "ALL_UNPRED_SUB_1",
            "ALL_UNPRED_SUB_2", "ALL_UNPRED_LINE_HEAD", "PENDING_SECTION_TITLE",
            "PENDING_ASK_NOTE", "ERR_BAND_FOOTNOTE",
            # v19.535:待確認清單分組(同句只講一次)+ 空月文案(月份吃徽章同一個變數)
