@@ -1,4 +1,4 @@
-"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.532)。
+"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.533)。
 
 純字串產生器(**零 streamlit、零 IO**),吃 `services.dividend_calendar.build_month_calendar`
 的結構 → 產出自成一頁的 HTML(深/淺色皆適配)。共用於:App 內 `st.components.html` 嵌入(方式 A)、
@@ -6,6 +6,16 @@
 
 v19.532:頁尾多一行**假日表降級警語**(僅在 `cal["holiday_calendar"] == "weekend_only"` 時出現)。
 文案 SSOT 在 L2 `services.dividend_calendar.holiday_calendar_note`,與純文字摘要 / LINE Flex 同一句。
+
+v19.533 §15 顯示層(user 2026-08-26 拍板):
+  §15.2 明細表欄位正名 —— 「除息基準日」→ **「預估基準日」**、「信心」→ **「誤差」**。
+        「預估」二字必須出現在**欄頭**(user 明確要求),不可只放頁尾免責。
+        「高/中/低」三級徽章(舊 `.cf` 樣式與 `_CONF` 對照表)一併刪除 —— 留著等於留一條漂回去的路。
+  §15.3 推不出日期的基金**保留可見**:圖例留色 + 月曆格**正下方**一排灰虛線 chip
+        (`施羅德 · 上次 7/29`)+ 明細表仍列一行(預估基準日欄寫「—」)。
+        ⚠️ **日期格子內不放任何東西** —— 我們確實不知道是哪天,放進格子等於發明位置。
+  §15.4 **全部**推不出 → 換標題 / 副標 / 版面(**不畫空月曆格**),改逐檔一列的「待確認清單」。
+  §15.5 待確認區塊末尾點名 —— 本次只做點名,不做手動輸入儲存(§-1 不主動擴散)。
 """
 from __future__ import annotations
 
@@ -13,11 +23,31 @@ import calendar as _calendar
 import html as _html
 
 from services.dividend_calendar import (
+    ALL_UNPRED_SUB_1,
+    ALL_UNPRED_SUB_2,
+    ALL_UNPRED_TITLE,
+    PENDING_ASK_NOTE,
+    PENDING_SECTION_TITLE,
     dedupe_events,
     display_label,
     holiday_calendar_note,
+    is_all_unpredictable,
     pay_window,
+    pending_line,
+    reason_needs_last_date,
 )
+
+_TITLE_DEFAULT = "基金除息配息行事曆"      # 預設標題(§15.4 全部推不出時整組換掉)
+
+# ── §15.1 誤差帶顯示切點(顯示邏輯留 L3;分位數本身在 L2 `estimate_error_band`)──────
+# user 2026-08-26 廢止畫面上的「高/中/低」三級標籤 —— 它回答不了「哪天該去看帳戶」,
+# 而且三級的單調性只建立在 3 個樣本上,脆。改成該檔**自己的**歷史算出來的 ±N 天。
+# ⚠️ 引擎的 `confidence` 沒動,仍是閘門與 §13.6 硬門檻的依據,只是不再直接顯示。
+_ERR_BAND_EXACT = 0        # E = 0        → 「±0 天」
+_ERR_BAND_DAYS_MAX = 2     # E <= 2       → 「±E 天」
+_ERR_BAND_WEEK_MAX = 7     # E <= 7       → 「±1 週」
+# E > 7 或 None(證據不足)→ 不給數字。§1:借用別檔的準確度填一個看似合理的 ±N = 捏造。
+_ERR_BAND_NA_TEXT = "僅供參考"
 
 # 投信分色(中間調,深/淺底都看得清;判不出 → 預設灰)
 _HOUSE_COLOR = {
@@ -28,7 +58,6 @@ _HOUSE_COLOR = {
 }
 _DEFAULT_COLOR = "#6b7280"
 _DOW = ["一", "二", "三", "四", "五", "六", "日"]
-_CONF = {"high": ("高", "high"), "medium": ("中", "med"), "low": ("低", "low")}
 
 _CSS = """
 :root{
@@ -99,13 +128,23 @@ th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line-soft)}
 thead th{font-size:12px;letter-spacing:.04em;color:var(--ink-faint);font-weight:700;border-bottom:1px solid var(--line)}
 tbody tr:last-child td{border-bottom:none}
 td.name b{font-weight:700}
-.house{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft)}
+.house{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft);white-space:nowrap}
+thead th{white-space:nowrap}
 .est{color:var(--accent-ink);font-weight:700}
 .muted{color:var(--ink-faint)}
-.cf{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
-.cf.high{background:var(--ok-bg);color:var(--ok)}
-.cf.med{background:var(--exclude-bg);color:var(--ink-soft)}
-.cf.low{background:var(--accent-soft);color:var(--accent-ink)}
+/* §15.1 誤差欄:取代原本的「高/中/低」信心徽章 */
+.eb{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;display:inline-block}
+.eb.exact{background:var(--ok-bg);color:var(--ok)}
+.eb.days{background:var(--exclude-bg);color:var(--ink-soft)}
+.eb.week{background:var(--accent-soft);color:var(--accent-ink)}
+.eb.na{color:var(--ink-faint);border:1px dashed var(--line)}
+/* §15.3 推不出日期的基金:月曆格**正下方**一排灰虛線 chip(日期格內不放任何東西)*/
+.pending-lab{font-size:11.5px;letter-spacing:.04em;color:var(--ink-faint);font-weight:700;margin:14px 0 0}
+.pending{display:flex;flex-wrap:wrap;gap:8px;margin:7px 0 0;padding:0;list-style:none}
+.pending li{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;padding:4px 10px;border-radius:8px;border:1px dashed var(--line);color:var(--ink-faint);background:transparent}
+tr.pend td{color:var(--ink-faint)}
+tr.pend td.why{white-space:normal;line-height:1.55;font-size:12.5px}
+.ask{margin-top:12px;font-size:12.5px;color:var(--ink-faint)}
 .excluded{margin-top:16px;padding:13px 16px;background:var(--exclude-bg);border-radius:12px;border:1px solid var(--line-soft);font-size:13.5px;color:var(--ink-soft)}
 .excluded b{color:var(--ink)}
 .excluded .x{display:inline-block;padding:1px 7px;border-radius:6px;background:var(--surface);border:1px solid var(--line);color:var(--exclude);font-size:12px;font-weight:700;margin-right:8px}
@@ -142,7 +181,11 @@ table{min-width:0;font-size:16px}
 th,td{padding:9px 5px}
 thead th{font-size:14px}
 .house{font-size:15px;gap:5px}
-.cf{font-size:13px;padding:2px 9px}
+.eb{font-size:13px;padding:2px 9px}
+tr.pend td.why{font-size:13px}
+.pending-lab{font-size:13px;margin-top:12px}
+.pending li{font-size:13px;padding:4px 9px}
+.ask{font-size:13px}
 footer.note{font-size:13px;margin-top:18px;padding-top:14px;line-height:1.65}
 """
 
@@ -192,83 +235,203 @@ def _fmt_pay_window(ex) -> str:
     return f"{_lo.month}/{_lo.day}~{_hi.month}/{_hi.day}"
 
 
-def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行事曆",
-                               is_sample: bool = False, compact: bool = False) -> str:
-    """月曆結構 → 自成一頁 HTML 字串(日期欄位一律為**除息基準日**推估值)。
+def _err_band_label(band) -> tuple:
+    """§15.1 誤差帶(天)→ (顯示字串, CSS class)。
 
-    `compact=True`:推播圖專用版型(窄幅 + 大字 + 收緊留白),見 `_CSS_COMPACT`。
-    App 網頁版用預設 False,版面完全不變。
+    E = 0 → 「±0 天」;E <= 2 → 「±E 天」;E <= 7 → 「±1 週」;
+    E > 7 **或 None(證據不足)** → 「僅供參考」—— **不給數字**。
+    §1:證據不足時填一個看似合理的 ±N(例如全站平均)= 讓沒把握的看起來有把握,是捏造。
     """
-    y, m = int(cal["year"]), int(cal["month"])
-    roc = y - 1911
-    first_wd, days = _calendar.monthrange(y, m)      # first_wd: Mon=0..Sun=6
-    by_day = cal.get("by_day") or {}
-    events = cal.get("events") or []
+    if band is None:
+        return _ERR_BAND_NA_TEXT, "na"
+    try:
+        _b = int(band)
+    except (TypeError, ValueError):
+        return _ERR_BAND_NA_TEXT, "na"          # 壞值 → 誠實退「僅供參考」,不猜
+    if _b <= _ERR_BAND_EXACT:
+        return "±0 天", "exact"
+    if _b <= _ERR_BAND_DAYS_MAX:
+        return f"±{_b} 天", "days"
+    if _b <= _ERR_BAND_WEEK_MAX:
+        return "±1 週", "week"
+    return _ERR_BAND_NA_TEXT, "na"
 
-    # 圖例:本月出現的投信(去重保序)
+
+def _pending_why(u: dict) -> str:
+    """待確認基金的「原因」欄文字:人話 reason(+ 必要時補上次實際基準日,§15.3)。
+
+    四類 reason 中 `anchor_weak` / `stale` 的文案**本身**已帶上次日期,`too_few` /
+    `no_anchor_day` 沒有 —— 是否要補由 L2 的 `reason_needs_last_date` 說了算(文案 SSOT
+    在哪,這個知識就在哪),L3 不做字串比對去猜。
+    """
+    _why = str(u.get("reason") or "原因未提供")
+    _last = u.get("last_ex")
+    if _last is not None and reason_needs_last_date(u.get("reason_code")):
+        _why += f"（上次 {_last.month}/{_last.day}）"
+    return _why
+
+
+def _legend_html(events: list, unpredictable: list) -> str:
+    """圖例:本月出現的投信(去重保序)。
+
+    §15.3:**推不出日期的基金也要留在圖例裡** —— 原本只掃 events,一旦某檔推不出,
+    它的顏色會整個從圖例消失,視覺系統斷裂(user 會以為這檔基金被移除了)。
+    """
     seen, legend = set(), []
-    for e in events:
+    for e in [*events, *unpredictable]:
         h = e.get("house") or ""
         key = h or e.get("code")
         if key not in seen:
             seen.add(key)
             legend.append((h or e.get("code"), _color(h)))
-    legend_html = "".join(
+    return "".join(
         f'<li><span class="dot" style="background:{_e(c)}"></span>{_e(h)}</li>' for h, c in legend)
 
-    # 月曆格子
-    cells = []
-    for _ in range(first_wd):
-        cells.append('<div class="cell blank"></div>')
-    for d in range(1, days + 1):
-        dow = (first_wd + d - 1) % 7
-        wknd = " wknd" if dow >= 5 else ""
-        evs = by_day.get(d) or []
-        chips = ""
-        if evs:
-            chips = '<div class="chips">' + "".join(
-                f'<span class="chip"><span class="dot" style="background:{_e(c["color"])}"></span>'
-                f'<b>{_e(c["label"])}</b>'
-                + ('<span class="q">?</span>' if c["low"] else "")
-                + '</span>'
-                for c in _dedupe_day_chips(evs)) + '</div>'
-        has = " has" if evs else ""
-        cells.append(f'<div class="cell{wknd}{has}"><div class="d tnum">{d}</div>{chips}</div>')
-    grid_html = "".join(cells)
 
-    # 明細表(user 2026-08-24:基金欄只留投信名、拿掉代號;「上次配息」「年化配息」整欄移除;
-    # 原「所屬」欄與基金欄同值 → 合併成一欄,不重複)
+def _pending_chips_html(unpredictable: list) -> str:
+    """§15.3 月曆格**正下方**一排灰虛線 chip:`施羅德 · 上次 7/29`。
+
+    ⚠️ **日期格子內不放任何東西** —— 我們確實不知道是哪一天,把上個月的日期放進格子
+    等於發明位置(月底型一猜就錯一整輪,正是本次要修的病)。
+    ⚠️ chip 上寫的是**上一次的實際基準日**(事實),不是本月預估;「上次」二字不可省。
+    虛線 + 灰字 + 不在格子裡,三個訊號一起說「這是參考,不是本月的答案」。
+    """
+    if not unpredictable:
+        return ""
+    _items = "".join(
+        f'<li><span class="dot" style="background:{_e(_color(u.get("house")))}"></span>'
+        f'{_e(pending_line(u))}</li>' for u in unpredictable)
+    return (f'<p class="pending-lab">本月推不出日期（顯示上次實際基準日，僅供參考）</p>'
+            f'<ul class="pending">{_items}</ul>')
+
+
+def _detail_rows_html(events: list, unpredictable: list) -> str:
+    """明細表列:先列推得出的(帶預估基準日 + 誤差),再列推不出的(§15.3 仍列一行)。"""
     rows = ""
     for e in dedupe_events(events):                  # 同日同投信只列一次(user 2026-08-24)
         ex = e["ex_date"]
-        cf_zh, cf_cls = _CONF.get(e.get("confidence"), ("—", "med"))
+        _eb_txt, _eb_cls = _err_band_label(e.get("error_band"))
         rows += (
             f'<tr><td class="tnum est">{ex.month}/{ex.day}</td>'
             f'<td class="name"><span class="house">'
             f'<span class="dot" style="background:{_e(_color(e.get("house")))}"></span>'
             f'<b>{_e(_chip_label(e))}</b></span></td>'
             f'<td class="tnum muted">{_e(_fmt_pay_window(ex))}</td>'
-            f'<td><span class="cf {cf_cls}">{cf_zh}</span></td></tr>')
+            f'<td><span class="eb {_eb_cls}">{_e(_eb_txt)}</span></td></tr>')
+    # §15.3:推不出的基金**仍列一行**(不是整檔消失)——「預估基準日」寫 —,「誤差」欄寫原因人話。
+    for u in unpredictable:
+        rows += (
+            f'<tr class="pend"><td class="muted">—</td>'
+            f'<td class="name"><span class="house">'
+            f'<span class="dot" style="background:{_e(_color(u.get("house")))}"></span>'
+            f'<b>{_e(display_label(u))}</b></span></td>'
+            f'<td class="muted">—</td>'
+            f'<td class="why">{_e(_pending_why(u))}</td></tr>')
     if not rows:
-        rows = '<tr><td colspan="4" class="muted">本月你的基金無推估除息基準日（或資料不足）。</td></tr>'
+        rows = ('<tr><td colspan="4" class="muted">'
+                '本月你的基金無推估除息基準日（或資料不足）。</td></tr>')
+    return rows
 
-    # user 2026-08-24「沒有配息的整段移除」:累積型/查無配息的基金本來就不會配息,不需佔版面提醒。
-    # ⚠️ 下方 `unpredictable`(有配息史但本月推不出)**保留** —— 那是「可能有配息但算不出來」,
-    # 靜默吃掉會讓你誤以為當月沒事(§1 誠實揭露)。兩者語意不同,不可一起砍。
-    exc_html = ""
 
-    # 稽核 M3:有配息史但本月無法推估(節奏不規則 / 疑停配過舊)→ 誠實揭露,不靜默消失
+def _all_unpredictable_body(unpredictable: list) -> str:
+    """§15.4 全部推不出:**不畫空月曆格**,改逐檔一列的「待確認清單」。
+
+    空格子是最大的誤導來源 —— 一整片空白讀起來就是「這個月沒配息」,但事實是
+    「這幾檔都會配,只是我算不出是哪一天」(§1 讓失敗看起來像成功)。
+    每列:投信名 · 上次實際基準日 · 原因。
+    """
+    rows = "".join(
+        f'<tr class="pend"><td class="name"><span class="house">'
+        f'<span class="dot" style="background:{_e(_color(u.get("house")))}"></span>'
+        f'<b>{_e(display_label(u))}</b></span></td>'
+        f'<td class="tnum">{_e(_fmt_last_ex(u))}</td>'
+        f'<td class="why">{_e(str(u.get("reason") or "原因未提供"))}</td></tr>'
+        for u in unpredictable)
+    return (f'<h2 class="section-t">{_e(PENDING_SECTION_TITLE)}</h2>'
+            f'<div class="tbl-scroll"><table><thead><tr>'
+            f'<th>基金</th><th>上次實際基準日</th><th>原因</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table></div>'
+            f'<p class="ask">{_e(PENDING_ASK_NOTE)}</p>')
+
+
+def _fmt_last_ex(u: dict) -> str:
+    """上次實際基準日 → `YYYY/M/D`;查不到 → 「不詳」(§1 不回填任何日期)。"""
+    _last = u.get("last_ex")
+    return f"{_last.year}/{_last.month}/{_last.day}" if _last is not None else "不詳"
+
+
+def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
+                               is_sample: bool = False, compact: bool = False) -> str:
+    """月曆結構 → 自成一頁 HTML 字串(日期欄位一律為**除息基準日**推估值)。
+
+    `compact=True`:推播圖專用版型(窄幅 + 大字 + 收緊留白),見 `_CSS_COMPACT`。
+    App 網頁版用預設 False,版面完全不變。
+
+    v19.533(§15 顯示層,user 2026-08-26 拍板)三件事:
+      §15.2 明細表欄位正名:「除息基準日」→ **「預估基準日」**、「信心」→ **「誤差」**。
+            「預估」二字必須出現在**欄頭**(user 明確要求),不可只放頁尾免責 ——
+            頁尾沒人看,欄頭才是 user 讀數字時眼睛所在的位置。
+      §15.3 推不出日期的基金**保留可見**:圖例留色 + 月曆格正下方一排灰虛線 chip
+            (寫「上次 M/D」)+ 明細表仍列一行(預估基準日欄寫 —)。日期格內不放東西。
+      §15.4 **全部**推不出 → 整組換標題 / 副標 / 版面(不畫空月曆),改「待確認清單」。
+    """
+    y, m = int(cal["year"]), int(cal["month"])
+    roc = y - 1911
+    events = cal.get("events") or []
     unpredictable = cal.get("unpredictable") or []
-    unp_html = ""
-    if unpredictable:
-        # §14.2:逐檔列出**自己的**成因(節奏不規則 / 筆數不足 / 疑停配 / 本月遇連假),
-        # 不再只給一句籠統的合併說法 —— 「每年 2 月固定不見」必須看得出是連假而不是壞掉(§1)。
-        names = "；".join(
-            f'<b>{_e(x.get("code"))}</b> {_e(x.get("name"))}（{_e(x.get("reason") or "原因未提供")}）'
-            for x in unpredictable)
-        unp_html = (f'<div class="excluded"><span class="x" style="color:var(--accent-ink)">無法推估</span>'
-                    f'以下基金<b>有配息史但本月推不出除息基準日</b>，'
-                    f'請自行至基金公司網站確認：{names}。</div>')
+    _all_unp = is_all_unpredictable(cal)
+
+    # §15.4:整組換標題。只在 caller 沿用預設標題時覆寫 —— 明確指定標題的 caller(存檔 / 樣張)
+    # 有自己的意圖,不代它決定。
+    if _all_unp and title == _TITLE_DEFAULT:
+        title = ALL_UNPRED_TITLE
+    _sub = (f'{_e(ALL_UNPRED_SUB_1.format(n=len(unpredictable)))}<br>'
+            f'{_e(ALL_UNPRED_SUB_2)}') if _all_unp else \
+        '依你的基金過往配息節奏，推估本月除息基準日與配息入帳日。加減基金 → 下月自動更新。'
+
+    legend_html = _legend_html(events, unpredictable)
+
+    if _all_unp:
+        _main = _all_unpredictable_body(unpredictable)
+    else:
+        first_wd, days = _calendar.monthrange(y, m)      # first_wd: Mon=0..Sun=6
+        by_day = cal.get("by_day") or {}
+        cells = []
+        for _ in range(first_wd):
+            cells.append('<div class="cell blank"></div>')
+        for d in range(1, days + 1):
+            dow = (first_wd + d - 1) % 7
+            wknd = " wknd" if dow >= 5 else ""
+            evs = by_day.get(d) or []
+            chips = ""
+            if evs:
+                chips = '<div class="chips">' + "".join(
+                    f'<span class="chip"><span class="dot" style="background:{_e(c["color"])}"></span>'
+                    f'<b>{_e(c["label"])}</b>'
+                    + ('<span class="q">?</span>' if c["low"] else "")
+                    + '</span>'
+                    for c in _dedupe_day_chips(evs)) + '</div>'
+            has = " has" if evs else ""
+            cells.append(f'<div class="cell{wknd}{has}"><div class="d tnum">{d}</div>{chips}</div>')
+        grid_html = "".join(cells)
+        # 明細表(user 2026-08-24:基金欄只留投信名、拿掉代號;「上次配息」「年化配息」整欄移除;
+        # 原「所屬」欄與基金欄同值 → 合併成一欄,不重複)
+        rows = _detail_rows_html(events, unpredictable)
+        _ask = (f'<p class="ask">{_e(PENDING_ASK_NOTE)}</p>' if unpredictable else '')
+        _main = (
+            f'<div class="cal-scroll"><div class="cal">\n'
+            f'<div class="dow"><div>{_DOW[0]}</div><div>{_DOW[1]}</div><div>{_DOW[2]}</div>'
+            f'<div>{_DOW[3]}</div><div>{_DOW[4]}</div><div class="sat">{_DOW[5]}</div>'
+            f'<div class="sun">{_DOW[6]}</div></div>\n'
+            f'<div class="grid">{grid_html}</div></div></div>\n'
+            # §15.3:虛線 chip 排在**月曆格正下方**(不是頁尾),user 看完格子就會看到它
+            f'{_pending_chips_html(unpredictable)}\n'
+            f'<h2 class="section-t">本月除息基準日明細（推估）</h2>\n'
+            f'<div class="tbl-scroll"><table><thead><tr>\n'
+            # §15.2:「預估」在欄頭。「誤差」取代「信心」—— user 要的是「哪天該去看帳戶」,
+            # 「中信心」回答不了;±N 天回答得了。
+            f'<th>預估基準日</th><th>基金</th><th>入帳(估)</th><th>誤差</th>\n'
+            f'</tr></thead><tbody>{rows}</tbody></table></div>{_ask}')
 
     sample_badge = '<span class="badge sample">樣張 · 日期為推估</span>' if is_sample else \
                    '<span class="badge sample">日期為推估</span>'
@@ -285,18 +448,10 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 <style>{_CSS}{_CSS_COMPACT if compact else ''}</style></head><body><div class="wrap">
 <header><p class="eyebrow">追蹤清單 ∪ 持倉 · 每月月初更新</p>
 <h1>{_e(title)}</h1>
-<p class="sub">依你的基金過往配息節奏，推估本月除息基準日與配息入帳日。加減基金 → 下月自動更新。</p>
+<p class="sub">{_sub}</p>
 <div class="badges"><span class="badge month tnum">民國{roc}年 {m}月（{y}）</span>{sample_badge}</div>
 <ul class="legend">{legend_html}</ul></header>
-<div class="cal-scroll"><div class="cal">
-<div class="dow"><div>{_DOW[0]}</div><div>{_DOW[1]}</div><div>{_DOW[2]}</div><div>{_DOW[3]}</div><div>{_DOW[4]}</div><div class="sat">{_DOW[5]}</div><div class="sun">{_DOW[6]}</div></div>
-<div class="grid">{grid_html}</div></div></div>
-<h2 class="section-t">本月除息基準日明細（推估）</h2>
-<div class="tbl-scroll"><table><thead><tr>
-<th>除息基準日</th><th>基金</th><th>入帳(估)</th><th>信心</th>
-</tr></thead><tbody>{rows}</tbody></table></div>
-{exc_html}
-{unp_html}
+{_main}
 <footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算「<b>除息基準日</b>」，非官方公告。{warn_html}<br>
 上述基金基準日皆以實際基金營業日為準。<br>
 依公開說明書規定，<b>配息入帳日為除息日後一個月內</b>，入帳時間將依實際作業為準。<br>

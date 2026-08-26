@@ -1,4 +1,4 @@
-"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.532)。L2 純函式,零 IO。
+"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.533)。L2 純函式,零 IO。
 
 用途:吃每檔基金的**配息歷史**,推估「本月**除息基準日** + 配息入帳日」,產生月曆結構供 L3 渲染。
 資料由 L1 抓好傳入(reuse `repositories.fund` 的 dividends);本層不碰網路、不 import streamlit。
@@ -35,11 +35,24 @@ v19.532 對抗式稽核四修(每條都附實跑數字,見對應常數 / 函式�
      掃 2025–2028 × 全假說 × 3 convention,補回 117 組原本無聲消失的 (假說, 月)。
   4. `_stale_state` / `predict_ex_for_month` / `build_month_calendar` 收 `ref_day`,cron(每月 1 號)
      不再被當成月中 15 號 → 少算 14 天陳舊度而誤殺月配基金。
+
+v19.533 §15 顯示層(user 2026-08-26 拍板)—— **只改「顯示什麼」,沒改「算什麼」**:
+  §15.1 `estimate_error_band(dividends)`:逐檔用**自己的**歷史 walk-forward,取 `|推估-實際|`
+        的 80% 分位當誤差帶 E,證據不足回 None。畫面上的「高/中/低」三級標籤由它取代;
+        引擎的 `confidence` **原封不動**(仍是 §3 閘門與 §13.6 硬門檻的依據,只是不再直接顯示)。
+        ⚠️ 禁止用全站合併分布回填單一基金 —— 那是讓沒證據的基金借用別檔的準確度(§1 捏造)。
+  §15.3 `build_month_calendar` 的 `unpredictable` 條目增列 `house` / `last_ex`,reason 文案
+        改人話 + 帶具體數字(見 `_reason_text`);L3 據此保留該檔的圖例顏色並顯示
+        **上一次的實際基準日**(事實),而**不是**把它當成本月預估(那是猜)。
+  §15.4 全部推不出 → `is_all_unpredictable` 為真 → 純文字摘要 / Flex 卡片整組換文案
+        (首行先講「是推不出,不是沒配息」、altText 移除「0 檔」)。
+  §12 相容:既有 key 一個都沒少,`error_band` / `house` / `last_ex` 皆為**新增**。
 """
 from __future__ import annotations
 
 import calendar as _calendar
 import datetime as _dt
+import math as _math
 import statistics as _stats
 from collections import Counter as _Counter
 from typing import Any
@@ -142,6 +155,17 @@ _STALE_LOW_PERIODS = 2           # 距 ref >= 2 個週期 → 信心壓 low
 # §7 的 ref_date:caller 只給 (ref_year, ref_month) 沒給「日」,取**月中**當該月的代表時點 ——
 # 取月初/月底會系統性低估/高估陳舊度 15 天(半個月配週期);月中是無偏的中點估計。
 _REF_DAY_OF_MONTH = 15
+
+# ── §15.1 誤差帶:畫面上的「高/中/低」三級標籤廢止,改「±N 天」──────────────────
+# user 2026-08-26 拍板:要的是「哪天該去看帳戶」,「中信心」回答不了這個問題。
+# ⚠️ **引擎內部的 `confidence` 一個字都沒動** —— 它仍是 §3 閘門與 §13.6 硬門檻的依據,
+#    只是不再直接顯示給 user。改的是「顯示什麼」,不是「算什麼」。
+# ⚠️ **禁止**用全站/全檔合併的誤差分布回填單一基金(§1 反捏造):那會讓一檔完全沒有證據的
+#    基金借用別檔的準確度,畫面上長得跟真的有把握一樣。證據不足就回 None,顯示「僅供參考」。
+_ERR_BAND_QUANTILE = 0.80        # |推估 - 實際| 的 80% 分位(§15.1;向上取整後為該檔誤差帶 E)
+_ERR_BAND_MIN_SAMPLES = 3        # walk-forward 實際「有給出日期」的樣本數下限,不足 → None
+# 起手歷史筆數沿用 `_CONF_MIN_RECORDS_FOR_TRUST`(8):同一條「這檔基金的歷史夠不夠撐一個
+# 有數字的宣稱」門檻,不另立第二個閾值(§3.3 SSOT,避免兩處各自漂移)。
 
 _HOLIDAY_CAL_TW = "TW"                   # §8 provenance:真有國定假日表
 _HOLIDAY_CAL_WEEKEND = "weekend_only"    # §8 provenance:holidays 套件缺 → 只跳週末
@@ -850,19 +874,117 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
             "horizon_months": _h, **_prov}
 
 
+# ── §15.1 逐檔誤差帶(L2 純函式,零 IO;顯示成 ±N 天 / 僅供參考的字串在 L3)──────────
+def _records_to_dividends(recs: list) -> list:
+    """已 parse 的紀錄 → `infer_schedule` 吃得下的原始 dict list(walk-forward 內部用)。
+
+    `_parse_records` 會排序 + 去重,原始 `dividends` 的索引順序與時序**無關**(MoneyDJ 是
+    newest-first),所以不能直接切原始 list 當「歷史前綴」—— 必須從 parse 後的時序切,
+    再還原成 dict 餵回去。key 名對齊 `_parse_records` 的取值順序(`date` 優先)。
+    """
+    return [{"date": r["ex"].isoformat(),
+             "pay_date": r["pay"].isoformat() if r["pay"] else None,
+             "amount": r["amount"], "yield_pct": r["yield_pct"]} for r in recs]
+
+
+def estimate_error_band(dividends: list) -> "int | None":
+    """配息史 → 該檔**自己的**誤差帶 E(天);證據不足 → None(§15.1,§1 不借別檔的準確度)。
+
+    做法:對這一檔基金做 walk-forward —— 從第 `_CONF_MIN_RECORDS_FOR_TRUST`(8)筆起,
+    每次**只用過去**推下一筆的除息基準日,收集 `|推估 - 實際|` 的日數,取 80% 分位向上取整。
+
+        E = ceil(quantile_80({ |pred_i - true_i| : i in walk_forward(hist) }))
+
+    Returns:
+        int  —— 該檔誤差帶(天);0 代表 walk-forward 八成以上逐日命中。
+        None —— **證據不足,不給數字**(歷史 < 8 筆,或 walk-forward 有給出日期的樣本 < 3)。
+                L3 顯示「僅供參考」,不可自行填一個數字補位。
+
+    ⚠️ **不可改成全站合併分布**:把所有基金的誤差混在一起算一個共用的 ±N,會讓一檔
+    完全沒有證據的新基金顯示得跟老基金一樣有把握 —— 那是 §1 意義下的捏造。
+    每檔只准用自己的歷史,算不出來就誠實說算不出來。
+
+    ⚠️ 口徑與 §13.6 驗收一致(`tests/test_dividend_anchor_v19527.py::_walk_forward`):
+    起手 8 筆、ref 取「最後一筆歷史所在年月」、棄權(回 None)**不計入**誤差樣本 ——
+    棄權在畫面上本來就不會顯示數字,把它當成 0 天誤差會虛報準確度。
+
+    複雜度:O(k) 次 `infer_schedule` + `predict_ex_for_month`(k = 歷史筆數 - 8),
+    純計算無 IO;`build_month_calendar` 只對**推得出日期**的基金呼叫(見該函式註解)。
+    """
+    recs = _parse_records(dividends)
+    if len(recs) < _CONF_MIN_RECORDS_FOR_TRUST:
+        return None                      # 歷史不足 → 不給數字(§15.1)
+    errs: list = []
+    for i in range(_CONF_MIN_RECORDS_FOR_TRUST, len(recs)):
+        _tgt = recs[i]["ex"]
+        _ref = recs[i - 1]["ex"]         # 「現在」= 最後一筆歷史所在月(= 推下一筆的時點)
+        _got = predict_ex_for_month(infer_schedule(_records_to_dividends(recs[:i])),
+                                    _tgt.year, _tgt.month,
+                                    ref_year=_ref.year, ref_month=_ref.month)
+        if not _got or not _got.get("ex_date"):
+            continue                     # 誠實棄權的月份不進誤差樣本(見 docstring)
+        errs.append(abs((_got["ex_date"] - _tgt).days))
+    if len(errs) < _ERR_BAND_MIN_SAMPLES:
+        return None                      # 樣本太少 → 分位數沒有意義(§15.1)
+    return _quantile_ceil(errs, _ERR_BAND_QUANTILE)
+
+
+def _quantile_ceil(values: list, q: float) -> int:
+    """整數樣本的 q 分位(線性內插)後**向上取整**。空 list → 呼叫端須先擋(§1 不回預設值)。
+
+    內插法與 numpy 預設 (`method="linear"`) 一致:h = (n-1)·q,在相鄰兩個順序統計量之間內插。
+    向上取整是刻意的**保守**方向 —— 誤差帶寧可報大一天,不可報小一天讓 user 少留餘裕。
+    """
+    _s = sorted(values)
+    _h = (len(_s) - 1) * q
+    _lo = int(_h)
+    _hi = min(_lo + 1, len(_s) - 1)
+    return int(_math.ceil(_s[_lo] + (_h - _lo) * (_s[_hi] - _s[_lo])))
+
+
 # §14.2 unpredictable 的四類成因(code 給程式判讀,文字給 UI 顯示人話)
 REASON_ANCHOR_WEAK = "anchor_weak"        # 復現率不足(s < 0.80)—— 配息節奏不規則
 REASON_TOO_FEW = "too_few"                # 歷史筆數 < 3
 REASON_STALE = "stale"                    # 疑停配 / 資料過舊
 REASON_NO_ANCHOR_DAY = "no_anchor_day"    # 該月連假,無合理錨定日(位移超過 τ)
 
-_REASON_TEXT = {
-    REASON_TOO_FEW: "配息紀錄不足 3 筆，無法判斷節奏，本月不推估",
-    REASON_STALE: "最近無配息紀錄（疑停配 / 資料過舊），本月無法推估",
-    REASON_NO_ANCHOR_DAY: "本月錨定日遇連假／月底，營業日校正超出容忍範圍，不硬推日期",
-    REASON_ANCHOR_WEAK: "配息日期無穩定規律（歷史復現率不足），本月無法推估",
-}
-_REASON_TEXT_IRREGULAR = "配息節奏不規則 / 資料不足，本月無法推估"    # anchor_weak 的節奏版文案
+# §15.3 文案改**人話 + 具體數字**(user 2026-08-26 拍板)。舊版四句全是術語
+# (「錨定日」「營業日校正」「容忍範圍」「歷史復現率」),user 讀完仍不知道該不該擔心
+# —— 「停配」與「這個月剛好卡連假」是完全不同的兩件事,但舊文案讀起來一樣。
+# ⚠️ 數字一律**現算**,不寫死:筆數 / 靜默月數 / 上次日期 / 名目錨定日都取自該檔自己的資料。
+# 這兩類**文案本身沒帶「上次是哪天」**(語意上不自然),L3 明細表須另附(§15.3「並附上次實際日期」)。
+_REASON_WITHOUT_LAST_DATE = (REASON_TOO_FEW, REASON_NO_ANCHOR_DAY)
+
+
+def reason_needs_last_date(reason_code: str) -> bool:
+    """該類 reason 文案本身**沒有**帶上次實際基準日 → L3 須自行另附(§15.3)。
+
+    知識放在文案這一側(SSOT):文案改了、有沒有帶日期跟著改,L3 不必猜也不必字串比對。
+    """
+    return reason_code in _REASON_WITHOUT_LAST_DATE
+
+
+def _fmt_md(d: "_dt.date | None") -> str:
+    """date → 「M/D」;None → ""(§1 不捏造日期,呼叫端據空字串決定整句怎麼收)。"""
+    return f"{d.month}/{d.day}" if d is not None else ""
+
+
+def _reason_text(code: str, *, n: int = 0, window: int = 0,
+                 last_ex: "_dt.date | None" = None, stale_months: int = 0,
+                 nominal: "_dt.date | None" = None) -> str:
+    """§15.3 四類 reason 的人話文案(SSOT:HTML 明細表 / 虛線 chip / LINE 三處共用)。"""
+    if code == REASON_TOO_FEW:
+        return f"只有 {n} 筆配息紀錄，還看不出規律（至少要 {_ANCHOR_MIN_RECORDS} 筆）。"
+    if code == REASON_STALE:
+        _when = f"{last_ex.year}/{last_ex.month:02d}" if last_ex is not None else "更早以前"
+        return f"上次配息是 {_when}，已經 {stale_months} 個月沒動靜，可能停配或資料沒更新。"
+    if code == REASON_NO_ANCHOR_DAY:
+        _at = _fmt_md(nominal) or _fmt_md(last_ex)
+        if not _at:                       # 兩個日期都算不出 → 不硬掰「平常在 X 前後」(§1)
+            return "這個月碰上連假，順延後跟平常差太多，不亂猜。"
+        return f"平常在 {_at} 前後除息，但這個月碰上連假，順延後差太多，不亂猜。"
+    _tail = f"上次是 {_fmt_md(last_ex)}。" if last_ex is not None else ""
+    return f"最近 {window} 次除息的日子跳來跳去，對不上固定規律，不硬推。{_tail}"
 
 
 def _on_phase_grid(schedule: dict, month: int) -> bool:
@@ -888,19 +1010,26 @@ def _unpredictable_reason(schedule: dict, year: int, month: int,
     _cad = schedule.get("cadence")
     _step = _CADENCE_MONTHS.get(_cad)
     _last_ex = schedule.get("last_ex")
-    if int(schedule.get("n") or 0) < _ANCHOR_MIN_RECORDS:
-        return REASON_TOO_FEW, _REASON_TEXT[REASON_TOO_FEW]
+    _n = int(schedule.get("n") or 0)
+    if _n < _ANCHOR_MIN_RECORDS:
+        return REASON_TOO_FEW, _reason_text(REASON_TOO_FEW, n=_n)
     if _step and _last_ex is not None:
         _ry = ref_year if ref_year is not None else year
         _rm = ref_month if ref_month is not None else month
-        if _stale_state(_last_ex, _ry, _rm, _step, ref_day)[2]:
-            return REASON_STALE, _REASON_TEXT[REASON_STALE]
+        _months, _periods, _too_stale = _stale_state(_last_ex, _ry, _rm, _step, ref_day)
+        if _too_stale:
+            return REASON_STALE, _reason_text(REASON_STALE, last_ex=_last_ex,
+                                              stale_months=_months)
     _anchor = schedule.get("anchor")
     if _anchor and _on_phase_grid(schedule, month) \
             and project_anchor(_anchor, year, month) is None:
-        return REASON_NO_ANCHOR_DAY, _REASON_TEXT[REASON_NO_ANCHOR_DAY]
-    return REASON_ANCHOR_WEAK, (_REASON_TEXT_IRREGULAR if _cad in ("single", "irregular")
-                                else _REASON_TEXT[REASON_ANCHOR_WEAK])
+        # 名目錨定日(未校正)= 「平常大約是哪天」;校正後超出 τ 才落到這一類,
+        # 所以這個日期正是 user 要的參照點(§15.3「平常在 M/D 前後除息」)。
+        _nominal = _anchor_nominal(_anchor.get("type"), _anchor.get("params"), year, month)
+        return REASON_NO_ANCHOR_DAY, _reason_text(REASON_NO_ANCHOR_DAY, nominal=_nominal,
+                                                  last_ex=_last_ex)
+    return REASON_ANCHOR_WEAK, _reason_text(REASON_ANCHOR_WEAK, last_ex=_last_ex,
+                                            window=min(_n, _RECENT_N))
 
 
 def build_month_calendar(funds: list, year: int, month: int,
@@ -920,9 +1049,13 @@ def build_month_calendar(funds: list, year: int, month: int,
         {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{},
          holiday_calendar}
         event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n,
+                 **error_band**,
                  **anchor_type, anchor_score, roll_convention, holiday_calendar, horizon_months**}
+                 error_band = §15.1 該檔誤差帶(天,int)或 None(證據不足 → L3 顯示「僅供參考」)
         excluded     = {code, name, reason}(無配息 = 累積型/查無)
-        unpredictable= {code, name, reason, reason_code}(有配息史但本月無法推估)
+        unpredictable= {code, name, house, reason, reason_code, last_ex}(有配息史但本月無法推估)
+                       house / last_ex 為 §15.3 新增:圖例顏色保留 + 顯示**上一次的實際基準日**
+                       (事實;**不是**把它當本月預估 —— 那是猜)
                        reason_code ∈ {anchor_weak, too_few, stale, no_anchor_day}(§14.2),
                        reason = 對應人話。稽核 M3 + §1:誠實揭露成因而非靜默消失;
                        季/年配相位網格外的「空月」不列此(合理不配)。
@@ -955,14 +1088,22 @@ def build_month_calendar(funds: list, year: int, month: int,
             # §14.2:推不出就要說得出成因(code + 人話);季/年配的**空月**是合理不配,不列。
             _code, _why = _unpredictable_reason(sch, year, month, ref_year, ref_month, ref_day)
             if sch["cadence"] in ("single", "irregular") or _on_phase_grid(sch, month):
-                unpredictable.append({"code": code, "name": name,
-                                      "reason": _why, "reason_code": _code})
+                # §15.3:推不出的基金**保留可見** —— 帶 house(圖例顏色不斷裂)+ last_ex
+                # (上一次的**實際**基準日,事實)。⚠️ last_ex 是「上次」不是「本月預估」:
+                # 把上個月的日期擺進本月格子等於發明位置,月底型一猜就錯一整輪。
+                unpredictable.append({"code": code, "name": name, "house": house,
+                                      "reason": _why, "reason_code": _code,
+                                      "last_ex": sch["last_ex"]})
             # 季/年配的空月 → 合理不配,不列也不算異常
             continue
         events.append({"code": code, "name": name, "house": house,
                        "ex_date": pred["ex_date"], "pay_date_est": pred["pay_date_est"],
                        "confidence": pred["confidence"], "last_amount": sch["last_amount"],
                        "last_yield": sch["last_yield"], "n": sch["n"],
+                       # §15.1 誤差帶:逐檔用**自己的**歷史 walk-forward 算(None = 證據不足)。
+                       # 只對推得出日期的基金算(推不出的那些畫面上顯示 reason,不顯示 ±N),
+                       # 省掉 O(k) 次重擬合。`confidence` 仍原封不動帶著 —— 它是閘門依據。
+                       "error_band": estimate_error_band((f or {}).get("dividends")),
                        # §8 provenance 五欄:v19.532 前在這層被丟光(見 docstring)
                        **{_k: pred.get(_k) for _k in _PROVENANCE_KEYS}})
 
@@ -1007,6 +1148,41 @@ def detect_house(name: str) -> str:
         if any(k in _n for k in keys):
             return house
     return ""
+
+
+# ── §15.4 / §15.5「全部推不出」的整組文案(HTML / LINE 純文字 / Flex 三處共用 SSOT)──────
+# 為什麼要整組換掉:原本全空月曆 + 「本月無推估除息基準日」讀起來就是**「這個月沒配息」**,
+# 但事實是「這幾檔都會配息,只是我算不出是哪一天」—— 那是 §1 意義下「讓失敗看起來像成功」。
+# 空月曆格是最大的誤導來源(格子是空的 = 那天沒事),所以這個情境**不畫月曆**,改逐檔一列。
+ALL_UNPRED_TITLE = "本月除息日推不出來"
+ALL_UNPRED_SUB_1 = "你的 {n} 檔基金這個月都會配息，只是最近的除息節奏對不上規律，系統不敢給日期。"
+ALL_UNPRED_SUB_2 = "下方列出各檔上次的實際基準日供參考，實際日期請看基金公司公告。"
+ALL_UNPRED_LINE_HEAD = "⚠️ 本月 {n} 檔都推不出除息日 —— 是推不出，不是沒配息"
+PENDING_SECTION_TITLE = "待確認清單"
+# §15.5:先做**點名**,不做手動輸入儲存(手動覆寫的 UI 與持久化留待 user 看過後再決定,§-1 不擴散)。
+PENDING_ASK_NOTE = "※ 這幾檔若你手上有近期的實際基準日，可以補進來提高準確度。"
+
+
+def is_all_unpredictable(cal: "dict | None") -> bool:
+    """本月**一檔都推不出**(有配息史卻全數棄權)→ True,觸發 §15.4 的整組換文案 / 換版面。
+
+    與「真的沒有任何基金」區分開:`events` 與 `unpredictable` **都**空 = user 根本沒基金
+    或全是累積型,那時仍走原本的空月文案(誠實,且沒有東西可以列)。
+    三個介面(HTML / LINE 文字 / Flex)共用這一個判斷,避免三處條件各自漂移。
+    """
+    _c = cal or {}
+    return not (_c.get("events") or []) and bool(_c.get("unpredictable") or [])
+
+
+def pending_line(entry: dict) -> str:
+    """待確認清單的單行文字:`投信名 · 上次 M/D`(§15.3 / §15.4)。
+
+    §1:顯示的是**上一次的實際基準日**(事實),不是把它當本月預估 —— 差別在那個「上次」二字,
+    不可省。查不到上次日期 → 誠實寫「上次日期不詳」,不回填任何日期。
+    """
+    _last = (entry or {}).get("last_ex")
+    _when = f"上次 {_fmt_md(_last)}" if isinstance(_last, _dt.date) else "上次日期不詳"
+    return f"{display_label(entry or {})} · {_when}"
 
 
 # ── LINE 月初摘要文字(方式 C;純字串,零 IO)──────────────────
@@ -1172,8 +1348,25 @@ def build_summary_text(cal: dict) -> str:
     """
     y, m = cal.get("year"), cal.get("month")
     _roc = (y - 1911) if isinstance(y, int) else "?"
-    lines = [f"🗓️ 基金除息行事曆 · 民國{_roc}年{m}月（推估）"]
     events = cal.get("events") or []
+    _unp = cal.get("unpredictable") or []
+    # §15.4:全部推不出 → **首行**先講清楚「是推不出,不是沒配息」,再列各檔上次的實際基準日。
+    # 原本第一行是「🗓️ 基金除息行事曆 · 民國X年Y月（推估）」+ 一句「本月無推估除息基準日」,
+    # 在 LINE 的推播預覽裡只看得到前兩行 → user 讀到的結論是「這個月沒事」(§1 違憲)。
+    if is_all_unpredictable(cal):
+        lines = [ALL_UNPRED_LINE_HEAD.format(n=len(_unp)),
+                 f"🗓️ 民國{_roc}年{m}月 · {PENDING_SECTION_TITLE}"]
+        for _u in _unp[:_FLEX_MAX_ROWS]:
+            lines.append(f"• {pending_line(_u)}")
+        if len(_unp) > _FLEX_MAX_ROWS:
+            lines.append(f"…另 {len(_unp) - _FLEX_MAX_ROWS} 檔（開 App 看完整）")
+        lines.append(PENDING_ASK_NOTE)
+        _warn = holiday_calendar_note(cal)
+        if _warn:
+            lines.append(_warn)
+        lines.append("※ 推估非官方,實際以基金公司公告為準。")
+        return "\n".join(lines)
+    lines = [f"🗓️ 基金除息行事曆 · 民國{_roc}年{m}月（推估）"]
     if not events:
         lines.append("你的基金本月無推估除息基準日（或資料不足）。")
     else:
@@ -1185,7 +1378,6 @@ def build_summary_text(cal: dict) -> str:
     # user 2026-08-24「沒有配息的整段移除」→ 不再提累積型/無配息檔數(那些本來就不會配,不需提醒)。
     # `unpredictable`(有配息史但本月推不出)**保留** —— 那是「可能有配息但我算不出來」,
     # 靜默吃掉會讓你以為當月沒事(§1 誠實揭露)。
-    _unp = cal.get("unpredictable") or []
     if _unp:
         lines.append(f"（{len(_unp)} 檔節奏不規則/疑停配,無法推估）")
     _warn = holiday_calendar_note(cal)      # v19.532 阻斷 2:假日表降級要說出口(§1)
@@ -1222,6 +1414,50 @@ def _flex_event_row(e: dict) -> dict:
     return {"type": "box", "layout": "horizontal", "spacing": "sm", "contents": _contents}
 
 
+def _flex_all_unpredictable(cal: dict, roc, month, unp: list) -> dict:
+    """§15.4「全部推不出」的 Flex 卡片:標題 / 副標 / 逐檔上次基準日 / 點名補資料。
+
+    §1:**不可**沿用「本月無推估除息基準日」那張卡 —— 它讀起來是「這個月沒配息」,
+    而事實是「都會配,只是算不出哪天」。altText 也必須改(LINE 通知列只看得到 altText,
+    原本會顯示「0 檔」,那正是最誤導的一句)。
+    """
+    _n = len(unp)
+    _body: list = [
+        {"type": "text", "text": ALL_UNPRED_SUB_1.format(n=_n),
+         "size": "sm", "color": _FLEX_INK, "wrap": True},
+        {"type": "text", "text": ALL_UNPRED_SUB_2,
+         "size": "xxs", "color": _FLEX_SUB, "wrap": True},
+        {"type": "separator", "margin": "sm"},
+    ]
+    for _u in unp[:_FLEX_MAX_ROWS]:
+        _body.append({"type": "text", "text": pending_line(_u), "size": "sm",
+                      "color": _FLEX_INK, "wrap": True})
+    if _n > _FLEX_MAX_ROWS:
+        _body.append({"type": "text", "text": f"…另 {_n - _FLEX_MAX_ROWS} 檔（開 App 看完整）",
+                      "size": "xs", "color": _FLEX_SUB, "wrap": True})
+    _body.append({"type": "text", "text": PENDING_ASK_NOTE,
+                  "size": "xxs", "color": _FLEX_SUB, "wrap": True, "margin": "sm"})
+    _warn = holiday_calendar_note(cal)
+    if _warn:
+        _body.append({"type": "text", "text": _warn, "size": "xxs", "color": _FLEX_SUB,
+                      "wrap": True})
+    _body.append({"type": "text", "text": "※ 推估非官方,實際以基金公司公告為準。",
+                  "size": "xxs", "color": _FLEX_SUB, "wrap": True})
+    _bubble = {
+        "type": "bubble", "size": "mega",
+        "header": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": [
+            {"type": "text", "text": f"⚠️ {ALL_UNPRED_TITLE}", "weight": "bold", "size": "lg",
+             "color": _FLEX_INK, "wrap": True},
+            {"type": "text", "text": f"民國{roc}年{month}月・{PENDING_SECTION_TITLE}",
+             "size": "sm", "color": _FLEX_SUB},
+        ]},
+        "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": _body},
+    }
+    # §15.4 明確要求**移除「0 檔」**:0 檔會被讀成「這個月沒有基金配息」,與事實相反。
+    return {"contents": _bubble,
+            "alt_text": f"🗓️ 民國{roc}年{month}月 除息行事曆（{_n} 檔待確認・系統推不出日期）"}
+
+
 def build_summary_flex(cal: dict) -> dict:
     """月曆結構 → LINE Flex 彩色卡片。**純函式,零 IO**。回 {"contents": bubble, "alt_text": str}。
 
@@ -1231,6 +1467,10 @@ def build_summary_flex(cal: dict) -> dict:
     _roc = (y - 1911) if isinstance(y, int) else "?"
     events = dedupe_events(cal.get("events") or [])    # 同日同投信只列一次(user 2026-08-24)
     _unp = cal.get("unpredictable") or []
+
+    # §15.4:全部推不出 → 換一整組(標題 / 副標 / 內容 / altText),不再是「無推估」的空卡片。
+    if is_all_unpredictable(cal):
+        return _flex_all_unpredictable(cal, _roc, m, _unp)
 
     _body: list = []
     if not events:
@@ -1273,4 +1513,9 @@ def build_summary_flex(cal: dict) -> dict:
 
 __all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
            "detect_anchor", "project_anchor", "holiday_calendar_note",
-           "detect_house", "build_summary_text", "build_summary_flex", "add_business_days"]
+           "detect_house", "build_summary_text", "build_summary_flex", "add_business_days",
+           # §15 顯示層:誤差帶 + 「全部推不出」的文案 SSOT(L3 / LINE 共用)
+           "estimate_error_band", "is_all_unpredictable", "pending_line",
+           "reason_needs_last_date", "ALL_UNPRED_TITLE", "ALL_UNPRED_SUB_1",
+           "ALL_UNPRED_SUB_2", "ALL_UNPRED_LINE_HEAD", "PENDING_SECTION_TITLE",
+           "PENDING_ASK_NOTE"]

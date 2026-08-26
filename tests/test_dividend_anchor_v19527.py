@@ -33,6 +33,7 @@ from services.dividend_calendar import (
     build_month_calendar,
     build_summary_text,
     detect_anchor,
+    estimate_error_band,
     infer_schedule,
     is_business_day,
     predict_ex_for_month,
@@ -1694,3 +1695,191 @@ def test_production_callers_pass_the_real_day_down():
         assert call, f"{rel} 找不到 build_month_calendar 呼叫"
         assert "ref_day=" in call.group(0), (
             f"{rel} 呼叫 build_month_calendar 時沒把真實日期傳下去:{call.group(0)}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §15.1 `estimate_error_band` —— 逐檔誤差帶(取代畫面上的「高/中/低」三級標籤)
+#   核心紅線:**每檔只准用自己的歷史**。用全站合併分布回填單一基金 = 讓一檔沒有證據的
+#   基金借用別檔的準確度,那是 §1 意義下的捏造 —— 比不給數字更危險。
+# ══════════════════════════════════════════════════════════════════════
+def _err_divs(dates):
+    """[date] → `estimate_error_band` 吃得下的 dividends(只需要基準日)。"""
+    return [{"date": d.isoformat()} for d in dates]
+
+
+def _clean_monthly(day, n, start=(2024, 1)):
+    """n 筆「每月固定 day 號、落非營業日則校正」的乾淨月配史(誤差帶應為 0)。"""
+    out, (y, m) = [], start
+    for _ in range(n):
+        out.append(_dc.roll_to_business_day(_dt.date(y, m, min(day, _calmod.monthrange(y, m)[1]))))
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+    return out
+
+
+def test_error_band_none_when_history_too_short():
+    """歷史 < 8 筆 → **不給數字**(回 None)。
+
+    §15.1:8 筆是 `_CONF_MIN_RECORDS_FOR_TRUST`,同一條「這檔基金的歷史夠不夠撐一個
+    有數字的宣稱」門檻。7 筆的基金畫面上顯示「僅供參考」,而不是一個看起來有把握的 ±0 天。
+    """
+    for _n in (0, 1, 3, 7):
+        assert estimate_error_band(_err_divs(_clean_monthly(14, _n))) is None, f"n={_n}"
+    assert estimate_error_band(None) is None                 # 無資料也不可回 0(§1)
+    assert estimate_error_band([]) is None
+
+
+def test_error_band_none_when_walk_forward_samples_too_few():
+    """歷史夠長、但 walk-forward 幾乎全棄權 → 樣本 < 3 → 仍回 None。
+
+    §1:分位數建立在 1~2 個樣本上沒有意義,那種「±0 天」是假精確。
+    這裡用 10 筆**完全不規則**的歷史:每次都推不出來 → 樣本 0 → None。
+    """
+    rng = __import__("random").Random(915)
+    _base = _dt.date(2024, 1, 3)
+    _dates, _cur = [], _base
+    for _ in range(10):
+        _cur = _dc.roll_to_business_day(_cur + _dt.timedelta(days=rng.randint(17, 47)))
+        _dates.append(_cur)
+    assert estimate_error_band(_err_divs(_dates)) is None
+
+
+def test_error_band_zero_for_perfectly_regular_fund():
+    """每月固定日號、12 筆 → walk-forward 逐日命中 → 誤差帶 0(畫面顯示「±0 天」)。"""
+    assert estimate_error_band(_err_divs(_clean_monthly(14, 12))) == 0
+
+
+def test_error_band_grows_with_real_jitter():
+    """同一檔基金加入作業抖動後,誤差帶**必須變大** —— 否則這個數字沒有在測量任何東西。"""
+    _clean = _clean_monthly(14, 16)
+    _jit = list(_clean)
+    for _i in range(9, len(_jit)):                 # 只動 walk-forward 會評到的後段
+        _jit[_i] = _dc.roll_to_business_day(_jit[_i] + _dt.timedelta(days=3 + (_i % 4)))
+    _b0, _b1 = estimate_error_band(_err_divs(_clean)), estimate_error_band(_err_divs(_jit))
+    assert _b0 == 0
+    assert _b1 is None or _b1 > _b0, f"抖動後誤差帶沒變大:{_b0} → {_b1}"
+
+
+def test_error_band_is_per_fund_and_stateless():
+    """§15.1 紅線:**禁止**用全站合併分布回填單一基金。
+
+    這條測的是「函式只吃這一檔的歷史,而且不帶跨呼叫的狀態」——
+    先算一次弱歷史的結果,中間夾 30 次強歷史的呼叫,再算一次弱歷史:兩次必須完全相同。
+    若哪天有人加了「全站誤差快取 / 全域校準」,弱檔就會被強檔的分布拉好看,這條會立刻紅。
+    """
+    _weak = _err_divs(_clean_monthly(14, 8))       # 剛好 8 筆 → 樣本數少
+    _strong = _err_divs(_clean_monthly(9, 20))
+    _first = estimate_error_band(_weak)
+    for _ in range(30):
+        estimate_error_band(_strong)
+    assert estimate_error_band(_weak) == _first
+    # 簽名只收一檔的 dividends —— 沒有第二個參數可以把別檔的資料餵進來
+    import inspect
+    _sig = list(inspect.signature(estimate_error_band).parameters)
+    assert _sig == ["dividends"], f"簽名多了東西,可能是全站分布的入口:{_sig}"
+
+
+def test_error_band_matches_acceptance_walk_forward_shape():
+    """口徑 drift-lock:誤差帶的 walk-forward 必須與 §13.6 驗收同一套規則。
+
+    起手 8 筆(`_MIN_HIST`)、只用過去推下一筆、**棄權不計入誤差樣本**。
+    棄權在畫面上本來就不顯示數字,把它當成 0 天誤差會把誠實棄權洗成準確度(§1)。
+    這裡用真實資料逐檔比對:自己重算一次分位數,必須與函式輸出一致。
+    """
+    import math as _m
+    for code, raw in _REAL_FUNDS.items():
+        recs = [_dt.date.fromisoformat(_iso(a)) for a, _b, _c in raw][::-1]
+        errs = []
+        for i in range(_MIN_HIST, len(recs)):
+            tgt, ref = recs[i], recs[i - 1]
+            got = predict_ex_for_month(infer_schedule(_err_divs(recs[:i])), tgt.year, tgt.month,
+                                       ref_year=ref.year, ref_month=ref.month)
+            if got and got.get("ex_date"):
+                errs.append(abs((got["ex_date"] - tgt).days))
+        if len(errs) < 3:
+            assert estimate_error_band(_err_divs(recs)) is None, code
+            continue
+        _s = sorted(errs)
+        _h = (len(_s) - 1) * 0.80
+        _lo = int(_h)
+        _hi = min(_lo + 1, len(_s) - 1)
+        _want = int(_m.ceil(_s[_lo] + (_h - _lo) * (_s[_hi] - _s[_lo])))
+        assert estimate_error_band(_err_divs(recs)) == _want, code
+
+
+def test_error_band_on_real_five_funds_is_plausible():
+    """user 5 檔真實配息表的誤差帶:四檔規律者 <= 2 天,施羅德(節奏最亂)明顯較大。
+
+    §1:這條不是為了鎖死數字,是為了擋「全部回 0 天」或「全部回 None」這兩種
+    看起來很乾淨、實際上沒在測量任何東西的退化。
+    """
+    _bands = {c: estimate_error_band(_err_divs([_dt.date.fromisoformat(_iso(a))
+                                                for a, _b, _c in raw][::-1]))
+              for c, raw in _REAL_FUNDS.items()}
+    assert all(b is not None for b in _bands.values()), _bands   # 5 檔歷史都 >= 8 筆
+    for _c in ("JFZN3 摩根", "ACTI71 聯博", "ACCP138 瀚亞", "TLZF9 安聯"):
+        assert _bands[_c] <= 2, (_c, _bands)
+    assert _bands["SD080 施羅德"] > 2, _bands                     # 最亂的那檔不可被美化
+
+
+def test_build_month_calendar_carries_error_band_and_keeps_confidence():
+    """§12 相容 + §15.1:event 多一個 `error_band`,`confidence` **一個字都不能少**。
+
+    引擎的 confidence 仍是 §3 閘門與 §13.6 硬門檻的依據 —— 改的是「顯示什麼」,
+    不是「算什麼」。把它從 event 拿掉會讓硬門檻無從量測。
+    """
+    funds = [{"code": "M14", "name": "月配 14 號", "house": "",
+              "dividends": _err_divs(_clean_monthly(14, 12, start=(2025, 8)))}]
+    cal = build_month_calendar(funds, 2026, 8, ref_year=2026, ref_month=7, ref_day=20)
+    assert cal["counts"]["events"] == 1
+    ev = cal["events"][0]
+    assert ev["error_band"] == 0
+    assert ev["confidence"] in ("low", "medium", "high")      # 保留不動
+
+
+def test_unpredictable_entries_carry_house_and_last_ex():
+    """§15.3:推不出的基金要**留得住** —— house(圖例顏色)+ last_ex(上次實際基準日)。
+
+    ⚠️ `last_ex` 是「上一次的**實際**基準日」這個**事實**,不是本月預估。
+    把它當本月預估擺進日期格子,月底型一猜就錯一整輪 —— 那正是本次要修的病。
+    """
+    funds = [{"code": "IRR9", "name": "施羅德不規則", "house": "施羅德",
+              "dividends": _err_divs([_dt.date(2025, 1, 10), _dt.date(2025, 2, 20),
+                                      _dt.date(2025, 6, 5)])}]
+    cal = build_month_calendar(funds, 2026, 8)
+    u = cal["unpredictable"][0]
+    assert u["house"] == "施羅德"
+    assert u["last_ex"] == _dt.date(2025, 6, 5)
+    assert u["reason_code"] in ("anchor_weak", "too_few", "stale", "no_anchor_day")
+
+
+def test_reason_texts_are_plain_chinese_with_numbers():
+    """§15.3:四類 reason 文案改人話**且帶具體數字**,不再是術語。
+
+    舊版四句(「錨定日」「營業日校正」「容忍範圍」「歷史復現率」)讀完仍分不出
+    「停配」與「這個月剛好卡連假」—— 那兩件事對 user 的行動完全不同。
+    """
+    _t = _dc._reason_text
+    assert _t(_dc.REASON_TOO_FEW, n=2) == "只有 2 筆配息紀錄，還看不出規律（至少要 3 筆）。"
+    assert _t(_dc.REASON_STALE, last_ex=_dt.date(2025, 3, 14), stale_months=11) == (
+        "上次配息是 2025/03，已經 11 個月沒動靜，可能停配或資料沒更新。")
+    assert _t(_dc.REASON_NO_ANCHOR_DAY, nominal=_dt.date(2026, 2, 15)) == (
+        "平常在 2/15 前後除息，但這個月碰上連假，順延後差太多，不亂猜。")
+    assert _t(_dc.REASON_ANCHOR_WEAK, window=12, last_ex=_dt.date(2026, 7, 29)) == (
+        "最近 12 次除息的日子跳來跳去，對不上固定規律，不硬推。上次是 7/29。")
+    # §1:術語不可回流
+    _all = " ".join([_t(_dc.REASON_TOO_FEW, n=2),
+                     _t(_dc.REASON_STALE, last_ex=_dt.date(2025, 3, 1), stale_months=9),
+                     _t(_dc.REASON_NO_ANCHOR_DAY, nominal=_dt.date(2026, 2, 15)),
+                     _t(_dc.REASON_ANCHOR_WEAK, window=12, last_ex=_dt.date(2026, 7, 1))])
+    for _jargon in ("錨定", "營業日校正", "容忍範圍", "復現率"):
+        assert _jargon not in _all, f"reason 文案退回術語:{_jargon}"
+
+
+def test_reason_text_omits_date_it_does_not_have():
+    """§1:上次日期不明時**不可**掰一個 —— 整句改寫,不留半截「上次是 。」。"""
+    assert _dc._reason_text(_dc.REASON_ANCHOR_WEAK, window=5, last_ex=None).endswith("不硬推。")
+    assert "上次是" not in _dc._reason_text(_dc.REASON_ANCHOR_WEAK, window=5, last_ex=None)
+    assert _dc._reason_text(_dc.REASON_NO_ANCHOR_DAY, nominal=None, last_ex=None) == (
+        "這個月碰上連假，順延後跟平常差太多，不亂猜。")

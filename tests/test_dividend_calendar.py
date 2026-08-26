@@ -241,7 +241,13 @@ def test_stale_monthly_not_predicted_and_bucketed():
     funds = [{"code": "OLD", "name": "停配月配基金", "dividends": _monthly_divs(day=14, start=(2024, 1), n=12)}]
     cal = build_month_calendar(funds, 2026, 8)
     assert cal["counts"]["events"] == 0 and cal["counts"]["unpredictable"] == 1
-    assert "疑停配" in cal["unpredictable"][0]["reason"]
+    # §15.3 文案改人話(v19.533):原本是「最近無配息紀錄（疑停配 / 資料過舊）」這種術語句,
+    # 改成帶**具體數字**的「上次配息是 YYYY/MM，已經 N 個月沒動靜，可能停配或資料沒更新。」
+    # —— 判斷仍走同一個 `_stale_state`,只是說法從術語換成 user 讀得懂的話。
+    _u = cal["unpredictable"][0]
+    assert _u["reason_code"] == "stale"
+    assert "可能停配或資料沒更新" in _u["reason"] and "2024/12" in _u["reason"]
+    assert _u["last_ex"] == _dt.date(2024, 12, 16)      # §15.3:上次的**實際**基準日(事實;12/14 是週六 → 校正)
 
 
 def test_quarterly_end_of_month_lands_correct_month():

@@ -69,7 +69,13 @@ def test_main_dry_run_prints_summary(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert seen["codes"] == ["TLZF9", "JFZN3"]          # 持倉∪追蹤去重保序
-    assert "基金除息行事曆" in out and "推估非官方" in out
+    # ⚠️ v19.533 §15.4:摘要有**兩種**開頭 —— 推得出時是「🗓️ 基金除息行事曆 · 民國X年Y月（推估）」,
+    # 全部推不出時首行改成「⚠️ 本月 N 檔都推不出除息日 —— 是推不出,不是沒配息」(§1:不可讓
+    # 「算不出來」讀起來像「這個月沒配息」)。本檔 fixture 的配息史是寫死的 2025 年,
+    # 隨真實時間推進**必然**變成後者,所以這條只鎖「有摘要且帶免責」,不鎖哪一種開頭 ——
+    # 兩種開頭各自的逐字文案由 `tests/test_dividend_calendar_render.py` 守(§13.8 用詞歸該檔)。
+    assert "🗓️" in out and "民國" in out
+    assert "推估非官方" in out
 
 
 def test_main_missing_creds_returns_1(monkeypatch):
