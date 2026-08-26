@@ -114,7 +114,11 @@ def main(argv=None) -> int:
     # user 2026-08-24:推「下個月」預估(每月 1 號先知道下月除息 + 到帳),非本月。12 月 → 隔年 1 月。
     _ny, _nm = (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)
     # ref = 本月(現在)→ 陳舊度相對現在量,正常月配基金推下月不會被誤判低信心/疑停配(v19.518)。
-    cal = build_month_calendar(funds, _ny, _nm, ref_year=now.year, ref_month=now.month)
+    # ref_day = **今天幾號**(v19.532 bug 4):本 workflow 是 `cron: "0 0 1 * *"` → now.day 恆為 1,
+    # 而 L2 未給日時會退回月中(15 號),等於每次執行都把陳舊度多算 14 天。實測(2026-09-01 觸發、
+    # 月配、last=2026-05-11):真實靜默 113 天 < 122 天門檻,卻被算成 127 天 → 判疑停配 → 整檔消失。
+    cal = build_month_calendar(funds, _ny, _nm, ref_year=now.year, ref_month=now.month,
+                               ref_day=now.day)
     text = build_summary_text(cal)              # dry-run 預覽用(可讀純文字)
     flex = build_summary_flex(cal)              # 實送:LINE Flex 彩色卡片(user 2026-08-24)
     _log(f"下月 {_ny}-{_nm:02d} 推估除息 {cal['counts']['events']} 檔｜排除 {cal['counts']['excluded']} 檔")

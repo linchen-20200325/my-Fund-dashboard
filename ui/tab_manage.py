@@ -279,7 +279,9 @@ def _sec_dividend_calendar():
 
         from services.dividend_calendar import build_month_calendar
         from ui.helpers.dividend_calendar_render import render_month_calendar_html
-        _cal = build_month_calendar(_items, _now.year, _now.month)
+        # ref_day = 今天幾號(v19.532 bug 4):不傳的話 L2 會退回「月中 15 號」估陳舊度 ——
+        # App 在月初開會被多算 14 天、月底開會被少算 15 天,月配基金在門檻附近會忽有忽無。
+        _cal = build_month_calendar(_items, _now.year, _now.month, ref_day=_now.day)
         _html = render_month_calendar_html(_cal)
         _components.html(_html, height=900, scrolling=True)
         _c = _cal["counts"]

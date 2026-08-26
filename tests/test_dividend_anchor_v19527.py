@@ -613,16 +613,30 @@ def test_confidence_drops_to_medium_when_score_below_high_cut():
 
 
 def test_confidence_count_boundaries():
-    """§4:k>=6 才可能 high;k 在 4~5 之間退 medium;k=3 只能 low。
+    """§4 的 k 門檻 + **v19.532 阻斷 1**:k < 8 一律 low,k >= 8 才回到 §4 的 s/h 分級。
+
+    ⚠️ **行為變更改斷言,不是放寬**:本條原本斷言 k=6 → high、k=5 → medium(照 §4 字面)。
+    v19.532 對「每月從同一個 5 天窗內隨機挑一個營業日」的**純雜訊**歷史各跑 400 次,實測
+    改動前 k=5 有 11 筆 medium、k=7 有 2 筆 high + 22 筆 medium —— 105 組候選參數擬 3~7 個點,
+    窮舉本來就能「完美重現」一段沒有規律的歷史。s 高在小 k 只證明候選夠多,證明不了節奏存在。
+    故 k < `_CONF_MIN_RECORDS_FOR_TRUST` 一律壓 low(仍**給日期**,只是誠實說沒把握)。
+    改後同一實驗 k∈{3,5,7} 的 high 與 medium 皆為 **0 筆**。
 
     筆數是 s 的可信度本身 —— 3 筆全中的 s=1.0 與 12 筆全中的 s=1.0 不是同一回事。
     """
-    hi = predict_ex_for_month(_clean_sched(n=6), 2026, 8, ref_year=2026, ref_month=7)
-    mid = predict_ex_for_month(_clean_sched(n=5), 2026, 8, ref_year=2026, ref_month=7)
-    lo = predict_ex_for_month(_clean_sched(n=3), 2026, 8, ref_year=2026, ref_month=7)
-    assert hi is not None and hi["confidence"] == "high"
-    assert mid is not None and mid["confidence"] == "medium"
-    assert lo is not None and lo["confidence"] == "low"
+    trust = _dc._CONF_MIN_RECORDS_FOR_TRUST
+    assert trust >= 4, "本條前提:門檻至少要蓋掉 §4 的 medium 下界(k>=4),否則測不到東西"
+    got = {n: predict_ex_for_month(_clean_sched(n=n), 2026, 8, ref_year=2026, ref_month=7)
+           for n in (3, 5, 6, 7, trust, trust + 1)}
+    for n in (3, 5, 6, 7):
+        assert got[n] is not None, (
+            f"k={n} 不該整檔消失 —— §1 的誠實是『仍顯示但壓低信心』,不是全部隱藏"
+            "(所以擋小 k 的是信心門檻,不是 `_ANCHOR_MIN_RECORDS`)")
+        assert got[n]["confidence"] == "low", (
+            f"k={n} < {trust}:純雜訊在這個筆數就能刷出 s=1.0,不准掛 medium/high")
+    # k 到門檻就回到 §4 的分級(s=1.0、h=1 → high),證明壓低的是**筆數**而不是整條公式壞掉
+    assert got[trust] is not None and got[trust]["confidence"] == "high"
+    assert got[trust + 1] is not None and got[trust + 1]["confidence"] == "high"
 
 
 def test_confidence_horizon_boundaries():
@@ -1394,3 +1408,289 @@ def test_real5_last_but_one_business_day_fund_is_covered_not_abstained():
     assert pred >= total * 0.5, (
         f"聯博只推了 {pred}/{total} 筆;倒數第 n 個營業日假說沒有覆蓋到它")
     assert hit / pred >= 0.80, f"聯博命中率 {hit}/{pred} 偏低,錨可能選錯"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v19.532 對抗式稽核四修(阻斷 1 / 阻斷 2 / bug 3 / bug 4)
+#   四條的共同精神:引擎可以說「不知道」,但**不可以錯還說有把握**,也**不可以悄悄降級**。
+# ══════════════════════════════════════════════════════════════════════
+def _noise_history(rng, n, window=5):
+    """**純雜訊**配息史:每月從同一個 5 天窗內隨機挑一天(校正到營業日),生成過程零規律。
+
+    任何錨定假說都不該能重現這種歷史。它是「105 組候選參數(1+3+31+35+35)擬 k 個點」
+    這件事的對照組 —— 窮舉能在雜訊上刷出多高的 s,就是過擬合的量級。
+    """
+    start = rng.randint(3, 22)
+    y, m, out = 2023, rng.randint(1, 12), []
+    while len(out) < n:
+        day = min(rng.randint(start, start + window - 1), _md(y, m))
+        out.append(_dc.roll_to_business_day(_dt.date(y, m, day)))
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+    return out
+
+
+def test_pure_noise_history_never_claims_medium_or_high_at_small_k():
+    """**阻斷 1 驗收**:純雜訊歷史在 k∈{3,5,7} 一筆 medium / high 都不准出現(low 可以)。
+
+    改動前實測(每組 400 次):k=3 給出日期 22~30%(全 low)、k=5 含 **11 筆 medium**、
+    k=7 含 **2 筆 high + 22 筆 medium**。稽核組另在 OOS(N=30000, k∈6..9)量到雜訊發出的
+    high 預測裡 **49.2% 錯超過 1 天**。根因是窮舉:候選夠多,總有一組能「完美重現」3~7 個點。
+    low 出現是**誠實**的(§1:仍顯示但明講沒把握),medium/high 不是。
+    """
+    import random
+    seen_any = 0
+    for k in (3, 5, 7):
+        rng = random.Random(20260825 * 1000 + k)
+        bad = []
+        for _ in range(150):
+            ser = _noise_history(rng, k + 1)
+            hist, tgt = ser[:-1], ser[-1]
+            got = predict_ex_for_month(infer_schedule(_recs(hist)), tgt.year, tgt.month,
+                                       ref_year=hist[-1].year, ref_month=hist[-1].month)
+            if got is None:
+                continue
+            seen_any += 1
+            if got["confidence"] != "low":
+                bad.append((k, hist[-1].isoformat(), got["confidence"]))
+        assert bad == [], (
+            f"k={k} 的純雜訊歷史拿到了 {len(bad)} 筆 medium/high(前 5 筆 {bad[:5]});"
+            "窮舉在小樣本上刷出來的 s 不是節奏,是候選數")
+    assert seen_any > 0, (
+        "一筆日期都沒給 → 這條測試變成恆真的空跑,無法證明門檻有在做事"
+        "(引擎在雜訊上該做的是『給日期但標 low』,不是全部棄權)")
+
+
+def test_small_k_is_forced_low_even_with_a_flawless_history():
+    """阻斷 1 的規則本體:k < `_CONF_MIN_RECORDS_FOR_TRUST` → low,**s=1.0 也一樣**。
+
+    完美復現在小 k 下證明不了節奏存在,只證明候選參數夠多 —— 這是本次擋雜訊的唯一有效手段
+    (k 相依的**接受門檻**在 k ≤ 9 是數學上的 no-op,見 `_ANCHOR_ACCEPT_MIN` 註解)。
+    """
+    trust = _dc._CONF_MIN_RECORDS_FOR_TRUST
+    for n in range(_dc._ANCHOR_MIN_RECORDS, trust):
+        sched = _clean_sched(n=n)
+        assert sched["anchor"] is not None and sched["anchor"]["score"] == 1.0, (
+            f"fixture 失效:k={n} 應為完美復現(s=1.0),實得 {sched['anchor']}")
+        got = predict_ex_for_month(sched, 2026, 8, ref_year=2026, ref_month=7)
+        assert got is not None, f"k={n} 不該整檔消失(§1:誠實壓低信心 > 全部隱藏)"
+        assert got["confidence"] == "low", f"k={n} < {trust} 卻掛 {got['confidence']}"
+
+
+def test_trust_threshold_is_a_module_constant_and_does_not_hide_new_funds():
+    """§3.3:新門檻必須是 module 具名常數;且它**只壓信心、不擋顯示**。
+
+    把 `_ANCHOR_MIN_RECORDS` 從 3 提到 8 也能擋雜訊,但那會讓新基金整檔從月曆消失 ——
+    §1 的誠實是「說得出自己沒把握」,不是「看不到就沒事」。這條把兩者的分工鎖住。
+    """
+    trust = getattr(_dc, "_CONF_MIN_RECORDS_FOR_TRUST", None)
+    assert isinstance(trust, int) and trust > _dc._ANCHOR_MIN_RECORDS, (
+        f"找不到可信筆數門檻常數(或它不大於 _ANCHOR_MIN_RECORDS):{trust}")
+    assert _dc._ANCHOR_MIN_RECORDS == 3, "§3 的 k>=3 顯示門檻不可跟著被抬高(新基金會消失)"
+    cal = build_month_calendar(
+        [{"code": "NEW", "name": "新發行月配", "house": "",
+          "dividends": _recs(_hist_fixed(2026, 7, 4, D=10), pay_gap=7)}],
+        2026, 8, ref_year=2026, ref_month=7)
+    assert cal["counts"]["events"] == 1, "4 筆歷史的新基金仍要出現在月曆上"
+    assert cal["events"][0]["confidence"] == "low", "只是信心必須誠實壓到 low"
+
+
+def test_build_month_calendar_event_carries_the_five_provenance_keys():
+    """**阻斷 2**:§8 的 5 個 provenance key 必須活著穿過 `build_month_calendar`。
+
+    改動前 `predict_ex_for_month` 產出的 `anchor_score` / `anchor_type` / `holiday_calendar` /
+    `horizon_months` / `roll_convention` 在這一層被整包丟掉,production 消費者零命中 ——
+    §8(稽核 A12)等於只做到 L2 函式邊界,「假日表缺失時 ex 側降級不可見」根本沒修到。
+    §12:既有 key 一個都不准少,只能增加。
+    """
+    cal = build_month_calendar(_cal_funds(), 2026, 8)
+    ev = cal["events"][0]
+    for k in ("code", "name", "house", "ex_date", "pay_date_est", "confidence",
+              "last_amount", "last_yield", "n"):
+        assert k in ev, f"§12 既有 event key 被弄丟:{k}"
+    for k in ("anchor_type", "anchor_score", "roll_convention",
+              "holiday_calendar", "horizon_months"):
+        assert k in ev, f"§8 provenance key 沒穿過 build_month_calendar:{k}"
+    assert ev["anchor_type"] in _ANCHOR_TYPES
+    assert 0.0 <= float(ev["anchor_score"]) <= 1.0
+    assert ev["roll_convention"] in _ROLLS
+    assert ev["holiday_calendar"] in ("TW", "weekend_only")
+    assert isinstance(ev["horizon_months"], int)
+    assert cal.get("holiday_calendar") == ev["holiday_calendar"], (
+        "月曆頂層要有一份整份共用的假日表狀態(L3 不必翻 events 才知道降級)")
+
+
+def test_missing_holiday_calendar_is_visible_in_every_surface(monkeypatch):
+    """**阻斷 2** 的重點:假日表降級必須**看得見** —— 文字 / Flex / HTML 頁尾三處都要改口。
+
+    實測(user 5 檔真實配息表)有 TW 假日表:覆蓋 93.7% / 命中 89.8%;
+    無假日表:覆蓋 **61.9%** / 命中 **84.6%**(跌破 §13.6 的 85% 門檻)—— 而在此之前
+    畫面**一字不改**。準確度悄悄少一截卻照樣自信,§1 定義下就是「讓失敗看起來像成功」。
+    (§13.8 把 L3 用詞測試歸 render 檔;這裡測的不是用詞而是**旗標有沒有一路傳到底**,
+     故與 L2 三個 surface 一起鎖在同一條,斷鏈時一眼看得出斷在哪一段。)
+    """
+    from ui.helpers.dividend_calendar_render import render_month_calendar_html
+
+    def _surfaces():
+        cal = build_month_calendar(_cal_funds(), 2026, 8)
+        return (cal, build_summary_text(cal), _dc.build_summary_flex(cal),
+                render_month_calendar_html(cal))
+
+    monkeypatch.setattr(_dc._tw_holidays, "_cache", None, raising=False)
+    assert _dc.has_holiday_calendar() is False, "fixture 失效:應已模擬成假日表不可用"
+    warn = _dc.holiday_calendar_note()
+    assert warn and "國定假日" in warn, f"降級警語不該是空的:{warn!r}"
+    cal, text, flex, html = _surfaces()
+    assert cal["holiday_calendar"] == "weekend_only"
+    assert warn in text, "純文字摘要沒說假日表缺失"
+    assert warn in str(flex["contents"]), "Flex 卡片沒說假日表缺失"
+    assert warn in html, "HTML 頁尾沒說假日表缺失"
+    # 還原交給 monkeypatch teardown(它會把 `_cache` 還回原本的 holidays 物件);
+    # 手動再 setattr 一次只會把 None 蓋回去,反而看起來像有還原其實沒有。
+
+
+def test_holiday_calendar_note_is_silent_when_calendar_is_present():
+    """降級警語只在**真的降級**時出現 —— 沒事也喊狼會讓真的降級被當背景雜訊。"""
+    if not _dc.has_holiday_calendar():
+        pytest.skip("此環境本來就沒有 TW 假日表,測不到『有假日表 → 不警告』")
+    cal = build_month_calendar(_cal_funds(), 2026, 8)
+    assert cal["holiday_calendar"] == "TW"
+    assert _dc.holiday_calendar_note(cal) == ""
+    assert "未載入國定假日表" not in build_summary_text(cal)
+
+
+def _tau() -> int:
+    return _dc._KEEP_MONTH_MAX_SHIFT_DAYS
+
+
+def test_reverse_direction_is_tried_when_primary_exceeds_tau():
+    """**bug 3**:主方向留在月內但位移 > τ 時,舊版直接回 None,**從不試反向**。
+
+    §13.7.1 寫的是「**任何方向**的校正位移 > τ → None」,舊實作只評估了一個方向 ——
+    反向回退只在「主方向跨出月份」時觸發。掃 2025–2028 × 全假說 × 3 convention,
+    **117 組**是「引擎回 None,但反方向存在 τ 內的當月營業日」。
+    其中 `FIXED_DAY(14) / following / 2026-02`(名目 2/14 撞農曆年)推出的 **2026-02-13
+    正是 user 安聯 TLZF9 的真實基準日**,只差 1 天卻整月消失。
+    """
+    a14 = {"type": "FIXED_DAY", "params": 14, "score": 1.0, "runner_up": 0.0,
+           "roll_convention": "following", "tie_broken": False}
+    got = project_anchor(dict(a14), 2026, 2)
+    assert got == _dt.date(2026, 2, 13), f"2026-02 應回退到 2/13(user 真實基準日),實得 {got}"
+    a25 = dict(a14, params=25)
+    assert project_anchor(a25, 2026, 9) == _dt.date(2026, 9, 24), "2026-09 中秋同型"
+
+
+def test_none_only_when_both_directions_are_impossible():
+    """bug 3 的 property:回 None ⟺ **兩個方向都**沒有「當月 + τ 內」的營業日。
+
+    掃全假說 × 3 convention × 2025–2028。回 None 必須是「真的推不出」,
+    不能是「只往一個方向看了一眼」(§1:棄權要棄得有道理,否則就是靜默漏資料)。
+    """
+    for conv in _ROLLS:
+        for a_type in _TIE_ORDER:
+            for params in _dc._anchor_candidates(a_type):
+                anchor = {"type": a_type, "params": params, "score": 1.0, "runner_up": 0.0,
+                          "roll_convention": conv, "tie_broken": False}
+                for y in range(2025, 2029):
+                    for m in range(1, 13):
+                        nom = _dc._anchor_nominal(a_type, params, y, m)
+                        if nom is None:
+                            continue
+                        feasible = []
+                        for sign in (1, -1):
+                            cur = nom
+                            for _ in range(40):
+                                cur += sign * _DAY
+                                if is_business_day(cur):
+                                    break
+                            if is_business_day(nom):
+                                cur = nom
+                            if (cur.year, cur.month) == (y, m) and abs((cur - nom).days) <= _tau():
+                                feasible.append(cur)
+                        got = project_anchor(dict(anchor), y, m)
+                        if got is None:
+                            assert not feasible, (
+                                f"{a_type}{params} {conv} {y}-{m:02d} 回 None,但 "
+                                f"{feasible} 是當月、營業日、位移 <= τ 的合理解")
+                        else:
+                            assert got in feasible, f"{a_type}{params} {conv} {y}-{m:02d} → {got}"
+
+
+def test_primary_direction_still_wins_when_both_are_feasible():
+    """bug 3 的護欄:兩邊都可行時取**主方向**,不是取位移較小者。
+
+    convention 是 §5 從歷史 ρ>=0.8 推出來的觀察值:「週六 → 週一(+2)」對 following 型
+    基金是它真實的作業行為。改成「就近取週五(-1)」= 用沒有證據的規則蓋掉有證據的規則,
+    5 檔實測三個口徑同時退步(命中 89.8% → 84.0% 跌破門檻、覆蓋 93.7% → 79.4%、
+    §13.6 硬門檻 0 → 1 筆)。
+    """
+    sat = [(y, m, d) for y in (2026, 2027) for m in range(1, 13)
+           for d in [_dt.date(y, m, 14)]
+           if d.weekday() == 5 and is_business_day(d + _DAY * 2) and is_business_day(d - _DAY)]
+    assert sat, "fixture 失效:找不到 14 號是週六、前後皆為營業日的月份"
+    for y, m, d in sat:
+        fwd = {"type": "FIXED_DAY", "params": 14, "score": 1.0, "runner_up": 0.0,
+               "roll_convention": "following", "tie_broken": False}
+        assert project_anchor(dict(fwd), y, m) == d + _DAY * 2, f"{y}-{m} following 應往後到週一"
+        assert project_anchor(dict(fwd, roll_convention="preceding"), y, m) == d - _DAY, (
+            f"{y}-{m} preceding 應往前到週五")
+
+
+def test_stale_ref_day_uses_caller_supplied_day_not_a_fixed_mid_month():
+    """**bug 4**:`_stale_state` 的 ref 日改由 caller 給;預設仍是 15(相容)。
+
+    production 的 cron 是 `0 0 1 * *`(每月 1 號)→ `now.day` 恆為 1,而引擎恆用 15 號
+    = **每次執行都把陳舊度多算 14 天**。「月中是無偏中點」只在執行日均勻分布時成立。
+    實測(cron 於 2026-09-01 觸發、月配、last=2026-05-11):真實靜默 113 天(< 122 天門檻),
+    引擎算成 127 天 → 判疑停配 → **整檔基金從月曆上消失**。
+    """
+    last = _dt.date(2026, 5, 11)
+    assert _dc._stale_state(last, 2026, 9, 1) == _dc._stale_state(last, 2026, 9, 1, 15), \
+        "不給 ref_day 時必須維持舊行為(15 號),否則所有既有 caller 一起偏移"
+    m15, _p15, stale15 = _dc._stale_state(last, 2026, 9, 1, 15)
+    m01, _p01, stale01 = _dc._stale_state(last, 2026, 9, 1, 1)
+    assert (m15, stale15) == (4, True), f"15 號口徑:4 個月、判過舊,實得 {(m15, stale15)}"
+    assert (m01, stale01) == (3, False), f"1 號口徑:3 個月、未過舊,實得 {(m01, stale01)}"
+
+
+def test_cron_day_one_no_longer_loses_a_monthly_fund_to_stale_gate():
+    """bug 4 端對端:同一檔月配基金,傳真實日(1 號)時留在月曆上,不傳時整檔消失。"""
+    hist, d = [], _dt.date(2025, 6, 11)
+    while d <= _dt.date(2026, 5, 11):
+        hist.append(_dc.roll_to_business_day(d))
+        d = _dt.date(d.year + (d.month == 12), 1 if d.month == 12 else d.month + 1, 11)
+    sched = infer_schedule(_recs(hist))
+    assert sched["last_ex"] == _dt.date(2026, 5, 11) and sched["cadence"] == "monthly"
+    real = predict_ex_for_month(sched, 2026, 10, ref_year=2026, ref_month=9, ref_day=1)
+    assert real is not None and real["ex_date"].month == 10, (
+        "cron 於 2026-09-01 執行:真實靜默 113 天 < 122 天門檻,不該判疑停配")
+    assert predict_ex_for_month(sched, 2026, 10, ref_year=2026, ref_month=9) is None, (
+        "fixture 前提:舊的固定 15 號口徑會把這檔算成 127 天而誤殺 —— 這正是 bug 4 的代價")
+    cal = build_month_calendar(
+        [{"code": "M11", "name": "月配 11 號", "house": "", "dividends": _recs(hist)}],
+        2026, 10, ref_year=2026, ref_month=9, ref_day=1)
+    assert cal["counts"]["events"] == 1, "build_month_calendar 也要能把 ref_day 傳下去"
+
+
+def test_ref_day_out_of_range_is_clamped_not_overflowed():
+    """bug 4 邊界:2 月傳 31 號 → 夾到月底,不可讓 `date()` 炸掉或溢位到 3 月(§1 不造假日期)。"""
+    last = _dt.date(2025, 12, 20)
+    assert _dc._stale_state(last, 2026, 2, 1, 31) == _dc._stale_state(last, 2026, 2, 1, 28)
+    assert _dc._stale_state(last, 2026, 2, 1, 0) == _dc._stale_state(last, 2026, 2, 1, 1)
+
+
+def test_production_callers_pass_the_real_day_down():
+    """bug 4 的另一半:L2 收得到 `ref_day` 沒用,**caller 要真的傳**。
+
+    這條鎖的是「修了但沒接線」這種最貴的假修復 —— 引擎改對了、cron 還是每月 1 號用 15 號口徑,
+    測試全綠而 user 的基金照樣每隔幾個月消失一次。
+    """
+    import pathlib
+    import re
+    for rel in ("scripts/dividend_calendar_notify.py", "ui/tab_manage.py"):
+        src = pathlib.Path(rel).read_text(encoding="utf-8")
+        call = re.search(r"build_month_calendar\((?:[^()]|\([^()]*\))*\)", src, re.S)
+        assert call, f"{rel} 找不到 build_month_calendar 呼叫"
+        assert "ref_day=" in call.group(0), (
+            f"{rel} 呼叫 build_month_calendar 時沒把真實日期傳下去:{call.group(0)}")

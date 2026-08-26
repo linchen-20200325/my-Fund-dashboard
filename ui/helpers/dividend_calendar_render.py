@@ -1,15 +1,23 @@
-"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.530)。
+"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.532)。
 
 純字串產生器(**零 streamlit、零 IO**),吃 `services.dividend_calendar.build_month_calendar`
 的結構 → 產出自成一頁的 HTML(深/淺色皆適配)。共用於:App 內 `st.components.html` 嵌入(方式 A)、
 之後 LINE 摘要附的連結 / 存檔(方式 C)。版型 = user 2026-08 核准的樣張。
+
+v19.532:頁尾多一行**假日表降級警語**(僅在 `cal["holiday_calendar"] == "weekend_only"` 時出現)。
+文案 SSOT 在 L2 `services.dividend_calendar.holiday_calendar_note`,與純文字摘要 / LINE Flex 同一句。
 """
 from __future__ import annotations
 
 import calendar as _calendar
 import html as _html
 
-from services.dividend_calendar import dedupe_events, display_label, pay_window
+from services.dividend_calendar import (
+    dedupe_events,
+    display_label,
+    holiday_calendar_note,
+    pay_window,
+)
 
 # 投信分色(中間調,深/淺底都看得清;判不出 → 預設灰)
 _HOUSE_COLOR = {
@@ -265,6 +273,13 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
     sample_badge = '<span class="badge sample">樣張 · 日期為推估</span>' if is_sample else \
                    '<span class="badge sample">日期為推估</span>'
 
+    # v19.532 阻斷 2:假日表降級**必須看得見**。實測(user 5 檔真實配息表)有 TW 假日表時
+    # 覆蓋 93.7% / 命中 89.8%,缺假日表時掉到覆蓋 61.9% / 命中 84.6%(跌破 §13.6 的 85%),
+    # 而在此之前畫面一字不改 —— 準確度悄悄少一截,user 看到的仍是同樣自信的月曆(§1 違憲)。
+    # 文案 SSOT 在 L2 `holiday_calendar_note`(text / Flex / 本頁尾三處同一句)。
+    _cal_warn = holiday_calendar_note(cal)
+    warn_html = (f'<br><b>{_e(_cal_warn)}</b>' if _cal_warn else '')
+
     return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{_e(title)}</title>
 <style>{_CSS}{_CSS_COMPACT if compact else ''}</style></head><body><div class="wrap">
@@ -282,7 +297,7 @@ def render_month_calendar_html(cal: dict, *, title: str = "基金除息配息行
 </tr></thead><tbody>{rows}</tbody></table></div>
 {exc_html}
 {unp_html}
-<footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算「<b>除息基準日</b>」，非官方公告。<br>
+<footer class="note"><b>※ 日期為推估：</b>用你真實基金 + 各基金公司月配除息節奏推算「<b>除息基準日</b>」，非官方公告。{warn_html}<br>
 上述基金基準日皆以實際基金營業日為準。<br>
 依公開說明書規定，<b>配息入帳日為除息日後一個月內</b>，入帳時間將依實際作業為準。<br>
 本行事曆所示之營業日僅供參考，實際之基金營業日請參閱<b>基金公司網站公告</b>為準。</footer>

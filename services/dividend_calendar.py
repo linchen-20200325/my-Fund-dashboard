@@ -1,4 +1,4 @@
-"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.530)。L2 純函式,零 IO。
+"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.532)。L2 純函式,零 IO。
 
 用途:吃每檔基金的**配息歷史**,推估「本月**除息基準日** + 配息入帳日」,產生月曆結構供 L3 渲染。
 資料由 L1 抓好傳入(reuse `repositories.fund` 的 dividends);本層不碰網路、不 import streamlit。
@@ -23,6 +23,18 @@
 §1 Fail-Loud:無配息紀錄(累積型/查無)→ cadence="none" → caller 落「已排除」,不偽造日期;
              錨定假說重現不了歷史 → 回 None 落 unpredictable,**寧可說不知道也不給看似合理的日期**;
              pay_date 缺 → 入帳日 None(標「約」窗或留白,不捏造)。
+
+v19.532 對抗式稽核四修(每條都附實跑數字,見對應常數 / 函式註解):
+  1. `_CONF_MIN_RECORDS_FOR_TRUST` —— k < 8 一律 low。純雜訊歷史各跑 400 次,改前 k=5 有
+     11 筆 medium、k=7 有 2 筆 high + 22 筆 medium(105 組候選參數擬 3~7 個點的必然結果),
+     改後 k ≤ 7 的 medium/high **全部歸零**,仍照給日期(§1:誠實壓低 > 全部隱藏)。
+  2. `build_month_calendar` 逐檔轉載 §8 的 5 個 provenance key + 月曆頂層 `holiday_calendar`,
+     L3 據此在頁尾 / 文字 / Flex 揭露假日表降級(缺假日表時覆蓋 93.7% → 61.9%、
+     命中 89.8% → 84.6%,原本畫面一字不改)。
+  3. `_apply_roll` 兩個方向都評估(主方向優先、反向為回退),不再「主方向超過 τ 就直接放棄」——
+     掃 2025–2028 × 全假說 × 3 convention,補回 117 組原本無聲消失的 (假說, 月)。
+  4. `_stale_state` / `predict_ex_for_month` / `build_month_calendar` 收 `ref_day`,cron(每月 1 號)
+     不再被當成月中 15 號 → 少算 14 天陳舊度而誤殺月配基金。
 """
 from __future__ import annotations
 
@@ -65,8 +77,27 @@ _ANCHOR_ORDER = [ANCHOR_MONTH_END, ANCHOR_MONTH_END_OFFSET, ANCHOR_FIXED_DAY,
 _MONTH_END_OFFSET_MAX = 3        # §13.2 n ∈ {1,2,3}(n=0 仍歸 MONTH_END,保留 0 參數優先權)
 
 _ANCHOR_ACCEPT_MIN = 0.80        # §3 復現率 s⁽¹⁾ 未達 → 回 None(§1 不硬給)
+# ⚠️ **v19.532 實測結論:這條門檻維持「不隨 k 變」的 0.80,k 相依版本已評估後退回。**
+# 稽核提案是改成 `max(0.80, 1 - 1/k)`(= 不准錯超過 1 筆),用意是擋 k ≤ 7 的窮舉過擬合。
+# 三組實跑之後不採用,理由逐條(數字都可用 §11 那 5 檔真實資料 + 純雜訊實驗複現):
+#   1) **在它自己點名的 k ≤ 9 區間是數學上的 no-op**:s 只能取 p/k,`s ≥ 0.80` 已經等價於
+#      「錯 ≤ floor(0.2k)」= k=3,4 錯 0 筆、k=5..9 錯 1 筆;`max(0.80, 1-1/k)` 在 k ≤ 9 給出
+#      **完全相同**的允許筆數。純雜訊實驗 k∈{3,5,7} 改前改後逐格相同 —— 一格都沒擋到。
+#   2) **在 k ≥ 10 會砍掉真實覆蓋**:5 檔實測命中率 89.8% → 86.5%、覆蓋率 93.7% → **58.7%**
+#      (22 筆消失,其中 **21 筆原本推對**)。摩根 / 聯博 / 施羅德的 k=12 穩態段全在 10/12=0.833,
+#      它們 walk-forward 100% 命中卻會被判成「重現不了自己的歷史」。真實基金在 12 筆視窗內
+#      帶 1~2 個作業離群值是常態,不是過擬合。
+#   3) **任何「錯 ≤ N 筆」的絕對上限都會懲罰長歷史**:試過 N=2(k ≤ 12 零代價)仍會讓
+#      `detect_anchor(30 筆, s=0.90)` 回 None,而**同一檔基金**只餵最近 12 筆(s=1.00)卻給得出
+#      日期 —— 歷史越長越不敢預測,方向反了;而且「回 None」= 該檔從月曆上**消失**,
+#      與本次採用的原則(§1:仍顯示但誠實壓 low > 全部隱藏)直接牴觸。
+# 真正把小 k 過擬合擋下來的是下面的 `_CONF_MIN_RECORDS_FOR_TRUST`(實測見該常數註解)。
 _ANCHOR_TIE_DELTA = 0.10         # §3 前二名差距 < 此值 → 取參數少者,且信心上限壓 medium
 _ANCHOR_MIN_RECORDS = 3          # §3 k < 3 → None
+# v19.532 阻斷 1:k 少於此值 → 信心**強制 low**(不論 s 多高)。
+# 不改 `_ANCHOR_MIN_RECORDS`(3)—— 那會讓新基金整檔從月曆上消失;§1 的誠實是「仍顯示、
+# 但明講沒把握」,不是「全部隱藏」。
+_CONF_MIN_RECORDS_FOR_TRUST = 8
 _ROLL_DIR_MIN_RATIO = 0.80       # §5 ρ₊ / ρ₋ 認定「單向校正」的門檻
 _KEEP_MONTH_MAX_SHIFT_DAYS = 3   # §5 τ:跨月回退的距離上限(日曆日),超過 → 該月無合理錨定日
 # ── §4 信心門檻(v19.531 **用實測校準**,不是憑感覺挑的整數)──────────────────
@@ -91,6 +122,10 @@ _KEEP_MONTH_MAX_SHIFT_DAYS = 3   # §5 τ:跨月回退的距離上限(日曆日)
 #     且區間內每個值在本資料上**行為完全相同**(可達 s 在 11/12=0.917 與 1.0 之間無值)。
 #     下界不可再放寬 —— 0.91 會讓 11/12 進 high,而 11/12 那格含一筆誤差 4 天的錯,
 #     §13.6 硬門檻立刻從 0 變 1;上界不取 1.0 是因為那等於要求字面完美,浮點上太脆。
+# ⚠️ **v19.532 同口徑重測**(加了 `_CONF_MIN_RECORDS_FOR_TRUST`,k<8 一律 low 之後):
+#   high 14/15 = 93.3%｜medium 32/36 = 88.9%｜low 7/8 = 87.5% → **仍單調**,本組門檻不需再校準。
+#   low 桶命中率上升是預期的(k=7 那批原本掛 medium/high、實測多半正確的筆被移進來);
+#   low 的語意是「**不擔保**」而不是「大概會錯」,故不構成 v19.531 修掉的那種反指標。
 _CONF_HIGH_MIN_SCORE = 0.95      # §4 high 三條件(校準後維持;通過區間 [0.92, 1.00])
 _CONF_HIGH_MIN_N = 6
 _CONF_HIGH_MAX_HORIZON = 1
@@ -110,6 +145,31 @@ _REF_DAY_OF_MONTH = 15
 
 _HOLIDAY_CAL_TW = "TW"                   # §8 provenance:真有國定假日表
 _HOLIDAY_CAL_WEEKEND = "weekend_only"    # §8 provenance:holidays 套件缺 → 只跳週末
+# §8 的五個 provenance key(SSOT:`predict_ex_for_month` 產出、`build_month_calendar` 逐檔轉載)
+_PROVENANCE_KEYS = ("anchor_type", "anchor_score", "roll_convention",
+                    "holiday_calendar", "horizon_months")
+# 假日表降級警語:text / Flex / HTML 頁尾三處共用同一句(SSOT,避免各寫各的而漂移)。
+# §1:降級**必須看得見** —— 實測無假日表時覆蓋 93.7% → 61.9%、命中 89.8% → 84.6%
+# (跌破 §13.6 的 85% 門檻),畫面卻一字不改 = 讓失敗看起來像成功。
+_HOLIDAY_CAL_WARN = "⚠️ 本次未載入國定假日表，日期僅跳過週末、未扣國定假日，準確度下降"
+
+
+def _holiday_calendar_state() -> str:
+    """§8 provenance:目前實際用的假日曆 → "TW" / "weekend_only"。"""
+    return _HOLIDAY_CAL_TW if has_holiday_calendar() else _HOLIDAY_CAL_WEEKEND
+
+
+def holiday_calendar_note(cal: "dict | None" = None) -> str:
+    """月曆(或 None = 問現在)→ 假日表降級警語;**沒降級回空字串**(不加無謂雜訊)。
+
+    L3(HTML 頁尾)、`build_summary_text`、`build_summary_flex` 三處共用這一句(SSOT)。
+    `cal` 帶 `holiday_calendar` 就用它(以產生月曆**當下**的狀態為準,不是渲染當下);
+    手搭 dict 沒帶這個 key → 退回現況查詢,§1 不因缺欄位就當成「有假日表」。
+    """
+    _state = (cal or {}).get("holiday_calendar")
+    if _state not in (_HOLIDAY_CAL_TW, _HOLIDAY_CAL_WEEKEND):
+        _state = _holiday_calendar_state()
+    return "" if _state == _HOLIDAY_CAL_TW else _HOLIDAY_CAL_WARN
 
 
 def _pdate(v: Any) -> "_dt.date | None":
@@ -264,24 +324,43 @@ def _anchor_nominal(a_type: str, params: Any, year: int, month: int) -> "_dt.dat
 # ── §5 營業日校正 R(方向從歷史推,不硬編;跨月回退帶 τ 上限)────────────────
 def _apply_roll(nominal: "_dt.date | None", convention: str,
                 year: int, month: int) -> "_dt.date | None":
-    """名目錨定日 → 校正後日期;跨出目標月、或**任一方向**位移 > τ → None(§1 不給錯月/被拉開的值)。
+    """名目錨定日 → 校正後日期;**兩個方向都不可行**才回 None(§1 不給錯月/被拉開的值)。
 
-    - following / modified_following:先往後找營業日;preceding:先往前找。
-    - 主方向跨出目標月 → 反向回退(= 現行 `keep_month` 行為)。
-    - **§13.7.1**:最後採用的那個方向,位移 > τ=3 日曆日 → 視為「該月無合理錨定日」→ None。
-      τ 不再只綁 keep_month 回退 —— preceding 型撞到農曆年連假同樣會被拉開 7 天(稽核 A4)。
+    - 名目日本身就是營業日 → 原值(位移 0,方向不參與)。
+    - 否則**兩個方向都算**:各自找第一個營業日,要求 (a) 仍落在目標月、(b) 位移 ≤ τ=3 日曆日。
+      兩邊都不合格 → None(§13.7.1「任何方向的校正位移 > τ → 該月無合理錨定日」)。
+    - 兩邊都合格 → 取**主方向**(following/modified_following 往後、preceding 往前);
+      主方向不合格但反向合格 → 用反向(涵蓋舊的 `keep_month` 跨月回退)。
+
+    ⚠️ **v19.532 修正**(user 可見 bug 3):舊版的反向回退**只在主方向跨出月份時**才觸發 ——
+    主方向留在月內但位移 > τ 時直接 return None,從不試反向。實測掃 2025–2028 × 全假說
+    × 3 種 convention,**117 組 (假說, convention, 月)**(去掉 convention 維度後 78 組)是
+    「舊版回 None,但反方向存在 τ 內的當月營業日」;且**沒有任何一組**原本推得出來的值被改動;
+    最貴的一例:`FIXED_DAY(14) / following / 2026-02`(名目 2/14 撞農曆年,往後要跳 9 天)
+    → 舊版整月消失,而 **2026-02-13 正是 user 安聯 TLZF9 的真實基準日**、只差 1 天。
+    安聯本身逃過一劫純粹因為它的歷史把方向推成 `preceding`;同型但推成 `following` 的基金
+    每逢農曆年就會從月曆上整檔消失(§14.2 抱怨的「15 號型基金每逢 2 月固定不見」同源)。
+
+    ⚠️ 主方向優先、**不是**取位移較小者:convention 是 §5 從歷史 ρ ≥ 0.8 推出來的**觀察值**,
+    「週六 → 週一(+2)」對 following 型基金是它真實的作業行為;改成「就近取週五(-1)」
+    等於用一個沒有證據的規則覆蓋掉有證據的規則 —— user 5 檔真實配息表實測:主方向優先
+    命中 89.8% / 覆蓋 93.7% / §13.6 硬門檻 0,改取位移較小者 **命中 84.0%(跌破 85% 門檻)/
+    覆蓋 79.4% / 硬門檻 1 筆**(三個口徑同時退步)。
+    反向只在主方向**做不到**(跨月 / 超過 τ)時才登場,那時 τ 已保證它離名目日不超過 3 天。
     """
     if nominal is None:
         return None
-    _fwd = convention != ROLL_PRECEDING
-    _d = _to_business(nominal, forward=_fwd)
-    if _d is None or (_d.year, _d.month) != (year, month):
-        _d = _to_business(nominal, forward=not _fwd)      # §5 keep_month 反向回退
-    if _d is None or (_d.year, _d.month) != (year, month):
-        return None
-    if abs((_d - nominal).days) > _KEEP_MONTH_MAX_SHIFT_DAYS:
-        return None                                       # §13.7.1 位移過大 → 不硬給
-    return _d
+    if is_business_day(nominal):
+        return nominal if (nominal.year, nominal.month) == (year, month) else None
+    _primary_forward = convention != ROLL_PRECEDING
+    for _fwd in (_primary_forward, not _primary_forward):     # 主方向優先,反向為回退
+        _d = _scan_business(nominal, forward=_fwd)
+        if _d is None or (_d.year, _d.month) != (year, month):
+            continue                                          # 掃不到 / 跨出目標月
+        if abs((_d - nominal).days) > _KEEP_MONTH_MAX_SHIFT_DAYS:
+            continue                                          # §13.7.1 位移過大 → 換方向再試
+        return _d
+    return None                                               # 兩個方向皆不可行 → 該月無錨定日
 
 
 def _infer_roll_convention(dates: list, a_type: str, params: Any) -> tuple:
@@ -488,15 +567,22 @@ def _grade_confidence(score: "float | None", k: int, horizon: int, *,
     high   : s ≥ 0.95 且 k ≥ 6 且 h ≤ 1
     medium : s ≥ 0.85 且 k ≥ 4 且 h ≤ 3
     low    : 其餘
-    另外三個**只降不升**的封頂(順序無關,取最保守):
+    **v19.532 阻斷 1**:`k < _CONF_MIN_RECORDS_FOR_TRUST`(8)→ 一律 low,**不論 s 多高**。
+    理由是實測不是感覺:對「每月從同一個 5 天窗內隨機挑一個營業日」的**純雜訊**歷史
+    (生成過程完全無規則)各跑 400 次,改動前 ——
+        k=3 給出日期 29.8%(全 low)｜k=5 27.0%(含 **11 筆 medium**)
+        k=7  8.2%(含 **2 筆 high + 22 筆 medium**)｜k=12 1.5%(含 5 筆 medium)
+    —— 亦即 105 組候選參數(1+3+31+35+35)拿去擬 3~7 個點,靠窮舉就能「完美重現」一段
+    純雜訊,s 閘門形同虛設。s 高在小 k 時**證明不了節奏存在**,只證明候選夠多。
+    另外四個**只降不升**的封頂(順序無關,取最保守):
       - `tie_broken`(§3 前二名差 < 0.10 靠參數數決選,**且兩者對該目標月投影不同日** ——
         v19.531 修正 1,由 caller 用 `_tie_diverges_in_month` 判完再傳進來)→ 上限 medium
       - `roll_convention == modified_following`(§5 方向混雜、未定)→ 壓 low
         ⚠️ §13.3:歷史**零偏移**不算「方向未定」,那時 convention = following → 不壓
       - `h < 0`(回填過去月份,§13.7.3)→ 壓 low(過去月份應以實際紀錄為準,不是推估)
     """
-    if score is None:
-        return "low"
+    if score is None or k < _CONF_MIN_RECORDS_FOR_TRUST:
+        return "low"                       # v19.532:筆數太少 → 誠實說沒把握(仍給日期)
     if score >= _CONF_HIGH_MIN_SCORE and k >= _CONF_HIGH_MIN_N and horizon <= _CONF_HIGH_MAX_HORIZON:
         _c = "high"
     elif score >= _CONF_MED_MIN_SCORE and k >= _CONF_MED_MIN_N and horizon <= _CONF_MED_MAX_HORIZON:
@@ -642,14 +728,25 @@ def infer_schedule(dividends: list) -> dict:
             "med_gap": med_gap, "anchor": anchor, "phase": phase}
 
 
-def _stale_state(last_ex: "_dt.date", ref_year: int, ref_month: int, step: int) -> tuple:
+def _stale_state(last_ex: "_dt.date", ref_year: int, ref_month: int, step: int,
+                 ref_day: "int | None" = None) -> tuple:
     """§7 + §13.1 陳舊度 → (stale_months, stale_periods, too_stale)。**單位一律「個月」**。
 
     舊式左邊是「幾個配息週期」右邊是「幾個月」,step=1 時碰巧等價,step=12 時
     `floor(1095/(30.44*12))=2` 拿去比 15 → 年配可靜默 3 年仍給日期(稽核 A11 原封不動)。
-    `ref_date` 取 ref 月的**月中**(caller 只給年月沒給日;月初/月底會系統性偏 15 天)。
+
+    `ref_day`(v19.532 bug 4):caller 知道「今天幾號」時**請傳真實日**;不傳才退回
+    `_REF_DAY_OF_MONTH`(15)。原本無條件用 15 號在 production 是**固定 +14 天偏誤** ——
+    `.github/workflows/dividend_calendar_notify.yml` 是 `cron: "0 0 1 * *"`(每月 1 號),
+    `now.day` 恆為 1,「月中是無偏中點」只在執行日均勻分布時成立,實際恆為 1 號時
+    day-15 反而是偏差最大的選擇。實測後果(cron 於 2026-09-01 觸發、月配基金、
+    last=2026-05-11):真實靜默 113 天 < 122 天門檻,引擎卻算成 127 天 → 判疑停配 →
+    **整檔基金從月曆上消失**。傳真實日期才是對的(把常數改成 1 只是偏到另一邊,App 路徑會受害)。
+    超出該月天數的 ref_day(如 2 月傳 31)夾到月底,不讓它溢位到下個月(§1 不靜默造出假日期)。
     """
-    _ref = _dt.date(ref_year, ref_month, _REF_DAY_OF_MONTH)
+    _rd = _REF_DAY_OF_MONTH if ref_day is None else int(ref_day)
+    _rd = max(1, min(_rd, _month_days(ref_year, ref_month)))
+    _ref = _dt.date(ref_year, ref_month, _rd)
     _days = max(0, (_ref - last_ex).days)
     _months = int(_days // _DAYS_PER_MONTH)
     return _months, _months // step, _months > min(_STALE_MAX_PERIODS * step,
@@ -658,7 +755,8 @@ def _stale_state(last_ex: "_dt.date", ref_year: int, ref_month: int, step: int) 
 
 def predict_ex_for_month(schedule: dict, year: int, month: int,
                          ref_year: "int | None" = None,
-                         ref_month: "int | None" = None) -> "dict | None":
+                         ref_month: "int | None" = None,
+                         ref_day: "int | None" = None) -> "dict | None":
     """節奏 dict + 目標年月 → 推估 dict 或 None(當月不配息 / 無法推估,§1 不硬給)。
 
     Returns(既有 key 全保留;v19.530 §8 增列 provenance):
@@ -680,6 +778,10 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
       `stale_periods >= 2`             → 信心壓 low
 
     ⚠️ `ref_year/ref_month`(v19.518):陳舊度須相對「**現在**」量,不是相對目標月;未給 → 用目標年月。
+    ⚠️ `ref_day`(**v19.532 bug 4**):ref 月的「幾號」。未給 → `_REF_DAY_OF_MONTH`(15)。
+       production 的 cron 是每月 **1 號**執行(`dividend_calendar_notify.yml`),恆定用 15 號
+       等於每次都把陳舊度多算 14 天 —— 實測會把「真實靜默 113 天(< 122 天門檻)」算成 127 天,
+       整檔基金無聲從月曆消失。**知道今天幾號的 caller 請一律傳下來**(見 `_stale_state`)。
 
     ⚠️ **§13.7.3 回填過去月份**:h < 0 或目標月早於 last_ex → 仍會給日期(季/年配需落在相位網格上),
     但信心一律壓 `low`。
@@ -699,7 +801,7 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
     _h = (year - _ry) * 12 + (month - _rm)
 
     # §7/§13.1 陳舊度:日差 → **月數**(用 last_ex 的「日」,月初與月底不再同分)
-    _stale_months, _stale, _too_stale = _stale_state(last_ex, _ry, _rm, step)
+    _stale_months, _stale, _too_stale = _stale_state(last_ex, _ry, _rm, step, ref_day)
     if _too_stale:
         return None                        # 疑停配 / 資料過舊 → 不硬給(§1)
     # §13.7.3:目標月早於最後一筆(回填過去)**允許**,但信心一律壓 low ——
@@ -744,7 +846,7 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
     gap = schedule.get("pay_gap_days")
     pay = ex + _dt.timedelta(days=gap) if isinstance(gap, int) else None
     return {"ex_date": ex, "pay_date_est": pay, "confidence": _conf,
-            "holiday_calendar": _HOLIDAY_CAL_TW if has_holiday_calendar() else _HOLIDAY_CAL_WEEKEND,
+            "holiday_calendar": _holiday_calendar_state(),
             "horizon_months": _h, **_prov}
 
 
@@ -775,7 +877,8 @@ def _on_phase_grid(schedule: dict, month: int) -> bool:
 
 
 def _unpredictable_reason(schedule: dict, year: int, month: int,
-                          ref_year: "int | None", ref_month: "int | None") -> tuple:
+                          ref_year: "int | None", ref_month: "int | None",
+                          ref_day: "int | None" = None) -> tuple:
     """§14.2:推不出的成因 → (reason_code, 人話)。**只在 `predict_ex_for_month` 回 None 時呼叫**。
 
     §1:成因要說得出口 —— τ 收緊(§13.7.1)後,15 號型基金每逢農曆年必無預估,
@@ -790,7 +893,7 @@ def _unpredictable_reason(schedule: dict, year: int, month: int,
     if _step and _last_ex is not None:
         _ry = ref_year if ref_year is not None else year
         _rm = ref_month if ref_month is not None else month
-        if _stale_state(_last_ex, _ry, _rm, _step)[2]:
+        if _stale_state(_last_ex, _ry, _rm, _step, ref_day)[2]:
             return REASON_STALE, _REASON_TEXT[REASON_STALE]
     _anchor = schedule.get("anchor")
     if _anchor and _on_phase_grid(schedule, month) \
@@ -802,22 +905,37 @@ def _unpredictable_reason(schedule: dict, year: int, month: int,
 
 def build_month_calendar(funds: list, year: int, month: int,
                          ref_year: "int | None" = None,
-                         ref_month: "int | None" = None) -> dict:
+                         ref_month: "int | None" = None,
+                         ref_day: "int | None" = None) -> dict:
     """多檔基金(含 dividends)+ 目標年月 → 月曆結構。
 
     `ref_year/ref_month`:陳舊度參考月(現在);推未來月(下月推播)時傳「本月」,避免正常月配
     被誤判低信心(v19.518)。未給 → 用目標月(App 目標=現在,零變化)。見 predict_ex_for_month。
+    `ref_day`:ref 月的「幾號」(v19.532 bug 4);未給 → 15 號。**知道今天幾號就傳真實日**,
+    否則 cron(每月 1 號)每次都被多算 14 天陳舊度,月配基金會在門檻附近整檔消失。
 
     Args:
         funds: [{"code", "name", "house"(選填), "dividends": [...]}]
     Returns:
-        {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{}}
-        event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n}
+        {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{},
+         holiday_calendar}
+        event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n,
+                 **anchor_type, anchor_score, roll_convention, holiday_calendar, horizon_months**}
         excluded     = {code, name, reason}(無配息 = 累積型/查無)
         unpredictable= {code, name, reason, reason_code}(有配息史但本月無法推估)
                        reason_code ∈ {anchor_weak, too_few, stale, no_anchor_day}(§14.2),
                        reason = 對應人話。稽核 M3 + §1:誠實揭露成因而非靜默消失;
                        季/年配相位網格外的「空月」不列此(合理不配)。
+
+    ⚠️ **v19.532 阻斷 2**:`predict_ex_for_month` 的 §8 五個 provenance key
+    (`anchor_type` / `anchor_score` / `roll_convention` / `holiday_calendar` / `horizon_months`)
+    原本在這一層被整包丟掉,§8 等於**只做到 L2 函式邊界、沒有任何 production 消費者拿得到**
+    —— 稽核 A12 要修的「假日表缺失時 ex 側降級對 caller 不可見」根本沒修到。實測(user 5 檔):
+        有 TW 假日表:覆蓋 93.7% / 命中 89.8%
+        無  假日表 :覆蓋 61.9% / 命中 84.6%(**低於 §13.6 的 85% 門檻**)
+    而畫面一字不改。現在 event 逐檔帶這 5 個 key,月曆頂層另帶一個整份共用的
+    `holiday_calendar`,L3 據此在頁尾 / 文字 / Flex 誠實加註(見 `holiday_calendar_note`)。
+    §12 相容:既有 key **一個都沒少**,只增加。
     """
     events: list = []
     excluded: list = []
@@ -831,10 +949,11 @@ def build_month_calendar(funds: list, year: int, month: int,
             excluded.append({"code": code, "name": name,
                              "reason": "無配息紀錄（累積型 / 查無配息）"})
             continue
-        pred = predict_ex_for_month(sch, year, month, ref_year=ref_year, ref_month=ref_month)
+        pred = predict_ex_for_month(sch, year, month, ref_year=ref_year,
+                                    ref_month=ref_month, ref_day=ref_day)
         if pred is None:
             # §14.2:推不出就要說得出成因(code + 人話);季/年配的**空月**是合理不配,不列。
-            _code, _why = _unpredictable_reason(sch, year, month, ref_year, ref_month)
+            _code, _why = _unpredictable_reason(sch, year, month, ref_year, ref_month, ref_day)
             if sch["cadence"] in ("single", "irregular") or _on_phase_grid(sch, month):
                 unpredictable.append({"code": code, "name": name,
                                       "reason": _why, "reason_code": _code})
@@ -843,7 +962,9 @@ def build_month_calendar(funds: list, year: int, month: int,
         events.append({"code": code, "name": name, "house": house,
                        "ex_date": pred["ex_date"], "pay_date_est": pred["pay_date_est"],
                        "confidence": pred["confidence"], "last_amount": sch["last_amount"],
-                       "last_yield": sch["last_yield"], "n": sch["n"]})
+                       "last_yield": sch["last_yield"], "n": sch["n"],
+                       # §8 provenance 五欄:v19.532 前在這層被丟光(見 docstring)
+                       **{_k: pred.get(_k) for _k in _PROVENANCE_KEYS}})
 
     events.sort(key=lambda e: (e["ex_date"], e["code"]))
     by_day: dict = {}
@@ -851,6 +972,8 @@ def build_month_calendar(funds: list, year: int, month: int,
         by_day.setdefault(e["ex_date"].day, []).append(e)
     return {"year": year, "month": month, "events": events, "by_day": by_day,
             "excluded": excluded, "unpredictable": unpredictable,
+            # 整份月曆共用一個假日表狀態(逐檔那份與它同值;放頂層讓 L3 不必翻 events 才知道)
+            "holiday_calendar": _holiday_calendar_state(),
             "counts": {"events": len(events), "excluded": len(excluded),
                        "unpredictable": len(unpredictable)}}
 
@@ -1065,6 +1188,9 @@ def build_summary_text(cal: dict) -> str:
     _unp = cal.get("unpredictable") or []
     if _unp:
         lines.append(f"（{len(_unp)} 檔節奏不規則/疑停配,無法推估）")
+    _warn = holiday_calendar_note(cal)      # v19.532 阻斷 2:假日表降級要說出口(§1)
+    if _warn:
+        lines.append(_warn)
     lines.append("※ 推估非官方,實際以基金公司公告為準。")
     return "\n".join(lines)
 
@@ -1124,6 +1250,10 @@ def build_summary_flex(cal: dict) -> dict:
     if _unp:
         _body.append({"type": "text", "text": f"（{len(_unp)} 檔節奏不規則/疑停配）",
                       "size": "xxs", "color": _FLEX_SUB, "wrap": True})
+    _warn = holiday_calendar_note(cal)      # v19.532 阻斷 2:假日表降級要說出口(§1)
+    if _warn:
+        _body.append({"type": "text", "text": _warn,
+                      "size": "xxs", "color": _FLEX_SUB, "wrap": True})
     _body.append({"type": "text", "text": "※ 推估非官方,實際以基金公司公告為準。",
                   "size": "xxs", "color": _FLEX_SUB, "wrap": True, "margin": "sm"})
 
@@ -1142,5 +1272,5 @@ def build_summary_flex(cal: dict) -> dict:
 
 
 __all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
-           "detect_anchor", "project_anchor",
+           "detect_anchor", "project_anchor", "holiday_calendar_note",
            "detect_house", "build_summary_text", "build_summary_flex", "add_business_days"]
