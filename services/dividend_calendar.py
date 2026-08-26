@@ -1,4 +1,4 @@
-"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.534)。L2 純函式,零 IO。
+"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.535)。L2 純函式,零 IO。
 
 用途:吃每檔基金的**配息歷史**,推估「本月**除息基準日** + 配息入帳日」,產生月曆結構供 L3 渲染。
 資料由 L1 抓好傳入(reuse `repositories.fund` 的 dividends);本層不碰網路、不 import streamlit。
@@ -62,6 +62,14 @@ v19.534 §15 顯示層複驗回修(總管 2026-08-26 實測 + 實看 v533 三張
      「上次 8/11」會被讀成上個月;`stale` 那類正是「很久以前」,不帶年份會低估陳舊度)。
   9. 追加 9:reason 文案與「上次日期」拆開,由 `reason_display(has_date_column=...)`
      依版面決定要不要補尾巴 —— 三欄表已有獨立日期欄時不重複講第二次。
+
+v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後)—— **引擎推估邏輯一行沒動**:
+  待辦 2:`group_unpredictable()` / `group_has_shared_note()` —— 待確認清單依「同一句說明」
+          併組,同句只在組上方講一次(v534_C 圖上同一句印 5 遍、每列各換行 2 行)。
+          ⚠️ 分組鍵刻意**不是只有 `reason_code`**:文案帶逐檔數字,只用 code 併組會讓組標題
+          講出對其他成員不成立的話(§1)。單檔成組維持逐列寫法,不為 1 檔開組標題。
+  待辦 3:`empty_month_note()` —— 空月文案的「本月」→ 實際目標月(與追加 7 同病),
+          HTML / LINE 文字 / Flex 三處收成一份 SSOT。
 """
 from __future__ import annotations
 
@@ -1228,6 +1236,19 @@ PENDING_SECTION_TITLE = "待確認清單"
 # §15.5:先做**點名**,不做手動輸入儲存(手動覆寫的 UI 與持久化留待 user 看過後再決定,§-1 不擴散)。
 PENDING_ASK_NOTE = "※ 這幾檔若你手上有近期的實際基準日，可以補進來提高準確度。"
 
+# ── 空月文案(`events` 與 `unpredictable` **都**空 = user 根本沒基金 / 全是累積型)────────
+# v19.535 待辦 3:原本三處各寫一句、且都寫死「本月」——與 v19.534 追加 7 同病:
+# cron 每月 1 號推的是**下個月**,「本月」在那個情境是錯的,而徽章上寫的又是真正的目標月。
+# (此路徑在推播情境**不會觸發** —— 無代碼時 notify 直接 exit 2 —— 但用詞一致性仍要收:
+#  三處各寫各的,下次改文案必漏一處。)
+# 月份走 `month_label()` 這一份 SSOT,與徽章 / 副標 / 明細標題同一個變數。
+EMPTY_MONTH_NOTE_TMPL = "{month}你的基金無推估除息基準日（或資料不足）。"
+
+
+def empty_month_note(year, month) -> str:
+    """空月文案(HTML 明細表 / LINE 純文字 / Flex 三處共用 SSOT)。"""
+    return EMPTY_MONTH_NOTE_TMPL.format(month=month_label(year, month))
+
 
 def is_all_unpredictable(cal: "dict | None") -> bool:
     """本月**一檔都推不出**(有配息史卻全數棄權)→ True,觸發 §15.4 的整組換文案 / 換版面。
@@ -1281,6 +1302,56 @@ def reason_display(entry: dict, *, has_date_column: bool,
         return _why
     _when = fmt_last_ex(_e.get("last_ex"), year=year, month=month)
     return f"{_why}（上次 {_when}）" if _when else _why
+
+
+# ── §15.4 待確認清單:同一句說明只講一次(v19.535 待辦 2)──────────────────────
+# 症狀(總管實看 `v534_C_all_unpred_2026-09.png`):5 檔全是 `anchor_weak`,原因欄同一句話
+# 印 5 遍、每列還換行成 2 行,在 560px 推播圖上佔掉大半版面(前一組實測:拿掉日期尾巴後
+# 高度一個像素都沒少 —— 因為重複的是**句子本身**,不是尾巴)。
+# 改法(§15.4 版面結構,總管核准):同組的說明句提到該組**上方一行**,列內只留
+# 「投信名 · 上次實際基準日」。
+#
+# ⚠️ **為什麼分組鍵不是只有 `reason_code`**:同一個 code 的文案會帶**逐檔不同的數字**
+#    (`too_few` 帶筆數 n、`stale` 帶年月與靜默月數、`anchor_weak` 帶視窗 min(n,12))。
+#    只用 code 併組 → 組標題會拿其中一檔的數字去代表全組,等於把 A 檔的事實安到 B 檔頭上
+#    (§1 捏造)。故鍵 = (code, **實際要顯示的那句話**);句子不同就分開站,誠實優先於版面。
+#    句子相同 ⇒ code 必然相同,所以這個鍵是 code 分組的**收斂版**,不會把不同成因混在一起。
+_PENDING_GROUP_MIN_SIZE = 2      # 成員數 >= 此值才提「組說明」;單檔成組 → 維持逐列寫法
+
+
+def group_unpredictable(unpredictable: list, *, year: "int | None" = None,
+                        month: "int | None" = None) -> list:
+    """待確認清單的分組(§15.4)。→ `[{"reason_code", "reason", "entries": [...]}]`,**保序**。
+
+    只給「有獨立『上次實際基準日』欄」的待確認清單版面用 —— 故 reason 一律走
+    `has_date_column=True`(不帶日期尾巴,§15.3 追加 9),不另開參數(§8.1 step 6)。
+
+    分組鍵 = (reason_code, reason 文字);見上方註解:文案帶逐檔數字,只用 code 併組會
+    讓組標題講出對其他成員不成立的話。組內順序 = 原順序,組間順序 = 首次出現順序
+    (不重排 → 畫面與 `unpredictable` 清單、LINE 逐檔列表同序,不會兩處各排各的)。
+    """
+    _groups: list = []
+    _index: dict = {}
+    for _u in unpredictable or []:
+        _why = reason_display(_u, has_date_column=True, year=year, month=month)
+        _key = (str((_u or {}).get("reason_code") or ""), _why)
+        _g = _index.get(_key)
+        if _g is None:
+            _g = {"reason_code": _key[0], "reason": _why, "entries": []}
+            _index[_key] = _g
+            _groups.append(_g)
+        _g["entries"].append(_u)
+    return _groups
+
+
+def group_has_shared_note(group: dict) -> bool:
+    """該組是否用「組上方一句說明」呈現(成員 >= `_PENDING_GROUP_MIN_SIZE`)。
+
+    單檔成組 → False → 維持**逐列寫法**(原因寫在該列上)。為 1 檔開一個組標題會多佔一行,
+    在「每檔成因都不同」的混合情境反而比原版更長 —— 分組是為了消掉重複,不是為了分組本身。
+    判斷放 L2(與 `group_unpredictable` 同一份知識),L3 不各自訂門檻。
+    """
+    return len(((group or {}).get("entries")) or []) >= _PENDING_GROUP_MIN_SIZE
 
 
 # ── LINE 月初摘要文字(方式 C;純字串,零 IO)──────────────────
@@ -1470,7 +1541,7 @@ def build_summary_text(cal: dict) -> str:
         return "\n".join(lines)
     lines = [f"🗓️ 基金除息行事曆 · {month_label(y, m)}（推估）"]
     if not events:
-        lines.append("你的基金本月無推估除息基準日（或資料不足）。")
+        lines.append(empty_month_note(y, m))
     else:
         lines.append(_pay_note())
         for e in dedupe_events(events):                # 同日同投信只列一次(user 2026-08-24)
@@ -1576,7 +1647,7 @@ def build_summary_flex(cal: dict) -> dict:
 
     _body: list = []
     if not events:
-        _body.append({"type": "text", "text": "你的基金本月無推估除息基準日（或資料不足）。",
+        _body.append({"type": "text", "text": empty_month_note(y, m),
                       "size": "sm", "color": _FLEX_SUB, "wrap": True})
     else:
         # user 2026-08-24:到帳時間改在清單「上方」寫一句(不逐檔列),與純文字/圖檔同口徑。
@@ -1622,4 +1693,7 @@ __all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
            "reason_needs_last_date", "reason_display", "fmt_last_ex", "month_label",
            "ALL_UNPRED_TITLE", "ALL_UNPRED_SUB_1",
            "ALL_UNPRED_SUB_2", "ALL_UNPRED_LINE_HEAD", "PENDING_SECTION_TITLE",
-           "PENDING_ASK_NOTE", "ERR_BAND_FOOTNOTE"]
+           "PENDING_ASK_NOTE", "ERR_BAND_FOOTNOTE",
+           # v19.535:待確認清單分組(同句只講一次)+ 空月文案(月份吃徽章同一個變數)
+           "group_unpredictable", "group_has_shared_note",
+           "EMPTY_MONTH_NOTE_TMPL", "empty_month_note"]
