@@ -1,4 +1,4 @@
-"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.538)。L2 純函式,零 IO。
+"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.539)。L2 純函式,零 IO。
 
 用途:吃每檔基金的**配息歷史**,推估「本月**除息基準日** + 配息入帳日」,產生月曆結構供 L3 渲染。
 資料由 L1 抓好傳入(reuse `repositories.fund` 的 dividends);本層不碰網路、不 import streamlit。
@@ -70,6 +70,23 @@ v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後)—— **引�
           講出對其他成員不成立的話(§1)。單檔成組維持逐列寫法,不為 1 檔開組標題。
   待辦 3:`empty_month_note()` —— 空月文案的「本月」→ 實際目標月(與追加 7 同病),
           HTML / LINE 文字 / Flex 三處收成一份 SSOT。
+
+v19.539 §16.3 典型誤差 vs 最壞誤差(**誤差帶的算法與 `_ERR_BAND_QUANTILE` 一個字沒動**):
+  `estimate_error_band` 回的是該檔自己的 **90 百分位** —— 那是**典型值**,
+  **結構上就看不到尾端事件**。合成壓力測試裡「誤差 >= 2 天卻標 ±0 天」的那些組合,
+  月份集中在農曆年;一檔月配基金 16 筆歷史通常只有 1 個 2 月,單一樣本移不動 90 百分位。
+  ⛔ **那不是誤差帶壞了,是拿它去回答一個它答不了的問題** —— 把分位數調寬到蓋住 1% 尾巴,
+  會讓**所有**基金的誤差帶一起失去資訊量(平常的 ±0/±1 全變 ±5 之類),**淨損**。
+  做法:抽出 `_walk_forward_errors`(邏輯逐字未改,兩個數字共用同一份樣本 → 口徑不可能漂),
+  新增 `estimate_error_worst` = `max(errs)`(**不經分位數內插、不四捨五入**,
+  它的全部意義就是「別把尾巴磨平」)。實測 user 5 檔 典型→最壞:
+  摩根 2→4、聯博 0→1、安聯 0→1、施羅德 11→14、瀚亞 0→0(它 12/12 全中,本來就該相同)。
+  event 增 `error_worst`;**L3 不讀它** —— 要不要印、印在哪裡屬**新增顯示欄位**,
+  須先送客戶 UI 線框草稿拍板。本輪只保證引擎算得出來、不會遺失。
+  ⚠️ **τ(`_KEEP_MONTH_MAX_SHIFT_DAYS`)一個字沒動** —— 反向回退在長連假可能落在
+  離主方向 10 天的位置,但那條規則改不改屬**業務語意**(這個引擎的定義是什麼),須另請示客戶。
+  同輪順帶更正 `estimate_error_band` 的**過期註解**(寫「80% 分位 / quantile_80」,
+  但常數自 v19.534 起就是 0.90、使用者看到的頁尾也寫「約九成」)——**只改註解,值沒動**。
 
 v19.538 §16.2 事實優先(**只換「顯示哪個值」,推估引擎一行沒動**):
   `build_month_calendar` 原本**完全不看**目標月有沒有實際紀錄,一律走 `predict_ex_for_month`;
@@ -988,9 +1005,15 @@ def estimate_error_band(dividends: list) -> "int | None":
     """配息史 → 該檔**自己的**誤差帶 E(天);證據不足 → None(§15.1,§1 不借別檔的準確度)。
 
     做法:對這一檔基金做 walk-forward —— 從第 `_CONF_MIN_RECORDS_FOR_TRUST`(8)筆起,
-    每次**只用過去**推下一筆的除息基準日,收集 `|推估 - 實際|` 的日數,取 80% 分位向上取整。
+    每次**只用過去**推下一筆的除息基準日,收集 `|推估 - 實際|` 的日數,取
+    `_ERR_BAND_QUANTILE` 分位向上取整。
 
-        E = ceil(quantile_80({ |pred_i - true_i| : i in walk_forward(hist) }))
+        E = ceil(quantile(_ERR_BAND_QUANTILE, { |pred_i - true_i| : i in walk_forward(hist) }))
+
+    ⚠️ **v19.539 註解更正(只改註解,那個 0.90 一個字都沒動)**:本段原本寫死「取 **80%** 分位」
+    與 `quantile_80(...)`,但 `_ERR_BAND_QUANTILE` 早在 **v19.534 就已由 0.80 調成 0.90**,
+    使用者看到的 `ERR_BAND_FOOTNOTE` 也寫「約**九成**」—— **註解與變數符號過期了,值沒錯**。
+    現在改寫成引用常數本身,下次再調就不會有第三處要同步(§2 SSOT;§1:文件說謊同樣是說謊)。
 
     Returns:
         int  —— 該檔誤差帶(天);0 代表 walk-forward 八成以上逐日命中。
@@ -1008,6 +1031,20 @@ def estimate_error_band(dividends: list) -> "int | None":
     複雜度:O(k) 次 `infer_schedule` + `predict_ex_for_month`(k = 歷史筆數 - 8),
     純計算無 IO;`build_month_calendar` 只對**推得出日期**的基金呼叫(見該函式註解)。
     """
+    errs = _walk_forward_errors(dividends)
+    if errs is None or len(errs) < _ERR_BAND_MIN_SAMPLES:
+        return None                      # 歷史不足 / 樣本太少 → 分位數沒有意義(§15.1)
+    return _quantile_ceil(errs, _ERR_BAND_QUANTILE)
+
+
+def _walk_forward_errors(dividends: list) -> "list | None":
+    """該檔 walk-forward 的 `|推估 - 實際|` 日數樣本;歷史不足 → None(§16.3 抽出)。
+
+    **v19.539 抽出,邏輯逐字未改** —— 原本這段內嵌在 `estimate_error_band` 裡,
+    導致「最壞曾差幾天」這個數字**算不出來**(要重跑一次同樣的 O(k) walk-forward)。
+    現在 `estimate_error_band`(典型值)與 `estimate_error_worst`(最壞值)共用同一份樣本,
+    口徑不可能漂(§2 SSOT)。
+    """
     recs = _parse_records(dividends)
     if len(recs) < _CONF_MIN_RECORDS_FOR_TRUST:
         return None                      # 歷史不足 → 不給數字(§15.1)
@@ -1021,9 +1058,40 @@ def estimate_error_band(dividends: list) -> "int | None":
         if not _got or not _got.get("ex_date"):
             continue                     # 誠實棄權的月份不進誤差樣本(見 docstring)
         errs.append(abs((_got["ex_date"] - _tgt).days))
-    if len(errs) < _ERR_BAND_MIN_SAMPLES:
-        return None                      # 樣本太少 → 分位數沒有意義(§15.1)
-    return _quantile_ceil(errs, _ERR_BAND_QUANTILE)
+    return errs
+
+
+def estimate_error_worst(dividends: list) -> "int | None":
+    """該檔 walk-forward 的**最壞**誤差(天)= `max(|推估 - 實際|)`;證據不足 → None。
+
+    §16.3(v19.539)—— **「典型誤差」與「最壞曾差多少」是兩個不同的數字。**
+
+    `estimate_error_band` 回的是該檔自己的 **90 百分位**(`_ERR_BAND_QUANTILE`),那是
+    **典型值**,它**在結構上就看不到尾端事件** —— 一個 90 百分位當然不會反映 1% 的尾巴。
+    **那不是它壞了,是拿它去回答一個它答不了的問題。**
+    實測(合成壓力測試,歷史完全規律、s=1.0):誤差 >= 2 天的組合裡,絕大多數的
+    90 百分位都是 **0**,月份集中在**農曆年**那一兩個月 —— 一檔月配基金 16 筆歷史裡
+    通常只有 1 個 2 月,單一樣本移不動 90 百分位。
+
+    ⛔ **正確的處置不是把 `_ERR_BAND_QUANTILE` 調寬到蓋住尾巴** ——
+    那會讓**所有**基金的誤差帶一起失去資訊量(平常那些 ±0 / ±1 會全部變成 ±5 之類),
+    是拿一個真實有用的指標去換一個罕見情境,**淨損**。故本函式**另外**給一個數字,
+    `estimate_error_band` 的算法與 `_ERR_BAND_QUANTILE` 的值**一個字都沒動**。
+
+    ⚠️ **最壞值是 `max`,不經分位數內插、不經四捨五入** —— 它的全部意義就是「別把尾巴磨平」,
+    一旦被平滑成 0 就等於沒算。
+
+    ⚠️ **本輪尚未在畫面上呈現**(總管 2026-08-27 指示):要不要印、印在哪裡屬**新增顯示欄位**,
+    依客戶「UI 草稿先行」原則須先送線框拍板。本輪只確保**引擎算得出來、且不會遺失**。
+
+    Returns:
+        int  —— 該檔 walk-forward 見過的最大誤差(天)。
+        None —— 證據不足(口徑與 `estimate_error_band` 完全相同,兩者同進同出)。
+    """
+    errs = _walk_forward_errors(dividends)
+    if errs is None or len(errs) < _ERR_BAND_MIN_SAMPLES:
+        return None
+    return max(errs)
 
 
 def _pay_gap_band(pay_gaps: list) -> tuple:
@@ -1242,7 +1310,10 @@ def build_month_calendar(funds: list, year: int, month: int,
         {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{},
          holiday_calendar}
         event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n,
-                 **error_band**, **pay_window_est**, **is_actual**,
+                 **error_band**, **error_worst**, **pay_window_est**, **is_actual**,
+                 error_worst= §16.3 該檔 walk-forward 見過的**最壞**誤差(天)或 None。
+                              與 error_band(90 百分位的典型值)是兩個數字,不可互相取代。
+                              ⚠️ L3 目前不讀它(新增顯示欄位須先送客戶線框草稿)
                  is_actual  = §16.2 這一格是**已發生的實際紀錄**(True)還是推估(False)。
                               ⚠️ L3 目前**不讀它** —— 畫面上區分實際/推估屬新增視覺元件,
                               待客戶線框拍板(接縫說明見本函式內該旗標的註解)
@@ -1299,7 +1370,7 @@ def build_month_calendar(funds: list, year: int, month: int,
                            # 實際紀錄的誤差**依定義為 0**(這是事實,不是「回測九成落在此範圍」)。
                            # ⚠️ 見下方 `is_actual` 的接縫說明 —— 畫面上這一格會顯示「±0 天」,
                            # 與「推估得非常準」長得一模一樣,目前**分不出來**。
-                           "error_band": 0,
+                           "error_band": 0, "error_worst": 0,
                            # ⚠️ **接縫,已知缺口,不是漏做**(v19.537,總管 2026-08-27 指示):
                            # 本旗標標示「這一格是**已發生的事實**,不是推估」。**L3 目前不讀它** ——
                            # 要在畫面上區分「實際 vs 推估」(徽章 / 字重 / 標記)屬**新增視覺元件**,
@@ -1344,6 +1415,10 @@ def build_month_calendar(funds: list, year: int, month: int,
                        # 只對推得出日期的基金算(推不出的那些畫面上顯示 reason,不顯示 ±N),
                        # 省掉 O(k) 次重擬合。`confidence` 仍原封不動帶著 —— 它是閘門依據。
                        "error_band": estimate_error_band((f or {}).get("dividends")),
+                       # §16.3「最壞曾差幾天」—— 與 error_band(90 百分位的**典型值**)是
+                       # **兩個不同的數字**。⚠️ L3 目前**不讀它**:要不要印、印在哪裡屬
+                       # 新增顯示欄位,須先送 UI 線框草稿給客戶拍板,本輪只保證算得出來。
+                       "error_worst": estimate_error_worst((f or {}).get("dividends")),
                        # §16.2:這一格是**推估**。實際紀錄那一支走上面的分支(is_actual=True)。
                        # 兩支都帶這個 key,L3 才不必用 `.get()` 猜(§12 相容:只增不減)。
                        "is_actual": False,
@@ -1910,7 +1985,8 @@ __all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
            "detect_anchor", "project_anchor", "holiday_calendar_note",
            "detect_house", "build_summary_text", "build_summary_flex", "add_business_days",
            # §15 顯示層:誤差帶 + 「全部推不出」的文案 SSOT(L3 / LINE 共用)
-           "estimate_error_band", "is_all_unpredictable", "pending_line",
+           "estimate_error_band", "estimate_error_worst", "actual_ex_for_month",
+           "is_all_unpredictable", "pending_line",
            "reason_needs_last_date", "reason_display", "fmt_last_ex", "month_label",
            "ALL_UNPRED_TITLE_TMPL", "all_unpred_title", "ALL_UNPRED_SUB_1",
            "ALL_UNPRED_SUB_2", "ALL_UNPRED_LINE_HEAD", "PENDING_SECTION_TITLE",
