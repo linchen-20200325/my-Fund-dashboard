@@ -1492,7 +1492,11 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
 - `models/` — Pydantic / 領域物件
 - `tests/` + 根 `test_*.py` — 單元測試
 - `cache/` + `data_cache/` — 落地快取（NAV / FX / 政策 / MJ 快照）
-- `scripts/` — 工具腳本（`quick_merge.sh` 等）
+- `scripts/` — 工具腳本（`fetch_nav_cache.py` / `update_macro_history.py` / `weekly_switch_notify.py` / `sync_to_stock.sh` 等）
+  - ⛔ **`quick_merge.sh` 已於 2026-08-27 整檔刪除（commit `2a839d5`；裁示者 user）——本行保留追溯，不是漏搬。** 該腳本檔頭自述「跳過 PR 直接 squash-merge 進 main」，唯一用途就是被禁止的那個動作；且它以**不存在的**「`CLAUDE.md §4` 例外」自我授權 —— 本 repo `CLAUDE.md §4` 是「計算層（Computation Correctness）」，**無任何例外條款**，最接近的 `PROCESS.md §4`（Auto-Ship）立場**完全相反**（明文要求走 `gh pr create` + `gh pr merge`）。
+  - **現行正規流程**：一律走 `PROCESS.md §4` Auto-Ship —— 開 PR → **CI 綠 + 獨立稽核通過** → `gh pr merge <PR號碼> --merge --delete-branch`（user 常設授權，但三道邊界不鬆：範圍不外溢／前置不得省／merge 完不算完）。**嚴禁繞過 PR 直推 main。**
+  - **防復發守衛**：`tests/test_no_direct_main_push_scripts.py` —— 掃 `scripts/` 下的 shell 腳本（`*.sh`，或無副檔名但帶 sh/bash shebang 者），偵測兩種形狀：明寫 `git push ... origin main`／「`git checkout main` + 裸 `git push`」（後者正是 `quick_merge.sh` 用的形狀，單看一行無害）；另含 liveness 斷言，掃不到檔案要**紅**而非靜默通過。⚠️ **刻意不涵蓋 `.github/workflows/`**（該處另有獨立授權的 cron 寫入，理由寫在測試檔內）——別誤以為 workflow 也有保護網。
+  - 若在 git history、或在姊妹 repo 看到同名檔 → **那是被刻意廢止的工具，不得復活**；需要取回原始內容做考古時用 `git show 2a839d5^:scripts/quick_merge.sh`。
 - `docs/`、`ARCHITECTURE.md`、`SPEC.md`、`BACKLOG.md`、`STRATEGY.md` — 技術文檔
 
 ## 當前版本
