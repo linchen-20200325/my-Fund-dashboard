@@ -55,7 +55,8 @@ Reboot 後：Tab6 → 上傳同一個 CSV → 紀錄還原
 Tab6 「⭐ 升等為預設」加新基金
 → 「💾 下載 preset_funds.json」
 → 用此檔取代 repo 的 config/preset_funds.json
-→ git commit + push（或用 ./scripts/quick_merge.sh）
+→ git commit → 開 PR（`gh pr create --fill`）→ CI 綠燈 + 稽核通過後 merge
+  ⚠️ 禁止直推 main（`PROCESS.md §4` Auto-Ship）
 → 下次 reboot 後仍是預設
 ```
 

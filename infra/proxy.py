@@ -14,6 +14,11 @@ import urllib3
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
+# v3 憲法 §02「失敗時退避，不連續轟炸來源」——「本次不試這個來源」的狀態機。
+# 分層：兩者同為 L0 Infra（infra.source_backoff → infra.cache → shared.backoff_policy，
+# 全程下行 / 同層，無 L1+ 依賴，不違 §8.2 硬規則 3）。
+from infra import source_backoff as _sb
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _PROXY_CFG_CACHE = None
@@ -148,6 +153,7 @@ def fetch_url(
     timeout: int  = 20,
     retries: int  = 3,
     backoff_on_429: bool = True,
+    bypass_backoff: bool = False,
 ) -> "requests.Response | None":
     """
     通用 HTTP GET（含 NAS Proxy 中繼 + 自動降級直連）。
@@ -160,6 +166,17 @@ def fetch_url(
       ProxyError    → **立刻**降級直連（不 sleep、不重試 —— proxy 連不上時
                       重試同一個 proxy 必然重複失敗，只是白付 retries × 2s）
       無 Proxy 設定 → 直連，SSL verify=True
+
+    v3 憲法 §02「失敗時退避，不連續轟炸來源」（`infra.source_backoff`）：
+      進場   → 該 host 仍在冷卻期 → **一個封包都不發**，直接回 None（呼叫端
+               的 fallback chain 會自然走下一個來源；語意與「打了但失敗」相同）
+      200    → 解除該 host 的退避（含降級直連成功）
+      失敗   → 依失敗類型套用冷卻期（403 封鎖 / 429 限流 / 逾時 / 5xx 各不同；
+               **404 與 407 刻意不退避**，理由見 `shared/backoff_policy.py`）
+      ⚠️ 退避**不快取任何值** —— 不存成功值也不存失敗值，只存「何時可以再試」，
+         故 §1 Fail Loud 完全不受影響：整條 chain 都在冷卻時照樣 fail loud。
+      `bypass_backoff=True` 供「刻意逐源探測」的診斷路徑用（Tab5 資料看板），
+      本輪**無 caller** —— 改 UI 屬 §-1.5.4 草稿先行，只留介面不動畫面。
     """
     import time as _t
     import random as _rnd
@@ -180,6 +197,16 @@ def fetch_url(
     # 的 log 是 collaborator 可見。砍掉 `?` 之後即可根絕,且 scheme+host+path 完整保留
     # → 除錯仍看得出「哪個來源、哪支 endpoint」,資訊價值不減。
     _url_log = url.split("?")[0]
+
+    # ── v3 §02 退避進場檢查：冷卻期內直接放棄，**不發任何請求** ──────────
+    # 放在 session 建立與 proxy 讀取之**前**：退避的整個意義就是「這一輪連碰都不碰」。
+    _src_key = _sb.source_key(url)
+    if not bypass_backoff:
+        _skip, _left, _kind = _sb.should_skip(_src_key)
+        if _skip:
+            print(f"[proxy] 退避中，跳過不打（source={_src_key}, kind={_kind}, "
+                  f"剩餘 {_left:.0f}s）：{_url_log[:80]}")
+            return None
 
     sess     = _get_thread_session()   # v19.333 F6:複用 thread-local 連線池
     _perr    = 0
@@ -211,6 +238,12 @@ def fetch_url(
             _last_status = r.status_code
             if r.status_code == 407:
                 print("[proxy] 407 Auth Failed — 確認 secrets 帳密")
+                # v3 §02：407 是**我方 NAS Squid 帳密設定錯**，請求根本沒到達來源
+                # → 分類為 proxy_auth，`shared/backoff_policy.py` 明訂**不退避**
+                # （退避來源等於罰錯人，還會把一個改 secrets 就能修的設定錯誤，
+                #   偽裝成一整排來源的「已跳過」）。呼叫仍走分類函式，讓「退不退避」
+                #   這個決定只有 SSOT 一個地方說了算。
+                _sb.record_failure(_src_key, "proxy_auth")
                 return None
             if r.status_code == 403:
                 _block += 1
@@ -237,6 +270,11 @@ def fetch_url(
                 # 直接回 None,那個指標誠實留空(§1)。預設 backoff_on_429=True 行為與契約測試不變。
                 if not backoff_on_429:
                     print(f"[proxy] 429 Rate Limit — fail-fast(caller 要求不退避):{_url_log[:80]}")
+                    # v3 §02：`backoff_on_429=False` 說的是「**這一次呼叫內**不要 sleep 重試」
+                    # （v19.507：Yahoo 限流不會在 2/4/8s 內解除，白等 14s）——
+                    # 它**不是**「下一次 rerun 可以馬上再打一次」。來源級冷卻照記，
+                    # 這正是「不連續轟炸」要擋的那個放大器（8 標的 × 每次互動 rerun）。
+                    _sb.record_failure(_src_key, "rate_limited")
                     return None
                 # ⚠️ v19.425 已查證但**未動**的同型問題（待 user 裁示，§-1）：
                 #   預設 retries=3、backoff=(2,4,8) → attempt 2（最後一次）時
@@ -255,8 +293,10 @@ def fetch_url(
                     _rl_atmp += 1
                     continue
                 print(f"[proxy] 429 已重試 {_rl_atmp} 次仍 rate-limited，放棄：{_url_log[:80]}")
+                _sb.record_failure(_src_key, "rate_limited")
                 return None
             if r.status_code == 200:
+                _sb.record_success(_src_key)   # v3 §02:來源活著 → 立刻解除退避
                 return r
             # ── 未預期狀態碼（402 額度用盡 / 401 / 404 / 5xx …）─────────────
             # 原本這裡沒有 else，直接掉出 if 鏈進下一輪重試，狀態碼與 body 全丟。
@@ -317,6 +357,9 @@ def fetch_url(
             _last_status = r_dc.status_code   # 收尾 log 要反映「最後一次」真狀態
             if r_dc.status_code == 200:
                 print("[proxy] 直連成功")
+                # 降級直連成功也算來源活著（走的是另一個出口 IP，但資料拿到了）
+                # → 解除退避。否則「proxy 被擋、直連可用」的常態會被自己的退避鎖死。
+                _sb.record_success(_src_key)
                 return r_dc
             print(f"[proxy] 直連非 200：status={r_dc.status_code}")
         except Exception as e_dc:
@@ -329,4 +372,29 @@ def fetch_url(
     # 措辭本身就講清楚 404 不必然是最後一次嘗試的結果。
     print(f"[proxy] 全部嘗試失敗（last_seen_status={_last_status}, "
           f"perr={_perr}, block={_block}, tmo={_tmo}）：{_url_log[:80]}")
+    # ── v3 §02 退避分類（順序有意義，逐條理由見 shared/backoff_policy.py）──────
+    # ① 404 最優先：來源**活著而且明確回答了**，只是這支 URL 不存在 → URL 的問題，
+    #    不是來源的問題。若因 404 退避整個 host，會直接打死
+    #    `tw_pmi_repository._pmi_src_cier_en_monthly`（刻意輪 3 個月份 slug，
+    #    **舊月份 404 是正常流程**）等所有「試幾個候選 URL」式的探測。
+    # ② 看過 403 → 封鎖（IP / Referer 層級，不會在幾秒內解除）。
+    # ③ 其餘 4xx/5xx → server_error（5xx 分鐘級恢復、402 額度用盡）。
+    # ④ 完全沒收到狀態碼（逾時 / ProxyError / 連線錯誤）→ unreachable（最短冷卻）。
+    if _last_status == 404:
+        _fail_kind = "not_found"
+    elif _last_status == 429:
+        # ⚠️ 這條**會**走到，不是防禦性冗餘：預設 retries=3 + backoff=(2,4,8) 時，
+        # 上面 429 分支的 `_rl_atmp` 在最後一次 attempt 仍 < 3 → sleep 完 continue →
+        # for 迴圈當場耗盡，**永遠走不到**那個 `return None` 的放棄分支
+        # （infra/proxy.py 內 v19.425 已查證並記載的既有行為，本次未改動它）。
+        # 少了這一條，429 會在收尾處被誤分類成 server_error(300s)，
+        # 「對方明確叫我們停」這個最強訊號反而拿到最短的冷卻期。
+        _fail_kind = "rate_limited"
+    elif _block >= 1:
+        _fail_kind = "blocked"
+    elif _last_status is not None and _last_status >= 400:
+        _fail_kind = "server_error"
+    else:
+        _fail_kind = "unreachable"
+    _sb.record_failure(_src_key, _fail_kind)
     return None

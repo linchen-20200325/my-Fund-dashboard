@@ -1,4 +1,4 @@
-"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.536)。L2 純函式,零 IO。
+"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.539)。L2 純函式,零 IO。
 
 用途:吃每檔基金的**配息歷史**,推估「本月**除息基準日** + 配息入帳日」,產生月曆結構供 L3 渲染。
 資料由 L1 抓好傳入(reuse `repositories.fund` 的 dividends);本層不碰網路、不 import streamlit。
@@ -70,6 +70,52 @@ v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後)—— **引�
           講出對其他成員不成立的話(§1)。單檔成組維持逐列寫法,不為 1 檔開組標題。
   待辦 3:`empty_month_note()` —— 空月文案的「本月」→ 實際目標月(與追加 7 同病),
           HTML / LINE 文字 / Flex 三處收成一份 SSOT。
+
+v19.539 §16.3 典型誤差 vs 最壞誤差(**誤差帶的算法與 `_ERR_BAND_QUANTILE` 一個字沒動**):
+  `estimate_error_band` 回的是該檔自己的 **90 百分位** —— 那是**典型值**,
+  **結構上就看不到尾端事件**。合成壓力測試裡「誤差 >= 2 天卻標 ±0 天」的那些組合,
+  月份集中在農曆年;一檔月配基金 16 筆歷史通常只有 1 個 2 月,單一樣本移不動 90 百分位。
+  ⛔ **那不是誤差帶壞了,是拿它去回答一個它答不了的問題** —— 把分位數調寬到蓋住 1% 尾巴,
+  會讓**所有**基金的誤差帶一起失去資訊量(平常的 ±0/±1 全變 ±5 之類),**淨損**。
+  做法:抽出 `_walk_forward_errors`(邏輯逐字未改,兩個數字共用同一份樣本 → 口徑不可能漂),
+  新增 `estimate_error_worst` = `max(errs)`(**不經分位數內插、不四捨五入**,
+  它的全部意義就是「別把尾巴磨平」)。實測 user 5 檔 典型→最壞:
+  摩根 2→4、聯博 0→1、安聯 0→1、施羅德 11→14、瀚亞 0→0(它 12/12 全中,本來就該相同)。
+  event 增 `error_worst`;**L3 不讀它** —— 要不要印、印在哪裡屬**新增顯示欄位**,
+  須先送客戶 UI 線框草稿拍板。本輪只保證引擎算得出來、不會遺失。
+  ⚠️ **τ(`_KEEP_MONTH_MAX_SHIFT_DAYS`)一個字沒動** —— 反向回退在長連假可能落在
+  離主方向 10 天的位置,但那條規則改不改屬**業務語意**(這個引擎的定義是什麼),須另請示客戶。
+  同輪順帶更正 `estimate_error_band` 的**過期註解**(寫「80% 分位 / quantile_80」,
+  但常數自 v19.534 起就是 0.90、使用者看到的頁尾也寫「約九成」)——**只改註解,值沒動**。
+
+v19.538 §16.2 事實優先(**只換「顯示哪個值」,推估引擎一行沒動**):
+  `build_month_calendar` 原本**完全不看**目標月有沒有實際紀錄,一律走 `predict_ex_for_month`;
+  而「當月」不算 §13.7.3 的 backfill(那要 `(year,month) < last_ex`)→ 信心一點都不壓。
+  實測 5 檔真實配息表 × 98 個「該月真的有配」的情境(模擬每月最後一天打開 App):
+  **10 個情境畫面與事實不一致,最大差 14 天**(施羅德 2025-12 畫面 12/31 事實 12/17、
+  2025-11 差 7、摩根 2026-08 差 4)—— 那些真實日期**當時就在同一份 payload 裡**。
+  做法:`actual_ex_for_month()` + `build_month_calendar` 在推估**之前**先查事實
+  (擺在後面的話,節奏推不出來的基金永遠走不到 —— 而那正是「把已知的事實說成不知道」)。
+  event 增 `is_actual` 旗標;**L3 不讀它**(見下)。
+  ⚠️ **已被記錄下來的接縫,不是漏做**(總管 2026-08-27 指示):畫面上區分「實際 vs 推估」
+  屬**新增視覺元件**,依客戶「UI 草稿先行」原則須先送線框拍板 → 本輪不做。
+  因此頁面那句全域「推估」徽章與欄頭「預估基準日」,對已是事實的格子而言仍是錯的;
+  本輪**刻意不改那些文案去圓它**(那同樣是設計變更)。守衛見
+  `test_is_actual_flag_is_present_on_both_branches_and_unread_by_render`。
+
+v19.537 §16.1 逐檔到帳窗(**修的是「哪天該去看帳戶」這一欄,引擎的除息日推估一行沒動**):
+  現況:所有基金一律套「基準日 +5~7 個**營業日**」通用窗(user 2026-08-24 憑手上幾檔給的
+  經驗值)。對 5 檔真實 MoneyDJ 配息表實測,**31/98 = 32% 的實際到帳日落在那個窗之外** ——
+  安聯 TLZF9 **20/20 全部落在窗外**(自身間隔 5 個日曆日,通用窗整段偏晚)、施羅德 SD080
+  10/18(間隔 12 天,偏早),**兩檔偏的方向相反**,所以平移通用窗救不了,只能逐檔算。
+  做法:`infer_schedule` 增出 `pay_gap_lo_days` / `pay_gap_hi_days`(該檔自己的
+  「基準→發放」間隔 p10 / p90,見 `_pay_gap_band`)→ `predict_ex_for_month` 增
+  `pay_window_est` → event 帶著 → L3 明細表優先用它,無發放紀錄才退回通用窗。
+  walk-forward 實測:通用窗命中 40/58 = 69.0% → 逐檔窗 54/58 = **93.1%**
+  (平均寬度 4.1 → 4.5 天,幾乎沒變寬);安聯 0/12 → 11/12,**其餘三檔一檔都沒變差**。
+  §1:該檔沒有發放紀錄 → `(None, None)`,退回通用窗照舊標「估」,**不借別檔的間隔補位**。
+  LINE / Flex 上方那一行的數字同步改吃這批基金自己的範圍(仍是一句話、仍在清單上方,
+  user 2026-08-24「到帳時間不逐檔列」未動)。
 
 v19.536(總管 2026-08-26 裁示)—— **引擎推估邏輯一行沒動**:
   §15.4「全部推不出」的標題常數 `ALL_UNPRED_TITLE` → `ALL_UNPRED_TITLE_TMPL` +
@@ -204,6 +250,11 @@ _REF_DAY_OF_MONTH = 15
 # 改後畫面:摩根「±2 天」、施羅德「僅供參考」(帶寬 11 > 7)、其餘三檔維持「±0 天」。
 _ERR_BAND_QUANTILE = 0.90        # |推估 - 實際| 的 90% 分位(§15.1;向上取整後為該檔誤差帶 E)
 _ERR_BAND_MIN_SAMPLES = 3        # walk-forward 實際「有給出日期」的樣本數下限,不足 → None
+
+# §16.1 逐檔到帳窗:該檔自己的「基準→發放」間隔取 p10~p90(日曆日)。見 `_pay_gap_band`。
+_PAY_BAND_Q_LO = 0.10
+_PAY_BAND_Q_HI = 0.90
+_PAY_BAND_MIN_SAMPLES = 3        # 間隔樣本下限,不足 → (None, None) → caller 退回通用窗
 # 頁尾說明(SSOT):具體數字比模糊標籤更容易被過度相信,必須說明它是什麼、憑什麼。
 # 「約九成」對應 `_ERR_BAND_QUANTILE`(0.90)—— 兩者要一起改,不可只改一邊(§3.3)。
 ERR_BAND_FOOTNOTE = "※ 誤差 = 用該檔自己的配息史回測，約九成情況落在此範圍內。"
@@ -736,7 +787,8 @@ def infer_schedule(dividends: list) -> dict:
         return {"cadence": "none", "ex_day": None, "pay_gap_days": None, "n": 0,
                 "confidence": "none", "day_std": None, "last_ex": None,
                 "last_amount": None, "last_yield": None, "med_gap": None,
-                "anchor": None, "phase": None}
+                "anchor": None, "phase": None,
+                "pay_gap_lo_days": None, "pay_gap_hi_days": None}
 
     recent = recs[-_RECENT_N:]
     _rdates = [r["ex"] for r in recent]
@@ -771,6 +823,7 @@ def infer_schedule(dividends: list) -> dict:
     pay_gaps = [(r["pay"] - r["ex"]).days for r in recs
                 if r["pay"] is not None and (r["pay"] - r["ex"]).days >= 0]
     pay_gap = round(_stats.median(pay_gaps)) if pay_gaps else None
+    pay_lo, pay_hi = _pay_gap_band(pay_gaps)
 
     _step = _CADENCE_MONTHS.get(cadence)
     # §13.7.6:錨定 / med_gap / 相位**同吃近 `_RECENT_N` 筆視窗**,§3 的 k 與 §4 的 k 皆為
@@ -792,7 +845,10 @@ def infer_schedule(dividends: list) -> dict:
     return {"cadence": cadence, "ex_day": ex_day, "pay_gap_days": pay_gap, "n": n,
             "confidence": conf, "day_std": day_std, "last_ex": last["ex"],
             "last_amount": last["amount"], "last_yield": last["yield_pct"],
-            "med_gap": med_gap, "anchor": anchor, "phase": phase}
+            "med_gap": med_gap, "anchor": anchor, "phase": phase,
+            # v19.537 §16.1:該檔**自己的**基準→發放間隔分布(p10 / p90,日曆日)。
+            # 中位數 `pay_gap_days` 只給得出一個點,畫面要的是「哪幾天該去看帳戶」的區間。
+            "pay_gap_lo_days": pay_lo, "pay_gap_hi_days": pay_hi}
 
 
 def _stale_state(last_ex: "_dt.date", ref_year: int, ref_month: int, step: int,
@@ -829,6 +885,8 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
     Returns(既有 key 全保留;v19.530 §8 增列 provenance):
         {ex_date          : date   —— 推估**除息基準日**(非除息日、非發放日,§4.1),恆為營業日且落在目標月
          pay_date_est     : date|None —— 基準日 + 歷史「基準→發放」間隔中位數;無歷史 → None
+         pay_window_est   : (date,date)|None —— §16.1 該檔自己的到帳窗(間隔 p10~p90);
+                            無發放紀錄 → None,caller 退回通用窗 `pay_window`(§1 不借別檔數字)
          confidence       : "high"|"medium"|"low"
          anchor_type      : str|None  —— 命中的錨定假說(§1 + §13.2 五選一)
          anchor_score     : float|None—— 該假說的歷史復現率 s⁽¹⁾(§2)
@@ -913,8 +971,21 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
     gap = schedule.get("pay_gap_days")
     pay = ex + _dt.timedelta(days=gap) if isinstance(gap, int) else None
     return {"ex_date": ex, "pay_date_est": pay, "confidence": _conf,
+            "pay_window_est": _pay_window_from_schedule(ex, schedule),
             "holiday_calendar": _holiday_calendar_state(),
             "horizon_months": _h, **_prov}
+
+
+def _pay_window_from_schedule(ex: "_dt.date | None", schedule: dict) -> "tuple | None":
+    """基準日 + 該檔節奏 → (最早, 最晚) 到帳推估日;該檔沒有間隔證據 → None。
+
+    §16.1:回 None 代表「這一檔沒有自己的發放紀錄」,caller 退回通用窗(`pay_window`)並照舊
+    標「估」—— **不可**拿別檔的間隔補位(§1,同 `estimate_error_band` 的禁令)。
+    """
+    _lo, _hi = schedule.get("pay_gap_lo_days"), schedule.get("pay_gap_hi_days")
+    if not isinstance(ex, _dt.date) or not isinstance(_lo, int) or not isinstance(_hi, int):
+        return None
+    return (ex + _dt.timedelta(days=_lo), ex + _dt.timedelta(days=_hi))
 
 
 # ── §15.1 逐檔誤差帶(L2 純函式,零 IO;顯示成 ±N 天 / 僅供參考的字串在 L3)──────────
@@ -934,9 +1005,15 @@ def estimate_error_band(dividends: list) -> "int | None":
     """配息史 → 該檔**自己的**誤差帶 E(天);證據不足 → None(§15.1,§1 不借別檔的準確度)。
 
     做法:對這一檔基金做 walk-forward —— 從第 `_CONF_MIN_RECORDS_FOR_TRUST`(8)筆起,
-    每次**只用過去**推下一筆的除息基準日,收集 `|推估 - 實際|` 的日數,取 80% 分位向上取整。
+    每次**只用過去**推下一筆的除息基準日,收集 `|推估 - 實際|` 的日數,取
+    `_ERR_BAND_QUANTILE` 分位向上取整。
 
-        E = ceil(quantile_80({ |pred_i - true_i| : i in walk_forward(hist) }))
+        E = ceil(quantile(_ERR_BAND_QUANTILE, { |pred_i - true_i| : i in walk_forward(hist) }))
+
+    ⚠️ **v19.539 註解更正(只改註解,那個 0.90 一個字都沒動)**:本段原本寫死「取 **80%** 分位」
+    與 `quantile_80(...)`,但 `_ERR_BAND_QUANTILE` 早在 **v19.534 就已由 0.80 調成 0.90**,
+    使用者看到的 `ERR_BAND_FOOTNOTE` 也寫「約**九成**」—— **註解與變數符號過期了,值沒錯**。
+    現在改寫成引用常數本身,下次再調就不會有第三處要同步(§2 SSOT;§1:文件說謊同樣是說謊)。
 
     Returns:
         int  —— 該檔誤差帶(天);0 代表 walk-forward 八成以上逐日命中。
@@ -954,6 +1031,20 @@ def estimate_error_band(dividends: list) -> "int | None":
     複雜度:O(k) 次 `infer_schedule` + `predict_ex_for_month`(k = 歷史筆數 - 8),
     純計算無 IO;`build_month_calendar` 只對**推得出日期**的基金呼叫(見該函式註解)。
     """
+    errs = _walk_forward_errors(dividends)
+    if errs is None or len(errs) < _ERR_BAND_MIN_SAMPLES:
+        return None                      # 歷史不足 / 樣本太少 → 分位數沒有意義(§15.1)
+    return _quantile_ceil(errs, _ERR_BAND_QUANTILE)
+
+
+def _walk_forward_errors(dividends: list) -> "list | None":
+    """該檔 walk-forward 的 `|推估 - 實際|` 日數樣本;歷史不足 → None(§16.3 抽出)。
+
+    **v19.539 抽出,邏輯逐字未改** —— 原本這段內嵌在 `estimate_error_band` 裡,
+    導致「最壞曾差幾天」這個數字**算不出來**(要重跑一次同樣的 O(k) walk-forward)。
+    現在 `estimate_error_band`(典型值)與 `estimate_error_worst`(最壞值)共用同一份樣本,
+    口徑不可能漂(§2 SSOT)。
+    """
     recs = _parse_records(dividends)
     if len(recs) < _CONF_MIN_RECORDS_FOR_TRUST:
         return None                      # 歷史不足 → 不給數字(§15.1)
@@ -967,9 +1058,77 @@ def estimate_error_band(dividends: list) -> "int | None":
         if not _got or not _got.get("ex_date"):
             continue                     # 誠實棄權的月份不進誤差樣本(見 docstring)
         errs.append(abs((_got["ex_date"] - _tgt).days))
-    if len(errs) < _ERR_BAND_MIN_SAMPLES:
-        return None                      # 樣本太少 → 分位數沒有意義(§15.1)
-    return _quantile_ceil(errs, _ERR_BAND_QUANTILE)
+    return errs
+
+
+def estimate_error_worst(dividends: list) -> "int | None":
+    """該檔 walk-forward 的**最壞**誤差(天)= `max(|推估 - 實際|)`;證據不足 → None。
+
+    §16.3(v19.539)—— **「典型誤差」與「最壞曾差多少」是兩個不同的數字。**
+
+    `estimate_error_band` 回的是該檔自己的 **90 百分位**(`_ERR_BAND_QUANTILE`),那是
+    **典型值**,它**在結構上就看不到尾端事件** —— 一個 90 百分位當然不會反映 1% 的尾巴。
+    **那不是它壞了,是拿它去回答一個它答不了的問題。**
+    實測(合成壓力測試,歷史完全規律、s=1.0):誤差 >= 2 天的組合裡,絕大多數的
+    90 百分位都是 **0**,月份集中在**農曆年**那一兩個月 —— 一檔月配基金 16 筆歷史裡
+    通常只有 1 個 2 月,單一樣本移不動 90 百分位。
+
+    ⛔ **正確的處置不是把 `_ERR_BAND_QUANTILE` 調寬到蓋住尾巴** ——
+    那會讓**所有**基金的誤差帶一起失去資訊量(平常那些 ±0 / ±1 會全部變成 ±5 之類),
+    是拿一個真實有用的指標去換一個罕見情境,**淨損**。故本函式**另外**給一個數字,
+    `estimate_error_band` 的算法與 `_ERR_BAND_QUANTILE` 的值**一個字都沒動**。
+
+    ⚠️ **最壞值是 `max`,不經分位數內插、不經四捨五入** —— 它的全部意義就是「別把尾巴磨平」,
+    一旦被平滑成 0 就等於沒算。
+
+    ⚠️ **本輪尚未在畫面上呈現**(總管 2026-08-27 指示):要不要印、印在哪裡屬**新增顯示欄位**,
+    依客戶「UI 草稿先行」原則須先送線框拍板。本輪只確保**引擎算得出來、且不會遺失**。
+
+    Returns:
+        int  —— 該檔 walk-forward 見過的最大誤差(天)。
+        None —— 證據不足(口徑與 `estimate_error_band` 完全相同,兩者同進同出)。
+    """
+    errs = _walk_forward_errors(dividends)
+    if errs is None or len(errs) < _ERR_BAND_MIN_SAMPLES:
+        return None
+    return max(errs)
+
+
+def _pay_gap_band(pay_gaps: list) -> tuple:
+    """該檔「基準日 → 發放日」間隔樣本 → (p10 向下取整, p90 向上取整) 日曆日;證據不足 → (None, None)。
+
+    **為什麼是 p10/p90 而不是 min/max**:min/max 被單一次作業異常整個拉開(施羅德實測寬到
+    7.4 天),而區間一寬就等於沒講。p10/p90 砍掉兩端各一成的離群,寬度與現行通用窗相當。
+
+    **為什麼要有這個東西**(v19.537 §16.1,實測數字,非推測):現行畫面對所有基金一律套
+    「基準日 +5~7 個**營業日**」,那是 user 2026-08-24 憑手上幾檔的印象給的通用經驗值。
+    對 5 檔真實 MoneyDJ 配息表做 walk-forward(只用過去的間隔推下一筆,起手 8 筆):
+
+        通用 +5~7 營業日 : 命中 40/58 = 69.0%,平均寬度 4.1 天
+        本檔 p10~p90     : 命中 54/58 = **93.1%**,平均寬度 4.5 天
+
+    逐檔差距集中在兩檔 —— 安聯 TLZF9(自身中位間隔 5 個**日曆**日,比通用窗早到)
+    **0/12 → 11/12**;施羅德 SD080(中位 12 天,比通用窗晚到)**5/10 → 7/10**。
+    另外三檔(摩根 / 聯博 / 瀚亞)本來就落在通用窗內,改後**一檔都沒有變差**(11~12/12 → 12/12)。
+
+    §1:樣本 < `_PAY_BAND_MIN_SAMPLES` → **回 (None, None)**,由 caller 退回通用窗並照舊標「估」;
+    不可拿別檔的間隔分布補位(那是借用別人的準確度,同 `estimate_error_band` 的禁令)。
+    """
+    if len(pay_gaps) < _PAY_BAND_MIN_SAMPLES:
+        return None, None
+    _s = sorted(pay_gaps)
+    _lo = int(_math.floor(_quantile_linear(_s, _PAY_BAND_Q_LO)))
+    _hi = int(_math.ceil(_quantile_linear(_s, _PAY_BAND_Q_HI)))
+    return _lo, max(_hi, _lo)            # 單一樣本值重複時兩端可能相等 → 保證 lo <= hi
+
+
+def _quantile_linear(values: list, q: float) -> float:
+    """整數樣本的 q 分位(線性內插,與 numpy `method="linear"` 一致)。空 list → 呼叫端先擋。"""
+    _s = sorted(values)
+    _h = (len(_s) - 1) * q
+    _lo = int(_h)
+    _hi = min(_lo + 1, len(_s) - 1)
+    return _s[_lo] + (_h - _lo) * (_s[_hi] - _s[_lo])
 
 
 def _quantile_ceil(values: list, q: float) -> int:
@@ -977,12 +1136,11 @@ def _quantile_ceil(values: list, q: float) -> int:
 
     內插法與 numpy 預設 (`method="linear"`) 一致:h = (n-1)·q,在相鄰兩個順序統計量之間內插。
     向上取整是刻意的**保守**方向 —— 誤差帶寧可報大一天,不可報小一天讓 user 少留餘裕。
+
+    ⚠️ 內插本體走 `_quantile_linear`(v19.537 抽出),與 `_pay_gap_band` 共用同一份實作 ——
+    兩處各寫一次遲早會漂(§2 SSOT)。
     """
-    _s = sorted(values)
-    _h = (len(_s) - 1) * q
-    _lo = int(_h)
-    _hi = min(_lo + 1, len(_s) - 1)
-    return int(_math.ceil(_s[_lo] + (_h - _lo) * (_s[_hi] - _s[_lo])))
+    return int(_math.ceil(_quantile_linear(values, q)))
 
 
 # §14.2 unpredictable 的四類成因(code 給程式判讀,文字給 UI 顯示人話)
@@ -1109,6 +1267,32 @@ def _unpredictable_reason(schedule: dict, year: int, month: int,
     return REASON_ANCHOR_WEAK, _reason_text(REASON_ANCHOR_WEAK, window=min(_n, _RECENT_N))
 
 
+def actual_ex_for_month(dividends: list, year: int, month: int) -> "dict | None":
+    """配息史 + 目標年月 → 該月**已經發生的實際紀錄** `{ex, pay}`;該月沒有紀錄 → None。
+
+    §16.2(v19.537):**手上有事實就不准顯示猜測**(§1 的直接推論)。
+    `build_month_calendar` 原本**完全不看**目標月有沒有實際紀錄,一律走 `predict_ex_for_month`。
+    回填**過去**月份會壓信心(§13.7.3),但**當月不算 backfill**(`(year, month) < last_ex` 才是),
+    所以「使用者在月底打開 App、該月真實基準日早就抓到手了」這個情境**完全不壓、照給推估值**。
+
+    實測(5 檔真實配息表,模擬「每月最後一天打開 App」,54 個情境):
+        **5 次畫面與事實不一致,最大差 7 天** ——
+        摩根 2025-10 畫面 10/07 事實 10/09(差 2)、摩根 2026-08 畫面 08/07 事實 08/11(差 4)、
+        聯博 2025-11 畫面 11/27 事實 11/26(差 1)、安聯 2026-05 畫面 05/14 事實 05/13(差 1)、
+        施羅德 2025-11 畫面 11/26 事實 11/19(**差 7**)。
+    這幾筆的真實日期**當時就在同一份 payload 裡**,只是沒人去看。
+
+    ⚠️ **同一個月有兩筆紀錄時取最早的那筆**(月曆一檔基金一個月只放一個事件)。
+    這是**已知限制**,不是判斷:一月兩配的基金在本結構下第二筆看不到
+    (`infer_schedule` 也會因 §13.5 網格異常把它判成 irregular)。
+    """
+    _recs = _parse_records(dividends)
+    for _r in _recs:                      # `_parse_records` 已排序,第一個命中即最早
+        if (_r["ex"].year, _r["ex"].month) == (year, month):
+            return {"ex": _r["ex"], "pay": _r["pay"]}
+    return None
+
+
 def build_month_calendar(funds: list, year: int, month: int,
                          ref_year: "int | None" = None,
                          ref_month: "int | None" = None,
@@ -1126,7 +1310,15 @@ def build_month_calendar(funds: list, year: int, month: int,
         {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{},
          holiday_calendar}
         event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n,
-                 **error_band**,
+                 **error_band**, **error_worst**, **pay_window_est**, **is_actual**,
+                 error_worst= §16.3 該檔 walk-forward 見過的**最壞**誤差(天)或 None。
+                              與 error_band(90 百分位的典型值)是兩個數字,不可互相取代。
+                              ⚠️ L3 目前不讀它(新增顯示欄位須先送客戶線框草稿)
+                 is_actual  = §16.2 這一格是**已發生的實際紀錄**(True)還是推估(False)。
+                              ⚠️ L3 目前**不讀它** —— 畫面上區分實際/推估屬新增視覺元件,
+                              待客戶線框拍板(接縫說明見本函式內該旗標的註解)
+                 pay_window_est = §16.1 該檔自己的到帳窗 (最早, 最晚) 或 None(無發放紀錄
+                                  → L3 退回通用窗)
                  **anchor_type, anchor_score, roll_convention, holiday_calendar, horizon_months**}
                  error_band = §15.1 該檔誤差帶(天,int)或 None(證據不足 → L3 顯示「僅供參考」)
         excluded     = {code, name, reason}(無配息 = 累積型/查無)
@@ -1159,6 +1351,45 @@ def build_month_calendar(funds: list, year: int, month: int,
             excluded.append({"code": code, "name": name,
                              "reason": "無配息紀錄（累積型 / 查無配息）"})
             continue
+        # ── §16.2 事實優先(v19.537):目標月已有實際紀錄 → 用它,不跑推估 ──────────
+        # ⚠️ 必須擺在 `predict_ex_for_month` **之前**:節奏推不出來的基金(anchor_weak /
+        # irregular)本來會整檔掉進 `unpredictable`,但**我們其實知道那個月是哪天**。
+        # 先推估再比對的話,那些基金永遠走不到這裡。
+        _act = actual_ex_for_month((f or {}).get("dividends"), year, month)
+        if _act is not None:
+            _gap = sch.get("pay_gap_days")
+            events.append({"code": code, "name": name, "house": house,
+                           "ex_date": _act["ex"],
+                           # 發放日同理:知道就用事實,不知道才用該檔的間隔中位數推
+                           "pay_date_est": _act["pay"] or (
+                               _act["ex"] + _dt.timedelta(days=_gap)
+                               if isinstance(_gap, int) else None),
+                           "pay_window_est": _pay_window_from_schedule(_act["ex"], sch),
+                           "confidence": "high", "last_amount": sch["last_amount"],
+                           "last_yield": sch["last_yield"], "n": sch["n"],
+                           # 實際紀錄的誤差**依定義為 0**(這是事實,不是「回測九成落在此範圍」)。
+                           # ⚠️ 見下方 `is_actual` 的接縫說明 —— 畫面上這一格會顯示「±0 天」,
+                           # 與「推估得非常準」長得一模一樣,目前**分不出來**。
+                           "error_band": 0, "error_worst": 0,
+                           # ⚠️ **接縫,已知缺口,不是漏做**(v19.537,總管 2026-08-27 指示):
+                           # 本旗標標示「這一格是**已發生的事實**,不是推估」。**L3 目前不讀它** ——
+                           # 要在畫面上區分「實際 vs 推估」(徽章 / 字重 / 標記)屬**新增視覺元件**,
+                           # 依客戶的「UI 草稿先行」原則必須先送線框草稿拍板,故本輪**不做**。
+                           # 由此產生一個**已被記錄下來的**不一致:頁面上那句全域的「推估」徽章、
+                           # 以及明細表欄頭「預估基準日」,對這些**已經是事實**的格子而言是錯的。
+                           # 本輪刻意**不改那些文案去圓它**(那同樣是文案/視覺設計變更)。
+                           # 客戶拍板線框後,接手者請從這個旗標渲染。
+                           "is_actual": True,
+                           "anchor_type": (sch.get("anchor") or {}).get("type"),
+                           "anchor_score": (sch.get("anchor") or {}).get("score"),
+                           "roll_convention": ((sch.get("anchor") or {}).get("roll_convention")
+                                               or ROLL_MODIFIED_FOLLOWING),
+                           "holiday_calendar": _holiday_calendar_state(),
+                           "horizon_months": ((year - (ref_year if ref_year is not None else year))
+                                              * 12
+                                              + (month - (ref_month if ref_month is not None
+                                                          else month)))})
+            continue
         pred = predict_ex_for_month(sch, year, month, ref_year=ref_year,
                                     ref_month=ref_month, ref_day=ref_day)
         if pred is None:
@@ -1175,12 +1406,22 @@ def build_month_calendar(funds: list, year: int, month: int,
             continue
         events.append({"code": code, "name": name, "house": house,
                        "ex_date": pred["ex_date"], "pay_date_est": pred["pay_date_est"],
+                       # §16.1 逐檔到帳窗(該檔自己的間隔 p10~p90);None = 該檔無發放紀錄,
+                       # L3 退回通用窗。**不可**在這層填別檔的數字補位(§1)。
+                       "pay_window_est": pred["pay_window_est"],
                        "confidence": pred["confidence"], "last_amount": sch["last_amount"],
                        "last_yield": sch["last_yield"], "n": sch["n"],
                        # §15.1 誤差帶:逐檔用**自己的**歷史 walk-forward 算(None = 證據不足)。
                        # 只對推得出日期的基金算(推不出的那些畫面上顯示 reason,不顯示 ±N),
                        # 省掉 O(k) 次重擬合。`confidence` 仍原封不動帶著 —— 它是閘門依據。
                        "error_band": estimate_error_band((f or {}).get("dividends")),
+                       # §16.3「最壞曾差幾天」—— 與 error_band(90 百分位的**典型值**)是
+                       # **兩個不同的數字**。⚠️ L3 目前**不讀它**:要不要印、印在哪裡屬
+                       # 新增顯示欄位,須先送 UI 線框草稿給客戶拍板,本輪只保證算得出來。
+                       "error_worst": estimate_error_worst((f or {}).get("dividends")),
+                       # §16.2:這一格是**推估**。實際紀錄那一支走上面的分支(is_actual=True)。
+                       # 兩支都帶這個 key,L3 才不必用 `.get()` 猜(§12 相容:只增不減)。
+                       "is_actual": False,
                        # §8 provenance 五欄:v19.532 前在這層被丟光(見 docstring)
                        **{_k: pred.get(_k) for _k in _PROVENANCE_KEYS}})
 
@@ -1521,15 +1762,44 @@ def pay_window(ex: "_dt.date | None") -> "tuple | None":
             add_business_days(ex, _PAY_BIZ_DAYS_MAX))
 
 
-def _pay_note() -> str:
+def _pay_gap_span(events: "list | None") -> "tuple | None":
+    """本次要列出的事件 → 這批基金到帳間隔的**聯集**範圍 (最小 lo, 最大 hi),日曆日。
+
+    一檔都沒有逐檔證據 → None(caller 退回通用的 +5~7 營業日說法)。
+    """
+    _los = [(e.get("pay_window_est")[0] - e["ex_date"]).days
+            for e in (events or [])
+            if e.get("pay_window_est") and isinstance(e.get("ex_date"), _dt.date)]
+    _his = [(e.get("pay_window_est")[1] - e["ex_date"]).days
+            for e in (events or [])
+            if e.get("pay_window_est") and isinstance(e.get("ex_date"), _dt.date)]
+    return (min(_los), max(_his)) if _los else None
+
+
+def _pay_note(events: "list | None" = None) -> str:
     """到帳說明單行(text / Flex 共用,口徑 SSOT 一處改兩處同步)。
 
     §1:括號內文案**依實際能力誠實改寫** —— 有假日表就說已扣國定假日,沒有就說沒扣,
     不宣稱做不到的事。
+
+    ⚠️ **v19.537 §16.1**:這一行原本寫死「+5~7 個**營業日**」,而那是 user 2026-08-24 憑
+    手上幾檔的印象給的**通用**經驗值 —— 對 5 檔真實配息表實測 **31/98 = 32% 的實際到帳日
+    落在那個窗之外**(安聯 20/20 全部落在窗外、施羅德 10/18,且兩檔偏的方向相反)。
+    現在改吃**這批基金自己的**間隔範圍(逐檔窗見 `_pay_window_from_schedule`)。
+
+    ⚠️ 這一行**仍然是一句話、仍然在清單上方**(user 2026-08-24「到帳時間不逐檔列」)——
+    改的是句子裡那兩個數字的**來源**,不是版面。一檔都沒有逐檔證據時原字不動。
+    ⚠️ 單位由「營業日」改為「天」是**必要**的:逐檔間隔是從真實「基準日→發放日」量出來的
+    日曆日差,裡面已經含掉了週末與連假;硬要換算回營業日反而是再猜一次。
     """
-    _scope = "已跳過週末與國定假日" if has_holiday_calendar() else "僅跳週末、未扣國定假日"
-    return (f"💰 到帳約 +{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個營業日左右"
-            f"（{_scope};實際仍以基金公司作業為準）")
+    _span = _pay_gap_span(events)
+    if _span is None:
+        _scope = "已跳過週末與國定假日" if has_holiday_calendar() else "僅跳週末、未扣國定假日"
+        return (f"💰 到帳約 +{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個營業日左右"
+                f"（{_scope};實際仍以基金公司作業為準）")
+    _lo, _hi = _span
+    return (f"💰 到帳約 +{_lo}~{_hi} 天"
+            f"（各檔不同,依各檔自己的配息紀錄推估;實際仍以基金公司作業為準）")
 
 
 def build_summary_text(cal: dict) -> str:
@@ -1563,8 +1833,9 @@ def build_summary_text(cal: dict) -> str:
     if not events:
         lines.append(empty_month_note(y, m))
     else:
-        lines.append(_pay_note())
-        for e in dedupe_events(events):                # 同日同投信只列一次(user 2026-08-24)
+        _shown = dedupe_events(events)             # 同日同投信只列一次(user 2026-08-24)
+        lines.append(_pay_note(_shown))            # §16.1 到帳範圍吃**實際列出的**這幾檔
+        for e in _shown:
             _ex = e["ex_date"]
             lines.append(f"• {_ex.month}/{_ex.day} 除息基準日　{display_label(e)}")
     # user 2026-08-24「沒有配息的整段移除」→ 不再提累積型/無配息檔數(那些本來就不會配,不需提醒)。
@@ -1672,7 +1943,7 @@ def build_summary_flex(cal: dict) -> dict:
                       "size": "sm", "color": _FLEX_SUB, "wrap": True})
     else:
         # user 2026-08-24:到帳時間改在清單「上方」寫一句(不逐檔列),與純文字/圖檔同口徑。
-        _body.append({"type": "text", "text": _pay_note(),
+        _body.append({"type": "text", "text": _pay_note(events),
                       "size": "xxs", "color": _FLEX_SUB, "wrap": True})
         _body.append({"type": "separator", "margin": "sm"})
         _body.extend(_flex_event_row(e) for e in events[:_FLEX_MAX_ROWS])
@@ -1701,8 +1972,12 @@ def build_summary_flex(cal: dict) -> dict:
         ]},
         "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": _body},
     }
+    # §16.1:altText 的到帳字樣與卡片內那一行同源(`_pay_gap_span`),不再各寫各的數字。
+    _span = _pay_gap_span(events)
+    _alt_pay = (f"基準日+{_span[0]}~{_span[1]}天" if _span
+                else f"基準日+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX}營業日")
     _alt = (f"🗓️ {month_label(y, m)} 除息行事曆"
-            f"（{len(events)} 檔・到帳=基準日+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX}營業日）")
+            f"（{len(events)} 檔・到帳={_alt_pay}）")
     return {"contents": _bubble, "alt_text": _alt}
 
 
@@ -1710,7 +1985,8 @@ __all__ = ["infer_schedule", "predict_ex_for_month", "build_month_calendar",
            "detect_anchor", "project_anchor", "holiday_calendar_note",
            "detect_house", "build_summary_text", "build_summary_flex", "add_business_days",
            # §15 顯示層:誤差帶 + 「全部推不出」的文案 SSOT(L3 / LINE 共用)
-           "estimate_error_band", "is_all_unpredictable", "pending_line",
+           "estimate_error_band", "estimate_error_worst", "actual_ex_for_month",
+           "is_all_unpredictable", "pending_line",
            "reason_needs_last_date", "reason_display", "fmt_last_ex", "month_label",
            "ALL_UNPRED_TITLE_TMPL", "all_unpred_title", "ALL_UNPRED_SUB_1",
            "ALL_UNPRED_SUB_2", "ALL_UNPRED_LINE_HEAD", "PENDING_SECTION_TITLE",

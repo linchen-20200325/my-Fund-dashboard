@@ -28,12 +28,22 @@ def _seed_cache():
     """在 repo 根 cache/nav/ 寫入測試快取,測完刪除(不污染 production 檔)。"""
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     p = _CACHE_DIR / f"{_TEST_CODE}.json"
+    # 2026-08-27:原 fixture 只有 3 點。`_src_cache_files` 新增品質閘後,筆數
+    # < `NAV_CACHE_MIN_POINTS`(=10,與 live 分支同一把尺)會被擋掉回空 →
+    # 本 fixture 補到 12 點連續交易日。**本檔各測試的意圖未變**
+    # (測的是「路徑指到 repo 根」與「live 全敗會退回快取」,不是「3 點可用」),
+    # 3 這個數字原本就是隨手取的。閘本身另有 tests/test_nav_cache_quality_gate.py 專測。
+    _navs = [10.0, 10.5, 10.2, 10.3, 10.4, 10.1, 10.6, 10.7, 10.55, 10.45, 10.5, 10.6]
     payload = {
         "updated_at": "2026-07-05T00:00:00Z",
         "history": [
-            {"date": "2026-06-01", "nav": 10.0},
-            {"date": "2026-06-02", "nav": 10.5},
-            {"date": "2026-06-03", "nav": 10.2},
+            {"date": d, "nav": v}
+            for d, v in zip(
+                ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04",
+                 "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10",
+                 "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16"],
+                _navs,
+            )
         ],
     }
     p.write_text(json.dumps(payload) + "\n", encoding="utf-8")
@@ -45,7 +55,7 @@ def test_cache_path_points_to_repo_root(_seed_cache):
     """路徑修正:_src_cache_files 必須讀到 repo 根 cache/nav/(非 repositories/fund/…)。"""
     s = _src_cache_files(_TEST_CODE)
     assert not s.empty, "路徑修正後應讀到 repo 根 cache/nav/ 的測試檔(修正前會回空)"
-    assert len(s) == 3
+    assert len(s) == 12
     assert abs(float(s.iloc[0]) - 10.0) < 1e-9
     assert s.attrs.get("source", "").startswith("GitHubActions:cache/nav/")
 
@@ -65,7 +75,7 @@ def test_fetch_nav_falls_back_to_cache_when_live_fails(_seed_cache, monkeypatch)
     monkeypatch.setattr(nav_metrics.requests, "get", lambda *a, **k: _FakeResp())
     s = fetch_nav(_TEST_CODE)
     assert not s.empty, "live 全敗時應退回 GitHub Actions 快取(接線前會回空)"
-    assert len(s) == 3
+    assert len(s) == 12
     assert s.attrs.get("source", "").startswith("GitHubActions:cache/nav/")
 
 

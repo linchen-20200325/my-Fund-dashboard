@@ -16,10 +16,22 @@ temp/
 *.cache
 *.csv
 *.xlsx
-# runtime cache（Streamlit 容器重啟即清空 / 測試可能寫入 → 不入 repo）
-cache/fund_history.json
-cache/nav_history/
-cache/nav/
+# ── cache/ 落地檔:預設全擋,例外才開白名單 ──────────────────────────────
+# 為什麼是「先全擋」而不是逐目錄列舉(這幾行請不要「清理」掉):
+#   舊寫法逐目錄列舉(fund_history.json / nav_history/ / nav/),結果**漏了三個寫使用者
+#   資料的目錄** —— cache/fund_pool/(選股池)、cache/portfolio_perf/(持倉權重與成本
+#   基礎)、cache/autosearch/(自動搜尋工單);另有 cache/fundclear/ 與 cache/fred_release/
+#   兩個上游抓取快取(run-state,非 repo 資產)同樣在外。任何一次 `git add -A` 都會把
+#   使用者資料帶進版控並推上 GitHub。
+#   新的 cache 子目錄只會越加越多,而「新增目錄時記得回頭補這份清單」已經失敗三次
+#   → 改用白名單制,漏加的預設是**安全**(不入 repo)而不是**外洩**。
+# ⚠️ 要新增例外,請往下加 `!` 行並就地寫明理由;不要把 `cache/*` 拿掉。
+cache/*
+# 例外(唯一):Streamlit Cloud 美國 IP 被上游封鎖時,這是唯一還吐得出 NAV 的離線種子檔,
+# v19.364 user 明文決策「保留」→ 刻意 commit 進 repo。其餘 cache/nav/*.json 一律不入。
+!cache/nav/
+cache/nav/*
+!cache/nav/TLZF9.json
 # 批次分析磁碟續存 checkpoint（使用者 run-state，非 repo 資產）
 data_cache/batch/
 # AI 白話總體檢磁碟續存（使用者 run-state，reboot 後回顯用；非 repo 資產）
@@ -48,3 +60,14 @@ commit_msg_*.txt
 # 稽核腳本的本機輸入 / 輸出（含你的持倉代號，屬個人資料；且是一次性 run-state）
 codes.txt
 6d_coverage.txt
+
+# ── AI 執行組的暫存工作筆記 ──────────────────────────────────────────
+# 為什麼要擋:這裡放的是各組執行任務時的中途筆記/草稿,**不是 repo 的交付物**。
+#   更實際的理由:這個工作區的 git index 是多組共用的,untracked 檔案就是
+#   「裸 `git commit`(沒帶 pathspec)」的燃料 —— 2026-08-27 已經發生過一次,
+#   有一組的裸 commit 把別組正在編輯的檔案一起掃進同一顆 commit(橫跨三組、18 檔)。
+#   另外它每次都會被自動檢查報成「有未提交的變更」,久了會讓人對這個警告免疫。
+# ⚠️ 例外:若某份筆記有**長期追溯價值**(例如事故留檔、決策理由),
+#   請明確 `git add -f scratchpad/<檔名>` 把它加進版控,**不要**靠這條規則把它擋在外面
+#   —— 擋掉不等於保存。姊妹 repo `my-stock-dashboard` 就有幾份筆記是刻意被追蹤的。
+scratchpad/

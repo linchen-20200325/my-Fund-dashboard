@@ -1571,15 +1571,66 @@ def test_reverse_direction_is_tried_when_primary_exceeds_tau():
     §13.7.1 寫的是「**任何方向**的校正位移 > τ → None」,舊實作只評估了一個方向 ——
     反向回退只在「主方向跨出月份」時觸發。掃 2025–2028 × 全假說 × 3 convention,
     **117 組**是「引擎回 None,但反方向存在 τ 內的當月營業日」。
-    其中 `FIXED_DAY(14) / following / 2026-02`(名目 2/14 撞農曆年)推出的 **2026-02-13
-    正是 user 安聯 TLZF9 的真實基準日**,只差 1 天卻整月消失。
+
+    ⚠️ **本測試的理由曾經寫錯,2026-08-27 更正(斷言本身沒錯,錯的是它宣稱在證明什麼)**:
+    ~~「其中 `FIXED_DAY(14) / following / 2026-02` 推出的 2026-02-13 **正是 user 安聯 TLZF9
+    的真實基準日**,只差 1 天卻整月消失。」~~
+    **實測推翻**:安聯 TLZF9 由自己的配息史推出來的錨是 **`FIXED_DAY(14) / preceding`**,
+    **不是 `following`**(見 `test_allianz_real_anchor_is_preceding_so_this_case_never_uses_the_fallback`)。
+    用它自己的錨推 2026-02,**主方向 2/14→2/13 就直接命中**,根本不會走到反向回退分支 ——
+    也就是說,這條測試**拿一個 `following` 的 fixture 去對照一檔實際是 `preceding` 的基金的
+    真實日期**。它一直是綠的,但綠的原因不是它宣稱的那個。
+
+    **更正後本測試守的是什麼(縮小到它真的證明得了的範圍)**:
+    純粹是 `_apply_roll` 的**行為契約** —— 主方向位移 > τ 時**會去試反方向**。
+    這個行為本身仍然需要守(拿掉它,117 組 (假說, 月) 會無聲消失,§1 靜默漏資料)。
+    **它不再宣稱與任何一檔真實基金的真實日期相符。**
     """
     a14 = {"type": "FIXED_DAY", "params": 14, "score": 1.0, "runner_up": 0.0,
            "roll_convention": "following", "tie_broken": False}
+    _nom = _dt.date(2026, 2, 14)
+    assert not is_business_day(_nom), "fixture 前提:2026-02-14 必須是非營業日"
+    _fwd = _dc._scan_business(_nom, forward=True)          # 主方向(following)
+    assert (_fwd - _nom).days > _tau(), (
+        f"fixture 前提消失:主方向位移 {(_fwd - _nom).days} 天未超過 τ={_tau()},"
+        "這條測不到反向回退")
     got = project_anchor(dict(a14), 2026, 2)
-    assert got == _dt.date(2026, 2, 13), f"2026-02 應回退到 2/13(user 真實基準日),實得 {got}"
+    assert got == _dt.date(2026, 2, 13), f"主方向超過 τ 時應改試反向(得 2/13),實得 {got}"
     a25 = dict(a14, params=25)
     assert project_anchor(a25, 2026, 9) == _dt.date(2026, 9, 24), "2026-09 中秋同型"
+
+
+def test_allianz_real_anchor_is_preceding_so_this_case_never_uses_the_fallback():
+    """把上一條**原本寫錯的那句宣稱**放到它真的成立的地方測(2026-08-27 補)。
+
+    原宣稱:「`FIXED_DAY(14)/following/2026-02` → 2/13 正是安聯的真實基準日」。
+    **實測**:安聯 TLZF9 的錨是 `FIXED_DAY(14)/**preceding**`,2026-02 走**主方向**
+    就到 2/13(位移 1 天,遠在 τ=3 內)—— **它一輩子不會用到反向回退分支**。
+    真實基準日 2026-02-13 也確實在它自己的配息表裡。
+
+    ⚠️ 順帶把**代價**記錄下來(**只記錄,不改判定規則**):同型但歷史推成 `following` 的基金,
+    引擎在 2026-02 會回退到 2/13,而一檔 `following` 基金實際會順延到 **2/23** —— **差 10 天**。
+    τ(`_KEEP_MONTH_MAX_SHIFT_DAYS`)管的是「離**名目日**多遠」,不是「離**真相**多遠」,
+    兩側加起來可以差 10 天。**要不要改這條規則屬業務語意(這個引擎的定義是什麼),
+    須另外請示客戶,本輪刻意不動** —— 本測試只釘住現況,讓下一個人看得到這個代價。
+    """
+    _raw = _REAL_FUNDS["TLZF9 安聯"]
+    _sch = infer_schedule([{"date": _iso(a)} for a, _b, _c in _raw])
+    _an = _sch["anchor"]
+    assert (_an["type"], _an["params"]) == ("FIXED_DAY", 14), _an
+    assert _an["roll_convention"] == "preceding", (
+        f"安聯的錨不是 preceding 了({_an['roll_convention']}) —— "
+        "上一條測試的更正註記與本條的前提都要重查")
+    # 主方向(preceding = 往前)直接命中,位移在 τ 內 → 不經反向回退
+    _nom = _dt.date(2026, 2, 14)
+    _bwd = _dc._scan_business(_nom, forward=False)
+    assert _bwd == _dt.date(2026, 2, 13) and abs((_bwd - _nom).days) <= _tau()
+    assert project_anchor(dict(_an), 2026, 2) == _dt.date(2026, 2, 13)
+    assert "2026/02/13" in [a for a, _b, _c in _raw], "2/13 不在安聯真實配息表裡"
+    # 代價:同型但 following 的基金,引擎給 2/13、主方向的真相是 2/23
+    _following = dict(_an, roll_convention="following")
+    assert project_anchor(_following, 2026, 2) == _dt.date(2026, 2, 13)
+    assert _dc._scan_business(_nom, forward=True) == _dt.date(2026, 2, 23)
 
 
 def test_none_only_when_both_directions_are_impossible():
@@ -1903,3 +1954,326 @@ def test_reason_text_omits_date_it_does_not_have():
     _u = {"reason": "只有 2 筆配息紀錄，還看不出規律（至少要 3 筆）。",
           "reason_code": "too_few", "last_ex": None}
     assert _dc.reason_display(_u, has_date_column=False) == _u["reason"]     # 不留空括號
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §16.1 逐檔到帳窗(v19.537)—— 「哪天該去看帳戶」這一欄不再對所有基金講同一句話
+# ══════════════════════════════════════════════════════════════════════
+def _pay_divs(raw) -> list:
+    """真實配息表 → 帶 pay_date 的 dividends(基準日 + 發放日兩欄都要,才量得出間隔)。"""
+    return [{"date": _iso(a), "pay_date": _iso(c)} for a, _b, c in raw]
+
+
+def test_pay_window_per_fund_beats_generic_window_on_real_data():
+    """**修復前後的實測對照**:通用「+5~7 營業日」窗 vs 該檔自己的 p10~p90 窗。
+
+    這條測的不是「新的比較好看」,而是**舊的對三分之一的人是錯的**:
+    walk-forward(只用過去的間隔推下一筆,起手 8 筆)——
+        通用窗 40/58 = 69.0%  ／  逐檔窗 54/58 = 93.1%
+    差距**集中在兩檔**:安聯 TLZF9(自身間隔 5 個日曆日,比通用窗早到)0/12 → 11/12;
+    施羅德 SD080(間隔 12 天,比通用窗晚到)5/10 → 7/10。**兩檔偏的方向相反**,
+    所以「把通用窗整體平移」救不了 —— 只能逐檔算。
+
+    §1:這一欄回答的是「哪天該去看帳戶」。一個對 32% 的列來說**必然落空**的區間,
+    比不給區間更糟(user 會照著它去看帳戶然後發現沒錢)。
+    """
+    _gen_hit = _own_hit = _n = 0
+    _per_fund = {}
+    for code, raw in _REAL_FUNDS.items():
+        recs = [(_dt.date.fromisoformat(_iso(a)), _dt.date.fromisoformat(_iso(c)))
+                for a, _b, c in raw][::-1]
+        _g = _o = _t = 0
+        for i in range(_MIN_HIST, len(recs)):
+            ex, pay = recs[i]
+            _sch = infer_schedule(_pay_divs([(a, b, c) for a, b, c in raw][::-1][:i]))
+            _own = _dc._pay_window_from_schedule(ex, _sch)
+            _gen = _dc.pay_window(ex)
+            _t += 1
+            _g += bool(_gen and _gen[0] <= pay <= _gen[1])
+            _o += bool(_own and _own[0] <= pay <= _own[1])
+        _per_fund[code] = (_g, _o, _t)
+        _gen_hit += _g
+        _own_hit += _o
+        _n += _t
+    assert _n >= 50, f"walk-forward 樣本太少,這條測不出東西:{_n}"
+    # 逐檔窗必須**明顯**優於通用窗;不寫死等號,寫死會在 fixture 增筆時假紅。
+    assert _own_hit > _gen_hit + 10, (
+        f"逐檔到帳窗沒有比通用窗好:逐檔 {_own_hit}/{_n} vs 通用 {_gen_hit}/{_n};"
+        f"逐檔明細 {_per_fund}")
+    assert _own_hit / _n >= 0.90, f"逐檔窗命中率掉到 90% 以下:{_own_hit}/{_n}"
+    # 安聯是本次修復的代表案例:它在通用窗下**一次都沒中過**。
+    _g_al, _o_al, _t_al = _per_fund["TLZF9 安聯"]
+    assert _g_al == 0, f"fixture 變了:安聯本來在通用窗下 0 命中,現在 {_g_al}/{_t_al}"
+    assert _o_al >= _t_al - 1, f"安聯改用自己的間隔後仍然沒中:{_o_al}/{_t_al}"
+
+
+def test_pay_window_est_is_carried_all_the_way_to_the_render_cell():
+    """**接線驗證**:L2 算出來的逐檔窗要真的出現在明細表那一格,不是算完就丟。
+
+    v19.537 修的正是這個 —— `pay_date_est` 早就逐檔算好了,但 render 端呼叫的是
+    通用 `pay_window(ex)`,逐檔值**production 0 caller**。只驗 L2 不驗這一段,
+    等於「修好了但畫面沒變」(§-2:沒查證的宣稱比沒有宣稱更危險)。
+    """
+    from ui.helpers.dividend_calendar_render import _fmt_pay_window, render_month_calendar_html
+    funds = [{"code": c.split()[0], "name": c, "house": c.split()[1],
+              "dividends": _pay_divs(raw)} for c, raw in _REAL_FUNDS.items()]
+    cal = build_month_calendar(funds, 2026, 9, ref_year=2026, ref_month=8, ref_day=27)
+    _al = next(e for e in cal["events"] if e["house"] == "安聯")
+    assert _al["pay_window_est"] is not None, "event 沒帶 §16.1 逐檔窗"
+    _gen = _dc.pay_window(_al["ex_date"])
+    assert _al["pay_window_est"] != _gen, "逐檔窗與通用窗同值 → 這條測不到東西"
+    _cell = _fmt_pay_window(_al)
+    assert _cell == (f"{_al['pay_window_est'][0].month}/{_al['pay_window_est'][0].day}"
+                     f"~{_al['pay_window_est'][1].month}/{_al['pay_window_est'][1].day}")
+    assert _cell != (f"{_gen[0].month}/{_gen[0].day}~{_gen[1].month}/{_gen[1].day}")
+    assert _cell in render_month_calendar_html(cal), "HTML 明細表裡沒有逐檔到帳窗"
+
+
+def test_pay_window_falls_back_to_generic_when_fund_has_no_pay_history():
+    """§1:該檔沒有發放紀錄 → 退回通用窗並照舊標「估」,**不可**拿別檔的間隔補位。
+
+    借別檔的準確度填一個看似合理的數字,與 `estimate_error_band` 禁止的全站合併分布
+    是同一種捏造。
+    """
+    from ui.helpers.dividend_calendar_render import _fmt_pay_window
+    _no_pay = [{"date": d.isoformat()} for d in _clean_monthly(14, 12, start=(2025, 8))]
+    cal = build_month_calendar([{"code": "NP", "name": "無發放紀錄", "house": "",
+                                 "dividends": _no_pay}],
+                               2026, 8, ref_year=2026, ref_month=7, ref_day=20)
+    ev = cal["events"][0]
+    assert ev["pay_window_est"] is None, "沒有發放紀錄卻算出逐檔窗 = 憑空捏造"
+    _gen = _dc.pay_window(ev["ex_date"])
+    assert _fmt_pay_window(ev) == f"{_gen[0].month}/{_gen[0].day}~{_gen[1].month}/{_gen[1].day}"
+
+
+def test_pay_note_line_stops_claiming_a_number_that_is_wrong_for_a_third_of_funds():
+    """LINE / Flex 上方那一行:數字要吃**這批基金自己的**間隔,不是寫死的 +5~7 營業日。
+
+    實測:寫死那句對 user 5 檔真實配息表有 31/98 = 32% 的實際到帳日落在窗外
+    (安聯 20/20 全部落在窗外,施羅德 10/18,且兩檔偏的方向相反)。
+    ⚠️ 這一行**仍然是一句話、仍然在清單上方**(user 2026-08-24「到帳時間不逐檔列」),
+    改的是句子裡那兩個數字的來源,不是版面。
+    """
+    funds = [{"code": c.split()[0], "name": c, "house": c.split()[1],
+              "dividends": _pay_divs(raw)} for c, raw in _REAL_FUNDS.items()]
+    cal = build_month_calendar(funds, 2026, 9, ref_year=2026, ref_month=8, ref_day=27)
+    _txt = build_summary_text(cal)
+    assert "+5~7 個營業日" not in _txt, "LINE 仍在講那個對 32% 的列是錯的通用窗"
+    _lo = min((e["pay_window_est"][0] - e["ex_date"]).days for e in cal["events"])
+    _hi = max((e["pay_window_est"][1] - e["ex_date"]).days for e in cal["events"])
+    assert f"+{_lo}~{_hi} 天" in _txt, f"到帳行的數字沒吃實際基金:{_txt.splitlines()[1]}"
+    assert f"+{_lo}~{_hi}天" in _dc.build_summary_flex(cal)["alt_text"]
+    # 一檔都沒有發放紀錄時 → 原字不動(不可因此無聲消失)
+    assert "+5~7 個營業日" in _dc._pay_note(None)
+    assert "到帳" in _dc._pay_note([])
+
+
+def test_pay_gap_band_refuses_to_guess_without_evidence():
+    """邊界:間隔樣本 < 3 → (None, None);空 list 不炸;單一重複值 lo <= hi 仍成立。"""
+    assert _dc._pay_gap_band([]) == (None, None)
+    assert _dc._pay_gap_band([5, 6]) == (None, None)
+    _lo, _hi = _dc._pay_gap_band([7, 7, 7])
+    assert (_lo, _hi) == (7, 7)
+    _lo2, _hi2 = _dc._pay_gap_band([5, 6, 7, 8, 30])
+    assert _lo2 <= _hi2 and _hi2 < 30, f"p90 沒有擋掉離群值:{(_lo2, _hi2)}"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §16.2 事實優先(v19.537)—— 目標月已有實際紀錄時,不准再顯示推估值
+# ══════════════════════════════════════════════════════════════════════
+def test_actual_record_wins_over_prediction_on_real_five_funds():
+    """模擬「使用者在每月最後一天打開 App」——此時該月的真實基準日**早就在同一份 payload 裡**。
+
+    修復前 `build_month_calendar` 完全不看目標月有沒有實際紀錄,一律走 `predict_ex_for_month`;
+    而「當月」不算 §13.7.3 的 backfill(那要 `(year,month) < last_ex`)→ **信心一點都不壓**。
+
+    實測 5 檔真實配息表 × 全部 98 個「該檔那個月真的有配」的情境:
+        **修復前 10 個情境的畫面與事實不一致,最大差 14 天**
+        (施羅德 2025-12 畫面 12/31 事實 12/17;2025-11 差 7;摩根 2026-08 差 4)
+        **修復後 0 個。**
+    §1:手上有事實卻顯示猜測,是這份憲法最直接的違反。
+    """
+    _before = _after = _total = 0
+    for code, raw in _REAL_FUNDS.items():
+        divs = [{"date": _iso(a), "pay_date": _iso(c)} for a, _b, c in raw]
+        for a, _b, _c in raw:
+            real = _dt.date.fromisoformat(_iso(a))
+            _last = _calmod.monthrange(real.year, real.month)[1]
+            cal = build_month_calendar(
+                [{"code": code, "name": code, "house": code.split()[1], "dividends": divs}],
+                real.year, real.month, ref_year=real.year, ref_month=real.month, ref_day=_last)
+            assert cal["events"], f"{code} {real:%Y-%m} 有實際紀錄卻沒進 events"
+            _total += 1
+            _pred = predict_ex_for_month(infer_schedule(divs), real.year, real.month,
+                                         ref_year=real.year, ref_month=real.month,
+                                         ref_day=_last)
+            if _pred and _pred["ex_date"] != real:
+                _before += 1
+            if cal["events"][0]["ex_date"] != real:
+                _after += 1
+    assert _total >= 90, f"情境數異常,這條測不到東西:{_total}"
+    assert _before >= 8, (
+        f"fixture 變了:修復前應有約 10 個情境畫面與事實不符,現在只有 {_before} —— "
+        "這條測試的前提消失了,請先查證再改斷言")
+    assert _after == 0, f"仍有 {_after}/{_total} 個情境顯示推估值而不是手上的事實(§1)"
+
+
+def test_actual_record_wins_even_when_the_engine_cannot_predict_that_month():
+    """最重要的一種:節奏推不出來的基金,**我們其實知道那個月是哪天**。
+
+    修復前這種基金整檔掉進 `unpredictable`(畫面顯示「節奏不規則,推不出」),
+    但目標月的實際紀錄就躺在同一份 payload 裡 —— 那是**把已知的事實說成不知道**。
+    所以事實優先必須擺在 `predict_ex_for_month` **之前**,不是「先推估再比對」。
+    """
+    _irr = [_dt.date(2025, 1, 10), _dt.date(2025, 2, 20), _dt.date(2025, 6, 5),
+            _dt.date(2025, 8, 26)]
+    funds = [{"code": "IRR", "name": "節奏不規則", "house": "施羅德",
+              "dividends": _err_divs(_irr)}]
+    # 對照組:沒有實際紀錄的月份 → 照舊誠實落 unpredictable
+    _no = build_month_calendar(funds, 2025, 9, ref_year=2025, ref_month=9, ref_day=30)
+    assert _no["counts"]["events"] == 0 and _no["counts"]["unpredictable"] == 1
+    # 有實際紀錄的月份 → 顯示事實
+    _yes = build_month_calendar(funds, 2025, 8, ref_year=2025, ref_month=8, ref_day=31)
+    assert _yes["counts"]["unpredictable"] == 0, "有事實卻仍被歸進『推不出』"
+    ev = _yes["events"][0]
+    assert ev["ex_date"] == _dt.date(2025, 8, 26)
+    assert ev["is_actual"] is True
+    assert ev["error_band"] == 0, "實際紀錄的誤差依定義為 0"
+
+
+def test_actual_record_uses_the_real_pay_date_when_it_has_one():
+    """發放日同理:知道就用事實;該筆沒有發放日 → 才退回該檔的間隔中位數推。"""
+    _divs = [{"date": "2026-03-10", "pay_date": "2026-03-19"},
+             {"date": "2026-04-10", "pay_date": "2026-04-20"},
+             {"date": "2026-05-11", "pay_date": "2026-05-20"},
+             {"date": "2026-06-10"}]                       # 最後一筆沒有發放日
+    funds = [{"code": "P", "name": "P", "house": "", "dividends": _divs}]
+    _known = build_month_calendar(funds, 2026, 4, ref_year=2026, ref_month=6, ref_day=30)
+    assert _known["events"][0]["pay_date_est"] == _dt.date(2026, 4, 20)
+    _unknown = build_month_calendar(funds, 2026, 6, ref_year=2026, ref_month=6, ref_day=30)
+    _ev = _unknown["events"][0]
+    assert _ev["ex_date"] == _dt.date(2026, 6, 10) and _ev["is_actual"] is True
+    _gap = infer_schedule(_divs)["pay_gap_days"]
+    assert _ev["pay_date_est"] == _dt.date(2026, 6, 10) + _dt.timedelta(days=_gap)
+
+
+def test_is_actual_flag_is_present_on_both_branches_and_unread_by_render():
+    """§12 相容 + **接縫的守衛**(v19.537,總管 2026-08-27 指示)。
+
+    `is_actual` 兩支都要帶(L3 才不必用 `.get()` 猜)。
+
+    ⚠️ **本測試同時鎖住一個「刻意不做」的邊界**:畫面上區分「實際 vs 推估」
+    (徽章 / 字重 / 標記)屬**新增視覺元件**,依客戶的「UI 草稿先行」原則必須先送線框拍板,
+    **本輪不做**。若有人在草稿拍板前逕自讓 render 讀這個旗標去改畫面,這條會轉紅 ——
+    它守的是**流程**,不是行為。拍板後請連同本斷言一起更新。
+    """
+    import ui.helpers.dividend_calendar_render as _r
+    _divs = [{"date": d.isoformat()} for d in _clean_monthly(14, 12, start=(2025, 8))]
+    funds = [{"code": "M", "name": "M", "house": "", "dividends": _divs}]
+    _pred = build_month_calendar(funds, 2026, 9, ref_year=2026, ref_month=8, ref_day=27)
+    assert _pred["events"][0]["is_actual"] is False
+    _act_month = _dt.date.fromisoformat(_divs[-1]["date"])
+    _act = build_month_calendar(funds, _act_month.year, _act_month.month,
+                                ref_year=_act_month.year, ref_month=_act_month.month,
+                                ref_day=28)
+    assert _act["events"][0]["is_actual"] is True
+    assert "is_actual" not in _r.__loader__.get_source(_r.__name__), (
+        "render 端開始讀 is_actual 了 —— 畫面上區分實際/推估屬新增視覺元件,"
+        "需先送 UI 線框草稿給客戶拍板(A-2),本輪刻意不做")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §16.3 典型誤差 vs 最壞誤差(v19.539)—— 兩個不同的數字,不可互相取代
+# ══════════════════════════════════════════════════════════════════════
+def test_error_band_value_is_bit_identical_after_walk_forward_extraction():
+    """**重構安全網**:抽出 `_walk_forward_errors` 之後,`estimate_error_band` 一位元都不能變。
+
+    §16.3 加的是**另一個數字**(最壞值),不是改誤差帶。這條把 v19.534 的驗收表原封釘住 ——
+    有人「順手」動到分位數或樣本口徑,這裡會立刻紅。
+    """
+    assert _dc._ERR_BAND_QUANTILE == 0.90, "誤差帶分位數被改動 —— §16.3 明文不動它"
+    _bands = {c: estimate_error_band(_err_divs([_dt.date.fromisoformat(_iso(a))
+                                                for a, _b, _c in raw][::-1]))
+              for c, raw in _REAL_FUNDS.items()}
+    assert _bands == {"JFZN3 摩根": 2, "ACTI71 聯博": 0, "ACCP138 瀚亞": 0,
+                      "TLZF9 安聯": 0, "SD080 施羅德": 11}, _bands
+
+
+def test_error_worst_is_a_different_number_and_is_never_smoothed_to_zero():
+    """§16.3:最壞值 = `max`,**不經分位數內插、不經四捨五入**。
+
+    90 百分位是**典型值**,在結構上看不到尾端事件 —— 那不是它壞了,是拿它去回答
+    它答不了的問題。實測 user 5 檔:
+        摩根   典型 2  最壞 **4**
+        聯博   典型 0  最壞 **1**
+        安聯   典型 0  最壞 **1**
+        施羅德 典型 11 最壞 **14**
+        瀚亞   典型 0  最壞 0(它 12/12 逐日全中,兩個數字本來就該相同)
+    四檔的最壞值都**嚴格大於**典型值 —— 這正是「±0 天」被讀成「保證那天」的來源。
+
+    ⛔ 修法**不是**把 `_ERR_BAND_QUANTILE` 調寬去蓋住尾巴:那會讓所有基金的誤差帶
+    一起失去資訊量(平常的 ±0 / ±1 全變成 ±5 之類),拿一個有用的指標換一個罕見情境 = 淨損。
+    """
+    _worst, _band = {}, {}
+    for c, raw in _REAL_FUNDS.items():
+        _d = _err_divs([_dt.date.fromisoformat(_iso(a)) for a, _b, _c in raw][::-1])
+        _worst[c], _band[c] = _dc.estimate_error_worst(_d), estimate_error_band(_d)
+    assert _worst == {"JFZN3 摩根": 4, "ACTI71 聯博": 1, "ACCP138 瀚亞": 0,
+                      "TLZF9 安聯": 1, "SD080 施羅德": 14}, _worst
+    for c in _worst:
+        assert _worst[c] >= _band[c], (c, _worst[c], _band[c])   # max >= 任何分位數
+    _strictly = [c for c in _worst if _worst[c] > _band[c]]
+    assert len(_strictly) >= 4, (
+        f"只有 {len(_strictly)} 檔的最壞值嚴格大於典型值 —— 若變成 0 檔,代表最壞值"
+        f"被平滑掉了,那等於沒算:{_worst} vs {_band}")
+    # 「不會被磨平成 0」:典型值為 0 但實際有非零誤差的基金,最壞值必須非 0
+    for c in ("ACTI71 聯博", "TLZF9 安聯"):
+        assert _band[c] == 0 and _worst[c] > 0, (c, _band[c], _worst[c])
+
+
+def test_error_worst_shares_the_exact_sample_with_error_band():
+    """口徑 SSOT:兩個數字必須來自**同一份** walk-forward 樣本,不可各跑各的。
+
+    各跑一次的話,只要有人改了其中一邊的起手筆數或棄權處理,兩個數字就會開始講不同的故事,
+    而畫面上看不出來(§2 SSOT / §1)。
+    """
+    for c, raw in _REAL_FUNDS.items():
+        _d = _err_divs([_dt.date.fromisoformat(_iso(a)) for a, _b, _c in raw][::-1])
+        _errs = _dc._walk_forward_errors(_d)
+        assert _dc.estimate_error_worst(_d) == max(_errs), c
+        assert estimate_error_band(_d) == _dc._quantile_ceil(_errs, _dc._ERR_BAND_QUANTILE), c
+    # 證據不足時兩者**同進同出**(不可一個給數字、一個給 None)
+    _thin = _err_divs([_dt.date(2025, 1, 10), _dt.date(2025, 2, 10)])
+    assert estimate_error_band(_thin) is None and _dc.estimate_error_worst(_thin) is None
+
+
+def test_error_worst_is_carried_on_events_but_not_rendered_yet():
+    """§12 相容 + **接縫守衛**:event 帶 `error_worst`,但 render **不讀**。
+
+    ⚠️ 要不要把「最壞曾差幾天」印在畫面上、印在哪裡,屬**新增顯示欄位** ——
+    依客戶「UI 草稿先行」原則須先送線框草稿拍板,本輪只確保引擎算得出來、不會遺失。
+    有人在拍板前逕自渲染它,這條會轉紅(守的是流程,不是行為)。
+    """
+    import ui.helpers.dividend_calendar_render as _r
+    funds = [{"code": c.split()[0], "name": c, "house": c.split()[1],
+              "dividends": [{"date": _iso(a)} for a, _b, _c in raw]}
+             for c, raw in _REAL_FUNDS.items()]
+    cal = build_month_calendar(funds, 2026, 9, ref_year=2026, ref_month=8, ref_day=27)
+    assert cal["events"], "fixture 失效"
+    for ev in cal["events"]:
+        assert "error_worst" in ev, ev["name"]
+        if ev["error_band"] is not None and ev["error_worst"] is not None:
+            assert ev["error_worst"] >= ev["error_band"], ev["name"]
+    assert "error_worst" not in _r.__loader__.get_source(_r.__name__), (
+        "render 端開始讀 error_worst 了 —— 新增顯示欄位須先送 UI 線框草稿給客戶拍板")
+
+
+def test_error_worst_on_actual_records_is_zero_by_fact():
+    """事實優先(§16.2)那一支:實際紀錄的典型與最壞誤差**依定義都是 0**,不是估出來的。"""
+    _divs = [{"date": d.isoformat()} for d in _clean_monthly(14, 12, start=(2025, 8))]
+    _last = _dt.date.fromisoformat(_divs[-1]["date"])
+    cal = build_month_calendar([{"code": "M", "name": "M", "house": "", "dividends": _divs}],
+                               _last.year, _last.month,
+                               ref_year=_last.year, ref_month=_last.month, ref_day=28)
+    ev = cal["events"][0]
+    assert ev["is_actual"] is True and ev["error_band"] == 0 and ev["error_worst"] == 0

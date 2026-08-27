@@ -3,7 +3,7 @@
 把舊 3-tab schema（保單分頁 v1 + _T7_State + _Ledgers）轉成 v2：
 每張保單分頁 11 欄、內聯 units / avg_nav / avg_fx 持倉 + 多幣別現金部位。
 
-設計原則（與 CLAUDE.md §4 鋼鐵自省一致）：
+設計原則（與 PROCESS.md §4「鋼鐵自省與交付」一致）：
 - **動原本前先備份**：呼叫 `copy_sheet_as_backup` 複製整本 Sheet → 才動原本
 - **冪等**：對已是 v2 的 worksheet 自動跳過（用 `is_v2_worksheet` 判斷）
 - **失敗安全**：單張保單轉換例外不中斷整批；錯誤訊息收集後一次回報

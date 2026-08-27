@@ -43,3 +43,25 @@ from __future__ import annotations
 # 走自然入口，讓循環在正確的方向上先解開。這一行**不是多餘的 import**，
 # 拿掉會讓部分測試檔在收集階段 ERROR（見上方 docstring）。
 import fund_fetcher  # noqa: F401
+
+
+# ════════════════════════════════════════════════════════════
+# 第二職責：每條測試前後清空「來源退避」狀態（v3 憲法 §02）
+# ════════════════════════════════════════════════════════════
+# `infra.source_backoff` 的狀態是 **module-level、跨呼叫存活**的（這正是它的用途：
+# 讓下一次 rerun 不要再打同一個剛失敗的來源）。在 pytest 裡這會變成**跨測試污染**：
+# `tests/test_proxy_infra.py` 有 30+ 條測試共用同一個假 host `example.com`，
+# 只要前一條讓它進了退避，後面每一條都會在 `fetch_url` 進場處被跳過 → 整批假紅。
+#
+# ⚠️ 這是**測試隔離**，不是把功能關掉：真正驗證退避行為的
+# `tests/test_source_backoff.py` 會在自己的測試體內主動製造失敗再斷言，
+# 本 fixture 只保證每條測試從乾淨狀態開始（等同 production 的「全域刷新」）。
+import pytest as _pytest
+
+
+@_pytest.fixture(autouse=True)
+def _reset_source_backoff():
+    from infra import source_backoff as _sb
+    _sb.reset_all()
+    yield
+    _sb.reset_all()

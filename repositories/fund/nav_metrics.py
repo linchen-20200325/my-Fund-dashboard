@@ -93,7 +93,12 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
                 continue
             print(f"[fetch_nav] {url[:65]} → {r.status_code}")
             s = _parse_nav_html(r.text)
-            if len(s) >= 10:
+            # v2026-08-27:原為 inline `>= 10`。該值同時出現在本分支、
+            # fund_orchestration 最終備援、與新加的快取閘 → 收進
+            # shared/data_quality.NAV_CACHE_MIN_POINTS 當 SSOT(§3.3),
+            # 行為與原本逐字相同(值就是 10)。
+            from shared.data_quality import NAV_CACHE_MIN_POINTS as _MIN_PTS
+            if len(s) >= _MIN_PTS:
                 print(f"[fetch_nav] ✅ {len(s)} 筆")
                 # F-PROV-1 phase 16 v19.102 — provenance(Series.attrs;動態 host:endpoint)
                 _host_fn = url.split("/")[2] if "://" in url else "moneydj"
@@ -115,7 +120,14 @@ def fetch_nav(full_key: str, portal: str = "") -> pd.Series:
         _cache_code = (mj_short or full_key).strip().upper()
         _cs = _src_cache_files(_cache_code)
         if _cs is not None and not _cs.empty:
-            print(f"[fetch_nav] ⚠️ live 全敗 → 退回 GitHub Actions 快取 {len(_cs)} 筆")
+            # v2026-08-27:_src_cache_files 現在會擋掉筆數不足 / schema 違反的快取
+            # (與 live 分支同一把尺),並把密度 / 空窗 / 新鮮度的疑義掛在 attrs。
+            # 這裡把 supports_annualized 直接印出來 —— §1:序列放行,但「這份資料
+            # 不足以算 Sharpe / σ / 最大回撤」必須是**大聲的**,不是躺在 attrs 裡
+            # 等下游自己發現。
+            _sa = _cs.attrs.get("supports_annualized", True)
+            print(f"[fetch_nav] ⚠️ live 全敗 → 退回 GitHub Actions 快取 {len(_cs)} 筆"
+                  + ("" if _sa else " ⛔ 此序列稀疏/過期,年化指標(Sharpe/σ/回撤)不可信"))
             return _cs
     except Exception as e:
         print(f"[fetch_nav] cache fallback ERR: {e}")

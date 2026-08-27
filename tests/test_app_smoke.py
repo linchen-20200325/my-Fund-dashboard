@@ -1,4 +1,4 @@
-"""app.py / mk_dashboard.py 靜態 smoke test（CLAUDE.md §4 強制驗證）
+"""app.py / mk_dashboard.py 靜態 smoke test（PROCESS.md §4「強制驗證機制」）
 
 不啟動 Streamlit runtime，純 AST / exec 驗證：
   T1. AST 編譯 — 確保兩個入口檔語法正確

@@ -22,6 +22,12 @@ from fund_fetcher import (  # noqa: F401
     normalize_result_state, merge_non_empty, classify_fetch_status,
 )
 from infra.proxy import _proxies, _ssl_verify  # noqa: F401
+# v3 憲法 §02 跨呼叫來源退避(L1 → L0,下行 import,不違 §8.2)。
+# 只有本檔**不走 fetch_url** 的兩段(er-api / Frankfurter)需要手動接；
+# 走 fetch_url 的來源(Yahoo via fetch_yf_close、FRED)已在 infra.proxy 內自動涵蓋。
+# ⚠️ `diagnose_fx_sources` **刻意不接** —— 那是 Tab5 逐源診斷，
+# 使用者按下去就是要知道「現在真的打得通嗎」，被退避跳過會給出誤導的診斷結果。
+from infra import source_backoff as _sb_fx
 # v19.240 R8 EX-L1ORCH-1 退役:calc_metrics + perf 注入 + reconcile 業務邏輯已上提
 # 至 services.fund_service.finalize_fund_metrics + L2 enriched wrapper
 # (fetch_fund_by_key_enriched)。本層只回 raw result(無 metrics key,caller 走 L2
@@ -218,10 +224,20 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
     except Exception:
         _proxies_fx = {}
 
-    if _ccy_base and _ccy_quote and _ccy_base != _ccy_quote:
+    # v3 憲法 §02:本段(與下面 Frankfurter 段)v18.273 起**刻意不走** `fetch_url`
+    # (直打 proxy,同 sidebar 測試 path),所以拿不到 `fetch_url` 內建的退避 ——
+    # 這裡手動接上同一套跨呼叫冷卻。`get_latest_fx` 是「T7 每 fund render 一次」的
+    # 高頻路徑,少了退避就是憲法點名的「連續轟炸來源」。
+    # ⚠️ 與 v18.275 positive-only `_FX_CACHE` **不衝突**:那個防的是「失敗值被快取成
+    # 假答案」,本段只記「這個 host 何時可以再試」,**不存任何 rate**;冷卻期內走的是
+    # `continue 到下一個來源`,與「打了但失敗」逐字相同(理由全文見 shared/backoff_policy.py)。
+    _ERAPI_URL = f"https://open.er-api.com/v6/latest/{_ccy_base}"
+    _erapi_key = _sb_fx.source_key(_ERAPI_URL)
+    if _ccy_base and _ccy_quote and _ccy_base != _ccy_quote and \
+            not _sb_fx.should_skip(_erapi_key)[0]:
         try:
             _r = _req_fx.get(
-                f"https://open.er-api.com/v6/latest/{_ccy_base}",
+                _ERAPI_URL,
                 proxies=_proxies_fx, timeout=15, verify=False,
             )
             if _r.status_code == 200:
@@ -229,15 +245,25 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
                 if _d.get("result") == "success":
                     _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
                     if _v > 0:
+                        _sb_fx.record_success(_erapi_key)
                         return _store(_v)
+                # HTTP 200 但 payload 不可用 → 來源活著,不是來源的錯,**不退避**
+                # (同 404 的道理:再打一次可能就好了,退避只會把資料藏起來)
+            else:
+                _sb_fx.record_failure(_erapi_key,
+                                      _sb_fx.kind_for_status(_r.status_code))
         except Exception as _e:
             print(f"[get_latest_fx] open.er-api {_ccy_base}: {_e}")
+            _sb_fx.record_failure(_erapi_key, "unreachable")
 
     # 4. Frankfurter (ECB) — 非 TWD pair 才用（ECB 沒有 TWD）
-    if (not _is_twd) and _ccy_base and _ccy_quote and _ccy_base != _ccy_quote:
+    _FRANK_URL = "https://api.frankfurter.app/latest"
+    _frank_key = _sb_fx.source_key(_FRANK_URL)
+    if (not _is_twd) and _ccy_base and _ccy_quote and _ccy_base != _ccy_quote and \
+            not _sb_fx.should_skip(_frank_key)[0]:
         try:
             _r = _req_fx.get(
-                "https://api.frankfurter.app/latest",
+                _FRANK_URL,
                 params={"from": _ccy_base, "to": _ccy_quote},
                 proxies=_proxies_fx, timeout=15, verify=False,
             )
@@ -245,10 +271,16 @@ def get_latest_fx(currency_pair: str, fred_api_key: str = "") -> "float | None":
                 _d = _r.json()
                 _v = float(_d.get("rates", {}).get(_ccy_quote, 0) or 0)
                 if _v > 0:
+                    _sb_fx.record_success(_frank_key)
                     return _store(_v)
+            else:
+                _sb_fx.record_failure(_frank_key,
+                                      _sb_fx.kind_for_status(_r.status_code))
         except Exception as _e:
             print(f"[get_latest_fx] Frankfurter {_ccy_base}/{_ccy_quote}: {_e}")
-    # 注意：None 不入 cache → 下次仍會 retry
+            _sb_fx.record_failure(_frank_key, "unreachable")
+    # 注意：None 不入 cache → 下次仍會 retry（v18.275 positive-only，未被退避推翻：
+    # 退避不存值，chain 全敗仍是誠實的 None，§1 Fail Loud 不變）
     return None
 
 
