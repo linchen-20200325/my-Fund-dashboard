@@ -50,12 +50,18 @@ from shared.signal_thresholds import (
 )
 
 # ════════════════════════════════════════════════════════════════
-# 閾值常數(本檔特用,非通用 metric — 不抽 SSOT;§8.2.A EX-POLICY-1 同理)
+# 閾值常數 —— **逐顆標出處**,沒有一顆靠例外編號豁免(§3.3)
+#
+# ⚠️ 2026-08-27 更正:本段原註為
+#     「閾值常數(本檔特用,非通用 metric — 不抽 SSOT;§8.2.A EX-POLICY-1 同理)」← 該 ID 已退役
+#   —— 那是**假引用**。**EX-POLICY-1 已於 v19.212 P0-3-#4 退役**:它的豁免對象
+#   `services/allocation_simulator.py`(866 LOC)整檔拔毒、production 0 caller,
+#   憲法主檔 §8.2.A 例外表該列已**整列刪除線**。拿一個不存在的例外替自己豁免掉
+#   「不抽 SSOT」,正是同節末句明文禁止的**「未經登錄的軟例外」**。
+#   正確的引用方式見 `shared/regime_fit.py` 檔頭 —— 它引用同一個 ID 時寫明
+#   「**專案已退役** allocation_simulator EX-POLICY-1」,而且是把它當**反面前例**
+#   (所以我不硬編、常數集中此處),**不是**拿來當豁免依據。方向相反。
 # ════════════════════════════════════════════════════════════════
-
-# 景氣燈號:macro score 0~10 切 3 級(對應 calc_macro_phase 的 0~2 衰退/8~10 高峰)
-_MACRO_SCORE_DANGER_MAX: float = 3.0    # < 3 → 衰退區
-_MACRO_SCORE_HEALTHY_MIN: float = 6.0   # ≥ 6 → 擴張區(中間 3~6 為警戒)
 
 # 警訊燈號:任一觸發 = 紅
 #
@@ -65,6 +71,8 @@ _MACRO_SCORE_HEALTHY_MIN: float = 6.0   # ≥ 6 → 擴張區(中間 3~6 為警�
 # F-GRAY-4 v19.169 — HY beginner_panic 改 SSOT(SPEC §16.2):
 # 數值不變(panic=8 / warn=5,仍為新手保守版),改 import shared/macro_thresholds_v2。
 from shared.macro_buckets import (
+    _MACRO_SCORE_DANGER_MAX as _MB_SCORE_DANGER_MAX,    # 2026-08-27 收 SSOT(見下)
+    _MACRO_SCORE_HEALTHY_MIN as _MB_SCORE_HEALTHY_MIN,  # 2026-08-27 收 SSOT(見下)
     _VIX_RED as _MB_VIX_RED,
     _VIX_YELLOW as _MB_VIX_YELLOW,
     BUCKET_META as _BUCKET_META,     # 桶標籤 SSOT(見下方 `_bucket_bar_cells`)
@@ -78,6 +86,14 @@ from shared.colors import TRAFFIC_NEUTRAL  # v19.252 Phase 4A:gray 走 SSOT
 # status.py 的 hex 是 TRAFFIC_*,本 bar 現用 MATERIAL_*,換色 = user 沒要求的視覺
 # 變更(§-1),留待 user 指示;emoji 完全等值故零風險先收。
 from ui.components.status import status_color as _status_ssot
+
+# 景氣燈號:macro score 0~10 切 3 級(對應 calc_macro_phase 的 0~2 衰退/8~10 高峰)。
+# 2026-08-27 **收 SSOT,數值零變更**(仍是 3.0 / 6.0):同一組切點原本在
+# `shared/macro_buckets.py` 與本檔各定義一份 —— 同一個事實兩份定義,§3.3 的正面違規,
+# 而且 macro_buckets 那份還是 `BUCKET_DANGER_SPECS["macro_score"]` 的 yellow / red
+# 來源(② 依據表的門檻描述由它產),兩份漂移時畫面會自打嘴巴。改 import 後只剩一份。
+_MACRO_SCORE_DANGER_MAX: float = _MB_SCORE_DANGER_MAX    # = 3.0,< 3 → 衰退區
+_MACRO_SCORE_HEALTHY_MIN: float = _MB_SCORE_HEALTHY_MIN  # = 6.0,≥ 6 → 擴張區(3~6 警戒)
 
 _VIX_PANIC_THRESHOLD: float = _MB_VIX_RED      # = 30,恐慌(全員一致)
 _VIX_WARNING_THRESHOLD: float = _MB_VIX_YELLOW # = 22,警戒(C2-B v19.158 收 SSOT)
@@ -140,13 +156,33 @@ def _bucket_bar_cells(keys) -> list:
 # v19.128 — 四時域分組 summary(長期 / 中期 / 短線 / 拐點)
 # ════════════════════════════════════════════════════════════════
 
-# 中期循環警戒閾值(本檔特用,§3.3 EX-POLICY-1 同理 — 教學語意門檻)
+# 中期循環警戒閾值。
+# ⚠️ 2026-08-27 更正:本行原註「(本檔特用,§3.3 EX-POLICY-1 同理 — 教學語意門檻)」(該 ID 已退役),
+#   同屬上方閾值常數區說明的那種**假引用**(EX-POLICY-1 v19.212 已退役)。
+#   現行依據逐顆分開:PMI / CPI 兩顆**本來就已經走 SSOT**(下方 import,v19.178/179
+#   F-GRAY-4 收的),根本不需要任何例外;真正還留 inline 的只有失業率那一顆,
+#   理由與待驗狀態寫在它自己的註解上,**不再共用一句總括豁免**。
 from shared.macro_thresholds_v2 import (  # F-GRAY-4 v19.178 + v19.179 PR-3
     CPI_YOY_THRESHOLDS as _CPI_THR_V2,
     PMI_THRESHOLDS as _PMI_THR_V2,
 )
 _PMI_CONTRACTION_THRESHOLD: float = _PMI_THR_V2["beginner_panic"]["contraction_below"]  # 50.0 (SSOT)
 _CPI_OVERHEAT_THRESHOLD: float = _CPI_THR_V2["beginner_panic"]["overheat_above"]  # 4.0 (SSOT)
+# 失業率「偏高」線 —— 本檔剩下的兩顆 inline 門檻之一(另一顆是下方 SLOOS)。
+# **留 inline 的依據(不是那個已退役的 EX-POLICY-1)**:憲法主檔 §8.3 F-GRAY-4 同一族
+# 情形 —— 「教學/新手保守版」與 stoplight / score_function **刻意不同源**。
+#   `shared/macro_buckets.BUCKET_DANGER_SPECS["unemployment"]` 走的是 score_function
+#   那把尺(yellow=4.5 / red=6.0,出處 `services/macro/validation.py` SCORE_RULES
+#   ["UNEMPLOYMENT"]);本檔這顆 5.0 是**第三個數字**,和上面兩顆都不相等,
+#   是四時域教學卡自己的「偏高」線。
+#   → (a) 收進既有 SSOT 任一顆都會**改動判燈輸出**(本輪硬性禁止改門檻數值);
+#     (b) 只為它另開一個單一 consumer 的 `UNEMPLOYMENT_THRESHOLDS` dict,
+#         是憲法主檔 §8.1 step 6「用不到的抽象」反例。
+#   故**維持 inline**,但依據改標到真的成立的那一條。
+# ⚠️ **待驗(§-2 規則 6,本輪只有一組看過、沒有第二組驗)**:5.0 這個數字全 repo
+#   只有這一處,**查不到它的出處**(DESIGN 值?當初手打?)。本輪未查證,
+#   不得被引用成「已查證的設計值」。若日後 HY / CPI / PMI 那套 `beginner_panic`
+#   多段式 SSOT 要擴到失業率,這一顆就是入口。
 _UNEMP_ELEVATED_THRESHOLD: float = 5.0     # 失業率 > 5% = 偏高
 
 # 短線震盪警戒:原有兩個本地門檻常數(債市波動率 / 選擇權買賣權比)已於
@@ -156,6 +192,13 @@ _UNEMP_ELEVATED_THRESHOLD: float = 5.0     # 失業率 > 5% = 偏高
 # 獨立資料線使用;本檔不再持有第二份數值。
 
 # 拐點警報
+# ⚠️ 2026-08-27 就地登記(**本輪不動,只記錄**):50.0 與
+#   `shared/macro_buckets.BUCKET_DANGER_SPECS["sloos"].red` 是**同一個數字的兩份**。
+#   但 macro_buckets 那份自己的 `source` 寫的是
+#   「DESIGN:對齊 macro_beginner_view._SLOOS_TIGHTENING(50)」—— 也就是**它引本檔**。
+#   本檔反過來去 import 它,會讓那句出處變成自我指涉的假話(正是本輪在修的那種病),
+#   而修好 macro_buckets 那句不在本輪的檔案邊界內。故**維持現狀 + 據實登記**,
+#   收斂方向(哪一份當真相源)留給有授權動 `shared/macro_buckets.py` 的那一輪決定。
 _SLOOS_TIGHTENING_THRESHOLD: float = 50.0  # SLOOS > 50 = 銀行收緊
 
 
