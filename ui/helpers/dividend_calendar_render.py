@@ -1,4 +1,4 @@
-"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.536)。
+"""ui/helpers/dividend_calendar_render.py — 除息基準日/配息月曆 HTML 渲染(v19.537)。
 
 純字串產生器(**零 streamlit、零 IO**),吃 `services.dividend_calendar.build_month_calendar`
 的結構 → 產出自成一頁的 HTML(深/淺色皆適配)。共用於:App 內 `st.components.html` 嵌入(方式 A)、
@@ -32,6 +32,13 @@ v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後):
   待辦 2  待確認清單依「同一句說明」**分組**:同句提到組上方一行,列內只留
           「投信名 · 上次實際基準日」;單檔成組維持逐列寫法(不為 1 檔開組標題)。
   待辦 3  空月文案的「本月」→ 實際目標月(L2 `empty_month_note`,與追加 7 同病)。
+
+v19.537 §16.1「入帳(估)」欄改用**逐檔**到帳窗(`_fmt_pay_window` 改吃 event 而非 ex):
+  L2 早就逐檔算好了間隔,但本檔原本一律呼叫通用 `pay_window(ex)`(基準日 +5~7 營業日)——
+  逐檔值 production 0 caller。實測通用窗對 user 5 檔真實配息表有 32% 的實際到帳日落在窗外
+  (安聯 20/20 全落在窗外)。改後 walk-forward 命中 69.0% → 93.1%。
+  **欄位、欄頭、版面一律未動** —— 同一格裡把對三分之一的人是錯的值換成對的值。
+  該檔無發放紀錄 → 仍退回通用窗(§1 不借別檔的間隔補位)。
 
 v19.536:§15.4「全部推不出」版型的 **H1** 也吃實際目標月(L2 `all_unpred_title`)——
 追加 7 收了副標 / 明細表標題 / chip 標籤 / LINE 首行四處,獨漏這個標題常數。
@@ -276,12 +283,22 @@ def _dedupe_day_chips(evs: list) -> list:
             for _ev in dedupe_events(evs)]
 
 
-def _fmt_pay_window(ex) -> str:
-    """除息基準日 → 入帳推估「區間」字串(如 `8/22~8/26`)。口徑 SSOT 走 L2 `pay_window`。
+def _fmt_pay_window(ev: dict) -> str:
+    """事件 → 入帳推估「區間」字串(如 `8/22~8/26`)。口徑 SSOT 全在 L2,本函式只負責排版。
 
-    §1:算不出(ex 非日期)→ 「—」,不捏造日期。
+    **優先用該檔自己的到帳窗**(`pay_window_est`,L2 §16.1 由該檔自己的「基準→發放」間隔
+    p10~p90 算出);該檔沒有發放紀錄才退回通用窗 `pay_window`(基準日 +5~7 個營業日)。
+
+    ⚠️ **v19.537 修的就是這裡**(實測,非推測):`pay_window_est` 這個值 L2 早就逐檔算好了,
+    但本函式原本簽名吃 `ex`、直接呼叫通用窗,逐檔值**從頭到尾沒有任何 caller** ——
+    畫面上所有基金一律顯示同一套 +5~7 營業日。對 user 的 5 檔真實配息表 walk-forward:
+    通用窗命中 40/58 = 69.0%,逐檔窗 54/58 = **93.1%**(寬度 4.1 → 4.5 天,幾乎沒變寬);
+    安聯 TLZF9 **0/12 → 11/12**(它自己的間隔是 5 個日曆日,通用窗整段偏晚)。
+    「哪天該去看帳戶」正是這一欄唯一要回答的問題。
+
+    §1:兩種窗都算不出(ex 非日期)→ 「—」,不捏造日期。
     """
-    _w = pay_window(ex)
+    _w = ev.get("pay_window_est") or pay_window(ev.get("ex_date"))
     if not _w:
         return "—"
     _lo, _hi = _w
@@ -374,7 +391,7 @@ def _detail_rows_html(events: list, unpredictable: list, *, year=None, month=Non
             f'<td class="name"><span class="house">'
             f'<span class="dot" style="background:{_e(_color(e.get("house")))}"></span>'
             f'<b>{_e(_chip_label(e))}</b></span></td>'
-            f'<td class="tnum muted">{_e(_fmt_pay_window(ex))}</td>'
+            f'<td class="tnum muted">{_e(_fmt_pay_window(e))}</td>'
             f'<td><span class="eb {_eb_cls}">{_e(_eb_txt)}</span></td></tr>')
     # §15.3:推不出的基金**仍列一行**(不是整檔消失)——「預估基準日」寫 —,「誤差」欄寫原因人話。
     for u in unpredictable:

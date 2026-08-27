@@ -1,4 +1,4 @@
-"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.536)。L2 純函式,零 IO。
+"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.537)。L2 純函式,零 IO。
 
 用途:吃每檔基金的**配息歷史**,推估「本月**除息基準日** + 配息入帳日」,產生月曆結構供 L3 渲染。
 資料由 L1 抓好傳入(reuse `repositories.fund` 的 dividends);本層不碰網路、不 import streamlit。
@@ -70,6 +70,20 @@ v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後)—— **引�
           講出對其他成員不成立的話(§1)。單檔成組維持逐列寫法,不為 1 檔開組標題。
   待辦 3:`empty_month_note()` —— 空月文案的「本月」→ 實際目標月(與追加 7 同病),
           HTML / LINE 文字 / Flex 三處收成一份 SSOT。
+
+v19.537 §16.1 逐檔到帳窗(**修的是「哪天該去看帳戶」這一欄,引擎的除息日推估一行沒動**):
+  現況:所有基金一律套「基準日 +5~7 個**營業日**」通用窗(user 2026-08-24 憑手上幾檔給的
+  經驗值)。對 5 檔真實 MoneyDJ 配息表實測,**31/98 = 32% 的實際到帳日落在那個窗之外** ——
+  安聯 TLZF9 **20/20 全部落在窗外**(自身間隔 5 個日曆日,通用窗整段偏晚)、施羅德 SD080
+  10/18(間隔 12 天,偏早),**兩檔偏的方向相反**,所以平移通用窗救不了,只能逐檔算。
+  做法:`infer_schedule` 增出 `pay_gap_lo_days` / `pay_gap_hi_days`(該檔自己的
+  「基準→發放」間隔 p10 / p90,見 `_pay_gap_band`)→ `predict_ex_for_month` 增
+  `pay_window_est` → event 帶著 → L3 明細表優先用它,無發放紀錄才退回通用窗。
+  walk-forward 實測:通用窗命中 40/58 = 69.0% → 逐檔窗 54/58 = **93.1%**
+  (平均寬度 4.1 → 4.5 天,幾乎沒變寬);安聯 0/12 → 11/12,**其餘三檔一檔都沒變差**。
+  §1:該檔沒有發放紀錄 → `(None, None)`,退回通用窗照舊標「估」,**不借別檔的間隔補位**。
+  LINE / Flex 上方那一行的數字同步改吃這批基金自己的範圍(仍是一句話、仍在清單上方,
+  user 2026-08-24「到帳時間不逐檔列」未動)。
 
 v19.536(總管 2026-08-26 裁示)—— **引擎推估邏輯一行沒動**:
   §15.4「全部推不出」的標題常數 `ALL_UNPRED_TITLE` → `ALL_UNPRED_TITLE_TMPL` +
@@ -204,6 +218,11 @@ _REF_DAY_OF_MONTH = 15
 # 改後畫面:摩根「±2 天」、施羅德「僅供參考」(帶寬 11 > 7)、其餘三檔維持「±0 天」。
 _ERR_BAND_QUANTILE = 0.90        # |推估 - 實際| 的 90% 分位(§15.1;向上取整後為該檔誤差帶 E)
 _ERR_BAND_MIN_SAMPLES = 3        # walk-forward 實際「有給出日期」的樣本數下限,不足 → None
+
+# §16.1 逐檔到帳窗:該檔自己的「基準→發放」間隔取 p10~p90(日曆日)。見 `_pay_gap_band`。
+_PAY_BAND_Q_LO = 0.10
+_PAY_BAND_Q_HI = 0.90
+_PAY_BAND_MIN_SAMPLES = 3        # 間隔樣本下限,不足 → (None, None) → caller 退回通用窗
 # 頁尾說明(SSOT):具體數字比模糊標籤更容易被過度相信,必須說明它是什麼、憑什麼。
 # 「約九成」對應 `_ERR_BAND_QUANTILE`(0.90)—— 兩者要一起改,不可只改一邊(§3.3)。
 ERR_BAND_FOOTNOTE = "※ 誤差 = 用該檔自己的配息史回測，約九成情況落在此範圍內。"
@@ -736,7 +755,8 @@ def infer_schedule(dividends: list) -> dict:
         return {"cadence": "none", "ex_day": None, "pay_gap_days": None, "n": 0,
                 "confidence": "none", "day_std": None, "last_ex": None,
                 "last_amount": None, "last_yield": None, "med_gap": None,
-                "anchor": None, "phase": None}
+                "anchor": None, "phase": None,
+                "pay_gap_lo_days": None, "pay_gap_hi_days": None}
 
     recent = recs[-_RECENT_N:]
     _rdates = [r["ex"] for r in recent]
@@ -771,6 +791,7 @@ def infer_schedule(dividends: list) -> dict:
     pay_gaps = [(r["pay"] - r["ex"]).days for r in recs
                 if r["pay"] is not None and (r["pay"] - r["ex"]).days >= 0]
     pay_gap = round(_stats.median(pay_gaps)) if pay_gaps else None
+    pay_lo, pay_hi = _pay_gap_band(pay_gaps)
 
     _step = _CADENCE_MONTHS.get(cadence)
     # §13.7.6:錨定 / med_gap / 相位**同吃近 `_RECENT_N` 筆視窗**,§3 的 k 與 §4 的 k 皆為
@@ -792,7 +813,10 @@ def infer_schedule(dividends: list) -> dict:
     return {"cadence": cadence, "ex_day": ex_day, "pay_gap_days": pay_gap, "n": n,
             "confidence": conf, "day_std": day_std, "last_ex": last["ex"],
             "last_amount": last["amount"], "last_yield": last["yield_pct"],
-            "med_gap": med_gap, "anchor": anchor, "phase": phase}
+            "med_gap": med_gap, "anchor": anchor, "phase": phase,
+            # v19.537 §16.1:該檔**自己的**基準→發放間隔分布(p10 / p90,日曆日)。
+            # 中位數 `pay_gap_days` 只給得出一個點,畫面要的是「哪幾天該去看帳戶」的區間。
+            "pay_gap_lo_days": pay_lo, "pay_gap_hi_days": pay_hi}
 
 
 def _stale_state(last_ex: "_dt.date", ref_year: int, ref_month: int, step: int,
@@ -829,6 +853,8 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
     Returns(既有 key 全保留;v19.530 §8 增列 provenance):
         {ex_date          : date   —— 推估**除息基準日**(非除息日、非發放日,§4.1),恆為營業日且落在目標月
          pay_date_est     : date|None —— 基準日 + 歷史「基準→發放」間隔中位數;無歷史 → None
+         pay_window_est   : (date,date)|None —— §16.1 該檔自己的到帳窗(間隔 p10~p90);
+                            無發放紀錄 → None,caller 退回通用窗 `pay_window`(§1 不借別檔數字)
          confidence       : "high"|"medium"|"low"
          anchor_type      : str|None  —— 命中的錨定假說(§1 + §13.2 五選一)
          anchor_score     : float|None—— 該假說的歷史復現率 s⁽¹⁾(§2)
@@ -913,8 +939,21 @@ def predict_ex_for_month(schedule: dict, year: int, month: int,
     gap = schedule.get("pay_gap_days")
     pay = ex + _dt.timedelta(days=gap) if isinstance(gap, int) else None
     return {"ex_date": ex, "pay_date_est": pay, "confidence": _conf,
+            "pay_window_est": _pay_window_from_schedule(ex, schedule),
             "holiday_calendar": _holiday_calendar_state(),
             "horizon_months": _h, **_prov}
+
+
+def _pay_window_from_schedule(ex: "_dt.date | None", schedule: dict) -> "tuple | None":
+    """基準日 + 該檔節奏 → (最早, 最晚) 到帳推估日;該檔沒有間隔證據 → None。
+
+    §16.1:回 None 代表「這一檔沒有自己的發放紀錄」,caller 退回通用窗(`pay_window`)並照舊
+    標「估」—— **不可**拿別檔的間隔補位(§1,同 `estimate_error_band` 的禁令)。
+    """
+    _lo, _hi = schedule.get("pay_gap_lo_days"), schedule.get("pay_gap_hi_days")
+    if not isinstance(ex, _dt.date) or not isinstance(_lo, int) or not isinstance(_hi, int):
+        return None
+    return (ex + _dt.timedelta(days=_lo), ex + _dt.timedelta(days=_hi))
 
 
 # ── §15.1 逐檔誤差帶(L2 純函式,零 IO;顯示成 ±N 天 / 僅供參考的字串在 L3)──────────
@@ -972,17 +1011,53 @@ def estimate_error_band(dividends: list) -> "int | None":
     return _quantile_ceil(errs, _ERR_BAND_QUANTILE)
 
 
+def _pay_gap_band(pay_gaps: list) -> tuple:
+    """該檔「基準日 → 發放日」間隔樣本 → (p10 向下取整, p90 向上取整) 日曆日;證據不足 → (None, None)。
+
+    **為什麼是 p10/p90 而不是 min/max**:min/max 被單一次作業異常整個拉開(施羅德實測寬到
+    7.4 天),而區間一寬就等於沒講。p10/p90 砍掉兩端各一成的離群,寬度與現行通用窗相當。
+
+    **為什麼要有這個東西**(v19.537 §16.1,實測數字,非推測):現行畫面對所有基金一律套
+    「基準日 +5~7 個**營業日**」,那是 user 2026-08-24 憑手上幾檔的印象給的通用經驗值。
+    對 5 檔真實 MoneyDJ 配息表做 walk-forward(只用過去的間隔推下一筆,起手 8 筆):
+
+        通用 +5~7 營業日 : 命中 40/58 = 69.0%,平均寬度 4.1 天
+        本檔 p10~p90     : 命中 54/58 = **93.1%**,平均寬度 4.5 天
+
+    逐檔差距集中在兩檔 —— 安聯 TLZF9(自身中位間隔 5 個**日曆**日,比通用窗早到)
+    **0/12 → 11/12**;施羅德 SD080(中位 12 天,比通用窗晚到)**5/10 → 7/10**。
+    另外三檔(摩根 / 聯博 / 瀚亞)本來就落在通用窗內,改後**一檔都沒有變差**(11~12/12 → 12/12)。
+
+    §1:樣本 < `_PAY_BAND_MIN_SAMPLES` → **回 (None, None)**,由 caller 退回通用窗並照舊標「估」;
+    不可拿別檔的間隔分布補位(那是借用別人的準確度,同 `estimate_error_band` 的禁令)。
+    """
+    if len(pay_gaps) < _PAY_BAND_MIN_SAMPLES:
+        return None, None
+    _s = sorted(pay_gaps)
+    _lo = int(_math.floor(_quantile_linear(_s, _PAY_BAND_Q_LO)))
+    _hi = int(_math.ceil(_quantile_linear(_s, _PAY_BAND_Q_HI)))
+    return _lo, max(_hi, _lo)            # 單一樣本值重複時兩端可能相等 → 保證 lo <= hi
+
+
+def _quantile_linear(values: list, q: float) -> float:
+    """整數樣本的 q 分位(線性內插,與 numpy `method="linear"` 一致)。空 list → 呼叫端先擋。"""
+    _s = sorted(values)
+    _h = (len(_s) - 1) * q
+    _lo = int(_h)
+    _hi = min(_lo + 1, len(_s) - 1)
+    return _s[_lo] + (_h - _lo) * (_s[_hi] - _s[_lo])
+
+
 def _quantile_ceil(values: list, q: float) -> int:
     """整數樣本的 q 分位(線性內插)後**向上取整**。空 list → 呼叫端須先擋(§1 不回預設值)。
 
     內插法與 numpy 預設 (`method="linear"`) 一致:h = (n-1)·q,在相鄰兩個順序統計量之間內插。
     向上取整是刻意的**保守**方向 —— 誤差帶寧可報大一天,不可報小一天讓 user 少留餘裕。
+
+    ⚠️ 內插本體走 `_quantile_linear`(v19.537 抽出),與 `_pay_gap_band` 共用同一份實作 ——
+    兩處各寫一次遲早會漂(§2 SSOT)。
     """
-    _s = sorted(values)
-    _h = (len(_s) - 1) * q
-    _lo = int(_h)
-    _hi = min(_lo + 1, len(_s) - 1)
-    return int(_math.ceil(_s[_lo] + (_h - _lo) * (_s[_hi] - _s[_lo])))
+    return int(_math.ceil(_quantile_linear(values, q)))
 
 
 # §14.2 unpredictable 的四類成因(code 給程式判讀,文字給 UI 顯示人話)
@@ -1126,7 +1201,9 @@ def build_month_calendar(funds: list, year: int, month: int,
         {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{},
          holiday_calendar}
         event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n,
-                 **error_band**,
+                 **error_band**, **pay_window_est**,
+                 pay_window_est = §16.1 該檔自己的到帳窗 (最早, 最晚) 或 None(無發放紀錄
+                                  → L3 退回通用窗)
                  **anchor_type, anchor_score, roll_convention, holiday_calendar, horizon_months**}
                  error_band = §15.1 該檔誤差帶(天,int)或 None(證據不足 → L3 顯示「僅供參考」)
         excluded     = {code, name, reason}(無配息 = 累積型/查無)
@@ -1175,6 +1252,9 @@ def build_month_calendar(funds: list, year: int, month: int,
             continue
         events.append({"code": code, "name": name, "house": house,
                        "ex_date": pred["ex_date"], "pay_date_est": pred["pay_date_est"],
+                       # §16.1 逐檔到帳窗(該檔自己的間隔 p10~p90);None = 該檔無發放紀錄,
+                       # L3 退回通用窗。**不可**在這層填別檔的數字補位(§1)。
+                       "pay_window_est": pred["pay_window_est"],
                        "confidence": pred["confidence"], "last_amount": sch["last_amount"],
                        "last_yield": sch["last_yield"], "n": sch["n"],
                        # §15.1 誤差帶:逐檔用**自己的**歷史 walk-forward 算(None = 證據不足)。
@@ -1521,15 +1601,44 @@ def pay_window(ex: "_dt.date | None") -> "tuple | None":
             add_business_days(ex, _PAY_BIZ_DAYS_MAX))
 
 
-def _pay_note() -> str:
+def _pay_gap_span(events: "list | None") -> "tuple | None":
+    """本次要列出的事件 → 這批基金到帳間隔的**聯集**範圍 (最小 lo, 最大 hi),日曆日。
+
+    一檔都沒有逐檔證據 → None(caller 退回通用的 +5~7 營業日說法)。
+    """
+    _los = [(e.get("pay_window_est")[0] - e["ex_date"]).days
+            for e in (events or [])
+            if e.get("pay_window_est") and isinstance(e.get("ex_date"), _dt.date)]
+    _his = [(e.get("pay_window_est")[1] - e["ex_date"]).days
+            for e in (events or [])
+            if e.get("pay_window_est") and isinstance(e.get("ex_date"), _dt.date)]
+    return (min(_los), max(_his)) if _los else None
+
+
+def _pay_note(events: "list | None" = None) -> str:
     """到帳說明單行(text / Flex 共用,口徑 SSOT 一處改兩處同步)。
 
     §1:括號內文案**依實際能力誠實改寫** —— 有假日表就說已扣國定假日,沒有就說沒扣,
     不宣稱做不到的事。
+
+    ⚠️ **v19.537 §16.1**:這一行原本寫死「+5~7 個**營業日**」,而那是 user 2026-08-24 憑
+    手上幾檔的印象給的**通用**經驗值 —— 對 5 檔真實配息表實測 **31/98 = 32% 的實際到帳日
+    落在那個窗之外**(安聯 20/20 全部落在窗外、施羅德 10/18,且兩檔偏的方向相反)。
+    現在改吃**這批基金自己的**間隔範圍(逐檔窗見 `_pay_window_from_schedule`)。
+
+    ⚠️ 這一行**仍然是一句話、仍然在清單上方**(user 2026-08-24「到帳時間不逐檔列」)——
+    改的是句子裡那兩個數字的**來源**,不是版面。一檔都沒有逐檔證據時原字不動。
+    ⚠️ 單位由「營業日」改為「天」是**必要**的:逐檔間隔是從真實「基準日→發放日」量出來的
+    日曆日差,裡面已經含掉了週末與連假;硬要換算回營業日反而是再猜一次。
     """
-    _scope = "已跳過週末與國定假日" if has_holiday_calendar() else "僅跳週末、未扣國定假日"
-    return (f"💰 到帳約 +{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個營業日左右"
-            f"（{_scope};實際仍以基金公司作業為準）")
+    _span = _pay_gap_span(events)
+    if _span is None:
+        _scope = "已跳過週末與國定假日" if has_holiday_calendar() else "僅跳週末、未扣國定假日"
+        return (f"💰 到帳約 +{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX} 個營業日左右"
+                f"（{_scope};實際仍以基金公司作業為準）")
+    _lo, _hi = _span
+    return (f"💰 到帳約 +{_lo}~{_hi} 天"
+            f"（各檔不同,依各檔自己的配息紀錄推估;實際仍以基金公司作業為準）")
 
 
 def build_summary_text(cal: dict) -> str:
@@ -1563,8 +1672,9 @@ def build_summary_text(cal: dict) -> str:
     if not events:
         lines.append(empty_month_note(y, m))
     else:
-        lines.append(_pay_note())
-        for e in dedupe_events(events):                # 同日同投信只列一次(user 2026-08-24)
+        _shown = dedupe_events(events)             # 同日同投信只列一次(user 2026-08-24)
+        lines.append(_pay_note(_shown))            # §16.1 到帳範圍吃**實際列出的**這幾檔
+        for e in _shown:
             _ex = e["ex_date"]
             lines.append(f"• {_ex.month}/{_ex.day} 除息基準日　{display_label(e)}")
     # user 2026-08-24「沒有配息的整段移除」→ 不再提累積型/無配息檔數(那些本來就不會配,不需提醒)。
@@ -1672,7 +1782,7 @@ def build_summary_flex(cal: dict) -> dict:
                       "size": "sm", "color": _FLEX_SUB, "wrap": True})
     else:
         # user 2026-08-24:到帳時間改在清單「上方」寫一句(不逐檔列),與純文字/圖檔同口徑。
-        _body.append({"type": "text", "text": _pay_note(),
+        _body.append({"type": "text", "text": _pay_note(events),
                       "size": "xxs", "color": _FLEX_SUB, "wrap": True})
         _body.append({"type": "separator", "margin": "sm"})
         _body.extend(_flex_event_row(e) for e in events[:_FLEX_MAX_ROWS])
@@ -1701,8 +1811,12 @@ def build_summary_flex(cal: dict) -> dict:
         ]},
         "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": _body},
     }
+    # §16.1:altText 的到帳字樣與卡片內那一行同源(`_pay_gap_span`),不再各寫各的數字。
+    _span = _pay_gap_span(events)
+    _alt_pay = (f"基準日+{_span[0]}~{_span[1]}天" if _span
+                else f"基準日+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX}營業日")
     _alt = (f"🗓️ {month_label(y, m)} 除息行事曆"
-            f"（{len(events)} 檔・到帳=基準日+{_PAY_BIZ_DAYS_MIN}~{_PAY_BIZ_DAYS_MAX}營業日）")
+            f"（{len(events)} 檔・到帳={_alt_pay}）")
     return {"contents": _bubble, "alt_text": _alt}
 
 

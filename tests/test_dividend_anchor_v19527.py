@@ -1903,3 +1903,125 @@ def test_reason_text_omits_date_it_does_not_have():
     _u = {"reason": "只有 2 筆配息紀錄，還看不出規律（至少要 3 筆）。",
           "reason_code": "too_few", "last_ex": None}
     assert _dc.reason_display(_u, has_date_column=False) == _u["reason"]     # 不留空括號
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §16.1 逐檔到帳窗(v19.537)—— 「哪天該去看帳戶」這一欄不再對所有基金講同一句話
+# ══════════════════════════════════════════════════════════════════════
+def _pay_divs(raw) -> list:
+    """真實配息表 → 帶 pay_date 的 dividends(基準日 + 發放日兩欄都要,才量得出間隔)。"""
+    return [{"date": _iso(a), "pay_date": _iso(c)} for a, _b, c in raw]
+
+
+def test_pay_window_per_fund_beats_generic_window_on_real_data():
+    """**修復前後的實測對照**:通用「+5~7 營業日」窗 vs 該檔自己的 p10~p90 窗。
+
+    這條測的不是「新的比較好看」,而是**舊的對三分之一的人是錯的**:
+    walk-forward(只用過去的間隔推下一筆,起手 8 筆)——
+        通用窗 40/58 = 69.0%  ／  逐檔窗 54/58 = 93.1%
+    差距**集中在兩檔**:安聯 TLZF9(自身間隔 5 個日曆日,比通用窗早到)0/12 → 11/12;
+    施羅德 SD080(間隔 12 天,比通用窗晚到)5/10 → 7/10。**兩檔偏的方向相反**,
+    所以「把通用窗整體平移」救不了 —— 只能逐檔算。
+
+    §1:這一欄回答的是「哪天該去看帳戶」。一個對 32% 的列來說**必然落空**的區間,
+    比不給區間更糟(user 會照著它去看帳戶然後發現沒錢)。
+    """
+    _gen_hit = _own_hit = _n = 0
+    _per_fund = {}
+    for code, raw in _REAL_FUNDS.items():
+        recs = [(_dt.date.fromisoformat(_iso(a)), _dt.date.fromisoformat(_iso(c)))
+                for a, _b, c in raw][::-1]
+        _g = _o = _t = 0
+        for i in range(_MIN_HIST, len(recs)):
+            ex, pay = recs[i]
+            _sch = infer_schedule(_pay_divs([(a, b, c) for a, b, c in raw][::-1][:i]))
+            _own = _dc._pay_window_from_schedule(ex, _sch)
+            _gen = _dc.pay_window(ex)
+            _t += 1
+            _g += bool(_gen and _gen[0] <= pay <= _gen[1])
+            _o += bool(_own and _own[0] <= pay <= _own[1])
+        _per_fund[code] = (_g, _o, _t)
+        _gen_hit += _g
+        _own_hit += _o
+        _n += _t
+    assert _n >= 50, f"walk-forward 樣本太少,這條測不出東西:{_n}"
+    # 逐檔窗必須**明顯**優於通用窗;不寫死等號,寫死會在 fixture 增筆時假紅。
+    assert _own_hit > _gen_hit + 10, (
+        f"逐檔到帳窗沒有比通用窗好:逐檔 {_own_hit}/{_n} vs 通用 {_gen_hit}/{_n};"
+        f"逐檔明細 {_per_fund}")
+    assert _own_hit / _n >= 0.90, f"逐檔窗命中率掉到 90% 以下:{_own_hit}/{_n}"
+    # 安聯是本次修復的代表案例:它在通用窗下**一次都沒中過**。
+    _g_al, _o_al, _t_al = _per_fund["TLZF9 安聯"]
+    assert _g_al == 0, f"fixture 變了:安聯本來在通用窗下 0 命中,現在 {_g_al}/{_t_al}"
+    assert _o_al >= _t_al - 1, f"安聯改用自己的間隔後仍然沒中:{_o_al}/{_t_al}"
+
+
+def test_pay_window_est_is_carried_all_the_way_to_the_render_cell():
+    """**接線驗證**:L2 算出來的逐檔窗要真的出現在明細表那一格,不是算完就丟。
+
+    v19.537 修的正是這個 —— `pay_date_est` 早就逐檔算好了,但 render 端呼叫的是
+    通用 `pay_window(ex)`,逐檔值**production 0 caller**。只驗 L2 不驗這一段,
+    等於「修好了但畫面沒變」(§-2:沒查證的宣稱比沒有宣稱更危險)。
+    """
+    from ui.helpers.dividend_calendar_render import _fmt_pay_window, render_month_calendar_html
+    funds = [{"code": c.split()[0], "name": c, "house": c.split()[1],
+              "dividends": _pay_divs(raw)} for c, raw in _REAL_FUNDS.items()]
+    cal = build_month_calendar(funds, 2026, 9, ref_year=2026, ref_month=8, ref_day=27)
+    _al = next(e for e in cal["events"] if e["house"] == "安聯")
+    assert _al["pay_window_est"] is not None, "event 沒帶 §16.1 逐檔窗"
+    _gen = _dc.pay_window(_al["ex_date"])
+    assert _al["pay_window_est"] != _gen, "逐檔窗與通用窗同值 → 這條測不到東西"
+    _cell = _fmt_pay_window(_al)
+    assert _cell == (f"{_al['pay_window_est'][0].month}/{_al['pay_window_est'][0].day}"
+                     f"~{_al['pay_window_est'][1].month}/{_al['pay_window_est'][1].day}")
+    assert _cell != (f"{_gen[0].month}/{_gen[0].day}~{_gen[1].month}/{_gen[1].day}")
+    assert _cell in render_month_calendar_html(cal), "HTML 明細表裡沒有逐檔到帳窗"
+
+
+def test_pay_window_falls_back_to_generic_when_fund_has_no_pay_history():
+    """§1:該檔沒有發放紀錄 → 退回通用窗並照舊標「估」,**不可**拿別檔的間隔補位。
+
+    借別檔的準確度填一個看似合理的數字,與 `estimate_error_band` 禁止的全站合併分布
+    是同一種捏造。
+    """
+    from ui.helpers.dividend_calendar_render import _fmt_pay_window
+    _no_pay = [{"date": d.isoformat()} for d in _clean_monthly(14, 12, start=(2025, 8))]
+    cal = build_month_calendar([{"code": "NP", "name": "無發放紀錄", "house": "",
+                                 "dividends": _no_pay}],
+                               2026, 8, ref_year=2026, ref_month=7, ref_day=20)
+    ev = cal["events"][0]
+    assert ev["pay_window_est"] is None, "沒有發放紀錄卻算出逐檔窗 = 憑空捏造"
+    _gen = _dc.pay_window(ev["ex_date"])
+    assert _fmt_pay_window(ev) == f"{_gen[0].month}/{_gen[0].day}~{_gen[1].month}/{_gen[1].day}"
+
+
+def test_pay_note_line_stops_claiming_a_number_that_is_wrong_for_a_third_of_funds():
+    """LINE / Flex 上方那一行:數字要吃**這批基金自己的**間隔,不是寫死的 +5~7 營業日。
+
+    實測:寫死那句對 user 5 檔真實配息表有 31/98 = 32% 的實際到帳日落在窗外
+    (安聯 20/20 全部落在窗外,施羅德 10/18,且兩檔偏的方向相反)。
+    ⚠️ 這一行**仍然是一句話、仍然在清單上方**(user 2026-08-24「到帳時間不逐檔列」),
+    改的是句子裡那兩個數字的來源,不是版面。
+    """
+    funds = [{"code": c.split()[0], "name": c, "house": c.split()[1],
+              "dividends": _pay_divs(raw)} for c, raw in _REAL_FUNDS.items()]
+    cal = build_month_calendar(funds, 2026, 9, ref_year=2026, ref_month=8, ref_day=27)
+    _txt = build_summary_text(cal)
+    assert "+5~7 個營業日" not in _txt, "LINE 仍在講那個對 32% 的列是錯的通用窗"
+    _lo = min((e["pay_window_est"][0] - e["ex_date"]).days for e in cal["events"])
+    _hi = max((e["pay_window_est"][1] - e["ex_date"]).days for e in cal["events"])
+    assert f"+{_lo}~{_hi} 天" in _txt, f"到帳行的數字沒吃實際基金:{_txt.splitlines()[1]}"
+    assert f"+{_lo}~{_hi}天" in _dc.build_summary_flex(cal)["alt_text"]
+    # 一檔都沒有發放紀錄時 → 原字不動(不可因此無聲消失)
+    assert "+5~7 個營業日" in _dc._pay_note(None)
+    assert "到帳" in _dc._pay_note([])
+
+
+def test_pay_gap_band_refuses_to_guess_without_evidence():
+    """邊界:間隔樣本 < 3 → (None, None);空 list 不炸;單一重複值 lo <= hi 仍成立。"""
+    assert _dc._pay_gap_band([]) == (None, None)
+    assert _dc._pay_gap_band([5, 6]) == (None, None)
+    _lo, _hi = _dc._pay_gap_band([7, 7, 7])
+    assert (_lo, _hi) == (7, 7)
+    _lo2, _hi2 = _dc._pay_gap_band([5, 6, 7, 8, 30])
+    assert _lo2 <= _hi2 and _hi2 < 30, f"p90 沒有擋掉離群值:{(_lo2, _hi2)}"
