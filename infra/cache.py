@@ -1,7 +1,13 @@
 """infra/cache.py — TTL 快取裝飾器 + 集中註冊機制（v11.0 B-9a 從 fund_fetcher.py 抽出）
 
 為什麼自己造輪子不用 @st.cache_data：
-  (1) CLAUDE.md §4 全域禁用 st.cache_data（殘留 stale data 隱憂）
+  (1) 本檔屬 L0 Infra（憲法主檔 §8.2 分層表），被全層 import：@st.cache_data 需要
+      streamlit 在場，_ttl_cache 則是純標準庫實作、零 streamlit 依賴，
+      CLI / pytest / 無 streamlit 的環境同樣可用
+      （EX-CACHE-1 條文本身即註明「Fund 端 @_ttl_cache 為 custom 實作不依賴 streamlit」）。
+      ⚠️ 憲法**沒有**禁用 st.cache_data —— EX-CACHE-1 明文**允許** L1 條件 import 使用；
+      本檔不用它是分層／依賴考量，不是禁令。
+      （2026-08-27 更正：原文誤寫「CLAUDE.md §4 全域禁用」，§4 是計算層，無此規定。）
   (2) functools.lru_cache 沒有 TTL，會永久存活 → 盤中 NAV 變動讀不到新值
   (3) 此實作跨 Streamlit rerun 共享（module 不重 import），
       同一 session 多次 rerun 重複呼叫即時 dedupe。
