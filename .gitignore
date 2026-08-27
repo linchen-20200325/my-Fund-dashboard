@@ -16,10 +16,22 @@ temp/
 *.cache
 *.csv
 *.xlsx
-# runtime cache（Streamlit 容器重啟即清空 / 測試可能寫入 → 不入 repo）
-cache/fund_history.json
-cache/nav_history/
-cache/nav/
+# ── cache/ 落地檔:預設全擋,例外才開白名單 ──────────────────────────────
+# 為什麼是「先全擋」而不是逐目錄列舉(這幾行請不要「清理」掉):
+#   舊寫法逐目錄列舉(fund_history.json / nav_history/ / nav/),結果**漏了三個寫使用者
+#   資料的目錄** —— cache/fund_pool/(選股池)、cache/portfolio_perf/(持倉權重與成本
+#   基礎)、cache/autosearch/(自動搜尋工單);另有 cache/fundclear/ 與 cache/fred_release/
+#   兩個上游抓取快取(run-state,非 repo 資產)同樣在外。任何一次 `git add -A` 都會把
+#   使用者資料帶進版控並推上 GitHub。
+#   新的 cache 子目錄只會越加越多,而「新增目錄時記得回頭補這份清單」已經失敗三次
+#   → 改用白名單制,漏加的預設是**安全**(不入 repo)而不是**外洩**。
+# ⚠️ 要新增例外,請往下加 `!` 行並就地寫明理由;不要把 `cache/*` 拿掉。
+cache/*
+# 例外(唯一):Streamlit Cloud 美國 IP 被上游封鎖時,這是唯一還吐得出 NAV 的離線種子檔,
+# v19.364 user 明文決策「保留」→ 刻意 commit 進 repo。其餘 cache/nav/*.json 一律不入。
+!cache/nav/
+cache/nav/*
+!cache/nav/TLZF9.json
 # 批次分析磁碟續存 checkpoint（使用者 run-state，非 repo 資產）
 data_cache/batch/
 # AI 白話總體檢磁碟續存（使用者 run-state，reboot 後回顯用；非 repo 資產）

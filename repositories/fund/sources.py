@@ -1251,6 +1251,43 @@ def _src_cache_files(code: str) -> "pd.Series":
         # 註:cache file 自帶 updated_at,代表 GH Actions 寫入時間,與本次讀取(fetched_at)不同維度
         if updated_at:
             s.attrs["cache_updated_at"] = updated_at
+
+        # ── 2026-08-27 品質閘 ────────────────────────────────────────────
+        # 本路徑原本**只檢查 history 非空**就回傳,而同一條 chain 的其他路徑:
+        #   live(`fetch_nav` 迴圈)  → len >= 10 **且** validate_fund_nav()
+        #   長歷史(`nav_metrics`)   → len >= 50 / 100
+        #   下游(`fetch_fund_by_key`)→ len >= 20 才收
+        # 唯獨這條照單全收。實測 cache/nav/TLZF9.json = 10 點橫跨 14.43 年、最大空窗
+        # 2,029 天、密度 0.69 點/年 —— 拿去算 Sharpe / σ / 最大回撤(年化 ×√252,
+        # 假設每點=1 交易日)出來的是看起來像數字的雜訊。
+        #
+        # 兩段式,刻意不對稱(§1 Fail Loud:讓它誠實,而不是讓它消失):
+        #   Tier A「擋」 = **補回既有標準,不是新標準** —— 筆數不足 / schema 違反。
+        #        下游本來就會丟掉 <10 點的序列,故可用性零損失。
+        #   Tier B「不擋,標註疑義」= 密度 / 空窗 / 新鮮度。序列**照回**,只掛旗標。
+        #        ⚠️ 這裡刻意不擋:本函式是「Streamlit Cloud 美國 IP 被上游封鎖時
+        #        唯一還吐得出 NAV 的來源」,擋掉會把「數字可疑」變成「完全沒資料」,
+        #        那是更糟的失效模式。10 點裡最新那筆仍是真的 NAV。
+        # 門檻全走 SSOT(§3.3),來源與理由見 shared/data_quality.py。
+        from shared.data_quality import assess_nav_cache_quality
+        _q = assess_nav_cache_quality(s, cache_updated_at=updated_at)
+        if not _q["usable"]:
+            # Tier A:與 live 分支同一把尺 → 不合格就不要污染 fallback chain
+            print(f"[cache_files] ⛔ {code}: {_q['reason']} → 視同無快取")
+            return pd.Series(dtype=float)
+        try:
+            # Tier A(二):live 分支跑的 schema,這條路徑原本從未跑過
+            from shared.schemas import validate_fund_nav
+            validate_fund_nav(s)
+        except Exception as _ve:
+            print(f"[cache_files] ⛔ {code}: 快取 schema 驗證失敗 → 視同無快取:{_ve}")
+            return pd.Series(dtype=float)
+        # Tier B:放行,但把疑義掛在 attrs 上讓下游看得見(§2.2 provenance 同機制)
+        s.attrs["nav_quality"] = _q
+        s.attrs["nav_quality_code"] = _q["code"]
+        s.attrs["supports_annualized"] = _q["supports_annualized"]
+        if _q["reason"]:
+            print(f"[cache_files] ⚠️ {code}: {_q['reason']}")
         return s
     except Exception as e:
         print(f"[cache_files] {code} 讀取失敗: {e}")
