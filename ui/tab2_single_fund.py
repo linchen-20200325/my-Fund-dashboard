@@ -780,7 +780,13 @@ def render_single_fund_tab() -> None:
                                         annotation_text=sl, annotation_font_color=sc,
                                         annotation_position="top right")
                 # 年高/年低參考線（區間脈絡；非 band 錨點）— A+B 的 A 面
-                for _rv, _rl in [(m.get("high_1y"), "年高"), (m.get("low_1y"), "年低")]:
+                # §1 疑義標註:序列不足 252 交易日時 `_hl` 會退回全序列,標「年高」是說謊。
+                # 標籤改讀 `risk_metric_meta.hl_windows`(SSOT,UI 不自編字串)。
+                _hlw = (((m or {}).get("risk_metric_meta") or {})
+                        .get("hl_windows") or {}).get("1y") or {}
+                _hi_lbl = _hlw.get("honest_label") or "年"
+                for _rv, _rl in [(m.get("high_1y"), f"{_hi_lbl}高"),
+                                 (m.get("low_1y"), f"{_hi_lbl}低")]:
                     if _rv:
                         fig_n.add_hline(y=float(_rv), line_color=TRAFFIC_NEUTRAL,
                                         line_dash="longdash", line_width=1, opacity=0.55,

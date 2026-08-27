@@ -22,6 +22,7 @@ import pandas as pd
 import numpy as np
 
 from shared.colors import GRAY_55, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, TRAFFIC_NEUTRAL, WARN_AMBER
+from shared.data_quality import assess_window_coverage  # §1 疑義標註 SSOT
 from shared.signal_thresholds import (  # v19.74 W2 SSOT
     TRADING_DAYS_PER_YEAR,
     NEAR_DIVIDEND_WARNING_PCT,
@@ -453,13 +454,34 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
         std_1y = std_dict.get("1年", std_2y)
 
     # ── 高低點（買點基準用2年）──────────────────────
-    def _hl(n):
-        sub = s.tail(n) if len(s) >= n else s
+    # v19.53x §1「有疑義的歷史資料要加註警示」:`_hl` 在 len(s) < n 時**靜默退回全序列**
+    # 卻仍掛「年高/年低」標籤 —— 停售 / 新發行 / cache/nav 稀疏快取(實例:10 筆橫跨
+    # 14.4 年)會讓畫面上那條「年高」線其實是十幾年前的高點。**值不動**(買賣點與門檻
+    # 零變更),另把涵蓋情形記進 `risk_metric_meta["hl_windows"]`,由 UI 改用誠實標籤。
+    _hl_windows: dict = {}
+
+    def _hl(n, _meta_key: str = "", _label: str = ""):
+        _short = len(s) < n
+        sub = s.tail(n) if not _short else s
+        if _meta_key:
+            _span = None
+            if len(sub) >= 2:
+                try:
+                    _span = float((sub.index[-1] - sub.index[0]).days)
+                except (TypeError, AttributeError):
+                    _span = None
+            _hl_windows[_meta_key] = assess_window_coverage(
+                n_points=len(s), requested_days=n,
+                span_days=_span, window_label=_label,
+            )
+            if _short:
+                print(f"[calc_metrics] ⚠️ {_meta_key} "
+                      f"{_hl_windows[_meta_key]['reason']}")
         return (round(float(sub.max()),4), str(sub.idxmax())[:10],
                 round(float(sub.min()),4), str(sub.idxmin())[:10])
-    h1y,hd1,l1y,ld1 = _hl(TRADING_DAYS_PER_YEAR)
-    h2y,hd2,l2y,ld2 = _hl(2 * TRADING_DAYS_PER_YEAR)   # ← 2年高低點
-    h3y,hd3,l3y,ld3 = _hl(3 * TRADING_DAYS_PER_YEAR)
+    h1y,hd1,l1y,ld1 = _hl(TRADING_DAYS_PER_YEAR, "1y", "年")
+    h2y,hd2,l2y,ld2 = _hl(2 * TRADING_DAYS_PER_YEAR, "2y", "2年")   # ← 2年高低點
+    h3y,hd3,l3y,ld3 = _hl(3 * TRADING_DAYS_PER_YEAR, "3y", "3年")
     hall = round(float(s.max()),4); hall_d = str(s.idxmax())[:10]
     lall = round(float(s.min()),4); lall_d = str(s.idxmin())[:10]
 
@@ -958,6 +980,8 @@ def calc_metrics(s: pd.Series, divs: list, risk_override: dict = None) -> dict:
             "reason": _calmar_reason,
         },
         "mixed_period_warning": _mixed_period_warning,
+        # §1 疑義標註:年 / 2年 / 3年 高低點視窗的實際涵蓋(值未被更動,只揭露)
+        "hl_windows": _hl_windows,
     }
     return dict(
         nav=now, std_multi=std_dict, std_1y=std_1y, std_2y=std_2y,
