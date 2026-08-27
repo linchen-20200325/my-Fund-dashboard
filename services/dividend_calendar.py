@@ -1,4 +1,4 @@
-"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.537)。L2 純函式,零 IO。
+"""services/dividend_calendar.py — 基金除息基準日/配息行事曆推估(v19.538)。L2 純函式,零 IO。
 
 用途:吃每檔基金的**配息歷史**,推估「本月**除息基準日** + 配息入帳日」,產生月曆結構供 L3 渲染。
 資料由 L1 抓好傳入(reuse `repositories.fund` 的 dividends);本層不碰網路、不 import streamlit。
@@ -70,6 +70,21 @@ v19.535 顯示層收尾(總管 2026-08-26 實看 v534 三張圖後)—— **引�
           講出對其他成員不成立的話(§1)。單檔成組維持逐列寫法,不為 1 檔開組標題。
   待辦 3:`empty_month_note()` —— 空月文案的「本月」→ 實際目標月(與追加 7 同病),
           HTML / LINE 文字 / Flex 三處收成一份 SSOT。
+
+v19.538 §16.2 事實優先(**只換「顯示哪個值」,推估引擎一行沒動**):
+  `build_month_calendar` 原本**完全不看**目標月有沒有實際紀錄,一律走 `predict_ex_for_month`;
+  而「當月」不算 §13.7.3 的 backfill(那要 `(year,month) < last_ex`)→ 信心一點都不壓。
+  實測 5 檔真實配息表 × 98 個「該月真的有配」的情境(模擬每月最後一天打開 App):
+  **10 個情境畫面與事實不一致,最大差 14 天**(施羅德 2025-12 畫面 12/31 事實 12/17、
+  2025-11 差 7、摩根 2026-08 差 4)—— 那些真實日期**當時就在同一份 payload 裡**。
+  做法:`actual_ex_for_month()` + `build_month_calendar` 在推估**之前**先查事實
+  (擺在後面的話,節奏推不出來的基金永遠走不到 —— 而那正是「把已知的事實說成不知道」)。
+  event 增 `is_actual` 旗標;**L3 不讀它**(見下)。
+  ⚠️ **已被記錄下來的接縫,不是漏做**(總管 2026-08-27 指示):畫面上區分「實際 vs 推估」
+  屬**新增視覺元件**,依客戶「UI 草稿先行」原則須先送線框拍板 → 本輪不做。
+  因此頁面那句全域「推估」徽章與欄頭「預估基準日」,對已是事實的格子而言仍是錯的;
+  本輪**刻意不改那些文案去圓它**(那同樣是設計變更)。守衛見
+  `test_is_actual_flag_is_present_on_both_branches_and_unread_by_render`。
 
 v19.537 §16.1 逐檔到帳窗(**修的是「哪天該去看帳戶」這一欄,引擎的除息日推估一行沒動**):
   現況:所有基金一律套「基準日 +5~7 個**營業日**」通用窗(user 2026-08-24 憑手上幾檔給的
@@ -1184,6 +1199,32 @@ def _unpredictable_reason(schedule: dict, year: int, month: int,
     return REASON_ANCHOR_WEAK, _reason_text(REASON_ANCHOR_WEAK, window=min(_n, _RECENT_N))
 
 
+def actual_ex_for_month(dividends: list, year: int, month: int) -> "dict | None":
+    """配息史 + 目標年月 → 該月**已經發生的實際紀錄** `{ex, pay}`;該月沒有紀錄 → None。
+
+    §16.2(v19.537):**手上有事實就不准顯示猜測**(§1 的直接推論)。
+    `build_month_calendar` 原本**完全不看**目標月有沒有實際紀錄,一律走 `predict_ex_for_month`。
+    回填**過去**月份會壓信心(§13.7.3),但**當月不算 backfill**(`(year, month) < last_ex` 才是),
+    所以「使用者在月底打開 App、該月真實基準日早就抓到手了」這個情境**完全不壓、照給推估值**。
+
+    實測(5 檔真實配息表,模擬「每月最後一天打開 App」,54 個情境):
+        **5 次畫面與事實不一致,最大差 7 天** ——
+        摩根 2025-10 畫面 10/07 事實 10/09(差 2)、摩根 2026-08 畫面 08/07 事實 08/11(差 4)、
+        聯博 2025-11 畫面 11/27 事實 11/26(差 1)、安聯 2026-05 畫面 05/14 事實 05/13(差 1)、
+        施羅德 2025-11 畫面 11/26 事實 11/19(**差 7**)。
+    這幾筆的真實日期**當時就在同一份 payload 裡**,只是沒人去看。
+
+    ⚠️ **同一個月有兩筆紀錄時取最早的那筆**(月曆一檔基金一個月只放一個事件)。
+    這是**已知限制**,不是判斷:一月兩配的基金在本結構下第二筆看不到
+    (`infer_schedule` 也會因 §13.5 網格異常把它判成 irregular)。
+    """
+    _recs = _parse_records(dividends)
+    for _r in _recs:                      # `_parse_records` 已排序,第一個命中即最早
+        if (_r["ex"].year, _r["ex"].month) == (year, month):
+            return {"ex": _r["ex"], "pay": _r["pay"]}
+    return None
+
+
 def build_month_calendar(funds: list, year: int, month: int,
                          ref_year: "int | None" = None,
                          ref_month: "int | None" = None,
@@ -1201,7 +1242,10 @@ def build_month_calendar(funds: list, year: int, month: int,
         {year, month, events[], by_day{day:[events]}, excluded[], unpredictable[], counts{},
          holiday_calendar}
         event = {code, name, house, ex_date, pay_date_est, confidence, last_amount, last_yield, n,
-                 **error_band**, **pay_window_est**,
+                 **error_band**, **pay_window_est**, **is_actual**,
+                 is_actual  = §16.2 這一格是**已發生的實際紀錄**(True)還是推估(False)。
+                              ⚠️ L3 目前**不讀它** —— 畫面上區分實際/推估屬新增視覺元件,
+                              待客戶線框拍板(接縫說明見本函式內該旗標的註解)
                  pay_window_est = §16.1 該檔自己的到帳窗 (最早, 最晚) 或 None(無發放紀錄
                                   → L3 退回通用窗)
                  **anchor_type, anchor_score, roll_convention, holiday_calendar, horizon_months**}
@@ -1236,6 +1280,45 @@ def build_month_calendar(funds: list, year: int, month: int,
             excluded.append({"code": code, "name": name,
                              "reason": "無配息紀錄（累積型 / 查無配息）"})
             continue
+        # ── §16.2 事實優先(v19.537):目標月已有實際紀錄 → 用它,不跑推估 ──────────
+        # ⚠️ 必須擺在 `predict_ex_for_month` **之前**:節奏推不出來的基金(anchor_weak /
+        # irregular)本來會整檔掉進 `unpredictable`,但**我們其實知道那個月是哪天**。
+        # 先推估再比對的話,那些基金永遠走不到這裡。
+        _act = actual_ex_for_month((f or {}).get("dividends"), year, month)
+        if _act is not None:
+            _gap = sch.get("pay_gap_days")
+            events.append({"code": code, "name": name, "house": house,
+                           "ex_date": _act["ex"],
+                           # 發放日同理:知道就用事實,不知道才用該檔的間隔中位數推
+                           "pay_date_est": _act["pay"] or (
+                               _act["ex"] + _dt.timedelta(days=_gap)
+                               if isinstance(_gap, int) else None),
+                           "pay_window_est": _pay_window_from_schedule(_act["ex"], sch),
+                           "confidence": "high", "last_amount": sch["last_amount"],
+                           "last_yield": sch["last_yield"], "n": sch["n"],
+                           # 實際紀錄的誤差**依定義為 0**(這是事實,不是「回測九成落在此範圍」)。
+                           # ⚠️ 見下方 `is_actual` 的接縫說明 —— 畫面上這一格會顯示「±0 天」,
+                           # 與「推估得非常準」長得一模一樣,目前**分不出來**。
+                           "error_band": 0,
+                           # ⚠️ **接縫,已知缺口,不是漏做**(v19.537,總管 2026-08-27 指示):
+                           # 本旗標標示「這一格是**已發生的事實**,不是推估」。**L3 目前不讀它** ——
+                           # 要在畫面上區分「實際 vs 推估」(徽章 / 字重 / 標記)屬**新增視覺元件**,
+                           # 依客戶的「UI 草稿先行」原則必須先送線框草稿拍板,故本輪**不做**。
+                           # 由此產生一個**已被記錄下來的**不一致:頁面上那句全域的「推估」徽章、
+                           # 以及明細表欄頭「預估基準日」,對這些**已經是事實**的格子而言是錯的。
+                           # 本輪刻意**不改那些文案去圓它**(那同樣是文案/視覺設計變更)。
+                           # 客戶拍板線框後,接手者請從這個旗標渲染。
+                           "is_actual": True,
+                           "anchor_type": (sch.get("anchor") or {}).get("type"),
+                           "anchor_score": (sch.get("anchor") or {}).get("score"),
+                           "roll_convention": ((sch.get("anchor") or {}).get("roll_convention")
+                                               or ROLL_MODIFIED_FOLLOWING),
+                           "holiday_calendar": _holiday_calendar_state(),
+                           "horizon_months": ((year - (ref_year if ref_year is not None else year))
+                                              * 12
+                                              + (month - (ref_month if ref_month is not None
+                                                          else month)))})
+            continue
         pred = predict_ex_for_month(sch, year, month, ref_year=ref_year,
                                     ref_month=ref_month, ref_day=ref_day)
         if pred is None:
@@ -1261,6 +1344,9 @@ def build_month_calendar(funds: list, year: int, month: int,
                        # 只對推得出日期的基金算(推不出的那些畫面上顯示 reason,不顯示 ±N),
                        # 省掉 O(k) 次重擬合。`confidence` 仍原封不動帶著 —— 它是閘門依據。
                        "error_band": estimate_error_band((f or {}).get("dividends")),
+                       # §16.2:這一格是**推估**。實際紀錄那一支走上面的分支(is_actual=True)。
+                       # 兩支都帶這個 key,L3 才不必用 `.get()` 猜(§12 相容:只增不減)。
+                       "is_actual": False,
                        # §8 provenance 五欄:v19.532 前在這層被丟光(見 docstring)
                        **{_k: pred.get(_k) for _k in _PROVENANCE_KEYS}})
 

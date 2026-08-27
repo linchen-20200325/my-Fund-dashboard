@@ -2025,3 +2025,107 @@ def test_pay_gap_band_refuses_to_guess_without_evidence():
     assert (_lo, _hi) == (7, 7)
     _lo2, _hi2 = _dc._pay_gap_band([5, 6, 7, 8, 30])
     assert _lo2 <= _hi2 and _hi2 < 30, f"p90 沒有擋掉離群值:{(_lo2, _hi2)}"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §16.2 事實優先(v19.537)—— 目標月已有實際紀錄時,不准再顯示推估值
+# ══════════════════════════════════════════════════════════════════════
+def test_actual_record_wins_over_prediction_on_real_five_funds():
+    """模擬「使用者在每月最後一天打開 App」——此時該月的真實基準日**早就在同一份 payload 裡**。
+
+    修復前 `build_month_calendar` 完全不看目標月有沒有實際紀錄,一律走 `predict_ex_for_month`;
+    而「當月」不算 §13.7.3 的 backfill(那要 `(year,month) < last_ex`)→ **信心一點都不壓**。
+
+    實測 5 檔真實配息表 × 全部 98 個「該檔那個月真的有配」的情境:
+        **修復前 10 個情境的畫面與事實不一致,最大差 14 天**
+        (施羅德 2025-12 畫面 12/31 事實 12/17;2025-11 差 7;摩根 2026-08 差 4)
+        **修復後 0 個。**
+    §1:手上有事實卻顯示猜測,是這份憲法最直接的違反。
+    """
+    _before = _after = _total = 0
+    for code, raw in _REAL_FUNDS.items():
+        divs = [{"date": _iso(a), "pay_date": _iso(c)} for a, _b, c in raw]
+        for a, _b, _c in raw:
+            real = _dt.date.fromisoformat(_iso(a))
+            _last = _calmod.monthrange(real.year, real.month)[1]
+            cal = build_month_calendar(
+                [{"code": code, "name": code, "house": code.split()[1], "dividends": divs}],
+                real.year, real.month, ref_year=real.year, ref_month=real.month, ref_day=_last)
+            assert cal["events"], f"{code} {real:%Y-%m} 有實際紀錄卻沒進 events"
+            _total += 1
+            _pred = predict_ex_for_month(infer_schedule(divs), real.year, real.month,
+                                         ref_year=real.year, ref_month=real.month,
+                                         ref_day=_last)
+            if _pred and _pred["ex_date"] != real:
+                _before += 1
+            if cal["events"][0]["ex_date"] != real:
+                _after += 1
+    assert _total >= 90, f"情境數異常,這條測不到東西:{_total}"
+    assert _before >= 8, (
+        f"fixture 變了:修復前應有約 10 個情境畫面與事實不符,現在只有 {_before} —— "
+        "這條測試的前提消失了,請先查證再改斷言")
+    assert _after == 0, f"仍有 {_after}/{_total} 個情境顯示推估值而不是手上的事實(§1)"
+
+
+def test_actual_record_wins_even_when_the_engine_cannot_predict_that_month():
+    """最重要的一種:節奏推不出來的基金,**我們其實知道那個月是哪天**。
+
+    修復前這種基金整檔掉進 `unpredictable`(畫面顯示「節奏不規則,推不出」),
+    但目標月的實際紀錄就躺在同一份 payload 裡 —— 那是**把已知的事實說成不知道**。
+    所以事實優先必須擺在 `predict_ex_for_month` **之前**,不是「先推估再比對」。
+    """
+    _irr = [_dt.date(2025, 1, 10), _dt.date(2025, 2, 20), _dt.date(2025, 6, 5),
+            _dt.date(2025, 8, 26)]
+    funds = [{"code": "IRR", "name": "節奏不規則", "house": "施羅德",
+              "dividends": _err_divs(_irr)}]
+    # 對照組:沒有實際紀錄的月份 → 照舊誠實落 unpredictable
+    _no = build_month_calendar(funds, 2025, 9, ref_year=2025, ref_month=9, ref_day=30)
+    assert _no["counts"]["events"] == 0 and _no["counts"]["unpredictable"] == 1
+    # 有實際紀錄的月份 → 顯示事實
+    _yes = build_month_calendar(funds, 2025, 8, ref_year=2025, ref_month=8, ref_day=31)
+    assert _yes["counts"]["unpredictable"] == 0, "有事實卻仍被歸進『推不出』"
+    ev = _yes["events"][0]
+    assert ev["ex_date"] == _dt.date(2025, 8, 26)
+    assert ev["is_actual"] is True
+    assert ev["error_band"] == 0, "實際紀錄的誤差依定義為 0"
+
+
+def test_actual_record_uses_the_real_pay_date_when_it_has_one():
+    """發放日同理:知道就用事實;該筆沒有發放日 → 才退回該檔的間隔中位數推。"""
+    _divs = [{"date": "2026-03-10", "pay_date": "2026-03-19"},
+             {"date": "2026-04-10", "pay_date": "2026-04-20"},
+             {"date": "2026-05-11", "pay_date": "2026-05-20"},
+             {"date": "2026-06-10"}]                       # 最後一筆沒有發放日
+    funds = [{"code": "P", "name": "P", "house": "", "dividends": _divs}]
+    _known = build_month_calendar(funds, 2026, 4, ref_year=2026, ref_month=6, ref_day=30)
+    assert _known["events"][0]["pay_date_est"] == _dt.date(2026, 4, 20)
+    _unknown = build_month_calendar(funds, 2026, 6, ref_year=2026, ref_month=6, ref_day=30)
+    _ev = _unknown["events"][0]
+    assert _ev["ex_date"] == _dt.date(2026, 6, 10) and _ev["is_actual"] is True
+    _gap = infer_schedule(_divs)["pay_gap_days"]
+    assert _ev["pay_date_est"] == _dt.date(2026, 6, 10) + _dt.timedelta(days=_gap)
+
+
+def test_is_actual_flag_is_present_on_both_branches_and_unread_by_render():
+    """§12 相容 + **接縫的守衛**(v19.537,總管 2026-08-27 指示)。
+
+    `is_actual` 兩支都要帶(L3 才不必用 `.get()` 猜)。
+
+    ⚠️ **本測試同時鎖住一個「刻意不做」的邊界**:畫面上區分「實際 vs 推估」
+    (徽章 / 字重 / 標記)屬**新增視覺元件**,依客戶的「UI 草稿先行」原則必須先送線框拍板,
+    **本輪不做**。若有人在草稿拍板前逕自讓 render 讀這個旗標去改畫面,這條會轉紅 ——
+    它守的是**流程**,不是行為。拍板後請連同本斷言一起更新。
+    """
+    import ui.helpers.dividend_calendar_render as _r
+    _divs = [{"date": d.isoformat()} for d in _clean_monthly(14, 12, start=(2025, 8))]
+    funds = [{"code": "M", "name": "M", "house": "", "dividends": _divs}]
+    _pred = build_month_calendar(funds, 2026, 9, ref_year=2026, ref_month=8, ref_day=27)
+    assert _pred["events"][0]["is_actual"] is False
+    _act_month = _dt.date.fromisoformat(_divs[-1]["date"])
+    _act = build_month_calendar(funds, _act_month.year, _act_month.month,
+                                ref_year=_act_month.year, ref_month=_act_month.month,
+                                ref_day=28)
+    assert _act["events"][0]["is_actual"] is True
+    assert "is_actual" not in _r.__loader__.get_source(_r.__name__), (
+        "render 端開始讀 is_actual 了 —— 畫面上區分實際/推估屬新增視覺元件,"
+        "需先送 UI 線框草稿給客戶拍板(A-2),本輪刻意不做")
