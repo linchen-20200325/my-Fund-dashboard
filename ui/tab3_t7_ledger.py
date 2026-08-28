@@ -19,6 +19,8 @@ import os
 import pandas as pd
 import streamlit as st
 
+from ui.helpers.render_state import not_ready
+
 from shared.colors import GH_BG_PRIMARY, GH_BORDER, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, TRAFFIC_NEUTRAL
 
 from infra.oauth import (
@@ -3097,9 +3099,11 @@ def render_t7_section() -> None:
                 unsafe_allow_html=True,
             )
             if not GEMINI_KEY:
-                st.info("ℹ️ 需設置 Gemini API key 才能使用此功能")
+                not_ready("未設定 Gemini API Key，無法呼叫 AI",
+                          where="Streamlit Cloud → Settings → Secrets 的 `GEMINI_API_KEY`")
             elif not _pf_t7:
-                st.info("ℹ️ 請先載入基金（上方「📡 載入所有未載入基金」）")
+                not_ready("尚未載入任何基金",
+                          where="本頁上方「📡 載入所有未載入基金」")
             else:
                 _mk_ai_phase = (st.session_state.get("phase_info_global")
                                 or st.session_state.get("phase_info") or {})

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import BG_DARK_RED_1, GRAY_CC, MATERIAL_RED, TRAFFIC_NEUTRAL
 
 from ui.helpers.fund_grp_health._utils import _safe_num
@@ -63,7 +65,7 @@ def _render_hwm_sigma_table(funds: list) -> None:
         import pandas as pd
         st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
     except Exception as e:  # noqa: BLE001
-        st.caption(f"⬜ HWM σ 表渲染失敗:{type(e).__name__}: {e}")
+        system_error("HWM σ 表渲染失敗", e)
 
 
 # v19.181 Bug 3 fix: MoneyDJ wb07 risk_metrics 是 **nested** 結構
@@ -144,7 +146,7 @@ def _render_risk_compare_table(funds: list) -> None:
             st.caption(f"⬜ {len(_rows) - _has_sharpe} / {len(_rows)} 檔基金 MoneyDJ 風險表"
                        f"資料不全(顯示 '—',不偽造)")
     except Exception as e:  # noqa: BLE001
-        st.caption(f"⬜ 風險表渲染失敗:{type(e).__name__}: {e}")
+        system_error("風險對比表渲染失敗", e)
 
 
 def _render_oversold_badges(funds: list) -> None:
@@ -159,7 +161,7 @@ def _render_oversold_badges(funds: list) -> None:
     try:
         from services.precision_service import calc_hwm_sigma_levels
     except Exception as e:
-        st.caption(f"⬜ σ 模組載入失敗:{type(e).__name__}: {e}")
+        system_error("σ 模組載入失敗", e)
         return
 
     _oversold = []

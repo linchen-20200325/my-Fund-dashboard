@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import BG_DARK_RED_1, GH_FG_PRIMARY, MATERIAL_RED, MD_BLUE_500, STREAMLIT_BG, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO, SHADOW_FUND_THRESHOLD_RATIO
 
@@ -47,7 +49,15 @@ def _render_one_matrix(*, title: str, subtitle: str, result: "dict | None",
         )
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
-        st.caption(f"⬜ 熱力圖渲染失敗:{type(e).__name__}: {e}")
+        # 🔴 **不是** degraded(2026-08-28 第二輪稽核 A4 更正)。
+        # 我上一輪把它降成 🟠,理由寫「數字全在且全對」—— 那句話不成立:
+        # 兩兩相關係數**只存在於這張圖的 `texttemplate` 裡**,圖沒畫出來,
+        # 低於影子門檻的那些係數就整組消失(下方只列 ≥ 門檻的配對)。
+        # 依 `render_state.system_error` 自己寫的通過條件(每一個數字都還在且還是對的),
+        # 這裡不合格 → 維持系統紅燈。
+        system_error("相關性熱力圖渲染失敗", e,
+                     hint="下方「影子基金 N 對」仍會列出超過門檻的配對,"
+                          "但低於門檻的兩兩相關係數只在這張圖上,現在看不到了。")
 
     if _shadow:
         st.markdown(f"**⚠️ 偵測到 {len(_shadow)} 對影子基金({label} ≥ {threshold})**")
@@ -94,7 +104,7 @@ def _render_correlation_matrix(funds: list) -> None:
             calc_holdings_overlap,
         )
     except Exception as e:
-        st.caption(f"⬜ 相關性模組載入失敗:{type(e).__name__}: {e}")
+        system_error("相關性模組載入失敗", e)
         return
 
     # ── 面板 1:持股 Jaccard + 產業 Cosine ──

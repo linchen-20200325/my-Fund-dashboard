@@ -24,6 +24,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.render_state import not_ready
+
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import BG_DARK_GREEN_3, BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, BG_DARK_RED_3, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL, WARN_AMBER, WHITE
 
@@ -1053,10 +1055,8 @@ def render_portfolio_tab() -> None:
         else:
             # v18.32: In-app OAuth Client 設定 wizard
             #         不必碰 secrets.toml / 不必重新部署，session-only 即時生效
-            st.warning(
-                "尚未設定 OAuth Client。請依下方步驟在 GCP console 建一個，"
-                "再回到這裡貼三個值即可登入。"
-            )
+            not_ready("尚未設定 OAuth Client",
+                      where="下方步驟：到 GCP console 建一個，再回這裡貼三個值即可登入")
             st.markdown("---")
             st.markdown("##### 🧙 OAuth Client 設定引導（5 分鐘完成）")
             st.markdown(

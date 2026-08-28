@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, STREAMLIT_BG, WARN_AMBER
 
 from ui.helpers.fund_grp_health._utils import _safe_num
@@ -29,12 +31,14 @@ def _render_mk_signal_table(funds: list) -> None:
         st.caption("⬜ 需先到 🌐 市場定調 Tab 點選「載入總經資料」,才能算景氣位階 + 操作訊號")
         return
 
-    try:
-        pass
-    except Exception as e:
-        st.caption(f"⬜ 訊號模組載入失敗:{type(e).__name__}: {e}")
-        return
-
+    # 2026-08-28 稽核 B1:此處原有一個 `try: pass / except ... return` 的**死殼** ——
+    # `pass` 永遠不會拋,那個 handler 在 production 路徑恆不觸發。
+    # 來歷已查證:commit 9564347(ruff F401 自動清 unused import)把
+    # `from ui.helpers.macro_helpers import mk_fund_signal` 移除後,ruff 以 `pass`
+    # 補上空的 try body,留下這個空殼。**不補回 import** —— 該 import 真正的、
+    # 仍在使用的位置在本檔 `mk_signal_by_code`,那裡已有完整的失敗處理
+    # (stderr + `mk_fund_signal = None` + `_import_err` 上報),本函式不需要它。
+    # 這與憲法 §-2 規則 6 點名的 `db4c139` 事故同型:宣稱有防護、實際恆不觸發。
     _phase = _phase_info.get("phase") or "擴張"
     _score = _phase_info.get("score") or 5.0
     st.caption(
@@ -59,7 +63,7 @@ def _render_mk_signal_table(funds: list) -> None:
                 "(可能 metrics 缺 buy/sell levels)"
             )
     except Exception as e:  # noqa: BLE001
-        st.caption(f"⬜ 表渲染失敗:{type(e).__name__}: {e}")
+        system_error("買賣訊號表渲染失敗", e)
 
 
 def _first_num(*vals):
@@ -166,7 +170,7 @@ def _render_bollinger_expanders(funds: list) -> None:
         import plotly.graph_objects as go
         import pandas as pd
     except Exception as e:
-        st.caption(f"⬜ Plotly / pandas 載入失敗:{type(e).__name__}: {e}")
+        system_error("Bollinger 詳圖 Plotly / pandas 載入失敗", e)
         return
 
     for _f in funds:
@@ -287,7 +291,14 @@ def _render_bollinger_expanders(funds: list) -> None:
                 )
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
-                st.caption(f"⬜ {_code} chart 渲染失敗:{type(e).__name__}: {e}")
+                # 🟠 判準只有一條(`render_state.system_error` 的 `degraded` 條件):
+                # 這個 try 只在畫圖,買賣點數值本身在健診大表裡照常顯示 → 數字全在且全對。
+                # ⚠️ 2026-08-28 第二輪稽核 A5:此處原本還寫了第二個理由
+                # 「且本處在逐檔迴圈內,用 🔴 會噴滿整頁紅框」—— **已刪除**。
+                # 那個理由可以被拿去合理化降級任何迴圈內的失敗(含必須維持 🔴 的池補抓),
+                # 而通過條件明寫「只有一個,不得放寬」。規則不能在寫下的第一天就被自己放寬。
+                system_error(f"{_code} Bollinger 圖渲染失敗", e, degraded=True,
+                             hint="這一檔的買賣點數值在健診大表裡仍然看得到,少的只有這張圖。")
 
 
 # ════════════════════════════════════════════════════════════════

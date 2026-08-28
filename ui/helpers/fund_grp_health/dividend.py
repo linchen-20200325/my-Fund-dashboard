@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 
@@ -14,7 +16,7 @@ def _render_dividend_matrix(funds: list) -> None:
         import plotly.graph_objects as go
         from ui.helpers.macro_helpers import compute_1y_total_return
     except ImportError as e:
-        st.caption(f"⬜ 真實收益矩陣未渲染：{e}")
+        system_error("真實收益矩陣模組載入失敗", e)
         return
 
     st.divider()

@@ -17,6 +17,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.render_state import not_ready
+
 from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
 # §3.3 反捏造:接近警戒門檻走 shared SSOT,不在本檔另寫一份同義 literal
@@ -2637,6 +2639,13 @@ def render_single_fund_tab() -> None:
                         headlines=_hl,
                         gemini_api_key=GEMINI_KEY,
                     )
+                else:
+                    # 2026-08-28 客戶拍板:金鑰沒設定原本是**完全不顯示** —— 五頁裡
+                    # 最安靜的一種畫法,使用者連「這裡本來有 AI 解盤」都不知道。
+                    # 統一為 ⬜ 灰色說明(線框 §03「同一個條件,全站五種畫法」)。
+                    not_ready("未設定 Gemini API Key，AI 深度解盤無法生成",
+                              where="Streamlit Cloud → Settings → Secrets 的 "
+                                    "`GEMINI_API_KEY`")
 
 
 # ══════════════════════════════════════════════════════

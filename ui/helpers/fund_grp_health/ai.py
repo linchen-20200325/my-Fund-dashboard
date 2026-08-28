@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import not_ready, system_error
+from ui.helpers.story_nav import tab_label
+
 from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GRAY_66, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_ORANGE_300
 
 from ui.helpers.fund_grp_health._utils import _safe_num
@@ -225,7 +228,7 @@ def _render_ai_cross_fund_evaluation(funds: list) -> None:
     try:
         _snap, _n = _build_cross_fund_snapshot(funds)
     except Exception as e:
-        st.caption(f"⬜ Snapshot 組裝失敗:{type(e).__name__}: {e}")
+        system_error("AI 跨檔評論 snapshot 組裝失敗", e)
         return
 
     # 呼叫共用 AI widget
@@ -247,7 +250,7 @@ def _render_ai_cross_fund_evaluation(funds: list) -> None:
             gemini_api_key=_key,
         )
     except Exception as e:
-        st.caption(f"⬜ AI widget 渲染失敗:{type(e).__name__}: {e}")
+        system_error("AI widget 渲染失敗", e)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -276,7 +279,7 @@ def _render_per_fund_news_expanders(funds: list) -> None:
         # EX-PASSTHRU-1(v19.377):兄弟 fetch_market_news 已登錄,同屬 self-contained news fetcher(見 CLAUDE.md §8.2.A)
         from repositories.news_repository import fetch_stock_news
     except Exception as e:
-        st.caption(f"⬜ 新聞模組載入失敗:{type(e).__name__}: {e}")
+        system_error("個股新聞模組載入失敗", e)
         return
 
     try:
@@ -322,7 +325,17 @@ def _render_per_fund_news_expanders(funds: list) -> None:
                 _hold_list.append((_zh or _nm[:20], _zh or _nm))
 
             if not _hold_list:
-                st.caption("⬜ 持股名稱解析失敗")
+                # 2026-08-28 稽核 B6:這裡沒有 exception —— 是前十大持股名稱全空
+                # (拿不到成分股名),屬「資料不足」不是「失敗」。灰色是對的,
+                # 但文案寫「失敗」配灰色正是本批要消滅的模糊,改為據實描述。
+                # ⚠️ 2026-08-28 第三輪稽核 P1:此處原本手抄成「🔬 個基深掘」——
+                # 分頁標籤 SSOT(`ui/helpers/story_nav._TAB_LABELS`)是「🔍 個基深掘」,
+                # 而 **🔬 在本 repo 另有歸屬**(`tab5_data_guard` 的「🔬 資料診斷」)。
+                # 使用者照圖示去找會落到另一個分頁、看不到持股資料 ——
+                # 與本批 M2 修掉的「指向一顆不存在的按鈕」**完全同型,一輪之後同型再犯**。
+                # 改吃 SSOT:`story_nav.py` 自己寫著手抄一份就是「第二份標籤」。
+                not_ready("這檔基金的持股名稱資料不足，無法查個股新聞",
+                          where=f"{tab_label('fund')} Tab 查看該基金的前十大持股原始資料")
                 continue
 
             _ss_key = f"_tab5grp_stknews_{_code}"
@@ -407,7 +420,7 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
             three_ratio_row_html as _tr_html,
         )
     except Exception as e:
-        st.caption(f"⬜ 三率模組載入失敗:{type(e).__name__}: {e}")
+        system_error("三率穿透模組載入失敗", e)
         return
 
     _pse = _PSE()
@@ -523,13 +536,13 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
                         unsafe_allow_html=True,
                     )
                 except Exception as _e_v:
-                    st.caption(f"⬜ 彙總失敗:{type(_e_v).__name__}: {_e_v}")
+                    system_error("三率彙總失敗", _e_v)
                 # 逐持倉明細
                 try:
                     _html = "".join(_tr_html(r) for r in _cached)
                     st.markdown(_html, unsafe_allow_html=True)
                 except Exception as _e_h:
-                    st.caption(f"⬜ 明細渲染失敗:{type(_e_h).__name__}: {_e_h}")
+                    system_error("三率明細渲染失敗", _e_h)
                 # 未解析持股
                 _resolved = {r.get("stock") for r in _cached}
                 _failed = [_t.get("name", "") for _t in _tops

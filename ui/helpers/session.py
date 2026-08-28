@@ -179,8 +179,40 @@ def friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = "
         st.warning(body)
     # stderr 鏡射(Streamlit Cloud log 可追)
     print(f"[friendly_error] {title} | {type(exc).__name__}: {exc}", file=_sys_mod.stderr)
-    with st.expander("🔧 技術細節（給工程師）", expanded=False):
-        st.code(f"{type(exc).__name__}: {exc}\n\n" + _tb_mod.format_exc(), language="python")
+    # 2026-08-28 稽核 B4:`format_exc()` 在**沒有 active exception** 時回傳
+    # `"NoneType: None"` —— 而本函式允許 caller 傳一個**自己建構的** exception
+    # 來報告「狀態不對」(例:fetcher 回傳 error token,沒有真的拋)。照舊直接串上去,
+    # 使用者展開「🔧 技術細節」會看到一段**假 traceback**,那本身就是 §1 的造假。
+    #
+    # ⚠️ 2026-08-28 第二輪稽核 N2 更正:第一版用**全域** `sys.exc_info()` 判斷,
+    # 那是錯的判準,它問的是「**現在**在不在 except 區塊裡」,而不是「**這個** exception
+    # 有沒有 traceback」。兩個實害:
+    #   (a) 在 handler **外面**上報一個真的捕捉到的例外(本批 `_report_pool_fetch_failures`
+    #       就是這個形狀 —— 迴圈內收集、迴圈外彙總上報)→ 畫面會印
+    #       「此為狀態回報，非捕捉到的例外」,那是**一句假話**,而且真 traceback 被丟掉;
+    #   (b) 在**不相干**的 except 內傳一個自建 exception → 會附上**別的例外**的 traceback。
+    # 改問例外物件自己:`exc.__traceback__`。有就用它格式化,沒有才說是狀態回報。
+    _tb = getattr(exc, "__traceback__", None)
+    if _tb is not None:
+        _detail = "".join(_tb_mod.format_exception(type(exc), exc, _tb))
+    else:
+        _detail = (f"{type(exc).__name__}: {exc}\n\n"
+                   "（此為狀態回報，非捕捉到的例外，因此沒有 traceback 可附。）")
+    # 2026-08-28:Streamlit 禁止 expander 巢狀(`Expanders may not be nested inside
+    # other expanders`)。本函式**自本批(顏色五態分離第一批)起**也被逐檔區塊
+    # (住在 `st.expander` 裡)呼叫 —— 之前沒有這種呼叫點:對 origin/main 做 AST 掃描,
+    # `friendly_error` / `_friendly_error` 共 7 個直接呼叫點,**詞法上位於
+    # `with st.expander(` 內者 0 處**(2026-08-28 實測;⚠️ 該掃描只看同檔詞法巢狀,
+    # 「函式 A 在 expander 內被呼叫、A 內部再呼叫 friendly_error」這種跨檔間接路徑掃不到),
+    # 若照舊硬開 expander,一個「區塊渲染失敗」會當場升級成整頁 StreamlitAPIException
+    # —— 錯誤呈現本身變成更大的錯誤。故降級為攤平的 st.code:技術細節一項都不少,
+    # 只是不收合。(§1:寧可版面醜,不可把失敗吞掉或炸更大。)
+    try:
+        with st.expander("🔧 技術細節（給工程師）", expanded=False):
+            st.code(_detail, language="python")
+    except Exception:  # noqa: BLE001 — 巢狀 expander / 無 container context
+        st.caption("🔧 技術細節（給工程師）")
+        st.code(_detail, language="python")
 
 
 def parse_indicator_date(iv: dict) -> tuple[object, list[tuple[str, str]]]:

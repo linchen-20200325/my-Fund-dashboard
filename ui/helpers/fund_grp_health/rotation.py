@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 
 def _assemble_rows(funds: list) -> list:
     """每檔組成 suggest_rotation_pairs 需要的欄位 dict。"""
@@ -129,7 +131,7 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
         _pairs = suggest_rotation_pairs(rows, sell_sigma=_sell, buy_sigma=_buy,
                                         min_score=float(_minsc))
     except Exception as e:  # noqa: BLE001
-        st.caption(f"⬜ 輪動配對計算失敗:[{type(e).__name__}] {str(e)[:80]}")
+        system_error("輪動配對計算失敗", e)
         return
 
     # v19.484 稽核 #5:σ 資料不足(淨值史太短 / 停售 → σ rank 回不了值)的檔會被排除在
@@ -243,7 +245,7 @@ def render_rotation_section(funds: list, *, key_prefix: str = "rot_") -> None:
     except Exception as e:  # noqa: BLE001
         st.divider()
         st.markdown("### 🔄 輪動配對建議(賣高基期 → 買**別類**低基期健康)")
-        st.caption(f"⬜ 輪動配對資料組建失敗:[{type(e).__name__}] {str(e)[:80]}")
+        system_error("輪動配對資料組建失敗", e)
         return
     _render_pairs_ui(rows, key_prefix=key_prefix, offer_download=False)
 

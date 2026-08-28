@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import business_alert, system_error
+
 from shared.colors import GH_BG_PRIMARY, GH_FG_SECONDARY, GRAY_55, INFO_BLUE, TRAFFIC_GREEN
 from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None(不畫成 0% 假柱)
 
@@ -303,9 +305,8 @@ def render_fund_grp_health_tab() -> None:
             if r.get("ok") and r.get("_fund_raw")
         ]
     except Exception as _e_build:
-        st.caption(
-            f"⬜ 進階資料建構失敗：[{type(_e_build).__name__}] {str(_e_build)[:80]}"
-        )
+        system_error("進階資料建構失敗", _e_build,
+                     hint="下方「進階分析」整區會因此不可用。")
         _funds_extra = []
 
     # v19.181:模組化 3 表 wrapper(健康分析 / 配息相關 / 實際購買結果)。
@@ -323,9 +324,7 @@ def render_fund_grp_health_tab() -> None:
             from ui.helpers.fund_grp_health.backtest_section import render_allocation_backtest_section
             render_allocation_backtest_section(_funds_extra)
         except Exception as _e_bt:
-            st.caption(
-                f"⬜ 配置回測區塊渲染失敗:[{type(_e_bt).__name__}] {str(_e_bt)[:80]}"
-            )
+            system_error("配置回測區塊渲染失敗", _e_bt)
 
     # v19.428:🎯 換股池顧問(選股池 + 依持倉×池的換股建議)。選股池 CRUD 永遠可用;
     # 換股建議按鈕觸發(避免每次重整補抓池中標的)。缺 macro/FX 由 section 內誠實降級(§1)。
@@ -333,9 +332,7 @@ def render_fund_grp_health_tab() -> None:
         from ui.helpers.fund_grp_health.switch_advisor_section import render_switch_advisor_section
         render_switch_advisor_section(_funds_extra)
     except Exception as _e_sw:
-        st.caption(
-            f"⬜ 換股池顧問區塊渲染失敗:[{type(_e_sw).__name__}] {str(_e_sw)[:80]}"
-        )
+        system_error("換股池顧問區塊渲染失敗", _e_sw)
 
     # v19.58 — 其餘進階貼圖區塊（真實收益矩陣 + 投資試算 + 持股 + 多檔比較 + AI…）。
     # 基金體檢 PK + 4 大健診卡已上移至健診總表之前，不再由此區塊渲染（避免上下重複）。
@@ -344,10 +341,7 @@ def render_fund_grp_health_tab() -> None:
             from ui.helpers.fund_grp_health_extras import render_fund_grp_health_extras
             render_fund_grp_health_extras(_funds_extra, principal_twd)
         except Exception as _e_extra:
-            st.caption(
-                f"⬜ 進階分析區塊渲染失敗：[{type(_e_extra).__name__}] "
-                f"{str(_e_extra)[:80]}"
-            )
+            system_error("進階分析區塊渲染失敗", _e_extra)
 
 
 # v19.413:_auto_fetch_moneydj 隨 process_one_fund 下沉 services/fund_row.py 後,本檔已無 caller,
@@ -847,8 +841,7 @@ def _render_health_3tables(rows: list[dict],
         if source_tab != "health":
             st.caption(_CS_PORTFOLIO_CONTRAST_NOTE)
     except Exception as _e_csa:
-        st.caption(f"⬜ 核心/衛星資產屬性分布計算失敗："
-                   f"{type(_e_csa).__name__}: {str(_e_csa)[:80]}")
+        system_error("核心/衛星資產屬性分布計算失敗", _e_csa)
 
     # ── 🎯 選基金（低基期進場點）── v19.347：僅健檢 Tab 顯示(show_screener),
     #    Tab3 持倉健診不放(避免互動 widget key 與健檢 Tab 撞 + §8.1 不過度設計)。
@@ -856,8 +849,7 @@ def _render_health_3tables(rows: list[dict],
         try:
             _render_low_base_screener(ok_rows)
         except Exception as _e_lb:
-            st.caption(f"⬜ 選基金（低基期）渲染失敗："
-                       f"{type(_e_lb).__name__}: {str(_e_lb)[:80]}")
+            system_error("選基金（低基期）渲染失敗", _e_lb)
 
     # ── 🔴 淘汰候選紅區( 4 規則 verdict=replace)── v19.315:提到最上面,一眼看見要換的 ──
     # 先建 ② 配息 rows(內含 _verdict),紅區與下方表 ② 共用同一份、不重算(SSOT,避免雙倍計算)。
@@ -869,16 +861,18 @@ def _render_health_3tables(rows: list[dict],
     ]
     _replace = [r for r in _div_rows if r.get("_verdict") == "replace"]
     if _replace:
-        _lines = "\n".join(
-            f"- **{r.get('code', '')}** "
-            f"{str(r.get('基金名', '') or '')[:20]}："
-            f"{r.get('_換標的 detail', '') or r.get('換標的建議', '')}"
-            for r in _replace
-        )
-        st.error(
-            f"### 🔴 淘汰候選 {len(_replace)} 檔（ 4 規則觸發，建議換標的）\n\n"
-            f"{_lines}\n\n"
-            "↓ 完整指標見下方 ① 健康分析 / ② 配息相關表。"
+        # 2026-08-28 客戶拍板:業務紅燈 ≠ 系統紅燈(線框 §03)。
+        # 這一塊是**分析成功了**、答案是「這幾檔該換」—— 那是成果,不是故障。
+        # 原本用 st.error,和「系統崩潰」共用同一個紅框:使用者無法從顏色分辨
+        # 「系統壞了、別信畫面上的數字」還是「數字可信、去換基金」——
+        # 兩者要他做的事**完全相反**。改為紅字卡片(紅色留著,錯誤框拿掉)。
+        business_alert(
+            f"🔴 淘汰候選 {len(_replace)} 檔（4 規則觸發，建議換標的）",
+            [f"• <b>{r.get('code', '')}</b> "
+             f"{str(r.get('基金名', '') or '')[:20]}："
+             f"{r.get('_換標的 detail', '') or r.get('換標的建議', '')}"
+             for r in _replace],
+            footer="↓ 完整指標見下方健診大表。",
         )
 
     # v19.411:①② 表不再單獨渲染,欄位已併入「健診大表」。
@@ -912,9 +906,8 @@ def _render_health_3tables(rows: list[dict],
             # `build_unified_health_df` 的「來源整組沒供資料就不出現該批欄」設計會讓
             # 畫面看起來「本來就沒這些欄」,user 以為功能被拿掉。改為 log + 當場說明。
             _extra_by_code = {}
-            st.caption(f"⬜ σ 位階 / 風險 / 買賣點 / 捕捉率 / 換標欄**整組計算失敗**,"
-                       f"本次大表不含這些欄(不是資料沒有):"
-                       f"[{type(_e_extra).__name__}] {str(_e_extra)[:80]}")
+            system_error("σ 位階 / 風險 / 買賣點 / 捕捉率 / 換標欄整組計算失敗", _e_extra,
+                         hint="本次健診大表不含這幾欄 —— 是算不出來,不是這些基金沒有資料。")
     _render_health_table(rows, funds_extra=None,
                          health_by_code=_health_by_code,
                          div_by_code=_div_by_code,
@@ -998,8 +991,11 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
                     df, health_by_code or {}, div_by_code or {}, extra_by_code or {},
                     current_regime=_regime)
             except Exception as _e_merge:  # noqa: BLE001 — 合併失敗不擋健診總表
-                st.caption(f"⬜ ①②③ 合併大表失敗:"
-                           f"[{type(_e_merge).__name__}] {str(_e_merge)[:80]}")
+                # 與 :909 同型:失敗時大表會**靜靜少掉數十欄**,而不是整張消失
+                # → 使用者看到的是一張「看起來完整」的窄表(2026-08-28 稽核 B3 補 hint)。
+                system_error("①②③ 合併大表失敗", _e_merge,
+                             hint="下方健診總表會少掉①②③合併進來的數十個欄位 —— "
+                                  "是併不進去,不是這些基金沒有那些資料。")
         # 2026-08-05 稽核 🟢 選作 6:本批 Sharpe 來源全同 → 該欄逐列重複、零資訊量,
         # 由 df 收合成表下一行 caption(§2.2 揭露不減少,只是從 48 欄裡挪出來講一次)。
         df, _sharpe_src_uniform = _fold_uniform_sharpe_source(df)
@@ -1011,10 +1007,7 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
                 # expanded=True：上移到健診總表之上後直接展開，避免 user 以為「沒有」。
                 render_fund_checkup(funds_extra, expanded=True)
             except Exception as _e_chk:
-                st.caption(
-                    f"⬜ 基金體檢 PK 表渲染失敗：[{type(_e_chk).__name__}] "
-                    f"{str(_e_chk)[:80]}"
-                )
+                system_error("基金體檢 PK 表渲染失敗", _e_chk)
 
         st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
         # v19.180:全期實際 / 年化兩軸並陳。短歷史也顯示真實累計值,不再 None。
@@ -1054,14 +1047,14 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             from ui.helpers.fund_grp_health.switch_section import render_switch_section
             render_switch_section(df.to_dict("records"))
         except Exception as _e_sw:  # noqa: BLE001 — 換標區塊失敗不擋大表
-            st.caption(f"⬜ 換標決策區塊失敗:[{type(_e_sw).__name__}] {str(_e_sw)[:80]}")
+            system_error("換標決策區塊失敗", _e_sw)
 
         # v19.425 — 🧭 景氣位階適配摘要
         try:
             from ui.helpers.fund_grp_health.regime_section import render_regime_fit_section
             render_regime_fit_section(df.to_dict("records"))
         except Exception as _e_rf:  # noqa: BLE001
-            st.caption(f"⬜ 景氣適配區塊失敗:[{type(_e_rf).__name__}] {str(_e_rf)[:80]}")
+            system_error("景氣適配區塊失敗", _e_rf)
 
         # v19.69 J1：多基金績效比較圖
         if len(ok_rows) >= 2:
@@ -1132,7 +1125,7 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
                     },
                 )
             except Exception as _e_chart:
-                st.caption(f"⬜ 比較圖渲染失敗：{type(_e_chart).__name__}")
+                system_error("多基金績效比較圖渲染失敗", _e_chart)
 
         # v19.77 L1：逐檔 expander → 兩張多檔合併表（持有 meta + 配息事件）
         st.markdown("#### 📋 逐檔配息明細 🧮")

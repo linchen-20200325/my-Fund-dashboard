@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 _TYPE_OPTS = ["自動(ER 判定)", "震盪", "成長"]
 _PRINCIPAL = 1_000_000.0     # 補抓池中標的用的名目本金(僅為走健診管線,不影響型態/基期)
 
@@ -55,11 +57,32 @@ def _rows_with_nav(funds: list, pool_by_code: dict) -> list:
     return rows
 
 
-def _fetch_rich(code: str, name: str = "") -> "dict | None":
+def _fetch_rich(code: str, name: str = "", *, failures: list | None = None) -> "dict | None":
     """池中未載入標的 → 走健診管線補抓成 rich dict(L2 process_one_fund + L3 _build_fund_dict)。
 
     name:選股池自填名 → 當作 name_hint 傳下去,線上抓不到真名(如 ALZF9)時顯示池名,
     而非代號(v19.497)。
+
+    failures:呼叫端傳一個 list 進來收集 `(code, exc)`;**本函式自己不畫任何東西**
+    (它住在 `_pool_rows` 的逐檔迴圈裡,就地渲染 = N 檔失敗噴 N 個框)。
+
+    ⚠️ **根因更正(2026-08-28 第二輪稽核 N1)** —— 本 docstring 前一版寫的
+    「proxy 掛掉 / MoneyDJ 子網域 403 → 就地畫紅燈會噴 20 個滿版紅框」**不成立**,
+    那句話是**沒查證就寫下的承重宣稱**(§-2 規則 6 點名的 `db4c139` 同型病)。
+    實際查證 `services/fund_row.py`:`process_one_fund` 整段包在一個 try 裡,
+    結尾 `except Exception` 一律 `return {"ok": False, "error": ...}`(:232-233),
+    另有五條提前 return 也是 `ok=False`(:87 上游 error / :103 NAV 抓不到 /
+    :112 幣別未知 / :121 FX 抓不到 / :133 配息計算失敗)。
+    **它幾乎不 raise** —— proxy / 403 走的是 `fd["error"]` → :87 的 `ok=False`。
+
+    所以真正的破口不是「N 個紅框」,而是**主要失敗路徑整條靜默**:
+    `ok=False` 時原本直接掉到 `return None`,`r["error"]` 被整個丟掉,
+    該檔從換股建議裡靜靜消失 —— 那正是線框 §03 的「示警不足」本身。
+    現在 `ok=False` 也會進 `failures`,由呼叫端彙總成一則上報。
+    `except` 分支保留(接得到的是兩個 import 失敗、`_pool_oauth_client()` 或
+    `_build_fund_dict` 拋錯),但它是**罕見路徑**,不是本機制的主要服務對象。
+
+    ⚠️ `failures` 沒傳時**維持靜默**(舊行為),不是靜默吞例外 —— 呼叫端有責任收。
     """
     try:
         from services.fund_row import process_one_fund
@@ -68,9 +91,43 @@ def _fetch_rich(code: str, name: str = "") -> "dict | None":
         r = process_one_fund(code, _PRINCIPAL, name_hint=name, oauth_client=_pool_oauth_client())
         if r.get("ok") and r.get("_fund_raw"):
             return _build_fund_dict(r["_fund_raw"], code, _PRINCIPAL, name_hint=name)
-    except Exception as _e:  # noqa: BLE001
-        st.caption(f"⬜ 池中標的 {code} 補抓失敗,略過:[{type(_e).__name__}] {str(_e)[:60]}")
+        # ⭐ 主要失敗路徑:`process_one_fund` 回 ok=False(不 raise)。
+        #    §1:`r["error"]` 不可丟掉 —— 丟掉就是這一檔靜靜從換股建議裡消失。
+        if failures is not None:
+            failures.append((code, RuntimeError(str(r.get("error") or "未知原因"))))
+    except Exception as _e:  # noqa: BLE001 — 罕見路徑:import / oauth / _build_fund_dict 拋錯
+        if failures is not None:
+            failures.append((code, _e))
     return None
+
+
+def _report_pool_fetch_failures(failures: list) -> None:
+    """把逐檔補抓失敗**彙總成一則**系統紅燈(對應 `_fetch_rich` 的 `failures`)。
+
+    「略過」= 這幾檔會從換股建議裡靜靜消失,使用者看不出少了它們 ——
+    正是線框 §03 點名的「示警不足」,故仍走系統紅燈,只是一次講完。
+
+    收到的多半是 `process_one_fund` 回的 `ok=False`(被包成 RuntimeError),
+    少數是真的拋出來的例外 —— 兩者都是「這一檔沒進候選」,對使用者是同一件事。
+    """
+    if not failures:
+        return
+    _codes = "、".join(str(c) for c, _ in failures)
+    # ⚠️ 逐檔原因一律列進 hint,不只掛第一個 —— 失敗原因可能各不相同
+    # (NAV 抓不到 / 幣別未知 / FX 抓不到 / 上游 error…),只講一個等於吞掉其餘(§1)。
+    #
+    # ⚠️ **已知限制(2026-08-28 第三輪稽核 P7,未修,登記第二批)**:技術細節(traceback)
+    # 只掛 `failures[0]`。而自 N1 起 `ok=False` 成為**主要路徑**,那些是合成的
+    # RuntimeError、**沒有 traceback**;若第一筆是合成的、第二筆才是真拋出的例外,
+    # **唯一有 traceback 的那筆就看不到**。
+    # 使用者面不受影響(逐檔原因都在 hint 裡),影響的是工程師排查。
+    _lines = "；".join(f"{c}：{str(e) or type(e).__name__}" for c, e in failures)
+    system_error(
+        f"選股池 {len(failures)} 檔補抓失敗,已從候選中排除:{_codes}",
+        failures[0][1],
+        hint=f"下方換股建議未涵蓋這 {len(failures)} 檔,不代表它們不值得換。"
+             f"逐檔原因 —— {_lines}",
+    )
 
 
 def _pool_rows(pool: list, funds: list) -> list:
@@ -78,8 +135,9 @@ def _pool_rows(pool: list, funds: list) -> list:
     from ui.helpers.fund_grp_health.rotation import _assemble_rows
     _loaded = {f.get("code"): f for f in funds}
     out = []
+    _failures: list = []          # 2026-08-28:逐檔失敗先收集,出迴圈後發一則(見 _fetch_rich)
     for e in pool:
-        _rich = _loaded.get(e.code) or _fetch_rich(e.code, e.name)
+        _rich = _loaded.get(e.code) or _fetch_rich(e.code, e.name, failures=_failures)
         if _rich is None:
             continue
         _row = _assemble_rows([_rich])[0]
@@ -92,6 +150,7 @@ def _pool_rows(pool: list, funds: list) -> list:
         if not _row.get("基金類別"):
             _row["基金類別"] = e.category
         out.append(_row)
+    _report_pool_fetch_failures(_failures)
     return out
 
 
@@ -211,7 +270,9 @@ def _maybe_snapshot(nav_by_code: dict, weights: dict, is_equal: bool, funds: lis
         st.session_state["_perf_snapshot_done"] = True   # 已嘗試寫入即設(避免 GS 錯誤時每次 rerun 重打)
         append_snapshot(PerfSnapshot(**_row))
     except Exception as _e:  # noqa: BLE001 — 快照失敗不影響走勢顯示;誠實提示
-        st.caption(f"⬜ 績效快照未寫入(不影響走勢):[{type(_e).__name__}] {str(_e)[:80]}")
+        system_error("組合績效快照未寫入", _e,
+                     hint="本區顯示的走勢數字不受影響;但這一筆歷史沒有累積上去,"
+                          "若持續失敗,「幾週後看變化」這件事會靜靜地不成立。")
 
 
 def render_portfolio_tracking(funds: list) -> None:
@@ -280,7 +341,8 @@ def render_portfolio_tracking(funds: list) -> None:
                 if len(_sdf) >= 2:
                     st.line_chart(_sdf)
     except Exception as _e:  # noqa: BLE001
-        st.caption(f"⬜ 快照歷史讀取略過:[{type(_e).__name__}] {str(_e)[:60]}")
+        system_error("組合績效快照歷史讀取失敗", _e,
+                     hint="上方走勢圖以當下資料重建,不受影響;缺的是歷史累積筆數。")
 
 
 # ───────────────────────── 選股池 CRUD UI ─────────────────────────
@@ -323,7 +385,8 @@ def _render_pool_editor() -> None:
     try:
         pool = list_pool(oauth_client=_oauth)
     except Exception as _e:  # noqa: BLE001
-        st.caption(f"⬜ 選股池讀取失敗:[{type(_e).__name__}] {str(_e)[:80]}")
+        system_error("選股池讀取失敗", _e,
+                     hint="選股池顯示為空不代表它是空的,可能只是這次讀不到。")
         return
 
     if pool:
@@ -566,4 +629,4 @@ def render_switch_advisor_section(funds: list) -> None:
                                    underperformance_by_code=_under)
         _render_advice(_res, _macro, _fx)
     except Exception as _e:  # noqa: BLE001
-        st.caption(f"⬜ 換股建議產生失敗:[{type(_e).__name__}] {str(_e)[:100]}")
+        system_error("換股建議產生失敗", _e)

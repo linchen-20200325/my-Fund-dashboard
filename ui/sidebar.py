@@ -13,6 +13,8 @@ import os
 import re
 import streamlit as st
 
+from ui.helpers.render_state import NOT_READY_MARK, not_ready
+
 from fund_fetcher import get_proxy_config
 from infra.oauth import build_authorize_url
 from repositories.policy_repository import get_sheet_title
@@ -69,13 +71,21 @@ def render_sidebar(*,
             _m = re.search(r'@(.+)', _proxy_cfg.get("http",""))
             _proxy_ep = _m.group(1) if _m else "已設定"
         st.markdown(f"{'✅' if fred_key else '❌'} FRED　　{'✅' if gemini_key else '❌'} Gemini　　{'✅' if _proxy_cfg else '⚠️'} Proxy")
-        st.caption(f"🔒 {_proxy_ep}" if _proxy_cfg else "⚠️ Proxy 未設定（MoneyDJ 可能被擋）")
+        # ⬜ 而非 ⚠️:沒設 Proxy 是「還沒設定」,不是故障(線框 §03)。
+        st.caption(f"🔒 {_proxy_ep}" if _proxy_cfg
+                   else f"{NOT_READY_MARK} Proxy 未設定（MoneyDJ 可能被擋）")
         st.divider()
         if st.sidebar.button("🔍 測試 Proxy 連線", use_container_width=True):
             import requests as _req
             _pcfg = get_proxy_config()
             if not _pcfg:
-                st.sidebar.error("Proxy 未設定")
+                # 2026-08-28 第三輪稽核:本檔第 76 行同一句「Proxy 未設定」已由本批改成
+                # 灰色說明,這裡(相隔六行)卻還是紅框 —— 因為當時的測試規則只認**裸**
+                # `st.` receiver,`st.sidebar.error` 對每一條規則都是隱形的。
+                # 它是「你還沒設定」不是「系統壞了」→ 統一為 ⬜(線框 §03)。
+                not_ready("Proxy 未設定，無法測試連線",
+                          where="Streamlit Cloud → Settings → Secrets 的 "
+                                "`PROXY_URL = \"http://user:pwd@your-nas-host:3128\"`")
             else:
                 # v18.269：除了既有 2 個基金 source，加 4 個 FX source 一起測，讓 user 看出
                 # 「網路正常但 FX 抓不到」是 source 端問題還是 endpoint 個別擋。

@@ -24,6 +24,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.render_state import not_ready
+
 from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW  # v19.390 V3b:燈號收 TRAFFIC SSOT
 
 from infra.proxy import get_proxy_config
@@ -978,12 +980,11 @@ def render_data_guard_tab() -> None:
                             f"{str(_e_d5_test)[:120]}"
                         )
         else:
-            st.warning(
-                "🔴 **NAS Proxy 未設定** — 走直連模式。\n\n"
-                "Streamlit Cloud IP 經常被 MoneyDJ 封鎖 → "
-                "建議至 Streamlit Cloud secrets 加：\n\n"
-                "```toml\nPROXY_URL = \"http://user:pwd@your-nas-host:3128\"\n```"
-            )
+            # 原本是 🔴 + st.warning:直連是「還沒設定 Proxy」的正常降級,不是故障。
+            not_ready("NAS Proxy 未設定 — 走直連模式"
+                      "（Streamlit Cloud IP 經常被 MoneyDJ 封鎖）",
+                      where="Streamlit Cloud secrets 加 "
+                            "`PROXY_URL = \"http://user:pwd@your-nas-host:3128\"`")
     except Exception as _e_d5_pxy:
         st.error(f"⚠️ 讀取 Proxy 設定失敗：{type(_e_d5_pxy).__name__}: {str(_e_d5_pxy)[:80]}")
 
@@ -1390,7 +1391,8 @@ def render_data_guard_tab() -> None:
             _diag_key = (st.secrets.get("FRED_API_KEY","")
                          or os.environ.get("FRED_API_KEY",""))
             if not _diag_key:
-                st.warning("⚠️ FRED_API_KEY 未設置 → 全部會 fallback")
+                not_ready("FRED_API_KEY 未設定 → 下方揭露日全部會走 fallback",
+                          where="Streamlit Cloud → Settings → Secrets 的 `FRED_API_KEY`")
             # 13 個診斷目標一律「中文名 + series id」，不再有純英文 label
             # （原本 UNRATE / HSN1F / PERMIT / UMCSENT / M2SL / FEDFUNDS 6 個
             #  只印 FRED 內部代號，看不懂就無從判斷該不該在意它延遲）
@@ -1553,8 +1555,10 @@ def render_data_guard_tab() -> None:
                 _ni_res = import_csv_text(_ni_code.strip().upper(), _ni_text,
                                           fund_name=_ni_name.strip())
                 if not _ni_res["enabled"]:
-                    st.error("❌ Google Sheets 未設定（google_service_account / "
-                             "macro_weights_sheet_id secrets）→ 無法匯入。")
+                    # 「資料源未設定」屬 ⬜,不是 🔴 —— 匯入沒壞,是還沒接上(線框 §03)。
+                    not_ready("Google Sheets 未設定，無法匯入",
+                              where="Secrets 的 `google_service_account` / "
+                                    "`macro_weights_sheet_id`")
                 elif _ni_res["written"] > 0:
                     # 稽核 N1-d:剛寫進去 → 立刻讓上方「累積狀態 / 累了多少」失效重讀,
                     # 否則 TTL 內會顯示寫入前的點數（§1 不顯示過期值）。
