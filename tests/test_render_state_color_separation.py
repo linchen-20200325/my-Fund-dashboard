@@ -1607,3 +1607,297 @@ def test_q3_home_page_no_longer_prints_a_key_notice():
         "（缺 GEMINI 只是少 AI 摘要，可降級）。客戶 2026-08-28 Q3 拍板把它移到"
         "「⑤ 設定與診斷 → 🔑 API 金鑰狀態」一處，**不是兩邊各留一份**：\n  "
         + "\n  ".join(bad))
+
+
+# ══════════════════════════════════════════════════════════════════
+# 批次三之一（2026-08-28）——
+#   Q4：tab2「部分資料視圖」死分支 → 2 行誠實訊息 + 保留分支當防當機護欄
+#   D1/D2：組合健診全失敗時 ~14 個區塊無名消失 → 在「因」的位置講一次 + 標題照印
+# ══════════════════════════════════════════════════════════════════
+
+def _st_render_calls_in(scope: ast.AST, containers: frozenset[str] = frozenset()) -> list[str]:
+    """`scope` 底下所有「會印給使用者看」的呼叫名稱（含重複，供計數）。
+
+    用 `_ST_RENDER_ATTRS` ∪ `_FUNC_RENDERERS` 判定，與本檔其餘規則同一份定義 ——
+    不另立一份會漂移的白名單（§2.1 SSOT）。
+    """
+    out = []
+    for c in ast.walk(scope):
+        if not isinstance(c, ast.Call):
+            continue
+        name = _callee(c, containers)
+        if name in _FUNC_RENDERERS or (
+                name.split(".")[-1] in _ST_RENDER_ATTRS and "." in name):
+            out.append(name)
+    return out
+
+
+# Q4 專用：守衛 body 內**允許出現的呼叫**（`ast.unparse(call.func)` 的原樣寫法）。
+# ⚠️ 這是 **fail-closed**，方向與 `_st_render_calls_in` 相反，兩者刻意並存：
+#   - `_st_render_calls_in`：名字**在**渲染集合裡才計數 → 看不懂的名字 = 不算；
+#   - 本集合：名字**不在**允許集合裡就算違規 → 看不懂的名字 = 紅。
+# 白名單式判定永遠可以靠改名繞過（把渲染包進一個 helper，再用裸名字呼叫），
+# fail-closed 不行。⚠️ **不動 `_st_render_calls_in` 本身** —— 它的 docstring 自陳
+# 「與本檔其餘規則同一份定義（§2.1 SSOT）」，改它會波及其他規則。
+# 重新產生本集合（照抄可跑）::
+#   $ python3 -c "
+#     import ast,pathlib
+#     t=ast.parse(pathlib.Path('ui/tab2_single_fund.py').read_text(encoding='utf-8'))
+#     f=next(n for n in ast.walk(t) if isinstance(n,ast.FunctionDef) and n.name=='render_single_fund_tab')
+#     g=[n for n in ast.walk(f) if isinstance(n,ast.If) and n.orelse and {'s','m'}<={x.id for x in ast.walk(n.test) if isinstance(x,ast.Name)}][0]
+#     print(sorted({ast.unparse(c.func) for b in g.body for c in ast.walk(b) if isinstance(c,ast.Call)}))"
+#   → ['fd.get', 'hasattr', 'len', 'not_ready', 'print', 'type']（量測日 2026-08-28）
+_Q4_ALLOWED_CALLS = frozenset({
+    "not_ready",                 # 這條分支唯一允許的渲染
+    "print",                     # 寫進 stderr 的非預期狀態 log
+    "fd.get", "len", "hasattr", "type",   # log 訊息裡的純值讀取，無渲染能力
+})
+
+
+def test_q4_unreachable_partial_view_stays_a_guard_and_never_fakes_a_card():
+    """Q4：tab2 那條 production 恆不觸發的分支 —— 分支要留、假卡不准回來。
+
+    背景（兩件事同時成立，缺一就會做錯）：
+    1. `if s is None or ... or not m:` 在 production **恆為 False**
+       （外層已把 failed / partial 接走，只剩 complete；而 complete 的定義就是
+       series≥10 + metrics 非空）。它原本的 body 是一張 53 行的「🟡 部分資料」
+       琥珀卡，宣稱「下方顯示已有資訊」—— 那句是**假的**，這條路徑上根本沒有
+       資料可顯示（§1：錯誤的數字比沒有數字更危險）。
+    2. **但分支本身不能拔掉**：拔掉之後任何非預期狀態會直接掉進主畫面，撞上
+       `f"…淨值 {len(s)} 筆"`（`s=None` → TypeError → 整頁 traceback）。
+       把一張看起來正常的卡換成整頁崩潰，是更糟的結果。
+
+    **守得到**：
+      - 把守衛整個拿掉（連 else 一起拉平）→ 紅（錨點找不到）；
+      - 假卡回來 → 紅。**由 fail-closed 那條斷言擋**（守衛 body 內只准出現
+        `_Q4_ALLOWED_CALLS` 裡的呼叫），不是靠「渲染呼叫數 != 1」那條。
+        ⚠️ **2026-08-28 補正：上一版在這裡寫的是「加任何第二個渲染呼叫 → 紅」，
+        那句是假的。** 實測否證：在模組層加一個 `_show_partial_amber_card()`
+        （body 是 `st.markdown` 卡片 + 2 個 `st.metric`），在守衛內 `not_ready(`
+        前面加**一行裸名字呼叫** → 本檔 **377 passed**，假卡完整回到畫面上而規則全綠。
+        根因是 `_st_render_calls_in` 的判定式
+        `name in _FUNC_RENDERERS or (name.split(".")[-1] in _ST_RENDER_ATTRS and "." in name)`
+        —— 裸名字呼叫沒有點、又不在 `_FUNC_RENDERERS` 裡，**完全不計數**；
+        而「用 helper 函式渲染」正是本 repo 的主流寫法
+        （`_render_health_table` / `render_allocation_backtest_section` …），
+        不是刻意刁難的形狀。修法見 `_Q4_ALLOWED_CALLS` 上方註解。
+      - 把 `not_ready(...)` 換成 `pass` / 刪掉 → 紅；
+      - 把 `not_ready` 換成 `st.error` 之類的警示色 → 紅。
+        **理由（2026-08-28 更正，原本寫的不是真正的理由）**：
+        (i) 這條路徑上**手上沒有 exception** —— `system_error()` 的簽名要求一個
+        `BaseException`，硬造一個只為滿足簽名，traceback 會是假的；
+        (ii) 改用 `st.error` 會多一個「拿不到失敗證據的紅框」，撞上
+        `BARE_ERROR_RATCHET`（22 → 23）→ `test_c_bare_error_backlog_only_shrinks` 轉紅。
+        ⚠️ 上一版寫的「也沒有任何數字壞掉，畫面只是空的」**與事實牴觸**：
+        這條分支真被走到，代表 `status` 回報 complete 卻缺 series/metrics，
+        **整個主畫面的數字會一次全部消失**，那不是「只是空的」。
+      - 拿掉 stderr 那行 log → 紅（「照理不會發生」的事一旦發生，必須留下紀錄，
+        否則我們永遠不會知道它發生過 —— 這正是 §-2 規則 6 的形狀）。
+    **守不到**（誠實列出，不要以為守住了）：
+      - 文案寫得對不對（本檔一律不做逐字斷言，理由見檔頭）；
+      - `where=` 指到的地方是不是真的存在（沒有任何機器檢查能驗這件事）；
+      - 「恆不觸發」這個前提本身 —— 那是**資料工程組實測 + 本檔註解裡那幾條
+        grep** 的結論，本測試**沒有**重驗它。若哪天 status 值域變了，本測試照樣綠。
+      - **`not_ready` 那一行的可達性** —— `_renders_before_returning` 只比 `return`
+        的行號，**不看分支可達性**：把 `not_ready(...)` 包進 `if False:`、或包進一個
+        定義了沒人呼叫的巢狀 def，它照樣算「在 return 之前」。這是
+        `_renders_before_returning` 的**既有家族限制**（Q1 / D1 / D2 三條規則一起吃），
+        不是本條造成的，但本條同樣沒有補。
+        ⚠️ 反方向（把**多餘的渲染**藏進 `if False:` / 沒人呼叫的巢狀 def）
+        **本條擋得住** —— 那是上面 fail-closed 斷言的附帶效果（實測兩種形狀皆轉紅）。
+        少的是「該跑的那一行**真的跑得到**」這半邊。
+    """
+    rel = "ui/tab2_single_fund.py"
+    fn = _fn_named(rel, "render_single_fund_tab")
+    assert fn is not None, f"{rel} 裡找不到 render_single_fund_tab() —— 改名了？"
+
+    # 錨點：test 同時提到 series 與 metrics 兩個區域變數、且有 else 的那個 if。
+    guards = [n for n in ast.walk(fn)
+              if isinstance(n, ast.If) and n.orelse
+              and {"s", "m"} <= {x.id for x in ast.walk(n.test) if isinstance(x, ast.Name)}]
+    assert len(guards) == 1, (
+        f"{rel}::render_single_fund_tab() 裡「test 同時用到 s 與 m、且帶 else」的守衛"
+        f"不是恰好 1 個（找到 {len(guards)} 個，行號 {[g.lineno for g in guards]}）—— "
+        "錨點失效，本規則會對空氣生效。若是刻意重構請一併更新錨點。")
+    guard = guards[0]
+
+    # ── 只看 if 的 body（else 是主畫面，當然有一大堆渲染呼叫）──────────
+    body_scope = ast.Module(body=guard.body, type_ignores=[])
+    rendered = _st_render_calls_in(body_scope)
+    assert rendered == ["not_ready"], (
+        f"{rel}:{guard.lineno} 這條 production 恆不觸發的分支裡，渲染呼叫應該**恰好一個**"
+        f"`not_ready(...)`，實際是 {rendered} —— "
+        "要嘛假的「部分資料」卡片回來了（它宣稱下方有資訊，但這條路徑上沒有），"
+        "要嘛誠實訊息被拿掉了。")
+
+    # ── fail-closed：body 內不得出現任何「不在允許集合裡」的呼叫 ───────────
+    # 上面那條 `rendered == ["not_ready"]` 是**白名單式**的，擋不住把渲染包進
+    # helper 再用裸名字呼叫（實證見 docstring「守得到」第一項）。這條反過來：
+    # 只要出現沒被明列允許的呼叫就紅，不管它長得像不像渲染。
+    # 附帶效果（本檔 `_renders_before_returning` 家族原本守不到的）：把渲染塞進
+    # `if False:` 這種恆不執行分支、或塞進「定義了沒人呼叫」的巢狀 def，
+    # 在**本條規則**下一樣會紅（`ast.walk` 不看可達性，而這裡不可達也算違規）。
+    _unexpected = sorted({_callee_src(c) for c in ast.walk(body_scope)
+                          if isinstance(c, ast.Call)} - _Q4_ALLOWED_CALLS)
+    assert not _unexpected, (
+        f"{rel}:{guard.lineno} 這條 production 恆不觸發的分支裡出現了未經許可的呼叫："
+        f"{_unexpected} —— 允許的只有 {sorted(_Q4_ALLOWED_CALLS)}。\n"
+        "最可能的情況是那張假的「🟡 部分資料」卡片回來了（可能是直接寫 `st.markdown`，"
+        "也可能是包成一個 helper 再呼叫 —— 後者 `_st_render_calls_in` 看不見，"
+        "所以才有這條 fail-closed）。若是刻意新增的無害呼叫，請連同理由一起"
+        "加進 `_Q4_ALLOWED_CALLS`，不要把這條斷言拿掉。")
+
+    # ⚠️「有這個呼叫」不夠，它要跑得到（稽核 M9 的同一種洞）。
+    assert _renders_before_returning(body_scope, "not_ready"), (
+        f"{rel}:{guard.lineno} 的 `not_ready(...)` 排在 `return` 後面，永遠不會執行。")
+
+    # 「照理不會發生」的事發生時要留下紀錄 —— 分支內必須有一個寫進 stderr 的 print。
+    _stderr_logs = [c for c in ast.walk(body_scope)
+                    if isinstance(c, ast.Call) and _callee(c) == "print"
+                    and any(k.arg == "file" for k in c.keywords)]
+    assert _stderr_logs, (
+        f"{rel}:{guard.lineno} 的護欄沒有把「非預期狀態」寫進 log —— "
+        "這條分支照理不會被走到，一旦被走到而畫面只印一句灰字、log 什麼都沒有，"
+        "我們永遠不會知道它發生過。")
+
+    # 護欄本身必須還在：else 分支（主畫面）要有實質內容，代表沒有人把它拉平。
+    assert len(guard.orelse) > 5, (
+        f"{rel}:{guard.lineno} 的 else（主畫面）被拉平或搬走了 —— "
+        "那代表守衛被整段刪除，任何非預期狀態會直接撞上主畫面的 `len(s)` → 整頁 traceback。")
+
+
+def _literal_list_size(node: ast.AST) -> int:
+    """靜態數得出來的**字面元素個數**；數不出來一律回 0（fail-closed）。
+
+    `["a", "b"]` → 2；`_base + ["c"]` → 遞迴相加；`_a + _b`（兩邊都是變數）→ 0。
+    ⚠️ 回 0 的語意是「**我沒辦法證明它非空**」，不是「它一定是空的」。這裡刻意
+    把「證不出來」當成違規：D1 要保證的是使用者**真的看到一份清單**，一個證不出
+    非空的寫法正是它該擋的東西。日後若真有正當的動態組法，請就地留一個字面元素
+    當錨、或改寫斷言並附理由，**不要**把斷言拿掉。
+    """
+    if isinstance(node, ast.List):
+        return len(node.elts)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _literal_list_size(node.left) + _literal_list_size(node.right)
+    return 0
+
+
+def test_d1_total_fetch_failure_is_explained_once_at_the_cause():
+    """D1 + D2：組合健診「全部抓取失敗」時，必須在**因**的位置講一次它少了什麼。
+
+    形狀：`_render_health_3tables()` 的 `if not ok_rows:` 早退，會讓本頁十幾個區塊
+    （核心/衛星分布、健診大表/總表、體檢 PK、換標決策、景氣適配、績效比較圖、
+    逐檔配息明細、持有 meta、配息事件、KPI 摘要、新鮮度 banner …）一次全部消失。
+    原本畫面只剩最後面的「#### ❌ 抓取失敗 + 逐檔紅字」—— 使用者知道抓失敗了，
+    但**不知道因此少看到什麼**，也就無從分辨「功能沒了」與「這次沒資料」。
+
+    **為什麼守「在因的位置講一次」而不是「每個下游都要講」**：下游那十幾塊被
+    **同一個條件**關掉，在每一塊各印一句灰字 = 滿版灰字，那是客戶 2026-08-28 Q1
+    第二句明確否掉的方向（「保持畫面極簡乾淨」）。
+
+    **守得到**：
+      - 早退分支變回「靜默 return」（拿掉說明）→ 紅；
+      - 說明從 🔴 改成灰字 → 紅（全部抓取失敗是**系統真失敗**，用灰字印會讓人
+        以為「還沒載入、按一下就好」，那是 `render_state` 檔頭點名的反向 bug）；
+      - 標題移回守衛之後（退回「連標題都看不到」的原狀，線框 §04① 的「標題照印」）→ 紅；
+      - `return` 移到說明之前（說明變死碼）→ 紅；
+      - 把區塊清單掏空成一句籠統的話 → 紅。**兩條斷言合起來才成立**：
+        (i) `st.error(...)` 的參數要**引用**同一個守衛內組出來的清單變數；
+        (ii) 那個變數的**字面元素個數必須 > 0**。
+        ⚠️ **2026-08-28 補正：上一版只有 (i)，於是這句承諾是假的。**
+        實證否證：把 `_gone = ["🧭 核心 / 衛星資產屬性分布"]` 改成 `_gone = []`
+        （後面的 `+= [...]` 改成指派給另一個沒人用的名字，`st.error` 仍照樣引用
+        `_gone`）→ 本檔 **377 passed**。根因是 `[]` 依然是一個 `ast.List`，
+        (i) 只問「有沒有一個被引用的 list 變數」，不問它裡面有沒有東西。
+    **守不到**（誠實列出）：
+      - 清單**列得對不對 / 列得全不全** —— 那是量測值，會漂移；本測試只驗
+        「有一份非空的清單被印出去」，不驗它的內容（本檔不做逐字斷言）；
+      - **執行期才長出來的元素** —— `_gone.append(...)` 這類呼叫不計入
+        `_literal_list_size`；本規則靠的是**字面**元素。反過來說，如果哪天整份
+        清單都改成 `append` 組出來，本規則會誤紅（fail-closed，可接受但要知道）；
+      - 下游有沒有人偷偷又各自加一句灰字（「講一次」的另一半）—— 沒有機器規則覆蓋，
+        已登記為待驗；
+      - 「一共是幾塊」這個數字 —— 本 PR 自己數到 14~15 塊，**與前一輪稽核說的 7 塊
+        不一致**，兩邊都是單組數的，沒有第二組驗過（§-2 規則 6）。
+      - **標題與說明那兩行的可達性** —— 兩處 `_renders_before_returning` 只比 `return`
+        的行號，**不看分支可達性**：把 `st.markdown` 標題或 `st.error` 包進 `if False:`、
+        或包進一個定義了沒人呼叫的巢狀 def，它們照樣算「在 return 之前」。
+        這是 `_renders_before_returning` 的**既有家族限制**（Q1 / Q4 一起吃），
+        不是本條造成的，本條也沒有補。
+        ⚠️ **本條刻意不照抄 Q4 的 fail-closed 呼叫白名單**：Q4 的守衛 body 只允許
+        **1 個**渲染呼叫，所以「不在允許集合裡就紅」剛好等於「假卡不准回來」；
+        而 D1 的守衛 body 本來就有 7 個正當呼叫、其中 `_render_health_table` 是
+        **真正的渲染 helper**，把它們一一列進白名單之後，白名單既擋不到
+        「渲染被藏進 `if False:`」，也擋不到「`_render_health_table` 內部被塞東西」——
+        列了等於沒列。查證（照抄可跑）::
+
+            $ python3 -c "
+              import ast,pathlib
+              t=ast.parse(pathlib.Path('ui/tab_fund_grp_health.py').read_text(encoding='utf-8'))
+              f=next(n for n in ast.walk(t) if isinstance(n,ast.FunctionDef) and n.name=='_render_health_3tables')
+              g=[n for n in f.body if isinstance(n,ast.If) and 'ok_rows' in {x.id for x in ast.walk(n.test) if isinstance(x,ast.Name)} and any(isinstance(b,ast.Return) for b in ast.walk(n))][0]
+              print(sorted({ast.unparse(c.func) for c in ast.walk(g) if isinstance(c,ast.Call)}))"
+
+        → 7 個（量測日 2026-08-28）。**所以這個方向在 D1 是兩邊都沒守到，已登記待後批。**
+    """
+    rel = "ui/tab_fund_grp_health.py"
+    fn = _fn_named(rel, "_render_health_3tables")
+    assert fn is not None, f"{rel} 裡找不到 _render_health_3tables() —— 改名了？"
+
+    guards = [n for n in fn.body
+              if isinstance(n, ast.If)
+              and "ok_rows" in {x.id for x in ast.walk(n.test) if isinstance(x, ast.Name)}
+              and any(isinstance(b, ast.Return) for b in ast.walk(n))]
+    assert len(guards) == 1, (
+        f"{rel}::_render_health_3tables() 裡「提到 ok_rows 且會 return」的守衛不是恰好 1 個"
+        f"（找到 {len(guards)} 個，行號 {[g.lineno for g in guards]}）—— 錨點失效。")
+    guard = guards[0]
+
+    _calls = _calls_named_in(guard)
+
+    # 顏色：全部抓取失敗是系統真失敗 → 必須是紅色入口，不得是灰字。
+    assert _calls & RED_ENTRYPOINTS, (
+        f"{rel}:{guard.lineno} 全部抓取失敗卻沒有任何紅色入口 —— "
+        "要嘛整段又變回靜默 return，要嘛被降成灰字。灰字會讓使用者以為"
+        "「還沒載入，按一下就好」，但他按幾次都一樣（render_state 檔頭：反向 bug）。")
+
+    # D2 線框 §04①「標題照印」：標題要排在守衛的 return 之前。
+    assert _renders_before_returning(guard, "st.markdown"), (
+        f"{rel}:{guard.lineno} 的標題又跑到 `return` 後面（或整個不見了）—— "
+        "全失敗時使用者連「這裡本來有一張表」都看不到，退回零痕跡的原狀（線框 §04①）。")
+
+    # 說明本身也要跑得到。
+    assert _renders_before_returning(guard, "st.error"), (
+        f"{rel}:{guard.lineno} 的 `st.error(...)` 排在 `return` 後面，永遠不會執行。")
+
+    # 清單不得被掏空成一句籠統的話：st.error 的參數要引用那份清單。
+    _errs = [c for c in ast.walk(guard)
+             if isinstance(c, ast.Call) and _callee(c) == "st.error"]
+    assert _errs, f"{rel}:{guard.lineno} 找不到 st.error(...)"
+    _names_used = set()
+    for c in _errs:
+        _names_used |= {x.id for x in ast.walk(c) if isinstance(x, ast.Name)}
+    _list_sizes: dict[str, int] = {}
+    for _n in ast.walk(guard):
+        if not isinstance(_n, (ast.Assign, ast.AugAssign)):
+            continue
+        _val = getattr(_n, "value", None)
+        if not isinstance(_val, (ast.List, ast.BinOp)):
+            continue
+        for _t in ([_n.target] if isinstance(_n, ast.AugAssign) else _n.targets):
+            if isinstance(_t, ast.Name):
+                _list_sizes[_t.id] = _list_sizes.get(_t.id, 0) + _literal_list_size(_val)
+    _list_vars = set(_list_sizes)
+    _printed_lists = {_k: _list_sizes[_k] for _k in _list_vars & _names_used}
+    assert _printed_lists, (
+        f"{rel}:{guard.lineno} 的 `st.error(...)` 沒有引用任何在同一個守衛內組出來的清單變數 —— "
+        "區塊清單被掏空成一句籠統的話了。「本頁有些東西不會出現」等於沒說，"
+        "使用者要的是「**哪些**不會出現」（線框 §04①）。")
+
+    # ⚠️「有一份清單」不夠，它要**非空**（2026-08-28 補正：上一版 `_gone = []` 照樣綠）。
+    assert max(_printed_lists.values()) > 0, (
+        f"{rel}:{guard.lineno} 的 `st.error(...)` 引用的清單變數 {_printed_lists} "
+        "一個字面元素都沒有 —— 印出去會是「以下區塊本次都不會出現：」後面空無一物，"
+        "等於又退回「一句籠統的話」。使用者要的是「**哪些**不會出現」（線框 §04①）。\n"
+        "（若清單改成執行期 `append` 組出來，本斷言會誤紅 —— 那時請留一個字面元素當錨"
+        "並就地說明，不要把斷言拿掉。）")
