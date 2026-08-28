@@ -306,15 +306,13 @@ def render_hot_money_section(token: str = "",
     except Exception as _ce:
         # v18.240：altair 失敗（如 typing_extensions 太舊踩 TypedDict closed=）→
         # 不再 fallback st.scatter_chart（底層仍是 altair 會再炸），改純表格降級
-        # degraded=True 的理由（逐項核對通過條件,**含不符的那一項**）：
-        #  ✓ 上方 4 個 metric（最新外資買賣超 / 近 N 日累計 / 最新匯率 / 近 N 日升貶）
-        #    與下方背離事件清單都在本 try **之外**,一個都沒少、一個都沒變。
-        #  ✓ handler 下面就地把同一組欄位（roll_flow / roll_apprec / state）畫成表格。
-        #  ⚠️ **不完全符合**：那張表是 `plot.tail(20)`,只有最後 20 列;
-        #     原圖畫的是整個序列。所以「每一個數字都還在」嚴格說並不成立。
-        # 判斷（非事實,供稽核推翻）：這裡取 🟠 是因為**拿來做決定的數字**是上方那 4 個
-        # metric,散點圖是趨勢示意;使用者不會因為少看到較早的 20 列以外資料而做出
-        # 錯誤決定。若稽核認為 tail 截斷已足以構成「數字消失」,改 degraded=False 即可。
+        # degraded=True 的理由（逐項核對 render_state.system_error 的通過條件）：
+        #  ✓ **本 try 從頭到尾只在畫圖,沒有產出任何數值輸出** —— 上方 4 個 metric
+        #    （最新外資買賣超 / 近 N 日累計 / 最新匯率 / 近 N 日升貶）與下方背離事件
+        #    清單都在本 try **之外**,一個都沒少、一個都沒變。
+        #  ✓ 把序列畫成散點圖,圖本身不算「數字」（SSOT 就是這樣寫的）。
+        #  ＋ handler 下面就地補一張 `plot.tail(20)` 表格 —— 依 SSOT 那是**加分不是門檻**,
+        #    有沒有它都不改變判定。（所以「tail 只有 20 列」不構成放寬,不必為它開例外。）
         system_error("象限圖渲染失敗", _ce, degraded=True,
                      hint="上方 4 個指標數字不受影響;下方改用表格列出最近 20 個交易日。")
         _t = plot.tail(20)[["date", "roll_flow", "roll_apprec", "state"]].copy()
@@ -331,9 +329,8 @@ def render_hot_money_section(token: str = "",
         try:
             st.bar_chart(sig.set_index("date")["foreign_net_yi"], height=220)
         except Exception as _be:
-            # degraded=True：本 try **只有**一行 st.bar_chart,沒有任何數字產生在裡面;
-            # handler 就地用 dataframe 列出同一欄的最後 10 列。
-            # ⚠️ 同上：tail(10) 不等於整段序列 —— 這是判斷不是事實,理由與象限圖那處相同。
+            # degraded=True：本 try **只有**一行 st.bar_chart,沒有產出任何數值輸出。
+            # handler 就地補的 `tail(10)` 表格依 SSOT 屬加分不是門檻。
             system_error("外資買賣超長條圖失敗", _be, degraded=True,
                          hint="上方指標數字不受影響;下方改用表格列出最近 10 個交易日。")
             st.dataframe(sig[["date", "foreign_net_yi"]].tail(10), use_container_width=True, hide_index=True)
@@ -342,7 +339,8 @@ def render_hot_money_section(token: str = "",
         try:
             st.line_chart(sig.set_index("date")["usdtwd"], height=220)
         except Exception as _le:
-            # degraded=True：同上（本 try 只有一行 st.line_chart,tail(10) 表格接手）。
+            # degraded=True：同上（本 try 只有一行 st.line_chart,無數值輸出;
+            # tail(10) 表格是加分不是門檻）。
             system_error("美元/台幣折線圖失敗", _le, degraded=True,
                          hint="上方指標數字不受影響;下方改用表格列出最近 10 個交易日。")
             st.dataframe(sig[["date", "usdtwd"]].tail(10), use_container_width=True, hide_index=True)

@@ -957,6 +957,14 @@ def render_macro_tab() -> None:
                             st.session_state["_radar_v1921_top"] = (_r_pre, _rs_pre)
                         except _FutTimeout:
                             st.session_state["_radar_v1921_top"] = (None, None)
+                            # ⚠️ **下一批候選，本批刻意不動**（2026-08-28 稽核 A9 登記）：
+                            # 逾時＝真失敗，而且 `(None, None)` 之後下方整個風險雷達
+                            # 區塊真的不渲染 —— 但這裡是灰字。
+                            # **兩把獨立的尺都掃不到它**，因為 handler 沒有把例外物件
+                            # 印出來（`_FutTimeout` 未綁 `as`，訊息是純字面字串），
+                            # 結構上與「這格沒資料」無法區分（見測試檔規則 1 盲點 4）。
+                            # 不在本批改的理由：它不在本批用來定義範圍的那個掃描結果裡，
+                            # 逕自加碼會讓「43 處」這個數字失去可複現性（§8.4 step 4）。
                             st.caption("⚠️ 風險雷達逾時未回,本次略過(不影響指標判讀)。")
                         except Exception:
                             st.session_state["_radar_v1921_top"] = (None, None)
@@ -965,6 +973,8 @@ def render_macro_tab() -> None:
                             st.session_state["_tp_v1948_top"] = _fu_tp.result(timeout=_ml_left())
                         except _FutTimeout:
                             st.session_state["_tp_v1948_top"] = None
+                            # ⚠️ 同上（稽核 A9）：逾時＝真失敗、拐點區塊真的消失，
+                            # 卻是灰字；兩把尺都掃不到。下一批候選，本批不動。
                             st.caption("⚠️ 轉折點偵測逾時未回,本次略過。")
                         except Exception:
                             st.session_state["_tp_v1948_top"] = None

@@ -23,15 +23,23 @@
 （第 4 條是這個單向性的**部分**補償：它要求那三組呼叫必須存在，刪掉就紅。
   但它只覆蓋那三組，不是全域。）
 
-⚠️ **receiver 盲點的三種形狀，補到第三種為止（2026-08-28）**：
-規則看不見的寫法，等於規則在那個方向上沒有生效。已知並已補上的三種：
+⚠️ **receiver 盲點：已知 5 種，補了 4 種（2026-08-28，稽核 A1 後更新）**
+規則看不見的寫法，等於規則在那個方向上沒有生效。
+**已補（每一種都有突變實證會轉紅）**：
   (a) `st.sidebar.error(...)` —— 屬性鏈（第三輪補）；
   (b) `_cols[2].error(...)` —— receiver 是 `ast.Subscript`（本批補，見 `_receiver_root`）；
-  (c) `col1.error(...)` —— receiver 是 `st.columns()` 綁出來的名字（本批補，見 `_st_container_names`）。
-⚠️ **不要讀成「receiver 已經全看得到」**：跨函式傳進來的容器、存進 dict / list 的容器，
-本檔**仍然看不見**（`_st_container_names` 只認同一檔內由 `st.<factory>(...)` 直接綁出的名字）。
-本批對 (b)(c) 各跑了**負控制**（把判定退回加寬前，同樣的突變全綠）—— 也就是說這兩條
-確實是靠加寬才抓得到的，不是別的規則順手抓到。
+  (c) `col1.error(...)` —— receiver 是 `st.columns()` 綁出來的名字（本批補，見 `_st_container_names`）；
+  (d) `_st_c.caption(...)` —— `import streamlit as _st_c` 的**模組別名**（本批補，
+      見 `_st_module_aliases`）。⚠️ 這個形狀**已經活在本批自己的 scope 裡**：
+      `ui/tab1_macro.py:306`、`ui/helpers/macro/ndc.py:61`。
+**未補（實測仍為綠，不要讀成已經補完）**：
+  (e) `getattr(st, "sidebar").caption(...)` —— 動態取屬性，靜態看不出來；
+  (f) `from streamlit import caption as _cap` 之後直接 `_cap(...)` —— 連 receiver 都沒有。
+  兩者本輪各跑過一次突變確認**仍然全綠**（32 passed）。要補 (f) 需要追蹤
+  `ImportFrom` 綁定，(e) 需要處理動態屬性 —— 已登記待後批。
+⚠️ **另外兩個仍然看不見的方向**：跨函式傳進來的容器、存進 dict / list 的容器
+（`_st_container_names` 只認同一檔內由 `<streamlit 名>.<factory>(...)` 直接綁出的名字）。
+本批對 (b)(c)(d) 各跑了**負控制 / 突變**，確認是靠加寬才抓得到的，不是別的規則順手抓到。
 """
 from __future__ import annotations
 
@@ -123,8 +131,29 @@ _ST_CONTAINER_FACTORIES = frozenset({
 })
 
 
+def _st_module_aliases(tree: ast.AST) -> frozenset[str]:
+    """這個模組把 streamlit 綁成了哪些名字？（`import streamlit as st` / `as _st_c` …）
+
+    ⚠️ 2026-08-28 稽核 A1：上一版把 `"st"` **硬編碼**在比對式裡，於是
+    `import streamlit as _st_c` 之後的 `_st_c.caption(例外)` 對每一條規則都是隱形的。
+    **這個形狀已經活在本批自己的 scope 裡**：`ui/tab1_macro.py:306`
+    （`_render_macro_indicator_card` 內 `import streamlit as _st_c`）、
+    `ui/helpers/macro/ndc.py:61`（`import streamlit as _st_mod`）。
+    今天那兩處都是良性的（沒拿它印例外），但形狀在，規則就得看得見。
+    """
+    out = {"st"}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name == "streamlit" and a.asname:
+                    out.add(a.asname)
+    return frozenset(out)
+
+
 def _st_container_names(tree: ast.AST) -> frozenset[str]:
-    """這個模組裡，哪些名字是 streamlit 容器？（`c1, c2 = st.columns(2)` 之類）
+    """這個模組裡，哪些名字「就是 streamlit」？＝ 模組別名 ∪ 由它們綁出來的容器。
+
+    （`c1, c2 = st.columns(2)` 之類；容器工廠也認別名，例：`c1 = _st_c.columns(2)`。）
 
     ⚠️ 刻意**只認同一個檔案內、由 `st.<factory>(...)` 直接綁出來的名字**：
     再往外推（跨函式傳遞、存進 dict）需要跨程序資料流分析，不在本批範圍內。
@@ -134,7 +163,7 @@ def _st_container_names(tree: ast.AST) -> frozenset[str]:
     （查證：`ui/tab1_macro_longterm.py:362` 的 `_lg_news.getLogger(...).warning`
       在本函式下**不會**被認成 streamlit，因為 `_lg_news` 綁的是 `import logging`）。
     """
-    out: set[str] = set()
+    out: set[str] = set(_st_module_aliases(tree))
     for n in ast.walk(tree):
         pairs = []
         if isinstance(n, ast.Assign):
@@ -145,7 +174,7 @@ def _st_container_names(tree: ast.AST) -> frozenset[str]:
         for tgt, val in pairs:
             if not (isinstance(val, ast.Call) and isinstance(val.func, ast.Attribute)):
                 continue
-            if (_receiver_root(val.func.value) != "st"
+            if (_receiver_root(val.func.value) not in out
                     or val.func.attr not in _ST_CONTAINER_FACTORIES):
                 continue
             for x in ast.walk(tgt):
@@ -314,6 +343,10 @@ def _direction_a_violations(path: pathlib.Path) -> list[str]:
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     containers = _st_container_names(tree)
+    parent = {}
+    for n in ast.walk(tree):
+        for c in ast.iter_child_nodes(n):
+            parent[c] = n
     bad = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ExceptHandler):
@@ -324,9 +357,24 @@ def _direction_a_violations(path: pathlib.Path) -> list[str]:
                 continue                      # 沒把例外拿給使用者看 → 不歸本檔管
             if _callee(call, containers) in RED_ENTRYPOINTS:
                 continue                      # 已經是系統紅燈
-            bad.append(f"{path.relative_to(ROOT)}:{call.lineno} "
-                       f"{_callee_src(call)}(…例外…)")
+            cur, fname = call, "<module>"
+            while cur in parent:
+                cur = parent[cur]
+                if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    fname = cur.name
+                    break
+            bad.append(f"{path.relative_to(ROOT)}::{fname}()"
+                       f"  (line {call.lineno} {_callee_src(call)})")
     return bad
+
+
+def _direction_a_site_keys(path: pathlib.Path) -> list[str]:
+    """違規站點的**結構鍵**：`相對路徑::函式()`，**不含行號**（行號會漂）。
+
+    ratchet 拿它比「是哪幾處」，而不只是「有幾處」—— 見
+    `test_a_caught_exception_backlog_only_shrinks` 對淨零置換的說明。
+    """
+    return [v.split("  (line ")[0] for v in _direction_a_violations(path)]
 
 
 @pytest.mark.parametrize("path", HEALTH_SCOPE + BATCH2A_SCOPE_A, ids=lambda p: p.name)
@@ -359,7 +407,15 @@ def test_caught_exception_is_reported_as_a_system_failure(path: pathlib.Path):
          ⚠️ 這正是本批新引進的 `_fetch_rich` / `_report_pool_fetch_failures` 的形狀
          （那一組是安全的：容器最後交給 `system_error`），但**規則沒有在守它**；
       4. 例外被轉成一個不含任何原名的字面字串（`st.caption("抓取失敗")`）——
-         結構上與「這格沒資料」無法區分，只能靠 review。
+         結構上與「這格沒資料」無法區分，只能靠 review；
+      5. ⭐ **`except Exception:`（未綁 `as`）＋ 印出「函式參數裡的那個例外」**
+         （2026-08-28 稽核 A2 揭露，本批**未修**）。實例：`ui/tab_manage.py`
+         的 `_friendly(title, e, level=...)` —— 內層 `except Exception:` 沒有綁定，
+         而 `st.caption(...)` 印的 `e` 是**外層函式的參數**。本檔的 taint 只從
+         `handler.name` 出發，看不到「參數本身就是一個例外物件」這件事。
+         ⚠️ **這正是兩把獨立的尺量出 47 vs 48 的唯一差額** —— 據實記在這裡，
+         不要把 47 讀成「全部」。要補需要型別/命名推斷（哪個參數是 Exception），
+         不在「只做顏色」這一批的範圍內。
     """
     bad = _direction_a_violations(path)
     assert not bad, (
@@ -381,6 +437,17 @@ def test_caught_exception_is_reported_as_a_system_failure(path: pathlib.Path):
 # ⚠️ 量測方法：`_direction_a_violations()`，與逐檔規則同一把尺（不要換尺再比大小）。
 DIRECTION_A_RATCHET = 4
 
+# ⚠️ **不只記「幾處」，還要記「是哪幾處」**（2026-08-28 稽核 X-4b 否證後補）：
+# 只斷言數量時，「還一筆再借一筆」的**淨零置換**永遠不紅 —— 實測：正確修掉
+# checkup.py 那處、同時在 tab_manage.py 新增一處全新灰字（總數仍 4）→ 1 passed。
+# 鍵刻意用 `路徑::函式()` 而不是行號：行號每次重構都漂，函式名不會。
+DIRECTION_A_SITES = frozenset({
+    "ui/helpers/fund/checkup.py::render_fund_checkup()",
+    "ui/helpers/portfolio/fee_deduction.py::render_fee_deduction_section()",
+    "ui/helpers/portfolio/load.py::batch_load_unloaded_funds()",
+    "ui/sidebar.py::render_sidebar()",
+})
+
 
 def test_a_caught_exception_backlog_only_shrinks():
     """範圍外的方向 A 殘留是 ratchet：可以慢慢還，不可以再借。
@@ -388,11 +455,33 @@ def test_a_caught_exception_backlog_only_shrinks():
     ⚠️ 這條擋的是「**新增**一個把例外印成灰字的地方」；它擋不住
     「把既有的一處刪掉不印」（那屬 §1 Fail Loud 的守備範圍，本檔開頭已宣告邊界）。
     """
-    total = sum(len(_direction_a_violations(p)) for p in UI_SOURCES)
+    found = [v for p in UI_SOURCES for v in _direction_a_violations(p)]
+    total = len(found)
     assert total <= DIRECTION_A_RATCHET, (
         f"把捕捉到的例外印成非紅燈的地方從 {DIRECTION_A_RATCHET} 增為 {total} —— "
         "新的失敗請走 ui.helpers.render_state.system_error()。\n  "
-        + "\n  ".join(v for p in UI_SOURCES for v in _direction_a_violations(p))
+        + "\n  ".join(found)
+    )
+    # ⚠️ **下限也要守**（2026-08-28 稽核 X-4b 否證後補）：
+    # 原本只有 `<=`，於是「還一筆再借一筆」的**淨零置換**永遠不紅 ——
+    # 實測：正確修掉 checkup.py 那處、同時在另一檔新增一處全新灰字（總數仍 4）→ 1 passed。
+    # 而且真的把那 4 處清完之後，**沒有任何機制把 4 降下來**，等於留了 4 格永久額度。
+    # 改成 `==` 之後：修好一處 → 本條轉紅 → 逼你把常數一起降。**紅燈在這裡是提醒不是責備。**
+    sites = {k for p in UI_SOURCES for k in _direction_a_site_keys(p)}
+    assert sites == DIRECTION_A_SITES, (
+        "方向 A 的殘留**站點**變了（不只是數量）—— 這條擋的是「還一筆再借一筆」的淨零置換。\n"
+        f"  只在現況有（新借的）：{sorted(sites - DIRECTION_A_SITES) or '無'}\n"
+        f"  只在清單有（已還掉的）：{sorted(DIRECTION_A_SITES - sites) or '無'}\n"
+        "還掉了就把 `DIRECTION_A_SITES` 與 `DIRECTION_A_RATCHET` 一起更新；"
+        "新借的請改走 system_error()。"
+    )
+    assert total == DIRECTION_A_RATCHET, (
+        f"方向 A 殘留剩 {total} 處，但 `DIRECTION_A_RATCHET` 還寫著 "
+        f"{DIRECTION_A_RATCHET} —— 修好了就把常數一起降下來（這條紅燈是提醒不是責備）。\n"
+        f"⚠️ 若你是**修好了**而看到這條：把常數改成 {total}。\n"
+        f"⚠️ 若你是**把某處的告知整段刪掉**（靜默吞掉）才讓數字變小：那不算修好，\n"
+        f"   請改走 system_error()（§1 Fail Loud —— 本檔規則抓不到「不印」，只抓「印錯顏色」）。\n"
+        f"目前殘留：\n  " + "\n  ".join(found)
     )
 
 
@@ -405,6 +494,14 @@ def test_a_declared_batch_scope_still_exists():
     """
     missing = sorted(str(p.relative_to(ROOT)) for p in BATCH2A_SCOPE_A if not p.is_file())
     assert not missing, f"下列路徑已不存在，本批的方向 A 規則正在對空氣生效：{missing}"
+    # ⚠️ **清單長度也要守**（2026-08-28 稽核 A3 補）：上一版只檢查「列出來的路徑存在」，
+    # 不檢查清單有沒有變短 —— 於是「刪掉一行 + 在該檔加 degraded=True」是**兩步繞過 N3**
+    # 的完整路徑（方向 A 那邊有 ratchet 兜底，N3 這邊沒有）。
+    # 用 `>=` 而不是 `==`：後續批次把更多檔清乾淨時應該**加**進來，那不該被擋。
+    assert len(BATCH2A_SCOPE_A) >= 14, (
+        f"`BATCH2A_SCOPE_A` 從 14 個檔縮成 {len(BATCH2A_SCOPE_A)} 個 —— "
+        "本批清乾淨的檔不得從 scope 移走（移走 = 規則 1 與 N3 在那個檔上一起失效）。"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -418,44 +515,107 @@ def test_a_declared_batch_scope_still_exists():
 # ⚠️ 這條同時是上面兩條的**反向護欄**：規則 1 可以靠「把整段刪掉不印」通過，
 #    本條要求那個呼叫**必須存在**，刪掉就紅。
 # ══════════════════════════════════════════════════════════════════
+# (說明, [(檔案, 函式, 錨點呼叫, 必須出現的紅燈入口)…])
+#
+# ⚠️ **錨點為什麼是「函式 + 那個呼叫」，而不是「整個檔案」**（2026-08-28 稽核 Z 組否證後重寫）：
+# 上一版三組 pair 各有一邊寫 `fn_name=None` ＝ 掃全檔，而那些檔案各自另有
+# 3 / 12 / 5 個**不相干的** `system_error()` —— 於是本規則被那些不相干的呼叫
+# **自證合格**。稽核組實測（跑全套，不只跑本條）：
+#     Z-1  backtest_section 的 USDTWD 失敗整段改 `pass` → 370 passed（全綠）
+#     Z-2  switch_advisor 的 list_pool 失敗整段改 `pass` → 370 passed（全綠）
+#     Z-3  tab_batch_analysis 兩處都改 `pass`            → 1 failed（只有這組抓到）
+# 也就是說：本條 docstring 原本寫的「刪掉就紅」，**對 6 個 side 有 3 個不成立**。
+# 這是「掃整個範圍 → 被不相干的東西自證合格」在本 repo 的**第 6 次復發**，
+# 而且復發在本批的旗艦新規則上，還附帶一句寫進檔案的錯誤強度宣稱。
+#
+# 現在的錨點：**找出「在 <函式> 裡、body 詞法上呼叫 <錨點> 的那個 try」，
+# 要求它的 handler 走 <紅燈入口>**。不相干的 `system_error` 再多也自證不了，
+# 因為它們不在那個 try 的 handler 裡。
+# ⚠️ `tab_batch_analysis._render_existing_results` 自己就有 2 個 `system_error`，
+#    所以「收窄到函式」還不夠 —— 錨點呼叫（`render_switch_section` /
+#    `render_regime_fit_section`）才是把兩者分開的那一維。
 _TWIN_FAILURES = [
-    # (說明, [(檔案, 函式名或 None, 必須出現的紅燈入口)…])
     ("USDTWD 匯率抓不到 → 美元計價基金被排除（兩邊逐字同一句、後果相同）", [
-        ("ui/helpers/fund_grp_health/backtest_section.py", None, "system_error"),
-        ("ui/helpers/portfolio_perf.py", "render_portfolio_performance", "system_error"),
+        ("ui/helpers/fund_grp_health/backtest_section.py",
+         "render_allocation_backtest_section", "fetch_usdtwd_frame", "system_error"),
+        ("ui/helpers/portfolio_perf.py",
+         "render_portfolio_performance", "fetch_usdtwd_frame", "system_error"),
     ]),
-    ("換標決策 / 景氣適配區塊失敗（兩邊呼叫的是同一個 render 函式）", [
-        ("ui/tab_fund_grp_health.py", None, "system_error"),
-        ("ui/tab_batch_analysis.py", "_render_existing_results", "system_error"),
+    ("換標決策區塊失敗（兩邊呼叫的是同一個 render_switch_section）", [
+        ("ui/tab_fund_grp_health.py",
+         "_render_health_table", "render_switch_section", "system_error"),
+        ("ui/tab_batch_analysis.py",
+         "_render_existing_results", "render_switch_section", "system_error"),
     ]),
-    ("選股池 list_pool() 讀取失敗（後果：tab_manage 會靜靜漏掉整個選股池）", [
-        ("ui/helpers/fund_grp_health/switch_advisor_section.py", None, "system_error"),
-        ("ui/tab_manage.py", "_sec_nav_backfill_auto", "system_error"),
+    ("景氣適配區塊失敗（兩邊呼叫的是同一個 render_regime_fit_section）", [
+        ("ui/tab_fund_grp_health.py",
+         "_render_health_table", "render_regime_fit_section", "system_error"),
+        ("ui/tab_batch_analysis.py",
+         "_render_existing_results", "render_regime_fit_section", "system_error"),
+    ]),
+    ("選股池讀取失敗（後果：tab_manage 會靜靜漏掉整個選股池）", [
+        # ⚠️ 這一檔有**兩個** list_pool 的 try：`_render_pool_editor`（訊息「選股池讀取失敗」，
+        #    ＝ tab_manage 那處的真正雙生）與 `render_switch_advisor_section`（訊息
+        #    「換股建議產生失敗」，是**另一個**失敗）。錨到後者會讓 Z-2 突變照樣全綠 ——
+        #    本輪自己用稽核組的 Z-2 回打時抓到並更正。
+        ("ui/helpers/fund_grp_health/switch_advisor_section.py",
+         "_render_pool_editor", "list_pool", "system_error"),
+        ("ui/tab_manage.py",
+         "_sec_nav_backfill_auto", "list_pool", "system_error"),
     ]),
 ]
 
 
-@pytest.mark.parametrize("label,pairs", _TWIN_FAILURES, ids=lambda x: x if isinstance(x, str) else "")
-def test_twin_failures_wear_the_same_colour(label, pairs):
-    """同一個失敗在不同分頁必須是同一個顏色入口。"""
+def _anchored_handler_reporters(rel: str, fn_name: str, anchor: str) -> list[list[str]] | None:
+    """在 `rel::fn_name()` 裡，body 詞法上呼叫 `anchor` 的每一個 try，其 handler 用了哪些入口。
+
+    回 None ＝ 連那個 try 都找不到（函式改名 / 呼叫搬走 / try 被拆掉）——
+    那也要紅，否則規則會對空氣生效。
+    """
+    tree = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == fn_name),
+              None)
+    if fn is None:
+        return None
+    out: list[list[str]] = []
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Try):
+            continue
+        body_calls = {(c.func.attr if isinstance(c.func, ast.Attribute)
+                       else getattr(c.func, "id", ""))
+                      for b in node.body for c in ast.walk(b) if isinstance(c, ast.Call)}
+        if anchor not in body_calls:
+            continue
+        out.append([_callee(c) for h in node.handlers for c in ast.walk(h)
+                    if isinstance(c, ast.Call)])
+    return out or None
+
+
+@pytest.mark.parametrize("label,sides", _TWIN_FAILURES,
+                         ids=lambda x: x if isinstance(x, str) else "")
+def test_twin_failures_wear_the_same_colour(label, sides):
+    """同一個失敗在不同分頁必須是同一個顏色入口。
+
+    ⚠️ **本條的強度，據實寫（不要再寫成「刪掉就紅」那種全稱保證）**：
+    守得到 —— 把**被錨定的那個 try** 的 handler 改成灰字、改成別的 widget、
+    或整段改 `pass`（handler 內沒有任何 `system_error` 呼叫）→ 紅；
+    把錨點函式改名、把錨點呼叫搬出那個 try → 紅（`_anchored_handler_reporters` 回 None）。
+    **守不到** —— handler 裡呼叫一個**自己另外定義的 wrapper**，而那個 wrapper 內部
+    才呼叫 `system_error`（跨函式呼叫圖，本檔一律不做）；以及把整個 try/except 連同
+    錨點呼叫一起刪掉改走別的實作（那不是「顏色錯」，是功能被移除，屬 §1 的守備範圍）。
+    """
     missing = []
-    for rel, fn_name, entry in pairs:
-        tree = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
-        scope = tree
-        if fn_name is not None:
-            scope = next((n for n in ast.walk(tree)
-                          if isinstance(n, ast.FunctionDef) and n.name == fn_name), None)
-            if scope is None:
-                missing.append(f"{rel}: 找不到函式 {fn_name}()（改名了？）")
-                continue
-        found = any(isinstance(n, ast.Call)
-                    and ((isinstance(n.func, ast.Name) and n.func.id == entry)
-                         or (isinstance(n.func, ast.Attribute) and n.func.attr == entry))
-                    for n in ast.walk(scope))
-        if not found:
-            missing.append(f"{rel}"
-                           + (f"::{fn_name}()" if fn_name else "")
-                           + f" 找不到 {entry}(...) 呼叫")
+    for rel, fn_name, anchor, entry in sides:
+        got = _anchored_handler_reporters(rel, fn_name, anchor)
+        if got is None:
+            missing.append(f"{rel}::{fn_name}() 裡找不到「body 呼叫 {anchor}(...)」的 try "
+                           f"—— 函式改名？呼叫搬走？try 拆掉？")
+            continue
+        for i, reporters in enumerate(got):
+            if entry not in reporters:
+                missing.append(f"{rel}::{fn_name}() 包住 {anchor}(...) 的第 {i + 1} 個 try，"
+                               f"其 handler 沒有走 {entry}(...)（實際用了：{reporters or '什麼都沒有'}）")
     assert not missing, (
         f"「{label}」在不同分頁的顏色又分岔了 —— 同一個失敗兩種顏色，"
         "顏色帶的資訊就變成「你在哪個分頁」而不是「這件事嚴不嚴重」：\n  "
@@ -1017,6 +1177,37 @@ _CHART_SAFE_BARE_CALLS = frozenset({
 })
 
 
+def _may_be_degraded(call: ast.Call) -> bool:
+    """這個 `system_error(...)` 有沒有**可能**把 🔴 降成 🟠？
+
+    ⚠️ **2026-08-28 稽核 N 組否證後改寫：上一版只認字面量 `True`，三種等效寫法全綠。**
+    判定式原本是 `getattr(k.value, "value", False) is True`，而
+    `render_state.system_error` 的實作是 `level="warning" if degraded else "error"`
+    —— 只要 truthy 就降色。稽核組實測（對照組 `degraded=True` → 1 failed）：
+
+        degraded=_dg（_dg = True）   → 32 passed  ← 綠，畫面真的變橘
+        **{"degraded": True}         → 32 passed  ← 綠，畫面真的變橘
+        degraded=1（truthy 非 bool）→ 32 passed  ← 綠，畫面真的變橘
+
+    現在改成**保守方向**：只要「無法證明它不會降色」就算數 ——
+      - 關鍵字 `degraded=<字面 falsy>`（`False` / `0` / `None` / `""`）→ 不算；
+      - 關鍵字 `degraded=<其他任何東西>`（變數、呼叫、算式）→ **算**（證明不了）；
+      - 出現 `**kwargs` 展開（`**{...}` 或 `**d`）→ **算**（裡面可能有 degraded）。
+    方向是刻意的：本規則擋的是「不該降的降了」，寧可多攔一個要人寫清楚，
+    也不要讓一個真的會降色的寫法從規則底下走過去。
+    """
+    for kw in call.keywords:
+        if kw.arg is None:                     # `**something`
+            return True
+        if kw.arg != "degraded":
+            continue
+        v = kw.value
+        if isinstance(v, ast.Constant) and not v.value:
+            continue                           # 明確寫死 falsy → 不會降色
+        return True
+    return False
+
+
 def _is_chart_only_try(node: ast.Try, containers: frozenset[str] = frozenset()) -> bool:
     """這個 `try:` 是不是「從頭到尾只在畫一張圖」？
 
@@ -1080,9 +1271,7 @@ def test_n3_degraded_is_not_a_one_way_escape_hatch(path: pathlib.Path):
         for handler in node.handlers:
             for call in ast.walk(handler):
                 if (isinstance(call, ast.Call) and _callee(call) == "system_error"
-                        and any(k.arg == "degraded"
-                                and getattr(k.value, "value", False) is True
-                                for k in call.keywords)):
+                        and _may_be_degraded(call)):
                     bad.append(f"{path.relative_to(ROOT)}:{call.lineno}")
     assert not bad, (
         "以下 `system_error(degraded=True)` 所在的 try，**本規則無法確認它只在畫圖**"
