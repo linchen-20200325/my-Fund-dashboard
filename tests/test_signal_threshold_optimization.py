@@ -6,7 +6,7 @@ import pytest
 
 from services.crisis_backtest import CrisisEvent
 from services.macro_signal_lookback import SignalSpec
-from services.signal_threshold_optimization import (
+from services.calibration.signal_threshold import (
     make_default_grid,
     optimize_signal_threshold,
 )

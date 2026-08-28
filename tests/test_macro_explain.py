@@ -15,7 +15,7 @@
 """
 from __future__ import annotations
 
-from services.macro_explain import (
+from services.macro.explain import (
     INDICATOR_FREQ_MAP,
     FREQ_LABEL,
     build_beginner_payload,

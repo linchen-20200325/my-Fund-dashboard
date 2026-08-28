@@ -7,7 +7,7 @@ services/macro_service.py::identify_regime() 並存互補。
 """
 from __future__ import annotations
 
-from services.macro_tw_local import (
+from services.macro.tw_local import (
     classify_long_term_regime,
     classify_short_term_regime,
     detect_mk_golden_inflection,

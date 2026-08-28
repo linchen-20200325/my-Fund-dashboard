@@ -12,7 +12,7 @@ plotly = pytest.importorskip("plotly")
 
 import plotly.graph_objects as go
 
-from ui.helpers.chart_danger import add_danger_hlines
+from ui.helpers.chart.danger import add_danger_hlines
 
 
 def test_high_bad_two_lines_with_ssot_values():

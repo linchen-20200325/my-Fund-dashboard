@@ -72,7 +72,7 @@ class TestComputeFourHorizonSummary:
     """compute_four_horizon_summary 純函式守衛"""
 
     def test_empty_returns_4_buckets(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary({})
         assert set(r.keys()) == {"long", "mid", "short", "inflection"}
         for _k, _d in r.items():
@@ -83,12 +83,12 @@ class TestComputeFourHorizonSummary:
             assert "emoji" in _d
 
     def test_none_indicators_no_raise(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary(None, phase_info={"phase": "復甦", "score": 6.5})
         assert r["long"]["level"] == "green"  # score 6.5 → green
 
     def test_long_horizon_uses_phase_score(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         # score 高 → green
         r_g = compute_four_horizon_summary({}, phase_info={"phase": "擴張", "score": 7.0})
         assert r_g["long"]["level"] == "green"
@@ -100,7 +100,7 @@ class TestComputeFourHorizonSummary:
         assert r_y["long"]["level"] == "yellow"
 
     def test_short_horizon_vix_panic_red(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary(
             {"VIX": {"value": 35.0}},
             phase_info={"phase": "擴張", "score": 6.0},
@@ -109,7 +109,7 @@ class TestComputeFourHorizonSummary:
         assert "VIX" in r["short"]["headline"]
 
     def test_short_horizon_vix_warning_yellow(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary(
             {"VIX": {"value": 22.0}},
             phase_info={"phase": "擴張", "score": 6.0},
@@ -117,7 +117,7 @@ class TestComputeFourHorizonSummary:
         assert r["short"]["level"] == "yellow"
 
     def test_inflection_sahm_triggers_red(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary(
             {"SAHM": {"value": 0.55}},
             phase_info={"phase": "擴張", "score": 6.0},
@@ -126,7 +126,7 @@ class TestComputeFourHorizonSummary:
         assert "薩姆" in r["inflection"]["headline"]
 
     def test_inflection_yield_inversion_yellow(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary(
             {"YIELD_10Y2Y": {"value": -0.5}},
             phase_info={"phase": "擴張", "score": 6.0},
@@ -135,7 +135,7 @@ class TestComputeFourHorizonSummary:
 
     def test_inflection_two_warnings_escalate_to_red(self):
         """≥ 2 個 warning(無 trigger)→ 紅燈(多重警訊)"""
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary(
             {
                 "YIELD_10Y2Y": {"value": -0.5},
@@ -146,7 +146,7 @@ class TestComputeFourHorizonSummary:
         assert r["inflection"]["level"] == "red"
 
     def test_mid_horizon_pmi_contraction(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary(
             {"PMI": {"value": 45.0}},
             phase_info={"phase": "擴張", "score": 6.0},
@@ -155,7 +155,7 @@ class TestComputeFourHorizonSummary:
         assert "PMI" in r["mid"]["headline"]
 
     def test_all_healthy_all_green(self):
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         r = compute_four_horizon_summary(
             {
                 "VIX": {"value": 14.0},
@@ -194,7 +194,7 @@ class TestComputeFourHorizonSummary:
             CFNAI_RECESSION_THRESHOLD,
             SAHM_RECESSION_THRESHOLD,
         )
-        from ui.helpers.macro_beginner_view import compute_four_horizon_summary
+        from ui.helpers.macro.beginner_view import compute_four_horizon_summary
         # 剛好 = SSOT 閾值 → 觸發
         r1 = compute_four_horizon_summary(
             {"SAHM": {"value": SAHM_RECESSION_THRESHOLD}},
@@ -217,7 +217,7 @@ class TestFiveBucketSummary:
 
     def test_news_gray_when_news_items_none(self):
         """news_items=None → 第 5 桶 ⬜「未掃描」(對齊 Stock 未抓 RSS 狀態)。"""
-        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        from ui.helpers.macro.beginner_view import compute_five_bucket_summary
         r = compute_five_bucket_summary({}, phase_info={}, news_items=None)
         assert "news" in r
         assert r["news"]["level"] == "gray"
@@ -225,7 +225,7 @@ class TestFiveBucketSummary:
 
     def test_news_green_when_no_systemic_hit(self):
         """news_items 有資料但無 systemic → 🟢 無系統風險。"""
-        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        from ui.helpers.macro.beginner_view import compute_five_bucket_summary
         items = [
             {"title": "Fed signals patience", "is_systemic": False},
             {"title": "Earnings beat", "is_systemic": False},
@@ -237,7 +237,7 @@ class TestFiveBucketSummary:
 
     def test_news_yellow_on_one_systemic(self):
         """1 則 systemic → 🟡(對齊 SSOT NEWS_SYSTEMIC_YELLOW_COUNT=1)。"""
-        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        from ui.helpers.macro.beginner_view import compute_five_bucket_summary
         items = [
             {"title": "Bank run risk warning", "is_systemic": True},
             {"title": "Earnings beat", "is_systemic": False},
@@ -249,7 +249,7 @@ class TestFiveBucketSummary:
 
     def test_news_red_on_two_or_more_systemic(self):
         """≥2 則 systemic → 🔴(對齊 SSOT NEWS_SYSTEMIC_RED_COUNT=2)。"""
-        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        from ui.helpers.macro.beginner_view import compute_five_bucket_summary
         items = [
             {"title": "War escalates", "is_systemic": True},
             {"title": "Major bank fails", "is_systemic": True},
@@ -262,7 +262,7 @@ class TestFiveBucketSummary:
 
     def test_preserves_four_horizons(self):
         """v19.146 不破壞既有 4-horizon — 應仍含 long/mid/short/inflection 完整 dict。"""
-        from ui.helpers.macro_beginner_view import compute_five_bucket_summary
+        from ui.helpers.macro.beginner_view import compute_five_bucket_summary
         r = compute_five_bucket_summary(
             {"PMI": {"value": 45.0}},
             phase_info={"phase": "減速", "score": 4.0},

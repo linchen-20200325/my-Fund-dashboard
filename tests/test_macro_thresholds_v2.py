@@ -86,7 +86,7 @@ def test_score_function_behavior_equivalence():
 
 def test_score_calibration_function_behavior_equivalence():
     """v19.169 後 _s_hy_spread 與原 inline 等價."""
-    from services.macro_score_calibration import _s_hy_spread
+    from services.calibration.macro_score import _s_hy_spread
     assert _s_hy_spread(3.5) == 2
     assert _s_hy_spread(7.0) == -2
     assert _s_hy_spread(5.0) == 0
@@ -138,7 +138,7 @@ def test_macro_validation_uses_ssot():
 
 
 def test_macro_score_calibration_uses_ssot():
-    import services.macro_score_calibration as msc
+    import services.calibration.macro_score as msc
     src = open(msc.__file__, encoding="utf-8").read()
     assert "from shared.macro_thresholds_v2 import" in src
 
@@ -437,8 +437,12 @@ def test_pmi_macro_validation_uses_ssot():
 
 
 def test_pmi_macro_score_calibration_uses_ssot():
-    """services/macro_score_calibration.py 必須 import PMI_THRESHOLDS."""
-    from services.macro_score_calibration import _s_pmi
+    """services/calibration/macro_score.py 必須 import PMI_THRESHOLDS.
+
+    (2026-08-28:原路徑 `services/macro_score_calibration.py` 為 v19.201 P2-3 的
+    向後相容 shim,production 0 caller,已整檔刪除 → 本測試改指真模組。)
+    """
+    from services.calibration.macro_score import _s_pmi
     # 行為等價:>= 50 → 2;< 45 → -2;[45, 50) → -1
     assert _s_pmi(50.0) == 2
     assert _s_pmi(44.0) == -2
@@ -446,8 +450,12 @@ def test_pmi_macro_score_calibration_uses_ssot():
 
 
 def test_pmi_macro_tw_local_uses_ssot():
-    """services/macro_tw_local.py 必須 import TW_PMI_THRESHOLDS."""
-    from services.macro_tw_local import _TWPMI_STRONG, _TWPMI_EXPANSION, _TWPMI_NEUTRAL, _TWPMI_WEAK
+    """services/macro/tw_local.py 必須 import TW_PMI_THRESHOLDS.
+
+    (2026-08-28:原路徑 `services/macro_tw_local.py` 為 v19.202 P2-2 的向後相容
+    shim,production 0 caller,已整檔刪除 → 本測試改指真模組。)
+    """
+    from services.macro.tw_local import _TWPMI_STRONG, _TWPMI_EXPANSION, _TWPMI_NEUTRAL, _TWPMI_WEAK
     assert _TWPMI_STRONG == 55.0
     assert _TWPMI_EXPANSION == 52.0
     assert _TWPMI_NEUTRAL == 50.0
@@ -455,8 +463,12 @@ def test_pmi_macro_tw_local_uses_ssot():
 
 
 def test_pmi_macro_beginner_view_uses_ssot():
-    """ui/helpers/macro_beginner_view.py 必須 import PMI_THRESHOLDS."""
-    from ui.helpers.macro_beginner_view import _PMI_CONTRACTION_THRESHOLD
+    """ui/helpers/macro/beginner_view.py 必須 import PMI_THRESHOLDS.
+
+    (2026-08-28:原路徑 `ui/helpers/macro_beginner_view.py` 為 v19.204 P2-7 的
+    向後相容 shim,production 0 caller,已整檔刪除 → 本測試改指真模組。)
+    """
+    from ui.helpers.macro.beginner_view import _PMI_CONTRACTION_THRESHOLD
     assert _PMI_CONTRACTION_THRESHOLD == 50.0
 
 
@@ -564,7 +576,7 @@ def test_fed_bs_matches_macro_repository_dict():
 
 def test_calibration_m2_fedbs_use_ssot():
     """macro_score_calibration._s_m2/_s_fed_bs 必須走 SSOT 常數（值 + 行為等價）。"""
-    from services.macro_score_calibration import (
+    from services.calibration.macro_score import (
         _s_m2, _s_fed_bs,
         _M2_EASING, _M2_TIGHTENING, _FEDBS_EXPANSION, _FEDBS_CONTRACTION,
     )
