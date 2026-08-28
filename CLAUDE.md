@@ -1312,7 +1312,7 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 
 ### 2.1 SSOT — 單一權威來源
 
-**來源註冊清單 SSOT**:`shared/fred_series.py`(v19.70, 34 FRED series IDs)+ `ui/helpers/data_registry.py`(L62-120, freshness lag table)+ `repositories/moneydj_fetcher.py:36-108`(MoneyDJ 多 page_type fallback chain)。
+**來源註冊清單 SSOT**:`shared/fred_series.py`(v19.70, 34 FRED series IDs)+ `ui/helpers/data_registry.py`(L62-120, freshness lag table)+ `repositories/fund/sources.py::get_page_types_to_try` + 同檔 `_PAGE_TYPE_*` / 平台碼對照表(MoneyDJ 多 page_type fallback chain)。⚠️ 本行原寫 `repositories/moneydj_fetcher.py:36-108`,**該檔不存在**(v19.200 P1-5 拆檔後實作住在 `repositories/fund/` 子套件);(2026-08-28 路徑更正,量測日同日),**只更正路徑,條文語意未改**。
 
 **5-Tier 權威分級**(衝突時上層贏,**禁止平均**):
 
@@ -1342,7 +1342,16 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 - `infra/cache.py` `_CACHE_REGISTRY` 集中註冊所有 cache 函式,supports「clear all」
 - ✅ **F-PROV-1 主要 fetcher 全收**(v19.82 → v19.221 逐步):
   - **L1 fetcher 已收**(各帶 `source` + `fetched_at`):`fetch_fred` v19.82 / `fetch_yf_close` v19.83 / `fetch_defillama_stablecoin_mcap` v19.84 / `fetch_aaii_sentiment` v19.84 / `fetch_foreign_flow_series` v19.151 / `fetch_twse_breadth` + `fetch_finmind_foreign_investor` + `fetch_cbc_m1b_m2` v19.94 / `fetch_ndc_signal_history` + `fetch_tw_pmi_local` v19.151 / `fetch_ism_pmi` v19.156(7 個 return 點) / `fetch_macro_compass` v19.86 / `fetch_stooq_csv` v19.197 / `fetch_cboe_csv` v19.221(`s.attrs["source"]/"fetched_at"`)
-  - **WONTFIX(v19.271 C 深挖確認)**:`fetch_yf_forward_pe` / `fetch_multpl_pe` 兩 fn **production 0 caller**(`services/valuation.py` v19.251 已退役,Forward P/E 改 `shared/macro_buckets.py:150-153` inline literal),且 fn 內部 `print(f"[external_market/...]")` console log 已具 audit trail。包 NamedTuple/dict 雖技術可行但 0 caller = ROI 0,§-1 不主動推。**未來條件**:若 V5 修補復活並接入 orchestrator,再評估 NamedTuple 包裝。
+  - ~~**WONTFIX(v19.271 C 深挖確認)**:`fetch_yf_forward_pe` / `fetch_multpl_pe` 兩 fn **production 0 caller**(`services/valuation.py` v19.251 已退役,Forward P/E 改 `shared/macro_buckets.py:150-153` inline literal),且 fn 內部 `print(f"[external_market/...]")` console log 已具 audit trail。包 NamedTuple/dict 雖技術可行但 0 caller = ROI 0,§-1 不主動推。**未來條件**:若 V5 修補復活並接入 orchestrator,再評估 NamedTuple 包裝。~~
+    → **2026-08-28 結案:兩 fn 已整段刪除,本列退役**(**有意識的政策變更,不是漏刪**;
+    決策者 **user** 2026-08-28「同意清理,落實目錄瘦身」)。
+    **舊表述的理由仍然成立**——「0 caller ⇒ 包 provenance 的 ROI 是 0」這句今天依然對;
+    **被權衡掉的是它的結論**:§-1.5.1c 判定 3 已把「Orphaned 過期代碼」的處置方向
+    由「維持現狀」改為「**實體刪除**」,而本輪正是「有任務碰到
+    `repositories/external_market_repository.py`」那個觸發條件。
+    **實測依據**:全 repo grep 兩個 fn 名,除自身定義外唯一命中處就是本列;
+    同檔其餘三個 fn(`fetch_stooq_csv` / `fetch_cboe_csv` / `fetch_cboe_pcratio_csv`)
+    由 `services/risk_radar.py` 真實使用,**未動**。
   - ✅ **macro 融合層 v19.270 D8 #8 落地**:`calculate_composite_score(ind, *, provenance_out=None)`
     opt-in side-car dict pattern。既有 caller 傳 None 行為零變化;新 caller 傳 dict 取得
     `sources` / `fetched_at_latest` / `contributions[indicator]` / `n_indicators`。設計選 E
@@ -1469,8 +1478,8 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 | DXY(美元指數) | [70, 130] | MACRO_THRESHOLDS |
 | HY OAS (%) | [1, 25] | MACRO_THRESHOLDS |
 | 殖利率差 10Y-2Y / 10Y-3M (%) | [-3, 5] | MACRO_THRESHOLDS |
-| Sahm Rule | ≥ 0.5 危機 | services/macro_service.py:216-218 |
-| CFNAI | ≤ -0.7 衰退 | services/macro_service.py:226 |
+| Sahm Rule | ≥ 0.5 危機 | SSOT `shared/signal_thresholds.py::SAHM_RECESSION_THRESHOLD`;consumer `services/macro/turning_points.py` |
+| CFNAI | ≤ -0.7 衰退 | SSOT `shared/signal_thresholds.py::CFNAI_RECESSION_THRESHOLD`;consumer `services/macro/turning_points.py` |
 | Forward P/E | μ=16.5, σ=3.0 | shared/macro_buckets.py:150-153(DESIGN literal,v19.251 valuation.py 退役) |
 | ~~GDP Trend (%)~~ | ~~μ=2.3, σ=1.5~~ | ~~services/valuation.py:33-38~~(v19.251 退役;production 0 caller) |
 | NAV(基金) | > 0 | (停售/清算時應為 NaN 而非 0) |
@@ -1496,7 +1505,7 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 | `MATERIAL_*`(色票) | hex 字串 | shared/colors.py v19.71 | ✅ SSOT(18 production 檔已遷移) |
 | `MACRO_THRESHOLDS`(26 entries) | 各 indicator zone 邊界 | repositories/macro_repository.py:180 v19.72 | ⚠️ **僅文件參考**(F-GRAY-4 v19.80 audit:dict 與 inline 條件**語意不同源**,inline 服務多用途有不同閾值,不可機械式 swap;詳見 macro_repository.py:199-212 註解) |
 | `SCORE_RULES`(macro evaluation) | weights + lambdas | services/macro_validation.py:35-84 | ✅ SSOT + JSON override(macro_thresholds_global.json) |
-| Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | services/macro_weights_store.py:363-364 | ✅ SSOT + active.json override |
+| Verdict cutoffs `(10,5,-5,-10)` + phase `(8,5,3)` | 5/4 級分類 | `services/macro/weights_store.py::_DEFAULT_VERDICT_CUTOFFS` / `_DEFAULT_PHASE_THRESHOLDS` | ✅ SSOT + active.json override |
 | ~~Valuation `FORWARD_PE_MEAN/STD`、`GDP_TREND/_STD`~~ | ~~16.5/3.0/2.3/1.5~~ | ~~services/valuation.py:33-38~~ | **v19.251 退役**(0 production caller,Forward P/E 改 shared/macro_buckets.py:150-153 inline literal) |
 | `signal_thresholds.*`(36 個語意常數) | 252 / 0.5 / -0.7 / σ cutoffs / 各 weight / NEAR_PCT / CPI YoY+MoM zones / capture min_months+score base / rotation σ 切點+健康門檻 等 | shared/signal_thresholds.py v19.75(v19.416 +5) | ✅ SSOT(W2+W3a+W5-4 已遷移 12 consumer:fund_service / macro_service / precision_service / portfolio_service / liquidity_engine / macro_explain / fund_dividend_calculator / risk_calibration / macro_repository.recession_probability / macro_tw_local CPI zones;v19.416 +2:capture_ratio / rotation) |
 | ~~Allocation phase params~~ | ~~DRIP/CASH/STAY 4×3 matrix~~ | ~~services/allocation_simulator.py:34-97~~ | ~~EX-POLICY-1~~ **v19.212 P0-3-#4 整檔拔毒**(866 LOC,production 0 caller) |
@@ -1562,7 +1571,7 @@ assert (fx_df["rate_twd_per_usd"] < 50).all(), "USDTWD 不應 >50"
 - **基金 1Y 報酬**:`(nav[-1]/nav[-252])-1` vs MoneyDJ wb01 顯示值 對帳(evidence: services/cross_source_compare.py)
 - **Sharpe**:自算(`mean/std * sqrt(252)`)vs MoneyDJ wb07 對帳
 - **配息殖利率**:`sum(12M div)/current_nav` vs MoneyDJ 顯示值
-- **macro health score**:目前單一 path(`services/macro_service.py`),缺對照演算法 → 步驟 3 audit 後補
+- **macro health score**:目前單一 path(`services/macro/composite_score.py::calculate_composite_score`),缺對照演算法 → 步驟 3 audit 後補
 
 **浮點比較**:**禁止 `==`**,一律:
 ```python
@@ -1615,7 +1624,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 - **配息切割(ex-date 跳空)**:NAV 跳空 → 視業務需求做還原 NAV 或保留原序列(目前保留原序列,但 Sharpe / σ 計算須警示)
 - **NAV 週末缺值**:基金不交易 → 計算 daily return 時跳過,**禁止**填 0
 - **FX 重大波動**:USDTWD 單日 > 1% → 影響 TWD 換匯績效顯著,應旗標
-- **MoneyDJ 子網域 403**:Insurance/TCB/Chubb 子域故障 → fallback chain(yp010000 → yp010001 → TDCC → FundClear → Cnyes)須完整(evidence: repositories/moneydj_fetcher.py:36-108)
+- **MoneyDJ 子網域 403**:Insurance/TCB/Chubb 子域故障 → fallback chain(yp010000 → yp010001 → TDCC → FundClear → Cnyes)須完整(evidence: `repositories/fund/sources.py::get_page_types_to_try` 與同檔各 `_src_*` fallback)
 - **FRED 月頻指標未發布**:next_release_date 未到 → 用上期值帶 `as_of` 標籤,**禁止**填當期日期
 - **proxy 失效 / 直連 / 407**:`infra/proxy.py` NAS Squid → 直連 → fail 降級鏈
 - **Google Sheet 政策衝突**:主鍵是 **`(policy_id, fund_url)` 複合鍵**,同一保單同一檔基金
@@ -1751,7 +1760,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 |---|---|---|---|
 | **L0 Infra** | (跨層基底) | OAuth / Proxy / Cache / 跨層公用 | `infra/proxy.py`、`infra/oauth.py`、`infra/cache.py`(+ `_CACHE_REGISTRY`) |
 | **L0 Shared** | (跨層基底) | 常數 / TTL / FRED IDs / 色票(無 IO 純常數) | `shared/ttls.py`、`shared/fred_series.py`、`shared/colors.py` |
-| **L1 Repository** | **DataFetcher** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund_repository.py`、`repositories/moneydj_fetcher.py`、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy shim)、`repositories/hot_money_repository.py`(P0-4-A 搬入)、`repositories/tw_macro_repository.py`(P0-4-B 搬入)|
+| **L1 Repository** | **DataFetcher** | 外部資料抓取 / HTTP / 解析 / 快取(`@_ttl_cache`) | `repositories/macro_repository.py`、`repositories/fund/`(子套件:`sources` / `fund_orchestration` / `nav_metrics` / `fx_and_main`;⚠️ 本欄原寫 `repositories/fund_repository.py`、`repositories/moneydj_fetcher.py`,**兩檔皆不存在** —— v19.200 P1-5 拆檔後的實際位置就是本子套件,(2026-08-28 路徑更正,量測日同日))、`repositories/news_repository.py`、`fund_fetcher.py`(根目錄,legacy shim)、`repositories/hot_money_repository.py`(P0-4-A 搬入)、`repositories/tw_macro_repository.py`(P0-4-B 搬入)|
 | **L2 Service** | **CalcEngine** | 業務邏輯純函式 / 評分 / 策略 / 模擬 / AI | `services/macro/` (11 子模組)、`services/health/` (5 子模組)、`services/calibration/` (4 子模組)、`services/fund_service.py`、`services/portfolio_service.py`、`services/ai_service.py`、`services/crisis_backtest.py`、`services/macro_validation.py`、`services/fund_batch.py`(v19.406 批次攤平器;v19.413 RETAINED-LEGACY)、`services/fund_row.py`(v19.413 `process_one_fund` 下沉;健診+批次共用單檔 worker)、`services/capture_ratio.py`(v19.414 上/下檔捕捉率 + 操盤評分,純數學)、`services/rotation.py`(v19.415 輪動配對純邏輯)等 ~25 檔(v19.212 退 allocation_simulator,v19.251 退 valuation) |
 | **L3 UI** | **ComponentUI** | Streamlit Tab 渲染 + components + helpers | `app.py`(425 LOC,僅 orchestrator)+ `ui/tab*.py` + `ui/components/` + `ui/helpers/` |
 

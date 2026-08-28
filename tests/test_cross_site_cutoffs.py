@@ -25,7 +25,7 @@ def test_vix_yellow_all_aligned_to_ssot():
     C2-D 為文件結案(SPEC §16.1),不再有 site-level 收斂工作。"""
     from services.macro_validation import DEFAULT_VIX_WARNING
     from shared.macro_buckets import _VIX_YELLOW
-    from ui.helpers.macro_beginner_view import _VIX_WARNING_THRESHOLD
+    from ui.helpers.macro.beginner_view import _VIX_WARNING_THRESHOLD
 
     # SSOT 22
     assert _VIX_YELLOW == 22.0, (
@@ -52,7 +52,7 @@ def test_vix_yellow_all_aligned_to_ssot():
 def test_hy_yellow_intentional_spread():
     """HY spread yellow 也是刻意散落:4(SSOT)/ 5(教學保守)。"""
     from shared.macro_buckets import _HY_YELLOW
-    from ui.helpers.macro_beginner_view import _HY_SPREAD_WARN_THRESHOLD
+    from ui.helpers.macro.beginner_view import _HY_SPREAD_WARN_THRESHOLD
     assert _HY_YELLOW == 4.0
     assert _HY_SPREAD_WARN_THRESHOLD == 5.0
     assert _HY_YELLOW != _HY_SPREAD_WARN_THRESHOLD
@@ -65,7 +65,7 @@ def test_vix_panic_universal_30():
     """VIX panic=30 是真 SSOT,所有 3 個模組必須一致。任一處改 30 → CI 立擋。"""
     from services.macro_validation import DEFAULT_VIX_CRISIS
     from shared.macro_buckets import _VIX_RED
-    from ui.helpers.macro_beginner_view import _VIX_PANIC_THRESHOLD
+    from ui.helpers.macro.beginner_view import _VIX_PANIC_THRESHOLD
 
     assert DEFAULT_VIX_CRISIS == 30.0
     assert _VIX_RED == 30.0

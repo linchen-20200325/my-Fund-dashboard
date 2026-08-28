@@ -239,10 +239,13 @@ def test_fx_cache_lives_in_l2_so_every_caller_can_reach_it():
     import ast
     from pathlib import Path
 
-    import services.fx_regime_service as S
-    from ui.helpers.fund_grp_health.fx_regime import fx_regime_by_ccy as _l3
-
-    assert _l3 is S.fx_regime_by_ccy, "L3 應為薄轉呼,不得自己再存一份快取"
+    # ⚠️ 2026-08-28:原本這裡還有兩行 ——
+    #     `from ui.helpers.fund_grp_health.fx_regime import fx_regime_by_ccy as _l3`
+    #     `assert _l3 is S.fx_regime_by_ccy, "L3 應為薄轉呼,不得自己再存一份快取"`
+    # 已刪除(**測試對象消失,不是為了讓 CI 綠**):那個 L3 re-export shim
+    # production 0 caller,本輪整檔刪除,沒有「薄轉呼」可以驗了。
+    # **下面的 AST 守衛刻意保留** —— 它驗的是 production 檔的 import 方向,
+    # 那個對象還在,而且正是「有人把快取搬回 L3」時唯一會紅燈的地方。
 
     # production 必須從 **L2** 讀。若哪天有人改回 import L3,
     # 測試的 monkeypatch 就會 patch 不到 → 安靜地打真網路(PROCESS §4 假綠)。

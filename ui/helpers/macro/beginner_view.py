@@ -25,7 +25,10 @@
 §8 架構
 - L3 UI helper;compute_* 系列為純函式(無 streamlit 依賴 → 可單獨測試)
 
-由 PR 2 (v19.125) wire 進 ui/tab1_macro.py:
+由 PR 2 (v19.125) wire 進 ui/tab1_macro.py(⚠️ 2026-08-28 註:下面這段是**歷史紀錄**,
+不是現行程式;其中的 `ui.helpers.macro_beginner_view` 是 v19.204 P2-7 的向後相容 shim,
+production 0 caller,已於 2026-08-28 整檔刪除 —— 現行 import path 就是本檔
+`ui.helpers.macro.beginner_view`。歷史段落照本檔慣例保留不刪,僅就地標明。):
     from ui.helpers.macro_beginner_view import (
         render_beginner_view, render_principle_classroom,
     )

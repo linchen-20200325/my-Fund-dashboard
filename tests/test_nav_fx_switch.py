@@ -147,13 +147,11 @@ def test_fetch_empty_not_cached(monkeypatch):
     _fr.clear_cache()
 
 
-def test_l3_shim_shares_the_l2_cache():
-    """舊 import path 必須指到**同一個** function object。
-
-    若哪天有人把 L3 那個檔改回自己實作一份快取,測試 monkeypatch L2 就不會生效,
-    production 會安靜地打真網路 —— 這條把兩者釘在一起。
-    """
-    import services.fx_regime_service as _l2
-    import ui.helpers.fund_grp_health.fx_regime as _l3
-
-    assert _l3.fx_regime_by_ccy is _l2.fx_regime_by_ccy
+# ⚠️ 2026-08-28:`test_l3_shim_shares_the_l2_cache` 整個刪除(**測試對象消失,
+# 不是為了讓 CI 綠**)。它斷言的是 `ui/helpers/fund_grp_health/fx_regime.py`
+# 這個 re-export shim 與 L2 指到同一個 function object;該 shim 本輪已整檔刪除
+# (production 0 caller),沒有「薄轉呼」這個東西可以驗了。
+# 它原本要防的失效模式(有人在 L3 自己再存一份快取 → monkeypatch L2 失效 →
+# 安靜打真網路)**仍然被守著**:見 `tests/test_flow_layer3c.py::
+# test_fx_cache_lives_in_l2_so_every_caller_can_reach_it` 的 AST 掃描,
+# 它直接檢查 production 檔有沒有從 `fund_grp_health.fx_regime` import。

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from services import macro_score_calibration as msc
+from services.calibration import macro_score as msc
 
 
 # ════════════════════════════════════════════════════════════
