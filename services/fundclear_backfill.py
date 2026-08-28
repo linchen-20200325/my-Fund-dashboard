@@ -120,7 +120,12 @@ def analyze_backfill_conflict(app_code: str, points: list, *,
       - `"clean"`     沒有重疊 → 純新增，安全
       - `"duplicate"` 有重疊但數值一致 → 重複下載，寫進去也只會被略過
       - `"conflict"`  有重疊且數值不同 → **極可能選錯級別**，應擋下
-      - `"unknown"`   讀不到既有資料（GS 未啟用等）→ 不宣稱安全（§1）
+      - `"unknown"`   讀不到既有資料（GS 未啟用等），**或讀到了但一筆都解析不出
+                      可用的（日期, 淨值）** → 不宣稱安全（§1：不知道 ≠ 沒有）
+
+    ⚠️ **呼叫端必須用白名單判斷**：只有 `"clean"` / `"duplicate"` 是「確定安全」。
+    寫成 `if verdict == "conflict": 擋` 是 fail-open —— `"unknown"` 與任何日後
+    新增的 verdict 都會靜默放行。
 
     existing_points（2026-08-28 新增，預設 None＝維持原行為）
     ----------------------------------------------------------
@@ -131,9 +136,25 @@ def analyze_backfill_conflict(app_code: str, points: list, *,
     ⚠️ 讀取失敗的判斷因此由**呼叫端**負責：注入路徑不會回 `"unknown"`，
     呼叫端不得把「沒注入」與「讀到空的」混為一談（前者不知道，後者是真的沒有）。
 
-    ⚠️ **這個判定保護不到什麼**：它只比對**重疊日期**的數值。
-    某個 code **第一次**回填時與既有資料零重疊 → verdict 恆為 `"clean"`，
-    本函式對它**完全無效**。它保護的是「已經有歷史的 code」。
+    ⚠️ **這個判定保護不到什麼（開放式描述，不是窮舉清單）**
+    -------------------------------------------------------
+    本函式**只在「同一個 `code` 上、日期能對上、既有值可解析」時才有意義**。
+    任何讓這三個前提之一不成立的情況，它就沉默放行 —— 下面是**已知**的分類，
+    ⛔ **不是「只有這幾項」**（2026-08-28 稽核：上一版把它寫成封閉列舉「只有新代碼首次
+    回填」，實測至少還有四項；本 repo 已因同一種「順手接一句沒查證的保證」連錯三次，
+    見 `ui/helpers/render_state.py` 的病史段）：
+      - **零重疊**：某個 code **第一次**回填時與既有資料零重疊 → verdict 恆為 `"clean"`。
+        它保護的是「已經有歷史的 code」。**這一項無法在本函式內修**（沒有東西可比）。
+      - **key 不是同一個東西**：比對以 `code` 為 key，而同一檔基金在不同來源的代碼
+        不同（MoneyDJ 內部碼 vs ISIN，見 `ui/tab_manage.py` 選股池說明）——
+        歷史以 A 碼存、回填以 B 碼寫 → 零重疊 → 零保護。
+      - **呼叫端沒有呼叫它**：本函式只是一個判定，保護與否取決於誰接了它、
+        以及接了之後有沒有用白名單擋（見上）。`nav_history` 有多條寫入路徑，
+        目前**不是每一條都經過這裡**。
+      - **日期格式不同尺**（2026-08-28 已修，留紀錄）：既有側曾直接吃原始字串、
+        incoming 側是 ISO → 手填 `'2020/1/2'` 永遠對不上。現已兩側同尺。
+      - **既有列全不可解析**（2026-08-28 已修，留紀錄）：曾與「真的沒有」一樣回 `clean`，
+        現回 `"unknown"`。
     """
     from shared.signal_thresholds import NAV_BACKFILL_CONFLICT_REL_TOL
 
@@ -151,9 +172,20 @@ def analyze_backfill_conflict(app_code: str, points: list, *,
                   f"{type(_e).__name__}: {_e}", file=_sys.stderr)
             return {**_blank, "reason": f"{type(_e).__name__}: {_e}"}
 
+    # 2026-08-28 稽核修正:**兩側都過同一把尺**（`nav_history_gs.norm_date_key`，
+    # 與 `append_points` 的 (code,date) 去重鍵完全同一條規則）。
+    # 修的是什麼:在此之前既有側直接吃 `load_points` 回的**原始字串**，而 incoming 側
+    # 是 ISO —— 既有列若是 user 手填的 `'2020/1/2'`（`append_points` v19.489 註解自陳
+    # 這種列確實存在），**永遠對不上 → 零重疊 → verdict 恆為 `clean` → 閘門靜默放行**
+    # 錯幣別序列（實測:既有 `'2024/01/02'` 10.00 vs 這次 33.10 → 放行）。
+    # ⚠️ 讀取端（`load_points`）同日已補上同一把尺；此處**再做一次**不是重複，
+    # 而是因為 `existing_points=` 注入路徑**繞過 `load_points`**，比對的正確性
+    # 不可以依賴呼叫端餵什麼格式進來。
+    from services.nav_history_gs import norm_date_key as _dkey
+
     _old = {}
     for _p in _existing:
-        _d = str(_p.get("date") or _p.get("nav_date") or "")[:10]
+        _d = _dkey(_p.get("date") or _p.get("nav_date") or "")
         try:
             _v = float(_p.get("nav"))
         except (TypeError, ValueError):
@@ -161,13 +193,22 @@ def analyze_backfill_conflict(app_code: str, points: list, *,
         if _d and _v > 0:
             _old[_d] = _v
     if not _old:
-        # 讀得到但一筆都沒有 → 這檔還沒累積過 → 純新增
+        if _existing:
+            # 2026-08-28 稽核修正:**「讀到了但一筆都用不了」≠「本來就沒有」**（§1:不知道 ≠ 沒有）。
+            # 既有列存在卻全數解析不出可用的 (日期, 淨值)（nav 欄壞掉 / nav<=0 / 缺 date 欄）
+            # —— 這是「不知道既有序列長什麼樣」，不是「這檔還沒累積過」。
+            # 舊版把兩者都回 `clean`，等於在讀不懂那張表的情況下宣稱安全。
+            # 手上明明有 `len(_existing)` 可以分辨。
+            return {**_blank, "reason": (
+                f"讀到 {len(_existing)} 筆既有列，但沒有任何一筆能解析出可用的"
+                f"（日期, 淨值）→ 無法對帳，不宣稱安全")}
+        # 真的讀到空的（這檔還沒累積過）→ 純新增
         return {**_blank, "verdict": "clean"}
 
     _overlap: list = []
     _conflict: list = []
     for _p in points:
-        _d = str(_p.get("nav_date") or "")[:10]
+        _d = _dkey(_p.get("nav_date") or "")
         _v = _p.get("nav")
         if _d not in _old:
             continue
@@ -241,11 +282,22 @@ def download_and_store(organize_code: str, fund_code: str, class_code: str,
     if dry_run:
         return _base
 
-    if _base["conflict"].get("verdict") == "conflict":
-        # fail-closed:重疊日的淨值對不上 = 幾乎必然是不同級別。
+    # 2026-08-28 稽核修正:**白名單 fail-closed**,不是黑名單。
+    # 舊版寫 `== "conflict"` → `unknown`（讀不到既有資料 / 既有列全不可解析）
+    # 與任何**日後新增的 verdict** 都會**靜默放行**。同日 `analyze_backfill_conflict`
+    # 讓 `unknown` 變得更容易出現（「讀到了但一筆都用不了」不再謊報 clean），
+    # 留著黑名單等於當場開一個新洞。只有這兩個 verdict 是「確定安全」。
+    _SAFE_VERDICTS = ("clean", "duplicate")
+    _v = _base["conflict"].get("verdict")
+    if _v not in _SAFE_VERDICTS:
+        # fail-closed:重疊日的淨值對不上 = 幾乎必然是不同級別;
+        # 讀不到／讀不懂既有資料 = 不知道 ≠ 安全（§1）。
         # 寫進去會讓正確資料**永久**進不來,而且健診會拿錯的算報酬(§1)。
-        return {**_base, "ok": False,
-                "reason": "偵測到淨值衝突（極可能選錯級別）—— 已擋下未寫入"}
+        _reason = ("偵測到淨值衝突（極可能選錯級別）—— 已擋下未寫入" if _v == "conflict"
+                   else f"無法與既有 nav_history 對帳（verdict={_v!r}"
+                        f"{'：' + str(_base['conflict'].get('reason'))[:80] if _base['conflict'].get('reason') else ''}）"
+                        "—— 不宣稱安全，已擋下未寫入")
+        return {**_base, "ok": False, "reason": _reason}
 
     from services.nav_history_gs import append_points
     _res = append_points(points)

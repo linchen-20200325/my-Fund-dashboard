@@ -158,6 +158,28 @@ def _norm_date(v: Any) -> str:
     return f"{_y:04d}-{_m:02d}-{_dd:02d}"
 
 
+def norm_date_key(v: Any) -> str:
+    """`(code, date)` 主鍵用的日期字串 —— **寫入去重、讀取、Gate 0 對帳共用這一把尺**。
+
+    `_norm_date` 回 `''` 的怪日期(未來日 / 月日超範圍 / 非法)**退回原字串前 10 碼**,
+    不弱化既有去重、也不靜默丟資料(§1:不猜)。
+
+    2026-08-28 稽核修正 —— 為什麼要把它抽成一個公用函式
+    ---------------------------------------------------
+    在此之前這條規則只寫在 `append_points` 的迴圈裡(**寫入端有正規化**),
+    而 `load_points`(**讀取端**)回的是未正規化的原始字串。兩邊不同尺的後果:
+    `fundclear_backfill.analyze_backfill_conflict` 拿讀取端的字串當 dict key、
+    拿 incoming 的 ISO 去查 —— 既有列若是 user 手填的 `'2020/1/2'`,
+    **永遠查不中 → 零重疊 → verdict 恆為 `clean` → 整道閘門靜默失效**
+    (實測:既有 `'2024/01/02'` 10.00 vs 這次 33.10 → 放行)。
+    而 `append_points` 的 v19.489 註解自己就寫著這種手填斜線列**確實存在**。
+
+    **一把尺、三個消費端** —— `append_points`(去重鍵)/ `load_points`(讀取)/
+    `analyze_backfill_conflict`(對帳兩側),避免再度出現「寫入端有、讀取端沒有」。
+    """
+    return _norm_date(v) or str(v if v is not None else "").strip()[:10]
+
+
 def _clean_points(points: list[dict]) -> list[dict]:
     """normalize + §1 過濾:code 空 / date 壞 / nav<=0 全丟(不偽造)。
 
@@ -287,11 +309,11 @@ def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any =
             seen: set = set()
             for r in existing[1:]:
                 if len(r) >= 2:
-                    # v19.489:去重鍵的日期先過 _norm_date 正規化,讓 user 手填的 '2020/1/2'
-                    # 與系統寫的 ISO '2020-01-02' 視為同一天(否則同日兩格式 → 重複列 + load
-                    # 時系統值覆蓋 user 值)。_norm_date 回 '' 的怪日期退回原字串,不弱化既有去重。
-                    _ed = _norm_date(str(r[1]).strip()) or str(r[1]).strip()[:10]
-                    seen.add((str(r[0]).strip().upper(), _ed))
+                    # v19.489:去重鍵的日期先正規化,讓 user 手填的 '2020/1/2' 與系統寫的
+                    # ISO '2020-01-02' 視為同一天(否則同日兩格式 → 重複列 + load 時系統值
+                    # 覆蓋 user 值)。2026-08-28:同一條規則抽成 `norm_date_key`,讀取端
+                    # (`load_points`)與 Gate 0 對帳共用同一把尺 —— 表達式等價,行為不變。
+                    seen.add((str(r[0]).strip().upper(), norm_date_key(r[1])))
             recorded_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
             new_rows: list = []
             for c in clean:  # 同批內也去重(同 code+date 只留第一筆)
@@ -353,7 +375,10 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
         except (TypeError, ValueError):
             continue
         out.append({
-            "code": c, "date": str(r[1]).strip()[:10], "nav": nav_f,
+            # 2026-08-28 稽核修正:讀取端**過去沒有**正規化,與 `append_points` 的去重鍵
+            # 不同尺 —— 既有列若是手填 '2020/1/2',Gate 0 拿 ISO 去比對永遠零重疊,
+            # 整道閘門靜默失效(理由與實測見 `norm_date_key`)。
+            "code": c, "date": norm_date_key(r[1]), "nav": nav_f,
             "fund_name": r[3] if len(r) > 3 else "",
             "source": r[4] if len(r) > 4 else "",
             "recorded_at": r[5] if len(r) > 5 else "",
@@ -529,4 +554,4 @@ def import_csv_text(code: str, csv_text: str, *, fund_name: str = "",
 
 __all__ = ["append_point", "append_points", "load_points", "load_series",
            "import_csv_text", "coverage_status", "is_enabled", "status",
-           "backend_status", "NavHistoryError"]
+           "backend_status", "norm_date_key", "NavHistoryError"]

@@ -402,12 +402,29 @@ def _sec_nav_backfill_auto() -> None:
             _y = _d / 365.25
             return f"（約 {_y:.1f} 年）" if _y >= 1 else f"（約 {_d} 天）"
 
+        def _result_zh(r):
+            """結果欄。2026-08-28 稽核修正:**被 Gate 0 擋下 ≠ 抓不到**。
+
+            舊版一律印 `⬜ {error}` —— 但被擋下的檔**抓得好好的**(`fetched` 是實數),
+            是資料完整性偵測把它擋下來的。依 `ui/helpers/render_state.py` 五態:
+            「還沒載入/還沒設定」才是 ⬜;**偵測到的真失敗是 🔴**。
+            """
+            if r["error"] is None and r["fetched"]:
+                return f"✅ {r['fetched']} 筆{_span_zh(r)}"
+            if r.get("blocked"):
+                return (f"🔴 已抓到 {r['fetched']} 筆,但**與既有雲端歷史對不上 → 擋下未寫入**"
+                        f":{r['error']}")
+            return f"⬜ {r['error']}"
+
         _rows = [{
             "代號": r["code"],
-            "結果": (f"✅ {r['fetched']} 筆{_span_zh(r)}" if (r["error"] is None and r["fetched"])
-                     else f"⬜ {r['error']}"),
+            "結果": _result_zh(r),
             "來源": _src_zh(r) if (r["error"] is None and r["fetched"]) else "—",
-            "淨值起迄": (f"{r['date_min']} ~ {r['date_max']}" if r["date_min"] else "—"),
+            # 2026-08-28 稽核修正:條件從 `if r["date_min"]` 改為「**沒有 error 才顯示**」。
+            # 舊版被 Gate 0 擋下的檔照樣秀出起迄 —— 而那是**被拒絕的那條序列**的區間,
+            # 使用者會以為那段歷史已經在雲端了（§1:錯誤的數字比沒有數字更危險）。
+            "淨值起迄": (f"{r['date_min']} ~ {r['date_max']}"
+                         if (r["error"] is None and r["date_min"]) else "—"),
         } for r in _res["results"]]
         st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
         # 跨度短提醒(§1 誠實):抓到但 < 1 年 → 多半是 MoneyDJ 短窗,長歷史源沒收錄該檔
@@ -425,11 +442,37 @@ def _sec_nav_backfill_auto() -> None:
             st.error(f"⚠️ {_res['n_ok']} 檔**已抓到並存本機**,但**寫入雲端失敗**:{_res['gs_error']}。"
                      "稍後再按一次重試(已抓到的會去重、不會重複寫)。")
         else:
-            _msg = (f"✅ 完成:{_res['n_ok']} 檔抓到 → 雲端 nav_history 去重後新增 "
+            # 2026-08-28 稽核修正 —— 舊版這裡有兩句話是假的,而且指路指錯地方:
+            #   (1) 把「被 Gate 0 擋下」併進「N 檔抓不到」:被擋的檔**抓得好好的**。
+            #   (2) 一律叫使用者「用下方 CSV 手動補」:手動 CSV 正是 nav_history
+            #       各條寫入路徑中**沒有這道閘門**的那一條 —— 把「疑似抓到錯幣別」
+            #       的檔導過去,等於教使用者繞過剛剛擋住他的那道護欄(§1)。
+            #       只有**真的抓不到**的檔才該走 CSV。
+            _n_blocked = int(_res.get("n_blocked") or 0)
+            _n_nofetch = int(_res["n_fail"]) - _n_blocked
+            _msg = (f"完成:{_res['n_ok']} 檔抓到 → 雲端 nav_history 去重後新增 "
                     f"**{_res['gs_written']:,}** 筆(永久,重開不丟)。")
-            if _res["n_fail"]:
-                _msg += f" ⬜ {_res['n_fail']} 檔抓不到(見上表)→ 用下方 CSV 手動補。"
-            st.success(_msg)
+            if _n_nofetch:
+                _msg += f" ⬜ {_n_nofetch} 檔**抓不到**(見上表)→ 用下方 CSV 手動補。"
+            if _n_blocked:
+                # 顏色:偵測到的資料完整性故障 = 🔴(render_state 五態的「系統真出錯」側),
+                # 不是 ⬜。用**同一個**訊息元件切紅,不新增區塊(版面不變 → §-1.5.4 屬修正錯誤)。
+                # ⚠️ 訊息**直接帶上每一檔的失敗原因**,不是只寫「見上表」——
+                # 紅框要拿得出失敗證據,否則它與「業務結論用紅字」無法區分
+                # (`tests/test_render_state_color_separation.py` 的 bare-`st.error`
+                #  ratchet 守的就是這件事:紅框必須手上真的有 error)。
+                _blocked_errors = "；".join(
+                    f"{r['code']}：{r['error']}"
+                    for r in _res["results"] if r.get("blocked"))
+                st.error(
+                    f"🔴 {_msg} 另有 **{_n_blocked} 檔抓到了但沒有寫入** —— "
+                    "它們與雲端既有歷史**對不上**,極可能抓到別的級別/幣別,已擋下。"
+                    f"\n\n{_blocked_errors}\n\n"
+                    "**不要用下方 CSV 硬補這幾檔** —— 手動 CSV 沒有這道檢查,"
+                    "補進去就會把可疑序列寫進那張永不刪除的表。"
+                    "請先在選股池確認該檔的 ISIN / 幣別是不是你要的那個級別。")
+            else:
+                st.success(f"✅ {_msg}")
 
 
 def _sec_nav_backfill() -> None:
