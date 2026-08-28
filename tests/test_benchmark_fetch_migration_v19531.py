@@ -91,6 +91,13 @@ def test_ui_does_not_import_yfinance() -> None:
 
     以 AST 判定，不用字串比對 —— 檔內 docstring 為了說明搬遷歷史會提到
     「import yfinance」這幾個字，字串比對會被那段文件誤判成命中。
+
+    ⚠️ **已知繞道（本條**不是** fail-closed，別把它當保證）**：本條只認
+    `ast.Import` / `ast.ImportFrom` 這種**靜態 import 形態**。用
+    `importlib.import_module("yfinance")` 取得同一個模組，本條**照樣綠燈** ——
+    2026-08-28 稽核實測復辟違憲後本條仍 pass。
+    真正擋下該繞道的是 `test_ui_benchmark_path_delegates_to_l1`（sentinel 往返）。
+    本條的定位是**形態偵測**：擋「不小心寫回去」，擋不住「刻意繞過」。
     """
     hits = []
     for node in ast.walk(_mk_tree()):
@@ -108,6 +115,10 @@ def test_ui_holds_no_benchmark_session_cache() -> None:
     同上以 AST 的**字串常值**判定（docstring 是一整段長字串，值不會恰好等於
     "mk_bench_cache"，故不會誤判）；快取已下沉 L1 `@_ttl_cache`（TTL 走
     `shared/ttls.py` SSOT），UI 層再存一份即 v3 §01「私自存放」。
+
+    ⚠️ **已知繞道（本條**不是** fail-closed）**：它只認 `"mk_bench_cache"` 這一個字面值。
+    快取 key 改名成 `"mk_bench_cache_v2"` 即可完全繞過，本條照樣綠燈
+    （2026-08-28 稽核實測）。同上，兜底的是 sentinel 那條。
     """
     hits = [n.value for n in ast.walk(_mk_tree())
             if isinstance(n, ast.Constant) and n.value == "mk_bench_cache"]
@@ -126,10 +137,16 @@ def test_ui_benchmark_path_delegates_to_l1() -> None:
 
 
 def test_l1_benchmark_reuses_single_yahoo_fetcher() -> None:
-    """L1 基準抓取必須走本 repo 唯一的 Yahoo 取數實作 `fetch_yf_close`。
+    """L1 基準抓取必須走既有共用入口 `fetch_yf_close`，不得自己再開一套。
 
-    v3 §01-2：「同一個資料來源全站只能有一處取數實作」。若 `fetch_benchmark_close`
-    自己開 HTTP / 自己 import yfinance，這個 patch 就不會被呼叫。
+    ⚠️ **本測試的斷言沒變；改掉的是它原本宣稱的理由。** 原 docstring 寫
+    「本 repo **唯一**的 Yahoo 取數實作」—— 那是**假的**，2026-08-28 稽核實測本 repo
+    至少另有 `repositories/fund/sources.py::_src_yahoo_finance_nav`（urlopen 直打 query2，
+    不走 infra.proxy）與 `scripts/fetch_nav_cache.py::fetch_yahoo_finance_history` 兩套獨立
+    實作（repo 自己也記在 `shared/api_endpoints.py` 檔頭：「YF query2 Morningstar URL 真 dupe」）。
+
+    本測試真正守的是：**基準序列不得再新增第四套取數實作** ——
+    若 `fetch_benchmark_close` 自己開 HTTP / 自己 import yfinance，這個 patch 就不會被呼叫。
     """
     with mock.patch.object(yfmod, "fetch_yf_close",
                            return_value=_chart_api_series()) as m:
@@ -222,8 +239,23 @@ def test_l1_has_no_second_cache_layer() -> None:
 
 
 # ════════════════════════════════════════════════════════════
-# C. 零行為變更（同一份來源資料 → 同樣的下游輸出）
+# C. 與「搬遷前行為模型」一致（⚠️ 不是等價證明，看清楚差別）
 # ════════════════════════════════════════════════════════════
+# ⛔ **本組證明的是「實作符合我們對舊行為的模型」，不是「與舊行為等價」。**
+# 原標題寫「零行為變更」是高估，2026-08-28 稽核擋下。差在哪：
+#   本組餵給「搬遷前那條路」的，是我們**自己建的** yfinance 輸出模型
+#   （`_legacy_yfinance_series`），而那個模型假設 yfinance 會把價格序列裁成 9 個月。
+#   實測 yfinance 1.6.0 原始碼：`params = {"range": period}`（"9mo" 原封送出），
+#   且 L408-416 算出來的 `start` **只裁 dividends / capital_gains / splits，不裁 quotes**。
+#   ⇒ 搬遷前的實際窗口 = 「Yahoo 對 range=9mo 回什麼」，**沙箱無外網，測不到**。
+#   用 `relativedelta` 而非被測程式碼的 `DateOffset` 只避開了常數引用，
+#   **繞不開「模型本身可能是錯的」**。
+# 兩種情境，哪一種為真未知 → 部署後必須實地確認：
+#   A) Yahoo 接受 9mo → 本組的一致性即等價；
+#   B) Yahoo 拒絕 9mo → 搬遷前拿到空表、`series=None`，
+#      **Benchmark_Lag 從沒亮過、對比圖從沒畫過**；搬遷後兩者會從死的變成活的。
+# 本組仍有價值：它釘死「窗口裁切與 index normalize 這兩段後處理不准被偷改」
+#   （M6/M7 突變即由本組擋下），只是不能拿它當「使用者看到的東西沒變」的證明。
 def test_series_identical_to_legacy_yfinance_shape() -> None:
     """同一份 Yahoo 收盤資料，搬遷後與搬遷前的序列 index / values 完全一致。"""
     days, vals = _dates(), _prices()

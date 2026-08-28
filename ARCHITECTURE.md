@@ -725,6 +725,7 @@ Tab5 開啟（唯讀 + 動態計算）
 |------|------|------|------|
 | `fetch_fred(series_id, api_key, n)` | 系列代碼 / API key / 筆數 | `pd.DataFrame[date,value]` | FRED observations API |
 | `fetch_yf_close(ticker, range_, interval)` | yfinance ticker | `pd.Series` | yfinance Chart REST API |
+| `fetch_benchmark_close(ticker)` | ticker(`SPY` / `QQQ`) | `pd.Series \| None` | **(v19.531 新增)** 投資組合對比基準近 9 個月日線收盤；內部呼 `fetch_yf_close(range_="1y")` 後裁窗口 + index normalize。**取不到回 `None`**（不回空序列，§1）。由 L3 UI 直呼，見 `CLAUDE.md §8.2.A` EX-PASSTHRU-1 |
 | `fetch_ism_pmi(api_key, max_age_days)` | FRED key / 容忍天數 | `dict` | ISM PMI 5 段 fallback |
 | `fred_get_next_release_date(series_id, api_key)` | 系列代碼 / API key | `date \| None` | **(v18.3 新增)** 查詢下次 release 日；30 天 disk cache；2 段呼叫（series/release → release/dates）；失敗回 None |
 
