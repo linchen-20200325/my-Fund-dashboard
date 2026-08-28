@@ -1857,9 +1857,10 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
 - **v19.314 拔除危機回測室(死功能,−3693 LOC)— 功能盤點第 1 刀(2026-07-05)**:
   - **背景**:user 拿當初 4 個設計初衷(總經位階/單基金體質/多基金金流/組合配置)回頭檢視儀表板,請我點出該改進/刪除的功能。盤點發現 `ui/tab_crisis_backtest.py`(2316 LOC)的 import 自 v19.31 起即**註解停用、進不去**,全 codebase 無第二個掛載點 = **死功能**,且不在 4 目標內。user 確認不用 → 整功能拔除。
   - **刪除(7 檔,−3693 LOC)**:`ui/tab_crisis_backtest.py` + `services/crisis_strategy_grid.py`(291,唯一 caller=死 UI)+ `services/crisis_ai_advisor.py`(191,唯一 caller=死 UI)+ 4 orphan test(`test_crisis_strategy_grid` / `test_crisis_ai_advisor` / `test_tab_crisis_backtest_gating` / `test_dual_signal_routing` —後者測的 AutoSearch routing helper 全數只存在於死 UI,無 live caller)。
-  - **保留**:`services/crisis_backtest.py`(`CrisisEvent`/`detect_crisis_events`)—macro `signal_lookback` + calibration `multi_factor`/~~`signal_threshold`~~ 仍共用,**非**危機回測專屬。
+  - **保留**:`services/crisis_backtest.py`(`CrisisEvent`/`detect_crisis_events`)—macro ~~`signal_lookback`~~ + calibration `multi_factor`/~~`signal_threshold`~~ 仍共用,**非**危機回測專屬。
     📌 **2026-08-28 Phase 1.4 事實更新(史料本體不動,只補現況)**:`services/calibration/signal_threshold.py`
-    已因 production 0 caller 實體刪除,不再是共用者。
+    與 `services/macro/signal_lookback.py`(含其 v19.202 shim `services/macro_signal_lookback.py`)
+    均已因 production 0 caller 實體刪除,兩者都不再是共用者。
     **本條「保留 crisis_backtest」的結論不變** —— `services/calibration/multi_factor.py`
     (經 `services/auto_search.py`)與 `ui/helpers/fund_grp_health/capture.py` 仍在用。
   - **doc-sync**:`app.py` 註解、`shared/converters.py` 過時註解、`ARCHITECTURE.md`(services + ui 樹刪 3 行)、`CLAUDE.md §2.3`(crisis_strategy_grid 參照更新)、`§8.2.A EX-PASSTHRU-1`(2 條 tab_crisis_backtest 例外退役)。歷史 changelog(STATE 舊條目 / BACKLOG F-PIT-1)為史料不動。

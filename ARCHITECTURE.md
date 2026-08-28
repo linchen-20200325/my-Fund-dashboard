@@ -87,7 +87,6 @@ my-Fund-dashboard/
 │   │   ├── turning_points.py       # 拐點偵測
 │   │   ├── tw_local.py             # TW 在地總經
 │   │   ├── us_indicators.py        # US macro orchestrator
-│   │   ├── signal_lookback.py      # 訊號歷史回看
 │   │   ├── china.py                # 中國總經
 │   │   └── composite_score.py
 │   ├── health/                     # 基金健診 subpackage(原 fund_grp_health_extras 拆)
@@ -138,6 +137,7 @@ my-Fund-dashboard/
 │   # 2026-08-28 Phase 1.4 退役清單(production 0 caller,實體刪除;v3 §01-2):
 │   #   第 2 波(第 1 波刪完才成立):services/tdcc_nav_accumulate.py
 │   #        + repositories/tdcc_nav_opendata.py + services/macro_signal_lookback.py(shim)
+│   #   第 3 波(第 2 波刪完才成立):services/macro/signal_lookback.py(383,實作本體)
 │   #   L2 services/:ai_advisor_pending.py / cross_source_compare.py / switch_state_machine.py
 │   #        / fund_batch.py(user 2026-08-28 明確點名,推翻其 RETAINED-LEGACY 保留決定)
 │   #        / calibration/risk.py / calibration/signal_threshold.py
