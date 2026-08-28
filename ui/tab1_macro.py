@@ -965,6 +965,21 @@ def render_macro_tab() -> None:
                             # 結構上與「這格沒資料」無法區分（見測試檔規則 1 盲點 4）。
                             # 不在本批改的理由：它不在本批用來定義範圍的那個掃描結果裡，
                             # 逕自加碼會讓「43 處」這個數字失去可複現性（§8.4 step 4）。
+                            #
+                            # 📌 **2026-08-28 批次二之二補一個「事實」，不改行為**：
+                            # 本函式裡**同一種** `_FutTimeout`（都是 `.result(timeout=…)`
+                            # 沒回來）現在有**三種顏色**：`_fu_ind` → `level="error"` 🔴、
+                            # `_fu_news` → `level="info"` 🔵、`_fu_radar` 與 `_fu_tp` →
+                            # `st.caption` ⬜。這正是測試檔 `_TWIN_FAILURES` 在守的那個形狀
+                            # （同一個失敗、不同顏色），只是它跨的是「同一函式內的四個 future」
+                            # 而不是跨分頁，所以那條規則涵蓋不到。
+                            # ⚠️ **這是事實，不是「所以該全部改紅」的結論** —— 三者的後果確實
+                            # 不同（指標是主體，news / radar / tp 是附屬），顏色分級**可能是
+                            # 刻意的**。下一批要動它時，要先回答的是「附屬區塊整塊失敗算不算
+                            # 系統真出錯」，而不是直接上色。
+                            # （查證，量測日 2026-08-28，實跑過：
+                            #  `python -c "import ast,pathlib;t=ast.parse(pathlib.Path('ui/tab1_macro.py').read_text());print([(h.lineno,[(ast.unparse(c.func),[ast.unparse(k) for k in c.keywords]) for c in ast.walk(h) if isinstance(c,ast.Call)]) for h in ast.walk(t) if isinstance(h,ast.ExceptHandler) and '_FutTimeout' in ast.unparse(h.type or ast.Constant(''))])"`
+                            #  → 4 個 handler，顏色分別為 error / info / caption / caption。）
                             st.caption("⚠️ 風險雷達逾時未回,本次略過(不影響指標判讀)。")
                         except Exception:
                             st.session_state["_radar_v1921_top"] = (None, None)

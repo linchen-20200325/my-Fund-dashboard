@@ -601,9 +601,18 @@ def test_twin_failures_wear_the_same_colour(label, sides):
     守得到 —— 把**被錨定的那個 try** 的 handler 改成灰字、改成別的 widget、
     或整段改 `pass`（handler 內沒有任何 `system_error` 呼叫）→ 紅；
     把錨點函式改名、把錨點呼叫搬出那個 try → 紅（`_anchored_handler_reporters` 回 None）。
-    **守不到** —— handler 裡呼叫一個**自己另外定義的 wrapper**，而那個 wrapper 內部
-    才呼叫 `system_error`（跨函式呼叫圖，本檔一律不做）；以及把整個 try/except 連同
-    錨點呼叫一起刪掉改走別的實作（那不是「顏色錯」，是功能被移除，屬 §1 的守備範圍）。
+    **會誤紅（false positive）** —— handler 裡呼叫一個**自己另外定義的 wrapper**，
+    而那個 wrapper 內部才呼叫 `system_error`：本規則只看 handler 內**這一層**的呼叫名
+    （跨函式呼叫圖，本檔一律不做），看到的是 wrapper 的名字 → 走 missing 分支 → **紅**。
+    也就是說這種寫法會被**擋下來**（代價是它其實是對的），不是被放過。
+    ⚠️ **2026-08-28 批次二之二只改這一句的措辭，規則行為一個字都沒動**：原文把這一項
+    列在「守不到」，而「守不到」會被下一個人讀成「**這樣寫可以繞過本規則**」——
+    方向剛好相反，那正是 §-2 規則 6 說的「沒查證的宣稱比沒有宣稱更危險」。
+    （查證，實跑過：
+     `python -c "import ast,importlib.util as u;s=u.spec_from_file_location('t','tests/test_render_state_color_separation.py');m=u.module_from_spec(s);s.loader.exec_module(m);h=ast.parse('try:\n    f()\nexcept Exception as e:\n    _w(1, e)').body[0].handlers[0];r=[m._callee(c) for c in ast.walk(h) if isinstance(c,ast.Call)];print(r, 'system_error' in r)"`
+     → `['_w'] False`，即 `entry not in reporters` 成立 → `missing` 有值 → assert 失敗。）
+    **真的守不到** —— 把整個 try/except 連同錨點呼叫一起刪掉、改走別的實作
+    （那不是「顏色錯」，是功能被移除，屬 §1 的守備範圍）。
     """
     missing = []
     for rel, fn_name, anchor, entry in sides:
@@ -1282,3 +1291,142 @@ def test_n3_degraded_is_not_a_one_way_escape_hatch(path: pathlib.Path):
         "在畫面上產生一個數字？）；否則維持 🔴：\n  "
         + "\n  ".join(bad)
     )
+
+
+# ══════════════════════════════════════════════════════════════════
+# Q1「三問判準」—— 按鈕之後才跑的區塊，資料不足時不得靜默消失
+# （客戶 2026-08-28 拍板：「按鈕後才執行的區塊留占位說明；按鈕前不加冗餘占位；
+#   依資料筆數決定的展開區維持 0 筆時消失。」線框 §02 判準 / §04 ②）
+#
+# ⚠️ **本組規則的錨點是「那個 early-return 分支」，不是「那個檔案」。**
+# 理由是 2026-08-28 稽核 Z 組的實證（見上方 `_TWIN_FAILURES` 前的長註）：
+# 掃整個範圍會被**不相干的**同名呼叫自證合格。所以下面兩條都先把
+# 「守衛所在的那個 `if`」找出來，找不到就直接紅（規則不對空氣生效）。
+#
+# ⚠️ **本組不宣稱「所有靜默消失都被守住了」。** 本批逐一追呼叫端後發現：線框 §04 ②
+# 點名的七個守衛裡，**大多數是呼叫端已經擋掉的死分支** —— 在那裡加占位＝加死碼
+# （正是 §-2 規則 6 那個「宣稱已修好、實際 production 恆不觸發」的病）。
+# 逐項結論（量測日 2026-08-28；查證法：把每個被點名函式的**所有非測試呼叫點**列出來，
+# 再看呼叫端是不是已經用同一個條件擋過。重跑：
+#   `grep -rnE '(^|[^A-Za-z_.])<fn>\(' --include=*.py . | grep -v '^./tests/'`）：
+#
+#   死分支（本批**刻意不動**，理由：改了不會執行）
+#     · `_render_health_table` 的 `if not rows:`
+#         → 兩個呼叫點都在 `_render_health_3tables()` 內，而它開頭就有同一個
+#           `if not rows: return`；且 `_run_batch_health()` 只在 `codes` 為空時回 []，
+#           而呼叫端在那之前已經 `if not codes: return`。
+#         ⚠️ 線框說的「全部失敗」其實**已經有畫面**：`ok_rows` 為空時
+#           `if err_rows:` 仍會印「#### ❌ 抓取失敗」+ 逐檔原因。真正消失的是**下游**，
+#           那個由 `test_q1_zero_usable_funds_is_explained_not_silently_skipped` 守。
+#     · `render_switch_section` / `render_regime_fit_section` 的 `if not _rows:`
+#         → 兩個呼叫點分別在 `if ok_rows:` 之內、與 `if df.empty: return` 之後；
+#           且 `code` 是 unified 大表寫死的第一欄（`unified.py` 的
+#           `columns = ["code", "基金名"] + …`）→ 過濾條件恆為真。
+#     · `dividend._render_dividend_matrix` 的 `if not funds:`
+#         → 唯一呼叫點在 `render_fund_grp_health_extras()` 內，而它開頭就有
+#           `if not funds: return`，**而且是同一個變數**。
+#     · `render_fund_grp_health_extras` 的 `if not funds:`
+#         → 唯一呼叫點被 `if _funds_extra:` 包著。真正的閘門在**呼叫端**，本批修的是那裡。
+#
+#   真的走得到（本批修了，由下面兩條規則守）
+#     · `backtest_section` 的 `if len(_nav) < 2:` —— 只健診 1 檔就會走到（很常見）。
+#     · `tab_fund_grp_health` 的 `if _funds_extra:` 兩個 gate —— 全部抓取失敗就會走到。
+#
+#   走得到、但**不在本批範圍**（登記，未動）
+#     · `rotation.render_rotation_section` 的 `if not funds:` —— 經 `__init__.py` 那條
+#       是死的，但 `ui/tab3_portfolio.py` 的持倉健診會傳可能為空的 `_funds_extra`。
+#       那是「📊 我的配置」頁，客戶核准的線框 §04 ④ 判定該頁**不用改**，
+#       且該頁的持倉健診子區塊線框並未分析過 → 從嚴不動。
+#
+# ⚠️ 上面這份清單是**單組**追出來的，沒有第二組獨立驗過（§-2 規則 6）。
+#    它只能當待驗事項，不得當成「靜默消失只剩這些」的既定前提。
+# ══════════════════════════════════════════════════════════════════
+
+def _fn_named(rel: str, fn_name: str):
+    """在 `rel` 裡找出名為 `fn_name` 的函式節點；找不到回 None（呼叫端須判紅）。"""
+    tree = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
+    return next((n for n in ast.walk(tree)
+                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                 and n.name == fn_name), None)
+
+
+def _calls_named_in(node: ast.AST) -> set[str]:
+    """node 底下所有呼叫的正規化名稱。"""
+    return {_callee(c) for c in ast.walk(node) if isinstance(c, ast.Call)}
+
+
+def test_q1_backtest_section_prints_its_title_before_the_early_return():
+    """🔁 配置回測：「只有 1 檔有淨值序列」時必須先印標題、再說缺什麼，不得靜默 return。
+
+    守的是線框 §01 的結論 —— 這是**位置問題**不是設計問題：
+    `return` 寫在標題**之前** → 使用者看不到任何痕跡；寫在**之後** → 他看到標題 + 一句灰字。
+
+    **守得到**：把那句 `not_ready(...)` 拿掉 / 換成 `pass` → 紅；
+    把 `st.markdown` 標題移回守衛之前（退回原狀）→ 紅；
+    把函式改名、或把 `len(_nav) < 2` 這個守衛整個拿掉 → 紅（錨點找不到）。
+    **守不到**：文案內容寫得對不對（本檔一律不做逐字斷言，理由見檔頭）。
+    """
+    rel = "ui/helpers/fund_grp_health/backtest_section.py"
+    fn = _fn_named(rel, "render_allocation_backtest_section")
+    assert fn is not None, f"{rel} 裡找不到 render_allocation_backtest_section() —— 改名了？"
+
+    # 錨點：body 裡「條件提到 _nav、且分支會 return」的那個 if。
+    guards = [n for n in fn.body
+              if isinstance(n, ast.If)
+              and "_nav" in {x.id for x in ast.walk(n.test) if isinstance(x, ast.Name)}
+              and any(isinstance(b, ast.Return) for b in ast.walk(n))]
+    assert len(guards) == 1, (
+        f"{rel}::render_allocation_backtest_section() 裡「提到 _nav 且會 return」的守衛 "
+        f"不是恰好 1 個（找到 {len(guards)} 個）—— 錨點失效，本規則會對空氣生效。"
+        "若是刻意重構，請一併更新本測試的錨點。")
+    guard = guards[0]
+
+    assert "not_ready" in _calls_named_in(guard), (
+        f"{rel}:{guard.lineno} 的守衛又變回靜默 `return` 了 —— "
+        "使用者已經按過 🩺 開始健診、也等過，這一塊卻整個消失，"
+        "他無從分辨「這個功能不存在」「這次沒算出來」「我的基金不適用」（線框 §02 判準問二）。")
+
+    # 標題必須在守衛**之前**（本次修的就是這個順序）。
+    titles = [n.lineno for n in fn.body
+              if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+              and _callee(n.value) == "st.markdown"]
+    assert titles and min(titles) < guard.lineno, (
+        f"{rel}::render_allocation_backtest_section() 的標題又跑到守衛之後了 —— "
+        "那等於退回「整塊零痕跡蒸發」的原狀（線框 §01：這是位置問題，不是設計問題）。")
+
+
+def test_q1_zero_usable_funds_is_explained_not_silently_skipped():
+    """💊 組合健診：一檔都沒抓成功時，下游整串消失前必須有一句灰字說明。
+
+    `_funds_extra == []`（全部抓取失敗，或 `_build_fund_dict` 整段爆掉）會讓
+    `if _funds_extra:` 兩個 gate 同時落空 → 🔁 配置回測 與 🔬 進階分析 **零痕跡消失**。
+
+    **守得到**：把那句 `not_ready(...)` 拿掉 → 紅；把 `if not _funds_extra:` 分支刪掉 → 紅；
+    函式改名 → 紅；把兩個下游區塊的呼叫搬走（錨點消失）→ 紅。
+    **守不到**：`if _funds_extra:` 這兩個 gate 本身被改成別的寫法而灰字還留著
+    （那時灰字會變成永遠不印或永遠印，本規則看不出來）。
+    """
+    rel = "ui/tab_fund_grp_health.py"
+    fn = _fn_named(rel, "render_fund_grp_health_tab")
+    assert fn is not None, f"{rel} 裡找不到 render_fund_grp_health_tab() —— 改名了？"
+
+    # 錨點強度：先證明我們錨在「真的有那兩個會消失的區塊」的函式上，
+    # 否則本規則會被一個不相干但剛好有 not_ready 的函式自證合格（稽核 Z 組的病）。
+    _calls = _calls_named_in(fn)
+    for _anchor in ("render_allocation_backtest_section", "render_fund_grp_health_extras"):
+        assert _anchor in _calls, (
+            f"{rel}::render_fund_grp_health_tab() 裡找不到 {_anchor}(...) —— "
+            "錨點消失（搬走了？改名了？）。本規則守的就是「這兩塊消失時要有說明」，"
+            "錨點不在就不該默默轉綠。")
+
+    handlers = [n for n in ast.walk(fn)
+                if isinstance(n, ast.If) and isinstance(n.test, ast.UnaryOp)
+                and isinstance(n.test.op, ast.Not)
+                and isinstance(n.test.operand, ast.Name)
+                and n.test.operand.id == "_funds_extra"]
+    assert handlers, (
+        f"{rel}::render_fund_grp_health_tab() 裡沒有任何 `if not _funds_extra:` 分支 —— "
+        "0 檔可用時，🔁 配置回測 與 🔬 進階分析 會再度靜默消失（線框 §04 ②）。")
+    assert any("not_ready" in _calls_named_in(h) for h in handlers), (
+        f"{rel} 的 `if not _funds_extra:` 分支沒有印任何灰色說明 —— "
+        "使用者按過按鈕、等過，卻只看到兩塊憑空不見。")

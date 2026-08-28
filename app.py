@@ -17,7 +17,6 @@ st.set_page_config(page_title="基金戰情室", page_icon="📊",
 
 # ⚠️ 一律放在 set_page_config 之後 —— 本檔的硬規則是「第一個 Streamlit 指令必須是
 # set_page_config」,任何在它之前的 import 都可能在 submodule 頂層先射出一個 st.* 呼叫。
-from ui.helpers.render_state import not_ready
 
 import os, datetime
 
@@ -75,12 +74,14 @@ div[data-testid="stTabs"] div[data-testid="stTabs"] div[data-baseweb="tab-list"]
 # **一個 secrets 檔都找不到**時,`.get()` 內部仍會去 `_parse()` → 直接
 # `raise StreamlitSecretNotFoundError`。於是新 clone 下來的專案(secrets.toml 有被
 # gitignore,本來就不會有)一跑就是滿版紅色 traceback,連「你缺什麼、去哪裡設」
-# 都沒說 —— 而本檔下面明明就有 `_check_secrets()` 專門在做那件事,只是永遠跑不到。
+# 都沒說 —— 而缺 key 這件事本來就有專門的地方在講(見下方「金鑰狀態的顯示位置」),
+# 只是那些地方在啟動崩潰時全都跑不到。
 #
 # 修法走既有 SSOT `infra.config.get_secret`(它 :39-48 早就 try/except 包好,
 # 且自帶 os.environ fallback)—— 不在本檔另寫一份(§2.1)。
-# §1:不是掩蓋錯誤 —— 缺 key 這件事照樣會被 `_check_secrets()` 講出來,
-# 只是改成使用者看得懂的形式,而不是崩在啟動的第 105 行。
+# §1:不是掩蓋錯誤 —— 缺 key 這件事照樣會被講出來,只是**不在這裡講**
+# (2026-08-28 Q3 起改由 Tab5 §④ 金鑰狀態 + 市場定調頁的 FRED 分支負責,
+#  見下方「金鑰狀態的顯示位置」),而不是崩在啟動的第 105 行。
 from infra.config import get_secret as _secret_raw  # noqa: E402
 
 
@@ -117,19 +118,20 @@ def _load_keys():
 
 FRED_KEY, GEMINI_KEY = _load_keys()
 
-
-def _check_secrets():
-    _missing = []
-    if not FRED_KEY:   _missing.append("FRED_API_KEY")
-    if not GEMINI_KEY: _missing.append("GEMINI_API_KEY")
-    if _missing:
-        # 2026-08-28 客戶拍板:金鑰沒設定是「你還沒設定」,不是「系統壞了」。
-        # 原本每次開 App 最上方都是一條紅字,把真紅燈的份量稀釋掉(線框 §03)。
-        # ⚠️ 只改顏色,不改位置 —— 搬到「⑤ 設定與診斷」屬下一批(Q3)。
-        not_ready(f"尚未設定金鑰：{', '.join(_missing)}",
-                  where="Streamlit Cloud → Settings → Secrets 新增後重新部署")
-
-_check_secrets()
+# ── 金鑰狀態的顯示位置(2026-08-28 客戶拍板 Q3:「同意移走。移至『⑤ 設定與診斷』
+#    的 API 金鑰狀態」)──────────────────────────────────────────────────────
+# 這裡原本有一個 `_check_secrets()`,在 module top-level 無條件執行 → **五個分頁的
+# 最上方都會看到**那一行,而它多半不代表任何故障(GEMINI 缺了只是少 AI 摘要,可降級)。
+# 批次一已先把它從 🔴 改成 ⬜(只改顏色、不改位置);本批依 Q3 **整段移走**,
+# 不是在兩邊各留一份。
+#
+# 搬去哪、以及為什麼資訊沒有變少(這三處都是既有的,不是本批新造):
+#   1. 缺哪幾把 + 去哪裡設 → `ui/tab5_data_guard.py` §④「🔑 API 金鑰狀態」。
+#      該表本來就逐把列出 FRED / GEMINI / FINMIND / PROXY / GOOGLE_SHEET_ID 的
+#      來源與遮罩(比這裡多 3 把);本批只補上它唯一缺的那件事 ——「去哪裡設定」。
+#   2. 缺 FRED(會擋住整個市場定調頁)→ `ui/tab1_macro.py` 的
+#      `if not FRED_KEY:` 分支已印「尚未設定 FRED 金鑰,無法載入總經資料」+ 去哪裡補。
+#   3. 缺 GEMINI(只影響 AI 區塊)→ 由各 AI 區塊自己在用得到的地方說。
 
 # v11.0 D-20: session_state 預設值初始化已抽至 ui/helpers/session.py
 from ui.helpers.session import init_session_state as _init_session_state

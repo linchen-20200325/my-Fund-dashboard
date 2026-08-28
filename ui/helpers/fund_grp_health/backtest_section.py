@@ -16,26 +16,51 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.helpers.render_state import system_error
+from ui.helpers.render_state import not_ready, system_error
 
 
 def render_allocation_backtest_section(funds: list) -> None:
     """🔁 配置回測 —— 回測 S0..S4 五套配置在台幣總報酬下表現,排名效益最高者 + 當前建議。
 
-    funds: rich fund dict list(含 code / name / series 原幣 NAV / currency)。<2 檔有序列 → 略過。
+    funds: rich fund dict list(含 code / name / series 原幣 NAV / currency)。
+    <2 檔有序列 → **印標題 + 一句灰字說明缺什麼**(2026-08-28 Q1;原本是靜默 `return`)。
     """
     from services.allocation_backtest import backtest_allocations, STRATEGY_LABELS
     from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS
 
     _nav = {f.get("code"): f.get("series") for f in (funds or [])
             if f.get("code") and f.get("series") is not None}
+
+    # ⚠️ **標題移到守衛之前**(2026-08-28 客戶拍板 Q1)。線框 §01 的結論是:
+    #    這不是一個設計問題,是一個**位置問題** —— 守衛寫在標題前面,使用者看不到
+    #    任何痕跡;寫在後面,他看到標題和一句灰字說明。本檔原本 `return` 在標題之前,
+    #    於是「只健診 1 檔」時整個 🔁 配置回測區塊零痕跡蒸發。
+    #    (同檔 `switch_section.py` 早就是對的寫法:`if not _reds:` 在標題之後。)
+    #
+    # 三問各自的答案:
+    #   問一 固定還是取決於資料? → **固定**。它是本頁骨架的一格,不是「每檔一個」的展開區。
+    #   問二 使用者已經做過那個動作了嗎? → **已經按過 🩺 開始健診**(本函式只在
+    #        `_funds_extra` 非空時才被呼叫)→ 判準命中:一律留灰色占位。
+    #   問三 為什麼沒東西? → **還沒給足資料**(不是結構上不適用)→ ⬜ 而非 ➖。
+    #
+    # ⚠️ 兩種原因要分開講,否則指錯路:檔數本來就 <2 → 去多貼幾檔;
+    #    檔數夠但抓不到淨值序列 → 多貼幾檔沒有用,原因在上方的逐檔失敗清單。
+    st.divider()
+    st.markdown("### 🔁 配置回測(哪套配置效益最高・教學非建議)")
     if len(_nav) < 2:
+        _n_funds = len(funds or [])
+        if _n_funds < 2:
+            not_ready(
+                f"配置回測要比較至少 2 檔的走勢,本次只健診了 {_n_funds} 檔",
+                where="本頁上方「基金代號」欄位(多貼幾檔後重按 🩺 開始健診)")
+        else:
+            not_ready(
+                f"配置回測需要至少 2 檔**抓得到淨值序列**的基金 —— "
+                f"本次 {_n_funds} 檔裡只有 {len(_nav)} 檔有序列 —— 多貼幾檔不會改善這一項",
+                where="本頁上方的逐檔失敗原因(看是哪幾檔沒抓到淨值)")
         return
     _ccy = {f.get("code"): f.get("currency", "") for f in funds if f.get("code")}
     _name = {f.get("code"): (f.get("name") or f.get("code")) for f in funds if f.get("code")}
-
-    st.divider()
-    st.markdown("### 🔁 配置回測(哪套配置效益最高・教學非建議)")
 
     # USDTWD 歷史(L2 facade;失敗 → 美元計價基金被排除,誠實提示,§1)
     _fx = None

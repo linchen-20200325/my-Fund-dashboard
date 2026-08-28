@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.helpers.render_state import business_alert, system_error
+from ui.helpers.render_state import business_alert, not_ready, system_error
 
 from shared.colors import GH_BG_PRIMARY, GH_FG_SECONDARY, GRAY_55, INFO_BLUE, TRAFFIC_GREEN
 from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None(不畫成 0% 假柱)
@@ -316,6 +316,31 @@ def render_fund_grp_health_tab() -> None:
     # 成立(本 Tab 只有單一本金欄位);Tab3 embed 不傳 → 不印(見 _weight_basis_note)。
     _render_health_3tables(rows, funds_extra=_funds_extra, show_screener=True,
                            source_tab="health")
+
+    # ── 一檔都沒抓成功時,下游整串靜默消失 ──────────────────────────────────
+    # 2026-08-28 客戶拍板 Q1「三問判準」在本頁的落點。三問各自的答案:
+    #   問一 這個區塊該不該在這裡,是固定的還是取決於資料?
+    #        → **固定**。「配置回測」「進階分析」是本頁骨架,不是「每檔一個」的展開區。
+    #   問二 使用者為了看到它,已經做過那個動作了嗎?
+    #        → **已經按過 🩺 開始健診、也等過**。他付出了等待卻整串消失,
+    #          而且無從分辨「這個功能不存在」「這次沒算出來」「我的基金不適用」。
+    #          → 判準命中:**一律留灰色占位 + 缺什麼 + 去哪裡補**。
+    #   問三 它為什麼沒東西? → **還沒給資料**(不是結構上不適用),故用 ⬜ 不是 ➖。
+    #
+    # ⚠️ **為什麼只印一句,而不是在下面每一塊各印一句**:線框 §07 自己預警過
+    #    「7 塊同時空 → 使用者會看到連續 7 條灰字」,而客戶 Q1 的第二句正是
+    #    「按鈕前不加冗餘占位」。這一句在**因**的位置講完(0 檔可用),
+    #    下游那幾塊是**果**,不再各講一次 —— 灰字的份量跟紅字一樣會被稀釋。
+    #
+    # ⚠️ **顏色**:真正的失敗已經在上面印成紅的了(逐檔的「❌ 抓取失敗」清單,
+    #    或 `_build_fund_dict` 那個 `system_error`)。這一句講的是**那個失敗的下游後果**
+    #    ——「這兩塊因此沒有輸入」,它本身不是一個新的故障,所以是 ⬜ 不是 🔴。
+    #    (稽核提醒:不要把這一句當成「真失敗被畫成灰字」的違規 —— 真失敗在上面,是紅的。)
+    if not _funds_extra:
+        not_ready(
+            f"「🔁 配置回測」與「🔬 進階分析」需要至少 1 檔的完整資料 —— "
+            f"本次 {len(rows)} 檔裡可用 0 檔,故這兩塊沒有內容可算",
+            where="本頁上方的失敗說明(逐檔原因)")
 
     # v19.427:🔁 配置回測(哪套配置效益最高 + 三輸出)。重用 _funds_extra(原幣 NAV + 幣別),
     # 走 L2 services.allocation_backtest;抓失敗/資料不足由 section 內誠實顯示,不拖垮整頁(§1)。

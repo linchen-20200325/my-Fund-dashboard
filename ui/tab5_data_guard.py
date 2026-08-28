@@ -1114,6 +1114,26 @@ def render_data_guard_tab() -> None:
         "「遮罩」顯示前 4 後 4 字 + 長度,可快速判「key 為空」vs「格式截斷」。"
     )
 
+    # ── 「去哪裡設定」——2026-08-28 客戶拍板 Q3,自 app.py 首頁搬來的那件事 ──────
+    # 原本 `app.py._check_secrets()` 在 module top-level 無條件跑,**五個分頁最上方**
+    # 都會看到一行「缺少必要金鑰」。客戶裁示移到本節。
+    # 上面那張表已經逐把列出「有沒有設、從哪讀到」(比原本多 3 把),**唯一沒有的就是
+    # 「那要去哪裡設」** —— 所以搬過來的是這一句,不是再貼一張同樣的表(§2.1 SSOT:
+    # 同一個事實不要有第二份實作)。
+    # ⚠️ 順帶修掉原句的一個**事實錯誤**:它把 GEMINI 也稱為「**必要**」金鑰。
+    #    兩者的後果不同,線框 §03 / Q3 點名的就是這件事 ——
+    #    缺 FRED → 整個 🌐 市場定調頁不能用(擋路);缺 GEMINI → 只是少 AI 摘要(可降級)。
+    #    故這裡分開講,不再用同一個詞蓋掉差別。
+    _key_where = "Streamlit Cloud → Settings → Secrets 新增後重新部署"
+    _unset = {_kr["name"] for _kr in _key_rows if _kr["source"] == "(無)"}
+    if "FRED_API_KEY" in _unset:
+        not_ready("尚未設定 FRED_API_KEY —— 整個 🌐 市場定調頁無法載入(這一把缺了會擋路)",
+                  where=_key_where)
+    if "GEMINI_API_KEY" in _unset:
+        not_ready("尚未設定 GEMINI_API_KEY —— 只影響各頁的 AI 摘要區塊,"
+                  "其餘指標與健診照常運作(可降級,不擋路)",
+                  where=_key_where)
+
     st.divider()
 
     # ── Section 3: 基金逐筆診斷 ───────────────────────────────────
