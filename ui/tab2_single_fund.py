@@ -513,8 +513,9 @@ def render_single_fund_tab() -> None:
                 #   (c) status 由 normalize_result_state **無條件覆寫**,不吃上游透傳:
                 #         $ grep -n 'result\["status"\]' fund_fetcher.py
                 #         → 293:    result["status"] = status      (單一賦值,無條件)
-                #   (d) production 只有一個地方寫 session_state.fund_data(即本檔 :283,
-                #       走完 normalize_result_state 才寫):
+                #   (d) production 只有一個地方寫 session_state.fund_data —— 就是本檔
+                #       `if do_load and mj_url_input.strip():` 那一段,而它是**走完**
+                #       normalize_result_state 之後才寫的:
                 #         $ grep -rn 'session_state\.fund_data *=\|session_state\["fund_data"\] *=' --include=*.py .
                 #         → ui/tab2_single_fund.py:283 + tests/test_app_apptest.py:574,641
                 #
