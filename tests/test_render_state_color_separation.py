@@ -35,6 +35,10 @@ HEALTH_SCOPE = sorted((ROOT / "ui" / "helpers" / "fund_grp_health").glob("*.py")
 # 「會把東西印到畫面上」的 st API。⚠️ 2026-08-28 第二輪稽核 A3：上一版漏了
 # `metric` / `dataframe` / `table` / `json` / `latex` —— 用它們印例外一樣看得到，
 # 卻不會被規則 1 抓到。集合漏一個，規則就在那個方向上是瞎的。
+# ⚠️ **本集合現在仍然不完整（第三輪稽核 P6 實測放行）**：至少還漏
+# `subheader` / `title` / `header`；`st.badge` 等新 API 也未納入。
+# 上一輪只寫了「漏一個就瞎」這句話，卻沒把「它現在仍然漏著」列出來 ——
+# 補在這裡，**不要讀成「已經補齊」**。補齊需要逐一對 Streamlit API 表，列第二批。
 _ST_RENDER_ATTRS = {"caption", "info", "warning", "error", "success", "markdown",
                     "write", "text", "code", "toast", "exception",
                     "metric", "dataframe", "table", "json", "latex"}
@@ -45,12 +49,45 @@ RED_ENTRYPOINTS = {"system_error", "friendly_error", "_friendly_error", "st.erro
                    "st.exception"}
 
 
+def _receiver_root(node: ast.AST) -> str | None:
+    """把 `st` / `st.sidebar` / `st.sidebar.foo` 這種屬性鏈剝到最左邊的名字。"""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
 def _callee(call: ast.Call) -> str:
-    if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
-        return f"{call.func.value.id}.{call.func.attr}"
+    """呼叫的**正規化**名稱：st 屬性鏈一律收斂成 `st.<attr>`。
+
+    ⚠️ 2026-08-28 第三輪稽核：上一版要求 receiver 是**裸** `ast.Name` 且 id == "st"，
+    於是 `st.sidebar.error(...)` 的 `call.func.value` 是 `ast.Attribute`（`st.sidebar`）
+    → 回 `"<?>"` → **規則 1／B1／B2／C／ratchet 全部看不見它**。
+    這不是「少守一點」：本 PR 自己改過的 `ui/sidebar.py` 裡就有一個反例 ——
+    第 76 行的「Proxy 未設定」被本批改成灰色，**六行之後**同一句話的
+    `st.sidebar.error("Proxy 未設定")` 還是紅的，而「未設定」正是
+    `NOT_CONFIGURED_PHRASES` 的第一個詞，B2 的設計意圖就是抓它。
+
+    正規化成 `st.<attr>` 是刻意的：既有規則集（`RED_ENTRYPOINTS`、`_ST_RENDER_ATTRS`…）
+    一個字都不用改，`st.sidebar.error` 自動被當成 `st.error` 處理 —— 它本來就是紅框。
+    要在訊息裡顯示真實寫法時用 `_callee_src()`。
+    """
+    if isinstance(call.func, ast.Attribute):
+        if _receiver_root(call.func.value) == "st":
+            return f"st.{call.func.attr}"
+        if isinstance(call.func.value, ast.Name):
+            return f"{call.func.value.id}.{call.func.attr}"
+        return "<?>"
     if isinstance(call.func, ast.Name):
         return call.func.id
     return "<?>"
+
+
+def _callee_src(call: ast.Call) -> str:
+    """訊息用：實際寫法（`st.sidebar.error`），不是正規化後的名字。"""
+    try:
+        return ast.unparse(call.func)
+    except Exception:  # noqa: BLE001 — 只是訊息好看，壞了不該讓測試爆掉
+        return _callee(call)
 
 
 def _rendering_calls(node: ast.AST):
@@ -319,6 +356,15 @@ def test_business_alert_is_not_an_error_box():
 #      - 條件不是裸名字（`st.secrets.get(...)` / `os.environ.get(...)` / `cfg.key`）；
 #      - 文案完全避開語彙家族（「請先完成設定」之類）。
 #    要補的話是第三條規則（追蹤憑證值的資料流），不在「只做顏色」這一批的範圍內。
+#
+# ⚠️⚠️ **2026-08-28 第三輪稽核 P8：上一句「兩行就能繞過」說輕了，此處更正。**
+#    我當時的隱含假設是「就算 B1／B2 被繞過，還有 ratchet 當後手」。**那不成立** ——
+#    稽核組實測一個**完全自然的命名**就三條全繞：
+#        `_setup_err = "請先完成資料源設定後再回到本頁。"` 然後 `st.error(_setup_err)`
+#    → B1 不叫（條件不是裸名字）、B2 不叫（文案無語彙）、
+#      **ratchet 也不叫**（變數名帶 `err` token ⇒ `_has_failure_evidence` 認為有失敗證據）。
+#    **ratchet 不是這條規則的後手保險** —— 它用的是同一個「有沒有失敗證據」判準，
+#    而那個判準恰好會被 `err` 這個常見字根餵飽。**三條是同源的，不是三層。**
 # ══════════════════════════════════════════════════════════════════
 ALARM_WIDGETS = {"error", "warning"}
 
@@ -393,12 +439,15 @@ def test_b2_not_configured_wording_is_never_alarm_coloured(path: pathlib.Path):
 
 
 def _st_calls_named(node: ast.AST, attrs: set[str]):
+    """node 底下所有 `st.<attr>(...)`，**含 `st.sidebar.<attr>` 這種屬性鏈**。
+
+    ⚠️ 見 `_callee` 的說明：只認裸 `st.` 會讓 `st.sidebar.*` 對全檔每一條規則隱形。
+    """
     for sub in ast.walk(node):
         if (isinstance(sub, ast.Call)
                 and isinstance(sub.func, ast.Attribute)
                 and sub.func.attr in attrs
-                and isinstance(sub.func.value, ast.Name)
-                and sub.func.value.id == "st"):
+                and _receiver_root(sub.func.value) == "st"):
             yield sub
 
 
@@ -478,7 +527,18 @@ def _rel(path: pathlib.Path) -> str:
 # ⚠️ 這不是豁免清單，是**待辦的可見化**：它是一個 ratchet，數字只准往下走。
 # 多數是表單驗證與中文失敗訊息（「投入總額必須大於 0」「讀回失敗」），
 # 判定要逐條看業務語意，不在「只做顏色」這一批的範圍內（§8.4 step 4：不自作主張擴大範圍）。
-BARE_ERROR_RATCHET = 21
+# ⭐ **2026-08-28 第三輪稽核：21 → 22，這是「修正量測誤差」，不是「放寬門檻」。**
+# 兩者的差別必須寫清楚，否則後人會以為 ratchet 被偷偷調鬆過：
+#   - 21 是 **receiver 判定放寬前**的量測值。當時規則只認**裸** `st.` receiver，
+#     `st.sidebar.error(...)` 對每一條規則都是隱形的 → **量測值偏低**。
+#   - 放寬後（`_callee` / `_st_calls_named` 改吃 st 屬性鏈）浮出 **2 個既有站點**，皆在 `ui/sidebar.py`：
+#       `st.sidebar.error("Proxy 未設定")`   → **本批已修**（改走 `not_ready` 並補「去哪裡設」）
+#       `st.sidebar.error("❌ 407：帳密錯誤")` → **真失敗，紅得對**；只是訊息是中文、
+#         C1 的英文字根抓不到「證據」而被歸為 bare（與其餘 21 處同一個成因）。
+#   - 淨值：23（浮出後）− 1（修掉 Proxy 那處）= **22**。差額 22 − 21 = +1，
+#     **是原本隱形的既有站點，不是有人新借了額度。**
+# ⛔ 不得為了讓 CI 綠而把新浮出的站點加進豁免清單、或把 receiver 判定改回去。
+BARE_ERROR_RATCHET = 22
 
 
 def _bare_error_calls(path: pathlib.Path):
@@ -512,13 +572,13 @@ def test_c_system_red_box_is_reserved_for_actual_failures(path: pathlib.Path):
 def test_c_bare_error_backlog_only_shrinks():
     """範圍外的既有 bare `st.error` 是 ratchet：可以慢慢還，不可以再借。
 
-    本批只做顏色，逐條判定那 21 處的業務語意不在範圍內（§8.4 step 4）；
+    本批只做顏色，逐條判定那 22 處的業務語意不在範圍內（§8.4 step 4）；
     但新寫的 code 不准再往這個數字上加。
 
-    ⚠️ **21 是「本規則自己這把尺」量出來的**（`UI_SOURCES` 再扣掉 `BATCH_SCOPE_C`
-    與 `_RED_BOX_IMPLEMENTATIONS`），origin/main 上這把尺是 **23**，本批轉掉 4 處 → 21。
-    換一把尺就是別的數字：`ui/**` 不含 `app.py` ＝ 25、含 `app.py` ＝ 26。
-    **不要拿不同 scope 的數字互相加減。**
+    ⚠️ **22 是「本規則自己這把尺」量出來的**（`UI_SOURCES` 再扣掉 `BATCH_SCOPE_C`
+    與 `_RED_BOX_IMPLEMENTATIONS`）。換一把尺就是別的數字：`ui/**` 不含 `app.py` ＝ 25、
+    含 `app.py` ＝ 26。**不要拿不同 scope 的數字互相加減。**
+    數字沿革（21 → 22 是**修正量測誤差**，不是放寬門檻）見 `BARE_ERROR_RATCHET` 上方註解。
     """
     total = sum(len(_bare_error_calls(p)) for p in UI_SOURCES
                 if _rel(p) not in BATCH_SCOPE_C | _RED_BOX_IMPLEMENTATIONS)
@@ -593,8 +653,14 @@ def test_m1_the_per_item_loop_itself_renders_nothing():
     「20 檔 = 20 個滿版紅框」的原病完整復發，三條 M1 測試**全綠**。
     （改用 `st.error` 會被 ratchet 攔到，但那是後手，不是 M1 在守。）
 
-    現在的判準：**任何呼叫 `_fetch_rich` 的迴圈，其迴圈體內不得出現渲染呼叫。**
-    收集在迴圈內、上報在迴圈外，是這個機制唯一正確的形狀。
+    現在的判準：**迴圈體內「詞法上直接寫出」`_fetch_rich(...)` 的那些迴圈，
+    其迴圈體內不得出現渲染呼叫。** 收集在迴圈內、上報在迴圈外，是唯一正確的形狀。
+
+    ⚠️ **只擋詞法直呼，一層 indirection 就繞得過**（2026-08-28 第三輪稽核 P4 實測）：
+    把渲染抽成 `_note_one_failure(code)` helper、迴圈裡改呼叫它 → 本條全綠。
+    上一版 docstring 寫「**任何**呼叫 `_fetch_rich` 的迴圈」，讀起來像完整保證 ——
+    **它不是**。要真的擋住需要跨函式呼叫圖分析，不在「只做顏色」這一批的範圍內，
+    已登記第二批。
     """
     src = ROOT / "ui" / "helpers" / "fund_grp_health" / "switch_advisor_section.py"
     tree = ast.parse(src.read_text(encoding="utf-8"))
@@ -783,6 +849,14 @@ def test_n3_degraded_is_not_a_one_way_escape_hatch(path: pathlib.Path):
     反方向的強迫規則（chart-only ⇒ 必須 degraded）上一輪存在過，被稽核 N4 打掉 ——
     它會把「數字真的消失」的區塊逼成橘色，正好是客戶 Q2 要建立的分辨力的反方向。
     代價據實揭露：**把某處的 `degraded=True` 拿掉不會有測試轉紅**（那個方向由 review 守）。
+
+    ⚠️ **本鎖的兩個已知破口（2026-08-28 第三輪稽核 P2 實測，未修，登記第二批）**：
+      1. 它只走 `ast.Try` 的 **handlers**。寫在 **try body** 裡的 `system_error(...)`
+         看不到 —— `backtest_section` 的 USDTWD 那處就是這個形狀（`if _err: system_error(...)`
+         寫在 try body 內），對它加 `degraded=True` **本規則全綠**。
+      2. `degraded` 的值必須是**字面量 `True`** 才認得出；寫成 `degraded=_DEGRADE`
+         這種變數就抓不到。
+    **不要把本規則讀成「degraded 已經鎖死」** —— 它鎖住的是最常見的那個寫法。
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     bad = []
@@ -797,7 +871,11 @@ def test_n3_degraded_is_not_a_one_way_escape_hatch(path: pathlib.Path):
                                 for k in call.keywords)):
                     bad.append(f"{path.relative_to(ROOT)}:{call.lineno}")
     assert not bad, (
-        "以下 `system_error(degraded=True)` 所在的 try **不是「只畫圖」**——"
-        "失敗時畫面上會少掉或改掉數字，使用者可能因此做出錯誤決定，不得降為 🟠：\n  "
+        "以下 `system_error(degraded=True)` 所在的 try，**本規則無法確認它只在畫圖**"
+        "（try 內出現了不認識的裸呼叫，可能是會產生數字的專案 helper）。\n"
+        "⚠️ 這是**規則能力的陳述，不是事實斷言** —— 它不代表那裡的數字一定會消失"
+        "（白名單有 false negative，方向是保守的：寧可多留一個 🔴）。"
+        "若確認只畫圖，請把那個裸呼叫加進 `_CHART_SAFE_BARE_CALLS`（並先問：它會不會"
+        "在畫面上產生一個數字？）；否則維持 🔴：\n  "
         + "\n  ".join(bad)
     )
