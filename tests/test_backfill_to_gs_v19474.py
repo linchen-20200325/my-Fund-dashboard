@@ -35,8 +35,15 @@ def _no_disk(monkeypatch):
     return _store
 
 
-def _wire(monkeypatch, *, fetch, enabled=True, append=None):
-    """接上 auto_fetch_moneydj / nav_history_gs.is_enabled / append_points 假件。"""
+def _wire(monkeypatch, *, fetch, enabled=True, append=None, existing=None,
+          load=None, reads=None):
+    """接上 auto_fetch_moneydj / nav_history_gs.is_enabled / append_points / load_points 假件。
+
+    `load_points` 自 Gate 0(2026-08-28)起會被 `backfill_to_gs` 在**寫入前**呼叫一次
+    (與既有 nav_history 對帳);預設回 `existing or []` ＝「雲端讀得到、但還沒有歷史」,
+    等同這些既有案例原本的情境(純新增)。`load` 可注入會拋的假件測 fail-closed;
+    `reads` 傳 list 進來可數呼叫次數(§5 配額:整批只能讀一次)。
+    """
     import services.moneydj_fetcher as MF
     import services.nav_history_gs as GS
     # v19.509:auto_fetch_moneydj 現接受 oauth_client kwarg → 包一層讓既有 fetch(c) 假件相容。
@@ -51,6 +58,13 @@ def _wire(monkeypatch, *, fetch, enabled=True, append=None):
         return {"written": len(points), "skipped": 0}
 
     monkeypatch.setattr(GS, "append_points", append or _default_append)
+
+    def _default_load(code=None, **kw):
+        if reads is not None:
+            reads.append(code)
+        return list(existing or [])
+
+    monkeypatch.setattr(GS, "load_points", load or _default_load)
     return _calls
 
 

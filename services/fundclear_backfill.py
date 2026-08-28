@@ -101,7 +101,8 @@ def list_classes_for(organize_code: str, fund_code: str) -> list[dict]:
     return fc.list_classes(organize_code, fund_code)
 
 
-def analyze_backfill_conflict(app_code: str, points: list) -> dict:
+def analyze_backfill_conflict(app_code: str, points: list, *,
+                              existing_points: "list | None" = None) -> dict:
     """寫入前的衝突偵測（稽核 E6，2026-08-14）。
 
     回 `{n_existing, n_overlap, n_conflict, samples, verdict}`。
@@ -120,19 +121,35 @@ def analyze_backfill_conflict(app_code: str, points: list) -> dict:
       - `"duplicate"` 有重疊但數值一致 → 重複下載，寫進去也只會被略過
       - `"conflict"`  有重疊且數值不同 → **極可能選錯級別**，應擋下
       - `"unknown"`   讀不到既有資料（GS 未啟用等）→ 不宣稱安全（§1）
+
+    existing_points（2026-08-28 新增，預設 None＝維持原行為）
+    ----------------------------------------------------------
+    批次呼叫端（`nav_history_store.backfill_to_gs`）一次要判很多檔，而 `load_points`
+    每次都是 `get_all_values()` **讀整張表** —— 逐檔各讀一次會把 Sheets 的
+    60 reads/min 讀取配額吃光（§5）。故批次端**整批只讀一次**再把該檔的既有點
+    切給這裡；此時本函式不再自己去讀。
+    ⚠️ 讀取失敗的判斷因此由**呼叫端**負責：注入路徑不會回 `"unknown"`，
+    呼叫端不得把「沒注入」與「讀到空的」混為一談（前者不知道，後者是真的沒有）。
+
+    ⚠️ **這個判定保護不到什麼**：它只比對**重疊日期**的數值。
+    某個 code **第一次**回填時與既有資料零重疊 → verdict 恆為 `"clean"`，
+    本函式對它**完全無效**。它保護的是「已經有歷史的 code」。
     """
     from shared.signal_thresholds import NAV_BACKFILL_CONFLICT_REL_TOL
 
     _blank = {"n_existing": 0, "n_overlap": 0, "n_conflict": 0,
               "samples": [], "verdict": "unknown"}
-    try:
-        from services.nav_history_gs import load_points
-        _existing = load_points(app_code) or []
-    except Exception as _e:  # noqa: BLE001
-        import sys as _sys
-        print(f"[fundclear_backfill] 衝突偵測讀不到既有 nav_history: "
-              f"{type(_e).__name__}: {_e}", file=_sys.stderr)
-        return {**_blank, "reason": f"{type(_e).__name__}: {_e}"}
+    if existing_points is not None:
+        _existing = list(existing_points)      # 批次端已代讀（見 docstring）
+    else:
+        try:
+            from services.nav_history_gs import load_points
+            _existing = load_points(app_code) or []
+        except Exception as _e:  # noqa: BLE001
+            import sys as _sys
+            print(f"[fundclear_backfill] 衝突偵測讀不到既有 nav_history: "
+                  f"{type(_e).__name__}: {_e}", file=_sys.stderr)
+            return {**_blank, "reason": f"{type(_e).__name__}: {_e}"}
 
     _old = {}
     for _p in _existing:

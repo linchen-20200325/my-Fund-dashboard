@@ -467,6 +467,10 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
 
     §1 Fail Loud:抓不到 / 清乾淨後為空 / 雲端寫入失敗 → 該檔 `error` 誠實回報,
       **不偽造、不靜默 no-op**;呼叫端(UI)據此列出「哪幾檔抓不到」引導改用手動 CSV。
+    Gate 0(2026-08-28):寫入前逐檔與既有 nav_history 對帳(重疊日淨值),對不上 → 該檔
+      **不寫**(雲端與本地 cache 皆不寫)+ `error` 誠實回報,其餘檔照跑;讀不到既有歷史
+      → 本次**不寫雲端**、走 `gs_error`(fail-closed)。⚠️ 只比對**重疊日期**,故**新代碼
+      首次回填零重疊時這道閘門無效** —— 詳見函式內註解。
     §2.4:GS 未啟用(缺 Service Account / 未把 SA 加為 NAV Sheet 編輯者)→ `gs_enabled=False`
       + `gs_written=0`,UI 提示去授權(否則只存本機、容器重啟即清)。
     §3.2/§4.2 不變量:序列清洗為「唯一日期 × 非 NaN × NAV>0 × 遞增」後才採用/寫入。
@@ -504,6 +508,7 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     import sys as _sys
 
     from services import nav_history_gs
+    from services.fundclear_backfill import analyze_backfill_conflict
     from services.moneydj_fetcher import auto_fetch_moneydj
 
     # ── 正規化 + 去重(保序;§2.1 code 一律 upper)────────────────────────────
@@ -525,6 +530,40 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     # 1825 天 < 各來源抓取視窗 2000 天(~5.5 年),故 5 年目標可達;採用門檻的「點數不減」
     # 護欄(稽核 F1)確保拉高門檻不會用稀疏候選換掉密集現有序列。
     _SPAN_TARGET_DAYS = 1825
+
+    # ── Gate 0（2026-08-28）:寫進 nav_history 之前先跟既有歷史對帳 ──────────
+    # 為什麼:`_rescue_by_isin` 的採用條件只看「筆數 × 跨度」,**沒有任何幣別條件**。
+    # 同一檔基金的美元 / 歐元 / 避險級別在晨星、Yahoo 都查得到,跨度更長就整條換掉;
+    # 而 nav_history 的去重鍵是 `(code, date)` 且**永不刪除** —— 錯的先寫進去,
+    # 對的就永遠寫不進來,下游 1Y 報酬 / Sharpe / σ 全部照錯的算,而畫面不會有警示
+    # (§1:錯誤的數字比沒有數字更危險;該分頁在說明書上標「無法從任何來源重建」)。
+    # 手段:重用已測過的 `fundclear_backfill.analyze_backfill_conflict`,比對**重疊
+    # 日期**的淨值,差幅超過 SSOT 容差就整檔擋下。
+    #
+    # ⚠️ **這道閘門保護不到什麼(必讀,不要以為補完了)**:
+    #    `analyze_backfill_conflict` 只比對**重疊日期** → 某個 code **第一次**回填時
+    #    與既有資料零重疊 → verdict 恆為 `"clean"` → **這道閘門對它完全無效**。
+    #    Gate 0 保護的是「**已經有歷史的 code**」;**新加入選股池的標的仍然沒有保護**,
+    #    那要靠後續批次(幣別欄 / 拒絕未知幣別)處理,本輪刻意不做。
+    #
+    # §5 配額:`load_points` 每次都是 `get_all_values()` 讀整張表 —— 逐檔各讀一次會把
+    # 60 reads/min 吃光(與本函式「一次讀 + 一次寫」的設計相反),故**整批只讀一次**,
+    # 再把各檔的既有點注入(`existing_points=`)。
+    _gate_by_code: "dict | None" = None      # None = 讀不到既有歷史 → 不敢寫雲端
+    _gate_error = None
+    if gs_on:
+        try:
+            _gate_by_code = {}
+            for _p in (nav_history_gs.load_points(oauth_client=oauth_client) or []):
+                _gate_by_code.setdefault(
+                    str(_p.get("code") or "").strip().upper(), []).append(_p)
+        except Exception as e:  # noqa: BLE001 — §1:讀不到就不宣稱安全,更不往裡面寫
+            _gate_by_code = None
+            _gate_error = (f"寫入前讀不到既有 nav_history,本次**不寫雲端**"
+                           f"(fail-closed,§1 不盲寫無法重建的表):"
+                           f"{type(e).__name__}: {str(e)[:60]}")
+            print(f"[backfill_to_gs] {_gate_error}", file=_sys.stderr)
+
     results: list = []
     all_points: list = []
     n = len(uniq)
@@ -621,20 +660,41 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
                 r["span_days"] = _span(s)
                 fund_name = (str(fd.get("fund_name") or fd.get("full_key") or "")
                              if isinstance(fd, dict) else "")
-                # 本地 cache 合併(快取;雲端重啟會清 → 非致命,不擋雲端寫入)
-                try:
-                    cached = _load_cache_series(code)
-                    merged = s if cached.empty else pd.concat([cached, s])
-                    merged = merged[~merged.index.duplicated(keep="last")].sort_index()
-                    _save_cache_series(code, merged)
-                except Exception as e:  # noqa: BLE001 — §1 記 log 不靜默,但不致命
-                    print(f"[backfill_to_gs] {code} 本地 cache 寫入失敗(非致命):"
-                          f"{type(e).__name__}: {e}", file=_sys.stderr)
-                # 收集雲端點(最後一次 append,省 quota)
-                for idx, v in s.items():
-                    all_points.append({"code": code, "nav": float(v),
-                                       "nav_date": idx.date(),
-                                       "fund_name": fund_name, "source": "backfill"})
+                _points = [{"code": code, "nav": float(v), "nav_date": idx.date(),
+                            "fund_name": fund_name, "source": "backfill"}
+                           for idx, v in s.items()]
+                # ── Gate 0:與既有歷史對帳(理由與「保護不到什麼」見本函式上方註解)──
+                _cf = (analyze_backfill_conflict(
+                           code, _points, existing_points=_gate_by_code.get(code, []))
+                       if (gs_on and _gate_by_code is not None) else None)
+                if _cf is not None and _cf.get("verdict") == "conflict":
+                    # fail-closed:重疊日的淨值對不上 = 幾乎必然抓到別的級別 / 幣別。
+                    # **本地 cache 也不寫** —— 這條序列本身可疑,不該進任何一層。
+                    _s0 = (_cf.get("samples") or [{}])[0]
+                    r["error"] = (
+                        f"與既有 nav_history 衝突:重疊 {_cf['n_overlap']} 日、"
+                        f"{_cf['n_conflict']} 日對不上"
+                        f"(如 {_s0.get('date', '?')} 既有 {_s0.get('existing', '?')}"
+                        f" vs 這次 {_s0.get('incoming', '?')})"
+                        " —— 極可能抓到別的級別/幣別,已擋下未寫入"
+                    )
+                else:
+                    # 本地 cache 合併(快取;雲端重啟會清 → 非致命,不擋雲端寫入)
+                    try:
+                        cached = _load_cache_series(code)
+                        merged = s if cached.empty else pd.concat([cached, s])
+                        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+                        _save_cache_series(code, merged)
+                    except Exception as e:  # noqa: BLE001 — §1 記 log 不靜默,但不致命
+                        print(f"[backfill_to_gs] {code} 本地 cache 寫入失敗(非致命):"
+                              f"{type(e).__name__}: {e}", file=_sys.stderr)
+                    # 收集雲端點(最後一次 append,省 quota)。
+                    # §1:閘門讀不到既有歷史時**不往雲端寫**,但抓取本身是成功的 ——
+                    # 沿用本函式既有原則「抓取成功 vs 雲端寫入失敗是兩件事」,不覆蓋
+                    # 各檔 fetch 結果(否則 n_ok 歸零、UI 誤報「0 檔抓到」),
+                    # 寫入端狀態獨立走 gs_error;本地 cache 可重建,照寫。
+                    if not (gs_on and _gate_by_code is None):
+                        all_points.extend(_points)
         except Exception as e:  # noqa: BLE001 — §1 逐檔誠實回報,不擋整批
             r["error"] = f"補抓失敗:{type(e).__name__}: {str(e)[:70]}"
         results.append(r)
@@ -643,7 +703,7 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     # §1/§5:抓取成功 vs 雲端寫入失敗是**兩件事**,不可混為一談 —— 寫入失敗**不覆蓋**
     # 各檔 fetch 結果(否則 n_ok 歸零、UI 誤報「0 檔抓到」)。寫入狀態獨立走 gs_error。
     gs_written = 0
-    gs_error = None
+    gs_error = _gate_error          # 閘門讀不到既有歷史 → 本次不寫雲端,誠實回報
     if gs_on and all_points:
         try:
             _res = nav_history_gs.append_points(all_points, oauth_client=oauth_client)
