@@ -37,7 +37,25 @@
 ⚠️ **這是已知的、尚未收斂的模糊**，據實登記而不是假裝沒有：本批把「紅色」拆乾淨了
 （業務紅 vs 系統紅），**橘色沒有拆**。要拆需要新增視覺語彙或改版面，
 屬 §-1.5 v3 §03-2 ① 的**客戶 gate**，不在「只做顏色」這一批的範圍內。
-現況的緩解是**位置與內容**：三者不會同時出現在同一個區塊裡，且只有第二種帶技術細節。
+現況唯一可靠的辨識點是**內容**：**只有第二種帶技術細節**（`🔧 技術細節` 區塊）。
+
+⚠️ 這一句原本後面還有半句「三者不會同時出現在同一個區塊裡」——
+**已刪除，因為它是假的**：`backtest_section.render_allocation_backtest_section()`
+**同一個函式、同一個「🔁 配置回測」區塊**內就同時有 `st.warning(_res["caveat"])`（§1 業務 caveat）
+與 `system_error(..., degraded=True)`（淨值疊圖失敗）兩種橘色。
+（查證指令：`python -c "import ast,pathlib; t=ast.parse(pathlib.Path('ui/helpers/fund_grp_health/backtest_section.py').read_text()); print([(ast.unparse(n.func), n.lineno) for n in ast.walk(t) if isinstance(n, ast.Call)])"`
+→ 同一函式內同時命中 `st.warning` 與帶 `degraded=True` 的 `system_error`。）
+
+⭐ **一條給後人（含我自己）的規則 —— 這是三輪稽核連續抓到的同一種病**：
+> **任何「X 不會發生／三者不會同時／已經全部／繞不過去」形式的句子，
+> 必須就地附上證明它的那條 `grep`／AST 指令；附不出來就不要寫。**
+
+病史（體積逐輪縮小，但習慣沒改，所以要用規則治而不是靠自律）：
+第一輪 commit message 的「順帶修掉」（那段其實是死碼）→
+第二輪測試註解的「那已經不是回歸，是改設計」（實測改兩行就繞過）→
+第三輪本行的「三者不會同時出現」（實測同一個函式裡就有兩種）。
+**三次都是「誠實揭露之後，順手接一句沒查證的安撫話」** ——
+揭露本身是對的，壞在那句多出來的保證。
 
 ⚠️ `not_ready()` 不吃 Exception —— 這是刻意的型別層防呆：
 「還沒載入」永遠不會有 exception 可報；一旦手上有 exception，就是 `system_error()`。

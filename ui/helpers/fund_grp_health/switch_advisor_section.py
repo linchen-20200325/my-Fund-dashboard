@@ -115,7 +115,12 @@ def _report_pool_fetch_failures(failures: list) -> None:
     _codes = "、".join(str(c) for c, _ in failures)
     # ⚠️ 逐檔原因一律列進 hint,不只掛第一個 —— 失敗原因可能各不相同
     # (NAV 抓不到 / 幣別未知 / FX 抓不到 / 上游 error…),只講一個等於吞掉其餘(§1)。
-    # 技術細節(traceback)仍只掛第一個,那是給工程師的,代號與原因已在文字裡講完。
+    #
+    # ⚠️ **已知限制(2026-08-28 第三輪稽核 P7,未修,登記第二批)**:技術細節(traceback)
+    # 只掛 `failures[0]`。而自 N1 起 `ok=False` 成為**主要路徑**,那些是合成的
+    # RuntimeError、**沒有 traceback**;若第一筆是合成的、第二筆才是真拋出的例外,
+    # **唯一有 traceback 的那筆就看不到**。
+    # 使用者面不受影響(逐檔原因都在 hint 裡),影響的是工程師排查。
     _lines = "；".join(f"{c}：{str(e) or type(e).__name__}" for c, e in failures)
     system_error(
         f"選股池 {len(failures)} 檔補抓失敗,已從候選中排除:{_codes}",

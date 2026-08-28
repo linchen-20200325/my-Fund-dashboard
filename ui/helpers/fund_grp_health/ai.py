@@ -4,6 +4,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ui.helpers.render_state import not_ready, system_error
+from ui.helpers.story_nav import tab_label
 
 from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GRAY_66, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_ORANGE_300
 
@@ -327,8 +328,14 @@ def _render_per_fund_news_expanders(funds: list) -> None:
                 # 2026-08-28 稽核 B6:這裡沒有 exception —— 是前十大持股名稱全空
                 # (拿不到成分股名),屬「資料不足」不是「失敗」。灰色是對的,
                 # 但文案寫「失敗」配灰色正是本批要消滅的模糊,改為據實描述。
+                # ⚠️ 2026-08-28 第三輪稽核 P1:此處原本手抄成「🔬 個基深掘」——
+                # 分頁標籤 SSOT(`ui/helpers/story_nav._TAB_LABELS`)是「🔍 個基深掘」,
+                # 而 **🔬 在本 repo 另有歸屬**(`tab5_data_guard` 的「🔬 資料診斷」)。
+                # 使用者照圖示去找會落到另一個分頁、看不到持股資料 ——
+                # 與本批 M2 修掉的「指向一顆不存在的按鈕」**完全同型,一輪之後同型再犯**。
+                # 改吃 SSOT:`story_nav.py` 自己寫著手抄一份就是「第二份標籤」。
                 not_ready("這檔基金的持股名稱資料不足，無法查個股新聞",
-                          where="🔬 個基深掘 Tab 查看該基金的前十大持股原始資料")
+                          where=f"{tab_label('fund')} Tab 查看該基金的前十大持股原始資料")
                 continue
 
             _ss_key = f"_tab5grp_stknews_{_code}"
