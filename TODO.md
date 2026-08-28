@@ -188,11 +188,21 @@
   - [ ] **2.2 UI 元件化（6 個新元件）**
         - **現況**：已有 **6 個新 UI 元件**的工作在進行中，總管交辦時指為分支
           `claude/fund-ui3b-components-sn42bh`。
-          ⚠️ **實測校正**：`git ls-remote --heads origin | grep -iE "ui3b|sn42bh"`
+          ~~⚠️ **實測校正**：`git ls-remote --heads origin | grep -iE "ui3b|sn42bh"`
           在 origin 上**只找到 `claude/fund-wireframe-docs-sn42bh` 一個分支**，
           **`claude/fund-ui3b-components-sn42bh` 尚未推送到 origin**（量測日 2026-08-28）。
-          → 該工作目前應存在於**某個 agent 的本地 clone**，尚未上遠端。
-          **本組未查證其內容**（本任務只新增 `TODO.md`，不讀他組工作區）。
+          → 該工作目前應存在於**某個 agent 的本地 clone**，尚未上遠端。~~
+          → **2026-08-28 狀態更新（不是原文寫錯，是時序差）**：上面那段在**量測當下為真**，
+          但**該分支已於本檔量測之後推送到 origin，並已開出 PR #726**。
+          **舊敘述加線保留、不刪**，因為它記錄的是「本檔的量測發生在推送之前」這個事實 ——
+          刪掉會讓後人以為本組當時漏看。
+          **新事實（實跑 `git ls-remote --heads origin` 覆核）**：
+          `claude/fund-ui3b-components-sn42bh` **存在於 origin**（`de721ef`），
+          對應 **PR #726**（**draft**，標題「UI3b：新增 6 個純函式 UI 元件（誠實性優先）+ 41 條突變驗證過的測試網」）。
+          該 PR 內文自陳「**本 PR 壓著不合併**，等 Phase 1 全部完成並通過測試後才放行」，
+          **與本檔下方『裁決』欄一致**（理由：**Phase 1 未完成不得跳級**，見本檔維護規則第 2 條）。
+          **本組仍未查證其程式碼內容**（本任務只新增／維護 `TODO.md`，不讀他組工作區）——
+          上表所引 PR 標題與合併時機均取自 PR 描述本身，**不是**對其實作正確性的背書。
         - **裁決（總管明訂）**：**壓著不合併** —— **等 Phase 1 全部通過測試才放行**。
         - **阻擋者**：**Phase 1 全項打勾 ＋ 測試通過**。
         - ⚠️ 依 `CLAUDE.md §4`（Auto-Ship 常設授權的三道邊界）：merge 免請示，
@@ -223,7 +233,12 @@
         - **現況**：總管交辦所述 —— **四大鐵律中有三條目前零機器守衛**（已實測），
           守衛正在建，指為分支 `claude/fund-ui3b-guards-sn42bh`。
           ⚠️ **實測校正（同 2.2）**：該分支**在 origin 上不存在**
-          （`git ls-remote --heads origin` 只有 `claude/fund-wireframe-docs-sn42bh`，量測日 2026-08-28），
+          （~~`git ls-remote --heads origin` 只有 `claude/fund-wireframe-docs-sn42bh`~~
+          → **2026-08-28 更正該括號內的舉證**：**不是原文寫錯，是時序差** ——
+          原句列舉的「只有 wireframe-docs 一個」在量測當下為真，但之後 origin 上又多了
+          `claude/fund-ui3b-components-sn42bh`、`claude/fund-todo-tracker-sn42bh`；
+          **`claude/fund-ui3b-guards-sn42bh` 則仍然未推送**，故**本項的結論未變、仍然有效**，
+          變的只是那句舉證所列的分支清單。量測日 2026-08-28，覆核同日），
           應仍在某個 agent 的本地 clone。
           ⚠️ **「四大鐵律有三條零守衛」是總管轉述的實測結論，本組未獨立複驗**，
           也**未查證那四條鐵律具體是哪四條**。→ **待查證**。
@@ -294,7 +309,7 @@
 | B8 | Phase 3.2：「四大鐵律」具體是哪四條、哪三條零守衛（本組未獨立複驗，也未查證是哪四條） | 承接守衛工作的那一組 |
 | B9 | Phase 3.3：失敗退避實作（`shared/backoff_policy.py` / `infra/source_backoff.py`）**是否已合併**（本組未查證） | 承接組現場確認 |
 | B10 | 1.5「憲法決定二」的出處（本組 `grep -rn "決定二" *.md docs/*.md` → **0 命中**） | 總管補上出處，或改記為口述交辦 |
-| B11 | `claude/fund-ui3b-components-sn42bh` 與 `claude/fund-ui3b-guards-sn42bh` 兩分支的內容與進度（實測 origin 上**均不存在**，應仍在本地 clone） | 各該承接組 |
+| B11 | ~~`claude/fund-ui3b-components-sn42bh` 與 `claude/fund-ui3b-guards-sn42bh` 兩分支的內容與進度（實測 origin 上**均不存在**，應仍在本地 clone）~~ → **2026-08-28 更正（不是原文寫錯，是時序差；「均不存在」在量測當下為真）**：現為 **guards 一個未推送**。**components 已推送到 origin**（`de721ef`）並開出 **PR #726**（draft、壓著不合併，理由是 **Phase 1 未完成不得跳級**）→ 其**內容**仍待查證，但**進度**已明。**`claude/fund-ui3b-guards-sn42bh` 仍未推送**，該半項**維持待查證**。 | 各該承接組 |
 
 ---
 
@@ -326,7 +341,13 @@ grep -n "P-UIHTTP-1\|P-UIGSPREAD-1\|P-UISUBPROC-1\|P-NAVCACHE-1\|P-NDCCACHE-1" C
    **未通讀** `PROCESS.md` / `SPEC.md` / `ARCHITECTURE.md` / `STATE.md` / `BACKLOG.md` / `docs/*.md`。
    若那些檔另有與本表牴觸的敘述，本次**沒查到**。
 3. **本組未讀任何他組的工作區**（Phase 2.2 的 6 個元件、Phase 3.2 的守衛、
-   Phase 3.3 的退避實作），故那三項的內容與進度**全部是待查證**，不是「已知」。
+   Phase 3.3 的退避實作），故那三項的**內容**是待查證，不是「已知」。
+   ⚠️ ~~故那三項的內容與**進度**全部是待查證~~ → **2026-08-28 更正（不是原文寫錯，是時序差）**：
+   「**進度**也全部未知」這半句**已不成立** —— Phase 2.2 的**進度**現已明
+   （分支已推送、PR #726 draft、壓著不合併），見 2.2 段與 B11。
+   但其**內容仍未讀**；Phase 3.2 / 3.3 則**內容與進度兩者都仍是待查證**。
+   ⚠️ 本項是被**這一次更正**抓到的第 4 處連帶失效 —— 交辦時只點名 3 處；
+   **一個事實變了，要把同一把尺對全檔同類敘述重跑一次**，不能只改被點名的那幾行。
 4. **本組未跑任何測試、未跑任何 UI 稽核**。本檔一個字都不宣稱「本 repo 已符合 X」。
 5. **`services/` 純淨性的 grep 字表不完整**（見 B4）。
    **能被一條 grep 推翻的全稱句，不該寫成結論** —— 故本檔在該處寫的是分類敘述加明列未涵蓋範圍，
