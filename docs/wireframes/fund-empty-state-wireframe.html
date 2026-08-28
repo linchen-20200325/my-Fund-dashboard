@@ -1,0 +1,841 @@
+<title>空狀態線框補版</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#f4f5f6; --card:#ffffff;
+  --ink:#182029; --ink-2:#4d5a67; --ink-3:#7b8794;
+  --line:#d3d9de; --line-2:#e6eaed;
+  --accent:#2d6a8f; --accent-soft:#e4eef4;
+  --wire:#eceff1; --wire-line:#b8c2cb;
+  --ok:#0ca30c; --warn:#ec835a; --danger:#c0392b; --mute:#8a8e96;
+  --gray-state:#8a939c; --gray-soft:#eef0f2;
+  --shadow:0 1px 2px rgba(24,32,41,.06),0 4px 14px rgba(24,32,41,.05);
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11161b; --card:#171e25;
+  --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98;
+  --line:#2b353f; --line-2:#222b33;
+  --accent:#6fb3d8; --accent-soft:#1b2a35;
+  --wire:#1c242c; --wire-line:#3a4753;
+  --ok:#3fc23f; --warn:#f0996f; --danger:#e06a5c; --mute:#8a939c;
+  --gray-state:#8a939c; --gray-soft:#1f272e;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.28);
+}}
+:root[data-theme="dark"]{
+  --paper:#11161b; --card:#171e25;
+  --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98;
+  --line:#2b353f; --line-2:#222b33;
+  --accent:#6fb3d8; --accent-soft:#1b2a35;
+  --wire:#1c242c; --wire-line:#3a4753;
+  --ok:#3fc23f; --warn:#f0996f; --danger:#e06a5c; --mute:#8a939c;
+  --gray-state:#8a939c; --gray-soft:#1f272e;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.7;margin:0;padding:0 20px 100px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto}
+
+header.mast{padding:56px 0 32px;border-bottom:2px solid var(--ink);margin-bottom:38px}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-size:clamp(28px,4.6vw,42px);line-height:1.2;margin:0 0 16px;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.standfirst{font-size:17px;color:var(--ink-2);max-width:64ch;margin:0}
+.mast-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+
+section{margin:0 0 52px}
+h2{font-size:22px;margin:0 0 8px;font-weight:700;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h2 .num{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
+h3{font-size:15.5px;margin:28px 0 10px;font-weight:700}
+h4{font-size:14px;margin:20px 0 8px;font-weight:700;color:var(--ink-2)}
+.lede{color:var(--ink-2);margin:0 0 20px;max-width:68ch;font-size:15px}
+p{margin:0 0 14px;max-width:70ch}
+
+.frame{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:20px;box-shadow:var(--shadow);margin:0 0 14px}
+.frame-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+.wb{background:var(--wire);border:1px dashed var(--wire-line);border-radius:4px;padding:11px 12px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);min-height:42px;display:flex;flex-direction:column;justify-content:center;gap:3px;margin-bottom:8px}
+.wb .t{font-weight:600;color:var(--ink);font-size:12.5px;font-family:var(--sans)}
+.wb .s{color:var(--ink-3);font-size:10.5px;line-height:1.55;font-family:var(--sans)}
+.wb.new{border-color:var(--accent);background:var(--accent-soft)}
+.wb.new .t{color:var(--accent)}
+.wb.gone{border-color:var(--danger);opacity:.8}
+.wb.gone .t{color:var(--danger);text-decoration:line-through}
+.wb.prop{border-color:var(--warn);background:transparent}
+.wb.prop .t{color:var(--warn)}
+.wb.ghost{border-color:var(--gray-state);background:var(--gray-soft);opacity:.95}
+.wb.ghost .t{color:var(--gray-state);font-weight:500}
+.wb.solid{border-style:solid}
+.tag{font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:1px 5px;border-radius:2px;border:1px solid currentColor;margin-right:7px;white-space:nowrap;opacity:.9}
+.src{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);opacity:.85}
+.row{display:grid;gap:10px;margin-bottom:10px}
+.r2{grid-template-columns:repeat(2,1fr)}
+@media (max-width:760px){.r2{grid-template-columns:1fr}}
+
+.note{border-left:3px solid var(--accent);background:var(--card);padding:14px 16px;border-radius:0 5px 5px 0;margin:14px 0;font-size:14px;color:var(--ink-2);box-shadow:var(--shadow)}
+.note b{color:var(--ink)}
+.note.warn{border-left-color:var(--warn)}
+.note.stop{border-left-color:var(--danger)}
+.note.good{border-left-color:var(--ok)}
+.note-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;font-weight:600}
+.note.warn .note-h{color:var(--warn)}
+.note.stop .note-h{color:var(--danger)}
+.note.good .note-h{color:var(--ok)}
+.note p:last-child{margin-bottom:0}
+
+table.ev{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:13.5px;min-width:600px}
+.ev th{text-align:left;padding:9px 10px;border-bottom:1.5px solid var(--line);font-size:11px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;white-space:nowrap;vertical-align:bottom}
+.ev td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top;color:var(--ink-2)}
+.ev td:first-child{color:var(--ink);font-weight:500}
+.ev tr.hi td{background:var(--accent-soft)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+code{font-family:var(--mono);font-size:.9em;background:var(--wire);padding:1px 5px;border-radius:3px;color:var(--ink)}
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+
+.decisions{display:grid;gap:14px;margin-top:18px}
+.dec{border:1px solid var(--line);border-left:4px solid var(--accent);background:var(--card);border-radius:0 6px 6px 0;padding:18px 20px;box-shadow:var(--shadow)}
+.dec.mine{border-left-color:var(--warn)}
+.dec h4{margin:0 0 8px;font-size:16px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;color:var(--ink)}
+.dec h4 .q{font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:600}
+.dec.mine h4 .q{color:var(--warn)}
+.rec{margin-top:12px;padding:10px 12px;background:var(--accent-soft);border-radius:4px;font-size:13.5px;color:var(--ink)}
+.rec b{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:3px}
+
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--ink-3);margin:10px 0 26px;padding:12px 14px;background:var(--card);border:1px solid var(--line-2);border-radius:5px}
+.legend span{display:flex;align-items:center;gap:7px}
+.sw{width:22px;height:12px;border-radius:2px;display:inline-block;flex:none}
+.sw.keep{background:var(--wire);border:1px dashed var(--wire-line)}
+.sw.ghost{background:var(--gray-soft);border:1px dashed var(--gray-state)}
+.sw.new{background:var(--accent-soft);border:1px dashed var(--accent)}
+.sw.gone{background:var(--wire);border:1px dashed var(--danger)}
+.sw.prop{background:transparent;border:1px dashed var(--warn)}
+ul{margin:0 0 14px;padding-left:20px;max-width:70ch}
+li{margin-bottom:7px;color:var(--ink-2)}
+li b{color:var(--ink)}
+hr.sep{border:none;border-top:1px solid var(--line);margin:0 0 40px}
+
+.pagecard{border:1px solid var(--line);border-radius:8px;background:var(--card);box-shadow:var(--shadow);padding:22px;margin:0 0 26px}
+.pagecard>.ph{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;border-bottom:1px solid var(--line-2);padding-bottom:12px;margin-bottom:16px}
+.ph .pn{font-family:var(--mono);font-size:13px;font-weight:600;color:#fff;background:var(--accent);padding:3px 9px;border-radius:3px}
+.ph .pt{font-size:19px;font-weight:700;color:var(--ink)}
+.ph .verdict{margin-left:auto;font-family:var(--mono);font-size:10.5px;padding:3px 9px;border-radius:3px;border:1px solid currentColor}
+.v-ok{color:var(--ok)} .v-mid{color:var(--warn)} .v-bad{color:var(--danger)}
+.oneline{background:var(--accent-soft);border:1px solid var(--accent);border-radius:5px;padding:12px 14px;margin:0 0 18px;font-size:14.5px;color:var(--ink)}
+.oneline .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:4px}
+.why{font-size:13.5px;color:var(--ink-2);border-top:1px dashed var(--line);margin-top:16px;padding-top:14px}
+.why b{color:var(--ink)}
+
+.rule{display:grid;grid-template-columns:auto 1fr;gap:10px 14px;align-items:start;margin:14px 0 18px;font-size:14px}
+.rule .q{font-family:var(--mono);font-size:11px;font-weight:600;color:#fff;background:var(--accent);border-radius:3px;padding:3px 8px;white-space:nowrap;margin-top:2px}
+.rule .a{color:var(--ink-2)}
+.rule .a b{color:var(--ink)}
+
+.codeblk{font-family:var(--mono);font-size:11.5px;background:var(--wire);border:1px solid var(--line);border-radius:5px;padding:12px 14px;margin:10px 0 14px;color:var(--ink-2);overflow-x:auto;line-height:1.75;white-space:pre}
+.codeblk .hl{color:var(--danger);font-weight:600}
+.codeblk .gd{color:var(--ok);font-weight:600}
+.codeblk .cm{color:var(--ink-3)}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Wireframe · 補版 · 待審批</p>
+  <h1>空狀態線框 —— 每次開 App 看到的第一個畫面</h1>
+  <p class="standfirst">
+    已核准的五頁線框是照「資料都載入好」畫的。這一份補上<strong>資料還沒進來時</strong>的畫面。
+    核心只有兩件事：<strong>哪些區塊該留占位、哪些該真的消失</strong>，
+    以及<strong>灰色（還沒載入）與紅色（真的出錯）怎麼分</strong>。
+    一樣只談結構與狀態，不談程式，需你拍板後才寫 UI 程式碼。
+  </p>
+  <div class="mast-meta">
+    <span>基準：fund-wireframe-final.html（已核准）</span>
+    <span>依據：客戶 2026-08-28 裁示</span>
+    <span>本文為結構草稿，非視覺定稿</span>
+  </div>
+</header>
+
+<div class="legend">
+  <span><i class="sw keep"></i>保留原樣</span>
+  <span><i class="sw ghost"></i>灰色占位（新規範）</span>
+  <span><i class="sw new"></i>新增／改法</span>
+  <span><i class="sw prop"></i>我方提案，需拍板</span>
+  <span><i class="sw gone"></i>移走或刪除</span>
+</div>
+
+<!-- 00 -->
+<section>
+  <h2><span class="num">00</span> 為什麼要補這一版</h2>
+  <p class="lede">
+    已核准線框的第 08 節自己寫了一句話：「動工前必須補查一次所有『資料不全時走另一套版面』的分岔，
+    <b>漏一個就等於漏掉半個畫面</b>。」補查做完了 —— 漏掉的比一半還多。
+  </p>
+
+  <h3>空狀態不是邊緣情況，是每次開 App 的第一個畫面</h3>
+  <p>
+    <code>ui/helpers/session.py</code> 的 <code>INITIAL_SESSION_STATE</code> 明確定義：
+    <code>macro_done=False</code>、<code>fund_data=None</code>、<code>portfolio_funds=[]</code>。
+    這三個值由 <code>app.py</code> 在每次 session 啟動時注入
+    （<code>init_session_state(st.session_state)</code>）——
+    也就是說<strong>每一次你打開這個 App，這三個值都是空的</strong>，
+    五頁全部從空狀態開始。
+  </p>
+  <div class="note">
+    <p class="note-h">一句話</p>
+    <p>
+      主版面是你<b>按過按鈕之後</b>才看得到的東西；空狀態是你<b>每一次</b>都會看到的東西。
+      現在的情況剛好相反：主版面畫了 2,100 行，空狀態畫了 0 行。
+    </p>
+  </div>
+
+  <h3>這份補版要回答的問題，只有三個</h3>
+  <div class="rule">
+    <span class="q">一</span><span class="a"><b>該留還是該消失？</b>資料不足時，每一張卡片是留一個灰色占位，還是真的整塊不見。</span>
+    <span class="q">二</span><span class="a"><b>灰的還是紅的？</b>「還沒載入」和「真的壞了」現在長得一樣，所以你每次進站都看到一片紅。</span>
+    <span class="q">三</span><span class="a"><b>哪些畫面根本不必畫？</b>盤點時找到一套 production 永遠到不了的版面，它應該被刪掉而不是被重畫。</span>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 01 -->
+<section>
+  <h2><span class="num">01</span> 現況：同一件事，這個專案有兩套相反的畫法</h2>
+  <p class="lede">
+    這不是「空狀態沒設計」，而是「<b>空狀態設計過，但只做了一半</b>」。
+    兩套慣例同時存在，而且就在同一個檔案裡。
+  </p>
+
+  <h3>證據：同一個函式，相隔 17 行，兩種相反的做法</h3>
+  <p>
+    <code>ui/helpers/fund_grp_health/switch_section.py</code> 的「🔀 換標決策建議」：
+  </p>
+
+  <div class="codeblk"><span class="cm"># ui/helpers/fund_grp_health/switch_section.py</span>
+def render_switch_section(rows):
+    _rows = [...]
+    <span class="hl">if not _rows:</span>
+        <span class="hl">return</span>              <span class="cm">← 沒資料：整塊蒸發，畫面零痕跡</span>
+
+    st.divider()
+    st.markdown("### 🔀 換標決策建議")   <span class="cm">← 標題寫在守衛「之後」</span>
+    ...
+    _reds = [...]
+    <span class="gd">if not _reds:</span>
+        <span class="gd">st.info("目前無 🔴 紅燈（賣出／平轉）檔 —— 沒有急需換掉的標的。")</span>
+        return                    <span class="cm">← 有資料但結果為空：老實講出來</span></div>
+
+  <p>
+    兩個都是「沒東西可顯示」。上面那個<b>消失</b>，下面那個<b>解釋</b>。
+    差別只在於：<strong>寫下面那段的時候，標題已經印出去了</strong>。
+  </p>
+
+  <div class="note stop">
+    <p class="note-h">所以真正的問題不是「要不要設計空狀態」</p>
+    <p>
+      而是<b>守衛寫在標題前面還是後面</b>。寫在前面 → 使用者看不到任何痕跡；
+      寫在後面 → 使用者看到標題和一句灰字說明。<br>
+      <b>這是一個位置問題，不是一個設計問題。</b> 這一點決定了本次改動的規模比想像中小很多。
+    </p>
+  </div>
+
+  <h3>灰色說明的寫法，這個專案早就有了 —— 而且用得非常熟</h3>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>既有的正確範式</th><th>它怎麼做</th><th>出處</th></tr></thead>
+    <tbody>
+      <tr class="hi">
+        <td><b>資料診斷的三態分離</b><br><span class="src">全站對此執行得最正確的一處</span></td>
+        <td>尚未載入 → 🔵「<b>無法判定</b>（這不等於全部正常）」／全健康 → 🟢／有異常 → 表格。
+        程式碼註解自陳理由：「診斷頁在什麼都沒載入時印大綠燈，會讓來查證數字的使用者<b>回頭懷疑自己的判讀</b>」</td>
+        <td><span class="src">tab5_data_guard.py <br>anomaly_view_state ≈:1586-1612</span></td>
+      </tr>
+      <tr>
+        <td>智能戰情室</td>
+        <td><b>先印標題</b>，再判斷；沒基金 → 「尚未載入任何基金。請在下方加入基金代碼後，戰情室會自動上線。」</td>
+        <td><span class="src">ui/components/mk_dashboard.py<br>render_mk_war_room ≈:665-688</span></td>
+      </tr>
+      <tr>
+        <td>基金體檢 PK 表</td>
+        <td>expander 標題永遠在；表空 → 「📊 載入基金後，這裡會列出每檔與同類型的 PK 體檢結果。」</td>
+        <td><span class="src">ui/helpers/fund/checkup.py ≈:455-470</span></td>
+      </tr>
+      <tr>
+        <td>我的配置的歡迎條</td>
+        <td>沒有可用基金 → 虛線框「👋 三步驟：1️⃣ 貼代碼 → 2️⃣ 批次加入 → 3️⃣ 看 KPI」</td>
+        <td><span class="src">tab3_portfolio.py ≈:1711-1725</span></td>
+      </tr>
+      <tr>
+        <td>買賣點對比（跨檔）</td>
+        <td>先印標題，再說「⬜ 需先到 🌐 市場定調 Tab 點選『載入總經資料』」—— <b>而且指出去哪裡補</b></td>
+        <td><span class="src">fund_grp_health/signals.py ≈:24-29</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note good">
+    <p class="note-h">量測：⬜ 這個灰色記號在本專案已經是家規</p>
+    <p>
+      <code>ui/</code> 全層出現 <b class="num">299</b> 次；光是「組合健診」這個套件就
+      <b class="num">109</b> 次、分佈在 <b class="num">15</b> 個檔案。
+      它已經被用在<b>欄位層</b>（這一格沒資料）、<b>數值層</b>（這個指標算不出來）、<b>圖表層</b>
+      （「抓不到的值一律留缺口，柱子不畫、紅點斷線，與『真的是 0%』分得出來」）。
+      <br><b>唯一沒被套用的層級，就是「整個區塊」。</b>
+    </p>
+    <p style="margin-top:10px">
+      <b>這改變了本提案的性質：</b>我們不是要引進一套新的視覺語言，
+      而是把<b>你們已經有、而且寫得很好的那一套</b>，往上套一層。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 02 -->
+<section>
+  <h2><span class="num">02</span> 判準：哪些留占位、哪些真的該消失</h2>
+  <p class="lede">
+    <b>不建議一刀切成「全部留占位」</b> —— 那會讓空畫面塞滿三十幾條灰字，比消失更難用。
+    下面是三個依序問的問題，前一個問完才問下一個。
+  </p>
+
+  <div class="frame">
+    <div class="frame-label"><span>判準</span><span>依序問，命中即止</span></div>
+    <div class="rule">
+      <span class="q">問一</span><span class="a">
+        <b>這個區塊「該不該在這裡」，是固定的，還是取決於資料？</b><br>
+        <b>固定</b>（它是頁面骨架的一部分，任何時候都該有一格）→ 往下問二。<br>
+        <b>取決於資料</b>（例如「每一檔基金一個展開區」，0 檔就是 0 個）→ <b>消失是對的</b>，不必占位。
+      </span>
+      <span class="q">問二</span><span class="a">
+        <b>使用者為了看到它，已經做過那個動作了嗎？</b><br>
+        <b>已經按了按鈕／已經載入</b> → <b>絕對不能消失</b>。他付出了等待卻沒得到解釋，
+        而且他無從分辨「這個功能不存在」和「這次沒算出來」。<br>
+        <b>還沒按</b> → <b>按鈕本身就是空狀態</b>，不必再加一條灰字。
+      </span>
+      <span class="q">問三</span><span class="a">
+        <b>它為什麼沒東西？</b><br>
+        <b>還沒給資料</b> → 灰色占位，<b>而且必須寫出「去哪裡補」</b>（照 signals.py 的寫法）。<br>
+        <b>結構上不適用</b>（台幣計價基金本來就沒有匯率位階）→ 用既有的 <code>➖</code>，或不顯示。
+      </span>
+    </div>
+  </div>
+
+  <h3>套用結果</h3>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>區塊型態</th><th>判準命中</th><th>處置</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td><b>已按「🩺 開始健診」之後才跑的區塊</b><br>換標決策／景氣適配／配息矩陣／輪動／配置回測／進階分析</td><td>問二：已按過</td><td><b>一律留灰色占位</b> + 缺什麼 + 去哪裡補</td></tr>
+      <tr class="hi"><td><b>健診大表本身</b>（rows 全空）</td><td>問二：已按過，且它一塊帶走下游整串</td><td><b>最優先。</b>必須留，並列出失敗檔與原因</td></tr>
+      <tr><td>按鈕還沒按的整頁下半部</td><td>問二：還沒按</td><td><b>不加占位</b>。按鈕與輸入框就是空狀態</td></tr>
+      <tr><td>每檔一個展開區（逐檔深度分析、逐檔診斷）</td><td>問一：取決於資料</td><td><b>消失正確</b>。0 檔就是 0 個展開區</td></tr>
+      <tr><td>台幣基金的匯率位階、無配息基金的配息欄</td><td>問三：結構上不適用</td><td>沿用既有 <code>➖</code>，<b>不要</b>改成 ⬜（兩者語意不同，現況已分對）</td></tr>
+      <tr><td>整個功能對這個使用者不適用</td><td>問三：不適用</td><td>不顯示。<b>不要</b>留一個永遠灰著的占位</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note warn">
+    <p class="note-h">占位長什麼樣：三個要素，缺一不可</p>
+    <p>
+      ① <b>標題照印</b>（使用者要知道這個功能存在）→
+      ② <b>一句話說缺什麼</b>（不是「無資料」，而是「缺 1Y 含息報酬」）→
+      ③ <b>指出去哪裡補</b>（「請先到 🌐 市場定調 按『📡 載入總經資料』」）。<br>
+      第三點是最容易省掉、也最有價值的一點 —— 沒有它，占位只是把「消失」換成「灰色的消失」。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 03 -->
+<section>
+  <h2><span class="num">03</span> 顏色：三態統一規則</h2>
+  <p class="lede">
+    現況最可量化的一個毛病：<strong>「Gemini 金鑰沒設定」這一件事，全站有五種畫法。</strong>
+  </p>
+
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>同一個條件</th><th>現在畫成</th><th>出處</th></tr></thead>
+    <tbody>
+      <tr><td>GEMINI_API_KEY 未設定</td><td><b style="color:var(--danger)">🔴 紅色錯誤</b>「缺少<b>必要</b>金鑰」（每次載入頁面最上方）</td><td><span class="src">app.py ≈:118-124</span></td></tr>
+      <tr><td>同上</td><td><b style="color:var(--warn)">🟠 橘色警告</b>「❗ 未設定 Gemini API Key — 無法呼叫 AI」</td><td><span class="src">ui/helpers/ai_summary.py ≈:103</span></td></tr>
+      <tr><td>同上</td><td><b style="color:var(--accent)">🔵 藍色提示</b>「ℹ️ 需設置 Gemini API key 才能使用此功能」</td><td><span class="src">tab3_t7_ledger.py ≈:3099-3100</span></td></tr>
+      <tr><td>同上</td><td><b style="color:var(--gray-state)">⬜ 灰色說明</b>「未設定 GEMINI_API_KEY，無法呼叫 AI」</td><td><span class="src">fund_grp_health/ai.py ≈:221</span></td></tr>
+      <tr><td>同上</td><td><b>完全不顯示</b> —— <code>if GEMINI_KEY:</code> 沒有 else，整塊靜靜跳過</td><td><span class="src">tab2_single_fund.py ≈:2429</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note stop">
+    <p class="note-h">而且錯的方向有兩個，不是一個</p>
+    <p>
+      <b>過度示警：</b>設定沒填、業務結論、靜態說明，被畫成紅色系統錯誤。<br>
+      <b>示警不足：</b>組合健診套件裡<b class="num">39</b> 處<b>真正的失敗</b>
+      （「相關性矩陣渲染失敗」「輪動配對計算失敗」「三率模組載入失敗」）
+      是用<b>灰色 caption</b> 印的 —— 跟「這格沒資料」長得一模一樣。<br>
+      <b>兩個方向加起來，等於顏色完全不帶資訊。</b>
+    </p>
+  </div>
+
+  <h3>建議的統一規則</h3>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>狀態</th><th>視覺</th><th>用在什麼</th><th>現況要改的</th></tr></thead>
+    <tbody>
+      <tr class="hi">
+        <td><b>未載入／未執行</b></td>
+        <td><b style="color:var(--gray-state)">⬜ 灰色說明</b><br>（沿用既有 ⬜ 慣例）</td>
+        <td>總經未載入、健診未跑、金鑰未設定、資料源未設定</td>
+        <td>上表五種畫法<b>全部統一到這一列</b>。金鑰未設定屬「你還沒設定」，不是「系統壞了」</td>
+      </tr>
+      <tr>
+        <td><b>不適用</b></td>
+        <td><code>➖</code> 或不顯示</td>
+        <td>台幣基金的匯率位階、不配息基金的配息欄</td>
+        <td><b>現況已經分對了，不要動。</b>特別注意不要把 ➖ 併進 ⬜</td>
+      </tr>
+      <tr class="hi">
+        <td><b>業務警訊</b></td>
+        <td><b style="color:var(--danger)">🔴 紅字，但用卡片／表格列</b><br>不用整塊紅色錯誤框</td>
+        <td>淘汰候選、嚴重吃本金、系統性風險暫緩換標</td>
+        <td>「🔴 淘汰候選 N 檔」現在用的是<b>和系統崩潰同一個紅框</b>。
+        分析<b>成功了</b>，答案是「這幾檔該換」—— 那是成果，不是故障
+        <span class="src">tab_fund_grp_health.py ≈:877</span></td>
+      </tr>
+      <tr class="hi">
+        <td><b>系統真出錯</b></td>
+        <td><b style="color:var(--danger)">🔴 紅色錯誤框</b> + 可展開技術細節</td>
+        <td>抓取失敗、渲染失敗、模組載入失敗</td>
+        <td>那 <b class="num">39</b> 處用灰字印的失敗<b>要改回紅色</b>。
+        市場定調頁的 <code>_safe_section</code> 已經是正確範式（區塊隔離 + 具名 + 附 traceback）</td>
+      </tr>
+      <tr>
+        <td><b>破壞性操作提醒</b></td>
+        <td><b style="color:var(--warn)">🟠 常駐橘框</b></td>
+        <td>說明書「🚨 刪分頁前先看這裡」</td>
+        <td>現在是<b>常駐紅框，但沒有任何錯誤發生</b>。
+        它是一則永遠有效的警語，紅色會稀釋真紅色的份量
+        <span class="src">tab6_manual.py ≈:457</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <p class="note-h">為什麼「業務紅燈」與「系統紅燈」一定要分開</p>
+    <p>
+      這是本節最重要的一條，而且和 §1「錯誤的數字比沒有數字更危險」同源：<br>
+      系統紅燈的意思是「<b>這個數字不可信</b>」；業務紅燈的意思是「<b>這個數字可信，而且它很難看</b>」。
+      兩者要你做的事完全相反 —— 前者要你別採信、去修；後者要你採信、去換基金。
+      <strong>用同一個紅色，等於把「不要相信這個畫面」和「相信這個畫面並據以行動」畫成同一件事。</strong>
+    </p>
+  </div>
+
+  <div class="note warn">
+    <p class="note-h">順帶的一個矛盾（同屬顏色，但根因是流程）</p>
+    <p>
+      市場定調頁：沒有 FRED 金鑰時，<b>整個載入按鈕區塊不會被渲染</b>
+      （<code>if not FRED_KEY:</code> 只印一行警告，兩顆按鈕在 else 裡）。
+      但同一頁的另一段照樣印「👆 點擊『載入總經資料』開始分析」——
+      <strong>那顆按鈕在這條路徑上根本不存在。</strong>
+      <span class="src">tab1_macro.py ≈:824 / :1536-1537（兩個 if 是平行的，不是巢狀）</span>
+      <br><b>改法：</b>沒有金鑰時，這句話要換成「⬜ 尚未設定 FRED 金鑰，無法載入總經資料」+ 去哪裡設定。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 04 -->
+<section>
+  <h2><span class="num">04</span> 五頁逐頁空狀態</h2>
+  <p class="lede">
+    每頁一張線框，畫的是<b>剛打開 App、什麼都還沒按</b>的畫面。
+    右上角標示該頁現況的嚴重程度。
+  </p>
+
+  <!-- P1 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">①</span><span class="pt">🌐 市場定調</span><span class="verdict v-mid">現況：大致可用，一處矛盾</span></div>
+    <div class="oneline">
+      <span class="lbl">空狀態的一句話</span>
+      <b>還沒載入 —— 按上面那顆按鈕就會有。</b>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>空狀態 · 由上到下</span><span>保留 4 塊 + 1 條說明</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>頁首：標題 · 導覽列</span><span class="s">與主版面相同，不因空狀態改變</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>載入列：📡 載入總經資料 · 🆕 強制重抓</span><span class="s">這一列<b>就是</b>空狀態的主角，維持現況一字不改<br><span class="src">tab1_macro.py ≈:846-860</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>💡 尚未載入總經資料，點擊下方按鈕開始</span><span class="s">現況已經有這一句，位置也對（在按鈕上方）<br><span class="src">tab1_macro.py ≈:836</span></span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>👆 點擊「載入總經資料」開始分析　→ 依金鑰狀態分兩句</span><span class="s">有金鑰 → 維持原句；<b>無金鑰 → 改成「⬜ 尚未設定 FRED 金鑰，無法載入總經資料（設定位置：…）」</b>。現況無金鑰時這句話指向一顆沒被畫出來的按鈕<br><span class="src">tab1_macro.py ≈:1537</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>其餘所有區塊 —— 不渲染</span><span class="s">四層總表、四時域圖、AI 總結在 <code>macro_done=False</code> 時整批不畫。<b>判準問二：使用者還沒按按鈕 → 消失是對的</b>，不必加占位<br><span class="src">tab1_macro.py ≈:1048（if macro_done）</span></span></div>
+    </div>
+
+    <div class="why">
+      <b>為什麼這頁幾乎不用改：</b>它是五頁裡空狀態做得最完整的 ——
+      按鈕在最上面、上方有一句提示、下方有一句提示，而且下半部乾淨地不渲染。
+      唯一要修的是「沒金鑰」那條岔路上的那句話指錯了對象。
+    </div>
+  </div>
+
+  <!-- P2 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">②</span><span class="pt">💊 組合健診</span><span class="verdict v-bad">現況：本次改動集中在這頁</span></div>
+    <div class="oneline">
+      <span class="lbl">空狀態的一句話</span>
+      <b>還沒健診 —— 貼代號、按開始。</b>
+      <span style="color:var(--ink-3);font-size:12.5px">（真正的問題不在這裡，在「按了之後」。）</span>
+    </div>
+
+    <h4>第一層：還沒按「🩺 開始健診」</h4>
+    <div class="frame">
+      <div class="frame-label"><span>空狀態 · 這一層現況正確</span><span>不改</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>頁首 · 總經 Phase 對照橫幅</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>輸入列：🔗 從我的組合帶入 · 基金代號 · 本金 TWD · 🩺 開始健診</span><span class="s"><b>按鈕即空狀態</b>（判準問二）。按鈕沒按 → 下方整批不渲染，這個 gate 是對的<br><span class="src">tab_fund_grp_health.py ≈:210-212</span></span></div>
+    </div>
+
+    <h4>第二層：<b>按了之後，但資料不足</b> —— 這裡是本次的核心</h4>
+    <div class="note stop">
+      <p class="note-h">為什麼這一層最嚴重</p>
+      <p>
+        使用者<b>已經按了按鈕、已經等過</b>。這時候一個區塊消失，他無從分辨
+        「這個功能不存在」「這次沒算出來」「我的基金不適用」。
+        而且他<b>沒有任何線索可以自己排除問題</b> —— 畫面上連那個功能的名字都沒有。
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>按了之後 · 資料不足時</span><span>灰色占位取代靜默消失</span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ 健診大表 —— 全部失敗時</span><span class="s"><b>最優先的一塊。</b>現況 <code>if not rows: return</code> 寫在標題之前，一塊帶走下游整串（換標、景氣適配、體檢 PK、逐檔配息、失敗清單全部跟著不見）。<br>改為：<b>標題照印 + 「N 檔全部抓取失敗」+ 逐檔失敗原因</b><br><span class="src">tab_fund_grp_health.py ≈:930-931（守衛）vs ≈:1019（第一個標題）</span></span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ 🔀 換標決策建議</span><span class="s">標題照印 + 「需要健診大表有結果才能算」<br><span class="src">switch_section.py ≈:22-23</span></span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ 🧭 景氣位階適配</span><span class="s">標題照印 + 缺什麼（景氣位階？資產屬性？）<br><span class="src">regime_section.py ≈:14-15</span></span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ 📊 真實收益 vs 配息率健康矩陣</span><span class="s">同一個函式裡「模組載入失敗」已經會印灰字，「沒有基金」卻直接 return —— <b>補上後者即可，寫法照抄前者</b><br><span class="src">dividend.py ≈:11-12（消失）vs ≈:16-17（已正確）</span></span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ 🔄 輪動配對建議</span><span class="s"><span class="src">rotation.py ≈:240</span></span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ 🔁 配置回測</span><span class="s">現況 <code>if len(_nav) &lt; 2: return</code>。改為「需至少 2 檔有淨值序列，目前 N 檔」<br><span class="src">backtest_section.py ≈:30-31</span></span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ 🔬 進階分析（整區）</span><span class="s">整個進階區的入口消失。<b>但注意</b>：進去之後「每檔一個展開區」的部分，0 檔就是 0 個 —— 那部分維持消失（判準問一）<br><span class="src">fund_grp_health/__init__.py ≈:59-60</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">不動</span>逐檔展開區（投資試算 / TER / 持股 / Bollinger）</span><span class="s"><b>維持消失。</b>它們的數量本來就等於基金數，0 檔對應 0 個展開區，這是正確的<br><span class="src">fund_grp_health/__init__.py ≈:83+</span></span></div>
+    </div>
+
+    <div class="why">
+      <b>為什麼是這一頁：</b>五頁裡「按鈕之後才跑」的區塊幾乎都集中在這裡。
+      其他四頁的空狀態要嘛在按鈕之前（正確），要嘛已經有占位（正確）。
+    </div>
+  </div>
+
+  <!-- P3 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">③</span><span class="pt">🔍 基金研究</span><span class="verdict v-bad">現況：零字說明</span></div>
+    <div class="oneline">
+      <span class="lbl">空狀態的一句話</span>
+      <b>還沒查任何一檔 —— 貼網址或用關鍵字找。</b>
+    </div>
+
+    <div class="note stop">
+      <p class="note-h">現況：這一頁的空狀態是「什麼都沒有」，字面意義上的</p>
+      <p>
+        <code>if fd:</code> 這個判斷<b>沒有 else</b>。<code>fund_data</code> 是
+        <code>None</code>（每個新 session 都是）時，輸入框以下<b>一個字都不印</b>。
+        <span class="src">tab2_single_fund.py ≈:362（if fd）—— 全函式無對應 else</span>
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>空狀態 · 由上到下</span><span>補一塊，其餘不動</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>🔍 關鍵字搜尋境外基金（合併後上升為共用工具）</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>模式切換：🔍 單檔深掘 ｜ 📦 批次掃描</span><span class="s">已核准線框的新增元件</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>輸入 MoneyDJ 網址／代碼 + 🚀 分析</span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">新增</span>⬜ 還沒有查詢結果 —— 三步驟說明</span><span class="s"><b>本頁唯一的新增。</b>照「我的配置」歡迎條的既有寫法：<b>1️⃣ 用關鍵字找代號 → 2️⃣ 貼上網址／代碼 → 3️⃣ 按 🚀 分析</b>。<br>不必畫成大面積，一條虛線框即可（現況那條寬 6px、字 12px，已經證明夠用）<br><span class="src">參照 tab3_portfolio.py ≈:1712-1725</span></span></div>
+    </div>
+
+    <div class="why">
+      <b>為什麼只補一塊：</b>這一頁的三個入口（搜尋、模式切換、輸入框）本身就是空狀態，
+      已經足夠。缺的只是「按下去之後會發生什麼」這一句 —— 現在使用者面對的是一個
+      輸入框和一片空白，沒有任何東西告訴他這一頁能做什麼。
+    </div>
+  </div>
+
+  <!-- P4 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">④</span><span class="pt">📊 我的配置</span><span class="verdict v-ok">現況：已經做對了</span></div>
+    <div class="oneline">
+      <span class="lbl">空狀態的一句話</span>
+      <b>還沒有任何基金 —— 先加進來。</b>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>空狀態 · 由上到下</span><span>全部沿用現況</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>👋 三步驟：1️⃣ 貼代碼 → 2️⃣ 批次加入 → 3️⃣ 看 KPI / T5 / T7</span><span class="s">虛線框歡迎條。<b>這是全站最完整的空狀態</b>，三個要素齊全（說明存在、說明缺什麼、指出下一步）<br><span class="src">tab3_portfolio.py ≈:1711-1725</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>🎯 智能戰情室 —— 標題在，內容換成一句話</span><span class="s">「尚未載入任何基金。請在下方加入基金代碼後，戰情室會自動上線。」<b>標題先印、再判斷</b>，正是我們要推廣的寫法<br><span class="src">mk_dashboard.py ≈:665-688</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>🩺 基金體檢表 —— expander 在，內容換成一句話</span><span class="s">「📊 載入基金後，這裡會列出每檔與同類型的 PK 體檢結果。」<br><span class="src">ui/helpers/fund/checkup.py ≈:462-470</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>加入與管理基金（已核准線框已上移到第一段）</span><span class="s">空狀態下這一段是<b>唯一能操作的東西</b>，上移之後正好落在歡迎條指向的位置</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>配置總覽以下 —— 不渲染</span><span class="s">歡迎條已經代替它說明了狀況，不必再加第二條灰字（判準問二：還沒加基金）<br><span class="src">tab3_portfolio.py ≈:1728（if _pf_loaded）</span></span></div>
+    </div>
+
+    <div class="why">
+      <b>這一頁不用改。</b>把它畫進來的理由是：<b>它就是我們建議的樣板。</b>
+      已核准線框把「加入與管理基金」上移到第一段，會讓這個空狀態更順
+      —— 歡迎條說「先貼代碼」，往下第一個東西正好就是貼代碼的地方。
+    </div>
+  </div>
+
+  <!-- P5 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">⑤</span><span class="pt">⚙️ 設定與診斷</span><span class="verdict v-ok">現況：全站最佳範式在這裡</span></div>
+    <div class="oneline">
+      <span class="lbl">空狀態的一句話</span>
+      <b>什麼都還沒載入 —— 所以現在<u>無法判定</u>，這不等於一切正常。</b>
+    </div>
+
+    <div class="note good">
+      <p class="note-h">這一頁已經把整份提案要講的事做完了</p>
+      <p>
+        資料異常清單的三態分離：<b>registry 空</b> → 🔵「尚未載入任何數據 →
+        <b>無法判定資料是否異常</b>（這不等於「全部正常」）」，並直接告訴你去哪裡載入；
+        <b>全健康</b> → 🟢，且補一句說明綠勾<b>覆蓋到哪、沒覆蓋到哪</b>；
+        <b>有異常</b> → 表格。
+        <span class="src">tab5_data_guard.py · anomaly_view_state ≈:1586-1612</span>
+      </p>
+      <p style="margin-top:10px">
+        程式碼註解寫得比我們能寫的更清楚：「<b>診斷頁在什麼都沒載入時印大綠燈，
+        會讓來查證數字的使用者回頭懷疑自己的判讀</b>」。<br>
+        <b>建議把這三態當成全站空狀態的規範來源</b>，其餘各頁照它抄，而不是另外發明一套。
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>空狀態 · 由上到下</span><span>兩處小修</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>目錄列 · 連線與帳號 · 資料維護 · 通報</span><span class="s">設定類區塊<b>本來就與資料無關</b>，任何時候都該完整顯示，不受空狀態影響</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>🔭 資料診斷：資料異常清單三態</span><span class="s">原樣保留，並升格為全站規範來源</span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ 🔑 API 金鑰狀態 —— 與側邊欄、與首頁紅字統一</span><span class="s">同一件事現在有五種畫法（見第 03 節）。這裡是<b>最適合的唯一出處</b>：金鑰狀態本來就屬「連線與帳號」<br><span class="src">tab5_data_guard.py ≈:1055 · sidebar.py ≈:77-78 · app.py ≈:118-124</span></span></div>
+      <div class="wb ghost"><span class="t"><span class="tag">改法</span>⬜ ❌ Google Sheets 未設定 → 改灰</span><span class="s">「未設定」是狀態不是故障，比照上一列<br><span class="src">tab5_data_guard.py ≈:1556</span></span></div>
+      <div class="wb gone"><span class="t">app.py 每次載入頁面最上方的紅字「缺少必要金鑰」</span><span class="s">它在<b>五頁的最上方</b>都出現，而且把可降級的 GEMINI 稱為「必要」。<br>改法：<b>移到 ⑤ 的金鑰狀態一處</b>，首頁若要保留提示則改灰字一行。<b>需你拍板（Q3）</b><br><span class="src">app.py ≈:118-124</span></span></div>
+    </div>
+
+    <div class="why">
+      <b>為什麼設定頁不加占位：</b>設定與診斷的內容<b>不依賴使用者資料</b> ——
+      連線設定、金鑰狀態、說明書在空狀態下和滿載時完全一樣。
+      唯一需要三態的是「資料診斷」本身，而它已經做好了。
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 05 -->
+<section>
+  <h2><span class="num">05</span> 一套該刪掉、不該重畫的版面</h2>
+  <p class="lede">
+    盤點「個基深掘一頁有幾種版面」時，找到一套 <b>production 永遠到不了</b>的版面。
+    為看不到的畫面做設計是浪費，所以它列在這裡是<b>建議刪除</b>，不是待重畫。
+  </p>
+
+  <h3>個基深掘的五種版面（實測）</h3>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>版面</th><th>觸發條件</th><th>規模</th><th>使用者何時看到</th><th>處置</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td><b>空白</b></td><td><code>fund_data is None</code>（無 else）</td><td class="num">0 行</td><td><b>每一次開 App</b></td><td><b>要補</b>（見第 04 節 ③）</td></tr>
+      <tr><td>失敗</td><td><code>status == "failed"</code></td><td class="num">1 行</td><td>抓取全敗</td><td>維持</td></tr>
+      <tr><td>部分資料</td><td><code>status == "partial"</code></td><td class="num">≈109 行</td><td><b>常見</b>（NAV 序列抓不到）</td><td>維持，這一套寫得不錯</td></tr>
+      <tr><td><b>完整但序列為空</b></td><td><code>status == "complete"</code> 且 series 空</td><td class="num">≈53 行</td><td><b>永遠不會</b></td><td><b>建議刪除</b></td></tr>
+      <tr><td>主版面</td><td><code>status == "complete"</code></td><td class="num">≈2,104 行</td><td>抓取成功</td><td>維持</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>為什麼判定它到不了</h3>
+  <div class="codeblk"><span class="cm"># fund_fetcher.py :197 classify_fetch_status —— 只會回三個值</span>
+if has_name and has_series and has_metrics:   <span class="cm"># has_series = len(series) &gt;= 10</span>
+    return <span class="gd">"complete"</span>
+if has_any:
+    return "partial"
+return "failed"
+
+<span class="cm"># ui/tab2_single_fund.py</span>
+if   _status_fd == "failed":   ...            <span class="cm"># :367</span>
+elif _status_fd == "partial":  ...            <span class="cm"># :369</span>
+else:                                          <span class="cm"># :478 ← 只剩 "complete" 進得來</span>
+    <span class="hl">if s is None or s.empty or not m:</span>       <span class="cm"># :483</span>
+        ... <span class="hl">≈53 行的琥珀色卡片</span>          <span class="cm"># ← "complete" 保證 series≥10 且 metrics 非空</span>
+                                               <span class="cm">#   這個條件恆為 False</span></div>
+
+  <p>
+    <code>"complete"</code> 的定義本身就要求<b>序列至少 10 筆、且 metrics 非空</b>；
+    而 <code>else</code> 分支只有 <code>"complete"</code> 進得來。
+    所以那個 <code>if</code> 在 production 路徑上<strong>恆為 False</strong> —— 那 53 行永遠不執行。
+  </p>
+
+  <div class="note warn">
+    <p class="note-h">誠實說明這條判定的邊界</p>
+    <p>
+      這是<b>順著程式碼推出來的，不是實機跑出來的</b>。它成立的前提是
+      <code>status</code> 一律由 <code>classify_fetch_status</code> 產生。
+      我查到的兩處寫入點（<code>tab2_single_fund.py ≈:280</code>、
+      <code>services/moneydj_fetcher.py ≈:87</code>）都寫成
+      <code>x.get("status", classify_fetch_status(x))</code> ——
+      也就是<b>若上游自己塞了第三種 status 字串，就會落進 else 而讓那段復活</b>。
+      <br><b>動工前要先確認沒有這種上游</b>，確認後才刪。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 06 -->
+<section>
+  <h2><span class="num">06</span> 需要你拍板的四件事</h2>
+  <p class="lede">
+    其餘（灰字寫法、要不要抽共用元件、改哪幾行、怎麼寫測試）都是技術細節，由團隊內部拍板。
+  </p>
+
+  <div class="decisions">
+
+    <div class="dec">
+      <h4><span class="q">Q1</span> 判準用「三問」這一套，同意嗎？</h4>
+      <p>
+        重點是<b>不一刀切</b>：按鈕之後才跑的區塊一律留占位；按鈕之前不加占位；
+        數量取決於資料的（每檔一個展開區）維持消失。
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>同意</strong>。理由：全部留占位會讓空畫面塞滿三十幾條灰字，
+        <em>那只是把「消失」換成「灰色的消失」</em>；而全部消失就是現在的問題。
+        分界點選在「<b>使用者有沒有按過那顆按鈕</b>」，是因為那正是他開始有預期的時刻 ——
+        按之前他不預期看到結果，按之後他預期。
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q2</span> 顏色五態表（第 03 節），採用嗎？</h4>
+      <p>
+        關鍵是把<b>業務紅燈</b>（淘汰候選、吃本金）與<b>系統紅燈</b>（抓取失敗、渲染失敗）分開，
+        並把「未設定／未載入」統一成灰色。
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>採用</strong>。決定性的理由：<em>兩種紅色要你做的事完全相反</em> ——
+        系統紅要你別採信這個數字、去修；業務紅要你採信它、去換基金。
+        用同一個紅色，等於把「不要相信這個畫面」和「相信並據以行動」畫成同一件事。
+        <br><span style="color:var(--ink-3);font-size:12.5px">附帶效益：那 39 處「用灰字印的真失敗」會一併被抓出來改回紅色。現在它們和「這格沒資料」長得一樣，等於<b>失敗是隱形的</b>。</span>
+      </div>
+    </div>
+
+    <div class="dec mine">
+      <h4><span class="q">Q3 · 我方追加</span> 首頁最上方那條紅字「缺少必要金鑰」，要移走嗎？</h4>
+      <p>
+        它在 <code>app.py</code> 頂層無條件執行，因此<b>五個分頁的最上方都會看到</b>；
+        而且把可以降級使用的 GEMINI 稱為「<b>必要</b>」——
+        同一支金鑰在其他四個地方分別被畫成橘色、藍色、灰色、以及完全不顯示。
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>移到 ⑤ 設定與診斷的「🔑 API 金鑰狀態」一處，首頁只在<u>缺 FRED</u> 時留一行灰字。</strong>
+        判準：<em>缺 FRED 會讓市場定調整頁不能用（擋路，值得提示）；缺 GEMINI 只是少了 AI 摘要（可降級，不該擋路）。</em>
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你希望開站就一眼看到金鑰狀態，替代方案是<b>保留在側邊欄</b>—— 側邊欄現在已經有一行 ✅／❌ 狀態列，而且用的是灰字，本來就是對的做法。但<b>不建議維持現在「每頁最上方一條紅字」</b>：它是你每次進站第一眼看到的東西，而它多半不代表任何故障。）</span>
+      </div>
+    </div>
+
+    <div class="dec mine">
+      <h4><span class="q">Q4 · 我方追加</span> 那套永遠到不了的版面（≈53 行），刪掉還是留著？</h4>
+      <p>
+        個基深掘的「完整但序列為空」分支，在 production 路徑上條件恆為 False。
+        留著的成本是：下一個人重設計這一頁時<b>會把它當成要維護的畫面</b>，
+        而且它長得跟「部分資料視圖」很像，容易被誤認為是同一件事的兩份實作。
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>先確認、後刪除</strong> —— 動工前先查清楚沒有上游會塞第三種 status 值，
+        確認之後整段拔掉，並在交付報告列出刪除項目。
+        <em>為看不到的畫面做設計，是這次補查最不該產生的成本。</em>
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你偏好保守，替代方案是<b>暫時保留但改成一行「⬜ 非預期狀態」+ 記錄</b>：這樣萬一它真的被走到，你會知道，而不是看到一張看起來正常的琥珀卡。代價是那段程式碼仍留在檔案裡。）</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 07 -->
+<section>
+  <h2><span class="num">07</span> 這份草稿沒把握的地方</h2>
+  <p class="lede">
+    列在這裡的，是我<b>沒有查證到底</b>或<b>與交辦資料對不起來</b>的事。
+    它們會影響工期或畫面，所以要先講。
+  </p>
+
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>不確定的事</th><th>狀況</th><th>怎麼收掉</th></tr></thead>
+    <tbody>
+      <tr class="hi">
+        <td><b>「33 個區塊會靜默消失」這個數字，我沒重現出來</b></td>
+        <td>我用可重跑的掃描（找「函式內裸 <code>return</code> 出現在第一個標題之前」）只掃到
+        <b class="num">13</b> 個<b>函式</b>。兩個數字不衝突 —— 交辦講的是<b>區塊</b>，
+        而一個函式可以帶走好幾個區塊（健診大表那一個就往下帶走整串）。
+        但<b>我無法獨立確認 33 這個數字</b>，本草稿一律用我自己量到的 13</td>
+        <td>動工前用同一支掃描腳本重跑並人工複核；<b>本草稿的判準不依賴這個數字</b>（判準是分類法，不是清單）</td>
+      </tr>
+      <tr class="hi">
+        <td><b>13 這個數字也只是「我這一組掃到的」</b></td>
+        <td>掃描只認「裸 <code>return</code>」+「<code>st.markdown("###...")</code> 形式的標題」。
+        用 <code>st.subheader</code>、用 HTML 直接畫標題、或用 <code>return None</code> 的寫法<b>都掃不到</b></td>
+        <td>需要第二組用不同方法獨立掃一次（例如從渲染順序反推，而不是從語法）</td>
+      </tr>
+      <tr>
+        <td>「死版面」的判定是讀程式碼推的</td>
+        <td>推論鏈完整（見第 05 節），但成立前提是 <code>status</code> 一律由
+        <code>classify_fetch_status</code> 產生。我查到的兩處寫入點都符合，<b>但我沒有窮舉所有寫入點</b></td>
+        <td>刪除前先窮舉一次；或照 Q4 的替代方案先改成可觀測</td>
+      </tr>
+      <tr>
+        <td>沒有實機跑過任何一個畫面</td>
+        <td>全部結論來自讀程式碼。<b>沒有金鑰、外部資料源被擋</b>的沙箱環境本來就跑不出真實畫面，
+        本次也沒有嘗試</td>
+        <td>灰／紅改完之後，要在有金鑰的環境實際看一次「開站第一眼」，這是唯一能驗收本次改動的方式</td>
+      </tr>
+      <tr>
+        <td>「五頁裡只有 ② 有這個問題」是推論</td>
+        <td>掃描結果確實集中在組合健診（13 個裡有 7 個），但 ③④⑤ 我是<b>逐頁讀主要進入點</b>判斷的，
+        不是窮舉每個子模組</td>
+        <td>若 ③④⑤ 另有隱藏分岔，本草稿會漏掉；併入上面第二列一起重掃</td>
+      </tr>
+      <tr>
+        <td>灰色占位會不會反而變吵</td>
+        <td>組合健診按鈕之後有 7 塊要加占位。<b>如果 7 塊同時空</b>（例如全部基金抓取失敗），
+        使用者會看到連續 7 條灰字</td>
+        <td>建議實作時先做<b>最上面那一塊</b>（健診大表全失敗），
+        並在它裡面一次講完；下面 6 塊若因它而空，可收成一句。<b>這屬實作細節，團隊內部決定，但先在此揭露風險</b></td>
+      </tr>
+      <tr>
+        <td>LINE 推播的訊息版面算不算「畫面」</td>
+        <td>本草稿<b>只涵蓋 Streamlit 五頁</b>，沒有處理推播訊息的空狀態</td>
+        <td>若推播也需要區分「沒資料」與「出錯」，需另外開一份</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note stop">
+    <p class="note-h">依 §-2 規則 6 誠實標註</p>
+    <p>
+      <b>本草稿的全部判定由單一組（架構與前端組）產出，未經第二組獨立複驗。</b>
+      其中<b>實測事實</b>（目錄結構、行為分支、grep 計數、各處出處）已逐項標明查法，那些是事實；
+      <b>由事實推出的判定</b>（三問判準、顏色五態、死版面該刪、五頁分級）才是待驗的部分。
+      <strong>兩者請分開看待。</strong>
+      本草稿列出的行號為量測日 <b>2026-08-28</b> 的位置，會隨改動漂移，故一律標 <code>≈</code>。
+    </p>
+    <p style="margin-top:10px">
+      <b>這是結構草稿，不是視覺定稿</b> —— 顏色的<b>語意</b>（灰＝未載入、紅＝真出錯）是本次要拍板的；
+      顏色的<b>色票、字級、間距</b>沿用現有樣式，不在本次討論範圍，與已核准的五頁線框一致。
+    </p>
+  </div>
+</section>
+
+</div>
