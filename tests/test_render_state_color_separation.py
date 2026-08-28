@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 
 import pytest
 
@@ -63,6 +64,57 @@ def _names_in(node: ast.AST) -> set[str]:
     return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
 
 
+# 「這個值是從例外衍生來的」—— 不綁 `as e` 也能拿到例外內容的幾條路。
+_EXC_DERIVED_CALLS = {"format_exc", "exc_info", "print_exc", "format_exception"}
+
+
+def _exception_tainted_names(handler: ast.ExceptHandler) -> set[str]:
+    """這個 handler 裡，哪些名字「帶著例外的內容」？
+
+    盲點 (a)（稽核組 2026-08-28 實測可繞過）：
+        `except Exception as e:  _m = f"{type(e).__name__}: {e}";  st.caption(_m)`
+    —— 印出去的是 `_m` 不是 `e`，只比對 `handler.name` 會放行。
+    這裡做一次**傳遞閉包**：凡是賦值右邊碰到已污染的名字，左邊也污染，直到不動點。
+    """
+    tainted = {handler.name} if handler.name else set()
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(handler):
+            if not isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                continue
+            value = node.value
+            if value is None:
+                continue
+            src = _names_in(value)
+            # 不綁 `as e` 但直接抓 traceback / exc_info 的，也算拿到例外內容（盲點 b）
+            derived = src & tainted or any(
+                isinstance(n, ast.Attribute) and n.attr in _EXC_DERIVED_CALLS
+                or isinstance(n, ast.Name) and n.id in _EXC_DERIVED_CALLS
+                for n in ast.walk(value))
+            if not derived:
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                for n in ast.walk(t):
+                    if isinstance(n, ast.Name) and n.id not in tainted:
+                        tainted.add(n.id)
+                        changed = True
+    return tainted
+
+
+def _call_shows_exception(call: ast.Call, tainted: set[str]) -> bool:
+    if _names_in(call) & tainted:
+        return True
+    # 盲點 (b)：`except Exception:`（不綁）＋ 直接把 traceback 印出去
+    return any(
+        (isinstance(n, ast.Attribute) and n.attr in _EXC_DERIVED_CALLS)
+        or (isinstance(n, ast.Name) and n.id in _EXC_DERIVED_CALLS)
+        for arg in [*call.args, *(k.value for k in call.keywords)]
+        for n in ast.walk(arg)
+    )
+
+
 @pytest.mark.parametrize("path", HEALTH_SCOPE, ids=lambda p: p.name)
 def test_caught_exception_is_reported_as_a_system_failure(path: pathlib.Path):
     """真的壞掉了，畫面卻只是「還沒載入」—— 這是本批要修掉的那個 bug。
@@ -75,19 +127,31 @@ def test_caught_exception_is_reported_as_a_system_failure(path: pathlib.Path):
     - `st.error()` / `friendly_error()`（既有的正確寫法，未被本批動到的沿用）
 
     刻意**不**檢查訊息內容 —— 文案會被改寫，widget 種類不會。
+
+    ⚠️ **本規則守得到什麼、守不到什麼（2026-08-28 稽核 T4 後更新，請照這個打折）**
+    守得到：
+      - 直接印 `as e` 綁定的名字；
+      - 印一個**從 `e` 衍生**出來的中間變數（`_m = f"...{e}"` → `st.caption(_m)`）；
+      - 不綁 `as e`、直接印 `traceback.format_exc()` / `sys.exc_info()`。
+    **仍守不到**（已知盲點，不要以為守得住）：
+      - handler 什麼都不印（靜默吞掉）—— 那屬 §1 Fail Loud 的守備範圍，不是本檔的；
+      - 例外內容先寫進 `dict` / `list` / `st.session_state` 再由**別的函式**印出去
+        （跨函式資料流，本檔只做 handler 內的名字傳遞）；
+      - 例外被轉成一個不含任何原名的字面字串（`st.caption("抓取失敗")`）——
+        那在結構上與「這格沒資料」無法區分，只能靠 review。
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     bad = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.ExceptHandler) or not node.name:
+        if not isinstance(node, ast.ExceptHandler):
             continue
+        tainted = _exception_tainted_names(node)
         for call in _rendering_calls(node):
-            if node.name not in _names_in(call):
+            if not _call_shows_exception(call, tainted):
                 continue                      # 沒把例外拿給使用者看 → 不歸本檔管
             if _callee(call) in RED_ENTRYPOINTS:
                 continue                      # 已經是系統紅燈
-            bad.append(f"{path.relative_to(ROOT)}:{call.lineno} "
-                       f"{_callee(call)}(… {node.name} …)")
+            bad.append(f"{path.relative_to(ROOT)}:{call.lineno} {_callee(call)}(…例外…)")
     assert not bad, (
         "以下位置把「抓到的例外」用非紅燈 widget 印出去，使用者會誤以為只是還沒載入、"
         "以為按一下就好；請改走 ui.helpers.render_state.system_error()：\n  "
@@ -242,8 +306,6 @@ def test_b1_missing_credential_branch_is_never_alarm_coloured(path: pathlib.Path
 @pytest.mark.parametrize("path", UI_SOURCES, ids=lambda p: str(p.name))
 def test_b2_not_configured_wording_is_never_alarm_coloured(path: pathlib.Path):
     """換個條件寫法就繞過 B1 —— 這一條從訊息本身抓。"""
-    if path.name == "test_render_state_color_separation.py":
-        return
     tree = ast.parse(path.read_text(encoding="utf-8"))
     bad = []
     for call in _st_calls_named(tree, ALARM_WIDGETS):
@@ -282,32 +344,59 @@ def _st_calls_named(node: ast.AST, attrs: set[str]):
 #   - 訊息是從某個 error / 失敗欄位組出來的（`…["error"]`、`_err`、`load_error` …）
 # 兩者皆無 → 它畫的是一個「分析成功之後的結論」或一則常駐警語，不該用系統紅框。
 # ══════════════════════════════════════════════════════════════════
-_FAILURE_EVIDENCE = ("error", "err", "fail", "exc", "traceback")
+# ⚠️ 這是一個**完整詞**集合，不是子字串樣板 —— 比對方式見 `_has_failure_evidence`。
+_FAILURE_EVIDENCE = frozenset({
+    "error", "errors", "err", "errs",
+    "fail", "failed", "failure", "failures",
+    "exc", "exception", "exceptions",
+    "traceback", "tb",
+})
+
+# 識別字/文案切詞：只取 ASCII 英數字段。`_gs_error` → {gs, error}；
+# `_excluded` → {excluded}；「（Excel 匯出同理）」→ {excel}；中文整段是分隔符。
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
 
 def _has_failure_evidence(call: ast.Call) -> bool:
     """這個呼叫手上有沒有「失敗的證據」？
 
-    ⚠️ 只掃**參數**，不掃 `call.func` —— `st.error` 的 attr 本身就是 "error"，
-    把它算進去會讓每一個 st.error 都自證有證據，規則當場失效。
-    （這個坑實際踩過：第一版寫成掃整個 call，突變測試不會紅。）
+    ⚠️ **兩個踩過的坑，都寫在這裡，因為它們都會讓這條規則安靜地失效。**
+
+    坑 1（第一版）：掃了整個 call node —— 而 `st.error` 的 attr 本身就是 `"error"`，
+    每一個 `st.error` 都自證有證據，規則當場失效、突變測試不會紅。
+    → 改為只掃**參數**（`call.args` / `call.keywords`），不碰 `call.func`。
+
+    坑 2（第二版，稽核組 2026-08-28 抓到）：比對方式是**裸子字串** `k in blob`，
+    而 `_FAILURE_EVIDENCE` 裡有 `exc` / `err` / `fail` 這種短字根。實測後果：
+      - 業務結論回退成 `st.error`，變數叫 `_excluded` → `"exc"` 命中 → **被豁免**
+      - 常駐警語回退成 `st.error`，文案加「（Excel 匯出同理）」→ `"exc"` 命中 → **被豁免**
+    也就是「ratchet 只准往下走」這句承重宣稱，對任何含 `exc`/`err`/`fail` 子字串的
+    訊息或變數名**都不成立**，新的業務紅框可以無聲加進來。
+    → 改為**完整詞**比對：把識別字與文案切成 ASCII 英數 token，再跟集合取交集。
     """
-    blob = ""
+    tokens: set[str] = set()
     for arg in [*call.args, *(k.value for k in call.keywords)]:
         for sub in ast.walk(arg):
             if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
-                blob += " " + sub.value.lower()
+                tokens |= set(_TOKEN_RE.findall(sub.value.lower()))
             elif isinstance(sub, ast.Name):
-                blob += " " + sub.id.lower()
+                tokens |= set(_TOKEN_RE.findall(sub.id.lower()))
             elif isinstance(sub, ast.Attribute):
-                blob += " " + sub.attr.lower()
-    return any(k in blob for k in _FAILURE_EVIDENCE)
+                tokens |= set(_TOKEN_RE.findall(sub.attr.lower()))
+    return bool(tokens & _FAILURE_EVIDENCE)
 
 
 # 錯誤呈現的實作本身（它們就是那個紅框），不在受檢範圍內。
-_RED_BOX_IMPLEMENTATIONS = {"session.py", "render_state.py"}
+# ⚠️ 一律寫**相對路徑**不寫 basename：basename 相同的檔案在別的目錄下會被誤放行，
+#    而改名會讓 parametrize case 無聲消失（下方 `test_c_declared_paths_still_exist` 擋這一半）。
+_RED_BOX_IMPLEMENTATIONS = {"ui/helpers/session.py", "ui/helpers/render_state.py"}
 
 # 本批（客戶拍板的第一批）實際轉換的兩處業務／常駐紅框所在檔案。
-BATCH_SCOPE_C = {"tab_fund_grp_health.py", "tab6_manual.py"}
+BATCH_SCOPE_C = {"ui/tab_fund_grp_health.py", "ui/tab6_manual.py"}
+
+
+def _rel(path: pathlib.Path) -> str:
+    return path.relative_to(ROOT).as_posix()
 
 # 範圍外、**已登記待後批處理**的既有 bare `st.error`（實測 2026-08-28：
 # origin/main 為 25，本批轉掉 4 處後為 21）。
@@ -327,7 +416,7 @@ def _bare_error_calls(path: pathlib.Path):
             if id(c) not in inside_except and not _has_failure_evidence(c)]
 
 
-@pytest.mark.parametrize("path", sorted(p for p in UI_SOURCES if p.name in BATCH_SCOPE_C),
+@pytest.mark.parametrize("path", sorted(p for p in UI_SOURCES if _rel(p) in BATCH_SCOPE_C),
                          ids=lambda p: str(p.name))
 def test_c_system_red_box_is_reserved_for_actual_failures(path: pathlib.Path):
     """`st.error` 不得拿來畫「業務結論」或「常駐警語」。
@@ -348,21 +437,180 @@ def test_c_system_red_box_is_reserved_for_actual_failures(path: pathlib.Path):
 def test_c_bare_error_backlog_only_shrinks():
     """範圍外的既有 bare `st.error` 是 ratchet：可以慢慢還，不可以再借。
 
-    本批只做顏色，逐條判定那 22 處的業務語意不在範圍內（§8.4 step 4）；
+    本批只做顏色，逐條判定那 21 處的業務語意不在範圍內（§8.4 step 4）；
     但新寫的 code 不准再往這個數字上加。
+
+    ⚠️ **21 是「本規則自己這把尺」量出來的**（`ui/**` ＋ `app.py`，再扣掉
+    `BATCH_SCOPE_C` 與 `_RED_BOX_IMPLEMENTATIONS`）。換一把尺就是別的數字：
+    同日實測 `ui/**` 不含 `app.py` ＝ 25、含 `app.py` ＝ 26。
+    **不要拿不同 scope 的數字互相加減**（見 commit「ratchet 敘述更正」）。
     """
     total = sum(len(_bare_error_calls(p)) for p in UI_SOURCES
-                if p.name not in BATCH_SCOPE_C | _RED_BOX_IMPLEMENTATIONS)
+                if _rel(p) not in BATCH_SCOPE_C | _RED_BOX_IMPLEMENTATIONS)
     assert total <= BARE_ERROR_RATCHET, (
         f"拿不到失敗證據的 st.error 從 {BARE_ERROR_RATCHET} 增為 {total} —— "
         "新的業務結論／常駐警語請走 business_alert() / st.warning()，不要再加進紅框。"
     )
 
 
+def test_c_declared_paths_still_exist():
+    """`BATCH_SCOPE_C` / `_RED_BOX_IMPLEMENTATIONS` 寫死了路徑 —— 檔案改名要出聲。
+
+    不加這條的話，改個檔名就會讓上面的 parametrize case **無聲消失**（0 個 case
+    也算通過），而 ratchet 只擋得住「數字變大」，擋不住「規則整條蒸發」。
+    """
+    missing = sorted(r for r in BATCH_SCOPE_C | _RED_BOX_IMPLEMENTATIONS
+                     if not (ROOT / r).is_file())
+    assert not missing, (
+        f"下列路徑已不存在，本檔的 C 規則正在對空氣生效：{missing}"
+    )
+
+
 def test_c_business_verdict_uses_the_business_entrypoint():
-    """反向護欄：上一條可以靠「整塊刪掉」通過，這一條擋掉那條逃生路。"""
-    src = (ROOT / "ui" / "tab_fund_grp_health.py").read_text(encoding="utf-8")
-    assert "business_alert(" in src, (
+    """反向護欄：上一條可以靠「整塊刪掉」通過，這一條擋掉那條逃生路。
+
+    ⚠️ 用 **AST 找真正的呼叫**，不是 `"business_alert(" in src`。
+    稽核組 2026-08-28 實測過那個字串版的破法：把方向 C 完整回退成 `st.error`、
+    只留一行註解 `# TODO: 改回 business_alert(` —— 三條 C 規則同時失效、全綠。
+    """
+    tree = ast.parse((ROOT / "ui" / "tab_fund_grp_health.py").read_text(encoding="utf-8"))
+    calls = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call)
+             and ((isinstance(n.func, ast.Name) and n.func.id == "business_alert")
+                  or (isinstance(n.func, ast.Attribute) and n.func.attr == "business_alert"))]
+    assert calls, (
         "健診頁的「淘汰候選」業務警訊不見了 —— 它是分析的主要成果，"
-        "改顏色不等於可以拿掉（§1）。"
+        "改顏色不等於可以拿掉（§1）。（註解裡寫 business_alert 不算數：本條看 AST。）"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
+# 逐檔迴圈裡的紅燈 —— 修「示警不足」不可以修出「示警過度」
+#
+# 2026-08-28 稽核 M1：選股池補抓失敗原本是**就地**畫紅燈，而它住在
+# `_pool_rows` 的逐檔迴圈裡。選股池 20 檔，遇 proxy 掛掉或 MoneyDJ 子網域 403
+# （依 `CLAUDE.md §1` Fund 脈絡屬**例行**狀況）→ 一次 20 個滿版紅框，
+# 每個底下各掛一塊技術細節。那正是線框 §03 要防的
+# 「滿版警示讓真錯誤沒人看見」，只是換成紅色、更嚴重。
+# ══════════════════════════════════════════════════════════════════
+def test_m1_per_item_fetch_helper_renders_nothing_itself():
+    """`_fetch_rich` 在迴圈裡被逐檔呼叫 → 它自己不准畫任何東西。
+
+    守的是**位置**不是文案：只要這個函式體內出現任何渲染呼叫，
+    N 檔失敗就會變成 N 個框。
+    """
+    src = (ROOT / "ui" / "helpers" / "fund_grp_health" / "switch_advisor_section.py")
+    tree = ast.parse(src.read_text(encoding="utf-8"))
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name == "_fetch_rich")
+    rendered = [f"line {c.lineno}: {_callee(c)}" for c in _rendering_calls(fn)]
+    assert not rendered, (
+        "`_fetch_rich` 住在 `_pool_rows` 的逐檔迴圈裡，就地渲染會讓 N 檔失敗噴 N 個框；"
+        "請把失敗收進 `failures` 由呼叫端彙總成一則：\n  " + "\n  ".join(rendered)
+    )
+
+
+def test_m1_pool_fetch_failures_are_reported_as_exactly_one_red_box(monkeypatch):
+    """N 檔失敗 → **一則**系統紅燈，而且要把 N 個代號都講出來。"""
+    from ui.helpers.fund_grp_health import switch_advisor_section as sas
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(sas, "system_error",
+                        lambda what, exc, **kw: calls.append((what, exc, kw)))
+    sas._report_pool_fetch_failures(
+        [("AAA", RuntimeError("boom")), ("BBB", RuntimeError("boom")),
+         ("CCC", RuntimeError("boom"))])
+
+    assert len(calls) == 1, f"應彙總成一則，實際 {len(calls)} 則"
+    what = calls[0][0]
+    for code in ("AAA", "BBB", "CCC"):
+        assert code in what, f"彙總訊息漏掉 {code}：{what!r}"
+
+
+def test_m1_no_failures_stays_silent(monkeypatch):
+    """沒失敗就不要出聲（否則每次開頁都多一個框）。"""
+    from ui.helpers.fund_grp_health import switch_advisor_section as sas
+    calls: list = []
+    monkeypatch.setattr(sas, "system_error", lambda *a, **k: calls.append(a))
+    sas._report_pool_fetch_failures([])
+    assert calls == []
+
+
+def test_m3_degraded_is_orange_and_default_is_red():
+    """M3：純圖失敗（數字全在且全對）→ 🟠；結論會變錯的失敗 → 🔴。
+
+    兩者穿同一件衣服，等於把客戶 Q2 要建立的分辨力又抹平。
+    """
+    from ui.helpers.render_state import system_error
+    assert "error" in _run(system_error, what="X", exc=ValueError("b"))
+    assert "warning" in _run(system_error, what="X", exc=ValueError("b"), degraded=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 同一句灰字不要印兩遍
+#
+# 2026-08-28 稽核 M2：`tab1_macro` 的「尚未設定 FRED 金鑰…」被兩個**平行**的
+# `if`（同縮排，都會執行）各印一次。線框 §04① 要的是「把指錯對象的那句換掉」，
+# 不是「再講一次」—— 同一句灰字印兩遍會把它變成雜訊。
+# ══════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("path", UI_SOURCES, ids=lambda p: str(p.name))
+def test_m2_same_grey_line_is_not_printed_twice_in_one_function(path: pathlib.Path):
+    """同一個函式裡，不得有兩個 `not_ready()` 帶完全相同的訊息字面。
+
+    守的是**重複**，不是文案內容：訊息想怎麼改都行，但不要同一句講兩遍。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    dupes = []
+    for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+        seen: dict[str, int] = {}
+        for call in ast.walk(fn):
+            if not (isinstance(call, ast.Call) and _callee(call) == "not_ready"
+                    and call.args):
+                continue
+            first = call.args[0]
+            if not (isinstance(first, ast.Constant) and isinstance(first.value, str)):
+                continue                       # f-string / 變數 → 不比（可能真的不同）
+            if first.value in seen:
+                dupes.append(f"{path.relative_to(ROOT)}:{seen[first.value]} 與 "
+                             f":{call.lineno} 在 {fn.name}() 內印了同一句：{first.value!r}")
+            else:
+                seen[first.value] = call.lineno
+    assert not dupes, "同一句灰色說明重複印出：\n  " + "\n  ".join(dupes)
+
+
+_CHART_CALLS = {"plotly_chart", "pyplot", "line_chart", "bar_chart", "area_chart",
+                "altair_chart", "map", "image"}
+
+
+@pytest.mark.parametrize("path", HEALTH_SCOPE, ids=lambda p: p.name)
+def test_m3_chart_only_try_blocks_report_as_degraded(path: pathlib.Path):
+    """`try:` 裡**只畫圖**（沒有其他 st 輸出）→ 失敗時必須 `degraded=True`（🟠）。
+
+    判準是**結構**，不是文案：這個 try 的內容只有一張圖，那它失敗時畫面上
+    每一個數字都還在、都還是對的 —— 使用者不可能因此做出錯誤決定。
+    對照同區塊的「匯率抓不到 → 美元計價基金被排除」，那個是結論真的會變 → 🔴。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    bad = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        # ⚠️ 必須把圖表 API 併進來掃 —— `_ST_RENDER_ATTRS` 只有文字類 widget，
+        #    用它掃會一張圖都找不到，本條就變成永遠通過的空規則（實際踩過）。
+        st_calls = [c for b in node.body
+                    for c in _st_calls_named(b, _ST_RENDER_ATTRS | _CHART_CALLS)]
+        charts = [c for c in st_calls if c.func.attr in _CHART_CALLS]
+        if not charts or len(charts) != len(st_calls):
+            continue                       # 不是「只畫圖」的 try → 不歸本條管
+        for handler in node.handlers:
+            for call in ast.walk(handler):
+                if not (isinstance(call, ast.Call) and _callee(call) == "system_error"):
+                    continue
+                if not any(k.arg == "degraded" and getattr(k.value, "value", False) is True
+                           for k in call.keywords):
+                    bad.append(f"{path.relative_to(ROOT)}:{call.lineno}")
+    assert not bad, (
+        "以下 try 區塊只畫了一張圖，失敗時卻用 🔴 系統紅燈上報 —— "
+        "數字全在且全對，使用者不可能因此做錯決定；請加 `degraded=True`：\n  "
+        + "\n  ".join(bad)
     )
