@@ -191,23 +191,23 @@ def tag_benchmark_lag(fund: dict, bench_series) -> str:
 
 
 def _get_benchmark_series(ticker: str = "SPY"):
-    """yfinance 抓基準收盤序列；以 st.session_state 做 session 級快取，每場次最多 1 次外呼。"""
-    cache_key = "mk_bench_cache"
-    cache = st.session_state.setdefault(cache_key, {})
-    if ticker in cache:
-        return cache[ticker]
-    series = None
-    try:
-        import yfinance as yf
-        tkr = yf.Ticker(ticker)
-        hist = tkr.history(period="9mo", interval="1d", auto_adjust=False)
-        if hist is not None and not hist.empty and "Close" in hist.columns:
-            series = hist["Close"].dropna()
-            series.index = pd.to_datetime(series.index).tz_localize(None)
-    except Exception as e:  # noqa: BLE001
-        print(f"[mk_dashboard] benchmark {ticker} fetch failed: {e}")
-    cache[ticker] = series
-    return series
+    """基準收盤序列 —— **純調用**，取數實作住在 L1。
+
+    v19.531 Phase 1.2（憲法 §8.3.P `P-UIHTTP-1`）：本函式原本在 L3 UI 層
+    `import yfinance` 直抓 SPY/QQQ，並用 `st.session_state["mk_bench_cache"]`
+    自建快取 —— 同時命中 §-1.5.1c v3 §01 三層圖 UI 框那句的兩個動詞
+    「嚴禁在 UI 層私自**存放**或**抓取**原始資料」。取數與快取皆已下沉至
+    L1 `repositories/macro/yf.py::fetch_benchmark_close`（TTL 走
+    `shared/ttls.py` SSOT，不再是無上限的 session 快取）。
+
+    ⚠️ L3 直呼 L1：見 CLAUDE.md §8.2.A **EX-PASSTHRU-1**（本檔為登錄成員）。
+    本層**不做任何後處理**（無多源 fallback、無跨 fetcher TTL 統一、無結果加工），
+    加一層純 pass-through 的 L2 wrapper 即 §8.1 step 6「用不到的抽象」反例。
+
+    回傳 None 代表取不到（上游已印出原因），呼叫端須顯示「無法取得」而非畫空圖（§1）。
+    """
+    from repositories.macro.yf import fetch_benchmark_close
+    return fetch_benchmark_close(ticker)
 
 
 def tag_price_zone(fund: dict) -> str:
