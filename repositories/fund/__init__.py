@@ -1,7 +1,10 @@
 """repositories/fund 子套件 — v19.200 P1-5 從 fund_repository.py 5117 LOC god module 拆出。
 
 結構:
-- `_helpers`:module-level imports + 常數
+- ~~`_helpers`:module-level imports + 常數~~ — **2026-08-28 整檔刪除**
+  (**有意識的移除,不是漏刪**):本 `__init__` 從未 import 它,四個子檔
+  也各自直接向 `infra.cache` / `fund_fetcher` / `shared.*` 取用,
+  拆檔後它就沒有任何 importer(全 repo 0 caller,實測)。歷史留在 git。
 - `sources`:全部 _src_* + tdcc_* + code mapping(80-2451)
 - `fund_orchestration`:_fetch_fund_single + fetch_fund_from_moneydj_url + search(2452-3554)
 - `nav_metrics`:NAV history + perf/risk/holdings/div(3555-4546)

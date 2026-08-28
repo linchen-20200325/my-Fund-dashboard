@@ -1342,7 +1342,16 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 - `infra/cache.py` `_CACHE_REGISTRY` 集中註冊所有 cache 函式,supports「clear all」
 - ✅ **F-PROV-1 主要 fetcher 全收**(v19.82 → v19.221 逐步):
   - **L1 fetcher 已收**(各帶 `source` + `fetched_at`):`fetch_fred` v19.82 / `fetch_yf_close` v19.83 / `fetch_defillama_stablecoin_mcap` v19.84 / `fetch_aaii_sentiment` v19.84 / `fetch_foreign_flow_series` v19.151 / `fetch_twse_breadth` + `fetch_finmind_foreign_investor` + `fetch_cbc_m1b_m2` v19.94 / `fetch_ndc_signal_history` + `fetch_tw_pmi_local` v19.151 / `fetch_ism_pmi` v19.156(7 個 return 點) / `fetch_macro_compass` v19.86 / `fetch_stooq_csv` v19.197 / `fetch_cboe_csv` v19.221(`s.attrs["source"]/"fetched_at"`)
-  - **WONTFIX(v19.271 C 深挖確認)**:`fetch_yf_forward_pe` / `fetch_multpl_pe` 兩 fn **production 0 caller**(`services/valuation.py` v19.251 已退役,Forward P/E 改 `shared/macro_buckets.py:150-153` inline literal),且 fn 內部 `print(f"[external_market/...]")` console log 已具 audit trail。包 NamedTuple/dict 雖技術可行但 0 caller = ROI 0,§-1 不主動推。**未來條件**:若 V5 修補復活並接入 orchestrator,再評估 NamedTuple 包裝。
+  - ~~**WONTFIX(v19.271 C 深挖確認)**:`fetch_yf_forward_pe` / `fetch_multpl_pe` 兩 fn **production 0 caller**(`services/valuation.py` v19.251 已退役,Forward P/E 改 `shared/macro_buckets.py:150-153` inline literal),且 fn 內部 `print(f"[external_market/...]")` console log 已具 audit trail。包 NamedTuple/dict 雖技術可行但 0 caller = ROI 0,§-1 不主動推。**未來條件**:若 V5 修補復活並接入 orchestrator,再評估 NamedTuple 包裝。~~
+    → **2026-08-28 結案:兩 fn 已整段刪除,本列退役**(**有意識的政策變更,不是漏刪**;
+    決策者 **user** 2026-08-28「同意清理,落實目錄瘦身」)。
+    **舊表述的理由仍然成立**——「0 caller ⇒ 包 provenance 的 ROI 是 0」這句今天依然對;
+    **被權衡掉的是它的結論**:§-1.5.1c 判定 3 已把「Orphaned 過期代碼」的處置方向
+    由「維持現狀」改為「**實體刪除**」,而本輪正是「有任務碰到
+    `repositories/external_market_repository.py`」那個觸發條件。
+    **實測依據**:全 repo grep 兩個 fn 名,除自身定義外唯一命中處就是本列;
+    同檔其餘三個 fn(`fetch_stooq_csv` / `fetch_cboe_csv` / `fetch_cboe_pcratio_csv`)
+    由 `services/risk_radar.py` 真實使用,**未動**。
   - ✅ **macro 融合層 v19.270 D8 #8 落地**:`calculate_composite_score(ind, *, provenance_out=None)`
     opt-in side-car dict pattern。既有 caller 傳 None 行為零變化;新 caller 傳 dict 取得
     `sources` / `fetched_at_latest` / `contributions[indicator]` / `n_indicators`。設計選 E
