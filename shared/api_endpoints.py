@@ -12,7 +12,10 @@ v19.223 P1-2:深層稽核發現 3+2+2 = 7 處 production URL 字串重複,收口
 當前 SSOT 內容
 ==============
 - FINMIND_BASE:FinMind v4 data API,被 hot_money_repository /
-  macro_tw_local_repository / tw_macro_repository 3 檔共用
+  macro_tw_local_repository ~~/ tw_macro_repository~~ 共用
+  (2026-08-28 Phase 1.4:`tw_macro_repository.py` production 0 caller 已實體刪除,
+   共用檔數 3 → **2**。⚠️ 仍為「真實重複」(2+ 檔),**本 SSOT 的存在理由未受影響**;
+   若哪天掉到 1 檔,才該依本檔設計原則考慮退回 source-local。)
 
 未列入(各自 source-local SSOT,讀 caller 即見)
 ==============================================
@@ -23,8 +26,11 @@ v19.223 P1-2:深層稽核發現 3+2+2 = 7 處 production URL 字串重複,收口
   Morningstar-symbol 專用,v19.230 P1-2 第二輪 從 scripts dupe 收回)
   + ALLIANZ / Cnyes / MoneyDJ
 - repositories/news_repository.py: _GOOGLE_NEWS_RSS
-- repositories/tw_macro_repository.py:39 TWSE_MI_INDEX_URL
-- repositories/tw_macro_repository.py:45 CBC_EF15M01_URL
+- ~~repositories/tw_macro_repository.py:39 TWSE_MI_INDEX_URL~~
+- ~~repositories/tw_macro_repository.py:45 CBC_EF15M01_URL~~
+  (2026-08-28 Phase 1.4:該檔已刪,這兩個 source-local URL 隨之消失。
+   ⚠️ 據實記錄:**全 repo 現已無 TWSE MI_INDEX 與 CBC EF15M01 的取數實作**;
+   它們在刪除前就是 0 caller,不是本次刪掉了在用的東西。)
 - infra/llm.py:111 Gemini generativelanguage(production fetcher,inline f-string)
 - infra/oauth.py: GOOGLE_AUTH_URL / GOOGLE_TOKEN_URL
 
@@ -51,5 +57,6 @@ v19.230 P1-2 第二輪深層稽核補刀
 from __future__ import annotations
 
 # FinMind v4 data API — 3 caller 共用
-# 原散落:hot_money_repository:25 / macro_tw_local_repository:35 / tw_macro_repository:40
+# 原散落:hot_money_repository:25 / macro_tw_local_repository:35 / ~~tw_macro_repository:40~~
+# (2026-08-28 Phase 1.4:tw_macro_repository.py 已刪;歷史來由保留,現行 caller 為前兩者)
 FINMIND_BASE = "https://api.finmindtrade.com/api/v4/data"

@@ -110,16 +110,18 @@ def test_services_layer_provenance_naming():
     assert "multi_factor" in mfo_src, "multi_factor_optimization 命名"
     assert "_stamp_prov" in mfo_src, "phase 18 _stamp_prov helper 存在"
 
-    # phase 19:us_liquidity_engine / risk_calibration
+    # phase 19:us_liquidity_engine / ~~risk_calibration~~(2026-08-28 整檔刪除)
     # (v19.251 Phase 2:valuation 整檔退役 — 0 production caller,test 孤兒清)
     ule_src = _read("services/us_liquidity_engine.py")
     assert "_provenance" in ule_src, "us_liquidity_engine orchestrator _provenance 存在"
     assert "FRED:" in ule_src, "us_liquidity_engine FRED 命名"
 
-    # v19.202 第三階段 A1:P2-3 拆 services/calibration/ 後,實作搬 risk.py
-    rc_src = _read("services/calibration/risk.py")
-    assert "_provenance" in rc_src, "risk_calibration notes._provenance 存在"
-    assert "FRED:" in rc_src, "risk_calibration FRED 命名"
+    # ⚠️ 2026-08-28 Phase 1.4:原本這裡還有三行 ——
+    #     `rc_src = _read("services/calibration/risk.py")` + 兩個 `_provenance` / `FRED:` 斷言。
+    #   已刪除(**測試對象消失,不是為了讓 CI 綠**):`services/calibration/risk.py`
+    #   production 0 caller,本輪整檔刪除,沒有原始碼可以讀了。
+    #   ⚠️ 這三行是**讀原始碼字串**做斷言、不是 import,字面 import 掃描看不到它 ——
+    #   往後刪檔前請一併 grep `_read("` 的參數。
 
 
 # ── 4. reconcile pattern 不退化 ──
