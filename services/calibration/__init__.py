@@ -1,10 +1,10 @@
 """services/calibration 子套件 — v19.201 P2-3 5 個 calibration / optimization 模組收編。
 
-從 services/ 平層搬入:
+從 services/ 平層搬入(**現存 2 檔**:macro_score / multi_factor;其餘 3 檔已逐次拔毒,逐條見下):
 - `macro_score.py`(原 macro_score_calibration.py)— Walk-forward 月度 score replay
-- `risk.py`(原 risk_calibration.py)— Risk score z-score 標準化
+- ~~`risk.py`(原 risk_calibration.py)— Risk score z-score 標準化~~ 2026-08-28 Phase 1.4 拔毒(production 0 caller)
 - ~~`cluster.py`(原 cluster_calibration.py)~~ v19.213 P0-3-#5 拔毒(production 0 caller)
-- `signal_threshold.py`(原 signal_threshold_optimization.py)— Threshold grid search
+- ~~`signal_threshold.py`(原 signal_threshold_optimization.py)— Threshold grid search~~ 2026-08-28 Phase 1.4 拔毒(production 0 caller)
 - `multi_factor.py`(原 multi_factor_optimization.py)— Modern Portfolio Theory allocator
 
 ARCHITECTURE_AUDIT §2.B D3。原 5 個檔散在 services/,subpackage 收編後分類清楚。

@@ -1,7 +1,7 @@
 """v19.458 深度強化 4 模組 —— 回歸測試(邏輯 + 邊界)。
 
 ① allocation_ladder(composite→水位+景氣門檻)② zscore_engine(Z 位階+分流)
-③ switch_state_machine(狀態機+Alpha/勝率)④ lookthrough_coverage(穿透時效+覆蓋率)。
+③ ~~switch_state_machine(狀態機+Alpha/勝率)~~(2026-08-28 隨模組刪除退場)④ lookthrough_coverage(穿透時效+覆蓋率)。
 全為純函式,離線可測。
 """
 from __future__ import annotations
@@ -85,29 +85,11 @@ def test_rebalance_signal_flow():
 
 
 # ════════════════════════ ③ switch_state_machine ════════════════════════
-def test_state_machine_transitions():
-    from services.switch_state_machine import next_status
-    assert next_status("WATCHING", "trigger")["status"] == "TRIGGERED"
-    assert next_status("TRIGGERED", "execute")["status"] == "HOLDING"
-    assert next_status("HOLDING", "close")["status"] == "CLOSED"
-    assert next_status("TRIGGERED", "cancel")["status"] == "WATCHING"
-    _bad = next_status("WATCHING", "execute")                # 非法轉移
-    assert _bad["valid"] is False and _bad["status"] == "WATCHING"   # 維持現狀(§1)
-    assert next_status("HOLDING", "hold")["changed"] is False        # 合法 no-op
-
-
-def test_transition_result_alpha_and_win():
-    from services.switch_state_machine import aggregate_winrate, transition_result
-    _r = transition_result(10.0, 12.0, benchmark_entry=100.0, benchmark_exit=105.0)
-    assert _r["fund_return_pct"] == 20.0 and _r["benchmark_return_pct"] == 5.0
-    assert _r["alpha_pct"] == 15.0 and _r["win"] is True
-    assert transition_result(0.0, 12.0)["fund_return_pct"] is None    # 起點0 不除零(§4.4)
-    _nb = transition_result(10.0, 12.0)                               # 無基準 → alpha None
-    assert _nb["alpha_pct"] is None and _nb["win"] is None
-    _agg = aggregate_winrate([_r, transition_result(10.0, 9.0, 100.0, 105.0), _nb])
-    assert _agg["n"] == 3 and _agg["n_scored"] == 2 and _agg["wins"] == 1
-    assert _agg["winrate"] == 0.5                                     # 缺基準的不灌水(§1)
-
+# ⚠️ 2026-08-28 Phase 1.4:本區塊原有 test_state_machine_transitions /
+#   test_transition_result_alpha_and_win 兩個 test,隨 `services/switch_state_machine.py`
+#   整檔刪除而移除(**測試對象消失,不是為了讓 CI 綠**)——該模組 production 0 caller,
+#   `repositories/pool_repository.py:41` 的狀態機合法值是本地定義、不 import 它(§8.2 不上行依賴)。
+#   本檔其餘三段(① allocation_ladder / ② zscore_engine / ④ lookthrough_coverage)一字未動。
 
 def test_pool_entry_status_backward_compat():
     from repositories.pool_repository import PoolEntry

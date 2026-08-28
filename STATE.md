@@ -352,7 +352,22 @@ user 要求批次分析表**完全 copy 組合健診那張合併大表**。
 - **`ui/tab_batch_analysis.py`**:改用 build_batch_unified_row(讀 `phase_info` → 資產屬性/
   操作訊號 對齊健診);狀態欄「✅成功/❌抓取失敗/⚠️無效代號」;舊 flat-schema checkpoint
   相容防護 `_rows_compatible`(讀回偵測不符即忽略,避免欄位錯位)。
-- **`services/fund_batch.py`** 標 RETAINED-LEGACY(analyze_fund_row production 0 caller)。
+- ~~**`services/fund_batch.py`** 標 RETAINED-LEGACY(analyze_fund_row production 0 caller)。~~
+  📌 **2026-08-28 狀態更新:該檔已整檔刪除**(**有意識的政策變更,不是漏刪**;
+  日期 **2026-08-28**,決策者 **user**)。
+  - **舊決定的理由仍然成立**:當時標 RETAINED-LEGACY 的依據是 **§-1「沒實際 bug / 沒具體需求 → 不要動」**
+    —— 沒有 user 指派就不主動拔一個雖然 0 caller、但測試齊全、隨時可接回的模組。
+    **這條防線今天依然需要**,它擋的是 AI 自行認定「看起來沒用就砍」。
+  - **被權衡掉的原因**:§-1 的觸發條件之一正是「**user 主動要求**」——
+    **user 2026-08-28 明確點名要刪**,保留決定由客戶本人推翻,§-1 不再構成阻卻。
+    對照 `CLAUDE.md` §-1.5.1c 判定 3:Orphaned 過期代碼一旦有任務碰到,處置方向是**實體刪除**。
+  - **刪除當下的實測依據**:production 0 caller;`ui/tab_batch_analysis.py` 走的是
+    `ui/helpers/fund_grp_health/unified.py`,該檔唯一的 `fund_batch` 字樣是下載檔名字串
+    `f"fund_batch_{ts}.csv"`(**字串,不是 import**,未動)。
+    連帶清理:`tests/test_fund_batch.py` 整檔;`tests/test_batch_checkpoint.py` 的
+    `test_analyze_row_survives_checkpoint`(唯一 import 它的外部測試);
+    `tests/test_flow_layer3c.py` parametrize 清單中的 `services/fund_batch.py` 條目
+    (**該檔以 `read_text` 讀原始碼,不是 import** —— 字面 import 掃描看不到)。
 
 **多 agent 交叉驗證**(user 要求「其他 AI 互相確認」):2 個獨立對抗 agent 各查等價性 /
 分層 / §1 / 舊存檔 —— findings 全修(JSON-safe 收口、§3.3 log、phase/score 漏傳、舊存檔防護)。
@@ -1842,7 +1857,11 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
 - **v19.314 拔除危機回測室(死功能,−3693 LOC)— 功能盤點第 1 刀(2026-07-05)**:
   - **背景**:user 拿當初 4 個設計初衷(總經位階/單基金體質/多基金金流/組合配置)回頭檢視儀表板,請我點出該改進/刪除的功能。盤點發現 `ui/tab_crisis_backtest.py`(2316 LOC)的 import 自 v19.31 起即**註解停用、進不去**,全 codebase 無第二個掛載點 = **死功能**,且不在 4 目標內。user 確認不用 → 整功能拔除。
   - **刪除(7 檔,−3693 LOC)**:`ui/tab_crisis_backtest.py` + `services/crisis_strategy_grid.py`(291,唯一 caller=死 UI)+ `services/crisis_ai_advisor.py`(191,唯一 caller=死 UI)+ 4 orphan test(`test_crisis_strategy_grid` / `test_crisis_ai_advisor` / `test_tab_crisis_backtest_gating` / `test_dual_signal_routing` —後者測的 AutoSearch routing helper 全數只存在於死 UI,無 live caller)。
-  - **保留**:`services/crisis_backtest.py`(`CrisisEvent`/`detect_crisis_events`)—macro `signal_lookback` + calibration `multi_factor`/`signal_threshold` 仍共用,**非**危機回測專屬。
+  - **保留**:`services/crisis_backtest.py`(`CrisisEvent`/`detect_crisis_events`)—macro `signal_lookback` + calibration `multi_factor`/~~`signal_threshold`~~ 仍共用,**非**危機回測專屬。
+    📌 **2026-08-28 Phase 1.4 事實更新(史料本體不動,只補現況)**:`services/calibration/signal_threshold.py`
+    已因 production 0 caller 實體刪除,不再是共用者。
+    **本條「保留 crisis_backtest」的結論不變** —— `services/calibration/multi_factor.py`
+    (經 `services/auto_search.py`)與 `ui/helpers/fund_grp_health/capture.py` 仍在用。
   - **doc-sync**:`app.py` 註解、`shared/converters.py` 過時註解、`ARCHITECTURE.md`(services + ui 樹刪 3 行)、`CLAUDE.md §2.3`(crisis_strategy_grid 參照更新)、`§8.2.A EX-PASSTHRU-1`(2 條 tab_crisis_backtest 例外退役)。歷史 changelog(STATE 舊條目 / BACKLOG F-PIT-1)為史料不動。
   - **驗證**:全庫 0 殘留真 import;保留的 crisis_backtest + 3 消費者 import smoke OK;pre-commit `--all-files`。
 
@@ -2255,7 +2274,17 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
 - **v19.250 B Route C-1 pending review ceremony 整批拔毒(2026-06-30)**:
   - User 訊號:總經 Tab 顯示「X 筆新權重待審核」橘色 banner,User 確認該 ceremony 已不再使用 → 選方案 B 拔 pending UI,保留 active.json 注入機制讓 production scoring 正常運作(可手動編輯 active.json)
   - 退役:`services/macro/weights_store.py` 的 pending 6 fn(load_pending / save_pending / approve_pending / reject_pending / has_pending / build_payload_from_multifactor)+ pending helper + GS pending CRUD + PENDING_MODES 常數 + dual-mode 路由,4 個 active fn(load_active / apply_weight_overrides / get_verdict_cutoffs / get_weight_override / get_phase_thresholds)100% 保留
-  - 退役:`services/ai_advisor_pending.py::explain_pending_weights` + 3 helper(pending 事後 AI 解讀);**保留**`recommend_weights` + 3 helper(AutoSearch top-5 winners 仍 reuse)
+  - 退役:`services/ai_advisor_pending.py::explain_pending_weights` + 3 helper(pending 事後 AI 解讀);
+    ~~**保留**`recommend_weights` + 3 helper(AutoSearch top-5 winners 仍 reuse)~~
+    📌 **2026-08-28 事實更正(不是政策變更,是原本就寫錯了)**:上面那句
+    「**AutoSearch top-5 winners 仍 reuse**」**在寫下之後就已經不成立**——
+    `recommend_weights` 的唯一消費者是 `ui/tab_crisis_backtest.py`,而該檔已於 **v19.314**
+    隨危機回測 UI 整功能拔除(見本檔 v19.314 條目)。也就是說,這句「仍 reuse」自 v19.314 起是**假陳述**,
+    只是沒有人回頭改它。**實測(2026-08-28)**:`git grep -n 'recommend_weights' -- '*.py'` 除該檔自身定義外,
+    只命中 `tests/test_ai_advisor_pending.py`;`services/auto_search.py` **從未** import 它。
+    → `services/ai_advisor_pending.py` 已於 2026-08-28 Phase 1.4 **整檔刪除**(含該測試檔)。
+    ⚠️ 記這一筆的價值不在檔案,在於:**一個「保留,因為 X 還在用」的理由,會在 X 被刪掉之後
+    繼續留在文件裡替它背書**,而刪 X 的那一輪並不會自動回頭檢查誰引用了 X 當理由。
   - 退役:`ui/tab1_macro.py` 的 `_render_one_pending_banner` + `_render_pending_weights_banner` + render_macro_tab caller + 2 處 stale docstring
   - 退役:`ui/tab_crisis_backtest.py` 的 `_render_ai_recommendation_section`(事前 AI 提交建議) + `_render_pending_submit_section`(📌 提交按鈕)+ 兩處 caller
   - 退役:`services/config/macro_weights_pending.json`(active.json 留)

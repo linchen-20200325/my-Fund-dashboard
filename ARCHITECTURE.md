@@ -73,7 +73,6 @@ my-Fund-dashboard/
 │   ├── snapshot_repository.py      # 快照 CRUD
 │   ├── news_repository.py          # 11 RSS feed 並聯
 │   ├── hot_money_repository.py     # 外資買賣超 + USDTWD(EX-CACHE-1)
-│   ├── tw_macro_repository.py      # TW PMI / NDC / CBC
 │   ├── moneydj_fetcher.py          # MoneyDJ 多 page_type fallback
 │   └── external_market_repository.py  # YF Ticker.info / multpl.com(原 valuation/risk_radar 下沉)
 │
@@ -109,7 +108,6 @@ my-Fund-dashboard/
 │   ├── precision_service.py        # 精準策略
 │   ├── ai_service.py               # Gemini 包裝(EX-AI-1)
 │   ├── crisis_backtest.py          # CrisisEvent/detect_crisis_events(macro/calibration 共用;v19.314 危機回測 UI 拔除後保留)
-│   ├── ai_advisor_pending.py       # 事前 AI 比對 top-N(v19.250 B 後 pending review 退役,僅留 recommend_weights)
 │   ├── moneydj_fetcher.py          # 基金 L2 orchestrator(R8 EX-L1ORCH-1 退役後純 L2)
 │   ├── liquidity_engine.py
 │   ├── us_liquidity_engine.py
@@ -127,10 +125,8 @@ my-Fund-dashboard/
 │   ├── policy_advisor_service.py
 │   ├── realtime_signal.py
 │   ├── risk_radar.py
-│   ├── signal_threshold_optimization.py
 │   ├── currency.py
 │   ├── format_helpers.py
-│   ├── cross_source_compare.py
 │   ├── fund_history.py
 │   ├── fund_total_return.py
 │   ├── fund_replacement_verdict.py
@@ -140,6 +136,13 @@ my-Fund-dashboard/
 │   ├── ai_prompts.py
 │   └── ledger_service.py
 │   # v19.251 退役清單:valuation.py / risk_calibration.py(shim) / macro_weights_store.py(shim)
+│   # 2026-08-28 Phase 1.4 退役清單(production 0 caller,實體刪除;v3 §01-2):
+│   #   L2 services/:ai_advisor_pending.py / cross_source_compare.py / switch_state_machine.py
+│   #        / fund_batch.py(user 2026-08-28 明確點名,推翻其 RETAINED-LEGACY 保留決定)
+│   #        / calibration/risk.py / calibration/signal_threshold.py
+│   #   L1 repositories/:tw_macro_repository.py
+│   # ⚠️ 上面被刪掉的 `signal_threshold_optimization.py` 這一行**在本輪之前就已經是假的** ——
+│   #   該檔早於 v19.201 P2-3 搬成 services/calibration/signal_threshold.py,舊路徑不存在。
 │
 ├── ui/                             # L3 ComponentUI(Streamlit only)
 │   ├── tab1_macro.py ~ tab6_manual.py
@@ -191,6 +194,7 @@ my-Fund-dashboard/
 | `repositories/policy_repository.py` | 656 → 1372 | 0(拆 repositories/policy/ 3 子模組) | 二度成長後整檔搬走 |
 | `services/fund_grp_health_extras.py` | (新) | 0(拆 services/health/ 5 子模組) | 拆完即退 |
 | `services/risk_calibration.py` | (新) | 0(v19.251 拔 shim,實作搬 services/calibration/risk.py) | shim 退役 |
+| `services/calibration/risk.py` | 307 | **0(2026-08-28 Phase 1.4 退役)** | 上一列那個 shim 的**實作本體**,production 0 caller,整檔刪除;`tests/test_risk_calibration.py` 同清,`tests/test_provenance_smoke.py` 讀原始碼的三行斷言一併移除 |
 | `services/macro_weights_store.py` | (新) | 0(v19.251 拔 shim,實作搬 services/macro/weights_store.py) | shim 退役 |
 | `services/valuation.py` | 187 | **0 (v19.251 退役)** | 0 production caller,test 孤兒同清 |
 | 根目錄業務 .py | 2 (app.py + fund_fetcher.py) | 2 | 不變 |

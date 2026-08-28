@@ -1846,7 +1846,7 @@ PMI_THRESHOLDS = {
 
 **建議優先順序**:HY_SPREAD(最少語意,最低風險)→ CPI → PMI
 
-**目前狀態**(v19.245 R13 復查):**proposal 已大幅落地** — `shared/macro_thresholds_v2.py` 已建立 5 SSOT(`HY_SPREAD_THRESHOLDS` / `CPI_YOY_THRESHOLDS` / `PMI_THRESHOLDS` / `FED_BS_THRESHOLDS` / `TW_PMI_THRESHOLDS`),13 consumer files 已接入(`v19.169` HY+CPI / `v19.178` CPI v2 進階 / `v19.179` PMI / `v19.184` M2+FedBS / `v19.245` HY inflection 收口)。剩餘 Tier 2/3 inline(`services/calibration/risk.py` synthetic data;`scripts/` calibration)為**模擬/校準資料,不影響 production 邏輯**,§-1 等實際 bug 觸發再加。
+**目前狀態**(v19.245 R13 復查):**proposal 已大幅落地** — `shared/macro_thresholds_v2.py` 已建立 5 SSOT(`HY_SPREAD_THRESHOLDS` / `CPI_YOY_THRESHOLDS` / `PMI_THRESHOLDS` / `FED_BS_THRESHOLDS` / `TW_PMI_THRESHOLDS`),13 consumer files 已接入(`v19.169` HY+CPI / `v19.178` CPI v2 進階 / `v19.179` PMI / `v19.184` M2+FedBS / `v19.245` HY inflection 收口)。剩餘 Tier 2/3 inline(~~`services/calibration/risk.py` synthetic data;~~`scripts/` calibration)為**模擬/校準資料,不影響 production 邏輯**,§-1 等實際 bug 觸發再加。（📌 **2026-08-28 Phase 1.4 事實更正**:`services/calibration/risk.py` 已因 production 0 caller 實體刪除,其 synthetic data inline 隨之消失。**本段「剩餘 Tier 2/3 不主動收」的結論未改**,只是清單少一項,`scripts/` calibration 仍在。）
 
 **§-1 對齊**:本 proposal 純文件,**不**自動觸發實作。user 明確指派某指標 → 才動工。
 
