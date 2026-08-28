@@ -179,8 +179,18 @@ def friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = "
         st.warning(body)
     # stderr 鏡射(Streamlit Cloud log 可追)
     print(f"[friendly_error] {title} | {type(exc).__name__}: {exc}", file=_sys_mod.stderr)
-    with st.expander("🔧 技術細節（給工程師）", expanded=False):
-        st.code(f"{type(exc).__name__}: {exc}\n\n" + _tb_mod.format_exc(), language="python")
+    _detail = f"{type(exc).__name__}: {exc}\n\n" + _tb_mod.format_exc()
+    # 2026-08-28:Streamlit 禁止 expander 巢狀(`Expanders may not be nested inside
+    # other expanders`)。本函式自 v19.5xx 起也被逐檔區塊(住在 `st.expander` 裡)呼叫,
+    # 若照舊硬開 expander,一個「區塊渲染失敗」會當場升級成整頁 StreamlitAPIException
+    # —— 錯誤呈現本身變成更大的錯誤。故降級為攤平的 st.code:技術細節一項都不少,
+    # 只是不收合。(§1:寧可版面醜,不可把失敗吞掉或炸更大。)
+    try:
+        with st.expander("🔧 技術細節（給工程師）", expanded=False):
+            st.code(_detail, language="python")
+    except Exception:  # noqa: BLE001 — 巢狀 expander / 無 container context
+        st.caption("🔧 技術細節（給工程師）")
+        st.code(_detail, language="python")
 
 
 def parse_indicator_date(iv: dict) -> tuple[object, list[tuple[str, str]]]:

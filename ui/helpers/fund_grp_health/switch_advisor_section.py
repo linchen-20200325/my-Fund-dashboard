@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 _TYPE_OPTS = ["自動(ER 判定)", "震盪", "成長"]
 _PRINCIPAL = 1_000_000.0     # 補抓池中標的用的名目本金(僅為走健診管線,不影響型態/基期)
 
@@ -69,7 +71,10 @@ def _fetch_rich(code: str, name: str = "") -> "dict | None":
         if r.get("ok") and r.get("_fund_raw"):
             return _build_fund_dict(r["_fund_raw"], code, _PRINCIPAL, name_hint=name)
     except Exception as _e:  # noqa: BLE001
-        st.caption(f"⬜ 池中標的 {code} 補抓失敗,略過:[{type(_e).__name__}] {str(_e)[:60]}")
+        # 「略過」= 這一檔會從換股建議裡靜靜消失 —— 使用者看不出少了它,
+        # 正是線框 §03 點名的「示警不足」,故走系統紅燈。
+        system_error(f"選股池標的 {code} 補抓失敗,已從候選中排除", _e,
+                     hint="下方換股建議未涵蓋這一檔,不代表它不值得換。")
     return None
 
 
@@ -211,7 +216,9 @@ def _maybe_snapshot(nav_by_code: dict, weights: dict, is_equal: bool, funds: lis
         st.session_state["_perf_snapshot_done"] = True   # 已嘗試寫入即設(避免 GS 錯誤時每次 rerun 重打)
         append_snapshot(PerfSnapshot(**_row))
     except Exception as _e:  # noqa: BLE001 — 快照失敗不影響走勢顯示;誠實提示
-        st.caption(f"⬜ 績效快照未寫入(不影響走勢):[{type(_e).__name__}] {str(_e)[:80]}")
+        system_error("組合績效快照未寫入", _e,
+                     hint="本區顯示的走勢數字不受影響;但這一筆歷史沒有累積上去,"
+                          "若持續失敗,「幾週後看變化」這件事會靜靜地不成立。")
 
 
 def render_portfolio_tracking(funds: list) -> None:
@@ -280,7 +287,8 @@ def render_portfolio_tracking(funds: list) -> None:
                 if len(_sdf) >= 2:
                     st.line_chart(_sdf)
     except Exception as _e:  # noqa: BLE001
-        st.caption(f"⬜ 快照歷史讀取略過:[{type(_e).__name__}] {str(_e)[:60]}")
+        system_error("組合績效快照歷史讀取失敗", _e,
+                     hint="上方走勢圖以當下資料重建,不受影響;缺的是歷史累積筆數。")
 
 
 # ───────────────────────── 選股池 CRUD UI ─────────────────────────
@@ -323,7 +331,8 @@ def _render_pool_editor() -> None:
     try:
         pool = list_pool(oauth_client=_oauth)
     except Exception as _e:  # noqa: BLE001
-        st.caption(f"⬜ 選股池讀取失敗:[{type(_e).__name__}] {str(_e)[:80]}")
+        system_error("選股池讀取失敗", _e,
+                     hint="選股池顯示為空不代表它是空的,可能只是這次讀不到。")
         return
 
     if pool:
@@ -566,4 +575,4 @@ def render_switch_advisor_section(funds: list) -> None:
                                    underperformance_by_code=_under)
         _render_advice(_res, _macro, _fx)
     except Exception as _e:  # noqa: BLE001
-        st.caption(f"⬜ 換股建議產生失敗:[{type(_e).__name__}] {str(_e)[:100]}")
+        system_error("換股建議產生失敗", _e)

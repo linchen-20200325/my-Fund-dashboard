@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 
 def render_allocation_backtest_section(funds: list) -> None:
     """🔁 配置回測 —— 回測 S0..S4 五套配置在台幣總報酬下表現,排名效益最高者 + 當前建議。
@@ -41,11 +43,17 @@ def render_allocation_backtest_section(funds: list) -> None:
         from services.hot_money_service import fetch_usdtwd_frame
         _df, _err = fetch_usdtwd_frame(BACKTEST_FX_FETCH_DAYS)
         if _err or _df is None or getattr(_df, "empty", True):
-            st.caption(f"⬜ USDTWD 匯率不可用({_err or '空序列'}),美元計價基金將被排除。")
+            # 抓回來但是空的/帶錯誤 → 美元基金被排除 = 畫面上的結論會少幾檔,
+            # 這是「算錯了」不是「還沒算」,所以走系統紅燈(線框 §03)。
+            system_error(
+                "USDTWD 匯率不可用,美元計價基金將被排除",
+                RuntimeError(str(_err or "空序列")),
+                hint="下方回測結果僅涵蓋台幣計價基金,不是完整組合。")
         else:
             _fx = _df.set_index("date")["usdtwd"]
     except Exception as _e:  # noqa: BLE001 — 抓失敗不拖垮整頁
-        st.caption(f"⬜ USDTWD 匯率抓取失敗,美元計價基金將被排除:[{type(_e).__name__}] {str(_e)[:80]}")
+        system_error("USDTWD 匯率抓取失敗,美元計價基金將被排除", _e,
+                     hint="下方回測結果僅涵蓋台幣計價基金,不是完整組合。")
 
     _res = backtest_allocations(_nav, _ccy, fx_series=_fx)
     if not _res.get("ok"):
@@ -108,7 +116,8 @@ def render_allocation_backtest_section(funds: list) -> None:
                            legend=dict(orientation="h", yanchor="bottom", y=1.02))
         st.plotly_chart(_fig, use_container_width=True)
     except Exception as _e_fig:  # noqa: BLE001 — 圖失敗不擋數據(排名表已在上方渲染)
-        st.caption(f"⬜ 淨值疊圖繪製失敗(數據不受影響):[{type(_e_fig).__name__}]")
+        system_error("配置回測淨值疊圖繪製失敗", _e_fig,
+                     hint="上方排名表的數字不受影響,少的只有這張圖。")
 
     # ── 匯率方向裁決(S1 現行 vs S2 反向)──
     st.markdown("**🧭 匯率方向裁決(S1 現行方向 vs S2 反向)**：" + _res["verdict_s1_vs_s2"]["wording"])

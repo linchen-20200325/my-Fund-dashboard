@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GRAY_66, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_ORANGE_300
 
 from ui.helpers.fund_grp_health._utils import _safe_num
@@ -225,7 +227,7 @@ def _render_ai_cross_fund_evaluation(funds: list) -> None:
     try:
         _snap, _n = _build_cross_fund_snapshot(funds)
     except Exception as e:
-        st.caption(f"⬜ Snapshot 組裝失敗:{type(e).__name__}: {e}")
+        system_error("AI 跨檔評論 snapshot 組裝失敗", e)
         return
 
     # 呼叫共用 AI widget
@@ -247,7 +249,7 @@ def _render_ai_cross_fund_evaluation(funds: list) -> None:
             gemini_api_key=_key,
         )
     except Exception as e:
-        st.caption(f"⬜ AI widget 渲染失敗:{type(e).__name__}: {e}")
+        system_error("AI widget 渲染失敗", e)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -276,7 +278,7 @@ def _render_per_fund_news_expanders(funds: list) -> None:
         # EX-PASSTHRU-1(v19.377):兄弟 fetch_market_news 已登錄,同屬 self-contained news fetcher(見 CLAUDE.md §8.2.A)
         from repositories.news_repository import fetch_stock_news
     except Exception as e:
-        st.caption(f"⬜ 新聞模組載入失敗:{type(e).__name__}: {e}")
+        system_error("個股新聞模組載入失敗", e)
         return
 
     try:
@@ -407,7 +409,7 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
             three_ratio_row_html as _tr_html,
         )
     except Exception as e:
-        st.caption(f"⬜ 三率模組載入失敗:{type(e).__name__}: {e}")
+        system_error("三率穿透模組載入失敗", e)
         return
 
     _pse = _PSE()
@@ -523,13 +525,13 @@ def _render_per_fund_three_ratio_expanders(funds: list) -> None:
                         unsafe_allow_html=True,
                     )
                 except Exception as _e_v:
-                    st.caption(f"⬜ 彙總失敗:{type(_e_v).__name__}: {_e_v}")
+                    system_error("三率彙總失敗", _e_v)
                 # 逐持倉明細
                 try:
                     _html = "".join(_tr_html(r) for r in _cached)
                     st.markdown(_html, unsafe_allow_html=True)
                 except Exception as _e_h:
-                    st.caption(f"⬜ 明細渲染失敗:{type(_e_h).__name__}: {_e_h}")
+                    system_error("三率明細渲染失敗", _e_h)
                 # 未解析持股
                 _resolved = {r.get("stock") for r in _cached}
                 _failed = [_t.get("name", "") for _t in _tops

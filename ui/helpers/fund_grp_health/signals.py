@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, STREAMLIT_BG, WARN_AMBER
 
 from ui.helpers.fund_grp_health._utils import _safe_num
@@ -32,7 +34,7 @@ def _render_mk_signal_table(funds: list) -> None:
     try:
         pass
     except Exception as e:
-        st.caption(f"⬜ 訊號模組載入失敗:{type(e).__name__}: {e}")
+        system_error("買賣訊號模組載入失敗", e)
         return
 
     _phase = _phase_info.get("phase") or "擴張"
@@ -59,7 +61,7 @@ def _render_mk_signal_table(funds: list) -> None:
                 "(可能 metrics 缺 buy/sell levels)"
             )
     except Exception as e:  # noqa: BLE001
-        st.caption(f"⬜ 表渲染失敗:{type(e).__name__}: {e}")
+        system_error("買賣訊號表渲染失敗", e)
 
 
 def _first_num(*vals):
@@ -166,7 +168,7 @@ def _render_bollinger_expanders(funds: list) -> None:
         import plotly.graph_objects as go
         import pandas as pd
     except Exception as e:
-        st.caption(f"⬜ Plotly / pandas 載入失敗:{type(e).__name__}: {e}")
+        system_error("Bollinger 詳圖 Plotly / pandas 載入失敗", e)
         return
 
     for _f in funds:
@@ -287,7 +289,7 @@ def _render_bollinger_expanders(funds: list) -> None:
                 )
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
-                st.caption(f"⬜ {_code} chart 渲染失敗:{type(e).__name__}: {e}")
+                system_error(f"{_code} Bollinger 圖渲染失敗", e)
 
 
 # ════════════════════════════════════════════════════════════════

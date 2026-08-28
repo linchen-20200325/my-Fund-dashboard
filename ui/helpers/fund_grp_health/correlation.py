@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import BG_DARK_RED_1, GH_FG_PRIMARY, MATERIAL_RED, MD_BLUE_500, STREAMLIT_BG, TRAFFIC_NEUTRAL
 from shared.signal_thresholds import SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO, SHADOW_FUND_THRESHOLD_RATIO
 
@@ -47,7 +49,7 @@ def _render_one_matrix(*, title: str, subtitle: str, result: "dict | None",
         )
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
-        st.caption(f"⬜ 熱力圖渲染失敗:{type(e).__name__}: {e}")
+        system_error("相關性熱力圖渲染失敗", e)
 
     if _shadow:
         st.markdown(f"**⚠️ 偵測到 {len(_shadow)} 對影子基金({label} ≥ {threshold})**")
@@ -94,7 +96,7 @@ def _render_correlation_matrix(funds: list) -> None:
             calc_holdings_overlap,
         )
     except Exception as e:
-        st.caption(f"⬜ 相關性模組載入失敗:{type(e).__name__}: {e}")
+        system_error("相關性模組載入失敗", e)
         return
 
     # ── 面板 1:持股 Jaccard + 產業 Cosine ──
