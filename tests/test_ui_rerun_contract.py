@@ -221,7 +221,11 @@ def _gate_function_keys(path: pathlib.Path) -> list[str]:
 # ⚠️ 本表由本組**自行重掃**產出，不是照抄派工單。
 FORM_SITES = frozenset({
     "ui/helpers/fund_grp_health/switch_advisor_section.py::_render_pool_editor()×1",
-    "ui/tab3_portfolio.py::render_portfolio_tab()×1",
+    # WP-D 2026-08-28：下面這組原本掛在 `ui/tab3_portfolio.py::render_portfolio_tab()`，
+    # 因「📋 保單管理（Google Sheets）」整段（790 行）抽成 `policy_admin_section.py`
+    # 而改掛新函式。**違規呼叫數一個沒有增減**（見該批 PR 的守恆對照），
+    # 這是本檔 docstring 寫的「錨點失效（拆函式）→ 更新表」那一種，不是新增豁免。
+    "ui/helpers/portfolio/policy_admin_section.py::render_policy_admin_section()×1",
     "ui/tab3_t7_ledger.py::render_t7_section()×3",
 })
 FORM_SITE_TOTAL = 5
@@ -294,7 +298,11 @@ def test_every_form_has_a_submit_button(path: pathlib.Path):
 NAKED_MULTI_INPUT_SITES = frozenset({
     "ui/helpers/fund_grp_health/switch_advisor_section.py::_render_pool_editor()×2",
     "ui/helpers/v2_editor.py::render_first_use_wizard()×1",
-    "ui/tab3_portfolio.py::render_portfolio_tab()×1",
+    # WP-D 2026-08-28：下面這組原本掛在 `ui/tab3_portfolio.py::render_portfolio_tab()`，
+    # 因「📋 保單管理（Google Sheets）」整段（790 行）抽成 `policy_admin_section.py`
+    # 而改掛新函式。**違規呼叫數一個沒有增減**（見該批 PR 的守恆對照），
+    # 這是本檔 docstring 寫的「錨點失效（拆函式）→ 更新表」那一種，不是新增豁免。
+    "ui/helpers/portfolio/policy_admin_section.py::render_policy_admin_section()×1",
 })
 NAKED_MULTI_INPUT_TOTAL = 4
 
