@@ -609,7 +609,7 @@ def test_twin_failures_wear_the_same_colour(label, sides):
     列在「守不到」，而「守不到」會被下一個人讀成「**這樣寫可以繞過本規則**」——
     方向剛好相反，那正是 §-2 規則 6 說的「沒查證的宣稱比沒有宣稱更危險」。
     （查證，實跑過：
-     `python -c "import ast,importlib.util as u;s=u.spec_from_file_location('t','tests/test_render_state_color_separation.py');m=u.module_from_spec(s);s.loader.exec_module(m);h=ast.parse('try:\n    f()\nexcept Exception as e:\n    _w(1, e)').body[0].handlers[0];r=[m._callee(c) for c in ast.walk(h) if isinstance(c,ast.Call)];print(r, 'system_error' in r)"`
+     `python -c "import ast,importlib.util as u;s=u.spec_from_file_location('t','tests/test_render_state_color_separation.py');m=u.module_from_spec(s);s.loader.exec_module(m);h=ast.parse('try:\\n    f()\\nexcept Exception as e:\\n    _w(1, e)').body[0].handlers[0];r=[m._callee(c) for c in ast.walk(h) if isinstance(c,ast.Call)];print(r, 'system_error' in r)"`
      → `['_w'] False`，即 `entry not in reporters` 成立 → `missing` 有值 → assert 失敗。）
     **真的守不到** —— 把整個 try/except 連同錨點呼叫一起刪掉、改走別的實作
     （那不是「顏色錯」，是功能被移除，屬 §1 的守備範圍）。
