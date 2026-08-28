@@ -1350,9 +1350,32 @@ def _fn_named(rel: str, fn_name: str):
                  and n.name == fn_name), None)
 
 
-def _calls_named_in(node: ast.AST) -> set[str]:
-    """node 底下所有呼叫的正規化名稱。"""
-    return {_callee(c) for c in ast.walk(node) if isinstance(c, ast.Call)}
+def _calls_named_in(node: ast.AST, containers: frozenset[str] = frozenset()) -> set[str]:
+    """node 底下所有呼叫的正規化名稱。
+
+    `containers` 傳 `_st_container_names(tree)` 就能認得 `import streamlit as _s`
+    這類**模組別名**（檔頭「receiver 盲點 (d)」）—— 不傳的話 `_s.caption(...)`
+    會被看成一個不相干的函式呼叫，規則在那個方向上等於沒生效。
+    """
+    return {_callee(c, containers) for c in ast.walk(node) if isinstance(c, ast.Call)}
+
+
+def _renders_before_returning(scope: ast.AST, entry: str) -> bool:
+    """`scope` 內第一個 `entry(...)` 是否出現在第一個 `return` **之前**。
+
+    ⚠️ **2026-08-28 稽核 M9 後新增，這條是本組規則原本最大的洞。**
+    原本只斷言「`entry` 這個呼叫存在」，於是把 `return` 移到 `not_ready` 前面
+    （＝占位變成死碼、畫面**退回零痕跡蒸發的原狀**）**測試照樣全綠** ——
+    規則驗的是那個呼叫「在」，不是「跑得到」。
+    這正是本 PR 要修的那個原始 bug 的形狀，卻繞得過本 PR 自己的新規則。
+    """
+    _entry_at = min((c.lineno for c in ast.walk(scope)
+                     if isinstance(c, ast.Call) and _callee(c) == entry), default=None)
+    _ret_at = min((n.lineno for n in ast.walk(scope)
+                   if isinstance(n, ast.Return)), default=None)
+    if _entry_at is None:
+        return False
+    return _ret_at is None or _entry_at < _ret_at
 
 
 def test_q1_backtest_section_prints_its_title_before_the_early_return():
@@ -1363,8 +1386,13 @@ def test_q1_backtest_section_prints_its_title_before_the_early_return():
 
     **守得到**：把那句 `not_ready(...)` 拿掉 / 換成 `pass` → 紅；
     把 `st.markdown` 標題移回守衛之前（退回原狀）→ 紅；
-    把函式改名、或把 `len(_nav) < 2` 這個守衛整個拿掉 → 紅（錨點找不到）。
-    **守不到**：文案內容寫得對不對（本檔一律不做逐字斷言，理由見檔頭）。
+    把函式改名、或把 `len(_nav) < 2` 這個守衛整個拿掉 → 紅（錨點找不到）；
+    **把 `return` 移到 `not_ready` 前面（占位變死碼）→ 紅**（稽核 M9，2026-08-28 補）。
+    **守不到**：文案內容寫得對不對（本檔一律不做逐字斷言，理由見檔頭）；
+    **標題是哪一個** —— 只驗「守衛之前有 `st.markdown`」，
+    所以把真標題移到守衛後、守衛前留一個 `st.markdown("")` 誘餌可以繞過（稽核 M10，已登記待後批）。
+    **會誤紅（fail-closed，可接受但要知道）**：`return not_ready(...)`（同一行回傳那個呼叫）——
+    `_renders_before_returning` 比的是行號，同一行不算「之前」。實測會紅。
     """
     rel = "ui/helpers/fund_grp_health/backtest_section.py"
     fn = _fn_named(rel, "render_allocation_backtest_section")
@@ -1386,6 +1414,11 @@ def test_q1_backtest_section_prints_its_title_before_the_early_return():
         "使用者已經按過 🩺 開始健診、也等過，這一塊卻整個消失，"
         "他無從分辨「這個功能不存在」「這次沒算出來」「我的基金不適用」（線框 §02 判準問二）。")
 
+    # ⚠️ 光是「有這個呼叫」不夠 —— 它要**跑得到**（稽核 M9）。
+    assert _renders_before_returning(guard, "not_ready"), (
+        f"{rel}:{guard.lineno} 的 `not_ready(...)` 排在 `return` **後面**，永遠不會執行 —— "
+        "畫面實際上退回「整塊零痕跡蒸發」的原狀，只是原始碼裡看起來有占位。")
+
     # 標題必須在守衛**之前**（本次修的就是這個順序）。
     titles = [n.lineno for n in fn.body
               if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
@@ -1402,9 +1435,13 @@ def test_q1_zero_usable_funds_is_explained_not_silently_skipped():
     `if _funds_extra:` 兩個 gate 同時落空 → 🔁 配置回測 與 🔬 進階分析 **零痕跡消失**。
 
     **守得到**：把那句 `not_ready(...)` 拿掉 → 紅；把 `if not _funds_extra:` 分支刪掉 → 紅；
-    函式改名 → 紅；把兩個下游區塊的呼叫搬走（錨點消失）→ 紅。
+    函式改名 → 紅；把兩個下游區塊的呼叫搬走（錨點消失）→ 紅；
+    **搬進 `if _funds_extra:` 之內（恆不執行）或搬進沒人呼叫的巢狀 helper → 紅**
+    （稽核 M8 / M8c，2026-08-28 補）；**`return` 排在 `not_ready` 前面 → 紅**（同 M9）。
     **守不到**：`if _funds_extra:` 這兩個 gate 本身被改成別的寫法而灰字還留著
     （那時灰字會變成永遠不印或永遠印，本規則看不出來）。
+    **會誤紅（fail-closed）**：把這個分支包進 `with st.container():` 之類的版面容器 ——
+    它就不再是 `fn.body` 的 top-level 陳述，即使行為完全不變也會紅。實測會紅。
     """
     rel = "ui/tab_fund_grp_health.py"
     fn = _fn_named(rel, "render_fund_grp_health_tab")
@@ -1427,6 +1464,146 @@ def test_q1_zero_usable_funds_is_explained_not_silently_skipped():
     assert handlers, (
         f"{rel}::render_fund_grp_health_tab() 裡沒有任何 `if not _funds_extra:` 分支 —— "
         "0 檔可用時，🔁 配置回測 與 🔬 進階分析 會再度靜默消失（線框 §04 ②）。")
-    assert any("not_ready" in _calls_named_in(h) for h in handlers), (
+    # ⚠️ **必須是函式的 top-level 陳述**（稽核 M8 / M8c）：把這個分支搬進
+    #    `if _funds_extra:` 之內（恆不執行），或搬進一個定義了但沒人呼叫的巢狀 helper，
+    #    原本的規則都照樣全綠 —— 因為 `ast.walk` 找得到它，但它跑不到。
+    _live = [h for h in handlers if h in fn.body]
+    assert _live, (
+        f"{rel}::render_fund_grp_health_tab() 的 `if not _funds_extra:` 不再是函式的"
+        "top-level 陳述（被搬進另一個 if、或搬進巢狀 helper）—— 那等於它跑不到，"
+        "畫面退回「兩塊憑空不見」的原狀。")
+    _ok = [h for h in _live if "not_ready" in _calls_named_in(h)]
+    assert _ok, (
         f"{rel} 的 `if not _funds_extra:` 分支沒有印任何灰色說明 —— "
         "使用者按過按鈕、等過，卻只看到兩塊憑空不見。")
+    assert any(_renders_before_returning(h, "not_ready") for h in _ok), (
+        f"{rel} 的 `if not _funds_extra:` 分支裡，`not_ready(...)` 排在 `return` 後面，"
+        "永遠不會執行（與 M9 同型）。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# Q3「首頁金鑰紅字搬家」—— 搬家不得把資訊弄丟，也不得搬回去
+# （客戶 2026-08-28 拍板：「同意移走。移至『⑤ 設定與診斷』的 API 金鑰狀態」）
+#
+# ⚠️ **為什麼要有這一組**：這是本批唯一的**行為變更**，也是客戶親自拍板的那一項，
+# 而 2026-08-28 稽核實測，它在整個 suite 裡**一條守衛都沒有** ——
+#   M11a 整段刪掉 Tab5 新增的「去哪裡設」    → 完整 fast lane 全綠
+#   M11b `_check_secrets()` 原封搬回 app.py → 完整 fast lane 全綠
+# 也就是「無聲刪掉目的地」「無聲搬回首頁」「兩邊各留一份」都沒有人會叫。
+#
+# 本組守的是**搬家這件事的兩端**，不是文案：
+#   C1 目的地要在（Tab5 §④ 必須逐把點名 + 說去哪裡設）
+#   C2 來源要空（app.py 不得再印金鑰提示 —— 它在 module top-level 跑，五頁都看得到）
+# ══════════════════════════════════════════════════════════════════
+
+# 「會把話講給使用者看」的入口（灰字與警示色都算 —— C2 不在乎顏色，在乎「有沒有講」）。
+_NOTICE_ENTRYPOINTS = frozenset({
+    "not_ready", "system_error", "friendly_error", "_friendly_error",
+    "st.error", "st.warning", "st.caption", "st.info",
+})
+# app.py 裡代表「這段在講金鑰」的識別：模組層兩個常數名，或任何看起來像憑證的字面。
+_APP_CREDENTIAL_NAMES = frozenset({"FRED_KEY", "GEMINI_KEY"})
+
+
+def _mentions_credential(node: ast.AST) -> bool:
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name) and n.id in _APP_CREDENTIAL_NAMES:
+            return True
+        if (isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and _is_credential_name(n.value)):
+            return True
+    return False
+
+
+def test_q3_key_notice_destination_still_names_each_key_and_where_to_set_it():
+    """Tab5 §④「🔑 API 金鑰狀態」必須逐把點名未設定的金鑰，並說「去哪裡設」。
+
+    搬家唯一會弄丟的東西就是**「那要去哪裡設」** —— 那張既有的金鑰表本來就會顯示
+    「有沒有設、從哪讀到」，但**沒有**告訴使用者要去哪裡補。本規則守的是那一句。
+
+    **守得到**：整段刪掉 → 紅（稽核 M11a）；拿掉 `where=` → 紅；
+    只剩一把（例如把 GEMINI 那條刪了）→ 紅；函式改名 → 紅。
+    **守不到**：文案怎麼寫（本檔一律不做逐字斷言）；那兩行在畫面上的**位置**。
+    **會誤紅（fail-closed）**：把兩條 `if "X" in _unset:` 改寫成
+    `for k in ("FRED_API_KEY", "GEMINI_API_KEY"): if k in _unset: ...` 這種等價迴圈 ——
+    金鑰名就不在 `if` 的 test 裡，本規則找不到「有沒有逐把點名」。實測會紅。
+    真要那樣重構，請一併把本規則的取名方式改成從迴圈的 iterable 取。
+    """
+    rel = "ui/tab5_data_guard.py"
+    fn = _fn_named(rel, "render_data_guard_tab")
+    assert fn is not None, f"{rel} 裡找不到 render_data_guard_tab() —— 改名了？"
+
+    # 錨點：條件引用 `_unset`（＝那張金鑰表算出來的「沒設定」集合）的那些 if。
+    # 錨在 `_unset` 上，是為了確保守的是**那張表底下那一段**，
+    # 而不是被本檔別處任何一個不相干的 `not_ready` 自證合格（稽核 Z 組的病）。
+    branches = [n for n in ast.walk(fn)
+                if isinstance(n, ast.If)
+                and "_unset" in {x.id for x in ast.walk(n.test) if isinstance(x, ast.Name)}]
+    assert branches, (
+        f"{rel}::render_data_guard_tab() 裡找不到任何「條件引用 `_unset`」的分支 —— "
+        "客戶 Q3 拍板搬過來的那一段不見了（或錨點變數改名）。"
+        "首頁那條已經移除，這裡再沒有，就是**兩邊都沒有**。")
+
+    named, missing_where = set(), []
+    for br in branches:
+        for c in ast.walk(br):
+            if not (isinstance(c, ast.Call) and _callee(c) == "not_ready"):
+                continue
+            if not any(k.arg == "where" for k in c.keywords):
+                missing_where.append(f"{rel}:{c.lineno}")
+            for n in ast.walk(br.test):
+                if isinstance(n, ast.Constant) and isinstance(n.value, str) \
+                        and _is_credential_name(n.value):
+                    named.add(n.value)
+
+    assert not missing_where, (
+        "Tab5 的金鑰說明沒有帶 `where=`（去哪裡設定）—— 那是搬家過程中**唯一會弄丟**的資訊："
+        "上面那張表已經顯示「有沒有設」，但沒有說要去哪裡補：\n  " + "\n  ".join(missing_where))
+    assert {"FRED_API_KEY", "GEMINI_API_KEY"} <= named, (
+        "Tab5 的金鑰說明沒有逐把點名 —— 原本 app.py 首頁那條會列出缺哪幾把，"
+        f"搬過來之後不得比它少。目前點名的只有：{sorted(named) or '（一把都沒有）'}")
+
+
+def test_q3_home_page_no_longer_prints_a_key_notice():
+    """`app.py` 不得再印金鑰提示 —— 它在 module top-level 跑，**五個分頁最上方都看得到**。
+
+    客戶 Q3 的原話是「移走」，不是「複製一份過去」。本規則守的是**來源那一端**：
+    只要 `app.py` 裡有任何一個函式**同時**（提到金鑰）與（呼叫一個會講話給使用者看的入口），
+    或 module 層直接印一句提到金鑰的話 → 紅。
+
+    **守得到**：把 `_check_secrets()` 原封搬回來 → 紅（稽核 M11b）；
+    換個函式名、換成 `st.caption` / `st.error` / `st.info` 一樣紅；
+    **改用 `import streamlit as _s` + `_s.caption(...)` 也紅**（M11c —— 本規則吃
+    `_st_container_names()`，見檔頭「receiver 盲點 (d)」；不吃的話這個變形是隱形的）。
+    **守不到**：把提示搬進**別的模組**再由 app.py import 呼叫（跨檔呼叫圖，本檔一律不做）。
+    **會誤紅（fail-closed）**：app.py 裡任何一個「提到 `FRED_KEY` / `GEMINI_KEY`
+    但講的其實是別件事」的灰字（例如講 proxy 狀態）也會紅 —— 本規則只看
+    「同一個函式裡既提到金鑰又講話」，不判斷它在講什麼。實測會紅。
+    ⚠️ 本規則**不管顏色**（灰的紅的都不准）—— 客戶要的是那個位置不要有這句話，
+    而不是「換個顏色留著」。批次一做過「只改顏色、不改位置」，Q3 就是來收掉它的。
+    """
+    rel = "app.py"
+    tree = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
+    # 認模組別名：`import streamlit as _s` 之後的 `_s.caption(...)` 也要算數，
+    # 否則換個 import 寫法就繞過去了（檔頭「receiver 盲點 (d)」，已有 helper）。
+    containers = _st_container_names(tree)
+
+    bad = []
+    for fn in [n for n in ast.walk(tree)
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+        hits = _calls_named_in(fn, containers) & _NOTICE_ENTRYPOINTS
+        if hits and _mentions_credential(fn):
+            bad.append(f"{rel}::{fn.name}() 同時提到金鑰並呼叫 {sorted(hits)}（第 {fn.lineno} 行）")
+    for node in tree.body:                       # module 層直接印的那種
+        if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)):
+            continue
+        hits = _calls_named_in(node, containers) & _NOTICE_ENTRYPOINTS
+        if hits and _mentions_credential(node):
+            bad.append(f"{rel}:{node.lineno} module 層直接印了提到金鑰的 {sorted(hits)}")
+
+    assert not bad, (
+        "首頁金鑰提示又回來了 —— 它在 module top-level 無條件執行，"
+        "**五個分頁的最上方都會看到**，而它多半不代表任何故障"
+        "（缺 GEMINI 只是少 AI 摘要，可降級）。客戶 2026-08-28 Q3 拍板把它移到"
+        "「⑤ 設定與診斷 → 🔑 API 金鑰狀態」一處，**不是兩邊各留一份**：\n  "
+        + "\n  ".join(bad))
