@@ -199,6 +199,14 @@ def batch_load_unloaded_funds() -> None:
                 st.write(f"✅ `{code}` {_nm_ok}")
             except Exception as _le:
                 code_cache[code] = {"error": str(_le)[:80]}
+                # ⚠️ 2026-08-28 顏色批次二之一：**刻意不改色,不是漏改**。兩個理由,
+                # 任一個都足夠：
+                #  (a) 這是**逐檔進度 log**（上下文是 ✅/❌ 一行一檔）,改紅 = N 個紅框（M1）;
+                #  (b) 同一批失敗**已經被彙總上報**了 —— 下方 `errors` 清單
+                #      （`st.warning("部分基金載入失敗：…")`）與寫進 `load_error` 的
+                #      逐檔狀態,都是同一份資訊的正式出口。改這裡只會變成講兩次。
+                # 另註：本函式結尾的 `st.rerun()` 會把整段進度 log 一起沖掉,
+                #      所以這一行本來就只在載入過程中短暫可見。
                 st.write(f"❌ `{code}` 失敗：{str(_le)[:80]}")
             _done += 1
             ld_label.info(f"📡 並行載入中 {_done}/{n_uniq}（剛完成 {code}）")

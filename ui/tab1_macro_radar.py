@@ -18,6 +18,8 @@ from __future__ import annotations
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import (
     GH_BG_PRIMARY,
     GH_BORDER,
@@ -91,7 +93,9 @@ def render_short_radar_section(
         except Exception as _radar_e:  # noqa: BLE001
             _radar = None
             _radar_sum = None
-            st.warning(f"⚠️ 風險雷達失敗：{str(_radar_e)[:120]}")
+            # 兩個 None → 下方整個風險雷達區塊（燈號 + 觸發項）不渲染。
+            system_error("風險雷達失敗", _radar_e,
+                         hint="下方風險雷達區塊這次不會出現;這不是「沒有風險」,是沒算出來。")
 
     if _radar and _radar_sum:
         st.markdown(

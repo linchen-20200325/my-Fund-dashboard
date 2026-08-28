@@ -22,6 +22,8 @@ import datetime as _dt
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 
 def _today_tw() -> str:
     return _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).date().isoformat()
@@ -328,7 +330,12 @@ def _sec_nav_backfill_auto() -> None:
                      for e in list_pool(oauth_client=_pool_oauth_client())]
         except Exception as _e:  # noqa: BLE001
             _pool = []
-            st.caption(f"⬜ 選股池讀取失敗:[{type(_e).__name__}] {str(_e)[:60]}")
+            # 2026-08-28 顏色批次二之一：換股顧問呼叫同一支選股池讀取 API 失敗時已是 🔴，
+            # 這裡還是灰字。而且後果更重 —— `_pool = []` 之後，下方「一鍵自動補全部
+            # 缺淨值」的代號集合會**整個選股池不見**，畫面卻只說「讀取失敗」，
+            # 使用者會以為補完了（§1：錯誤的數字比沒有數字更危險）。
+            system_error("選股池讀取失敗", _e,
+                         hint="下方補淨值只會涵蓋**已載入持倉**,選股池那幾檔這次不會被補到。")
         _all, _seen = [], set()
         for _c in _held + _pool:
             if _c and _c not in _seen:
@@ -499,7 +506,15 @@ def _sec_nav_backfill() -> None:
                         else:
                             st.caption("🗂️ 雲端 nav_history 已是最新（全部去重、無新增）")
                     except Exception as _e_gs:   # noqa: BLE001 — 雲端同步失敗不影響本機匯入
-                        st.caption(f"⬜ 雲端同步略過（本機已存）：[{type(_e_gs).__name__}] {str(_e_gs)[:60]}")
+                        # 原文案「略過」讀起來像「不需要做」,實際是**同步失敗**：
+                        # 匯入的淨值只在本機,容器重啟就沒了。
+                        # ⚠️ 已知未修：下一行 `st.rerun()` 應該會把這則訊息沖掉（改色前
+                        #    的 st.caption 同樣看不到）。要讓它真的看得見必須存進
+                        #    session_state 於 rerun 後補印 —— 行為變更,不在本批範圍。
+                        # ⚠️ **未沙箱實測**：依 Streamlit 語意推得,本批未寫 AppTest 驗證
+                        #    → 屬待驗事項。（同 tab1_macro_longterm.py 的那一處。）
+                        system_error("雲端 nav_history 同步失敗", _e_gs,
+                                     hint="本機已存,但**沒有寫上雲端**,容器重啟會清空。")
                 st.rerun()
 
         # 逐檔動作:增量更新 / 下載 / 清除 —— 從已建立的 cache 選一檔（取代原手打代號）

@@ -20,6 +20,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None,不再 `or 0`
 from services.macro import (
     backtest_turning_points,
@@ -298,7 +300,9 @@ def render_inflection_alert_section(
             st.session_state["_tp_v1948_top"] = _tp
         except Exception as _tp_e:  # noqa: BLE001
             _tp = None
-            st.warning(f"⚠️ 拐點偵測失敗：{str(_tp_e)[:120]}")
+            # `_tp = None` → 下方整個拐點區塊（機率、事件數、勝率）不渲染。
+            system_error("拐點偵測失敗", _tp_e,
+                         hint="下方拐點區塊這次不會出現;這不是「沒有拐點」,是沒算出來。")
 
     if _tp:
         _tp_c1, _tp_c2 = st.columns(2)
@@ -555,7 +559,12 @@ def render_inflection_alert_section(
                     st.plotly_chart(_btfig, use_container_width=True,
                                     key="bt_tp_spx_chart")
                 except Exception as _bt_fig_e:  # noqa: BLE001
-                    st.caption(f"走勢圖繪製失敗：{str(_bt_fig_e)[:80]}")
+                    # degraded=True 的理由（依 render_state 的通過條件逐項核對）：
+                    # 這個 try 從頭到尾只在組 plotly figure 並 st.plotly_chart 它;
+                    # 上方的事件明細表與下方「樣本 n=…」說明都在 try **之外**,
+                    # 失敗後畫面上每一個數字都還在且都對,掉的只有這張走勢圖。
+                    system_error("SPX 走勢圖繪製失敗", _bt_fig_e, degraded=True,
+                                 hint="上方事件明細表與統計數字不受影響,只有這張圖沒畫出來。")
             st.caption(
                 f"樣本 n={_sm['n_events']}，僅供參考；"
                 f"綠色虛線＝倒掛翻正日｜紅色陰影＝NBER 衰退期。"

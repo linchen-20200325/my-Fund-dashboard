@@ -242,9 +242,53 @@ def test_clear_cache_failure_leaves_a_trace(relpath, tag):
     """清快取失敗原本被 `pass` 吞掉，卻仍往下跑「已載入最新」的流程。
 
     使用者按了「強制重抓最新（清快取）」，拿到的其實是舊快取。
+
+    ⚠️ **2026-08-28 顏色批次二之一改寫，兩邊理由並陳（不是放寬）**：
+    - 舊寫法：`assert _code_lines(_src, "st.warning")` —— 全檔只要**任何地方**有一行
+      `st.warning` 就算過。它的理由今天仍然成立（那時 `st.warning` 是唯一的告知方式，
+      而且它擋住了「改回 `pass` 靜默吞掉」這個原病）。
+    - 被權衡掉的原因有兩個，而且第二個更重要：
+      (a) 客戶 2026-08-28 Q2 把「清快取失敗」這種**數字可能是錯的**失敗改走
+          `render_state.system_error()`（🔴），逐字釘住 `st.warning` 會把**正確的修法**
+          判成違規；
+      (b) 舊寫法**根本沒有檢查到正確的位置** —— `ui/tab1_macro.py` 之所以通過，是因為
+          該檔別處另有 `st.warning`（「市場相位資料缺失」等），與清快取這個 handler 無關。
+          **實測（不是推論）**：在 `origin/main`（461f811）上把清快取那段 `st.warning`
+          整段換成 `pass`，本測試 **2 passed** —— 原病完整復發而測試全綠。
+          （複現：`git worktree add <tmp> origin/main`，改該段為 `pass`，
+            跑 `pytest tests/test_flow_layer1.py::test_clear_cache_failure_leaves_a_trace`。）
+    - 新寫法改用 AST：找到**含這個 stderr tag 的那個 except handler**，要求它裡面有一個
+      對使用者可見的告知呼叫。**範圍變窄、強度變強**，不是放寬。
     """
+    import ast as _ast
+
     _src = _read(relpath)
     assert tag in _src, f"{relpath} 清快取失敗沒有 stderr 留痕"
-    assert _code_lines(_src, "st.warning"), (
-        f"{relpath} 清快取失敗沒有在畫面上告知使用者「這次不是最新」"
+
+    # 對使用者可見的「這次不是最新」告知：舊寫法（st.warning / st.error）與
+    # 現行寫法（render_state.system_error / friendly_error）都算數。
+    _REPORTERS = {"st.warning", "st.error", "system_error", "friendly_error"}
+
+    def _name(call: _ast.Call) -> str:
+        if isinstance(call.func, _ast.Attribute):
+            _v = call.func.value
+            while isinstance(_v, (_ast.Attribute, _ast.Subscript)):
+                _v = _v.value
+            _root = _v.id if isinstance(_v, _ast.Name) else None
+            return f"st.{call.func.attr}" if _root == "st" else call.func.attr
+        return call.func.id if isinstance(call.func, _ast.Name) else ""
+
+    _handlers = [h for h in _ast.walk(_ast.parse(_src))
+                 if isinstance(h, _ast.ExceptHandler)
+                 and tag in _ast.unparse(h)]
+    assert _handlers, (
+        f"{relpath} 找不到帶 {tag} 的 except handler —— stderr 留痕搬走了？"
     )
+    for _h in _handlers:
+        _reported = [_name(c) for c in _ast.walk(_h)
+                     if isinstance(c, _ast.Call) and _name(c) in _REPORTERS]
+        assert _reported, (
+            f"{relpath} 帶 {tag} 的 handler 裡沒有任何對使用者可見的告知 —— "
+            f"清快取失敗會靜默,使用者拿到舊快取卻以為是最新。"
+            f"可用的告知入口：{sorted(_REPORTERS)}"
+        )

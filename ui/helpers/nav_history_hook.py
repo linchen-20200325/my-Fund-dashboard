@@ -95,6 +95,8 @@ def _record(pairs: list, source: str) -> None:
     """共用:抽點 → session 去重 → L2 批次寫 → 非致命提示。"""
     import streamlit as st
 
+    from ui.helpers.render_state import system_error
+
     pts: list[dict] = []
     for code, fd in pairs:
         for p in _extract_points(fd, code):   # v19.437:存整段序列(非只末點)
@@ -126,7 +128,15 @@ def _record(pairs: list, source: str) -> None:
         if res.get("written"):
             st.caption(f"🗂️ NAV 累積:本次新存 {res['written']} 筆到 nav_history 分頁")
     except Exception as e:  # NavHistoryError 等 — 可見但非致命,不擋渲染
-        st.caption(f"⬜ NAV 累積寫入失敗(不影響分析):[{type(e).__name__}] {str(e)[:80]}")
+        # ⚠️ 對照上面那則：「累積**未啟用**（缺 secrets）」是真的「還沒設定」→
+        # 維持 ⬜ 灰字,一字未動。這裡是**寫入真的失敗**,而它的後果會延後發生：
+        # 使用者以為淨值在累積、其實沒有,幾週後才發現序列沒長（v19.362 ① 的原病）。
+        # 灰字會讓人以為「按一下就好」,按幾次都一樣 —— 故 🔴。
+        # ⚠️ 判斷（非事實）：本頁當下的數字全部正確,紅框指的是「未來的序列不可信」,
+        #    不是「上面這些數字不可信」。若客戶認為這裡該用 🟠,推翻本處即可。
+        system_error("NAV 累積寫入失敗", e,
+                     hint="本次分析的數字不受影響;但這一筆**沒有存進 nav_history**,"
+                          "長期序列不會變長。詳見 Tab5 🗂️ NAV 歷史匯入。")
 
 
 __all__ = ["record_fund_nav_point", "record_batch_nav_points",

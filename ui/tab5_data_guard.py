@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from ui.helpers.render_state import not_ready
+from ui.helpers.render_state import not_ready, system_error
 
 from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW  # v19.390 V3b:燈號收 TRAFFIC SSOT
 
@@ -1496,7 +1496,10 @@ def render_data_guard_tab() -> None:
                     _lines.append("✅ 旁證:`FRED_API_KEY` 讀得到 → secrets 本身有效,問題**只在上面這兩把**。")
                 st.error("\n\n".join(_lines))
         except Exception as _e_st:
-            st.caption(f"⬜ 累積狀態檢查失敗:[{type(_e_st).__name__}] {str(_e_st)[:60]}")
+            # 這顆燈答的是「能不能累積」。它自己掛掉時,畫面上沒有燈 ——
+            # 與「燈是綠的」在灰字之下難以分辨。
+            system_error("NAV 累積狀態檢查失敗", _e_st,
+                         hint="這次查不出雲端 nav_history 能不能寫入,不代表它是好的。")
 
         # ── 2026-08-11:「累了多少」——上面那顆燈只答「能不能累」 ────────────────
         # 為什麼要加：燈是綠的、每次抓取都有「本次新存 N 筆」、序列卻可以好幾週
@@ -1530,9 +1533,12 @@ def render_data_guard_tab() -> None:
                            "可能是尚未啟用（見上方狀態燈）或分頁還沒建立。"
                            "**這與「累積 0 點」不同**：讀不到就是不知道，不是沒有。")
         except Exception as _e_cov:
-            # §1：讀失敗要講出來，不可留白讓人以為「沒累積」
-            st.caption(f"⬜ 累積內容讀取失敗（不影響分析）："
-                       f"[{type(_e_cov).__name__}] {str(_e_cov)[:80]}")
+            # §1：讀失敗要講出來，不可留白讓人以為「沒累積」。
+            # ⚠️ 對照上方 else 分支：「讀不到任何累積點 —— 可能尚未啟用」是**真的
+            # 還沒有** → 維持灰色一字未動;這裡是**讀爆了**,整張涵蓋表消失。
+            system_error("累積內容讀取失敗", _e_cov,
+                         hint="這與「累積 0 點」不同 —— 讀不到就是不知道,不是沒有。"
+                              "上方分析本身不受影響。")
 
         st.caption(
             "從保險公司網站 / 對帳單下載歷史淨值 CSV，一次灌入 Google Sheet "

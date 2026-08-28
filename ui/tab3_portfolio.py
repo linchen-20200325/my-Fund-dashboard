@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from ui.helpers.render_state import not_ready
+from ui.helpers.render_state import not_ready, system_error
 
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import BG_DARK_GREEN_3, BG_DARK_NAVY_1, BG_DARK_NAVY_2, BG_DARK_NAVY_3, BG_DARK_RED_3, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL, WARN_AMBER, WHITE
@@ -347,10 +347,10 @@ def render_portfolio_tab() -> None:
             import sys as _sys_fx
             print(f"[tab3 FX 曝險摘要] 渲染失敗："
                   f"[{type(_e_fx_blk).__name__}] {_e_fx_blk}", file=_sys_fx.stderr)
-            st.caption(
-                f"⬜ FX 曝險摘要：本次未能產生（[{type(_e_fx_blk).__name__}]）"
-                "—— 這不代表沒有匯率風險。"
-            )
+            # 這是風險揭露區塊。訊息自己就寫「這不代表沒有匯率風險」——
+            # 需要寫這句,正是因為灰字讓「沒風險」與「沒算出來」長得一樣。
+            system_error("FX 曝險摘要渲染失敗", _e_fx_blk,
+                         hint="**這不代表沒有匯率風險**,只代表這一項沒算出來。")
 
         st.divider()
 
@@ -745,9 +745,8 @@ def render_portfolio_tab() -> None:
                 # v18.166：📥 雲端讀取 = 讀取現有帳本 + 從 Drive 挑帳本（兩者皆在此面板）
                 st.markdown("**📥 雲端讀取（全部讀回 / 挑選帳本）**")
                 if not _logged_in_q and not (_gsa_secret and _sheet_id_secret):
-                    st.warning(
-                        "⚠️ 尚未用 Google 登入。請至左側 sidebar 點「🔐 用 Google 登入」。"
-                    )
+                    not_ready("還沒用 Google 登入,無法讀取雲端帳本",
+                              where="左側 sidebar → 🔐 用 Google 登入")
                     # v19.296: 快捷登入按鈕（免回 Sidebar）
                     if _oauth_configured:
                         try:
@@ -889,9 +888,8 @@ def render_portfolio_tab() -> None:
             elif _io_panel == "save":
                 st.markdown("**📦 全部寫入 Sheet（本地 → 雲端）**")
                 if not _can_cloud_q:
-                    st.warning(
-                        "⚠️ 尚未登入 Google 或未指定 Sheet ID。請先在下方完成設定。"
-                    )
+                    not_ready("還沒登入 Google,或還沒指定 Sheet ID",
+                              where="左側 sidebar → 🔐 用 Google 登入;Sheet ID 見下方設定區")
                 else:
                     _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
                     _last_save = st.session_state.get("t3_last_save_at", "—")
@@ -930,14 +928,11 @@ def render_portfolio_tab() -> None:
                 # 「從 Drive 挑」已移到「📥 雲端讀取」面板（user 截圖反饋）
                 st.markdown("**✨ 新增帳本（建立全新 Google Sheet）**")
                 if not _oauth_configured:
-                    st.warning(
-                        "⚠️ 需先設定 OAuth Client 才能建立 Google Sheet。"
-                        "請至下方 expander 設定。"
-                    )
+                    not_ready("還沒設定 OAuth Client,無法建立 Google Sheet",
+                              where="本面板下方的「OAuth 設定」expander")
                 elif not _logged_in_q:
-                    st.warning(
-                        "⚠️ 尚未用 Google 登入。請至左側 sidebar 點「🔐 用 Google 登入」。"
-                    )
+                    not_ready("還沒用 Google 登入,無法建立帳本",
+                              where="左側 sidebar → 🔐 用 Google 登入")
                     # v19.296: 快捷登入按鈕（免回 Sidebar）
                     if _oauth_configured:
                         try:
@@ -1851,12 +1846,12 @@ def render_portfolio_tab() -> None:
             try:
                 _fn()
             except Exception as _e_w:
-                print(f"[tab3 風險揭露] {_label} 渲染失敗："
-                      f"[{type(_e_w).__name__}] {_e_w}")
-                st.caption(
-                    f"⬜ {_label}：本次未能產生（[{type(_e_w).__name__}] "
-                    f"{str(_e_w)[:80]}）—— **這不代表沒有風險**，只代表這一項沒算出來。"
-                )
+                # 四個風險揭露元件共用這個 wrapper。同上：「沒出現」與「沒風險」
+                # 長得一樣是 §1 的鏡像違規,顏色要把它分開。
+                # （原本的 print 沒帶 file=sys.stderr,Streamlit Cloud 撈不到;
+                #   system_error → friendly_error 內建 stderr 鏡射,順帶修好。）
+                system_error(f"{_label} 渲染失敗", _e_w,
+                             hint="**這不代表沒有風險**,只代表這一項沒算出來。")
 
         # ── v19.64 I1：總經 → 組合曝險聯動 banner（讀 Tab1 phase_info，跨 Tab 訊號）──
         def _w_macro_link() -> None:
@@ -2192,7 +2187,10 @@ def render_portfolio_tab() -> None:
                         _client_b = get_gspread_client_from_oauth(_creds_b)
                     except Exception as _e_oc:
                         _client_b = None
-                        st.caption(f"⚠️ OAuth client 建立失敗：{str(_e_oc)[:60]}")
+                        # `_client_b = None` → 下方每一檔的 Sheet 同步都會被跳過,
+                        # 使用者卻只看到一行灰字,會以為已經寫進雲端了。
+                        system_error("OAuth client 建立失敗", _e_oc,
+                                     hint="這批基金**不會**寫進雲端 Sheet,只留在本機 session。")
 
                 for (_code_b, _pid_b), (_raw_b, _err_b) in _results.items():
                     _new_item_b = {"code": _code_b, "invest_twd": 0,
@@ -2254,7 +2252,10 @@ def render_portfolio_tab() -> None:
                         st.session_state["policy_tabs"] = (
                             list_policy_worksheets(_client_b, _sid_b))
                     except Exception as _e_ref:
-                        st.caption(f"⚠️ 保單列表刷新失敗：{str(_e_ref)[:60]}")
+                        # 刷新失敗 → `policy_tabs` 停在舊值,下拉選單會少掉這次新增的
+                        # 保單分頁。那是「這個清單不可信」,不是「還沒載入」。
+                        system_error("保單列表刷新失敗", _e_ref,
+                                     hint="上方保單下拉選單可能仍是舊的,重新整理本頁即可更新。")
 
                 _update_data_registry()
 
@@ -2773,10 +2774,8 @@ def render_portfolio_tab() -> None:
                     from ui.helpers.fund_grp_health.rotation import render_rotation_section
                     render_rotation_section(_funds_extra, key_prefix="pf_rot_")
                 except Exception as _e_rot:
-                    st.caption(
-                        f"⬜ 輪動配對建議渲染失敗:"
-                        f"{type(_e_rot).__name__}: {str(_e_rot)[:80]}"
-                    )
+                    # 整個輪動配對建議區塊（配對表 + σ 切點判定）消失。
+                    system_error("輪動配對建議渲染失敗", _e_rot)
 
                 # v19.421 — 📊 組合績效(①);v19.424 — 🎯 效率前緣(②)。重用 _funds_extra。
                 try:
@@ -2787,15 +2786,11 @@ def render_portfolio_tab() -> None:
                     render_portfolio_performance(_funds_extra)
                     render_efficient_frontier(_funds_extra)
                 except Exception as _e_pp:
-                    st.caption(
-                        f"⬜ 組合分析(績效/前緣)渲染失敗:"
-                        f"{type(_e_pp).__name__}: {str(_e_pp)[:80]}"
-                    )
+                    # 年化報酬 / σ / Sharpe / 最大回撤 四個 KPI + 各檔貢獻表整組消失。
+                    system_error("組合分析(績效/效率前緣)渲染失敗", _e_pp)
             except Exception as _e_ph:
-                st.caption(
-                    f"⬜ 持倉健診總表渲染失敗:"
-                    f"{type(_e_ph).__name__}: {str(_e_ph)[:80]}"
-                )
+                # 這是持倉分頁最主要的那張大表,失敗＝整段診斷都不見。
+                system_error("持倉健診總表渲染失敗", _e_ph)
 
     # ─── 以下為原 with tab3: 第二段 ───────────────
     # v18.194 故事化：T7 持倉戰情（③）移到 T5 重疊診斷（④）之前，
@@ -2823,7 +2818,8 @@ def render_portfolio_tab() -> None:
         from ui.helpers.portfolio.fee_deduction import render_fee_deduction_section
         render_fee_deduction_section(st.session_state.get("portfolio_funds"))
     except Exception as _e_feeopt:  # noqa: BLE001 — 決策區任何例外收成提示，不影響其餘分頁
-        st.caption(f"⬜ 換扣款標的決策區略過：[{type(_e_feeopt).__name__}] {str(_e_feeopt)[:80]}")
+        # 原文案寫「略過」,讀起來像「這張保單不適用」;實際是整區算爆了。
+        system_error("換扣款標的決策區渲染失敗", _e_feeopt)
 
     # ── T7 已移至 T5 之前（v18.194 故事化：持倉戰情 → 重疊診斷）──
 

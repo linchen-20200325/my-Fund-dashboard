@@ -18,6 +18,7 @@ import re
 import pandas as pd
 import streamlit as st
 
+from ui.helpers.render_state import system_error
 from ui.helpers.fund_grp_health.unified import (
     BATCH_NUMERIC_COLUMNS,
     BATCH_UNIFIED_COLUMNS,
@@ -170,8 +171,12 @@ def _persist(run_id: str, codes: list[str], rows: dict) -> None:
         bc.save(run_id, codes, rows)
     except Exception as e:  # noqa: BLE001 — 磁碟不可寫(如 Cloud 唯讀)→ 降級,不炸跑批
         st.session_state[_K_DISK_OFF] = True
-        st.warning(f"⚠️ 磁碟續存失敗,本次改為只存記憶體(關分頁會消失):"
-                   f"{type(e).__name__}: {str(e)[:80]}")
+        # 與 nav_history 寫入失敗同一族：**畫面數字全對,壞掉的是持久化**。
+        # 兩處顏色必須一致,否則同一種失敗又會變成「看你在哪個分頁」。
+        # ⚠️ 判斷（非事實）：紅框指的是「這批結果留不住」,不是「這批數字算錯」。
+        system_error("磁碟續存失敗", e,
+                     hint="本次跑批結果**全部有效**,但改為只存記憶體 —— "
+                          "關掉分頁或重啟就會消失,無法續跑。")
 
 
 def _run_batch(codes: list[str], retry_failed: bool) -> None:
@@ -462,15 +467,18 @@ def _render_existing_results() -> None:
     try:
         from ui.helpers.fund_grp_health.switch_section import render_switch_section
         render_switch_section(df.to_dict("records"))
-    except Exception as _e_sw:  # noqa: BLE001
-        st.caption(f"⬜ 換標決策區塊失敗:[{type(_e_sw).__name__}] {str(_e_sw)[:80]}")
+    except Exception as _e_sw:  # noqa: BLE001 — 換標區塊失敗不擋大表
+        # 2026-08-28 顏色批次二之一：與 `tab_fund_grp_health.py` 呼叫的是
+        # **同一個 render_switch_section**，那邊已走 system_error、這邊還是灰字。
+        system_error("換標決策區塊失敗", _e_sw)
 
     # ── 🧭 景氣位階適配摘要 ── v19.425 ──
     try:
         from ui.helpers.fund_grp_health.regime_section import render_regime_fit_section
         render_regime_fit_section(df.to_dict("records"))
     except Exception as _e_rf:  # noqa: BLE001
-        st.caption(f"⬜ 景氣適配區塊失敗:[{type(_e_rf).__name__}] {str(_e_rf)[:80]}")
+        # 同上：與健診頁的 render_regime_fit_section 是同一個函式，顏色必須一致。
+        system_error("景氣適配區塊失敗", _e_rf)
 
     # 說明文裡的門檻數字一律從 shared/signal_thresholds SSOT 讀(§3.3):
     # 捕捉率最少月數、輪動高/低基期 σ 切點,改常數時這段文案自動跟著改。

@@ -19,7 +19,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from ui.helpers.render_state import not_ready
+from ui.helpers.render_state import not_ready, system_error
 
 from shared.colors import GH_BG_PRIMARY, GH_BORDER, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, TRAFFIC_NEUTRAL
 
@@ -3110,14 +3110,17 @@ def render_t7_section() -> None:
                 _mk_ai_ind = st.session_state.get("indicators") or {}
                 _mk_data_ok, _ = _calc_data_health(_mk_ai_ind)
                 if _mk_data_ok < 50:
-                    st.warning(
-                        f"🔴 總經完整率 **{_mk_data_ok}%**（&lt;50%）— "
-                        # 稽核 H2：原寫「📡 全量抓取」—— 市場定調頁**沒有這顆按鈕**
-                        # （實際是「📡 載入總經資料」/ 載入後變「🔄 更新總經資料」，
-                        #   見 ui/tab1_macro.py:930）。死指標文案。
-                        "建議先到「🌐 市場定調」按「📡 載入總經資料」載入指標後再生成，"
-                        "AI 才能給景氣位階對應的換股建議。仍可勾選下方略過按鈕直接生成基礎組合分析。"
-                    )
+                    # 2026-08-28 顏色批次二之一：本函式上方 8 行的「尚未載入任何基金」
+                    # 已經是 not_ready 灰字,這一則是**同一道前置門檻**（總經還沒載夠）,
+                    # 卻穿 🟠 又內嵌一個 🔴 emoji —— 同一個條件三種畫法。
+                    # 這裡沒有任何東西壞掉,只是「你還沒載入」。
+                    # 稽核 H2 的指路更正（不是「📡 全量抓取」而是「📡 載入總經資料」）
+                    # 原封搬進 where=，一字未改。
+                    not_ready(
+                        f"總經完整率只有 {_mk_data_ok}%（&lt;50%）—— "
+                        "AI 給不出景氣位階對應的換股建議;"
+                        "仍可勾選下方略過按鈕直接生成基礎組合分析",
+                        where="🌐 市場定調 → 📡 載入總經資料")
                 # v18.87: 資料來源透明化 — 明確說 AI 只看主帳本（不含 A/B/C 暫存方案）
                 # 使用者反饋「老師的判斷不能抓取重新配置的資料，因為這資料只是給我
                 # 想要重新配置的參考值」— 程式碼確實已隔離，但 UI 沒講清楚使用者會擔心
@@ -3163,8 +3166,12 @@ def render_t7_section() -> None:
                         try:
                             _mk_news = fetch_market_news(max_per_feed=4) or []
                         except Exception as _e_news:
-                            st.caption(f"⚠️ 新聞抓取失敗（{str(_e_news)[:60]}），"
-                                       f"AI 將在無新聞背景下分析")
+                            # 不是「少一張圖」：AI 接下來的系統性風險判讀會**在沒有
+                            # 新聞的情況下**做出來,結論本身會不一樣。灰字會讓使用者
+                            # 以為那份 AI 結論和平常一樣可信。
+                            system_error("新聞抓取失敗", _e_news,
+                                         hint="AI 這次將在**無新聞背景**下分析,"
+                                              "系統性風險段落的結論會因此偏保守/失真。")
                     if _mk_news:
                         _n_sys = sum(1 for h in _mk_news if h.get("is_systemic"))
                         if _n_sys > 0:
