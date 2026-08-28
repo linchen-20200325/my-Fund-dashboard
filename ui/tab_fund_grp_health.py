@@ -814,6 +814,61 @@ def _render_health_3tables(rows: list[dict],
 
     ok_rows = [r for r in rows if r.get("ok")]
     if not ok_rows:
+        # ══ D1 + D2(2026-08-28 批次三之一)══════════════════════════════
+        # 全部抓取失敗時,本頁**十幾個區塊會無聲消失**。原本使用者只看得到最後面
+        # 那段「#### ❌ 抓取失敗 + 逐檔紅字」—— 知道「抓失敗了」,但不知道
+        # **因此少看到了什麼**,也就無從判斷「是這個功能沒了,還是這次沒資料」。
+        #
+        # 為什麼講在這裡(「因」的位置),而不是在每個下游區塊各講一次:
+        #   `ok_rows` 空是**唯一的因**,它在這一行就已經確定;下游那些區塊全部被
+        #   同一個條件關掉。在 10+ 個下游各印一句灰字 = 滿版灰字,那是客戶 2026-08-28
+        #   Q1 第二句明確否掉的方向(「保持畫面極簡乾淨」)。**在因的位置講一次。**
+        #
+        # D2(線框 §04①「標題照印」):`#### 📊 健診大表` 這個標題原本印在下方
+        # :915,在本 early-return 之後 → 全失敗時連標題都不出現,使用者看不到任何
+        # 痕跡。把它提到守衛之前印,他至少看得到「這裡本來有一張表」+ 一句說明。
+        #
+        # 顏色(render_state 五態):**全部抓取失敗是系統真失敗 → 🔴**,不是 ⬜
+        # 「還沒載入」——用灰字印真失敗,使用者會以為「按一下就好」,但他按幾次都一樣
+        # (render_state 檔頭點名的反向 bug)。
+        # 刻意**不走 `system_error()`**:那個入口的簽名要求一個 BaseException,
+        # 而這裡手上沒有 —— 每一檔的失敗原因是 `r["error"]` **字串**(由批次層攔下後
+        # 存進 row),不是活的例外物件;硬造一個 Exception 只為了滿足簽名,traceback
+        # 會是假的。此處改用 `st.error`,與 `_render_health_table` 內既有的「部分失敗」
+        # 摘要**同一族寫法** —— 那一段長在 `if ok_rows:` 裡面,所以**全失敗時反而
+        # 印不出來**,本段補的正是它漏掉的那一半。
+        #
+        # ⚠️ 下面這份清單是**量測值,量測日 2026-08-28,會漂移**(§8.2.A.0 規則 4)。
+        # 重新產生(照抄可跑):
+        #   $ python3 -c "import ast,pathlib;s=pathlib.Path('ui/tab_fund_grp_health.py').read_text();t=ast.parse(s);f=[n for n in ast.walk(t) if isinstance(n,ast.FunctionDef) and n.name in ('_render_health_3tables','_render_health_table')];print([ (c.lineno, ast.unparse(c.func), ast.unparse(c.args[0])[:40] if c.args else '') for n in f for c in ast.walk(n) if isinstance(c,ast.Call) and (ast.unparse(c.func) in ('st.markdown','st.subheader') and c.args and '###' in ast.unparse(c.args[0]) or ast.unparse(c.func).startswith(('render_','_render_')))])"
+        st.markdown("#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）")
+        _gone = ["🧭 核心 / 衛星資產屬性分布"]
+        if show_screener:
+            _gone.append("🎯 選基金（低基期進場點）")
+        _gone += [
+            "🔴 淘汰候選紅區",
+            "📊 健診大表 / 健診總表**的表身**（含 4D Grade、σ 位階、買賣點）"
+            "——「📊 健診大表」的標題上面還印著，但底下沒有表；"
+            "「健診總表」連標題都不會出現",
+            "🩺 基金體檢 PK", "🔀 換標決策", "🧭 景氣位階適配",
+            "📈 多基金績效比較圖", "📋 逐檔配息明細（含「持有 meta」與「配息事件」兩張表）",
+            "5 格 KPI 摘要（檢查檔數 / 健康 / 警示 / 吃本金 / 累積配息）",
+            "MoneyDJ 資料新鮮度 banner",
+        ]
+        # 逐檔原因**寫在這裡**(不只指向下方),沿用本檔 2026-08-05 稽核「必修 4:
+        # 失敗摘要前置」的同一個理由 —— 使用者要先知道為什麼,再知道少了什麼。
+        # ⚠️ 已知冗餘,據實登記:`_render_health_table()` 結尾的「#### ❌ 抓取失敗」
+        # 會把同一份原因再印一次。修掉它要動 `_render_health_table` 的失敗區塊
+        # (它同時服務「部分失敗」路徑),不在本批範圍(§8.4 step 4);
+        # 而且「部分失敗」路徑本來就是同樣的前置+詳列兩段式,此處與它一致。
+        st.error(
+            f"❌ 這次輸入的 {len(rows)} 檔**全部抓取失敗**：\n\n"
+            + "\n".join(f"- **{r.get('code', '?')}**：{r.get('error', '?')}"
+                        for r in rows)
+            + "\n\n因此本頁以下區塊**本次都不會出現**"
+              "（是這次沒抓到資料，不是功能被拿掉）：\n\n"
+            + "\n".join(f"- {_g}" for _g in _gone)
+        )
         _render_health_table(rows, funds_extra=funds_extra)
         return
 

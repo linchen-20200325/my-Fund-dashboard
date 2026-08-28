@@ -103,16 +103,34 @@ class TestRegistrySubdataFreshness:
 # ══════════════════════════════════════════════════════════════
 class TestTab2RiskCardDedup:
     def test_shared_helper_defined_and_used_twice(self):
+        """M9 去重鎖:同款 flex-div HTML 全檔只能有一份(在 helper 內)。
+
+        2026-08-28 Q4 更新:原斷言是 `count >= 3   # 1 def + 2 call sites`。
+        Q4 把 partial 資料視圖(死分支的 body)換掉之後,production 只剩
+        **1 個 def + 1 個 `label_style="long"` 呼叫**,舊斷言必然失敗。
+        調整的是**計數**,不是 M9 要守的東西 —— M9 的實質守衛是下面那條
+        「同款 style 字串只出現 1 次」,它一字未動、仍然有效。
+        ⚠️ **函式名 `..._used_twice` 自此起是舊名、與實況不符**(現在只有 1 個
+        call site)。**刻意不改名**:改名會讓 CI 歷史上的這條 test id 斷掉,
+        而 M9 這個代號是靠它被追溯的。讀到名字的人請以本 docstring 為準。
+        """
         src = _src("ui/tab2_single_fund.py")
         assert "def _risk_1y_rows_html(" in src
-        assert src.count("_risk_1y_rows_html(") >= 3   # 1 def + 2 call sites
+        assert src.count("_risk_1y_rows_html(") >= 2   # 1 def + 1 call site（Q4 後）
         # 同款 flex-div style 只應存在於 helper 內(1 次)
         assert src.count("display:flex;justify-content:space-between;padding:5px 10px;") == 1
 
     def test_helper_label_styles(self):
+        """兩種 label_style 都要能渲染。
+
+        ⚠️ `"short"` 自 2026-08-28 Q4 起 **production 0 caller**(理由與撤銷條件
+        見 `_risk_1y_rows_html` docstring)。本測試**明示**傳入 `label_style="short"`,
+        不再靠預設值 —— 這樣讀測試的人一眼看得出它測的是防禦性分支,
+        而不是誤以為 production 還在走那條路。
+        """
         from ui.tab2_single_fund import _risk_1y_rows_html
         tbl = {"一年": {"標準差": 12.3, "Sharpe": 0.8, "Alpha": 1.1, "Beta": 0.9}}
-        short = _risk_1y_rows_html(tbl)
+        short = _risk_1y_rows_html(tbl, label_style="short")
         long = _risk_1y_rows_html(tbl, label_style="long")
         assert "標準差(1Y)" in short and "12.3" in short
         assert "波動 σ(1Y)" in long and "12.3%" in long   # long 版數值型加 %

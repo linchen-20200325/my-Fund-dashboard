@@ -149,7 +149,19 @@ class TestTab2NavPlaceholderGuard(unittest.TestCase):
         self.assertEqual(safe_float(9.5), 9.5)
 
     def test_tab2_no_bare_float_on_nav(self):
-        """源碼守衛:partial 視圖與買賣點段不得再裸 float() MoneyDJ 值。"""
+        """源碼守衛:買賣點段不得再裸 float() MoneyDJ 值。
+
+        ⚠️ **2026-08-28 Q4 更新:拿掉了一條要求「死碼必須存在」的斷言。**
+        原本還有一句 `assertIn("_safe_float(_p_nav)", src)` —— `_p_nav` 是
+        **partial 資料視圖**的區域變數,而那個視圖長在一條 production 恆不觸發的
+        分支上,Q4 已把該分支的 body 換成 2 行誠實訊息,`_p_nav` 隨之消失。
+        繼續留著那句 = **要求一段死碼必須存在**,任何人想清掉它都會被本測試擋下來。
+        **拿掉的是「必須有」,不是「不准有」** —— 上面兩條 `assertFalse`
+        (不准出現裸 `float(_p_nav` / 裸 `float(m.get("nav")`)**一字未動**,
+        所以 partial 視圖若哪天回來,裸 float 一樣會被擋。
+        (v19.331 原本要防的 bug 是「MoneyDJ 失敗時 nav_latest 是 "—"/"N/A" 字串,
+         裸 float() 直接 ValueError 炸頁」;那條防線靠的是 assertFalse,不是 assertIn。)
+        """
         import re
         with open("ui/tab2_single_fund.py", encoding="utf-8") as f:
             src = f.read()
@@ -158,7 +170,6 @@ class TestTab2NavPlaceholderGuard(unittest.TestCase):
                          "partial 視圖仍有裸 float(_p_nav…)")
         self.assertFalse(re.search(r"(?<!_safe_)float\(m\.get\(\"nav\"", src),
                          "買賣點段仍有裸 float(m.get(\"nav\")…)")
-        self.assertIn("_safe_float(_p_nav)", src)
         self.assertIn("_safe_float(m.get(\"nav\"))", src)
 
 

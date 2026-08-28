@@ -420,14 +420,28 @@ def test_complete_view_risk_rows_omit_duplicated_sharpe(tab2_mod) -> None:
 
 
 def test_partial_view_risk_rows_keep_sharpe(tab2_mod) -> None:
-    """partial 視圖上方沒有帶期間標籤的 Sharpe 格，所以這裡仍要留。"""
-    html = tab2_mod._risk_1y_rows_html(_RISK_TABLE_FIXTURE)
+    """`label_style="short"` 分支要留 Sharpe 列。
+
+    ⚠️ 2026-08-28 Q4 起這是**防禦性分支，production 0 caller**（原本唯一的
+    caller 是 partial 資料視圖，而那個視圖長在一條 production 恆不觸發的分支上，
+    body 已於 Q4 換成 2 行誠實訊息）。理由與撤銷條件見
+    `ui/tab2_single_fund._risk_1y_rows_html` 的 docstring。
+    本測試改為**明示** `label_style="short"`，不再靠預設值 —— 讓讀者一眼看出
+    它測的是防禦性分支，而不是誤以為 production 還在走這條路。
+    原本的理由（partial 視圖上方沒有帶期間標籤的 Sharpe 格）保留於此供追溯。
+    """
+    html = tab2_mod._risk_1y_rows_html(_RISK_TABLE_FIXTURE, label_style="short")
     assert "Sharpe(1Y)" in html
 
 
 def test_risk_rows_missing_table_renders_dashes(tab2_mod) -> None:
-    """邊界：空表 / 缺欄位 → 一律破折號，不得填 0（§1）。"""
-    html = tab2_mod._risk_1y_rows_html({})
+    """邊界：空表 / 缺欄位 → 一律破折號，不得填 0（§1）。
+
+    ⚠️ 同上，走的是 `label_style="short"` 這條 Q4 之後 production 0 caller 的
+    防禦性分支，故明示傳入。（`"long"` 的同款邊界由
+    `tests/test_review_fixes_v19_347.py::test_na_string_passthrough` 覆蓋。）
+    """
+    html = tab2_mod._risk_1y_rows_html({}, label_style="short")
     assert "—" in html
     assert ">0<" not in html and ">0.00<" not in html
 
