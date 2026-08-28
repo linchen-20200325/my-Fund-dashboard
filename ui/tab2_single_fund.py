@@ -18,6 +18,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ui.helpers.render_state import not_ready, system_error
+# ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。預設全空 → 本檔行為與合併前完全相同。
+from ui.helpers.fund_research.merge_context import (
+    PAGE_HEADER as _MERGED_PAGE_HEADER,
+    SHARED_SEARCH as _MERGED_SHARED_SEARCH,
+    owned_by_merged_page as _merged_page_owns,
+)
 
 from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
@@ -268,7 +274,10 @@ def render_single_fund_tab() -> None:
     from ui.helpers.story_nav import (
         render_flow_nav, render_story_nav, tab_label as _tab_label_t2,
     )
-    st.markdown(f"## {_tab_label_t2('fund')}")
+    # 合併頁（③ 基金研究）已在共用頂部畫過頁面大標時，這裡不再畫第二個 `##`。
+    # 只讓掉標題那一行 —— flow_nav / story_nav / caption 一律照舊（它們帶的是本模式的資訊）。
+    if not _merged_page_owns(_MERGED_PAGE_HEADER):
+        st.markdown(f"## {_tab_label_t2('fund')}")
     render_flow_nav("fund")      # 巨觀:第 ② 層 基金核心分析
     render_story_nav("fund")
     st.caption("輸入 MoneyDJ 代碼或網址，即時抓取淨值 / 持股 / 配息 / 風險指標")
@@ -354,28 +363,32 @@ def render_single_fund_tab() -> None:
                 if _nh_tr and _nh_tr.get("note"):
                     st.caption(("✅ " if _nh_tr.get("merged") else "⏳ ") + _nh_tr["note"])
 
-    # ── 關鍵字搜尋（折疊）──
-    with st.expander("🔍 關鍵字搜尋境外基金（TDCC / FundClear）", expanded=False):
-        c_kw, c_btn = st.columns([4,1])
-        with c_kw:
-            keyword = st.text_input("基金關鍵字", placeholder="安聯、收益成長、摩根、聯博...",
-                label_visibility="collapsed", key="fund_keyword")
-        with c_btn:
-            do_search = st.button("🔍 搜尋", type="primary", use_container_width=True, key="btn_search")
-        if do_search and keyword.strip():
-            with st.spinner(f"搜尋「{keyword}」中..."):
-                results = tdcc_search_fund(keyword.strip())
-                st.session_state.tdcc_results = results
-                if not results:
-                    st.warning("⚠️ 查無結果，請直接使用上方 MoneyDJ 網址輸入")
-                else:
-                    st.success(f"✅ 找到 {len(results)} 檔基金")
-        results = st.session_state.get("tdcc_results",[])
-        if results:
-            options = {f"{r.get('基金名稱','')} | {r.get('基金代碼','')}": r for r in results}
-            sel = st.selectbox(f"選擇基金（{len(results)} 筆）", list(options.keys()), key="tdcc_select")
-            fc  = options[sel].get("基金代碼","")
-            st.info(f"💡 代碼：**{fc}** → 在上方輸入框貼入代碼即可分析")
+    # 合併頁（③ 基金研究）把「找代號」工具升成兩個模式共用的頂部（線框 §03 原文：
+    # 「保留 🔍 關鍵字搜尋境外基金（TDCC / FundClear）…合併後上升為兩模式共用的『找代號』工具」）。
+    # 由合併頁畫時，這裡不再畫第二份；舊入口（app.py 直接呼叫本函式）旗標為空 → 行為不變。
+    if not _merged_page_owns(_MERGED_SHARED_SEARCH):
+        # ── 關鍵字搜尋（折疊）──
+        with st.expander("🔍 關鍵字搜尋境外基金（TDCC / FundClear）", expanded=False):
+            c_kw, c_btn = st.columns([4,1])
+            with c_kw:
+                keyword = st.text_input("基金關鍵字", placeholder="安聯、收益成長、摩根、聯博...",
+                    label_visibility="collapsed", key="fund_keyword")
+            with c_btn:
+                do_search = st.button("🔍 搜尋", type="primary", use_container_width=True, key="btn_search")
+            if do_search and keyword.strip():
+                with st.spinner(f"搜尋「{keyword}」中..."):
+                    results = tdcc_search_fund(keyword.strip())
+                    st.session_state.tdcc_results = results
+                    if not results:
+                        st.warning("⚠️ 查無結果，請直接使用上方 MoneyDJ 網址輸入")
+                    else:
+                        st.success(f"✅ 找到 {len(results)} 檔基金")
+            results = st.session_state.get("tdcc_results",[])
+            if results:
+                options = {f"{r.get('基金名稱','')} | {r.get('基金代碼','')}": r for r in results}
+                sel = st.selectbox(f"選擇基金（{len(results)} 筆）", list(options.keys()), key="tdcc_select")
+                fc  = options[sel].get("基金代碼","")
+                st.info(f"💡 代碼：**{fc}** → 在上方輸入框貼入代碼即可分析")
 
     # ── 分析結果 ──
     fd = st.session_state.fund_data

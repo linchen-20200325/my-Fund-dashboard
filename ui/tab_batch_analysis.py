@@ -19,6 +19,11 @@ import pandas as pd
 import streamlit as st
 
 from ui.helpers.render_state import system_error
+# ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。預設全空 → 本檔行為與合併前完全相同。
+from ui.helpers.fund_research.merge_context import (
+    PAGE_HEADER as _MERGED_PAGE_HEADER,
+    owned_by_merged_page as _merged_page_owns,
+)
 from ui.helpers.fund_grp_health.unified import (
     BATCH_NUMERIC_COLUMNS,
     BATCH_UNIFIED_COLUMNS,
@@ -252,7 +257,11 @@ def _build_df(codes: list[str], rows: dict) -> pd.DataFrame:
 def render_batch_analysis_tab() -> None:
     # 稽核 H1：H1 原寫死「批次基金分析」，分頁列是「📦 批次分析」—— 同頁兩個名字。
     from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tb
-    st.markdown(f"## {_tab_label_tb('batch')}")
+    # 合併頁（③ 基金研究）已在共用頂部畫過頁面大標時，這裡不再畫第二個 `##`。
+    # 只讓掉標題那一行 —— flow_nav 與下方那段 caption（含「400 檔約 30~40 分鐘」
+    # 這個使用者據以決定要不要按下去的預期說明）一律照舊，不得跟著消失。
+    if not _merged_page_owns(_MERGED_PAGE_HEADER):
+        st.markdown(f"## {_tab_label_tb('batch')}")
     render_flow_nav("batch")   # 巨觀:第 ② 層 基金核心分析
     st.caption(
         "上傳或貼上基金代號清單 → 每檔跑**與「組合健診」同一張大表**(評分/報酬/風險/配息/"
