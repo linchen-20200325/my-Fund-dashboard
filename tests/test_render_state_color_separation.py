@@ -172,3 +172,97 @@ def test_business_alert_is_not_an_error_box():
     calls = _run(business_alert, title="🔴 淘汰候選 2 檔", lines=["- A", "- B"])
     assert "error" not in calls, calls
     assert "markdown" in calls, calls
+
+
+# ══════════════════════════════════════════════════════════════════
+# 方向 B：「還沒設定 / 還沒載入」不得畫成警示色
+#
+# 兩條規則刻意用**兩種不同的抓法**，因為任一條單獨都有死角：
+#   B1 結構：`if not <某個金鑰變數>:` 這個分支裡不准出現警示色 widget。
+#            —— 抓得到「條件對、顏色錯」，抓不到把條件寫成別的形狀的。
+#   B2 語彙：警示色 widget 的字面訊息不得帶「還沒設定」這組詞。
+#            —— 抓得到條件寫成任何形狀的，抓不到把文案整組換掉的。
+# 兩條一起，要繞過必須同時改掉條件寫法**和**全部文案 —— 那已經不是回歸，是改設計。
+# ══════════════════════════════════════════════════════════════════
+ALARM_WIDGETS = {"error", "warning"}
+
+# 「這是一個憑證 / 資料源設定」的變數命名家族（本 repo 實際用法）。
+_CREDENTIAL_HINTS = ("_KEY", "KEY", "_TOKEN", "TOKEN", "SECRET", "CREDENTIAL")
+
+# 「還沒設定」的語彙家族。放在測試裡而不是散在各檔，是為了讓它有一個可以被讀、
+# 被增修的地方；新增一種說法時把它加進來，而不是去改十幾個 assert。
+NOT_CONFIGURED_PHRASES = ("未設定", "未設置", "需設置", "尚未設定", "缺少必要金鑰",
+                          "請在 Streamlit Cloud Secrets 填入")
+
+UI_SOURCES = sorted((ROOT / "ui").rglob("*.py")) + [ROOT / "app.py"]
+
+
+def _is_credential_name(name: str) -> bool:
+    up = name.upper()
+    return any(h in up for h in _CREDENTIAL_HINTS)
+
+
+def _literal_text(call: ast.Call) -> str:
+    """把呼叫參數裡所有字串常數串起來（f-string 的常數段也算）。"""
+    out = []
+    for sub in ast.walk(call):
+        if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+            out.append(sub.value)
+    return "".join(out)
+
+
+@pytest.mark.parametrize("path", UI_SOURCES, ids=lambda p: str(p.name))
+def test_b1_missing_credential_branch_is_never_alarm_coloured(path: pathlib.Path):
+    """`if not FRED_KEY:` / `if not GEMINI_KEY:` 這種分支 → 一律灰色說明。
+
+    金鑰沒填是「你還沒設定」，不是「系統壞了」。畫成紅／橘會把真紅燈的份量稀釋掉
+    （線框 §03：同一個條件，全站曾經有五種畫法）。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    bad = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test = node.test
+        if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)):
+            continue
+        names = [n for n in _names_in(test) if _is_credential_name(n)]
+        if not names:
+            continue
+        for stmt in node.body:                      # 只看這個分支自己，不看巢狀 else
+            for call in _st_calls_named(stmt, ALARM_WIDGETS):
+                bad.append(f"{path.relative_to(ROOT)}:{call.lineno} "
+                           f"if not {names[0]}: → st.{call.func.attr}")
+    assert not bad, (
+        "「金鑰／憑證沒設定」被畫成警示色；請改走 "
+        "ui.helpers.render_state.not_ready()：\n  " + "\n  ".join(bad)
+    )
+
+
+@pytest.mark.parametrize("path", UI_SOURCES, ids=lambda p: str(p.name))
+def test_b2_not_configured_wording_is_never_alarm_coloured(path: pathlib.Path):
+    """換個條件寫法就繞過 B1 —— 這一條從訊息本身抓。"""
+    if path.name == "test_render_state_color_separation.py":
+        return
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    bad = []
+    for call in _st_calls_named(tree, ALARM_WIDGETS):
+        text = _literal_text(call)
+        hit = [p for p in NOT_CONFIGURED_PHRASES if p in text]
+        if hit:
+            bad.append(f"{path.relative_to(ROOT)}:{call.lineno} "
+                       f"st.{call.func.attr}(…{hit[0]}…)")
+    assert not bad, (
+        "「還沒設定」被畫成警示色；請改走 ui.helpers.render_state.not_ready()：\n  "
+        + "\n  ".join(bad)
+    )
+
+
+def _st_calls_named(node: ast.AST, attrs: set[str]):
+    for sub in ast.walk(node):
+        if (isinstance(sub, ast.Call)
+                and isinstance(sub.func, ast.Attribute)
+                and sub.func.attr in attrs
+                and isinstance(sub.func.value, ast.Name)
+                and sub.func.value.id == "st"):
+            yield sub

@@ -13,6 +13,8 @@ import os
 import re
 import streamlit as st
 
+from ui.helpers.render_state import NOT_READY_MARK
+
 from fund_fetcher import get_proxy_config
 from infra.oauth import build_authorize_url
 from repositories.policy_repository import get_sheet_title
@@ -69,7 +71,9 @@ def render_sidebar(*,
             _m = re.search(r'@(.+)', _proxy_cfg.get("http",""))
             _proxy_ep = _m.group(1) if _m else "已設定"
         st.markdown(f"{'✅' if fred_key else '❌'} FRED　　{'✅' if gemini_key else '❌'} Gemini　　{'✅' if _proxy_cfg else '⚠️'} Proxy")
-        st.caption(f"🔒 {_proxy_ep}" if _proxy_cfg else "⚠️ Proxy 未設定（MoneyDJ 可能被擋）")
+        # ⬜ 而非 ⚠️:沒設 Proxy 是「還沒設定」,不是故障(線框 §03)。
+        st.caption(f"🔒 {_proxy_ep}" if _proxy_cfg
+                   else f"{NOT_READY_MARK} Proxy 未設定（MoneyDJ 可能被擋）")
         st.divider()
         if st.sidebar.button("🔍 測試 Proxy 連線", use_container_width=True):
             import requests as _req

@@ -15,6 +15,10 @@ import streamlit as st
 st.set_page_config(page_title="基金戰情室", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
 
+# ⚠️ 一律放在 set_page_config 之後 —— 本檔的硬規則是「第一個 Streamlit 指令必須是
+# set_page_config」,任何在它之前的 import 都可能在 submodule 頂層先射出一個 st.* 呼叫。
+from ui.helpers.render_state import not_ready
+
 import os, datetime
 
 TW_TZ = datetime.timezone(datetime.timedelta(hours=8))
@@ -119,11 +123,11 @@ def _check_secrets():
     if not FRED_KEY:   _missing.append("FRED_API_KEY")
     if not GEMINI_KEY: _missing.append("GEMINI_API_KEY")
     if _missing:
-        st.error(
-            f"⚠️ 缺少必要金鑰：{', '.join(_missing)}。"
-            "請至 Streamlit Cloud → Settings → Secrets 新增後重新部署。",
-            icon="🔑",
-        )
+        # 2026-08-28 客戶拍板:金鑰沒設定是「你還沒設定」,不是「系統壞了」。
+        # 原本每次開 App 最上方都是一條紅字,把真紅燈的份量稀釋掉(線框 §03)。
+        # ⚠️ 只改顏色,不改位置 —— 搬到「⑤ 設定與診斷」屬下一批(Q3)。
+        not_ready(f"尚未設定金鑰：{', '.join(_missing)}",
+                  where="Streamlit Cloud → Settings → Secrets 新增後重新部署")
 
 _check_secrets()
 

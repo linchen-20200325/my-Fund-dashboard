@@ -15,6 +15,7 @@ from __future__ import annotations
 import streamlit as st
 
 from shared.colors import BG_DARK_NAVY_4, MATERIAL_RED
+from ui.helpers.render_state import not_ready
 
 
 def render_ai_summary_section(
@@ -38,7 +39,8 @@ def render_ai_summary_section(
     if show_l3:
         st.divider()
     if not (gemini_key and show_l3):
-        st.caption("⚠️ 未設定 GEMINI_API_KEY，AI 分析功能關閉")
+        not_ready("未設定 GEMINI_API_KEY，AI 分析功能關閉",
+                  where="Streamlit Cloud → Settings → Secrets 的 `GEMINI_API_KEY`")
         return
 
     # ── 三色燈號阻斷(Core Protocol v2.0 Ch.1) ─────────

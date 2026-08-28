@@ -32,6 +32,8 @@ from typing import Optional
 
 import streamlit as st
 
+from ui.helpers.render_state import not_ready
+
 from services.ai_prompts import build_structured_summary_prompt
 
 
@@ -101,7 +103,8 @@ def render_ai_summary_widget(
 
         if run:
             if not _pool:
-                st.warning("❗ 未設定 Gemini API Key（secrets `GEMINI_API_KEY`）— 無法呼叫 AI。")
+                not_ready("未設定 Gemini API Key，無法呼叫 AI",
+                          where="Streamlit Cloud → Settings → Secrets 的 `GEMINI_API_KEY`")
                 return
             prompt = build_structured_summary_prompt(
                 tab_label=tab_label, snapshot=snapshot,

@@ -24,6 +24,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.render_state import not_ready
+
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
     GH_BG_CARD,
@@ -822,7 +824,8 @@ def render_macro_tab() -> None:
     # 函數 render_indicator_map() 保留在本檔頂層供 tab6 import 復用
 
     if not FRED_KEY:
-        st.warning("⚠️ 請在 Streamlit Cloud Secrets 填入 FRED_API_KEY")
+        not_ready("尚未設定 FRED 金鑰，無法載入總經資料",
+                  where="Streamlit Cloud → Settings → Secrets 的 `FRED_API_KEY`")
     else:
         _last_upd = st.session_state.get("macro_last_update")
         if _last_upd:
@@ -1533,5 +1536,10 @@ def render_macro_tab() -> None:
             _safe_section("🤖 AI 景氣判斷總結", render_ai_summary_section,
                           ind, phase, GEMINI_KEY,
                           show_l3=_show_l3, mac_pct=_ai_mac_pct)
-    else:
+    elif FRED_KEY:
         st.info("👆 點擊「載入總經資料」開始分析")
+    else:
+        # 沒金鑰時載入列整塊不渲染(本檔 `if not FRED_KEY:` 分支),
+        # 這句話原本指向一顆這條路徑上根本不存在的按鈕(線框 §04①)。
+        not_ready("尚未設定 FRED 金鑰，無法載入總經資料",
+                  where="Streamlit Cloud → Settings → Secrets 的 `FRED_API_KEY`")
