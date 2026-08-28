@@ -197,25 +197,65 @@ def test_mode_switch_is_one_toggle_not_a_second_layer_of_tabs():
 # ══════════════════════════════════════════════════════════════════
 # 2) 共用頂部：子頁的第二份標題 / 第二份搜尋框必須被關掉
 # ══════════════════════════════════════════════════════════════════
-def _calls_under_merge_guard(relpath: str) -> list[str]:
-    """回傳「被 `_merged_page_owns(...)` 條件式包住」的那些 st 呼叫的 attr 名。
+#: 檔案 → 該檔的「頁面 render 函式」。守衛只看這支函式裡面，
+#: 免得同檔其他函式裡剛好有一個被保護的呼叫就讓斷言過關。
+_PAGE_RENDERERS: dict = {
+    "ui/tab2_single_fund.py": "render_single_fund_tab",
+    "ui/tab_batch_analysis.py": "render_batch_analysis_tab",
+}
+
+
+def _st_calls_in_page_renderer(relpath: str):
+    """回傳該檔 render 函式內每個 `st.<attr>(...)` 呼叫的
+    `(attr, 第一個參數的原始碼, 是否被 `_merged_page_owns(...)` 守住)`。
+
+    ⚠️ **為什麼要連「第一個參數」一起回傳**（2026-08-28 稽核補強，理由寫下來免得改回去）：
+    本函式的第一版只回傳 attr 名，斷言寫成「`markdown` 有出現在被守住的呼叫裡」。
+    那條斷言**擋不住真正會發生的那種壞法** —— 實測突變：把真正的 `## 標題`
+    移出守衛、另外在守衛底下塞一個 `st.markdown("decoy")`，
+    **兩個 parametrize case 全部照樣綠燈**（2026-08-28 實跑，`P1` / `P2`）。
+    也就是舊斷言驗的是「有沒有人被守住」，不是「**該被守住的那一個**有沒有被守住」。
+    現在改成把每個呼叫的第一個參數一起取出來，由呼叫端指名要驗哪一個。
 
     AST 而非字串：註解或 docstring 裡寫 `_merged_page_owns` 不會讓本函式誤判。
     """
     tree = ast.parse((ROOT / relpath).read_text(encoding="utf-8"))
-    out: list[str] = []
-    for node in ast.walk(tree):
+    fname = _PAGE_RENDERERS[relpath]
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name == fname)
+
+    guarded_ids: set = set()
+    for node in ast.walk(fn):
         if not isinstance(node, ast.If):
             continue
-        guarded = any(isinstance(c, ast.Call)
-                      and getattr(c.func, "id", "") == "_merged_page_owns"
-                      for c in ast.walk(node.test))
-        if not guarded:
+        if not any(isinstance(c, ast.Call)
+                   and getattr(c.func, "id", "") == "_merged_page_owns"
+                   for c in ast.walk(node.test)):
             continue
         for sub in ast.walk(node):
-            if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
-                out.append(sub.func.attr)
+            guarded_ids.add(id(sub))
+
+    out: list[tuple] = []
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            # `ast.unparse` 而非 `get_source_segment`：後者每次都要重切整份原始碼，
+            # 在 2,700 行的 tab2 上會把這條測試從 0.3 秒拖到 15 秒。
+            arg0 = ast.unparse(node.args[0]) if node.args else ""
+            out.append((node.func.attr, arg0, id(node) in guarded_ids))
     return out
+
+
+def _is_h2(arg_src: str) -> bool:
+    """這個 `st.markdown` 的第一個參數是不是**頁面大標**（恰好兩個 `#`）？
+
+    `ast.unparse` 後長這樣：`f'## {_tab_label_t2(\'fund\')}'` / `'### ① 基本資料'`。
+    先剝掉 f 前綴與引號，再看是不是 `## ` 開頭（`###` 以下是區塊小標，不算）。
+    """
+    _t = arg_src.lstrip()
+    while _t[:1] in ("f", "F", "r", "R", "b", "B"):
+        _t = _t[1:]
+    _t = _t.lstrip("\"'")
+    return _t.startswith("## ")
 
 
 @pytest.mark.parametrize("relpath", ["ui/tab2_single_fund.py",
@@ -223,12 +263,23 @@ def _calls_under_merge_guard(relpath: str) -> list[str]:
 def test_sub_page_h2_title_is_behind_the_merge_guard(relpath):
     """合併頁自己畫大標時，子頁不准再畫第二個 `##`。
 
-    突變實驗（2026-08-28 實跑，兩檔各一次）：把
-    `if not _merged_page_owns(_MERGED_PAGE_HEADER):` 那一行連同縮排拿掉
-    （標題無條件畫）→ **本條轉紅**（`markdown` 不在被保護的呼叫裡）。
+    驗的是「**該檔 render 函式內的每一個 `## ` 大標**都在守衛底下」，
+    不是「有某個 markdown 在守衛底下」—— 後者擋不住「守錯人」那種壞法（見
+    `_st_calls_in_page_renderer` 的 docstring，那裡記了實測會漏掉的突變）。
+
+    突變實驗（2026-08-28 實跑）：
+    - M5a/M5b：拿掉 `if not _merged_page_owns(_MERGED_PAGE_HEADER):` → **轉紅**（兩檔各一次）。
+    - P1/P2（稽核加驗）：標題移出守衛、守衛底下改塞 `st.markdown("decoy")`
+      → 舊斷言**綠燈**（漏掉）、本版**轉紅**。
     """
-    assert "markdown" in _calls_under_merge_guard(relpath), (
-        f"{relpath} 的頁面大標沒有被合併頁旗標保護 —— 合併後會出現兩個 `##` 標題")
+    _h2 = [(a, g) for attr, a, g in _st_calls_in_page_renderer(relpath)
+           if attr == "markdown" and _is_h2(a)]
+    # 先擋「標題被改名/刪掉 → 0 個 case 也算通過」這種無聲消失。
+    assert _h2, f"{relpath} 的 render 函式裡找不到任何 `## ` 頁面大標 —— 斷言失去對象"
+    _unguarded = [a for a, g in _h2 if not g]
+    assert not _unguarded, (
+        f"{relpath} 的頁面大標沒有被合併頁旗標保護 —— 合併後會出現兩個 `##` 標題："
+        f"{_unguarded}")
 
 
 def test_single_fund_keyword_search_is_behind_the_merge_guard():
@@ -237,9 +288,17 @@ def test_single_fund_keyword_search_is_behind_the_merge_guard():
     突變實驗（2026-08-28 實跑）：把 `if not _merged_page_owns(_MERGED_SHARED_SEARCH):`
     拿掉、expander 拉回原縮排 → **本條轉紅**（`expander` 不在被保護的呼叫裡）。
     """
-    guarded = _calls_under_merge_guard("ui/tab2_single_fund.py")
-    assert "expander" in guarded and "text_input" in guarded, (
-        "個基深掘的關鍵字搜尋沒有被合併頁旗標保護 —— 合併後畫面上會有兩份搜尋框")
+    _calls = _st_calls_in_page_renderer("ui/tab2_single_fund.py")
+    _search_expanders = [(a, g) for attr, a, g in _calls
+                         if attr == "expander" and "關鍵字搜尋" in a]
+    assert _search_expanders, (
+        "找不到「關鍵字搜尋」的 expander —— 斷言失去對象（改名了？）")
+    _unguarded = [a for a, g in _search_expanders if not g]
+    assert not _unguarded, (
+        f"個基深掘的關鍵字搜尋沒有被合併頁旗標保護 —— 合併後畫面上會有兩份搜尋框：{_unguarded}")
+    # 搜尋框本體（輸入框 + 按鈕）也必須跟著被關掉，不能只關外層 expander。
+    assert any(attr == "text_input" and g for attr, _a, g in _calls), (
+        "關鍵字輸入框沒有被守住")
 
 
 def test_merge_context_flag_is_scoped_and_restored_even_on_error():
@@ -261,6 +320,49 @@ def test_merge_context_flag_is_scoped_and_restored_even_on_error():
             assert owned_by_merged_page(PAGE_HEADER) is True
             raise RuntimeError("boom")
     assert owned_by_merged_page(PAGE_HEADER) is False, "例外之後旗標沒有還原"
+
+
+def test_merge_context_flag_does_not_leak_across_threads():
+    """旗標必須是**每條執行緒各一份** —— 這是 2026-08-28 稽核抓到的真缺陷的守衛。
+
+    為什麼這條非有不可（原設計為什麼會壞）
+    --------------------------------------
+    旗標原本是模組層 `set()`，理由寫的是「Streamlit 一次 rerun 是單執行緒由上而下跑完」。
+    那句話**只在同一個 session 內成立**：Streamlit 是**一個 process、每個 session 一條
+    ScriptRunner 執行緒**，模組層變數因此跨 session 共用。於是 session A 停在
+    `merged_page_owns(...)` 區塊內（該區塊涵蓋整支 `render_single_fund_tab()`，
+    含網路抓取，可以跑好幾秒）時，session B 從**舊入口**進同一支函式 → 讀到 A 的旗標 →
+    **B 的頁面大標與搜尋框無聲消失**。
+
+    突變實驗（2026-08-28 實跑）：把 `_STATE = threading.local()` / `_owned()` 改回
+    模組層 `_OWNED: set = set()` → **本條轉紅**（另一條執行緒看到 True）。
+    """
+    import threading
+
+    from ui.helpers.fund_research.merge_context import (
+        PAGE_HEADER, merged_page_owns, owned_by_merged_page,
+    )
+
+    _entered, _may_exit = threading.Event(), threading.Event()
+    seen_from_other_thread: list = []
+
+    def _holder() -> None:
+        with merged_page_owns(PAGE_HEADER):
+            _entered.set()
+            _may_exit.wait(timeout=5)
+
+    t = threading.Thread(target=_holder, daemon=True)
+    t.start()
+    try:
+        assert _entered.wait(timeout=5), "持有旗標的執行緒沒有起來"
+        # 另一條執行緒（＝另一個 Streamlit session）此刻正持有旗標；本執行緒不該看見。
+        seen_from_other_thread.append(owned_by_merged_page(PAGE_HEADER))
+    finally:
+        _may_exit.set()
+        t.join(timeout=5)
+
+    assert seen_from_other_thread == [False], (
+        "合併頁的所有權旗標跨執行緒外洩 —— 另一個 session 的舊入口會無聲少掉標題與搜尋框")
 
 
 def test_merge_context_rejects_unknown_part_names():
@@ -303,6 +405,41 @@ def test_code_finder_reports_fetch_failure_as_a_system_error(monkeypatch):
     assert seen, "搜尋失敗沒有走系統紅燈 —— 使用者會以為只是查無結果"
     assert isinstance(seen[0][1], RuntimeError)
     assert _cf.RESULTS_KEY not in rec.session, "失敗竟然寫了一份（空的）結果進 session"
+
+
+def test_code_finder_failure_marks_previous_results_as_stale(monkeypatch):
+    """搜尋失敗時**保留**上一次的結果是刻意的（清掉等於沒收使用者已經查到的東西），
+    但那份清單會原樣留在下方、標題還寫「選擇基金（N 筆）」—— 看起來就像**這次**搜出來的。
+
+    §2.4：過期資料可以回，但**必須帶 is_stale 旗標**；§1：不得讓畫面看起來像成功。
+    旗標寫進既有的紅框 `hint`（使用者此刻正在看的地方），不新增視覺語彙。
+
+    突變實驗（2026-08-28 實跑）：把 `_search()` except 分支裡的 `_stale` 判斷拿掉、
+    hint 改回原本的固定字串 → **本條轉紅**（hint 沒有提到那是上一次的結果）。
+    """
+    import repositories.fund as _rf
+    import ui.helpers.fund_research.code_finder as _cf
+
+    monkeypatch.setattr(_rf, "tdcc_search_fund",
+                        lambda _kw: (_ for _ in ()).throw(RuntimeError("upstream 503")),
+                        raising=False)
+    kwargs_seen: list = []
+    monkeypatch.setattr(_cf, "system_error",
+                        lambda what, exc, **k: kwargs_seen.append(k))
+
+    with _fake_streamlit(monkeypatch, text="安聯", button=True) as rec:
+        # 上一次成功搜尋留下來的兩筆
+        rec.session[_cf.RESULTS_KEY] = [
+            {"基金名稱": "舊的一檔", "基金代碼": "OLD1"},
+            {"基金名稱": "舊的二檔", "基金代碼": "OLD2"},
+        ]
+        _cf.render_code_finder()
+
+    assert kwargs_seen, "失敗沒有走 system_error"
+    _hint = kwargs_seen[0].get("hint", "")
+    assert "上一次" in _hint, (
+        "紅框沒有講明下方那份清單是上一次的結果 —— 使用者會以為那是這次搜到的（§2.4 is_stale）")
+    assert "2" in _hint, "沒有講清楚是幾筆過期資料"
 
 
 def test_code_finder_not_searched_yet_is_grey_not_red(monkeypatch):

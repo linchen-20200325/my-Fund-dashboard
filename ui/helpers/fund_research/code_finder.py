@@ -47,9 +47,17 @@ def _search(keyword: str) -> None:
         with st.spinner(f"搜尋「{keyword}」中..."):
             results = tdcc_search_fund(keyword)
     except Exception as _e_search:  # noqa: BLE001 — 誠實上報，不吞（§1）
-        system_error("基金關鍵字搜尋失敗", _e_search,
-                     hint="這是抓取端的問題，不是「查無此基金」。"
-                          "可稍後重試，或直接在下方模式 A 貼上 MoneyDJ 代碼／網址。")
+        # ⚠️ 2026-08-28 稽核修正：失敗時**刻意不清掉**上一次的結果（清掉等於把使用者
+        # 已經查到的東西沒收），但那份清單會原樣留在下方、標題還寫「選擇基金（N 筆）」——
+        # 看起來就像**這次**搜出來的。§2.4：過期資料可以留，但**必須帶 is_stale 旗標**。
+        # 旗標寫進既有的紅框 hint（使用者此刻正在看的地方），不新增視覺語彙。
+        _stale = st.session_state.get(RESULTS_KEY) or []
+        _hint = ("這是抓取端的問題，不是「查無此基金」。"
+                 "可稍後重試，或直接在下方模式 A 貼上 MoneyDJ 代碼／網址。")
+        if _stale:
+            _hint += (f"　⚠️ 下方仍列出的 {len(_stale)} 筆是**上一次**搜尋的結果，"
+                      f"**不是**這次「{keyword}」的 —— 這次沒有拿到任何資料。")
+        system_error("基金關鍵字搜尋失敗", _e_search, hint=_hint)
         return
     st.session_state[RESULTS_KEY] = results
     if not results:

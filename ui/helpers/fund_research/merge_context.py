@@ -24,10 +24,28 @@
 `render_single_fund_tab`）也會跟著少掉標題。用 context manager + `finally` 還原，
 把「範圍」寫死在語言層，不靠紀律。
 
+為什麼旗標存在 `threading.local()` 而不是模組層全域集合
+------------------------------------------------------
+⚠️ **2026-08-28 稽核發現並修正的一個真缺陷，理由寫下來免得後人又改回去。**
+本模組原本用一個模組層 `set()`。那個寫法的理由是「Streamlit 一次 rerun 是單執行緒
+由上而下跑完」—— **那句話只對「同一個 session 內」成立**：Streamlit 是
+**每個 session 各跑一條 ScriptRunner 執行緒、共用同一個 process**，模組層變數因此
+是**跨 session 共用**的。
+
+於是會發生這件事：session A 正在合併頁裡、還停在 `merged_page_owns(...)` 區塊內
+（該區塊涵蓋整支 `render_single_fund_tab()`，含網路抓取，可以跑好幾秒），
+此時 session B 從**舊入口**進 `render_single_fund_tab()` → 讀到 A 留下的旗標 →
+**B 的頁面大標與搜尋框無聲消失**。本模組上一段才剛說要避免的那件事，
+換成跨 session 又發生一次。
+
+`threading.local()` 讓每條 ScriptRunner 執行緒各持一份，跨 session 互不可見；
+`finally` 還原則繼續負責同一執行緒內的巢狀與例外路徑。**兩者是各管一半，缺一不可。**
+
 ⚠️ 本模組不做任何渲染、不碰 streamlit —— 它只回答一個布林問題。
 """
 from __future__ import annotations
 
+import threading
 from contextlib import contextmanager
 from typing import Iterator
 
@@ -42,9 +60,18 @@ SHARED_SEARCH: str = "shared_search"
 #: `CLAUDE.md §1` Fail Loud。
 _KNOWN_PARTS: frozenset = frozenset({PAGE_HEADER, SHARED_SEARCH})
 
-#: 目前被合併頁持有的區塊。模組層單例：Streamlit 一次 rerun 是單執行緒由上而下跑完，
-#: 而本旗標的生命週期只有「合併頁呼叫子渲染函式」那幾行。
-_OWNED: set = set()
+#: 目前被合併頁持有的區塊，**每條執行緒各一份**（理由見模組 docstring：Streamlit
+#: 一個 process 服務多個 session，每個 session 各一條 ScriptRunner 執行緒）。
+_STATE = threading.local()
+
+
+def _owned() -> set:
+    """本執行緒目前持有的區塊集合（第一次取用時才建立）。"""
+    _s = getattr(_STATE, "owned", None)
+    if _s is None:
+        _s = set()
+        _STATE.owned = _s
+    return _s
 
 
 def _validate(parts: tuple) -> None:
@@ -61,7 +88,7 @@ def owned_by_merged_page(part: str) -> bool:
     未知名稱一律 `raise`（不是回 False）—— 理由見 `_validate`。
     """
     _validate((part,))
-    return part in _OWNED
+    return part in _owned()
 
 
 @contextmanager
@@ -71,10 +98,11 @@ def merged_page_owns(*parts: str) -> Iterator[None]:
     巢狀安全：離開時還原成進入前的集合，而不是清空。
     """
     _validate(parts)
-    _before = set(_OWNED)
-    _OWNED.update(parts)
+    _cur = _owned()
+    _before = set(_cur)
+    _cur.update(parts)
     try:
         yield
     finally:
-        _OWNED.clear()
-        _OWNED.update(_before)
+        _cur.clear()
+        _cur.update(_before)
