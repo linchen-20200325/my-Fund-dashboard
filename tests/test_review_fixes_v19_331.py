@@ -157,8 +157,18 @@ class TestTab2NavPlaceholderGuard(unittest.TestCase):
         分支上,Q4 已把該分支的 body 換成 2 行誠實訊息,`_p_nav` 隨之消失。
         繼續留著那句 = **要求一段死碼必須存在**,任何人想清掉它都會被本測試擋下來。
         **拿掉的是「必須有」,不是「不准有」** —— 上面兩條 `assertFalse`
-        (不准出現裸 `float(_p_nav` / 裸 `float(m.get("nav")`)**一字未動**,
-        所以 partial 視圖若哪天回來,裸 float 一樣會被擋。
+        (不准出現裸 `float(_p_nav` / 裸 `float(m.get("nav")`)**一字未動**。
+
+        ⚠️ **2026-08-28 補正:上一版在這裡寫「所以 partial 視圖若哪天回來,
+        裸 float 一樣會被擋」—— 那句話說太滿。** 它成立**有前提**:
+        兩條 assertFalse 是**逐字綁死變數名**的正規表示式(見下方原始碼:
+        負向後查 `(?<!_safe_)` 之後直接接死 `_p_nav` 與 `m.get("nav"` 兩個字面),
+        所以只在**partial 視圖回來時仍沿用 `_p_nav` 這個名字**的情況下才擋得住。
+        實證:把該分支改寫成 `_nav_raw = ...` + 裸 `float(_nav_raw)` 之後,
+        兩條 assertFalse **都不會 fire**(實跑本檔 → 9 passed)。
+        也就是說本檔守的是「**這兩個既有寫法不准回歸**」,**不是**
+        「任何裸 float 都擋得住」。要守後者需要 AST 規則(誰對 MoneyDJ 取來的值
+        呼叫 `float`),不是逐字 regex —— 已登記為待辦,本輪不做(§8.4 step 4)。
         (v19.331 原本要防的 bug 是「MoneyDJ 失敗時 nav_latest 是 "—"/"N/A" 字串,
          裸 float() 直接 ValueError 炸頁」;那條防線靠的是 assertFalse,不是 assertIn。)
         """

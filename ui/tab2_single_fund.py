@@ -515,13 +515,29 @@ def render_single_fund_tab() -> None:
                 #         → 293:    result["status"] = status      (單一賦值,無條件)
                 #   (d) production 只有一個地方寫 session_state.fund_data —— 就是本檔
                 #       `if do_load and mj_url_input.strip():` 那一段,而它是**走完**
-                #       normalize_result_state 之後才寫的:
+                #       normalize_result_state 之後才寫的。查證指令(照抄可跑):
                 #         $ grep -rn 'session_state\.fund_data *=\|session_state\["fund_data"\] *=' --include=*.py .
-                #         → ui/tab2_single_fund.py:283 + tests/test_app_apptest.py:574,641
+                #       量測日 2026-08-28 共 3 命中:本檔上述那一段(production 唯一寫入點)
+                #       + tests/test_app_apptest.py 裡兩個直接塞 session_state 的測試(見下)。
+                #       ⚠️ **刻意不抄行號**(§8.2.A.0 規則 1:行號保證會過期)——
+                #       本行上一版硬抄了一個「本檔 :<行號>」,在寫下的當天就已經偏掉。
+                #       要定位請重跑上面那條指令。
                 #
-                # ⚠️ 但「恆不觸發」只涵蓋 production:上面 (d) 的兩個測試就直接塞
-                # `"status": "ok"`(不在 {complete,partial,failed} 內)繞過 normalize —— 也就是
-                # **這個 else 對任意 status 值都是開著的**,護欄不是多餘的。
+                # ⚠️ 但「恆不觸發」只涵蓋 production:(d) 那兩個測試直接把
+                # `"status": "ok"`(不在 {complete,partial,failed} 內)塞進 session_state,
+                # **繞過 normalize_result_state** —— 也就是**這個 else 對任意 status 值
+                # 都是開著的**(依據:上面那條 grep 的兩個測試命中處,可自行覆核)。
+                #
+                # ⚠️ **「else 開著」證不到「護欄被走過」,兩件事不要混為一談。**
+                # (2026-08-28 補正:上一版在這裡宣稱「護欄不是多餘的」時把證據講得比
+                #  實際大 —— 那是**靜態推理**成立,不是實測走過。)
+                # 據實記錄:那兩個測試各自餵 400 筆非空 NAV series + 非空 metrics,
+                # 下面三個 disjunct 全為 False → **它們走的是 else 主畫面,從來沒有
+                # 進過本護欄的 body**(其中一個測試甚至斷言 `morningstar(span-extend)`
+                # 與「跨度 1825」有渲染出來,而那兩個字串只出現在 else 主畫面的
+                # st.success 裡)。→ **本護欄的 body 目前沒有任何測試走過。**
+                # 保留它的理由因此是靜態的、而且仍然成立:外層 else 對任意 status 開著,
+                # 一旦把 body 拔掉,非預期狀態會直接撞上主畫面的 `len(s)`(見下)。
                 #
                 # 為什麼不整段刪掉:刪掉要連下面的 else 一起拿掉 → 主畫面 2,100+ 行全部
                 # 反縮排(git blame 整段洗掉);而且拔掉之後任何「非預期 status + 空序列」
