@@ -118,7 +118,6 @@ my-Fund-dashboard/
 │   ├── macro_explain.py
 │   ├── macro_tw_local.py
 │   ├── macro_composite_score.py
-│   ├── macro_signal_lookback.py
 │   ├── macro_score_calibration.py
 │   ├── multi_factor_optimization.py
 │   ├── nav_history_store.py
@@ -137,6 +136,8 @@ my-Fund-dashboard/
 │   └── ledger_service.py
 │   # v19.251 退役清單:valuation.py / risk_calibration.py(shim) / macro_weights_store.py(shim)
 │   # 2026-08-28 Phase 1.4 退役清單(production 0 caller,實體刪除;v3 §01-2):
+│   #   第 2 波(第 1 波刪完才成立):services/tdcc_nav_accumulate.py
+│   #        + repositories/tdcc_nav_opendata.py + services/macro_signal_lookback.py(shim)
 │   #   L2 services/:ai_advisor_pending.py / cross_source_compare.py / switch_state_machine.py
 │   #        / fund_batch.py(user 2026-08-28 明確點名,推翻其 RETAINED-LEGACY 保留決定)
 │   #        / calibration/risk.py / calibration/signal_threshold.py
