@@ -63,12 +63,25 @@ def _fetch_rich(code: str, name: str = "", *, failures: list | None = None) -> "
     name:選股池自填名 → 當作 name_hint 傳下去,線上抓不到真名(如 ALZF9)時顯示池名,
     而非代號(v19.497)。
 
-    failures:呼叫端傳一個 list 進來收集 `(code, exc)`;**本函式自己不畫任何東西**。
-    理由(2026-08-28 稽核):本函式住在 `_pool_rows` 的逐檔迴圈裡,選股池 20 檔遇上
-    proxy 掛掉或 MoneyDJ 子網域 403(依 `CLAUDE.md §1` Fund 脈絡屬**例行**狀況)
-    → 就地畫紅燈會一次噴 20 個滿版紅框、每個底下各掛一塊技術細節。
-    那正是線框 §03 要防的「滿版警示讓真錯誤沒人看見」,只是換成紅色、更嚴重
-    —— 修「示警不足」不可以修出「示警過度」。改由呼叫端彙總成**一則**。
+    failures:呼叫端傳一個 list 進來收集 `(code, exc)`;**本函式自己不畫任何東西**
+    (它住在 `_pool_rows` 的逐檔迴圈裡,就地渲染 = N 檔失敗噴 N 個框)。
+
+    ⚠️ **根因更正(2026-08-28 第二輪稽核 N1)** —— 本 docstring 前一版寫的
+    「proxy 掛掉 / MoneyDJ 子網域 403 → 就地畫紅燈會噴 20 個滿版紅框」**不成立**,
+    那句話是**沒查證就寫下的承重宣稱**(§-2 規則 6 點名的 `db4c139` 同型病)。
+    實際查證 `services/fund_row.py`:`process_one_fund` 整段包在一個 try 裡,
+    結尾 `except Exception` 一律 `return {"ok": False, "error": ...}`(:232-233),
+    另有五條提前 return 也是 `ok=False`(:87 上游 error / :103 NAV 抓不到 /
+    :112 幣別未知 / :121 FX 抓不到 / :133 配息計算失敗)。
+    **它幾乎不 raise** —— proxy / 403 走的是 `fd["error"]` → :87 的 `ok=False`。
+
+    所以真正的破口不是「N 個紅框」,而是**主要失敗路徑整條靜默**:
+    `ok=False` 時原本直接掉到 `return None`,`r["error"]` 被整個丟掉,
+    該檔從換股建議裡靜靜消失 —— 那正是線框 §03 的「示警不足」本身。
+    現在 `ok=False` 也會進 `failures`,由呼叫端彙總成一則上報。
+    `except` 分支保留(接得到的是兩個 import 失敗、`_pool_oauth_client()` 或
+    `_build_fund_dict` 拋錯),但它是**罕見路徑**,不是本機制的主要服務對象。
+
     ⚠️ `failures` 沒傳時**維持靜默**(舊行為),不是靜默吞例外 —— 呼叫端有責任收。
     """
     try:
@@ -78,7 +91,11 @@ def _fetch_rich(code: str, name: str = "", *, failures: list | None = None) -> "
         r = process_one_fund(code, _PRINCIPAL, name_hint=name, oauth_client=_pool_oauth_client())
         if r.get("ok") and r.get("_fund_raw"):
             return _build_fund_dict(r["_fund_raw"], code, _PRINCIPAL, name_hint=name)
-    except Exception as _e:  # noqa: BLE001
+        # ⭐ 主要失敗路徑:`process_one_fund` 回 ok=False(不 raise)。
+        #    §1:`r["error"]` 不可丟掉 —— 丟掉就是這一檔靜靜從換股建議裡消失。
+        if failures is not None:
+            failures.append((code, RuntimeError(str(r.get("error") or "未知原因"))))
+    except Exception as _e:  # noqa: BLE001 — 罕見路徑:import / oauth / _build_fund_dict 拋錯
         if failures is not None:
             failures.append((code, _e))
     return None
@@ -89,17 +106,22 @@ def _report_pool_fetch_failures(failures: list) -> None:
 
     「略過」= 這幾檔會從換股建議裡靜靜消失,使用者看不出少了它們 ——
     正是線框 §03 點名的「示警不足」,故仍走系統紅燈,只是一次講完。
+
+    收到的多半是 `process_one_fund` 回的 `ok=False`(被包成 RuntimeError),
+    少數是真的拋出來的例外 —— 兩者都是「這一檔沒進候選」,對使用者是同一件事。
     """
     if not failures:
         return
     _codes = "、".join(str(c) for c, _ in failures)
-    # 技術細節只掛第一個例外(它們多半同源:proxy / 子網域 403);
-    # 其餘代號已列在標題,不另開 N 塊 traceback。
+    # ⚠️ 逐檔原因一律列進 hint,不只掛第一個 —— 失敗原因可能各不相同
+    # (NAV 抓不到 / 幣別未知 / FX 抓不到 / 上游 error…),只講一個等於吞掉其餘(§1)。
+    # 技術細節(traceback)仍只掛第一個,那是給工程師的,代號與原因已在文字裡講完。
+    _lines = "；".join(f"{c}：{str(e) or type(e).__name__}" for c, e in failures)
     system_error(
         f"選股池 {len(failures)} 檔補抓失敗,已從候選中排除:{_codes}",
         failures[0][1],
         hint=f"下方換股建議未涵蓋這 {len(failures)} 檔,不代表它們不值得換。"
-             "（技術細節為其中第一檔;多檔同時失敗通常同源,例如 proxy 或子網域 403。）",
+             f"逐檔原因 —— {_lines}",
     )
 
 

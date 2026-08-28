@@ -49,11 +49,15 @@ def _render_one_matrix(*, title: str, subtitle: str, result: "dict | None",
         )
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
-        # 🟠 同 M3 判準:這個 try 從頭到尾只在畫一張熱力圖,失敗後下方
-        # 「影子基金 N 對」的結論(同一份 result["matrix"] 算出來的)照樣印 ——
-        # 數字全在且全對,掉的只有視覺化。
-        system_error("相關性熱力圖渲染失敗", e, degraded=True,
-                     hint="下方影子基金判定不受影響,少的只有這張熱力圖。")
+        # 🔴 **不是** degraded(2026-08-28 第二輪稽核 A4 更正)。
+        # 我上一輪把它降成 🟠,理由寫「數字全在且全對」—— 那句話不成立:
+        # 兩兩相關係數**只存在於這張圖的 `texttemplate` 裡**,圖沒畫出來,
+        # 低於影子門檻的那些係數就整組消失(下方只列 ≥ 門檻的配對)。
+        # 依 `render_state.system_error` 自己寫的通過條件(每一個數字都還在且還是對的),
+        # 這裡不合格 → 維持系統紅燈。
+        system_error("相關性熱力圖渲染失敗", e,
+                     hint="下方「影子基金 N 對」仍會列出超過門檻的配對,"
+                          "但低於門檻的兩兩相關係數只在這張圖上,現在看不到了。")
 
     if _shadow:
         st.markdown(f"**⚠️ 偵測到 {len(_shadow)} 對影子基金({label} ≥ {threshold})**")

@@ -183,9 +183,18 @@ def friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = "
     # `"NoneType: None"` —— 而本函式允許 caller 傳一個**自己建構的** exception
     # 來報告「狀態不對」(例:fetcher 回傳 error token,沒有真的拋)。照舊直接串上去,
     # 使用者展開「🔧 技術細節」會看到一段**假 traceback**,那本身就是 §1 的造假。
-    # 故:有 active exception 才附 traceback,沒有就明說這是狀態回報。
-    if _sys_mod.exc_info()[0] is not None:
-        _detail = f"{type(exc).__name__}: {exc}\n\n" + _tb_mod.format_exc()
+    #
+    # ⚠️ 2026-08-28 第二輪稽核 N2 更正:第一版用**全域** `sys.exc_info()` 判斷,
+    # 那是錯的判準,它問的是「**現在**在不在 except 區塊裡」,而不是「**這個** exception
+    # 有沒有 traceback」。兩個實害:
+    #   (a) 在 handler **外面**上報一個真的捕捉到的例外(本批 `_report_pool_fetch_failures`
+    #       就是這個形狀 —— 迴圈內收集、迴圈外彙總上報)→ 畫面會印
+    #       「此為狀態回報，非捕捉到的例外」,那是**一句假話**,而且真 traceback 被丟掉;
+    #   (b) 在**不相干**的 except 內傳一個自建 exception → 會附上**別的例外**的 traceback。
+    # 改問例外物件自己:`exc.__traceback__`。有就用它格式化,沒有才說是狀態回報。
+    _tb = getattr(exc, "__traceback__", None)
+    if _tb is not None:
+        _detail = "".join(_tb_mod.format_exception(type(exc), exc, _tb))
     else:
         _detail = (f"{type(exc).__name__}: {exc}\n\n"
                    "（此為狀態回報，非捕捉到的例外，因此沒有 traceback 可附。）")

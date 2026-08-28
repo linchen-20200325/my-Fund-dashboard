@@ -327,7 +327,8 @@ def _render_per_fund_news_expanders(funds: list) -> None:
                 # 2026-08-28 稽核 B6:這裡沒有 exception —— 是前十大持股名稱全空
                 # (拿不到成分股名),屬「資料不足」不是「失敗」。灰色是對的,
                 # 但文案寫「失敗」配灰色正是本批要消滅的模糊,改為據實描述。
-                not_ready("這檔基金的持股名稱資料不足，無法查個股新聞")
+                not_ready("這檔基金的持股名稱資料不足，無法查個股新聞",
+                          where="🔬 個基深掘 Tab 查看該基金的前十大持股原始資料")
                 continue
 
             _ss_key = f"_tab5grp_stknews_{_code}"
