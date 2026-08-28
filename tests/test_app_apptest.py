@@ -376,10 +376,22 @@ def test_tab1_macro_done_seeded_renders_composite_without_exception(
     )
 
 
-def test_tab1_missing_fred_key_shows_warning(monkeypatch: pytest.MonkeyPatch) -> None:
-    """缺少 FRED_API_KEY 時，_check_secrets() 應顯示「缺少必要金鑰」錯誤訊息。
+def test_tab1_missing_fred_key_is_reported_as_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """缺少 FRED_API_KEY → 必須**點名這把 key**，而且用**灰色說明**、不是紅字。
 
-    回歸目的：保護 secrets 缺失時的降級提示，避免使用者面對 redacted error。
+    回歸目的（原意保留）：保護 secrets 缺失時的降級提示，避免使用者面對 redacted error。
+
+    ⚠️ 2026-08-28 客戶拍板（線框 fund-empty-state-wireframe.html §03）：
+    「未載入／未設定一律改灰色說明」—— 金鑰沒填是「你還沒設定」，不是「系統壞了」。
+    原本每次開 App 最上方都是一條紅字，把真紅燈的份量稀釋掉。
+    **有意識的政策變更，不是把測試改鬆**：斷言從一條變兩條，而且兩條方向相反 ——
+      1. 有沒有講 → 灰色說明必須點名這把 key（**不釘文案**，只釘 key 名稱）；
+      2. 用什麼顏色 → error / warning 兩種警示 widget 都**不得**出現這把 key。
+    舊版只驗第 1 點的一個變形，且把文案「缺少必要金鑰」逐字釘死；
+    現在文案可以改、顏色不能錯。
+
     monkeypatch.delenv：清除前面 module-scope fixture 對 os.environ 的污染。
     """
     monkeypatch.delenv("FRED_API_KEY", raising=False)
@@ -388,13 +400,30 @@ def test_tab1_missing_fred_key_shows_warning(monkeypatch: pytest.MonkeyPatch) ->
     app.secrets["FRED_API_KEY"] = ""
     app.secrets["GEMINI_API_KEY"] = "test-gemini-key"
     app.run()
-    error_blobs = " ".join(
-        str(getattr(e, "value", e) or "") for e in app.error
+
+    def _texts(elements) -> list[str]:
+        return [str(getattr(e, "value", e) or "") for e in elements]
+
+    # 「還沒設定」的語彙家族（SSOT 在 tests/test_render_state_color_separation.py，
+    # 那支是全站規則；這裡只取用來認出「這一則講的是沒設定」）。
+    not_configured = ("未設定", "未設置", "需設置", "尚未設定", "缺少必要金鑰")
+
+    grey = _texts(app.caption)
+    assert any("FRED_API_KEY" in t for t in grey), (
+        "缺金鑰時必須用灰色說明點名缺的是哪一把；"
+        f"實際 caption elements: {grey!r}"
     )
-    assert "缺少必要金鑰" in error_blobs, \
-        f"未偵測到缺金鑰錯誤訊息；實際 error elements: {error_blobs!r}"
-    assert "FRED_API_KEY" in error_blobs, \
-        "錯誤訊息應點名缺失的具體 key"
+
+    # ⚠️ 逐則檢查，不能把全站 error/warning 串成一坨再搜 —— Tab5 的診斷區有一則
+    # 合理的警示會提到 `FRED_API_KEY`（「連既有的 FRED_API_KEY 都讀不到 → 整份
+    # secrets 沒生效」），那講的是**另一件事**（secrets 整份壞掉），不是「你還沒設定」。
+    # 串起來搜會把它誤判成違規。判準是**同一則**裡同時出現「這把 key」和「還沒設定」。
+    offenders = [t for t in _texts(app.error) + _texts(app.warning)
+                 if "FRED_API_KEY" in t and any(p in t for p in not_configured)]
+    assert not offenders, (
+        "「還沒設定」不可畫成紅字／橘字 —— 那會稀釋真紅燈的份量（線框 §03）；"
+        f"違規元素: {offenders!r}"
+    )
 
 
 # ════════════════════════════════════════════════════════════
