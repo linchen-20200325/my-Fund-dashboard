@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.helpers.render_state import system_error
+from ui.helpers.render_state import business_alert, system_error
 
 from shared.colors import GH_BG_PRIMARY, GH_FG_SECONDARY, GRAY_55, INFO_BLUE, TRAFFIC_GREEN
 from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None(不畫成 0% 假柱)
@@ -861,16 +861,18 @@ def _render_health_3tables(rows: list[dict],
     ]
     _replace = [r for r in _div_rows if r.get("_verdict") == "replace"]
     if _replace:
-        _lines = "\n".join(
-            f"- **{r.get('code', '')}** "
-            f"{str(r.get('基金名', '') or '')[:20]}："
-            f"{r.get('_換標的 detail', '') or r.get('換標的建議', '')}"
-            for r in _replace
-        )
-        st.error(
-            f"### 🔴 淘汰候選 {len(_replace)} 檔（ 4 規則觸發，建議換標的）\n\n"
-            f"{_lines}\n\n"
-            "↓ 完整指標見下方 ① 健康分析 / ② 配息相關表。"
+        # 2026-08-28 客戶拍板:業務紅燈 ≠ 系統紅燈(線框 §03)。
+        # 這一塊是**分析成功了**、答案是「這幾檔該換」—— 那是成果,不是故障。
+        # 原本用 st.error,和「系統崩潰」共用同一個紅框:使用者無法從顏色分辨
+        # 「系統壞了、別信畫面上的數字」還是「數字可信、去換基金」——
+        # 兩者要他做的事**完全相反**。改為紅字卡片(紅色留著,錯誤框拿掉)。
+        business_alert(
+            f"🔴 淘汰候選 {len(_replace)} 檔（4 規則觸發，建議換標的）",
+            [f"• <b>{r.get('code', '')}</b> "
+             f"{str(r.get('基金名', '') or '')[:20]}："
+             f"{r.get('_換標的 detail', '') or r.get('換標的建議', '')}"
+             for r in _replace],
+            footer="↓ 完整指標見下方健診大表。",
         )
 
     # v19.411:①② 表不再單獨渲染,欄位已併入「健診大表」。

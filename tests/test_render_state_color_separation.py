@@ -266,3 +266,102 @@ def _st_calls_named(node: ast.AST, attrs: set[str]):
                 and isinstance(sub.func.value, ast.Name)
                 and sub.func.value.id == "st"):
             yield sub
+
+
+# ══════════════════════════════════════════════════════════════════
+# 方向 C：業務紅燈 vs 系統紅燈
+#
+# 線框 §03 最重要的一條：
+#   系統紅燈 = 「這個數字**不可信**」；業務紅燈 = 「這個數字**可信**，而且它很難看」。
+#   兩者要使用者做的事完全相反 —— 前者要他別採信、去修；後者要他採信、去行動。
+#   用同一個紅色，等於把「不要相信這個畫面」和「相信這個畫面並據以行動」畫成同一件事。
+#
+# 這裡守的形狀：`st.error`（＝系統紅框）**只給「這次執行出了問題」用**。
+# 判準是**這個呼叫拿不拿得到失敗證據**，不是它的文案：
+#   - 手上有 exception，或
+#   - 訊息是從某個 error / 失敗欄位組出來的（`…["error"]`、`_err`、`load_error` …）
+# 兩者皆無 → 它畫的是一個「分析成功之後的結論」或一則常駐警語，不該用系統紅框。
+# ══════════════════════════════════════════════════════════════════
+_FAILURE_EVIDENCE = ("error", "err", "fail", "exc", "traceback")
+
+def _has_failure_evidence(call: ast.Call) -> bool:
+    """這個呼叫手上有沒有「失敗的證據」？
+
+    ⚠️ 只掃**參數**，不掃 `call.func` —— `st.error` 的 attr 本身就是 "error"，
+    把它算進去會讓每一個 st.error 都自證有證據，規則當場失效。
+    （這個坑實際踩過：第一版寫成掃整個 call，突變測試不會紅。）
+    """
+    blob = ""
+    for arg in [*call.args, *(k.value for k in call.keywords)]:
+        for sub in ast.walk(arg):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                blob += " " + sub.value.lower()
+            elif isinstance(sub, ast.Name):
+                blob += " " + sub.id.lower()
+            elif isinstance(sub, ast.Attribute):
+                blob += " " + sub.attr.lower()
+    return any(k in blob for k in _FAILURE_EVIDENCE)
+
+
+# 錯誤呈現的實作本身（它們就是那個紅框），不在受檢範圍內。
+_RED_BOX_IMPLEMENTATIONS = {"session.py", "render_state.py"}
+
+# 本批（客戶拍板的第一批）實際轉換的兩處業務／常駐紅框所在檔案。
+BATCH_SCOPE_C = {"tab_fund_grp_health.py", "tab6_manual.py"}
+
+# 範圍外、**已登記待後批處理**的既有 bare `st.error`（量測日 2026-08-28）。
+# ⚠️ 這不是豁免清單，是**待辦的可見化**：它是一個 ratchet，數字只准往下走。
+# 多數是表單驗證與中文失敗訊息（「投入總額必須大於 0」「讀回失敗」），
+# 判定要逐條看業務語意，不在「只做顏色」這一批的範圍內（§8.4 step 4：不自作主張擴大範圍）。
+BARE_ERROR_RATCHET = 22
+
+
+def _bare_error_calls(path: pathlib.Path):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    inside_except = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ExceptHandler):
+            inside_except.update(id(c) for c in _st_calls_named(node, {"error"}))
+    return [c for c in _st_calls_named(tree, {"error"})
+            if id(c) not in inside_except and not _has_failure_evidence(c)]
+
+
+@pytest.mark.parametrize("path", sorted(p for p in UI_SOURCES if p.name in BATCH_SCOPE_C),
+                         ids=lambda p: str(p.name))
+def test_c_system_red_box_is_reserved_for_actual_failures(path: pathlib.Path):
+    """`st.error` 不得拿來畫「業務結論」或「常駐警語」。
+
+    抓法刻意不看文案：只看這個呼叫**手上有沒有失敗證據**。
+    「🔴 淘汰候選 N 檔」拿不到任何 exception / error 欄位 —— 因為分析成功了，
+    它報的是成果；那就不該長得跟系統崩潰一樣。
+    """
+    bare = _bare_error_calls(path)
+    assert not bare, (
+        f"{path.relative_to(ROOT)}：st.error 拿不到任何失敗證據 —— "
+        "業務結論／常駐警語不可與系統崩潰共用紅框。"
+        "業務警訊走 render_state.business_alert()，常駐提醒走 st.warning()。\n  "
+        + "\n  ".join(f"line {c.lineno}" for c in bare)
+    )
+
+
+def test_c_bare_error_backlog_only_shrinks():
+    """範圍外的既有 bare `st.error` 是 ratchet：可以慢慢還，不可以再借。
+
+    本批只做顏色，逐條判定那 22 處的業務語意不在範圍內（§8.4 step 4）；
+    但新寫的 code 不准再往這個數字上加。
+    """
+    total = sum(len(_bare_error_calls(p)) for p in UI_SOURCES
+                if p.name not in BATCH_SCOPE_C | _RED_BOX_IMPLEMENTATIONS)
+    assert total <= BARE_ERROR_RATCHET, (
+        f"拿不到失敗證據的 st.error 從 {BARE_ERROR_RATCHET} 增為 {total} —— "
+        "新的業務結論／常駐警語請走 business_alert() / st.warning()，不要再加進紅框。"
+    )
+
+
+def test_c_business_verdict_uses_the_business_entrypoint():
+    """反向護欄：上一條可以靠「整塊刪掉」通過，這一條擋掉那條逃生路。"""
+    src = (ROOT / "ui" / "tab_fund_grp_health.py").read_text(encoding="utf-8")
+    assert "business_alert(" in src, (
+        "健診頁的「淘汰候選」業務警訊不見了 —— 它是分析的主要成果，"
+        "改顏色不等於可以拿掉（§1）。"
+    )
