@@ -820,7 +820,10 @@ L3↛L1 直呼／跨層上行 import。**禁止引用 v3 的「三層」去主�
   `yfinance` 直抓 ＝ **抓取**，`st.session_state` 快取 ＝ **存放**。
   它**不受 EX-PASSTHRU-1 保護**（那條豁免的是「UI 呼叫住在 L1 的 public fetcher」，
   而 B1 的取數實作**就長在 UI 檔裡**，正是 v3 要「抽出並搬遷」的東西），
-  也**不受 EX-UICACHE-1 保護**（見 §8.2.A.1 該列條件 ②：被快取的須為本地持久化讀取，非外部 HTTP）。
+  也**不受 EX-UICACHE-1 保護**（見 §8.2.A.1 該列條件 ②）。
+  ⚠️ **2026-08-28 第三輪稽核同步更正本交叉引用（舊表述加刪除線保留，不是漏刪）**：本句原寫
+  ~~（見 §8.2.A.1 該列條件 ②：被快取的須為**本地持久化讀取，非外部 HTTP**）~~—— **該條件的舊表述本身已被改寫**（理由：`Google Sheets` 讀取其實就是遠端 API 往返，舊表述把它含混成「本地持久化」）。
+  **B1 不受保護這個結論不變**（它是 `yfinance` 直抓、完全不在 EX-CRUD-1 射程內），**變的只是引用的理由要以改寫後的條件 ② 為準**。
 
   ⚠️ **本次處置：只登記，不動工。登記 ≠ 動工。**
   依 **§-1**「沒有 user 指派、沒有實際 bug 觸發 → 停手等指令」，且本批授權範圍是**純文件更正**
@@ -830,13 +833,16 @@ L3↛L1 直呼／跨層上行 import。**禁止引用 v3 的「三層」去主�
   `repositories/`，快取一併下沉；在那之前本列只作為現況登記。**
   ⚠️ **本列不得被引用為動工授權**，也**不得**被引用來發動一輪「全 UI 掃私有取數」的巡邏（§-1）。
   📌 **已登記為 §8.3.P 的 `P-UIHTTP-1`**（附「由誰查」與「觸發點」），
-  以免這條登記變成沒有出口的待辦。**C 類的 gspread 問題同樣登記為 `P-UIGSPREAD-1`。**
+  以免這條登記變成沒有出口的待辦。**C 類的 gspread 問題同樣登記為 `P-UIGSPREAD-1`；C 類的 `subprocess` 對外往返（sidebar 的 GitHub 版本比對）已於 2026-08-28 第三輪稽核補登為 `P-UISUBPROC-1`** —— ⚠️ **上一輪只登記了 gspread 那一項，把 sidebar 那一項點名後就擱著（寫「本段不下判定」卻沒有由誰查、沒有觸發點），等於留下一個沒有出口的待辦，本輪補齊。**
 
   **C 類｜其他對外往返（非 HTTP client 形態）—— 本段只點名存在，不逐一判定**
 
   - `ui/sidebar.py` — 「♻️ 強制同步 GitHub 最新邏輯」按鈕內 `import subprocess`，跑
     `git ls-remote origin main`（**實際會連到 GitHub**）比對 local HEAD vs remote main。
     它**不經任何 HTTP client**，因此**上一輪與本輪的字表都掃不到它的網路性質**（`subprocess` 是本輪才加進字表的）。
+    📌 **2026-08-28 第三輪稽核補：已登記為 §8.3.P 的 `P-UISUBPROC-1`**（附「待答問題／由誰查／觸發點」）。
+    ⚠️ **補登原因**：本段原本只寫「不下判定」，**沒有任何 `P-` 登記、沒有由誰查、沒有觸發點** ——
+    那正是 §8.3.P 前言要防的「**待查證沒有出口 ＝ 實質永久豁免**」，**上一輪只修了一半**。
   - `ui/tab3_portfolio.py` / `ui/tab3_t7_ledger.py` / `ui/helpers/io/oauth_state.py` /
     `ui/helpers/cloud_io.py` 等 — **gspread client 呼叫**（如 `_sa.open_by_key(...)` 存取探測），
     實際是**往返 Google Sheets API 的網路呼叫**，但形態上是 SDK 方法、不含任何 `requests` 字樣。
@@ -1890,7 +1896,7 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 | **EX-CRUD-1** | UI 直呼以下 L1 repository:`policy_repository` / `snapshot_repository` / `ledger_repository` / `batch_checkpoint` / `pool_repository` / `portfolio_perf_repository`(v19.407 補登前四;v19.428 補登 pool;v19.430 補登 portfolio_perf;Google Sheets / 本地 JSON 持久化) | L3 UI 可直接 import L1 CRUD repository | §8.2 規則「L3 不得直呼 L1 — cache 才能集中」的核心理由是**外部 HTTP fetcher 的 TTL cache 須集中管理**。本組 repository 為**本地持久化**(read+write 同檔),**無 `@_ttl_cache` / `@st.cache_data` 裝飾**,亦無外部 HTTP I/O — 不存在「cache 分散」問題。為純 CRUD 加 L2 pass-through wrapper = §8.1 step 6「用不到的抽象」反例。`ui/helpers/cloud_io.py` / `v2_editor.py` / `oauth_state.py` + `ui/tab3_portfolio.py` / `tab3_t7_ledger.py` 直接 import 為允許用法;`ui/tab_batch_analysis.py` 直呼 `repositories/batch_checkpoint.py`(批次分析磁碟續存,v19.407)為同精神新增。**v19.428**:`repositories/pool_repository.py`(換股顧問選股池,GS worksheet + 本地 JSON fallback,read+write 同檔、無 cache 裝飾、無外部 HTTP)由 `ui/helpers/fund_grp_health/switch_advisor_section.py` 直呼,同精神新增(檔頭已註解指回本表)。**v19.430**:`repositories/portfolio_perf_repository.py`(組合績效永久快照,GS worksheet `_portfolio_perf_history` + 本地 JSON fallback,read+write 同檔、無 cache 裝飾、無外部 HTTP)由同一 `switch_advisor_section.py` 直呼,同精神新增。F-H6 v19.79 決策。 |
 | **EX-PASSTHRU-1**(v19.251 補登 3 + v19.273 補登 1 + v19.377 B2c 補登 2 entry) | UI 直呼以下 L1 facade fetcher(共 8 組):<br>- `repositories.fund.tdcc_search_fund`(`ui/tab2_single_fund.py:147`)— 多 endpoint(TDCC 3-2 + 3-4)整合 + dedup + nav merge + keyword match<br>- ~~`repositories.fund.get_latest_fx`~~ **(v19.247 R16 升級)**:9 caller files / 18 call sites 全 migrate 至 L2 `services.fund_service.get_latest_fx`(thin facade 呼 L1 實作,L1 業務 0 改動)<br>- `repositories.news_repository.fetch_market_news`(`ui/tab1_macro.py:1188` / `ui/tab3_t7_ledger.py:2710`)— 5 RSS feeds 並聯 + keyword filtering + systemic risk classify + dedup + sort<br>- ~~**`repositories.fund.fetch_fund_by_key` / `fetch_nav_history_long`**(`ui/tab_crisis_backtest.py`)~~ **(v19.314 退役)**:危機回測 UI 整功能拔除,此 2 條 UI 直呼例外一併退役<br>- **`repositories.fund.diagnose_fx_sources`**(`ui/tab5_data_guard.py:832` lazy)— Tab5 資料看板 diagnostic,L1 內部用 + UI 直呼合理<br>- **`repositories.macro_tw_local_repository.{fetch_ndc_signal_history,fetch_tw_pmi_local,fetch_tw_export_yoy,fetch_foreign_consecutive_days}`**(`ui/tab1_macro.py:821` lazy,4 fn 一組)— TW 本地總經 self-contained L1 fetcher(FinMind 單源),v19.197 P1-4 從 `macro_tw_local_fetch.py` 下沉 repositories,UI 直呼取數後在 L3 端 regime 判讀。**v19.268 D8 #7 後**:UI 端 `_safe_tw()` wrapper 已加 schema 驗證(`validate_ndc_signal_dict` 等),取數即驗,純 fetch facade 無 L2 業務需上提。<br>- **`repositories.macro_repository.fred_get_next_release_date`**(`ui/helpers/io/data_registry.py:139` lazy / `ui/tab5_data_guard.py:1237` lazy)— thin FRED 揭露日 helper(動態 TTL 計算 / Tab5 診斷用),無 L2 業務邏輯,UI 直呼取數。**v19.377 B2c 補登**(全域排毒 Wave B2 架構越權查緝點名;user 核准混合案:thin pass-through 登例外而非建 facade,避 §8.1 step 6「用不到的抽象」)。<br>- **`repositories.news_repository.fetch_stock_news`**(`ui/helpers/fund_grp_health/ai.py:232` / `ui/tab2_single_fund.py:1300`)— self-contained 個股新聞 fetcher(feedparser Google News 逐股搜尋),與**已登錄兄弟** `fetch_market_news` 同精神(self-contained news fetcher,UI 直呼);為兩兄弟一致處理故一併登錄。**v19.377 B2c 補登**。 | L3 UI 直接 import L1 facade(共 8 組);v19.247 R16 後 `get_latest_fx` 已上提 L2 wrapper | **v19.273 Phase 2 TOP 3 補登原因**:`tab1_macro.py:821` 4 個 TW macro local fetcher UI 直呼為 v19.197 P1-4 下沉後的既有 pattern,屬「self-contained L1 fetcher + UI 直呼取數」(F-GRAY-2 同精神),原僅有 v19.197 commit 紀錄未在例外表登錄,PHASE1_AUDIT_DELTA.md TOP 3 點名補登避免讀例外表者誤判為違憲。**v19.251 補登原因**:R8 EX-L1ORCH-1 退役註腳口頭認可 `tab_crisis_backtest.fetch_fund_by_key`,但未在例外表正式登錄;另 `fetch_nav_history_long` / `diagnose_fx_sources` 同屬 lazy import + 單一 caller pattern,一併補登。**v19.247 R16 部分升級記錄**:9 UI caller 全 migrate `from services.fund_service import get_latest_fx`,L2 thin facade 呼 L1 實作(允許 L2→L1 方向)。L1 業務 0 改動。**升級觸發條件**:user 明確要求集中 cache、新增 source、後處理 bug。F-H6 v19.79 原決策 + R15/R16 對齊。 |
 | ~~**EX-L1ORCH-1**~~(v19.240 R8 升級退役) | ~~L1 fund orchestrator import L2 `calc_metrics`~~ | ~~抓 + 打包 facade~~ | **退役原因**:v19.240 深挖發現實際違憲 3 個 L2 symbol(`calc_metrics` + `reconcile_fund_annual_return` + `reconcile_dividend_yield`)+ 大量 L2 業務判斷(perf 注入決策 / window 閾值 / % vs decimal 換算 / 對帳)push 回 L1,**升級觸發條件 (a)+(b) 均達標**。R8 採方案 (b) 拆 return + L2 wrapper:`services.fund_service.finalize_fund_metrics()` + `fetch_fund_by_key_enriched` / `fetch_fund_from_moneydj_url_enriched` 兩 wrapper 上提 L1 業務邏輯,L1 純化為 raw fetch + packaging。L1→L2 violation 從 3 → 0。Migrate 4 個 caller site(`ui/helpers/v2_editor.py` / `services/moneydj_fetcher.py` x3),其餘 `tab_crisis_backtest.py` 用 raw `fetch_fund_by_key`(只取 series 不需 metrics)。 |
-| **EX-UICACHE-1**(2026-08-28 補登) | **依模式判定,不列行號**(沿用姊妹 repo `my-stock-dashboard` §8.2.A.0 規則 1;⚠️ **本檔無 §8.2.A.0 一節**,該規則出自姊妹 repo)—— L3 `ui/**` 內以 `@st.cache_data` 自建薄快取,且**同時**滿足下列 4 條:<br>① **TTL 走 `shared/ttls.py` SSOT**,檔內**不寫死秒數**(§3.3);<br>② 被快取的是**本地持久化讀取**(Google Sheets / 本地 JSON),**非外部 HTTP 取數**;<br>③ **有明確的寫後失效路徑**,且該路徑**真的被寫入端呼叫**(不是只定義不接線);<br>④ 快取只擋「重複讀」,**不改變任何顯示語意**。<br>**2026-08-28 實測符合者 4 處 / 2 檔**(量測日;「會漂移的量測值標日期」同樣沿用姊妹 repo §8.2.A.0 規則 4)。⚠️ **掃描指令找到 5 個裝飾點,其中 1 個(`ndc.py`)經逐一驗證後不符條件 ②,已移出本例外(見下)** ——**「掃到幾個」不等於「符合幾個」,不得直接把掃描列數當成例外成員數**:<br>- `ui/helpers/v2_editor.py` — `_cached_load_policy_v2` / `_cached_list_policies`(`TTL_1MIN`),失效走 `_invalidate_cache()`(檔內 4 個寫入點實呼);<br>- `ui/tab5_data_guard.py` — `_cached_nh_status` / `_cached_nh_coverage`(`TTL_5MIN`),失效走 `_clear_nh_caches()`(匯入寫入後實呼);<br>- ~~`ui/helpers/macro/ndc.py` — `_cached_ndc_score`(`TTL_15MIN`,**寫法為 `@_st_mod.cache_data`**)。⚠️ **本檔無失效路徑,也不需要** —— NDC 為**月頻唯讀**指標,UI 端**不存在寫入動作**,故第 ③ 條以「**無寫入端**」滿足,不是「漏做」。**它與前 4 個的豁免理由不同,讀表時不要混為一談。**~~<br>　→ ⛔ **2026-08-28 同日經稽核移出本例外**(**有意識的更正,不是漏刪**;依據:**實測**,鏈路見下)。**理由:它不滿足本列自訂的條件 ②。** 實測鏈路:`_cached_ndc_score()` → 同檔 `_fetch_ndc_score()` → `repositories/macro_tw_local_repository.py::fetch_ndc_signal_history` → `fetch_url(FINMIND_BASE, params=...)` —— **被快取的是外部 HTTP(FinMind API),不是條件 ② 所要求的「本地持久化讀取(Google Sheets / 本地 JSON)」**。<br>　⚠️ **它同時當場命中本列自己寫的升級觸發條件**:(1)「開始快取**外部 HTTP 取數** → 那一刻起 cache 必須回 L1 集中」**本來就已經成立**;(3)「同一份資料長出第二層快取(兩層 TTL 疊加 = 失效語意不可推理)」—— `fetch_ndc_signal_history` 在 **L1 已帶 `@_ttl_cache(ttl_sec=TTL_15MIN)`**(實測),UI 再疊一層 `TTL_15MIN`。<br>　**一個例外不能收一個當場觸發自己升級條件的成員** —— 那等於例外把自己寫的門檻當不存在。**現況:登記為待判定,見 §8.3「尚未判定(待派工查證)」;依 §-1 無觸發,本批不動工、不改任何 `.py`。** | L3 UI 自建 `@st.cache_data` 薄快取層 | **與姊妹 repo `my-stock-dashboard` 的 `V-SMART-CACHE-1`(判定為**違憲待修**)差別在哪 —— 這是本列存在的理由,務必看清楚**:那一列的病是 **(a) TTL 全是 inline literal、未走 SSOT(同時違 §3.3)** ＋ **(b) 快取的是外部 HTTP 取數,本該在 L1 集中**。**本列(移出 `ndc.py` 後的 4 處)兩個病都沒有**:TTL 全部 import 自 `shared/ttls.py`;被快取的是 **Google Sheets / 本地 JSON 持久化讀取**,與 **EX-CRUD-1 同一族**(該例外已認定此類 read+write 同檔的本地持久化不存在「cache 分散」問題)。<br>⚠️ **補正紀錄(誠實揭露,§-2 規則 6)**:上面這句「**兩個病都沒有**」在本例外**補登當下並不成立** —— 當時成員含 `ui/helpers/macro/ndc.py`,而它快取的正是**外部 HTTP**,也就是 V-SMART-CACHE-1 的病 (b)。**這句正是本列用來與姊妹 repo 那條「違憲待修」劃清界線的關鍵句,卻對其中一個成員為假。** 移出 `ndc.py` 後本句才成立。**教訓:例外的自訂條件必須逐一成員實跑驗證,不得以整組宣稱代替** —— 依姊妹 repo §8.2.A.0 規則 5,豁免理由必須是「**為什麼這個位置是對的**」;把一個不符條件的成員收進來,就是**把違憲寫成合憲**。<br>**為什麼不下沉 L2(這才是關鍵)**:現行失效語意是「**UI 的寫入動作觸發清除**」——`_invalidate_cache` / `_clear_nh_caches` 都由**寫入端就地呼叫**。下沉 L2 後,**L2 拿不到 UI 的寫入事件**,只能改成純 TTL 過期 → 使用者存檔後畫面會顯示**寫入前的舊值**,直到 TTL 到期。**那是把「§1 不顯示過期值」換成「等一分鐘」,是行為退化,不是架構改善。**<br>**事故依據(就地記載於 `ui/tab5_data_guard.py` 該快取上方,非本表事後補述)**:未加此層前,任一分頁的任一次互動都會重打 Google Sheets;**25 檔實測「rerun 起算 17 秒後 `WebSocket onclose`」,2026-08-14 實機兩次重現**。移除本層 = 回到該事故。<br>**升級觸發條件(任一命中即脫離本例外、須搬 L1/L2)**:(1) 開始快取**外部 HTTP 取數**(那一刻起 cache 必須回 L1 集中);(2) TTL 改成**檔內寫死秒數**(違 §3.3,本例外前提消失);(3) 同一份資料在 **L2 也長出第二層快取**(兩層 TTL 疊加 = 失效語意不可推理);(4) 快取開始**改變顯示語意**(例如失敗時回舊值卻不標 `is_stale`,違 §2.4)。 |
+| **EX-UICACHE-1**(2026-08-28 補登) | **依模式判定,不列行號**(沿用姊妹 repo `my-stock-dashboard` §8.2.A.0 規則 1;⚠️ **本檔無 §8.2.A.0 一節**,該規則出自姊妹 repo)—— L3 `ui/**` 內以 `@st.cache_data` 自建薄快取,且**同時**滿足下列 4 條:<br>① **TTL 走 `shared/ttls.py` SSOT**,檔內**不寫死秒數**(§3.3);<br>② ~~被快取的是**本地持久化讀取**(Google Sheets / 本地 JSON),**非外部 HTTP 取數**~~ → **2026-08-28 第三輪稽核改寫(有意識的更正,不是漏刪;決策者:稽核回修組)**:**被快取的必須是「憲法既有認定為『本地持久化 CRUD』的那一類讀取」(＝ EX-CRUD-1 的射程),而不是「不經網路」。**<br>　⚠️ **據實講清楚,不再用括號含混過去**:`Google Sheets` 的讀取是**經 gspread SDK 往返 Google Sheets API 的遠端網路呼叫**(逐成員鏈路實測見下方驗證段 **③**),**不是**本地檔案 I/O。舊表述把它寫進「本地持久化」的括號裡,會讓讀者以為它不上網 —— **那是假的**。<br>　⛔ **本例外賴以成立的,是 EX-CRUD-1「此類 read+write 同檔的持久化 CRUD 不存在 cache 分散問題」這個【既有認定】;而該認定本身目前登記為【尚未查證】(§8.3.P **`P-UIGSPREAD-1`**)。該列若判定 gspread 直呼**不**等同「本地持久化」,**本例外當場失去依據,須整列重審**(已寫入 `P-UIGSPREAD-1` 的觸發點)。**在該查證完成前,本條件只能當『暫行依據』,不得當已查證的事實引用。**;<br>③ **有明確的寫後失效路徑**,且該路徑**真的被寫入端呼叫**(不是只定義不接線);<br>④ 快取只擋「重複讀」,**不改變任何顯示語意**。<br>**2026-08-28 實測符合者 4 處 / 2 檔**(量測日;「會漂移的量測值標日期」同樣沿用姊妹 repo §8.2.A.0 規則 4)。⚠️ **第三輪稽核補:這 4 處不是同一種強度** —— **只有 `_cached_nh_status` 一處無條件成立**(其鏈路完全不上網);**另 3 處(`_cached_load_policy_v2` / `_cached_list_policies` / `_cached_nh_coverage`)快取的都是 gspread 遠端往返,屬【有條件成立】,條件就是改寫後的條件 ② 所繫的 `P-UIGSPREAD-1`。** **讀本列時不得把 4 處當成同一個確定性。**⚠️ **掃描指令找到 5 個裝飾點,其中 1 個(`ndc.py`)經逐一驗證後不符條件 ②,已移出本例外(見下)** ——**「掃到幾個」不等於「符合幾個」,不得直接把掃描列數當成例外成員數**:<br>- `ui/helpers/v2_editor.py` — `_cached_load_policy_v2` / `_cached_list_policies`(`TTL_1MIN`),失效走 `_invalidate_cache()`(~~檔內 4 個寫入點實呼~~ → **2026-08-28 第三輪稽核更正,實測**:檔內共 **4 個呼叫點**,其中**只有 2 個是真寫入端**(「➕ 新增保單」與「首次使用 wizard」,兩處都在 `write_policy_v2(...)` 之後);另 **2 個不是寫入** —— 「🔄 重試（清快取）」是**讀取失敗後重試**、「📥 重新讀回（從雲端讀最新）」是**純讀**(該處就地註解自陳 v19.451 已移除寫入按鈕)。**條件 ③ 仍然滿足**(確有真寫入端呼叫),**但「4 個寫入點」這個數字是假的** —— 這是同一份 diff 內第三次「把未查證的計數寫成實測」,故就地更正並留痕);<br>- `ui/tab5_data_guard.py` — `_cached_nh_status` / `_cached_nh_coverage`(`TTL_5MIN`),失效走 `_clear_nh_caches()`(**2026-08-28 第三輪稽核實測**:全 repo `1` 個 production 呼叫點,位於「📥 匯入到 nav_history」按鈕內、`import_csv_text(...)` 回傳 `written > 0` 之後 —— **確為真寫入端,條件 ③ 成立**;另有 1 處在 `tests/` 內作為守衛斷言。⚠️ 這一項是**跟著隔壁那個被抓到說謊的計數一起重驗的** —— **同一次更正必須把同一把尺對全部同類項目重跑,不能只修被點名的那一個**);<br>- ~~`ui/helpers/macro/ndc.py` — `_cached_ndc_score`(`TTL_15MIN`,**寫法為 `@_st_mod.cache_data`**)。⚠️ **本檔無失效路徑,也不需要** —— NDC 為**月頻唯讀**指標,UI 端**不存在寫入動作**,故第 ③ 條以「**無寫入端**」滿足,不是「漏做」。**它與前 4 個的豁免理由不同,讀表時不要混為一談。**~~<br>　→ ⛔ **2026-08-28 同日經稽核移出本例外**(**有意識的更正,不是漏刪**;依據:**實測**,鏈路見下)。**理由:它不滿足本列自訂的條件 ②。** 實測鏈路:`_cached_ndc_score()` → 同檔 `_fetch_ndc_score()` → `repositories/macro_tw_local_repository.py::fetch_ndc_signal_history` → `fetch_url(FINMIND_BASE, params=...)` —— **被快取的是外部 HTTP(FinMind API)。**<br>　📌 **2026-08-28 第三輪稽核同步註（移出結論不變，改的是引用的理由）**:上句原本引用的是~~條件 ② 舊表述「本地持久化讀取(Google Sheets / 本地 JSON)」~~,而**該舊表述本身已在同日被改寫**(理由:它把 gspread 遠端往返含混成「本地持久化」)。**以改寫後的條件 ② 重判,結論一樣是「移出」,而且理由更乾淨**:FinMind API **完全不在 EX-CRUD-1 的射程內**(既非 read+write 同檔的持久化 CRUD,也不是本 repo 任何既有例外已認定的對象)。<br>　⚠️ **但要誠實記一筆**:當初拿條件 ② 把 `ndc.py` 踢出去時,**同一把尺沒有對留下來的 4 個成員各套一次**—— 若當時套了,會當場發現其中 3 個也是遠端往返,條件 ② 的措辭問題本來在那一輪就該被抓到。**這就是本輪要修的『不對稱裁決』本身。**<br>　⚠️ **它同時當場命中本列自己寫的升級觸發條件**:(1)「開始快取**外部 HTTP 取數** → 那一刻起 cache 必須回 L1 集中」**本來就已經成立**;(3)「同一份資料長出第二層快取(兩層 TTL 疊加 = 失效語意不可推理)」—— `fetch_ndc_signal_history` 在 **L1 已帶 `@_ttl_cache(ttl_sec=TTL_15MIN)`**(實測),UI 再疊一層 `TTL_15MIN`。<br>　**一個例外不能收一個當場觸發自己升級條件的成員** —— 那等於例外把自己寫的門檻當不存在。**現況:登記為待判定,見 §8.3「尚未判定(待派工查證)」;依 §-1 無觸發,本批不動工、不改任何 `.py`。** | L3 UI 自建 `@st.cache_data` 薄快取層 | **與姊妹 repo `my-stock-dashboard` 的 `V-SMART-CACHE-1`(判定為**違憲待修**)差別在哪 —— 這是本列存在的理由,務必看清楚**:那一列的病是 **(a) TTL 全是 inline literal、未走 SSOT(同時違 §3.3)** ＋ **(b) 快取的是外部 HTTP 取數,本該在 L1 集中**。~~**本列(移出 `ndc.py` 後的 4 處)兩個病都沒有**:TTL 全部 import 自 `shared/ttls.py`;被快取的是 **Google Sheets / 本地 JSON 持久化讀取**,與 **EX-CRUD-1 同一族**(該例外已認定此類 read+write 同檔的本地持久化不存在「cache 分散」問題)。~~<br>→ ⛔ **2026-08-28 第三輪稽核改寫(有意識的更正,不是漏刪;決策者:稽核回修組)**:**「兩個病都沒有」這句對 4 個成員中的 3 個為假,不得留著。** 逐成員實測(指令與輸出見下方驗證段 **③**):<br>　- **病 (a)(TTL 寫死 inline literal)確實不存在** —— 4 處 TTL 全部 import 自 `shared/ttls.py`。**這半句仍然成立。**<br>　- **病 (b)(快取外部往返)對 3/4 成員成立**:`_cached_load_policy_v2` → `repositories/policy/v2.py::load_policy_v2`(`_with_quota_retry(client.open_by_key, ...)` ＋ `ws.get_all_records()`)、`_cached_list_policies` → 同檔 `list_policy_worksheets`(`client.open_by_key` ＋ `sh.worksheets()`)、`_cached_nh_coverage` → `services/nav_history_gs.py::coverage_status` → `load_points`(`ws.get_all_values()`) —— **三者都是往返 Google Sheets API 的遠端呼叫**。**唯一真的沒有外部往返的成員是 `_cached_nh_status`**(→ `status()`,只讀 `get_secret(...)`)。<br>　⛔ **故本列與 V-SMART-CACHE-1 的正確差別是**:**少了病 (a);病 (b) 並非不存在,而是靠 EX-CRUD-1 的既有認定被豁免,而該認定尚未查證(`P-UIGSPREAD-1`)。**<br>　⚠️ **「與 EX-CRUD-1 同一族」這個援引本身有一道前提裂縫,必須就地講明,不得靠它自證**:EX-CRUD-1 的免責推理前提是「**無 `@_ttl_cache` / `@st.cache_data` 裝飾** → 不存在『cache 分散』問題」,而**本列的成員正好就是加了 `@st.cache_data` 的那一類** —— **把 EX-CRUD-1 的結論搬過來,同時違反了那個結論賴以成立的前提。**<br>　⚠️ **同一份 `CLAUDE.md` 裡,`P-UIGSPREAD-1` 原文已明文寫「在查證完成前不得引用該主張」,而本列正在引用它替 3 個成員背書** —— 這一點在前兩輪都沒有被指出,故在此釘死:**本列現階段的成立與否,全繫於 `P-UIGSPREAD-1` 的裁決與上述前提裂縫,不得再以「兩個病都沒有」或「同族 EX-CRUD-1」自證合憲。**<br>⚠️ **補正紀錄(誠實揭露,§-2 規則 6)**:上面這句「**兩個病都沒有**」在本例外**補登當下並不成立** —— 當時成員含 `ui/helpers/macro/ndc.py`,而它快取的正是**外部 HTTP**,也就是 V-SMART-CACHE-1 的病 (b)。**這句正是本列用來與姊妹 repo 那條「違憲待修」劃清界線的關鍵句,卻對其中一個成員為假。** 移出 `ndc.py` 後本句才成立。**教訓:例外的自訂條件必須逐一成員實跑驗證,不得以整組宣稱代替** —— 依姊妹 repo §8.2.A.0 規則 5,豁免理由必須是「**為什麼這個位置是對的**」;把一個不符條件的成員收進來,就是**把違憲寫成合憲**。<br>**為什麼不下沉 L2(這才是關鍵)**:現行失效語意是「**UI 的寫入動作觸發清除**」——`_invalidate_cache` / `_clear_nh_caches` 都由**寫入端就地呼叫**。下沉 L2 後,**L2 拿不到 UI 的寫入事件**,只能改成純 TTL 過期 → 使用者存檔後畫面會顯示**寫入前的舊值**,直到 TTL 到期。**那是把「§1 不顯示過期值」換成「等一分鐘」,是行為退化,不是架構改善。**<br>**事故依據(就地記載於 `ui/tab5_data_guard.py` 該快取上方,非本表事後補述)**:未加此層前,任一分頁的任一次互動都會重打 Google Sheets;**25 檔實測「rerun 起算 17 秒後 `WebSocket onclose`」,2026-08-14 實機兩次重現**。移除本層 = 回到該事故。<br>**升級觸發條件(任一命中即脫離本例外、須搬 L1/L2)**:(1) 開始快取**外部 HTTP 取數**(那一刻起 cache 必須回 L1 集中);(2) TTL 改成**檔內寫死秒數**(違 §3.3,本例外前提消失);(3) 同一份資料在 **L2 也長出第二層快取**(兩層 TTL 疊加 = 失效語意不可推理);(4) 快取開始**改變顯示語意**(例如失敗時回舊值卻不標 `is_stale`,違 §2.4)。 |
 | **EX-CISCRIPT-1**(2026-08-28 補登) | `scripts/fetch_nav_cache.py`(**782 LOC**,量測日 2026-08-28)—— **CI/離線精簡環境**用的獨立 NAV 抓取實作,與 L1 `repositories/fund/sources.py` **同源同目的但平行實作**(檔內 9 個 `fetch_*`:TDCC ×2 / MoneyDJ ×2 / AllianzGI / SITCA / CnYES / Yahoo / 銀行平台)。字面命中 v3 §01-2「同一個資料來源全站只能有一處取數實作」。<br>**它與 L1 的唯一共用點**:lazy `from repositories.fund.sources import YF_MORNINGSTAR_CHART_URL`(**單一 URL 常數**,v19.230 P1-2 已收 SSOT);另有 lazy `from repositories.policy_repository import ...`(有憑證時才載)。**除此之外抓取邏輯全部自帶。** | `scripts/**` 得平行實作一份精簡取數,不與 L1 合併 | **① 合併會把 streamlit 依賴鏈拉進精簡環境(這是既有的、有紀錄的設計決定,不是本次發明)**:`repositories/fund/sources.py` 的 module-load 會 `from bs4 import BeautifulSoup`,整個 `repositories/fund` package 一起被拉起;`STATE.md` 就地記載「**CI 精簡環境不能 import sources.py——會拉 streamlit——故平行精簡實作**」。該 script 刻意零重依賴到**連 `requests` 都在runtime `pip install`**。<br>**② 網路前提不同**:L1 走 **NAS Squid proxy**(§2.1 T3 來源多需台灣 IP);此 script 設計為在**GitHub Actions(美國 IP)** 執行,兩者可達的來源集合本來就不一樣。<br>**③ 它是 `cache/nav/{CODE}.json` 的唯一產出者,而該快取被活的 L1 讀取**:`save_cache()` 寫入 `<repo根>/cache/nav/`,而 `repositories/fund/nav_metrics.py::fetch_nav` 在**所有 live URL 全敗後、return 空之前**呼叫 `sources._src_cache_files()` 取它當**最終降級**(v19.319 接線,回歸網 `tests/test_cache_nav_fallback.py` + `tests/test_nav_cache_quality_gate.py`)。→ 合併它 = 動到一條**仍在被讀**的降級鏈,屬 §8.4 步驟 4 明禁的自作主張大重構。<br>**升級觸發條件(任一命中即重新評估)**:(1) `repositories/fund/sources.py` 變成**可在精簡環境 import**(bs4/streamlit 依賴消失)——理由 ① 當場失效;(2) `_src_cache_files` 從 `fetch_nav` 降級鏈**移除**——理由 ③ 失效,此時該問的是「**還要不要留這支 script**」;(3) 兩邊解析邏輯**出現行為分歧**(同一檔同一天 NAV 不一致)——那是 SSOT 破裂,**必須立刻收斂**,不得再引本例外。 |
 
 > 📌 **EX-UICACHE-1 / EX-CISCRIPT-1 兩列的驗證指令與已知限制（2026-08-28 補登時就地記錄）**
@@ -1956,6 +1962,86 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 > 配上 §-1「沒觸發不動工」，會讓這個「待查證」**無限期存續**，實質變成一張**永久豁免**：
 > 「因為還沒查所以不能動」，而「查」永遠不會被排進來。**待查證必須有出口，否則它就是豁免。**
 > ⚠️ 原句**保留不刪**（它本身沒錯，只是不完整）；補的是**它缺的那一半**。
+>
+> ---
+>
+> **③ EX-UICACHE-1 條件 ② 的逐成員鏈路實測（2026-08-28 第三輪稽核補；本段是條件 ② 改寫的依據）**
+>
+> **為什麼要有這一段**：條件 ② 原本寫「被快取的是**本地持久化讀取**（Google Sheets / 本地 JSON），
+> **非外部 HTTP 取數**」，並以此把 `ndc.py` 踢出例外。**踢 `ndc.py` 那一步是對的；
+> 錯的是這把尺沒有對留下來的 4 個成員也套一次。** 本段補上那次遺漏的逐成員驗證。
+>
+> ```
+> grep -rn "@st\.cache_data\|@_st_mod\.cache_data" --include=*.py ui/
+> grep -n "def load_policy_v2" -A 20 repositories/policy/v2.py
+> grep -n "def list_policy_worksheets" -A 8 repositories/policy/v2.py
+> grep -n "^def status\|^def load_points\|^def coverage_status" -A 20 services/nav_history_gs.py
+> grep -rn "_invalidate_cache" --include=*.py .
+> ```
+>
+> **逐一判讀結果（4 個成員，全部實跑，非推論）**：
+>
+> | 成員 | 快取的實際鏈路 | 是否遠端往返 |
+> |---|---|---|
+> | `ui/helpers/v2_editor.py::_cached_load_policy_v2` | → `repositories/policy/v2.py::load_policy_v2` → `_with_quota_retry(client.open_by_key, sheet_id)` ＋ `_with_quota_retry(ws.get_all_records)` | **是**（gspread → Google Sheets API） |
+> | `ui/helpers/v2_editor.py::_cached_list_policies` | → `repositories/policy/v2.py::list_policy_worksheets` → `client.open_by_key` ＋ `sh.worksheets()` | **是** |
+> | `ui/tab5_data_guard.py::_cached_nh_coverage` | → `services/nav_history_gs.py::coverage_status` → 同檔 `load_points` → `ws.get_all_values()` | **是** |
+> | `ui/tab5_data_guard.py::_cached_nh_status` | → `services/nav_history_gs.py::status` → 只呼叫 `infra.config.get_secret(...)`（`google_service_account` / `NAV_SHEET_ID` / `FRED_API_KEY`） | **否** ✅ |
+>
+> ⛔ **結論（已回寫進上表該列，兩處都改）**：「被快取的非外部 HTTP」這句**只對 1/4 成員成立**。
+> 條件 ② 因此改寫為「**必須落在 EX-CRUD-1 已認定的『本地持久化 CRUD』射程內**」，
+> 並就地標明**該認定尚未查證**（§8.3.P `P-UIGSPREAD-1`）。
+>
+> ⚠️ **本段要留給後人的方法教訓（比數字重要）**：這把尺（條件 ②）**被不對稱使用了** ——
+> 拿它去**排除**一個成員（`ndc.py`）時很嚴格，卻**沒有拿同一把尺去檢查留下來的 4 個**。
+> **例外表最常見的失效模式不是「條件寫錯」，是「條件只往外用、不往內用」。**
+> 往後任何一次「依條件 X 移出某成員」的動作，**必須同時把條件 X 對全部留任成員重跑一次**，
+> 並把逐成員結果寫下來（就像上表）——**只寫結論不寫逐成員，等於沒驗。**
+>
+> **④ `_invalidate_cache` 的 4 個呼叫點逐一判讀（同上，實跑 `grep -rn "_invalidate_cache" --include=*.py .`）**
+>
+> | 呼叫點所在區塊 | 前一個動作 | 算不算「寫入端」 |
+> |---|---|---|
+> | 「➕ 新增保單」按鈕 | `ensure_policy_worksheet(...)` ＋ `write_policy_v2(...)` | **是（真寫入）** |
+> | 「首次使用 wizard」建保單＋首檔基金 | `write_policy_v2(...)` | **是（真寫入）** |
+> | 「🔄 重試（清快取）」 | `_cached_list_policies` **讀取失敗**後的重試 | 否（讀取重試） |
+> | 「📥 重新讀回（從雲端讀最新）」 | 無寫入；就地註解自陳 **v19.451 唯讀化、已移除寫入按鈕** | 否（純讀） |
+>
+> → **條件 ③「該路徑真的被寫入端呼叫」仍然滿足**（有 2 個真寫入端），
+> **但上表原寫的「檔內 4 個寫入點實呼」是把呼叫點數當成寫入點數，數字為假**，已就地更正。
+>
+> **同一把尺對另一個成員也重跑一次（這一步上兩輪沒做，是本輪的重點）**：
+> ```
+> grep -rn "_clear_nh_caches" --include=*.py .
+> ```
+> → 全 repo **3 行**：`ui/tab5_data_guard.py` 的**函式定義** 1 行、**production 呼叫** 1 行、
+> `tests/test_audit_20260814_batch01.py` 的**守衛斷言** 1 行。
+> 唯一的 production 呼叫位於「📥 匯入到 nav_history」按鈕內、
+> `import_csv_text(...)` 回傳 `written > 0` 的分支之後 —— **確為真寫入端，條件 ③ 成立，原敘述無誤**。
+> ⛔ **但「原敘述無誤」是這次驗出來的，不是上兩輪驗出來的。**
+> **更正一個被點名的數字時，必須把同一把尺對全部同類項目重跑** ——
+> 否則下一輪抓到的就是「你只修了被指出的那一個」。
+>
+> ---
+>
+> ⚠️ **⑤ 一項本批客觀上做不到、但必須就地揭露的缺口（§-2 規則 6；前兩輪完全沒有提及）**
+>
+> 本節末句自訂：新增例外**必須**：(1) 在此表登錄、(2) **對應檔案加註解指回此表**、(3) PR 描述附理由。
+>
+> **實測**：
+> ```
+> grep -rn "EX-UICACHE-1\|EX-CISCRIPT-1" --include=*.py .
+> ```
+> → **0 命中**（對照組：`grep -rln "EX-CRUD-1\|EX-PASSTHRU-1\|EX-CACHE-1" --include=*.py .`
+> 在 `ui/` 與 `services/` 下有多檔命中，既有例外都有回指註解）。
+>
+> → **`EX-UICACHE-1` / `EX-CISCRIPT-1` 兩列目前 (1)(3) 已做、(2) 未做。**
+> **原因**：這三輪的授權範圍都是**純文件更正、不得改任何 `.py`**，(2) 在本批**客觀上做不到**。
+> ⚠️ **但「做不到」不等於「不用講」** —— 前兩輪一次都沒提，等於默默漏掉一條本節自訂的硬性要求。
+> **觸發點（任一命中即在該次任務內補上，屬 §-1.5.1c 判定 3 所稱「本次弄到的東西」的收尾義務，不必另行請示）**：
+> (1) 有任務碰到 `ui/helpers/v2_editor.py`；(2) 有任務碰到 `ui/tab5_data_guard.py`；
+> (3) 有任務碰到 `scripts/fetch_nav_cache.py`；(4) user 直接點名。
+> ⛔ **在補上之前，這兩列屬本節末句所稱「未完整登錄」的狀態**，讀者請據此打折信任。
 
 **符合 EX-CACHE-1 的標準寫法**:
 ```python
@@ -2042,10 +2128,15 @@ except ImportError:
 | **P-NAVCACHE-1** | `scripts/fetch_nav_cache.py`（見 §8.2.A.1 **EX-CISCRIPT-1**）已無排程、僅手動觸發。v3 `01`-2 對「**已無排程、僅手動觸發**」的 script 該如何處置——是「仍有用途」還是「Orphaned 待清理」？<br>**已知事實（實測）**：它**不是 0 caller**——`scripts/accumulate_nav_tw.py` 與 `scripts/migrate_nav_caches_to_sheet.py` 以 `importlib` 載入它、復用 `_discover_fund_codes()`；`docs/NAV_NAS_CRON_SETUP.md` 亦指向它。**「沒有排程」不等於「沒有人用」。** | **獨立一組**，**不得**由當初補登 EX-CISCRIPT-1 的同一組承接 | (1) 有任務碰到 `scripts/fetch_nav_cache.py` 或 `cache/nav/`；(2) `repositories/fund/nav_metrics.py::fetch_nav` 的降級鏈移除 `_src_cache_files`；(3) 兩支兄弟 script 不再 `importlib` 載入它；(4) user 直接點名 |
 | **P-NDCCACHE-1** | `ui/helpers/macro/ndc.py::_cached_ndc_score` 在 **UI 層快取外部 HTTP**（→ `fetch_ndc_signal_history` → `fetch_url(FINMIND_BASE)`），且該 L1 fetcher **已自帶 `@_ttl_cache(ttl_sec=TTL_15MIN)`** → **兩層同 TTL 疊加**。<br>2026-08-28 已**移出 EX-UICACHE-1**（不符其條件 ②）。**待答**：它是該（a）直接刪掉 UI 這層、由 L1 既有 cache 承擔，還是（b）另有 UI 層非快取不可的理由（例如 `_ttl_cache` 與 `st.cache_data` 的跨 session 語意差異）需另立例外？ | **獨立一組**，**不得**由 2026-08-28 補登 EX-UICACHE-1 的同一組承接 | (1) 有任務碰到 `ui/helpers/macro/ndc.py` 或 `repositories/macro_tw_local_repository.py`；(2) 實際出現「NDC 分數顯示過期／不一致」的 bug；(3) user 直接點名 |
 | **P-UIHTTP-1** | `ui/components/mk_dashboard.py::_get_benchmark_series` 以 `yfinance` 在 **UI 層直抓外部行情** ＋ `st.session_state` **自建快取**，產出顯示給 user 的 `Benchmark_Lag` 標籤與對比圖（登記於 §-1.5.1c 判定 2 **B 類**）。**它是 v3 `01`-1「主動搬遷」的真實適用對象。**<br>**待答**：搬遷方案為何（取數下沉 `repositories/`、快取歸屬哪一層、`bench_ticker` 由 UI 傳入的介面怎麼切）？ | **獨立一組**（實作與稽核分離，§-1.5 v1 第一條第 3 點） | (1) 有任務碰到 `ui/components/mk_dashboard.py` 或 `ui/tab3_portfolio.py` 的波段觀測站區塊；(2) 基準指數取數出現 bug；(3) user 直接點名 |
-| **P-UIGSPREAD-1** | `ui/**` 多處直呼 gspread client（如 `ui/tab3_portfolio.py` 的 `_sa.open_by_key(...)` 存取探測），**實際是往返 Google Sheets API 的網路呼叫**。**待答**：這是否等同既有 **EX-CRUD-1** 所述的「本地持久化 CRUD」而受其豁免，還是屬 v3 `01` 所禁的「UI 層私自抓取」？（登記於 §-1.5.1c 判定 2 **C 類**） | **獨立一組**（§-2 規則 4/5：此問題取決於「有沒有漏看」） | (1) 有任務碰到上述任一 UI 檔的 gspread 呼叫；(2) 有人要據此擴大或收窄 EX-CRUD-1；(3) user 直接點名 |
+| **P-UIGSPREAD-1** | `ui/**` 多處直呼 gspread client（如 `ui/tab3_portfolio.py` 的 `_sa.open_by_key(...)` 存取探測），**實際是往返 Google Sheets API 的網路呼叫**。**待答**：這是否等同既有 **EX-CRUD-1** 所述的「本地持久化 CRUD」而受其豁免，還是屬 v3 `01` 所禁的「UI 層私自抓取」？（登記於 §-1.5.1c 判定 2 **C 類**）<br>⛔ **2026-08-28 第三輪稽核補：本列不是孤立的待辦，`EX-UICACHE-1` 整列掛在它上面。** 該例外的條件 ② 已改寫為「被快取的必須落在 EX-CRUD-1 的『本地持久化 CRUD』射程內」，而其 **4 個成員中有 3 個快取的正是 gspread 讀取**（`load_policy_v2` / `list_policy_worksheets` / `coverage_status`→`load_points`，逐成員鏈路見 §8.2.A.1 驗證段 ③）。**本列若判定 gspread 直呼不等同「本地持久化」，`EX-UICACHE-1` 當場失去依據、須整列重審。**<br>⚠️ **另有一道前提裂縫必須一併裁決**：EX-CRUD-1 的免責推理前提是「**無 `@_ttl_cache` / `@st.cache_data` 裝飾** → 不存在 cache 分散問題」，而 `EX-UICACHE-1` 的成員**正好就是加了 `@st.cache_data` 的那一類** —— 也就是說，即使本列判 gspread 算「本地持久化」，**EX-CRUD-1 的結論仍不當然可以搬給一個違反其前提的對象**。兩件事要分開查、分開答。 | **獨立一組**（§-2 規則 4/5：此問題取決於「有沒有漏看」）；**且不得由 2026-08-28 補登／回修 `EX-UICACHE-1` 的任一組承接**（實作與稽核分離） | (1) 有任務碰到上述任一 UI 檔的 gspread 呼叫；(2) 有人要據此擴大或收窄 EX-CRUD-1；(3) **有人要引用或依賴 `EX-UICACHE-1`（含把新成員收進該例外）**；(4) user 直接點名 |
+| **P-UISUBPROC-1**（2026-08-28 第三輪稽核補登） | `ui/sidebar.py::render_sidebar()` 內「♻️ 強制同步 GitHub 最新邏輯」按鈕 `import subprocess`，跑 `git rev-parse --short HEAD` 與 **`git ls-remote origin main`**（後者**實際連到 GitHub**）比對部署版本，結果以 st.success / st.warning ＋ Reboot 連結顯示（登記於 §-1.5.1c 判定 2 **C 類**）。<br>**待答**：它算不算 v3 `01`-1 所禁的「UI 層私有資料抓取」？**兩邊都有話說，故本組不裁決** —— 傾向「不算」的理由：取回的是 **commit SHA**，用途是**部署版本診斷**，不產生任何業務指標，形態接近 A 類 ping；傾向「算」的理由：它**確實對外往返**，且 **A 類三個成員全是 HTTP ping、本項不是**，`subprocess` 形態的對外往返在本檔尚無任何判定先例，**不得直接套用 A 類結論**。<br>⚠️ **本列補登的直接原因**：上一輪把它點名在 C 類、寫「**本段不下判定**」，卻**沒有給任何 `P-` 登記、沒有指定由誰查、沒有觸發點** —— 那正是本小節前言所指「**待查證沒有出口 ＝ 實質永久豁免**」的形態，**只修了一半**。 | **獨立一組**（§-2 規則 4/5：本題同時取決於「有沒有漏看其他非 HTTP client 形態的對外往返」）；**不得由 2026-08-28 登記 C 類的同一組承接** | (1) 有任務碰到 `ui/sidebar.py` 的版本比對區塊；(2) 有人要據此擴大或收窄 **A 類「連線診斷 ping」** 的定義；(3) `ui/**` 再出現第二處 `subprocess` 對外往返；(4) user 直接點名 |
 
 ⚠️ **本表全部由單組（2026-08-28 文件更正組）登記，未經第二組獨立複驗**（§-2 規則 6）。
-表中「已知事實」欄位為實測，「待答問題」為本組判斷；**「本檔沒有第五個待判定項」這句話本組未查證、也不宣稱**。
+表中「已知事實」欄位為實測，「待答問題」為本組判斷；~~**「本檔沒有第五個待判定項」這句話本組未查證、也不宣稱**~~。
+→ **2026-08-28 第三輪稽核更新（有意識的更正，不是漏刪）**：本表已由 4 列增為 **5 列**（新增 `P-UISUBPROC-1`），故原句的「第五個」措辭已失效；
+**其語意照舊、且更要緊**——**「本檔沒有第六個待判定項」這句話本組同樣未查證、也不宣稱**。
+⚠️ **`P-UISUBPROC-1` 是怎麼被找到的，值得記一筆**：它不是靠掃描找到的，而是**上一輪自己點名在 C 類、卻沒有給出口**，由第三輪稽核逐句回讀時撿回來。
+**這代表本表的完整性靠的是「有人回頭讀」，不是任何一次掃描** —— 讀者請據此打折信任本表的窮舉性。
 
 ### 8.4 做到一半的新增功能 — 先盤點再動
 
