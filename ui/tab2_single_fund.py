@@ -19,7 +19,7 @@ import streamlit as st
 
 from ui.helpers.render_state import not_ready, system_error
 
-from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
 # §3.3 反捏造:接近警戒門檻走 shared SSOT,不在本檔另寫一份同義 literal
 from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _NEAR_PCT_SSOT
@@ -183,6 +183,24 @@ def _risk_1y_rows_html(risk_table: dict, *, label_style: str = "short") -> str:
     故仍保留 Sharpe 列。
     v19.347(第九份 ⑯):補「追蹤誤差 Tracking Error」列 — wb07 風險表本就解析
     此欄入 risk_table(clean_risk_table NUMERIC 集含),僅 UI 從未顯示;缺值顯 —。
+
+    ⚠️ **`label_style="short"`(本函式的預設值)自 2026-08-28 Q4 起 production 0 caller**
+    —— 它唯一的 production caller 是 partial 資料視圖,而那個視圖本來就長在一條
+    production 恆不觸發的分支裡,該分支的 body 已於 Q4 換成 2 行誠實訊息(見本檔
+    `if s is None or ... :` 處的說明)。
+    查證(量測日 2026-08-28,兩條都要跑;實際 production 用法只剩 1 個 def + 1 個
+    `label_style="long"` 的呼叫 —— 輸出裡命中本 docstring 自己的那幾行不算 caller,
+    請按行號排除,不要被「有很多命中」誤導):
+      $ grep -n '_risk_1y_rows_html(' ui/tab2_single_fund.py
+      $ grep -rn 'label_style' ui/ --include=*.py
+    **刻意保留而不刪除的理由**:刪 "short" 就要連 `label_style` 參數一起刪(留一個
+    只剩單一合法值的參數比留著分支更誤導),那會改到唯一的 production 呼叫點 + 3 個
+    測試檔共 5 個測試,並且會一起拆掉 v19.347 對「追蹤誤差列」的回歸鎖 —— 相對於
+    一個 6 行、無 I/O、無狀態的純函式分支,那個代價不成比例(§8.1 step 6 的反向:
+    這裡不是「加一個用不到的抽象」,是「拆一個已經在那裡的分支」)。
+    **撤銷條件**:若日後 partial 視圖不會回來,或有人要動這個函式的 signature,
+    連同 `label_style` 參數一併刪除,並更新上述 3 個測試檔。
+    ⚠️ 這是判斷不是事實 —— 稽核若認為應照 v3 §01-2「孤兒即刪」處理,推翻本段即可。
     """
     _r1y = (risk_table or {}).get("一年", {}) or {}
     _std = _r1y.get("標準差", "—"); _sh = _r1y.get("Sharpe", "—")
@@ -483,58 +501,63 @@ def render_single_fund_tab() -> None:
             mj_raw = fd.get("moneydj_raw",{}) or {}
 
             if s is None or (hasattr(s,"empty") and s.empty) or not m:
-                # ── 部分資料視圖（series 缺失時仍顯示可用資訊）────────
-                _p_name  = name or fk
-                _p_nav   = mj_raw.get("nav_latest")
-                _p_risk  = (mj_raw.get("risk_metrics") or {})
-                _p_perf  = (mj_raw.get("perf") or {})
-                _p_err   = fd.get("error") or fd.get("warning") or ""
-                _p_cat   = mj_raw.get("category","")
-                _p_fee   = mj_raw.get("mgmt_fee","")
-
-                st.markdown(
-                    f"<div style='background:{BG_DARK_AMBER_3};border:1px solid {MATERIAL_ORANGE};"
-                    f"border-radius:10px;padding:14px 18px;margin:8px 0'>"
-                    f"<div style='color:{MATERIAL_ORANGE};font-weight:700;font-size:13px;margin-bottom:8px'>"
-                    f"🟡 部分資料（歷史淨值序列未取得，下方顯示已有資訊）</div>"
-                    + (f"<div style='color:{GRAY_CC};font-size:11px;margin-bottom:6px'>{_p_err}</div>"
-                       if _p_err else "")
-                    + (f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;border-top:1px solid {BG_DARK_AMBER_1};padding-top:8px;margin-top:4px'>"
-                    f"💡 系統已自動嘗試境內/境外雙路由。若仍失敗，可直接貼入完整 MoneyDJ 網址：<br>"
-                    f"境內：<code>yp010000.djhtm?a={fk}</code>　"
-                    f"境外：<code>yp010001.djhtm?a={fk}</code></div>"
-                    f"</div>"),
-                    unsafe_allow_html=True)
-
-                # 顯示已取得的基本資料
-                _pc1, _pc2, _pc3 = st.columns(3)
-                with _pc1:
-                    # v19.331 review 修正:MoneyDJ 失敗時 nav_latest 常為 "—"/"N/A"/"查無資料"
-                    # (非 None)→ 原裸 float() 轉型直接 ValueError,partial 視圖整頁炸。
-                    # 改 safe_float(SSOT shared/converters):非數值顯示 N/A,不造假不炸頁。
-                    _p_nav_f = _safe_float(_p_nav)
-                    if _p_nav_f is not None:
-                        st.metric("最新淨值", f"{_p_nav_f:.4f}")
-                    else:
-                        st.metric("最新淨值", "N/A")
-                with _pc2:
-                    st.metric("基金類別", _p_cat[:12] or "N/A")
-                with _pc3:
-                    st.metric("最高經理費", _p_fee or "N/A")
-
-                # 若有風險指標，仍顯示
-                if _p_risk.get("risk_table"):
-                    st.markdown("#### 📊 風險指標（已取得）")
-                    # v19.336 M9:與 complete 視圖共用 _risk_1y_rows_html(原兩套同款 HTML)
-                    st.markdown(_risk_1y_rows_html(_p_risk["risk_table"]),
-                                unsafe_allow_html=True)
-
-                # 若有績效數據，顯示
-                if _p_perf:
-                    st.markdown("#### 📈 績效數據（已取得）")
-                    _perf_cols = st.columns(len(_p_perf))
-                    for _pi, (_pk, _pv) in enumerate(list(_p_perf.items())[:4]):
-                        _perf_cols[_pi].metric(f"報酬率({_pk})", f"{_pv:.2f}%" if isinstance(_pv,(int,float)) else str(_pv))
+                # ⚠️ Q4(2026-08-28):本分支在 production **恆不觸發**,body 由 53 行
+                # 「🟡 部分資料」琥珀卡換成 2 行誠實訊息;分支本身**刻意保留**當防當機護欄。
+                #
+                # 為什麼恆不觸發 —— 證明指令就地附上(render_state.py 家規:任何
+                # 「X 不會發生」形式的句子,必須帶著證明它的那條指令,附不出來就不要寫):
+                #   (a) 外層 `if _status_fd == "failed"` / `elif == "partial"` 已把兩個值接走,
+                #       走到本 else 只剩 status == "complete";
+                #   (b) complete 的定義(fund_fetcher.classify_fetch_status)就是
+                #       fund_name + series 長度 ≥10 + metrics 非空 → 下面三個 disjunct 全 False;
+                #   (c) status 由 normalize_result_state **無條件覆寫**,不吃上游透傳:
+                #         $ grep -n 'result\["status"\]' fund_fetcher.py
+                #         → 293:    result["status"] = status      (單一賦值,無條件)
+                #   (d) production 只有一個地方寫 session_state.fund_data —— 就是本檔
+                #       `if do_load and mj_url_input.strip():` 那一段,而它是**走完**
+                #       normalize_result_state 之後才寫的。查證指令(照抄可跑):
+                #         $ grep -rn 'session_state\.fund_data *=\|session_state\["fund_data"\] *=' --include=*.py .
+                #       量測日 2026-08-28 共 3 命中:本檔上述那一段(production 唯一寫入點)
+                #       + tests/test_app_apptest.py 裡兩個直接塞 session_state 的測試(見下)。
+                #       ⚠️ **刻意不抄行號**(§8.2.A.0 規則 1:行號保證會過期)——
+                #       本行上一版硬抄了一個「本檔 :<行號>」,在寫下的當天就已經偏掉。
+                #       要定位請重跑上面那條指令。
+                #
+                # ⚠️ 但「恆不觸發」只涵蓋 production:(d) 那兩個測試直接把
+                # `"status": "ok"`(不在 {complete,partial,failed} 內)塞進 session_state,
+                # **繞過 normalize_result_state** —— 也就是**這個 else 對任意 status 值
+                # 都是開著的**(依據:上面那條 grep 的兩個測試命中處,可自行覆核)。
+                #
+                # ⚠️ **「else 開著」證不到「護欄被走過」,兩件事不要混為一談。**
+                # (2026-08-28 補正:上一版在這裡宣稱「護欄不是多餘的」時把證據講得比
+                #  實際大 —— 那是**靜態推理**成立,不是實測走過。)
+                # 據實記錄:那兩個測試各自餵 400 筆非空 NAV series + 非空 metrics,
+                # 下面三個 disjunct 全為 False → **它們走的是 else 主畫面,從來沒有
+                # 進過本護欄的 body**(其中一個測試甚至斷言 `morningstar(span-extend)`
+                # 與「跨度 1825」有渲染出來,而那兩個字串只出現在 else 主畫面的
+                # st.success 裡)。→ **本護欄的 body 目前沒有任何測試走過。**
+                # 保留它的理由因此是靜態的、而且仍然成立:外層 else 對任意 status 開著,
+                # 一旦把 body 拔掉,非預期狀態會直接撞上主畫面的 `len(s)`(見下)。
+                #
+                # 為什麼不整段刪掉:刪掉要連下面的 else 一起拿掉 → 主畫面 2,100+ 行全部
+                # 反縮排(git blame 整段洗掉);而且拔掉之後任何「非預期 status + 空序列」
+                # 會直接掉進主畫面,撞上下方 `f"…淨值 {len(s)} 筆"`(s=None → TypeError
+                # → 整頁 traceback,前後無 try 保護)。**把一張看起來正常的卡換成整頁崩潰,
+                # 是更糟的結果。**
+                #
+                # 文案為什麼不再說「部分資料，下方顯示已有資訊」:那是假的 —— 舊卡下方的
+                # metric 與風險區塊在這條路徑上根本沒有資料可顯示(§1 錯誤的數字比沒有數字危險)。
+                import sys as _sys_q4
+                print(
+                    f"[tab2/unexpected-state] status={fd.get('status')!r} 卻缺 series/metrics: "
+                    f"series_type={type(s).__name__} "
+                    f"series_len={len(s) if hasattr(s, '__len__') else 'n/a'} "
+                    f"metrics_empty={not m}",
+                    file=_sys_q4.stderr)
+                not_ready(
+                    f"「{name or fk}」的資料狀態非預期（系統回報已完整，實際缺少淨值序列），"
+                    "本次不顯示任何數字以免誤導",
+                    where="上方的「🚀 分析」按鈕重跑一次；若仍相同，請把畫面截圖回報")
             else:
                 st.markdown("### ① 基本資料 & 淨值趨勢")
                 # v19.283:NAV 來源 + 跨度攤在最顯眼處(不藏進 expander)。
