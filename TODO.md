@@ -7,6 +7,15 @@
 
 **建立日期：2026-08-28**
 
+**沿革**：
+- **v1**（PR #727 → main `a81e460`）建立本檔。
+- **v2**（2026-08-28）：**Phase 1.4 死碼刪除（PR #730 → main `149d1dd`）之後的狀態同步**。
+  本次更新的所有舊敘述**一律加刪除線保留**，後面接狀態更新 —— 它們在寫下的當下**都是真的**，
+  失效的原因是**世界前進了**，不是原文寫錯。**刪掉它們會讓後人以為本檔當時漏看。**
+  ⚠️ **本次同步的基準點**：`git log --oneline -6 origin/main` 實跑（2026-08-28）——
+  `149d1dd` #730 Phase 1.4／`b00eabf` #729 三鐵律守衛／`a81e460` #727 本檔 v1／
+  `592b1fa` #728 三份線框進 `docs/wireframes/`。
+
 ⚠️ **本檔內的量測值會漂移（檔案大小、檔數、分頁數、分支是否存在、grep 命中數），引用前請現場複驗。**
 本檔所有「現況」欄位均標明取得證據的**指令或路徑**，就是為了讓後人能自己重跑一次，而不是相信這張表。
 
@@ -39,8 +48,9 @@
 |---|---|---|
 | 1.1 建立 `src/data/{macro, stock, fund, portfolio}` | **本 repo 無 `src/` 目錄**。姊妹 repo `my-stock-dashboard` **已有** `src/data/`，其子目錄為 `core daily etf macro news notify portfolio proxy sector_flow stock` —— 客戶點名的 macro / stock / portfolio 都在裡面。本 repo 的對應物是 **`repositories/`**（已有 `fund/` `macro/` `policy/` 三個領域子目錄） | 本 repo：`ls -d src` → `No such file or directory`；`ls -d repositories/*/` → `repositories/fund/ repositories/macro/ repositories/policy/`。姊妹 repo：`ls src/data/` |
 | 1.4 刪除 `stock_etf_dashboard/`（2,658 行） | **兩個 repo 都沒有這個目錄。** 姊妹 repo 的 git 歷史顯示它**已被刪除**；本 repo **從未有過** | 本 repo：`ls -d stock_etf_dashboard` → `No such file or directory`。姊妹 repo：同樣不存在，且 commit `e4e03f6`「刪除 stock_etf_dashboard/：先驗後刪，附可達性硬證明」 |
-| 1.4 `services/fund_batch.py` | **本 repo 確實存在**（10161 bytes，量測日 2026-08-28）。憲法 `§8.2` 記載為「v19.406 批次攤平器；v19.413 RETAINED-LEGACY」 | `ls -l services/fund_batch.py`；`CLAUDE.md §8.2` L2 Service 列 |
-| 1.4 「29 個無效測試模組」／「停用的 3 個總經指標模組」 | **待查證** —— 正由**獨立稽核組**實測中，本組手上**沒有清單**。⚠️ 客戶給的是**數量**不是**清單** | `ls tests/*.py \| wc -l` → **326**（量測日 2026-08-28）。此為總數，**不是**無效數 |
+| 1.4 `services/fund_batch.py` | ~~**本 repo 確實存在**（10161 bytes，量測日 2026-08-28）。憲法 `§8.2` 記載為「v19.406 批次攤平器；v19.413 RETAINED-LEGACY」~~ → **2026-08-28 狀態變更（決策者：user；不是原文寫錯，是本檔寫下之後被刪了）**：**已於 PR #730（main `149d1dd`）實體刪除**（−221 行），實測 production 0 caller。**客戶此項成立、已完成** | 刪除前：`ls -l services/fund_batch.py`。刪除後實測：`ls services/fund_batch.py` → No such file；`git show --stat 149d1dd` |
+| 1.4 「29 個無效測試模組」 | ~~**待查證** —— 正由**獨立稽核組**實測中，本組手上**沒有清單**~~ → **2026-08-28 結案：客戶的「29」是錯的數字。** 稽核組複現了它的產生方式（**只看模組路徑字面有無出現在別的檔案**），並實測至少 **5 個假陽性**（`repositories/ai_cache.py`、`repositories/batch_checkpoint.py` 等**其實都有人用**）。改用正確方法（納入**相對 import／barrel re-export／動態載入／workflow 與 docs 引用**）算出來是 **11 個可刪**，已全數刪除 | `git show --stat 149d1dd`（19 檔／−3,733 行，11 production 模組 + 8 孤兒測試） |
+| 1.4 「停用的 3 個總經指標模組」 | ~~**待查證**~~ → **2026-08-28 結案：查不到對應對象。** 兩條線索都已失效 —— `fetch_tw_export_yoy` 早在 **v19.355** 改走海關 opendata、**活得好好的**；`fetch_yf_forward_pe` / `fetch_multpl_pe` **上週已刪**；總經指南針三層鏈的佔位檔**也早已刪完**。⭐ **稽核組沒有為了湊數字硬找三個交差** —— 這正是本檔 §0 那條「實際找到幾個就報幾個」的紅線被真正執行了一次 | 稽核組回報；`CLAUDE.md §2.2` 對 `fetch_yf_forward_pe` / `fetch_multpl_pe` 的退役註記 |
 
 ⚠️ **關於數量的硬規則**：客戶寫的 29 / 3 是**目標數字，不是驗收標準**。
 **實際找到幾個就報幾個，不得為湊數字而刪。** 一個「為了湊到 29」而被刪掉的活檔案，
@@ -66,6 +76,19 @@
 ---
 
 ## Phase 1：資料庫管理、死碼清理與架構解耦（最優先）
+
+**進度總覽（2026-08-28 更新，實測）**
+
+| 子項 | 狀態 | 一句話 |
+|---|---|---|
+| 1.1 目錄分類 | ✅ **已符合**（不改目錄名） | 架構已達成，只是命名不同；總管裁決，客戶可推翻 |
+| 1.2 取數抽離集中 | 🔨 **已派工開工** | 分支 `claude/fund-phase1-extract-sn42bh`，目標 `P-UIHTTP-1` |
+| 1.3 核心計算純化 | ⏳ **仍待查證** | 本組的 grep 字表不完整，須獨立一組重掃 |
+| 1.4 死碼實體刪除 | ✅ **完成** | PR #730 → main `149d1dd`，19 檔 / −3,733 行 |
+| 1.5 FundClear/TDCC 保留 | ✅ **維持不動** | 但**證據已換**（見 1.5，原引的第二個檔已被刪） |
+
+⚠️ **Phase 1 總項尚未可勾** —— **1.2 未完成、1.3 未查證**。
+依維護規則第 2 條：**未完成不得跳級**，Phase 2 / Phase 3 的落地仍受此拘束。
 
 - [ ] **Phase 1 總項**（所有子項打勾後才可勾此項）
 
@@ -97,7 +120,12 @@
              `bench_ticker` 介面怎麼切）→ 依 `§8.1` 出架構規劃，**這一步禁止寫 code**。
           2. **`P-UIGSPREAD-1` 裁決**（獨立一組；憲法明訂**不得**由補登／回修 `EX-UICACHE-1` 的組承接）。
           3. **`P-UISUBPROC-1` 裁決**（獨立一組；憲法明訂**不得**由登記 C 類的同一組承接）。
-        - **阻擋者**：無（可立即開始）。
+        - **進度（2026-08-28 更新）**：⭐ **已派工開工** —— 分支
+          `claude/fund-phase1-extract-sn42bh`，**目標為 `P-UIHTTP-1`**（上列待辦第 1 項）。
+          ⚠️ **本組未讀其內容、未查證其進度**（本任務只維護 `TODO.md`，不讀他組工作區）；
+          此處僅記「已開工」這個狀態，**不代表已完成**。`P-UIGSPREAD-1` / `P-UISUBPROC-1`
+          兩項裁決**仍未開始**。
+        - **阻擋者**：無（已開始）。
           ⚠️ 但 **`EX-UICACHE-1` 整列掛在 `P-UIGSPREAD-1` 上**（憲法原文），
           故 `P-UIGSPREAD-1` **未裁決前，不得把新成員收進 `EX-UICACHE-1`**。
         - ⚠️ **`P-UIHTTP-1` 的搬遷屬架構改動，動工前須過 `§8.1`；若同時改到畫面結構，
@@ -122,32 +150,71 @@
         - **阻擋者**：無（查證可立即開始）；但若查出違反者，其修復**排在 1.2 之後**
           （同屬架構解耦，避免兩組同時改 `services/` 撞檔 —— `§-1.5.1c 00` 多 Agent 派工防撞）。
 
-  - [ ] **1.4 死碼實體刪除**
+  - [x] **1.4 死碼實體刪除**　→ **已完成（PR #730 → main `149d1dd`，2026-08-28）**
+        - **總結**：**11 個 production 0 caller 模組 ＋ 8 個孤兒測試 ＝ 19 檔 / −3,733 行**，分 3 波刪除。
+        - **測試對帳（總管親自實測，非轉述）**：
+          - main `b00eabf`（刪除**前**）：**14 failed / 5574 passed / 17 skipped**
+          - 分支（刪除**後**）：**14 failed / 5463 passed / 17 skipped**
+          - **差額 111 ＝ 被刪掉的測試數**；**failed 維持 14 且逐一同名**
+            （12 個 `test_dividend_anchor_v19527` ＋ 2 個 `test_dividend_calendar`，
+            全是沙箱缺 `holidays` 套件的**既有假紅**，與本批無關）。
+          - ⚠️ **failed 數相同不等於沒事** —— 這裡站得住腳是因為**逐一同名比對過**，不是因為數字一樣。
         - [x] **1.4-a `stock_etf_dashboard/`（2,658 行）→ N/A，本 repo 不存在**
               - **現況**：`ls -d stock_etf_dashboard` → `No such file or directory`（本 repo）。
                 姊妹 repo `my-stock-dashboard` **同樣不存在**，且其 git 歷史有
                 commit `e4e03f6`「刪除 stock_etf_dashboard/：先驗後刪，附可達性硬證明」。
               - **裁決**：**本項在本 repo 無適用對象，標 N/A。** 客戶此項源自姊妹 repo。
               - **阻擋者**：無。
-        - [ ] **1.4-b `services/fund_batch.py` → 待稽核**
-              - **現況**：**檔案存在**（10161 bytes，量測日 2026-08-28）。
+        - [x] **1.4-b `services/fund_batch.py` → 已刪除（PR #730）**
+              - ~~**現況**：**檔案存在**（10161 bytes，量測日 2026-08-28）。
                 憲法 `§8.2` L2 Service 列記載「v19.406 批次攤平器；**v19.413 RETAINED-LEGACY**」。
-              - **待辦**：由**獨立一組**實測 production caller 數，判定是活碼還是孤兒。
-                ⚠️ 依 `CLAUDE.md §-2` 規則 5，「這個檔**還有** caller 嗎」屬**取決於有沒有漏看**的問題
-                → **一律派工，且不可自己查自己**。
-                ⚠️ 「RETAINED-LEGACY」是**自稱**，依 `§-1.5.1c 判定 3`：
-                **「已自稱 Archive」不是免驗證的通行證**，實際過期與否要靠 caller 實測。
-              - **阻擋者**：無（查證可立即開始）；**刪除動作**須等 caller 實測完成。
-        - [ ] **1.4-c 「29 個無效測試模組」→ 清單待稽核組回報**
-              - **現況**：**本組沒有清單。** 僅知 `tests/*.py` 共 **326 個檔**
+                **待辦**：由**獨立一組**實測 production caller 數，判定是活碼還是孤兒。
+                **阻擋者**：無（查證可立即開始）；**刪除動作**須等 caller 實測完成。~~
+              - → **2026-08-28 狀態變更（決策者：user）：已完成。不是原文寫錯，是本檔寫下之後它被刪了。**
+                caller 實測結果為 **production 0 caller**，已於 **PR #730（main `149d1dd`）實體刪除**（−221 行）。
+                證據：`git show --stat 149d1dd`；`ls services/fund_batch.py` → No such file。
+              - ⭐ **這一項正好驗證了舊敘述當時堅持的那條紀律**：檔頭自稱
+                「**RETAINED-LEGACY … 保留不刪**」，而依 `§-1.5.1c 判定 3`
+                **「已自稱 Archive」不是免驗證的通行證** —— 最後是**實測 caller** 才把它判成孤兒，
+                **不是**因為它自稱 legacy 就留、也**不是**因為它自稱 legacy 就刪。**舊敘述加線保留，因為它記錄的是這條紀律。**
+              - **阻擋者**：無（已完成）。
+        - [x] **1.4-c 「29 個無效測試模組」→ 已結案：客戶的數字是錯的，實際是 11 個**
+              - ~~**現況**：**本組沒有清單。** 僅知 `tests/*.py` 共 **326 個檔**
                 （`ls tests/*.py | wc -l`，量測日 2026-08-28）—— 這是**總數**，不是無效數。
-              - **待辦**：等獨立稽核組回報**具名清單**（檔名逐一列出）。
-              - ⚠️ **不得憑「29」這個數字動手。** 實際找到幾個就報幾個。
-              - **阻擋者**：**獨立稽核組的清單**。清單未到 → **不動工**。
-        - [ ] **1.4-d 「停用的 3 個總經指標模組」→ 清單待稽核組回報**
-              - **現況**：**本組沒有清單，也未查證是哪三個。**
-              - **待辦**：同 1.4-c，等具名清單。
-              - **阻擋者**：**獨立稽核組的清單**。
+                **待辦**：等獨立稽核組回報**具名清單**。
+                **阻擋者**：**獨立稽核組的清單**。清單未到 → **不動工**。~~
+              - → **2026-08-28 狀態變更（決策者：user）：清單已到並已執行完畢。**
+              - ⭐ **客戶的「29」被推翻，理由要記住（比數字重要）**：稽核組**複現了那個 29 是怎麼算出來的**
+                —— 它**只看模組路徑字面有沒有出現在別的檔案裡**。該方法實測至少 **5 個假陽性**
+                （`repositories/ai_cache.py`、`repositories/batch_checkpoint.py` 等，**其實都有人用**）。
+                正確方法必須同時涵蓋 **相對 import / barrel re-export / 動態載入 / workflow 與 docs 引用**，
+                據此算出的可刪數是 **11 個**。
+              - **實際刪除**：**11 個 production 0 caller 模組 ＋ 8 個孤兒測試 ＝ 19 檔 / −3,733 行**，
+                分 **3 波**（波與波之間有真實依賴，故不可一次砍）：
+                - **第 1 波**（葉節點、互不依賴）：`services/ai_advisor_pending.py`、
+                  `services/cross_source_compare.py`、`services/switch_state_machine.py`、
+                  `services/fund_batch.py`、`services/calibration/risk.py`、
+                  `services/calibration/signal_threshold.py`、`repositories/tw_macro_repository.py`
+                - **第 2 波**：`services/tdcc_nav_accumulate.py`、`repositories/tdcc_nav_opendata.py`、
+                  `services/macro_signal_lookback.py`
+                - **第 3 波**：`services/macro/signal_lookback.py`
+              - 證據：`git show --stat 149d1dd`（PR #730 → main `149d1dd`）。
+              - ✅ **§0 的紅線「實際找到幾個就報幾個，不得為湊數字而刪」在本項被真正執行了一次**
+                —— 沒有為了湊到 29 而多刪 18 個。
+              - **阻擋者**：無（已完成）。
+        - [x] **1.4-d 「停用的 3 個總經指標模組」→ 已結案：查無對應對象，N/A**
+              - ~~**現況**：**本組沒有清單，也未查證是哪三個。**
+                **待辦**：同 1.4-c，等具名清單。
+                **阻擋者**：**獨立稽核組的清單**。~~
+              - → **2026-08-28 狀態變更（決策者：user）：稽核組查不到對應對象，本項判為 N/A。**
+              - **兩條線索都已失效（逐一列出，不含糊帶過）**：
+                1. `fetch_tw_export_yoy` —— 早在 **v19.355** 就改走**海關 opendata**，**活得好好的**，不是停用模組。
+                2. `fetch_yf_forward_pe` / `fetch_multpl_pe` —— **上週已刪**（見 `CLAUDE.md §2.2` 該列的退役註記）。
+                3. 總經指南針三層鏈的佔位檔 —— **也早已刪完**。
+              - ⭐ **最重要的一點：稽核組沒有為了湊數字硬找三個交差。**
+                這正是 §0 那條紅線（「客戶給的是**目標數字**，不是**驗收標準**」）在實務上第二次生效。
+                **一個為了湊到 3 而被刪掉的活模組，比留著 3 個死模組嚴重得多。**
+              - **阻擋者**：無（已完成）。
         - ⚠️ **1.4 全項共同的動工紅線**（`CLAUDE.md §-1` ＋ `§-1.5.1c 判定 3`）：
           - GC（垃圾清理）是「**任務內的收尾義務**」，**不是主動巡邏授權**。
             ⛔ **不得**引用本項發動「全 repo 掃孤兒檔」的巡邏。
@@ -156,9 +223,21 @@
           - **正式下架仍在被使用的既有功能** → **必須請示客戶**（「孤兒 ≠ 沒人用」）。
 
   - [x] **1.5 FundClear / TDCC 官方淨值路線保留**
-        - **現況**：兩條路線的實作**都在**：`repositories/fundclear_offshore.py`、
-          `repositories/tdcc_nav_opendata.py`（`ls repositories/`，量測日 2026-08-28）。
-          憲法 `§2.1` 亦記載 FundClear（境外主）／TDCC（境內主）為 T1 官方來源。
+        - ~~**現況**：兩條路線的實作**都在**：`repositories/fundclear_offshore.py`、
+          `repositories/tdcc_nav_opendata.py`（`ls repositories/`，量測日 2026-08-28）。~~
+          → ⚠️ **2026-08-28 更正（決策者：user；不是原文寫錯，是本檔寫下之後檔案被刪了）**：
+          **舊敘述所列的第二個檔 `repositories/tdcc_nav_opendata.py` 已於 PR #730 實體刪除**
+          （連同 `services/tdcc_nav_accumulate.py`，屬第 2 波），**實測 production 0 caller**。
+          ⚠️ **本項結論（兩條官方淨值路線都還在）仍然成立，但理由必須換掉**：
+          **TDCC 取數本身沒有消失**，它住在 **`repositories/fund/sources.py`**
+          （實測該檔 `__all__` 含 `tdcc_get_agents` / `tdcc_search_fund` / `_src_tdcc_meta` /
+          `_tdcc_resolve_fund_name`，且第 587 行起有 TDCC→cnyes 名稱橋接的實作）。
+          被刪掉的是**另一條 0 caller 的 opendata 旁支**，不是主線。
+          **現況（實測 2026-08-28 覆核）**：`repositories/fundclear_offshore.py` **仍在**；
+          TDCC 走 `repositories/fund/sources.py`。憲法 `§2.1` 記載 FundClear（境外主）／
+          TDCC（境內主）為 T1 官方來源，**該記載未受影響**。
+          ⚠️ **這一處不在交辦點名的 5 處之內，是本組逐檔比對時抓到的第 6 處失效** ——
+          方法教訓見附錄 C 盲點 7。
         - **裁決**：**本項是「不動」** —— 官方淨值路線暫留、排入備援接線。故直接標 `[x]`。
         - ⚠️ **一處據實揭露**：總管交辦時把本項出處寫為「**憲法決定二**」，
           但本組實測 `grep -rn "決定二" *.md docs/*.md` → **0 命中**。
@@ -229,24 +308,44 @@
         - **待辦**：對 Phase 1 / Phase 2 產出的每一個修復，補上會轉紅的守衛測試。
         - **阻擋者**：**Phase 1 與 Phase 2 的修復本體**（沒有修復就沒有可突變的對象）。
 
-  - [ ] **3.2 四大鐵律的機器守衛**
-        - **現況**：總管交辦所述 —— **四大鐵律中有三條目前零機器守衛**（已實測），
-          守衛正在建，指為分支 `claude/fund-ui3b-guards-sn42bh`。
-          ⚠️ **實測校正（同 2.2）**：該分支**在 origin 上不存在**
-          （~~`git ls-remote --heads origin` 只有 `claude/fund-wireframe-docs-sn42bh`~~
-          → **2026-08-28 更正該括號內的舉證**：**不是原文寫錯，是時序差** ——
-          原句列舉的「只有 wireframe-docs 一個」在量測當下為真，但之後 origin 上又多了
-          `claude/fund-ui3b-components-sn42bh`、`claude/fund-todo-tracker-sn42bh`；
-          **`claude/fund-ui3b-guards-sn42bh` 則仍然未推送**，故**本項的結論未變、仍然有效**，
-          變的只是那句舉證所列的分支清單。量測日 2026-08-28，覆核同日），
-          應仍在某個 agent 的本地 clone。
-          ⚠️ **「四大鐵律有三條零守衛」是總管轉述的實測結論，本組未獨立複驗**，
-          也**未查證那四條鐵律具體是哪四條**。→ **待查證**。
-        - **待辦**：
-          1. 由承接組**具名列出**四大鐵律各是哪一條、各自的守衛現況（有／無／部分）。
-          2. 補齊零守衛者的機器守衛（CI gate）。
-        - **阻擋者**：無（守衛可獨立於 Phase 1 進行）；
-          但**合併順序**同 2.2 —— 依總管明訂，Phase 2/3 的分支等 Phase 1 通過測試才放行。
+  - [ ] **3.2 四大鐵律的機器守衛**　→ **部分完成：三鐵律守衛已上線（PR #729），但不等於已符合**
+        - ~~**現況**：總管交辦所述 —— **四大鐵律中有三條目前零機器守衛**（已實測），
+          守衛正在建，指為分支 `claude/fund-ui3b-guards-sn42bh`。~~
+          → **2026-08-28 狀態變更（決策者：user；不是原文寫錯，是狀態前進了）**：
+          **守衛已合併進 main（PR #729 → `b00eabf`）**，**不再是「正在建」**。
+          新增 3 個測試檔、**206 條測試**：`tests/test_ui_grid_contract.py`、
+          `tests/test_ui_rerun_contract.py`、`tests/test_first_screen_contract.py`
+          （證據：`git show --stat b00eabf`）。
+        - ⛔ **兩件必須據實寫明的事，否則這一項會被誤讀成「已符合」**：
+          1. ⭐ **守衛擋的是「往後不准變糟」，不是「現在已符合」。**
+             實測 **109 個 `columns()` 呼叫中只有 21 個是 3 欄**，其餘 **88 個非 3 欄進了豁免表**。
+             **豁免表是待辦的可見化，不是批准** —— 讀這一項時**不得**把「守衛綠燈」讀成「版面已達標」。
+          2. ⭐ **鐵律 3（三態顏色）沒有在這批修。**
+             它的守衛目前 **fail-open**（**包成 helper 就隱形**，掃不到）。
+             **總管裁決：單獨排一批。** 翻成 fail-closed 的影響估算：
+             **約 20 個站點會轉紅，其中約 8 個是真發現、約 8 個是需先建別名解析的噪音。**
+             ⚠️ 這個估算**本組未複驗**，照轉。
+        - **分支狀態（v1 舊敘述整段作廢，加線保留）**：
+          ~~⚠️ 實測校正（同 2.2）：該分支在 origin 上不存在（`git ls-remote --heads origin`
+          當時只有 `claude/fund-wireframe-docs-sn42bh`；v1 更新輪已就地更正該舉證所列的分支清單，
+          結論「guards 分支未推送」當時仍成立），應仍在某個 agent 的本地 clone。~~
+          → **2026-08-28 v2：整段作廢，理由是它問錯了問題。**
+          `claude/fund-ui3b-guards-sn42bh` 這個分支名**在 origin 上仍查無**（實測覆核），
+          但**守衛工作根本不是經該分支落地的** —— **實際落地的是 PR #729（`b00eabf`），已在 main**。
+          故「那個分支在哪」**已不影響任何判斷**。
+          ⚠️ **教訓**：v1 追著「分支存不存在」問，但真正該問的是「**那件事做完了沒有**」。
+          **分支名是過程的痕跡，不是進度本身。**
+        - ⚠️ **「四大鐵律具體是哪四條」本組仍未查證**（v1 即標明，**本次未解**）。
+          「三條零守衛」那半已由 PR #729 處理掉，見上。→ 見附錄 B **B8**。
+        - **待辦（尚未完成的部分）**：
+          1. ~~補齊三鐵律守衛~~ → **已完成（PR #729）**。
+          2. **鐵律 3（三態顏色）的守衛翻成 fail-closed** —— 總管裁決單獨排一批，**尚未開始**。
+          3. **88 個非 3 欄豁免項的收斂** —— 豁免表只是可見化，**還沒有人去收**。
+          4. 由承接組**具名列出**四大鐵律各是哪一條（本組仍未查證是哪四條）。
+        - **阻擋者**：無（守衛本身已上線）；
+          但**鐵律 3 那一批**依總管裁決單獨排，**尚未排入**。
+          ⚠️ 原「合併順序同 2.2」那句**對 PR #729 已不適用**（它已經合併了）；
+          **對 Phase 2 的 #726 仍然適用**，見 2.2 段。
 
   - [ ] **3.3 資料真實性驗證（`§1` Fail Loud）**
         - **現況**：憲法 `§1` 已定「寧可炸掉，不可造假」；`§-1.5.1c 02` 另加四條具體要求
@@ -299,17 +398,17 @@
 
 | 編號 | 待查證內容 | 誰來查 |
 |---|---|---|
-| B1 | 「29 個無效測試模組」的**具名清單**（本組只知 `tests/*.py` 共 326 檔，非無效數） | 獨立稽核組 |
-| B2 | 「停用的 3 個總經指標模組」的**具名清單**（本組完全未查證是哪三個） | 獨立稽核組 |
-| B3 | `services/fund_batch.py` 的 production caller 數（「RETAINED-LEGACY」是自稱，須實測） | 獨立一組，不可自己查自己 |
+| ~~B1~~ **已結案** | ~~「29 個無效測試模組」的**具名清單**（本組只知 `tests/*.py` 共 326 檔，非無效數）~~ → **2026-08-28 結案**：客戶的「29」經稽核組複現其產生方式後判定**數字錯誤**（至少 5 個假陽性），正確數為 **11 個**，已於 PR #730 全數刪除。詳見 1.4-c | ~~獨立稽核組~~ 已完成 |
+| ~~B2~~ **已結案** | ~~「停用的 3 個總經指標模組」的**具名清單**（本組完全未查證是哪三個）~~ → **2026-08-28 結案：查無對應對象，判為 N/A**。兩條線索皆失效（`fetch_tw_export_yoy` v19.355 已改走海關 opendata 且仍在用；`fetch_yf_forward_pe`/`fetch_multpl_pe` 上週已刪；指南針佔位檔早已刪完）。**稽核組未為湊數字硬找三個交差。** 詳見 1.4-d | ~~獨立稽核組~~ 已完成 |
+| ~~B3~~ **已結案** | ~~`services/fund_batch.py` 的 production caller 數（「RETAINED-LEGACY」是自稱，須實測）~~ → **2026-08-28 結案**：實測 **production 0 caller**，已於 PR #730 實體刪除。⭐ **是實測 caller 判定的，不是因為它自稱 legacy** —— 該紀律見 1.4-b | ~~獨立一組~~ 已完成 |
 | B4 | `services/` 是否真的零 I/O（本組的 grep 字表**未涵蓋** `urllib` / `socket` / `subprocess` / 其他 SDK / 動態 import / 內部封裝間接呼叫） | 獨立一組 |
 | B5 | `P-UIGSPREAD-1`：`ui/**` 直呼 gspread 是否等同 EX-CRUD-1 的「本地持久化 CRUD」 | 獨立一組，**不得**由補登／回修 `EX-UICACHE-1` 的組承接 |
 | B6 | `P-UISUBPROC-1`：`ui/sidebar.py` 的 `subprocess` 對外往返算不算「私有資料抓取」 | 獨立一組，**不得**由登記 C 類的同一組承接 |
 | B7 | Phase 2.3：本 repo UI 的 `st.form` 防重繪／Checkbox Gate 現況（本組**未跑任何 UI 稽核**） | 獨立一組 |
-| B8 | Phase 3.2：「四大鐵律」具體是哪四條、哪三條零守衛（本組未獨立複驗，也未查證是哪四條） | 承接守衛工作的那一組 |
-| B9 | Phase 3.3：失敗退避實作（`shared/backoff_policy.py` / `infra/source_backoff.py`）**是否已合併**（本組未查證） | 承接組現場確認 |
+| B8 | Phase 3.2：「四大鐵律」具體是哪四條（本組**仍未查證**）。~~哪三條零守衛~~ → **2026-08-28 部分結案**：**三條的守衛已上線**（PR #729 → `b00eabf`，3 檔 206 條測試）；**鐵律 3（三態顏色）仍 fail-open**，總管裁決單獨排一批。⚠️ **守衛上線 ≠ 已符合**（88 個非 3 欄在豁免表內）。**「四條各是哪一條」仍為待查證** | 承接守衛工作的那一組 |
+| ~~B9~~ **部分結案** | ~~Phase 3.3：失敗退避實作（`shared/backoff_policy.py` / `infra/source_backoff.py`）**是否已合併**（本組未查證）~~ → **2026-08-28 實測：兩個檔案在 main 上都已存在**（`ls shared/backoff_policy.py infra/source_backoff.py` 皆命中）。⚠️ **「檔案在」不等於「已接線、已生效、已通過稽核」** —— 本組**只驗了檔案存在**，**未讀其實作、未跑測試、未查證它與 `fx_and_main.py` v18.275 positive-only 設計的張力是否已處理**。**該張力仍是 3.3 的硬要求，見該項。** | 承接組現場確認**接線與張力處理**（存在性已驗） |
 | B10 | 1.5「憲法決定二」的出處（本組 `grep -rn "決定二" *.md docs/*.md` → **0 命中**） | 總管補上出處，或改記為口述交辦 |
-| B11 | ~~`claude/fund-ui3b-components-sn42bh` 與 `claude/fund-ui3b-guards-sn42bh` 兩分支的內容與進度（實測 origin 上**均不存在**，應仍在本地 clone）~~ → **2026-08-28 更正（不是原文寫錯，是時序差；「均不存在」在量測當下為真）**：現為 **guards 一個未推送**。**components 已推送到 origin**（`de721ef`）並開出 **PR #726**（draft、壓著不合併，理由是 **Phase 1 未完成不得跳級**）→ 其**內容**仍待查證，但**進度**已明。**`claude/fund-ui3b-guards-sn42bh` 仍未推送**，該半項**維持待查證**。 | 各該承接組 |
+| B11 | ~~`claude/fund-ui3b-components-sn42bh` 與 `claude/fund-ui3b-guards-sn42bh` 兩分支的內容與進度（實測 origin 上**均不存在**，應仍在本地 clone）~~ → **2026-08-28 更正（不是原文寫錯，是時序差；「均不存在」在量測當下為真）**：現為 **guards 一個未推送**。**components 已推送到 origin**（`de721ef`）並開出 **PR #726**（draft、壓著不合併，理由是 **Phase 1 未完成不得跳級**）→ 其**內容**仍待查證，但**進度**已明。**`claude/fund-ui3b-guards-sn42bh` 仍未推送**，該半項**維持待查證**。 → **2026-08-28 v2 再更新**：**components 的 PR #726 仍為 open / draft、仍壓著不合併**（狀態未變）；**guards 那半項已無意義** —— 守衛工作**不是**經該分支落地的，而是 **PR #729（`b00eabf`）已合併進 main**，故該分支名是否存在**已不影響任何判斷**（見 3.2 段）。 | 各該承接組 |
 
 ---
 
@@ -322,11 +421,11 @@
 ls -d src                                   # → No such file or directory
 ls -d repositories/*/                       # → fund/ macro/ policy/
 ls -d stock_etf_dashboard                   # → No such file or directory
-ls -l services/fund_batch.py                # → 10161 bytes
+ls -l services/fund_batch.py                # → 10161 bytes（量測當下；PR #730 後該檔已刪除）
 grep -n "yfinance\|yf\.Ticker\|mk_bench_cache" ui/components/mk_dashboard.py
 grep -rnE "(^|[[:space:]])(import (requests|httpx|feedparser|bs4)|from (requests|httpx|feedparser|bs4)[. ])" services/ --include=*.py
 grep -n "st.tabs" app.py                    # → 7 頂層 + tab_ref 內巢狀 2
-ls tests/*.py | wc -l                       # → 326
+ls tests/*.py | wc -l                       # → 326（量測當下；PR #729 +3、PR #730 −8 後，2026-08-28 覆核為 321）
 git ls-remote --heads origin | grep -iE "ui3b|sn42bh"
 grep -rn "決定二" *.md docs/*.md            # → 0 命中
 grep -n "P-UIHTTP-1\|P-UIGSPREAD-1\|P-UISUBPROC-1\|P-NAVCACHE-1\|P-NDCCACHE-1" CLAUDE.md
@@ -355,3 +454,28 @@ grep -n "P-UIHTTP-1\|P-UIGSPREAD-1\|P-UISUBPROC-1\|P-NAVCACHE-1\|P-NDCCACHE-1" C
 6. **本檔不構成動工授權。** 依 `CLAUDE.md §-1`：user 沒明確指派時 → **停手等指令**。
    ⛔ **不得**因為「TODO.md 上寫了」就去做某一項 —— 那正是 `§-1` 明列的
    「❌ 機械式清 TODO list 充數」與「❌ 因為文件寫了就提議」。
+
+### v2 更新輪（2026-08-28，Phase 1.4 後同步）新增的方法教訓
+
+7. ⭐ **「一個事實變了，要把同一把尺對全檔重跑」—— 本輪又抓到一處交辦沒點名的失效。**
+   交辦點名 5 處，本組逐檔比對後發現**第 6 處**：**§1.5 引用的
+   `repositories/tdcc_nav_opendata.py` 也在 PR #730 被刪了**。
+   若只改被點名的 5 處，§1.5 會留下一個指向不存在檔案的「證據」——
+   **一份會說謊的進度表，比沒有進度表更危險**（對照 `CLAUDE.md §8.2.A.0` 立節理由）。
+   ⚠️ 這是**同一個教訓在本檔第二次生效**（第一次見 v1 更新輪的盲點 3）。
+   **往後每次狀態同步，都要把變動事實對全檔同類敘述掃一遍，不能只改被點名的行。**
+
+8. ⭐ **「rebase 之後，基線要重量」——本輪的真實案例。**
+   Phase 1.4 執行組回報的測試基線 **5368** 是在守衛（PR #729，**+206 測試**）合併**之前**量的，
+   **rebase 後沒有重量**。→ **數字本身內部一致，但基線對不上**。
+   總管親自重量後為：刪除前 **5574 passed**、刪除後 **5463 passed**、差額 **111**。
+   ⚠️ **失效模式要記住**：兩個數字各自都沒錯，錯的是**它們不是在同一個世界量的**。
+   **rebase / merge 之後，任何「前後對比」的基線都必須重新量一次，不得沿用 rebase 前的數字。**
+
+9. **本輪同樣是單組產出，未經第二組獨立複驗。**
+   本輪**實跑覆核**的有：`git log --oneline -6 origin/main`、`git show --stat 149d1dd`、
+   `git show --stat b00eabf`、`git show --stat 592b1fa`、被刪檔案的 `ls` 存在性、
+   `ls tests/*.py | wc -l`（→ **321**）、`repositories/fund/sources.py` 的 TDCC symbol。
+   **未複驗**的有（照轉，標明出處）：測試 pass/fail 數字（總管親自實測）、
+   「29 的產生方式與 5 個假陽性」（稽核組）、「109 個 `columns()` 中 21 個是 3 欄」（守衛組）、
+   「鐵律 3 翻 fail-closed 約 20 站點轉紅、約 8 真 8 噪音」（估算，未複驗）。
