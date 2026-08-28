@@ -770,11 +770,48 @@ L3↛L1 直呼／跨層上行 import。**禁止引用 v3 的「三層」去主�
     該來源**一律升級 L2 集中**，不得再以 EX-PASSTHRU-1 續留兩份。
   - **EX-CRUD-1 不受此影響**：它涵蓋的是**本地持久化 CRUD**（Google Sheets／本地 JSON，read+write 同檔、
     無 cache 裝飾、無外部 HTTP），**不是「取數來源」**，`01`-2 的「同一資料來源只能有一處取數實作」射不到它。
-- **本 repo 現況（實測，2026-08-27）**：`ui/**` 全層只有 **2 檔**出現 `import requests` ——
-  `ui/sidebar.py`（「測試 Proxy 連線」按鈕）與 `ui/tab5_data_guard.py`（「API 連線延遲趨勢」測速按鈕）。
-  **兩者都是連線診斷 ping**（回應內容丟棄、不產生任何業務指標），**不是** v3 所指的「私有資料抓取」。
-  **判定：登記為邊緣案例、不動工**（§-1 無觸發）；若日後那兩處要擴充成會產生數值的東西，**立即落入 `01`-1**。
-  ⚠️ **「ui/ 只有這 2 檔」是單組 grep 的窮舉句，未經第二組驗證**（§-2 規則 6）。
+- ~~**本 repo 現況（實測，2026-08-27）**：`ui/**` 全層只有 **2 檔**出現 `import requests` ——~~
+  ~~`ui/sidebar.py`（「測試 Proxy 連線」按鈕）與 `ui/tab5_data_guard.py`（「API 連線延遲趨勢」測速按鈕）。~~
+  ~~⚠️ **「ui/ 只有這 2 檔」是單組 grep 的窮舉句，未經第二組驗證**（§-2 規則 6）。~~
+  → **2026-08-28 更正為 3 處**（**有意識的更正，不是漏刪**；依據：**實測**，指令與輸出見下）。
+  **舊表述的結論仍然成立**（都是連線診斷 ping、都不動工）；**被更正的是「有幾處」與「怎麼查」** ——
+  舊表述當時只掃 `import requests`，**漏掉第三處**，而漏掉的原因不是眼力，是**查法**（見「⚠️ 方法缺陷」）。
+
+- **本 repo 現況（實測，2026-08-28）**：`ui/**` 全層有 **3 處**對外發 HTTP，**全部是連線診斷 ping**
+  （只讀 `status_code` / 耗時 / 回應長度，**內容丟棄、不產生任何業務指標**），
+  **不是** v3 所指的「私有資料抓取」：
+
+  | # | 檔案 | 位置（符號 + 按鈕，**不寫行號**，§8.2.A.0 規則 1） | 形態 |
+  |---|---|---|---|
+  | 1 | `ui/sidebar.py` | `render_sidebar()` 內「🔍 測試 Proxy 連線」按鈕 | `import requests as _req`，逐一 GET 6 個 endpoint 測通 |
+  | 2 | `ui/tab5_data_guard.py` | `render_data_guard_tab()` 內「🕐 立即測試三源連線速度」（`key="btn_d5_ping"`） | `import requests as _req_lat`，測 3 源往返 ms |
+  | 3 | `ui/tab5_data_guard.py` | `render_data_guard_tab()` 內「🧪 立即測 NAS Proxy 連線」（`key="btn_d5_proxy_test"`） | **`from infra.proxy import fetch_url`**，GET 一個 MoneyDJ URL，只讀 `status_code` 與 `len(r.text)` |
+
+  **判定：三處都登記為邊緣案例、不動工**（§-1 無觸發）；若日後任一處要擴充成會產生數值的東西，
+  **立即落入 `01`-1**。**這一點與舊表述相同，未改。**
+
+- ⚠️ **方法缺陷（本次真正要記的東西，比「2 → 3」這個數字重要）**：
+  舊表述的查法是 **只 grep `import requests`**。第 3 處走的是 `infra.proxy.fetch_url`
+  —— 它**根本不含 `requests` 這個字**，所以**不是漏看，是那條指令在結構上就掃不到它**。
+  **同一個字面 grep 再跑一百次，還是會漏同一處。**
+  → **往後查「UI 層有沒有對外取數」，不得只掃 `import requests`**，必須同時涵蓋
+  **經由 `infra/proxy` 等內部封裝發出的請求**。對照 §8 前言那條既有教訓
+  （「用『要問客戶』的關鍵字，結構上永遠掃不到放寬條文」）—— **是同一種病：字表選錯，掃再多次都沒用。**
+
+  **驗證指令（2026-08-28 實跑過，本行即從實跑處照抄；repo 根目錄執行）**：
+
+  ```
+  git grep -nE "import (requests|httpx|urllib)|import (fetch_url|urlopen)|requests\.(get|post)|\.urlopen\(|feedparser\.parse\(" -- 'ui/**'
+  ```
+
+  **當時輸出 4 行**：上表 3 處，外加 `ui/tab5_data_guard.py` 一句**字串字面值**
+  （caption 文案「所有 requests.get + urllib.urlopen 已透過 NAS Proxy 中繼」，非程式呼叫）。
+  ⚠️ **本指令刻意「寧可多抓、不可漏抓」** —— 命中後**須人工逐一判讀**是呼叫還是字串。
+  **會多抓是設計，不是瑕疵**；反過來為了乾淨而收窄字表，正是這次出錯的原因。
+
+  ⚠️ **本次仍是單組實測，未經第二組獨立驗證**（§-2 規則 6）——
+  「`ui/**` 只有這 3 處」仍是**窮舉句**，只是換了一條**掃得到第三種形態**的指令。
+  **不得**當成「已查證的事實」；且上列指令**未涵蓋** `socket` / `subprocess` / 其他內部封裝等形態。
 
 #### 判定 3｜`01`-2 Garbage Collection ✕ §-1「沒需求不要動」：**GC 是任務內的收尾義務，不是主動巡邏授權**
 
@@ -1783,6 +1820,62 @@ np.isclose(a, b, rtol=1e-9, atol=1e-12)
 | **EX-CRUD-1** | UI 直呼以下 L1 repository:`policy_repository` / `snapshot_repository` / `ledger_repository` / `batch_checkpoint` / `pool_repository` / `portfolio_perf_repository`(v19.407 補登前四;v19.428 補登 pool;v19.430 補登 portfolio_perf;Google Sheets / 本地 JSON 持久化) | L3 UI 可直接 import L1 CRUD repository | §8.2 規則「L3 不得直呼 L1 — cache 才能集中」的核心理由是**外部 HTTP fetcher 的 TTL cache 須集中管理**。本組 repository 為**本地持久化**(read+write 同檔),**無 `@_ttl_cache` / `@st.cache_data` 裝飾**,亦無外部 HTTP I/O — 不存在「cache 分散」問題。為純 CRUD 加 L2 pass-through wrapper = §8.1 step 6「用不到的抽象」反例。`ui/helpers/cloud_io.py` / `v2_editor.py` / `oauth_state.py` + `ui/tab3_portfolio.py` / `tab3_t7_ledger.py` 直接 import 為允許用法;`ui/tab_batch_analysis.py` 直呼 `repositories/batch_checkpoint.py`(批次分析磁碟續存,v19.407)為同精神新增。**v19.428**:`repositories/pool_repository.py`(換股顧問選股池,GS worksheet + 本地 JSON fallback,read+write 同檔、無 cache 裝飾、無外部 HTTP)由 `ui/helpers/fund_grp_health/switch_advisor_section.py` 直呼,同精神新增(檔頭已註解指回本表)。**v19.430**:`repositories/portfolio_perf_repository.py`(組合績效永久快照,GS worksheet `_portfolio_perf_history` + 本地 JSON fallback,read+write 同檔、無 cache 裝飾、無外部 HTTP)由同一 `switch_advisor_section.py` 直呼,同精神新增。F-H6 v19.79 決策。 |
 | **EX-PASSTHRU-1**(v19.251 補登 3 + v19.273 補登 1 + v19.377 B2c 補登 2 entry) | UI 直呼以下 L1 facade fetcher(共 8 組):<br>- `repositories.fund.tdcc_search_fund`(`ui/tab2_single_fund.py:147`)— 多 endpoint(TDCC 3-2 + 3-4)整合 + dedup + nav merge + keyword match<br>- ~~`repositories.fund.get_latest_fx`~~ **(v19.247 R16 升級)**:9 caller files / 18 call sites 全 migrate 至 L2 `services.fund_service.get_latest_fx`(thin facade 呼 L1 實作,L1 業務 0 改動)<br>- `repositories.news_repository.fetch_market_news`(`ui/tab1_macro.py:1188` / `ui/tab3_t7_ledger.py:2710`)— 5 RSS feeds 並聯 + keyword filtering + systemic risk classify + dedup + sort<br>- ~~**`repositories.fund.fetch_fund_by_key` / `fetch_nav_history_long`**(`ui/tab_crisis_backtest.py`)~~ **(v19.314 退役)**:危機回測 UI 整功能拔除,此 2 條 UI 直呼例外一併退役<br>- **`repositories.fund.diagnose_fx_sources`**(`ui/tab5_data_guard.py:832` lazy)— Tab5 資料看板 diagnostic,L1 內部用 + UI 直呼合理<br>- **`repositories.macro_tw_local_repository.{fetch_ndc_signal_history,fetch_tw_pmi_local,fetch_tw_export_yoy,fetch_foreign_consecutive_days}`**(`ui/tab1_macro.py:821` lazy,4 fn 一組)— TW 本地總經 self-contained L1 fetcher(FinMind 單源),v19.197 P1-4 從 `macro_tw_local_fetch.py` 下沉 repositories,UI 直呼取數後在 L3 端 regime 判讀。**v19.268 D8 #7 後**:UI 端 `_safe_tw()` wrapper 已加 schema 驗證(`validate_ndc_signal_dict` 等),取數即驗,純 fetch facade 無 L2 業務需上提。<br>- **`repositories.macro_repository.fred_get_next_release_date`**(`ui/helpers/io/data_registry.py:139` lazy / `ui/tab5_data_guard.py:1237` lazy)— thin FRED 揭露日 helper(動態 TTL 計算 / Tab5 診斷用),無 L2 業務邏輯,UI 直呼取數。**v19.377 B2c 補登**(全域排毒 Wave B2 架構越權查緝點名;user 核准混合案:thin pass-through 登例外而非建 facade,避 §8.1 step 6「用不到的抽象」)。<br>- **`repositories.news_repository.fetch_stock_news`**(`ui/helpers/fund_grp_health/ai.py:232` / `ui/tab2_single_fund.py:1300`)— self-contained 個股新聞 fetcher(feedparser Google News 逐股搜尋),與**已登錄兄弟** `fetch_market_news` 同精神(self-contained news fetcher,UI 直呼);為兩兄弟一致處理故一併登錄。**v19.377 B2c 補登**。 | L3 UI 直接 import L1 facade(共 8 組);v19.247 R16 後 `get_latest_fx` 已上提 L2 wrapper | **v19.273 Phase 2 TOP 3 補登原因**:`tab1_macro.py:821` 4 個 TW macro local fetcher UI 直呼為 v19.197 P1-4 下沉後的既有 pattern,屬「self-contained L1 fetcher + UI 直呼取數」(F-GRAY-2 同精神),原僅有 v19.197 commit 紀錄未在例外表登錄,PHASE1_AUDIT_DELTA.md TOP 3 點名補登避免讀例外表者誤判為違憲。**v19.251 補登原因**:R8 EX-L1ORCH-1 退役註腳口頭認可 `tab_crisis_backtest.fetch_fund_by_key`,但未在例外表正式登錄;另 `fetch_nav_history_long` / `diagnose_fx_sources` 同屬 lazy import + 單一 caller pattern,一併補登。**v19.247 R16 部分升級記錄**:9 UI caller 全 migrate `from services.fund_service import get_latest_fx`,L2 thin facade 呼 L1 實作(允許 L2→L1 方向)。L1 業務 0 改動。**升級觸發條件**:user 明確要求集中 cache、新增 source、後處理 bug。F-H6 v19.79 原決策 + R15/R16 對齊。 |
 | ~~**EX-L1ORCH-1**~~(v19.240 R8 升級退役) | ~~L1 fund orchestrator import L2 `calc_metrics`~~ | ~~抓 + 打包 facade~~ | **退役原因**:v19.240 深挖發現實際違憲 3 個 L2 symbol(`calc_metrics` + `reconcile_fund_annual_return` + `reconcile_dividend_yield`)+ 大量 L2 業務判斷(perf 注入決策 / window 閾值 / % vs decimal 換算 / 對帳)push 回 L1,**升級觸發條件 (a)+(b) 均達標**。R8 採方案 (b) 拆 return + L2 wrapper:`services.fund_service.finalize_fund_metrics()` + `fetch_fund_by_key_enriched` / `fetch_fund_from_moneydj_url_enriched` 兩 wrapper 上提 L1 業務邏輯,L1 純化為 raw fetch + packaging。L1→L2 violation 從 3 → 0。Migrate 4 個 caller site(`ui/helpers/v2_editor.py` / `services/moneydj_fetcher.py` x3),其餘 `tab_crisis_backtest.py` 用 raw `fetch_fund_by_key`(只取 series 不需 metrics)。 |
+| **EX-UICACHE-1**(2026-08-28 補登) | **依模式判定,不列行號**(§8.2.A.0 規則 1)—— L3 `ui/**` 內以 `@st.cache_data` 自建薄快取,且**同時**滿足下列 4 條:<br>① **TTL 走 `shared/ttls.py` SSOT**,檔內**不寫死秒數**(§3.3);<br>② 被快取的是**本地持久化讀取**(Google Sheets / 本地 JSON),**非外部 HTTP 取數**;<br>③ **有明確的寫後失效路徑**,且該路徑**真的被寫入端呼叫**(不是只定義不接線);<br>④ 快取只擋「重複讀」,**不改變任何顯示語意**。<br>**2026-08-28 實測符合者 5 處 / 3 檔**(量測日;依規則 4 標日期):<br>- `ui/helpers/v2_editor.py` — `_cached_load_policy_v2` / `_cached_list_policies`(`TTL_1MIN`),失效走 `_invalidate_cache()`(檔內 4 個寫入點實呼);<br>- `ui/tab5_data_guard.py` — `_cached_nh_status` / `_cached_nh_coverage`(`TTL_5MIN`),失效走 `_clear_nh_caches()`(匯入寫入後實呼);<br>- `ui/helpers/macro/ndc.py` — `_cached_ndc_score`(`TTL_15MIN`,**寫法為 `@_st_mod.cache_data`**)。⚠️ **本檔無失效路徑,也不需要** —— NDC 為**月頻唯讀**指標,UI 端**不存在寫入動作**,故第 ③ 條以「**無寫入端**」滿足,不是「漏做」。**它與前 4 個的豁免理由不同,讀表時不要混為一談。** | L3 UI 自建 `@st.cache_data` 薄快取層 | **與姊妹 repo `my-stock-dashboard` 的 `V-SMART-CACHE-1`(判定為**違憲待修**)差別在哪 —— 這是本列存在的理由,務必看清楚**:那一列的病是 **(a) TTL 全是 inline literal、未走 SSOT(同時違 §3.3)** ＋ **(b) 快取的是外部 HTTP 取數,本該在 L1 集中**。**本列兩個病都沒有**:TTL 全部 import 自 `shared/ttls.py`;被快取的是 **Google Sheets / 本地 JSON 持久化讀取**,與 **EX-CRUD-1 同一族**(該例外已認定此類 read+write 同檔的本地持久化不存在「cache 分散」問題)。<br>**為什麼不下沉 L2(這才是關鍵)**:現行失效語意是「**UI 的寫入動作觸發清除**」——`_invalidate_cache` / `_clear_nh_caches` 都由**寫入端就地呼叫**。下沉 L2 後,**L2 拿不到 UI 的寫入事件**,只能改成純 TTL 過期 → 使用者存檔後畫面會顯示**寫入前的舊值**,直到 TTL 到期。**那是把「§1 不顯示過期值」換成「等一分鐘」,是行為退化,不是架構改善。**<br>**事故依據(就地記載於 `ui/tab5_data_guard.py` 該快取上方,非本表事後補述)**:未加此層前,任一分頁的任一次互動都會重打 Google Sheets;**25 檔實測「rerun 起算 17 秒後 `WebSocket onclose`」,2026-08-14 實機兩次重現**。移除本層 = 回到該事故。<br>**升級觸發條件(任一命中即脫離本例外、須搬 L1/L2)**:(1) 開始快取**外部 HTTP 取數**(那一刻起 cache 必須回 L1 集中);(2) TTL 改成**檔內寫死秒數**(違 §3.3,本例外前提消失);(3) 同一份資料在 **L2 也長出第二層快取**(兩層 TTL 疊加 = 失效語意不可推理);(4) 快取開始**改變顯示語意**(例如失敗時回舊值卻不標 `is_stale`,違 §2.4)。 |
+| **EX-CISCRIPT-1**(2026-08-28 補登) | `scripts/fetch_nav_cache.py`(**782 LOC**,量測日 2026-08-28)—— **CI/離線精簡環境**用的獨立 NAV 抓取實作,與 L1 `repositories/fund/sources.py` **同源同目的但平行實作**(檔內 9 個 `fetch_*`:TDCC ×2 / MoneyDJ ×2 / AllianzGI / SITCA / CnYES / Yahoo / 銀行平台)。字面命中 v3 §01-2「同一個資料來源全站只能有一處取數實作」。<br>**它與 L1 的唯一共用點**:lazy `from repositories.fund.sources import YF_MORNINGSTAR_CHART_URL`(**單一 URL 常數**,v19.230 P1-2 已收 SSOT);另有 lazy `from repositories.policy_repository import ...`(有憑證時才載)。**除此之外抓取邏輯全部自帶。** | `scripts/**` 得平行實作一份精簡取數,不與 L1 合併 | **① 合併會把 streamlit 依賴鏈拉進精簡環境(這是既有的、有紀錄的設計決定,不是本次發明)**:`repositories/fund/sources.py` 的 module-load 會 `from bs4 import BeautifulSoup`,整個 `repositories/fund` package 一起被拉起;`STATE.md` 就地記載「**CI 精簡環境不能 import sources.py——會拉 streamlit——故平行精簡實作**」。該 script 刻意零重依賴到**連 `requests` 都在runtime `pip install`**。<br>**② 網路前提不同**:L1 走 **NAS Squid proxy**(§2.1 T3 來源多需台灣 IP);此 script 設計為在**GitHub Actions(美國 IP)** 執行,兩者可達的來源集合本來就不一樣。<br>**③ 它是 `cache/nav/{CODE}.json` 的唯一產出者,而該快取被活的 L1 讀取**:`save_cache()` 寫入 `<repo根>/cache/nav/`,而 `repositories/fund/nav_metrics.py::fetch_nav` 在**所有 live URL 全敗後、return 空之前**呼叫 `sources._src_cache_files()` 取它當**最終降級**(v19.319 接線,回歸網 `tests/test_cache_nav_fallback.py` + `tests/test_nav_cache_quality_gate.py`)。→ 合併它 = 動到一條**仍在被讀**的降級鏈,屬 §8.4 步驟 4 明禁的自作主張大重構。<br>**升級觸發條件(任一命中即重新評估)**:(1) `repositories/fund/sources.py` 變成**可在精簡環境 import**(bs4/streamlit 依賴消失)——理由 ① 當場失效;(2) `_src_cache_files` 從 `fetch_nav` 降級鏈**移除**——理由 ③ 失效,此時該問的是「**還要不要留這支 script**」;(3) 兩邊解析邏輯**出現行為分歧**(同一檔同一天 NAV 不一致)——那是 SSOT 破裂,**必須立刻收斂**,不得再引本例外。 |
+
+> 📌 **EX-UICACHE-1 / EX-CISCRIPT-1 兩列的驗證指令與已知限制（2026-08-28 補登時就地記錄）**
+>
+> **本段存在的理由**：這兩列的理由句裡有「**只有 5 處**」「**唯一產出者**」這種**窮舉句**，
+> 依 §-2 規則 6 必須附上**產生它的那條指令**，否則後人無從複驗、也無從發現它何時開始說謊。
+> **下列指令均為 2026-08-28 於 repo 根目錄實跑，本處為從實跑處照抄。**
+>
+> **① EX-UICACHE-1「`ui/**` 的快取共 5 處」**：
+>
+> ```
+> git grep -nE "^[[:space:]]*@[A-Za-z_][A-Za-z0-9_]*\.(cache_data|cache_resource)" -- 'ui/**'
+> ```
+>
+> 當時輸出 5 行（`ndc.py` ×1、`v2_editor.py` ×2、`tab5_data_guard.py` ×2）。
+> ⚠️ **這條指令刻意不寫死 `@st.`** —— `ui/helpers/macro/ndc.py` 用的是 **`@_st_mod.cache_data`**
+> （streamlit 以別名 import），**`@st\.cache_data` 這種寫法掃不到它**。
+> **這正是本輪更正 1 的同一個病**（字表假設了單一拼法），且**同一輪內就再犯一次、又被同一招抓到**
+> —— 故在此就地釘死：**掃裝飾器一律用「別名不敏感」的樣式，不要寫死模組名。**
+>
+> **② EX-CISCRIPT-1「`cache/nav/` 的唯一產出者」**：
+>
+> ```
+> git grep -nE "CACHE_DIR|cache/nav" -- '*.py' | grep -v tests/
+> ```
+>
+> ⚠️ **這條刻意很寬，輸出數十行，必須人工逐一判讀**（同 ① 的精神：寧可多抓不可漏抓）。
+> 當時逐一判讀後：**寫入 `cache/nav/` 的只有 `scripts/fetch_nav_cache.py`**
+> （`CACHE_DIR = Path(__file__).parent.parent / "cache" / "nav"` ＋ `save_cache()` 的 `cache_file.write_text(...)`）；
+> **讀取端**為 `repositories/fund/sources.py::_src_cache_files`。
+> 兄弟腳本 `scripts/accumulate_nav_tw.py` **不寫這個目錄**（它 `append_points` 寫 Google Sheets）。
+>
+> ⛔ **判讀這條輸出時最容易犯的錯：`cache/nav/` 與 `cache/nav_history/` 是兩個不同的目錄，不要混為一談。**
+> 前者＝本列所指、由 `scripts/fetch_nav_cache.py` 產出、被 `_src_cache_files` 當最終降級讀取；
+> 後者＝ `services/nav_history_store.py`（Tab6 手動 CSV 匯入）與 `repositories/fund/nav_metrics.py`
+> 的本地 disk cache，**產出者與消費者都不同**。上列輸出兩者都會命中，
+> **把 `nav_history` 的寫入端誤算成「`cache/nav` 的第二個產出者」，就會得出「理由 ③ 不成立」的錯誤結論。**
+>
+> ⚠️ **一項與本列理由有關、必須據實揭露的現況（不改變本列判定，但改變它的急迫性）**：
+> **`.github/workflows/fetch_nav_cache.yml` 在本次量測時已不存在**（實測 `ls .github/workflows/` 無此檔），
+> `STATE.md` 記載該 workflow 的 `schedule` cron 已被拔除、**script 保留供手動觸發**。
+> → **因此「它是一條每日在跑的生產鏈」這句話，以 2026-08-28 的實況而言並不成立，本表不得如此宣稱**；
+> 本列成立靠的是**理由 ①（依賴隔離）與理由 ③（產出物仍被活的降級鏈讀取）**，**不靠**「每日在跑」。
+> 現行每日 NAV 是 `.github/workflows/weekly_nav_backfill.yml` → `scripts/weekly_nav_backfill.py` → 雲端
+> `nav_history`，**與 `cache/nav/` 是兩條不同的鏈**，不要混談。
+>
+> ⚠️ **由此引出一個本組不予裁決的開放問題**：v3 §01-2 對「已無排程、僅手動觸發」的 script
+> 該如何處置（是「仍有用途」還是「Orphaned 待清理」）—— **本組不下判定**，理由有三：
+> (a) **§-1 無觸發**（本批是純文件更正，沒有任務碰到這支 script）；
+> (b) **它不是 0 caller** —— `scripts/accumulate_nav_tw.py` 與 `scripts/migrate_nav_caches_to_sheet.py`
+> 都以 `importlib` 載入它、復用 `_discover_fund_codes()` 當基金代碼 SSOT，且 `docs/NAV_NAS_CRON_SETUP.md`
+> 也指向它；**「沒有排程」不等於「沒有人用」**；
+> (c) 依 **§-2 規則 4**，這種「還有沒有人用」的問題**取決於有沒有漏看**，
+> **必須另派獨立一組查證，且不可由本組自己查自己**。
+> ⛔ **在該查證完成前，不得引用本段去刪除或合併這支 script。**
 
 **符合 EX-CACHE-1 的標準寫法**:
 ```python
