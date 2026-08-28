@@ -154,7 +154,17 @@ my-Fund-dashboard/
 │   ├── components/
 │   │   ├── macro_card.py / macro_card_edu.py
 │   │   ├── mk_dashboard.py / mk_clock.py
-│   │   ├── macro_compass_top.py(已退役,待 git rm)
+│   │   ├── ~~macro_compass_top.py(已退役,待 git rm)~~
+│   │   │   └─ ⚠️ **2026-08-28 更正:這行在本輪之前就已經是假的**(有意識的更正,不是漏刪)。
+│   │   │      `git rm` 早就做過了 —— 實測 `ui/components/macro_compass_top.py` **不存在**,
+│   │   │      本行卻還掛著「待 git rm」,是一筆**指向不存在檔案的 stale 引用**。
+│   │   │      **舊表述的理由曾經成立**(寫下時該檔確實還在、確實待刪);被權衡掉的不是理由,
+│   │   │      是它描述的事實已經不存在 —— 而一份會說謊的架構圖比沒有架構圖更危險
+│   │   │      (§1 同精神:錯誤的資訊比沒有資訊更危險)。
+│   │   │      ⚠️ **刪除的確切 commit / 日期本輪查不到**:本 clone 是 shallow(178 commits),
+│   │   │      該刪除發生在 shallow 邊界之前,`git log -- <該路徑>` 0 命中。**據實標明,不編一個日期。**
+│   │   │      歷史紀錄(STATE.md / ARCHITECTURE_AUDIT.md / BACKLOG.md)提到此檔者**一律不動** ——
+│   │   │      那些是當時的事實紀錄,不是現況宣稱。
 │   │   └── (其他 component)
 │   └── helpers/
 │       ├── session.py
