@@ -309,11 +309,12 @@ _RED_BOX_IMPLEMENTATIONS = {"session.py", "render_state.py"}
 # 本批（客戶拍板的第一批）實際轉換的兩處業務／常駐紅框所在檔案。
 BATCH_SCOPE_C = {"tab_fund_grp_health.py", "tab6_manual.py"}
 
-# 範圍外、**已登記待後批處理**的既有 bare `st.error`（量測日 2026-08-28）。
+# 範圍外、**已登記待後批處理**的既有 bare `st.error`（實測 2026-08-28：
+# origin/main 為 25，本批轉掉 4 處後為 21）。
 # ⚠️ 這不是豁免清單，是**待辦的可見化**：它是一個 ratchet，數字只准往下走。
 # 多數是表單驗證與中文失敗訊息（「投入總額必須大於 0」「讀回失敗」），
 # 判定要逐條看業務語意，不在「只做顏色」這一批的範圍內（§8.4 step 4：不自作主張擴大範圍）。
-BARE_ERROR_RATCHET = 22
+BARE_ERROR_RATCHET = 21
 
 
 def _bare_error_calls(path: pathlib.Path):
