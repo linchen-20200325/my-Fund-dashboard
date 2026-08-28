@@ -1,0 +1,1015 @@
+<title>基金儀表板五頁線框</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#f4f5f6; --card:#ffffff;
+  --ink:#182029; --ink-2:#4d5a67; --ink-3:#7b8794;
+  --line:#d3d9de; --line-2:#e6eaed;
+  --accent:#2d6a8f; --accent-soft:#e4eef4;
+  --wire:#eceff1; --wire-line:#b8c2cb;
+  --ok:#0ca30c; --warn:#ec835a; --danger:#c0392b; --mute:#8a8e96;
+  --shadow:0 1px 2px rgba(24,32,41,.06),0 4px 14px rgba(24,32,41,.05);
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11161b; --card:#171e25;
+  --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98;
+  --line:#2b353f; --line-2:#222b33;
+  --accent:#6fb3d8; --accent-soft:#1b2a35;
+  --wire:#1c242c; --wire-line:#3a4753;
+  --ok:#3fc23f; --warn:#f0996f; --danger:#e06a5c; --mute:#8a939c;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.28);
+}}
+:root[data-theme="dark"]{
+  --paper:#11161b; --card:#171e25;
+  --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98;
+  --line:#2b353f; --line-2:#222b33;
+  --accent:#6fb3d8; --accent-soft:#1b2a35;
+  --wire:#1c242c; --wire-line:#3a4753;
+  --ok:#3fc23f; --warn:#f0996f; --danger:#e06a5c; --mute:#8a939c;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.7;margin:0;padding:0 20px 100px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto}
+
+header.mast{padding:56px 0 32px;border-bottom:2px solid var(--ink);margin-bottom:38px}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-size:clamp(28px,4.6vw,42px);line-height:1.2;margin:0 0 16px;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.standfirst{font-size:17px;color:var(--ink-2);max-width:62ch;margin:0}
+.mast-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+
+section{margin:0 0 52px}
+h2{font-size:22px;margin:0 0 8px;font-weight:700;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h2 .num{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
+h3{font-size:15.5px;margin:28px 0 10px;font-weight:700}
+h4{font-size:14px;margin:20px 0 8px;font-weight:700;color:var(--ink-2)}
+.lede{color:var(--ink-2);margin:0 0 20px;max-width:66ch;font-size:15px}
+p{margin:0 0 14px;max-width:70ch}
+
+.frame{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:20px;box-shadow:var(--shadow);margin:0 0 14px}
+.frame-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+.wb{background:var(--wire);border:1px dashed var(--wire-line);border-radius:4px;padding:11px 12px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);min-height:42px;display:flex;flex-direction:column;justify-content:center;gap:3px;margin-bottom:8px}
+.wb .t{font-weight:600;color:var(--ink);font-size:12.5px;font-family:var(--sans)}
+.wb .s{color:var(--ink-3);font-size:10.5px;line-height:1.55;font-family:var(--sans)}
+.wb.new{border-color:var(--accent);background:var(--accent-soft)}
+.wb.new .t{color:var(--accent)}
+.wb.gone{border-color:var(--danger);opacity:.78}
+.wb.gone .t{color:var(--danger);text-decoration:line-through}
+.wb.prop{border-color:var(--warn);background:transparent}
+.wb.prop .t{color:var(--warn)}
+.wb.solid{border-style:solid}
+.tag{font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:1px 5px;border-radius:2px;border:1px solid currentColor;margin-right:7px;white-space:nowrap;opacity:.9}
+.src{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);opacity:.85}
+.row{display:grid;gap:10px;margin-bottom:10px}
+.r2{grid-template-columns:repeat(2,1fr)}
+.r3{grid-template-columns:repeat(3,1fr)}
+.r4{grid-template-columns:repeat(4,1fr)}
+.r-side{grid-template-columns:1.6fr 1fr}
+@media (max-width:760px){.r2,.r3,.r4,.r-side{grid-template-columns:1fr}}
+
+.navstrip{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.tab{font-family:var(--mono);font-size:11.5px;padding:7px 13px;border:1px solid var(--wire-line);border-bottom:none;border-radius:4px 4px 0 0;background:var(--wire);color:var(--ink-2)}
+.tab.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.tab.gone{text-decoration:line-through;opacity:.42;border-style:dashed}
+
+.note{border-left:3px solid var(--accent);background:var(--card);padding:14px 16px;border-radius:0 5px 5px 0;margin:14px 0;font-size:14px;color:var(--ink-2);box-shadow:var(--shadow)}
+.note b{color:var(--ink)}
+.note.warn{border-left-color:var(--warn)}
+.note.stop{border-left-color:var(--danger)}
+.note-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;font-weight:600}
+.note.warn .note-h{color:var(--warn)}
+.note.stop .note-h{color:var(--danger)}
+.note p:last-child{margin-bottom:0}
+
+table.ev{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:13.5px;min-width:520px}
+.ev th{text-align:left;padding:9px 10px;border-bottom:1.5px solid var(--line);font-size:11px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;white-space:nowrap}
+.ev td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top;color:var(--ink-2)}
+.ev td:first-child{color:var(--ink);font-weight:500}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+code{font-family:var(--mono);font-size:.9em;background:var(--wire);padding:1px 5px;border-radius:3px;color:var(--ink)}
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+
+.flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;margin:14px 0}
+.flow .n{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:8px 12px;font-weight:600}
+.flow .a{color:var(--ink-3)}
+
+.decisions{display:grid;gap:14px;margin-top:18px}
+.dec{border:1px solid var(--line);border-left:4px solid var(--accent);background:var(--card);border-radius:0 6px 6px 0;padding:18px 20px;box-shadow:var(--shadow)}
+.dec.mine{border-left-color:var(--warn)}
+.dec h4{margin:0 0 8px;font-size:16px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;color:var(--ink)}
+.dec h4 .q{font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:600}
+.dec.mine h4 .q{color:var(--warn)}
+.rec{margin-top:12px;padding:10px 12px;background:var(--accent-soft);border-radius:4px;font-size:13.5px;color:var(--ink)}
+.rec b{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:3px}
+
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--ink-3);margin:10px 0 26px;padding:12px 14px;background:var(--card);border:1px solid var(--line-2);border-radius:5px}
+.legend span{display:flex;align-items:center;gap:7px}
+.sw{width:22px;height:12px;border-radius:2px;display:inline-block;flex:none}
+.sw.keep{background:var(--wire);border:1px dashed var(--wire-line)}
+.sw.new{background:var(--accent-soft);border:1px dashed var(--accent)}
+.sw.gone{background:var(--wire);border:1px dashed var(--danger)}
+.sw.prop{background:transparent;border:1px dashed var(--warn)}
+ul{margin:0 0 14px;padding-left:20px;max-width:70ch}
+li{margin-bottom:7px;color:var(--ink-2)}
+li b{color:var(--ink)}
+hr.sep{border:none;border-top:1px solid var(--line);margin:0 0 40px}
+
+.pagecard{border:1px solid var(--line);border-radius:8px;background:var(--card);box-shadow:var(--shadow);padding:22px;margin:0 0 26px}
+.pagecard>.ph{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;border-bottom:1px solid var(--line-2);padding-bottom:12px;margin-bottom:16px}
+.ph .pn{font-family:var(--mono);font-size:13px;font-weight:600;color:#fff;background:var(--accent);padding:3px 9px;border-radius:3px}
+.ph .pt{font-size:19px;font-weight:700;color:var(--ink)}
+.oneline{background:var(--accent-soft);border:1px solid var(--accent);border-radius:5px;padding:12px 14px;margin:0 0 18px;font-size:14.5px;color:var(--ink)}
+.oneline .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:4px}
+.why{font-size:13.5px;color:var(--ink-2);border-top:1px dashed var(--line);margin-top:16px;padding-top:14px}
+.why b{color:var(--ink)}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Wireframe · 待審批</p>
+  <h1>基金儀表板 · 五頁線框</h1>
+  <p class="standfirst">
+    這份只談<strong>分頁結構與資訊排列</strong>，不談程式。五個新分頁<strong>逐頁畫出由上到下的區塊順序</strong>，
+    每一塊都標明保留／新增／移走，並附現況出處。需你拍板後團隊才會寫任何 UI 程式碼。
+  </p>
+  <div class="mast-meta">
+    <span>盤點基準：7 分頁 · 約 32,100 行 UI</span>
+    <span>提案：5 分頁</span>
+    <span>需拍板：9 項</span>
+  </div>
+</header>
+
+<div class="legend">
+  <span><i class="sw keep"></i> 保留（原樣或換位置）</span>
+  <span><i class="sw new"></i> 搬進來 / 合併</span>
+  <span><i class="sw gone"></i> 移走 / 刪除</span>
+  <span><i class="sw prop"></i> 建議新增（現況沒有，我方提案）</span>
+</div>
+
+<div class="note">
+  <p class="note-h">怎麼讀這份文件</p>
+  <p>
+    <b>第 03 節是主體</b> —— 五個新分頁各一張線框，由上到下就是你將看到的順序。
+    其餘各節是它的理由與配套。每塊區塊右下的灰色小字是<b>現況出處</b>（哪個檔案第幾行），
+    方便你抽查「這真的是現在畫面上有的東西嗎」。
+  </p>
+</div>
+
+<!-- 01 -->
+<section>
+  <h2><span class="num">01</span> 診斷：為什麼是重排，不是微調</h2>
+  <p class="lede">四個實測發現說明了問題不在單一頁面，而在分頁之間。</p>
+
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>發現</th><th>數字</th><th>意義</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>「配置 &amp; 帳本」頁講不出一句話職責</td>
+        <td class="num">6,403 行 · 約佔全站 20%</td>
+        <td>盤點認定它同時是 <b>10 個不同產品</b>，含一段 800 行的 Google Sheets 保單管理／設定區</td>
+      </tr>
+      <tr>
+        <td>區塊編號有 6 套互相衝突</td>
+        <td class="num">6 套</td>
+        <td>「配置 &amp; 帳本」頁畫面順序是 <b>④→①→②→③</b>：「加入基金」排在「配置總覽」之後</td>
+      </tr>
+      <tr>
+        <td>頂端導覽有 4 種模式</td>
+        <td class="num">8 個渲染面 · 4 種模式</td>
+        <td>有的兩條、有的一條、有的沒有 —— <b>同一條決策動線上的分頁彼此就不一致</b></td>
+      </tr>
+      <tr>
+        <td>匯率抓取<b>只快取成功結果</b></td>
+        <td class="num">失敗時 2 次 / 每次操作</td>
+        <td>網路正常時 5 分鐘內為 0 次；<b>一旦抓失敗，每次操作都重跑 4 個來源</b>，而它不在任何按鈕後面</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note warn">
+    <p class="note-h">一個結構性事實，決定了整份草稿的方向</p>
+    <p>
+      Streamlit 的分頁切換<strong>只是前端 CSS</strong> —— 七個分頁的內容<strong>每次操作都全部重跑一次</strong>。
+      現況的解法是每個分頁各自發明一套「按鈕沒按就不做事」的旗標，<b>共五套機制、五種行為</b>。
+    </p>
+    <p style="margin-top:10px">
+      代價你每天都在付：<b>首次進站時七個分頁全是空的「請按按鈕」</b> ——
+      實測畫面上同時有 <span class="num">5 個錯誤、8 個警告、17 個「尚未載入」、21 顆按鈕</span>。
+    </p>
+    <p style="margin-top:10px;color:var(--ink-3);font-size:13px">
+      ⚠️ 據實說明：這組數字是在<b>沒有金鑰、外部資料源被擋</b>的環境量的。正式環境錯誤數會少幾則，
+      但「17 個尚未載入」與「21 顆按鈕」與金鑰無關，那是結構造成的。另外分頁① 的兩顆載入鈕<b>不在</b>這 21 顆內，
+      有金鑰時實際會更多。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 02 -->
+<section>
+  <h2><span class="num">02</span> 提案：7 個分頁 → 5 個，照決策順序排</h2>
+  <p class="lede">現在的分頁順序與你實際做決定的順序不一致。新結構就是把它排回來。</p>
+
+  <div class="flow">
+    <span class="n">① 現在該進攻還防守</span><span class="a">→</span>
+    <span class="n">② 我手上這組健康嗎</span><span class="a">→</span>
+    <span class="n">③ 這一檔／這一批怎樣</span><span class="a">→</span>
+    <span class="n">④ 那我要怎麼配 · 記帳</span><span class="a">→</span>
+    <span class="n">⑤ 設定與診斷</span>
+  </div>
+
+  <div class="frame">
+    <div class="frame-label"><span>頂層導覽</span><span>7 → 5</span></div>
+    <div class="navstrip">
+      <span class="tab on">🌐 市場定調</span>
+      <span class="tab">💊 組合健診</span>
+      <span class="tab">🔍 基金研究</span>
+      <span class="tab">📊 我的配置</span>
+      <span class="tab">⚙️ 設定與診斷</span>
+    </div>
+    <div class="navstrip" style="margin-top:14px">
+      <span class="tab gone">📦 批次分析</span>
+      <span class="tab gone">📋 我的管理室</span>
+      <span class="tab gone">📖 參考 / 診斷</span>
+    </div>
+    <div class="wb solid" style="margin-top:8px;margin-bottom:0">
+      <span class="s">上排＝新結構；下排＝被併走的三個分頁。<b>功能一個都不刪，只換位置。</b></span>
+    </div>
+  </div>
+
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>原分頁</th><th>去向</th><th>依據</th></tr></thead>
+    <tbody>
+      <tr><td>🌐 市場定調<span class="num"> 1,537+1,734 行</span></td><td>① 不動</td><td>盤點認定它是<b>全站職責講得最清楚的一頁</b>，一句話職責直接沿用；<b>但它頁內的圈號同樣要清理</b>（六套裡有兩套就在這頁）</td></tr>
+      <tr><td>💊 組合健診<span class="num"> 1,217 行 + 十餘個子模組</span></td><td>② 不動，升格為「健診唯一出處」</td><td>健診三表現在在兩個分頁各畫一次，「配置 &amp; 帳本」的說明文字自陳「與組合健診完全同源」</td></tr>
+      <tr><td>🔍 個基深掘<span class="num"> 2,637 行</span><br>📦 批次分析<span class="num"> 532 行</span></td><td>③ 合併為「基金研究」</td><td>兩者都回答「<b>還沒放進組合前，這檔／這批值不值得看</b>」，差別只在一檔深看 vs 一批淺掃。<br><b>⚠️ 這是資訊架構論證，不是程式血緣論證 —— 見下方說明與 Q6</b></td></tr>
+      <tr><td>📊 配置 &amp; 帳本<span class="num"> 6,403 行</span></td><td>④ 保留配置與帳本，<b>其餘搬走</b></td><td>見第 03 節的 ④ 我的配置</td></tr>
+      <tr><td>📋 我的管理室<span class="num"> 556 行</span><br>📖 參考 / 診斷<span class="num"> 2,383 行</span></td><td>⑤ 合併為「設定與診斷」</td><td>兩者都是「設定與檢查」，不在決策動線上。<b>NAV 匯入現在同時存在於這兩頁</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note stop">
+    <p class="note-h">「批次分析併去哪裡」是真的要你拍板，不是既定事實</p>
+    <p>
+      程式碼查驗結果：批次分析那張大表的欄位設定<b>定義在「組合健診」的模組裡</b>
+      （<code>fund_grp_health/columns.py:494</code>），而它<b>唯一的外部呼叫者就是批次分析</b>
+      （<code>tab_batch_analysis.py:439</code>，只多傳一個批次參數）。
+      批次分析總共從組合健診 import <b>5 個模組</b>；<b>個基深掘對這套設定零引用</b>。
+      也就是說 —— <strong>就血緣而言，批次分析是「組合健診的 400 檔版」，不是「個基深掘的批次版」。</strong>
+    </p>
+    <p style="margin-top:10px">
+      本份線框仍先照「掛在 ③ 基金研究」畫，理由是<b>資訊架構</b>而非程式血緣：
+      ② 的一句話職責是「<b>我手上這幾檔</b>」，而 400 檔批次掃描掃的正是<b>你還沒買的東西</b>；
+      把一個要跑 30~40 分鐘的批次任務放進你每天開來看持倉的那一頁，會直接毀掉 ② 的那一句話。
+      但這個取捨要你決定 —— 已列為 <b>Q6</b>，兩個選項與各自代價都寫在那裡。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 03 -->
+<section>
+  <h2><span class="num">03</span> 五頁逐頁線框</h2>
+  <p class="lede">
+    每一頁一張線框，由上到下就是實際渲染順序。每頁先給<strong>一句話職責</strong> ——
+    講不出一句話的頁面，就是還沒設計好；這正是現在「配置 &amp; 帳本」的狀況。
+  </p>
+
+  <!-- PAGE 1 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">①</span><span class="pt">🌐 市場定調</span></div>
+    <div class="oneline">
+      <span class="lbl">這一頁的一句話職責</span>
+      <b>現在該加碼還是防禦。</b>
+      <span style="color:var(--ink-3);font-size:12.5px">（沿用現況原本就寫得出來的那一句，不改。）</span>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>由上到下</span><span>22 個區塊 → 10 塊 + 1 個收合區</span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>頁首：標題 · 單一導覽列 · 上次更新時間</span><span class="s">現況這頁只有一條導覽 —— 這是四種模式中最乾淨的，其餘四頁統一過來<br><span class="src">tab1_macro.py:809-838</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>載入列：📡 載入／更新總經資料 · 🆕 強制重抓（清快取）</span><span class="s">按下後 4 路並行抓取，程式裡設有 75 秒上限。清快取鈕只清這一頁，設計正確，保留<br><span class="src">tab1_macro.py:848-850 · 預算 75s @ :889</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>結論 — 現在該加碼還是防禦</span><span class="s">紅／黃／綠燈 + 一句結論。原本叫「① 結論」，拿掉圈號<br><span class="src">tab1_macro.py:1091</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>依據 — 憑什麼這樣說</span><span class="s">五桶摘要 + 證據表 + 加權淨分。原「② 依據」<br><span class="src">tab1_macro.py:1115</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>建議資產水位 · 加權淨分 vs 多空投票對帳</span><span class="s">兩種算法互相對帳的小徽章，是全站少數「同一個數字用兩種方法算」的地方，保留<br><span class="src">tab1_macro.py:1168-1202</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>例外 — 有沒有該警覺的</span><span class="s">今日關鍵橫幅（系統性風險／拐點／新聞）。原「③ 例外」<br><span class="src">tab1_macro.py:1208</span></span></div>
+
+      <div class="wb new"><span class="t"><span class="tag">合併</span>資料可信度（一塊，取代現在的兩塊）</span><span class="s">現在「④ 可信度」的 2 個徽章，與它正下方那條 11px 的「資料新鮮度條」<b>講的是同一件事</b>（資料能不能信），卻用兩種視覺語言。合成一塊：一行摘要 + 展開看細節<br><span class="src">tab1_macro.py:1247（可信度）+ :1281-1390（新鮮度條）</span></span></div>
+
+      <div class="wb prop"><span class="t"><span class="tag">建議</span>即時訊號 + 決策矩陣 —— 上移到這裡</span><span class="s">這是全頁<b>唯一給出逐檔行動</b>（持有／加碼／減倉／全撤 + 目標權重）的區塊，現在排在第 21 位，前面隔著 5 個一級區塊、十幾張圖。程式碼註解記載<b>它已經搬家四次</b>，每次都是為了「不要被埋起來」→ 這是尚未收斂的爭議點，<b>需你拍板（Q8）</b><br><span class="src">tab1_macro.py:1510 · 搬家紀錄 :1487-1508</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>🔎 詳細資料與說明（收合，四個時域）</span><span class="s">🌳 長期座標 ／ 📈 中期循環 ／ 🎯 短線雷達 ／ ⚠️ 拐點警報 —— 順序不動<br><span class="src">tab1_macro.py:1431 / :1464 / :1473 / :1481</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>🤖 AI 景氣判斷總結</span><span class="s">維持在最後<br><span class="src">tab1_macro.py:1529</span></span></div>
+    </div>
+
+    <h4>這一頁移走什麼</h4>
+    <div class="wb gone"><span class="t">📦 ARCHIVED — 台股熱錢監測</span><span class="s">自稱 archive，說明文字自己寫「境外美股基金可略過」，卻仍每次渲染佔一格 —— <b>作者自己說不用看的東西</b><br><span class="src">tab1_macro_longterm.py:286-288</span></span></div>
+    <div class="wb gone"><span class="t">「載入流動性引擎」這顆按鈕的按鈕</span><span class="s">主載入鈕按完後，短線雷達裡<b>還要再按一次</b>才看得到流動性引擎，之後又有第三顆重抓鈕。同一個毛病在 2026-08-05 已被判定要刪（指南針），這處沒被一起處理 → 併入主載入<br><span class="src">tab1_macro_radar.py:204, :218</span></span></div>
+    <div class="wb gone"><span class="t">頁內圈號 ①②③④（含撞號的 ①②④⑤⑥）</span><span class="s">這一頁同時有兩套 ①②：總表層的「①結論②依據」與拐點區內的「①全域導航塔②拐點偵測中心」；再加上三個孤兒序號 ④⑤⑥。使用者看到的順序是 …⑥→④⑤→①②<br><span class="src">tab1_macro_inflection.py:85,290 · tab1_macro_radar.py:72,214 · tab1_macro_longterm.py:136</span></span></div>
+
+    <div class="note" style="margin-top:16px">
+      <p class="note-h">一個要澄清的東西：🇨🇳 中國副盤</p>
+      <p>
+        程式碼有三行註解把「中國副盤」寫進渲染順序，<b>但全站沒有任何實作</b> ——
+        畫面上從來沒有這個區塊。這裡標明，是為了避免下一個人以為我們把它刪掉了。
+        <span class="src">tab1_macro.py:1392 / 1503 / 1505 皆為註解</span>
+      </p>
+    </div>
+
+    <div class="why">
+      <b>為什麼這樣排：</b>四層答案的順序 —— <b>結論 → 依據 → 例外 → 可信度</b> —— 是現況就有的好設計，不動它。
+      唯一的結構改動是把「逐檔行動」從最底部提到這四層之後：你看完「該進攻還防守」，下一個問題必然是「那我手上這幾檔要怎麼動」，
+      而不是「先看四張時域圖」。四時域圖不刪，只是收在「詳細資料」裡。
+    </div>
+  </div>
+
+  <!-- PAGE 2 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">②</span><span class="pt">💊 組合健診</span></div>
+    <div class="oneline">
+      <span class="lbl">這一頁的一句話職責</span>
+      <b>我手上這幾檔，哪幾檔在吃本金。</b>
+      <span style="color:var(--ink-3);font-size:12.5px">（沿用現況那一句。問題不在職責，在於這頁實際塞的東西遠超過這句話。）</span>
+    </div>
+
+    <div class="note warn">
+      <p class="note-h">這一頁的核心問題</p>
+      <p>
+        盤點認定它「<b>一個分頁裝了至少 5 個不同產品</b>」。最直接的證據：頁內的換股池顧問區塊
+        <b>自己用一段說明文字教使用者「這一頁由上到下有 4 塊」</b> ——
+        需要在頁內寫導覽說明，本身就是資訊架構過載的自白。
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>由上到下</span><span>現況 24 區塊（含 9 個進階子區）→ 分四段</span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>頁首 · <b>單一</b>導覽列</span><span class="s">現況這裡疊了兩條麵包屑（flow + story）。2026-08-19 你反映「說明欄位太多太複雜」時只簡化了分頁①，這頁沒跟著改<br><span class="src">tab_fund_grp_health.py:133-135</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>總經 Phase 對照橫幅</span><span class="s">承接分頁① 的結果，是決策動線的接點<br><span class="src">:142-165</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>輸入列：🔗 從我的組合帶入 · 基金代號 · 本金 TWD · 🩺 開始健診</span><span class="s">未按按鈕直接不渲染，零成本 —— 這個 gating 保留<br><span class="src">:170-212</span></span></div>
+
+      <div class="wb new"><span class="t"><span class="tag">上移</span>結論摘要：5 個數字 + 失敗檔清單</span><span class="s">檢查檔數／健康／警示／吃本金／累積配息。現況它排在兩張表之後（第 14 位）；<b>「哪幾檔在吃本金」正是這一頁的一句話職責，該最先看到</b><br><span class="src">:955-985</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>核心／衛星資產屬性分布（4 個數字）</span><span class="s"><span class="src">:825-829</span></span></div>
+
+      <div class="wb new"><span class="t"><span class="tag">合併</span>健診大表（<b>一個標題、一張表</b>）</span><span class="s">現況有<b>兩個標題講同一張表</b>：「📊 健診大表（①②③ 已去重複合併成一張）」與「健診總表（🧮 = 自行換算欄位）」，中間還隔著體檢 PK 表 —— 使用者會以為有兩張。<br>表本身 <b>48 欄</b>，橫向捲動。建議加<b>欄位分組切換</b>（健康／配息／購買結果／風險）取代現在「整欄一樣就自動收起來」的臨時補救<br><span class="src">:896（標題一）· :1019-1052（標題二 + 實際的表）· 48 欄註記 :1041 · 臨時補救 :56</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>🩺 基金體檢表 PK + 健診摘要表</span><span class="s"><span class="src">ui/helpers/fund/checkup.py:461,583</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>🎯 選基金（低基期進場點 · HWM σ rank）</span><span class="s"><span class="src">:495-550</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>🔀 換標決策建議 · 🧭 景氣位階適配</span><span class="s"><span class="src">switch_section.py:26 · regime_section.py:20</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>📋 逐檔配息明細 · 持有 meta · 配息事件</span><span class="s"><span class="src">:1107-1181</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>🔁 配置回測（教學，非建議）</span><span class="s"><span class="src">backtest_section.py:36</span></span></div>
+
+      <div class="wb new"><span class="t"><span class="tag">搬入</span>🎯 換股池顧問 —— <b>選股池從管理室搬過來，兩個入口併一個</b></span><span class="s">同一份選股池資料<b>現在有兩個 CRUD 入口</b>：管理室的「📁 選股池(候選基金)」與這頁換股池顧問裡的「📁 選股池(候選基金)」，標題只差一個標題層級。建議留在決策動線內的這一頁 → <b>需你拍板（Q7）</b><br><span class="src">tab_manage.py:71 ／ switch_advisor_section.py:310（同名）· 兩者都直接讀同一個選股池儲存</span></span></div>
+
+      <div class="wb new"><span class="t"><span class="tag">改法</span>🔬 進階分析 9 子區 —— 改成「選一檔看」</span><span class="s">現況：真實收益矩陣／逐檔深度分析／相關性矩陣／-2σ 超跌／輪動配對／Bollinger 詳圖／AI 跨檔評論／持股新聞／三率穿透。其中<b>四組是「每檔一個展開區」</b>，10 檔基金＝最多 <b>40 個展開區</b>，而且「逐檔深度分析」是<b>預設全部展開</b>。改為先選一檔、再看該檔的細項<br><span class="src">__init__.py:63-83 · signals.py:162-177 · ai.py:268-331, 394-446</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>❌ 抓取失敗清單</span><span class="s">⚠️ 現況<b>失敗資訊出現在兩個地方</b>（上方摘要區的紅字清單 + 這裡的獨立區塊），建議併進上方摘要一處<br><span class="src">:955-985 與 :1215</span></span></div>
+    </div>
+
+    <h4>這一頁移走什麼</h4>
+    <div class="wb gone"><span class="t">🔄 輪動配對建議（其中一份）</span><span class="s">同一個標題在批次分析頁也渲染一次，兩個入口各一份，連標題字串都在程式裡寫了兩次。建議<b>只留這一頁</b>，批次結果改為「送進健診看輪動」<br><span class="src">rotation.py:109 與 :245 兩處同標題</span></span></div>
+
+    <div class="why">
+      <b>為什麼這樣排：</b>把順序改成<b>「先給答案，再給依據，最後才是工具」</b> ——
+      結論摘要（哪幾檔在吃本金）→ 大表（憑什麼）→ 換標與配置回測（那要怎麼辦）→ 進階分析（想深挖時再展開）。
+      現況的順序是資產分布 → 選基金 → 摘要 → 兩張表，答案埋在第三段。
+    </div>
+    <div class="why" style="border-top-style:solid">
+      <b>一項技術債，順手記在這裡：</b>這頁有一段把錯誤直接吞掉的程式碼（寫入淨值歷史失敗時不報錯），
+      違反你們自己訂的「寧可炸掉、不可造假」規範。與版面無關，但重設計時會動到那一段，建議一起修。
+      <span class="src">tab_fund_grp_health.py:290-291</span>
+    </div>
+  </div>
+
+  <!-- PAGE 3 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">③</span><span class="pt">🔍 基金研究　<span style="font-size:13px;color:var(--ink-3);font-family:var(--mono)">= 個基深掘 + 批次分析</span></span></div>
+    <div class="oneline">
+      <span class="lbl">這一頁的一句話職責</span>
+      <b>還沒放進組合之前，查一檔或掃一批的體質。</b>
+      <span style="color:var(--ink-3);font-size:12.5px">（⚠️ 這一句是<b>我方新寫的</b>：現況兩頁各有自己的一句話——「單一檔的全部細節」與「一次掃 400 檔，導出 CSV」——合併後需要一句涵蓋兩者的，需你認可。）</span>
+    </div>
+
+    <h4>合併方式：一頁、兩個模式，共用頂部</h4>
+    <p style="font-size:14px">
+      不是把兩頁上下相接，而是<strong>共用一個「先找到標的」的頂部</strong>，再用一個模式切換決定下面畫什麼。
+      理由：兩頁現在<b>各有一套輸入框</b>，而「用關鍵字找基金代號」的工具只存在於個基深掘頁裡，
+      批次分析頁的使用者要湊代號清單時得跨頁去找。
+    </p>
+
+    <div class="frame">
+      <div class="frame-label"><span>共用頂部</span><span>兩個模式都看得到</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>🔍 關鍵字搜尋境外基金（TDCC / FundClear）</span><span class="s">現況只在個基深掘頁，且藏在一個收合區內。合併後<b>上升為兩模式共用的「找代號」工具</b><br><span class="src">tab2_single_fund.py:338-344</span></span></div>
+      <div class="wb prop"><span class="t"><span class="tag">建議</span>模式切換：<b>🔍 單檔深掘</b>　｜　<b>📦 批次掃描</b></span><span class="s">單一切換鍵，切換的是下方版面。<b>不是</b>第二層分頁 —— 全站已經有三層巢狀分頁的問題，這裡不再加一層<br><span class="src">現況無此元件（新增）</span></span></div>
+    </div>
+
+    <div class="row r2">
+      <div class="frame">
+        <div class="frame-label"><span>模式 A · 單檔深掘</span><span>現況 20 區塊</span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>輸入 MoneyDJ 網址／代碼 + 🚀 分析</span><span class="s"><span class="src">:257-263</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>基本資料 &amp; 淨值趨勢</span><span class="s">原「① 基本資料」<span class="src">:537</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>📈 三合一趨勢診斷圖 · vs 大盤</span><span class="s"><span class="src">:674-816 · :919-933</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>買賣點信號（標準差策略）</span><span class="s">原「②」，含 9 個進階指標 + 換標建議<span class="src">:947 · :1361-1401</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>風險指標 &amp; 配息 · 3-3-3 評估</span><span class="s">原「③」<span class="src">:1465-1667 · :78</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>💰 投資試算（含完整計算公式）</span><span class="s">兩個「完整計算公式（含數字代入）」收合區保留 —— 這是全站少數把算式攤開給人核對的地方<span class="src">:1978-2128 · :2189, :2329</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>持股 · 個股新聞 · 三率穿透（各自按鈕觸發）</span><span class="s">已經是「按了才抓」，設計正確<span class="src">:1845-1930</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>🤖 AI 深度解盤</span><span class="s">原「④」<span class="src">:2418</span></span></div>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label"><span>模式 B · 批次掃描</span><span>現況 11 區塊</span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>輸入：檔案上傳 ｜ 貼上代號清單</span><span class="s">含「400 檔約 30~40 分鐘」的預期說明<span class="src">tab_batch_analysis.py:260-266, :252-258</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>▶️ 開始／繼續　🔁 重試失敗　🗑️ 清除重來</span><span class="s"><span class="src">:338-348</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>💾 磁碟上的批次存檔（斷點續傳）</span><span class="s"><b>全站唯一有斷點續傳的長任務</b> —— 關掉分頁還能續跑。原樣保留<span class="src">:369-372</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>4 個數字：檔數／完全成功／部分成功／失敗</span><span class="s"><span class="src">:415-421</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>結果大表（固定高度、橫向捲動）</span><span class="s">用的<b>就是分頁② 健診大表的欄位設定</b>，只多傳一個批次參數<span class="src">:437-441</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>⬇️ 下載 CSV</span><span class="s"><b>全站唯一的正式匯出路徑</b>。也是目前唯一能繞過「表格印不完整」的方法<span class="src">:448</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>ℹ️ 欄位說明 / 這張表沒有什麼</span><span class="s">盤點認定<b>這頁的錯誤揭露是全站做得最好的</b>（明確區分完全成功／部分成功／失敗，並反覆強調「留白不代表沒有這項資料」）→ 建議把這套寫法反推到其他頁<span class="src">:482 · :422-433</span></span></div>
+        <div class="wb gone"><span class="t">🔄 輪動配對建議</span><span class="s">與分頁② 重複，移到 ② 一處<span class="src">:460</span></span></div>
+      </div>
+    </div>
+
+    <h4>這一頁移走什麼</h4>
+    <div class="wb gone"><span class="t">🔍 抓取診斷細節（哪個源失敗 + NAS Proxy 狀態）</span><span class="s">這是<b>維運資訊</b>，卻長在使用者的分析主線上。搬到 ⑤ 設定與診斷 —— 那裡本來就是診斷的家<br><span class="src">tab2_single_fund.py:386</span></span></div>
+
+    <div class="note stop">
+      <p class="note-h">兩件必須在動工前確認的事</p>
+      <p>
+        <b>（一）隱藏的第二套版面。</b>當淨值序列抓不到時，個基深掘會走一整套<b>完全不同的「部分資料視圖」</b>
+        （3 個數字 + 風險表 + 績效數字），版面與正常視圖不一樣。
+        盤點是<b>偶然讀到才發現</b>的，並明說「同型的分岔在別頁可能還有」。
+        重設計必須把它一起畫，否則會漏掉一半的畫面。
+        <span class="src">tab2_single_fund.py:480-537</span>
+      </p>
+      <p style="margin-top:10px">
+        <b>（二）批次掃描該掛哪一頁。</b>如第 02 節所述，批次分析在資料上是<b>組合健診的 400 檔版</b>，
+        不是個基深掘的批次版。掛在這一頁的理由是「都是還沒買進之前的研究」；
+        掛在 ② 的理由是「共用同一張表、同一套計算」。<b>需你拍板（Q6）。</b>
+      </p>
+    </div>
+
+    <div class="why">
+      <b>為什麼這樣排：</b>兩個模式共用「找代號」與「輸入」，是因為使用者的實際起點只有一個 ——
+      「我想查某檔／某批基金，但我手上只有名字」。現況把這個起點的工具只放在其中一頁，
+      另一頁的人得跨頁去湊清單。至於兩模式下方的內容順序，維持各自現況不動：
+      本次改的是<b>入口與歸屬</b>，不是各自頁內的順序（那會讓改動面一次太大）。
+    </div>
+  </div>
+
+  <!-- PAGE 4 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">④</span><span class="pt">📊 我的配置</span></div>
+    <div class="oneline">
+      <span class="lbl">這一頁的一句話職責</span>
+      <b>我實際持有什麼、值多少、下一筆錢怎麼配。</b>
+      <span style="color:var(--ink-3);font-size:12.5px">（⚠️ <b>這一句是新定義的</b>。現況這一頁<b>講不出職責</b>——盤點列出它同時是 10 個不同產品，而頁面自己的說明文字只描述了其中一項。這一頁是本次改動最大的。）</span>
+    </div>
+
+    <div class="row r2">
+      <div class="frame">
+        <div class="frame-label"><span>現況 ·「配置 &amp; 帳本」</span><span>6,403 行 · 畫面順序 ④→①→②→③</span></div>
+        <div class="wb"><span class="t">智能戰情室（FX 曝險摘要等）</span><span class="s"><span class="src">:240-353</span></span></div>
+        <div class="wb"><span class="t">戰情區 + 表格（多個分隔線）</span><span class="s"><span class="src">:353-490</span></span></div>
+        <div class="wb"><span class="t">🔬 <b>④</b> 持股重疊度診斷</span><span class="s">每張保單一個展開區 + 一顆按鈕<span class="src">:491-584</span></span></div>
+        <div class="wb"><span class="t">🗂️ Raw data（原始抓取資料）</span><span class="s"><span class="src">:608</span></span></div>
+        <div class="wb gone"><span class="t">📋 保單管理（Google Sheets）</span><span class="s">約 <b>800 行</b>的收合區：Sheet 快速存讀 · OAuth 引導 · v1→v2 升級 · 進階工具 · 保單列新增更新。<b>OAuth 精靈只是其中一小塊</b>（:1061 附近）<span class="src">:637-1431</span></span></div>
+        <div class="wb"><span class="t">🗂️ 保單分組視圖 + 圖</span><span class="s"><span class="src">:1434-1687</span></span></div>
+        <div class="wb"><span class="t">📊 <b>①</b> 配置總覽</span><span class="s"><span class="src">:1729</span></span></div>
+        <div class="wb"><span class="t">📈 淨值成長模擬曲線</span><span class="s">含 2% 無風險基準對比<span class="src">:1935-1978</span></span></div>
+        <div class="wb"><span class="t">➕ <b>②</b> 加入與管理基金</span><span class="s">排在總覽之後<span class="src">:2080-2392</span></span></div>
+        <div class="wb gone"><span class="t">📊 真實收益 vs 配息率健康矩陣</span><span class="s">與分頁② <b>同一個標題</b>，兩份實作<span class="src">:2488-2596</span></span></div>
+        <div class="wb gone"><span class="t">💊 持倉健診（<b>沒有編號</b>）</span><span class="s">與組合健診<b>共用同一個渲染函式、各畫一次</b>（不是複製貼上的兩份程式），說明文字自陳「完全同源」<span class="src">:2608-2613</span></span></div>
+        <div class="wb"><span class="t">💼 <b>③</b> 持倉戰情（T7 帳本）</span><span class="s">獨立檔 3,246 行，內含 A/B/C 三個子分頁<span class="src">:2805 → tab3_t7_ledger.py</span></span></div>
+        <div class="wb"><span class="t">費用與扣款（<b>沒有編號</b>）</span><span class="s"><span class="src">:2824</span></span></div>
+        <div class="wb"><span class="t">🤖 AI 摘要</span><span class="s"><span class="src">:2834</span></span></div>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label"><span>提案 · ④ 我的配置</span><span>順序照操作流程 · 頁內不編號</span></div>
+        <div class="wb new"><span class="t"><span class="tag">上移</span>加入與管理基金 <span style="font-family:var(--mono);font-size:10px;opacity:.7">第 1 段</span></span><span class="s">手動加入（支援多檔）· 每張保單的基金清單與刪除 · 📡 載入所有未載入基金。<b>沒有標的就沒有配置</b>，這是這頁的第一步<br><span class="src">:2080-2392 · :2298</span></span></div>
+        <div class="wb prop"><span class="t"><span class="tag">建議</span>└ 新增／更新保單列（主鍵：保單編號 + 基金網址）</span><span class="s">現況它在那個 800 行設定區的最底部。但它是<b>資料輸入</b>不是連線設定 —— 建議<b>留在本頁</b>，只把「連線／授權」搬去 ⑤。<b>需你拍板（Q9）</b><br><span class="src">:1258-1394</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>配置總覽 <span style="font-family:var(--mono);font-size:10px;opacity:.7">第 2 段</span></span><span class="s">核心區。把現在散在頁面上下兩端、其實都在講「現況長怎樣」的三塊收在這裡：<b>FX 曝險摘要／智能戰情室</b>、<b>保單分組視圖</b>、<b>淨值成長模擬曲線</b><br><span class="src">:1729 + :240-353 + :1434 + :1935</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>持股重疊度診斷 <span style="font-family:var(--mono);font-size:10px;opacity:.7">第 3 段</span></span><span class="s">維持「每張保單一顆按鈕才算」的做法 —— 這是全站少數一開始就做對延遲載入的區塊<br><span class="src">:491-584</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>帳本（A 新投入 / B 投入再平衡 / C 轉換再平衡）<span style="font-family:var(--mono);font-size:10px;opacity:.7">第 4 段</span></span><span class="s">本來就是獨立檔，內部三個子分頁不動<br><span class="src">tab3_t7_ledger.py:258, :1132</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>費用與扣款 <span style="font-family:var(--mono);font-size:10px;opacity:.7">第 5 段</span></span><span class="s">現況緊貼在帳本與 AI 摘要之間、沒有編號。位置合理（費用是持有成本），只補上層級<br><span class="src">:2824</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>🤖 AI 摘要</span><span class="s"><span class="src">:2834</span></span></div>
+        <div class="wb"><span class="t"><span class="tag">保留</span>🗂️ Raw data（收合，核對數字來源）</span><span class="s">保留在最後。它是「這個數字哪來的」的追查入口，有價值但不該擋路<br><span class="src">:608</span></span></div>
+
+        <div class="wb new" style="margin-top:14px"><span class="t">→ 持倉健診：改成一行連結</span><span class="s">「你的持倉健診在【組合健診】」，不再重畫一次（Q2）</span></div>
+        <div class="wb new"><span class="t">→ 收益／配息矩陣：留在 ② 一份</span></div>
+        <div class="wb new"><span class="t">→ 連線與授權設定：整段搬到 ⑤</span></div>
+      </div>
+    </div>
+
+    <div class="note">
+      <p class="note-h">為什麼「加入基金」要移到最前面</p>
+      <p>
+        現在畫面上的編號順序是 <b>④ → ① → ② → ③</b>：你先看到「④ 持股重疊度診斷」，
+        往下捲一千多行才看到「① 配置總覽」，再捲三百多行才是「② 加入與管理基金」。
+        也就是<strong>「加入基金」排在「配置總覽」之後</strong>——但你得先有基金才有配置可看。
+        新順序把它擺回第一步，並且<b>頁內不再編號</b>（見第 04 節）。
+      </p>
+    </div>
+
+    <div class="note warn">
+      <p class="note-h">這一頁有已發生過的生產事故</p>
+      <p>
+        程式碼註解記載：這段原本沒有任何守門，每一次操作都對全部持倉重跑一次含網路抓取的健診計算 ——
+        <strong>25 檔時，一次操作跑 17 秒後連線中斷、畫面永久凍結</strong>（2026-08-14 實機兩次重現）。
+        <b>這件事已經修好了</b>（改成「持倉指紋快取 + 一顆顯式重算鈕」），本次拆頁<b>不會再賺一次這個效能</b>。
+        放在這裡是因為它說明了一件事：<b>當初會爆炸，正是因為這頁重畫了一份不屬於它的東西</b>（持倉健診）。
+        移走那一份之後，那段守門機制就變成不必要的複雜度，而不是必要的防護。
+      </p>
+      <p style="margin-top:10px;color:var(--ink-3);font-size:13px">
+        ⚠️ 據實說明：17 秒這個數字是<b>程式碼註解裡記載的當時實機數據</b>，本次盤點<b>沒有重現</b>它。
+      </p>
+    </div>
+
+    <div class="why">
+      <b>為什麼這樣排：</b>照你實際的操作順序 —— <b>先加標的 → 看現在長怎樣 → 檢查重疊 → 記帳與再平衡</b>。
+      現況的順序不是任何一種流程，而是十年疊加的結果（新東西加在檔案末尾、舊東西留在原地）。
+      這一頁不新增任何功能，全部改動都是「換位置」與「刪掉重複的那一份」。
+    </div>
+  </div>
+
+  <!-- PAGE 5 -->
+  <div class="pagecard">
+    <div class="ph"><span class="pn">⑤</span><span class="pt">⚙️ 設定與診斷</span></div>
+    <div class="oneline">
+      <span class="lbl">這一頁的一句話職責</span>
+      <b>設定連線、維護資料，東西沒抓到的時候來這裡查。</b>
+      <span style="color:var(--ink-3);font-size:12.5px">（⚠️ 新定義。它由現況三個來源合成：管理室的「你還沒買的東西 + 資料維護」、資料診斷的「東西沒抓到的時候來這裡查為什麼」、以及從「配置 &amp; 帳本」搬來的連線設定。）</span>
+    </div>
+
+    <h4>結構：五個分區，<b>單頁 + 目錄錨點</b>，不再加一層分頁</h4>
+    <div class="note stop">
+      <p class="note-h">為什麼不用子分頁</p>
+      <p>
+        現況「說明書」是<strong>全站唯一的三層巢狀分頁</strong>：頂層 7 個 → 參考／診斷 2 個 → 說明書 10 個。
+        一份公式要點<b>三次</b>才看得到，而且程式裡還特地寫了一條樣式規則去修這種深度造成的畫面問題。
+        新結構若再開子分頁，等於把三層變成三層。改用<b>一頁到底 + 頂部目錄跳轉</b>：一次點擊到位，而且可以用瀏覽器搜尋整頁找東西。
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>頂部</span><span>目錄</span></div>
+      <div class="wb prop"><span class="t"><span class="tag">建議</span>目錄列：🔌 連線與帳號 · 🗄️ 資料維護 · 🔔 通報 · 🔭 資料診斷 · 📖 說明書</span><span class="s">點擊跳到該分區<span class="src">現況無此元件（新增）</span></span></div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>A · 🔌 連線與帳號</span><span>從「配置 &amp; 帳本」搬來 + 診斷頁合併</span></div>
+      <div class="wb new"><span class="t"><span class="tag">搬入</span>Sheet 快速存讀面板</span><span class="s">從 Drive 列出 Sheets · 使用此 Sheet · 立即全部讀回／寫入<span class="src">tab3_portfolio.py:644-902</span></span></div>
+      <div class="wb new"><span class="t"><span class="tag">搬入</span>🧙 OAuth Client 設定引導（5 分鐘完成）</span><span class="s"><span class="src">tab3_portfolio.py:1061-1082</span></span></div>
+      <div class="wb new"><span class="t"><span class="tag">搬入</span>🆕 資料格式 v1→v2 升級（含先備份）</span><span class="s">一次性遷移工具<span class="src">tab3_portfolio.py:1165-1234</span></span></div>
+      <div class="wb new"><span class="t"><span class="tag">合併</span>🔑 API 金鑰狀態</span><span class="s">從資料診斷搬來，與上面的連線設定放在一起才是完整的「我的連線狀況」<span class="src">tab5_data_guard.py:1055</span></span></div>
+      <div class="wb new"><span class="t"><span class="tag">合併</span>🌐 NAS Proxy 中繼站狀態 + 🧪 測試連線</span><span class="s"><span class="src">tab5_data_guard.py:935-954</span></span></div>
+      <div class="wb new"><span class="t"><span class="tag">搬入</span>🔍 抓取診斷細節（哪個源失敗）</span><span class="s">從個基深掘搬來<span class="src">tab2_single_fund.py:386</span></span></div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>B · 🗄️ 資料維護</span><span>解決 NAV 匯入的重複</span></div>
+      <div class="wb new" style="border-width:2px"><span class="t"><span class="tag">合一</span>NAV 歷史 —— <b>三個功能一個入口</b></span><span class="s">
+        現況<b>同一件事分在兩個分頁</b>，連名字都不一樣：<br>
+        ・管理室「🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）」<span class="src">tab_manage.py:430</span><br>
+        ・資料診斷「🗂️ NAV 歷史匯入與累積狀態（保單對帳單 CSV → nav_history）」<span class="src">tab5_data_guard.py:1464-1548</span><br>
+        <b>合併後的單一區塊：</b>① 上傳對帳單 CSV 當基底　② 🔄 一鍵自動補全缺淨值（原管理室 :303-430）　③ 累積狀態表（哪幾檔補到哪一天）<br>
+        <b>命名採用</b>「NAV 歷史」，兩個舊標題都不留 —— 留任一個都會讓人以為另一個還在別頁。
+      </span></div>
+      <div class="wb new"><span class="t"><span class="tag">搬入</span>🛠️ 進階工具（保單資料表檢視）</span><span class="s">保單列的<b>新增／更新</b>建議留在 ④（見 Q9），這裡只留唯讀檢視與批次工具<span class="src">tab3_portfolio.py:1258-1394</span></span></div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>C · 🔔 通報</span><span>從管理室搬來</span></div>
+      <div class="wb new"><span class="t"><span class="tag">搬入</span>🔔 換股通報（LINE）</span><span class="s">👁️ 預覽本週會送的訊息 · ✉️ 測試發送 · 📖 NAS 設定步驟<span class="src">tab_manage.py:90-119</span></span></div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>D · 🔭 資料診斷</span><span>原樣搬入，去掉編號</span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>資料完整性檢查表（前 4 個分頁）</span><span class="s">⚠️ 這件事現在有<b>三種視覺語言</b>：這張表、分頁① 的「可信度」徽章、分頁① 的新鮮度條。建議三處共用同一個元件：<b>摘要在 ①、完整表在這裡</b><br><span class="src">tab5_data_guard.py:224</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>📥 第一手原始資料源總覽 + 重抓</span><span class="s"><span class="src">:383-405</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>📋 全域資料健康總表 + 抽查快照</span><span class="s"><span class="src">:557-691</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>📊 基金資料診斷（每檔一個展開區）</span><span class="s"><span class="src">:1119-1243</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>⚠️ 資料異常清單</span><span class="s"><span class="src">:1579</span></span></div>
+      <div class="wb"><span class="t"><span class="tag">保留</span>進階診斷（全部按鈕觸發）</span><span class="s">API 連線延遲趨勢 · FX 四來源逐一檢測 · FRED 發布日診斷 · Phase 3-B 燈號回測<span class="src">:744, :993, :1380, :826</span></span></div>
+      <div class="wb gone"><span class="t">🔄 重新載入總經（這顆按鈕）</span><span class="s">它做的事是<b>清掉分頁① 的狀態</b>。一顆會影響別頁的按鈕放在診斷頁右上角 → 移回分頁① 的載入列<br><span class="src">:209</span></span></div>
+      <div class="wb gone"><span class="t">每次操作都跑的匯率抓取</span><span class="s">這頁最上方有一次無條件的匯率抓取，加上分頁進入前的資料註冊表更新，就是第 05 節那 2 次網路請求。改為<b>按鈕觸發或跟著診斷一起跑</b><br><span class="src">tab5_data_guard.py:275 · app.py:331</span></span></div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>E · 📖 說明書</span><span>10 個子分頁 → 單頁目錄</span></div>
+      <div class="wb new"><span class="t"><span class="tag">改法</span>10 個主題改為錨點目錄</span><span class="s">Macro Score · 景氣天氣 · 健診評等 4D · 吃本金診斷 · 再平衡公式 · 核心衛星 · 汰弱留強 · Sheet 資料結構 · 全局指標關聯地圖 · 宏觀教學文獻。<br>頁首的「📊 資料來源完整地圖」置頂不動<br><span class="src">tab6_manual.py:147-158 · :43</span></span></div>
+      <div class="wb gone"><span class="t">說明書內的三套編號</span><span class="s">子分頁用 1.~10.、內文用 ①~⑨（第 10 個沒編號）、頁首另有 ⓪ —— 同一頁三套。改用純標題階層<br><span class="src">tab6_manual.py:147-158, :162-528, :43</span></span></div>
+    </div>
+
+    <h4>從管理室搬去別頁的兩塊</h4>
+    <div class="wb prop"><span class="t"><span class="tag">建議</span>📁 選股池（候選基金）　→ 搬到 ② 組合健診</span><span class="s">現況兩個入口（管理室 + 組合健診的換股池顧問）操作同一份資料。選股池是<b>決策資產</b>不是設定，建議整併到決策動線內的 ②。<b>需你拍板（Q7）</b><br><span class="src">tab_manage.py:71 ／ switch_advisor_section.py:310</span></span></div>
+    <div class="wb prop"><span class="t"><span class="tag">建議</span>🗓️ 除息行事曆　→ 跟著選股池走</span><span class="s">它的資料來源就是選股池（按鈕字面是「抓選股池標的 → 產生本月除息月曆」），兩者分開會再造出一次跨頁跳轉<br><span class="src">tab_manage.py:255-259</span></span></div>
+
+    <div class="note stop">
+      <p class="note-h">必修，而且比原先估的大：頁面之間的「指路文字」有 9 處、分屬 3 套不相容的編號</p>
+      <p>
+        最明顯的一行在管理室：「先到 <b>Tab④／組合健診</b>」—— 但「組合健診」是第 <b>2</b> 個分頁，Tab④ 是「配置 &amp; 帳本」。
+        程式碼查驗後發現這不是單一 typo：
+      </p>
+      <ul style="margin-top:10px">
+        <li><b>說明書裡是另一套</b>：Tab2＝個基深掘（實際第 4）、Tab3＝組合健診（實際第 2）、Tab4＝配置（實際第 5）<span class="src">tab6_manual.py:69,78,88,92,95,96</span></li>
+        <li>帳本裡「Tab3」指的是配置頁<span class="src">tab3_t7_ledger.py:1171</span></li>
+        <li>管理室另有兩處<span class="src">tab_manage.py:41,64</span></li>
+      </ul>
+      <p>
+        <b>根因</b>：頂層分頁編號本身就有兩套並存 —— 程式碼註解把七個分頁標成
+        <code>① ② ②-B ③ ④ ④-B ⑤</code>（把批次分析與管理室當成附屬），
+        而一般人是照位置數 1~7。<b>同一句「分頁⑤」，一邊指配置頁、一邊指參考／診斷頁。</b>
+        <span class="src">app.py:231/252/267/281/295/309/322</span>
+      </p>
+      <p style="margin-top:10px">
+        這些全是<strong>寫死的字面值</strong>，重排分頁後會全面失準，必須一起改成自動帶入分頁名。
+        <b>要用哪一套頂層編號，需你拍板（Q10）。</b>
+      </p>
+    </div>
+
+    <div class="why">
+      <b>為什麼這樣排：</b>順序是<b>「先能連上 → 再有資料 → 再送得出通知 → 出事才查 → 想懂公式才讀」</b>，
+      也就是新使用者第一天的先後，同時也是出問題時由外而內的排查順序。
+      現況這些東西散在三個地方（管理室、資料診斷、配置頁的 800 行設定區），
+      而診斷頁自己的說明文字承認「中間各區塊在你沒遇到問題時可以完全略過」——
+      既然平時是雜訊，就不該佔在決策動線上。
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 04 -->
+<section>
+  <h2><span class="num">04</span> 跨頁統一：三件成本極低、你立刻看得到的事</h2>
+
+  <h3>① 編號體系：6 套 → 1 套</h3>
+  <p>現在每一頁自己編一套圈號，而且互相衝突。提案是<strong>只在頂層保留決策站號</strong>，頁內改用純標題階層。</p>
+
+  <div class="row r2">
+    <div class="frame">
+      <div class="frame-label"><span>現況</span><span>6 套並存</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">① 市場定調：總表 ①②③④ ＋ 拐點區內又一套 ①② ＋ 雷達內 ④⑤ ＋ 長期內 ⑥（看到的順序是 …⑥→④⑤→①②）</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">個基深掘：①②③④ 被 <b>8 個未編號區塊</b>打斷</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">配置 &amp; 帳本：畫面順序 ④→①→②→③，且持倉健診沒有編號</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">資料診斷：⓪①②③④⑤⑥ 中間插了 <b>5 個未編號</b>收合區</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">說明書：子分頁 1.~10. ＋ 內文 ①~⑨ ＋ 頁首 ⓪</span></div>
+    </div>
+    <div class="frame">
+      <div class="frame-label"><span>提案</span><span>1 套</span></div>
+      <div class="wb new" style="min-height:auto"><span class="t">頂層：① ~ ⑤ 決策站號</span><span class="s">只有分頁列用圈號，且與決策順序一致</span></div>
+      <div class="wb new" style="min-height:auto"><span class="t">頁內：純標題階層</span><span class="s">大標／中標／小標，不編號</span></div>
+      <div class="wb new" style="min-height:auto"><span class="t">分頁名與站號從同一份設定產生</span><span class="s">分頁名<b>已經</b>有統一出處，<b>頁內編號完全沒有</b> —— 這正是它漂成 6 套的原因</span></div>
+    </div>
+  </div>
+
+  <h3>② 導覽列：4 種模式 → 1 種</h3>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>現況</th><th>哪幾頁</th><th>提案</th></tr></thead>
+    <tbody>
+      <tr><td>只有「決策動線」一條</td><td>① 市場定調</td><td rowspan="4">全部統一成<b>一條</b>，位置與樣式固定。<br>以 ① 現況為樣板（它是被簡化過的那一頁）</td></tr>
+      <tr><td>「四層流程」＋「決策動線」<b>兩條疊著</b></td><td>② 組合健診 · 個基深掘 · 配置 &amp; 帳本</td></tr>
+      <tr><td>只有「四層流程」一條</td><td>批次分析 · 我的管理室</td></tr>
+      <tr><td>兩條都沒有</td><td>資料診斷 · 說明書</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="color:var(--ink-3);font-size:13px">
+    ⚠️ 這裡的「8 個」指<b>渲染面</b>：7 個頂層分頁，其中「參考／診斷」內含兩個子分頁，各自算一個。8 面 4 模式必然有重複，重點不在「沒有兩個一樣」，而在<b>同一條決策動線上的 ①②③④ 四頁彼此就不一致</b>。
+  </p>
+
+  <h3>③ 命名：同一件事最多有 6 個名字</h3>
+  <div class="tscroll">
+    <table class="ev">
+      <thead><tr><th>概念</th><th>現在的叫法</th><th>提案</th></tr></thead>
+      <tbody>
+        <tr><td>健康度評估</td><td>健診 · 體檢 · 健康分析 · 4D Grade · 四維 · 六因子<span class="num">（6 種）</span></td><td>統一為<b>健診</b><span class="num">（188 次 vs 體檢 54 次）</span></td></tr>
+        <tr><td>換掉一檔基金</td><td>換標 · 換股 · 輪動<span class="num">（同一頁內共存 3 種）</span><br>＋ 汰弱留強<span class="num">（僅出現在說明書，4 次）</span></td><td>統一為<b>換標</b><span class="num">（59 次 vs 換股 36 次）</span></td></tr>
+        <tr><td>候選名單</td><td>選股池 · 觀察池 · 候選基金<span class="num">（3 種）</span></td><td>統一為<b>選股池</b><span class="num">（71 次 vs 觀察池 5 次）</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13.5px;color:var(--ink-2)">
+    另有兩項屬於同一類、但屬<b>顯示瑕疵</b>而非命名分歧，建議一併修：
+    多個欄位名稱<b>帶著一個前導空白</b>（畫面上真的多一格）；
+    以及一行讀不通的標題「換標的建議( 4 規則<b>心型警</b>結合)」。
+    <span class="src">後者盤點註明：找不到原始字串可佐證，只能確認畫面上這行讀起來是壞的</span>
+  </p>
+  <div class="note warn">
+    <p class="note-h">還有一項「算了卻丟掉」的重複，順帶一提</p>
+    <p>
+      有兩個近乎同名的欄位（「3-3-3」與「3-3-3 篩」）由兩個不同模組各算一次，
+      而程式碼註解自己寫明<b>其中一個在合併時會被過濾掉</b> ——
+      也就是每次健診都算了一份沒人看得到的結果。屬於統一命名時可以順手清掉的東西。
+      <span class="src">services/health/report.py:324-326, :365 · services/fund_row.py:221</span>
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 05 -->
+<section>
+  <h2><span class="num">05</span> 效能與列印</h2>
+
+  <h3>匯率抓取：只快取成功結果</h3>
+  <p>
+    真正的問題不是「每次操作 2 次網路請求」，而是<strong>它只快取成功的結果</strong>。
+    網路正常時，成功結果會被快取 5 分鐘，這段期間成本趨近於零；
+    但<strong>一旦抓失敗就不進快取</strong>，於是每一次操作都重跑一次 4 個來源的備援鏈 ——
+    也就是網路愈不順、它跑得愈兇。實測堆疊有兩個呼叫點：進入「參考／診斷」分頁前的<b>資料註冊表更新</b>，
+    以及<b>資料診斷頁頂端</b>，兩處都<strong>不在任何按鈕後面</strong>。
+  </p>
+  <div class="note">
+    <p class="note-h">這一項不需要等重設計</p>
+    <p>它與版面無關，可以獨立先修，是全站唯一「不必改任何畫面就能拿到的效能改善」。</p>
+  </div>
+
+  <h3>五套「按鈕沒按就不做事」的旗標 → 一套</h3>
+  <p>
+    因為分頁切換只是前端效果，七頁的內容每次操作都會全部重跑，所以每個分頁各自發明了一套守門旗標 ——
+    <b>市場定調、組合健診、配置頁、個基深掘、批次分析各一套，五種行為、五個出錯面</b>。
+    現成的最佳實作已經存在：配置頁的<strong>持倉指紋快取</strong>是全站唯一
+    「指紋不含時間、內容變了才重算、另給一顆顯式重算鈕」的完整設計，可以直接當統一方案的藍本。
+  </p>
+  <div class="note warn">
+    <p class="note-h">這是三項裡風險最高的</p>
+    <p>動的是每個分頁的執行條件，<b>最容易改出「該顯示卻沒顯示」</b>。建議排在版面定案之後單獨做，且每頁分開驗收。</p>
+  </div>
+
+  <h3>列印／PDF：現在印不出完整表格</h3>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>項目</th><th>現況</th><th>後果</th></tr></thead>
+    <tbody>
+      <tr><td>表格元件</td><td class="num">56 個虛擬滾動 · 0 個靜態</td><td><b>列印只會印出視窗內看得到的那幾列</b></td></tr>
+      <tr><td>列印樣式</td><td class="num">0 條列印樣式</td><td>沒有任何列印排版</td></tr>
+      <tr><td>行動裝置樣式</td><td class="num">0 個寬度斷點</td><td>全站沒有任何寬度斷點（只有 1 條深淺色偏好查詢）。分欄約 <b>105 處固定 + 8 處動態</b> —— Streamlit 在窄螢幕會自動把欄堆疊，所以固定欄數本身<b>不是</b>缺陷；真正不會縮放的是卡片內<b>寫死的字級</b>（如 11px）</td></tr>
+      <tr><td>唯一可行的匯出</td><td class="num">1 個下載鍵</td><td>批次掃描的 CSV 下載 —— 新結構把它保留在 ③</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="color:var(--ink-3);font-size:13.5px">
+    ⚠️ 行動裝置與列印<strong>只做了靜態檢查（搜尋樣式規則），沒有實機或瀏覽器驗證</strong>。
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- 06 -->
+<section>
+  <h2><span class="num">06</span> 建議的施工順序</h2>
+  <p class="lede">依「改動槓桿 ÷ 風險」排。第 1 批刻意排最前，因為它最便宜、你最快看得到差別。</p>
+
+  <div class="row r3">
+    <div class="wb new" style="min-height:130px"><span class="t">第 1 批 · 統一語言</span><span class="s"><b>編號 + 導覽 + 命名 + 指路文字</b><br><br>風險仍最低（幾乎純文字），滿版有感，也能先驗證你對命名的偏好。<br><b>但成本要據實上修</b>：指路文字不是 1 行而是 <b>9 處、3 套編號慣例</b>，且要先決定頂層編號用哪一套（Q10），才動得了。</span></div>
+    <div class="wb new" style="min-height:130px"><span class="t">第 2 批 · 分頁重組</span><span class="s"><b>7 分頁 → 5 分頁</b><br><br>槓桿最大。切割線是現成的：帳本本來就是獨立檔、設定區本來就是一個完整收合區、持倉健診本來就是一次 import。</span></div>
+    <div class="wb new" style="min-height:130px"><span class="t">第 3 批 · 效能與列印</span><span class="s"><b>統一守門旗標 + 列印樣式</b><br><br>風險最高，排最後。但那 2 次網路請求<b>可以獨立先修</b>，不必等。</span></div>
+  </div>
+  <div class="note warn">
+    <p class="note-h">一個既有共識，這次要沿用</p>
+    <p>
+      「分頁自稱的名字」與「分頁列上的名字」對不上，<b>在這個專案已經發作過兩次</b> ——
+      程式碼註解自陳是「同一種病第二次發作」，因此七個分頁名後來全部收進同一份設定管理。
+      <b>這次合併＋改名，必須走同一份設定</b>，包含所有指路文字都改成自動帶入，
+      不要再出現任何一處寫死的分頁名或分頁號。
+      <span class="src">app.py:220-223</span>
+    </p>
+  </div>
+  <p style="font-size:13.5px;color:var(--ink-2)">
+    第 2 批內部再排序的話：<b>④ 我的配置</b> 先（它是唯一講不出職責的一頁，且吃掉最多重複），
+    <b>⑤ 設定與診斷</b> 次之（它接收 ④ 搬出來的東西），<b>③ 基金研究</b> 第三，
+    <b>① ②</b> 只有小幅調整，可以最後做。
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- 07 -->
+<section>
+  <h2><span class="num">07</span> 需要你拍板的十件事</h2>
+  <p class="lede">
+    前五題是結構主線；後五題是畫這份線框時<b>發現規格沒交代、必須由你決定</b>的（標為橘色）。
+    其餘（取數路徑、快取設定、元件實作、測試怎麼寫）都是技術細節，由團隊內部拍板，不佔用你的時間。
+  </p>
+
+  <div class="decisions">
+
+    <div class="dec">
+      <h4><span class="q">Q1</span> 7 個分頁併成 5 個，同意嗎？</h4>
+      <p>「批次分析」併進「基金研究」、「管理室 + 參考／診斷」併成「設定與診斷」。<strong>功能一個都不刪，只換位置。</strong></p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>同意</strong>。理由是<em>資訊架構</em>：現在的七個分頁不是照決策順序排的，而是功能長出來的先後順序。
+        併成五個之後，分頁列本身就是你做決定的順序。
+        <br><span style="color:var(--ink-3);font-size:12.5px">⚠️ 附帶風險：分頁改名在這個專案<b>已經發作過兩次</b>「頁面自稱與分頁列不同名」的問題。這次改名必須全部走同一份設定，包含九處指路文字（見 Q10）。</span>
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q2</span>「配置 &amp; 帳本」裡的持倉健診，改成一行連結，可以嗎？</h4>
+      <p>它與「組合健診」<b>共用同一個渲染函式、各畫一次</b>，說明文字自陳「完全同源」。提案是配置頁只留一行「你的持倉健診在【組合健診】」。</p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>改成連結</strong>。同一份東西畫兩次，除了慢，還有一個更糟的風險：<em>兩邊哪天不同步時，你不會知道該信哪一個</em>。
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你習慣在配置頁直接看到健診結果，可改成「摘要三行 + 連結」，但完整三表只留一處。）</span>
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q3</span> 頁內圈號全部拿掉，只留頂層分頁編號 —— 可以嗎？</h4>
+      <p>現在 6 套圈號互相衝突（其中兩套就在同一頁上）。要嘛統一成一套，要嘛頁內不編號。</p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>頁內不編號</strong>。頁內區塊會隨功能增減而變動，<em>只要編了號，就一定會再次漂移</em> ——
+        現在這 6 套就是這樣長出來的。標題階層（大／中／小）表達層級已經夠用，而且不會過期。
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q4</span> 命名統一：健診 / 換標 / 選股池 —— 用這三個詞可以嗎？</h4>
+      <p>目前健康度評估有 6 個名字、換基金有 3 個（另有一個只在說明書出現）、候選名單有 3 個。</p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>採用這三個</strong>。都是現況中<em>出現次數最多</em>的那一個（健診 188 次 vs 體檢 54 次；換標 59 次 vs 換股 36 次；選股池 71 次 vs 觀察池 5 次），改動面最小、你也最習慣。
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你偏好別的詞，換一個也行 —— 只是要改的地方多一些。）</span>
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q5</span> 首次進站的空狀態要不要一併處理？</h4>
+      <p>
+        現在第一眼會看到 <span class="num">5 個錯誤 + 8 個警告 + 17 個「尚未載入」+ 21 顆按鈕</span>，而它們多半只是「還沒按更新」。
+        <br><span style="color:var(--ink-3);font-size:12.5px">⚠️ 這組數字量自<b>沒有金鑰、外部資料源被擋</b>的環境：正式部署錯誤數會少幾則，但按鈕會<b>更多</b>（市場定調的兩顆載入鈕當時沒被算進去）。</span>
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>一併處理，但只做最小版本</strong>：把「還沒載入」與「真的出錯」在視覺上分開 ——
+        前者用灰色說明、後者才用紅色。<em>現在兩者長得一樣，所以你每次進站都看到一片紅，久了就不看了。</em>
+        完整的「一鍵載入全部」屬於下一階段，本次不做。
+      </div>
+    </div>
+
+    <div class="dec mine">
+      <h4><span class="q">Q6 · 我方追加</span> 400 檔批次掃描，掛在「基金研究」還是「組合健診」？</h4>
+      <p>
+        程式血緣指向<b>組合健診</b>（那張大表的欄位設定就定義在組合健診裡，批次分析是它唯一的外部呼叫者）；
+        資訊架構指向<b>基金研究</b>（掃的是你還沒買的東西，而組合健診講的是「我手上這幾檔」）。
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>掛在 ③ 基金研究</strong>。決定性的理由是<em>一句話職責</em>：② 的那一句是「我手上這幾檔，哪幾檔在吃本金」，
+        把一個要跑 30~40 分鐘、掃 400 檔還沒買的東西的任務放進去，那句話就不成立了 ——
+        而這整份改版的驗收標準就是「每一頁講得出一句話」。
+        <br><span style="color:var(--ink-3);font-size:12.5px">代價要講清楚：程式上兩者共用那張表，所以掛在 ③ 之後，那張表的<b>欄位設定仍然住在組合健診的模組裡</b>（跨頁共用），這是技術債，不影響你看到的畫面，但團隊要知道。若你選掛在 ②，好處是血緣一致、改動最小；壞處是 ② 會再胖一圈。</span>
+      </div>
+    </div>
+
+    <div class="dec mine">
+      <h4><span class="q">Q7 · 我方追加</span> 選股池與除息行事曆，搬到「組合健診」還是留在「設定與診斷」？</h4>
+      <p>
+        同一份選股池<b>現在有兩個入口</b>（管理室、以及組合健診裡的換股池顧問），標題只差一個層級，操作的是同一份資料。除息行事曆的資料來源就是選股池。
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>兩者都搬到 ② 組合健診</strong>，管理室那個入口收掉。選股池是<em>決策資產</em>（下一檔要買什麼）不是設定，
+        而換標建議本來就需要它；放在 ⑤ 等於每次想換標都要離開決策動線。
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你習慣在「維護」的心情下整理選股池，也可以反過來 —— 全部留在 ⑤，② 只讀不改。但<b>不能維持現在兩個都能改的狀態</b>。）</span>
+      </div>
+    </div>
+
+    <div class="dec mine">
+      <h4><span class="q">Q8 · 我方追加</span>「即時訊號 + 決策矩陣」要不要移到市場定調的上半部？</h4>
+      <p>
+        它是市場定調頁<b>唯一給出逐檔行動</b>（持有／加碼／減倉／全撤 + 目標權重）的區塊，現在排在第 21 位。
+        程式碼註解記載<b>它已經搬過四次家</b>，每次都是為了「不要被埋起來」—— 也就是這件事一直沒有定案。
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>移到四層總表之後、四時域詳圖之前</strong>。你看完「該進攻還防守」，下一個問題必然是「那我手上這幾檔怎麼動」。
+        <br><span style="color:var(--ink-3);font-size:12.5px">（反方理由也成立：先看完四個時域的圖再決定逐檔動作，比較不衝動。這題沒有客觀答案，取決於你實際怎麼用這一頁 —— 所以要你決定，而不是我們再幫它搬第五次家。）</span>
+      </div>
+    </div>
+
+    <div class="dec mine">
+      <h4><span class="q">Q9 · 我方追加</span> 保單資料列的新增／更新，留在「我的配置」還是跟著設定搬走？</h4>
+      <p>它現在住在那段 800 行設定區的最底部。但「新增一列保單」是<b>資料輸入</b>，和「設定 Google 授權」不是同一件事。</p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>留在 ④ 我的配置</strong>，只把連線與授權搬去 ⑤。判準是：<em>你每個月會做的事留在配置頁，設定一次就不再碰的搬去設定頁。</em>
+      </div>
+    </div>
+
+    <div class="dec mine">
+      <h4><span class="q">Q10 · 我方追加</span> 頂層分頁編號要用哪一套？</h4>
+      <p>
+        現在有兩套並存：程式碼註解把七個分頁標成 <code>① ② ②-B ③ ④ ④-B ⑤</code>（把批次分析與管理室當附屬），
+        而人是照位置數 1~7。<b>同一句「分頁⑤」，一邊指配置頁、一邊指參考／診斷頁</b> —— 這正是那九處指路文字指錯的根因。
+      </p>
+      <div class="rec">
+        <b>我方建議</b>
+        <strong>合併成五頁後只留位置序 ① ~ ⑤，附屬編號整套廢掉</strong>，並且所有指路文字改成自動帶入分頁名（不寫號碼）。
+        原本需要 <code>②-B</code> 這種寫法，是因為有分頁「其實是別頁的附屬品」—— 而這次合併正好把那兩個附屬品收回它們的本體。
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 08 -->
+<section>
+  <h2><span class="num">08</span> 這份線框沒把握的地方</h2>
+  <p class="lede">
+    以下是畫這份線框時<strong>無法從盤點資料確定</strong>的事。列在這裡，是因為它們會影響工期或畫面，
+    而不是因為它們不重要 —— 需要回頭再查一次，或由你決定。
+  </p>
+
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>不確定的事</th><th>為什麼會不確定</th><th>怎麼收掉</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>還有幾套「第二版面」？</b></td>
+        <td>個基深掘在抓不到淨值時會走一整套<b>完全不同的畫面</b>，盤點是偶然讀到才發現的，並明說「同型的分岔在別頁可能還有」</td>
+        <td><b>動工前必須補查一次</b>：逐頁列出所有「資料不全時走另一套版面」的分岔。漏一個就等於漏掉半個畫面</td>
+      </tr>
+      <tr>
+        <td>「配置 &amp; 帳本」頁最上方那兩段的內容</td>
+        <td>盤點只記到「智能戰情室」與「多個分隔線隔開的戰情區 + 表格」兩個標題，<b>內部有哪些卡片沒有展開</b></td>
+        <td>本線框把它們整段歸入「配置總覽」。實作前要展開確認，可能需要再拆</td>
+      </tr>
+      <tr>
+        <td>組合健診頁到底有幾個子模組</td>
+        <td>盤點文字寫「15 個模組」，但它自己列出的清單有 <b>18 個</b> —— 兩個數字對不起來</td>
+        <td>不影響版面，但影響工時估算。實作前重數一次</td>
+      </tr>
+      <tr>
+        <td>健診一次最多能跑幾檔</td>
+        <td>盤點只確認「逐檔深度分析最多 10 檔」，上限值本身沒查到</td>
+        <td>影響「每檔一個展開區」改成「選一檔看」的必要性強度（10 檔 vs 更多，差很多）</td>
+      </tr>
+      <tr>
+        <td>「換標的建議( 4 規則心型警結合)」原本要寫什麼</td>
+        <td>盤點明說<b>找不到原始字串可佐證</b>，只能確認畫面上這行讀不通</td>
+        <td>統一命名時一併決定新標題，不要試圖還原</td>
+      </tr>
+      <tr>
+        <td>載入資料之後，每次操作到底要多久</td>
+        <td>實測<b>只量到空狀態</b>（沙箱沒有金鑰、外部資料源被擋）。「載入後很貴」是讀程式碼推的，不是量的</td>
+        <td>效能那一批動工前，要在有金鑰的環境實測一次基準</td>
+      </tr>
+      <tr>
+        <td>手機上到底長怎樣、印出來到底缺什麼</td>
+        <td><b>只做了靜態檢查</b>（搜尋樣式規則），沒有實機或瀏覽器驗證</td>
+        <td>列印那一批動工前實機驗一次；本線框對此不做任何承諾</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note stop">
+    <p class="note-h">哪些是「現況」、哪些是「我們的提案」</p>
+    <p>
+      線框裡標<span style="color:var(--warn);font-weight:700">橘色虛線</span>的六塊，是<b>現況沒有、我方提案</b>的：
+      基金研究的<b>模式切換</b>、設定與診斷的<b>目錄列</b>、市場定調的<b>即時訊號上移</b>、
+      選股池與除息行事曆的<b>搬遷</b>、保單列新增更新的<b>留任</b>。
+      另有兩處是對既有區塊的改法提案，內文以「建議」二字標出：健診大表的<b>欄位分組切換</b>、進階分析的<b>選一檔看</b>。
+      除此之外，每一個灰色或藍色區塊都能在現況畫面上找到對應，出處寫在該塊右下角。
+    </p>
+    <p style="margin-top:10px">
+      這是<b>結構草稿，不是視覺定稿</b> —— 顏色、字級、間距沿用現有樣式，不在本次討論範圍。
+    </p>
+  </div>
+</section>
+
+</div>
