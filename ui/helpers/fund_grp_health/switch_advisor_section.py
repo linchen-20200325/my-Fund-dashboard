@@ -57,11 +57,19 @@ def _rows_with_nav(funds: list, pool_by_code: dict) -> list:
     return rows
 
 
-def _fetch_rich(code: str, name: str = "") -> "dict | None":
+def _fetch_rich(code: str, name: str = "", *, failures: list | None = None) -> "dict | None":
     """池中未載入標的 → 走健診管線補抓成 rich dict(L2 process_one_fund + L3 _build_fund_dict)。
 
     name:選股池自填名 → 當作 name_hint 傳下去,線上抓不到真名(如 ALZF9)時顯示池名,
     而非代號(v19.497)。
+
+    failures:呼叫端傳一個 list 進來收集 `(code, exc)`;**本函式自己不畫任何東西**。
+    理由(2026-08-28 稽核):本函式住在 `_pool_rows` 的逐檔迴圈裡,選股池 20 檔遇上
+    proxy 掛掉或 MoneyDJ 子網域 403(依 `CLAUDE.md §1` Fund 脈絡屬**例行**狀況)
+    → 就地畫紅燈會一次噴 20 個滿版紅框、每個底下各掛一塊技術細節。
+    那正是線框 §03 要防的「滿版警示讓真錯誤沒人看見」,只是換成紅色、更嚴重
+    —— 修「示警不足」不可以修出「示警過度」。改由呼叫端彙總成**一則**。
+    ⚠️ `failures` 沒傳時**維持靜默**(舊行為),不是靜默吞例外 —— 呼叫端有責任收。
     """
     try:
         from services.fund_row import process_one_fund
@@ -71,11 +79,28 @@ def _fetch_rich(code: str, name: str = "") -> "dict | None":
         if r.get("ok") and r.get("_fund_raw"):
             return _build_fund_dict(r["_fund_raw"], code, _PRINCIPAL, name_hint=name)
     except Exception as _e:  # noqa: BLE001
-        # 「略過」= 這一檔會從換股建議裡靜靜消失 —— 使用者看不出少了它,
-        # 正是線框 §03 點名的「示警不足」,故走系統紅燈。
-        system_error(f"選股池標的 {code} 補抓失敗,已從候選中排除", _e,
-                     hint="下方換股建議未涵蓋這一檔,不代表它不值得換。")
+        if failures is not None:
+            failures.append((code, _e))
     return None
+
+
+def _report_pool_fetch_failures(failures: list) -> None:
+    """把逐檔補抓失敗**彙總成一則**系統紅燈(對應 `_fetch_rich` 的 `failures`)。
+
+    「略過」= 這幾檔會從換股建議裡靜靜消失,使用者看不出少了它們 ——
+    正是線框 §03 點名的「示警不足」,故仍走系統紅燈,只是一次講完。
+    """
+    if not failures:
+        return
+    _codes = "、".join(str(c) for c, _ in failures)
+    # 技術細節只掛第一個例外(它們多半同源:proxy / 子網域 403);
+    # 其餘代號已列在標題,不另開 N 塊 traceback。
+    system_error(
+        f"選股池 {len(failures)} 檔補抓失敗,已從候選中排除:{_codes}",
+        failures[0][1],
+        hint=f"下方換股建議未涵蓋這 {len(failures)} 檔,不代表它們不值得換。"
+             "（技術細節為其中第一檔;多檔同時失敗通常同源,例如 proxy 或子網域 403。）",
+    )
 
 
 def _pool_rows(pool: list, funds: list) -> list:
@@ -83,8 +108,9 @@ def _pool_rows(pool: list, funds: list) -> list:
     from ui.helpers.fund_grp_health.rotation import _assemble_rows
     _loaded = {f.get("code"): f for f in funds}
     out = []
+    _failures: list = []          # 2026-08-28:逐檔失敗先收集,出迴圈後發一則(見 _fetch_rich)
     for e in pool:
-        _rich = _loaded.get(e.code) or _fetch_rich(e.code, e.name)
+        _rich = _loaded.get(e.code) or _fetch_rich(e.code, e.name, failures=_failures)
         if _rich is None:
             continue
         _row = _assemble_rows([_rich])[0]
@@ -97,6 +123,7 @@ def _pool_rows(pool: list, funds: list) -> list:
         if not _row.get("基金類別"):
             _row["基金類別"] = e.category
         out.append(_row)
+    _report_pool_fetch_failures(_failures)
     return out
 
 

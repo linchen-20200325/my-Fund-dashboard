@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.helpers.render_state import system_error
+from ui.helpers.render_state import not_ready, system_error
 
 from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GRAY_66, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_ORANGE_300
 
@@ -324,7 +324,10 @@ def _render_per_fund_news_expanders(funds: list) -> None:
                 _hold_list.append((_zh or _nm[:20], _zh or _nm))
 
             if not _hold_list:
-                st.caption("⬜ 持股名稱解析失敗")
+                # 2026-08-28 稽核 B6:這裡沒有 exception —— 是前十大持股名稱全空
+                # (拿不到成分股名),屬「資料不足」不是「失敗」。灰色是對的,
+                # 但文案寫「失敗」配灰色正是本批要消滅的模糊,改為據實描述。
+                not_ready("這檔基金的持股名稱資料不足，無法查個股新聞")
                 continue
 
             _ss_key = f"_tab5grp_stknews_{_code}"

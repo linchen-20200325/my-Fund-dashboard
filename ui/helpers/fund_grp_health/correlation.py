@@ -49,7 +49,11 @@ def _render_one_matrix(*, title: str, subtitle: str, result: "dict | None",
         )
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
-        system_error("相關性熱力圖渲染失敗", e)
+        # 🟠 同 M3 判準:這個 try 從頭到尾只在畫一張熱力圖,失敗後下方
+        # 「影子基金 N 對」的結論(同一份 result["matrix"] 算出來的)照樣印 ——
+        # 數字全在且全對,掉的只有視覺化。
+        system_error("相關性熱力圖渲染失敗", e, degraded=True,
+                     hint="下方影子基金判定不受影響,少的只有這張熱力圖。")
 
     if _shadow:
         st.markdown(f"**⚠️ 偵測到 {len(_shadow)} 對影子基金({label} ≥ {threshold})**")

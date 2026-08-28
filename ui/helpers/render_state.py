@@ -64,13 +64,27 @@ def not_ready(message: str, *, where: str = "") -> None:
     st.caption(_msg)
 
 
-def system_error(what: str, exc: BaseException, *, hint: str = "") -> None:
+def system_error(what: str, exc: BaseException, *, hint: str = "",
+                 degraded: bool = False) -> None:
     """🔴 系統真出錯：紅色錯誤框 + 可展開技術細節 + stderr 鏡射。
 
     用在：抓取失敗、渲染失敗、模組載入失敗 —— 也就是**畫面上少了或錯了一個數字**。
 
     走 `ui.helpers.session.friendly_error(level="error")`（全站錯誤呈現 SSOT，
     §2.1），本函式只負責把「這是系統紅燈」這個語意具名化，讓稽核與測試找得到。
+
+    Parameters
+    ----------
+    degraded : 降為 🟠 橘框（`level="warning"`）。
+        **通過條件只有一個，不得放寬**：這次失敗之後，畫面上**每一個數字都還在、
+        而且都還是對的**，掉的只有非數值的呈現物（一張圖）。使用者**不可能**因為
+        這次失敗而做出錯誤決定 —— 他只是少看到一張圖。
+
+        ⚠️ 只要有任何一個數字消失、被排除、或改變（例：匯率抓不到 → 美元計價基金
+        被排除在回測之外），**一律 `degraded=False`**：那正是客戶 2026-08-28 要
+        建立的分辨力（「這個數字不可信」vs「這個數字可信」）。把兩者穿同一件紅衣服
+        會把它抹平；把前者穿成橘衣服更糟。
+        （2026-08-28 稽核 M3：本檔同一區塊內就有一組正反例，見 backtest_section。）
     """
     from ui.helpers.session import friendly_error  # lazy：避免 import 迴圈
 
@@ -78,7 +92,7 @@ def system_error(what: str, exc: BaseException, *, hint: str = "") -> None:
         what, exc,
         hint=hint or "此區塊已隔離，其他區塊與分頁不受影響；"
                      "請展開下方「🔧 技術細節」把 traceback 截圖回報。",
-        level="error",
+        level="warning" if degraded else "error",
     )
 
 

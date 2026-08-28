@@ -179,9 +179,22 @@ def friendly_error(title: str, exc: Exception, *, hint: str = "", level: str = "
         st.warning(body)
     # stderr 鏡射(Streamlit Cloud log 可追)
     print(f"[friendly_error] {title} | {type(exc).__name__}: {exc}", file=_sys_mod.stderr)
-    _detail = f"{type(exc).__name__}: {exc}\n\n" + _tb_mod.format_exc()
+    # 2026-08-28 稽核 B4:`format_exc()` 在**沒有 active exception** 時回傳
+    # `"NoneType: None"` —— 而本函式允許 caller 傳一個**自己建構的** exception
+    # 來報告「狀態不對」(例:fetcher 回傳 error token,沒有真的拋)。照舊直接串上去,
+    # 使用者展開「🔧 技術細節」會看到一段**假 traceback**,那本身就是 §1 的造假。
+    # 故:有 active exception 才附 traceback,沒有就明說這是狀態回報。
+    if _sys_mod.exc_info()[0] is not None:
+        _detail = f"{type(exc).__name__}: {exc}\n\n" + _tb_mod.format_exc()
+    else:
+        _detail = (f"{type(exc).__name__}: {exc}\n\n"
+                   "（此為狀態回報，非捕捉到的例外，因此沒有 traceback 可附。）")
     # 2026-08-28:Streamlit 禁止 expander 巢狀(`Expanders may not be nested inside
-    # other expanders`)。本函式自 v19.5xx 起也被逐檔區塊(住在 `st.expander` 裡)呼叫,
+    # other expanders`)。本函式**自本批(顏色五態分離第一批)起**也被逐檔區塊
+    # (住在 `st.expander` 裡)呼叫 —— 之前沒有這種呼叫點:對 origin/main 做 AST 掃描,
+    # `friendly_error` / `_friendly_error` 共 7 個直接呼叫點,**詞法上位於
+    # `with st.expander(` 內者 0 處**(2026-08-28 實測;⚠️ 該掃描只看同檔詞法巢狀,
+    # 「函式 A 在 expander 內被呼叫、A 內部再呼叫 friendly_error」這種跨檔間接路徑掃不到),
     # 若照舊硬開 expander,一個「區塊渲染失敗」會當場升級成整頁 StreamlitAPIException
     # —— 錯誤呈現本身變成更大的錯誤。故降級為攤平的 st.code:技術細節一項都不少,
     # 只是不收合。(§1:寧可版面醜,不可把失敗吞掉或炸更大。)

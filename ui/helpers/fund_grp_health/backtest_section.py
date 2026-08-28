@@ -116,7 +116,10 @@ def render_allocation_backtest_section(funds: list) -> None:
                            legend=dict(orientation="h", yanchor="bottom", y=1.02))
         st.plotly_chart(_fig, use_container_width=True)
     except Exception as _e_fig:  # noqa: BLE001 — 圖失敗不擋數據(排名表已在上方渲染)
-        system_error("配置回測淨值疊圖繪製失敗", _e_fig,
+        # 🟠 而非 🔴:排名表已渲染成功、每一個數字都還在且都是對的,掉的只有這張圖
+        # → 使用者不可能因此做出錯誤決定。對照同區塊上方的 USDTWD 失敗(美元計價基金
+        # 被**排除**,結論真的會變) —— 那個是 🔴。兩者不可穿同一件衣服(2026-08-28 稽核 M3)。
+        system_error("配置回測淨值疊圖繪製失敗", _e_fig, degraded=True,
                      hint="上方排名表的數字不受影響,少的只有這張圖。")
 
     # ── 匯率方向裁決(S1 現行 vs S2 反向)──

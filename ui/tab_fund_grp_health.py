@@ -991,7 +991,11 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
                     df, health_by_code or {}, div_by_code or {}, extra_by_code or {},
                     current_regime=_regime)
             except Exception as _e_merge:  # noqa: BLE001 — 合併失敗不擋健診總表
-                system_error("①②③ 合併大表失敗", _e_merge)
+                # 與 :909 同型:失敗時大表會**靜靜少掉數十欄**,而不是整張消失
+                # → 使用者看到的是一張「看起來完整」的窄表(2026-08-28 稽核 B3 補 hint)。
+                system_error("①②③ 合併大表失敗", _e_merge,
+                             hint="下方健診總表會少掉①②③合併進來的數十個欄位 —— "
+                                  "是併不進去,不是這些基金沒有那些資料。")
         # 2026-08-05 稽核 🟢 選作 6:本批 Sharpe 來源全同 → 該欄逐列重複、零資訊量,
         # 由 df 收合成表下一行 caption(§2.2 揭露不減少,只是從 48 欄裡挪出來講一次)。
         df, _sharpe_src_uniform = _fold_uniform_sharpe_source(df)

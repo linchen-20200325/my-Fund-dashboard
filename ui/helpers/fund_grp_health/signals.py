@@ -31,12 +31,14 @@ def _render_mk_signal_table(funds: list) -> None:
         st.caption("⬜ 需先到 🌐 市場定調 Tab 點選「載入總經資料」,才能算景氣位階 + 操作訊號")
         return
 
-    try:
-        pass
-    except Exception as e:
-        system_error("買賣訊號模組載入失敗", e)
-        return
-
+    # 2026-08-28 稽核 B1:此處原有一個 `try: pass / except ... return` 的**死殼** ——
+    # `pass` 永遠不會拋,那個 handler 在 production 路徑恆不觸發。
+    # 來歷已查證:commit 9564347(ruff F401 自動清 unused import)把
+    # `from ui.helpers.macro_helpers import mk_fund_signal` 移除後,ruff 以 `pass`
+    # 補上空的 try body,留下這個空殼。**不補回 import** —— 該 import 真正的、
+    # 仍在使用的位置在本檔 `mk_signal_by_code`(:83),那裡已有完整的失敗處理
+    # (stderr + `mk_fund_signal = None` + `_import_err` 上報),本函式不需要它。
+    # 這與憲法 §-2 規則 6 點名的 `db4c139` 事故同型:宣稱有防護、實際恆不觸發。
     _phase = _phase_info.get("phase") or "擴張"
     _score = _phase_info.get("score") or 5.0
     st.caption(
@@ -289,7 +291,10 @@ def _render_bollinger_expanders(funds: list) -> None:
                 )
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
-                system_error(f"{_code} Bollinger 圖渲染失敗", e)
+                # 🟠 同 M3 判準:只畫圖,買賣點數值本身在健診大表裡照常顯示。
+                # 且本處在**逐檔迴圈**內,用 🔴 會讓一次批次失敗噴滿整頁紅框。
+                system_error(f"{_code} Bollinger 圖渲染失敗", e, degraded=True,
+                             hint="這一檔的買賣點數值在健診大表裡仍然看得到,少的只有這張圖。")
 
 
 # ════════════════════════════════════════════════════════════════
