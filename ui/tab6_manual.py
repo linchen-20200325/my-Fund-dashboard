@@ -24,6 +24,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_BB, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 
@@ -515,7 +517,9 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
             from ui.tab1_macro import render_indicator_map
             render_indicator_map()
         except Exception as _e_map:
-            st.caption(f"⚠️ 地圖載入失敗：{str(_e_map)[:80]}")
+            # 指標地圖是這一節的主體（復用 Tab1 的 render_indicator_map）,
+            # 失敗＝整塊內容不見,不是掉一張裝飾圖。
+            system_error("指標地圖載入失敗", _e_map)
         st.markdown("""
 **🎯 投資應用：**
 1. **看到 PMI 強勁** → 通常領先 1-2 季出現通膨升溫 → 央行升息預期升高 → 提前減碼利率敏感資產（長債、科技股）
@@ -604,7 +608,10 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
                         st.plotly_chart(_l2fig, use_container_width=True)
                         st.caption("🔴 紅色陰影 = 歷史衰退/危機區間;上圖藍線 = 薩姆規則(pp),下圖橘虛線 = SLOOS 銀行放貸標準(%)。上下共用時間軸,各自單位、不再共軸扭曲。")
                 except Exception as _e_c:
-                    st.warning(f"⚠️ 歷史對照圖載入失敗：{_e_c}")
+                    # ⚠️ 不是 degraded：這個 try 內除了 plotly 之外還有一句解讀用的
+                    # caption（紅色陰影 / 藍線 / 橘虛線各代表什麼）,而且沒有任何
+                    # 表格 fallback —— 失敗後這一整塊是空的。
+                    system_error("歷史對照圖載入失敗", _e_c)
 
         # ── § D. 👉 完整指標加扣分明細 ─────────────────────────────────────────
         # 標題不寫死項數：實際參與計分的指標數會隨資料抓取結果與校準檔變動，
@@ -725,4 +732,5 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
                     else:
                         st.info("⬜ 沒有可用的指標資料")
                 except Exception as _e_d:
-                    st.warning(f"⚠️ 加扣分明細載入失敗：{_e_d}")
+                    # 整張加扣分明細表（指標 / 數值 / 信號 / 貢獻分 / 權重）消失。
+                    system_error("加扣分明細載入失敗", _e_d)

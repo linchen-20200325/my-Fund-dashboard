@@ -620,4 +620,11 @@ def render_fund_checkup(portfolio_funds: list | None, expanded: bool = False) ->
             try:
                 _render_fund_health_card(_f, _k)
             except Exception as _e:
+                # ⚠️ 2026-08-28 顏色批次二之一：**刻意不改色,不是漏改**。
+                # 這行住在逐檔迴圈裡（上一行的 `for _c, (_f, _k) in _kpi_cache.items()`）,
+                # 就地改成 system_error → N 檔失敗就是 N 個滿版紅框,正是
+                # `tests/test_render_state_color_separation.py` M1 那組規則在防的
+                # 「示警過度」。正解是像 `switch_advisor_section._fetch_rich` 那樣
+                # 「迴圈內收集、迴圈外彙總成一則」—— 那是結構改動,不是換顏色,
+                # 不在「只做顏色」這一批的範圍內。已登記待後批。
                 st.caption(f"⚠️ {_c} 健診卡渲染失敗：[{type(_e).__name__}] {str(_e)[:60]}")

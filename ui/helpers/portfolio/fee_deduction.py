@@ -343,4 +343,8 @@ def render_fee_deduction_section(funds: list) -> None:
         except ValueError as _e:   # 引擎 §1 fail-loud(理論上 fee>0 已擋)
             st.error(f"試算失敗:[{type(_e).__name__}] {str(_e)[:80]}")
         except Exception as _e:    # noqa: BLE001 — 任何例外收成提示,不炸 Tab3
+            # ⚠️ 2026-08-28 顏色批次二之一：**刻意不改色,不是漏改**。同 checkup.py ——
+            # 這行住在 `for _g in _groups:` 的逐保單迴圈裡,就地改紅 = N 張保單
+            # N 個紅框（M1 的原病）。正解是彙總,屬結構改動,已登記待後批。
+            # （上面那行 `except ValueError` 已經是 st.error,顏色本來就對。）
             st.caption(f"⬜ 本保單試算略過:[{type(_e).__name__}] {str(_e)[:80]}")

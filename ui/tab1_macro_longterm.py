@@ -22,6 +22,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.converters import safe_num  # v19.396 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
     GH_BG_CARD,
@@ -119,7 +121,8 @@ def render_long_term_section(
                         trend=_ud.get("series"),
                         spark_key=_spk)
     except Exception as _us_card_e:  # noqa: BLE001
-        st.caption(f"💵 美股流動性卡片暫時無法顯示：[{type(_us_card_e).__name__}] {_us_card_e}")
+        # 整張卡（訊號燈 + 數值 + 日期 + 迷你走勢）消失,不是少一張圖。
+        system_error("💵 美股流動性卡片渲染失敗", _us_card_e)
 
     # v19.461:移除「策略3 景氣時鐘觀測站（美林時鐘定位器）」區塊（user 2026-08-17:介面精簡）。
     # classify_phase / PMI SSOT 常數留在 ui/components/mk_clock.py 供 SSOT-lock 測試用，不再於 UI 渲染。
@@ -254,10 +257,18 @@ def render_long_term_section(
                         print(f"[tab1_longterm/clear_cache] "
                               f"{type(_e_clr_lt).__name__}: {_e_clr_lt}",
                               file=_sys_lt.stderr)
-                        st.warning(
-                            f"⚠️ 快取沒有清成功（[{type(_e_clr_lt).__name__}]）"
-                            "—— 重新載入的資料可能仍是舊的。"
-                        )
+                        # 與 tab1_macro.py 的「快取沒清成功」是同一件事的第二份副本,
+                        # 顏色必須一致（那邊已改 🔴）。
+                        # ⚠️ 已知未修：下一行 `st.rerun()` 應該會把這則訊息一起沖掉
+                        #    （改色前的 st.warning 同樣看不到 —— 改色不會讓它變糟,
+                        #     也不會讓它變好）。要真的讓它看得見必須把狀態存進
+                        #     session_state 於 rerun 後補印 —— 行為變更,不在「只做顏色」
+                        #     這一批的範圍內,已登記待後批。
+                        # ⚠️ **未沙箱實測,據實標明**：上一句是依 Streamlit 語意推得的
+                        #    （rerun 中止本次 run、本次已畫的元素被丟棄）,本批沒有為它
+                        #    寫 AppTest → 屬**待驗事項**,不得被當成已查證的事實。
+                        system_error("快取沒有清成功", _e_clr_lt,
+                                     hint="重新載入的資料可能仍是舊的。")
                     st.rerun()
         except Exception as _us_e:
             st.error(f"美股流動性監測渲染失敗：[{type(_us_e).__name__}] {_us_e}")

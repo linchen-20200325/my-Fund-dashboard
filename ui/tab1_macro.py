@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from ui.helpers.render_state import not_ready
+from ui.helpers.render_state import not_ready, system_error
 
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
@@ -873,11 +873,13 @@ def render_macro_tab() -> None:
                 print(f"[tab1_macro/clear_cache] {type(_e_clr).__name__}: {_e_clr}",
                       file=_sys_clr.stderr)
                 _tb_clr.print_exc(file=_sys_clr.stderr)
-                st.warning(
-                    f"⚠️ **快取沒有清成功**（[{type(_e_clr).__name__}] "
-                    f"{str(_e_clr)[:100]}）—— 下面重新載入的資料**可能仍來自舊快取**，"
-                    "不保證是最新。請改用左側「🧹 全域刷新」，或稍後再試。"
-                )
+                # 2026-08-28 顏色批次二之一：這句自己就說「下面的資料可能仍來自舊快取」
+                # ＝ 畫面上的數字**可能是錯的**（不是「少一張圖」）。依 render_state
+                # system_error 的通過條件，只要有任何一個數字會變 → degraded=False。
+                system_error(
+                    "快取沒有清成功", _e_clr,
+                    hint="下面重新載入的資料**可能仍來自舊快取**，不保證是最新。"
+                         "請改用左側「🧹 全域刷新」，或稍後再試。")
             st.session_state.macro_done = False
             _do_load = True  # 同流程跑下方 spinner block
         if _do_load:
@@ -955,6 +957,14 @@ def render_macro_tab() -> None:
                             st.session_state["_radar_v1921_top"] = (_r_pre, _rs_pre)
                         except _FutTimeout:
                             st.session_state["_radar_v1921_top"] = (None, None)
+                            # ⚠️ **下一批候選，本批刻意不動**（2026-08-28 稽核 A9 登記）：
+                            # 逾時＝真失敗，而且 `(None, None)` 之後下方整個風險雷達
+                            # 區塊真的不渲染 —— 但這裡是灰字。
+                            # **兩把獨立的尺都掃不到它**，因為 handler 沒有把例外物件
+                            # 印出來（`_FutTimeout` 未綁 `as`，訊息是純字面字串），
+                            # 結構上與「這格沒資料」無法區分（見測試檔規則 1 盲點 4）。
+                            # 不在本批改的理由：它不在本批用來定義範圍的那個掃描結果裡，
+                            # 逕自加碼會讓「43 處」這個數字失去可複現性（§8.4 step 4）。
                             st.caption("⚠️ 風險雷達逾時未回,本次略過(不影響指標判讀)。")
                         except Exception:
                             st.session_state["_radar_v1921_top"] = (None, None)
@@ -963,6 +973,8 @@ def render_macro_tab() -> None:
                             st.session_state["_tp_v1948_top"] = _fu_tp.result(timeout=_ml_left())
                         except _FutTimeout:
                             st.session_state["_tp_v1948_top"] = None
+                            # ⚠️ 同上（稽核 A9）：逾時＝真失敗、拐點區塊真的消失，
+                            # 卻是灰字；兩把尺都掃不到。下一批候選，本批不動。
                             st.caption("⚠️ 轉折點偵測逾時未回,本次略過。")
                         except Exception:
                             st.session_state["_tp_v1948_top"] = None
@@ -1106,8 +1118,9 @@ def render_macro_tab() -> None:
                 "推導細節 → 看再下方的四時域分區")
             _action_light_renderer(_al["light"])("\n".join(_al_lines))
         except Exception as _al_e:  # noqa: BLE001 — 結論燈失敗不得擋掉整頁總經
-            st.caption(
-                f"🚦 買賣總結燈暫無法顯示：[{type(_al_e).__name__}] {_al_e}")
+            # 消失的是本頁**最上面那個結論**（現在能不能買 + 理由）。灰字會讓人以為
+            # 「還沒載入、按一下就好」，實際按幾次都一樣。
+            system_error("① 買賣總結燈渲染失敗", _al_e)
 
         # ══ ② 依據 —— 表格(兩把尺並陳 + 各桶狀態 + 每列指路)══════════
         # 這張表取代三個原本各自為政的區塊,資料一格不少地併進來:
@@ -1202,9 +1215,13 @@ def render_macro_tab() -> None:
                         unsafe_allow_html=True)
                 # neutral_mix / no_data → 不顯示(弱訊號不佔版面)
             except Exception as _rc_e:  # noqa: BLE001 — 對帳 chip 非致命,但不吞聲
-                st.caption(f"對帳 chip 暫無法顯示：[{type(_rc_e).__name__}] {_rc_e}")
+                # 對帳 chip 報的是「加權淨分與多空投票同不同向」＝一個判讀結果，
+                # 不是一張圖；它消失時使用者少掉的是「這個分數能不能信」的證據。
+                system_error("② 對帳 chip 渲染失敗", _rc_e)
         except Exception as _ev_e:  # noqa: BLE001 — 依據表失敗不得擋掉整頁總經
-            st.warning(f"② 依據表渲染失敗(降級)：[{type(_ev_e).__name__}] {_ev_e}")
+            # 整張「憑什麼這樣說」的證據表（加權淨分 + 五桶狀態）消失 —— 那是本頁
+            # 數字最密集的一塊，原本寫「(降級)」但降級的定義是「只掉一張圖」。
+            system_error("② 依據表渲染失敗", _ev_e)
 
         # ══ ③ 例外 —— 敘事(今日關鍵 + 系統性風險 + 拐點 / 新聞桶)═══════
         # 只講「該警覺的」;沒有例外時誠實說沒有,不硬擠內容(§1)。
@@ -1224,7 +1241,9 @@ def render_macro_tab() -> None:
                 )
                 st.markdown(_kab(_cka(ind, _ka_tp)), unsafe_allow_html=True)
             except Exception as _ka_e:  # noqa: BLE001
-                st.caption(f"⚡ 今日關鍵橫幅暫無法顯示：[{type(_ka_e).__name__}] {_ka_e}")
+                # 橫幅內容就是「今天該警覺的事」；它不出現與「今天沒有該警覺的事」
+                # 在畫面上長得一模一樣（§1 的鏡像違規）。
+                system_error("③ 今日關鍵橫幅渲染失敗", _ka_e)
         try:
             # 必修 2:② 沒跑完時補一條「無法判定」,`_exc_lines` 因此非空 →
             # 下方那句「都不在警戒狀態」不會被印出來(它只在 ② 真的算完且全綠時成立)。
@@ -1238,7 +1257,8 @@ def render_macro_tab() -> None:
                     "✅ 新聞系統性風險未達警戒等級，拐點桶與新聞桶也都不在警戒狀態；"
                     "各桶讀數完整列在上方 ② 依據表。")
         except Exception as _ex_e:  # noqa: BLE001
-            st.caption(f"③ 例外層暫無法顯示：[{type(_ex_e).__name__}] {_ex_e}")
+            # 同上：例外層失敗時，畫面看起來就像「沒有例外」。
+            system_error("③ 例外層渲染失敗", _ex_e)
 
         # ══ ④ 可信度 —— 這些數字能信嗎(chip + 既有資料新鮮度條)═════════
         # 新鮮度條沿用既有實作**一字未改**(它本身已是 chip 形式,含 hover
@@ -1278,7 +1298,9 @@ def render_macro_tab() -> None:
                               else f"已載入 {_n_loaded} 筆；{_n_expect} 個關鍵指標全數到齊")),
                 unsafe_allow_html=True)
         except Exception as _tr_e:  # noqa: BLE001
-            st.caption(f"可信度 chip 暫無法顯示：[{type(_tr_e).__name__}] {_tr_e}")
+            # 這個 chip 報的正是「N 個關鍵指標中 M 個未取得」—— 它自己消失時，
+            # 使用者連「上面那些數字完不完整」都不知道，比少一張圖嚴重得多。
+            system_error("④ 可信度 chip 渲染失敗", _tr_e)
 
         # v19.50 ══ 📊 資料新鮮度條（總抓取時間 + age + 各區塊資料截止日）══
         _ml_upd = st.session_state.get("macro_last_update")

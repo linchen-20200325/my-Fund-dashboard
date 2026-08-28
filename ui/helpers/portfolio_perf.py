@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 
 def render_portfolio_performance(funds: list) -> None:
     """📊 組合績效 —— 年化報酬 / σ / Sharpe / 最大回撤 + 各檔貢獻。funds<1 檔有序列 → 略過。"""
@@ -36,7 +38,13 @@ def render_portfolio_performance(funds: list) -> None:
         if _fxdf is not None and not _fxdf.empty:
             _fx = _fxdf.set_index("date")["usdtwd"]
     except Exception as _e_fx:  # noqa: BLE001 — 匯率抓取失敗 → 美元基金排除,不靜默造假
-        st.caption(f"⬜ USDTWD 匯率抓取失敗,美元計價基金將被排除:[{type(_e_fx).__name__}] {str(_e_fx)[:80]}")
+        # 2026-08-28 顏色批次二之一：與 `fund_grp_health/backtest_section.py` 的
+        # USDTWD 例外**逐字同一句、後果也一樣**（美元計價基金被排除 → 下方 4 個 KPI
+        # 與貢獻表少算幾檔），那邊已是 🔴、這邊還是灰字。同一個失敗兩種顏色，
+        # 顏色帶的資訊就變成「你在哪個分頁」而不是「這件事嚴不嚴重」。
+        # degraded=False：有數字被排除 → 依 render_state.system_error 的通過條件，一律 🔴。
+        system_error("USDTWD 匯率抓取失敗,美元計價基金將被排除", _e_fx,
+                     hint="下方組合績效僅涵蓋台幣計價基金,不是完整組合。")
 
     st.divider()
     st.markdown("### 📊 組合績效(固定權重・日再平衡假設・TWD 計價)")

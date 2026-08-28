@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from ui.helpers.render_state import not_ready
+from ui.helpers.render_state import not_ready, system_error
 
 from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
@@ -950,7 +950,11 @@ def render_single_fund_tab() -> None:
                 except Exception as _e_bmk:  # noqa: BLE001 — 疊圖失敗不擋下方信號
                     print(f"[tab2 vs大盤] {type(_e_bmk).__name__}: {_e_bmk}",
                           file=_sys_b.stderr)
-                    st.caption(f"⬜ vs 大盤圖失敗:[{type(_e_bmk).__name__}] {str(_e_bmk)[:60]}")
+                    # ⚠️ 不是 degraded：這個 try 裡除了疊圖,還有「跑贏/跑輸大盤
+                    # **X 個百分點**」那句帶數字的 caption（在 plotly_chart 之後）,
+                    # 失敗時那個數字一起消失 → 依通過條件必須 🔴。
+                    system_error("vs 大盤疊圖失敗", _e_bmk,
+                                 hint="「跑贏/跑輸大盤幾個百分點」這個數字這次也沒算出來。")
 
                 st.markdown("### ② 買賣點信號（標準差策略）")
                 # ── 標準差買賣點分析 v3.0（3 買 + 3 賣 + 接近度）──
@@ -1084,10 +1088,11 @@ def render_single_fund_tab() -> None:
                         import sys as _sys_hwm
                         print(f"[tab2/hwm_sigma] {type(_e_hwm).__name__}: {_e_hwm}",
                               file=_sys_hwm.stderr)
-                        st.caption(
-                            f"⬜ HWM σ 絕對位階卡渲染失敗："
-                            f"[{type(_e_hwm).__name__}] {str(_e_hwm)[:120]}"
-                            "（是計算失敗，不是這檔沒有資料）")
+                        # 註解原本就寫「是計算失敗，不是這檔沒有資料」—— 那句話
+                        # 之所以要寫,正是因為灰字讓兩者長得一樣。改成 🔴 就不必靠
+                        # 文案去救顏色。
+                        system_error("HWM σ 絕對位階卡渲染失敗", _e_hwm,
+                                     hint="這是計算失敗,不是這檔沒有這個資料。")
 
                 # ── v18.47: 📊 基金健康總覽（4 維度評分 + Overall Grade + 白話結論）──
                 # v19.177 #3A+#4B：4D 評分 + grade 全走 services.health.grade.compute_4d_health SSOT,
@@ -1167,10 +1172,9 @@ def render_single_fund_tab() -> None:
                     import sys as _sys_4d
                     print(f"[tab2/4d_health] {type(_e_4d).__name__}: {_e_4d}",
                           file=_sys_4d.stderr)
-                    st.caption(
-                        f"⬜ 4D 基金健康總覽卡渲染失敗："
-                        f"[{type(_e_4d).__name__}] {str(_e_4d)[:120]}"
-                        "（是計算失敗，不是這檔沒有資料）")
+                    # 消失的是本頁**最大的那張結論卡**（A/B/C/D/F 綜合評等 + 4 維分數）。
+                    system_error("4D 基金健康總覽卡渲染失敗", _e_4d,
+                                 hint="這是計算失敗,不是這檔沒有評等。")
 
                 # ── v18.20: 🔴 吃本金 KPI 紅綠燈（獨立 banner，主 KPI 列旁）──
                 # 不依賴 divs[] 是否有資料；只要有 ret_1y + 任一配息率來源即顯示。
@@ -1294,7 +1298,8 @@ def render_single_fund_tab() -> None:
                            f"{_kpi_nav_warn}</div>" if _kpi_nav_warn else "")
                         + "</div>", unsafe_allow_html=True)
                 except Exception as _kpi_e:  # noqa: BLE001
-                    st.caption(f"吃本金 KPI 計算異常：{str(_kpi_e)[:60]}")
+                    # 吃本金 banner 的 Coverage / 配息率 / 判定燈整組消失。
+                    system_error("吃本金 KPI 計算失敗", _kpi_e)
 
                 # v19.181:📊 進階指標(入門 KPI 之外的細項 — Sortino/Calmar/Alpha/Expense
                 # /MaxDD/3Y-5Y 年化/3-3-3 篩/換標的建議)— 共用 fund_health_report SSOT,
@@ -1468,7 +1473,8 @@ def render_single_fund_tab() -> None:
                                 + "(對齊資料診斷面板)"
                             )
                 except Exception as _adv_e:  # noqa: BLE001
-                    st.caption(f"⬜ 進階指標渲染失敗:{type(_adv_e).__name__}: {str(_adv_e)[:60]}")
+                    # Sortino / Calmar / Alpha / 費用率 / MaxDD / 3Y-5Y 年化 整組消失。
+                    system_error("進階指標渲染失敗", _adv_e)
 
                 st.markdown("### ③ 風險指標 & 配息")
                 # 關鍵指標 + 配息
@@ -1524,7 +1530,10 @@ def render_single_fund_tab() -> None:
                                        "「換標策略分 / 策略燈號」走**報酬 / 風險 / vs大盤 加權**,是不同引擎,"
                                        "同一檔兩頁可能給不同結論,別跨頁互比。")
                     except Exception as _e_z:  # noqa: BLE001 — 位階為加值卡,失敗不影響風險表
-                        st.caption(f"📐 Z-Score 計算略過:[{type(_e_z).__name__}]")
+                        # 原文案寫「略過」,讀起來像「這檔不適用」;實際是算爆了,
+                        # 而且「🎯 建議動作」那張卡會一起不見。
+                        system_error("Z-Score 位階卡計算失敗", _e_z,
+                                     hint="「🎯 建議動作」這次不會出現;右側風險表不受影響。")
 
                     # v19.496 A1:同類相對品質分(單一頁 — 對「Tab3 持倉 ∪ 本檔」排名)。
                     # ⚠️ 稽核修:此處不算操盤因子(捕捉率需基準抓取,單頁不另抓)→ 涵蓋面向數
@@ -1554,7 +1563,10 @@ def render_single_fund_tab() -> None:
                             st.caption("🎖️ 同類相對品質分:⬜ 資料不足 —— 單一檔沒有同伴可相對排名,"
                                        "請先到「配置 & 帳本」載入持倉,或改看 健檢 / 批次分頁。")
                     except Exception as _e_q:  # noqa: BLE001 — 相對分為加值,失敗不影響其他
-                        st.caption(f"🎖️ 同類相對品質分計算略過:[{type(_e_q).__name__}]")
+                        # ⚠️ 對照上方 else 分支：那句「⬜ 資料不足 —— 單一檔沒有同伴」
+                        # 是**真的**「還沒有」→ 維持灰色,一字未動。這裡是**算爆了**,
+                        # 兩者在改色前長得一模一樣,那正是客戶 Q2 要拆開的東西。
+                        system_error("同類相對品質分計算失敗", _e_q)
                     # ── 必修 2:混期示警 + 對帳降級揭露(沿用 v19.91 chip 樣式)──
                     # 這兩條原本 production 0 reader:`mixed_period_warning` 只有
                     # fund_service 自己與 test 讀,所以線上「Sharpe 1Y 0.28」與
