@@ -137,8 +137,19 @@ def test_download_supports_dry_run_and_fails_closed():
     assert _sig.parameters["dry_run"].default is False, "預設必須是「會寫」以外的安全側"
 
     _code = _code_lines(inspect.getsource(download_and_store))
-    assert 'verdict") == "conflict"' in _code, (
+    # 2026-08-28:本斷言原本釘的是**舊的、比較弱的**寫法 `verdict") == "conflict"`
+    # （黑名單）。該寫法是 fail-open —— `"unknown"`（讀不到既有資料 / 既有列全數
+    # 解析不出可用值）與**任何日後新增的 verdict** 都會靜默放行。同日已改成
+    # **白名單 fail-closed**:只有 `clean` / `duplicate` 放行,其餘一律擋。
+    # 這是**加嚴**,不是繞過 —— 但舊斷言只認得舊字面,會把加嚴判成違規（實測轉紅）。
+    # 故改為釘住**更強的那個性質**,並明文禁止退回黑名單。
+    # 舊字面保留在本註解裡,方便日後追溯這條 gate 的演進（§ 舊條文不刪）。
+    assert "_SAFE_VERDICTS" in _code, (
         "非 dry-run 路徑沒有擋衝突 —— 確認鈕會變成繞過安全檢查的後門")
+    assert 'not in _SAFE_VERDICTS' in _code, (
+        "verdict 判斷不是白名單 —— 只擋已知的壞值 = unknown 與日後新增的 verdict 靜默放行")
+    assert 'verdict") == "conflict"' not in _code, (
+        "退回黑名單寫法（只擋 conflict）—— 那是 fail-open,§1:不知道 ≠ 安全")
 
 
 # v19.472:FundClear 挑基金補歷史 UI(含 dry-run 預覽/確認兩步)已依 user 2026-08-18 要求

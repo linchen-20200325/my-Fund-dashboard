@@ -457,6 +457,61 @@ def clear_cache(code: str) -> bool:
     return False
 
 
+# ── Gate 0 共用常數 / helper（2026-08-28 稽核修正）────────────────────────────
+# **白名單**，不是黑名單:只有這兩個 verdict 是「確定安全」。舊版寫 `== "conflict"` 才擋
+# → `"unknown"`（讀不到既有資料 / 既有列全不可解析）與**任何日後新增的 verdict**
+# 都會靜默放行,fail-open。§1:不知道 ≠ 安全。
+_GATE0_SAFE_VERDICTS = ("clean", "duplicate")
+_GATE0_MODES = ("enforce", "observe", "off")
+
+
+def _gate0_mode() -> str:
+    """Gate 0 運行模式（`NAV_GATE0_MODE` secret / env）—— **關掉不必改 code**。
+
+    為什麼要有這個開關（2026-08-28 稽核）:這道閘門長在**每天 20:00 都在跑**的排程上,
+    而在此之前**沒有任何旗標** —— 要關掉只能改 code → 開 PR → 等 CI → 合併,
+    那是數小時的 MTTR,期間每天都在丟當日淨值。
+
+    - `enforce`（**預設**）:不安全的 verdict → 該檔擋下不寫（雲端與本地 cache 皆不寫）。
+    - `observe`:**照常判定、照常回報、但不擋**。兩個用途 ——
+      (a) 誤擋時的止血（改一個 env 就好）;(b) 讓「先量真實觸發頻率再調門檻」變得可能
+      （C1 的比例門檻沒有真實資料可校準,盲調風險更大）。
+    - `off`:完全不判定（連讀既有歷史都省下）。⚠️ 等於沒有護欄,只該用於確認閘門本身
+      是不是故障來源。
+    不認得的值 → **退回 `enforce` 並印一行**（§1:打錯字不該靜默變成沒有護欄）。
+    """
+    import sys as _sys
+    try:
+        from infra.config import get_secret
+        _raw = str(get_secret("NAV_GATE0_MODE") or "").strip().lower()
+    except Exception as _e:  # noqa: BLE001 — 讀不到設定 → 走預設（最安全那邊）
+        print(f"[backfill_to_gs] 讀 NAV_GATE0_MODE 失敗,退回 enforce:"
+              f"{type(_e).__name__}: {_e}", file=_sys.stderr)
+        return "enforce"
+    if not _raw:
+        return "enforce"
+    if _raw not in _GATE0_MODES:
+        print(f"[backfill_to_gs] NAV_GATE0_MODE={_raw!r} 不認得（可用:"
+              f"{'/'.join(_GATE0_MODES)}）→ 退回 enforce", file=_sys.stderr)
+        return "enforce"
+    return _raw
+
+
+def _gate0_reason(cf: dict, *, blocked: bool) -> str:
+    """把 verdict 轉成給人看的一句話。`blocked=False`（observe 模式）不得寫「已擋下」。"""
+    _tail = "已擋下未寫入" if blocked else "⚠️ observe 模式:**沒有擋**,已照常寫入"
+    if cf.get("verdict") == "conflict":
+        _s0 = (cf.get("samples") or [{}])[0]
+        return (f"與既有 nav_history 衝突:重疊 {cf.get('n_overlap')} 日、"
+                f"{cf.get('n_conflict')} 日對不上"
+                f"(如 {_s0.get('date', '?')} 既有 {_s0.get('existing', '?')}"
+                f" vs 這次 {_s0.get('incoming', '?')})"
+                f" —— 極可能抓到別的級別/幣別,{_tail}")
+    _why = str(cf.get("reason") or "")[:80]
+    return (f"無法與既有 nav_history 對帳(verdict={cf.get('verdict')!r}"
+            f"{'：' + _why if _why else ''}) —— 不知道 ≠ 安全（§1）,{_tail}")
+
+
 def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     """一鍵補全部缺淨值:多檔基金抓**完整可得歷史** → 本地 cache + 雲端 nav_history(永久)。
 
@@ -467,6 +522,15 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
 
     §1 Fail Loud:抓不到 / 清乾淨後為空 / 雲端寫入失敗 → 該檔 `error` 誠實回報,
       **不偽造、不靜默 no-op**;呼叫端(UI)據此列出「哪幾檔抓不到」引導改用手動 CSV。
+    Gate 0(2026-08-28):寫入前逐檔與既有 nav_history 對帳(重疊日淨值),對不上 → 該檔
+      **不寫**(雲端與本地 cache 皆不寫)+ `error` 誠實回報,其餘檔照跑;讀不到既有歷史
+      → 本次**不寫雲端**、走 `gs_error`(fail-closed)。判定採**白名單**:只有 `clean` /
+      `duplicate` 放行,`unknown` 與日後新增的 verdict 一律擋(§1 不知道 ≠ 安全)。
+      被擋的檔帶 `blocked=True`(呼叫端據此把「被擋下」與「抓不到」分開報)。
+      可用 `NAV_GATE0_MODE` env/secret 切 `enforce`(預設)/`observe`(判定但不擋)/`off`
+      —— 見 `_gate0_mode`。⚠️ **這道閘門保護不到的情形是開放式的**(已知至少五類,
+      含零重疊、code key 不一致、`gs_on=False`、其餘寫入路徑、模式被關掉)——
+      詳見函式內註解,**那是已知分類不是窮舉**。
     §2.4:GS 未啟用(缺 Service Account / 未把 SA 加為 NAV Sheet 編輯者)→ `gs_enabled=False`
       + `gs_written=0`,UI 提示去授權(否則只存本機、容器重啟即清)。
     §3.2/§4.2 不變量:序列清洗為「唯一日期 × 非 NaN × NAV>0 × 遞增」後才採用/寫入。
@@ -483,12 +547,19 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
 
     Returns:
         {
-          "results": [{code, fetched, date_min, date_max, source, span_days, error|None}, ...],
+          "results": [{code, fetched, date_min, date_max, source, span_days,
+                       error|None, blocked: bool, gate_observed: str|None}, ...],
           "gs_enabled": bool,      # 雲端是否啟用(SA + NAV_SHEET_ID)
           "gs_written": int,       # 本次去重後真正新增到雲端的列數
-          "n_ok": int,             # 抓到淨值的檔數
-          "n_fail": int,           # 抓不到的檔數
+          "gs_error": str|None,    # 雲端寫入 / 寫入前對帳讀取失敗訊息
+          "n_ok": int,             # 抓到淨值且沒有 error 的檔數
+          "n_fail": int,           # **有 error 的檔數(含抓不到 + 被 Gate 0 擋下)**
+          "n_blocked": int,        # 其中被 Gate 0 擋下的檔數 → 純「抓不到」= n_fail - n_blocked
+          "gate_mode": str,        # 本次 Gate 0 模式:enforce / observe / off
         }
+        ⚠️ 呼叫端**必須**用 `blocked` / `n_blocked` 區分「被擋下」與「抓不到」:
+        被擋下的檔是**抓得好好的**,把它報成「抓不到 → 用手動 CSV 補」是說謊,
+        而且手動 CSV 正是 `nav_history` 各寫入路徑中**沒有這道閘門**的那一條。
 
     v19.475(user 2026-08-18 回報「不是抓半年的嗎」):實測 8 檔保單平台基金全落回
       MoneyDJ 30 天短窗 —— 根因是 `_span_extend_insurance_nav` 的長歷史救援**只對前綴在
@@ -504,6 +575,7 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     import sys as _sys
 
     from services import nav_history_gs
+    from services.fundclear_backfill import analyze_backfill_conflict
     from services.moneydj_fetcher import auto_fetch_moneydj
 
     # ── 正規化 + 去重(保序;§2.1 code 一律 upper)────────────────────────────
@@ -525,6 +597,63 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     # 1825 天 < 各來源抓取視窗 2000 天(~5.5 年),故 5 年目標可達;採用門檻的「點數不減」
     # 護欄(稽核 F1)確保拉高門檻不會用稀疏候選換掉密集現有序列。
     _SPAN_TARGET_DAYS = 1825
+
+    # ── Gate 0（2026-08-28）:寫進 nav_history 之前先跟既有歷史對帳 ──────────
+    # 為什麼:`_rescue_by_isin` 的採用條件只看「筆數 × 跨度」,**沒有任何幣別條件**。
+    # 同一檔基金的美元 / 歐元 / 避險級別在晨星、Yahoo 都查得到,跨度更長就整條換掉;
+    # 而 nav_history 的去重鍵是 `(code, date)` 且**永不刪除** —— 錯的先寫進去,
+    # 對的就永遠寫不進來,下游 1Y 報酬 / Sharpe / σ 全部照錯的算,而畫面不會有警示
+    # (§1:錯誤的數字比沒有數字更危險;該分頁在說明書上標「無法從任何來源重建」)。
+    # 手段:重用已測過的 `fundclear_backfill.analyze_backfill_conflict`,比對**重疊
+    # 日期**的淨值,差幅超過 SSOT 容差就整檔擋下。
+    #
+    # ⚠️ **這道閘門保護不到什麼(必讀,不要以為補完了)**
+    #    ⛔ 以下是**已知分類,不是窮舉清單**。上一版把它寫成封閉列舉(「只有新代碼首次
+    #    回填」),稽核實測至少還有四項 —— 本 repo 已因「誠實揭露之後順手接一句沒查證的
+    #    保證」連錯三次(病史見 `ui/helpers/render_state.py`)。**不要再寫「只有這 N 項」。**
+    #    a) **零重疊**:只比對重疊日期 → 某個 code **第一次**回填時與既有資料零重疊 →
+    #       verdict 恆為 `"clean"` → 對它完全無效。保護的是「**已經有歷史的 code**」。
+    #    b) **key 不是同一個東西**:比對以 `code` 為 key,而同一檔基金在不同網站的代碼
+    #       不同(MoneyDJ 內部碼 vs ISIN,見 `ui/tab_manage.py` 選股池說明)——
+    #       歷史以 A 碼存、回填以 B 碼寫 → 零重疊 → 零保護。
+    #    c) **`gs_on=False` 時整道閘門不跑**:沒有 SA 也沒有 OAuth → 不讀既有歷史、
+    #       不判定,錯幣別序列照樣進本地 cache(`ui/tab_manage.py` 在 `backend_status`
+    #       為 `local` 時按鈕仍可按)。
+    #    d) **只守住 `nav_history` 多條寫入路徑中的這一條**。其餘路徑目前沒有閘門,
+    #       其中 `ui/helpers/nav_history_hook.py` 在使用者每次看基金時就寫入整段序列
+    #       (掛在 `ui/tab2_single_fund.py` 與 `ui/tab_fund_grp_health.py`)。
+    #       →「其餘路徑要不要一起接」屬 §8.4 step 4 的**範圍決定**,已登記,本輪不做。
+    #    e) **模式被關掉時不擋**:`NAV_GATE0_MODE=observe/off`(見 `_gate0_mode`)。
+    #    ✅ 已修但留紀錄(2026-08-28):日期兩側不同尺(手填 `'2020/1/2'` 永遠對不上)、
+    #       既有列全不可解析時謊報 `clean`、以及 `== "conflict"` 的 fail-open 黑名單。
+    #
+    # §5 配額:`load_points` 每次都是 `get_all_values()` 讀整張表 —— 逐檔各讀一次會把
+    # 60 reads/min 吃光(與本函式「一次讀 + 一次寫」的設計相反),故**整批只讀一次**,
+    # 再把各檔的既有點注入(`existing_points=`)。
+    _gate_by_code: "dict | None" = None      # None = 讀不到既有歷史 → 不敢寫雲端
+    _gate_error = None
+    _gate_mode = _gate0_mode()               # enforce(預設) / observe / off,見 `_gate0_mode`
+    if _gate_mode == "off":
+        print("[backfill_to_gs] ⚠️ NAV_GATE0_MODE=off:Gate 0 完全停用,本次不做任何對帳",
+              file=_sys.stderr)
+    if gs_on and _gate_mode != "off":
+        try:
+            _gate_by_code = {}
+            for _p in (nav_history_gs.load_points(oauth_client=oauth_client) or []):
+                _gate_by_code.setdefault(
+                    str(_p.get("code") or "").strip().upper(), []).append(_p)
+        except Exception as e:  # noqa: BLE001 — §1:讀不到就不宣稱安全,更不往裡面寫
+            _gate_by_code = None
+            _gate_error = (f"寫入前讀不到既有 nav_history,本次**不寫雲端**"
+                           f"(fail-closed,§1 不盲寫無法重建的表):"
+                           f"{type(e).__name__}: {str(e)[:60]}")
+            print(f"[backfill_to_gs] {_gate_error}", file=_sys.stderr)
+
+    # ⚠️ 「**沒讀**」與「**讀失敗**」要分開:`off` 模式是刻意不讀(閘門停用),
+    #    不是讀不到 —— 若混為一談,`off` 會讓 `_gate_by_code is None` 恆成立,
+    #    連帶把雲端寫入整個關掉(本來只是想關掉閘門)。
+    _gate_read_failed = bool(gs_on and _gate_mode != "off" and _gate_by_code is None)
+
     results: list = []
     all_points: list = []
     n = len(uniq)
@@ -596,7 +725,13 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
             except Exception:  # noqa: BLE001 — 進度回呼壞掉不該擋補抓
                 pass
         r = {"code": code, "fetched": 0, "date_min": None, "date_max": None,
-             "source": None, "span_days": 0, "error": None}
+             "source": None, "span_days": 0, "error": None,
+             # 2026-08-28:被 Gate 0 擋下 ≠ 抓不到。呼叫端(cron / UI)必須分得開,
+             # 否則會把「抓得好好的但被擋下」講成「抓不到」,還把使用者導向手動 CSV
+             # ——那正是七條寫入路徑裡**唯一沒有閘門**的那一條。用旗標而不是比對
+             # 中文錯誤字串(字串一改,呼叫端就靜默失準)。
+             "blocked": False,
+             "gate_observed": None}
         # 逐檔全程 guard(§1「不擋整批」:任一檔抓取/清洗/組點爆掉 → 只記該檔 error)。
         try:
             fd = auto_fetch_moneydj(code, oauth_client=oauth_client)
@@ -621,20 +756,45 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
                 r["span_days"] = _span(s)
                 fund_name = (str(fd.get("fund_name") or fd.get("full_key") or "")
                              if isinstance(fd, dict) else "")
-                # 本地 cache 合併(快取;雲端重啟會清 → 非致命,不擋雲端寫入)
-                try:
-                    cached = _load_cache_series(code)
-                    merged = s if cached.empty else pd.concat([cached, s])
-                    merged = merged[~merged.index.duplicated(keep="last")].sort_index()
-                    _save_cache_series(code, merged)
-                except Exception as e:  # noqa: BLE001 — §1 記 log 不靜默,但不致命
-                    print(f"[backfill_to_gs] {code} 本地 cache 寫入失敗(非致命):"
-                          f"{type(e).__name__}: {e}", file=_sys.stderr)
-                # 收集雲端點(最後一次 append,省 quota)
-                for idx, v in s.items():
-                    all_points.append({"code": code, "nav": float(v),
-                                       "nav_date": idx.date(),
-                                       "fund_name": fund_name, "source": "backfill"})
+                _points = [{"code": code, "nav": float(v), "nav_date": idx.date(),
+                            "fund_name": fund_name, "source": "backfill"}
+                           for idx, v in s.items()]
+                # ── Gate 0:與既有歷史對帳(理由與「保護不到什麼」見本函式上方註解)──
+                _cf = (analyze_backfill_conflict(
+                           code, _points, existing_points=_gate_by_code.get(code, []))
+                       if (gs_on and _gate_by_code is not None) else None)
+                # 2026-08-28 稽核修正:**白名單 fail-closed**。舊版寫 `== "conflict"` 才擋
+                # → `"unknown"`(讀不到 / 既有列全不可解析)與**任何日後新增的 verdict**
+                # 一律靜默放行。同日 `analyze_backfill_conflict` 讓 `unknown` 更常出現,
+                # 留著黑名單等於當場開一個新洞（§1:不知道 ≠ 安全）。
+                _unsafe = (_cf is not None
+                           and _cf.get("verdict") not in _GATE0_SAFE_VERDICTS)
+                if _unsafe and _gate_mode == "enforce":
+                    # fail-closed:重疊日的淨值對不上 = 幾乎必然抓到別的級別 / 幣別。
+                    # **本地 cache 也不寫** —— 這條序列本身可疑,不該進任何一層。
+                    r["blocked"] = True
+                    r["error"] = _gate0_reason(_cf, blocked=True)
+                else:
+                    if _unsafe:      # observe 模式:判定了、報了,但**不擋**（見 `_gate0_mode`）
+                        r["gate_observed"] = _gate0_reason(_cf, blocked=False)
+                        print(f"[backfill_to_gs] {code} {r['gate_observed']}",
+                              file=_sys.stderr)
+                    # 本地 cache 合併(快取;雲端重啟會清 → 非致命,不擋雲端寫入)
+                    try:
+                        cached = _load_cache_series(code)
+                        merged = s if cached.empty else pd.concat([cached, s])
+                        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+                        _save_cache_series(code, merged)
+                    except Exception as e:  # noqa: BLE001 — §1 記 log 不靜默,但不致命
+                        print(f"[backfill_to_gs] {code} 本地 cache 寫入失敗(非致命):"
+                              f"{type(e).__name__}: {e}", file=_sys.stderr)
+                    # 收集雲端點(最後一次 append,省 quota)。
+                    # §1:閘門讀不到既有歷史時**不往雲端寫**,但抓取本身是成功的 ——
+                    # 沿用本函式既有原則「抓取成功 vs 雲端寫入失敗是兩件事」,不覆蓋
+                    # 各檔 fetch 結果(否則 n_ok 歸零、UI 誤報「0 檔抓到」),
+                    # 寫入端狀態獨立走 gs_error;本地 cache 可重建,照寫。
+                    if not _gate_read_failed:
+                        all_points.extend(_points)
         except Exception as e:  # noqa: BLE001 — §1 逐檔誠實回報,不擋整批
             r["error"] = f"補抓失敗:{type(e).__name__}: {str(e)[:70]}"
         results.append(r)
@@ -643,7 +803,7 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     # §1/§5:抓取成功 vs 雲端寫入失敗是**兩件事**,不可混為一談 —— 寫入失敗**不覆蓋**
     # 各檔 fetch 結果(否則 n_ok 歸零、UI 誤報「0 檔抓到」)。寫入狀態獨立走 gs_error。
     gs_written = 0
-    gs_error = None
+    gs_error = _gate_error          # 閘門讀不到既有歷史 → 本次不寫雲端,誠實回報
     if gs_on and all_points:
         try:
             _res = nav_history_gs.append_points(all_points, oauth_client=oauth_client)
@@ -664,4 +824,9 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         "gs_error": gs_error,                                     # 雲端寫入失敗訊息(None=正常)
         "n_ok": sum(1 for r in results if r["error"] is None and r["fetched"]),
         "n_fail": sum(1 for r in results if r["error"]),
+        # 2026-08-28:被 Gate 0 擋下的檔數。**`n_fail` 含這一類** —— 純粹「抓不到」的
+        # 檔數是 `n_fail - n_blocked`。分開的理由:被擋的檔**抓得好好的**,把它講成
+        # 「抓不到」是說謊,而且會把使用者導向手動 CSV(唯一沒有閘門的那條路)。
+        "n_blocked": sum(1 for r in results if r.get("blocked")),
+        "gate_mode": _gate_mode,          # enforce / observe / off（誠實回報這次跑在哪個模式）
     }
