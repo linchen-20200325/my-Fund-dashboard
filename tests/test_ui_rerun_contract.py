@@ -16,7 +16,7 @@
 
 | # | 規則 | 方向 | 現況 |
 |---|---|---|---|
-| 1 | 既有 `st.form` 站點不准消失 | 資產登記（`==`） | 5 處 / 3 檔 |
+| 1 | 既有 `st.form` 站點不准消失 | 資產登記（`==`） | 6 處 / 4 檔 |
 | 2 | 每個 `with st.form(...)` 內必須有 `form_submit_button` | fail-closed，無額度 | 0 違規 |
 | 3 | 同一區塊 ≥2 個輸入 + 其後的 `st.button` → 必須包 form | fail-closed + ratchet | 4 處 / 3 函式 |
 | 4 | 既有的 checkbox / button 延遲載入 gate 不准被刪 | 資產登記（子集） | 22 函式 / 64 處 |
@@ -215,12 +215,19 @@ def _gate_function_keys(path: pathlib.Path) -> list[str]:
 # ══════════════════════════════════════════════════════════════════
 # 規則 1：既有的 `st.form` 站點（資產登記）
 # ══════════════════════════════════════════════════════════════════
-# 量測日 2026-08-28、基準 commit `a28e6a3`：`ui/**` + `app.py` 共 **5 個**
-# `with st.form(...)`，分佈 3 檔。（`tests/test_app_smoke.py` 內另有 1 個，
+# 量測日 2026-08-31、基準 commit `5f798ee`：`ui/**` + `app.py` 共 **6 個**
+# `with st.form(...)`，分佈 4 檔。（`tests/test_app_smoke.py` 內另有 1 個，
 #  不在 `UI_SOURCES` 範圍內，本表不含 —— 測試檔不是產品程式碼。）
 # ⚠️ 本表由本組**自行重掃**產出，不是照抄派工單。
+# 沿革：量測日 2026-08-28（commit `a28e6a3`）為 5 個 / 3 檔；2026-08-31 新增元件 B 一處。
 FORM_SITES = frozenset({
     "ui/helpers/fund_grp_health/switch_advisor_section.py::_render_pool_editor()×1",
+    # 2026-08-31：③ 批次「🧩 互補配對探索」的 3 支門檻滑桿包進 form + 「套用門檻」submit。
+    # **這是新增一處 form（好事），不是搬家** —— #738 建元件 B 時就該包，當時因本檔正由
+    # #736 佔用（File Boundary 防撞）而具名延後，阻擋解除後於本批補上。
+    # 客戶已拍板線框（`docs/wireframes/rotation-components-wireframe.html` §03 區塊 1
+    # 「3 欄滑桿 ＋『套用門檻』鈕」）即長這樣，故屬「實作補齊既有規格」而非新設計。
+    "ui/helpers/fund_grp_health/rotation.py::render_complementary_explorer_from_df()×1",
     # WP-D 2026-08-28：下面這組原本掛在 `ui/tab3_portfolio.py::render_portfolio_tab()`，
     # 因「📋 保單管理（Google Sheets）」整段（790 行）抽成 `policy_admin_section.py`
     # 而改掛新函式。**違規呼叫數一個沒有增減**（見該批 PR 的守恆對照），
@@ -228,7 +235,7 @@ FORM_SITES = frozenset({
     "ui/helpers/portfolio/policy_admin_section.py::render_policy_admin_section()×1",
     "ui/tab3_t7_ledger.py::render_t7_section()×3",
 })
-FORM_SITE_TOTAL = 5
+FORM_SITE_TOTAL = 6   # 2026-08-31：5 → 6（元件 B 門檻列包 form；上一行那筆）
 
 
 def test_existing_forms_must_not_degrade():
@@ -415,8 +422,8 @@ def test_form_anchor_still_detectable():
                        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                        and n.func.attr == "form_submit_button")
     assert submits >= 5, (
-        f"只掃到 {submits} 個 `form_submit_button`（量測日 2026-08-28 為 6）——"
-        "form 偵測可能已經對空氣生效。")
+        f"只掃到 {submits} 個 `form_submit_button`（量測日 2026-08-31 為 7；"
+        "2026-08-28 為 6，差額為元件 B 的「套用門檻」）—— form 偵測可能已經對空氣生效。")
 
 
 def test_declared_form_paths_still_exist():

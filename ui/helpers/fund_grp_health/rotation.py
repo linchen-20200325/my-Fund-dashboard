@@ -311,11 +311,11 @@ def render_complementary_explorer_from_df(df) -> None:
     df 不存在 → 不渲染(批次面板自己有「▶️ 開始」指路),首屏成本為零。
     收合標題帶計數 —— 計數本身就是答案的預覽(0 對 = 不用點開)。
 
-    ⚠️ 線框揭露的「3 支滑桿包 st.form」防重繪手法**本批刻意未做**:
-    新增 `st.form` 站點須同步登記 `tests/test_ui_rerun_contract.py::FORM_SITES`,
-    而該檔正由另一 PR(#736)修改中、本批明令禁改(File Boundary 防撞)。
-    滑桿暫維持現況的直連寫法(與改型前行為相同,無退化),form 包裝待 #736
-    合併後另批補上 —— 已在交付報告揭露,不靜默吞掉。
+    ✅ 2026-08-31 補齊(#738 延後項):線框揭露的「3 支滑桿包 `st.form`」防重繪手法
+    **已落地**(區塊 1 + 「套用門檻」submit),並同步登記
+    `tests/test_ui_rerun_contract.py::FORM_SITES`。#738 當時未做的唯一原因是該測試檔
+    正由另一 PR(#736)佔用、明令禁改(File Boundary 防撞);該阻擋已解除。
+    **滑桿 key 沿用 `batch_rot_*` 未改**,門檻預設值仍走 SSOT,計數行為不變(見區塊 1 註)。
     """
     if df is None or getattr(df, "empty", True):
         return
@@ -350,19 +350,32 @@ def render_complementary_explorer_from_df(df) -> None:
                    "⚠️ 跌深**不保證**漲回來 —— 買方已先過濾"
                    "(健康等第 A/B/C + 沒有在吃本金 + 操盤評分達標),避免接刀。")
 
-        # ── 區塊 1:門檻列(3 欄滑桿,預設值走 SSOT,與 ② 同一組門檻)──
-        c1, c2, c3 = st.columns(3)
-        c1.slider("高基期門檻(σ rank ≥)", -2.0, 0.5, ROTATION_SELL_SIGMA, 0.1,
-                  key="batch_rot_sell",
-                  help="現價離期間高點多近就算「太貴、可以賣」。"
-                       "σ 是波動的倍數,數字愈接近 0 代表愈貼近高點。")
-        c2.slider("低基期門檻(σ rank ≤)", -3.0, -0.5, ROTATION_BUY_SIGMA, 0.1,
-                  key="batch_rot_buy",
-                  help="現價要跌到離高點多遠才算「夠便宜、可以買」。"
-                       "數字愈負代表跌得愈深。")
-        c3.slider("買方操盤評分 ≥", 0, 100, int(ROTATION_BUY_MIN_SCORE), 5,
-                  key="batch_rot_score",
-                  help="要換進來的基金,經理人操盤評分至少要幾分(避免換到操作更差的)。")
+        # ── 區塊 1:門檻列(3 欄滑桿包 st.form,預設值走 SSOT,與 ② 同一組門檻)──
+        # 鐵律 2(Form 防重繪):批次 df 動輒數百檔,沒有 form 時**每拉一格滑桿**就整頁
+        # 重跑一次。包進 form 後拖動不觸發 rerun,按「套用門檻」才算。
+        # (客戶已拍板線框 §03 區塊 1:「3 欄滑桿 ＋『套用門檻』鈕」—— 實作補上既有規格,
+        #  不是新設計;#738 當時因 tests/test_ui_rerun_contract.py 防撞而延後,本批補齊。)
+        # ⚠️ key 沿用 `batch_rot_*` **一字未改** —— 既有 session 值原地延續。
+        # form 內的 widget 只在**按下送出時**才寫回 session_state,而標題計數與下方表身
+        # 都在 expander 之前讀同一組 key → 送出前兩者一起維持「上一次套用」的門檻,
+        # 不會出現「標題已變、表還沒變」的兩個數字打架(§2.1);首跑則同樣退 SSOT 預設。
+        # ⚠️ 「送出前不寫回」是 Streamlit 的 form 語意,**沙箱驗不到**(AppTest 不模擬
+        # 前端緩衝,見 tests/test_rotation_form_rerun_20260831.py 檔頭);守衛驗的是
+        # 產生該行為的接線(3 支滑桿與 submit 鈕同屬一個 form_id)。體感請在瀏覽器確認。
+        with st.form("batch_rot_threshold_form", clear_on_submit=False):
+            c1, c2, c3 = st.columns(3)
+            c1.slider("高基期門檻(σ rank ≥)", -2.0, 0.5, ROTATION_SELL_SIGMA, 0.1,
+                      key="batch_rot_sell",
+                      help="現價離期間高點多近就算「太貴、可以賣」。"
+                           "σ 是波動的倍數,數字愈接近 0 代表愈貼近高點。")
+            c2.slider("低基期門檻(σ rank ≤)", -3.0, -0.5, ROTATION_BUY_SIGMA, 0.1,
+                      key="batch_rot_buy",
+                      help="現價要跌到離高點多遠才算「夠便宜、可以買」。"
+                           "數字愈負代表跌得愈深。")
+            c3.slider("買方操盤評分 ≥", 0, 100, int(ROTATION_BUY_MIN_SCORE), 5,
+                      key="batch_rot_score",
+                      help="要換進來的基金,經理人操盤評分至少要幾分(避免換到操作更差的)。")
+            st.form_submit_button("套用門檻", use_container_width=True)
 
         if _calc_err is not None:
             # 🔴 系統真出錯(區塊隔離:上方批次大表與其 CSV 不受影響)
