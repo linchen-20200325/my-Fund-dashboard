@@ -22,6 +22,12 @@
   - 元件 B 改為自己 inline 一份表(不呼叫 `_render_pairs_body`)→ sentinel 紅
   - 元件 A 拿掉 excluded caption → test_excluded_rendered 紅
 
+⚠️ **2026-08-31 稽核回修批新增一條**(本檔的 bare 渲染被元件 B 的 `st.form` 化「連坐」):
+  - `_render_explorer_bare()` 的 `finally` 收尾拿掉(form 狀態外洩到根 DeltaGenerator、
+    污染整個 pytest 行程)→ `test_bare_render_here_leaves_no_form_state_on_the_root_dg` 紅;
+    同行程再跑 `tests/test_render_smoke.py` 另外 3 條一起紅。
+    **本檔在該 PR 之前無害** —— 當時元件 B 沒有 form,是它 form 化之後才連坐。
+
 已知守不到(誠實列出):跨檔動態 `getattr` 呼叫;把 gate 條件改成恆真
 (`== "health" or True`);渲染順序若改以「先存 list 再亂序執行」的間接形式。
 """
@@ -211,13 +217,69 @@ def test_explorer_routes_through_l2_and_shared_body(monkeypatch):
 
     monkeypatch.setattr(SR, "suggest_rotation_pairs", _rec_pairs)
     monkeypatch.setattr(UIR, "_render_pairs_body", _rec_body)
-    UIR.render_complementary_explorer_from_df(_BATCH_DF)
+    _render_explorer_bare()      # ⚠️ 一定要走這個 helper,理由見它的 docstring
     assert seen.get("l2") == (2, ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA,
                               float(ROTATION_BUY_MIN_SCORE)), (
         "元件 B 未經 services.rotation.suggest_rotation_pairs(或門檻不走 SSOT 預設)")
     assert seen.get("body") == (2, 1, "batch_rot_", True), (
         "元件 B 未把完整配對表委派給共用 `_render_pairs_body` —— "
         "重新 inline 第二份表 = ②/③ 表身分家(§2.1)")
+
+
+def _render_explorer_bare() -> None:
+    """bare 模式渲染元件 B,**並清掉它留在根 DeltaGenerator 上的 form 殘留**。
+
+    ⚠️ `finally` 不是防禦性程式碼,是修一個實測到的**行程污染**(2026-08-31 稽核抓到)。
+    元件 B 自 2026-08-31 起含 `with st.form(...)`;bare 模式(無 ScriptRunContext)離開
+    該區塊後,根 DeltaGenerator(`st._main`,模組級單例)會留下 `_form_data`,活過整個
+    pytest 行程 → 之後任何用 AppTest 且畫面上有 `st.button` 的測試都會被判成
+    「按鈕在 form 裡」而丟 StreamlitAPIException(實測打掛 `tests/test_render_smoke.py` 3 條)。
+
+    本檔在**本 PR 之前無害**(當時元件 B 沒有 form),是被 form 化「連坐」才需要收尾 ——
+    **不是本檔自己的舊債**,故一併補上。完整機制、版本註記與「為什麼不能連
+    `_active_dg = _main_dg` 一起抄」見
+    `tests/test_rotation_form_rerun_20260831.py::_render_bare` 的 docstring。
+
+    ⚠️ **本檔任何 bare 渲染元件 B 的地方都要走這裡**,不要直接呼叫 —— 直接呼叫必漏。
+    """
+    import streamlit as st
+
+    import ui.helpers.fund_grp_health.rotation as UIR
+    try:
+        UIR.render_complementary_explorer_from_df(_BATCH_DF)
+    finally:
+        # 例外路徑也要清 —— 渲染中途爆掉時殘留最嚴重(with 沒走完)。
+        _main = getattr(st, "_main", None)
+        if _main is not None:
+            _main._form_data = None
+
+
+def test_bare_render_here_leaves_no_form_state_on_the_root_dg():
+    """本檔 bare 渲染元件 B 之後,`st._main._form_data` 必須回到 None。
+
+    ⚠️ **這條守的是別的檔案,不是本檔** —— 而那正是它非有不可的理由:
+    `st._main` 是模組級單例,bare 模式(無 ScriptRunContext)下 `with st.form(...)`
+    的殘留會活過整個 pytest 行程,讓**之後**任何用 AppTest 且畫面上有 `st.button`
+    的測試被誤判成「按鈕在 form 裡」而丟 StreamlitAPIException
+    (實測受害者:`tests/test_render_smoke.py` 3 條)。
+
+    上面 `test_explorer_routes_through_l2_and_shared_body` 的 `finally` 收尾若被刪掉,
+    **本檔自己照樣全綠**、CI 也可能因為 marker 分流/字母序剛好而全綠 ——
+    **沒有這條,那行 `finally` 就是一段沒有守衛的修復,下一個人整理程式碼時可以無聲刪掉。**
+
+    完整機制、版本註記與「為什麼不能抄 `_active_dg` 那行」見
+    `tests/test_rotation_form_rerun_20260831.py::_render_bare` 的 docstring。
+    """
+    import streamlit as st
+
+    _main = getattr(st, "_main", None)
+    assert _main is not None, "streamlit 沒有 _main —— 本守衛的前提不成立,請重新確認版本"
+    _main._form_data = None      # 先歸零,免得被同行程更早的測試影響、驗到假綠
+    _render_explorer_bare()
+    assert getattr(_main, "_form_data", None) is None, (
+        f"bare 渲染後根 DG 仍殘留 form 狀態:{_main._form_data!r} —— "
+        "同一個 pytest 行程內,後續任何 AppTest 畫面上的 st.button 都會被誤判成"
+        "「在 form 內」而丟 StreamlitAPIException。")
 
 
 def test_render_pairs_ui_still_routes_through_shared_body(monkeypatch):

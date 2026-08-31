@@ -34,6 +34,7 @@ from __future__ import annotations
 import functools as _ft
 import time as _time
 import re as _re
+from collections.abc import MutableMapping as _MutableMapping
 
 
 def _normalize_moneydj_url_for_cache(url: str) -> str:
@@ -67,17 +68,287 @@ def _normalize_moneydj_url_for_cache(url: str) -> str:
         return url
 
 
+# ════════════════════════════════════════════════════════════
+# v3 憲法 §02「只快取成功結果」— 失敗標記機制（2026-08-31）
+# ════════════════════════════════════════════════════════════
+# ## 這裡解的是什麼
+#
+# `_ttl_cache` 原本在 `fn()` 回傳後**無條件** `_cache[key] = (now, result)`。
+# 而 L1 fetcher 的慣例是「失敗 → 回空 Series / 空 DataFrame」（§1 不回假資料），
+# 於是**一次上游瞬斷會把空值鎖住整個 TTL** —— 使用者看到總經盤面空白，
+# 而且**分不出「抓不到」與「真的沒有」**。
+#
+# ## ⚠️ 為什麼不是「空的就不要快取」（這是本機制存在的全部理由，必讀）
+#
+# 「空」有兩種，**回傳值本身分不出來**：
+#
+# | | 例 | 該不該快取 |
+# |---|---|---|
+# | **抓失敗** | proxy 掛掉 / 逾時 / 403 / 429 → `fetch_url` 回 `None` | ❌ 不該——下次要重試 |
+# | **真的沒有** | FRED 回 200 且 `observations: []`；Yahoo 回 200 但該區間無觀測 | ✅ 該——那就是答案 |
+#
+# 兩者都是「空 DataFrame」。**若讓裝飾器去猜，猜錯哪一邊都是 §1 違憲**：
+# 猜成失敗 → 把「真的沒有」變成每次呼叫都重打來源（轟炸）；
+# 猜成成功 → 就是現在這個 bug。
+#
+# → **正解是讓 fetcher 自己講**：它知道自己走的是哪個分支。裝飾器**永遠不猜**，
+#   只認 fetcher 明確掛上的標記。沒掛標記 = 照舊快取（既有 `_ttl_cache`
+#   使用者行為**零改變**，這也是本機制刻意做成 opt-in 而非預設過濾的原因）。
+#
+# ## 判準：「HTTP 層有沒有把回應交到手上」
+#
+# 本次三個 fetcher 一律只標記 **`fetch_url` 回 `None`** 那一支，理由是
+# **只有這一支重試才有意義**：
+#
+# - `r is None`（連不上 / 逾時 / 403 / 429 / 5xx）→ **暫時性**，下次可能就好 → 標記，不快取。
+# - HTTP 200 但 JSON 壞掉 / 解析不出東西 → 來源活著而且**明確回答了**，
+#   同一個回應再要一次還是同樣結果 → **不標記**（重抓不會變好，只會多打一次來源）。
+# - HTTP 200 且解析成功但序列是空的 → **這就是答案**，照常快取。
+#
+# ## ⚠️ 「這不會造成連續轟炸來源」——**這句話只對四種失敗成立，不是六種**
+#
+# ~~本機制不會造成「連續轟炸來源」：退避早就有了且住在更下層，所以「失敗不快取
+# → 下次再試」的那個再試，會先撞上來源冷卻而**根本不會出門**。~~
+#
+# ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪 · 日期 2026-08-31 · 決策者：AI 總管）。**
+#
+# **舊表述對 `unreachable` / `server_error` / `blocked` / `rate_limited` 這四種
+# 仍然完全成立**，而且那正是本機制設計時真正在想的情境 —— 它們都有冷卻期
+# （60s / 300s / 900s / 1800s），失敗不快取之後的「再試」確實會被 `should_skip()`
+# 擋在門口。**這四種的推理沒有一個字要改。**
+#
+# **錯的是它被寫成一句涵蓋全部六種的全稱句。** `not_found`(404) 與
+# `proxy_auth`(407) 依 `shared/backoff_policy.NO_COOLDOWN_KINDS` **冷卻 0 秒**
+# —— 對這兩種來說，`_ttl_cache` 是**唯一的節流器**。把它們也標記成「失敗、
+# 不入快取」，等於同時拆掉兩層。**實測（5 次 Streamlit rerun，同窗量測）**：
+#
+# | 失敗 | 修復前 | 一律標記（錯） | 現行 |
+# |---|---|---|---|
+# | 404 `not_found` | 3 個請求 | **15** | **3** |
+# | 407 `proxy_auth` | 1 個請求 | **5**  | **1** |
+# | 500 `server_error`（有 300s 冷卻） | 3 | 3 | 3 |
+#
+# **處置**：`infra/proxy.py::mark_fetch_failed_if_retryable` 依失敗分類決定要不要
+# 標記，`NO_COOLDOWN_KINDS` 那兩種**不標記、照舊入快取**。這**不是為它們破例** ——
+# 判準一直都是「來源活著且明確回答了 → 那個回答就是答案」（HTTP 200 解析失敗刻意
+# 不標記，用的就是這條），而 404 正是最純粹的那種情況。完整理由見該 helper 的
+# docstring；六種 kind 逐一守衛見
+# `tests/test_ttl_cache_positive_only.py::test_mark_decision_matches_backoff_policy_for_every_fail_kind`。
+#
+# 兩層仍然是串聯，只是第二層對其中兩種 kind **刻意留白**：
+#
+#     _ttl_cache（要不要記住這個答案）→ fetch_url → source_backoff（這一輪要不要碰這個來源）
+#
+# ## 與 `repositories/fund/fx_and_main.py` v18.275 的關係
+#
+# 同一個精神的兩種寫法。v18.275 的 `_FX_CACHE` 是**手動**快取，寫入點 `_store()`
+# 只長在成功分支上，失敗路徑自然不會寫。本機制是把同一件事做進**裝飾器**，
+# 讓走 `@_ttl_cache` 的 fetcher 不必各自手刻一份快取。
+# **v18.275 一行都沒動，也不需要動。**
+#
+# ## ⚠️ `.attrs` 傳播：新增回傳 pandas 的 `@_ttl_cache` 函式前必讀
+#
+# ⚠️ **本段的第一版（2026-08-31 稍早）量錯了環境，已更正 —— 這件事本身值得記。**
+# 當時的傳播矩陣（獨立稽核與本組各跑一次）都跑在**沙箱的 pandas 3.0.5** 上，
+# 而 `requirements.txt` 宣告的是 **`pandas>=2.3.3,<3.0`** —— CI 與 production
+# 用的是 **2.x**。兩組都做了對的動作（實測、不轉述），卻**量在一個不是
+# production 的環境上**，於是把 3.x 的語意寫成了不帶版本限定的通則。
+# 抓到它的是本節的守衛測試第一次上 CI 就紅 —— 守衛做對了事。
+# **下列每一條都在兩個版本各跑一次**（`pandas 2.3.3` 與 `3.0.5`），逐條標明。
+#
+# ### 一、方法／單元運算 → **兩版都傳播**（這是真正要防的那一種）
+#
+# `marked.copy()` / `.dropna()` / `.to_frame()` / `.sort_index()` / `.iloc[:1]`
+# / `.rename(...)` / `marked * 2` —— **pandas 2.3.3 與 3.0.5 實測皆保留標記**。
+#
+# ⛔ **所以「升級到 3.x 才有風險」是錯的讀法：風險在目前宣告的 2.x 就存在。**
+#    一個 `return fetch_yf_close(t).dropna()` 或 `... / 100` 的衍生函式，
+#    在**今天**的 production 上就會繼承標記。
+#
+# ### 二、二元運算 → **版本相關，這是唯一的差異點**
+#
+# | 寫法 | pandas 2.3.3 | pandas 3.0.5 |
+# |---|---|---|
+# | `marked + clean`（被標記的在**左**） | **傳播** | 傳播 |
+# | `clean + marked`（被標記的在**右**） | **不傳播** | **傳播** |
+#
+# 2.x 只從**左運算元**繼承 `.attrs`；3.x 兩邊都繼承。
+# **不要靠記憶挑邊** —— 要嘛用第三點的逃生門，要嘛實測。
+#
+# ### 三、⚠️ 合併類操作 → **看誰是 caller，不是看有沒有出現被標記的那一方**
+#
+# **本段第一版寫「`combine_first()` 會清掉標記」，那是錯的**，而且錯在
+# **安全方向** —— 它會讓作者以為「用了 `combine_first` 就不必叫
+# `clear_fetch_failed`」。第一版只量了 `乾淨.combine_first(標記)` 一個方向
+# 就寫成通則。兩個方向都量之後，真正的規則是：
+#
+# **`self`（caller）那一側的 `.attrs` 勝出**，參數側的被丟掉。兩版皆然：
+#
+# | 寫法 | 2.3.3 | 3.0.5 |
+# |---|---|---|
+# | `marked.combine_first(clean)` | **保留標記** | **保留標記** |
+# | `clean.combine_first(marked)` | 清掉 | 清掉 |
+# | `marked.fillna(clean)` | **保留標記** | **保留標記** |
+# | `clean.fillna(marked)` | 清掉 | 清掉 |
+# | `marked.where(cond, clean)` | **保留標記** | **保留標記** |
+# | `marked.update(clean)` 之後的 `marked` | **保留標記** | **保留標記** |
+#
+# ⛔ **這一條為什麼要命**：`primary.combine_first(fallback)` **正是本 repo
+#    fallback chain 的標準寫法**（§2.1 多源備援）。實測那個真實形狀：
+#
+#      主源失敗（空 Series + 標記）.combine_first(備源成功（真資料）)
+#        → 值 = 備源的真資料（**備援確實生效了，答案是對的**）
+#        → 但**仍帶著失敗標記** → 這個正確的結果**永遠不會入快取**
+#
+#    這正是本段要防的那種「不會自己叫的病」的**最典型實例**，
+#    而本段的第一版把它漏掉了。
+#
+# ### 三之二、真正會清掉標記的操作 → 兩版一致
+#
+# `pd.concat([...])`（兩種順序皆清）、`pd.DataFrame({...})`（兩種順序皆清）
+# —— 它們**沒有一個享有特權的 `self`**，故一律不繼承。**2.3.3 與 3.0.5 一致。**
+#
+# **沒有一致規則可背，只能實測** —— 而「實測」必須**兩個方向都量**，
+# 這正是第一版栽的地方。
+#
+# ### 四、落地往返 → 兩版一致
+#
+# **`to_parquet` / `read_parquet` 保留 `.attrs`；CSV 不保留**（兩版皆然）。
+# 這點特別容易踩到，因為本 repo 的凍結快照走 parquet（§5 可重現性）。
+#
+# ## 目前為什麼還沒出事
+#
+# 本組實測全 repo **13 個 `@_ttl_cache` 函式**中，回傳 pandas 的**恰好只有
+# 被標記的那 3 個**（`fetch_yf_close` / `fetch_fred` /
+# `fetch_defillama_stablecoin_mcap`），其餘 10 個回 `dict` / `float | None`
+# （`.attrs` 對它們不存在）。**所以目前沒有任何下游會繼承到標記。**
+# （此事與 pandas 版本無關。）
+#
+# ⛔ **新增回傳 pandas Series / DataFrame 的 `@_ttl_cache` 函式時，
+#    必須確認它的值不是從上述三個被標記的上游算出來的。**
+#    若是，上游失敗時新函式會**繼承標記 → 永遠不入快取**。
+#    ⚠️ 那是**效能病，不是正確性病** —— 它每次都重抓，答案仍然是對的，
+#    所以**不會有任何測試變紅、也不會有畫面出錯**，只會安靜地變慢。
+#    正因為它不會自己叫，才要寫在這裡。
+#    **處理方式**：在新函式回傳前呼叫 `clear_fetch_failed(result)`，
+#    明確表態「我這一層的成敗由我自己決定，不繼承上游的」。
+#
+# 守衛：`tests/test_ttl_cache_positive_only.py`。兩版都成立的部分**硬斷言**；
+# 二元運算那一條**依 pandas 版本分支斷言**（2.x 斷言不傳播、3.x 斷言傳播）——
+# 刻意**不**寫成「兩邊都過」，因為這組測試存在的價值就是
+# **pandas 改語意時要紅**。另以 AST 靜態掃描釘住「回傳 pandas 的
+# `@_ttl_cache` 函式只有那 3 個」，新增第 4 個就紅燈。
+
+FETCH_FAILED_ATTR = "fetch_failed"
+
+
+def mark_fetch_failed(obj, reason: str):
+    """標記「這個回傳值來自**失敗的抓取**」→ `@_ttl_cache` 不會快取它。
+
+    用在 fetcher 的失敗分支上，回傳值本身（型別、內容）**完全不變** ——
+    標記掛在 pandas 的 `.attrs` 上，呼叫端讀 `.empty` / `len()` 的既有寫法零影響。
+    （`.attrs` 已是本 repo 承載 provenance 的既有慣例，§2.2。）
+
+    Args:
+        obj: fetcher 的失敗回傳值（pandas Series / DataFrame）。
+        reason: 失敗原因，人讀用。
+
+    Returns:
+        `obj` 本身（方便 `return mark_fetch_failed(pd.Series(...), "...")` 一行寫完）。
+
+    ⚠️ **不要對「來自快取的物件」呼叫本函式**（2026-08-31 稽核 F6 補）。
+    `_ttl_cache` 命中時回傳的是**同一個物件**（不是複本），而 `_cache` 是
+    module-level 的 —— Streamlit 各 session 共用。對一個剛從快取拿到的
+    Series 呼叫 `mark_fetch_failed()`，會就地改到**所有 session 都看得到的
+    那一份**，且下一個 caller 拿到的仍是快取裡的舊值（它已經在快取裡了，
+    標記阻止不了「已經入快取」這件事，只會讓它看起來像失敗）。
+    本函式的唯一正確用法是**在 fetcher 的失敗分支上、對當場新建的空物件呼叫**。
+
+    Raises:
+        TypeError: `obj` 無法承載標記（例如 dict / list）。
+            **刻意 fail loud，不做 silent no-op** —— 靜默失敗會讓作者以為自己
+            擋住了失敗快取，實際上什麼都沒發生，那正是本次要修的那種假象
+            （§-2「沒查證的宣稱比沒有宣稱更危險」）。
+            回傳 dict 的 fetcher 請改用 `_daily_cache(cache_if=...)`，
+            或在自己的分支裡明確處理。
+        ValueError: `reason` 為空（`""` / `None` / 只有空白）。
+            ⚠️ **2026-08-31 稽核 F5 補**：在此之前 `mark_fetch_failed(obj, "")`
+            是一個**靜默 no-op** —— `.attrs` 確實被寫入 `""`，但 `is_fetch_failed`
+            用 `bool()` 判斷，`""` 是 falsy → 回 False → 結果照樣入快取。
+            上面那句「刻意 fail loud，不做 silent no-op」因此**對空 reason 為假**，
+            而且假在最糟的方向：作者寫了標記、以為擋住了，什麼都沒發生。
+            現在改成 raise，讓它與 TypeError 那一支的承諾一致。
+    """
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(
+            "mark_fetch_failed: reason 不可為空 —— 空字串會讓 is_fetch_failed() "
+            "回 False（bool('') 為 falsy），標記形同沒下，結果照樣入快取。"
+            "請寫出是哪個來源、為什麼失敗（§1 fail loud 要求可回溯）。"
+        )
+    _attrs = getattr(obj, "attrs", None)
+    if not isinstance(_attrs, _MutableMapping):
+        raise TypeError(
+            f"mark_fetch_failed: {type(obj).__name__} 無法承載失敗標記"
+            f"（需要 dict-like 的 .attrs，pandas Series/DataFrame 才有）。"
+            f"回傳此型別的 fetcher 請改用 _daily_cache(cache_if=...) 或自行處理。"
+        )
+    _attrs[FETCH_FAILED_ATTR] = str(reason)
+    return obj
+
+
+def clear_fetch_failed(obj):
+    """清掉失敗標記 —— 給「值由被標記的上游算出來、但本層自有成敗判斷」的函式用。
+
+    存在理由見本檔上方「`.attrs` 傳播」段：pandas 的算術運算會把上游的標記
+    傳染給結果（`乾淨 + 被標記` → 帶標記），若新函式不表態就會**繼承一個
+    不屬於自己的失敗**，導致它永遠不入快取（安靜的效能病，不會有測試變紅）。
+
+    無 `.attrs` 的物件直接原樣回傳（no-op）—— 這裡**不** fail loud，
+    因為「本來就沒有標記可清」與「清乾淨了」對呼叫端是同一件事；
+    `mark_fetch_failed` 會 raise 是因為那裡靜默失敗會產生**假的安全感**，
+    兩者不對稱是刻意的。
+
+    Returns:
+        `obj` 本身（方便 `return clear_fetch_failed(out)` 一行寫完）。
+    """
+    _attrs = getattr(obj, "attrs", None)
+    if isinstance(_attrs, _MutableMapping):
+        _attrs.pop(FETCH_FAILED_ATTR, None)
+    return obj
+
+
+def is_fetch_failed(obj) -> bool:
+    """這個回傳值有沒有被 `mark_fetch_failed` 標記過？
+
+    無 `.attrs` 的物件（dict / list / int / None …）一律回 False ——
+    **未標記 = 視為成功**，既有 `_ttl_cache` 使用者行為不變。
+    """
+    try:
+        _attrs = getattr(obj, "attrs", None)
+        if not isinstance(_attrs, _MutableMapping):
+            return False
+        return bool(_attrs.get(FETCH_FAILED_ATTR))
+    except Exception:
+        # 標記機制自己壞掉不該把取數打死 → 從寬當成功（維持既有行為）
+        return False
+
+
 def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
     """TTL + LRU 兩層快取裝飾器。
 
     cache key 由 (args, sorted kwargs) 組成；無法 hash 的引數（list/dict）跳過快取直走原 fn。
     v19.74 K2：新增 key_fn 參數，可自訂 key 生成邏輯（用於 URL normalize 等特殊場景）。
 
-    Wrapper 暴露：cache_clear() / cache_info() → {size, maxsize, ttl_sec, hits, misses}
+    2026-08-31（v3 §02「只快取成功結果」）：被 `mark_fetch_failed()` 標記過的結果
+    **不入快取**，下次呼叫會真的重試（重試是否出門由 `infra.source_backoff` 決定，
+    見上方 module 註解）。未標記者照舊快取 —— 既有使用者零行為改變。
+
+    Wrapper 暴露：cache_clear() / cache_info()
+        → {size, maxsize, ttl_sec, hits, misses, uncached_fail}
     """
     def decorator(fn):
         _cache: dict = {}
-        _stats = {"hits": 0, "misses": 0}
+        _stats = {"hits": 0, "misses": 0, "uncached_fail": 0}
 
         @_ft.wraps(fn)
         def wrapper(*args, **kwargs):
@@ -110,6 +381,13 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
                 return hit[1]
             _stats["misses"] += 1
             result = fn(*args, **kwargs)
+            # v3 §02「只快取成功結果」：fetcher 明說這次是抓失敗 → 不入快取，
+            # 下次呼叫真的重試（是否出門由 infra.source_backoff 決定）。
+            # ⚠️ 這裡**不判斷「空不空」** —— 空有兩種意思，裝飾器沒有資訊分辨，
+            #    猜錯任一邊都違憲。理由見本檔上方 module 註解。
+            if is_fetch_failed(result):
+                _stats["uncached_fail"] += 1
+                return result
             _cache[key] = (now, result)
             # LRU 防呆：超過 maxsize 砍最舊
             if len(_cache) > maxsize:
@@ -121,11 +399,27 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
             _cache.clear()
             _stats["hits"] = 0
             _stats["misses"] = 0
+            _stats["uncached_fail"] = 0
 
         wrapper.cache_clear = _clear   # type: ignore[attr-defined]
         wrapper.cache_info = lambda: {   # type: ignore[attr-defined]
             "size": len(_cache), "maxsize": maxsize, "ttl_sec": ttl_sec,
             "hits": _stats["hits"], "misses": _stats["misses"],
+            # 「這個 fetcher 因為抓失敗而沒被快取幾次」——§5 可觀測性。
+            # ~~Tab5 快取狀態表走 get_all_cache_info() 泛型渲染，零 UI 改動。~~
+            # ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪 · 決策者：AI 總管）：
+            #    這句兩處皆不實。** 實測：(a) `uncached_fail` 在 `ui/` 與 `app.py`
+            #    **0 命中**；(b) 全站唯一消費 `get_all_cache_info()` 的畫面在
+            #    `ui/helpers/portfolio/policy_admin_section.py`（**「📋 保單管理」，
+            #    不是 Tab5**），而且它是寫死的 f-string，只加總 size/hits/misses ——
+            #    **沒有泛型渲染，新欄位不會自己長出來。**
+            #    **舊表述的用意仍然成立**（本欄確實是為了讓失敗次數可被看見），
+            #    錯的是它宣稱這件事**已經做到了**。
+            #    **現況：本欄目前在 UI 沒有任何消費者，production 尚無可觀測入口。**
+            #    要接進「⑤ 參考 / 診斷」屬**欄位增減**，依客戶 2026-08-31 頒布的
+            #    協作介面須**動工前先出 HTML 線框給客戶審** → **另立一批，不是本批省略**。
+            #    在那之前，要看這個數字請用 `get_all_cache_info()` 直接讀（測試已釘）。
+            "uncached_fail": _stats["uncached_fail"],
         }
         wrapper._cache_dict = _cache   # type: ignore[attr-defined]   # for tests
         return wrapper
