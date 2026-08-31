@@ -66,12 +66,27 @@ def homogeneity_grade(alert_pairs: int, success_pairs: int, *,
 
 
 def _has_dims(fund: dict) -> tuple:
-    """(has_holdings, has_sector) —— 鏡像 calc_holdings_overlap 的資料在場判定。
+    """(has_holdings, has_sector) —— calc_holdings_overlap 資料在場判定的**明寫鏡像複本**。
 
     ⚠️ 這不是第二份演算法:calc_holdings_overlap 的 has_h/has_s 是**內部變數**
-    沒有輸出,無法從其回傳值推回「哪一對是真算的、哪一對是雙缺填 0.0 的」。
-    本函式逐字鏡像其正規化(名稱 strip 後非空;sector 另要求 pct > 0),
-    並由 `tests/test_homogeneity_service.py` 的鏡像鎖測試釘住兩邊不分家。
+    沒有輸出,無法從其回傳值推回「哪一對是真算的、哪一對是雙缺填 0.0 的」,
+    故在此明寫一份複本。鏡像到的點:持股「有無名稱」、sector 要求 name 非空
+    且 pct > 0、pct 解析失敗當 0.0。
+
+    ⚠️ 已知分家點(2026-08-31 稽核實測推翻「逐字鏡像」宣稱;單組結論):
+    1. **純空白持股名**:SSOT 端過濾式 `if h.get("name")` 取 strip **前** truthy ——
+       兩檔基金 `top_holdings=[{"name": "  "}]` 時,空白名被收進集合、正規化成 ""
+       後兩檔共享 {""} → Jaccard=1.0 產出影子警示對;本函式要求 strip **後**非空
+       → 判該檔無持股資料。同一情境下 SSOT 端出紅卡、本函式把該對排除在成功對
+       之外(畫面自相矛盾);且警示對數可大於成功對數,homogeneity_grade 的
+       ratio 理論上可 > 1(無 clamp)。
+    2. **例外捕捉範圍**:sector pct 解析,SSOT 端 `except Exception`,
+       本函式 `except (TypeError, ValueError)`。
+    根因在 SSOT 端把純空白名當資料(既有行為,本批無權改);修法屬另案裁決,
+    此處僅據實揭露,不改 SSOT、也不改本函式行為(§-1.5.3 C 禁止夾帶)。
+
+    鏡像鎖測試(`tests/test_homogeneity_service.py`)實際覆蓋的只有兩點:
+    「雙缺對填 0.0 不算成功」與「sector pct=0 不算有資料」—— 不含上列分家情境。
     """
     f = fund or {}
     has_h = any((h.get("name") or "").strip() for h in (f.get("top_holdings") or []))
