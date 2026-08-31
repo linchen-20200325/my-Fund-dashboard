@@ -764,9 +764,21 @@ def render_policy_admin_section(
                     import repositories.macro_repository  # noqa: F401 — 觸發 macro 快取註冊
                     _info_rows = _gci()
                     if _info_rows:
+                        # `size` 是 cache_info() 欄位契約的必備欄位
+                        # (infra.cache.CACHE_INFO_REQUIRED_KEYS)。**刻意直接用
+                        # `r["size"]` 而非 `.get("size", 0)`** —— 生產者違約時要
+                        # 炸出來(下方 except 會留 stderr),用 0 頂替會靜默少算
+                        # entries,那就是 §1 禁止的假數字。
                         _total_entries = sum(r["size"] for r in _info_rows)
-                        _total_hits = sum(r.get("hits", 0) for r in _info_rows)
-                        _total_misses = sum(r.get("misses", 0) for r in _info_rows)
+                        # ⚠️ 統計欄位是**全有或全無**:proxy 型快取
+                        # (`_FX_CACHE` / `_SOURCE_BACKOFF`)只是 raw dict 包裝,
+                        # 沒有攔截呼叫 → **命中率不適用**。
+                        # 用 `"hits" in r` 明確把它們排除在分母之外,**不要**用
+                        # `r.get("hits", 0)` —— 那會把「不適用」寫成「0 次命中」。
+                        _stat_rows = [r for r in _info_rows
+                                      if "hits" in r and "misses" in r]
+                        _total_hits = sum(r["hits"] for r in _stat_rows)
+                        _total_misses = sum(r["misses"] for r in _stat_rows)
                         _total_calls = _total_hits + _total_misses
                         _hit_rate = (
                             f"{(_total_hits / _total_calls * 100):.1f}%"
@@ -777,8 +789,21 @@ def render_policy_admin_section(
                             f"{_total_entries} entries / hit-rate {_hit_rate}"
                             f"（hits={_total_hits} / misses={_total_misses}）"
                         )
-                except Exception:
-                    pass   # smoke-allow-pass — 顯示性 caption 失敗不影響功能
+                except Exception as _e_ci:
+                    # §1 Fail Loud:**不影響主功能**這個判斷仍然成立(這只是一行
+                    # 顯示性 caption),被權衡掉的是它**連 log 都沒有**。
+                    # ⚠️ 這個 except 曾經整整吞掉一個真缺陷:2026-08-31 實測
+                    # `get_all_cache_info()` 14 列有 4 種形狀,其中 7 列沒有
+                    # `size` 欄位(`_ttl_cache` 用 `size`,`_daily_cache` 與兩個
+                    # proxy 用 `currsize`)→ `sum(r["size"] …)` 拋
+                    # `KeyError: 'size'` → 被這裡吞掉 → **這行 caption 從上線
+                    # 以來一次都沒印出來過,而測試一路長綠**。
+                    # 根因已在 infra/cache.py 的「cache_info() 欄位契約」收斂;
+                    # 這裡補上留痕,讓**下一個**違約者不會再無聲消失。
+                    import sys as _sys_ci
+                    print(f"[policy_admin/cache_info] 快取狀態 caption 失敗"
+                          f"(不影響主功能): {type(_e_ci).__name__}: {_e_ci}",
+                          file=_sys_ci.stderr)
 
                 # 共用：取統計與更新 _sheet_stats
                 def _refresh_sheet_stats(_cli: object) -> None:
@@ -796,8 +821,27 @@ def render_policy_admin_section(
                             "ledgers": _led_ct,
                             "last_sync": _meta_x.get("latest_updated_at", ""),
                         }
-                    except Exception:
-                        pass   # smoke-allow-pass — 統計失敗不影響主流程
+                    except Exception as _e_ss:
+                        # §1 Fail Loud:同上一處的判讀 —— **不影響主流程**成立,
+                        # 但**沒有 log** 不成立。這裡包的是三個真的會失敗的遠端
+                        # 呼叫(list_policy_worksheets / get_state_metadata /
+                        # load_all_ledgers),網路或授權失敗是**預期內**的;問題是
+                        # 廣義 `except Exception` 連 KeyError / TypeError 這種
+                        # **程式錯誤**也一起吞,和上一處的 KeyError 是同一個病。
+                        # 📌 **與上一處的差別(據實記錄,不含糊)**:上一處吞掉的是
+                        # 一個**看得見**的 caption;本處寫入的 `_sheet_stats`
+                        # **全 repo 沒有任何讀取端**(AST + grep 窮舉:只有這一行
+                        # 寫、無人讀)——它的 3 個 `st.metric` 消費者已於 v18.169
+                        # 隨「📋 保單清單」區塊移除(見 ARCHITECTURE.md v18.169、
+                        # SPEC.md「動態 metric 數字捨棄」)。也就是說本處**目前
+                        # 藏不住可見症狀**,但仍是同一種靜默,故一併補留痕。
+                        # ⚠️ 「這段是否該整個移除」屬**死碼判定**,取決於「有沒有
+                        # 漏看」,且本批沒有任務碰它 → 依 §-1 **登記不動**,已寫進
+                        # 本批 PR 描述。
+                        import sys as _sys_ss
+                        print(f"[policy_admin/sheet_stats] Sheet 統計更新失敗"
+                              f"(不影響主流程): {type(_e_ss).__name__}: {_e_ss}",
+                              file=_sys_ss.stderr)
 
                 # v18.167：refresh_only 路徑（dump_all / load_all 已移到頂部快捷面板）
                 if _refresh_clicked:

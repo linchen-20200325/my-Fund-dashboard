@@ -85,6 +85,76 @@ WHITE: str = "#fff"                # pure white
 # v19.274 Phase 2 收尾:策略3 訊號 chip 近黑底(3 處跨 tab2/tab3,原 inline "#111")
 CHIP_BG_NEAR_BLACK: str = "#111"   # near-black chip bg(phase-signal chip / alloc fallback)
 
+# ── 三態顏色語意角色 SSOT（2026-08-31，客戶四大鐵律第 3 條「三態顏色分離」）──────
+# 客戶拍板的三態：
+#   未載入／沒點過 ＝ 灰色說明 ／ 系統真出錯 ＝ 紅色警示 ／ 業務上的壞消息 ＝ **業務色**。
+# 2026-08-31 前，業務警訊卡（`ui/helpers/render_state.business_alert`）用的是
+# `MATERIAL_RED`，與系統紅同屬「一眼看去就是那個紅」，**只靠形狀（卡片 vs 錯誤框）分辨** ——
+# 本組拆的就是這一點。`MATERIAL_RED` 其餘用途（吃本金／z-score／sparkline，34 檔）**未動**。
+#
+# ⚠️ 下面兩個值是**一組、依底色擇一**，不是「深色版／淺色版隨便挑」。
+#    實測 WCAG 對比（`scripts` 無此工具，數字由本次 PR 就地計算，公式 WCAG 2.x relative luminance）：
+#      #96124a on #ffffff = 8.46:1 ✅ ／ on 業務卡底 #2a0a0a = 2.17:1 ❌（幾乎看不見）
+#      #f294b6 on #2a0a0a = 8.45:1 ✅ ／ on #ffffff        = 2.17:1 ❌（幾乎看不見）
+#    **用錯邊的代價不是「不夠好看」，是字直接讀不到。**
+#    `tests/test_tricolor_colour_provenance.py::test_r1_*` 以對比公式把這件事機器化，
+#    不靠這段註解自律。
+BUSINESS_ALERT_ON_LIGHT: str = "#96124a"   # 深莓紅：**淺**色底上的業務警訊前景
+BUSINESS_ALERT_ON_DARK: str = "#f294b6"    # 亮莓紅：**深**色底上的業務警訊前景
+
+# ⚠️⚠️ **`BUSINESS_ALERT_ON_LIGHT` 今天沒有 production 消費者 —— 這是刻意保留，不是漏刪。**
+#    **總管 2026-08-31 拍板：留在 SSOT，不刪；但必須就地標明現況。** 以下即該標明。
+#
+#    **現況（實測）**：`.streamlit/config.toml` 釘死 `base = "dark"` → App 只有深色底，
+#    因此只有 `ON_DARK` 會被畫出來。
+#
+#    ⚠️ **引用清單更正（2026-08-31，有意識的更正，不是漏刪；決策者：本實作組，稽核指出）**
+#    舊表述寫 ~~「全 repo 對 `ON_LIGHT` 的引用**只有**本檔的定義與
+#    `tests/test_tricolor_colour_provenance.py` 的守衛」~~ —— **漏了第三處。**
+#    **實測**（`grep -rn 'BUSINESS_ALERT_ON_LIGHT' --include='*.py' --include='*.md' .`）
+#    命中 **3 個檔**：
+#      1. **本檔** —— 定義（`BUSINESS_ALERT_ON_LIGHT: str = "#96124a"`）＋本段註解；
+#      2. `tests/test_tricolor_colour_provenance.py` —— 守衛（`BUSINESS_TOKEN_NAMES`、
+#         `test_r0_*`、`test_r1_the_light_surface_pair_is_kept_usable_for_a_light_surface`）；
+#      3. **`ui/helpers/render_state.py`** —— **模組 docstring 內的散文**
+#         （「淺色底的配對值 `BUSINESS_ALERT_ON_LIGHT`（`#96124a`）已進 SSOT 但 production 用不到」）。
+#
+#    ⚠️ **第三處是散文，不是功能引用** —— 它不是 `import`、不是 `from ... import`、
+#    也不會被求值成任何輸出，**刪掉本常數不會讓那一行報錯**。
+#    **兩邊理由並陳**：舊表述想講的事**仍然成立** ——「本常數沒有 production 消費者」
+#    這個結論**不受第三處影響**（散文不是消費者）；**被權衡掉的是它的措辭**：
+#    「引用**只有**兩處」是一句**可被一條 grep 推翻的全稱句**，而它偏偏是錯的。
+#    **新表述勝出的理由**：後人若拿舊句去 grep 覆核，會發現對不上，
+#    進而懷疑整段保留裁決的可信度 —— **一個錯的計數會拖垮它旁邊所有正確的結論。**
+#    （對照本檔既有的 `115 條 / 4 條` 那則自我更正：同一個病，同一份檔案內第二次。）
+#
+#    **為什麼留（兩個理由，缺一不可）**：
+#      1. **它是「一組兩個值」的另一半，不是獨立常數。** 上面那張對比表就是它存在的意義 ——
+#         `#f294b6` 在白底只有 2.17:1、`#96124a` 在業務卡底也只有 2.17:1。**留著配對值
+#         ＋ 用對比測試釘住**，是防止有人把 `ON_DARK` 畫到淺底上的最直接手段；
+#         **只留一半，SSOT 會變成一個會誤導人的半套。**
+#      2. 客戶是把兩個值**一起**給的，刪一半等於片面改掉客戶給的規格。
+#
+#    ⛔ **給未來的 Garbage Collection（`CLAUDE.md §-1.5.1c` v3 §01-2「用不到即清理」）**：
+#    本常數**符合「無 production caller」的表面特徵，但不是孤兒**，理由如上。
+#    **刪它之前必須先確認「本 repo 已確定不需要主題感知」** —— 那是一個尚未成立的前提
+#    （主題感知機制已另立待辦，本批不做：`base="dark"` 現況下沒有需求觸發）。
+#    ✅ **實際護欄不靠這段註解**：刪掉本常數會讓
+#    `tests/test_tricolor_colour_provenance.py` 的 **4 條**測試當場轉紅，第一條是
+#    `test_r0_both_role_tokens_exist_even_the_one_with_no_caller`，它的失敗訊息
+#    直接把上面這些理由印出來 ——**GC 刪不掉它而不出聲，而且會被告知為什麼。**
+#    （2026-08-31 實測，見該批 PR 突變表 M5。⚠️ 初稿在此寫「3 條」是**沒查證就寫的**，
+#     實跑是 4 條；且在補 `test_r0` 之前實際會噴 **115 條**——其中 112 條是 R2 對每個
+#     UI 檔各報一次同樣的 AttributeError，**那種級聯會把真正的原因埋掉**，
+#     故一併把 R2 改為容錯查值、由 `test_r0` 專責報這件事。）
+#
+#    ⛔ **`@media (prefers-color-scheme: light)` 這條路已評估並否決，不要再試**：
+#    那個 media query 反映的是**作業系統偏好**，**不是** Streamlit 主題。
+#    使用者 OS 設淺色、App 仍是深色底 → 會挑到 `ON_LIGHT` 畫在 `#2a0a0a` 上
+#    ＝ **2.17:1，比現況更糟**。本 repo 唯一的深淺切換在
+#    `ui/helpers/dividend_calendar_render.py`，那是**獨立匯出 HTML**（供 PNG 匯出）的私有
+#    `:root{--…}` CSS，讀不到本模組，也套不進 `st.markdown` 片段 —— **不是可用的機制。**
+
 # 同義對應
 TRAFFIC_EMOJI: tuple[str, str, str, str] = ("🟢", "🟡", "🔴", "⬜")
 TRAFFIC_HEX: tuple[str, str, str, str] = (
