@@ -57,7 +57,64 @@
   把 wrapper 搬到另一個檔、且該 wrapper 的簽章不帶 exception-ish 參數、body 也不格式化
   例外，(a)(b)(c) 會同時失手。要補需要跨檔呼叫圖，不在本批範圍。
   （(a)(b) 是**跨檔有效**的：它們只看 wrapper 自己的簽章與 body。）
+- ⚠️ **X1｜同檔兩層 wrapper —— 上一行沒有涵蓋它，這是獨立的一條**（2026-08-31 補）。
+  上一行只揭露「wrapper **搬到別的檔**會失手」，讀起來像是「**同一個檔**內一定抓得到」。
+  **不是。** 實測：
+
+      def _inner(what, detail):          # ← 顏色錯在這裡，但它從未被 seed
+          st.markdown(f"<div style='color:{業務色}'>{what}{detail}</div>", ...)
+      def _outer(what, exc):             # ← 判準 (c) 只標記到這一層
+          _inner(what, str(exc))
+      try: ...
+      except Exception as e:
+          _outer('NAV 抓取失敗', e)
+
+  **根因**：`_system_failure_renderers()` 的判準 (c) 只從 **except handler 的直接 callee**
+  取 seed，**taint 不傳第二跳**；而 `_outer` 自己沒有任何 render 呼叫，於是
+  「被標記的函式不畫圖、畫圖的函式沒被標記」，兩邊都不報。
+  **要補需要把同檔呼叫圖做到不動點**（把 callee 的 taint 再往下傳），屬**範圍擴大**，本批不做。
+- ⚠️ **X3｜module-level 間接呼叫（如 `functools.partial`）**（2026-08-31 補）。
+  `_emit = functools.partial(_show)` 之後 `except ...: _emit(str(e))` ——
+  handler 的 callee 是 `_emit`（module-level **`Name`**，不是 `FunctionDef`），
+  `byname.get("_emit")` 落空 → 判準 (c) 拿不到 seed。
+  ⚠️ **但它只在 (a)(b) 同時避開時才成立**：若那個 painter 的參數叫 `exc`／標註 `Exception`，
+  **判準 (a) 照樣抓到**（實測：本批第一版探針就是因為參數名寫成 `exc` 而被抓到，
+  重做成 `detail` 才隔離出這條繞道）。**寫探針時若不先關掉 (a)，會誤以為 (c) 沒破。**
+- ✅ **X2｜`*args` 收參數 —— 曾經是繞道，2026-08-31 已修，留紀錄不留破口**：
+  `def _paint(*bits)` 之下，`_paint("NAV 失敗", e)` 的 `e`（index 1）會因
+  `i >= len(params)` 被**靜默跳過**，taint 遺失、整個函式不被判為系統失敗渲染。
+  這是**規則自身的邏輯 bug**（不是範圍取捨）—— 位置引數吃不完時是被 vararg 收走的。
+  已於 `_system_failure_renderers()` 就地修正並附回歸測試
+  `test_r3_a_varargs_wrapper_is_not_a_blind_spot`（拿掉修正該測試會轉紅，已突變驗證）。
+- ⚠️ **本節三條的定性：未來回歸風險，不是現存漏洞。**
+  2026-08-31 實測掃過全 `ui/**`（**112 檔 / 534 函式**，量測日）：
+  「被判為系統失敗渲染的函式 → 呼叫另一個同檔、自己會 render 的函式」**現存實例 0**。
+  → **今天沒有任何一處在利用 X1**；揭露它是為了讓下一個人知道**這條路是通的**，
+  不是宣稱現在漏了什麼。⚠️ 「0 實例」是**單組掃描**的結論，未經第二組驗證。
 - 本檔只掃 `ui/**` 與 `app.py`。`services/**` 不畫 UI，不在範圍。
+- ⚠️ **R1 對比規則量的是「亮度」，不是「色相」——它擋得住什麼、擋不住什麼**（2026-08-31 補）：
+  **擋得住**「改回系統紅」（字串規則）與「**差一個位元**」（實測 `#f44337` vs `#f44336`：
+  字串規則放行，對比規則 **1.0003:1** 當場轉紅）。
+  **擋不住**「換一個**亮度不同、但仍然很紅**的紅」—— 實測 `#c62828`（Material Red 800）
+  對 `MATERIAL_RED` 是 **1.5267:1**、`#8b0000`（darkred）是 **2.7185:1**，
+  兩者都**通過** 1.5 門檻，但沒有人會說它們不是「系統紅家族」。
+  ⚠️ 且**現行餘裕很薄**：`BUSINESS_ALERT_ON_DARK` vs `MATERIAL_RED` 實測 **1.6986:1**，
+  距離門檻只有 **0.199**。**動任一個值之前先重算這個數字。**
+- ⚠️ **殘餘破口：用 `MATERIAL_RED` 手繪一個系統錯誤框，新舊守衛都綠**（2026-08-31 實測）。
+
+      from shared.colors import MATERIAL_RED
+      def _fail_card(what, exc):
+          st.markdown(f"<div style='border:2px solid {MATERIAL_RED};"
+                      f"color:{MATERIAL_RED}'>{what}: {exc}</div>", ...)
+
+  R2 只看**角色色**的 hex（`MATERIAL_RED` 不是角色色）；R3 的兩條分別看「業務色」與
+  「**寫死的 hex**」，而這裡用的是**具名 SSOT 常數**、不是 inline hex → 三條都不響。
+  **定性要看清楚**：它畫的是**系統紅**去報**系統錯誤**，**語意方向沒有錯** ——
+  屬「**形狀違規**」（沒走 `system_error()`，少了 widget 一致性），
+  **不是**本檔要抓的「**顏色違規**」（拿業務色報系統錯）。
+  ⛔ **刻意不為它加白名單，也刻意不擴大守衛範圍**：前者違反本檔「零白名單」的設計，
+  後者會把「UI 不准出現 `MATERIAL_RED`」變成新規則，掃到 34 個無關檔案（§8.4 步驟 4）。
+  **這是有意識的留白，不是漏掉。**
 - 顏色值若經由變數多次轉手（`c = 業務色; d = c; ...`）本檔做的是**同 scope 傳遞閉包**，
   跨函式傳參不追。
 - ⚠️ 本檔規則由**單組**（前端 UI 組）設計與實作，**未經第二組獨立驗證**（`CLAUDE.md §-2` 規則 6）。
@@ -209,8 +266,27 @@ def _docstring_nodes(tree: ast.AST) -> set[int]:
 
     ⚠️ 2026-08-31 實測修正：第一版把 docstring 也當成「寫死顏色」，於是
     `ui/helpers/render_state.py` **因為說明文字裡引用了 `#f294b6` 而被判違規**。
-    在文件裡講一個顏色叫什麼，跟把它 inline 畫出來是兩件事；
-    docstring 不會被求值成任何輸出，排除它不開後門。
+    在文件裡講一個顏色叫什麼，跟把它 inline 畫出來是兩件事。
+
+    ⚠️ **措辭更正（2026-08-31，有意識的更正，不是漏刪；決策者：本實作組，稽核指出）**：
+    本段舊表述寫 ~~「docstring 不會被求值成任何輸出，排除它**不開後門**」~~ ——
+    **那句話字面上是假的，已改為「不開**實務上的**後門」。**
+    **反例（實測，新守衛 347 passed 全綠）**：
+
+        def _paint():
+            '''<div style='color:#f294b6'>業務警訊</div>'''
+            st.markdown(_paint.__doc__, unsafe_allow_html=True)
+
+    `__doc__` **確實可以被求值成輸出** —— 舊表述的前半句（「不會被求值」）就是錯的，
+    後半句（「不開後門」）建立在它上面，一起垮。
+    **兩邊理由並陳**：舊表述**在它要解決的問題上仍然成立** ——
+    排除 docstring 是為了不把「說明文字提到一個顏色」誤判成違規，那個判斷沒有錯，
+    本函式**照舊排除 docstring**，一行未改；**被權衡掉的只有那句全稱斷言**。
+    **新表述勝出的理由**：實務嚴重性可忽略（沒有人把 `__doc__` 當 HTML 餵給
+    `unsafe_allow_html`），**但「可忽略」跟「不存在」是兩件事** ——
+    寫成「不開後門」會讓下一個人以為這裡已經封死，
+    而本檔整份 docstring 的用途正是告訴後人**哪裡還是通的**（見模組 docstring 已知邊界）。
+    **能被一個 6 行反例推翻的句子，就不該用全稱語氣寫進守衛。**
     """
     out = set()
     for node in ast.walk(tree):
@@ -307,6 +383,23 @@ def test_r1_business_colour_is_visibly_apart_from_the_system_red():
 
     `#f44335` 與 `#f44336` 是不同的字串、同一個顏色 —— 只比字串等同，
     等於留一條「改一個位元就過關」的路。這裡用 WCAG 對比公式量。
+
+    ⚠️ **這條擋得住什麼、擋不住什麼（2026-08-31 實測，就地寫明）**
+    **擋得住**「差一個位元」：`#f44337` vs `MATERIAL_RED(#f44336)` ——
+    上一條的字串規則**放行**，本條算出 **1.0003:1** 當場轉紅。**兩條是縱深，不是重複。**
+
+    ⛔ **擋不住「換一個亮度不同、但仍然很紅的紅」** —— 因為 **WCAG 對比量的是「相對亮度」，
+    不是「色相」**。實測：`#c62828`（**Material Red 800**，貨真價實的系統紅家族）
+    對 `MATERIAL_RED` 是 **1.5267:1**、`#8b0000`（darkred）是 **2.7185:1**，
+    **兩者都通過 1.5 門檻**。把業務色改成它們，本條不會響。
+    → **本條防的是「原地微調」，不是「換一個紅」**；後者目前**沒有機器護欄**，
+    靠的是 `test_r1_business_alert_actually_paints_with_the_role_token` 釘住
+    「必須引用角色常數」＋ code review。**不要以為這條顧到了色相。**
+
+    ⚠️ **現行餘裕很薄，動值之前先重算**：實測四組之中最緊的是
+    `BUSINESS_ALERT_ON_DARK`(#f294b6) vs `MATERIAL_RED`(#f44336) ＝ **1.6986:1**，
+    距離 1.5 門檻只有 **0.199**。（其餘三組：ON_DARK vs TRAFFIC_RED 1.7359、
+    ON_LIGHT vs MATERIAL_RED 2.2974、ON_LIGHT vs TRAFFIC_RED 2.2482。）
     """
     import shared.colors as C
     for token in sorted(BUSINESS_TOKEN_NAMES):
@@ -383,9 +476,31 @@ def test_r1_business_alert_rail_is_thicker_than_a_default_rule():
 # R2 — 角色色只准從 SSOT 來（M3 的守衛）
 #
 # 「追不到就紅」的第一半：角色色的 hex **不准**出現在 UI 檔的字面值裡。
-# 量測（2026-08-31，本 PR 就地跑）：`ui/**` + `app.py` 共 216 個 hex 字面值、
-# 散在 29 檔，其中命中角色色的 **0 個** —— 所以本條**不需要任何白名單**就能上線。
-# ⚠️ 本條只管**三態角色色**，不是「UI 不准出現任何 hex」：那 216 個多半是圖表／品牌／
+#
+# ⚠️ **量測數字更正（2026-08-31，有意識的更正，不是漏刪；決策者：本實作組，稽核指出）**
+#    舊表述寫 ~~「共 **216** 個 hex 字面值、散在 **29** 檔，其中命中角色色的 **0 個**」~~ ——
+#    **那組數字用任何一種算法都不重現，而且沒有寫明是用哪種算法數的。**
+#    **兩邊理由並陳**：舊表述想講的事**仍然成立**（角色色沒有被 inline，所以不需要白名單）；
+#    **被權衡掉的是它的呈現方式** —— 一個沒有附算法的計數，後人無從複驗，
+#    也無從發現它何時開始說謊；而「命中 0 個」在**未排除 docstring** 時**其實是 2 個**。
+#
+# **現行量測（本 PR 就地實跑；算法寫明，數字跟著算法走）** —— 三種算法各數一次：
+#   ① 原文 grep（含註解＋docstring）        ：**220** 個 / **30** 檔；命中角色色 **2** 個
+#   ② AST 字串常數（含 docstring，排除註解）：**204** 個 / **27** 檔；命中角色色 **2** 個
+#   ③ AST 字串常數，**排除 docstring**      ：**195** 個 / **23** 檔；命中角色色 **0** 個
+#      ↑ **③ 就是本條實際採用的口徑**（見 `_docstring_nodes()`），故本條**零白名單**成立。
+#
+# ⚠️ **「命中角色色 0 個」必須帶限定語：那是「排除 docstring 後」。**
+#    **未排除時是 2 個**，都在 `ui/helpers/render_state.py` 的**模組 docstring** 內
+#    （該 docstring 為第 1~93 行；兩處分別在第 32 行提到 `#f294b6`、第 36 行提到 `#96124a`，
+#    都是**說明文字在講這個顏色叫什麼**，不是把它畫出來）。
+#    **不寫這個限定語，「0 個」看起來會像是「repo 裡根本沒出現過角色色的 hex」——那是假的。**
+#
+# ⚠️ **本行是量測日快照，會漂移；複驗請重跑，不要引用本行**：①② 的數字**已知會隨 main 前進而變**
+#    —— 本分支合併 `origin/main`（#741 動到 `app.py`）之後，①② 各 +2 / +1
+#    （合併前實測為 218/30 與 203/27，**③ 不變**）。**③ 才是本條的判準。**
+#
+# ⚠️ 本條只管**三態角色色**，不是「UI 不准出現任何 hex」：其餘那些多半是圖表／品牌／
 #    badge 用色，與三態無關，把它們一起收進來屬 §8.4 step 4 明禁的自作主張擴大範圍。
 # ══════════════════════════════════════════════════════════════════
 @pytest.mark.parametrize("path", UI_SOURCES, ids=_rel)
@@ -544,11 +659,22 @@ def _system_failure_renderers(tree: ast.AST) -> dict[str, tuple[str, set[str], b
             if fn is None:
                 continue
             params = [p.arg for p in _fn_params(fn)]
+            # `_fn_params` 的順序是 posonly → args → kwonly → vararg → kwarg，
+            # 故 params[:n_pos] 正好是「能用位置傳進去」的那些參數。
+            n_pos = len(fn.args.posonlyargs) + len(fn.args.args)
+            vararg = fn.args.vararg.arg if fn.args.vararg else None
             seeds: set[str] = set()
             for i, arg in enumerate(call.args):
-                if ({n.id for n in ast.walk(arg) if isinstance(n, ast.Name)} & tainted
-                        and i < len(params)):
+                if not ({n.id for n in ast.walk(arg) if isinstance(n, ast.Name)} & tainted):
+                    continue
+                if i < n_pos:
                     seeds.add(params[i])
+                elif vararg:
+                    # ⚠️ 2026-08-31 修正（探針 X2）：`def _paint(*bits)` 之下 n_pos == 0，
+                    # 於是 `_paint("NAV 失敗", e)` 的 e（index 1）過去會因 index 超界被
+                    # **靜默跳過** → taint 遺失 → 整個函式沒被判為系統失敗渲染。
+                    # 位置引數吃不完時是被 vararg 收走的，故污染 vararg 名。
+                    seeds.add(vararg)
             for kw in call.keywords:
                 if kw.arg and {n.id for n in ast.walk(kw.value)
                                if isinstance(n, ast.Name)} & tainted:
@@ -643,6 +769,49 @@ def test_r3_a_system_failure_renderer_never_paints_an_untraceable_hex(
         "若這其實是業務警訊，請走 business_alert()。\n  "
         + "\n  ".join(bad)
     )
+
+
+def test_r3_a_varargs_wrapper_is_not_a_blind_spot():
+    """`def _paint(*bits)` 也要抓得到 —— 這是 2026-08-31 修掉的一個**規則自身的 bug**。
+
+    **它不是範圍取捨，是算錯了。** 判準 (c) 把「呼叫點的第 i 個引數」對映到
+    「callee 的第 i 個參數」，但 `*args` 之下宣告參數只有一個（`bits`），
+    於是 `_paint("NAV 失敗", e)` 的 `e`（index **1**）撞上 `i >= len(params)`
+    被**靜默跳過** → taint 遺失 → `_paint` 從未被判為系統失敗渲染 → 用業務色也不報。
+
+    ⚠️ **當時的實測**：舊規則之下 `_system_failure_renderers()` 對本探針回傳 `{}`（空），
+    新舊守衛雙綠。修正方式：位置引數吃不完時是被 vararg 收走的，故污染 vararg 名。
+
+    ⛔ **這條是 X2 修正的突變哨兵** —— 把 `_system_failure_renderers()` 裡
+    `elif vararg: seeds.add(vararg)` 那一段拿掉，本條**必須轉紅**（已突變驗證）。
+    **沒有這條，那個修正沒有任何東西守著。**
+    """
+    probe = (
+        "import streamlit as st\n"
+        "from shared.colors import BUSINESS_ALERT_ON_DARK\n"
+        "def _paint(*bits):\n"
+        "    st.markdown(f\"<div style='color:{BUSINESS_ALERT_ON_DARK}'>{bits}</div>\","
+        " unsafe_allow_html=True)\n"
+        "def render_block(payload):\n"
+        "    try:\n"
+        "        _ = payload['nav']\n"
+        "    except Exception as e:\n"
+        "        _paint('NAV 抓取失敗', e)\n"
+    )
+    tree = ast.parse(probe)
+    suspects = _system_failure_renderers(tree)
+    assert "_paint" in suspects, (
+        "`*args` wrapper 沒有被判準 (c) 認出來 —— 位置引數 index 超過宣告參數數量時，"
+        "taint 被靜默跳過。這是 R3 的算術 bug，不是刻意留的鬆度。"
+    )
+    aliases = _st_aliases(tree)
+    containers = _container_names(tree, aliases)
+    business = _business_names(tree)
+    painted = [call for fn, call, args, _why in
+               _failure_path_renders(tree, aliases, containers)
+               if fn.name == "_paint"
+               and any(_mentions_business(a, business) for a in args)]
+    assert painted, "偵測到是系統失敗渲染，卻沒認出它畫的是業務色 —— 規則只做了一半。"
 
 
 def test_r3_the_failopen_shape_is_actually_caught():

@@ -106,8 +106,27 @@ BUSINESS_ALERT_ON_DARK: str = "#f294b6"    # 亮莓紅：**深**色底上的業�
 #    **總管 2026-08-31 拍板：留在 SSOT，不刪；但必須就地標明現況。** 以下即該標明。
 #
 #    **現況（實測）**：`.streamlit/config.toml` 釘死 `base = "dark"` → App 只有深色底，
-#    因此只有 `ON_DARK` 會被畫出來。全 repo 對 `ON_LIGHT` 的引用只有本檔的定義與
-#    `tests/test_tricolor_colour_provenance.py` 的守衛。
+#    因此只有 `ON_DARK` 會被畫出來。
+#
+#    ⚠️ **引用清單更正（2026-08-31，有意識的更正，不是漏刪；決策者：本實作組，稽核指出）**
+#    舊表述寫 ~~「全 repo 對 `ON_LIGHT` 的引用**只有**本檔的定義與
+#    `tests/test_tricolor_colour_provenance.py` 的守衛」~~ —— **漏了第三處。**
+#    **實測**（`grep -rn 'BUSINESS_ALERT_ON_LIGHT' --include='*.py' --include='*.md' .`）
+#    命中 **3 個檔**：
+#      1. **本檔** —— 定義（`BUSINESS_ALERT_ON_LIGHT: str = "#96124a"`）＋本段註解；
+#      2. `tests/test_tricolor_colour_provenance.py` —— 守衛（`BUSINESS_TOKEN_NAMES`、
+#         `test_r0_*`、`test_r1_the_light_surface_pair_is_kept_usable_for_a_light_surface`）；
+#      3. **`ui/helpers/render_state.py`** —— **模組 docstring 內的散文**
+#         （「淺色底的配對值 `BUSINESS_ALERT_ON_LIGHT`（`#96124a`）已進 SSOT 但 production 用不到」）。
+#
+#    ⚠️ **第三處是散文，不是功能引用** —— 它不是 `import`、不是 `from ... import`、
+#    也不會被求值成任何輸出，**刪掉本常數不會讓那一行報錯**。
+#    **兩邊理由並陳**：舊表述想講的事**仍然成立** ——「本常數沒有 production 消費者」
+#    這個結論**不受第三處影響**（散文不是消費者）；**被權衡掉的是它的措辭**：
+#    「引用**只有**兩處」是一句**可被一條 grep 推翻的全稱句**，而它偏偏是錯的。
+#    **新表述勝出的理由**：後人若拿舊句去 grep 覆核，會發現對不上，
+#    進而懷疑整段保留裁決的可信度 —— **一個錯的計數會拖垮它旁邊所有正確的結論。**
+#    （對照本檔既有的 `115 條 / 4 條` 那則自我更正：同一個病，同一份檔案內第二次。）
 #
 #    **為什麼留（兩個理由，缺一不可）**：
 #      1. **它是「一組兩個值」的另一半，不是獨立常數。** 上面那張對比表就是它存在的意義 ——
