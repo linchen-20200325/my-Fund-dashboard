@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """app.py — 基金戰情室 v18.0(重構版)
-模組架構(v19.405 6→5):市場定調 → 組合健診 → 個基深掘 → 配置 & 帳本 → 參考 / 診斷
+模組架構(2026-08-31 客戶拍板線框,7→5):
+  ① 市場定調 → ② 組合健診 → ③ 基金研究 → ④ 我的配置 → ⑤ 設定與診斷
+  (③ = 個基深掘 + 批次分析;⑤ = 我的管理室 + 資料診斷 + 說明書)
+分頁名一律走 `ui/helpers/story_nav.tab_label()` SSOT,本檔不得再出現字面值。
 快取策略(v19.333 對齊實作,review F10):L1 repository 以 @_ttl_cache / @_daily_cache
 短 TTL 快取(infra/cache.py _CACHE_REGISTRY 集中註冊),
 UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述與實作不符,已更正
@@ -86,16 +89,41 @@ from services.macro import (
     ENGINE_VERSION,
 )
 from ui.tab1_macro import render_macro_tab
-from ui.tab2_single_fund import render_single_fund_tab
 from ui.tab3_portfolio import render_portfolio_tab
-from ui.tab5_data_guard import render_data_guard_tab
-from ui.tab6_manual import render_manual_tab
 # v19.314:危機回測室(tab_crisis_backtest + crisis_strategy_grid + crisis_ai_advisor)
 # 自 v19.31 起即註解停用、進不去;user 確認不用 → 整功能拔除(2798 LOC)。
-# 註:services/crisis_backtest.py(CrisisEvent/detect_crisis_events)保留,macro/calibration 仍用。
+# ~~註:services/crisis_backtest.py(CrisisEvent/detect_crisis_events)保留,macro/calibration 仍用。~~
+# ⚠️ 2026-08-31 狀態更新 + 事實更正,**不是漏刪**(WP-F 順手修;純註解、零行為影響)。
+# 上面那句有**兩處與實況不符,而且是兩種不同的錯**,故分開講:
+#   (1)「**macro** 仍用」—— **寫下當天就已經是假的,與任何後續刪碼無關**。
+#       實測(AST,量測日 2026-08-31):`services/macro/` 底下**沒有任何一處
+#       import `services.crisis_backtest`**;唯一命中的 `services/macro/validation.py`
+#       是在 **docstring 裡提到它的名字**(「與既有 …detect_crisis_events 輸出對齊」),
+#       那是設計說明,不是相依。**把 grep 命中的字串當成 import,正是這句話出錯的那一步。**
+#   (2)「**calibration** 仍用」—— **寫下當時為真,但正在失效中**:
+#       `services/calibration/multi_factor.py` 確實 `from services.crisis_backtest
+#       import CrisisEvent`,而該檔已由 **#743 死碼清理(production 0 caller)**
+#       提出整檔刪除、**稽核中、尚未合併**。
+#       ⚠️ 本註解**刻意不寫成「已刪」** —— #743 合併前那是未來式,依 §-2 規則 6
+#       不得把未落地的事寫成既成事實。#743 合併後,本項改為「已隨 #743 退場」。
+#   (3) 它**漏掉了真正讓 crisis_backtest.py 活著的那個消費者**:
+#       `ui/helpers/fund_grp_health/capture.py` → `from services.crisis_backtest
+#       import fetch_market_series`(上/下檔捕捉率的基準抓取)。
+#       **這一條與 #743 無關** —— 所以 `services/crisis_backtest.py` 在 #743
+#       合併之後**依然要保留**,不是孤兒。
+# → 現行讀法:`services/crisis_backtest.py` 保留;production 消費者是
+#   **`ui/helpers/fund_grp_health/capture.py`**(＋ #743 合併前的
+#   `services/calibration/multi_factor.py`)。
+#   ⚠️ 消費者清單是**會漂移的量測值**,需要時**現場量測**,不要引用本行。查證方式:
+#   `git grep -n "crisis_backtest" -- '*.py'` 後**逐一判讀是 import 還是 docstring 提及**
+#   —— 只看 grep 命中數,就會複製 (1) 的錯誤。
 from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
-from ui.tab_batch_analysis import render_batch_analysis_tab  # noqa: E402
-from ui.tab_manage import render_manage_tab  # noqa: E402  (📋 我的管理室,v19.433)
+# 2026-08-31 七→五接線:③ 與 ⑤ 是**合併頁**,由它們自己去 lazy import 五個舊入口
+# (render_single_fund_tab / render_batch_analysis_tab / render_manage_tab /
+#  render_data_guard_tab / render_manual_tab)。本檔**刻意不再直接 import 那五個** ——
+# 留著會讓「app.py 到底掛了幾個入口」有兩種讀法,而那正是本次要消滅的東西。
+from ui.tab_fund_research import render_fund_research_tab  # noqa: E402  (③ 基金研究)
+from ui.tab_settings_diag import render_settings_diag_tab  # noqa: E402  (⑤ 設定與診斷)
 
 APP_VERSION = "v19.405_IA_P4_TabRestructure"
 
@@ -218,8 +246,13 @@ elif "FED_RATE" in _cached_ind:
           file=_sys_rf.stderr)
 
 
-# v18.136: _update_data_registry 搬至 ui/helpers/data_registry.py
-from ui.helpers.data_registry import _update_data_registry  # noqa: F401
+# v18.136: _update_data_registry 搬至 ui/helpers/data_registry.py。
+# 2026-08-31 七→五接線:本檔**不再 import、也不再呼叫**它 —— 它的唯一 caller 契約
+# (「呼叫 render_data_guard_tab 前先更新註冊表」)已隨資料診斷一起搬進
+# `ui/tab_settings_diag.py::_render_diag_section`,且**在 checkbox gate 之後**才跑。
+# 留在這裡等於每次 rerun 都無條件更新註冊表(內含一次真的打網路的 USDTWD 抓取),
+# 而使用者可能根本沒打開 ⑤。全 repo 無人 `from app import _update_data_registry`
+# (2026-08-31 實測 grep,單組結論),故一併移除 import。
 
 
 # ── Tab5 完整率所需的 16 個關鍵指標(SAHM/SLOOS/PMI/.../COPPER) ──
@@ -272,133 +305,140 @@ render_sidebar(
 # ══════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════
-# v19.130 舊 6-tab 故事化動線已由下方 v19.405 Phase 4 決策動線(6→5)取代。
-# v19.405 Phase 4（IA 重分類 6→5）：分頁改照「決策動線」排序 + 命名,
-# 支援型的「資料診斷 + 說明書」合成一個「參考 / 診斷」分頁(user 核准合區)。
-# 決策動線:① 市場定調(加碼/防禦)→ ② 組合健診(哪幾檔健康/吃本金)→
-#          ③ 個基深掘(細看被點名的那檔)→ ④ 配置 & 帳本(記帳/再平衡)→ ⑤ 參考/診斷。
-# 2026-08-05 稽核 必修 2:決策動線四站的分頁名改吃 `ui/helpers/story_nav._STEPS`
-# SSOT(`tab_label()` 去掉 ①②③④ 序號)。原本 app.py 與 story_nav 各寫死一份,
-# 導致各 Tab 的「請至 X 分頁」指路文案改名後對不上(§3.3 反捏造)。
+# 沿革(為什麼是 5 個、為什麼分頁名一定要走 SSOT)——舊條文保留,理由仍然成立:
+# v19.130 舊 6-tab 故事化動線 → v19.405 Phase 4(IA 重分類 6→5)分頁改照「決策動線」
+# 排序 + 命名,支援型的「資料診斷 + 說明書」合成一個「參考 / 診斷」分頁。
+# 2026-08-05 稽核 必修 2:決策動線四站的分頁名改吃 `ui/helpers/story_nav` SSOT。
+# 原本 app.py 與 story_nav 各寫死一份,導致各 Tab 的「請至 X 分頁」指路文案改名後
+# 對不上(§3.3 反捏造)。
 # 2026-08-14：原本「📦 批次分析 / 📋 我的管理室 / 📖 參考 / 診斷」三個因為
 # 「不在決策動線 4 站內」而保留字面值 —— 但那理由只解釋了它們**不需要序號前綴**,
 # 不代表分頁名可以有第二份來源。實機稽核在 sidebar 又抓到三處指路文案指向不存在
-# 的分頁名(同一種病第二次發作)。故 7 個分頁名全部收進 story_nav._TAB_LABELS。
+# 的分頁名(同一種病第二次發作)。故頂層分頁名全部收進 story_nav。
+#
+# ── 2026-08-31：七 → 五（客戶拍板線框 `docs/wireframes/fund-wireframe-final.html`）──
+# ① 🌐 市場定調 / ② 💊 組合健診 / ③ 🔍 基金研究 / ④ 📊 我的配置 / ⑤ ⚙️ 設定與診斷
+#   ③ = 舊「個基深掘」+「批次分析」(ui/tab_fund_research.py,單一模式切換鍵)
+#   ⑤ = 舊「我的管理室」+「參考 / 診斷」內的資料診斷與說明書
+#       (ui/tab_settings_diag.py,單頁 + 目錄錨點,**不再有巢狀 st.tabs**)
+# ⚠️ 巢狀 st.tabs 一併消失 —— 舊「參考 / 診斷」是全站唯一的三層巢狀分頁入口。
+#     檔首 CSS 那條「把巢狀 tab-list 還原 static」的規則**刻意保留**:說明書
+#     (`ui/tab6_manual.py`)自己仍有一層 st.tabs,規則失效只會回到現況、不會壞。
 from ui.helpers.story_nav import tab_label as _tab_label
-tab_macro, tab_health, tab_batch, tab_single, tab_portfolio, tab_manage, tab_ref = st.tabs(
-    [_tab_label("macro"), _tab_label("health"), _tab_label("batch"),
-     _tab_label("fund"), _tab_label("portfolio"), _tab_label("manage"),
-     _tab_label("ref")])
 
-# ══════════════════════════════════════════════════════
-# TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）
-# ══════════════════════════════════════════════════════
-with tab_macro:
-    # §1 分頁隔離（v19.429）：st.tabs 單次 run 渲染全部分頁，總經（第 1 個 with
-    # 區塊）若拋未捕捉例外會中止整個 script → 其後所有分頁空白。外層 try 保證「總經
-    # 整體失敗不連坐其他分頁」；內層 tab1_macro._safe_section 再做 section 級細粒度
-    # 隔離。非靜默吞：friendly_error 顯式顯示 + stderr 鏡射進 Cloud log + traceback。
-    #
-    # 🧭 總經指南針:整條鏈已於 2026-08-05 移除(見本檔上方沿革區塊)。此處不再有
-    # 任何指南針呼叫,元件模組本身也已退役 —— 在此還原呼叫會直接 ImportError。
-    try:
-        # v18.127 B-C.5: 內容已搬到 ui/tab1_macro.py
-        render_macro_tab()
-    except Exception as _macro_tab_e:  # noqa: BLE001 — §1 分頁隔離，非靜默吞
-        from ui.helpers.session import friendly_error as _fe_macro
-        _fe_macro("「🌐 市場定調」分頁渲染失敗", _macro_tab_e,
-                  hint="此分頁已隔離，其他分頁不受影響；請展開「🔧 技術細節」把 "
-                       "traceback（含 File \"...\", line N）回報，即可精準定位根因。",
-                  level="error")
+# ⭐ 「🔍 抓取診斷細節」的所有權必須由**本檔**持有,不能讓 ⑤ 自己 with ——
+#    這是七→五接線唯一一個「不做就會畫兩份」的地方,理由寫死在這裡:
+#    旗標是 thread-local context manager(`ui/helpers/settings_diag/merge_context.py`),
+#    只在 `with` 區塊內成立;而 Streamlit 的 `st.tabs` **一次 run 會把五個分頁的
+#    body 全部執行過**,順序就是下面 with 區塊的順序 —— ③ 跑在 ⑤ 之前。
+#    ⑤ 就算把自己整個包起來,那時 ③ 早就跑完了,回頭關不掉它已經畫出去的那一份。
+#    → 由 app.py 在**進入第一個分頁之前**就宣告持有,五個分頁全程有效:
+#      ③ 底下的 `ui/tab2_single_fund.py` 看到旗標 → 跳過那一塊;
+#      ⑤ 的 `render_fetch_diag_from_session()` 是無條件渲染 → 全站只剩它那一份。
+#    守衛:`tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`
+#         (突變:拿掉這個 with → 轉紅)。
+from ui.helpers.settings_diag.merge_context import (  # noqa: E402
+    FETCH_DIAG as _SD_FETCH_DIAG,
+    settings_page_owns as _settings_page_owns,
+)
 
-# ══════════════════════════════════════════════════════
-# TAB ② — 💊 組合健診（決策動線第 2 站:手上哪幾檔健康 / 吃本金)
-# v19.405 Phase 4:提前至第 2 站(健診先於個基深掘,對齊「先看整體、再鑽個檔」動線)。
-# 以 100 萬 TWD 為基準逐檔模擬:原幣本金 / 持有份額 / 逐期配息折算 TWD / 吃本金判定。
-# ══════════════════════════════════════════════════════
-with tab_health:
-    try:
-        render_fund_grp_health_tab()
-    except Exception as _health_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
-        from ui.helpers.session import friendly_error as _fe_health
-        _fe_health("「💊 組合健診」分頁渲染失敗", _health_tab_e,
-                   hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
-                        "(含 File \"...\", line N)回報,即可精準定位根因。",
-                   level="error")
+tab_macro, tab_health, tab_research, tab_portfolio, tab_settings = st.tabs(
+    [_tab_label("macro"), _tab_label("health"), _tab_label("research"),
+     _tab_label("portfolio"), _tab_label("settings")])
 
-# ══════════════════════════════════════════════════════
-# TAB ②-B — 📦 批次分析（工具:一次上傳大量代號 → 報酬/風險/配息表 → 下載 CSV)
-# 與「組合健診」同為基金分析,但規模不同:健診 ≤10 檔深看,批次為 400 檔淺掃導出。
-# ══════════════════════════════════════════════════════
-with tab_batch:
-    try:
-        render_batch_analysis_tab()
-    except Exception as _batch_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
-        from ui.helpers.session import friendly_error as _fe_batch
-        _fe_batch("「📦 批次分析」分頁渲染失敗", _batch_tab_e,
-                  hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
-                       "(含 File \"...\", line N)回報,即可精準定位根因。",
-                  level="error")
 
-# ══════════════════════════════════════════════════════
-# TAB ③ — 🔍 個基深掘（決策動線第 3 站:被健診點名的那檔,細看買賣點）
-# ══════════════════════════════════════════════════════
-with tab_single:
-    # v18.126 B-C.4: 內容已搬到 ui/tab2_single_fund.py
-    try:
-        render_single_fund_tab()
-    except Exception as _single_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
-        from ui.helpers.session import friendly_error as _fe_single
-        _fe_single("「🔍 個基深掘」分頁渲染失敗", _single_tab_e,
-                   hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
-                        "(含 File \"...\", line N)回報,即可精準定位根因。",
-                   level="error")
+# ⚠️ 五段 try/except **刻意逐段展開,不收成 helper** —— 這是一次「本來想收、實測之後
+#    決定不收」的取捨,理由寫下來免得下一個人又想收一次:
+#    (a) `tests/test_macro_tab_section_isolation.py::test_app_macro_tab_isolation_guard`
+#        與 `tests/test_tab_isolation_v19502.py::test_every_tab_block_has_try_except`
+#        要求 `with tab_*:` 的 body **第一層就看得到 `Try` 節點**。收成 helper 之後
+#        try 躲進函式裡,那兩條守衛會轉紅 —— 而它們守的是 user 2026-08-21 實際回報過
+#        的事故(「每個 Tab 小按鈕壓下就整個跳出來」),不該為了少寫幾行而讓它失效。
+#    (b) 重複的**只有 try/except 骨架**;真正會漂移的東西(分頁名)已經走
+#        `_tab_label(...)` SSOT,不再是五份手抄的中文字面值 —— 原本那五段各帶一份
+#        「「🌐 市場定調」分頁渲染失敗」,分頁一改名就會有人漏改。
+#    守衛:`tests/test_wpf_five_tab_wiring.py::test_tab_error_titles_go_through_tab_label`
+#         (突變:把任一段的標題改回寫死字串 → 轉紅)。
+_TAB_ISOLATION_HINT = ("此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
+                       "(含 File \"...\", line N)回報,即可精準定位根因。")
 
-# ══════════════════════════════════════════════════════
-# TAB ④ — 📊 配置 & 帳本（決策動線第 4 站:記帳 + 再平衡）
-# ══════════════════════════════════════════════════════
-with tab_portfolio:
-    # v18.128 B-C.6: 內容(含 T5/T6/T7 子區)已搬到 ui/tab3_portfolio.py
-    try:
-        render_portfolio_tab()
-    except Exception as _portfolio_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
-        from ui.helpers.session import friendly_error as _fe_portfolio
-        _fe_portfolio("「📊 配置 & 帳本」分頁渲染失敗", _portfolio_tab_e,
-                      hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
-                           "(含 File \"...\", line N)回報,即可精準定位根因。",
-                      level="error")
 
-# ══════════════════════════════════════════════════════
-# TAB ④-B — 📋 我的管理室（v19.433:選股池 + 投資組合 + 通報 一站集中管理）
-# 不新增儲存;重用既有 L1/L2/L0(pool_repository / policy v2 讀寫 / switch_notify / line_push)。
-# ══════════════════════════════════════════════════════
-with tab_manage:
-    try:
-        render_manage_tab()
-    except Exception as _manage_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
-        from ui.helpers.session import friendly_error as _fe_manage
-        _fe_manage("「📋 我的管理室」分頁渲染失敗", _manage_tab_e,
-                   hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」回報 traceback。",
-                   level="error")
+# ⚠️ 這個 `with` 必須包住**全部五個**分頁(理由見上方 ⭐ 區塊)。
+with _settings_page_owns(_SD_FETCH_DIAG):
+    # ══════════════════════════════════════════════════════
+    # TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）
+    # ══════════════════════════════════════════════════════
+    with tab_macro:
+        # §1 分頁隔離（v19.429）：st.tabs 單次 run 渲染全部分頁,任一分頁若拋未捕捉
+        # 例外會中止整個 script → 其後所有分頁空白。外層 try 保證「一頁失敗不連坐
+        # 其他頁」;內層各頁自己的 section 級隔離再做細粒度切分。
+        # ⚠️ 2026-08-31 WP-F 就地更正(**有意識的更正,不是漏刪** · 決策者:AI 總管):
+        #    舊句 ~~「內層各頁自己的 _safe_section 再做 section 級細粒度隔離」~~
+        #    在寫下的當天對 ① 成立(`ui/tab1_macro.py::_safe_section`),但對**新合併的
+        #    ③ 與 ⑤ 為假** —— 那兩頁當時一個 section 級 try 都沒有。七→五之後
+        #    ⑤ 一頁裝著管理室 + 資料診斷 + 說明書:管理室當掉會**一併帶走**使用者
+        #    出事時要去查的那兩塊。已於同批補上(`ui.helpers.render_state.safe_section`),
+        #    本句自此為真。⚠️ ② 與 ④ **仍未逐 section 隔離**(它們自己有頁內 try/except,
+        #    但不是統一的 section 級)—— 據實登記,本批未受指派、§-1 無觸發,未動。
+        # 非靜默吞:friendly_error 顯式顯示 + stderr 鏡射進 Cloud log + traceback。
+        #
+        # 🧭 總經指南針:整條鏈已於 2026-08-05 移除(見本檔上方沿革區塊)。此處不再有
+        # 任何指南針呼叫,元件模組本身也已退役 —— 在此還原呼叫會直接 ImportError。
+        try:
+            render_macro_tab()
+        except Exception as _macro_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_macro
+            _fe_macro(f"「{_tab_label('macro')}」分頁渲染失敗", _macro_tab_e,
+                      hint=_TAB_ISOLATION_HINT, level="error")
 
-# ══════════════════════════════════════════════════════
-# TAB ⑤ — 📖 參考 / 診斷（支援區:資料診斷 + 說明書合區,v19.405 Phase 4）
-# 二者皆為參考/支援型(非決策階段)→ user 核准收成一區,內用巢狀分頁分隔。
-# v19.31 ARCHIVED: 📉 危機回測室,模組檔保留於磁碟,未來啟用解註即可。
-# ══════════════════════════════════════════════════════
-with tab_ref:
-    try:
-        _ref_diag, _ref_manual = st.tabs(["🔭 資料診斷", "📖 說明書"])
-        with _ref_diag:
-            # v18.125 B-C.3: 內容已搬到 ui/tab5_data_guard.py
-            _update_data_registry()
-            render_data_guard_tab()
-        with _ref_manual:
-            # v18.117 B-C.1: 內容已搬到 ui/tab6_manual.py
-            render_manual_tab()
-    except Exception as _ref_tab_e:  # noqa: BLE001 — §1 分頁隔離(v19.502),非靜默吞
-        from ui.helpers.session import friendly_error as _fe_ref
-        _fe_ref("「📖 參考 / 診斷」分頁渲染失敗", _ref_tab_e,
-                hint="此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
-                     "(含 File \"...\", line N)回報,即可精準定位根因。",
-                level="error")
+    # ══════════════════════════════════════════════════════
+    # TAB ② — 💊 組合健診（決策動線第 2 站:手上哪幾檔健康 / 吃本金）
+    # 以 100 萬 TWD 為基準逐檔模擬:原幣本金 / 持有份額 / 逐期配息折算 TWD / 吃本金判定。
+    # ══════════════════════════════════════════════════════
+    with tab_health:
+        try:
+            render_fund_grp_health_tab()
+        except Exception as _health_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_health
+            _fe_health(f"「{_tab_label('health')}」分頁渲染失敗", _health_tab_e,
+                       hint=_TAB_ISOLATION_HINT, level="error")
+
+    # ══════════════════════════════════════════════════════
+    # TAB ③ — 🔍 基金研究（決策動線第 3 站:還沒放進組合前,查一檔或掃一批的體質）
+    # 合併頁(2026-08-31 七→五):共用「找代號」頂部 + 單一模式切換鍵
+    # (🔍 單檔深掘 / 📦 批次掃描),**不是第二層分頁**。
+    # 批次面板另有 checkbox gate —— 全站唯一 30~40 分鐘的長任務,切過來不會開跑。
+    # ══════════════════════════════════════════════════════
+    with tab_research:
+        try:
+            render_fund_research_tab()
+        except Exception as _research_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_research
+            _fe_research(f"「{_tab_label('research')}」分頁渲染失敗", _research_tab_e,
+                         hint=_TAB_ISOLATION_HINT, level="error")
+
+    # ══════════════════════════════════════════════════════
+    # TAB ④ — 📊 我的配置（決策動線第 4 站:記帳 + 再平衡）
+    # ══════════════════════════════════════════════════════
+    with tab_portfolio:
+        try:
+            render_portfolio_tab()
+        except Exception as _portfolio_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_portfolio
+            _fe_portfolio(f"「{_tab_label('portfolio')}」分頁渲染失敗", _portfolio_tab_e,
+                          hint=_TAB_ISOLATION_HINT, level="error")
+
+    # ══════════════════════════════════════════════════════
+    # TAB ⑤ — ⚙️ 設定與診斷（支援區:連線與帳號 / 資料維護與通報 / 資料診斷 / 說明書）
+    # 合併頁(2026-08-31 七→五):單頁 + 目錄錨點,**不再有巢狀 st.tabs**。
+    # 資料診斷整區在 checkbox gate 之後(含 `_update_data_registry()` 與那次
+    # 無條件的匯率抓取)—— 本檔因此不再自己呼叫 `_update_data_registry()`。
+    # v19.31 ARCHIVED: 📉 危機回測室,模組檔保留於磁碟,未來啟用解註即可。
+    # ══════════════════════════════════════════════════════
+    with tab_settings:
+        try:
+            render_settings_diag_tab()
+        except Exception as _settings_tab_e:  # noqa: BLE001 — §1 分頁隔離,非靜默吞
+            from ui.helpers.session import friendly_error as _fe_settings
+            _fe_settings(f"「{_tab_label('settings')}」分頁渲染失敗", _settings_tab_e,
+                         hint=_TAB_ISOLATION_HINT, level="error")

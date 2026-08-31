@@ -198,12 +198,25 @@ def test_equal_caption_drops_false_causal_claim():
 
 
 def test_equal_caption_hint_only_in_health_tab():
-    """「請到組合配置 Tab 逐檔填」只在健診 Tab 印。修正前會紅（兩個 caller 都印）。"""
+    """「請到 ④ 逐檔填」的導引只在健診 Tab 印。修正前會紅（兩個 caller 都印）。
+
+    ⚠️ 2026-08-31 WP-F 修正（**有意識的修改，不是漏改** · 決策者：AI 總管）：
+    期望值 ~~寫死 `"組合配置"`~~ 改為 runtime 讀 `tab_label("portfolio")`。
+    - **舊寫法的理由仍然成立**：它要驗的是「導引有沒有出現」，用一個好認的字串當
+      指紋最直接。
+    - **被權衡掉的原因**：那個指紋本身是**假的** ——「組合配置」從來不是任何時期的
+      ④ 分頁名（七→五前是「📊 配置 & 帳本」、之後是「📊 我的配置」）。
+      測試把一個錯名字釘住，等於**保護那個 bug 不被修掉**：這次修 production 的
+      錯名字，紅的反而是這條測試。期望值改吃 SSOT 之後，④ 再改名兩邊會一起走。
+    """
+    from ui.helpers.story_nav import tab_label
+
     from ui.tab_fund_grp_health import _weight_basis_note
+    _p = tab_label("portfolio")
     csa = summarize_core_satellite_allocation(_EQUAL_ITEMS)
-    assert "組合配置" in _weight_basis_note(csa, "health"), "健診 Tab 應保留導引"
-    assert "組合配置" not in _weight_basis_note(csa), "Tab3 embed（預設）不得下錯誤指示"
-    assert "組合配置" not in _weight_basis_note(csa, "portfolio")
+    assert _p in _weight_basis_note(csa, "health"), "健診 Tab 應保留導引"
+    assert _p not in _weight_basis_note(csa), "Tab3 embed（預設）不得下錯誤指示"
+    assert _p not in _weight_basis_note(csa, "portfolio")
 
 
 def test_non_equal_modes_never_get_the_hint():

@@ -30,10 +30,21 @@ _GRP_HEALTH = _ROOT / "ui" / "tab_fund_grp_health.py"
 # ══════════════════════════════════════════════════════════════
 class TestTabLabel:
     def test_strips_ordinal_prefix(self):
+        """2026-08-31 七→五（客戶拍板線框）：第 3 站改為合併頁「🔍 基金研究」，
+        第 4 站改名「📊 我的配置」。
+
+        ⚠️ **這是有意識的政策變更，不是漏改**（日期 2026-08-31，決策者 user 拍板線框）。
+        舊斷言 `tab_label("fund") == "🔍 個基深掘"` 的理由**仍然成立**（它鎖住
+        「分頁名有唯一來源」這件事）；被權衡掉的是它的**對象** —— `fund` 已經
+        不是分頁，而是 ③ 基金研究頁內的一個模式。它現在由
+        `tests/test_story_nav.py::test_old_top_level_keys_now_fail_loud`
+        以「必須 raise」的形式繼續守著，強度不減反增。
+        """
         assert tab_label("macro") == "🌐 市場定調"
         assert tab_label("health") == "💊 組合健診"
-        assert tab_label("fund") == "🔍 個基深掘"
-        assert tab_label("portfolio") == "📊 配置 & 帳本"
+        assert tab_label("research") == "🔍 基金研究"
+        assert tab_label("portfolio") == "📊 我的配置"
+        assert tab_label("settings") == "⚙️ 設定與診斷"
 
     def test_derived_from_steps_not_a_second_copy(self):
         """每個 label 都必須是 `_STEPS` 該站字串去掉序號後的結果(不得另寫一份)。"""

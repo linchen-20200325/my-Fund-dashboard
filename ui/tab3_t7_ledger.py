@@ -20,6 +20,11 @@ import pandas as pd
 import streamlit as st
 
 from ui.helpers.render_state import not_ready, system_error
+# 指路文案的分頁 / 分區名 SSOT —— 本檔不得另寫一份字面值（理由見各使用處註記）。
+from ui.helpers.story_nav import (
+    tab_label as _tab_label,
+    where_to_find as _where_to_find,
+)
 
 from shared.colors import GH_BG_PRIMARY, GH_BORDER, GH_FG_SECONDARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_DEEP_ORANGE_400, MD_GREEN_A200, TRAFFIC_NEUTRAL
 
@@ -1930,7 +1935,15 @@ def render_t7_section() -> None:
                                                         "借過來的基金會直接參與單位數、市值與換匯計算，"
                                                         "缺這幾項就只能用猜的，**猜出來的數字看起來會跟真的一模一樣**，"
                                                         "所以這裡直接擋下。\n\n"
-                                                        f"請先到「🔍 個基深掘」查一次 `{_src_code}` 讓它抓到淨值與匯率，"
+                                                        # ⚠️ 2026-08-31 由 WP-F 修正（**有意識的政策變更，
+                                                        # 不是漏改** · 決策者：AI 總管 · 依據：客戶
+                                                        # 2026-08-31 拍板的五分頁線框）。舊寫法
+                                                        # ~~「🔍 個基深掘」~~ 的理由**仍然成立**（借基金被
+                                                        # 擋下來時要告訴使用者去哪裡把資料補齊）；被權衡掉的是
+                                                        # 它寫死了一個七→五之後不存在的分頁名 ——「🔍 個基深掘」
+                                                        # 現在是「③ 🔍 基金研究」頁內的一個模式。
+                                                        f"請先到 {_where_to_find('fund')} 查一次 `{_src_code}` "
+                                                        "讓它抓到淨值與匯率，"
                                                         "或在來源保單的「📝 編輯持倉」把買入淨值 / 匯率補上，再回來借。"
                                                     )
                                                 else:
@@ -3120,7 +3133,10 @@ def render_t7_section() -> None:
                         f"總經完整率只有 {_mk_data_ok}%（&lt;50%）—— "
                         "AI 給不出景氣位階對應的換股建議;"
                         "仍可勾選下方略過按鈕直接生成基礎組合分析",
-                        where="🌐 市場定調 → 📡 載入總經資料")
+                        # 2026-08-31 WP-F：分頁名改吃 SSOT。舊寫法把**現行**分頁名
+                        # 手抄一份，理由（讓使用者看得懂去哪）仍成立，但下一次改名
+                        # 就會漏改這一處 —— 本 repo 同型事故已發作兩次。
+                        where=f"{_tab_label('macro')} → 📡 載入總經資料")
                 # v18.87: 資料來源透明化 — 明確說 AI 只看主帳本（不含 A/B/C 暫存方案）
                 # 使用者反饋「老師的判斷不能抓取重新配置的資料，因為這資料只是給我
                 # 想要重新配置的參考值」— 程式碼確實已隔離，但 UI 沒講清楚使用者會擔心

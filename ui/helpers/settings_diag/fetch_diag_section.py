@@ -155,9 +155,21 @@ def render_fetch_diag_from_session() -> None:
     """
     fd = st.session_state.get("fund_data")
     if not fd:
+        # ⚠️ 2026-08-31 七→五(客戶拍板線框)由 WP-F 收斂;**有意識的政策變更,
+        # 不是漏改**(日期 2026-08-31,決策者:客戶 2026-08-31 五分頁動線)。
+        # 舊寫法 ~~`where="🔍 個基深掘 → 輸入代碼 → 🚀 分析"`~~ 的理由**仍然成立**
+        # ——「灰色說明要指出去哪裡才能產生資料」這個目的沒有變。被權衡掉的是它
+        # **寫死了一個已經不存在的分頁名**:七→五之後「🔍 個基深掘」是「③ 🔍 基金
+        # 研究」頁內的一個模式,分頁列上找不到這個名字。
+        # 它不經 `tab_label` 所以**不會 raise**,只會安靜地指錯地方 ——
+        # 比 raise 更難發現,正是本 repo 已發作兩次的那種病。
+        # 改吃 SSOT:`where_to_find('fund')` 回「③ 🔍 基金研究 → 🔍 單檔深掘」,
+        # 站號與分頁名都由 `_TAB_LABELS` 的順序推導,不寫死。
+        from ui.helpers.story_nav import where_to_find  # noqa: PLC0415
+
         not_ready(
             "尚無抓取紀錄可診斷 —— 先在個基頁分析過一檔基金，這裡才有東西可看",
-            where="🔍 個基深掘 → 輸入代碼 → 🚀 分析",
+            where=f"{where_to_find('fund')} → 輸入代碼 → 🚀 分析",
         )
         return
     _status_fd = fd.get("status", "")

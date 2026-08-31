@@ -55,15 +55,21 @@ from ui.helpers.fund_research.merge_context import (
     SHARED_SEARCH,
     merged_page_owns,
 )
-from ui.helpers.render_state import not_ready
+from ui.helpers.render_state import not_ready, safe_section
+from ui.helpers.story_nav import tab_label
 
 #: 合併頁的頁面大標。
-#: ⚠️ **寫死在這裡是有代價的、而且是已知的**：全站分頁名的 SSOT 是
-#: `ui/helpers/story_nav.py::tab_label()`，但它目前只有 `fund` / `batch` 兩個舊 key，
-#: 沒有「基金研究」這個合併後的名字。新增 key 要改 `ui/helpers/story_nav.py` ——
-#: **不在本工作包的檔案邊界內**，故先在本檔具名成常數（至少同一檔內只有一份），
-#: 並在 PR 描述回報：接線工作包（app.py 七→五）應把它收進 story_nav SSOT。
-MERGED_TAB_LABEL: str = "🔍 基金研究"
+#: ~~⚠️ **寫死在這裡是有代價的、而且是已知的**：全站分頁名的 SSOT 是~~
+#: ~~`ui/helpers/story_nav.py::tab_label()`，但它目前只有 `fund` / `batch` 兩個舊 key，~~
+#: ~~沒有「基金研究」這個合併後的名字。新增 key 要改 `ui/helpers/story_nav.py` ——~~
+#: ~~**不在本工作包的檔案邊界內**，故先在本檔具名成常數（至少同一檔內只有一份），~~
+#: ~~並在 PR 描述回報：接線工作包（app.py 七→五）應把它收進 story_nav SSOT。~~
+#: **2026-08-31 已收進 SSOT**（有意識的狀態變更，不是漏刪 · 決策者：AI 總管）。
+#: 舊註記的理由**仍然成立**：當時 `_TAB_LABELS` 真的沒有 `research` 這個 key，
+#: 而新增 key 不在該工作包的檔案邊界內 —— 具名成常數是那個情境下的正解。
+#: 被權衡掉的只是那個**前提**：WP-F 接線批次已把 `research` 加進 `_TAB_LABELS`，
+#: 該註記自己寫的「接線工作包應把它收進 story_nav SSOT」這件事，就是這一行。
+MERGED_TAB_LABEL: str = tab_label("research")
 
 #: 模式切換的兩個選項（線框原文用字，不要改寫）。
 MODE_SINGLE: str = "🔍 單檔深掘"
@@ -71,10 +77,16 @@ MODE_BATCH: str = "📦 批次掃描"
 
 
 def _render_shared_top() -> None:
-    """共用頂部：頁面大標 + 一句話職責 + 「找代號」工具。兩個模式都看得到。"""
+    """共用頂部：頁面大標 + 一句話職責 + 「找代號」工具。兩個模式都看得到。
+
+    ⚠️ 「找代號」工具**單獨隔離**（2026-08-31 補）：它是本頁唯一會**打外部網路**的
+    區塊（`tdcc_search_fund` → TDCC / FundClear）。不隔離的話，一次搜尋例外會把
+    整個 ③ 打掉 —— 連下面的模式切換鍵與單檔深掘一起消失，而使用者其實只是
+    「搜尋失敗」而已。大標與職責句不包：它們不會失敗，包起來只是多一層。
+    """
     st.markdown(f"## {MERGED_TAB_LABEL}")
     st.caption("還沒放進組合之前，查一檔或掃一批的體質。")
-    render_code_finder()
+    safe_section("🔍 找代號", render_code_finder)
 
 
 def _render_single_mode() -> None:
@@ -125,7 +137,15 @@ def render_fund_research_tab() -> None:
         key="fr_mode",
     )
 
+    # ⚠️ 模式本體各自隔離（2026-08-31 補）：兩個模式各自是一整支舊分頁的 body
+    # （`render_batch_analysis_tab` / `render_single_fund_tab`）。合併之前它們分屬
+    # 兩個頂層分頁、各有 `app.py` 給的一段 try；合併之後共用 ③ 的那一個 try ——
+    # 任一模式炸掉會把**共用頂部的「找代號」工具與模式切換鍵一起帶走**，
+    # 使用者連換去另一個模式都做不到。走 `safe_section()` 之後，模式本體失敗
+    # 只會就地紅燈（顯式顯示 + log + 可展開 traceback，§1 不吞例外），
+    # 頂部與切換鍵照常在，使用者切得回去。
+    # 守衛：`tests/test_wpf_section_isolation.py`。
     if mode == MODE_BATCH:
-        _render_batch_mode()
+        safe_section(MODE_BATCH, _render_batch_mode)
     else:
-        _render_single_mode()
+        safe_section(MODE_SINGLE, _render_single_mode)

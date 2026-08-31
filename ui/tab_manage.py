@@ -601,16 +601,30 @@ def _sec_nav_backfill() -> None:
 
 
 def render_manage_tab() -> None:
-    from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tm
+    from ui.helpers.story_nav import render_flow_nav, section_label as _section_label_tm
     # ⑤ 設定與診斷合併頁（線框 §03 ⑤，WP-E）已畫分區標題時，這裡不再畫第二個 `##`。
     # 只讓掉標題那一行 —— flow_nav / caption / info 一律照舊（它們帶的是本頁的資訊）。
-    # 旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。
+    # ~~旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。~~
+    # ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**這句話現在是假的。** ⑤ 已接線
+    # （`app.py` 掛 `render_settings_diag_tab`），本函式的唯一 production caller 是
+    # `ui/tab_settings_diag.py::_render_maintain_section()`，它永遠帶著
+    # `settings_page_owns(MANAGE_HEADER)` → 下方 `if not _settings_page_owns(...)`
+    # 的 `st.markdown("## …")` 在 production **恆不觸發**（分區標題由 ⑤ 畫）。
+    # 分支刻意保留：它是「⑤ 沒持有時本頁自己畫大標」的契約實作。
     from ui.helpers.settings_diag.merge_context import (
         MANAGE_HEADER as _SD_MANAGE_HEADER,
         owned_by_settings_page as _settings_page_owns,
     )
     if not _settings_page_owns(_SD_MANAGE_HEADER):
-        st.markdown(f"## {_tab_label_tm('manage')}")
+        # ⚠️ 2026-08-31 WP-F 就地修正（**有意識的修正，不是漏改** ·
+        # 決策者：AI 總管）：舊寫法 ~~`tab_label('manage')`~~ 在七→五之後
+        # **會當場 KeyError** —— `'manage'` 自 2026-08-31 起是**頁內分區**、
+        # 不是分頁，`tab_label()` 對它一律 fail loud（story_nav 刻意設計）。
+        # 它沒有炸過，只是因為這個分支在 production 恆不觸發（合併頁永遠
+        # 持有 PAGE_HEADER / MANAGE_HEADER）—— **一顆埋在死碼裡的地雷**：
+        # 哪天有人讓這個分支活過來，第一件事就是 KeyError。
+        # 改吃 `section_label('manage')`（分區名 SSOT，回「🗄️ 資料維護與通報」）。
+        st.markdown(f"## {_section_label_tm('manage')}")
     render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
     st.info(
