@@ -30,10 +30,60 @@
 3. 🆕 **契約守衛（回填前）**：直接向每個生產者要 `cache_info()`，斷言必備欄位齊全。
    **第 1 條驗不到 `name`** —— `get_all_cache_info()` 內是
    `info["name"] = fn.__name__`（**無條件事後回填**），回填後的列必然有 `name`。
-   → 日後有人新增第 5 種生產者卻不照契約，**要靠第 3 條才會紅**。
+   → ~~日後有人新增第 5 種生產者卻不照契約，**要靠第 3 條才會紅**。~~
 
 ⚠️ **刻意用真實 `_CACHE_REGISTRY`，不自己造假 dict** —— 造假 dict 只會測到
 「我寫的假資料符合我寫的契約」，測不到真的生產者。
+
+⚠️ **涵蓋範圍限定（必讀；上面那句被實測推翻）**
+------------------------------------------------
+**有意識的更正，不是漏刪**；日期 **2026-08-31**；決策者：**#746 回修組**，
+依**第二輪獨立稽核**實測。
+
+**舊表述的理由仍然成立**：第 3 條確實是「第 5 生產者不照契約」的**唯一**紅燈來源
+（第 1 條因回填而結構上看不見它），這句話描述的機制沒有錯。
+**被權衡掉的是它省略掉的前提** —— 它讀起來像「新增任何第 5 生產者都會被抓到」，
+**而那要看那個生產者住在哪個模組**。
+
+**根因**：`_CACHE_REGISTRY` 由 `register_cache(fn)` 在 **module import 時**填充
+→ registry 的內容**取決於誰被 import**。本檔守衛（含第 3 條）的涵蓋範圍
+＝ 下方 `rows` fixture 那 6 個 import 的**可達集合**，**不是 production 全集**。
+
+**三個數字都對，但不可互換（2026-08-31 AST 別名不敏感窮舉 + 實測）**：
+
+===================================  ====  ==========================================
+量的是什麼                           數量  來源
+===================================  ====  ==========================================
+`cache_info()` **生產者種類**           4  `infra/cache.py` ×2（`_ttl_cache` /
+                                          `_daily_cache`）+ `infra/source_backoff.py`
+                                          + `repositories/fund/fx_and_main.py`
+production **註冊點**                  20  18 個 `@register_cache`
+                                          + 2 處 `register_cache(<proxy>())`
+本檔 fixture **可達的註冊條目**        18  實測（本檔守衛的真實涵蓋範圍）
+===================================  ====  ==========================================
+
+**差額的 2 個生產者不在本檔視野內**：
+  - `services/liquidity_engine.py::fetch_liquidity_factors`
+  - `services/us_liquidity_engine.py::fetch_us_liquidity_snapshot`
+
+兩者都是 UI 端**函式內 lazy import**（`ui/tab1_macro.py` /
+`ui/tab1_macro_longterm.py` / `ui/tab1_macro_radar.py` /
+`services/macro/us_indicators.py`）—— 也就是說它們在 production **真的會**進
+registry（使用者開過總經分頁後即為 20），只是本檔**永遠量不到**。
+
+**決定性實測（2026-08-31，本組獨立複跑）**：把一個「有 `size`、沒有 `name`」的
+違約生產者種進 `services/us_liquidity_engine.py`（fixture 永遠不會 import 的模組），
+先證明該突變**確實生效**（registry 內出現該違約者），再跑本檔 —— **18 條全綠、
+零紅燈**。
+
+⚠️ **這是結構性限制，不是本批的缺陷**：守衛只能檢查**已註冊**的東西，而註冊是
+import 的副作用。且上述 2 個構外生產者**目前皆符合契約**（實測）→ 這是**未來的
+偵測缺口，不是現行的違約**。**要修的是「有沒有據實揭露」，不是程式碼。**
+
+⚠️ **想擴大涵蓋範圍的人請注意**：在 fixture 補 import 只會把 18 變成 20，
+**不會**改變「涵蓋範圍＝import 可達集合」這個結構 —— 下一個新增在別處的生產者
+一樣看不到。真正的解是改成**掃描註冊點**（AST）而非**掃描 registry**（runtime），
+那是另一個題目，**本批沒有做**（§-1：無 user 指派、無實際 bug 觸發）。
 """
 import ast
 import pathlib
@@ -170,6 +220,16 @@ class TestRawProducerContract:
             except Exception as e:  # 生產者連 cache_info() 都叫不動 = 違約
                 offenders.append((label, f"cache_info() 拋 {type(e).__name__}: {e}"))
                 continue
+            # ⚠️ 型別先驗，不能只靠下一行的 `set(raw)`（2026-08-31 稽核 M-D2）：
+            # `set(REQUIRED) - set(raw)` 對**任何可迭代物**都成立 —— 生產者回一個
+            # `["name", "size"]`（list）會完全過關，而消費端 `r["size"]` 會當場
+            # TypeError。實務上牽強（真的 `lru_cache` 回 namedtuple，`set()` 迭代出
+            # 的是數值 → 反而會被抓到），但關掉它只要一行。
+            if not isinstance(raw, dict):
+                offenders.append(
+                    (label, f"cache_info() 回傳 {type(raw).__name__} 而非 dict")
+                )
+                continue
             missing = sorted(set(CACHE_INFO_REQUIRED_KEYS) - set(raw))
             if missing:
                 offenders.append((label, f"缺 {missing}"))
@@ -187,6 +247,21 @@ class TestRawProducerContract:
         若哪天 `get_all_cache_info()` 的回填被拿掉，回填前後的 `name` 必須一致
         —— 也就是**回填目前不承載任何東西**，它只是防禦性的重複。
         這條同時釘住「回填不得被用來『補齊』一個違約的生產者」。
+
+        ⚠️ **刪本條之前必讀 —— 它同時是 `name` 唯一的型別檢查**（2026-08-31 稽核）：
+        `size` 有 `test_size_is_a_non_negative_int` 守型別，**`name` 沒有對應的
+        型別測試**。實測兩筆突變 —— 生產者回 `name=None`、回 `name=12345` ——
+        **只有本條抓到**（`raw_name != label` 兩種都成立）。
+
+        ⚠️ **它「看起來恆真」是個陷阱**：對走 `_ttl_cache` / `_daily_cache` 的生產者
+        而言（**本檔可見的 18 條裡佔 16 條**，2026-08-31 實測；⚠️ 這是**fixture 可達**
+        的計數，不是 production 全集，見本檔開頭「涵蓋範圍限定」），
+        `@functools.wraps` 讓 `info["name"]` 與 `fn.__name__` 本來就是
+        同一個字串，本條近乎恆真 —— 但**對 2 個 proxy 生產者它是真的在檢查**
+        （`_FX_CACHE` / `_SOURCE_BACKOFF` 兩邊都是**手寫**的：一邊手寫
+        `__name__`，一邊手寫 `"name"` 字面值，兩者可以各自漂移）。
+        → **日後若有人覺得它「恆真、沒在測東西」而刪掉，會同時失去 `name` 的
+        型別防線。要刪請先補一條 `name` 的型別測試。**
         """
         mismatched = []
         for fn in producers:

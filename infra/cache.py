@@ -662,7 +662,34 @@ def get_all_cache_info() -> list[dict]:
     **舊表述保留不刪、也不劃線**：它描述的機制（契約由測試強制）本身是對的，
     錯的是它的**涵蓋範圍**；劃掉它反而會變成主張「契約沒有測試在守」，那是另一個
     假宣稱。已改為由 `TestRawProducerContract` 對**回填前的原始輸出**斷言，
-    兩個必備欄位自此都真的被守住。
+    ~~兩個必備欄位自此都真的被守住。~~
+
+    ⚠️ **涵蓋範圍限定 —— 上面那句同樣是過度宣稱**（**有意識的更正，不是漏刪**；
+    日期 **2026-08-31**；決策者：**#746 回修組**，依**第二輪獨立稽核**實測）。
+    **舊表述的理由仍然成立**：`TestRawProducerContract` 確實把尺換到了回填前，
+    這一步是對的，也確實同時擋住了「拔掉 `name`」與「違約的第 5 生產者」兩種突變
+    ——**在它看得見的範圍內**。**被權衡掉的是那個「自此都」的全稱範圍**：
+    `_CACHE_REGISTRY` 由 `register_cache(fn)` 在 **module import 時**填充，
+    所以守衛的涵蓋範圍 ＝ 測試 fixture 那幾個 import 的**可達集合**，
+    **不是** production 的全集。三個數字都對，但**不可互換**：
+      - `cache_info()` **生產者種類** = **4**（AST 別名不敏感窮舉：本檔 2 處
+        `wrapper.cache_info = ...` + `infra/source_backoff.py` +
+        `repositories/fund/fx_and_main.py`）；
+      - production **註冊點** = **20**（18 個 `@register_cache` + 2 處
+        `register_cache(<proxy>())`）；
+      - 測試 fixture 可達的**註冊條目** = **18**（2026-08-31 實測）。
+    **差額的 2 個生產者不在守衛視野內**：`services/liquidity_engine.py::
+    fetch_liquidity_factors` 與 `services/us_liquidity_engine.py::
+    fetch_us_liquidity_snapshot` —— 兩者都是 UI 端**函式內 lazy import**
+    （`ui/tab1_macro.py` / `tab1_macro_longterm.py` / `tab1_macro_radar.py` /
+    `services/macro/us_indicators.py`），使用者**開過總經分頁後 registry 就變 20**，
+    也就是它們在 production 真的會進 registry，只是守衛**永遠量不到**。
+    **決定性實測（2026-08-31）**：把一個「有 `size`、沒有 `name`」的違約生產者種進
+    `services/us_liquidity_engine.py`（fixture 永遠不會 import 的模組），
+    `tests/test_cache_info_contract.py` **18 條全綠、零紅燈**。
+    ⚠️ **這是結構性限制，不是這批的缺陷** —— 守衛只能檢查**已註冊**的東西；
+    且上述 2 個構外生產者**目前皆符合契約**（實測），所以這是**未來的偵測缺口，
+    不是現行的違約**。寫在這裡是因為**後人讀的是 code，不是 PR 描述**。
     """
     out = []
     for fn in _CACHE_REGISTRY:
