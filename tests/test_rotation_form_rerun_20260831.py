@@ -234,21 +234,37 @@ def test_first_load_count_uses_ssot_defaults():
         f"首屏標題計數與 SSOT 預設門檻算出的結果不符:{labels}")
 
 
-@pytest.mark.parametrize("sell,expect_pairs", [(-0.5, 1), (0.4, 0)])
-def test_applied_thresholds_drive_the_count(sell: float, expect_pairs: int,
+#: (已套用的 sell 門檻, 預期「N 對可換」, 預期「N 檔高基期」)。
+#: ⚠️ **兩個 case 都刻意選成「算出來的數字與 SSOT 預設不同」**,理由見下方 docstring。
+#: 用 `_BATCH_DF` 實算:預設 `-0.5` → (1, 1);`-2.5` → (0, 2);`0.4` → (0, 0)。
+_APPLIED_THRESHOLD_CASES = [(-2.5, 0, 2), (0.4, 0, 0)]
+
+
+@pytest.mark.parametrize("sell,expect_ok,expect_high", _APPLIED_THRESHOLD_CASES)
+def test_applied_thresholds_drive_the_count(sell: float, expect_ok: int,
+                                            expect_high: int,
                                             monkeypatch: pytest.MonkeyPatch):
     """套用後的門檻真的驅動標題計數(不是永遠印 SSOT 那一組數字)。
 
     直接把「已套用」狀態放進 `session_state`(＝ 使用者按過「套用門檻」之後的狀態),
-    驗計數跟著走。`sell=0.4` 會把唯一的高基期標的濾掉 → 0 對。
+    驗計數跟著走:`sell=0.4` 把唯一的高基期標的濾掉 → 0 檔;
+    `sell=-2.5` 放寬到連 B 也算高基期 → 2 檔(但 B 之外已無別類健康低基期可配 → 0 對可換)。
+
+    ⚠️ **測資怎麼選,是這條有沒有守護力的關鍵**(踩過兩次,寫下來):
+    1. 初版用 `sell=-0.5`,那**就是 SSOT 預設值** —— 稽核實測:在「標題改讀別的 key」
+       的突變下它**仍然綠**(讀錯 key → 退回預設 -0.5,剛好等於測資)。**套套邏輯。**
+    2. 依稽核建議改 `-1.0` 後雖已非預設值,但實算 `-1.0` 與 `-0.5` **算出來的數字相同**
+       (都是 1 對 / 1 檔)→ 遇到同一個突變**還是綠**。**「值不同」不等於「結果不同」。**
+    → 現行改用 `-2.5`(0 對 / 2 檔),與預設的 (1, 1) **在兩個數字上都不同**,
+    突變一改讀別的 key 就會轉紅。**與本檔 M7 是同一個陷阱的第三次現身。**
     """
     import streamlit as st
     seen: dict = {}
     monkeypatch.setattr(st, "expander", _fake_expander(seen))
     monkeypatch.setitem(st.session_state, "batch_rot_sell", sell)
     _render_bare()
-    assert seen["label"] == (f"🧩 互補配對探索（{expect_pairs} 對可換 / "
-                             f"{expect_pairs} 檔高基期）"), seen["label"]
+    assert seen["label"] == (f"🧩 互補配對探索（{expect_ok} 對可換 / "
+                             f"{expect_high} 檔高基期）"), seen["label"]
 
 
 def test_expander_count_and_table_body_share_one_source(monkeypatch: pytest.MonkeyPatch):
@@ -323,8 +339,12 @@ def _render_bare() -> None:
 #: test_explorer_routes_through_l2_and_shared_body`),後續的 `AppTest` 就會拿到
 #: `StreamlitAPIException: Forms cannot be nested in other forms.` ——
 #: bare 模式沒有 ScriptRunContext,form 的容器狀態會殘留到之後的 AppTest。
-#: 實測:單跑本檔全綠,與上述任一測試同行程就紅,**且順序反過來就好** →
-#: 在啟用 `pytest-randomly` 的情況下這會是**間歇性紅燈**,不是穩定失敗。
+#: 實測:單跑本檔全綠,與上述任一測試同行程就紅,**且順序反過來就好**。
+#: ⚠️ 本 repo **目前沒有** `pytest-randomly`(2026-08-31 實測:`requirements-dev.txt` /
+#: CI 設定 / `conftest.py` 皆無,環境亦未安裝)。在 pytest 預設的**字母序**下,
+#: `test_rotation_components_ui…` 排在 `test_rotation_form_rerun…` **之前**
+#: → in-process 寫法會是**穩定紅燈,不是間歇**;若日後導入隨機序才會變成間歇性紅燈。
+#: **兩種情況都得靠子行程解決**,故本作法與有沒有 randomly 無關。
 #: 這是測試框架的產物,**與 production 無關**(production 永遠有 ScriptRunContext)。
 _PROBE_SRC = '''
 import json, sys
