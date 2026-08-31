@@ -20,11 +20,25 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
     的 NO_COOLDOWN_KINDS **照舊入快取**(TTL 是它們唯一的節流器)。
     **其餘未標記的 fetcher 仍會快取空結果。**
   · @st.cache_data — **完全不在本機制涵蓋範圍內,失敗照樣鎖滿 TTL**。
-    全 repo 8 處(repositories/hot_money_repository ×2、ui/helpers/v2_editor ×2、
-    ui/tab5_data_guard ×2、ui/helpers/macro/ndc ×1、repositories/pool_repository ×1);
-    其中 fetch_usdtwd_series 與 _cached_ndc_score **直接快取外部 HTTP 的失敗**。
-    已登記為既有缺口,本批**刻意不修**(機制不同、回傳 tuple 承載不了 .attrs),
-    見 PR「刻意沒做」段。
+    全 repo 8 個裝飾點,其中 **4 處實測會把失敗鎖住**(⚠️ 本行為 2026-08-31
+    第三次更正:第一版漏掉 @st.cache_data 整類、第二版列了但只列 2/4 處 ——
+    同一段自己在檢討的「全稱句蓋掉例外」的病,連犯三次,故本行改為逐處列出
+    並標明來源):
+      鎖住 → repositories/hot_money_repository.fetch_foreign_flow_series(30 分)
+             repositories/hot_money_repository.fetch_usdtwd_series      (10 分)
+             repositories/pool_repository._cached_pool_map              (30 分;
+               上游 _load_pool_map 自己把例外吞成 {} → 那個空 dict 被快取)
+             ui/helpers/macro/ndc._cached_ndc_score                     (15 分)
+      不鎖 → ui/helpers/v2_editor ×2(拋 PolicySheetError → 例外不入快取)、
+             ui/tab5_data_guard._cached_nh_status / _cached_nh_coverage(無外部 HTTP)
+    ⚠️ **這 8 處的清單與「鎖不鎖」的判定都是逐一實測跑出來的,不是讀 code 推定**
+    (獨立複驗組先量、本組再以各自的上游計數器複跑;⚠️ 若只數 raw HTTP 會把
+     foreign_flow / pool_map 誤判成「未觸發」—— 它們的失敗發生在 HTTP 層之上)。
+    ⚠️ **清單來自字面掃描**
+    (`git grep -nE "^[[:space:]]*@[A-Za-z_][A-Za-z0-9_]*\\.(cache_data|cache_resource)"`),
+    **未涵蓋動態註冊 / getattr / 條件式套用等非字面寫法** —— 不得讀成「就這 8 處」。
+    本批**刻意不修**(機制不同:回傳 tuple 承載不了 .attrs、@st.cache_data 也不看標記),
+    已登記為獨立待辦,使用者可見影響見 PR「刻意沒做」段。
   刻意做成 opt-in 而非預設過濾:「空」有「抓失敗」與「真的沒有」兩義、回傳值
   分不出來,讓裝飾器去猜任一邊都違 §1 — 機制、判準與各分支理由見
   infra/cache.py 的 module 註解與 infra/proxy.py::mark_fetch_failed_if_retryable
