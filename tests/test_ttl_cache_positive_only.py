@@ -803,7 +803,7 @@ def test_concat_and_frame_construction_drop_the_mark_in_both_orders():
 
     它們沒有一個享有特權的 `self`，故一律不繼承。
     """
-    c, m = _clean_series(), _marked_series()
+    c = _clean_series()
     assert is_fetch_failed(pd.concat([c, _marked_series()])) is False
     assert is_fetch_failed(pd.concat([_marked_series(), c])) is False
     assert is_fetch_failed(pd.DataFrame({"a": c, "b": _marked_series()})) is False
