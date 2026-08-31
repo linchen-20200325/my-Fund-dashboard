@@ -484,13 +484,23 @@ def render_portfolio_tab() -> None:
                             # 2026-08-05 稽核 🔴 必修 2(同型延伸):原寫死「由 Tab2 個別查詢」
                             # —— 個基深掘早已不是第 2 個分頁,序號寫死 = 與 :292 同一顆地雷。
                             # 一併收 story_nav.tab_label SSOT。
+                            #
+                            # ⚠️ 2026-08-31 七→五(客戶拍板線框)由 WP-F 收斂;
+                            # **有意識的政策變更,不是漏改**(決策者:客戶 2026-08-31 五分頁動線)。
+                            # 舊寫法 ~~`tab_label as _tab_label_333` + 「{…('fund')}」分頁~~
+                            # 的理由**仍然成立**(指路必須吃 SSOT、序號不得寫死),上面兩行
+                            # 註解照舊有效;被權衡掉的是它的**對象** —— `fund` 已經不是分頁,
+                            # 而是「③ 🔍 基金研究」頁內的模式,`tab_label('fund')` 會當場 KeyError。
+                            # 改用 `where_to_find('fund')`:回「③ 🔍 基金研究 → 🔍 單檔深掘」,
+                            # 站號與分頁名都由 `_TAB_LABELS` 的順序推導。
+                            # 「分頁」二字一併拿掉 —— 目的地是分頁裡的一個模式,不是一個分頁。
                             from ui.helpers.story_nav import (  # noqa: PLC0415
-                                tab_label as _tab_label_333,
+                                where_to_find as _where_to_find_333,
                             )
                             st.info(
                                 f"共 {_total} 檔　✅ 通過 {_pass_cnt} 檔　"
                                 f"❌ 未通過 {_fail_cnt} 檔　❓ 資料不足 {_unk_cnt} 檔　"
-                                f"（③同儕排名請至「{_tab_label_333('fund')}」分頁個別查詢，"
+                                f"（③同儕排名請至「{_where_to_find_333('fund')}」個別查詢，"
                                 f"組合批次僅評 ①②）",
                                 icon="📊",
                             )
@@ -512,7 +522,16 @@ def render_portfolio_tab() -> None:
             # 且它早已不是第 2 個分頁(app.py 現為 5 分頁,個基深掘排第 4)。分頁名
             # SSOT = ui/helpers/story_nav._STEPS(tab_label 去序號導出);序號一併拿掉
             # ——序號會隨分頁增刪漂移,寫死等於埋下同型地雷。
-            from ui.helpers.story_nav import tab_label as _tab_label  # noqa: PLC0415
+            #
+            # ⚠️ 2026-08-31 七→五(客戶拍板線框)由 WP-F 收斂;**有意識的政策變更,
+            # 不是漏改**(決策者:客戶 2026-08-31 五分頁動線)。
+            # 舊寫法 ~~`tab_label as _tab_label` + 「{_tab_label('fund')}」分頁~~ 的理由
+            # **仍然成立**(上面四行註解一個字都沒被推翻:分頁名要吃 SSOT、序號不得寫死);
+            # 被權衡掉的是它的**對象** —— 七→五之後 `fund` 是「③ 🔍 基金研究」頁內的
+            # 模式,不是分頁。照舊寫會 **KeyError**,而這張歡迎卡是**空組合時的預設畫面**,
+            # 等於一進 ④ 就整頁壞掉。改用 `where_to_find('fund')`(站號由順序推導)。
+            # 「分頁」二字一併拿掉 —— 目的地是分頁裡的一個模式。
+            from ui.helpers.story_nav import where_to_find as _where_to_find  # noqa: PLC0415
             st.markdown(
                 f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
                 f"border:1px solid {GH_BORDER};border-radius:8px;"
@@ -522,7 +541,7 @@ def render_portfolio_tab() -> None:
                 f"<span style='color:{GRAY_AA};font-size:11px;font-weight:400'>"
                 f"　— 加入基金後顯示 戰情室、組合健康儀表、3-3-3 篩選</span></div>"
                 f"<div style='color:{GRAY_AA};font-size:12px;line-height:1.7'>"
-                f"🔍 <b style='color:{TRAFFIC_NEUTRAL}'>「{_tab_label('fund')}」分頁</b>搜尋 → 按「➕ 加入組合」；"
+                f"🔍 <b style='color:{TRAFFIC_NEUTRAL}'>「{_where_to_find('fund')}」</b>搜尋 → 按「➕ 加入組合」；"
                 f"📥 或在下方「➕ 加入基金」輸入代碼點「📡 載入」；"
                 f"也可從 Google Sheet 讀回已存組合。🎯 組合有資料後，分析自動出現在頁面頂部。"
                 f"</div></div>",

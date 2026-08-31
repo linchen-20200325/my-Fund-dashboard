@@ -61,10 +61,27 @@ def render_policy_admin_bridge(
     """
     if not owned_by_settings_page(POLICY_ADMIN):
         # 本批狀態：⑤ 未接線。什麼都沒壞 → ⬜ 灰色說明，不是紅燈（三態規則）。
+        #
+        # ⚠️ 2026-08-31 由 WP-F 修正（**有意識的政策變更，不是漏改** ·
+        # 決策者：AI 總管 · 依據：客戶 2026-08-31 拍板的五分頁線框）。
+        # 舊寫法 ~~`where="📊 配置 & 帳本 → 📋 保單管理（Google Sheets）"`~~ 的理由
+        # **仍然成立** ——「灰色說明要指出去哪裡才能用到這個功能」這個目的沒有變。
+        # 被權衡掉的是它**寫死了一個已經不存在的分頁名**：七→五之後 ④ 叫
+        # 「📊 我的配置」，分頁列上沒有「📊 配置 & 帳本」。
+        # 它與同一個函式（`not_ready(where=...)`）在 `fetch_diag_section.py` 被修掉的
+        # 那一處是**同一種寫法、同一種病**：不經 `tab_label` 所以**連 raise 都不會**，
+        # 只會安靜地指到一個不存在的分頁名 —— 那一批只修了一隻，這是它的兄弟。
+        # 改吃 SSOT：`where_to_find('portfolio')` 回「④ 📊 我的配置」，
+        # 站號與分頁名都由 `_TAB_LABELS` 的順序推導，不寫死。
+        # （「📋 保單管理（Google Sheets）」是 ④ **頁內**的區塊標題、不是分區 key，
+        #   故原樣接在後面 —— 它不在 `_SECTION_LABELS` 裡，硬塞進去會讓
+        #   `section_label()` 回一個沒有對應分區錨點的名字。）
+        from ui.helpers.story_nav import where_to_find  # noqa: PLC0415
+
         not_ready(
             "保單管理（Sheet 連線／OAuth 授權／v1→v2 升級）尚未接線到本頁 ——"
             "接線前它仍完整住在配置分頁，不會少功能也不會出現兩份",
-            where="📊 配置 & 帳本 → 📋 保單管理（Google Sheets）",
+            where=f"{where_to_find('portfolio')} → 📋 保單管理（Google Sheets）",
         )
         return None
 

@@ -223,7 +223,11 @@ GRID_EXEMPT_SITES = frozenset({
     "ui/tab1_macro_radar.py::render_short_radar_section()  columns(seq:2)×2",
     "ui/tab2_single_fund.py::render_single_fund_tab()  columns(int:2)×1",
     "ui/tab2_single_fund.py::render_single_fund_tab()  columns(int:4)×1",
-    "ui/tab2_single_fund.py::render_single_fund_tab()  columns(seq:2)×5",
+    # 2026-08-31 WP-F：×5 → ×4（**變少，不是漏登**）。刪掉的那一個是孤兒關鍵字搜尋框
+    # 裡的 `st.columns([4,1])`（輸入框 + 搜尋鈕）—— 該分支自七→五接線起在 production
+    # 恆不觸發（唯一 caller 永遠持有 SHARED_SEARCH 旗標），整段已實體刪除。
+    # 「找代號」工具現在只有一份，住在 `ui/helpers/fund_research/code_finder.py`。
+    "ui/tab2_single_fund.py::render_single_fund_tab()  columns(seq:2)×4",
     # WP-D 2026-08-28：下面這組原本掛在 `ui/tab3_portfolio.py::render_portfolio_tab()`，
     # 因「📋 保單管理（Google Sheets）」整段（790 行）抽成 `policy_admin_section.py`
     # 而改掛新函式。**違規呼叫數一個沒有增減**（見該批 PR 的守恆對照），
@@ -253,7 +257,9 @@ GRID_EXEMPT_SITES = frozenset({
 })
 
 #: 量測日 2026-08-28 的**違規呼叫總數**（不是鍵數）。與上表一起降。
-GRID_EXEMPT_CALL_TOTAL = 88
+# 2026-08-31 WP-F：88 → 87（**變少**；刪掉孤兒搜尋框的 `st.columns([4,1])`，
+# 理由見上方 `tab2_single_fund` 那一列的註記）。
+GRID_EXEMPT_CALL_TOTAL = 87
 
 #: 量測日 2026-08-28 掃到的 streamlit `columns()` 呼叫總數（合格 + 違規）。
 #: 錨點用：低於這個數字代表 `st.columns` 被換成別的寫法，規則正在對空氣生效。

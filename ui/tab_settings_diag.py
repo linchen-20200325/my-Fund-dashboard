@@ -53,12 +53,22 @@ D 資料診斷 → E 說明書**。
 widget key 與寫入路徑要收斂），留給接線後的收斂批次；**本批兩個入口原樣並存**。
 在 ⑤ 內兩者分屬 B／D 兩個分區，D 又在 gate 之後 —— 不會同屏出現兩份。
 
-⚠️ 尚未接線（刻意）
--------------------
-本檔**還沒有**被 `app.py` 掛上去；`render_manage_tab` / `render_data_guard_tab` /
-`render_manual_tab` 三個舊入口**原樣保留**（旗標全空 → 行為與現在完全相同，
-守衛：`tests/test_settings_diag_merge.py`）。七分頁 → 五分頁的接線屬另一個
-工作包，在那之前把 app.py 改掉會讓現行畫面壞掉。
+⚠️ ~~尚未接線（刻意）~~ → **已接線（2026-08-31 WP-F）**
+--------------------------------------------------------
+~~本檔**還沒有**被 `app.py` 掛上去；`render_manage_tab` / `render_data_guard_tab` /~~
+~~`render_manual_tab` 三個舊入口**原樣保留**（旗標全空 → 行為與現在完全相同，~~
+~~守衛：`tests/test_settings_diag_merge.py`）。七分頁 → 五分頁的接線屬另一個~~
+~~工作包，在那之前把 app.py 改掉會讓現行畫面壞掉。~~
+
+**有意識的狀態更新，不是漏刪**（日期 2026-08-31 · 決策者：AI 總管）。
+舊段落在它寫下的當天是對的（WP-E 刻意只做組裝、不接線）；被權衡掉的只是它的
+**狀態**：WP-F 已把本檔掛上 `app.py` 的第 ⑤ 個 slot。
+**現況**：`app.py` 只 import `render_settings_diag_tab`，三個舊入口
+（`render_manage_tab` / `render_data_guard_tab` / `render_manual_tab`）改由本檔
+lazy import，**旗標因此恆為持有**（不再是「全空」）——
+那三個舊入口自己畫 `##` 大標的分支在 production **恆不觸發**，
+各該檔已就地註明。守衛：`tests/test_settings_diag_merge.py`（檔名未變）
+＋ `tests/test_wpf_five_tab_wiring.py`。
 
 對外 API
 --------
@@ -68,7 +78,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.helpers.render_state import not_ready
+from ui.helpers.render_state import not_ready, safe_section
 from ui.helpers.settings_diag.fetch_diag_section import render_fetch_diag_from_session
 from ui.helpers.settings_diag.merge_context import (
     DATA_GUARD_HEADER,
@@ -77,14 +87,18 @@ from ui.helpers.settings_diag.merge_context import (
     settings_page_owns,
 )
 from ui.helpers.settings_diag.policy_admin_bridge import render_policy_admin_bridge
+from ui.helpers.story_nav import tab_label
 
 #: 合併頁的頁面大標。
-#: ⚠️ **寫死在這裡是有代價的、而且是已知的**（WP-C 同款處置）：全站分頁名的
-#: SSOT 是 `ui/helpers/story_nav.py::tab_label()`，但它目前沒有「設定與診斷」
-#: 這個合併後的名字。新增 key 要改 `ui/helpers/story_nav.py` ——
-#: **不在本工作包的檔案邊界內**，故先在本檔具名成常數（至少同一檔內只有一份），
-#: 並在 PR 描述回報：接線工作包（app.py 七→五）應把它收進 story_nav SSOT。
-MERGED_TAB_LABEL: str = "⚙️ 設定與診斷"
+#: ~~⚠️ **寫死在這裡是有代價的、而且是已知的**（WP-C 同款處置）：全站分頁名的~~
+#: ~~SSOT 是 `ui/helpers/story_nav.py::tab_label()`，但它目前沒有「設定與診斷」~~
+#: ~~這個合併後的名字。新增 key 要改 `ui/helpers/story_nav.py` ——~~
+#: ~~**不在本工作包的檔案邊界內**，故先在本檔具名成常數（至少同一檔內只有一份），~~
+#: ~~並在 PR 描述回報：接線工作包（app.py 七→五）應把它收進 story_nav SSOT。~~
+#: **2026-08-31 已收進 SSOT**（有意識的狀態變更，不是漏刪 · 決策者：AI 總管）。
+#: 理由同 `ui/tab_fund_research.py` 該處：舊註記在它寫下的當天是對的（`settings`
+#: 那時真的不在 `_TAB_LABELS` 裡），只是它自己指名的那個「接線工作包」就是 WP-F。
+MERGED_TAB_LABEL: str = tab_label("settings")
 
 #: 目錄錨點（Streamlit 對中文標題的自動 anchor 不可靠 → 顯式指定）。
 ANCHOR_CONN: str = "sd-sec-conn"
@@ -124,7 +138,11 @@ def _render_conn_section() -> None:
 
     # ── 🔍 抓取診斷細節（從個基頁搬入；線框 A 分區「搬入」項）──────────
     # 區塊本體與個基頁共用同一份（ui/helpers/settings_diag/fetch_diag_section.py）；
-    # 個基頁那份由 FETCH_DIAG 旗標控制，本批旗標全空 → 個基頁行為不變。
+    # 個基頁那份由 FETCH_DIAG 旗標控制。
+    # ~~本批旗標全空 → 個基頁行為不變。~~
+    # ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪**）：
+    # `app.py` 已把五個分頁全部包進 `with settings_page_owns(FETCH_DIAG)`
+    # → 旗標**恆為持有**，個基頁那份**恆不畫**，抓取診斷只由本行畫一次。
     render_fetch_diag_from_session()
 
 
@@ -185,17 +203,35 @@ def render_settings_diag_tab() -> None:
     """渲染「⑤ ⚙️ 設定與診斷」合併頁（單頁 + 目錄，分區順序照線框）。
 
     Caller 不需傳參數（與 Tab2/3/5/6 同設計準則）。
+
+    ⚠️ **每個分區各自隔離（2026-08-31 補；本頁最重要的一條）**
+    ------------------------------------------------------------
+    七→五之前，「🗄️ 資料維護與通報」（舊 `tab_manage`）與「🔭 資料診斷 / 📖 說明書」
+    （舊 `tab_ref`）分屬**兩個頂層分頁**，各有 `app.py` 給的一段 try —— 管理室炸掉
+    不會影響診斷頁。合併成 ⑤ 一頁之後，它們共用 ⑤ 的那**一個** try：
+    **管理室當掉會一併帶走 🔭 資料診斷與 📖 說明書。**
+    而那兩塊正是使用者出事時要去的地方（本頁一句話職責：「東西沒抓到的時候來這裡查」）
+    —— 把診斷跟故障綁在同一條命上，等於在最需要它的時候把它拿走。
+
+    故四個分區各自走 `safe_section()`：一個分區炸掉就地紅燈（顯式顯示 + log +
+    可展開 traceback，`CLAUDE.md §1` 不吞例外），其餘三個照常渲染。
+    這也讓 `app.py:317-318` 那句「內層各頁自己的 `_safe_section` 再做 section 級
+    細粒度隔離」對本頁**由假變真** —— 在此之前本頁一個 `_safe_section` 都沒有。
+
+    守衛：`tests/test_wpf_section_isolation.py`。
     """
+    # 頂部（大標 + 目錄）不包 —— 它一炸就沒有目錄可以跳，包起來只是讓使用者
+    # 對著一個沒有入口的空頁；那種情況就該讓 app.py 的分頁級隔離接手。
     _render_shared_top()
 
     st.divider()
-    _render_conn_section()
+    safe_section("🔌 連線與帳號", _render_conn_section)
 
     st.divider()
-    _render_maintain_section()
+    safe_section("🗄️ 資料維護與通報", _render_maintain_section)
 
     st.divider()
-    _render_diag_section()
+    safe_section("🔭 資料診斷", _render_diag_section)
 
     st.divider()
-    _render_manual_section()
+    safe_section("📖 說明書", _render_manual_section)

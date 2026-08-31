@@ -223,7 +223,16 @@ class TestDualRulerCaption:
         assert "上方" in _embed, "Tab3 embed 沒指出行動建議在本頁上方"
         assert "上方" not in _health, (
             "健診 Tab 沒有「上方那一格」—— 指過去會讓使用者找一個不存在的東西")
-        assert "組合配置" in _health, "健診 Tab 應指向組合配置 Tab"
+        # ⚠️ 2026-08-31 WP-F 修正（**有意識的修改，不是漏改** · 決策者：AI 總管）：
+        # 期望值 ~~寫死 `"組合配置"`~~ 改為 runtime 讀 `tab_label("portfolio")`。
+        # **舊寫法的理由仍然成立**（要驗「有沒有指向 ④」，拿名字當指紋最直接）；
+        # **被權衡掉的原因**：那個指紋是**假的** ——「組合配置」從來不是任何時期的
+        # ④ 分頁名（七→五前是「📊 配置 & 帳本」、之後是「📊 我的配置」）。
+        # 測試把錯名字釘住＝**保護那個 bug 不被修掉**：修 production 反而弄紅測試。
+        from ui.helpers.story_nav import tab_label as _tl
+
+        assert _tl("portfolio") in _health, (
+            f"健診 Tab 應指向 ④「{_tl('portfolio')}」，實際：{_health}")
         for _cap in (_embed, _health):
             assert "policy_tier" in _cap, "沒講唯一真相是 Sheet 標的級別"
 

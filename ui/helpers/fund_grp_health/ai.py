@@ -4,7 +4,9 @@ from __future__ import annotations
 import streamlit as st
 
 from ui.helpers.render_state import not_ready, system_error
-from ui.helpers.story_nav import tab_label
+# 2026-08-31 七→五:本檔唯一的指路文案改吃 `where_to_find`(分區指路),
+# 不再是 `tab_label`(頂層分頁名)—— 理由寫在該處呼叫上方。
+from ui.helpers.story_nav import where_to_find
 
 from shared.colors import GH_BG_CARD, GH_BG_PRIMARY, GRAY_66, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_ORANGE_300
 
@@ -334,8 +336,22 @@ def _render_per_fund_news_expanders(funds: list) -> None:
                 # 使用者照圖示去找會落到另一個分頁、看不到持股資料 ——
                 # 與本批 M2 修掉的「指向一顆不存在的按鈕」**完全同型,一輪之後同型再犯**。
                 # 改吃 SSOT:`story_nav.py` 自己寫著手抄一份就是「第二份標籤」。
+                #
+                # ⚠️ 2026-08-31 七→五(客戶拍板線框)由 WP-F 收斂;**有意識的政策變更,
+                # 不是漏改**(日期 2026-08-31,決策者:客戶 2026-08-31 五分頁動線)。
+                # 舊寫法 ~~`where=f"{tab_label('fund')} Tab 查看…"`~~ 的理由**仍然成立**
+                # ——「指路文案必須吃 SSOT、不得手抄」一個字都沒有被推翻,上面整段註解
+                # 照舊有效。被權衡掉的是它的**對象**:`fund` 在七→五之後**不再是一個
+                # 分頁**,而是「③ 🔍 基金研究」頁內的一個模式。
+                # 若照舊寫:(a) `tab_label('fund')` 自 2026-08-31 起**當場 KeyError**
+                # (story_nav 對舊分頁 key 一律 fail loud);(b) 就算讓它回傳分頁名,
+                # 使用者也會**在分頁列上找不到「個基深掘」** —— 那正是上面註解在講的
+                # 同一種病的第三次發作,只是這次連 SSOT 本身都會是錯的。
+                # 改用 `where_to_find('fund')`:回「③ 🔍 基金研究 → 🔍 單檔深掘」,
+                # 站號與分頁名都由 `_TAB_LABELS` 的**順序**推導,不寫死。
+                # 「Tab」二字一併拿掉 —— 目的地已經不是一個分頁,是分頁裡的一個模式。
                 not_ready("這檔基金的持股名稱資料不足，無法查個股新聞",
-                          where=f"{tab_label('fund')} Tab 查看該基金的前十大持股原始資料")
+                          where=f"{where_to_find('fund')} 查看該基金的前十大持股原始資料")
                 continue
 
             _ss_key = f"_tab5grp_stknews_{_code}"

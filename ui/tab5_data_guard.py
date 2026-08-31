@@ -199,7 +199,12 @@ def render_data_guard_tab() -> None:
     with _d5_hdr:
         # ⑤ 設定與診斷合併頁（線框 §03 ⑤，WP-E）已畫分區標題時，這裡不再畫第二個 `##`。
         # 只讓掉標題那一行 —— caption / info / 右側按鈕一律照舊。
-        # 旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。
+        # ~~旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。~~
+        # ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**這句話現在是假的。** ⑤ 已接線，
+        # 本函式的 production caller 是 `ui/tab_settings_diag.py::_render_diag_section()`
+        # （在 `sd_diag_gate` checkbox 之後），它永遠帶著
+        # `settings_page_owns(DATA_GUARD_HEADER)` → 下方畫 `##` 大標的分支
+        # 在 production **恆不觸發**。分支刻意保留（契約實作，同 tab_manage）。
         from ui.helpers.settings_diag.merge_context import (
             DATA_GUARD_HEADER as _SD_DATA_GUARD_HEADER,
             owned_by_settings_page as _settings_page_owns,
@@ -1138,7 +1143,11 @@ def render_data_guard_tab() -> None:
     _key_where = "Streamlit Cloud → Settings → Secrets 新增後重新部署"
     _unset = {_kr["name"] for _kr in _key_rows if _kr["source"] == "(無)"}
     if "FRED_API_KEY" in _unset:
-        not_ready("尚未設定 FRED_API_KEY —— 整個 🌐 市場定調頁無法載入(這一把缺了會擋路)",
+        # 2026-08-31 WP-F：分頁名改吃 SSOT（同上，避免第二份標籤）。
+        from ui.helpers.story_nav import tab_label as _tl_key  # noqa: PLC0415
+
+        not_ready(f"尚未設定 FRED_API_KEY —— 整個「{_tl_key('macro')}」頁無法載入"
+                  "(這一把缺了會擋路)",
                   where=_key_where)
     if "GEMINI_API_KEY" in _unset:
         not_ready("尚未設定 GEMINI_API_KEY —— 只影響各頁的 AI 摘要區塊,"

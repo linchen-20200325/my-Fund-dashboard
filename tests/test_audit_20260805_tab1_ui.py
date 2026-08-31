@@ -231,12 +231,21 @@ def test_tab6_indicator_name_not_truncated_through_proxy_label():
 # ══════════════════════════════════════════════════════════════
 # 必修 2 — 三處指路文案接 story_nav.tab_label()
 # ══════════════════════════════════════════════════════════════
-# (檔案 → 該檔應呼叫的 tab_label key, 該檔不得再出現的死分頁名字面值)
+# (檔案 → 該檔應傳給 story_nav SSOT 的 key, 該檔不得再出現的死分頁名字面值)
+#
+# ⚠️ 2026-08-31 七→五（WP-F）：`_TAB3` 那一列的 key `fund` **已不是頂層分頁**，
+#    而是「③ 🔍 基金研究」頁內的模式。指路函式因此由 `tab_label()` 移轉為
+#    `where_to_find()`（回「③ 🔍 基金研究 → 🔍 單檔深掘」，站號由順序推導）。
+#    本表**不記錄該用哪個函式** —— 見下方 `_SSOT_HINT_FNS` 與該測試的 docstring。
 _HINT_SITES = (
     (_TAB1,      "portfolio", "📦 投資組合"),
     (_TAB1_INFL, "portfolio", "📊 組合基金"),
     (_TAB3,      "fund",      "單檔基金"),
 )
+
+#: `story_nav` 的**指路 SSOT 入口**（任一個都算接線）。
+#: `tab_label` 指頂層分頁、`where_to_find` 指頁內分區（會自動帶上所屬分頁與站號）。
+_SSOT_HINT_FNS = ("tab_label", "where_to_find")
 
 
 @pytest.mark.parametrize("path,key,dead", _HINT_SITES,
@@ -245,11 +254,34 @@ def test_hint_text_wired_to_tab_label(path: Path, key: str, dead: str):
     """**修正前必紅** —— `tab_label()` 早就存在,但這三處仍是寫死字串。
 
     兩段都要過才算接線:
-      (a) 該檔真的有 `tab_label('<key>')` **呼叫**(不是只 import);
+      (a) 該檔真的有把 `'<key>'` 傳給 **story_nav 指路 SSOT** 的呼叫(不是只 import);
       (b) 死分頁名不再出現在任何**字串字面值**裡(註解引述舊文案不算)。
+
+    ⚠️ **2026-08-31 由 WP-F 收斂 (a) 的判準。有意識的政策變更,不是漏改。**
+    （日期 2026-08-31；決策者：**客戶 2026-08-31 拍板的五分頁動線線框**）
+
+    **舊寫法**（原地保留、加刪除線，不刪）::
+
+        ~~assert key in _call_first_str_args(path, "tab_label"), (~~
+        ~~    f"{path.name} 沒有 tab_label('{key}') 呼叫 —— 指路文案未接 SSOT")~~
+
+    **舊寫法的理由仍然成立**：它守的是「指路文案必須**吃 SSOT**、不得手抄字面值」,
+    這是 2026-08-05 必修 2 的核心,一個字都沒有被推翻 —— (b) 半段也原封未動。
+    **被權衡掉的只有「SSOT 入口只能是 `tab_label` 這一個函式」這個假設**：
+    七→五之後指到**頁內分區**的文案必須改用 `where_to_find()`（`tab_label('fund')`
+    自 2026-08-31 起會 fail loud），逐字釘住 `tab_label` 會把**正確的修法判成違規**。
+    改為接受 `_SSOT_HINT_FNS` 任一入口 —— **範圍沒有放寬**：仍然要求
+    「這個 key 真的被傳進 story_nav 的某個指路函式」,只是不再指定是哪一個。
+
+    ⚠️ 這個放寬是**刻意設計成能跨過階段二的**：`ui/tab3_portfolio.py` 那兩處
+    目前仍是 `tab_label('fund')`（本批不得動該檔，另一批佔用中），改成
+    `where_to_find('fund')` 之後本條**照樣綠** —— 不會在階段二又紅一次。
     """
-    assert key in _call_first_str_args(path, "tab_label"), (
-        f"{path.name} 沒有 tab_label('{key}') 呼叫 —— 指路文案未接 SSOT")
+    _wired = set()
+    for _fn in _SSOT_HINT_FNS:
+        _wired |= set(_call_first_str_args(path, _fn))
+    assert key in _wired, (
+        f"{path.name} 沒有把 '{key}' 傳給 {_SSOT_HINT_FNS} 任一個 —— 指路文案未接 SSOT")
     for s in _string_constants(path):
         assert dead not in s, f"{path.name} 仍有寫死的死分頁名字面值:{s!r}"
 
@@ -261,10 +293,28 @@ def test_tab3_hint_drops_stale_tab_ordinal():
 
 
 def test_hint_keys_exist_in_story_nav():
-    """指路用的 key 必須是 `_STEPS` 合法站別(§1:未知 key 會 KeyError 當場炸)。"""
-    from ui.helpers.story_nav import tab_label
+    """指路用的 key 必須在 story_nav 解析得到(§1:未知 key 會 KeyError 當場炸)。
+
+    ⚠️ **2026-08-31 由 WP-F 收斂。有意識的政策變更,不是漏改。**
+    （日期 2026-08-31；決策者：**客戶 2026-08-31 拍板的五分頁動線線框**）
+
+    **舊寫法**（原地保留、加刪除線，不刪）::
+
+        ~~from ui.helpers.story_nav import tab_label~~
+        ~~for _p, _key, _dead in _HINT_SITES:~~
+        ~~    assert tab_label(_key)~~
+
+    **舊寫法的理由仍然成立**：`_HINT_SITES` 裡填的 key **必須真的解析得到**，
+    否則這張表本身就會在 production 炸掉（它列的是活的指路文案）。
+
+    **被權衡掉的是「解析入口只有 `tab_label`」**：七→五之後 `fund` 是**分區**，
+    `tab_label('fund')` 依設計會 fail loud，用它來驗會把正確的資料判成錯的。
+    改用 `where_to_find()` —— 它**同時吃分頁 key 與分區 key**，正是這張表需要的
+    「這個 key 指得到某個真實存在的地方嗎」。**強度沒有降低**：未知 key 一樣 raise。
+    """
+    from ui.helpers.story_nav import where_to_find
     for _p, _key, _dead in _HINT_SITES:
-        assert tab_label(_key)
+        assert where_to_find(_key)
 
 
 # ══════════════════════════════════════════════════════════════

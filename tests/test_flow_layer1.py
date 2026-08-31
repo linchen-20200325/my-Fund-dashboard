@@ -33,14 +33,48 @@ def _read(rel: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 1) 分頁名 SSOT — 7 個分頁全收
+# 1) 分頁名 SSOT — ~~7 個分頁全收~~ → 5 個分頁全收（2026-08-31 七→五，見下方註記）
 # ══════════════════════════════════════════════════════════════════════════
 class TestTabLabelCoversAllTabs:
     def test_all_seven_tabs_have_labels(self):
-        from ui.helpers.story_nav import _TAB_LABELS
-        assert set(_TAB_LABELS) == {
-            "macro", "health", "batch", "fund", "portfolio", "manage", "ref",
-        }, "分頁名 SSOT 沒有涵蓋全部 7 個頂層分頁"
+        """⚠️ **2026-08-31 由 WP-F 收斂：七 → 五。有意識的政策變更，不是漏改。**
+        （日期 2026-08-31；決策者：**客戶 2026-08-31 拍板的五分頁動線線框**
+        `docs/wireframes/fund-wireframe-final.html` §03）
+
+        **舊斷言**（原地保留、加刪除線，不刪）::
+
+            ~~assert set(_TAB_LABELS) == {~~
+            ~~    "macro", "health", "batch", "fund", "portfolio", "manage", "ref",~~
+            ~~}, "分頁名 SSOT 沒有涵蓋全部 7 個頂層分頁"~~
+
+        **舊斷言的理由仍然成立**：它守的是「**每一個頂層分頁的名字都必須在 SSOT 裡**，
+        不准有第二份寫死的字面值」—— 那是 2026-08-14 稽核在 sidebar 抓到三處死指路
+        之後立的規矩，今天一個字都沒有被推翻。
+
+        **被權衡掉的是那個「7」，不是它的原則**：七→五之後 `batch`／`fund` 併成
+        ③ 基金研究、`manage`／`ref` 併成 ⑤ 設定與診斷，它們**不再是頂層分頁**，
+        而是合併頁裡的分區。把它們留在 `_TAB_LABELS` 會讓 `tab_label()` 回傳
+        **分頁列上根本找不到的名字** —— 那是同一種病的第三次發作，而且這次連
+        SSOT 本身都會是錯的（比前兩次更難查，因為前兩次的修法「收進 SSOT」幫不上忙）。
+
+        **原則由誰接手（強度不減反增）**：
+        - 本條改鎖新的 5 個 key **與其順序**（順序即站號 ①~⑤）；
+        - 舊 4 個 key 由 `tests/test_story_nav.py::test_old_top_level_keys_now_fail_loud`
+          以「**必須 raise**」的形式繼續守著；
+        - 分區名另有 `_SECTION_LABELS` ＋ `test_section_labels_match_merged_pages` 漂移鎖。
+
+        ⚠️ **函式名刻意不改**（仍叫 `..._seven_tabs...`）：改名會讓
+        `git log -L` / blame 追不到這條規矩的沿革，而本 repo 的慣例是
+        **舊條文保留不刪**。名稱與現況的落差由本 docstring 承擔。
+        """
+        from ui.helpers.story_nav import _SECTION_LABELS, _TAB_LABELS
+
+        assert list(_TAB_LABELS) == [
+            "macro", "health", "research", "portfolio", "settings",
+        ], "分頁名 SSOT 的內容或**順序**變了 —— 順序即站號 ①②③④⑤，不是裝飾"
+        # 舊的頂層 key 必須是**降級成分區**，不是憑空消失
+        assert {"fund", "batch", "manage"} <= set(_SECTION_LABELS), (
+            "七→五之後 fund/batch/manage 應降級為頁內分區，而不是被刪掉")
 
     def test_app_no_longer_hardcodes_tab_names(self):
         """`app.py` 的 st.tabs 不得再出現寫死的分頁名字面值。
@@ -80,11 +114,36 @@ class TestFlowNav:
         assert ":gray[② 基金核心分析]" in md
 
     def test_shows_sibling_tabs_and_next_layer(self):
-        from ui.helpers.story_nav import flow_nav_markdown
+        """⚠️ **2026-08-31 由 WP-F 收斂。有意識的政策變更，不是漏改。**
+        （日期 2026-08-31；決策者：**客戶 2026-08-31 拍板的五分頁動線線框**）
+
+        **舊斷言**（原地保留、加刪除線，不刪）::
+
+            ~~assert "📦 批次分析" in md, "同層的其他分頁沒列出來"~~
+            ~~assert "🔍 個基深掘" not in md.split("\\n\\n")[-1], (~~
+            ~~    "『本層另有』不該把你正在看的這頁也列進去")~~
+
+        **舊斷言的理由仍然成立**：導覽的「本層另有」必須**真的列出同層的其他項目**，
+        而且**不可以把你正在看的這一項也列進去**（那是廢話）。這兩件事一個字都沒改，
+        本條下方仍然逐條驗。
+
+        **被權衡掉的只有那兩個寫死的中文字串**：七→五之後
+        「📦 批次分析」→ 分區名「📦 批次掃描」、「🔍 個基深掘」→「🔍 單檔深掘」。
+        **而且不該再寫死** —— 寫死一份就是「第二份標籤」，正是 `story_nav` 存在要防的東西
+        （本條原本自己就在犯這個毛病）。改為**從 SSOT 取值**：
+        `_SECTION_LABELS['batch']` / `['fund']`。這樣分區改名時本條會**跟著對**，
+        而不是變成下一顆需要有人手動同步的地雷。
+
+        ⚠️ 順帶記一筆：`flow_nav_markdown("fund")` 的 caller（`ui/tab2_single_fund.py`）
+        在七→五之後**一個字都沒改** —— `story_nav` 內部把分區 key 解析成所屬分頁／層。
+        本條同時是那條解析路徑的迴歸鎖。
+        """
+        from ui.helpers.story_nav import _SECTION_LABELS, flow_nav_markdown
+
         md = flow_nav_markdown("fund")
-        assert "📦 批次分析" in md, "同層的其他分頁沒列出來"
-        assert "🔍 個基深掘" not in md.split("\n\n")[-1], (
-            "『本層另有』不該把你正在看的這頁也列進去"
+        assert _SECTION_LABELS["batch"] in md, "同層的其他項目沒列出來"
+        assert _SECTION_LABELS["fund"] not in md.split("\n\n")[-1], (
+            "『本層另有』不該把你正在看的這一項也列進去"
         )
         assert "下一層" in md
 
