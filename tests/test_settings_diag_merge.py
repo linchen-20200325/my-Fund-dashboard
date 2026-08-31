@@ -578,3 +578,151 @@ def test_settings_page_module_does_not_reach_into_data_or_compute_layers():
         bad += [m for m in mods
                 if m.split(".")[0] in {"repositories", "services", "infra"}]
     assert not bad, f"⑤ 合併頁自己去碰了資料 / 計算層：{sorted(set(bad))}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 7) 旗標綁定：guard 的**引數**必須綁對旗標（2026-08-31 獨立稽核抓到的缺口）
+# ══════════════════════════════════════════════════════════════════
+# 稽核的突變：把 `ui/tab_manage.py` 的 import 改成
+# `DATA_GUARD_HEADER as _SD_MANAGE_HEADER`（guard 呼叫與極性都不動）→
+# 上面 20 條**照綠**。原因：第 4 節的 AST 守衛只認呼叫名 `_settings_page_owns`
+# 與極性、**不看引數**；第 3 節的 sentinel 又把子頁整支 stub 掉，
+# 真 guard 從未在「⑤ 持有旗標」下被執行。接線後綁錯旗標 ⇒ ⑤ 內無聲出現
+# 兩個 `##` 標題（正是這組守衛要防的那種壞法，換了一個突變方向）。
+# 本節補上缺的那把尺：**經 ImportFrom 的 alias 綁定**（不是字串 grep ——
+# 三個子頁的 import 全是 `X as _SD_Y` 的 alias 形態）解析 guard 引數
+# 真正指到 merge_context 的哪個常數，逐檔斷言期望值。
+
+#: ⑤ 旗標常數的唯一出處。alias 追到的模組不是它 → 一律視為綁錯。
+_MERGE_CONTEXT_MODULE = "ui.helpers.settings_diag.merge_context"
+
+#: 檔案 → guard 引數必須綁到的 merge_context 常數名。
+_GUARD_EXPECTED_FLAG: dict = {
+    "ui/tab_manage.py": "MANAGE_HEADER",
+    "ui/tab5_data_guard.py": "DATA_GUARD_HEADER",
+    "ui/tab6_manual.py": "MANUAL_HEADER",
+    "ui/tab2_single_fund.py": "FETCH_DIAG",
+}
+
+
+def _import_bindings(tree: ast.AST) -> dict:
+    """整檔（含函式內 local import）每個被 import 的名字 → (來源模組, 原始名)。
+
+    只處理 `from M import X [as Y]`；`import M` 形態的名字不會出現在 guard
+    引數裡（引數是常數名不是模組名），遇到也自然落入「解析不到」→ fail-closed。
+    """
+    out: dict = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for a in node.names:
+                out[a.asname or a.name] = (node.module, a.name)
+    return out
+
+
+def _reassigned_names(tree: ast.AST) -> set:
+    """整檔被指派過的名字（`X = ...` / `X: T = ...` / for-target / with-as …）。
+
+    guard 引數若同時是 import 綁定**又**被重新指派過，靜態上就無法信任
+    import 那條線（`_SD_MANAGE_HEADER = DATA_GUARD_HEADER` 這種遮蔽會讓
+    純 import 解析誤判為綁對）→ 一律 fail-closed 當成綁錯。
+    """
+    names: set = set()
+    for node in ast.walk(tree):
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            targets = [node.target]
+        elif isinstance(node, ast.For):
+            targets = [node.target]
+        elif isinstance(node, ast.withitem) and node.optional_vars is not None:
+            targets = [node.optional_vars]
+        for t in targets:
+            for sub in ast.walk(t):
+                if isinstance(sub, ast.Name):
+                    names.add(sub.id)
+    return names
+
+
+def _resolved_guard_flags(relpath: str, *, guard_name: str,
+                          fn_name: str) -> list:
+    """該檔 `fn_name` 內每個 `guard_name(...)` 呼叫的引數，解析成
+    「merge_context 的原始常數名」清單。**任何一步解析不了都直接 assert 失敗**
+    （fail-closed：解析不到＝綁錯，不是跳過）。"""
+    tree = ast.parse((ROOT / relpath).read_text(encoding="utf-8"))
+    bindings = _import_bindings(tree)
+    reassigned = _reassigned_names(tree)
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name == fn_name)
+
+    flags: list = []
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Call)
+                and getattr(node.func, "id", "") == guard_name):
+            continue
+        assert len(node.args) == 1 and not node.keywords, (
+            f"{relpath}::{fn_name} 的 {guard_name}(...) 不是單一位置引數："
+            f"{ast.unparse(node)}（本守衛認不得 → fail-closed 視為綁錯）")
+        arg = node.args[0]
+        assert isinstance(arg, ast.Name), (
+            f"{relpath}::{fn_name} 的 guard 引數不是單純名稱："
+            f"{ast.unparse(arg)}（fail-closed 視為綁錯）")
+        assert arg.id not in reassigned, (
+            f"{relpath} 內 {arg.id} 被重新指派過 —— import 綁定不可信"
+            f"（fail-closed 視為綁錯）")
+        assert arg.id in bindings, (
+            f"{relpath}::{fn_name} 的 guard 引數 {arg.id} 追不到 import 來源"
+            f"（fail-closed 視為綁錯）")
+        mod, orig = bindings[arg.id]
+        assert mod == _MERGE_CONTEXT_MODULE, (
+            f"{relpath} 的 guard 引數 {arg.id} 綁到 {mod}.{orig}，"
+            f"不是 {_MERGE_CONTEXT_MODULE} 的旗標")
+        flags.append(orig)
+    return flags
+
+
+@pytest.mark.parametrize("relpath", sorted(_GUARD_EXPECTED_FLAG))
+def test_guard_argument_is_bound_to_the_expected_flag(relpath):
+    """四個子頁的 `_settings_page_owns(...)` 引數必須綁到**各自那支**旗標。
+
+    突變實驗（2026-08-31 實跑，重現稽核原始突變＋兩個變體）：
+    - tab_manage 的 import 改 `DATA_GUARD_HEADER as _SD_MANAGE_HEADER` →
+      **本條轉紅**（稽核指出上面 20 條照綠的那個缺口）。
+    - tab5 改 `MANUAL_HEADER as _SD_DATA_GUARD_HEADER` → **轉紅**。
+    - tab2 改 `MANAGE_HEADER as _SD_FETCH_DIAG` → **轉紅**。
+    - 在函式內加 `_SD_MANAGE_HEADER = _SD_DATA_GUARD_HEADER` 遮蔽 import →
+      **轉紅**（reassigned fail-closed，import 解析不會被遮蔽騙過）。
+    """
+    flags = _resolved_guard_flags(relpath, guard_name=_GUARD_NAME,
+                                  fn_name=_PAGE_RENDERERS[relpath])
+    assert flags, (f"{relpath} 找不到任何 {_GUARD_NAME}(...) 呼叫 —— 斷言失去對象"
+                   f"（guard 被整個拿掉？第 4 節會另外抓極性，本條抓綁定）")
+    expected = _GUARD_EXPECTED_FLAG[relpath]
+    wrong = [f for f in flags if f != expected]
+    assert not wrong, (
+        f"{relpath} 的 guard 綁錯旗標：綁到 {wrong}，應為 {expected} ——"
+        f"接線後 ⑤ 持有 {expected} 時這一塊不會讓位（或別的旗標誤傷它），"
+        f"畫面會無聲多出／少掉一塊")
+
+
+def test_settings_page_own_sections_bind_the_expected_flags():
+    """⑤ 頁自己三個分區的 `with settings_page_owns(...)` 也要綁對旗標
+    （同一把尺量到底；行為面另有 sentinel `owned_at_call` 佐證，兩者互補：
+    sentinel 驗「⑤ 端持有對了」，本條驗「靜態綁定就是那一支」）。
+
+    突變實驗（2026-08-31 實跑）：把 `_render_maintain_section` 的
+    `settings_page_owns(MANAGE_HEADER)` 改成 `settings_page_owns(DATA_GUARD_HEADER)`
+    → **本條轉紅**。
+    """
+    _expected_by_fn = {
+        "_render_maintain_section": "MANAGE_HEADER",
+        "_render_diag_section": "DATA_GUARD_HEADER",
+        "_render_manual_section": "MANUAL_HEADER",
+    }
+    for fn_name, expected in _expected_by_fn.items():
+        flags = _resolved_guard_flags("ui/tab_settings_diag.py",
+                                      guard_name="settings_page_owns",
+                                      fn_name=fn_name)
+        assert flags == [expected], (
+            f"ui/tab_settings_diag.py::{fn_name} 持有的旗標是 {flags}，"
+            f"應為恰好一次 {expected}")
