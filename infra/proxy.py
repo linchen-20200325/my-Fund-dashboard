@@ -143,8 +143,19 @@ def _get_thread_session() -> requests.Session:
 #      `mark_fetch_failed_if_retryable` → **B 的真失敗被判成「照舊快取」（False）**，
 #      鎖滿一個 TTL。
 #
-# **這不是 production bug** —— 實測至少 9 個 production 檔案真的呼叫 `fetch_url`
-# （另 1 個命中在文件字串），其中**只有 3 個消費分類**，而那 3 個全都寫成
+# **這不是 production bug** —— ~~實測至少 9 個 production 檔案真的呼叫 `fetch_url`
+# （另 1 個命中在文件字串）~~ → **2026-08-31 更正（有意識的更正，不是漏刪）：
+# 真值是 10 個，我少算 1 個。** AST 實測（把 `Call` 節點綁定到 `infra.proxy.fetch_url`、
+# 含 `as` 別名）：**10 個真 caller、3 個消費分類、0 個「消費卻沒呼叫」**。
+#
+# ⛔ **漏掉的是 `ui/tab5_data_guard.py`**（`_fu_d5(...)`，在 `btn_d5_proxy_test` 按鈕內）
+#    —— 本 repo 憲法 §-1.5.1c 判定 2 的 **A3** 早已登記此呼叫點。
+#    **成因值得記**：我用的是**字面 grep `fetch_url(`**，而該處是 `as` 別名
+#    （`_fu_d5`）→ **那條指令在結構上就掃不到它**，跑一百次也一樣。
+#    （同型缺陷本 PR 已犯過：字表漏 `yfinance`、漏 `_st_mod.cache_data`。
+#      **別名／包裝是這個 repo 的常態寫法，字面比對是錯的工具。**）
+#
+# 其中**只有 3 個消費分類**，而那 3 個全都寫成
 # `r = fetch_url(...)` 緊接 `if r is None: return mark_...(...)`、**中間沒有分支**，
 # 不變式成立。⚠️ 但**目前這是靠人遵守的約定，不是機器擋住的**：
 # 現有守衛釘的是「`pop` 會清掉」（那是對的），**沒有**釘住「第一次讀是誰的」。
@@ -154,13 +165,37 @@ def _get_thread_session() -> requests.Session:
 #    新增守衛屬新增測試檔，超出本批「純文件更正」的授權，**已另立一批登記**。
 #    ⛔ 不要把這行讀成「這條路走不通、不必再試」。
 #
-#    **可行做法（本 repo 今天剛做出同型的東西：#745 三態顏色批次的 R3 守衛，
-#    從形態下手、零白名單、零 ratchet、對真 repo 零誤判）**：本不變式**純語法**，
-#    比顏色那題更簡單 —— AST 掃描每一個 `mark_fetch_failed_if_retryable(...)` 呼叫點，
-#    要求同一個函式內存在一個**詞法上在它之前**的 `fetch_url(...)` 呼叫，
-#    且兩者之間**不得有任何分支**（`If` / `For` / `While` / `Try` / `With` /
-#    另一個 `fetch_url`）。**不需要知道任何檔名或函式名** → 擋得住
-#    「第 4 個消費者被加進來時中間插了一個 if」，正是下面 ⛔ 那條目前只能靠人記得的事。
+#    **可行做法** —— ⚠️ **以下是第二版；初版規則由總管給出、經稽核組實作驗證為
+#    3/3 誤判，已更正。這種來歷要留著。**
+#
+#    ~~初版：AST 掃描每個 `mark_fetch_failed_if_retryable(...)` 呼叫點，要求同函式內
+#      存在詞法上在它之前的 `fetch_url(...)`，且兩者之間**不得有任何分支**
+#      （`If` / `For` / `While` / `Try` / `With` / 另一個 `fetch_url`）。~~
+#    ⛔ **初版把本檔現行 3 個消費者全部判違規（3/3 誤判，實測）** —— 因為實際寫法
+#       就是 `r = fetch_url(...)` / `if r is None:` / `return mark_...(...)`，
+#       **那個呼叫點必然住在一個 `If` 裡面**。規則寫的條件會把它自己要保護的模式判違規。
+#
+#    ✅ **正確寫法**：「**除了緊接 assignment 的 `if <target> is None` 守衛之外**，
+#       不得有其他分支」。本不變式是**純語法**的，不需要知道任何檔名或函式名
+#       → 擋得住「第 4 個消費者被加進來時中間插了一個 `if`」，
+#       正是下面 ⛔ 那條目前只能靠人記得的事。
+#
+#    ⚠️ **實作時已知的三個缺口（稽核組實測，一併寫上免得下一個人重踩）**：
+#      (a) `fetch_url` **別名 import**（`_fu_d5` / `_fetch_url` / `_infra_fetch_url`）
+#          → 字面比對會誤判，**方向安全**（誤報，不是漏報）；
+#      (b) `mark_...` 以 **attribute 形式**呼叫（`P.mark_...`）或被別名
+#          → **fail-open，這個方向危險**（該擋的沒擋到）；
+#      (c) 包裝函式 **`fetch_url_with_retry`** 不會被字面比對命中
+#          —— 而它正是 `sources.py` 那 17 個呼叫點走的路。
+#      → **(a) 與 (c) 的解法都是「綁定到符號、不要比對字面」**（同本檔上方那個
+#        10 vs 9 的漏算成因）；(b) 必須另外處理，否則守衛會有安全洞。
+#
+#    **可行性依據**：本 repo 已有人做過同型的形態偵測守衛（#745 三態顏色批次的
+#    R3 守衛，同樣是「呼叫端怎麼包都要看得到」）。
+#    ⚠️ **刻意不引用它的品質宣稱**（「零白名單、零 ratchet、對真 repo 零誤判」）：
+#    那是 **#745 自己 body 裡明列的單組結論、未經第二組獨立稽核**，
+#    且該 PR **現為 open / draft、尚未合併**。**這裡只借「有人做過、可行」，
+#    不借它的數據** —— 拿未驗證且未合併的宣稱替新規則背書，正是本 PR 一路在修的病。
 #
 # ⛔ **新增消費者時**：`mark_fetch_failed_if_retryable` 與其 `fetch_url` 之間
 #    **不得有任何其他分支**（含 early return、迴圈、巢狀呼叫別的 fetcher）。
@@ -192,7 +227,11 @@ def pop_last_fail_kind() -> str:
       內 → 落到「標記、不快取」這個安全側。失敗模式是 fail-safe，不是 fail-silent。~~
     ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪；由獨立複驗實測推翻）：那句是假的。**
     **第一次讀仍可能拿到別人的殘值** —— 若上一個 caller 打了 `fetch_url` 卻不消費分類
-    （實測 9 個 production caller 中有 6 個是這種），殘值就留在本執行緒；
+    （~~實測 9 個 production caller 中有 6 個~~ → **2026-08-31 更正：AST 實測為
+    **10 個 caller 中有 7 個**；漏算成因見模組註解），殘值就留在本執行緒；
+    ⚠️ **實際的殘值量比這個數字更大**：`repositories/fund/sources.py` 有 **17 個**
+    `fetch_url_with_retry(...)` 呼叫點，該包裝內部就是 `infra.proxy.fetch_url`
+    （實跑 spy 確認），且**完全不消費分類** —— 它是最大的殘值產生者之一。
     此時一個**沒有自己打 `fetch_url`** 的讀取會拿到那個殘值，若恰好是 404，
     真失敗就會被判成「照舊快取」。**只有「拿不到殘值」時才會回 `""` 並落在安全側。**
 
@@ -230,7 +269,15 @@ def mark_fetch_failed_if_retryable(obj, reason: str):
     ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪；由獨立複驗實測推翻）：
     上面那兩個舉例替本 helper 背書是錯的 —— 它們對本 helper 是 0 使用。**
     實測：`tw_pmi_repository` 只走 `fetch_url`、**不消費分類**；
-    `repositories/fund/sources` **一次都沒呼叫 `fetch_url`**（走 `urlopen`）。
+    ~~`repositories/fund/sources` **一次都沒呼叫 `fetch_url`**（走 `urlopen`）。~~
+    ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪；獨立稽核推翻）：後半句是假的。**
+    該檔確實有 16 個 `urlopen(`，**但同時有 17 個 `fetch_url_with_retry(...)`**，
+    而該包裝內部就是 `infra.proxy.fetch_url`（實跑 spy 確認會走到）。
+    **結論不變（它對本 helper 是 0 使用），但理由要改成「不消費分類」，
+    不是「沒呼叫」。**
+    ⛔ **這個差別在殘值那一段特別要緊**：照實況，`sources.py` 反而是**最大的
+    殘值產生者之一**（大量呼叫、完全不消費）。寫成「沒呼叫」會給後人
+    **完全相反的**風險圖像。
     它們受**退避層**（`shared/backoff_policy` 的「404 免退避」）管轄，
     **不受本 helper 的「404 免標記」管轄** —— 兩件不同的事，被我混為一談了。
 
@@ -238,9 +285,11 @@ def mark_fetch_failed_if_retryable(obj, reason: str):
       · **退避層**：`shared/backoff_policy` 之所以讓 404 免退避，理由是上面那種
         「輪 slug／試 page_type」的探測 —— **那個理由完全成立，只是不屬於本層。**
       · **本層（快取豁免）**：受影響的三個 fetcher（`fetch_yf_close` / `fetch_fred` /
-        `fetch_defillama_stablecoin_mcap`）**全都是固定 URL**
-        （`query1.finance.yahoo.com/v8/finance/chart` / `api.stlouisfed.org` /
-        `stablecoins.llama.fi`）—— 對它們而言 **404 是異常，不是「答案」**。
+        `fetch_defillama_stablecoin_mcap`）~~全都是固定 URL~~
+        → **2026-08-31 措辭更正：「固定 URL」講得太滿**（`fetch_yf_close` 的
+        `ticker` 進 path、`fetch_fred` 的 `series_id` 進 params，只有 defillama
+        字面固定）。**成立的說法是：這三個都不做「逐一探測 slug / page_type」
+        那種以 404 當正常回覆的輪詢** —— 對它們而言 **404 是異常，不是「答案」**。
         **404 免標記在這裡的實際效果是「維持 `main` 的既有行為」（非回歸），
         不是「404 是正確答案所以該記住」。** 它擋掉的是本 PR 若一律標記就會造成的
         **請求量 5 倍放大**（實測 3 → 15），僅此而已。
@@ -249,8 +298,12 @@ def mark_fetch_failed_if_retryable(obj, reason: str):
     ~~它該給使用者的是一個紅色的系統錯誤（v3 §02「介面狀態嚴格分離」）。~~
     ⚠️ **2026-08-31 更正（同上）：那句描述的是一個尚不存在的出口** ——
     與本 PR §F3 修掉的病同型（宣稱一個未接線的可觀測入口已經存在）。
-    **實測現況**：全 repo 唯一的 407 紅字在 `ui/sidebar.py` 那顆**要手動點的**
-    「測試 Proxy 連線」按鈕內；**正常載入路徑上 407 沒有任何紅色出口**
+    **實測現況**：~~全 repo **唯一**的 407 紅字~~ → **2026-08-31 更正：是 2 處，
+    不是「唯一」。** 兩處都在**要手動點的按鈕內**：`ui/sidebar.py`
+    的「🔍 測試 Proxy 連線」，以及 `ui/tab5_data_guard.py` 的
+    「🧪 立即測 NAS Proxy 連線」（`btn_d5_proxy_test`，其 `st.error` 訊息含
+    「無回應 (407/403/timeout)」）。**實質結論不變：正常載入路徑上
+    407 沒有任何紅色出口**
     （`infra/proxy.py` 只 `print` 到 stdout），使用者看到的是**空白面板 + 鎖 10~30 分
     + 無說明**。**這與 `main` 相同、非本 PR 造成的回歸**；
     「該有一個紅色出口」是**尚未做的事**，不是現況。
