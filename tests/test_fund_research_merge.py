@@ -218,22 +218,42 @@ def _st_calls_in_page_renderer(relpath: str):
     現在改成把每個呼叫的第一個參數一起取出來，由呼叫端指名要驗哪一個。
 
     AST 而非字串：註解或 docstring 裡寫 `_merged_page_owns` 不會讓本函式誤判。
+
+    ⚠️ **「被守住」必須連極性一起驗**（2026-08-31 第三方複驗補強，理由寫下來免得改回去）：
+    本函式的第二版把「整個 If 底下的所有節點」都算成被守住 —— 不看 `not`。
+    實測突變：把 `if not _merged_page_owns(...)` 的 `not` 拿掉（極性反轉）→
+    舊入口（app.py 今天就掛著的那個）**整個少掉 `##` 標題**、合併頁反而畫兩份，
+    而本檔 14 條 + `test_tab2_single_fund` + `test_app_apptest` **全部照樣綠燈**
+    （2026-08-31 實跑）。那正是這組守衛要防的「無聲消失」，只是換了一個突變方向。
+    現在只認「合併頁**沒**持有時才畫」的那個分支：
+    `if not _merged_page_owns(...)` 的 body，或 `if _merged_page_owns(...)` 的 else。
+    條件式若被改寫成本函式認不得的形狀（例如併進複合條件），對應呼叫會被視為
+    未守住而轉紅 —— fail-closed，逼人回來看這裡，而不是安靜放行。
     """
     tree = ast.parse((ROOT / relpath).read_text(encoding="utf-8"))
     fname = _PAGE_RENDERERS[relpath]
     fn = next(n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name == fname)
 
+    def _is_owns_call(c) -> bool:
+        return (isinstance(c, ast.Call)
+                and getattr(c.func, "id", "") == "_merged_page_owns")
+
     guarded_ids: set = set()
     for node in ast.walk(fn):
         if not isinstance(node, ast.If):
             continue
-        if not any(isinstance(c, ast.Call)
-                   and getattr(c.func, "id", "") == "_merged_page_owns"
-                   for c in ast.walk(node.test)):
+        test = node.test
+        if (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)
+                and _is_owns_call(test.operand)):
+            branch = node.body          # if not owns(...): <這裡是被守住的>
+        elif _is_owns_call(test):
+            branch = node.orelse        # if owns(...): ... else: <這裡才是被守住的>
+        else:
             continue
-        for sub in ast.walk(node):
-            guarded_ids.add(id(sub))
+        for stmt in branch:
+            for sub in ast.walk(stmt):
+                guarded_ids.add(id(sub))
 
     out: list[tuple] = []
     for node in ast.walk(fn):
