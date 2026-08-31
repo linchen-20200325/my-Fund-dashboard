@@ -21,9 +21,23 @@
 |--------------|----------------------------|-------------------------|
 | 未載入／未設定 | ⬜ 灰色說明（`st.caption`） | `not_ready()`           |
 | 不適用       | ➖ 或不顯示                 | `NOT_APPLICABLE_MARK`（現況已分對，**不要**併進 ⬜） |
-| 業務警訊     | 🔴 紅字，但用卡片／表格列    | `business_alert()`      |
+| 業務警訊     | 🫐 **莓紅**字卡片＋ 6px 左軌   | `business_alert()`      |
 | 系統真出錯   | 🔴 紅色錯誤框 + 可展開技術細節 | `system_error()`      |
 | 破壞性操作提醒 | 🟠 常駐橘框                | `st.warning()`（無例外處理，不需 helper） |
+
+⚠️ **2026-08-31 更新：業務警訊改用「莓紅」，與系統紅正式脫鉤。**
+在此之前，業務警訊與系統紅框**共用 `MATERIAL_RED`**，兩者的差別**只剩形狀**
+（卡片 vs 錯誤框）—— 而形狀是最容易在餘光裡看丟的一種差異，
+等於把上面那句「兩者要使用者做的事完全相反」交給使用者自己用眼力去補。
+現在業務色是 `shared.colors.BUSINESS_ALERT_ON_DARK`（`#f294b6`），左軌加粗到
+`BUSINESS_ALERT_RAIL_PX`（6px）：**顏色與形狀兩個訊號同向**，任一個看丟都還有另一個。
+- `MATERIAL_RED` 其餘用途（吃本金／z-score／sparkline，34 檔）**一處未動** ——
+  本批換掉的只有「業務警訊框」這一個角色。
+- **淺色底的配對值 `BUSINESS_ALERT_ON_LIGHT`（`#96124a`）已進 SSOT 但 production 用不到**，
+  原因（App 釘死深色 + 本 repo 沒有主題感知機制）寫在 `shared/colors.py` 該常數上方，
+  **不在這裡重複**（同一個事實只准有一個真相源）。
+- 這條分離由 `tests/test_tricolor_colour_provenance.py` 守，**守顏色來源不守字面**：
+  它擋的不只是「直接把業務色寫成系統紅」，也擋「包一層 helper 再用業務色畫系統錯誤」。
 
 ⚠️ **🟠 這件衣服，同一頁上現在有三種意思**（2026-08-28 第二輪稽核 A6 補登；
 本模組自稱是顏色 SSOT，表就必須跟得上實況，否則它自己變成新的模糊來源）：
@@ -81,13 +95,18 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import BG_DARK_RED_1, GH_FG_PRIMARY, MATERIAL_RED
+from shared.colors import BG_DARK_RED_1, BUSINESS_ALERT_ON_DARK, GH_FG_PRIMARY
 
 # ⬜ 在 ui/ 全層已是家規（量測日 2026-08-28：299 處）——沿用，不引進新符號。
 NOT_READY_MARK: str = "⬜"
 # ➖「結構上不適用」（台幣基金沒有匯率位階、不配息基金沒有配息欄）。
 # 與 ⬜ 語意不同：⬜ 是「現在沒有、之後會有」，➖ 是「這件事對它本來就不存在」。
 NOT_APPLICABLE_MARK: str = "➖"
+
+# 業務警訊卡的左軌粗細。系統紅框（`st.error`）**沒有左軌** —— 顏色分離之後，
+# 這條軌是第二個、也是形狀上的辨識點，故 4px → 6px 讓它在餘光裡就分得出來。
+# 具名而不 inline：§3.3 反捏造（同一個數字只准定義一次）。
+BUSINESS_ALERT_RAIL_PX: int = 6
 
 
 def not_ready(message: str, *, where: str = "") -> None:
@@ -165,19 +184,24 @@ def system_error(what: str, exc: BaseException, *, hint: str = "",
 
 
 def business_alert(title: str, lines: list[str], *, footer: str = "") -> None:
-    """🔴 業務警訊：紅字卡片，**不是**紅色錯誤框。
+    """🫐 業務警訊：**莓紅**字卡片，**不是**紅色錯誤框。
 
     用在：淘汰候選、嚴重吃本金、系統性風險暫緩換標 —— 分析**成功了**，
     答案是「這幾檔該換」。那是成果，不是故障，所以不能用 `st.error`
     （會和系統崩潰共用同一個視覺語彙）。
+
+    2026-08-31 起連**顏色**也不共用：前景走 `BUSINESS_ALERT_ON_DARK`，
+    左軌 `BUSINESS_ALERT_RAIL_PX`（6px，系統紅框沒有左軌）。
+    在此之前兩者同為 `MATERIAL_RED`，差別只剩形狀。
     """
     _body = "".join(f"<div style='margin:2px 0'>{ln}</div>" for ln in lines)
     _foot = (f"<div style='color:{GH_FG_PRIMARY};opacity:.7;font-size:11px;"
              f"margin-top:6px'>{footer}</div>") if footer else ""
     st.markdown(
-        f"<div style='background:{BG_DARK_RED_1};border-left:4px solid {MATERIAL_RED};"
+        f"<div style='background:{BG_DARK_RED_1};"
+        f"border-left:{BUSINESS_ALERT_RAIL_PX}px solid {BUSINESS_ALERT_ON_DARK};"
         f"border-radius:6px;padding:10px 12px;margin:6px 0'>"
-        f"<div style='color:{MATERIAL_RED};font-weight:700;font-size:15px;"
+        f"<div style='color:{BUSINESS_ALERT_ON_DARK};font-weight:700;font-size:15px;"
         f"margin-bottom:4px'>{title}</div>"
         f"<div style='color:{GH_FG_PRIMARY};font-size:13px'>{_body}</div>"
         f"{_foot}</div>",

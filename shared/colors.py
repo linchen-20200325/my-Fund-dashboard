@@ -85,6 +85,34 @@ WHITE: str = "#fff"                # pure white
 # v19.274 Phase 2 收尾:策略3 訊號 chip 近黑底(3 處跨 tab2/tab3,原 inline "#111")
 CHIP_BG_NEAR_BLACK: str = "#111"   # near-black chip bg(phase-signal chip / alloc fallback)
 
+# ── 三態顏色語意角色 SSOT（2026-08-31，客戶四大鐵律第 3 條「三態顏色分離」）──────
+# 客戶拍板的三態：
+#   未載入／沒點過 ＝ 灰色說明 ／ 系統真出錯 ＝ 紅色警示 ／ 業務上的壞消息 ＝ **業務色**。
+# 2026-08-31 前，業務警訊卡（`ui/helpers/render_state.business_alert`）用的是
+# `MATERIAL_RED`，與系統紅同屬「一眼看去就是那個紅」，**只靠形狀（卡片 vs 錯誤框）分辨** ——
+# 本組拆的就是這一點。`MATERIAL_RED` 其餘用途（吃本金／z-score／sparkline，34 檔）**未動**。
+#
+# ⚠️ 下面兩個值是**一組、依底色擇一**，不是「深色版／淺色版隨便挑」。
+#    實測 WCAG 對比（`scripts` 無此工具，數字由本次 PR 就地計算，公式 WCAG 2.x relative luminance）：
+#      #96124a on #ffffff = 8.46:1 ✅ ／ on 業務卡底 #2a0a0a = 2.17:1 ❌（幾乎看不見）
+#      #f294b6 on #2a0a0a = 8.45:1 ✅ ／ on #ffffff        = 2.17:1 ❌（幾乎看不見）
+#    **用錯邊的代價不是「不夠好看」，是字直接讀不到。**
+#    `tests/test_tricolor_colour_provenance.py::test_r1_*` 以對比公式把這件事機器化，
+#    不靠這段註解自律。
+BUSINESS_ALERT_ON_LIGHT: str = "#96124a"   # 深莓紅：**淺**色底上的業務警訊前景
+BUSINESS_ALERT_ON_DARK: str = "#f294b6"    # 亮莓紅：**深**色底上的業務警訊前景
+
+# ⚠️ **目前 production 只用得到 ON_DARK 這一個**，據實寫明原因，不要讀成「另一個是死碼」：
+#    `.streamlit/config.toml` 釘死 `base = "dark"` → Streamlit App 只有深色底。
+#    `ON_LIGHT` 先進 SSOT 是因為客戶把兩個值一起給了，且它是 `ON_DARK` 的配對值；
+#    真正要讓它生效，需要一套「Streamlit 內文如何得知目前主題」的機制 —— 本 repo **沒有**
+#    （唯一的深淺切換在 `ui/helpers/dividend_calendar_render.py`，那是獨立匯出 HTML 的
+#    私有 `:root{--…}` CSS，讀不到本模組，也套不進 `st.markdown` 片段）。
+#    ⛔ **不要**在 `st.markdown` 裡加 `@media (prefers-color-scheme: light)` 來「順手支援」：
+#    那個 media query 反映的是**作業系統偏好**，不是 Streamlit 主題。使用者 OS 設淺色、
+#    App 仍是深色底 → 會挑到 `ON_LIGHT` 畫在 `#2a0a0a` 上＝ 2.17:1，**比現況更糟**。
+#    此事已回報總管裁決（見本批 PR 描述），不由執行組自行發明機制。
+
 # 同義對應
 TRAFFIC_EMOJI: tuple[str, str, str, str] = ("🟢", "🟡", "🔴", "⬜")
 TRAFFIC_HEX: tuple[str, str, str, str] = (
