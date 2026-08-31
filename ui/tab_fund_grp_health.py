@@ -957,6 +957,22 @@ def _render_health_3tables(rows: list[dict],
             footer="↓ 完整指標見下方健診大表。",
         )
 
+    # ── 🛡️ 持倉互斥避險(元件 A)── 2026-08-31 客戶拍板 Q1:緊接「結論摘要」
+    # (淘汰候選紅區)之後、健診大表之前 ——「哪幾檔在吃本金」與「哪幾對會一起跌」
+    # 是同一層級的行動答案。完整相關性矩陣**不搬家**,仍在下方 🔬 進階分析。
+    # 僅 ② 健診 Tab(source_tab == "health"):Q1 拍板的是 ② 組合健診頁;
+    # Tab3 持倉健診 embed 不在拍板範圍,版面異動未經草稿不夾帶(§-1.5 v3 §03-2 ①)。
+    # funds_extra 缺(進階資料建構失敗)→ 不渲染:上游已有 system_error 講因,
+    # 這裡不再各印一句(「在因的位置講一次」,同本檔 D1 慣例)。
+    if source_tab == "health" and funds_extra:
+        try:
+            from ui.components.mutual_exclusion import (
+                render_mutual_exclusion_section,
+            )
+            render_mutual_exclusion_section(funds_extra)
+        except Exception as _e_me:  # noqa: BLE001 — 區塊隔離,失敗不擋健診大表
+            system_error("持倉互斥避險區塊渲染失敗", _e_me)
+
     # v19.411:①② 表不再單獨渲染,欄位已併入「健診大表」。
     # 2026-08-06 必修 4:原本 90 行 inline dict 抽至
     # `ui/helpers/fund_grp_health/columns.py`,讓**批次大表(Tab③)沿用同一份設定**
