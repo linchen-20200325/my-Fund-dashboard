@@ -24,6 +24,13 @@ from ui.helpers.fund_research.merge_context import (
     SHARED_SEARCH as _MERGED_SHARED_SEARCH,
     owned_by_merged_page as _merged_page_owns,
 )
+# ⑤ 設定與診斷合併頁（線框 §03 ⑤）的所有權旗標 + 抓取診斷區塊本體（WP-E 抽出共用）。
+# 預設旗標全空 → 本檔行為與抽出前完全相同（守衛：tests/test_settings_diag_merge.py）。
+from ui.helpers.settings_diag.fetch_diag_section import render_fetch_diag_section
+from ui.helpers.settings_diag.merge_context import (
+    FETCH_DIAG as _SD_FETCH_DIAG,
+    owned_by_settings_page as _settings_page_owns,
+)
 
 from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
@@ -416,98 +423,13 @@ def render_single_fund_tab() -> None:
             # 摺疊處置(原則 1):這一區只在 partial 狀態出現,而 partial 的**唯一用途**
             # 就是回答「到底哪個源失敗」。把它裝進一個永遠展開的摺疊殼,等於在最需要
             # 被讀的診斷資訊外面多包一層裝飾邊框。改標題 + container 直接攤平。
-            st.markdown("##### 🔍 抓取診斷細節（哪個源失敗 + NAS Proxy 狀態）")
-            with st.container():
-                _mj_raw    = fd.get("moneydj_raw", {}) or {}
-                _series    = fd.get("series")
-                _series_n  = (len(_series) if _series is not None
-                              and hasattr(_series, "__len__") else 0)
-                _has_metrics = bool(fd.get("metrics"))
-                _has_risk    = bool(_mj_raw.get("risk_metrics"))
-                _has_div     = bool(fd.get("dividends"))
-                _raw_warn = fd.get("warning") or _mj_raw.get("warning", "") or "—"
-                _raw_err  = fd.get("error")   or _mj_raw.get("error",  "") or "—"
-                # v18.120: NAS Proxy 狀態檢測（issue 4 user 切到 NAS 後仍失敗）
-                try:
-                    from infra.proxy import get_proxy_config as _gpc
-                    _pxy_cfg = _gpc()
-                    if _pxy_cfg:
-                        _pxy_url = _pxy_cfg.get("https", "—")
-                        # 隱藏密碼
-                        import re as _re_pxy
-                        _pxy_safe = _re_pxy.sub(
-                            r"//[^:]+:[^@]+@", "//****:****@", _pxy_url)
-                        _pxy_line = f"NAS Proxy: ✅ {_pxy_safe}"
-                    else:
-                        _pxy_line = "NAS Proxy: ❌ 未設定（走直連，Cloud IP 可能被封）"
-                except Exception as _e_pxy:
-                    _pxy_line = f"NAS Proxy: ⚠️ 讀取失敗 ({type(_e_pxy).__name__})"
-                # v19.193 SSOT:呼叫 portfolio_service.get_factor_availability(),
-                # 確保診斷 ✅/❌ ↔ calc_fund_factor_score 實際納入 factor 1-1 對齊。
-                # 修正 v19.191 inline 走岔(mgmt_fee="N/A"/expense_ratio=0/tr1y="abc"/
-                # annual_div_rate=None 等 case 的 ✅/❌ 偏差)。
-                from services.portfolio_service import get_factor_availability as _gfa
-                _m_diag = fd.get("metrics") or {}
-                # 若 fd 未帶 risk_table 但 moneydj_raw 有 → 補上,匹配 calc_fund_factor_score
-                # caller 慣例。
-                _avail_fd = dict(fd)
-                if "perf" not in _avail_fd:
-                    _avail_fd["perf"] = _mj_raw.get("perf") or {}
-                _avail = _gfa(_avail_fd, risk_table=_mj_raw.get("risk_metrics"))
-                def _mk_bool(b: bool) -> str:
-                    return "✅" if b else "—"
-                _adv_3y = _m_diag.get("ret_3y_ann")
-                _adv_5y = _m_diag.get("ret_5y_ann")
-                def _mk(v):
-                    return "✅" if v is not None else "—"
-                # 必修 4:門檻文案改**直接 import SSOT 常數**渲染,不再寫死數字。
-                # 舊文案寫的樣本門檻(60)與 Calmar 的一年期退路皆已過時
-                # ⚠️ 本註解**刻意不引用舊文案原字串** —— `test_stale_threshold_copy_removed`
-                #    是對整檔原始碼做子字串掃描,註解裡引用等於自己讓自己紅。
-                # (實際 250 / 756,且 1Y fallback 已取消)→ user 看到「我有 100 筆
-                # 應該夠」但畫面顯示「—」= §1 要防的「無法察覺的矛盾」。
-                from services.fund_service import (
-                    MIN_DOWNSIDE_OBS_SORTINO as _MIN_DOWN,
-                    MIN_OBS_CALMAR as _MIN_CALMAR,
-                    MIN_OBS_MAX_DRAWDOWN as _MIN_MDD,
-                    MIN_OBS_SHARPE_SORTINO as _MIN_SS,
-                )
-                st.code(
-                    f"{_pxy_line}\n"
-                    f"────────────────────────\n"
-                    f"狀態: {_status_fd}\n"
-                    f"基金名稱: {_p_fn or '（未抓到）'}\n"
-                    f"NAV 序列: {_series_n} 筆 "
-                    f"{'✅' if _series_n >= 10 else '❌ (需 ≥10)'}\n"
-                    f"指標 (calc_metrics): {'✅' if _has_metrics else '❌'}\n"
-                    f"風險指標 (wb07):     {'✅' if _has_risk    else '❌'}\n"
-                    f"配息歷史 (wb05):     {'✅' if _has_div     else '❌'}\n"
-                    f"最新淨值: {_mj_raw.get('nav_latest', '—')}\n"
-                    f"基金類別: {_mj_raw.get('fund_type',  '—')}\n"
-                    f"page_type: {fd.get('page_type', '—')}\n"
-                    f"────────────────────────\n"
-                    f"📊 進階指標(對齊 calc_fund_factor_score SSOT):\n"
-                    f"  Sortino:     {_mk_bool(_avail['Sortino'])}  "
-                    f"(需 ≥{_MIN_SS} 交易日 + ≥{_MIN_DOWN} 筆低於 MAR 的報酬)\n"
-                    f"  Calmar:      {_mk_bool(_avail['Calmar'])}  "
-                    f"(需 ≥{_MIN_CALMAR} 交易日 = 3Y;**無** 1Y fallback)\n"
-                    f"  Max DD:      {_mk(_m_diag.get('max_drawdown'))}  "
-                    f"(需 ≥{_MIN_MDD} 交易日)\n"
-                    f"  Alpha:       {_mk_bool(_avail['Alpha'])}  (perf.1Y 可解析;adr 預設 0)\n"
-                    f"  費用率:      {_mk_bool(_avail['ExpenseRatio'])}  (arg/expense_ratio/mgmt_fee float 可解析)\n"
-                    f"  3Y 年化:     {_mk(_adv_3y)}  (需 NAV ≥ 3 年,非 6F factor)\n"
-                    f"  5Y 年化:     {_mk(_adv_5y)}  (需 NAV ≥ 5 年,非 6F factor)\n"
-                    f"────────────────────────\n"
-                    f"warning: {_raw_warn}\n"
-                    f"error:   {_raw_err}",
-                    language=None,
-                )
-                st.caption(
-                    "📌 **判讀**：\n"
-                    "- Proxy ✅ + page_type yp010000 + NAV=0 → 路由錯（境外基金抓到境內頁）\n"
-                    "- Proxy ✅ + page_type yp010001 + NAV=0 → 源真壞或 NAS 不通該基金\n"
-                    "- Proxy ❌ → 至 Streamlit Cloud secrets 加 PROXY_URL = \"http://user:pwd@host:3128\""
-                )
+            #
+            # WP-E（線框 §03 ⑤「A · 🔌 連線與帳號」搬入項）：區塊本體**原封抽至**
+            # `ui/helpers/settings_diag/fetch_diag_section.py`，⑤ 與本頁共用同一份。
+            # ⑤ 持有 FETCH_DIAG 旗標時本頁不再畫（接線批次才會持有）；
+            # 旗標全空（現況）→ 與抽出前完全相同：partial 時渲染同一塊。
+            if not _settings_page_owns(_SD_FETCH_DIAG):
+                render_fetch_diag_section(fd, _status_fd, _p_fn)
         else:
             s    = fd.get("series"); m = fd.get("metrics",{}); divs = fd.get("dividends",[])
             name = fd.get("fund_name",""); fk = fd.get("full_key","")

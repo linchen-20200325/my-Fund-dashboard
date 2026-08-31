@@ -31,7 +31,15 @@ from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, 
 
 def render_manual_tab() -> None:
     """渲染系統說明書 Tab — 10 sub-tab 公式與判斷標準完整說明。"""
-    st.markdown("## 📖 系統說明書 — 公式與判斷標準完整說明")
+    # ⑤ 設定與診斷合併頁（線框 §03 ⑤，WP-E）已畫分區標題時，這裡不再畫第二個 `##`。
+    # 只讓掉標題那一行 —— caption 與全部內容照舊。
+    # 旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。
+    from ui.helpers.settings_diag.merge_context import (
+        MANUAL_HEADER as _SD_MANUAL_HEADER,
+        owned_by_settings_page as _settings_page_owns,
+    )
+    if not _settings_page_owns(_SD_MANUAL_HEADER):
+        st.markdown("## 📖 系統說明書 — 公式與判斷標準完整說明")
     st.caption("📖 故事附錄・公式聖經：拆解前 4 站每個評分模型、公式與指標的算法，讓進階使用者看懂決策邏輯。")
 
     # ════════════════════════════════════════════════════════════

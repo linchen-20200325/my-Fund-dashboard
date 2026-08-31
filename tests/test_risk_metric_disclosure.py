@@ -258,8 +258,18 @@ class TestTab2DisclosureWiring:
         assert "天含息報酬(非 1Y)" in src
 
     def test_stale_threshold_copy_removed(self):
-        """必修 4 —— **修正前必紅**:UI 對 user 說的門檻是舊值(60 筆 / 1Y fallback)。"""
-        src = _tab2_src()
+        """必修 4 —— **修正前必紅**:UI 對 user 說的門檻是舊值(60 筆 / 1Y fallback)。
+
+        ⚠️ WP-E（2026-08-31）:「🔍 抓取診斷細節」區塊本體（含 `_MIN_SS` 那組
+        SSOT import）**原封抽至** `ui/helpers/settings_diag/fetch_diag_section.py`
+        供 ⑤ 與個基頁共用。本測試守的是「文案有沒有照實說」,不是「文案住在哪個檔」
+        —— 比照下方 `_grp_health_src()` 的既有處置（搬家不誤紅、砍掉才紅）:
+        兩檔一起讀。stale 字串的**不得出現**斷言同樣覆蓋兩檔（搬過去也不准帶舊值）。
+        """
+        _diag_src = (Path(__file__).resolve().parent.parent
+                     / "ui/helpers/settings_diag/fetch_diag_section.py"
+                     ).read_text(encoding="utf-8")
+        src = _tab2_src() + "\n" + _diag_src
         assert "需 ≥60 筆" not in src
         assert "需 NAV ≥ 60 筆" not in src
         assert "或 1Y 報酬 + max_dd" not in src
