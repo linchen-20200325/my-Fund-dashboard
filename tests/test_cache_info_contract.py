@@ -14,13 +14,23 @@
 `except Exception: pass  # smoke-allow-pass` 吞掉 →
 **那行 caption 從上線以來一次都沒印出來過，而測試一路長綠。**
 
-本檔要擋的兩件事
-----------------
-1. **契約守衛**：`get_all_cache_info()` 的**每一列**都要有 `name` + `size`；
-   統計欄位 `hits`/`misses`/`uncached_fail` **全有或全無**。
-   → 日後有人新增第 5 種生產者卻不照契約，這裡會紅。
+~~本檔要擋的兩件事~~ → **三件事**
+--------------------------------
+⚠️ **有意識的更正，不是漏刪**（日期 **2026-08-31**；決策者：**#746 回修組**，
+依獨立紅隊實測）。**舊表述在寫下的當天不是「寫錯」，是「不完整」**：第 1 條的
+「每一列都要有 `name` + `size`」讀起來像兩個欄位都被守住了，
+**實測只有 `size` 是真的**（理由見下方第 3 條與 `TestRawProducerContract`）。
+舊表述的理由仍然成立（它確實描述了第 1、2 條在做的事），被權衡掉的是它的
+**涵蓋範圍宣稱**。
+
+1. **契約守衛（回填後）**：`get_all_cache_info()` 的**每一列**都要有
+   `name` + `size`；統計欄位 `hits`/`misses`/`uncached_fail` **全有或全無**。
 2. **回歸守衛**：直接釘住本次的 bug —— 對**真實 registry** 做消費端那個加總，
    不得拋例外。
+3. 🆕 **契約守衛（回填前）**：直接向每個生產者要 `cache_info()`，斷言必備欄位齊全。
+   **第 1 條驗不到 `name`** —— `get_all_cache_info()` 內是
+   `info["name"] = fn.__name__`（**無條件事後回填**），回填後的列必然有 `name`。
+   → 日後有人新增第 5 種生產者卻不照契約，**要靠第 3 條才會紅**。
 
 ⚠️ **刻意用真實 `_CACHE_REGISTRY`，不自己造假 dict** —— 造假 dict 只會測到
 「我寫的假資料符合我寫的契約」，測不到真的生產者。
@@ -57,6 +67,16 @@ def rows():
     out = get_all_cache_info()
     assert out, "registry 是空的 —— 這批測試就失去意義了（import 沒觸發註冊？）"
     return out
+
+
+@pytest.fixture(scope="module")
+def producers(rows):
+    """registry 本身（不是 get_all_cache_info() 的輸出）。
+
+    依賴 `rows` 只為借它的 import 副作用 —— 那些 import 才會觸發快取註冊。
+    """
+    assert ic._CACHE_REGISTRY, "registry 是空的 —— 這批測試就失去意義了"
+    return list(ic._CACHE_REGISTRY)
 
 
 class TestCacheInfoContract:
@@ -115,6 +135,72 @@ class TestCacheInfoContract:
         """反向：不能全部都「不適用」，否則上一條會空轉成假綠燈。"""
         with_stats = [r for r in rows if set(CACHE_INFO_STAT_KEYS).issubset(r)]
         assert with_stats, "沒有任何一列帶統計欄位 —— hit-rate 永遠算不出來"
+
+
+class TestRawProducerContract:
+    """契約守衛（**回填前**）：直接向每個生產者要 `cache_info()`，不看回填後的列。
+
+    ⚠️ **為什麼非得多這一組不可 —— 這是 2026-08-31 紅隊實測抓到的守衛缺口**：
+    `get_all_cache_info()` 內部寫的是 `info["name"] = fn.__name__` ——
+    **無條件事後回填**。於是 `rows` fixture 拿到的每一列都一定有 `name`，
+    上面 `TestCacheInfoContract` 那組**在結構上不可能**看到「生產者沒吐 name」。
+    實測兩筆：
+      (a) 拔掉 `infra/cache.py::_ttl_cache` 新增的 `"name": fn.__name__`
+          → 生產者原始輸出真的少了 `name`（行為確實變了），16 條守衛**全綠**；
+      (b) 註冊一個「有 `size`、沒有 `name`」的第 5 生產者
+          → 回填後那列有 `name`，16 條守衛**全綠**。
+    也就是說：契約的兩個必備欄位裡，先前**只有 `size` 真的被守住**。
+
+    本組把尺換成**回填前的原始輸出**，同一個尺同時擋住 (a) 與 (b)。
+    ⚠️ 這一條是**行為守衛**，不是形式守衛：它斷言的是生產者實際吐出來的東西，
+    不是原始碼長什麼樣。
+    """
+
+    def test_producer_output_carries_required_keys_before_backfill(self, producers):
+        """每個生產者**自己**就要吐齊必備欄位，不准靠 get_all_cache_info() 補。
+
+        `name` 之所以要生產者自己給：`fn.cache_info()` 是 public 介面，
+        直接呼叫它的 caller（不經 `get_all_cache_info()`）拿到的必須也是完整的列。
+        """
+        offenders = []
+        for fn in producers:
+            label = getattr(fn, "__name__", repr(fn))
+            try:
+                raw = fn.cache_info()
+            except Exception as e:  # 生產者連 cache_info() 都叫不動 = 違約
+                offenders.append((label, f"cache_info() 拋 {type(e).__name__}: {e}"))
+                continue
+            missing = sorted(set(CACHE_INFO_REQUIRED_KEYS) - set(raw))
+            if missing:
+                offenders.append((label, f"缺 {missing}"))
+        assert not offenders, (
+            f"下列生產者的 **cache_info() 原始輸出**違反欄位契約：{offenders}\n"
+            f"  → 必備欄位 = {CACHE_INFO_REQUIRED_KEYS}\n"
+            f"  → 注意：get_all_cache_info() 會事後回填 `name`，所以看回填後的列"
+            f"    **驗不出這個問題**；本條刻意在回填前量。\n"
+            f"  → 見 infra/cache.py 的「cache_info() 欄位契約」段"
+        )
+
+    def test_backfill_is_not_load_bearing(self, producers):
+        """反向：確認上一條沒有空轉。
+
+        若哪天 `get_all_cache_info()` 的回填被拿掉，回填前後的 `name` 必須一致
+        —— 也就是**回填目前不承載任何東西**，它只是防禦性的重複。
+        這條同時釘住「回填不得被用來『補齊』一個違約的生產者」。
+        """
+        mismatched = []
+        for fn in producers:
+            label = getattr(fn, "__name__", repr(fn))
+            try:
+                raw_name = fn.cache_info().get("name")
+            except Exception:
+                continue  # 上一條會紅，這裡不重複報
+            if raw_name != label:
+                mismatched.append((label, raw_name))
+        assert not mismatched, (
+            f"生產者自報的 name 與 registry 的 __name__ 不一致：{mismatched}\n"
+            f"  → 兩者不一致時，UI 顯示的名字會隨『有沒有走 get_all_cache_info()』而變"
+        )
 
 
 class TestCaptionRegression:
