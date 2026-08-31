@@ -105,7 +105,7 @@ my-Fund-dashboard/
 │   │
 │   ├── risk/precision/optimization 群    (多達 10 檔)
 │   │   ├── risk_radar              780   ⚠️ Line 183 import urllib + _fetch_stooq_csv = fetcher
-│   │   ├── multi_factor_optimization 770
+│   │   ├── ~~multi_factor_optimization 770~~ (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   │   ├── crisis_strategy_grid       ?
 │   │   ├── crisis_backtest            ?
 │   │   ├── crisis_ai_advisor       193
@@ -118,7 +118,7 @@ my-Fund-dashboard/
 │   │
 │   ├── ai/advisor 群     × 5
 │   │   ├── ai_service              674
-│   │   ├── auto_search             633
+│   │   ├── ~~auto_search             633~~ (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   │   ├── ai_prompts              222
 │   │   ├── ai_advisor_pending      234
 │   │   └── crisis_ai_advisor       193
@@ -126,8 +126,8 @@ my-Fund-dashboard/
 │   ├── 其他 service
 │   │   ├── ledger_service          532
 │   │   ├── ~~allocation_simulator    441~~ (v19.212 P0-3-#4 拔毒,production 0 caller)
-│   │   ├── auto_search_store_local   ?
-│   │   ├── auto_search_store_gs      ?   ⚠️ Line 45 直 `import streamlit` 讀 secrets
+│   │   ├── ~~auto_search_store_local   ?~~ (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
+│   │   ├── ~~auto_search_store_gs      ?~~   ⚠️ Line 45 直 `import streamlit` 讀 secrets (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   │   ├── moneydj_fetcher           ?   ⚠️ **名為 fetcher** — 但 spot-check 顯示是 URL 組裝 + 包 L1 fetch,不違憲
 │   │   ├── nav_history_store         ?
 │   │   ├── realtime_signal           ?   ⚠️ Line 67 `from ui.helpers.macro_helpers import ...` = L2→L3 反向依賴
