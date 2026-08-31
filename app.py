@@ -322,8 +322,21 @@ render_sidebar(
 #   ⑤ = 舊「我的管理室」+「參考 / 診斷」內的資料診斷與說明書
 #       (ui/tab_settings_diag.py,單頁 + 目錄錨點,**不再有巢狀 st.tabs**)
 # ⚠️ 巢狀 st.tabs 一併消失 —— 舊「參考 / 診斷」是全站唯一的三層巢狀分頁入口。
-#     檔首 CSS 那條「把巢狀 tab-list 還原 static」的規則**刻意保留**:說明書
-#     (`ui/tab6_manual.py`)自己仍有一層 st.tabs,規則失效只會回到現況、不會壞。
+#     檔首 CSS 那條「把巢狀 tab-list 還原 static」的規則**刻意保留**。
+#     ⚠️ 2026-08-31 就地更正**保留理由**(**有意識的變更,不是漏刪** ·
+#        日期 2026-08-31 · 決策者:AI 總管):
+#     ~~說明書(`ui/tab6_manual.py`)自己仍有一層 st.tabs,規則失效只會回到現況、不會壞。~~
+#     **這句已不成立**:同日「說明書 10 子分頁 → 單頁 + 錨點目錄」之後,
+#     `ui/tab6_manual.py` 的 `tabs(...)` 呼叫數為 **0**
+#     (守衛 `tests/test_manual_anchor_toc.py::test_manual_has_no_nested_tabs`)。
+#     **舊理由在它寫下的當天是對的**;變的不是判斷,是它指的那個對象消失了。
+#     **規則本身照舊保留,而且仍有作用對象** —— 巢狀 st.tabs 並未絕跡:
+#       · `ui/tab3_t7_ledger.py`(經 `ui/tab3_portfolio.py` 在頂層分頁 ④ 內渲染)
+#       · `ui/components/column_group_tabs.py`
+#     ⛔ **不得**把本次更正讀成「這條 CSS 可以刪了」—— 刪它是**行為變更**,
+#        要另案評估(而且上面兩處還在用)。本次只改敘述,CSS 一個字元未動。
+#     ⚠️ 「巢狀 st.tabs 只剩上列 2 處」是**單組 AST 實測**(量測日 2026-08-31,
+#        掃 `ui/**/*.py` + `app.py`),**沒有第二組驗過**,引用請打折。
 from ui.helpers.story_nav import tab_label as _tab_label
 
 # ⭐ 「🔍 抓取診斷細節」的所有權必須由**本檔**持有,不能讓 ⑤ 自己 with ——
