@@ -449,12 +449,67 @@ def test_binary_op_with_marked_on_the_right_is_version_dependent():
         )
 
 
-def test_concat_and_frame_construction_drop_the_mark():
-    """會**清掉**標記的操作 —— pandas 2.3.3 與 3.0.5 實測一致，硬斷言。"""
-    assert is_fetch_failed(pd.concat([_clean_series(), _marked_series()])) is False
-    assert is_fetch_failed(_clean_series().combine_first(_marked_series())) is False
-    assert is_fetch_failed(
-        pd.DataFrame({"a": _clean_series(), "b": _marked_series()})) is False
+@pytest.mark.parametrize("label, op", [
+    ("combine_first", lambda m, c: m.combine_first(c)),
+    ("fillna",        lambda m, c: m.fillna(c)),
+    ("where",         lambda m, c: m.where(m > 3, c)),
+])
+def test_merge_ops_keep_the_mark_when_the_marked_one_is_the_caller(label, op):
+    """⚠️ **合併類操作看誰是 caller** —— `self` 那側的 attrs 勝出。兩版皆然。
+
+    這條是補上第一版漏掉的那個方向。第一版只斷言了
+    `乾淨.combine_first(標記) is False`（安全的那向），就在註解裡寫成
+    「combine_first 會清掉標記」的通則 —— **錯在安全方向**：
+    會讓作者以為用了 combine_first 就不必叫 `clear_fetch_failed`。
+    """
+    assert is_fetch_failed(op(_marked_series(), _clean_series())) is True, (
+        f"{label}: 被標記者作為 caller 時標記應保留"
+    )
+
+
+@pytest.mark.parametrize("label, op", [
+    ("combine_first", lambda m, c: c.combine_first(m)),
+    ("fillna",        lambda m, c: c.fillna(m)),
+])
+def test_merge_ops_drop_the_mark_when_the_marked_one_is_the_argument(label, op):
+    """同一組操作的另一個方向：被標記者只是**參數**時，標記被丟掉。兩版皆然。"""
+    assert is_fetch_failed(op(_marked_series(), _clean_series())) is False, (
+        f"{label}: 被標記者作為參數時標記應被丟掉"
+    )
+
+
+def test_fallback_chain_shape_inherits_the_mark_even_when_fallback_succeeded():
+    """⚠️ 本 repo fallback chain 的**真實形狀**，也是這整段註解最要緊的實例。
+
+    `primary.combine_first(fallback)` 是 §2.1 多源備援的標準寫法。
+    主源失敗、備源成功時：**值是對的（備援確實生效），卻仍帶著失敗標記**
+    → 那個正確的結果永遠不會入快取。這是效能病，不會有畫面出錯。
+    """
+    idx = pd.to_datetime(["2024-01-01", "2024-01-02"])
+    primary_failed = mark_fetch_failed(pd.Series(dtype=float), "primary down")
+    fallback_ok = pd.Series([9.0, 9.5], index=idx)
+
+    merged = primary_failed.combine_first(fallback_ok)
+
+    assert list(merged) == [9.0, 9.5], "備援沒生效，這個測試的前提就不成立"
+    assert is_fetch_failed(merged) is True, (
+        "fallback chain 不再繼承標記 —— 若 pandas 改了語意，"
+        "infra/cache.py 的合併類操作段需同步更正"
+    )
+    # 逃生門要能救回它
+    assert is_fetch_failed(clear_fetch_failed(merged)) is False
+
+
+def test_concat_and_frame_construction_drop_the_mark_in_both_orders():
+    """真正會清掉標記的操作 —— **兩種順序都量過**，兩版一致。
+
+    它們沒有一個享有特權的 `self`，故一律不繼承。
+    """
+    c, m = _clean_series(), _marked_series()
+    assert is_fetch_failed(pd.concat([c, _marked_series()])) is False
+    assert is_fetch_failed(pd.concat([_marked_series(), c])) is False
+    assert is_fetch_failed(pd.DataFrame({"a": c, "b": _marked_series()})) is False
+    assert is_fetch_failed(pd.DataFrame({"a": _marked_series(), "b": c})) is False
 
 
 def test_parquet_roundtrip_keeps_attrs_but_csv_does_not(tmp_path):
@@ -596,6 +651,7 @@ def test_the_three_are_actually_marked_in_source():
     防的是「有人把標記拿掉、卻忘了把名字移出上面的白名單」——
     那會讓白名單從守衛退化成一張沒人維護的清單。
     """
+    import ast
     import pathlib
 
     root = pathlib.Path(__file__).resolve().parent.parent
@@ -605,7 +661,24 @@ def test_the_three_are_actually_marked_in_source():
         "fetch_defillama_stablecoin_mcap": root / "repositories" / "macro" / "alternate.py",
     }
     for fn_name, path in srcs.items():
-        text = path.read_text(encoding="utf-8")
-        assert "mark_fetch_failed(" in text, (
-            f"{path.name} 不再呼叫 mark_fetch_failed,但 {fn_name} 仍列在白名單裡"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        target = next(
+            (n for n in ast.walk(tree)
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and n.name == fn_name),
+            None,
+        )
+        assert target is not None, f"{path.name} 找不到 {fn_name}"
+        # ⚠️ 用 AST 找**呼叫節點**，不是純文字 `"mark_fetch_failed(" in text`。
+        # 後者會被 docstring / 註解裡提到的函式名餵成假陰性（今天三檔都沒有，
+        # 但那是運氣不是保證），而假陰性在這裡的意思是「標記被拿掉了卻沒人叫」。
+        called = any(
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "mark_fetch_failed"
+            for n in ast.walk(target)
+        )
+        assert called, (
+            f"{fn_name} 函式體內已無 mark_fetch_failed() 呼叫,"
+            f"但它仍列在 _MARKED_PANDAS_TTL_FUNCS 白名單裡"
         )
