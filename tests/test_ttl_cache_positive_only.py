@@ -555,6 +555,51 @@ def test_no_cooldown_kinds_are_throttled_by_the_ttl_cache_alone(kind, status):
         yf_mod.fetch_yf_close.cache_clear()
 
 
+def test_fail_kind_is_consumed_on_read_so_a_stale_value_cannot_leak():
+    """⭐ `pop_last_fail_kind()` 必須**取出即清掉**,否則殘值會造成靜默錯誤決定。
+
+    ⚠️ **這條是 2026-08-31 突變測試補出來的缺口**:突變 M-F1e(把 pop 改成
+    單純的 getter)當時**48 條全綠**,也就是那個設計決定完全沒有守衛。
+
+    危險情境:某個 fetcher 因條件不成立而**根本沒呼叫 `fetch_url`**,卻仍走到
+    失敗分支去問「剛剛是哪一種失敗」→ 讀到同執行緒上一個 fetcher 留下的殘值。
+    若那個殘值恰好是 404,**這次的真失敗會被判成「照舊快取」、鎖滿一個 TTL**
+    —— 正是本 PR 要修的那個 bug 換一個入口再犯一次。
+
+    取出即清掉之後,沒有對應 `fetch_url` 的讀取一律拿到 `""`,而 `""` 不在
+    `NO_COOLDOWN_KINDS` 內 → 落到「標記、不快取」的安全側(fail-safe)。
+    """
+    from unittest.mock import patch as _patch
+    from infra import proxy as proxy_mod
+    from infra import source_backoff as sb
+    from infra.proxy import pop_last_fail_kind, mark_fetch_failed_if_retryable
+
+    class _Resp:
+        status_code = 404
+        content = b"{}"
+
+    sb.reset_all()
+    try:
+        with _patch.object(proxy_mod, "_get_thread_session",
+                           return_value=type("S", (), {"get": staticmethod(lambda *a, **k: _Resp())})), \
+             _patch.object(proxy_mod, "get_proxy_config", return_value={}):
+            assert proxy_mod.fetch_url("https://q.example.invalid/x", timeout=1) is None
+
+        assert pop_last_fail_kind() == "not_found", "第一次讀應拿到本次的分類"
+        assert pop_last_fail_kind() == "", (
+            "第二次讀仍拿得到值 —— 值沒有被消費掉,殘值會外洩到下一個 fetcher"
+        )
+
+        # 端到端:沒有經過 fetch_url 的失敗分支,必須落在安全側(標記、不快取)
+        out = mark_fetch_failed_if_retryable(pd.Series(dtype=float), "some other failure")
+        assert is_fetch_failed(out) is True, (
+            "沒有對應 fetch_url 的呼叫竟然被判成『不用重試』—— "
+            "它讀到了殘值,而且是往不安全的方向錯"
+        )
+    finally:
+        sb.reset_all()
+
+
 def test_retryable_kinds_do_not_get_cached_so_cooldown_expiry_can_recover():
     """對照組:**有冷卻期的四種必須不入快取** —— 否則冷卻過期後拿到的仍是被鎖住的空值。
 
@@ -922,6 +967,70 @@ def _ttl_cached_defs_returning_pandas():
             if ret is not None:
                 found.append((str(rel), node.name, ret))
     return found
+
+
+@pytest.mark.parametrize("label, src, fn_name", [
+    ("不寫回傳註解",
+     "import pandas as pd\n"
+     "from fund_fetcher import _ttl_cache\n"
+     "@_ttl_cache(ttl_sec=60)\n"
+     "def bypass_no_annotation(x):\n"
+     "    return pd.Series(dtype=float)\n",
+     "bypass_no_annotation"),
+    ("裝飾器別名 import",
+     "import pandas as pd\n"
+     "from fund_fetcher import _ttl_cache as _tc\n"
+     "@_tc(ttl_sec=60)\n"
+     "def bypass_alias(x) -> pd.Series:\n"
+     "    return pd.Series(dtype=float)\n",
+     "bypass_alias"),
+])
+def test_scanner_catches_the_two_known_bypasses(label, src, fn_name):
+    """⭐ 2026-08-31 稽核 F4:把兩個**實測繞得過**的寫法釘成回歸測試。
+
+    修復前的掃描器對這兩種都是綠的:
+      · 只看 `node.returns`,**不寫回傳註解**就整個看不見;
+      · 用 `"_ttl_cache" in ast.dump(d)` 比對,`import ... as _tc` 之後
+        `@_tc(...)` 比不到。
+
+    ⚠️ **這條守的是掃描器自己的涵蓋範圍**,不是產品行為 —— 因為
+    `test_only_the_three_marked_functions_return_pandas_from_ttl_cache`
+    在**修好與沒修好時都是綠的**(白名單集合不變),它結構上抓不到自己的漏洞。
+    ⚠️ **實證**:2026-08-31 突變 M-F4a / M-F4b(把掃描器改回舊版)在**只有那條
+    白名單斷言**時是 **48 passed 全綠**的 —— 少了本條,掃描器退化不會有任何測試變紅。
+    """
+    import ast
+    tree = ast.parse(src)
+    deco_names = _ttl_cache_decorator_names(tree)
+    target = next(n for n in ast.walk(tree)
+                  if isinstance(n, ast.FunctionDef) and n.name == fn_name)
+    assert _returns_pandas(target, deco_names) is not None, (
+        f"繞道「{label}」沒被抓到 —— 掃描器退回舊版了"
+    )
+
+
+def test_scanner_honestly_admits_what_it_cannot_catch():
+    """反向釘:**掃描器抓不到的那一種,要真的抓不到。**
+
+    docstring 明列了「`out = pd.Series(...)` 之後 `return out`」抓不到。
+    這條把那句話固化成測試 —— 若哪天有人把掃描器加強到抓得到了,
+    本條會紅,提醒他**回去把 docstring 的涵蓋範圍一起改**。
+    否則就會出現「程式已加強、文件還在自認很弱」或反過來的漂移。
+    """
+    import ast
+    src = ("import pandas as pd\n"
+           "from fund_fetcher import _ttl_cache\n"
+           "@_ttl_cache(ttl_sec=60)\n"
+           "def hidden(x):\n"
+           "    out = pd.Series(dtype=float)\n"
+           "    return out\n")
+    tree = ast.parse(src)
+    target = next(n for n in ast.walk(tree)
+                  if isinstance(n, ast.FunctionDef) and n.name == "hidden")
+    assert _returns_pandas(target, _ttl_cache_decorator_names(tree)) is None, (
+        "掃描器現在抓得到『先賦值再 return』了 —— 這是好事,"
+        "但請一併更新它 docstring 的『仍然抓不到』清單,別讓兩者漂移"
+    )
 
 
 def test_only_the_three_marked_functions_return_pandas_from_ttl_cache():
