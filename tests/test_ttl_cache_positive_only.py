@@ -391,40 +391,76 @@ def _marked_series():
     return mark_fetch_failed(s, "upstream down")
 
 
-def test_arithmetic_propagates_the_failure_mark_even_from_clean_left_operand():
-    """⚠️ 反直覺:`乾淨 + 被標記` 的**結果會帶標記**。
+# ⚠️ 版本判定：`requirements.txt` 宣告 `pandas>=2.3.3,<3.0`，CI 與 production
+#    用 2.x；開發沙箱可能是 3.x。二元運算的傳播語意**兩版不同**，故本節依實際
+#    載入的版本分支斷言 —— **刻意不寫成「兩邊都過」**，那會讓這組測試失去意義。
+_PANDAS_MAJOR = int(pd.__version__.split(".")[0])
+_IS_PANDAS_3PLUS = _PANDAS_MAJOR >= 3
 
-    釘住它的理由有二:(a) 這是 module 註解警告的那個坑,行為若變了註解就變成謊;
-    (b) pandas 升版若改掉這個語意,我們要**知道** —— 不是因為它壞了,
-    而是因為那段警告會失去依據。
+
+def _clean_series():
+    return pd.Series([1.0, 2.0], index=pd.to_datetime(["2024-01-01", "2024-01-02"]))
+
+
+def _marked_series():
+    s = pd.Series([3.0, 4.0], index=pd.to_datetime(["2024-01-01", "2024-01-02"]))
+    return mark_fetch_failed(s, "upstream down")
+
+
+@pytest.mark.parametrize("label, op", [
+    ("copy",        lambda m: m.copy()),
+    ("dropna",      lambda m: m.dropna()),
+    ("to_frame",    lambda m: m.to_frame()),
+    ("sort_index",  lambda m: m.sort_index()),
+    ("islice",      lambda m: m.iloc[:1]),
+    ("rename",      lambda m: m.rename("x")),
+    ("scalar_mul",  lambda m: m * 2),
+    ("marked_left", lambda m: m + _clean_series()),
+])
+def test_derived_operations_propagate_the_mark_on_all_supported_pandas(label, op):
+    """⚠️ 這一組在 **pandas 2.3.3 與 3.0.5 實測皆傳播** —— 硬斷言，不分版本。
+
+    **它證明「衍生函式會繼承標記」的風險在目前宣告的 2.x 就存在**，
+    不是「升到 3.x 才會活過來」。`clear_fetch_failed` 的存在理由就在這裡。
     """
-    assert is_fetch_failed(_clean_series() + _marked_series()) is True
-    assert is_fetch_failed(_marked_series() + _clean_series()) is True
-    assert is_fetch_failed(_clean_series() * _marked_series()) is True
-    assert is_fetch_failed(_clean_series() - _marked_series()) is True
+    assert is_fetch_failed(op(_marked_series())) is True, (
+        f"{label}: 標記未被繼承 —— 若 pandas 改了語意，"
+        f"infra/cache.py 的傳播段需同步更正"
+    )
+
+
+def test_binary_op_with_marked_on_the_right_is_version_dependent():
+    """⚠️ **唯一的版本差異點**，故依版本分支斷言。
+
+    - pandas 2.x：只從**左**運算元繼承 `.attrs` → `乾淨 + 被標記` **不**傳播
+    - pandas 3.x：兩邊都繼承 → **傳播**
+
+    這條紅了代表 pandas 改了語意 —— **那正是它該做的事**，
+    請同步更正 `infra/cache.py` 的傳播段，不要把它改成兩邊都過。
+    """
+    got = is_fetch_failed(_clean_series() + _marked_series())
+    if _IS_PANDAS_3PLUS:
+        assert got is True, (
+            f"pandas {pd.__version__}: 預期 3.x 會從右運算元繼承標記，實得 {got}"
+        )
+    else:
+        assert got is False, (
+            f"pandas {pd.__version__}: 預期 2.x **不**從右運算元繼承標記，實得 {got}"
+        )
 
 
 def test_concat_and_frame_construction_drop_the_mark():
-    """同樣反直覺的另一半:組合類操作反而會**清掉**標記。
-
-    「沒有一致規則可背,只能實測」—— 這條就是那個實測。
-    """
+    """會**清掉**標記的操作 —— pandas 2.3.3 與 3.0.5 實測一致，硬斷言。"""
     assert is_fetch_failed(pd.concat([_clean_series(), _marked_series()])) is False
     assert is_fetch_failed(_clean_series().combine_first(_marked_series())) is False
     assert is_fetch_failed(
         pd.DataFrame({"a": _clean_series(), "b": _marked_series()})) is False
 
 
-def test_copy_like_operations_keep_the_mark():
-    assert is_fetch_failed(_marked_series().copy()) is True
-    assert is_fetch_failed(_marked_series().dropna()) is True
-    assert is_fetch_failed(_marked_series().to_frame()) is True
-
-
 def test_parquet_roundtrip_keeps_attrs_but_csv_does_not(tmp_path):
-    """⚠️ 反直覺:parquet 往返**保留** `.attrs`,CSV 不會。
+    """⚠️ 反直覺：parquet 往返**保留** `.attrs`，CSV 不會 —— 兩版實測一致。
 
-    本 repo 的凍結快照走 parquet(§5 可重現性),所以這件事會踩到。
+    本 repo 的凍結快照走 parquet（§5 可重現性），所以這件事會踩到。
     """
     df = _marked_series().to_frame(name="v")
     assert is_fetch_failed(df) is True
@@ -442,37 +478,44 @@ def test_parquet_roundtrip_keeps_attrs_but_csv_does_not(tmp_path):
 
 
 def test_clear_fetch_failed_is_the_escape_hatch():
-    """module 註解叫新函式呼叫它 —— 它得真的有用。"""
-    derived = _clean_series() + _marked_series()
+    """module 註解叫新函式呼叫它 —— 它得真的有用。
+
+    ⚠️ 這裡用 `marked * 2`（**兩版都會傳播**）而不是 `clean + marked`
+    （2.x 不傳播）—— 前一版就是踩了這個坑，在 CI 的 2.x 上整條失去意義。
+    """
+    derived = _marked_series() * 2
     assert is_fetch_failed(derived) is True          # 繼承了不屬於自己的失敗
     out = clear_fetch_failed(derived)
     assert out is derived
     assert is_fetch_failed(out) is False
 
-    # 對沒有 attrs 的東西是 no-op、不 raise(與 mark_fetch_failed 刻意不對稱)
+    # 對沒有 attrs 的東西是 no-op、不 raise（與 mark_fetch_failed 刻意不對稱）
     for obj in ({}, [], None, 42, "x"):
         assert clear_fetch_failed(obj) is obj
 
 
 def test_derived_function_that_clears_the_mark_still_gets_cached():
-    """把 module 註解描述的那個坑與它的解法,端到端跑一次。"""
+    """把 module 註解描述的那個坑與它的解法，端到端跑一次。
+
+    同上，用 `marked * 2` 這種**兩版都會傳播**的寫法當示範。
+    """
     calls = {"n": 0}
 
     @_ttl_cache(ttl_sec=600)
     def derived_bad(_k):                              # 沒表態 → 繼承標記
         calls["n"] += 1
-        return _clean_series() + _marked_series()
+        return _marked_series() * 2
 
     derived_bad("a")
     derived_bad("a")
-    assert calls["n"] == 2, "示範用例本身失效了:它應該要繼承標記而不入快取"
+    assert calls["n"] == 2, "示範用例本身失效了：它應該要繼承標記而不入快取"
 
     calls2 = {"n": 0}
 
     @_ttl_cache(ttl_sec=600)
     def derived_good(_k):                             # 明確表態
         calls2["n"] += 1
-        return clear_fetch_failed(_clean_series() + _marked_series())
+        return clear_fetch_failed(_marked_series() * 2)
 
     derived_good("a")
     derived_good("a")
