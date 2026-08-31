@@ -212,7 +212,36 @@ render_manual_tab()
         # 30 會誤紅。本條的用意是「render 沒有早期爆掉只剩零星元素」,精確章節
         # 清單由 tests/test_tab6_manual.py 的 sub-tab 斷言守 —— 兩條分工,
         # 不要在這裡釘章節數。
-        assert len(at.markdown) > 20, f"說明書 render 元素太少({len(at.markdown)})"
+        #
+        # ⚠️ **2026-08-31 就地更正：只數 `at.markdown` 是把「總量代理」寫成了
+        # 「單一元素型別代理」。有意識的更正,不是漏刪**(決策者:AI 總管)。
+        # ~~assert len(at.markdown) > 20~~
+        # **舊寫法的理由仍然成立**:本條要驗的是「render 沒有早期爆掉只剩零星元素」,
+        # 拿一個總量門檻當代理是對的。**被權衡掉的是它的分母** —— 說明書把 11 個
+        # 章節標題從 `st.markdown("### …")` 改成 `st.subheader(anchor=…)` 之後,
+        # 那 11 個元素**換了型別而不是消失**(實測 base:markdown 26 / subheader 0;
+        # head:markdown 16 / subheader 11,26 − 11 + 1 = 16,+1 是新增的目錄那行)。
+        # 也就是說舊寫法會因為**一次純渲染型別的搬遷**而誤紅,它數的東西一開始就選窄了。
+        # ⛔ **刻意不把門檻從 20 調到 15** —— 那是把「數多少」改小(舊門檻在 26 上留
+        #    6 個餘裕 ≈ 23%,`>15` 在 16 上只留 1 個 ≈ 6%,從門檻退化成絆線),
+        #    而且元素型別耦合一點都沒解決,下次再搬一個標題還是會紅。
+        #    這裡改的是「**數什麼**」:把說明書實際用到的四種靜態元素全部算進來。
+        # **三判準複驗(2026-08-31 實測)**:① 本寫法在 base `cc37709` 上也綠
+        #    (33 > 30,證明不是為新版量身訂做);② 突變「`render_manual_tab()` 在
+        #    caption 之後就 `return`」→ 本條轉紅(門檻沒被抽空);③ 意圖保留
+        #    (仍是總量代理,精確章節清單仍由 tests/test_manual_anchor_toc.py 守)。
+        # ⚠️ **誠實揭露(這條修不掉,也不打算在這裡修)**:`len(...)` 這種**計數**門檻
+        #    **抓不到「內容被刪」** —— 本組實測把某一章 534 字元的教學表換成空字串
+        #    (語法合法、AST 驗過),本條與 tests/test_manual_anchor_toc.py +
+        #    tests/test_tab6_manual.py 全套**全綠**,`markdown` 仍 16、四元素總量仍 36。
+        #    這是計數代理的
+        #    **既有性質**,不是本批造成的;**別把「門檻修好了」讀成「內容守住了」**。
+        _n = (len(at.markdown) + len(at.subheader)
+              + len(at.caption) + len(at.dataframe))
+        assert _n > 30, (
+            f"說明書 render 元素太少({_n}；markdown={len(at.markdown)} "
+            f"subheader={len(at.subheader)} caption={len(at.caption)} "
+            f"dataframe={len(at.dataframe)})")
 
     def test_render_macro_tab_unbound_regression(self):
         """v19.137 回歸:物理重排不該再出現 UnboundLocalError"""

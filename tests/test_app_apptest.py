@@ -285,10 +285,28 @@ def test_tab6_manual_renders_key_sections(at: AppTest) -> None:
         "說明書自己的 caption（📖 故事附錄・公式聖經）不見了 —— "
         "本體可能整個沒被呼叫，不只是標題讓位。")
 
-    markdown_blobs = " ".join(m.value for m in at.markdown if isinstance(m.value, str))
+    # ⚠️ **2026-08-31 就地更正：草堆改對，針一字不動。有意識的更正，不是漏刪**
+    # （決策者：AI 總管）。
+    # ~~markdown_blobs = " ".join(m.value for m in at.markdown ...)~~
+    # **舊寫法的理由仍然成立**：要驗的是「說明書內文還在」，把所有文字串起來
+    # 找關鍵字是對的做法。**被權衡掉的是它只撈 `at.markdown` 這一種元素** ——
+    # 說明書「10 子分頁 → 單頁錨點目錄」之後，章節標題（含本條找的
+    # `⓪ 📊 資料來源完整地圖`）由 `st.markdown("### …")` 改成
+    # `st.subheader(..., anchor=…)`：**元素換了型別，字沒有消失**。
+    # 舊寫法會因為一次純渲染型別的搬遷而誤紅。
+    # ⛔ **刻意不換掉、也不放寬 needle** —— `資料來源完整地圖` 這根針就是這條
+    #    守衛的全部價值（章標被誤改／整塊被誤刪時它要紅）。換弱或刪掉才是放寬。
+    # **三判準複驗（2026-08-31 實測）**：① 本寫法在 base `cc37709` 上也綠
+    #    （那時標題還在 `at.markdown` 裡，聯集當然也撈得到）；② 突變「把
+    #    `📊 資料來源完整地圖` 這個標題改名」→ 本條轉紅；③ 意圖保留（三根針全在）。
+    markdown_blobs = " ".join(
+        v for v in ([m.value for m in at.markdown]
+                    + [h.value for h in at.subheader]
+                    + [c.value for c in at.caption])
+        if isinstance(v, str))
     assert "資料來源完整地圖" in markdown_blobs, (
         f"說明書內文（Section ⓪ 資料來源完整地圖）未找到；"
-        f"markdown 前 400 字: {markdown_blobs[:400]!r}")
+        f"markdown+subheader+caption 前 400 字: {markdown_blobs[:400]!r}")
 
 
 def test_t7_ledgers_session_state_default_empty(at: AppTest) -> None:
