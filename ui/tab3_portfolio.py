@@ -98,7 +98,7 @@ _VIX_NOTE_FLAG = "_t3_vix_advice_note_shown"
 def _vix_for_advice(*, note: bool = True) -> float | None:
     """取當前 VIX 餵給 `services.policy_advisor_service.advise_fund`。
 
-    **來源**：`st.session_state["indicators"]["VIX"]["value"]` —— 由 Tab①
+    **來源**：`st.session_state["indicators"]["VIX"]["value"]` —— 由市場定調分頁
     「📡 載入總經資料」寫入的同一份 dict（唯一 writer 在 `ui/tab1_macro.py`），
     值由 `services/macro/us_indicators.py` 產生。
 
@@ -107,12 +107,17 @@ def _vix_for_advice(*, note: bool = True) -> float | None:
     門檻數值本身**不在本檔寫死**：從 advisor 匯出的具名常數讀（該常數再往上
     收 `shared/macro_buckets` 的全站 panic 線），提示文字才不會與規則漂移。
 
-    **缺值處置（§1）**：跨 Tab 依賴 —— 使用者若本 session 沒開過 Tab①，
+    **缺值處置（§1）**：跨 Tab 依賴 —— 使用者若本 session 沒開過市場定調分頁，
     `indicators` 根本不存在。此時回 `None`，`advise_fund` 對 `vix=None` 自有
     降級分支（吃 VIX 的那條規則不成立，改走其餘規則）。**禁止**用「常見值」
     或上次的值頂替：那會讓一條沒有依據的加碼建議看起來像有依據。
     `note=True` 時額外印一行說明，讓使用者知道少了哪一條判斷、以及怎麼補。
+    ⚠️ 指路文案裡的分頁名走 `story_nav.tab_label` SSOT，**不得**寫死「Tab①」——
+    頁內編號已於 WP-D 全數取消（線框 §04），寫死站號會變成第二個真相源。
     """
+    from ui.helpers.story_nav import (  # noqa: PLC0415 — 分頁名 SSOT，見 docstring
+        tab_label as _tab_label_vix,
+    )
     _raw = ((st.session_state.get("indicators") or {}).get("VIX") or {}).get("value")
     _msg = ""
     if _raw is None:
@@ -120,7 +125,7 @@ def _vix_for_advice(*, note: bool = True) -> float | None:
             f"⬜ 尚未載入 VIX —— 「σ 深跌 **且** VIX ≥ {_ADVISOR_VIX_PANIC:.0f}"
             "（恐慌區）→ 分批加碼」這條規則"
             "本次不參與下方建議的判斷（其餘規則照常）。"
-            "想補上：先到 🌐 Tab① 按「📡 載入總經資料」，再回本頁。"
+            f"想補上：先到「{_tab_label_vix('macro')}」按「📡 載入總經資料」，再回本頁。"
         )
     else:
         try:
@@ -230,7 +235,7 @@ def render_portfolio_tab() -> None:
         render_flow_nav, render_story_nav, tab_label as _tab_label_t3,
     )
     st.markdown(f"## {_tab_label_t3('portfolio')}")
-    render_flow_nav("portfolio")   # 巨觀:第 ③ 層 監控與評分
+    render_flow_nav("portfolio")   # 巨觀:監控與評分層(L3);層號由 story_nav SSOT 產生
     render_story_nav("portfolio")
     # 「六因子評分」自 v19.177 起已不再用於評等（改 4 維健診），標題不再這樣寫，
     # 免得使用者去說明書查一個退役模型（2026-08 稽核必修 8 同型）。
@@ -239,2592 +244,1889 @@ def render_portfolio_tab() -> None:
     if "portfolio_funds" not in st.session_state:
         st.session_state.portfolio_funds = []
 
-    # ── v18.9 智能戰情室（決策導向：核心衛星×體檢×買賣區間）────────────
-    # 已載入基金時頂部優先顯示；空組合時讓給歡迎卡。
-    _pf_for_warroom = [f for f in st.session_state.portfolio_funds
-                       if f.get("loaded") and not f.get("load_error")]
-    if _pf_for_warroom:
-        # v18.163：頂部統一 hero KPI（合併 mk_war_room 4 卡 + 配息矩陣 4 卡，
-        # 解決 user 反饋「上下兩段 KPI 重複占版面」）。
-        from ui.helpers.portfolio_health import (
-            compute_health_kpis,
-            render_hero_kpi_cards,
-        )
-        try:
-            from ui.components.mk_dashboard import build_mk_dataframe as _build_mk
-            _loaded_hero = [f for f in _pf_for_warroom
-                             if f.get("loaded") and not f.get("load_error")]
-            _mk_df_hero = _build_mk(_loaded_hero, bench_series=None)
-        except Exception:
-            _mk_df_hero = None   # smoke-allow-pass — KPI 不影響後續功能
-        _kpis_hero = compute_health_kpis(_pf_for_warroom, _mk_df_hero)
-        # （原本這裡把 _kpis_hero 塞進 session_state 說「供下方 expander summary 用」，
-        #   但全 repo 沒有任何讀取方 —— 純粹的死寫入，已刪除。
-        #   若日後真要跨區塊共用，請同批加上讀取端，不要先留一個沒人讀的 key。）
-        st.markdown(
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
-            f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
-            f"<span style='color:{MD_BLUE_300};font-size:15px;font-weight:900'>📊 組合健康儀表</span>"
-            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.163 6 指標一覽</span>"
-            "</div>",
-            unsafe_allow_html=True)
-        render_hero_kpi_cards(_kpis_hero)
+    # ══════════════════════════════════════════════════════════════════════
+    # 版面順序（WP-D）—— 客戶已拍板的線框 `docs/wireframes/fund-wireframe-final.html`
+    # §03「④ 我的配置」：**照操作流程排，頁內不編號**
+    #     加入與管理基金 → 配置總覽 → 持股重疊度診斷 → 帳本 → 費用與扣款
+    #     → AI 摘要 → Raw data（收合，留在最後）
+    # 線框原文：「照你實際的操作順序 —— 先加標的 → 看現在長怎樣 → 檢查重疊
+    #            → 記帳與再平衡。」搬遷前的畫面順序是 ④→①→②→③
+    #            （「加入基金」排在「配置總覽」之後，但你得先有基金才有配置可看）。
+    #
+    # ⚠️ **為什麼用 container 佔位、而不是把程式碼整段搬上去**（這是本批最關鍵的
+    #    設計決定，請勿在不讀完這段的情況下「順手改成真的搬」）：
+    #
+    #    Streamlit 的**顯示順序 = container 建立順序**，**執行順序 = `with` 進入順序**。
+    #    兩者可以分離（本 repo 釘版 streamlit 1.59.2 實測確認，守衛見
+    #    `tests/test_wpd_portfolio_layout.py::test_container_slots_decouple_display_from_execution`）。
+    #
+    #    本批的任務是**版面重整，不是計算改動**。實測盤點出~~三處~~ **至少四處**
+    #    「同一次 run 內先寫後讀 / 先讀後寫」的耦合，真的搬動程式碼會讓它們翻面：
+    #      1. `portfolio_core_pct` —— slider 在「加入與管理基金」段尾（原 :2471）寫入，
+    #         而「配置總覽」透過 `ui/helpers/portfolio/allocation.py` 讀它。
+    #         搬遷前是**先讀後寫**（總覽吃的是上一次 run 的值）；把 slider 搬到總覽
+    #         前面會變成**先寫後讀** → 同一次 run 的數字會變。
+    #      2. `policy_sheet_id` —— 保單管理段寫、加入基金段讀。
+    #      3. `gsheet_tokens` —— 加入基金段寫、保單管理段讀。
+    #      4. `_schema_ver` —— 保單管理段寫（`policy_admin_section.py` 內
+    #         `detect_sheet_schema_version` 偵測後寫入 / 一鍵升級後寫 "v2"），
+    #         「保單分組視圖」讀（本檔「🔗 綁到保單」的顯示條件，與 `_sheet_id`
+    #         同一個 `if`）。搬遷前是**先寫後讀**；把分組視圖排到保單管理之前
+    #         會變成**先讀後寫** → 該下拉吃到上一次 run 的 schema 判定。
+    #         （2026-08-31 獨立稽核補；原「三處」是實作組單組 AST 掃描的漏算 ——
+    #          該掃描看不到「寫在抽出的模組、讀在本檔」這種跨檔耦合。
+    #          守衛本身不受影響：執行順序測試是**整條 tuple 精確比對**，
+    #          任何調換都會紅，不只保護被點名的 key。）
+    #    ⚠️ 這四處是**已知清單，不是窮舉** —— 跨模組的 session_state 讀寫
+    #    靜態掃不完整；日後要改 `with` 順序，先重掃再動。
+    #    這幾處**都會改變畫面上的數字或顯示條件**，而本批**無權**改動計算
+    #    （派工規格：「不得改變任何數字的算法」；`CLAUDE.md §-1.5.3 C` 禁止夾帶）。
+    #
+    #    → 故：**建立順序 = 線框要的顯示順序；`with` 順序 = 搬遷前的執行順序**。
+    #      使用者看到的是新版面，每一個數字與搬遷前逐格相同。
+    #    → 真正的程式碼搬移（連同上面各處耦合的處置）屬後續批次，不在 WP-D。
+    # ══════════════════════════════════════════════════════════════════════
+    _sec_add      = st.container()   # 1. 加入與管理基金（沒有標的就沒有配置）
+    _sec_policy   = st.container()   # 1b. 保單管理（Google Sheets）—— WP-E 會把
+                                     #     「連線／授權」搬去 ⑤、「保單列新增更新」留在 ④
+    _sec_overview = st.container()   # 2. 配置總覽（現況長怎樣）
+    _sec_overlap  = st.container()   # 3. 持股重疊度診斷
+    _sec_ledger   = st.container()   # 4-5. 帳本（T7）+ 費用與扣款
+    _sec_ai       = st.container()   # 6. AI 摘要
+    _sec_raw      = st.container()   # 7. Raw data（核對數字來源，留在最後、不擋路）
 
-        # v19.303: FX 曝險摘要 — 組合匯率敏感度一覽
-        try:
-            _fx_counts: dict = {}
-            for _pf_fx in _pf_for_warroom:
-                # 稽核 J1-b：原本是 `str(...or "USD").strip().upper() or "USD"`
-                # —— **雙重** USD fallback。實測後果：兩檔台幣計價的安聯台股基金
-                # 因 Sheet currency 欄空白而被算進 USD，整段印出「USD 25 檔（100%）」
-                # 與一句「組合 100% 為 USD 計價」的**錯誤風險警語**。
-                # 風險揭露區塊拿捏造的幣別當輸入，比不揭露更糟（§1）。
-                # 改法：未知就誠實歸到「未知」桶，不併進任何幣別。
-                _ccy = str(_pf_fx.get("currency") or "").strip().upper() or _UNKNOWN_CCY
-                _fx_counts[_ccy] = _fx_counts.get(_ccy, 0) + 1
-            _total_fx = sum(_fx_counts.values()) or 1
-            if _fx_counts:
-                # 取 FX 即時匯率（re-use tab3 cache pattern）
-                _fx_spot: dict = {}
-                for _ccy_fx in _fx_counts:
-                    if _ccy_fx == "TWD":
-                        _fx_spot[_ccy_fx] = 1.0
-                        continue
-                    if _ccy_fx == _UNKNOWN_CCY:
-                        # 稽核 J1-b：未知幣別不去猜匯率、也不去打 API
-                        _fx_spot[_ccy_fx] = 0.0
-                        continue
-                    try:
-                        from services.fund_service import get_latest_fx as _gf_fx
-                        import os as _os_fx
-                        _fk_fx = st.secrets.get("FRED_API_KEY", "") or _os_fx.environ.get("FRED_API_KEY", "")
-                        _v_fx = _gf_fx(f"{_ccy_fx}TWD=X", fred_api_key=_fk_fx)
-                        _fx_spot[_ccy_fx] = float(_v_fx) if _v_fx else 0.0
-                    except Exception:
-                        _fx_spot[_ccy_fx] = 0.0
-                _fx_lines = []
-                for _ccy_fx, _cnt in sorted(_fx_counts.items(), key=lambda x: -x[1]):
-                    _pct = _cnt / _total_fx * 100
-                    _rate = _fx_spot.get(_ccy_fx, 0)
-                    if _ccy_fx == _UNKNOWN_CCY:
-                        # 稽核 J1-b：說清楚「查不到」與「怎麼補」，不冒充任何幣別
-                        _rate_str = ("**計價幣別不明** —— 請在 Google Sheet 的 "
-                                     "`currency` 欄補上（例：TWD / USD）")
-                    else:
-                        _rate_str = (f"1 {_ccy_fx} ≈ {_rate:.2f} TWD"
-                                     if _rate > 0 else "匯率待抓")
-                    _fx_lines.append(f"**{_ccy_fx}** {_cnt} 檔（{_pct:.0f}%）· {_rate_str}")
-                # 內容 < 6 行且含「USD 佔比過半」警告 → 收起來等於把風險藏起來（原則 1）。
-                # 原本用「永遠展開的 expander」達成,但那層殼本身不提供任何資訊 —— 對
-                # 使用者是多一圈邊框 + 一個假的「可收合」暗示。改成標題 + container。
-                st.markdown(f"##### 💱 FX 曝險摘要（{len(_fx_counts)} 種幣別）")
-                with st.container():
-                    st.caption(
-                        "組合中非 TWD 基金的幣別分布。台幣升值 1% 約等幅侵蝕該幣別折算績效。"
-                    )
-                    for _line in _fx_lines:
-                        st.markdown(f"- {_line}")
-                    # 稽核 J1-b：幣別不明的檔先講清楚，否則下面那句百分比會被
-                    # 讀成「已知全貌」。原本它們被靜默併進 USD，直接造出假警語。
-                    _unk_n = _fx_counts.get(_UNKNOWN_CCY, 0)
-                    if _unk_n:
-                        st.warning(
-                            f"⚠️ 有 **{_unk_n} 檔**查不到計價幣別（Google Sheet 的 "
-                            "`currency` 欄空白，且 MoneyDJ 也沒回傳）。這幾檔**未計入**"
-                            "下方任何幣別的佔比，其匯率風險目前無法評估 —— "
-                            "請到 Sheet 補上幣別後重新載入。"
-                        )
-                    _usd_pct = _fx_counts.get("USD", 0) / _total_fx * 100
-                    if _usd_pct >= 50:
-                        st.warning(
-                            f"⚠️ 組合 {_usd_pct:.0f}% 為 USD 計價，台幣大幅升值時 TWD 績效將明顯縮水。"
-                            + (f"（此比例的分母含上述 {_unk_n} 檔幣別不明者）" if _unk_n else "")
-                        )
-        except Exception as _e_fx_blk:
-            # §1：FX 曝險是風險揭露，失敗要留痕（原本 `pass` → 畫面零痕跡）
-            # 稽核 P2：補 file=sys.stderr —— Streamlit Cloud 的 log 面板
-            # **只顯示 stderr**，走 stdout 的 print 在雲端完全撈不到。
-            import sys as _sys_fx
-            print(f"[tab3 FX 曝險摘要] 渲染失敗："
-                  f"[{type(_e_fx_blk).__name__}] {_e_fx_blk}", file=_sys_fx.stderr)
-            # 這是風險揭露區塊。訊息自己就寫「這不代表沒有匯率風險」——
-            # 需要寫這句,正是因為灰字讓「沒風險」與「沒算出來」長得一樣。
-            system_error("FX 曝險摘要渲染失敗", _e_fx_blk,
-                         hint="**這不代表沒有匯率風險**,只代表這一項沒算出來。")
+    with _sec_overview:
+        # 線框 §2「配置總覽」把三塊散在頁面上下兩端的「現況長怎樣」收在一起：
+        # 配置總覽本體（含 KPI 卡與淨值成長模擬曲線）→ FX 曝險摘要／智能戰情室
+        # → 保單分組視圖。同樣用子 slot 控制顯示順序，執行順序不動。
+        _ov_core     = st.container()   # 配置總覽 + KPI 卡 + 淨值成長模擬曲線
+        _ov_warroom  = st.container()   # FX 曝險摘要／智能戰情室
+        _ov_group    = st.container()   # 保單分組視圖
 
-        st.divider()
+    # ── 以下 `with` 的先後 = 搬遷前的執行順序，一步都沒有調換 ────────────────
 
-        # v18.14: 改用 markdown 章節（避免外層 expander 包住內部 expander 觸發 Streamlit 巢狀錯誤）
-        st.markdown(
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
-            f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
-            f"<span style='color:{MD_BLUE_300};font-size:15px;font-weight:900'>🎯 策略3 智能戰情室</span>"
-            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.9 新手戰情中心</span>"
-            "</div>",
-            unsafe_allow_html=True)
-        render_mk_war_room(st.session_state.portfolio_funds)
-        st.divider()
-
-        # v18.213：基金體檢表（郭老師「挑三揀四」PK 同類型，揪優等生 / 汰弱候選）
-        from ui.helpers.fund_checkup import render_fund_checkup
-        # expanded=True：同一個元件在組合健檢頁是展開的，這裡收起來 = 同元件兩種行為。
-        # 體檢表是資料型內容（原則 1），統一展開。
-        render_fund_checkup(st.session_state.portfolio_funds, expanded=True)
-        st.divider()
-
-        # v19.xxx： 3-3-3 原則批次篩選（留強汰弱量化依據）
-        st.markdown(
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
-            f"border-left:4px solid {MD_GREEN_A200};border-radius:8px;padding:10px 14px;margin:8px 0'>"
-            f"<span style='color:{MD_GREEN_A200};font-size:15px;font-weight:900'>🔢  3-3-3 原則批次篩選</span>"
-            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>成立>3年 ／ 3年年化>7% ／ 晨星3星(手動確認)</span>"
-            "</div>",
-            unsafe_allow_html=True)
-        try:
-            from services.fund_screening import batch_333_funds as _batch_333
-            _funds_333 = [
-                {
-                    "code":    f.get("code", ""),
-                    "name":    f.get("name") or f.get("code") or "",
-                    "series":  f.get("series"),
-                    "metrics": f.get("metrics") or {},
-                }
-                for f in _pf_for_warroom
-                if f.get("series") is not None
-            ]
-            if _funds_333:
-                # 原本是 `expanded=True` 的 expander —— 永遠開著的殼只是多一層邊框
-                # 和一次多餘的點擊，資料型內容直接攤平（原則 1）。
-                st.caption("📋 3-3-3 評估明細")
-                with st.container():
-                    _df_333 = _batch_333(_funds_333)
-                    if not _df_333.empty:
-                        st.dataframe(
-                            _df_333,
-                            use_container_width=True,
-                            hide_index=True,
-                        )
-                        st.caption(
-                            "✅=通過 ❌=未通過 ❓=資料不足　"
-                            "②來源空=MoneyDJ 含息報酬；②來源*=NAV 未含配息(保守估計)　"
-                            "③晨星評級請至 [Morningstar](https://www.morningstar.com.tw/) 手動查閱"
-                        )
-                        # 整體通過統計
-                        _pass_cnt = (_df_333["整體"] == "✅").sum()
-                        _fail_cnt = (_df_333["整體"] == "❌").sum()
-                        _unk_cnt  = (_df_333["整體"] == "❓").sum()
-                        _total    = len(_df_333)
-                        # 2026-08-05 稽核 🔴 必修 2(同型延伸):原寫死「由 Tab2 個別查詢」
-                        # —— 個基深掘早已不是第 2 個分頁,序號寫死 = 與 :292 同一顆地雷。
-                        # 一併收 story_nav.tab_label SSOT。
-                        from ui.helpers.story_nav import (  # noqa: PLC0415
-                            tab_label as _tab_label_333,
-                        )
-                        st.info(
-                            f"共 {_total} 檔　✅ 通過 {_pass_cnt} 檔　"
-                            f"❌ 未通過 {_fail_cnt} 檔　❓ 資料不足 {_unk_cnt} 檔　"
-                            f"（③同儕排名請至「{_tab_label_333('fund')}」分頁個別查詢，"
-                            f"組合批次僅評 ①②）",
-                            icon="📊",
-                        )
-                    else:
-                        st.info("NAV 資料尚未載入或不足，無法評估。")
-            else:
-                st.info("請先在下方加入基金並載入資料。", icon="👇")
-        except Exception as _e333_tab3:
-            import sys as _sys333
-            print(f"[tab3/333] batch error: {_e333_tab3}", file=_sys333.stderr)
-            st.warning("3-3-3 批次評估載入失敗，請檢查 services/fund_screening.py。")
-        st.divider()
-    else:
-        # v19.297：空組合歡迎卡 — 未加入任何基金（或全未載入）時的引導畫面
-        # v19.334 user 指示「說明縮小,不需要這麼大」:48px 圖示+置中大標+28px padding
-        # 的整屏卡 + 3 個 st.info 步驟框 → 收成單張緊湊卡(標題行+兩行說明),
-        # 資訊不減、高度約原本 1/4。
-        # 2026-08-05 稽核 🔴 必修 2:原寫死 Tab2「單檔基金」—— 該分頁名不存在,
-        # 且它早已不是第 2 個分頁(app.py 現為 5 分頁,個基深掘排第 4)。分頁名
-        # SSOT = ui/helpers/story_nav._STEPS(tab_label 去序號導出);序號一併拿掉
-        # ——序號會隨分頁增刪漂移,寫死等於埋下同型地雷。
-        from ui.helpers.story_nav import tab_label as _tab_label  # noqa: PLC0415
-        st.markdown(
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
-            f"border:1px solid {GH_BORDER};border-radius:8px;"
-            f"padding:10px 14px;margin:8px 0'>"
-            f"<div style='color:{WHITE};font-size:14px;font-weight:700;margin-bottom:4px'>"
-            f"📊 歡迎使用基金組合管理"
-            f"<span style='color:{GRAY_AA};font-size:11px;font-weight:400'>"
-            f"　— 加入基金後顯示 戰情室、組合健康儀表、3-3-3 篩選</span></div>"
-            f"<div style='color:{GRAY_AA};font-size:12px;line-height:1.7'>"
-            f"🔍 <b style='color:{TRAFFIC_NEUTRAL}'>「{_tab_label('fund')}」分頁</b>搜尋 → 按「➕ 加入組合」；"
-            f"📥 或在下方「➕ 加入基金」輸入代碼點「📡 載入」；"
-            f"也可從 Google Sheet 讀回已存組合。🎯 組合有資料後，分析自動出現在頁面頂部。"
-            f"</div></div>",
-            unsafe_allow_html=True)
-        st.divider()
-    # v19.185 Bug5:相關性矩陣物理上移至摘要正下方(原在 T7 後)。
-    # T5 只讀 session_state.portfolio_funds(全域)+ 自 guard(>=2 loaded),搬移變數安全。
-    # ── T5: 持股相關性矩陣（v18.36 按保單分組）──────────────────────────────
-    _pf_for_corr_raw = [f for f in st.session_state.portfolio_funds
-                        if f.get("loaded") and f.get("series") is not None]
-
-    # 按 policy_id 分組（無保單者歸入「(未綁保單)」），每組內按 code 去重，
-    # 避免同 code 跨保單時 calc_holdings_overlap 回傳 DataFrame 重複欄名
-    # 觸發 pyarrow `Duplicate column names found` 例外。
-    from collections import defaultdict as _dd_t5
-    _t5_buckets: dict = _dd_t5(list)
-    for _ft5 in _pf_for_corr_raw:
-        _pid_raw = str(_ft5.get("policy_id", "") or "").strip()
-        _t5_buckets[_pid_raw or "(未綁保單)"].append(_ft5)
-    _t5_groups: dict = {}
-    for _pid_k, _items_k in _t5_buckets.items():
-        _seen_c: set = set()
-        _uniq_k: list = []
-        for _ft5 in _items_k:
-            _code_k = str(_ft5.get("code", "") or "").strip().upper()
-            if not _code_k or _code_k in _seen_c:
-                continue
-            _seen_c.add(_code_k)
-            _uniq_k.append(_ft5)
-        if len(_uniq_k) >= 2:
-            _t5_groups[_pid_k] = _uniq_k
-
-    if _t5_groups:
-        st.divider()
-        st.markdown("### 🔬 ④ 持股重疊度診斷（T5 — 底層持股 + 產業重疊度，按保單分組）")
-        st.caption("以「持股 Jaccard × 0.6 + 產業 cosine × 0.4」綜合分;資料不齊自動降級為 NAV 相關係數。"
-                   "重疊度 大於等於 0.70 → 影子基金警告。已依保單號碼分群，組內基金互相比較。")
-        for _pid_g, _group_funds in _t5_groups.items():
-            with st.expander(f"📋 保單 **{_pid_g}**　·　{len(_group_funds)} 檔基金", expanded=False):
-                _btn_key = f"btn_corr_{_pid_g}"
-                _ss_key  = f"corr_result_{_pid_g}"
-                if st.button("🔗 計算基金重疊度", key=_btn_key):
-                    from services.portfolio_service import calc_holdings_overlap as _calc_holdings_overlap
-                    _hov_input = []
-                    for f in _group_funds:
-                        _mj = (f.get("moneydj_raw") or {})
-                        _h = _mj.get("holdings") or {}
-                        _hov_input.append({
-                            "code": f.get("code", "?"),
-                            "name": f.get("name") or f.get("code"),
-                            "top_holdings": _h.get("top_holdings") or [],
-                            "sector_alloc": _h.get("sector_alloc") or [],
-                        })
-                    _hov_result = _calc_holdings_overlap(_hov_input)
-                    if (not _hov_result) or _hov_result.get("method") == "n/a":
-                        _corr_input = [{"code": f.get("code","?"), "series": f.get("series")}
-                                       for f in _group_funds]
-                        _hov_result = calc_correlation_matrix(_corr_input)
-                        if _hov_result is not None:
-                            _hov_result.setdefault("method", "nav_fallback")
-                            _freq_used = _hov_result.get("freq", "?")
-                            _hov_result.setdefault("notes",
-                                f"持股 / 產業資料皆缺，降級為 NAV Pearson 相關"
-                                f"（{_freq_used}頻；>= 0.85 為 shadow）")
-                    st.session_state[_ss_key] = _hov_result
-                _cr = st.session_state.get(_ss_key)
-                if _cr and _cr.get("matrix") is not None:
-                    _method = _cr.get("method", "?")
-                    _notes  = _cr.get("notes", "")
-                    _is_nav_fb = _method == "nav_fallback"
-                    _shadow = _cr.get("shadow_pairs", [])
-                    _thr = 0.85 if _is_nav_fb else 0.70
-                    _label = "相關係數" if _is_nav_fb else "重疊度"
-                    st.info(f"📌 計算方式：**{_method}**（{_notes}）")
-                    if _shadow:
-                        st.error(
-                            f"⚠️ **影子基金警告**：偵測到 {len(_shadow)} 對 {_label} 大於等於 {_thr} 的基金，"
-                            "持有意義可能重疊！"
-                        )
-                        _holdings_by_code: dict = {}
-                        if not _is_nav_fb:
-                            for _f in _group_funds:
-                                _mj_h = ((_f.get("moneydj_raw") or {}).get("holdings") or {})
-                                _holdings_by_code[_f.get("code", "?")] = [
-                                    (h.get("name") or "").strip()
-                                    for h in (_mj_h.get("top_holdings") or [])
-                                    if h.get("name")
-                                ]
-                        for _sa, _sb, _sv in _shadow:
-                            _common_html = ""
-                            if not _is_nav_fb:
-                                _ha = _holdings_by_code.get(_sa, [])
-                                _hb_upper = {n.upper() for n in _holdings_by_code.get(_sb, []) if n}
-                                _common = [n for n in _ha if n and n.upper() in _hb_upper]
-                                if _common:
-                                    _items_zh = []
-                                    for _n in _common[:6]:
-                                        _zh = _zh_holding(_n)
-                                        _items_zh.append(f"{_n[:18]}{f'({_zh})' if _zh else ''}")
-                                    _more = f"…+{len(_common)-6}" if len(_common) > 6 else ""
-                                    _common_html = (
-                                        f"<div style='color:{MD_ORANGE_300};font-size:11px;margin:2px 0 0 12px'>"
-                                        f"🔁 共同持股 {len(_common)} 檔："
-                                        f"{'、'.join(_items_zh)}{_more}</div>")
-                            st.markdown(
-                                f"- `{_sa}` × `{_sb}` — {_label} **{_sv:.3f}**{_common_html}",
-                                unsafe_allow_html=True)
-                    else:
-                        st.success(f"✅ 各基金 {_label} 均在 {_thr} 以下，組合分散效果良好")
-                    def _color_overlap(v, _thr=_thr):
-                        try: f = float(v)
-                        except Exception: return ""
-                        # v18.249: NaN（兩檔 NAV 無重疊期）不上色，跟其他級別區分
-                        if pd.isna(f): return f"color:{TRAFFIC_NEUTRAL}"
-                        if f >= _thr:    return f"background-color:#b71c1c;color:{WHITE}"
-                        if f >= 0.50:    return f"background-color:#ef6c00;color:{WHITE}"
-                        if f >= 0.20:    return f"background-color:#558b2f;color:{WHITE}"
-                        if f >= -0.20:   return f"background-color:#2e7d32;color:{WHITE}"
-                        return f"background-color:#1565c0;color:{WHITE}"
-                    # v18.249: NaN → 「—」（codebase 標準缺失符號），不再顯示 'nan'
-                    _fmt_corr = lambda v: "—" if pd.isna(v) else f"{v:.2f}"
-                    try:
-                        _styled = (_cr["matrix"].style
-                                   .map(_color_overlap)
-                                   .format(_fmt_corr))
-                        st.dataframe(_styled, use_container_width=True)
-                    except Exception:
-                        st.dataframe(_cr["matrix"].round(2), use_container_width=True)
-                    # v18.249: 補一行說明 — 兩檔 NAV 序列無重疊期就無法算相關性
-                    if _cr["matrix"].isna().any().any():
-                        st.caption(
-                            "ℹ️ `—` 代表兩檔基金的 NAV 序列**無重疊期**（如新基金 vs 舊基金），"
-                            "Pearson 相關係數無法計算；不代表 0 也不代表無相關。"
-                        )
-                    if _is_nav_fb:
-                        st.caption(
-                            "💡 NAV 相關法：1.0 = 漲跌完全一樣｜0.5~0.85 = 連動偏高｜0 = 無關｜負 = 反向。"
-                            "🔴 大於等於 0.85 = 影子基金。"
-                        )
-                    else:
-                        st.caption(
-                            f"💡 持股 + 產業重疊度（method={_method}）：1.0 = 完全相同組合｜"
-                            "0.7~1.0 = 影子基金 / 集中度過高｜0.4~0.7 = 中度重疊｜"
-                            "0~0.3 = 分散良好。建議擇一持有 大於等於 0.7 的對。"
-                        )
-
-    # ── Raw data（v19.185 Bug5：摘要 → 矩陣 → Raw data → AI 版面順序）──────
-    # 每檔基金 MoneyDJ 原始抓取結果攤平,供 user 核對 AI / 摘要的數字來源(§2.2 血緣)。
-    _pf_raw_dump = [f for f in st.session_state.portfolio_funds
-                    if f.get("loaded") and not f.get("load_error")]
-    if _pf_raw_dump:
-        with st.expander("🗂️ Raw data（基金原始抓取資料 — 核對數字來源）", expanded=False):
-            st.caption("MoneyDJ wb01/wb05/wb07 + metrics 原始值;摘要表 / AI 戰情室的數字皆源於此。")
-            for _frd in _pf_raw_dump:
-                _code_rd = _frd.get("code", "?")
-                _name_rd = (_frd.get("name") or _code_rd)[:30]
-                _m_rd = _frd.get("metrics") or {}
-                _mj_rd = _frd.get("moneydj_raw") or {}
-                _raw_view = {
-                    "代碼": _code_rd,
-                    "計價幣別": _mj_rd.get("currency") or _frd.get("currency") or "—",
-                    "NAV(原幣)": _m_rd.get("nav") or _mj_rd.get("nav_latest"),
-                    "年化配息率%(wb05)": _mj_rd.get("moneydj_div_yield"),
-                    "年化配息率%(metrics)": _m_rd.get("annual_div_rate"),
-                    "1Y含息%": _m_rd.get("ret_1y_total") or _m_rd.get("ret_1y"),
-                    "Sharpe": _m_rd.get("sharpe"),
-                    "年化波動%": _m_rd.get("std_1y"),
-                    "最高經理費%": _mj_rd.get("mgmt_fee"),
-                    "類別": _mj_rd.get("category") or "—",
-                }
-                st.markdown(f"**{_name_rd}** `{_code_rd}`")
-                st.json(_raw_view, expanded=False)
-
-    # ════════════════════════════════════════════════════════════════
-    # 🆕 v18.22 保單視圖 P1.3：保單管理 + 保單分組視圖（top-level expander）
-    # v18.75：OAuth 設定解析 + 登入 UI 已 hoist 到 sidebar；此處僅保留 Sheet 設定
-    # ════════════════════════════════════════════════════════════════
-
-    # v18.28: 未登入 OAuth 或無 token 時預設展開（引導使用者連 Sheets）
-    _gsheet_default_expand = not bool(st.session_state.get("gsheet_tokens"))
-    with st.expander("📋 保單管理（Google Sheets）— Sheet 設定 / 保單清單",
-                     expanded=_gsheet_default_expand):
-        # v18.162：互動式快捷面板 ── 4 顆按鈕全部「真執行」一鍵到位。
-        # 雲端讀寫抽 ui/helpers/cloud_io.py 純函式（dump_all_to_sheet /
-        # load_all_from_sheet），與下方 L880+ 完整面板共用同一份 IO 邏輯；
-        # JSON 下載/上傳沿用 v18.161 的 ui/helpers/json_backup.py。
-        # 未登入 OAuth 或無 sheet_id 時，雲端 panel 顯示友善提示 + 動作按鈕 disabled。
-        st.markdown("##### 🚀 快速存讀面板")
-        _io_panel = st.session_state.get("t3_io_panel", "load")
-
-        def _t3_set_io_panel(_name: str) -> None:
-            st.session_state["t3_io_panel"] = _name
-
-        _io_c1, _io_c2, _io_c3, _io_c4, _io_c5 = st.columns(5)
-        _io_c1.button("📥 雲端讀取", use_container_width=True,
-                      key="t3_io_btn_load",
-                      type=("primary" if _io_panel == "load" else "secondary"),
-                      on_click=_t3_set_io_panel, args=("load",),
-                      help="從 Google Sheet 把保單分頁 + _T7_State 讀回本地")
-        _io_c2.button("📦 雲端存檔", use_container_width=True,
-                      key="t3_io_btn_save",
-                      type=("primary" if _io_panel == "save" else "secondary"),
-                      on_click=_t3_set_io_panel, args=("save",),
-                      help="把目前持倉 + ledger 寫回 Google Sheet")
-        _io_c3.button("✨ 新增帳本", use_container_width=True,
-                      key="t3_io_btn_new",
-                      type=("primary" if _io_panel == "new" else "secondary"),
-                      on_click=_t3_set_io_panel, args=("new",),
-                      help="建立全新的 Google Sheet 作為帳本")
-        _io_c4.button("💾 下載 JSON", use_container_width=True,
-                      key="t3_io_btn_dl",
-                      type=("primary" if _io_panel == "dl" else "secondary"),
-                      on_click=_t3_set_io_panel, args=("dl",),
-                      help="把整本帳本下載為本機 JSON（不依賴網路）")
-        _io_c5.button("📂 上傳 JSON", use_container_width=True,
-                      key="t3_io_btn_ul",
-                      type=("primary" if _io_panel == "ul" else "secondary"),
-                      on_click=_t3_set_io_panel, args=("ul",),
-                      help="從本機 JSON 還原整本帳本")
-
-        # 共用：雲端 panel 需要的快取狀態（避免重複打 API）
-        # v19.302: 補 _sheet_id_secret fallback(對齊 L828 既有 pattern)——純 Service
-        # Account 使用者(設了 POLICY_SHEET_ID secret、從不走 OAuth 登入)原本
-        # session 無 policy_sheet_id → _sheet_id_q 為空 → 自動讀回/讀取鈕都不出現。
-        _sheet_id_q = (st.session_state.get("policy_sheet_id")
-                       or _sheet_id_secret or "").strip()
-        _logged_in_q = bool(st.session_state.get("gsheet_tokens"))
-        _can_cloud_q = bool(_sheet_id_q) and (
-            _logged_in_q or (_gsa_secret and _sheet_id_secret)
-        )
-        _sheet_title_q = ""
-        if _can_cloud_q and _oauth_configured and _logged_in_q:
-            _sheet_title_q = st.session_state.get("_t3_cur_sheet_title", "")
-            if not _sheet_title_q:
-                try:
-                    _sheet_title_q = (
-                        get_sheet_title(_get_oauth_client(), _sheet_id_q) or ""
-                    )
-                    if _sheet_title_q:
-                        st.session_state["_t3_cur_sheet_title"] = _sheet_title_q
-                except Exception:
-                    _sheet_title_q = ""
-
-        def _t3_cloud_client_q():
-            # v19.302: 委派 SSOT helper — 優先 Service Account(見 _t3_sheet_client)
-            return _t3_sheet_client()
-
-        # ── 切換帳本後自動讀回：持倉切換 + 同 code 基金資訊沿用（免重抓）──
-        # 只在「帳本 ID 變了」且雲端可達時跑一次；真正不同的新標的留給既有
-        # 「📡 載入未載入基金」按鈕抓（避免切換時卡 30s×N）。失敗也記下 id，
-        # 不重試迴圈，user 可手動按「📥 雲端讀取」再試。
-        # 防呆：本次 session「第一次進入」且已有本地持倉（如剛還原 JSON）→
-        # 只記下帳本不自動讀回，避免 sync 把本地狀態洗掉；真正切換 id 時才讀。
-        _prev_loaded_id = st.session_state.get("_last_loaded_sheet_id")
-        if _sheet_id_q and _can_cloud_q and _prev_loaded_id != _sheet_id_q:
-            _skip_first = (_prev_loaded_id is None
-                           and bool(st.session_state.get("portfolio_funds")))
-            st.session_state["_last_loaded_sheet_id"] = _sheet_id_q
-            from ui.helpers.cloud_io import load_all_from_sheet as _auto_load
-            from ui.helpers.portfolio_load import count_unloaded_funds
-            _ares = ({"ok": False, "_skipped": True} if _skip_first else
-                     _auto_load(_t3_cloud_client_q(), _sheet_id_q,
-                                st.session_state,
-                                oauth_mode=bool(_oauth_configured)))
-            if _ares.get("_skipped"):
-                pass   # 首次進入保留本地持倉，不自動讀回
-            elif _ares.get("ok"):
-                st.session_state["t3_last_load_at"] = tw_now_str()
-                _reused_n = len(_ares.get("reused", []))
-                _, _new_codes = count_unloaded_funds()
-                _tot = len(st.session_state.get("portfolio_funds", []) or [])
-                st.toast(
-                    f"📥 已自動讀回此帳本：持倉 {_tot} 檔"
-                    + (f"／沿用 {_reused_n} 檔免重抓" if _reused_n else "")
-                    + (f"／{_new_codes} 檔新標的待載入" if _new_codes
-                       else "／全部已載入"),
-                    icon="📥",
-                )
-            else:
-                st.warning(
-                    "⚠️ 自動讀回失敗（可手動按上方「📥 雲端讀取」重試）："
-                    f"{_ares.get('error')}"
-                )
-
-        with st.container(border=True):
-            if _io_panel == "load":
-                # v18.166：📥 雲端讀取 = 讀取現有帳本 + 從 Drive 挑帳本（兩者皆在此面板）
-                st.markdown("**📥 雲端讀取（全部讀回 / 挑選帳本）**")
-                if not _logged_in_q and not (_gsa_secret and _sheet_id_secret):
-                    not_ready("還沒用 Google 登入,無法讀取雲端帳本",
-                              where="左側 sidebar → 🔐 用 Google 登入")
-                    # v19.296: 快捷登入按鈕（免回 Sidebar）
-                    if _oauth_configured:
-                        try:
-                            _cfg_ld = _resolve_oauth_cfg()
-                            _url_ld = build_authorize_url(
-                                _cfg_ld["client_id"], _cfg_ld["redirect_uri"],
-                                state=_get_login_state())
-                            st.link_button("🔐 用 Google 登入", _url_ld)
-                        except Exception:
-                            pass
-                else:
-                    # v18.168：對調 — 上半「📂 從 Drive 挑帳本」，下半「📥 立即全部讀回」
-                    # 上半 ── 從 Drive 挑帳本（OAuth + 已登入時顯示）
-                    if _oauth_configured and _logged_in_q:
-                        st.markdown("**📂 從 Drive 挑帳本（切換 / 首次選用）**")
-                        _fld_btn_c1, _fld_btn_c2 = st.columns([2, 3])
-                        if _fld_btn_c1.button("🔄 載入資料夾清單",
-                                               key="btn_load_drive_folders",
-                                               use_container_width=True,
-                                               help="點一次抓 Drive 內所有資料夾；之後下方下拉就能選"):
-                            try:
-                                _folders_ls = list_user_folders(_get_oauth_client())
-                                st.session_state["_my_folders"] = _folders_ls
-                                if not _folders_ls:
-                                    st.info("ℹ️ Drive 內沒有資料夾，或 token 缺 `drive.metadata.readonly` 權限")
-                            except (PolicySheetError, OAuthError) as _fle:
-                                _err_text_f = str(_fle)
-                                if "insufficient" in _err_text_f.lower() or "403" in _err_text_f:
-                                    st.error("❌ 列資料夾失敗：OAuth token 缺中繼權限。左 sidebar「🚪 登出」→ 重新登入即可。")
-                                else:
-                                    st.error(f"❌ 列資料夾失敗：{_fle}")
-                            except Exception as _fle2:
-                                st.error(f"❌ 未預期錯誤：[{type(_fle2).__name__}] {_fle2}")
-
-                        _my_folders = st.session_state.get("_my_folders") or []
-                        _folder_options = [("", "🌐 整個帳號（不限資料夾）")] + [
-                            (f["id"], f"📁 {f['name']}  (`{f['id'][:10]}…`)") for f in _my_folders]
-                        _cur_folder_id = str(st.session_state.get("_drive_folder_id", "") or "")
-                        try:
-                            _cur_fld_idx = next(i for i, (fid, _) in enumerate(_folder_options) if fid == _cur_folder_id)
-                        except StopIteration:
-                            _cur_fld_idx = 0
-                        _sel_fld_idx = st.selectbox(
-                            "📁 限定資料夾（可選）",
-                            range(len(_folder_options)),
-                            index=_cur_fld_idx,
-                            format_func=lambda i: _folder_options[i][1],
-                            key="sel_drive_folder",
-                            help="留空 = 列整個帳號；或先點「🔄 載入資料夾清單」抓 Drive 資料夾後挑一個")
-                        _folder_id = _folder_options[_sel_fld_idx][0]
-                        st.session_state["_drive_folder_id"] = _folder_id
-
-                        if st.button("📂 從 Drive 列出 Sheets",
-                                      key="btn_list_drive_sheets",
-                                      use_container_width=True,
-                                      help="需要 OAuth `drive.metadata.readonly` 權限；若尚未授權請先登出再登入"):
-                            try:
-                                _files_ls = list_user_sheets(_get_oauth_client(), folder_id=_folder_id)
-                                st.session_state["_my_sheets"] = _files_ls
-                                _scope_name = _folder_options[_sel_fld_idx][1].lstrip("📁🌐 ").split("  (")[0]
-                                st.session_state["_my_sheets_scope"] = _scope_name
-                                if not _files_ls:
-                                    st.info("ℹ️ Drive 內沒有 Google Sheets，或目前 token 只能看 app 建立的檔。")
-                            except (PolicySheetError, OAuthError) as _lse:
-                                _err_text = str(_lse)
-                                if "insufficient" in _err_text.lower() or "403" in _err_text:
-                                    st.error(
-                                        "❌ 列檔失敗：OAuth token 缺 `drive.metadata.readonly` 權限。"
-                                        "請至 sidebar「🚪 登出」→ 重新「🔐 用 Google 登入」。"
-                                    )
-                                else:
-                                    st.error(f"❌ 列檔失敗：{_lse}")
-                            except Exception as _lse2:
-                                st.error(f"❌ 未預期錯誤：[{type(_lse2).__name__}] {_lse2}")
-
-                        _my_sheets = st.session_state.get("_my_sheets") or []
-                        _scope_hint = st.session_state.get("_my_sheets_scope", "")
-                        if _my_sheets:
-                            _opt_labels = [f"📄 {f['name']}  (`{f['id'][:14]}…`)" for f in _my_sheets]
-                            _scope_label = f"（來源：{_scope_hint}）" if _scope_hint else ""
-                            _sel_idx = st.selectbox(
-                                f"清單共 {len(_my_sheets)} 個 Sheets — 選一本 {_scope_label}",
-                                range(len(_opt_labels)),
-                                format_func=lambda i: _opt_labels[i],
-                                key="sel_my_sheets",
-                            )
-                            if st.button("✅ 使用此 Sheet 作為投組資料庫",
-                                          key="btn_pick_my_sheet",
-                                          type="primary", use_container_width=True):
-                                _picked = _my_sheets[_sel_idx]
-                                st.session_state["policy_sheet_id"] = _picked["id"]
-                                if "inp_sheet_id" in st.session_state:
-                                    del st.session_state["inp_sheet_id"]
-                                st.session_state.pop("_t3_cur_sheet_title", None)
-                                st.success(f"✅ 已選用 `{_picked['name']}`（ID `{_picked['id']}`）")
-                                st.rerun()
-                        st.markdown("---")
-
-                    # 下半 ── 全部讀回（需有 _sheet_id_q）
-                    if _sheet_id_q:
-                        st.markdown("**📥 全部讀回（雲端 → 本地）**")
-                        _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
-                        _last_load = st.session_state.get("t3_last_load_at", "—")
-                        _book_disp = (f"**{_sheet_title_q}**" if _sheet_title_q
-                                      else f"`{_sheet_id_q[:14]}…`")
-                        st.caption(
-                            f"📂 帳本：{_book_disp} ｜ 本地持倉：{_fund_n} 檔 "
-                            f"｜ 上次讀回：{_last_load}"
-                        )
-                        if st.button("📥 立即全部讀回", type="primary",
-                                      use_container_width=True,
-                                      key="t3_io_panel_load_run"):
-                            from ui.helpers.cloud_io import load_all_from_sheet
-                            _res = load_all_from_sheet(
-                                _t3_cloud_client_q(), _sheet_id_q,
-                                st.session_state,
-                                oauth_mode=bool(_oauth_configured),
-                            )
-                            if not _res["ok"]:
-                                st.error(f"❌ {_res['error']}")
-                            else:
-                                st.session_state["t3_last_load_at"] = tw_now_str()
-                                _msg = [f"新增 {len(_res['added'])} 檔",
-                                        f"保留 {len(_res['kept'])} 檔",
-                                        f"移除 {len(_res['removed'])} 檔"]
-                                if _res.get("reused"):
-                                    _msg.append(f"沿用 {len(_res['reused'])} 檔免重抓")
-                                if _res["restored_ct"]:
-                                    _msg.append(f"T7 部位 {_res['restored_ct']} 筆")
-                                st.success("📥 全部讀回完成：" + " / ".join(_msg))
-                                for _w in _res["warnings"]:
-                                    st.warning(f"⚠️ {_w}")
-                                st.rerun()
-                    else:
-                        st.info(
-                            "ℹ️ 尚未指定 Sheet ID。請從上方「📂 從 Drive 挑一本」，"
-                            "或至「✨ 新增帳本」建立新帳本。"
-                        )
-            elif _io_panel == "save":
-                st.markdown("**📦 全部寫入 Sheet（本地 → 雲端）**")
-                if not _can_cloud_q:
-                    not_ready("還沒登入 Google,或還沒指定 Sheet ID",
-                              where="左側 sidebar → 🔐 用 Google 登入;Sheet ID 見下方設定區")
-                else:
-                    _fund_n = len(st.session_state.get("portfolio_funds", []) or [])
-                    _last_save = st.session_state.get("t3_last_save_at", "—")
-                    _book_disp = (f"**{_sheet_title_q}**" if _sheet_title_q
-                                  else f"`{_sheet_id_q[:14]}…`")
-                    st.caption(
-                        f"📂 帳本：{_book_disp} ｜ 待寫入持倉：{_fund_n} 檔 "
-                        f"｜ 上次寫入：{_last_save}"
-                    )
-                    if st.button("📦 立即全部寫入", type="primary",
-                                  use_container_width=True,
-                                  key="t3_io_panel_save_run",
-                                  disabled=(_fund_n == 0),
-                                  help=("無持倉可寫入" if _fund_n == 0 else None)):
-                        from ui.helpers.cloud_io import dump_all_to_sheet
-                        _res = dump_all_to_sheet(
-                            _t3_cloud_client_q(), _sheet_id_q, st.session_state,
-                        )
-                        if not _res["ok"]:
-                            st.error(f"❌ {_res['error']}")
-                        else:
-                            st.session_state["t3_last_save_at"] = tw_now_str()
-                            _msg = [f"保單分頁 +{_res['written']} 筆"]
-                            if _res["n_state"]:
-                                _msg.append(f"_T7_State +{_res['n_state']} 筆")
-                            if _res.get("n_overview"):
-                                _msg.append(f"_持倉總覽 +{_res['n_overview']} 筆")
-                            if _res["skipped_no_pid"]:
-                                _msg.append(f"略過未綁保單 {_res['skipped_no_pid']} 檔")
-                            st.success("📦 已寫入 Sheet：" + "、".join(_msg))
-                            for _w in _res["warnings"]:
-                                st.warning(f"⚠️ {_w}")
-                            st.rerun()
-            elif _io_panel == "new":
-                # v18.166：「✨ 新增帳本」只剩「自動建立新 Sheet」；
-                # 「從 Drive 挑」已移到「📥 雲端讀取」面板（user 截圖反饋）
-                st.markdown("**✨ 新增帳本（建立全新 Google Sheet）**")
-                if not _oauth_configured:
-                    not_ready("還沒設定 OAuth Client,無法建立 Google Sheet",
-                              where="本面板下方的「OAuth 設定」expander")
-                elif not _logged_in_q:
-                    not_ready("還沒用 Google 登入,無法建立帳本",
-                              where="左側 sidebar → 🔐 用 Google 登入")
-                    # v19.296: 快捷登入按鈕（免回 Sidebar）
-                    if _oauth_configured:
-                        try:
-                            _cfg_nw = _resolve_oauth_cfg()
-                            _url_nw = build_authorize_url(
-                                _cfg_nw["client_id"], _cfg_nw["redirect_uri"],
-                                state=_get_login_state())
-                            st.link_button("🔐 用 Google 登入", _url_nw)
-                        except Exception:
-                            pass
-                else:
-                    st.caption(
-                        "💡 讓 app 建一張全新的 Google Sheet 作為帳本（不必先到 Drive 開檔）。"
-                        "想挑 Drive 內既有的 Sheet 請改點「📥 雲端讀取」。"
-                    )
-                    _ac_c1, _ac_c2 = st.columns([3, 2])
-                    _ac_title = _ac_c1.text_input(
-                        "新 Sheet 名稱", value="Fund Dashboard - 投資組合",
-                        key="inp_auto_sheet_title",
-                    ).strip()
-                    _ac_c2.write("")
-                    if _ac_c2.button("🚀 自動建立 Sheet",
-                                      key="btn_auto_create_sheet",
-                                      use_container_width=True,
-                                      disabled=not _ac_title):
-                        try:
-                            _new_sid, _new_url = create_dashboard_sheet(
-                                _get_oauth_client(), _ac_title)
-                            st.session_state["policy_sheet_id"] = _new_sid
-                            if "inp_sheet_id" in st.session_state:
-                                del st.session_state["inp_sheet_id"]
-                            st.session_state.pop("_t3_cur_sheet_title", None)
-                            st.success(
-                                f"✅ 已建立新 Sheet `{_ac_title}` — ID `{_new_sid}` 已自動填入。"
-                            )
-                            st.markdown(f"📂 [在 Google Drive 開啟此 Sheet]({_new_url})")
-                            st.rerun()
-                        except (PolicySheetError, OAuthError) as _ace:
-                            _err_text = str(_ace)
-                            if "insufficient authentication scopes" in _err_text.lower() or "403" in _err_text:
-                                st.error(
-                                    "❌ 建立失敗：OAuth token 缺 `drive.file` 權限。"
-                                    "請至 sidebar「🚪 登出」→ 重新「🔐 用 Google 登入」。"
-                                )
-                            else:
-                                st.error(f"❌ 建立失敗：{_ace}")
-                        except Exception as _ace2:
-                            st.error(f"❌ 未預期錯誤：[{type(_ace2).__name__}] {_ace2}")
-            elif _io_panel == "dl":
-                import json as _json_top
-                from ui.helpers.json_backup import build_export_payload
-                _payload = build_export_payload(st.session_state)
-                _bytes = _json_top.dumps(
-                    _payload, ensure_ascii=False, indent=2,
-                ).encode("utf-8")
-                _ts = tw_now_str("%Y%m%d_%H%M%S")
-                st.markdown("**💾 下載完整 JSON 備份**")
-                st.caption(
-                    f"含 {len(_payload['portfolio_funds'])} 檔基金 + "
-                    f"{len(_payload['t7_ledgers'])} 筆 ledger + "
-                    f"{len(_payload['t7_scenarios'])} 個方案（離線可還原）"
-                )
-                st.download_button(
-                    "💾 立即下載 JSON 備份",
-                    data=_bytes,
-                    file_name=f"fund_dashboard_backup_{_ts}.json",
-                    mime="application/json",
-                    use_container_width=True,
-                    key="t3_io_dl_btn_top",
-                )
-            elif _io_panel == "ul":
-                from ui.helpers.json_backup import restore_from_json_bytes
-                st.markdown("**📂 上傳 JSON 還原**")
-                st.caption("選擇先前下載的 `fund_dashboard_backup_*.json` 直接覆蓋本地帳本。")
-                _up = st.file_uploader(
-                    "選擇 JSON 備份檔", type=["json"],
-                    key="t3_io_ul_top", label_visibility="collapsed",
-                )
-                if _up is not None:
-                    _result = restore_from_json_bytes(_up.read(), st.session_state)
-                    if _result["ok"]:
-                        st.success(
-                            f"✅ 已還原 {_result['n_funds']} 檔基金 + "
-                            f"{_result['n_ledgers']} 筆 ledger。"
-                            "請按下方「📡 載入所有未載入基金」重新抓取即時資料。"
-                        )
-                        st.session_state.pop("_t7_auto_estimate_done", None)
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {_result['error']}")
-        st.divider()
-
-        # ── 認證區塊（v18.75 已搬到 sidebar，這裡只顯示狀態與連結）─────
-        # v19.52: 函式級初值，避免未登入時 L1133「綁到既有保單」分支讀未綁變數
-        _sheet_id = ""
-        _logged_in = bool(st.session_state.get("gsheet_tokens"))
-
-        if _oauth_configured:
-            if _logged_in:
-                st.success("🟢 已用 Google 登入（OAuth）— 登出請至左側 sidebar")
-            else:
-                st.info("ℹ️ 尚未登入 Google — 請至左側 sidebar 點「🔐 用 Google 登入」")
-                # v19.296: 快捷登入按鈕（免回 Sidebar）
-                try:
-                    _cfg_auth = _resolve_oauth_cfg()
-                    _url_auth = build_authorize_url(
-                        _cfg_auth["client_id"], _cfg_auth["redirect_uri"],
-                        state=_get_login_state())
-                    st.link_button("🔐 用 Google 登入", _url_auth)
-                except Exception:
-                    pass
-        elif _gsa_secret and _sheet_id_secret:
-            st.info("ℹ️ 偵測到 Service Account 設定，走舊版單表 schema（向後相容）")
-            _logged_in = True   # SA 視同已登入
-        else:
-            # v18.32: In-app OAuth Client 設定 wizard
-            #         不必碰 secrets.toml / 不必重新部署，session-only 即時生效
-            not_ready("尚未設定 OAuth Client",
-                      where="下方步驟：到 GCP console 建一個，再回這裡貼三個值即可登入")
-            st.markdown("---")
-            st.markdown("##### 🧙 OAuth Client 設定引導（5 分鐘完成）")
+    with _ov_warroom:
+        # ── v18.9 智能戰情室（決策導向：核心衛星×體檢×買賣區間）────────────
+        # 已載入基金時頂部優先顯示；空組合時讓給歡迎卡。
+        _pf_for_warroom = [f for f in st.session_state.portfolio_funds
+                           if f.get("loaded") and not f.get("load_error")]
+        if _pf_for_warroom:
+            # v18.163：頂部統一 hero KPI（合併 mk_war_room 4 卡 + 配息矩陣 4 卡，
+            # 解決 user 反饋「上下兩段 KPI 重複占版面」）。
+            from ui.helpers.portfolio_health import (
+                compute_health_kpis,
+                render_hero_kpi_cards,
+            )
+            try:
+                from ui.components.mk_dashboard import build_mk_dataframe as _build_mk
+                _loaded_hero = [f for f in _pf_for_warroom
+                                 if f.get("loaded") and not f.get("load_error")]
+                _mk_df_hero = _build_mk(_loaded_hero, bench_series=None)
+            except Exception:
+                _mk_df_hero = None   # smoke-allow-pass — KPI 不影響後續功能
+            _kpis_hero = compute_health_kpis(_pf_for_warroom, _mk_df_hero)
+            # （原本這裡把 _kpis_hero 塞進 session_state 說「供下方 expander summary 用」，
+            #   但全 repo 沒有任何讀取方 —— 純粹的死寫入，已刪除。
+            #   若日後真要跨區塊共用，請同批加上讀取端，不要先留一個沒人讀的 key。）
             st.markdown(
-                """
-                **一次性 GCP 設定**（之後你就只要按「🔐 用 Google 登入」即可）：
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
+                f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
+                f"<span style='color:{MD_BLUE_300};font-size:15px;font-weight:900'>📊 組合健康儀表</span>"
+                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.163 6 指標一覽</span>"
+                "</div>",
+                unsafe_allow_html=True)
+            render_hero_kpi_cards(_kpis_hero)
 
-                1. **啟用 API**：[GCP Console → APIs Library](https://console.cloud.google.com/apis/library) →
-                   啟用 `Google Sheets API` + `Google Drive API`
-                2. **OAuth consent screen**：
-                   [連結](https://console.cloud.google.com/apis/credentials/consent) → User Type: **External**
-                   → 填 App name / email → Scopes 加 `spreadsheets` + `drive.file` + `openid` + `userinfo.email`
-                   → Test users 加自己的 Gmail
-                3. **建 OAuth Client ID**：
-                   [連結](https://console.cloud.google.com/apis/credentials) → Create Credentials →
-                   OAuth client ID → Web application
-                   → **Authorized redirect URIs** 必須加上**這個 app 的 URL**（含尾巴 `/`），
-                   e.g. `https://你的-app.streamlit.app/` 或 `http://localhost:8501/`
-                   → 建完會跳出 Client ID + Client Secret，複製下來
-                4. **填到下方表單**並按「💾 套用」，立即啟用登入按鈕
-                """
-            )
-
-            st.markdown("##### 貼上你的 OAuth Client 三個值")
-            # 預填 session_state 已存的（重整後重貼方便）
-            _existing = st.session_state.get("custom_oauth_cfg", {}) or {}
-            _wf1, _wf2 = st.columns(2)
-            _w_cid = _wf1.text_input(
-                "Client ID",
-                value=_existing.get("client_id", ""),
-                placeholder="1234567890-xxxxx.apps.googleusercontent.com",
-                key="wf_oauth_cid",
-            )
-            _w_csec = _wf2.text_input(
-                "Client Secret",
-                value=_existing.get("client_secret", ""),
-                placeholder="GOCSPX-xxxxxxxxxxxxxxxxxx",
-                type="password",
-                key="wf_oauth_csec",
-            )
-            # Redirect URI 預設：嘗試從當前 URL 推斷（給使用者複製到 GCP console）
-            _default_redirect = _existing.get("redirect_uri", "")
-            if not _default_redirect:
-                try:
-                    # Streamlit 1.30+ 提供 st.context.url；缺則留空讓使用者貼
-                    _default_redirect = getattr(st.context, "url", "")
-                except Exception:
-                    _default_redirect = ""
-            _w_uri = st.text_input(
-                "Redirect URI（要跟 GCP console 完全一致，含尾巴 `/`）",
-                value=_default_redirect,
-                placeholder="https://你的-app.streamlit.app/",
-                key="wf_oauth_uri",
-                help="必須含 `https://` 開頭與結尾斜線，且要跟 GCP Console「Authorized redirect URIs」一字不差",
-            )
-
-            _wbc1, _wbc2 = st.columns([1, 3])
-            if _wbc1.button("💾 套用設定", type="primary",
-                            use_container_width=True,
-                            disabled=not (_w_cid.strip() and _w_csec.strip()
-                                          and _w_uri.strip()),
-                            key="btn_save_custom_oauth"):
-                _ru = _w_uri.strip()
-                # 防呆 1：缺 scheme 自動補 https://
-                if _ru and not (_ru.startswith("http://") or _ru.startswith("https://")):
-                    _ru = "https://" + _ru
-                # 防呆 2：Google OAuth 要求 redirect_uri 完整含 path，常見漏結尾 /
-                if "/" not in _ru[8:]:  # 跳過 https:// 後檢查 path
-                    _ru = _ru + "/"
-                st.session_state["custom_oauth_cfg"] = {
-                    "client_id":     _w_cid.strip(),
-                    "client_secret": _w_csec.strip(),
-                    "redirect_uri":  _ru,
-                }
-                if _ru != _w_uri.strip():
-                    st.info(f"ℹ️ redirect_uri 自動補完為 `{_ru}` — 請確認 GCP Console「Authorized redirect URIs」也是這個字串")
-                st.success("✅ OAuth Client 設定已套用（session 有效），"
-                           "可按「🔐 用 Google 登入」")
-                st.rerun()
-            _wbc2.caption(
-                "ℹ️ Session-only：重整頁面後要重貼。"
-                "若要永久生效，請把這三個值寫到 Streamlit Secrets `[google_oauth]` section。"
-            )
-
-        # ── v18.164：Sheet ID 輸入已 hoist 到 sidebar；此處只從 session_state 取值 ──
-        if _logged_in:
-            _sheet_id = (st.session_state.get("policy_sheet_id")
-                          or _sheet_id_secret or "").strip()
-
-            # v18.165：「✨ 新增帳本」面板已 hoist 到頂部快捷面板第 5 顆按鈕
-            # 此處不再重複渲染自動建立 / Drive 挑（避免 widget key 衝突）
-
-            # ── v18.169：原「📋 保單清單」說明區塊已移至 Tab6 說明書（§9 Sheet 資料結構）──
-            # 動態 metric（保單分頁 / _T7_State / _Ledgers 計數）已捨棄，避免 Tab3 雜訊
-
-            # ── 多帳本管理已移除（v18.188，user 要求）──
-            # 改用「📥 雲端讀取（從 Drive 挑帳本）」+「📦 雲端存檔」以存取/讀取方式
-            # 管理多帳本，不再需要獨立的「切換到此帳本」流程；建立新帳本見頂部
-            # 「✨ 新增帳本」；改名請直接在 Google Drive 操作。
-
-            # ── v18.149 schema v2 升級偵測（PR A — UI hook only）──
-            # v2 schema：每張保單分頁內聯 units / avg_nav / avg_fx + 多幣別現金。
-            # PR A 提供工具（detect / migrate / backup），PR B 才接 wizard / 編輯 UI。
-            # 這裡只放偵測 + 一鍵升級按鈕讓 user 自己決定何時轉。
-            if _oauth_configured and _sheet_id:
-                st.markdown("---")
-                st.markdown("##### 🆕 v18.149 新資料格式（snapshot-only）")
-                st.caption(
-                    "新格式：每張保單分頁直接存「持有單位、平均 NAV、平均 FX、多幣別現金」"
-                    "（11 欄）— 砍掉 `_T7_State` + `_Ledgers` 結構。"
-                    "T7 模組改成純讀模擬；真實加碼/贖回請自行在 Sheet 內修改。"
-                    "升級前會先**複製整本 Sheet 為備份**，確認新資料無誤再手動刪舊備份。"
-                )
-                _mig_c1, _mig_c2 = st.columns([2, 3])
-                if _mig_c1.button("🔍 偵測目前 Sheet 格式",
-                                    key="btn_detect_schema_v149",
-                                    use_container_width=True):
-                    try:
-                        _cli_d = _get_oauth_client()
-                        _ver = detect_sheet_schema_version(_cli_d, _sheet_id)
-                        st.session_state["_schema_ver"] = _ver
-                    except PolicySheetError as _ed:
-                        st.error(f"❌ 偵測失敗：{_ed}")
-                    except Exception as _ed2:
-                        st.error(f"❌ 未預期錯誤：[{type(_ed2).__name__}] {_ed2}")
-                _ver_now = st.session_state.get("_schema_ver", "")
-                if _ver_now == "v2":
-                    _mig_c2.success("✅ 已是 v2 新格式")
-                elif _ver_now == "v1":
-                    _mig_c2.warning("⚠️ 目前是 v1 舊格式，建議升級")
-                elif _ver_now == "empty":
-                    _mig_c2.info("ℹ️ 空 Sheet（無保單分頁）— 等加保單後再升級")
-
-                if _ver_now == "v1":
-                    if st.button("🚀 升級到 v2（先備份原 Sheet）",
-                                  key="btn_migrate_v149",
-                                  type="primary", use_container_width=True):
+            # v19.303: FX 曝險摘要 — 組合匯率敏感度一覽
+            try:
+                _fx_counts: dict = {}
+                for _pf_fx in _pf_for_warroom:
+                    # 稽核 J1-b：原本是 `str(...or "USD").strip().upper() or "USD"`
+                    # —— **雙重** USD fallback。實測後果：兩檔台幣計價的安聯台股基金
+                    # 因 Sheet currency 欄空白而被算進 USD，整段印出「USD 25 檔（100%）」
+                    # 與一句「組合 100% 為 USD 計價」的**錯誤風險警語**。
+                    # 風險揭露區塊拿捏造的幣別當輸入，比不揭露更糟（§1）。
+                    # 改法：未知就誠實歸到「未知」桶，不併進任何幣別。
+                    _ccy = str(_pf_fx.get("currency") or "").strip().upper() or _UNKNOWN_CCY
+                    _fx_counts[_ccy] = _fx_counts.get(_ccy, 0) + 1
+                _total_fx = sum(_fx_counts.values()) or 1
+                if _fx_counts:
+                    # 取 FX 即時匯率（re-use tab3 cache pattern）
+                    _fx_spot: dict = {}
+                    for _ccy_fx in _fx_counts:
+                        if _ccy_fx == "TWD":
+                            _fx_spot[_ccy_fx] = 1.0
+                            continue
+                        if _ccy_fx == _UNKNOWN_CCY:
+                            # 稽核 J1-b：未知幣別不去猜匯率、也不去打 API
+                            _fx_spot[_ccy_fx] = 0.0
+                            continue
                         try:
-                            from scripts.migrate_v149_schema import migrate_sheet as _mig
-                            _cli_m = _get_oauth_client()
-                            with st.spinner("⏳ 備份 + 升級中（視保單數約 10-60 秒）..."):
-                                _summary = _mig(_cli_m, _sheet_id, with_backup=True)
-                            if _summary.get("backup_sheet_url"):
-                                st.success(
-                                    f"✅ 已備份原 Sheet → "
-                                    f"[在 Drive 開啟備份]({_summary['backup_sheet_url']})"
-                                )
-                            _ok_n = sum(1 for m in _summary.get("migrated", [])
-                                         if not m.get("errors"))
-                            _err_n = sum(1 for m in _summary.get("migrated", [])
-                                          if m.get("errors"))
-                            st.success(
-                                f"✅ 已升級 {_ok_n}/{_summary.get('policies', 0)} 張保單到 v2"
-                                + (f"（{_err_n} 張有錯誤，見下方）" if _err_n else "")
-                            )
-                            if _err_n:
-                                st.warning("\n".join(
-                                    f"- {m['policy_id']}：{'; '.join(m['errors'])}"
-                                    for m in _summary["migrated"] if m.get("errors")
-                                ))
-                            st.session_state["_schema_ver"] = "v2"
-                            st.rerun()
-                        except Exception as _eme:
-                            st.error(f"❌ 升級失敗：[{type(_eme).__name__}] {_eme}")
-
-                # v2 預覽：讀新 schema 顯示給 user 對照
-                if _ver_now == "v2":
-                    if st.checkbox("👁️ 預覽 v2 schema 資料（read-only）",
-                                    key="cb_preview_v2", value=False):
-                        try:
-                            _cli_p = _get_oauth_client()
-                            _df_v2 = load_all_policies_v2(_cli_p, _sheet_id)
-                            if _df_v2.empty:
-                                st.caption("（v2 schema 沒有任何資料）")
-                            else:
-                                st.dataframe(_df_v2, use_container_width=True,
-                                              hide_index=True)
-                                # v19.436:item_type 退役,全為基金列 → 以非空 fund_code 計數
-                                _n_fund = int((_df_v2["fund_code"].astype(str).str.strip()
-                                               != "").sum()) if "fund_code" in _df_v2 else 0
-                                st.caption(f"共 {len(_df_v2)} 列；基金 {_n_fund} 檔。")
-                        except Exception as _epe:
-                            st.error(f"❌ 讀 v2 失敗：[{type(_epe).__name__}] {_epe}")
-
-                # v18.150 PR B：v2 native 編輯 UI（保單區塊 + in-line data_editor +
-                # 新增保單 + 第一次使用 wizard）
-                if _ver_now == "v2":
-                    try:
-                        from ui.helpers.v2_editor import render_v2_section
-                        _cli_v2 = _get_oauth_client()
-                        render_v2_section(_cli_v2, _sheet_id)
-                    except Exception as _ev2:
-                        st.error(f"❌ v2 編輯 UI 載入失敗："
-                                  f"[{type(_ev2).__name__}] {_ev2}")
-
-            # ── v18.167：原「🧰 一鍵存讀」（與頂部 📥/📦 重複）已刪除
-            #            此處只保留頂部沒有的小工具：refresh-only + 清空快取
-            if _sheet_id:
-                st.markdown("---")
-                st.markdown("##### 🛠️ 進階工具")
-                st.caption("📌 全部存讀請至頂部「🚀 快速存讀面板」；此處只放頂部沒有的小工具。")
-
-                _tool_c1, _tool_c2 = st.columns(2)
-                _refresh_clicked = _tool_c1.button(
-                    "🔄 只重新整理分頁清單（不動投組）",
-                    key="btn_policy_refresh", use_container_width=True,
-                    help="只重整下方「保單分頁」下拉選單，不動投資組合資料"
-                )
-                # v18.58: 一鍵清空 fetch TTL 快取（強制下次抓 fresh NAV/FX/Macro）
-                _clear_cache_clicked = _tool_c2.button(
-                    "🗑️ 清空抓取快取",
-                    key="btn_clear_fetch_cache_v18_58",
-                    use_container_width=True,
-                    help=("清空 fund_fetcher / macro_core 的 TTL 快取，"
-                          "下次抓取會走 fresh HTTP（盤中需要即時新值時用）。\n"
-                          "預設 TTL：NAV/FX 5min、MoneyDJ 15min、Macro 5min、FRED 30min")
-                )
-                if _clear_cache_clicked:
-                    try:
-                        from fund_fetcher import clear_all_caches as _cac
-                        import repositories.macro_repository  # noqa: F401 — 觸發 macro 快取註冊
-                        _n = _cac()
-                        st.success(f"✅ 已清空 {_n} 個快取函式（下次抓取走 fresh HTTP）")
-                    except Exception as _e_cc:
-                        st.error(f"清空失敗：{str(_e_cc)[:120]}")
-                try:
-                    from fund_fetcher import get_all_cache_info as _gci
-                    import repositories.macro_repository  # noqa: F401 — 觸發 macro 快取註冊
-                    _info_rows = _gci()
-                    if _info_rows:
-                        _total_entries = sum(r["size"] for r in _info_rows)
-                        _total_hits = sum(r.get("hits", 0) for r in _info_rows)
-                        _total_misses = sum(r.get("misses", 0) for r in _info_rows)
-                        _total_calls = _total_hits + _total_misses
-                        _hit_rate = (
-                            f"{(_total_hits / _total_calls * 100):.1f}%"
-                            if _total_calls > 0 else "—"
-                        )
+                            from services.fund_service import get_latest_fx as _gf_fx
+                            import os as _os_fx
+                            _fk_fx = st.secrets.get("FRED_API_KEY", "") or _os_fx.environ.get("FRED_API_KEY", "")
+                            _v_fx = _gf_fx(f"{_ccy_fx}TWD=X", fred_api_key=_fk_fx)
+                            _fx_spot[_ccy_fx] = float(_v_fx) if _v_fx else 0.0
+                        except Exception:
+                            _fx_spot[_ccy_fx] = 0.0
+                    _fx_lines = []
+                    for _ccy_fx, _cnt in sorted(_fx_counts.items(), key=lambda x: -x[1]):
+                        _pct = _cnt / _total_fx * 100
+                        _rate = _fx_spot.get(_ccy_fx, 0)
+                        if _ccy_fx == _UNKNOWN_CCY:
+                            # 稽核 J1-b：說清楚「查不到」與「怎麼補」，不冒充任何幣別
+                            _rate_str = ("**計價幣別不明** —— 請在 Google Sheet 的 "
+                                         "`currency` 欄補上（例：TWD / USD）")
+                        else:
+                            _rate_str = (f"1 {_ccy_fx} ≈ {_rate:.2f} TWD"
+                                         if _rate > 0 else "匯率待抓")
+                        _fx_lines.append(f"**{_ccy_fx}** {_cnt} 檔（{_pct:.0f}%）· {_rate_str}")
+                    # 內容 < 6 行且含「USD 佔比過半」警告 → 收起來等於把風險藏起來（原則 1）。
+                    # 原本用「永遠展開的 expander」達成,但那層殼本身不提供任何資訊 —— 對
+                    # 使用者是多一圈邊框 + 一個假的「可收合」暗示。改成標題 + container。
+                    st.markdown(f"##### 💱 FX 曝險摘要（{len(_fx_counts)} 種幣別）")
+                    with st.container():
                         st.caption(
-                            f"🔋 快取狀態：{len(_info_rows)} 個函式 / "
-                            f"{_total_entries} entries / hit-rate {_hit_rate}"
-                            f"（hits={_total_hits} / misses={_total_misses}）"
+                            "組合中非 TWD 基金的幣別分布。台幣升值 1% 約等幅侵蝕該幣別折算績效。"
                         )
-                except Exception:
-                    pass   # smoke-allow-pass — 顯示性 caption 失敗不影響功能
+                        for _line in _fx_lines:
+                            st.markdown(f"- {_line}")
+                        # 稽核 J1-b：幣別不明的檔先講清楚，否則下面那句百分比會被
+                        # 讀成「已知全貌」。原本它們被靜默併進 USD，直接造出假警語。
+                        _unk_n = _fx_counts.get(_UNKNOWN_CCY, 0)
+                        if _unk_n:
+                            st.warning(
+                                f"⚠️ 有 **{_unk_n} 檔**查不到計價幣別（Google Sheet 的 "
+                                "`currency` 欄空白，且 MoneyDJ 也沒回傳）。這幾檔**未計入**"
+                                "下方任何幣別的佔比，其匯率風險目前無法評估 —— "
+                                "請到 Sheet 補上幣別後重新載入。"
+                            )
+                        _usd_pct = _fx_counts.get("USD", 0) / _total_fx * 100
+                        if _usd_pct >= 50:
+                            st.warning(
+                                f"⚠️ 組合 {_usd_pct:.0f}% 為 USD 計價，台幣大幅升值時 TWD 績效將明顯縮水。"
+                                + (f"（此比例的分母含上述 {_unk_n} 檔幣別不明者）" if _unk_n else "")
+                            )
+            except Exception as _e_fx_blk:
+                # §1：FX 曝險是風險揭露，失敗要留痕（原本 `pass` → 畫面零痕跡）
+                # 稽核 P2：補 file=sys.stderr —— Streamlit Cloud 的 log 面板
+                # **只顯示 stderr**，走 stdout 的 print 在雲端完全撈不到。
+                import sys as _sys_fx
+                print(f"[tab3 FX 曝險摘要] 渲染失敗："
+                      f"[{type(_e_fx_blk).__name__}] {_e_fx_blk}", file=_sys_fx.stderr)
+                # 這是風險揭露區塊。訊息自己就寫「這不代表沒有匯率風險」——
+                # 需要寫這句,正是因為灰字讓「沒風險」與「沒算出來」長得一樣。
+                system_error("FX 曝險摘要渲染失敗", _e_fx_blk,
+                             hint="**這不代表沒有匯率風險**,只代表這一項沒算出來。")
 
-                # 共用：取統計與更新 _sheet_stats
-                def _refresh_sheet_stats(_cli: object) -> None:
-                    try:
-                        _tabs_x = list_policy_worksheets(_cli, _sheet_id)
-                        _meta_x = get_state_metadata(_cli, _sheet_id)
-                        try:
-                            _led_df = load_all_ledgers(_cli, _sheet_id)
-                            _led_ct = len(_led_df)
-                        except (PolicySheetError, OAuthError):
-                            _led_ct = "—"
-                        st.session_state["_sheet_stats"] = {
-                            "tabs": len(_tabs_x),
-                            "t7_state": _meta_x.get("row_count", 0),
-                            "ledgers": _led_ct,
-                            "last_sync": _meta_x.get("latest_updated_at", ""),
-                        }
-                    except Exception:
-                        pass   # smoke-allow-pass — 統計失敗不影響主流程
+            st.divider()
 
-                # v18.167：refresh_only 路徑（dump_all / load_all 已移到頂部快捷面板）
-                if _refresh_clicked:
-                    from ui.helpers.cloud_io import load_all_from_sheet
-                    _client = _t3_sheet_client()  # v19.302: 優先 Service Account
-                    _res_l = load_all_from_sheet(
-                        _client, _sheet_id, st.session_state,
-                        oauth_mode=bool(_oauth_configured),
-                        refresh_only=True,
-                    )
-                    if not _res_l["ok"]:
-                        st.error(f"❌ {_res_l['error']}")
-                    else:
-                        for _w in _res_l["warnings"]:
-                            st.warning(f"⚠️ {_w}")
-                        _refresh_sheet_stats(_client)
-                        st.success("✅ 保單列表已刷新")
-                        st.rerun()
+            # v18.14: 改用 markdown 章節（避免外層 expander 包住內部 expander 觸發 Streamlit 巢狀錯誤）
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
+                f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:8px 0'>"
+                f"<span style='color:{MD_BLUE_300};font-size:15px;font-weight:900'>🎯 策略3 智能戰情室</span>"
+                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>v18.9 新手戰情中心</span>"
+                "</div>",
+                unsafe_allow_html=True)
+            render_mk_war_room(st.session_state.portfolio_funds)
+            st.divider()
 
-                _pdf_cached = st.session_state.get("policies_df")
-                if _pdf_cached is not None and not _pdf_cached.empty:
-                    st.markdown("**📋 保單分頁清單**")
-                    # v18.64: column header 改顯繁中（schema 仍英文，僅 UI 改名）
-                    # v19.436:同時涵蓋 v2(10 欄)與 v1 欄名 → 兩種 schema 載入時都有中文標籤,
-                    # 不再露出 fund_code/units 等英文原名(Streamlit 自動忽略 df 沒有的鍵)。
-                    # v2 欄:核心欄在前;units/avg_nav/avg_fx 為持倉模擬選填,標「(選填)」。
-                    st.dataframe(
-                        _pdf_cached, use_container_width=True, hide_index=True,
-                        column_order=[
-                            "policy_id", "fund_code", "fund_name", "currency",
-                            "tier", "invest_twd", "div_cash_pct",
-                            "units", "avg_nav", "avg_fx",
-                            # v1 欄(非 oauth 模式 fallback)
-                            "policy_name", "fund_url", "invest_date",
-                            "fx_at_buy", "notes", "policy_tier",
-                        ],
-                        column_config={
-                            # v2 schema（10 欄）
-                            "policy_id":    st.column_config.TextColumn("保單編號"),
-                            "fund_code":    st.column_config.TextColumn("基金代號"),
-                            "fund_name":    st.column_config.TextColumn("基金名稱"),
-                            "currency":     st.column_config.TextColumn("幣別"),
-                            "tier":         st.column_config.TextColumn("級別"),
-                            "invest_twd":   st.column_config.NumberColumn("投資金額 (TWD)"),
-                            "div_cash_pct": st.column_config.NumberColumn("現金給付%"),
-                            "units":        st.column_config.NumberColumn("持有單位數(選填)"),
-                            "avg_nav":      st.column_config.NumberColumn("平均成本(選填)"),
-                            "avg_fx":       st.column_config.NumberColumn("平均匯率(選填)"),
-                            # v1 schema（向後相容）
-                            "policy_name":  st.column_config.TextColumn("保單名稱"),
-                            "fund_url":     st.column_config.TextColumn("基金代碼"),
-                            "invest_date":  st.column_config.TextColumn("投資日期"),
-                            "fx_at_buy":    st.column_config.NumberColumn("買入匯率"),
-                            "notes":        st.column_config.TextColumn("備註"),
-                            "policy_tier":  st.column_config.TextColumn("配置定位"),
-                        },
-                    )
+            # v18.213：基金體檢表（郭老師「挑三揀四」PK 同類型，揪優等生 / 汰弱候選）
+            from ui.helpers.fund_checkup import render_fund_checkup
+            # expanded=True：同一個元件在組合健檢頁是展開的，這裡收起來 = 同元件兩種行為。
+            # 體檢表是資料型內容（原則 1），統一展開。
+            render_fund_checkup(st.session_state.portfolio_funds, expanded=True)
+            st.divider()
 
-                # v18.167：「📁 本機 JSON 備份」整段刪除（與頂部 💾/📂 重複）
-
-                # ── v18.63: 保單分頁管理區塊已移除（使用者反饋過度複雜）
-                #           保單分頁的建立 / 刪除改由「批次加入」自動處理：
-                #           - 加入基金時帶 pid → 自動建立對應保單分頁
-                #           - 「📦 全部寫入 Sheet」自動上傳所有保單分頁
-                #           - 如需刪除整個分頁，到 Google Sheets 直接刪 tab 即可
-
-                # ── 舊 SA 路徑：保留原表單 ───────────────────────
-                if _gsa_secret and not _oauth_configured:
-                    _show_form = st.checkbox("➕ 編輯保單列（舊 SA schema）",
-                        key="cb_policy_edit", value=False)
-                    if _show_form:
-                        st.markdown("##### 新增 / 更新保單列（主鍵：policy_id + fund_url）")
-                        with st.form("form_policy_upsert", clear_on_submit=False):
-                            _pf_c1, _pf_c2 = st.columns(2)
-                            _row = {}
-                            _row["policy_id"]   = _pf_c1.text_input("policy_id *", key="pol_id")
-                            _row["policy_name"] = _pf_c2.text_input("policy_name", key="pol_name")
-                            _row["fund_url"]    = _pf_c1.text_input("fund_url *", key="pol_url")
-                            _row["invest_twd"]  = _pf_c2.number_input("invest_twd",
-                                min_value=0, step=10000, key="pol_amt")
-                            _row["invest_date"] = _pf_c1.text_input("invest_date", key="pol_date")
-                            _row["currency"]    = _pf_c2.text_input("currency", key="pol_ccy")
-                            _row["fx_at_buy"]   = _pf_c1.number_input("fx_at_buy",
-                                min_value=0.0, step=0.01, key="pol_fx", value=0.0)
-                            _row["notes"]       = _pf_c2.text_input("notes", key="pol_notes")
-                            _fbcols = st.columns([1, 1, 4])
-                            _save_clicked = _fbcols[0].form_submit_button("💾 儲存", type="primary")
-                            _del_clicked  = _fbcols[1].form_submit_button("🗑️ 刪除此列")
-                            if _save_clicked:
-                                if not _row["policy_id"] or not _row["fund_url"]:
-                                    st.warning("policy_id 與 fund_url 為必填")
-                                else:
-                                    try:
-                                        _client = get_gspread_client(_gsa_secret)
-                                        _act = upsert_policy_row(_client, _sheet_id, _row)
-                                        st.success(f"✅ {_act}")
-                                    except PolicySheetError as _pe:
-                                        st.error(f"❌ 寫入失敗：{_pe}")
-                            elif _del_clicked:
-                                if not _row["policy_id"] or not _row["fund_url"]:
-                                    st.warning("policy_id + fund_url 必填")
-                                else:
-                                    try:
-                                        _client = get_gspread_client(_gsa_secret)
-                                        _hit = delete_policy_row(_client, _sheet_id,
-                                            _row["policy_id"], _row["fund_url"])
-                                        st.success("✅ 已刪除" if _hit else "ℹ️ 主鍵未命中")
-                                    except PolicySheetError as _pe:
-                                        st.error(f"❌ 刪除失敗：{_pe}")
-
-    # 原 `expanded=True` expander → 拿掉殼（原則 1：資料型區塊不加永遠開著的摺疊層）
-    st.markdown("#### 🗂️ 保單分組視圖")
-    with st.container():
-        _pol_funds = [f for f in st.session_state.portfolio_funds if f.get("policy_id")]
-        _ungrouped = [f for f in st.session_state.portfolio_funds if not f.get("policy_id")]
-
-        # v18.151: 頂部捷徑 — 有未載入基金時直接顯示載入按鈕，避免使用者滾不下去找
-        from ui.helpers.portfolio_load import (
-            batch_load_unloaded_funds as _batch_load_top,
-            count_unloaded_funds as _count_unloaded_top,
-        )
-        _n_ent_top, _n_uniq_top = _count_unloaded_top()
-        if _n_ent_top > 0:
-            _top_label = (
-                f"📡 載入未載入基金（{_n_ent_top} 條"
-                + (f" / {_n_uniq_top} unique code" if _n_uniq_top != _n_ent_top else "")
-                + "）— 抓即時 NAV / 績效"
-            )
-            if st.button(_top_label, type="primary",
-                          key="btn_pf_load_all_top",
-                          use_container_width=True):
-                _batch_load_top()
-
-        if not _pol_funds and not _ungrouped:
-            # 稽核 H3：原寫「📡 從 Sheet 同步」—— 全 repo 沒有這個按鈕標籤（死指標）。
-            # 實際入口是「📋 保單管理」expander 內快速存讀面板的「📥 雲端讀取」。
-            st.info("尚未載入任何基金。設定 Google Sheets 後，"
-                    "展開上方「📋 保單管理（Google Sheets）」→ 按「📥 雲端讀取」"
-                    "即可帶入保單分組。")
+            # v19.xxx： 3-3-3 原則批次篩選（留強汰弱量化依據）
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
+                f"border-left:4px solid {MD_GREEN_A200};border-radius:8px;padding:10px 14px;margin:8px 0'>"
+                f"<span style='color:{MD_GREEN_A200};font-size:15px;font-weight:900'>🔢  3-3-3 原則批次篩選</span>"
+                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px;margin-left:8px'>成立>3年 ／ 3年年化>7% ／ 晨星3星(手動確認)</span>"
+                "</div>",
+                unsafe_allow_html=True)
+            try:
+                from services.fund_screening import batch_333_funds as _batch_333
+                _funds_333 = [
+                    {
+                        "code":    f.get("code", ""),
+                        "name":    f.get("name") or f.get("code") or "",
+                        "series":  f.get("series"),
+                        "metrics": f.get("metrics") or {},
+                    }
+                    for f in _pf_for_warroom
+                    if f.get("series") is not None
+                ]
+                if _funds_333:
+                    # 原本是 `expanded=True` 的 expander —— 永遠開著的殼只是多一層邊框
+                    # 和一次多餘的點擊，資料型內容直接攤平（原則 1）。
+                    st.caption("📋 3-3-3 評估明細")
+                    with st.container():
+                        _df_333 = _batch_333(_funds_333)
+                        if not _df_333.empty:
+                            st.dataframe(
+                                _df_333,
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+                            st.caption(
+                                "✅=通過 ❌=未通過 ❓=資料不足　"
+                                "②來源空=MoneyDJ 含息報酬；②來源*=NAV 未含配息(保守估計)　"
+                                "③晨星評級請至 [Morningstar](https://www.morningstar.com.tw/) 手動查閱"
+                            )
+                            # 整體通過統計
+                            _pass_cnt = (_df_333["整體"] == "✅").sum()
+                            _fail_cnt = (_df_333["整體"] == "❌").sum()
+                            _unk_cnt  = (_df_333["整體"] == "❓").sum()
+                            _total    = len(_df_333)
+                            # 2026-08-05 稽核 🔴 必修 2(同型延伸):原寫死「由 Tab2 個別查詢」
+                            # —— 個基深掘早已不是第 2 個分頁,序號寫死 = 與 :292 同一顆地雷。
+                            # 一併收 story_nav.tab_label SSOT。
+                            from ui.helpers.story_nav import (  # noqa: PLC0415
+                                tab_label as _tab_label_333,
+                            )
+                            st.info(
+                                f"共 {_total} 檔　✅ 通過 {_pass_cnt} 檔　"
+                                f"❌ 未通過 {_fail_cnt} 檔　❓ 資料不足 {_unk_cnt} 檔　"
+                                f"（③同儕排名請至「{_tab_label_333('fund')}」分頁個別查詢，"
+                                f"組合批次僅評 ①②）",
+                                icon="📊",
+                            )
+                        else:
+                            st.info("NAV 資料尚未載入或不足，無法評估。")
+                else:
+                    st.info("請先在下方加入基金並載入資料。", icon="👇")
+            except Exception as _e333_tab3:
+                import sys as _sys333
+                print(f"[tab3/333] batch error: {_e333_tab3}", file=_sys333.stderr)
+                st.warning("3-3-3 批次評估載入失敗，請檢查 services/fund_screening.py。")
+            st.divider()
         else:
-            # 取 VIX 給 advisor。
-            # 原本讀的是一個**全 repo 沒有任何 writer** 的 session key（唯一寫入端
-            # 是已移除的總經指南針元件），所以此處恆為 None，advise_fund 吃 VIX 的
-            # 那條規則等於長期失效卻無人察覺。改走 helper 讀 Tab① 實際寫入的
-            # `indicators`，缺值仍誠實回 None（§1）。
-            _vix_for_adv = _vix_for_advice()
+            # v19.297：空組合歡迎卡 — 未加入任何基金（或全未載入）時的引導畫面
+            # v19.334 user 指示「說明縮小,不需要這麼大」:48px 圖示+置中大標+28px padding
+            # 的整屏卡 + 3 個 st.info 步驟框 → 收成單張緊湊卡(標題行+兩行說明),
+            # 資訊不減、高度約原本 1/4。
+            # 2026-08-05 稽核 🔴 必修 2:原寫死 Tab2「單檔基金」—— 該分頁名不存在,
+            # 且它早已不是第 2 個分頁(app.py 現為 5 分頁,個基深掘排第 4)。分頁名
+            # SSOT = ui/helpers/story_nav._STEPS(tab_label 去序號導出);序號一併拿掉
+            # ——序號會隨分頁增刪漂移,寫死等於埋下同型地雷。
+            from ui.helpers.story_nav import tab_label as _tab_label  # noqa: PLC0415
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_2},{BG_DARK_NAVY_1});"
+                f"border:1px solid {GH_BORDER};border-radius:8px;"
+                f"padding:10px 14px;margin:8px 0'>"
+                f"<div style='color:{WHITE};font-size:14px;font-weight:700;margin-bottom:4px'>"
+                f"📊 歡迎使用基金組合管理"
+                f"<span style='color:{GRAY_AA};font-size:11px;font-weight:400'>"
+                f"　— 加入基金後顯示 戰情室、組合健康儀表、3-3-3 篩選</span></div>"
+                f"<div style='color:{GRAY_AA};font-size:12px;line-height:1.7'>"
+                f"🔍 <b style='color:{TRAFFIC_NEUTRAL}'>「{_tab_label('fund')}」分頁</b>搜尋 → 按「➕ 加入組合」；"
+                f"📥 或在下方「➕ 加入基金」輸入代碼點「📡 載入」；"
+                f"也可從 Google Sheet 讀回已存組合。🎯 組合有資料後，分析自動出現在頁面頂部。"
+                f"</div></div>",
+                unsafe_allow_html=True)
+            st.divider()
 
-            # 分組
-            _by_policy: dict[str, list[dict]] = {}
-            for _f in _pol_funds:
-                _by_policy.setdefault(_f.get("policy_id", "?"), []).append(_f)
+    with _sec_overlap:
+        # v19.185 Bug5:相關性矩陣物理上移至摘要正下方(原在 T7 後)。
+        # T5 只讀 session_state.portfolio_funds(全域)+ 自 guard(>=2 loaded),搬移變數安全。
+        # ── T5: 持股相關性矩陣（v18.36 按保單分組）──────────────────────────────
+        _pf_for_corr_raw = [f for f in st.session_state.portfolio_funds
+                            if f.get("loaded") and f.get("series") is not None]
 
-            # P3 的 policy_tier→is_core 判定已上收 ui.helpers.portfolio.allocation，
-            # 讓保單級與全組合級用同一把尺（見該檔 docstring 的 4 處差異表）。
-            from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
-                get_core_target_pct as _get_core_target_p,
-                resolve_core_flag as _is_core_in_policy,
-                summarize_core_satellite as _sum_cs_p,
+        # 按 policy_id 分組（無保單者歸入「(未綁保單)」），每組內按 code 去重，
+        # 避免同 code 跨保單時 calc_holdings_overlap 回傳 DataFrame 重複欄名
+        # 觸發 pyarrow `Duplicate column names found` 例外。
+        from collections import defaultdict as _dd_t5
+        _t5_buckets: dict = _dd_t5(list)
+        for _ft5 in _pf_for_corr_raw:
+            _pid_raw = str(_ft5.get("policy_id", "") or "").strip()
+            _t5_buckets[_pid_raw or "(未綁保單)"].append(_ft5)
+        _t5_groups: dict = {}
+        for _pid_k, _items_k in _t5_buckets.items():
+            _seen_c: set = set()
+            _uniq_k: list = []
+            for _ft5 in _items_k:
+                _code_k = str(_ft5.get("code", "") or "").strip().upper()
+                if not _code_k or _code_k in _seen_c:
+                    continue
+                _seen_c.add(_code_k)
+                _uniq_k.append(_ft5)
+            if len(_uniq_k) >= 2:
+                _t5_groups[_pid_k] = _uniq_k
+
+        if _t5_groups:
+            st.divider()
+            st.markdown("### 🔬 持股重疊度診斷（T5 — 底層持股 + 產業重疊度，按保單分組）")
+            st.caption("以「持股 Jaccard × 0.6 + 產業 cosine × 0.4」綜合分;資料不齊自動降級為 NAV 相關係數。"
+                       "重疊度 大於等於 0.70 → 影子基金警告。已依保單號碼分群，組內基金互相比較。")
+            for _pid_g, _group_funds in _t5_groups.items():
+                with st.expander(f"📋 保單 **{_pid_g}**　·　{len(_group_funds)} 檔基金", expanded=False):
+                    _btn_key = f"btn_corr_{_pid_g}"
+                    _ss_key  = f"corr_result_{_pid_g}"
+                    if st.button("🔗 計算基金重疊度", key=_btn_key):
+                        from services.portfolio_service import calc_holdings_overlap as _calc_holdings_overlap
+                        _hov_input = []
+                        for f in _group_funds:
+                            _mj = (f.get("moneydj_raw") or {})
+                            _h = _mj.get("holdings") or {}
+                            _hov_input.append({
+                                "code": f.get("code", "?"),
+                                "name": f.get("name") or f.get("code"),
+                                "top_holdings": _h.get("top_holdings") or [],
+                                "sector_alloc": _h.get("sector_alloc") or [],
+                            })
+                        _hov_result = _calc_holdings_overlap(_hov_input)
+                        if (not _hov_result) or _hov_result.get("method") == "n/a":
+                            _corr_input = [{"code": f.get("code","?"), "series": f.get("series")}
+                                           for f in _group_funds]
+                            _hov_result = calc_correlation_matrix(_corr_input)
+                            if _hov_result is not None:
+                                _hov_result.setdefault("method", "nav_fallback")
+                                _freq_used = _hov_result.get("freq", "?")
+                                _hov_result.setdefault("notes",
+                                    f"持股 / 產業資料皆缺，降級為 NAV Pearson 相關"
+                                    f"（{_freq_used}頻；>= 0.85 為 shadow）")
+                        st.session_state[_ss_key] = _hov_result
+                    _cr = st.session_state.get(_ss_key)
+                    if _cr and _cr.get("matrix") is not None:
+                        _method = _cr.get("method", "?")
+                        _notes  = _cr.get("notes", "")
+                        _is_nav_fb = _method == "nav_fallback"
+                        _shadow = _cr.get("shadow_pairs", [])
+                        _thr = 0.85 if _is_nav_fb else 0.70
+                        _label = "相關係數" if _is_nav_fb else "重疊度"
+                        st.info(f"📌 計算方式：**{_method}**（{_notes}）")
+                        if _shadow:
+                            st.error(
+                                f"⚠️ **影子基金警告**：偵測到 {len(_shadow)} 對 {_label} 大於等於 {_thr} 的基金，"
+                                "持有意義可能重疊！"
+                            )
+                            _holdings_by_code: dict = {}
+                            if not _is_nav_fb:
+                                for _f in _group_funds:
+                                    _mj_h = ((_f.get("moneydj_raw") or {}).get("holdings") or {})
+                                    _holdings_by_code[_f.get("code", "?")] = [
+                                        (h.get("name") or "").strip()
+                                        for h in (_mj_h.get("top_holdings") or [])
+                                        if h.get("name")
+                                    ]
+                            for _sa, _sb, _sv in _shadow:
+                                _common_html = ""
+                                if not _is_nav_fb:
+                                    _ha = _holdings_by_code.get(_sa, [])
+                                    _hb_upper = {n.upper() for n in _holdings_by_code.get(_sb, []) if n}
+                                    _common = [n for n in _ha if n and n.upper() in _hb_upper]
+                                    if _common:
+                                        _items_zh = []
+                                        for _n in _common[:6]:
+                                            _zh = _zh_holding(_n)
+                                            _items_zh.append(f"{_n[:18]}{f'({_zh})' if _zh else ''}")
+                                        _more = f"…+{len(_common)-6}" if len(_common) > 6 else ""
+                                        _common_html = (
+                                            f"<div style='color:{MD_ORANGE_300};font-size:11px;margin:2px 0 0 12px'>"
+                                            f"🔁 共同持股 {len(_common)} 檔："
+                                            f"{'、'.join(_items_zh)}{_more}</div>")
+                                st.markdown(
+                                    f"- `{_sa}` × `{_sb}` — {_label} **{_sv:.3f}**{_common_html}",
+                                    unsafe_allow_html=True)
+                        else:
+                            st.success(f"✅ 各基金 {_label} 均在 {_thr} 以下，組合分散效果良好")
+                        def _color_overlap(v, _thr=_thr):
+                            try: f = float(v)
+                            except Exception: return ""
+                            # v18.249: NaN（兩檔 NAV 無重疊期）不上色，跟其他級別區分
+                            if pd.isna(f): return f"color:{TRAFFIC_NEUTRAL}"
+                            if f >= _thr:    return f"background-color:#b71c1c;color:{WHITE}"
+                            if f >= 0.50:    return f"background-color:#ef6c00;color:{WHITE}"
+                            if f >= 0.20:    return f"background-color:#558b2f;color:{WHITE}"
+                            if f >= -0.20:   return f"background-color:#2e7d32;color:{WHITE}"
+                            return f"background-color:#1565c0;color:{WHITE}"
+                        # v18.249: NaN → 「—」（codebase 標準缺失符號），不再顯示 'nan'
+                        _fmt_corr = lambda v: "—" if pd.isna(v) else f"{v:.2f}"
+                        try:
+                            _styled = (_cr["matrix"].style
+                                       .map(_color_overlap)
+                                       .format(_fmt_corr))
+                            st.dataframe(_styled, use_container_width=True)
+                        except Exception:
+                            st.dataframe(_cr["matrix"].round(2), use_container_width=True)
+                        # v18.249: 補一行說明 — 兩檔 NAV 序列無重疊期就無法算相關性
+                        if _cr["matrix"].isna().any().any():
+                            st.caption(
+                                "ℹ️ `—` 代表兩檔基金的 NAV 序列**無重疊期**（如新基金 vs 舊基金），"
+                                "Pearson 相關係數無法計算；不代表 0 也不代表無相關。"
+                            )
+                        if _is_nav_fb:
+                            st.caption(
+                                "💡 NAV 相關法：1.0 = 漲跌完全一樣｜0.5~0.85 = 連動偏高｜0 = 無關｜負 = 反向。"
+                                "🔴 大於等於 0.85 = 影子基金。"
+                            )
+                        else:
+                            st.caption(
+                                f"💡 持股 + 產業重疊度（method={_method}）：1.0 = 完全相同組合｜"
+                                "0.7~1.0 = 影子基金 / 集中度過高｜0.4~0.7 = 中度重疊｜"
+                                "0~0.3 = 分散良好。建議擇一持有 大於等於 0.7 的對。"
+                            )
+
+    with _sec_raw:
+        # ── Raw data（v19.185 Bug5：摘要 → 矩陣 → Raw data → AI 版面順序）──────
+        # 每檔基金 MoneyDJ 原始抓取結果攤平,供 user 核對 AI / 摘要的數字來源(§2.2 血緣)。
+        _pf_raw_dump = [f for f in st.session_state.portfolio_funds
+                        if f.get("loaded") and not f.get("load_error")]
+        if _pf_raw_dump:
+            with st.expander("🗂️ Raw data（基金原始抓取資料 — 核對數字來源）", expanded=False):
+                st.caption("MoneyDJ wb01/wb05/wb07 + metrics 原始值;摘要表 / AI 戰情室的數字皆源於此。")
+                for _frd in _pf_raw_dump:
+                    _code_rd = _frd.get("code", "?")
+                    _name_rd = (_frd.get("name") or _code_rd)[:30]
+                    _m_rd = _frd.get("metrics") or {}
+                    _mj_rd = _frd.get("moneydj_raw") or {}
+                    _raw_view = {
+                        "代碼": _code_rd,
+                        "計價幣別": _mj_rd.get("currency") or _frd.get("currency") or "—",
+                        "NAV(原幣)": _m_rd.get("nav") or _mj_rd.get("nav_latest"),
+                        "年化配息率%(wb05)": _mj_rd.get("moneydj_div_yield"),
+                        "年化配息率%(metrics)": _m_rd.get("annual_div_rate"),
+                        "1Y含息%": _m_rd.get("ret_1y_total") or _m_rd.get("ret_1y"),
+                        "Sharpe": _m_rd.get("sharpe"),
+                        "年化波動%": _m_rd.get("std_1y"),
+                        "最高經理費%": _mj_rd.get("mgmt_fee"),
+                        "類別": _mj_rd.get("category") or "—",
+                    }
+                    st.markdown(f"**{_name_rd}** `{_code_rd}`")
+                    st.json(_raw_view, expanded=False)
+
+    with _sec_policy:
+        # WP-D：約 800 行的「保單管理（Google Sheets）」原封抽出成獨立模組，
+        # 邏輯一字未改（見該檔 docstring）。本頁暫時仍呼叫它 —— 線框要它搬去
+        # ⑤「設定與診斷」，但 ⑤ 在本批還不存在（WP-E/WP-F），且線框 Q9 已拍板
+        # 「新增／更新保單列」要**留在** ④ —— 那一刀屬 WP-E，本批不切。
+        # `_sheet_id` 原本是本函式的區域變數，下方「保單分組視圖」要讀它；
+        # 搬出去之後改由該函式回傳原值交還（刻意不重算，重算會讀到不同時點的
+        # session_state，那是行為變更）。
+        from ui.helpers.portfolio.policy_admin_section import (  # noqa: PLC0415
+            render_policy_admin_section as _render_policy_admin,
+        )
+        _sheet_id = _render_policy_admin(
+            oauth_configured=_oauth_configured,
+            resolve_oauth_cfg=_resolve_oauth_cfg,
+            get_oauth_client=_get_oauth_client,
+            gsa_secret=_gsa_secret,
+            sheet_id_secret=_sheet_id_secret,
+            get_login_state=_get_login_state,
+            sheet_client=_t3_sheet_client,
+        )
+
+    with _ov_group:
+        # 原 `expanded=True` expander → 拿掉殼（原則 1：資料型區塊不加永遠開著的摺疊層）
+        st.markdown("#### 🗂️ 保單分組視圖")
+        with st.container():
+            _pol_funds = [f for f in st.session_state.portfolio_funds if f.get("policy_id")]
+            _ungrouped = [f for f in st.session_state.portfolio_funds if not f.get("policy_id")]
+
+            # v18.151: 頂部捷徑 — 有未載入基金時直接顯示載入按鈕，避免使用者滾不下去找
+            from ui.helpers.portfolio_load import (
+                batch_load_unloaded_funds as _batch_load_top,
+                count_unloaded_funds as _count_unloaded_top,
             )
+            _n_ent_top, _n_uniq_top = _count_unloaded_top()
+            if _n_ent_top > 0:
+                _top_label = (
+                    f"📡 載入未載入基金（{_n_ent_top} 條"
+                    + (f" / {_n_uniq_top} unique code" if _n_uniq_top != _n_ent_top else "")
+                    + "）— 抓即時 NAV / 績效"
+                )
+                if st.button(_top_label, type="primary",
+                              key="btn_pf_load_all_top",
+                              use_container_width=True):
+                    _batch_load_top()
 
-            _policy_target = _get_core_target_p(st.session_state)
+            if not _pol_funds and not _ungrouped:
+                # 稽核 H3：原寫「📡 從 Sheet 同步」—— 全 repo 沒有這個按鈕標籤（死指標）。
+                # 實際入口是「📋 保單管理」expander 內快速存讀面板的「📥 雲端讀取」。
+                st.info("尚未載入任何基金。設定 Google Sheets 後，"
+                        "展開上方「📋 保單管理（Google Sheets）」→ 按「📥 雲端讀取」"
+                        "即可帶入保單分組。")
+            else:
+                # 取 VIX 給 advisor。
+                # 原本讀的是一個**全 repo 沒有任何 writer** 的 session key（唯一寫入端
+                # 是已移除的總經指南針元件），所以此處恆為 None，advise_fund 吃 VIX 的
+                # 那條規則等於長期失效卻無人察覺。改走 helper 讀市場定調分頁實際寫入的
+                # `indicators`，缺值仍誠實回 None（§1）。
+                _vix_for_adv = _vix_for_advice()
 
-            for _pid, _funds in _by_policy.items():
-                _pname = _funds[0].get("policy_name") or _pid
-                _cs_p  = _sum_cs_p(_funds, target_pct=_policy_target)
-                _ptot  = _cs_p["total_twd"]
-                _p_core_amt = _cs_p["core_twd"]
-                _p_core_pct = (round(_cs_p["core_pct"], 1)
-                               if _cs_p["core_pct"] is not None else 0)
+                # 分組
+                _by_policy: dict[str, list[dict]] = {}
+                for _f in _pol_funds:
+                    _by_policy.setdefault(_f.get("policy_id", "?"), []).append(_f)
 
-                st.markdown(
-                    f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});"
-                    f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:10px 0 6px'>"
-                    f"<span style='color:{MD_BLUE_300};font-weight:900;font-size:15px'>🏷️ {_pname}</span>"
-                    f"<span style='color:{GRAY_AA};font-size:11px;margin-left:8px'>({_pid})</span>"
-                    f"<span style='color:{WHITE};font-size:13px;margin-left:auto;float:right'>"
-                    f"投入 {fmt_twd(_ptot)} · {len(_funds)} 檔 · 核心 {_p_core_pct}%</span>"
-                    f"</div>", unsafe_allow_html=True)
+                # P3 的 policy_tier→is_core 判定已上收 ui.helpers.portfolio.allocation，
+                # 讓保單級與全組合級用同一把尺（見該檔 docstring 的 4 處差異表）。
+                from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+                    get_core_target_pct as _get_core_target_p,
+                    resolve_core_flag as _is_core_in_policy,
+                    summarize_core_satellite as _sum_cs_p,
+                )
 
-                # ── P3: 保單級核心/衛星 mini donut ────────────────────
-                if _ptot > 0:
-                    _dn_p_col, _dn_p_msg = st.columns([1, 2])
-                    with _dn_p_col:
-                        _dn_pv = [_p_core_amt, _ptot - _p_core_amt]
-                        _dn_pl = [f"🛡️ 核心 {_p_core_pct}%",
-                                  f"⚡ 衛星 {100 - _p_core_pct:.1f}%"]
-                        fig_p_dn = go.Figure(go.Pie(
-                            labels=_dn_pl, values=_dn_pv,
-                            hole=0.65,
-                            marker=dict(colors=[MD_BLUE_300, MATERIAL_ORANGE],
-                                        line=dict(color=STREAMLIT_BG, width=1)),
-                            textinfo="percent", textfont=dict(size=9),
-                            hovertemplate="%{label}: NT$%{value:,.0f}<extra></extra>",
-                        ))
-                        fig_p_dn.update_layout(
-                            paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
-                            font_color=GH_FG_PRIMARY,
-                            height=120,
-                            margin=dict(t=4, b=4, l=4, r=4),
-                            showlegend=False,
-                            annotations=[dict(
-                                text=f"<b>{_p_core_pct}%</b>",
-                                x=0.5, y=0.5, font_size=12, showarrow=False,
-                                font=dict(color=MD_BLUE_300))],
-                        )
-                        st.plotly_chart(fig_p_dn, use_container_width=True,
-                                        key=f"policy_dn_{_pid}")
-                    # 預先算每檔 sigma / dividend 供 recommend_policy 用（與下方 fund-level 同邏輯）
-                    _funds_enriched = []
-                    for _f in _funds:
-                        _s = _f.get("series")
-                        _m = _f.get("metrics", {}) or {}
-                        _mj_e = _f.get("moneydj_raw", {}) or {}
-                        _sig_e = None
-                        if _s is not None and len(_s.dropna()) >= 30:
+                _policy_target = _get_core_target_p(st.session_state)
+
+                for _pid, _funds in _by_policy.items():
+                    _pname = _funds[0].get("policy_name") or _pid
+                    _cs_p  = _sum_cs_p(_funds, target_pct=_policy_target)
+                    _ptot  = _cs_p["total_twd"]
+                    _p_core_amt = _cs_p["core_twd"]
+                    _p_core_pct = (round(_cs_p["core_pct"], 1)
+                                   if _cs_p["core_pct"] is not None else 0)
+
+                    st.markdown(
+                        f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});"
+                        f"border-left:4px solid {MD_BLUE_300};border-radius:8px;padding:10px 14px;margin:10px 0 6px'>"
+                        f"<span style='color:{MD_BLUE_300};font-weight:900;font-size:15px'>🏷️ {_pname}</span>"
+                        f"<span style='color:{GRAY_AA};font-size:11px;margin-left:8px'>({_pid})</span>"
+                        f"<span style='color:{WHITE};font-size:13px;margin-left:auto;float:right'>"
+                        f"投入 {fmt_twd(_ptot)} · {len(_funds)} 檔 · 核心 {_p_core_pct}%</span>"
+                        f"</div>", unsafe_allow_html=True)
+
+                    # ── P3: 保單級核心/衛星 mini donut ────────────────────
+                    if _ptot > 0:
+                        _dn_p_col, _dn_p_msg = st.columns([1, 2])
+                        with _dn_p_col:
+                            _dn_pv = [_p_core_amt, _ptot - _p_core_amt]
+                            _dn_pl = [f"🛡️ 核心 {_p_core_pct}%",
+                                      f"⚡ 衛星 {100 - _p_core_pct:.1f}%"]
+                            fig_p_dn = go.Figure(go.Pie(
+                                labels=_dn_pl, values=_dn_pv,
+                                hole=0.65,
+                                marker=dict(colors=[MD_BLUE_300, MATERIAL_ORANGE],
+                                            line=dict(color=STREAMLIT_BG, width=1)),
+                                textinfo="percent", textfont=dict(size=9),
+                                hovertemplate="%{label}: NT$%{value:,.0f}<extra></extra>",
+                            ))
+                            fig_p_dn.update_layout(
+                                paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
+                                font_color=GH_FG_PRIMARY,
+                                height=120,
+                                margin=dict(t=4, b=4, l=4, r=4),
+                                showlegend=False,
+                                annotations=[dict(
+                                    text=f"<b>{_p_core_pct}%</b>",
+                                    x=0.5, y=0.5, font_size=12, showarrow=False,
+                                    font=dict(color=MD_BLUE_300))],
+                            )
+                            st.plotly_chart(fig_p_dn, use_container_width=True,
+                                            key=f"policy_dn_{_pid}")
+                        # 預先算每檔 sigma / dividend 供 recommend_policy 用（與下方 fund-level 同邏輯）
+                        _funds_enriched = []
+                        for _f in _funds:
+                            _s = _f.get("series")
+                            _m = _f.get("metrics", {}) or {}
+                            _mj_e = _f.get("moneydj_raw", {}) or {}
+                            _sig_e = None
+                            if _s is not None and len(_s.dropna()) >= 30:
+                                try:
+                                    from services.precision_service import calc_hwm_sigma_levels as _hwm_e
+                                    _sig_e = _hwm_e(_s, lookback=252)
+                                except Exception:
+                                    _sig_e = None  # smoke-allow-pass
+                            _div_e = None
                             try:
-                                from services.precision_service import calc_hwm_sigma_levels as _hwm_e
-                                _sig_e = _hwm_e(_s, lookback=252)
+                                # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
+                                from ui.helpers.macro_helpers import compute_1y_total_return
+                                _tret_v, _ = compute_1y_total_return({
+                                    "metrics": _m, "moneydj_raw": _mj_e,
+                                })
+                                _tret = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
+                                _dyld = float(_mj_e.get("moneydj_div_yield")
+                                              or _m.get("annual_div_rate") or 0)
+                                if _dyld > 0:
+                                    _div_e = div_safety_check(_tret, _dyld)
                             except Exception:
-                                _sig_e = None  # smoke-allow-pass
-                        _div_e = None
+                                _div_e = None  # smoke-allow-pass
+                            _funds_enriched.append({
+                                "invest_twd": _f.get("invest_twd", 0) or 0,
+                                "is_core":    _is_core_in_policy(_f),
+                                "sigma_info": _sig_e,
+                                "dividend_info": _div_e,
+                            })
+                        _p_rec = recommend_policy(_funds_enriched, target_core_pct=_policy_target)
+                        _rec_clr = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
+                                    "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}.get(_p_rec["color"], TRAFFIC_NEUTRAL)
+                        with _dn_p_msg:
+                            st.markdown(
+                                f"<div style='margin-top:18px;color:{_rec_clr};font-size:13px;"
+                                f"line-height:1.55'>🎯 {_p_rec['text']}</div>",
+                                unsafe_allow_html=True)
+
+                    for _f in _funds:
+                        _code = _f.get("code", "?")
+                        _name = (_f.get("name") or _code)[:30]
+                        if not _f.get("loaded"):
+                            st.caption(f"⏳ {_code} {_name} — 尚未抓資料（按下方批次載入）")
+                            continue
+                        if _f.get("load_error"):
+                            st.caption(f"❌ {_code} — 載入失敗：{_f.get('load_error')}")
+                            continue
+
+                        _series  = _f.get("series")
+                        _metrics = _f.get("metrics", {}) or {}
+                        _mj      = _f.get("moneydj_raw", {}) or {}
+
+                        # σ 位階
+                        _sigma_info = None
+                        if _series is not None and len(_series.dropna()) >= 30:
+                            try:
+                                from services.precision_service import calc_hwm_sigma_levels as _hwm_fn2
+                                _sigma_info = _hwm_fn2(_series, lookback=252)
+                            except Exception as _se:
+                                _sigma_info = {"error": str(_se)[:60]}
+
+                        # 配息覆蓋率 / 吃本金
+                        _div_info = None
                         try:
                             # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
                             from ui.helpers.macro_helpers import compute_1y_total_return
                             _tret_v, _ = compute_1y_total_return({
-                                "metrics": _m, "moneydj_raw": _mj_e,
+                                "metrics": _metrics, "moneydj_raw": _mj,
                             })
                             _tret = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
-                            _dyld = float(_mj_e.get("moneydj_div_yield")
-                                          or _m.get("annual_div_rate") or 0)
+                            # v19.272 Phase 2 TOP 1:adr 走 SSOT 3 層 fallback chain(原行內 2 層收斂)
+                            from services.health.dividend import _resolve_adr_with_fallback
+                            _dyld_v, _ = _resolve_adr_with_fallback({
+                                "metrics": _metrics, "moneydj_raw": _mj,
+                            })
+                            _dyld = float(_dyld_v or 0)
                             if _dyld > 0:
-                                _div_e = div_safety_check(_tret, _dyld)
+                                _div_info = div_safety_check(_tret, _dyld)
                         except Exception:
-                            _div_e = None  # smoke-allow-pass
-                        _funds_enriched.append({
-                            "invest_twd": _f.get("invest_twd", 0) or 0,
-                            "is_core":    _is_core_in_policy(_f),
-                            "sigma_info": _sig_e,
-                            "dividend_info": _div_e,
-                        })
-                    _p_rec = recommend_policy(_funds_enriched, target_core_pct=_policy_target)
-                    _rec_clr = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
-                                "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}.get(_p_rec["color"], TRAFFIC_NEUTRAL)
-                    with _dn_p_msg:
+                            _div_info = None  # smoke-allow-pass
+
+                        # 60MA 趨勢
+                        _ma_trend = None
+                        if _series is not None and len(_series.dropna()) >= 65:
+                            try:
+                                _ma60 = _series.dropna().rolling(60).mean()
+                                if len(_ma60.dropna()) >= 5:
+                                    _ma_trend = "up" if _ma60.iloc[-1] > _ma60.iloc[-5] else "down"
+                            except Exception:
+                                _ma_trend = None  # smoke-allow-pass
+
+                        _advice = advise_fund(_sigma_info, _div_info, _ma_trend, _vix_for_adv)
+
+                        _sig_lbl = (_sigma_info or {}).get("label", "—") if _sigma_info else "—"
+                        _sig_clr = (_sigma_info or {}).get("color", TRAFFIC_NEUTRAL) if _sigma_info else TRAFFIC_NEUTRAL
+                        _sig_rnk = (_sigma_info or {}).get("sigma_rank")
+                        _sig_str = f"{_sig_rnk:+.2f}σ" if isinstance(_sig_rnk, (int, float)) else "—"
+                        _div_alert = (_div_info or {}).get("alert_level", "grey")
+                        _div_icon  = {"red": "🔴", "yellow": "🟡", "green": "🟢", "grey": "⚪"}.get(_div_alert, "⚪")
+                        _adv_clr   = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
+                                      "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}.get(_advice["color"], TRAFFIC_NEUTRAL)
+                        _inv_amt   = _f.get("invest_twd", 0) or 0
+
                         st.markdown(
-                            f"<div style='margin-top:18px;color:{_rec_clr};font-size:13px;"
-                            f"line-height:1.55'>🎯 {_p_rec['text']}</div>",
-                            unsafe_allow_html=True)
+                            f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;"
+                            f"padding:10px 14px;margin:4px 0 8px 20px'>"
+                            f"<div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
+                            f"<span style='color:{GH_FG_PRIMARY};font-weight:700;font-size:13px'>{_name}</span>"
+                            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code}</span>"
+                            f"<span style='color:{_sig_clr};font-size:11px;background:{GH_BG_CARD};padding:2px 8px;border-radius:10px'>"
+                            f"σ {_sig_str} · {_sig_lbl}</span>"
+                            f"<span style='color:{GRAY_CC};font-size:11px'>{_div_icon} {_div_alert}</span>"
+                            f"<span style='color:{GRAY_AA};font-size:11px;margin-left:auto'>{fmt_twd(_inv_amt)}</span>"
+                            f"</div>"
+                            f"<div style='color:{_adv_clr};font-size:12px;margin-top:6px;line-height:1.5'>"
+                            f"💡 {_advice['text']}</div>"
+                            f"</div>", unsafe_allow_html=True)
 
-                for _f in _funds:
-                    _code = _f.get("code", "?")
-                    _name = (_f.get("name") or _code)[:30]
-                    if not _f.get("loaded"):
-                        st.caption(f"⏳ {_code} {_name} — 尚未抓資料（按下方批次載入）")
-                        continue
-                    if _f.get("load_error"):
-                        st.caption(f"❌ {_code} — 載入失敗：{_f.get('load_error')}")
-                        continue
-
-                    _series  = _f.get("series")
-                    _metrics = _f.get("metrics", {}) or {}
-                    _mj      = _f.get("moneydj_raw", {}) or {}
-
-                    # σ 位階
-                    _sigma_info = None
-                    if _series is not None and len(_series.dropna()) >= 30:
+                if _ungrouped:
+                    st.markdown(
+                        f"<div style='color:{TRAFFIC_NEUTRAL};font-size:12px;margin-top:14px'>📂 未分組基金（手動加入、未綁保單）</div>",
+                        unsafe_allow_html=True)
+                    for _f in _ungrouped:
+                        st.caption(f"• {_f.get('code','?')} — {_f.get('name','') or '尚未載入'}")
+                    # v18.151: 「未綁保單」inline 快捷 — 載入這些 + 綁到保單下拉
+                    st.caption(
+                        f"⚠️ 你有 **{len(_ungrouped)} 檔未綁保單**（這些基金不在任何保單分頁內）。"
+                    )
+                    _ug_c1, _ug_c2 = st.columns([2, 3])
+                    # 載入這些（會等同上方主按鈕，只是顯眼快捷）
+                    _ug_not_loaded = [_g for _g in _ungrouped if not _g.get("loaded")]
+                    if _ug_not_loaded:
+                        if _ug_c1.button(f"📡 載入這 {len(_ug_not_loaded)} 檔",
+                                           key="btn_load_ungrouped",
+                                           use_container_width=True,
+                                           help="跟頂部「載入未載入基金」同效果，方便就近點"):
+                            from ui.helpers.portfolio_load import batch_load_unloaded_funds as _bl_ug
+                            _bl_ug()
+                    # 綁到既有保單（OAuth + 已升 v2 時才顯示，避免複雜化）
+                    if _oauth_configured and _sheet_id and \
+                       st.session_state.get("_schema_ver") == "v2":
                         try:
-                            from services.precision_service import calc_hwm_sigma_levels as _hwm_fn2
-                            _sigma_info = _hwm_fn2(_series, lookback=252)
-                        except Exception as _se:
-                            _sigma_info = {"error": str(_se)[:60]}
+                            from repositories.policy_repository import list_policy_worksheets as _lpw
+                            _existing_pids = _lpw(_get_oauth_client(), _sheet_id)
+                        except Exception:
+                            _existing_pids = []
+                        if _existing_pids:
+                            with _ug_c2:
+                                _bind_pid = st.selectbox(
+                                    "🔗 綁到保單", ["（先選保單）"] + list(_existing_pids),
+                                    key="sel_bind_policy_ungrouped",
+                                    label_visibility="collapsed")
+                                if _bind_pid and _bind_pid != "（先選保單）":
+                                    if st.button(f"✅ 套用：把這 {len(_ungrouped)} 檔綁到「{_bind_pid}」",
+                                                  key="btn_apply_bind_pid",
+                                                  use_container_width=True):
+                                        # 把所有未綁基金都設 policy_id
+                                        _cnt = 0
+                                        for _idx, _ff in enumerate(st.session_state.portfolio_funds):
+                                            if not _ff.get("policy_id"):
+                                                st.session_state.portfolio_funds[_idx]["policy_id"] = _bind_pid
+                                                _cnt += 1
+                                        st.success(
+                                            f"✅ 已把 {_cnt} 檔綁到「{_bind_pid}」（仍須到「✨ v2 編輯介面」"
+                                            f"填 units/avg_nav/avg_fx 後 [💾 存到雲端] 才會推 Google Sheet）"
+                                        )
+                                        st.rerun()
+                    else:
+                        _ug_c2.caption(
+                            "💡 升級到 v2 後可用「🔗 綁到保單」下拉，"
+                            "或到「✨ v2 編輯介面」手動加列。"
+                        )
 
-                    # 配息覆蓋率 / 吃本金
-                    _div_info = None
+    with _ov_core:
+        # ── v18.46 緊湊歡迎條（單列三步驟，不再佔大面積）────────────────────
+        # 稽核 E2:原為 `f.get("loaded")` —— 抓失敗的基金也是 loaded=True,
+        # 於是最上方 KPI 卡寫「25 檔」、下面每張表只有 8 列。走 SSOT 判定。
+        from ui.helpers.session import usable_funds as _usable_funds_e2
+        _pf_loaded = _usable_funds_e2(st.session_state.portfolio_funds)
+        if not _pf_loaded:
+            st.markdown(
+                f"<div style='background:{BG_DARK_NAVY_1};border:1px dashed {MD_BLUE_300};border-radius:8px;"
+                f"padding:6px 14px;margin:4px 0 10px;font-size:12px;color:{GRAY_AA};"
+                "display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
+                f"<span style='color:{MD_BLUE_300};font-weight:700'>👋 三步驟：</span>"
+                f"<span><b style='color:{WHITE}'>1️⃣ 貼代碼</b></span>"
+                f"<span style='color:{GRAY_55}'>→</span>"
+                f"<span><b style='color:{WHITE}'>2️⃣ 批次加入</b></span>"
+                f"<span style='color:{GRAY_55}'>→</span>"
+                f"<span><b style='color:{WHITE}'>3️⃣ 看 KPI / T5 / T7</b></span>"
+                f"<span style='margin-left:auto;color:{GRAY_66};font-size:10px'>"
+                "💡 AI 分析按鈕觸發，不自動扣 API</span>"
+                "</div>", unsafe_allow_html=True)
+
+        # ── 配置總覽（WP-D：頁內不編號，見上方版面順序說明）──
+        if _pf_loaded:
+            st.markdown("### 📊 配置總覽 — 你的組合現況")
+            # §1：Sheet 本金欄若寫成 `NT$1,000` / `1000元`，原本會靜默變 0，該檔基金
+            # 隨即在本金 / 核心% / 月配息 / 回撤權重全部消失且畫面零提示。
+            # 這裡把 L1 loader 記下的解析失敗列**彙總指名**，使用者才知道去改哪一格。
+            try:
+                from repositories.policy_repository import (  # noqa: PLC0415
+                    get_invest_twd_parse_errors as _get_inv_errs,
+                )
+                _inv_errs = _get_inv_errs()
+            except Exception as _e_inv:
+                _inv_errs = []
+                print(f"[tab3] 本金解析回報讀取失敗：[{type(_e_inv).__name__}] {_e_inv}")
+            if _inv_errs:
+                _err_lines = []
+                for _e in _inv_errs[:10]:
+                    _who = (_e.get("fund_code") or _e.get("fund_url")
+                            or _e.get("policy_id") or "—")
+                    _err_lines.append(
+                        f"- **{_e.get('source', '')} 第 {_e.get('row', '?')} 列**"
+                        f"（{str(_who)[:40]}）：{_e.get('reason', '')}"
+                    )
+                st.warning(
+                    f"⚠️ **{len(_inv_errs)} 列本金格式無法解析，已以 0 計入** —— "
+                    "下方「投入本金 / 核心資產比例 / 預估月配息」都會少算這幾檔。\n\n"
+                    + "\n".join(_err_lines)
+                    + ("\n- …（其餘 %d 列略）" % (len(_inv_errs) - 10)
+                       if len(_inv_errs) > 10 else "")
+                    + "\n\n請在 Google Sheet 把該格改成**純數字**（可含千分位逗號），"
+                    "例如 `1,000,000`；不要加 `NT$` / `元` / 中文數字。"
+                )
+
+        # ── v15.1 KPI 字卡列：投入本金 / 累計報酬 / 核心% / 月配息（新手語言）──
+        if _pf_loaded:
+            # 核心/衛星唯一真相：金額加權 + policy_tier 優先（見 allocation.py docstring）
+            from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+                format_core_satellite_caption as _fmt_cs_cap,
+                get_core_target_pct as _get_core_target,
+                summarize_core_satellite as _sum_cs,
+            )
+            _cs_kpi = _sum_cs(_pf_loaded,
+                              target_pct=_get_core_target(st.session_state))
+            _tot_kpi  = _cs_kpi["total_twd"]
+            _core_pct_kpi = (round(_cs_kpi["core_pct"], 1)
+                             if _cs_kpi["core_pct"] is not None else 0.0)
+            # 累計報酬：以各基金 series 起點 → 當前點，按投資額加權
+            _cum_ret_pct = None
+            try:
+                _w_returns = []
+                _w_amounts = []
+                for _f in _pf_loaded:
+                    _s = _f.get("series")
+                    _amt = _f.get("invest_twd", 0) or 0
+                    if _s is not None and len(_s.dropna()) >= 2 and _amt > 0:
+                        _ss = _s.dropna()
+                        _ret = (float(_ss.iloc[-1]) / float(_ss.iloc[0]) - 1.0) * 100.0
+                        _w_returns.append(_ret * _amt)
+                        _w_amounts.append(_amt)
+                if _w_amounts:
+                    _cum_ret_pct = sum(_w_returns) / sum(_w_amounts)
+            except Exception:
+                _cum_ret_pct = None
+            # 月配息估算：從 moneydj_raw.moneydj_div_yield / metrics.annual_div_rate
+            # v18.39 修：原本用 dividend_yield_pct/yield_pct 都不是實際 schema 上的欄位，
+            # 整個欄一直是 0；改用 v18.34 真實收益矩陣同款 fallback chain。
+            _est_monthly_div = 0.0
+            for _f in _pf_loaded:
+                _mj_kpi = _f.get("moneydj_raw") or {}
+                _m_kpi  = _f.get("metrics") or {}
+                _yld = (_mj_kpi.get("moneydj_div_yield")
+                        or _m_kpi.get("annual_div_rate")
+                        or 0)
+                _amt = _f.get("invest_twd", 0) or 0
+                try:
+                    _est_monthly_div += (float(_yld) / 100.0) * float(_amt) / 12.0
+                except Exception:
+                    pass  # smoke-allow-pass — 任一檔配息率非數值不影響其餘累加
+
+            _ret_color = MATERIAL_GREEN if (_cum_ret_pct or 0) > 0 else (MATERIAL_RED if (_cum_ret_pct or 0) < 0 else TRAFFIC_NEUTRAL)
+            _ret_str   = f"{_cum_ret_pct:+.2f}%" if _cum_ret_pct is not None else "—"
+            st.markdown(
+                "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 16px'>"
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
+                f"border-radius:12px;padding:16px 18px'>"
+                f"<div style='color:{GRAY_AA};font-size:11px'>💰 投入本金（NTD）</div>"
+                f"<div style='color:{WHITE};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
+                f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
+                f"{len(_pf_loaded)} 檔手填本金加總 · 非當前市值</div></div>"
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
+                f"border-radius:12px;padding:16px 18px'>"
+                f"<div style='color:{GRAY_AA};font-size:11px'>📈 累計報酬</div>"
+                f"<div style='color:{_ret_color};font-size:26px;font-weight:900;margin-top:4px'>{_ret_str}</div>"
+                f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>從淨值首日加權至今</div></div>"
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
+                f"border-radius:12px;padding:16px 18px'>"
+                f"<div style='color:{GRAY_AA};font-size:11px'>🛡️ 核心資產比例</div>"
+                f"<div style='color:{MD_BLUE_300};font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
+                f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
+                f"衛星 {100-_core_pct_kpi:.1f}% · 金額加權</div></div>"
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
+                f"border-radius:12px;padding:16px 18px'>"
+                f"<div style='color:{GRAY_AA};font-size:11px'>💵 預估月配息</div>"
+                f"<div style='color:{MD_ORANGE_300};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
+                f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
+                f"以<b>本金</b>×配息率粗估</div></div>"
+                "</div>", unsafe_allow_html=True)
+            # 原則 4「多做說明」：三個最容易被誤讀的數字，一次講清楚基數是什麼。
+            st.caption(
+                "💡 **這四格的基數**：\n"
+                "1. **投入本金 ≠ 當前市值** — 本金是你在 Google Sheet 手填的 `invest_twd`"
+                "（放進去多少錢）；本頁「💼 持倉戰情（T7 帳本）」的「組合當前市值 (TWD)」"
+                "＝ Σ 單位數 × 最新淨值 × 匯率（現在值多少錢）。兩者差額 = 未實現損益（± 已領配息）。\n"
+                "2. **核心資產比例** — " + _fmt_cs_cap(_cs_kpi) + "\n"
+                "3. **預估月配息** — 以**投入本金**× 年化配息率 ÷ 12 粗估；"
+                "T7 帳本那格是以**當前市值**為基數。淨值下跌時本金基數會**高估**現金流，"
+                "以 T7 的市值版為準。"
+            )
+
+            # ── 以下 4 個都是「風險揭露」元件（總經曝險 / 資料新鮮度 / 持股集中度 /
+            #    產業集中度）。原本 4 個 `except: pass` 讓它們失敗時**畫面完全沒有痕跡**
+            #    ——「沒出現」與「沒風險」長得一模一樣，是 §1 反造假的鏡像違規。
+            #    現在改成：不阻斷主流程，但一律 stderr log + 畫面留一行說明它沒跑成功。
+            def _risk_widget(_label: str, _fn) -> None:
+                try:
+                    _fn()
+                except Exception as _e_w:
+                    # 四個風險揭露元件共用這個 wrapper。同上：「沒出現」與「沒風險」
+                    # 長得一樣是 §1 的鏡像違規,顏色要把它分開。
+                    # （原本的 print 沒帶 file=sys.stderr,Streamlit Cloud 撈不到;
+                    #   system_error → friendly_error 內建 stderr 鏡射,順帶修好。）
+                    system_error(f"{_label} 渲染失敗", _e_w,
+                                 hint="**這不代表沒有風險**,只代表這一項沒算出來。")
+
+            # ── v19.64 I1：總經 → 組合曝險聯動 banner（讀 Tab1 phase_info，跨 Tab 訊號）──
+            def _w_macro_link() -> None:
+                from ui.helpers.macro_linkage import render_macro_exposure_link
+                render_macro_exposure_link(st.session_state, core_pct=_core_pct_kpi)
+            _risk_widget("總經曝險聯動提示", _w_macro_link)
+
+            # ── v19.62 E3：MoneyDJ 資料新鮮度條（組合層級，所有基金聯合統計）──
+            def _w_freshness() -> None:
+                from ui.helpers.freshness import render_mj_freshness_banner
+                _fresh_items = []
+                for _f in _pf_loaded:
+                    _mj = _f.get("moneydj_raw") or {}
+                    _fresh_items.append({
+                        "code": _f.get("code", "?"),
+                        "name": _f.get("name", "") or _f.get("code", "?"),
+                        "nav_date": _mj.get("nav_date", ""),
+                        "fetched_at": _mj.get("_moneydj_fetched_at", ""),
+                    })
+                render_mj_freshness_banner(_fresh_items)
+            _risk_widget("MoneyDJ 資料新鮮度", _w_freshness)
+
+            # ── v19.66 I3：穿透式持股集中度摘要（聚合各基金 top_holdings，跨區塊聯動 T5）──
+            def _w_conc() -> None:
+                from ui.helpers.concentration import render_concentration_summary
+                render_concentration_summary(_pf_loaded)
+            _risk_widget("穿透式持股集中度", _w_conc)
+
+            # ── v19.74 I7：穿透式產業集中度摘要（聚合各基金 sector_alloc）──
+            def _w_sector() -> None:
+                from ui.helpers.concentration import render_sector_concentration_summary
+                render_sector_concentration_summary(_pf_loaded)
+            _risk_widget("穿透式產業集中度", _w_sector)
+
+            # ── v15.1 資產成長曲線（vs 2% 無風險基準，§0 禁 ETF）─────────
+            # v18.43：同 code 跨多保單會讓 _value_series.name 重複，join 時欄名衝突拋例外。
+            # 分析視圖按 code 去重（與 v18.34 戰情室 / v18.38 真實收益矩陣策略一致）。
+            try:
+                _curve_df = None
+                _seen_curve: set = set()
+                for _f in _pf_loaded:
+                    _c_curve = str(_f.get("code", "") or "").strip().upper()
+                    if not _c_curve or _c_curve in _seen_curve:
+                        continue
+                    _s = _f.get("series")
+                    _amt = _f.get("invest_twd", 0) or 0
+                    if _s is None or len(_s.dropna()) < 2 or _amt <= 0:
+                        continue
+                    _seen_curve.add(_c_curve)
+                    _ss = _s.dropna()
+                    # 折算為「今日金額對齊到首日 NAV → 今日 NAV」的成長
+                    _value_series = (_ss / float(_ss.iloc[0])) * float(_amt)
+                    _value_series.name = _c_curve
+                    if _curve_df is None:
+                        _curve_df = _value_series.to_frame()
+                    else:
+                        _curve_df = _curve_df.join(_value_series, how="outer")
+                if _curve_df is not None and len(_curve_df) >= 2:
+                    # W5-2 §1: 多基金 outer-join 後 NaN 代表「該基金當日無對應 NAV」(週末/假日/上市前),
+                    # 此處 ffill 為「合成資產曲線」業務正確(用前一交易日 NAV 算當日市值),加 log 透明化
+                    _ffill_n = int(_curve_df.isna().sum().sum())
+                    _curve_df = _curve_df.sort_index().ffill()
+                    if _ffill_n > 0:
+                        print(f"[tab3 portfolio curve] ffill 補 {_ffill_n} 個 NaN(週末/假日/未上市前)")
+                    _total_curve = _curve_df.sum(axis=1)
+                    # 2% 無風險基準（從首日總額複利）
+                    _days = (_total_curve.index - _total_curve.index[0]).days
+                    _rf_curve = float(_total_curve.iloc[0]) * (1.0 + 0.02) ** (_days / 365.0)
+
+                    # 原 `expanded=True` expander → 拿掉殼（原則 1）
+                    # 命名誠實化：這條線畫的是 `(NAV_t / NAV_0) × invest_twd` 逐檔加總 ——
+                    # 起點固定等於投入本金，之後只跟著**淨值相對漲跌**縮放。
+                    # 它既不是本金（本金是常數，不會有曲線），也不是市值（沒有配息、
+                    # 沒有實際分批扣款時點、沒有匯率）。用「資產總額」那類字眼會被直接
+                    # 讀成「我現在有多少錢」，是本頁最容易誤導的一處。
+                    st.markdown("#### 📈 淨值成長模擬曲線（含 2% 無風險基準對比）")
+                    with st.container():
+                        fig_curve = go.Figure()
+                        fig_curve.add_trace(go.Scatter(
+                            x=_total_curve.index, y=_total_curve.values,
+                            name="你的組合", mode="lines",
+                            line=dict(color=MATERIAL_GREEN, width=2.5, shape="spline"),
+                            fill="tozeroy", fillcolor="rgba(0,200,83,0.08)",
+                            hovertemplate="%{x|%Y-%m-%d}<br>NT$ %{y:,.0f}<extra></extra>"))
+                        fig_curve.add_trace(go.Scatter(
+                            x=_total_curve.index, y=_rf_curve,
+                            name="2% 無風險基準", mode="lines",
+                            line=dict(color=TRAFFIC_NEUTRAL, width=1.2, dash="dot"),
+                            hovertemplate="%{x|%Y-%m-%d}<br>NT$ %{y:,.0f}<extra>無風險</extra>"))
+                        # 標註：起點 / 當前 / 最高 / 最低
+                        _hi_idx = _total_curve.idxmax(); _lo_idx = _total_curve.idxmin()
+                        fig_curve.add_trace(go.Scatter(
+                            x=[_total_curve.index[0], _hi_idx, _lo_idx, _total_curve.index[-1]],
+                            y=[_total_curve.iloc[0], _total_curve.loc[_hi_idx],
+                               _total_curve.loc[_lo_idx], _total_curve.iloc[-1]],
+                            mode="markers+text",
+                            marker=dict(size=[8,10,10,12],
+                                        color=[TRAFFIC_NEUTRAL,MATERIAL_GREEN,MATERIAL_RED,WHITE],
+                                        line=dict(color=STREAMLIT_BG, width=2)),
+                            # 末點原本只標一個「今」字加金額 → 最容易被讀成「我現在有
+                            # 多少錢」。改標「今日模擬」，與 y 軸／標題／下方說明同一套語彙。
+                            text=["起點（＝投入本金）",
+                                  f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
+                                  f"低 {fmt_twd(_total_curve.loc[_lo_idx])}",
+                                  f"今日模擬 {fmt_twd(_total_curve.iloc[-1])}"],
+                            textposition=["top right","top center","bottom center","top left"],
+                            textfont=dict(size=10, color=GH_FG_PRIMARY),
+                            showlegend=False,
+                            hoverinfo="skip"))
+                        fig_curve.update_layout(
+                            paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                            font_color=GH_FG_PRIMARY, height=320,
+                            margin=dict(t=20, b=30, l=55, r=20),
+                            legend=dict(orientation="h", y=1.05, font_size=10),
+                            hovermode="x unified")
+                        fig_curve.update_yaxes(title_text="模擬市值 (NTD)",
+                                               gridcolor=BG_DARK_NAVY_3)
+                        fig_curve.update_xaxes(gridcolor=BG_DARK_NAVY_3)
+                        st.plotly_chart(fig_curve, use_container_width=True)
+                        st.caption(
+                            "💡 **怎麼看**：綠線是你的組合走勢，灰虛線是「把錢放定存賺 2%」的基準。"
+                            "綠線在灰線上方代表你的選擇贏過定存。")
+                        st.caption(
+                            "📐 **這條線怎麼算的**：每檔基金的**投入本金**放在它第一個有淨值的"
+                            "那天，之後只隨**淨值相對漲跌**等比例縮放，再把各檔加總。"
+                            "**它不是你戶頭現在的錢** —— 未計入配息、未計入實際分批扣款的"
+                            "買進時點、也未計入台幣兌原幣匯率；除息當天淨值跳空，這條線也會"
+                            "跟著往下。真實金額請以保單對帳單為準。")
+            except Exception as _curve_e:
+                # v18.43 補錯誤型別讓使用者能 debug
+                _friendly_error(
+                    "資產曲線繪製失敗",
+                    f"[{type(_curve_e).__name__}] {_curve_e}",
+                    hint="可能是某些基金的 NAV 序列太短或缺漏，等資料補齊後重試即可。")
+
+        # Hero：核心/衛星配置概況
+        # v(本次)：核心/衛星四處各算各的 → 全部改吃 ui.helpers.portfolio.allocation
+        # （金額加權 + policy_tier 優先 + 目標一律 portfolio_core_pct）。
+        if _pf_loaded:
+            # 這裡刻意**不**再呼叫 `format_core_satellite_caption`：它吃的是同一份
+            # `_pf_loaded`，輸出與上方「💡 這四格的基數」第 2 點 byte-identical，
+            # 印第二次只是把同一句話貼兩遍。分母 / 級別來源的說明留在那一處
+            # （使用者第一次遇到這個百分比的地方），這裡只補它沒講的：目標值哪來的。
+            from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+                get_core_target_pct as _get_core_target2,
+                summarize_core_satellite as _sum_cs2,
+            )
+            _target   = _get_core_target2(st.session_state)
+            _cs_hero  = _sum_cs2(_pf_loaded, target_pct=_target)
+            _tot  = _cs_hero["total_twd"]
+            _core_pct = (round(_cs_hero["core_pct"], 1)
+                         if _cs_hero["core_pct"] is not None else 0.0)
+            _diff     = round(_cs_hero["diff_pct"], 1) if _cs_hero["diff_pct"] is not None else 0.0
+            _dc       = MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN)
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid {GH_BORDER}'>"
+                f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · 投入本金 {fmt_twd(_tot)}" if _tot else "") + "</div>"
+                f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
+                f"<div><div style='color:{MD_BLUE_300};font-size:11px'>🛡️ 核心資產</div><div style='color:{MD_BLUE_300};font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
+                f"<div><div style='color:{MATERIAL_ORANGE};font-size:11px'>⚡ 衛星資產</div><div style='color:{MATERIAL_ORANGE};font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
+                f"<div><div style='color:{_dc};font-size:11px'>目標偏差（目標核心 {_target:.0f}%）</div><div style='color:{_dc};font-size:28px;font-weight:900'>{_diff:+.1f}%</div></div>"
+                f"</div></div>", unsafe_allow_html=True)
+
+            # ── 核心/衛星甜甜圈（P1.3 縮成單列 mini chart）──────────────
+            # v19.393 V4c:原 N 檔基金 = N 片但只藍/橙 2 色 → 同色 wedge 糊成一片不可讀(dataviz
+            # 多切片圓餅反模式)。聚合成「核心 vs 衛星」2 片(與 :1322 保單級 donut 一致);
+            # 總額 = Σ invest_twd 不變、核心% 不變,per-fund 明細見下方持倉健診表。
+            _core_amt = _cs_hero["core_twd"]
+            _sat_amt  = _cs_hero["sat_twd"]
+            _n_core   = _cs_hero["n_core"]
+            _dn_labels = [f"🛡️ 核心 · {_n_core} 檔", f"⚡ 衛星 · {_cs_hero['n_sat']} 檔"]
+            _dn_values = [_core_amt, _sat_amt]
+            _dn_colors = [MD_BLUE_300, MATERIAL_ORANGE]
+            _alert     = abs(_diff) > 10
+            _bg_c      = "#1a0808" if _alert else STREAMLIT_BG
+            fig_dn = go.Figure()
+            if sum(_dn_values) > 0:
+                fig_dn.add_trace(go.Pie(
+                    labels    = _dn_labels,
+                    values    = _dn_values,
+                    hole      = 0.65,
+                    marker    = dict(colors=_dn_colors, line=dict(color=STREAMLIT_BG, width=1)),
+                    textinfo  = "percent",
+                    textfont  = dict(size=9),
+                    hovertemplate="%{label}: NT$%{value:,.0f} (%{percent})<extra></extra>",
+                ))
+            fig_dn.update_layout(
+                paper_bgcolor = _bg_c, plot_bgcolor = _bg_c,
+                font_color    = GH_FG_PRIMARY,
+                height        = 140,
+                margin        = dict(t=4, b=4, l=4, r=4),
+                showlegend    = False,
+                annotations   = [dict(
+                    text  = f"<b>{_core_pct}%</b><br><span style='font-size:9px'>核心</span>",
+                    x=0.5, y=0.5, font_size=14, showarrow=False,
+                    font=dict(color=MD_BLUE_300))],
+            )
+            st.plotly_chart(fig_dn, use_container_width=True)
+            if not _cs_hero["is_amount_weighted"]:
+                st.caption(
+                    "⬜ 全部 %d 檔都沒填投入本金 → 無法算金額比例，上方 0%% 不代表真的沒有核心資產。"
+                    % _cs_hero["n_funds"]
+                )
+            elif _alert:
+                st.caption(
+                    f"⚠️ 配置偏離 {_diff:+.1f}%（核心 {_core_pct}% vs 目標 {_target:.0f}%）— "
+                    f"{'核心過重，可贖回轉衛星' if _diff > 0 else '衛星過重，可獲利轉核心'}"
+                )
+            else:
+                st.caption(
+                    f"✅ 配置健康（核心 {_core_pct}% / 衛星 {100-_core_pct:.1f}%，"
+                    f"偏差 {_diff:+.1f}%，目標 {_target:.0f}%±10%）"
+                )
+            st.caption(
+                "📐 這裡的核心% 與上方「🛡️ 核心資產比例」字卡是同一個數字（同一份持倉、"
+                "同一套算法）；分母與級別來源的說明見上方「💡 這四格的基數」第 2 點。"
+                "目標值來自下方「⚙️ 組合設定」的核心比例 slider。")
+            # v18.192：教學化 — 核心/衛星 + 配息覆蓋率白話文（收合、不藏數據）
+            render_metric_explainer(["core_satellite", "div_coverage"])
+
+    with _sec_add:
+        st.markdown("### ➕ 加入與管理基金")
+        with st.expander("➕ 手動加入基金（支援多檔批次）", expanded=False):
+            st.caption(
+                "**📋 2 步驟流程**　·　Step 1（這裡）：貼**代碼** → 按 **➕ 批次加入** → "
+                "**📡 載入所有未載入基金**　→　Step 2（下方 T7「📝 編輯初始持倉」）：輸入"
+                "**單位數 / 平均成本 / 匯率**　→　上方「📦 全部寫入 Sheet」一鍵同步雲端。"
+            )
+            _existing_pids = st.session_state.get("policy_tabs", [])
+            c_codes, c_default_pid = st.columns([3, 2])
+            with c_codes:
+                pf_codes_input = st.text_area(
+                    "基金代碼（每行一檔，可加 ,pid 逐行覆寫）",
+                    label_visibility="collapsed",
+                    # v18.62: 高度 120 → 75 防手機被按鈕擠到 fold 下方
+                    height=75,
+                    placeholder=("ACCP138\nACDD01\nJFZN3,PL-2024-002"),
+                    key="pf_codes_input",
+                )
+            with c_default_pid:
+                pf_pid_input = st.text_input(
+                    "預設保單號碼（可選）",
+                    label_visibility="collapsed",
+                    placeholder=("預設保單 " + (
+                        f"（已有：{', '.join(_existing_pids[:3])}{'…' if len(_existing_pids)>3 else ''}）"
+                        if _existing_pids else "（可選）")),
+                    key="pf_pid_input",
+                )
+            pf_add_btn = st.button(
+                "➕ 批次加入（加完按上方「📡 載入所有未載入基金」抓資料）",
+                type="primary",
+                use_container_width=True,
+                key="btn_pf_add",
+            )
+
+            if pf_add_btn and pf_codes_input.strip():
+                default_pid = pf_pid_input.strip()
+                # ── v18.33: 解析多行輸入 ──────────────────────────────
+                _entries: list[tuple] = []   # [(code, pid), ...]
+                _existing_set = {(f["code"], f.get("policy_id", "") or "")
+                                  for f in st.session_state.portfolio_funds}
+                _skipped_dup: list[str] = []
+                for _line in pf_codes_input.splitlines():
+                    _line = _line.strip()
+                    if not _line:
+                        continue
+                    if "," in _line:
+                        _parts = [p.strip() for p in _line.split(",", 1)]
+                        _code, _pid = _parts[0].upper(), _parts[1]
+                    else:
+                        _code = _line.upper()
+                        _pid = default_pid
+                    if not _code:
+                        continue
+                    if (_code, _pid) in _existing_set:
+                        _skipped_dup.append(f"{_code}@{_pid or '(未綁)'}")
+                        continue
+                    _existing_set.add((_code, _pid))
+                    _entries.append((_code, _pid))
+
+                if not _entries:
+                    if _skipped_dup:
+                        st.warning(
+                            f"⚠️ 全部已存在於組合：{', '.join(_skipped_dup[:10])}"
+                            f"{'…' if len(_skipped_dup) > 10 else ''}"
+                        )
+                    else:
+                        st.warning("⚠️ 沒有有效代碼可加入")
+                else:
+                    # ── v18.33: 並行抓取 + v18.58: 按 unique code 先 dedupe 再 broadcast
+                    # 同 code 跨 N 保單只 fetch 一次，再 broadcast 給所有 (code, pid)
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+                    _uniq_codes = list({_c for _c, _ in _entries})
+                    _progress = st.progress(0.0,
+                        text=f"開始並行載入 {len(_uniq_codes)} 檔 unique 基金"
+                             f"（{len(_entries)} 條 entry, dedupe by code）…")
+                    _code_to_raw: dict = {}   # code → (raw_dict, error_msg)
+                    _done = 0
+                    with ThreadPoolExecutor(max_workers=4) as _ex:
+                        _futures = {
+                            _ex.submit(auto_fetch_moneydj, _c): _c
+                            for _c in _uniq_codes
+                        }
+                        for _fut in as_completed(_futures):
+                            _c_key = _futures[_fut]
+                            try:
+                                _code_to_raw[_c_key] = (_fut.result(), None)
+                            except Exception as _e:
+                                _code_to_raw[_c_key] = (None, str(_e)[:80])
+                            _done += 1
+                            _progress.progress(
+                                _done / len(_uniq_codes),
+                                text=f"完成 {_done}/{len(_uniq_codes)}：剛完成 {_c_key}",
+                            )
+                    _progress.empty()
+                    # broadcast：每個 (code, pid) 都拿同一份 raw_dict
+                    _results: dict = {
+                        (_c, _p): _code_to_raw[_c] for _c, _p in _entries
+                    }
+
+                    # ── v18.33: 批次寫入 + Sheets 同步（單一 OAuth client）──
+                    _succ, _fail, _sheet_synced = [], [], []
+                    _cfg_b = _resolve_oauth_cfg()
+                    _toks_b = st.session_state.get("gsheet_tokens")
+                    _sid_b = st.session_state.get("policy_sheet_id")
+                    _client_b = None
+                    if _cfg_b and _toks_b and _sid_b:
+                        try:
+                            _t_b = ensure_fresh_tokens(dict(_toks_b),
+                                _cfg_b["client_id"], _cfg_b["client_secret"])
+                            st.session_state["gsheet_tokens"] = _t_b
+                            _creds_b = build_credentials_from_tokens(_t_b,
+                                _cfg_b["client_id"], _cfg_b["client_secret"])
+                            _client_b = get_gspread_client_from_oauth(_creds_b)
+                        except Exception as _e_oc:
+                            _client_b = None
+                            # `_client_b = None` → 下方每一檔的 Sheet 同步都會被跳過,
+                            # 使用者卻只看到一行灰字,會以為已經寫進雲端了。
+                            system_error("OAuth client 建立失敗", _e_oc,
+                                         hint="這批基金**不會**寫進雲端 Sheet,只留在本機 session。")
+
+                    for (_code_b, _pid_b), (_raw_b, _err_b) in _results.items():
+                        _new_item_b = {"code": _code_b, "invest_twd": 0,
+                                        "loaded": True, "load_error": None,
+                                        "policy_id": _pid_b,
+                                        "policy_name": _pid_b}
+                        _emsg = _err_b or (_raw_b.get("error") if _raw_b else "")
+                        if _emsg:
+                            _new_item_b.update({"load_error": _emsg})
+                            _fail.append(f"{_code_b}: {str(_emsg)[:40]}")
+                        else:
+                            _new_item_b.update({
+                                "name":        _raw_b.get("fund_name") or _code_b,
+                                "series":      _raw_b.get("series"),
+                                "dividends":   _raw_b.get("dividends", []),
+                                "metrics":     _raw_b.get("metrics", {}),
+                                "moneydj_raw": _raw_b,
+                                "risk_metrics":_raw_b.get("risk_metrics", {}),
+                                "is_core":     _is_core_fund(
+                                    _raw_b.get("fund_name") or _code_b),
+                                "currency":    _raw_b.get("currency", "")
+                                                or _raw_b.get("metrics", {}).get("currency", ""),
+                            })
+                            _succ.append(_code_b)
+                            # v18.272：記錄到「曾經查過的基金清單」（Tab6 顯示）
+                            try:
+                                from services.fund_history import record_fund as _rec_fh3
+                                _rec_fh3(
+                                    _code_b,
+                                    _raw_b.get("fund_name", "") or _code_b,
+                                    source="Tab3",
+                                )
+                            except Exception:
+                                pass
+                            if _pid_b and _client_b:
+                                try:
+                                    upsert_fund_in_policy(_client_b, _sid_b, _pid_b, {
+                                        "fund_url":     _code_b,
+                                        "policy_name":  _pid_b,
+                                        "invest_twd":   0,
+                                        "invest_date":  "",
+                                        "currency":     _new_item_b.get("currency", ""),
+                                        "fx_at_buy":    0.0,
+                                        "notes":        "Tab3 batch add",
+                                        "policy_tier":  ("core" if _new_item_b.get("is_core")
+                                                         else "satellite"
+                                                         if _new_item_b.get("is_core") is False
+                                                         else ""),
+                                    })
+                                    _sheet_synced.append(_code_b)
+                                except (PolicySheetError, OAuthError) as _e_ws:
+                                    _fail.append(
+                                        f"{_code_b} Sheet 同步: {str(_e_ws)[:30]}")
+                        st.session_state.portfolio_funds.append(_new_item_b)
+
+                    # 完成後刷新 policy_tabs cache
+                    if _client_b and _sheet_synced:
+                        try:
+                            st.session_state["policy_tabs"] = (
+                                list_policy_worksheets(_client_b, _sid_b))
+                        except Exception as _e_ref:
+                            # 刷新失敗 → `policy_tabs` 停在舊值,下拉選單會少掉這次新增的
+                            # 保單分頁。那是「這個清單不可信」,不是「還沒載入」。
+                            system_error("保單列表刷新失敗", _e_ref,
+                                         hint="上方保單下拉選單可能仍是舊的,重新整理本頁即可更新。")
+
+                    _update_data_registry()
+
+                    # ── 摘要訊息 ────────────────────────────────────────
+                    _msg_parts = [f"成功 {len(_succ)} 檔"]
+                    if _sheet_synced:
+                        _msg_parts.append(f"☁️ Sheet 同步 {len(_sheet_synced)} 檔")
+                    if _skipped_dup:
+                        _msg_parts.append(f"⏭️ 跳過 {len(_skipped_dup)} 檔已存在")
+                    if _fail:
+                        _msg_parts.append(f"❌ 失敗 {len(_fail)} 檔")
+                    _summary = " · ".join(_msg_parts)
+                    if _fail:
+                        st.error(f"批次加入完成 — {_summary}")
+                        st.caption("**失敗明細**：")
+                        for _f_msg in _fail[:10]:
+                            st.caption(f"• {_f_msg}")
+                        if len(_fail) > 10:
+                            st.caption(f"…還有 {len(_fail) - 10} 筆")
+                    else:
+                        st.success(f"✅ 批次加入完成 — {_summary}")
+                    st.rerun()
+
+        pf = st.session_state.portfolio_funds
+        if not pf:
+            st.info("💡 請在上方輸入基金代碼加入，支援多檔同時比較")
+        else:
+            # 批次載入按鈕（v18.151：邏輯抽到 ui/helpers/portfolio_load.py）
+            not_loaded = [i for i, f in enumerate(pf) if not f.get("loaded")]
+            if not_loaded:
+                from ui.helpers.portfolio_load import (
+                    batch_load_unloaded_funds as _batch_load,
+                    count_unloaded_funds as _count_unloaded,
+                )
+                _n_ent, _n_uniq = _count_unloaded()
+                _btn_label = (
+                    f"📡 載入所有未載入基金（{_n_ent} 條 entry"
+                    + (f" / {_n_uniq} unique" if _n_uniq != _n_ent else "")
+                    + "）"
+                )
+                if st.button(_btn_label, type="primary", key="btn_pf_load_all"):
+                    _batch_load()
+
+            # v18.30: 為主清單預計算 VIX（給每檔 advise_fund 用）
+            # 同上：原本讀的那個 session key 0 writer → 恆 None。改吃市場定調分頁的 indicators。
+            _vix_t3_main = _vix_for_advice()
+
+            def _compute_advice_for(_pf_item: dict) -> dict:
+                """v18.30: 從 pf_item 算出 advise_fund 需要的三組訊號 + 呼叫 advisor。
+            失敗時回傳 grey '⏳ 資料不足'。"""
+                try:
+                    _s_local = _pf_item.get("series")
+                    _m_local = _pf_item.get("metrics", {}) or {}
+                    _mj_local = _pf_item.get("moneydj_raw", {}) or {}
+                    _sigma = None
+                    if _s_local is not None and len(_s_local.dropna()) >= 30:
+                        try:
+                            from services.precision_service import calc_hwm_sigma_levels as _hwm_fn3
+                            _sigma = _hwm_fn3(_s_local, lookback=252)
+                        except Exception as _e_s:
+                            _sigma = {"error": str(_e_s)[:60]}
+                    _div = None
                     try:
                         # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
                         from ui.helpers.macro_helpers import compute_1y_total_return
                         _tret_v, _ = compute_1y_total_return({
-                            "metrics": _metrics, "moneydj_raw": _mj,
+                            "metrics": _m_local, "moneydj_raw": _mj_local,
                         })
-                        _tret = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
-                        # v19.272 Phase 2 TOP 1:adr 走 SSOT 3 層 fallback chain(原行內 2 層收斂)
-                        from services.health.dividend import _resolve_adr_with_fallback
-                        _dyld_v, _ = _resolve_adr_with_fallback({
-                            "metrics": _metrics, "moneydj_raw": _mj,
-                        })
-                        _dyld = float(_dyld_v or 0)
-                        if _dyld > 0:
-                            _div_info = div_safety_check(_tret, _dyld)
+                        _tret_l = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
+                        _dyld_l = float(_mj_local.get("moneydj_div_yield")
+                                         or _m_local.get("annual_div_rate") or 0)
+                        if _dyld_l > 0:
+                            _div = div_safety_check(_tret_l, _dyld_l)
                     except Exception:
-                        _div_info = None  # smoke-allow-pass
-
-                    # 60MA 趨勢
-                    _ma_trend = None
-                    if _series is not None and len(_series.dropna()) >= 65:
+                        _div = None   # smoke-allow-pass
+                    _ma = None
+                    if _s_local is not None and len(_s_local.dropna()) >= 65:
                         try:
-                            _ma60 = _series.dropna().rolling(60).mean()
-                            if len(_ma60.dropna()) >= 5:
-                                _ma_trend = "up" if _ma60.iloc[-1] > _ma60.iloc[-5] else "down"
+                            _ma60_l = _s_local.dropna().rolling(60).mean()
+                            if len(_ma60_l.dropna()) >= 5:
+                                _ma = "up" if _ma60_l.iloc[-1] > _ma60_l.iloc[-5] else "down"
                         except Exception:
-                            _ma_trend = None  # smoke-allow-pass
-
-                    _advice = advise_fund(_sigma_info, _div_info, _ma_trend, _vix_for_adv)
-
-                    _sig_lbl = (_sigma_info or {}).get("label", "—") if _sigma_info else "—"
-                    _sig_clr = (_sigma_info or {}).get("color", TRAFFIC_NEUTRAL) if _sigma_info else TRAFFIC_NEUTRAL
-                    _sig_rnk = (_sigma_info or {}).get("sigma_rank")
-                    _sig_str = f"{_sig_rnk:+.2f}σ" if isinstance(_sig_rnk, (int, float)) else "—"
-                    _div_alert = (_div_info or {}).get("alert_level", "grey")
-                    _div_icon  = {"red": "🔴", "yellow": "🟡", "green": "🟢", "grey": "⚪"}.get(_div_alert, "⚪")
-                    _adv_clr   = {"red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
-                                  "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}.get(_advice["color"], TRAFFIC_NEUTRAL)
-                    _inv_amt   = _f.get("invest_twd", 0) or 0
-
-                    st.markdown(
-                        f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;"
-                        f"padding:10px 14px;margin:4px 0 8px 20px'>"
-                        f"<div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-                        f"<span style='color:{GH_FG_PRIMARY};font-weight:700;font-size:13px'>{_name}</span>"
-                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{_code}</span>"
-                        f"<span style='color:{_sig_clr};font-size:11px;background:{GH_BG_CARD};padding:2px 8px;border-radius:10px'>"
-                        f"σ {_sig_str} · {_sig_lbl}</span>"
-                        f"<span style='color:{GRAY_CC};font-size:11px'>{_div_icon} {_div_alert}</span>"
-                        f"<span style='color:{GRAY_AA};font-size:11px;margin-left:auto'>{fmt_twd(_inv_amt)}</span>"
-                        f"</div>"
-                        f"<div style='color:{_adv_clr};font-size:12px;margin-top:6px;line-height:1.5'>"
-                        f"💡 {_advice['text']}</div>"
-                        f"</div>", unsafe_allow_html=True)
-
-            if _ungrouped:
-                st.markdown(
-                    f"<div style='color:{TRAFFIC_NEUTRAL};font-size:12px;margin-top:14px'>📂 未分組基金（手動加入、未綁保單）</div>",
-                    unsafe_allow_html=True)
-                for _f in _ungrouped:
-                    st.caption(f"• {_f.get('code','?')} — {_f.get('name','') or '尚未載入'}")
-                # v18.151: 「未綁保單」inline 快捷 — 載入這些 + 綁到保單下拉
-                st.caption(
-                    f"⚠️ 你有 **{len(_ungrouped)} 檔未綁保單**（這些基金不在任何保單分頁內）。"
-                )
-                _ug_c1, _ug_c2 = st.columns([2, 3])
-                # 載入這些（會等同上方主按鈕，只是顯眼快捷）
-                _ug_not_loaded = [_g for _g in _ungrouped if not _g.get("loaded")]
-                if _ug_not_loaded:
-                    if _ug_c1.button(f"📡 載入這 {len(_ug_not_loaded)} 檔",
-                                       key="btn_load_ungrouped",
-                                       use_container_width=True,
-                                       help="跟頂部「載入未載入基金」同效果，方便就近點"):
-                        from ui.helpers.portfolio_load import batch_load_unloaded_funds as _bl_ug
-                        _bl_ug()
-                # 綁到既有保單（OAuth + 已升 v2 時才顯示，避免複雜化）
-                if _oauth_configured and _sheet_id and \
-                   st.session_state.get("_schema_ver") == "v2":
-                    try:
-                        from repositories.policy_repository import list_policy_worksheets as _lpw
-                        _existing_pids = _lpw(_get_oauth_client(), _sheet_id)
-                    except Exception:
-                        _existing_pids = []
-                    if _existing_pids:
-                        with _ug_c2:
-                            _bind_pid = st.selectbox(
-                                "🔗 綁到保單", ["（先選保單）"] + list(_existing_pids),
-                                key="sel_bind_policy_ungrouped",
-                                label_visibility="collapsed")
-                            if _bind_pid and _bind_pid != "（先選保單）":
-                                if st.button(f"✅ 套用：把這 {len(_ungrouped)} 檔綁到「{_bind_pid}」",
-                                              key="btn_apply_bind_pid",
-                                              use_container_width=True):
-                                    # 把所有未綁基金都設 policy_id
-                                    _cnt = 0
-                                    for _idx, _ff in enumerate(st.session_state.portfolio_funds):
-                                        if not _ff.get("policy_id"):
-                                            st.session_state.portfolio_funds[_idx]["policy_id"] = _bind_pid
-                                            _cnt += 1
-                                    st.success(
-                                        f"✅ 已把 {_cnt} 檔綁到「{_bind_pid}」（仍須到「✨ v2 編輯介面」"
-                                        f"填 units/avg_nav/avg_fx 後 [💾 存到雲端] 才會推 Google Sheet）"
-                                    )
-                                    st.rerun()
-                else:
-                    _ug_c2.caption(
-                        "💡 升級到 v2 後可用「🔗 綁到保單」下拉，"
-                        "或到「✨ v2 編輯介面」手動加列。"
-                    )
-
-    # ── v18.46 緊湊歡迎條（單列三步驟，不再佔大面積）────────────────────
-    # 稽核 E2:原為 `f.get("loaded")` —— 抓失敗的基金也是 loaded=True,
-    # 於是最上方 KPI 卡寫「25 檔」、下面每張表只有 8 列。走 SSOT 判定。
-    from ui.helpers.session import usable_funds as _usable_funds_e2
-    _pf_loaded = _usable_funds_e2(st.session_state.portfolio_funds)
-    if not _pf_loaded:
-        st.markdown(
-            f"<div style='background:{BG_DARK_NAVY_1};border:1px dashed {MD_BLUE_300};border-radius:8px;"
-            f"padding:6px 14px;margin:4px 0 10px;font-size:12px;color:{GRAY_AA};"
-            "display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-            f"<span style='color:{MD_BLUE_300};font-weight:700'>👋 三步驟：</span>"
-            f"<span><b style='color:{WHITE}'>1️⃣ 貼代碼</b></span>"
-            f"<span style='color:{GRAY_55}'>→</span>"
-            f"<span><b style='color:{WHITE}'>2️⃣ 批次加入</b></span>"
-            f"<span style='color:{GRAY_55}'>→</span>"
-            f"<span><b style='color:{WHITE}'>3️⃣ 看 KPI / T5 / T7</b></span>"
-            f"<span style='margin-left:auto;color:{GRAY_66};font-size:10px'>"
-            "💡 AI 分析按鈕觸發，不自動扣 API</span>"
-            "</div>", unsafe_allow_html=True)
-
-    # ── 故事站 ① 配置總覽（v18.195 故事化 step2b：標示由上而下動線）──
-    if _pf_loaded:
-        st.markdown("### 📊 ① 配置總覽 — 你的組合現況")
-        # §1：Sheet 本金欄若寫成 `NT$1,000` / `1000元`，原本會靜默變 0，該檔基金
-        # 隨即在本金 / 核心% / 月配息 / 回撤權重全部消失且畫面零提示。
-        # 這裡把 L1 loader 記下的解析失敗列**彙總指名**，使用者才知道去改哪一格。
-        try:
-            from repositories.policy_repository import (  # noqa: PLC0415
-                get_invest_twd_parse_errors as _get_inv_errs,
-            )
-            _inv_errs = _get_inv_errs()
-        except Exception as _e_inv:
-            _inv_errs = []
-            print(f"[tab3] 本金解析回報讀取失敗：[{type(_e_inv).__name__}] {_e_inv}")
-        if _inv_errs:
-            _err_lines = []
-            for _e in _inv_errs[:10]:
-                _who = (_e.get("fund_code") or _e.get("fund_url")
-                        or _e.get("policy_id") or "—")
-                _err_lines.append(
-                    f"- **{_e.get('source', '')} 第 {_e.get('row', '?')} 列**"
-                    f"（{str(_who)[:40]}）：{_e.get('reason', '')}"
-                )
-            st.warning(
-                f"⚠️ **{len(_inv_errs)} 列本金格式無法解析，已以 0 計入** —— "
-                "下方「投入本金 / 核心資產比例 / 預估月配息」都會少算這幾檔。\n\n"
-                + "\n".join(_err_lines)
-                + ("\n- …（其餘 %d 列略）" % (len(_inv_errs) - 10)
-                   if len(_inv_errs) > 10 else "")
-                + "\n\n請在 Google Sheet 把該格改成**純數字**（可含千分位逗號），"
-                "例如 `1,000,000`；不要加 `NT$` / `元` / 中文數字。"
-            )
-
-    # ── v15.1 ② KPI 字卡列：投入本金 / 累計報酬 / 核心% / 月配息（新手語言）──
-    if _pf_loaded:
-        # 核心/衛星唯一真相：金額加權 + policy_tier 優先（見 allocation.py docstring）
-        from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
-            format_core_satellite_caption as _fmt_cs_cap,
-            get_core_target_pct as _get_core_target,
-            summarize_core_satellite as _sum_cs,
-        )
-        _cs_kpi = _sum_cs(_pf_loaded,
-                          target_pct=_get_core_target(st.session_state))
-        _tot_kpi  = _cs_kpi["total_twd"]
-        _core_pct_kpi = (round(_cs_kpi["core_pct"], 1)
-                         if _cs_kpi["core_pct"] is not None else 0.0)
-        # 累計報酬：以各基金 series 起點 → 當前點，按投資額加權
-        _cum_ret_pct = None
-        try:
-            _w_returns = []
-            _w_amounts = []
-            for _f in _pf_loaded:
-                _s = _f.get("series")
-                _amt = _f.get("invest_twd", 0) or 0
-                if _s is not None and len(_s.dropna()) >= 2 and _amt > 0:
-                    _ss = _s.dropna()
-                    _ret = (float(_ss.iloc[-1]) / float(_ss.iloc[0]) - 1.0) * 100.0
-                    _w_returns.append(_ret * _amt)
-                    _w_amounts.append(_amt)
-            if _w_amounts:
-                _cum_ret_pct = sum(_w_returns) / sum(_w_amounts)
-        except Exception:
-            _cum_ret_pct = None
-        # 月配息估算：從 moneydj_raw.moneydj_div_yield / metrics.annual_div_rate
-        # v18.39 修：原本用 dividend_yield_pct/yield_pct 都不是實際 schema 上的欄位，
-        # 整個欄一直是 0；改用 v18.34 真實收益矩陣同款 fallback chain。
-        _est_monthly_div = 0.0
-        for _f in _pf_loaded:
-            _mj_kpi = _f.get("moneydj_raw") or {}
-            _m_kpi  = _f.get("metrics") or {}
-            _yld = (_mj_kpi.get("moneydj_div_yield")
-                    or _m_kpi.get("annual_div_rate")
-                    or 0)
-            _amt = _f.get("invest_twd", 0) or 0
-            try:
-                _est_monthly_div += (float(_yld) / 100.0) * float(_amt) / 12.0
-            except Exception:
-                pass  # smoke-allow-pass — 任一檔配息率非數值不影響其餘累加
-
-        _ret_color = MATERIAL_GREEN if (_cum_ret_pct or 0) > 0 else (MATERIAL_RED if (_cum_ret_pct or 0) < 0 else TRAFFIC_NEUTRAL)
-        _ret_str   = f"{_cum_ret_pct:+.2f}%" if _cum_ret_pct is not None else "—"
-        st.markdown(
-            "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 16px'>"
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
-            f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:{GRAY_AA};font-size:11px'>💰 投入本金（NTD）</div>"
-            f"<div style='color:{WHITE};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_tot_kpi)}</div>"
-            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
-            f"{len(_pf_loaded)} 檔手填本金加總 · 非當前市值</div></div>"
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
-            f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:{GRAY_AA};font-size:11px'>📈 累計報酬</div>"
-            f"<div style='color:{_ret_color};font-size:26px;font-weight:900;margin-top:4px'>{_ret_str}</div>"
-            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>從淨值首日加權至今</div></div>"
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
-            f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:{GRAY_AA};font-size:11px'>🛡️ 核心資產比例</div>"
-            f"<div style='color:{MD_BLUE_300};font-size:26px;font-weight:900;margin-top:4px'>{_core_pct_kpi:.1f}%</div>"
-            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
-            f"衛星 {100-_core_pct_kpi:.1f}% · 金額加權</div></div>"
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},{BG_DARK_NAVY_2});border:1px solid {GH_BORDER};"
-            f"border-radius:12px;padding:16px 18px'>"
-            f"<div style='color:{GRAY_AA};font-size:11px'>💵 預估月配息</div>"
-            f"<div style='color:{MD_ORANGE_300};font-size:26px;font-weight:900;margin-top:4px'>{fmt_twd(_est_monthly_div)}</div>"
-            f"<div style='color:{TRAFFIC_NEUTRAL};font-size:10px;margin-top:2px'>"
-            f"以<b>本金</b>×配息率粗估</div></div>"
-            "</div>", unsafe_allow_html=True)
-        # 原則 4「多做說明」：三個最容易被誤讀的數字，一次講清楚基數是什麼。
-        st.caption(
-            "💡 **這四格的基數**：\n"
-            "1. **投入本金 ≠ 當前市值** — 本金是你在 Google Sheet 手填的 `invest_twd`"
-            "（放進去多少錢）；下方「③ 持倉戰情（T7 帳本）」的「組合當前市值 (TWD)」"
-            "＝ Σ 單位數 × 最新淨值 × 匯率（現在值多少錢）。兩者差額 = 未實現損益（± 已領配息）。\n"
-            "2. **核心資產比例** — " + _fmt_cs_cap(_cs_kpi) + "\n"
-            "3. **預估月配息** — 以**投入本金**× 年化配息率 ÷ 12 粗估；"
-            "T7 帳本那格是以**當前市值**為基數。淨值下跌時本金基數會**高估**現金流，"
-            "以 T7 的市值版為準。"
-        )
-
-        # ── 以下 4 個都是「風險揭露」元件（總經曝險 / 資料新鮮度 / 持股集中度 /
-        #    產業集中度）。原本 4 個 `except: pass` 讓它們失敗時**畫面完全沒有痕跡**
-        #    ——「沒出現」與「沒風險」長得一模一樣，是 §1 反造假的鏡像違規。
-        #    現在改成：不阻斷主流程，但一律 stderr log + 畫面留一行說明它沒跑成功。
-        def _risk_widget(_label: str, _fn) -> None:
-            try:
-                _fn()
-            except Exception as _e_w:
-                # 四個風險揭露元件共用這個 wrapper。同上：「沒出現」與「沒風險」
-                # 長得一樣是 §1 的鏡像違規,顏色要把它分開。
-                # （原本的 print 沒帶 file=sys.stderr,Streamlit Cloud 撈不到;
-                #   system_error → friendly_error 內建 stderr 鏡射,順帶修好。）
-                system_error(f"{_label} 渲染失敗", _e_w,
-                             hint="**這不代表沒有風險**,只代表這一項沒算出來。")
-
-        # ── v19.64 I1：總經 → 組合曝險聯動 banner（讀 Tab1 phase_info，跨 Tab 訊號）──
-        def _w_macro_link() -> None:
-            from ui.helpers.macro_linkage import render_macro_exposure_link
-            render_macro_exposure_link(st.session_state, core_pct=_core_pct_kpi)
-        _risk_widget("總經曝險聯動提示", _w_macro_link)
-
-        # ── v19.62 E3：MoneyDJ 資料新鮮度條（組合層級，所有基金聯合統計）──
-        def _w_freshness() -> None:
-            from ui.helpers.freshness import render_mj_freshness_banner
-            _fresh_items = []
-            for _f in _pf_loaded:
-                _mj = _f.get("moneydj_raw") or {}
-                _fresh_items.append({
-                    "code": _f.get("code", "?"),
-                    "name": _f.get("name", "") or _f.get("code", "?"),
-                    "nav_date": _mj.get("nav_date", ""),
-                    "fetched_at": _mj.get("_moneydj_fetched_at", ""),
-                })
-            render_mj_freshness_banner(_fresh_items)
-        _risk_widget("MoneyDJ 資料新鮮度", _w_freshness)
-
-        # ── v19.66 I3：穿透式持股集中度摘要（聚合各基金 top_holdings，跨區塊聯動 T5）──
-        def _w_conc() -> None:
-            from ui.helpers.concentration import render_concentration_summary
-            render_concentration_summary(_pf_loaded)
-        _risk_widget("穿透式持股集中度", _w_conc)
-
-        # ── v19.74 I7：穿透式產業集中度摘要（聚合各基金 sector_alloc）──
-        def _w_sector() -> None:
-            from ui.helpers.concentration import render_sector_concentration_summary
-            render_sector_concentration_summary(_pf_loaded)
-        _risk_widget("穿透式產業集中度", _w_sector)
-
-        # ── v15.1 ③ 資產成長曲線（vs 2% 無風險基準，§0 禁 ETF）─────────
-        # v18.43：同 code 跨多保單會讓 _value_series.name 重複，join 時欄名衝突拋例外。
-        # 分析視圖按 code 去重（與 v18.34 戰情室 / v18.38 真實收益矩陣策略一致）。
-        try:
-            _curve_df = None
-            _seen_curve: set = set()
-            for _f in _pf_loaded:
-                _c_curve = str(_f.get("code", "") or "").strip().upper()
-                if not _c_curve or _c_curve in _seen_curve:
-                    continue
-                _s = _f.get("series")
-                _amt = _f.get("invest_twd", 0) or 0
-                if _s is None or len(_s.dropna()) < 2 or _amt <= 0:
-                    continue
-                _seen_curve.add(_c_curve)
-                _ss = _s.dropna()
-                # 折算為「今日金額對齊到首日 NAV → 今日 NAV」的成長
-                _value_series = (_ss / float(_ss.iloc[0])) * float(_amt)
-                _value_series.name = _c_curve
-                if _curve_df is None:
-                    _curve_df = _value_series.to_frame()
-                else:
-                    _curve_df = _curve_df.join(_value_series, how="outer")
-            if _curve_df is not None and len(_curve_df) >= 2:
-                # W5-2 §1: 多基金 outer-join 後 NaN 代表「該基金當日無對應 NAV」(週末/假日/上市前),
-                # 此處 ffill 為「合成資產曲線」業務正確(用前一交易日 NAV 算當日市值),加 log 透明化
-                _ffill_n = int(_curve_df.isna().sum().sum())
-                _curve_df = _curve_df.sort_index().ffill()
-                if _ffill_n > 0:
-                    print(f"[tab3 portfolio curve] ffill 補 {_ffill_n} 個 NaN(週末/假日/未上市前)")
-                _total_curve = _curve_df.sum(axis=1)
-                # 2% 無風險基準（從首日總額複利）
-                _days = (_total_curve.index - _total_curve.index[0]).days
-                _rf_curve = float(_total_curve.iloc[0]) * (1.0 + 0.02) ** (_days / 365.0)
-
-                # 原 `expanded=True` expander → 拿掉殼（原則 1）
-                # 命名誠實化：這條線畫的是 `(NAV_t / NAV_0) × invest_twd` 逐檔加總 ——
-                # 起點固定等於投入本金，之後只跟著**淨值相對漲跌**縮放。
-                # 它既不是本金（本金是常數，不會有曲線），也不是市值（沒有配息、
-                # 沒有實際分批扣款時點、沒有匯率）。用「資產總額」那類字眼會被直接
-                # 讀成「我現在有多少錢」，是本頁最容易誤導的一處。
-                st.markdown("#### 📈 淨值成長模擬曲線（含 2% 無風險基準對比）")
-                with st.container():
-                    fig_curve = go.Figure()
-                    fig_curve.add_trace(go.Scatter(
-                        x=_total_curve.index, y=_total_curve.values,
-                        name="你的組合", mode="lines",
-                        line=dict(color=MATERIAL_GREEN, width=2.5, shape="spline"),
-                        fill="tozeroy", fillcolor="rgba(0,200,83,0.08)",
-                        hovertemplate="%{x|%Y-%m-%d}<br>NT$ %{y:,.0f}<extra></extra>"))
-                    fig_curve.add_trace(go.Scatter(
-                        x=_total_curve.index, y=_rf_curve,
-                        name="2% 無風險基準", mode="lines",
-                        line=dict(color=TRAFFIC_NEUTRAL, width=1.2, dash="dot"),
-                        hovertemplate="%{x|%Y-%m-%d}<br>NT$ %{y:,.0f}<extra>無風險</extra>"))
-                    # 標註：起點 / 當前 / 最高 / 最低
-                    _hi_idx = _total_curve.idxmax(); _lo_idx = _total_curve.idxmin()
-                    fig_curve.add_trace(go.Scatter(
-                        x=[_total_curve.index[0], _hi_idx, _lo_idx, _total_curve.index[-1]],
-                        y=[_total_curve.iloc[0], _total_curve.loc[_hi_idx],
-                           _total_curve.loc[_lo_idx], _total_curve.iloc[-1]],
-                        mode="markers+text",
-                        marker=dict(size=[8,10,10,12],
-                                    color=[TRAFFIC_NEUTRAL,MATERIAL_GREEN,MATERIAL_RED,WHITE],
-                                    line=dict(color=STREAMLIT_BG, width=2)),
-                        # 末點原本只標一個「今」字加金額 → 最容易被讀成「我現在有
-                        # 多少錢」。改標「今日模擬」，與 y 軸／標題／下方說明同一套語彙。
-                        text=["起點（＝投入本金）",
-                              f"高 {fmt_twd(_total_curve.loc[_hi_idx])}",
-                              f"低 {fmt_twd(_total_curve.loc[_lo_idx])}",
-                              f"今日模擬 {fmt_twd(_total_curve.iloc[-1])}"],
-                        textposition=["top right","top center","bottom center","top left"],
-                        textfont=dict(size=10, color=GH_FG_PRIMARY),
-                        showlegend=False,
-                        hoverinfo="skip"))
-                    fig_curve.update_layout(
-                        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
-                        font_color=GH_FG_PRIMARY, height=320,
-                        margin=dict(t=20, b=30, l=55, r=20),
-                        legend=dict(orientation="h", y=1.05, font_size=10),
-                        hovermode="x unified")
-                    fig_curve.update_yaxes(title_text="模擬市值 (NTD)",
-                                           gridcolor=BG_DARK_NAVY_3)
-                    fig_curve.update_xaxes(gridcolor=BG_DARK_NAVY_3)
-                    st.plotly_chart(fig_curve, use_container_width=True)
-                    st.caption(
-                        "💡 **怎麼看**：綠線是你的組合走勢，灰虛線是「把錢放定存賺 2%」的基準。"
-                        "綠線在灰線上方代表你的選擇贏過定存。")
-                    st.caption(
-                        "📐 **這條線怎麼算的**：每檔基金的**投入本金**放在它第一個有淨值的"
-                        "那天，之後只隨**淨值相對漲跌**等比例縮放，再把各檔加總。"
-                        "**它不是你戶頭現在的錢** —— 未計入配息、未計入實際分批扣款的"
-                        "買進時點、也未計入台幣兌原幣匯率；除息當天淨值跳空，這條線也會"
-                        "跟著往下。真實金額請以保單對帳單為準。")
-        except Exception as _curve_e:
-            # v18.43 補錯誤型別讓使用者能 debug
-            _friendly_error(
-                "資產曲線繪製失敗",
-                f"[{type(_curve_e).__name__}] {_curve_e}",
-                hint="可能是某些基金的 NAV 序列太短或缺漏，等資料補齊後重試即可。")
-
-    # Hero：核心/衛星配置概況
-    # v(本次)：核心/衛星四處各算各的 → 全部改吃 ui.helpers.portfolio.allocation
-    # （金額加權 + policy_tier 優先 + 目標一律 portfolio_core_pct）。
-    if _pf_loaded:
-        # 這裡刻意**不**再呼叫 `format_core_satellite_caption`：它吃的是同一份
-        # `_pf_loaded`，輸出與上方「💡 這四格的基數」第 2 點 byte-identical，
-        # 印第二次只是把同一句話貼兩遍。分母 / 級別來源的說明留在那一處
-        # （使用者第一次遇到這個百分比的地方），這裡只補它沒講的：目標值哪來的。
-        from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
-            get_core_target_pct as _get_core_target2,
-            summarize_core_satellite as _sum_cs2,
-        )
-        _target   = _get_core_target2(st.session_state)
-        _cs_hero  = _sum_cs2(_pf_loaded, target_pct=_target)
-        _tot  = _cs_hero["total_twd"]
-        _core_pct = (round(_cs_hero["core_pct"], 1)
-                     if _cs_hero["core_pct"] is not None else 0.0)
-        _diff     = round(_cs_hero["diff_pct"], 1) if _cs_hero["diff_pct"] is not None else 0.0
-        _dc       = MATERIAL_RED if abs(_diff)>10 else (MATERIAL_ORANGE if abs(_diff)>5 else MATERIAL_GREEN)
-        st.markdown(
-            f"<div style='background:linear-gradient(135deg,{BG_DARK_NAVY_1},#1a2332);border-radius:14px;padding:18px 22px;margin-bottom:16px;border:1px solid {GH_BORDER}'>"
-            f"<div style='font-size:13px;color:{TRAFFIC_NEUTRAL};margin-bottom:10px'>📊 目前投資組合 — {len(_pf_loaded)} 檔" + (f" · 投入本金 {fmt_twd(_tot)}" if _tot else "") + "</div>"
-            f"<div style='display:flex;gap:20px;flex-wrap:wrap'>"
-            f"<div><div style='color:{MD_BLUE_300};font-size:11px'>🛡️ 核心資產</div><div style='color:{MD_BLUE_300};font-size:28px;font-weight:900'>{_core_pct}%</div></div>"
-            f"<div><div style='color:{MATERIAL_ORANGE};font-size:11px'>⚡ 衛星資產</div><div style='color:{MATERIAL_ORANGE};font-size:28px;font-weight:900'>{100-_core_pct:.1f}%</div></div>"
-            f"<div><div style='color:{_dc};font-size:11px'>目標偏差（目標核心 {_target:.0f}%）</div><div style='color:{_dc};font-size:28px;font-weight:900'>{_diff:+.1f}%</div></div>"
-            f"</div></div>", unsafe_allow_html=True)
-
-        # ── 核心/衛星甜甜圈（P1.3 縮成單列 mini chart）──────────────
-        # v19.393 V4c:原 N 檔基金 = N 片但只藍/橙 2 色 → 同色 wedge 糊成一片不可讀(dataviz
-        # 多切片圓餅反模式)。聚合成「核心 vs 衛星」2 片(與 :1322 保單級 donut 一致);
-        # 總額 = Σ invest_twd 不變、核心% 不變,per-fund 明細見下方持倉健診表。
-        _core_amt = _cs_hero["core_twd"]
-        _sat_amt  = _cs_hero["sat_twd"]
-        _n_core   = _cs_hero["n_core"]
-        _dn_labels = [f"🛡️ 核心 · {_n_core} 檔", f"⚡ 衛星 · {_cs_hero['n_sat']} 檔"]
-        _dn_values = [_core_amt, _sat_amt]
-        _dn_colors = [MD_BLUE_300, MATERIAL_ORANGE]
-        _alert     = abs(_diff) > 10
-        _bg_c      = "#1a0808" if _alert else STREAMLIT_BG
-        fig_dn = go.Figure()
-        if sum(_dn_values) > 0:
-            fig_dn.add_trace(go.Pie(
-                labels    = _dn_labels,
-                values    = _dn_values,
-                hole      = 0.65,
-                marker    = dict(colors=_dn_colors, line=dict(color=STREAMLIT_BG, width=1)),
-                textinfo  = "percent",
-                textfont  = dict(size=9),
-                hovertemplate="%{label}: NT$%{value:,.0f} (%{percent})<extra></extra>",
-            ))
-        fig_dn.update_layout(
-            paper_bgcolor = _bg_c, plot_bgcolor = _bg_c,
-            font_color    = GH_FG_PRIMARY,
-            height        = 140,
-            margin        = dict(t=4, b=4, l=4, r=4),
-            showlegend    = False,
-            annotations   = [dict(
-                text  = f"<b>{_core_pct}%</b><br><span style='font-size:9px'>核心</span>",
-                x=0.5, y=0.5, font_size=14, showarrow=False,
-                font=dict(color=MD_BLUE_300))],
-        )
-        st.plotly_chart(fig_dn, use_container_width=True)
-        if not _cs_hero["is_amount_weighted"]:
-            st.caption(
-                "⬜ 全部 %d 檔都沒填投入本金 → 無法算金額比例，上方 0%% 不代表真的沒有核心資產。"
-                % _cs_hero["n_funds"]
-            )
-        elif _alert:
-            st.caption(
-                f"⚠️ 配置偏離 {_diff:+.1f}%（核心 {_core_pct}% vs 目標 {_target:.0f}%）— "
-                f"{'核心過重，可贖回轉衛星' if _diff > 0 else '衛星過重，可獲利轉核心'}"
-            )
-        else:
-            st.caption(
-                f"✅ 配置健康（核心 {_core_pct}% / 衛星 {100-_core_pct:.1f}%，"
-                f"偏差 {_diff:+.1f}%，目標 {_target:.0f}%±10%）"
-            )
-        st.caption(
-            "📐 這裡的核心% 與上方「🛡️ 核心資產比例」字卡是同一個數字（同一份持倉、"
-            "同一套算法）；分母與級別來源的說明見上方「💡 這四格的基數」第 2 點。"
-            "目標值來自下方「⚙️ 組合設定」的核心比例 slider。")
-        # v18.192：教學化 — 核心/衛星 + 配息覆蓋率白話文（收合、不藏數據）
-        render_metric_explainer(["core_satellite", "div_coverage"])
-
-    st.markdown("### ➕ ② 加入與管理基金")
-    with st.expander("➕ 手動加入基金（支援多檔批次）", expanded=False):
-        st.caption(
-            "**📋 2 步驟流程**　·　Step 1（這裡）：貼**代碼** → 按 **➕ 批次加入** → "
-            "**📡 載入所有未載入基金**　→　Step 2（下方 T7「📝 編輯初始持倉」）：輸入"
-            "**單位數 / 平均成本 / 匯率**　→　上方「📦 全部寫入 Sheet」一鍵同步雲端。"
-        )
-        _existing_pids = st.session_state.get("policy_tabs", [])
-        c_codes, c_default_pid = st.columns([3, 2])
-        with c_codes:
-            pf_codes_input = st.text_area(
-                "基金代碼（每行一檔，可加 ,pid 逐行覆寫）",
-                label_visibility="collapsed",
-                # v18.62: 高度 120 → 75 防手機被按鈕擠到 fold 下方
-                height=75,
-                placeholder=("ACCP138\nACDD01\nJFZN3,PL-2024-002"),
-                key="pf_codes_input",
-            )
-        with c_default_pid:
-            pf_pid_input = st.text_input(
-                "預設保單號碼（可選）",
-                label_visibility="collapsed",
-                placeholder=("預設保單 " + (
-                    f"（已有：{', '.join(_existing_pids[:3])}{'…' if len(_existing_pids)>3 else ''}）"
-                    if _existing_pids else "（可選）")),
-                key="pf_pid_input",
-            )
-        pf_add_btn = st.button(
-            "➕ 批次加入（加完按上方「📡 載入所有未載入基金」抓資料）",
-            type="primary",
-            use_container_width=True,
-            key="btn_pf_add",
-        )
-
-        if pf_add_btn and pf_codes_input.strip():
-            default_pid = pf_pid_input.strip()
-            # ── v18.33: 解析多行輸入 ──────────────────────────────
-            _entries: list[tuple] = []   # [(code, pid), ...]
-            _existing_set = {(f["code"], f.get("policy_id", "") or "")
-                              for f in st.session_state.portfolio_funds}
-            _skipped_dup: list[str] = []
-            for _line in pf_codes_input.splitlines():
-                _line = _line.strip()
-                if not _line:
-                    continue
-                if "," in _line:
-                    _parts = [p.strip() for p in _line.split(",", 1)]
-                    _code, _pid = _parts[0].upper(), _parts[1]
-                else:
-                    _code = _line.upper()
-                    _pid = default_pid
-                if not _code:
-                    continue
-                if (_code, _pid) in _existing_set:
-                    _skipped_dup.append(f"{_code}@{_pid or '(未綁)'}")
-                    continue
-                _existing_set.add((_code, _pid))
-                _entries.append((_code, _pid))
-
-            if not _entries:
-                if _skipped_dup:
-                    st.warning(
-                        f"⚠️ 全部已存在於組合：{', '.join(_skipped_dup[:10])}"
-                        f"{'…' if len(_skipped_dup) > 10 else ''}"
-                    )
-                else:
-                    st.warning("⚠️ 沒有有效代碼可加入")
-            else:
-                # ── v18.33: 並行抓取 + v18.58: 按 unique code 先 dedupe 再 broadcast
-                # 同 code 跨 N 保單只 fetch 一次，再 broadcast 給所有 (code, pid)
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-                _uniq_codes = list({_c for _c, _ in _entries})
-                _progress = st.progress(0.0,
-                    text=f"開始並行載入 {len(_uniq_codes)} 檔 unique 基金"
-                         f"（{len(_entries)} 條 entry, dedupe by code）…")
-                _code_to_raw: dict = {}   # code → (raw_dict, error_msg)
-                _done = 0
-                with ThreadPoolExecutor(max_workers=4) as _ex:
-                    _futures = {
-                        _ex.submit(auto_fetch_moneydj, _c): _c
-                        for _c in _uniq_codes
-                    }
-                    for _fut in as_completed(_futures):
-                        _c_key = _futures[_fut]
-                        try:
-                            _code_to_raw[_c_key] = (_fut.result(), None)
-                        except Exception as _e:
-                            _code_to_raw[_c_key] = (None, str(_e)[:80])
-                        _done += 1
-                        _progress.progress(
-                            _done / len(_uniq_codes),
-                            text=f"完成 {_done}/{len(_uniq_codes)}：剛完成 {_c_key}",
-                        )
-                _progress.empty()
-                # broadcast：每個 (code, pid) 都拿同一份 raw_dict
-                _results: dict = {
-                    (_c, _p): _code_to_raw[_c] for _c, _p in _entries
-                }
-
-                # ── v18.33: 批次寫入 + Sheets 同步（單一 OAuth client）──
-                _succ, _fail, _sheet_synced = [], [], []
-                _cfg_b = _resolve_oauth_cfg()
-                _toks_b = st.session_state.get("gsheet_tokens")
-                _sid_b = st.session_state.get("policy_sheet_id")
-                _client_b = None
-                if _cfg_b and _toks_b and _sid_b:
-                    try:
-                        _t_b = ensure_fresh_tokens(dict(_toks_b),
-                            _cfg_b["client_id"], _cfg_b["client_secret"])
-                        st.session_state["gsheet_tokens"] = _t_b
-                        _creds_b = build_credentials_from_tokens(_t_b,
-                            _cfg_b["client_id"], _cfg_b["client_secret"])
-                        _client_b = get_gspread_client_from_oauth(_creds_b)
-                    except Exception as _e_oc:
-                        _client_b = None
-                        # `_client_b = None` → 下方每一檔的 Sheet 同步都會被跳過,
-                        # 使用者卻只看到一行灰字,會以為已經寫進雲端了。
-                        system_error("OAuth client 建立失敗", _e_oc,
-                                     hint="這批基金**不會**寫進雲端 Sheet,只留在本機 session。")
-
-                for (_code_b, _pid_b), (_raw_b, _err_b) in _results.items():
-                    _new_item_b = {"code": _code_b, "invest_twd": 0,
-                                    "loaded": True, "load_error": None,
-                                    "policy_id": _pid_b,
-                                    "policy_name": _pid_b}
-                    _emsg = _err_b or (_raw_b.get("error") if _raw_b else "")
-                    if _emsg:
-                        _new_item_b.update({"load_error": _emsg})
-                        _fail.append(f"{_code_b}: {str(_emsg)[:40]}")
-                    else:
-                        _new_item_b.update({
-                            "name":        _raw_b.get("fund_name") or _code_b,
-                            "series":      _raw_b.get("series"),
-                            "dividends":   _raw_b.get("dividends", []),
-                            "metrics":     _raw_b.get("metrics", {}),
-                            "moneydj_raw": _raw_b,
-                            "risk_metrics":_raw_b.get("risk_metrics", {}),
-                            "is_core":     _is_core_fund(
-                                _raw_b.get("fund_name") or _code_b),
-                            "currency":    _raw_b.get("currency", "")
-                                            or _raw_b.get("metrics", {}).get("currency", ""),
-                        })
-                        _succ.append(_code_b)
-                        # v18.272：記錄到「曾經查過的基金清單」（Tab6 顯示）
-                        try:
-                            from services.fund_history import record_fund as _rec_fh3
-                            _rec_fh3(
-                                _code_b,
-                                _raw_b.get("fund_name", "") or _code_b,
-                                source="Tab3",
-                            )
-                        except Exception:
-                            pass
-                        if _pid_b and _client_b:
-                            try:
-                                upsert_fund_in_policy(_client_b, _sid_b, _pid_b, {
-                                    "fund_url":     _code_b,
-                                    "policy_name":  _pid_b,
-                                    "invest_twd":   0,
-                                    "invest_date":  "",
-                                    "currency":     _new_item_b.get("currency", ""),
-                                    "fx_at_buy":    0.0,
-                                    "notes":        "Tab3 batch add",
-                                    "policy_tier":  ("core" if _new_item_b.get("is_core")
-                                                     else "satellite"
-                                                     if _new_item_b.get("is_core") is False
-                                                     else ""),
-                                })
-                                _sheet_synced.append(_code_b)
-                            except (PolicySheetError, OAuthError) as _e_ws:
-                                _fail.append(
-                                    f"{_code_b} Sheet 同步: {str(_e_ws)[:30]}")
-                    st.session_state.portfolio_funds.append(_new_item_b)
-
-                # 完成後刷新 policy_tabs cache
-                if _client_b and _sheet_synced:
-                    try:
-                        st.session_state["policy_tabs"] = (
-                            list_policy_worksheets(_client_b, _sid_b))
-                    except Exception as _e_ref:
-                        # 刷新失敗 → `policy_tabs` 停在舊值,下拉選單會少掉這次新增的
-                        # 保單分頁。那是「這個清單不可信」,不是「還沒載入」。
-                        system_error("保單列表刷新失敗", _e_ref,
-                                     hint="上方保單下拉選單可能仍是舊的,重新整理本頁即可更新。")
-
-                _update_data_registry()
-
-                # ── 摘要訊息 ────────────────────────────────────────
-                _msg_parts = [f"成功 {len(_succ)} 檔"]
-                if _sheet_synced:
-                    _msg_parts.append(f"☁️ Sheet 同步 {len(_sheet_synced)} 檔")
-                if _skipped_dup:
-                    _msg_parts.append(f"⏭️ 跳過 {len(_skipped_dup)} 檔已存在")
-                if _fail:
-                    _msg_parts.append(f"❌ 失敗 {len(_fail)} 檔")
-                _summary = " · ".join(_msg_parts)
-                if _fail:
-                    st.error(f"批次加入完成 — {_summary}")
-                    st.caption("**失敗明細**：")
-                    for _f_msg in _fail[:10]:
-                        st.caption(f"• {_f_msg}")
-                    if len(_fail) > 10:
-                        st.caption(f"…還有 {len(_fail) - 10} 筆")
-                else:
-                    st.success(f"✅ 批次加入完成 — {_summary}")
-                st.rerun()
-
-    pf = st.session_state.portfolio_funds
-    if not pf:
-        st.info("💡 請在上方輸入基金代碼加入，支援多檔同時比較")
-    else:
-        # 批次載入按鈕（v18.151：邏輯抽到 ui/helpers/portfolio_load.py）
-        not_loaded = [i for i, f in enumerate(pf) if not f.get("loaded")]
-        if not_loaded:
-            from ui.helpers.portfolio_load import (
-                batch_load_unloaded_funds as _batch_load,
-                count_unloaded_funds as _count_unloaded,
-            )
-            _n_ent, _n_uniq = _count_unloaded()
-            _btn_label = (
-                f"📡 載入所有未載入基金（{_n_ent} 條 entry"
-                + (f" / {_n_uniq} unique" if _n_uniq != _n_ent else "")
-                + "）"
-            )
-            if st.button(_btn_label, type="primary", key="btn_pf_load_all"):
-                _batch_load()
-
-        # v18.30: 為主清單預計算 VIX（給每檔 advise_fund 用）
-        # 同上：原本讀的那個 session key 0 writer → 恆 None。改吃 Tab① 的 indicators。
-        _vix_t3_main = _vix_for_advice()
-
-        def _compute_advice_for(_pf_item: dict) -> dict:
-            """v18.30: 從 pf_item 算出 advise_fund 需要的三組訊號 + 呼叫 advisor。
-            失敗時回傳 grey '⏳ 資料不足'。"""
-            try:
-                _s_local = _pf_item.get("series")
-                _m_local = _pf_item.get("metrics", {}) or {}
-                _mj_local = _pf_item.get("moneydj_raw", {}) or {}
-                _sigma = None
-                if _s_local is not None and len(_s_local.dropna()) >= 30:
-                    try:
-                        from services.precision_service import calc_hwm_sigma_levels as _hwm_fn3
-                        _sigma = _hwm_fn3(_s_local, lookback=252)
-                    except Exception as _e_s:
-                        _sigma = {"error": str(_e_s)[:60]}
-                _div = None
-                try:
-                    # v19.73 K1：走 SSOT 統一 Tab2/Tab3 含息報酬算法
-                    from ui.helpers.macro_helpers import compute_1y_total_return
-                    _tret_v, _ = compute_1y_total_return({
-                        "metrics": _m_local, "moneydj_raw": _mj_local,
-                    })
-                    _tret_l = safe_num(_tret_v)  # v19.399 §1:缺→None(不捏造 0),dividend_safety 對 None 自有 grey 誠實分支
-                    _dyld_l = float(_mj_local.get("moneydj_div_yield")
-                                     or _m_local.get("annual_div_rate") or 0)
-                    if _dyld_l > 0:
-                        _div = div_safety_check(_tret_l, _dyld_l)
+                            _ma = None   # smoke-allow-pass
+                    return advise_fund(_sigma, _div, _ma, _vix_t3_main)
                 except Exception:
-                    _div = None   # smoke-allow-pass
-                _ma = None
-                if _s_local is not None and len(_s_local.dropna()) >= 65:
-                    try:
-                        _ma60_l = _s_local.dropna().rolling(60).mean()
-                        if len(_ma60_l.dropna()) >= 5:
-                            _ma = "up" if _ma60_l.iloc[-1] > _ma60_l.iloc[-5] else "down"
-                    except Exception:
-                        _ma = None   # smoke-allow-pass
-                return advise_fund(_sigma, _div, _ma, _vix_t3_main)
-            except Exception:
-                return {"text": "⏳ 建議計算失敗",
-                        "code": "ERROR", "color": "grey"}
+                    return {"text": "⏳ 建議計算失敗",
+                            "code": "ERROR", "color": "grey"}
 
-        # v18.37 基金清單按保單號碼分組成 expander。
-        # 不再使用 v18.35 per-fund 內層 expander（外層保單 expander 已提供摺疊功能；
-        # Streamlit 禁止 expander 巢狀，這裡刻意把詳細內容攤平在保單 expander 內）。
-        # 預設 **展開**（原則 1）：這一區是「我的持倉現況」主資料 —— 每檔的 NAV /
-        # 配息率 / Sharpe / σ / 建議都在裡面，收起來等於把主角藏在摺疊層後面。
-        from collections import defaultdict as _dd_pf_main
-        from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
-            resolve_core_flag as _core_flag_card,
-        )
-        _pf_by_pid: dict = _dd_pf_main(list)
-        for i, pf_item in enumerate(pf):
-            _pid_main = str(pf_item.get("policy_id", "") or "").strip() or "(未綁保單)"
-            _pf_by_pid[_pid_main].append((i, pf_item))
+            # v18.37 基金清單按保單號碼分組成 expander。
+            # 不再使用 v18.35 per-fund 內層 expander（外層保單 expander 已提供摺疊功能；
+            # Streamlit 禁止 expander 巢狀，這裡刻意把詳細內容攤平在保單 expander 內）。
+            # 預設 **展開**（原則 1）：這一區是「我的持倉現況」主資料 —— 每檔的 NAV /
+            # 配息率 / Sharpe / σ / 建議都在裡面，收起來等於把主角藏在摺疊層後面。
+            from collections import defaultdict as _dd_pf_main
+            from ui.helpers.portfolio.allocation import (  # noqa: PLC0415
+                resolve_core_flag as _core_flag_card,
+            )
+            _pf_by_pid: dict = _dd_pf_main(list)
+            for i, pf_item in enumerate(pf):
+                _pid_main = str(pf_item.get("policy_id", "") or "").strip() or "(未綁保單)"
+                _pf_by_pid[_pid_main].append((i, pf_item))
 
-        for _pid_main, _items_main in _pf_by_pid.items():
-          with st.expander(f"📋 保單 **{_pid_main}**　·　{len(_items_main)} 檔基金", expanded=True):
-            for i, pf_item in _items_main:
-                status_icon = "✅" if (pf_item.get("loaded") and not pf_item.get("load_error")) else ("❌" if pf_item.get("load_error") else "⏳")
-                m_i    = pf_item.get("metrics",{})
-                rm_i   = pf_item.get("risk_metrics",{})
-                rt_i   = rm_i.get("risk_table",{})
-                # 走全站唯一真相（policy_tier 優先），否則同一檔會「卡片寫衛星、
-                # KPI 卻把它算進核心」——原本這裡只讀 is_core，無視 Sheet 的 policy_tier。
-                role_i = "🛡️核心" if _core_flag_card(pf_item) else "⚡衛星"
-                _nav_i  = m_i.get("nav") or (pf_item.get("moneydj_raw") or {}).get("nav_latest","")
-                _adr_i  = (pf_item.get("moneydj_raw") or {}).get("moneydj_div_yield") or m_i.get("annual_div_rate","")
-                _sh_i   = (rt_i.get("一年") or {}).get("Sharpe","")
-                _std_i  = (rt_i.get("一年") or {}).get("標準差","")
-                with st.container():
-                    ci1, ci2, ci3 = st.columns([4,4,1])
-                    with ci1:
-                        st.markdown(
-                            f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0'>"
-                            f"{status_icon} <b style='color:{GH_FG_PRIMARY}'>{(pf_item.get('name','') or pf_item['code'])[:28]}</b> "
-                            f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{pf_item['code']}</span> "
-                            f"<span style='color:{MATERIAL_ORANGE};font-size:11px;margin-left:6px'>{role_i}</span></div>",
-                            unsafe_allow_html=True)
-                    with ci2:
-                        st.markdown(
-                            f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0;font-size:11px;color:{TRAFFIC_NEUTRAL}'>"
-                            f"NAV: <b style='color:{GH_FG_PRIMARY}'>{_nav_i}</b>"
-                            f"　配息率: <b style='color:{MATERIAL_ORANGE}'>{_adr_i}{'%' if _adr_i else ''}</b>"
-                            f"　Sharpe: <b style='color:{MD_GREEN_A200}'>{_sh_i}</b>"
-                            f"　σ: <b>{_std_i}{'%' if _std_i else ''}</b></div>",
-                            unsafe_allow_html=True)
-                    with ci3:
-                        if st.button("🗑️", key=f"del_pf_{i}", help=f"移除 {pf_item['code']}"):
-                            st.session_state.portfolio_funds.pop(i)
-                            st.rerun()
+            for _pid_main, _items_main in _pf_by_pid.items():
+              with st.expander(f"📋 保單 **{_pid_main}**　·　{len(_items_main)} 檔基金", expanded=True):
+                for i, pf_item in _items_main:
+                    status_icon = "✅" if (pf_item.get("loaded") and not pf_item.get("load_error")) else ("❌" if pf_item.get("load_error") else "⏳")
+                    m_i    = pf_item.get("metrics",{})
+                    rm_i   = pf_item.get("risk_metrics",{})
+                    rt_i   = rm_i.get("risk_table",{})
+                    # 走全站唯一真相（policy_tier 優先），否則同一檔會「卡片寫衛星、
+                    # KPI 卻把它算進核心」——原本這裡只讀 is_core，無視 Sheet 的 policy_tier。
+                    role_i = "🛡️核心" if _core_flag_card(pf_item) else "⚡衛星"
+                    _nav_i  = m_i.get("nav") or (pf_item.get("moneydj_raw") or {}).get("nav_latest","")
+                    _adr_i  = (pf_item.get("moneydj_raw") or {}).get("moneydj_div_yield") or m_i.get("annual_div_rate","")
+                    _sh_i   = (rt_i.get("一年") or {}).get("Sharpe","")
+                    _std_i  = (rt_i.get("一年") or {}).get("標準差","")
+                    with st.container():
+                        ci1, ci2, ci3 = st.columns([4,4,1])
+                        with ci1:
+                            st.markdown(
+                                f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0'>"
+                                f"{status_icon} <b style='color:{GH_FG_PRIMARY}'>{(pf_item.get('name','') or pf_item['code'])[:28]}</b> "
+                                f"<span style='color:{TRAFFIC_NEUTRAL};font-size:11px'>{pf_item['code']}</span> "
+                                f"<span style='color:{MATERIAL_ORANGE};font-size:11px;margin-left:6px'>{role_i}</span></div>",
+                                unsafe_allow_html=True)
+                        with ci2:
+                            st.markdown(
+                                f"<div style='padding:8px 12px;background:{GH_BG_CARD};border-radius:8px;margin:3px 0;font-size:11px;color:{TRAFFIC_NEUTRAL}'>"
+                                f"NAV: <b style='color:{GH_FG_PRIMARY}'>{_nav_i}</b>"
+                                f"　配息率: <b style='color:{MATERIAL_ORANGE}'>{_adr_i}{'%' if _adr_i else ''}</b>"
+                                f"　Sharpe: <b style='color:{MD_GREEN_A200}'>{_sh_i}</b>"
+                                f"　σ: <b>{_std_i}{'%' if _std_i else ''}</b></div>",
+                                unsafe_allow_html=True)
+                        with ci3:
+                            if st.button("🗑️", key=f"del_pf_{i}", help=f"移除 {pf_item['code']}"):
+                                st.session_state.portfolio_funds.pop(i)
+                                st.rerun()
 
-                    if pf_item.get("load_error"):
-                        st.caption(f"⚠️ {pf_item['load_error']}")
+                        if pf_item.get("load_error"):
+                            st.caption(f"⚠️ {pf_item['load_error']}")
 
-                    # 詳細建議 + 訊號（攤平在保單 expander 內，不再用內層 expander）
-                    _can_detail = pf_item.get("loaded") and not pf_item.get("load_error")
-                    if _can_detail:
-                        _adv_card = _compute_advice_for(pf_item)
-                        _adv_clr_card = {
-                            "red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
-                            "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL
-                        }.get(_adv_card.get("color", "grey"), TRAFFIC_NEUTRAL)
-                        st.markdown(
-                            f"<div style='padding:6px 12px;background:{GH_BG_PRIMARY};"
-                            f"border-left:3px solid {_adv_clr_card};"
-                            f"border-radius:6px;margin:3px 0 8px 0;"
-                            f"font-size:12px;color:{_adv_clr_card};line-height:1.55'>"
-                            f"💡 {_adv_card.get('text', '—')}</div>",
-                            unsafe_allow_html=True)
+                        # 詳細建議 + 訊號（攤平在保單 expander 內，不再用內層 expander）
+                        _can_detail = pf_item.get("loaded") and not pf_item.get("load_error")
+                        if _can_detail:
+                            _adv_card = _compute_advice_for(pf_item)
+                            _adv_clr_card = {
+                                "red": MATERIAL_RED, "orange": MATERIAL_ORANGE, "yellow": CAUTION_YELLOW,
+                                "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL
+                            }.get(_adv_card.get("color", "grey"), TRAFFIC_NEUTRAL)
+                            st.markdown(
+                                f"<div style='padding:6px 12px;background:{GH_BG_PRIMARY};"
+                                f"border-left:3px solid {_adv_clr_card};"
+                                f"border-radius:6px;margin:3px 0 8px 0;"
+                                f"font-size:12px;color:{_adv_clr_card};line-height:1.55'>"
+                                f"💡 {_adv_card.get('text', '—')}</div>",
+                                unsafe_allow_html=True)
 
-                        # ──  v3.0 買賣訊號迷你卡（共用 Tab2 的 metrics）──
-                        if m_i:
-                            _mi_b1 = m_i.get("buy1");  _mi_b2 = m_i.get("buy2");  _mi_b3 = m_i.get("buy3")
-                            _mi_s1 = m_i.get("sell1"); _mi_s2 = m_i.get("sell2"); _mi_s3 = m_i.get("sell3")
-                            _mi_nav = float(m_i.get("nav") or 0)
-                            _mi_pl  = m_i.get("pos_label","正常")
-                            _mi_pc  = m_i.get("pos_color",TRAFFIC_NEUTRAL)
-                            _mi_bbd = m_i.get("bb_lower"); _mi_bbu = m_i.get("bb_upper")
-                            _mi_NEAR = float(m_i.get("near_threshold_pct") or 2.0)
-                            if _mi_b1 and _mi_nav > 0:
-                                def _mini_chip(target, is_buy):
-                                    if not target: return ("—", GRAY_66)
-                                    d = (_mi_nav - target) / target * 100
-                                    if is_buy:
-                                        if d <= 0:           return ("🟢", MD_GREEN_A400)
-                                        elif d <= _mi_NEAR:  return ("⚠️", WARN_AMBER)
-                                        else:                return ("▲",  GRAY_55)
-                                    else:
-                                        if d >= 0:           return ("🔔", MATERIAL_RED)
-                                        elif d >= -_mi_NEAR: return ("⚠️", WARN_AMBER)
-                                        else:                return ("▼",  GRAY_55)
-                                # 雙確認：σ 觸發 + 布林同向
-                                _double_buy  = (_mi_b1 and _mi_nav <= _mi_b1) and (_mi_bbd and _mi_nav <= _mi_bbd)
-                                _double_sell = (_mi_s1 and _mi_nav >= _mi_s1) and (_mi_bbu and _mi_nav >= _mi_bbu)
-                                _badge = ""
-                                if _double_buy:
-                                    _badge = f"<span style='background:{BG_DARK_GREEN_3};color:{MD_GREEN_A400};border:1px solid {MD_GREEN_A400};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🟢🟢 σ+布林 雙確認買</span>"
-                                elif _double_sell:
-                                    _badge = f"<span style='background:{BG_DARK_RED_3};color:{MATERIAL_RED};border:1px solid {MATERIAL_RED};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🔔🔔 σ+布林 雙確認賣</span>"
-                                # 6 個訊號方塊（從深買到深賣）
-                                _cells = ""
-                                for _v, _lbl, _is_buy in [
-                                    (_mi_b3, "買3", True), (_mi_b2, "買2", True), (_mi_b1, "買1", True),
-                                    (_mi_s1, "賣1", False),(_mi_s2, "賣2", False),(_mi_s3, "賣3", False),
-                                ]:
-                                    _ch, _cc = _mini_chip(_v, _is_buy)
-                                    _cells += (f"<div style='flex:1;text-align:center;padding:4px 2px;"
-                                               f"background:{GH_BG_PRIMARY};border-radius:6px;margin:0 2px'>"
-                                               f"<div style='font-size:9px;color:{TRAFFIC_NEUTRAL}'>{_lbl}</div>"
-                                               f"<div style='font-size:11px;font-weight:700;color:{GRAY_CC}'>{_v:.3f}</div>"
-                                               f"<div style='font-size:13px;color:{_cc}'>{_ch}</div></div>")
-                                st.markdown(
-                                    f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;padding:8px 12px;margin:2px 0 8px 0'>"
-                                    f"<div style='display:flex;align-items:center;margin-bottom:5px'>"
-                                    f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>📍 策略3 訊號</span>"
-                                    f"<span style='background:{CHIP_BG_NEAR_BLACK};color:{_mi_pc};border:1px solid {_mi_pc};padding:1px 8px;"
-                                    f"border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>{_mi_pl}</span>"
-                                    f"{_badge}"
-                                    f"<span style='color:{GRAY_55};font-size:10px;margin-left:auto'>NAV {_mi_nav:.4f}</span>"
-                                    f"</div>"
-                                    f"<div style='display:flex;align-items:stretch'>{_cells}</div>"
-                                    f"</div>", unsafe_allow_html=True)
+                            # ──  v3.0 買賣訊號迷你卡（共用 Tab2 的 metrics）──
+                            if m_i:
+                                _mi_b1 = m_i.get("buy1");  _mi_b2 = m_i.get("buy2");  _mi_b3 = m_i.get("buy3")
+                                _mi_s1 = m_i.get("sell1"); _mi_s2 = m_i.get("sell2"); _mi_s3 = m_i.get("sell3")
+                                _mi_nav = float(m_i.get("nav") or 0)
+                                _mi_pl  = m_i.get("pos_label","正常")
+                                _mi_pc  = m_i.get("pos_color",TRAFFIC_NEUTRAL)
+                                _mi_bbd = m_i.get("bb_lower"); _mi_bbu = m_i.get("bb_upper")
+                                _mi_NEAR = float(m_i.get("near_threshold_pct") or 2.0)
+                                if _mi_b1 and _mi_nav > 0:
+                                    def _mini_chip(target, is_buy):
+                                        if not target: return ("—", GRAY_66)
+                                        d = (_mi_nav - target) / target * 100
+                                        if is_buy:
+                                            if d <= 0:           return ("🟢", MD_GREEN_A400)
+                                            elif d <= _mi_NEAR:  return ("⚠️", WARN_AMBER)
+                                            else:                return ("▲",  GRAY_55)
+                                        else:
+                                            if d >= 0:           return ("🔔", MATERIAL_RED)
+                                            elif d >= -_mi_NEAR: return ("⚠️", WARN_AMBER)
+                                            else:                return ("▼",  GRAY_55)
+                                    # 雙確認：σ 觸發 + 布林同向
+                                    _double_buy  = (_mi_b1 and _mi_nav <= _mi_b1) and (_mi_bbd and _mi_nav <= _mi_bbd)
+                                    _double_sell = (_mi_s1 and _mi_nav >= _mi_s1) and (_mi_bbu and _mi_nav >= _mi_bbu)
+                                    _badge = ""
+                                    if _double_buy:
+                                        _badge = f"<span style='background:{BG_DARK_GREEN_3};color:{MD_GREEN_A400};border:1px solid {MD_GREEN_A400};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🟢🟢 σ+布林 雙確認買</span>"
+                                    elif _double_sell:
+                                        _badge = f"<span style='background:{BG_DARK_RED_3};color:{MATERIAL_RED};border:1px solid {MATERIAL_RED};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>🔔🔔 σ+布林 雙確認賣</span>"
+                                    # 6 個訊號方塊（從深買到深賣）
+                                    _cells = ""
+                                    for _v, _lbl, _is_buy in [
+                                        (_mi_b3, "買3", True), (_mi_b2, "買2", True), (_mi_b1, "買1", True),
+                                        (_mi_s1, "賣1", False),(_mi_s2, "賣2", False),(_mi_s3, "賣3", False),
+                                    ]:
+                                        _ch, _cc = _mini_chip(_v, _is_buy)
+                                        _cells += (f"<div style='flex:1;text-align:center;padding:4px 2px;"
+                                                   f"background:{GH_BG_PRIMARY};border-radius:6px;margin:0 2px'>"
+                                                   f"<div style='font-size:9px;color:{TRAFFIC_NEUTRAL}'>{_lbl}</div>"
+                                                   f"<div style='font-size:11px;font-weight:700;color:{GRAY_CC}'>{_v:.3f}</div>"
+                                                   f"<div style='font-size:13px;color:{_cc}'>{_ch}</div></div>")
+                                    st.markdown(
+                                        f"<div style='background:{GH_BG_PRIMARY};border:1px solid {GH_BG_HOVER};border-radius:8px;padding:8px 12px;margin:2px 0 8px 0'>"
+                                        f"<div style='display:flex;align-items:center;margin-bottom:5px'>"
+                                        f"<span style='color:{TRAFFIC_NEUTRAL};font-size:10px'>📍 策略3 訊號</span>"
+                                        f"<span style='background:{CHIP_BG_NEAR_BLACK};color:{_mi_pc};border:1px solid {_mi_pc};padding:1px 8px;"
+                                        f"border-radius:10px;font-size:10px;font-weight:700;margin-left:6px'>{_mi_pl}</span>"
+                                        f"{_badge}"
+                                        f"<span style='color:{GRAY_55};font-size:10px;margin-left:auto'>NAV {_mi_nav:.4f}</span>"
+                                        f"</div>"
+                                        f"<div style='display:flex;align-items:stretch'>{_cells}</div>"
+                                        f"</div>", unsafe_allow_html=True)
 
-        # 核心/衛星目標設定
-        st.divider()
-        st.session_state.portfolio_core_pct = st.slider(
-            "目標核心資產比例（%）", 50, 90,
-            st.session_state.get("portfolio_core_pct",75), 5, key="slider_core_pct")
-
-        # ── 真實收益長條圖（Core Protocol v2.0 Ch.4）────────────────
-        # v18.38：分析視圖按 code 去重（同基金跨多保單只算一次），
-        # 與 v18.34 戰情室 / v18.36 T5 重疊度矩陣的去重策略一致。
-        _loaded_pf_raw = [f for f in pf if f.get("loaded") and not f.get("load_error")]
-        _seen_rc: set = set()
-        _loaded_pf: list = []
-        for _f in _loaded_pf_raw:
-            _c = str(_f.get("code", "") or "").strip().upper()
-            if not _c or _c in _seen_rc:
-                continue
-            _seen_rc.add(_c)
-            _loaded_pf.append(_f)
-        if _loaded_pf:
+            # 核心/衛星目標設定
             st.divider()
-            st.markdown("### 📊 真實收益 vs 配息率健康矩陣")
-            st.caption("長條高度 < 紅虛線 → 含息報酬不足以支撐配息 → 吃本金警示")
+            st.session_state.portfolio_core_pct = st.slider(
+                "目標核心資產比例（%）", 50, 90,
+                st.session_state.get("portfolio_core_pct",75), 5, key="slider_core_pct")
 
-            # v18.48 三層 fallback + is_real 旗標，正確區分「真 0%」與「資料不足」
-            # v18.72: 加 _rc_src 追蹤每檔 1Y 來源，hover 顯示讓使用者一眼看出走哪條 fallback
-            _rc_names, _rc_ret, _rc_div, _rc_real, _rc_src = [], [], [], [], []
-            for _f in _loaded_pf:
-                _mj  = _f.get("moneydj_raw", {}) or {}
-                _m   = _f.get("metrics", {}) or {}
-                _pf2 = _mj.get("perf", {}) or {}
-                _name = (_f.get("name") or _f["code"])[:18]
-
-                # v18.65: 真 1Y 優先 — perf["1Y"] (wb01 官方 / local_calc 注入只有真 1Y)
-                # v18.134: 改用 compute_1y_total_return 共用 helper（與 Tab2 對齊）
-                # 修使用者反饋「同一基金兩 view 顯示不同 1Y 報酬」
-                from ui.helpers.macro_helpers import compute_1y_total_return
-                _ret_v, _src_label = compute_1y_total_return(_f)
-                _is_real = _ret_v is not None
-                _ret_window_days = None    # v18.65 短窗口提示（helper 內部已標明來源）
-
-                # v19.272 Phase 2 TOP 1.2:adr 走 SSOT _resolve_adr_with_fallback 3 層 chain
-                # 原 line 2042 + 2046-2067 inline 3 層 fallback 完全複製 SSOT 邏輯,收掉 22 LOC
-                from services.health.dividend import _resolve_adr_with_fallback
-                _div_v, _ = _resolve_adr_with_fallback(_f)
-                _div = round(float(_div_v), 2) if _div_v else 0.0
-                _rc_names.append(_name)
-                _rc_ret.append(round(_ret_v, 2) if _ret_v is not None else 0.0)
-                _rc_div.append(round(_div, 2))
-                _rc_real.append(_is_real)
-                _rc_src.append(_src_label if _is_real else "資料不足")
-
-            if _rc_names:
-                # v19.402 §1:改走 SSOT dividend_safety(gap 判定 綠/黃/紅),取代原
-                # inline 1.2× coverage 門檻 → 與全站(Tab2 警示框 / 健診 3 表)一致,不再打架。
-                # 資料不足(_real=False)/ 無配息(_d≤0)→ dividend_safety 回 grey,誠實不誤判。
-                # L3→L2 呼叫(portfolio_service),同時修掉原 inline 分類的 §8.2 越權。
-                # (div_safety_check 即 dividend_safety,已於檔頭 module 級 import,不重複)
-                _LVL_COLOR = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
-                              "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}
-                _rc_levels = []
-                for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
-                    if not _real:
-                        _rc_levels.append("grey")            # 1Y 資料不足 → 灰
-                    else:
-                        _rc_levels.append(
-                            div_safety_check(_r, _d).get("alert_level", "grey"))
-                _rc_colors = [_LVL_COLOR.get(_lv, TRAFFIC_NEUTRAL) for _lv in _rc_levels]
-
-                fig_rc = go.Figure()
-                # v19.387 V1 §1:含息報酬長條用真實值 _rc_ret(移除 max(_r,0.5) 地板 ——
-                # 原本把吃本金的負報酬硬拉成正向長條、標籤卻標真負值,視覺與數據矛盾)。
-                # 負報酬向下、以 0 基準線(下方 add_hline)呈現;顏色 _rc_colors 已把吃本金標紅。
-                fig_rc.add_trace(go.Bar(
-                    x=_rc_names, y=_rc_ret,
-                    name="含息報酬率(1Y)%",
-                    marker_color=_rc_colors,
-                    text=[f"{v:.1f}%" for v in _rc_ret],
-                    textposition="outside",
-                    customdata=list(zip(_rc_ret, _rc_src)),
-                    hovertemplate=("%{x}<br>含息報酬：%{customdata[0]:.2f}%"
-                                   "<br>來源：%{customdata[1]}<extra></extra>")))
-                # 配息年化率紅色點線
-                if any(d > 0 for d in _rc_div):
-                    fig_rc.add_trace(go.Scatter(
-                        x=_rc_names, y=_rc_div,
-                        name="配息年化率%",
-                        mode="markers+lines",
-                        line=dict(color=MATERIAL_RED, width=1.5, dash="dot"),
-                        marker=dict(symbol="diamond", size=8, color=MATERIAL_RED),
-                        hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
-                # 零基準線
-                fig_rc.add_hline(y=0, line_color=GRAY_55, line_width=1)
-                # ── 吃本金：背景色塊 + 標註（v19.402:紅框依 SSOT red 判定,gap>2%,
-                #    與長條顏色同源;gap 0~2% 為 SSOT yellow → 橙條但不標「吃本金」）──
-                _y_max = max(max(_rc_ret, default=10), max(_rc_div, default=10)) * 1.35
-                for _i, (_r, _d, _n, _real, _lv) in enumerate(zip(_rc_ret, _rc_div, _rc_names, _rc_real, _rc_levels)):
-                    if _lv == "red":
-                        fig_rc.add_vrect(
-                            x0=_i - 0.45, x1=_i + 0.45,
-                            fillcolor="rgba(244,67,54,0.08)",
-                            line_color="rgba(244,67,54,0.4)", line_width=1,
-                            layer="below")
-                        fig_rc.add_annotation(
-                            x=_n, y=_y_max,
-                            text=f"⚠️ 吃本金<br>缺口 {_d-_r:.1f}%",
-                            showarrow=False,
-                            font=dict(color=MATERIAL_RED, size=11),
-                            bgcolor="rgba(42,10,10,0.85)",
-                            bordercolor=MATERIAL_RED, borderwidth=1,
-                            borderpad=4)
-                    elif not _real and _d > 0:
-                        # 缺 1Y 資料 → 顯示「資料不足」灰色標註，不誤判吃本金
-                        fig_rc.add_annotation(
-                            x=_n, y=_y_max,
-                            text="⬜ 1Y 資料不足<br>無法判定",
-                            showarrow=False,
-                            font=dict(color=GRAY_AA, size=10),
-                            bgcolor="rgba(60,60,60,0.7)",
-                            bordercolor=GRAY_66, borderwidth=1,
-                            borderpad=4)
-                fig_rc.update_layout(
-                    paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
-                    font_color=GH_FG_PRIMARY, height=360,
-                    margin=dict(t=40, b=20, l=40, r=20),
-                    legend=dict(orientation="h", font_size=10, y=1.08),
-                    yaxis_title="報酬率 / 配息率 (%)",
-                    yaxis=dict(range=[min(0, min(_rc_ret, default=0)) - 2, _y_max]),
-                    bargap=0.35, hovermode="x unified")
-                st.plotly_chart(fig_rc, use_container_width=True)
-
-                # v18.163：下方 4 卡 KPI 已移除（與 Tab3 頂部 hero KPI 重複）；
-                # 詳細數字在 hero「💵 現金流安全」/「🔴 留校查看」見。
-
-        # v19.180:💊 持倉健診總表(共用 SSOT 渲染,不重抓資料)
-        # 來源:與「基金組合健診」Tab 完全同源(process_one_fund + _render_health_table),
-        # 差異:per-fund 用 user 實際 invest_twd 為本金(若無則預設 100 萬 TWD)。
-        # 目的:user 看完真實收益矩陣後,直接判斷「是否需要換標的 / 基金不健康」。
-        if _loaded_pf:
-            try:
+            # ── 真實收益長條圖（Core Protocol v2.0 Ch.4）────────────────
+            # v18.38：分析視圖按 code 去重（同基金跨多保單只算一次），
+            # 與 v18.34 戰情室 / v18.36 T5 重疊度矩陣的去重策略一致。
+            _loaded_pf_raw = [f for f in pf if f.get("loaded") and not f.get("load_error")]
+            _seen_rc: set = set()
+            _loaded_pf: list = []
+            for _f in _loaded_pf_raw:
+                _c = str(_f.get("code", "") or "").strip().upper()
+                if not _c or _c in _seen_rc:
+                    continue
+                _seen_rc.add(_c)
+                _loaded_pf.append(_f)
+            if _loaded_pf:
                 st.divider()
-                st.markdown("### 💊 持倉健診（共用 SSOT 3 表:健康分析 / 配息相關 / 實際購買結果）")
-                st.caption(
-                    "與「基金組合健診」Tab 完全同源(v19.181 模組化 3 表)。"
-                    "**① 健康分析**:4D Grade + Sharpe/Sortino/Calmar/Alpha/Expense/MaxDD + 3Y/5Y 年化 + 3-3-3 篩。"
-                    "**② 配息相關**:adr + 1Y 含息 + 吃本金燈號(1Y·)+ ** 4 規則換標的建議**。"
-                    "**③ 實際購買結果**:per-fund 用 invest_twd 為本金"
-                    "(未填者給 100 萬 TWD 模擬本金,**僅供配息試算,不進核心/衛星比例**)。"
-                )
-                from services.fund_row import process_one_fund as _proc_health  # v19.413 下沉 L2
-                from ui.tab_fund_grp_health import _render_health_3tables as _render_health_tbl
-                from concurrent.futures import (
-                    ThreadPoolExecutor as _TPE_h,
-                    as_completed as _ac_h,
-                )
-                # ── 稽核 N1-b：持倉健診改「首次自動 + 快取 + 重算鈕」───────────────
-                # 原本這整段沒有任何守門（唯一條件是 `if _loaded_pf:`），於是**每一次
-                # rerun** 都對全部持倉重跑 ThreadPool × process_one_fund（內含 FX / NAV
-                # 網路 I/O）。25 檔實測：rerun 起算 17 秒後 `WebSocket onclose`，畫面
-                # 永久凍結（2026-08-14 實機兩次重現）。
-                # 對策：以持倉指紋（代號 + 投入金額 + 序列長度）為 key 快取結果；
-                # 指紋不變就直接複用，變了才重算。另給一顆顯式「重新計算」。
-                # ⚠️ 指紋刻意不含時間 —— 「同一組持倉」在同一 session 內不該因為
-                # 你按了別的按鈕就重抓一次（那正是本 bug 的成因）。要最新值請按重算。
-                def _pf_health_fingerprint(_funds: list) -> str:
-                    _parts = []
-                    for _f in _funds:
-                        _s = _f.get("series")
-                        try:
-                            _n = len(_s) if _s is not None else 0
-                        except TypeError:
-                            _n = 0
-                        _parts.append(
-                            f"{str(_f.get('code', '') or '').upper()}"
-                            f"|{_f.get('invest_twd') or 0}|{_n}"
-                        )
-                    return ";".join(sorted(_parts))
+                st.markdown("### 📊 真實收益 vs 配息率健康矩陣")
+                st.caption("長條高度 < 紅虛線 → 含息報酬不足以支撐配息 → 吃本金警示")
 
-                _warn_gap_h = 2.0  # SSOT 對齊 fund_dividend_calculator.DEFAULT_WARN_GAP_PCT
-                # ⚠️ 模擬本金（2026-08-07 user 裁決的第 4 點）：未填 invest_twd 的基金
-                # 仍需要一個本金才算得出「每月配息 TWD / 實際購買結果」，故保留 100 萬
-                # 預設 —— 拿掉它會讓那幾檔的配息試算靜默變 0（比沒有數字更危險，§1）。
-                # 但它**僅供試算，不進配置比例**：下面逐檔記 `_principal_is_default`，
-                # 共用 render 會把這幾檔以 weight=0 擋在「核心/衛星屬性分布」分母外。
-                _DEFAULT_PRINC = 1_000_000.0
-                _health_results: list = [None] * len(_loaded_pf)
-                # index → 該檔的本金是不是模擬值（使用者從未填過金額）
-                _princ_is_sim: list = [False] * len(_loaded_pf)
+                # v18.48 三層 fallback + is_real 旗標，正確區分「真 0%」與「資料不足」
+                # v18.72: 加 _rc_src 追蹤每檔 1Y 來源，hover 顯示讓使用者一眼看出走哪條 fallback
+                _rc_names, _rc_ret, _rc_div, _rc_real, _rc_src = [], [], [], [], []
+                for _f in _loaded_pf:
+                    _mj  = _f.get("moneydj_raw", {}) or {}
+                    _m   = _f.get("metrics", {}) or {}
+                    _pf2 = _mj.get("perf", {}) or {}
+                    _name = (_f.get("name") or _f["code"])[:18]
 
-                # 稽核 N1-b：快取查核（詳見上方 `_pf_health_fingerprint` 的說明）
-                _pf_fp_h = _pf_health_fingerprint(_loaded_pf)
-                _cache_h = st.session_state.get("_pf_health_cache") or {}
-                _force_h = bool(st.session_state.pop("_pf_health_force", False))
-                _hit_h = (
-                    (not _force_h)
-                    and _cache_h.get("fp") == _pf_fp_h
-                    and len(_cache_h.get("rows") or []) == len(_loaded_pf)
-                )
-                _c1_h, _c2_h = st.columns([4, 1])
-                if _c2_h.button("🔄 重新計算", key="pf_health_recalc",
-                                use_container_width=True,
-                                help="重新抓取每檔的即時 NAV / 匯率並重算健診。"
-                                     "平常不需要按 —— 持倉沒變動時本區直接沿用本次 "
-                                     "session 已算好的結果，避免每次操作都重跑一輪。"):
-                    st.session_state["_pf_health_force"] = True
-                    st.rerun()
+                    # v18.65: 真 1Y 優先 — perf["1Y"] (wb01 官方 / local_calc 注入只有真 1Y)
+                    # v18.134: 改用 compute_1y_total_return 共用 helper（與 Tab2 對齊）
+                    # 修使用者反饋「同一基金兩 view 顯示不同 1Y 報酬」
+                    from ui.helpers.macro_helpers import compute_1y_total_return
+                    _ret_v, _src_label = compute_1y_total_return(_f)
+                    _is_real = _ret_v is not None
+                    _ret_window_days = None    # v18.65 短窗口提示（helper 內部已標明來源）
 
-                if _hit_h:
-                    _health_results = list(_cache_h["rows"])
-                    _princ_is_sim = list(_cache_h["sim"])
-                    _c1_h.caption(
-                        f"✅ 沿用本次 session 已算好的健診結果（{len(_loaded_pf)} 檔，"
-                        f"算於 {_cache_h.get('at', '—')}）。持倉金額或檔數變動會自動重算；"
-                        "要抓最新淨值請按右邊「🔄 重新計算」。"
+                    # v19.272 Phase 2 TOP 1.2:adr 走 SSOT _resolve_adr_with_fallback 3 層 chain
+                    # 原 line 2042 + 2046-2067 inline 3 層 fallback 完全複製 SSOT 邏輯,收掉 22 LOC
+                    from services.health.dividend import _resolve_adr_with_fallback
+                    _div_v, _ = _resolve_adr_with_fallback(_f)
+                    _div = round(float(_div_v), 2) if _div_v else 0.0
+                    _rc_names.append(_name)
+                    _rc_ret.append(round(_ret_v, 2) if _ret_v is not None else 0.0)
+                    _rc_div.append(round(_div, 2))
+                    _rc_real.append(_is_real)
+                    _rc_src.append(_src_label if _is_real else "資料不足")
+
+                if _rc_names:
+                    # v19.402 §1:改走 SSOT dividend_safety(gap 判定 綠/黃/紅),取代原
+                    # inline 1.2× coverage 門檻 → 與全站(Tab2 警示框 / 健診 3 表)一致,不再打架。
+                    # 資料不足(_real=False)/ 無配息(_d≤0)→ dividend_safety 回 grey,誠實不誤判。
+                    # L3→L2 呼叫(portfolio_service),同時修掉原 inline 分類的 §8.2 越權。
+                    # (div_safety_check 即 dividend_safety,已於檔頭 module 級 import,不重複)
+                    _LVL_COLOR = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
+                                  "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}
+                    _rc_levels = []
+                    for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
+                        if not _real:
+                            _rc_levels.append("grey")            # 1Y 資料不足 → 灰
+                        else:
+                            _rc_levels.append(
+                                div_safety_check(_r, _d).get("alert_level", "grey"))
+                    _rc_colors = [_LVL_COLOR.get(_lv, TRAFFIC_NEUTRAL) for _lv in _rc_levels]
+
+                    fig_rc = go.Figure()
+                    # v19.387 V1 §1:含息報酬長條用真實值 _rc_ret(移除 max(_r,0.5) 地板 ——
+                    # 原本把吃本金的負報酬硬拉成正向長條、標籤卻標真負值,視覺與數據矛盾)。
+                    # 負報酬向下、以 0 基準線(下方 add_hline)呈現;顏色 _rc_colors 已把吃本金標紅。
+                    fig_rc.add_trace(go.Bar(
+                        x=_rc_names, y=_rc_ret,
+                        name="含息報酬率(1Y)%",
+                        marker_color=_rc_colors,
+                        text=[f"{v:.1f}%" for v in _rc_ret],
+                        textposition="outside",
+                        customdata=list(zip(_rc_ret, _rc_src)),
+                        hovertemplate=("%{x}<br>含息報酬：%{customdata[0]:.2f}%"
+                                       "<br>來源：%{customdata[1]}<extra></extra>")))
+                    # 配息年化率紅色點線
+                    if any(d > 0 for d in _rc_div):
+                        fig_rc.add_trace(go.Scatter(
+                            x=_rc_names, y=_rc_div,
+                            name="配息年化率%",
+                            mode="markers+lines",
+                            line=dict(color=MATERIAL_RED, width=1.5, dash="dot"),
+                            marker=dict(symbol="diamond", size=8, color=MATERIAL_RED),
+                            hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
+                    # 零基準線
+                    fig_rc.add_hline(y=0, line_color=GRAY_55, line_width=1)
+                    # ── 吃本金：背景色塊 + 標註（v19.402:紅框依 SSOT red 判定,gap>2%,
+                    #    與長條顏色同源;gap 0~2% 為 SSOT yellow → 橙條但不標「吃本金」）──
+                    _y_max = max(max(_rc_ret, default=10), max(_rc_div, default=10)) * 1.35
+                    for _i, (_r, _d, _n, _real, _lv) in enumerate(zip(_rc_ret, _rc_div, _rc_names, _rc_real, _rc_levels)):
+                        if _lv == "red":
+                            fig_rc.add_vrect(
+                                x0=_i - 0.45, x1=_i + 0.45,
+                                fillcolor="rgba(244,67,54,0.08)",
+                                line_color="rgba(244,67,54,0.4)", line_width=1,
+                                layer="below")
+                            fig_rc.add_annotation(
+                                x=_n, y=_y_max,
+                                text=f"⚠️ 吃本金<br>缺口 {_d-_r:.1f}%",
+                                showarrow=False,
+                                font=dict(color=MATERIAL_RED, size=11),
+                                bgcolor="rgba(42,10,10,0.85)",
+                                bordercolor=MATERIAL_RED, borderwidth=1,
+                                borderpad=4)
+                        elif not _real and _d > 0:
+                            # 缺 1Y 資料 → 顯示「資料不足」灰色標註，不誤判吃本金
+                            fig_rc.add_annotation(
+                                x=_n, y=_y_max,
+                                text="⬜ 1Y 資料不足<br>無法判定",
+                                showarrow=False,
+                                font=dict(color=GRAY_AA, size=10),
+                                bgcolor="rgba(60,60,60,0.7)",
+                                bordercolor=GRAY_66, borderwidth=1,
+                                borderpad=4)
+                    fig_rc.update_layout(
+                        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
+                        font_color=GH_FG_PRIMARY, height=360,
+                        margin=dict(t=40, b=20, l=40, r=20),
+                        legend=dict(orientation="h", font_size=10, y=1.08),
+                        yaxis_title="報酬率 / 配息率 (%)",
+                        yaxis=dict(range=[min(0, min(_rc_ret, default=0)) - 2, _y_max]),
+                        bargap=0.35, hovermode="x unified")
+                    st.plotly_chart(fig_rc, use_container_width=True)
+
+                    # v18.163：下方 4 卡 KPI 已移除（與 Tab3 頂部 hero KPI 重複）；
+                    # 詳細數字在 hero「💵 現金流安全」/「🔴 留校查看」見。
+
+            # v19.180:💊 持倉健診總表(共用 SSOT 渲染,不重抓資料)
+            # 來源:與「基金組合健診」Tab 完全同源(process_one_fund + _render_health_table),
+            # 差異:per-fund 用 user 實際 invest_twd 為本金(若無則預設 100 萬 TWD)。
+            # 目的:user 看完真實收益矩陣後,直接判斷「是否需要換標的 / 基金不健康」。
+            if _loaded_pf:
+                try:
+                    st.divider()
+                    st.markdown("### 💊 持倉健診（共用 SSOT 3 表:健康分析 / 配息相關 / 實際購買結果）")
+                    st.caption(
+                        "與「基金組合健診」Tab 完全同源(v19.181 模組化 3 表)。"
+                        "**① 健康分析**:4D Grade + Sharpe/Sortino/Calmar/Alpha/Expense/MaxDD + 3Y/5Y 年化 + 3-3-3 篩。"
+                        "**② 配息相關**:adr + 1Y 含息 + 吃本金燈號(1Y·)+ ** 4 規則換標的建議**。"
+                        "**③ 實際購買結果**:per-fund 用 invest_twd 為本金"
+                        "(未填者給 100 萬 TWD 模擬本金,**僅供配息試算,不進核心/衛星比例**)。"
                     )
-                else:
-                    _prog_h = st.progress(0.0, text="📥 持倉健診計算中…")
-                    try:
-                        with _TPE_h(max_workers=min(len(_loaded_pf), 4)) as _exh:
-                            # v19.497:選股池自填名(比持倉抓取名更可能有真名,如 ALZF9)。
-                            # §1:池讀失敗不擋健診(guard → 空 map)。EX-CRUD-1 允許 L3 直呼。
-                            _pool_name_h: dict = {}
+                    from services.fund_row import process_one_fund as _proc_health  # v19.413 下沉 L2
+                    from ui.tab_fund_grp_health import _render_health_3tables as _render_health_tbl
+                    from concurrent.futures import (
+                        ThreadPoolExecutor as _TPE_h,
+                        as_completed as _ac_h,
+                    )
+                    # ── 稽核 N1-b：持倉健診改「首次自動 + 快取 + 重算鈕」───────────────
+                    # 原本這整段沒有任何守門（唯一條件是 `if _loaded_pf:`），於是**每一次
+                    # rerun** 都對全部持倉重跑 ThreadPool × process_one_fund（內含 FX / NAV
+                    # 網路 I/O）。25 檔實測：rerun 起算 17 秒後 `WebSocket onclose`，畫面
+                    # 永久凍結（2026-08-14 實機兩次重現）。
+                    # 對策：以持倉指紋（代號 + 投入金額 + 序列長度）為 key 快取結果；
+                    # 指紋不變就直接複用，變了才重算。另給一顆顯式「重新計算」。
+                    # ⚠️ 指紋刻意不含時間 —— 「同一組持倉」在同一 session 內不該因為
+                    # 你按了別的按鈕就重抓一次（那正是本 bug 的成因）。要最新值請按重算。
+                    def _pf_health_fingerprint(_funds: list) -> str:
+                        _parts = []
+                        for _f in _funds:
+                            _s = _f.get("series")
                             try:
-                                from repositories.pool_repository import list_pool as _lp_h
-                                _pool_name_h = {str(_e.code).upper(): (_e.name or "")
-                                                for _e in (_lp_h() or []) if _e.name}
-                            except Exception as _e_ph:  # noqa: BLE001
-                                print(f"[tab3 持倉健診] 選股池名稱查詢略過:"
-                                      f"{type(_e_ph).__name__}: {_e_ph}")
-                            _futs_h = {}
-                            for _ih, _fh in enumerate(_loaded_pf):
-                                _code_h = str(_fh.get("code", "") or "").strip().upper()
-                                _fd_h = _fh.get("moneydj_raw") or None
-                                _inv = _fh.get("invest_twd")
-                                try:
-                                    _principal_h = float(_inv) if _inv else 0.0
-                                except (TypeError, ValueError):
-                                    _principal_h = 0.0
-                                # 先判「有沒有真實金額」再補預設 —— 不用浮點 == 反推
-                                # 是否等於預設值（§4.3 禁止 `==` 比浮點；且真的填了
-                                # 100 萬的人不該被誤標成模擬本金）。
-                                _princ_is_sim[_ih] = _principal_h <= 0
-                                if _princ_is_sim[_ih]:
-                                    _principal_h = _DEFAULT_PRINC
-                                # name_hint:池名優先(ALZF9 類真名只存在池),退持倉名(可能亦為代號)
-                                _nh_h = _pool_name_h.get(_code_h) or (_fh.get("name") or "")
-                                _futs_h[_exh.submit(
-                                    _proc_health, _code_h, _principal_h,
-                                    "", _warn_gap_h, _fd_h, _nh_h,   # v19.497 name_hint
-                                )] = _ih
-                            _done_h = 0
-                            _n_h = len(_loaded_pf)
-                            for _futh in _ac_h(_futs_h):
-                                _ih2 = _futs_h[_futh]
-                                try:
-                                    _health_results[_ih2] = _futh.result()
-                                except Exception as _eh:
-                                    _health_results[_ih2] = {
-                                        "code": _loaded_pf[_ih2].get("code", "?"),
-                                        "ok": False,
-                                        "error": f"{type(_eh).__name__}: {_eh}",
-                                    }
-                                _done_h += 1
-                                _prog_h.progress(
-                                    _done_h / _n_h,
-                                    text=f"📥 已完成 {_done_h}/{_n_h} 檔…",
-                                )
-                    finally:
-                        _prog_h.empty()
-                    # 只有真的算完才寫快取（失敗列本身也是有效結果，會帶 ok=False）
-                    st.session_state["_pf_health_cache"] = {
-                        "fp":   _pf_fp_h,
-                        "rows": list(_health_results),
-                        "sim":  list(_princ_is_sim),
-                        # 走 ui.helpers.tw_time SSOT（檔頭已 import），不自建 tz
-                        "at":   tw_now_str("%H:%M:%S"),
-                    }
-                # v19.330:🧭 核心/衛星配置檢查已下沉共用 _render_health_3tables(兩 tab 齊顯示),
-                # 不再於此 inline(避免重複 + 只在 Tab3 出現)。
-                # 把「這檔用的是模擬本金」旗標接到 row 上（§1 揭露）：共用 render
-                # 讀它決定該檔要不要進配置比例分母。產生端算對了但沒接出去 =
-                # PROCESS.md §4 點名的最貴失效模式，故旗標與消費端同批交付。
-                for _idx_ps, _row_ps in enumerate(_health_results):
-                    if isinstance(_row_ps, dict) and _princ_is_sim[_idx_ps]:
-                        _row_ps["_principal_is_default"] = True
-                _ok_health = [r for r in _health_results if r is not None]
-                # v19.420 F-BM-3:持倉健診也帶「分析 extra 欄組」(σ/HWM/買賣點 / 上下檔捕捉率 /
-                # 操盤評分 / vs 大盤%)—— 先前 Tab3 未傳 funds_extra → 整組欄缺席(稽核 A2#1 抓到)。
-                # 用實際持倉重組 rich fund dict 傳入;show_screener 維持 False(不與健檢 Tab 撞 widget key)。
-                from ui.helpers.fund_grp_health._utils import _build_fund_dict
-                _funds_extra = [
-                    _build_fund_dict(_r["_fund_raw"], _r["code"], _DEFAULT_PRINC)
-                    for _r in _ok_health
-                    if _r.get("ok") and _r.get("_fund_raw")
-                ]
-                # source_tab="portfolio"：本頁上方另有一個**分類依據不同**的核心%
-                # （2026-08-07 後分母與目標值差異已消：模擬本金不進比例、本區不設
-                # 目標）。共用 render 的「🧭 核心/衛星資產屬性分布」在**兩個 Tab**
-                # 都已是唯讀純資訊，本參數只決定指路句要指向哪一格 ——
-                # 這裡指「本頁上方」，健診 Tab 指「組合配置」Tab。
-                _render_health_tbl(_ok_health, funds_extra=_funds_extra,
-                                   source_tab="portfolio")
+                                _n = len(_s) if _s is not None else 0
+                            except TypeError:
+                                _n = 0
+                            _parts.append(
+                                f"{str(_f.get('code', '') or '').upper()}"
+                                f"|{_f.get('invest_twd') or 0}|{_n}"
+                            )
+                        return ";".join(sorted(_parts))
 
-                # v19.418 — 🔄 輪動配對建議(持倉健診也顯示;user 2026-07-28 要求兩邊都要)。
-                # 重用 _funds_extra;widget key 用 'pf_rot_' 前綴避免與健檢 Tab 的 'rot_' 撞鍵。
-                try:
-                    from ui.helpers.fund_grp_health.rotation import render_rotation_section
-                    render_rotation_section(_funds_extra, key_prefix="pf_rot_")
-                except Exception as _e_rot:
-                    # 整個輪動配對建議區塊（配對表 + σ 切點判定）消失。
-                    system_error("輪動配對建議渲染失敗", _e_rot)
+                    _warn_gap_h = 2.0  # SSOT 對齊 fund_dividend_calculator.DEFAULT_WARN_GAP_PCT
+                    # ⚠️ 模擬本金（2026-08-07 user 裁決的第 4 點）：未填 invest_twd 的基金
+                    # 仍需要一個本金才算得出「每月配息 TWD / 實際購買結果」，故保留 100 萬
+                    # 預設 —— 拿掉它會讓那幾檔的配息試算靜默變 0（比沒有數字更危險，§1）。
+                    # 但它**僅供試算，不進配置比例**：下面逐檔記 `_principal_is_default`，
+                    # 共用 render 會把這幾檔以 weight=0 擋在「核心/衛星屬性分布」分母外。
+                    _DEFAULT_PRINC = 1_000_000.0
+                    _health_results: list = [None] * len(_loaded_pf)
+                    # index → 該檔的本金是不是模擬值（使用者從未填過金額）
+                    _princ_is_sim: list = [False] * len(_loaded_pf)
 
-                # v19.421 — 📊 組合績效(①);v19.424 — 🎯 效率前緣(②)。重用 _funds_extra。
-                try:
-                    from ui.helpers.portfolio_perf import (
-                        render_efficient_frontier,
-                        render_portfolio_performance,
+                    # 稽核 N1-b：快取查核（詳見上方 `_pf_health_fingerprint` 的說明）
+                    _pf_fp_h = _pf_health_fingerprint(_loaded_pf)
+                    _cache_h = st.session_state.get("_pf_health_cache") or {}
+                    _force_h = bool(st.session_state.pop("_pf_health_force", False))
+                    _hit_h = (
+                        (not _force_h)
+                        and _cache_h.get("fp") == _pf_fp_h
+                        and len(_cache_h.get("rows") or []) == len(_loaded_pf)
                     )
-                    render_portfolio_performance(_funds_extra)
-                    render_efficient_frontier(_funds_extra)
-                except Exception as _e_pp:
-                    # 年化報酬 / σ / Sharpe / 最大回撤 四個 KPI + 各檔貢獻表整組消失。
-                    system_error("組合分析(績效/效率前緣)渲染失敗", _e_pp)
-            except Exception as _e_ph:
-                # 這是持倉分頁最主要的那張大表,失敗＝整段診斷都不見。
-                system_error("持倉健診總表渲染失敗", _e_ph)
+                    _c1_h, _c2_h = st.columns([4, 1])
+                    if _c2_h.button("🔄 重新計算", key="pf_health_recalc",
+                                    use_container_width=True,
+                                    help="重新抓取每檔的即時 NAV / 匯率並重算健診。"
+                                         "平常不需要按 —— 持倉沒變動時本區直接沿用本次 "
+                                         "session 已算好的結果，避免每次操作都重跑一輪。"):
+                        st.session_state["_pf_health_force"] = True
+                        st.rerun()
 
-    # ─── 以下為原 with tab3: 第二段 ───────────────
-    # v18.194 故事化：T7 持倉戰情（③）移到 T5 重疊診斷（④）之前，
-    # 符合「① 配置總覽 → ② 加入/載入 → ③ 持倉戰情 → ④ 重疊診斷」的由上而下敘事。
-    # T7 為自含函式、讀 session_state，置於所有 載入/加入 區塊之後 → 資料齊全、零依賴風險。
-    # ── T7 帳務 + AI 深度組合建議 ── (v18.144 抽至 ui/tab3_t7_ledger.py)
-    st.markdown("### 💼 ③ 持倉戰情（T7 帳本）")
-    # 稽核 E12（2026-08-14）：T7 的表單驗證原本用 `st.stop()`（6 處），
-    # 那會中止**整個 script run** —— 連排在 Tab3 之後的「📋 我的管理室」
-    # 「📖 參考 / 診斷」兩個分頁都跟著空白。使用者只是忘了填金額，
-    # 畫面卻像壞掉，多半會以為是連線問題而重整（重整後輸入全沒了）。
-    # 改成攔自訂例外：中止範圍縮到 T7 這一段，其他分頁照常渲染。
-    # `t7_abort()` 在拋之前已經顯示過 st.error，這裡只補一句「其餘分頁不受影響」。
-    try:
-        render_t7_section()
-    except T7InputAbort:
-        st.caption(
-            "ℹ️ 上面那個錯誤只中止了「持倉戰情」這一段的試算 —— "
-            "修正後重新送出即可，**其他分頁不受影響**。"
-        )
+                    if _hit_h:
+                        _health_results = list(_cache_h["rows"])
+                        _princ_is_sim = list(_cache_h["sim"])
+                        _c1_h.caption(
+                            f"✅ 沿用本次 session 已算好的健診結果（{len(_loaded_pf)} 檔，"
+                            f"算於 {_cache_h.get('at', '—')}）。持倉金額或檔數變動會自動重算；"
+                            "要抓最新淨值請按右邊「🔄 重新計算」。"
+                        )
+                    else:
+                        _prog_h = st.progress(0.0, text="📥 持倉健診計算中…")
+                        try:
+                            with _TPE_h(max_workers=min(len(_loaded_pf), 4)) as _exh:
+                                # v19.497:選股池自填名(比持倉抓取名更可能有真名,如 ALZF9)。
+                                # §1:池讀失敗不擋健診(guard → 空 map)。EX-CRUD-1 允許 L3 直呼。
+                                _pool_name_h: dict = {}
+                                try:
+                                    from repositories.pool_repository import list_pool as _lp_h
+                                    _pool_name_h = {str(_e.code).upper(): (_e.name or "")
+                                                    for _e in (_lp_h() or []) if _e.name}
+                                except Exception as _e_ph:  # noqa: BLE001
+                                    print(f"[tab3 持倉健診] 選股池名稱查詢略過:"
+                                          f"{type(_e_ph).__name__}: {_e_ph}")
+                                _futs_h = {}
+                                for _ih, _fh in enumerate(_loaded_pf):
+                                    _code_h = str(_fh.get("code", "") or "").strip().upper()
+                                    _fd_h = _fh.get("moneydj_raw") or None
+                                    _inv = _fh.get("invest_twd")
+                                    try:
+                                        _principal_h = float(_inv) if _inv else 0.0
+                                    except (TypeError, ValueError):
+                                        _principal_h = 0.0
+                                    # 先判「有沒有真實金額」再補預設 —— 不用浮點 == 反推
+                                    # 是否等於預設值（§4.3 禁止 `==` 比浮點；且真的填了
+                                    # 100 萬的人不該被誤標成模擬本金）。
+                                    _princ_is_sim[_ih] = _principal_h <= 0
+                                    if _princ_is_sim[_ih]:
+                                        _principal_h = _DEFAULT_PRINC
+                                    # name_hint:池名優先(ALZF9 類真名只存在池),退持倉名(可能亦為代號)
+                                    _nh_h = _pool_name_h.get(_code_h) or (_fh.get("name") or "")
+                                    _futs_h[_exh.submit(
+                                        _proc_health, _code_h, _principal_h,
+                                        "", _warn_gap_h, _fd_h, _nh_h,   # v19.497 name_hint
+                                    )] = _ih
+                                _done_h = 0
+                                _n_h = len(_loaded_pf)
+                                for _futh in _ac_h(_futs_h):
+                                    _ih2 = _futs_h[_futh]
+                                    try:
+                                        _health_results[_ih2] = _futh.result()
+                                    except Exception as _eh:
+                                        _health_results[_ih2] = {
+                                            "code": _loaded_pf[_ih2].get("code", "?"),
+                                            "ok": False,
+                                            "error": f"{type(_eh).__name__}: {_eh}",
+                                        }
+                                    _done_h += 1
+                                    _prog_h.progress(
+                                        _done_h / _n_h,
+                                        text=f"📥 已完成 {_done_h}/{_n_h} 檔…",
+                                    )
+                        finally:
+                            _prog_h.empty()
+                        # 只有真的算完才寫快取（失敗列本身也是有效結果，會帶 ok=False）
+                        st.session_state["_pf_health_cache"] = {
+                            "fp":   _pf_fp_h,
+                            "rows": list(_health_results),
+                            "sim":  list(_princ_is_sim),
+                            # 走 ui.helpers.tw_time SSOT（檔頭已 import），不自建 tz
+                            "at":   tw_now_str("%H:%M:%S"),
+                        }
+                    # v19.330:🧭 核心/衛星配置檢查已下沉共用 _render_health_3tables(兩 tab 齊顯示),
+                    # 不再於此 inline(避免重複 + 只在 Tab3 出現)。
+                    # 把「這檔用的是模擬本金」旗標接到 row 上（§1 揭露）：共用 render
+                    # 讀它決定該檔要不要進配置比例分母。產生端算對了但沒接出去 =
+                    # PROCESS.md §4 點名的最貴失效模式，故旗標與消費端同批交付。
+                    for _idx_ps, _row_ps in enumerate(_health_results):
+                        if isinstance(_row_ps, dict) and _princ_is_sim[_idx_ps]:
+                            _row_ps["_principal_is_default"] = True
+                    _ok_health = [r for r in _health_results if r is not None]
+                    # v19.420 F-BM-3:持倉健診也帶「分析 extra 欄組」(σ/HWM/買賣點 / 上下檔捕捉率 /
+                    # 操盤評分 / vs 大盤%)—— 先前 Tab3 未傳 funds_extra → 整組欄缺席(稽核 A2#1 抓到)。
+                    # 用實際持倉重組 rich fund dict 傳入;show_screener 維持 False(不與健檢 Tab 撞 widget key)。
+                    from ui.helpers.fund_grp_health._utils import _build_fund_dict
+                    _funds_extra = [
+                        _build_fund_dict(_r["_fund_raw"], _r["code"], _DEFAULT_PRINC)
+                        for _r in _ok_health
+                        if _r.get("ok") and _r.get("_fund_raw")
+                    ]
+                    # source_tab="portfolio"：本頁上方另有一個**分類依據不同**的核心%
+                    # （2026-08-07 後分母與目標值差異已消：模擬本金不進比例、本區不設
+                    # 目標）。共用 render 的「🧭 核心/衛星資產屬性分布」在**兩個 Tab**
+                    # 都已是唯讀純資訊，本參數只決定指路句要指向哪一格 ——
+                    # 這裡指「本頁上方」，健診 Tab 指「組合配置」Tab。
+                    _render_health_tbl(_ok_health, funds_extra=_funds_extra,
+                                       source_tab="portfolio")
 
-    # v19.511:換扣款標的決策（依保單試算「保單管理費該從哪一檔基金扣、還是台幣現金扣」）。
-    # 放 T7 帳本之後 —— 重用 T7 的成本基礎（t7_ledgers）+ 即時 nav/fx。try/except 不炸 Tab3。
-    try:
-        from ui.helpers.portfolio.fee_deduction import render_fee_deduction_section
-        render_fee_deduction_section(st.session_state.get("portfolio_funds"))
-    except Exception as _e_feeopt:  # noqa: BLE001 — 決策區任何例外收成提示，不影響其餘分頁
-        # 原文案寫「略過」,讀起來像「這張保單不適用」;實際是整區算爆了。
-        system_error("換扣款標的決策區渲染失敗", _e_feeopt)
+                    # v19.418 — 🔄 輪動配對建議(持倉健診也顯示;user 2026-07-28 要求兩邊都要)。
+                    # 重用 _funds_extra;widget key 用 'pf_rot_' 前綴避免與健檢 Tab 的 'rot_' 撞鍵。
+                    try:
+                        from ui.helpers.fund_grp_health.rotation import render_rotation_section
+                        render_rotation_section(_funds_extra, key_prefix="pf_rot_")
+                    except Exception as _e_rot:
+                        # 整個輪動配對建議區塊（配對表 + σ 切點判定）消失。
+                        system_error("輪動配對建議渲染失敗", _e_rot)
 
-    # ── T7 已移至 T5 之前（v18.194 故事化：持倉戰情 → 重疊診斷）──
+                    # v19.421 — 📊 組合績效;v19.424 — 🎯 效率前緣。重用 _funds_extra。
+                    try:
+                        from ui.helpers.portfolio_perf import (
+                            render_efficient_frontier,
+                            render_portfolio_performance,
+                        )
+                        render_portfolio_performance(_funds_extra)
+                        render_efficient_frontier(_funds_extra)
+                    except Exception as _e_pp:
+                        # 年化報酬 / σ / Sharpe / 最大回撤 四個 KPI + 各檔貢獻表整組消失。
+                        system_error("組合分析(績效/效率前緣)渲染失敗", _e_pp)
+                except Exception as _e_ph:
+                    # 這是持倉分頁最主要的那張大表,失敗＝整段診斷都不見。
+                    system_error("持倉健診總表渲染失敗", _e_ph)
 
-    # v18.159：通用 AI 白話文總結 widget（4 視角 selectbox）
-    _render_tab3_ai_summary(GEMINI_KEY)
+    with _sec_ledger:
+        # ─── 以下為原 with tab3: 第二段 ───────────────
+        # WP-D（線框 §03 ④）：版面順序改為「加入與管理基金 → 配置總覽 →
+        # 持股重疊度診斷 → 帳本 → 費用與扣款 → AI 摘要 → Raw data」，頁內不再編號。
+        # （v18.194 那套「①配置總覽→②加入/載入→③持倉戰情→④重疊診斷」的敘事已退場：
+        #  它的畫面實際順序是 ④→①→②→③，正是線框點名要修的東西。）
+        # T7 為自含函式、讀 session_state，置於所有 載入/加入 區塊之後 → 資料齊全、零依賴風險。
+        # ── T7 帳務 + AI 深度組合建議 ── (v18.144 抽至 ui/tab3_t7_ledger.py)
+        st.markdown("### 💼 持倉戰情（T7 帳本）")
+        # 稽核 E12（2026-08-14）：T7 的表單驗證原本用 `st.stop()`（6 處），
+        # 那會中止**整個 script run** —— 連排在 Tab3 之後的「📋 我的管理室」
+        # 「📖 參考 / 診斷」兩個分頁都跟著空白。使用者只是忘了填金額，
+        # 畫面卻像壞掉，多半會以為是連線問題而重整（重整後輸入全沒了）。
+        # 改成攔自訂例外：中止範圍縮到 T7 這一段，其他分頁照常渲染。
+        # `t7_abort()` 在拋之前已經顯示過 st.error，這裡只補一句「其餘分頁不受影響」。
+        try:
+            render_t7_section()
+        except T7InputAbort:
+            st.caption(
+                "ℹ️ 上面那個錯誤只中止了「持倉戰情」這一段的試算 —— "
+                "修正後重新送出即可，**其他分頁不受影響**。"
+            )
+
+        # v19.511:換扣款標的決策（依保單試算「保單管理費該從哪一檔基金扣、還是台幣現金扣」）。
+        # 放 T7 帳本之後 —— 重用 T7 的成本基礎（t7_ledgers）+ 即時 nav/fx。try/except 不炸 Tab3。
+        try:
+            from ui.helpers.portfolio.fee_deduction import render_fee_deduction_section
+            render_fee_deduction_section(st.session_state.get("portfolio_funds"))
+        except Exception as _e_feeopt:  # noqa: BLE001 — 決策區任何例外收成提示，不影響其餘分頁
+            # 原文案寫「略過」,讀起來像「這張保單不適用」;實際是整區算爆了。
+            system_error("換扣款標的決策區渲染失敗", _e_feeopt)
+
+    with _sec_ai:
+        # ── T7 已移至 T5 之前（v18.194 故事化：持倉戰情 → 重疊診斷）──
+
+        # v18.159：通用 AI 白話文總結 widget（4 視角 selectbox）
+        _render_tab3_ai_summary(GEMINI_KEY)
 
 
 def _render_tab3_ai_summary(gemini_key: str) -> None:

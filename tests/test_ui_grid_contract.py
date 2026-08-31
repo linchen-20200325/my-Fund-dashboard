@@ -224,10 +224,16 @@ GRID_EXEMPT_SITES = frozenset({
     "ui/tab2_single_fund.py::render_single_fund_tab()  columns(int:2)×1",
     "ui/tab2_single_fund.py::render_single_fund_tab()  columns(int:4)×1",
     "ui/tab2_single_fund.py::render_single_fund_tab()  columns(seq:2)×5",
-    "ui/tab3_portfolio.py::render_portfolio_tab()  columns(int:2)×3",
-    "ui/tab3_portfolio.py::render_portfolio_tab()  columns(int:5)×1",
-    "ui/tab3_portfolio.py::render_portfolio_tab()  columns(seq:2)×8",
-    "ui/tab3_portfolio.py::render_portfolio_tab()  columns(seq:3)×2",
+    # WP-D 2026-08-28：下面這組原本掛在 `ui/tab3_portfolio.py::render_portfolio_tab()`，
+    # 因「📋 保單管理（Google Sheets）」整段（790 行）抽成 `policy_admin_section.py`
+    # 而改掛新函式。**違規呼叫數一個沒有增減**（見該批 PR 的守恆對照），
+    # 這是本檔 docstring 寫的「錨點失效（拆函式）→ 更新表」那一種，不是新增豁免。
+    "ui/helpers/portfolio/policy_admin_section.py::render_policy_admin_section()  columns(int:2)×3",
+    "ui/helpers/portfolio/policy_admin_section.py::render_policy_admin_section()  columns(int:5)×1",
+    "ui/helpers/portfolio/policy_admin_section.py::render_policy_admin_section()  columns(seq:2)×4",
+    "ui/helpers/portfolio/policy_admin_section.py::render_policy_admin_section()  columns(seq:3)×1",
+    "ui/tab3_portfolio.py::render_portfolio_tab()  columns(seq:2)×4",
+    "ui/tab3_portfolio.py::render_portfolio_tab()  columns(seq:3)×1",
     "ui/tab3_t7_ledger.py::render_t7_section()  columns(dynamic)×5",
     "ui/tab3_t7_ledger.py::render_t7_section()  columns(int:2)×2",
     "ui/tab3_t7_ledger.py::render_t7_section()  columns(seq:2)×3",
