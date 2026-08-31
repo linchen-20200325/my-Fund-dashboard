@@ -98,7 +98,7 @@ my-Fund-dashboard/
 │   ├── calibration/                # 校準 subpackage(原 risk_calibration 等)
 │   │   ├── risk.py                 # 風險校準 + Fama-French 3-factor
 │   │   ├── macro_score.py          # macro 評分校準
-│   │   ├── multi_factor.py         # 多因子 walk-forward
+│   │   ├── ~~multi_factor.py~~     # 多因子 walk-forward (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   │   └── signal_threshold.py     # 訊號閾值 grid search
 │   ├── config/
 │   │   └── macro_weights_active.json  # C-2 active override(可手動編輯)
@@ -111,14 +111,14 @@ my-Fund-dashboard/
 │   ├── liquidity_engine.py
 │   ├── us_liquidity_engine.py
 │   ├── reconcile.py                # 對帳 wrapper
-│   ├── auto_search.py + auto_search_store_gs/local.py  # 自動搜尋
+│   ├── ~~auto_search.py + auto_search_store_gs/local.py~~  # 自動搜尋 (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   ├── decision_matrix.py
 │   ├── macro_validation.py         # macro SCORE_RULES
 │   ├── macro_explain.py
 │   ├── macro_tw_local.py
 │   ├── macro_composite_score.py
 │   ├── macro_score_calibration.py
-│   ├── multi_factor_optimization.py
+│   ├── ~~multi_factor_optimization.py~~  # shim (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   ├── nav_history_store.py
 │   ├── policy_advisor_service.py
 │   ├── realtime_signal.py
@@ -144,6 +144,15 @@ my-Fund-dashboard/
 │   #   L1 repositories/:tw_macro_repository.py
 │   # ⚠️ 上面被刪掉的 `signal_threshold_optimization.py` 這一行**在本輪之前就已經是假的** ——
 │   #   該檔早於 v19.201 P2-3 搬成 services/calibration/signal_threshold.py,舊路徑不存在。
+│   # 2026-08-31 退役清單(auto_search 封閉死簇,production 0 caller,實體刪除;v3 §01-2):
+│   #   L2 services/:auto_search.py(598) / auto_search_store_gs.py(240)
+│   #        / auto_search_store_local.py(88) / calibration/multi_factor.py(781)
+│   #        / multi_factor_optimization.py(8,shim)
+│   #   五者**互為對方唯一 caller**,簇外 production 0 引用(四種獨立查法覆核,見該次 PR)。
+│   #   連帶:tests/test_auto_search.py + tests/test_multi_factor_optimization.py 整檔清;
+│   #        tests/test_services_purity_contract.py 豁免表 17 鍵同批下修(45→28);
+│   #        tests/test_sa_secret_string_no_dict_prewrap.py 由守 3 檔縮為 2 檔;
+│   #        tests/test_provenance_smoke.py 讀原始碼的兩行斷言一併移除。
 │
 ├── ui/                             # L3 ComponentUI(Streamlit only)
 │   ├── tab1_macro.py ~ tab6_manual.py
@@ -208,6 +217,11 @@ my-Fund-dashboard/
 | `services/calibration/risk.py` | 307 | **0(2026-08-28 Phase 1.4 退役)** | 上一列那個 shim 的**實作本體**,production 0 caller,整檔刪除;`tests/test_risk_calibration.py` 同清,`tests/test_provenance_smoke.py` 讀原始碼的三行斷言一併移除 |
 | `services/macro_weights_store.py` | (新) | 0(v19.251 拔 shim,實作搬 services/macro/weights_store.py) | shim 退役 |
 | `services/valuation.py` | 187 | **0 (v19.251 退役)** | 0 production caller,test 孤兒同清 |
+| `services/auto_search.py` | 598 | **0(2026-08-31 退役)** | auto_search 封閉死簇核心,production 0 caller;`tests/test_auto_search.py` 同清 |
+| `services/auto_search_store_gs.py` | 240 | **0(2026-08-31 退役)** | 上一列的 Google Sheets 後端,唯一 caller 是 `auto_search.py`;`GSPREAD_DEBT` 8 鍵同批下修 |
+| `services/auto_search_store_local.py` | 88 | **0(2026-08-31 退役)** | 同上的本地 JSON 後端;`FS_WRITE_DEBT` 3 + `FS_READ_DEBT` 3 鍵同批下修 |
+| `services/calibration/multi_factor.py` | 781 | **0(2026-08-31 退役)** | 多因子 walk-forward 實作本體,僅經 shim 被 `auto_search.py` 使用;`IMPORT_DEBT` 2 鍵同批下修 |
+| `services/multi_factor_optimization.py` | 8 | **0(2026-08-31 退役)** | 上一列的向後相容 shim(`globals()` 注入);`NAMESPACE_INJECTION_DEBT` 1 鍵同批下修 |
 | 根目錄業務 .py | 2 (app.py + fund_fetcher.py) | 2 | 不變 |
 
 ### 完整 v11.0 細節(原文保留)

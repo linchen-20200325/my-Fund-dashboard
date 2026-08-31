@@ -42,6 +42,10 @@ CLAUDE.md §8.2 硬規則寫死了 L2 Service 的兩條：
 也就是**它引用「規則字表的不完整」當作自己的豁免理由**,
 並拿 `auto_search_store_gs` 當先例,而那一檔同樣沒有登錄。
 **兩檔互為背書,兩檔都不在 §8.2.A 例外表裡。** 這正是 §8.2 末句禁止的「軟例外」。
+⚠️ 2026-08-31 事實更新:`services/auto_search_store_gs.py` 已整檔刪除
+(production 0 caller,客戶 2026-08-31 授權死碼清理)。**上面這段教訓不因此失效** ——
+它記的是「拿規則字表的漏洞當通行證」這個手法,不是那一個檔案;
+`nav_history_gs.py` 的自授豁免**原封不動還在**,只是少了可背書的對象。
 缺陷 2(黑名單)與這個自授例外是**同一件事的兩面**:
 規則的漏洞一旦存在,就會被當成通行證。
 
@@ -69,11 +73,14 @@ CLAUDE.md §8.2 硬規則寫死了 L2 Service 的兩條：
 ⚠️ 本守衛看不到什麼（誠實列出,不讓後人事後才發現）
 ═══════════════════════════════════════════════════════════════════════════
 **A. 執行期改寫 module namespace —— 靜態分析的絕對盲區。**
-   `services/macro_composite_score.py` / `macro_validation.py` /
-   `multi_factor_optimization.py` 三個 shim 用
+   `services/macro_composite_score.py` / `macro_validation.py` 兩個 shim 用
    `for _name in dir(_mod): globals()[_name] = getattr(_mod, _name)`
    把另一個模組的符號整包注入自己的 namespace。
-   **任何靜態守衛(包含本檔)對這三檔注入進來的東西都是瞎的。**
+   **任何靜態守衛(包含本檔)對這兩檔注入進來的東西都是瞎的。**
+   ⚠️ 2026-08-31 更正:原文寫「**三個** shim」,第三個是
+   `services/multi_factor_optimization.py` —— 該檔已於本日整檔刪除
+   (auto_search 封閉死簇,production 0 caller;客戶 2026-08-31 授權死碼清理)。
+   **盲區本身沒有變小,只是少了一個成員**;這種寫法一旦再出現,照樣要登記。
    → 故本檔另立 `test_no_runtime_namespace_injection`,把「這種寫法本身」當違規登記。
    它守的不是內容,是**盲區的邊界**。
 
@@ -355,13 +362,6 @@ IMPORT_DEBT: dict[str, str] = {
         "L2 直讀程序環境變數 os.environ.get('GEMINI_API_KEY' / 'GEMINI_API_KEYS' / "
         "'GEMINI_API_KEY_{i}')。純函式層不該依賴程序環境；本 repo 已有 infra.config "
         "的 get_secret/require_secret 統一入口,此處繞過了它。**未登錄於 §8.2.A 例外表。**",
-    "services/calibration/multi_factor.py::build_plateau_heatmap_2d() -> plotly.graph_objects":
-        "L2 純計算層 import 繪圖庫（plotly.graph_objects）。非網路 I/O,但屬 L2→L4(Render) "
-        "的職責外溢 —— 圖表物件生成依 §8.2 分層屬 Render 側,不該由純計算層產出。"
-        "函式內 lazy import,module load 時不觸發,故不影響 L2 的無依賴啟動。",
-    "services/calibration/multi_factor.py::build_plateau_surface_3d() -> plotly.graph_objects":
-        "同上（同檔第二處 lazy import plotly.graph_objects,3D surface 版本）。"
-        "兩處理由與處置相同,一併登記以免只修一處就讓 ratchet 誤判。",
 }
 
 # 量測日 2026-08-28 的錨點：services/ 檔數與 import 陳述數的下限。
@@ -519,12 +519,6 @@ def _scan_fs() -> tuple[set[str], set[str], int]:
 # ── 豁免表：檔案系統**寫入/刪除**（2026-08-28 實測）─────────────────
 # ⚠️ 登記 ≠ 核准。寫入與刪除是 L2 純度最嚴重的一類違反 —— 它讓「純函式」有了副作用。
 FS_WRITE_DEBT: dict[str, str] = {
-    "services/auto_search_store_local.py::__init__()":
-        "L2 建立本地目錄（_dir.mkdir）。此檔整體是本地 JSON 持久化 store,職責屬 L1。",
-    "services/auto_search_store_local.py::_write()":
-        "L2 寫本地 JSON（p.write_text）。同上。",
-    "services/auto_search_store_local.py::delete_job()":
-        "L2 刪除本地檔（p.unlink）。**刪除是不可逆副作用**,最不該住在純計算層。",
     "services/fund_history.py::_save()":
         "L2 寫使用者查詢歷史 JSON（_CACHE_DIR.mkdir + _HIST_FILE.write_text）。持久化職責屬 L1。",
     "services/fund_history.py::clear_history()":
@@ -541,14 +535,6 @@ FS_WRITE_DEBT: dict[str, str] = {
 # ── 豁免表：檔案系統**讀取**（2026-08-28 實測）───────────────────────
 # ⚠️ 讀取的門檻比寫入寬（無副作用、可重現）,但仍是 I/O,仍屬 §8.2 所禁,故一併登記。
 FS_READ_DEBT: dict[str, str] = {
-    "services/auto_search_store_local.py::_read()":
-        "L2 讀取本地 JSON job 檔（p.exists + p.read_text）。此檔整體是本地持久化 store,"
-        "職責屬 L1 repository,不該住在純計算層。",
-    "services/auto_search_store_local.py::delete_job()":
-        "L2 對本地 job 檔做存在性探測（p.exists）。與同名的寫入登記是同一個函式的兩面:"
-        "它先讀檔案系統再刪檔案系統,讀寫都不該發生在純計算層。",
-    "services/auto_search_store_local.py::list_jobs()":
-        "L2 列舉目錄後逐檔讀取（self._dir.glob + p.read_text）。目錄列舉與讀檔皆為檔案系統 I/O。",
     "services/fund_history.py::_load()":
         "L2 讀取使用者查詢歷史 JSON（_HIST_FILE.exists + read_text）。持久化讀取職責屬 L1。",
     "services/fund_history.py::_load_default_funds()":
@@ -664,8 +650,12 @@ GSPREAD_DEBT: dict[str, str] = {
     #    —— 那不是豁免理由,那是**規則字表的漏洞被拿來當通行證**。
     #    §8.2 的字表不完整（本 repo 憲法 §-1.5.1c 判定 2 已記載它漏抓兩次）,
     #    「不在清單裡」證明的是清單不全,不是這樣寫是對的。
-    #    而它引用的「先例」auto_search_store_gs **同樣沒有登錄在 §8.2.A 例外表**
-    #    —— 兩檔互為背書,兩檔都是 §8.2 末句明文禁止的「未經登錄的軟例外」。
+    #    ⚠️ 2026-08-31 事實更新（**論證未變,只更正它引用的事實**）:它引用的「先例」
+    #    `services/auto_search_store_gs.py` **已於本日整檔刪除**(auto_search 封閉死簇,
+    #    production 0 caller;客戶 2026-08-31 授權死碼清理)。該檔當年**同樣沒有登錄在
+    #    §8.2.A 例外表** —— 兩檔曾互為背書,兩檔都是 §8.2 末句明文禁止的「未經登錄的軟例外」。
+    #    **先例消失不等於本檔的豁免變成正當**:本檔的登記理由與處置一字未改,
+    #    它現在只是**少了那個可以拿來背書的對象**。
     "services/nav_history_gs.py::_get_sheet()":
         "L2 建立 gspread client 並開啟試算表（get_gspread_client + client.open_by_key "
         "+ oauth_client.open_by_key）。**未登錄於 §8.2.A 例外表**；檔頭以「不在 §8.2 "
@@ -676,25 +666,6 @@ GSPREAD_DEBT: dict[str, str] = {
         "L2 遠端寫入 NAV 點位（ws.append_rows + ws.get_all_values）。同上,未登錄。",
     "services/nav_history_gs.py::load_points()":
         "L2 遠端讀取（ws.get_all_values）。同上,未登錄。",
-    # ── services/auto_search_store_gs.py ──────────────────────────
-    # ⚠️ 上面那一檔引為「先例」的就是本檔,而本檔自己也沒有登錄。
-    "services/auto_search_store_gs.py::_get_sheet()":
-        "L2 建立 gspread client 並開啟試算表（get_gspread_client + client.open_by_key）。"
-        "**未登錄於 §8.2.A 例外表** —— 卻被 nav_history_gs 引為豁免先例。",
-    "services/auto_search_store_gs.py::_get_worksheet()":
-        "L2 建立工作表（sh.add_worksheet）—— 遠端寫入。未登錄。",
-    "services/auto_search_store_gs.py::_ensure_header()":
-        "L2 讀寫表頭（ws.row_values）。未登錄。",
-    "services/auto_search_store_gs.py::append_result()":
-        "L2 遠端寫入（ws.append_row）。未登錄。",
-    "services/auto_search_store_gs.py::save_job()":
-        "L2 遠端寫入 + 讀取（ws.append_row + ws.get_all_values）。未登錄。",
-    "services/auto_search_store_gs.py::list_jobs()":
-        "L2 遠端讀取（ws.get_all_values）。未登錄。",
-    "services/auto_search_store_gs.py::list_results()":
-        "L2 遠端讀取（ws.get_all_values）。未登錄。",
-    "services/auto_search_store_gs.py::delete_job()":
-        "L2 遠端讀取後刪列（ws_jobs.get_all_values + ws_res.get_all_values）。未登錄。",
     # ── services/macro/weights_store.py ───────────────────────────
     "services/macro/weights_store.py::_gs_get_worksheet()":
         "L2 建立 gspread client + 開表 + 建工作表（get_gspread_client + "
@@ -938,9 +909,6 @@ NAMESPACE_INJECTION_DEBT: dict[str, str] = {
     "services/macro_validation.py::<module>":
         "同型向後相容 shim,同樣用 globals() 整包注入,同樣是本檔所有規則的盲區。"
         "被它注入的符號若帶 I/O,上面每一條規則都掃不到。",
-    "services/multi_factor_optimization.py::<module>":
-        "同型向後相容 shim,同樣用 globals() 整包注入,同樣是本檔所有規則的盲區。"
-        "三檔為同一種手法,一併登記以免只改一檔就讓 ratchet 誤判。",
 }
 
 
