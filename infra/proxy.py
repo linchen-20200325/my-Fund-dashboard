@@ -119,9 +119,10 @@ def _get_thread_session() -> requests.Session:
 # 不能為此改成 tuple。故用 thread-local 側車傳遞（`_TLS_HTTP` 已是本檔既有慣例，
 # 且 TW PMI 9 源賽跑走 `ThreadPoolExecutor`，per-thread 隔離才不會互相覆寫）。
 #
-# ⚠️ **值只在「同一執行緒內、緊接著 `fetch_url` 之後」有意義。** 每一個
-#    `return` 都會覆寫它（成功寫 `""`），所以它永遠反映**最後一次**呼叫；
-#    但跨到別的 fetcher、或中間又打了一次別的 URL，讀到的就是那一次的。
+# ⚠️ **值只在「同一執行緒內、緊接著 `fetch_url` 之後」有意義。** 兩道防線讓
+#    「讀到別人的值」不可能發生：`fetch_url` **進場先清**（寫不進別人的），
+#    `pop_last_fail_kind()` **取出即清掉**（讀不到別人的）。因此
+#    「沒有對應 `fetch_url` 的讀取」一律拿到 `""` → 落在**標記、不快取**的安全側。
 _TLS_FAIL = threading.local()
 
 
