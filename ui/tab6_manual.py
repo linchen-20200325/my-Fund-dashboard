@@ -10,8 +10,19 @@
 設計：
 - 純函式（無參數）：完全自包含
 - 內部使用 streamlit + pandas（caller 端 `with tab6:` context 之內被呼叫）
-- 10 個 sub-tab：Macro Score / 景氣天氣 / 健診評等 4D / 吃本金 / 再平衡 /
-  核心衛星 / 汰弱留強 / Sheet 資料結構 / 全局指標關聯地圖 / 宏觀教學文獻
+- ~~10 個 sub-tab~~ → **單頁 + 錨點目錄**，共 10 章：Macro Score / 景氣天氣 /
+  健診評等 4D / 吃本金 / 再平衡 / 核心衛星 / 汰弱留強 / Sheet 資料結構 /
+  全局指標關聯地圖 / 宏觀教學文獻
+  **有意識的政策變更，不是漏刪**（日期 2026-08-31 · 決策者：客戶，線框
+  `docs/wireframes/fund-wireframe-final.html` §03 PAGE 5「E · 📖 說明書」）。
+  **舊設計的理由仍然成立**：子分頁一次只渲染一章，十章的 markdown / dataframe
+  不必同時畫；分頁列本身也是一份現成的目錄。
+  **被權衡掉的原因**（線框原文）：說明書是**全站唯一的三層巢狀分頁**，
+  「一份公式要點三次才看得到」；七→五之後 ⑤ 本身已是「單頁 + 目錄錨點」，
+  這裡再開一層會把三層變回三層。單頁另外換到一件子分頁給不了的東西：
+  **瀏覽器整頁搜尋一次找得到十章**。
+  章節（key / 目錄短標 / 標題）的唯一出處是本檔的 `_CHAPTERS`；
+  守衛 `tests/test_manual_anchor_toc.py`。
 
 ⚠️ **本檔的鐵律：只寫「畫面上真的跑得出來」的算法。**
 說明書寫了但系統沒實作的章節，會讓使用者拿著對不上的公式回頭懷疑自己的判讀，
@@ -24,7 +35,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ui.helpers.render_state import system_error
+from ui.helpers.render_state import not_ready, system_error
 # 指路文案的分頁 / 分區名 SSOT —— 不得在本檔另寫一份字面值（理由見下方兩處註記）。
 from ui.helpers.story_nav import (
     section_label as _section_label,
@@ -34,8 +45,80 @@ from ui.helpers.story_nav import (
 from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_BB, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# 章節 SSOT —— 目錄與標題**只有這一份**
+# ══════════════════════════════════════════════════════════════════════════
+# 2026-08-31 客戶拍板線框（`docs/wireframes/fund-wireframe-final.html` §03 PAGE 5
+# 「E · 📖 說明書」）逐字要求兩件事：
+#   ① 「10 個主題改為錨點目錄……頁首的『📊 資料來源完整地圖』置頂不動」
+#   ② 「說明書內的三套編號……改用純標題階層」
+#
+# ⚠️ **為什麼是一張表、而不是「目錄一份 + 標題一份」**：目錄與標題各寫一份，
+#    改章名時漏改另一邊是**必然會發生**的事（本 repo 的「指路指到不存在的分頁」
+#    已發作三次，全部同一個形狀：同一個事實有兩個出處）。這裡讓它**在結構上
+#    不可能漂移** —— 目錄由本表 for-loop 產生，標題由 `_chapter()` 讀本表產生。
+#    守衛 `tests/test_manual_anchor_toc.py` 另從**行為面**驗兩邊真的對得上。
+#
+# 欄位：(key, 目錄短標, 章節標題)
+#   - key      → anchor = f"{_ANCHOR_PREFIX}{key}"，錨點字串不另手寫
+#   - 目錄短標 → 沿用線框列出的十個主題名（原子分頁名去掉 `1.`~`10.` 編號）
+#   - 章節標題 → 原 `### ①`~`### ⑨` 的標題**去掉圈號**，其餘一字未改
+_ANCHOR_PREFIX = "manual-"
+
+_CHAPTERS: tuple[tuple[str, str, str], ...] = (
+    ("macro-score",   "🧮 Macro Score",      "🧮 AI Macro Score — 加權景氣評分"),
+    ("weather",       "🌤️ 景氣天氣",          "🌤️ 總經天氣預報 — Score → 天氣映射"),
+    ("grade-4d",      "🏆 健診評等 4D",       "🏆 基金健診評等（4 維健康度）"),
+    ("capital-eat",   "🔴 吃本金診斷",        "🔴 吃本金診斷（Capital Return Detection）"),
+    ("rebalance",     "⚖️ 再平衡公式",        "⚖️ 再平衡公式（One-Click Rebalance）"),
+    ("core-sat",      "🛡️⚡ 核心衛星",        "🛡️⚡ 核心/衛星分類邏輯"),
+    ("switch-out",    "🔄 汰弱留強",          "🔄 汰弱留強（同類 PK）"),
+    ("sheet-schema",  "📋 Sheet 資料結構",    "📋 Sheet 資料結構（這本 Google Sheet 內的分頁長相）"),
+    ("indicator-map", "🗺️ 全局指標關聯地圖",  "🗺️ 全局指標關聯地圖 — 一眼看懂大環境如何影響基金"),
+    ("edu-docs",      "📚 宏觀教學文獻",      "📚 宏觀教學文獻"),
+)
+
+_CH_TITLE: dict[str, str] = {_k: _t for _k, _, _t in _CHAPTERS}
+
+
+def _anchor(key: str) -> str:
+    """章節 key → HTML anchor id。
+
+    §1 Fail Loud：未知 key 直接 `KeyError` —— 回退成猜一個 anchor，
+    只會讓目錄連到一個頁面上不存在的位置（點了沒反應，而且沒有人會發現）。
+    """
+    if key not in _CH_TITLE:
+        raise KeyError(f"tab6_manual._anchor: 未知章節 key {key!r}；"
+                       f"合法值 = {[_k for _k, _, _ in _CHAPTERS]}")
+    return f"{_ANCHOR_PREFIX}{key}"
+
+
+def _chapter(key: str) -> None:
+    """畫一個章節標題（`st.subheader` + 顯式 anchor）。
+
+    顯式指定 anchor 的理由同 `ui/tab_settings_diag.py`：Streamlit 對中文標題
+    自動產生的 anchor 不可靠，目錄連結會連不過去。
+    """
+    st.subheader(_CH_TITLE[key], anchor=_anchor(key))
+
+
+def _render_toc() -> None:
+    """錨點目錄 —— 取代原本的 10 個 `st.tabs` 子分頁。
+
+    位置刻意與原本的分頁列**完全相同**（頁首資料地圖之後、第一章之前）：
+    線框寫「頁首的『📊 資料來源完整地圖』置頂不動」，而使用者原本就是在這個
+    高度找「我要看哪一章」的入口。
+    """
+    st.markdown("**📑 目錄**　" + "　·　".join(
+        f"[{_toc}](#{_anchor(_k)})" for _k, _toc, _ in _CHAPTERS))
+
+
 def render_manual_tab() -> None:
-    """渲染系統說明書 Tab — 10 sub-tab 公式與判斷標準完整說明。"""
+    """渲染系統說明書 —— **單頁 + 錨點目錄**，10 章公式與判斷標準完整說明。
+
+    ~~10 sub-tab~~ → 錨點目錄（2026-08-31，客戶拍板線框 §03 PAGE 5；
+    **有意識的政策變更，不是漏刪**，完整理由見模組 docstring 與 `_render_toc()` 上方註記）。
+    """
     # ⑤ 設定與診斷合併頁（線框 §03 ⑤，WP-E）已畫分區標題時，這裡不再畫第二個 `##`。
     # 只讓掉標題那一行 —— caption 與全部內容照舊。
     # ~~旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。~~
@@ -59,7 +142,17 @@ def render_manual_tab() -> None:
     # 摺疊處置(原則 1):這張總表是說明書的第一張「資料在哪裡」對照表,原本包在一層
     # 永遠展開的摺疊殼裡 —— 殼不承載資訊,只多一圈邊框和「可以收起來」的假暗示。
     # 改成標題 + container,表格直接攤平。
-    st.markdown("### ⓪ 📊 資料來源完整地圖(每筆資料→Tab→endpoint→refresh→fallback)")
+    # ⚠️ 2026-08-31 客戶拍板線框：~~`### ⓪`~~ → **無編號的 `st.subheader`**
+    # （**有意識的政策變更，不是漏刪** · 決策者：客戶 · 線框 §03 PAGE 5「說明書內的
+    # 三套編號……改用純標題階層」，`⓪` 正是它點名的第三套）。
+    # **舊寫法的理由仍然成立**：`⓪` 明確表示「這張表在第 ① 章之前、是總覽不是章節」。
+    # **被權衡掉的原因**：那個資訊現在由「它排在目錄之前」表達，不必再借一套圈號；
+    # 而留著它就等於留著線框要收掉的三套編號其中之一。
+    # ⚠️ **刻意不給 anchor**：它**置頂**（線框：「頁首的『📊 資料來源完整地圖』置頂不動」），
+    #    位置在目錄**之上** —— 目錄不必提供一個往上跳的連結。這也讓
+    #    `tests/test_manual_anchor_toc.py` 的「目錄 ⇔ 章節」雙向檢查得以成立
+    #    （有 anchor 卻不在目錄裡 = 失聯的章節，那條守衛會轉紅）。
+    st.subheader("📊 資料來源完整地圖(每筆資料→Tab→endpoint→refresh→fallback)")
     with st.container():
         # ⚠️ 2026-08-31 由 WP-F 修正（**有意識的政策變更,不是漏改** ·
         # 決策者:AI 總管 · 依據:客戶 2026-08-31 拍板的五分頁線框）。
@@ -173,23 +266,23 @@ def render_manual_tab() -> None:
 
     st.divider()
 
-    _t6 = st.tabs([
-        "🧮 1. Macro Score",
-        "🌤️ 2. 景氣天氣",
-        "🏆 3. 健診評等 4D",
-        "🔴 4. 吃本金診斷",
-        "⚖️ 5. 再平衡公式",
-        "🛡️⚡ 6. 核心衛星",
-        "🔄 7. 汰弱留強",
-        "📋 8. Sheet 資料結構",
-        "🗺️ 9. 全局指標關聯地圖",
-        "📚 10. 宏觀教學文獻",
-    ])
+    # ⚠️ 2026-08-31 客戶拍板線框：~~10 個 `st.tabs` 子分頁~~ → **單頁 + 錨點目錄**
+    # （**有意識的政策變更，不是漏刪** · 日期 2026-08-31 · 決策者：客戶（線框
+    # `docs/wireframes/fund-wireframe-final.html` §03 PAGE 5「E · 📖 說明書」逐字拍板））。
+    # **舊寫法的理由仍然成立**：子分頁一次只畫一章，十章的 markdown / dataframe
+    # 不必同時渲染，而且分頁列本身就是一份「這裡有十個主題」的目錄。
+    # **被權衡掉的原因**（線框原文）：說明書是**全站唯一的三層巢狀分頁**
+    # （頂層 → 參考／診斷 → 說明書十個），「一份公式要點三次才看得到」；
+    # 七→五之後 ⑤ 已經是單頁 + 目錄錨點的結構，這裡再開一層等於把三層又變回三層。
+    # 換成錨點目錄之後：一次點擊到位，而且**瀏覽器的整頁搜尋找得到十章的內容**
+    # —— 子分頁時代 Ctrl-F 只找得到當前那一章。
+    # ⚠️ 十章內容**一行未改**：本次只動結構與標題（去掉三套編號），
+    #    教學文字 / 公式 / 表格 / 圖全部原樣。
+    _render_toc()
 
     # ── 1. Macro Score ────────────────────────────────────────────
-    with _t6[0]:
-        st.markdown("### ① 🧮 AI Macro Score — 加權景氣評分")
-        st.markdown("""
+    _chapter("macro-score")
+    st.markdown("""
 **公式：**
 ```
 Macro_Score = Σ(wᵢ × sᵢ) / Σ(wᵢ)  →  正規化到 0~10
@@ -197,42 +290,47 @@ Macro_Score = Σ(wᵢ × sᵢ) / Σ(wᵢ)  →  正規化到 0~10
 score_normalized = (earned_score + total_weight) / (2 × total_weight) × 10
 ```
 """)
-        st.dataframe(pd.DataFrame([
-            ["殖利率利差 10Y-2Y", "DGS10-DGS2",   2,   "±2",   "倒掛(<0)=-2，翻正=+2，>0.5=+1"],
-            ["殖利率利差 10Y-3M", "DGS10-DGS3MO", 2,   "±2",   "倒掛=-2，翻正=+3（降息確認）"],
-            ["PMI 製造業",        "NAPM",          2,   "±2",   ">50=+2，45~50=-1，<45=-2"],
-            ["HY 信用利差",       "BAMLH0A0HYM2", 2,   "±2",   "<4%=+2，4~6%=0，>6%=-2"],
-            ["M2 流動性",         "M2SL",          1,   "±1",   ">5%=+1，<0%=-1"],
-            ["市場廣度 RSP/SPY",  "RSP/SPY",       1,   "±1",   "月漲>0.5%=+1，月跌>1%=-1"],
-            ["DXY 美元指數",      "DX-Y.NYB",      1,   "±1",   "月跌>1%=+1（弱美元利多），月漲>2%=-1"],
-            ["Fed 資產負債表",    "WALCL",          1,   "±1",   "擴表>5%=+1，縮表<-5%=-1"],
-            ["VIX 恐慌指數",      "^VIX",           1,   "±1",   "<18=+1（平靜），>30=-1（恐慌）"],
-            ["CPI 通膨率",        "CPIAUCSL",      0.5, "±0.5", "1~2.5%=+0.5，>4%=-0.5"],
-            ["Fed Rate",          "FEDFUNDS",      0.5, "±0.5", "降息=+0.5，>5%=-0.5"],
-            ["失業率",             "UNRATE",        0.5, "±0.5", "<4.5%=+0.5，>6%=-1"],
-            ["PPI 生產者物價",    "PPIACO",         0.5, "±0.5", "0~3%=+0.5，>5%=-0.5"],
-            ["銅博士",             "HG=F",           0.5, "±0.5", "月漲>2%=+0.5，月跌>5%=-0.5"],
-        ], columns=["指標", "FRED/Ticker", "權重(w)", "分值範圍", "評分邏輯"]),
-            use_container_width=True, hide_index=True,
-            column_config={
-                "指標": st.column_config.TextColumn("指標", width="medium"),
-                "FRED/Ticker": st.column_config.TextColumn(
-                    "FRED/Ticker", width="small", help="FRED series ID 或 Yahoo ticker"),
-                "權重(w)": st.column_config.NumberColumn(
-                    "權重(w)", format="%.1f",
-                    help="加權分子/分母都用它；可被校準檔覆寫，實際值以 Tab1 明細為準"),
-                "分值範圍": st.column_config.TextColumn("分值範圍", width="small"),
-                "評分邏輯": st.column_config.TextColumn("評分邏輯", width="large"),
-            })
-        st.warning(
-            "⚠️ **上表是「主要指標」節選，不是完整清單，也不要拿它自己加總對答案。**\n\n"
-            "實際參與計分的指標數比上表多（包含權重最高的 **薩姆規則 SAHM** 與 "
-            "**SLOOS 銀行放貸標準** 兩個衰退預警因子），而且每項權重可以被校準檔覆寫。\n\n"
-            "👉 **要對帳請看 Tab1 的「完整指標加扣分明細」**"
-            "（本說明書最後一個分頁「📚 宏觀教學文獻」的 § D 也有同一份），"
-            "那裡是**當下實際生效**的指標、權重與加扣分，會隨資料與校準即時變動。"
-        )
-        st.markdown("""
+    st.dataframe(pd.DataFrame([
+        ["殖利率利差 10Y-2Y", "DGS10-DGS2",   2,   "±2",   "倒掛(<0)=-2，翻正=+2，>0.5=+1"],
+        ["殖利率利差 10Y-3M", "DGS10-DGS3MO", 2,   "±2",   "倒掛=-2，翻正=+3（降息確認）"],
+        ["PMI 製造業",        "NAPM",          2,   "±2",   ">50=+2，45~50=-1，<45=-2"],
+        ["HY 信用利差",       "BAMLH0A0HYM2", 2,   "±2",   "<4%=+2，4~6%=0，>6%=-2"],
+        ["M2 流動性",         "M2SL",          1,   "±1",   ">5%=+1，<0%=-1"],
+        ["市場廣度 RSP/SPY",  "RSP/SPY",       1,   "±1",   "月漲>0.5%=+1，月跌>1%=-1"],
+        ["DXY 美元指數",      "DX-Y.NYB",      1,   "±1",   "月跌>1%=+1（弱美元利多），月漲>2%=-1"],
+        ["Fed 資產負債表",    "WALCL",          1,   "±1",   "擴表>5%=+1，縮表<-5%=-1"],
+        ["VIX 恐慌指數",      "^VIX",           1,   "±1",   "<18=+1（平靜），>30=-1（恐慌）"],
+        ["CPI 通膨率",        "CPIAUCSL",      0.5, "±0.5", "1~2.5%=+0.5，>4%=-0.5"],
+        ["Fed Rate",          "FEDFUNDS",      0.5, "±0.5", "降息=+0.5，>5%=-0.5"],
+        ["失業率",             "UNRATE",        0.5, "±0.5", "<4.5%=+0.5，>6%=-1"],
+        ["PPI 生產者物價",    "PPIACO",         0.5, "±0.5", "0~3%=+0.5，>5%=-0.5"],
+        ["銅博士",             "HG=F",           0.5, "±0.5", "月漲>2%=+0.5，月跌>5%=-0.5"],
+    ], columns=["指標", "FRED/Ticker", "權重(w)", "分值範圍", "評分邏輯"]),
+        use_container_width=True, hide_index=True,
+        column_config={
+            "指標": st.column_config.TextColumn("指標", width="medium"),
+            "FRED/Ticker": st.column_config.TextColumn(
+                "FRED/Ticker", width="small", help="FRED series ID 或 Yahoo ticker"),
+            "權重(w)": st.column_config.NumberColumn(
+                "權重(w)", format="%.1f",
+                help="加權分子/分母都用它；可被校準檔覆寫，實際值以 Tab1 明細為準"),
+            "分值範圍": st.column_config.TextColumn("分值範圍", width="small"),
+            "評分邏輯": st.column_config.TextColumn("評分邏輯", width="large"),
+        })
+    st.warning(
+        "⚠️ **上表是「主要指標」節選，不是完整清單，也不要拿它自己加總對答案。**\n\n"
+        "實際參與計分的指標數比上表多（包含權重最高的 **薩姆規則 SAHM** 與 "
+        "**SLOOS 銀行放貸標準** 兩個衰退預警因子），而且每項權重可以被校準檔覆寫。\n\n"
+        "👉 **要對帳請看 Tab1 的「完整指標加扣分明細」**"
+        # ⚠️ 2026-08-31：~~「最後一個分頁」~~ → 「最後一章」（**有意識的更正，不是漏刪** ·
+        # 決策者：AI 總管 · 依據：本批把說明書的 10 個子分頁改成單頁錨點目錄）。
+        # **舊寫法在它寫下的當天是對的** —— 那時「📚 宏觀教學文獻」確實是一個子分頁；
+        # 本批把子分頁拿掉之後，這句話會**指向一個不存在的東西**（§1：錯的指路比
+        # 沒有指路更危險，使用者會去找一個永遠找不到的分頁）。
+        "（本說明書最後一章「📚 宏觀教學文獻」的 § D 也有同一份），"
+        "那裡是**當下實際生效**的指標、權重與加扣分，會隨資料與校準即時變動。"
+    )
+    st.markdown("""
 **景氣位階對應：**
 | Score | 位階 | 建議股債現金 |
 |-------|------|------------|
@@ -243,9 +341,8 @@ score_normalized = (earned_score + total_weight) / (2 × total_weight) × 10
 """)
 
     # ── 2. 景氣天氣 ───────────────────────────────────────────────
-    with _t6[1]:
-        st.markdown("### ② 🌤️ 總經天氣預報 — Score → 天氣映射")
-        st.markdown("""
+    _chapter("weather")
+    st.markdown("""
 **公式：**
 ```
 Score ≥ 7  → ☀️ 晴天（建議股票為主）
@@ -261,14 +358,13 @@ Score < 4  → ⛈️ 暴雨（防禦為主）
 """)
 
     # ── 3. 健診評等 4D（實際生效的評等模型）────────────────────────
-    with _t6[2]:
-        st.markdown("### ③ 🏆 基金健診評等（4 維健康度）")
-        st.info(
-            "📌 **你在 Tab2 / Tab3 看到的 A/B/C/D/F 評等，就是這一套。**"
-            "說明書舊版寫的「六因子評分（Sharpe / Sortino / MaxDD / Calmar / Alpha / 費用率）"
-            "→ 0~100 分 → A/B/C/D」**已不再用於評等**，見下方「六因子現在的角色」。"
-        )
-        st.markdown("""
+    _chapter("grade-4d")
+    st.info(
+        "📌 **你在 Tab2 / Tab3 看到的 A/B/C/D/F 評等，就是這一套。**"
+        "說明書舊版寫的「六因子評分（Sharpe / Sortino / MaxDD / Calmar / Alpha / 費用率）"
+        "→ 0~100 分 → A/B/C/D」**已不再用於評等**，見下方「六因子現在的角色」。"
+    )
+    st.markdown("""
 **公式：**
 ```
 四維各自 0~100 分 → 綜合分 = 算得出來的維度取「算術平均」（不加權）
@@ -276,28 +372,28 @@ Score < 4  → ⛈️ 暴雨（防禦為主）
 Grade：A ≥ 80 ／ B ≥ 65 ／ C ≥ 50 ／ D ≥ 35 ／ F < 35
 ```
 """)
-        st.dataframe(pd.DataFrame([
-            ["💵 1. 配息健康度（Coverage）", "含息總報酬 ÷ 年化配息率 —— 配息是不是「賺來的」",
-             "≥1.5→95　≥1.2→80　≥1.0→65　≥0.5→40　<0.5→15",
-             "MoneyDJ wb01 含息報酬 ÷ wb05 年化配息率"],
-            ["📈 2. 風險調整報酬（Sharpe）", "每承擔一單位波動換到多少超額報酬",
-             "≥1.5→95　≥1.0→80　≥0.5→60　≥0→40　<0→15",
-             "MoneyDJ wb07 風險表；缺則本地淨值自算"],
-            ["📊 3. 走勢健康（MA 方向 + 報酬）", "60 日均線在走升還是走跌，搭配 1Y 報酬正負",
-             "均線升+正報酬→85　只有均線升→70　只有均線跌→45　均線跌+負報酬→25",
-             "淨值序列 60 日移動平均"],
-            ["🛡️ 4. 低波動性（σ）", "年化標準差，越低越穩（**不是**越低越好賺）",
-             "<10%→90　<15%→75　<20%→55　<30%→35　≥30%→15",
-             "近一年日報酬年化標準差"],
-        ], columns=["維度", "在問什麼", "分數對應", "資料來源"]),
-            use_container_width=True, hide_index=True,
-            column_config={
-                "維度": st.column_config.TextColumn("維度", width="medium"),
-                "在問什麼": st.column_config.TextColumn("在問什麼", width="large"),
-                "分數對應": st.column_config.TextColumn("分數對應", width="large"),
-                "資料來源": st.column_config.TextColumn("資料來源", width="medium"),
-            })
-        st.markdown("""
+    st.dataframe(pd.DataFrame([
+        ["💵 1. 配息健康度（Coverage）", "含息總報酬 ÷ 年化配息率 —— 配息是不是「賺來的」",
+         "≥1.5→95　≥1.2→80　≥1.0→65　≥0.5→40　<0.5→15",
+         "MoneyDJ wb01 含息報酬 ÷ wb05 年化配息率"],
+        ["📈 2. 風險調整報酬（Sharpe）", "每承擔一單位波動換到多少超額報酬",
+         "≥1.5→95　≥1.0→80　≥0.5→60　≥0→40　<0→15",
+         "MoneyDJ wb07 風險表；缺則本地淨值自算"],
+        ["📊 3. 走勢健康（MA 方向 + 報酬）", "60 日均線在走升還是走跌，搭配 1Y 報酬正負",
+         "均線升+正報酬→85　只有均線升→70　只有均線跌→45　均線跌+負報酬→25",
+         "淨值序列 60 日移動平均"],
+        ["🛡️ 4. 低波動性（σ）", "年化標準差，越低越穩（**不是**越低越好賺）",
+         "<10%→90　<15%→75　<20%→55　<30%→35　≥30%→15",
+         "近一年日報酬年化標準差"],
+    ], columns=["維度", "在問什麼", "分數對應", "資料來源"]),
+        use_container_width=True, hide_index=True,
+        column_config={
+            "維度": st.column_config.TextColumn("維度", width="medium"),
+            "在問什麼": st.column_config.TextColumn("在問什麼", width="large"),
+            "分數對應": st.column_config.TextColumn("分數對應", width="large"),
+            "資料來源": st.column_config.TextColumn("資料來源", width="medium"),
+        })
+    st.markdown("""
 **Grade 等級：**
 | Score | Grade | 評語 |
 |-------|-------|------|
@@ -321,9 +417,8 @@ Sortino（只罰下行波動）／ Calmar（報酬÷最大回撤）／ Alpha（�
 """)
 
     # ── 4. 吃本金診斷 ─────────────────────────────────────────────
-    with _t6[3]:
-        st.markdown("### ④ 🔴 吃本金診斷（Capital Return Detection）")
-        st.markdown("""
+    _chapter("capital-eat")
+    st.markdown("""
 **策略3 以息養股核心公式：**
 ```
 吃本金判斷：含息總報酬(wb01 1Y) < 年化配息率(wb05)
@@ -349,9 +444,8 @@ Sortino（只罰下行波動）／ Calmar（報酬÷最大回撤）／ Alpha（�
 """)
 
     # ── 5. 再平衡公式 ─────────────────────────────────────────────
-    with _t6[4]:
-        st.markdown("### ⑤ ⚖️ 再平衡公式（One-Click Rebalance）")
-        st.markdown("""
+    _chapter("rebalance")
+    st.markdown("""
 **策略3 再平衡差額計算：**
 ```
 Action_i = (Total_Portfolio × Target_Weight_i) - Current_Value_i
@@ -386,21 +480,20 @@ Action_i = (Total_Portfolio × Target_Weight_i) - Current_Value_i
     # 若日後真要做，請先確定資料源與公式，再重新寫章節（不要直接還原原文）。
 
     # ── 6. 核心衛星分類 ──────────────────────────────────────────
-    with _t6[5]:
-        st.markdown("### ⑥ 🛡️⚡ 核心/衛星分類邏輯")
-        st.markdown("**優先序：手動設定 > 關鍵字比對 > 預設（衛星）**")
-        st.dataframe(pd.DataFrame([
-            ["🛡️ 核心", "債、收益、配息、平衡、高息、公用、多元、income、bond、dividend、balanced"],
-            ["⚡ 衛星", "AI、科技、半導體、成長、主題、印度、越南、生技、醫療、能源、tech、growth"],
-        ], columns=["分類", "觸發關鍵字（基金名稱含有任一）"]),
-            use_container_width=True, hide_index=True,
-            column_config={
-                "分類": st.column_config.TextColumn("分類", width="small"),
-                "觸發關鍵字（基金名稱含有任一）": st.column_config.TextColumn(
-                    "觸發關鍵字（基金名稱含有任一）", width="large",
-                    help="基金名稱只要含有其中任一詞就歸該類；核心關鍵字優先比對"),
-            })
-        st.markdown("""
+    _chapter("core-sat")
+    st.markdown("**優先序：手動設定 > 關鍵字比對 > 預設（衛星）**")
+    st.dataframe(pd.DataFrame([
+        ["🛡️ 核心", "債、收益、配息、平衡、高息、公用、多元、income、bond、dividend、balanced"],
+        ["⚡ 衛星", "AI、科技、半導體、成長、主題、印度、越南、生技、醫療、能源、tech、growth"],
+    ], columns=["分類", "觸發關鍵字（基金名稱含有任一）"]),
+        use_container_width=True, hide_index=True,
+        column_config={
+            "分類": st.column_config.TextColumn("分類", width="small"),
+            "觸發關鍵字（基金名稱含有任一）": st.column_config.TextColumn(
+                "觸發關鍵字（基金名稱含有任一）", width="large",
+                help="基金名稱只要含有其中任一詞就歸該類；核心關鍵字優先比對"),
+        })
+    st.markdown("""
 **優先序細節（Tab3「① 配置總覽」「Hero 甜甜圈」「保單分組」三處同一把尺）：**
 1. Google Sheet 保單分頁的 **`policy_tier`** 欄（填 `core` / `satellite`）—— 最高優先
 2. 沒填 `policy_tier` → 用**基金名稱關鍵字**推定（上表）
@@ -426,40 +519,39 @@ Action_i = (Total_Portfolio × Target_Weight_i) - Current_Value_i
 """)
 
     # ── 7. 汰弱留強評分 ──────────────────────────────────────────
-    with _t6[6]:
-        st.markdown("### ⑦ 🔄 汰弱留強（同類 PK）")
-        # ⚠️ 2026-08-31 WP-F 收尾批修正（**兩個不同的歸因，刻意分開寫，不要含混成一個**）：
-        #
-        # (a) **名字「個基深掘」是本批打壞的（回歸）**：它在 `origin/main` 上**是有效的
-        #     分頁名**，七→五把它降級成「③ 🔍 基金研究」頁內的「🔍 單檔深掘」分區 ——
-        #     與已列為必修並修掉的那 6 處回歸**完全同類**。它漏網的唯一原因是守衛的
-        #     **去 emoji 盲點**（字表存的是完整標籤，這裡只寫了名字那半）。
-        #     ⚠️ 它**不是**誤判、**不是**既有債 —— 前一版 docstring 把它歸進「10 處真誤判」
-        #     是錯的，已一併更正為 8（該處說明是下一批的交接依據，寫錯會讓下一批建立在假前提上）。
-        #
-        # (b) **編號「Tab2」「Tab3」是既有債**：在 main 上就已經錯了 —— 舊七分頁的順序是
-        #     ①總經 ②健診 ③批次 ④個基 ⑤配置 ⑥管理室 ⑦參考，「個基深掘」是第 **4** 個、
-        #     不是 Tab2；「🩺 基金體檢表」實際住在 `ui/tab3_portfolio.py::render_portfolio_tab`
-        #     （＝ ④），也不是 Tab3。**站號一律由 `story_nav` 的分頁順序推導**
-        #     （`where_to_find()` 內部走 `_tab_ordinal`），本檔不寫死任何站號。
-        #
-        # ⚠️ **本次改寫的範圍邊界 = 這兩個字串常數之內**，不外溢到本檔其他字串。
-        #    同一字串內殘留的「Tab6 的歷史紀錄」**刻意不動**：本組無法確認它實際指向哪裡
-        #    （舊 Tab6 ＝「📋 我的管理室」，但「歷史紀錄」是不是真的在那裡，本組沒查），
-        #    依「不可望文生義」原則不憑印象改 —— 同 `tests/test_wpf_five_tab_wiring.py`
-        #    的 `_KNOWN_DEBT` 對「組合基金」那條的處理方式。
-        #    ⚠️ **它不進 `_KNOWN_DEBT` 表**：那張表收的是「**守衛會抓到、但本批不修**」的項目，
-        #    而這一句**兩條守衛都抓不到**（不帶引號、也不含任何字表裡的名字）——
-        #    收進去會是一條永遠不被查詢的死條目。它登記在該檔
-        #    `test_no_live_string_hardcodes_a_tab_name` docstring 的「盲點規模」段
-        #    （本檔 20 筆 `TabN` 過期指涉之一）。
-        st.info(
-            f"📌 這一章對應 {_where_to_find('portfolio')} 的「🩺 基金體檢表」→「體檢判定」欄，"
-            f"以及 {_where_to_find('fund')} 的「四分位」燈號。**兩者判準不同、資料源不同**，"
-            "下面分開講。舊版說明書寫的「汰弱分數 = 含息報酬×40% + Sharpe×30% + 費用率×30%，"
-            "低於 60 分汰換」**系統從未實作**，已移除。"
-        )
-        st.markdown(f"""
+    _chapter("switch-out")
+    # ⚠️ 2026-08-31 WP-F 收尾批修正（**兩個不同的歸因，刻意分開寫，不要含混成一個**）：
+    #
+    # (a) **名字「個基深掘」是本批打壞的（回歸）**：它在 `origin/main` 上**是有效的
+    #     分頁名**，七→五把它降級成「③ 🔍 基金研究」頁內的「🔍 單檔深掘」分區 ——
+    #     與已列為必修並修掉的那 6 處回歸**完全同類**。它漏網的唯一原因是守衛的
+    #     **去 emoji 盲點**（字表存的是完整標籤，這裡只寫了名字那半）。
+    #     ⚠️ 它**不是**誤判、**不是**既有債 —— 前一版 docstring 把它歸進「10 處真誤判」
+    #     是錯的，已一併更正為 8（該處說明是下一批的交接依據，寫錯會讓下一批建立在假前提上）。
+    #
+    # (b) **編號「Tab2」「Tab3」是既有債**：在 main 上就已經錯了 —— 舊七分頁的順序是
+    #     ①總經 ②健診 ③批次 ④個基 ⑤配置 ⑥管理室 ⑦參考，「個基深掘」是第 **4** 個、
+    #     不是 Tab2；「🩺 基金體檢表」實際住在 `ui/tab3_portfolio.py::render_portfolio_tab`
+    #     （＝ ④），也不是 Tab3。**站號一律由 `story_nav` 的分頁順序推導**
+    #     （`where_to_find()` 內部走 `_tab_ordinal`），本檔不寫死任何站號。
+    #
+    # ⚠️ **本次改寫的範圍邊界 = 這兩個字串常數之內**，不外溢到本檔其他字串。
+    #    同一字串內殘留的「Tab6 的歷史紀錄」**刻意不動**：本組無法確認它實際指向哪裡
+    #    （舊 Tab6 ＝「📋 我的管理室」，但「歷史紀錄」是不是真的在那裡，本組沒查），
+    #    依「不可望文生義」原則不憑印象改 —— 同 `tests/test_wpf_five_tab_wiring.py`
+    #    的 `_KNOWN_DEBT` 對「組合基金」那條的處理方式。
+    #    ⚠️ **它不進 `_KNOWN_DEBT` 表**：那張表收的是「**守衛會抓到、但本批不修**」的項目，
+    #    而這一句**兩條守衛都抓不到**（不帶引號、也不含任何字表裡的名字）——
+    #    收進去會是一條永遠不被查詢的死條目。它登記在該檔
+    #    `test_no_live_string_hardcodes_a_tab_name` docstring 的「盲點規模」段
+    #    （本檔 20 筆 `TabN` 過期指涉之一）。
+    st.info(
+        f"📌 這一章對應 {_where_to_find('portfolio')} 的「🩺 基金體檢表」→「體檢判定」欄，"
+        f"以及 {_where_to_find('fund')} 的「四分位」燈號。**兩者判準不同、資料源不同**，"
+        "下面分開講。舊版說明書寫的「汰弱分數 = 含息報酬×40% + Sharpe×30% + 費用率×30%，"
+        "低於 60 分汰換」**系統從未實作**，已移除。"
+    )
+    st.markdown(f"""
 #### A. 組合體檢表的「汰弱候選」— 超額報酬（pp）
 
 **這是 {_where_to_find('portfolio')} 實際亮 ⚠️ 的判準：**
@@ -506,18 +598,17 @@ Action_i = (Total_Portfolio × Target_Weight_i) - Current_Value_i
 """)
 
     # ── 8. Sheet 資料結構（v18.169：從 Tab3 expander 搬移過來）─────────
-    with _t6[7]:
-        st.markdown("### ⑧ 📋 Sheet 資料結構（這本 Google Sheet 內的分頁長相）")
-        # 2026-08-28 客戶拍板(線框 §03「破壞性操作提醒 → 🟠 常駐橘框」):
-        # 這是一則**永遠有效的警語**,不是「現在出錯了」。常駐紅框會稀釋真紅色的份量
-        # —— 每次點進這個分頁都看到紅,久了就對紅色免疫,真的壞掉時反而看不見。
-        st.warning(
-            "🚨 **刪分頁前先看這裡**：系統會用到的分頁**不是全部都以底線開頭**。"
-            "特別是 **`nav_history`（沒有底線）存的是逐日累積的歷史淨值**，"
-            "刪掉等於毀掉數年份的長期報酬 / 3Y / 5Y / 低基期判斷基礎，"
-            "而且**無法從任何來源重建**（外部只抓得到近期淨值）。"
-        )
-        st.markdown("""
+    _chapter("sheet-schema")
+    # 2026-08-28 客戶拍板(線框 §03「破壞性操作提醒 → 🟠 常駐橘框」):
+    # 這是一則**永遠有效的警語**,不是「現在出錯了」。常駐紅框會稀釋真紅色的份量
+    # —— 每次點進這個分頁都看到紅,久了就對紅色免疫,真的壞掉時反而看不見。
+    st.warning(
+        "🚨 **刪分頁前先看這裡**：系統會用到的分頁**不是全部都以底線開頭**。"
+        "特別是 **`nav_history`（沒有底線）存的是逐日累積的歷史淨值**，"
+        "刪掉等於毀掉數年份的長期報酬 / 3Y / 5Y / 低基期判斷基礎，"
+        "而且**無法從任何來源重建**（外部只抓得到近期淨值）。"
+    )
+    st.markdown("""
 系統目前會讀寫**這 6 種分頁**，平時各動作（批次加入、T7 套用、CSV 匯入）會自動同步到對應分頁。
 若不確定哪個按鈕同步什麼，請改用 Tab3 頂部「🚀 快速存讀面板」。
 
@@ -547,9 +638,8 @@ Action_i = (Total_Portfolio × Target_Weight_i) - Current_Value_i
 """)
 
     # ── 9. 全局指標關聯地圖（v18.174：從 Tab1 expander 搬移過來 — 純教學圖）──
-    with _t6[8]:
-        st.markdown("### ⑨ 🗺️ 全局指標關聯地圖 — 一眼看懂大環境如何影響基金")
-        st.markdown("""
+    _chapter("indicator-map")
+    st.markdown("""
 **📖 怎麼讀：** 跟著箭頭從**左→右**讀。冷色（藍/橘）= 源頭指標，暖色（紅）= 承壓資產。
 
 **升息劇本（正向讀）：**
@@ -564,15 +654,15 @@ PMI 強勁 → 通膨升溫 → 央行維持高利率 → 殖利率飆升
 PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、科技股回神
 ```
 """)
-        # 復用 Tab1 同一個 render_indicator_map() 函數，避免重複定義
-        try:
-            from ui.tab1_macro import render_indicator_map
-            render_indicator_map()
-        except Exception as _e_map:
-            # 指標地圖是這一節的主體（復用 Tab1 的 render_indicator_map）,
-            # 失敗＝整塊內容不見,不是掉一張裝飾圖。
-            system_error("指標地圖載入失敗", _e_map)
-        st.markdown("""
+    # 復用 Tab1 同一個 render_indicator_map() 函數，避免重複定義
+    try:
+        from ui.tab1_macro import render_indicator_map
+        render_indicator_map()
+    except Exception as _e_map:
+        # 指標地圖是這一節的主體（復用 Tab1 的 render_indicator_map）,
+        # 失敗＝整塊內容不見,不是掉一張裝飾圖。
+        system_error("指標地圖載入失敗", _e_map)
+    st.markdown("""
 **🎯 投資應用：**
 1. **看到 PMI 強勁** → 通常領先 1-2 季出現通膨升溫 → 央行升息預期升高 → 提前減碼利率敏感資產（長債、科技股）
 2. **看到 PMI 走弱** → 通膨壓力緩和 → 央行轉鴿派預期 → 加碼利率敏感資產（長債、REITs、成長股）
@@ -583,206 +673,235 @@ PMI 走弱 → 通膨降溫 → 降息 → 殖利率下行 → 債券上漲、�
 """)
 
     # ── 10. 宏觀教學文獻（v19.40 PR2：從 Tab1 搬遷）────────────────────────────
-    with _t6[9]:
-        st.markdown("### 📚 宏觀教學文獻")
-        st.caption(
-            "💡 以下面板需先在 **📊 總經** Tab 按「📡 載入總經資料」後方可顯示即時數據。"
-            "未載入時各區塊顯示提示訊息。"
-        )
+    _chapter("edu-docs")
+    # ⚠️ 2026-08-31 修正（**有意識的政策變更，不是漏刪** · 決策者：AI 總管 ·
+    # 依據：客戶 2026-08-31 拍板的五分頁線框）：
+    # 舊寫法 ~~「**📊 總經** Tab」~~ 的理由**仍然成立** —— 它要告訴讀者「這些面板的
+    # 資料是別頁載入的、不是這裡」。**被權衡掉的是那個名字**：分頁列上從來沒有
+    # 「📊 總經」這個分頁（① 現行叫「🌐 市場定調」），寫死的名字不經 `story_nav`
+    # 求值 → 不會 raise，只會安靜地把使用者送到一個找不到的地方。
+    # 改吃 SSOT：`where_to_find('macro')` 回「① 🌐 市場定調」。
+    st.caption(
+        f"💡 以下面板需先在 {_where_to_find('macro')} 按「📡 載入總經資料」"
+        "後方可顯示即時數據。未載入時各區塊顯示提示訊息。"
+    )
 
-        _edu_ind = st.session_state.get("_macro_ind", {})
-        _no_data_msg = "📡 尚未載入總經資料 — 請先切至 **📊 總經** Tab 按「📡 載入總經資料」按鈕，本頁即可顯示即時指標教學。"
+    _edu_ind = st.session_state.get("_macro_ind", {})
+    # ⚠️ 2026-08-31 兩處一起修（**有意識的政策變更，不是漏刪** · 決策者：AI 總管）：
+    # (a) **死指路** —— 舊字串 ~~「請先切至 **📊 總經** Tab」~~ 指到一個分頁列上
+    #     不存在的名字（理由同上一段），改吃 `where_to_find('macro')`。
+    # (b) **顏色語意混用** —— 舊寫法是 `st.info(...)`（🔵 藍框）裝一句「尚未載入」。
+    #     依 `ui/helpers/render_state.py` 的五態 SSOT（客戶 2026-08-28 拍板的空狀態
+    #     線框 §03「顏色：三態統一規則」），**「未載入／未設定」一律走 ⬜ 灰色說明**。
+    #     **舊寫法的理由仍然成立**（藍框比灰字顯眼，使用者比較不會漏看）；
+    #     **被權衡掉的原因**是線框要建立的分辨力：顏色只回答「這個數字可不可信」，
+    #     一旦「還沒載入」也有自己的顏色，使用者就得先讀完文字才知道要不要緊張。
+    # ⚠️ `not_ready()` 自己會加 ⬜ 前綴與「（請先到：…）」尾綴 → 訊息本體**不再自帶**
+    #    「📡」與指路句，否則會變成兩份（重複的指路是漂移的起點）。
+    _no_data_msg = "尚未載入總經資料，本頁的即時指標教學需要它"
+    _no_data_where = f"{_where_to_find('macro')} → 📡 載入總經資料"
 
-        # ── § C. 📈 景氣循環歷史對照圖（危機紅區 × 指標趨勢）──────────────────────
-        with st.expander("📈 景氣循環歷史對照圖（危機紅區 × 指標趨勢）", expanded=False):
-            if not _edu_ind:
-                st.info(_no_data_msg)
-            else:
-                try:
-                    import plotly.graph_objects as _go_c
-                    from plotly.subplots import make_subplots as _msp_c
-                    import pandas as _pd_c
-                    _sahm_s  = (_edu_ind.get("SAHM")  or {}).get("series")
-                    _sloos_s = (_edu_ind.get("SLOOS") or {}).get("series")
-                    _l2_has  = any(s is not None and len(s) >= 5 for s in [_sahm_s, _sloos_s])
-                    if not _l2_has:
-                        st.info("📡 請先載入總經資料以顯示歷史對照圖")
+    # ── § C. 📈 景氣循環歷史對照圖（危機紅區 × 指標趨勢）──────────────────────
+    with st.expander("📈 景氣循環歷史對照圖（危機紅區 × 指標趨勢）", expanded=False):
+        if not _edu_ind:
+            not_ready(_no_data_msg, where=_no_data_where)
+        else:
+            try:
+                import plotly.graph_objects as _go_c
+                from plotly.subplots import make_subplots as _msp_c
+                import pandas as _pd_c
+                _sahm_s  = (_edu_ind.get("SAHM")  or {}).get("series")
+                _sloos_s = (_edu_ind.get("SLOOS") or {}).get("series")
+                _l2_has  = any(s is not None and len(s) >= 5 for s in [_sahm_s, _sloos_s])
+                if not _l2_has:
+                    # 同上：「未載入」走 ⬜ 灰色說明，不用 🔵 藍框（render_state 五態）。
+                    not_ready("總經資料不足，畫不出歷史對照圖"
+                              "（需要薩姆規則或 SLOOS 其中之一至少 5 筆）",
+                              where=_no_data_where)
+                else:
+                    # v19.391 V4a:拆雙軸違規(dataviz #2 硬規則)—— 薩姆(pp)與 SLOOS(%)不同
+                    # 尺度不可共軸(交叉點會被任意扭曲);改上下兩個「共用 x 時間軸」的 subplot,
+                    # 各自單位、資料值完全不變,只是不再共軸誤導。
+                    _l2fig = _msp_c(rows=2, cols=1, shared_xaxes=True,
+                                    vertical_spacing=0.09, row_heights=[0.55, 0.45])
+                    if _sahm_s is not None and len(_sahm_s) >= 5:
+                        _sh = _sahm_s if isinstance(_sahm_s, _pd_c.Series) else _pd_c.Series(_sahm_s)
+                        _sh = _sh.dropna().tail(120)
+                        _l2fig.add_trace(_go_c.Scatter(
+                            x=_sh.index, y=_sh.values, name="薩姆規則 (pp)",
+                            line={"color": MD_BLUE_300, "width": 2},
+                            hovertemplate="Sahm: %{y:.2f}pp<extra></extra>"),
+                            row=1, col=1)
+                        _l2fig.add_hline(y=0.5, line_dash="dash",
+                                         line_color=MATERIAL_RED, opacity=0.6,
+                                         annotation_text="衰退觸發線 0.5",
+                                         annotation_font_color=MATERIAL_RED,
+                                         row=1, col=1)
+                    if _sloos_s is not None and len(_sloos_s) >= 5:
+                        _sl = _sloos_s if isinstance(_sloos_s, _pd_c.Series) else _pd_c.Series(_sloos_s)
+                        _sl = _sl.dropna().tail(120)
+                        _l2fig.add_trace(_go_c.Scatter(
+                            x=_sl.index, y=_sl.values, name="SLOOS (%)",
+                            line={"color": MATERIAL_ORANGE, "width": 2, "dash": "dot"},
+                            hovertemplate="SLOOS: %{y:.1f}%<extra></extra>"),
+                            row=2, col=1)
+                    _crises = [
+                        ("2007-12-01", "2009-06-01", "2008 金融海嘯"),
+                        ("2020-02-01", "2020-06-01", "2020 COVID"),
+                        ("2022-01-01", "2022-12-01", "2022 升息週期"),
+                    ]
+                    for _cs, _ce, _cn in _crises:
+                        _l2fig.add_vrect(
+                            x0=_cs, x1=_ce,
+                            fillcolor="rgba(244,67,54,0.12)",
+                            line_width=0,
+                            annotation_text=_cn,
+                            annotation_position="top left",
+                            annotation_font={"size": 9, "color": MATERIAL_RED},
+                            row="all", col=1)
+                    _l2fig.update_layout(
+                        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
+                        font_color=GH_FG_PRIMARY, height=360,
+                        margin=dict(t=30, b=20, l=50, r=20),
+                        legend=dict(orientation="h", y=-0.12, font={"size": 10}),
+                        hovermode="x unified")
+                    _l2fig.update_yaxes(title_text="薩姆規則 (pp)", gridcolor=GH_BG_HOVER, row=1, col=1)
+                    _l2fig.update_yaxes(title_text="SLOOS (%)", gridcolor=GH_BG_HOVER, row=2, col=1)
+                    _l2fig.update_xaxes(gridcolor=GH_BG_HOVER)
+                    st.plotly_chart(_l2fig, use_container_width=True)
+                    st.caption("🔴 紅色陰影 = 歷史衰退/危機區間;上圖藍線 = 薩姆規則(pp),下圖橘虛線 = SLOOS 銀行放貸標準(%)。上下共用時間軸,各自單位、不再共軸扭曲。")
+            except Exception as _e_c:
+                # ⚠️ 不是 degraded：這個 try 內除了 plotly 之外還有一句解讀用的
+                # caption（紅色陰影 / 藍線 / 橘虛線各代表什麼）,而且沒有任何
+                # 表格 fallback —— 失敗後這一整塊是空的。
+                system_error("歷史對照圖載入失敗", _e_c)
+
+    # ── § D. 👉 完整指標加扣分明細 ─────────────────────────────────────────
+    # 標題不寫死項數：實際參與計分的指標數會隨資料抓取結果與校準檔變動，
+    # 寫死數字等於保證某天對不上（原「23 項」即為此類漂移）。
+    with st.expander(
+        f"👉 完整指標加扣分明細（{len(_edu_ind)} 項已載入，依 |score × weight| 由大至小）"
+        if _edu_ind else "👉 完整指標加扣分明細（依 |score × weight| 由大至小）",
+        expanded=False,
+    ):
+        if not _edu_ind:
+            not_ready(_no_data_msg, where=_no_data_where)
+        else:
+            try:
+                _CONTRIB_MAP_D = {
+                    "PMI":           ("製造業擴張，有利股市",       "製造業收縮，景氣動能放緩"),
+                    "LEI":           ("領先指標走升，景氣加速",     "領先指標走弱，景氣放緩"),
+                    "SAHM":          ("勞動市場惡化，衰退預警",     "勞動市場穩健"),
+                    "SLOOS":         ("銀行緊縮放貸，信用收斂",     "銀行寬鬆放貸，信用擴張"),
+                    "YIELD_10Y2Y":   ("利差走闊，殖利率正常化",     "利差倒掛，衰退預警"),
+                    "YIELD_10Y3M":   ("利差走闊，景氣健康",         "利差倒掛，紐約聯儲衰退模型啟動"),
+                    "HY_SPREAD":     ("信用利差走闊，避險升溫",     "信用利差收斂，風險偏好上升"),
+                    "VIX":           ("恐慌升溫，波動加大",          "市場平靜，風險偏好上升"),
+                    "CPI":           ("通膨壓力升溫，緊縮風險",     "通膨回落，貨幣政策放鬆空間"),
+                    "PPI":           ("上游成本升溫",                "上游成本回落"),
+                    "INFL_EXP_5Y":   ("通膨預期升溫，債市壓力",     "通膨預期降溫，利率下行空間"),
+                    "FED_RATE":      ("資金成本上升，估值承壓",     "資金成本下降，流動性寬鬆"),
+                    "UNEMPLOYMENT":  ("失業率上升，景氣承壓",       "失業率下降，景氣健康"),
+                    "JOBLESS":       ("初領失業金升溫，裁員壓力",   "初領失業金回落，就業改善"),
+                    "CONT_CLAIMS":   ("持續失業金升溫",              "持續失業金回落"),
+                    "CONSUMER_CONF": ("消費信心強，內需動能足",     "消費信心弱，內需放緩"),
+                    "M2":            ("M2 寬鬆，流動性充沛",        "M2 緊縮，流動性收斂"),
+                    "M2_WEEKLY":     ("M2 週頻寬鬆",                 "M2 週頻緊縮"),
+                    "FED_BS":        ("Fed 擴表（QE）",              "Fed 縮表（QT）"),
+                    "DXY":           ("美元走強，外幣資產承壓",     "美元走弱，外幣資產受益"),
+                    "ADL":           ("市場廣度健康",                "大型股獨撐，廣度疲弱"),
+                    "COPPER":        ("銅價走強，全球景氣轉熱",     "銅價走弱，全球景氣轉冷"),
+                    "PERMIT_HOUSING":("建照核發強，房市領先",       "建照核發弱，房市領先疲弱"),
+                }
+                st.caption(
+                    "📖 **怎麼看這張表**：「💡 貢獻說明」直接告訴你這檔指標目前如何影響景氣總分。"
+                    "排序依 |score × weight| ＝ 對總分實際影響力，最重要的指標在最上方。"
+                )
+                # v19.405:weight=0 合法(去重後的備源,如月頻 M2 命中時的
+                # M2_WEEKLY)。原式 `_iv.get("weight", 1) or 1` 因 Python
+                # `0 or 1 == 1` 把刻意歸零的權重還原成 1 → 本表仍以
+                # |score × 1| 讓已去重的備源佔排序位。
+                # 契約 SSOT:services/macro/composite_score.coerce_weight
+                from services.macro.composite_score import coerce_weight as _cw
+                _rows_d = []
+                for _ik, _iv in _edu_ind.items():
+                    if not isinstance(_iv, dict):
+                        continue
+                    try:
+                        _w = _cw(_iv.get("weight", 1))
+                    except (TypeError, ValueError):
+                        _w = 1.0
+                    _sc_raw = _iv.get("score", 0) or 0
+                    try:
+                        # `+ 0.0` 消 -0.0(w=0 時 clamp 會產生負零,顯示成 "-0.0")
+                        _sc_clamped = round(max(-_w, min(_w, float(_sc_raw))), 2) + 0.0
+                    except (TypeError, ValueError):
+                        _sc_clamped = 0.0
+                    _val_raw = _iv.get("value")
+                    _val_str = f"{_val_raw:.2f}" if isinstance(_val_raw, (int, float)) else str(_val_raw or "")[:10]
+                    _phrases = _CONTRIB_MAP_D.get(_ik)
+                    if _phrases:
+                        _semantic = _phrases[0] if _sc_clamped > 0 else (_phrases[1] if _sc_clamped < 0 else "現況中性")
                     else:
-                        # v19.391 V4a:拆雙軸違規(dataviz #2 硬規則)—— 薩姆(pp)與 SLOOS(%)不同
-                        # 尺度不可共軸(交叉點會被任意扭曲);改上下兩個「共用 x 時間軸」的 subplot,
-                        # 各自單位、資料值完全不變,只是不再共軸誤導。
-                        _l2fig = _msp_c(rows=2, cols=1, shared_xaxes=True,
-                                        vertical_spacing=0.09, row_heights=[0.55, 0.45])
-                        if _sahm_s is not None and len(_sahm_s) >= 5:
-                            _sh = _sahm_s if isinstance(_sahm_s, _pd_c.Series) else _pd_c.Series(_sahm_s)
-                            _sh = _sh.dropna().tail(120)
-                            _l2fig.add_trace(_go_c.Scatter(
-                                x=_sh.index, y=_sh.values, name="薩姆規則 (pp)",
-                                line={"color": MD_BLUE_300, "width": 2},
-                                hovertemplate="Sahm: %{y:.2f}pp<extra></extra>"),
-                                row=1, col=1)
-                            _l2fig.add_hline(y=0.5, line_dash="dash",
-                                             line_color=MATERIAL_RED, opacity=0.6,
-                                             annotation_text="衰退觸發線 0.5",
-                                             annotation_font_color=MATERIAL_RED,
-                                             row=1, col=1)
-                        if _sloos_s is not None and len(_sloos_s) >= 5:
-                            _sl = _sloos_s if isinstance(_sloos_s, _pd_c.Series) else _pd_c.Series(_sloos_s)
-                            _sl = _sl.dropna().tail(120)
-                            _l2fig.add_trace(_go_c.Scatter(
-                                x=_sl.index, y=_sl.values, name="SLOOS (%)",
-                                line={"color": MATERIAL_ORANGE, "width": 2, "dash": "dot"},
-                                hovertemplate="SLOOS: %{y:.1f}%<extra></extra>"),
-                                row=2, col=1)
-                        _crises = [
-                            ("2007-12-01", "2009-06-01", "2008 金融海嘯"),
-                            ("2020-02-01", "2020-06-01", "2020 COVID"),
-                            ("2022-01-01", "2022-12-01", "2022 升息週期"),
-                        ]
-                        for _cs, _ce, _cn in _crises:
-                            _l2fig.add_vrect(
-                                x0=_cs, x1=_ce,
-                                fillcolor="rgba(244,67,54,0.12)",
-                                line_width=0,
-                                annotation_text=_cn,
-                                annotation_position="top left",
-                                annotation_font={"size": 9, "color": MATERIAL_RED},
-                                row="all", col=1)
-                        _l2fig.update_layout(
-                            paper_bgcolor=STREAMLIT_BG, plot_bgcolor=STREAMLIT_BG,
-                            font_color=GH_FG_PRIMARY, height=360,
-                            margin=dict(t=30, b=20, l=50, r=20),
-                            legend=dict(orientation="h", y=-0.12, font={"size": 10}),
-                            hovermode="x unified")
-                        _l2fig.update_yaxes(title_text="薩姆規則 (pp)", gridcolor=GH_BG_HOVER, row=1, col=1)
-                        _l2fig.update_yaxes(title_text="SLOOS (%)", gridcolor=GH_BG_HOVER, row=2, col=1)
-                        _l2fig.update_xaxes(gridcolor=GH_BG_HOVER)
-                        st.plotly_chart(_l2fig, use_container_width=True)
-                        st.caption("🔴 紅色陰影 = 歷史衰退/危機區間;上圖藍線 = 薩姆規則(pp),下圖橘虛線 = SLOOS 銀行放貸標準(%)。上下共用時間軸,各自單位、不再共軸扭曲。")
-                except Exception as _e_c:
-                    # ⚠️ 不是 degraded：這個 try 內除了 plotly 之外還有一句解讀用的
-                    # caption（紅色陰影 / 藍線 / 橘虛線各代表什麼）,而且沒有任何
-                    # 表格 fallback —— 失敗後這一整塊是空的。
-                    system_error("歷史對照圖載入失敗", _e_c)
-
-        # ── § D. 👉 完整指標加扣分明細 ─────────────────────────────────────────
-        # 標題不寫死項數：實際參與計分的指標數會隨資料抓取結果與校準檔變動，
-        # 寫死數字等於保證某天對不上（原「23 項」即為此類漂移）。
-        with st.expander(
-            f"👉 完整指標加扣分明細（{len(_edu_ind)} 項已載入，依 |score × weight| 由大至小）"
-            if _edu_ind else "👉 完整指標加扣分明細（依 |score × weight| 由大至小）",
-            expanded=False,
-        ):
-            if not _edu_ind:
-                st.info(_no_data_msg)
-            else:
-                try:
-                    _CONTRIB_MAP_D = {
-                        "PMI":           ("製造業擴張，有利股市",       "製造業收縮，景氣動能放緩"),
-                        "LEI":           ("領先指標走升，景氣加速",     "領先指標走弱，景氣放緩"),
-                        "SAHM":          ("勞動市場惡化，衰退預警",     "勞動市場穩健"),
-                        "SLOOS":         ("銀行緊縮放貸，信用收斂",     "銀行寬鬆放貸，信用擴張"),
-                        "YIELD_10Y2Y":   ("利差走闊，殖利率正常化",     "利差倒掛，衰退預警"),
-                        "YIELD_10Y3M":   ("利差走闊，景氣健康",         "利差倒掛，紐約聯儲衰退模型啟動"),
-                        "HY_SPREAD":     ("信用利差走闊，避險升溫",     "信用利差收斂，風險偏好上升"),
-                        "VIX":           ("恐慌升溫，波動加大",          "市場平靜，風險偏好上升"),
-                        "CPI":           ("通膨壓力升溫，緊縮風險",     "通膨回落，貨幣政策放鬆空間"),
-                        "PPI":           ("上游成本升溫",                "上游成本回落"),
-                        "INFL_EXP_5Y":   ("通膨預期升溫，債市壓力",     "通膨預期降溫，利率下行空間"),
-                        "FED_RATE":      ("資金成本上升，估值承壓",     "資金成本下降，流動性寬鬆"),
-                        "UNEMPLOYMENT":  ("失業率上升，景氣承壓",       "失業率下降，景氣健康"),
-                        "JOBLESS":       ("初領失業金升溫，裁員壓力",   "初領失業金回落，就業改善"),
-                        "CONT_CLAIMS":   ("持續失業金升溫",              "持續失業金回落"),
-                        "CONSUMER_CONF": ("消費信心強，內需動能足",     "消費信心弱，內需放緩"),
-                        "M2":            ("M2 寬鬆，流動性充沛",        "M2 緊縮，流動性收斂"),
-                        "M2_WEEKLY":     ("M2 週頻寬鬆",                 "M2 週頻緊縮"),
-                        "FED_BS":        ("Fed 擴表（QE）",              "Fed 縮表（QT）"),
-                        "DXY":           ("美元走強，外幣資產承壓",     "美元走弱，外幣資產受益"),
-                        "ADL":           ("市場廣度健康",                "大型股獨撐，廣度疲弱"),
-                        "COPPER":        ("銅價走強，全球景氣轉熱",     "銅價走弱，全球景氣轉冷"),
-                        "PERMIT_HOUSING":("建照核發強，房市領先",       "建照核發弱，房市領先疲弱"),
-                    }
-                    st.caption(
-                        "📖 **怎麼看這張表**：「💡 貢獻說明」直接告訴你這檔指標目前如何影響景氣總分。"
-                        "排序依 |score × weight| ＝ 對總分實際影響力，最重要的指標在最上方。"
-                    )
-                    # v19.405:weight=0 合法(去重後的備源,如月頻 M2 命中時的
-                    # M2_WEEKLY)。原式 `_iv.get("weight", 1) or 1` 因 Python
-                    # `0 or 1 == 1` 把刻意歸零的權重還原成 1 → 本表仍以
-                    # |score × 1| 讓已去重的備源佔排序位。
-                    # 契約 SSOT:services/macro/composite_score.coerce_weight
-                    from services.macro.composite_score import coerce_weight as _cw
-                    _rows_d = []
-                    for _ik, _iv in _edu_ind.items():
-                        if not isinstance(_iv, dict):
-                            continue
-                        try:
-                            _w = _cw(_iv.get("weight", 1))
-                        except (TypeError, ValueError):
-                            _w = 1.0
-                        _sc_raw = _iv.get("score", 0) or 0
-                        try:
-                            # `+ 0.0` 消 -0.0(w=0 時 clamp 會產生負零,顯示成 "-0.0")
-                            _sc_clamped = round(max(-_w, min(_w, float(_sc_raw))), 2) + 0.0
-                        except (TypeError, ValueError):
-                            _sc_clamped = 0.0
-                        _val_raw = _iv.get("value")
-                        _val_str = f"{_val_raw:.2f}" if isinstance(_val_raw, (int, float)) else str(_val_raw or "")[:10]
-                        _phrases = _CONTRIB_MAP_D.get(_ik)
-                        if _phrases:
-                            _semantic = _phrases[0] if _sc_clamped > 0 else (_phrases[1] if _sc_clamped < 0 else "現況中性")
-                        else:
-                            _semantic = "正面訊號" if _sc_clamped > 0 else ("負面訊號" if _sc_clamped < 0 else "現況中性")
-                        # 2026-08-05 稽核 🔴 必修 1 順帶:原 [:18] 會把服務層的
-                        # 代理值長名「ISM 製造業 PMI（Phil Fed 替代）」(20 字)
-                        # 切成「…（Phil Fed 替」—— 剛好砍掉「替代」二字的下半,
-                        # 讓代理值在 23 項明細表裡看起來像官方本尊(§1 反造假)。
-                        # 放寬到 32 字(現行最長 name 為 24 字,留 8 字餘裕)。
-                        _name = str(_iv.get("name", _ik) or _ik)[:32]
-                        if _sc_clamped > 0:
-                            _verdict = f"{_name} {_val_str} ➡️ {_semantic}，貢獻 +{_sc_clamped:.1f} 分"
-                        elif _sc_clamped < 0:
-                            _verdict = f"{_name} {_val_str} ➡️ {_semantic}，扣 {_sc_clamped:.1f} 分"
-                        else:
-                            _verdict = f"{_name} {_val_str} ➡️ {_semantic}（不加減分）"
-                        _abs_contrib = abs(_sc_clamped * _w)
-                        _rows_d.append({
-                            "_abs": _abs_contrib,
-                            "指標":      _name,
-                            "數值":      _val_str,
-                            "信號":      _iv.get("signal", "⬜"),
-                            "貢獻分":    _sc_clamped,
-                            "權重":      _w,
-                            "💡 貢獻說明": _verdict,
-                        })
-                    if _rows_d:
-                        _rows_d.sort(key=lambda r: r["_abs"], reverse=True)
-                        # stash for AI snapshot
-                        try:
-                            _pos_d = [r for r in _rows_d if r["貢獻分"] > 0][:3]
-                            _neg_d = [r for r in _rows_d if r["貢獻分"] < 0][:3]
-                            st.session_state["_macro_23items"] = {
-                                "n_total": len(_rows_d),
-                                "n_pos": len([r for r in _rows_d if r["貢獻分"] > 0]),
-                                "n_neg": len([r for r in _rows_d if r["貢獻分"] < 0]),
-                                "top_pos": [{"name": r["指標"], "verdict": r["💡 貢獻說明"]} for r in _pos_d],
-                                "top_neg": [{"name": r["指標"], "verdict": r["💡 貢獻說明"]} for r in _neg_d],
-                            }
-                        except Exception:
-                            pass
-                        for r in _rows_d:
-                            r.pop("_abs", None)
-                        st.dataframe(pd.DataFrame(_rows_d), use_container_width=True, hide_index=True,
-                                     column_config={
-                                         "指標":      st.column_config.TextColumn(width="small"),
-                                         "數值":      st.column_config.TextColumn(width="small"),
-                                         "信號":      st.column_config.TextColumn(width="small"),
-                                         "貢獻分":    st.column_config.NumberColumn(format="%.2f", width="small"),
-                                         "權重":      st.column_config.NumberColumn(format="%.0f", width="small"),
-                                         "💡 貢獻說明": st.column_config.TextColumn(width="large"),
-                                     })
+                        _semantic = "正面訊號" if _sc_clamped > 0 else ("負面訊號" if _sc_clamped < 0 else "現況中性")
+                    # 2026-08-05 稽核 🔴 必修 1 順帶:原 [:18] 會把服務層的
+                    # 代理值長名「ISM 製造業 PMI（Phil Fed 替代）」(20 字)
+                    # 切成「…（Phil Fed 替」—— 剛好砍掉「替代」二字的下半,
+                    # 讓代理值在 23 項明細表裡看起來像官方本尊(§1 反造假)。
+                    # 放寬到 32 字(現行最長 name 為 24 字,留 8 字餘裕)。
+                    _name = str(_iv.get("name", _ik) or _ik)[:32]
+                    if _sc_clamped > 0:
+                        _verdict = f"{_name} {_val_str} ➡️ {_semantic}，貢獻 +{_sc_clamped:.1f} 分"
+                    elif _sc_clamped < 0:
+                        _verdict = f"{_name} {_val_str} ➡️ {_semantic}，扣 {_sc_clamped:.1f} 分"
                     else:
-                        st.info("⬜ 沒有可用的指標資料")
-                except Exception as _e_d:
-                    # 整張加扣分明細表（指標 / 數值 / 信號 / 貢獻分 / 權重）消失。
-                    system_error("加扣分明細載入失敗", _e_d)
+                        _verdict = f"{_name} {_val_str} ➡️ {_semantic}（不加減分）"
+                    _abs_contrib = abs(_sc_clamped * _w)
+                    _rows_d.append({
+                        "_abs": _abs_contrib,
+                        "指標":      _name,
+                        "數值":      _val_str,
+                        "信號":      _iv.get("signal", "⬜"),
+                        "貢獻分":    _sc_clamped,
+                        "權重":      _w,
+                        "💡 貢獻說明": _verdict,
+                    })
+                if _rows_d:
+                    _rows_d.sort(key=lambda r: r["_abs"], reverse=True)
+                    # stash for AI snapshot
+                    try:
+                        _pos_d = [r for r in _rows_d if r["貢獻分"] > 0][:3]
+                        _neg_d = [r for r in _rows_d if r["貢獻分"] < 0][:3]
+                        st.session_state["_macro_23items"] = {
+                            "n_total": len(_rows_d),
+                            "n_pos": len([r for r in _rows_d if r["貢獻分"] > 0]),
+                            "n_neg": len([r for r in _rows_d if r["貢獻分"] < 0]),
+                            "top_pos": [{"name": r["指標"], "verdict": r["💡 貢獻說明"]} for r in _pos_d],
+                            "top_neg": [{"name": r["指標"], "verdict": r["💡 貢獻說明"]} for r in _neg_d],
+                        }
+                    except Exception:
+                        pass
+                    for r in _rows_d:
+                        r.pop("_abs", None)
+                    st.dataframe(pd.DataFrame(_rows_d), use_container_width=True, hide_index=True,
+                                 column_config={
+                                     "指標":      st.column_config.TextColumn(width="small"),
+                                     "數值":      st.column_config.TextColumn(width="small"),
+                                     "信號":      st.column_config.TextColumn(width="small"),
+                                     "貢獻分":    st.column_config.NumberColumn(format="%.2f", width="small"),
+                                     "權重":      st.column_config.NumberColumn(format="%.0f", width="small"),
+                                     "💡 貢獻說明": st.column_config.TextColumn(width="large"),
+                                 })
+                else:
+                    # ⚠️ 2026-08-31 修正（**有意識的政策變更，不是漏刪** ·
+                    # 決策者：AI 總管 · 依據：空狀態線框 §03「顏色：三態統一規則」）：
+                    # 舊寫法 ~~`st.info("⬜ 沒有可用的指標資料")`~~ 是 **🔵 藍框裡包一個
+                    # ⬜ 灰標記** —— 同一句話同時穿兩件衣服，而那兩件在本 repo 是不同
+                    # 語意（🔵 沒有定義、⬜ ＝ 未載入／未設定／沒有東西可顯示）。
+                    # **舊寫法的理由仍然成立**：作者已經正確判斷這是「⬜ 這一族」，
+                    # 只是拿 `st.info` 當容器。**被權衡掉的只有容器**，語意未變。
+                    # ⚠️ `not_ready()` 自己會加 ⬜ → 訊息本體**不再自帶** ⬜（否則兩個）。
+                    not_ready("沒有可用的指標資料")
+            except Exception as _e_d:
+                # 整張加扣分明細表（指標 / 數值 / 信號 / 貢獻分 / 權重）消失。
+                system_error("加扣分明細載入失敗", _e_d)
