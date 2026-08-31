@@ -104,6 +104,18 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
         system_error("輪動配對計算失敗", e)
         return
 
+    _render_pairs_body(rows, _pairs, _sell, _buy,
+                       key_prefix=key_prefix, offer_download=offer_download)
+
+
+def _render_pairs_body(rows: list, _pairs: list, _sell: float, _buy: float, *,
+                       key_prefix: str, offer_download: bool) -> None:
+    """配對表本體:σ 不足名單 + 空態 + 9 欄表 + 誠實 caption(+ 選配 CSV)。
+
+    2026-08-31 元件 B(互補配對探索)自 `_render_pairs_ui` 抽出**逐字共用**:
+    ②/Tab3 的既有輪動配對區與 ③ 批次的收合 Expander 渲染同一份表身,
+    不留兩份(§2.1)。呼叫端已算好 _pairs(含失敗處理),本函式只畫。
+    """
     # v19.484 稽核 #5:σ 資料不足(淨值史太短 / 停售 → σ rank 回不了值)的檔會被排除在
     # 買方候選外。原本靜默剔除 → 明確標名,讓使用者知道「不是漏了它,是它現在無法評估」(§1)。
     # (2026-08-31 判斷式逐字下沉 services.rotation.insufficient_sigma_names,UI 只呼叫。)
@@ -220,7 +232,157 @@ def render_rotation_section(funds: list, *, key_prefix: str = "rot_") -> None:
 
 
 def render_rotation_section_from_df(df) -> None:
-    """🔄 批次分頁:用已算好的組合健診大表 df 渲染輪動配對(不重抓)+ 獨立 CSV 下載。"""
+    """🔄 批次分頁:用已算好的組合健診大表 df 渲染輪動配對(不重抓)+ 獨立 CSV 下載。
+
+    ⚠️ 2026-08-31 起批次分頁改走 `render_complementary_explorer_from_df`(元件 B,
+    客戶 Q3 拍板「改型為互補探索」);本函式保留供既有 import 路徑與回歸測試,
+    production 端 `ui/tab_batch_analysis.py` 已不再呼叫它。
+    """
     if df is None or getattr(df, "empty", True):
         return
     _render_pairs_ui(rows_from_batch_df(df), key_prefix="batch_rot_", offer_download=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 元件 B:🧩 候選標的互補探索(2026-08-31 客戶拍板 Q3/Q4)
+# ═══════════════════════════════════════════════════════════════════════
+
+def _pair_card_html(p: dict) -> str:
+    """單張「最佳互補配對卡」(Q4:每張只顯示最佳一檔買方;其餘候選看下方完整表)。
+
+    視覺沿用 #726 六元件語彙(gh_card 外框 + status_chip 徽章),不另創第三套。
+    無不同類健康低基期可換 → 買方側誠實顯示「⚪ 無標的」,不藏卡(§1)。
+    """
+    from shared.colors import GH_FG_MUTED, GH_FG_PRIMARY
+    from ui.components.cards import gh_card
+    from ui.components.status import status_chip
+
+    def _sigma_txt(v):
+        return "—" if v is None else f"{v:+.2f}σ"
+
+    sell = (f"<div style='font-size:11px;color:{GH_FG_MUTED}'>賣出（高基期）</div>"
+            f"<div style='font-size:13px;font-weight:700;color:{GH_FG_PRIMARY};"
+            f"line-height:1.35'>{p['sell_name']}"
+            f"<span style='color:{GH_FG_MUTED};font-size:11px'>（{p['sell_code']}）</span></div>"
+            f"<div style='font-size:11.5px;color:{GH_FG_MUTED}'>"
+            f"{p['sell_cat'] or '—'}　·　σ {_sigma_txt(p['sell_sigma'])}</div>")
+    if p.get("buy_code"):
+        _score = "—" if p.get("buy_score") is None else f"{p['buy_score']:.0f}"
+        buy = (f"<div style='font-size:11px;color:{GH_FG_MUTED};margin-top:7px'>"
+               f"⇄ 最佳互補買進（別類低基期健康）</div>"
+               f"<div style='font-size:13px;font-weight:700;color:{GH_FG_PRIMARY};"
+               f"line-height:1.35'>{p['buy_name']}"
+               f"<span style='color:{GH_FG_MUTED};font-size:11px'>（{p['buy_code']}）</span></div>"
+               f"<div style='font-size:11.5px;color:{GH_FG_MUTED}'>"
+               f"{p.get('buy_cat') or '—'}　·　σ {_sigma_txt(p['buy_sigma'])}　·　"
+               f"4D {p.get('buy_grade') or '—'}　·　操盤 {_score}</div>")
+        _pot = p.get("potential_pct")
+        foot_bits = []
+        if _pot is not None:
+            foot_bits.append(
+                f"<span style='color:{GH_FG_PRIMARY};font-weight:700'>潛在差價 {_pot:+.1f}%</span>"
+                f"<span style='color:{GH_FG_MUTED};font-size:10.5px'>（僅幾何回推,不是預測）</span>")
+        if p.get("cross_ccy"):
+            foot_bits.append(status_chip("跨幣別（含匯差）", "caution"))
+        foot = (f"<div style='margin-top:6px;display:flex;gap:10px;align-items:center;"
+                f"flex-wrap:wrap;font-size:12px'>{''.join(foot_bits)}</div>") if foot_bits else ""
+    else:
+        buy = (f"<div style='font-size:11px;color:{GH_FG_MUTED};margin-top:7px'>"
+               f"⇄ 最佳互補買進</div>"
+               f"<div style='font-size:12.5px;color:{GH_FG_MUTED}'>"
+               f"⚪ 無不同類健康低基期標的（誠實留白,不硬湊）</div>")
+        foot = ""
+    return gh_card(sell + buy + foot, radius=9, padding="12px 14px",
+                   extra="position:relative;overflow:hidden")
+
+
+def render_complementary_explorer_from_df(df) -> None:
+    """🧩 元件 B:③ 批次結果區的「候選標的互補探索」(預設收合 Expander)。
+
+    客戶 2026-08-31 拍板(線框 `docs/wireframes/rotation-components-wireframe.html`):
+    - **Q3**:③ 的輪動配對由「攤開照抄 ②」改型為本元件(收合 + 卡片 + 完整表 + CSV),
+      並覆蓋舊五頁線框「批次端輪動整段移除」該句。**資訊零損失,位置與型態改變。**
+    - **Q4**:互補配對卡每張只顯示**最佳一檔**買方(計算層本來就只回一檔);
+      想比較其他候選,往下就是完整配對表。
+    - 一句話職責:**掃出來的這一批裡,誰跟誰互補。**(互補 = 不同類別 + 一高一低基期
+      + 買方通過健康過濾 —— 即既有輪動配對定義,零新演算法。)
+
+    直接讀已算好的批次大表 df(**不重抓**,沿用 rows_from_batch_df 資料路徑);
+    df 不存在 → 不渲染(批次面板自己有「▶️ 開始」指路),首屏成本為零。
+    收合標題帶計數 —— 計數本身就是答案的預覽(0 對 = 不用點開)。
+
+    ⚠️ 線框揭露的「3 支滑桿包 st.form」防重繪手法**本批刻意未做**:
+    新增 `st.form` 站點須同步登記 `tests/test_ui_rerun_contract.py::FORM_SITES`,
+    而該檔正由另一 PR(#736)修改中、本批明令禁改(File Boundary 防撞)。
+    滑桿暫維持現況的直連寫法(與改型前行為相同,無退化),form 包裝待 #736
+    合併後另批補上 —— 已在交付報告揭露,不靜默吞掉。
+    """
+    if df is None or getattr(df, "empty", True):
+        return
+    from services.rotation import suggest_rotation_pairs
+    from shared.signal_thresholds import (
+        ROTATION_BUY_MIN_SCORE,
+        ROTATION_BUY_SIGMA,
+        ROTATION_SELL_SIGMA,
+    )
+    from ui.helpers.render_state import not_ready
+
+    rows = rows_from_batch_df(df)
+
+    # Expander 標題的計數要在 expander 建立**之前**算好 —— 門檻讀 session_state
+    # (widget 互動後 rerun 時已是最新值;首跑用 SSOT 預設),與內部滑桿同一組 key,
+    # 故標題計數與內容永遠同源,不會兩個數字打架(§2.1)。
+    _sell = float(st.session_state.get("batch_rot_sell", ROTATION_SELL_SIGMA))
+    _buy = float(st.session_state.get("batch_rot_buy", ROTATION_BUY_SIGMA))
+    _minsc = float(st.session_state.get("batch_rot_score", int(ROTATION_BUY_MIN_SCORE)))
+    _calc_err = None
+    try:
+        _pairs = suggest_rotation_pairs(rows, sell_sigma=_sell, buy_sigma=_buy,
+                                        min_score=_minsc)
+    except Exception as e:  # noqa: BLE001 — 進 expander 後以 system_error 呈現
+        _pairs, _calc_err = [], e
+
+    _n_ok = sum(1 for p in _pairs if p.get("buy_code"))
+    with st.expander(f"🧩 互補配對探索（{_n_ok} 對可換 / {len(_pairs)} 檔高基期）",
+                     expanded=False):
+        st.caption("掃出來的這一批裡,**誰跟誰互補**:賣掉貼近高點的高基期候選,"
+                   "換進**不同類別**、跌得深但體質健康的標的(分散 + 賺回歸差價)。"
+                   "⚠️ 跌深**不保證**漲回來 —— 買方已先過濾"
+                   "(健康等第 A/B/C + 沒有在吃本金 + 操盤評分達標),避免接刀。")
+
+        # ── 區塊 1:門檻列(3 欄滑桿,預設值走 SSOT,與 ② 同一組門檻)──
+        c1, c2, c3 = st.columns(3)
+        c1.slider("高基期門檻(σ rank ≥)", -2.0, 0.5, ROTATION_SELL_SIGMA, 0.1,
+                  key="batch_rot_sell",
+                  help="現價離期間高點多近就算「太貴、可以賣」。"
+                       "σ 是波動的倍數,數字愈接近 0 代表愈貼近高點。")
+        c2.slider("低基期門檻(σ rank ≤)", -3.0, -0.5, ROTATION_BUY_SIGMA, 0.1,
+                  key="batch_rot_buy",
+                  help="現價要跌到離高點多遠才算「夠便宜、可以買」。"
+                       "數字愈負代表跌得愈深。")
+        c3.slider("買方操盤評分 ≥", 0, 100, int(ROTATION_BUY_MIN_SCORE), 5,
+                  key="batch_rot_score",
+                  help="要換進來的基金,經理人操盤評分至少要幾分(避免換到操作更差的)。")
+
+        if _calc_err is not None:
+            # 🔴 系統真出錯(區塊隔離:上方批次大表與其 CSV 不受影響)
+            system_error("互補配對計算失敗", _calc_err,
+                         hint="上方批次大表與「⬇️ 下載分析結果 CSV」不受影響。")
+            return
+
+        if len(rows) < 2:
+            not_ready("配對需至少 2 檔;目前批次結果不足 2 檔,還不能比對互補性")
+            return
+
+        # ── 區塊 2:最佳互補配對卡(3 欄自適應網格;Q4 每張只顯示最佳一檔買方)──
+        if _pairs:
+            for _i in range(0, len(_pairs), 3):
+                _cols = st.columns(3)
+                for _col, _p in zip(_cols, _pairs[_i:_i + 3]):
+                    _col.markdown(_pair_card_html(_p), unsafe_allow_html=True)
+            st.caption("卡片是答案、下表是依據:每張卡只給**最佳一檔**買方(σ 跌最深且"
+                       "通過健康過濾);想比較其他候選請看下方完整配對表。")
+
+        # ── 區塊 3+4:完整配對表(9 欄原樣)+ CSV + 誠實揭露列(與 ② 同一份表身)──
+        _render_pairs_body(rows, _pairs, _sell, _buy,
+                           key_prefix="batch_rot_", offer_download=True)
