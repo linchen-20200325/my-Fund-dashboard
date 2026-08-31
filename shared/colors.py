@@ -102,16 +102,39 @@ CHIP_BG_NEAR_BLACK: str = "#111"   # near-black chip bg(phase-signal chip / allo
 BUSINESS_ALERT_ON_LIGHT: str = "#96124a"   # 深莓紅：**淺**色底上的業務警訊前景
 BUSINESS_ALERT_ON_DARK: str = "#f294b6"    # 亮莓紅：**深**色底上的業務警訊前景
 
-# ⚠️ **目前 production 只用得到 ON_DARK 這一個**，據實寫明原因，不要讀成「另一個是死碼」：
-#    `.streamlit/config.toml` 釘死 `base = "dark"` → Streamlit App 只有深色底。
-#    `ON_LIGHT` 先進 SSOT 是因為客戶把兩個值一起給了，且它是 `ON_DARK` 的配對值；
-#    真正要讓它生效，需要一套「Streamlit 內文如何得知目前主題」的機制 —— 本 repo **沒有**
-#    （唯一的深淺切換在 `ui/helpers/dividend_calendar_render.py`，那是獨立匯出 HTML 的
-#    私有 `:root{--…}` CSS，讀不到本模組，也套不進 `st.markdown` 片段）。
-#    ⛔ **不要**在 `st.markdown` 裡加 `@media (prefers-color-scheme: light)` 來「順手支援」：
-#    那個 media query 反映的是**作業系統偏好**，不是 Streamlit 主題。使用者 OS 設淺色、
-#    App 仍是深色底 → 會挑到 `ON_LIGHT` 畫在 `#2a0a0a` 上＝ 2.17:1，**比現況更糟**。
-#    此事已回報總管裁決（見本批 PR 描述），不由執行組自行發明機制。
+# ⚠️⚠️ **`BUSINESS_ALERT_ON_LIGHT` 今天沒有 production 消費者 —— 這是刻意保留，不是漏刪。**
+#    **總管 2026-08-31 拍板：留在 SSOT，不刪；但必須就地標明現況。** 以下即該標明。
+#
+#    **現況（實測）**：`.streamlit/config.toml` 釘死 `base = "dark"` → App 只有深色底，
+#    因此只有 `ON_DARK` 會被畫出來。全 repo 對 `ON_LIGHT` 的引用只有本檔的定義與
+#    `tests/test_tricolor_colour_provenance.py` 的守衛。
+#
+#    **為什麼留（兩個理由，缺一不可）**：
+#      1. **它是「一組兩個值」的另一半，不是獨立常數。** 上面那張對比表就是它存在的意義 ——
+#         `#f294b6` 在白底只有 2.17:1、`#96124a` 在業務卡底也只有 2.17:1。**留著配對值
+#         ＋ 用對比測試釘住**，是防止有人把 `ON_DARK` 畫到淺底上的最直接手段；
+#         **只留一半，SSOT 會變成一個會誤導人的半套。**
+#      2. 客戶是把兩個值**一起**給的，刪一半等於片面改掉客戶給的規格。
+#
+#    ⛔ **給未來的 Garbage Collection（`CLAUDE.md §-1.5.1c` v3 §01-2「用不到即清理」）**：
+#    本常數**符合「無 production caller」的表面特徵，但不是孤兒**，理由如上。
+#    **刪它之前必須先確認「本 repo 已確定不需要主題感知」** —— 那是一個尚未成立的前提
+#    （主題感知機制已另立待辦，本批不做：`base="dark"` 現況下沒有需求觸發）。
+#    ✅ **實際護欄不靠這段註解**：刪掉本常數會讓
+#    `tests/test_tricolor_colour_provenance.py` 的 **4 條**測試當場轉紅，第一條是
+#    `test_r0_both_role_tokens_exist_even_the_one_with_no_caller`，它的失敗訊息
+#    直接把上面這些理由印出來 ——**GC 刪不掉它而不出聲，而且會被告知為什麼。**
+#    （2026-08-31 實測，見該批 PR 突變表 M5。⚠️ 初稿在此寫「3 條」是**沒查證就寫的**，
+#     實跑是 4 條；且在補 `test_r0` 之前實際會噴 **115 條**——其中 112 條是 R2 對每個
+#     UI 檔各報一次同樣的 AttributeError，**那種級聯會把真正的原因埋掉**，
+#     故一併把 R2 改為容錯查值、由 `test_r0` 專責報這件事。）
+#
+#    ⛔ **`@media (prefers-color-scheme: light)` 這條路已評估並否決，不要再試**：
+#    那個 media query 反映的是**作業系統偏好**，**不是** Streamlit 主題。
+#    使用者 OS 設淺色、App 仍是深色底 → 會挑到 `ON_LIGHT` 畫在 `#2a0a0a` 上
+#    ＝ **2.17:1，比現況更糟**。本 repo 唯一的深淺切換在
+#    `ui/helpers/dividend_calendar_render.py`，那是**獨立匯出 HTML**（供 PNG 匯出）的私有
+#    `:root{--…}` CSS，讀不到本模組，也套不進 `st.markdown` 片段 —— **不是可用的機制。**
 
 # 同義對應
 TRAFFIC_EMOJI: tuple[str, str, str, str] = ("🟢", "🟡", "🔴", "⬜")

@@ -234,6 +234,41 @@ def _hexes_in(node: ast.AST) -> list[str]:
 
 
 # ══════════════════════════════════════════════════════════════════
+# R0 — 角色常數必須存在（GC 護欄；2026-08-31 總管裁決後補）
+# ══════════════════════════════════════════════════════════════════
+def _role_values() -> dict[str, str]:
+    """角色常數的**現值**；缺席者不列入（讓 R2 不會整片 AttributeError 級聯）。"""
+    import shared.colors as C
+    return {t: getattr(C, t) for t in BUSINESS_TOKEN_NAMES if hasattr(C, t)}
+
+
+def test_r0_both_role_tokens_exist_even_the_one_with_no_caller():
+    """**`BUSINESS_ALERT_ON_LIGHT` 今天沒有 production 消費者，但不准刪。**
+
+    總管 2026-08-31 拍板保留。本條是它的**機器護欄** —— 沒有這條，
+    未來一輪 GC（v3 §01-2「用不到即清理」）會把它當孤兒清掉，
+    而 SSOT 會變成一個「只有深色底那一半」的半套：下一個人拿 `ON_DARK`
+    去畫淺色底時，沒有任何東西會攔他。
+
+    ⚠️ 這條刻意**單獨存在**、且訊息自帶理由。
+    2026-08-31 實測：把常數刪掉會讓本檔 **115 條**測試轉紅，其中 112 條是
+    R2 對每個 UI 檔各報一次同樣的 `AttributeError` —— **那種級聯只會把真正的
+    原因埋掉**。有了本條，刪除的第一個訊號是一句講得清楚的話。
+    """
+    import shared.colors as C
+    missing = sorted(t for t in BUSINESS_TOKEN_NAMES if not hasattr(C, t))
+    assert not missing, (
+        f"三態角色常數不見了：{missing}\n"
+        "若這是 Garbage Collection 把「沒有 caller 的常數」當孤兒刪掉 —— **請還原**。\n"
+        "`BUSINESS_ALERT_ON_LIGHT` 確實沒有 production 消費者（App 釘死深色底），\n"
+        "但它是 `ON_DARK` 的**配對值**：兩者在對方的底色上都只有 2.17:1，\n"
+        "留著配對值 + 對比測試，是防止有人把 ON_DARK 畫到淺底上的手段。\n"
+        "刪它的前提是「本 repo 已確定不需要主題感知」—— 那個前提目前不成立。\n"
+        "理由全文見 shared/colors.py 該常數上方註解。"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
 # R1 — 三個角色必須真的分得開（M1 的守衛）
 # ══════════════════════════════════════════════════════════════════
 def _luminance(hex_str: str) -> float:
@@ -356,8 +391,8 @@ def test_r1_business_alert_rail_is_thicker_than_a_default_rule():
 @pytest.mark.parametrize("path", UI_SOURCES, ids=_rel)
 def test_r2_role_colour_hex_is_never_inlined_in_ui(path: pathlib.Path):
     """角色色一律 `from shared.colors import ...`，不得寫死 hex。"""
-    import shared.colors as C
-    role_values = {getattr(C, t).lower(): t for t in BUSINESS_TOKEN_NAMES}
+    # 缺席常數由 R0 專責報錯；此處容錯，避免整片 AttributeError 級聯把原因埋掉。
+    role_values = {v.lower(): t for t, v in _role_values().items()}
     tree = ast.parse(path.read_text(encoding="utf-8"))
     docstrings = _docstring_nodes(tree)
     bad = []
