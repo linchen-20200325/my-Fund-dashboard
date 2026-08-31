@@ -984,7 +984,7 @@ def _ttl_cached_defs_returning_pandas():
      "def bypass_alias(x) -> pd.Series:\n"
      "    return pd.Series(dtype=float)\n",
      "bypass_alias"),
-])
+], ids=["no_return_annotation", "decorator_alias_import"])   # 參數含換行,不給 ids 會讓 CI 輸出無法閱讀
 def test_scanner_catches_the_two_known_bypasses(label, src, fn_name):
     """⭐ 2026-08-31 稽核 F4:把兩個**實測繞得過**的寫法釘成回歸測試。
 
