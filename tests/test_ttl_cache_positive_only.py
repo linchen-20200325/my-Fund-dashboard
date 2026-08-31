@@ -27,6 +27,7 @@ import pytest
 
 from infra.cache import (
     _ttl_cache,
+    clear_fetch_failed,
     is_fetch_failed,
     mark_fetch_failed,
     FETCH_FAILED_ATTR,
@@ -371,3 +372,197 @@ def test_backoff_cooldown_expiry_really_retries():
     finally:
         sb._clock = orig_clock
         sb.reset_all()
+
+
+# ══════════════════════════════════════════════════════════════
+# 6. ⭐ `.attrs` 傳播（2026-08-31 獨立稽核 F1）
+#    這一組守的不是「今天壞了」,是「明天有人踩到」——
+#    它防的是一種**不會自己叫**的病:新函式繼承了上游的失敗標記 →
+#    永遠不入快取 → 每次重抓 → 答案仍然正確,只是安靜地變慢。
+#    沒有任何既有測試會因為它變紅,所以必須專門釘一條。
+# ══════════════════════════════════════════════════════════════
+
+def _clean_series():
+    return pd.Series([1.0, 2.0], index=pd.to_datetime(["2024-01-01", "2024-01-02"]))
+
+
+def _marked_series():
+    s = pd.Series([3.0, 4.0], index=pd.to_datetime(["2024-01-01", "2024-01-02"]))
+    return mark_fetch_failed(s, "upstream down")
+
+
+def test_arithmetic_propagates_the_failure_mark_even_from_clean_left_operand():
+    """⚠️ 反直覺:`乾淨 + 被標記` 的**結果會帶標記**。
+
+    釘住它的理由有二:(a) 這是 module 註解警告的那個坑,行為若變了註解就變成謊;
+    (b) pandas 升版若改掉這個語意,我們要**知道** —— 不是因為它壞了,
+    而是因為那段警告會失去依據。
+    """
+    assert is_fetch_failed(_clean_series() + _marked_series()) is True
+    assert is_fetch_failed(_marked_series() + _clean_series()) is True
+    assert is_fetch_failed(_clean_series() * _marked_series()) is True
+    assert is_fetch_failed(_clean_series() - _marked_series()) is True
+
+
+def test_concat_and_frame_construction_drop_the_mark():
+    """同樣反直覺的另一半:組合類操作反而會**清掉**標記。
+
+    「沒有一致規則可背,只能實測」—— 這條就是那個實測。
+    """
+    assert is_fetch_failed(pd.concat([_clean_series(), _marked_series()])) is False
+    assert is_fetch_failed(_clean_series().combine_first(_marked_series())) is False
+    assert is_fetch_failed(
+        pd.DataFrame({"a": _clean_series(), "b": _marked_series()})) is False
+
+
+def test_copy_like_operations_keep_the_mark():
+    assert is_fetch_failed(_marked_series().copy()) is True
+    assert is_fetch_failed(_marked_series().dropna()) is True
+    assert is_fetch_failed(_marked_series().to_frame()) is True
+
+
+def test_parquet_roundtrip_keeps_attrs_but_csv_does_not(tmp_path):
+    """⚠️ 反直覺:parquet 往返**保留** `.attrs`,CSV 不會。
+
+    本 repo 的凍結快照走 parquet(§5 可重現性),所以這件事會踩到。
+    """
+    df = _marked_series().to_frame(name="v")
+    assert is_fetch_failed(df) is True
+
+    pq = tmp_path / "t.parquet"
+    try:
+        df.to_parquet(pq)
+    except Exception as e:                       # pyarrow 缺席的環境
+        pytest.skip(f"parquet 引擎不可用: {type(e).__name__}")
+    assert is_fetch_failed(pd.read_parquet(pq)) is True, "parquet 不再保留 attrs"
+
+    csv = tmp_path / "t.csv"
+    df.to_csv(csv)
+    assert is_fetch_failed(pd.read_csv(csv, index_col=0)) is False
+
+
+def test_clear_fetch_failed_is_the_escape_hatch():
+    """module 註解叫新函式呼叫它 —— 它得真的有用。"""
+    derived = _clean_series() + _marked_series()
+    assert is_fetch_failed(derived) is True          # 繼承了不屬於自己的失敗
+    out = clear_fetch_failed(derived)
+    assert out is derived
+    assert is_fetch_failed(out) is False
+
+    # 對沒有 attrs 的東西是 no-op、不 raise(與 mark_fetch_failed 刻意不對稱)
+    for obj in ({}, [], None, 42, "x"):
+        assert clear_fetch_failed(obj) is obj
+
+
+def test_derived_function_that_clears_the_mark_still_gets_cached():
+    """把 module 註解描述的那個坑與它的解法,端到端跑一次。"""
+    calls = {"n": 0}
+
+    @_ttl_cache(ttl_sec=600)
+    def derived_bad(_k):                              # 沒表態 → 繼承標記
+        calls["n"] += 1
+        return _clean_series() + _marked_series()
+
+    derived_bad("a")
+    derived_bad("a")
+    assert calls["n"] == 2, "示範用例本身失效了:它應該要繼承標記而不入快取"
+
+    calls2 = {"n": 0}
+
+    @_ttl_cache(ttl_sec=600)
+    def derived_good(_k):                             # 明確表態
+        calls2["n"] += 1
+        return clear_fetch_failed(_clean_series() + _marked_series())
+
+    derived_good("a")
+    derived_good("a")
+    assert calls2["n"] == 1, "clear_fetch_failed 沒有解除繼承來的標記"
+
+
+# ══════════════════════════════════════════════════════════════
+# 7. ⭐ AST 靜態掃描:回傳 pandas 的 @_ttl_cache 函式只有那 3 個
+#    新增第 4 個就紅燈,強迫作者回去讀 infra/cache.py 的傳播警告。
+# ══════════════════════════════════════════════════════════════
+
+# 這三個是**已經被 mark_fetch_failed 標記、且確認不從被標記上游衍生**的。
+_MARKED_PANDAS_TTL_FUNCS = {
+    "fetch_yf_close",
+    "fetch_fred",
+    "fetch_defillama_stablecoin_mcap",
+}
+
+
+def _ttl_cached_defs_returning_pandas():
+    """AST 掃全 repo,找出所有 `@_ttl_cache` 且回傳註解為 pandas 的函式。
+
+    刻意用 AST 而非 import + registry:registry 只含「已被 import 的模組」,
+    測試若只 import 一部分就會少算 —— 那種漏算會讓守衛安靜失效。
+    """
+    import ast
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    found = []
+    for py in root.rglob("*.py"):
+        rel = py.relative_to(root)
+        if rel.parts[0] in {"tests", ".git"}:
+            continue
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            has_ttl = any(
+                "_ttl_cache" in ast.dump(d) for d in node.decorator_list
+            )
+            if not has_ttl or node.returns is None:
+                continue
+            ret = ast.unparse(node.returns)
+            if "pd." in ret or "DataFrame" in ret or "Series" in ret:
+                found.append((str(rel), node.name, ret))
+    return found
+
+
+def test_only_the_three_marked_functions_return_pandas_from_ttl_cache():
+    """守住 `infra/cache.py` 傳播警告所依賴的那個前提。
+
+    它今天成立(回 pandas 的恰好就是被標記的那 3 個),所以沒有下游會繼承標記。
+    **一旦有人新增第 4 個,這條會紅**,逼他去讀那段警告、決定要不要呼叫
+    `clear_fetch_failed()`。
+
+    ⚠️ 這條紅了**不代表新函式有錯** —— 它只代表「需要有人判斷一次」。
+    確認過不從被標記上游衍生(或已呼叫 clear_fetch_failed)之後,
+    把名字加進 `_MARKED_PANDAS_TTL_FUNCS` 即可。
+    """
+    found = _ttl_cached_defs_returning_pandas()
+    names = {name for _f, name, _r in found}
+    assert names == _MARKED_PANDAS_TTL_FUNCS, (
+        f"回傳 pandas 的 @_ttl_cache 函式集合變了。\n"
+        f"實際: {sorted(names)}\n預期: {sorted(_MARKED_PANDAS_TTL_FUNCS)}\n"
+        f"完整清單: {found}\n"
+        f"→ 請先讀 infra/cache.py 的「.attrs 傳播」段,確認新函式的值"
+        f"不是從被標記的上游算出來的(若是,回傳前呼叫 clear_fetch_failed)。"
+    )
+
+
+def test_the_three_are_actually_marked_in_source():
+    """反向釘:那三個必須真的呼叫了 `mark_fetch_failed`。
+
+    防的是「有人把標記拿掉、卻忘了把名字移出上面的白名單」——
+    那會讓白名單從守衛退化成一張沒人維護的清單。
+    """
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    srcs = {
+        "fetch_yf_close": root / "repositories" / "macro" / "yf.py",
+        "fetch_fred": root / "repositories" / "macro" / "fred.py",
+        "fetch_defillama_stablecoin_mcap": root / "repositories" / "macro" / "alternate.py",
+    }
+    for fn_name, path in srcs.items():
+        text = path.read_text(encoding="utf-8")
+        assert "mark_fetch_failed(" in text, (
+            f"{path.name} 不再呼叫 mark_fetch_failed,但 {fn_name} 仍列在白名單裡"
+        )

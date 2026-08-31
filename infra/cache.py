@@ -124,6 +124,42 @@ def _normalize_moneydj_url_for_cache(url: str) -> str:
 # 只長在成功分支上，失敗路徑自然不會寫。本機制是把同一件事做進**裝飾器**，
 # 讓走 `@_ttl_cache` 的 fetcher 不必各自手刻一份快取。
 # **v18.275 一行都沒動，也不需要動。**
+#
+# ## ⚠️ `.attrs` 傳播：新增回傳 pandas 的 `@_ttl_cache` 函式前必讀
+#
+# （2026-08-31 獨立稽核 F1 發現，本組以傳播矩陣**實測複驗**，pandas 3.0.5；
+#   下列每一條都是跑出來的，不是從文件推的。）
+#
+# **反直覺的兩件事**：
+#
+# 1. **算術運算會把失敗標記「傳染」給結果，即使左運算元是乾淨的。**
+#    實測 `乾淨Series + 被標記Series` → 結果**帶標記**（`+ - *` 皆然，
+#    順序不影響）。`.copy()` / `.dropna()` / `.to_frame()` 同樣保留標記。
+#    **反過來 `pd.concat([...])`、`combine_first()`、`pd.DataFrame({...})`
+#    會把標記清掉** —— 沒有一致規則可背，只能實測。
+#
+# 2. **`to_parquet` / `read_parquet` 往返會保留 `.attrs`；CSV 不會。**
+#    這點特別容易踩到，因為本 repo 的凍結快照走 parquet（§5 可重現性）。
+#
+# **今天無害，明天可能不是**（這是寫下這段的唯一理由）：
+# 本組實測全 repo **13 個 `@_ttl_cache` 函式**中，回傳 pandas 的**恰好只有
+# 被標記的那 3 個**（`fetch_yf_close` / `fetch_fred` /
+# `fetch_defillama_stablecoin_mcap`），其餘 10 個回 `dict` / `float | None`
+# （`.attrs` 對它們不存在）。**所以目前沒有任何下游會繼承到標記。**
+#
+# ⛔ **新增回傳 pandas Series / DataFrame 的 `@_ttl_cache` 函式時，
+#    必須確認它的值不是從上述三個被標記的上游「算」出來的。**
+#    若是（例如拿 `fetch_yf_close("A") / fetch_yf_close("B")` 算比值），
+#    上游失敗時新函式會**繼承標記 → 永遠不入快取**。
+#    ⚠️ 那是**效能病，不是正確性病** —— 它每次都重抓，答案仍然是對的，
+#    所以**不會有任何測試變紅、也不會有畫面出錯**，只會安靜地變慢。
+#    正因為它不會自己叫，才要寫在這裡。
+#    **處理方式**：在新函式回傳前呼叫 `clear_fetch_failed(result)`，
+#    明確表態「我這一層的成敗由我自己決定，不繼承上游的」。
+#
+# 守衛：`tests/test_ttl_cache_positive_only.py` 釘住上述傳播行為，並以 AST
+# 靜態掃描釘住「回傳 pandas 的 `@_ttl_cache` 函式只有那 3 個」——
+# 新增第 4 個就會紅燈，強迫作者回來讀這一段。
 
 FETCH_FAILED_ATTR = "fetch_failed"
 
@@ -158,6 +194,27 @@ def mark_fetch_failed(obj, reason: str):
             f"回傳此型別的 fetcher 請改用 _daily_cache(cache_if=...) 或自行處理。"
         )
     _attrs[FETCH_FAILED_ATTR] = str(reason)
+    return obj
+
+
+def clear_fetch_failed(obj):
+    """清掉失敗標記 —— 給「值由被標記的上游算出來、但本層自有成敗判斷」的函式用。
+
+    存在理由見本檔上方「`.attrs` 傳播」段：pandas 的算術運算會把上游的標記
+    傳染給結果（`乾淨 + 被標記` → 帶標記），若新函式不表態就會**繼承一個
+    不屬於自己的失敗**，導致它永遠不入快取（安靜的效能病，不會有測試變紅）。
+
+    無 `.attrs` 的物件直接原樣回傳（no-op）—— 這裡**不** fail loud，
+    因為「本來就沒有標記可清」與「清乾淨了」對呼叫端是同一件事；
+    `mark_fetch_failed` 會 raise 是因為那裡靜默失敗會產生**假的安全感**，
+    兩者不對稱是刻意的。
+
+    Returns:
+        `obj` 本身（方便 `return clear_fetch_failed(out)` 一行寫完）。
+    """
+    _attrs = getattr(obj, "attrs", None)
+    if isinstance(_attrs, _MutableMapping):
+        _attrs.pop(FETCH_FAILED_ATTR, None)
     return obj
 
 
