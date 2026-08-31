@@ -2,7 +2,7 @@
 
 「定期追蹤投資組合績效」的**往前累積**層:每天存一列組合層績效快照,幾週後成為
 可稽核的績效帳(捕捉**真實權重路徑** —— 這是「用目前權重回推過去」的走勢重建拿不到的)。
-雙後端(仿 pool_repository / auto_search_store):
+雙後端(仿 pool_repository / ~~auto_search_store~~ —— 後者已於 2026-08-31 因 production 0 caller 整檔刪除,此處僅存設計淵源):
 - **Google Sheets**(secrets 有設 → 主):worksheet `_portfolio_perf_history`,跨裝置同步、reboot 不掉。
 - **本地 JSON**(無 GS → fallback):`cache/portfolio_perf/perf_history.json`(Cloud FS ephemeral,dev/離線用)。
 

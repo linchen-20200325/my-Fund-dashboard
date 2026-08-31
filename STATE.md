@@ -824,8 +824,16 @@ user「全做」團隊稽核殘留清單。逐項**先查證再動**(§8.4 / PRO
   (§8.4);re-export 私名鏈不破,policy/ledger/snapshot 140 綠。
 - **T2b DRY(改)**:`repositories/fund/sources.py` 4 處 `safe_float(x.replace("%",""))` 手動剝%
   反模式 → SSOT `safe_num`;10 費用域輸入等價全 MATCH,real_ter/sources 158 綠。
-- **T3a 死碼(WONTFIX-查證)**:`calibration/multi_factor.py` 18 defs **逐一查 caller 全部有用**
-  (_zscore/_normalize/_filter_events 皆內部呼叫,其餘 2~12 external),無死函式,不改。
+- ~~**T3a 死碼(WONTFIX-查證)**:`calibration/multi_factor.py` 18 defs **逐一查 caller 全部有用**
+  (_zscore/_normalize/_filter_events 皆內部呼叫,其餘 2~12 external),無死函式,不改。~~
+  📌 **2026-08-31 狀態更新(有意識的變更,不是漏刪;決策者:客戶 2026-08-31 授權死碼清理)**:
+  該檔已**整檔刪除**。**舊結論在它的射程內仍然成立** —— 當時查的是「**檔案內部**有沒有死函式」,
+  答案(18 defs 互相都有 caller)今天依然對。**被推翻的是它的射程之外**:
+  那些 external caller **全部來自 `services/auto_search.py`**,而整條 auto_search 鏈
+  production 0 caller —— 也就是**檔案內部沒有死碼,但整個檔案是死的**。
+  ⚠️ **這一筆值得後人記住的方法教訓**:「逐一查每個函式都有 caller」**證明不了這個檔案活著** ——
+  一個封閉死簇裡的每個成員都會互相引用,查函式層級只會看到「全部有用」。
+  **要問的是「這條鏈的頭有沒有接到 production 入口」,不是「每個函式有沒有人叫」。**
 - **T3b 越權(WONTFIX-查證)**:hot_money L1(EX-CACHE-1 合規)/ L2(純 facade)/ L3(走 service)
   分層乾淨,P0-4-A 拆檔後無 scope creep,不改。
 - **T4 文件(改)**:`PROCESS.md` v2.0→v3.0,加 §6 動態重規劃 / §7 全自動自修迴圈 / §8 多 Agent+UAT。
@@ -1863,6 +1871,13 @@ user 實機截圖回報 tab5 三筆異常(外資買賣超 ARCHIVED 106天 / 雷�
     均已因 production 0 caller 實體刪除,兩者都不再是共用者。
     **本條「保留 crisis_backtest」的結論不變** —— `services/calibration/multi_factor.py`
     (經 `services/auto_search.py`)與 `ui/helpers/fund_grp_health/capture.py` 仍在用。
+    📌 **2026-08-31 再次事實更新(史料本體不動,只補現況)**:`services/calibration/multi_factor.py`
+    與 `services/auto_search.py` **已隨 auto_search 封閉死簇實體刪除**(production 0 caller;
+    客戶 2026-08-31 授權死碼清理)。**「保留 crisis_backtest」的結論仍然不變,但支撐它的理由只剩一條** ——
+    現存唯一 production 消費者是 `ui/helpers/fund_grp_health/capture.py`
+    (`from services.crisis_backtest import fetch_market_series`,2026-08-31 實測)。
+    ⚠️ **據此提醒後人**:本檔的共用者已由三條減到一條,**下一次那唯一一條若也消失,
+    `crisis_backtest.py` 就會變成 0 caller** —— 屆時應重新評估,而**不是**引用本條當作永久保留的依據。
   - **doc-sync**:`app.py` 註解、`shared/converters.py` 過時註解、`ARCHITECTURE.md`(services + ui 樹刪 3 行)、`CLAUDE.md §2.3`(crisis_strategy_grid 參照更新)、`§8.2.A EX-PASSTHRU-1`(2 條 tab_crisis_backtest 例外退役)。歷史 changelog(STATE 舊條目 / BACKLOG F-PIT-1)為史料不動。
   - **驗證**:全庫 0 殘留真 import;保留的 crisis_backtest + 3 消費者 import smoke OK;pre-commit `--all-files`。
 
