@@ -52,8 +52,21 @@ ThreadPool(process_one_fund) → _health_results → _ok_health → _funds_extra
 - **守不到**：把健診 3 表的內容**複製一份**到 ④（不 import、自己重寫一遍）。
   本檔認的是「有沒有呼叫那個函式」，不是「畫面上有沒有出現健診表」。
 - **守不到**：其他分頁（②以外）另外 embed 一次健診。本檔只看 `ui/tab3_portfolio.py`。
-- **守不到**：單行連結被改成兩行、三行。第 3 條守的是「沒有標題、沒有卡片、
-  沒有多出來的 `st.markdown` 區塊」，**不是**字數。
+- **守不到**：**同一個** caption 裡塞進很長的字、渲染出來折成好幾行。
+  第 3 條數的是**元素個數**（`st.caption` 總數 == 1、`###` 標題 == 0），**不是字數**。
+  ⚠️ 2026-08-31 稽核更正：本行原本寫「守不到：被改成兩行、三行」，那句話在
+  「**多開一個 `st.caption`**」這個方向上**已經不成立** —— 第 3 條現在會擋。
+  真正守不到的只剩「一個 caption 內文太長」。
+- **守不到**：第 6 條只掃 `_render_health_3tables` / `_render_health_table`
+  **兩個函式本體**，不遞迴進它們呼叫的其他模組。
+
+## 📌 分層說明：第 1 條（import guard）是這批的真正防線
+
+2026-08-31 獨立稽核指出：第 2 條的 banned-name 清單是**硬編碼名單**，
+改一個新別名就能繞過；擋住它的其實是**第 1 條** —— 沒有 import 就沒有東西可叫。
+兩條是**縱深**不是重複：第 1 條擋「拿得到」，第 2 條擋「用得到」。
+⚠️ **日後若要精簡本檔，第 1 條（`test_tab3_does_not_import_health_render`）
+是不能刪的那一條。**
 
 ## 突變驗證（每條都實跑過，結果見各 test 的 docstring）
 
@@ -210,23 +223,39 @@ def test_tab3_does_not_call_health_render():
 # 3) 單行連結存在、走 SSOT、而且真的只有「一行」
 # ══════════════════════════════════════════════════════════════════════════
 def test_tab3_health_block_has_single_line_link_via_ssot():
-    """健診區塊裡必須有**恰好一個** `st.caption`，其內容以 f-string 內嵌
-    `tab_label('health')`（分頁名 SSOT）；且該區塊**不得**再有 `###` 標題。
+    """健診區塊直屬的 `st.caption` **總數必須是 1**，而且**就是那個**以 f-string
+    內嵌 `tab_label('health')`（分頁名 SSOT）的指路句；且該區塊**不得**再有 `###` 標題。
 
-    三件事一起守，因為它們是同一個要求的三面：
+    四件事一起守，因為它們是同一個要求的四面：
     - **有連結**：`tab_label('health')` 出現在 caption 裡（不是別的 key）；
     - **走 SSOT**：是**呼叫**取得，不是寫死字串（寫死由第 4 條再補一刀）；
-    - **只有一行**：`###` 標題數 == 0 —— 客戶說「單行連結」，不是「換一張卡片」。
+    - **只有一個 caption**：區塊直屬 `st.caption` 總數 == 1，且它就是那個連結；
+    - **沒有標題**：`###` 標題數 == 0 —— 客戶說「單行連結」，不是「換一張卡片」。
 
-    ⚠️ 這裡只數**直接寫在該 If 底下**的 `st.markdown('###...')`；
-    下游 `render_rotation_section` 等函式**自己**印的 `###` 標題不在本檔射程內
-    （它們是各自區塊的標題，本來就該有，且本次未動）。
+    ## ⚠️ 第三點是 2026-08-31 稽核補的（原本的敘述說謊）
 
-    突變實驗（實跑，三次）：
+    本 docstring 原本寫「必須有**恰好一個** `st.caption`」，但當時的斷言是
+    `len(link_captions) == 1` —— 它只數**含 `tab_label('health')` 的那個**。
+    稽核實測：**另外多加一個普通 `st.caption` 可以全綠存活**。
+    也就是「恰好一個」這句話當時是**假的**，而且與檔頭「守不到：被改成兩行、三行」
+    自相矛盾。
+
+    **處置：把斷言改成真的（總數 == 1），而不是把 docstring 改軟。** 理由：
+    規格原文就是「**只留一行，不要做成卡片、不要加按鈕、不要新增任何版面元素**」——
+    「總數 == 1」正是這句話的字面意思，不是我額外加嚴。把敘述改軟才是放掉要求。
+
+    ⚠️ 只數**直接寫在該 If 底下**的呼叫；下游 `render_rotation_section` 等函式
+    **自己**印的 caption / `###` 標題不在射程內（它們是各自區塊的東西，本次未動）。
+    ⚠️ 也只認 `st.caption`：區塊內既有的 `_c1_h.caption(...)`（重算快取提示，掛在
+    column 物件上）**不計入** —— 它屬仍在跑的計算段，本批未動它。
+
+    突變實驗（實跑，四次）：
     1. 刪掉那個 `st.caption(...)` → 轉紅（`找不到指向 ② 的單行連結`）；
     2. 把 `_tab_label_t3('health')` 換成 `_tab_label_t3('portfolio')` → 轉紅（同上）；
     3. 把 `### 💊 持倉健診（共用 SSOT 3 表…）` 那行 `st.markdown` 加回去 → 轉紅
-       （`健診區塊又多了 1 個 '###' 標題`）。三次還原後皆轉綠。
+       （`健診區塊又多了 1 個 '###' 標題`）；
+    4. 在連結旁多加一個 `st.caption("補充說明")`（稽核抓到的存活變體）→ **現在轉紅**
+       （`健診區塊直屬的 st.caption 有 2 個，應為 1`）。四次還原後皆轉綠。
     """
     block = _health_block(_parse(TAB3))
 
@@ -258,6 +287,25 @@ def test_tab3_health_block_has_single_line_link_via_ssot():
         f"分頁名**必須**取自 `ui/helpers/story_nav.tab_label`（SSOT）—— "
         f"寫死「💊 組合健診」的話，② 改名時這行會默默指向一個不存在的分頁"
         f"（2026-08-05 稽核 🔴 必修 2 的原始事故就是這個）。"
+    )
+
+    # (a2) 「單行」＝ 這個區塊直屬的 `st.caption` **總數就是 1**（2026-08-31 稽核補）。
+    #      原本只數「含 tab_label('health') 的那個」→ 稽核實測「另外多加一個普通
+    #      st.caption」可以存活。客戶要的是**一行**、規格明寫「不要新增任何版面元素」，
+    #      所以數的必須是**總數**，不是「符合條件的那個」。
+    #      ⚠️ 只認 `st.caption`；區塊內既有的 `_c1_h.caption(...)`（重算快取提示，
+    #      掛在 column 物件上）**不在此列**，它是計算段的既有元素、本批未動。
+    all_captions = [c for c in _calls(block) if _dotted(c.func) == "st.caption"]
+    assert len(all_captions) == 1, (
+        f"健診區塊直屬的 `st.caption` 有 {len(all_captions)} 個，應為 1：\n"
+        f"{[f'L{c.lineno}' for c in all_captions]}\n"
+        f"客戶要的是**單行連結**（規格：「只留一行，不要做成卡片、不要加按鈕、"
+        f"不要新增任何版面元素」）。要多一段說明文字，請併進同一個 caption，"
+        f"不要再開一個 —— 或者那其實是版面變更，該走草稿 gate。"
+    )
+    assert all_captions[0] is link_captions[0], (
+        "區塊裡唯一的 `st.caption` 不是那個指向 ② 的連結 —— 兩條斷言對不起來，"
+        "請確認連結沒有被換成別的東西。"
     )
 
     # (b) 灰色說明語意：不得用 st.error / st.warning 講「功能在別頁」。
@@ -347,16 +395,40 @@ def test_health_precompute_and_downstream_sections_preserved():
     **本條紅了 = ④ 的輪動配對 / 組合績效 / 效率前緣可能已經靜默變空**——
     畫面上就是「那幾區不見了」，而沒有任何錯誤訊息（`CLAUDE.md` §1 點名最危險的那種）。
 
-    守三樣東西，缺一不可：
+    守四樣東西，缺一不可：
     - `process_one_fund`（健診逐檔計算，`_health_results` 的來源）仍被 import；
-    - `_funds_extra` 仍在健診區塊內被賦值（三個下游的唯一輸入）；
+    - `_funds_extra` 仍在健診區塊內被賦值，**且它的值真的接在 `_ok_health` 上**；
+    - `_ok_health` 的值真的接在 `_health_results` 上（＝整條資料鏈沒有被截斷）；
     - 三個下游區塊仍被呼叫。
 
-    突變實驗（實跑，兩次）：
+    ## ⚠️ 為什麼要看「值」而不只看「名字有沒有被賦值」（2026-08-31 稽核抓到的漏洞）
+
+    本條原本只斷言「`_funds_extra` 這個名字有出現在賦值左邊」。獨立稽核實測，
+    下面兩個突變**全綠存活**：
+
+    - `_funds_extra = []` ——名字還在，值被換成空 list；
+    - `_ok_health = []` ——上游被截斷，`_funds_extra` 跟著算出空 list。
+
+    兩者都會讓 🔄 輪動配對 / 📊 組合績效 / 🎯 效率前緣**靜默變空**，
+    **而那正是本條存在的唯一理由**。守「名字」不守「值」＝ 這條測試在它最該擋的
+    那個方向上是瞎的。故改為**連資料鏈的形狀一起釘**：
+    `_health_results` → `_ok_health` → `_funds_extra`，任一節被換成 `[]` 或改接
+    別的來源都會轉紅。
+
+    ⚠️ **仍然守不到**：`_ok_health = [r for r in _health_results if False]`
+    這種「來源對、but 過濾條件恆假」的寫法。本條認的是**資料鏈的接線**，
+    不是**篩選邏輯的語意** —— 那要 runtime 差分才驗得到，不在本檔射程。
+
+    突變實驗（實跑，四次）：
     1. 刪掉 `_funds_extra = [...]` 那段 list comprehension → 轉紅
        （`健診區塊內找不到 _funds_extra 的賦值`）；
     2. 刪掉 `render_portfolio_performance(_funds_extra)` 這行 → 轉紅
-       （`④ 少了下游區塊：['render_portfolio_performance']`）。兩次還原後皆轉綠。
+       （`④ 少了下游區塊：['render_portfolio_performance']`）；
+    3. `_funds_extra = []`（稽核抓到的存活變體）→ **現在轉紅**
+       （`_funds_extra 的值不是接在 _ok_health 上的 list comprehension`）；
+    4. `_ok_health = []`（稽核抓到的存活變體）→ **現在轉紅**
+       （`_ok_health 的值不是接在 _health_results 上的 list comprehension`）。
+    四次還原後皆轉綠。
     """
     tree = _parse(TAB3)
     block = _health_block(tree)
@@ -380,16 +452,40 @@ def test_health_precompute_and_downstream_sections_preserved():
     )
     assert imported, "ImportFrom 掃描結果為空，AST 解析可能出錯"
 
-    # (b) `_funds_extra` 仍在健診區塊內被賦值
-    assigned = {
-        t.id
-        for n in ast.walk(block) if isinstance(n, ast.Assign)
-        for t in n.targets if isinstance(t, ast.Name)
-    }
-    assert "_funds_extra" in assigned, (
-        "健診區塊內找不到 `_funds_extra` 的賦值。它是三個下游區塊的唯一輸入，"
-        "沒有它 = 那三區拿不到資料。"
-    )
+    # (b) 資料鏈的形狀：_health_results → _ok_health → _funds_extra
+    #     只看「名字被賦值」會被 `X = []` 繞過（稽核實測存活）→ 連 value 一起認。
+    def _assign_values(name: str) -> list[ast.AST]:
+        return [
+            n.value
+            for n in ast.walk(block) if isinstance(n, ast.Assign)
+            for t in n.targets
+            if isinstance(t, ast.Name) and t.id == name
+        ]
+
+    def _assert_listcomp_fed_by(name: str, source: str) -> None:
+        values = _assign_values(name)
+        assert values, (
+            f"健診區塊內找不到 `{name}` 的賦值。它是資料鏈的一節，"
+            f"沒有它 = 下游三區拿不到資料。"
+        )
+        ok = [
+            v for v in values
+            if isinstance(v, ast.ListComp)
+            and v.generators
+            and isinstance(v.generators[0].iter, ast.Name)
+            and v.generators[0].iter.id == source
+        ]
+        assert ok, (
+            f"`{name}` 的值不是接在 `{source}` 上的 list comprehension —— "
+            f"實得 {[type(v).__name__ for v in values]}"
+            f"（{[ast.unparse(v)[:60] for v in values]}）。\n"
+            f"⚠️ **把它換成 `[]`（或改接別的來源）畫面不會報錯，但 🔄 輪動配對 / "
+            f"📊 組合績效 / 🎯 效率前緣會靜默變空** —— 那正是本條要擋的東西。\n"
+            f"WP-G 只授權移除**渲染**，資料鏈一節都不准斷。"
+        )
+
+    _assert_listcomp_fed_by("_ok_health", "_health_results")
+    _assert_listcomp_fed_by("_funds_extra", "_ok_health")
 
     # (c) 三個下游區塊仍被呼叫
     called = {_call_name(c) for c in _calls(block)}
@@ -417,35 +513,66 @@ def test_health_render_chain_is_display_only():
     `st.session_state[...] = `，本條會轉紅 —— 那不是「測試擋路」，
     是在提醒他：**④ 已經沒有在跑這段渲染了，你寫的那個值在 ④ 不會被寫入。**
 
-    ⚠️ 只涵蓋這兩個函式本體，**不遞迴進它們呼叫的其他模組**
-    （`_render_low_base_screener` / `render_mutual_exclusion_section` / `columns` 等）。
-    「整條鏈路零寫入」是更強的宣稱，本條**沒有**證明到那個程度。
+    ## 認得出來的四種寫入形態（第 2~4 種是 2026-08-31 稽核補的）
 
-    突變實驗（實跑）：在 `_render_health_3tables` 開頭插入
-    `st.session_state["_wpg_probe"] = 1` → **本條轉紅**
-    （`AssertionError: 健診渲染鏈路出現 session_state 寫入`）。還原後轉綠。
+    | # | 形態 | 例 |
+    |---|---|---|
+    | 1 | 下標賦值 | `st.session_state["k"] = v` |
+    | 2 | **屬性賦值** | `st.session_state.k = v` |
+    | 3 | **`.update()`** | `st.session_state.update(k=v)` |
+    | 4 | **widget 的 `key=`**（streamlit 會**代你寫**進 session_state） | `st.selectbox(..., key="k")` |
+
+    原本只認第 1 種 —— 稽核指出另外三種都能無聲繞過，而**第 4 種最陰**：
+    它看起來完全不像賦值，卻是 streamlit 最常見的 session_state 寫入途徑。
+    **實測**：這四種在兩個函式本體內目前都是 0，所以補上不會產生偽陽性。
+
+    ⚠️ **仍然只涵蓋這兩個函式本體，不遞迴進它們呼叫的其他模組**
+    （`_render_low_base_screener` / `render_mutual_exclusion_section` / `columns` 等）。
+    「整條鏈路零寫入」是更強的宣稱，本條**沒有**證明到那個程度 ——
+    該宣稱由 2026-08-31 獨立稽核以跨模組遞迴呼叫圖 + runtime 差分另行驗證，
+    **不是**本條證出來的，別把兩者混為一談。
+
+    突變實驗（實跑，四次，每種形態各一）：在 `_render_health_3tables` 開頭插入
+    `st.session_state["_wpg_probe"] = 1` / `st.session_state._wpg_probe = 1` /
+    `st.session_state.update(_wpg_probe=1)` / `st.text_input("x", key="_wpg_probe")`
+    → **四種都轉紅**。還原後轉綠。
     """
     tree = _parse(HEALTH)
     writes: list[str] = []
     for name in HEALTH_RENDER_FUNCS:
         fn = _func(tree, name)
         for node in ast.walk(fn):
+            # 形態 1 / 2：下標賦值與屬性賦值
             targets: list[ast.AST] = []
             if isinstance(node, ast.Assign):
                 targets = list(node.targets)
             elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
                 targets = [node.target]
             for t in targets:
-                # 只認 `<...>.session_state[...] = ...` 這種真寫入；
-                # `x = st.session_state.get(...)` 是讀，target 是 Name，不會命中。
+                # `x = st.session_state.get(...)` 是**讀**，target 是 Name，不會命中。
                 if isinstance(t, ast.Subscript) and "session_state" in _dotted(t.value):
-                    writes.append(f"{name}:{node.lineno}: {_dotted(t)}")
+                    writes.append(f"{name}:L{node.lineno} 下標賦值 {_dotted(t)}")
+                elif isinstance(t, ast.Attribute) and "session_state" in _dotted(t.value):
+                    writes.append(f"{name}:L{node.lineno} 屬性賦值 {_dotted(t)}")
+
+            if isinstance(node, ast.Call):
+                dotted = _dotted(node.func)
+                # 形態 3：`st.session_state.update(...)` / `.setdefault(...)`
+                if ("session_state" in dotted
+                        and dotted.rsplit(".", 1)[-1] in ("update", "setdefault")):
+                    writes.append(f"{name}:L{node.lineno} {dotted}(...)")
+                # 形態 4：widget 帶 `key=` —— streamlit 會代為寫入 session_state
+                if dotted.startswith("st.") and any(
+                    kw.arg == "key" for kw in node.keywords
+                ):
+                    writes.append(f"{name}:L{node.lineno} widget key= → {dotted}")
 
     assert writes == [], (
         f"健診渲染鏈路出現 session_state 寫入：{writes}\n"
         f"④（我的配置）自 WP-G 起**不再呼叫這段渲染** —— 你在這裡寫的值，"
         f"在 ④ 那一頁永遠不會被寫入。若 ④ 有東西要讀它，請把寫入移到"
-        f"`ui/tab3_portfolio.py` 仍在執行的**計算**段，不要留在渲染裡。"
+        f"`ui/tab3_portfolio.py` 仍在執行的**計算**段，不要留在渲染裡。\n"
+        f"（widget `key=` 也算：streamlit 會代你把 widget 值寫進 session_state。）"
     )
 
 

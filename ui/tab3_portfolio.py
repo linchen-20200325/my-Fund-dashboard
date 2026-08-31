@@ -2090,6 +2090,19 @@ def render_portfolio_tab() -> None:
                     # 據實記錄的附帶行為變更(**不是**「零行為變更」):
                     #   (a) 3 表本身、以及只印在表內的那兩句 `source_tab` 指路措辭
                     #       (`_weight_basis_note` / `_core_satellite_verdict_caption`)一併不再出現;
+                    #   (a2) **`render_fund_checkup`(基金體檢 PK)在本頁少了一份** ——
+                    #       它原本被畫兩次,但**那兩次不是同一個東西**
+                    #       (2026-08-31 稽核更正;初稿寫成「重複兩次」是不準確的宣稱):
+                    #         · 本頁上方直接呼叫那次 → 傳 `st.session_state.portfolio_funds`,
+                    #           用**使用者實際填的 `invest_twd`**(每檔不同);
+                    #         · 被移除的 embed 那次 → 傳 `_build_fund_dict(..., _DEFAULT_PRINC)`,
+                    #           **每檔硬寫 100 萬**的齊頭模擬基準。
+                    #       `invest_twd` 會驅動可見輸出(原幣本金 / 月配息 / 年配息三欄 + 健診卡文案),
+                    #       兩份的數字本來就不一樣。**移除的是「齊頭模擬基準」那一份。**
+                    #       ⚠️ **但沒有能力消失**:同型的齊頭模擬版在 ② 仍在,而且 ② 的本金是
+                    #       **使用者可設定的單一本金**(`_build_fund_dict(r, code, principal_twd)`),
+                    #       比本頁硬寫死的 100 萬更好用。要齊頭比較 → 去 ②;
+                    #       要看自己實際金額 → 本頁上方那一份仍在。
                     #   (b) 本 repo 自此**沒有任何 caller 傳 `source_tab="portfolio"`** →
                     #       `ui/tab_fund_grp_health._CS_WHERE_PORTFOLIO` 成為 production 不可達分支。
                     #       依 §-1.5.1c 判定 3(4) 它是「因本次改動才變成沒用的」,本該同批清掉;
