@@ -6,8 +6,14 @@ fail-loud)。但仍有 3 個 call site 在**進 get_gspread_client 之前**就 `
 secret 存成 JSON 字串時 `dict("...")` 直接拋 ValueError(且 Streamlit Cloud 遮蔽訊息),
 使用者用到「選股池 / 換股顧問 / 總經權重 / auto-search」就會炸。
 
-本測試以**行為**鎖住修正:把 secret 餵成字串,3 個 sheet-getter 必須把**原字串**
+本測試以**行為**鎖住修正:把 secret 餵成字串,sheet-getter 必須把**原字串**
 一路傳到 get_gspread_client(用 stub 攔截),全程不拋 ValueError。
+
+⚠️ 2026-08-31 範圍縮減(**有意識的變更,不是漏刪**;決策者:客戶 2026-08-31 授權死碼清理):
+原本守 **3 檔**,現守 **2 檔** —— 第三個 `services/auto_search_store_gs.py` 已整檔刪除
+(auto_search 封閉死簇,production 0 caller)。**縮的是對象,不是標準**:
+`pool_repository` 與 `macro/weights_store` 兩檔的行為鎖與原始碼鎖**一字未改**。
+上段「3 個 call site」保留原文不改 —— 那是**當時的事故現場描述**,不是現行守備範圍。
 """
 from __future__ import annotations
 
@@ -81,15 +87,6 @@ def test_pool_repository_passes_string_secret_untouched(monkeypatch):
     assert received == [_SA_JSON], "SA 字串應原樣傳給 get_gspread_client(不得先 dict())"
 
 
-def test_auto_search_store_passes_string_secret_untouched(monkeypatch):
-    received = _patch(monkeypatch)
-    import services.auto_search_store_gs as _ass
-
-    sh = _ass._get_sheet()
-    assert isinstance(sh, _FakeSheet)
-    assert received == [_SA_JSON]
-
-
 def test_weights_store_passes_string_secret_untouched(monkeypatch):
     received = _patch(monkeypatch)
     import services.macro.weights_store as _ws
@@ -106,7 +103,10 @@ def test_no_dict_prewrap_source_lock():
     root = Path(__file__).resolve().parent.parent
     targets = [
         root / "repositories" / "pool_repository.py",
-        root / "services" / "auto_search_store_gs.py",
+        # ⚠️ 2026-08-31:原本這裡還有 `services/auto_search_store_gs.py`。
+        #   該檔已整檔刪除(auto_search 封閉死簇,production 0 caller;
+        #   客戶 2026-08-31 授權死碼清理)——**是測試對象消失,不是為了讓 CI 綠**。
+        #   剩下兩檔的回歸鎖一字未動,仍然有效。
         root / "services" / "macro" / "weights_store.py",
     ]
     bad = 'dict(require_secret("google_service_account"))'

@@ -1,6 +1,6 @@
 """repositories/pool_repository.py — 選股池(候選基金)持久化(v19.428)。L1 CRUD。
 
-使用者維護的「選股池」= 一組候選基金,供換股顧問配對。雙後端(仿 auto_search_store):
+使用者維護的「選股池」= 一組候選基金,供換股顧問配對。雙後端(仿 ~~auto_search_store~~ —— 該模組已於 2026-08-31 因 production 0 caller 整檔刪除,此處僅存設計淵源;同型現例見 `repositories/portfolio_perf_repository.py`):
 - **Google Sheets**(secrets 有設 → 主):worksheet `_fund_pool`,跨裝置同步、Cloud reboot 不掉。
   v19.472:目標 Sheet 改成**獨立一本**(`POOL_SHEET_ID` secret → baked `_POOL_SHEET_ID_DEFAULT`,
   見 `_pool_sheet_id`)—— user 2026-08-18「基金要另一本,不能共上方(持倉)的 id」。**不再共用
