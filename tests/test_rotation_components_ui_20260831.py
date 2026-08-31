@@ -22,6 +22,12 @@
   - 元件 B 改為自己 inline 一份表(不呼叫 `_render_pairs_body`)→ sentinel 紅
   - 元件 A 拿掉 excluded caption → test_excluded_rendered 紅
 
+⚠️ **2026-08-31 稽核回修批新增一條**(本檔的 bare 渲染被元件 B 的 `st.form` 化「連坐」):
+  - `_render_explorer_bare()` 的 `finally` 收尾拿掉(form 狀態外洩到根 DeltaGenerator、
+    污染整個 pytest 行程)→ `test_bare_render_here_leaves_no_form_state_on_the_root_dg` 紅;
+    同行程再跑 `tests/test_render_smoke.py` 另外 3 條一起紅。
+    **本檔在該 PR 之前無害** —— 當時元件 B 沒有 form,是它 form 化之後才連坐。
+
 已知守不到(誠實列出):跨檔動態 `getattr` 呼叫;把 gate 條件改成恆真
 (`== "health" or True`);渲染順序若改以「先存 list 再亂序執行」的間接形式。
 """
