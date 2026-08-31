@@ -548,6 +548,7 @@ def test_code_finder_is_the_only_search_entry():
     貼回 import 而不呼叫本來就不會多畫一份搜尋框。
     """
     _hits: list[str] = []
+    _detail: list[str] = []          # 只給失敗訊息用（帶行號），不參與判定
     for _p in sorted(ROOT.glob("ui/**/*.py")):
         _tree = ast.parse(_p.read_text(encoding="utf-8"))
         for _n in ast.walk(_tree):
@@ -555,12 +556,22 @@ def test_code_finder_is_the_only_search_entry():
                 continue
             _fn = getattr(_n.func, "id", None) or getattr(_n.func, "attr", None)
             if _fn == "tdcc_search_fund":
-                _hits.append(f"{_p.relative_to(ROOT)}:{_n.lineno}")
+                # ⚠️ **只記檔案，不記行號**（2026-08-31 收尾批修正）。
+                # ~~舊寫法把行號一起記進來，斷言第一支寫死 `code_finder.py:48`。~~
+                # **有意識的修正，不是漏改**（決策者：AI 總管 · 依據：第三組複驗）。
+                # **舊寫法的理由仍然成立**：把行號印進失敗訊息，定位最快。
+                # **被權衡掉的原因**：那個行號在寫下之後**當批就已經過期**
+                # （同批後續改了 docstring，實際已是 `:68`），於是斷言的
+                # **第一支永遠為 False、靠 `or` 的第二支才成立 ＝ 死子句** ——
+                # 一個永遠不會成立的條件留在斷言裡，只會誤導後人以為它在守什麼。
+                # 這正是姊妹 repo §8.2.A.0 規則 1「禁止寫行號」要防的東西：
+                # **行號是保證會過期的資訊**，而過期不會觸發任何人去更新它。
+                # 行號改放進**失敗訊息**（只在紅燈時求值，過期也不影響判定）。
+                _hits.append(str(_p.relative_to(ROOT)))
+                _detail.append(f"{_p.relative_to(ROOT)}:{_n.lineno}")
 
-    assert _hits == ["ui/helpers/fund_research/code_finder.py:48"] or (
-        len(_hits) == 1 and _hits[0].startswith("ui/helpers/fund_research/code_finder.py")
-    ), (
-        f"`tdcc_search_fund` 在 UI 層的呼叫點不是恰好一個：{_hits}。\n"
+    assert _hits == ["ui/helpers/fund_research/code_finder.py"], (
+        f"`tdcc_search_fund` 在 UI 層的呼叫點不是恰好一個：{_detail}。\n"
         "合併頁把「找代號」升成兩個模式共用的頂部之後，全站只該有一份搜尋框；\n"
         "多一個呼叫點＝多一份搜尋框，或是又有人複製了一份取數實作。\n"
         "（憲法 §8.2.A EX-PASSTHRU-1 的登記路徑也應指到這個唯一的活呼叫點。）"

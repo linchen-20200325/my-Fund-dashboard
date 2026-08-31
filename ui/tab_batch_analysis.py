@@ -23,7 +23,21 @@ from ui.helpers.render_state import system_error
 # 舊寫法把**現行**分頁名手抄一份，理由（讓使用者知道去哪）仍成立；
 # 被權衡掉的是「第二份標籤」本身 —— 本 repo 分頁改名漏改已發作兩次。
 from ui.helpers.story_nav import tab_label as _tab_label
-# ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。預設全空 → 本檔行為與合併前完全相同。
+# ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。
+# ~~預設全空 → 本檔行為與合併前完全相同。~~
+# ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：
+# **這句話現在是假的。**
+# 舊句的理由**仍然成立** —— 它寫下的當天 ③ 合併頁還沒被 `app.py` 掛上去，
+# `render_batch_analysis_tab` 仍有一個不帶旗標的舊入口，旗標**確實**是空的。
+# 被權衡掉的是它的**前提**：WP-F 七→五接線移除了舊入口，本函式現在的唯一 caller
+# 是 `ui/tab_fund_research.py::_render_batch_mode()`，它**永遠**帶著
+# `merged_page_owns(PAGE_HEADER)` 進來 → 旗標**恆為持有**
+# （執行時實測：以 shim 攔截 `_render_batch_mode` 內的 lazy import，量到
+# `PAGE_HEADER_owned=True`）。
+# 直接後果：下方 `if not _merged_page_owns(_MERGED_PAGE_HEADER):` 在 production
+# **恆不觸發**（刻意保留為契約實作／防當機護欄，見該處註記）。
+# ⚠️ 本句與 `ui/tab2_single_fund.py` 檔頭那句**逐字同型**；那句在前一批已更正，
+# 這句漏網 —— **同型的假敘述必須一起改，只修被點名的那一個就是本節反覆在犯的錯**。
 from ui.helpers.fund_research.merge_context import (
     PAGE_HEADER as _MERGED_PAGE_HEADER,
     owned_by_merged_page as _merged_page_owns,
