@@ -620,11 +620,17 @@ def _import_bindings(tree: ast.AST) -> dict:
 
 
 def _reassigned_names(tree: ast.AST) -> set:
-    """整檔被指派過的名字（`X = ...` / `X: T = ...` / for-target / with-as …）。
+    """整檔被指派過的名字（`X = ...` / `X: T = ...` / walrus / for-target / with-as …）。
 
     guard 引數若同時是 import 綁定**又**被重新指派過，靜態上就無法信任
     import 那條線（`_SD_MANAGE_HEADER = DATA_GUARD_HEADER` 這種遮蔽會讓
     純 import 解析誤判為綁對）→ 一律 fail-closed 當成綁錯。
+
+    ⚠️ walrus（`ast.NamedExpr`）**必須**在列 —— 2026-08-31 稽核第三個對抗性
+    變體實證本函式初版漏了它：guard 前一行插
+    `(_SD_MANAGE_HEADER := "data_guard_header")` → 當時 25 條**照綠**。
+    walrus 是運算式不是陳述式，藏得進 if 條件、引數、f-string 裡 ——
+    漏掉它等於留一條不經 Assign 節點的重綁後門。
     """
     names: set = set()
     for node in ast.walk(tree):
@@ -632,6 +638,8 @@ def _reassigned_names(tree: ast.AST) -> set:
         if isinstance(node, ast.Assign):
             targets = node.targets
         elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            targets = [node.target]
+        elif isinstance(node, ast.NamedExpr):
             targets = [node.target]
         elif isinstance(node, ast.For):
             targets = [node.target]
@@ -692,6 +700,9 @@ def test_guard_argument_is_bound_to_the_expected_flag(relpath):
     - tab2 改 `MANAGE_HEADER as _SD_FETCH_DIAG` → **轉紅**。
     - 在函式內加 `_SD_MANAGE_HEADER = _SD_DATA_GUARD_HEADER` 遮蔽 import →
       **轉紅**（reassigned fail-closed，import 解析不會被遮蔽騙過）。
+    - guard 前一行插 walrus `(_SD_MANAGE_HEADER := "data_guard_header")` →
+      **轉紅**（稽核第三個對抗性變體；初版 `_reassigned_names` 漏收
+      `ast.NamedExpr` 時本條照綠，已補）。
     """
     flags = _resolved_guard_flags(relpath, guard_name=_GUARD_NAME,
                                   fn_name=_PAGE_RENDERERS[relpath])
