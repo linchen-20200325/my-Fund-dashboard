@@ -197,7 +197,15 @@ def render_data_guard_tab() -> None:
     # v18.128 hotfix: 補回 B-C.3 抽取漏掉的 Section 0 + Section -1 開頭 24 行
     _d5_hdr, _d5_btn = st.columns([3, 1])
     with _d5_hdr:
-        st.markdown("## 🔬 資料診斷")
+        # ⑤ 設定與診斷合併頁（線框 §03 ⑤，WP-E）已畫分區標題時，這裡不再畫第二個 `##`。
+        # 只讓掉標題那一行 —— caption / info / 右側按鈕一律照舊。
+        # 旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。
+        from ui.helpers.settings_diag.merge_context import (
+            DATA_GUARD_HEADER as _SD_DATA_GUARD_HEADER,
+            owned_by_settings_page as _settings_page_owns,
+        )
+        if not _settings_page_owns(_SD_DATA_GUARD_HEADER):
+            st.markdown("## 🔬 資料診斷")
         st.caption("📖 故事幕後站・資料守衛：投資決策背後的數據如何被抓取與守護 — 確認所有來源成功下載，方便排查問題")
         st.info(
             "🔧 **本頁大部分是維運診斷內容**（secrets / TOML 解析錯誤、NAS Proxy 連線測試、"
