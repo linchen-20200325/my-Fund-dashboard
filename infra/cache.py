@@ -403,6 +403,10 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
 
         wrapper.cache_clear = _clear   # type: ignore[attr-defined]
         wrapper.cache_info = lambda: {   # type: ignore[attr-defined]
+            # `name` 由生產者自己給(2026-08-31 欄位契約 CACHE_INFO_REQUIRED_KEYS)。
+            # 過去只靠 get_all_cache_info() 事後注入 → 直接呼叫 fn.cache_info()
+            # 的 caller 拿到的列是不完整的。
+            "name": fn.__name__,
             "size": len(_cache), "maxsize": maxsize, "ttl_sec": ttl_sec,
             "hits": _stats["hits"], "misses": _stats["misses"],
             # 「這個 fetcher 因為抓失敗而沒被快取幾次」——§5 可觀測性。
@@ -425,6 +429,38 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
         return wrapper
 
     return decorator
+
+
+# ════════════════════════════════════════════════════════════
+# cache_info() 欄位契約(SSOT,2026-08-31)
+# ════════════════════════════════════════════════════════════
+# 為什麼要有這段:`cache_info()` 有 **4 個生產者** —— `_ttl_cache` /
+# `_daily_cache`(本檔)、`infra.source_backoff._BackoffRegistryProxy`、
+# `repositories.fund.fx_and_main._FxCacheProxy` —— 過去各寫各的欄位名,
+# 光是「entry 數」就有兩個名字:`size`(_ttl_cache)與 `currsize`(其餘三個)。
+# 後果是實測到的真缺陷:唯一的 production 消費者
+# (`ui/helpers/portfolio/policy_admin_section.py` 的「🔋 快取狀態」caption)
+# 寫 `sum(r["size"] for r in rows)`,一撞到 `currsize` 的列就 `KeyError: 'size'`,
+# 再被外層 `except Exception: pass` 吞掉 → **那行 caption 從未在 production 印出來過**。
+#
+# 契約:
+#   ① 必備欄位 `CACHE_INFO_REQUIRED_KEYS` —— **每一列都要有**,缺 = 違憲。
+#   ② 統計欄位 `CACHE_INFO_STAT_KEYS` —— **全有或全無**。
+#      ⚠️ **缺席代表「這個快取本質上沒有命中率」,不是「0 次命中」。**
+#      proxy 型快取(`_FX_CACHE` / `_SOURCE_BACKOFF`)只是把一個 raw dict 包成
+#      registry 介面,並沒有攔截呼叫,命中/未命中無從談起 —— 為了湊格式填 0
+#      就是 §1 禁止的假數字。**消費端請用 `"hits" in row` 判斷,不要用
+#      `row.get("hits", 0)`** —— 後者會把「不適用」偽裝成「0」。
+#   ③ 其餘欄位(`maxsize` / `ttl_sec` / `ttl` / `backing_off`)由各生產者自訂。
+#
+# 為什麼 `ttl` **不列入必備**:它在四個生產者之間本來就不是同一種東西
+# (`_ttl_cache` 給秒數 300;`_daily_cache` 給 `"daily-reset"`;
+#  `_SOURCE_BACKOFF` 給 `"per-failure-kind"`;`_FX_CACHE` 給 float 秒數)。
+# 硬塞進同一個 key 只是把「不同的東西」寫成「同一個欄位」,屬湊格式;
+# 且 `_daily_cache` 的 `"daily-reset"` 與 `TTL_TODAY` marker 已有既存對齊測試。
+# → **本批刻意不動 ttl**,只把「entry 數」這個真的同義的欄位收斂成一個名字。
+CACHE_INFO_REQUIRED_KEYS: tuple[str, ...] = ("name", "size")
+CACHE_INFO_STAT_KEYS: tuple[str, ...] = ("hits", "misses", "uncached_fail")
 
 
 # 集中註冊：UI「🔄 清空快取」按鈕一鍵清所有快取
@@ -544,6 +580,19 @@ def _daily_cache(fn=None, *, today_fn=None, cache_if=None):
         wrapper.cache_clear = lambda: _cache.clear()
         wrapper.cache_info = lambda: {
             "name": _fn.__name__,
+            # 2026-08-31 欄位契約:entry 數的正式欄位名是 `size`(對齊 _ttl_cache)。
+            "size": len(_cache),
+            # ~~"currsize": len(_cache),~~ → 降為**向後相容別名**,保留不刪。
+            # **有意識的更正,不是漏刪**(日期 2026-08-31;決策者:資料與計算組)。
+            # **舊表述的理由仍然成立**:`currsize` 是照 `functools.lru_cache`
+            # 的命名慣例取的,對熟悉 stdlib 的讀者最直覺。
+            # **被權衡掉的原因**:這個介面的消費者是**我們自己的 UI**,不是
+            # lru_cache 的使用者;而兩個名字並存已經實際造成 production 缺陷
+            # (見上方欄位契約段)。同一件事只能有一個名字(§2.1 SSOT)。
+            # **為什麼別名不當場刪**:`tests/test_daily_cache.py`、
+            # `tests/test_daily_cache_skip_failure.py`、`tests/test_source_backoff.py`
+            # 仍讀 `currsize`,而那三個檔**不在本批的檔案邊界內**。
+            # **移除條件**:那三個檔遷到 `size` 之後即可刪本行(屆時屬收尾義務)。
             "currsize": len(_cache),
             "ttl": "daily-reset",
             **_stats,
@@ -595,7 +644,16 @@ def clear_caches_by_names(names) -> int:
 
 
 def get_all_cache_info() -> list[dict]:
-    """回傳所有註冊快取的狀態，給 UI 顯示「cache hit 率」/「entries」用。"""
+    """回傳所有註冊快取的狀態，給 UI 顯示「cache hit 率」/「entries」用。
+
+    每一列都遵守本檔上方的 **cache_info() 欄位契約**：
+    - 必備 `CACHE_INFO_REQUIRED_KEYS`（`name` / `size`）—— 一定有；
+    - 統計 `CACHE_INFO_STAT_KEYS`（`hits` / `misses` / `uncached_fail`）
+      **全有或全無**，**缺席 = 「不適用」，不是 0 次命中**。
+      消費端請用 `"hits" in row` 判斷，不要用 `row.get("hits", 0)`。
+    契約由 `tests/test_cache_info_contract.py` 強制（新增第 5 個生產者卻不照
+    契約 → CI 紅燈）。
+    """
     out = []
     for fn in _CACHE_REGISTRY:
         try:
