@@ -403,7 +403,9 @@ def render_single_fund_tab() -> None:
     # `_render_single_mode` 內的 lazy import，量到 `SHARED_SEARCH_owned=True`）。
     # 留著死碼的代價不只是行數：它讓 `repositories.fund.tdcc_search_fund` 看起來
     # 有兩個 UI 呼叫點，而實際活著的只有 `ui/helpers/fund_research/code_finder.py`
-    # 一個 —— 憲法 §8.2.A EX-PASSTHRU-1 的登記路徑正是指到這個死的呼叫點。
+    # 一個 —— 憲法 §8.2.A EX-PASSTHRU-1 的登記路徑當時正是指到這個死的呼叫點。
+    # 📌 2026-08-31 同日已由總管裁決修正：該登記已改指
+    # `ui/helpers/fund_research/code_finder.py::_search`（不寫行號）。本行保留為沿革。
     #
     # 找代號工具現在只有一份，住在共用頂部：`ui/helpers/fund_research/code_finder.py`。
 
