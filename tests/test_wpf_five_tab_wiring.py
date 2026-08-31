@@ -390,6 +390,14 @@ def test_tab_error_titles_go_through_tab_label():
 _SECTION_HINT_SITES = (
     ("ui/helpers/fund_grp_health/ai.py", "fund"),
     ("ui/helpers/settings_diag/fetch_diag_section.py", "fund"),
+    # 階段二（#740 合併後）納管：④ 我的配置的兩處指路。
+    # ⚠️ 其中「空組合歡迎卡」那一處**沒有任何既有測試覆蓋**（實測 2026-08-31）：
+    #    `test_app_apptest::test_tab3_empty_portfolio_shows_welcome_card` 找的
+    #    「👋 三步驟」其實來自 `ui/tab3_portfolio.py` 另一個區塊（:1028），
+    #    **不是**這張「📊 歡迎使用基金組合管理」卡。它在階段一之所以紅，是因為
+    #    KeyError 把整個 ④ 打斷、連帶那個區塊也沒渲染 —— **它從來沒有在守這張卡**。
+    #    本條是那張卡目前唯一的守衛。
+    ("ui/tab3_portfolio.py", "fund"),
 )
 
 
@@ -416,19 +424,39 @@ def test_section_hints_use_where_to_find(relpath: str, key: str):
     _src = (ROOT / relpath).read_text(encoding="utf-8")
     _tree = ast.parse(_src)
 
+    # ⚠️ **必須把 alias 解析回原函式名，不能看呼叫點長什麼樣。**
+    #    本檔的呼叫慣例是 `from ui.helpers.story_nav import X as _X_something`，
+    #    所以呼叫點的名字是**呼叫者自己取的**，不代表它呼叫到哪個函式。
+    #    實測（2026-08-31 突變 N10）：把 import 改成
+    #    `tab_label as _where_to_find`（呼叫點一個字都不用動），
+    #    只看呼叫點名字的版本**照樣 GREEN** —— 而那正是七→五之下會 KeyError 的寫法，
+    #    且它就長在 ④ 空組合時的**預設畫面**上。故改為建 alias → 原名 的對照表。
+    _alias: dict[str, str] = {}
+    for _n in ast.walk(_tree):
+        if isinstance(_n, ast.ImportFrom) and (_n.module or "").endswith("story_nav"):
+            for _a in _n.names:
+                _alias[_a.asname or _a.name] = _a.name
+
+    def _resolved_calls(fn_name: str) -> list:
+        """回傳「**真的呼叫到 `fn_name`**」的那些呼叫的第一個字面參數。"""
+        _out = []
+        for _c in ast.walk(_tree):
+            if not (isinstance(_c, ast.Call) and _c.args
+                    and isinstance(_c.args[0], ast.Constant)):
+                continue
+            _called = getattr(_c.func, "id", None) or getattr(_c.func, "attr", None)
+            if _called and _alias.get(_called) == fn_name:
+                _out.append(_c.args[0].value)
+        return _out
+
     # (a) 該 key 真的被傳進 where_to_find(...)
-    _passed = [c.args[0].value for c in ast.walk(_tree)
-               if isinstance(c, ast.Call) and _call_name(c) == "where_to_find"
-               and c.args and isinstance(c.args[0], ast.Constant)]
-    assert key in _passed, (
-        f"{relpath} 沒有 where_to_find('{key}') 呼叫 —— "
-        f"指到頁內分區的文案必須帶上所屬分頁名（否則使用者在分頁列上找不到）。")
+    assert key in _resolved_calls("where_to_find"), (
+        f"{relpath} 沒有解析得到的 where_to_find('{key}') 呼叫 —— "
+        f"指到頁內分區的文案必須帶上所屬分頁名（否則使用者在分頁列上找不到）。"
+        f"（已解析的 story_nav alias：{_alias}）")
 
     # (b) 不得再把分區 key 傳給 tab_label（七→五之後那會 KeyError）
-    _bad = [c.args[0].value for c in ast.walk(_tree)
-            if isinstance(c, ast.Call) and _call_name(c) == "tab_label"
-            and c.args and isinstance(c.args[0], ast.Constant)
-            and c.args[0].value in _SECTION_LABELS]
+    _bad = [v for v in _resolved_calls("tab_label") if v in _SECTION_LABELS]
     assert not _bad, (
         f"{relpath} 仍把分區 key {_bad} 傳給 tab_label() —— 七→五之後會 KeyError")
 
