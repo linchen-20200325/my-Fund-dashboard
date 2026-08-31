@@ -407,6 +407,15 @@ def test_gate_anchor_still_detectable():
         f"{GATE_ANCHOR_MIN_SITES}）—— gate 規則可能正在對空氣生效。")
 
 
+#: `form_submit_button` 的數量下限 —— **等於當下實測值,刻意不留容忍度**。
+#: ⚠️ 2026-08-31 稽核指出:本條原本寫死 `>= 5`,而實測自 2026-08-28 起就是 6、
+#: 本批之後是 7 —— 也就是**容忍度從 1 悄悄變成 2**:可以無聲拆掉兩個 form 而本條不紅。
+#: 「下限沒跟著實測值走」本身就是一種靜默弱化,所以現在把它綁死在實測值上。
+#: **這是「會漂移的量測值」**:每次有意增減 form 都要一起改這個數字(改它是正常維護,
+#: 不是繞過守衛)—— 相對地,**沒改它就退化,一定會紅**,那正是本條要的效果。
+_FORM_SUBMIT_FLOOR = 7
+
+
 def test_form_anchor_still_detectable():
     """錨點：`st.form` 與 `form_submit_button` 還掃得到嗎？
 
@@ -421,9 +430,12 @@ def test_form_anchor_still_detectable():
         submits += sum(1 for n in ast.walk(tree)
                        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                        and n.func.attr == "form_submit_button")
-    assert submits >= 5, (
-        f"只掃到 {submits} 個 `form_submit_button`（量測日 2026-08-31 為 7；"
-        "2026-08-28 為 6，差額為元件 B 的「套用門檻」）—— form 偵測可能已經對空氣生效。")
+    assert submits >= _FORM_SUBMIT_FLOOR, (
+        f"只掃到 {submits} 個 `form_submit_button`，少於下限 {_FORM_SUBMIT_FLOOR}"
+        "（量測日 2026-08-31 為 7；2026-08-28 為 6，差額為元件 B 的「套用門檻」）"
+        " —— form 偵測可能已經對空氣生效。"
+        "\n若這是**有意**移除某個 form，請同步下修 `_FORM_SUBMIT_FLOOR` 並在 commit 說明；"
+        "本條刻意不留容忍度,理由見該常數上方註解。")
 
 
 def test_declared_form_paths_still_exist():
