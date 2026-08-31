@@ -18,6 +18,12 @@ from requests.adapters import HTTPAdapter
 # 分層：兩者同為 L0 Infra（infra.source_backoff → infra.cache → shared.backoff_policy，
 # 全程下行 / 同層，無 L1+ 依賴，不違 §8.2 硬規則 3）。
 from infra import source_backoff as _sb
+# 2026-08-31 F1：失敗分類 → 要不要標記「不入快取」。兩個 import 都是**下行**
+# （infra.proxy → infra.cache / shared.backoff_policy），無迴圈：`infra/cache.py`
+# 不 import 任何 infra 模組，`shared/` 是純常數。分類與冷卻秒數的 SSOT 在
+# `shared/backoff_policy.py`，本檔只讀不定義（§2.1）。
+from infra.cache import mark_fetch_failed as _mark_fetch_failed
+from shared.backoff_policy import NO_COOLDOWN_KINDS as _NO_COOLDOWN_KINDS
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -97,6 +103,106 @@ def _get_thread_session() -> requests.Session:
 
 
 # ════════════════════════════════════════════════════════════
+# 2026-08-31 修復 F1：把「最近一次失敗的分類」交回給呼叫端
+# ════════════════════════════════════════════════════════════
+# ## 為什麼需要這個
+#
+# `fetch_url` 失敗一律回 `None`，**六種失敗長得一模一樣**。而
+# `shared/backoff_policy.py` 明訂其中兩種（`not_found`=404 / `proxy_auth`=407）
+# **刻意不退避**（`NO_COOLDOWN_KINDS`）—— 對這兩種來說，`_ttl_cache` 是
+# **唯一的節流器**。若呼叫端把它們一律標記成「失敗、不入快取」，等於同時
+# 拆掉退避與快取兩層，每次 Streamlit rerun 都會重打一輪（實測 5 次 rerun：
+# 404 由 3 個請求變 15 個、407 由 1 變 5）。
+#
+# 呼叫端要做對這個決定，就必須知道**剛剛那次是哪一種失敗** ——
+# 但 `fetch_url` 的回傳型別 `Response | None` 是 30+ caller 的公用契約，
+# 不能為此改成 tuple。故用 thread-local 側車傳遞（`_TLS_HTTP` 已是本檔既有慣例，
+# 且 TW PMI 9 源賽跑走 `ThreadPoolExecutor`，per-thread 隔離才不會互相覆寫）。
+#
+# ⚠️ **值只在「同一執行緒內、緊接著 `fetch_url` 之後」有意義。** 每一個
+#    `return` 都會覆寫它（成功寫 `""`），所以它永遠反映**最後一次**呼叫；
+#    但跨到別的 fetcher、或中間又打了一次別的 URL，讀到的就是那一次的。
+_TLS_FAIL = threading.local()
+
+
+def pop_last_fail_kind() -> str:
+    """取出並**清掉**本執行緒最近一次 `fetch_url` 的失敗分類；沒有則回 `""`。
+
+    分類字串與 `shared/backoff_policy.BACKOFF_COOLDOWN_SEC` 的鍵同一套
+    （`unreachable` / `server_error` / `blocked` / `rate_limited` /
+    `not_found` / `proxy_auth`），**該檔是唯一真相源，本檔只回報不定義**。
+
+    ## ⚠️ 為什麼是「取出並清掉」而不是單純的 getter
+
+    這個值是**側車**，它與「剛剛那次 `fetch_url`」的對應關係全靠呼叫順序維繫。
+    若做成可重複讀的 getter，下面這個情境會**靜默給出錯的答案**：
+
+        某個 fetcher 因為條件不成立而**根本沒呼叫 `fetch_url`**（或呼叫的是
+        別的包裝），卻仍走到失敗分支去問「剛剛是哪一種失敗」
+        → 讀到的是**同一執行緒上一個 fetcher** 留下的殘值
+        → 若那個殘值恰好是 404，這次的真失敗就會被判成「照舊快取」，
+          被鎖滿一個 TTL —— **正是本 PR 要修的那個 bug 換一個入口再犯一次。**
+
+    取出即清掉之後，同一個值**只會被讀到一次**；沒有對應 `fetch_url` 的讀取
+    一律拿到 `""`，而 `""` 不在 `NO_COOLDOWN_KINDS` 內 → **落到「標記、不快取」
+    這個安全側**（與 `shared/backoff_policy.BACKOFF_DEFAULT_KIND` 對未知失敗
+    「從寬、寧可多打一次」的立場一致）。**失敗模式是 fail-safe，不是 fail-silent。**
+
+    ⚠️ 也因此**不要為了 log 而先讀一次** —— 讀走了，真正要做決定的那一行就拿不到。
+    """
+    _k = getattr(_TLS_FAIL, "kind", "") or ""
+    _TLS_FAIL.kind = ""
+    return _k
+
+
+def mark_fetch_failed_if_retryable(obj, reason: str):
+    """依**最近一次** `fetch_url` 的失敗分類決定要不要掛「不入快取」標記。
+
+    ## 判準：重試有沒有意義
+
+    - **重試有意義**（`unreachable` / `server_error` / `blocked` / `rate_limited`）
+      → 掛 `mark_fetch_failed` 標記，`@_ttl_cache` **不快取**，下次真的重試
+      （而那個重試會先撞上 `infra.source_backoff` 的來源冷卻，不會轟炸）。
+    - **重試沒有意義**（`NO_COOLDOWN_KINDS` = `not_found` / `proxy_auth`）
+      → **不標記，照舊入快取**。
+
+    ## ⚠️ 為什麼 404 / 407 該被快取（這不是為它們破例，是同一條判準）
+
+    本機制的判準一向是「**來源活著且明確回答了 → 那個回答就是答案**」——
+    HTTP 200 但解析不出東西之所以刻意不標記，就是這個理由。**404 正是這種情況**：
+    來源活著、明確回答「這支 URL 不存在」，那個 404 **就是答案**，把它記住是正確的，
+    不是掩蓋。`repositories/tw_pmi_repository` 刻意輪三個月份 slug、
+    `repositories/fund/sources` 逐一試 page_type，**舊月份／不存在的 page_type 回 404
+    是正常流程**，每次 rerun 重打一輪只是純浪費。
+
+    **407 是我方 NAS Squid 帳密設錯**，請求根本沒到達來源 —— 重打一百次也不會變對。
+    它該給使用者的是一個紅色的系統錯誤（v3 §02「介面狀態嚴格分離」），
+    不是每次 rerun 都去撞一輪。
+
+    ## 逃生口（§1 對偶：不可讓資料長期消失）
+
+    使用者修好 proxy 設定 / 來源補上那支 URL 之後，**不必等 TTL** ——
+    「📋 保單管理 → 🗑️ 清空抓取快取」（`fund_fetcher.clear_all_caches`）與
+    sidebar「🧹 全域刷新」（`infra.cache.global_refresh_all`）都會清掉這一層。
+    ✅ **2026-08-31 實測確認**：三個被標記的 fetcher 都在 `_CACHE_REGISTRY` 內，
+    按下去 `cache_info()['size']` 歸零、下一次呼叫真的重打上游。
+    守衛：`tests/test_ttl_cache_positive_only.py::test_no_cooldown_kinds_are_still_unlockable_by_the_clear_cache_button`。
+
+    Args:
+        obj: fetcher 的失敗回傳值（pandas Series / DataFrame）。
+        reason: 失敗原因，人讀用；實際寫入時會附上分類。
+
+    Returns:
+        `obj` 本身（不論有沒有標記），方便一行寫完。
+    """
+    _kind = pop_last_fail_kind()
+    if _kind in _NO_COOLDOWN_KINDS:
+        # 不標記 → 照舊入 `_ttl_cache`。對這兩種失敗，TTL 是唯一的節流器。
+        return obj
+    return _mark_fetch_failed(obj, f"{reason} (kind={_kind or 'unknown'})")
+
+
+# ════════════════════════════════════════════════════════════
 # v18.115 B-A：fund_fetcher 殘 593 行 HTTP 層收口到本檔
 # ════════════════════════════════════════════════════════════
 def _proxies() -> dict:
@@ -146,6 +252,27 @@ install_global_urllib_proxy()
 _RATE_LIMIT_BACKOFF_SEC: tuple = (2.0, 4.0, 8.0)
 
 
+def _note_failure(key: str, kind: str) -> int:
+    """記一次來源失敗（退避 SSOT）**並同步**本執行緒的最後失敗分類。
+
+    包成一個函式而不是在 7 個 return 前各寫兩行：兩件事必須同進同出，
+    分開寫遲早會有人只加其中一半 —— 那會讓 `pop_last_fail_kind()` 讀到上一次
+    呼叫的殘值，而那是**靜默錯誤**（決定會做，只是做錯）。
+    """
+    _TLS_FAIL.kind = kind
+    return _sb.record_failure(key, kind)
+
+
+def _note_success(key: str) -> bool:
+    """來源成功 → 解除退避**並清掉**本執行緒的最後失敗分類。
+
+    清掉這件事不可省：不清的話，一次成功之後 `pop_last_fail_kind()` 仍回上一次的
+    失敗分類，下一個 fetcher 會據此做出錯的快取決定。
+    """
+    _TLS_FAIL.kind = ""
+    return _sb.record_success(key)
+
+
 def fetch_url(
     url:     str,
     headers: dict = None,
@@ -181,6 +308,11 @@ def fetch_url(
     import time as _t
     import random as _rnd
 
+    # 進場先清殘值：本次呼叫的失敗分類只由本次呼叫決定。與
+    # `pop_last_fail_kind()` 的「取出即清掉」是同一道防線的兩端 ——
+    # 一端保證讀不到別人的，一端保證寫不進別人的。
+    _TLS_FAIL.kind = ""
+
     _proxy  = get_proxy_config() or {}
     _verify = not bool(_proxy)
     _hdr = {
@@ -206,6 +338,12 @@ def fetch_url(
         if _skip:
             print(f"[proxy] 退避中，跳過不打（source={_src_key}, kind={_kind}, "
                   f"剩餘 {_left:.0f}s）：{_url_log[:80]}")
+            # 這條路徑不經 `_note_failure`（本輪沒有真的失敗，是**刻意不打**），
+            # 但呼叫端仍需要知道「為什麼沒拿到東西」→ 沿用**當初把它打進冷卻**
+            # 的那個分類。它必然不在 `NO_COOLDOWN_KINDS` 內（那兩種冷卻 0 秒、
+            # 根本不會進 `_STATE`），所以呼叫端會標記成失敗、不入快取 ——
+            # 正確：冷卻期是暫時的，過期之後要拿到真答案而不是被鎖住的空值。
+            _TLS_FAIL.kind = _kind
             return None
 
     sess     = _get_thread_session()   # v19.333 F6:複用 thread-local 連線池
@@ -243,7 +381,7 @@ def fetch_url(
                 # （退避來源等於罰錯人，還會把一個改 secrets 就能修的設定錯誤，
                 #   偽裝成一整排來源的「已跳過」）。呼叫仍走分類函式，讓「退不退避」
                 #   這個決定只有 SSOT 一個地方說了算。
-                _sb.record_failure(_src_key, "proxy_auth")
+                _note_failure(_src_key, "proxy_auth")
                 return None
             if r.status_code == 403:
                 _block += 1
@@ -274,7 +412,7 @@ def fetch_url(
                     # （v19.507：Yahoo 限流不會在 2/4/8s 內解除，白等 14s）——
                     # 它**不是**「下一次 rerun 可以馬上再打一次」。來源級冷卻照記，
                     # 這正是「不連續轟炸」要擋的那個放大器（8 標的 × 每次互動 rerun）。
-                    _sb.record_failure(_src_key, "rate_limited")
+                    _note_failure(_src_key, "rate_limited")
                     return None
                 # ⚠️ v19.425 已查證但**未動**的同型問題（待 user 裁示，§-1）：
                 #   預設 retries=3、backoff=(2,4,8) → attempt 2（最後一次）時
@@ -293,10 +431,10 @@ def fetch_url(
                     _rl_atmp += 1
                     continue
                 print(f"[proxy] 429 已重試 {_rl_atmp} 次仍 rate-limited，放棄：{_url_log[:80]}")
-                _sb.record_failure(_src_key, "rate_limited")
+                _note_failure(_src_key, "rate_limited")
                 return None
             if r.status_code == 200:
-                _sb.record_success(_src_key)   # v3 §02:來源活著 → 立刻解除退避
+                _note_success(_src_key)   # v3 §02:來源活著 → 立刻解除退避
                 return r
             # ── 未預期狀態碼（402 額度用盡 / 401 / 404 / 5xx …）─────────────
             # 原本這裡沒有 else，直接掉出 if 鏈進下一輪重試，狀態碼與 body 全丟。
@@ -359,7 +497,7 @@ def fetch_url(
                 print("[proxy] 直連成功")
                 # 降級直連成功也算來源活著（走的是另一個出口 IP，但資料拿到了）
                 # → 解除退避。否則「proxy 被擋、直連可用」的常態會被自己的退避鎖死。
-                _sb.record_success(_src_key)
+                _note_success(_src_key)
                 return r_dc
             print(f"[proxy] 直連非 200：status={r_dc.status_code}")
         except Exception as e_dc:
@@ -396,5 +534,5 @@ def fetch_url(
         _fail_kind = "server_error"
     else:
         _fail_kind = "unreachable"
-    _sb.record_failure(_src_key, _fail_kind)
+    _note_failure(_src_key, _fail_kind)
     return None

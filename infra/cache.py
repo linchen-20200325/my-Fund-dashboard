@@ -105,18 +105,39 @@ def _normalize_moneydj_url_for_cache(url: str) -> str:
 #   同一個回應再要一次還是同樣結果 → **不標記**（重抓不會變好，只會多打一次來源）。
 # - HTTP 200 且解析成功但序列是空的 → **這就是答案**，照常快取。
 #
-# ## ⚠️ 這不會造成「連續轟炸來源」（v3 §02 的另一半，本次未新造任何東西）
+# ## ⚠️ 「這不會造成連續轟炸來源」——**這句話只對四種失敗成立，不是六種**
 #
-# 退避**早就有了**且住在更下層：`infra/proxy.py::fetch_url` 進場先問
-# `infra.source_backoff.should_skip()`，冷卻中直接回 `None` **不發請求**
-# （冷卻秒數 SSOT 在 `shared/backoff_policy.py`）。所以「失敗不快取 → 下次再試」
-# 的那個「再試」，會先撞上來源冷卻而**根本不會出門**。兩層是串聯：
+# ~~本機制不會造成「連續轟炸來源」：退避早就有了且住在更下層，所以「失敗不快取
+# → 下次再試」的那個再試，會先撞上來源冷卻而**根本不會出門**。~~
+#
+# ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪 · 日期 2026-08-31 · 決策者：AI 總管）。**
+#
+# **舊表述對 `unreachable` / `server_error` / `blocked` / `rate_limited` 這四種
+# 仍然完全成立**，而且那正是本機制設計時真正在想的情境 —— 它們都有冷卻期
+# （60s / 300s / 900s / 1800s），失敗不快取之後的「再試」確實會被 `should_skip()`
+# 擋在門口。**這四種的推理沒有一個字要改。**
+#
+# **錯的是它被寫成一句涵蓋全部六種的全稱句。** `not_found`(404) 與
+# `proxy_auth`(407) 依 `shared/backoff_policy.NO_COOLDOWN_KINDS` **冷卻 0 秒**
+# —— 對這兩種來說，`_ttl_cache` 是**唯一的節流器**。把它們也標記成「失敗、
+# 不入快取」，等於同時拆掉兩層。**實測（5 次 Streamlit rerun，同窗量測）**：
+#
+# | 失敗 | 修復前 | 一律標記（錯） | 現行 |
+# |---|---|---|---|
+# | 404 `not_found` | 3 個請求 | **15** | **3** |
+# | 407 `proxy_auth` | 1 個請求 | **5**  | **1** |
+# | 500 `server_error`（有 300s 冷卻） | 3 | 3 | 3 |
+#
+# **處置**：`infra/proxy.py::mark_fetch_failed_if_retryable` 依失敗分類決定要不要
+# 標記，`NO_COOLDOWN_KINDS` 那兩種**不標記、照舊入快取**。這**不是為它們破例** ——
+# 判準一直都是「來源活著且明確回答了 → 那個回答就是答案」（HTTP 200 解析失敗刻意
+# 不標記，用的就是這條），而 404 正是最純粹的那種情況。完整理由見該 helper 的
+# docstring；六種 kind 逐一守衛見
+# `tests/test_ttl_cache_positive_only.py::test_mark_decision_matches_backoff_policy_for_every_fail_kind`。
+#
+# 兩層仍然是串聯，只是第二層對其中兩種 kind **刻意留白**：
 #
 #     _ttl_cache（要不要記住這個答案）→ fetch_url → source_backoff（這一輪要不要碰這個來源）
-#
-# 而 `not_found`(404) / `proxy_auth`(407) 依 `backoff_policy` **刻意不退避** ——
-# 那是設計，不是漏洞：404 是「這支 URL 不存在，去試下一個」，
-# 407 是「NAS 帳密設錯，改 secrets 就好」，兩者退避都會罰錯人。
 #
 # ## 與 `repositories/fund/fx_and_main.py` v18.275 的關係
 #
@@ -235,6 +256,14 @@ def mark_fetch_failed(obj, reason: str):
     Returns:
         `obj` 本身（方便 `return mark_fetch_failed(pd.Series(...), "...")` 一行寫完）。
 
+    ⚠️ **不要對「來自快取的物件」呼叫本函式**（2026-08-31 稽核 F6 補）。
+    `_ttl_cache` 命中時回傳的是**同一個物件**（不是複本），而 `_cache` 是
+    module-level 的 —— Streamlit 各 session 共用。對一個剛從快取拿到的
+    Series 呼叫 `mark_fetch_failed()`，會就地改到**所有 session 都看得到的
+    那一份**，且下一個 caller 拿到的仍是快取裡的舊值（它已經在快取裡了，
+    標記阻止不了「已經入快取」這件事，只會讓它看起來像失敗）。
+    本函式的唯一正確用法是**在 fetcher 的失敗分支上、對當場新建的空物件呼叫**。
+
     Raises:
         TypeError: `obj` 無法承載標記（例如 dict / list）。
             **刻意 fail loud，不做 silent no-op** —— 靜默失敗會讓作者以為自己
@@ -242,7 +271,20 @@ def mark_fetch_failed(obj, reason: str):
             （§-2「沒查證的宣稱比沒有宣稱更危險」）。
             回傳 dict 的 fetcher 請改用 `_daily_cache(cache_if=...)`，
             或在自己的分支裡明確處理。
+        ValueError: `reason` 為空（`""` / `None` / 只有空白）。
+            ⚠️ **2026-08-31 稽核 F5 補**：在此之前 `mark_fetch_failed(obj, "")`
+            是一個**靜默 no-op** —— `.attrs` 確實被寫入 `""`，但 `is_fetch_failed`
+            用 `bool()` 判斷，`""` 是 falsy → 回 False → 結果照樣入快取。
+            上面那句「刻意 fail loud，不做 silent no-op」因此**對空 reason 為假**，
+            而且假在最糟的方向：作者寫了標記、以為擋住了，什麼都沒發生。
+            現在改成 raise，讓它與 TypeError 那一支的承諾一致。
     """
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(
+            "mark_fetch_failed: reason 不可為空 —— 空字串會讓 is_fetch_failed() "
+            "回 False（bool('') 為 falsy），標記形同沒下，結果照樣入快取。"
+            "請寫出是哪個來源、為什麼失敗（§1 fail loud 要求可回溯）。"
+        )
     _attrs = getattr(obj, "attrs", None)
     if not isinstance(_attrs, _MutableMapping):
         raise TypeError(
@@ -363,8 +405,20 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
         wrapper.cache_info = lambda: {   # type: ignore[attr-defined]
             "size": len(_cache), "maxsize": maxsize, "ttl_sec": ttl_sec,
             "hits": _stats["hits"], "misses": _stats["misses"],
-            # 「這個 fetcher 因為抓失敗而沒被快取幾次」——§5 可觀測性，
-            # Tab5 快取狀態表走 get_all_cache_info() 泛型渲染，零 UI 改動。
+            # 「這個 fetcher 因為抓失敗而沒被快取幾次」——§5 可觀測性。
+            # ~~Tab5 快取狀態表走 get_all_cache_info() 泛型渲染，零 UI 改動。~~
+            # ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪 · 決策者：AI 總管）：
+            #    這句兩處皆不實。** 實測：(a) `uncached_fail` 在 `ui/` 與 `app.py`
+            #    **0 命中**；(b) 全站唯一消費 `get_all_cache_info()` 的畫面在
+            #    `ui/helpers/portfolio/policy_admin_section.py`（**「📋 保單管理」，
+            #    不是 Tab5**），而且它是寫死的 f-string，只加總 size/hits/misses ——
+            #    **沒有泛型渲染，新欄位不會自己長出來。**
+            #    **舊表述的用意仍然成立**（本欄確實是為了讓失敗次數可被看見），
+            #    錯的是它宣稱這件事**已經做到了**。
+            #    **現況：本欄目前在 UI 沒有任何消費者，production 尚無可觀測入口。**
+            #    要接進「⑤ 參考 / 診斷」屬**欄位增減**，依客戶 2026-08-31 頒布的
+            #    協作介面須**動工前先出 HTML 線框給客戶審** → **另立一批，不是本批省略**。
+            #    在那之前，要看這個數字請用 `get_all_cache_info()` 直接讀（測試已釘）。
             "uncached_fail": _stats["uncached_fail"],
         }
         wrapper._cache_dict = _cache   # type: ignore[attr-defined]   # for tests

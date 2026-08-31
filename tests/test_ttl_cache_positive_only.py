@@ -55,6 +55,52 @@ def test_mark_works_on_dataframe():
     assert df.empty, "標記不得改變 DataFrame 內容"
 
 
+def test_mark_fetch_failed_rejects_empty_reason():
+    """⭐ 2026-08-31 稽核 F5:空 `reason` 曾是**靜默 no-op**,現在必須 raise。
+
+    修復前:`.attrs` 確實被寫入 `""`,但 `is_fetch_failed` 用 `bool()` 判斷 ——
+    `bool("")` 為 False → 結果**照樣入快取**。也就是作者寫了標記、以為擋住了,
+    實際上什麼都沒發生,而 `mark_fetch_failed` 的 docstring 明寫
+    「**刻意 fail loud,不做 silent no-op**」—— 那句話對空 reason 為假。
+
+    這條同時釘住兩件事:(a) 空 reason 會 raise;(b) **raise 之前不留下半套標記**
+    (物件不得被改成「有 attrs 但 falsy」那種既不算失敗、又不乾淨的狀態)。
+    """
+    for bad in ("", "   ", None, 0):
+        s = pd.Series([1.0])
+        with pytest.raises(ValueError):
+            mark_fetch_failed(s, bad)          # type: ignore[arg-type]
+        assert FETCH_FAILED_ATTR not in s.attrs, (
+            f"reason={bad!r} raise 了,卻仍在 .attrs 留下殘跡 —— "
+            f"半套狀態比沒標記更難查"
+        )
+        assert is_fetch_failed(s) is False
+
+
+def test_empty_reason_would_have_been_a_silent_noop_without_the_guard():
+    """反證 F5 的必要性:**只要繞過那道 ValueError,空 reason 就是靜默 no-op。**
+
+    這條不是在測產品碼,是在把「為什麼要加那道 raise」的理由固化下來 ——
+    直接模擬舊行為(直接寫 `.attrs`),證明 `is_fetch_failed` 會回 False、
+    `_ttl_cache` 會照樣快取。沒有這條,下一個人可能會覺得那道 raise 太嚴而拿掉。
+    """
+    calls = {"n": 0}
+
+    @_ttl_cache(ttl_sec=600)
+    def fake_fetch(_k):
+        calls["n"] += 1
+        out = pd.Series(dtype=float)
+        out.attrs[FETCH_FAILED_ATTR] = ""     # ← 舊行為:reason 為空
+        return out
+
+    fake_fetch("a")
+    fake_fetch("a")
+    assert calls["n"] == 1, "空 reason 竟然擋住了快取 —— 那 F5 的前提就不成立"
+    assert fake_fetch.cache_info()["size"] == 1
+    assert fake_fetch.cache_info()["uncached_fail"] == 0, \
+        "空 reason 的標記不會被 is_fetch_failed 認出 —— 這正是它是 no-op 的證據"
+
+
 def test_unmarked_objects_are_treated_as_success():
     """未標記 = 成功。這是既有 `_ttl_cache` 使用者零行為改變的保證。"""
     for obj in (pd.Series(dtype=float), pd.DataFrame(), {}, [], None, 0, "x"):
@@ -348,6 +394,222 @@ def test_failure_retry_is_gated_by_existing_source_backoff():
         sb.reset_all()
 
 
+# ── ⭐ 2026-08-31 F1：六種失敗分類逐一釘住「標不標記」的決定 ──────────
+#
+# **為什麼原本那一條不夠**：`test_failure_retry_is_gated_by_existing_source_backoff`
+# 只覆蓋 `unreachable` 一種 —— 而它恰好是「有冷卻期」的那一族。
+# `shared/backoff_policy.NO_COOLDOWN_KINDS`（`not_found` 404 / `proxy_auth` 407）
+# **冷卻 0 秒**，對它們來說 `_ttl_cache` 是**唯一的節流器**；一律標記成失敗
+# ＝ 同時拆掉兩層，每次 rerun 都重打一輪（實測 5 次 rerun：404 由 3 個請求變 15 個、
+# 407 由 1 變 5）。單一 kind 的守衛結構上看不到這件事，故改成**六種全參數化**。
+
+_FAIL_KIND_MATRIX = [
+    # (kind, 讓 fetch_url 走到那個分類的 HTTP 狀態碼；None = 連線層例外, 應否標記)
+    ("unreachable",  None, True),
+    ("server_error", 500,  True),
+    ("blocked",      403,  True),
+    ("rate_limited", 429,  True),
+    ("not_found",    404,  False),   # ← NO_COOLDOWN_KINDS
+    ("proxy_auth",   407,  False),   # ← NO_COOLDOWN_KINDS
+]
+
+
+def _drive_yf(status, reruns=1):
+    """用假 Session 把 `fetch_yf_close` 推到指定 HTTP 狀態碼，回傳 (結果, 實際出門次數)。
+
+    刻意走**完整的 `fetch_url`**（而不是直接 patch `yf.fetch_url` 回 None）——
+    本測試要驗的正是「分類 → 標不標記」這整條鏈，patch 掉 `fetch_url` 就等於
+    把要驗的東西假設掉了。
+    """
+    from unittest.mock import patch as _patch
+    from infra import proxy as proxy_mod
+    from repositories.macro import yf as yf_mod
+
+    class _Resp:
+        def __init__(self, code):
+            self.status_code = code
+            self.content = b'{"chart":{"result":[{}]}}'
+
+    sent = {"n": 0}
+
+    class _Sess:
+        @staticmethod
+        def get(*_a, **_kw):
+            sent["n"] += 1
+            if status is None:
+                raise RuntimeError("connection refused")   # → unreachable
+            return _Resp(status)
+
+    out = None
+    with _patch.object(proxy_mod, "_get_thread_session", return_value=_Sess()), \
+         _patch.object(proxy_mod, "get_proxy_config", return_value={}):
+        for _ in range(reruns):
+            out = yf_mod.fetch_yf_close("^VIX")
+    return out, sent["n"]
+
+
+@pytest.mark.parametrize("kind, status, should_mark", _FAIL_KIND_MATRIX,
+                         ids=[k for k, _s, _m in _FAIL_KIND_MATRIX])
+def test_mark_decision_matches_backoff_policy_for_every_fail_kind(kind, status, should_mark):
+    """六種失敗分類，逐一釘住「該不該標記成失敗」。
+
+    契約:**`NO_COOLDOWN_KINDS` 不標記,其餘標記** —— 而且這個判斷必須跟著
+    `shared/backoff_policy.py`(SSOT)走,不是在測試裡另寫一份清單。
+    """
+    from unittest.mock import patch as _patch
+    from infra import proxy as proxy_mod
+    from infra import source_backoff as sb
+    from infra.proxy import pop_last_fail_kind
+    from repositories.macro import yf as yf_mod
+    from shared.backoff_policy import NO_COOLDOWN_KINDS
+
+    # 期望值直接由 SSOT 推導 —— 若有人改 NO_COOLDOWN_KINDS,本表會跟著變,
+    # 不會出現「政策改了測試還綠」的情況。
+    assert should_mark == (kind not in NO_COOLDOWN_KINDS), (
+        f"本測試的期望表與 shared/backoff_policy.NO_COOLDOWN_KINDS 不一致 —— "
+        f"改政策時請一併改這張表(kind={kind})"
+    )
+
+    sb.reset_all()
+    yf_mod.fetch_yf_close.cache_clear()
+    try:
+        # ① 先單獨驗**分類**:直接打 fetch_url,自己把值取走。
+        #    ⚠️ 刻意與 ② 分開跑 —— `pop_last_fail_kind()` 是取出即清掉的
+        #    (理由見該函式 docstring),在 ② 裡讀等於把 fetcher 要用的值搶走。
+        _sent_cls = {"n": 0}
+
+        class _Resp:
+            def __init__(self, code):
+                self.status_code = code
+                self.content = b"{}"
+
+        class _S:
+            @staticmethod
+            def get(*_a, **_kw):
+                _sent_cls["n"] += 1
+                if status is None:
+                    raise RuntimeError("connection refused")
+                return _Resp(status)
+
+        with _patch.object(proxy_mod, "_get_thread_session", return_value=_S()), \
+             _patch.object(proxy_mod, "get_proxy_config", return_value={}):
+            assert proxy_mod.fetch_url("https://q.example.invalid/x",
+                                       timeout=1, backoff_on_429=False) is None
+        assert pop_last_fail_kind() == kind, (
+            f"fetch_url 把這個狀態碼分類錯了,預期 {kind!r} —— "
+            f"分類錯了,後面的標記決定一定跟著錯"
+        )
+        sb.reset_all()
+
+        # ② 再驗**決定**:走完整的 fetch_yf_close。
+        out, _sent = _drive_yf(status)
+        assert is_fetch_failed(out) is should_mark, (
+            f"kind={kind}:標記決定錯了(實際 {is_fetch_failed(out)},預期 {should_mark})"
+        )
+        _size = yf_mod.fetch_yf_close.cache_info()["size"]
+        assert _size == (0 if should_mark else 1), (
+            f"kind={kind}:快取狀態與標記決定不一致(size={_size})"
+        )
+    finally:
+        sb.reset_all()
+        yf_mod.fetch_yf_close.cache_clear()
+
+
+@pytest.mark.parametrize("kind, status", [(k, s) for k, s, m in _FAIL_KIND_MATRIX if not m],
+                         ids=[k for k, _s, m in _FAIL_KIND_MATRIX if not m])
+def test_no_cooldown_kinds_are_throttled_by_the_ttl_cache_alone(kind, status):
+    """⭐ `NO_COOLDOWN_KINDS`:**沒有退避可用,所以請求量必須靠 `_ttl_cache` 壓住。**
+
+    這一條是 F1 的核心 —— 它同時斷言三件事:
+      ① 這個 kind 確實**沒有進退避**(`get_backoff_state()` 空的,所以不是退避在擋);
+      ② 結果**沒有被標記**(＝入了快取);
+      ③ 5 次 rerun 的對外請求量**等於**第 1 次的量(＝真的沒有增加)。
+
+    ⚠️ ① 是關鍵:少了它,②③ 在「退避幫忙擋著」的情況下也會通過,
+    這條就會變成一個**看起來有守、其實守不到**的測試。
+    """
+    from infra import source_backoff as sb
+    from repositories.macro import yf as yf_mod
+
+    sb.reset_all()
+    yf_mod.fetch_yf_close.cache_clear()
+    try:
+        _out1, n_first = _drive_yf(status, reruns=1)
+        assert sb.get_backoff_state() == [], (
+            f"kind={kind} 竟然進了退避 —— 它應在 NO_COOLDOWN_KINDS 內。"
+            f"本測試的前提(沒有退避可用)不成立,結論無效"
+        )
+        assert is_fetch_failed(_out1) is False, \
+            f"kind={kind} 被標記成失敗 → 不入快取 → 唯一的節流器被拆掉"
+
+        _out5, n_total = _drive_yf(status, reruns=5)
+        assert n_total == 0, (
+            f"kind={kind}:再打 5 次 rerun 仍對外送出 {n_total} 個請求 —— "
+            f"沒有被 _ttl_cache 擋住(第一次是 {n_first} 個)。"
+            f"這正是 2026-08-31 稽核量到的 404:3→15 / 407:1→5 那個放大器"
+        )
+        assert yf_mod.fetch_yf_close.cache_info()["hits"] >= 5, \
+            "5 次 rerun 應該全部命中快取"
+    finally:
+        sb.reset_all()
+        yf_mod.fetch_yf_close.cache_clear()
+
+
+def test_retryable_kinds_do_not_get_cached_so_cooldown_expiry_can_recover():
+    """對照組:**有冷卻期的四種必須不入快取** —— 否則冷卻過期後拿到的仍是被鎖住的空值。
+
+    這條與上一條是一體兩面:一個守「不該標的別標」,一個守「該標的別漏」。
+    只有其中一條時,把判斷寫死成常數(永遠標 / 永遠不標)只會紅一半。
+    """
+    from infra import source_backoff as sb
+    from repositories.macro import yf as yf_mod
+    from shared.backoff_policy import NO_COOLDOWN_KINDS
+
+    for kind, status, should_mark in _FAIL_KIND_MATRIX:
+        if kind in NO_COOLDOWN_KINDS:
+            continue
+        sb.reset_all()
+        yf_mod.fetch_yf_close.cache_clear()
+        try:
+            out, _n = _drive_yf(status)
+            assert is_fetch_failed(out) is True, f"{kind} 應標記卻沒標"
+            assert yf_mod.fetch_yf_close.cache_info()["size"] == 0, \
+                f"{kind} 被寫進快取 → 冷卻過期後仍會拿到鎖住的空值"
+        finally:
+            sb.reset_all()
+            yf_mod.fetch_yf_close.cache_clear()
+
+
+def test_no_cooldown_kinds_are_still_unlockable_by_the_clear_cache_button():
+    """§1 對偶:404/407 被快取之後,**使用者不必等 TTL** —— 清快取按鈕真的解得開。
+
+    這條守的是 `mark_fetch_failed_if_retryable` docstring 裡那個逃生口宣稱。
+    若某天有人把這三個 fetcher 從 `_CACHE_REGISTRY` 拿掉,按鈕就會失效,
+    而「404 照舊快取」的整個正當性建立在這個逃生口上 —— 故必須有測試釘住。
+    """
+    from infra import source_backoff as sb
+    from repositories.macro import yf as yf_mod
+    import repositories.macro_repository  # noqa: F401 — 同 UI 按鈕作法,觸發註冊
+    from fund_fetcher import clear_all_caches, get_all_cache_info
+
+    sb.reset_all()
+    yf_mod.fetch_yf_close.cache_clear()
+    try:
+        _out, n_first = _drive_yf(404, reruns=2)
+        assert yf_mod.fetch_yf_close.cache_info()["size"] == 1, "404 應該入快取"
+        assert "fetch_yf_close" in {r.get("name") for r in get_all_cache_info()}, \
+            "fetch_yf_close 不在 _CACHE_REGISTRY 內 → 清快取按鈕清不到它"
+
+        clear_all_caches()
+        assert yf_mod.fetch_yf_close.cache_info()["size"] == 0, "按鈕沒清掉這一層"
+
+        _out2, n_after = _drive_yf(404, reruns=1)
+        assert n_after > 0, "清完之後沒有真的重打上游 → 逃生口是假的"
+    finally:
+        sb.reset_all()
+        yf_mod.fetch_yf_close.cache_clear()
+
+
 def test_backoff_cooldown_expiry_really_retries():
     """冷卻過期後**必須真的重試** —— 退避不可讓資料永遠消失(§1 的對偶)。"""
     from infra import source_backoff as sb
@@ -396,15 +658,6 @@ def _marked_series():
 #    載入的版本分支斷言 —— **刻意不寫成「兩邊都過」**，那會讓這組測試失去意義。
 _PANDAS_MAJOR = int(pd.__version__.split(".")[0])
 _IS_PANDAS_3PLUS = _PANDAS_MAJOR >= 3
-
-
-def _clean_series():
-    return pd.Series([1.0, 2.0], index=pd.to_datetime(["2024-01-01", "2024-01-02"]))
-
-
-def _marked_series():
-    s = pd.Series([3.0, 4.0], index=pd.to_datetime(["2024-01-01", "2024-01-02"]))
-    return mark_fetch_failed(s, "upstream down")
 
 
 @pytest.mark.parametrize("label, op", [
@@ -590,8 +843,60 @@ _MARKED_PANDAS_TTL_FUNCS = {
 }
 
 
+def _ttl_cache_decorator_names(tree):
+    """這個模組裡，哪些名字實際綁到了 `_ttl_cache`？
+
+    ⚠️ **2026-08-31 稽核 F4 修**：原本用 `"_ttl_cache" in ast.dump(d)` 比對，
+    `from fund_fetcher import _ttl_cache as _tc` 之後寫 `@_tc(...)` **掃不到**
+    （實測綠燈通過）。改為先讀模組的 import 別名，再用名字比對。
+    """
+    import ast
+    names = {"_ttl_cache"}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for a in node.names:
+                if a.name.split(".")[-1] == "_ttl_cache":
+                    names.add(a.asname or a.name.split(".")[-1])
+    return names
+
+
+def _returns_pandas(node, deco_names):
+    """這個函式看起來會回傳 pandas 嗎？**兩條線索取聯集**。
+
+    ① 回傳型別註解含 `pd.` / `Series` / `DataFrame`（原本只看這一條）；
+    ② 函式體內任一 `return` 敘述提到 `pd.Series` / `pd.DataFrame` /
+       `Series(` / `DataFrame(`。
+
+    ⚠️ **2026-08-31 稽核 F4 修**：原本只看 ①，於是「**不寫回傳註解**」就能
+    整個繞過守衛（實測綠燈通過）。加上 ② 之後，這個繞道要成立必須同時
+    不寫註解、且 return 敘述裡不出現任何 pandas 字樣（例如
+    `out = pd.Series(...)` 之後 `return out`）—— **仍然做得到，見下方
+    測試 docstring 對涵蓋範圍的誠實描述。**
+    """
+    import ast
+    if not any(isinstance(d, ast.Name) and d.id in deco_names
+               or isinstance(d, ast.Call) and isinstance(d.func, ast.Name)
+               and d.func.id in deco_names
+               or isinstance(d, ast.Attribute) and d.attr in deco_names
+               or isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute)
+               and d.func.attr in deco_names
+               for d in node.decorator_list):
+        return None
+    if node.returns is not None:
+        ret = ast.unparse(node.returns)
+        if "pd." in ret or "DataFrame" in ret or "Series" in ret:
+            return ret
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Return) and sub.value is not None:
+            src = ast.unparse(sub.value)
+            if ("pd.Series" in src or "pd.DataFrame" in src
+                    or "Series(" in src or "DataFrame(" in src):
+                return f"<return 敘述推定> {src[:60]}"
+    return None
+
+
 def _ttl_cached_defs_returning_pandas():
-    """AST 掃全 repo,找出所有 `@_ttl_cache` 且回傳註解為 pandas 的函式。
+    """AST 掃全 repo,找出所有 `@_ttl_cache`(含 import 別名)且**看起來**回傳 pandas 的函式。
 
     刻意用 AST 而非 import + registry:registry 只含「已被 import 的模組」,
     測試若只 import 一部分就會少算 —— 那種漏算會讓守衛安靜失效。
@@ -609,16 +914,12 @@ def _ttl_cached_defs_returning_pandas():
             tree = ast.parse(py.read_text(encoding="utf-8"))
         except (SyntaxError, UnicodeDecodeError):
             continue
+        deco_names = _ttl_cache_decorator_names(tree)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            has_ttl = any(
-                "_ttl_cache" in ast.dump(d) for d in node.decorator_list
-            )
-            if not has_ttl or node.returns is None:
-                continue
-            ret = ast.unparse(node.returns)
-            if "pd." in ret or "DataFrame" in ret or "Series" in ret:
+            ret = _returns_pandas(node, deco_names)
+            if ret is not None:
                 found.append((str(rel), node.name, ret))
     return found
 
@@ -627,12 +928,34 @@ def test_only_the_three_marked_functions_return_pandas_from_ttl_cache():
     """守住 `infra/cache.py` 傳播警告所依賴的那個前提。
 
     它今天成立(回 pandas 的恰好就是被標記的那 3 個),所以沒有下游會繼承標記。
-    **一旦有人新增第 4 個,這條會紅**,逼他去讀那段警告、決定要不要呼叫
-    `clear_fetch_failed()`。
 
-    ⚠️ 這條紅了**不代表新函式有錯** —— 它只代表「需要有人判斷一次」。
+    ⚠️ **這條紅了不代表新函式有錯** —— 它只代表「需要有人判斷一次」。
     確認過不從被標記上游衍生(或已呼叫 clear_fetch_failed)之後,
     把名字加進 `_MARKED_PANDAS_TTL_FUNCS` 即可。
+
+    ## ⚠️ 涵蓋範圍：**這是靜態啟發式，不是完備守衛**（2026-08-31 稽核 F4 更正）
+
+    ~~新增第 4 個就紅燈。~~ **那句是絕對句,實測不成立**,已就地更正
+    (**有意識的更正,不是漏刪** · 日期 2026-08-31 · 決策者:AI 總管)。
+    **舊表述想表達的意圖仍然成立**(這條確實是為了逼作者判斷一次),
+    錯的是它把一個啟發式寫成保證。
+
+    **抓得到**:
+      · `@_ttl_cache(...)` 與 `@<import 別名>(...)`(F4 修,原本別名繞得過);
+      · 有 pandas 回傳註解的;
+      · 沒有註解、但 `return` 敘述裡出現 `pd.Series` / `pd.DataFrame` 的
+        (F4 修,原本沒註解就整個看不見)。
+
+    **仍然抓不到(誠實列出,不假裝窮舉)**:
+      · `out = pd.Series(...)` … `return out` —— 註解與 return 敘述都不含
+        pandas 字樣(型別推導才看得出來,AST 做不到);
+      · 動態裝飾(`f = _ttl_cache(...)(f)`)、`getattr` / 條件式套用裝飾器;
+      · 回傳 pandas 但包在 tuple / dict 裡的(例:`fetch_usdtwd_series` 回
+        `tuple[pd.DataFrame, str]` —— 它走 `@st.cache_data` 不在本掃描範圍,
+        但同型寫法若走 `@_ttl_cache` 一樣掃不到);
+      · 從別的模組 re-export 進來、在本模組沒有 `def` 的。
+
+    → **這條紅了要處理;它綠不代表沒有第 4 個。** 真正的保證只能靠 code review。
     """
     found = _ttl_cached_defs_returning_pandas()
     names = {name for _f, name, _r in found}
@@ -672,13 +995,17 @@ def test_the_three_are_actually_marked_in_source():
         # ⚠️ 用 AST 找**呼叫節點**，不是純文字 `"mark_fetch_failed(" in text`。
         # 後者會被 docstring / 註解裡提到的函式名餵成假陰性（今天三檔都沒有，
         # 但那是運氣不是保證），而假陰性在這裡的意思是「標記被拿掉了卻沒人叫」。
+        # 2026-08-31 F1:三個 fetcher 改呼叫 `mark_fetch_failed_if_retryable`
+        # (依失敗分類決定要不要標記,404/407 照舊快取)。兩個名字都算數 ——
+        # 白名單守的是「這個函式有沒有在失敗分支表態」,不是「用了哪一個 API」。
+        _MARK_APIS = {"mark_fetch_failed", "mark_fetch_failed_if_retryable"}
         called = any(
             isinstance(n, ast.Call)
             and isinstance(n.func, ast.Name)
-            and n.func.id == "mark_fetch_failed"
+            and n.func.id in _MARK_APIS
             for n in ast.walk(target)
         )
         assert called, (
-            f"{fn_name} 函式體內已無 mark_fetch_failed() 呼叫,"
+            f"{fn_name} 函式體內已無 {' / '.join(sorted(_MARK_APIS))} 呼叫,"
             f"但它仍列在 _MARKED_PANDAS_TTL_FUNCS 白名單裡"
         )

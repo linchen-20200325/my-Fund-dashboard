@@ -11,8 +11,7 @@ from typing import Optional
 
 import pandas as pd
 
-from infra.proxy import fetch_url
-from infra.cache import mark_fetch_failed
+from infra.proxy import fetch_url, mark_fetch_failed_if_retryable
 from fund_fetcher import _ttl_cache, register_cache
 from shared.ttls import TTL_5MIN, TTL_10MIN
 
@@ -41,6 +40,12 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
         重試是否真的出門由 `infra.source_backoff` 的來源冷卻決定,故不會轟炸來源。
         **HTTP 200 但序列為空(該區間真的沒有觀測)不標記,照常快取** —— 那是答案,
         不是失敗。兩者回傳值長得一模一樣,差別只在這個標記,**裝飾器不猜**(§1)。
+
+        ⚠️ **2026-08-31 修正（有意識的更正，不是漏刪）**:404(`not_found`) 與
+        407(`proxy_auth`)**不標記、照舊快取** —— `shared/backoff_policy.py` 明訂
+        這兩種**刻意不退避**,`_ttl_cache` 是它們唯一的節流器;若連它也拆掉,
+        每次 rerun 都會重打一輪(實測 5 次 rerun:404 由 3 個請求變 15 個)。
+        判準與完整理由見 `infra/proxy.py::mark_fetch_failed_if_retryable`。
     """
     url = f"{YF_CHART_BASE}/{ticker}"
     r = fetch_url(
@@ -51,9 +56,10 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
                                 # ~14s/標的 → 總經載入 8 標的爆 75s 逾時。遇 429 直接留空(§1)。
     )
     if r is None:
-        # 抓失敗(非「真的沒有」)→ 標記後不入快取。原本無條件快取,一次瞬斷
-        # 就把空序列鎖住整個 TTL_10MIN,而 VIX/DGS10/USDTWD/DXY/SPY 全走這裡。
-        return mark_fetch_failed(
+        # 抓失敗(非「真的沒有」)→ **依失敗分類**決定要不要標記。原本無條件快取,
+        # 一次瞬斷就把空序列鎖住整個 TTL_10MIN,而 VIX/DGS10/USDTWD/DXY/SPY 全走這裡。
+        # ⚠️ 404/407 走「不標記、照舊快取」那一支,理由見該 helper 的 docstring。
+        return mark_fetch_failed_if_retryable(
             pd.Series(dtype=float, name=ticker), f"fetch_url returned None: {ticker}")
     try:
         d = r.json()

@@ -4,14 +4,30 @@
 快取策略(v19.333 對齊實作,review F10):L1 repository 以 @_ttl_cache / @_daily_cache
 短 TTL 快取(infra/cache.py _CACHE_REGISTRY 集中註冊),
 UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述與實作不符,已更正
-失敗結果不入快取(2026-08-31 更正:原文把這句寫成無條件全稱句,而當時**是假的** —
-  `_ttl_cache` 無條件快取,一次上游瞬斷會把空值鎖住整個 TTL。現行實況分兩種):
-  · @_daily_cache — **全部**適用,cache_if 預設過濾空 / failed 結果(v19.253 R23)
-  · @_ttl_cache  — **僅限自己呼叫 infra.cache.mark_fetch_failed() 標記過失敗的
-    fetcher**(現為 fetch_yf_close / fetch_fred / fetch_defillama_stablecoin_mcap);
-    **其餘未標記的 fetcher 仍會快取空結果**。刻意做成 opt-in 而非預設過濾:
-    「空」有「抓失敗」與「真的沒有」兩義、回傳值分不出來,讓裝飾器去猜任一邊
-    都違 §1 — 機制、判準與各分支理由見 infra/cache.py 的 module 註解
+失敗結果不入快取 — ⚠️ **這句在 2026-08-31 之前是無條件全稱句,而當時是假的**
+  (`_ttl_cache` 無條件快取,一次上游瞬斷把空值鎖住整個 TTL)。**現行實況分三種機制**
+  (2026-08-31 二次更正:第一版只寫了前兩種,漏掉 @st.cache_data — 同一個「全稱句
+   蓋掉例外」的病在同一次修復裡換個位置又犯了一次,故本行改為逐一列出):
+  · @_daily_cache — cache_if 預設過濾 None / 空集合 / dict 含 "...all_failed"
+    (v19.253 R23)。⚠️ **它不認 mark_fetch_failed 標記** —— 用的是 len()==0 與
+    dict 的 source 欄位去**猜**。這與 infra/cache.py module 註解的核心論證
+    (「讓裝飾器去猜,猜錯哪一邊都違憲」)**不一致**;就地寫明,不留著裝沒看見。
+    實務上它服務的多是回 dict 的 fetcher(有 all_failed marker 可讀),
+    但「回空 Series 代表真的沒有」這種情形在它底下仍會被誤判成失敗。
+  · @_ttl_cache  — **僅限自己呼叫 infra.proxy.mark_fetch_failed_if_retryable()
+    的 fetcher**(現為 fetch_yf_close / fetch_fred / fetch_defillama_stablecoin_mcap),
+    且**只對「重試有意義」的四種失敗生效** —— 404 / 407 依 shared/backoff_policy
+    的 NO_COOLDOWN_KINDS **照舊入快取**(TTL 是它們唯一的節流器)。
+    **其餘未標記的 fetcher 仍會快取空結果。**
+  · @st.cache_data — **完全不在本機制涵蓋範圍內,失敗照樣鎖滿 TTL**。
+    全 repo 8 處(repositories/hot_money_repository ×2、ui/helpers/v2_editor ×2、
+    ui/tab5_data_guard ×2、ui/helpers/macro/ndc ×1、repositories/pool_repository ×1);
+    其中 fetch_usdtwd_series 與 _cached_ndc_score **直接快取外部 HTTP 的失敗**。
+    已登記為既有缺口,本批**刻意不修**(機制不同、回傳 tuple 承載不了 .attrs),
+    見 PR「刻意沒做」段。
+  刻意做成 opt-in 而非預設過濾:「空」有「抓失敗」與「真的沒有」兩義、回傳值
+  分不出來,讓裝飾器去猜任一邊都違 §1 — 機制、判準與各分支理由見
+  infra/cache.py 的 module 註解與 infra/proxy.py::mark_fetch_failed_if_retryable
 v18.176:移除回測 Tab(user 只需汰弱留強判斷換基金,回測拖速度且 NAV 歷史抓不全)
 v19.130:tab 重排 + 改名 + 刪除「💼 配置模擬器」
 """

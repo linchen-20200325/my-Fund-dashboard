@@ -16,8 +16,7 @@ import re
 
 import pandas as pd
 
-from infra.proxy import fetch_url
-from infra.cache import mark_fetch_failed
+from infra.proxy import fetch_url, mark_fetch_failed_if_retryable
 from fund_fetcher import _ttl_cache, register_cache
 from shared.fred_series import (
     FRED_BSCICP02,
@@ -50,11 +49,18 @@ def fetch_defillama_stablecoin_mcap() -> pd.Series:
         `@_ttl_cache`**,下次呼叫真的重試。HTTP 200 之後的各種空結果
         (JSON 壞掉 / 解不出 rows / schema 驗證不過)**刻意不標記** ——
         來源活著且已回答,重抓拿到的是同一份東西。
+
+        ⚠️ **2026-08-31 修正（有意識的更正，不是漏刪）**:404(`not_found`) 與
+        407(`proxy_auth`)**不標記、照舊快取** —— `shared/backoff_policy.py` 明訂
+        這兩種**刻意不退避**,`_ttl_cache` 是它們唯一的節流器;若連它也拆掉,
+        每次 rerun 都會重打一輪(實測 5 次 rerun:404 由 3 個請求變 15 個)。
+        判準與完整理由見 `infra/proxy.py::mark_fetch_failed_if_retryable`。
     """
     r = fetch_url(DEFILLAMA_STABLECOIN_URL, timeout=20)
     if r is None:
-        # 抓失敗 → 標記後不入快取(原本被鎖 TTL_30MIN)
-        return mark_fetch_failed(
+        # 抓失敗 → **依失敗分類**決定要不要標記(原本無條件快取,被鎖 TTL_30MIN)。
+        # ⚠️ 404/407 走「不標記、照舊快取」那一支,理由見該 helper 的 docstring。
+        return mark_fetch_failed_if_retryable(
             pd.Series(dtype=float, name="stablecoin_mcap"),
             "fetch_url returned None: DefiLlama:stablecoin_mcap")
     try:
