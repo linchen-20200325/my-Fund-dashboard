@@ -1901,19 +1901,32 @@ def render_portfolio_tab() -> None:
             # 來源:與「基金組合健診」Tab 完全同源(process_one_fund + _render_health_table),
             # 差異:per-fund 用 user 實際 invest_twd 為本金(若無則預設 100 萬 TWD)。
             # 目的:user 看完真實收益矩陣後,直接判斷「是否需要換標的 / 基金不健康」。
+            #
+            # ⚠️ WP-G(客戶 2026-08-31「各頁不重複渲染相同功能 …… ④ 健診改單行連結」):
+            # **健診 3 表在本頁的渲染已移除**,只留一行指路 → ② 組合健診(健診的唯一主場)。
+            # 上面四行歷史說明**保留不刪**:它們描述的「與 ② 同源、per-fund 用實際本金」
+            # 這個設計仍然成立 —— 被拿掉的只有「在這一頁再畫一次」。
+            #
+            # ⛔ **計算不能跟著拔(本任務最大的風險,實測後的處置)**:下面 ThreadPool 算出的
+            # `_health_results` → `_funds_extra`,是**同一區塊後面三個區塊的資料前置**
+            # (🔄 輪動配對建議 / 📊 組合績效 / 🎯 效率前緣),而那三個**不在**本次授權範圍。
+            # 故本次**只移除渲染、保留計算**;拔掉計算會讓那三區靜默變空(比沒有數字更危險,§1)。
+            # 實測依據(AST,守衛見 tests/test_wpg_portfolio_health_link_20260831.py):
+            # `_render_health_3tables` / `_render_health_table` 全鏈路**零 `st.session_state[...] =` 寫入**
+            # (只有兩處 `.get("phase_info")` 讀進區域變數)→ 移除渲染不會讓後面的區塊讀到舊值或缺值。
+            # ⚠️ 「零寫入」是本組單組 AST 掃描的結論,未經第二組驗證(§-2 規則 6)。
             if _loaded_pf:
                 try:
                     st.divider()
-                    st.markdown("### 💊 持倉健診（共用 SSOT 3 表:健康分析 / 配息相關 / 實際購買結果）")
+                    # WP-G 單行指路。**灰色說明語意**(caption),不是 st.error / st.warning ——
+                    # 「功能搬到別頁」不是系統故障(三態顏色分離)。分頁名走 story_nav SSOT
+                    # (`_tab_label_t3`,本函式開頭已 import),**不得**寫死「💊 組合健診」。
                     st.caption(
-                        "與「基金組合健診」Tab 完全同源(v19.181 模組化 3 表)。"
-                        "**① 健康分析**:4D Grade + Sharpe/Sortino/Calmar/Alpha/Expense/MaxDD + 3Y/5Y 年化 + 3-3-3 篩。"
-                        "**② 配息相關**:adr + 1Y 含息 + 吃本金燈號(1Y·)+ ** 4 規則換標的建議**。"
-                        "**③ 實際購買結果**:per-fund 用 invest_twd 為本金"
-                        "(未填者給 100 萬 TWD 模擬本金,**僅供配息試算,不進核心/衛星比例**)。"
+                        f"💊 持倉健診(健康分析 / 配息相關 / 實際購買結果)請看「{_tab_label_t3('health')}」"
+                        "分頁 —— 同一個功能不在兩頁重複渲染;本頁以下的輪動配對 / 組合績效 / "
+                        "效率前緣仍用同一份健診資料計算。"
                     )
                     from services.fund_row import process_one_fund as _proc_health  # v19.413 下沉 L2
-                    from ui.tab_fund_grp_health import _render_health_3tables as _render_health_tbl
                     from concurrent.futures import (
                         ThreadPoolExecutor as _TPE_h,
                         as_completed as _ac_h,
@@ -2042,6 +2055,13 @@ def render_portfolio_tab() -> None:
                         }
                     # v19.330:🧭 核心/衛星配置檢查已下沉共用 _render_health_3tables(兩 tab 齊顯示),
                     # 不再於此 inline(避免重複 + 只在 Tab3 出現)。
+                    # 📌 2026-08-31 WP-G 狀態更新(上面兩行保留不刪 —— 狀態變更,不是漏刪):
+                    # 本頁已不呼叫 `_render_health_3tables`,故「兩 tab 齊顯示」**現在只剩 ② 那一 tab**。
+                    # v19.330 當時「不要 inline、走共用」的判斷仍然成立(它防的是長出第二份實作);
+                    # 變的只是這一頁不再是那個共用渲染的 caller。
+                    # ⚠️ 下面那句「共用 render 讀它決定分母」同理:`_principal_is_default` 旗標
+                    # 仍然照接(產生端未動),但**本頁已無消費端** —— 它現在只服務 ② 那一頁。
+                    # 刻意不拔:旗標寫在 row 上,而 row(`_ok_health`)仍是本頁三個下游區塊的輸入。
                     # 把「這檔用的是模擬本金」旗標接到 row 上（§1 揭露）：共用 render
                     # 讀它決定該檔要不要進配置比例分母。產生端算對了但沒接出去 =
                     # PROCESS.md §4 點名的最貴失效模式，故旗標與消費端同批交付。
@@ -2058,13 +2078,37 @@ def render_portfolio_tab() -> None:
                         for _r in _ok_health
                         if _r.get("ok") and _r.get("_fund_raw")
                     ]
-                    # source_tab="portfolio"：本頁上方另有一個**分類依據不同**的核心%
-                    # （2026-08-07 後分母與目標值差異已消：模擬本金不進比例、本區不設
-                    # 目標）。共用 render 的「🧭 核心/衛星資產屬性分布」在**兩個 Tab**
-                    # 都已是唯讀純資訊，本參數只決定指路句要指向哪一格 ——
-                    # 這裡指「本頁上方」，健診 Tab 指「組合配置」Tab。
-                    _render_health_tbl(_ok_health, funds_extra=_funds_extra,
-                                       source_tab="portfolio")
+                    # ── WP-G(2026-08-31):健診 3 表的渲染呼叫已移除 ─────────────────
+                    # 原本這裡是 `_render_health_tbl(_ok_health, funds_extra=_funds_extra,
+                    # source_tab="portfolio")`(即 `ui.tab_fund_grp_health._render_health_3tables`),
+                    # 把 ② 的健診 3 表在本頁再畫一次。改為本區開頭那一行指路。
+                    # 連帶移除:檔內原本的 `from ui.tab_fund_grp_health import _render_health_3tables`
+                    # ——**本檔自此不再 import 健診渲染**(守衛用這一點當 fail-closed 斷言)。
+                    #
+                    # `_ok_health` / `_funds_extra` **刻意保留**:它們是下面三個區塊的輸入(見上方 ⛔)。
+                    #
+                    # 據實記錄的附帶行為變更(**不是**「零行為變更」):
+                    #   (a) 3 表本身、以及只印在表內的那兩句 `source_tab` 指路措辭
+                    #       (`_weight_basis_note` / `_core_satellite_verdict_caption`)一併不再出現;
+                    #   (a2) **`render_fund_checkup`(基金體檢 PK)在本頁少了一份** ——
+                    #       它原本被畫兩次,但**那兩次不是同一個東西**
+                    #       (2026-08-31 稽核更正;初稿寫成「重複兩次」是不準確的宣稱):
+                    #         · 本頁上方直接呼叫那次 → 傳 `st.session_state.portfolio_funds`,
+                    #           用**使用者實際填的 `invest_twd`**(每檔不同);
+                    #         · 被移除的 embed 那次 → 傳 `_build_fund_dict(..., _DEFAULT_PRINC)`,
+                    #           **每檔硬寫 100 萬**的齊頭模擬基準。
+                    #       `invest_twd` 會驅動可見輸出(原幣本金 / 月配息 / 年配息三欄 + 健診卡文案),
+                    #       兩份的數字本來就不一樣。**移除的是「齊頭模擬基準」那一份。**
+                    #       ⚠️ **但沒有能力消失**:同型的齊頭模擬版在 ② 仍在,而且 ② 的本金是
+                    #       **使用者可設定的單一本金**(`_build_fund_dict(r, code, principal_twd)`),
+                    #       比本頁硬寫死的 100 萬更好用。要齊頭比較 → 去 ②;
+                    #       要看自己實際金額 → 本頁上方那一份仍在。
+                    #   (b) 本 repo 自此**沒有任何 caller 傳 `source_tab="portfolio"`** →
+                    #       `ui/tab_fund_grp_health._CS_WHERE_PORTFOLIO` 成為 production 不可達分支。
+                    #       依 §-1.5.1c 判定 3(4) 它是「因本次改動才變成沒用的」,本該同批清掉;
+                    #       **但本次授權明文禁止動 ② 端(`ui/tab_fund_grp_health.py`)一個字**,
+                    #       故**登記不動**,連同該檔 L114 docstring「同時被健診 Tab 與 Tab3 embed
+                    #       呼叫」這句已失真的敘述,一併列入 PR 描述的待辦。
 
                     # v19.418 — 🔄 輪動配對建議(持倉健診也顯示;user 2026-07-28 要求兩邊都要)。
                     # 重用 _funds_extra;widget key 用 'pf_rot_' 前綴避免與健檢 Tab 的 'rot_' 撞鍵。
