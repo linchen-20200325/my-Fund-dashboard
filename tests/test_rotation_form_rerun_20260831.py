@@ -38,6 +38,21 @@ form 緩衝,本段就過期了**(屆時可以把體感也寫成測試,不必再�
   - `ROTATION_SELL_SIGMA` 改寫成 inline `-0.5` → `test_slider_defaults_come_from_ssot` 紅
   - 標題計數改用另一組 key → `test_expander_count_and_table_body_share_one_source` 紅
   - `FORM_SITES` 不登記元件 B → `test_form_site_is_registered_in_the_global_table` 紅
+
+**2026-08-31 稽核回修批新增的四條(前三條是稽核實測「全綠漏網」的突變)**:
+
+  - `buy_sigma=_buy` 改成直接吃 `ROTATION_BUY_SIGMA`(低基期滑桿變裝飾品)
+    → `test_applied_thresholds_drive_the_count[batch_rot_buy…]` 紅
+  - `min_score=_minsc` 改成直接吃 SSOT 常數(評分滑桿變裝飾品)
+    → `test_applied_thresholds_drive_the_count[batch_rot_score…]` 紅
+  - `clear_on_submit=False` 改 `True`(每次套用後滑桿彈回預設)
+    → `test_form_does_not_clear_on_submit` 紅
+  - `_render_bare()` 的 `finally` 收尾拿掉(form 狀態外洩污染整個 pytest 行程)
+    → `test_bare_render_leaves_no_form_state_on_the_root_dg` 紅
+    (且同行程的 `tests/test_render_smoke.py` 3 條一起紅)
+
+⚠️ **前三條在本批之前是零守衛的** —— 「本檔有 13 條測試」與「這 13 條守到了什麼」
+是兩回事。**守的是哪一條參數,要逐條數。**
 """
 from __future__ import annotations
 
@@ -169,6 +184,29 @@ def test_form_wiring_is_live_at_runtime():
         "送出鈕與滑桿不屬於同一個 form —— 按了不會套用")
 
 
+def test_form_does_not_clear_on_submit():
+    """`clear_on_submit` 必須是 False —— 按下「套用門檻」不得把滑桿彈回預設值。
+
+    ⚠️ **這條在 2026-08-31 稽核前是零守衛的**:`clear_on_submit` 是本批新寫的參數,
+    稽核把它從 `False` 改成 `True`,**127 條測試全綠**。
+    那個突變在使用者眼裡是這樣的:拉到 sell=-1.2 → 按「套用門檻」→ 表算對了,
+    **但三支滑桿同時彈回 SSOT 預設** → 使用者看到的門檻與表身用的門檻不一致,
+    下一次再按就套用回預設(§2.1 兩個數字打架)。**畫面沒壞、行為壞了。**
+
+    本條讀的是 **runtime 的 form proto**(`Block.form.clear_on_submit`),不是原始碼字面 ——
+    AST 看得到 `clear_on_submit=False` 這串字,看不到「它有沒有被別的寫法蓋掉」。
+    ⚠️ 誠實邊界:AppTest 不模擬送出後的清空行為(同檔頭那段),所以本條驗的是
+    **送給前端的那個旗標**,不是**彈回去的體感**。
+    """
+    forms = _run_form_probe()
+    assert len(forms) == 1, f"門檻列應只有 1 個 form,實際 {forms}"
+    form_id, clear_on_submit = forms[0]
+    assert form_id == "batch_rot_threshold_form", f"form_id 變了:{form_id}"
+    assert clear_on_submit is False, (
+        "門檻列 form 的 clear_on_submit 是 True —— 每次按「套用門檻」後三支滑桿都會"
+        "彈回 SSOT 預設,使用者看到的門檻與表身用的門檻會不一致。")
+
+
 # ══════════════════════════════════════════════════════════════
 # 2. key 沿用 + 預設值走 SSOT
 # ══════════════════════════════════════════════════════════════
@@ -240,37 +278,94 @@ def test_first_load_count_uses_ssot_defaults():
         f"首屏標題計數與 SSOT 預設門檻算出的結果不符:{labels}")
 
 
-#: (已套用的 sell 門檻, 預期「N 對可換」, 預期「N 檔高基期」)。
-#: ⚠️ **兩個 case 都刻意選成「算出來的數字與 SSOT 預設不同」**,理由見下方 docstring。
-#: 用 `_BATCH_DF` 實算:預設 `-0.5` → (1, 1);`-2.5` → (0, 2);`0.4` → (0, 0)。
-_APPLIED_THRESHOLD_CASES = [(-2.5, 0, 2), (0.4, 0, 0)]
+#: (session key, 已套用的值, 預期「N 對可換」, 預期「N 檔高基期」)。
+#: **三支滑桿各自都要有 case** —— 理由見 `test_applied_thresholds_drive_the_count`。
+#: 用 `_BATCH_DF` 實算(2026-08-31):SSOT 預設 `(-0.5, -1.5, 50)` → **(1, 1)**;
+#: `sell=-2.0` → (0, 2)、`sell=0.4` → (0, 0)、`buy=-3.0` → (0, 1)、`score=80` → (0, 1)。
+#: 四個 case 算出來的「對可換」都與預設的 1 不同 → 任何「忽略 session、直接吃 SSOT
+#: 常數」的突變都會被抓到。
+#: ⚠️ **每個值都必須是使用者拉得到的**(在該滑桿的 min/max/step 上),
+#: 由 `test_applied_threshold_cases_are_reachable_through_the_widget` 機械驗證,
+#: 不靠這裡的註解自我保證 —— 理由見那條的 docstring(這是同一個陷阱的第四次現身)。
+_APPLIED_THRESHOLD_CASES = [
+    ("batch_rot_sell", -2.0, 0, 2),
+    ("batch_rot_sell", 0.4, 0, 0),
+    ("batch_rot_buy", -3.0, 0, 1),
+    ("batch_rot_score", 80, 0, 1),
+]
 
 
-@pytest.mark.parametrize("sell,expect_ok,expect_high", _APPLIED_THRESHOLD_CASES)
-def test_applied_thresholds_drive_the_count(sell: float, expect_ok: int,
-                                            expect_high: int,
+@pytest.mark.parametrize("key,applied,expect_ok,expect_high", _APPLIED_THRESHOLD_CASES)
+def test_applied_thresholds_drive_the_count(key: str, applied: float,
+                                            expect_ok: int, expect_high: int,
                                             monkeypatch: pytest.MonkeyPatch):
-    """套用後的門檻真的驅動標題計數(不是永遠印 SSOT 那一組數字)。
+    """套用後的門檻真的驅動標題計數(不是永遠印 SSOT 那一組數字)—— **三支滑桿都要驗**。
 
-    直接把「已套用」狀態放進 `session_state`(＝ 使用者按過「套用門檻」之後的狀態),
-    驗計數跟著走:`sell=0.4` 把唯一的高基期標的濾掉 → 0 檔;
-    `sell=-2.5` 放寬到連 B 也算高基期 → 2 檔(但 B 之外已無別類健康低基期可配 → 0 對可換)。
+    把「已套用」狀態放進 `session_state`,驗計數跟著走:
+    `sell=0.4` 把唯一的高基期標的濾掉 → 0 檔;`sell=-2.0` 放寬到連 B 也算高基期 → 2 檔
+    (但已無別類健康低基期可配 → 0 對);`buy=-3.0` 收緊到 B 不再算低基期 → 配不出來;
+    `score=80` 把評分 75 的 B 擋在健康過濾外 → 同樣配不出來。
 
-    ⚠️ **測資怎麼選,是這條有沒有守護力的關鍵**(踩過兩次,寫下來):
-    1. 初版用 `sell=-0.5`,那**就是 SSOT 預設值** —— 稽核實測:在「標題改讀別的 key」
-       的突變下它**仍然綠**(讀錯 key → 退回預設 -0.5,剛好等於測資)。**套套邏輯。**
-    2. 依稽核建議改 `-1.0` 後雖已非預設值,但實算 `-1.0` 與 `-0.5` **算出來的數字相同**
-       (都是 1 對 / 1 檔)→ 遇到同一個突變**還是綠**。**「值不同」不等於「結果不同」。**
-    → 現行改用 `-2.5`(0 對 / 2 檔),與預設的 (1, 1) **在兩個數字上都不同**,
-    突變一改讀別的 key 就會轉紅。**與本檔 M7 是同一個陷阱的第三次現身。**
+    ⚠️ **為什麼三支都要有 case(2026-08-31 稽核實測,不是形式主義)**:先前只驗 `sell`,
+    稽核把 production 的 `buy_sigma=_buy` / `min_score=_minsc` 分別改成**直接吃 SSOT 常數**
+    (＝那兩支滑桿變成純裝飾品,拉了完全沒用),**127 條測試全綠**。
+    **「有守衛」不等於「守到了」—— 守的是哪一條參數要逐條數。**
+
+    ⚠️ **測資怎麼選,是這條有沒有守護力的關鍵**(同一個陷阱已現身四次,逐次寫下來):
+    1. 初版用 `sell=-0.5`,那**就是 SSOT 預設值** —— 在「標題改讀別的 key」的突變下
+       **仍然綠**(讀錯 key → 退回預設,剛好等於測資)。**套套邏輯。**
+    2. 改 `-1.0` 後雖已非預設值,但實算與 `-0.5` **算出來的數字相同**(都是 1 對 / 1 檔)
+       → 同一個突變**還是綠**。**「值不同」不等於「結果不同」。**
+    3. 改 `-2.5` 後兩個數字都不同了,突變確實轉紅 —— 但 `-2.5` **在滑桿範圍之外**
+       (該滑桿是 `-2.0 .. 0.5`),使用者根本拉不到;而本條的 docstring 卻宣稱它
+       「＝使用者按過『套用門檻』之後的狀態」。**那句話對 -2.5 不成立。**
+       (實測:AppTest `set_value(-2.5)` 被**靜默拒絕**,session 仍是 -0.5。)
+       → 現行改用 `-2.0`(滑桿下界,拉得到),實算同為 (0, 2),**鑑別力完全相同**。
+    4. 第三種變形因此是:**測資用了一個使用者到不了的狀態,還宣稱那是使用者的狀態。**
+       前兩次的病徵是「突變照樣綠」——**看得見**,一跑突變就露餡;
+       這次的病徵是「突變確實轉紅」——**看不見**,因為所有訊號都正常
+       (測試綠、突變紅),沒有任何一個數字會告訴你「這個狀態使用者根本拉不到」。
+       **守衛有力,但它守的前提是假的**,所以它守的其實是別的東西。
+       **認法**:凡是把值塞進 `session_state` 就宣稱「這是使用者的狀態」的測試,
+       都要回頭對一次那個 widget 的 min/max/step ——
+       現在這件事由下一條 `..._reachable_through_the_widget` 機械化了,不再靠人記得。
     """
     import streamlit as st
     seen: dict = {}
     monkeypatch.setattr(st, "expander", _fake_expander(seen))
-    monkeypatch.setitem(st.session_state, "batch_rot_sell", sell)
+    monkeypatch.setitem(st.session_state, key, applied)
     _render_bare()
     assert seen["label"] == (f"🧩 互補配對探索（{expect_ok} 對可換 / "
                              f"{expect_high} 檔高基期）"), seen["label"]
+
+
+@pytest.mark.parametrize("key,applied,expect_ok,expect_high", _APPLIED_THRESHOLD_CASES)
+def test_applied_threshold_cases_are_reachable_through_the_widget(
+        key: str, applied: float, expect_ok: int, expect_high: int):
+    """上一條的每個「已套用值」都必須是**使用者真的拉得到**的,而且真的驅動畫面。
+
+    上一條走的是 `monkeypatch.setitem(session_state, ...)` —— **繞過了 widget**,
+    所以它驗不出「這個值根本不在滑桿範圍內」。本條改用 AppTest **實際操作滑桿**,
+    一次驗兩件事:
+
+    1. **可達性**:`set_value(x)` 之後 `session_state[key]` 真的等於 `x`。
+       (streamlit 對超界值是**靜默拒絕**、不報錯 —— 這正是 `-2.5` 那次沒被發現的原因。)
+    2. **端到端**:透過真 widget 套用之後,Expander 標題的數字與上一條相同 ——
+       也就是「這支滑桿真的驅動結果」,而不是只有「session_state 真的驅動結果」。
+
+    ⚠️ 本條**不**證明「送出前不會重繪」:AppTest 不模擬 form 的送出前緩衝(見檔頭);
+    它證明的是**滑桿→結果**這條線是通的。
+    """
+    got = _run_applied_probe()[f"{key}={applied}"]
+    assert got["session"] == applied, (
+        f"滑桿 {key} 設成 {applied} 之後,session_state 卻是 {got['session']} —— "
+        f"該值不在此滑桿的 min/max/step 上,streamlit 靜默拒絕了它。"
+        "測資必須是使用者拉得到的值(見上一條 docstring 第 3、4 點)。")
+    _want = f"🧩 互補配對探索（{expect_ok} 對可換 / {expect_high} 檔高基期）"
+    assert got["expanders"] == [_want], (
+        f"透過真 widget 套用 {key}={applied} 後,標題計數是 {got['expanders']} —— "
+        f"與 session_state 路徑算出的 ({expect_ok}, {expect_high}) 不一致,"
+        "表示這支滑桿沒有真的接到計算上。")
 
 
 def test_expander_count_and_table_body_share_one_source(monkeypatch: pytest.MonkeyPatch):
@@ -306,7 +401,34 @@ def test_expander_count_and_table_body_share_one_source(monkeypatch: pytest.Monk
 
 
 # ══════════════════════════════════════════════════════════════
-# 4. 與全域資產表對接
+# 4. 測試行程衛生 —— form 化的連帶損害,不是預防性設計
+# ══════════════════════════════════════════════════════════════
+def test_bare_render_leaves_no_form_state_on_the_root_dg():
+    """bare 渲染元件 B 之後,`st._main._form_data` **必須**回到 None。
+
+    這條守的是**別人的測試**,不是本檔自己的:`st._main` 是模組級單例,bare 模式下
+    `with st.form(...)` 的殘留會活過整個 pytest 行程,讓**之後**任何用 AppTest 且畫面
+    上有 `st.button` 的測試炸掉(實測:`tests/test_render_smoke.py` 3 條紅)。
+
+    ⚠️ **為什麼需要一條測試,而不是「加了 finally 就好」**:這個病的症狀出現在
+    **另一個檔案**、而且**只在特定執行順序下**出現 —— 也就是說,把 `finally` 拿掉
+    之後,本檔自己**照樣全綠**,CI 也可能因為字母序剛好而全綠。**沒有這條,那行
+    `finally` 是一段沒有守衛的修復,下一個人整理程式碼時可以無聲刪掉它。**
+
+    突變自證(2026-08-31 實跑):拿掉 `_render_bare` 的 `finally` 那行 → 本條轉紅
+    (assert 收到 `FormData(form_id='batch_rot_threshold_form')`)。
+    """
+    import streamlit as st
+    _reset_form_state()          # 先歸零,免得被同行程更早的測試影響、驗到假綠
+    _render_bare()
+    assert getattr(st._main, "_form_data", None) is None, (
+        f"bare 渲染後根 DG 仍殘留 form 狀態:{st._main._form_data!r} —— "
+        "同一個 pytest 行程內,後續任何 AppTest 畫面上的 st.button 都會被誤判成"
+        "「在 form 內」而丟 StreamlitAPIException(見 _render_bare docstring)。")
+
+
+# ══════════════════════════════════════════════════════════════
+# 5. 與全域資產表對接
 # ══════════════════════════════════════════════════════════════
 def test_form_site_is_registered_in_the_global_table():
     """新增的 form 必須登記進 `FORM_SITES`,否則下一個人可以無聲拆掉它。
@@ -331,11 +453,63 @@ def _fake_expander(sink: dict):
 
 
 def _render_bare() -> None:
-    """bare 模式直接呼叫元件 B(widget 回傳預設值,不需要 AppTest)。"""
+    """bare 模式直接呼叫元件 B(widget 回傳預設值,不需要 AppTest)。
+
+    ⚠️ **收尾的 `finally` 不是防禦性程式碼,是修一個實測到的行程污染**
+    (2026-08-31 稽核抓到,streamlit 1.59.2 實測):
+
+    元件 B 現在含 `with st.form(...)`。bare 模式(無 ScriptRunContext)下離開該 with
+    區塊時,dg_stack 雖然彈回深度 1,**根 DG(`st._main`)卻被就地留下 `_form_data`**,
+    而它是**模組級單例**、活過整個 pytest 行程。實測:
+
+        before bare render   dg_stack depth=1 form_ids=[None]
+        after  bare render   dg_stack depth=1 form_ids=['batch_rot_threshold_form']
+
+    後果:同一行程內**之後**任何用 AppTest 渲染的測試,只要畫面上有 `st.button`,
+    都會被 streamlit 判成「按鈕長在 form 裡」而丟
+    `StreamlitAPIException: st.button() can't be used in an st.form().`
+    實測 `pytest tests/test_rotation_form_rerun_20260831.py tests/test_render_smoke.py`
+    → `test_render_smoke.py` **3 條紅**(踩到 `ui/tab1_macro.py` 與
+    `ui/tab5_data_guard.py` 的 `st.button`)。
+
+    ⚠️ **之前全綠純屬巧合,不是設計 —— 而且是「兩層巧合」疊在一起**(2026-08-31 實測):
+
+    1. **本機跑整套(不帶 `-m`)靠的是字母序**:`test_render_smoke`(ren)恰好排在
+       `test_rotation_*`(rot)**之前**,受害者先跑完才被污染。
+    2. **CI 兩條 lane 靠的是 marker 分流**:`TestRenderSmoke` 掛 `@pytest.mark.slow`,
+       而本檔與 `test_rotation_components_ui_*` **沒有** slow marker →
+       fast lane(`-m "not slow"`)把受害者剔掉、slow lane(`-m "slow"`)把污染源剔掉,
+       **兩者在 CI 上根本沒碰過面**。
+
+    也就是說 CI 綠燈**完全沒有覆蓋到這條路徑**,它不是「驗過沒事」而是「沒驗到」。
+    ①隨機序、②只跑子集、③日後新增一個排序在 `test_rot*` 之後又用 AppTest 的測試檔、
+    ④哪天有人把 marker 調一調 —— 任一即紅。
+    **靠檔名字母序或 marker 分流當隔離,都是假的隔離。**
+
+    修法沿用本 repo 既有先例 `tests/test_app_smoke.py`
+    (v19.176,同一個病:app.py bare 跑 module body 後殘留 `_form_data`)。
+    ⚠️ 抄那段時**不要**連 `_active_dg = _main_dg` 一起抄 —— streamlit 1.59.2 上
+    `_active_dg` 已是**無 setter 的 property**,寫它會拋
+    `AttributeError: property '_active_dg' ... has no setter`
+    (v19.176 原處是被它自己的 `try/except` 吞掉才沒出事,不是那行有效)。
+    ⚠️ 這是**版本相依行為**,不是永恆事實;請現場重驗,不要引用本段當永久事實。
+    """
     from ui.helpers.fund_grp_health.rotation import (
         render_complementary_explorer_from_df,
     )
-    render_complementary_explorer_from_df(_BATCH_DF)
+    try:
+        render_complementary_explorer_from_df(_BATCH_DF)
+    finally:
+        # 例外路徑也要清 —— 渲染中途爆掉時殘留最嚴重(with 沒走完)。
+        _reset_form_state()
+
+
+def _reset_form_state() -> None:
+    """把根 DeltaGenerator 的 form 殘留清掉(理由見 `_render_bare` docstring)。"""
+    import streamlit as st
+    _main = getattr(st, "_main", None)
+    if _main is not None:
+        _main._form_data = None
 
 
 #: 在**乾淨子行程**裡用 AppTest 渲染元件 B,把要驗的東西印成 JSON。
@@ -346,11 +520,24 @@ def _render_bare() -> None:
 #: `StreamlitAPIException: Forms cannot be nested in other forms.` ——
 #: bare 模式沒有 ScriptRunContext,form 的容器狀態會殘留到之後的 AppTest。
 #: 實測:單跑本檔全綠,與上述任一測試同行程就紅,**且順序反過來就好**。
-#: ⚠️ 本 repo **目前沒有** `pytest-randomly`(2026-08-31 實測:`requirements-dev.txt` /
-#: CI 設定 / `conftest.py` 皆無,環境亦未安裝)。在 pytest 預設的**字母序**下,
-#: `test_rotation_components_ui…` 排在 `test_rotation_form_rerun…` **之前**
-#: → in-process 寫法會是**穩定紅燈,不是間歇**;若日後導入隨機序才會變成間歇性紅燈。
-#: **兩種情況都得靠子行程解決**,故本作法與有沒有 randomly 無關。
+#: ~~⚠️ 本 repo **目前沒有** `pytest-randomly`(2026-08-31 實測:`requirements-dev.txt` /~~
+#: ~~CI 設定 / `conftest.py` 皆無,**環境亦未安裝**)。~~
+#: ⚠️ **2026-08-31 更正 —— 有意識的更正,不是漏刪 · 決策者:AI 總管。**
+#: 上面那句是**四個分句,前三個為真、第四個為假**:
+#:   - ✅ `requirements-dev.txt` / CI 設定 / `conftest.py` 皆**未宣告** `pytest-randomly`
+#:     (2026-08-31 複驗仍為 0 命中)。
+#:   - ❌ 「**環境亦未安裝**」**為假**:實測 `pip show pytest-randomly` → **4.1.0**,
+#:     dist-info mtime **2026-08-31T11:44:19Z** —— 由**另一個 agent** 裝進這個共用沙箱,
+#:     時間早於本分支後兩個 commit。寫下那句時它就已經在了。
+#: **這句錯誤的源頭是 AI 總管,不是實作組**:上一輪總管告訴實作組「本 repo 沒裝這個
+#: plugin,該失敗會是穩定的而非間歇」——**前半對、後半錯**,而後半正是被抄進註解的那句。
+#: 據實記錄來源,不把它記成實作組的疏失。
+#: **現行(誠實版本)**:repo 未宣告 → **CI 上是字母序**;共用沙箱已裝 4.1.0 →
+#: **本地跑會是隨機序**。兩種情況都得靠子行程解決,故結論(用乾淨子行程)不變。
+#: ⚠️ **而那個假設本身遮蔽了一個真缺陷**:正因為以為「不會隨機」,才沒人去跑隨機序;
+#: **隨機序正是抓到本檔行程污染(見 `_render_bare`)的方式** ——
+#: 若當初照那句話信下去,CI 會一路綠到某天有人加了一個排序在 `test_rot*` 之後的
+#: AppTest 測試檔為止。**一句未查證的環境宣稱,擋掉的是一次會抓到真 bug 的驗證。**
 #: 這是測試框架的產物,**與 production 無關**(production 永遠有 ScriptRunContext)。
 _PROBE_SRC = '''
 import json, sys
@@ -375,20 +562,96 @@ print("@@PROBE@@" + json.dumps({{
 '''
 
 
-def _run_probe() -> dict:
-    """在乾淨子行程裡跑 AppTest,回傳 JSON 結果(理由見 `_PROBE_SRC` 上方註)。"""
+#: 「實際操作滑桿」探針:每個 case 開一個乾淨 AppTest、拉那支滑桿、記錄
+#: session 值與 Expander 標題。與 `_PROBE_SRC` 分開是因為它要跑 N+1 次 AppTest。
+_APPLIED_PROBE_SRC = '''
+import json, sys
+sys.path.insert(0, {root!r})
+import pandas as pd
+from streamlit.testing.v1 import AppTest
+
+_SRC = """
+import sys
+sys.path.insert(0, {root!r})
+import pandas as pd
+from ui.helpers.fund_grp_health.rotation import render_complementary_explorer_from_df
+render_complementary_explorer_from_df(pd.DataFrame({records!r}))
+"""
+
+def _forms(at):
+    """走訪 element tree 撈出 Block.form 的 proto(AppTest 沒有 at.form 這個 accessor)。"""
+    out = []
+    def _walk(n):
+        p = getattr(n, "proto", None)
+        if p is not None and type(p).__name__ == "Block":
+            try:
+                if p.WhichOneof("type") == "form":
+                    out.append([p.form.form_id, p.form.clear_on_submit])
+            except Exception:
+                pass
+        ch = getattr(n, "children", None) or []
+        for c in (ch.values() if isinstance(ch, dict) else ch):
+            _walk(c)
+    _walk(at.main)
+    return out
+
+res = {{"forms": _forms(AppTest.from_string(_SRC, default_timeout=60).run()), "applied": {{}}}}
+for _key, _val in {cases!r}:
+    _at = AppTest.from_string(_SRC, default_timeout=60).run()
+    _w = [s for s in _at.slider if s.key == _key][0]
+    _at2 = _w.set_value(_val).run()
+    res["applied"]["%s=%s" % (_key, _val)] = {{
+        "session": _at2.session_state[_key],
+        "expanders": [e.label for e in _at2.expander],
+        "exceptions": [e.value for e in _at2.exception],
+    }}
+print("@@PROBE@@" + json.dumps(res, ensure_ascii=False))
+'''
+
+#: 子行程探針很慢(每個 AppTest 約 1 秒),同一個 pytest 行程內只跑一次。
+_PROBE_CACHE: dict = {}
+
+
+def _spawn(src: str) -> dict:
+    """跑一個探針子行程,回傳它印出的 JSON。"""
     import json
     import subprocess
     import sys
 
-    src = _PROBE_SRC.format(root=str(ROOT), records=_BATCH_DF.to_dict("records"))
     # check=False:子行程非 0 也要往下走 —— 下面的 assert 會把 stdout/stderr 一起印出來,
     # 比 CalledProcessError 的空訊息好讀。
     proc = subprocess.run([sys.executable, "-c", src], capture_output=True,
-                          text=True, timeout=300, cwd=str(ROOT), check=False)
+                          text=True, timeout=600, cwd=str(ROOT), check=False)
     marker = [ln for ln in proc.stdout.splitlines() if ln.startswith("@@PROBE@@")]
     assert marker, (
         "AppTest 探針子行程沒有產出結果 —— "
         f"returncode={proc.returncode}\nstdout:\n{proc.stdout[-2000:]}"
         f"\nstderr:\n{proc.stderr[-2000:]}")
     return json.loads(marker[-1][len("@@PROBE@@"):])
+
+
+def _run_probe() -> dict:
+    """在乾淨子行程裡跑 AppTest,回傳 JSON 結果(理由見 `_PROBE_SRC` 上方註)。"""
+    if "base" not in _PROBE_CACHE:
+        _PROBE_CACHE["base"] = _spawn(
+            _PROBE_SRC.format(root=str(ROOT), records=_BATCH_DF.to_dict("records")))
+    return _PROBE_CACHE["base"]
+
+
+def _run_applied_probe() -> dict:
+    """`{key}={value}` → 實際拉過該滑桿之後的 session 值與 Expander 標題。"""
+    if "applied" not in _PROBE_CACHE:
+        _PROBE_CACHE["applied"] = _spawn(_APPLIED_PROBE_SRC.format(
+            root=str(ROOT), records=_BATCH_DF.to_dict("records"),
+            cases=[(k, v) for k, v, _o, _h in _APPLIED_THRESHOLD_CASES]))
+    probe = _PROBE_CACHE["applied"]
+    for _k, _v in probe["applied"].items():
+        assert not _v["exceptions"], f"{_k}: {_v['exceptions']}"
+    return probe["applied"]
+
+
+def _run_form_probe() -> list:
+    """門檻列 form 的 `[form_id, clear_on_submit]`(與 applied 探針同一個子行程)。"""
+    if "applied" not in _PROBE_CACHE:
+        _run_applied_probe()
+    return _PROBE_CACHE["applied"]["forms"]
