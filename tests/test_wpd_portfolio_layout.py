@@ -22,9 +22,12 @@
 
 第 2 條紅了 = 版面排錯，肉眼看得到。
 **第 3 條紅了 = 數字可能已經變了，而且肉眼看不出來。**
-搬遷時實測到三處「同一次 run 內先寫後讀 / 先讀後寫」的耦合
-（`portfolio_core_pct` / `policy_sheet_id` / `gsheet_tokens`），
-只要有人「順手把 `with` 也照版面順序排一排」，那三處就會翻面 ——
+搬遷時實測到~~三處~~**至少四處**「同一次 run 內先寫後讀 / 先讀後寫」的耦合
+（`portfolio_core_pct` / `policy_sheet_id` / `gsheet_tokens`，
+2026-08-31 獨立稽核補第 4 處 `_schema_ver` —— 保單管理段寫、保單分組視圖讀，
+與 `_sheet_id` 同一個顯示條件；原「三處」是單組 AST 掃描漏算了
+「寫在抽出的模組、讀在 tab3」的跨檔耦合。**四處是已知清單，不是窮舉**），
+只要有人「順手把 `with` 也照版面順序排一排」，那幾處就會翻面 ——
 畫面看起來一模一樣，KPI 卡的核心% 卻吃到不同 run 的 slider 值。
 這正是 `CLAUDE.md §-2` 說的「肉眼 review 抓不到」的那一種退化。
 
@@ -231,14 +234,18 @@ def test_execution_order_must_stay_exactly_as_before_the_migration() -> None:
     """**最要緊的一條**：`with` 的進入順序 == 搬遷前的執行順序，一步都不准換。
 
     WP-D 是**版面重整，不是計算改動**（派工規格：「不得改變任何數字的算法」）。
-    搬遷時實測到三處同一次 run 內的 session_state 耦合：
+    搬遷時實測到**至少四處**同一次 run 內的 session_state 耦合
+    （原文寫「三處」；第 4 處為 2026-08-31 獨立稽核補，非窮舉）：
       1. `portfolio_core_pct` —— slider 在「加入與管理基金」段尾寫，
          「配置總覽」透過 `ui/helpers/portfolio/allocation.py` 讀。
          搬遷前是**先讀後寫**；一旦調換就變**先寫後讀**，KPI 卡的核心%
          會吃到不同 run 的 slider 值。
       2. `policy_sheet_id` —— 保單管理段寫、加入基金段讀。
       3. `gsheet_tokens` —— 加入基金段寫、保單管理段讀。
-    這三處都會**改變畫面上的數字或顯示條件**，而且**畫面排版看起來完全一樣**。
+      4. `_schema_ver` —— 保單管理段（`policy_admin_section.py`）寫、
+         「保單分組視圖」讀（「🔗 綁到保單」顯示條件，與 `_sheet_id` 同一個 `if`）。
+         搬遷前是**先寫後讀**；調換會讓下拉吃到上一次 run 的 schema 判定。
+    這幾處都會**改變畫面上的數字或顯示條件**，而且**畫面排版看起來完全一樣**。
 
     突變驗證（2026-08-28 實跑）
     --------------------------
@@ -254,9 +261,11 @@ def test_execution_order_must_stay_exactly_as_before_the_migration() -> None:
         f"搬遷前：{list(PRE_MIGRATION_EXECUTION_ORDER)}\n"
         "⚠️ 版面順序由 container **建立**順序決定（見上一條），"
         "**不需要**也**不可以**靠調換 `with` 來排版 —— "
-        "調換 `with` 會改到 `portfolio_core_pct` / `policy_sheet_id` / `gsheet_tokens` "
-        "三處同一次 run 內的先寫後讀關係，畫面一樣、數字會變。\n"
-        "真要改執行順序，請先處理那三處耦合，並在 PR 說明改了哪個數字。")
+        "調換 `with` 會改到 `portfolio_core_pct` / `policy_sheet_id` / `gsheet_tokens` / "
+        "`_schema_ver`（至少四處，已知非窮舉）同一次 run 內的先寫後讀關係，"
+        "畫面一樣、數字會變。\n"
+        "真要改執行順序，請先**重掃**所有跨段 / 跨模組耦合（不要只處理被點名的），"
+        "並在 PR 說明改了哪個數字。")
 
 
 def test_display_and_execution_orders_are_actually_different() -> None:
@@ -279,9 +288,14 @@ def test_display_and_execution_orders_are_actually_different() -> None:
         "session_state 耦合並更新本檔），要嘛有人把表抄成一樣。兩種都要在 PR 講清楚。")
 
 
-@pytest.mark.parametrize("path", [TAB3, T7], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [TAB3, T7, POLICY_ADMIN], ids=lambda p: p.name)
 def test_no_in_page_section_numbering_in_headings(path: pathlib.Path) -> None:
     """頁內標題不得帶圈號 —— 線框 §04「頁內：純標題階層，不編號」。
+
+    ⚠️ 2026-08-31 獨立稽核補 `POLICY_ADMIN` 進掃描範圍：這 790 行是**同一頁**的
+    內容，WP-D 把它抽成模組的同時也把它抽出了本規則的射程 —— 第一版只掃
+    TAB3 / T7，等於規則誕生當天就有 1/3 的頁面在規則外（實測現況 0 違規，
+    加入後仍綠；docstring 內的 ④⑤ 是跨分頁站號文件，不是渲染標題，掃不到是對的）。
 
     盤點認定本頁的病是「畫面順序 ④→①→②→③」：同一頁用圈號同時表達
     **區塊站號**、**表格準則序號**、**跨分頁站號**三種不同語意。
