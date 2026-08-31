@@ -382,6 +382,79 @@ def test_tab_error_titles_go_through_tab_label():
             f"錯誤標題沒有走 tab_label()：{ast.unparse(_m)[:120]}")
 
 
+# ══════════════════════════════════════════════════════════════════
+# 4) 指路文案：指到「頁內分區」的地方必須走 where_to_find()
+# ══════════════════════════════════════════════════════════════════
+#: (檔案, 該檔指到的分區 key)。
+#: ⚠️ 這張表**不是窮舉** —— 它是本組單組 grep 的結果，只鎖已知的這幾處。
+_SECTION_HINT_SITES = (
+    ("ui/helpers/fund_grp_health/ai.py", "fund"),
+    ("ui/helpers/settings_diag/fetch_diag_section.py", "fund"),
+)
+
+
+@pytest.mark.parametrize("relpath,key", _SECTION_HINT_SITES,
+                         ids=[p.split("/")[-1] for p, _ in _SECTION_HINT_SITES])
+def test_section_hints_use_where_to_find(relpath: str, key: str):
+    """指到**頁內分區**的文案必須吃 `where_to_find()`，且不得殘留舊分頁名字面值。
+
+    為什麼要新開一條（既有測試蓋不到這兩處）：
+    - `ui/helpers/fund_grp_health/ai.py` 原本寫 `tab_label('fund')` ——
+      七→五之後**會 KeyError**，但它只在「前十大持股名稱全空」時才走到，
+      **全 repo 沒有任何測試覆蓋那條分支**（跑全套也看不到的 latent 破壞）。
+    - `ui/helpers/settings_diag/fetch_diag_section.py` 原本把
+      `"🔍 個基深掘 → 輸入代碼 → 🚀 分析"` **寫死成字串**，不經 `tab_label`
+      所以**連 raise 都不會** —— 只會安靜地指到一個分頁列上不存在的名字。
+      **「不會炸、只會指錯」才是最難發現的那一種。**
+
+    突變實驗（2026-08-31 實跑，見 PR 突變表 N7／N8）：
+    - `ai.py` 的 `where_to_find('fund')` 改回 `tab_label('fund')` → **本條轉紅**。
+    - `fetch_diag_section.py` 的 `where=` 改回寫死「🔍 個基深掘 …」→ **本條轉紅**。
+    """
+    from ui.helpers.story_nav import _SECTION_LABELS, tab_label
+
+    _src = (ROOT / relpath).read_text(encoding="utf-8")
+    _tree = ast.parse(_src)
+
+    # (a) 該 key 真的被傳進 where_to_find(...)
+    _passed = [c.args[0].value for c in ast.walk(_tree)
+               if isinstance(c, ast.Call) and _call_name(c) == "where_to_find"
+               and c.args and isinstance(c.args[0], ast.Constant)]
+    assert key in _passed, (
+        f"{relpath} 沒有 where_to_find('{key}') 呼叫 —— "
+        f"指到頁內分區的文案必須帶上所屬分頁名（否則使用者在分頁列上找不到）。")
+
+    # (b) 不得再把分區 key 傳給 tab_label（七→五之後那會 KeyError）
+    _bad = [c.args[0].value for c in ast.walk(_tree)
+            if isinstance(c, ast.Call) and _call_name(c) == "tab_label"
+            and c.args and isinstance(c.args[0], ast.Constant)
+            and c.args[0].value in _SECTION_LABELS]
+    assert not _bad, (
+        f"{relpath} 仍把分區 key {_bad} 傳給 tab_label() —— 七→五之後會 KeyError")
+
+    # (c) 不得殘留舊分頁名的**活字串**（docstring／註解講歷史可以）
+    _docs = set()
+    for _n in ast.walk(_tree):
+        if isinstance(_n, (ast.Module, ast.FunctionDef,
+                           ast.AsyncFunctionDef, ast.ClassDef)):
+            _b = getattr(_n, "body", None)
+            if (_b and isinstance(_b[0], ast.Expr)
+                    and isinstance(_b[0].value, ast.Constant)
+                    and isinstance(_b[0].value.value, str)):
+                _docs.add(id(_b[0].value))
+    _live = [n.value for n in ast.walk(_tree)
+             if isinstance(n, ast.Constant) and isinstance(n.value, str)
+             and id(n) not in _docs]
+    for _dead in ("🔍 個基深掘", "📦 批次分析", "📋 我的管理室"):
+        _hits = [s for s in _live if _dead in s]
+        assert not _hits, (
+            f"{relpath} 仍有舊分頁名「{_dead}」的活字串：{_hits} —— "
+            f"它不經 tab_label 所以不會 raise，只會安靜地指錯地方。")
+    # 順帶確認新分頁名沒有被手抄成第二份
+    assert not [s for s in _live if tab_label("research") in s], (
+        f"{relpath} 手抄了分頁名「{tab_label('research')}」—— 應由 where_to_find 產生")
+
+
 if __name__ == "__main__":
     import sys
 

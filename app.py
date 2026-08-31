@@ -35,7 +35,31 @@ from ui.tab1_macro import render_macro_tab
 from ui.tab3_portfolio import render_portfolio_tab
 # v19.314:危機回測室(tab_crisis_backtest + crisis_strategy_grid + crisis_ai_advisor)
 # 自 v19.31 起即註解停用、進不去;user 確認不用 → 整功能拔除(2798 LOC)。
-# 註:services/crisis_backtest.py(CrisisEvent/detect_crisis_events)保留,macro/calibration 仍用。
+# ~~註:services/crisis_backtest.py(CrisisEvent/detect_crisis_events)保留,macro/calibration 仍用。~~
+# ⚠️ 2026-08-31 狀態更新 + 事實更正,**不是漏刪**(WP-F 順手修;純註解、零行為影響)。
+# 上面那句有**兩處與實況不符,而且是兩種不同的錯**,故分開講:
+#   (1)「**macro** 仍用」—— **寫下當天就已經是假的,與任何後續刪碼無關**。
+#       實測(AST,量測日 2026-08-31):`services/macro/` 底下**沒有任何一處
+#       import `services.crisis_backtest`**;唯一命中的 `services/macro/validation.py`
+#       是在 **docstring 裡提到它的名字**(「與既有 …detect_crisis_events 輸出對齊」),
+#       那是設計說明,不是相依。**把 grep 命中的字串當成 import,正是這句話出錯的那一步。**
+#   (2)「**calibration** 仍用」—— **寫下當時為真,但正在失效中**:
+#       `services/calibration/multi_factor.py` 確實 `from services.crisis_backtest
+#       import CrisisEvent`,而該檔已由 **#743 死碼清理(production 0 caller)**
+#       提出整檔刪除、**稽核中、尚未合併**。
+#       ⚠️ 本註解**刻意不寫成「已刪」** —— #743 合併前那是未來式,依 §-2 規則 6
+#       不得把未落地的事寫成既成事實。#743 合併後,本項改為「已隨 #743 退場」。
+#   (3) 它**漏掉了真正讓 crisis_backtest.py 活著的那個消費者**:
+#       `ui/helpers/fund_grp_health/capture.py` → `from services.crisis_backtest
+#       import fetch_market_series`(上/下檔捕捉率的基準抓取)。
+#       **這一條與 #743 無關** —— 所以 `services/crisis_backtest.py` 在 #743
+#       合併之後**依然要保留**,不是孤兒。
+# → 現行讀法:`services/crisis_backtest.py` 保留;production 消費者是
+#   **`ui/helpers/fund_grp_health/capture.py`**(＋ #743 合併前的
+#   `services/calibration/multi_factor.py`)。
+#   ⚠️ 消費者清單是**會漂移的量測值**,需要時**現場量測**,不要引用本行。查證方式:
+#   `git grep -n "crisis_backtest" -- '*.py'` 後**逐一判讀是 import 還是 docstring 提及**
+#   —— 只看 grep 命中數,就會複製 (1) 的錯誤。
 from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
 # 2026-08-31 七→五接線:③ 與 ⑤ 是**合併頁**,由它們自己去 lazy import 五個舊入口
 # (render_single_fund_tab / render_batch_analysis_tab / render_manage_tab /

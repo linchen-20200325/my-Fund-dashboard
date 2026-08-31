@@ -36,9 +36,79 @@ def test_policy_client_and_sheet_bare_mode_degrades_not_crash():
 
 
 def test_manage_tab_registered_in_app():
-    txt = (_ROOT / "app.py").read_text(encoding="utf-8")
-    assert "from ui.tab_manage import render_manage_tab" in txt
-    assert "📋 我的管理室" in txt and "with tab_manage:" in txt
+    """管理室必須真的被掛出去(寫好沒接線 = 沒交付)。
+
+    ⚠️ **2026-08-31 由 WP-F 收斂:七 → 五。有意識的政策變更,不是漏改。**
+    (日期 2026-08-31;決策者:**客戶 2026-08-31 拍板的五分頁動線線框**
+    `docs/wireframes/fund-wireframe-final.html` §03)
+
+    **舊斷言**(原地保留、加刪除線,不刪)::
+
+        ~~txt = (_ROOT / "app.py").read_text(encoding="utf-8")~~
+        ~~assert "from ui.tab_manage import render_manage_tab" in txt~~
+        ~~assert "📋 我的管理室" in txt and "with tab_manage:" in txt~~
+
+    **舊斷言的理由仍然成立**:`render_manage_tab` 若沒有任何 caller 就是死碼 ——
+    本 repo 反覆出現「算對了沒接出去」,這條就是管理室的接線鎖。
+
+    **被權衡掉的是它假設「接線的人一定是 `app.py`、而且管理室一定是頂層分頁」**:
+    七→五之後管理室是「⑤ ⚙️ 設定與診斷」裡的**分區**,由
+    `ui/tab_settings_diag.py::_render_maintain_section` lazy import 並呼叫;
+    `app.py` 依設計**不再**直接 import 它(留著會讓「app.py 掛了幾個入口」有兩種讀法,
+    也很容易被人順手掛回 `st.tabs` 而同一塊畫兩次)。照舊斷言驗,會把**正確的接線
+    判成違規**。另,舊斷言第二段寫死「📋 我的管理室」本身就是第二份標籤。
+
+    **改法:驗「接線鏈真的通到 `app.py`」,而不是「`app.py` 自己 import」** ——
+    (a) ⑤ 合併頁真的呼叫 `render_manage_tab()`;
+    (b) `app.py` 真的掛了 ⑤;
+    (c) ⑤ 的分頁名走 `story_nav` SSOT、且 `app.py` 內不得出現該字面值。
+    **範圍沒有放寬** —— 三段缺一即紅,且比舊寫法**多驗了中間那一節**。
+    """
+    import ast as _ast
+
+    _app = (_ROOT / "app.py").read_text(encoding="utf-8")
+    _sd = (_ROOT / "ui" / "tab_settings_diag.py").read_text(encoding="utf-8")
+
+    def _calls(src: str, fn: str) -> list:
+        """該原始碼裡對 `fn` 的**真實呼叫**（AST），不是字串出現次數。
+
+        ⚠️ **必須用 AST**：`ui/tab_settings_diag.py` 的**模組 docstring 裡就寫著**
+        「`render_manage_tab()` 原樣呼叫」，所以 `"render_manage_tab()" in src`
+        會被檔案自己的說明文字騙成綠燈。
+        **實測（2026-08-31 突變 N3）**：把那一行真正的呼叫換成 `pass`，
+        字串版斷言**照樣 GREEN**；改用 AST 後才轉紅。
+        （本 session 同型假綠已出現三次：M8 兩棵 AST 樹、f-string 常數、本條。）
+        """
+        return [n for n in _ast.walk(_ast.parse(src))
+                if isinstance(n, _ast.Call)
+                and (getattr(n.func, "id", None) == fn
+                     or getattr(n.func, "attr", None) == fn)]
+
+    # (a) ⑤ 合併頁 → 管理室
+    assert "from ui.tab_manage import render_manage_tab" in _sd, (
+        "⑤ 設定與診斷沒有 import 管理室 —— 管理室變成死碼")
+    assert _calls(_sd, "render_manage_tab"), "⑤ 只 import 沒呼叫 —— 算對了沒接出去"
+
+    # (b) app.py → ⑤
+    assert "from ui.tab_settings_diag import render_settings_diag_tab" in _app
+    assert "with tab_settings:" in _app, "app.py 沒有 ⑤ 的 with 區塊"
+    assert _calls(_app, "render_settings_diag_tab"), "app.py 只 import 沒呼叫 ⑤"
+
+    # (c) ⑤ 的分頁名吃 SSOT(不得寫死字面值)
+    #
+    # ⚠️ 比對的是 **AST 的字串常數**,不是原始碼文字 —— `app.py` 的沿革註解本來就
+    #    寫著「⑤ ⚙️ 設定與診斷」,用 `in _app` 會被檔案自己的說明文字騙過而誤判違規。
+    #    (本條第一版就是這樣紅的;同型假陽性/假陰性在本 repo 已出現多次。)
+    import ast as _ast
+
+    from ui.helpers.story_nav import tab_label
+
+    assert '_tab_label("settings")' in _app, "⑤ 的分頁名沒走 story_nav SSOT"
+    _live = [n.value for n in _ast.walk(_ast.parse(_app))
+             if isinstance(n, _ast.Constant) and isinstance(n.value, str)]
+    _hard = [s for s in _live if tab_label("settings") in s]
+    assert not _hard, (
+        f"app.py 仍有寫死的分頁名字串 {_hard} —— 又出現第二份標籤")
 
 
 def test_fund_history_section_fully_removed():

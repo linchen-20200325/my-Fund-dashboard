@@ -244,19 +244,51 @@ def test_tab2_search_input_and_button_rendered(at: AppTest) -> None:
 
 
 def test_tab6_manual_renders_key_sections(at: AppTest) -> None:
-    """Tab6 容器層至少渲染「系統說明書」+「公式與判斷標準」標題。
+    """說明書容器層必須有標題 + 內文（防整塊被誤刪 / 章標被誤改）。
 
-    回歸目的：防 Tab6 容器整個被誤刪 / 章標被誤改。
-    （8 章節 nested tabs 內文僅在 click 後展開，AppTest 預設無法穿透，故只驗外層。）
+    （10 章節 nested tabs 內文僅在 click 後展開，AppTest 預設無法穿透，故只驗外層。）
+
+    ⚠️ **2026-08-31 由 WP-F 收斂：七 → 五。有意識的政策變更，不是漏改。**
+    （日期 2026-08-31；決策者：**客戶 2026-08-31 拍板的五分頁動線線框**
+    `docs/wireframes/fund-wireframe-final.html` §03）
+
+    **舊斷言**（原地保留、加刪除線，不刪）::
+
+        ~~assert "📖 系統說明書" in markdown_blobs~~
+        ~~assert "公式與判斷標準" in markdown_blobs~~
+
+    **舊斷言的理由仍然成立**：說明書整塊被誤刪、或章標被誤改，使用者會直接少掉
+    一整頁而沒人發現 —— 這條就是那塊的存在性鎖。
+
+    **被權衡掉的是「它去 `at.markdown` 找那一行 `##`」**：七→五之後說明書是
+    「⑤ ⚙️ 設定與診斷」的分區，`ui/tab6_manual.py` 依 `MANUAL_HEADER` 旗標
+    **讓掉自己那一行** `## 📖 系統說明書 — 公式與判斷標準完整說明`，改由 ⑤ 畫
+    `st.subheader("📖 說明書")`。舊斷言找的那兩個字串**就長在同一行被讓掉的 `##` 上**。
+
+    ⚠️ **這是「標題換位置」，不是「內容變少」—— 實測佐證（2026-08-31）**：
+    同一次 AppTest run 裡，說明書內文（`資料來源完整地圖` / `六因` / `評等`）
+    與它自己的 caption（`公式聖經`）**全部仍在**。本條把那三件事都驗進來，
+    **覆蓋面是變大的**：舊寫法只驗一行 `##`，新寫法驗「⑤ 的分區標題」＋
+    「說明書自己的 caption」＋「說明書內文」三段。
+
+    ⚠️ 分區標題**從 SSOT 取**（`_SECTION_LABELS['manual']`），不在測試裡再抄一份。
     """
+    from ui.helpers.story_nav import _SECTION_LABELS
+
+    _want_head = _SECTION_LABELS["manual"]          # 「📖 說明書」
+    _subs = [s.value for s in at.subheader if isinstance(s.value, str)]
+    assert any(_want_head in s for s in _subs), (
+        f"⑤ 沒有畫說明書分區標題「{_want_head}」；實際 subheader: {_subs!r}")
+
+    _caps = " ".join(c.value for c in at.caption if isinstance(c.value, str))
+    assert "公式聖經" in _caps, (
+        "說明書自己的 caption（📖 故事附錄・公式聖經）不見了 —— "
+        "本體可能整個沒被呼叫，不只是標題讓位。")
+
     markdown_blobs = " ".join(m.value for m in at.markdown if isinstance(m.value, str))
-    assert "📖 系統說明書" in markdown_blobs, (
-        f"Tab6 「📖 系統說明書」容器章標未在 markdown 中找到；"
-        f"markdown 前 400 字: {markdown_blobs[:400]!r}"
-    )
-    assert "公式與判斷標準" in markdown_blobs, (
-        "Tab6 副標「公式與判斷標準」未找到；可能說明書條件分支被改。"
-    )
+    assert "資料來源完整地圖" in markdown_blobs, (
+        f"說明書內文（Section ⓪ 資料來源完整地圖）未找到；"
+        f"markdown 前 400 字: {markdown_blobs[:400]!r}")
 
 
 def test_t7_ledgers_session_state_default_empty(at: AppTest) -> None:
