@@ -143,8 +143,13 @@ body,.stApp{{background:{STREAMLIT_BG};color:{GH_FG_PRIMARY}}}
    Tab1 從頂捲到底需 60+ 次滾輪,tab bar 不 sticky → 換分頁要整路捲回去。
    ⚠️ Streamlit 內部 DOM(data-testid / data-baseweb)**無公開契約**,升版可能改名。
    故只用「選不到就什麼都不發生」的純 CSS(不寫任何 JS、不改寬度,失效 = 回到現況)。
-   第 2 條規則把**巢狀** st.tabs(參考 / 診斷內的子頁)還原 static —— 否則子分頁列
-   也會黏在畫面上互相打架。用 descendant(非 `>`)寫法,不假設 tab-list 是直接子節點。
+   第 2 條規則把**巢狀** st.tabs 還原 static —— 否則子分頁列也會黏在畫面上互相打架。
+   用 descendant(非 `>`)寫法,不假設 tab-list 是直接子節點。
+   ⚠️ 2026-08-31 就地更正**作用對象**(**有意識的更正,不是漏刪** · 決策者:AI 總管):
+   原句點名的那個巢狀入口已隨七→五消失;**現行作用對象**是 `ui/tab3_t7_ledger.py`
+   的 A/B/C 再平衡子分頁,經 `ui/tab3_portfolio.py` 在頂層分頁 ④ 內渲染。
+   **舊表述逐字保留 + 日期 / 決策者 / 兩邊理由,見下方 TABS 區塊註解**
+   (刻意不寫在此:本區塊是會送進瀏覽器的 live string,理由同見該處)。
    background 吃 STREAMLIT_BG SSOT(禁寫死 hex);top/z-index 為 CSS 佈局數值
    (同本區 .card 的 padding 慣例),top 取 Streamlit 固定 header 高度。 */
 div[data-testid="stTabs"] div[data-baseweb="tab-list"]{{position:sticky;top:3.75rem;z-index:100;background:{STREAMLIT_BG};border-bottom:1px solid {GH_BORDER}}}
@@ -330,13 +335,48 @@ render_sidebar(
 #     `ui/tab6_manual.py` 的 `tabs(...)` 呼叫數為 **0**
 #     (守衛 `tests/test_manual_anchor_toc.py::test_manual_has_no_nested_tabs`)。
 #     **舊理由在它寫下的當天是對的**;變的不是判斷,是它指的那個對象消失了。
-#     **規則本身照舊保留,而且仍有作用對象** —— 巢狀 st.tabs 並未絕跡:
-#       · `ui/tab3_t7_ledger.py`(經 `ui/tab3_portfolio.py` 在頂層分頁 ④ 內渲染)
-#       · `ui/components/column_group_tabs.py`
-#     ⛔ **不得**把本次更正讀成「這條 CSS 可以刪了」—— 刪它是**行為變更**,
-#        要另案評估(而且上面兩處還在用)。本次只改敘述,CSS 一個字元未動。
-#     ⚠️ 「巢狀 st.tabs 只剩上列 2 處」是**單組 AST 實測**(量測日 2026-08-31,
-#        掃 `ui/**/*.py` + `app.py`),**沒有第二組驗過**,引用請打折。
+#     **規則本身照舊保留,而且仍有作用對象** —— 巢狀 st.tabs 並未絕跡。
+#     ⚠️ 但下列兩個 call site **份量不同,不要並列著讀**:live 的只有第一個。
+#       · **live** —— `ui/tab3_t7_ledger.py::render_t7_section` 的 A/B/C 再平衡子分頁。
+#         由 `ui/tab3_portfolio.py::render_portfolio_tab` **無條件呼叫**(只包在
+#         `except T7InputAbort` 裡,不是 gate),而 `render_portfolio_tab` 又在本檔頂層
+#         `with tab_portfolio:` 內執行 → **真的會渲染出巢狀 tab-list**。
+#       · ~~`ui/components/column_group_tabs.py`~~ —— **2026-08-31 就地更正**
+#         (**有意識的更正,不是漏刪** · 決策者:AI 總管):該檔 **production caller 0 個**,
+#         **永遠不會被渲染**,因此**不是**這條 CSS 的作用對象。
+#         實測:`git grep -n "column_group" -- '*.py'` 的命中全部落在 `tests/` 與該檔
+#         自身,唯一的例外就是**本註解區塊自己**;另 `TODO.md:635` 記「6 個元件已存在,
+#         但畫面上還看不到它們」,`:633` 轉錄 PR #726 自陳「接線是下一批的事」。
+#         **舊表述錯在把「原始碼裡有 st.tabs」當成「畫面上有巢狀 tab bar」** ——
+#         CSS 作用於**被渲染出來的 DOM**,不是作用於檔案裡的字樣。
+#         列在此處**備查、不刪**:等 2.1 五分頁重組把它接上線,它才會成為第 2 個作用對象。
+#     📌 **檔首那條 CSS 註解本身也有一句同型的過期敘述,一併於 2026-08-31 更正**
+#        (**有意識的更正,不是漏刪** · 決策者:AI 總管)。**舊表述逐字保留於此**:
+#        ~~「第 2 條規則把**巢狀** st.tabs(參考 / 診斷內的子頁)還原 static」~~
+#        —— 該描述的**兩層都已不在**:「📖 參考 / 診斷」已於七→五退役
+#        (`ui/helpers/story_nav.py` 的 `RETIRED_TAB_LABELS`),其底下說明書那一層
+#        子分頁也在本批改成單頁 + 錨點目錄。**舊表述在它寫下的當天是對的** ——
+#        它精準描述了當時唯一的巢狀入口;變的不是判斷,是它指的那個對象消失了。
+#        ⚠️ **為什麼紀錄記在這裡、而不是記在那條 CSS 註解裡**:那段註解位在
+#        `st.markdown(f"""<style>…` 的 **live string** 內,會隨每次頁面載入送進瀏覽器;
+#        且守衛 `tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name`
+#        **禁止活字串出現分頁名**(含退役名)。→ live string 只留精簡的正確敘述 + 指路,
+#        完整紀錄放 Python 註解。**這不是把舊表述刪掉,是換一個位置保留。**
+#        ⚠️ **這一處為什麼三輪都沒被守衛抓到**:上述守衛比對的是**完整標籤**
+#        「📖 參考 / 診斷」(帶 emoji),而那句 CSS 註解寫的是不帶 emoji 的
+#        「參考 / 診斷」→ 子字串比對不成立,CI 全綠。這正是該守衛 docstring 自陳的
+#        **去 emoji 盲點**(F-M3 / F-M9)。**同型的過期敘述日後仍只能靠人回讀,
+#        不要指望 CI。** ⛔ 依總管指示,**不得**為了讓它轉紅而放寬字表或加豁免。
+#     ⛔ **不得**把本次更正讀成「這條 CSS 可以刪了」—— 刪它是**行為變更**,要另案評估
+#        (而且上面那個 live 的還在用)。本次只改敘述,CSS 與選擇器一個字元未動。
+#     ⚠️ 「巢狀 st.tabs 的 call site 只有上列 2 個、其中 live 只有 1 個」是**單組實測**
+#        (量測日 2026-08-31),**沒有第二組驗過**,引用請打折。
+#        📌 複驗時的陷阱,寫下來免得下一個人踩:**pathspec 要用 `ui/`,不要用
+#        `ui/**/*.py`** —— 後者在 git 2.43 的 wildmatch 下**掃不到直接放在 `ui/` 底下
+#        的檔案**(實測:`git grep -lE "\.tabs\(" -- 'ui/**/*.py'` 少掉
+#        `ui/tab3_t7_ledger.py`,也就是**會漏掉上面唯一 live 的那一個**)。
+#        本輪用的是全 repo `git grep -nE "\.tabs\(" -- '*.py'` 再逐一判讀
+#        (排除 `tests/` 與註解/docstring 命中)。
 from ui.helpers.story_nav import tab_label as _tab_label
 
 # ⭐ 「🔍 抓取診斷細節」的所有權必須由**本檔**持有,不能讓 ⑤ 自己 with ——
