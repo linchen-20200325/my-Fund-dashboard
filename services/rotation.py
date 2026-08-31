@@ -86,6 +86,62 @@ def revert_upside_pct(dist_hwm_pct) -> "float | None":
     return round(-d / (1.0 + d / 100.0), 1)
 
 
+def insufficient_sigma_names(rows: list, sell_sigma: float = ROTATION_SELL_SIGMA,
+                             buy_sigma: float = ROTATION_BUY_SIGMA) -> list:
+    """σ 資料不足(classify_base == 'unknown')的檔名清單(name 缺 → 退 code)。
+
+    v19.484 稽核 #5 的門檻判斷:σ 資料不足(淨值史太短 / 停售 → σ rank 回不了值)的檔
+    會被排除在買方候選外 —— 原本靜默剔除 → 呼叫端據本清單明確標名,讓使用者知道
+    「不是漏了它,是它現在無法評估」(§1)。
+    (原 inline 於 ui/helpers/fund_grp_health/rotation.py::_render_pairs_ui,
+    2026-08-31 逐字下沉本檔;判斷式一字未改。)
+    """
+    return [str(r.get("name") or r.get("code"))
+            for r in rows
+            if classify_base(r.get("σ rank"), sell_sigma, buy_sigma) == "unknown"]
+
+
+def _cell(row, col):
+    """從 pandas Series / dict 取值,NaN → None(避免 str(nan)='nan' 混入類別/σ)。
+
+    (2026-08-31 自 ui/helpers/fund_grp_health/rotation.py 逐字下沉;邏輯一字未改。)
+    """
+    import pandas as pd
+    v = row.get(col)
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return v
+
+
+def rows_from_batch_df(df) -> list:
+    """批次「組合健診大表」df → suggest_rotation_pairs 所需 rows。
+
+    所有欄位(σ rank / 距 HWM % / 操盤評分 / 基金類別 / 4D Grade / 吃本金燈號)已在大表內,
+    **直接讀、不重抓**。σ rank / 距 HWM % 為預格式化字串(如 '-2.00σ'/'‑18%'),
+    本檔的 _sigma / _num 會自行剝除單位。
+    (2026-08-31 自 ui/helpers/fund_grp_health/rotation.py 逐字下沉 —— 批次 df → 配對核心的
+    輸入契約對映與配對演算法同住一檔,全站單一份;邏輯一字未改。)
+    """
+    rows = []
+    for _, r in df.iterrows():
+        _code = _cell(r, "code")
+        rows.append({
+            "code": _code,
+            "name": _cell(r, "基金名") or _code,
+            "基金類別": _cell(r, "基金類別"),
+            "4D Grade": _cell(r, "4D Grade"),
+            "σ rank": _cell(r, "σ rank"),
+            "距 HWM %": _cell(r, "距 HWM %"),
+            "操盤評分": _cell(r, "操盤評分"),
+            "吃本金燈號": _cell(r, "吃本金燈號 (1Y · )"),
+            "currency": _cell(r, "ccy"),   # v19.484:跨幣別換股標註(§4.1)用;大表已正規化欄
+        })
+    return rows
+
+
 def suggest_rotation_pairs(fund_rows, sell_sigma: float = ROTATION_SELL_SIGMA,
                            buy_sigma: float = ROTATION_BUY_SIGMA,
                            min_score: float = ROTATION_BUY_MIN_SCORE) -> list:

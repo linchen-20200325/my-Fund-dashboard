@@ -57,40 +57,10 @@ def _assemble_rows(funds: list) -> list:
     return rows
 
 
-def _cell(row, col):
-    """從 pandas Series / dict 取值,NaN → None(避免 str(nan)='nan' 混入類別/σ)。"""
-    import pandas as pd
-    v = row.get(col)
-    try:
-        if pd.isna(v):
-            return None
-    except (TypeError, ValueError):
-        pass
-    return v
-
-
-def rows_from_batch_df(df) -> list:
-    """批次「組合健診大表」df → suggest_rotation_pairs 所需 rows。
-
-    所有欄位(σ rank / 距 HWM % / 操盤評分 / 基金類別 / 4D Grade / 吃本金燈號)已在大表內,
-    **直接讀、不重抓**。σ rank / 距 HWM % 為預格式化字串(如 '-2.00σ'/'‑18%'),
-    services.rotation 的 _sigma / _num 會自行剝除單位。
-    """
-    rows = []
-    for _, r in df.iterrows():
-        _code = _cell(r, "code")
-        rows.append({
-            "code": _code,
-            "name": _cell(r, "基金名") or _code,
-            "基金類別": _cell(r, "基金類別"),
-            "4D Grade": _cell(r, "4D Grade"),
-            "σ rank": _cell(r, "σ rank"),
-            "距 HWM %": _cell(r, "距 HWM %"),
-            "操盤評分": _cell(r, "操盤評分"),
-            "吃本金燈號": _cell(r, "吃本金燈號 (1Y · )"),
-            "currency": _cell(r, "ccy"),   # v19.484:跨幣別換股標註(§4.1)用;大表已正規化欄
-        })
-    return rows
+# 2026-08-31 計算下沉:批次大表 df → rows 的輸入契約對映(原本檔 `_cell` + `rows_from_batch_df`)
+# 已**逐字**搬至 services/rotation.py(與配對核心同住,全站單一份)。此處 re-export 保持
+# 既有 import 路徑(`from ui.helpers.fund_grp_health.rotation import rows_from_batch_df`)不變。
+from services.rotation import rows_from_batch_df  # noqa: F401
 
 
 def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = False) -> None:
@@ -136,10 +106,9 @@ def _render_pairs_ui(rows: list, *, key_prefix: str, offer_download: bool = Fals
 
     # v19.484 稽核 #5:σ 資料不足(淨值史太短 / 停售 → σ rank 回不了值)的檔會被排除在
     # 買方候選外。原本靜默剔除 → 明確標名,讓使用者知道「不是漏了它,是它現在無法評估」(§1)。
-    from services.rotation import classify_base as _classify_base
-    _insuff_names = [str(r.get("name") or r.get("code"))
-                     for r in rows
-                     if _classify_base(r.get("σ rank"), _sell, _buy) == "unknown"]
+    # (2026-08-31 判斷式逐字下沉 services.rotation.insufficient_sigma_names,UI 只呼叫。)
+    from services.rotation import insufficient_sigma_names
+    _insuff_names = insufficient_sigma_names(rows, _sell, _buy)
 
     def _render_insufficient_note() -> None:
         if _insuff_names:
