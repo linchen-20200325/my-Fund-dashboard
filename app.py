@@ -314,7 +314,15 @@ with _settings_page_owns(_SD_FETCH_DIAG):
     with tab_macro:
         # §1 分頁隔離（v19.429）：st.tabs 單次 run 渲染全部分頁,任一分頁若拋未捕捉
         # 例外會中止整個 script → 其後所有分頁空白。外層 try 保證「一頁失敗不連坐
-        # 其他頁」;內層各頁自己的 _safe_section 再做 section 級細粒度隔離。
+        # 其他頁」;內層各頁自己的 section 級隔離再做細粒度切分。
+        # ⚠️ 2026-08-31 WP-F 就地更正(**有意識的更正,不是漏刪** · 決策者:AI 總管):
+        #    舊句 ~~「內層各頁自己的 _safe_section 再做 section 級細粒度隔離」~~
+        #    在寫下的當天對 ① 成立(`ui/tab1_macro.py::_safe_section`),但對**新合併的
+        #    ③ 與 ⑤ 為假** —— 那兩頁當時一個 section 級 try 都沒有。七→五之後
+        #    ⑤ 一頁裝著管理室 + 資料診斷 + 說明書:管理室當掉會**一併帶走**使用者
+        #    出事時要去查的那兩塊。已於同批補上(`ui.helpers.render_state.safe_section`),
+        #    本句自此為真。⚠️ ② 與 ④ **仍未逐 section 隔離**(它們自己有頁內 try/except,
+        #    但不是統一的 section 級)—— 據實登記,本批未受指派、§-1 無觸發,未動。
         # 非靜默吞:friendly_error 顯式顯示 + stderr 鏡射進 Cloud log + traceback。
         #
         # 🧭 總經指南針:整條鏈已於 2026-08-05 移除(見本檔上方沿革區塊)。此處不再有

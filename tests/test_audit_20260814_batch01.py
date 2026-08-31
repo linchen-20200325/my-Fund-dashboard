@@ -314,19 +314,50 @@ def test_sidebar_uses_tab_label_ssot():
     )
 
 
-@pytest.mark.parametrize("relpath,expr,old_title", [
-    ("ui/tab3_portfolio.py", "_tab_label_t3('portfolio')", "組合基金管理"),
-    ("ui/tab2_single_fund.py", "_tab_label_t2('fund')", "單一基金深度分析"),
+@pytest.mark.parametrize("relpath,fn,key,old_title", [
+    ("ui/tab3_portfolio.py", "tab_label", "portfolio", "組合基金管理"),
+    # ⚠️ 2026-08-31 WP-F 更新（**有意識的修改，不是漏改** · 決策者：AI 總管）：
+    # ~~("ui/tab2_single_fund.py", "_tab_label_t2('fund')", "單一基金深度分析")~~
+    # `'fund'` 自七→五起是**頁內分區**，`tab_label('fund')` 會 `KeyError`；
+    # 該處已改為 `section_label('fund')`（原本是埋在恆不觸發分支裡的地雷）。
+    ("ui/tab2_single_fund.py", "section_label", "fund", "單一基金深度分析"),
 ])
-def test_page_title_matches_tab_label(relpath, expr, old_title):
+def test_page_title_matches_tab_label(relpath, fn, key, old_title):
     """頁面 H1 必須與分頁列同源，否則同一頁兩個名字。
 
     ⚠️ 不可只斷言 `"tab_label" in src` —— 這兩個檔本來就有
     `render_ai_summary_widget(tab_label=...)` 的 kwarg，那樣寫是**假綠**
     （2026-08-14 獨立稽核抓到）。要鎖就鎖 H1 真正用的那個運算式。
+
+    ⚠️ 2026-08-31 再修一次（同一個病的第二次發作）：
+    ~~舊寫法把**呼叫點的別名**寫死成期望值（`"_tab_label_t2('fund')" in _src`）。~~
+    **舊寫法的理由仍然成立** —— 它是為了避開上一段講的那個假綠，鎖「真正用的運算式」
+    這個方向完全正確。**被權衡掉的是它鎖的東西**：別名是**呼叫者自己取的名字**，
+    改名（本批把 `_tab_label_t2` 改成 `_section_label_t2`）會讓它紅，
+    而把 import 換成 `section_label as _tab_label_t2` 卻能讓它綠 —— 那正是
+    `tests/test_wpf_five_tab_wiring.py` 記載的 N10 假綠。
+    現在改成**解析 alias 回原函式名**，鎖「真的呼叫到哪個 story_nav 函式、傳了哪個 key」。
     """
+    import ast as _ast
+
     _src = _read_source(relpath)
-    assert expr in _src, f"{relpath} 的頁面 H1 沒有改吃 story_nav SSOT（缺 {expr}）"
+    _tree = _ast.parse(_src)
+    _alias: dict = {}
+    for _n in _ast.walk(_tree):
+        if isinstance(_n, _ast.ImportFrom) and (_n.module or "").endswith("story_nav"):
+            for _a in _n.names:
+                _alias[_a.asname or _a.name] = _a.name
+    _resolved = set()
+    for _c in _ast.walk(_tree):
+        if not (isinstance(_c, _ast.Call) and _c.args
+                and isinstance(_c.args[0], _ast.Constant)):
+            continue
+        _nm = getattr(_c.func, "id", None) or getattr(_c.func, "attr", None)
+        if _nm and _nm in _alias:
+            _resolved.add((_alias[_nm], _c.args[0].value))
+    assert (fn, key) in _resolved, (
+        f"{relpath} 的頁面 H1 沒有解析得到 story_nav.{fn}({key!r}) 呼叫；"
+        f"已解析：{sorted(_resolved)}，alias 表：{_alias}")
     # 舊的寫死標題不得出現在 st.markdown 的 H1（註解/docstring 提及可放行）
     _hits = [ln for ln in _code_lines_containing(_src, old_title)
              if "st.markdown" in ln]

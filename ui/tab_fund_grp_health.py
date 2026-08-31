@@ -16,6 +16,9 @@ from __future__ import annotations
 import streamlit as st
 
 from ui.helpers.render_state import business_alert, not_ready, system_error
+# 指路文案的分頁名 SSOT（理由見下方 `_EQUAL_MODE_HEALTH_TAB_HINT` /
+# `_CS_WHERE_HEALTH` 兩處的 2026-08-31 註記）。
+from ui.helpers.story_nav import tab_label as _tab_label
 
 from shared.colors import GH_BG_PRIMARY, GH_FG_SECONDARY, GRAY_55, INFO_BLUE, TRAFFIC_GREEN
 from shared.converters import safe_num  # v19.387 V1 §1:缺值保留 None(不畫成 0% 假柱)
@@ -617,8 +620,17 @@ _WEIGHT_MODE_NOTE: dict[str, str] = {
 # 只在健診 Tab 成立的補充導引:健診 Tab 只有**單一本金欄位**(`principal_twd` broadcast
 # 給全部基金)，結構上不可能逐檔填 → 指向 Tab3 是正確且唯一的出路。Tab3 自己渲染時
 # **不得**印此句(user 已在該 Tab，且他可能只是各檔金額恰好相同)。
+# ⚠️ 2026-08-31 WP-F 修正（**有意識的政策變更，不是漏改** · 決策者：AI 總管）。
+# 舊寫法 ~~「組合配置」Tab~~ 的理由**仍然成立**：健診只有單一本金欄位，結構上不可能
+# 逐檔填，指向 ④ 是正確且唯一的出路 —— 這個**指路方向**沒有錯。
+# 被權衡掉的是那個**名字**：④ 在七→五之前叫「📊 配置 & 帳本」、之後叫「📊 我的配置」，
+# **兩個時期都沒有**一個叫「組合配置」的分頁。
+# ⚠️ **歸因**：這不是七→五打壞的，它在 main 上就已經指向一個不存在的名字（既有債）。
+# 因為它從來沒進過 `_TAB_LABELS`，任何「比對歷史分頁名」的守衛都掃不到它 ——
+# 這正是本批把守衛加上「形態向」那一條的理由。
 _EQUAL_MODE_HEALTH_TAB_HINT = (
-    "；本 Tab 只有單一本金欄位，要依實際金額配置請到「組合配置」Tab 逐檔填投入金額"
+    f"；本 Tab 只有單一本金欄位，要依實際金額配置請到「{_tab_label('portfolio')}」"
+    "逐檔填投入金額"
 )
 
 
@@ -710,9 +722,12 @@ _CS_WHERE_PORTFOLIO = (
     "看本頁上方「🛡️ 核心資產比例 / 目標偏差」那一格（那裡吃你在 Google Sheet "
     "標的 `policy_tier` + ⚙️ 組合設定的目標）。"
 )
+# ⚠️ 2026-08-31 WP-F 修正（同上一處：舊寫法 ~~「組合配置」Tab~~ 是憑印象手寫、
+# 兩個時期都不存在的名字；既有債，不是七→五打壞的）。
 _CS_WHERE_HEALTH = (
-    "看「組合配置」Tab 的「🛡️ 核心資產比例 / 目標偏差」那一格（那裡吃你在 Google "
-    "Sheet 標的 `policy_tier`）—— 本 Tab 只有代號與單一本金，讀不到你標的配置定位。"
+    f"看「{_tab_label('portfolio')}」的「🛡️ 核心資產比例 / 目標偏差」那一格"
+    "（那裡吃你在 Google Sheet 標的 `policy_tier`）—— "
+    "本 Tab 只有代號與單一本金，讀不到你標的配置定位。"
 )
 
 

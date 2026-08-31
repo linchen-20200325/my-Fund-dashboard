@@ -4,6 +4,10 @@ from __future__ import annotations
 import streamlit as st
 
 from ui.helpers.render_state import system_error
+# 2026-08-31 WP-F：指路文案的分頁名改吃 `story_nav` SSOT。
+# 舊寫法把**現行**分頁名手抄一份，理由（讓使用者知道去哪）仍成立；
+# 被權衡掉的是「第二份標籤」本身 —— 本 repo 分頁改名漏改已發作兩次。
+from ui.helpers.story_nav import tab_label as _tab_label
 
 from shared.colors import GH_BG_CARD, GH_FG_PRIMARY, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_PURPLE_500, STREAMLIT_BG, WARN_AMBER
 
@@ -28,7 +32,8 @@ def _render_mk_signal_table(funds: list) -> None:
 
     _phase_info = st.session_state.get("phase_info") if hasattr(st, "session_state") else None
     if not _phase_info:
-        st.caption("⬜ 需先到 🌐 市場定調 Tab 點選「載入總經資料」,才能算景氣位階 + 操作訊號")
+        st.caption(f"⬜ 需先到「{_tab_label('macro')}」點選「載入總經資料」,"
+                   "才能算景氣位階 + 操作訊號")
         return
 
     # 2026-08-28 稽核 B1:此處原有一個 `try: pass / except ... return` 的**死殼** ——

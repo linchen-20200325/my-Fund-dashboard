@@ -22,6 +22,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import pathlib
+import re
 
 import pytest
 
@@ -377,110 +378,425 @@ def test_tab_error_titles_go_through_tab_label():
         f"分頁隔離的錯誤標題是寫死字串：{[n.value for n in _plain]} —— "
         "分頁名必須走 story_nav.tab_label()。")
     assert _fail_msgs, "找不到任何「分頁渲染失敗」訊息 —— 分頁隔離被移除了？"
-    for _m in _fail_msgs:
-        assert "tab_label" in ast.unparse(_m), (
-            f"錯誤標題沒有走 tab_label()：{ast.unparse(_m)[:120]}")
 
-
-# ══════════════════════════════════════════════════════════════════
-# 4) 指路文案：指到「頁內分區」的地方必須走 where_to_find()
-# ══════════════════════════════════════════════════════════════════
-#: (檔案, 該檔指到的分區 key)。
-#: ⚠️ 這張表**不是窮舉** —— 它是本組單組 grep 的結果，只鎖已知的這幾處。
-_SECTION_HINT_SITES = (
-    ("ui/helpers/fund_grp_health/ai.py", "fund"),
-    ("ui/helpers/settings_diag/fetch_diag_section.py", "fund"),
-    # 階段二（#740 合併後）納管：④ 我的配置的兩處指路。
-    # ⚠️ 其中「空組合歡迎卡」那一處**沒有任何既有測試覆蓋**（實測 2026-08-31）：
-    #    `test_app_apptest::test_tab3_empty_portfolio_shows_welcome_card` 找的
-    #    「👋 三步驟」其實來自 `ui/tab3_portfolio.py` 另一個區塊（:1028），
-    #    **不是**這張「📊 歡迎使用基金組合管理」卡。它在階段一之所以紅，是因為
-    #    KeyError 把整個 ④ 打斷、連帶那個區塊也沒渲染 —— **它從來沒有在守這張卡**。
-    #    本條是那張卡目前唯一的守衛。
-    ("ui/tab3_portfolio.py", "fund"),
-)
-
-
-@pytest.mark.parametrize("relpath,key", _SECTION_HINT_SITES,
-                         ids=[p.split("/")[-1] for p, _ in _SECTION_HINT_SITES])
-def test_section_hints_use_where_to_find(relpath: str, key: str):
-    """指到**頁內分區**的文案必須吃 `where_to_find()`，且不得殘留舊分頁名字面值。
-
-    為什麼要新開一條（既有測試蓋不到這兩處）：
-    - `ui/helpers/fund_grp_health/ai.py` 原本寫 `tab_label('fund')` ——
-      七→五之後**會 KeyError**，但它只在「前十大持股名稱全空」時才走到，
-      **全 repo 沒有任何測試覆蓋那條分支**（跑全套也看不到的 latent 破壞）。
-    - `ui/helpers/settings_diag/fetch_diag_section.py` 原本把
-      `"🔍 個基深掘 → 輸入代碼 → 🚀 分析"` **寫死成字串**，不經 `tab_label`
-      所以**連 raise 都不會** —— 只會安靜地指到一個分頁列上不存在的名字。
-      **「不會炸、只會指錯」才是最難發現的那一種。**
-
-    突變實驗（2026-08-31 實跑，見 PR 突變表 N7／N8）：
-    - `ai.py` 的 `where_to_find('fund')` 改回 `tab_label('fund')` → **本條轉紅**。
-    - `fetch_diag_section.py` 的 `where=` 改回寫死「🔍 個基深掘 …」→ **本條轉紅**。
-    """
-    from ui.helpers.story_nav import _SECTION_LABELS, tab_label
-
-    _src = (ROOT / relpath).read_text(encoding="utf-8")
-    _tree = ast.parse(_src)
-
-    # ⚠️ **必須把 alias 解析回原函式名，不能看呼叫點長什麼樣。**
-    #    本檔的呼叫慣例是 `from ui.helpers.story_nav import X as _X_something`，
-    #    所以呼叫點的名字是**呼叫者自己取的**，不代表它呼叫到哪個函式。
-    #    實測（2026-08-31 突變 N10）：把 import 改成
-    #    `tab_label as _where_to_find`（呼叫點一個字都不用動），
-    #    只看呼叫點名字的版本**照樣 GREEN** —— 而那正是七→五之下會 KeyError 的寫法，
-    #    且它就長在 ④ 空組合時的**預設畫面**上。故改為建 alias → 原名 的對照表。
+    # ⚠️ **必須把 alias 解析回原函式名，不能看呼叫點長什麼樣**（2026-08-31 補）。
+    # ~~舊寫法 `assert "tab_label" in ast.unparse(_m)`~~ 是**純字串比對**：
+    # 它只問「這段 f-string 的原始碼裡有沒有出現 `tab_label` 這七個字」。
+    # **有意識的政策變更，不是漏改**（日期 2026-08-31 · 決策者：AI 總管）。
+    # 舊寫法的理由**仍然成立** —— 它比「完全不檢查」強，而且抓得到「把標題改回
+    # 寫死字串」這個最常見的突變（那種寫法連 `tab_label` 三個字都沒有）。
+    # 被權衡掉的原因：它與本檔下方 `test_section_hints_use_where_to_find` 修過的
+    # **N10 是同一個洞**，只是沒人回頭補這一處。實測（2026-08-31，本批重跑）：
+    # 把 `app.py` 的 import 改成 `section_label as _tab_label_err` 並在五段 f-string
+    # 裡呼叫 `_tab_label_err('macro')` —— 呼叫點的原始碼**含有 `tab_label` 這七個字**
+    # （它是 alias 名字的一部分），舊斷言 **23 passed 全綠**；而實際執行時
+    # `section_label('macro')` 會 `KeyError`，例外從 `except` handler 內部拋出
+    # → **逸出分頁隔離**，整個 script run 中止，渲染元素由 126 掉到 13（全站空白）。
+    # **守衛全綠、畫面全白**，正是本 repo 已實證過兩次的假守衛形狀。
+    # 修法比照下方那一條：用 `ImportFrom` 建 alias → 原名 的對照表。
     _alias: dict[str, str] = {}
     for _n in ast.walk(_tree):
         if isinstance(_n, ast.ImportFrom) and (_n.module or "").endswith("story_nav"):
             for _a in _n.names:
                 _alias[_a.asname or _a.name] = _a.name
 
-    def _resolved_calls(fn_name: str) -> list:
-        """回傳「**真的呼叫到 `fn_name`**」的那些呼叫的第一個字面參數。"""
-        _out = []
-        for _c in ast.walk(_tree):
-            if not (isinstance(_c, ast.Call) and _c.args
-                    and isinstance(_c.args[0], ast.Constant)):
-                continue
-            _called = getattr(_c.func, "id", None) or getattr(_c.func, "attr", None)
-            if _called and _alias.get(_called) == fn_name:
-                _out.append(_c.args[0].value)
-        return _out
+    for _m in _fail_msgs:
+        _resolved = set()
+        for _c in ast.walk(_m):
+            if isinstance(_c, ast.Call):
+                _nm = getattr(_c.func, "id", None) or getattr(_c.func, "attr", None)
+                if _nm:
+                    _resolved.add(_alias.get(_nm, _nm))
+        assert "tab_label" in _resolved, (
+            f"錯誤標題沒有**真的**呼叫到 story_nav.tab_label()："
+            f"{ast.unparse(_m)[:120]}；解析出來的呼叫 = {sorted(_resolved)}，"
+            f"已解析的 story_nav alias = {_alias}。\n"
+            "（只是名字裡帶 `tab_label` 三個字不算 —— 那是 N10 那個洞。）")
 
-    # (a) 該 key 真的被傳進 where_to_find(...)
-    assert key in _resolved_calls("where_to_find"), (
-        f"{relpath} 沒有解析得到的 where_to_find('{key}') 呼叫 —— "
-        f"指到頁內分區的文案必須帶上所屬分頁名（否則使用者在分頁列上找不到）。"
-        f"（已解析的 story_nav alias：{_alias}）")
 
-    # (b) 不得再把分區 key 傳給 tab_label（七→五之後那會 KeyError）
-    _bad = [v for v in _resolved_calls("tab_label") if v in _SECTION_LABELS]
-    assert not _bad, (
-        f"{relpath} 仍把分區 key {_bad} 傳給 tab_label() —— 七→五之後會 KeyError")
+# ══════════════════════════════════════════════════════════════════
+# 4) 指路文案 SSOT —— **全 repo 掃描，兩條並行**
+# ══════════════════════════════════════════════════════════════════
+# ⚠️ 這一節在 2026-08-31 被整段重寫。**有意識的政策變更，不是漏刪**
+#    （日期 2026-08-31 · 決策者：AI 總管）。
+#
+# ~~舊設計：`_SECTION_HINT_SITES` 三檔白名單 + `test_section_hints_use_where_to_find`
+#   逐檔 parametrize。~~
+#
+# **舊設計的理由仍然成立**：它把當時已知的三處鎖得很死（(a) 真的呼叫到
+# `where_to_find` (b) 不得把分區 key 傳給 `tab_label` (c) 不得殘留舊分頁名活字串），
+# 三條檢查本身都是對的，而且它自己就誠實寫著「⚠️ 這張表**不是窮舉**」。
+#
+# **被權衡掉的原因**：那句誠實的自述正是它的死因 —— 一份白名單**結構上**抓不到
+# 名單外的第 N+1 處。2026-08-31 稽核實測：本批打壞的 6 處指路文案，
+# **一處都不在那三個檔裡**，守衛全綠。這與本 repo 已發作三次的同一個病同源
+# （2026-08-05 必修 2、2026-08-14 sidebar 三處、2026-08-31 本次）。
+#
+# ⚠️ **而且「換成黑名單」也不夠** —— 這一點是本次最重要的發現，寫在最前面：
+# 另一組同日撿到 4 處寫著「組合配置」的指路文案，而「組合配置」
+# **從來沒有進過任何一版的 `_TAB_LABELS`**（④ 七→五前叫「📊 配置 & 帳本」、
+# 之後叫「📊 我的配置」）。也就是說，**任何以「比對歷史分頁名」為基礎的字表，
+# 結構上都掃不到「有人憑印象發明的新錯名字」** —— 那只是把白名單換一層皮。
+#
+# 故本節是**兩條並行的守衛，缺一不可**：
+#   1. **黑名單向**（`test_no_live_string_hardcodes_a_tab_name`）——
+#      字表 = 現行 `_TAB_LABELS` 值 ∪ `RETIRED_TAB_LABELS` ∪ `MISWRITTEN_TAB_NAMES`，
+#      **單一出處在 `ui/helpers/story_nav.py`**，本檔不另存一份。
+#      它同時擋「指到已退役的分頁」與「把現行分頁名手抄第二份」。
+#   2. **形態向**（`test_navigation_hints_go_through_story_nav`）——
+#      活字串帶「指路形狀」卻沒有經過 `tab_label` / `where_to_find` / `section_label`
+#      求值 → 紅。**這條不依賴任何字表**，所以「有人又發明一個新錯名字」也擋得住。
+#      驗收突變（2026-08-31 實跑，見 PR 突變表 F-M6）：在任一 UI 檔加一句
+#      `st.caption("請到「隨便一個沒人聽過的分頁」看")` → **本條轉紅**。
+#
+# 另補第 3 條（`test_no_section_key_reaches_tab_label`）：舊設計的檢查 (b) 也
+# 全 repo 化 —— `tab_label('fund'/'batch'/'manage'/'diag'/'manual')` 會 `KeyError`。
 
-    # (c) 不得殘留舊分頁名的**活字串**（docstring／註解講歷史可以）
-    _docs = set()
-    for _n in ast.walk(_tree):
+#: 掃描範圍：production 端會渲染給使用者看的程式碼。
+#: ⚠️ **`tests/` 不在範圍內是刻意的、且不是「整目錄豁免」**：測試裡的字串是
+#: **期望值**，本來就必須寫得出具體的名字（否則測試等於拿被測物驗被測物）。
+#: 但期望值**不該寫死已失效的名字** —— 那會變成「保護 bug 不被修掉」的測試，
+#: 本批就修過一個實例（`tests/test_alloc_weight_mode_honesty.py` 原本把
+#: 「組合配置」釘成期望值）。那一類要靠 code review，不是靠本節。
+_SCAN_GLOBS = ("ui/**/*.py", "services/**/*.py", "repositories/**/*.py",
+               "shared/**/*.py", "infra/**/*.py")
+_SCAN_EXTRA = ("app.py",)
+
+#: 指路形狀（形態向用）。三個 pattern 是**互補**的，不是同義：
+#:   A  「X」分頁 / 「X」Tab      —— 帶分頁詞的引用名
+#:   A2 分頁「X」                —— 反向語序
+#:   B  請至 / 請先到 / 切到「X」 —— **不帶分頁詞**的導引（本批 6 處裡有 3 處是這種）
+#: ⚠️ B 的動詞表刻意**不含**單字「去」：實測會把「減去「過去 12 個月最低值」」
+#:    這種數學說明誤判成指路（2026-08-31 調參時實際踩到）。
+_QUOTED = r"[「『][^」』]{1,24}[」』]"
+_NAV_SHAPES = (
+    re.compile(_QUOTED + r"[^\S\n]{0,2}(?:分頁|頁籤|Tab)"),
+    re.compile(r"(?:分頁|頁籤|Tab)[^\S\n]{0,2}" + _QUOTED),
+    re.compile(r"(?:請至|請到|請先到|先到|切到|切換到|回到|前往)[^\S\n]{0,3}" + _QUOTED),
+)
+
+#: story_nav 的三個求值入口（alias 會被解析回這些名字）。
+_NAV_FNS = frozenset({"tab_label", "section_label", "where_to_find"})
+
+# ── 豁免表 ─────────────────────────────────────────────────────────────
+# ⚠️ **逐條具名 + 附理由，不得整檔或整目錄豁免。** 格式：(相對路徑, 字串片段, 理由)。
+# 只有「檔案相符 **且** 該片段出現在那個字串裡」才豁免 —— 換句話說，同一個檔案裡
+# **其他**字串照樣受檢。
+
+#: (1) **真的合規**：這些字串不是指路文案，或它指的東西本來就不是頂層分頁。
+_LEGIT_EXEMPT: tuple[tuple[str, str, str], ...] = (
+    ("ui/helpers/story_nav.py", "",
+     "本模組**就是** SSOT 本身 —— 分頁名與分區名的字面值定義在這裡，"
+     "退役名字表也在這裡。掃描它等於要求 SSOT 不准定義自己。"),
+    ("ui/tab3_portfolio.py", "組合配置與健康度",
+     "AI 摘要 prompt 的**章節標題**（`_sections_t3` 清單），不是指路文案 —— "
+     "它是要 AI 產出的段落名，使用者不會拿它去分頁列上找東西。"
+     "它命中黑名單純粹因為字面上包含「組合配置」四個字。"),
+    ("ui/tab6_manual.py", "📚 宏觀教學文獻",
+     "說明書**自己那層 `st.tabs`** 的子分頁名（`_t6`），由本檔自己建立、自己引用，"
+     "不是 `_TAB_LABELS` 管的頂層分頁。story_nav 的兩張表都不該收它"
+     "（收了會讓 `tab_label()` 回一個頂層分頁列上不存在的名字，正是它要防的事）。"),
+)
+
+#: (2) **已知的既有債 —— 不是合規，只是本批未受指派**。
+#: ⚠️ 這張表與 `_LEGIT_EXEMPT` **性質完全不同**，刻意分開兩個常數而不是併成一個：
+#: 併起來會讓「這樣寫是對的」與「這樣寫是錯的、還沒修」長得一模一樣，
+#: 那正是 `CLAUDE.md §8.2.A.0 規則 5` 點名的「把違憲寫成合憲」。
+#: **歸因**：以下每一條在 `origin/main` 上就已經指向不存在的東西，
+#: **不是七→五打壞的**。本批的授權範圍是稽核點名的 6 處回歸 + 協調者指派的 4 處，
+#: 這些**不在其中**（`CLAUDE.md §-1`：沒有指派、沒有 bug 觸發就不動工；
+#: `§8.4 步驟 4`：範圍要不要擴大是客戶 / 總管的決定，不是執行組自己拍板）。
+#: 已在 PR 描述具名回報，等總管裁決是否納入下一批。
+_KNOWN_DEBT: tuple[tuple[str, str, str], ...] = (
+    ("ui/helpers/macro/linkage.py", "「總經」Tab",
+     "既有債：「總經」不是任何時期的分頁名（① 一直叫「🌐 市場定調」）。"),
+    ("ui/helpers/portfolio/fee_deduction.py", "「💼 T7 帳本」",
+     "既有債：T7 帳本是 ④ **頁內**的區塊，不是分頁；且它不在 `_SECTION_LABELS` 裡，"
+     "要修得先決定「④ 的頁內區塊要不要進分區 SSOT」—— 那是設計決定，不是字串修正。"),
+    ("ui/tab1_macro_ai.py", "「🔬 資料診斷」",
+     "既有債：emoji 就寫錯了（現行分區是「🔭 資料診斷」，🔬 vs 🔭）。"),
+    ("ui/tab2_single_fund.py", "請至「資料診斷」",
+     "既有債：少了所屬分頁名，使用者在分頁列上找不到「資料診斷」。"),
+    ("ui/tab3_t7_ledger.py", "請至「📋 保單管理」",
+     "既有債：保單管理是 ④ 頁內區塊，同 `fee_deduction` 那一條，需先做設計決定。"),
+    ("ui/tab5_data_guard.py", "「組合基金」Tab",
+     "既有債：「單一基金」/「組合基金」都不是任何時期的分頁名。"),
+    ("ui/tab5_data_guard.py", "Tab 4 組合配置",
+     "既有債，且**不只這一列**：同一張診斷總表有「🌐 Tab 1 …／🔍 Tab 2 單一基金／"
+     "💊 Tab 3 組合健診／📊 Tab 4 組合配置」四列，站號與名字在七→五之後全部對不上"
+     "（組合健診現在是 ②、不是 Tab 3）。修它是**整張表重寫**，屬 scope 決定。"),
+)
+
+
+def _docstring_ids(tree: ast.Module) -> set:
+    """module / class / function 的 docstring 節點 id —— 掃描一律排除。
+
+    理由：docstring 與註解是**講歷史**的地方（本 repo 的慣例就是「舊條文保留不刪、
+    加刪除線 + 兩邊理由並陳」），把它們算進去等於禁止記錄歷史。
+    註解根本不進 AST，天然排除。
+    """
+    _out: set = set()
+    for _n in ast.walk(tree):
         if isinstance(_n, (ast.Module, ast.FunctionDef,
                            ast.AsyncFunctionDef, ast.ClassDef)):
             _b = getattr(_n, "body", None)
             if (_b and isinstance(_b[0], ast.Expr)
                     and isinstance(_b[0].value, ast.Constant)
                     and isinstance(_b[0].value.value, str)):
-                _docs.add(id(_b[0].value))
-    _live = [n.value for n in ast.walk(_tree)
-             if isinstance(n, ast.Constant) and isinstance(n.value, str)
-             and id(n) not in _docs]
-    for _dead in ("🔍 個基深掘", "📦 批次分析", "📋 我的管理室"):
-        _hits = [s for s in _live if _dead in s]
-        assert not _hits, (
-            f"{relpath} 仍有舊分頁名「{_dead}」的活字串：{_hits} —— "
-            f"它不經 tab_label 所以不會 raise，只會安靜地指錯地方。")
-    # 順帶確認新分頁名沒有被手抄成第二份
-    assert not [s for s in _live if tab_label("research") in s], (
-        f"{relpath} 手抄了分頁名「{tab_label('research')}」—— 應由 where_to_find 產生")
+                _out.add(id(_b[0].value))
+    return _out
+
+
+def _scan_files() -> list:
+    _fs = []
+    for _g in _SCAN_GLOBS:
+        _fs += list(ROOT.glob(_g))
+    _fs += [ROOT / _x for _x in _SCAN_EXTRA]
+    return sorted({_f for _f in _fs if _f.is_file()})
+
+
+def _live_strings(path: pathlib.Path):
+    """(字串, 行號) —— 只回**活字串**（非 docstring、非註解）。"""
+    _tree = ast.parse(path.read_text(encoding="utf-8"))
+    _docs = _docstring_ids(_tree)
+    for _n in ast.walk(_tree):
+        if (isinstance(_n, ast.Constant) and isinstance(_n.value, str)
+                and id(_n) not in _docs):
+            yield _n.value, _n.lineno
+
+
+def _story_nav_alias(tree: ast.Module) -> dict:
+    """`from ...story_nav import X as _y` → {_y: X}。
+
+    ⚠️ **不能只看呼叫點的名字** —— 呼叫點叫什麼是呼叫者自己取的（N10 突變：
+    `tab_label as _where_to_find`，呼叫點一個字不用改就能騙過字串比對）。
+    """
+    _a: dict = {}
+    for _n in ast.walk(tree):
+        if isinstance(_n, ast.ImportFrom) and (_n.module or "").endswith("story_nav"):
+            for _nm in _n.names:
+                _a[_nm.asname or _nm.name] = _nm.name
+    return _a
+
+
+def _exempted(relpath: str, text: str) -> str:
+    """回傳豁免 / 既有債的理由字串；都不符合則回 ""。"""
+    for _tbl in (_LEGIT_EXEMPT, _KNOWN_DEBT):
+        for _p, _needle, _why in _tbl:
+            if relpath == _p and (_needle == "" or _needle in text):
+                return _why
+    return ""
+
+
+def test_no_live_string_hardcodes_a_tab_name():
+    """**黑名單向**：活字串不得含任何「分頁名」字面值（現行的也不行）。
+
+    字表的三個來源與**為什麼三個都要**：
+    - **現行 `_TAB_LABELS` 值** —— 手抄一份現行名字不會馬上壞，但**下一次改名就會漏改**。
+      本 repo 分頁改名漏改已發作三次，每次都是這個形狀。
+    - **`RETIRED_TAB_LABELS`** —— 已退役的名字，寫在文案裡就是**現在就已經指錯**。
+    - **`MISWRITTEN_TAB_NAMES`** —— 從來不存在、憑印象手寫的名字（如「組合配置」）。
+
+    ⚠️ **字表的唯一出處是 `ui/helpers/story_nav.py`**，本檔不另存一份 ——
+    測試自己抄一份字表，就是它要禁止的那個行為的翻版。
+
+    突變實驗（2026-08-31 實跑，PR 突變表 F-M2）：把
+    `ui/helpers/settings_diag/policy_admin_bridge.py` 的 `where=` 改回寫死
+    `"📊 配置 & 帳本 → 📋 保單管理（Google Sheets）"` → **本條轉紅**。
+
+    ⚠️ **本條抓不到的東西（實測，據實寫在這裡而不是假裝沒有）**：
+    字表比對的是**完整標籤（含 emoji）**。實測突變 F-M3 —— 把
+    `ui/tab6_manual.py` 的指路改回
+    `"🔭 資料診斷(「參考 / 診斷」分頁內)"` —— **本條照樣綠**，因為退役全名是
+    「📖 參考 / 診斷」而那句只寫了不帶 emoji 的「參考 / 診斷」。
+    **同一個突變由形態向那一條抓到**（「參考 / 診斷」＋分頁 命中指路形狀）。
+    ⚠️ 刻意**不**把「去掉 emoji 的變體」加進字表：實測會多出 13 處命中，
+    其中多數是**真正的**誤判（「組合健診大表」是表名、「💊 基金組合健診」是區塊標題、
+    CSS 字串等）。把它們塞進豁免表＝用一堆假豁免換一點涵蓋率，
+    而那個涵蓋率**形態向已經免費提供了**。
+    **這正是兩條並行的價值：各自的盲點不重疊。**
+    """
+    from ui.helpers.story_nav import (
+        MISWRITTEN_TAB_NAMES, RETIRED_TAB_LABELS, _TAB_LABELS,
+    )
+
+    _banned = (set(_TAB_LABELS.values()) | set(RETIRED_TAB_LABELS)
+               | set(MISWRITTEN_TAB_NAMES))
+    _bad: list[str] = []
+    for _f in _scan_files():
+        _rel = str(_f.relative_to(ROOT))
+        for _txt, _ln in _live_strings(_f):
+            _hit = sorted(_n for _n in _banned if _n in _txt)
+            if not _hit:
+                continue
+            if _exempted(_rel, _txt):
+                continue
+            _bad.append(f"{_rel}:{_ln} 命中 {_hit}：{_txt[:70]!r}")
+    assert not _bad, (
+        "以下活字串把分頁名寫死了（分頁名只准有一個來源 "
+        "`ui/helpers/story_nav.py`）：\n  " + "\n  ".join(_bad) +
+        "\n\n改吃 `tab_label()` / `section_label()` / `where_to_find()`；"
+        "若確認它不是指路文案，請具名加進 `_LEGIT_EXEMPT` 並寫明理由。")
+
+
+def test_navigation_hints_go_through_story_nav():
+    """**形態向**：活字串帶「指路形狀」就必須經過 story_nav 求值。
+
+    ## 這條為什麼是結構性的（本節的重點）
+
+    黑名單只能擋**已知**的錯名字。這條不看名字、只看**形狀** ——
+    「請到「X」」「「X」分頁」這種句子，不管 X 是什麼，只要那個表達式裡沒有
+    真正呼叫到 `tab_label` / `section_label` / `where_to_find`，就是**有人手打了一個
+    分頁名**。所以「有人又發明一個新錯名字」也擋得住，而黑名單擋不住。
+
+    ## 判定範圍
+
+    往上找到最近的陳述層（`Expr` / `Assign` / `Call` / `keyword` / `JoinedStr`），
+    在那整棵子樹裡找 story_nav 呼叫 —— 因為指路文案常是
+    `f"…{where_to_find('x')}…"` 或 `not_ready(msg, where=f"{tab_label('x')} → …")`，
+    字串常數與那個呼叫是**兄弟節點**，只看字串自己永遠找不到。
+    alias 一律解析回原名（理由見 `_story_nav_alias`）。
+
+    ## 驗收突變（2026-08-31 實跑，PR 突變表 F-M6）
+
+    在 `ui/tab6_manual.py` 加一句
+    `st.caption("請到「隨便一個沒人聽過的分頁」看")` → **本條轉紅**。
+    ⚠️ 這個突變是**驗收條件不是加分題**：它綠燈就代表本條還是一個換皮的白名單。
+    """
+    _bad: list[str] = []
+    for _f in _scan_files():
+        _rel = str(_f.relative_to(ROOT))
+        _src = _f.read_text(encoding="utf-8")
+        _tree = ast.parse(_src)
+        _docs = _docstring_ids(_tree)
+        _alias = _story_nav_alias(_tree)
+        _parent: dict = {}
+        for _n in ast.walk(_tree):
+            for _c in ast.iter_child_nodes(_n):
+                _parent[id(_c)] = _n
+
+        for _n in ast.walk(_tree):
+            if not (isinstance(_n, ast.Constant) and isinstance(_n.value, str)):
+                continue
+            if id(_n) in _docs:
+                continue
+            _shape = next((p.search(_n.value) for p in _NAV_SHAPES
+                           if p.search(_n.value)), None)
+            if _shape is None:
+                continue
+            # 往上收斂到最近的陳述層，再看整棵子樹有沒有 story_nav 呼叫
+            _cur, _top = _n, _n
+            for _ in range(14):
+                _p = _parent.get(id(_cur))
+                if _p is None or isinstance(_p, (ast.Module, ast.FunctionDef,
+                                                 ast.AsyncFunctionDef, ast.ClassDef)):
+                    break
+                _cur = _p
+                if isinstance(_p, (ast.Expr, ast.Assign, ast.Call,
+                                   ast.keyword, ast.JoinedStr)):
+                    _top = _p
+            _resolved = set()
+            for _c in ast.walk(_top):
+                if isinstance(_c, ast.Call):
+                    _nm = getattr(_c.func, "id", None) or getattr(_c.func, "attr", None)
+                    if _nm:
+                        _resolved.add(_alias.get(_nm, _nm))
+            if _resolved & _NAV_FNS:
+                continue
+            if _exempted(_rel, _n.value):
+                continue
+            _bad.append(f"{_rel}:{_n.lineno} 指路形狀 {_shape.group(0)!r}："
+                        f"{_n.value[:70]!r}")
+    assert not _bad, (
+        "以下活字串長得像指路文案，卻沒有經過 `ui/helpers/story_nav` 求值 —— "
+        "也就是那個分頁 / 分區名是手打的：\n  " + "\n  ".join(_bad) +
+        "\n\n改吃 `where_to_find()`（會自動帶上所屬分頁名與站號）；"
+        "若它指的不是頂層分頁，請具名加進 `_LEGIT_EXEMPT` 並寫明理由。")
+
+
+def test_no_section_key_reaches_tab_label():
+    """分區 key 不得傳進 `tab_label()` —— 七→五之後那會 `KeyError`。
+
+    舊設計的檢查 (b) 全 repo 化。它會炸得很難看（不是靜默指錯，是當場拋例外，
+    而且若發生在 `except` handler 裡會**逸出分頁隔離**、整站空白）。
+
+    ⚠️ alias 一律解析回原名。2026-08-31 實測，本 repo 有**三處**是靠 alias 藏著的
+    （`_tab_label_t2('fund')` / `_tab_label_tb('batch')` / `_tab_label_tm('manage')`），
+    純字串 grep `tab_label('fund')` **一處都掃不到**。它們沒炸過只是因為
+    分支恆不觸發 —— 埋在死碼裡的地雷，本批已改為 `section_label()`。
+
+    突變實驗（2026-08-31 實跑，PR 突變表 F-M5）：把 `ui/tab_manage.py` 的
+    `section_label as _section_label_tm` 改回 `tab_label as _section_label_tm`
+    → **本條轉紅**（呼叫點一個字都不用改）。
+    """
+    from ui.helpers.story_nav import _SECTION_LABELS
+
+    _bad: list[str] = []
+    for _f in _scan_files():
+        _tree = ast.parse(_f.read_text(encoding="utf-8"))
+        _alias = _story_nav_alias(_tree)
+        for _c in ast.walk(_tree):
+            if not (isinstance(_c, ast.Call) and _c.args
+                    and isinstance(_c.args[0], ast.Constant)):
+                continue
+            _nm = getattr(_c.func, "id", None) or getattr(_c.func, "attr", None)
+            if _alias.get(_nm) != "tab_label":
+                continue
+            if _c.args[0].value in _SECTION_LABELS:
+                _bad.append(f"{_f.relative_to(ROOT)}:{_c.lineno} "
+                            f"tab_label({_c.args[0].value!r})")
+    assert not _bad, (
+        "以下呼叫把**分區 key** 傳給 `tab_label()`，執行到就 KeyError：\n  "
+        + "\n  ".join(_bad) + "\n改用 `section_label()` 或 `where_to_find()`。")
+
+
+def test_exemption_tables_do_not_rot():
+    """豁免 / 既有債表的每一條都必須**還指得到東西**（否則它是殭屍條目）。
+
+    存在的理由：豁免表最常見的失效模式不是「寫錯」，是「那處早就改掉了，
+    條目卻留著」—— 留著的條目會替**下一個**碰巧含有同一片段的字串開一個後門，
+    而且沒有人會發現。故每次跑測試都驗一次：條目指的檔案還在、片段還命中。
+
+    突變實驗（2026-08-31 實跑，PR 突變表 F-M7）：在 `_KNOWN_DEBT` 加一條
+    `("ui/tab6_manual.py", "這個字串不存在", "假條目")` → **本條轉紅**。
+    """
+    _dead: list[str] = []
+    for _label, _tbl in (("_LEGIT_EXEMPT", _LEGIT_EXEMPT),
+                         ("_KNOWN_DEBT", _KNOWN_DEBT)):
+        for _p, _needle, _why in _tbl:
+            _f = ROOT / _p
+            if not _f.is_file():
+                _dead.append(f"{_label}: 檔案不存在 {_p}")
+                continue
+            assert _why.strip(), f"{_label}: {_p} / {_needle!r} 沒有寫理由"
+            if _needle == "":
+                continue
+            if not any(_needle in _t for _t, _ in _live_strings(_f)):
+                _dead.append(f"{_label}: {_p} 已無活字串含 {_needle!r}")
+    assert not _dead, (
+        "豁免 / 既有債表有殭屍條目（指到的東西已經不在了）：\n  "
+        + "\n  ".join(_dead) + "\n請刪掉該條目 —— 留著等於留一個沒人知道的後門。")
+
+
+def test_retired_and_current_tab_labels_are_disjoint():
+    """退役名字表不得與現行 `_TAB_LABELS` 重疊（重疊 = 有一邊寫錯了）。
+
+    `macro` / `health` 兩個 key 的值七→五未變，所以它們**不該**出現在退役表裡；
+    反過來，任何一個退役名字若又變回現行值，代表 `_TAB_LABELS` 或退役表其中之一
+    沒跟上，而這兩張表是黑名單守衛的全部依據。
+    """
+    from ui.helpers.story_nav import (
+        MISWRITTEN_TAB_NAMES, RETIRED_TAB_LABELS, _TAB_LABELS,
+    )
+
+    _cur = set(_TAB_LABELS.values())
+    assert not (_cur & set(RETIRED_TAB_LABELS)), (
+        f"退役表與現行分頁名重疊：{sorted(_cur & set(RETIRED_TAB_LABELS))}")
+    assert not (_cur & set(MISWRITTEN_TAB_NAMES)), (
+        f"錯名字表與現行分頁名重疊：{sorted(_cur & set(MISWRITTEN_TAB_NAMES))}")
+    assert not (set(RETIRED_TAB_LABELS) & set(MISWRITTEN_TAB_NAMES)), (
+        "退役表與錯名字表重疊 —— 兩者性質不同（曾經對過 vs 從來沒對過），"
+        "不可混放，否則 PR 描述的歸因會寫錯。")
 
 
 if __name__ == "__main__":

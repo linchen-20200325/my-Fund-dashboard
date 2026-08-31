@@ -18,14 +18,27 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ui.helpers.render_state import not_ready, system_error
-# ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。預設全空 → 本檔行為與合併前完全相同。
+# ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。
+# ~~預設全空 → 本檔行為與合併前完全相同。~~
+# ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**這句話現在是假的。**
+# 舊句的理由**仍然成立** —— 它寫下的當天 ③ 合併頁還沒被 `app.py` 掛上去，
+# `render_single_fund_tab` 仍有一個不帶旗標的舊入口，旗標**確實**是空的。
+# 被權衡掉的是它的**前提**：WP-F 七→五接線移除了舊入口，本函式現在的唯一 caller
+# 是 `ui/tab_fund_research.py::_render_single_mode()`，它**永遠**帶著
+# `merged_page_owns(PAGE_HEADER, SHARED_SEARCH)` 進來 → 旗標**恆為持有**。
+# 直接後果：下方 `if not _merged_page_owns(_MERGED_PAGE_HEADER):` 在 production
+# **恆不觸發**（刻意保留為防當機護欄，見該處註記）。
 from ui.helpers.fund_research.merge_context import (
     PAGE_HEADER as _MERGED_PAGE_HEADER,
-    SHARED_SEARCH as _MERGED_SHARED_SEARCH,
     owned_by_merged_page as _merged_page_owns,
 )
 # ⑤ 設定與診斷合併頁（線框 §03 ⑤）的所有權旗標 + 抓取診斷區塊本體（WP-E 抽出共用）。
-# 預設旗標全空 → 本檔行為與抽出前完全相同（守衛：tests/test_settings_diag_merge.py）。
+# ~~預設旗標全空 → 本檔行為與抽出前完全相同（守衛：tests/test_settings_diag_merge.py）。~~
+# ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**這句話現在是假的。**
+# WP-F 把 `app.py` 的**全部五個**分頁包進 `with _settings_page_owns(_SD_FETCH_DIAG):`
+# （理由見 `tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`：
+# ③ 跑在 ⑤ 之前，⑤ 自己 with 關不掉 ③ 已經畫出去的那一份）→ `FETCH_DIAG`
+# 在 production **恆為持有**。守衛檔名未變、仍然有效。
 from ui.helpers.settings_diag.fetch_diag_section import render_fetch_diag_section
 from ui.helpers.settings_diag.merge_context import (
     FETCH_DIAG as _SD_FETCH_DIAG,
@@ -37,9 +50,6 @@ from shared.converters import safe_float as _safe_float  # v19.331 review:占位
 # §3.3 反捏造:接近警戒門檻走 shared SSOT,不在本檔另寫一份同義 literal
 from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _NEAR_PCT_SSOT
 
-from repositories.fund import (
-    tdcc_search_fund,
-)
 from services.portfolio_service import dividend_safety as div_safety_check
 from services.precision_service import (
     calc_hwm_sigma_levels,
@@ -279,12 +289,20 @@ def render_single_fund_tab() -> None:
     # 稽核 H1：分頁列寫「🔍 個基深掘」(story_nav SSOT)，這裡卻寫死
     # 「單一基金深度分析」—— 同一頁兩個名字（與 Tab④ 同型）。
     from ui.helpers.story_nav import (
-        render_flow_nav, render_story_nav, tab_label as _tab_label_t2,
+        render_flow_nav, render_story_nav, section_label as _section_label_t2,
     )
     # 合併頁（③ 基金研究）已在共用頂部畫過頁面大標時，這裡不再畫第二個 `##`。
     # 只讓掉標題那一行 —— flow_nav / story_nav / caption 一律照舊（它們帶的是本模式的資訊）。
     if not _merged_page_owns(_MERGED_PAGE_HEADER):
-        st.markdown(f"## {_tab_label_t2('fund')}")
+        # ⚠️ 2026-08-31 WP-F 就地修正（**有意識的修正，不是漏改** ·
+        # 決策者：AI 總管）：舊寫法 ~~`tab_label('fund')`~~ 在七→五之後
+        # **會當場 KeyError** —— `'fund'` 自 2026-08-31 起是**頁內分區**、
+        # 不是分頁，`tab_label()` 對它一律 fail loud（story_nav 刻意設計）。
+        # 它沒有炸過，只是因為這個分支在 production 恆不觸發（合併頁永遠
+        # 持有 PAGE_HEADER / MANAGE_HEADER）—— **一顆埋在死碼裡的地雷**：
+        # 哪天有人讓這個分支活過來，第一件事就是 KeyError。
+        # 改吃 `section_label('fund')`（分區名 SSOT，回「🔍 單檔深掘」）。
+        st.markdown(f"## {_section_label_t2('fund')}")
     render_flow_nav("fund")      # 巨觀:第 ② 層 基金核心分析
     render_story_nav("fund")
     st.caption("輸入 MoneyDJ 代碼或網址，即時抓取淨值 / 持股 / 配息 / 風險指標")
@@ -370,32 +388,24 @@ def render_single_fund_tab() -> None:
                 if _nh_tr and _nh_tr.get("note"):
                     st.caption(("✅ " if _nh_tr.get("merged") else "⏳ ") + _nh_tr["note"])
 
-    # 合併頁（③ 基金研究）把「找代號」工具升成兩個模式共用的頂部（線框 §03 原文：
-    # 「保留 🔍 關鍵字搜尋境外基金（TDCC / FundClear）…合併後上升為兩模式共用的『找代號』工具」）。
-    # 由合併頁畫時，這裡不再畫第二份；舊入口（app.py 直接呼叫本函式）旗標為空 → 行為不變。
-    if not _merged_page_owns(_MERGED_SHARED_SEARCH):
-        # ── 關鍵字搜尋（折疊）──
-        with st.expander("🔍 關鍵字搜尋境外基金（TDCC / FundClear）", expanded=False):
-            c_kw, c_btn = st.columns([4,1])
-            with c_kw:
-                keyword = st.text_input("基金關鍵字", placeholder="安聯、收益成長、摩根、聯博...",
-                    label_visibility="collapsed", key="fund_keyword")
-            with c_btn:
-                do_search = st.button("🔍 搜尋", type="primary", use_container_width=True, key="btn_search")
-            if do_search and keyword.strip():
-                with st.spinner(f"搜尋「{keyword}」中..."):
-                    results = tdcc_search_fund(keyword.strip())
-                    st.session_state.tdcc_results = results
-                    if not results:
-                        st.warning("⚠️ 查無結果，請直接使用上方 MoneyDJ 網址輸入")
-                    else:
-                        st.success(f"✅ 找到 {len(results)} 檔基金")
-            results = st.session_state.get("tdcc_results",[])
-            if results:
-                options = {f"{r.get('基金名稱','')} | {r.get('基金代碼','')}": r for r in results}
-                sel = st.selectbox(f"選擇基金（{len(results)} 筆）", list(options.keys()), key="tdcc_select")
-                fc  = options[sel].get("基金代碼","")
-                st.info(f"💡 代碼：**{fc}** → 在上方輸入框貼入代碼即可分析")
+    # ── 關鍵字搜尋（折疊）—— 2026-08-31 整段刪除 ────────────────────────────
+    # ~~`if not _merged_page_owns(SHARED_SEARCH):` + 折疊版關鍵字搜尋框~~
+    # **有意識的政策變更，不是漏刪**（日期 2026-08-31 · 決策者：AI 總管）。
+    #
+    # 舊條文的理由**仍然成立**：它是為了讓「舊入口（app.py 直接呼叫本函式）」與
+    # 「合併頁入口」共存時不畫出兩份搜尋框 —— 那個 guard 在兩個入口並存的期間
+    # 確實有效，一行都沒有寫錯。
+    #
+    # 被權衡掉的原因：WP-F 七→五接線把**舊入口移除**了。本函式現在的唯一 caller 是
+    # `ui/tab_fund_research.py::_render_single_mode()`，而它永遠帶著
+    # `merged_page_owns(PAGE_HEADER, SHARED_SEARCH)` 進來 → 判斷式恆為 False，
+    # 整個 `if` body 在 production **恆不觸發**（執行時實測：以 shim 攔截
+    # `_render_single_mode` 內的 lazy import，量到 `SHARED_SEARCH_owned=True`）。
+    # 留著死碼的代價不只是行數：它讓 `repositories.fund.tdcc_search_fund` 看起來
+    # 有兩個 UI 呼叫點，而實際活著的只有 `ui/helpers/fund_research/code_finder.py`
+    # 一個 —— 憲法 §8.2.A EX-PASSTHRU-1 的登記路徑正是指到這個死的呼叫點。
+    #
+    # 找代號工具現在只有一份，住在共用頂部：`ui/helpers/fund_research/code_finder.py`。
 
     # ── 分析結果 ──
     fd = st.session_state.fund_data
@@ -427,7 +437,13 @@ def render_single_fund_tab() -> None:
             # WP-E（線框 §03 ⑤「A · 🔌 連線與帳號」搬入項）：區塊本體**原封抽至**
             # `ui/helpers/settings_diag/fetch_diag_section.py`，⑤ 與本頁共用同一份。
             # ⑤ 持有 FETCH_DIAG 旗標時本頁不再畫（接線批次才會持有）；
-            # 旗標全空（現況）→ 與抽出前完全相同：partial 時渲染同一塊。
+            # ~~旗標全空（現況）→ 與抽出前完全相同：partial 時渲染同一塊。~~
+            # ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**「旗標全空」現在是假的** —— WP-F 之後 `app.py` 把五個
+            # 分頁全部包進 `with settings_page_owns(FETCH_DIAG)`，本判斷式在
+            # production **恆為 False**，這一行 `render_fetch_diag_section(...)`
+            # **恆不觸發**（抓取診斷改由 ⑤ 的 `render_fetch_diag_from_session()` 畫）。
+            # 分支本身**刻意保留**：它是「⑤ 沒持有時本頁要自己畫」這個契約的實作，
+            # 拿掉等於把契約寫死成單向；且 `test_settings_diag_merge` 以 AST 鎖它的極性。
             if not _settings_page_owns(_SD_FETCH_DIAG):
                 render_fetch_diag_section(fd, _status_fd, _p_fn)
         else:
@@ -1518,8 +1534,18 @@ def render_single_fund_tab() -> None:
                                 st.caption(f"貢獻分解:{_parts}　—— 相對本組同伴的位置,非絕對好壞;"
                                            "紅線(吃本金 / 3-3-3)另外看。")
                         else:
+                            # ⚠️ 2026-08-31 由 WP-F 修正(**有意識的政策變更,不是漏改** ·
+                            # 決策者:AI 總管 · 依據:客戶 2026-08-31 拍板的五分頁線框)。
+                            # 舊寫法 ~~「配置 & 帳本」~~ 的理由**仍然成立**(要告訴使用者
+                            # 去哪裡載入持倉才會有同伴可比);被權衡掉的是它寫死了一個
+                            # 七→五之後不存在的分頁名(④ 現在叫「📊 我的配置」)——
+                            # 不經 `tab_label` 所以不會 raise,只會安靜地指錯。
+                            from ui.helpers.story_nav import (  # noqa: PLC0415
+                                where_to_find as _wtf_q,
+                            )
                             st.caption("🎖️ 同類相對品質分:⬜ 資料不足 —— 單一檔沒有同伴可相對排名,"
-                                       "請先到「配置 & 帳本」載入持倉,或改看 健檢 / 批次分頁。")
+                                       f"請先到 {_wtf_q('portfolio')} 載入持倉,"
+                                       f"或改看 {_wtf_q('batch')}。")
                     except Exception as _e_q:  # noqa: BLE001 — 相對分為加值,失敗不影響其他
                         # ⚠️ 對照上方 else 分支：那句「⬜ 資料不足 —— 單一檔沒有同伴」
                         # 是**真的**「還沒有」→ 維持灰色,一字未動。這裡是**算爆了**,
@@ -2407,8 +2433,12 @@ def render_single_fund_tab() -> None:
                     _ai_fd_pct, _ = _calc_data_health()
                     if _ai_fd_pct < 50:
                         # 稽核 H2:同 t7 —— 市場定調沒有叫「全量抓取」的按鈕
-                        st.caption(f"🔴 總經資料完整率 {_ai_fd_pct}%：建議先到「🌐 市場定調」"
-                                   "按「📡 載入總經資料」，"
+                        # 2026-08-31 WP-F：分頁名改吃 SSOT（同上，避免第二份標籤）。
+                        from ui.helpers.story_nav import (  # noqa: PLC0415
+                            tab_label as _tl_ai,
+                        )
+                        st.caption(f"🔴 總經資料完整率 {_ai_fd_pct}%：建議先到"
+                                   f"「{_tl_ai('macro')}」按「📡 載入總經資料」，"
                                    "AI 才有景氣位階背景（仍可直接生成、僅準確度略降）。")
                     elif _ai_fd_pct < 80:
                         st.caption(f"🟡 資料完整率 {_ai_fd_pct}%，AI 參考性略降。")

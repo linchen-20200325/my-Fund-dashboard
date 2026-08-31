@@ -302,23 +302,41 @@ def test_sub_page_h2_title_is_behind_the_merge_guard(relpath):
         f"{_unguarded}")
 
 
-def test_single_fund_keyword_search_is_behind_the_merge_guard():
-    """「找代號」工具在合併頁升為共用頂部 → 子頁那份摺疊版必須被關掉。
-
-    突變實驗（2026-08-28 實跑）：把 `if not _merged_page_owns(_MERGED_SHARED_SEARCH):`
-    拿掉、expander 拉回原縮排 → **本條轉紅**（`expander` 不在被保護的呼叫裡）。
-    """
-    _calls = _st_calls_in_page_renderer("ui/tab2_single_fund.py")
-    _search_expanders = [(a, g) for attr, a, g in _calls
-                         if attr == "expander" and "關鍵字搜尋" in a]
-    assert _search_expanders, (
-        "找不到「關鍵字搜尋」的 expander —— 斷言失去對象（改名了？）")
-    _unguarded = [a for a, g in _search_expanders if not g]
-    assert not _unguarded, (
-        f"個基深掘的關鍵字搜尋沒有被合併頁旗標保護 —— 合併後畫面上會有兩份搜尋框：{_unguarded}")
-    # 搜尋框本體（輸入框 + 按鈕）也必須跟著被關掉，不能只關外層 expander。
-    assert any(attr == "text_input" and g for attr, _a, g in _calls), (
-        "關鍵字輸入框沒有被守住")
+# ~~def test_single_fund_keyword_search_is_behind_the_merge_guard(): ...~~
+# ── 2026-08-31 退場（**有意識的政策變更，不是漏刪** · 決策者：AI 總管）─────────
+#
+# 舊條文（原文照錄，供追溯）：
+#   """「找代號」工具在合併頁升為共用頂部 → 子頁那份摺疊版必須被關掉。
+#
+#   突變實驗（2026-08-28 實跑）：把 `if not _merged_page_owns(_MERGED_SHARED_SEARCH):`
+#   拿掉、expander 拉回原縮排 → **本條轉紅**（`expander` 不在被保護的呼叫裡）。
+#   """
+#   _calls = _st_calls_in_page_renderer("ui/tab2_single_fund.py")
+#   _search_expanders = [(a, g) for attr, a, g in _calls
+#                        if attr == "expander" and "關鍵字搜尋" in a]
+#   assert _search_expanders, (
+#       "找不到「關鍵字搜尋」的 expander —— 斷言失去對象（改名了？）")
+#   _unguarded = [a for a, g in _search_expanders if not g]
+#   assert not _unguarded, (
+#       f"個基深掘的關鍵字搜尋沒有被合併頁旗標保護 —— 合併後畫面上會有兩份搜尋框：{_unguarded}")
+#   # 搜尋框本體（輸入框 + 按鈕）也必須跟著被關掉，不能只關外層 expander。
+#   assert any(attr == "text_input" and g for attr, _a, g in _calls), (
+#       "關鍵字輸入框沒有被守住")
+#
+# **兩邊理由並陳**：
+# - **舊守衛的理由仍然成立**：它守的是「舊入口（app.py 直接呼叫 `render_single_fund_tab`）
+#   與合併頁入口並存時，搜尋框不得畫兩份」。在那個並存期間，這條是有效的、抓得到東西的
+#   —— 它的突變實驗（2026-08-28）是真的轉過紅的。
+# - **被權衡掉的原因**：WP-F 七→五接線移除了舊入口。`render_single_fund_tab()` 現在的
+#   唯一 caller 是 `ui/tab_fund_research.py::_render_single_mode()`，它永遠帶著
+#   `merged_page_owns(PAGE_HEADER, SHARED_SEARCH)` → 那個 `if` body 恆不觸發（死碼），
+#   整段已於同日刪除。**斷言因此失去對象**：它要找的 expander 不再存在，
+#   留著只會是一條恆紅（或被改成恆綠）的殭屍守衛。
+#
+# ⚠️ **不是「這個需求消失了」**：「找代號工具全站只有一份」這個要求**仍然有效**，
+#    只是承接者換人 —— 現由 `test_code_finder_is_the_only_search_entry`（見下）
+#    以「全 repo 只有一個 `tdcc_search_fund` UI 呼叫點」的形式守住，
+#    比舊條文的「expander 有沒有被 if 包住」更直接。
 
 
 def test_merge_context_flag_is_scoped_and_restored_even_on_error():
@@ -502,3 +520,48 @@ def test_merged_page_module_does_not_reach_into_data_or_compute_layers():
         bad += [m for m in mods
                 if m.split(".")[0] in {"repositories", "services", "infra"}]
     assert not bad, f"合併頁自己去碰了資料 / 計算層：{sorted(set(bad))}"
+
+
+def test_code_finder_is_the_only_search_entry():
+    """「找代號」工具在 UI 層**只准有一個** `tdcc_search_fund` 呼叫點。
+
+    ## 這條是誰的接班人
+
+    它接的是 2026-08-31 退場的 `test_single_fund_keyword_search_is_behind_the_merge_guard`
+    （退場理由見該處的刪除線註記）。舊條文守的是「子頁那份搜尋框有沒有被旗標關掉」；
+    七→五接線把舊入口移除、那個分支變成死碼並整段刪除之後，斷言失去對象。
+    **需求沒有消失，只是換一種更直接的問法**：與其問「第二份有沒有被關掉」，
+    直接問「**到底有幾份**」。
+
+    ## 為什麼用 AST 而不是 grep
+
+    `ui/helpers/fund_research/code_finder.py` 的 docstring 自己就寫著
+    「本檔是 `repositories.fund.tdcc_search_fund` 的第二個 UI 呼叫點」——
+    純字串 grep 會被這句說明文字騙到（本 repo 已實證同型假綠，見本檔開頭「方法」）。
+    故只數**真正的 `ast.Call`**，docstring 與註解一律不算。
+
+    ## 突變實驗（拿掉修復必須轉紅）
+
+    把 2026-08-31 從 `ui/tab2_single_fund.py` 刪掉的那段折疊搜尋框貼回去
+    （含 `results = tdcc_search_fund(keyword.strip())`）→ **本條轉紅**
+    （呼叫點變成 2 個）。⚠️ 只貼回 `import` 不算 —— 本條數的是呼叫，
+    貼回 import 而不呼叫本來就不會多畫一份搜尋框。
+    """
+    _hits: list[str] = []
+    for _p in sorted(ROOT.glob("ui/**/*.py")):
+        _tree = ast.parse(_p.read_text(encoding="utf-8"))
+        for _n in ast.walk(_tree):
+            if not isinstance(_n, ast.Call):
+                continue
+            _fn = getattr(_n.func, "id", None) or getattr(_n.func, "attr", None)
+            if _fn == "tdcc_search_fund":
+                _hits.append(f"{_p.relative_to(ROOT)}:{_n.lineno}")
+
+    assert _hits == ["ui/helpers/fund_research/code_finder.py:48"] or (
+        len(_hits) == 1 and _hits[0].startswith("ui/helpers/fund_research/code_finder.py")
+    ), (
+        f"`tdcc_search_fund` 在 UI 層的呼叫點不是恰好一個：{_hits}。\n"
+        "合併頁把「找代號」升成兩個模式共用的頂部之後，全站只該有一份搜尋框；\n"
+        "多一個呼叫點＝多一份搜尋框，或是又有人複製了一份取數實作。\n"
+        "（憲法 §8.2.A EX-PASSTHRU-1 的登記路徑也應指到這個唯一的活呼叫點。）"
+    )

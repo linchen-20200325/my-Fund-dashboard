@@ -218,14 +218,42 @@ def test_no_leftover_seven_tab_labels_in_story_nav_source():
                     and isinstance(_b[0].value.value, str)):
                 _docstrings.add(id(_b[0].value))
 
+    # ⚠️ 2026-08-31 新增一個**具名的例外**（**有意識的政策變更，不是漏改** ·
+    # 決策者：AI 總管）：`RETIRED_TAB_LABELS` / `MISWRITTEN_TAB_NAMES` 兩個常數
+    # **就是**「已失效分頁名」的字表本身，它們的元素**必須**是那些字串。
+    # ~~本條原本禁止 story_nav.py 出現任何舊分頁名的活字串。~~
+    # **舊條文的理由仍然成立**：它要防的是「SSOT 自己還留著一份舊值」——
+    # 例如有人把 `batch` 留在 `_TAB_LABELS` 裡，`tab_label('batch')` 就會回一個
+    # 分頁列上不存在的名字（本模組 docstring 講的就是這件事）。**這個防線一字未鬆**。
+    # **被權衡掉的只是它的涵蓋方式**：它原本假設「舊名字出現在本檔 ＝ 一定是殘留」，
+    # 而 2026-08-31 之後多了一個**正當**的出現位置 —— 黑名單守衛的字表 SSOT
+    # （`tests/test_wpf_five_tab_wiring.py::test_no_live_string_hardcodes_a_tab_name`
+    # 拿它去掃全 repo）。字表不寫出那些字，就無從比對。
+    # ⚠️ 例外**只給這兩個常數的元素**，本檔其餘任何位置照樣禁止 ——
+    # 也就是「`_TAB_LABELS` 裡殘留舊值」這個原本要抓的東西，依然會被抓到。
+    _WHITELIST_ASSIGN = {"RETIRED_TAB_LABELS", "MISWRITTEN_TAB_NAMES"}
+    _in_name_table: set = set()
+    for _n in _ast.walk(_tree):
+        if isinstance(_n, (_ast.Assign, _ast.AnnAssign)):
+            _tgts = (_n.targets if isinstance(_n, _ast.Assign) else [_n.target])
+            if any(getattr(_t, "id", None) in _WHITELIST_ASSIGN for _t in _tgts):
+                _in_name_table |= {id(_c) for _c in _ast.walk(_n)
+                                   if isinstance(_c, _ast.Constant)}
+
     _live = [_n.value for _n in _ast.walk(_tree)
              if isinstance(_n, _ast.Constant) and isinstance(_n.value, str)
-             and id(_n) not in _docstrings]
+             and id(_n) not in _docstrings and id(_n) not in _in_name_table]
 
     for _dead in ("📦 批次分析", "📋 我的管理室", "📖 參考 / 診斷", "🔍 個基深掘",
                   "📊 配置 & 帳本"):
         _hits = [_s for _s in _live if _dead in _s]
         assert not _hits, f"story_nav.py 仍有舊分頁名 {_dead} 的活字串：{_hits}"
+
+    # 例外不得被擴大成「整個檔案豁免」：這兩個常數本身必須真的存在且非空，
+    # 否則上面那段排除等於白寫（有人把常數刪掉、字表沒了，守衛也不會叫）。
+    from ui.helpers.story_nav import MISWRITTEN_TAB_NAMES, RETIRED_TAB_LABELS
+    assert RETIRED_TAB_LABELS and MISWRITTEN_TAB_NAMES, (
+        "退役 / 錯名字表是空的 —— 黑名單守衛會退化成只擋現行分頁名")
 
 
 def test_steps_labels_are_ordinal_plus_tab_label():

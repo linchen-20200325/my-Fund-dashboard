@@ -19,6 +19,10 @@ import pandas as pd
 import streamlit as st
 
 from ui.helpers.render_state import system_error
+# 2026-08-31 WP-F：指路文案的分頁名改吃 `story_nav` SSOT。
+# 舊寫法把**現行**分頁名手抄一份，理由（讓使用者知道去哪）仍成立；
+# 被權衡掉的是「第二份標籤」本身 —— 本 repo 分頁改名漏改已發作兩次。
+from ui.helpers.story_nav import tab_label as _tab_label
 # ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。預設全空 → 本檔行為與合併前完全相同。
 from ui.helpers.fund_research.merge_context import (
     PAGE_HEADER as _MERGED_PAGE_HEADER,
@@ -256,12 +260,20 @@ def _build_df(codes: list[str], rows: dict) -> pd.DataFrame:
 
 def render_batch_analysis_tab() -> None:
     # 稽核 H1：H1 原寫死「批次基金分析」，分頁列是「📦 批次分析」—— 同頁兩個名字。
-    from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tb
+    from ui.helpers.story_nav import render_flow_nav, section_label as _section_label_tb
     # 合併頁（③ 基金研究）已在共用頂部畫過頁面大標時，這裡不再畫第二個 `##`。
     # 只讓掉標題那一行 —— flow_nav 與下方那段 caption（含「400 檔約 30~40 分鐘」
     # 這個使用者據以決定要不要按下去的預期說明）一律照舊，不得跟著消失。
     if not _merged_page_owns(_MERGED_PAGE_HEADER):
-        st.markdown(f"## {_tab_label_tb('batch')}")
+        # ⚠️ 2026-08-31 WP-F 就地修正（**有意識的修正，不是漏改** ·
+        # 決策者：AI 總管）：舊寫法 ~~`tab_label('batch')`~~ 在七→五之後
+        # **會當場 KeyError** —— `'batch'` 自 2026-08-31 起是**頁內分區**、
+        # 不是分頁，`tab_label()` 對它一律 fail loud（story_nav 刻意設計）。
+        # 它沒有炸過，只是因為這個分支在 production 恆不觸發（合併頁永遠
+        # 持有 PAGE_HEADER / MANAGE_HEADER）—— **一顆埋在死碼裡的地雷**：
+        # 哪天有人讓這個分支活過來，第一件事就是 KeyError。
+        # 改吃 `section_label('batch')`（分區名 SSOT，回「📦 批次掃描」）。
+        st.markdown(f"## {_section_label_tb('batch')}")
     render_flow_nav("batch")   # 巨觀:第 ② 層 基金核心分析
     st.caption(
         "上傳或貼上基金代號清單 → 每檔跑**與「組合健診」同一張大表**(評分/報酬/風險/配息/"
@@ -500,7 +512,8 @@ def _render_existing_results() -> None:
     )
     with st.expander("ℹ️ 欄位說明 / 這張表沒有什麼", expanded=False):
         st.markdown(
-            "- 本表 = **和「💊 組合健診」完全同一張大表**(健康分析 + 配息相關 + 實際購買結果 "
+            f"- 本表 = **和「{_tab_label('health')}」完全同一張大表**"
+            "(健康分析 + 配息相關 + 實際購買結果 "
             "+ 基期 / 風險 / 買賣點)。\n"
             "- **每一欄的欄名都可以把滑鼠移上去看說明**(怎麼算的、單位是什麼、留白代表什麼、"
             "能不能拿去跨檔比大小)。\n"
@@ -547,5 +560,5 @@ def _render_existing_results() -> None:
             "🔴 兩邊都貴(出場時機好)/ ⚪ 觀望。台幣計價顯示 ➖;匯率比淨值更難預測,"
             "只是傾向參考、不保證買低賣高。⚠️ **用的是跑批當下的匯率**,匯率變動請重跑。\n"
             "- ⚠️ **這張表沒有**:AI 跨檔評論、逐檔持股明細 —— 那是少量基金深看用的,"
-            "請到「💊 組合健診」做。"
+            f"請到「{_tab_label('health')}」做。"
         )

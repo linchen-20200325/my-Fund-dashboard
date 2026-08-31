@@ -593,9 +593,21 @@ def render_switch_advisor_section(funds: list) -> None:
     st.divider()
     st.markdown("### 🎯 換股池顧問(選股池 + 換股建議・教學非保證)")
 
-    # v19.433:選股池的加/刪/改已移到「📋 我的管理室」分頁集中管理(避免同一 st.tabs run
+    # v19.433:選股池的加/刪/改已移到管理室集中管理(避免同一 st.tabs run
     # 兩處都渲染 _render_pool_editor → DuplicateWidgetID)。本區仍讀選股池做配對(下方按鈕)。
-    st.caption("💡 選股池的新增/刪除已搬到「📋 我的管理室」分頁集中管理;本區直接讀你的選股池做換股配對。")
+    #
+    # ⚠️ 2026-08-31 由 WP-F 修正(**有意識的政策變更,不是漏改** ·
+    # 決策者:AI 總管 · 依據:客戶 2026-08-31 拍板的五分頁線框)。
+    # 舊寫法 ~~「📋 我的管理室」分頁~~ 的理由**仍然成立** —— 使用者要知道
+    # 「那我要去哪裡加減選股池」,指路本身是對的。被權衡掉的是:七→五之後
+    # 「📋 我的管理室」**不再是分頁**,它降級成「⑤ ⚙️ 設定與診斷」頁內的
+    # 「🗄️ 資料維護與通報」分區。寫死的名字不經 `tab_label` → 不會 raise,
+    # 只會安靜地叫使用者去找一個分頁列上沒有的分頁。
+    # 改吃 SSOT:`where_to_find('manage')`。
+    from ui.helpers.story_nav import where_to_find as _where_to_find  # noqa: PLC0415
+
+    st.caption(f"💡 選股池的新增/刪除已搬到 {_where_to_find('manage')} 集中管理;"
+               "本區直接讀你的選股池做換股配對。")
 
     if not funds:
         st.info("尚未載入持倉基金 → 先在上方載入基金,再回來產生換股建議。")

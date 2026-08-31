@@ -164,6 +164,36 @@ def system_error(what: str, exc: BaseException, *, hint: str = "",
     )
 
 
+def safe_section(label: str, fn, *args, **kwargs) -> None:
+    """跑 `fn(*args, **kwargs)`；若拋例外 → 就地紅燈 + log，**不外拋**（區塊級隔離）。
+
+    為什麼需要它（本函式存在的唯一理由）
+    ------------------------------------
+    `app.py` 的五段 try/except 是**分頁級**隔離：一個分頁炸掉，其他四個分頁還在。
+    但 2026-08-31 七→五之後，**一個分頁裡面裝的東西變多了** —— ⑤ 一頁同時裝著
+    「🔌 連線與帳號 / 🗄️ 資料維護與通報 / 🔭 資料診斷 / 📖 說明書」四個分區。
+    舊七分頁時代這四塊分屬 `tab_manage` 與 `tab_ref` **兩個**分頁、各有自己的 try，
+    互不連坐；合併之後它們共用 ⑤ 的那一個 try ——
+    **管理室當掉會一併帶走 🔭 資料診斷與 📖 說明書**。
+    而那兩個地方，正是使用者出事時要去的地方（⑤ 的一句話職責就寫著
+    「東西沒抓到的時候來這裡查」）。**把診斷跟故障綁在同一條命上，是最糟的順序。**
+
+    ⚠️ **不吞例外**（`CLAUDE.md §1`）：走 `system_error()` 顯式紅燈 + stderr 鏡射進
+    Cloud log + 可展開 traceback（含 `File "...", line N`）。失敗的分區就地顯示，
+    同頁其餘分區照常渲染。
+
+    ⚠️ **與 `ui/tab1_macro.py::_safe_section` 的關係（據實登記，不假裝沒有）**：
+    那裡有一份同精神的私有實作（v19.429）。本函式**不是**去合併它 ——
+    本批的檔案邊界不含 `tab1_macro.py`，`CLAUDE.md §-1` 無觸發不動工。
+    現況：**兩份同精神實作並存**，本函式是 SSOT 側的那一份；日後有任務碰到
+    `tab1_macro.py` 時應把該私有版收斂到這裡（登記，不構成動工授權）。
+    """
+    try:
+        fn(*args, **kwargs)
+    except Exception as _sec_e:  # noqa: BLE001 — §1 區塊隔離：顯式顯示 + log，非靜默吞
+        system_error(f"「{label}」區塊渲染失敗", _sec_e)
+
+
 def business_alert(title: str, lines: list[str], *, footer: str = "") -> None:
     """🔴 業務警訊：紅字卡片，**不是**紅色錯誤框。
 

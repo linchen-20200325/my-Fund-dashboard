@@ -25,6 +25,8 @@ import pandas as pd
 import streamlit as st
 
 from ui.helpers.render_state import system_error
+# 指路文案的分頁 / 分區名 SSOT —— 不得在本檔另寫一份字面值（理由見下方兩處註記）。
+from ui.helpers.story_nav import where_to_find as _where_to_find
 
 from shared.colors import GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_BB, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_NEUTRAL
 
@@ -33,7 +35,11 @@ def render_manual_tab() -> None:
     """渲染系統說明書 Tab — 10 sub-tab 公式與判斷標準完整說明。"""
     # ⑤ 設定與診斷合併頁（線框 §03 ⑤，WP-E）已畫分區標題時，這裡不再畫第二個 `##`。
     # 只讓掉標題那一行 —— caption 與全部內容照舊。
-    # 旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。
+    # ~~旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。~~
+    # ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**這句話現在是假的。** ⑤ 已接線，
+    # 本函式的 production caller 是 `ui/tab_settings_diag.py::_render_manual_section()`，
+    # 它永遠帶著 `settings_page_owns(MANUAL_HEADER)` → 下方畫 `##` 大標的分支
+    # 在 production **恆不觸發**。分支刻意保留（契約實作，同 tab_manage）。
     from ui.helpers.settings_diag.merge_context import (
         MANUAL_HEADER as _SD_MANUAL_HEADER,
         owned_by_settings_page as _settings_page_owns,
@@ -52,9 +58,17 @@ def render_manual_tab() -> None:
     # 改成標題 + container,表格直接攤平。
     st.markdown("### ⓪ 📊 資料來源完整地圖(每筆資料→Tab→endpoint→refresh→fallback)")
     with st.container():
+        # ⚠️ 2026-08-31 由 WP-F 修正（**有意識的政策變更,不是漏改** ·
+        # 決策者:AI 總管 · 依據:客戶 2026-08-31 拍板的五分頁線框）。
+        # 舊寫法 ~~「🔭 資料診斷(「參考 / 診斷」分頁內)」~~ 的理由**仍然成立** ——
+        # 它要告訴讀者「紅燈要去哪裡看」,而且還貼心地補了上一層分頁名。
+        # 被權衡掉的是:七→五之後「📖 參考 / 診斷」這個分頁**不存在了**,
+        # 資料診斷降級為「⑤ ⚙️ 設定與診斷」頁內的一個分區。寫死的名字不經
+        # `tab_label` → 不會 raise,只會安靜地指到分頁列上找不到的地方。
+        # 改吃 SSOT:`where_to_find('diag')` 回「⑤ ⚙️ 設定與診斷 → 🔭 資料診斷」。
         st.caption(
             "本系統 4 個資料 Tab 用到的所有資料來源,按「**資料項目 → 用在哪個 Tab → 來源 / endpoint "
-            "→ refresh / 發布延遲 → 失敗 fallback**」整理。**任一筆失敗都會在 🔭 資料診斷(「參考 / 診斷」分頁內) "
+            f"→ refresh / 發布延遲 → 失敗 fallback**」整理。**任一筆失敗都會在 {_where_to_find('diag')} "
             "用紅燈標出**。對照 `CLAUDE.md §2.1 SSOT` 5-Tier 權威分級。"
         )
 
@@ -145,10 +159,12 @@ def render_manual_tab() -> None:
             f"<div style='border:1px solid {GH_BORDER};border-radius:6px;overflow:hidden'>"
             f"{_dm_html}</div>", unsafe_allow_html=True,
         )
+        # ⚠️ 同上（2026-08-31 WP-F）：舊寫法 ~~「🔭 資料診斷(「參考 / 診斷」分頁內)」~~
+        # 指到一個七→五之後不存在的分頁名；改吃 `where_to_find('diag')` SSOT。
         st.caption(
             "**📖 對應憲法**:`CLAUDE.md §2.1 SSOT`(5-Tier 權威分級)、`§2.3 PIT`(發布延遲表)、"
             "`§2.4 Freshness`(TTL 對照)、`§4.6` 領域邊界(基金特有狀態)。"
-            " **任一筆紅燈 → 🔭 資料診斷(「參考 / 診斷」分頁內)找對應 fetcher 修。**"
+            f" **任一筆紅燈 → {_where_to_find('diag')} 找對應 fetcher 修。**"
         )
     # ════════════════════════════════════════════════════════════
 
