@@ -360,8 +360,9 @@ def render_complementary_explorer_from_df(df) -> None:
         # 都在 expander 之前讀同一組 key → 送出前兩者一起維持「上一次套用」的門檻,
         # 不會出現「標題已變、表還沒變」的兩個數字打架(§2.1);首跑則同樣退 SSOT 預設。
         # ⚠️ 「送出前不寫回」是 Streamlit 的 form 語意,**沙箱驗不到**(AppTest 不模擬
-        # 前端緩衝,見 tests/test_rotation_form_rerun_20260831.py 檔頭);守衛驗的是
-        # 產生該行為的接線(3 支滑桿與 submit 鈕同屬一個 form_id)。體感請在瀏覽器確認。
+        # 前端緩衝 —— streamlit 1.59.2 實測、量測日 2026-08-31,是版本相依行為不是永恆事實;
+        # 見 tests/test_rotation_form_rerun_20260831.py 檔頭);守衛驗的是產生該行為的接線
+        # (3 支滑桿與 submit 鈕同屬一個 form_id)。體感請在瀏覽器確認。
         with st.form("batch_rot_threshold_form", clear_on_submit=False):
             c1, c2, c3 = st.columns(3)
             c1.slider("高基期門檻(σ rank ≥)", -2.0, 0.5, ROTATION_SELL_SIGMA, 0.1,
