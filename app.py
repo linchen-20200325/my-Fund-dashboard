@@ -2,8 +2,16 @@
 """app.py — 基金戰情室 v18.0(重構版)
 模組架構(v19.405 6→5):市場定調 → 組合健診 → 個基深掘 → 配置 & 帳本 → 參考 / 診斷
 快取策略(v19.333 對齊實作,review F10):L1 repository 以 @_ttl_cache / @_daily_cache
-短 TTL 快取(infra/cache.py _CACHE_REGISTRY 集中註冊;失敗結果不入快取),
+短 TTL 快取(infra/cache.py _CACHE_REGISTRY 集中註冊),
 UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述與實作不符,已更正
+失敗結果不入快取(2026-08-31 更正:原文把這句寫成無條件全稱句,而當時**是假的** —
+  `_ttl_cache` 無條件快取,一次上游瞬斷會把空值鎖住整個 TTL。現行實況分兩種):
+  · @_daily_cache — **全部**適用,cache_if 預設過濾空 / failed 結果(v19.253 R23)
+  · @_ttl_cache  — **僅限自己呼叫 infra.cache.mark_fetch_failed() 標記過失敗的
+    fetcher**(現為 fetch_yf_close / fetch_fred / fetch_defillama_stablecoin_mcap);
+    **其餘未標記的 fetcher 仍會快取空結果**。刻意做成 opt-in 而非預設過濾:
+    「空」有「抓失敗」與「真的沒有」兩義、回傳值分不出來,讓裝飾器去猜任一邊
+    都違 §1 — 機制、判準與各分支理由見 infra/cache.py 的 module 註解
 v18.176:移除回測 Tab(user 只需汰弱留強判斷換基金,回測拖速度且 NAV 歷史抓不全)
 v19.130:tab 重排 + 改名 + 刪除「💼 配置模擬器」
 """

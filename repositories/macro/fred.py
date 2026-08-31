@@ -15,6 +15,7 @@ from typing import Optional
 import pandas as pd
 
 from infra.proxy import fetch_url
+from infra.cache import mark_fetch_failed
 from fund_fetcher import _ttl_cache, register_cache
 from shared.macro_thresholds_v2 import (
     CPI_YOY_THRESHOLDS as _CPI_THR,
@@ -230,8 +231,17 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
 
     v19.82 F-PROV-1(§2.2 provenance):新增 `source` + `fetched_at` 兩欄,
     schema-additive;既有 caller(讀 date/value/realtime_start)無需修改。
+
+    快取語意(2026-08-31,v3 §02「只快取成功結果」):
+        **只有 `fetch_url` 回 None(連不上/逾時/403/429/5xx)那一支帶
+        `mark_fetch_failed` 標記 → 不入 `@_ttl_cache`**,下次呼叫真的重試。
+        **`observations: []`(FRED 回 200 明說該區間沒有觀測)不標記,照常快取** ——
+        那是 FRED 給的答案,不是抓失敗。兩者都回空 DataFrame,差別只在這個標記。
     """
     if not api_key:
+        # 缺 key 是設定問題不是抓取失敗,且 api_key 本身是 cache key 的一部分
+        # (`fetch_fred(sid, "", n)` 與帶 key 的呼叫是**不同的 entry**),
+        # 補上 key 之後不會命中這筆 → 不存在 poisoning,維持原行為不標記。
         return pd.DataFrame()
     r = fetch_url(
         FRED_BASE,
@@ -245,13 +255,20 @@ def fetch_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
         timeout=20,
     )
     if r is None:
-        return pd.DataFrame()
+        # 抓失敗 → 標記後不入快取(原本被鎖 TTL_30MIN,總經一整批 FRED 全空)
+        return mark_fetch_failed(
+            pd.DataFrame(), f"fetch_url returned None: FRED:{series_id}")
     try:
         obs = r.json().get("observations", [])
     except Exception as e:
         print(f"[macro_core/fred] {series_id} JSON 解析失敗: {e}")
+        # 刻意不標記(同 yf.py 該處):200 已到手,來源活著且明確回答了,
+        # 再要一次還是同樣的壞回應 —— 重抓不會變好,只會多打一次來源。
         return pd.DataFrame()
     if not obs:
+        # ⚠️ **這是「真的沒有」,不是「抓失敗」** —— FRED 回 200 並明說該區間
+        # 無觀測。刻意不標記、照常快取:把它當失敗會讓每次呼叫都重打 FRED,
+        # 正是 v3 §02 另一半「不連續轟炸來源」要防的事。
         return pd.DataFrame()
     df = pd.DataFrame(obs)
     df = df[df["value"] != "."].copy()

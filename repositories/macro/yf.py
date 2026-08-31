@@ -12,6 +12,7 @@ from typing import Optional
 import pandas as pd
 
 from infra.proxy import fetch_url
+from infra.cache import mark_fetch_failed
 from fund_fetcher import _ttl_cache, register_cache
 from shared.ttls import TTL_5MIN, TTL_10MIN
 
@@ -33,6 +34,13 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
     pd.Series  index 為 DatetimeIndex,value 為收盤價。失敗時回傳空 Series。
                provenance(F-PROV-1 v19.83):成功時 `s.attrs` 含
                `source="Yahoo:<ticker>"` + `fetched_at=UTC ISO`。
+
+    快取語意(2026-08-31,v3 §02「只快取成功結果」):
+        **`fetch_url` 回 None(連不上/逾時/403/429/5xx)時回傳的空 Series 帶
+        `mark_fetch_failed` 標記 → 不入 `@_ttl_cache`**,下次呼叫真的重試;
+        重試是否真的出門由 `infra.source_backoff` 的來源冷卻決定,故不會轟炸來源。
+        **HTTP 200 但序列為空(該區間真的沒有觀測)不標記,照常快取** —— 那是答案,
+        不是失敗。兩者回傳值長得一模一樣,差別只在這個標記,**裝飾器不猜**(§1)。
     """
     url = f"{YF_CHART_BASE}/{ticker}"
     r = fetch_url(
@@ -43,7 +51,10 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
                                 # ~14s/標的 → 總經載入 8 標的爆 75s 逾時。遇 429 直接留空(§1)。
     )
     if r is None:
-        return pd.Series(dtype=float, name=ticker)
+        # 抓失敗(非「真的沒有」)→ 標記後不入快取。原本無條件快取,一次瞬斷
+        # 就把空序列鎖住整個 TTL_10MIN,而 VIX/DGS10/USDTWD/DXY/SPY 全走這裡。
+        return mark_fetch_failed(
+            pd.Series(dtype=float, name=ticker), f"fetch_url returned None: {ticker}")
     try:
         d = r.json()
         result = d["chart"]["result"][0]
@@ -58,6 +69,11 @@ def fetch_yf_close(ticker: str, range_: str = "2y", interval: str = "1d") -> pd.
         s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
     except Exception as e:
         print(f"[macro_core/yf] {ticker} 解析失敗: {e}")
+        # ⚠️ 這一支**刻意不標記**(2026-08-31),不是漏掉:
+        # 走到這裡代表 HTTP 200 已經拿到手、來源活著而且明確回答了,只是內容
+        # 不符預期(壞 ticker 會讓 Yahoo 回 result:null → 這裡 TypeError)。
+        # 同一個回應再要一次還是同樣結果 → **重抓不會變好,只會每次呼叫多打一次來源**。
+        # 只有「連回應都沒拿到」(上面 r is None)重試才有意義,故只標記那一支。
         return pd.Series(dtype=float, name=ticker)
     # v19.161 A1 Phase B:pandera schema 驗 final contract(values+index+attrs)
     # 此驗證**故意放在 parse try-except 之外**,schema 違反(values=NaN /

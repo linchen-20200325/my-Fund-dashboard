@@ -17,6 +17,7 @@ import re
 import pandas as pd
 
 from infra.proxy import fetch_url
+from infra.cache import mark_fetch_failed
 from fund_fetcher import _ttl_cache, register_cache
 from shared.fred_series import (
     FRED_BSCICP02,
@@ -43,14 +44,24 @@ def fetch_defillama_stablecoin_mcap() -> pd.Series:
     Returns
     -------
     pd.Series  index=DatetimeIndex, value=總流通市值(USD)。失敗回空 Series。
+
+    快取語意(2026-08-31,v3 §02「只快取成功結果」):
+        **只有 `fetch_url` 回 None 那一支帶 `mark_fetch_failed` 標記 → 不入
+        `@_ttl_cache`**,下次呼叫真的重試。HTTP 200 之後的各種空結果
+        (JSON 壞掉 / 解不出 rows / schema 驗證不過)**刻意不標記** ——
+        來源活著且已回答,重抓拿到的是同一份東西。
     """
     r = fetch_url(DEFILLAMA_STABLECOIN_URL, timeout=20)
     if r is None:
-        return pd.Series(dtype=float, name="stablecoin_mcap")
+        # 抓失敗 → 標記後不入快取(原本被鎖 TTL_30MIN)
+        return mark_fetch_failed(
+            pd.Series(dtype=float, name="stablecoin_mcap"),
+            "fetch_url returned None: DefiLlama:stablecoin_mcap")
     try:
         data = r.json()
     except Exception as e:
         print(f"[defillama] 穩定幣 JSON 解析失敗: {e}")
+        # 刻意不標記(同 yf.py / fred.py 該處):200 已到手,重抓不會變好。
         return pd.Series(dtype=float, name="stablecoin_mcap")
     rows: dict = {}
     for item in (data or []):

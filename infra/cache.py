@@ -34,6 +34,7 @@ from __future__ import annotations
 import functools as _ft
 import time as _time
 import re as _re
+from collections.abc import MutableMapping as _MutableMapping
 
 
 def _normalize_moneydj_url_for_cache(url: str) -> str:
@@ -67,17 +68,131 @@ def _normalize_moneydj_url_for_cache(url: str) -> str:
         return url
 
 
+# ════════════════════════════════════════════════════════════
+# v3 憲法 §02「只快取成功結果」— 失敗標記機制（2026-08-31）
+# ════════════════════════════════════════════════════════════
+# ## 這裡解的是什麼
+#
+# `_ttl_cache` 原本在 `fn()` 回傳後**無條件** `_cache[key] = (now, result)`。
+# 而 L1 fetcher 的慣例是「失敗 → 回空 Series / 空 DataFrame」（§1 不回假資料），
+# 於是**一次上游瞬斷會把空值鎖住整個 TTL** —— 使用者看到總經盤面空白，
+# 而且**分不出「抓不到」與「真的沒有」**。
+#
+# ## ⚠️ 為什麼不是「空的就不要快取」（這是本機制存在的全部理由，必讀）
+#
+# 「空」有兩種，**回傳值本身分不出來**：
+#
+# | | 例 | 該不該快取 |
+# |---|---|---|
+# | **抓失敗** | proxy 掛掉 / 逾時 / 403 / 429 → `fetch_url` 回 `None` | ❌ 不該——下次要重試 |
+# | **真的沒有** | FRED 回 200 且 `observations: []`；Yahoo 回 200 但該區間無觀測 | ✅ 該——那就是答案 |
+#
+# 兩者都是「空 DataFrame」。**若讓裝飾器去猜，猜錯哪一邊都是 §1 違憲**：
+# 猜成失敗 → 把「真的沒有」變成每次呼叫都重打來源（轟炸）；
+# 猜成成功 → 就是現在這個 bug。
+#
+# → **正解是讓 fetcher 自己講**：它知道自己走的是哪個分支。裝飾器**永遠不猜**，
+#   只認 fetcher 明確掛上的標記。沒掛標記 = 照舊快取（既有 `_ttl_cache`
+#   使用者行為**零改變**，這也是本機制刻意做成 opt-in 而非預設過濾的原因）。
+#
+# ## 判準：「HTTP 層有沒有把回應交到手上」
+#
+# 本次三個 fetcher 一律只標記 **`fetch_url` 回 `None`** 那一支，理由是
+# **只有這一支重試才有意義**：
+#
+# - `r is None`（連不上 / 逾時 / 403 / 429 / 5xx）→ **暫時性**，下次可能就好 → 標記，不快取。
+# - HTTP 200 但 JSON 壞掉 / 解析不出東西 → 來源活著而且**明確回答了**，
+#   同一個回應再要一次還是同樣結果 → **不標記**（重抓不會變好，只會多打一次來源）。
+# - HTTP 200 且解析成功但序列是空的 → **這就是答案**，照常快取。
+#
+# ## ⚠️ 這不會造成「連續轟炸來源」（v3 §02 的另一半，本次未新造任何東西）
+#
+# 退避**早就有了**且住在更下層：`infra/proxy.py::fetch_url` 進場先問
+# `infra.source_backoff.should_skip()`，冷卻中直接回 `None` **不發請求**
+# （冷卻秒數 SSOT 在 `shared/backoff_policy.py`）。所以「失敗不快取 → 下次再試」
+# 的那個「再試」，會先撞上來源冷卻而**根本不會出門**。兩層是串聯：
+#
+#     _ttl_cache（要不要記住這個答案）→ fetch_url → source_backoff（這一輪要不要碰這個來源）
+#
+# 而 `not_found`(404) / `proxy_auth`(407) 依 `backoff_policy` **刻意不退避** ——
+# 那是設計，不是漏洞：404 是「這支 URL 不存在，去試下一個」，
+# 407 是「NAS 帳密設錯，改 secrets 就好」，兩者退避都會罰錯人。
+#
+# ## 與 `repositories/fund/fx_and_main.py` v18.275 的關係
+#
+# 同一個精神的兩種寫法。v18.275 的 `_FX_CACHE` 是**手動**快取，寫入點 `_store()`
+# 只長在成功分支上，失敗路徑自然不會寫。本機制是把同一件事做進**裝飾器**，
+# 讓走 `@_ttl_cache` 的 fetcher 不必各自手刻一份快取。
+# **v18.275 一行都沒動，也不需要動。**
+
+FETCH_FAILED_ATTR = "fetch_failed"
+
+
+def mark_fetch_failed(obj, reason: str):
+    """標記「這個回傳值來自**失敗的抓取**」→ `@_ttl_cache` 不會快取它。
+
+    用在 fetcher 的失敗分支上，回傳值本身（型別、內容）**完全不變** ——
+    標記掛在 pandas 的 `.attrs` 上，呼叫端讀 `.empty` / `len()` 的既有寫法零影響。
+    （`.attrs` 已是本 repo 承載 provenance 的既有慣例，§2.2。）
+
+    Args:
+        obj: fetcher 的失敗回傳值（pandas Series / DataFrame）。
+        reason: 失敗原因，人讀用。
+
+    Returns:
+        `obj` 本身（方便 `return mark_fetch_failed(pd.Series(...), "...")` 一行寫完）。
+
+    Raises:
+        TypeError: `obj` 無法承載標記（例如 dict / list）。
+            **刻意 fail loud，不做 silent no-op** —— 靜默失敗會讓作者以為自己
+            擋住了失敗快取，實際上什麼都沒發生，那正是本次要修的那種假象
+            （§-2「沒查證的宣稱比沒有宣稱更危險」）。
+            回傳 dict 的 fetcher 請改用 `_daily_cache(cache_if=...)`，
+            或在自己的分支裡明確處理。
+    """
+    _attrs = getattr(obj, "attrs", None)
+    if not isinstance(_attrs, _MutableMapping):
+        raise TypeError(
+            f"mark_fetch_failed: {type(obj).__name__} 無法承載失敗標記"
+            f"（需要 dict-like 的 .attrs，pandas Series/DataFrame 才有）。"
+            f"回傳此型別的 fetcher 請改用 _daily_cache(cache_if=...) 或自行處理。"
+        )
+    _attrs[FETCH_FAILED_ATTR] = str(reason)
+    return obj
+
+
+def is_fetch_failed(obj) -> bool:
+    """這個回傳值有沒有被 `mark_fetch_failed` 標記過？
+
+    無 `.attrs` 的物件（dict / list / int / None …）一律回 False ——
+    **未標記 = 視為成功**，既有 `_ttl_cache` 使用者行為不變。
+    """
+    try:
+        _attrs = getattr(obj, "attrs", None)
+        if not isinstance(_attrs, _MutableMapping):
+            return False
+        return bool(_attrs.get(FETCH_FAILED_ATTR))
+    except Exception:
+        # 標記機制自己壞掉不該把取數打死 → 從寬當成功（維持既有行為）
+        return False
+
+
 def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
     """TTL + LRU 兩層快取裝飾器。
 
     cache key 由 (args, sorted kwargs) 組成；無法 hash 的引數（list/dict）跳過快取直走原 fn。
     v19.74 K2：新增 key_fn 參數，可自訂 key 生成邏輯（用於 URL normalize 等特殊場景）。
 
-    Wrapper 暴露：cache_clear() / cache_info() → {size, maxsize, ttl_sec, hits, misses}
+    2026-08-31（v3 §02「只快取成功結果」）：被 `mark_fetch_failed()` 標記過的結果
+    **不入快取**，下次呼叫會真的重試（重試是否出門由 `infra.source_backoff` 決定，
+    見上方 module 註解）。未標記者照舊快取 —— 既有使用者零行為改變。
+
+    Wrapper 暴露：cache_clear() / cache_info()
+        → {size, maxsize, ttl_sec, hits, misses, uncached_fail}
     """
     def decorator(fn):
         _cache: dict = {}
-        _stats = {"hits": 0, "misses": 0}
+        _stats = {"hits": 0, "misses": 0, "uncached_fail": 0}
 
         @_ft.wraps(fn)
         def wrapper(*args, **kwargs):
@@ -110,6 +225,13 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
                 return hit[1]
             _stats["misses"] += 1
             result = fn(*args, **kwargs)
+            # v3 §02「只快取成功結果」：fetcher 明說這次是抓失敗 → 不入快取，
+            # 下次呼叫真的重試（是否出門由 infra.source_backoff 決定）。
+            # ⚠️ 這裡**不判斷「空不空」** —— 空有兩種意思，裝飾器沒有資訊分辨，
+            #    猜錯任一邊都違憲。理由見本檔上方 module 註解。
+            if is_fetch_failed(result):
+                _stats["uncached_fail"] += 1
+                return result
             _cache[key] = (now, result)
             # LRU 防呆：超過 maxsize 砍最舊
             if len(_cache) > maxsize:
@@ -121,11 +243,15 @@ def _ttl_cache(ttl_sec: int, maxsize: int = 128, key_fn=None):
             _cache.clear()
             _stats["hits"] = 0
             _stats["misses"] = 0
+            _stats["uncached_fail"] = 0
 
         wrapper.cache_clear = _clear   # type: ignore[attr-defined]
         wrapper.cache_info = lambda: {   # type: ignore[attr-defined]
             "size": len(_cache), "maxsize": maxsize, "ttl_sec": ttl_sec,
             "hits": _stats["hits"], "misses": _stats["misses"],
+            # 「這個 fetcher 因為抓失敗而沒被快取幾次」——§5 可觀測性，
+            # Tab5 快取狀態表走 get_all_cache_info() 泛型渲染，零 UI 改動。
+            "uncached_fail": _stats["uncached_fail"],
         }
         wrapper._cache_dict = _cache   # type: ignore[attr-defined]   # for tests
         return wrapper
