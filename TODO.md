@@ -319,6 +319,10 @@
         - ⚠️ **一筆被守衛抓到、值得記住的事**：`services/nav_history_gs.py` 檔頭自陳的豁免理由是
           「**不在 §8.2「L2 禁 requests/httpx/bs4/feedparser」清單**」，並拿 `auto_search_store_gs`
           當先例 —— **兩檔互為背書，兩檔都沒登錄在 §8.2.A**。
+          ⚠️ **2026-08-31 事實更新**：`services/auto_search_store_gs.py` 已整檔刪除
+          （production 0 caller）。**這條教訓不因此失效** —— 它記的是「拿規則字表的漏洞
+          當通行證」這個**手法**，不是那一個檔案；`nav_history_gs.py` 的自授豁免
+          **原封不動還在、仍未登錄**，只是**少了那個可以拿來背書的對象**。
           **那不是豁免理由，那是規則字表的漏洞被拿來當通行證**，
           正是 `§8.2` 末句明文禁止的「未經登錄的軟例外」。
         - ~~**待辦**：派**獨立一組**用**涵蓋所有網路形態**的字表重掃 `services/`，
@@ -798,7 +802,7 @@ PR #726 自陳「壓著不合併，等 Phase 1 全部完成」，而它已於 **
 
 | 編號 | 債在哪 | 規模（實測） | 為什麼這輪沒做 | 觸發點 |
 |---|---|---|---|---|
-| **D-1**<br>（＝ **1.3-b**） | `services/` 純度：AST 全量掃描查出的現況違規（gspread 遠端往返含寫入／檔案系統讀寫／經 `infra.llm` 的間接 HTTP／L1→L2 上行 import／`globals()` 執行期注入） | **45 項**，釘在 `tests/test_services_purity_contract.py::test_debt_tables_are_debt_not_approval` 的 `assert total <= 45`（ratchet：**只准往下，不准往上**） | PR #733 明文「**本批刻意不修任何一項違規**」——把 gspread 持久化服務搬出 L2 **會動到 NAV 歷史鏈**，屬 `§8.4 步驟 4` 的**範圍決定，需客戶核准**，不在該批授權內 | (1) **客戶就 scope 裁示**；(2) 有任務碰到 `services/nav_history_gs.py` / `auto_search_store_gs.py` 等登記在案的檔；(3) 有人要**調高**那個 `<= 45` 的上限（**那一刻就是本項到期日**） |
+| **D-1**<br>（＝ **1.3-b**） | `services/` 純度：AST 全量掃描查出的現況違規（gspread 遠端往返含寫入／檔案系統讀寫／經 `infra.llm` 的間接 HTTP／L1→L2 上行 import／`globals()` 執行期注入） | ~~**45 項**~~ → **28 項**（2026-08-31，**狀態更新，不是漏刪**）。⚠️ **這 17 項不是「修好了」，是「載體被刪掉了」** —— auto_search 封閉死簇整簇實體刪除（`auto_search` / `auto_search_store_gs` / `auto_search_store_local` / `calibration/multi_factor` / `multi_factor_optimization`，production 0 caller），違規隨檔案一起消失。**剩下的 28 項一項都沒被處理，本列不得打勾。** 釘在 `tests/test_services_purity_contract.py::test_debt_tables_are_debt_not_approval` 的 `assert total <= 45`（ratchet：**只准往下，不准往上**） | PR #733 明文「**本批刻意不修任何一項違規**」——把 gspread 持久化服務搬出 L2 **會動到 NAV 歷史鏈**，屬 `§8.4 步驟 4` 的**範圍決定，需客戶核准**，不在該批授權內 | (1) **客戶就 scope 裁示**；(2) 有任務碰到 `services/nav_history_gs.py` / `auto_search_store_gs.py` 等登記在案的檔；(3) 有人要**調高**那個 `<= 45` 的上限（**那一刻就是本項到期日**） |
 | **D-2** | 鐵律 3（三態顏色）的守衛目前 **fail-open** —— **包成 helper 就隱形**，掃不到 | 翻成 fail-closed 的影響估算：**約 20 個站點會轉紅，其中約 8 個是真發現、約 8 個是需先建別名解析的噪音**。⚠️ **此估算本組未複驗，照轉**（來源：守衛組，見 3.2） | **總管裁決單獨排一批**（理由：它會一次翻紅約 20 處，混進其他批次會讓歸因失效 —— 對照 `PROCESS.md §3` 相依序列化） | (1) 該批被排入；(2) 有任務碰到 `ui/helpers/render_state.py` 或三態呈現；(3) 出現「該紅沒紅／該灰卻紅」的實際回報 |
 | **D-3** | `STATE.md` 的**存檔紀錄停在 2026-08-12** | 實測 `grep -n "^## " STATE.md \| head` → 最新一筆存檔標題為「**✅ 2026-08-12 存檔：📋 我的管理室…（v19.433・PR #625）**」。⚠️ **要分清兩件事**：檔案**本身**有被後續 commit 動過（`git log -1 -- STATE.md` → `149d1dd`，2026-08-28，就地補了事實更正），**但沒有新增任何一筆存檔** —— 也就是 **PR #625 之後這一整輪的工作（含 #722~#733）一筆都沒進 STATE.md** | 本輪各批的授權範圍都是**單一主題**（守衛／刪碼／搬遷／本檔），**補存檔不在任何一批的檔案邊界內**（`§-1.5` 第一條第 2 點 File Boundary；夾帶進來會同時違反 `§-1.5.3 C` 禁止夾帶） | (1) 有任務碰到 `STATE.md`；(2) user 直接點名；(3) 下一次有人要靠 `STATE.md` 回答「最近做了什麼」時發現它答不出來 |
 | **D-4** | main 上有 **106 個既存 commit 的訊息含 session URL**（`claude.ai/code`） | 實測（2026-08-28，本 clone）：`git log origin/main --format=%H \| wc -l` → **182** 個 commit；`git log origin/main --grep="claude.ai/code" --format=%h \| wc -l` → **106**；另 `--grep="session_"` → **113**。⚠️ **106 與 113 是兩個不同的字串各自的命中數，不是同一份清單的兩種算法**，本組**未比對兩者的交集與差集** | ⛔ **清理需改寫已推送的歷史（`force-push`）**，而依 `CLAUDE.md §-1.5.1a 接合 A1`，**`git push --force` 與重寫已推送歷史明文不在 merge 常設授權內，須逐案請示客戶** —— **不在既有授權範圍** | **只有一個**：**客戶明示要求**。⛔ **任何人都不得以「順手清乾淨」為由發動** —— 那會重寫 182 個 commit 中的 106 個，是本 repo 目前可想像的**最大單一破壞性操作** |

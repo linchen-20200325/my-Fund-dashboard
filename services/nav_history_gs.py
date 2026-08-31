@@ -12,10 +12,22 @@
 §1 Fail Loud:資料不足(nav<=0 / date 壞 / code 空)→ **不寫**(不偽造);
              真 GS I/O 失敗 → **raise NavHistoryError**(呼叫端須看見,不靜默吞)。
 §5 冪等:`(code, date)` 去重 —— 同日重複查同檔只留 1 筆,不灌水。
-§8.2:L2 service(比照 services/auto_search_store_gs.py),存進 `_nav_sheet_id()` 那本
+§8.2:L2 service(~~比照 services/auto_search_store_gs.py~~),存進 `_nav_sheet_id()` 那本
      workbook(v19.472 改獨立 `NAV_SHEET_ID`)加 `nav_history` 分頁;UI(L3)呼叫本層,**不自己開 gspread**。
      GS secrets 未設(local / CI)→ 安靜 no-op,不干擾。gspread I/O 為持久化職責,
-     不在 §8.2「L2 禁 requests/httpx/bs4/feedparser」清單,且有 auto_search_store_gs 先例。
+     ~~不在 §8.2「L2 禁 requests/httpx/bs4/feedparser」清單,且有 auto_search_store_gs 先例。~~
+
+     ⚠️ **2026-08-31 更正(有意識的變更,不是漏刪;決策者:客戶 2026-08-31 授權死碼清理)** ——
+     上面那兩句劃掉的**不是因為檔案被刪才失效,是它們本來就不是有效的豁免理由**:
+     (a) `services/auto_search_store_gs.py` 已整檔刪除(production 0 caller),
+         **那個「先例」不存在了**;而且它當年**自己也沒有登錄在 §8.2.A 例外表**
+         —— 兩檔曾互為背書,兩檔都是 §8.2 末句禁止的「未經登錄的軟例外」。
+     (b) 「不在字表清單裡」證明的是**清單不全**,不是這樣寫是對的
+         (本 repo 憲法 §-1.5.1c 判定 2 已記載該字表漏抓兩次)。
+     **現況據實說明**:本檔的 gspread 往返**仍未登錄於 §8.2.A 例外表**,
+     已登記在 `tests/test_services_purity_contract.py::GSPREAD_DEBT`(登記 ≠ 核准)。
+     **本輪未修它** —— 把 gspread 持久化搬出 L2 會動到 NAV 歷史鏈,
+     屬 §8.4 步驟 4 的範圍決定,不在本輪(死碼清理)授權內。
 
 Worksheet schema `nav_history`(A1 = headers):
     code | date | nav | fund_name | source | recorded_at

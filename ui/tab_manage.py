@@ -602,7 +602,15 @@ def _sec_nav_backfill() -> None:
 
 def render_manage_tab() -> None:
     from ui.helpers.story_nav import render_flow_nav, tab_label as _tab_label_tm
-    st.markdown(f"## {_tab_label_tm('manage')}")
+    # ⑤ 設定與診斷合併頁（線框 §03 ⑤，WP-E）已畫分區標題時，這裡不再畫第二個 `##`。
+    # 只讓掉標題那一行 —— flow_nav / caption / info 一律照舊（它們帶的是本頁的資訊）。
+    # 旗標全空（現況，⑤ 未接線）→ 本頁行為與現在完全相同。
+    from ui.helpers.settings_diag.merge_context import (
+        MANAGE_HEADER as _SD_MANAGE_HEADER,
+        owned_by_settings_page as _settings_page_owns,
+    )
+    if not _settings_page_owns(_SD_MANAGE_HEADER):
+        st.markdown(f"## {_tab_label_tm('manage')}")
     render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
     st.info(

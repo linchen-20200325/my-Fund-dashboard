@@ -40,6 +40,19 @@
 - v19.271 新增 dead code — **0 件**
 - P3-A2~A6 新 UI tab 越權 — **0 件**
 
+> 📌 **2026-08-31 事實更新(本節上方表格與 REFUTED 清單皆為當時的稽核史料,一字未改)**:
+> `services/calibration/multi_factor.py` 與 `services/auto_search.py` **已整檔刪除**
+> (auto_search 封閉死簇,production 0 caller;客戶 2026-08-31 授權死碼清理)。對本節的影響:
+> - **第 3 列(Sharpe 3 處實作)**:第三處證據 `calibration/multi_factor.py:361` 已不存在
+>   → 現存為 **2 處**(`services/health/grade.py` 評分 / `services/reconcile.py` 對帳)。
+>   **原判定「0 真重複」不變且更強** —— 少的那一處是被刪掉,不是被合併。
+> - **第 4 列(Volatility 2 處實作)**:同理,現存為 **1 處**(`services/health/grade.py`)。
+> - **REFUTED 清單的 `auto_search.py:138` 那一條**:該檔已不存在。
+>   **「它是不同公式、非重複實作」這個判定在當時是對的**,本更新不推翻它;
+>   只是那個比較對象今天已經不在 repo 裡。
+> ⚠️ **不得**把本註讀成「重複問題已解決」—— **刪掉一個死掉的實作不等於收斂了活著的實作**;
+> 上表第 1、2 列(ADR fallback / HTML card 邊框)**一項都沒有被本輪處理**。
+
 ---
 
 ## §2 模組化簡化建議(§-1 LOW 跳過)
