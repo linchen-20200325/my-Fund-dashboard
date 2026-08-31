@@ -1,0 +1,1028 @@
+<title>市場定調與組合健診線框</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   Tokens — 完整淺色定義於 :root，深色只覆蓋 token（三種狀態都涵蓋）
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --paper:#eef1f3;
+  --surface:#ffffff;
+  --surface-2:#f6f8f9;
+  --sunk:#e3e8eb;
+  --ink:#151c22;
+  --ink-2:#3d4a54;
+  --ink-3:#6b7a85;
+  --line:#ccd6dc;
+  --line-soft:#dfe6ea;
+  --accent:#12605c;
+  --accent-soft:#d6e8e6;
+  --accent-ink:#0b3f3c;
+
+  /* 三態語意色 — 與 accent 完全分離，這是本頁的主題之一 */
+  --st-idle:#7c8a94;          /* ⬜ 未載入／沒點過 */
+  --st-idle-bg:#e7ebee;
+  --st-err:#b4231c;           /* 🔴 系統真出錯 */
+  --st-err-bg:#fbe6e4;
+  --st-biz:#96124a;           /* 🟥 業務警訊 — 深莓紅（總管決定 1） */
+  --st-biz-bg:#fbe4ec;
+  --mark:#a8570a;             /* 版面標記：搬移／新增（非語意三態色） */
+  --mark-bg:#fdefdc;
+  --st-ok:#1c6b3f;
+  --st-ok-bg:#dff0e6;
+
+  --shadow:0 1px 2px rgba(20,30,40,.06),0 6px 18px rgba(20,30,40,.05);
+  --radius:6px;
+  --mono:"SFMono-Regular",Menlo,Consolas,"Roboto Mono","Noto Sans Mono CJK TC",monospace;
+  --sans:"PingFang TC","Noto Sans TC","Microsoft JhengHei","Hiragino Sans TC",
+         system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#10161a;
+    --surface:#171f25;
+    --surface-2:#1d262d;
+    --sunk:#0c1114;
+    --ink:#e6edf1;
+    --ink-2:#b3c0c9;
+    --ink-3:#7f8f9a;
+    --line:#2e3a43;
+    --line-soft:#242e35;
+    --accent:#4fbdb4;
+    --accent-soft:#123734;
+    --accent-ink:#9fe0d9;
+    --st-idle:#8b98a2;
+    --st-idle-bg:#222b31;
+    --st-err:#ff8a80;
+    --st-err-bg:#3a1614;
+    --st-biz:#f294b6;
+    --st-biz-bg:#3a1024;
+    --mark:#e0a256;
+    --mark-bg:#33240f;
+    --st-ok:#6cc48c;
+    --st-ok-bg:#12301f;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#10161a; --surface:#171f25; --surface-2:#1d262d; --sunk:#0c1114;
+  --ink:#e6edf1; --ink-2:#b3c0c9; --ink-3:#7f8f9a;
+  --line:#2e3a43; --line-soft:#242e35;
+  --accent:#4fbdb4; --accent-soft:#123734; --accent-ink:#9fe0d9;
+  --st-idle:#8b98a2; --st-idle-bg:#222b31;
+  --st-err:#ff8a80; --st-err-bg:#3a1614;
+  --st-biz:#f294b6; --st-biz-bg:#3a1024;
+  --mark:#e0a256; --mark-bg:#33240f;
+  --st-ok:#6cc48c; --st-ok-bg:#12301f;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+code,.mono{font-family:var(--mono);font-size:.84em;letter-spacing:-.01em}
+
+/* ── 版頭 ───────────────────────────────────────────── */
+.masthead{
+  border-bottom:1px solid var(--line);background:var(--surface);
+  padding:34px 26px 0;
+}
+.mast-in{max-width:1120px;margin:0 auto}
+.eyebrow{
+  font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);font-weight:700;margin:0 0 10px;
+}
+h1{
+  margin:0 0 10px;font-size:clamp(26px,3.6vw,38px);line-height:1.25;
+  letter-spacing:-.02em;font-weight:800;text-wrap:balance;
+}
+.dek{margin:0 0 20px;max-width:62ch;color:var(--ink-2);font-size:15.5px}
+.meta-row{
+  display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12.5px;color:var(--ink-3);
+  padding-bottom:18px;
+}
+.meta-row b{color:var(--ink-2);font-weight:600}
+
+nav.toc{display:flex;gap:2px;flex-wrap:wrap;margin-top:4px}
+nav.toc a{
+  padding:9px 13px;font-size:13px;color:var(--ink-2);text-decoration:none;
+  border-bottom:2px solid transparent;font-weight:600;
+}
+nav.toc a:hover{color:var(--accent);border-bottom-color:var(--line)}
+nav.toc a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+
+/* ── 主體 ───────────────────────────────────────────── */
+main{max-width:1120px;margin:0 auto;padding:0 26px 90px}
+section{padding-top:52px}
+.sec-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.sec-num{
+  font-family:var(--mono);font-size:12px;color:var(--accent);
+  font-weight:700;letter-spacing:.06em;
+}
+h2{
+  margin:0;font-size:clamp(20px,2.4vw,26px);letter-spacing:-.015em;
+  font-weight:800;text-wrap:balance;
+}
+h3{
+  margin:34px 0 10px;font-size:17px;font-weight:750;letter-spacing:-.01em;
+}
+h4{margin:22px 0 8px;font-size:14px;font-weight:700;color:var(--ink-2)}
+.lede{color:var(--ink-2);max-width:66ch;margin:0 0 22px}
+p{max-width:70ch}
+
+.rule{height:1px;background:var(--line);border:0;margin:0}
+
+/* ── 卡片 / 網格 ─────────────────────────────────────── */
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:14px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:16px 18px;box-shadow:var(--shadow);
+}
+.card h4{margin-top:0}
+.src{
+  display:block;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);
+  margin-top:6px;word-break:break-all;line-height:1.6;
+}
+.src b{color:var(--accent);font-weight:600}
+
+/* ── 標籤 ───────────────────────────────────────────── */
+.tag{
+  display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;
+  font-weight:700;letter-spacing:.02em;white-space:nowrap;
+  border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);
+}
+.tag.keep{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.tag.move{background:var(--mark-bg);color:var(--mark);border-color:transparent}
+.tag.cut{background:var(--st-err-bg);color:var(--st-err);border-color:transparent}
+.tag.dup{background:var(--st-err-bg);color:var(--st-err);border-color:transparent}
+.tag.byd{background:var(--st-ok-bg);color:var(--st-ok);border-color:transparent}
+.tag.frag{background:var(--mark-bg);color:var(--mark);border-color:transparent}
+
+/* ── details ────────────────────────────────────────── */
+details{
+  border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--surface);margin-bottom:10px;overflow:hidden;
+}
+details[open]{box-shadow:var(--shadow)}
+summary{
+  cursor:pointer;padding:11px 15px;font-weight:650;font-size:14px;
+  list-style:none;display:flex;gap:10px;align-items:center;
+}
+summary::-webkit-details-marker{display:none}
+summary::before{
+  content:"▸";color:var(--accent);font-size:12px;transition:transform .15s;
+  display:inline-block;
+}
+details[open] summary::before{transform:rotate(90deg)}
+summary:hover{background:var(--surface-2)}
+summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.det-body{padding:2px 16px 16px;border-top:1px solid var(--line-soft)}
+.det-body ul{margin:8px 0;padding-left:20px}
+.det-body li{margin-bottom:5px;font-size:14px}
+.count{
+  margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-3);
+  font-weight:600;
+}
+
+/* ── 三態圖例 ───────────────────────────────────────── */
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 8px}
+.lg{
+  cursor:pointer;border:1px solid var(--line);background:var(--surface);
+  border-radius:var(--radius);padding:10px 14px;font:inherit;font-size:13px;
+  text-align:left;flex:1 1 210px;color:var(--ink);transition:box-shadow .15s;
+}
+.lg:hover{box-shadow:var(--shadow)}
+.lg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lg[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.lg .swatch{
+  display:inline-block;width:12px;height:12px;border-radius:3px;
+  margin-right:8px;vertical-align:-1px;
+}
+.lg small{display:block;color:var(--ink-3);font-size:11.5px;line-height:1.5;margin-top:3px}
+.sw-idle{background:var(--st-idle)}
+.sw-err{background:var(--st-err)}
+.sw-biz{background:var(--st-biz)}
+
+/* ── 線框元件 ───────────────────────────────────────── */
+.wf{
+  background:var(--sunk);border:1px solid var(--line);border-radius:8px;
+  padding:16px;margin-top:16px;
+}
+.wf-title{
+  font-size:12px;font-family:var(--mono);color:var(--ink-3);
+  letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px;font-weight:700;
+}
+.blk{
+  background:var(--surface);border:1px solid var(--line);border-radius:5px;
+  padding:11px 13px;margin-bottom:10px;
+}
+.blk-h{font-size:13.5px;font-weight:700;margin-bottom:3px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.blk-s{font-size:12px;color:var(--ink-3);line-height:1.6}
+.blk.wide{border-left:3px solid var(--accent)}
+.pill{
+  font-size:10px;font-family:var(--mono);padding:0 6px;border-radius:3px;
+  background:var(--accent-soft);color:var(--accent-ink);font-weight:700;
+}
+.pill.new{background:var(--mark-bg);color:var(--mark)}
+
+/* 狀態示範 */
+.state{border-radius:4px;padding:8px 11px;font-size:12.5px;margin-top:7px;line-height:1.6}
+.state.idle{background:var(--st-idle-bg);color:var(--st-idle);border:1px dashed var(--st-idle)}
+.state.err{background:var(--st-err-bg);color:var(--st-err);border:1px solid var(--st-err);font-weight:600}
+.state.biz{background:var(--st-biz-bg);color:var(--st-biz);border-left:6px solid var(--st-biz)}
+body.f-idle .state:not(.idle),
+body.f-err  .state:not(.err),
+body.f-biz  .state:not(.biz){opacity:.18}
+.state{transition:opacity .18s}
+
+/* 表單框 */
+.formbox{
+  border:2px dashed var(--accent);border-radius:6px;padding:12px 13px;
+  background:var(--accent-soft);margin-bottom:10px;
+}
+:root[data-theme="dark"] .formbox,
+.formbox{color:var(--ink)}
+.formbox .fb-h{
+  font-size:11px;font-family:var(--mono);color:var(--accent-ink);font-weight:700;
+  letter-spacing:.06em;margin-bottom:8px;text-transform:uppercase;
+}
+.ctrl{
+  background:var(--surface);border:1px solid var(--line);border-radius:4px;
+  padding:6px 10px;font-size:12.5px;color:var(--ink-2);margin-bottom:6px;
+}
+.submit{
+  background:var(--accent);color:#fff;border-radius:4px;padding:7px 14px;
+  font-size:13px;font-weight:700;display:inline-block;text-align:center;
+}
+:root[data-theme="dark"] .submit{color:#08201f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .submit{color:#08201f}}
+
+/* 三欄網格示範 */
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:10px}
+@media(max-width:640px){.g3{grid-template-columns:1fr}}
+.g3 .blk{margin-bottom:0}
+.fullwide{
+  border:1px solid var(--line);border-radius:5px;background:var(--surface);
+  padding:11px 13px;margin-bottom:10px;
+}
+.tablefake{
+  overflow-x:auto;border:1px solid var(--line-soft);border-radius:4px;margin-top:8px;
+  background:var(--surface-2);
+}
+.tablefake table{border-collapse:collapse;width:100%;min-width:760px;font-size:11.5px}
+.tablefake th,.tablefake td{
+  border:1px solid var(--line-soft);padding:5px 8px;text-align:left;white-space:nowrap;
+}
+.tablefake th{background:var(--sunk);font-weight:700;color:var(--ink-2)}
+
+/* ── 分頁切換 ───────────────────────────────────────── */
+.tabs{display:flex;gap:6px;margin:20px 0 0;flex-wrap:wrap}
+.tabbtn{
+  font:inherit;font-size:14px;font-weight:700;cursor:pointer;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  padding:9px 18px;border-radius:6px 6px 0 0;border-bottom-color:transparent;
+}
+.tabbtn[aria-selected="true"]{background:var(--sunk);color:var(--ink);border-color:var(--line)}
+.tabbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── 表格 ───────────────────────────────────────────── */
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);margin-top:14px;background:var(--surface)}
+table.data{border-collapse:collapse;width:100%;min-width:720px;font-size:13.5px}
+table.data th,table.data td{
+  padding:9px 12px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);
+}
+table.data th{
+  background:var(--surface-2);font-weight:700;font-size:12px;white-space:nowrap;
+  color:var(--ink-2);position:sticky;top:0;
+}
+table.data tr:last-child td{border-bottom:0}
+table.data td.why{color:var(--ink-2);font-size:13px}
+
+/* ── 提醒框 ─────────────────────────────────────────── */
+.note{
+  border-left:4px solid var(--accent);background:var(--surface);
+  padding:13px 16px;border-radius:0 var(--radius) var(--radius) 0;margin:16px 0;
+  border-top:1px solid var(--line);border-right:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+}
+.note.warn{border-left-color:var(--mark)}
+.note.hard{border-left-color:var(--st-err)}
+.note p{margin:0 0 8px}
+.note p:last-child{margin-bottom:0}
+.note strong{font-weight:750}
+
+footer{
+  border-top:1px solid var(--line);background:var(--surface);
+  padding:34px 26px 60px;margin-top:60px;
+}
+.foot-in{max-width:1120px;margin:0 auto}
+.ask{
+  border:2px solid var(--accent);border-radius:var(--radius);padding:18px 20px;
+  background:var(--accent-soft);color:var(--accent-ink);max-width:70ch;
+}
+.ask h3{margin:0 0 8px;font-size:16px;color:var(--accent-ink)}
+.ask p{margin:0;color:var(--accent-ink);font-size:14.5px}
+.kbd{
+  font-family:var(--mono);font-size:12.5px;background:var(--surface);
+  border:1px solid var(--line);border-radius:3px;padding:1px 6px;color:var(--ink);
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="masthead">
+  <div class="mast-in">
+    <p class="eyebrow">UI 線框草稿 · 動工前審查</p>
+    <h1>① 市場定調 ／ ② 組合健診 —— 頁內資訊去重與重新分配</h1>
+    <p class="dek">
+      分頁七→五之後，① 與 ② 各自累積了一批「同一份資料被畫兩次」的區塊，
+      而且 ① 頁上有三個區塊在回答本來屬於 ② 的問題。這份線框先把現況逐塊攤開，
+      指出重複，再提出重組後的版面。<strong>拍板前不寫任何 UI 程式碼。</strong>
+    </p>
+    <div class="meta-row">
+      <span>分支 <b>claude/…-wpf</b>（PR #744，待合併）</span>
+      <span>盤點日 <b>2026-08-31</b></span>
+      <span>來源 <b>唯讀讀碼</b>，未跑畫面</span>
+      <span>分頁名 SSOT <b>ui/helpers/story_nav.py</b></span>
+    </div>
+    <nav class="toc" aria-label="章節">
+      <a href="#s1">1 現況盤點</a>
+      <a href="#s2">2 重複清單</a>
+      <a href="#s3">3 重組後版面</a>
+      <a href="#s4">4 搬移對照表</a>
+      <a href="#s5">5 據實揭露</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ═══════════ 1 現況盤點 ═══════════ -->
+<section id="s1">
+  <div class="sec-head"><span class="sec-num">01</span><h2>現況盤點 — 兩頁目前實際渲染了什麼</h2></div>
+  <p class="lede">
+    逐區塊以<strong>程式碼</strong>為準列出（標題／取數函式／內容），不採信檔名與註解。
+    展開看細節；<span class="mono">檔案::符號</span> 是定位用，刻意不寫行號（行號保證會過期）。
+  </p>
+
+  <h3>① 🌐 市場定調　<span class="tag">入口 <span class="mono">ui/tab1_macro.py::render_macro_tab</span></span></h3>
+
+  <details>
+    <summary>首屏：載入列<span class="count">3 塊</span></summary>
+    <div class="det-body">
+      <ul>
+        <li><b>標題 + 決策動線麵包屑</b> — <span class="mono">story_nav.render_story_nav("macro")</span></li>
+        <li><b>資料時效提示</b> — 讀 <span class="mono">session.macro_last_update</span>；&gt;4h 出 <span class="mono">st.info</span>，否則 caption</li>
+        <li><b>兩顆全寬按鈕</b> — <span class="mono">btn_macro_load</span>（載入／更新）、<span class="mono">btn_macro_force</span>（強制重抓 + 清快取）。
+          按下後以 <span class="mono">ThreadPoolExecutor(max_workers=4)</span> 併行抓
+          <span class="mono">fetch_all_indicators / fetch_market_news / detect_risk_radar / detect_turning_points</span>，共用 75 秒死線</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>🧾 總表區 — 四層閱讀順序<span class="count">4 塊</span></summary>
+    <div class="det-body">
+      <ul>
+        <li><b>① 結論 — 現在該加碼還是防禦</b>　<span class="mono">services.macro.macro_action_light(ind, phase.score)</span> → 燈 + 一句行動 + 理由條列</li>
+        <li><b>② 依據 — 憑什麼這樣說</b>　<span class="mono">ui.helpers.macro.beginner_view.{compute_five_bucket_summary, build_evidence_rows, render_evidence_table}</span>
+          ＋ <span class="mono">macro.helpers.calculate_composite_score / composite_verdict</span>。
+          表下另有<b>建議資產水位</b>（<span class="mono">services.allocation_ladder.allocation_from_composite</span> ＋ <span class="mono">macro.ndc.get_ndc_score</span> → 股／債／現金 % ＋ 停利、加碼 Z 門檻）與
+          <b>雙演算法對帳 chip</b>（<span class="mono">services.macro.composite_score.reconcile_composite_score</span>）</li>
+        <li><b>③ 例外 — 有沒有該警覺的</b>　<span class="mono">services.macro.daily_key_alerts.collect_key_alerts</span> ＋ <span class="mono">ui.helpers.macro.key_alerts.key_alerts_banner</span>；
+          再加本檔 <span class="mono">_exception_lines / _bucket_status_unavailable_line</span></li>
+        <li><b>④ 可信度 — 這些數字能信嗎</b>　<span class="mono">_proxy_indicator_labels / _missing_indicator_keys</span> → status chip；
+          下接資料新鮮度條（月頻截止日 ＋ FRED 5 序列命中 chip：DGS10／DGS2／DGS3MO／HY OAS／M2SL）</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔎 詳細區 — 四時域 ＋ 決策矩陣 ＋ AI<span class="count">6 塊</span></summary>
+    <div class="det-body">
+      <ul>
+        <li><b>🌳 長期座標</b>　<span class="mono">ui/tab1_macro_longterm.py::render_long_term_section</span>
+          <span class="src">內含：💵 美股流動性×熱錢（流動性 M2/WALCL/RRP × 信用 HY OAS/HYG-LQD × 情緒 AAII，3 欄卡）／Raw data expander／
+          📦 ARCHIVED 台股熱錢（<b>ui.hot_money.render_hot_money_section</b>）／
+          <b>💰 資本防線 — 含息報酬 vs 配息率（讀 portfolio_funds）</b>／📰 市場新聞 expander</span></li>
+        <li><b>📈 中期循環</b>　<span class="mono">ui/tab1_macro_midcycle.py::render_mid_cycle_section</span>
+          <span class="src">Z-Score 5 欄卡 ＋「📋 Z-Score 完整矩陣」expander ＋ 🧭 L3 情境判斷</span></li>
+        <li><b>🎯 短線雷達</b>　<span class="mono">ui/tab1_macro_radar.py::render_short_radar_section</span>
+          <span class="src">④ ⚡ 短線風險雷達（<b>services.risk_radar.detect_risk_radar</b>，5 欄 sparkline，含 vix_level／yield_10y_shock／spx_trend_break）／⑤ 🌊 流動性壓力預警引擎（深水區 4 因子）</span></li>
+        <li><b>⚠️ 拐點警報</b>　<span class="mono">ui/tab1_macro_inflection.py::render_inflection_alert_section</span>
+          <span class="src">① 🎯 全域導航塔（薩姆／SLOOS／廣度，3 欄）／<b>🚦 持倉紅綠燈（讀 portfolio_funds）</b>／
+          ② 🎯 拐點偵測中心（<b>detect_turning_points</b>：新訂單−庫存、10Y-2Y、HY、薩姆、CFNAI、歷史回測、變數重要性）</span></li>
+        <li><b>📋 即時訊號 + 決策矩陣</b>　<span class="mono">ui/tab1_macro.py::_render_realtime_decision_dashboard</span>
+          <span class="src">verdict 大卡（<b>services.realtime_signal.compute_realtime_dashboard</b>）＋
+          <b>逐檔決策矩陣表（讀 portfolio_funds → _enrich_fund_for_decision：precision_service.calc_hwm_sigma_levels ＋ portfolio_service.dividend_safety）</b>
+          ＋ 4 格 stat_tile（加碼／持有／減倉／全撤）＋ 動作對照表</span></li>
+        <li><b>🤖 AI 景氣判斷總結</b>　<span class="mono">ui/tab1_macro_ai.py::render_ai_summary_section</span></li>
+      </ul>
+    </div>
+  </details>
+
+  <h3>② 💊 組合健診　<span class="tag">入口 <span class="mono">ui/tab_fund_grp_health.py::render_fund_grp_health_tab</span></span></h3>
+
+  <details>
+    <summary>首屏：上下文 ＋ 輸入<span class="count">5 塊</span></summary>
+    <div class="det-body">
+      <ul>
+        <li><b>標題 ＋ 兩條導覽</b>　<span class="mono">render_flow_nav("health")</span> ＋ <span class="mono">render_story_nav("health")</span> ＋ 一句方法論 caption</li>
+        <li><b>總經 Phase 對照橫幅</b>　讀 <span class="mono">session.phase_info</span> → <span class="mono">macro_helpers.format_phase_score</span>；沒載入時退成一句指路 caption</li>
+        <li><b>🔗 從我的組合帶入（N 檔）</b>　讀 <span class="mono">session.portfolio_funds</span>，寫回代號 text_area</li>
+        <li><b>輸入</b>　<span class="mono">st.text_area</span> 基金代號（≤10 檔）＋ <span class="mono">st.number_input</span> 本金 TWD　<span class="tag cut">無 form</span></li>
+        <li><b>🩺 開始健診</b>　寫 <span class="mono">session._fund_grp_health_ran</span>（點過一次就持續渲染）</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>運算與加值欄<span class="count">4 塊</span></summary>
+    <div class="det-body">
+      <ul>
+        <li><b>逐檔健診</b>　<span class="mono">_run_batch_health → services.fund_row.process_one_fund</span></li>
+        <li><b>同類四分位</b>　<span class="mono">services.peer_rank.peer_quartile_labels(rows, window_years=3.0)</span></li>
+        <li><b>235 加碼水位</b>　<span class="mono">services.ladder235.ladder_signal</span> ＋ <span class="mono">services.fund_service.get_latest_vix</span>；
+          附「🔎 各檔判定理由」expander</li>
+        <li><b>NAV 累積寫回</b>　<span class="mono">ui.helpers.nav_history_hook.record_batch_nav_points</span>（寫 Google Sheet nav_history）</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>三表區 <span class="mono">_render_health_3tables</span><span class="count">5 塊</span></summary>
+    <div class="det-body">
+      <ul>
+        <li><b>🧭 核心／衛星資產屬性分布</b>　<span class="mono">services.health.asset_class.summarize_core_satellite_allocation</span>，4 格 metric（純資訊、不評價配置）</li>
+        <li><b>🎯 選基金（低基期進場點 · HWM σ rank）</b>　<span class="mono">services.fund_screening.screen_funds</span>；
+          2 個 multiselect ＋ 2 個 checkbox ＋ 表 ＋ CSV 下載　<span class="tag cut">無 form</span></li>
+        <li><b>🔴 淘汰候選紅區</b>　<span class="mono">services.health.report.build_dividend_summary_row</span> 的 <span class="mono">_verdict=="replace"</span> → <span class="mono">render_state.business_alert</span></li>
+        <li><b>🛡️ 持倉互斥避險</b>　<span class="mono">ui/components/mutual_exclusion.py::render_mutual_exclusion_section</span>
+          （<span class="mono">services.homogeneity</span> ＋ <span class="mono">portfolio_service</span> 相關係數；與下方完整矩陣共用同一份輸入）</li>
+        <li><b>📊 健診大表</b>　<span class="mono">ui/helpers/fund_grp_health/unified.py::build_unified_health_df</span>，48+ 欄寬表</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>大表區 <span class="mono">_render_health_table</span><span class="count">8 塊</span></summary>
+    <div class="det-body">
+      <ul>
+        <li><b>MoneyDJ 資料新鮮度 banner</b>　<span class="mono">_render_mj_freshness_banner</span></li>
+        <li><b>抓取失敗前置摘要</b>　<span class="mono">st.error</span>（部分失敗）／全失敗另有一段列出「本次會消失哪些區塊」</li>
+        <li><b>5 格 KPI</b>　檢查檔數 ／ 🟢 健康 ／ 🟡 警示 ／ <b>🔴 吃本金</b> ／ 累積 TWD 配息</li>
+        <li><b>🩺 基金體檢 PK ＋ 4 大健診卡</b>　<span class="mono">ui.helpers.fund_checkup.render_fund_checkup(expanded=True)</span></li>
+        <li><b>健診總表</b>　寬表 dataframe ＋ column_config（<span class="mono">fund_grp_health/columns.py</span>）</li>
+        <li><b>🔀 換標決策建議</b>　<span class="mono">fund_grp_health/switch_section.py</span> → <span class="mono">services.switch_strategy</span></li>
+        <li><b>🧭 景氣位階適配</b>　<span class="mono">fund_grp_health/regime_section.py</span>，讀同一個 <span class="mono">session.phase_info</span></li>
+        <li><b>📈 多基金績效比較圖 ／ 📋 逐檔配息明細（持有 meta ＋ 配息事件）／ ❌ 抓取失敗</b></li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>回測 ／ 換股池 ／ 🔬 進階分析<span class="count">11 塊</span></summary>
+    <div class="det-body">
+      <ul>
+        <li><b>🔁 配置回測</b>　<span class="mono">fund_grp_health/backtest_section.py</span> → <span class="mono">services.allocation_backtest</span></li>
+        <li><b>🎯 換股池顧問</b>　<span class="mono">fund_grp_health/switch_advisor_section.py</span>；
+          選股池 CRUD（<span class="mono">st.form("pool_add_form")</span>　<span class="tag byd">已有 form</span>）＋「🔍 產生換股建議」；讀 <span class="mono">session.composite_score</span></li>
+        <li><b>③ 真實收益矩陣</b>　<span class="mono">fund_grp_health/dividend.py</span></li>
+        <li><b>💼 逐檔深度分析</b>　每檔一個 expander（<span class="mono">investment.py</span>：投資試算 ＋ TER ＋ 前十大持股）</li>
+        <li><b>⑥ 相關性矩陣</b>　<span class="mono">fund_grp_health/correlation.py</span>（持股重疊 ＋ NAV 走勢同步，兩面板）</li>
+        <li><b>⑨ −2σ 超跌警示</b>　<span class="mono">fund_grp_health/risk.py::_render_oversold_badges</span></li>
+        <li><b>🔄 輪動配對建議</b>　<span class="mono">fund_grp_health/rotation.py</span></li>
+        <li><b>⑪ Bollinger 詳圖</b>　<span class="mono">fund_grp_health/signals.py</span>，每檔 expander</li>
+        <li><b>⑫ AI 跨檔評論 ／ ⑬ 個股新聞 ／ ⑭ 三率穿透</b>　<span class="mono">fund_grp_health/ai.py</span>，後兩者每檔 expander ＋ 按鈕</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<hr class="rule" style="margin-top:52px">
+
+<!-- ═══════════ 2 重複清單 ═══════════ -->
+<section id="s2">
+  <div class="sec-head"><span class="sec-num">02</span><h2>重複清單 — 逐項附兩處位置與判準</h2></div>
+  <p class="lede">
+    判準分三級：<span class="tag dup">真重複</span>＝同一份資料、同一條計算，被畫兩次；
+    <span class="tag frag">入口碎裂</span>＝同一個決策被切成多個入口，計算不同、答案可能互相矛盾；
+    <span class="tag byd">刻意／非重複</span>＝看起來像，但口徑不同或是刻意的摘要／明細分工，<strong>不得刪</strong>。
+  </p>
+
+  <div class="grid2">
+
+    <div class="card">
+      <h4>DUP-1　吃本金判定畫三次　<span class="tag dup">真重複</span></h4>
+      <p style="margin:6px 0;font-size:14px">同一條判定式：<span class="mono">近一年含息報酬 &lt; 年化配息率 → 🔴</span></p>
+      <span class="src">
+        ① <b>tab1_macro_longterm.py::render_long_term_section</b> → 「💰 資本防線」<br>
+        ① <b>tab1_macro_inflection.py::render_inflection_alert_section</b> → 「🚦 持倉紅綠燈」<br>
+        ② <b>tab_fund_grp_health.py::_render_health_table</b> → 「吃本金燈號 (1Y·)」欄 ＋ <b>k4.metric("🔴 吃本金")</b>
+      </span>
+      <p style="margin:10px 0 0;font-size:13.5px;color:var(--ink-2)">
+        <b>判準：</b>三處都吃 <span class="mono">metrics.ret_1y</span> 與 <span class="mono">metrics.annual_div_rate</span>；
+        ① 的兩處各自 inline 寫了一次比較式，② 走 SSOT 的 <span class="mono">check_eating_principal_1y_mk</span>。
+        <b>同一份資料、同一個結論、三種畫法。</b>
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>DUP-2　逐檔加減碼建議畫三次（門檻各不同）　<span class="tag frag">入口碎裂</span></h4>
+      <span class="src">
+        ① <b>tab1_macro.py::_render_realtime_decision_dashboard</b> → 決策矩陣（5 級 verdict × σ × 配息 → 持有／加碼／減倉／全撤）<br>
+        ① <b>tab1_macro_inflection.py</b> → 持倉紅綠燈（σ 買賣點 ＋ 布林雙確認）<br>
+        ② <b>健診大表</b> → 「σ 位階／買點／賣點／基期」欄 ＋「加碼水位」欄（<b>services.ladder235</b> 三取一 Max）
+      </span>
+      <p style="margin:10px 0 0;font-size:13.5px;color:var(--ink-2)">
+        <b>判準：</b>σ 全部來自同一支 <span class="mono">precision_service.calc_hwm_sigma_levels</span>（同一份資料），
+        但三套<b>門檻與分級不同</b>。所以它不是「同一張圖畫兩次」，而是
+        <b>同一個問題有三個可能互相矛盾的答案</b>，使用者無從得知該聽哪一個。
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>DUP-3　總經 phase 在 ② 出現三處　<span class="tag dup">真重複（其中兩處）</span></h4>
+      <span class="src">
+        ② <b>render_fund_grp_health_tab</b> 頂部「總經 Phase 對照橫幅」（讀 session.phase_info）<br>
+        ② <b>fund_grp_health/regime_section.py::render_regime_fit_section</b> → 「🧭 景氣位階適配」再印一次同一個 phase 字串<br>
+        ② <b>unified.py::build_merged_extra_columns</b> → 大表「景氣適配／適配傾向」欄
+      </span>
+      <p style="margin:10px 0 0;font-size:13.5px;color:var(--ink-2)">
+        <b>判準：</b>前兩者是<b>同一個 session 值的兩次重印</b>（真重複）；
+        第三者是「每檔 × phase」的衍生欄，<b>不是</b>重複 —— 但「🧭 景氣位階適配」區塊的四格計數
+        只是那個欄的 <span class="mono">count</span>，可以併回頂部橫幅那一行。
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>DUP-4　「該換掉哪幾檔」四個入口　<span class="tag frag">入口碎裂</span></h4>
+      <span class="src">
+        ② 🔴 淘汰候選紅區（<b>_verdict=="replace"</b>，4 規則）<br>
+        ② 🔀 換標決策建議（<b>switch_strategy</b>：策略燈號紅燈 → 同類 argmax 替換）<br>
+        ② 🔄 輪動配對建議（<b>rotation.py</b>：賣高基期 → 買別類低基期）<br>
+        ② 🎯 換股池顧問（<b>switch_advisor_section.py</b>：持倉 × 選股池）
+      </span>
+      <p style="margin:10px 0 0;font-size:13.5px;color:var(--ink-2)">
+        <b>判準：</b><span class="mono">switch_section.py</span> 自己就印了一句 caption 解釋
+        「策略燈號紅燈 ≠ 一般吃本金紅燈，兩欄語意不同」——
+        <b>那句話本身就是證據：它們不是同一份資料被畫兩次，而是四個不同計算被擺成四個平行入口。</b>
+        重組時<b>一個計算都不刪</b>，只把入口收成一塊。
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>DUP-5　verdict 大卡 ＝ ② 依據表那一列　<span class="tag dup">真重複（已自承）</span></h4>
+      <span class="src">
+        ① <b>_render_realtime_decision_dashboard</b> 的 verdict 大卡<br>
+        ① <b>總表 ② 依據表</b>的「綜合健康度」那一列
+      </span>
+      <p style="margin:10px 0 0;font-size:13.5px;color:var(--ink-2)">
+        <b>判準：</b>程式碼註解已明寫「<b>同一個數字、不是第二個判斷</b>」，並在卡面上印了一句同源說明、
+        把小數位對齊。也就是說：<b>重複已知，只是被加註而不是被移除。</b>
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>DUP-6　核心／衛星比例兩把尺　<span class="tag byd">非重複，不得刪</span></h4>
+      <span class="src">
+        ② 🧭 核心／衛星資產屬性分布（依<b>基金資產屬性</b>判定）<br>
+        ④ 我的配置「🛡️ 核心資產比例／目標偏差」（依 Google Sheet 的 <b>policy_tier</b>）
+      </span>
+      <p style="margin:10px 0 0;font-size:13.5px;color:var(--ink-2)">
+        <b>判準：不同口徑。</b>程式碼已有 <span class="mono">_CS_PORTFOLIO_CONTRAST_NOTE</span> 專門解釋差異。
+        兩個數字不一樣是正確的，合併會製造一個假的「唯一真相」。
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>DUP-7　互斥避險 vs 相關性矩陣　<span class="tag byd">刻意的摘要／明細</span></h4>
+      <span class="src">
+        ② 🛡️ 持倉互斥避險（警示對卡片，上方）<br>
+        ② ⑥ 相關性矩陣（完整熱力圖，🔬 進階分析內）
+      </span>
+      <p style="margin:10px 0 0;font-size:13.5px;color:var(--ink-2)">
+        <b>判準：</b>兩者共用 <span class="mono">correlation.build_overlap_input / build_corr_input</span>
+        同一份輸入、同一個計算，但這是<b>刻意的</b>——元件 docstring 明寫「完整矩陣不搬家，本元件只把警示對上移」。
+        <b>保留現狀。</b>
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>DUP-8　VIX 兩條取數路徑　<span class="tag frag">存疑，未查證</span></h4>
+      <span class="src">
+        ① <b>services.risk_radar.detect_risk_radar</b> 內的 <b>vix_level</b>（短線雷達 ＋ ② 依據表短線桶）<br>
+        ② <b>services.fund_service.get_latest_vix</b>（235 加碼水位用）
+      </span>
+      <p style="margin:10px 0 0;font-size:13.5px;color:var(--ink-2)">
+        <b>判準：無法判定。</b>本組<b>沒有</b>往下追這兩條是否最終走同一個 L1 fetcher。
+        兩者<b>都不是 UI 重複</b>（畫的是不同東西），列在這裡是因為「同一來源全站只能有一處取數實作」是既有規矩。
+        <b>本項不列入重組方案，須另派一組查證。</b>
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<hr class="rule" style="margin-top:52px">
+
+<!-- ═══════════ 3 重組後版面 ═══════════ -->
+<section id="s3">
+  <div class="sec-head"><span class="sec-num">03</span><h2>重組後版面</h2></div>
+  <p class="lede">
+    動線原則：<b>① 只回答「市場現在在哪、該加碼還是防禦」</b>，
+    <b>② 只回答「我手上這些，哪幾檔有問題」</b>，
+    <b>凡是要看單一檔基金的細節一律去 ③ 基金研究</b>。
+  </p>
+
+  <h3>三態顏色圖例 — 點一下可單獨檢視</h3>
+  <div class="legend" role="group" aria-label="三態顏色圖例">
+    <button class="lg" id="lg-idle" aria-pressed="false" data-state="idle">
+      <span class="swatch sw-idle"></span><b>⬜ 未載入／沒點過</b>
+      <small>灰色說明 ＋ 一句「去哪裡補」。不是故障，按鈕還沒按而已。<br><span class="mono">render_state.not_ready()</span></small>
+    </button>
+    <button class="lg" id="lg-err" aria-pressed="false" data-state="err">
+      <span class="swatch sw-err"></span><b>🔴 系統真的出錯</b>
+      <small>紅色錯誤框 ＋ 可展開技術細節。意思是「這個數字不可信」。<br><span class="mono">render_state.system_error()</span></small>
+    </button>
+    <button class="lg" id="lg-biz" aria-pressed="false" data-state="biz">
+      <span class="swatch sw-biz"></span><b>🟥 業務上的壞消息（深莓紅）</b>
+      <small>粗左軌卡片、<b>無</b>錯誤框。意思是「數字可信，而且很難看」——去換基金。<br><span class="mono">render_state.business_alert()</span><br><b>此為決定 1 後的配色</b>；現行程式碼是與系統紅同一個紅。</small>
+    </button>
+  </div>
+
+  <div class="note warn">
+    <p><strong>總管已拍板 · 決定 1｜三態顏色要分開，照做。</strong></p>
+    <p>
+      現行程式碼裡「系統真出錯」與「業務警訊」是<u>同一個紅</u>——
+      <span class="mono">business_alert()</span> 用的就是 <span class="mono">MATERIAL_RED</span>，
+      兩者<b>只靠形狀分辨</b>（錯誤框 vs 左軌卡片）。這<b>直接違反四大鐵律第 3 條</b>，不是可選項。
+    </p>
+    <p>
+      <b>決定：業務警訊改用「深莓紅 ＋ 粗左軌 ＋ 無錯誤框」，系統紅燈維持現行 <span class="mono">MATERIAL_RED</span>。</b>
+      不動橘色那一族（橘色已經承載破壞性操作提醒／降級失敗／業務 caveat 三種意思，再塞會變第四種）。
+    </p>
+    <p>
+      <b>理由：</b>三態的價值在於「<b>一眼看出這是資料還沒到、還是系統壞了、還是你的錢出事了</b>」。
+      共用同一個紅、只靠形狀分辨，等於要求使用者<b>在最慌的時候做視覺推理</b>。
+      ⚠️ <span class="mono">render_state.py</span> 檔頭已登記「同一頁上有三種意思」——
+      <b>那條登記不是保留現狀的理由，是它早就被指出過的證據。</b>
+    </p>
+    <p>
+      ⚠️ <b>但顏色改動屬跨全站的視覺變更，不在本次 ①② 重組的檔案邊界內 →
+      另立一批，與本次重組解耦，不夾帶進 §04 搬移方案。</b>
+      夾帶會讓「這是重組」變成繞過檔案邊界的通行證。
+      本線框的三態示意<b>已按決定後的配色畫</b>，方便對照；實作歸另一批。
+    </p>
+  </div>
+
+  <div class="note warn">
+    <p><strong>總管已拍板 · 決定 2｜② 行動摘要的資料口徑：以「本次分析的那一批」為準，並在畫面上寫出涵蓋範圍。</strong></p>
+    <p>
+      <b>不</b>指定固定吃 <span class="mono">session.portfolio_funds</span> 或固定吃貼上的代號 ——
+      <b>兩者都可能是對的</b>，使用者臨時貼一批來比較是 ② 的正常用法。
+    </p>
+    <p>
+      <b>規則：行動摘要永遠只涵蓋這次實際分析的那一批，且區塊標題必須明寫來源與檔數</b>，
+      例如「<b>這 12 檔（來源：我的持倉）</b>」或「<b>這 5 檔（來源：你貼上的代號）</b>」。
+    </p>
+    <p>
+      <b>理由：</b>真正的危險不是選錯哪一批，是<b>沉默地混用兩批</b> ——
+      摘要說「你有 3 檔吃本金」，使用者以為講的是全部持倉，實際只涵蓋他剛貼的 5 檔。
+      那是輸出一個會誤導的數字，違反「錯誤的數字比沒有數字更危險」。
+      <b>寫出涵蓋範圍，兩種用法就都成立。</b>
+    </p>
+    <p>
+      ⚠️ §05 那條「① 與 ② 讀的不一定是同一批基金、搬移前必須先決定」的揭露<b>仍然有效、原文未動</b> ——
+      <b>決定就是這條，不是把問題送走。</b>
+    </p>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="頁面線框">
+    <button class="tabbtn" role="tab" id="tab-a" aria-selected="true" aria-controls="wf-a">① 🌐 市場定調</button>
+    <button class="tabbtn" role="tab" id="tab-b" aria-selected="false" aria-controls="wf-b">② 💊 組合健診</button>
+  </div>
+
+  <!-- ─── ① 線框 ─── -->
+  <div class="wf" id="wf-a" role="tabpanel" aria-labelledby="tab-a">
+    <div class="wf-title">① 🌐 市場定調　—　重組後（首屏 = 載入表單 ＋ 結論，其餘一律在下方）</div>
+
+    <div class="formbox">
+      <div class="fb-h">Form ①-A　更新總經資料（防全頁重繪）</div>
+      <div class="ctrl">☑ 總經指標　☑ 新聞　☑ 風險雷達　☑ 拐點偵測　　<span style="color:var(--ink-3)">（預設全選）</span></div>
+      <div class="ctrl">☐ 強制重抓最新（清快取）</div>
+      <span class="submit">📡 載入 ／ 更新總經資料</span>
+      <div class="blk-s" style="margin-top:8px">
+        現況是兩顆<b>裸按鈕</b>，且「強制重抓」是獨立第二顆 —— 使用者常誤按兩次。
+        收成一個 form ＋ 一顆送出鈕：勾選過程不觸發任何重繪。
+      </div>
+    </div>
+
+    <div class="blk"><div class="blk-h">🕐 資料時效列<span class="pill">保留</span></div>
+      <div class="blk-s">上次抓取時間 ＋ 距今多久。這一行永遠有意義，不是占位。</div>
+      <div class="state idle">⬜ 尚未載入總經資料　—— 按上方「📡 載入／更新總經資料」開始</div>
+      <div class="state err">🔴 沒有抓到任何總經指標（0 個）　▸ 展開技術細節</div>
+    </div>
+
+    <div class="fullwide"><div class="blk-h">🧾 ① 結論 — 現在該加碼還是防禦<span class="pill">保留 · 全寬</span></div>
+      <div class="blk-s">一句行動 ＋ 理由條列。全頁最上面唯一的結論，維持全寬、不進三欄。</div>
+    </div>
+
+    <div class="fullwide"><div class="blk-h">🧾 ② 依據 — 憑什麼這樣說<span class="pill">保留 · 全寬表</span></div>
+      <div class="blk-s">五桶證據表（多欄位資料表 → <b>全寬 ＋ 橫向捲動，不塞進三欄</b>）。</div>
+      <div class="tablefake"><table>
+        <tr><th>面向</th><th>讀數</th><th>狀態</th><th>兩把尺對照</th><th>說明</th><th>詳細在下方哪一段</th></tr>
+        <tr><td>🩺 綜合健康度</td><td>+6.5</td><td>樂觀</td><td>投票 12多/5空</td><td>加權淨分</td><td>四時域全段</td></tr>
+        <tr><td>🌳 長期</td><td>—</td><td>—</td><td>—</td><td>—</td><td>🌳 長期座標</td></tr>
+      </table></div>
+    </div>
+
+    <div class="g3">
+      <div class="blk"><div class="blk-h">📐 建議資產水位<span class="pill">保留</span></div>
+        <div class="blk-s">股 / 債 / 現金 % ＋ 停利、加碼 Z 門檻。<br>市場層結論，留 ①。</div></div>
+      <div class="blk"><div class="blk-h">⚡ ③ 例外<span class="pill">保留</span></div>
+        <div class="blk-s">今日關鍵 ＋ 系統性風險 ＋ 拐點/新聞桶。沒有例外時誠實說沒有。</div></div>
+      <div class="blk"><div class="blk-h">🔍 ④ 可信度<span class="pill">保留</span></div>
+        <div class="blk-s">代理值 / 缺漏 chip ＋ FRED 5 序列命中 ＋ 新鮮度。</div>
+        <div class="state err">🔴 部分 FRED 序列失敗或過期</div></div>
+    </div>
+
+    <div class="fullwide" style="border-style:dashed">
+      <div class="blk-h">🔎 詳細資料與說明<span class="pill">保留 · 順序不動</span></div>
+      <div class="blk-s">🌳 長期座標 ▸ 📈 中期循環 ▸ 🎯 短線雷達 ▸ ⚠️ 拐點警報 ▸ 🤖 AI 景氣判斷總結</div>
+    </div>
+
+    <div class="g3">
+      <div class="blk" style="border-left:3px solid var(--mark)">
+        <div class="blk-h">💰 資本防線<span class="pill new">→ 移去 ②</span></div>
+        <div class="blk-s">逐檔含息 vs 配息（DUP-1）。它回答的是「我手上這幾檔」，不是「市場在哪」。</div></div>
+      <div class="blk" style="border-left:3px solid var(--mark)">
+        <div class="blk-h">🚦 持倉紅綠燈<span class="pill new">→ 移去 ②</span></div>
+        <div class="blk-s">逐檔燈號（DUP-1 ＋ DUP-2）。同上。</div></div>
+      <div class="blk" style="border-left:3px solid var(--mark)">
+        <div class="blk-h">📋 逐檔決策矩陣<span class="pill new">→ 移去 ②</span></div>
+        <div class="blk-s">表 ＋ 4 格計數 ＋ 動作對照表整組搬。<b>verdict 大卡刪除</b>（DUP-5，與 ② 依據表同一個數字）。</div></div>
+    </div>
+
+    <div class="blk"><div class="blk-h">📦 ARCHIVED — 台股熱錢監測<span class="pill">維持現狀，本組不裁決</span></div>
+      <div class="blk-s">
+        自稱 ARCHIVED、且 caption 已寫「境外美股基金可略過」。
+        <b>但「它還有沒有人用」取決於有沒有漏看，本組沒有做 caller 實測，因此不提刪除。</b>
+        建議另派一組查證後再決定。
+      </div></div>
+  </div>
+
+  <!-- ─── ② 線框 ─── -->
+  <div class="wf" id="wf-b" role="tabpanel" aria-labelledby="tab-b" hidden>
+    <div class="wf-title">② 💊 組合健診　—　重組後（結論在最上，明細在最下，單檔細節全部出去）</div>
+
+    <div class="blk"><div class="blk-h">📊 市場環境一行<span class="pill">合併三處為一</span></div>
+      <div class="blk-s">
+        當前 Phase ＋ 順風 / 逆風 / 全景氣 / 無法判定 四格計數，<b>併成同一行</b>。
+        （DUP-3：現況是頂部橫幅印一次、「🧭 景氣位階適配」區塊再印一次。）
+      </div>
+      <div class="state idle">⬜ 還沒載入總經資料，這裡先空著　—— 請先到「① 🌐 市場定調」按載入</div>
+    </div>
+
+    <div class="formbox">
+      <div class="fb-h">Form ②-A　健診輸入（防全頁重繪）</div>
+      <div class="ctrl">基金代號（每行一檔，最多 10 檔）　　<span style="color:var(--ink-3)">［🔗 從我的組合帶入 N 檔］</span></div>
+      <div class="ctrl">本金（TWD）：1,000,000</div>
+      <span class="submit">🩺 開始健診</span>
+      <div class="blk-s" style="margin-top:8px">
+        現況：text_area ＋ number_input <b>裸放</b>，改一個字就全頁重跑一次。收進 form 之後，
+        送出前完全不重繪。
+      </div>
+    </div>
+
+    <div class="note hard" style="margin:14px 0 10px">
+      <p style="font-size:14px"><strong>首屏到此為止。</strong>下面全部區塊都在「🩺 開始健診」按下之後才存在
+      —— 按鈕前<b>不畫任何空表格外框、不放「請點上方按鈕」以外的占位</b>。</p>
+    </div>
+
+    <div class="g3">
+      <div class="blk"><div class="blk-h">檢查檔數<span class="pill">保留</span></div><div class="blk-s" style="font-size:22px;font-weight:800">8 <span style="font-size:12px;color:var(--st-err)">−2</span></div></div>
+      <div class="blk"><div class="blk-h">🔴 吃本金<span class="pill">保留</span></div><div class="blk-s" style="font-size:22px;font-weight:800">3</div></div>
+      <div class="blk"><div class="blk-h">累積 TWD 配息<span class="pill">保留</span></div><div class="blk-s" style="font-size:22px;font-weight:800">42,180</div></div>
+    </div>
+
+    <div class="fullwide" style="border-left:6px solid var(--st-biz)">
+      <div class="blk-h">🔴 行動摘要 — 這 <u>12</u> 檔（來源：<u>我的持倉</u>）哪幾檔要處理<span class="pill new">新合併塊</span></div>
+      <div class="blk-s">
+        把現在散落的四塊<b>結論</b>收成一塊（<b>不刪任何一種計算</b>）：
+        淘汰候選紅區 ＋ <b>從 ① 搬來的持倉紅綠燈 / 決策矩陣建議</b> ＋ −2σ 超跌警示。
+        每一列標明<b>它是哪一把尺判出來的</b>，這樣使用者才知道兩個相反的建議為什麼會同時出現（DUP-2）。
+      </div>
+      <div class="blk-s" style="margin-top:6px;color:var(--mark)">
+        ⬆️ <b>標題那兩個底線的字是變數，不是文案</b>（總管決定 2）：檔數與來源隨本次分析實際涵蓋的那一批填，
+        來源二選一 ——「我的持倉」或「你貼上的代號」。<b>不得省略</b>：沉默地混用兩批＝輸出一個會誤導的數字。
+      </div>
+      <div class="state biz">🟧 淘汰候選 3 檔（4 規則觸發，建議換標的）　·　ACCP138 連續 4 期吃本金</div>
+      <div class="state idle">⬜ 這一列需要 σ 位階，本檔淨值筆數不足　—— 資料來源見下方大表「可信度」欄</div>
+      <div class="state err">🔴 σ 位階 / 風險 / 買賣點整組計算失敗　▸ 展開技術細節</div>
+    </div>
+
+    <div class="g3">
+      <div class="blk"><div class="blk-h">🛡️ 持倉互斥避險<span class="pill">保留</span></div>
+        <div class="blk-s">哪幾對會一起跌（警示對卡片）。完整熱力圖留在下方明細。</div></div>
+      <div class="blk"><div class="blk-h">🧭 核心／衛星分布<span class="pill">保留</span></div>
+        <div class="blk-s">4 格：核心 / 衛星 / 待定 / 分類涵蓋度。<b>與 ④ 是不同的尺（DUP-6），不合併。</b></div></div>
+      <div class="blk"><div class="blk-h">🩺 基金體檢 PK<span class="pill">保留</span></div>
+        <div class="blk-s">跨檔 PK ＋ 4 大健診卡。是「跨檔比較」不是「單檔細節」，留 ②。</div></div>
+    </div>
+
+    <div class="fullwide"><div class="blk-h">📊 健診大表<span class="pill">保留 · 全寬 · 橫向捲動</span></div>
+      <div class="blk-s">48+ 欄寬表。<b>資料表不進三欄網格</b>（鐵律 ① 本來就不涵蓋表格）。</div>
+      <div class="tablefake"><table>
+        <tr><th>代號</th><th>基金名</th><th>4D Grade</th><th>吃本金燈號 (1Y·)</th><th>σ 位階</th><th>基期</th><th>加碼水位</th><th>景氣適配</th><th>換標建議</th><th>同類四分位</th></tr>
+        <tr><td>ACCP138</td><td>…</td><td>B</td><td>🔴 吃本金</td><td>−1.8σ</td><td>🟢 低基期</td><td>🟡 燈二 (+20%)</td><td>⚠️ 逆風</td><td>平轉</td><td>Q3</td></tr>
+        <tr><td>ACUSI23</td><td>…</td><td>A</td><td>🟢 健康</td><td>+0.4σ</td><td>⚪ 中性</td><td>⚪ 巡航</td><td>✅ 順風</td><td>—</td><td>Q1</td></tr>
+      </table></div>
+    </div>
+
+    <div class="fullwide"><div class="blk-h">🔀 換誰買誰<span class="pill new">四入口合併為一塊 · 內含三個切換</span></div>
+      <div class="blk-s">
+        DUP-4。收成<b>一個區塊、三個切換</b>：<b>換標決策</b>（同類替換）／<b>輪動配對</b>（賣高基期買低基期）／<b>換股池</b>（持倉 × 我的池）。
+        <b>三套計算原封不動</b>，改的只是它們不再是三個平行的一級標題。
+      </div>
+      <div class="formbox" style="margin-top:10px;margin-bottom:0">
+        <div class="fb-h">Form ②-B　換股池 CRUD（現況已有 form，維持）</div>
+        <div class="ctrl">基金代號　｜　ISIN（抓不到淨值的檔才要填）</div>
+        <span class="submit">➕ 加入 ／ 更新選股池</span>
+      </div>
+    </div>
+
+    <div class="g3">
+      <div class="blk"><div class="blk-h">🔁 配置回測<span class="pill">保留</span></div>
+        <div class="blk-s">哪套配置效益最高（教學非建議）。</div></div>
+      <div class="blk"><div class="blk-h">📈 多檔績效比較圖<span class="pill">保留</span></div>
+        <div class="blk-s">跨檔比較，屬 ②。</div></div>
+      <div class="blk"><div class="blk-h">⑫ AI 跨檔評論<span class="pill">保留</span></div>
+        <div class="blk-s">跨檔綜述，屬 ②。按鈕觸發。</div></div>
+    </div>
+
+    <div class="fullwide" style="border-style:dashed">
+      <div class="blk-h">🔬 明細（預設收合）<span class="pill">保留於 ②</span></div>
+      <div class="blk-s">③ 真實收益矩陣 ／ ⑥ 相關性矩陣完整熱力圖（DUP-7 刻意的明細）／ 📋 逐檔配息明細（持有 meta ＋ 配息事件，兩張<b>合併</b>表）／ ❌ 抓取失敗清單</div>
+    </div>
+
+    <div class="g3">
+      <div class="blk" style="border-left:3px solid var(--mark)"><div class="blk-h">🎯 選基金（低基期）<span class="pill new">→ 移去 ③</span></div>
+        <div class="blk-s">它回答「該<b>買</b>哪一檔」，不是「哪一檔<b>有問題</b>」；且與輪動配對的「買」那半重疊。
+        <b>順帶解掉現況那 4 個裸控制項（2 multiselect ＋ 2 checkbox）每動一下就全頁重繪</b>——到 ③ 之後包成 form。</div></div>
+      <div class="blk" style="border-left:3px solid var(--mark)"><div class="blk-h">💼 逐檔深度分析<span class="pill new">→ 移去 ③</span></div>
+        <div class="blk-s">投資試算 ／ TER ／ 前十大持股，每檔一個 expander = 單檔細節。</div></div>
+      <div class="blk" style="border-left:3px solid var(--mark)"><div class="blk-h">⑪ Bollinger／⑬ 個股新聞／⑭ 三率穿透／🔎 235 各檔理由<span class="pill new">→ 移去 ③</span></div>
+        <div class="blk-s">四者都是「點開某一檔看它自己」，一律屬 ③。</div></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <p><strong>四大鐵律在這份線框裡的落點：</strong></p>
+    <p>
+      ① <b>三欄網格</b>：卡片型內容排三欄（上面每個 <span class="mono">.g3</span> 區）；
+      <b>健診大表、依據表、行動摘要維持全寬</b>，表格不塞進三欄。<br>
+      ② <b>Form 封裝</b>：① 新增 1 個（載入表單）、② 新增 1 個（健診輸入）、③ 接收 1 個（低基期篩選）；
+      現有的換股池 form 維持。<b>現況：① 頁 0 個 form，② 頁只有 1 個</b>
+      （<span class="mono">switch_advisor_section.py</span> 的 <span class="mono">pool_add_form</span>），
+      而 ② 最重的兩組控制項（健診輸入、低基期篩選）都在 form 之外。<br>
+      ③ <b>三態分離</b>：上方圖例可點擊單獨檢視。<b>系統紅與業務紅共用同一個紅</b>已由總管拍板拆開（決定 1），但屬<b>跨全站視覺變更、另立一批</b>，不在本次 ①② 重組的搬移方案內。<br>
+      ④ <b>首屏無冗餘占位</b>：② 的首屏只有「市場環境一行 ＋ 輸入表單」，按鈕之前不畫任何空表格外框。
+    </p>
+  </div>
+</section>
+
+<hr class="rule" style="margin-top:52px">
+
+<!-- ═══════════ 4 搬移對照表 ═══════════ -->
+<section id="s4">
+  <div class="sec-head"><span class="sec-num">04</span><h2>搬移對照表</h2></div>
+  <p class="lede">每一列都附一句理由。<b>沒有任何一個「計算」被刪掉</b>——刪掉的只有兩個東西：重複的畫法，與重複的入口標題。</p>
+
+  <div class="scroll">
+    <table class="data">
+      <thead><tr><th>區塊</th><th>現在在哪</th><th>處置</th><th>去哪</th><th>為什麼</th></tr></thead>
+      <tbody>
+        <tr><td>💰 資本防線（含息 vs 配息）</td><td class="mono">tab1_macro_longterm.py</td><td><span class="tag move">搬</span></td><td>② 行動摘要</td><td class="why">逐檔吃本金，不是市場位階；且與 ② 的吃本金燈號同一條判定式（DUP-1）。</td></tr>
+        <tr><td>🚦 持倉紅綠燈</td><td class="mono">tab1_macro_inflection.py</td><td><span class="tag move">搬</span></td><td>② 行動摘要</td><td class="why">逐檔燈號，同上；同時是 DUP-2 三個矛盾答案之一，收在同一塊才能並列出處。</td></tr>
+        <tr><td>📋 逐檔決策矩陣表 ＋ 4 格計數 ＋ 動作對照表</td><td class="mono">tab1_macro.py::_render_realtime_decision_dashboard</td><td><span class="tag move">搬</span></td><td>② 行動摘要</td><td class="why">「我手上這幾檔該加該減」＝ ② 的題目。整組搬，門檻與說明一起帶走。</td></tr>
+        <tr><td>└ verdict 大卡</td><td class="mono">同上</td><td><span class="tag cut">刪</span></td><td>—</td><td class="why">程式碼自承與 ② 依據表「同一個數字、不是第二個判斷」（DUP-5）。搬到 ② 之後錨點改用 ② 的市場環境一行。</td></tr>
+        <tr><td>🧭 景氣位階適配（獨立區塊）</td><td class="mono">fund_grp_health/regime_section.py</td><td><span class="tag cut">併</span></td><td>② 市場環境一行</td><td class="why">它只是把大表「景氣適配」欄做四格計數，外加重印一次 phase 字串（DUP-3）。計數保留、標題與重印刪除。</td></tr>
+        <tr><td>🔀 換標決策 ／ 🔄 輪動配對 ／ 🎯 換股池顧問 ／ 🔴 淘汰候選</td><td class="mono">switch_section / rotation / switch_advisor_section / tab_fund_grp_health</td><td><span class="tag">收</span></td><td>② 🔀 換誰買誰（一塊三切換）＋ 行動摘要</td><td class="why">同一個決策四個平行入口（DUP-4）。四套計算全部保留，只把四個一級標題收成一個。</td></tr>
+        <tr><td>🎯 選基金（低基期進場點）</td><td class="mono">tab_fund_grp_health.py::_render_low_base_screener</td><td><span class="tag move">搬</span></td><td>③ 基金研究</td><td class="why">回答「該買哪一檔」而不是「哪一檔有問題」；且它那 4 個裸控制項是本頁最大的重繪來源。</td></tr>
+        <tr><td>💼 逐檔深度分析（投資試算 ／ TER ／ 持股）</td><td class="mono">fund_grp_health/investment.py</td><td><span class="tag move">搬</span></td><td>③ 基金研究</td><td class="why">每檔一個 expander ＝ 單一檔基金的細節，依動線原則一律屬 ③。</td></tr>
+        <tr><td>⑪ Bollinger 詳圖 ／ ⑬ 個股新聞 ／ ⑭ 三率穿透</td><td class="mono">fund_grp_health/signals.py, ai.py</td><td><span class="tag move">搬</span></td><td>③ 基金研究</td><td class="why">同上，三者都是「點開某一檔看它自己」。</td></tr>
+        <tr><td>🔎 235 加碼水位：各檔判定理由</td><td class="mono">tab_fund_grp_health.py</td><td><span class="tag move">搬</span></td><td>③ 基金研究</td><td class="why">逐檔理由屬單檔細節；大表的「加碼水位」欄留在 ②。</td></tr>
+        <tr><td>總經 Phase 橫幅</td><td class="mono">tab_fund_grp_health.py</td><td><span class="tag keep">留 · 合併</span></td><td>② 市場環境一行</td><td class="why">② 需要市場上下文，但一頁只需要一次（DUP-3）。</td></tr>
+        <tr><td>🛡️ 持倉互斥避險 ／ ⑥ 相關性矩陣</td><td class="mono">mutual_exclusion.py / correlation.py</td><td><span class="tag byd">兩者都留</span></td><td>② 原位</td><td class="why">刻意的「摘要在上、明細在下」（DUP-7），元件 docstring 明寫不搬家。</td></tr>
+        <tr><td>🧭 核心／衛星資產屬性分布</td><td class="mono">tab_fund_grp_health.py</td><td><span class="tag byd">留</span></td><td>② 原位</td><td class="why">與 ④ 的核心% 是<b>不同的尺</b>（DUP-6），合併會製造假的唯一真相。</td></tr>
+        <tr><td>📊 健診大表 ／ 🩺 體檢 PK ／ 📈 比較圖 ／ 🔁 回測 ／ ⑫ AI 跨檔</td><td class="mono">② 各處</td><td><span class="tag keep">留</span></td><td>② 原位</td><td class="why">全部是<b>跨檔</b>比較或組合層結論，正是 ② 的題目。</td></tr>
+        <tr><td>四時域詳細（長期／中期／短線／拐點）＋ 🤖 AI 景氣總結</td><td class="mono">tab1_macro_*.py</td><td><span class="tag keep">留</span></td><td>① 原位</td><td class="why">全部是市場層，且是總表四層的推導依據，順序不動。</td></tr>
+        <tr><td>📦 ARCHIVED 台股熱錢監測</td><td class="mono">tab1_macro_longterm.py → ui/hot_money.py</td><td><span class="tag">不裁決</span></td><td>—</td><td class="why">看起來像廢棄，但「還有沒有人用」取決於有沒有漏看，本組未做 caller 實測，不提刪除。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="rule" style="margin-top:52px">
+
+<!-- ═══════════ 5 據實揭露 ═══════════ -->
+<section id="s5">
+  <div class="sec-head"><span class="sec-num">05</span><h2>據實揭露</h2></div>
+
+  <h3>使用者會察覺的變化</h3>
+  <ul>
+    <li><b>① 頁會變短、變得「只講市場」。</b>習慣在 ① 頁底看逐檔加減碼建議的人，會找不到它 —— 需要在 ① 的決策矩陣原位留一句指路到 ②。</li>
+    <li><b>② 頁的吃本金判定會從「三種說法」變成「一種說法 ＋ 三個出處」。</b>
+      現況三處門檻不完全同源（① 兩處 inline、② 走 SSOT），<b>合併後某些基金的燈色可能與今天不同</b>。
+      這不是 bug，是今天就存在的分歧被攤開；但客戶會看到差異，必須事先講。</li>
+    <li><b>② 的單檔 expander 全部消失。</b>要看某一檔的投資試算 / 持股 / 三率，改到 ③ 基金研究。</li>
+    <li><b>換股相關的四個標題收成一個。</b>用標題找功能的人要重新學一次位置。</li>
+    <li><b>form 化之後，改輸入不會即時重算。</b>要按送出鈕。這是刻意的（防全頁重繪），但對已習慣即時反應的人是行為變更。</li>
+  </ul>
+
+  <h3>會失效的指路文字（實測命中，但<span class="tag cut">單組清查，未經第二組驗證</span>）</h3>
+  <p>下面這幾處<b>現在就已經指向一個分頁列上不存在的名字</b>。
+  ⚠️ <b>歸因更正（總管複驗）：它們指的「組合配置」在 main 上就已經不是任何分頁名，屬<u>既有債</u>，
+  不是七→五造成的。</b>重組不會製造這個問題，只會讓更多人撞到它們：</p>
+  <ul>
+    <li><span class="mono">tab_fund_grp_health.py::_EQUAL_MODE_HEALTH_TAB_HINT</span> — 「請到<b>『組合配置』Tab</b> 逐檔填投入金額」</li>
+    <li><span class="mono">tab_fund_grp_health.py::_CS_WHERE_HEALTH</span> — 「看<b>『組合配置』Tab</b> 的『🛡️ 核心資產比例 / 目標偏差』」</li>
+    <li><span class="mono">fund_grp_health/columns.py</span> — 「每月配息 (TWD)」與「每月配息單位數」兩欄的 help 各有一句「<b>『組合配置』分頁</b>」</li>
+  </ul>
+  <p>四處都應改吃 <span class="mono">story_nav.where_to_find()</span>。
+  <b>已由總管複驗並轉給 #744 修復批次處理，不在本次 ①② 重組的檔案邊界內。</b></p>
+  <p><b>但本次搬移會新增一批需要指路的位置</b>（① 決策矩陣原位 → ②；② 逐檔 expander 原位 → ③），
+  那些新指路屬本次範圍，一律走同一支 SSOT，不得手抄。</p>
+
+  <h3>本組<u>沒有</u>查證的部分</h3>
+  <div class="note hard">
+    <p>下列全部是<b>單組唯讀讀碼</b>的結果，<b>未經第二組驗證</b>，也<b>沒有跑過任何一次畫面</b>：</p>
+    <ul style="margin:8px 0 0">
+      <li><b>「重複只有這 8 項」是本組單組清查的窮舉句，未經第二組驗證。</b>
+        清查方式是逐一讀 ①② 的 render 函式與其呼叫鏈，<b>不是</b>系統性掃描 —— 語意相同但實作不同的重複很可能漏掉。</li>
+      <li><b>DUP-1 的合併有一個口徑差沒查</b>：① 兩處讀的是 <span class="mono">session.portfolio_funds</span>（④ 載入的持倉），
+        ② 讀的是使用者在 ② 貼上的代號。<b>兩者不一定是同一批基金</b>（「🔗 從我的組合帶入」只是選配）。
+        搬移前必須先決定「② 的行動摘要要以哪一批為準」。</li>
+      <li><b>DUP-2 三套門檻是否真的會給出相反答案，本組沒有實測</b>，只確認它們的分級規則不同。</li>
+      <li><b>DUP-8（VIX 兩條取數）本組不裁決</b>，沒有追到 L1 fetcher。</li>
+      <li><b>ARCHIVED 熱錢區塊沒有做 caller 實測</b>，因此不提刪除。</li>
+      <li><b>沒有量測任何一頁的實際重繪成本</b>。「form 化能省多少」是根據 Streamlit 行為推論，不是實測數字。</li>
+      <li><b>沒有讀 ③ 基金研究與 ④ 我的配置的完整內容</b>，只讀了 ③ 的模式切換與 ④ 被 ② 引用到的部分。
+        因此「搬去 ③ 之後不會跟 ③ 現有的東西撞在一起」<b>本組無法保證</b>。</li>
+      <li><b>顏色提案（業務警訊改深莓紅）沒有做對比度量測</b>，也沒有檢查它與現有 <span class="mono">shared/colors.py</span> 是否有可用的常數。</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="foot-in">
+    <div class="ask">
+      <h3>請客戶拍板</h3>
+      <p>
+        <b>只需要看版面。</b>可以就回覆 <span class="kbd">版面 OK，動工</span>；
+        要改就直接指出哪一塊。
+      </p>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* 頁面線框切換 */
+  var tabs = [
+    { btn: document.getElementById("tab-a"), panel: document.getElementById("wf-a") },
+    { btn: document.getElementById("tab-b"), panel: document.getElementById("wf-b") }
+  ];
+  tabs.forEach(function (t, i) {
+    if (!t.btn || !t.panel) return;
+    t.btn.addEventListener("click", function () {
+      tabs.forEach(function (o, j) {
+        var on = i === j;
+        o.btn.setAttribute("aria-selected", on ? "true" : "false");
+        o.panel.hidden = !on;
+      });
+    });
+  });
+
+  /* 三態圖例：點一下只看那一態 */
+  var legend = Array.prototype.slice.call(document.querySelectorAll(".lg"));
+  legend.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var on = b.getAttribute("aria-pressed") === "true";
+      legend.forEach(function (o) { o.setAttribute("aria-pressed", "false"); });
+      document.body.classList.remove("f-idle", "f-err", "f-biz");
+      if (!on) {
+        b.setAttribute("aria-pressed", "true");
+        document.body.classList.add("f-" + b.dataset.state);
+      }
+    });
+  });
+})();
+</script>
