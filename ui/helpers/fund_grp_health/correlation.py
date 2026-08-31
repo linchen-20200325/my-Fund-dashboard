@@ -77,6 +77,39 @@ def _render_one_matrix(*, title: str, subtitle: str, result: "dict | None",
         st.success(f"✅ 本組合無影子基金({label} 皆 < {threshold})")
 
 
+def build_overlap_input(funds: list) -> list:
+    """rich fund dicts → calc_holdings_overlap 輸入(code/name/top_holdings/sector_alloc)。
+
+    2026-08-31 自 `_render_correlation_matrix` 原 inline 抽出(逐字,僅換名):
+    ②「持倉互斥避險」元件(mutual_exclusion.py)要餵**同一份**輸入給同一個 L2 計算,
+    inline 留兩份會分家(§2.1 SSOT)。純資料重排,無 streamlit 呼叫。
+    """
+    out = []
+    for _f in funds or []:
+        _mj = _f.get("moneydj_raw") or {}
+        _h = _mj.get("holdings") or {}
+        out.append({
+            "code": _f.get("code", "?"),
+            "name": _f.get("name") or _f.get("code"),
+            "top_holdings": _h.get("top_holdings") or [],
+            "sector_alloc": _h.get("sector_alloc") or [],
+        })
+    return out
+
+
+def build_corr_input(funds: list) -> list:
+    """rich fund dicts → calc_correlation_matrix 輸入(code/series;另帶 name 供揭露)。
+
+    同上 2026-08-31 抽出。`name` 是**加欄不改行為**:calc_correlation_matrix 只讀
+    code/series,多的 key 不影響既有輸出;services.homogeneity 用它把被剔除檔標名(§1)。
+    """
+    return [
+        {"code": _f.get("code", "?"), "name": _f.get("name") or _f.get("code"),
+         "series": _f.get("series")}
+        for _f in funds or []
+    ]
+
+
 def _render_correlation_matrix(funds: list) -> None:
     """⑥ 持股/產業相關性矩陣 + 漲跌幅相關係數矩陣(兩個獨立面板)。
 
@@ -108,16 +141,8 @@ def _render_correlation_matrix(funds: list) -> None:
         return
 
     # ── 面板 1:持股 Jaccard + 產業 Cosine ──
-    _hov_input = []
-    for _f in funds:
-        _mj = _f.get("moneydj_raw") or {}
-        _h = _mj.get("holdings") or {}
-        _hov_input.append({
-            "code": _f.get("code", "?"),
-            "name": _f.get("name") or _f.get("code"),
-            "top_holdings": _h.get("top_holdings") or [],
-            "sector_alloc": _h.get("sector_alloc") or [],
-        })
+    # (輸入組裝 2026-08-31 抽出為 build_overlap_input,與 ② 互斥避險元件共用同一份)
+    _hov_input = build_overlap_input(funds)
     _hov_result = calc_holdings_overlap(_hov_input)
     if _hov_result and _hov_result.get("matrix") is not None:
         _method = _hov_result.get("method", "?")
@@ -133,11 +158,9 @@ def _render_correlation_matrix(funds: list) -> None:
     )
 
     # ── 面板 2(v19.289):NAV 漲跌幅 Pearson 相關係數,恆算 ──
+    # (輸入組裝 2026-08-31 抽出為 build_corr_input;多帶 name 加欄不改行為,見該函式)
     st.markdown("")
-    _corr_input = [
-        {"code": _f.get("code", "?"), "series": _f.get("series")}
-        for _f in funds
-    ]
+    _corr_input = build_corr_input(funds)
     _corr_result = calc_correlation_matrix(_corr_input)
     if _corr_result and _corr_result.get("matrix") is not None:
         _freq = _corr_result.get("freq", "?")

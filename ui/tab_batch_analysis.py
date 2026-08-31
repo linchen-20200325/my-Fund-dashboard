@@ -468,9 +468,11 @@ def _render_existing_results() -> None:
         key="batch_download",
     )
 
-    # ── 🔄 輪動配對建議(跨類別;讀上表 σ/操盤評分/類別,不重抓)+ 獨立 CSV 下載 ──
-    from ui.helpers.fund_grp_health.rotation import render_rotation_section_from_df
-    render_rotation_section_from_df(df)
+    # ── 🧩 候選標的互補探索(元件 B)── 2026-08-31 客戶拍板 Q3:原「攤開照抄 ②
+    # 的輪動配對整段」改型為**預設收合的 Expander**(卡片 + 完整表 + CSV,資訊零損失),
+    # 不再把第二張大表攤在結果區把頁尾撐爆。讀上表 σ/操盤評分/類別,不重抓。
+    from ui.helpers.fund_grp_health.rotation import render_complementary_explorer_from_df
+    render_complementary_explorer_from_df(df)
 
     # ── 🔀 換標決策(策略燈號已在上表;此區 regime banner + 紅燈檔一對一替換)── v19.423 ──
     try:
