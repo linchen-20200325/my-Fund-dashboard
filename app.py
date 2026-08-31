@@ -2,8 +2,65 @@
 """app.py — 基金戰情室 v18.0(重構版)
 模組架構(v19.405 6→5):市場定調 → 組合健診 → 個基深掘 → 配置 & 帳本 → 參考 / 診斷
 快取策略(v19.333 對齊實作,review F10):L1 repository 以 @_ttl_cache / @_daily_cache
-短 TTL 快取(infra/cache.py _CACHE_REGISTRY 集中註冊;失敗結果不入快取),
+短 TTL 快取(infra/cache.py _CACHE_REGISTRY 集中註冊),
 UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述與實作不符,已更正
+失敗結果不入快取 — ⚠️ **這句在 2026-08-31 之前是無條件全稱句,而當時是假的**
+  (`_ttl_cache` 無條件快取,一次上游瞬斷把空值鎖住整個 TTL)。**現行實況分三種機制**
+  (2026-08-31 二次更正:第一版只寫了前兩種,漏掉 @st.cache_data — 同一個「全稱句
+   蓋掉例外」的病在同一次修復裡換個位置又犯了一次,故本行改為逐一列出):
+  · @_daily_cache — cache_if 預設過濾 None / 空集合 / dict 含 "...all_failed"
+    (v19.253 R23)。⚠️ **它不認 mark_fetch_failed 標記** —— 用的是 len()==0 與
+    dict 的 source 欄位去**猜**。這與 infra/cache.py module 註解的核心論證
+    (「讓裝飾器去猜,猜錯哪一邊都違憲」)**不一致**;就地寫明,不留著裝沒看見。
+    實務上它服務的多是回 dict 的 fetcher(有 all_failed marker 可讀),
+    但「回空 Series 代表真的沒有」這種情形在它底下仍會被誤判成失敗。
+  · @_ttl_cache  — **僅限自己呼叫 infra.proxy.mark_fetch_failed_if_retryable()
+    的 fetcher**(現為 fetch_yf_close / fetch_fred / fetch_defillama_stablecoin_mcap),
+    且**只對「重試有意義」的四種失敗生效** —— 404 / 407 依 shared/backoff_policy
+    的 NO_COOLDOWN_KINDS **照舊入快取**(TTL 是它們唯一的節流器)。
+    **其餘未標記的 fetcher 仍會快取空結果。**
+  · @st.cache_data — **完全不在本機制涵蓋範圍內,失敗照樣鎖滿 TTL**。
+    全 repo 8 個裝飾點,其中 **至少 5 處實測會把失敗鎖住**(⚠️ 本行為 2026-08-31
+    **第四次**更正:第一版漏掉 @st.cache_data 整類、第二版只列 2 處、
+    第三版寫成「4 處」且把 _cached_nh_coverage 的理由寫成假的 —— 同一段自己在
+    檢討的病連犯四次,故本行改為逐處列出、逐處標明判定依據):
+      鎖住 → repositories/hot_money_repository.fetch_foreign_flow_series(30 分)
+             repositories/hot_money_repository.fetch_usdtwd_series      (10 分)
+             repositories/pool_repository._cached_pool_map              (30 分;
+               上游 _load_pool_map 自己把例外吞成 {} → 那個空 dict 被快取)
+             ui/helpers/macro/ndc._cached_ndc_score                     (15 分)
+             ui/tab5_data_guard._cached_nh_coverage                     ( 5 分;
+               ⚠️ **第四次更正才補上**,見下)
+      不鎖 → ui/helpers/v2_editor ×2(拋 PolicySheetError → 例外不入快取)、
+             ui/tab5_data_guard._cached_nh_status(→ status(),只讀 get_secret,
+               **確實無外部 HTTP** —— 這半句原本就對,不要跟著改)
+    ⛔ **原文把 _cached_nh_coverage 也寫成「無外部 HTTP」,那是假的。**
+    實測鏈路:_cached_nh_coverage → services/nav_history_gs.coverage_status
+    → 同檔 load_points → _get_sheet() → sh.worksheet()(gspread 內部
+    fetch_sheet_metadata)+ ws.get_all_values() —— **全是往返 Google Sheets API
+    的遠端呼叫**。且 load_points 內層有 try: ws = sh.worksheet(...) / except: return []
+    → 失敗回 {} 並入快取,實測第 2 次呼叫**上游未重跑** → **鎖 TTL_5MIN**。
+    ⚠️ **本 repo 憲法 §8.2.A.1 已於 2026-08-28 第三輪稽核就地改寫過同一句措辭**,
+    該處明寫「舊表述把它寫進『本地持久化』的括號裡,會讓讀者以為它不上網 ——
+    **那是假的**」,並附逐成員表釘死 _cached_nh_coverage 遠端往返=是、
+    _cached_nh_status=否。**憲法三天前已明文更正掉的假措辭,被我原樣寫回一次。**
+    ⚠️ **這 8 處的清單與「鎖不鎖」的判定都是逐一實測跑出來的,不是讀 code 推定**
+    (⚠️ 若只數 raw HTTP 會把 foreign_flow / pool_map / nh_coverage 三處都誤判成
+     「未觸發」—— 它們的失敗都發生在 **HTTP 層之上**:一個在 fetch_url_with_retry、
+     一個被上游吞成 {}、一個在 gspread SDK 內)。
+    ⚠️ **清單來自字面掃描**;⚠️ **該指令直接跑會得 9 行**(多一個 SPEC.md 的文件範例),
+    **必須加 `-- '*.py'` 才重現「8」**:
+    (`git grep -nE "^[[:space:]]*@[A-Za-z_][A-Za-z0-9_]*\\.(cache_data|cache_resource)" -- '*.py'`)
+    **且未涵蓋動態註冊 / getattr / 條件式套用等非字面寫法** —— 不得讀成「就這 8 處」。
+    ⚠️ **ui/tab5_data_guard.py 在本 PR 的三次不同查核裡各被漏一次**
+    (fetch_url caller 數、本清單、407 紅字出口)。**同一個檔、三次,不是巧合** ——
+    它是**唯一同時有「診斷用 HTTP 呼叫 + 自建 cache + 錯誤紅字」的檔**,
+    剛好落在每一種掃描字表的邊緣。**下次做這類窮舉時,這個檔要單獨看一遍。**
+    本批**刻意不修**(機制不同:回傳 tuple 承載不了 .attrs、@st.cache_data 也不看標記),
+    已登記為獨立待辦,使用者可見影響見 PR「刻意沒做」段。
+  刻意做成 opt-in 而非預設過濾:「空」有「抓失敗」與「真的沒有」兩義、回傳值
+  分不出來,讓裝飾器去猜任一邊都違 §1 — 機制、判準與各分支理由見
+  infra/cache.py 的 module 註解與 infra/proxy.py::mark_fetch_failed_if_retryable
 v18.176:移除回測 Tab(user 只需汰弱留強判斷換基金,回測拖速度且 NAV 歷史抓不全)
 v19.130:tab 重排 + 改名 + 刪除「💼 配置模擬器」
 """
