@@ -22,6 +22,11 @@ class _WS:
     def append_rows(self, rows, **k):
         self.rows.extend([list(r) for r in rows])
 
+    def row_values(self, n):
+        """真 gspread worksheet 一定有的方法 —— `_get_worksheet` 2026-09-01 起會用它
+        判斷既有分頁的表頭要不要補欄(照抄 `pool_repository._ws` 慣例)。"""
+        return list(self.rows[n - 1]) if len(self.rows) >= n else []
+
     def update(self, rng, values):
         pass
 

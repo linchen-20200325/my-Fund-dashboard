@@ -30,8 +30,17 @@
      屬 §8.4 步驟 4 的範圍決定,不在本輪(死碼清理)授權內。
 
 Worksheet schema `nav_history`(A1 = headers):
-    code | date | nav | fund_name | source | recorded_at
+    code | date | nav | fund_name | source | recorded_at | currency
 主鍵 (code, date)。
+
+⚠️ **`currency` 為 2026-09-01 新增的第 7 欄,存的是「寫入當下量到的觀測值」**
+(來源序列自己宣告的 `Series.attrs["currency"]`),**不是猜出來的**。
+這張表 `(code, date)` 去重且**永不刪除** —— 一個欄位不存在,它記不下來的事實就是
+**永久失去**(既有的 `source` 欄存的是 `"app"`/`"backfill"`/`"nas_cron"`,反推不出 fetcher,
+更反推不出幣別)。故先把欄位開出來、確保寫入端帶上,封堵後續污染。
+⚠️ **空字串 = 誠實的未知,不是失敗**:多數 producer 手上沒有觀測值(全 repo 只有晨星 /
+Yahoo / FundClear 會宣告),**既有列一律留空,不回填任何猜測值**(§1:不知道 ≠ TWD)。
+⛔ 本輪**刻意沒有任何下游消費者讀這一欄** —— 採用點守門依客戶 2026-09-01 指示另批補齊。
 """
 from __future__ import annotations
 
@@ -54,7 +63,8 @@ def _gs_guard(oauth_client: Any, _sheet: Any):
 
 
 _WS_NAV = "nav_history"
-_NAV_HEADERS = ["code", "date", "nav", "fund_name", "source", "recorded_at"]
+_NAV_HEADERS = ["code", "date", "nav", "fund_name", "source", "recorded_at",
+                "currency"]
 # v19.472:NAV 淨值存進**獨立一本** Google Sheet(user 2026-08-18 指定「基金淨值存取」那本)。
 #   目標本 = `NAV_SHEET_ID` secret → baked 預設(**僅此兩層,無自動回退**;v19.506 更正:
 #   原註寫「回退舊 macro_weights_sheet_id」是**誤導**,`_nav_sheet_id()` 從未做此回退。
@@ -200,6 +210,8 @@ def _clean_points(points: list[dict]) -> list[dict]:
     2026-08-17 ALZF9 被 parse 成 2026-10-12 未來日)。單獨計數 + log 一行,避免和去重
     `skipped` 混算被淹沒(稽核 §5 建議)。此處只 log,過濾行為不變(仍不寫入 §1)。
     """
+    from shared.data_quality import normalize_iso_ccy
+
     out: list[dict] = []
     _bad_dates: list[str] = []
     for p in points:
@@ -217,6 +229,11 @@ def _clean_points(points: list[dict]) -> list[dict]:
                 "code": code, "date": d, "nav": nav_f,
                 "fund_name": str(p.get("fund_name") or ""),
                 "source": str(p.get("source") or "app"),
+                # 2026-09-01 第 7 欄。⚠️ 本函式是**白名單輸出** —— 沒列在這裡的 key
+                # 會被整個丟掉,呼叫端加了 `currency` 也是安靜的 no-op(實測)。
+                # 非 ISO 三碼(中文別名 / `None` / 垃圾字串)一律收成 `""`(§1 不猜);
+                # 這張表永不刪除,寧可留空也不要寫一個猜的幣別進去。
+                "currency": normalize_iso_ccy(p.get("currency")),
             })
     if _bad_dates:
         import sys as _sys
@@ -288,13 +305,27 @@ def _get_sheet(oauth_client: Any = None):
 
 
 def _get_worksheet(sh):
-    """取得 nav_history worksheet,不存在則建立 + 寫 header。"""
+    """取得 nav_history worksheet,不存在則建立 + 寫 header;**既有分頁欄位缺就補 header**。
+
+    2026-09-01(第 7 欄 `currency`):既有分頁是 6 欄建的,不補表頭的話新欄會是無標題的
+    G 欄。補法**逐字照抄本 repo 既有慣例** —— `repositories/pool_repository.py::PoolRepo._ws`
+    與 `repositories/portfolio_perf_repository.py::PerfRepo._ws` 兩處同一行;
+    `_fund_pool` 分頁在 production 就是這樣 6→7→10 欄加過來的。
+
+    ⛔ **絕對不要改用 `ws.resize(cols=...)`**:gspread 送出的是**絕對值**
+    (`{"gridProperties": {"columnCount": 7}}`),在使用者自己維護到 26 欄的表上等於
+    **刪掉 H..Z 欄連同內容** —— 而 `nav_history` 這張表使用者**會手動維護**。
+    `values.append` 本來就會視需要擴欄,不需要也不該先 resize。
+    """
     try:
-        return sh.worksheet(_WS_NAV)
+        ws = sh.worksheet(_WS_NAV)
     except Exception:
         ws = sh.add_worksheet(title=_WS_NAV, rows=1000, cols=len(_NAV_HEADERS))
         ws.update("A1", [_NAV_HEADERS])
         return ws
+    if ws.row_values(1)[: len(_NAV_HEADERS)] != _NAV_HEADERS:   # 補 header(欄位缺失時)
+        ws.update("A1", [_NAV_HEADERS])
+    return ws
 
 
 def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any = None) -> dict:
@@ -334,7 +365,8 @@ def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any =
                     continue
                 seen.add(key)
                 new_rows.append([c["code"], c["date"], c["nav"],
-                                 c["fund_name"], c["source"], recorded_at])
+                                 c["fund_name"], c["source"], recorded_at,
+                                 c["currency"]])
             if new_rows:
                 ws.append_rows(new_rows, value_input_option="USER_ENTERED")
             return {"written": len(new_rows), "skipped": len(points) - len(new_rows)}
@@ -394,6 +426,9 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
             "fund_name": r[3] if len(r) > 3 else "",
             "source": r[4] if len(r) > 4 else "",
             "recorded_at": r[5] if len(r) > 5 else "",
+            # 2026-09-01 第 7 欄。舊列(6 格 / 最小 3 欄 schema)→ `""`(未知),
+            # 同既有 `fund_name` / `source` 的容忍寫法,**不回填任何猜測值**(§1)。
+            "currency": r[6] if len(r) > 6 else "",
         })
     return out
 
@@ -420,6 +455,17 @@ def load_series(code: str, *, _sheet: Any = None, oauth_client: Any = None):
     s = s.groupby(s.index).last().sort_index()   # 同日 keep-last + 昇冪
     s.attrs["source"] = f"GoogleSheet:nav_history:{str(code).strip().upper()}"
     s.attrs["fetched_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    # 2026-09-01:**逐列一致才敢宣告**幣別(§1 / §4.1)。這張表的列來自多條寫入路徑、
+    # 多個 fetcher,同一個 code 的列**可以**混到不同幣別;只要有一列未知或彼此不一致,
+    # 就完全不設這個 key(未知),**絕不挑一個、絕不換算**。
+    # ⚠️ 沒有這幾行的話,加欄位是**零效果** —— 本函式原本只設 `source` / `fetched_at`,
+    #    下游(`fund_service._merge_nav_history_series`)拿不到累積序列的幣別宣告。
+    # ⚠️ 比對範圍刻意取**該 code 的全部載入列**,不是只取存活到 Series 裡的那些:
+    #    方向是保守的(只會少宣告,不會多宣告),而多宣告才是會害死人的那一邊。
+    from shared.data_quality import reconcile_row_currencies
+    _ccy = reconcile_row_currencies([p.get("currency") for p in pts])
+    if _ccy:
+        s.attrs["currency"] = _ccy
     return s
 
 
