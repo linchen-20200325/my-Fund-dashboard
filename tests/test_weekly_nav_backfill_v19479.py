@@ -173,6 +173,20 @@ def test_main_does_not_call_a_blocked_fund_unfetchable(monkeypatch, capsys):
     assert "NAV_GATE0_MODE=observe" in _err, "沒有告訴人怎麼止血 = 只會天天紅"
 
 
+def test_summary_line_does_count_a_real_unfetchable_fund(monkeypatch, capsys):
+    """`"1 檔抓不到"` 的**正向錨點**:真的有一檔抓不到時,完成行必須這樣印。
+
+    沒有這一則,上面兩條 `assert "1 檔抓不到" not in _err` 就是**沒有配對的負向斷言** ——
+    完成行的措辭一旦被改（例如改成「1 檔取數失敗」）,那兩條會**靜默恆真**,
+    而它們守的正是「不可以把『被擋下』/『拒絕換源』併進『抓不到』」這件事。
+    """
+    _nofetch = {"code": "Z", "fetched": 0, "date_min": None, "date_max": None,
+                "source": None, "error": "MoneyDJ 掛了", "blocked": False}
+    _patch_backfill(monkeypatch, _res([_OK_ROW, _nofetch]))
+    W.main([])
+    assert "1 檔抓不到" in capsys.readouterr().err
+
+
 def test_step_summary_lists_the_blocked_funds(monkeypatch, tmp_path):
     """exit code 負責叫人來看,`$GITHUB_STEP_SUMMARY` 負責讓他一眼看懂（§5 可觀測）。"""
     _f = tmp_path / "summary.md"
@@ -206,7 +220,7 @@ def test_main_logs_the_currency_refusal_per_fund(monkeypatch, capsys):
     _err = capsys.readouterr().err
     assert "🟠 C" in _err, "🟠 而不是 🔴:它沒有造成任何資料遺失"
     assert "拒絕換源" in _err and "TWD" in _err and "USD" in _err
-    assert "原幣別序列照常寫入" in _err, (
+    assert "原幣別序列保留,照常送出寫入" in _err, (
         "把『拒絕換源』講成『沒寫入』= 訊息說謊,會把人導去做不必要的補救")
     # ⚠️ 反向同樣要守:這句只有在**真的寫入了**的時候才准出現,見下方三則。
 
@@ -235,7 +249,13 @@ def test_step_summary_lists_the_currency_refusals(monkeypatch, tmp_path):
     _txt = _f.read_text(encoding="utf-8")
     assert "拒絕換源" in _txt and "`C`" in _txt
     assert "**1** 檔" in _txt
-    assert "有寫入" in _txt, "summary 也不可以把『拒絕換源』渲染成失敗"
+    # 2026-09-01 稽核 🔴 C:這裡原本是 `assert "有寫入" in _txt`,而全文含「有寫入」的
+    # **只有**「…**不是每一檔都有寫入**」那一行 —— 它是靠**對立句的子字串**通過的,
+    # 恰好是它宣稱要守的那件事的反面。改成斷言真正代表「不是失敗」的那兩個渲染元素。
+    assert "### 🟠 幣別不一致,已拒絕換源" in _txt, "要有專屬表格,不是只有 bullet"
+    assert "這一檔今天的結局" in _txt, "表格要有逐檔結局欄,不是一句總論"
+    assert "原幣別序列保留,照常送出寫入" in _txt, (
+        "有寫入的那一檔要看得到它的結局,否則 summary 等於把拒絕換源渲染成失敗")
     assert "被 Gate 0 擋下（**抓到了但沒寫入**）:**0** 檔" in _txt, (
         "兩者語意完全不同,渲染上必須分得開")
 
@@ -248,7 +268,12 @@ def test_step_summary_has_no_currency_table_when_none(monkeypatch, tmp_path):
     W.main([])
     _txt = _f.read_text(encoding="utf-8")
     assert "幣別不一致 → 拒絕換源" in _txt and "**0** 檔" in _txt   # bullet 照列
-    assert "已拒絕換源（**這些檔有寫入**" not in _txt              # 但沒有表格
+    # 2026-09-01 稽核 🔴 B:這裡原本斷言 `"已拒絕換源（**這些檔有寫入**" not in _txt`,
+    # 而那是**舊表頭**;同一輪的渲染改動把表頭換掉後,該字串在全 repo 已不存在 →
+    # 斷言**恆真**,「無事不生空表」變成 0 覆蓋（實測 `if _ccy:` → `if True:` 仍全綠）。
+    # 現改為斷言**現行**表格的兩個標記都不出現,兩者都有 live 正向錨點（見上一則）。
+    assert "### 🟠 幣別不一致,已拒絕換源" not in _txt, "沒發生卻生出了表格"
+    assert "這一檔今天的結局" not in _txt, "沒發生卻生出了表格的欄位"
 
 
 # ── 2026-09-01 稽核 🔴:「原幣別序列照常寫入」是**無條件斷言**,在兩個可達狀態下為假 ──
@@ -272,8 +297,8 @@ def test_currency_refusal_with_nothing_fetched_must_not_claim_a_write(monkeypatc
     W.main([])
     _err = capsys.readouterr().err
     assert "🟠 D" in _err and "拒絕換源" in _err
-    assert "原幣別序列照常寫入" not in _err, (
-        "同一次 run 同時印『⬜ 抓不到淨值』與『原幣別序列照常寫入』= 兩行自相矛盾")
+    assert "原幣別序列保留,照常送出寫入" not in _err, (
+        "同一次 run 同時印『⬜ 抓不到淨值』與『原幣別序列…寫入』= 兩行自相矛盾")
     assert "今天等於沒補到" in _err
 
 
@@ -286,7 +311,7 @@ def test_currency_refusal_on_a_blocked_fund_must_not_claim_a_write(monkeypatch, 
     W.main([])
     _err = capsys.readouterr().err
     assert "🔴 E" in _err and "🟠 E" in _err
-    assert "原幣別序列照常寫入" not in _err
+    assert "原幣別序列保留,照常送出寫入" not in _err
     assert "另被 Gate 0 擋下" in _err
 
 
@@ -308,7 +333,7 @@ def test_step_summary_shows_per_fund_outcome_not_a_blanket_claim(monkeypatch, tm
     W.main([])
     _txt = _f.read_text(encoding="utf-8")
     assert "這一檔今天的結局" in _txt
-    assert "原幣別序列照常寫入" in _txt and "今天等於沒補到" in _txt
+    assert "原幣別序列保留,照常送出寫入" in _txt and "今天等於沒補到" in _txt
     assert "**這些檔有寫入**" not in _txt, "表頭仍是無條件斷言"
     assert "不影響數字正確性" not in _txt, "那句在『完全沒寫入』的狀態下是假的"
     assert "完全沒有寫入任何淨值" in _txt
@@ -321,7 +346,7 @@ def test_step_summary_no_nothing_written_warning_when_all_wrote(monkeypatch, tmp
     _patch_backfill(monkeypatch, _res([_CCY_ROW]))
     W.main([])
     _txt = _f.read_text(encoding="utf-8")
-    assert "原幣別序列照常寫入" in _txt
+    assert "原幣別序列保留,照常送出寫入" in _txt
     assert "完全沒有寫入任何淨值" not in _txt
 
 
@@ -349,3 +374,63 @@ def test_step_summary_failure_does_not_break_the_run(monkeypatch):
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", "/nonexistent-dir/x/summary.md")
     _patch_backfill(monkeypatch, _res([_OK_ROW]))
     assert W.main([]) == 0
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 2026-09-01 稽核 🔴 B 的**類別化**守衛 —— 「死掉的 not in 斷言」不是一處,是一類
+#
+# 病徵:一條 `assert "…" not in _txt` 的字串,一旦在 repo 裡不存在了,就變成
+# **永遠會過的空操作,而且沒有任何訊號**。B 就是這樣死的:同一輪的渲染改動把表頭
+# 換掉,守「無事不生空表」的那條斷言從此恆真,實測 `if _ccy:` → `if True:` 全綠。
+#
+# 規則(本檔適用):每一條 `not in` 的字串,必須**二擇一** ——
+#   (a) 在本檔某處也有一條 `in` 斷言用同一個字串(＝ live 錨點:字串一旦被改名,
+#       正向那條會先轉紅,強迫人同步更新負向那條);或
+#   (b) 明列在 `_DELIBERATE_TRIPWIRES`(＝**復辟絆線**:它就是要守「這句話不准回來」,
+#       字串本來就該不存在,沒有正向錨點是**設計**不是缺陷)。
+# 兩者皆非 → 這條斷言正在悄悄死去,測試直接把它抓出來。
+# ══════════════════════════════════════════════════════════════════════════
+_DELIBERATE_TRIPWIRES = {
+    # 舊的無條件斷言措辭 —— 這幾句**不准回來**,故意沒有正向錨點。
+    "有寫入,寫的是原幣別那條)。",      # 舊完成行
+    "**這些檔有寫入**",                 # 舊 Step Summary 表頭
+    "不影響數字正確性",                 # 舊 Step Summary 結語(在「完全沒寫入」時為假)
+}
+
+
+def _collect_assert_strings(path):
+    """回 (負向 not-in 字串集合, 正向 in 字串集合) —— 只看本檔自己的 AST。"""
+    import ast
+    tree = ast.parse(open(path, encoding="utf-8").read())
+    neg, pos = set(), set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+            continue
+        if not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
+            continue
+        if isinstance(node.ops[0], ast.NotIn):
+            neg.add(node.left.value)
+        elif isinstance(node.ops[0], ast.In):
+            pos.add(node.left.value)
+    return neg, pos
+
+
+def test_no_not_in_assertion_has_silently_gone_dead():
+    """每條 `not in` 要嘛有 live 正向錨點,要嘛是明列的復辟絆線。"""
+    neg, pos = _collect_assert_strings(__file__)
+    assert neg, "前提沒成立:本檔應該有 not-in 斷言,掃不到代表這個守衛本身壞了"
+    orphan = sorted(neg - pos - _DELIBERATE_TRIPWIRES)
+    assert not orphan, (
+        f"下列 not-in 斷言既沒有正向錨點、也沒有登記為復辟絆線 → 它可能已經恆真:"
+        f"{orphan}。修法:改成斷言**現行**渲染的字串（並確保同檔有一條 `in` 用它）,"
+        f"或如果它真的是『這句話不准回來』的絆線,就登記進 _DELIBERATE_TRIPWIRES。")
+
+
+def test_deliberate_tripwires_are_actually_absent_from_the_source():
+    """反向:登記為絆線的字串,現在**必須真的不在**產線原始碼裡。
+
+    否則就是「絆線登記了,但那句話其實還活著」—— 比沒有絆線更糟(它會讓人以為守住了)。
+    """
+    _src = open(W.__file__, encoding="utf-8").read()
+    _alive = sorted(t for t in _DELIBERATE_TRIPWIRES if t in _src)
+    assert not _alive, f"這幾句已被判定為不准出現,但仍在 {W.__file__} 裡:{_alive}"
