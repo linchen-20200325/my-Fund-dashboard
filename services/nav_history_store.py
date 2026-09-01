@@ -747,7 +747,11 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
 
         Returns:
             `(series, source, ccy_notes)` —— `ccy_notes` 是被拒絕的候選說明清單
-            (空 list = 沒有任何候選因幣別被拒),供呼叫端誠實回報給 cron / UI(§5)。
+            (空 list = 沒有任何候選因幣別被拒)。⚠️ **消費者現況(2026-09-01 實測,不美化)**:
+            只有 cron `scripts/weekly_nav_backfill.py` 讀它(逐檔 log ＋ 完成行聚合 ＋
+            Step Summary 表)。**`ui/tab_manage.py` 的一鍵補抓沒有讀** —— 在 UI 端加渲染
+            屬 §-1.5 v3 §03-2 ① 的畫面異動,要先出線框給客戶拍板,故本輪不做、就地登記。
+            ⛔ 不要在別處寫「cron / UI 都看得到」—— 那是上一版犯過的那種未查證宣稱。
         """
         _ccy_notes: list = []
         try:
@@ -915,8 +919,10 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         "n_blocked": sum(1 for r in results if r.get("blocked")),
         # 2026-09-01:因幣別不一致而**拒絕換源**的檔數。⚠️ 與 `n_blocked` 是兩件事 ——
         # 這些檔**有寫入**(寫的是原本正確幣別的那條),只是沒有換成更長的候選。
-        # 之所以要聚合出來:呼叫端(cron / UI)要能一眼看到次數,不必去掃 results;
-        # 只把理由塞進 results 而沒有人讀,等於「揭露了但沒人看得見」(§5)。
+        # 之所以要聚合出來:呼叫端要能一眼看到次數,不必去掃 results;只把理由塞進
+        # results 而沒有人讀,等於「揭露了但沒人看得見」(§5)——上一版就是這樣,
+        # 而且 PR 還宣稱「讓 cron 看得見」,被稽核抓到。
+        # ⚠️ 現況:**cron 已接、UI 未接**(見 `_rescue_by_isin` docstring 的消費者現況)。
         "n_ccy_refused": sum(1 for r in results if r.get("ccy_refused")),
         "gate_mode": _gate_mode,          # enforce / observe / off（誠實回報這次跑在哪個模式）
     }
