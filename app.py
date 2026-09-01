@@ -23,17 +23,24 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
     的 NO_COOLDOWN_KINDS **照舊入快取**(TTL 是它們唯一的節流器)。
     **其餘未標記的 fetcher 仍會快取空結果。**
   · @st.cache_data — **完全不在本機制涵蓋範圍內,失敗照樣鎖滿 TTL**。
-    全 repo 8 個裝飾點,其中 **至少 5 處實測會把失敗鎖住**(⚠️ 本行為 2026-08-31
+    全 repo 8 個裝飾點,其中 ~~**至少 5 處實測會把失敗鎖住**~~ → **2026-09-01
+    起至少 3 處**(pool_map / nh_coverage 兩處已修,見下方刪除線;⚠️ 這裡刻意仍寫
+    「**至少**」—— 那 8 處是**字面掃描**的結果,不是窮舉,見下方兩則字表免責)
+    (⚠️ 本行為 2026-08-31
     **第四次**更正:第一版漏掉 @st.cache_data 整類、第二版只列 2 處、
     第三版寫成「4 處」且把 _cached_nh_coverage 的理由寫成假的 —— 同一段自己在
     檢討的病連犯四次,故本行改為逐處列出、逐處標明判定依據):
       鎖住 → repositories/hot_money_repository.fetch_foreign_flow_series(30 分)
              repositories/hot_money_repository.fetch_usdtwd_series      (10 分)
-             repositories/pool_repository._cached_pool_map              (30 分;
-               上游 _load_pool_map 自己把例外吞成 {} → 那個空 dict 被快取)
+             ~~repositories/pool_repository._cached_pool_map~~          (**2026-09-01
+               已修**:上游 _load_pool_map 改為照實 raise → 例外不入快取;
+               「不阻斷抓取鏈」那半改由 _pool_map_or_empty() 在快取**之外**承接,
+               並在進場處查 gspread 來源冷卻)
              ui/helpers/macro/ndc._cached_ndc_score                     (15 分)
-             ui/tab5_data_guard._cached_nh_coverage                     ( 5 分;
-               ⚠️ **第四次更正才補上**,見下)
+             ~~ui/tab5_data_guard._cached_nh_coverage~~                 (**2026-09-01
+               已修**:鎖住的成因是 services/nav_history_gs.load_points 內層
+               `try: ws = sh.worksheet(...) / except: return []` 把 API 錯誤壓成
+               「沒有這個分頁」;現在只放行非 API 錯誤,其餘往上拋並登記來源冷卻)
       不鎖 → ui/helpers/v2_editor ×2(拋 PolicySheetError → 例外不入快取)、
              ui/tab5_data_guard._cached_nh_status(→ status(),只讀 get_secret,
                **確實無外部 HTTP** —— 這半句原本就對,不要跟著改)
@@ -41,8 +48,13 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
     實測鏈路:_cached_nh_coverage → services/nav_history_gs.coverage_status
     → 同檔 load_points → _get_sheet() → sh.worksheet()(gspread 內部
     fetch_sheet_metadata)+ ws.get_all_values() —— **全是往返 Google Sheets API
-    的遠端呼叫**。且 load_points 內層有 try: ws = sh.worksheet(...) / except: return []
-    → 失敗回 {} 並入快取,實測第 2 次呼叫**上游未重跑** → **鎖 TTL_5MIN**。
+    的遠端呼叫**。~~且 load_points 內層有 try: ws = sh.worksheet(...) / except: return []
+    → 失敗回 {} 並入快取,實測第 2 次呼叫**上游未重跑** → **鎖 TTL_5MIN**。~~
+    ⚠️ **2026-09-01 已修(有意識的狀態變更,不是漏刪;決策者:客戶「批次 2」)**:
+    那個內層 except 現在只放行「不帶 HTTP 狀態碼且非配額錯誤」的失敗
+    (WorksheetNotFound = 分頁真的還沒建);API 錯誤一律往上拋 → 例外不入
+    @st.cache_data → **不再鎖 TTL**,並由 infra/gspread_retry 登記跨呼叫冷卻,
+    冷卻期內直接 raise、零往返。**「全是遠端呼叫」那句仍然為真,未受影響。**
     ⚠️ **本 repo 憲法 §8.2.A.1 已於 2026-08-28 第三輪稽核就地改寫過同一句措辭**,
     該處明寫「舊表述把它寫進『本地持久化』的括號裡,會讓讀者以為它不上網 ——
     **那是假的**」,並附逐成員表釘死 _cached_nh_coverage 遠端往返=是、

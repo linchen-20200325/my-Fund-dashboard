@@ -367,12 +367,54 @@ def set_type_override(code: str, type_override: str, oauth_client=None) -> None:
 # 查本表拿 secId(或用 ISIN 去晨星串 secId)走「晨星 → Yahoo chart」補淨值。快取整份
 # code→entry(大小寫不敏感鍵),改池後 `_clear_pool_cache()` 立即生效(退役 id_map_repository)。
 
-def _load_pool_map() -> dict:
-    """{CODE(大寫) → PoolEntry}。讀不到 → {}(不阻斷抓取鏈,§1 退硬編/搜尋)。"""
+def _pool_backoff_ident(oauth_client=None) -> "tuple[str, str]":
+    """本次查表會用哪把憑證、打哪一本 → (actor, sheet_id)。
+
+    走**本地 JSON** 後端時回 `("", "")` —— 那條路不上網,沒有來源可以退避
+    (`infra.gspread_retry.should_skip_gspread` / `record_gspread_failure` 看到空
+    actor 一律 no-op)。actor 只有 `"sa"` / `"oauth"` 兩個值,理由見
+    `infra/gspread_retry.py` 檔尾「actor(憑證身分)為什麼只有兩個值」。
+    """
     try:
-        return {e.code.strip().upper(): e for e in list_pool() if e.code.strip()}
-    except Exception:  # noqa: BLE001 — 選股池不可用 → 空,退硬編表/名稱搜尋
-        return {}
+        if _sa_present():
+            return ("sa", _pool_sheet_id())
+        if oauth_client is not None:
+            return ("oauth", _pool_sheet_id())
+    except Exception:  # noqa: BLE001 — 偵測失敗 = 當作沒有憑證(不退避,行為最保守)
+        pass
+    return ("", "")
+
+
+def _load_pool_map() -> dict:
+    """{CODE(大寫) → PoolEntry}。
+
+    ⚠️ **2026-09-01 起:失敗一律往上拋,不再吞成 `{}`**(有意識的行為變更,不是漏刪;
+    決策者:客戶 2026-09-01「批次 2(gspread 相關站點):加上跨呼叫冷卻退避」)。
+
+    **舊寫法為什麼非改不可**:它把「讀失敗」和「選股池是空的」壓成同一個回傳值,
+    而下游 `_cached_pool_map` 是 `@st.cache_data` —— streamlit **不快取例外、
+    但會快取空值**,於是一次瞬斷會把那個假的空池**鎖滿 30 分鐘 TTL**,
+    期間所有補淨值查表全部 miss。**空選股池是合法狀態**(使用者還沒加任何標的),
+    兩者同義就是 §1 點名的「空有兩義」。
+    (`app.py` 檔頭的 `@st.cache_data` 清單早已把本處列為「鎖住」的五處之一。)
+
+    **舊寫法的用意仍然成立**:補淨值鏈**不該**因為選股池讀不到就整條炸掉。
+    那個用意由 `_pool_map_or_empty()` 承接 —— **例外在快取之內拋、在快取之外譯**,
+    §1 與「不阻斷抓取鏈」兩件事同時成立。
+    """
+    _actor, _sid = _pool_backoff_ident()
+    try:
+        _m = {e.code.strip().upper(): e for e in list_pool() if e.code.strip()}
+    except Exception as _e:
+        from infra.gspread_retry import record_gspread_failure
+        _k, _cd = record_gspread_failure(_actor, _sid, _e)
+        if _k:
+            print(f"[pool_repository] 選股池讀取失敗 → 登記冷卻 {_cd}s(key={_k}):"
+                  f"{type(_e).__name__}: {str(_e)[:120]}")
+        raise
+    from infra.gspread_retry import record_gspread_success
+    record_gspread_success(_actor, _sid)
+    return _m
 
 
 try:  # EX-CACHE-1:App 端走 st.cache_data(跨 rerun 共享 + TTL);headless 退無快取
@@ -400,9 +442,37 @@ def _clear_pool_cache() -> None:
         pass
 
 
+def _pool_map_or_empty() -> dict:
+    """補淨值查表的**對外入口**:冷卻期內或讀失敗 → `{}`,不阻斷抓取鏈。
+
+    這是「內拋外譯」的**外譯**那一半 —— `_load_pool_map` 在快取**之內**照實拋
+    (例外不入 `@st.cache_data`,失敗因此不會被鎖滿 TTL),本函式在快取**之外**
+    把它翻成「這次查不到」,維持 `resolve_secid` / `resolve_isin` /
+    `resolve_currency` 對 `repositories/fund/sources.py` 既有的「None → 退硬編表 /
+    名稱搜尋」契約。
+
+    ⚠️ 冷卻檢查放在這裡(而不是放進 `_cached_pool_map`)的理由:命中快取時那支
+    函式**根本不會執行**,把 gate 放進去會變成「有快取就不查、沒快取才查」的隨機行為;
+    放在入口則是每次都查一次,而且冷卻期內**連快取都不必碰**就直接回 `{}`。
+    """
+    from infra.gspread_retry import should_skip_gspread
+    _actor, _sid = _pool_backoff_ident()
+    _skip, _left, _kind = should_skip_gspread(_actor, _sid)
+    if _skip:
+        print(f"[pool_repository] 選股池剛失敗過(kind={_kind}),冷卻中還剩 {_left:.0f}s "
+              f"→ 本次不打 Google Sheets,退硬編表/名稱搜尋")
+        return {}
+    try:
+        return _cached_pool_map()
+    except Exception as _e:  # noqa: BLE001 — 外譯:抓取鏈不因選股池讀不到而中斷
+        print(f"[pool_repository] 選股池不可用,退硬編表/名稱搜尋:"
+              f"{type(_e).__name__}: {str(_e)[:120]}")
+        return {}
+
+
 def _pool_entry_of(code) -> "PoolEntry | None":
     _c = str(code or "").strip().upper()
-    return _cached_pool_map().get(_c) if _c else None
+    return _pool_map_or_empty().get(_c) if _c else None
 
 
 def resolve_secid(code) -> "tuple[str, str] | None":

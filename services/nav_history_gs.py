@@ -355,24 +355,89 @@ def append_point(code: str, nav: Any, nav_date: Any, fund_name: str = "",
     return res["written"] > 0
 
 
+def _nav_backoff_ident(oauth_client: Any = None) -> "tuple[str, str]":
+    """本次讀寫會用哪把憑證、打哪一本 → (actor, sheet_id);未啟用 → ("", "")。
+
+    actor 只有 `"sa"` / `"oauth"` 兩個值,鑰匙怎麼切、為什麼切兩把,見
+    `infra/gspread_retry.py` 檔尾「跨呼叫『來源冷卻』—— gspread 版」。
+    """
+    try:
+        if is_enabled():
+            return ("sa", _nav_sheet_id())
+        if oauth_client is not None:
+            return ("oauth", _nav_sheet_id())
+    except Exception:  # noqa: BLE001 — 偵測失敗 = 當作沒有憑證(不退避,行為最保守)
+        pass
+    return ("", "")
+
+
 def load_points(code: str | None = None, *, _sheet: Any = None,
                 oauth_client: Any = None) -> list[dict]:
     """讀 nav_history(可選 code 過濾),回 [{code,date,nav,fund_name,source,recorded_at}]。
     tab 不存在 / 未啟用(SA 缺且無 OAuth)→ 回 []。供 Increment B 消費端 + 去重 lookup 用。
     oauth_client:v19.509 —— SA 缺時 UI 注入登入者身分讀雲端(與寫入同一本)。
+
+    ── 2026-09-01 跨呼叫來源冷卻(客戶指示:批次 2)────────────────────────────
+    **為什麼冷卻要放在這一支,而不是放在 `coverage_status` 或 UI 的快取上**:
+    真正會轟炸 Google 的不是診斷頁那一次,是 `load_series` —— 健診每檔基金各呼叫
+    一次,每次 `_get_sheet()`(open_by_key)+ `worksheet()` + `get_all_values()`
+    = **3 趟往返**;25 檔 ≈ 75 趟/rerun,而讀取配額是 60/min/憑證。
+    `services/fund_service.py` 對讀取失敗是 **fail-soft**(log 後退回 live-only),
+    所以失敗**不會**讓那個迴圈停下來 —— 沒有冷卻,它會每次 rerun 重演一次。
+    這就是 2026-08-14「rerun 起算 17 秒後 WebSocket onclose」的形狀。
+
+    **冷卻期內為什麼是 raise 而不是回 `[]`**:回 `[]` 會與「這檔真的還沒累積」
+    同義(§1「空有兩義」),`fund_service` 會印出「⬜ 累積序列空(SA 未啟用/無累積)」
+    這種**與事實不符**的訊息,然後靜靜地少算歷史。改成 raise `NavHistoryError`,
+    走的是該檔**既有的** fail-soft 分支(「⚠️ 讀取失敗,退回 live-only」)——
+    與「真的打了但失敗」逐字相同,只是**沒有付出那 3 趟往返**。
+    Tab5 的 `_cached_nh_coverage` 同理:它外層既有的 `system_error(...)` 會照實顯示,
+    而不是掉進「⬜ 讀不到任何累積點 —— 可能尚未啟用」那個灰字(那句會誤導)。
     """
     if _sheet is None and not is_enabled() and oauth_client is None:
         return []
+
+    # `_sheet` 是測試注入(不碰真 gspread)→ 不查冷卻、不登記,避免污染測試狀態。
+    _actor, _sid = ("", "") if _sheet is not None else _nav_backoff_ident(oauth_client)
+    if _actor:
+        from infra.gspread_retry import should_skip_gspread
+        _skip, _left, _kind = should_skip_gspread(_actor, _sid)
+        if _skip:
+            raise NavHistoryError(
+                f"nav_history 剛失敗過(kind={_kind}),來源冷卻中還剩 {_left:.0f} 秒 "
+                f"→ 本次不打 Google Sheets(避免連續轟炸 / 配額耗盡)。"
+                f"要立即重試請用 sidebar 的「全域刷新」。")
+
     try:
         with _gs_guard(oauth_client, _sheet):     # v19.509:序列化共用 OAuth client 併發讀
             sh = _sheet if _sheet is not None else _get_sheet(oauth_client)
             try:
                 ws = sh.worksheet(_WS_NAV)
-            except Exception:
-                return []
+            except Exception as _e_ws:
+                # 2026-09-01:原本這裡是**無條件** `return []` —— 於是 `sh.worksheet()`
+                # 打出來的 429 / 403 會被壓成「這張表沒有 nav_history 分頁」,
+                # 對外與「分頁真的還沒建」完全同義(§1「空有兩義」),而且
+                # **冷卻機制永遠學不到那次失敗**(app.py 檔頭已記載這條鏈把
+                # `_cached_nh_coverage` 鎖滿 TTL_5MIN 的實測)。
+                # 現在只放行「不是 API 錯誤」的那一種(WorksheetNotFound 等);
+                # 帶 HTTP 狀態碼的 / 配額錯誤一律往上拋,由外層登記冷卻。
+                from infra.gspread_retry import http_status_of, is_quota_error
+                if http_status_of(_e_ws) is None and not is_quota_error(_e_ws):
+                    return []
+                raise
             rows = ws.get_all_values()[1:]
     except Exception as e:
+        if _actor:
+            from infra.gspread_retry import record_gspread_failure
+            _k, _cd = record_gspread_failure(_actor, _sid, e)
+            if _k:
+                import sys as _sys
+                print(f"[nav_history_gs] 讀取失敗 → 登記冷卻 {_cd}s(key={_k}):"
+                      f"{type(e).__name__}: {str(e)[:120]}", file=_sys.stderr)
         raise NavHistoryError(f"nav_history load 失敗:{e}") from e
+    if _actor:
+        from infra.gspread_retry import record_gspread_success
+        record_gspread_success(_actor, _sid)
 
     want = str(code or "").strip().upper()
     out: list[dict] = []
