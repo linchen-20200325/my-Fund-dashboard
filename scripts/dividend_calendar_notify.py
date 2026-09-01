@@ -16,9 +16,16 @@
 
 ⚠️ **補送過去的月份會顯示事實、不是推估**:`build_month_calendar` 自 v19.538 §16.2 起,
 目標月若已有實際除息紀錄就直接用它(`actual_ex_for_month`,信心 high / 誤差 0 / `is_actual=True`)。
-排程路徑(推下個月)幾乎不會踩到 —— 未來月份不會有紀錄;**補送過去月份則幾乎必然踩到**。
+排程路徑(推下個月)幾乎不會踩到 —— 未來月份**通常**還沒有紀錄;**補送過去月份則幾乎必然踩到**。
 實測(5 檔真實 MoneyDJ 配息表,ref 固定 2026-09-01):補 2026-07 → 5/5 全走事實,
 其中摩根 JFZN3 補 2026-08 由推估 08/07 變成事實 08/11(差 4 天)。
+⚠️ 「幾乎」不是「不可能」:`actual_ex_for_month` 的命中條件只有「年月相同」,
+**整條資料鏈沒有任何『未來日期』過濾**。某檔配息表若已列出目標月的**已公告**基準日,
+那一格當場就走事實分支。目前擋住它的是 MoneyDJ 解析端把金額欄空的預告列丟掉
+(`repositories/fund/fund_orchestration.py` wb05 迴圈 `_amt <= 0 → continue`)——
+那是**資料巧合,不是結構保證**,而且只在 MoneyDJ 那一條路徑上。
+⚠️ **寬限窗路徑也會踩到**:1~3 號未指定月份 → 目標是**本月**,該月 1 號就除息的基金
+在 3 號那一跑已經有實際紀錄 → 走事實分支,卻仍掛在下面那個全域「推估」徽章底下。
 ⚠️ 圖上目前**分不出**事實與推估(全域「推估」徽章對事實格而言是錯的)——
 那是 `06c7093` 就已登記、待 UI 線框拍板的接縫,不是本腳本的 bug。
 
@@ -51,7 +58,10 @@ def _log(msg: str) -> None:
 
 _TZ_TW = _dt.timezone(_dt.timedelta(hours=8))
 _TARGET_MONTH_ENV = "TARGET_MONTH"          # workflow 走 env 傳(不插進 shell 指令列,防 injection)
-_TARGET_MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
+# `re.ASCII`:沒有它 `\d` 是 Unicode 數字類 —— 實測 `'٢٠٢٦-٠٩'`(阿拉伯-印度數字)與
+# `'２０２６-０９'`(全形)都會通過,`int()` 還會把它們解析成 (2026, 9)。結果雖然「剛好對」,
+# 但與說明/錯誤訊息宣稱的「格式須 YYYY-MM」不符,且靜默接受非預期輸入本身就是 §1 的反例。
+_TARGET_MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$", re.ASCII)
 _YEAR_MIN, _YEAR_MAX = 2000, 2100           # 打錯字防呆(如 0226 / 20261);非業務門檻
 
 # 未指定 target_month 時,「幾號(含)以內視為上個月 28 號那一跑遲到」的寬限窗。
@@ -161,7 +171,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="每月除息行事曆 LINE 摘要(headless)")
     ap.add_argument("--dry-run", action="store_true", help="只印不送")
     ap.add_argument("--target-month", default=None,
-                    help=f"指定目標月 YYYY-MM(留空 = 下個月);亦可用 env {_TARGET_MONTH_ENV},旗標優先")
+                    # ⚠️ `--help` 是使用者介面,與本檔開頭 docstring / workflow input 的
+                    #    description 是**同一句話的三個出口**,改一處要三處一起改。
+                    #    v19.538 加了 `_LATE_RUN_GRACE_DAYS` 後這裡一度還寫「留空 = 下個月」,
+                    #    在 1~3 號是**假話**。
+                    help=("指定目標月 YYYY-MM(補送用)。留空時看今天幾號:"
+                          f"{_LATE_RUN_GRACE_DAYS + 1} 號~月底 → 下個月;"
+                          f"1~{_LATE_RUN_GRACE_DAYS} 號 → 本月(視為上月 28 號那一跑遲到)。"
+                          f"亦可用 env {_TARGET_MONTH_ENV},旗標優先"))
     args = ap.parse_args(argv)
 
     # 目標月**先解析再抓資料**:格式錯就該立刻死,不要抓完幾十檔配息才發現參數是錯的。

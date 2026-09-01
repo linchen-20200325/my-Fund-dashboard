@@ -39,6 +39,9 @@ on:
         # ⚠️ **留空時的目標月看「今天幾號」**(v19.538,`_LATE_RUN_GRACE_DAYS`):
         #    4 號~月底 → 下個月;**1~3 號 → 本月**(視為上月 28 號那一跑遲到跨月,
         #    否則非閏年 2 月會整月無聲跳過)。1~3 號要送下個月 → **明填 target_month**。
+        # ⚠️ **排程跑失敗時不要按 Re-run**:Re-run 保留 event=schedule 且**不允許改 inputs**,
+        #    隔幾天才重跑會落在寬限窗外(day > 3)→ 目標月跳過一個月,而且填不了 target_month。
+        #    改成重新 Run workflow + 明填 target_month。(說明見 docs/DIVIDEND_CALENDAR_SETUP.md)
         # ⚠️ **補送過去的月份時,該月已有實際除息紀錄的基金會顯示「事實」而不是推估**
         #    (`services.dividend_calendar.actual_ex_for_month`,v19.538 §16.2:信心 high、
         #    誤差 0)。圖上目前**分不出**哪格是事實哪格是推估 —— 那是已登記的接縫

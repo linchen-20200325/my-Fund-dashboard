@@ -483,8 +483,15 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     真正該傳達的「這張圖是哪個月」已由下方月份徽章與副標各講一次,不缺這一句;
     推播端另有 LINE 文字首行 `🗓️ 基金除息行事曆 · <月份>`。
     ⚠️ 要讓兩邊各說各話請**不要**加 kwarg 硬塞一句進來(§8.1 step 6:兩邊都不需要的資訊,
-    不值得為它開一個參數)。守衛:`tests/test_dividend_calendar_render.py`
-    `test_eyebrow_states_scope_not_update_cadence` —— 加回任何頻率字眼即紅燈。
+    不值得為它開一個參數)。
+    ⚠️ **同一條規矩也管副標**(v19.539 補完):副標原本寫「加減基金 → 下月自動更新」,
+    在 App 端是**假的** —— 加一檔基金這一秒就在本月月曆上,那句話卻承諾了一個不存在的延遲。
+    改為「加減基金 → 下次產生時一併納入」(App 的「下次產生」= 再按一次按鈕,推播的 = 下一次排程)。
+    守衛(`tests/test_dividend_calendar_render.py`),射程分兩層、別記成一層:
+      - `test_eyebrow_states_scope_not_update_cadence` / `test_no_surface_promises_a_delayed_update`
+        = **已知字串黑名單**,只擋清單上的字面,沒列進去的講法會漏;
+      - `test_subtitle_is_locked_verbatim_on_both_paths` + eyebrow 字面全等鎖
+        = 這兩行**加任何字都會紅**。
 
     v19.533(§15 顯示層,user 2026-08-26 拍板)三件事:
       §15.2 明細表欄位正名:「除息基準日」→ **「預估基準日」**、「信心」→ **「誤差」**。
@@ -513,7 +520,14 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     _sub = (f'{_e(ALL_UNPRED_SUB_1.format(n=len(unpredictable)))}<br>'
             f'{_e(ALL_UNPRED_SUB_2)}') if _all_unp else \
         (f'依你的基金過往配息節奏，推估{_e(_ml)}的除息基準日與配息入帳日。'
-         f'加減基金 → 下月自動更新。')
+         # v19.539 B-3 補完:原句是「加減基金 → 下月自動更新」。它與同一個 <header> 裡剛被
+         # 拿掉的 eyebrow「每月月底更新」同病 —— 而且更糟:eyebrow 只是**講錯頻率**,這一句
+         # **承諾了一個不存在的延遲**。App 路徑(`ui/tab_manage.py` 把 `_now.year` /
+         # `_now.month` 當目標月餵給 `build_month_calendar`)是按下按鈕**當場現算、目標月
+         # 就是本月**,新加的基金這一秒就出現在月曆上,副標卻在正下方叫使用者等下個月。
+         # 改成只講「下次產生時」——App 的「下次產生」= 再按一次按鈕(隨時),推播的「下次產生」
+         # = 下一次排程,兩條路徑都成立,且不承諾任何時間。
+         f'加減基金 → 下次產生時一併納入。')
 
     legend_html = _legend_html(events, unpredictable)
 

@@ -24,7 +24,8 @@
 → 只改一邊不會有任何東西報錯,所以要用測試把 cron 字面值鎖住。
 
 ## 附帶守的三件事
-1. `target_month`(手動補送):留空 = 下個月;格式錯 → **exit 2 報錯**,
+1. `target_month`(手動補送):留空 = **看今天幾號**(4 號~月底 → 下個月;1~3 號 → 本月,
+   見 `_LATE_RUN_GRACE_DAYS`);格式錯 → **exit 2 報錯**,
    **不可**靜默退回下個月(§1:讓 user 以為補送成功卻收到別的月份 = 最糟的失敗模式)。
 2. `ref_year/ref_month/ref_day` = **執行當下**,**不跟著目標月跑**(陳舊度量測基準)。
 3. workflow 沒有把 user 可控的 `target_month` 插進 `run:` 指令列(script injection)。
@@ -178,6 +179,89 @@ def test_no_step_in_any_job_interpolates_target_month_into_run():
                       f"改走 env: 由 Python 讀 os.environ → {_bad}")
 
 
+# ── v19.539 B-5:上面兩條是**黑名單**(只看插值裡有沒有 `target_month`),看不見整包 dump ──
+# 實測 13 個 workflow 突變,11 個轉紅,**漏掉這兩個**:
+#     ${{ toJSON(github.event.inputs) }}      ${{ github.event.inputs }}
+# 兩者都會把**整包 inputs**(含 user 可控的 target_month)代換進 `run:`,是 GitHub 官方
+# 硬化指南點名的形態,而字面上完全沒有 `target_month` 這個詞 → 黑名單結構上看不到。
+# 修法:改成**白名單** —— `run:` 裡只准出現 dry_run 那一個布林三元式,其餘一律紅燈。
+_ALLOWED_RUN_INTERP = "github.event.inputs.dry_run == 'true' && '--dry-run' || ''"
+# `NAME: ${{ ... }}` 獨佔一行 = env/with 綁定(值進環境變數,不進 shell 指令列)。
+_ENV_BINDING_LINE_RE = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_-]*:\s*\$\{\{[^{}]*\}\}\s*$")
+
+
+def _norm_expr(expr: str) -> str:
+    """插值運算式正規化(GitHub 對空白不敏感,守衛也不該被空白騙過)。"""
+    return " ".join(expr.split())
+
+
+def test_every_interpolation_in_the_file_is_either_an_env_binding_or_the_dry_run_ternary():
+    """**白名單底線守衛**(不依賴 pyyaml):全檔每一個 `${{ }}` 只准是這兩種之一。
+
+      1. `NAME: ${{ ... }}` 獨佔一行 —— env / with 綁定,值進環境變數不進指令列;
+      2. `${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}` —— 唯一一個
+         進 `run:` 的插值,展開結果只可能是固定字面值 `--dry-run` 或空字串,不含 user 輸入。
+
+    白名單的**重點**是它不必事先知道危險長什麼樣子:`${{ toJSON(github.event.inputs) }}`、
+    `${{ github.event.inputs }}`、`${{ github.event.issue.title }}` 這些都不在清單上 → 一律紅。
+    ⚠️ 射程誠實話:本條是**行掃描**,`NAME: ${{ ... }}` 這個形狀若出現在 `run:` 的 shell
+       腳本裡(例如 `run: |` 內寫 `FOO: ${{ toJSON(github.event) }}`)會被誤放行 ——
+       那一半由下一條(逐 step 解析 `run` 字串)負責。兩條合起來才完整。
+    """
+    _bad = []
+    for _ln, _line in enumerate(_workflow_text().splitlines(), start=1):
+        for _expr in _INTERP_RE.findall(_line):
+            if _ENV_BINDING_LINE_RE.match(_line):
+                continue                                   # 1. env / with 綁定
+            if _norm_expr(_expr) == _ALLOWED_RUN_INTERP:
+                continue                                   # 2. 唯一允許進 run: 的插值
+            # 3. 註解裡的**空**佔位符 `${{ }}`(本檔的安全註解就在講這件事)。
+            #    只放行「空的」:註解若在 YAML 層會被丟掉(無害),但若是 `run:` 區塊內的
+            #    **shell 註解**,GitHub 仍會先做字串代換 —— 值裡有換行就能跳出註解變成指令。
+            #    故帶任何運算式的插值,即使寫在 `#` 後面也一律紅燈。
+            if _line.lstrip().startswith("#") and not _norm_expr(_expr):
+                continue
+            _bad.append(f"{_ln}: ${{{{{_expr}}}}}")
+    assert not _bad, (
+        "workflow 出現不在白名單上的插值 → 只准 `NAME: ${{ ... }}` env 綁定,"
+        f"或 run: 裡那一個 dry_run 三元式;越權的有 → {_bad}")
+
+
+def test_no_run_step_interpolates_anything_but_the_dry_run_ternary():
+    """**白名單**(結構化版):逐 job 逐 step 解析 `run:`,裡面的插值只准是 dry_run 三元式。
+
+    這條補的是上一條看不見的東西 —— 整包 dump:
+    `${{ toJSON(github.event.inputs) }}` / `${{ github.event.inputs }}` 會把**整包 inputs**
+    (含 user 可控的 `target_month`)在 shell 執行**之前**代換進指令列。
+    `test_no_step_in_any_job_interpolates_target_month_into_run` 那條黑名單找的是字面
+    `target_month`,整包 dump 裡沒有這個詞 → 它抓不到(實測突變:綠燈通過)。
+    """
+    yaml = pytest.importorskip("yaml")           # pyyaml 為 pre-commit 傳遞依賴,缺則略過
+    doc = yaml.safe_load(_workflow_text())
+    _steps = [(_jn, _i, _st)
+              for _jn, _job in (doc.get("jobs") or {}).items()
+              for _i, _st in enumerate(_job.get("steps") or [])]
+    assert _steps, "解析不到任何 step → 這條測試等於沒在守,先修解析"
+    _bad = []
+    for _jn, _i, _st in _steps:
+        _run = _st.get("run")
+        if not isinstance(_run, str):
+            continue
+        for _expr in _INTERP_RE.findall(_run):
+            if _norm_expr(_expr) != _ALLOWED_RUN_INTERP:
+                _bad.append(f"job={_jn} step#{_i}({_st.get('name') or _st.get('uses')}): "
+                            f"${{{{{_expr}}}}}")
+    assert not _bad, (
+        "`run:` 裡出現不在白名單上的插值(整包 dump / 任何 github.event 欄位都算)→ "
+        f"改走 env: 由程式讀 os.environ → {_bad}")
+
+
+def test_the_whitelisted_dry_run_expression_still_exists():
+    """反向鎖:白名單那一式必須真的還在,否則 `dry_run=true` 會變成實送(§1 最糟的失敗模式)。"""
+    _exprs = [_norm_expr(_e) for _e in _INTERP_RE.findall(_workflow_text())]
+    assert _ALLOWED_RUN_INTERP in _exprs, "dry_run 三元式不見了 → 手動 dry-run 會實際推播"
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 2. _resolve_target_month —— 純函式
 # ══════════════════════════════════════════════════════════════════════
@@ -251,7 +335,13 @@ def test_explicit_month_is_used_verbatim(raw, want):
 
 
 @pytest.mark.parametrize("bad", ["2026-13", "2026-00", "202609", "abc", "2026-9",
-                                 "26-09", "2026/09", "1999-05", "2101-05", "2026-09-01"])
+                                 "26-09", "2026/09", "1999-05", "2101-05", "2026-09-01",
+                                 # v19.539:`\d` 預設是 **Unicode** 數字類 —— 加 `re.ASCII` 前
+                                 # 這兩個實測**會通過**,`int()` 還把它們解析成 (2026, 9)。
+                                 # 結果雖然剛好對,但與「格式須 YYYY-MM」的宣稱不符,
+                                 # 而且靜默接受非預期輸入本身就是 §1 的反例。
+                                 "٢٠٢٦-٠٩",          # 阿拉伯-印度數字
+                                 "２０２６-０９"])      # 全形數字
 def test_bad_format_raises_and_never_falls_back(bad):
     """§1:格式錯 → raise,**不可**靜默回「下個月」(那會讓 user 收到別的月份還以為成功)。"""
     with pytest.raises(ValueError) as _ei:
@@ -347,6 +437,28 @@ def test_empty_env_is_treated_as_unspecified(monkeypatch):
     assert rc == 0 and (seen["year"], seen["month"]) == (2026, 10)
 
 
+@pytest.mark.parametrize("day", [1, 2, 3])
+def test_grace_window_through_main_targets_this_month(monkeypatch, day):
+    """**寬限窗的 main() 層測試**(v19.539 補):`_resolve_target_month` 有單元測,
+    但 `main()` 這一層原本只測了「28 號準時 / 跨年 / 2 月 / 明填 / env / 空 env / 旗標覆蓋 /
+    格式錯」—— **就是沒有「day ≤ 3 且未指定」**,也就是 B-4 真正要修的那條路徑。
+
+    這裡驗的是整條:凍結 now 到 1~3 號 → 不給 `--target-month`、env 也不給 →
+    `build_month_calendar` 實際收到的目標月是**本月**;同時 `ref_day` 仍是今天幾號
+    (寬限窗只換目標月,不得污染陳舊度量測基準)。
+    """
+    rc, seen = _run_main(monkeypatch, now=_now(2026, 9, day))
+    assert rc == 0
+    assert (seen["year"], seen["month"]) == (2026, 9), "1~3 號未指定 → 應視為遲到、送本月"
+    assert (seen["ref_year"], seen["ref_month"], seen["ref_day"]) == (2026, 9, day)
+
+
+def test_grace_window_through_main_never_fires_on_the_28th(monkeypatch):
+    """配套反向:28 號那一跑(準時)行為一個字都沒變 → 仍是下個月。"""
+    rc, seen = _run_main(monkeypatch, now=_now(2026, 9, 28))
+    assert rc == 0 and (seen["year"], seen["month"]) == (2026, 10)
+
+
 def test_cli_flag_overrides_env(monkeypatch):
     rc, seen = _run_main(monkeypatch, now=_now(2026, 9, 1),
                          argv=("--dry-run", "--target-month", "2026-09"),
@@ -386,8 +498,14 @@ def test_cli_end_to_end_nonzero_exit():
 # ══════════════════════════════════════════════════════════════════════
 # 5. v19.538:target_month 補送 × §16.2 事實優先(`actual_ex_for_month`)的交互
 #    `06c7093` 讓 `build_month_calendar` 在目標月**已有實際紀錄**時直接顯示事實。
-#    排程路徑(推下個月)踩不到 —— 未來月份不會有紀錄;**補送過去月份幾乎必然踩到**。
-#    這裡把「兩條路徑各自會發生什麼」鎖住,避免下次有人改動任一邊時無聲翻面。
+#    排程路徑(推下個月)**幾乎**踩不到 —— 未來月份通常還沒有紀錄;**補送過去月份幾乎必然踩到**。
+#    ⚠️ 「幾乎」是刻意的措辭,不是保守:`actual_ex_for_month` 的命中條件只有「年月相同」,
+#       **整條資料鏈沒有任何『未來日期』過濾**(services/dividend_calendar.py 該函式 + 其上游
+#       `_parse_records`)。目標月若真的已經有一筆已公告的基準日,排程路徑當場就走事實分支。
+#       今天擋住它的是 MoneyDJ 解析端把金額欄空的預告列丟掉
+#       (`repositories/fund/fund_orchestration.py` wb05 迴圈 `_amt <= 0 → continue`)——
+#       那是**資料巧合,不是結構保證**,而且只在 MoneyDJ 那一條路徑上。
+#    這裡把「兩條路徑在**本檔 fixture 下**各自會發生什麼」鎖住,避免下次有人改動任一邊時無聲翻面。
 # ══════════════════════════════════════════════════════════════════════
 def _monthly_history(last_y: int, last_m: int, day: int = 11, n: int = 14) -> list:
     """n 筆月配紀錄,最後一筆落在 (last_y, last_m)。基準日一律套營業日校正。"""
@@ -412,11 +530,21 @@ def _one_event(year: int, month: int, hist: list) -> dict:
     return _cal["events"][0]
 
 
-def test_scheduled_path_next_month_is_always_an_estimate_not_a_fact():
-    """排程路徑(推**下個月**):目標月不可能已有紀錄 → 一律 `is_actual=False`。"""
+def test_scheduled_path_falls_back_to_the_estimate_when_the_target_month_has_no_record():
+    """排程路徑(推**下個月**):本 fixture 的歷史只到 2026-08 → 10 月沒有紀錄 → 走推估。
+
+    ⚠️ **這條測的是「沒有紀錄 → 推估」,不是「未來月份不可能有事實」**。
+    舊名 `..._is_always_an_estimate_not_a_fact` 與舊 docstring(「目標月不可能已有紀錄」)
+    是**被程式碼推翻的全稱句**:`actual_ex_for_month` 只比對年月,整條資料鏈沒有任何
+    「未來日期」過濾;在配息表尾端補一筆 2026-10 的紀錄再推 2026-10,就會拿到
+    `is_actual=True` / `confidence=high` / `error_band=0`(見本檔區段抬頭的說明)。
+    目前排程路徑踩不到,靠的是 MoneyDJ 解析端丟棄金額欄空的預告列 —— 資料巧合,不是保證。
+    要不要加「未來日期不採信」的過濾是**業務決策**(顯示已公告的事實可能反而是好事),
+    待 user 拍板(§-1),**不在本測的射程內**。
+    """
     _hist = _monthly_history(2026, 8)                 # 歷史到 2026-08 為止
     _ev = _one_event(2026, 10, _hist)                 # 9/28 那一跑推 10 月
-    assert _ev["is_actual"] is False, "未來月份不該有『事實』"
+    assert _ev["is_actual"] is False, "該月無紀錄 → 應走推估分支"
     assert _ev["error_band"] is not None               # 推估才有誤差帶
 
 
