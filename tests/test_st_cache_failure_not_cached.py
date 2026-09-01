@@ -97,24 +97,37 @@ _RAISES: dict[str, tuple[str, str, str]] = {
         # 也就是說：這張登記表在**它自己所屬的那個 PR 裡**變成假的，沒有人回頭看。
         # → 現行寫法**不寫任何可被 AST 證偽的計數**，只寫政策
         #   （`test_raises_reasons_state_policy_not_counts` 機械擋住計數）。
+        # ⚠️ 2026-09-01 第五輪：**理由字串本身重寫**（有意識的更正，不是漏刪 ·
+        #    決策者：本修復組）。改的只有括號裡的**列舉**，政策句一字未動。
         "內拋外譯：失敗路徑 raise _FetchFailed 穿過 @st.cache_data 不入快取，"
         "公開 wrapper 再譯回既有的 (df, err) 形狀。"
-        "例外是「沒有任何節流器」的失敗分支（body status 落在 NO_COOLDOWN_KINDS、"
-        "或 fetch_url 回 None 但來源未進退避）—— 那些仍 return，由 TTL_30MIN 節流；"
+        "例外是「沒有任何節流器」的失敗分支 —— 那些仍 return，由 TTL_30MIN 節流；"
         "若那些也 raise，就變成每次 rerun 真打一次上游，比改版前更糟。"
-        "實際分支數與歸屬以 repositories/hot_money_repository.py 內的註解為準，"
+        "已知落在這一類的有：body status 落在 NO_COOLDOWN_KINDS；"
+        "body status 是 SSOT kind_for_status 對 2xx/3xx 回的哨符 ''（那是"
+        "「這不是失敗」的意思，不是一個失敗分類；cooldown_for('') 走「未知 kind "
+        "從寬」的 default、非 0，故必須先判 not _kind）；"
+        "或 fetch_url 回 None 但來源未進退避。"
+        "⚠️ 這是已知清單，刻意不寫成窮舉 —— 哨符那一項在被寫進本欄之前，"
+        "已經在同一個 PR 裡活了一輪、沒有進任何一份列舉。"
+        "實際分支與歸屬以 repositories/hot_money_repository.py 內的註解為準，"
         "本欄不重述數字（重述必然漂移，2026-09-01 已實證）。",
-        # ⚠️ 2026-09-01 第四輪：上面那個括號列舉**不是窮舉，也漏了一項**。
+        # ⚠️ 2026-09-01 第四輪的發現與實測，保留在此（它是上面那句的**證據**）：
         #    `d6b8b68` 把條件改成 `if not _kind or cooldown_for(_kind) <= 0:` 之後，
-        #    **SSOT `kind_for_status` 對 2xx/3xx 回的哨符 `""` 成為第三種 return 情形**
+        #    **SSOT `kind_for_status` 對 2xx/3xx 回的哨符 `""` 成為另一種 return 情形**
         #    （實測：`kind_for_status(201)` → `''`，`cooldown_for('')` → `60`，
-        #     且 `'' not in NO_COOLDOWN_KINDS` —— 它與括號裡列的兩種都不同）。
-        #    **政策句仍為真**（「沒有節流器的就 return」），**假的是括號裡的列舉**。
-        # ⚠️ **本輪刻意不改上面那個字串常數**：本輪的授權是「只改文字、不改任何可
-        #    執行程式碼」，而 `_RAISES` 的理由是 **dict 的值**，改它會動到 AST 骨架
-        #    （docstring 與註解才是本輪可動的載體）。故把但書放在這裡 ——
-        #    與本檔既有慣例一致（其餘更正也都以相鄰註解承載）。
-        #    **若要把哨符寫進理由字串本身，請在下一輪連同 AST 骨架 diff 一起交付。**
+        #     且 `'' not in NO_COOLDOWN_KINDS` —— 它與原本括號裡列的都不同）。
+        #    **政策句當時就為真**（「沒有節流器的就 return」），**假的是括號裡的列舉**。
+        # ~~⚠️ **本輪刻意不改上面那個字串常數**：本輪的授權是「只改文字、不改任何可~~
+        # ~~   執行程式碼」，而 `_RAISES` 的理由是 **dict 的值**，改它會動到 AST 骨架~~
+        # ~~  （docstring 與註解才是本輪可動的載體）。故把但書放在這裡 ——~~
+        # ~~   與本檔既有慣例一致（其餘更正也都以相鄰註解承載）。~~
+        # ~~   **若要把哨符寫進理由字串本身，請在下一輪連同 AST 骨架 diff 一起交付。**~~
+        #    → **2026-09-01 第五輪：條件已達成，不是當初判錯。** 第四輪的授權確實
+        #    禁止動可執行碼，而理由字串同時是「文字」也是「dict 的值」——
+        #    那一輪擋下該矛盾、並就地記明代價（「只有旁邊的註解說了實話」）是對的。
+        #    本輪派工單解除該限制並要求連同 AST 骨架 diff 交付，已照辦。
+        #    ⚠️ **登記表因此不再需要靠相鄰註解才為真** —— 這一段自此只剩證據價值。
     ),
     "repositories/hot_money_repository.py::_cached_usdtwd_series": (
         "_fetch_usdtwd_series_uncached",
@@ -690,6 +703,21 @@ _COUNT_CLAIM_MUST_CATCH = (
 # 中文裡壓倒性是慣用語、不是計數的寫法 —— **不得**誤報。
 # `每次 rerun 真打一次上游` 就活在本檔自己的 `_RAISES` 理由裡：
 # 第三輪第一版把 `一` 收進數字類，**當場誤報了它**，故 `一X` 刻意排除（見 `_COUNT_CLAIM`）。
+#
+# ⚠️ **2026-09-01 第五輪：`"一律 raise _FetchFailed"` 這一格刻意留著，理由寫在這裡**
+#    （稽核意見：它作為 regex fixture 無害，但同一檔上方剛把「一律 raise」判為假，
+#     當正面樣本讀起來刺眼）。**本組判斷是不換**，兩條理由：
+#    (1) 本清單存在的目的是證明 regex **不會誤報 `一X` 慣用語**，樣本值不值得信任
+#        取決於它**在 repo 裡真的出現過**；而「一律 `raise`」這個句型至今仍活在
+#        `repositories/policy/v2.py`、`repositories/hot_money_repository.py`
+#        （`_fetch_foreign_flow_series_uncached` 的 docstring）、
+#        `ui/helpers/*/merge_context.py`、`tests/test_asset_publish.py` ——
+#        換成自己編的同義句，是拿「production 有出現過」換「讀起來順」。
+#    (2) 上方判為假的是 **`_cached_usdtwd_series` 那一格的內容宣稱**
+#        （「兩個失敗點……一律 raise」），**不是這個句型本身**；
+#        本清單的元素是**給 regex 吃的字串樣本**，不是對 repo 現況的宣稱。
+#    ⛔ 這是**取捨，不是「沒看到」** —— 若後人認為 fixture 應該只收自造樣本，
+#       那是另一個決定，請連同「樣本要不要求 repo 內實際出現」一起改，不要只換這一格。
 _COUNT_CLAIM_MUST_PASS = (
     "每次 rerun 真打一次上游", "一律 raise _FetchFailed", "一點都不快取",
     "由 TTL_30MIN 節流", "404/407 是 SSOT 明訂刻意不退避", "v2 的 429 重試",
