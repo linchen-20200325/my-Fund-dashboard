@@ -424,12 +424,17 @@ def _cache_store(monkeypatch):
     return store
 
 
-def _wire_backfill(monkeypatch, *, fd, yahoo=None, pool_ccy=None):
+def _wire_backfill(monkeypatch, *, fd, yahoo=None, morningstar=None, cnyes=None,
+                   isin="LU0000000001", pool_ccy=None):
     """接上每日排程實際走的那條鏈的所有外部邊界,回傳「寫進雲端的點」。
 
     慣例沿用 `tests/test_nav_currency_swap_guard.py::_wire_l2`(同一條鏈、同一組邊界)。
     `load_points` 回 `[]` → Gate 0 零重疊 → verdict `clean` 放行
     (那是 Gate 0 的**已知破口 a**,本節刻意利用它把幣別這條線單獨隔離出來測)。
+
+    三個候選源與 `isin` 都可獨立指定,才驅動得到 `_rescue_by_isin` 的**每一個出口**:
+    傳 `None` = 回空序列;傳 **Exception 實例** = 該源拋例外;傳 Series = 該源回那條序列。
+    `isin=None` = 池中沒有 ISIN(救援 gate 不成立)。
     """
     import repositories.fund.sources as SRC
     import repositories.pool_repository as POOL
@@ -437,14 +442,19 @@ def _wire_backfill(monkeypatch, *, fd, yahoo=None, pool_ccy=None):
     import services.nav_history_gs as _GS
 
     _empty = pd.Series(dtype=float)
+
+    def _src(v):
+        if isinstance(v, BaseException):
+            raise v
+        return _empty if v is None else v
+
     monkeypatch.setattr(MF, "auto_fetch_moneydj", lambda code, **kw: fd)
-    monkeypatch.setattr(POOL, "resolve_isin", lambda code: "LU0000000001")
+    monkeypatch.setattr(POOL, "resolve_isin", lambda code: isin)
     monkeypatch.setattr(POOL, "resolve_currency", lambda code: pool_ccy)
-    monkeypatch.setattr(SRC, "_src_yahoo_finance_nav",
-                        lambda code: (yahoo if yahoo is not None else _empty))
+    monkeypatch.setattr(SRC, "_src_yahoo_finance_nav", lambda code: _src(yahoo))
     monkeypatch.setattr(SRC, "_src_morningstar_nav",
-                        lambda code, fund_name="": _empty)
-    monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: _empty)
+                        lambda code, fund_name="": _src(morningstar))
+    monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: _src(cnyes))
     monkeypatch.setattr(_GS, "is_enabled", lambda: True)
     monkeypatch.setattr(_GS, "load_points", lambda code=None, **kw: [])
     written: list = []
@@ -520,6 +530,139 @@ def test_backfill_never_falls_back_to_fd_currency(monkeypatch, _cache_store):
     assert written and {p["currency"] for p in written} == {""}, (
         f"取到了「宣告線」(fd['currency'])而不是「量測線」;"
         f"實得 {sorted({p['currency'] for p in written})!r}")
+
+
+# ── 5.1 `_rescue_by_isin` 的**每一個出口**,不是只有 happy path ─────────────
+#
+# ⚠️ **這一組是 2026-09-01 第二輪稽核挖出來的,原因比洞本身重要**:
+#    上面三條守衛**只驅動「一次成功換源」這一條路徑**(yahoo 成功、其餘回空)。
+#    而 `_rescue_by_isin` 實際有**六條**互不相同的路徑,只有其中一條被守到:
+#      (1) `resolve_isin` 拋例外 → 提早 return(序列不變)
+#      (2) 池中沒有 ISIN        → 提早 return(序列不變)          ← M6
+#      (3) 某個候選源拋例外      → `continue`(序列不變)
+#      (4) **採用門檻不成立**    → 整個 if 不進去,連 `_assess_swap` 都沒走到(序列不變)
+#      (5) 候選**因幣別被拒**    → `continue`(序列不變)            ← M7
+#      (6) 採用                 → 賦值,**而且迴圈還會繼續**(可重複)  ← M8
+#    ⚠️ **稽核給的清單是四條,把 (3) 與 (5) 併成一條、且漏掉 (4)** ——
+#    本組讀碼後逐條數出**六條**,(3)(4) 是稽核沒點名的,一併補守衛。
+#    ⚠️ 「六條」是本組讀碼歸納,**不宣稱窮舉**;驗證方式見 PR 描述。
+#
+# **通則(留給下一個人的一句話)**:
+#   **守衛要覆蓋函式的每一個出口,不是只覆蓋 happy path。**
+#   「補了兩格」不代表沒有第三格 —— 這三個洞全部長在 `if`/`continue`/`return`
+#   的**非主線分支**上,而它們寫進的是一張**永不刪除**的表。
+def test_rescue_refused_on_currency_keeps_the_original_series_declaration(
+        monkeypatch, _cache_store):
+    """⛔ **最嚴重的一個**:候選**因幣別對不上被拒絕**時,幣別不得被那個候選污染。
+
+    `_assess_swap` 判定「候選幣別對不上 → 拒絕採用」→ 序列**沒有換**,留下 MoneyDJ
+    那 30 列;但被拒絕那個候選的 `EUR` **絕不能**被蓋到那 30 列上 —— 那是 §1 憑空編造,
+    而且**發生在唯一一道幣別守門的 else 分支裡**(這條路真的會走到:`ccy_refused`
+    是 cron summary 有在報的欄位)。
+
+    **突變**:在 `_ccy_notes.append(...)` 之後、`continue` 之前加 `cur_ccy = _cand_ccy`
+    → 本則必須轉紅(實測突變前該突變**完全沉默**:nav 十二個測試檔 230 passed)。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(
+        monkeypatch,
+        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "currency": "USD",
+            "fund_name": "F"},
+        yahoo=_daily(600, "2020-01-01", ccy="EUR"))       # 幣別對不上 → 必被拒
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["ccy_refused"], "本則沒有走到「因幣別被拒」那條分支 → 什麼都沒測到"
+    assert r["source"] == "moneydj", f"序列不該被換掉;實得 source={r['source']!r}"
+    _got = {p["currency"] for p in written}
+    assert _got == {"USD"}, (
+        f"被**拒絕**的候選的幣別被蓋到留下來那條序列上(§1 憑空編造);實得 {sorted(_got)!r}")
+    assert "EUR" not in _got
+
+
+def test_rescue_without_isin_keeps_the_measured_currency(monkeypatch, _cache_store):
+    """池中**沒有 ISIN**(救援 gate 不成立)→ 幣別必須原封留著,不得掉成空字串。
+
+    這不是造假,是**靜默資料遺失** —— 但它落在**多數路徑**上(救援的 gate 原文就是
+    「池中有 ISIN 才觸發」,退回 MoneyDJ 短窗是常態),而這張表**永不刪除**:
+    空掉的那一格**以後補不回來**(本 PR 自己的原則:既有列一律留空、不得回填)。
+
+    **突變**:`if not _isin: return s, src, _ccy_notes, ""` → 本則必須轉紅。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(
+        monkeypatch, isin=None,                          # ← 池中沒有 ISIN
+        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "fund_name": "F"},
+        yahoo=_daily(600, "2020-01-01", ccy="EUR"))      # 永遠不會被查詢
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "moneydj" and r["fetched"] == 30
+    assert {p["currency"] for p in written} == {"USD"}, (
+        f"沒有 ISIN 就把量到的幣別弄丟了(靜默資料遺失,永久補不回);"
+        f"實得 {sorted({p['currency'] for p in written})!r}")
+
+
+def test_rescue_consecutive_swaps_currency_tracks_the_last_adopted_source(
+        monkeypatch, _cache_store):
+    """**連續換源**:yahoo(EUR, 300 天)→ morningstar(JPY, 600 天)→ 幣別必須是 **JPY**。
+
+    迴圈會**連續採用**:被寫入的每一列最後都來自 morningstar,幣別若凍在**第一個**
+    被採用的候選(EUR),序列是最後一個的、宣告卻是第一個的 ——
+    **與本 PR 修的是同一個造假,只是晚一圈迴圈。**
+
+    **突變**(對既有守衛真正沉默的那一版,本組實測 230 passed):
+    只在「第一次採用」時設幣別 —— `if not src.endswith("(ISIN)"): cur_ccy = _cand_ccy`
+    → 本則必須轉紅。
+    ⚠️ 本組第一版突變寫成 `cur_ccy = cur_ccy or _cand_ccy`,**被上面那條單次換源守衛
+    抓到了**(因為該 fixture 的 MoneyDJ 有宣告 USD)—— 那不是忠實的「沉默突變」,
+    據實記下來,免得後人以為隨便寫個突變就能證明覆蓋度。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(
+        monkeypatch,
+        fd={"series": _daily(30, "2025-01-01"), "fund_name": "F"},   # MoneyDJ 不宣告
+        yahoo=_daily(300, "2024-01-01", ccy="EUR"),
+        morningstar=_daily(600, "2020-01-01", ccy="JPY"))
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert "morningstar" in (r["source"] or ""), (
+        f"沒有連續換到 morningstar → 本則沒測到要測的東西;實得 source={r['source']!r}")
+    _got = {p["currency"] for p in written}
+    assert _got == {"JPY"}, (
+        f"幣別凍在第一個被採用的候選,序列卻是最後一個的;實得 {sorted(_got)!r}")
+    assert "EUR" not in _got
+
+
+def test_rescue_candidate_below_adoption_threshold_does_not_touch_currency(
+        monkeypatch, _cache_store):
+    """**採用門檻不成立**(候選 < 10 筆)→ 連 `_assess_swap` 都沒走到,幣別不得變。
+
+    ⚠️ **這條路徑稽核的四出口清單沒有點名**(本組讀碼時數出來的第 (4) 條)。
+    它是實務上最常走的一條:候選源回了東西、但稀疏或跨度不夠 → 不採用。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(
+        monkeypatch,
+        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "fund_name": "F"},
+        yahoo=_daily(5, "2020-01-01", ccy="EUR"))     # 只有 5 筆 → 門檻不成立
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "moneydj" and not r["ccy_refused"], (
+        "本則應該連幣別守門都沒走到(門檻先擋掉),實際卻走到了 → fixture 沒對準")
+    assert {p["currency"] for p in written} == {"USD"}
+
+
+def test_rescue_all_sources_raising_keeps_the_measured_currency(
+        monkeypatch, _cache_store):
+    """**三個候選源全部拋例外** → 三次 `continue`,幣別必須原封不動。
+
+    ⚠️ 同樣是稽核四出口清單沒點名的一條(本組數出來的第 (3) 條,且此處是**三源組合**)。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(
+        monkeypatch,
+        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "fund_name": "F"},
+        yahoo=RuntimeError("yahoo down"),
+        morningstar=RuntimeError("ms down"),
+        cnyes=RuntimeError("cnyes down"))
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert r["source"] == "moneydj" and r["fetched"] == 30
+    assert {p["currency"] for p in written} == {"USD"}
 
 
 # ══════════════════════════════════════════════════════════════════════
