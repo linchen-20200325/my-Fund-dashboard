@@ -923,6 +923,9 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         # results 而沒有人讀,等於「揭露了但沒人看得見」(§5)——上一版就是這樣,
         # 而且 PR 還宣稱「讓 cron 看得見」,被稽核抓到。
         # ⚠️ 現況:**cron 已接、UI 未接**(見 `_rescue_by_isin` docstring 的消費者現況)。
+        # 生產端讀者(2026-09-01 實測):`scripts/weekly_nav_backfill.py::main` 的完成行,
+        # 與三行外的 `res.get("n_blocked")` 對稱。⚠️ 它只是**計數** ——「哪幾檔、
+        # 各自的結局是什麼」仍要掃 `results`(逐檔結局走該檔的 `_ccy_outcome`)。
         "n_ccy_refused": sum(1 for r in results if r.get("ccy_refused")),
         "gate_mode": _gate_mode,          # enforce / observe / off（誠實回報這次跑在哪個模式）
     }

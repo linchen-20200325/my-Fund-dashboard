@@ -29,9 +29,14 @@ silent data loss;理由與「天天紅」的權衡完整寫在 `main` 末段)。
 另寫 `$GITHUB_STEP_SUMMARY`(有設才寫)讓 run 頁面一眼看懂,見 `_step_summary`。
 
 **幣別不一致 → 拒絕換源(2026-09-01)**:長歷史候選與本檔預期幣別對不上時,`backfill_to_gs`
-會拒絕整條替換(§1 不換算、不混寫),**但原本正確幣別的那條照常寫入**。因此它
-**刻意不影響 exit code** —— 與 Gate 0 的「被擋下」不同,這裡**沒有任何資料遺失**,
-天天紅只會讓真正的失敗被淹掉。它照樣要**被看見**:逐檔 🟠 一行 + 完成行的聚合計數
+會拒絕整條替換(§1 不換算、不混寫);**單就這個決定而言沒有資料遺失** —— 原本正確幣別
+的那條照常寫入。因此它**刻意不影響 exit code**:與 Gate 0 的「被擋下」不同,
+天天紅只會讓真正的失敗被淹掉,而且幣別拒絕**沒有 `NAV_GATE0_MODE` 那種止血開關**
+(選股池 currency 填錯的檔會每天拒絕、永遠不會自己好 → 真讓它 exit 1,這條 cron 會
+**永久紅**,把 `blocked` 賴以生效的訊號一起燒掉)。
+⚠️ **但「拒絕換源」與「今天有沒有補到」是兩件事,渲染時不得混為一談** ——
+同一檔可以「拒絕換源」+「MoneyDJ 也抓不到」或「+ 被 Gate 0 擋下」而**完全沒有寫入**
+(兩支都以實跑 probe 複驗過)。逐檔結局一律走 `_ccy_outcome`,**禁止**再寫成無條件斷言。它照樣要**被看見**:逐檔 🟠 一行 + 完成行的聚合計數
 + Step Summary 專屬表格(見 `_step_summary`),否則就是 §1／§5 要防的無聲降級。
 """
 from __future__ import annotations
@@ -95,6 +100,33 @@ def _load_client_and_holdings_sheet():
     return client, (str(_sid) if _sid else None)
 
 
+def _ccy_outcome(r: dict) -> str:
+    """一檔「幣別拒絕換源」的**實際結局**一句話。
+
+    2026-09-01 稽核 🔴:上一版在四個地方無條件寫「原幣別序列照常寫入」——
+    那是**斷言**,而它在兩個可達狀態下是**假的**(兩支都以實跑 probe 複驗過,不是推論):
+      - **MoneyDJ 也抓不到**:`ccy_refused` 設在 `if s.empty` **之前** → 拒絕成立、
+        序列是空的 → cron 會同時印「⬜ 抓不到淨值」與「🟠 原幣別序列照常寫入」,
+        **同一次 run 的兩行自相矛盾,而且根本不存在那條「原幣別序列」**。
+      - **同一檔又被 Gate 0 擋下**:`ccy_refused` 也設在 Gate 0 **之前** → 會同時印
+        🔴「已擋下未寫入」與 🟠「照常寫入」。⚠️ 而且這兩件事**正相關** ——
+        幣別混亂的基金,正是歷史值對不上 Gate 0 的那一檔。
+
+    §1:訊息說謊比沒有訊息更危險。**資料行為本身是對的**(空序列時拒絕美元候選仍然正確
+    —— 寧可沒有,不可寫錯幣別);錯的純粹是敘述,所以這裡只改敘述。
+    """
+    if r.get("blocked"):
+        return "本檔另被 Gate 0 擋下,今天沒有寫入任何淨值"
+    if not r.get("fetched"):
+        return "本檔沒有其他可寫入的序列,今天等於沒補到"
+    return "原幣別序列照常寫入"
+
+
+def _ccy_nothing_written(ccy_refused: list) -> int:
+    """被拒絕的檔裡,**今天完全沒有寫入**的檔數(blocked 或根本沒抓到)。"""
+    return sum(1 for r in ccy_refused if r.get("blocked") or not r.get("fetched"))
+
+
 def _step_summary(res: dict, blocked: list, ccy_refused: "list | None" = None) -> None:
     """把結果寫進 `$GITHUB_STEP_SUMMARY`（有設才寫;本機/NAS 無此 env → no-op）。
 
@@ -113,6 +145,7 @@ def _step_summary(res: dict, blocked: list, ccy_refused: "list | None" = None) -
     if not _path:
         return
     _ccy = list(ccy_refused or [])
+    _ccy_none = _ccy_nothing_written(_ccy)
     _nb = int(res.get("n_blocked") or 0)
     _nf = int(res.get("n_fail") or 0) - _nb
     _lines = [
@@ -122,7 +155,8 @@ def _step_summary(res: dict, blocked: list, ccy_refused: "list | None" = None) -
         f"**{res.get('gs_written', 0)}** 筆）",
         f"- ⬜ 抓不到:**{_nf}** 檔",
         f"- 🔴 被 Gate 0 擋下（**抓到了但沒寫入**）:**{_nb}** 檔",
-        f"- 🟠 幣別不一致 → 拒絕換源（**有寫入**,寫的是原幣別那條）:**{len(_ccy)}** 檔",
+        f"- 🟠 幣別不一致 → 拒絕換源:**{len(_ccy)}** 檔"
+        + (f"（其中 **{_ccy_none}** 檔今天**完全沒有寫入**）" if _ccy_none else ""),
         f"- Gate 0 模式:`{res.get('gate_mode', '?')}`",
     ]
     if res.get("gs_error"):
@@ -144,18 +178,27 @@ def _step_summary(res: dict, blocked: list, ccy_refused: "list | None" = None) -
     if _ccy:
         _lines += [
             "",
-            "### 🟠 幣別不一致,已拒絕換源（**這些檔有寫入**,不是失敗）",
+            "### 🟠 幣別不一致,已拒絕換源",
             "",
-            "| 代號 | 理由 |", "|---|---|",
+            "| 代號 | 這一檔今天的結局 | 理由 |", "|---|---|---|",
         ]
-        _lines += [f"| `{r['code']}` | {str(r.get('ccy_refused') or '').replace('|', '/')} |"
+        _lines += [f"| `{r['code']}` | {_ccy_outcome(r)} | "
+                   f"{str(r.get('ccy_refused') or '').replace('|', '/')} |"
                    for r in _ccy]
         _lines += [
             "",
             "長歷史候選與本檔預期幣別對不上 → **拒絕整條換掉**（§1 不換算、不混寫）。",
-            "寫進去的是原本正確幣別的那條,所以**不影響數字正確性**;",
-            "代價是這幾檔的歷史維持原本的跨度。要補到 5 年請去選股池把 `currency` 填對。",
+            "**這個決定本身一定是對的**（寧可沒有,不可寫錯幣別）——",
+            "但「今天有沒有補到」要看上表**逐檔**的結局欄,**不是每一檔都有寫入**。",
+            "要補到 5 年請去選股池把 `currency` 填對。",
         ]
+        if _ccy_none:
+            _lines += [
+                "",
+                f"⚠️ 上表有 **{_ccy_none}** 檔**今天完全沒有寫入任何淨值** ——",
+                "拒絕換源之外還疊了「MoneyDJ 也抓不到」或「被 Gate 0 擋下」。",
+                "這幾檔不處理就會每天重演。",
+            ]
     try:
         with open(_path, "a", encoding="utf-8") as _f:
             _f.write("\n".join(_lines) + "\n")
@@ -206,14 +249,20 @@ def main(argv=None) -> int:
         # 幣別拒絕與上面三態**正交**（一檔可以同時「抓到並寫入」＋「拒絕過換源」）,
         # 故獨立一行,不塞進 if/elif 鏈裡。🟠 而不是 🔴:它沒有造成任何資料遺失。
         if r.get("ccy_refused"):
-            _log(f"  🟠 {r['code']}: 【幣別不一致,已拒絕換源;原幣別序列照常寫入】"
+            _log(f"  🟠 {r['code']}: 【幣別不一致,已拒絕換源;{_ccy_outcome(r)}】"
                  f"{r['ccy_refused']}")
     # 2026-08-28 稽核修正:被擋下的檔**抓得好好的**,舊版把它併進「N 檔抓不到」是說謊。
     _n_blocked = int(res.get("n_blocked") or 0)
     _n_nofetch = int(res["n_fail"]) - _n_blocked
+    # 與三行外的 `_n_blocked` 對稱:計數讀 L2 的聚合欄,不在這裡自己數
+    # (稽核 minor:上一版加了 `n_ccy_refused` 卻沒有任何生產端讀者,
+    #  同一個 commit 寫的唯一呼叫端還是去掃 `results` —— 那個欄位當場變成裝飾品)。
+    _n_ccy = int(res.get("n_ccy_refused") or 0)
+    _n_ccy_none = _ccy_nothing_written(_ccy_refused)
     _log(f"完成:{res['n_ok']} 檔抓到 → 雲端去重後新增 {res['gs_written']} 筆;"
          f"{_n_nofetch} 檔抓不到;{_n_blocked} 檔被 Gate 0 擋下(抓到了但沒寫入);"
-         f"{len(_ccy_refused)} 檔幣別不一致拒絕換源(有寫入,寫的是原幣別那條)。"
+         f"{_n_ccy} 檔幣別不一致拒絕換源"
+         f"{f'(其中 {_n_ccy_none} 檔今天完全沒寫入)' if _n_ccy_none else ''}。"
          f" gate_mode={res.get('gate_mode', '?')}")
     _step_summary(res, _blocked, _ccy_refused)
     if res.get("gs_error"):

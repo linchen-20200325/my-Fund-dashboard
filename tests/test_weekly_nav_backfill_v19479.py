@@ -130,6 +130,7 @@ def _res(results, **kw):
              "n_ok": sum(1 for r in results if r["error"] is None and r["fetched"]),
              "n_fail": sum(1 for r in results if r["error"]),
              "n_blocked": sum(1 for r in results if r.get("blocked")),
+             "n_ccy_refused": sum(1 for r in results if r.get("ccy_refused")),
              "gate_mode": "enforce"}
     _base.update(kw)
     return _base
@@ -207,6 +208,7 @@ def test_main_logs_the_currency_refusal_per_fund(monkeypatch, capsys):
     assert "拒絕換源" in _err and "TWD" in _err and "USD" in _err
     assert "原幣別序列照常寫入" in _err, (
         "把『拒絕換源』講成『沒寫入』= 訊息說謊,會把人導去做不必要的補救")
+    # ⚠️ 反向同樣要守:這句只有在**真的寫入了**的時候才准出現,見下方三則。
 
 
 def test_main_summary_line_counts_currency_refusals(monkeypatch, capsys):
@@ -247,6 +249,92 @@ def test_step_summary_has_no_currency_table_when_none(monkeypatch, tmp_path):
     _txt = _f.read_text(encoding="utf-8")
     assert "幣別不一致 → 拒絕換源" in _txt and "**0** 檔" in _txt   # bullet 照列
     assert "已拒絕換源（**這些檔有寫入**" not in _txt              # 但沒有表格
+
+
+# ── 2026-09-01 稽核 🔴:「原幣別序列照常寫入」是**無條件斷言**,在兩個可達狀態下為假 ──
+# `r["ccy_refused"]` 設在 `if s.empty` **之前**、也在 Gate 0 **之前** →
+# 「拒絕發生」與「什麼都沒寫」可以同時成立。兩支都以實跑 probe 複驗過,不是推論。
+# ⚠️ 資料行為是對的(空序列時拒絕美元候選仍然正確,§1 寧可沒有不可寫錯幣別);
+#    這幾則守的是**敘述不得說謊** —— 訊息說謊比沒有訊息更危險。
+_CCY_NOFETCH_ROW = {"code": "D", "fetched": 0, "date_min": None, "date_max": None,
+                    "source": None, "blocked": False,
+                    "error": "抓不到淨值(晨星/CnYES 查無 ISIN / MoneyDJ 掛 / 代碼不對)",
+                    "ccy_refused": "幣別不一致:這檔基金應為 TWD,但候選序列宣告 USD"}
+_CCY_BLOCKED_ROW = {"code": "E", "fetched": 2, "date_min": "2024-12-01",
+                    "date_max": "2024-12-30", "source": "moneydj", "blocked": True,
+                    "error": "與既有 nav_history 衝突:重疊 1 日、1 日對不上 —— 已擋下未寫入",
+                    "ccy_refused": "幣別不一致:這檔基金應為 TWD,但候選序列宣告 USD"}
+
+
+def test_currency_refusal_with_nothing_fetched_must_not_claim_a_write(monkeypatch, capsys):
+    """拒絕換源 ＋ MoneyDJ 也抓不到 → **不存在**「原幣別序列」,不准說它被寫入。"""
+    _patch_backfill(monkeypatch, _res([_CCY_NOFETCH_ROW]))
+    W.main([])
+    _err = capsys.readouterr().err
+    assert "🟠 D" in _err and "拒絕換源" in _err
+    assert "原幣別序列照常寫入" not in _err, (
+        "同一次 run 同時印『⬜ 抓不到淨值』與『原幣別序列照常寫入』= 兩行自相矛盾")
+    assert "今天等於沒補到" in _err
+
+
+def test_currency_refusal_on_a_blocked_fund_must_not_claim_a_write(monkeypatch, capsys):
+    """拒絕換源 ＋ 同一檔被 Gate 0 擋下 → 🔴 說「未寫入」、🟠 不准說「照常寫入」。
+
+    ⚠️ 這兩件事**正相關**:幣別混亂的基金正是歷史值對不上 Gate 0 的那一檔。
+    """
+    _patch_backfill(monkeypatch, _res([_CCY_BLOCKED_ROW]))
+    W.main([])
+    _err = capsys.readouterr().err
+    assert "🔴 E" in _err and "🟠 E" in _err
+    assert "原幣別序列照常寫入" not in _err
+    assert "另被 Gate 0 擋下" in _err
+
+
+def test_summary_line_flags_how_many_wrote_nothing(monkeypatch, capsys):
+    """完成行不得無條件宣稱「有寫入」,要把「其中幾檔完全沒寫入」講出來。"""
+    _patch_backfill(monkeypatch, _res([_OK_ROW, _CCY_ROW, _CCY_NOFETCH_ROW]))
+    W.main([])
+    _err = capsys.readouterr().err
+    assert "2 檔幣別不一致拒絕換源" in _err
+    assert "其中 1 檔今天完全沒寫入" in _err
+    assert "有寫入,寫的是原幣別那條)。" not in _err, "完成行仍是無條件斷言"
+
+
+def test_step_summary_shows_per_fund_outcome_not_a_blanket_claim(monkeypatch, tmp_path):
+    """Step Summary 逐檔要有「結局」欄;沒寫入的檔要另外拉一段警示。"""
+    _f = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(_f))
+    _patch_backfill(monkeypatch, _res([_CCY_ROW, _CCY_NOFETCH_ROW]))
+    W.main([])
+    _txt = _f.read_text(encoding="utf-8")
+    assert "這一檔今天的結局" in _txt
+    assert "原幣別序列照常寫入" in _txt and "今天等於沒補到" in _txt
+    assert "**這些檔有寫入**" not in _txt, "表頭仍是無條件斷言"
+    assert "不影響數字正確性" not in _txt, "那句在『完全沒寫入』的狀態下是假的"
+    assert "完全沒有寫入任何淨值" in _txt
+
+
+def test_step_summary_no_nothing_written_warning_when_all_wrote(monkeypatch, tmp_path):
+    """反向:全部都有寫入 → 不要生出那段警示(§5 訊號不該被雜訊稀釋)。"""
+    _f = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(_f))
+    _patch_backfill(monkeypatch, _res([_CCY_ROW]))
+    W.main([])
+    _txt = _f.read_text(encoding="utf-8")
+    assert "原幣別序列照常寫入" in _txt
+    assert "完全沒有寫入任何淨值" not in _txt
+
+
+def test_summary_line_reads_the_l2_aggregate_not_a_local_recount(monkeypatch, capsys):
+    """稽核 minor:計數要讀 L2 的 `n_ccy_refused`(與 `_n_blocked` 對稱),不要自己再數一次。
+
+    加一個聚合欄、用「這樣才看得見」當理由、然後沒有任何生產端讀者 —— 那個欄位就是裝飾品。
+    """
+    _res_obj = _res([_OK_ROW, _CCY_ROW])
+    _res_obj["n_ccy_refused"] = 7          # 故意與 results 不同 → 只有真的讀它才會印 7
+    _patch_backfill(monkeypatch, _res_obj)
+    W.main([])
+    assert "7 檔幣別不一致拒絕換源" in capsys.readouterr().err
 
 
 def test_step_summary_is_a_noop_without_the_env(monkeypatch):
