@@ -279,8 +279,16 @@ def render_long_term_section(
     # v19.342 資料自動補抓:面板維持 ARCHIVED(v19.47 user 決策不變),但 stash
     # 資料 >30 天(= AI prompt 排除閾值)時 data-only 補抓一次 — 解「不點開
     # expander 就永遠 stale → 資料診斷永久紅 + AI prompt 永久排除」死循環。
-    # 30 分鐘 @st.cache_data(hot_money_repository)天然節流;失敗保留舊 stash,
-    # 只 print log 不打擾 UI(§1 fail loud at log)。
+    # ~~30 分鐘 @st.cache_data(hot_money_repository)天然節流~~
+    # ⚠️ 2026-09-01 更正(有意識的更正,不是漏刪):**這句對「失敗路徑」自本日起為假**。
+    #    `repositories/hot_money_repository.py` 已改為「內拋外譯」——
+    #    失敗會 raise、**穿過 `@st.cache_data` 不入快取**,那 30 分鐘的 TTL
+    #    只節流「成功結果」。失敗路徑改由 `infra.source_backoff` 的**來源冷卻**節流
+    #    (應用層失敗也會登記,見該檔 `_finmind_failed`)。
+    #    本呼叫點目前真正擋住重打的是**下面那個 `_hm_auto_refresh_tried`
+    #    session-once 旗標**,不是快取 —— 所以這裡不是漏洞;
+    #    但這行文字會被後人當成現行節流機制引用,故就地更正。
+    # 失敗保留舊 stash,只 print log 不打擾 UI(§1 fail loud at log)。
     try:
         from ui.hot_money import hot_money_is_stale, refresh_hot_money_data
         # 每 session 最多嘗試一次(成敗皆標記):失敗時不隨每次 rerun 重打網路

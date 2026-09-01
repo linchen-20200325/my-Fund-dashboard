@@ -242,12 +242,39 @@ def test_foreign_flow_401_bad_token_surfaces_status(monkeypatch):
     assert '401' in err
 
 
-def test_foreign_flow_empty_data_still_says_non_trading_day(monkeypatch):
-    """status=200 + data 為空 → 才是真的「非交易日區間」，訊息不可被誤改。"""
+def test_foreign_flow_empty_data_is_reported_as_upstream_anomaly_not_holiday(monkeypatch):
+    """~~status=200 + data 為空 → 才是真的「非交易日區間」，訊息不可被誤改。~~
+
+    ⚠️ **2026-09-01 規格更正（有意識的政策變更，不是把測試改鬆）** ——
+    原測試（`test_foreign_flow_empty_data_still_says_non_trading_day`）把
+    「空 ⇒ 非交易日」釘成契約，但那個前提**經實測為假**：
+
+      · production 的查詢視窗是 `days + 14`，而 `days` 來自 `ui/hot_money.py`
+        的 `cc1.slider("回看天數", 60, 365, 180, step=30)`
+        → **視窗恆為 74 ~ 379 個日曆日**；台灣最長連假約 9 天。
+        一個 ≥ 74 天的視窗回傳 `data: []`，**不可能**是非交易日區間。
+      · 於是舊訊息「無資料回傳（可能為非交易日區間）」在**唯一會發生的情境下
+        是錯的歸因**，而且被 `@st.cache_data` 鎖 30 分鐘 —— 正是 §1
+        「錯誤的數字比沒有數字更危險」，也正是憲法 §2.1 記載的
+        `fetch_tw_export_yoy` 掛在不存在 dataset 上「恆無資料」活了好幾版的同型病。
+
+    **本測試是加嚴不是放寬**：舊版只斷言 `df.empty` + 訊息含「非交易日」；
+    新版另外釘住 (a) 反向鎖「不得再被說成非交易日」、(b) 訊息要帶得出視窗天數，
+    以及 (c) **這次失敗有登記來源退避**（＝不會每次 rerun 都去打 FinMind，
+    那才是當初「不敢改成 raise」的真正理由，現已由退避層承接）。
+    """
+    from infra import source_backoff as _sb
+    _sb.reset_all()
     _patch_finmind(monkeypatch, _MockResp({'status': 200, 'data': []}))
     df, err = fetch_foreign_flow_series(32)
     assert df.empty
-    assert '非交易日' in err
+    # 反向鎖：與 402 那條同一個精神 —— 上游異常不得被說成休市
+    assert '非交易日' not in err, f"上游異常被誤報成非交易日：{err!r}"
+    assert '46' in err, f"訊息應帶出實際視窗天數（32+14=46），實際：{err!r}"
+    # 失敗有被登記進來源冷卻 → 下一次 rerun 在 fetch_url 進場處就被擋下
+    assert [d for d in _sb.get_backoff_state()
+            if d['source'] == 'api.finmindtrade.com'], \
+        f"應用層失敗未登記來源退避：{_sb.get_backoff_state()}"
 
 
 def test_foreign_flow_none_response_mentions_proxy_log(monkeypatch):
