@@ -59,6 +59,25 @@ def _workflow_text() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
 
 
+def _load_workflow_yaml():
+    """解析 workflow YAML;**缺 pyyaml 一律紅燈,不 skip**(安全守衛專用)。
+
+    ⚠️ **v19.540**:本檔兩條**安全**守衛原本寫 `pytest.importorskip("yaml")` —— 缺套件就
+    靜默 skip,而 skip 在 pytest 是綠燈,不會有人發現。用 meta_path finder 擋掉 yaml,在
+    **v19.539 的樹上**對同一個突變(`run:` 內插 `FOO: ${{ toJSON(github.event) }}`)實跑:
+    pyyaml 在場 → `1 failed, 62 passed`(exit 1);不在場 → `60 passed, 3 skipped`(exit 0,
+    **完全無人擋**)。
+    這正是行掃描那條當初的賣點(「安全守衛不該因為某個環境少裝一個套件就靜默 skip」,
+    寫在它自己的 docstring 裡),結構化這邊卻自己開了一模一樣的洞。
+
+    連帶修的是相依宣告:pyyaml 在 v19.540 前**不在任何 requirements 檔裡**,是靠
+    `pre-commit>=3.5` 的硬相依被帶進來的 —— 一條**承重但未宣告**的相依。已寫進
+    `requirements-dev.txt`,故這裡直接 `import yaml`,缺了就是環境沒照 requirements 裝。
+    """
+    import yaml  # 刻意在函式內 import:缺套件 → 這條測試紅燈,不是 skip
+    return yaml.safe_load(_workflow_text())
+
+
 def test_cron_is_28th_0023_utc():
     """cron 必須是 `23 0 28 * *`(台灣 28 號 08:23)。
 
@@ -99,8 +118,12 @@ def test_workflow_comment_states_the_pairing():
 
 
 def test_workflow_yaml_parses_and_declares_target_month():
-    """YAML 合法 + `workflow_dispatch` 有 target_month(預設空 = 下個月)。"""
-    yaml = pytest.importorskip("yaml")           # pyyaml 為 pre-commit 傳遞依賴,缺則略過
+    """YAML 合法 + `workflow_dispatch` 有 target_month(預設空 = 下個月)。
+
+    ⚠️ 本條**不是**安全守衛,故缺 pyyaml 仍容許 skip;兩條安全守衛已於 v19.540 改成
+       缺套件即紅燈(見 `_load_workflow_yaml`),pyyaml 亦已寫進 `requirements-dev.txt`。
+    """
+    yaml = pytest.importorskip("yaml")
     doc = yaml.safe_load(_workflow_text())
     # ⚠️ YAML 1.1 會把裸 `on:` 解析成布林 True(不是字串 "on")—— 兩種都接。
     on_cfg = doc.get("on") if "on" in doc else doc.get(True)
@@ -109,6 +132,38 @@ def test_workflow_yaml_parses_and_declares_target_month():
     assert "target_month" in _inputs, "缺 target_month → 手動觸發也只能送下個月,無法補送"
     assert _inputs["target_month"]["default"] == "", "預設須為空字串(= 走排程的下個月)"
     assert "YYYY-MM" in _inputs["target_month"]["description"]
+
+
+# ── v19.540:面板說明是「使用者按下去那一刻唯一看得到的字」──────────────────
+# GitHub 的 **Run workflow 面板不顯示 YAML 註解**。v19.539 把 Re-run 陷阱寫在 `target_month`
+# 上方的註解裡 —— 那段字在面板上根本不存在,只有讀 repo 的人看得到。
+# 另外 v19.539 的 description 把「4 號 / 1~3 號」**寫死**,沒有任何測試把它綁回
+# `_LATE_RUN_GRACE_DAYS`(常數只被鎖在 1..5)→ 把常數改成 2 或 5,面板當場開始說謊而**全綠**。
+def _target_month_description() -> str:
+    """workflow_dispatch 面板上 `target_month` 那一欄的說明文字(原始字面,不需 pyyaml)。"""
+    _m = re.search(r'^\s*description:\s*"([^"]*YYYY-MM[^"]*)"\s*$', _workflow_text(), re.M)
+    assert _m, "找不到 target_month 的 description(面板上唯一顯示的說明,不可只寫在註解裡)"
+    return _m.group(1)
+
+
+def test_target_month_description_tracks_the_grace_constant_and_warns_about_rerun():
+    """面板說明必須 (a) 跟著 `_LATE_RUN_GRACE_DAYS` 走、(b) 寫出 Re-run 陷阱。
+
+    (a) **常數 → 面板**的綁定:寫死的「4 號 / 1~3 號」在常數被調成 2 或 5 時就是假話,
+        而 `test_grace_window_constant_is_...` 只把常數鎖在 1..5,不會攔下這種漂移。
+    (b) Re-run 保留 `event=schedule` 且**不允許改 inputs** → 隔幾天才重跑會落在寬限窗外
+        (day > `_LATE_RUN_GRACE_DAYS`)→ 目標月跳過一個月,而且填不了 `target_month`。
+        這句話**必須在 description 裡**:面板不顯示註解。
+    """
+    _d = _target_month_description()
+    _g = M._LATE_RUN_GRACE_DAYS
+    assert f"{_g + 1} 號" in _d, (
+        f"面板說明未跟上 _LATE_RUN_GRACE_DAYS={_g}(應提到「{_g + 1} 號」):{_d!r}")
+    assert f"1~{_g} 號" in _d, (
+        f"面板說明未跟上 _LATE_RUN_GRACE_DAYS={_g}(應提到「1~{_g} 號」):{_d!r}")
+    assert "Re-run" in _d, (
+        "Re-run 陷阱只寫在 YAML 註解裡等於沒寫 —— Run workflow 面板不顯示註解,"
+        f"使用者唯一看得到的是這行 description:{_d!r}")
 
 
 # `${{ ... }}` 一個插值運算式(非貪婪,GitHub 的插值不可巢狀)。
@@ -159,9 +214,11 @@ def test_no_step_in_any_job_interpolates_target_month_into_run():
     ⚠️ 檢查的是**插值運算式內部**是否提到 target_month(大小寫不分,故 `${{ env.TARGET_MONTH }}`
     同樣會被抓)。純文字出現 `target_month`(例如 shell 註解)不算 —— 沒有插值就沒有代換,
     也就沒有 injection。
+    ⚠️ **本條只看 `run:`**(名字就這麼說)。`with:` 之類其他鍵由白名單那條負責 ——
+       它在 v19.540 起走訪**整份解析後的文件**,不再只看 `run`。
+    ⚠️ v19.540:缺 pyyaml 改**紅燈**(原為 `importorskip` 靜默 skip),理由見 `_load_workflow_yaml`。
     """
-    yaml = pytest.importorskip("yaml")           # pyyaml 為 pre-commit 傳遞依賴,缺則略過
-    doc = yaml.safe_load(_workflow_text())
+    doc = _load_workflow_yaml()
     _steps = [(_jn, _i, _st)
               for _jn, _job in (doc.get("jobs") or {}).items()
               for _i, _st in enumerate(_job.get("steps") or [])]
@@ -186,8 +243,19 @@ def test_no_step_in_any_job_interpolates_target_month_into_run():
 # 硬化指南點名的形態,而字面上完全沒有 `target_month` 這個詞 → 黑名單結構上看不到。
 # 修法:改成**白名單** —— `run:` 裡只准出現 dry_run 那一個布林三元式,其餘一律紅燈。
 _ALLOWED_RUN_INTERP = "github.event.inputs.dry_run == 'true' && '--dry-run' || ''"
-# `NAME: ${{ ... }}` 獨佔一行 = env/with 綁定(值進環境變數,不進 shell 指令列)。
-_ENV_BINDING_LINE_RE = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_-]*:\s*\$\{\{[^{}]*\}\}\s*$")
+# `NAME: ${{ ... }}` 獨佔一行。
+# ⚠️ **v19.540 更正:v19.539 這裡寫的前提是錯的。** 原文寫
+#     「`NAME: ${{ ... }}` 獨佔一行 = env/**with** 綁定(值進環境變數,不進 shell 指令列)」
+# —— 對 `env:` 成立,對 `with:` **不成立**:`with:` 是**餵給 action 的輸入**,怎麼用由該
+# action 決定,`actions/github-script` 的 `script` 輸入會被**當 JavaScript 執行**。可執行反例:
+#     - uses: actions/github-script@v7
+#       with:
+#         script: ${{ toJSON(github.event) }}
+# 這個形態在 v19.539 通過**全部 5 條**守衛(實跑 5 passed):行掃描把它當合法綁定放行,
+# 兩條結構化守衛只看 `step["run"]`、看不到 `with`。
+# 修法(兩邊各補一半):行掃描這條的白名單多一個條件「**必須位於 `env:` 區塊內**」;
+# 結構化那條改成走訪**解析後的整份文件**(不再只看 `run`)。
+_KEY_INTERP_LINE_RE = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_-]*:\s*\$\{\{[^{}]*\}\}\s*$")
 
 
 def _norm_expr(expr: str) -> str:
@@ -195,24 +263,55 @@ def _norm_expr(expr: str) -> str:
     return " ".join(expr.split())
 
 
+def _env_block_line_numbers(text: str) -> set:
+    """回傳「位於某個 `env:` 區塊內」的行號集合(1-based,純看縮排)。
+
+    規則:`env:` 自成一行(允許尾隨註解)後,**縮排更深**的行都算它的子項;縮排回到同層
+    或更淺就結束。空行與整行註解不改變狀態(它們不影響 YAML 的區塊結構)。
+
+    ⚠️ **射程**:這是行掃描,分不出「真的 YAML `env:` 區塊」與「`run: |` 的 shell 腳本裡
+       剛好寫了一行 `env:`」—— 後者由結構化那條(解析後走訪整份文件)負責。
+    """
+    inside, env_indent = set(), None
+    for _ln, _line in enumerate(text.splitlines(), start=1):
+        _stripped = _line.strip()
+        if not _stripped or _stripped.startswith("#"):
+            continue                                   # 空行 / 註解:不改變區塊狀態
+        _indent = len(_line) - len(_line.lstrip())
+        if env_indent is not None and _indent > env_indent:
+            inside.add(_ln)
+            continue
+        env_indent = _indent if re.match(r"^\s*env:\s*(#.*)?$", _line) else None
+    return inside
+
+
 def test_every_interpolation_in_the_file_is_either_an_env_binding_or_the_dry_run_ternary():
     """**白名單底線守衛**(不依賴 pyyaml):全檔每一個 `${{ }}` 只准是這兩種之一。
 
-      1. `NAME: ${{ ... }}` 獨佔一行 —— env / with 綁定,值進環境變數不進指令列;
+      1. `NAME: ${{ ... }}` 獨佔一行、**且位於 `env:` 區塊內** —— env 綁定,值進環境變數
+         不進指令列;**v19.540 加上「必須在 env 區塊內」這個條件**(理由見下與
+         `_KEY_INTERP_LINE_RE` 的註解:`with:` 的輸入不是環境變數,可能被當程式碼執行);
       2. `${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}` —— 唯一一個
          進 `run:` 的插值,展開結果只可能是固定字面值 `--dry-run` 或空字串,不含 user 輸入。
 
     白名單的**重點**是它不必事先知道危險長什麼樣子:`${{ toJSON(github.event.inputs) }}`、
     `${{ github.event.inputs }}`、`${{ github.event.issue.title }}` 這些都不在清單上 → 一律紅。
-    ⚠️ 射程誠實話:本條是**行掃描**,`NAME: ${{ ... }}` 這個形狀若出現在 `run:` 的 shell
-       腳本裡(例如 `run: |` 內寫 `FOO: ${{ toJSON(github.event) }}`)會被誤放行 ——
-       那一半由下一條(逐 step 解析 `run` 字串)負責。兩條合起來才完整。
+
+    ⚠️ **射程誠實話(v19.540 改寫)**:本條是**行掃描**,只看得到縮排,看不到 YAML 結構。
+       - **v19.540 起擋得住**:`env:` 區塊**外**的 `NAME: ${{ ... }}` —— 例如
+         `with: / script: ${{ toJSON(github.event) }}`(v19.539 被誤放行的那個形態)。
+       - **仍擋不住**:`run: |` 的 shell 腳本裡自己寫一行 `env:` 再接 `FOO: ${{ ... }}`,
+         縮排上與真的 env 區塊一模一樣 → 由下一條(解析後走訪整份文件)負責。
+       ⚠️ v19.539 這裡原本寫「**兩條合起來才完整**」——那是**被可執行反例證偽的全稱句**:
+          當時 `with: script: ${{ toJSON(github.event) }}` 通過**全部 5 條**守衛。
+          現在只宣稱「兩條的**已知**盲區互補」,**不宣稱窮盡**。
     """
+    _env_lines = _env_block_line_numbers(_workflow_text())
     _bad = []
     for _ln, _line in enumerate(_workflow_text().splitlines(), start=1):
         for _expr in _INTERP_RE.findall(_line):
-            if _ENV_BINDING_LINE_RE.match(_line):
-                continue                                   # 1. env / with 綁定
+            if _KEY_INTERP_LINE_RE.match(_line) and _ln in _env_lines:
+                continue                                   # 1. env 區塊內的綁定
             if _norm_expr(_expr) == _ALLOWED_RUN_INTERP:
                 continue                                   # 2. 唯一允許進 run: 的插值
             # 3. 註解裡的**空**佔位符 `${{ }}`(本檔的安全註解就在講這件事)。
@@ -227,33 +326,72 @@ def test_every_interpolation_in_the_file_is_either_an_env_binding_or_the_dry_run
         f"或 run: 裡那一個 dry_run 三元式;越權的有 → {_bad}")
 
 
-def test_no_run_step_interpolates_anything_but_the_dry_run_ternary():
-    """**白名單**(結構化版):逐 job 逐 step 解析 `run:`,裡面的插值只准是 dry_run 三元式。
+def _walk_interpolations(node, path=()):
+    """走訪解析後的 YAML,yield `(路徑, 插值運算式)` —— **每一個** `${{ }}`,不限 `run:`。
 
-    這條補的是上一條看不見的東西 —— 整包 dump:
-    `${{ toJSON(github.event.inputs) }}` / `${{ github.event.inputs }}` 會把**整包 inputs**
-    (含 user 可控的 `target_month`)在 shell 執行**之前**代換進指令列。
-    `test_no_step_in_any_job_interpolates_target_month_into_run` 那條黑名單找的是字面
-    `target_month`,整包 dump 裡沒有這個詞 → 它抓不到(實測突變:綠燈通過)。
+    v19.540:原本的結構化守衛只取 `step["run"]`,於是 `with:` 底下的插值完全在視線外
+    (`actions/github-script` 的 `script` 輸入是**直接當 JavaScript 執行**的)。改走訪整份
+    文件後,`uses:` / `with:` / `if:` / `container.image` 這些鍵都一併進入射程。
     """
-    yaml = pytest.importorskip("yaml")           # pyyaml 為 pre-commit 傳遞依賴,缺則略過
-    doc = yaml.safe_load(_workflow_text())
+    if isinstance(node, dict):
+        for _k, _v in node.items():
+            yield from _walk_interpolations(_v, path + (str(_k),))
+    elif isinstance(node, list):
+        for _i, _v in enumerate(node):
+            yield from _walk_interpolations(_v, path + (f"[{_i}]",))
+    elif isinstance(node, str):
+        for _expr in _INTERP_RE.findall(node):
+            yield path, _expr
+
+
+def test_no_interpolation_in_the_parsed_workflow_escapes_the_whitelist():
+    """**白名單**(結構化版):解析後走訪**整份文件**,每個插值只准是 env 綁定或 dry_run 三元式。
+
+    ⚠️ v19.540 更名(舊名 `test_no_run_step_interpolates_anything_but_the_dry_run_ternary`):
+       舊名說的是「run step」,而射程已擴到整份文件 —— 名字若停在 `run:`,下一個人會以為
+       `with:` 沒人守(那正是這次的漏洞)。
+
+    這條補的是行掃描那條看不見的東西,**兩種形態**:
+      1. **整包 dump**:`${{ toJSON(github.event.inputs) }}` / `${{ github.event.inputs }}`
+         會把整包 inputs(含 user 可控的 `target_month`)在 shell 執行**之前**代換進指令列。
+         `test_no_step_in_any_job_interpolates_target_month_into_run` 那條黑名單找的是字面
+         `target_month`,整包 dump 裡沒有這個詞 → 它抓不到(實測突變:綠燈通過)。
+      2. **`run:` 以外的鍵**(v19.540 加):
+             - uses: actions/github-script@v7
+               with:
+                 script: ${{ toJSON(github.event) }}
+         `with:` **不是**環境變數,值怎麼用由 action 決定 —— `github-script` 直接把 `script`
+         當 JavaScript 跑。本條 v19.539 只看 `step["run"]`,這個形態實跑**沒抓到**
+         (連同其餘 4 條,5 條全綠)。故改為走訪整份文件。
+
+    允許清單(與行掃描那條同一組,只是這裡看得到真正的 YAML 結構):
+      - 路徑倒數第二段是 `env`、**且整條路徑不經過 `with`** → env 綁定(值進環境變數,
+        不進指令列)。`with:` 底下若有一個剛好叫 `env` 的 action 輸入,那**不是**環境變數,
+        值怎麼用由該 action 決定 → 不放行(行掃描那條看不出這個差別,是它的已知盲區);
+      - 路徑最後一段是 `run` 且運算式 == dry_run 三元式。
+    其餘一律紅燈。
+    """
+    doc = _load_workflow_yaml()
     _steps = [(_jn, _i, _st)
               for _jn, _job in (doc.get("jobs") or {}).items()
               for _i, _st in enumerate(_job.get("steps") or [])]
     assert _steps, "解析不到任何 step → 這條測試等於沒在守,先修解析"
-    _bad = []
-    for _jn, _i, _st in _steps:
-        _run = _st.get("run")
-        if not isinstance(_run, str):
-            continue
-        for _expr in _INTERP_RE.findall(_run):
-            if _norm_expr(_expr) != _ALLOWED_RUN_INTERP:
-                _bad.append(f"job={_jn} step#{_i}({_st.get('name') or _st.get('uses')}): "
-                            f"${{{{{_expr}}}}}")
+    _seen, _bad = [], []
+    for _path, _expr in _walk_interpolations(doc):
+        _seen.append((_path, _norm_expr(_expr)))
+        if len(_path) >= 2 and _path[-2] == "env" and "with" not in _path:
+            continue                                       # env 綁定(`with:` 底下的不算)
+        if _path and _path[-1] == "run" and _norm_expr(_expr) == _ALLOWED_RUN_INTERP:
+            continue                                       # 唯一允許進 run: 的插值
+        _bad.append(f"{'.'.join(_path)}: ${{{{{_expr}}}}}")
     assert not _bad, (
-        "`run:` 裡出現不在白名單上的插值(整包 dump / 任何 github.event 欄位都算)→ "
-        f"改走 env: 由程式讀 os.environ → {_bad}")
+        "解析後的 workflow 出現不在白名單上的插值(整包 dump / `with:` 輸入 / 任何 "
+        f"github.event 欄位都算)→ 改走 env: 由程式讀 os.environ → {_bad}")
+    # 反向:走訪真的有看到東西,否則「0 個違規」可能只是走訪壞掉(§1 不要假綠燈)。
+    assert any(_p and _p[-1] == "run" and _e == _ALLOWED_RUN_INTERP for _p, _e in _seen), (
+        f"走訪不到 run: 裡的 dry_run 三元式 → 先修走訪,別把它當通過({_seen})")
+    assert any(len(_p) >= 2 and _p[-2] == "env" and "with" not in _p for _p, _ in _seen), (
+        f"走訪不到任何 env 綁定 → 先修走訪,別把它當通過({_seen})")
 
 
 def test_the_whitelisted_dry_run_expression_still_exists():
@@ -502,9 +640,12 @@ def test_cli_end_to_end_nonzero_exit():
 #    ⚠️ 「幾乎」是刻意的措辭,不是保守:`actual_ex_for_month` 的命中條件只有「年月相同」,
 #       **整條資料鏈沒有任何『未來日期』過濾**(services/dividend_calendar.py 該函式 + 其上游
 #       `_parse_records`)。目標月若真的已經有一筆已公告的基準日,排程路徑當場就走事實分支。
-#       今天擋住它的是 MoneyDJ 解析端把金額欄空的預告列丟掉
-#       (`repositories/fund/fund_orchestration.py` wb05 迴圈 `_amt <= 0 → continue`)——
-#       那是**資料巧合,不是結構保證**,而且只在 MoneyDJ 那一條路徑上。
+#       ⚠️ v19.540 誠實化(原文寫「今天擋住它的是 MoneyDJ …」):**若** MoneyDJ 會列出
+#       「已公告、金額未定」的預告列,那**可能**擋住它的是解析端把金額欄空的列丟掉
+#       (`repositories/fund/fund_orchestration.py:1320` wb05 `_amt is None or _amt <= 0 → continue`);
+#       但**它會不會列預告列,本次沒有查證**(v19.540 撰寫環境實測連不到 MoneyDJ:
+#       proxy CONNECT 403)。來源若根本不列,那個判斷式一次都沒出過場,功勞就記錯了地方。
+#       **能確定的只有:程式沒有任何東西阻止它。**
 #    這裡把「兩條路徑在**本檔 fixture 下**各自會發生什麼」鎖住,避免下次有人改動任一邊時無聲翻面。
 # ══════════════════════════════════════════════════════════════════════
 def _monthly_history(last_y: int, last_m: int, day: int = 11, n: int = 14) -> list:
@@ -538,7 +679,11 @@ def test_scheduled_path_falls_back_to_the_estimate_when_the_target_month_has_no_
     是**被程式碼推翻的全稱句**:`actual_ex_for_month` 只比對年月,整條資料鏈沒有任何
     「未來日期」過濾;在配息表尾端補一筆 2026-10 的紀錄再推 2026-10,就會拿到
     `is_actual=True` / `confidence=high` / `error_band=0`(見本檔區段抬頭的說明)。
-    目前排程路徑踩不到,靠的是 MoneyDJ 解析端丟棄金額欄空的預告列 —— 資料巧合,不是保證。
+    排程路徑在**本檔 fixture 下**踩不到(這條測的就是它);**production 會不會踩到、
+    以及踩不到的原因,本次沒有查證**(v19.540 誠實化,原文寫「靠的是 MoneyDJ 解析端丟棄
+    金額欄空的預告列」):若 MoneyDJ 會列預告列,那個 `_amt <= 0 → continue` 可能是擋板;
+    若它根本不列未來月份,擋住的是**資料來源本身**,那個判斷式一次都沒出過場。
+    (v19.540 撰寫環境實測連不到 MoneyDJ:proxy CONNECT 403 → 無法現場確認。)
     要不要加「未來日期不採信」的過濾是**業務決策**(顯示已公告的事實可能反而是好事),
     待 user 拍板(§-1),**不在本測的射程內**。
     """

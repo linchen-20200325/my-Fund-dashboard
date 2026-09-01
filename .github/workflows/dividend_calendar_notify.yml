@@ -42,11 +42,16 @@ on:
         # ⚠️ **排程跑失敗時不要按 Re-run**:Re-run 保留 event=schedule 且**不允許改 inputs**,
         #    隔幾天才重跑會落在寬限窗外(day > 3)→ 目標月跳過一個月,而且填不了 target_month。
         #    改成重新 Run workflow + 明填 target_month。(說明見 docs/DIVIDEND_CALENDAR_SETUP.md)
+        #    ⚠️ v19.540:這段警告**同時**要寫進下面的 `description` —— GitHub 的 Run workflow
+        #    面板**不顯示 YAML 註解**,使用者按 Re-run 那一刻唯一看得到的就是 description。
+        #    註解留著是給讀 repo 的人看理由,面板那句是給當下要按的人看。
         # ⚠️ **補送過去的月份時,該月已有實際除息紀錄的基金會顯示「事實」而不是推估**
         #    (`services.dividend_calendar.actual_ex_for_month`,v19.538 §16.2:信心 high、
         #    誤差 0)。圖上目前**分不出**哪格是事實哪格是推估 —— 那是已登記的接縫
         #    (待 UI 線框拍板),不是這裡的 bug。
-        description: "指定月份 YYYY-MM(留空:4 號後=下個月 / 1~3 號=本月)"
+        # ⚠️ 「4 號 / 1~3 號」= `scripts/dividend_calendar_notify.py:_LATE_RUN_GRACE_DAYS`(=3),
+        #    由 tests/test_dividend_calendar_cron_v19537.py 綁住:改常數沒改這句 → 紅燈。
+        description: "指定月份 YYYY-MM(留空:4 號後=下個月 / 1~3 號=本月)。排程失敗別按 Re-run(它不讓你填本欄,又會跳過一個月)→ 改成重開一次 Run workflow 並填本欄"
         default: ""
 
 concurrency:
