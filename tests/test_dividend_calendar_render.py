@@ -908,3 +908,79 @@ def test_empty_month_note_uses_target_month_not_this_month():
         assert empty_month_note(2027, 2) in _surface             # 三處同一句 SSOT
         assert "本月無推估" not in _surface and "本月你的基金" not in _surface
     assert "無推估除息基準日" in _html                            # §13.8 口徑仍是「基準日」
+
+
+# ── v19.538 B-3:共用樣板的 eyebrow 不得宣稱更新頻率 ──────────────────────
+# 這一份 HTML **兩條路徑共用**,而兩條的「更新時機」不是同一件事:
+#   App(`ui/tab_manage.py`)  → 看**本月**,使用者按下去**當場現算**;
+#   LINE 推播(`render_month_calendar_png`)→ 看**下個月**,每月 28 號推一次。
+# 舊字串「追蹤清單 ∪ 持倉 · 每月月底更新」在 App 端會被讀成「這張圖要等月底才更新」,
+# 但它是剛算出來的;而改回「每月月初更新」則換推播端變錯 —— **任何頻率字眼都必然有一邊是假的**。
+# 故 eyebrow 只描述**範圍**(這張圖是誰的基金),不描述**行為**。
+_EYEBROW_EXPECTED = '<p class="eyebrow">追蹤清單 ∪ 持倉</p>'
+# 「頻率宣稱」字表:兩條路徑都不成立的講法(「加減基金 → 下月自動更新」講的是**基金集合**
+# 會不會跟著變,不是這張圖多久重畫一次,故刻意不在此列)。
+_CADENCE_CLAIMS = ("每月月底更新", "每月月初更新", "月底更新", "月初更新",
+                   "每月月底", "每月月初", "每月更新")
+
+
+def _both_paths_html():
+    """回傳 [(路徑名, html)] —— App 版型與推播版型各一份(唯一差別是 `compact`)。"""
+    _c = _cal()                                         # 共用檔頭既有 fixture
+    return [("App(tab_manage,compact=False)", render_month_calendar_html(_c)),
+            ("LINE 推播(png,compact=True)", render_month_calendar_html(_c, compact=True))]
+
+
+def test_eyebrow_states_scope_not_update_cadence():
+    """eyebrow 只講「這是誰的基金」,**不講多久更新一次** —— 兩條路徑各驗一次。
+
+    守的是「共用樣板不得宣稱一個它服務兩種行為的頻率」。有人把
+    「每月月底更新」/「每月月初更新」加回去(不論加在 eyebrow 或頁面任何地方)即紅燈。
+    """
+    for _name, _html in _both_paths_html():
+        assert _EYEBROW_EXPECTED in _html, f"{_name}:eyebrow 字面漂移"
+        for _claim in _CADENCE_CLAIMS:
+            assert _claim not in _html, (
+                f"{_name}:出現更新頻率宣稱「{_claim}」—— 本樣板兩條路徑共用,"
+                "App 是按下去現算、推播是每月 28 號,任何頻率字眼都會有一邊是假的")
+
+
+def test_removing_the_cadence_word_loses_no_month_information():
+    """拿掉頻率字眼**沒有**讓「這張圖是哪個月」變得看不出來 —— 兩條路徑都還有月份。
+
+    這是上一條的配套:禁令要能成立,前提是被拿掉的資訊在別處還在(否則就是把資訊刪掉)。
+    月份在 **徽章** 與 **副標** 各出現一次;推播端另有 LINE 文字首行(見
+    `test_line_caption_first_line_says_not_no_dividend` 與 `build_summary_text`)。
+    """
+    from services.dividend_calendar import month_label
+    _cal_2027 = build_month_calendar([], 2027, 2)
+    for _compact in (False, True):
+        _html = render_month_calendar_html(_cal_2027, compact=_compact)
+        assert '<span class="badge month tnum">民國116年 2月（2027）</span>' in _html
+        assert month_label(2027, 2) in _html          # 副標/文案走同一份 SSOT
+
+
+def test_push_png_path_renders_the_same_template():
+    """推播 PNG 走的**就是**上面那份 HTML(compact=True)—— 否則上一條等於沒守到推播端。
+
+    `render_month_calendar_png` 只組 HTML 再委派 L0 `infra.html_to_png`;
+    這裡把 L0 換成間諜攔下實際傳進去的 HTML,不需要 Chromium。
+    """
+    import infra.html_to_png as _l0
+    from ui.helpers.dividend_calendar_render import render_month_calendar_png
+    _seen = {}
+    _orig = _l0.html_to_png
+
+    def _spy(html, **kw):
+        _seen["html"] = html
+        return b"\x89PNG\r\n\x1a\n"
+
+    _l0.html_to_png = _spy
+    try:
+        render_month_calendar_png(_cal())
+    finally:
+        _l0.html_to_png = _orig
+    assert _seen["html"] == render_month_calendar_html(_cal(), compact=True)
+    assert _EYEBROW_EXPECTED in _seen["html"]
+    for _claim in _CADENCE_CLAIMS:
+        assert _claim not in _seen["html"]

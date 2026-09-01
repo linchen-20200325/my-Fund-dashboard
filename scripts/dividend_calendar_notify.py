@@ -10,7 +10,17 @@
 `tests/test_dividend_calendar_cron_v19537.py` 鎖住。
 
 補送指定月份:`--target-month 2026-09`(或 env `TARGET_MONTH`,旗標優先);
-留空 = 下個月。**格式不合法一律報錯離開(exit 2),絕不靜默退回下個月**(§1)。
+**格式不合法一律報錯離開(exit 2),絕不靜默退回下個月**(§1)。
+留空時看**今天幾號**:4 號~月底 → 下個月;**1~3 號 → 本月**(視為上月 28 號那一跑遲到跨月,
+理由與實測值見 `_LATE_RUN_GRACE_DAYS`)。
+
+⚠️ **補送過去的月份會顯示事實、不是推估**:`build_month_calendar` 自 v19.538 §16.2 起,
+目標月若已有實際除息紀錄就直接用它(`actual_ex_for_month`,信心 high / 誤差 0 / `is_actual=True`)。
+排程路徑(推下個月)幾乎不會踩到 —— 未來月份不會有紀錄;**補送過去月份則幾乎必然踩到**。
+實測(5 檔真實 MoneyDJ 配息表,ref 固定 2026-09-01):補 2026-07 → 5/5 全走事實,
+其中摩根 JFZN3 補 2026-08 由推估 08/07 變成事實 08/11(差 4 天)。
+⚠️ 圖上目前**分不出**事實與推估(全域「推估」徽章對事實格而言是錯的)——
+那是 `06c7093` 就已登記、待 UI 線框拍板的接縫,不是本腳本的 bug。
 
 reuse:`weekly_switch_notify` 的 `_load_client_and_sheet` / `_read_holdings` / `_read_watchlist`
 (讀代碼);配息用輕量 `auto_fetch_moneydj`(只需 dividends + 名稱,不算全指標)。
@@ -44,6 +54,22 @@ _TARGET_MONTH_ENV = "TARGET_MONTH"          # workflow 走 env 傳(不插進 she
 _TARGET_MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
 _YEAR_MIN, _YEAR_MAX = 2000, 2100           # 打錯字防呆(如 0226 / 20261);非業務門檻
 
+# 未指定 target_month 時,「幾號(含)以內視為上個月 28 號那一跑遲到」的寬限窗。
+# ⚠️ 這個常數在修一個**只有 2 月會壞、而且壞了不會有任何東西報錯**的洞,理由全部是實測值:
+#   `_now_tw()` 取的是**任務實際起跑時刻**,不是排程時刻。cron `23 0 28 * *` = 28 號 08:23 台灣,
+#   要讓台灣日期跨月需延遲 **937 分(15.62 h)**;本 repo 實測(update_macro_history.yml,
+#   13 次 schedule 觸發,量測日 2026-09-01:中位數 144.4 分、**最長 692.8 分**)餘裕只有 244 分。
+#   非閏年 2 月 28 日是當月最後一天 → 一旦跨過台灣午夜,`now` 變成 3/1,
+#   「下個月」就從 3 月跳成 4 月 —— **3 月整月無聲跳過,而且要等 30 天才有下一次**。
+#   (其他月份的 28 號 + 延遲最多走到 29/30/31 號,月份不變,不受影響。)
+# **為什麼是 3 而不是 1**:落到 1 號需延遲 > 937 分,落到 2 號需 > 2377 分(39.6 h)、
+#   3 號需 > 3817 分(63.6 h)。1 已足以涵蓋唯一實際會發生的情形,取 3 是**刻意留的餘裕**
+#   —— 代價很小(見下),而猜錯的代價是整月不見。
+# **代價(誠實寫明)**:1~3 號**手動**觸發且**不填 target_month** → 送**本月**而非下個月。
+#   這正好落在 user 2026-09-01 裁示允許的另一組配對(「月初例如 1 號發布這個月的配息基準日」),
+#   **不可能**產生被否決的「月初發下個月」。要在 1~3 號送下個月 → 明填 `target_month`。
+_LATE_RUN_GRACE_DAYS = 3
+
 
 def _now_tw() -> "_dt.datetime":
     """現在(台北時間)。獨立成函式讓測試可凍結時間。"""
@@ -53,14 +79,23 @@ def _now_tw() -> "_dt.datetime":
 def _resolve_target_month(now: "_dt.datetime", raw: "str | None") -> "tuple[int, int]":
     """(現在, 指定值) → 目標 (year, month)。
 
-    `raw` 空/None → **下個月**(12 月 → 隔年 1 月),即排程路徑;
-    `raw` = "YYYY-MM" → 該月(補送用)。
+    `raw` = "YYYY-MM" → **該月**(補送用,`now` 完全不參與)。
+    `raw` 空/None → 依**現在幾號**判斷這一跑屬於哪一次排程:
+      - `now.day > _LATE_RUN_GRACE_DAYS` → **下個月**(12 月 → 隔年 1 月),即 28 號準時那一跑;
+      - `now.day <= _LATE_RUN_GRACE_DAYS` → **本月** —— 視為「上個月 28 號那一跑遲到、
+        起跑時已跨過台灣午夜」。理由與常數取值見 `_LATE_RUN_GRACE_DAYS` 的註解
+        (非閏年 2/28 + 延遲 > 937 分 → 3 月整月無聲跳過)。
+
+    ⚠️ 這一條**不改變 28 號準時觸發的行為**(28 > 3),改變的只有「1~3 號、未指定月份」
+    這一個情境 —— 而那個情境落在 user 允許的「月初發本月」那一組,不是被否決的「月初發下個月」。
 
     §1:格式不合法 → **raise ValueError**(呼叫端 exit 2),**嚴禁**靜默退回「下個月」——
     那會讓 user 以為補送成功、實際收到另一個月,是最糟的失敗模式(錯的數字比沒有數字危險)。
     """
     s = (raw or "").strip()
     if not s:
+        if now.day <= _LATE_RUN_GRACE_DAYS:
+            return (now.year, now.month)      # 上個月 28 號那一跑遲到 → 目標仍是「本月」
         return (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)
     m = _TARGET_MONTH_RE.match(s)
     if not m:
@@ -138,8 +173,16 @@ def main(argv=None) -> int:
     except ValueError as _e:
         _log(f"❌ {_e} → 中止(不退回下個月,避免補送到錯的月份)")
         return 2
-    _log(f"目標月 {_ny}-{_nm:02d}" + (f"(手動指定 {_raw_tm.strip()})" if (_raw_tm or "").strip()
-                                     else "(未指定 → 下個月)"))
+    # ⚠️ log 必須說出**實際走了哪一條**:未指定時有兩條(準時 → 下個月 / 遲到寬限 → 本月),
+    # 一律印「下個月」會在 2 月那條路徑上變成假話,而那正是最需要看 log 判斷的時候(§1)。
+    if (_raw_tm or "").strip():
+        _why = f"(手動指定 {_raw_tm.strip()})"
+    elif now.day <= _LATE_RUN_GRACE_DAYS:
+        _why = (f"(未指定,今天 {now.day} 號 ≤ {_LATE_RUN_GRACE_DAYS} → "
+                "視為上月 28 號那一跑遲到 → 本月)")
+    else:
+        _why = "(未指定 → 下個月)"
+    _log(f"目標月 {_ny}-{_nm:02d}{_why}")
 
     from scripts.weekly_switch_notify import (
         _load_client_and_sheet,

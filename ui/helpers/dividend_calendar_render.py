@@ -474,6 +474,18 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     `compact=True`:推播圖專用版型(窄幅 + 大字 + 收緊留白),見 `_CSS_COMPACT`。
     App 網頁版用預設 False,版面完全不變。
 
+    ⚠️ **本樣板的 eyebrow 不准寫更新頻率**(v19.538;`追蹤清單 ∪ 持倉`,句點)。
+    這一份 HTML **兩條路徑共用**,而兩條的「更新時機」根本不是同一件事:
+      - `ui/tab_manage.py` 的 App —— 看**本月**,使用者按下去**當場現算**(沒有「更新週期」);
+      - `render_month_calendar_png` → LINE 推播 —— 看**下個月**,每月 28 號推一次。
+    寫「每月月底更新」在 App 端會被讀成「這張圖要等月底才更新」(實際是剛算出來的);
+    寫「每月月初更新」則在推播端是錯的 —— **任何頻率字眼都必然有一邊是假的**。
+    真正該傳達的「這張圖是哪個月」已由下方月份徽章與副標各講一次,不缺這一句;
+    推播端另有 LINE 文字首行 `🗓️ 基金除息行事曆 · <月份>`。
+    ⚠️ 要讓兩邊各說各話請**不要**加 kwarg 硬塞一句進來(§8.1 step 6:兩邊都不需要的資訊,
+    不值得為它開一個參數)。守衛:`tests/test_dividend_calendar_render.py`
+    `test_eyebrow_states_scope_not_update_cadence` —— 加回任何頻率字眼即紅燈。
+
     v19.533(§15 顯示層,user 2026-08-26 拍板)三件事:
       §15.2 明細表欄位正名:「除息基準日」→ **「預估基準日」**、「信心」→ **「誤差」**。
             「預估」二字必須出現在**欄頭**(user 明確要求),不可只放頁尾免責 ——
@@ -564,7 +576,7 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{_e(title)}</title>
 <style>{_CSS}{_CSS_COMPACT if compact else ''}</style></head><body><div class="wrap">
-<header><p class="eyebrow">追蹤清單 ∪ 持倉 · 每月月底更新</p>
+<header><p class="eyebrow">追蹤清單 ∪ 持倉</p>
 <h1>{_e(title)}</h1>
 <p class="sub">{_sub}</p>
 <div class="badges"><span class="badge month tnum">民國{roc}年 {m}月（{y}）</span>{sample_badge}</div>

