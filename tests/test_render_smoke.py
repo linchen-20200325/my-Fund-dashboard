@@ -198,7 +198,25 @@ render_data_guard_tab()
         _assert_no_uncaught(at, "render_data_guard_tab")
 
     def test_render_manual_tab(self):
-        """tab6:v19.136 系統說明書 + 原理教室 sub-tab"""
+        """tab6:v19.136 系統說明書 + 原理教室 ~~sub-tab~~ **單頁 + 錨點目錄**。
+
+        ⚠️ **2026-09-01 就地更正「sub-tab」三個字。有意識的更正，不是漏刪**
+        （日期 **2026-09-01** · 決策者：**AI 總管** · 依據：**實測**
+        `git grep -c -F ".tabs(" ffad4ca -- ui/tab6_manual.py` → **無輸出（0）**；
+        同一指令對 `origin/main` → **1**）。
+        **舊表述在它寫下的當天是對的**：說明書那時確實是 10 個 `st.tabs` 子分頁。
+        **被權衡掉的是它的時態** —— 那個載體**就是本 PR 拆掉的**
+        （commit `10a8433`），現況為單頁 + 錨點目錄（`_CHAPTERS` + `_render_toc()`）。
+
+        ⛔ **「原理教室」四個字刻意不動 —— 它不是本 PR 打壞的。**
+        它在 **base 上就已經是假的**：總經原理教室已於 **v19.317** 說明書瘦身時
+        整段砍除（同源殘留至少還有三處：**本檔的 module docstring**、`conftest.py`
+        提到 `test_manual_classroom.py` 退役的那行、`tests/test_macro_thresholds_v2.py`
+        講「v19.317 說明書瘦身」的那段 —— **刻意不寫行號**，行號會被下一次編輯弄假，
+        用 `grep -rn 原理教室` 找即可）。
+        那是**既有債**，依 **§-1**「沒實際 bug／沒具體需求 → 不要動」**不夾帶**；
+        本次只改「是我打壞的」那一半。
+        """
         from streamlit.testing.v1 import AppTest
         drv = _build_driver('''
 from ui.tab6_manual import render_manual_tab
@@ -210,8 +228,30 @@ render_manual_tab()
         # ⚠️ 2026-08-06:移除「台股 TPI」幽靈章節(三個權重常數存在,但全站零計算
         # 零渲染,說明書描述了一個不存在的功能)後 sub-tab 11 → 10,原本釘死的
         # 30 會誤紅。本條的用意是「render 沒有早期爆掉只剩零星元素」,精確章節
-        # 清單由 tests/test_tab6_manual.py 的 sub-tab 斷言守 —— 兩條分工,
+        # ~~清單由 tests/test_tab6_manual.py 的 sub-tab 斷言守~~ —— 兩條分工,
         # 不要在這裡釘章節數。
+        #
+        # ⚠️ **2026-09-01 就地更正上面那條劃線：它指的東西已被本 PR 拆掉。**
+        #    **有意識的更正,不是漏刪**(日期 **2026-09-01** · 決策者:**AI 總管**
+        #    · 依據:**實測**)。
+        #    **舊表述在它寫下的當天是對的**:`tests/test_tab6_manual.py` 那時確實有
+        #    `test_render_calls_streamlit_tabs_with_10_subtabs`,斷言
+        #    `len(captured_labels) == 10`,「精確章節清單」確實由它守。
+        #    **被權衡掉的是它的指涉對象** —— 本 PR 把該測試改名為
+        #    `test_render_draws_10_chapters_as_a_single_page`,斷言反轉為
+        #    `captured_labels == []`(「說明書不得再開 sub-tab」)。
+        #    **它現在守的是「不准有 sub-tab」,不再是「精確章節清單」。**
+        #    **現行的精確章節清單守衛 = `tests/test_manual_anchor_toc.py`**
+        #    (`test_toc_and_sections_agree` / `test_chapter_titles_are_rendered_verbatim`
+        #    / `test_every_chapter_key_is_called_once_in_order`),
+        #    外加 `tests/test_tab6_manual.py::test_manual_has_no_phantom_chapters`。
+        #    「兩條分工、不要在這裡釘章節數」的**分工原則本身未變**,換的是另一條是誰。
+        #
+        # 📌 **上面 2026-08-06 那段「後 sub-tab 11 → 10」刻意不劃線** ——
+        #    它是**當日的歷史紀錄**,2026-08-06 當天說明書確實是 sub-tab、確實 11 → 10,
+        #    **這句話沒有變成假的**(劃掉一句為真的歷史紀錄,本身才是竄改)。
+        #    但它講的那個**載體**已隨本 PR 消失,故在此點名,免得讀者反推出
+        #    「說明書現在還有 sub-tab」。
         #
         # ⚠️ **2026-08-31 就地更正：只數 `at.markdown` 是把「總量代理」寫成了
         # 「單一元素型別代理」。有意識的更正,不是漏刪**(決策者:AI 總管)。
