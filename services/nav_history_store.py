@@ -595,6 +595,7 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
           "n_ok": int,             # 抓到淨值且沒有 error 的檔數
           "n_fail": int,           # **有 error 的檔數(含抓不到 + 被 Gate 0 擋下)**
           "n_blocked": int,        # 其中被 Gate 0 擋下的檔數 → 純「抓不到」= n_fail - n_blocked
+          "n_ccy_refused": int,    # 因**幣別不一致**而拒絕換源的檔數(**不是**沒寫入)
           "gate_mode": str,        # 本次 Gate 0 模式:enforce / observe / off
         }
         ⚠️ 呼叫端**必須**用 `blocked` / `n_blocked` 區分「被擋下」與「抓不到」:
@@ -912,5 +913,10 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         # 檔數是 `n_fail - n_blocked`。分開的理由:被擋的檔**抓得好好的**,把它講成
         # 「抓不到」是說謊,而且會把使用者導向手動 CSV(唯一沒有閘門的那條路)。
         "n_blocked": sum(1 for r in results if r.get("blocked")),
+        # 2026-09-01:因幣別不一致而**拒絕換源**的檔數。⚠️ 與 `n_blocked` 是兩件事 ——
+        # 這些檔**有寫入**(寫的是原本正確幣別的那條),只是沒有換成更長的候選。
+        # 之所以要聚合出來:呼叫端(cron / UI)要能一眼看到次數,不必去掃 results;
+        # 只把理由塞進 results 而沒有人讀,等於「揭露了但沒人看得見」(§5)。
+        "n_ccy_refused": sum(1 for r in results if r.get("ccy_refused")),
         "gate_mode": _gate_mode,          # enforce / observe / off（誠實回報這次跑在哪個模式）
     }

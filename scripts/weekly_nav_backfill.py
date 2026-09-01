@@ -27,6 +27,12 @@ cron:.github/workflows/weekly_nav_backfill.yml(**每天** 20:00 台灣;NAV 多 T
 故障 —— 舊版 n_ok>0 就回 0,一檔被擋會綠燈零通知、每天重演,fail-closed 退化成
 silent data loss;理由與「天天紅」的權衡完整寫在 `main` 末段)。
 另寫 `$GITHUB_STEP_SUMMARY`(有設才寫)讓 run 頁面一眼看懂,見 `_step_summary`。
+
+**幣別不一致 → 拒絕換源(2026-09-01)**:長歷史候選與本檔預期幣別對不上時,`backfill_to_gs`
+會拒絕整條替換(§1 不換算、不混寫),**但原本正確幣別的那條照常寫入**。因此它
+**刻意不影響 exit code** —— 與 Gate 0 的「被擋下」不同,這裡**沒有任何資料遺失**,
+天天紅只會讓真正的失敗被淹掉。它照樣要**被看見**:逐檔 🟠 一行 + 完成行的聚合計數
++ Step Summary 專屬表格(見 `_step_summary`),否則就是 §1／§5 要防的無聲降級。
 """
 from __future__ import annotations
 
@@ -89,17 +95,24 @@ def _load_client_and_holdings_sheet():
     return client, (str(_sid) if _sid else None)
 
 
-def _step_summary(res: dict, blocked: list) -> None:
+def _step_summary(res: dict, blocked: list, ccy_refused: "list | None" = None) -> None:
     """把結果寫進 `$GITHUB_STEP_SUMMARY`（有設才寫;本機/NAS 無此 env → no-op）。
 
     exit code 負責**叫人來看**（見 `main` 末段的理由）,本函式負責**讓他一眼看懂** ——
     run 頁面直接看到哪一檔被擋、差在哪一天,不必翻 log。§5 可觀測。
     失敗只 log 不擋（寫 summary 壞掉不該讓一次成功的補淨值變成失敗）。
+
+    2026-09-01 新增 `ccy_refused`（幣別不一致 → 拒絕換源）。**與 `blocked` 同規格渲染,
+    但語意完全不同,渲染上必須分得開**:`blocked` 是「抓到了但**整檔沒寫入**」,
+    `ccy_refused` 是「**有寫入**,寫的是原本正確幣別那條,只是沒換成更長的候選」。
+    ⚠️ 為什麼非渲染不可:這道守門的「誠實揭露」原本只存在 stderr 數百行 log 裡,
+    沒有任何聚合、沒有任何 UI —— 那就是 §1／§5 要防的**無聲降級**。
     """
     import os
     _path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not _path:
         return
+    _ccy = list(ccy_refused or [])
     _nb = int(res.get("n_blocked") or 0)
     _nf = int(res.get("n_fail") or 0) - _nb
     _lines = [
@@ -109,6 +122,7 @@ def _step_summary(res: dict, blocked: list) -> None:
         f"**{res.get('gs_written', 0)}** 筆）",
         f"- ⬜ 抓不到:**{_nf}** 檔",
         f"- 🔴 被 Gate 0 擋下（**抓到了但沒寫入**）:**{_nb}** 檔",
+        f"- 🟠 幣別不一致 → 拒絕換源（**有寫入**,寫的是原幣別那條）:**{len(_ccy)}** 檔",
         f"- Gate 0 模式:`{res.get('gate_mode', '?')}`",
     ]
     if res.get("gs_error"):
@@ -126,6 +140,21 @@ def _step_summary(res: dict, blocked: list) -> None:
             "",
             "這幾檔今天**沒有寫入任何淨值**,不處理就會每天重演。",
             "確認是誤擋 → 設 `NAV_GATE0_MODE=observe` 先止血,再修來源。",
+        ]
+    if _ccy:
+        _lines += [
+            "",
+            "### 🟠 幣別不一致,已拒絕換源（**這些檔有寫入**,不是失敗）",
+            "",
+            "| 代號 | 理由 |", "|---|---|",
+        ]
+        _lines += [f"| `{r['code']}` | {str(r.get('ccy_refused') or '').replace('|', '/')} |"
+                   for r in _ccy]
+        _lines += [
+            "",
+            "長歷史候選與本檔預期幣別對不上 → **拒絕整條換掉**（§1 不換算、不混寫）。",
+            "寫進去的是原本正確幣別的那條,所以**不影響數字正確性**;",
+            "代價是這幾檔的歷史維持原本的跨度。要補到 5 年請去選股池把 `currency` 填對。",
         ]
     try:
         with open(_path, "a", encoding="utf-8") as _f:
@@ -162,6 +191,9 @@ def main(argv=None) -> int:
     from services.nav_history_store import backfill_to_gs
     res = backfill_to_gs(codes)
     _blocked = [r for r in res["results"] if r.get("blocked")]
+    # 2026-09-01:因幣別不一致而拒絕換源的檔。**這些檔有寫入**（寫的是原幣別那條）,
+    # 所以**不進 exit code**（見末段）—— 但一定要被看見,否則這道守門等於沒揭露。
+    _ccy_refused = [r for r in res["results"] if r.get("ccy_refused")]
     for r in res["results"]:
         if r["error"] is None and r["fetched"]:
             _log(f"  ✅ {r['code']}: {r['fetched']} 筆 ({r['date_min']}~{r['date_max']}) "
@@ -171,13 +203,19 @@ def main(argv=None) -> int:
             _log(f"  🔴 {r['code']}: 【Gate 0 擋下,未寫入】{r['error']}")
         else:
             _log(f"  ⬜ {r['code']}: {r['error']}")
+        # 幣別拒絕與上面三態**正交**（一檔可以同時「抓到並寫入」＋「拒絕過換源」）,
+        # 故獨立一行,不塞進 if/elif 鏈裡。🟠 而不是 🔴:它沒有造成任何資料遺失。
+        if r.get("ccy_refused"):
+            _log(f"  🟠 {r['code']}: 【幣別不一致,已拒絕換源;原幣別序列照常寫入】"
+                 f"{r['ccy_refused']}")
     # 2026-08-28 稽核修正:被擋下的檔**抓得好好的**,舊版把它併進「N 檔抓不到」是說謊。
     _n_blocked = int(res.get("n_blocked") or 0)
     _n_nofetch = int(res["n_fail"]) - _n_blocked
     _log(f"完成:{res['n_ok']} 檔抓到 → 雲端去重後新增 {res['gs_written']} 筆;"
-         f"{_n_nofetch} 檔抓不到;{_n_blocked} 檔被 Gate 0 擋下(抓到了但沒寫入)。"
+         f"{_n_nofetch} 檔抓不到;{_n_blocked} 檔被 Gate 0 擋下(抓到了但沒寫入);"
+         f"{len(_ccy_refused)} 檔幣別不一致拒絕換源(有寫入,寫的是原幣別那條)。"
          f" gate_mode={res.get('gate_mode', '?')}")
-    _step_summary(res, _blocked)
+    _step_summary(res, _blocked, _ccy_refused)
     if res.get("gs_error"):
         _log(f"⚠️ 雲端寫入失敗:{res['gs_error']}(§1 exit 1)")
         return 1

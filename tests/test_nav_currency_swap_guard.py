@@ -318,6 +318,24 @@ def test_backfill_refuses_currency_swap_and_still_writes_the_right_series(
     assert "拒絕 ISIN 救援換源" in capsys.readouterr().err, "§1:拒寫要留下 log"
 
 
+def test_backfill_aggregates_currency_refusals_for_callers(monkeypatch, cache_store):
+    """`n_ccy_refused` 聚合(稽核 🔴 必修):呼叫端要能一眼拿到次數,不必去掃 `results`。
+
+    ⚠️ 它與 `n_blocked` **語意相反**,必須分得開:`n_blocked` 是「整檔沒寫入」,
+    本欄是「有寫入(寫的是原幣別那條),只是沒換成更長的候選」。
+    只把理由塞進 `results` 而沒有任何聚合／消費者 = 揭露了但沒人看得見(§5)。
+    """
+    import services.nav_history_store as NS
+
+    _wire_l2(monkeypatch,
+             fd={"series": _series([("2024-12-01", 15.1), ("2024-12-30", 15.2)]),
+                 "fund_name": "F", "currency": "TWD"},
+             yahoo=_long(1900, ccy="USD"))
+    out = NS.backfill_to_gs(["ACDD19"])
+    assert out["n_ccy_refused"] == 1
+    assert out["n_blocked"] == 0 and out["n_fail"] == 0 and out["n_ok"] == 1
+
+
 def test_backfill_does_not_convert_currency(monkeypatch, cache_store):
     """⛔ 禁止靜默換算:被拒絕之後寫進去的必須是**原始台幣數值**,不是換匯過的。"""
     import services.nav_history_store as NS
