@@ -1,0 +1,785 @@
+<title>五分頁動線重構</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+:root{
+  --ink:#15181e;
+  --ink-2:#39414e;
+  --muted:#626c7a;
+  --paper:#f2f5f8;
+  --card:#ffffff;
+  --card-2:#f8fafb;
+  --rule:#d5dce4;
+  --rule-soft:#e4e9ef;
+  --accent:#1e5a72;
+  --accent-soft:#e3edf2;
+  --berry:#8e1f3c;
+  --berry-soft:#fbeef1;
+  --sysred:#bf3a2b;
+  --sysred-soft:#fdeeec;
+  --grey-state:#9aa3af;
+  --grey-soft:#eceff3;
+  --shadow:0 1px 2px rgba(21,24,30,.05), 0 6px 18px rgba(21,24,30,.05);
+  --sans:"IBM Plex Sans","Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#e8ecf1;
+    --ink-2:#b9c2cd;
+    --muted:#8d97a5;
+    --paper:#12151a;
+    --card:#1a1f26;
+    --card-2:#20262f;
+    --rule:#2e3742;
+    --rule-soft:#262e37;
+    --accent:#6fb2ce;
+    --accent-soft:#16303d;
+    --berry:#e2839c;
+    --berry-soft:#2e1620;
+    --sysred:#f0897a;
+    --sysred-soft:#301813;
+    --grey-state:#6d7683;
+    --grey-soft:#20262f;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e8ecf1;
+  --ink-2:#b9c2cd;
+  --muted:#8d97a5;
+  --paper:#12151a;
+  --card:#1a1f26;
+  --card-2:#20262f;
+  --rule:#2e3742;
+  --rule-soft:#262e37;
+  --accent:#6fb2ce;
+  --accent-soft:#16303d;
+  --berry:#e2839c;
+  --berry-soft:#2e1620;
+  --sysred:#f0897a;
+  --sysred-soft:#301813;
+  --grey-state:#6d7683;
+  --grey-soft:#20262f;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:34px 22px 72px}
+
+/* ---------- masthead ---------- */
+.mast{
+  display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;
+  gap:18px;padding-bottom:18px;border-bottom:2px solid var(--ink);
+}
+.mast h1{
+  margin:0;font-size:clamp(26px,4vw,38px);font-weight:600;letter-spacing:-.02em;
+  text-wrap:balance;line-height:1.2;
+}
+.mast .sub{margin:6px 0 0;color:var(--muted);font-size:14px;max-width:62ch}
+.stamp{
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);text-align:right;line-height:1.8;white-space:nowrap;
+}
+.stamp b{color:var(--accent);font-weight:500}
+
+/* ---------- rules legend ---------- */
+.rules{
+  margin:22px 0 0;display:grid;gap:12px;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+}
+@media (max-width:860px){.rules{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.rules{grid-template-columns:1fr}}
+.rule-card{
+  background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  padding:12px 13px;box-shadow:var(--shadow);
+}
+.rule-card .n{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--accent);
+  text-transform:uppercase;display:block;margin-bottom:4px;
+}
+.rule-card .t{font-weight:600;font-size:13.5px;display:block;margin-bottom:3px}
+.rule-card .d{font-size:12.5px;color:var(--muted);line-height:1.5}
+
+/* ---------- three-state legend ---------- */
+.states{
+  margin-top:12px;background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  padding:14px 15px;box-shadow:var(--shadow);
+}
+.states h3{margin:0 0 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.state-row{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:700px){.state-row{grid-template-columns:1fr}}
+.sx{padding:10px 12px;border-radius:2px;font-size:13px;line-height:1.5}
+.sx .lab{display:block;font-weight:600;margin-bottom:2px;font-size:12.5px}
+.sx.grey{background:var(--grey-soft);color:var(--grey-state);border:1px dashed var(--rule)}
+.sx.grey .lab{color:var(--muted)}
+.sx.berry{background:var(--berry-soft);color:var(--ink-2);border-left:4px solid var(--berry)}
+.sx.berry .lab{color:var(--berry)}
+.sx.sys{background:var(--sysred-soft);color:var(--ink-2);border:2px solid var(--sysred)}
+.sx.sys .lab{color:var(--sysred)}
+
+/* ---------- layout ---------- */
+.shell{display:grid;grid-template-columns:236px minmax(0,1fr);gap:26px;margin-top:30px}
+@media (max-width:840px){.shell{grid-template-columns:1fr;gap:18px}}
+
+nav.rail{position:sticky;top:18px;align-self:start}
+@media (max-width:840px){nav.rail{position:static}}
+.rail-h{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 9px;padding-left:2px;
+}
+.rail-list{display:flex;flex-direction:column;gap:5px}
+@media (max-width:840px){.rail-list{flex-direction:row;flex-wrap:wrap}}
+.tab-btn{
+  display:flex;align-items:baseline;gap:9px;width:100%;text-align:left;cursor:pointer;
+  background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--rule);
+  border-radius:2px;padding:9px 11px;font-family:var(--sans);font-size:14px;color:var(--ink-2);
+  transition:border-color .12s ease, background .12s ease;
+}
+@media (max-width:840px){.tab-btn{width:auto;flex:1 1 auto}}
+.tab-btn .idx{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.tab-btn .nm{font-weight:500}
+.tab-btn:hover{border-color:var(--accent)}
+.tab-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tab-btn[aria-selected="true"]{
+  background:var(--accent-soft);border-color:var(--rule);border-left-color:var(--accent);color:var(--ink);
+}
+.tab-btn[aria-selected="true"] .idx{color:var(--accent)}
+.rail-note{
+  margin-top:14px;padding:10px 11px;border:1px dashed var(--rule);border-radius:2px;
+  font-size:12px;color:var(--muted);line-height:1.55;background:var(--card-2);
+}
+
+/* ---------- panel ---------- */
+.panel[hidden]{display:none}
+.panel-head{border-bottom:1px solid var(--rule);padding-bottom:12px;margin-bottom:16px}
+.panel-head .kicker{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
+}
+.panel-head h2{margin:3px 0 5px;font-size:24px;font-weight:600;letter-spacing:-.01em}
+.panel-head .job{color:var(--muted);font-size:13.5px;max-width:64ch;margin:0}
+
+.screen{
+  background:var(--card);border:1px solid var(--rule);border-radius:4px;
+  box-shadow:var(--shadow);overflow:hidden;
+}
+.screen-bar{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--card-2);border-bottom:1px solid var(--rule-soft);
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+}
+.screen-bar .dot{width:8px;height:8px;border-radius:50%;background:var(--rule);flex:none}
+.screen-body{padding:16px}
+
+.grid3{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:760px){.grid3{grid-template-columns:1fr}}
+.span3{grid-column:1/-1}
+@media (max-width:760px){.span3{grid-column:auto}}
+
+.card{
+  border:1px solid var(--rule);border-radius:3px;background:var(--card);
+  padding:12px 13px;min-height:104px;display:flex;flex-direction:column;gap:6px;
+}
+.card.warn{border-left:4px solid var(--berry);background:var(--berry-soft)}
+.card.dim{border-style:dashed;background:var(--grey-soft)}
+.card h4{margin:0;font-size:14px;font-weight:600;line-height:1.35}
+.card .meta{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.02em}
+.card p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.card.warn p{color:var(--ink-2)}
+.card.dim h4{color:var(--muted)}
+.big{font-family:var(--mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.card.warn .big{color:var(--berry)}
+
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto;padding-top:4px}
+.chip{
+  font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:2px 6px;border-radius:2px;
+  border:1px solid var(--rule);color:var(--muted);background:var(--card-2);white-space:nowrap;
+}
+.chip.form{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.chip.tri{border-color:var(--berry);color:var(--berry);background:var(--berry-soft)}
+
+.formbox{
+  border:1px solid var(--accent);border-radius:3px;background:var(--accent-soft);
+  padding:11px 13px;margin-bottom:12px;
+}
+.formbox .fh{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent);display:block;margin-bottom:6px;
+}
+.formbox .fields{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fld{
+  flex:1 1 150px;background:var(--card);border:1px solid var(--rule);border-radius:2px;
+  padding:6px 9px;font-size:12.5px;color:var(--muted);
+}
+.apply{
+  background:var(--accent);color:var(--card);border:none;border-radius:2px;
+  padding:7px 16px;font-family:var(--sans);font-size:12.5px;font-weight:600;cursor:default;flex:none;
+}
+:root[data-theme="dark"] .apply,
+:root:not([data-theme="light"]) .apply{color:var(--paper)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .apply{color:#fff}}
+
+.empty{
+  border:1px dashed var(--rule);border-radius:3px;background:var(--card-2);
+  padding:14px 15px;
+}
+.empty .et{font-weight:600;font-size:13.5px;margin-bottom:4px}
+.empty ol{margin:0;padding-left:18px;font-size:12.5px;color:var(--muted);line-height:1.7}
+
+.boundary{
+  margin-top:16px;display:grid;gap:12px;grid-template-columns:1fr 1fr;
+}
+@media (max-width:760px){.boundary{grid-template-columns:1fr}}
+.bx{border:1px solid var(--rule);border-radius:3px;padding:12px 13px;background:var(--card)}
+.bx h5{
+  margin:0 0 7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;
+}
+.bx ul{margin:0;padding-left:16px;font-size:12.5px;line-height:1.65;color:var(--ink-2)}
+.bx code{font-family:var(--mono);font-size:11.5px;color:var(--accent);background:var(--accent-soft);padding:0 3px;border-radius:2px}
+.bx.out h5{color:var(--berry)}
+.bx.out ul{color:var(--muted)}
+
+.decide{
+  margin-top:26px;border-top:2px solid var(--ink);padding-top:16px;
+}
+.decide h3{margin:0 0 4px;font-size:17px;font-weight:600}
+.decide p{margin:0 0 12px;color:var(--muted);font-size:13.5px;max-width:70ch}
+.qa{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:760px){.qa{grid-template-columns:1fr}}
+.q{border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:2px;padding:11px 12px;background:var(--card)}
+.q .ql{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--accent);text-transform:uppercase}
+.q p{margin:4px 0 0;font-size:13px;color:var(--ink-2);line-height:1.55}
+.q .rec{margin-top:6px;font-size:12.5px;color:var(--muted)}
+.q .rec b{color:var(--ink);font-weight:600}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div>
+      <h1>五分頁動線重構</h1>
+      <p class="sub">把目前散在十幾個 <code style="font-family:var(--mono);font-size:13px">ui/tab*.py</code> 的功能，依「功能純粹性」與「金融操作自然動線」重排成五個職責互斥的分頁。此為動工前的視覺線框，供拍板用。</p>
+    </div>
+    <div class="stamp">
+      狀態 <b>待審</b><br>
+      版次 <b>WF-IA-1</b><br>
+      日期 <b>2026-09-01</b>
+    </div>
+  </header>
+
+  <section class="rules" aria-label="四大 UI 核心原則">
+    <div class="rule-card">
+      <span class="n">Rule 01</span>
+      <span class="t">3 欄自適應網格</span>
+      <span class="d">卡片與指標排 3 欄，手機自動塌為 1 欄；多欄位大表維持全寬橫向捲動。</span>
+    </div>
+    <div class="rule-card">
+      <span class="n">Rule 02</span>
+      <span class="t">Form 封裝防重繪</span>
+      <span class="d">篩選、輸入框、滑桿一律 <code style="font-family:var(--mono);font-size:12px">st.form</code> 包住，按「套用」才運算。</span>
+    </div>
+    <div class="rule-card">
+      <span class="n">Rule 03</span>
+      <span class="t">三態顏色分離</span>
+      <span class="d">灰＝未載入或前提不足；莓紅左軌＝業務警示；紅框＝系統真出錯。</span>
+    </div>
+    <div class="rule-card">
+      <span class="n">Rule 04</span>
+      <span class="t">首屏無冗餘占位</span>
+      <span class="d">無資料不畫空表格外框，改用空狀態三要素：標題、缺什麼、去哪補。</span>
+    </div>
+  </section>
+
+  <section class="states" aria-label="三態顏色實樣">
+    <h3>三態實樣（本線框全篇一致使用）</h3>
+    <div class="state-row">
+      <div class="sx grey">
+        <span class="lab">灰 — 未載入 / 前提不足</span>
+        尚未點擊「載入總經資料」。不是錯誤，不上紅。
+      </div>
+      <div class="sx berry">
+        <span class="lab">莓紅左軌 — 業務警示</span>
+        資料可信，但表現差：這檔連兩季落後基準。
+      </div>
+      <div class="sx sys">
+        <span class="lab">紅框 — 系統真出錯</span>
+        FinMind 額度用盡，冷卻中；此欄無法計算。
+      </div>
+    </div>
+  </section>
+
+  <div class="shell">
+
+    <nav class="rail" aria-label="分頁">
+      <p class="rail-h">新分頁結構</p>
+      <div class="rail-list" role="tablist" aria-orientation="vertical">
+        <button class="tab-btn" role="tab" id="t1" aria-controls="p1" aria-selected="true"><span class="idx">01</span><span class="nm">市場總覽</span></button>
+        <button class="tab-btn" role="tab" id="t2" aria-controls="p2" aria-selected="false"><span class="idx">02</span><span class="nm">持倉體檢</span></button>
+        <button class="tab-btn" role="tab" id="t3" aria-controls="p3" aria-selected="false"><span class="idx">03</span><span class="nm">標的探索</span></button>
+        <button class="tab-btn" role="tab" id="t4" aria-controls="p4" aria-selected="false"><span class="idx">04</span><span class="nm">資產配置</span></button>
+        <button class="tab-btn" role="tab" id="t5" aria-controls="p5" aria-selected="false"><span class="idx">05</span><span class="nm">設定與診斷</span></button>
+      </div>
+      <p class="rail-note">動線是有順序的：先看<b>市場在哪</b>，再看<b>我手上的怎樣</b>，需要換才去<b>找標的</b>，決定了才動<b>配置</b>。設定獨立在最後。</p>
+    </nav>
+
+    <div>
+
+      <!-- ============ 01 ============ -->
+      <section class="panel" id="p1" role="tabpanel" aria-labelledby="t1">
+        <div class="panel-head">
+          <span class="kicker">Tab 01</span>
+          <h2>市場總覽</h2>
+          <p class="job">回答一個問題：<b>現在市場環境該進攻還是防守？</b>這裡只有大盤與總經，不出現任何一檔我持有的基金。</p>
+        </div>
+
+        <div class="screen">
+          <div class="screen-bar"><span class="dot"></span>市場總覽</div>
+          <div class="screen-body">
+            <div class="formbox">
+              <span class="fh">Form ─ 載入閘門</span>
+              <div class="fields">
+                <div class="fld">觀察區間　近 180 天</div>
+                <div class="fld">資料源　FRED ＋ FinMind</div>
+                <button class="apply" type="button" tabindex="-1">載入總經資料</button>
+              </div>
+            </div>
+
+            <div class="grid3">
+              <div class="card span3">
+                <h4>資產水位建議</h4>
+                <span class="big">核心 70 ／ 衛星 30</span>
+                <p>由總經綜合分數推出的建議水位，與下方燈號同源。點開可看每盞燈的貢獻。</p>
+                <div class="chips"><span class="chip">全寬</span><span class="chip tri">三態</span></div>
+              </div>
+
+              <div class="card">
+                <h4>景氣位階</h4>
+                <span class="big">擴張中段</span>
+                <p>NDC 燈號 ＋ PMI ＋ 殖利率差合成。</p>
+                <div class="chips"><span class="chip">3 欄之 1</span></div>
+              </div>
+              <div class="card warn">
+                <h4>波動與信用</h4>
+                <span class="big">VIX 24.1</span>
+                <p>已越過 22 黃線，尚未觸及 30 恐慌線。</p>
+                <div class="chips"><span class="chip tri">業務警示</span></div>
+              </div>
+              <div class="card dim">
+                <h4>通膨與利率</h4>
+                <span class="big">—</span>
+                <p>未載入。點上方「載入總經資料」。</p>
+                <div class="chips"><span class="chip">灰態</span></div>
+              </div>
+
+              <div class="card">
+                <h4>熱錢動向</h4>
+                <span class="big">外資 +182 億</span>
+                <p>近 5 日累計；USDTWD 同軸對照。</p>
+                <div class="chips"><span class="chip">3 欄之 1</span></div>
+              </div>
+              <div class="card">
+                <h4>極端風險警語</h4>
+                <span class="big">無</span>
+                <p>目前未觸發任何極端條件。</p>
+              </div>
+              <div class="card">
+                <h4>新聞情緒</h4>
+                <span class="big">偏空 −0.3</span>
+                <p>五個 RSS 來源關鍵字命中，不做加權平均。</p>
+              </div>
+
+              <div class="card span3">
+                <h4>總經燈號全表</h4>
+                <p>17 項指標 × 值 / 位階 / 資料日期 / 來源。<b>欄位多，維持全寬橫向捲動，不塌成 3 欄。</b></p>
+                <div class="chips"><span class="chip">大表全寬</span><span class="chip">橫向捲動</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="boundary">
+          <div class="bx">
+            <h5>從哪裡搬來</h5>
+            <ul>
+              <li><code>ui/tab1_macro.py</code> ─ 全部</li>
+              <li><code>ui/tab1_macro_longterm.py</code> ─ 熱錢區塊</li>
+              <li><code>app.py</code> ─ 總經羅盤（目前內嵌在 app.py）</li>
+            </ul>
+          </div>
+          <div class="bx out">
+            <h5>這裡不放什麼</h5>
+            <ul>
+              <li>任何一檔我持有的基金表現 → <b>02</b></li>
+              <li>單一基金的深度研究 → <b>03</b></li>
+              <li>資料源健康度、快取狀態 → <b>05</b></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 02 ============ -->
+      <section class="panel" id="p2" role="tabpanel" aria-labelledby="t2" hidden>
+        <div class="panel-head">
+          <span class="kicker">Tab 02</span>
+          <h2>持倉體檢</h2>
+          <p class="job">回答一個問題：<b>我手上這些，哪一檔出問題了？</b>只診斷、不決策 ─ 要換什麼、怎麼配，在 04。</p>
+        </div>
+
+        <div class="screen">
+          <div class="screen-bar"><span class="dot"></span>持倉體檢</div>
+          <div class="screen-body">
+            <div class="formbox">
+              <span class="fh">Form ─ 診斷條件（目前每拉一格全頁重繪，本次一併修掉）</span>
+              <div class="fields">
+                <div class="fld">輪動門檻　σ ±1.0</div>
+                <div class="fld">回看窗　12 個月</div>
+                <div class="fld">只看衛星　☐</div>
+                <button class="apply" type="button" tabindex="-1">套用</button>
+              </div>
+            </div>
+
+            <div class="grid3">
+              <div class="card span3">
+                <h4>組合健康總分</h4>
+                <span class="big">72 ／ 100</span>
+                <p>五桶評等加權。下方三張卡是扣分最重的三項，點進去看逐檔。</p>
+                <div class="chips"><span class="chip">全寬</span></div>
+              </div>
+
+              <div class="card warn">
+                <h4>吃本金警示</h4>
+                <span class="big">2 檔</span>
+                <p>配息覆蓋率低於 1.0，實際在配回本金。</p>
+                <div class="chips"><span class="chip tri">業務警示</span></div>
+              </div>
+              <div class="card warn">
+                <h4>衛星連續落後</h4>
+                <span class="big">1 檔</span>
+                <p>連兩季落後對比基準（SPY / QQQ）。</p>
+                <div class="chips"><span class="chip tri">業務警示</span></div>
+              </div>
+              <div class="card">
+                <h4>影子基金重疊</h4>
+                <span class="big">相似度 0.78</span>
+                <p>兩檔持股高度重疊，分散效果打折。</p>
+              </div>
+
+              <div class="card span3">
+                <h4>逐檔體檢表</h4>
+                <p>代碼 / 名稱 / 幣別 / 近 1 年 / Sharpe / 最大回撤 / 配息覆蓋 / 五桶評等 / 資料日期。<b>欄位多，全寬橫向捲動。</b></p>
+                <div class="chips"><span class="chip">大表全寬</span><span class="chip">橫向捲動</span><span class="chip tri">列內三態</span></div>
+              </div>
+
+              <div class="card span3">
+                <div class="empty">
+                  <div class="et">尚未設定持倉</div>
+                  <ol>
+                    <li>缺什麼 ─ 還沒有任何保單或扣款標的</li>
+                    <li>去哪補 ─ 到「04 資產配置 › 保單與扣款標的」新增</li>
+                    <li>補完後這裡會自動出現逐檔體檢</li>
+                  </ol>
+                </div>
+                <div class="chips"><span class="chip">空狀態三要素</span><span class="chip">不畫空表格外框</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="boundary">
+          <div class="bx">
+            <h5>從哪裡搬來</h5>
+            <ul>
+              <li><code>ui/tab3_portfolio.py</code> ─ 健診段</li>
+              <li><code>ui/components/mk_dashboard.py</code> ─ 波段觀測站</li>
+              <li><code>ui/helpers/fund_grp_health/</code> ─ 全部</li>
+            </ul>
+          </div>
+          <div class="bx out">
+            <h5>這裡不放什麼</h5>
+            <ul>
+              <li>換股建議與再平衡試算 → <b>04</b>（那是決策，不是診斷）</li>
+              <li>我沒持有的基金 → <b>03</b></li>
+              <li>大盤環境 → <b>01</b></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 03 ============ -->
+      <section class="panel" id="p3" role="tabpanel" aria-labelledby="t3" hidden>
+        <div class="panel-head">
+          <span class="kicker">Tab 03</span>
+          <h2>標的探索</h2>
+          <p class="job">回答一個問題：<b>有沒有更好的標的？</b>這裡的基金<u>不預設我有持有</u>。目前搜尋入口散在三個地方，此次收成一個。</p>
+        </div>
+
+        <div class="screen">
+          <div class="screen-bar"><span class="dot"></span>標的探索</div>
+          <div class="screen-body">
+            <div class="formbox">
+              <span class="fh">Form ─ 唯一搜尋入口（取代目前三處分散的搜尋框）</span>
+              <div class="fields">
+                <div class="fld">代碼或名稱　0P0000ABCD</div>
+                <div class="fld">來源　全部</div>
+                <button class="apply" type="button" tabindex="-1">搜尋</button>
+              </div>
+            </div>
+
+            <div class="grid3">
+              <div class="card">
+                <h4>安聯台灣智慧基金</h4>
+                <span class="meta">ACDD19 · TWD</span>
+                <p>近 1 年 +12.4%　Sharpe 0.81</p>
+                <div class="chips"><span class="chip">結果卡 3 欄</span></div>
+              </div>
+              <div class="card">
+                <h4>貝萊德世界礦業 A2</h4>
+                <span class="meta">0P00000XYZ · EUR</span>
+                <p>近 1 年 +3.1%　Sharpe 0.22</p>
+              </div>
+              <div class="card dim">
+                <h4>元大高股息平衡</h4>
+                <span class="meta">幣別未知</span>
+                <p>此來源未提供計價幣別，換算後績效不予顯示。</p>
+                <div class="chips"><span class="chip">灰態</span><span class="chip">不猜值</span></div>
+              </div>
+
+              <div class="card span3">
+                <h4>單一基金深度</h4>
+                <p>選定後展開：NAV 走勢 · 績效分期 · 風險指標 · 前十大持股 · 配息紀錄 · 資料來源與抓取時間。<b>五個區塊各自 3 欄，持股與配息為大表全寬。</b></p>
+                <div class="chips"><span class="chip">3 欄</span><span class="chip">大表全寬</span><span class="chip tri">來源標註</span></div>
+              </div>
+
+              <div class="card span3">
+                <h4>批次分析</h4>
+                <p>一次丟多個代碼跑同一組指標，結果落地可續跑。<b>長時間運算，必須在 Form 之後才啟動。</b></p>
+                <div class="chips"><span class="chip form">Form 後才跑</span><span class="chip">大表全寬</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="boundary">
+          <div class="bx">
+            <h5>從哪裡搬來</h5>
+            <ul>
+              <li><code>ui/tab2_single_fund.py</code> ─ 深度區</li>
+              <li><code>ui/tab_fund_research.py</code> ─ 搜尋與比較</li>
+              <li><code>ui/tab_batch_analysis.py</code> ─ 批次</li>
+            </ul>
+          </div>
+          <div class="bx out">
+            <h5>這裡不放什麼</h5>
+            <ul>
+              <li>我持有部位的健康度 → <b>02</b></li>
+              <li>「要不要換成這檔」的試算 → <b>04</b></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 04 ============ -->
+      <section class="panel" id="p4" role="tabpanel" aria-labelledby="t4" hidden>
+        <div class="panel-head">
+          <span class="kicker">Tab 04</span>
+          <h2>資產配置</h2>
+          <p class="job">回答一個問題：<b>那我要怎麼調？</b>所有會改變我部位的動作都集中在這裡 ─ 含目前埋在巢狀分頁裡的交易帳本。</p>
+        </div>
+
+        <div class="screen">
+          <div class="screen-bar"><span class="dot"></span>資產配置</div>
+          <div class="screen-body">
+            <div class="grid3">
+              <div class="card span3">
+                <h4>核心 ／ 衛星現況 vs 建議</h4>
+                <span class="big">現況 62 ／ 38　→　建議 70 ／ 30</span>
+                <p>建議值來自 01 的資產水位，這裡只呈現差距與所需動作。</p>
+                <div class="chips"><span class="chip">全寬</span><span class="chip">與 01 同源</span></div>
+              </div>
+            </div>
+
+            <div class="formbox" style="margin-top:12px">
+              <span class="fh">Form ─ 再平衡試算</span>
+              <div class="fields">
+                <div class="fld">目標核心比例　70%</div>
+                <div class="fld">可動用金額　TWD 200,000</div>
+                <div class="fld">只調衛星　☑</div>
+                <button class="apply" type="button" tabindex="-1">試算</button>
+              </div>
+            </div>
+
+            <div class="grid3">
+              <div class="card">
+                <h4>換股顧問</h4>
+                <span class="big">2 組建議</span>
+                <p>把 02 診斷出的問題檔，配對到 03 的候選標的。</p>
+                <div class="chips"><span class="chip">串接 02 ＋ 03</span></div>
+              </div>
+              <div class="card">
+                <h4>保單與扣款標的</h4>
+                <span class="big">3 張保單</span>
+                <p>每張保單下的基金與投入金額；權重是算出來的，不是存的。</p>
+              </div>
+              <div class="card">
+                <h4>配息月曆</h4>
+                <span class="big">本月 4 筆</span>
+                <p>預估除息日與誤差天數，推不出來的保留可見。</p>
+              </div>
+
+              <div class="card span3">
+                <h4>交易帳本</h4>
+                <p><b>目前埋在「持股」分頁裡的第二層 <code>st.tabs</code>，此次拉到同一層。</b>買賣紀錄 / 成本 / 已實現損益 / 對帳。欄位多，全寬橫向捲動。</p>
+                <div class="chips"><span class="chip">解掉巢狀分頁</span><span class="chip">大表全寬</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="boundary">
+          <div class="bx">
+            <h5>從哪裡搬來</h5>
+            <ul>
+              <li><code>ui/tab3_portfolio.py</code> ─ 配置段</li>
+              <li><code>ui/tab3_t7_ledger.py</code> ─ 帳本（<b>解巢狀</b>）</li>
+              <li><code>ui/helpers/portfolio/allocation.py</code></li>
+              <li>換股顧問 ─ 自 02 的健診段切出</li>
+            </ul>
+          </div>
+          <div class="bx out">
+            <h5>這裡不放什麼</h5>
+            <ul>
+              <li>診斷「哪裡有問題」 → <b>02</b></li>
+              <li>研究「這檔好不好」 → <b>03</b></li>
+              <li>⚠️ <b>巢狀 <code>st.tabs</code> 一律不留</b>；分頁只有一層</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 05 ============ -->
+      <section class="panel" id="p5" role="tabpanel" aria-labelledby="t5" hidden>
+        <div class="panel-head">
+          <span class="kicker">Tab 05</span>
+          <h2>設定與診斷</h2>
+          <p class="job">回答一個問題：<b>資料本身可不可信、要不要我補？</b>平常不用進來；出事時第一個進來。</p>
+        </div>
+
+        <div class="screen">
+          <div class="screen-bar"><span class="dot"></span>設定與診斷</div>
+          <div class="screen-body">
+            <div class="grid3">
+              <div class="card">
+                <h4>資料來源健康度</h4>
+                <span class="big">18 源 · 2 異常</span>
+                <p>每源最後成功時間與資料日期。</p>
+                <div class="chips"><span class="chip tri">三態</span></div>
+              </div>
+              <div class="card">
+                <h4>NAV 累積狀態</h4>
+                <span class="big">42 檔 · 最長 6.2 年</span>
+                <p>雲端歷史涵蓋度，逐檔可展開。</p>
+              </div>
+              <div class="card">
+                <h4>連線與金鑰</h4>
+                <span class="big">正常</span>
+                <p>Google 授權、Proxy、API 金鑰。</p>
+              </div>
+
+              <div class="card span3">
+                <h4>手動補資料</h4>
+                <p>CSV 匯入淨值歷史、一鍵補抓、逐檔結果。<b>寫入類動作，全部 Form 封裝。</b></p>
+                <div class="chips"><span class="chip form">Form 封裝</span><span class="chip">寫入類</span></div>
+              </div>
+
+              <div class="card span3 dim">
+                <h4>使用手冊</h4>
+                <p>指標定義、門檻由來、常見誤讀。純文字，不佔首屏。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="boundary">
+          <div class="bx">
+            <h5>從哪裡搬來</h5>
+            <ul>
+              <li><code>ui/tab5_data_guard.py</code></li>
+              <li><code>ui/tab_manage.py</code></li>
+              <li><code>ui/tab_settings_diag.py</code></li>
+              <li><code>ui/tab6_manual.py</code></li>
+            </ul>
+          </div>
+          <div class="bx out">
+            <h5>這裡不放什麼</h5>
+            <ul>
+              <li><b>快取與退避狀態不做成畫面</b> ─ 沿用先前已拍板的裁示：那批不必改任何畫面，本次不推翻</li>
+              <li>任何投資判斷 → <b>01 ~ 04</b></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <section class="decide">
+    <h3>三件會改變你操作習慣的事，我已拍板</h3>
+    <p>你把分頁劃分與功能歸類全權交給我，所以這三件不再是選擇題 ─ 這裡寫的是<b>決定</b>與<b>理由</b>，供你在看版面時一併過目。其餘（每張卡放哪、欄位順序、命名）同樣已定，不佔用你的時間。</p>
+    <div class="qa">
+      <div class="q">
+        <span class="ql">已定 · 換股顧問 → 04</span>
+        <p>它同時是「診斷結果」也是「決策動作」，02 和 04 都說得通。</p>
+        <p class="rec">放 <b>04 資產配置</b>。它產生的是你要<b>執行</b>的動作；而 02 全篇只診斷、不建議 ─ 混進去會讓 02 的職責不純，也會讓你在同一頁同時「看病」和「下單」。</p>
+      </div>
+      <div class="q">
+        <span class="ql">已定 · 交易帳本拉出巢狀</span>
+        <p>目前帳本是「持股」分頁底下的第二層分頁，要點兩次才到。</p>
+        <p class="rec">拉到 <b>04 同一層</b>，<b>全站不留任何巢狀分頁</b>。代價是 04 內容較多，由 3 欄自適應網格吸收；換到的是每個功能都只要點一次。</p>
+      </div>
+      <div class="q">
+        <span class="ql">已定 · 總經只留一份</span>
+        <p>目前總經有新舊兩套並存，兩個入口都掛在主畫面上。</p>
+        <p class="rec"><b>01 只保留一套</b>。舊版<b>不會在本批被拔掉</b> ─ 先並存、逐項對照功能等價、把對照表交給你看過，確認沒有東西掉了才下架。</p>
+      </div>
+    </div>
+    <p style="margin:14px 0 0"><b>所以這份草稿現在只請你看一件事：版面視覺 OK 嗎？</b>你點頭之後前端組立刻開始寫 Streamlit 程式碼。</p>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab-btn'));
+  function show(id){
+    tabs.forEach(function(b){
+      var sel = b.id === id;
+      b.setAttribute('aria-selected', sel ? 'true' : 'false');
+      var panel = document.getElementById(b.getAttribute('aria-controls'));
+      if (panel) panel.hidden = !sel;
+    });
+  }
+  tabs.forEach(function(b, i){
+    b.addEventListener('click', function(){ show(b.id); });
+    b.addEventListener('keydown', function(e){
+      var d = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1
+            : e.key === 'ArrowUp'   || e.key === 'ArrowLeft'  ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      var n = tabs[(i + d + tabs.length) % tabs.length];
+      n.focus(); show(n.id);
+    });
+  });
+})();
+</script>

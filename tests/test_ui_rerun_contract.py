@@ -221,6 +221,19 @@ def _gate_function_keys(path: pathlib.Path) -> list[str]:
 # ⚠️ 本表由本組**自行重掃**產出，不是照抄派工單。
 # 沿革：量測日 2026-08-28（commit `a28e6a3`）為 5 個 / 3 檔；2026-08-31 新增元件 B 一處。
 FORM_SITES = frozenset({
+    # 2026-09-01 五分頁動線重構：`st.form` 封裝的**共用入口**（IA kit 鐵則 02）。
+    # **這是新增一處 form（好事），不是搬家** —— 本批沒有移動或刪除任何既有 form 站點。
+    # 它與本表其他列的差別：其他列是「某個畫面包了 form」，這一列是「**給所有畫面用的
+    # form 包裝器**」。它現在**沒有 production caller**（本批只做元件，不改分頁），
+    # 各分頁改用它是下一批的事。
+    # ⚠️ **屆時會發生的事，先寫在這裡**：分頁改用 `applied_form()` 之後，
+    #    它們原本各自的 `st.form(` 站點會從本表消失、收斂到這一列 ——
+    #    到時候 `FORM_SITE_TOTAL` 會**變少**，那**不是**有人把 form 拆掉，
+    #    是站點被收斂了。**請連同呼叫端一起看，不要只看總數下降就放行。**
+    # ✅ 這個包裝器自己的行為由 `tests/test_ia_kit.py` 五條斷言守（皆已突變驗證）：
+    #    送出鈕必須排在所有 widget 之後（M6）、送出結果必須寫回 gate（M7）、
+    #    未送出時 gate 為 False、預設送出字是「套用」、區塊內拋例外不吞。
+    "ui/helpers/ia/gated_form.py::applied_form()×1",
     "ui/helpers/fund_grp_health/switch_advisor_section.py::_render_pool_editor()×1",
     # 2026-08-31：③ 批次「🧩 互補配對探索」的 3 支門檻滑桿包進 form + 「套用門檻」submit。
     # **這是新增一處 form（好事），不是搬家** —— #738 建元件 B 時就該包，當時因本檔正由
@@ -235,7 +248,8 @@ FORM_SITES = frozenset({
     "ui/helpers/portfolio/policy_admin_section.py::render_policy_admin_section()×1",
     "ui/tab3_t7_ledger.py::render_t7_section()×3",
 })
-FORM_SITE_TOTAL = 6   # 2026-08-31：5 → 6（元件 B 門檻列包 form；上一行那筆）
+FORM_SITE_TOTAL = 7   # 2026-08-31：5 → 6（元件 B 門檻列包 form）；
+                      # 2026-09-01：6 → 7（IA kit `applied_form()` 共用包裝器，**新增**非搬家）
 
 
 def test_existing_forms_must_not_degrade():
