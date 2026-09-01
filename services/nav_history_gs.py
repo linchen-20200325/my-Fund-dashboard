@@ -344,12 +344,26 @@ def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any =
             # `coverage_status()` 仍 raise → 紅色「累積內容讀取失敗」就顯示在
             # **一次成功匯入的正下方**,最長 15 分鐘(429 則 30 分鐘)。
             # 相對修改前是**回歸**:修改前清完快取會真的重讀,立刻看到剛匯入的資料。
-            # 寫入成功同時證明了配額沒滿、這本開得起來、而且可寫 —— 比任何讀取探測都強。
-            _wa, _wsid = (("", "") if _sheet is not None
-                          else _nav_backoff_ident(oauth_client))
-            if _wa:
-                from infra.gspread_retry import record_gspread_success
-                record_gspread_success(_wa, _wsid)
+            # 寫入成功證明了**這本開得起來、而且可寫**。
+            # ⚠️ 2026-09-01 措辭收緊(稽核 NEW-7):~~「配額沒滿」~~ 說得太滿 ——
+            # Sheets 讀與寫是不同配額桶,寫成功不證明讀配額可用(該關係未能一手查證)。
+            # ⚠️ 2026-09-01 稽核 NEW-3:**這幾行必須自己包 try** —— 它在主 `try:` 之內,
+            # 而主 `try:` 的 `except` 會把任何例外譯成 `raise NavHistoryError`。
+            # 稽核實測(讓 record_gspread_success 拋):`ws.append_rows` **已經收到那一列**,
+            # 使用者的資料**真的寫進去了**,Tab5 卻顯示「匯入失敗」——
+            # 那是 §1 的**反向造假**:報一個與事實不符的失敗。
+            # (pool 的 `_after_pool_write` 一開始就這樣寫了,nav 這邊漏掉 —— 稽核第五格。)
+            try:
+                _wa, _wsid = (("", "") if _sheet is not None
+                              else _nav_backoff_ident(oauth_client))
+                if _wa:
+                    from infra.gspread_retry import record_gspread_success
+                    record_gspread_success(_wa, _wsid)
+            except Exception as _e_sb:  # noqa: BLE001 — 收尾動作壞掉不得推翻一次成功的寫入
+                import sys as _sys2
+                print(f"[nav_history_gs] 寫入成功但解除讀取冷卻時出錯(資料已寫入,"
+                      f"不影響本次結果):{type(_e_sb).__name__}: {str(_e_sb)[:120]}",
+                      file=_sys2.stderr)
             return {"written": len(new_rows), "skipped": len(points) - len(new_rows)}
     except NavHistoryError:
         raise

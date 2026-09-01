@@ -184,6 +184,9 @@ class _FakeWS:
     def update(self, *_a, **_kw):
         self._c.n += 1
 
+    def delete_rows(self, *_a, **_kw):
+        self._c.n += 1
+
 
 class _FakeSpreadsheet:
     def __init__(self, counter, fail_at):
@@ -455,7 +458,27 @@ def test_nav_disabled_returns_empty_without_touching_backoff(monkeypatch):
 # ══════════════════════════════════════════════════════════════
 # 6) 稽核 N1：寫入成功必須**解除讀取冷卻**（只清快取是不夠的）
 # ══════════════════════════════════════════════════════════════
-def test_pool_write_success_clears_read_cooldown(gs):
+def _pool_write_paths():
+    """`_after_pool_write()` 實際接了**四條**寫入路徑 —— 四條都要守。
+
+    ⚠️ 稽核 NEW-1：原本只測 `add_or_update` 一條，於是「把另外三條退回只清快取」
+    這個突變 **43 條全綠**。其中 **`set_secid` 最要緊** ——
+    `repositories/fund/sources.py` 在**補淨值 hot path** 上回寫晨星 secId 走的就是它，
+    那條退回去等於 N1 的回歸直接在主路徑上復辟，而測試一顆都不會紅。
+    """
+    import repositories.pool_repository as P
+    return {
+        "add_or_update":    lambda: P.add_or_update(P.PoolEntry(code="NEW1",
+                                                                morningstar_secid="SEC-NEW")),
+        "remove_from_pool": lambda: P.remove_from_pool("NOPE"),
+        "set_type_override": lambda: P.set_type_override("ALZF9", "成長"),
+        "set_secid":        lambda: P.set_secid("ALZF9", "SEC-X"),
+    }
+
+
+@pytest.mark.parametrize("path", ["add_or_update", "remove_from_pool",
+                                  "set_type_override", "set_secid"])
+def test_pool_write_success_clears_read_cooldown(gs, path):
     """稽核實跑重現的回歸：讀取吃過一次 403 → 登記 900s 冷卻 → 上游恢復 →
     使用者成功寫入 → 舊寫法只清快取、清不掉退避 → `resolve_secid` 仍回 `None`、
     **0 趟**，模組 docstring 承諾的「改池後立即生效」在冷卻窗內不再為真。"""
@@ -467,9 +490,9 @@ def test_pool_write_success_clears_read_cooldown(gs):
     assert GR.should_skip_gspread(*P._pool_backoff_ident())[0] is True   # 冷卻已登記
 
     set_fail()                                        # 上游恢復
-    P.add_or_update(P.PoolEntry(code="NEW1", morningstar_secid="SEC-NEW"))
+    _pool_write_paths()[path]()
     assert GR.should_skip_gspread(*P._pool_backoff_ident())[0] is False, \
-        "寫入成功卻沒解除讀取冷卻 → 下一次查表仍會空手而回"
+        f"{path} 寫入成功卻沒解除讀取冷卻 → 下一次查表仍會空手而回"
 
     counter.n = 0
     assert P.resolve_secid("ALZF9") == ("F00000P8WB", "USD")
@@ -520,6 +543,23 @@ def test_pool_write_success_clearing_does_not_break_when_backoff_errors(gs, monk
     monkeypatch.setattr(P, "_pool_backoff_ident",
                         lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom")))
     P.add_or_update(P.PoolEntry(code="NEW2"))          # 不得拋
+
+
+def test_nav_write_success_clearing_does_not_break_when_backoff_errors(gs, monkeypatch):
+    """⭐ 稽核 NEW-3 的鏡像：上一條 pool 有、nav **原本沒有**（第五格沒守衛）。
+
+    `append_points` 的解除動作原本直接寫在主 `try:` 內，而主 `except` 會把它譯成
+    `raise NavHistoryError` —— 稽核實測：`ws.append_rows` **已經收到那一列**、
+    資料真的寫進去了，Tab5 卻顯示「匯入失敗」。**那是 §1 的反向造假**：
+    報一個與事實不符的失敗。
+    """
+    import services.nav_history_gs as NG
+    _c, set_fail = gs
+    set_fail()
+    monkeypatch.setattr(NG, "_nav_backoff_ident",
+                        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom")))
+    res = NG.append_points([{"code": "ALZF9", "nav": 12.5, "nav_date": "2026-07-25"}])
+    assert res["written"] == 1, "資料寫進去了就必須誠實回報 written=1，不得改報失敗"
 
 
 # ══════════════════════════════════════════════════════════════
