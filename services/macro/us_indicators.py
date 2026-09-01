@@ -54,7 +54,7 @@ from services.macro._helpers import (  # noqa: F401
     FRED_AMTMNO, FRED_CCSA, FRED_CFNAI, FRED_CHF_USD, FRED_CPI,
     FRED_DGS10, FRED_DGS2, FRED_DGS3MO, FRED_DRTSCILM, FRED_DXY,
     FRED_FED_BS, FRED_FED_FUNDS, FRED_HSN1F, FRED_HY_SPREAD, FRED_ICSA,
-    FRED_ISM_PMI, FRED_JPY_USD, FRED_M2, FRED_M2_WEEKLY, FRED_MNFCTRIRSA,
+    FRED_JPY_USD, FRED_M2, FRED_M2_WEEKLY, FRED_MNFCTRIRSA,
     FRED_PAYEMS, FRED_PERMIT, FRED_PPI, FRED_RRP, FRED_SAHM,
     FRED_T10Y2Y, FRED_T5YIE, FRED_TGA, FRED_UMCSENT, FRED_UNRATE,
 )
@@ -114,11 +114,10 @@ _INDICATOR_SNAPSHOT: dict = {}
 # 具名常數化以免 §3.3 inline magic + 防未來重複改動。
 _VIX_SNAPSHOT_CALM = 18.0
 
-# ── PMI 補救/防呆常數(v19.404 稽核)──────────────────────────────
-# 歷史補救序列的時效上限:沿用主路徑 `repositories.macro.alternate.fetch_ism_pmi`
-# 的 `max_age_days=90` 契約 —— value 端已被 90 天時效檢查擋掉的死 series,
-# 沒有理由當作 series 端的「歷史結構」餵給 Z-Score / lag-correlation。
-_PMI_HIST_MAX_AGE_DAYS = 90
+# ── PMI 防呆常數(v19.404 稽核)──────────────────────────────────
+# 2026-09-01:`_PMI_HIST_MAX_AGE_DAYS = 90` 已一併移除 —— 它唯一的 consumer 是
+# 本檔的「series 補救」路徑(補抓 FRED ISPMANPMI),該路徑已於本批拔除,常數隨之
+# 成為 0 caller 孤兒。**這是本次改動造成的孤兒,屬同一批的收尾**,不是順手清理。
 # PMI 刻度值域(CLAUDE.md §3.2 合理範圍表 + `fetch_ism_pmi` 各段自帶的
 # `30 <= v <= 70` 防呆,同一契約)。落在此區間外者**必非 PMI 刻度**
 # (例:OECD US BCI ~98–102),不可用 50 榮枯線判讀。
@@ -406,7 +405,7 @@ def fetch_all_indicators(fred_api_key):
         fetch_fred_batch([
             (FRED_DGS10, 2600), (FRED_DGS2, 2600), (FRED_DGS3MO, 2600),
             (FRED_HY_SPREAD, 2500), (FRED_M2, 144),
-            (FRED_ISM_PMI, 144), (FRED_FED_BS, 312), (FRED_CPI, 144),
+            (FRED_FED_BS, 312), (FRED_CPI, 144),
             (FRED_FED_FUNDS, 144), (FRED_UNRATE, 144), (FRED_PPI, 144),
             (FRED_UMCSENT, 144), (FRED_ICSA, 312), (FRED_HSN1F, 144),
             (FRED_SAHM, 144), (FRED_DRTSCILM, 80), (FRED_CFNAI, 144),
@@ -419,11 +418,14 @@ def fetch_all_indicators(fred_api_key):
             (FRED_RRP, 2000), (FRED_TGA, 312),
         ], fred_api_key, max_workers=8)
 
-    # ── PMI（v2.1 改用共用函式 fetch_ism_pmi 6 段備援 + 90 天時效檢查）──
+    # ── PMI（共用函式 fetch_ism_pmi 5 段備援 + 90 天時效檢查）──
     #   舊版直接拿 FRED NAPM 末筆值，會誤用 2016-08 停更後的死值欺騙 UI；
-    #   改呼叫 macro_core.fetch_ism_pmi()，備援順序：
-    #   NAPM/ISPMANPMI（時效檢查）→ MacroMicro → ISM World → DBnomics →
+    #   改呼叫 fetch_ism_pmi()，備援順序（2026-09-01 起）：
+    #   MacroMicro → ISM World → DBnomics →
     #   Phil Fed Diffusion（轉 PMI 刻度，**代理值非本尊**）→ OECD US BCI（最後手段）
+    #   ⚠️ 原先排在最前面的 FRED NAPM / ISPMANPMI 兩段已拔除（2026-09-01，客戶指令
+    #      「已廢棄資料源不得留存或發起查詢」）；理由與回復方式見
+    #      `repositories/macro/alternate.py` 檔頭橫幅。
     #   ⚠️ 舊註解寫「相關性 0.85」為過度宣稱，已刪：Phil Fed 是單一聯準區約 250 家
     #      廠商的月變化擴散指數，ISM 是全國 16 大產業複合指數。實證反例 2026-07：
     #      Phil Fed 10.3→41.4（+31.1），ISM 53.3→55.6（+2.3）。命中此段時
@@ -440,40 +442,19 @@ def fetch_all_indicators(fred_api_key):
                 [float(x) for x in pmi["values"]],
                 index=pd.to_datetime(pmi["dates"]),
             ).tail(120)
-        # v18.118/119 issue 3 補救：HTML 來源或舊 tail(24) 限制導致 series 缺失或過短
-        # → 補抓 FRED ISPMANPMI 144 期當 series（即使源 value 已過時，歷史結構對
-        #   Phase 4 lag-correlation / Phase 3-B 燈號回測仍可用 — 都看相對變化）
-        # v18.119: 條件放寬「s is None or len(s) < 60」— 上游 fetch_ism_pmi 雖已改 tail(120)
-        # 但 MacroMicro / ISM World 等 HTML 源仍可能回 0 期，雙保險。
-        # v19.404 稽核修正（§1 Fail Loud）：本補救路徑抓的 `ISPMANPMI` 與 `NAPM` 兩條
-        #   FRED series 都在 2016-08 ISM 收回授權後停更/下架 —— 主路徑 `fetch_ism_pmi`
-        #   有 90 天時效檢查會跳過它們，這裡卻**無時效檢查也無空值 log**：
-        #     (a) df_hist 為空（series 已下架）→ 原碼靜默什麼都不做，看不出補救失敗；
-        #     (b) df_hist 非空但末筆停在 2016 → 把一段十年前的死序列裝進 `series`，
-        #         而 `value` 是當期值 → `calc_macro_phase_zpct` 的
-        #         `z = (value - mean(series.tail(60))) / std` 與 Phase 4 lag-corr 全被污染。
-        #   改為：空 → 明確 log；過期（沿用 `fetch_ism_pmi(max_age_days=90)` 同一時效契約）
-        #   → 明確 log 並**拒絕採用**，寧可留 series=None 讓下游 `len(s)>=N` 防線跳過該格。
-        if (s is None or len(s) < 60) and fred_api_key:
-            try:
-                df_hist = _fred(FRED_ISM_PMI, fred_api_key, 144)
-                if df_hist.empty:
-                    print(f"[PMI] ⚠️ series 補救失敗：FRED {FRED_ISM_PMI} 回空 "
-                          f"(2016-08 ISM 收回授權後停更/下架)，本次不補歷史")
-                else:
-                    _hist_last = pd.to_datetime(df_hist["date"].iloc[-1])
-                    _hist_age = (pd.Timestamp.today().normalize() - _hist_last.normalize()).days
-                    if _hist_age > _PMI_HIST_MAX_AGE_DAYS:
-                        print(f"[PMI] ⚠️ series 補救**拒絕採用**：FRED {FRED_ISM_PMI} 末筆="
-                              f"{_hist_last.date()} 已停更 {_hist_age} 天 > "
-                              f"{_PMI_HIST_MAX_AGE_DAYS} 天；與當期 value 混用會污染 "
-                              f"Z-Score / lag-correlation（§1 不以死值假裝有歷史）")
-                    else:
-                        s = df_hist.set_index("date")["value"].tail(120)
-                        print(f"[PMI] series 補救：FRED {FRED_ISM_PMI} 歷史 {len(s)} 期"
-                              f"（末筆 {_hist_last.date()}，age={_hist_age}d）")
-            except Exception as _e_pmi_hist:
-                print(f"[PMI] ⚠️ series 補救失敗：{type(_e_pmi_hist).__name__}: {_e_pmi_hist}")
+        # ⚠️ 2026-09-01：原本這裡還有一段「series 補救」—— HTML 源沒帶歷史序列時，
+        #   補抓 FRED `ISPMANPMI` 144 期當 `series`。**該段已一併拔除**（同一批、
+        #   同一個理由：客戶明令已廢棄資料源不得發起查詢）。
+        #   **舊寫法的理由仍然成立**：v19.404 已經替它補上空值 log 與時效檢查，
+        #   確保不會把 2016 的死序列混進 Z-Score / lag-correlation —— 就「不會污染
+        #   下游」而言舊碼是對的。**被權衡掉的原因**：那兩道防線的實際效果是
+        #   「**每次都先送出請求，再 100% 拒絕採用結果**」——
+        #   `ISPMANPMI` 2016-08 起停更，age 恆遠大於當時用的 90 天時效上限，
+        #   這條路徑**在 production 沒有任何一種輸入能讓它真的補到 series**。
+        #   拔掉後 `s` 維持 None，與拔掉前的實際結果**完全相同**（下游本來就有
+        #   `len(s) >= N` / `series=None` 的防線），差別只在少送一次註定被丟棄的請求。
+        #   ⛔ 不得以「補歷史」為由復活對這兩條 series 的查詢；若日後真需要 PMI 歷史
+        #      序列，要接的是**還活著的**源，不是 2016 就停更的那兩條。
         is_proxy = bool(pmi.get("is_proxy"))
         src_label = pmi.get("source", "?")
         # v19.404 稽核修正：原判斷式 `src_label == "OECD-Proxy"` **永遠不成立** ——

@@ -320,15 +320,35 @@ def fetch_aaii_sentiment() -> dict:
 # ISM 製造業 PMI — 5 段備援共用函式（v1.1 兩端統一）
 #
 # 為什麼 5 段？
-#   FRED NAPM / ISPMANPMI 自 2016-08 ISM 收回授權後停更，但保留以防重啟；
 #   MacroMicro / ISM World 為主存活源但 HTML 結構易變動；
 #   DBnomics 為 ISM JSON 鏡像（無需 key）；
+#   Phil Fed 擴散指數在 FRED 上仍持續更新，轉 PMI 刻度後作替代計（is_proxy）；
 #   OECD US Business Confidence 在 FRED 上仍持續更新，作為「概念替代指標」，
 #   值約 98–102（非 PMI 的 30–70 區間），與 ISM PMI 相關性 ~0.7。
+#
+# ⚠️ 2026-09-01 已移除原「方案 1+2：FRED NAPM / ISPMANPMI」（有意識的政策變更，
+#    不是漏刪；決策者：客戶 2026-09-01「已廢棄的資料源一律從資料庫與取數邏輯中
+#    徹底拔除，不得留存或發起查詢」）。
+#    **舊寫法的理由仍然成立**：那兩段留著是「以防 ISM 哪天重新授權 FRED 轉載」，
+#    而且它有 max_age_days 時效檢查、不會把 2016 的死值端上畫面 —— 就「不會騙人」
+#    這點而言舊碼是對的。**被權衡掉的原因**：時效檢查是**先發請求、拿到資料才丟棄**，
+#    每次冷啟動都對兩條 2016-08 起停更的 series 各打一次 FRED，命中率恆為 0；
+#    客戶的指令直接禁止「發起查詢」，不只是禁止「採用結果」。
+#    若 ISM 日後恢復授權，回復方式是重新加回這兩段（git history 有完整實作），
+#    而不是把它們留在這裡空轉。
+#
+# ⚠️ 段號 3~7 為**歷史編號，刻意不重排**（最小改動）：本檔外仍有交叉引用指名段號
+#    （`shared/fred_series.py` 的「方案 6」、`services/macro/us_indicators.py` 的
+#    「方案 7」）。重排會讓那些引用一起變成錯的，且與本批「只拔死源」的射程無關。
+#    **實際會執行的段數是 5 段**，不是 7 段。
 # ══════════════════════════════════════════════════════════════
 
 def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
     """抓取 ISM 製造業 PMI（5 段備援，月頻）。
+
+    段號 3~7 為歷史編號、刻意不重排（見上方橫幅）；實際執行 5 段。
+    原方案 1+2（FRED NAPM / ISPMANPMI）已於 2026-09-01 拔除 —— 那兩條 series
+    自 2016-08 ISM 收回授權後停更，客戶明令不得對其發起查詢。
 
     Returns
     -------
@@ -343,37 +363,10 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
     today = _dt.date.today()
     errs: list[str] = []
 
-    # ── 方案 1+2: FRED NAPM / ISPMANPMI（max_age_days 時效檢查）──
-    if fred_api_key:
-        for sid, lbl in [('NAPM', 'FRED NAPM'), ('ISPMANPMI', 'FRED ISPMANPMI')]:
-            try:
-                # v18.119 issue 1 真正修法：n=144 + tail(120) 拉滿 10 年月頻
-                # 原 n=36 + tail(24) 只 24 期 → Phase 4 min_overlap=24 + lag=3
-                # → .shift(-3).dropna() = 21 < 24 → return out_empty
-                df = fetch_fred(sid, fred_api_key, n=144)
-                if df.empty or len(df) < 5:
-                    continue
-                df = df.tail(120)
-                last_date = pd.to_datetime(df['date'].iloc[-1]).date()
-                age = (today - last_date).days
-                if age > max_age_days:
-                    print(f'[macro_core/PMI/FRED] ⚠️ {sid} 最新={last_date} '
-                          f'已停更 {age} 天 > {max_age_days}，跳過')
-                    continue
-                v = round(float(df['value'].iloc[-1]), 1)
-                print(f'[macro_core/PMI/FRED] ✅ {sid}={v} date={last_date} '
-                      f'series={len(df)} 期')
-                # F-PROV-1 phase 18 v19.156 — 加 fetched_at(source 已存在)
-                return {
-                    'value': v, 'date': str(last_date), 'label': lbl,
-                    'source': f'FRED:{sid}', 'is_proxy': False, 'series_id': sid,
-                    'fetched_at': pd.Timestamp.now('UTC').isoformat(),
-                    'dates':  [str(pd.to_datetime(d).date()) for d in df['date']],
-                    'values': [round(float(x), 1) for x in df['value']],
-                }
-            except Exception as e:
-                errs.append(f'FRED.{sid}:{type(e).__name__}')
-                print(f'[macro_core/PMI/FRED/{sid}] ❌ {e}')
+    # ── 方案 1+2（FRED NAPM / ISPMANPMI）已於 2026-09-01 拔除，理由見檔頭橫幅。
+    #    ⛔ 不得復活：這兩條 series 2016-08 起停更，任何形式的「先抓再依時效丟棄」
+    #       都違反客戶「不得發起查詢」的指令。守衛見
+    #       tests/test_dead_fred_pmi_series_removed.py。
 
     # ── 方案 3: MacroMicro 財經 M 平方（中文 HTML）──
     try:
@@ -564,11 +557,15 @@ def fetch_ism_pmi(fred_api_key: str = "", *, max_age_days: int = 90) -> dict:
             errs.append(f'OECD-Proxy:{type(e).__name__}')
             print(f'[macro_core/PMI/OECD-Proxy] ❌ {e}')
 
-    err_msg = ' | '.join(errs) or 'all 7 stages failed'
-    print(f'[macro_core/PMI] ❌ 7 段備援全失敗：{err_msg}')
+    # §1 Fail Loud：五段全敗一律回 err token（value=None），
+    # **不得**回退到任何猜測值 / 舊快取 / 填補值。
+    # 2026-09-01：段數 7 → 5（拔除死掉的 FRED NAPM / ISPMANPMI），字串同步更正；
+    #             留著「7」會讓 audit 讀 log 時對不上實際跑過的段數。
+    err_msg = ' | '.join(errs) or 'all 5 stages failed'
+    print(f'[macro_core/PMI] ❌ 5 段備援全失敗：{err_msg}')
     # F-PROV-1 phase 18 v19.156 — fail token 也帶 source + fetched_at(便於 audit)
     return {'_err_pmi': err_msg, 'value': None,
-            'source': 'ISM-PMI:all_7_stages_failed',
+            'source': 'ISM-PMI:all_5_stages_failed',
             'fetched_at': pd.Timestamp.now('UTC').isoformat()}
 
 

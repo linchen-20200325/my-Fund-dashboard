@@ -61,8 +61,30 @@ FRED_MNFCTRIRSA: str = "MNFCTRIRSA"  # Manufacturing inventory ratio
 FRED_GDPNOW: str = "GDPNOW"        # Atlanta Fed GDPNow
 
 # ── ISM / PMI ──────────────────────────────────────────────────────
-FRED_ISM_PMI: str = "ISPMANPMI"    # ISM manufacturing PMI
-FRED_NAPM: str = "NAPM"            # NAPM manufacturing (legacy)
+# ⛔ 2026-09-01：下列兩條 series **自 2016-08 ISM 收回授權後停更**，
+#    已從 production 取數邏輯中全數拔除（客戶指令：「已廢棄的資料源一律從資料庫與
+#    取數邏輯中徹底拔除，不得留存或發起查詢」）。拔除的三個點：
+#      1. `repositories/macro/alternate.py::fetch_ism_pmi` 原方案 1+2（先抓再依時效丟棄）
+#      2. `services/macro/us_indicators.py::fetch_all_indicators` 的 `fetch_fred_batch` 預熱清單
+#      3. 同檔 PMI 區塊的「series 補救」（補抓 ISPMANPMI 144 期）
+#    ⛔ **不得用於 production 取數**。要接 PMI 一律走
+#      `repositories/macro/alternate.py::fetch_ism_pmi` 的存活備援鏈。
+#    守衛：`tests/test_dead_fred_pmi_series_removed.py`。
+#
+# ⚠️ 常數本身**保留、未刪**，理由據實寫明（不是「以防萬一」這種空話）：
+#    · `FRED_NAPM` —— 仍有**一個真實 consumer**：`ui/helpers/io/data_registry.py`
+#      的 `_FRED_SERIES_MAP["PMI"]`（供 `fred_get_next_release_date` 查發布日）。
+#      ⚠️ 據實揭露：那條路徑查的是**同一條死 series 的發布日**，形同對死源發問。
+#      本批的檔案邊界不含 `ui/`，故**只登記、未處理** —— 留給碰到該檔的下一批。
+#      **不得**把「常數還在」讀成「這條 series 還能用」。
+#    · `FRED_ISM_PMI` —— production 已 0 consumer；保留的原因是
+#      `services/macro/_helpers.py` 仍 re-export 它（該檔在本批邊界外），
+#      且 `tests/test_fred_series_ssot.py` 以它驗 SSOT 鏈。
+#      **僅供歷史比對 / 跨檔 re-export，不得用於 production 取數。**
+#    （consumer 盤點方法：AST walk 全 repo 600 個 .py + `git grep` 全追蹤檔交叉驗，
+#      指令與輸出見本批 PR 描述。）
+FRED_ISM_PMI: str = "ISPMANPMI"    # ⛔ 2016-08 停更；勿用於 production 取數
+FRED_NAPM: str = "NAPM"            # ⛔ 2016-08 停更；勿用於 production 取數
 FRED_BSCICP02: str = "BSCICP02USM460S"  # OECD business confidence US
 
 # ── Regional Fed surveys ───────────────────────────────────────────

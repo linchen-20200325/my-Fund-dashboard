@@ -41,7 +41,12 @@ def _philly_df() -> pd.DataFrame:
 
 
 def _stub_fred(series_id: str, api_key: str, n: int = 250) -> pd.DataFrame:
-    """只有 Phil Fed 有資料;NAPM / ISPMANPMI(2016 停更)回空 → 前段自然落空。"""
+    """只有 Phil Fed 有資料;其餘 series 回空。
+
+    2026-09-01:原註寫「NAPM / ISPMANPMI(2016 停更)回空 → 前段自然落空」——
+    那兩段已整段拔除,現在根本不會有人拿這兩個 sid 來問。註解照實更新;
+    本 stub 的行為與各條測試的斷言**一字未改**(Phil Fed 路徑不受影響)。
+    """
     if series_id == FRED_PHILLY_FED:
         return _philly_df()
     return pd.DataFrame(columns=["date", "value"])
