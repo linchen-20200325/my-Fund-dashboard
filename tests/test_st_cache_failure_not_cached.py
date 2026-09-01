@@ -1,5 +1,14 @@
 # -*- coding: utf-8 -*-
-"""AST CI 守衛：每一個 `@*.cache_data` / `@*.cache_resource` 裝飾點都要被交代。
+"""AST CI 守衛：**靜態掃得到的** `@*.cache_data` / `@*.cache_resource` 裝飾點都要被交代。
+
+⚠️ **標題刻意不寫「每一個」**（2026-09-01 第二輪稽核指出，**有意識的更正，不是漏刪**）：
+~~「每一個 `@*.cache_data` / `@*.cache_resource` 裝飾點都要被交代」~~ 是一句
+**可以被三行程式碼證偽的全稱句** —— 只要把裝飾器名字動態組出來
+（`getattr(st, "cache" + "_data")`），本檔就看不到它。那三行本輪已補上守衛
+（N6/N7/N8，見 `_const_str`），但**下一種寫法永遠還在**：靜態分析對一個可以
+`exec` 的語言不可能窮舉。本檔能做的是**提高繞過的成本**，不是保證沒有漏網。
+對照憲法 §-1.5.1c 判定 2 的方法教訓：「能被一條 grep 推翻的全稱句，就不該寫進憲法」——
+守衛的標題同理。
 
 ## 這條守的是什麼
 
@@ -9,7 +18,7 @@
 這違反 v3 憲法 §02「**只快取成功結果；失敗時退避，不連續轟炸來源**」與 §2.4
 「超過 TTL 應重新抓取」，而一個被鎖住的空值正是 §1「錯誤的數字比沒有數字更危險」。
 
-## 判準：每個裝飾點必須落在下列三類之一，否則 CI 紅燈
+## 判準：**被掃到的**裝飾點必須落在下列三類之一，否則 CI 紅燈
 
 - **(a) `_RAISES`** —— 失敗路徑會 `raise`，例外穿過快取層不入快取。
 - **(b) `_WHITELIST`** —— 已知未修，**附理由**（為什麼現在不修、卡在什麼前置）。
@@ -52,6 +61,7 @@ M2b 與憲法 §-2 規則 6 的創始實證是同一個病（宣稱修好、實�
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -78,9 +88,22 @@ _RAISES: dict[str, tuple[str, str, str]] = {
     "repositories/hot_money_repository.py::_cached_foreign_flow_series": (
         "_fetch_foreign_flow_series_uncached",
         "repositories/hot_money_repository.py",
-        "內拋外譯：5 個無二義的失敗點 raise _FetchFailed，公開 wrapper 譯回 (df, err)。"
-        "另 2 個「空有兩義」的分支（非交易日／無 Foreign 類別）刻意仍 return、照舊快取 —— "
-        "連假週末真的就是沒有資料，改成 raise 會把 FinMind 免費額度燒到 402。",
+        # ⚠️ 2026-09-01 第二輪：整段重寫（**有意識的更正，不是漏刪**）。
+        # 舊理由與 `bf9ddc2` 逐字相同，而 `f5f4a1d` 已經把它講的三件事全部推翻：
+        #   ~~「5 個無二義的失敗點 raise」~~ → AST 實數 raise=8 / return=2；
+        #   ~~「另 2 個（非交易日／無 Foreign 類別）刻意仍 return」~~ → 那兩個
+        #      **就是這個 PR 改成 raise 的**；
+        #   ~~「連假週末真的就是沒有資料」~~ → 正是同一個 PR 在檔頭加刪除線推翻的那句。
+        # 也就是說：這張登記表在**它自己所屬的那個 PR 裡**變成假的，沒有人回頭看。
+        # → 現行寫法**不寫任何可被 AST 證偽的計數**，只寫政策
+        #   （`test_raises_reasons_state_policy_not_counts` 機械擋住計數）。
+        "內拋外譯：失敗路徑 raise _FetchFailed 穿過 @st.cache_data 不入快取，"
+        "公開 wrapper 再譯回既有的 (df, err) 形狀。"
+        "例外是「沒有任何節流器」的失敗分支（body status 落在 NO_COOLDOWN_KINDS、"
+        "或 fetch_url 回 None 但來源未進退避）—— 那些仍 return，由 TTL_30MIN 節流；"
+        "若那些也 raise，就變成每次 rerun 真打一次上游，比改版前更糟。"
+        "實際分支數與歸屬以 repositories/hot_money_repository.py 內的註解為準，"
+        "本欄不重述數字（重述必然漂移，2026-09-01 已實證）。",
     ),
     "repositories/hot_money_repository.py::_cached_usdtwd_series": (
         "_fetch_usdtwd_series_uncached",
@@ -184,7 +207,88 @@ def _iter_py_files():
         yield p, rel
 
 
-def _cache_symbol_names(tree: ast.AST) -> set[str]:
+def _const_str(node: ast.expr, strs: dict) -> "str | None":
+    """盡力把一個運算式摺成字串常數；摺不出來回 `None`。
+
+    ⚠️ 這個函式存在的唯一理由:`getattr(st, X)` 的第二個參數**不一定是字面值**。
+    2026-09-01 第二輪稽核實測的三種繞道,原版全部逃掉(各 12 passed):
+
+        N6  _c6 = getattr(st, "cache" + "_data") ; @_c6(ttl=60)           ⛔
+        N7  _NAME7 = "cache_data" ; _c7 = getattr(st, _NAME7) ; @_c7(...) ⛔
+        N8  @getattr(st, "cache" + "_data")(ttl=60)                       ⛔
+
+    根因是原版要求 `args[1]` 必須是 `ast.Constant` —— 洗成 `BinOp`(字串拼接)
+    或 `Name`(變數)就穿過去。**N6 實測是真的能運作的快取**
+    (3 次呼叫實際只執行 1 次、有 `.clear`),不是理論上的漏洞。
+
+    ⛔ **本函式不宣稱窮舉,而且結構上不可能窮舉**:`"".join([...])`、
+    `"cache_data"[::-1][::-1]`、`chr(99)+...`、`sys.modules`、`exec` 等
+    任意運算都繞得過。靜態分析對一個可以動態組字串的語言,只能提高繞過的成本。
+    **本檔的標題與判準措辭已據此改寫,不再使用「每一個裝飾點」這種可被三行程式碼
+    證偽的全稱句**(2026-09-01 稽核指出)。
+    """
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if isinstance(node, ast.Name):
+        return strs.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        _l = _const_str(node.left, strs)
+        _r = _const_str(node.right, strs)
+        return None if (_l is None or _r is None) else _l + _r
+    if isinstance(node, ast.JoinedStr):          # 全常數段的 f-string
+        parts = []
+        for v in node.values:
+            _p = _const_str(v, strs)
+            if _p is None:
+                return None
+            parts.append(_p)
+        return "".join(parts)
+    return None
+
+
+# 摺疊的迭代上限。鏈式拼接(`_A = "a"` → `_B = _A + "b"` → `_C = _B + "c"`)每多一層
+# 就多一輪;5 層已遠超過任何合理的「把字串藏起來」寫法,而上限保證本函式必然終止。
+_STR_FOLD_MAX_PASSES = 5
+
+
+def _str_const_names(tree: ast.AST) -> dict:
+    """`X = "..."`(含可摺疊的拼接)→ {"X": "..."}。多輪迭代,接得住鏈式拼接。
+
+    ⚠️ **兩道終止保險,缺一不可**(2026-09-01 實測:少了它們,本檔在本 repo 會跑不完):
+      1. **先到先贏,不覆寫已知的名字** —— 否則 `s = s + "x"` 這種
+         自我參照的累加(本 repo 常見)會讓值每一輪都變,`while changed` 永不收斂。
+      2. **輪數上限** `_STR_FOLD_MAX_PASSES` —— 就算 (1) 哪天被改掉也不會掛住 CI。
+    ⚠️ 代價要講明:同一個名字被重新綁定成不同字串時,本函式**只認第一次**,
+    可能因此漏判(＝**保守漏放**,不是誤報)。這與本檔整體的取捨一致:
+    靜態分析只能提高繞過成本,見 `_const_str` 的 ⛔ 段。
+    """
+    out: dict = {}
+    for _ in range(_STR_FOLD_MAX_PASSES):
+        changed = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            _v = _const_str(node.value, out)
+            if _v is None:
+                continue
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name) and tgt.id not in out:
+                    out[tgt.id] = _v
+                    changed = True
+        if not changed:
+            break
+    return out
+
+
+def _is_getattr_cache(node: ast.expr, strs: dict) -> bool:
+    """`getattr(<任何東西>, <摺得出 cache_data/cache_resource 的運算式>)`？"""
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr" and len(node.args) >= 2):
+        return False
+    return _const_str(node.args[1], strs) in _CACHE_ATTRS
+
+
+def _cache_symbol_names(tree: ast.AST, strs: "dict | None" = None) -> set[str]:
     """本檔內所有「其實就是 `st.cache_data` / `cache_resource`」的區域名字。
 
     ⚠️ 2026-09-01 修（稽核實測）：原本的 docstring 誇口「別名不敏感」，
@@ -195,7 +299,11 @@ def _cache_symbol_names(tree: ast.AST) -> set[str]:
 
     本函式把這兩種綁定收進來。迭代到定點，接得住 `a = st.cache_data` → `b = a` 的鏈。
     （目前 repo 內 M3/M4 皆 0 命中，這是**防未來**，不是修現況。）
+
+    ⚠️ 2026-09-01 第二輪追加:`_c6 = getattr(st, "cache" + "_data")` 這種
+    **經由 `getattr` 的綁定**也要收進來(N6 / N7)，見 `_const_str`。
     """
+    strs = _str_const_names(tree) if strs is None else strs
     names: set[str] = set(_CACHE_ATTRS)     # from streamlit import cache_data
     changed = True
     while changed:
@@ -211,7 +319,8 @@ def _cache_symbol_names(tree: ast.AST) -> set[str]:
             elif isinstance(node, ast.Assign):
                 v = node.value
                 hit = ((isinstance(v, ast.Attribute) and v.attr in _CACHE_ATTRS)
-                       or (isinstance(v, ast.Name) and v.id in names))
+                       or (isinstance(v, ast.Name) and v.id in names)
+                       or _is_getattr_cache(v, strs))
                 if not hit:
                     continue
                 for tgt in node.targets:
@@ -221,32 +330,38 @@ def _cache_symbol_names(tree: ast.AST) -> set[str]:
     return names
 
 
-def _resolves_to_cache(node: ast.expr, names: set[str]) -> bool:
+def _resolves_to_cache(node: ast.expr, names: set[str],
+                       strs: "dict | None" = None) -> bool:
     """這個運算式最終是不是 `cache_data` / `cache_resource`？
 
-    涵蓋（皆為 2026-09-01 稽核列出的繞道，實測原版全部逃掉）：
+    涵蓋（皆為 2026-09-01 兩輪稽核列出的繞道，實測原版全部逃掉）：
       · `st.cache_data` / `_st_mod.cache_data`（模組別名）
       · `memo` / `_cd`（函式別名，見 `_cache_symbol_names`）
       · `getattr(st, "cache_data")`（M5）
+      · **`getattr(st, "cache" + "_data")`（N6/N8）與
+        `getattr(st, _NAME)`（N7）—— 第二個參數摺得出常數字串就算**
       · 上述任一種再被呼叫一層：`st.cache_data(ttl=60)`、`getattr(...)(...)`
+
+    ⛔ **不是窮舉,也不可能窮舉** —— 理由與已知逃生路徑見 `_const_str`。
     """
+    strs = {} if strs is None else strs
     if isinstance(node, ast.Attribute):
         return node.attr in _CACHE_ATTRS
     if isinstance(node, ast.Name):
         return node.id in names
     if isinstance(node, ast.Call):
-        f = node.func
-        if (isinstance(f, ast.Name) and f.id == "getattr" and len(node.args) >= 2
-                and isinstance(node.args[1], ast.Constant)
-                and node.args[1].value in _CACHE_ATTRS):
+        if _is_getattr_cache(node, strs):
             return True
-        return _resolves_to_cache(f, names)
+        return _resolves_to_cache(node.func, names, strs)
     return False
 
 
-def _is_cache_decorator(dec: ast.expr, names: "set[str] | None" = None) -> bool:
-    """裝飾點判定 —— 模組別名、函式別名、`getattr` 三種寫法都算。"""
-    return _resolves_to_cache(dec, names if names is not None else set(_CACHE_ATTRS))
+def _is_cache_decorator(dec: ast.expr, names: "set[str] | None" = None,
+                        strs: "dict | None" = None) -> bool:
+    """裝飾點判定 —— 模組別名、函式別名、`getattr`（含拼接／變數）都算。"""
+    return _resolves_to_cache(dec,
+                              names if names is not None else set(_CACHE_ATTRS),
+                              strs)
 
 
 def _collect_sites() -> dict[str, ast.FunctionDef]:
@@ -256,11 +371,12 @@ def _collect_sites() -> dict[str, ast.FunctionDef]:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except SyntaxError:  # noqa: PERF203 — 壞檔不該讓本守衛整條掛掉
             continue
-        names = _cache_symbol_names(tree)
+        strs = _str_const_names(tree)
+        names = _cache_symbol_names(tree, strs)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if any(_is_cache_decorator(d, names) for d in node.decorator_list):
+            if any(_is_cache_decorator(d, names, strs) for d in node.decorator_list):
                 sites[f"{rel}::{node.name}"] = node
     return sites
 
@@ -391,7 +507,8 @@ def test_cache_decorator_is_only_used_via_at_syntax():
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except SyntaxError:
             continue
-        names = _cache_symbol_names(tree)
+        strs = _str_const_names(tree)
+        names = _cache_symbol_names(tree, strs)
         deco_ids: set[int] = set()
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -405,12 +522,9 @@ def test_cache_decorator_is_only_used_via_at_syntax():
                     not isinstance(getattr(node, "ctx", None), ast.Load):
                 continue          # 賦值目標不是「使用」
             if isinstance(node, (ast.Attribute, ast.Name)) and \
-                    _resolves_to_cache(node, names):
+                    _resolves_to_cache(node, names, strs):
                 offenders.append(f"{rel}:{getattr(node, 'lineno', '?')}")
-            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
-                    and node.func.id == "getattr" and len(node.args) >= 2 \
-                    and isinstance(node.args[1], ast.Constant) \
-                    and node.args[1].value in _CACHE_ATTRS:
+            elif isinstance(node, ast.Call) and _is_getattr_cache(node, strs):
                 offenders.append(f"{rel}:{getattr(node, 'lineno', '?')}")
     assert not offenders, (
         "以下位置在 `@` 裝飾語法之外引用了 cache_data / cache_resource，"
@@ -420,8 +534,57 @@ def test_cache_decorator_is_only_used_via_at_syntax():
     )
 
 
-@pytest.mark.parametrize("key", sorted(set(_WHITELIST) | set(_NO_EXTERNAL_ROUNDTRIP)))
+def _reason_of(key: str) -> str:
+    """三張登記表共用的理由取值（`_RAISES` 的理由在 tuple 第 3 格）。"""
+    if key in _RAISES:
+        return _RAISES[key][2]
+    return _WHITELIST.get(key) or _NO_EXTERNAL_ROUNDTRIP.get(key) or ""
+
+
+_ALL_REGISTRY_KEYS = sorted(set(_RAISES) | set(_WHITELIST) | set(_NO_EXTERNAL_ROUNDTRIP))
+
+
+@pytest.mark.parametrize("key", _ALL_REGISTRY_KEYS)
 def test_exemptions_carry_a_reason(key):
-    """豁免必須附理由，且理由要能讓後人判斷「什麼時候可以移出」。"""
-    reason = _WHITELIST.get(key) or _NO_EXTERNAL_ROUNDTRIP.get(key) or ""
-    assert len(reason.strip()) >= 20, f"{key} 的豁免理由太短或缺漏：{reason!r}"
+    """每一格登記都必須附理由，且理由要能讓後人判斷「什麼時候可以移出」。
+
+    ⚠️ **2026-09-01 第二輪擴大射程（稽核指出的結構缺口）**：本條原本只跑
+    `_WHITELIST` 與 `_NO_EXTERNAL_ROUNDTRIP`，**`_RAISES` 的理由字串是全 repo
+    唯一沒有任何測試檢查其內容的一格** —— 於是它在自己所屬的那個 PR 裡爛掉
+    （宣稱「5 個失敗點」而 AST 實數 8、宣稱「另 2 個仍 return」而那兩個正是被改掉的），
+    整整一輪沒有人發現。**沒有被任何測試看著的登記，遲早會說謊。**
+    """
+    reason = _reason_of(key)
+    assert len(reason.strip()) >= 20, f"{key} 的登記理由太短或缺漏：{reason!r}"
+
+
+# 會漂移的計數措辭：`5 個` / `2 處` / `3 條` / `7 個失敗點` …
+_COUNT_CLAIM = re.compile(r"[0-9０-９]+\s*[個个处處條条筆笔]")
+
+
+@pytest.mark.parametrize("key", sorted(_RAISES))
+def test_raises_reasons_state_policy_not_counts(key):
+    """⭐ `_RAISES` 的理由**不得寫可被 AST 證偽的計數** —— 寫政策，不寫數字。
+
+    ## 為什麼是「禁止寫數字」而不是「檢查數字對不對」
+
+    檢查數字對不對，等於要本檔去定義「什麼叫一個失敗點」（`raise` 節點數？
+    失敗分支數？`return` 的失敗分支算不算？），而那個定義一改，
+    守衛與被守的東西就會再度漂移 —— **把一個會腐爛的宣稱換成另一個會腐爛的宣稱**。
+    直接禁掉這種宣稱，理由欄就只剩「政策」，而政策不會因為多加一個分支而變假。
+
+    ## 這一條擋的是什麼（實證，不是假想）
+
+    `bf9ddc2` 寫下「5 個無二義的失敗點 raise……另 2 個刻意仍 return」，
+    `f5f4a1d` 把那 2 個也改成了 raise、AST 實數變成 8 —— **同一個 PR 內、
+    相隔一個 commit，這句話就變成假的**，而且它是一張**守衛用的登記表**。
+    憲法 `infra/source_backoff.py::_BackoffRegistryProxy` 記載的教訓正是這個形狀：
+    「更正措辭時只修被點名的那個載體，剩下的副本會繼續說謊。」
+    """
+    reason = _RAISES[key][2]
+    hits = _COUNT_CLAIM.findall(reason)
+    assert not hits, (
+        f"{key} 的 _RAISES 理由含可被 AST 證偽的計數 {hits}：{reason!r}\n"
+        f"請改寫成**政策**（什麼情況 raise、什麼情況 return、為什麼），"
+        f"把實際數字留在被守的原始碼註解裡 —— 登記表重述數字必然漂移。"
+    )

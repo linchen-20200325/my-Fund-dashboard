@@ -283,8 +283,12 @@ def render_long_term_section(
     # ⚠️ 2026-09-01 更正(有意識的更正,不是漏刪):**這句對「失敗路徑」自本日起為假**。
     #    `repositories/hot_money_repository.py` 已改為「內拋外譯」——
     #    失敗會 raise、**穿過 `@st.cache_data` 不入快取**,那 30 分鐘的 TTL
-    #    只節流「成功結果」。失敗路徑改由 `infra.source_backoff` 的**來源冷卻**節流
+    #    只節流「成功結果」。失敗路徑改由 `infra.source_backoff` 的冷卻節流
     #    (應用層失敗也會登記,見該檔 `_finmind_failed`)。
+    #    ⚠️ 2026-09-01 第二輪補正:那個冷卻的粒度是 **dataset**(外資買賣超這一支),
+    #    **不是 host** —— 所以它**不會**連帶擋掉同一個 FinMind host 上的
+    #    NDC 景氣對策信號(`ui/helpers/macro/ndc.py`)。第一版用 host 粒度,
+    #    實測把健康的 NDC 一起關掉了。
     #    本呼叫點目前真正擋住重打的是**下面那個 `_hm_auto_refresh_tried`
     #    session-once 旗標**,不是快取 —— 所以這裡不是漏洞;
     #    但這行文字會被後人當成現行節流機制引用,故就地更正。

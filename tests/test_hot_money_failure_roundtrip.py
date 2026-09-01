@@ -91,6 +91,10 @@ _SCENARIOS: dict[str, tuple[int, bytes]] = {
     "http_500":   (500, b'{"err": "boom"}'),
     # SSOT 判定「刻意不退避」的分類 → 這一層若還 raise 就一個節流器都不剩
     "body_404":   (200, b'{"msg": "dataset not found", "status": 404}'),
+    # HTTP 200 但 body 是空白 → `fund_fetcher.fetch_url_with_retry` 尾端
+    # `return resp if resp.text.strip() else None` 會把它轉成 None，
+    # 而 `fetch_url` 早已 `_note_success()` → **誰都沒有記退避**（同 body_404 的處境）
+    "http_200_empty_body": (200, b'   '),
     # positive control：成功
     "ok": (
         200,
@@ -206,11 +210,21 @@ def test_app_level_failure_is_not_cached_and_registers_backoff(
         f"（@st.cache_data 只對『回傳值』快取，失敗必須 raise 才穿得過去）"
     )
 
-    live = [d for d in _sb.get_backoff_state() if d["source"] == "api.finmindtrade.com"]
+    _states = _sb.get_backoff_state()
+    live = [d for d in _states if d["source"] == hm._FINMIND_DATASET_KEY]
     assert live, (
-        f"{scenario}: 應用層失敗沒有登記來源退避 —— "
+        f"{scenario}: 應用層失敗沒有登記退避 —— "
         f"這是 HTTP 200，fetch_url 已經 _note_success() 解除冷卻了，"
-        f"不補記就會每次 rerun 真打一次上游。目前 state={_sb.get_backoff_state()}"
+        f"不補記就會每次 rerun 真打一次上游。目前 state={_states}"
+    )
+    # ⭐ 反向鎖（2026-09-01 第二輪的核心迴歸）：**不得**登記到 host 鍵上。
+    # host 鍵一被寫進去，`infra/proxy.py::fetch_url` 就會把同一個 host 上
+    # 完全健康的其它 dataset 一起擋掉 —— 實測誤殺 NDC 景氣對策信號
+    # （`ui/helpers/macro/ndc.py`，Tab1 資產水位 / 動態 Z 門檻 + Tab2 再平衡訊號）。
+    # 跨 dataset 的端對端證明另見 `test_sibling_dataset_on_same_host_is_untouched`。
+    assert not [d for d in _states if d["source"] == hm._FINMIND_HOST_KEY], (
+        f"{scenario}: dataset 專屬的 payload 失敗被登記到 host 鍵 "
+        f"{hm._FINMIND_HOST_KEY!r} —— 會誤殺同 host 的其它 dataset。state={_states}"
     )
 
     # 第一次真的打了；第 2/3 次被退避在 fetch_url 進場處擋下 → 不再有網路往返
@@ -226,6 +240,11 @@ def test_app_level_failure_is_not_cached_and_registers_backoff(
     assert "退避冷卻中" in _later_err and "未發出任何請求" in _later_err, (
         f"{scenario}: 冷卻期的訊息未誠實交代「本次沒有打上游」：{_later_err!r}"
     )
+    # 冷卻訊息要講清楚**冷卻的是誰**（不是整個來源）——否則讀 log 的人會以為
+    # FinMind 整台被關掉，然後去找一個不存在的 host 冷卻。
+    assert hm._FINMIND_DATASET in _later_err, (
+        f"{scenario}: 冷卻訊息未指出是哪一個 dataset 在冷卻：{_later_err!r}"
+    )
 
 
 def test_empty_data_is_not_blamed_on_holidays(harness):
@@ -238,6 +257,75 @@ def test_empty_data_is_not_blamed_on_holidays(harness):
     _df, err = run("empty_data", days=116)[0]
     assert "非交易日" not in err, f"上游異常被誤報成休市：{err!r}"
     assert "130" in err, f"訊息應帶出實際視窗天數（116+14=130），實際：{err!r}"
+
+
+# ════════════════════════════════════════════════════════════════════
+# ⭐ 跨 dataset 隔離：同一個 host 上的鄰居不得被連坐
+# ════════════════════════════════════════════════════════════════════
+def test_sibling_dataset_on_same_host_is_untouched(monkeypatch):
+    """外資 dataset 壞掉，**不得**害到同一個 host 上健康的 NDC 景氣對策信號。
+
+    ## 這一條是 `fe664ad` 迴歸的端對端證明（2026-09-01 第二輪，兩組獨立稽核指出）
+
+    第一版把 payload 形狀失敗登記在 **host 鍵**（`api.finmindtrade.com`）上，
+    於是 `infra/proxy.py::fetch_url` 在進場處把**同一個 host 的所有查詢**一起擋掉。
+    實測（只讓外資 dataset 壞、NDC dataset 全程健康）：
+
+        b5b0464 / bf9ddc2 : NDC score=31，TaiwanBusinessIndicator 打上游 1 次
+        fe664ad           : NDC score=None，打上游 0 次
+                            [proxy] 退避中，跳過不打（source=api.finmindtrade.com）
+
+    NDC 是**活的 production 消費者**（`ui/helpers/macro/ndc.py::_fetch_ndc_score`
+    → Tab1 資產水位 / 動態 Z 門檻、Tab2 再平衡訊號），拿不到分數就退預設門檻。
+
+    ## 為什麼不能只靠上面那條反向鎖
+
+    `test_app_level_failure_is_not_cached_and_registers_backoff` 的反向鎖只證明
+    「沒有寫進 host 鍵」；本條證明的是**下游真的還拿得到資料** ——
+    中間還隔著 `fetch_url` 的進場檢查、`_ttl_cache`、以及 NDC 自己的解析。
+    只鎖登記表、不驗端對端，等於相信「鍵沒寫錯 ⇒ 行為就對了」。
+    """
+    _require_real_streamlit()
+    import repositories.macro_tw_local_repository as _tw
+
+    _ndc_body = json.dumps({"status": 200, "data": [
+        {"date": f"2026-{m:02d}-01", "monitoring": 29 + (m % 3),
+         "monitoring_color": "綠燈", "leading": 100.0} for m in range(1, 9)
+    ]}).encode()
+
+    seen: dict[str, int] = {}
+
+    class _DispatchSession:
+        def get(self, url, **kw):
+            _ds = (kw.get("params") or {}).get("dataset", "?")
+            seen[_ds] = seen.get(_ds, 0) + 1
+            if _ds == "TaiwanBusinessIndicator":            # 鄰居：完全健康
+                return _FakeResp(200, _ndc_body)
+            return _FakeResp(*_SCENARIOS["quota_402"])      # 外資：壞掉
+
+    monkeypatch.setattr(_proxy, "_get_thread_session", lambda: _DispatchSession())
+    monkeypatch.setattr(_proxy, "get_proxy_config", lambda: None)
+
+    hm.fetch_foreign_flow_series.clear()
+    _tw.fetch_ndc_signal_history.cache_clear()
+    _sb.reset_all()
+    try:
+        _df, _err = hm.fetch_foreign_flow_series(122)
+        assert _df.empty and "402" in _err, f"前置條件沒成立（外資該壞）：{_err!r}"
+
+        _ndc = _tw.fetch_ndc_signal_history(token="")
+        assert seen.get("TaiwanBusinessIndicator") == 1, (
+            f"NDC 的查詢被擋掉了，一個封包都沒發出去 —— 退避鍵誤殺鄰居。"
+            f"實際上游呼叫：{seen}；退避狀態：{_sb.get_backoff_state()}"
+        )
+        assert _ndc.get("score_latest") is not None, (
+            f"NDC 拿不到分數（error={_ndc.get('error')!r}）—— "
+            f"退避狀態：{_sb.get_backoff_state()}"
+        )
+    finally:
+        hm.fetch_foreign_flow_series.clear()
+        _tw.fetch_ndc_signal_history.cache_clear()
+        _sb.reset_all()
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -255,6 +343,58 @@ def test_transport_failure_backoff_is_left_to_fetch_url(harness):
     )
 
 
+def test_http_200_empty_body_falls_back_to_caching(harness):
+    """HTTP 200 但 body 空 → `fetch_url` 判定成功、沒人記退避 → **必須落回快取**。
+
+    ## 這一條擋的是本 PR 自己製造過的迴歸（2026-09-01 第二輪實測）
+
+    `fe664ad` 在這個情境下是 **rerun#1..#3 各打一次上游**（實測 total=3），
+    而改版前（`b5b0464`）是 **1**（失敗被 `@st.cache_data` 鎖 30 分鐘）。
+    也就是說：一個以「不要連續轟炸來源」為題的 PR，在這條路徑上**把請求量放大了 3 倍**。
+
+    根因是本檔的節流不變式漏了一格：失敗**只有在確實有節流器時才可以 raise**。
+    這裡三個節流器都不在（dataset 沒登記、host 被 `_note_success` 清掉、
+    raise 又穿過快取），所以唯一正確的做法是 `return`，讓 `TTL_30MIN` 接手。
+    """
+    run, net, impl = harness
+    df, err = run("http_200_empty_body", days=120)[0]
+    assert df.empty and err
+    assert impl["n"] == 1, (
+        f"沒有節流器的失敗必須落回快取（實作跑了 {impl['n']} 次，預期 1）—— "
+        f"否則每次 rerun 都真打一次上游，比改版前更糟"
+    )
+    assert net["n"] == 1, f"3 次 rerun 打了 {net['n']} 次上游（預期 1）"
+    assert not _sb.get_backoff_state(), f"這一支不該登記任何退避：{_sb.get_backoff_state()}"
+
+
+def test_backoff_expiry_lets_the_chain_retry(harness, monkeypatch):
+    """冷卻期滿後**這條鏈**要真的重試 —— 退避不可讓資料永久消失（§1 對偶）。
+
+    ⚠️ `tests/test_source_backoff.py` 驗的是**模組**的到期行為；本條驗的是
+    **熱錢這條鏈**接上去之後到期會不會真的重打（進場處的 `should_skip` 有沒有接對）。
+    兩者不可互相取代：模組對了但鏈沒接，一樣是永久黑掉。
+    """
+    run, net, impl = harness
+    _t = {"now": 1000.0}
+    monkeypatch.setattr(_sb, "_clock", lambda: _t["now"])
+
+    results = run("quota_402", days=121, reruns=2)
+    assert net["n"] == 1, f"冷卻期內仍在打上游：{net['n']}"
+    assert "退避冷卻中" in results[-1][1]
+
+    # 跳過整個冷卻期（server_error = 300s，取 +1 秒確保過期）
+    _cd = _sb.get_backoff_state()
+    assert _cd and _cd[0]["cooldown_sec"] > 0, _cd
+    _t["now"] += _cd[0]["cooldown_sec"] + 1
+
+    _before = net["n"]
+    _df, _err = hm.fetch_foreign_flow_series(121)
+    assert net["n"] == _before + 1, (
+        f"冷卻期滿後沒有重試（上游呼叫數停在 {net['n']}）—— 退避把資料永久藏起來了"
+    )
+    assert "退避冷卻中" not in _err, f"冷卻已到期，訊息卻仍說在冷卻：{_err!r}"
+
+
 def test_no_cooldown_kind_falls_back_to_caching(harness):
     """body status 落在 `NO_COOLDOWN_KINDS`（404 / 407）→ **照舊快取**，不 raise。
 
@@ -267,15 +407,26 @@ def test_no_cooldown_kind_falls_back_to_caching(harness):
     assert df.empty and "404" in err
     assert impl["n"] == 1, f"不退避的分類必須由 TTL 承擔節流（實作跑了 {impl['n']} 次）"
     assert net["n"] == 1
-    assert not [d for d in _sb.get_backoff_state()
-                if d["source"] == "api.finmindtrade.com"], "not_found 不該進退避"
+    assert not _sb.get_backoff_state(), (
+        f"not_found 不該進退避（host 或 dataset 都不該）：{_sb.get_backoff_state()}"
+    )
 
 
 def test_empty_frames_carry_real_dtypes(harness):
     """失敗回傳的空 df 帶正確 dtype（datetime64 / float64），不是 object。
 
     改版前 base 自己就不一致（一條 object、一條 typed）；本 PR 統一。
-    現行消費端都先判 `.empty`，實務影響為零 —— 但「回傳形狀逐字相同」要為真就不能留差異。
+    現行消費端都先判 `.empty`，實務影響為零。
+
+    ⚠️ **2026-09-01 第二輪更正（有意識的更正，不是漏刪）**：本段原本寫
+    ~~「但『回傳形狀逐字相同』要為真就不能留差異」~~ —— **因果講反了**。
+    統一 dtype **本身就是形狀變更**（實測 7/7 個失敗分支的 dtype 都變了），
+    所以它是「逐字相同不成立」的原因，不是讓它成立的手段。
+    那句假宣稱當時被寫進**三個載體**（本檔、`_empty_flow_df` docstring、
+    兩支公開 `fetch_*` 的 docstring），三份一起錯 ——
+    正是 `infra/source_backoff.py::_BackoffRegistryProxy` 記載的那個教訓：
+    「更正措辭時只修被點名的那個載體，剩下的副本會繼續說謊。」
+    現行的變更清單寫在兩支公開 `fetch_*` 的 docstring 裡（唯一真相源）。
     """
     run, _net, _impl = harness
     df, _err = run("quota_402", days=119)[0]

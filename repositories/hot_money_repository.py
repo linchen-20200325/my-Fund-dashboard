@@ -40,8 +40,45 @@ from infra.cache import register_st_cache
 # JSON 解析失敗三種情境 rerun#1..#3 各 1 次呼叫、`get_backoff_state()` 全空;
 # 對照組真 HTTP 500 則有登記、第 2 次起直接跳過不打。
 #
-# 手法沿用既有先例 `repositories/fund/fx_and_main.py::get_latest_fx`
-# (裸 `requests.get` 拿不到 `fetch_url` 的內建退避,檔內自己接同一套)。
+# ## ⚠️ 退避鍵是 **dataset 專屬**,不是 host —— 這一段是 2026-09-01 第二輪稽核的產物
+#
+# 第一版把這些失敗以 host 鍵(`api.finmindtrade.com`)登記,**實測誤殺了同一個 host
+# 上完全健康的 NDC 景氣對策信號**:只讓外資 dataset 壞掉、NDC dataset 全程正常,
+# `ui/helpers/macro/ndc.py::_fetch_ndc_score` 從 `score=31` 變成 `score=None`,
+# 而且 `TaiwanBusinessIndicator` 那支查詢**一個封包都沒發出去**
+# (`[proxy] 退避中,跳過不打`)。NDC 是活的 production 消費者
+# (Tab1 資產水位 / 動態 Z 門檻、Tab2 再平衡訊號)。
+#
+# **為什麼 host 粒度在這裡是錯的**:`shared/backoff_policy.py` 末段自己寫了它成立的前提
+# ——「403 / 429 / 連線失敗都是對方按 **host(+ 我方 IP)** 判定的……**URL 專屬**的失敗
+# (404)已由上表排除在退避之外,故 host 粒度**不會誤殺**」。而本檔登記的是
+# **dataset 專屬的 payload 形狀失敗**(JSON 壞 / 缺類別欄 / 0 筆 / 無 Foreign 類別),
+# 正是該段刻意排除的那一類。base 上唯二的 `record_failure` 呼叫者
+# (`infra/proxy.py`、`repositories/fund/fx_and_main.py`)全部是 **status-code / 連線層**;
+# 本檔是第一個用 payload 形狀登記的,所以也必須是第一個把鍵縮小的。
+#
+# **與 `fx_and_main.py::get_latest_fx` 的關係,據實寫清楚(第一版把這句寫錯了)**:
+# **機制**確實沿用它 —— 拿不到 `fetch_url` 內建退避的路徑,由 repository 自己接同一套,
+# 且它同樣用「自己算出來的鍵」(`_erapi_key`)而不是共用一個全域鍵。
+# 但**政策相反**:該檔對「HTTP 200 但 payload 不可用」就地寫著
+# 「來源活著,不是來源的錯,**不退避**」,一次都沒登記。本檔選擇登記,
+# 是因為這裡的 payload 失敗會**反覆**發生(dataset 改名 / 額度用盡 / 詞彙變更),
+# 而 fx 那條有多來源 fallback chain 可以立刻接手、本檔沒有。
+# ⚠️ **這是一個有意識的政策分歧,不是「沿用先例」** —— 第一版的檔頭把它寫成沿用,
+# 那句話是假的(2026-09-01 稽核指出,本輪更正)。
+#
+# **未解的前提,誠實揭露(§-2 規則 6)**:FinMind 額度用盡到底是**真 HTTP 402**
+# 還是 **HTTP 200 + body `{"status":402}`**,本 repo 的記載自相矛盾
+# (`infra/proxy.py` 當它是真狀態碼;本檔與 `repositories/macro_tw_local_repository.py`
+# 寫在 body),而**不實打 API 就無法判定**(會消耗使用者額度)。
+# 本檔因此**不替 402 另開 host 粒度的特例**:
+#   · 若是真 402 → `fetch_url` 既有路徑已經會用 host 粒度退避,不必本檔插手;
+#   · 若是 200+body → NDC 自己有 `@_ttl_cache(TTL_15MIN)` 且**失敗 dict 也會被快取**,
+#     最多每 15 分鐘白打一次,不構成「轟炸」。
+# 用一個查不到的前提去換「多殺一個健康的消費者」的風險,不划算 ——
+# 這正是第一版踩到的那顆雷。
+# ⚠️ 另一種讀法存在(「402 用 host 鍵才對,額度是帳號級的」),本檔**不宣稱它錯**;
+# 只是它**只在其中一個未被證實的假設下才有意義**,故不採用。
 from infra import source_backoff as _sb_hm
 
 
@@ -52,9 +89,17 @@ def _empty_flow_df() -> pd.DataFrame:
     **object** dtype,而成功路徑造出來的是 datetime64/float64。改版前這兩種空 df
     在不同分支各出現一次,**base 自己就不一致**;統一成帶型別的版本,
     `pd.concat` / `merge` 才不會在空集合上噴 dtype 警告。
+    ⚠️ **2026-09-01 更正(有意識的更正,不是漏刪)**:本段原本寫
+    ~~「但『回傳形狀逐字相同』這句話要為真,就不能留著這個差異」~~ ——
+    **那是把因果講反了**。統一 dtype **本身就是一個形狀變更**
+    (改版前 7 個失敗分支全是 `object`,現在全是 typed;**實測 7/7 不同**),
+    所以它不是「讓逐字相同成立」的手段,而是「逐字相同不成立」的**原因之一**。
+    公開 wrapper 的 docstring 當時同步寫了那句假宣稱,兩處**互相引用、一起錯**。
+    現行說法:**這是一個刻意的、已揭露的形狀變更**(變更清單見兩支公開
+    `fetch_*` 的 docstring)。**改動本身的理由不變**:base 自己就不一致
+    (一條 object、一條 typed),`pd.concat` / `merge` 在空集合上會噴 dtype 警告;
     現行消費端(`ui/hot_money.py` / `services/hot_money_service.py`)全部先判
-    `.empty` 才動欄位,實務影響為零 —— 但「回傳形狀逐字相同」這句話要為真,
-    就不能留著這個差異(§1:記錄不可說謊)。
+    `.empty` 才動欄位,實務影響為零。
     """
     return pd.DataFrame({
         "date": pd.Series(dtype="datetime64[ns]"),
@@ -136,8 +181,14 @@ def _yf_series_to_df(series: pd.Series) -> pd.DataFrame:
 #     → 一樣被歸成「非交易日」並快取。
 #
 # ✅ **「改成 raise 會燒額度」那個擔憂本身是對的,但它的前提已經被同一批修掉了**:
-#   本檔現在會在應用層失敗時呼叫 `_sb_hm.record_failure(...)` 登記來源冷卻,
-#   下一次 rerun 在 `fetch_url` **進場處**就被擋下、一個封包都不發。
+#   本檔現在會在應用層失敗時呼叫 `_sb_hm.record_failure(...)` 登記冷卻,
+#   下一次 rerun 在**本 fetcher 的進場處**就被擋下、一個封包都不發。
+#   ⚠️ **2026-09-01 更正(有意識的更正,不是漏刪)**:本行原寫
+#   ~~「在 `fetch_url` **進場處**就被擋下」~~ —— 自本輪把退避鍵改成 dataset 粒度之後
+#   **那句話為假**:`fetch_url` 只查 host 鍵,查不到本檔登記的 dataset 鍵。
+#   現行的攔截點是 `_fetch_foreign_flow_series_uncached` 開頭那一段
+#   `should_skip(_FINMIND_DATASET_KEY)`。**「一個封包都不發」這個效果不變**,
+#   變的是**誰擋的** —— 而那個差別正是「不會誤殺同 host 的 NDC」的來源。
 #   有了退避,就可以誠實地 raise。**而原本那個理由若一致套用,會連本檔自己做的
 #   402 raise 一起禁掉 —— 舊表述是選擇性套用了自己的判準。**
 #
@@ -157,14 +208,44 @@ class _FetchFailed(RuntimeError):
     """
 
 
-_FINMIND_SOURCE_KEY = _sb_hm.source_key(_FINMIND_BASE)
+# 本 fetcher 打的那一個 dataset(退避鍵要用的粒度,見檔頭)。
+_FINMIND_DATASET = "TaiwanStockTotalInstitutionalInvestors"
+
+# 「這個視窗長到不可能整段都是休市」的門檻(日曆日)。
+# 台灣最長連假(春節)不超過兩週,30 天給了 2 倍以上餘裕。
+# ⚠️ 這個常數存在的唯一理由是**歸因誠實**:`fetch_foreign_flow_series` 是**沒有下限的
+# public API**,`days=5` → 視窗 19 天,那個長度**確實可能**整段落在連假裡。
+# production 現行呼叫點全部 ≥ 60(`ui/hot_money.py` 的 slider 60~365、
+# `refresh_hot_money_data(days=180)` 預設),所以這是**潛在**而非現存的誤歸因;
+# 但一句「視窗遠長於任何連假」寫死在訊息裡,就是一句會在某些輸入下說謊的話。
+_HOLIDAY_SAFE_WINDOW_DAYS = 30
+
+# ⚠️ **兩個鍵,用途嚴格分開,不要混用**:
+#   · `_FINMIND_HOST_KEY` —— `infra/proxy.py::fetch_url` 用的那一個(host 粒度)。
+#     本檔**只讀不寫**:讀它是為了分辨「這次沒發請求是因為 host 在冷卻」;
+#     寫它會殃及同 host 的其它 dataset(NDC 景氣對策信號),那正是本輪修的迴歸。
+#   · `_FINMIND_DATASET_KEY` —— 本檔**自己登記、自己查**的 dataset 粒度鍵。
+#     刻意帶 `finmind-dataset:` 前綴,讓它在 `get_backoff_state()` / log 裡
+#     一眼看得出**不是 host**(`source_key()` 產出的一定是 netloc,不可能長這樣),
+#     也保證與任何 host 鍵不可能相撞。
+#   ⚠️ dataset 鍵**不會**被 `fetch_url` 讀到(它只查 `source_key(url)`)——
+#     所以本檔必須在進場處自己查一次,否則等於登記了一個沒有人看的旗標。
+#     `infra/source_backoff.py` 的 `_STATE` 是 `dict[str, dict]`、
+#     `record_failure/should_skip` 都只把 key 當不透明字串,故非 host 鍵是合法用法
+#     (`fx_and_main.py` 同樣是「自己算鍵、自己查」,只是它的鍵剛好是 host)。
+_FINMIND_HOST_KEY = _sb_hm.source_key(_FINMIND_BASE)
+_FINMIND_DATASET_KEY = f"finmind-dataset:{_FINMIND_DATASET}"
 
 
 def _finmind_failed(msg: str, kind: str = "server_error") -> _FetchFailed:
-    """登記一次 FinMind **應用層**失敗(跨呼叫來源冷卻),再回傳例外物件供 `raise`。
+    """登記一次本 dataset 的**應用層**失敗(跨呼叫冷卻),再回傳例外物件供 `raise`。
 
     用法一律是 `raise _finmind_failed(...)` —— 記錄與拋出綁在同一個運算式裡,
     不可能只做一半(同 `infra/proxy.py::_note_failure` 把兩件事包成一個函式的理由)。
+
+    ⚠️ **登記在 `_FINMIND_DATASET_KEY`,不是 host** —— 理由與實測見檔頭。
+    一句話:本檔看到的是**這個 dataset 的 payload 壞了**,不是「FinMind 這台主機壞了」,
+    拿 host 去退避會把同 host 的 NDC 一起關掉(第一版實測誤殺,`score` 31 → None)。
 
     ## ⚠️ 什麼時候**不**該呼叫它(這比什麼時候該呼叫更重要)
 
@@ -180,14 +261,33 @@ def _finmind_failed(msg: str, kind: str = "server_error") -> _FetchFailed:
     → 也就是說:本 helper **只用在「HTTP 200 已經到手、但 payload 不可用」** 這一類,
       那正好是 `fetch_url` 看不到、而它已經 `_note_success()` 解除冷卻的那個缺口。
 
+    ## 本檔的節流不變式(三選一,不得有第四種)
+
+    失敗**只在「確實有東西在節流」時才 raise**;沒有節流器就得 `return`,
+    讓 `@st.cache_data` 的 TTL 承擔。三個節流器:
+      1. 本 helper 剛登記的 **dataset 冷卻**(進場處會查) → raise;
+      2. `fetch_url` 已登記的 **host 冷卻**(`r is None` 那一支會查) → raise;
+      3. 兩者都沒有(`NO_COOLDOWN_KINDS`、或 200 但 body 空被 `fetch_url_with_retry`
+         轉成 None)→ **return**,由 `TTL_30MIN` 節流。
+    ⚠️ 少了第 3 條,那些分支會變成「每次 rerun 真打一次上游」——**比改版前更糟**
+    (改版前失敗被快取,30 分鐘才打一次)。第一版只對 body-status 那一支想到這件事,
+    `r is None` 那一支漏了,本輪補齊(2026-09-01)。
+
     ## 與憲法 §-2.A #1 那條「已知會誤判的 AST 規則」無關
 
     那條規則管的是 `infra.proxy.mark_fetch_failed_if_retryable` —— 它靠
     **thread-local 側車**(`pop_last_fail_kind`)取得分類,所以對「與 `fetch_url`
     之間有沒有分支」極度敏感。本 helper **不讀任何側車**:key 與 kind 都是
     明確參數,放在哪個分支裡都不會拿到別人的殘值。
+
+    ⚠️ **本段講的是「那條 AST 規則對分支敏感」,不是「憲法把側車明載為脆弱」** ——
+    `CLAUDE.md` 全檔沒有 `pop_last_fail_kind` 這個字串,§-2.A #1 記的是
+    **總管自訂的 AST 規則本身寫錯**(3/3 現行消費者被誤判)。本 PR 前一版的
+    **commit message 與 PR 描述**把它寫成「憲法明載為脆弱」,那句引用是假的
+    (2026-09-01 稽核指出);**本 docstring 當時就沒有那樣寫,說錯的是那兩個載體**,
+    更正登記在本輪的 commit message 與 PR 描述裡。
     """
-    _sb_hm.record_failure(_FINMIND_SOURCE_KEY, kind)
+    _sb_hm.record_failure(_FINMIND_DATASET_KEY, kind)
     return _FetchFailed(msg)
 
 
@@ -197,14 +297,37 @@ def _fetch_foreign_flow_series_uncached(
     """`fetch_foreign_flow_series` 的真實實作 —— **未被快取裝飾**。
 
     ⚠️ 取數失敗一律 `raise _finmind_failed(<err 字串>, <失敗分類>)`,**不**回
-    (空 df, err):例外穿過 `@st.cache_data` 不入快取,同時登記來源冷卻讓下一次
-    rerun 在 `fetch_url` 進場處被擋下(v3 §02「只快取成功結果;失敗時退避」)。
+    (空 df, err):例外穿過 `@st.cache_data` 不入快取,同時登記 **dataset 粒度**的
+    冷卻,讓下一次 rerun 在**本函式的進場處**被擋下
+    (v3 §02「只快取成功結果;失敗時退避」)。
+    ⚠️ 2026-09-01 第二輪更正:本段原寫 ~~「在 `fetch_url` 進場處被擋下」~~ ——
+    退避鍵改成 dataset 粒度之後,`fetch_url` 查不到它(它只查 host 鍵),
+    攔截點在本函式開頭。**「一個封包都不發」的效果不變,變的是誰擋的。**
 
-    **唯一仍會 `return`(＝仍被快取)的失敗分支**:body status 對應到
-    `NO_COOLDOWN_KINDS`(`not_found` / `proxy_auth`)時 —— SSOT 明訂那兩種
-    **刻意不退避**,此時若還 raise 就完全沒有節流器。判斷與 `repositories/macro/yf.py`
-    對 404/407 的既有處置逐字同源(「`_ttl_cache` 是它們唯一的節流器」)。
+    **仍會 `return`(＝仍被快取)的失敗分支**——一律是「**沒有任何節流器**」那一類
+    (見 `_finmind_failed` 的節流不變式):
+      · body status 落在 `NO_COOLDOWN_KINDS`(`not_found` / `proxy_auth`);
+      · `r is None` 且 host **不在**冷卻期(404/407,或 `fetch_url_with_retry` 把
+        「HTTP 200 但 body 空」轉成的 None —— 那一種 `fetch_url` 已經
+        `_note_success()` 過了,誰都沒有記)。
+    判斷與 `repositories/macro/yf.py` 對 404/407 的既有處置同源
+    (「`_ttl_cache` 是它們唯一的節流器」)。
     """
+    # ── dataset 退避進場檢查 ────────────────────────────────────────
+    # ⚠️ 非做不可:退避鍵是 dataset 粒度(見檔頭),而 `fetch_url` 只查 host 鍵 ——
+    #    少了這一段,`record_failure` 登記的東西**沒有任何人會讀**,
+    #    等於「有登記、無節流」,每次 rerun 照樣真打一次上游。
+    # ⚠️ 這裡刻意 `raise _FetchFailed(...)` 而**不是** `_finmind_failed(...)`:
+    #    再記一次會把 `until` 往後推 → 只要使用者一直 rerun 就永遠解不開(餓死)。
+    _ds_skip, _ds_left, _ds_kind = _sb_hm.should_skip(_FINMIND_DATASET_KEY)
+    if _ds_skip:
+        raise _FetchFailed(
+            f"FinMind {_FINMIND_DATASET} 退避冷卻中"
+            f"（前次失敗分類 {_ds_kind}，剩餘約 {_ds_left:.0f} 秒）："
+            f"本次**未發出任何請求**，冷卻結束後會自動重試；"
+            f"冷卻只針對這一個 dataset，同來源的其它查詢不受影響；"
+            f"首次失敗的完整原因見 [hot_money] log")
+
     _win_days = int(days) + 14   # 實際查詢視窗(見下方 `not rows` 分支的理由)
     try:
         from fund_fetcher import fetch_url_with_retry
@@ -230,13 +353,28 @@ def _fetch_foreign_flow_series_uncached(
         #    (`fetch_url` 進場處直接回 None,**一次都沒重試**),
         #    舊句「全部重試失敗」在那個情境下是假的(§1「錯誤的歸因比沒有歸因更危險」)。
         #    兩種情況分開講,不合併成一句含糊的「無回應」。
-        _skip, _left, _kind = _sb_hm.should_skip(_FINMIND_SOURCE_KEY)
+        _skip, _left, _kind = _sb_hm.should_skip(_FINMIND_HOST_KEY)
         if _skip:
             raise _FetchFailed(
                 f"FinMind 來源退避冷卻中（前次失敗分類 {_kind}，剩餘約 {_left:.0f} 秒）："
                 f"本次**未發出任何請求**，冷卻結束後會自動重試；"
                 f"首次失敗的完整原因（含狀態碼 / API msg）見 [proxy] 與 [hot_money] log")
-        raise _FetchFailed(
+        # 走到這裡 = `fetch_url` 看過這次失敗、卻**依 SSOT 刻意沒有退避**
+        # (404 / 407),或者它根本判定成功(HTTP 200 但 body 空,
+        # `fund_fetcher.fetch_url_with_retry` 尾端 `return resp if resp.text.strip() else None`
+        # 會把它轉成 None,而 `fetch_url` 早已 `_note_success()`)。
+        # **一個節流器都沒有 → 必須 return 讓 TTL_30MIN 接手**;此處若 raise,
+        # 就變成每次 rerun 真打一次上游,比改版前(失敗被快取 30 分鐘)更糟。
+        # 這與下面 body-status 落在 `NO_COOLDOWN_KINDS` 時的處置是同一條規則。
+        # ⚠️ 措辭:原句的「若為 402 額度用盡,」已刪(**有意識的刪除,不是漏刪**;
+        #    2026-09-01,決策者:本修復組)。理由是**它在這一支永遠為假**:
+        #    真 402 會被 `fetch_url` 分類成 `server_error` 並登記 300s 冷卻
+        #    → 上面那個 `_skip` 分支就先接走了;而 body-402(HTTP 200)根本走不到
+        #    `r is None`。留著它等於指一個到不了的方向(§1 錯誤的歸因)。
+        #    **保留**「狀態碼見 [proxy] log」——那句仍然為真且是唯一的線索出口。
+        print(f"[hot_money] ⚠️ fetch_url 回 None 但來源未進退避"
+              f"（多為 404/407 或 200 空 body）→ 本次失敗照舊入快取，由 TTL_30MIN 節流")
+        return _empty_flow_df(), (
             "FinMind 無回應（fetch_url 全部重試失敗；狀態碼見 [proxy] log）")
 
     try:
@@ -279,9 +417,16 @@ def _fetch_foreign_flow_series_uncached(
         #    是上游異常。舊訊息「可能為非交易日區間」在唯一會發生的情境下是錯的歸因。
         print(f"[hot_money] ❌ FinMind 回 200 但 {_win_days} 天視窗 0 筆;"
               f"payload keys={sorted(_payload)[:6]}")
+        # ⚠️ 歸因隨**實際視窗長度**走,不寫死(2026-09-01 稽核指出:原句
+        #    「視窗遠長於任何連假」對 `days=5`(視窗 19 天)是假的)。
+        _why = ("視窗遠長於任何連假，屬上游異常"
+                if _win_days >= _HOLIDAY_SAFE_WINDOW_DAYS
+                else f"視窗僅 {_win_days} 天、短於連假安全門檻 "
+                     f"{_HOLIDAY_SAFE_WINDOW_DAYS} 天，無法排除整段休市；"
+                     f"也可能是上游異常")
         raise _finmind_failed(
             f"FinMind 回 200 但 {_win_days} 天視窗內 0 筆資料"
-            f"（視窗遠長於任何連假，屬上游異常；payload keys={sorted(_payload)[:6]}）")
+            f"（{_why}；payload keys={sorted(_payload)[:6]}）")
 
     df = pd.DataFrame(rows)
     name_col = next((c for c in ("name", "institutional_investors") if c in df.columns), None)
@@ -331,7 +476,32 @@ def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame,
 
     Returns: (df[date, foreign_net_yi 億元], error_msg or "")
 
-    ⚠️ 回傳形狀與訊息內容與改版前**逐字相同**;變的只有「失敗結果不再進快取」。
+    ## ⚠️ 與改版前(`b5b0464`)的差異 —— 這一節是 2026-09-01 稽核的更正
+
+    ~~「回傳形狀與訊息內容與改版前**逐字相同**;變的只有『失敗結果不再進快取』。」~~
+    **這句話是假的,兩半都假**(**有意識的更正,不是漏刪** · 2026-09-01 · 決策者:本修復組)。
+    它在 `bf9ddc2` 寫下的當天為真;`f5f4a1d` 改了訊息與 dtype 之後**沒有回頭改它**。
+    **實測(base / 本分支各跑一次同一支探針,逐分支比對)**:
+
+    | 差異 | 實測 |
+    |---|---|
+    | **dtype** | **7/7 個失敗分支都變了**:`object` → `datetime64[ns]` / `float64`(見 `_empty_flow_df`) |
+    | **訊息** | **3/7 個變了**(其餘 4 個逐字未動) |
+
+    三個訊息變更,逐條列出(**全部是刻意的,不是副作用**):
+      1. `data: []` —— 舊「無資料回傳(可能為非交易日區間)」→ 新句帶出實際視窗天數與歸因。
+         理由見檔頭大段註解(那個歸因在 production 的唯一情境下是錯的)。
+      2. 無 Foreign 類別 —— 舊「FinMind 無 Foreign 類別資料」→ 新句多帶筆數與實際類別。
+      3. `r is None` —— 舊句的「**若為 402 額度用盡,**」**已刪**;
+         並新增一個「來源退避冷卻中」的變體(改版前不存在這個狀態)。
+         刪除理由見該分支就地註解:真 402 會先被 host 冷卻分支接走、
+         body-402 根本走不到這裡,那半句在這一支**永遠為假**。
+
+    **行為變更(不是「只有不進快取」)**:
+      · 失敗改為 `raise` 穿過 `@st.cache_data` → 失敗不再被鎖滿 TTL;
+      · 應用層失敗會登記 **dataset 粒度**的來源冷卻(見檔頭);
+      · **但**「完全沒有節流器」的失敗分支仍 `return`(＝仍被快取),
+        見 `_finmind_failed` 的節流不變式。
     """
     try:
         return _cached_foreign_flow_series(days, token)
@@ -387,7 +557,16 @@ def fetch_usdtwd_series(days: int) -> tuple[pd.DataFrame, str]:
 
     Returns: (df[date, usdtwd], error_msg or "")
 
-    ⚠️ 回傳形狀與訊息內容與改版前**逐字相同**;變的只有「失敗結果不再進快取」。
+    ## ⚠️ 與改版前(`b5b0464`)的差異 —— 2026-09-01 稽核更正
+
+    ~~「回傳形狀與訊息內容與改版前**逐字相同**」~~ —— **訊息那半是真的,形狀那半是假的**
+    (**有意識的更正,不是漏刪** · 2026-09-01 · 決策者:本修復組)。實測:
+      · **訊息**:2/2 個失敗分支**逐字未動** ✅
+      · **dtype**:失敗回傳的空 df 由 `object` 改為 `datetime64[ns]` / `float64` ❌
+        (`USDTWD 抓取失敗` 那一支;理由見 `_empty_usdtwd_df`)
+    行為變更:失敗改 `raise` 穿過 `@st.cache_data`,不再被鎖滿 TTL。
+    **本支不登記任何來源冷卻**(理由見 `_fetch_usdtwd_series_uncached` 內註解:
+    上游 `fetch_yf_close` 已有自己的節流器,在這裡再記一次會把 VIX/DGS10/DXY/SPY 一起鎖住)。
     """
     try:
         return _cached_usdtwd_series(days)
