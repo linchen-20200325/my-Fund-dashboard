@@ -21,7 +21,7 @@ v19.534 顯示層複驗回修(總管 2026-08-26 實測 + 實看 v533 三張圖�
   裁示 2  月曆格 chip 的低信心「?」**移除**:整張圖沒有一處解釋它,且會與誤差帶互相矛盾
           (同一檔可能同時「?」+「±0 天」)。一個訊號、一個地方 —— 誠實訊號是誤差帶。
   追加 7  副標 / 明細表標題 / 虛線 chip 標籤的「本月」→ **實際目標月**(走 `month_label`,
-          與徽章同一個月份變數)。推播每月 1 號推下個月,「本月」在那個情境是錯的。
+          與徽章同一個月份變數)。推播每月 28 號推下個月,「本月」在那個情境是錯的。
   追加 8  「上次 M/D」離目標月超過半年 → 帶年份(L2 `fmt_last_ex`)。
   追加 9  原因欄:版面有獨立「上次實際基準日」欄時不重複帶日期(L2 `reason_display`)。
   必改 1  誤差帶改 90 分位,頁尾配一句 `ERR_BAND_FOOTNOTE` 說明它憑什麼。
@@ -370,7 +370,7 @@ def _pending_chips_html(unpredictable: list, *, year=None, month=None) -> str:
     _items = "".join(
         f'<li><span class="dot" style="background:{_e(_color(u.get("house")))}"></span>'
         f'{_e(pending_line(u, year=year, month=month))}</li>' for u in unpredictable)
-    # v19.534 追加 7:標籤原寫「本月」,但推播每月 1 號推的是**下個月** → 用實際目標月。
+    # v19.534 追加 7:標籤原寫「本月」,但推播每月 28 號推的是**下個月** → 用實際目標月。
     return (f'<p class="pending-lab">{_e(month_label(year, month))}'
             f'推不出日期（顯示上次實際基準日，僅供參考）</p>'
             f'<ul class="pending">{_items}</ul>')
@@ -404,7 +404,7 @@ def _detail_rows_html(events: list, unpredictable: list, *, year=None, month=Non
             f'<td class="why">'
             f'{_e(_pending_why(u, has_date_column=False, year=year, month=month))}</td></tr>')
     if not rows:
-        # v19.535 待辦 3:原本寫死「本月」—— 與追加 7 同病(cron 每月 1 號推的是**下個月**)。
+        # v19.535 待辦 3:原本寫死「本月」—— 與追加 7 同病(cron 每月 28 號推的是**下個月**)。
         # 文案 SSOT 在 L2 `empty_month_note`(HTML / LINE 文字 / Flex 三處同一句),
         # 月份走 `month_label` 這一份變數,與徽章 / 副標 / 明細標題同源。
         rows = (f'<tr><td colspan="4" class="muted">'
@@ -492,10 +492,10 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     # 有自己的意圖,不代它決定。
     if _all_unp and title == _TITLE_DEFAULT:
         # v19.536:H1 原寫死「本月」—— v19.534 追加 7 把副標 / 明細表標題 / chip 標籤 /
-        # LINE 首行都換成實際目標月時獨漏這一處,推播(每月 1 號推下個月)時 H1 與正下方
+        # LINE 首行都換成實際目標月時獨漏這一處,推播(每月 28 號推下個月)時 H1 與正下方
         # 的徽章互相矛盾。月份走 L2 `all_unpred_title` → `month_label`,與 `_ml` 同源。
         title = all_unpred_title(y, m)
-    # v19.534 追加 7:副標原寫「推估**本月**…」,但徽章寫的是真正的目標月,推播(每月 1 號推
+    # v19.534 追加 7:副標原寫「推估**本月**…」,但徽章寫的是真正的目標月,推播(每月 28 號推
     # 下個月)時同一張圖自相矛盾 —— 改用與徽章同一個月份變數(`month_label`)。
     _ml = month_label(y, m)
     _sub = (f'{_e(ALL_UNPRED_SUB_1.format(n=len(unpredictable)))}<br>'
@@ -564,7 +564,7 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{_e(title)}</title>
 <style>{_CSS}{_CSS_COMPACT if compact else ''}</style></head><body><div class="wrap">
-<header><p class="eyebrow">追蹤清單 ∪ 持倉 · 每月月初更新</p>
+<header><p class="eyebrow">追蹤清單 ∪ 持倉 · 每月月底更新</p>
 <h1>{_e(title)}</h1>
 <p class="sub">{_sub}</p>
 <div class="badges"><span class="badge month tnum">民國{roc}年 {m}月（{y}）</span>{sample_badge}</div>

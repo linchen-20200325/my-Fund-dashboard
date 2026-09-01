@@ -1,7 +1,16 @@
-"""scripts/dividend_calendar_notify.py — 每月月初 除息行事曆 LINE 摘要(方式 C)v19.443。
+"""scripts/dividend_calendar_notify.py — 每月月底 除息行事曆 LINE 摘要(方式 C)v19.537。
 
-不靠 user 開 App:每月月初對「**持倉 ∪ 追蹤清單**」抓配息史 → 推估本月除息日 → 推一則
-LINE 文字摘要(「8/7 摩根 JFZN3 除息…」)。視覺完整月曆看 App「我的管理室 → 除息行事曆」(方式 A)。
+不靠 user 開 App:**每月 28 號 08:23(台灣)**對「**持倉 ∪ 追蹤清單**」抓配息史 →
+推估**下個月**除息日 → 推一則 LINE 摘要(「10/7 摩根 JFZN3 除息…」)。
+視覺完整月曆看 App「我的管理室 → 除息行事曆」(方式 A;App 那邊看的是**本月**)。
+
+⚠️ **「28 號」與「推下個月」是一組配對**(v19.537):user 2026-09-01 裁示「月底發下個月,
+或月初發本月,**絕對不會是月初發下個月**」。cron 在 `.github/workflows/dividend_calendar_notify.yml`,
+兩邊必須同進退(成因:2026-08-24 只改了目標月沒改 cron);漂移由
+`tests/test_dividend_calendar_cron_v19537.py` 鎖住。
+
+補送指定月份:`--target-month 2026-09`(或 env `TARGET_MONTH`,旗標優先);
+留空 = 下個月。**格式不合法一律報錯離開(exit 2),絕不靜默退回下個月**(§1)。
 
 reuse:`weekly_switch_notify` 的 `_load_client_and_sheet` / `_read_holdings` / `_read_watchlist`
 (讀代碼);配息用輕量 `auto_fetch_moneydj`(只需 dividends + 名稱,不算全指標)。
@@ -9,12 +18,15 @@ reuse:`weekly_switch_notify` 的 `_load_client_and_sheet` / `_read_holdings` / `
 環境變數(同週報):google_service_account / macro_weights_sheet_id(讀持倉,可缺→只跑追蹤清單)、
 WATCH_CSV_URL(追蹤清單)、LINE_CHANNEL_TOKEN(或 LINE_CHANNEL_ACCESS_TOKEN)/ LINE_USER_ID。
 
-§1:無任何代碼 → exit 2;全部抓失敗 → exit 1;LINE 未送出(缺憑證)→ exit 1;dry-run 只印。
+§1:target_month 格式錯 → exit 2;無任何代碼 → exit 2;全部抓失敗 → exit 1;
+LINE 未送出(缺憑證)→ exit 1;dry-run 只印。
 """
 from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import os
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +37,40 @@ if str(_ROOT) not in sys.path:
 
 def _log(msg: str) -> None:
     print(f"[dividend_calendar_notify] {msg}", file=sys.stderr)
+
+
+_TZ_TW = _dt.timezone(_dt.timedelta(hours=8))
+_TARGET_MONTH_ENV = "TARGET_MONTH"          # workflow 走 env 傳(不插進 shell 指令列,防 injection)
+_TARGET_MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
+_YEAR_MIN, _YEAR_MAX = 2000, 2100           # 打錯字防呆(如 0226 / 20261);非業務門檻
+
+
+def _now_tw() -> "_dt.datetime":
+    """現在(台北時間)。獨立成函式讓測試可凍結時間。"""
+    return _dt.datetime.now(_TZ_TW)
+
+
+def _resolve_target_month(now: "_dt.datetime", raw: "str | None") -> "tuple[int, int]":
+    """(現在, 指定值) → 目標 (year, month)。
+
+    `raw` 空/None → **下個月**(12 月 → 隔年 1 月),即排程路徑;
+    `raw` = "YYYY-MM" → 該月(補送用)。
+
+    §1:格式不合法 → **raise ValueError**(呼叫端 exit 2),**嚴禁**靜默退回「下個月」——
+    那會讓 user 以為補送成功、實際收到另一個月,是最糟的失敗模式(錯的數字比沒有數字危險)。
+    """
+    s = (raw or "").strip()
+    if not s:
+        return (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)
+    m = _TARGET_MONTH_RE.match(s)
+    if not m:
+        raise ValueError(f"target_month 格式不合法,需 YYYY-MM(例 2026-09):收到 {raw!r}")
+    _y, _mo = int(m.group(1)), int(m.group(2))
+    if not 1 <= _mo <= 12:
+        raise ValueError(f"target_month 月份須 1~12:收到 {raw!r}")
+    if not _YEAR_MIN <= _y <= _YEAR_MAX:
+        raise ValueError(f"target_month 年份須 {_YEAR_MIN}~{_YEAR_MAX}:收到 {raw!r}")
+    return _y, _mo
 
 
 def _fetch_divs(codes: list) -> list:
@@ -79,7 +125,21 @@ def _render_and_publish(cal: dict, year: int, month: int) -> "str | None":
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="每月除息行事曆 LINE 摘要(headless)")
     ap.add_argument("--dry-run", action="store_true", help="只印不送")
+    ap.add_argument("--target-month", default=None,
+                    help=f"指定目標月 YYYY-MM(留空 = 下個月);亦可用 env {_TARGET_MONTH_ENV},旗標優先")
     args = ap.parse_args(argv)
+
+    # 目標月**先解析再抓資料**:格式錯就該立刻死,不要抓完幾十檔配息才發現參數是錯的。
+    now = _now_tw()
+    _raw_tm = args.target_month if args.target_month is not None else os.environ.get(
+        _TARGET_MONTH_ENV, "")
+    try:
+        _ny, _nm = _resolve_target_month(now, _raw_tm)
+    except ValueError as _e:
+        _log(f"❌ {_e} → 中止(不退回下個月,避免補送到錯的月份)")
+        return 2
+    _log(f"目標月 {_ny}-{_nm:02d}" + (f"(手動指定 {_raw_tm.strip()})" if (_raw_tm or "").strip()
+                                     else "(未指定 → 下個月)"))
 
     from scripts.weekly_switch_notify import (
         _load_client_and_sheet,
@@ -110,18 +170,18 @@ def main(argv=None) -> int:
         _log("全部基金配息抓取失敗(可能 proxy/網路/美國 IP 擋 MoneyDJ)→ 不送誤導訊息,中止")
         return 1
 
-    now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
-    # user 2026-08-24:推「下個月」預估(每月 1 號先知道下月除息 + 到帳),非本月。12 月 → 隔年 1 月。
-    _ny, _nm = (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)
-    # ref = 本月(現在)→ 陳舊度相對現在量,正常月配基金推下月不會被誤判低信心/疑停配(v19.518)。
-    # ref_day = **今天幾號**(v19.532 bug 4):本 workflow 是 `cron: "0 0 1 * *"` → now.day 恆為 1,
-    # 而 L2 未給日時會退回月中(15 號),等於每次執行都把陳舊度多算 14 天。實測(2026-09-01 觸發、
-    # 月配、last=2026-05-11):真實靜默 113 天 < 122 天門檻,卻被算成 127 天 → 判疑停配 → 整檔消失。
+    # ⚠️ `ref_*` 是**陳舊度量測基準,語意是「現在」,與目標月無關** —— 一律傳 now,
+    # **即使手動指定了 target_month 也不跟著跑**(v19.537;鎖在 test_dividend_calendar_cron_v19537)。
+    # ref = 現在 → 陳舊度相對現在量,正常月配基金推下月不會被誤判低信心/疑停配(v19.518)。
+    # ref_day = **今天幾號**(v19.532 bug 4):L2 未給日時會退回月中(15 號),等於把陳舊度多/少
+    # 算半個月。實測(月配、last_ex=2026-05-11、於 2026-09-01 量):
+    #   ref=2026-09 day=1 → stale 3 個月、too_stale=False(正確);day=15 → 4、True(整檔誤判疑停配);
+    #   ref 若跟著目標月跑到 2026-10 day=15 → 5、True(更嚴重)。
     cal = build_month_calendar(funds, _ny, _nm, ref_year=now.year, ref_month=now.month,
                                ref_day=now.day)
     text = build_summary_text(cal)              # dry-run 預覽用(可讀純文字)
     flex = build_summary_flex(cal)              # 實送:LINE Flex 彩色卡片(user 2026-08-24)
-    _log(f"下月 {_ny}-{_nm:02d} 推估除息 {cal['counts']['events']} 檔｜排除 {cal['counts']['excluded']} 檔")
+    _log(f"目標月 {_ny}-{_nm:02d} 推估除息 {cal['counts']['events']} 檔｜排除 {cal['counts']['excluded']} 檔")
 
     if args.dry_run:
         print("─" * 40 + "\n" + text + "\n" + "─" * 40)

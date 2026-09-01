@@ -134,7 +134,7 @@ def test_ex_record_date_wording_locked_in_four_places():
     四處 = 副標 / 明細區塊標題 / 明細表頭 / 空月文案(見 `render_month_calendar_html`)。
 
     ⚠️ **v19.534 追加 7:副標與明細標題的「本月」改成實際目標月**(總管 2026-08-26 實看
-    `v533_B_partial_2027-02.png` 後裁示)。cron 每月 1 號推的是**下個月**,而徽章寫的是真正的
+    `v533_B_partial_2027-02.png` 後裁示)。cron 每月 28 號推的是**下個月**,而徽章寫的是真正的
     目標月 —— 同一張圖上「本月」與「民國116年 2月」自相矛盾。鎖的重點仍是「除息基準日」
     這五個字連在一起,月份前綴走 `month_label` 這一份 SSOT。
 
@@ -153,7 +153,7 @@ def test_ex_record_date_wording_locked_in_four_places():
     assert '<th>預估基準日</th>' in html
     assert '<th>除息基準日</th>' not in html
     # 4) 空月文案(需要一份沒有事件的月曆才會渲染出來)
-    #    ⚠️ v19.535 待辦 3:這句原本寫死「本月」—— 與追加 7 同病(cron 每月 1 號推的是**下個月**),
+    #    ⚠️ v19.535 待辦 3:這句原本寫死「本月」—— 與追加 7 同病(cron 每月 28 號推的是**下個月**),
     #    改成吃徽章同一個月份變數。鎖的重點仍是「除息基準日」五個字,月份前綴走 `month_label`。
     from services.dividend_calendar import empty_month_note
     _empty = render_month_calendar_html(build_month_calendar([], 2026, 8))
@@ -542,7 +542,7 @@ def test_all_unpredictable_swaps_title_and_subtitle():
 
     v19.536:H1 的月份由寫死的「本月」→ **實際目標月**(走 `month_label` 這一份 SSOT)。
     v19.534 追加 7 收了副標 / 明細表標題 / chip 標籤 / LINE 首行,獨漏這個 H1 ——
-    推播每月 1 號推**下個月**,H1 寫「本月」而正下方徽章寫真正的目標月,同一張圖自相矛盾。
+    推播每月 28 號推**下個月**,H1 寫「本月」而正下方徽章寫真正的目標月,同一張圖自相矛盾。
     """
     from services.dividend_calendar import month_label
     html = render_month_calendar_html(_cal_all_unpred())
@@ -661,7 +661,7 @@ def test_all_unpredictable_table_does_not_repeat_the_date_in_the_reason():
 def test_target_month_wording_replaces_this_month_everywhere_on_the_page():
     """v19.534 追加 7:圖上所有指涉目標月的「本月」→ **實際目標月**(走 `month_label`)。
 
-    cron 每月 1 號推的是**下個月**:徽章寫「民國116年 2月」、副標卻寫「推估本月…」,
+    cron 每月 28 號推的是**下個月**:徽章寫「民國116年 2月」、副標卻寫「推估本月…」,
     同一張圖自相矛盾。此處連虛線 chip 上方那行標籤一起守(它也寫過「本月推不出日期」)。
     """
     from services.dividend_calendar import month_label
@@ -699,7 +699,7 @@ def test_line_caption_first_line_says_not_no_dividend():
     LINE 推播預覽只看得到前一兩行 —— 原本首行是「🗓️ 基金除息行事曆 · 民國X年Y月（推估）」,
     第二行才是「本月無推估除息基準日」,user 掃過去的結論是「這個月沒事」(§1 違憲)。
 
-    v19.534 裁示 4:首行的「本月」→ **實際目標月**。cron(每月 1 號)推的是**下個月**,
+    v19.534 裁示 4:首行的「本月」→ **實際目標月**。cron(每月 28 號)推的是**下個月**,
     §15.4 規格逐字寫的「本月」在推播情境是錯的(總管 2026-08-26 認錯改規格);
     App 端目標月 = 當月時語意仍正確,兩邊都對。
     """
@@ -888,7 +888,7 @@ def test_pending_groups_never_merge_two_funds_with_different_numbers():
 def test_empty_month_note_uses_target_month_not_this_month():
     """待辦 3:`events` 與 `unpredictable` **都**空的路徑,文案不再寫死「本月」。
 
-    與 v19.534 追加 7 同病:cron 每月 1 號推的是**下個月**,徽章寫的是真正的目標月,
+    與 v19.534 追加 7 同病:cron 每月 28 號推的是**下個月**,徽章寫的是真正的目標月,
     同一張圖上「本月」與「民國116年2月」自相矛盾。
     (此路徑在推播情境不會觸發 —— 無代碼時 notify 直接 exit 2 —— 但用詞一致性仍要收:
      HTML / LINE 文字 / Flex 三處原本各寫各的,下次改文案必漏一處。)
