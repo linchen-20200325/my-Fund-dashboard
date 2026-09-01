@@ -1980,7 +1980,7 @@ QA / 驗收 / 提案 / 對齊 / UI / 畫面 / 版面 / 效能 / Streamlit / 草�
 
 ### 3.1 邊界契約(Schema)
 
-**現況**:requirements.txt **無 pandera**,現有資料 schema 散落於各 repository 的 dict / df parse 邏輯(~~`fund_repository.py`~~ → **`repositories/fund/`** 子套件(見 §2.1 表下「`fund_repository.py` 路徑事實更正」註)、`macro_repository.py`、`news_repository.py`)。
+**現況**:requirements.txt **無 pandera**〔⚠️ **2026-09-01 反遮蔽註記 —— 這半句是假的,本輪刻意未修**:實測 `requirements.txt:31` 寫著 `pandera>=0.20,<1.0`,本節下方三行的「✅ **全結案 v19.241**(F-SCHEMA-1):pandera 已 pin」才是現況,**同一段內自相矛盾**。本行末尾的路徑刪除線只更正 `fund_repository.py` 這個檔名,**不對本句其餘部分背書** —— 特別是**不代表「無 pandera」已被複核為真**。⛔ **會這樣註記,是因為本輪的更正本身有遮蔽風險**:一個帶著 `2026-09-01` 日期戳的更正掛在這一行上,會讓後人以為整行已經在那天被查過。**修一句、卻讓旁邊那句更難被發現,與本輪主題(文件不該說謊)是同一個病。**本項屬**條文語意**而非路徑,不在本輪授權射程內,**已登記回報總管另派**〕,現有資料 schema 散落於各 repository 的 dict / df parse 邏輯(~~`fund_repository.py`~~ → **`repositories/fund/`** 子套件(見 §2.1 表下「`fund_repository.py` 路徑事實更正」註)、`macro_repository.py`、`news_repository.py`)。
 
 **規範**:新增資料流入 / 流出系統的點,**必須**附等效斷言(即使尚未引入 pandera):
 
