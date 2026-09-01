@@ -226,8 +226,18 @@ _HOLIDAY_SAFE_WINDOW_DAYS = 30
 #     寫它會殃及同 host 的其它 dataset(NDC 景氣對策信號),那正是本輪修的迴歸。
 #   · `_FINMIND_DATASET_KEY` —— 本檔**自己登記、自己查**的 dataset 粒度鍵。
 #     刻意帶 `finmind-dataset:` 前綴,讓它在 `get_backoff_state()` / log 裡
-#     一眼看得出**不是 host**(`source_key()` 產出的一定是 netloc,不可能長這樣),
-#     也保證與任何 host 鍵不可能相撞。
+#     一眼看得出**不是 host**,而且與**實務上任何 host 鍵都不會相撞**。
+#     ⚠️ **2026-09-01 第三輪更正(有意識的更正,不是漏刪 · 決策者:本修復組)**:
+#     上一版寫 ~~「`source_key()` 產出的**一定是** netloc,**不可能**相撞」~~ ——
+#     **那是結構性宣稱,而它為假**。`infra/source_backoff.py::source_key` 的實作是
+#     `urlsplit(url).netloc.lower() **or** str(url)[:80]` —— netloc 為空時
+#     **回退成原字串**。**實測**:
+#         source_key("finmind-dataset:TaiwanStockTotalInstitutionalInvestors")
+#         → 'finmind-dataset:TaiwanStockTotalInstitutionalInvestors'(原樣回傳)
+#     也就是說,只要有人拿這個鍵去餵 `source_key()`,就會得到同一個字串。
+#     **正確說法是「實務上不會」**(現行 `record_failure` 的呼叫者餵的都是真 URL),
+#     **不是「結構上不可能」**。前綴仍然有價值(log 可讀性 + 實務隔離),
+#     只是它**不是一道結構保證**,不該被後人當成一道保證來依賴。
 #   ⚠️ dataset 鍵**不會**被 `fetch_url` 讀到(它只查 `source_key(url)`)——
 #     所以本檔必須在進場處自己查一次,否則等於登記了一個沒有人看的旗標。
 #     `infra/source_backoff.py` 的 `_STATE` 是 `dict[str, dict]`、
@@ -254,14 +264,28 @@ def _finmind_failed(msg: str, kind: str = "server_error") -> _FetchFailed:
       (`shared/backoff_policy.py`)決定。在這裡再記一次,等於用本檔的猜測
       **覆蓋 SSOT 的裁決** —— 尤其 404/407 是 SSOT 明訂「刻意不退避」的,
       硬記下去會把「輪候選 URL」那類正常流程整個 host 打死。
-    · **`fetch_url_with_retry` 自己拋例外的路徑** —— `fetch_url` 內部
-      `except Exception: break` 已兜住所有連線層例外並記過失敗;能冒泡到本檔的
-      幾乎只剩 `ImportError` 之類**與來源無關**的錯,替來源記一筆冷卻是罰錯人。
+    · **`fetch_url_with_retry` 自己拋例外的路徑** —— 能冒泡到本檔的多半是
+      `ImportError` 之類**與來源無關**的錯,替來源記一筆冷卻是罰錯人。
+      ⚠️ **2026-09-01 第三輪更正(有意識的更正,不是漏刪 · 決策者:本修復組)**:
+      本項原本的辯護詞是 ~~「`fetch_url` 內部 `except Exception: break`
+      **已兜住所有連線層例外**並記過失敗」~~ —— **那句話對 HTTP 200 路徑不成立**。
+      **可自驗**:`infra/proxy.py` 在 `r.status_code == 200` 時
+      `_note_success(_src_key)` 之後**立刻 `return r`**;
+      body 是之後才由 `fund_fetcher.fetch_url_with_retry` 讀的
+      (`resp.encoding = resp.apparent_encoding` 與 `resp.text.strip()`),
+      **那兩行已經在 `fetch_url` 的 try 之外**。若解碼 / charset 偵測在那裡拋錯,
+      例外會冒泡到本檔,而 `fetch_url` **已經先 `_note_success()` 解除了冷卻** ——
+      也就是這一支**同時沒有 host 冷卻、沒有 dataset 冷卻、也不入快取**。
+      ⛔ **這是一個結構性破洞,而不是可達的 bug**:`requests` 在 `stream=False`
+      下於 `Session.send` 內就把 body 讀完了,`.text` 又以 `errors="replace"` 解碼,
+      本輪**構造不出 production 可達的觸發點**。故**只更正辯護詞、登記,不為它改行為**
+      —— 為一個構造不出來的路徑改行為,等於加一段沒有測試看得住的碼。
+      ⚠️ **「構造不出」不等於「不可能」**,依 §-2 規則 6 這句只能當**待驗事項**。
 
     → 也就是說:本 helper **只用在「HTTP 200 已經到手、但 payload 不可用」** 這一類,
       那正好是 `fetch_url` 看不到、而它已經 `_note_success()` 解除冷卻的那個缺口。
 
-    ## 本檔的節流不變式(三選一,不得有第四種)
+    ## 本檔的節流不變式(目標狀態;⚠️ **已知有一個未達標的分支**,見末段)
 
     失敗**只在「確實有東西在節流」時才 raise**;沒有節流器就得 `return`,
     讓 `@st.cache_data` 的 TTL 承擔。三個節流器:
@@ -271,7 +295,17 @@ def _finmind_failed(msg: str, kind: str = "server_error") -> _FetchFailed:
          轉成 None)→ **return**,由 `TTL_30MIN` 節流。
     ⚠️ 少了第 3 條,那些分支會變成「每次 rerun 真打一次上游」——**比改版前更糟**
     (改版前失敗被快取,30 分鐘才打一次)。第一版只對 body-status 那一支想到這件事,
-    `r is None` 那一支漏了,本輪補齊(2026-09-01)。
+    `r is None` 那一支漏了,第二版補齊(2026-09-01)。
+
+    ⛔ **不變式尚未貫徹,據實登記(2026-09-01 第三輪;有意識的揭露,不是漏想)**:
+    上一版把這一段寫成「**三選一,不得有第四種**」,並在別處宣稱已「**逐一**走過每一條
+    失敗分支」—— **兩句都太滿,已被本輪實測推翻**。目前**確知有兩個分支不滿足它**:
+      · **本檔的 `except Exception as e: raise _FetchFailed(f"FinMind 抓取失敗:…")`**
+        —— HTTP 200 之後才在 `fetch_url` 的 try 之外拋錯時,三個節流器一個都沒有
+        (見上一段)。**結構性破洞、本輪構造不出 production 可達的觸發點,故只登記不改。**
+      · ~~**`fetch_usdtwd_series` 的同型分支**~~ → **本輪已修**(改為 `return`,
+        由 `TTL_10MIN` 承擔),實測見 `_fetch_usdtwd_series_uncached` 內註解。
+    ⚠️ **本段刻意不寫「只有這兩個」** —— 那正是上一版犯的錯。這是**已知清單**,不是窮舉。
 
     ## 與憲法 §-2.A #1 那條「已知會誤判的 AST 規則」無關
 
@@ -374,8 +408,19 @@ def _fetch_foreign_flow_series_uncached(
         #    **保留**「狀態碼見 [proxy] log」——那句仍然為真且是唯一的線索出口。
         print(f"[hot_money] ⚠️ fetch_url 回 None 但來源未進退避"
               f"（多為 404/407 或 200 空 body）→ 本次失敗照舊入快取，由 TTL_30MIN 節流")
+        # ⚠️ 訊息不得再寫「**全部重試失敗**」(2026-09-01 第三輪更正,
+        #    **有意識的更正,不是漏刪** · 決策者:本修復組)。
+        #    上一版把「若為 402 額度用盡,」刪掉時,**留下了同一個分支上另一句假話**:
+        #    本支涵蓋的「HTTP 200 但 body 空」子情況裡,`fetch_url` **第一次就成功了**
+        #    (它 `_note_success()` 過、回了 200),是 `fund_fetcher.fetch_url_with_retry`
+        #    尾端 `return resp if resp.text.strip() else None` 才把它轉成 None ——
+        #    **一次重試都沒有失敗**。上一版自己在下方 `print` 裡就寫了「多為 404/407
+        #    或 200 空 body」,卻沒把同一把尺套到隔壁這行訊息上(本 PR 第三次同型)。
+        #    現行措辭只講**可觀測的事實**(沒有可用回應 + 來源未進退避),不猜過程。
         return _empty_flow_df(), (
-            "FinMind 無回應（fetch_url 全部重試失敗；狀態碼見 [proxy] log）")
+            "FinMind 無可用回應且來源未進退避（可能是 404/407 —— SSOT 明訂刻意不退避，"
+            "或 HTTP 200 但 body 為空 —— 此時並未發生任何重試失敗）；"
+            "實際狀態碼見 [proxy] log")
 
     try:
         _payload = r.json()
@@ -400,11 +445,21 @@ def _fetch_foreign_flow_series_uncached(
         except (TypeError, ValueError):
             _status_int = None
         _kind = _sb_hm.kind_for_status(_status_int)
-        if _sb_hm.cooldown_for(_kind) <= 0:
+        # ⚠️ `kind_for_status` 對 **2xx/3xx 回 `""`**,那是「**這不是失敗**」的哨符
+        #    (SSOT 就地註解:`return ""   # 2xx/3xx 不是失敗`),**不是一個失敗分類**。
+        #    上一版只判 `cooldown_for(_kind) <= 0`,而 `cooldown_for("")` 走的是
+        #    「未知 kind 從寬」的 default → **60 > 0** → 於是 body status 若是
+        #    201 / 304,本檔會**照樣退避並 `record_failure(key, "")`**,
+        #    使用者看到「前次失敗分類 ,剩餘約 60 秒」(分類欄是空的)。
+        #    **實測**:`kind_for_status(201)` → `''`;`cooldown_for('')` → `60`。
+        #    本檔自陳「分類走 SSOT,不自己另立對照表」,**卻沒有接住 SSOT 的哨符** ——
+        #    2026-09-01 第三輪補上(有意識的更正,不是漏刪 · 決策者:本修復組)。
+        if not _kind or _sb_hm.cooldown_for(_kind) <= 0:
             # `not_found` / `proxy_auth`:SSOT 明訂**刻意不退避** → 這裡若還 raise,
             # 就一個節流器都不剩(每次 rerun 真打一次)。改為 return、由 TTL 承擔,
             # 與 `repositories/macro/yf.py` 對 404/407 的既有判斷同源。
-            print(f"[hot_money] ⚠️ FinMind {_api_status} 分類為 {_kind}(不退避)"
+            print(f"[hot_money] ⚠️ FinMind {_api_status} 分類為 "
+                  f"{_kind or '(非失敗狀態碼,SSOT 哨符)'}(不退避)"
                   f" → 本次失敗照舊入快取,由 TTL_30MIN 節流")
             return _empty_flow_df(), f"FinMind {_api_status}: {_msg}"
         raise _finmind_failed(f"FinMind {_api_status}: {_msg}", _kind)
@@ -512,7 +567,21 @@ def fetch_foreign_flow_series(days: int, token: str = "") -> tuple[pd.DataFrame,
 def _fetch_usdtwd_series_uncached(days: int) -> tuple[pd.DataFrame, str]:
     """`fetch_usdtwd_series` 的真實實作 —— **未被快取裝飾**。
 
-    兩個失敗點都**無二義**(上游拋例外 / Yahoo 回空),一律 `raise _FetchFailed`。
+    ⚠️ **2026-09-01 第三輪更正(有意識的政策變更,不是漏刪 · 決策者:本修復組)**:
+    本段原寫 ~~「兩個失敗點都**無二義**(上游拋例外 / Yahoo 回空),
+    一律 `raise _FetchFailed`」~~ —— **後半句自本輪起不成立,而且它一直是錯的判準**。
+
+    現行處置**依 `_finmind_failed` 的節流不變式逐支判**(不看「有沒有二義」,
+    看「**有沒有節流器**」):
+
+    | 失敗點 | 有節流器嗎 | 處置 |
+    |---|---|---|
+    | `except` —— 上游拋例外(主要是 `validate_yf_close` 的 schema 違反) | **沒有**(`_ttl_cache` 不存例外、`fetch_url` 已 `_note_success`) | **`return`**,由 `TTL_10MIN` 承擔 |
+    | `df.empty` —— Yahoo 回空 | **有**(`fetch_url` 的 host 冷卻,或 `fetch_yf_close` 的 `_ttl_cache` 存住那個未標記的空 series) | `raise _FetchFailed` |
+
+    「無二義」講的是**這個失敗該不該算失敗**(它仍然成立,兩支都是真失敗);
+    但**該不該 raise 從來不是由二義性決定的** —— 那是節流不變式管的事。
+    上一版把兩個判準混在一句話裡,於是在沒有節流器的那一支照樣 raise。
     """
     try:
         from repositories.macro_repository import fetch_yf_close
@@ -522,7 +591,39 @@ def _fetch_usdtwd_series_uncached(days: int) -> tuple[pd.DataFrame, str]:
                   else "2y" if days > 365 else "1y" if days > 90 else "6mo")
         series = fetch_yf_close("USDTWD=X", range_=range_, interval="1d")
     except Exception as e:
-        raise _FetchFailed(f"USDTWD 抓取失敗：{e}") from e
+        # ⛔ **這一支必須 `return`,不可 `raise`**(2026-09-01 第三輪修;
+        #    **有意識的行為變更,不是漏刪** · 決策者:本修復組)——
+        #    它就是 `_finmind_failed` 那條節流不變式的第 3 種情形:**一個節流器都沒有**。
+        #
+        #    **可達且已實測的觸發點**:`fetch_yf_close` 尾端的
+        #    `validate_yf_close(s)` **刻意放在 parse 的 try-except 之外**
+        #    (該檔就地註明:schema 違反是上游 bug,須當場 raise)。於是 Yahoo 回
+        #    **HTTP 200 + 畸形 payload**(`close <= 0` / timestamp 重複或非遞增 / NaN)時
+        #    會拋 `SchemaError`,而:
+        #      · 上游的 `@_ttl_cache` **不存例外** → 它擋不住;
+        #      · `fetch_url` 看到 200 已 `_note_success()` → **沒有 host 冷卻**;
+        #      · 本檔這裡若 raise,又穿過 `@st.cache_data` → **沒有 TTL**。
+        #    → **每次 rerun 都真打一次 Yahoo**。
+        #
+        #    **實測(同一支探針,fake session 數 `sess.get`,3 次 rerun 的每輪增量)**:
+        #        b5b0464(base) : [1, 0, 0]      ← 失敗被快取,10 分鐘才打一次
+        #        fe664ad       : [1, 1, 1]  ⛔
+        #        7a45c89       : [1, 1, 1]  ⛔   ← 第二輪修了外資那側,**這一側漏了**
+        #        本輪          : [1, 0, 0]  ✅   ← 回到 base 的節流強度
+        #
+        #    ⚠️ **本檔原本的辯護詞在這一支正好不成立**:docstring 寫
+        #    「本支不登記任何來源冷卻(理由:上游 `fetch_yf_close` 已有自己的節流器)」——
+        #    而 `_ttl_cache` **唯一擋不住的就是例外**,也就是這一支。
+        #    上一版實測的 `yfnull` / `yfempty` / `http500` **三種都是回值**,
+        #    剛好全部避開了唯一會 raise 的那一種。
+        #
+        #    ⚠️ **這不是把失敗藏起來**:錯誤訊息照樣往上帶(§1 Fail Loud),
+        #    Tab1「強制重抓」照樣 `.clear()` 得掉;變的只有**節流由誰承擔**。
+        #    這也**正好還原 base 的行為**(base 這一支本來就是 `return`)。
+        print(f"[hot_money] ⚠️ USDTWD 取數拋例外且無任何來源冷卻"
+              f"（多為 validate_yf_close 的 schema 違反）"
+              f"→ 本次失敗照舊入快取，由 TTL_10MIN 節流：{e}")
+        return _empty_usdtwd_df(), f"USDTWD 抓取失敗：{e}"
 
     df = _yf_series_to_df(series)
     if df.empty:
@@ -563,10 +664,33 @@ def fetch_usdtwd_series(days: int) -> tuple[pd.DataFrame, str]:
     (**有意識的更正,不是漏刪** · 2026-09-01 · 決策者:本修復組)。實測:
       · **訊息**:2/2 個失敗分支**逐字未動** ✅
       · **dtype**:失敗回傳的空 df 由 `object` 改為 `datetime64[ns]` / `float64` ❌
-        (`USDTWD 抓取失敗` 那一支;理由見 `_empty_usdtwd_df`)
-    行為變更:失敗改 `raise` 穿過 `@st.cache_data`,不再被鎖滿 TTL。
-    **本支不登記任何來源冷卻**(理由見 `_fetch_usdtwd_series_uncached` 內註解:
-    上游 `fetch_yf_close` 已有自己的節流器,在這裡再記一次會把 VIX/DGS10/DXY/SPY 一起鎖住)。
+        ⚠️ **2026-09-01 第三輪更正(有意識的更正,不是漏刪 · 決策者:本修復組)**:
+        上一版在這裡加了括號「(**`USDTWD 抓取失敗` 那一支**)」,**那個射程是錯的**。
+        **實測(base / 本分支各跑同一支探針,逐子情境比對)**:
+
+        | 分支 | 子情境 | base | 本分支 |
+        |---|---|---|---|
+        | `USDTWD 抓取失敗` | 上游拋例外 | `object` | **typed** ❌ 變了 |
+        | `USDTWD 無資料`   | 上游回**空 series** | `object` | **typed** ❌ **也變了** |
+        | `USDTWD 無資料`   | 上游回值但全被濾掉(NaN / ≤0) | typed | typed ✅ 未變 |
+
+        成因:base 的 `_yf_series_to_df` 對**空輸入**回的是
+        `pd.DataFrame(columns=[...])`(object),對「有值但濾光」回的是 typed ——
+        **base 自己就不一致**;本分支統一走 `_empty_usdtwd_df()`(typed),
+        於是**兩個分支都被影響到,只是後者只在其中一個子情境**。
+        **「形狀那半是假的」這個結論不變**,錯的只有上一版括號裡的射程 ——
+        而那正是本 PR 一路在犯的同一種錯:**更正一句話時,把它的射程也順手猜了一個**。
+    行為變更:**Yahoo 回空**那一支改 `raise` 穿過 `@st.cache_data`,不再被鎖滿 TTL;
+    **上游拋例外**那一支維持 `return`(＝仍被快取,與 base 相同),理由見下。
+    **本支不登記任何來源冷卻** —— 但**原本的理由只對了一半**
+    (2026-09-01 第三輪更正,**有意識的更正,不是漏刪** · 決策者:本修復組):
+      · ~~「上游 `fetch_yf_close` 已有自己的節流器」~~ 對**回值**的失敗成立
+        (`@_ttl_cache(TTL_10MIN)` 會把空 series 存下來);
+      · 對**拋例外**的失敗**不成立** —— `_ttl_cache` **唯一擋不住的就是例外**,
+        而那正是 `validate_yf_close` 走的路。故那一支改由本層的
+        `@st.cache_data(TTL_10MIN)` 承擔(見 `_fetch_usdtwd_series_uncached` 內註解與實測)。
+    「在這裡再記一次 Yahoo 冷卻會把 VIX/DGS10/DXY/SPY 一起鎖住」**這半句仍然成立**,
+    也仍然是不登記來源冷卻的理由 —— 被權衡掉的只有「上游已經有節流器」那半句的射程。
     """
     try:
         return _cached_usdtwd_series(days)

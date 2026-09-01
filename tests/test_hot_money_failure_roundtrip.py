@@ -91,6 +91,9 @@ _SCENARIOS: dict[str, tuple[int, bytes]] = {
     "http_500":   (500, b'{"err": "boom"}'),
     # SSOT 判定「刻意不退避」的分類 → 這一層若還 raise 就一個節流器都不剩
     "body_404":   (200, b'{"msg": "dataset not found", "status": 404}'),
+    # body status 是 **2xx/3xx** → `kind_for_status` 回 `""`（SSOT 的「這不是失敗」哨符），
+    # 而 `cooldown_for("")` 走 default 60s > 0 —— 若不接住哨符就會登記一筆 kind 為空的退避
+    "body_201":   (200, b'{"msg": "created", "status": 201}'),
     # HTTP 200 但 body 是空白 → `fund_fetcher.fetch_url_with_retry` 尾端
     # `return resp if resp.text.strip() else None` 會把它轉成 None，
     # 而 `fetch_url` 早已 `_note_success()` → **誰都沒有記退避**（同 body_404 的處境）
@@ -138,9 +141,31 @@ def harness(monkeypatch):
     def run(scenario: str, days: int, reruns: int = 3):
         """跑 `reruns` 次 `fetch_foreign_flow_series(days)`，回傳**每一次**的 (df, err)。
 
-        ⚠️ 刻意回傳整串而不是最後一次：第 2 次起會被退避在 `fetch_url` 進場處擋下，
-        訊息換成「來源退避冷卻中」——**第一次**那個才是真正的失敗原因，
-        對錯誤訊息的斷言必須打在 `results[0]` 上。
+        ⚠️ 刻意回傳整串而不是最後一次：第 2 次起會被退避擋下、訊息換掉，
+        **第一次**那個才是真正的失敗原因，對錯誤訊息的斷言必須打在 `results[0]` 上。
+
+        ⚠️ **2026-09-01 第三輪更正（有意識的更正，不是漏刪 · 決策者：本修復組）**：
+        本段原寫 ~~「被退避在 **`fetch_url` 進場處**擋下，訊息換成「**來源**退避冷卻中」」~~
+        —— **兩句都是 `7a45c89` 自己弄假的**。它們在 `fe664ad`（退避鍵還是 host 粒度）
+        為真；`7a45c89` 把鍵縮成 dataset 之後，`fetch_url` **只查 host 鍵、查不到它**
+        （那正是 `7a45c89` 在 `repositories/hot_money_repository.py` 檔頭與
+        `_fetch_foreign_flow_series_uncached` docstring 裡**親手劃掉**的同一句話）。
+
+        **實測（同一支探針，在 `should_skip` 上掛 tracer）**：
+
+            rerun#1  should_skip: [(dataset, False), (host, False)]   net=1
+            rerun#2  should_skip: [(dataset, True)]                   net=1  ← host 那支根本沒被問
+            err#2 = "FinMind TaiwanStockTotalInstitutionalInvestors 退避冷卻中（…）"
+
+        **現行事實**：攔截點是 `_fetch_foreign_flow_series_uncached` **開頭**的
+        `should_skip(_FINMIND_DATASET_KEY)`；訊息是 **dataset 變體**
+        （帶 dataset 名，不是「來源退避冷卻中」——那是 `r is None` 那一支才會出現的變體）。
+
+        ⛔ **根因比這兩行重要，寫在這裡免得下一輪再犯**：`7a45c89` 的 PR 描述
+        列了兩條掃描指令去掃五個載體，**但兩條的字表不一樣** ——
+        非 tests 那條有 `進場處`，tests 這條**沒有**。於是「更正措辭時只修被點名的那個載體」
+        這條教訓，**在照著它做的那一輪、以另一個維度（載體之間字表不同）再發生一次**。
+        → **同一次更正必須用同一份字表掃全部五個載體**，字表本身也要是同一份。
         """
         state["scenario"] = scenario
         hm.fetch_foreign_flow_series.clear()
@@ -227,7 +252,12 @@ def test_app_level_failure_is_not_cached_and_registers_backoff(
         f"{hm._FINMIND_HOST_KEY!r} —— 會誤殺同 host 的其它 dataset。state={_states}"
     )
 
-    # 第一次真的打了；第 2/3 次被退避在 fetch_url 進場處擋下 → 不再有網路往返
+    # 第一次真的打了；第 2/3 次被退避擋下 → 不再有網路往返。
+    # ⚠️ 2026-09-01 第三輪更正：原註寫「被退避在 **fetch_url 進場處**擋下」——
+    #    退避鍵自 `7a45c89` 起是 dataset 粒度，而 `fetch_url` 只查 host 鍵；
+    #    實測 rerun#2 只問了 dataset 鍵一次，**host 那支根本沒被問到**。
+    #    真正的攔截點是 `_fetch_foreign_flow_series_uncached` 開頭的 `should_skip`。
+    #    （這一行與 `harness::run` 的 docstring 是同一句話的兩個副本，一起改。）
     assert net["n"] == 1, (
         f"{scenario}: 退避沒有生效 —— 3 次 rerun 打了 {net['n']} 次上游（預期 1）"
     )
@@ -410,6 +440,114 @@ def test_no_cooldown_kind_falls_back_to_caching(harness):
     assert not _sb.get_backoff_state(), (
         f"not_found 不該進退避（host 或 dataset 都不該）：{_sb.get_backoff_state()}"
     )
+
+
+def test_ssot_non_failure_status_is_not_registered_as_backoff(harness):
+    """body status 是 **2xx/3xx** → `kind_for_status` 回 `""`（「這不是失敗」的哨符）。
+
+    ## 這一條擋的是 `7a45c89` 上活著的一個 bug（2026-09-01 第三輪稽核指出）
+
+    `infra/source_backoff.py::kind_for_status` 對 2xx/3xx **回空字串**，
+    就地註解寫著 `return ""   # 2xx/3xx 不是失敗`。但 `cooldown_for("")` 走的是
+    「**未知 kind 從寬**」的 default（實測 **60**），於是舊寫法只判
+    `cooldown_for(_kind) <= 0` 時**會照樣退避**，並 `record_failure(key, "")`。
+
+    **`7a45c89` 實跑**（body `{"status":201}`，3 次 rerun）：
+
+        backoff: [{'source': 'finmind-dataset:…', 'kind': '', 'cooldown_sec': 60, …}]
+        err#3  : "FinMind … 退避冷卻中（前次失敗分類 ，剩餘約 60 秒）"   ← 分類欄是空的
+
+    本檔自陳「分類走 SSOT，不自己另立對照表」，**卻沒有接住 SSOT 的哨符** ——
+    抄了對照表卻沒抄它的語意。突變：把 `not _kind or` 拿掉 → 本條轉紅。
+    """
+    run, net, impl = harness
+    df, err = run("body_201", days=123)[0]
+    assert df.empty and "201" in err
+    assert not _sb.get_backoff_state(), (
+        f"2xx/3xx 是 SSOT 的「非失敗」哨符，不得登記成退避（尤其不得登記成空分類）："
+        f"{_sb.get_backoff_state()}"
+    )
+    assert impl["n"] == 1, (
+        f"沒有節流器的失敗必須落回快取（實作跑了 {impl['n']} 次，預期 1）"
+    )
+    assert net["n"] == 1, f"3 次 rerun 打了 {net['n']} 次上游（預期 1）"
+    # 使用者不該看到「前次失敗分類 （空白）」這種訊息
+    assert "退避冷卻中" not in err, f"不該進退避卻顯示了冷卻訊息：{err!r}"
+
+
+def test_usdtwd_schema_violation_falls_back_to_caching(monkeypatch):
+    """⭐ Yahoo 回 **HTTP 200 + 畸形 payload** → `validate_yf_close` 拋 SchemaError。
+
+    ## 這一條擋的是 `7a45c89` 仍然帶著的一個**可達**迴歸（第三輪稽核指出）
+
+    節流不變式：**失敗只在確實有節流器時才 raise**。這一支三個節流器都沒有：
+
+    - `repositories/macro/yf.py::fetch_yf_close` 的 `validate_yf_close(s)`
+      **刻意放在 parse 的 try-except 之外**（該檔就地註明：schema 違反是上游 bug，
+      須當場 raise）→ 例外冒泡；
+    - 它的 `@_ttl_cache` **不存例外** → 擋不住；
+    - `fetch_url` 看到 HTTP 200 已 `_note_success()` → **沒有 host 冷卻**；
+    - `_fetch_usdtwd_series_uncached` 若在這裡 raise，又穿過 `@st.cache_data`
+      → **連 TTL 都沒有** → **每次 rerun 真打一次 Yahoo**。
+
+    **實測（同一支探針，3 次 rerun 的每輪 `sess.get` 增量）**：
+
+        b5b0464(base) [1, 0, 0]      ← 失敗被快取，10 分鐘才打一次
+        fe664ad       [1, 1, 1]  ⛔
+        7a45c89       [1, 1, 1]  ⛔   ← 第二輪修了外資那側，這一側漏了
+        本輪          [1, 0, 0]  ✅
+
+    ⚠️ **為什麼上一輪沒抓到**：它實測的 `yfnull` / `yfempty` / `http500`
+    **三種都是「回值」**，剛好全部避開了唯一會 **raise** 的那一種；
+    而該檔的辯護詞「上游 `fetch_yf_close` 已有自己的節流器」
+    **正好對這一支不成立** —— `_ttl_cache` 唯一擋不住的就是例外。
+
+    突變：把 `_fetch_usdtwd_series_uncached` 的 `except` 分支改回
+    `raise _FetchFailed(...)` → 本條轉紅（`net` 由 1 變 3）。
+    """
+    _require_real_streamlit()
+    import repositories.macro.yf as _yf
+
+    # Yahoo Chart 200，但 close 全 <= 0 → YahooCloseSchema 契約違反 → SchemaError
+    _bad = json.dumps({"chart": {"result": [{
+        "timestamp": [1767225600, 1767312000],
+        "indicators": {"quote": [{"close": [-1.0, -2.0]}]},
+    }]}}).encode()
+
+    net = {"n": 0}
+
+    class _S:
+        def get(self, url, **kw):
+            net["n"] += 1
+            return _FakeResp(200, _bad)
+
+    monkeypatch.setattr(_proxy, "_get_thread_session", lambda: _S())
+    monkeypatch.setattr(_proxy, "get_proxy_config", lambda: None)
+
+    _yf.fetch_yf_close.cache_clear()
+    hm.fetch_usdtwd_series.clear()
+    _sb.reset_all()
+    try:
+        per_rerun = []
+        for _ in range(3):
+            _before = net["n"]
+            df, err = hm.fetch_usdtwd_series(30)
+            per_rerun.append(net["n"] - _before)
+
+        assert df.empty and err, f"schema 違反必須誠實回報失敗：{err!r}"
+        assert "抓取失敗" in err, f"訊息應保留上游原因：{err!r}"
+        assert per_rerun == [1, 0, 0], (
+            f"沒有節流器的失敗必須落回快取，實測每輪上游呼叫 {per_rerun}（預期 [1, 0, 0]）"
+            f" —— [1, 1, 1] 代表每次 rerun 都真打一次 Yahoo，比改版前更糟"
+        )
+        assert not _sb.get_backoff_state(), (
+            f"本支不登記來源冷卻（會把 VIX/DGS10/DXY/SPY 一起鎖住）："
+            f"{_sb.get_backoff_state()}"
+        )
+    finally:
+        _yf.fetch_yf_close.cache_clear()
+        hm.fetch_usdtwd_series.clear()
+        _sb.reset_all()
 
 
 def test_empty_frames_carry_real_dtypes(harness):

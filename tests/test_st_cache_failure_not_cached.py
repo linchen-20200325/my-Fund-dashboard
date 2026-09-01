@@ -108,7 +108,18 @@ _RAISES: dict[str, tuple[str, str, str]] = {
     "repositories/hot_money_repository.py::_cached_usdtwd_series": (
         "_fetch_usdtwd_series_uncached",
         "repositories/hot_money_repository.py",
-        "內拋外譯：兩個失敗點都無二義（上游拋例外／Yahoo 回空），一律 raise _FetchFailed。",
+        # ⚠️ 2026-09-01 第三輪重寫（**有意識的更正，不是漏刪**）。舊理由
+        # ~~「內拋外譯：兩個失敗點都無二義（上游拋例外／Yahoo 回空），一律 raise _FetchFailed。」~~
+        # 兩個問題：(1)「兩個」是**中文數字的計數宣稱**，穿過了本檔自己的計數禁令
+        #   —— 也就是這條守衛在 HEAD 上放行了一句它本來就該擋的話；
+        # (2)「一律 raise」自本輪起**為假**：上游拋例外那一支已改為 return
+        #   （它一個節流器都沒有，raise 會變成每次 rerun 真打一次 Yahoo，
+        #    實測 base [1,0,0] → 7a45c89 [1,1,1] → 本輪 [1,0,0]）。
+        "內拋外譯：依節流不變式逐支判 —— Yahoo 回空（有 host 冷卻或上游 _ttl_cache "
+        "接手）走 raise _FetchFailed 穿過 @st.cache_data；上游拋例外（validate_yf_close "
+        "的 schema 違反，_ttl_cache 不存例外、fetch_url 已 _note_success）沒有任何節流器，"
+        "故仍 return 由 TTL_10MIN 承擔。實際分支歸屬以 "
+        "repositories/hot_money_repository.py 內的表格為準，本欄不重述數字。",
     ),
     # ⛔ ~~"ui/helpers/v2_editor.py::_cached_load_policy_v2"~~ 已於 2026-09-01
     #    移到 `_WHITELIST`（**有意識的更正，不是漏刪**）。舊登記理由寫
@@ -207,6 +218,11 @@ def _iter_py_files():
         yield p, rel
 
 
+# 摺疊結果的長度上限(字元)。理由見 `_const_str` 內 `_STR_FOLD_MAX_LEN` 那一段:
+# 兩道終止保險擋不收斂,這一道擋「收斂到很大的值」造成的記憶體爆掉。
+_STR_FOLD_MAX_LEN = 4096
+
+
 def _const_str(node: ast.expr, strs: dict) -> "str | None":
     """盡力把一個運算式摺成字串常數；摺不出來回 `None`。
 
@@ -234,7 +250,22 @@ def _const_str(node: ast.expr, strs: dict) -> "str | None":
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         _l = _const_str(node.left, strs)
         _r = _const_str(node.right, strs)
-        return None if (_l is None or _r is None) else _l + _r
+        if _l is None or _r is None:
+            return None
+        # ⛔ 長度上限(2026-09-01 第三輪補;**有意識的新增,不是漏想**)——
+        #    兩道終止保險擋的是「**不收斂**」,擋不住「**收斂到一個很大的值**」。
+        #    `_A0 = "x"` 後接 k 行 `_Ai = _A(i-1) + _A(i-1)` 是 **2^k 成長**,
+        #    **實測**(在本檔的 `_str_const_names` 上直接量):
+        #        k=16 →      65,536 字元        k=20 →   1,048,576 字元 /  28 MB
+        #        k=24 →  16,777,216 字元 / 82 MB(0.04s)
+        #    外推約 30~35 行就足以把 CI runner 吃到 OOM-kill,
+        #    而 `_iter_py_files()` **對每一個被追蹤的 `.py` 都跑一次**。
+        #    這一行讓超長的摺疊直接放棄(回 `None` ＝ **保守漏放**,不是誤報)——
+        #    與本檔整體取捨一致:靜態分析只提高繞過成本,不保證窮舉。
+        #    上限遠大於任何真實的裝飾器名(`cache_resource` 才 14 字元)。
+        if len(_l) + len(_r) > _STR_FOLD_MAX_LEN:
+            return None
+        return _l + _r
     if isinstance(node, ast.JoinedStr):          # 全常數段的 f-string
         parts = []
         for v in node.values:
@@ -254,10 +285,23 @@ _STR_FOLD_MAX_PASSES = 5
 def _str_const_names(tree: ast.AST) -> dict:
     """`X = "..."`(含可摺疊的拼接)→ {"X": "..."}。多輪迭代,接得住鏈式拼接。
 
-    ⚠️ **兩道終止保險,缺一不可**(2026-09-01 實測:少了它們,本檔在本 repo 會跑不完):
+    ⚠️ **兩道終止保險,是縱深防禦,不是「缺一不可」**
+    (2026-09-01 第三輪更正,**有意識的更正,不是漏刪** · 決策者:本修復組):
       1. **先到先贏,不覆寫已知的名字** —— 否則 `s = s + "x"` 這種
-         自我參照的累加(本 repo 常見)會讓值每一輪都變,`while changed` 永不收斂。
+         自我參照的累加會讓值每一輪都變,`while changed` 永不收斂。
       2. **輪數上限** `_STR_FOLD_MAX_PASSES` —— 就算 (1) 哪天被改掉也不會掛住 CI。
+
+    **突變實測(本輪跑的,不是推論)**:
+
+        MUT-1  只拿掉 (1) 先到先贏          → 18 passed(13.5s)   ← 仍然終止
+        MUT-2  只拿掉 (2) 輪數上限          → 18 passed(11.0s)   ← 仍然終止
+        MUT-3  兩道**都**拿掉               → **跑不完(>2 分鐘 timeout)**
+
+    → 上一版寫 ~~「**缺一不可**」~~ **太滿**:任一道單獨存在都足以終止,
+    **只有兩道全拿掉才會不收斂**。而且那句話與**它自己的下一行**自相矛盾 ——
+    第 2 點就寫著「就算 (1) 哪天被改掉也不會掛住 CI」,那正是「不是缺一不可」的意思。
+    **保留兩道的理由仍然成立**(縱深防禦:任一道被後人改壞,另一道還在),
+    被權衡掉的只有那句**強度宣稱**。
     ⚠️ 代價要講明:同一個名字被重新綁定成不同字串時,本函式**只認第一次**,
     可能因此漏判(＝**保守漏放**,不是誤報)。這與本檔整體的取捨一致:
     靜態分析只能提高繞過成本,見 `_const_str` 的 ⛔ 段。
@@ -558,8 +602,39 @@ def test_exemptions_carry_a_reason(key):
     assert len(reason.strip()) >= 20, f"{key} 的登記理由太短或缺漏：{reason!r}"
 
 
-# 會漂移的計數措辭：`5 個` / `2 處` / `3 條` / `7 個失敗點` …
-_COUNT_CLAIM = re.compile(r"[0-9０-９]+\s*[個个处處條条筆笔]")
+# 會漂移的計數措辭：`5 個` / `2 處` / `3 條` / `7 個失敗點` / `兩個` / `7 支` / `raise=8` …
+#
+# ⚠️ **2026-09-01 第三輪擴大（有意識的更正，不是漏刪 · 決策者：本修復組）**：
+# 上一版只認 **阿拉伯／全形數字 + 五個量詞**，於是**它自己要擋的那種句子還活在 HEAD 上** ——
+# `_RAISES["…::_cached_usdtwd_series"]` 寫著「內拋外譯：**兩個**失敗點都無二義……」，
+# **中文數字整個穿過去**（該句在本輪已連同其內容一起改寫，見該格）。
+#
+# **實測 BYPASS 清單（上一版 regex，本輪逐一跑過）**：
+#     兩個 / 五個 / 七個 / 數個 / 若干 / 7 支 / 7 項 / 7 點 / 7 次 / 共 3 支 / 4 項 / raise=8
+# **突變驗證（MUT-F）**：把理由換成
+#     「七個失敗點中的五個…另兩個…共 3 支分支、4 項例外」
+# → 上一版 **18 passed 全綠**；本版 **1 failed**（正控制：換回「5 個…另 2 個」→ 兩版都紅）。
+#
+# ⛔ **射程仍然只到 `_RAISES` 的理由欄，這一點沒有變，也是本輪刻意不擴的**：
+# `repositories/hot_money_repository.py` 兩支公開 docstring 裡的
+# `7/7`、`3/7`、`2/2`、「4 個逐字未動」**沒有任何守衛看得到**（F2 那個射程錯誤就出在那一格）。
+# **不擴的理由**：把它擴成「掃全 repo 每一份 docstring 的數字」是**另一個守衛**
+# ——600+ 檔的誤報面完全不同，且會擋掉大量合法的量測值登記（憲法 §8.2.A.0 規則 4
+# 允許「標了日期的量測值」）。**本輪改用內容面處理**：那四個數字本輪已**獨立重測過**
+# （逐分支比對 base vs 本分支：dtype 7/7 變、訊息 3/7 變、4 個逐字未動、USDTWD 訊息 2/2 未變），
+# 並在該 docstring 就地標明量測方法。**「那一格沒有守衛」這個缺口本身，登記不修。**
+#
+# ⚠️ **`一` 刻意排除在中文數字之外（保守漏放，不是漏想）**：`一次` / `一點` / `一種` /
+# `一道` 在中文裡壓倒性地是**慣用語**而不是計數（本檔自己的理由欄就有
+# 「每次 rerun 真打**一次**上游」）。第一版把 `一` 收進去，實測**當場誤報**該句。
+# 代價是「只有一個失敗點」這種真的計數宣稱會漏掉 —— 故另補 `只有一…` / `僅一…`
+# 兩個明確的計數句型。**這是刻意的取捨，寫在這裡是為了讓後人知道它漏了什麼。**
+_COUNT_CLAIM = re.compile(
+    r"(?:[0-9０-９]+|[二三四五六七八九十兩两廿卅百千數数幾几]|(?:只有|僅|仅)一)\s*"
+    r"[個个處处條条筆笔支項项點点次道種种類类]"
+    r"|\b(?:raise|return|except|branch|分支|失敗點)\s*[=＝:：]\s*[0-9]+"
+    r"|若干"
+)
 
 
 @pytest.mark.parametrize("key", sorted(_RAISES))
@@ -588,3 +663,92 @@ def test_raises_reasons_state_policy_not_counts(key):
         f"請改寫成**政策**（什麼情況 raise、什麼情況 return、為什麼），"
         f"把實際數字留在被守的原始碼註解裡 —— 登記表重述數字必然漂移。"
     )
+
+
+# 上一版 `_COUNT_CLAIM` 實測會放過的措辭（2026-09-01 第三輪逐一跑過）。
+# 每一個都是**真的會漂移的計數宣稱**，本清單就是這條守衛的迴歸網。
+_COUNT_CLAIM_MUST_CATCH = (
+    "5 個失敗點", "8 處", "2 條",                    # 舊版就抓得到（正控制，防改壞）
+    "兩個失敗點", "五個", "七個", "三種", "十個",       # 中文數字 —— 舊版全部放過
+    "數個", "若干",                                  # 概數 —— 舊版全部放過
+    "7 支分支", "7 項例外", "7 點", "7 次", "共 3 支", "4 項",   # 量詞不在舊版清單
+    "raise=8", "分支=3",                             # AST 節點數的等號寫法
+    "只有一個失敗點", "僅一處",                        # `一` 的明確計數句型
+)
+
+# 中文裡壓倒性是慣用語、不是計數的寫法 —— **不得**誤報。
+# `每次 rerun 真打一次上游` 就活在本檔自己的 `_RAISES` 理由裡：
+# 第三輪第一版把 `一` 收進數字類，**當場誤報了它**，故 `一X` 刻意排除（見 `_COUNT_CLAIM`）。
+_COUNT_CLAIM_MUST_PASS = (
+    "每次 rerun 真打一次上游", "一律 raise _FetchFailed", "一點都不快取",
+    "由 TTL_30MIN 節流", "404/407 是 SSOT 明訂刻意不退避", "v2 的 429 重試",
+)
+
+
+@pytest.mark.parametrize("phrase", _COUNT_CLAIM_MUST_CATCH)
+def test_count_claim_regex_catches_drifting_phrasings(phrase):
+    r"""⭐ 守衛的**守衛**：`_COUNT_CLAIM` 自己要抓得到它宣稱要擋的那些寫法。
+
+    ## 為什麼需要這一條（2026-09-01 第三輪稽核實證，不是假想）
+
+    上一版的 regex 是 `[0-9０-９]+\s*[個个处處條条筆笔]` —— 只認**阿拉伯／全形數字**
+    加**五個量詞**。實測 BYPASS：`兩個` / `五個` / `數個` / `若干` / `7 支` / `7 項` /
+    `7 次` / `raise=8` …
+
+    **而它要擋的那種句子，當時就活在 HEAD 上**：
+    `_RAISES["…::_cached_usdtwd_series"]` 寫著「內拋外譯：**兩個**失敗點都無二義……」。
+    也就是說：**一條專門用來擋計數宣稱的守衛，放行了它正下方那一格裡的計數宣稱**，
+    整整一輪沒有人發現 —— 與它自己 docstring 裡記載的病史是同一個形狀。
+
+    **突變驗證（MUT-F）**：把理由換成
+    「七個失敗點中的五個…另兩個…共 3 支分支、4 項例外」
+    → 上一版 **18 passed 全綠**；本版 **1 failed**。
+    """
+    assert _COUNT_CLAIM.findall(phrase), (
+        f"_COUNT_CLAIM 放過了一句會漂移的計數宣稱：{phrase!r}\n"
+        f"這正是它存在的理由 —— 每一次放寬都要先問「它還抓得到這張清單嗎」。"
+    )
+
+
+@pytest.mark.parametrize("phrase", _COUNT_CLAIM_MUST_PASS)
+def test_count_claim_regex_does_not_flag_idioms(phrase):
+    """反向鎖：`_COUNT_CLAIM` **不得**誤報中文慣用語，否則沒有人寫得出合格的理由。
+
+    誤報比漏報更糟：漏報只是守不到，誤報會逼作者為了過 CI 去改一句本來正確的話。
+    """
+    assert not _COUNT_CLAIM.findall(phrase), (
+        f"_COUNT_CLAIM 誤報了一句慣用語：{phrase!r} → {_COUNT_CLAIM.findall(phrase)}"
+    )
+
+
+def test_const_folding_refuses_to_build_giant_strings():
+    """⭐ 常數摺疊器不得被一段 `.py` 撐爆記憶體（2026-09-01 第三輪補）。
+
+    ## 這是一個 DoS，不是理論問題
+
+    `_str_const_names` 的兩道終止保險擋的是「**不收斂**」，
+    **擋不住「收斂到一個非常大的值」**。`_A0 = "x"` 後接 k 行
+    `_Ai = _A(i-1) + _A(i-1)` 是 **2^k 成長**。**本輪實測**（直接量 `_str_const_names`）：
+
+        k=16 →      65,536 字元            k=20 →   1,048,576 字元 /  28 MB
+        k=24 →  16,777,216 字元 / 82 MB    → 外推 k≈30~35 足以 OOM-kill CI runner
+
+    而 `_iter_py_files()` **對每一個被追蹤的 `.py` 都跑一次**這個摺疊器 ——
+    也就是說，任何人只要往 repo 裡塞一個約 35 行的檔案，就能讓 CI 整台掛掉。
+
+    修法是 `_const_str` 內一行長度上限（`_STR_FOLD_MAX_LEN`），
+    超過即回 `None`（＝**保守漏放**，不是誤報）。上限遠大於任何真實的裝飾器名
+    （`cache_resource` 才 14 字元）。
+
+    突變：拿掉那一行 → 本條的 `assert` 會拿到一個 2^24 長度的字串而轉紅。
+    """
+    src = '_A0 = "x"\n' + "".join(f"_A{i} = _A{i-1} + _A{i-1}\n" for i in range(1, 25))
+    folded = _str_const_names(ast.parse(src))
+    biggest = max((len(v) for v in folded.values()), default=0)
+    assert biggest <= _STR_FOLD_MAX_LEN, (
+        f"常數摺疊產生了 {biggest:,} 字元的字串（上限 {_STR_FOLD_MAX_LEN:,}）—— "
+        f"2^k 成長的拼接鏈可以用約 35 行把 CI runner 吃到 OOM。"
+    )
+    # 正控制：上限不得大到把正常的裝飾器名也擋掉
+    ok = _str_const_names(ast.parse('_N = "cache" + "_data"\n'))
+    assert ok.get("_N") == "cache_data", f"上限訂太低，連正常摺疊都壞了：{ok}"
