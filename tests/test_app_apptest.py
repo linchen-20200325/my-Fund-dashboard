@@ -246,7 +246,41 @@ def test_tab2_search_input_and_button_rendered(at: AppTest) -> None:
 def test_tab6_manual_renders_key_sections(at: AppTest) -> None:
     """說明書容器層必須有標題 + 內文（防整塊被誤刪 / 章標被誤改）。
 
-    （10 章節 nested tabs 內文僅在 click 後展開，AppTest 預設無法穿透，故只驗外層。）
+    ⚠️ **2026-09-01 就地更正：本行三個宣稱死了兩個半。有意識的更正，不是漏刪**
+    （日期 **2026-09-01** · 決策者：**AI 總管** · 依據：**實測**，指令見下）::
+
+        ~~（10 章節 nested tabs 內文僅在 click 後展開，AppTest 預設無法穿透，故只驗外層。）~~
+
+    **舊表述在它寫下的當天是對的**：那時 `ui/tab6_manual.py` 確實用 `st.tabs`
+    開了 10 個子分頁，內文只在點到該分頁時才渲染，「只驗外層」是誠實的自我設限。
+    **被權衡掉的是它的時態，不是它的判斷** —— 它描述的那個載體**就是本 PR 拆掉的**
+    （commit `10a8433`「說明書 10 個子分頁改單頁錨點目錄」）。
+    **實測（2026-09-01，本行從實跑處照抄）**：
+    `git grep -c -F ".tabs(" ffad4ca -- ui/tab6_manual.py` → **無輸出（0）**；
+    同一指令對 `origin/main` → **1**。現況是**單頁 + 錨點目錄**，10 章一次全部渲染。
+
+    ⚠️ **三個宣稱逐一對照 —— 不要因為「數字沒錯」就以為整句還活著**：
+    ① 「**10 章節**」→ **仍然成立**（`ui.tab6_manual._CHAPTERS` 實測 10 章），
+       本行唯一沒壞的字；
+    ② 「**nested tabs** ／ 內文僅在 click 後展開 ／ AppTest 預設無法穿透」→ **全假**。
+       沒有 tabs 就沒有 click，也就沒有「穿不穿得透」這個問題；
+    ③ 「**故只驗外層**」→ **本函式自己就是反證**：下方 `markdown_blobs` 取
+       `at.markdown + at.subheader + at.caption` 的聯集，它撈到的
+       `⓪ 📊 資料來源完整地圖` 正是**內層**的章節標題。
+
+    ⚠️ **這一處為什麼漏掉七輪，比這三句話本身更值得記**：**同一個函式的函式體裡**
+    （下方 `markdown_blobs` 上面那段更正註解），由**同一次 commit** 寫下「說明書
+    『10 子分頁 → 單頁錨點目錄』之後，章節標題…由 `st.markdown` 改成 `st.subheader`」
+    —— 作者在同一個函式裡**描述了這個事實變更**，卻沒有回頭看自己這段 docstring。
+    更關鍵的是**篩子選錯**：前六輪的自掃用「**這句是不是本 PR 寫的**」當納入判準，
+    而本行由 `079c457`（早已在 main 上）寫入、由本 PR 打壞 ——
+    **用「誰寫的」當篩子，正好會把它篩掉**。
+    **正確判準是「是不是我這次的改動讓它不成立的」**（§-1.5.1c 判定 3）：
+    「誰寫的」只是充分條件，「誰打壞的」才是必要條件。
+
+    ⚠️ **本段刻意不寫「下方 N 行」這種行距數字** —— 它會被下一次編輯（包括本段
+    自己這次插入）弄假，正是本 PR 反覆在修的同一種病；改用**不會漂移的錨點**
+    （函式名／符號名）指位。
 
     ⚠️ **2026-08-31 由 WP-F 收斂：七 → 五。有意識的政策變更，不是漏改。**
     （日期 2026-08-31；決策者：**客戶 2026-08-31 拍板的五分頁動線線框**
@@ -285,10 +319,28 @@ def test_tab6_manual_renders_key_sections(at: AppTest) -> None:
         "說明書自己的 caption（📖 故事附錄・公式聖經）不見了 —— "
         "本體可能整個沒被呼叫，不只是標題讓位。")
 
-    markdown_blobs = " ".join(m.value for m in at.markdown if isinstance(m.value, str))
+    # ⚠️ **2026-08-31 就地更正：草堆改對，針一字不動。有意識的更正，不是漏刪**
+    # （決策者：AI 總管）。
+    # ~~markdown_blobs = " ".join(m.value for m in at.markdown ...)~~
+    # **舊寫法的理由仍然成立**：要驗的是「說明書內文還在」，把所有文字串起來
+    # 找關鍵字是對的做法。**被權衡掉的是它只撈 `at.markdown` 這一種元素** ——
+    # 說明書「10 子分頁 → 單頁錨點目錄」之後，章節標題（含本條找的
+    # `⓪ 📊 資料來源完整地圖`）由 `st.markdown("### …")` 改成
+    # `st.subheader(..., anchor=…)`：**元素換了型別，字沒有消失**。
+    # 舊寫法會因為一次純渲染型別的搬遷而誤紅。
+    # ⛔ **刻意不換掉、也不放寬 needle** —— `資料來源完整地圖` 這根針就是這條
+    #    守衛的全部價值（章標被誤改／整塊被誤刪時它要紅）。換弱或刪掉才是放寬。
+    # **三判準複驗（2026-08-31 實測）**：① 本寫法在 base `cc37709` 上也綠
+    #    （那時標題還在 `at.markdown` 裡，聯集當然也撈得到）；② 突變「把
+    #    `📊 資料來源完整地圖` 這個標題改名」→ 本條轉紅；③ 意圖保留（三根針全在）。
+    markdown_blobs = " ".join(
+        v for v in ([m.value for m in at.markdown]
+                    + [h.value for h in at.subheader]
+                    + [c.value for c in at.caption])
+        if isinstance(v, str))
     assert "資料來源完整地圖" in markdown_blobs, (
         f"說明書內文（Section ⓪ 資料來源完整地圖）未找到；"
-        f"markdown 前 400 字: {markdown_blobs[:400]!r}")
+        f"markdown+subheader+caption 前 400 字: {markdown_blobs[:400]!r}")
 
 
 def test_t7_ledgers_session_state_default_empty(at: AppTest) -> None:
