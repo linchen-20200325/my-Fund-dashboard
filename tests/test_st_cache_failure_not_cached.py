@@ -29,6 +29,25 @@ import 敘述可以跟。硬猜只會得到一個看起來有守、實際上猜�
 ⚠️ **突變測試（本檔存在的意義）**：把 `repositories/hot_money_repository.py` 的
 `raise _FetchFailed(...)` 改回 `return (空 df, err)`，`test_raises_entries_really_raise`
 **必須轉紅燈**。守不到東西的守衛等於沒有守衛。
+
+## ⛔ 本檔守**不到**什麼（2026-09-01 稽核實測，誠實揭露）
+
+本檔是**純形態守衛**：`test_raises_entries_really_raise` 用的是
+`any(isinstance(n, ast.Raise) for n in ast.walk(target))` —— 它只問
+「這個 `def` 裡**有沒有一個** `Raise` 節點」，**不問可達性、不問例外型別、
+也不問它是不是長在失敗路徑上**。實測突變：
+
+    M1  兩支 uncached 內所有 raise 全改回 return              → 2 條 FAILED ✅
+    M2  只留 1 個 raise（其餘改回 return）                     → 11 passed ⛔
+    M2b 真實失敗路徑全改 return，只塞
+        `if days < 0: raise ValueError("unreachable")`        → 11 passed ⛔
+
+M2b 與憲法 §-2 規則 6 的創始實證是同一個病（宣稱修好、實際是死碼、production 恆不觸發）
+—— **而它當時就長在這個專門用來防該病的守衛裡**。
+
+→ **補位的是 `tests/test_hot_money_failure_roundtrip.py`**：真 streamlit 下 patch 上游、
+連呼 3 次、數「未快取實作」實際執行了幾次。M2b 在那一檔會轉紅。
+**本檔負責「有沒有登記／登記表有沒有脫節」，那一檔負責「行為對不對」，兩者缺一不可。**
 """
 from __future__ import annotations
 
@@ -44,6 +63,12 @@ _SKIP_DIRS = {
     "tests", ".git", ".venv", "venv", "env", "node_modules",
     "build", "dist", "__pycache__", ".mypy_cache", ".pytest_cache",
 }
+
+# 根目錄 `conftest.py` 同屬測試基礎設施（它就是那個 pass-through stub 的產地），
+# 與 `tests/` 同一個理由排除。
+_SKIP_FILES = {"conftest.py"}
+
+_CACHE_ATTRS = ("cache_data", "cache_resource")
 
 # ── (a) 失敗會 raise ────────────────────────────────────────────────
 # key: "<裝飾點檔案>::<裝飾函式名>"
@@ -62,12 +87,17 @@ _RAISES: dict[str, tuple[str, str, str]] = {
         "repositories/hot_money_repository.py",
         "內拋外譯：兩個失敗點都無二義（上游拋例外／Yahoo 回空），一律 raise _FetchFailed。",
     ),
-    "ui/helpers/v2_editor.py::_cached_load_policy_v2": (
-        "load_policy_v2",
-        "repositories/policy/v2.py",
-        "上游 load_policy_v2 讀取失敗即 raise PolicySheetError，例外穿過快取層；"
-        "caller 端 _load_policy_into_buf 接住後走 _show_quota_friendly 顯示。",
-    ),
+    # ⛔ ~~"ui/helpers/v2_editor.py::_cached_load_policy_v2"~~ 已於 2026-09-01
+    #    移到 `_WHITELIST`（**有意識的更正，不是漏刪**）。舊登記理由寫
+    #    「上游 load_policy_v2 讀取失敗即 raise PolicySheetError」——
+    #    **實測推翻**：`repositories/policy/v2.py::load_policy_v2` 內層有
+    #        try: ws = _with_quota_retry(sh.worksheet, title)
+    #        except Exception: return empty
+    #    → gspread 的 429 在**進到那個 raise 之前**就被吞成空 DataFrame，
+    #    然後被 `@st.cache_data` 快取住（實測 3 次呼叫：上游只跑 1 次）。
+    #    這與底下 `pool_repository` 白名單的理由是**一模一樣的形狀**
+    #    （「訊號在快取層之前就死了」），卻被放進了 `_RAISES` —— 等於
+    #    **把一個未修的點認證成已修**。理由見該白名單條目。
     "ui/helpers/v2_editor.py::_cached_list_policies": (
         "list_policy_worksheets",
         "repositories/policy/v2.py",
@@ -89,6 +119,15 @@ _WHITELIST: dict[str, str] = {
         "憲法 §8.3.P `P-NDCCACHE-1` 指定由獨立一組裁決；且 L1 fetch_ndc_signal_history "
         "已自帶同為 15 分的 @_ttl_cache，只修 UI 這層改善 ≈ 0。"
     ),
+    "ui/helpers/v2_editor.py::_cached_load_policy_v2": (
+        "2026-09-01 由 _RAISES 移入（原登記為誤）。與 pool_repository 同形：訊號在快取層"
+        "**之前**就死了 —— repositories/policy/v2.py::load_policy_v2 內層的 "
+        "`except Exception: return empty`（`sh.worksheet` 那一段）會把 gspread 429 "
+        "吞成空 DataFrame，於是被 @st.cache_data 快取住（實測 3 次呼叫上游只跑 1 次）。"
+        "需先拆那個 except 才輪得到這一層，而那超出本批檔案邊界（§-1.5.3 C 禁止夾帶）。"
+        "⚠️ 同檔的 _cached_list_policies 不同：list_policy_worksheets 沒有這層內吞，"
+        "維持在 _RAISES。"
+    ),
 }
 
 # ── (c) 鏈路無外部往返 ──────────────────────────────────────────────
@@ -100,26 +139,114 @@ _NO_EXTERNAL_ROUNDTRIP: dict[str, str] = {
 }
 
 
-def _iter_py_files():
-    for p in sorted(_ROOT.rglob("*.py")):
-        rel = p.relative_to(_ROOT)
-        if any(part in _SKIP_DIRS for part in rel.parts):
-            continue
-        yield p, rel.as_posix()
+def _git_tracked_py_files() -> "list[str] | None":
+    """git **追蹤中**的 `.py`（`git ls-files --cached`）—— 也就是 CI 實際看得到的那一組。
 
+    ⚠️ 為什麼不能用 `rglob`（2026-09-01 稽核指出）：`rglob` **不看 git**，
+    任何人在工作區留一份 scratch / 備份 `.py`，都會被掃進來、然後因為「未歸類」
+    而在本機把這條守衛弄紅。守衛應該守 **repo 的內容**，不是守某個人的工作區。
 
-def _is_cache_decorator(dec: ast.expr) -> bool:
-    """別名不敏感：`@st.cache_data` / `@_st_mod.cache_data` / `@_st_pool.cache_data(...)` 都算。
-
-    ⚠️ 刻意**不**寫死 `st.` —— `ui/helpers/macro/ndc.py` 用的是 `@_st_mod.cache_data`，
-    寫死模組名的樣式結構上就掃不到它（憲法 §8.2.A.1 驗證段 ① 已就地記過這個教訓）。
+    ⚠️ **已知殘留（誠實揭露，不是漏想）**：一個**全新、尚未 `git add`** 的 `.py`
+    不在這份清單裡，所以它新增的裝飾點要等到入 index 才會被看到。
+    這是刻意的取捨 —— 本守衛是 **CI 閘門**，而 CI 的 checkout 裡只有被追蹤的檔案，
+    讓兩邊看到同一組檔案，本機才不會出現「CI 綠、本機紅」這種無法重現的雜訊。
+    **已追蹤檔案的未提交修改照樣看得到**（下面讀的是磁碟上的內容，不是 blob）。
     """
-    node = dec.func if isinstance(dec, ast.Call) else dec
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(_ROOT), "ls-files", "-z", "--cached", "--", "*.py"],
+            capture_output=True, check=True, timeout=60,
+        ).stdout.decode("utf-8")
+    except Exception:            # 非 git checkout / 無 git → 退回 rglob（見下）
+        return None
+    return [p for p in out.split("\0") if p]
+
+
+def _iter_py_files():
+    _tracked = _git_tracked_py_files()
+    if _tracked is None:
+        # 降級模式：印一行讓人知道本次掃描可能含工作區殘留（不靜默切換行為）。
+        print("[st-cache-guard] ⚠️ 取不到 git 檔案清單，退回 rglob —— "
+              "工作區殘留的 .py 可能造成誤報")
+        _rels = [p.relative_to(_ROOT).as_posix() for p in sorted(_ROOT.rglob("*.py"))]
+    else:
+        _rels = sorted(_tracked)
+    for rel in _rels:
+        parts = rel.split("/")
+        if any(part in _SKIP_DIRS for part in parts):
+            continue
+        if rel in _SKIP_FILES:
+            continue
+        p = _ROOT / rel
+        if not p.is_file():
+            continue
+        yield p, rel
+
+
+def _cache_symbol_names(tree: ast.AST) -> set[str]:
+    """本檔內所有「其實就是 `st.cache_data` / `cache_resource`」的區域名字。
+
+    ⚠️ 2026-09-01 修（稽核實測）：原本的 docstring 誇口「別名不敏感」，
+    但那只對**模組**別名成立（`@_st_mod.cache_data` ✅），對**函式**別名一律逃掉：
+
+        M3  from streamlit import cache_data as memo ; @memo(ttl=60)   → 逃掉 ⛔
+        M4  _cd = st.cache_data ; @_cd(ttl=60)                          → 逃掉 ⛔
+
+    本函式把這兩種綁定收進來。迭代到定點，接得住 `a = st.cache_data` → `b = a` 的鏈。
+    （目前 repo 內 M3/M4 皆 0 命中，這是**防未來**，不是修現況。）
+    """
+    names: set[str] = set(_CACHE_ATTRS)     # from streamlit import cache_data
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                for a in node.names:
+                    if a.name in _CACHE_ATTRS:
+                        n = a.asname or a.name
+                        if n not in names:
+                            names.add(n)
+                            changed = True
+            elif isinstance(node, ast.Assign):
+                v = node.value
+                hit = ((isinstance(v, ast.Attribute) and v.attr in _CACHE_ATTRS)
+                       or (isinstance(v, ast.Name) and v.id in names))
+                if not hit:
+                    continue
+                for tgt in node.targets:
+                    if isinstance(tgt, ast.Name) and tgt.id not in names:
+                        names.add(tgt.id)
+                        changed = True
+    return names
+
+
+def _resolves_to_cache(node: ast.expr, names: set[str]) -> bool:
+    """這個運算式最終是不是 `cache_data` / `cache_resource`？
+
+    涵蓋（皆為 2026-09-01 稽核列出的繞道，實測原版全部逃掉）：
+      · `st.cache_data` / `_st_mod.cache_data`（模組別名）
+      · `memo` / `_cd`（函式別名，見 `_cache_symbol_names`）
+      · `getattr(st, "cache_data")`（M5）
+      · 上述任一種再被呼叫一層：`st.cache_data(ttl=60)`、`getattr(...)(...)`
+    """
     if isinstance(node, ast.Attribute):
-        return node.attr in ("cache_data", "cache_resource")
+        return node.attr in _CACHE_ATTRS
     if isinstance(node, ast.Name):
-        return node.id in ("cache_data", "cache_resource")
+        return node.id in names
+    if isinstance(node, ast.Call):
+        f = node.func
+        if (isinstance(f, ast.Name) and f.id == "getattr" and len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value in _CACHE_ATTRS):
+            return True
+        return _resolves_to_cache(f, names)
     return False
+
+
+def _is_cache_decorator(dec: ast.expr, names: "set[str] | None" = None) -> bool:
+    """裝飾點判定 —— 模組別名、函式別名、`getattr` 三種寫法都算。"""
+    return _resolves_to_cache(dec, names if names is not None else set(_CACHE_ATTRS))
 
 
 def _collect_sites() -> dict[str, ast.FunctionDef]:
@@ -129,10 +256,11 @@ def _collect_sites() -> dict[str, ast.FunctionDef]:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except SyntaxError:  # noqa: PERF203 — 壞檔不該讓本守衛整條掛掉
             continue
+        names = _cache_symbol_names(tree)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if any(_is_cache_decorator(d) for d in node.decorator_list):
+            if any(_is_cache_decorator(d, names) for d in node.decorator_list):
                 sites[f"{rel}::{node.name}"] = node
     return sites
 
@@ -243,6 +371,52 @@ def test_raises_entries_really_raise(key):
         f"{key} 登記為「失敗會 raise」，但 {owner_rel}::{delegate or site_fn_name} "
         f"內找不到任何 raise —— 失敗結果會被 @cache_data 鎖滿整個 TTL"
         f"（v3 憲法 §02「只快取成功結果」/ §2.4 / §1）。"
+    )
+
+
+def test_cache_decorator_is_only_used_via_at_syntax():
+    """`cache_data` 只准以 `@` 裝飾語法出現 —— 否則本檔的登記表結構上看不到它。
+
+    ⚠️ 2026-09-01 稽核實測的繞道（原版全部逃掉，目前 repo 內 0 命中，本條為防未來）：
+
+        M6  _f = st.cache_data(ttl=60)(_impl)      # 不用 @，直接套用
+
+    `_collect_sites()` 只看 `FunctionDef.decorator_list`，M6 這種寫法連被列舉的機會
+    都沒有 —— 它不是「歸類錯」，是**根本不在候選集合裡**，而那正是本檔最危險的失效模式
+    （一個看起來全綠、實際上什麼都沒看到的守衛）。故直接禁掉非 `@` 的用法。
+    """
+    offenders: list[str] = []
+    for path, rel in _iter_py_files():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError:
+            continue
+        names = _cache_symbol_names(tree)
+        deco_ids: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                for d in node.decorator_list:
+                    for sub in ast.walk(d):
+                        deco_ids.add(id(sub))
+        for node in ast.walk(tree):
+            if id(node) in deco_ids:
+                continue
+            if isinstance(node, (ast.Attribute, ast.Name)) and \
+                    not isinstance(getattr(node, "ctx", None), ast.Load):
+                continue          # 賦值目標不是「使用」
+            if isinstance(node, (ast.Attribute, ast.Name)) and \
+                    _resolves_to_cache(node, names):
+                offenders.append(f"{rel}:{getattr(node, 'lineno', '?')}")
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+                    and node.func.id == "getattr" and len(node.args) >= 2 \
+                    and isinstance(node.args[1], ast.Constant) \
+                    and node.args[1].value in _CACHE_ATTRS:
+                offenders.append(f"{rel}:{getattr(node, 'lineno', '?')}")
+    assert not offenders, (
+        "以下位置在 `@` 裝飾語法之外引用了 cache_data / cache_resource，"
+        "本檔的登記表結構上看不到它們：\n  " + "\n  ".join(sorted(set(offenders)))
+        + "\n\n請改回 `@<模組>.cache_data(...)` 的裝飾寫法並登記，"
+          "或（若確有必要）在本測試就地說明並豁免。"
     )
 
 
