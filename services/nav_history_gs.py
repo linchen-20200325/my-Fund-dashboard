@@ -331,6 +331,12 @@ def _get_worksheet(sh):
     整排重寫會把他自己取的名字改掉,而**換來的好處是零**(程式根本不看)。
     所以:**長度夠了就什麼都不做;不夠就只把尾巴缺的那幾格補上,永遠不碰 A1。**
 
+    ⚠️ **「缺幾格」取決於既有表頭有多長,不是固定一格**(2026-09-01 稽核指出,就地更正):
+    6 欄舊分頁 → 補 `G1` **一格**;而 **user 2026-08-19 明文要求支援的 3 欄最小 schema**
+    (`code | date | nav`,見 `tests/test_nav_history_gs_min_schema_v19489.py` 檔頭)
+    → 補 **`D1:G1` 四格**。`_NAV_HEADERS[len(_hdr):]` 本來就一般化了,
+    **舊註解寫「本批就是 G1」是敘述錯誤,不是程式錯誤。**
+
     ⚠️ **本處刻意偏離 `repositories/pool_repository.py::PoolRepo._ws` 與
     `repositories/portfolio_perf_repository.py::PerfRepo._ws` 的整排比對慣例**
     (`if ws.row_values(1)[: len(_HEADERS)] != _HEADERS: ws.update("A1", [_HEADERS])`)。
@@ -352,13 +358,24 @@ def _get_worksheet(sh):
         # 第 1 列整列空白(全新 / 空白工作表)→ 同樣沒有東西會被覆寫,照寫整排。
         ws.update("A1", [_NAV_HEADERS])
     elif len(_hdr) < len(_NAV_HEADERS):
-        # **只補尾巴缺的那幾格**(本批就是 G1);既有的 A1..F1 一格都不碰。
+        # **只補尾巴缺的那幾格**(6 欄表 → `G1`;3 欄最小 schema → `D1:G1`);
+        # 既有的那幾格**一格都不碰**,不論它們寫的是什麼。
         ws.update(f"{_a1_col(len(_hdr))}1", [_NAV_HEADERS[len(_hdr):]])
     return ws
 
 
 def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any = None) -> dict:
     """批次 append 多筆 nav 點:**讀一次去重 + 一次 append_rows**(省 Sheets quota;60 reads/min)。
+
+    ⚠️ **2026-09-01 誠實更正:本路徑現在是 2 次 read,不是 1 次。**
+    `_get_worksheet` 為了判斷表頭要不要補欄,多發了一次 `ws.row_values(1)`
+    (在既有分頁上;分頁不存在的新建路徑不受影響)。上面那句「讀一次」描述的是
+    **去重讀**(`get_all_values`)那一次,仍然只有一次;但**整條寫入路徑的 read 次數
+    由 1 變 2**,這是本次加第 7 欄付出的代價,登記在此。
+    ⚠️ **刻意不為了省這次 read 改用 `existing[0]`**(總管 2026-09-01 裁決):那會讓
+    同一個不變式長出**兩條實作路徑**(一條在 `_get_worksheet` 內、一條在外),
+    而 `_get_worksheet` 是讀寫兩條路徑**共用**的。「最小改動」與「單一真相源」
+    兩條都指向**改敘述、不改程式**。
 
     points: [{"code", "nav", "nav_date", "fund_name"(opt), "source"(opt)}]
     回傳 {"written": int, "skipped": int}。

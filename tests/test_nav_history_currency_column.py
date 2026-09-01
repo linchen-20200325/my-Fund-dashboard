@@ -158,11 +158,12 @@ def test_clean_points_keeps_currency_key():
         f"currency 被白名單丟掉了(整條線靜默 no-op);實得 {out!r}")
 
 
-def test_existing_6col_sheet_gets_only_the_missing_cell_filled():
+def test_existing_6col_sheet_gets_only_the_missing_cells_filled():
     """既有 6 欄分頁 → **只補 G1 那一格**,不是整排重寫。
 
-    ⚠️ **本則 2026-09-01 改寫過**(原名 `test_existing_6col_sheet_gets_header_repaired_not_resized`,
-       原本只斷言 `ws.rows[0] == _HDR7`)。舊斷言在**兩種實作下都會通過** ——
+    ⚠️ **本則 2026-09-01 加嚴過**(原名 `test_existing_6col_sheet_gets_header_repaired_not_resized`,
+       原本只斷言 `ws.rows[0] == _HDR7`)。**舊斷言保留、另外再加新斷言 —— 是加嚴,不是替換。**
+       舊斷言在**兩種實作下都會通過** ——
        「整排重寫 A1:G1」與「只補 G1」對這個英文表頭 fixture 產生**完全一樣的結果**,
        所以它證明不了本函式真正的行為。現在改成斷言**動到了哪幾格**。
 
@@ -201,6 +202,31 @@ def test_user_authored_headers_are_never_overwritten():
     assert all(r != "A1" for r, _v in ws.updates), (
         f"寫了 A1 → 覆寫了使用者的表頭;實得 {ws.updates!r}")
     assert ws.rows[-1][6] == "JPY"        # 資料照樣落在第 7 欄
+
+
+def test_three_col_min_schema_gets_four_cells_filled_and_first_three_untouched():
+    """**3 欄最小 schema** —— user 2026-08-19 明文要求支援的形狀(見
+    `tests/test_nav_history_gs_min_schema_v19489.py` 檔頭)。
+
+    ⚠️ **2026-09-01 稽核補**:本 PR 前一版的敘述(PR body、`_get_worksheet` 註解、
+       本檔某個測試名)都寫「**只補缺的那一格 / 本批就是 G1**」——
+       **那只對 6 欄表成立**。3 欄表補的是 **`D1:G1` 四格**。
+       **程式一直是對的**(`_NAV_HEADERS[len(_hdr):]` 本來就一般化),
+       **錯的是敘述,而且這個形狀當時沒有任何測試。**
+
+    真正該守的不變式**與欄數無關**:**既有的那幾格,一格都不許動。**
+    """
+    zh3 = ["代碼", "日期", "淨值"]        # 使用者自己取的名字,而且只有 3 欄
+    ws = _WS([list(zh3), ["OLD", "2020/1/2", "46.58"]])
+    GS.append_points([{"code": "NEW", "nav": 1.0, "nav_date": "2026-07-22",
+                       "currency": "GBP"}], _sheet=_Sheet(ws))
+
+    assert ws.updates == [("D1", [["fund_name", "source", "recorded_at", "currency"]])], (
+        f"3 欄表補的應該是 D1:G1 四格,而且不得碰 A1:C1;實得 {ws.updates!r}")
+    assert ws.rows[0][:3] == zh3, (
+        f"使用者的 3 欄表頭被改掉了;實得 {ws.rows[0][:3]!r}")
+    assert ws.rows[0] == zh3 + ["fund_name", "source", "recorded_at", "currency"]
+    assert ws.rows[-1][6] == "GBP"        # 資料照樣落在第 7 欄
 
 
 def test_header_already_full_length_is_left_completely_alone():
@@ -370,6 +396,130 @@ def test_load_series_declares_currency_only_when_every_row_agrees():
                    ["X", "2026-07-21", "10.0", "", "app", "t", "USD"],
                    ["X", "2026-07-22", "10.1", "", "app", "t", ""]])
     assert "currency" not in GS.load_series("X", _sheet=_Sheet(partial)).attrs
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 5. `backfill_to_gs` 的幣別寫入路徑(**第二個寫入端**)
+#
+# ⚠️ **這一段是 2026-09-01 獨立稽核擋下 PR 後補的,原因要寫清楚**:
+#    本 PR 自陳「補上寫入端的列形狀契約」,但**兩個寫入端只守了一個** ——
+#    `ui/helpers/nav_history_hook.py` 有守,`backfill_to_gs` **零守衛**。
+#    稽核實跑兩個突變,**全套 6310 passed 一顆都沒紅**:
+#      突變 1:換源時幣別不跟隨(退回 3-tuple 語意)→ 全綠
+#      突變 2:`"currency": _ccy` → `"currency": ""`(永遠不寫幣別)→ 全綠
+#    而突變 1 當場重現了本 PR 要修的那個造假:MoneyDJ(USD, 30 天) 被
+#    yahoo(EUR, 600 天) 換掉之後,**600 列全部掛上已經被丟棄那條序列的 USD 宣告**。
+#    憲法明列「突變測試(拔掉修復邏輯必須轉為紅燈)」是必做項 —— 沒有這一段,
+#    本 PR 最核心的那個修法**沒有任何測試看著它**,而這張表是**永不刪除**的。
+# ══════════════════════════════════════════════════════════════════════
+@pytest.fixture
+def _cache_store(monkeypatch):
+    """本地 cache 讀寫改記憶體(不碰磁碟)。慣例同 `tests/test_nav_currency_swap_guard.py`。"""
+    import services.nav_history_store as NS
+    store: dict = {}
+    monkeypatch.setattr(NS, "_load_cache_series",
+                        lambda code: store.get(code, pd.Series(dtype=float)))
+    monkeypatch.setattr(NS, "_save_cache_series",
+                        lambda code, s: store.__setitem__(code, s))
+    return store
+
+
+def _wire_backfill(monkeypatch, *, fd, yahoo=None, pool_ccy=None):
+    """接上每日排程實際走的那條鏈的所有外部邊界,回傳「寫進雲端的點」。
+
+    慣例沿用 `tests/test_nav_currency_swap_guard.py::_wire_l2`(同一條鏈、同一組邊界)。
+    `load_points` 回 `[]` → Gate 0 零重疊 → verdict `clean` 放行
+    (那是 Gate 0 的**已知破口 a**,本節刻意利用它把幣別這條線單獨隔離出來測)。
+    """
+    import repositories.fund.sources as SRC
+    import repositories.pool_repository as POOL
+    import services.moneydj_fetcher as MF
+    import services.nav_history_gs as _GS
+
+    _empty = pd.Series(dtype=float)
+    monkeypatch.setattr(MF, "auto_fetch_moneydj", lambda code, **kw: fd)
+    monkeypatch.setattr(POOL, "resolve_isin", lambda code: "LU0000000001")
+    monkeypatch.setattr(POOL, "resolve_currency", lambda code: pool_ccy)
+    monkeypatch.setattr(SRC, "_src_yahoo_finance_nav",
+                        lambda code: (yahoo if yahoo is not None else _empty))
+    monkeypatch.setattr(SRC, "_src_morningstar_nav",
+                        lambda code, fund_name="": _empty)
+    monkeypatch.setattr(SRC, "_src_cnyes_nav", lambda code: _empty)
+    monkeypatch.setattr(_GS, "is_enabled", lambda: True)
+    monkeypatch.setattr(_GS, "load_points", lambda code=None, **kw: [])
+    written: list = []
+
+    def _append(points, **kw):
+        written.extend(points)
+        return {"written": len(points), "skipped": 0}
+
+    monkeypatch.setattr(_GS, "append_points", _append)
+    return written
+
+
+def _daily(n, start="2020-01-01", ccy=None):
+    return _series(_days(n, start), [10.0 + i * 0.001 for i in range(n)], ccy=ccy)
+
+
+def test_backfill_writes_the_currency_measured_on_the_series(monkeypatch, _cache_store):
+    """`backfill_to_gs` 寫入的每一點都帶**序列量到的**幣別。
+
+    序列夠長(跨度 > `_SPAN_TARGET_DAYS`)→ 不觸發 ISIN 救援,單獨隔離「基本路徑」。
+
+    **突變**:`"currency": _ccy` → `"currency": ""` → 本則必須轉紅。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(monkeypatch, fd={"series": _daily(2000, ccy="USD"),
+                                              "fund_name": "F"})
+    out = NS.backfill_to_gs(["X"])
+    assert out["results"][0]["fetched"] == 2000 and out["results"][0]["source"] == "moneydj"
+    assert written, "沒有任何點被寫進雲端 → 本則什麼都沒測到"
+    assert {p["currency"] for p in written} == {"USD"}, (
+        f"寫入的幣別不是序列量到的值;實得 {sorted({p['currency'] for p in written})!r}")
+
+
+def test_backfill_currency_follows_the_adopted_series_when_rescue_swaps_source(
+        monkeypatch, _cache_store):
+    """⭐ **本 PR 最核心的那個修法,這是唯一看著它的守衛。**
+
+    MoneyDJ(USD、30 天)跨度不足 → `_rescue_by_isin` 換成 yahoo(EUR、600 天)。
+    被寫入的 600 列**每一列都來自 yahoo**,所以幣別必須是 **EUR**;
+    掛上 MoneyDJ 那條**已經被丟棄**的序列的 USD 宣告 = §1 明令禁止的憑空編造,
+    而且會**永久**留在 `nav_history`(去重鍵 `(code, date)`、永不刪除)。
+
+    **突變**:把換源時的幣別跟隨拿掉(退回 3-tuple 語意)——
+    `s, src, _cur = _cand, f"{_name}(ISIN)", _span(_cand)` → 本則必須轉紅
+    (實測突變後 `currency` 集合會變成 `{'USD'}`)。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(
+        monkeypatch,
+        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "fund_name": "F"},
+        yahoo=_daily(600, "2020-01-01", ccy="EUR"))
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    assert "yahoo" in (r["source"] or ""), (
+        f"救援沒有換源 → 本則沒測到要測的東西;實得 source={r['source']!r}")
+    assert written, "沒有任何點被寫進雲端 → 本則什麼都沒測到"
+    _got = {p["currency"] for p in written}
+    assert _got == {"EUR"}, (
+        f"換源後幣別沒有跟著換 —— 被丟棄那條序列的宣告被掛到 {len(written)} 列上;"
+        f"實得 {sorted(_got)!r}")
+    assert "USD" not in _got, "MoneyDJ 的宣告出現在 yahoo 的列上(§1 憑空編造)"
+
+
+def test_backfill_never_falls_back_to_fd_currency(monkeypatch, _cache_store):
+    """第二個寫入端同樣**不得**退回 `fd["currency"]`(宣告線)。
+
+    fixture 刻意讓兩條線矛盾:`fd["currency"]="TWD"`、序列不宣告 → 必須寫 `""`。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(monkeypatch,
+                             fd={"series": _daily(2000), "currency": "TWD",
+                                 "fund_name": "F"})
+    NS.backfill_to_gs(["X"])
+    assert written and {p["currency"] for p in written} == {""}, (
+        f"取到了「宣告線」(fd['currency'])而不是「量測線」;"
+        f"實得 {sorted({p['currency'] for p in written})!r}")
 
 
 # ══════════════════════════════════════════════════════════════════════
