@@ -63,6 +63,13 @@ WIREFRAME_DISPLAY_ORDER = (
     "_sec_policy",    # 保單管理（Google Sheets）—— WP-E 會把「連線／授權」搬去 ⑤
     "_sec_overview",  # 配置總覽（內含三個子 slot，見 OVERVIEW_SUB_ORDER）
     "_sec_overlap",   # 持股重疊度診斷
+    # 2026-09-01（客戶拍板線框 `docs/wireframes/ia-wireframe.html` Tab 04）：
+    # 🎯 換股顧問自 ② 持倉體檢搬入。線框 Tab 04 的相對順序是
+    # 「核心/衛星現況 → …… → **換股顧問** → …… → **交易帳本**」，
+    # 故建在 `_sec_overlap` 與 `_sec_ledger` 之間。
+    # ⚠️ 那一批**刻意不重排既有七個 slot**（那是「④ 全頁改版」，屬另一批）——
+    #    本行是**插入一個新 slot**，既有七個的相對順序一格未動。
+    "_sec_switch",    # 🎯 換股顧問（自 ② 搬入；線框：換股顧問在交易帳本之前）
     "_sec_ledger",    # 帳本（T7）+ 費用與扣款
     "_sec_ai",        # AI 摘要
     "_sec_raw",       # Raw data（核對數字來源，留最後、不擋路）
@@ -83,6 +90,14 @@ PRE_MIGRATION_EXECUTION_ORDER = (
     "_sec_add",       # 原 :2075-2793 加入與管理基金（含載入 / 清單 / 矩陣 / 健診）
     "_sec_ledger",    # 原 :2795-2822 帳本 + 費用與扣款
     "_sec_ai",        # 原 :2824-2827 AI 摘要
+    # 2026-09-01：🎯 換股顧問自 ② 搬入，`with` **附加在最後**。
+    # ⚠️ 這是本表唯一一次被加長，而且**刻意只能加在尾端** ——
+    #    上面九項的相對順序一格未動，故本檔要防的四處 session_state 先寫後讀耦合
+    #    全部不受影響（新區塊只讀，見 `tests/test_ia_switch_advisor_moved_to_portfolio.py`
+    #    的 `test_switch_block_only_reads_session_state_keys_nobody_else_uses`）。
+    #    日後若有人想把它插到中間去「讓執行順序也照版面走」，本條會當場轉紅 ——
+    #    那正是它存在的理由。
+    "_sec_switch",    # 🎯 換股顧問（新增；顯示位置另由建立順序決定）
 )
 
 

@@ -166,16 +166,36 @@ MISWRITTEN_TAB_NAMES: frozenset = frozenset({
 #      manage        → `ui/tab_settings_diag.py::_render_maintain_section` 的分區標題
 #      diag          → 同檔 `_render_diag_section`
 #      manual        → 同檔 `_render_manual_section`
-#    ⚠️ 那兩個合併頁**目前仍各自持有自己的字面值**（它們不在本批的檔案邊界內）。
-#    本表是**唯一真相源**，兩個合併頁應在後續批次改吃它 —— 已列入 PR 描述的
-#    待辦，`tests/test_story_nav.py::test_section_labels_match_merged_pages`
+#      switch        → `ui/helpers/fund_grp_health/switch_advisor_section.py::`
+#                      `render_switch_advisor_section` 的分區標題（渲染於 ④ 資產配置）
+#      pf_add        → `ui/tab3_portfolio.py` 的「加入與管理基金」區塊標題
+#    ⚠️ 上面**前五個**合併頁**目前仍各自持有自己的字面值**（它們不在當時那一批的
+#    檔案邊界內）。本表是**唯一真相源**，那些頁應在後續批次改吃它 —— 已列入 PR
+#    描述的待辦，`tests/test_story_nav.py::test_section_labels_match_merged_pages`
 #    以實際檔案內容比對，兩邊漂移時會**當場轉紅**（不是靠人記得）。
+#    ⚠️ **`switch` 不一樣，不要跟前五個混為一談**：它**已經**吃這張表
+#    （`section_label("switch")`），沒有第二份字面值。故它的漂移鎖走 **AST 接線驗證**
+#    而不是字串比對 —— 見 `tests/test_ia_switch_advisor_moved_to_portfolio.py::`
+#    `test_section_heading_uses_the_ssot_label_and_a_stable_anchor`。
+#    ⚠️ **`pf_add` 目前仍是前五個那一類**（`ui/tab3_portfolio.py` 自己持有字面值，
+#    本批未改該行）—— **它沒有字串比對漂移鎖**，據實寫在這裡而不是假裝有。
 _SECTION_LABELS: dict[str, str] = {
     "fund":   "🔍 單檔深掘",
     "batch":  "📦 批次掃描",
     "manage": "🗄️ 資料維護與通報",
     "diag":   "🔭 資料診斷",
     "manual": "📖 說明書",
+    # 2026-09-01（客戶拍板線框 `ia-wireframe.html` Tab 04）：換股顧問自 ② 持倉體檢
+    # 搬到 ④ 資產配置。理由是客戶逐字給的 —— **它產出的是「要執行的動作」，
+    # 而 ② 全篇只診斷、不建議**。線框 p2「這裡不放什麼」明列
+    # 「換股建議與再平衡試算 → 04（那是決策，不是診斷）」。
+    # ⚠️ 名字取線框的「換股顧問」（不是舊的「換股池顧問」）—— 線框是客戶看過並
+    #    拍板的那份視覺，其餘四個分區名同樣以線框為準（見 `_TAB_LABELS` 的同型註記）。
+    "switch": "🎯 換股顧問",
+    # ④ 頁內既有的「加入基金」區塊。收進本表**只為了讓指路文案有 SSOT 可吃** ——
+    # 換股顧問在「一檔持倉都還沒載入」時要告訴使用者「去哪補」，而那個地方就是它。
+    # 手抄「➕ 加入與管理基金」六個字正是本模組整篇在防的事。
+    "pf_add": "➕ 加入與管理基金",
 }
 
 # 分區 → 它住在哪個頂層分頁。`where_to_find()` 與導覽的 key 解析都吃這張表。
@@ -185,6 +205,8 @@ _SECTION_TO_TAB: dict[str, str] = {
     "manage": "settings",
     "diag":   "settings",
     "manual": "settings",
+    "switch": "portfolio",
+    "pf_add": "portfolio",
 }
 
 

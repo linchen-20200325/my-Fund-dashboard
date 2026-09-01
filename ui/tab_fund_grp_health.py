@@ -354,13 +354,33 @@ def render_fund_grp_health_tab() -> None:
         except Exception as _e_bt:
             system_error("配置回測區塊渲染失敗", _e_bt)
 
-    # v19.428:🎯 換股池顧問(選股池 + 依持倉×池的換股建議)。選股池 CRUD 永遠可用;
-    # 換股建議按鈕觸發(避免每次重整補抓池中標的)。缺 macro/FX 由 section 內誠實降級(§1)。
-    try:
-        from ui.helpers.fund_grp_health.switch_advisor_section import render_switch_advisor_section
-        render_switch_advisor_section(_funds_extra)
-    except Exception as _e_sw:
-        system_error("換股池顧問區塊渲染失敗", _e_sw)
+    # ── 🎯 換股顧問:2026-09-01 已搬到 ④ 資產配置 ─────────────────────────────
+    # ~~v19.428:🎯 換股池顧問(選股池 + 依持倉×池的換股建議)。選股池 CRUD 永遠可用;~~
+    # ~~換股建議按鈕觸發(避免每次重整補抓池中標的)。缺 macro/FX 由 section 內誠實降級(§1)。~~
+    # ~~render_switch_advisor_section(_funds_extra)~~
+    # **有意識的政策變更,不是漏刪** · 日期 **2026-09-01** · 決策者:**客戶拍板線框**
+    # (`docs/wireframes/ia-wireframe.html`)。
+    #
+    # **客戶給的理由(逐字,不是本組的判斷)**:線框 Tab 02「這裡不放什麼」寫著
+    # 「換股建議與再平衡試算 → **04**(那是決策,不是診斷)」;Tab 04「從哪裡搬來」寫著
+    # 「換股顧問 ─ 自 02 的健診段切出」。② 全篇**只診斷、不建議**,而換股顧問產出的是
+    # **要執行的動作**。
+    # **舊寫法的理由仍然成立**(換股建議確實需要「持倉 × 選股池」,而 ② 手上剛好有
+    # 一份健診完的持倉);被權衡掉的是**它放在哪一頁** —— ④ 同樣有一份持倉健診結果
+    # (`_funds_extra`),不必為了搬家重抓一次。
+    #
+    # ⚠️ **這一行指路是必要的,不是客套**:使用者原本在本頁找得到的東西被搬走了。
+    #    本 repo 前例:一批 UI 重整打壞 6 處使用者可見的指路,由紅隊擋下。
+    #    分區名走 `story_nav.where_to_find('switch')` SSOT —— **不得**手抄
+    #    「④ 資產配置」或「🎯 換股顧問」,那正是本 repo 已經指錯三次的寫法。
+    # ⚠️ **顏色**:功能搬到別頁**不是系統故障**,用灰色 caption(三態顏色分離),
+    #    不得用 st.error / st.warning。同 `ui/tab3_portfolio.py` WP-G 那一行指路的處置。
+    from ui.helpers.story_nav import where_to_find as _where_to_find_sw  # noqa: PLC0415
+
+    st.caption(
+        f"🎯 換股顧問(依你的持倉 × 選股池產生換股建議)請看 {_where_to_find_sw('switch')} —— "
+        "本頁只回答「哪一檔出問題了」,要換什麼、怎麼配是決策,集中在那一頁。"
+    )
 
     # v19.58 — 其餘進階貼圖區塊（真實收益矩陣 + 投資試算 + 持股 + 多檔比較 + AI…）。
     # 基金體檢 PK + 4 大健診卡已上移至健診總表之前，不再由此區塊渲染（避免上下重複）。

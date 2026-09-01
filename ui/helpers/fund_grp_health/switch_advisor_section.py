@@ -6,12 +6,34 @@ L3 orchestrator:選股池 CRUD(L1 `pool_repository`,EX-CRUD-1)+ 讀已載入持�
 取數走既有 L2/L3:持倉列用 `fund_grp_health.rotation._assemble_rows`;池中未載入標的用
 `services.fund_row.process_one_fund` 補抓(L2);總經 composite 讀 session;匯率位階走
 `fx_regime.fx_regime_by_ccy`。**教學非保證**:缺條件誠實回持有/資料不足(§1),不硬給動作。
+
+⚠️ **本檔住在 `ui/helpers/fund_grp_health/`(② 持倉體檢的 helper 套件),但自 2026-09-01
+起它渲染在「④ 資產配置」** —— 路徑與渲染位置不一致,是**刻意的**,不是漏搬。
+理由(客戶拍板線框 `docs/wireframes/ia-wireframe.html` Tab 02「這裡不放什麼」):
+換股顧問產出的是**要執行的動作**,而 ② 全篇**只診斷、不建議**,故渲染位置移到 ④;
+但**檔案本身不搬**,因為 `ui/tab_manage.py` 另有 4 處直接 import 本檔的
+`_render_pool_editor` / `_pool_oauth_client`(⑤ 的選股池 CRUD),
+且 `tests/test_ui_grid_contract.py` / `test_ui_rerun_contract.py` /
+`test_help_plain_language.py` / `test_render_state_color_separation.py`
+都以本檔路徑為錨點登記。搬檔 = 純 cosmetic、卻要動 4 個 import + 4 個測試錨點,
+正是 `CLAUDE.md §8.1 step 6`「用不到的抽象」與 §8.4 step 4「禁止自作主張大重構」的反例。
+→ **已登記回報總管**:若日後要把檔案搬進 `ui/helpers/portfolio/`,那是獨立的一批,
+   不該夾帶在「換渲染位置」這件事裡。
+
+⚠️ **唯一 production 渲染入口是 `ui/tab3_portfolio.py::render_portfolio_tab`**
+(② `ui/tab_fund_grp_health.py` 自 2026-09-01 起只留一行灰色指路,不再渲染本區塊)。
+漂移鎖:`tests/test_ia_switch_advisor_moved_to_portfolio.py`。
 """
 from __future__ import annotations
 
 import streamlit as st
 
 from ui.helpers.render_state import system_error
+
+#: 區塊錨點。Streamlit 對中文標題自動產生的 anchor 不可靠 → 顯式指定
+#: (沿用 `ui/tab_settings_diag.py` 的 `ANCHOR_*` 慣例)。
+#: 客戶鐵則:④ 內部**不得**再開一層 `st.tabs` → 分區靠「區塊 + 標題 + 錨點」。
+ANCHOR_SWITCH: str = "pf-sec-switch"
 
 _TYPE_OPTS = ["自動(ER 判定)", "震盪", "成長"]
 _PRINCIPAL = 1_000_000.0     # 補抓池中標的用的名目本金(僅為走健診管線,不影響型態/基期)
@@ -586,12 +608,30 @@ def _render_advice(res: dict, macro, fxlbl) -> None:
 
 
 def render_switch_advisor_section(funds: list) -> None:
-    """🎯 換股池顧問 —— 選股池管理 + (按鈕觸發)換股建議。funds = 已載入持倉 rich dict。"""
+    """🎯 換股顧問 —— 讀選股池 + (按鈕觸發)換股建議。funds = 已載入持倉 rich dict。
+
+    **渲染位置:④ 資產配置**(`ui/tab3_portfolio.py::render_portfolio_tab`)。
+    2026-09-01 之前渲染在 ② 持倉體檢;搬遷理由見模組 docstring。
+    `funds` 由 ④ 既有的持倉健診結果重組(`_build_fund_dict`)—— **不另外抓一次**。
+    """
     from repositories.pool_repository import list_pool
     from services.switch_advisor import advise_switches
 
     st.divider()
-    st.markdown("### 🎯 換股池顧問(選股池 + 換股建議・教學非保證)")
+    # 2026-09-01(客戶拍板線框 `ia-wireframe.html`):
+    #   (a) 標題吃 `story_nav.section_label("switch")` SSOT —— ② 那一行指路與本標題
+    #       自此是同一個字串,不會再各自漂移(本 repo 指路已經指錯三次)。
+    #   (b) 名字由 ~~「換股池顧問」~~ 改為線框的「**換股顧問**」
+    #       (**有意識的改名,不是漏改** · 決策者:客戶拍板線框 · 日期 2026-09-01)。
+    #       舊名的理由仍然成立(它同時涵蓋「選股池」與「顧問」兩件事),被權衡掉的原因是
+    #       線框是客戶逐字看過的那份視覺;而且選股池 CRUD 早在 v19.433 就搬去 ⑤ 了,
+    #       「池」字留在標題只會讓人以為在這裡可以加減選股池。
+    #   (c) 改用 `st.subheader(..., anchor=...)` —— 渲染層級與 `###` 相同,
+    #       多的是一個穩定錨點(④ 不得再開一層 st.tabs → 分區靠標題 + 錨點)。
+    from ui.helpers.story_nav import section_label as _section_label  # noqa: PLC0415
+
+    st.subheader(f"{_section_label('switch')}(選股池 + 換股建議・教學非保證)",
+                 anchor=ANCHOR_SWITCH)
 
     # v19.433:選股池的加/刪/改已移到管理室集中管理(避免同一 st.tabs run
     # 兩處都渲染 _render_pool_editor → DuplicateWidgetID)。本區仍讀選股池做配對(下方按鈕)。
@@ -610,7 +650,22 @@ def render_switch_advisor_section(funds: list) -> None:
                "本區直接讀你的選股池做換股配對。")
 
     if not funds:
-        st.info("尚未載入持倉基金 → 先在上方載入基金,再回來產生換股建議。")
+        # 2026-09-01 三態顏色分離(客戶鐵則 03)+ 空狀態三要素(鐵則 04)。
+        # ⚠️ **這是刻意的行為變更,不是「零行為變更」**:原本是 `st.info`(藍色)。
+        #   「還沒載入持倉」不是系統故障、也不是業務警示,它是**前提不足** → 灰。
+        #   藍色 info 在本 repo 沒有被指派任何語意,等於第四種顏色。
+        # ⚠️ 文案也必須改:原文「先在**上方**載入基金」在 ② 是對的(② 的貼碼框就在上面),
+        #   搬到 ④ 之後「上方」指的是另一個東西 —— 指路一旦搬家就會說謊,
+        #   這正是本 repo 已經發作過的那個病。改吃 `where_to_find` SSOT。
+        from ui.helpers.ia import empty_state  # noqa: PLC0415
+        from ui.helpers.story_nav import section_label as _sl  # noqa: PLC0415
+
+        empty_state(
+            "還沒有可以配對的持倉",
+            "本區要拿「你目前的持倉」去跟選股池配對,而現在一檔都還沒載入",
+            where=f"本頁的「{_sl('pf_add')}」(載入後回到本區)",
+            footer="載入之後這裡會出現「產生換股建議」按鈕。",
+        )
         return
 
     render_portfolio_tracking(funds)                    # 📈 績效追蹤(走勢 + 快照)
