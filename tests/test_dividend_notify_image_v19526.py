@@ -101,10 +101,16 @@ def test_published_path_is_year_month_scoped(monkeypatch, wired):
         seen["path"], seen["bytes"] = path, data
         return _URL
     monkeypatch.setattr(AP, "publish_asset", _pub)
+    # ⚠️ v19.538:「未指定目標月」分兩條路(28 號準時 → 下個月;1~3 號 → 本月,見
+    # `_LATE_RUN_GRACE_DAYS`)。本測驗的是準時那一條的檔名,故把「現在」凍結在當月 28 號
+    # —— 不凍結的話這條測試每月 1~3 號會自己翻面(吃真實今天)。
+    import datetime as _dt
+    _real = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
+    _now = _real.replace(day=28, hour=8, minute=23, second=0, microsecond=0)
+    monkeypatch.setattr(M, "_now_tw", lambda: _now)
+
     assert M.main([]) == 0
     # 檔名帶「目標月」(=下個月)→ 每月一張、不互相覆蓋,舊訊息的圖不會被蓋掉
-    import datetime as _dt
-    _now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
     _ny, _nm = (_now.year + 1, 1) if _now.month == 12 else (_now.year, _now.month + 1)
     assert seen["path"] == f"dividend-calendar/{_ny}-{_nm:02d}.png"
     assert seen["bytes"] == _PNG

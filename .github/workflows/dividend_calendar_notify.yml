@@ -1,18 +1,58 @@
-name: "除息行事曆 月初摘要 (LINE)"
+name: "除息行事曆 月底摘要 (LINE)"
 
-# 每月月初對「持倉 ∪ 追蹤清單」推估**下個月**除息日(遇六日/國定假日順延營業日)+ 到帳區間
+# 每月**月底**對「持倉 ∪ 追蹤清單」推估**下個月**除息日(遇六日/國定假日順延營業日)+ 到帳區間
 # (除息 +5~7 營業日)→ 推一張**月曆圖檔 + 圖下方文字清單**到 LINE。
 # 圖 = 截 App「我的管理室 → 除息行事曆」同一份 HTML,兩邊同源。
 # 產圖/發佈/推圖任一步失敗 → 自動退 Flex 彩色卡片 → 再退純文字,提醒一定送達(§1)。
-# ⚠️ cron 是 UTC。台灣 = UTC+8。 0 0 1 * * = 每月 1 號 00:00 UTC = 1 號 08:00 台灣。
+#
+# ⚠️⚠️ **「28 號」與「推下個月」是一組配對,改一邊必須改另一邊**(v19.537 事故成因):
+#   2026-08-13 建這條 workflow 時是「1 號發**本月**」;2026-08-24 commit 2ec9819(PR #705)
+#   把目標月改成**下個月**,cron 卻沒跟著改 → 變成「1 號發下個月」,user 2026-09-01 裁示
+#   「絕對不會是月初發布下個月」。連帶缺口:**2026 年 9 月的行事曆永遠不會被自動送出** ——
+#   舊設定的 9/1 會送 10 月、新設定的 9/28 也送 10 月,**兩條路徑都產不出 9 月**
+#   (補送走 workflow_dispatch 的 target_month)。
+#   ⚠️ 上一句講的是「**設定會產生什麼結果**」,不是「某次執行送了什麼」——
+#     這條 workflow **至今一次排程都沒跑過**(2026-09-01 查 Actions API:6 次執行
+#     **全部**是 workflow_dispatch、最早 2026-08-24,`event=schedule` 命中 **0**)。
+#   → 只准兩種配對:**月底發下個月**(現行)或 **月初發本月**。`tests/test_dividend_calendar_cron_v19537.py`
+#     鎖住 cron 字面值,漂移即紅燈。
+#
+# ⚠️ cron 是 UTC。台灣 = UTC+8。 `23 0 28 * *` = 每月 28 號 00:23 UTC = **28 號 08:23 台灣**。
+#   **為什麼是 28 號**:2 月沒有 29~31 號,固定 28 號才保證每月觸發**恰好一次**,
+#     不必再寫「今天是不是當月最後一天」的判斷(29/30/31 號會讓 2 月整月漏發)。
+#   **為什麼分鐘取 23 而非 0**:GitHub 官方文件明列排程在**每個整點**為高負載時段,會延遲
+#     甚至**直接丟棄**佇列中的 job。本 repo 實測同為 00:00 UTC 的 update_macro_history.yml:
+#     13 次 schedule 觸發**最快也要 61.9 分鐘**才起跑(中位數 144.4、最長 692.8;
+#     量測日 2026-09-01,取 `run_started_at` − 排程時刻)。錯開整點可大幅降低。
 on:
   schedule:
-    - cron: "0 0 1 * *"
+    - cron: "23 0 28 * *"
   workflow_dispatch:
     inputs:
       dry_run:
         description: "只印不送 (true/false)"
         default: "true"
+      target_month:
+        # 補送用(例:2026 年 9 月因上述 cron/目標月不同步而從未被自動送出 → 填 2026-09 手動補)。
+        # ⚠️ 格式不合法一律**報錯離開**,不會靜默退回「下個月」——
+        #    那會讓你以為補送成功、實際收到另一個月(§1 最糟的失敗模式)。
+        # ⚠️ **留空時的目標月看「今天幾號」**(v19.538,`_LATE_RUN_GRACE_DAYS`):
+        #    4 號~月底 → 下個月;**1~3 號 → 本月**(視為上月 28 號那一跑遲到跨月,
+        #    否則非閏年 2 月會整月無聲跳過)。1~3 號要送下個月 → **明填 target_month**。
+        # ⚠️ **排程跑失敗時不要按 Re-run**:Re-run 保留 event=schedule 且**不允許改 inputs**,
+        #    隔幾天才重跑會落在寬限窗外(day > 3)→ 目標月跳過一個月,而且填不了 target_month。
+        #    改成重新 Run workflow + 明填 target_month。(說明見 docs/DIVIDEND_CALENDAR_SETUP.md)
+        #    ⚠️ v19.540:這段警告**同時**要寫進下面的 `description` —— GitHub 的 Run workflow
+        #    面板**不顯示 YAML 註解**,使用者按 Re-run 那一刻唯一看得到的就是 description。
+        #    註解留著是給讀 repo 的人看理由,面板那句是給當下要按的人看。
+        # ⚠️ **補送過去的月份時,該月已有實際除息紀錄的基金會顯示「事實」而不是推估**
+        #    (`services.dividend_calendar.actual_ex_for_month`,v19.538 §16.2:信心 high、
+        #    誤差 0)。圖上目前**分不出**哪格是事實哪格是推估 —— 那是已登記的接縫
+        #    (待 UI 線框拍板),不是這裡的 bug。
+        # ⚠️ 「4 號 / 1~3 號」= `scripts/dividend_calendar_notify.py:_LATE_RUN_GRACE_DAYS`(=3),
+        #    由 tests/test_dividend_calendar_cron_v19537.py 綁住:改常數沒改這句 → 紅燈。
+        description: "指定月份 YYYY-MM(留空:4 號後=下個月 / 1~3 號=本月)。排程失敗別按 Re-run(它不讓你填本欄,又會跳過一個月)→ 改成重開一次 Run workflow 並填本欄"
+        default: ""
 
 concurrency:
   group: dividend-calendar-notify
@@ -63,6 +103,12 @@ jobs:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
           PROXY_URL: ${{ secrets.PROXY_URL }}
+          # ⚠️ **安全**:target_month 是 user 可控字串,**絕不可**用 ${{ }} 插進下面 run: 的
+          # 指令列(GitHub Actions script injection —— 插值是在 shell 之前做字串代換,
+          # 填 `; rm -rf …` 就會被當指令跑)。一律走 env,由 Python 端讀 os.environ。
+          # (既有 dry_run 那條插值只會產出固定字面值 `--dry-run` 或 `''`,不含 user 輸入,安全。)
+          # schedule 觸發時 inputs 為 null → 這個 env 會是空字串 → Python 端視為「未指定」→ 下個月。
+          TARGET_MONTH: ${{ github.event.inputs.target_month }}
         run: >
           python scripts/dividend_calendar_notify.py
           ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}

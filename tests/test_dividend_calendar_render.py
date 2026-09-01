@@ -134,7 +134,7 @@ def test_ex_record_date_wording_locked_in_four_places():
     四處 = 副標 / 明細區塊標題 / 明細表頭 / 空月文案(見 `render_month_calendar_html`)。
 
     ⚠️ **v19.534 追加 7:副標與明細標題的「本月」改成實際目標月**(總管 2026-08-26 實看
-    `v533_B_partial_2027-02.png` 後裁示)。cron 每月 1 號推的是**下個月**,而徽章寫的是真正的
+    `v533_B_partial_2027-02.png` 後裁示)。cron 每月 28 號推的是**下個月**,而徽章寫的是真正的
     目標月 —— 同一張圖上「本月」與「民國116年 2月」自相矛盾。鎖的重點仍是「除息基準日」
     這五個字連在一起,月份前綴走 `month_label` 這一份 SSOT。
 
@@ -153,7 +153,7 @@ def test_ex_record_date_wording_locked_in_four_places():
     assert '<th>預估基準日</th>' in html
     assert '<th>除息基準日</th>' not in html
     # 4) 空月文案(需要一份沒有事件的月曆才會渲染出來)
-    #    ⚠️ v19.535 待辦 3:這句原本寫死「本月」—— 與追加 7 同病(cron 每月 1 號推的是**下個月**),
+    #    ⚠️ v19.535 待辦 3:這句原本寫死「本月」—— 與追加 7 同病(cron 每月 28 號推的是**下個月**),
     #    改成吃徽章同一個月份變數。鎖的重點仍是「除息基準日」五個字,月份前綴走 `month_label`。
     from services.dividend_calendar import empty_month_note
     _empty = render_month_calendar_html(build_month_calendar([], 2026, 8))
@@ -542,7 +542,7 @@ def test_all_unpredictable_swaps_title_and_subtitle():
 
     v19.536:H1 的月份由寫死的「本月」→ **實際目標月**(走 `month_label` 這一份 SSOT)。
     v19.534 追加 7 收了副標 / 明細表標題 / chip 標籤 / LINE 首行,獨漏這個 H1 ——
-    推播每月 1 號推**下個月**,H1 寫「本月」而正下方徽章寫真正的目標月,同一張圖自相矛盾。
+    推播每月 28 號推**下個月**,H1 寫「本月」而正下方徽章寫真正的目標月,同一張圖自相矛盾。
     """
     from services.dividend_calendar import month_label
     html = render_month_calendar_html(_cal_all_unpred())
@@ -661,7 +661,7 @@ def test_all_unpredictable_table_does_not_repeat_the_date_in_the_reason():
 def test_target_month_wording_replaces_this_month_everywhere_on_the_page():
     """v19.534 追加 7:圖上所有指涉目標月的「本月」→ **實際目標月**(走 `month_label`)。
 
-    cron 每月 1 號推的是**下個月**:徽章寫「民國116年 2月」、副標卻寫「推估本月…」,
+    cron 每月 28 號推的是**下個月**:徽章寫「民國116年 2月」、副標卻寫「推估本月…」,
     同一張圖自相矛盾。此處連虛線 chip 上方那行標籤一起守(它也寫過「本月推不出日期」)。
     """
     from services.dividend_calendar import month_label
@@ -699,7 +699,7 @@ def test_line_caption_first_line_says_not_no_dividend():
     LINE 推播預覽只看得到前一兩行 —— 原本首行是「🗓️ 基金除息行事曆 · 民國X年Y月（推估）」,
     第二行才是「本月無推估除息基準日」,user 掃過去的結論是「這個月沒事」(§1 違憲)。
 
-    v19.534 裁示 4:首行的「本月」→ **實際目標月**。cron(每月 1 號)推的是**下個月**,
+    v19.534 裁示 4:首行的「本月」→ **實際目標月**。cron(每月 28 號)推的是**下個月**,
     §15.4 規格逐字寫的「本月」在推播情境是錯的(總管 2026-08-26 認錯改規格);
     App 端目標月 = 當月時語意仍正確,兩邊都對。
     """
@@ -888,7 +888,7 @@ def test_pending_groups_never_merge_two_funds_with_different_numbers():
 def test_empty_month_note_uses_target_month_not_this_month():
     """待辦 3:`events` 與 `unpredictable` **都**空的路徑,文案不再寫死「本月」。
 
-    與 v19.534 追加 7 同病:cron 每月 1 號推的是**下個月**,徽章寫的是真正的目標月,
+    與 v19.534 追加 7 同病:cron 每月 28 號推的是**下個月**,徽章寫的是真正的目標月,
     同一張圖上「本月」與「民國116年2月」自相矛盾。
     (此路徑在推播情境不會觸發 —— 無代碼時 notify 直接 exit 2 —— 但用詞一致性仍要收:
      HTML / LINE 文字 / Flex 三處原本各寫各的,下次改文案必漏一處。)
@@ -908,3 +908,171 @@ def test_empty_month_note_uses_target_month_not_this_month():
         assert empty_month_note(2027, 2) in _surface             # 三處同一句 SSOT
         assert "本月無推估" not in _surface and "本月你的基金" not in _surface
     assert "無推估除息基準日" in _html                            # §13.8 口徑仍是「基準日」
+
+
+# ── v19.538 B-3:共用樣板的 eyebrow 不得宣稱更新頻率 ──────────────────────
+# 這一份 HTML **兩條路徑共用**,而兩條的「更新時機」不是同一件事:
+#   App(`ui/tab_manage.py`)  → 看**本月**,使用者按下去**當場現算**;
+#   LINE 推播(`render_month_calendar_png`)→ 看**下個月**,每月 28 號推一次。
+# 舊字串「追蹤清單 ∪ 持倉 · 每月月底更新」在 App 端會被讀成「這張圖要等月底才更新」,
+# 但它是剛算出來的;而改回「每月月初更新」則換推播端變錯 —— **任何頻率字眼都必然有一邊是假的**。
+# 故 eyebrow 只描述**範圍**(這張圖是誰的基金),不描述**行為**。
+_EYEBROW_EXPECTED = '<p class="eyebrow">追蹤清單 ∪ 持倉</p>'
+# 副標**字面全等鎖**(v19.539 B-3 補完)。{ml} = `services.dividend_calendar.month_label`。
+# ⚠️ 這一條才是「加任何字都會紅」的那個守衛;下面的 `_CADENCE_CLAIMS` / `_DELAY_PROMISES`
+#   只是**已知字串黑名單**,擋不住沒列進去的講法(實測見 `test_eyebrow_...` 的 docstring)。
+#   兩者的分工:字面鎖守 <header> 內那兩行(改動必然紅、必須有人重新想過);黑名單守**全頁**
+#   (footer / legend / 明細表任何角落被塞一句進去也會紅,但只限清單上的字面)。
+_SUB_EXPECTED_TMPL = ('<p class="sub">依你的基金過往配息節奏，推估{ml}的除息基準日與配息入帳日。'
+                      '加減基金 → 下次產生時一併納入。</p>')
+# 「頻率宣稱」黑名單:講「多久重畫一次」的字面,兩條路徑都必有一邊是假的。
+_CADENCE_CLAIMS = ("每月月底更新", "每月月初更新", "月底更新", "月初更新",
+                   "每月月底", "每月月初", "每月更新", "每月 28 號更新",
+                   "要等月底才會重算", "下次推播是月底")
+# 「延遲承諾」黑名單(v19.539 B-3 補完):講「新加的基金要等到某個未來時點才會納入」的字面。
+# ⚠️ 舊註解把「加減基金 → 下月自動更新」**刻意排除**在頻率字表之外,理由是「它講的是基金集合、
+#   不是重畫頻率」。那個理由在 **App 路徑不成立**:`ui/tab_manage.py` 的
+#   `build_month_calendar(_items, _now.year, _now.month, ref_day=_now.day)` 目標月就是本月、
+#   而且是按鈕按下去當場現算 —— 新加的基金**這一秒**就在月曆上(見
+#   `test_a_newly_added_fund_lands_on_this_months_calendar_immediately`)。
+#   比起被拿掉的 eyebrow「每月月初更新」(講錯頻率),這一句更糟:它**承諾了一個不存在的延遲**。
+_DELAY_PROMISES = ("下月自動更新", "下個月自動更新", "下月才會更新", "下個月才會更新",
+                   "下月才會納入", "下個月才會納入")
+
+
+def _both_paths_html():
+    """回傳 [(路徑名, html)] —— App 版型與推播版型各一份(唯一差別是 `compact`)。"""
+    _c = _cal()                                         # 共用檔頭既有 fixture
+    return [("App(tab_manage,compact=False)", render_month_calendar_html(_c)),
+            ("LINE 推播(png,compact=True)", render_month_calendar_html(_c, compact=True))]
+
+
+def test_eyebrow_states_scope_not_update_cadence():
+    """eyebrow 只講「這是誰的基金」,**不講多久更新一次** —— 兩條路徑各驗一次。
+
+    ⚠️ **這條守衛的實際射程**(v19.539 誠實化;舊 docstring 寫「加回**任何**頻率字眼即紅燈」,
+    那是假話):
+      1. **eyebrow 字面全等鎖** —— `_EYEBROW_EXPECTED` 必須原樣出現。eyebrow 那一行只要被動過
+         就紅,這一半確實是「任何字」都擋。
+      2. **全頁已知字串黑名單** —— `_CADENCE_CLAIMS` 是**列舉**,只擋清單上的那 10 個字面。
+         實測(把字串塞進**副標**而非 eyebrow):`每月月初更新` 紅;
+         `每月 28 號更新` / `要等月底才會重算` / `下次推播是月底` 當時**全部沒抓到**
+         —— 擋住 eyebrow 的一直是第 1 條字面鎖,不是黑名單。那三個已於 v19.539 補進清單,
+         但**沒列進去的講法照樣會漏**,別把這條當成語意級守衛。
+    副標本身另有字面鎖(見 `test_subtitle_is_locked_verbatim_on_both_paths`),那才是
+    「副標加任何字都會紅」的那一條。
+    """
+    for _name, _html in _both_paths_html():
+        assert _EYEBROW_EXPECTED in _html, f"{_name}:eyebrow 字面漂移"
+        for _claim in _CADENCE_CLAIMS:
+            assert _claim not in _html, (
+                f"{_name}:出現更新頻率宣稱「{_claim}」—— 本樣板兩條路徑共用,"
+                "App 是按下去現算、推播是每月 28 號,這類頻率字眼會有一邊是假的")
+
+
+# ── v19.539 B-3 補完:同一個 <header> 裡的副標也不得承諾「延遲」 ─────────────
+def test_subtitle_is_locked_verbatim_on_both_paths():
+    """副標**字面全等鎖** —— 這是唯一一條「加任何字都會紅」的守衛。
+
+    為什麼需要字面鎖而不是再擴一次黑名單:B-3 第一輪只清掉 eyebrow 的「每月月底更新」,
+    同一個 `<header>` 裡的副標「加減基金 → 下月自動更新」原封不動留著,而黑名單刻意把它排除
+    (舊註解理由:「講的是基金集合、不是重畫頻率」)。黑名單天生擋不住沒列進去的句子,
+    所以這裡改鎖字面:副標多一個字、少一個字都要有人重新想過「這句話在兩條路徑都成立嗎」。
+    """
+    from services.dividend_calendar import month_label
+    _want = _SUB_EXPECTED_TMPL.format(ml=month_label(2026, 8))     # _cal() 是 2026-08
+    for _name, _html in _both_paths_html():
+        assert _want in _html, f"{_name}:副標字面漂移,應為 {_want!r}"
+
+
+def test_no_surface_promises_a_delayed_update():
+    """**三個出口一起守**:共用樣板 / App caption / 說明文件都不得承諾「下月才會更新」。
+
+    這三處是同一句話的三個出口,v19.539 之前寫的都是「加減基金 → 下月自動更新」:
+      - `ui/helpers/dividend_calendar_render.py`  副標(App + 推播共用)
+      - `ui/tab_manage.py`                        App 區塊 caption
+      - `docs/DIVIDEND_CALENDAR_SETUP.md`         文件開頭
+    只改其中一兩處 = 又一次「只清一半」,所以連原始碼/文件的字面一起掃。
+    ⚠️ 射程同樣是**已知字串黑名單**(`_DELAY_PROMISES`),不是語意判斷;
+       共用樣板那一份另有字面鎖擋住任何改寫,原始碼/文件這兩份沒有。
+    """
+    from pathlib import Path
+    _root = Path(__file__).resolve().parents[1]
+    # (名稱, 內容, 該視為註解的行首) —— Python 原始碼會把舊句子寫在「為什麼改掉」的註解裡,
+    # 那是**要保留**的沿革;Markdown **不設任何豁免**(`>` 引言與 `*` 項目都是使用者真的會讀到
+    # 的正文,把它們當註解跳過等於在文件裡開一個洞)。
+    _surfaces = [(_n, _h, None) for _n, _h in _both_paths_html()]
+    _surfaces += [("ui/tab_manage.py",
+                   (_root / "ui/tab_manage.py").read_text(encoding="utf-8"), "#"),
+                  ("docs/DIVIDEND_CALENDAR_SETUP.md",
+                   (_root / "docs/DIVIDEND_CALENDAR_SETUP.md").read_text(encoding="utf-8"), None)]
+    for _name, _text, _cmt in _surfaces:
+        for _claim in _DELAY_PROMISES:
+            _hits = [_ln for _ln in _text.splitlines()
+                     if _claim in _ln and not (_cmt and _ln.lstrip().startswith(_cmt))]
+            assert not _hits, (
+                f"{_name}:出現延遲承諾「{_claim}」→ {_hits[:2]};"
+                "App 路徑是按下去當場現算本月,新加的基金這一秒就在月曆上,"
+                "承諾一個不存在的延遲比講錯頻率更糟")
+
+
+def test_a_newly_added_fund_lands_on_this_months_calendar_immediately():
+    """上一條禁令的**事實基礎**:App 路徑加一檔基金,它就在**本月**月曆上,沒有任何延遲。
+
+    複製 `ui/tab_manage.py::_sec_dividend_calendar` 的呼叫形狀
+    (`build_month_calendar(_items, _now.year, _now.month, ref_day=_now.day)`):
+    同樣的 now、只多一檔基金 → 事件數 +1 且新代碼出現在 HTML。
+    這一條若哪天紅了,代表 App 真的變成延遲更新 —— 那時副標才可以講延遲。
+    """
+    _now = _dt.datetime(2026, 8, 20, 9, 0, tzinfo=_dt.timezone(_dt.timedelta(hours=8)))
+    _base = [{"code": "TLZF9", "name": "安聯收益成長", "house": detect_house("安聯收益成長"),
+              "dividends": _divs(14)}]
+    _added = _base + [{"code": "NEWFD", "name": "摩根新加的", "house": detect_house("摩根新加的"),
+                       "dividends": _divs(7)}]
+    _mk = lambda _items: build_month_calendar(          # noqa: E731 — 與 App 同一組實參
+        _items, _now.year, _now.month, ref_day=_now.day)
+    _before, _after = _mk(_base), _mk(_added)
+    assert len(_after["events"]) == len(_before["events"]) + 1, "新加的基金沒有立刻進本月月曆"
+    assert "NEWFD" not in render_month_calendar_html(_before)
+    assert "摩根" in render_month_calendar_html(_after)
+
+
+def test_removing_the_cadence_word_loses_no_month_information():
+    """拿掉頻率字眼**沒有**讓「這張圖是哪個月」變得看不出來 —— 兩條路徑都還有月份。
+
+    這是上一條的配套:禁令要能成立,前提是被拿掉的資訊在別處還在(否則就是把資訊刪掉)。
+    月份在 **徽章** 與 **副標** 各出現一次;推播端另有 LINE 文字首行(見
+    `test_line_caption_first_line_says_not_no_dividend` 與 `build_summary_text`)。
+    """
+    from services.dividend_calendar import month_label
+    _cal_2027 = build_month_calendar([], 2027, 2)
+    for _compact in (False, True):
+        _html = render_month_calendar_html(_cal_2027, compact=_compact)
+        assert '<span class="badge month tnum">民國116年 2月（2027）</span>' in _html
+        assert month_label(2027, 2) in _html          # 副標/文案走同一份 SSOT
+
+
+def test_push_png_path_renders_the_same_template():
+    """推播 PNG 走的**就是**上面那份 HTML(compact=True)—— 否則上一條等於沒守到推播端。
+
+    `render_month_calendar_png` 只組 HTML 再委派 L0 `infra.html_to_png`;
+    這裡把 L0 換成間諜攔下實際傳進去的 HTML,不需要 Chromium。
+    """
+    import infra.html_to_png as _l0
+    from ui.helpers.dividend_calendar_render import render_month_calendar_png
+    _seen = {}
+    _orig = _l0.html_to_png
+
+    def _spy(html, **kw):
+        _seen["html"] = html
+        return b"\x89PNG\r\n\x1a\n"
+
+    _l0.html_to_png = _spy
+    try:
+        render_month_calendar_png(_cal())
+    finally:
+        _l0.html_to_png = _orig
+    assert _seen["html"] == render_month_calendar_html(_cal(), compact=True)
+    assert _EYEBROW_EXPECTED in _seen["html"]
+    for _claim in (*_CADENCE_CLAIMS, *_DELAY_PROMISES):
+        assert _claim not in _seen["html"]

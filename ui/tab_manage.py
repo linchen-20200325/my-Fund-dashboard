@@ -255,8 +255,17 @@ def _sec_dividend_calendar():
     import datetime as _dt
 
     st.markdown("### 🗓️ 除息行事曆")
+    # v19.539 B-3 補完:原句尾是「加減標的 → 下月自動更新」——**在 App 路徑是假的**。
+    # 下面那個 `build_month_calendar` 呼叫的目標月就是 `_now.year` / `_now.month`(= 本月),
+    # 而且是按鈕按下去當場現算,新加的標的**這一秒**就會出現在月曆上,不必等下個月。
+    # ⚠️ 這段註解**刻意不寫成 `函式名(...)` 的形狀** —— `tests/test_dividend_anchor_v19527.py::
+    #    test_production_callers_pass_the_real_day_down` 用正則抓本檔**第一個**該形狀的字串
+    #    來驗 `ref_day=` 有沒有傳下去,註解寫成呼叫樣會被它當成真正的呼叫點(實測會紅)。
+    # 這句話與 `ui/helpers/dividend_calendar_render.py` 的副標、
+    # `docs/DIVIDEND_CALENDAR_SETUP.md` 開頭是同一句話的三個出口,要改就三處一起改
+    # (守衛:tests/test_dividend_calendar_render.py::test_no_surface_promises_a_delayed_update)。
     st.caption("你的基金**本月除息 / 配息日推估**(選股池 + 已載入持倉)。用過往配息節奏推算,"
-               "**非官方公告**;累積型不配息的自動不顯示,加減標的 → 下月自動更新。")
+               "**非官方公告**;累積型不配息的自動不顯示,加減標的 → 重按產生按鈕即納入。")
 
     if st.button("🗓️ 抓選股池標的 → 產生本月除息月曆", use_container_width=True, key="divcal_gen"):
         try:

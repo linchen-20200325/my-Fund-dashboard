@@ -21,7 +21,7 @@ v19.534 顯示層複驗回修(總管 2026-08-26 實測 + 實看 v533 三張圖�
   裁示 2  月曆格 chip 的低信心「?」**移除**:整張圖沒有一處解釋它,且會與誤差帶互相矛盾
           (同一檔可能同時「?」+「±0 天」)。一個訊號、一個地方 —— 誠實訊號是誤差帶。
   追加 7  副標 / 明細表標題 / 虛線 chip 標籤的「本月」→ **實際目標月**(走 `month_label`,
-          與徽章同一個月份變數)。推播每月 1 號推下個月,「本月」在那個情境是錯的。
+          與徽章同一個月份變數)。推播每月 28 號推下個月,「本月」在那個情境是錯的。
   追加 8  「上次 M/D」離目標月超過半年 → 帶年份(L2 `fmt_last_ex`)。
   追加 9  原因欄:版面有獨立「上次實際基準日」欄時不重複帶日期(L2 `reason_display`)。
   必改 1  誤差帶改 90 分位,頁尾配一句 `ERR_BAND_FOOTNOTE` 說明它憑什麼。
@@ -370,7 +370,7 @@ def _pending_chips_html(unpredictable: list, *, year=None, month=None) -> str:
     _items = "".join(
         f'<li><span class="dot" style="background:{_e(_color(u.get("house")))}"></span>'
         f'{_e(pending_line(u, year=year, month=month))}</li>' for u in unpredictable)
-    # v19.534 追加 7:標籤原寫「本月」,但推播每月 1 號推的是**下個月** → 用實際目標月。
+    # v19.534 追加 7:標籤原寫「本月」,但推播每月 28 號推的是**下個月** → 用實際目標月。
     return (f'<p class="pending-lab">{_e(month_label(year, month))}'
             f'推不出日期（顯示上次實際基準日，僅供參考）</p>'
             f'<ul class="pending">{_items}</ul>')
@@ -404,7 +404,7 @@ def _detail_rows_html(events: list, unpredictable: list, *, year=None, month=Non
             f'<td class="why">'
             f'{_e(_pending_why(u, has_date_column=False, year=year, month=month))}</td></tr>')
     if not rows:
-        # v19.535 待辦 3:原本寫死「本月」—— 與追加 7 同病(cron 每月 1 號推的是**下個月**)。
+        # v19.535 待辦 3:原本寫死「本月」—— 與追加 7 同病(cron 每月 28 號推的是**下個月**)。
         # 文案 SSOT 在 L2 `empty_month_note`(HTML / LINE 文字 / Flex 三處同一句),
         # 月份走 `month_label` 這一份變數,與徽章 / 副標 / 明細標題同源。
         rows = (f'<tr><td colspan="4" class="muted">'
@@ -474,6 +474,25 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     `compact=True`:推播圖專用版型(窄幅 + 大字 + 收緊留白),見 `_CSS_COMPACT`。
     App 網頁版用預設 False,版面完全不變。
 
+    ⚠️ **本樣板的 eyebrow 不准寫更新頻率**(v19.538;`追蹤清單 ∪ 持倉`,句點)。
+    這一份 HTML **兩條路徑共用**,而兩條的「更新時機」根本不是同一件事:
+      - `ui/tab_manage.py` 的 App —— 看**本月**,使用者按下去**當場現算**(沒有「更新週期」);
+      - `render_month_calendar_png` → LINE 推播 —— 看**下個月**,每月 28 號推一次。
+    寫「每月月底更新」在 App 端會被讀成「這張圖要等月底才更新」(實際是剛算出來的);
+    寫「每月月初更新」則在推播端是錯的 —— **任何頻率字眼都必然有一邊是假的**。
+    真正該傳達的「這張圖是哪個月」已由下方月份徽章與副標各講一次,不缺這一句;
+    推播端另有 LINE 文字首行 `🗓️ 基金除息行事曆 · <月份>`。
+    ⚠️ 要讓兩邊各說各話請**不要**加 kwarg 硬塞一句進來(§8.1 step 6:兩邊都不需要的資訊,
+    不值得為它開一個參數)。
+    ⚠️ **同一條規矩也管副標**(v19.539 補完):副標原本寫「加減基金 → 下月自動更新」,
+    在 App 端是**假的** —— 加一檔基金這一秒就在本月月曆上,那句話卻承諾了一個不存在的延遲。
+    改為「加減基金 → 下次產生時一併納入」(App 的「下次產生」= 再按一次按鈕,推播的 = 下一次排程)。
+    守衛(`tests/test_dividend_calendar_render.py`),射程分兩層、別記成一層:
+      - `test_eyebrow_states_scope_not_update_cadence` / `test_no_surface_promises_a_delayed_update`
+        = **已知字串黑名單**,只擋清單上的字面,沒列進去的講法會漏;
+      - `test_subtitle_is_locked_verbatim_on_both_paths` + eyebrow 字面全等鎖
+        = 這兩行**加任何字都會紅**。
+
     v19.533(§15 顯示層,user 2026-08-26 拍板)三件事:
       §15.2 明細表欄位正名:「除息基準日」→ **「預估基準日」**、「信心」→ **「誤差」**。
             「預估」二字必須出現在**欄頭**(user 明確要求),不可只放頁尾免責 ——
@@ -492,16 +511,23 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     # 有自己的意圖,不代它決定。
     if _all_unp and title == _TITLE_DEFAULT:
         # v19.536:H1 原寫死「本月」—— v19.534 追加 7 把副標 / 明細表標題 / chip 標籤 /
-        # LINE 首行都換成實際目標月時獨漏這一處,推播(每月 1 號推下個月)時 H1 與正下方
+        # LINE 首行都換成實際目標月時獨漏這一處,推播(每月 28 號推下個月)時 H1 與正下方
         # 的徽章互相矛盾。月份走 L2 `all_unpred_title` → `month_label`,與 `_ml` 同源。
         title = all_unpred_title(y, m)
-    # v19.534 追加 7:副標原寫「推估**本月**…」,但徽章寫的是真正的目標月,推播(每月 1 號推
+    # v19.534 追加 7:副標原寫「推估**本月**…」,但徽章寫的是真正的目標月,推播(每月 28 號推
     # 下個月)時同一張圖自相矛盾 —— 改用與徽章同一個月份變數(`month_label`)。
     _ml = month_label(y, m)
     _sub = (f'{_e(ALL_UNPRED_SUB_1.format(n=len(unpredictable)))}<br>'
             f'{_e(ALL_UNPRED_SUB_2)}') if _all_unp else \
         (f'依你的基金過往配息節奏，推估{_e(_ml)}的除息基準日與配息入帳日。'
-         f'加減基金 → 下月自動更新。')
+         # v19.539 B-3 補完:原句是「加減基金 → 下月自動更新」。它與同一個 <header> 裡剛被
+         # 拿掉的 eyebrow「每月月底更新」同病 —— 而且更糟:eyebrow 只是**講錯頻率**,這一句
+         # **承諾了一個不存在的延遲**。App 路徑(`ui/tab_manage.py` 把 `_now.year` /
+         # `_now.month` 當目標月餵給 `build_month_calendar`)是按下按鈕**當場現算、目標月
+         # 就是本月**,新加的基金這一秒就出現在月曆上,副標卻在正下方叫使用者等下個月。
+         # 改成只講「下次產生時」——App 的「下次產生」= 再按一次按鈕(隨時),推播的「下次產生」
+         # = 下一次排程,兩條路徑都成立,且不承諾任何時間。
+         f'加減基金 → 下次產生時一併納入。')
 
     legend_html = _legend_html(events, unpredictable)
 
@@ -564,7 +590,7 @@ def render_month_calendar_html(cal: dict, *, title: str = _TITLE_DEFAULT,
     return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{_e(title)}</title>
 <style>{_CSS}{_CSS_COMPACT if compact else ''}</style></head><body><div class="wrap">
-<header><p class="eyebrow">追蹤清單 ∪ 持倉 · 每月月初更新</p>
+<header><p class="eyebrow">追蹤清單 ∪ 持倉</p>
 <h1>{_e(title)}</h1>
 <p class="sub">{_sub}</p>
 <div class="badges"><span class="badge month tnum">民國{roc}年 {m}月（{y}）</span>{sample_badge}</div>

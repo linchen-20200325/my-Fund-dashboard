@@ -1692,8 +1692,10 @@ def test_primary_direction_still_wins_when_both_are_feasible():
 def test_stale_ref_day_uses_caller_supplied_day_not_a_fixed_mid_month():
     """**bug 4**:`_stale_state` 的 ref 日改由 caller 給;預設仍是 15(相容)。
 
-    production 的 cron 是 `0 0 1 * *`(每月 1 號)→ `now.day` 恆為 1,而引擎恆用 15 號
+    production 的 cron **當時**是 `0 0 1 * *`(每月 1 號)→ `now.day` 恆為 1,而引擎恆用 15 號
     = **每次執行都把陳舊度多算 14 天**。「月中是無偏中點」只在執行日均勻分布時成立。
+    (v19.537 起 cron 改每月 28 號 → 同一個病、方向翻面成少算 13 天;本測試保留 1 號口徑
+     作為原始回歸案例 —— 要守的是「caller 傳真實日 ≠ 預設 15 號」,與是哪一天無關。)
     實測(cron 於 2026-09-01 觸發、月配、last=2026-05-11):真實靜默 113 天(< 122 天門檻),
     引擎算成 127 天 → 判疑停配 → **整檔基金從月曆上消失**。
     """
@@ -1735,7 +1737,7 @@ def test_ref_day_out_of_range_is_clamped_not_overflowed():
 def test_production_callers_pass_the_real_day_down():
     """bug 4 的另一半:L2 收得到 `ref_day` 沒用,**caller 要真的傳**。
 
-    這條鎖的是「修了但沒接線」這種最貴的假修復 —— 引擎改對了、cron 還是每月 1 號用 15 號口徑,
+    這條鎖的是「修了但沒接線」這種最貴的假修復 —— 引擎改對了、呼叫端還是走 15 號口徑,
     測試全綠而 user 的基金照樣每隔幾個月消失一次。
     """
     import pathlib
