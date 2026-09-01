@@ -512,6 +512,41 @@ def _gate0_reason(cf: dict, *, blocked: bool) -> str:
             f"{'：' + _why if _why else ''}) —— 不知道 ≠ 安全（§1）,{_tail}")
 
 
+def _expected_currency(code: str, fd) -> str:
+    """這檔基金**應該**是哪一種計價幣別 → ISO 三碼;判不出來回 `""`(未知,§1 不猜)。
+
+    順序:抓取結果自帶的 `currency`(已經過 `fund_orchestration._ensure_currency` 修過
+    死預設 USD 的那一層)→ 選股池使用者填的 `currency`。中文別名先過 L2
+    `services.currency.normalize_ccy`(本層是 L2,可以用),再由 L0 收成 ISO 三碼。
+
+    ⚠️ 這個值證明的是「上游**宣告**的幣別」,不是「宣告正確」——
+    見 `shared/data_quality.py` 該節「保護不到什麼」b 項。
+    """
+    import sys as _sys
+
+    from shared.data_quality import normalize_iso_ccy
+
+    def _norm(_raw) -> str:
+        try:
+            from services.currency import normalize_ccy
+            return normalize_iso_ccy(normalize_ccy(_raw, default=""))
+        except Exception as _e:  # noqa: BLE001 — 正規化失敗不得擋抓取,退「未知」
+            print(f"[backfill_to_gs] {code} 幣別正規化失敗:{type(_e).__name__}: {_e}",
+                  file=_sys.stderr)
+            return ""
+
+    _c = _norm((fd or {}).get("currency") if isinstance(fd, dict) else "")
+    if _c:
+        return _c
+    try:
+        from repositories.pool_repository import resolve_currency
+        return _norm(resolve_currency(code) or "")
+    except Exception as _e:  # noqa: BLE001 — 讀不到選股池 → 未知(不擋、不猜)
+        print(f"[backfill_to_gs] {code} 讀選股池幣別失敗:{type(_e).__name__}: {_e}",
+              file=_sys.stderr)
+        return ""
+
+
 def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     """一鍵補全部缺淨值:多檔基金抓**完整可得歷史** → 本地 cache + 雲端 nav_history(永久)。
 
@@ -527,6 +562,10 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
       → 本次**不寫雲端**、走 `gs_error`(fail-closed)。判定採**白名單**:只有 `clean` /
       `duplicate` 放行,`unknown` 與日後新增的 verdict 一律擋(§1 不知道 ≠ 安全)。
       被擋的檔帶 `blocked=True`(呼叫端據此把「被擋下」與「抓不到」分開報)。
+    幣別守門(2026-09-01):長歷史救援換源**之前**先比幣別 —— 候選宣告的幣別與本檔
+      預期幣別明確不一致 → **不換源**(保留原本正確幣別的序列照常寫入)+ 該檔
+      `ccy_refused` 誠實記錄理由。⚠️ 與 `blocked` 不同:這不是整檔被擋,
+      是**只拒絕那次替換**。⛔ 一律不做換匯(§4.1:禁止跨幣別直接混寫)。
       可用 `NAV_GATE0_MODE` env/secret 切 `enforce`(預設)/`observe`(判定但不擋)/`off`
       —— 見 `_gate0_mode`。⚠️ **這道閘門保護不到的情形是開放式的**(已知至少五類,
       含零重疊、code key 不一致、`gs_on=False`、其餘寫入路徑、模式被關掉)——
@@ -548,7 +587,8 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     Returns:
         {
           "results": [{code, fetched, date_min, date_max, source, span_days,
-                       error|None, blocked: bool, gate_observed: str|None}, ...],
+                       error|None, blocked: bool, gate_observed: str|None,
+                       ccy_refused: str|None}, ...],
           "gs_enabled": bool,      # 雲端是否啟用(SA + NAV_SHEET_ID)
           "gs_written": int,       # 本次去重後真正新增到雲端的列數
           "gs_error": str|None,    # 雲端寫入 / 寫入前對帳讀取失敗訊息
@@ -577,6 +617,8 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     from services import nav_history_gs
     from services.fundclear_backfill import analyze_backfill_conflict
     from services.moneydj_fetcher import auto_fetch_moneydj
+    from shared.data_quality import assess_nav_series_swap as _assess_swap
+    from shared.data_quality import nav_series_currency as _series_ccy
 
     # ── 正規化 + 去重(保序;§2.1 code 一律 upper)────────────────────────────
     _seen: set = set()
@@ -600,6 +642,12 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
 
     # ── Gate 0（2026-08-28）:寫進 nav_history 之前先跟既有歷史對帳 ──────────
     # 為什麼:`_rescue_by_isin` 的採用條件只看「筆數 × 跨度」,**沒有任何幣別條件**。
+    # ⚠️ **2026-09-01 更新:上面這句已經不完全成立,但這道閘門一點都沒有變得不必要。**
+    #    `_rescue_by_isin` 現在**多了一個幣別條件**(候選宣告的幣別與本檔預期幣別
+    #    明確不一致 → 拒絕換源,見該函式 docstring)。它擋掉的是「**兩邊都宣告了、
+    #    而且對不上**」那一種;擋不掉的至少有:候選來源根本不宣告幣別(cnyes)、
+    #    上游 meta 的幣別本身就是錯的(死預設 USD)、以及**不經過 `_rescue_by_isin`
+    #    的其餘寫入路徑**。故 Gate 0 仍是最後一道,原文保留不刪。
     # 同一檔基金的美元 / 歐元 / 避險級別在晨星、Yahoo 都查得到,跨度更長就整條換掉;
     # 而 nav_history 的去重鍵是 `(code, date)` 且**永不刪除** —— 錯的先寫進去,
     # 對的就永遠寫不進來,下游 1Y 報酬 / Sharpe / σ 全部照錯的算,而畫面不會有警示
@@ -676,7 +724,8 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         """序列跨度(日曆日);< 2 筆回 0。"""
         return int((x.index.max() - x.index.min()).days) if len(x) >= 2 else 0
 
-    def _rescue_by_isin(code: str, s: "pd.Series", src: str) -> "tuple[pd.Series, str]":
+    def _rescue_by_isin(code: str, s: "pd.Series", src: str,
+                        expected_ccy: str = "") -> "tuple[pd.Series, str, list]":
         """auto 抓到的跨度太短 → 用池中 ISIN(晨星)/ 代碼(CnYES)試長歷史,取更長者。
 
         gate:池中有 ISIN 才觸發(user 「填 ISIN 解鎖補淨值」的設計)。晨星走 ISIN→secId;
@@ -687,16 +736,28 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         orchestration `_adopt_if_better` 的 `_effective_nav_len` 哲學,不可用「稀疏但跨度
         略長」的候選換掉「密集」的現有序列(否則下游 3Y/5Y 年化因點數不足而失真,§1 更糟)。
         `_clean` 已把序列正規化為唯一日期 × 有效值,故 `len` 即有效點數。
+
+        **幣別守門(2026-09-01 新增,§1 / §4.1)**:上列三個門檻**一個字都沒提到幣別**,
+        而候選來源正是最會換幣別的兩個(晨星 `currencyId` 換算後淨值、Yahoo `{secId}.F`
+        法蘭克福掛牌)。候選宣告的幣別與本檔預期幣別**明確不一致** → **拒絕採用**
+        (顯式拒寫 + log,**絕不換算**:在寫入端偷偷換匯會做出一條「看起來連續、
+        實際混過兩種幣別」的序列,比拒絕替換危險得多)。幣別未知 → 照舊採用,
+        由 Gate 0 當第二道 —— 理由與已知破口見 `shared/data_quality.py` 該節。
+
+        Returns:
+            `(series, source, ccy_notes)` —— `ccy_notes` 是被拒絕的候選說明清單
+            (空 list = 沒有任何候選因幣別被拒),供呼叫端誠實回報給 cron / UI(§5)。
         """
+        _ccy_notes: list = []
         try:
             from repositories.pool_repository import resolve_isin
             _isin = resolve_isin(code)
         except Exception as _e:  # noqa: BLE001 — 讀 ISIN 失敗不擋(退回 MoneyDJ 短窗)
             print(f"[backfill_to_gs] {code} resolve_isin 失敗:{type(_e).__name__}: {_e}",
                   file=_sys.stderr)
-            return s, src
+            return s, src, _ccy_notes
         if not _isin:
-            return s, src
+            return s, src, _ccy_notes
         # v19.477(user 提醒流程 code→ISIN→secId→**Yahoo chart** 抓 NAV):加 Yahoo 候選。
         # `_src_yahoo_finance_nav` 用池中 secId 組 `{secId}.F` 打 Yahoo v8 chart(range=10y,
         # 美國 IP 可用) —— 這是 user 明指的主路徑;晨星 timeseries / CnYES 為輔。三源都試,
@@ -709,14 +770,30 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
                            ("morningstar", lambda: _src_morningstar_nav(code)),
                            ("cnyes", lambda: _src_cnyes_nav(code))):
             try:
-                _cand = _clean(_fn())
+                # ⚠️ 幣別要在**清洗之前**讀:`_clean` 走 dropna / 布林索引 / 排序,
+                #    pandas 的 `attrs` 不保證在這些運算後還在。
+                _raw_cand = _fn()
+                _cand_ccy = _series_ccy(_raw_cand)
+                _cand = _clean(_raw_cand)
             except Exception as _e:  # noqa: BLE001 — 單源失敗 log 後跳過,不擋整檔
                 print(f"[backfill_to_gs] {code} {_name} 救援失敗:"
                       f"{type(_e).__name__}: {_e}", file=_sys.stderr)
                 continue
             if len(_cand) >= 10 and _span(_cand) > _cur and len(_cand) >= len(s):
+                _sw = _assess_swap(expected_ccy=expected_ccy,
+                                   candidate_ccy=_cand_ccy,
+                                   candidate_source=f"{_name}(ISIN)",
+                                   current_source=src)
+                if not _sw["safe"]:
+                    # 顯式拒寫 + log(§1)。拒絕的代價只是「歷史維持原本的跨度」;
+                    # 放行的代價是一條混過兩種幣別、且因 (code,date) 去重而**永遠
+                    # 改不掉**的 nav_history。兩邊不對等 → fail-closed。
+                    print(f"[backfill_to_gs] ⛔ {code} 拒絕 ISIN 救援換源:"
+                          f"{_sw['reason']}", file=_sys.stderr)
+                    _ccy_notes.append(_sw["reason"])
+                    continue
                 s, src, _cur = _cand, f"{_name}(ISIN)", _span(_cand)
-        return s, src
+        return s, src, _ccy_notes
 
     for i, code in enumerate(uniq):
         if progress_cb is not None:
@@ -731,7 +808,11 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
              # ——那正是七條寫入路徑裡**唯一沒有閘門**的那一條。用旗標而不是比對
              # 中文錯誤字串(字串一改,呼叫端就靜默失準)。
              "blocked": False,
-             "gate_observed": None}
+             "gate_observed": None,
+             # 2026-09-01:因**幣別不一致**而被拒絕的長歷史候選(§1 顯式拒寫要被看見)。
+             # None = 沒有任何候選因幣別被拒。⚠️ 這與 `blocked` 是兩回事:`blocked` 是
+             # 「整檔沒寫入」,本欄是「換源被拒、但原本那條(正確幣別的)照樣寫入」。
+             "ccy_refused": None}
         # 逐檔全程 guard(§1「不擋整批」:任一檔抓取/清洗/組點爆掉 → 只記該檔 error)。
         try:
             fd = auto_fetch_moneydj(code, oauth_client=oauth_client)
@@ -741,7 +822,10 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
             src = "moneydj"
             # ISIN 直驅長歷史救援:auto 跨度短 → 不管前綴,用 ISIN 試晨星 / CnYES(§v19.475)
             if _span(s) < _SPAN_TARGET_DAYS:
-                s, src = _rescue_by_isin(code, s, src)
+                s, src, _ccy_notes = _rescue_by_isin(
+                    code, s, src, _expected_currency(code, fd))
+                if _ccy_notes:
+                    r["ccy_refused"] = "；".join(_ccy_notes)
             if s.empty:
                 r["error"] = (
                     "抓到序列但清乾淨後為空(全 NaN / 非正值 / 皆未來日)" if _had_raw

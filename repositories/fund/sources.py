@@ -1796,6 +1796,11 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
             # F-PROV-1 phase 10 v19.96 — provenance(Series.attrs)
             s.attrs["source"] = f"Morningstar:UK:timeseries:{sec_id}"
             s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+            # 2026-09-01:宣告**這條序列是哪一種計價幣別**。晨星 timeseries 是拿
+            # `currencyId` 要「換算後」的淨值,查不到使用者幣別時死預設 "USD" ——
+            # 不宣告出來,下游長歷史救援就會拿它整條蓋掉別種幣別的序列(§1/§4.1)。
+            # 慣例同 `repositories/fundclear_offshore.py` 的 attrs["currency"]。
+            s.attrs["currency"] = str(currency_id or "").strip().upper()
             return s
     except Exception as _e2:
         print(f"[src_morningstar] {_code} UK timeseries: {_e2}")
@@ -1822,6 +1827,7 @@ def _src_morningstar_nav(code: str, fund_name: str = "") -> "pd.Series":
                 # F-PROV-1 phase 10 v19.96 — provenance(Series.attrs;含 token 識別)
                 s.attrs["source"] = f"Morningstar:lt:{_tok}:{sec_id}"
                 s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+                s.attrs["currency"] = str(currency_id or "").strip().upper()  # 同上(§1/§4.1)
                 return s
         except Exception as _e3:
             print(f"[src_morningstar] {_code} lt/{_tok}: {_e3}")
@@ -1938,6 +1944,11 @@ def _src_yahoo_finance_nav(code: str) -> "pd.Series":
             print(f"[src_yahoo] {_code} ({yf_symbol}): 無結果")
             return pd.Series(dtype=float)
         r = result[0]
+        # 2026-09-01:Yahoo v8 chart 的 `meta.currency` 一直都在,先前**整個丟掉**。
+        # 這裡打的是 `{secId}.F`(法蘭克福掛牌)—— 同一檔基金的別種計價幣別在 Yahoo
+        # 一樣查得到,不把幣別帶出來,下游救援就會拿它整條蓋掉正確幣別的序列(§1/§4.1)。
+        # 讀不到就留空字串 = 未知(§1 不猜),由 shared.data_quality 那層當 unknown 處理。
+        _yf_ccy = str((r.get("meta") or {}).get("currency") or "").strip().upper()
         timestamps = r.get("timestamp", [])
         # v19.333 review F2:.get("quote", [{}]) 的 default 只在 key 缺失時生效;
         # API 回 "quote": [](key 在但空 list)時 [0] 會 IndexError 被外層吞掉,
@@ -1958,6 +1969,7 @@ def _src_yahoo_finance_nav(code: str) -> "pd.Series":
             # F-PROV-1 phase 10 v19.96 — provenance(Series.attrs)
             s.attrs["source"] = f"Yahoo:chart:{yf_symbol}"
             s.attrs["fetched_at"] = pd.Timestamp.now('UTC').isoformat()
+            s.attrs["currency"] = _yf_ccy        # 見上(§1/§4.1);空 = 未知,不猜
             return s
         print(f"[src_yahoo] {_code} ({yf_symbol}): 資料解析後為空")
     except Exception as _e:

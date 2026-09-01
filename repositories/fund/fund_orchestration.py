@@ -158,6 +158,18 @@ def _span_extend_insurance_nav(
     _cur_span = _nav_span_days(nav_s)
     # v19.505:池裡有 secid/isin 的基金(不限保單前綴)也走長歷史救援(span 在範圍內才查池,省 IO)
     if 0 < _cur_span < 300 and (is_insurance_code or _pool_secid_or_isin(_code)):
+        # 2026-09-01 幣別守門(§1 / §4.1):本迴圈是**整條序列替換**,而採用條件在此之前
+        # 只看「筆數 × 跨度」—— 晨星是拿 `currencyId` 要換算後的淨值(查不到就死預設 USD),
+        # 跨度更長就會把台幣序列整條換成美元序列,下游報酬/Sharpe/σ 照算、畫面無異狀。
+        # 預期幣別在此只取「不需額外網路」的既有來源(基金名 → 選股池 → 台灣字樣推定),
+        # 取不到就是未知 → 不擋(見 shared.data_quality 該節「保護不到什麼」a/b 兩項)。
+        _expect_ccy = ""
+        try:
+            from shared.data_quality import normalize_iso_ccy as _iso_ccy
+            _expect_ccy = _iso_ccy(_correct_currency("", fund_name or "", _code))
+        except Exception as _ce:  # noqa: BLE001 — 判不出幣別不得擋抓取,退「未知」
+            print(f"[orchestrator] span-extend 預期幣別判定失敗 {_code}: "
+                  f"{type(_ce).__name__}: {_ce}")
         _long_candidates = (
             ("morningstar",
              lambda: _src_morningstar_nav(_code, fund_name=fund_name or "")),
@@ -171,9 +183,29 @@ def _span_extend_insurance_nav(
                 _cand = pd.Series(dtype=float)
             if (_cand is not None and len(_cand) >= 10
                     and _nav_span_days(_cand) > _cur_span):
+                # ⛔ 幣別對不上 → **拒絕替換**(不換算、不混寫;§1 Fail Loud 的「顯式拒寫 + log」)。
+                # 拒絕的代價只是「歷史維持原本的短跨度」,而放行的代價是一條混過兩種幣別、
+                # 永遠改不掉的 nav_history —— 兩邊不對等,故 fail-closed。
+                try:
+                    from shared.data_quality import (
+                        assess_nav_series_swap as _assess_swap,
+                        nav_series_currency as _series_ccy,
+                    )
+                    _sw = _assess_swap(expected_ccy=_expect_ccy,
+                                       candidate_ccy=_series_ccy(_cand),
+                                       candidate_source=_long_src,
+                                       current_source=nav_source)
+                except Exception as _se:  # noqa: BLE001 — 判定本身壞掉不得靜默放行
+                    print(f"[orchestrator] ⛔ {_code} span-extend 幣別判定失敗,"
+                          f"保守不換源:{type(_se).__name__}: {_se}")
+                    continue
+                if not _sw["safe"]:
+                    print(f"[orchestrator] ⛔ {_code} span-extend 拒絕換源:{_sw['reason']}")
+                    continue
                 print(f"[orchestrator] 📏 {_code} span-extend "
                       f"{nav_source}({_cur_span}d/{len(nav_s)}筆) → "
-                      f"{_long_src}({_nav_span_days(_cand)}d/{len(_cand)}筆)")
+                      f"{_long_src}({_nav_span_days(_cand)}d/{len(_cand)}筆)"
+                      f" ccy={_sw['verdict']}")
                 nav_s = _cand
                 nav_source = f"{_long_src}(span-extend)"
                 _cur_span = _nav_span_days(_cand)

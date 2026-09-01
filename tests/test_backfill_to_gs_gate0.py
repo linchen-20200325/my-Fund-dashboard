@@ -4,6 +4,11 @@
 每天 20:00 TW 的 `weekly_nav_backfill` 對「持倉 ∪ 選股池」全跑 `backfill_to_gs`。
 其中 `_rescue_by_isin` 的採用條件只看「筆數 × 跨度」,**沒有任何幣別條件** ——
 同一檔基金的美元 / 歐元 / 避險級別在晨星、Yahoo 都查得到,只要跨度更長就整條換掉。
+⚠️ **2026-09-01 更新:上面這句已經不完全成立,但本檔一則都沒有失效。**
+   `_rescue_by_isin` 現在多了一道**幣別守門**(見 `tests/test_nav_currency_swap_guard.py`),
+   擋的是「**兩邊都宣告了幣別、而且對不上**」那一種。它擋不掉的至少有:候選來源
+   根本不宣告幣別(cnyes)、上游 meta 的幣別本身就是錯的、以及不經過 `_rescue_by_isin`
+   的其餘寫入路徑 —— 本檔的 Gate 0 仍是**最後一道**。原文保留不刪。
 而 `nav_history` 的去重鍵是 `(code, date)` 且**永不刪除**:
 **錯的先寫進去,對的就永遠寫不進來**,下游 1Y 報酬 / Sharpe / σ 全部照錯的算,
 畫面上沒有任何警示(§1:錯誤的數字比沒有數字更危險)。
@@ -103,6 +108,10 @@ def test_gate0_blocks_currency_swap_through_real_rescue_by_isin(monkeypatch, cac
     """端到端重現紅隊路徑:MoneyDJ 短窗(對的幣別)→ ISIN 救援換到跨度更長的**別的幣別**。
 
     `_rescue_by_isin` 只比「筆數 × 跨度」,一定會採用長的那條;Gate 0 是最後一道。
+    ⚠️ 2026-09-01:本則刻意**不讓候選宣告幣別**(`attrs["currency"]` 空)—— 那正是新加的
+    幣別守門**擋不到**的情形,所以這條端到端路徑仍然會換源、仍然由 Gate 0 收尾,
+    本則因此仍在測它原本要測的東西。幣別守門自己的覆蓋在
+    `tests/test_nav_currency_swap_guard.py`。
     """
     import repositories.fund.sources as SRC
     import repositories.pool_repository as POOL
