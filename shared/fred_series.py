@@ -61,8 +61,39 @@ FRED_MNFCTRIRSA: str = "MNFCTRIRSA"  # Manufacturing inventory ratio
 FRED_GDPNOW: str = "GDPNOW"        # Atlanta Fed GDPNow
 
 # ── ISM / PMI ──────────────────────────────────────────────────────
-FRED_ISM_PMI: str = "ISPMANPMI"    # ISM manufacturing PMI
-FRED_NAPM: str = "NAPM"            # NAPM manufacturing (legacy)
+# ⛔ 2026-09-01：下列兩條 series **自 2016-08 ISM 收回授權後停更**，
+#    已從 production 取數邏輯中全數拔除（客戶指令：「已廢棄的資料源一律從資料庫與
+#    取數邏輯中徹底拔除，不得留存或發起查詢」）。拔除的**五個**查詢點：
+#      1. `repositories/macro/alternate.py::fetch_ism_pmi` 原方案 1+2（先抓再依時效丟棄）
+#      2. `services/macro/us_indicators.py::fetch_all_indicators` 的 `fetch_fred_batch` 預熱清單
+#      3. 同檔 PMI 區塊的「series 補救」（補抓 ISPMANPMI 144 期）
+#      4. `ui/helpers/io/data_registry.py::_FRED_SERIES_MAP["PMI"]`
+#         （每次評估 PMI 新鮮度都對 NAPM 打兩次 FRED API 問「下次發布日」）
+#      5. `ui/tab5_data_guard.py` 的「FRED 下次發布日診斷」清單中的 NAPM 那一列
+#         （按下診斷鈕即對死 series 發起查詢）
+#    ⛔ **不得用於 production 取數**。要接 PMI 一律走
+#      `repositories/macro/alternate.py::fetch_ism_pmi` 的存活備援鏈。
+#    守衛：`tests/test_dead_fred_pmi_series_removed.py`。
+#
+# ⛔ `FRED_NAPM` 已於 2026-09-01 **整條刪除**（不是漏刪）。
+#    它在本批的第一版還留著，理由是「`ui/helpers/io/data_registry.py` 的
+#    `_FRED_SERIES_MAP["PMI"]` 還在用它查發布日」——**那個理由在同一批之內就被
+#    我們自己推翻了**：總管把 `ui/` 拉進本批範圍後，該條目連同其對死 series 的
+#    發布日查詢一併移除，`FRED_NAPM` 當場變成 0 caller 孤兒。
+#    依 v3 §01-2（因本次改動才變成孤兒 ⇒ 屬本次收尾義務）＋ 客戶「不得**留存**」，
+#    整條刪除。**回復方式**：git history 有完整定義，ISM 若恢復授權再加回來。
+#
+# ⚠️ `FRED_ISM_PMI` **保留、未刪**，理由據實寫明（不是「以防萬一」這種空話）：
+#    production 已 0 consumer，但 `services/macro/_helpers.py` 仍 re-export 它，
+#    而該檔**不在本批的檔案邊界內**（其他組佔用），本批不得動它。
+#    → 也就是說：**它現在唯一的存在理由，就是那一行邊界外的 re-export。**
+#    把 `services/macro/_helpers.py` 的 `FRED_ISM_PMI,` 那行拿掉之後，
+#    本常數即可比照 `FRED_NAPM` 整條刪除。**已回報總管，留給下一批。**
+#    ⛔ 在那之前：**僅供跨檔 re-export，不得用於 production 取數。**
+#
+#    （consumer 盤點方法：AST walk 全 repo 601 個 .py + `git grep` 全追蹤檔交叉驗，
+#      指令與輸出見本批 PR 描述。）
+FRED_ISM_PMI: str = "ISPMANPMI"    # ⛔ 2016-08 停更；勿用於 production 取數
 FRED_BSCICP02: str = "BSCICP02USM460S"  # OECD business confidence US
 
 # ── Regional Fed surveys ───────────────────────────────────────────

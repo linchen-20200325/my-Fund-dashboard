@@ -488,9 +488,11 @@ def render_data_guard_tab() -> None:
         # 端點欄原本一格塞 16 個裸 series id，擠成一團無法閱讀。改成
         # 「幾條 + 分類舉例」，完整逐條清單在下方「FRED 下次發布日診斷」區。
         ("1️⃣", "FRED API",            "美國總經 14+ 指標",
-         "16 條 series：利率/利差（DGS10, DGS2, DGS3MO）、信用（BAMLH0A0HYM2）、"
+         # 2026-09-01：NAPM 移除（2016-08 停更，已從取數邏輯全數拔除），
+         # 條數同步 16 → 15 —— 數字與括號內清單必須一致，否則這格自己會說謊。
+         "15 條 series：利率/利差（DGS10, DGS2, DGS3MO）、信用（BAMLH0A0HYM2）、"
          "流動性（M2SL, WALCL）、物價（CPIAUCSL, PPIACO）、"
-         "就業（UNRATE, ICSA, SAHMREALTIME）、其他（NAPM, FEDFUNDS, UMCSENT, HSN1F, DRTSCILM）",
+         "就業（UNRATE, ICSA, SAHMREALTIME）、其他（FEDFUNDS, UMCSENT, HSN1F, DRTSCILM）",
          "—", _src_status(bool(_src_ind), _fred_ok, len(_FRED_INTERNAL))),
         ("2️⃣", "Yahoo Chart REST",    "市場行情 4 項",
          "^VIX  /  RSP+SPY  /  DX-Y.NYB  /  HG=F",
@@ -746,10 +748,14 @@ def render_data_guard_tab() -> None:
     _d5_ind = st.session_state.get("indicators", {})
 
     if _d5_ind and not _d5_ind.get("PMI"):
+        # 2026-09-01：原文寫「三層 fallback：1. ISM NAPM → 2. ISM ISPMANPMI →
+        #   3. Phil Fed」。前兩段已於同批拔除（2016-08 起停更），若不同步改，
+        #   這段**給使用者看的說明**會在合併當下變成假話。
         st.info(
-            "ℹ️ **PMI** 三層 fallback 全失敗：\n"
-            "1. ISM NAPM → 2. ISM ISPMANPMI → 3. Phil Fed 擴散指數轉換\n\n"
-            "可能原因：FRED API Key 失效 / NAS Proxy 中斷 / 三項皆當日斷線。"
+            "ℹ️ **PMI** 五段 fallback 全失敗：\n"
+            "1. MacroMicro → 2. ISM World 官方 → 3. DBnomics → "
+            "4. Phil Fed 擴散指數轉換（代理值）→ 5. OECD 美國商業信心（代理值）\n\n"
+            "可能原因：FRED API Key 失效 / NAS Proxy 中斷 / 五項皆當日斷線。"
             "領先指標部分仍可參考 Tab1 的 **CFNAI** 或 **LEI** 指標卡。"
         )
 
@@ -939,9 +945,16 @@ def render_data_guard_tab() -> None:
                 f"｜{'⚠️ proxy 源' if _d5_pmi_proxy else '✅ 原生源'}"
             )
             if _d5_pmi_n == 0:
+                # 2026-09-01：原文寫「代表 FRED ISPMANPMI 補救路徑也失敗，需檢查
+                #   FRED_API_KEY」—— 那條補救路徑已於同批拔除（它補抓的
+                #   ISPMANPMI 2016-08 起停更），留著會叫使用者去查一個**已經不存在**
+                #   的東西，而且把責任誤導到 API Key 上。
                 st.warning(
-                    "⚠️ PMI series 為空 — v18.118 修復前是常見狀況（HTML 來源只回 value 不回歷史）。"
-                    "若仍出現代表 FRED ISPMANPMI 補救路徑也失敗，需檢查 FRED_API_KEY。"
+                    "⚠️ PMI series 為空 — 代表本次命中的是 **只回當期值、不回歷史序列**"
+                    "的來源（MacroMicro / ISM World / DBnomics 三段 HTML/JSON 源）。\n\n"
+                    "**這不是錯誤**：value 仍然有效，只是 Z-Score / 領先落後相關性這類"
+                    "需要歷史序列的計算會跳過 PMI 這一格。命中 Phil Fed 或 OECD 兩段"
+                    "（代理值）時則會帶回 120 期序列。"
                 )
 
     st.divider()
@@ -1433,12 +1446,17 @@ def render_data_guard_tab() -> None:
             if not _diag_key:
                 not_ready("FRED_API_KEY 未設定 → 下方揭露日全部會走 fallback",
                           where="Streamlit Cloud → Settings → Secrets 的 `FRED_API_KEY`")
-            # 13 個診斷目標一律「中文名 + series id」，不再有純英文 label
+            # 12 個診斷目標一律「中文名 + series id」，不再有純英文 label
+            # ⚠️ 2026-09-01：原本第 2 列是 ("PMI 製造業採購經理人指數", "NAPM",
+            #   "monthly")，**已移除**（13 → 12）。理由：按下「立即診斷」會對清單裡
+            #   每一條 series 呼叫 `fred_get_next_release_date` —— 對 NAPM 而言就是
+            #   **對一條 2016-08 起停更的 series 發起查詢**，正是客戶指令所禁。
+            #   PMI 已不從 FRED 取數（見 repositories/macro/alternate.py 檔頭），
+            #   其新鮮度改走 data_registry 的天數閾值 fallback，本表不再適用。
             # （原本 UNRATE / HSN1F / PERMIT / UMCSENT / M2SL / FEDFUNDS 6 個
             #  只印 FRED 內部代號，看不懂就無從判斷該不該在意它延遲）
             _diag_targets = [
                 ("CPI 消費者物價指數", "CPIAUCSL", "monthly"),
-                ("PMI 製造業採購經理人指數", "NAPM", "monthly"),
                 ("失業率", "UNRATE", "monthly"),
                 ("CFNAI 芝加哥聯儲全國活動指數", "CFNAI", "monthly"),
                 ("成屋銷售", "HSN1F", "monthly"),

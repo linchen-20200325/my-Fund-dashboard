@@ -40,5 +40,11 @@ def test_fred_constants_imported_from_ssot():
     # 確認 _helpers 端真的 re-export 自 shared.fred_series(SSOT 鏈閉環驗證)
     helpers_src = open("services/macro/_helpers.py", encoding="utf-8").read()
     assert "from shared.fred_series import" in helpers_src
-    for const in ("FRED_CCSA", "FRED_ICSA", "FRED_CPI", "FRED_ISM_PMI"):
+    # 2026-09-01:樣本清單中的 `FRED_ISM_PMI` 換成 `FRED_UNRATE`。
+    #   本條守的性質是「us_indicators 確實從 SSOT 鏈引入 FRED_* 常數」,取樣即可;
+    #   而 `FRED_ISM_PMI`(ISPMANPMI,2016-08 停更)已於本批從 us_indicators 全數
+    #   拔除,再拿它當樣本等於**要求本檔保留一個對死 series 的引用**,與客戶
+    #   「不得留存」的指令直接牴觸。換成同樣走 `_helpers` re-export、且真的有在用的
+    #   `FRED_UNRATE` —— **被測性質一字未變,只是換了一個仍然成立的樣本**。
+    for const in ("FRED_CCSA", "FRED_ICSA", "FRED_CPI", "FRED_UNRATE"):
         assert const in src, f"{const} 應引入並使用"

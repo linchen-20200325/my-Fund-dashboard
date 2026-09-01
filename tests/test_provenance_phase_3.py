@@ -10,14 +10,18 @@ import pandas as pd
 
 
 # ════════════════════════════════════════════════════════════════
-# fetch_ism_pmi — 7 段備援都應帶 provenance
+# fetch_ism_pmi — 各段備援都應帶 provenance
+#
+# 2026-09-01:原方案 1+2(FRED NAPM / ISPMANPMI,2016-08 起停更)已拔除,
+#   實際執行段數 7 → 5。本檔守的**性質不變**(每個 return 都要帶 source +
+#   fetched_at),改的只是「哪一段被拿來當樣本」與 fail token 的段數字串。
 # ════════════════════════════════════════════════════════════════
 
 class TestIsmPmiProvenance:
-    """fetch_ism_pmi 7 段備援 + 1 失敗路徑(共 8 個 return)provenance 守衛。"""
+    """fetch_ism_pmi 5 段備援 + 1 失敗路徑(共 6 個 return)provenance 守衛。"""
 
     def test_fail_all_stages_carries_provenance(self, monkeypatch):
-        """全 7 段失敗 → err token 也須帶 source + fetched_at(便於 audit 哪輪掛)。"""
+        """全 5 段失敗 → err token 也須帶 source + fetched_at(便於 audit 哪輪掛)。"""
         from repositories import macro_repository as mr
         # mock 全部 stage 失敗(fred 空 / 網路 503 / DBnomics 空 docs)
         monkeypatch.setattr("repositories.macro.alternate.fetch_fred", lambda *a, **kw: pd.DataFrame())
@@ -27,13 +31,21 @@ class TestIsmPmiProvenance:
         assert out.get("value") is None
         # F-PROV-1 v19.156
         assert "source" in out
-        assert out["source"] == "ISM-PMI:all_7_stages_failed"
+        assert out["source"] == "ISM-PMI:all_5_stages_failed"
         assert "fetched_at" in out
         # ISO 8601 含 'T'
         assert "T" in out["fetched_at"]
 
-    def test_fred_success_carries_provenance(self, monkeypatch):
-        """FRED stage 1+2 命中 → source='FRED:<sid>' + fetched_at。"""
+    def test_fred_stage_success_carries_provenance(self, monkeypatch):
+        """FRED 段命中 → source='FRED:...' + fetched_at。
+
+        2026-09-01 更新:原本這條驗的是方案 1+2(FRED NAPM / ISPMANPMI),那兩段
+        已拔除。**本檔要守的性質沒有變** —— 「FRED 來源的段命中時要帶 provenance」;
+        換的只是樣本段:拔除後仍以 FRED 為來源的是方案 6(Phil Fed 轉 PMI 刻度)
+        與方案 7(OECD BCI),兩者都是 `is_proxy=True`。
+        故 `is_proxy` 斷言由 False 改為 True —— 這是**現況的真實值**,不是為了換綠燈
+        放寬斷言:斷言本身仍是精確的 `is True`,只是指向拔除後真正會命中的那一段。
+        """
         import datetime as _dt
         from repositories import macro_repository as mr
 
@@ -47,12 +59,15 @@ class TestIsmPmiProvenance:
             "fetched_at": ["2026-06-26T00:00:00+00:00"] * 5,
         })
         monkeypatch.setattr("repositories.macro.alternate.fetch_fred", lambda *a, **kw: _df)
+        # HTML/JSON 三段(方案 3/4/5)斷線 → 落到仍存活的 FRED 段(方案 6 Phil Fed)
+        monkeypatch.setattr("repositories.macro.alternate.fetch_url", lambda *a, **kw: None)
         out = mr.fetch_ism_pmi(fred_api_key="x" * 32, max_age_days=99999)
         assert out.get("value") is not None
         assert out["source"].startswith("FRED:")
         assert "fetched_at" in out
         assert "T" in out["fetched_at"]
-        assert out["is_proxy"] is False
+        # 拔除方案 1+2 後,唯二仍以 FRED 為來源的段都是代理值,必須誠實標 is_proxy
+        assert out["is_proxy"] is True
 
 
 # ════════════════════════════════════════════════════════════════
