@@ -130,7 +130,10 @@ def _sec_notify():
 
 def _preview_notify(funds):
     if not funds:
-        st.info("目前沒有『已載入』的持倉基金 → 先到 Tab④/組合健診 載入基金,再回來預覽。")
+        # 指路一律走 SSOT：舊字面值「Tab④/組合健診」名字與站號**都**錯
+        # （健診是 ②、不是 ④；且 2026-09-01 已改名「持倉體檢」）。
+        from ui.helpers.story_nav import where_to_find as _wtf
+        st.info(f"目前沒有『已載入』的持倉基金 → 先到 {_wtf('health')} 載入基金,再回來預覽。")
         return
     try:
         from repositories.pool_repository import list_pool
@@ -271,7 +274,9 @@ def _sec_dividend_calendar():
         try:
             _items, _np, _nh = _divcal_gather_items()
             if not _items:
-                st.info("選股池與已載入持倉都是空的 → 先到上面『選股池』加標的,或到組合健診載入基金。")
+                from ui.helpers.story_nav import where_to_find as _wtf2
+                st.info("選股池與已載入持倉都是空的 → 先到上面『選股池』加標的,"
+                        f"或到 {_wtf2('health')} 載入基金。")
                 st.session_state.pop("_divcal_items", None)
             else:
                 st.session_state["_divcal_items"] = _items
