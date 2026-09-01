@@ -203,13 +203,25 @@ GRID_EXEMPT_SITES = frozenset({
     #    也就是本檔 docstring 警告過的「一個 `_grid3()` helper 一秒繞過」，
     #    只是這次是**有意識地**發生的。
     #
-    # ✅ **補償措施（不是口頭保證，是三條已突變驗證的斷言）**：
-    #    `tests/test_ia_kit.py::test_grid_cols_is_three`
-    #        —— `GRID_COLS` 必須是 3（突變 M1：改成 2 → 轉紅）。
-    #    `tests/test_ia_kit.py::test_card_grid_gives_one_column_per_item_and_keeps_column_width_stable`
-    #        —— 每一列都必須開滿 `GRID_COLS` 欄（突變 M2：最後一列只開 2 欄 → 轉紅）。
-    #    這兩條守的是**同一件事的更強版本**：本檔只能證「這個呼叫的參數是不是字面 3」，
-    #    那兩條直接證「實際傳給 `st.columns` 的值是 3」。
+    # ✅ **補償措施（不是口頭保證，是四條已突變驗證的斷言）**：
+    #    1. `test_ia_kit.py::test_grid_cols_is_three`
+    #       —— `GRID_COLS` 必須是 3（突變 M1：改成 2 → 轉紅）。
+    #    2. `test_ia_kit.py::test_card_grid_gives_one_column_per_item_and_keeps_column_width_stable`
+    #       —— `card_grid` 每一列都必須開滿 `GRID_COLS` 欄（突變 M2 → 轉紅）。
+    #    3. `test_ia_kit.py::test_card_row_opens_exactly_the_client_grid_width`
+    #       —— `card_row` 預設必須開 `GRID_COLS` 欄（突變 A2-M1：預設改 2 → 轉紅）。
+    #    4. `test_ia_kit.py::test_render_cards_lays_cards_out_at_the_client_grid_width`
+    #       —— `render_cards` 必須用 `GRID_COLS` 排（突變 A3-M1：塌成 1 欄 → 轉紅）。
+    #    這四條守的是**同一件事的更強版本**：本檔只能證「這個呼叫的參數是不是字面 3」，
+    #    那四條直接證「實際傳給 `st.columns` 的值是 3」。
+    #
+    # ⚠️ **2026-09-01 更正（有意識的更正，不是漏刪）**：本段原寫「**三條**」卻只列出
+    #    **兩條**，再自稱「這兩條」—— 一段在講「補償措施不是口頭保證」的註解，
+    #    自己的計數對不上。真正的原因不只是筆誤：當時 `card_row` 與 `render_cards`
+    #    **確實一條斷言都沒有**（稽核實測：把 `card_row` 預設改成 2、把 `render_cards`
+    #    改成塌一欄，全 suite `6350 passed` 逐字不變、零反應）。
+    #    也就是說，那個「三」是**把不存在的覆蓋算了進去**。
+    #    本輪補上第 3、4 條之後，「四條」才是實際存在且已突變驗證的數字。
     # ⚠️ 本判斷由前端／架構組單組作出，未經第二組驗證（`CLAUDE.md §-2` 規則 6）。
     "ui/helpers/ia/layout.py::card_row()  columns(dynamic)×1",
     "ui/helpers/ia/layout.py::card_grid()  columns(dynamic)×1",

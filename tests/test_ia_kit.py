@@ -42,6 +42,9 @@ from ui.helpers.ia import (  # noqa: E402
     APPLY_LABEL,
     CARD_STATES,
     GRID_COLS,
+    FormGate,
+    card_row,
+    render_cards,
     STATE_BUSINESS,
     STATE_ERROR,
     STATE_NOT_READY,
@@ -81,6 +84,37 @@ def test_card_grid_gives_one_column_per_item_and_keeps_column_width_stable():
     assert len(_out) == 5, "回傳欄位數必須與項目數一致"
     # 5 個項目 → 兩列（3 + 2），兩次都必須開滿 3 欄
     assert [c.args[0] for c in _cols.call_args_list] == [GRID_COLS, GRID_COLS]
+
+
+def test_card_row_opens_exactly_the_client_grid_width():
+    """`card_row()` 預設必須開**恰好 `GRID_COLS`** 欄，並把那幾欄交出去。
+
+    ⚠️ **本條是 2026-09-01 稽核抓到的缺口，補的**：在此之前 `card_row` 被
+    `tests/test_ui_grid_contract.py` 的 `GRID_EXEMPT_SITES` **豁免**掉，
+    自己卻**一條斷言都沒有** —— 稽核實測把預設值改成 2，全 suite `6350 passed`
+    逐字不變、零反應。那正是該契約 docstring 警告的
+    「一個 `_grid3()` helper 一秒繞過」，而且**下面沒有網**。
+    （突變 A2-M1：預設值 3 → 2 必須轉紅。）
+    """
+    with patch("streamlit.columns", side_effect=_fake_columns) as _cols:
+        with card_row() as _row:
+            pass
+    _cols.assert_called_once_with(GRID_COLS)
+    assert len(_row) == GRID_COLS
+
+
+def test_card_row_hands_back_the_real_columns():
+    """yield 出去的必須是 `st.columns()` 回傳的那些物件本身（不是複本／不是空殼）。"""
+    _made = []
+
+    def _spy(n):
+        _made.append(_fake_columns(n))
+        return _made[-1]
+
+    with patch("streamlit.columns", side_effect=_spy):
+        with card_row() as _row:
+            pass
+    assert list(_row) == _made[0]
 
 
 def test_card_grid_empty_draws_nothing():
@@ -253,6 +287,66 @@ def test_unknown_state_fails_loud_and_does_not_default_to_ok():
     """未知狀態 → 炸掉。**預設成 OK 是最糟的降級**（壞卡長得像好卡）。"""
     with pytest.raises(ValueError, match="未知狀態"):
         state_card("x", state="looks_fine")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 鐵則 01 × 03 的組合入口 —— render_cards
+# ══════════════════════════════════════════════════════════════════
+def test_render_cards_lays_cards_out_at_the_client_grid_width():
+    """`render_cards()` 必須把卡片排進**三欄**網格。
+
+    ⚠️ **本條同為 2026-09-01 稽核抓到的缺口**：稽核把 `cols or GRID_COLS`
+    改成 `cols or 1`（整頁卡片塌成一欄、鐵則 01 當場失效），
+    全 suite **6350 passed 零反應** —— 這個匯出符號當時一條斷言都沒有。
+    （突變 A3-M1：`cols or 1` 必須轉紅。）
+    """
+    with patch("streamlit.columns", side_effect=_fake_columns) as _cols, \
+            patch("streamlit.metric"), patch("streamlit.caption"):
+        render_cards([{"title": f"卡{_i}", "value": "1"} for _i in range(3)])
+    assert [c.args[0] for c in _cols.call_args_list] == [GRID_COLS]
+
+
+def test_render_cards_routes_every_card_to_its_own_state():
+    """每張卡都要照自己的 `state` 走對應入口 —— 不是整批用同一個視覺。"""
+    with patch("streamlit.columns", side_effect=_fake_columns), \
+            patch("streamlit.markdown"), patch("streamlit.caption"), \
+            patch("streamlit.metric") as _mt, \
+            patch("ui.helpers.ia.cards.not_ready") as _nr, \
+            patch("ui.helpers.ia.cards.business_alert") as _ba:
+        render_cards([
+            {"title": "景氣位階", "value": "擴張中段"},
+            {"title": "通膨與利率", "state": STATE_NOT_READY, "note": "未載入"},
+            {"title": "波動與信用", "value": "VIX 24.1", "state": STATE_BUSINESS},
+        ])
+    assert _mt.call_count == 1, "OK 卡沒走 st.metric"
+    assert _nr.call_count == 1, "灰卡沒走 not_ready"
+    assert _ba.call_count == 1, "業務警示卡沒走 business_alert"
+
+
+def test_render_cards_empty_draws_nothing():
+    """空清單不畫任何東西（鐵則 04：不留冗餘占位）—— 連欄位都不該開。"""
+    with patch("streamlit.columns", side_effect=_fake_columns) as _cols:
+        render_cards([])
+    _cols.assert_not_called()
+
+
+# ══════════════════════════════════════════════════════════════════
+# FormGate —— 匯出的型別，行為要有斷言（同為稽核抓到的零覆蓋符號）
+# ══════════════════════════════════════════════════════════════════
+def test_form_gate_is_falsy_until_submitted():
+    """`if gate:` 是本套件對外承諾的用法，`__bool__` 必須跟著 `submitted` 走。"""
+    _g = FormGate(key="k")
+    assert bool(_g) is False and _g.submitted is False
+    _g.submitted = True
+    assert bool(_g) is True
+
+
+def test_form_gate_defaults_carry_the_wireframe_label():
+    """gate 自帶的送出字預設是「套用」，且 `extra` 是每個實例各自的 dict。"""
+    _a, _b = FormGate(key="a"), FormGate(key="b")
+    assert _a.submit_label == APPLY_LABEL
+    _a.extra["x"] = 1
+    assert _b.extra == {}, "extra 被共用了（dataclass 可變預設值的經典 bug）"
 
 
 # ══════════════════════════════════════════════════════════════════
