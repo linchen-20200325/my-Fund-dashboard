@@ -39,11 +39,17 @@ class TestTabLabel:
         不是分頁，而是 ③ 基金研究頁內的一個模式。它現在由
         `tests/test_story_nav.py::test_old_top_level_keys_now_fail_loud`
         以「必須 raise」的形式繼續守著，強度不減反增。
+
+        ⚠️ **2026-09-01 五分頁動線重構（客戶拍板線框 `ia-wireframe.html`）：四個分頁改名。**
+        **有意識的政策變更，不是漏改**（日期 2026-09-01，決策者：客戶）。
+        改的**只有顯示名** —— key、順序、站號、對應的 render 函式一律未動，
+        所以本條的作用（「分頁名有唯一來源、不得靜默漂移」）**一字未減**，
+        只是它現在鎖的是新的那五個字串。**本條會因改名而轉紅，正是它該有的行為。**
         """
-        assert tab_label("macro") == "🌐 市場定調"
-        assert tab_label("health") == "💊 組合健診"
-        assert tab_label("research") == "🔍 基金研究"
-        assert tab_label("portfolio") == "📊 我的配置"
+        assert tab_label("macro") == "🌐 市場總覽"
+        assert tab_label("health") == "💊 持倉體檢"
+        assert tab_label("research") == "🔍 標的探索"
+        assert tab_label("portfolio") == "📊 資產配置"
         assert tab_label("settings") == "⚙️ 設定與診斷"
 
     def test_derived_from_steps_not_a_second_copy(self):

@@ -547,7 +547,7 @@ _LEGIT_EXEMPT: tuple[tuple[str, str, str], ...] = (
 _KNOWN_DEBT: tuple[tuple[str, str, str], ...] = (
     ("ui/helpers/macro/linkage.py", "「總經」Tab",
      "【形態向抓到｜main 已存在】既有債：「總經」不是任何時期的分頁名"
-     "（① 一直叫「🌐 市場定調」）。修法明確：`tab_label('macro')`，屬字串修正、無設計決定。"),
+     "（① 在 2026-08-31~09-01 期間叫「🌐 市場定調」，2026-09-01 起叫「🌐 市場總覽」；兩個都不是「總經」）。修法明確：`tab_label('macro')`，屬字串修正、無設計決定。"),
     ("ui/helpers/portfolio/fee_deduction.py", "「💼 T7 帳本」",
      "【形態向抓到｜main 已存在】既有債：T7 帳本是 ④ **頁內**的區塊，不是分頁；"
      "且它不在 `_SECTION_LABELS` 裡 —— 要修得先決定「④ 的頁內區塊要不要進分區 SSOT」，"
