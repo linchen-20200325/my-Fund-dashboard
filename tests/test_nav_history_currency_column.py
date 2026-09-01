@@ -28,6 +28,8 @@ schema 原本六欄、**沒有幣別欄** —— 而**一個欄位不存在,它�
 """
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import pytest
 
@@ -50,20 +52,45 @@ _HDR6_LEGACY = ["code", "date", "nav", "fund_name", "source", "recorded_at"]
 
 
 class _WS:
-    """最小 gspread worksheet 假件(真 worksheet 有的四個方法都給,不缺 `row_values`)。"""
+    """最小 gspread worksheet 假件(真 worksheet 有的四個方法都給,不缺 `row_values`)。
+
+    ⚠️ `update` **不是 no-op**:它記下每一次呼叫的**範圍字串**,並且**按範圍逐格套用**。
+    表頭修補的整個爭點就是「**動到了哪幾格**」—— 用 no-op 假件寫的守衛,
+    在「只補 G1」與「整排重寫 A1:G1」之間**分辨不出來**,等於什麼都沒證明。
+    """
 
     def __init__(self, rows):
         self.rows = [list(r) for r in rows]
+        self.updates: list = []          # [(range, values), ...]
 
     def get_all_values(self):
         return [[str(c) for c in r] for r in self.rows]
 
     def row_values(self, n):
-        return list(self.rows[n - 1]) if len(self.rows) >= n else []
+        """真 gspread 會**去掉尾端空格**再回傳 —— 假件照做,否則「缺幾格」會算錯。"""
+        if len(self.rows) < n:
+            return []
+        r = [str(c) for c in self.rows[n - 1]]
+        while r and r[-1] == "":
+            r.pop()
+        return r
 
     def update(self, rng, values):
-        assert rng == "A1"
-        self.rows[0] = list(values[0])
+        self.updates.append((rng, [list(v) for v in values]))
+        m = re.fullmatch(r"([A-Z]+)(\d+)", str(rng))
+        assert m, f"未預期的 A1 範圍格式:{rng!r}"
+        col0 = 0
+        for ch in m.group(1):
+            col0 = col0 * 26 + (ord(ch) - 64)
+        col0 -= 1
+        row0 = int(m.group(2)) - 1
+        while len(self.rows) <= row0:
+            self.rows.append([])
+        row = self.rows[row0]
+        vals = list(values[0])
+        while len(row) < col0 + len(vals):
+            row.append("")
+        row[col0: col0 + len(vals)] = vals
 
     def append_rows(self, rows, **_k):
         self.rows.extend([list(r) for r in rows])
@@ -131,19 +158,74 @@ def test_clean_points_keeps_currency_key():
         f"currency 被白名單丟掉了(整條線靜默 no-op);實得 {out!r}")
 
 
-def test_existing_6col_sheet_gets_header_repaired_not_resized():
-    """既有 6 欄分頁 → 補表頭到 7 欄。
+def test_existing_6col_sheet_gets_only_the_missing_cell_filled():
+    """既有 6 欄分頁 → **只補 G1 那一格**,不是整排重寫。
 
-    ⛔ 補法必須是 `ws.update("A1", …)`(照抄 `pool_repository._ws` 慣例),
-       **不得**用 `ws.resize(cols=…)` —— gspread 送的是**絕對值**,在使用者手動維護到
+    ⚠️ **本則 2026-09-01 改寫過**(原名 `test_existing_6col_sheet_gets_header_repaired_not_resized`,
+       原本只斷言 `ws.rows[0] == _HDR7`)。舊斷言在**兩種實作下都會通過** ——
+       「整排重寫 A1:G1」與「只補 G1」對這個英文表頭 fixture 產生**完全一樣的結果**,
+       所以它證明不了本函式真正的行為。現在改成斷言**動到了哪幾格**。
+
+    ⛔ 補法**不得**用 `ws.resize(cols=…)` —— gspread 送的是**絕對值**,在使用者手動維護到
        26 欄的表上等於刪掉 H..Z 欄連同內容。本假件**刻意不提供 `resize`**:
        誰改成 resize,這裡就 AttributeError 轉紅。
     """
     ws = _WS([_HDR6_LEGACY, ["OLD", "2026-07-01", "9.9", "n", "app", "t"]])
     GS.append_points([{"code": "NEW", "nav": 1.0, "nav_date": "2026-07-22",
                        "currency": "EUR"}], _sheet=_Sheet(ws))
-    assert ws.rows[0] == _HDR7, f"表頭沒補到 7 欄;實得 {ws.rows[0]!r}"
+    assert ws.updates == [("G1", [["currency"]])], (
+        f"表頭修補動到的範圍不是「只有 G1」;實得 {ws.updates!r}")
+    assert ws.rows[0] == _HDR7
     assert ws.rows[-1][6] == "EUR"
+
+
+def test_user_authored_headers_are_never_overwritten():
+    """使用者自己取的表頭(非英文、6 格)→ **前 6 格逐格不變**,只有第 7 格被補上。
+
+    **為什麼可以這樣做(理由必須成立,不是偷懶)**:本模組**沒有任何一處讀表頭列的文字** ——
+    `load_points` / `append_points` 都是 `get_all_values()[1:]` **跳過**第 1 列,
+    再以 `r[0]`..`r[6]` **逐位置**取值。表頭文字對程式**零作用**,它只是給人看的,
+    因此它**屬於使用者**;而這張表使用者**會手動維護**。
+    整排重寫會把他取的名字改掉,換來的好處是**零**。
+
+    **突變**:把實作改回 `ws.update("A1", [_NAV_HEADERS])` → 本則必須轉紅。
+    """
+    zh = ["代碼", "日期", "淨值", "來源", "更新時間", "備註"]
+    ws = _WS([list(zh), ["OLD", "2026-07-01", "9.9", "n", "app", "t"]])
+    GS.append_points([{"code": "NEW", "nav": 1.0, "nav_date": "2026-07-22",
+                       "currency": "JPY"}], _sheet=_Sheet(ws))
+
+    assert ws.rows[0][:6] == zh, (
+        f"使用者自己取的表頭被改掉了(前 6 格應逐格不變);實得 {ws.rows[0][:6]!r}")
+    assert ws.rows[0][6] == "currency", f"第 7 格沒補上;實得 {ws.rows[0]!r}"
+    assert all(r != "A1" for r, _v in ws.updates), (
+        f"寫了 A1 → 覆寫了使用者的表頭;實得 {ws.updates!r}")
+    assert ws.rows[-1][6] == "JPY"        # 資料照樣落在第 7 欄
+
+
+def test_header_already_full_length_is_left_completely_alone():
+    """表頭長度已達 7 → **什麼都不做**(一次 update 都不發)。"""
+    zh7 = ["代碼", "日期", "淨值", "來源", "更新時間", "備註", "幣別"]
+    ws = _WS([list(zh7), ["OLD", "2026-07-01", "9.9", "n", "app", "t", "USD"]])
+    GS.append_points([{"code": "NEW", "nav": 1.0, "nav_date": "2026-07-22"}],
+                     _sheet=_Sheet(ws))
+    assert ws.updates == [], f"表頭已足長卻還去動它;實得 {ws.updates!r}"
+    assert ws.rows[0] == zh7
+
+
+def test_blank_header_row_gets_the_full_header():
+    """第 1 列整列空白(全新 / 空白工作表)→ 寫整排沒有覆寫任何東西,可以照寫。"""
+    ws = _WS([["", "", ""]])
+    GS.append_points([{"code": "NEW", "nav": 1.0, "nav_date": "2026-07-22"}],
+                     _sheet=_Sheet(ws))
+    assert ws.updates == [("A1", [_HDR7])]
+    assert ws.rows[0] == _HDR7
+
+
+@pytest.mark.parametrize("idx0,want", [(0, "A"), (5, "F"), (6, "G"), (25, "Z"),
+                                       (26, "AA"), (27, "AB")])
+def test_a1_col(idx0, want):
+    assert GS._a1_col(idx0) == want
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -304,27 +304,56 @@ def _get_sheet(oauth_client: Any = None):
         "nav_history 無可用憑證:未設 Service Account,也未注入使用者 OAuth client。")
 
 
-def _get_worksheet(sh):
-    """取得 nav_history worksheet,不存在則建立 + 寫 header;**既有分頁欄位缺就補 header**。
+def _a1_col(idx0: int) -> str:
+    """0-based 欄索引 → A1 欄名(0→`"A"`、6→`"G"`、26→`"AA"`)。純函式,無 I/O。"""
+    _s, _n = "", idx0 + 1
+    while _n:
+        _n, _r = divmod(_n - 1, 26)
+        _s = chr(65 + _r) + _s
+    return _s
 
-    2026-09-01(第 7 欄 `currency`):既有分頁是 6 欄建的,不補表頭的話新欄會是無標題的
-    G 欄。補法**逐字照抄本 repo 既有慣例** —— `repositories/pool_repository.py::PoolRepo._ws`
-    與 `repositories/portfolio_perf_repository.py::PerfRepo._ws` 兩處同一行;
-    `_fund_pool` 分頁在 production 就是這樣 6→7→10 欄加過來的。
+
+def _get_worksheet(sh):
+    """取得 nav_history worksheet,不存在則建立 + 寫 header;**既有分頁只補「缺的那幾格」**。
+
+    2026-09-01(第 7 欄 `currency`):既有分頁是 6 欄建的,不補的話新欄會是無標題的 G 欄。
+
+    **為什麼是「只補缺格」而不是「整排重寫」——這是本函式唯一該記住的事**
+    ------------------------------------------------------------------
+    本模組**沒有任何一處讀表頭列的文字**:`load_points` 與 `append_points` 都是
+    `ws.get_all_values()[1:]` **跳過**第 1 列,再以 `r[0]`..`r[6]` **逐位置**取值;
+    `load_series` / `coverage_status` 都走 `load_points`。
+    (⚠️ 別跟 `_pick_col` / `import_csv_text` 的 `rows[0]` 混淆 —— 那是**使用者上傳的
+    CSV** 的第一列,不是這張 worksheet 的表頭。)
+
+    → **表頭文字對程式完全沒有作用,它只是給人看的,因此它屬於使用者。**
+    這張表使用者**會手動維護**,他大可把表頭寫成 `代碼 | 日期 | 淨值 | …`;
+    整排重寫會把他自己取的名字改掉,而**換來的好處是零**(程式根本不看)。
+    所以:**長度夠了就什麼都不做;不夠就只把尾巴缺的那幾格補上,永遠不碰 A1。**
+
+    ⚠️ **本處刻意偏離 `repositories/pool_repository.py::PoolRepo._ws` 與
+    `repositories/portfolio_perf_repository.py::PerfRepo._ws` 的整排比對慣例**
+    (`if ws.row_values(1)[: len(_HEADERS)] != _HEADERS: ws.update("A1", [_HEADERS])`)。
+    那兩處的取捨與這裡不同,不能照抄;差別見本 PR 描述的登記。
 
     ⛔ **絕對不要改用 `ws.resize(cols=...)`**:gspread 送出的是**絕對值**
     (`{"gridProperties": {"columnCount": 7}}`),在使用者自己維護到 26 欄的表上等於
-    **刪掉 H..Z 欄連同內容** —— 而 `nav_history` 這張表使用者**會手動維護**。
-    `values.append` 本來就會視需要擴欄,不需要也不該先 resize。
+    **刪掉 H..Z 欄連同內容**。`values.append` 本來就會視需要擴欄,不需要也不該先 resize。
     """
     try:
         ws = sh.worksheet(_WS_NAV)
     except Exception:
+        # 分頁本來不存在 → 整排寫沒有覆寫任何東西。
         ws = sh.add_worksheet(title=_WS_NAV, rows=1000, cols=len(_NAV_HEADERS))
         ws.update("A1", [_NAV_HEADERS])
         return ws
-    if ws.row_values(1)[: len(_NAV_HEADERS)] != _NAV_HEADERS:   # 補 header(欄位缺失時)
+    _hdr = ws.row_values(1)
+    if not any(str(_c).strip() for _c in _hdr):
+        # 第 1 列整列空白(全新 / 空白工作表)→ 同樣沒有東西會被覆寫,照寫整排。
         ws.update("A1", [_NAV_HEADERS])
+    elif len(_hdr) < len(_NAV_HEADERS):
+        # **只補尾巴缺的那幾格**(本批就是 G1);既有的 A1..F1 一格都不碰。
+        ws.update(f"{_a1_col(len(_hdr))}1", [_NAV_HEADERS[len(_hdr):]])
     return ws
 
 
