@@ -152,3 +152,94 @@ class TestFetchAllIndicatorsIssuesNoDeadQuery:
             f"fetch_fred_batch 預熱清單仍含已廢棄 series：{dead_in_batch}")
         assert singles.dead_hits == [], (
             f"fetch_all_indicators 仍對已廢棄 series 發出單次請求：{singles.dead_hits}")
+
+
+class TestUiPathsIssueNoDeadQuery:
+    """UI 端兩個「發布日查詢」入口也不得再指向死 series。
+
+    這兩處在本批第一版被我登記為「邊界外，未處理」，總管 2026-09-01 裁示拉回同批做。
+    它們與前面三個點是**同一個病**：拿一條 2016-08 起停更的 series 去問 FRED
+    「它下次什麼時候發布」——`fred_get_next_release_date` 內部會打兩支 API
+    （`/fred/series/release` → `/fred/release/dates`）。
+
+    取值方式：**AST 取出真正的字面值再比對**（沿用 `test_indicator_inventory.py`
+    既有作法），不是對原始碼做字串 grep —— 差別在於改寫成
+    `FRED_" + "NAPM` 這類拼接時，字串 grep 會漏，literal_eval 不會。
+    ⚠️ 誠實揭露其極限：若有人改成**執行期動態組出** sid（例如從 dict 取），
+    AST 取值一樣看不到。這一層守的是「有人手動把死 sid 寫回這兩張表」。
+    """
+
+    @staticmethod
+    def _extract_literal(func, var_name: str):
+        """AST 取出 `var_name` 的值。
+
+        值可能是字面值（`"NAPM"`）或指向 `shared.fred_series` 的名字（`FRED_NAPM`）
+        —— 兩種都要解得開，否則把常數換個名字就能繞過本守衛。
+        名字解不開時**保留原名字串**（而不是靜默丟掉），讓它仍可被比對到。
+        """
+        import ast
+        import inspect
+
+        import shared.fred_series as _fs
+
+        def _val(node):
+            if isinstance(node, ast.Constant):
+                return node.value
+            if isinstance(node, ast.Name):
+                return getattr(_fs, node.id, node.id)
+            if isinstance(node, (ast.Tuple, ast.List)):
+                return tuple(_val(e) for e in node.elts)
+            if isinstance(node, ast.Dict):
+                return {_val(k): _val(v) for k, v in zip(node.keys, node.values)}
+            raise AssertionError(f"無法解析的節點：{ast.dump(node)[:120]}")
+
+        tree = ast.parse(inspect.getsource(func).strip())
+        for node in ast.walk(tree):
+            tgt = None
+            if isinstance(node, ast.AnnAssign):
+                tgt = getattr(node.target, "id", "")
+            elif isinstance(node, ast.Assign) and len(node.targets) == 1:
+                tgt = getattr(node.targets[0], "id", "")
+            if tgt == var_name:
+                return _val(node.value)
+        raise AssertionError(f"找不到 {var_name}")
+
+    def test_data_registry_release_map_has_no_dead_series(self):
+        """`_FRED_SERIES_MAP` 不得含死 series（原 `"PMI": FRED_NAPM`）。
+
+        突變驗證：把 `"PMI": "NAPM",` 加回該 dict → 本條紅。
+        """
+        from ui.helpers.io import data_registry as dr
+
+        mapping = self._extract_literal(dr._update_data_registry, "_FRED_SERIES_MAP")
+        dead = {k: v for k, v in mapping.items() if v in _DEAD_SIDS}
+        assert dead == {}, (
+            f"_FRED_SERIES_MAP 仍指向已廢棄 series：{dead}；"
+            f"每次評估這些指標的新鮮度都會對死 series 打兩支 FRED API")
+        # 併驗「PMI 確實已不在表內」——上面那條在 dict 被整個清空時也會綠，
+        # 這條釘住的是「PMI 這一列真的被移走了」。
+        assert "PMI" not in mapping, "PMI 不應再有 FRED 發布日映射（已改走天數閾值 fallback）"
+
+    def test_tab5_release_diagnostic_has_no_dead_series(self):
+        """Tab5「FRED 下次發布日診斷」清單不得含死 series。
+
+        按下該按鈕會對清單裡每一條 sid 呼叫 `fred_get_next_release_date`。
+        突變驗證：把 `("PMI 製造業採購經理人指數", "NAPM", "monthly"),` 加回去 → 本條紅。
+        """
+        import ui.tab5_data_guard as t5
+
+        targets = self._extract_literal(t5.render_data_guard_tab, "_diag_targets")
+        dead = [row for row in targets if row[1] in _DEAD_SIDS]
+        assert dead == [], f"Tab5 發布日診斷清單仍含已廢棄 series：{dead}"
+
+    def test_fred_napm_constant_is_gone(self):
+        """`FRED_NAPM` 已無任何 consumer → 依客戶「不得留存」整條刪除。
+
+        突變驗證：把常數加回 `shared/fred_series.py` → 本條紅。
+        ⚠️ `FRED_ISM_PMI` **刻意不列入本條**：它仍被 `services/macro/_helpers.py`
+        re-export，而該檔在本批的檔案邊界外。移除那行之後它才能比照刪除。
+        """
+        import shared.fred_series as fs
+
+        assert not hasattr(fs, "FRED_NAPM"), (
+            "FRED_NAPM 應已刪除（0 caller 孤兒 + 客戶明令不得留存）")

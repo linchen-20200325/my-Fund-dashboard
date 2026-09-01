@@ -398,6 +398,9 @@ def fetch_all_indicators(fred_api_key):
 
     # ── v19.65 P1-F1：21 條 FRED 批次預熱（並行 8 worker）──
     # v19.67 P1-F2：擴展 3 條 liquidity_engine.py 用 FRED（DTWEXBGS/DEXJPUS/DEXSZUS）
+    # ⚠️ 上兩行是**當時的沿革紀錄**，「21 條」指 v19.65 當下的條數，不是現況。
+    #    2026-09-01 拔掉已停更的 ISPMANPMI 後，**現行清單為 26 條**。
+    #    （條數會隨每次增刪漂移 —— 需要精確值請直接數下面那個 list，不要引用本行。）
     # 原本 16 條 sequential `_fred()` 呼叫各 0.2~0.5s（首次 cache miss）→ 一次 batch
     # 並行 + 共享既有 @_ttl_cache(30min)，後續呼叫點自然 hit cache、邏輯 0 改動。
     # 估 Fund 首頁總經 tab 載入 -3~6s（v19.67 額外覆蓋深水區流動性兩 builder 冷啟動）。

@@ -27,7 +27,6 @@ from shared.fred_series import (
     FRED_ICSA,
     FRED_M2,
     FRED_M2_WEEKLY,
-    FRED_NAPM,
     FRED_PAYEMS,
     FRED_PERMIT,
     FRED_PPI,
@@ -140,8 +139,35 @@ def _update_data_registry():
     }
 
     # ── v18.3 indicator_key → FRED series_id（供 next_release_date 動態查詢）
+    #
+    # ⚠️ 2026-09-01：**"PMI" 條目已移除**（有意識的政策變更，不是漏刪；
+    #    決策者：客戶 2026-09-01「已廢棄的資料源一律從資料庫與取數邏輯中徹底拔除，
+    #    不得留存或發起查詢」）。
+    #    原本是 `"PMI": FRED_NAPM`，而 `NAPM` 自 2016-08 ISM 收回授權後停更 ——
+    #    `_freshness()` 每次評估 PMI 這一列都會對它跑 `fred_get_next_release_date`，
+    #    也就是**對一條死 series 打兩次 FRED API**（先 /series/release 再 /release/dates）
+    #    去問「它下次什麼時候發布」。同批已把 PMI 的三個取數點一併拔除，
+    #    見 `repositories/macro/alternate.py` 檔頭橫幅。
+    #
+    #    **移除後 PMI 這一列的行為**：`_FRED_SERIES_MAP.get("PMI")` → None →
+    #    `if sid:` 不成立 → 落到本函式下方 `freq == "monthly"` 的**天數閾值 fallback**
+    #    （≤60 天 🟢／≤90 天 🟡／>90 天 🔴，標籤帶 "fallback" 字樣）。
+    #    **不是空白、不是錯誤訊息** —— 與任何未列入本表的指標走同一條既有路徑。
+    #
+    #    ⚠️ 為什麼**不**把它改指到別條 FRED series（例如 Phil Fed）：
+    #    PMI 的值現在來自 MacroMicro / ISM World / DBnomics / Phil Fed / OECD 五段
+    #    備援中的**任何一段**，沒有單一 FRED series 能代表「ISM PMI 的發布排程」。
+    #    硬指一條等於**捏造一個發布日**，違反 §1（寧可沒有數字，不可有錯的數字）。
+    #
+    #    ⚠️ 與 NFP（見上方 2026-08-20 補登）的差別，據實寫明以免被誤引：
+    #    NFP 落到 fallback 會出現「假黃燈」，因為 PAYEMS 觀測日標月初、發布約 +5 週，
+    #    正常 age 會突破 60 天。**PMI 沒有這個問題**：ISM 在次月第一個營業日就發布
+    #    上月數據，觀測日標當月 1 日 → 正常 age 上限約 31 天，離 60 天門檻仍有餘裕。
+    #    ⚠️ 但這是**推算、不是實測**（本批依指令不得實打 FRED 驗證）；
+    #    若 PMI 落到第 5 段 OECD BCI（該源 FRED 觀測日延遲較大），age 有機會逼近門檻。
+    #    真的出現假黃燈時，正解是**替 PMI 加一條屬於它自己的 fallback 天數門檻**，
+    #    ⛔ 不是把死 series 加回本表。
     _FRED_SERIES_MAP: dict[str, str] = {
-        "PMI":          FRED_NAPM,        # 隔月 1 日 release
         "CPI":          FRED_CPI,         # 隔月 ~13 日
         "UNEMPLOYMENT": FRED_UNRATE,      # 隔月 1st Friday
         "M2":           FRED_M2,
