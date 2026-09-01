@@ -22,13 +22,35 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
     且**只對「重試有意義」的四種失敗生效** —— 404 / 407 依 shared/backoff_policy
     的 NO_COOLDOWN_KINDS **照舊入快取**(TTL 是它們唯一的節流器)。
     **其餘未標記的 fetcher 仍會快取空結果。**
-  · @st.cache_data — **完全不在本機制涵蓋範圍內,失敗照樣鎖滿 TTL**。
-    全 repo 8 個裝飾點,其中 **至少 5 處實測會把失敗鎖住**(⚠️ 本行為 2026-08-31
+  · @st.cache_data — **完全不在本機制涵蓋範圍內**。
+    ⚠️ **2026-09-01 更正:本項的標題句與下方兩列已被 #754 推翻**
+    (**有意識的更正,不是漏刪** · 日期 2026-09-01 · 決策者:#754 修復組)。
+    原句 ~~「失敗照樣鎖滿 TTL」~~ 是一句**全稱句**,而 #754 已把
+    `repositories/hot_money_repository.py` 兩支的**主要失敗路徑**改成 raise ——
+    例外穿過 `@st.cache_data` **不入快取**。
+    **舊句在寫下當天為真,被權衡掉的是它的前提** —— 那個前提就是本項末段自己寫的
+    「本批刻意不修、已登記為獨立待辦」,而**那個待辦已經被做掉了**。
+    **現行讀法:逐支、逐分支看下方標註,不要讀任何一句總結。**
+    ⛔ **不得用一句新的全稱句換掉舊的全稱句** —— 下方 `pool_repository` /
+    `ndc` / `_cached_nh_coverage` **三列本輪未重驗,維持原登記、原措辭**。
+    全 repo 8 個裝飾點,其中 ~~**至少 5 處實測會把失敗鎖住**~~ →
+    **改為逐列標註(見下)**(⚠️ 本行為 2026-08-31
     **第四次**更正:第一版漏掉 @st.cache_data 整類、第二版只列 2 處、
     第三版寫成「4 處」且把 _cached_nh_coverage 的理由寫成假的 —— 同一段自己在
     檢討的病連犯四次,故本行改為逐處列出、逐處標明判定依據):
-      鎖住 → repositories/hot_money_repository.fetch_foreign_flow_series(30 分)
-             repositories/hot_money_repository.fetch_usdtwd_series      (10 分)
+      鎖住 → ~~repositories/hot_money_repository.fetch_foreign_flow_series(30 分)~~
+             → **#754 後改為「部分鎖住」**。**不入快取(raise)**:進場退避、傳輸例外、
+               host 冷卻、JSON 解析失敗、body-status 有實際冷卻、0 筆、缺類別欄、無 Foreign。
+               **仍入快取(仍鎖 30 分)**的只剩兩支 ——
+               (a) `r is None` 且 host **未**進退避(404/407,或 HTTP 200 空 body);
+               (b) body-status 落在 `NO_COOLDOWN_KINDS`(`not_found`/`proxy_auth`),
+                   **或**是 SSOT `kind_for_status` 對 2xx/3xx 回的哨符 `""`。
+               **那兩支是刻意留的**:它們一個節流器都沒有,改 raise 會變成每次 rerun 真打一次上游。
+             ~~repositories/hot_money_repository.fetch_usdtwd_series      (10 分)~~
+             → **#754 後改為「部分鎖住」**。**不入快取(raise)**:`df.empty`(Yahoo 回空)。
+               **仍入快取(仍鎖 10 分)**:上游拋例外(主要是 `validate_yf_close` 的 schema 違反)
+               —— 該支同樣一個節流器都沒有(`_ttl_cache` 不存例外、`fetch_url` 已 `_note_success`),
+               **這是刻意還原 base 的行為,不是漏改**。
              repositories/pool_repository._cached_pool_map              (30 分;
                上游 _load_pool_map 自己把例外吞成 {} → 那個空 dict 被快取)
              ui/helpers/macro/ndc._cached_ndc_score                     (15 分)
@@ -59,8 +81,20 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
     (fetch_url caller 數、本清單、407 紅字出口)。**同一個檔、三次,不是巧合** ——
     它是**唯一同時有「診斷用 HTTP 呼叫 + 自建 cache + 錯誤紅字」的檔**,
     剛好落在每一種掃描字表的邊緣。**下次做這類窮舉時,這個檔要單獨看一遍。**
-    本批**刻意不修**(機制不同:回傳 tuple 承載不了 .attrs、@st.cache_data 也不看標記),
-    已登記為獨立待辦,使用者可見影響見 PR「刻意沒做」段。
+    ~~本批**刻意不修**(機制不同:回傳 tuple 承載不了 .attrs、@st.cache_data 也不看標記),~~
+    ~~已登記為獨立待辦,使用者可見影響見 PR「刻意沒做」段。~~
+    → ⚠️ **2026-09-01 狀態變更,不是漏刪**:那個「獨立待辦」**已由 #754 對
+      `hot_money_repository` 兩支做掉**。手法是**內拋外譯**(未快取實作 raise →
+      `@st.cache_data` 層例外穿過 → 公開 wrapper 接住並譯回既有的 `(df, err)` 形狀),
+      **公開介面一個字未變** —— 也就是舊理由「回傳 tuple 承載不了 .attrs」
+      **是被繞過,不是被推翻**(那句話本身今天仍然對)。
+      **另外三列(pool_repository / ndc / _cached_nh_coverage)仍未修、仍是待辦。**
+    ⚠️ **本項與 `tests/test_st_cache_failure_not_cached.py::_RAISES` 是同一件事的兩份記錄**
+    —— 該表把上述兩支登記為「失敗會 raise、例外穿過快取層不入快取」。
+    在 #754 之前,**兩份互相矛盾**(這裡說「鎖住」、那裡說「不入快取」),
+    而**沒有任何字表掃得到本檔**(本檔在 #754 的五個載體掃描裡從頭到尾沒被提過)。
+    **兩份必須同進退**:再有人改動那兩支的失敗路徑,這裡與那張表要一起改 ——
+    否則就是「同一句話散在多個載體、只修被點名的那一個」(§-2.A #13 的形狀)又一次。
   刻意做成 opt-in 而非預設過濾:「空」有「抓失敗」與「真的沒有」兩義、回傳值
   分不出來,讓裝飾器去猜任一邊都違 §1 — 機制、判準與各分支理由見
   infra/cache.py 的 module 註解與 infra/proxy.py::mark_fetch_failed_if_retryable
