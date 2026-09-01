@@ -160,6 +160,25 @@ _RAISES: dict[str, tuple[str, str, str]] = {
     #    這與底下 `pool_repository` 白名單的理由是**一模一樣的形狀**
     #    （「訊號在快取層之前就死了」），卻被放進了 `_RAISES` —— 等於
     #    **把一個未修的點認證成已修**。理由見該白名單條目。
+    "repositories/pool_repository.py::_cached_pool_map": (
+        "_load_pool_map",
+        "repositories/pool_repository.py",
+        "#756 批次 2 內拋外譯：_load_pool_map 失敗即 raise（不再吞成 {}）→ 例外穿過 "
+        "@st.cache_data 不入快取；「不阻斷抓取鏈」那半改由快取**之外**的 "
+        "_pool_map_or_empty() 承接，並在進場處查 gspread 兩把退避鑰匙。"
+        "⚠️ 空選股池是合法狀態 —— 舊寫法把它與讀失敗壓成同一個回傳值，"
+        "正是 §1「空有兩義」；本表關心的「失敗會不會被快取」只看 raise 這一半。",
+    ),
+    "ui/tab5_data_guard.py::_cached_nh_coverage": (
+        # 多跳鏈：裝飾函式 → coverage_status → load_points（raise 在最後一跳）
+        "coverage_status>load_points",
+        "services/nav_history_gs.py",
+        "#756 批次 2：load_points 進場查 gspread 冷卻、冷卻期內 raise NavHistoryError；"
+        "且內層 `try: ws = sh.worksheet(...) / except: return []` 改為只放行非 API 錯誤"
+        "（WorksheetNotFound = 分頁真的還沒建），API 錯誤一律往上拋。"
+        "coverage_status 自己不 raise，它是把 load_points 的例外往上傳 —— "
+        "故本列登記為**多跳**，每一跳都由 test_raises_entries_really_raise 逐跳 AST 驗。",
+    ),
     "ui/helpers/v2_editor.py::_cached_list_policies": (
         "list_policy_worksheets",
         "repositories/policy/v2.py",
@@ -169,14 +188,19 @@ _RAISES: dict[str, tuple[str, str, str]] = {
 
 # ── (b) 已知未修，附理由 ────────────────────────────────────────────
 _WHITELIST: dict[str, str] = {
-    "repositories/pool_repository.py::_cached_pool_map": (
-        "待 #56 Batch 2；需先拆 _load_pool_map 的 `except → {}`（缺陷 #67）—— "
-        "訊號在快取層之前就死了，這一層先改沒有意義。"
-    ),
-    "ui/tab5_data_guard.py::_cached_nh_coverage": (
-        "待 #56 Batch 2；需先拆 services/nav_history_gs.py::load_points 內層的 "
-        "`except → []`，且動工前置未解（gspread 跨呼叫冷卻）。"
-    ),
+    # ⚠️ 2026-09-01：`pool_repository::_cached_pool_map` 與
+    #    `tab5_data_guard::_cached_nh_coverage` 兩列**已移入 `_RAISES`**（見上）。
+    #    舊登記理由逐字保留於此，**加刪除線、不刪**（有意識的狀態變更，不是漏刪）：
+    #      ~~"repositories/pool_repository.py::_cached_pool_map":
+    #          "待 #56 Batch 2；需先拆 _load_pool_map 的 `except → {}`（缺陷 #67）——
+    #           訊號在快取層之前就死了，這一層先改沒有意義。"~~
+    #      ~~"ui/tab5_data_guard.py::_cached_nh_coverage":
+    #          "待 #56 Batch 2；需先拆 services/nav_history_gs.py::load_points 內層的
+    #           `except → []`，且動工前置未解（gspread 跨呼叫冷卻）。"~~
+    #    **兩條舊理由在寫下當天都為真**，而它們寫的那個前置條件（「待 #56 Batch 2」）
+    #    就是 #756 這個 PR —— 兩個 `except` 都已拆掉，冷卻也接上了。
+    #    ⚠️ 留這段的理由：這張表**上一輪才因為「未重驗卻被移進 _RAISES」出過事**
+    #    （見上方 `_cached_load_policy_v2` 的移出註記）。移動方向相反時同樣要留痕。
     "ui/helpers/macro/ndc.py::_cached_ndc_score": (
         "憲法 §8.3.P `P-NDCCACHE-1` 指定由獨立一組裁決；且 L1 fetch_ndc_signal_history "
         "已自帶同為 15 分的 @_ttl_cache，只修 UI 這層改善 ≈ 0。"
@@ -545,14 +569,33 @@ def test_raises_entries_really_raise(key):
         # raise 直接寫在裝飾函式本體
         target = site_fn
     else:
-        # ① 裝飾函式必須真的呼叫那個委派符號（不能只是登記表上寫爽的）
+        # ⚠️ 2026-09-01（#756 批次 2 合併時擴充，**純增量，單跳條目行為一字未變**）：
+        #    delegate 允許寫成 `"a>b"` 的**多跳鏈**。
+        #    起因：`ui/tab5_data_guard.py::_cached_nh_coverage` 的 raise 住在**兩跳外**
+        #    —— 裝飾函式呼叫 `coverage_status`，而 `coverage_status` 自己沒有 raise，
+        #    它是把 `load_points` 的 `NavHistoryError` **往上傳**。
+        #    單跳 schema 表達不了這種鏈，於是它只能留在 `_WHITELIST`（「已知未修」），
+        #    而它其實**已經修好了** —— 那會讓這張表對它說謊。
+        #    ⛔ 不接受「反正它會傳上來」這種口頭保證：**每一跳都要 AST 驗**
+        #       （前一跳必須真的呼叫下一跳），最後一跳必須真的有 raise。
+        _hops = [h.strip() for h in delegate.split(">") if h.strip()]
+        # ① 裝飾函式必須真的呼叫鏈上第一個符號（不能只是登記表上寫爽的）
         called = _called_names(site_fn, _alias_map(site_rel))
-        assert delegate in called, (
-            f"{key} 未呼叫登記的委派符號 {delegate!r} —— "
+        assert _hops[0] in called, (
+            f"{key} 未呼叫登記的委派符號 {_hops[0]!r} —— "
             f"登記表與實作已脫節（{site_rel} 內實際呼叫：{sorted(called)}）"
         )
-        target = _find_def(owner_rel, delegate)
-        assert target is not None, f"{owner_rel} 內找不到 def {delegate}"
+        target = _find_def(owner_rel, _hops[0])
+        assert target is not None, f"{owner_rel} 內找不到 def {_hops[0]}"
+        # ② 其餘每一跳：前一跳必須真的呼叫它
+        for _prev, _cur in zip(_hops, _hops[1:]):
+            _prev_called = _called_names(target, _alias_map(owner_rel))
+            assert _cur in _prev_called, (
+                f"{key} 的委派鏈斷在 {_prev} → {_cur}："
+                f"{owner_rel}::{_prev} 內實際呼叫 {sorted(_prev_called)}"
+            )
+            target = _find_def(owner_rel, _cur)
+            assert target is not None, f"{owner_rel} 內找不到 def {_cur}"
 
     has_raise = any(isinstance(n, ast.Raise) for n in ast.walk(target))
     assert has_raise, (

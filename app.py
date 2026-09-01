@@ -33,6 +33,14 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
     **現行讀法:逐支、逐分支看下方標註,不要讀任何一句總結。**
     ⛔ **不得用一句新的全稱句換掉舊的全稱句** —— 下方 `pool_repository` /
     `ndc` / `_cached_nh_coverage` **三列本輪未重驗,維持原登記、原措辭**。
+    → 📌 **2026-09-01 續記(#756 批次 2 合併時就地補,#754 那句一字未改)**:
+      上句「三列本輪未重驗」對 **#754 那一輪**為真;**#756 重驗並修好了其中兩列**
+      (`pool_repository._cached_pool_map` / `ui/tab5_data_guard._cached_nh_coverage`,
+      逐列標註見下)。**`ndc._cached_ndc_score` 那一列仍未重驗、仍是待辦。**
+      ⚠️ **本 PR 原本改過上面那行計數(寫成「至少 3 處」),合併時刻意撤掉** ——
+      #754 立的規矩是「**改為逐列標註,不要讀任何一句總結**」,那比一個新的計數嚴格;
+      再寫一個「3」進去,正是它上一行明禁的「用一句新的全稱句換掉舊的全稱句」。
+      **兩列的修復狀態由下方的逐列刪除線承載,不由計數承載。**
     全 repo 8 個裝飾點,其中 ~~**至少 5 處實測會把失敗鎖住**~~ →
     **改為逐列標註(見下)**(⚠️ 本行為 2026-08-31
     **第四次**更正:第一版漏掉 @st.cache_data 整類、第二版只列 2 處、
@@ -51,11 +59,19 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
                **仍入快取(仍鎖 10 分)**:上游拋例外(主要是 `validate_yf_close` 的 schema 違反)
                —— 該支同樣一個節流器都沒有(`_ttl_cache` 不存例外、`fetch_url` 已 `_note_success`),
                **這是刻意還原 base 的行為,不是漏改**。
-             repositories/pool_repository._cached_pool_map              (30 分;
-               上游 _load_pool_map 自己把例外吞成 {} → 那個空 dict 被快取)
+             ~~repositories/pool_repository._cached_pool_map              (30 分;
+               上游 _load_pool_map 自己把例外吞成 {} → 那個空 dict 被快取)~~
+             → **#756(批次 2)已修**:`_load_pool_map` 改為照實 raise
+               (空選股池是合法狀態,與讀失敗同義即 §1「空有兩義」)→ 例外穿過
+               `@st.cache_data` **不入快取**;「不阻斷抓取鏈」那半改由
+               `_pool_map_or_empty()` 在**快取之外**承接(內拋外譯,同 #754 手法),
+               並在進場處查 gspread 兩把退避鑰匙。**公開介面
+               (`resolve_secid`/`resolve_isin`/`resolve_currency`)一個字未變。**
              ui/helpers/macro/ndc._cached_ndc_score                     (15 分)
-             ui/tab5_data_guard._cached_nh_coverage                     ( 5 分;
-               ⚠️ **第四次更正才補上**,見下)
+             ~~ui/tab5_data_guard._cached_nh_coverage~~                 (**2026-09-01
+               已修**:鎖住的成因是 services/nav_history_gs.load_points 內層
+               `try: ws = sh.worksheet(...) / except: return []` 把 API 錯誤壓成
+               「沒有這個分頁」;現在只放行非 API 錯誤,其餘往上拋並登記來源冷卻)
       不鎖 → ui/helpers/v2_editor ×2(拋 PolicySheetError → 例外不入快取)、
              ui/tab5_data_guard._cached_nh_status(→ status(),只讀 get_secret,
                **確實無外部 HTTP** —— 這半句原本就對,不要跟著改)
@@ -63,8 +79,13 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
     實測鏈路:_cached_nh_coverage → services/nav_history_gs.coverage_status
     → 同檔 load_points → _get_sheet() → sh.worksheet()(gspread 內部
     fetch_sheet_metadata)+ ws.get_all_values() —— **全是往返 Google Sheets API
-    的遠端呼叫**。且 load_points 內層有 try: ws = sh.worksheet(...) / except: return []
-    → 失敗回 {} 並入快取,實測第 2 次呼叫**上游未重跑** → **鎖 TTL_5MIN**。
+    的遠端呼叫**。~~且 load_points 內層有 try: ws = sh.worksheet(...) / except: return []
+    → 失敗回 {} 並入快取,實測第 2 次呼叫**上游未重跑** → **鎖 TTL_5MIN**。~~
+    ⚠️ **2026-09-01 已修(有意識的狀態變更,不是漏刪;決策者:客戶「批次 2」)**:
+    那個內層 except 現在只放行「不帶 HTTP 狀態碼且非配額錯誤」的失敗
+    (WorksheetNotFound = 分頁真的還沒建);API 錯誤一律往上拋 → 例外不入
+    @st.cache_data → **不再鎖 TTL**,並由 infra/gspread_retry 登記跨呼叫冷卻,
+    冷卻期內直接 raise、零往返。**「全是遠端呼叫」那句仍然為真,未受影響。**
     ⚠️ **本 repo 憲法 §8.2.A.1 已於 2026-08-28 第三輪稽核就地改寫過同一句措辭**,
     該處明寫「舊表述把它寫進『本地持久化』的括號裡,會讓讀者以為它不上網 ——
     **那是假的**」,並附逐成員表釘死 _cached_nh_coverage 遠端往返=是、
@@ -88,7 +109,12 @@ UI「全域刷新」clear_all_caches() 強制重抓 — 原「零快取」敘述
       `@st.cache_data` 層例外穿過 → 公開 wrapper 接住並譯回既有的 `(df, err)` 形狀),
       **公開介面一個字未變** —— 也就是舊理由「回傳 tuple 承載不了 .attrs」
       **是被繞過,不是被推翻**(那句話本身今天仍然對)。
-      **另外三列(pool_repository / ndc / _cached_nh_coverage)仍未修、仍是待辦。**
+      ~~**另外三列(pool_repository / ndc / _cached_nh_coverage)仍未修、仍是待辦。**~~
+      → ⚠️ **2026-09-01 狀態變更,不是漏刪(#756 批次 2 合併時就地更正)**:
+        那句對 **#754 那一輪**為真;**#756 已把其中兩列做掉** ——
+        `pool_repository._cached_pool_map` 與 `ui/tab5_data_guard._cached_nh_coverage`
+        (兩者同樣走**內拋外譯**,逐列說明見上方清單)。
+        **現行:只剩 `ndc._cached_ndc_score` 一列未修、仍是待辦。**
     ⚠️ **本項與 `tests/test_st_cache_failure_not_cached.py::_RAISES` 是同一件事的兩份記錄**
     —— 該表把上述兩支登記為「失敗會 raise、例外穿過快取層不入快取」。
     在 #754 之前,**兩份互相矛盾**(這裡說「鎖住」、那裡說「不入快取」),
