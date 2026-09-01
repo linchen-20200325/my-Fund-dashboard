@@ -47,6 +47,22 @@ def test_kind_follows_status_table(status, expect):
     assert GR.kind_for_gspread_error(_api_error(status)) == expect
 
 
+@pytest.mark.parametrize("status,orig_kind", [(404, "not_found"), (407, "proxy_auth")])
+def test_both_zero_cooldown_exemptions_are_overridden_for_gspread(status, orig_kind):
+    """**兩格都要守**（2026-09-01 稽核 N2a）：原本只守了 404，於是把
+    `if _kind in ("not_found", "proxy_auth")` 改成 `("not_found",)` 這個突變
+    **26 條全綠** —— 407 的冷卻從 60s 靜靜掉回 0，沒有任何一條測試看得見。
+
+    ⚠️ 兩格的**理由不同**（見 `kind_for_gspread_error` docstring）：
+    404 是「gspread 沒有探測鏈」；407 是「gspread 不經過 NAS Squid，
+    『罰錯人』的前提不存在」。這裡只釘住**結論**，理由的正確性由 docstring 承擔。
+    """
+    assert SB.kind_for_status(status) == orig_kind
+    assert SB.cooldown_for(orig_kind) == 0                    # 原表確實是 0
+    assert GR.kind_for_gspread_error(_api_error(status)) == "unreachable"
+    assert SB.cooldown_for(GR.kind_for_gspread_error(_api_error(status))) > 0
+
+
 def test_gspread_404_does_not_inherit_the_zero_cooldown_exemption():
     """`source_backoff.kind_for_status(404)` 是 `not_found`（**0 冷卻**）——
     那條豁免服務的是「輪好幾個月份 slug、舊月份 404 是正常流程」的探測鏈。
@@ -131,14 +147,25 @@ class _Counter:
         self.n = 0
 
 
+def _status_for(fail_at, point, default=429):
+    """假件的失敗點語法：`"worksheet"` = 用預設狀態碼；`"worksheet:403"` = 指定。
+    回 None 代表這個點不失敗。"""
+    for item in fail_at:
+        head, _, tail = str(item).partition(":")
+        if head == point:
+            return int(tail) if tail else default
+    return None
+
+
 class _FakeWS:
     def __init__(self, name, counter, fail_at):
         self._name, self._c, self._fail = name, counter, fail_at
 
     def get_all_values(self):
         self._c.n += 1
-        if "values" in self._fail:
-            raise _api_error(429)
+        _st = _status_for(self._fail, "values")
+        if _st is not None:
+            raise _api_error(_st)
         if self._name == "_fund_pool":
             return [POOL_HEADERS,
                     ["ALZF9", "安聯", "股票", "", "", "2026-01-01", "WATCHING",
@@ -148,6 +175,15 @@ class _FakeWS:
     def row_values(self, _n):
         return POOL_HEADERS
 
+    def append_rows(self, rows, **_kw):
+        self._c.n += 1
+
+    def append_row(self, row, **_kw):
+        self._c.n += 1
+
+    def update(self, *_a, **_kw):
+        self._c.n += 1
+
 
 class _FakeSpreadsheet:
     def __init__(self, counter, fail_at):
@@ -155,8 +191,9 @@ class _FakeSpreadsheet:
 
     def worksheet(self, name):
         self._c.n += 1
-        if "worksheet" in self._fail:
-            raise _api_error(429)
+        _st = _status_for(self._fail, "worksheet")
+        if _st is not None:
+            raise _api_error(_st)
         if "worksheet_missing" in self._fail:
             raise RuntimeError("WorksheetNotFound")   # 非 API 錯誤：分頁真的還沒建
         return _FakeWS(name, self._c, self._fail)
@@ -168,8 +205,9 @@ class _FakeClient:
 
     def open_by_key(self, _k):
         self._c.n += 1
-        if "open" in self._fail:
-            raise _api_error(429)
+        _st = _status_for(self._fail, "open")
+        if _st is not None:
+            raise _api_error(_st)
         return _FakeSpreadsheet(self._c, self._fail)
 
 
@@ -282,15 +320,39 @@ def test_pool_local_backend_is_untouched(monkeypatch, tmp_path):
 # ══════════════════════════════════════════════════════════════
 # 5) nav_history（services/nav_history_gs）
 # ══════════════════════════════════════════════════════════════
-def test_nav_worksheet_api_error_is_no_longer_swallowed(gs):
-    """`try: ws = sh.worksheet(...) / except: return []` 原本把 429 壓成
+@pytest.mark.parametrize("status", [429, 403, 404, 500])
+def test_nav_worksheet_api_error_is_no_longer_swallowed(gs, status):
+    """`try: ws = sh.worksheet(...) / except: return []` 原本把 API 錯誤壓成
     「這張表沒有 nav_history 分頁」—— 對外與「分頁真的還沒建」同義（§1 空有兩義），
-    而且冷卻機制永遠學不到那次失敗。"""
+    而且冷卻機制永遠學不到那次失敗。
+
+    ⚠️ **四個狀態碼都要守**（2026-09-01 稽核 N2b）：原本只守 429，於是
+    「只放行 429、403/404 仍吞回 `[]`」這個突變 **26 條全綠**。
+    而 **403（SA 未被加為該本的編輯者）正是本 repo 文件自陳的預期失敗態**，
+    也是整套「兩把鑰匙」論述最倚重的場景 —— 那一格原本沒有任何守衛。
+    """
     import services.nav_history_gs as NG
     _c, set_fail = gs
-    set_fail("worksheet")
+    set_fail(f"worksheet:{status}")
     with pytest.raises(NG.NavHistoryError):
         NG.load_points("ALZF9")
+
+
+@pytest.mark.parametrize("status,expect_key_kind", [
+    (429, "quota"),      # 配額 → 憑證層鑰匙
+    (403, "sheet"),      # 未分享 → 單一試算表鑰匙
+])
+def test_nav_worksheet_failure_lands_on_the_right_key(gs, status, expect_key_kind):
+    """403 發生在 `worksheet()` 時也必須記在**試算表**鑰匙上（不是憑證層）——
+    否則同一把憑證下健康的另一本會被誤殺。"""
+    import services.nav_history_gs as NG
+    _c, set_fail = gs
+    set_fail(f"worksheet:{status}")
+    with pytest.raises(NG.NavHistoryError):
+        NG.load_points("ALZF9")
+    actor, sid = NG._nav_backoff_ident()
+    want = GR.quota_key(actor) if expect_key_kind == "quota" else GR.sheet_key(actor, sid)
+    assert want in SB._STATE, f"應記在 {want}，實際 {list(SB._STATE)}"
 
 
 def test_nav_missing_worksheet_still_returns_empty(gs):
@@ -388,3 +450,111 @@ def test_nav_disabled_returns_empty_without_touching_backoff(monkeypatch):
     assert NG.load_points("ALZF9") == []
     assert NG._nav_backoff_ident() == ("", "")
     assert not SB._STATE
+
+
+# ══════════════════════════════════════════════════════════════
+# 6) 稽核 N1：寫入成功必須**解除讀取冷卻**（只清快取是不夠的）
+# ══════════════════════════════════════════════════════════════
+def test_pool_write_success_clears_read_cooldown(gs):
+    """稽核實跑重現的回歸：讀取吃過一次 403 → 登記 900s 冷卻 → 上游恢復 →
+    使用者成功寫入 → 舊寫法只清快取、清不掉退避 → `resolve_secid` 仍回 `None`、
+    **0 趟**，模組 docstring 承諾的「改池後立即生效」在冷卻窗內不再為真。"""
+    import repositories.pool_repository as P
+    counter, set_fail = gs
+    set_fail("open:403")
+    _fresh_pool()
+    assert P.resolve_secid("ALZF9") is None
+    assert GR.should_skip_gspread(*P._pool_backoff_ident())[0] is True   # 冷卻已登記
+
+    set_fail()                                        # 上游恢復
+    P.add_or_update(P.PoolEntry(code="NEW1", morningstar_secid="SEC-NEW"))
+    assert GR.should_skip_gspread(*P._pool_backoff_ident())[0] is False, \
+        "寫入成功卻沒解除讀取冷卻 → 下一次查表仍會空手而回"
+
+    counter.n = 0
+    assert P.resolve_secid("ALZF9") == ("F00000P8WB", "USD")
+    assert counter.n > 0, "寫入成功後的下一次讀取應該真的打上游"
+
+
+def test_nav_write_success_clears_read_cooldown(gs):
+    """同型第二例，而且後果更難看：紅色「累積內容讀取失敗」會顯示在
+    **一次成功匯入的正下方**（Tab5 的 except 分支），最長 15 分鐘。"""
+    import services.nav_history_gs as NG
+    counter, set_fail = gs
+    set_fail("open:403")
+    with pytest.raises(NG.NavHistoryError):
+        NG.load_points("ALZF9")
+    assert GR.should_skip_gspread(*NG._nav_backoff_ident())[0] is True
+
+    set_fail()
+    res = NG.append_points([{"code": "ALZF9", "nav": 12.5, "nav_date": "2026-07-23"}])
+    assert res["written"] == 1
+    assert GR.should_skip_gspread(*NG._nav_backoff_ident())[0] is False, \
+        "匯入成功卻沒解除讀取冷卻 → 成功訊息正下方會出現紅色讀取失敗"
+
+    counter.n = 0
+    assert NG.coverage_status()                       # 立刻讀得到，不再 raise
+    assert counter.n > 0
+
+
+def test_nav_csv_import_success_also_clears_cooldown(gs):
+    """`import_csv_text` 是 Tab5 那顆按鈕真正呼叫的入口 —— 它委派 `append_points`，
+    這條釘住那層委派沒有把解除動作漏掉。"""
+    import services.nav_history_gs as NG
+    _c, set_fail = gs
+    set_fail("open:403")
+    with pytest.raises(NG.NavHistoryError):
+        NG.load_points("ALZF9")
+    set_fail()
+    out = NG.import_csv_text("ALZF9", "日期,淨值\n2026-07-24,13.5\n")
+    assert out["written"] == 1
+    assert GR.should_skip_gspread(*NG._nav_backoff_ident())[0] is False
+
+
+def test_pool_write_success_clearing_does_not_break_when_backoff_errors(gs, monkeypatch):
+    """解除退避是**收尾**動作 —— 它自己壞掉不該讓一次成功的寫入看起來像失敗。"""
+    import repositories.pool_repository as P
+    _c, set_fail = gs
+    set_fail()
+    _fresh_pool()
+    monkeypatch.setattr(P, "_pool_backoff_ident",
+                        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom")))
+    P.add_or_update(P.PoolEntry(code="NEW2"))          # 不得拋
+
+
+# ══════════════════════════════════════════════════════════════
+# 7) 稽核 N4：把「省下幾趟」寫成**不繫於注入點**的不變量
+# ══════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("where,first_cost", [
+    ("open", 1),        # 失敗在 open_by_key    → 第一次付 1 趟
+    ("worksheet", 2),   # 失敗在 worksheet()    → 第一次付 2 趟
+    ("values", 3),      # 失敗在 get_all_values → 第一次付 3 趟
+])
+@pytest.mark.parametrize("site", ["pool", "nav"])
+def test_only_the_first_call_pays_regardless_of_where_it_fails(gs, where, first_cost, site):
+    """**第一次付多少趟取決於失敗發生在哪一段；第 2、3 次一律 0 趟。**
+
+    ⚠️ 這條取代前一版 PR 描述裡「pool ×3 → 1 趟」的說法（2026-09-01 稽核 N4）：
+    那個「1」是假件讓 `open_by_key` 直接炸的產物 —— 403 改注在 `get_all_values`
+    就變成 3。**要點（第 2、3 次 0 趟）成立，但那個數字不該被引用。**
+    """
+    import repositories.pool_repository as P
+    import services.nav_history_gs as NG
+    counter, set_fail = gs
+    set_fail(f"{where}:403")
+    _fresh_pool()
+
+    def _call():
+        if site == "pool":
+            P.resolve_secid("ALZF9")
+        else:
+            with pytest.raises(NG.NavHistoryError):
+                NG.load_points("ALZF9")
+
+    per = []
+    for _ in range(3):
+        before = counter.n
+        _call()
+        per.append(counter.n - before)
+    assert per[0] == first_cost, f"第一次應付 {first_cost} 趟，實際 {per}"
+    assert per[1:] == [0, 0], f"第 2、3 次應為 0 趟，實際 {per}"

@@ -340,14 +340,35 @@ def list_pool(oauth_client=None) -> list:
     return get_pool_store(oauth_client).list_pool()
 
 
+def _after_pool_write(oauth_client=None) -> None:
+    """寫入成功後的收尾:**清查表快取 ＋ 解除讀取冷卻**(2026-09-01 稽核 N1)。
+
+    ⚠️ 只清快取是不夠的 —— 稽核實跑重現:讀取先吃過一次 403 → 登記 900 秒冷卻 →
+    上游恢復 → 使用者在 UI 成功寫入 → `_clear_pool_cache()` 清得掉快取,
+    **清不掉退避** → 下一次 `resolve_secid` 仍在冷卻窗內直接回 `{}`、0 趟,
+    於是「改池後立即生效」這句承諾在冷卻窗內**不再為真**(最長 15 分鐘)。
+
+    **寫入成功本身就是「這把憑證 + 這本試算表現在是健康的」的最強證據** ——
+    比任何一次讀取探測都強(它同時證明了配額沒滿、這本開得起來、而且可寫)。
+    所以這裡呼叫 `record_gspread_success`,把兩把鑰匙一起解除。
+    """
+    _clear_pool_cache()               # 立即生效:清補淨值查表快取,不必等 TTL
+    try:
+        from infra.gspread_retry import record_gspread_success
+        record_gspread_success(*_pool_backoff_ident(oauth_client))
+    except Exception as _e:  # noqa: BLE001 — 解除退避是收尾動作,壞掉不該讓寫入看起來失敗
+        print(f"[pool_repository] 寫入成功但解除讀取冷卻時出錯(不影響寫入):"
+              f"{type(_e).__name__}: {str(_e)[:120]}")
+
+
 def add_or_update(entry: PoolEntry, oauth_client=None) -> None:
     get_pool_store(oauth_client).upsert(entry)
-    _clear_pool_cache()               # 立即生效:清補淨值查表快取,不必等 TTL
+    _after_pool_write(oauth_client)
 
 
 def remove_from_pool(code: str, oauth_client=None) -> None:
     get_pool_store(oauth_client).remove(code)
-    _clear_pool_cache()
+    _after_pool_write(oauth_client)
 
 
 def set_type_override(code: str, type_override: str, oauth_client=None) -> None:
@@ -357,7 +378,7 @@ def set_type_override(code: str, type_override: str, oauth_client=None) -> None:
         if e.code == str(code).strip():
             e.type_override = type_override if type_override in _VALID_TYPES else ""
             store.upsert(e)
-            _clear_pool_cache()
+            _after_pool_write(oauth_client)
             return
     raise KeyError(f"選股池無此標的:{code}")
 
@@ -365,7 +386,13 @@ def set_type_override(code: str, type_override: str, oauth_client=None) -> None:
 # ── 補淨值查表(v19.472 併入對照表:供 repositories/fund/sources.py hot path)──────────
 # 選股池同時是「code → 晨星 secId / ISIN / 幣別」對照表。MoneyDJ 抓不到淨值時,sources.py
 # 查本表拿 secId(或用 ISIN 去晨星串 secId)走「晨星 → Yahoo chart」補淨值。快取整份
-# code→entry(大小寫不敏感鍵),改池後 `_clear_pool_cache()` 立即生效(退役 id_map_repository)。
+# code→entry(大小寫不敏感鍵),~~改池後 `_clear_pool_cache()` 立即生效~~(退役 id_map_repository)。
+# ⚠️ **2026-09-01 就地更正(有意識的更正,不是漏刪;決策者:客戶指派的稽核複驗)**:
+# 自本檔接上跨呼叫來源冷卻起,「清快取」**不再等於**「立即生效」—— 讀取若正處於冷卻窗內,
+# `_pool_map_or_empty()` 會在進場處直接回 `{}`,清快取清不到它。
+# **現行寫法**:寫入成功一律走 `_after_pool_write()`,它**清快取 ＋ 解除兩把退避鑰匙**,
+# 「立即生效」這句承諾因此才重新為真。舊表述的用意仍然成立(改完池不該等 30 分 TTL),
+# 被權衡掉的只是它的機制描述 —— 現在光清快取已經不夠了。
 
 def _pool_backoff_ident(oauth_client=None) -> "tuple[str, str]":
     """本次查表會用哪把憑證、打哪一本 → (actor, sheet_id)。
@@ -519,7 +546,7 @@ def set_secid(code, secid, currency: str = "", name: str = "", oauth_client=None
             if name and not e.name:          # 只在空名稱時補(不蓋使用者填的)
                 e.name = str(name).strip()
             store.upsert(e)
-            _clear_pool_cache()
+            _after_pool_write(oauth_client)
             return
 
 

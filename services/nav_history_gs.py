@@ -337,6 +337,19 @@ def append_points(points: list[dict], *, _sheet: Any = None, oauth_client: Any =
                                  c["fund_name"], c["source"], recorded_at])
             if new_rows:
                 ws.append_rows(new_rows, value_input_option="USER_ENTERED")
+            # 2026-09-01 稽核 N1:**寫入成功 → 解除讀取冷卻**。
+            # 稽核實跑重現的回歸:讀取先吃過一次 403 → 登記 900s 冷卻 → 上游恢復 →
+            # 使用者在 Tab5 按「📥 匯入到 nav_history」→ **成功寫入 N 筆** →
+            # `_clear_nh_caches()` 清得掉快取、**清不掉退避** → 緊接著的
+            # `coverage_status()` 仍 raise → 紅色「累積內容讀取失敗」就顯示在
+            # **一次成功匯入的正下方**,最長 15 分鐘(429 則 30 分鐘)。
+            # 相對修改前是**回歸**:修改前清完快取會真的重讀,立刻看到剛匯入的資料。
+            # 寫入成功同時證明了配額沒滿、這本開得起來、而且可寫 —— 比任何讀取探測都強。
+            _wa, _wsid = (("", "") if _sheet is not None
+                          else _nav_backoff_ident(oauth_client))
+            if _wa:
+                from infra.gspread_retry import record_gspread_success
+                record_gspread_success(_wa, _wsid)
             return {"written": len(new_rows), "skipped": len(points) - len(new_rows)}
     except NavHistoryError:
         raise
