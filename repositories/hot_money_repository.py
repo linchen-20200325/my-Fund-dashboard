@@ -291,8 +291,15 @@ def _finmind_failed(msg: str, kind: str = "server_error") -> _FetchFailed:
     讓 `@st.cache_data` 的 TTL 承擔。三個節流器:
       1. 本 helper 剛登記的 **dataset 冷卻**(進場處會查) → raise;
       2. `fetch_url` 已登記的 **host 冷卻**(`r is None` 那一支會查) → raise;
-      3. 兩者都沒有(`NO_COOLDOWN_KINDS`、或 200 但 body 空被 `fetch_url_with_retry`
-         轉成 None)→ **return**,由 `TTL_30MIN` 節流。
+      3. 兩者都沒有 → **return**,由 `TTL_30MIN` 節流。已知落在這一類的有:
+         `NO_COOLDOWN_KINDS`(`not_found`/`proxy_auth`)、
+         **`kind_for_status` 對 2xx/3xx 回的哨符 `""`**、
+         或 200 但 body 空被 `fetch_url_with_retry` 轉成 None。
+         ⚠️ **這是已知清單,不是窮舉**(同本段末句的但書)。
+         ⚠️ **哨符那一項是 2026-09-01 第四輪補上的**:它是**第三輪自己新增的
+         第三種 return 情形**(`if not _kind or ...`),當時**沒有進任何一份列舉** ——
+         同一輪在別處剛寫下「刻意不寫『只有這兩個』」,卻沒把同一句但書
+         套到隔壁的列舉上。**同一把尺只往被點名的那一格用,本 PR 第四次。**
     ⚠️ 少了第 3 條,那些分支會變成「每次 rerun 真打一次上游」——**比改版前更糟**
     (改版前失敗被快取,30 分鐘才打一次)。第一版只對 body-status 那一支想到這件事,
     `r is None` 那一支漏了,第二版補齊(2026-09-01)。
@@ -339,8 +346,14 @@ def _fetch_foreign_flow_series_uncached(
     攔截點在本函式開頭。**「一個封包都不發」的效果不變,變的是誰擋的。**
 
     **仍會 `return`(＝仍被快取)的失敗分支**——一律是「**沒有任何節流器**」那一類
-    (見 `_finmind_failed` 的節流不變式):
+    (見 `_finmind_failed` 的節流不變式)。**以下是已知清單,刻意不寫成窮舉**
+    (⚠️ 2026-09-01 第四輪補上第三項與這句但書:第三項是**第三輪自己新增的**,
+     當時漏掉了 —— 而同一輪已在 `_finmind_failed` 寫下同一句但書,**沒有套過來**):
       · body status 落在 `NO_COOLDOWN_KINDS`(`not_found` / `proxy_auth`);
+      · **body status 是 SSOT `kind_for_status` 對 2xx/3xx 回的哨符 `""`**
+        —— 那是「**這不是失敗**」的意思,不是一個失敗分類;
+        `cooldown_for("")` 會走「未知 kind 從寬」的 default(非 0),
+        所以**不能只判 `cooldown_for(_kind) <= 0`**,必須先判 `not _kind`;
       · `r is None` 且 host **不在**冷卻期(404/407,或 `fetch_url_with_retry` 把
         「HTTP 200 但 body 空」轉成的 None —— 那一種 `fetch_url` 已經
         `_note_success()` 過了,誰都沒有記)。

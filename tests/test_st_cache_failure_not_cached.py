@@ -104,6 +104,17 @@ _RAISES: dict[str, tuple[str, str, str]] = {
         "若那些也 raise，就變成每次 rerun 真打一次上游，比改版前更糟。"
         "實際分支數與歸屬以 repositories/hot_money_repository.py 內的註解為準，"
         "本欄不重述數字（重述必然漂移，2026-09-01 已實證）。",
+        # ⚠️ 2026-09-01 第四輪：上面那個括號列舉**不是窮舉，也漏了一項**。
+        #    `d6b8b68` 把條件改成 `if not _kind or cooldown_for(_kind) <= 0:` 之後，
+        #    **SSOT `kind_for_status` 對 2xx/3xx 回的哨符 `""` 成為第三種 return 情形**
+        #    （實測：`kind_for_status(201)` → `''`，`cooldown_for('')` → `60`，
+        #     且 `'' not in NO_COOLDOWN_KINDS` —— 它與括號裡列的兩種都不同）。
+        #    **政策句仍為真**（「沒有節流器的就 return」），**假的是括號裡的列舉**。
+        # ⚠️ **本輪刻意不改上面那個字串常數**：本輪的授權是「只改文字、不改任何可
+        #    執行程式碼」，而 `_RAISES` 的理由是 **dict 的值**，改它會動到 AST 骨架
+        #    （docstring 與註解才是本輪可動的載體）。故把但書放在這裡 ——
+        #    與本檔既有慣例一致（其餘更正也都以相鄰註解承載）。
+        #    **若要把哨符寫進理由字串本身，請在下一輪連同 AST 骨架 diff 一起交付。**
     ),
     "repositories/hot_money_repository.py::_cached_usdtwd_series": (
         "_fetch_usdtwd_series_uncached",
