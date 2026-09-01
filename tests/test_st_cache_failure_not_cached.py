@@ -107,9 +107,13 @@ _RAISES: dict[str, tuple[str, str, str]] = {
         "body status 是 SSOT kind_for_status 對 2xx/3xx 回的哨符 ''（那是"
         "「這不是失敗」的意思，不是一個失敗分類；cooldown_for('') 走「未知 kind "
         "從寬」的 default、非 0，故必須先判 not _kind）；"
-        "或 fetch_url 回 None 但來源未進退避。"
+        "或 fetch_url 回 None 但來源未進退避；"
+        "或 except Exception 那一支（ImportError，或 HTTP 200 之後才拋的解碼／charset 錯 —— "
+        "fetch_url 已 _note_success 解除 host 冷卻，本支又不呼叫 _finmind_failed）。"
         "⚠️ 這是已知清單，刻意不寫成窮舉 —— 哨符那一項在被寫進本欄之前，"
-        "已經在同一個 PR 裡活了一輪、沒有進任何一份列舉。"
+        "已經在同一個 PR 裡活了一輪、沒有進任何一份列舉；"
+        "而 except 那一支從第三輪就被登記成「已知不滿足不變式」，"
+        "卻連續三輪沒有被收進任何一份列舉，直到第六輪才連同行為一起修。"
         "實際分支與歸屬以 repositories/hot_money_repository.py 內的註解為準，"
         "本欄不重述數字（重述必然漂移，2026-09-01 已實證）。",
         # ⚠️ 2026-09-01 第四輪的發現與實測，保留在此（它是上面那句的**證據**）：
@@ -709,10 +713,15 @@ _COUNT_CLAIM_MUST_CATCH = (
 #     當正面樣本讀起來刺眼）。**本組判斷是不換**，兩條理由：
 #    (1) 本清單存在的目的是證明 regex **不會誤報 `一X` 慣用語**，樣本值不值得信任
 #        取決於它**在 repo 裡真的出現過**；而「一律 `raise`」這個句型至今仍活在
-#        `repositories/policy/v2.py`、`repositories/hot_money_repository.py`
-#        （`_fetch_foreign_flow_series_uncached` 的 docstring）、
-#        `ui/helpers/*/merge_context.py`、`tests/test_asset_publish.py` ——
+#        `repositories/policy/v2.py`、`ui/helpers/*/merge_context.py`、
+#        `infra/asset_publish.py`、`tests/test_asset_publish.py` ——
 #        換成自己編的同義句，是拿「production 有出現過」換「讀起來順」。
+#    ⚠️ **2026-09-01 第六輪就地更正引用（有意識的更正，不是漏刪）**：本清單原本還列了
+#        `repositories/hot_money_repository.py`（`_fetch_foreign_flow_series_uncached`
+#        的 docstring）。**那一句本輪已被改掉** —— 它寫「取數失敗**一律** raise」，
+#        而**同一個 docstring 的下一段從第一版起就在列「仍會 return 的失敗分支」**，
+#        是一句從寫下當天就自相矛盾的話。引用一併更新，否則就變成
+#        「更正一句話時漏掉它的副本」—— 那正是本檔到處在記的那個病。
 #    (2) 上方判為假的是 **`_cached_usdtwd_series` 那一格的內容宣稱**
 #        （「兩個失敗點……一律 raise」），**不是這個句型本身**；
 #        本清單的元素是**給 regex 吃的字串樣本**，不是對 repo 現況的宣稱。

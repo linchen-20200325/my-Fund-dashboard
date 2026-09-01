@@ -570,3 +570,185 @@ def test_empty_frames_carry_real_dtypes(harness):
     df, _err = run("quota_402", days=119)[0]
     assert str(df["date"].dtype) == "datetime64[ns]", df.dtypes.to_dict()
     assert str(df["foreign_net_yi"].dtype) == "float64", df.dtypes.to_dict()
+
+
+# ════════════════════════════════════════════════════════════════════
+# 2026-09-01 第六輪：兩個「本 PR 自己造成」的迴歸，各配一條會轉紅的守衛
+# ════════════════════════════════════════════════════════════════════
+def test_transport_exception_falls_back_to_caching(monkeypatch):
+    """⭐ `except Exception` 那一支**沒有任何節流器** → 必須 `return`（＝入快取）。
+
+    ## 這一支為什麼沒有節流器（三個都不在）
+
+    `fetch_url` 內部的 `except Exception: break` 已經兜住**連線層**例外並回 `None`
+    （走 `r is None` 那一支）。能冒泡到 `_fetch_foreign_flow_series_uncached`
+    的 `except` 的只剩兩種，兩種都不是「上游壞了」：
+
+    - `from fund_fetcher import fetch_url_with_retry` 的 `ImportError`；
+    - **HTTP 200 已到手之後**才拋的錯 —— `fetch_url_with_retry` 尾端的
+      `resp.encoding = resp.apparent_encoding` 與 `resp.text.strip()`
+      **在 `fetch_url` 的 try 之外**，而 `fetch_url` 早已 `_note_success()`。
+
+    於是：host 冷卻**已被解除**、dataset 冷卻**沒有登記**（本支刻意不呼叫
+    `_finmind_failed` —— 替一個與來源無關的錯記冷卻是罰錯人）、
+    若再 `raise` 又穿過 `@st.cache_data` → **每次 rerun 真打一次上游**。
+
+    ## 觸發手法
+
+    讓 `resp.apparent_encoding` 拋錯 —— 那正是上述第二種，而且**不需要**改任何
+    production 程式碼就構造得出來。第三輪曾以「構造不出 production 可達的觸發點」
+    為由只登記不修；**本條就是那個理由的反證**：構造得出來，也量得到。
+
+    ## 實測（3 次 rerun 的每輪 `sess.get` 增量）
+
+        b5b0464(base) : [1, 0, 0]
+        98dcfd4       : [1, 1, 1]  ⛔  ← 與 base 相比放大了請求量
+        本輪          : [1, 0, 0]  ✅
+
+    突變：把該分支改回 `raise _FetchFailed(...)` → 本條轉紅（[1,1,1]）。
+    """
+    _require_real_streamlit()
+    net = {"n": 0}
+
+    class _BoomResp:
+        """⚠️ **刻意不繼承 `_FakeResp`**：它的 `__init__` 會 `self.apparent_encoding = ...`，
+        碰上一個唯讀 property 會在 **`fetch_url` 的 try 之內**就炸掉 —— 那會被
+        `except Exception: break` 兜住、回 `None`、還登記一筆 host 冷卻，
+        於是走的是 `r is None` 那一支，**根本沒碰到本條要守的 `except`**。
+        （第一版就是這樣寫的，測試當場紅燈說「訊息是來源退避冷卻中」，
+        那個紅燈是對的 —— 它抓到探針沒打中目標。）
+        本類讓 `apparent_encoding` **只有 getter**，讀取發生在
+        `fetch_url_with_retry` 尾端、也就是 `fetch_url` 的 try **之外**。
+        """
+
+        def __init__(self, status: int, body: bytes):
+            self.status_code = status
+            self.content = body
+            self._text = body.decode("utf-8", "replace")
+            self.encoding = "utf-8"
+
+        @property
+        def apparent_encoding(self):
+            raise UnicodeError("charset 偵測炸了")
+
+        @property
+        def text(self) -> str:
+            return self._text
+
+        def json(self):
+            return json.loads(self._text)
+
+    class _S:
+        def get(self, url, **kw):
+            net["n"] += 1
+            return _BoomResp(200, b'{"status": 200, "data": []}')
+
+    monkeypatch.setattr(_proxy, "_get_thread_session", lambda: _S())
+    monkeypatch.setattr(_proxy, "get_proxy_config", lambda: None)
+
+    hm.fetch_foreign_flow_series.clear()
+    _sb.reset_all()
+    try:
+        per_rerun = []
+        for _ in range(3):
+            _before = net["n"]
+            df, err = hm.fetch_foreign_flow_series(101)
+            per_rerun.append(net["n"] - _before)
+
+        assert df.empty and err, f"必須誠實回報失敗：{err!r}"
+        assert "抓取失敗" in err, f"訊息應保留上游原因（與 base 逐字相同）：{err!r}"
+        assert per_rerun == [1, 0, 0], (
+            f"沒有節流器的失敗必須落回快取，實測每輪上游呼叫 {per_rerun}（預期 [1, 0, 0]）"
+            f" —— [1, 1, 1] 代表每次 rerun 都真打一次 FinMind，比改版前更糟"
+        )
+        assert not _sb.get_backoff_state(), (
+            f"本支刻意不登記來源冷卻（錯與來源無關，記下去是罰錯人）："
+            f"{_sb.get_backoff_state()}"
+        )
+    finally:
+        hm.fetch_foreign_flow_series.clear()
+        _sb.reset_all()
+
+
+def test_tab1_force_refresh_actually_reaches_upstream(harness):
+    """⭐ Tab1「強制重抓」在退避冷卻期內**必須真的重打一次上游**。
+
+    ## 這條守的是什麼
+
+    PR 描述開頭的問題陳述就是「按『Tab1 強制重抓』也只是把同一份失敗快取再讀一次」。
+    本 PR 新增的 **dataset 粒度冷卻**不在 `_TAB1_TTL_CACHE_NAMES` 裡
+    （實測 `"_SOURCE_BACKOFF" in _TAB1_TTL_CACHE_NAMES` → `False`），
+    於是 `clear_tab1_macro_caches()` 把 TTL cache 與 `@st.cache_data` 清光之後，
+    下一次呼叫**仍然**在 `_fetch_foreign_flow_series_uncached` 進場處被
+    `should_skip` 擋下 —— **一個封包都不發**，訊息還從「FinMind 402: quota」
+    這種具體原因退化成「退避冷卻中」。
+
+    對照組：sidebar「全域刷新」走 `global_refresh_all()` → `clear_all_caches()`
+    → 整個 `_CACHE_REGISTRY`（含 `_SOURCE_BACKOFF`）→ **它一直是好的**。
+    也就是「只有全域刷新逃得掉冷卻，Tab1 那顆按鈕逃不掉」。
+
+    ## 實測（402 持續失敗，按下按鈕後的上游請求數）
+
+        b5b0464(base) : 1   ← 按鈕真的重打了
+        98dcfd4       : 0   ⛔
+        本輪          : 1   ✅
+
+    突變：拿掉 `clear_tab1_macro_caches` 的 (4) 那一段 → 本條轉紅（upstream=0）。
+    """
+    from services.macro import clear_tab1_macro_caches
+
+    run, net, _impl = harness
+    run("quota_402", days=101, reruns=1)          # 進入冷卻
+    assert _sb.get_backoff_state(), "前置不成立：這一步應該已經登記了 dataset 冷卻"
+
+    _before = net["n"]
+    _stat = clear_tab1_macro_caches(session_state=None)
+    df, err = hm.fetch_foreign_flow_series(101)
+
+    assert _stat["backoff_cleared"] == 1, (
+        f"clear_tab1_macro_caches 沒有解掉 dataset 冷卻：{_stat}"
+    )
+    assert net["n"] - _before == 1, (
+        f"按「強制重抓」之後上游請求數 = {net['n'] - _before}（預期 1）—— "
+        f"0 代表按鈕一個封包都沒發，使用者按了也拿不到東西"
+    )
+    assert "退避冷卻中" not in err, (
+        f"訊息退化成冷卻提示、而不是真正的失敗原因：{err!r}"
+    )
+
+
+def test_force_refresh_does_not_unlock_host_level_backoff(harness):
+    """⭐ 反向鎖：「強制重抓」**不得**解掉 host 級冷卻（那才是保護上游的那道）。
+
+    這是「連按繞過退避」那個風險的處理方式 —— 射程刻意只到 dataset 鍵：
+
+    - 真正代表「上游正在受苦」的分類（429 限流 / 5xx / 403 封鎖 / 逾時）
+      全部是 `fetch_url` 登記的 **host 冷卻**，本條釘死它們不受按鈕影響；
+      host 還在冷卻時 `fetch_url` 照樣**一個封包都不發**。
+    - 於是連按最多只能重試「HTTP 200 但 payload 不可用」那一類，
+      而那一類上游的傳輸層是健康的。
+
+    另外兩條界線在別處量：**一次按鈕 ＝ 至多一次上游請求**
+    （失敗會由 `_finmind_failed` 當場重新登記一個完整冷卻，本模組不做指數放大），
+    以及**這正是 base 的行為**（見 `test_tab1_force_refresh_actually_reaches_upstream`）。
+
+    突變：把 `clear_source_backoff()` 改成 `_sb.reset_all()` → 本條轉紅。
+    """
+    from services.macro import clear_tab1_macro_caches
+
+    run, net, _impl = harness
+    run("quota_402", days=101, reruns=1)
+    _sb.record_failure(hm._FINMIND_HOST_KEY, "rate_limited")   # 上游真的在受苦
+
+    _before = net["n"]
+    clear_tab1_macro_caches(session_state=None)
+    df, err = hm.fetch_foreign_flow_series(101)
+
+    _still = {d["source"] for d in _sb.get_backoff_state()}
+    assert hm._FINMIND_HOST_KEY in _still, (
+        f"host 級冷卻被按鈕解掉了 —— 連按就能轟炸一個正在受苦的來源：{_still}"
+    )
+    assert net["n"] - _before == 0, (
+        f"host 仍在冷卻時按下按鈕仍發了 {net['n'] - _before} 個封包（預期 0）"
+    )
+    assert "來源退避冷卻中" in err, f"訊息應如實說明是 host 冷卻擋下的：{err!r}"

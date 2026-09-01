@@ -144,13 +144,31 @@ def _yf_series_to_df(series: pd.Series) -> pd.DataFrame:
 # 按「強制重抓」也只是把同一份快取再讀一次。這違反 §2.4「超過 TTL 應重新抓取」,
 # 而畫面上一個被鎖住的空值,正是 §1「錯誤的數字比沒有數字更危險」講的東西。
 #
-# ## 做法:內拋外譯(三層,公開介面一個字不變)
+# ## 做法:內拋外譯(三層,~~公開介面一個字不變~~ → **公開呼叫介面不變**)
 #
 #   _fetch_*_uncached()        ← 失敗 raise;它**沒有**被裝飾,例外不會進快取
 #          ↑
 #   @st.cache_data _cached_*() ← 只有成功結果被存下來,例外直接穿過去
 #          ↑
 #   公開 fetch_*()             ← 接住例外,翻回既有回傳形狀 (df, err)
+#
+# ⚠️ **2026-09-01 第六輪措辭更正(有意識的更正,不是漏刪 · 決策者:本修復組)**:
+#   「一個字不變」**嚴格說不成立**,據實記下差在哪(實測 base vs 本分支):
+#     · **不變**:呼叫方式、signature(含型別註記與預設值)、回傳形狀、`.clear()`
+#       (由檔尾 `_bind_clear` 綁回公開名字)、`__wrapped__`。
+#     · **變了**:公開 callable 的**型別**由 streamlit 的 `CachedFunc` 變成普通 `function`,
+#       連帶少掉 6 個 streamlit **私有**屬性(`_function_key` / `_get_or_create_cached_value` /
+#       `_handle_cache_hit` / `_handle_cache_miss` / `_info` / `_is_protocol`);
+#       `infra.cache._ST_CACHE_REGISTRY` 註冊到的名字也由 `fetch_*` 變成 `_cached_*`。
+#     · **功能面為零影響**(全 repo 消費端 —— `services/hot_money_service.py`、
+#       `services/macro/__init__.py`、`scripts/export_fund_db.py`、`shared/schemas.py`
+#       —— 只用到「呼叫」與 `.clear()`;`global_refresh_all` 是**逐個 iterate 呼叫
+#       `.clear()`、不按名字查**,故改名不影響它)。
+#   **舊表述的用意仍然成立**(呼叫端真的一行都不用改);
+#   **被權衡掉的是它的絕對性** —— 一個以「記錄不可說謊」為題的 PR,
+#   不該用一句實測擋得掉的全稱句當標題。
+#   ⚠️ 「**只用到呼叫與 `.clear()`**」是取決於「有沒有漏看」的宣稱,
+#   本輪為單組實測,未經第二組驗證(§-2 規則 6)。
 #
 # 刻意**不**建共用機制:本批只有兩支,抽共用抽象是 §8.1 step 6「用不到的抽象」反例。
 #
@@ -304,15 +322,30 @@ def _finmind_failed(msg: str, kind: str = "server_error") -> _FetchFailed:
     (改版前失敗被快取,30 分鐘才打一次)。第一版只對 body-status 那一支想到這件事,
     `r is None` 那一支漏了,第二版補齊(2026-09-01)。
 
-    ⛔ **不變式尚未貫徹,據實登記(2026-09-01 第三輪;有意識的揭露,不是漏想)**:
-    上一版把這一段寫成「**三選一,不得有第四種**」,並在別處宣稱已「**逐一**走過每一條
-    失敗分支」—— **兩句都太滿,已被本輪實測推翻**。目前**確知有兩個分支不滿足它**:
-      · **本檔的 `except Exception as e: raise _FetchFailed(f"FinMind 抓取失敗:…")`**
+    ⛔ **不變式的貫徹狀態,據實登記(2026-09-01 第三輪起逐輪更新)**:
+    第三輪之前把這一段寫成「**三選一,不得有第四種**」,並在別處宣稱已「**逐一**走過每一條
+    失敗分支」—— **兩句都太滿,已被第三輪實測推翻**。當時確知有兩個分支不滿足它,
+    **本輪(第六輪)起兩個都已修,原文加刪除線保留**:
+      · ~~**本檔的 `except Exception as e: raise _FetchFailed(f"FinMind 抓取失敗:…")`**
         —— HTTP 200 之後才在 `fetch_url` 的 try 之外拋錯時,三個節流器一個都沒有
-        (見上一段)。**結構性破洞、本輪構造不出 production 可達的觸發點,故只登記不改。**
-      · ~~**`fetch_usdtwd_series` 的同型分支**~~ → **本輪已修**(改為 `return`,
+        (見上一段)。**結構性破洞、本輪構造不出 production 可達的觸發點,故只登記不改。**~~
+        → **2026-09-01 第六輪已修**(改為 `return`,由 `TTL_30MIN` 承擔;
+        **有意識的行為變更,不是漏刪** · 決策者:本修復組)。
+        ⚠️ **舊表述的第一句仍然成立**(它確實是一個結構性破洞);
+        **被推翻的是「所以只登記不改」那個結論**,三條理由:
+        (a) **它與 `_fetch_usdtwd_series_uncached` 的 `except` 是同一個形狀**,
+            而那一支第四輪已修 —— 只修被點名的那一格,正是本 PR 一路在批的那件事;
+        (b) 「構造不出來的路徑改行為 ＝ 加一段沒有測試看得住的碼」這個理由**不成立**:
+            實測用 `resp.apparent_encoding` 拋錯即可觸發並量到 `[1,1,1] → [1,0,0]`,
+            守衛見 `tests/test_hot_money_failure_roundtrip.py`;
+        (c) 這一支**還涵蓋一個與 charset 無關、確定可達的子情形**:
+            `from fund_fetcher import fetch_url_with_retry` 的 ImportError。
+        ⚠️ **「production 可達性」本組同樣沒有證明** —— 改成 `return` 不需要它:
+        `return` 在兩種情形下都不劣於 `raise`(還原 base 行為),所以不必先解決可達性。
+      · ~~**`fetch_usdtwd_series` 的同型分支**~~ → **第四輪已修**(改為 `return`,
         由 `TTL_10MIN` 承擔),實測見 `_fetch_usdtwd_series_uncached` 內註解。
-    ⚠️ **本段刻意不寫「只有這兩個」** —— 那正是上一版犯的錯。這是**已知清單**,不是窮舉。
+    ⚠️ **本段刻意不寫「只有這兩個」,也不寫「現在全部貫徹了」** —— 那正是第三輪之前
+    犯的錯。這是**已知清單**,不是窮舉:本檔可能還有第三個未被發現的分支。
 
     ## 與憲法 §-2.A #1 那條「已知會誤判的 AST 規則」無關
 
@@ -337,10 +370,15 @@ def _fetch_foreign_flow_series_uncached(
 ) -> tuple[pd.DataFrame, str]:
     """`fetch_foreign_flow_series` 的真實實作 —— **未被快取裝飾**。
 
-    ⚠️ 取數失敗一律 `raise _finmind_failed(<err 字串>, <失敗分類>)`,**不**回
-    (空 df, err):例外穿過 `@st.cache_data` 不入快取,同時登記 **dataset 粒度**的
+    ⚠️ 取數失敗**只要有節流器就** `raise _finmind_failed(<err 字串>, <失敗分類>)`,
+    **不**回 (空 df, err):例外穿過 `@st.cache_data` 不入快取,同時登記 **dataset 粒度**的
     冷卻,讓下一次 rerun 在**本函式的進場處**被擋下
     (v3 §02「只快取成功結果;失敗時退避」)。
+    ⚠️ 2026-09-01 第六輪更正:本句原寫 ~~「取數失敗**一律** `raise`」~~
+    (**有意識的更正,不是漏刪** · 決策者:本修復組)。**那個「一律」在它寫下的當天就是假的** ——
+    緊接的下一段從第一版起就在列「仍會 `return` 的失敗分支」,**同一個 docstring 內自相矛盾**。
+    本輪把 J 分支(`except` 那一支)也改成 `return` 之後,矛盾只會更明顯,故就地改掉。
+    **判準是「有沒有節流器」,不是「是不是失敗」** —— 見 `_finmind_failed` 的節流不變式。
     ⚠️ 2026-09-01 第二輪更正:本段原寫 ~~「在 `fetch_url` 進場處被擋下」~~ ——
     退避鍵改成 dataset 粒度之後,`fetch_url` 查不到它(它只查 host 鍵),
     攔截點在本函式開頭。**「一個封包都不發」的效果不變,變的是誰擋的。**
@@ -356,7 +394,11 @@ def _fetch_foreign_flow_series_uncached(
         所以**不能只判 `cooldown_for(_kind) <= 0`**,必須先判 `not _kind`;
       · `r is None` 且 host **不在**冷卻期(404/407,或 `fetch_url_with_retry` 把
         「HTTP 200 但 body 空」轉成的 None —— 那一種 `fetch_url` 已經
-        `_note_success()` 過了,誰都沒有記)。
+        `_note_success()` 過了,誰都沒有記);
+      · **`except Exception` 那一支(ImportError,或 HTTP 200 之後才拋的解碼/charset 錯)**
+        —— 2026-09-01 第六輪由 `raise` 改為 `return`,同樣是「一個節流器都沒有」;
+        它在**第三輪就被登記成「已知不滿足不變式」,卻連續三輪沒有被收進本清單**
+        (第四輪補了哨符那一項時也漏了它) —— 又一次「同一把尺只往被點名的那一格用」。
     判斷與 `repositories/macro/yf.py` 對 404/407 的既有處置同源
     (「`_ttl_cache` 是它們唯一的節流器」)。
     """
@@ -389,8 +431,38 @@ def _fetch_foreign_flow_series_uncached(
             params["token"] = token
         r = fetch_url_with_retry(_FINMIND_BASE, params=params, timeout=15, retries=2)
     except Exception as e:
-        # transport 失敗 = 上游問題,不可快取(下次 rerun 應重試)
-        raise _FetchFailed(f"FinMind 抓取失敗：{e}") from e
+        # ⛔ **這一支必須 `return`,不可 `raise`**(2026-09-01 第六輪修;
+        #    **有意識的行為變更,不是漏刪** · 決策者:本修復組)——
+        #    它就是 `_finmind_failed` 那條節流不變式的第 3 種情形:**一個節流器都沒有**。
+        #
+        #    ⚠️ 舊註解寫 ~~「transport 失敗 = 上游問題,不可快取(下次 rerun 應重試)」~~,
+        #    **那個歸因在本檔改成 raise 之後就不成立了**:`fetch_url` 內部的
+        #    `except Exception: break` 已經兜住連線層例外並回 None(走 `r is None` 那一支),
+        #    能冒泡到**這裡**的只剩兩種,兩種都不是「上游問題」:
+        #      · `from fund_fetcher import fetch_url_with_retry` 的 ImportError;
+        #      · **HTTP 200 已到手之後**才拋的錯 —— `fetch_url_with_retry` 尾端的
+        #        `resp.encoding = resp.apparent_encoding` 與 `resp.text.strip()`
+        #        **在 `fetch_url` 的 try 之外**,而 `fetch_url` 早已 `_note_success()`。
+        #    後者三個節流器一個都不剩:沒有 host 冷卻(已被 `_note_success` 解除)、
+        #    沒有 dataset 冷卻(本支不呼叫 `_finmind_failed`,理由見該 docstring:
+        #    替一個與來源無關的錯記一筆冷卻是罰錯人)、raise 又穿過 `@st.cache_data`。
+        #
+        #    **實測(同一支探針,fake session 數 `sess.get`,3 次 rerun 的每輪增量;
+        #     觸發手法＝讓 `resp.apparent_encoding` 拋錯,那正是上述第二種)**:
+        #        b5b0464(base) : [1, 0, 0]      ← 失敗被快取,30 分鐘才打一次
+        #        98dcfd4       : [1, 1, 1]  ⛔  ← 每次 rerun 真打一次上游
+        #        本輪          : [1, 0, 0]  ✅  ← 回到 base 的節流強度
+        #
+        #    ⚠️ **與 `_fetch_usdtwd_series_uncached` 的 `except` 是同一個形狀**,
+        #    而那一支已於 `d6b8b68` 修掉、這一支當時漏了 —— 本 PR 一路在批的
+        #    「同一把尺只往被點名的那一格用」,在這裡是第五次。
+        #
+        #    ⚠️ **這不是把失敗藏起來**:錯誤訊息逐字保留(§1 Fail Loud),
+        #    Tab1「強制重抓」照樣 `.clear()` 得掉;變的只有**節流由誰承擔**。
+        print(f"[hot_money] ⚠️ FinMind 取數拋例外且無任何節流器"
+              f"（ImportError，或 HTTP 200 之後才拋的解碼／charset 錯）"
+              f"→ 本次失敗照舊入快取，由 TTL_30MIN 節流：{e}")
+        return _empty_flow_df(), f"FinMind 抓取失敗：{e}"
 
     if r is None:
         # ⚠️ **這一支刻意不呼叫 `_finmind_failed`**:`fetch_url` 收尾時已依
@@ -648,6 +720,30 @@ def _fetch_usdtwd_series_uncached(days: int) -> tuple[pd.DataFrame, str]:
         #    實測(fake session 數 sess.get):yfnull / yfempty / http500 三種情境
         #    本檔改版前後都是 rerun#1..#3 = 1 / 0 / 0,**零額外請求**。
         #    本檔在這裡再記一次 Yahoo 冷卻,只會把 VIX/DGS10/DXY/SPY 一起鎖住。
+        #
+        # ⚠️ **2026-09-01 第六輪補上一句上面沒說的話(有意識的揭露,不是漏想)**:
+        #    「它有節流器」為真,**但那個節流器比原本的 TTL 短一半** ——
+        #    改版前擋住這一支的是本檔的 `@st.cache_data(TTL_10MIN)`(600s);
+        #    改成 raise 之後只剩 `fetch_url` 的 host 冷卻,而**持續 5xx** 的分類是
+        #    `server_error` → 300s。**於是持續失敗時的請求頻率剛好翻倍。**
+        #
+        #    **上面那句「1 / 0 / 0 零額外請求」沒有錯,但它的量測窗太短看不到這件事**:
+        #    三次立即 rerun 都落在同一個 300s 冷卻內,base 與本分支自然一樣。
+        #    差別要拉到冷卻週期以上才會出現。
+        #
+        #    **實測到的週期(2026-09-01,本輪重量)**:持續 HTTP 500 時
+        #    一次真實嘗試 ＝ 3 個 `sess.get`(`fetch_url` 內部 retries=3);
+        #    `BACKOFF_COOLDOWN_SEC["server_error"]` = 300s、`TTL_10MIN` = 600s。
+        #    → 30 分鐘等速 rerun:base 1800/600 × 3 = **9**;本分支 1800/300 × 3 = **18**。
+        #    **U2(200+schema 違反)/ U3(200 空序列)/ U4(404)三種都不變** ——
+        #    U2 已於第四輪改回 `return`(走 TTL_10MIN),U3/U4 的節流器本來就不是這一層。
+        #
+        #    ⚠️ **本輪刻意不為它改行為**,理由是三條裡最弱的一條也還撐得住:
+        #    (a) 這一支**確實有節流器**,不觸犯節流不變式(不變式管的是「有沒有」,
+        #        不是「夠不夠長」);(b) 要讓它回到 600s,得在本層把空序列也快取起來,
+        #        那正是本 PR 要拆掉的東西 —— 會把「Yahoo 瞬斷 → 空白畫面鎖 10 分鐘」裝回去;
+        #    (c) 300s 仍**遠嚴於**「完全沒有節流器」(那是每次 rerun 一發)。
+        #    **這是一個取捨,不是沒看到** —— 據實登記,供後人推翻。
         raise _FetchFailed("USDTWD 無資料（Yahoo Chart API 失敗或被限流）")
     # 截取最近 days
     cutoff = pd.Timestamp.now() - pd.Timedelta(days=days)
@@ -765,3 +861,53 @@ _bind_clear(fetch_usdtwd_series, _cached_usdtwd_series)
 # 有沒有被設 —— 指到實作而不是薄 wrapper,那個檢查才量得到它要量的東西。
 fetch_foreign_flow_series.__wrapped__ = _fetch_foreign_flow_series_uncached
 fetch_usdtwd_series.__wrapped__ = _fetch_usdtwd_series_uncached
+
+
+# ── 「強制重抓」的第二半:清快取之外,還要解掉本檔登記的冷卻 ─────────────
+def clear_source_backoff() -> int:
+    """解除**本檔登記的 dataset 粒度冷卻**,回傳清掉幾筆(0 或 1)。
+
+    ## 為什麼非有它不可(2026-09-01 第六輪稽核抓到的迴歸)
+
+    Tab1「**強制重抓**」走 `services/macro/__init__.py::clear_tab1_macro_caches`,
+    它只清 `_TAB1_TTL_CACHE_NAMES` 裡的 TTL cache 與兩支 `@st.cache_data`——
+    **清不到退避狀態**(`_SOURCE_BACKOFF` 不在那個 frozenset 裡,實測 `in` → False)。
+    而本 PR 新增的 dataset 冷卻是**跨快取層**的:快取清光了,
+    `_fetch_foreign_flow_series_uncached` 進場處仍會被 `should_skip` 擋下。
+
+    **實測(402 額度用盡持續失敗,同一支探針數 `sess.get`)**:
+
+        按 Tab1「強制重抓」後的上游請求數
+          b5b0464(base) : 1   ← 按鈕真的重打了
+          98dcfd4       : 0   ⛔ 一個封包都不發,訊息還從「FinMind 402: quota」
+                                退化成「退避冷卻中」
+          本輪          : 1   ✅
+
+    也就是說:PR 描述開頭的問題陳述(「按『Tab1 強制重抓』也只是把同一份失敗快取
+    再讀一次」)在改完之後**變成了另一種形式的同一個症狀** —— 使用者依然拿不到東西。
+    **這是本 PR 自己造成的使用者可見迴歸**,依 §-1.5.1c 判定 3 屬本批的收尾義務。
+
+    ## ⚠️ 射程刻意很窄 —— 這是「連按繞過退避」那個風險的處理方式
+
+    本函式**只解 `_FINMIND_DATASET_KEY` 一個鍵**,三條界線寫死:
+
+    1. **不碰 host 鍵**(`_FINMIND_HOST_KEY`),也不碰任何別的來源。
+       真正代表「上游正在受苦」的那些分類 —— 429 限流 / 5xx / 403 封鎖 / 逾時 ——
+       全部是 `fetch_url` 登記的 **host 冷卻**,本函式一律不動;
+       host 還在冷卻時 `fetch_url` 照樣**一個封包都不發**。
+       → **連按最多只能重試「HTTP 200 但 payload 不可用」那一類**,
+         而那一類上游的傳輸層是健康的。
+    2. **解除 ≠ 免除**。下一次若又失敗,`_finmind_failed` 會**當場重新登記
+       一個完整的冷卻**(本模組不做指數放大,也不累積) ——
+       所以連按的成本上界是「**一次按鈕 ＝ 至多一次上游請求**」,
+       由人的手速而不是機器的迴圈決定。
+    3. **這正是 base 的行為**。base 按一次「強制重抓」就真的重打一次上游
+       (上表第一列)。本函式**不是開一個新的洞,是不要把使用者依賴的那個關掉**。
+
+    ⚠️ **本組未查證的部分,據實揭露**:清掉冷卻之後 `should_skip` 那一側**還有沒有
+    別的副作用**,本組只驗到「該鍵消失、下一次真的會打、失敗會重新登記」這三件事
+    (見 `tests/test_hot_money_failure_roundtrip.py` 的三條守衛)。
+    `_STATE` 是本模組私有、只被 `should_skip` / `record_*` / `get_backoff_state` 讀,
+    但「**沒有別的讀者**」是一句取決於有沒有漏看的全稱句,本組不宣稱(§-2 規則 6)。
+    """
+    return 1 if _sb_hm.reset_key(_FINMIND_DATASET_KEY) else 0
