@@ -395,29 +395,49 @@ def test_mode_nav_key_follows_the_selected_mode():
 # T15 · D3 兩模式「基期」用字對齊
 # ══════════════════════════════════════════════════════════════════════
 def _unified_base_labels() -> dict:
-    """從 `unified.py` 的 `_BASE_LBL` **字面值**讀出大表的用字。
+    """讀出**健診大表實際使用**的那組「基期」用字。
 
-    它是函式內的區域變數（import 不到），所以只能用 AST 讀 —— 這正是
-    「這組字串目前沒有 SSOT」的證據本身，不是本測試偷懶。
+    兩種綁定方式都要讀得到，因為 `unified.py` 在 2026-09-02 換了寫法：
+
+    · **舊**：`_BASE_LBL = {...}`（函式內區域變數字面值）→ 用 AST 讀字面值。
+    · **新**（#763 T29 合併進來）：
+      `from ui.helpers.fund_grp_health._utils import BASE_LABELS as _BASE_LBL`
+      → 順著 `unified.py` **自己寫的那一行 import** 去把 SSOT 取回來。
+
+    ⚠️ 一律**以 `unified.py` 的原始碼為錨**，不是直接 import 一個猜來的 SSOT ——
+    否則有人把 `unified.py` 改回手抄字典，本函式照樣回 SSOT 的值，
+    這把漂移鎖就對空氣生效了。兩種綁定都找不到 → fail loud（§1）。
     """
+    import importlib
+
     for node in ast.walk(_tree(UNIFIED)):
+        # 舊：函式內字面值。
         if (isinstance(node, ast.Assign)
                 and any(isinstance(t, ast.Name) and t.id == "_BASE_LBL"
                         for t in node.targets)):
             return ast.literal_eval(node.value)
+        # 新：`from <絕對模組> import <NAME> as _BASE_LBL`。
+        if isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            for _alias in node.names:
+                if _alias.asname == "_BASE_LBL":
+                    return dict(getattr(
+                        importlib.import_module(node.module), _alias.name))
     raise AssertionError(
-        "`unified.py` 找不到 `_BASE_LBL` —— 若它已被收進 SSOT（那是好事），"
-        "請把本測試改成直接 import 那個 SSOT，並把 "
-        "`tab2_single_fund.BASE_LABELS_FROM_MERGED_TABLE` 一起改吃它。")
+        "`unified.py` 既沒有 `_BASE_LBL` 字面值、也沒有把它綁到任何絕對 import —— "
+        "大表的「基期」用字現在來自哪裡無法判定，這把漂移鎖已經對空氣生效。")
 
 
 def test_base_label_wording_matches_the_merged_table():
     """單檔 σ 卡片的「基期」用字必須與批次大表**逐字相同**（線框 D3）。
 
-    ⚠️ 這是一把**漂移鎖**，不是 SSOT。這組字串在 repo 內目前有三份且無共同來源
-    （`unified.py::_BASE_LBL`、`rotation.py::_lbl`、本批新增的
-    `tab2_single_fund.BASE_LABELS_FROM_MERGED_TABLE`）—— 收進 `shared/` 才是正解，
-    但那不在本批的檔案邊界內。**在收進去之前，任一邊改字就當場轉紅。**
+    ⚠️ 這是一把**漂移鎖**，不是 SSOT。
+
+    **2026-09-02 合併後的現況**（#760 ＋ #763 T29 併在一起）：`unified.py::_BASE_LBL`
+    與 `rotation.py` 都已改吃 `ui/helpers/fund_grp_health/_utils.py::BASE_LABELS`
+    這份 SSOT（守衛見 `tests/test_base_label_ssot.py`，那是 runtime 探針、比本檔的
+    AST 讀法更強）—— **只剩 `tab2_single_fund.BASE_LABELS_FROM_MERGED_TABLE`
+    還是手抄的第三份**。讓它也吃同一份才是正解，但那要動 ② 的 production 檔，
+    不在本次合併的檔案邊界內。**在收進去之前，任一邊改字就當場轉紅。**
     """
     from ui.tab2_single_fund import BASE_LABELS_FROM_MERGED_TABLE as _mine
 
