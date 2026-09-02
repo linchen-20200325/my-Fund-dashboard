@@ -434,7 +434,8 @@ def _wire_backfill(monkeypatch, *, fd, yahoo=None, morningstar=None, cnyes=None,
 
     三個候選源與 `isin` 都可獨立指定,才驅動得到 `_rescue_by_isin` 的**每一個出口**:
     傳 `None` = 回空序列;傳 **Exception 實例** = 該源拋例外;傳 Series = 該源回那條序列。
-    `isin=None` = 池中沒有 ISIN(救援 gate 不成立)。
+    `isin=None` = 池中沒有 ISIN(救援 gate 不成立);`isin=` **Exception 實例** =
+    `resolve_isin` 自己拋例外(讀池失敗那條出口 —— 它**不經過** `_src`,故另走 `_isin_of`)。
     """
     import repositories.fund.sources as SRC
     import repositories.pool_repository as POOL
@@ -449,7 +450,15 @@ def _wire_backfill(monkeypatch, *, fd, yahoo=None, morningstar=None, cnyes=None,
         return _empty if v is None else v
 
     monkeypatch.setattr(MF, "auto_fetch_moneydj", lambda code, **kw: fd)
-    monkeypatch.setattr(POOL, "resolve_isin", lambda code: isin)
+
+    def _isin_of(code):
+        # ⚠️ 不能沿用 `_src`:那個把 None 翻成「空序列」,而 `resolve_isin` 的 None
+        #    是「池中沒有 ISIN」這個**有意義的回傳值**,不是空資料。
+        if isinstance(isin, BaseException):
+            raise isin
+        return isin
+
+    monkeypatch.setattr(POOL, "resolve_isin", _isin_of)
     monkeypatch.setattr(POOL, "resolve_currency", lambda code: pool_ccy)
     monkeypatch.setattr(SRC, "_src_yahoo_finance_nav", lambda code: _src(yahoo))
     monkeypatch.setattr(SRC, "_src_morningstar_nav",
@@ -663,6 +672,47 @@ def test_rescue_all_sources_raising_keeps_the_measured_currency(
     r = NS.backfill_to_gs(["X"])["results"][0]
     assert r["source"] == "moneydj" and r["fetched"] == 30
     assert {p["currency"] for p in written} == {"USD"}
+
+
+def test_rescue_pool_read_raising_keeps_the_measured_currency(
+        monkeypatch, _cache_store):
+    """**`resolve_isin` 自己拋例外**(讀池失敗)→ 最早那條 return,幣別必須原封不動。
+
+    這是 `_rescue_by_isin` 六個出口裡**最後一個沒有守衛的**(本 PR 的出口盤點表第 (1) 條,
+    「對應」欄一直是空的)。它**不是** happy path 的變體:前面五條都在「池讀得到 ISIN」
+    之後才分岔,這一條在**進迴圈之前**就 return,`_ccy_notes` 恆空、三個候選源一次都不會被問。
+
+    **為什麼它會走到(不是假想)**:`resolve_isin` 讀的是 Google Sheets 選股池
+    (`repositories/pool_repository`),而讀池會因配額 / 網路 / 憑證失效而拋 ——
+    同一個形狀在 `repositories/fund/fund_orchestration._pool_secid_or_isin` 已經有
+    「池炸掉不得擋抓取」的守衛與測試(`tests/test_currency_and_secid_gate_v19505.py::
+    test_pool_read_raises_gate_conservative_false`),**但那是另一個函式**,
+    對 `backfill_to_gs` 這條寫入線零覆蓋。
+
+    ⚠️ 損害與 M6(池中沒有 ISIN)同型但更隱蔽:池一時讀不到,**不代表這檔沒有幣別** ——
+    MoneyDJ 那條序列自己量到的 USD 就在手上。把它掉成空字串是**靜默資料遺失**,
+    而 `nav_history` **永不刪除**、既有列一律留空不回填 → **那一格以後補不回來**。
+
+    **突變**:`except Exception ...: return s, src, _ccy_notes, ""`(或任何常數)
+    → 本則必須轉紅。**本組實測該突變對修復前的全套完全沉默。**
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(
+        monkeypatch,
+        isin=RuntimeError("pool sheet 讀取失敗"),        # ← resolve_isin 自己炸
+        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "fund_name": "F"},
+        yahoo=_daily(600, "2020-01-01", ccy="EUR"))      # 永遠不會被查詢
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    # 先確認 fixture 真的打在這條出口上:救援沒發生 → 來源仍是 MoneyDJ,
+    # 而且**沒有任何候選因幣別被拒**(那是第 (5) 條出口的事,不是這一條)。
+    assert r["source"] == "moneydj" and r["fetched"] == 30, (
+        f"fixture 沒對準:救援不該發生;實得 source={r['source']!r} fetched={r['fetched']!r}")
+    assert not r["ccy_refused"], (
+        f"這條出口 `_ccy_notes` 恆空,不該有幣別拒絕紀錄;實得 {r['ccy_refused']!r}")
+    _got = {p["currency"] for p in written}
+    assert _got == {"USD"}, (
+        f"池讀取失敗就把序列自己量到的幣別弄丟了(靜默資料遺失,永久補不回);"
+        f"實得 {sorted(_got)!r}")
 
 
 # ══════════════════════════════════════════════════════════════════════
