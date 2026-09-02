@@ -17,6 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.ia import empty_state
 from ui.helpers.render_state import not_ready, system_error
 # ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。
 # ~~預設全空 → 本檔行為與合併前完全相同。~~
@@ -49,6 +50,27 @@ from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
 # §3.3 反捏造:接近警戒門檻走 shared SSOT,不在本檔另寫一份同義 literal
 from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _NEAR_PCT_SSOT
+
+#: D3 —— 單檔 σ 卡片沿用**批次大表**的「基期」標籤字（客戶拍板線框
+#: `docs/wireframes/wireframe-fund-research.html`「D3」：
+#: 「單檔卡片沿用大表的『基期』標籤字：🔴 高基期／⚪ 中性／🟢 低基期／⬜ 資料不足」，
+#: 讓使用者兩個模式看到的是同一套詞）。
+#:
+#: ⛔ **這是同一組字串在 repo 內的第三份，而且沒有 SSOT 可以吃 —— 據實寫明，不要當它沒發生。**
+#: 現有兩份：`ui/helpers/fund_grp_health/unified.py` 的 `_BASE_LBL`（**函式內的區域變數**，
+#: 匯入不到）與 `ui/helpers/fund_grp_health/rotation.py` 的 `_lbl`（同樣是區域變數，
+#: 而且用字略有不同：「🔴 高基期(可賣)」）。**正解是把它收進 `shared/` 或
+#: `services/rotation.py`，但那兩處都不在本批的檔案邊界內**（本批只准動
+#: `ui/tab1_macro.py` / `ui/tab_fund_research.py` / `ui/tab2_single_fund.py` /
+#: `ui/tab_batch_analysis.py` / `tests/**`），已列入 PR 描述交總管另派。
+#:
+#: ✅ **在收進 SSOT 之前，漂移由測試擋住，不靠自律**：
+#: `tests/test_ia_tab13_batch3.py::test_base_label_wording_matches_the_merged_table`
+#: 以 AST 讀出 `unified.py::_BASE_LBL` 的字面值逐鍵比對 —— 任一邊改字就當場轉紅。
+BASE_LABELS_FROM_MERGED_TABLE: dict = {
+    "high": "🔴 高基期", "low": "🟢 低基期",
+    "mid": "⚪ 中性", "unknown": "⬜ 資料不足",
+}
 
 from services.portfolio_service import dividend_safety as div_safety_check
 from services.precision_service import (
@@ -288,9 +310,9 @@ def render_single_fund_tab() -> None:
 
     # 稽核 H1：分頁列寫「🔍 個基深掘」(story_nav SSOT)，這裡卻寫死
     # 「單一基金深度分析」—— 同一頁兩個名字（與 Tab④ 同型）。
-    from ui.helpers.story_nav import (
-        render_flow_nav, render_story_nav, section_label as _section_label_t2,
-    )
+    # 2026-09-02 D5：`render_flow_nav` / `render_story_nav` **已移到合併頁的共用頂部**
+    # （`ui/tab_fund_research.py::_render_shared_top()`），本檔不再 import 它們。
+    from ui.helpers.story_nav import section_label as _section_label_t2
     # 合併頁（③ 基金研究）已在共用頂部畫過頁面大標時，這裡不再畫第二個 `##`。
     # 只讓掉標題那一行 —— flow_nav / story_nav / caption 一律照舊（它們帶的是本模式的資訊）。
     if not _merged_page_owns(_MERGED_PAGE_HEADER):
@@ -303,8 +325,16 @@ def render_single_fund_tab() -> None:
         # 哪天有人讓這個分支活過來，第一件事就是 KeyError。
         # 改吃 `section_label('fund')`（分區名 SSOT，回「🔍 單檔深掘」）。
         st.markdown(f"## {_section_label_t2('fund')}")
-    render_flow_nav("fund")      # 巨觀:第 ② 層 基金核心分析
-    render_story_nav("fund")
+    # ⚠️ 2026-09-02 D5 收斂（**有意識的政策變更，不是漏刪** · 決策者：客戶拍板線框
+    # `docs/wireframes/wireframe-fund-research.html`「決定 2 / D5」）：
+    # 這裡原本畫 ~~`render_flow_nav("fund")`~~ ＋ ~~`render_story_nav("fund")`~~。
+    # **舊寫法在它寫下的當天是對的** —— 當時「個基深掘」是一個獨立的頂層分頁，
+    # 導覽本來就該由它自己畫。**被推翻的是它的前提**：七→五之後它變成 ③ 的一個
+    # *模式*，而 `render_flow_nav("fund")` 與 `render_flow_nav("batch")` 的第一行
+    # **逐字相同**（同屬 L2）→ 切模式時等於同一份資料畫兩次；且只有本檔多畫一條
+    # `render_story_nav`，批次沒有 → **切模式時頂部高度會跳動**。
+    # 現行：兩條導覽都由 `ui/tab_fund_research.py::_render_shared_top()` 畫一次，
+    # 本模式只留下面這一句自己的功能 caption。
     st.caption("輸入 MoneyDJ 代碼或網址，即時抓取淨值 / 持股 / 配息 / 風險指標")
 
     # ── 輸入列（自動偵測境內/境外，移除 radio）────────────────────
@@ -1027,6 +1057,16 @@ def render_single_fund_tab() -> None:
                             _sr    = _hwm["sigma_rank"]
                             _dist  = _hwm["dist_to_hwm_pct"]
                             _l1, _l2, _l3 = _hwm["level_1s"], _hwm["level_2s"], _hwm["level_3s"]
+                            # D3：把批次大表的「基期」用字搬過來（同一個 σ rank、
+                            # 同一個 `classify_base()`、同一組門檻常數 → 同一份資料，
+                            # 只是這裡是 N=1 的卡片、那裡是 N 列的表格欄）。
+                            from services.rotation import classify_base as _cb_t2
+                            from shared.signal_thresholds import (
+                                ROTATION_BUY_SIGMA as _ROT_BUY_T2,
+                                ROTATION_SELL_SIGMA as _ROT_SELL_T2,
+                            )
+                            _base_lbl = BASE_LABELS_FROM_MERGED_TABLE[
+                                _cb_t2(_sr, _ROT_SELL_T2, _ROT_BUY_T2)]
                             st.markdown(
                                 f"<div style='background:{BG_DARK_NAVY_1};border:2px solid {_hc};"
                                 f"border-radius:12px;padding:14px 18px;margin:10px 0'>"
@@ -1041,6 +1081,9 @@ def render_single_fund_tab() -> None:
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_dist:+.2f}%</div></div>"
                                 f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>σ 位階</div>"
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_sr:+.2f}σ</div></div>"
+                                # D3：與批次大表同一套詞，切模式時不會看到兩種講法。
+                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>基期</div>"
+                                f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_base_lbl}</div></div>"
                                 f"</div>"
                                 f"<div style='display:flex;gap:12px;flex-wrap:wrap;font-size:11px'>"
                                 f"<span style='color:{MD_GREEN_A200}'>HWM-1σ: {_l1:.4f}{_ccy_sfx}</span>"
@@ -1055,6 +1098,18 @@ def render_single_fund_tab() -> None:
                                 "💡 **怎麼看**:σ 位階 ≤ −2σ = 距歷史高點深跌,基本面若健康可分批"
                                 "承接;≥ +1σ = 接近前高偏過熱。此為「絕對位階」(對歷史高點),"
                                 "與上方買賣線的「相對中樞」互補。"
+                            )
+                            # D3：說清楚「基期」不是這張卡自己發明的第二套判定。
+                            # ⚠️ **刻意另起一個 `st.caption`，不併進上面那一句**
+                            # （2026-09-02 就地更正）：Python 會把相鄰字串**在剖析階段
+                            # 折成同一個 Constant**，併進去等於把本批的新文案和
+                            # v19.404 的既有文案黏成同一顆節點 —— 本批新增的
+                            # 「禁方位詞」守衛就會連那句既有的「與**上方**買賣線…」
+                            # 一起判紅（那句不是本批寫的，也不在本批射程內）。
+                            # 分開兩個 caption：新舊各自可被獨立檢查，畫面上仍是兩行灰字。
+                            st.caption(
+                                "「基期」欄與批次掃描大表 / 健診總表**同一套判定**"
+                                "(同一個 σ rank、同一組門檻),兩邊用字刻意一致。"
                             )
                     except Exception as _e_hwm:  # noqa: BLE001
                         # 稽核 A3：原本是 `pass  # smoke-allow-pass` —— 整張
@@ -2648,6 +2703,45 @@ def render_single_fund_tab() -> None:
                     not_ready("未設定 Gemini API Key，AI 深度解盤無法生成",
                               where="Streamlit Cloud → Settings → Secrets 的 "
                                     "`GEMINI_API_KEY`")
+    else:
+        # ── ⬜ 空狀態（本檔唯一新增；客戶拍板線框
+        #    `docs/wireframes/fund-empty-state-wireframe.html`
+        #    「③ … 新增：⬜ 還沒有查詢結果 —— 三步驟說明」）──────────────
+        #
+        # ⚠️ **這個 `else` 之前不存在** —— 線框就地點名：「這一頁的空狀態是
+        # 『什麼都沒有』，字面意義上的 `if fd:` 這個判斷**沒有 else**。
+        # `fund_data` 是 `None`（**每個新 session 都是**）時，輸入框以下
+        # **一個字都不印**。」而那正是每次開 App 進到 ③ 看到的第一個畫面。
+        #
+        # 走 `ui/helpers/ia/empty_state.py`（IA 鐵則 04 三要素：標題／缺什麼／
+        # 去哪補），**不自己刻一套灰態** —— 灰色文案的 SSOT 是
+        # `ui/helpers/render_state.not_ready()`，`empty_state()` 只是替它補上
+        # 標題與區塊化排版。線框寫「不必畫成大面積，一條虛線框即可」，
+        # 這正是 `not_ready()` 現行的樣子。
+        #
+        # ⚠️ 三步驟的用字**逐字照線框**：1️⃣ 用關鍵字找代號 → 2️⃣ 貼上網址／代碼
+        # → 3️⃣ 按 🚀 分析。三步全部落在**本頁**（找代號工具在合併頁共用頂部、
+        # 輸入框與分析鈕就在正上方），所以不經 `where_to_find()` ——
+        # 那個函式產出的是「**跨分頁**」的指路（`③ 🔍 標的探索 → …`），
+        # 拿來指同一頁上方的三個 widget 只會讓人以為要換頁。
+        empty_state(
+            "還沒有查詢結果",
+            # 同上：~~「**下面**的淨值走勢…」~~ 也是方位詞，一併拿掉。
+            "還沒查過任何一檔基金 —— 淨值走勢、風險指標、配息與吃本金檢查"
+            "要等分析跑完才會出現",
+            # ⚠️ 2026-09-02 就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管，
+            # 依據獨立稽核）：舊文案寫 ~~「1️⃣ **上方**「🔍 找代號」…」~~ ——
+            # **方位是版面順序的函數，寫進文案等於保證下一次重排就說謊**。
+            # ③ 的共用頂部本批才剛動過（D5 把導覽插到「找代號」之前），
+            # 下一批重排時「上方」就會指錯。#759 已經因為同一件事跌過一次。
+            # **舊文案的用意仍然成立**（要告訴使用者去哪裡找代號），
+            # 被權衡掉的只有那個會過期的方位詞 —— 改用**線框原本的用字**
+            # （「1️⃣ 用關鍵字找代號 → 2️⃣ 貼上網址／代碼 → 3️⃣ 按 🚀 分析」），
+            # 它本來就沒有方位詞。
+            where="1️⃣ 用「🔍 找代號」以關鍵字查代號　→　"
+                  "2️⃣ 貼上網址／代碼到「MoneyDJ URL 或代碼」欄　→　3️⃣ 按「🚀 分析」",
+            footer="也可以直接貼 MoneyDJ 網址；境內外基金會自動判斷，不必先選。",
+        )
 
 
 # ══════════════════════════════════════════════════════
