@@ -267,7 +267,12 @@ def _toc_anchors(fake: _FakeSt) -> list[str]:
 
 
 def _toc_labels(fake: _FakeSt) -> list[str]:
-    """目錄連結的**文字**（`[這一段]`），不是 anchor。
+    r"""目錄連結的**文字**（`[這一段]`），不是 anchor。
+
+    ⚠️ 本 docstring 前面那個 `r` 前綴**不能拿掉** —— 它引用了正則 `\]\(#`，
+    在非 raw 字串裡 `\]` 是 invalid escape sequence，會噴 DeprecationWarning
+    （本批第一版就踩到，全套 warnings 4 → 7；由 `tests/test_nav_waterfall_no_overwrite.py`
+    編譯全 repo 原始碼時浮出來，報成 `<unknown>:270`）。
 
     ⚠️ 這個 helper 是 2026-09-02 獨立稽核補的，補的是一個**真實的漏洞**：
     `_toc_anchors()` 的正則 `\]\(#([^)]+)\)` **只抓 `(#anchor)`，把 `[連結文字]`
