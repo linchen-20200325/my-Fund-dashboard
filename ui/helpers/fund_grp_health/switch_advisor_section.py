@@ -324,6 +324,43 @@ def render_portfolio_tracking(funds: list) -> None:
     c3.metric("年化波動 σ", f"{_m['ann_vol_pct']:.2f}%" if _m.get("ann_vol_pct") is not None else "—")
     c4.metric("最大回撤", _pct(_m.get("max_drawdown_pct")))
 
+    # ⛔ 2026-09-02:本卡自 ② 搬入後,與 ④ 既有的「📊 組合績效」
+    #    (`ui/helpers/portfolio_perf.render_portfolio_performance`)**同頁並存**,
+    #    而兩者有三個**逐字相同**的標籤:年化報酬 / 年化波動 σ / 最大回撤。
+    #    **實測(2026-09-02)**:兩者的數學收口到**同一個 SSOT** ——
+    #    `portfolio_returns()` → `metrics_from_return_series()`;
+    #    `performance_metrics()` 只是把 `cagr_pct` 改名成 `ann_return_pct` 出口,
+    #    `ann_vol_pct` / `max_drawdown_pct` 原樣透傳,兩邊 rf_annual 同為 0.0、
+    #    assumption 字串逐字相同。故:
+    #      · 共同交易日 ≥ `PORTFOLIO_TREND_MIN_DAYS` → 三個同名指標**數字完全相同**;
+    #      · 不足        → **本卡**依 §4.6 抑制年化 → 那兩欄顯示「—」,
+    #                      而下方那張**沒有這道閘門**、仍然給數字。
+    #    → 同一頁、同一個標籤,一張「—」一張有數字,**會被讀成「其中一張壞了」**,
+    #      而「不足 60 天」正是**新載入組合的常態**。這個混淆是「把兩張卡放到同一頁」
+    #      造成的,搬家之前它們在不同分頁、撞不到一起。
+    #    **本行 caption 只負責把範圍講清楚**(§1 誠實:不讓使用者把設計讀成故障)。
+    # ⛔ **刻意不刪卡、不改標籤、不動演算法**:去重屬「視覺元件增刪」,依客戶
+    #    草稿先行原則必須先過線框,而 ④ 的完整版面線框正在客戶端審批中(另一批)。
+    # ⚠️ 門檻**不得寫死 60**,一律引 SSOT(§3.3);使用者看得到的字裡不寫章節號與內部名。
+    from shared.signal_thresholds import PORTFOLIO_TREND_MIN_DAYS  # noqa: PLC0415
+
+    _scope = (
+        "本卡＝用你已累積的每日淨值 × 目前權重重建的走勢,另外存一份永久快照;"
+        "下方「📊 組合績效」是**同一套算式**的另一個出口(多一個 Sharpe,沒有走勢與快照)。"
+        "兩張卡的「年化報酬 / 年化波動 σ / 最大回撤」**同名同義** —— "
+        "天數足夠時兩邊數字本來就會一樣,不是各自算出來的兩個答案。"
+    )
+    if _t["annualized_suppressed"]:
+        _scope += (
+            f"　·　目前共同交易日不足 **{PORTFOLIO_TREND_MIN_DAYS}** 天 → "
+            "本卡**刻意不計年化**(期間太短,年化會嚴重失真):"
+            "「年化報酬」與「年化波動 σ」顯示「—」,"
+            "而「期間累積報酬」與「最大回撤」不受影響、仍是實數。"
+            "下方「📊 組合績效」**沒有這道門檻**,同樣的天數仍會給你年化數字 —— "
+            "**兩邊對不上是這道門檻造成的,不是其中一張壞掉。**"
+        )
+    st.caption(_scope)
+
     _curve = _t["curve"]
     if _curve is not None and len(_curve) >= 2:
         import pandas as pd
