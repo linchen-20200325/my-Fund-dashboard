@@ -2,11 +2,15 @@
 
 沿革：v19.405 Phase 4 對齊 6→5；**2026-08-31 客戶拍板線框 7→5** 之後，
 第 3 站由「🔍 個基深掘」改為合併頁「🔍 基金研究」、第 4 站改名「📊 我的配置」。
+⚠️ 2026-09-01 五分頁動線重構（客戶拍板線框 `ia-wireframe.html`）四個分頁**再次改名**：
+   市場定調→**市場總覽** ／ 組合健診→**持倉體檢** ／ 基金研究→**標的探索** ／
+   我的配置→**資產配置**（⑤ 設定與診斷未改）。下方逐字斷言已同步；
+   **它們轉紅正是本檔的作用** —— 改名必須是一次有意識的動作，不能靜默漂移。
 
 只測內容層 `story_nav_markdown`（不涉 streamlit）；`render_story_nav` 走 st.caption，
 由 app smoke / AppTest 覆蓋。
 
-⚠️ 本檔**刻意不寫死**「④ 📊 我的配置」以外的中文字面值去對 `_TAB_LABELS`：
+⚠️ 本檔**刻意不寫死**「④ 📊 資產配置」以外的中文字面值去對 `_TAB_LABELS`：
    凡是能從 SSOT 導出的，一律導出。少數保留字面值的地方（第 1 站 / 第 4 站的
    highlight 形狀）是為了讓「markdown 長相」本身有一條鎖 —— 那是這個模組的產出，
    不是它的輸入。
@@ -33,8 +37,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 
 def test_story_nav_highlights_current_step():
     md = story_nav_markdown("portfolio")
-    assert "**:blue[④ 📊 我的配置]**" in md    # 目前站：藍色粗體
-    assert ":gray[① 🌐 市場定調]" in md          # 其餘站：灰色
+    assert "**:blue[④ 📊 資產配置]**" in md    # 目前站：藍色粗體
+    assert ":gray[① 🌐 市場總覽]" in md          # 其餘站：灰色
     assert "記帳 + 再平衡" in md                  # 目前站提示
 
 
@@ -42,13 +46,13 @@ def test_story_nav_all_steps_present():
     md = story_nav_markdown("macro")
     for _key, _label, _hint in _STEPS:
         assert _label in md
-    assert "**:blue[① 🌐 市場定調]**" in md
+    assert "**:blue[① 🌐 市場總覽]**" in md
 
 
 def test_story_nav_health_step_valid():
-    """v19.405 Phase 4 新增第 2 站『組合健診』→ health 為合法 current key。"""
+    """v19.405 Phase 4 新增第 2 站（2026-09-01 起名「持倉體檢」）→ health 為合法 current key。"""
     md = story_nav_markdown("health")
-    assert "**:blue[② 💊 組合健診]**" in md
+    assert "**:blue[② 💊 持倉體檢]**" in md
     assert "吃本金" in md
 
 
@@ -59,10 +63,10 @@ def test_story_nav_invalid_current_no_highlight():
 
 
 def test_story_nav_order_decision_flow():
-    """順序必須是 市場定調 → 組合健診 → 基金研究 → 我的配置（決策動線）。
+    """順序必須是 市場總覽 → 持倉體檢 → 標的探索 → 資產配置（決策動線）。
 
     2026-08-31 七→五：第 3 站的 key 由 `fund` 改為 `research`
-    （個基深掘 + 批次分析合併成「基金研究」）。
+    （個基深掘 + 批次分析合併成 ③；③ 2026-09-01 起名「標的探索」）。
     """
     keys = [s[0] for s in _STEPS]
     assert keys == ["macro", "health", "research", "portfolio"]
@@ -100,7 +104,7 @@ def test_tab_label_error_message_points_at_the_replacement():
         tab_label("batch")
     _msg = str(_ei.value)
     assert "where_to_find" in _msg, "錯誤訊息沒有指名替代 API"
-    assert "基金研究" in _msg, "錯誤訊息沒有直接把正確答案算給 caller 看"
+    assert "標的探索" in _msg, "錯誤訊息沒有直接把正確答案算給 caller 看"
 
 
 def test_section_label_and_tab_label_are_disjoint_namespaces():
@@ -114,11 +118,11 @@ def test_section_label_and_tab_label_are_disjoint_namespaces():
 
 def test_where_to_find_carries_the_owning_tab_and_ordinal():
     """指路字串必須**自動帶上頂層分頁名**（線框要求），站號由順序推導、不寫死。"""
-    assert where_to_find("batch") == "③ 🔍 基金研究 → 📦 批次掃描"
-    assert where_to_find("fund") == "③ 🔍 基金研究 → 🔍 單檔深掘"
+    assert where_to_find("batch") == "③ 🔍 標的探索 → 📦 批次掃描"
+    assert where_to_find("fund") == "③ 🔍 標的探索 → 🔍 單檔深掘"
     assert where_to_find("manual") == "⑤ ⚙️ 設定與診斷 → 📖 說明書"
     # 分頁 key 也吃得下（沒有下一層可指）
-    assert where_to_find("macro") == "① 🌐 市場定調"
+    assert where_to_find("macro") == "① 🌐 市場總覽"
     with pytest.raises(KeyError):
         where_to_find("nope")
 
@@ -152,7 +156,7 @@ def test_section_keys_resolve_to_the_owning_tab_in_story_nav():
     整條導覽**靜默不畫** —— 無聲的功能退化比報錯更難發現。
     """
     md = story_nav_markdown("fund")
-    assert "**:blue[③ 🔍 基金研究]**" in md, "分區 key 沒有解析成所屬分頁"
+    assert "**:blue[③ 🔍 標的探索]**" in md, "分區 key 沒有解析成所屬分頁"
     assert story_nav_markdown("batch") == md, "同一頁的兩個模式應指向同一站"
 
 
