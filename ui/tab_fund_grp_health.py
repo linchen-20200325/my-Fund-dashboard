@@ -58,6 +58,20 @@ def _pick_comparison_basis(rows: "list[dict]") -> str:
 _SHARPE_SRC_COL = "Sharpe 來源"
 
 
+# ── 健診大表標題 SSOT(2026-09-02 T19)────────────────────────────────────────
+# 這一頁**只有一張表**,但原本印了**兩個 h4 標題**在它上面:
+#   `#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）`(由 `_render_health_3tables` 印)
+#   `#### 健診總表（🧮 = 自行換算欄位）`              (由 `_render_health_table` 印)
+# 兩句在講同一張 dataframe,中間還隔著新鮮度 banner 與 KPI —— 使用者會以為底下有兩張表,
+# 捲到最後只找得到一張。合併成一句,兩邊原本各自帶的資訊(合併去重複 / 🧮 自行換算 /
+# 橫向可滾動)一項不減。
+# 走常數而不是各自寫字面值:全失敗 early-return 也要印同一個標題(D2),
+# 兩處手抄正是這次要修的病。
+_BIG_TABLE_HEADING = (
+    "#### 📊 健診大表（①②③ 已去重複合併成一張;🧮 = 自行換算欄位;橫向可滾動）"
+)
+
+
 def _fold_uniform_sharpe_source(df):
     """本批「Sharpe 來源」全同 → 從 df 剔除該欄,回 `(df, 唯一來源標籤)`;否則 `(df, None)`。
 
@@ -915,15 +929,14 @@ def _render_health_3tables(rows: list[dict],
         # ⚠️ 下面這份清單是**量測值,量測日 2026-08-28,會漂移**(§8.2.A.0 規則 4)。
         # 重新產生(照抄可跑):
         #   $ python3 -c "import ast,pathlib;s=pathlib.Path('ui/tab_fund_grp_health.py').read_text();t=ast.parse(s);f=[n for n in ast.walk(t) if isinstance(n,ast.FunctionDef) and n.name in ('_render_health_3tables','_render_health_table')];print([ (c.lineno, ast.unparse(c.func), ast.unparse(c.args[0])[:40] if c.args else '') for n in f for c in ast.walk(n) if isinstance(c,ast.Call) and (ast.unparse(c.func) in ('st.markdown','st.subheader') and c.args and '###' in ast.unparse(c.args[0]) or ast.unparse(c.func).startswith(('render_','_render_')))])"
-        st.markdown("#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）")
+        st.markdown(_BIG_TABLE_HEADING)
         _gone = ["🧭 核心 / 衛星資產屬性分布"]
         if show_screener:
             _gone.append("🎯 選基金（低基期進場點）")
         _gone += [
             "🔴 淘汰候選紅區",
-            "📊 健診大表 / 健診總表**的表身**（含 4D Grade、σ 位階、買賣點）"
-            "——「📊 健診大表」的標題上面還印著，但底下沒有表；"
-            "「健診總表」連標題都不會出現",
+            "📊 健診大表**的表身**（含 4D Grade、σ 位階、買賣點）"
+            "——標題上面還印著，但底下沒有表",
             "🩺 基金體檢 PK", "🔀 換標決策", "🧭 景氣位階適配",
             "📈 多基金績效比較圖", "📋 逐檔配息明細（含「持有 meta」與「配息事件」兩張表）",
             "5 格 KPI 摘要（檢查檔數 / 健康 / 警示 / 吃本金 / 累積配息）",
@@ -1057,9 +1070,9 @@ def _render_health_3tables(rows: list[dict],
     _div_cfg = dividend_column_config()
 
     # ── 📊 健診大表(①②③ + σ/風險/去重複合併成一張)── v19.411 ──
-    st.markdown("#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）")
-    st.caption("原「① 健康分析 / ② 配息相關 / ③ 實際購買結果」三表已合併去重複。"
-               "評分(4D Grade)/ 每月配息 / σ 位階 / 買賣點皆在此一張表內。")
+    # 2026-09-02 T19:標題與說明**不在這裡印** —— 它們已合併成單一標題,由
+    # `_render_health_table` 在**緊貼 dataframe 的位置**印出(見 `_BIG_TABLE_HEADING`)。
+    # 原本印在這裡的話,標題與表身中間會隔著新鮮度 banner、失敗摘要、KPI 與體檢 PK。
     # ①② by-code 資料 + σ/風險/,全部傳給 _render_health_table 併成一張大表。
     _health_by_code = {str(r.get("code")): r for r in _health_rows if r.get("code")}
     _div_by_code = {str(r.get("code")): {k: v for k, v in r.items() if not str(k).startswith("_")}
@@ -1191,7 +1204,10 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             except Exception as _e_chk:
                 system_error("基金體檢 PK 表渲染失敗", _e_chk)
 
-        st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
+        # 2026-09-02 T19:單一標題(原「📊 健診大表」+「健診總表（🧮 = 自行換算欄位）」兩句)。
+        st.markdown(_BIG_TABLE_HEADING)
+        st.caption("原「① 健康分析 / ② 配息相關 / ③ 實際購買結果」三表已合併去重複。"
+                   "評分(4D Grade)/ 每月配息 / σ 位階 / 買賣點皆在此一張表內。")
         # v19.180:全期實際 / 年化兩軸並陳。短歷史也顯示真實累計值,不再 None。
         st.caption(
             "🩺 **吃本金燈號 (1Y · )** 採老師的體檢邏輯:"
