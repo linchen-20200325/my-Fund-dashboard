@@ -1,21 +1,27 @@
-"""④ 資產配置 —— 交易帳本拉平（T5）的漂移鎖。
+"""④ 資產配置 —— 交易帳本拉平（T5）＋ 真實收益矩陣去重（T21）的漂移鎖。
 
-客戶拍板線框：④ 內部**不得**再開一層 `st.tabs`，分區靠「區塊 + 標題 + 錨點」。
+客戶拍板線框：④ 內部**不得**再開一層 `st.tabs`；同一個東西不要在兩頁各印一次。
 
 ## 為什麼要有這個檔（不是儀式）
 
-`ui/tab3_t7_ledger.py` 是**全站最後一個真的會畫出第二層分頁列**的地方。
+**T5** —— `ui/tab3_t7_ledger.py` 是**全站最後一個真的會畫出第二層分頁列**的地方。
 ⚠️ 本 repo 已經因為這件事留下**兩句假宣稱**：
   · `ui/tab_settings_diag.py` 檔頭 ~~「全站最後一層巢狀 `st.tabs` 自此消失」~~
     （已就地劃線更正，收窄成「⑤ 這一頁自此沒有」）；
   · #747 的 PR 標題同樣宣稱巢狀分頁已消失。
-**兩句都是真的把自己那一頁掃乾淨了，但都掃不到本檔。** 所以第 1 條規則
+**兩句都是真的把自己那一頁掃乾淨了，但都掃不到本檔。** 所以本檔的第 1 條規則
 刻意**不是**「檢查某個字串不見了」，而是「`tabs(...)` 呼叫數 == 0」——
 無論用什麼別名寫都算。
 
+**T21** —— 真實收益矩陣曾是 clone×2（`STATE.md` 自陳）。把 ④ 那份拿掉之後，
+最容易靜靜壞掉的方式是**兩個相反的方向**：有人把它加回 ④（又變兩份），
+或有人把 ② 那份也刪了（功能整個消失、而「④ 沒有它」的斷言照樣綠）。
+故本檔用**集合精確相等**（`==`，不是 `in`、不是 `not in`）把「渲染點恰好一處、
+且就是 ② 那一處」釘死 —— **兩個方向都會紅。**
+
 ## ⚠️ 給下一個維護者：一種看起來比活著更綠的死法
 
-把本檔任何一條斷言用 `if False:` / `return` 之類**死分支**關掉，
+把本檔任何一條行為斷言用 `if False:` / `return` 之類**死分支**關掉，
 pytest 照樣報 **PASSED**、`--collect-only` 的數字也一格不變 ——
 **守衛死掉會比它活著更綠。** 靜態掃描、覆蓋率、測試數量**都偵測不到**這件事。
 **唯一偵測得到它的就是突變測試本身**：改壞 production code，確認本檔真的轉紅。
@@ -28,7 +34,7 @@ pytest 照樣報 **PASSED**、`--collect-only` 的數字也一格不變 ——
 
 規則 1（無巢狀分頁）是**負向**斷言，單獨存在會有「東西被整段刪光也照樣綠」的
 空操作風險。故一律與**正向**斷言配對：三段必須真的被畫出來、標題逐字正確、
-順序正確、而且**是 production 路徑在畫**（後者靠 AST，理由見 `ledger_rendered`）。
+順序正確。負向與正向同時成立，才叫「拉平了」而不是「不見了」。
 """
 from __future__ import annotations
 
@@ -38,9 +44,26 @@ import pathlib
 import pytest
 
 # 復用既有規則檔的 receiver 剝殼與呼叫正規化（§2.1 SSOT：不另寫第二份）。
-from test_render_state_color_separation import ROOT  # noqa: E402
+from test_render_state_color_separation import (  # noqa: E402
+    ROOT,
+    UI_SOURCES,
+    _callee,
+    _st_container_names,
+)
 
 LEDGER = ROOT / "ui" / "tab3_t7_ledger.py"
+PORTFOLIO = ROOT / "ui" / "tab3_portfolio.py"
+
+#: 真實收益矩陣的**唯一**主場（② 持倉體檢）。
+MATRIX_HOME = ROOT / "ui" / "helpers" / "fund_grp_health" / "dividend.py"
+
+#: 用來辨識「這是矩陣的標題」的字。刻意取兩頁都用過的那一段，
+#: 而不是整句 —— 整句一旦被微調（加個 emoji）就會靜靜失效。
+MATRIX_HEADING_MARK = "健康矩陣"
+
+#: 會畫出「標題」的 streamlit API。⚠️ 刻意**不含 `st.caption`** ——
+#: ④ 留下來的那行灰色指路正是 caption，它是**指路不是渲染**。
+HEADING_CALLS = frozenset({"st.markdown", "st.subheader", "st.header", "st.title"})
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -48,6 +71,25 @@ LEDGER = ROOT / "ui" / "tab3_t7_ledger.py"
 # ══════════════════════════════════════════════════════════════════
 def _tree(path: pathlib.Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"))
+
+
+def _docstring_ids(tree: ast.AST) -> frozenset[int]:
+    """module / class / def 的 docstring 節點 id —— 掃字串時一律排除。
+
+    理由同 `tests/test_manual_anchor_toc.py`：docstring 與註解是**講歷史**的地方
+    （本 repo 慣例「舊條文保留不刪 + 加刪除線 + 兩邊理由並陳」），
+    把它們算進掃描等於禁止記錄歷史。註解不進 AST，天然排除。
+    """
+    out: set[int] = set()
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.Module, ast.FunctionDef,
+                          ast.AsyncFunctionDef, ast.ClassDef)):
+            b = getattr(n, "body", None)
+            if (b and isinstance(b[0], ast.Expr)
+                    and isinstance(b[0].value, ast.Constant)
+                    and isinstance(b[0].value.value, str)):
+                out.add(id(b[0].value))
+    return frozenset(out)
 
 
 class _Ctx:
@@ -352,3 +394,147 @@ def test_toc_is_rendered_in_the_production_path() -> None:
     }
     assert "_t7_render_toc" in called, (
         "production 路徑沒有畫錨點目錄 —— 三段攤平後就沒有導覽入口了。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# T21 真實收益矩陣：全站恰好一處，且就是 ② 那一處
+# ══════════════════════════════════════════════════════════════════
+def _matrix_heading_sites() -> set[str]:
+    """全站**畫出**矩陣標題的檔案集合（相對 repo 根的 posix 路徑）。
+
+    「畫出」= 標題字出現在 `st.markdown/subheader/header/title` 的參數裡。
+    刻意排除 `st.caption`（灰色指路）與 docstring（歷史紀錄）。
+    """
+    out: set[str] = set()
+    for path in UI_SOURCES:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:  # pragma: no cover - 壞檔另有守衛
+            continue
+        docs = _docstring_ids(tree)
+        containers = _st_container_names(tree)
+        for n in ast.walk(tree):
+            if not isinstance(n, ast.Call):
+                continue
+            if _callee(n, containers) not in HEADING_CALLS:
+                continue
+            for sub in ast.walk(n):
+                if (isinstance(sub, ast.Constant) and isinstance(sub.value, str)
+                        and id(sub) not in docs
+                        and MATRIX_HEADING_MARK in sub.value):
+                    out.add(path.relative_to(ROOT).as_posix())
+    return out
+
+
+def test_dividend_matrix_is_rendered_in_exactly_one_place() -> None:
+    """全站畫「真實收益 vs 配息率健康矩陣」標題的地方**恰好一處**，且是 ② 那一處。
+
+    ⚠️ 這是**集合精確相等**（`==`），不是 `not in` —— 兩個方向都會紅：
+    - 有人把矩陣加回 ④（或第三頁）→ 集合變大 → **轉紅**；
+    - 有人把 ② 那份也刪了 → 集合變空 → **轉紅**（功能整個消失時，
+      一條「④ 沒有它」的 `not in` 斷言會照樣是綠的 —— 那正是本 repo
+      已登記的空操作失效模式，本條刻意不用那種寫法）。
+
+    突變實驗 A：在 `ui/tab3_portfolio.py` 加回
+    `st.markdown("### 📊 真實收益 vs 配息率健康矩陣")` → **轉紅**（2 處）。
+    突變實驗 B：把 `ui/helpers/fund_grp_health/dividend.py` 的該行標題刪掉
+    → **轉紅**（0 處）。
+    """
+    want = {MATRIX_HOME.relative_to(ROOT).as_posix()}
+    got = _matrix_heading_sites()
+    assert got == want, (
+        f"真實收益矩陣的渲染點應恰好是 {sorted(want)}，實際 {sorted(got)}。\n"
+        "· 多了 → 同一張圖在兩頁各印一次（客戶拍板線框明禁）；\n"
+        "· 少了 → 功能整個消失，② 持倉體檢那個唯一主場被拆掉了。")
+
+
+def test_matrix_home_actually_renders_the_heading() -> None:
+    """② 那份**真的畫得出來**（行為），不是只有一行字面值躺在檔案裡。
+
+    上一條是靜態集合比對；靜態看得到「字串在那裡」，看不到「它會不會被執行到」。
+    本條把 `_render_dividend_matrix` 實際跑一次，斷言標題真的被送進 `st.markdown`。
+
+    突變實驗：把 `_render_dividend_matrix` 開頭改成 `return`（或把
+    `if not funds: return` 改成 `if True: return`）→ **轉紅**。
+    """
+    import ui.helpers.fund_grp_health.dividend as _dv
+
+    fake = _FakeSt()
+    import unittest.mock as _mock
+    with _mock.patch.object(_dv, "st", fake):
+        # 一檔最小 fund dict：走得到標題那幾行就夠，後面算不出來不影響本條。
+        _dv._render_dividend_matrix([{"code": "TEST01", "name": "測試基金"}])
+
+    headings = [a[0] for n, a, _k in fake.calls
+                if n in {"markdown", "subheader"} and a and isinstance(a[0], str)]
+    assert any(MATRIX_HEADING_MARK in h for h in headings), (
+        "② 持倉體檢的真實收益矩陣沒有畫出標題 —— "
+        f"實際畫出的標題：{headings}")
+
+
+def test_matrix_home_is_still_wired_into_the_health_tab() -> None:
+    """② 的呼叫鏈完整：`app.py` → 健檢 Tab → extras → `_render_dividend_matrix`。
+
+    上一條證明「那個函式會畫」，本條證明「有人會呼叫它」。
+    兩條都要 —— 只證明前者的話，整條鏈被拔掉時本檔照樣全綠。
+
+    突變實驗：把 `ui/helpers/fund_grp_health/__init__.py` 裡的
+    `_render_dividend_matrix(funds)` 那行註解掉 → **轉紅**。
+    """
+    chain = [
+        (ROOT / "app.py", "render_fund_grp_health_tab"),
+        (ROOT / "ui" / "tab_fund_grp_health.py", "render_fund_grp_health_extras"),
+        (ROOT / "ui" / "helpers" / "fund_grp_health" / "__init__.py",
+         "_render_dividend_matrix"),
+    ]
+    broken: list[str] = []
+    for path, callee in chain:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        called = {
+            n.func.id for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        } | {
+            n.func.attr for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+        }
+        if callee not in called:
+            broken.append(f"{path.relative_to(ROOT).as_posix()} 沒有呼叫 {callee}()")
+    assert broken == [], (
+        "② 真實收益矩陣的呼叫鏈斷了：\n  " + "\n  ".join(broken) +
+        "\n④ 那份已經拿掉了，這條鏈一斷，功能就整個消失。")
+
+
+def test_portfolio_points_users_to_the_health_tab_via_ssot() -> None:
+    """④ 必須留一行指路，且分頁名走 `story_nav` SSOT（不得手抄「持倉體檢」）。
+
+    「搬了但沒留指路」是本 repo 已經發作過的失效模式（一批 UI 重整打壞 6 處
+    使用者可見的指路，由紅隊擋下）；「手抄分頁名」則是已經指錯三次的寫法 ——
+    七→五改版後寫死的名字會指到分頁列上不存在的地方，而且**不會 raise**，
+    只會安靜地錯。
+
+    本條斷言的是**呼叫**：`where_to_find("health")` 真的被呼叫（`==` 比對
+    參數常數），不是「檔案裡有 health 這個字」。
+
+    突變實驗：把那行 caption 的 `_where_to_find_rc('health')` 換成寫死的
+    「② 持倉體檢」→ **轉紅**。
+    """
+    tree = _tree(PORTFOLIO)
+    # 找出所有 where_to_find 的別名（`from ... import where_to_find as X`）
+    aliases = {"where_to_find"}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and (n.module or "").endswith("story_nav"):
+            for a in n.names:
+                if a.name == "where_to_find":
+                    aliases.add(a.asname or a.name)
+
+    args_seen = {
+        n.args[0].value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        and n.func.id in aliases and n.args
+        and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)
+    }
+    assert "health" in args_seen, (
+        "④ 沒有用 `where_to_find('health')` 指路到 ② 持倉體檢。\n"
+        f"目前 ④ 呼叫 where_to_find 的 key：{sorted(args_seen)}\n"
+        "矩陣搬走了就必須告訴使用者去哪，而分頁名必須走 SSOT。")
