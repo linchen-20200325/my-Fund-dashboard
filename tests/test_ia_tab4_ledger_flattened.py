@@ -35,6 +35,13 @@ pytest 照樣報 **PASSED**、`--collect-only` 的數字也一格不變 ——
 規則 1（無巢狀分頁）是**負向**斷言，單獨存在會有「東西被整段刪光也照樣綠」的
 空操作風險。故一律與**正向**斷言配對：三段必須真的被畫出來、標題逐字正確、
 順序正確。負向與正向同時成立，才叫「拉平了」而不是「不見了」。
+
+⚠️ **而「正向」還有第二層陷阱，本批實際踩過**：拿 SSOT 去渲染、再跟 SSOT 比對，
+是**同義反覆** —— 改壞 production 路徑它照樣綠。故行為測試（`ledger_rendered`
+那組）**必須**搭配把 helper 綁回 production 路徑的 AST 測試
+（`..._uses_the_ssot_headings_in_order` / `..._no_handwritten_...` /
+`..._not_inside_an_expander` / `..._toc_is_rendered_...`）。
+**四條缺一，前面那組就退化成「helper 自己跟自己一致」。**
 """
 from __future__ import annotations
 
