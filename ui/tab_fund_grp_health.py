@@ -1274,7 +1274,15 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         # v19.425 — 🧭 景氣位階適配摘要
         try:
             from ui.helpers.fund_grp_health.regime_section import render_regime_fit_section
-            render_regime_fit_section(df.to_dict("records"))
+            # 2026-09-02 T16:`show_current_regime=False` —— 本頁最上方已有一條
+            # 「📊 當前總經 Phase：…」橫幅,讀的是**同一個** `phase_info["phase"]`。
+            # 原本這裡會把同一個字串再宣告一次,而且措辭不同(「當前總經 Phase」vs
+            # 「當前景氣位階」),讀起來像兩個不同的東西。位階這句話併回頁首那一行,
+            # 本區塊只講適配結果。
+            # ⚠️ 只關本頁的重複宣告:`ui/tab_batch_analysis.py` 沒有那條橫幅,
+            #    它走預設 True、行為不變(詳見該函式 docstring)。
+            render_regime_fit_section(df.to_dict("records"),
+                                      show_current_regime=False)
         except Exception as _e_rf:  # noqa: BLE001
             system_error("景氣適配區塊失敗", _e_rf)
 
