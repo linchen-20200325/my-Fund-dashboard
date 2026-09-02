@@ -21,9 +21,23 @@ caption 內容。把 caption 包進永遠不成立的 `if` 裡（死分支）**�
 因為它斷言的是「畫面上有沒有這行字」，不是「原始碼裡有沒有這個字串」。
 
 **守不到的**（誠實揭露）：
+
 1. 文案寫得好不好讀 —— 只驗關鍵語意詞在不在，不驗可讀性。
 2. caption 在畫面上的**視覺位置**（AppTest 給的是扁平元素清單，不解析版面）。
 3. 真瀏覽器的呈現（沒有瀏覽器）。
+4. ⭐ **這行字說的是不是真的 —— 本檔只驗「關鍵詞在不在」，不驗「內容為真」。**
+   **本 PR 的 `下方` 錯誤就是從這個洞掉下去的**：第一版 caption 兩次寫
+   「**下方**「📊 組合績效」」，而那張卡實際渲染在**本頁最上面**
+   （`_sec_add` 顯示位置 1/8，本卡 `_sec_switch` 是 5/8）。
+   當時 7 條全綠 —— 因為每一條都只問「有沒有提到組合績效」，沒有一條問「方位對不對」。
+   2026-09-02 稽核另外實證兩個同型的**沉默突變**：
+   - **A6**：在 caption 尾端加回那句**已被撤回的假宣稱**
+     「但兩者演算法不同,數字對不上是正常的。」→ 當時 **7 passed，零紅**。
+   - **A7**：把「期間累積報酬與最大回撤**不受影響**」改成「**也一樣顯示「—」**」
+     （與本檔另一條測試自己斷言的事實**直接矛盾**）→ 當時 **7 passed，零紅**。
+   本輪已針對**這三個具體的假話**補上斷言（方位詞、A6、A7，見下方三條），
+   ⚠️ **但那是三個點狀補丁，不是通用的「內容真偽」檢查** ——
+   任何**新的**假陳述仍可能全綠通過。讀本檔請據此打折信任。
 """
 from __future__ import annotations
 
@@ -61,6 +75,12 @@ def _script_long():           # ≥ PORTFOLIO_TREND_MIN_DAYS → 年化照給
     from ui.helpers.fund_grp_health.switch_advisor_section import render_portfolio_tracking
     import tests.test_ia_tracking_card_scope_caption as _t
     render_portfolio_tracking(_t._funds(220))
+
+
+def _script_sister_card():    # ④ 既有的那張姊妹卡（用來驗 SSOT 名字對不對得上）
+    from ui.helpers.portfolio_perf import render_portfolio_performance
+    import tests.test_ia_tracking_card_scope_caption as _t
+    render_portfolio_performance(_t._funds(220))
 
 
 @pytest.fixture()
@@ -167,3 +187,110 @@ def test_the_scope_note_is_grey_not_info_or_warning(hermetic):
     _warn = "\n".join(getattr(w, "value", "") for w in at.warning)
     assert "同一套算式" not in _info, f"範圍說明被畫成藍色 info：{_info!r}"
     assert "同一套算式" not in _warn, f"範圍說明被畫成橘色 warning：{_warn!r}"
+
+
+# ── 5. 姊妹卡的名字必須走 SSOT，不得手抄（漂移鎖） ───────────────────────
+
+def _sister_card_heading_name() -> str:
+    """姊妹卡**實際渲染出來**的標題，取「(」之前的名字部分。
+
+    `### 📊 組合績效(固定權重・日再平衡假設・TWD 計價)` → `📊 組合績效`
+    """
+    at = AppTest.from_function(_script_sister_card, default_timeout=60)
+    at.run()
+    assert not at.exception, [str(e) for e in at.exception]
+    _heads = [m.value for m in at.markdown if m.value.lstrip().startswith("#")]
+    assert _heads, f"姊妹卡沒有渲染出任何標題：{[m.value for m in at.markdown]!r}"
+    _h = _heads[0].lstrip("# ").strip()
+    for _sep in ("(", "（"):
+        _h = _h.split(_sep)[0]
+    return _h.strip()
+
+
+def test_the_ssot_label_still_matches_the_sister_cards_real_heading(hermetic):
+    """SSOT 的 `pf_perf` 必須**精確等於**姊妹卡實際標題的名字部分。
+
+    **為什麼要有這條**：2026-09-02 稽核突變 A8 —— 把「📊 組合績效」改名，
+    當時 **40 passed、零紅**：caption 立刻變成死指路而沒有任何測試察覺。
+    本 repo 的「指路指到不存在的東西」已經發作過三次。
+
+    ⚠️ **必須是精確比對，不能用 `in`**：本條第一版就是寫 `label in heading`，
+    結果 A8 改成「組合績效**表**」時**照樣綠燈**（原字串是新字串的子字串）。
+    這個洞是本輪自己踩出來、自己補的。
+
+    突變：把 `render_portfolio_performance` 的標題改名（不動 SSOT）→ 本條轉紅。
+    """
+    from ui.helpers.story_nav import section_label
+    assert _sister_card_heading_name() == section_label("pf_perf"), (
+        f"SSOT 的 '{section_label('pf_perf')}' 對不上姊妹卡實際標題的名字部分 "
+        f"'{_sister_card_heading_name()}' —— 有人改名卻沒同步 SSOT，caption 已成死指路")
+
+
+def test_the_caption_reads_the_label_from_the_ssot_not_a_hand_copy(hermetic, monkeypatch):
+    """把 SSOT 的值換掉 → caption 顯示的名字必須跟著換。
+
+    這是唯一擋得住「有人手抄『📊 組合績效』四個字」的斷言：手抄值與 SSOT 值
+    **逐字相同**，所以純比對字串永遠分不出來（本條第一版就是這樣被 B1 突變騙過去的）。
+
+    突變：把 caption 裡的 `section_label("pf_perf")` 換成手抄字面值 → 本條轉紅。
+    """
+    import ui.helpers.story_nav as _nav
+    _sentinel = "🧪 姊妹卡哨兵名"
+    monkeypatch.setitem(_nav._SECTION_LABELS, "pf_perf", _sentinel)
+    _caps = _captions(_run(_script_long))
+    assert _sentinel in _caps, f"caption 沒跟著 SSOT 走（疑似手抄字面值）：{_caps!r}"
+
+
+# ── 6. 不准寫方位詞（本 PR 真的在這裡跌過一次） ──────────────────────────
+
+_POSITIONAL = ("下方", "上方", "下面", "上面", "往下捲", "往上捲", "底下")
+
+
+@pytest.mark.parametrize("script", [_script_short, _script_long],
+                         ids=["short_series", "long_series"])
+def test_the_caption_uses_no_positional_words(hermetic, script):
+    """方位是 **slot 順序的函數**，寫進文案等於保證下一次重排就說謊。
+
+    **實證**：本 caption 第一版寫了兩次「下方」，而姊妹卡其實在**上面**。
+    ④ 的完整版面線框正在客戶端審批、很可能重排 —— 方位詞一律不准寫。
+
+    突變：把任何一處改回「下方「📊 組合績效」」 → 本條轉紅。
+    """
+    _caps = _captions(_run(script))
+    _hit = [w for w in _POSITIONAL if w in _caps]
+    assert not _hit, f"caption 出現方位詞 {_hit} —— 版面一重排就會指錯：{_caps!r}"
+
+
+# ── 7. 兩句已知假話不得復活（點狀補丁，非通用真偽檢查） ────────────────────
+
+def test_caption_does_not_resurrect_the_retracted_algorithm_claim(hermetic):
+    """堵稽核突變 A6：那句「兩者演算法不同」**已被實測推翻**，不得回到畫面上。
+
+    兩張卡的數學收口到同一個 SSOT；≥ 門檻時三個同名指標數字完全相同。
+    突變：在 caption 尾端加回「但兩者演算法不同,數字對不上是正常的。」→ 本條轉紅。
+    """
+    for _s in (_script_short, _script_long):
+        _caps = _captions(_run(_s))
+        assert "演算法不同" not in _caps, f"已撤回的假宣稱又出現在畫面上：{_caps!r}"
+
+
+def test_caption_claim_about_unaffected_metrics_matches_the_real_values(hermetic):
+    """堵稽核突變 A7：caption 說哪兩欄「不受影響」，就必須真的沒被打成「—」。
+
+    這一條是**行為交叉比對**，不是純字串：先讀實際渲染出來的四個 metric 值，
+    算出真正被打成「—」的集合，再要求 caption 的說法與它一致。
+    突變：把「不受影響、仍是實數」改成「也一樣顯示「—」」→ 本條轉紅。
+    """
+    at = _run(_script_short)
+    _by_label = {m.label: m.value for m in at.metric}
+    _dashed = {k for k, v in _by_label.items() if v == "—"}
+    _solid = {k for k, v in _by_label.items() if v != "—"}
+    # 前提：短序列下只有兩個年化欄位被抑制
+    assert _dashed == {"年化報酬", "年化波動 σ"}, _by_label
+    assert _solid == {"期間累積報酬", "最大回撤"}, _by_label
+
+    _caps = _captions(at)
+    assert "不受影響" in _caps, (
+        f"caption 沒有說那兩欄不受影響 —— 但它們實際上是實數 {_solid}：{_caps!r}")
+    for _lbl in _solid:
+        assert _lbl in _caps, f"caption 沒點名不受影響的「{_lbl}」：{_caps!r}"

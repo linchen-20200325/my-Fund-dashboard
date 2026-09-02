@@ -196,6 +196,14 @@ _SECTION_LABELS: dict[str, str] = {
     # 換股顧問在「一檔持倉都還沒載入」時要告訴使用者「去哪補」，而那個地方就是它。
     # 手抄「➕ 加入與管理基金」六個字正是本模組整篇在防的事。
     "pf_add": "➕ 加入與管理基金",
+    # ④ 頁內既有的「組合績效」卡（`ui/helpers/portfolio_perf.render_portfolio_performance`）。
+    # 收進本表的理由同 `pf_add`：📈 績效追蹤卡的範圍說明必須指名它，**不得手抄**。
+    # ⚠️ 2026-09-02 稽核實證（本 PR 內）：那一行範圍說明原本手抄「📊 組合績效」四個字，
+    #    突變測試把該卡改名後 **40 passed、零紅** —— 一改名就變成死指路，
+    #    而本 repo 的「指路指到不存在的東西」已經發作過三次。故收進 SSOT + 加漂移鎖
+    #    （`tests/test_ia_tracking_card_scope_caption.py`
+    #     ::test_the_sister_card_label_is_not_a_hand_copied_literal，執行期比對真實標題）。
+    "pf_perf": "📊 組合績效",
 }
 
 # 分區 → 它住在哪個頂層分頁。`where_to_find()` 與導覽的 key 解析都吃這張表。
@@ -207,6 +215,7 @@ _SECTION_TO_TAB: dict[str, str] = {
     "manual": "settings",
     "switch": "portfolio",
     "pf_add": "portfolio",
+    "pf_perf": "portfolio",
 }
 
 

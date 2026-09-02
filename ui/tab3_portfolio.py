@@ -2261,7 +2261,20 @@ def render_portfolio_tab() -> None:
     #      · 兩者 `rf_annual` 都取預設 0.0，`assumption` 字串**逐字相同**
     #        （`"fixed-weight daily-rebalance"`）；輸入也同一份（都是 `_funds_extra`），
     #        `_ccy_fx_for()` 與 `render_portfolio_performance()` 內嵌那段抓匯率的邏輯
-    #        逐行等價（同 `BACKTEST_FX_FETCH_DAYS`、同 `fetch_usdtwd_frame`）。
+    #        ~~逐行等價（同 `BACKTEST_FX_FETCH_DAYS`、同 `fetch_usdtwd_frame`）。~~
+    #        ⚠️ **2026-09-02 更正：「逐行等價」過強**（**有意識的更正，不是漏刪** ·
+    #        日期 **2026-09-02** · 決策者：**實作組**，依據：獨立稽核指出並經本組實測）。
+    #        **成功路徑等價為真**（同 `BACKTEST_FX_FETCH_DAYS`、同 `fetch_usdtwd_frame`、
+    #        同 `.set_index("date")["usdtwd"]`，故餵給兩張卡的 `_fx` 相同）；
+    #        **但 `except` 分支不等價**：`_ccy_fx_for()` 失敗時**靜默** `_fx = None`，
+    #        而姊妹卡失敗時呼叫 `system_error(...)` 出紅框。
+    #        → 同一個失敗，一張卡無聲、一張卡紅框。
+    #        **舊表述的用意仍然成立**（它要說明的是「兩張卡拿到的匯率是同一份，
+    #        所以數字差異不可能來自匯率」—— 這一點在成功路徑上仍為真，
+    #        而本節的結論「演算法相同」也不依賴 except 分支）；
+    #        **被權衡掉的是它的強度** —— 「逐行等價」是可被一眼推翻的全稱句。
+    #        ⚠️ 該差異是**既有的**，`_ccy_fx_for()` 與姊妹卡本批皆未改動；
+    #           這裡只更正**本批寫下的那句註解**，不處置該差異本身。
     #    **舊表述錯在哪**：它拿「一個假設的描述」去對比「一個函式名」，
     #    而那個描述正是那個函式**自己**的假設 —— `performance_metrics` 的 docstring
     #    第一句就寫「假設固定權重、每日再平衡」。兩邊講的是同一件事。
