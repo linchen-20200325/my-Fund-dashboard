@@ -326,6 +326,10 @@ def render_data_guard_tab() -> None:
         _tab_status(_alloc_have, _alloc_total) if _pf_total else ("⬜", GRAY_66)
     )
 
+    from ui.helpers.story_nav import where_to_find as _wtf
+    def _wtf_health() -> str: return _wtf("health")
+    def _wtf_portfolio() -> str: return _wtf("portfolio")
+
     _tab_table = [
         ("🌐 Tab 1 總經", _t1_emoji, _t1_color,
          f"{_macro_have}/{_macro_total} 指標",
@@ -339,10 +343,16 @@ def render_data_guard_tab() -> None:
           f"配息 {'✓' if _cf_have_div else '✗'} ｜ 持股 {'✓' if _cf_have_holdings else '✗'}")
          if _src_cf else "在 Tab 2 查詢基金代號觸發",
          "若 NAV ✗ → 檢查 MoneyDJ / Cnyes / TDCC fallback chain"),
-        ("💊 Tab 3 組合健診", _t3_emoji, _t3_color,
+        # ⚠️ 只有這一列走 SSOT，其餘三列**刻意未動** —— 它們是 `_KNOWN_DEBT` 已登記的
+        #    既有債（「整張表重寫」在該表被明記為 scope 決定，不是本批能自己拍板的）。
+        #    本列非改不可的理由：2026-09-01 改名把它從「站號錯」升級成「名字也不存在」，
+        #    而它是**本批自己造成**的那一種，屬本批的收尾義務。
+        #    ⚠️ 因此本表目前是混合風格（本列「② 💊 持倉體檢」vs 其餘「🌐 Tab 1 總經」）——
+        #    據實登記，不假裝整齊；整張表要統一得先過 scope gate。
+        (_wtf_health(), _t3_emoji, _t3_color,
          f"{_pf_loaded_n}/{_pf_total} 已載入" if _pf_total else "未設定持倉",
          (f"NAV {_pf_nav_n}/{_pf_loaded_n} ｜ 配息 {_pf_div_n}/{_pf_loaded_n}"
-          if _pf_loaded_n else "在 Tab 3 / 4 加入持倉基金"),
+          if _pf_loaded_n else f"在 {_wtf_health()} / {_wtf_portfolio()} 加入持倉基金"),
          "若有未載入 → 該基金在 fallback chain 全敗"),
         ("📊 Tab 4 組合配置", _t4_emoji, _t4_color,
          f"{_alloc_have}/{_alloc_total} 元件" if _pf_total else "未設定",

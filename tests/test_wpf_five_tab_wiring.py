@@ -547,7 +547,7 @@ _LEGIT_EXEMPT: tuple[tuple[str, str, str], ...] = (
 _KNOWN_DEBT: tuple[tuple[str, str, str], ...] = (
     ("ui/helpers/macro/linkage.py", "「總經」Tab",
      "【形態向抓到｜main 已存在】既有債：「總經」不是任何時期的分頁名"
-     "（① 一直叫「🌐 市場定調」）。修法明確：`tab_label('macro')`，屬字串修正、無設計決定。"),
+     "（① 在 2026-08-31~09-01 期間叫「🌐 市場定調」，2026-09-01 起叫「🌐 市場總覽」；兩個都不是「總經」）。修法明確：`tab_label('macro')`，屬字串修正、無設計決定。"),
     ("ui/helpers/portfolio/fee_deduction.py", "「💼 T7 帳本」",
      "【形態向抓到｜main 已存在】既有債：T7 帳本是 ④ **頁內**的區塊，不是分頁；"
      "且它不在 `_SECTION_LABELS` 裡 —— 要修得先決定「④ 的頁內區塊要不要進分區 SSOT」，"
@@ -568,12 +568,16 @@ _KNOWN_DEBT: tuple[tuple[str, str, str], ...] = (
      "下一批要先確認它實際要把使用者送去哪裡，不可望文生義。"),
     ("ui/tab5_data_guard.py", "Tab 4 組合配置",
      "【黑名單向抓到（`組合配置` 在 `MISWRITTEN_TAB_NAMES`）｜main 已存在】"
-     "既有債，且**不只這一列**：同一張診斷總表有「🌐 Tab 1 …／🔍 Tab 2 單一基金／"
-     "💊 Tab 3 組合健診／📊 Tab 4 組合配置」四列，站號與名字在七→五之後全部對不上"
-     "（組合健診現在是 ②、不是 Tab 3）。修它是**整張表重寫**，屬 scope 決定。"
-     "⚠️ 其中「💊 Tab 3 組合健診」那一列**兩條守衛目前都抓不到**"
-     "（去 emoji 變體不在字表、句子也不帶指路形狀）—— 見上方"
-     "`test_no_live_string_hardcodes_a_tab_name` docstring 的『盲點』段。"),
+     "既有債：同一張診斷總表原有「🌐 Tab 1 …／🔍 Tab 2 單一基金／"
+     "💊 Tab 3 組合健診／📊 Tab 4 組合配置」四列，站號與名字在七→五之後全部對不上。"
+     "修整張表是**整張表重寫**，屬 scope 決定，**其餘三列仍未動**。\n"
+     "⚠️ **2026-09-01 更新：第三列已修，本條剩三列。** 那一列在改名後從「站號錯」"
+     "升級成「名字在分頁列上根本不存在」，屬改名批**自己造成**的回歸，故在該批收尾；"
+     "現走 `where_to_find('health')`。**本表因此是混合風格**（該列 SSOT、其餘三列舊字面值）"
+     "—— 據實登記，不假裝整齊。\n"
+     "⚠️ 原文曾記「那一列兩條守衛都抓不到（去 emoji 變體不在字表）」——"
+     "**該盲點已於同批修補**（`_deemoji_variants()`），現在抓得到，"
+     "見 `test_no_live_string_hardcodes_a_tab_name` 的『盲點』段與其突變實證。"),
 )
 
 
@@ -635,6 +639,47 @@ def _exempted(relpath: str, text: str) -> str:
             if relpath == _p and (_needle == "" or _needle in text):
                 return _why
     return ""
+
+
+def _deemoji_variants(labels: set) -> set:
+    """把「<emoji> <名字>」拆出**裸名字**，供黑名單比對用。
+
+    為什麼只對 `RETIRED_TAB_LABELS` / `MISWRITTEN_TAB_NAMES` 展開，
+    **不對現行 `_TAB_LABELS` 展開**（2026-09-01 實測後的取捨，不是偷懶）
+    ----------------------------------------------------------------
+    退役名字的裸名（「組合健診」「市場定調」…）在本 repo 裡**只可能**是死指路，
+    所以展開它們是**零誤判**的：實測命中 **0 處**（量測日 2026-09-01，
+    在本批把 9 處 production 死指路修完之後）。
+
+    現行名字的裸名不行 —— 它們是**日常中文詞**。實測若一併展開會多出 **7 處誤判**
+    （量測日 2026-09-01）：`services/macro/us_indicators.py` 的「維持資產配置」、
+    `shared/regime_fit.py` 的基金分類關鍵字「資產配置」、
+    `ui/helpers/fund_grp_health/ai.py` ×2、`ui/helpers/macro/linkage.py` 的
+    「建議資產配置：」、`ui/tab1_macro_ai.py` 的「資產配置建議」、
+    以及 `ui/helpers/settings_diag/merge_context.py` 的錯誤訊息「未知的『設定與診斷』區塊名稱」。
+    **那 7 處沒有一處是指路文案**，把它們塞進豁免表只會讓豁免表退化成白名單
+    （本檔 docstring 反覆警告的那件事）。
+
+    ⚠️ **所以本條在「現行名字被裸寫」這個方向上仍然是盲的** ——
+    寫 `st.markdown("### 持倉體檢")`（不帶 emoji）**不會**被抓到。
+    要補這個方向需要的是「指路形狀」那條（形態向），不是加長字表。
+    **據實寫明，不要讀成本條已經全覆蓋。**
+
+    ⚠️ 舊決策的理由**仍然成立、不是當初判錯**：本條 docstring 原本記載
+    「刻意不把去 emoji 變體加進字表 —— 會多出 10 處命中，3 真 7 誤判」。
+    那個 3:7 是**當時的實況**；本批把那 3 處真死指路修掉、
+    又把 7 處誤判裡屬於 `tab_batch_analysis` 的表名改吃 `tab_label('health')`，
+    **誤判與真陽性同時歸零**，加進來的成本才從「7 個假豁免」變成 0。
+    **被權衡掉的是它的前提（誤判很多），不是它的邏輯。**
+    """
+    _out = set()
+    for _lbl in labels:
+        _parts = _lbl.split(" ", 1)
+        # 只有「開頭是非文數字（emoji）＋空格＋名字」才拆；「組合配置」這種本來就沒有
+        # emoji 的照原樣放回去（拆了會變成它自己，無害但語意不清）。
+        if len(_parts) == 2 and _parts[0] and not _parts[0][0].isalnum():
+            _out.add(_parts[1])
+    return _out
 
 
 def test_no_live_string_hardcodes_a_tab_name():
@@ -815,8 +860,19 @@ def test_no_live_string_hardcodes_a_tab_name():
         MISWRITTEN_TAB_NAMES, RETIRED_TAB_LABELS, _TAB_LABELS,
     )
 
+    # ⚠️ 2026-09-01 補盲點：**已退役／從來不存在**的名字，連「去 emoji 的裸名」也要抓。
+    #    盲點長什麼樣（實證，不是假想）：改名批把 ② 從「組合健診」改名「持倉體檢」之後，
+    #    `ui/tab_fund_grp_health.py` 的頁面標題仍寫死「### 💊 基金組合健診」——
+    #    **分頁列一個名字、點進去另一個名字**，而本條當時**全綠**。
+    #    原因：banned 集合裡只有**完整標籤**「💊 組合健診」，而那個字串是
+    #    「💊 **基金**組合健診」（emoji 與名字之間夾了字），子字串比對不成立。
+    #    同型的還有 `ui/tab5_data_guard.py` 的「💊 Tab 3 組合健診」。
+    #    → 這是本 repo 第三次死指路（前兩次見 `story_nav.py` docstring），
+    #      也是唯一一次使用者一打開分頁就看得到的。
     _banned = (set(_TAB_LABELS.values()) | set(RETIRED_TAB_LABELS)
-               | set(MISWRITTEN_TAB_NAMES))
+               | set(MISWRITTEN_TAB_NAMES)
+               | _deemoji_variants(set(RETIRED_TAB_LABELS)
+                                   | set(MISWRITTEN_TAB_NAMES)))
     _bad: list[str] = []
     for _f in _scan_files():
         _rel = str(_f.relative_to(ROOT))

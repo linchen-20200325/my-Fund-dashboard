@@ -191,6 +191,41 @@ def _all_streamlit_calls(path: pathlib.Path):
 #   - 想新增一個非 3 欄的版面 → 必須動這張表，而動表會出現在 diff 裡被 review 看到。
 # ⚠️ 量測方法：`_grid_site_counts(UI_SOURCES)`，與逐檔規則同一把尺 —— 不要換尺再比大小。
 GRID_EXEMPT_SITES = frozenset({
+    # ── 2026-09-01 五分頁動線重構：三欄網格的 SSOT 本身（IA kit）──────────────
+    # ⚠️ **這兩列與本表其他列性質不同，讀之前先看這段。**
+    # 其他列記的是「這裡刻意不是 3 欄」；這兩列記的是「**這裡就是那個 3**，
+    # 但它寫成 `st.columns(cols)`（參數），所以 AST 靜態證不出它是 3」。
+    # 依本檔「靜態證不出 ＝ 違規、不留動態通行證」的設計，它必須登記 —— 登記是對的。
+    #
+    # ⛔ **但這個登記會讓本檔的涵蓋面縮小，必須講清楚，不要讓後人以為是免費的**：
+    #    各分頁日後改用 `card_row()` / `card_grid()` 之後，它們原本一個個
+    #    `st.columns(3)` 的合格站點會消失，全部收斂成這兩個**已豁免**的站點 ——
+    #    也就是本檔 docstring 警告過的「一個 `_grid3()` helper 一秒繞過」，
+    #    只是這次是**有意識地**發生的。
+    #
+    # ✅ **補償措施（不是口頭保證，是四條已突變驗證的斷言）**：
+    #    1. `test_ia_kit.py::test_grid_cols_is_three`
+    #       —— `GRID_COLS` 必須是 3（突變 M1：改成 2 → 轉紅）。
+    #    2. `test_ia_kit.py::test_card_grid_gives_one_column_per_item_and_keeps_column_width_stable`
+    #       —— `card_grid` 每一列都必須開滿 `GRID_COLS` 欄（突變 M2 → 轉紅）。
+    #    3. `test_ia_kit.py::test_card_row_opens_exactly_the_client_grid_width`
+    #       —— `card_row` 預設必須開 `GRID_COLS` 欄（突變 A2-M1：預設改 2 → 轉紅）。
+    #    4. `test_ia_kit.py::test_render_cards_lays_cards_out_at_the_client_grid_width`
+    #       —— `render_cards` 必須用 `GRID_COLS` 排（突變 A3-M1：塌成 1 欄 → 轉紅）。
+    #    這四條守的是**同一件事的更強版本**：本檔只能證「這個呼叫的參數是不是字面 3」，
+    #    那四條直接證「實際傳給 `st.columns` 的值是 3」。
+    #
+    # ⚠️ **2026-09-01 更正（有意識的更正，不是漏刪）**：本段原寫「**三條**」卻只列出
+    #    **兩條**，再自稱「這兩條」—— 一段在講「補償措施不是口頭保證」的註解，
+    #    自己的計數對不上。真正的原因不只是筆誤：當時 `card_row` 與 `render_cards`
+    #    **確實一條斷言都沒有**（稽核實測：把 `card_row` 預設改成 2、把 `render_cards`
+    #    改成塌一欄，全 suite `6350 passed` 逐字不變、零反應）。
+    #    也就是說，那個「三」是**把不存在的覆蓋算了進去**。
+    #    本輪補上第 3、4 條之後，「四條」才是實際存在且已突變驗證的數字。
+    # ⚠️ 本判斷由前端／架構組單組作出，未經第二組驗證（`CLAUDE.md §-2` 規則 6）。
+    "ui/helpers/ia/layout.py::card_row()  columns(dynamic)×1",
+    "ui/helpers/ia/layout.py::card_grid()  columns(dynamic)×1",
+    # ── 以下為既有登記（2026-08-28 起）────────────────────────────────────
     "ui/components/macro_card.py::render_macro_card_grid()  columns(dynamic)×1",
     "ui/components/mk_clock.py::render_macro_clock()  columns(seq:2)×1",
     "ui/components/mk_dashboard.py::render_mk_war_room()  columns(seq:2)×1",
@@ -259,7 +294,9 @@ GRID_EXEMPT_SITES = frozenset({
 #: 量測日 2026-08-28 的**違規呼叫總數**（不是鍵數）。與上表一起降。
 # 2026-08-31 WP-F：88 → 87（**變少**；刪掉孤兒搜尋框的 `st.columns([4,1])`，
 # 理由見上方 `tab2_single_fund` 那一列的註記）。
-GRID_EXEMPT_CALL_TOTAL = 87
+# 2026-09-01 IA kit：87 → 89（**變多 2**，且**兩個都是新寫的**、不是把別處拆掉換來的
+# —— 本批沒有刪除任何既有 `st.columns` 呼叫；理由見上方 IA kit 那兩列的長註）。
+GRID_EXEMPT_CALL_TOTAL = 89
 
 #: 量測日 2026-08-28 掃到的 streamlit `columns()` 呼叫總數（合格 + 違規）。
 #: 錨點用：低於這個數字代表 `st.columns` 被換成別的寫法，規則正在對空氣生效。

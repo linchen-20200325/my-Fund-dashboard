@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """app.py — 基金戰情室 v18.0(重構版)
 模組架構(2026-08-31 客戶拍板線框,7→5):
-  ① 市場定調 → ② 組合健診 → ③ 基金研究 → ④ 我的配置 → ⑤ 設定與診斷
+  ① 市場總覽 → ② 持倉體檢 → ③ 標的探索 → ④ 資產配置 → ⑤ 設定與診斷
+  (2026-09-01 客戶拍板線框 `ia-wireframe.html` 改名;分頁**數量、順序、內容一律未動**,
+   改的只有顯示名 —— 名稱 SSOT 見 `ui/helpers/story_nav._TAB_LABELS`)
   (③ = 個基深掘 + 批次分析;⑤ = 我的管理室 + 資料診斷 + 說明書)
 分頁名一律走 `ui/helpers/story_nav.tab_label()` SSOT,本檔不得再出現字面值。
 快取策略(v19.333 對齊實作,review F10):L1 repository 以 @_ttl_cache / @_daily_cache
@@ -182,7 +184,7 @@ from ui.tab_fund_grp_health import render_fund_grp_health_tab  # noqa: E402
 # (render_single_fund_tab / render_batch_analysis_tab / render_manage_tab /
 #  render_data_guard_tab / render_manual_tab)。本檔**刻意不再直接 import 那五個** ——
 # 留著會讓「app.py 到底掛了幾個入口」有兩種讀法,而那正是本次要消滅的東西。
-from ui.tab_fund_research import render_fund_research_tab  # noqa: E402  (③ 基金研究)
+from ui.tab_fund_research import render_fund_research_tab  # noqa: E402  (③ 標的探索)
 from ui.tab_settings_diag import render_settings_diag_tab  # noqa: E402  (⑤ 設定與診斷)
 
 APP_VERSION = "v19.405_IA_P4_TabRestructure"
@@ -230,7 +232,7 @@ div[data-testid="stTabs"] div[data-testid="stTabs"] div[data-baseweb="tab-list"]
 # 修法走既有 SSOT `infra.config.get_secret`(它 :39-48 早就 try/except 包好,
 # 且自帶 os.environ fallback)—— 不在本檔另寫一份(§2.1)。
 # §1:不是掩蓋錯誤 —— 缺 key 這件事照樣會被講出來,只是**不在這裡講**
-# (2026-08-28 Q3 起改由 Tab5 §④ 金鑰狀態 + 市場定調頁的 FRED 分支負責,
+# (2026-08-28 Q3 起改由 Tab5 §④ 金鑰狀態 + ① 市場總覽頁的 FRED 分支負責,
 #  見下方「金鑰狀態的顯示位置」),而不是崩在啟動的第 105 行。
 from infra.config import get_secret as _secret_raw  # noqa: E402
 
@@ -279,7 +281,7 @@ FRED_KEY, GEMINI_KEY = _load_keys()
 #   1. 缺哪幾把 + 去哪裡設 → `ui/tab5_data_guard.py` §④「🔑 API 金鑰狀態」。
 #      該表本來就逐把列出 FRED / GEMINI / FINMIND / PROXY / GOOGLE_SHEET_ID 的
 #      來源與遮罩(比這裡多 3 把);本批只補上它唯一缺的那件事 ——「去哪裡設定」。
-#   2. 缺 FRED(會擋住整個市場定調頁)→ `ui/tab1_macro.py` 的
+#   2. 缺 FRED(會擋住整個 ① 市場總覽頁)→ `ui/tab1_macro.py` 的
 #      `if not FRED_KEY:` 分支已印「尚未設定 FRED 金鑰,無法載入總經資料」+ 去哪裡補。
 #   3. 缺 GEMINI(只影響 AI 區塊)→ 由各 AI 區塊自己在用得到的地方說。
 
@@ -382,7 +384,7 @@ render_sidebar(
 # 的分頁名(同一種病第二次發作)。故頂層分頁名全部收進 story_nav。
 #
 # ── 2026-08-31：七 → 五（客戶拍板線框 `docs/wireframes/fund-wireframe-final.html`）──
-# ① 🌐 市場定調 / ② 💊 組合健診 / ③ 🔍 基金研究 / ④ 📊 我的配置 / ⑤ ⚙️ 設定與診斷
+# ① 🌐 市場總覽 / ② 💊 持倉體檢 / ③ 🔍 標的探索 / ④ 📊 資產配置 / ⑤ ⚙️ 設定與診斷
 #   ③ = 舊「個基深掘」+「批次分析」(ui/tab_fund_research.py,單一模式切換鍵)
 #   ⑤ = 舊「我的管理室」+「參考 / 診斷」內的資料診斷與說明書
 #       (ui/tab_settings_diag.py,單頁 + 目錄錨點,**不再有巢狀 st.tabs**)
@@ -485,6 +487,8 @@ tab_macro, tab_health, tab_research, tab_portfolio, tab_settings = st.tabs(
 #    (b) 重複的**只有 try/except 骨架**;真正會漂移的東西(分頁名)已經走
 #        `_tab_label(...)` SSOT,不再是五份手抄的中文字面值 —— 原本那五段各帶一份
 #        「「🌐 市場定調」分頁渲染失敗」,分頁一改名就會有人漏改。
+#        ⚠️ 2026-09-01 改名批**實地驗證了這句話** —— 四個分頁改名,
+#           這五段錯誤標題一行都不必動,因為它們走 `_tab_label(...)`。
 #    守衛:`tests/test_wpf_five_tab_wiring.py::test_tab_error_titles_go_through_tab_label`
 #         (突變:把任一段的標題改回寫死字串 → 轉紅)。
 _TAB_ISOLATION_HINT = ("此分頁已隔離,其他分頁不受影響;請展開「🔧 技術細節」把 traceback"
@@ -494,7 +498,7 @@ _TAB_ISOLATION_HINT = ("此分頁已隔離,其他分頁不受影響;請展開「
 # ⚠️ 這個 `with` 必須包住**全部五個**分頁(理由見上方 ⭐ 區塊)。
 with _settings_page_owns(_SD_FETCH_DIAG):
     # ══════════════════════════════════════════════════════
-    # TAB ① — 🌐 市場定調（決策動線第 1 站:加碼或防禦）
+    # TAB ① — 🌐 市場總覽（決策動線第 1 站:加碼或防禦;只做總體環境判讀）
     # ══════════════════════════════════════════════════════
     with tab_macro:
         # §1 分頁隔離（v19.429）：st.tabs 單次 run 渲染全部分頁,任一分頁若拋未捕捉
@@ -520,7 +524,7 @@ with _settings_page_owns(_SD_FETCH_DIAG):
                       hint=_TAB_ISOLATION_HINT, level="error")
 
     # ══════════════════════════════════════════════════════
-    # TAB ② — 💊 組合健診（決策動線第 2 站:手上哪幾檔健康 / 吃本金）
+    # TAB ② — 💊 持倉體檢（決策動線第 2 站:手上哪幾檔健康 / 吃本金;**只診斷,不建議動作**）
     # 以 100 萬 TWD 為基準逐檔模擬:原幣本金 / 持有份額 / 逐期配息折算 TWD / 吃本金判定。
     # ══════════════════════════════════════════════════════
     with tab_health:
@@ -532,7 +536,7 @@ with _settings_page_owns(_SD_FETCH_DIAG):
                        hint=_TAB_ISOLATION_HINT, level="error")
 
     # ══════════════════════════════════════════════════════
-    # TAB ③ — 🔍 基金研究（決策動線第 3 站:還沒放進組合前,查一檔或掃一批的體質）
+    # TAB ③ — 🔍 標的探索（決策動線第 3 站:還沒放進組合前,查一檔或掃一批的體質）
     # 合併頁(2026-08-31 七→五):共用「找代號」頂部 + 單一模式切換鍵
     # (🔍 單檔深掘 / 📦 批次掃描),**不是第二層分頁**。
     # 批次面板另有 checkbox gate —— 全站唯一 30~40 分鐘的長任務,切過來不會開跑。
@@ -546,7 +550,7 @@ with _settings_page_owns(_SD_FETCH_DIAG):
                          hint=_TAB_ISOLATION_HINT, level="error")
 
     # ══════════════════════════════════════════════════════
-    # TAB ④ — 📊 我的配置（決策動線第 4 站:記帳 + 再平衡）
+    # TAB ④ — 📊 資產配置（決策動線第 4 站:記帳 + 再平衡;**要執行的動作都在這裡**）
     # ══════════════════════════════════════════════════════
     with tab_portfolio:
         try:

@@ -290,7 +290,7 @@ def render_batch_analysis_tab() -> None:
         st.markdown(f"## {_section_label_tb('batch')}")
     render_flow_nav("batch")   # 巨觀:第 ② 層 基金核心分析
     st.caption(
-        "上傳或貼上基金代號清單 → 每檔跑**與「組合健診」同一張大表**(評分/報酬/風險/配息/"
+        f"上傳或貼上基金代號清單 → 每檔跑**與「{_tab_label('health')}」同一張大表**(評分/報酬/風險/配息/"
         "σ位階/買賣點,以 100 萬 TWD 為基準)→ 下載 CSV。每檔抓 NAV/配息/績效"
         "(T+1~T+3、含 fallback chain)+ 完整健診計算,**400 檔約 30~40 分鐘**;**每檔即時存磁碟** → "
         "關分頁 / 伺服器重啟也不白費,重進上傳同一份清單自動接續。"
@@ -335,7 +335,8 @@ def render_batch_analysis_tab() -> None:
         if _ck_rows and not _rows_compatible(_ck_rows):
             # 舊版 flat-schema 存檔 → 忽略,提示重跑(表格已升級為組合健診大表)
             st.session_state[_K_ROWS] = {}
-            st.info("偵測到**舊版格式**的批次存檔,已忽略 —— 批次表已升級為「組合健診大表」,"
+            st.info("偵測到**舊版格式**的批次存檔,已忽略 —— 批次表已升級為"
+                    f"「{_tab_label('health')}大表」,"
                     "請重新分析(舊存檔可按「🗑️ 清除重來」刪除)。")
         elif _ck_rows:
             st.session_state[_K_ROWS] = _ck_rows
@@ -420,7 +421,8 @@ def _render_recent_checkpoints() -> None:
             if not ckpt:
                 st.error("讀回失敗:存檔可能已損毀或被刪除。")
             elif _ck_rows and not _rows_compatible(_ck_rows):
-                st.warning("此存檔為**舊版格式**(批次表已升級為組合健診大表),無法讀回;"
+                st.warning("此存檔為**舊版格式**(批次表已升級為"
+                           f"{_tab_label('health')}大表),無法讀回;"
                            "請重新上傳清單分析。")
             else:
                 st.session_state[_K_ROWS] = _ck_rows
@@ -452,7 +454,8 @@ def _render_existing_results() -> None:
     run_at = st.session_state.get(_K_RUN_AT, "—")
 
     st.divider()
-    st.markdown(f"### 📊 分析結果(組合健診大表)　·　執行時間(台北):{run_at}")
+    st.markdown(f"### 📊 分析結果({_tab_label('health')}大表)"
+                f"　·　執行時間(台北):{run_at}")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("檔數", n)
     m2.metric("✅ 完全成功", n_ok)
@@ -549,7 +552,7 @@ def _render_existing_results() -> None:
             "- **報酬**:近一年含息(優先抄 MoneyDJ 官方績效表)/ 3 年·5 年平均每年 / "
             "全期實際與年化;**風險**:Sharpe / Sortino / Calmar / 最大跌幅 / 離高點多遠;"
             "**買賣點**:分批買 3 段~賣 3 段 + 現價落在哪一段。\n"
-            "- **吃本金燈號 / 換標的建議 /  3-3-3** 的判定與組合健診用同一套算法,不會兩處打架。\n"
+            f"- **吃本金燈號 / 換標的建議 /  3-3-3** 的判定與「{_tab_label('health')}」用同一套算法,不會兩處打架。\n"
             "- **上/下檔捕捉% + 操盤評分**:和大盤比(台幣計價比台股、**美元計價比 S&P 500**),"
             "把月份拆成大盤漲的月和跌的月分開算;"
             f"需要漲的月、跌的月**各**至少 {_CAP_MIN} 個月(貼近高點或成立太短的基金跌月太少 → "
