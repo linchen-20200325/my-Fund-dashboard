@@ -132,9 +132,14 @@ def _dedup_rows_by_code(rows: "list[dict]") -> "list[dict]":
 
 
 def render_fund_grp_health_tab() -> None:
-    """渲染 💊 基金組合健診 Tab（v19.37 新增）。"""
-    st.markdown("### 💊 基金組合健診")
-    from ui.helpers.story_nav import render_flow_nav, render_story_nav
+    """渲染 ② 持倉體檢 Tab（v19.37 新增；2026-09-01 隨客戶拍板線框改名）。"""
+    # ⚠️ 頁面標題**必須**走 `tab_label('health')`，不得寫死中文字面值。
+    #    2026-09-01 改名（組合健診 → 持倉體檢）時，這裡原本寫死「### 💊 基金組合健診」
+    #    —— 分頁列已經改成「💊 持倉體檢」，點進來卻還是舊標題，**同一頁兩個名字**。
+    #    這是本 repo 第三次發生死指路（前兩次見 `ui/helpers/story_nav.py` docstring），
+    #    也是唯一一次「使用者一打開分頁就看得到」的。走 SSOT 之後它不可能再漂。
+    from ui.helpers.story_nav import render_flow_nav, render_story_nav, tab_label
+    st.markdown(f"### {tab_label('health')}")
     render_flow_nav("health")   # 巨觀:第 ③ 層 監控與評分
     render_story_nav("health")  # v19.405 Phase 4:健診為決策動線第 2 站
     st.caption(

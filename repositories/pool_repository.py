@@ -340,14 +340,38 @@ def list_pool(oauth_client=None) -> list:
     return get_pool_store(oauth_client).list_pool()
 
 
+def _after_pool_write(oauth_client=None) -> None:
+    """寫入成功後的收尾:**清查表快取 ＋ 解除讀取冷卻**(2026-09-01 稽核 N1)。
+
+    ⚠️ 只清快取是不夠的 —— 稽核實跑重現:讀取先吃過一次 403 → 登記 900 秒冷卻 →
+    上游恢復 → 使用者在 UI 成功寫入 → `_clear_pool_cache()` 清得掉快取,
+    **清不掉退避** → 下一次 `resolve_secid` 仍在冷卻窗內直接回 `{}`、0 趟,
+    於是「改池後立即生效」這句承諾在冷卻窗內**不再為真**(最長 15 分鐘)。
+
+    **寫入成功本身就是「這把憑證 + 這本試算表現在是健康的」的最強證據** ——
+    它證明了**這本開得起來、而且可寫**。
+    ⚠️ **2026-09-01 措辭收緊(稽核 NEW-7)**:~~「同時證明了配額沒滿」~~ 說得太滿 ——
+    Sheets 的**讀與寫是不同的配額桶**,寫成功不證明**讀**配額可用
+    (⚠️ 該關係本組與稽核都沒能一手查證,egress 擋住官方頁 → 這裡不對配額做宣稱)。
+    所以這裡呼叫 `record_gspread_success`,把兩把鑰匙一起解除。
+    """
+    _clear_pool_cache()               # 立即生效:清補淨值查表快取,不必等 TTL
+    try:
+        from infra.gspread_retry import record_gspread_success
+        record_gspread_success(*_pool_backoff_ident(oauth_client))
+    except Exception as _e:  # noqa: BLE001 — 解除退避是收尾動作,壞掉不該讓寫入看起來失敗
+        print(f"[pool_repository] 寫入成功但解除讀取冷卻時出錯(不影響寫入):"
+              f"{type(_e).__name__}: {str(_e)[:120]}")
+
+
 def add_or_update(entry: PoolEntry, oauth_client=None) -> None:
     get_pool_store(oauth_client).upsert(entry)
-    _clear_pool_cache()               # 立即生效:清補淨值查表快取,不必等 TTL
+    _after_pool_write(oauth_client)
 
 
 def remove_from_pool(code: str, oauth_client=None) -> None:
     get_pool_store(oauth_client).remove(code)
-    _clear_pool_cache()
+    _after_pool_write(oauth_client)
 
 
 def set_type_override(code: str, type_override: str, oauth_client=None) -> None:
@@ -357,7 +381,7 @@ def set_type_override(code: str, type_override: str, oauth_client=None) -> None:
         if e.code == str(code).strip():
             e.type_override = type_override if type_override in _VALID_TYPES else ""
             store.upsert(e)
-            _clear_pool_cache()
+            _after_pool_write(oauth_client)
             return
     raise KeyError(f"選股池無此標的:{code}")
 
@@ -365,14 +389,62 @@ def set_type_override(code: str, type_override: str, oauth_client=None) -> None:
 # ── 補淨值查表(v19.472 併入對照表:供 repositories/fund/sources.py hot path)──────────
 # 選股池同時是「code → 晨星 secId / ISIN / 幣別」對照表。MoneyDJ 抓不到淨值時,sources.py
 # 查本表拿 secId(或用 ISIN 去晨星串 secId)走「晨星 → Yahoo chart」補淨值。快取整份
-# code→entry(大小寫不敏感鍵),改池後 `_clear_pool_cache()` 立即生效(退役 id_map_repository)。
+# code→entry(大小寫不敏感鍵),~~改池後 `_clear_pool_cache()` 立即生效~~(退役 id_map_repository)。
+# ⚠️ **2026-09-01 就地更正(有意識的更正,不是漏刪;決策者:客戶指派的稽核複驗)**:
+# 自本檔接上跨呼叫來源冷卻起,「清快取」**不再等於**「立即生效」—— 讀取若正處於冷卻窗內,
+# `_pool_map_or_empty()` 會在進場處直接回 `{}`,清快取清不到它。
+# **現行寫法**:寫入成功一律走 `_after_pool_write()`,它**清快取 ＋ 解除兩把退避鑰匙**,
+# 「立即生效」這句承諾因此才重新為真。舊表述的用意仍然成立(改完池不該等 30 分 TTL),
+# 被權衡掉的只是它的機制描述 —— 現在光清快取已經不夠了。
+
+def _pool_backoff_ident(oauth_client=None) -> "tuple[str, str]":
+    """本次查表會用哪把憑證、打哪一本 → (actor, sheet_id)。
+
+    走**本地 JSON** 後端時回 `("", "")` —— 那條路不上網,沒有來源可以退避
+    (`infra.gspread_retry.should_skip_gspread` / `record_gspread_failure` 看到空
+    actor 一律 no-op)。actor 只有 `"sa"` / `"oauth"` 兩個值,理由見
+    `infra/gspread_retry.py` 檔尾「actor(憑證身分)為什麼只有兩個值」。
+    """
+    try:
+        if _sa_present():
+            return ("sa", _pool_sheet_id())
+        if oauth_client is not None:
+            return ("oauth", _pool_sheet_id())
+    except Exception:  # noqa: BLE001 — 偵測失敗 = 當作沒有憑證(不退避,行為最保守)
+        pass
+    return ("", "")
+
 
 def _load_pool_map() -> dict:
-    """{CODE(大寫) → PoolEntry}。讀不到 → {}(不阻斷抓取鏈,§1 退硬編/搜尋)。"""
+    """{CODE(大寫) → PoolEntry}。
+
+    ⚠️ **2026-09-01 起:失敗一律往上拋,不再吞成 `{}`**(有意識的行為變更,不是漏刪;
+    決策者:客戶 2026-09-01「批次 2(gspread 相關站點):加上跨呼叫冷卻退避」)。
+
+    **舊寫法為什麼非改不可**:它把「讀失敗」和「選股池是空的」壓成同一個回傳值,
+    而下游 `_cached_pool_map` 是 `@st.cache_data` —— streamlit **不快取例外、
+    但會快取空值**,於是一次瞬斷會把那個假的空池**鎖滿 30 分鐘 TTL**,
+    期間所有補淨值查表全部 miss。**空選股池是合法狀態**(使用者還沒加任何標的),
+    兩者同義就是 §1 點名的「空有兩義」。
+    (`app.py` 檔頭的 `@st.cache_data` 清單早已把本處列為「鎖住」的五處之一。)
+
+    **舊寫法的用意仍然成立**:補淨值鏈**不該**因為選股池讀不到就整條炸掉。
+    那個用意由 `_pool_map_or_empty()` 承接 —— **例外在快取之內拋、在快取之外譯**,
+    §1 與「不阻斷抓取鏈」兩件事同時成立。
+    """
+    _actor, _sid = _pool_backoff_ident()
     try:
-        return {e.code.strip().upper(): e for e in list_pool() if e.code.strip()}
-    except Exception:  # noqa: BLE001 — 選股池不可用 → 空,退硬編表/名稱搜尋
-        return {}
+        _m = {e.code.strip().upper(): e for e in list_pool() if e.code.strip()}
+    except Exception as _e:
+        from infra.gspread_retry import record_gspread_failure
+        _k, _cd = record_gspread_failure(_actor, _sid, _e)
+        if _k:
+            print(f"[pool_repository] 選股池讀取失敗 → 登記冷卻 {_cd}s(key={_k}):"
+                  f"{type(_e).__name__}: {str(_e)[:120]}")
+        raise
+    from infra.gspread_retry import record_gspread_success
+    record_gspread_success(_actor, _sid)
+    return _m
 
 
 try:  # EX-CACHE-1:App 端走 st.cache_data(跨 rerun 共享 + TTL);headless 退無快取
@@ -400,9 +472,37 @@ def _clear_pool_cache() -> None:
         pass
 
 
+def _pool_map_or_empty() -> dict:
+    """補淨值查表的**對外入口**:冷卻期內或讀失敗 → `{}`,不阻斷抓取鏈。
+
+    這是「內拋外譯」的**外譯**那一半 —— `_load_pool_map` 在快取**之內**照實拋
+    (例外不入 `@st.cache_data`,失敗因此不會被鎖滿 TTL),本函式在快取**之外**
+    把它翻成「這次查不到」,維持 `resolve_secid` / `resolve_isin` /
+    `resolve_currency` 對 `repositories/fund/sources.py` 既有的「None → 退硬編表 /
+    名稱搜尋」契約。
+
+    ⚠️ 冷卻檢查放在這裡(而不是放進 `_cached_pool_map`)的理由:命中快取時那支
+    函式**根本不會執行**,把 gate 放進去會變成「有快取就不查、沒快取才查」的隨機行為;
+    放在入口則是每次都查一次,而且冷卻期內**連快取都不必碰**就直接回 `{}`。
+    """
+    from infra.gspread_retry import should_skip_gspread
+    _actor, _sid = _pool_backoff_ident()
+    _skip, _left, _kind = should_skip_gspread(_actor, _sid)
+    if _skip:
+        print(f"[pool_repository] 選股池剛失敗過(kind={_kind}),冷卻中還剩 {_left:.0f}s "
+              f"→ 本次不打 Google Sheets,退硬編表/名稱搜尋")
+        return {}
+    try:
+        return _cached_pool_map()
+    except Exception as _e:  # noqa: BLE001 — 外譯:抓取鏈不因選股池讀不到而中斷
+        print(f"[pool_repository] 選股池不可用,退硬編表/名稱搜尋:"
+              f"{type(_e).__name__}: {str(_e)[:120]}")
+        return {}
+
+
 def _pool_entry_of(code) -> "PoolEntry | None":
     _c = str(code or "").strip().upper()
-    return _cached_pool_map().get(_c) if _c else None
+    return _pool_map_or_empty().get(_c) if _c else None
 
 
 def resolve_secid(code) -> "tuple[str, str] | None":
@@ -449,7 +549,7 @@ def set_secid(code, secid, currency: str = "", name: str = "", oauth_client=None
             if name and not e.name:          # 只在空名稱時補(不蓋使用者填的)
                 e.name = str(name).strip()
             store.upsert(e)
-            _clear_pool_cache()
+            _after_pool_write(oauth_client)
             return
 
 

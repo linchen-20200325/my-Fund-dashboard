@@ -89,8 +89,17 @@ BATCH2A_SCOPE_A = [ROOT / p for p in (
 _ST_RENDER_ATTRS = {"caption", "info", "warning", "error", "success", "markdown",
                     "write", "text", "code", "toast", "exception",
                     "metric", "dataframe", "table", "json", "latex"}
+# ⚠️ 2026-09-01：把 IA kit 的兩個**組合層**入口一併登記進來。
+#    它們自己不畫顏色（內部委派回 `not_ready` / `business_alert` / `system_error`），
+#    但**呼叫端看到的是它們** —— 不登記的話，本檔對「經由 helper 畫出來的顏色」
+#    完全隱形。稽核 2026-09-01 實測：
+#        except Exception as _e: st.caption(f"抓取失敗：{_e}")        → 本檔 FAILED（對）
+#        except Exception as _e: state_card(..., state=STATE_NOT_READY) → 835 passed（隱形）
+#    本 repo 早就登記過這個失效模式（「包成 helper 就完全隱形」），
+#    而 IA kit 正好造出了那個 helper —— 所以在它**還沒有任何 production caller**的
+#    此刻就先把網補上，而不是等下一批各分頁改用它之後才發現 ratchet 永遠不動。
 _FUNC_RENDERERS = {"system_error", "friendly_error", "_friendly_error", "not_ready",
-                   "business_alert"}
+                   "business_alert", "state_card", "render_cards"}
 # 合格的「系統紅燈」入口（🔴 紅色錯誤框 + 可展開技術細節）。
 RED_ENTRYPOINTS = {"system_error", "friendly_error", "_friendly_error", "st.error",
                    "st.exception"}
@@ -335,6 +344,37 @@ def _call_shows_exception(call: ast.Call, tainted: set[str]) -> bool:
     )
 
 
+def _is_red_entrypoint(call: ast.Call, containers: frozenset[str]) -> bool:
+    """這個呼叫算不算「系統紅燈入口」。
+
+    大多數入口看名字就夠（`RED_ENTRYPOINTS`）。**`state_card` 是例外**：
+    它同一個函式可以畫四種顏色，紅不紅**取決於 `state=` 參數**——
+    `state_card(..., state=STATE_ERROR, exc=e)` 是**正確**的紅燈寫法，
+    而 `state_card(..., state=STATE_NOT_READY)` 印例外正是本檔要抓的 bug。
+    只看名字會把前者誤判成違規（假紅燈），只好逐呼叫看參數。
+
+    ⚠️ **`render_cards` 一律不算紅燈**（fail-closed）：它吃的是一串 dict，
+    每張卡的 `state` 靜態解不出來。**解不出來就當成不是紅燈** ——
+    沿用本 repo 網格契約「靜態證不出它是 3 就算違規」的同一個方向。
+    """
+    _name = _callee(call, containers)
+    if _name in RED_ENTRYPOINTS:
+        return True
+    if _name != "state_card":
+        return False
+    for _kw in call.keywords:
+        if _kw.arg != "state":
+            continue
+        _v = _kw.value
+        if isinstance(_v, ast.Name) and _v.id == "STATE_ERROR":
+            return True
+        if isinstance(_v, ast.Attribute) and _v.attr == "STATE_ERROR":
+            return True
+        if isinstance(_v, ast.Constant) and _v.value == "error":
+            return True
+    return False
+
+
 def _direction_a_violations(path: pathlib.Path) -> list[str]:
     """方向 A 的違規：except handler 抓到例外、拿它去印，卻不是系統紅燈入口。
 
@@ -355,7 +395,7 @@ def _direction_a_violations(path: pathlib.Path) -> list[str]:
         for call in _rendering_calls(node, containers):
             if not _call_shows_exception(call, tainted):
                 continue                      # 沒把例外拿給使用者看 → 不歸本檔管
-            if _callee(call, containers) in RED_ENTRYPOINTS:
+            if _is_red_entrypoint(call, containers):
                 continue                      # 已經是系統紅燈
             cur, fname = call, "<module>"
             while cur in parent:

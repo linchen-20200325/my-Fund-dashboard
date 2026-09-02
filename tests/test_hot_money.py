@@ -211,6 +211,13 @@ def _patch_finmind(monkeypatch, resp):
     # @st.cache_data → 每測前清，避免跨測污染（各測另用相異 days 當 cache key 保險）
     if hasattr(fetch_foreign_flow_series, 'clear'):
         fetch_foreign_flow_series.clear()
+    # 2026-09-01 補：退避狀態同樣要清。fetcher 自本日起會在應用層失敗時登記
+    # **dataset 粒度**的跨呼叫冷卻，而冷卻期內會在進場處直接放棄、**根本不呼叫
+    # `fetch_url_with_retry`** —— 前一個測試留下的冷卻會讓後面的測試拿到空的 `captured`
+    # （實測：`test_foreign_flow_token_forwarded` 因此 KeyError: 'params'）。
+    # ⚠️ 這是**測試隔離**，不是把斷言改鬆：清的是跨測殘留，不是被測行為。
+    from infra import source_backoff as _sb_iso
+    _sb_iso.reset_all()
     return captured
 
 
@@ -242,12 +249,69 @@ def test_foreign_flow_401_bad_token_surfaces_status(monkeypatch):
     assert '401' in err
 
 
-def test_foreign_flow_empty_data_still_says_non_trading_day(monkeypatch):
-    """status=200 + data 為空 → 才是真的「非交易日區間」，訊息不可被誤改。"""
+def test_foreign_flow_empty_data_is_reported_as_upstream_anomaly_not_holiday(monkeypatch):
+    """~~status=200 + data 為空 → 才是真的「非交易日區間」，訊息不可被誤改。~~
+
+    ⚠️ **2026-09-01 規格更正（有意識的政策變更，不是把測試改鬆）** ——
+    原測試（`test_foreign_flow_empty_data_still_says_non_trading_day`）把
+    「空 ⇒ 非交易日」釘成契約，但那個前提**經實測為假**：
+
+      · production 的查詢視窗是 `days + 14`，而 `days` 來自 `ui/hot_money.py`
+        的 `cc1.slider("回看天數", 60, 365, 180, step=30)`
+        → **視窗恆為 74 ~ 379 個日曆日**；台灣最長連假約 9 天。
+        一個 ≥ 74 天的視窗回傳 `data: []`，**不可能**是非交易日區間。
+      · 於是舊訊息「無資料回傳（可能為非交易日區間）」在**唯一會發生的情境下
+        是錯的歸因**，而且被 `@st.cache_data` 鎖 30 分鐘 —— 正是 §1
+        「錯誤的數字比沒有數字更危險」，也正是憲法 §2.1 記載的
+        `fetch_tw_export_yoy` 掛在不存在 dataset 上「恆無資料」活了好幾版的同型病。
+
+    **本測試是加嚴不是放寬**：舊版只斷言 `df.empty` + 訊息含「非交易日」；
+    新版另外釘住 (a) 反向鎖「不得再被說成非交易日」、(b) 訊息要帶得出視窗天數，
+    以及 (c) **這次失敗有登記來源退避**（＝不會每次 rerun 都去打 FinMind，
+    那才是當初「不敢改成 raise」的真正理由，現已由退避層承接）。
+    """
+    from infra import source_backoff as _sb
+    _sb.reset_all()
     _patch_finmind(monkeypatch, _MockResp({'status': 200, 'data': []}))
     df, err = fetch_foreign_flow_series(32)
     assert df.empty
-    assert '非交易日' in err
+    # 反向鎖：與 402 那條同一個精神 —— 上游異常不得被說成休市
+    assert '非交易日' not in err, f"上游異常被誤報成非交易日：{err!r}"
+    assert '46' in err, f"訊息應帶出實際視窗天數（32+14=46），實際：{err!r}"
+    # 失敗有被登記進退避 → 下一次 rerun 在本 fetcher 進場處就被擋下
+    # ⚠️ 2026-09-01 第二輪更正：鍵是 **dataset 粒度**，不是 host。
+    #    host 粒度會把同一個 host 上健康的 NDC 景氣對策信號一起關掉（實測誤殺），
+    #    端對端證明見 tests/test_hot_money_failure_roundtrip.py::
+    #    test_sibling_dataset_on_same_host_is_untouched。
+    import repositories.hot_money_repository as _hm_mod
+    _st8 = _sb.get_backoff_state()
+    assert [d for d in _st8 if d['source'] == _hm_mod._FINMIND_DATASET_KEY], \
+        f"應用層失敗未登記退避：{_st8}"
+    assert not [d for d in _st8 if d['source'] == _hm_mod._FINMIND_HOST_KEY], \
+        f"dataset 專屬失敗被登記到 host 鍵（會誤殺鄰居 dataset）：{_st8}"
+
+
+def test_foreign_flow_short_window_does_not_claim_it_beats_any_holiday(monkeypatch):
+    """`days` 小 → 視窗短 → **不得**再宣稱「視窗遠長於任何連假」。
+
+    ⚠️ `fetch_foreign_flow_series` 是**沒有下限的 public API**：`days=5` → 視窗 19 天，
+    那個長度確實可能整段落在連假裡。production 現行呼叫點全部 ≥ 60
+    （`ui/hot_money.py` slider 60~365、`refresh_hot_money_data(days=180)` 預設），
+    所以這是**潛在**而非現存的誤歸因 —— 但一句在某些輸入下會說謊的話，
+    就不該寫死在使用者看得到的錯誤訊息裡（§1：錯誤的歸因比沒有歸因更危險）。
+    """
+    _patch_finmind(monkeypatch, _MockResp({'status': 200, 'data': []}))
+    _df, err = fetch_foreign_flow_series(5)          # 視窗 = 5 + 14 = 19 天
+    assert '19' in err, f"訊息應帶出實際視窗天數（5+14=19），實際：{err!r}"
+    assert '遠長於任何連假' not in err, (
+        f"19 天的視窗被宣稱『遠長於任何連假』—— 那是假的：{err!r}"
+    )
+    assert '無法排除' in err, f"短視窗應誠實說明無法排除休市：{err!r}"
+
+    # 對照組：production 的最小 days（60 → 視窗 74 天）仍走「上游異常」歸因
+    _patch_finmind(monkeypatch, _MockResp({'status': 200, 'data': []}))
+    _df2, err2 = fetch_foreign_flow_series(60)
+    assert '遠長於任何連假' in err2, f"74 天視窗應判為上游異常：{err2!r}"
 
 
 def test_foreign_flow_none_response_mentions_proxy_log(monkeypatch):
