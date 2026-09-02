@@ -63,6 +63,13 @@ WIREFRAME_DISPLAY_ORDER = (
     "_sec_policy",    # 保單管理（Google Sheets）—— WP-E 會把「連線／授權」搬去 ⑤
     "_sec_overview",  # 配置總覽（內含三個子 slot，見 OVERVIEW_SUB_ORDER）
     "_sec_overlap",   # 持股重疊度診斷
+    # 2026-09-01（客戶拍板線框 `docs/wireframes/ia-wireframe.html` Tab 04）：
+    # 🎯 換股顧問自 ② 持倉體檢搬入。線框 Tab 04 的相對順序是
+    # 「核心/衛星現況 → …… → **換股顧問** → …… → **交易帳本**」，
+    # 故建在 `_sec_overlap` 與 `_sec_ledger` 之間。
+    # ⚠️ 那一批**刻意不重排既有七個 slot**（那是「④ 全頁改版」，屬另一批）——
+    #    本行是**插入一個新 slot**，既有七個的相對順序一格未動。
+    "_sec_switch",    # 🎯 換股顧問（自 ② 搬入；線框：換股顧問在交易帳本之前）
     "_sec_ledger",    # 帳本（T7）+ 費用與扣款
     "_sec_ai",        # AI 摘要
     "_sec_raw",       # Raw data（核對數字來源，留最後、不擋路）
@@ -83,6 +90,28 @@ PRE_MIGRATION_EXECUTION_ORDER = (
     "_sec_add",       # 原 :2075-2793 加入與管理基金（含載入 / 清單 / 矩陣 / 健診）
     "_sec_ledger",    # 原 :2795-2822 帳本 + 費用與扣款
     "_sec_ai",        # 原 :2824-2827 AI 摘要
+    # 2026-09-01：🎯 換股顧問自 ② 搬入，`with` **附加在最後**。
+    # ⚠️ 這是本表唯一一次被加長，而且**刻意只能加在尾端** ——
+    #    上面九項的相對順序一格未動，故本檔要防的四處 session_state 先寫後讀耦合
+    #    全部不受影響。
+    #    ~~（新區塊只讀，見 `tests/test_ia_switch_advisor_moved_to_portfolio.py`~~
+    #    ~~的 `test_switch_block_only_reads_session_state_keys_nobody_else_uses`）。~~
+    #    ⚠️ **2026-09-02 更正：上面那個括號裡有兩處不實**
+    #    （**有意識的更正，不是漏刪** · 日期 **2026-09-02** · 決策者：**實作組**，
+    #     依據：獨立稽核指出「測試名不存在」，本組實測後發現「只讀」同樣不成立）。
+    #    **(1) 那個測試名不存在。** 實際守這件事的是同檔的
+    #        `test_switch_section_writes_only_its_own_session_keys`（直接寫入 ⊆ 自己的兩把）
+    #        ＋ `test_nobody_else_touches_those_two_keys`（沒有別人碰那兩把）。
+    #        **功能覆蓋一直都在，錯的只是指標。**
+    #    **(2) 「新區塊只讀」也不對** —— 它會寫**自己的**兩把 key：
+    #        `_switch_advise_done`、`_perf_snapshot_done`。
+    #    **舊表述的用意仍然成立**（要說的是「它不會去動別人在讀的 key，所以插在最後
+    #    不影響既有順序」—— 這一點為真，而且正是上面兩條測試在守的東西）；
+    #    **被權衡掉的是它的精確度**：把「不寫**別人的** key」寫成了「只讀」，
+    #    再配一個不存在的測試名 —— 讀的人照著去找會找不到，然後合理懷疑覆蓋不存在。
+    #    日後若有人想把它插到中間去「讓執行順序也照版面走」，本條會當場轉紅 ——
+    #    那正是它存在的理由。
+    "_sec_switch",    # 🎯 換股顧問（新增；顯示位置另由建立順序決定）
 )
 
 
