@@ -199,12 +199,32 @@ def _gate_function_keys(path: pathlib.Path) -> list[str]:
     """`if st.checkbox(...) / st.button(...) / st.toggle(...):` 這種延遲載入 gate。
 
     2026-09-02 增收 **`applied_form(...)`**（IA kit 鐵則 02，`ui/helpers/ia/gated_form.py`）。
-    它依建構就會產生一個送出閘門：`with applied_form(...) as gate:` 之後
-    `if gate:` 才跑重運算 —— 效果與 `if st.button(...)` **相同或更強**
-    （form 連「每改一個輸入就整頁重跑」也一起擋掉）。
-    ⚠️ **這是擴大偵測範圍，不是放寬** —— 少了它，任何把 `st.button` gate 升級成
-    form gate 的改動都會被誤判成「gate 不見了」，逼後人為了消紅**把 gate 拆回去**，
-    正好與本規則的目的相反。
+
+    ⚠️ **本分支看得到什麼、看不到什麼 —— 據實寫明，不要照抄成「等價」**
+    ---------------------------------------------------------------------
+    新分支只看「這個函式裡**有沒有出現 `applied_form(...)` 這個 Call**」，
+    **不看它回傳的 gate 有沒有被拿去 gate 任何東西**。兩種形態的差別在這裡：
+
+    - `if st.button(...):` —— **call 與 guard 不可分離**，看到 call 就等於看到 guard。
+    - `with applied_form(...) as gate:` —— **兩者可以分離**：`applied_form` 照樣被呼叫，
+      而 `if gate:` 那一行可以被改成 `if False:`、或整個拿掉。**本分支偵測不到。**
+
+    2026-09-02 實測（本組自行重跑，非轉述）：保留 `applied_form(...)`、把
+    `ui/tab_manage.py::_sec_nav_backfill_auto` 的 `if not _bf_gate: return` 改成
+    `if False: return` → **本條仍為綠**（`1 passed`）。
+    當時另有 5 條紅，但那是**附帶抓到的** —— gate 失效後真的打了外網把渲染搞爛，
+    不是設計來抓這件事的。**對「重運算很便宜、不打外網」的未來使用者，沒有任何東西守得住。**
+
+    → **所以本次是「換一種偵測形態」，不是「等價地擴大」。** 之所以仍然收它：
+    不收的話，任何把 button gate **升級**成 form gate 的改動都會被誤判成「gate 不見了」，
+    逼後人為了消紅**把 gate 拆回去**，方向比現在更糟。
+
+    📌 **待補的機器規則（已登記，本批未做）**：AST 驗「`applied_form(...)` 回傳的
+    gate 必須被消費」（出現在某個 `if` 的判斷式裡，或被傳出去）。
+    ⚠️ `ui/helpers/ia/gated_form.py` 的 docstring 已經寫著這個病
+    （「submit 的回傳值要被接住並用來 gate 運算……否則就會**很明顯地看出**沒 gate」）——
+    但「很明顯地看出」是**人眼規則，不是機器規則**；`tests/test_ia_kit.py` 27 條裡
+    **沒有一條**在驗呼叫端有沒有用 gate。這條補起來之前，本分支只是形態偵測。
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     containers = _st_container_names(tree)

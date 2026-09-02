@@ -240,8 +240,23 @@ def _render_maintain_section() -> None:
     #    最終順序是「資料來源健康度 → NAV 累積狀態 → 連線與金鑰 → 手動補資料 →
     #    使用手冊」，兩塊之間**夾著「連線與金鑰」**。把 ⑤ 重組成那五塊屬 **T18 批次**
     #    （T18 本來就要動「連線與金鑰」，同一塊不能兩批同時改），**本批不做**。
-    #    本批只把 NAV 由「一塊」拆成「兩塊」並維持**狀態在前、寫入在後**的相對順序 ——
-    #    T18 之後在中間插入「連線與金鑰」時，這個相對順序仍然成立，守衛也不必改。
+    #    本批只把 NAV 由「一塊」拆成「兩塊」並維持**狀態在前、寫入在後**的相對順序。
+    #
+    # ⛔ **T18 必讀：守衛「需要」更新，不要照抄本批的宣稱。**
+    #    本批 PR 曾寫「T18 插入之後不必改守衛」——**那句話是假的，已撤回**
+    #    （2026-09-02 獨立稽核實測推翻）。正確說法分兩層：
+    #    - **斷言的語意會存活**：`test_two_blocks_use_the_ssot_labels_and_status_comes_before_manual`
+    #      比的是兩塊標題的**相對索引**（`_status_at < _manual_at`），中間插入任何東西都不影響。
+    #    - **但它驅動的入口會消失**：那條測試跑的是 `_render_maintain_section()`。
+    #      線框 Tab 05 的五個 `<h4>` 順序是「資料來源健康度 / NAV 累積狀態 /
+    #      **連線與金鑰** / 手動補資料 / 使用手冊」——「連線與金鑰」**夾在兩塊中間**，
+    #      所以 T18 一定得把這兩塊拆出這個入口。稽核實際模擬了一次（把 manual 塊移出
+    #      本函式、另成 `safe_section`，全域相對順序仍是狀態在前），結果：
+    #          FAILED test_two_blocks_use_the_ssot_labels_and_status_comes_before_manual
+    #          E AssertionError: 沒畫出「手動補資料」標題 '### 手動補資料'
+    #    → **T18 要做的是把那條守衛的驅動點改成新的入口（或整頁），不是刪掉它。**
+    #    ⚠️ 該模擬保留了 `NAV_HISTORY` 綁定才只紅一條；若 T18 同時把它移出本分區，
+    #      `test_settings_page_own_sections_bind_the_expected_flags` 會一起紅。
     with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
         render_manage_tab()
         st.divider()

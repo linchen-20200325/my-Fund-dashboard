@@ -217,6 +217,15 @@ def test_two_blocks_use_the_ssot_labels_and_status_comes_before_manual(monkeypat
     順序在兩者之間夾了「連線與金鑰」。錨到相鄰，會在 ⑤ 依線框重組（T18）當天
     無故轉紅，而那時什麼都沒壞。
 
+    ⛔ **給 T18：本條「需要」更新驅動點，不要以為它會自動存活。**
+    斷言的**語意**會存活（比的是相對索引，中間插入什麼都不影響），
+    **但它驅動的入口 `_render_maintain_section()` 會消失** ——「連線與金鑰」夾在
+    兩塊中間，T18 必須把兩塊拆出這個入口。2026-09-02 獨立稽核實際模擬過一次
+    （把 manual 塊移出該函式、另成 `safe_section`，全域相對順序仍是狀態在前）：
+        FAILED test_two_blocks_use_the_ssot_labels_and_status_comes_before_manual
+        E AssertionError: 沒畫出「手動補資料」標題 '### 手動補資料'
+    → **把驅動點換成新的入口（或整頁渲染），不是刪掉本條。**
+
     ⚠️ 標題用 **`==`** 比對整行，不是 `in` —— 「原名＋後綴」就能騙過子字串比對。
 
     突變實驗（實跑，輸出貼在 PR）：把 `_render_maintain_section` 內
@@ -528,3 +537,85 @@ def test_real_failure_is_still_red(monkeypatch):
     assert _errs, (
         "狀態查詢真的爆掉卻沒有紅框 —— 系統故障被畫成了「還沒設定」，"
         f"使用者會以為只要去設定就好。實際呼叫：{rec.names()}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 5) 送出閘門真的擋住寫入（不是「有沒有建 form」，是「沒送出就不寫」）
+# ══════════════════════════════════════════════════════════════════
+class _FakeUpload:
+    """假的上傳檔：只要 `getvalue()`，回一份最小的合法 CSV。"""
+
+    def __init__(self, payload: bytes = b"CODE,DATE,NAV\nTEST1,2026-01-02,10.5\n") -> None:
+        self._payload = payload
+
+    def getvalue(self) -> bytes:
+        return self._payload
+
+
+def _run_local_base_upload(monkeypatch, *, submitted: bool):
+    """跑一次「本地基底 CSV」區塊，回傳 `import_nav_csv_multi` 被呼叫的次數。
+
+    ⚠️ 監看點放在 **`services.nav_history_store`**（實作模組）而不是呼叫端的區域別名 ——
+    區域別名是在函式內 `from ... import ... as _nh_import_multi` 綁的，
+    patch 呼叫端拿不到；patch 來源模組才會被那行 import 取到。
+    """
+    import services.nav_history_store as _store
+    import ui.tab_manage as _tm
+
+    calls: list = []
+
+    def _spy(payload):
+        calls.append(payload)
+        return {"codes": [], "results": {}, "points": [], "errors": []}
+
+    with _fake_st(monkeypatch, button=submitted) as rec:
+        monkeypatch.setattr(_store, "import_nav_csv_multi", _spy, raising=True)
+        # 上傳欄回一個「使用者已經選好檔」的狀態 —— 這正是舊行為會立刻寫入的情境。
+        _orig_uploader = None
+
+        def _uploader(*a, **k):
+            rec.calls.append(("file_uploader", a[0] if a else None, k.get("key")))
+            return _FakeUpload()
+
+        monkeypatch.setattr(__import__("streamlit"), "file_uploader", _uploader,
+                            raising=False)
+        _tm.render_nav_csv_manage_section()
+    return len(calls), rec
+
+
+def test_local_base_csv_does_not_write_until_submitted(monkeypatch):
+    """**選好檔但還沒按送出 → 一筆都不准寫。**
+
+    這一條守的是本批**刻意的行為變更**：原碼是「檔案一選好就立刻
+    `import_nav_csv_multi(...)` ＋ `st.rerun()`」，使用者**沒有反悔的機會** ——
+    選錯檔的當下就已經寫進本機 cache 與雲端了。
+
+    ⚠️ **為什麼 `test_every_write_path_is_wrapped_in_a_form` 不夠**：那條只驗
+    「有沒有建立 `_nh_upload_csv_form` 這個 form」，**不驗「沒送出就不寫」**。
+    2026-09-02 獨立稽核把本行為改回舊版跑全套，得到
+    `6567 passed, 13 skipped` —— **與未突變的 head 一模一樣，整個 corpus 沒有一條
+    釘住它**。那就是「拔掉修復不會轉紅」，本條即為補上的那一條。
+
+    突變實驗（實跑，輸出貼在 PR）：把 `render_nav_csv_manage_section()` 的
+    `elif _up_gate and _nh_file is not None:` 改回 `elif _nh_file is not None:`
+    （＝ 回到「選好就寫」）→ **本條轉紅**（未送出卻呼叫了 1 次）。
+    """
+    _n, _rec = _run_local_base_upload(monkeypatch, submitted=False)
+    assert _n == 0, (
+        f"使用者只是選了檔、還沒按送出，就已經寫進 cache／雲端了（呼叫 {_n} 次）——"
+        "選錯檔沒有反悔的機會。")
+
+
+def test_local_base_csv_writes_exactly_once_when_submitted(monkeypatch):
+    """**反面（不可省）**：按了送出 → **恰好寫一次**。
+
+    少了這一條，「把整條寫入路徑刪掉」也會讓上一條全綠 ——
+    那不是修好，是把功能弄不見。用 `== 1` 而不是 `>= 1`：重複寫入同樣是缺陷。
+
+    突變實驗（實跑，輸出貼在 PR）：把那一段 `elif` 分支整個拿掉
+    （＝ 按了送出也不寫）→ **本條轉紅**（呼叫 0 次）。
+    """
+    _n, _rec = _run_local_base_upload(monkeypatch, submitted=True)
+    assert _n == 1, (
+        f"按了送出卻沒有恰好寫一次（實際 {_n} 次）—— 0 次代表功能不見了，"
+        "多次代表同一份 CSV 被重複匯入。")
