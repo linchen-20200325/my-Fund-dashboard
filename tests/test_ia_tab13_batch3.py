@@ -156,10 +156,21 @@ def test_each_macro_source_is_gated_by_its_own_checkbox(fetcher: str, flag: str)
              if c.args and ast.unparse(c.args[0]) == fetcher]
     assert len(_subs) == 1, (
         f"預期 `{fetcher}` 剛好被 submit 一次，實際 {len(_subs)} 次。")
-    _guards = " ".join(_enclosing_tests(_subs[0], _f))
+    _guards = _enclosing_tests(_subs[0], _f)
+    # ⛔ **不得改回 `flag in " ".join(_guards)` 這種子字串比對。**
+    # 2026-09-02 獨立稽核實測：radar / tp 兩路的**外層**條件是
+    # `_has_fred and (_want_radar or _want_tp)` —— 它**同時含有兩個旗標字串**，
+    # 於是把內層那個三元條件整個拿掉、讓它無條件 submit，子字串比對**仍然全綠**
+    # （4 個參數化案例 4 passed）。也就是說本條當時只有 ind / news 兩個案例真的在守，
+    # radar / tp 兩個**結構上不可能紅**。
+    # 現行：要求那個旗標**自己就是一整條完整條件**（`ast.unparse(test) == flag`），
+    # 外層那個 OR 條件因此救不了它。
     assert flag in _guards, (
-        f"`{fetcher}` 的 submit 沒有被 `{flag}` 擋住（外層條件：{_guards!r}）——\n"
-        "勾選框就變成裝飾品：使用者取消勾選，那一路照樣打出去。")
+        f"`{fetcher}` 的 submit 沒有任何一層條件**剛好就是** `{flag}`"
+        f"（外層條件逐層為：{_guards!r}）——\n"
+        "勾選框就變成裝飾品：使用者取消勾選，那一路照樣打出去。\n"
+        "⚠️ 只出現在 `_has_fred and (_want_radar or _want_tp)` 這種**合併條件**裡不算數，"
+        "那條 OR 兩路都會通過。")
 
 
 def test_freshness_stamp_only_when_indicators_were_really_refetched():
@@ -174,10 +185,10 @@ def test_freshness_stamp_only_when_indicators_were_really_refetched():
                      for t in n.targets)]
     assert _hits, "找不到 `macro_last_update` 的指派 —— 錨點失效，請更新本測試。"
     for _h in _hits:
-        _guards = " ".join(_enclosing_tests(_h, _f))
+        _guards = _enclosing_tests(_h, _f)
         assert "_ind_fetched" in _guards, (
             "`macro_last_update` 的指派沒有被 `_ind_fetched` 擋住"
-            f"（外層條件：{_guards!r}）—— 沒重抓卻蓋時間戳 ＝ 假的新鮮度。")
+            f"（外層條件逐層為：{_guards!r}）—— 沒重抓卻蓋時間戳 ＝ 假的新鮮度。")
 
 
 def test_news_session_write_is_gated_by_its_own_checkbox():
@@ -191,9 +202,9 @@ def test_news_session_write_is_gated_by_its_own_checkbox():
                      for t in n.targets)]
     assert _hits, "找不到 `st.session_state.news_items` 的指派 —— 錨點失效，請更新本測試。"
     for _h in _hits:
-        _guards = " ".join(_enclosing_tests(_h, _f))
+        _guards = _enclosing_tests(_h, _f)
         assert "_news_fetched" in _guards, (
-            f"`news_items` 的指派沒有被 `_news_fetched` 擋住（外層條件：{_guards!r}）。")
+            f"`news_items` 的指派沒有被 `_news_fetched` 擋住（外層條件逐層為：{_guards!r}）。")
 
 
 def test_zero_indicator_message_separates_skipped_from_failed():
@@ -539,3 +550,210 @@ def test_macro_checkbox_defaults_match_the_wireframe():
     assert _defaults.get("chk_macro_force") is False, (
         "「強制重抓最新（清快取）」預設必須是 False —— 預設開啟會讓每一次送出"
         "都清一次快取。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 必修 2 · 旗標的**推導方式**（不是只驗包裝）—— 2026-09-02 獨立稽核補
+# ══════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("flag, future", [
+    ("_ind_fetched", "_fu_ind"),
+    ("_news_fetched", "_fu_news"),
+])
+def test_fetched_flags_are_derived_from_the_actual_future(flag: str, future: str):
+    """`_ind_fetched` / `_news_fetched` 必須由**那個 future 本身**算出來。
+
+    ## 為什麼非有這條不可（稽核實測，不是推測）
+
+    2026-09-02 獨立稽核的突變：`_ind_fetched = _fu_ind is not None` → **`_ind_fetched = True`**
+    → **全套 476 passed，全綠**。後果：**時間戳照蓋、成功訊息照說「已抓取」，而指標是舊的**
+    —— `CLAUDE.md §1`（造假）＋ §2.4（新鮮度）的直球違規。
+
+    原因很簡單也很致命：`test_freshness_stamp_only_when_indicators_were_really_refetched`
+    只驗「`macro_last_update` 的指派**有沒有被 `_ind_fetched` 包住**」，
+    **完全不驗 `_ind_fetched` 是怎麼算出來的** —— 包裝在、內容是假的。
+    本條補的就是那一半。
+
+    ⚠️ **`_want_ind` 不算數，這是刻意的。** 兩者目前邏輯等價
+    （`_fu_ind = submit(...) if _want_ind else None`），但「有沒有真的送出去抓」
+    的權威來源是 **future**，不是使用者的勾選意圖 —— 中間若日後多一道
+    （額度、金鑰、熔斷）就會分岔，而分岔的那一刻旗標必須跟著 future 走。
+    """
+    _f = _func(TAB1, "render_macro_tab")
+    _assigns = [n for n in ast.walk(_f) if isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == flag for t in n.targets)]
+    assert len(_assigns) == 1, (
+        f"`{flag}` 被指派了 {len(_assigns)} 次，預期剛好 1 次 —— "
+        "多一次指派就可能在後面把它蓋成恆真。")
+    _rhs = _assigns[0].value
+    assert not isinstance(_rhs, ast.Constant), (
+        f"`{flag} = {ast.unparse(_rhs)}` 是寫死的常數 —— "
+        "那代表旗標與「這一輪到底有沒有真的去抓」完全脫鉤：\n"
+        "  · 若恆為 True：沒重抓也蓋時間戳、也說「已抓取」＝ 捏造新鮮度（§1／§2.4）；\n"
+        "  · 若恆為 False：真的抓到了卻永遠不更新時間戳。")
+    _names = {n.id for n in ast.walk(_rhs) if isinstance(n, ast.Name)}
+    assert future in _names, (
+        f"`{flag} = {ast.unparse(_rhs)}` 沒有用到 `{future}` —— "
+        f"旗標必須由**那個 future 本身**決定（見本條 docstring 末段："
+        "`_want_*` 是使用者的意圖，不是「有沒有真的送出去抓」的權威來源）。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 必修 3 · D3 的門檻**引數順序**（不是只驗有呼叫）—— 2026-09-02 獨立稽核補
+# ══════════════════════════════════════════════════════════════════════
+def _import_alias_map(func: ast.FunctionDef) -> dict:
+    """函式內 `from x import A as B` 的 `B -> A` 對照（含 module 層看不到的區域 import）。"""
+    out = {}
+    for _n in ast.walk(func):
+        if isinstance(_n, ast.ImportFrom):
+            for _a in _n.names:
+                out[_a.asname or _a.name] = _a.name
+    return out
+
+
+def test_base_label_thresholds_are_passed_in_the_right_order():
+    """`classify_base(σ, sell, buy)` 的**第 2 / 3 個引數不得對調**。
+
+    ## 為什麼非有這條不可（稽核實測）
+
+    2026-09-02 獨立稽核的突變：把 `_cb_t2(_sr, _ROT_SELL_T2, _ROT_BUY_T2)` 的兩個門檻
+    **對調** → **全套 476 passed，全綠**。
+    後果：σ 卡片的「基期」與批次大表**變成不同口徑**，而卡片正下方那句 caption
+    還寫著「與大表**同一套判定**」—— **D3 的整個立論當場變假，而且沒有任何守衛會叫**。
+    `test_sigma_card_actually_renders_the_base_label` 只驗「有沒有呼叫 `classify_base`」。
+
+    本條驗**引數的身分與順序**：第 2 個必須解析回 `ROTATION_SELL_SIGMA`、
+    第 3 個必須解析回 `ROTATION_BUY_SIGMA`（區域 `import ... as` 會先解析回原名）。
+    """
+    _f = _func(TAB2, "render_single_fund_tab")
+    _alias = _import_alias_map(_f)
+    _calls_cb = [c for c in ast.walk(_f) if isinstance(c, ast.Call)
+                 and _alias.get(getattr(c.func, "id", ""), getattr(c.func, "id", ""))
+                 == "classify_base"]
+    assert len(_calls_cb) == 1, (
+        f"`classify_base` 在 `render_single_fund_tab()` 內被呼叫 {len(_calls_cb)} 次，預期 1 次。")
+    _args = _calls_cb[0].args
+    assert len(_args) == 3, (
+        f"`classify_base` 只傳了 {len(_args)} 個引數 —— 少傳門檻會吃預設值，"
+        "看起來會對，但**與大表同口徑**這件事就變成巧合而不是保證。")
+    _second = _alias.get(getattr(_args[1], "id", ""), getattr(_args[1], "id", ""))
+    _third = _alias.get(getattr(_args[2], "id", ""), getattr(_args[2], "id", ""))
+    assert (_second, _third) == ("ROTATION_SELL_SIGMA", "ROTATION_BUY_SIGMA"), (
+        f"門檻引數順序錯了：第 2 個是 {_second!r}、第 3 個是 {_third!r}，"
+        "應為 (ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA)。\n"
+        "對調之後「基期」與批次大表就是兩個口徑，而卡片上那句"
+        "「與大表同一套判定」會變成假話（D3 的整個立論）。")
+
+
+def test_swapping_those_thresholds_really_changes_the_answer():
+    """錨點：證明上一條守的不是空氣 —— 對調**真的**會改變分類結果。
+
+    若哪天門檻改到讓對調沒有差別，上一條就變成一條對空氣生效的規則；
+    本條會先紅，提醒重新評估。
+    """
+    from services.rotation import classify_base
+    from shared.signal_thresholds import ROTATION_BUY_SIGMA, ROTATION_SELL_SIGMA
+
+    _diff = [v for v in (-2.5, -1.5, -1.0, -0.5, 0.0)
+             if classify_base(v, ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA)
+             != classify_base(v, ROTATION_BUY_SIGMA, ROTATION_SELL_SIGMA)]
+    assert _diff, (
+        "對調 sell / buy 門檻之後分類結果完全一樣 —— "
+        "`test_base_label_thresholds_are_passed_in_the_right_order` 因此變成"
+        "對空氣生效的規則，請重新評估那條的價值。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 加做 · 本批新文案不准寫方位詞（沿用 #759 的既有解法）
+# ══════════════════════════════════════════════════════════════════════
+#: #759 `tests/test_ia_tracking_card_scope_caption.py::_POSITIONAL` 的同一組字。
+#: **刻意逐字沿用**（不自己重新發明一組）—— 那一批就是因為一個錯的方位詞被擋下。
+_POSITIONAL_WORDS = ("下方", "上方", "下面", "上面", "往下捲", "往上捲", "底下")
+
+#: 本批新增／改寫的**使用者看得到的文案**的指紋。
+#: 每一條都必須在原始碼裡找得到（見 `test_positional_word_ban_is_not_scanning_air`）——
+#: 少了那道錨點，這條規則會在文案改寫後**默默變成對空氣生效**。
+_NEW_COPY_FINGERPRINTS = (
+    # ① 載入表單（T2）
+    "要更新哪幾塊", "只會略過這裡的預抓", "本次沒有勾選",
+    "在載入表單裡勾回", "本次未重抓總經指標",
+    # ③ 單檔空狀態（T9）
+    "還沒有查詢結果", "還沒查過任何一檔基金", "以關鍵字查代號",
+    "也可以直接貼 MoneyDJ 網址",
+    # ③ σ 卡片「基期」（D3）與批次欄位說明（D4）
+    "「基期」欄與批次掃描大表", "本表只列", "同一份計算的不同投影",
+)
+
+_COPY_SOURCES = (TAB1, TAB2, TAB_BATCH, TAB_RESEARCH)
+
+
+def _docstring_ids(tree: ast.AST) -> set:
+    out = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if (isinstance(body, list) and body and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)):
+            out.add(id(body[0].value))
+    return out
+
+
+def _batch_copy_constants():
+    """本批新文案的字串常數：`(檔名, 值)`。
+
+    ⚠️ **只挑帶指紋的常數，不掃整檔** —— 這四個檔裡有大量**既有**文案本來就寫了方位詞
+    （例如 v19.404 那句「與**上方**買賣線的『相對中樞』互補」）。
+    那些不是本批寫的、也不在本批的射程內；整檔掃會製造上百個與本批無關的紅燈，
+    那種紅燈只會被下一個人加白名單關掉，規則就死了。
+    **本條是「新文案不准再犯」，不是「全站清洗」。**
+
+    ⚠️ Python 會把**相鄰字串常數在剖析階段折成同一顆 `Constant`**，
+    所以「把本批的句子併進既有那一句」會讓兩者變成同一顆節點、一起被判 ——
+    這正是 σ 卡片那句 D3 說明**另起一個 `st.caption`** 的原因（見該處註記）。
+    """
+    out = []
+    for path in _COPY_SOURCES:
+        tree = _tree(path)
+        docs = _docstring_ids(tree)
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and id(node) not in docs
+                    and any(fp in node.value for fp in _NEW_COPY_FINGERPRINTS)):
+                out.append((path.name, node.value))
+    return out
+
+
+def test_new_user_facing_copy_has_no_positional_words():
+    """本批新增的文案一律不准寫「上方 / 下方 / 下面 / 底下」這類方位詞。
+
+    ## 為什麼（這不是為了突變好看）
+
+    **方位是版面順序的函數**：寫進文案，等於保證下一次重排就說謊。
+    #759 今天才因為這件事跌過一次（caption 寫兩次「下方」，姊妹卡其實在上面），
+    而**本批自己就重排了 ③ 的共用頂部**（D5 把導覽插到「🔍 找代號」之前）——
+    下一批再動一次，任何「上方 X」都會指錯。
+
+    ⚠️ 初稿真的犯了兩次，是本條把它們抓出來的：
+    空狀態的 `where=` 寫「**上方**「🔍 找代號」」、`missing` 寫「**下面**的淨值走勢」。
+    改用線框原本的用字（「用關鍵字找代號 → 貼上網址／代碼 → 按 🚀 分析」）之後就沒有方位詞了
+    —— **線框本來就沒寫方位，是我自己加的。**
+    """
+    _bad = [(f, w, v[:80]) for f, v in _batch_copy_constants()
+            for w in _POSITIONAL_WORDS if w in v]
+    assert not _bad, (
+        "本批新文案出現方位詞 —— 版面一重排就會指錯，請改寫成「用「X」…」這種"
+        "不依賴位置的講法：\n  "
+        + "\n  ".join(f"{f}: {w!r} in {v!r}" for f, w, v in _bad))
+
+
+def test_positional_word_ban_is_not_scanning_air():
+    """錨點：每一條指紋都必須真的在原始碼裡找得到。
+
+    少了這條，只要有人改寫文案（指紋失效），上一條就會在**掃到 0 個字串**的情況下
+    照樣全綠 —— 一條對空氣生效的規則比沒有規則更危險，因為它看起來有在守。
+    """
+    _all = " ".join(v for _, v in _batch_copy_constants())
+    _missing = [fp for fp in _NEW_COPY_FINGERPRINTS if fp not in _all]
+    assert not _missing, (
+        f"以下指紋在四個 UI 檔裡找不到了：{_missing}\n"
+        "文案改寫本身沒問題，但請把 `_NEW_COPY_FINGERPRINTS` 一起更新 —— "
+        "否則「禁方位詞」那條會變成對空氣生效。")

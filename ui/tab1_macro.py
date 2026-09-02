@@ -862,7 +862,26 @@ def render_macro_tab() -> None:
         # 已經做到同一件事，而且多告訴使用者「你現在是哪一種」。**這是本批對線框的
         # 唯一一處刻意偏離，已在 PR 描述具名回報。**
         with applied_form("macro_load_form", submit_label=_btn_label) as _macro_gate:
-            st.caption("要更新哪幾塊？（預設全選；**沒有勾的不會重抓**，沿用上次結果）")
+            # ⚠️ 2026-09-02 就地更正（**有意識的更正，不是漏刪** · 日期 2026-09-02 ·
+            # 決策者：AI 總管，依據獨立稽核的執行期實測）：
+            # 舊文案 ~~「要更新哪幾塊？（預設全選；**沒有勾的不會重抓**，沿用上次結果）」~~
+            # **對「風險雷達」與「拐點偵測」兩路是假的。**
+            # **舊文案的用意仍然成立**（勾選框確實會讓這裡少送兩個 future）；
+            # **被推翻的是它的前提** —— 稽核用 AppTest 實測：取消勾選之後那兩路
+            # **照樣被打**，只是從並行執行緒搬到序列渲染路徑：
+            #   `ui/tab1_macro_radar.py::render_short_radar_section` 與
+            #   `ui/tab1_macro_inflection.py` 都拿 session 的
+            #   `_radar_v1921_top` / `_tp_v1948_top` 當快取，**而唯一的寫入者就是下面
+            #   那兩個 `if _fu_* is not None:`** → 沒勾 → key 從未寫入 → 它們落進
+            #   自己的 `else:` 分支、自己呼叫 `detect_risk_radar` / `detect_turning_points`。
+            # 失效範圍正好是最該有效的兩次：**冷 session** 與**勾了「強制重抓」那一次**
+            # （清快取清單含這兩個 key）；暖 session 才是好的。
+            # 真正的修法要動那兩個下游檔，**不在本批檔案邊界內** → 已登記交總管另批。
+            st.caption("要更新哪幾塊？（預設全選）")
+            st.caption(
+                "⚠️ 取消勾選「總經指標」／「新聞」＝ 這一輪**真的不重抓**，沿用上次結果；"
+                "取消勾選「風險雷達」／「拐點偵測」**只會略過這裡的預抓** —— "
+                "它們的區塊用到時仍會自己抓一次。")
             _cw = st.columns(4)
             _want_ind = _cw[0].checkbox("總經指標", value=True,
                                         key="chk_macro_want_ind")
@@ -942,8 +961,17 @@ def render_macro_tab() -> None:
                 _ex_ml = _TPE_ml(max_workers=4)
                 try:
                     # 2026-09-02：四路各自受 form 內的勾選框控制（線框 Form ①-A）。
-                    # **沒有勾的那一路根本不 submit** —— 這不是「抓了再丟掉」，
-                    # 而是真的少打一次外部來源（勾選的意義就在這裡）。
+                    # 沒有勾的那一路**不會在這裡 submit**。
+                    # ⛔ **但「不 submit」≠「不會被抓」，這一點務必看清楚**
+                    # （2026-09-02 就地更正，**有意識的更正，不是漏刪**；
+                    #  依據：獨立稽核的 AppTest 執行期實測）：
+                    # 舊註解寫 ~~「而是真的少打一次外部來源」~~ ——
+                    # 對 `fetch_all_indicators` / `fetch_market_news` **成立**
+                    # （它們的消費端只讀 session，不會自己補抓）；
+                    # 對 `detect_risk_radar` / `detect_turning_points` **不成立** ——
+                    # 下游 `ui/tab1_macro_radar.py` / `ui/tab1_macro_inflection.py`
+                    # 讀不到 session 快取時會**自己抓一次**，總次數一次都沒少。
+                    # 兩個下游檔不在本批檔案邊界內 → 缺口已登記交總管另批。
                     _fu_ind = (_ex_ml.submit(fetch_all_indicators, FRED_KEY)
                                if _want_ind else None)
                     _fu_news = (_ex_ml.submit(fetch_market_news, max_per_feed=5)
@@ -1062,7 +1090,9 @@ def render_macro_tab() -> None:
                     # 「條件不足」不是「系統壞了」，依三態要走 ⬜ 灰不是 🔴 紅。
                     not_ready(
                         "本次沒有勾選「總經指標」，先前也沒有已載入的指標可以沿用",
-                        where="上方表單勾回「總經指標」再按一次送出鈕")
+                        # 不寫方位詞（「上方」）：方位是版面順序的函數，
+                        # 下一次重排就會指錯 —— 沿用 #759 的既有教訓。
+                        where="在載入表單裡勾回「總經指標」，再按一次送出鈕")
                 elif not ind:
                     st.error(
                         f"❌ 沒有抓到任何總經指標（0 個，耗時 {_macro_ms}ms）。"
