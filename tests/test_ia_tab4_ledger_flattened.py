@@ -42,6 +42,26 @@ pytest 照樣報 **PASSED**、`--collect-only` 的數字也一格不變 ——
 （`..._uses_the_ssot_headings_in_order` / `..._no_handwritten_...` /
 `..._not_inside_an_expander` / `..._toc_is_rendered_...`）。
 **四條缺一，前面那組就退化成「helper 自己跟自己一致」。**
+
+## ⛔ 本檔守不到的（2026-09-02 獨立稽核實測，就地登記，不要當成已涵蓋）
+
+上面那句「把 helper **綁回 production 路徑**」**只在語法層成立，不在可達性層成立**。
+AST 看得到「這一行寫在 `render_t7_section` 裡」，**看不到那一行會不會被執行到**。
+稽核實跑出**五個假綠**（改 production、本檔全數 passed）：
+
+1. `_t7_section_heading("b")` 關進 `if False:`
+2. `_t7_render_toc()` 關進 `if False:`
+3. **三段標題全部關進 `if False:`（拉平在畫面上整個消失）**
+4. `_render_dividend_matrix(funds)` 關進 `if False:`
+5. ④ 的指路 caption 改成「留著 `where_to_find('health')` 呼叫但不渲染」
+
+**這是所有靜態守衛的共同上限，不是本檔的實作瑕疵** —— 要擋住它得整頁真渲染，
+而 T7 主體在沙箱拿不到 OAuth / NAV / FX。**對照組**：真的**刪掉**指路 caption
+連同 import → **轉紅**；也就是說只有「留著呼叫、但讓它不渲染」這種**刻意**寫法會漏。
+
+⛔ **因此不得把本檔讀成「④ 的版面已經被完整守住」。** 本檔守的是
+**形狀與來源**（有沒有巢狀分頁、標題與目錄是不是同出一源、有沒有被包進 expander），
+**不是**「使用者真的看得到」。後者只有真渲染或人工驗收擋得住。
 """
 from __future__ import annotations
 
@@ -200,6 +220,10 @@ def ledger_rendered(monkeypatch):
     **把 helper 綁回 production 路徑的是下面三條 AST 測試**
     （`..._uses_the_ssot_headings_in_order` / `..._no_handwritten_...` /
     `..._not_inside_an_expander`），**缺了它們，本 fixture 這兩條就是同義反覆。**
+
+    ⚠️ **但那三條只到語法層**：它們確認「這一行寫在 production 函式裡」，
+    **不確認那一行會被執行到**（把它關進 `if False:` → 全綠，稽核實測）。
+    完整上限見模組 docstring「本檔守不到的」。
     """
     import ui.tab3_t7_ledger as _led
 
@@ -230,12 +254,28 @@ def _heading_calls_in_render() -> list[str]:
     return [k for _ln, k in sorted(out)]
 
 
-def _toc_anchors(fake: _FakeSt) -> list[str]:
-    import re
+def _toc_markdown(fake: _FakeSt) -> str:
     toc = [a[0] for n, a, _k in fake.calls
            if n == "markdown" and a and isinstance(a[0], str) and "📑" in a[0]]
     assert len(toc) == 1, f"目錄應該恰好畫一次，實際 {len(toc)} 次"
-    return re.findall(r"\]\(#([^)]+)\)", toc[0])
+    return toc[0]
+
+
+def _toc_anchors(fake: _FakeSt) -> list[str]:
+    import re
+    return re.findall(r"\]\(#([^)]+)\)", _toc_markdown(fake))
+
+
+def _toc_labels(fake: _FakeSt) -> list[str]:
+    """目錄連結的**文字**（`[這一段]`），不是 anchor。
+
+    ⚠️ 這個 helper 是 2026-09-02 獨立稽核補的，補的是一個**真實的漏洞**：
+    `_toc_anchors()` 的正則 `\]\(#([^)]+)\)` **只抓 `(#anchor)`，把 `[連結文字]`
+    整個丟掉**，而 `test_section_titles_are_rendered_verbatim` 只比對 subheader
+    —— 兩條加起來**沒有任何一條把目錄的連結文字綁回 `_T7_SECTIONS`**。
+    """
+    import re
+    return re.findall(r"\[([^\]]+)\]\(#", _toc_markdown(fake))
 
 
 def _subheader_anchors(fake: _FakeSt) -> list[str]:
@@ -285,13 +325,42 @@ def test_section_titles_are_rendered_verbatim(ledger_rendered) -> None:
     assert _subheader_titles(ledger_rendered) == [lbl for _, lbl in _T7_SECTIONS]
 
 
+def test_toc_link_text_matches_the_ssot_labels(ledger_rendered) -> None:
+    """目錄連結的**文字**必須逐字 == `_T7_SECTIONS` 的標籤欄，順序也要對。
+
+    ⚠️ **本條是 2026-09-02 獨立稽核抓到本檔漏洞後補的，不是原設計的一部分。**
+    補之前，本檔（連同 production 註解、commit message、PR 描述）都宣稱
+    「一欄制讓目錄與標題漂移**結構上不可能發生**」——**那句話當時是假的**，
+    而且被實測繞過：
+
+        突變 B1：`_t7_render_toc()` 內把連結文字硬寫成另一組字
+                （`A 加碼(舊名)` / `B 再平衡(舊名)` / `C 轉換(舊名)`），
+                anchor 仍走 `_t7_anchor` → **全套 11 passed 全綠**，
+                而畫面上目錄的字與段標題完全對不起來。
+
+    根因：舊有的兩條測試一條只看 anchor、一條只看 subheader，
+    **目錄的連結文字沒有任何一條在守。**
+
+    **補上本條之後，那句話才變成真的**：一欄制真正保證的是「不存在第二欄可以漂移」，
+    而本條再擋住「有人繞過那一欄、在目錄裡手寫另一組字」。
+
+    突變實驗（實跑）：上述 B1 → **本條轉紅**。
+    """
+    from ui.tab3_t7_ledger import _T7_SECTIONS
+
+    assert _toc_labels(ledger_rendered) == [lbl for _, lbl in _T7_SECTIONS], (
+        "目錄的連結文字與 `_T7_SECTIONS` 不符 —— 有人繞過 SSOT 在目錄裡手寫了字。\n"
+        f"目錄實際={_toc_labels(ledger_rendered)}\n"
+        f"應為={[lbl for _, lbl in _T7_SECTIONS]}")
+
+
 # ══════════════════════════════════════════════════════════════════
-# T5-3 把 helper 綁回 production 路徑（AST；上面那組行為測試缺這個就是同義反覆）
+# T5-3 把 helper 綁回 production 路徑（AST **語法層**；可達性守不到，見模組 docstring）
 # ══════════════════════════════════════════════════════════════════
 def test_render_path_uses_the_ssot_headings_in_order() -> None:
     """`render_t7_section()` 內必須依序呼叫三個 `_t7_section_heading`。
 
-    **這條才是把 SSOT 綁到 production 路徑上的那一條。** 上面的行為測試
+    **這條才是把 SSOT 綁到 production 路徑上的那一條（限語法層）。** 上面的行為測試
     （`test_toc_and_sections_agree` / `..._verbatim`）是拿 SSOT 渲染再跟 SSOT 比，
     **改壞 production 路徑它們不會紅**（已實測，見 `ledger_rendered` docstring）。
 
@@ -313,7 +382,7 @@ def test_render_path_uses_the_ssot_headings_in_order() -> None:
 
 
 def test_no_handwritten_section_heading_bypasses_the_ssot() -> None:
-    """帶 `anchor=` 的 `st.subheader` **只准**出現在 `_t7_section_heading` 內。
+    """`st.subheader` **只准**出現在 `_t7_section_heading` 內（**不論帶不帶 `anchor=`**）。
 
     擋的是「繞過 SSOT 自己手寫一個 `st.subheader(..., anchor=...)`」——
     那會讓標題與目錄各走各的，而 `_T7_SECTIONS` 一欄制的防漂移保證當場失效。
@@ -321,8 +390,16 @@ def test_no_handwritten_section_heading_bypasses_the_ssot() -> None:
     ⚠️ 這是**集合式**的 fail-closed 檢查（合法位置恰好一處），
     不是「檔案裡沒有某字串」的 `not in`。
 
-    突變實驗：在 `render_t7_section` 內加一行
-    `st.subheader("B 投入再平衡（暫停使用）", anchor="t7-b")` → **轉紅**。
+    ⚠️ **2026-09-02 收緊（獨立稽核指出）**：本條原本只抓**帶 `anchor=`** 的
+    `st.subheader` —— 於是手寫一個**不帶 anchor** 的標題就能整個繞過，
+    畫面上會同時出現兩個互相矛盾的段標題而全套照樣全綠。
+    現在改為「**本檔任何一處 `st.subheader`，只要不在 `_t7_section_heading` 裡，
+    就是違規**」。實測本檔的 `st.subheader` 呼叫**只有 SSOT 那一處**，
+    故這條收緊不會誤傷既有寫法。
+
+    突變實驗（兩種都實跑過）：在 `render_t7_section` 內加
+    `st.subheader("B 投入再平衡（暫停使用）", anchor="t7-b")` → **轉紅**；
+    加**不帶 anchor** 的 `st.subheader("B 投入再平衡（暫停使用）")` → **同樣轉紅**。
     """
     tree = _tree(LEDGER)
     # 先找出 `_t7_section_heading` 這個函式體內的節點 id（合法位置）
@@ -338,13 +415,11 @@ def test_no_handwritten_section_heading_bypasses_the_ssot() -> None:
         if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                 and n.func.attr == "subheader"):
             continue
-        if not any(kw.arg == "anchor" for kw in n.keywords):
-            continue
         if id(n) not in legal:
             offenders.append(f"{LEDGER.name}:{n.lineno} {ast.unparse(n)[:70]}")
 
     assert offenders == [], (
-        "有人繞過 `_t7_section_heading` 手寫帶 anchor 的標題：\n  "
+        "有人繞過 `_t7_section_heading` 手寫段標題：\n  "
         + "\n  ".join(offenders) +
         "\n段標題與目錄必須同出一源（`_T7_SECTIONS`），否則兩邊會各自漂移。")
 
