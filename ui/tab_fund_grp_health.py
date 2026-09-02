@@ -573,11 +573,26 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
     # 不再需要三欄排版。
     _all_ccy = sorted({it["currency"] for it in items if it["currency"]})
     _all_cat = sorted({it["category"] for it in items if it["category"]})
-    _sel_ccy = st.multiselect("幣別（外幣/台幣）", _all_ccy, default=_all_ccy, key="lb_ccy")
-    _sel_cat = st.multiselect("基金類別", _all_cat, default=_all_cat, key="lb_cat")
-    _cc1, _cc2 = st.columns(2)
-    _only_eat = _cc1.checkbox("只留不吃本金（綠/黃燈）", value=True, key="lb_noeat")
-    _only_low = _cc2.checkbox("只留低基期", value=True, key="lb_onlylow")
+    # ── 篩選條件包進 form(2026-09-02 T3;拍板線框 Rule 02)───────────────────
+    # 這四個控制項原本是**裸 widget**:動一個就觸發整頁 rerun,而本頁的 rerun 會把
+    # `_run_batch_health()`(逐檔 MoneyDJ / FundClear 取數)整輪重跑一次。四個控制項
+    # 各撥一下 = 四輪。包進 form 之後,值只在按「套用」時提交一次。
+    # ⚠️ 篩選本身(`screen_funds`)是 L2 純函式、很便宜 —— 這裡省的**不是它**,
+    #    是它上游那一整輪頁面重跑。
+    # ⚠️ 這裡**刻意不接 gate 的回傳值**,與上方主表單不同,理由據實寫下來:
+    #    `gated_form` 的 docstring 提醒「回傳值沒被拿去 gate 運算 = 假 form」——
+    #    那條提醒針對的是**貴的重運算**。本區被 gate 的候選只有 `screen_funds`
+    #    (L2 純函式、輸入已在記憶體、零 I/O)。若拿 gate 去擋它,使用者第一次看到的
+    #    會是一張空區塊、非得先按一次「套用」才有東西 —— 那是把便宜的東西擋掉、
+    #    換來一個多餘的點擊。真正貴的那一輪(整頁 rerun → `_run_batch_health`)
+    #    **已經被 form 本身擋住了**(form 內的 widget 互動不觸發 rerun)。
+    from ui.helpers.ia import applied_form as _applied_form  # noqa: PLC0415
+    with _applied_form("lb_screener_filters"):
+        _sel_ccy = st.multiselect("幣別（外幣/台幣）", _all_ccy, default=_all_ccy, key="lb_ccy")
+        _sel_cat = st.multiselect("基金類別", _all_cat, default=_all_cat, key="lb_cat")
+        _cc1, _cc2 = st.columns(2)
+        _only_eat = _cc1.checkbox("只留不吃本金（綠/黃燈）", value=True, key="lb_noeat")
+        _only_low = _cc2.checkbox("只留低基期", value=True, key="lb_onlylow")
 
     # 2) L2 純函式篩選（多選清空 → None = 不篩該維度，避免空表困惑）
     #    lookback / 門檻一律走 L2 預設 = SSOT，UI 不再持有第二組數字（§3.3）。
