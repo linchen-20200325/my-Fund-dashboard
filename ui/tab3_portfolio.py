@@ -291,9 +291,37 @@ def render_portfolio_tab() -> None:
                                      #     「連線／授權」搬去 ⑤、「保單列新增更新」留在 ④
     _sec_overview = st.container()   # 2. 配置總覽（現況長怎樣）
     _sec_overlap  = st.container()   # 3. 持股重疊度診斷
+    _sec_switch   = st.container()   # 3b. 🎯 換股顧問（2026-09-01 自 ② 持倉體檢搬入）
     _sec_ledger   = st.container()   # 4-5. 帳本（T7）+ 費用與扣款
     _sec_ai       = st.container()   # 6. AI 摘要
     _sec_raw      = st.container()   # 7. Raw data（核對數字來源，留在最後、不擋路）
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 🎯 換股顧問：從 ② 持倉體檢搬入（2026-09-01，客戶拍板線框 `ia-wireframe.html`）
+    # ══════════════════════════════════════════════════════════════════════
+    # **客戶給的理由（決定已定，不是本組的判斷）**：換股顧問產出的是**要執行的
+    # 動作**，而 ② 全篇**只診斷、不建議**。線框 Tab 02「這裡不放什麼」逐字寫著
+    # 「換股建議與再平衡試算 → 04（那是決策，不是診斷）」；Tab 04「從哪裡搬來」
+    # 逐字寫著「換股顧問 ─ 自 02 的健診段切出」。
+    #
+    # **顯示位置**：`_sec_switch` 建在 `_sec_overlap` 與 `_sec_ledger` 之間 ——
+    # 線框 Tab 04 的相對順序是「核心/衛星現況 → …… → 換股顧問 → …… → 交易帳本」，
+    # 本批只保證這兩個既有錨點之間的相對位置正確。
+    # ⚠️ **本批刻意不重排 ④ 既有的七個 slot**：那是「④ 全頁改版」，屬另一批
+    #    （`CLAUDE.md §8.4 step 4` 禁止自作主張大重構；上面那段 container 註解
+    #     已列出至少四處 session_state 先寫後讀耦合，重排會讓數字翻面）。
+    #
+    # **執行位置**：真正的 `with _sec_switch:` 在本函式**最後**（`_sec_ai` 之後）。
+    # 這是本檔既有的「建立順序＝顯示順序、`with` 順序＝執行順序」慣例（見上方那段
+    # 長註解）；排在最後是為了**一步都不動既有的執行順序** —— 本區塊只讀不寫
+    # （它自己的 `_switch_advise_done` / `_perf_snapshot_done` 兩個 session key
+    # 沒有任何其他消費者，實測見 `tests/test_ia_switch_advisor_moved_to_portfolio.py`）。
+    #
+    # **資料**：`_switch_funds` 由下方持倉健診段既有的 `_funds_extra` 指派而來 ——
+    # 那是 ④ **本來就在算**、且已經餵給輪動配對／組合績效／效率前緣的同一份。
+    # ⚠️ **不得**在這裡另外抓一次（`CLAUDE.md §-1.5.1c v3 §01-2`：同一個資料來源
+    #    全站只能有一處取數實作）。一檔都沒載入時它維持空 list → 區塊走空狀態三要素。
+    _switch_funds: list = []
 
     with _sec_overview:
         # 線框 §2「配置總覽」把三塊散在頁面上下兩端的「現況長怎樣」收在一起：
@@ -2097,6 +2125,13 @@ def render_portfolio_tab() -> None:
                         for _r in _ok_health
                         if _r.get("ok") and _r.get("_fund_raw")
                     ]
+                    # 🎯 換股顧問（2026-09-01 自 ② 搬入）吃的就是這一份 —— **不另抓**。
+                    # 只是把把手交出去；真正的渲染在本函式最後的 `with _sec_switch:`
+                    # （理由見函式開頭「🎯 換股顧問」那段註解）。
+                    # ⚠️ 這一行**不得**改成 `list(_funds_extra)` 之類的複製：下游三個既有
+                    #    區塊（輪動配對／組合績效／效率前緣）與換股顧問吃的必須是同一份
+                    #    物件，複製一份就會出現「同一頁兩份持倉資料」的第二真相源。
+                    _switch_funds = _funds_extra
                     # ── WP-G(2026-08-31):健診 3 表的渲染呼叫已移除 ─────────────────
                     # 原本這裡是 `_render_health_tbl(_ok_health, funds_extra=_funds_extra,
                     # source_tab="portfolio")`(即 `ui.tab_fund_grp_health._render_health_3tables`),
@@ -2190,6 +2225,88 @@ def render_portfolio_tab() -> None:
 
         # v18.159：通用 AI 白話文總結 widget（4 視角 selectbox）
         _render_tab3_ai_summary(GEMINI_KEY)
+
+    # ── 🎯 換股顧問（2026-09-01 自 ② 持倉體檢搬入）────────────────────────
+    # **刻意排在所有 `with` 的最後**（顯示位置另由 `_sec_switch` 決定，見函式開頭
+    # 那段註解）。放最後的理由是「一步都不動既有的執行順序」：本檔開頭那段長註解
+    # 已列出至少四處「同一次 run 內先寫後讀」的 session_state 耦合，任何插隊都可能
+    # 讓既有數字翻面，而本批**無權**改動計算。
+    # ⚠️ `_switch_funds` 可能是空 list（一檔都沒載入 / 健診段沒跑到）——
+    #    那時 `render_switch_advisor_section` 走空狀態三要素（鐵則 04），
+    #    **不是**靜默消失。它在 ② 的時候也是這個形狀，只是文案指錯了地方。
+    # ⚠️ try/except 沿用 ② 原本那一圈（連錯誤文案都一樣）：整區算爆時要看得見紅框，
+    #    而不是靜靜少一塊（§1）。
+    #
+    # ⛔ **登記，不處置：本頁自此有兩組標籤重疊的績效 KPI**（2026-09-01 本批發現，
+    #    **不是本批造成的重複實作，是搬家把兩者放到了同一頁**）：
+    #      · `switch_advisor_section.render_portfolio_tracking()`（隨本次搬入）
+    #        → 期間累積報酬 / **年化報酬** / **年化波動 σ** / **最大回撤**
+    #      · `ui/helpers/portfolio_perf.render_portfolio_performance()`（④ 既有）
+    #        → **年化報酬** / **年化波動 σ** / Sharpe / **最大回撤**
+    #    **三個標籤字串完全相同**（已逐位元組核對，見下）。
+    #
+    #    ⚠️ **2026-09-02 更正：原本寫在這裡的「但演算法不同」是假的**
+    #    （**有意識的更正，不是漏刪** · 日期 **2026-09-02** · 決策者：**實作組**，
+    #    起因為總管指派複驗本批自己的宣稱）。舊表述加刪除線保留：
+    #      ~~**三個標籤字串完全相同，但演算法不同**（前者是「固定目前權重 + 日再平衡」~~
+    #      ~~重建走勢，後者走 `services.portfolio_performance.performance_metrics`）~~
+    #      ~~→ 同一頁兩張卡、同一個標籤、可能不同的數字。~~
+    #
+    #    **為什麼是假的（實測，不是讀出來的印象）**：兩者的數學**收口到同一個 SSOT**。
+    #      · `performance_metrics()` = `portfolio_returns()` → `metrics_from_return_series()`，
+    #        然後把 `cagr_pct` **改名**成 `ann_return_pct` 出口；
+    #        `ann_vol_pct` / `max_drawdown_pct` 是**原樣透傳**。
+    #      · `reconstruct_trend()` 呼叫的是**同兩個函式**（`services/portfolio_tracking.py`
+    #        檔頭自陳「數學全收口至 `portfolio_performance` SSOT」）。
+    #      · 兩者 `rf_annual` 都取預設 0.0，`assumption` 字串**逐字相同**
+    #        （`"fixed-weight daily-rebalance"`）；輸入也同一份（都是 `_funds_extra`），
+    #        `_ccy_fx_for()` 與 `render_portfolio_performance()` 內嵌那段抓匯率的邏輯
+    #        ~~逐行等價（同 `BACKTEST_FX_FETCH_DAYS`、同 `fetch_usdtwd_frame`）。~~
+    #        ⚠️ **2026-09-02 更正：「逐行等價」過強**（**有意識的更正，不是漏刪** ·
+    #        日期 **2026-09-02** · 決策者：**實作組**，依據：獨立稽核指出並經本組實測）。
+    #        **成功路徑等價為真**（同 `BACKTEST_FX_FETCH_DAYS`、同 `fetch_usdtwd_frame`、
+    #        同 `.set_index("date")["usdtwd"]`，故餵給兩張卡的 `_fx` 相同）；
+    #        **但 `except` 分支不等價**：`_ccy_fx_for()` 失敗時**靜默** `_fx = None`，
+    #        而姊妹卡失敗時呼叫 `system_error(...)` 出紅框。
+    #        → 同一個失敗，一張卡無聲、一張卡紅框。
+    #        **舊表述的用意仍然成立**（它要說明的是「兩張卡拿到的匯率是同一份，
+    #        所以數字差異不可能來自匯率」—— 這一點在成功路徑上仍為真，
+    #        而本節的結論「演算法相同」也不依賴 except 分支）；
+    #        **被權衡掉的是它的強度** —— 「逐行等價」是可被一眼推翻的全稱句。
+    #        ⚠️ 該差異是**既有的**，`_ccy_fx_for()` 與姊妹卡本批皆未改動；
+    #           這裡只更正**本批寫下的那句註解**，不處置該差異本身。
+    #    **舊表述錯在哪**：它拿「一個假設的描述」去對比「一個函式名」，
+    #    而那個描述正是那個函式**自己**的假設 —— `performance_metrics` 的 docstring
+    #    第一句就寫「假設固定權重、每日再平衡」。兩邊講的是同一件事。
+    #
+    #    **真正的差異只有一個，而且不是演算法，是顯示閘門**：
+    #    `reconstruct_trend()` 有年化閘門 —— 共同交易日 < `PORTFOLIO_TREND_MIN_DAYS`（60）
+    #    時把 `cagr_pct` / `ann_vol_pct` / `sharpe` / `calmar` 抹成 None。故：
+    #      · n_days ≥ 60 → 三個重疊 KPI **數字完全相同**（同值、同 round、同格式化）。
+    #      · n_days <  60 → 年化報酬與年化波動 σ：**上面那張顯示「—」、下面那張顯示數字**；
+    #        最大回撤**永遠相同**（它不在被抹的鍵裡）。
+    #
+    #    **所以裁決項不但沒有消失，形狀還更糟，需要總管／客戶裁決的理由改成**：
+    #      (a) 多數情況下這是**兩張數字一模一樣、標籤也一樣的卡**＝純冗餘；
+    #      (b) 短序列時**同一頁、同一個標籤，一個「—」一個有數字**——
+    #          使用者只會讀成「其中一張壞了」或「這兩個在講不同的東西」，
+    #          兩種解讀都不對，正是 §1 最在意的「看起來不像壞掉」的形狀。
+    #    ⚠️ **本更正只推翻「演算法不同」這一句，不宣稱這兩張卡該留該砍。**
+    #    ⚠️ **本更正為實作組單組實測，未經第二組複驗**（`CLAUDE.md §-2` 規則 6）。
+    #        複驗指令（repo 根執行）：比較同一份輸入餵給
+    #        `performance_metrics()` 與 `reconstruct_trend()["metrics"]` 的三個重疊鍵。
+    #    ⚠️ **本批刻意不處置**：要收斂就得砍掉其中一組或改標籤，那是
+    #    「正式下架既有功能 / 改變客戶看到的規格」，屬 `CLAUDE.md §-1.5.1c v3 §03-2 ②`
+    #    的**客戶 gate**，不是實作細節。**已在 PR 描述具名回報總管裁決。**
+    #    ⛔ 在裁決之前，**不得**引用本段自行刪除任一組。
+    with _sec_switch:
+        try:
+            from ui.helpers.fund_grp_health.switch_advisor_section import (
+                render_switch_advisor_section,
+            )
+            render_switch_advisor_section(_switch_funds)
+        except Exception as _e_sw:  # noqa: BLE001 — 整區失敗要有紅框，不得靜默
+            system_error("換股顧問區塊渲染失敗", _e_sw)
 
 
 def _render_tab3_ai_summary(gemini_key: str) -> None:
