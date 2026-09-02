@@ -140,7 +140,9 @@ def build_merged_extra_columns(funds: list, phase: str = "", score=None) -> tupl
     # 讓 user 一眼看出高基期(貼近高點)/ 低基期(跌深)標的,不必自己讀 σ 數字。
     from services.rotation import classify_base
     from shared.signal_thresholds import ROTATION_BUY_SIGMA, ROTATION_SELL_SIGMA
-    _BASE_LBL = {"high": "🔴 高基期", "low": "🟢 低基期", "mid": "⚪ 中性", "unknown": "⬜ 資料不足"}
+    # 2026-09-02 T29:用字走 `_utils.BASE_LABELS` SSOT(原為本函式內的區域變數,
+    # 全 repo 三份手抄、彼此 import 不到)。
+    from ui.helpers.fund_grp_health._utils import BASE_LABELS as _BASE_LBL
     for _slot in combined.values():
         _slot["基期"] = _BASE_LBL[
             classify_base(_slot.get("σ rank"), ROTATION_SELL_SIGMA, ROTATION_BUY_SIGMA)]

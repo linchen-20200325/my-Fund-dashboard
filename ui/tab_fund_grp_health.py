@@ -624,9 +624,10 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
     import pandas as pd
     from streamlit import column_config as _cc
     _eat_map = {True: "🔴 吃本金", False: "🟢 不吃", None: "❓ 未知"}
-    # 與 ui/helpers/fund_grp_health/unified.py 的「基期」欄同一組標籤語意
-    _base_map = {"low": "🟢 低基期", "mid": "⚪ 中性",
-                 "high": "🔴 高基期", "unknown": "⬜ 資料不足"}
+    # 與健診大表的「基期」欄**同一份**標籤(2026-09-02 T29 起走 SSOT,不再手抄)。
+    # 下方 caption 宣稱「本區標 🟢 低基期的,大表『基期』欄一定也是 🟢」——
+    # 那句話的前提就是這兩處用同一組字;靠手抄的話,改一邊就會讓那句宣稱變成假的。
+    from ui.helpers.fund_grp_health._utils import BASE_LABELS as _base_map
     _df = pd.DataFrame([{
         "代號": r["code"], "基金名": r["name"],
         "類別": r["category"] or "—", "幣別": r["currency"] or "—",
