@@ -22,6 +22,19 @@ class _WS:
     def append_rows(self, rows, **k):
         self.rows.extend([list(r) for r in rows])
 
+    def row_values(self, n):
+        """真 gspread worksheet 一定有的方法 —— `_get_worksheet` 2026-09-01 起會用它
+        判斷既有分頁的表頭要不要補欄。
+
+        ⚠️ **2026-09-01 更正(有意識的更正,不是漏刪)**:本句原寫
+        ~~「照抄 `pool_repository._ws` **慣例**」~~ —— 那在 commit 1 寫下時是對的,
+        但 commit 2 把表頭修補**收窄成「只補缺的那幾格、絕不寫 A1」**,
+        **刻意偏離**了 `pool_repository._ws` 的整排比對慣例(理由:本模組
+        逐位置讀、從不讀表頭文字,故表頭屬於使用者)。
+        **改實作卻沒回頭改註解,會留下一句和 `services/nav_history_gs.py`
+        正面矛盾的敘述** —— 現據實更正。"""
+        return list(self.rows[n - 1]) if len(self.rows) >= n else []
+
     def update(self, rng, values):
         pass
 
