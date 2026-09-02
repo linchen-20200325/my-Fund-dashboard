@@ -73,21 +73,42 @@ _HEALTH = "ui/tab_fund_grp_health.py"
 
 
 def test_q1_element_a_sits_between_red_zone_and_big_table():
-    """淘汰候選(結論摘要)→ 🛡️ 元件 A → 📊 健診大表,順序即客戶拍板的 Q1。"""
-    fn = _fn(_parse(_HEALTH), "_render_health_3tables")
+    """淘汰候選(結論摘要)→ 🛡️ 元件 A → 📊 健診大表,順序即客戶拍板的 Q1。
+
+    ⚠️ **2026-09-02 T19 更新錨點(有意識的修改,不是放寬)**:健診大表的標題原本是
+    `_render_health_3tables` 內一句寫死的 `st.markdown("#### 📊 健診大表…")`,本條就拿它
+    當下界。T19 把這一頁上面**兩個**講同一張表的標題合成一個、並移到 `_render_health_table`
+    內緊貼 dataframe 的位置,同時改走 SSOT 常數 `_BIG_TABLE_HEADING`(不再是字串字面值)
+    —— 於是原本那個 `ast.Constant` 比對**一個都掃不到**,本條會以
+    「「📊 健診大表」標題不見了」轉紅,而實際上標題還在、只是換了家。
+
+    **錨點改成「呼叫 `_render_health_table` 的那一行」** —— 它就是大表的渲染入口,
+    而 T19 之後標題與表身是同一個函式印的,兩者不可能再被拆開。
+    順帶加一條:那個常數確實是 `_render_health_table` 印出來的(否則錨點會對空氣生效)。
+    **Q1 的順序要求一字未改。**
+    """
+    tree = _parse(_HEALTH)
+    fn = _fn(tree, "_render_health_3tables")
     red = _calls_named(fn, "business_alert")
     me = _calls_named(fn, "render_mutual_exclusion_section")
-    big = [c for c in _calls_named(fn, "markdown")
-           if c.args and isinstance(c.args[0], ast.Constant)
-           and isinstance(c.args[0].value, str) and "📊 健診大表" in c.args[0].value]
+    big = _calls_named(fn, "_render_health_table")
     assert red, "淘汰候選紅區(business_alert)不見了 —— Q1 的錨點消失,請同步線框與本守衛"
     assert me, "元件 A(render_mutual_exclusion_section)未在 _render_health_3tables 內被呼叫"
-    assert big, "「📊 健診大表」標題不見了 —— Q1 的另一個錨點消失"
+    assert big, "健診大表的渲染入口(_render_health_table)不見了 —— Q1 的另一個錨點消失"
     me_line = me[0].lineno
     assert max(c.lineno for c in red) < me_line, (
         "元件 A 必須在淘汰候選紅區(結論摘要)**之後**(Q1 拍板位置)")
     assert me_line < max(c.lineno for c in big), (
-        "元件 A 必須在「📊 健診大表」標題**之前**(Q1 拍板位置)")
+        "元件 A 必須在健診大表**之前**(Q1 拍板位置)")
+
+    # 錨點的另一半:大表標題確實由 `_render_health_table` 印出來。
+    tbl = _fn(tree, "_render_health_table")
+    heads = [c for c in _calls_named(tbl, "markdown")
+             if c.args and isinstance(c.args[0], ast.Name)
+             and c.args[0].id == "_BIG_TABLE_HEADING"]
+    assert heads, (
+        "`_render_health_table` 沒有印 `_BIG_TABLE_HEADING` —— "
+        "錨點會對空氣生效,請同步本守衛與 T19 的標題 SSOT")
 
 
 def test_element_a_only_on_health_tab():
