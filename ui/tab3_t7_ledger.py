@@ -222,6 +222,50 @@ def _t7d_fetch_fund_meta(code: str, existing=None) -> dict:
     return fetch_fund_meta_safe(code, _existing=existing)
 
 
+#: ④ 交易帳本 A/B/C 三段的 **SSOT**：`(key, 標籤)`。
+#:
+#: ⚠️ **刻意只有一欄標籤**，目錄連結文字與區塊標題**共用它** —— 這不是省事，是
+#: 針對本 repo 已實證的一種漏洞做的設計。`tests/test_manual_anchor_toc.py` 檔頭
+#: 記載：說明書的 `_CHAPTERS` 有「目錄短標」與「章節標題」**兩欄不同的字**，
+#: 同一列改一欄不改另一欄，目錄與實際章名當場對不起來，而全套測試**照樣全綠**
+#: （該檔已就地更正並誠實標明「就是沒守」）。一欄制讓那種漂移**結構上不可能發生**。
+#: ⚠️ 標籤逐字沿用搬遷前 `st.tabs([...])` 的三個分頁名（見下方 `render_t7_section`
+#: 內的更正註記）—— 使用者記得的是這三個名字，改名是另一件事、不在本批。
+_T7_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("a", "A 新投入"),
+    ("b", "B 投入再平衡"),
+    ("c", "C 轉換再平衡 (Switch)"),
+)
+
+#: anchor 前綴 —— 與 `ui/tab6_manual.py` 同慣例（顯式指定，不吃 Streamlit 對中文
+#: 標題自動產生的 anchor，那個不可靠、目錄連結會連不過去）。
+_T7_ANCHOR_PREFIX = "t7-"
+
+
+def _t7_anchor(key: str) -> str:
+    """回傳某一段的顯式 anchor id。未知 key 直接炸（§1 Fail Loud）。"""
+    if key not in {_k for _k, _ in _T7_SECTIONS}:
+        raise KeyError(f"tab3_t7_ledger._t7_anchor: 未知區段 key {key!r}；"
+                       f"合法值 = {[_k for _k, _ in _T7_SECTIONS]}")
+    return f"{_T7_ANCHOR_PREFIX}{key}"
+
+
+def _t7_section_heading(key: str) -> None:
+    """畫一段的標題（`st.subheader` + 顯式 anchor）。"""
+    _label = dict(_T7_SECTIONS)[key]
+    st.subheader(_label, anchor=_t7_anchor(key))
+
+
+def _t7_render_toc() -> None:
+    """錨點目錄 —— 取代原本的 3 個 `st.tabs` 子分頁。
+
+    位置刻意與原本的分頁列**完全相同**（帳本即時面板的 placeholder 之後、
+    第一段之前）：使用者原本就是在這個高度找「我要做哪一種試算」的入口。
+    """
+    st.markdown("**📑 三種試算**　" + "　·　".join(
+        f"[{_label}](#{_t7_anchor(_k)})" for _k, _label in _T7_SECTIONS))
+
+
 def render_t7_section() -> None:
     """渲染 T7 帳務試算 + 深度組合建議 AI 子區。
 
@@ -1136,12 +1180,38 @@ def render_t7_section() -> None:
             # 占位：tabs 處理完才渲染最新帳本，避免 1 cycle 過期
             _panel_ph = st.empty()
 
-            _tA, _tB, _tC = st.tabs(
-                ["A 新投入", "B 投入再平衡", "C 轉換再平衡 (Switch)"]
-            )
+            # ══════════════════════════════════════════════════════════════
+            # 版面（2026-09-02，客戶拍板線框）：~~`st.tabs(["A 新投入", "B 投入
+            # 再平衡", "C 轉換再平衡 (Switch)"])`~~ → **單頁 + 錨點目錄**
+            # （**有意識的政策變更，不是漏刪** · 決策者：**客戶** · 線框明訂
+            #   ④ 內部不得再開一層 `st.tabs`；`ui/helpers/fund_grp_health/
+            #   switch_advisor_section.py` 檔頭已把這條記成「客戶鐵則」）。
+            #
+            # ⚠️ **本檔是全站最後一個真的會畫出第二層分頁列的地方。** 說明書
+            #    （`ui/tab6_manual.py`）與 ⑤（`ui/tab_settings_diag.py`）都已
+            #    改成單頁 + 錨點，但 `ui/tab_settings_diag.py` 檔頭那句
+            #    ~~「全站最後一層巢狀 `st.tabs` 自此消失」~~ 是**假宣稱**（該檔
+            #    已就地劃線更正並收窄成「⑤ 這一頁自此沒有」）—— 因為它只掃了
+            #    自己那一頁，掃不到本檔。**本批才是真的把它清掉的那一批。**
+            #
+            # ⚠️ **為什麼是 `st.container()` 而不是把三段程式碼 dedent 出來**：
+            #    `st.tabs` **單次 run 會渲染全部分頁**（本 repo 多處實測自陳：
+            #    `app.py`、`ui/tab5_data_guard.py`、`ui/components/
+            #    column_group_tabs.py`）—— 也就是說 A/B/C 三段本來就**每一次
+            #    rerun 都全部執行**。換成 container 後**執行的東西一行都沒變**，
+            #    變的只有外框：分頁列不見了、三段依序攤平。body 縮排原封不動
+            #    ＝ 這 1,550 行的邏輯**零改動風險**（`CLAUDE.md §-1.5.1a` 對照表
+            #    第 9 列「最小改動」；`§8.4 步驟 4` 禁止自作主張大重構）。
+            #
+            # ⛔ **不得改用 `st.expander` 預設收合來取代分頁**：收合內容不在 DOM
+            #    裡 → 殺掉 Ctrl-F，錨點也跳不進去。（這一點已在別批被設計組否決；
+            #    要收合請用「整段一個總開關」，內部結構不變。）
+            # ══════════════════════════════════════════════════════════════
+            _t7_render_toc()
 
             # ── A. 新投入 ───────────────────────────────────────────────────
-            with _tA:
+            _t7_section_heading("a")
+            with st.container():
                 st.caption("拿一筆新台幣加碼某檔（或多檔）基金。NAV / FX 即時自動抓取，使用者只填金額。")
                 _a_mode = st.radio(
                     "加碼模式",
@@ -1489,7 +1559,8 @@ def render_t7_section() -> None:
                             )
 
             # ── B. 投入再平衡 ────────────────────────────────────────────────
-            with _tB:
+            _t7_section_heading("b")
+            with st.container():
                 st.caption(
                     "拿一筆新台幣按目標權重攤分到多檔基金。"
                     "依「投入後總市值 × 目標權重 − 目前市值」缺口比例分配；"
@@ -1802,7 +1873,8 @@ def render_t7_section() -> None:
                             )
 
             # ── C. 轉換再平衡 [核心，M→N action-driven，v18.5] ──────────────
-            with _tC:
+            _t7_section_heading("c")
+            with st.container():
                 st.caption(
                     "**多賣方組 + 各自買方組** 複合轉換。例：A 賣 10% 配 C / "
                     "B 賣 20% 配 D, E。同幣別 → fx_avg 嚴格繼承；跨幣別 → 即期立帳。"
