@@ -497,35 +497,6 @@ def test_backfill_writes_the_currency_measured_on_the_series(monkeypatch, _cache
         f"寫入的幣別不是序列量到的值;實得 {sorted({p['currency'] for p in written})!r}")
 
 
-def test_backfill_currency_follows_the_adopted_series_when_rescue_swaps_source(
-        monkeypatch, _cache_store):
-    """⭐ **本 PR 最核心的那個修法,這是唯一看著它的守衛。**
-
-    MoneyDJ(USD、30 天)跨度不足 → `_rescue_by_isin` 換成 yahoo(EUR、600 天)。
-    被寫入的 600 列**每一列都來自 yahoo**,所以幣別必須是 **EUR**;
-    掛上 MoneyDJ 那條**已經被丟棄**的序列的 USD 宣告 = §1 明令禁止的憑空編造,
-    而且會**永久**留在 `nav_history`(去重鍵 `(code, date)`、永不刪除)。
-
-    **突變**:把換源時的幣別跟隨拿掉(退回 3-tuple 語意)——
-    `s, src, _cur = _cand, f"{_name}(ISIN)", _span(_cand)` → 本則必須轉紅
-    (實測突變後 `currency` 集合會變成 `{'USD'}`)。
-    """
-    import services.nav_history_store as NS
-    written = _wire_backfill(
-        monkeypatch,
-        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "fund_name": "F"},
-        yahoo=_daily(600, "2020-01-01", ccy="EUR"))
-    r = NS.backfill_to_gs(["X"])["results"][0]
-    assert "yahoo" in (r["source"] or ""), (
-        f"救援沒有換源 → 本則沒測到要測的東西;實得 source={r['source']!r}")
-    assert written, "沒有任何點被寫進雲端 → 本則什麼都沒測到"
-    _got = {p["currency"] for p in written}
-    assert _got == {"EUR"}, (
-        f"換源後幣別沒有跟著換 —— 被丟棄那條序列的宣告被掛到 {len(written)} 列上;"
-        f"實得 {sorted(_got)!r}")
-    assert "USD" not in _got, "MoneyDJ 的宣告出現在 yahoo 的列上(§1 憑空編造)"
-
-
 def test_backfill_never_falls_back_to_fd_currency(monkeypatch, _cache_store):
     """第二個寫入端同樣**不得**退回 `fd["currency"]`(宣告線)。
 
@@ -608,76 +579,105 @@ def test_rescue_without_isin_keeps_the_measured_currency(monkeypatch, _cache_sto
         f"實得 {sorted({p['currency'] for p in written})!r}")
 
 
-def test_rescue_consecutive_swaps_currency_tracks_the_last_adopted_source(
-        monkeypatch, _cache_store):
-    """**連續換源**:yahoo(EUR, 300 天)→ morningstar(JPY, 600 天)→ 幣別必須是 **JPY**。
+# ── 出口 (6)「採用換源」的幣別:四格表驅動 ──────────────────────────────
+# 2026-09-02 由三條分散的守衛改寫成一張表。**這不是整理版面,是關掉一整類漏洞。**
+#
+# 不變式(四格共用,一句話):
+#   **表上那一欄 == 最後被採用那條序列自己宣告的幣別;它不宣告就是空字串。**
+#   「不知道」永遠不可以被上一個來源的宣告頂替(§1:空是誠實的未知,不是失敗)。
+#
+#                     | 最後採用者**有**宣告 | 最後採用者**不**宣告
+#   ------------------|----------------------|----------------------
+#   **單次換源**       | USD → EUR            | USD → (空)
+#   **連續換源**       | EUR → JPY            | EUR → (空)     ← 原本零驅動
+#
+# **為什麼右下那格是 production 會真的發生的組合,不是為了突變好看**:
+# 全 repo 只有晨星 / Yahoo / FundClear 會宣告幣別,MoneyDJ 主線不宣告 ——
+# 「連續換源、而第二個採用的來源不宣告」本來就是常態組合。
+# (稽核已先驗過 production 在該情境是對的:未突變時 `currencies=['']`。
+#  **本表補的是守衛深度,不是修 bug。**)
+#
+# ⚠️ **為什麼要表驅動,而不是再補一條**:對任何有限測試集,永遠找得到存活的突變。
+# 逐條補 = 靠人一個一個猜突變,猜不到的就留著。把**整類子情境**一次驅動完,
+# N-A(`_cand_ccy or cur_ccy`)、N-C(`or (cur_ccy if src.endswith("(ISIN)") else "")`)
+# 以及**還沒有人想到的同類變體**會一起被擋住。
+#
+# ⚠️ **本表取代的三條守衛(語意一條沒少,不是刪測試)**:
+#   test_backfill_currency_follows_the_adopted_series_when_rescue_swaps_source  → 左上
+#   test_rescue_consecutive_swaps_currency_tracks_the_last_adopted_source       → 左下
+#   test_rescue_adopting_a_candidate_that_declares_nothing_writes_empty_...     → 右上
+#   三條各自的斷言(source 有換到、幣別集合相等、舊宣告不得出現)全部併進統一斷言,
+#   且 MoneyDJ 一律改成宣告 USD —— 左下那格原本 MoneyDJ 不宣告,現在**更嚴**
+#   (錯誤繼承會露出 USD 或 EUR,兩種都被 `== {want_ccy}` 抓到)。
+#
+# ⚠️ **歷史教訓,別重犯**:第一版 M8 突變寫成 `cur_ccy = cur_ccy or _cand_ccy`,
+#   **被左上那格抓到了**(它的 MoneyDJ 有宣告 USD)—— 那不是忠實的沉默突變。
+#   **突變本身也要先驗它真的沉默,否則證明不了覆蓋度。**
+#
+# ⛔⛔ **綠燈不證明任何事 —— 這一段請讀完再改本表**(2026-09-02 稽核實測):
+#   把本表的斷言整段包進 `if False:` 死分支,pytest 報的是 **43 passed**,
+#   **collect 數完全不變、名字照樣列在收集清單裡**。
+#     守衛誠實 + 注入 N-A  → 1 failed, 42 passed
+#     守衛被死分支 + N-A   → 43 passed        ← 守衛死了,看起來**更綠**
+#   **行為斷言被掉包,pytest 在 pass/fail 與 collect 兩個維度都偵測不到,呈現的是假綠。**
+#   **唯一偵測得到它的就是突變測試本身。** 動本表之後,請重跑突變,不要只看綠燈。
+_MDJ_SPEC = (30, "2025-01-01", "USD")   # MoneyDJ:一律宣告 USD,錯誤繼承才露得出來
 
-    迴圈會**連續採用**:被寫入的每一列最後都來自 morningstar,幣別若凍在**第一個**
-    被採用的候選(EUR),序列是最後一個的、宣告卻是第一個的 ——
-    **與本 PR 修的是同一個造假,只是晚一圈迴圈。**
 
-    **突變**(對既有守衛真正沉默的那一版,本組實測 230 passed):
-    只在「第一次採用」時設幣別 —— `if not src.endswith("(ISIN)"): cur_ccy = _cand_ccy`
-    → 本則必須轉紅。
-    ⚠️ 本組第一版突變寫成 `cur_ccy = cur_ccy or _cand_ccy`,**被上面那條單次換源守衛
-    抓到了**(因為該 fixture 的 MoneyDJ 有宣告 USD)—— 那不是忠實的「沉默突變」,
-    據實記下來,免得後人以為隨便寫個突變就能證明覆蓋度。
+def _spec_series(spec):
+    """`(n, start, ccy)` → 序列;`None` → `None`(該源回空序列,不參與採用)。"""
+    if spec is None:
+        return None
+    _n, _start, _ccy = spec
+    return _daily(_n, _start, ccy=_ccy)
+
+
+@pytest.mark.parametrize("case_id,yahoo_spec,ms_spec,want_src,want_ccy", [
+    # 單次換源(只有 yahoo 夠長)
+    ("單次換源 / 採用者有宣告", (600, "2020-01-01", "EUR"), None, "yahoo", "EUR"),
+    ("單次換源 / 採用者不宣告", (600, "2020-01-01", None), None, "yahoo", ""),
+    # 連續換源(yahoo 先被採用,morningstar 更長 → 再被採用)
+    ("連續換源 / 最後採用者有宣告",
+     (300, "2024-01-01", "EUR"), (600, "2020-01-01", "JPY"), "morningstar", "JPY"),
+    ("連續換源 / 最後採用者不宣告",          # ← 本輪補的那一格,原本零驅動
+     (300, "2024-01-01", "EUR"), (600, "2020-01-01", None), "morningstar", ""),
+])
+def test_adopted_rows_carry_the_last_adopted_series_own_currency(
+        monkeypatch, _cache_store, case_id, yahoo_spec, ms_spec, want_src, want_ccy):
+    """出口 (6):被寫入的每一列都來自**最後被採用**那條序列 → 幣別必須是**它自己**宣告的。
+
+    掛上任何**已經被丟棄**那條序列的宣告 = §1 明令禁止的憑空編造,
+    而 `nav_history` **永不刪除**、去重鍵 `(code, date)` → **寫進去就永遠改不掉**。
+    完整理由、四格表與歷史教訓見本函式上方的區塊註解。
     """
     import services.nav_history_store as NS
+    _n, _start, _ccy = _MDJ_SPEC
     written = _wire_backfill(
         monkeypatch,
-        fd={"series": _daily(30, "2025-01-01"), "fund_name": "F"},   # MoneyDJ 不宣告
-        yahoo=_daily(300, "2024-01-01", ccy="EUR"),
-        morningstar=_daily(600, "2020-01-01", ccy="JPY"))
+        fd={"series": _daily(_n, _start, ccy=_ccy), "fund_name": "F"},
+        yahoo=_spec_series(yahoo_spec),
+        morningstar=_spec_series(ms_spec))
     r = NS.backfill_to_gs(["X"])["results"][0]
-    assert "morningstar" in (r["source"] or ""), (
-        f"沒有連續換到 morningstar → 本則沒測到要測的東西;實得 source={r['source']!r}")
-    _got = {p["currency"] for p in written}
-    assert _got == {"JPY"}, (
-        f"幣別凍在第一個被採用的候選,序列卻是最後一個的;實得 {sorted(_got)!r}")
-    assert "EUR" not in _got
 
-
-def test_rescue_adopting_a_candidate_that_declares_nothing_writes_empty_not_inherited(
-        monkeypatch, _cache_store):
-    """**採用一個「不宣告幣別」的候選** → 表上必須是**空**,不得繼承被丟棄那條的宣告。
-
-    ⚠️ **這條是出口 (6) 的第二個子情境,獨立稽核抓到的 —— 不是本組自己發現的。**
-    出口 (6) 原有的兩條守衛(`..._follows_the_adopted_series_when_rescue_swaps_source`
-    與 `..._consecutive_swaps_currency_tracks_the_last_adopted_source`)**都只驅動
-    「候選有宣告幣別」**(EUR / JPY)那個子情境;「**候選什麼都不宣告**」這條**零覆蓋**。
-
-    **它產生的正是本 PR 存在的理由那個造假形狀**:序列整條換成 yahoo 的 600 列,
-    而那 600 列**全部掛上已經被丟棄那條 MoneyDJ 序列的 `USD`** ——
-    來源不宣告幣別,卻憑空多出一句宣告,§1 明令禁止。
-    **靜默資料遺失還能事後補;這是憑空編造,而 `nav_history` 永不刪除、(code,date) 去重
-    → 寫進去就永遠改不掉。**
-
-    **突變**:採用那一行 `_span(_cand), _cand_ccy)` → `_span(_cand), _cand_ccy or cur_ccy)`
-    → 本則必須轉紅。**稽核實測該突變對修復前的全套完全沉默(6514 passed, exit 0)。**
-    ⚠️ **`or` 這種寫法看起來像「合理的 fallback」,正是它危險的地方** ——
-    在幣別這條線上,「不知道」**不可以**被上一個來源的宣告頂替(§1:空是誠實的未知)。
-    """
-    import services.nav_history_store as NS
-    written = _wire_backfill(
-        monkeypatch,
-        # MoneyDJ 有宣告 USD → cur_ccy 進 `_rescue_by_isin` 時是 "USD"
-        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "fund_name": "F"},
-        # 候選跨度更長、點數更多,但**完全不宣告幣別**(`_series` 的 ccy=None → 無 attrs)
-        yahoo=_daily(600, "2020-01-01"))
-    r = NS.backfill_to_gs(["X"])["results"][0]
-    # fixture 對準檢查:換源真的發生了,否則本則測不到要測的東西。
-    assert "yahoo" in (r["source"] or "") and r["fetched"] == 600, (
-        f"沒有換到 yahoo → 本則沒測到出口 (6);"
-        f"實得 source={r['source']!r} fetched={r['fetched']!r}")
+    # ── fixture 對準檢查:換源真的發生、而且停在預期那一個來源 ──────────────
+    _last_spec = ms_spec or yahoo_spec
+    assert want_src in (r["source"] or ""), (
+        f"[{case_id}] 沒有換到 {want_src} → 本格沒測到出口 (6);"
+        f"實得 source={r['source']!r}")
+    assert r["fetched"] == _last_spec[0], (
+        f"[{case_id}] 採用的不是最後那條候選 → fixture 沒對準;"
+        f"實得 fetched={r['fetched']!r},預期 {_last_spec[0]}")
     assert not r["ccy_refused"], (
-        f"候選幣別未知不該被拒(unknown ≠ mismatch);實得 {r['ccy_refused']!r}")
-    # ⭐ 行為斷言:看**實際寫進那一欄的值**,不是比對字串或看旗標。
+        f"[{case_id}] 不該有候選因幣別被拒(unknown ≠ mismatch);"
+        f"實得 {r['ccy_refused']!r}")
+    assert written, f"[{case_id}] 沒有任何點被寫進雲端 → 本格什麼都沒測到"
+
+    # ── ⭐ 行為斷言:看**實際寫進那一欄的值**,不是字串比對、不是旗標 ────────
     _got = {p["currency"] for p in written}
-    assert _got == {""}, (
-        f"憑空編造:這 {len(written)} 列全部來自 yahoo(它不宣告幣別),"
-        f"卻被蓋上已丟棄那條 MoneyDJ 序列的宣告;實得 {sorted(_got)!r}")
-    assert "USD" not in _got
+    assert _got == {want_ccy}, (
+        f"[{case_id}] 這 {len(written)} 列全部來自最後採用的 {want_src}"
+        f"(它宣告 {want_ccy!r}),幣別卻是 {sorted(_got)!r} —— "
+        f"被丟棄那條序列的宣告被掛上去了(§1 憑空編造)")
 
 
 def test_rescue_candidate_below_adoption_threshold_does_not_touch_currency(
