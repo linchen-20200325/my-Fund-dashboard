@@ -338,6 +338,32 @@ def nav_series_currency(s) -> str:
         return ""
 
 
+def reconcile_row_currencies(ccys) -> str:
+    """一組**逐列**幣別宣告 → 這條合併序列能誠實宣告的幣別;有任何分歧或未知 → `""`。
+
+    用於「把來自不同來源的列併成一條序列」的場合(`nav_history` 累積歷史 ∪ live 取數):
+    合併後的序列只有在**每一列都宣告了同一個 ISO 三碼**時才敢對外宣告那個幣別。
+
+    §1 Fail Loud, Never Fake —— 這裡的失效模式很具體:一條混過兩種幣別的序列,
+    只要對外宣告其中一種,下游(1Y 報酬 / Sharpe / σ)就會照那個假設算,
+    而畫面上不會有任何異狀。故任一列未知、或列與列之間不一致 → 一律退成 `""`(未知),
+    **絕不挑一個**、**絕不換算**(換算見本模組開頭:寫入端偷偷換匯比拒絕宣告危險得多)。
+
+    Args:
+        ccys: 逐列(或逐來源)的幣別宣告字串序列。空序列 → `""`(沒有任何宣告可依據)。
+
+    Returns:
+        全部相同且為可辨識 ISO 三碼 → 該三碼;否則 `""`。
+
+    ⚠️ 本函式證明的是「**這些宣告彼此一致**」,不是「宣告正確」——
+    上游若整批死預設成同一個錯幣別,這裡照樣回那個錯的值(同本模組開頭 b 項)。
+    """
+    _norm = [normalize_iso_ccy(_c) for _c in (ccys or [])]
+    if not _norm or not all(_norm):      # 空 / 任一未知 → 不宣告(§1 不知道 ≠ 一致)
+        return ""
+    return _norm[0] if len(set(_norm)) == 1 else ""
+
+
 def nav_currency_verdict(expected, candidate) -> str:
     """兩個幣別宣告的比對結果:`match` / `mismatch` / `unknown`。
 
