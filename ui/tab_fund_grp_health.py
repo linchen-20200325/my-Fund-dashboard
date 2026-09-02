@@ -181,21 +181,35 @@ def render_fund_grp_health_tab() -> None:
             st.session_state["fund_grp_health_codes"] = "\n".join(_pf_codes)
             st.rerun()
 
-    codes_raw = st.text_area(
-        f"基金代號（每行一檔，最多 {_MAX_CODES} 檔；例：ACCP138）",
-        key="fund_grp_health_codes",
-        height=130,
-        placeholder="ACCP138\nACUSI23\n...",
-    )
-    # v19.59：移除「原幣別 fallback」selectbox — 幣別嚴格走 MoneyDJ wb05「計價幣別」欄抓網路。
-    # MoneyDJ 抓不到 → 該檔回 error「幣別未知」（不再用人工選的 fallback 矇混）。
-    principal_twd = st.number_input(
-        "本金（TWD）",
-        min_value=10_000.0, max_value=10_000_000.0,
-        value=1_000_000.0, step=100_000.0,
-        key="fund_grp_health_principal",
-        help="所有基金都假設投入這個金額，才能把「每月配息」「累積配息」放在同一個尺度上比較。",
-    )
+    # ── 診斷條件表單(2026-09-02 T1;拍板線框 Tab 02「Form ─ 診斷條件」)──────────
+    # 為什麼一定要包 `st.form`:本頁**每一次 rerun 都會重抓淨值、並打一次 Google Sheets**
+    # (`_run_batch_health` → MoneyDJ/FundClear 逐檔取數;`record_batch_nav_points` →
+    # nav_history 分頁 append)。沒有 form 時,使用者在「本金」上按一下上下鍵、
+    # 或在代號框改一個字,Streamlit 就整頁重跑一輪 —— 對外部來源等於一次白打的轟炸
+    # (§02「失敗時退避,不連續轟炸來源」的同一個成本面)。
+    # 包進 form 之後,widget 的值只在**按下送出鈕**時才提交一次。
+    #
+    # ⚠️ 「🔗 從我的組合帶入」**刻意留在 form 外**:它會寫 session_state 後 `st.rerun()`,
+    #    而 `st.button` 在 form 內是被 Streamlit 明文禁止的(只能有 form_submit_button)。
+    #    它本來就不是「診斷條件」,是一個獨立的帶入動作。
+    from ui.helpers.ia import applied_form as _applied_form  # noqa: PLC0415
+    with _applied_form("fund_grp_health_form",
+                       submit_label="🩺 開始健診") as _health_gate:
+        codes_raw = st.text_area(
+            f"基金代號（每行一檔，最多 {_MAX_CODES} 檔；例：ACCP138）",
+            key="fund_grp_health_codes",
+            height=130,
+            placeholder="ACCP138\nACUSI23\n...",
+        )
+        # v19.59：移除「原幣別 fallback」selectbox — 幣別嚴格走 MoneyDJ wb05「計價幣別」欄抓網路。
+        # MoneyDJ 抓不到 → 該檔回 error「幣別未知」（不再用人工選的 fallback 矇混）。
+        principal_twd = st.number_input(
+            "本金（TWD）",
+            min_value=10_000.0, max_value=10_000_000.0,
+            value=1_000_000.0, step=100_000.0,
+            key="fund_grp_health_principal",
+            help="所有基金都假設投入這個金額，才能把「每月配息」「累積配息」放在同一個尺度上比較。",
+        )
 
     # ── 稽核 C2（2026-08-14）：拆掉「吃本金閾值 %」滑桿 ────────────────────────
     # 它的 help 寫著「配息率 − 含息報酬率 > 此值 → 標 🔴 吃本金」，但畫面上那個 🔴
@@ -217,7 +231,10 @@ def render_fund_grp_health_tab() -> None:
     # 原 `if not st.button(...): return` 的致命 bug(user 2026-08-21 回報「壓一下就回到這」):
     # 出結果後,一按任何逐檔按鈕(三率穿透 / 個股新聞)就觸發 rerun → 開始健診鈕回 False →
     # return → 整張健診結果塌回輸入表單。改存旗標:點過一次就持續渲染,逐檔按鈕不再弄丟結果。
-    if st.button("🩺 開始健診", key="fund_grp_health_btn"):
+    # 2026-09-02 T1:原 `st.button("🩺 開始健診", key="fund_grp_health_btn")` 已改為上方
+    # `applied_form()` 的送出鈕(`st.button` 不得放在 form 內)。旗標語意不變:
+    # gate 只在「按下送出的那一輪」為 True,長期狀態仍由 session_state 旗標持有。
+    if _health_gate:
         st.session_state["_fund_grp_health_ran"] = True
     if not st.session_state.get("_fund_grp_health_ran"):
         return
