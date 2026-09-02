@@ -1046,7 +1046,19 @@ def _render_health_3tables(rows: list[dict],
             _extra_by_code = {}
             system_error("σ 位階 / 風險 / 買賣點 / 捕捉率 / 換標欄整組計算失敗", _e_extra,
                          hint="本次健診大表不含這幾欄 —— 是算不出來,不是這些基金沒有資料。")
-    _render_health_table(rows, funds_extra=None,
+    # ⚠️ funds_extra **必須透傳**(2026-09-02 T4)。原本這裡寫死 `funds_extra=None`,
+    # 而 `_render_health_table` 內「🩺 基金體檢 PK + 4 大健診卡」整段長在
+    # `if funds_extra:` 裡面 → **production 路徑恆不觸發,該區塊從來沒有畫出來過**。
+    # 另一個呼叫點(全失敗 early-return)雖然有傳 funds_extra,但那條路 `ok_rows` 為空、
+    # 走不到 `if ok_rows:` 區塊 —— 兩條路加起來就是「這個功能對使用者不存在」。
+    # 而畫面文案(全失敗時的 `_gone` 清單列著「🩺 基金體檢 PK」)、本檔上方註解
+    # (「v19.189：基金體檢 PK + 4 大健診卡已上移至健診總表之前」)、以及拍板線框
+    # 都說它在這裡 —— **三處都在描述一個不存在的畫面**。
+    # 舊守衛 `tests/test_grp_health_checkup_order.py` 用的是子字串比對
+    # (`"_render_health_table(rows, funds_extra=" in src`),而 `funds_extra=None`
+    # **正好命中那個子字串** → 守衛全綠、功能全無。新的可達性守衛見
+    # `tests/test_grp_health_checkup_reachable.py`(實跑本函式、看真正收到的引數)。
+    _render_health_table(rows, funds_extra=funds_extra,
                          health_by_code=_health_by_code,
                          div_by_code=_div_by_code,
                          extra_by_code=_extra_by_code,
