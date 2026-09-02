@@ -2243,9 +2243,45 @@ def render_portfolio_tab() -> None:
     #        → 期間累積報酬 / **年化報酬** / **年化波動 σ** / **最大回撤**
     #      · `ui/helpers/portfolio_perf.render_portfolio_performance()`（④ 既有）
     #        → **年化報酬** / **年化波動 σ** / Sharpe / **最大回撤**
-    #    **三個標籤字串完全相同，但演算法不同**（前者是「固定目前權重 + 日再平衡」
-    #    重建走勢，後者走 `services.portfolio_performance.performance_metrics`）
-    #    → 同一頁兩張卡、同一個標籤、可能不同的數字。
+    #    **三個標籤字串完全相同**（已逐位元組核對，見下）。
+    #
+    #    ⚠️ **2026-09-02 更正：原本寫在這裡的「但演算法不同」是假的**
+    #    （**有意識的更正，不是漏刪** · 日期 **2026-09-02** · 決策者：**實作組**，
+    #    起因為總管指派複驗本批自己的宣稱）。舊表述加刪除線保留：
+    #      ~~**三個標籤字串完全相同，但演算法不同**（前者是「固定目前權重 + 日再平衡」~~
+    #      ~~重建走勢，後者走 `services.portfolio_performance.performance_metrics`）~~
+    #      ~~→ 同一頁兩張卡、同一個標籤、可能不同的數字。~~
+    #
+    #    **為什麼是假的（實測，不是讀出來的印象）**：兩者的數學**收口到同一個 SSOT**。
+    #      · `performance_metrics()` = `portfolio_returns()` → `metrics_from_return_series()`，
+    #        然後把 `cagr_pct` **改名**成 `ann_return_pct` 出口；
+    #        `ann_vol_pct` / `max_drawdown_pct` 是**原樣透傳**。
+    #      · `reconstruct_trend()` 呼叫的是**同兩個函式**（`services/portfolio_tracking.py`
+    #        檔頭自陳「數學全收口至 `portfolio_performance` SSOT」）。
+    #      · 兩者 `rf_annual` 都取預設 0.0，`assumption` 字串**逐字相同**
+    #        （`"fixed-weight daily-rebalance"`）；輸入也同一份（都是 `_funds_extra`），
+    #        `_ccy_fx_for()` 與 `render_portfolio_performance()` 內嵌那段抓匯率的邏輯
+    #        逐行等價（同 `BACKTEST_FX_FETCH_DAYS`、同 `fetch_usdtwd_frame`）。
+    #    **舊表述錯在哪**：它拿「一個假設的描述」去對比「一個函式名」，
+    #    而那個描述正是那個函式**自己**的假設 —— `performance_metrics` 的 docstring
+    #    第一句就寫「假設固定權重、每日再平衡」。兩邊講的是同一件事。
+    #
+    #    **真正的差異只有一個，而且不是演算法，是顯示閘門**：
+    #    `reconstruct_trend()` 有年化閘門 —— 共同交易日 < `PORTFOLIO_TREND_MIN_DAYS`（60）
+    #    時把 `cagr_pct` / `ann_vol_pct` / `sharpe` / `calmar` 抹成 None。故：
+    #      · n_days ≥ 60 → 三個重疊 KPI **數字完全相同**（同值、同 round、同格式化）。
+    #      · n_days <  60 → 年化報酬與年化波動 σ：**上面那張顯示「—」、下面那張顯示數字**；
+    #        最大回撤**永遠相同**（它不在被抹的鍵裡）。
+    #
+    #    **所以裁決項不但沒有消失，形狀還更糟，需要總管／客戶裁決的理由改成**：
+    #      (a) 多數情況下這是**兩張數字一模一樣、標籤也一樣的卡**＝純冗餘；
+    #      (b) 短序列時**同一頁、同一個標籤，一個「—」一個有數字**——
+    #          使用者只會讀成「其中一張壞了」或「這兩個在講不同的東西」，
+    #          兩種解讀都不對，正是 §1 最在意的「看起來不像壞掉」的形狀。
+    #    ⚠️ **本更正只推翻「演算法不同」這一句，不宣稱這兩張卡該留該砍。**
+    #    ⚠️ **本更正為實作組單組實測，未經第二組複驗**（`CLAUDE.md §-2` 規則 6）。
+    #        複驗指令（repo 根執行）：比較同一份輸入餵給
+    #        `performance_metrics()` 與 `reconstruct_trend()["metrics"]` 的三個重疊鍵。
     #    ⚠️ **本批刻意不處置**：要收斂就得砍掉其中一組或改標籤，那是
     #    「正式下架既有功能 / 改變客戶看到的規格」，屬 `CLAUDE.md §-1.5.1c v3 §03-2 ②`
     #    的**客戶 gate**，不是實作細節。**已在 PR 描述具名回報總管裁決。**
