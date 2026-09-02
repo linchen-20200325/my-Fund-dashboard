@@ -278,7 +278,12 @@ GRID_EXEMPT_SITES = frozenset({
     "ui/tab3_t7_ledger.py::render_t7_section()  columns(seq:2)×3",
     "ui/tab3_t7_ledger.py::render_t7_section()  columns(seq:3)×3",
     "ui/tab3_t7_ledger.py::render_t7_section()  columns(seq:6)×2",
-    "ui/tab5_data_guard.py::render_data_guard_tab()  columns(int:2)×2",
+    # 2026-09-02：原本 `render_data_guard_tab()` 底下的 2 個 `columns(2)`，其中一個
+    # 隨「🗂️ NAV 歷史匯入」抽成 `render_nav_statement_csv_import()`
+    # （線框 `ia-wireframe.html` Tab 05 把 NAV 拆成「累積狀態」與「手動補資料」兩塊）。
+    # **錨點更新，不是新增豁免** —— 欄數與理由一格未變（基金代碼／基金名稱左右對照 2 欄）。
+    "ui/tab5_data_guard.py::render_data_guard_tab()  columns(int:2)×1",
+    "ui/tab5_data_guard.py::render_nav_statement_csv_import()  columns(int:2)×1",
     "ui/tab5_data_guard.py::render_data_guard_tab()  columns(int:4)×5",
     "ui/tab5_data_guard.py::render_data_guard_tab()  columns(seq:2)×3",
     "ui/tab5_data_guard.py::render_data_guard_tab()  columns(seq:3)×1",

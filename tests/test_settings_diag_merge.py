@@ -613,11 +613,18 @@ def test_settings_page_module_does_not_reach_into_data_or_compute_layers():
 _MERGE_CONTEXT_MODULE = "ui.helpers.settings_diag.merge_context"
 
 #: 檔案 → guard 引數必須綁到的 merge_context 常數名。
+#: 每個子頁的 render 函式**可以**綁哪幾支旗標。
+#: 2026-09-02：由「一檔一支」改為「一檔一個**封閉集合**」—— ⑤ 把 NAV 拆成兩塊之後，
+#: `tab_manage` 與 `tab5_data_guard` 各自多了一個 `NAV_HISTORY` 守衛
+#: （線框 `ia-wireframe.html` Tab 05）。
+#: ⚠️ **仍然是封閉集合、仍然 fail-closed**：綁到集合外的任何旗標照樣轉紅。
+#: 放寬的是「這一頁可以持有幾塊」，**不是**「可以綁別頁的旗標」——
+#: 原本要擋的那個病（tab_manage 誤綁 DATA_GUARD_HEADER）**一格未鬆**。
 _GUARD_EXPECTED_FLAG: dict = {
-    "ui/tab_manage.py": "MANAGE_HEADER",
-    "ui/tab5_data_guard.py": "DATA_GUARD_HEADER",
-    "ui/tab6_manual.py": "MANUAL_HEADER",
-    "ui/tab2_single_fund.py": "FETCH_DIAG",
+    "ui/tab_manage.py": {"MANAGE_HEADER", "NAV_HISTORY"},
+    "ui/tab5_data_guard.py": {"DATA_GUARD_HEADER", "NAV_HISTORY"},
+    "ui/tab6_manual.py": {"MANUAL_HEADER"},
+    "ui/tab2_single_fund.py": {"FETCH_DIAG"},
 }
 
 
@@ -684,24 +691,29 @@ def _resolved_guard_flags(relpath: str, *, guard_name: str,
         if not (isinstance(node, ast.Call)
                 and getattr(node.func, "id", "") == guard_name):
             continue
-        assert len(node.args) == 1 and not node.keywords, (
-            f"{relpath}::{fn_name} 的 {guard_name}(...) 不是單一位置引數："
+        # 2026-09-02：`settings_page_owns(...)` 起可帶**多個**位置引數
+        # （⑤ 的一個分區可同時持有多塊，例如 MANAGE_HEADER ＋ NAV_HISTORY）。
+        # ⚠️ **fail-closed 一格未鬆**：每一個引數仍逐一解析，任何一個追不到
+        #    import 來源／被重新指派／不是單純名稱，照樣 assert 失敗。
+        #    放寬的只有「**幾個**」，不是「**允不允許認不得的形狀**」。
+        assert node.args and not node.keywords, (
+            f"{relpath}::{fn_name} 的 {guard_name}(...) 沒有位置引數或帶了關鍵字："
             f"{ast.unparse(node)}（本守衛認不得 → fail-closed 視為綁錯）")
-        arg = node.args[0]
-        assert isinstance(arg, ast.Name), (
-            f"{relpath}::{fn_name} 的 guard 引數不是單純名稱："
-            f"{ast.unparse(arg)}（fail-closed 視為綁錯）")
-        assert arg.id not in reassigned, (
-            f"{relpath} 內 {arg.id} 被重新指派過 —— import 綁定不可信"
-            f"（fail-closed 視為綁錯）")
-        assert arg.id in bindings, (
-            f"{relpath}::{fn_name} 的 guard 引數 {arg.id} 追不到 import 來源"
-            f"（fail-closed 視為綁錯）")
-        mod, orig = bindings[arg.id]
-        assert mod == _MERGE_CONTEXT_MODULE, (
-            f"{relpath} 的 guard 引數 {arg.id} 綁到 {mod}.{orig}，"
-            f"不是 {_MERGE_CONTEXT_MODULE} 的旗標")
-        flags.append(orig)
+        for arg in node.args:
+            assert isinstance(arg, ast.Name), (
+                f"{relpath}::{fn_name} 的 guard 引數不是單純名稱："
+                f"{ast.unparse(arg)}（fail-closed 視為綁錯）")
+            assert arg.id not in reassigned, (
+                f"{relpath} 內 {arg.id} 被重新指派過 —— import 綁定不可信"
+                f"（fail-closed 視為綁錯）")
+            assert arg.id in bindings, (
+                f"{relpath}::{fn_name} 的 guard 引數 {arg.id} 追不到 import 來源"
+                f"（fail-closed 視為綁錯）")
+            mod, orig = bindings[arg.id]
+            assert mod == _MERGE_CONTEXT_MODULE, (
+                f"{relpath} 的 guard 引數 {arg.id} 綁到 {mod}.{orig}，"
+                f"不是 {_MERGE_CONTEXT_MODULE} 的旗標")
+            flags.append(orig)
     return flags
 
 
@@ -725,11 +737,17 @@ def test_guard_argument_is_bound_to_the_expected_flag(relpath):
     assert flags, (f"{relpath} 找不到任何 {_GUARD_NAME}(...) 呼叫 —— 斷言失去對象"
                    f"（guard 被整個拿掉？第 4 節會另外抓極性，本條抓綁定）")
     expected = _GUARD_EXPECTED_FLAG[relpath]
-    wrong = [f for f in flags if f != expected]
+    wrong = [f for f in flags if f not in expected]
     assert not wrong, (
-        f"{relpath} 的 guard 綁錯旗標：綁到 {wrong}，應為 {expected} ——"
-        f"接線後 ⑤ 持有 {expected} 時這一塊不會讓位（或別的旗標誤傷它），"
+        f"{relpath} 的 guard 綁錯旗標：綁到 {wrong}，合法值為 {sorted(expected)} ——"
+        f"接線後 ⑤ 持有那幾支時這一塊不會讓位（或別的旗標誤傷它），"
         f"畫面會無聲多出／少掉一塊")
+    # ⚠️ 雙向：登記了卻**一次都沒綁到**，代表那個守衛被整個拿掉了（或改名了）。
+    #    少了這一半，把 `NAV_HISTORY` 守衛整段刪掉會讓本條更綠。
+    _missing = sorted(expected - set(flags))
+    assert not _missing, (
+        f"{relpath} 登記要守 {_missing}，但 render 函式裡一次都沒綁到 ——"
+        f"守衛被拿掉了？實際綁到：{sorted(set(flags))}")
 
 
 def test_settings_page_own_sections_bind_the_expected_flags():
@@ -741,15 +759,21 @@ def test_settings_page_own_sections_bind_the_expected_flags():
     `settings_page_owns(MANAGE_HEADER)` 改成 `settings_page_owns(DATA_GUARD_HEADER)`
     → **本條轉紅**。
     """
+    # 2026-09-02：⑤ 的一個分區可同時持有多塊（NAV 拆兩塊之後，B 分區同時持有
+    # MANAGE_HEADER ＋ NAV_HISTORY；D 分區也必須持有 NAV_HISTORY，否則資料診斷
+    # 會把它自己那份 NAV 再畫一次）。**用 `==` 比集合，不是「至少包含」** ——
+    # 多綁一支別頁的旗標照樣轉紅。
     _expected_by_fn = {
-        "_render_maintain_section": "MANAGE_HEADER",
-        "_render_diag_section": "DATA_GUARD_HEADER",
-        "_render_manual_section": "MANUAL_HEADER",
+        "_render_maintain_section": {"MANAGE_HEADER", "NAV_HISTORY"},
+        "_render_diag_section": {"DATA_GUARD_HEADER", "NAV_HISTORY"},
+        "_render_manual_section": {"MANUAL_HEADER"},
     }
     for fn_name, expected in _expected_by_fn.items():
         flags = _resolved_guard_flags("ui/tab_settings_diag.py",
                                       guard_name="settings_page_owns",
                                       fn_name=fn_name)
-        assert flags == [expected], (
-            f"ui/tab_settings_diag.py::{fn_name} 持有的旗標是 {flags}，"
-            f"應為恰好一次 {expected}")
+        assert set(flags) == expected, (
+            f"ui/tab_settings_diag.py::{fn_name} 持有的旗標是 {sorted(set(flags))}，"
+            f"應為 {sorted(expected)}")
+        assert len(flags) == len(set(flags)), (
+            f"ui/tab_settings_diag.py::{fn_name} 重複持有同一支旗標：{flags}")

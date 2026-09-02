@@ -22,7 +22,9 @@ import datetime as _dt
 
 import streamlit as st
 
-from ui.helpers.render_state import system_error
+from ui.helpers.ia import applied_form
+
+from ui.helpers.render_state import not_ready, system_error
 
 
 def _today_tw() -> str:
@@ -381,7 +383,15 @@ def _sec_nav_backfill_auto() -> None:
         if not _all:
             st.info("目前沒有可補的基金 —— 先載入持倉,或在上方選股池加入候選(填代號 + ISIN)。")
             return
-        if not st.button("🔄 開始補抓全部缺淨值", use_container_width=True, key="_nh_backfill_all"):
+        # 鐵則 02（線框 Rule 02 ＋ Tab 05「手動補資料 → **寫入類**，全部 Form 封裝」）。
+        # ⚠️ 據實寫明：**這一條路徑沒有任何輸入 widget**，所以 form 帶不來 Rule 02 想要的
+        #    防重繪效益（那條規則防的是「每拉一格就整頁重跑」）。此處包 form 是為了
+        #    **寫入類動作一律經過同一道送出閘門**這個一致性要求（總管 2026-09-02 裁決
+        #    「三條路徑都要包」）。**把理由寫成「省了重繪」會是假的，故不那樣寫。**
+        with applied_form("_nh_backfill_all_form",
+                          submit_label="🔄 開始補抓全部缺淨值") as _bf_gate:
+            st.caption("按下送出後會逐檔連外抓取,檔數多會花數分鐘。")
+        if not _bf_gate:
             return
 
         from services.nav_history_store import backfill_to_gs
@@ -555,12 +565,18 @@ def render_nav_csv_manage_section(*, expander_label: str | None = None) -> None:
 
         # v19.490（user 2026-08-19「移除基金代號欄，代號由 CSV 帶入」）:上傳讀 CSV 代號欄自動分檔,
         # 多檔可放同一個 CSV（代號欄區分）。逐檔動作(增量/下載/清除)改用下方 cache 選單挑代號。
-        _nh_file = st.file_uploader(
-            "📥 上傳 NAV CSV（格式:**代號 ｜ 日期 ｜ 淨值**，無表頭亦可；日期西元/民國都吃；"
-            "多檔可放同一個 CSV，用代號欄自動分檔）",
-            type=["csv"], key="_nh_upload_csv",
-        )
-        if _nh_file is not None:
+        # 鐵則 02：上傳是**寫入類**動作 → 包進 form，按送出才真的匯入。
+        # ⚠️ 這同時修掉一個既有的隱性行為：原碼是「檔案一選好就立刻匯入 + `st.rerun()`」，
+        #    使用者**沒有反悔的機會**，選錯檔就已經寫進本機 cache 與雲端了。
+        with applied_form("_nh_upload_csv_form", submit_label="📥 匯入這個 CSV") as _up_gate:
+            _nh_file = st.file_uploader(
+                "📥 上傳 NAV CSV（格式:**代號 ｜ 日期 ｜ 淨值**，無表頭亦可；日期西元/民國都吃；"
+                "多檔可放同一個 CSV，用代號欄自動分檔）",
+                type=["csv"], key="_nh_upload_csv",
+            )
+        if _up_gate and _nh_file is None:
+            not_ready("還沒選檔案", where="上方「📥 上傳 NAV CSV」")
+        elif _up_gate and _nh_file is not None:
             _mr = _nh_import_multi(_nh_file.getvalue())
             if _mr["errors"]:
                 st.error("、".join(_mr["errors"]))

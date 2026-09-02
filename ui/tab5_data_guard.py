@@ -24,6 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.ia import applied_form
 from ui.helpers.render_state import not_ready, system_error
 
 from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW  # v19.390 V3b:燈號收 TRAFFIC SSOT
@@ -1629,13 +1630,28 @@ def render_data_guard_tab() -> None:
 def render_nav_accumulation_status() -> None:
     """③ 累積狀態：能不能累（狀態燈）＋ 累了多少（逐檔涵蓋表）。
 
-    2026-09-02 線框 §03 ⑤ B「合一」抽出（**只搬位置，行為一行未改**）。
+    2026-09-02 線框 `ia-wireframe.html` Tab 05 抽出，成為**唯讀**的「NAV 累積狀態」區塊。
 
-    ⚠️ **它必須畫在匯入表單「之前」** —— 燈是 🔴「累積未啟用」時，
-    下面兩條 CSV 匯入與一鍵補全**寫不進雲端**。把狀態燈放在動作之後，
+    ⚠️ **它必須畫在「手動補資料」之前**（線框的區塊順序就是這樣排的）——
+    雲端沒啟用時，那一區的三條寫入路徑**都寫不進雲端**。把狀態放在動作之後，
     使用者會先上傳完才發現東西沒存進去（`CLAUDE.md §1`：不可讓畫面看起來成功）。
-    原碼就地的註解已經寫明「收起來的話使用者永遠不會知道歷史淨值根本沒在累積」，
-    合一之後這個順序理由只會更強（它現在是三個功能共用的前提）。
+    ⚠️ 兩區之間**夾著「連線與金鑰」**（線框順序），所以守衛錨的是**兩個區塊的相對順序**，
+    不是「相鄰」—— 錨到相鄰會在 ⑤ 重組（T18）當天無故轉紅。
+
+    ⭐ **三態顏色（2026-09-02 總管裁決；本函式最重要的一條）**
+    ------------------------------------------------------------
+    四大鐵則的三態是：**灰 ＝ 未載入／前提不足**、深莓紅左軌 ＝ 業務警示、
+    **紅框 ＝ 系統真出錯**。「雲端沒設好 → 累積未啟用」是**前提不足**，
+    ~~不是系統故障~~ —— 它以前畫成 `st.error` 紅框，那是**過度示警**：
+    什麼都沒有壞，只是還沒設定。**有意識的更正，不是漏刪**（日期 2026-09-02 ·
+    決策者：AI 總管 · 依據：`CLAUDE.md` 引 v3 §02「介面狀態嚴格分離：
+    『未點擊載入』以灰色說明提示，『系統真出錯』才標註紅色警示，**杜絕假性錯誤滿版**」）。
+    **舊寫法的用意仍然成立**（這件事很重要、使用者必須看到），
+    **被權衡掉的是它的顏色** —— 重要不等於故障，而滿版假紅字會讓**真正的紅**沒人看得見。
+
+    **兩種狀態都要畫得出來，而且各有守衛**：
+    - **沒設定** → 灰色空狀態三要素（標題 / 缺什麼 / 去哪補），走 `not_ready()`。
+    - **設定了但查詢真的爆掉** → `system_error()` 紅框（下方 `except` 分支，一字未動）。
     """
     # v19.362 ①:累積狀態燈 — 終結「secrets 沒設 = 靜默略過,以為在累積其實沒有」
     try:
@@ -1647,8 +1663,7 @@ def render_nav_accumulation_status() -> None:
         else:
             # v19.379:細分病因(放錯地方 / 引號貼壞 / 整份 secrets 沒生效)
             _diag = _ni_st.get("diag", {})
-            _lines = [f"🔴 **累積未啟用**:缺 {', '.join(_ni_st['missing'])} "
-                      "→ 淨值不會累積、下方匯入也無法寫入。"]
+            _lines = []
             _sa_d = _diag.get("google_service_account")
             if _sa_d == "absent":
                 _lines.append("• `google_service_account`:**App 完全沒讀到這把 key** → 檢查："
@@ -1666,7 +1681,19 @@ def render_nav_accumulation_status() -> None:
                               "(TOML 格式壞 / 放錯 App / 沒 reboot),不是這兩把單獨的問題。")
             elif _diag.get("st_secrets_alive") is True:
                 _lines.append("✅ 旁證:`FRED_API_KEY` 讀得到 → secrets 本身有效,問題**只在上面這兩把**。")
-            st.error("\n\n".join(_lines))
+            # ⬜ 灰色空狀態三要素（標題 / 缺什麼 / 去哪補）—— 不是紅框，理由見 docstring。
+            # 「去哪補」指的是 Streamlit Secrets（App 設定），**不是**頁內某個分區：
+            # 這兩把 key 今天只能在 Secrets 設，指去頁內任何區塊都是假指路。
+            # ⚠️ 刻意**不手抄任何分區/分頁名** —— 手抄的那一刻它就開始漂移
+            # （story_nav 整個模組存在的理由）。
+            not_ready(
+                f"NAV 累積未啟用：尚未設定 {', '.join(_ni_st['missing'])} "
+                "→ 淨值不會累積、「手動補資料」也寫不進雲端",
+                where="App 的 Secrets 設定")
+            if _lines:
+                # 細分病因（放錯地方 / 引號貼壞 / 整份 secrets 沒生效）——
+                # 內容一字未改，只是跟著上面那則一起改走灰色。
+                st.caption("\n\n".join(_lines))
     except Exception as _e_st:
         # 這顆燈答的是「能不能累積」。它自己掛掉時,畫面上沒有燈 ——
         # 與「燈是綠的」在灰字之下難以分辨。
@@ -1730,16 +1757,26 @@ def render_nav_statement_csv_import() -> None:
         "`nav_history` 分頁 —— **立刻補回過去數年**，解鎖 3Y/5Y/低基期（不必等每日累積）。"
         "格式：header 含「日期/淨值」關鍵字自動對欄；無 header 則第 1 欄=日期、第 2 欄=淨值。"
         "民國(113/03/15)與西元日期都支援；同 (代碼,日期) 自動去重，重跑不灌水。")
-    _ni_c1, _ni_c2 = st.columns(2)
-    with _ni_c1:
-        _ni_code = st.text_input("基金代碼", key="navhist_import_code",
-                                 placeholder="TLZF9 / ACTI71 ...")
-    with _ni_c2:
-        _ni_name = st.text_input("基金名稱（選填）", key="navhist_import_name")
-    _ni_file = st.file_uploader("上傳歷史淨值 CSV", type=["csv", "txt"],
-                                key="navhist_import_file")
-    if st.button("📥 匯入到 nav_history", key="navhist_import_btn",
-                 disabled=not (_ni_file and _ni_code.strip())):
+    # 鐵則 02（線框 `ia-wireframe.html` Rule 02 ＋ Tab 05「手動補資料 → **寫入類**，
+    # 全部 Form 封裝」）：三個輸入 + 一顆送出鈕。不包 form 的話使用者每打一個字整頁
+    # 就重跑一次，而本頁的重跑會連帶更新資料註冊表、抓匯率。
+    # ⚠️ 送出鈕的 `disabled=` **刻意拿掉**：form 內 widget 的值要等送出才拿得到，
+    #    拿它算 disabled 會永遠停在初始值（按鈕永遠是 disabled）。
+    #    改成送出後才驗，缺什麼就誠實講 —— 而且那是 ⬜ 前提不足，不是 🔴 故障。
+    with applied_form("navhist_import_form",
+                      submit_label="📥 匯入到 nav_history") as _ni_gate:
+        _ni_c1, _ni_c2 = st.columns(2)
+        with _ni_c1:
+            _ni_code = st.text_input("基金代碼", key="navhist_import_code",
+                                     placeholder="TLZF9 / ACTI71 ...")
+        with _ni_c2:
+            _ni_name = st.text_input("基金名稱（選填）", key="navhist_import_name")
+        _ni_file = st.file_uploader("上傳歷史淨值 CSV", type=["csv", "txt"],
+                                    key="navhist_import_file")
+    if _ni_gate and not (_ni_file and (_ni_code or "").strip()):
+        not_ready("還沒選好要匯入的東西：基金代碼與 CSV 檔**兩者都要有**",
+                  where="上方「基金代碼」與「上傳歷史淨值 CSV」")
+    elif _ni_gate:
         try:
             _ni_text = _ni_file.getvalue().decode("utf-8-sig", errors="replace")
             from services.nav_history_gs import import_csv_text

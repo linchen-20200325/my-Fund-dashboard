@@ -169,6 +169,11 @@ def test_section_keys_resolve_to_the_owning_tab_in_story_nav():
     ("manage", "ui/tab_settings_diag.py"),
     ("diag",   "ui/tab_settings_diag.py"),
     ("manual", "ui/tab_settings_diag.py"),
+    # 2026-09-02：⑤ 的 NAV 兩塊（線框 `ia-wireframe.html` Tab 05）。字面值住在
+    # `ui/helpers/settings_diag/nav_history_section.py`（合併頁把該區塊委派給它），
+    # 所以漂移鎖錨到那一檔而不是 `tab_settings_diag.py`。
+    ("nav_status", "ui/helpers/settings_diag/nav_history_section.py"),
+    ("nav_manual", "ui/helpers/settings_diag/nav_history_section.py"),
 ])
 def test_section_labels_match_merged_pages(key: str, relpath: str):
     """`_SECTION_LABELS` 的字必須真的出現在該合併頁的原始碼裡。

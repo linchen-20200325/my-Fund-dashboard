@@ -1,6 +1,7 @@
-"""T23 守衛：⑤ 的「🗄️ NAV 歷史」—— 三個功能**一個**入口。
+"""T23 守衛：⑤ 的 NAV 兩塊 —— 「NAV 累積狀態」（唯讀）＋「手動補資料」（寫入類）。
 
-線框（客戶已拍板）：`docs/wireframes/fund-wireframe-final.html` §03 ⑤ B「合一」。
+線框（客戶已拍板）：`docs/wireframes/ia-wireframe.html` **Tab 05**（2026-09-01），
+它取代了較舊的 `fund-wireframe-final.html` §03「三個功能一個入口」。
 
 ## 為什麼這一組測試長這樣（方法先講清楚，不要照抄成別的形狀）
 
@@ -143,21 +144,37 @@ def _fake_st(monkeypatch, *, checkbox: bool = False, button: bool = False):
     yield rec
 
 
-# ── 三條路徑各自的 widget key（**實作端真的送出去的那個字串**）────────────
-#: ② 一鍵自動補全（`nav_history_store.backfill_to_gs`）
-KEY_AUTO_BACKFILL = "_nh_backfill_all"
-#: ① 本地基底 CSV（`nav_history_store.import_nav_csv_multi`，多檔、寫本機 cache）
+# ── 三條路徑各自的識別字串（**實作端真的送出去的那個參數**）────────────────
+#: ① 一鍵自動補全（`nav_history_store.backfill_to_gs`）。
+#: ⚠️ 錨的是 **form 的 key**，不是按鈕的 key —— 這條路徑沒有輸入 widget，
+#:    鐵則 02 之後它的送出鈕變成 `form_submit_button`（沒有自己的 key）。
+KEY_AUTO_BACKFILL = "_nh_backfill_all_form"
+#: ③ 本地基底 CSV（`nav_history_store.import_nav_csv_multi`，多檔、寫本機 cache）
 KEY_LOCAL_BASE_CSV = "_nh_upload_csv"
-#: ① 對帳單 CSV（`nav_history_gs.import_csv_text`，單檔、代碼手填、只寫雲端）
+#: ② 對帳單 CSV（`nav_history_gs.import_csv_text`，單檔、代碼手填、只寫雲端）
 KEY_STATEMENT_CSV = "navhist_import_file"
 
-#: 三個功能全到齊 ＝ 這三個 key 全都被渲染出來。
+#: 三條路徑全到齊 ＝ 這三個字串全都被渲染出來。
 NAV_FEATURE_KEYS = frozenset({KEY_AUTO_BACKFILL, KEY_LOCAL_BASE_CSV,
                               KEY_STATEMENT_CSV})
 
 
+def _nav_identities(rec: _Rec) -> list:
+    """本次渲染送出的 NAV 路徑識別字串（依呼叫順序，含重複）。
+
+    widget 走 `key=`；`st.form()` 的 key 是**第一個位置引數**（`applied_form` 就是
+    這樣呼叫的），兩種都要收 —— 只收 `key=` 會漏掉整條 form 化的路徑。
+    """
+    out = []
+    for _n, _a, _k in rec.calls:
+        _id = _a if _n == "form" else _k
+        if _id in NAV_FEATURE_KEYS:
+            out.append(_id)
+    return out
+
+
 def _nav_keys(rec: _Rec) -> set:
-    return rec.keys_of("button", "file_uploader") & NAV_FEATURE_KEYS
+    return set(_nav_identities(rec))
 
 
 @pytest.fixture()
@@ -170,79 +187,127 @@ def _quiet_registry(monkeypatch):
 # ══════════════════════════════════════════════════════════════════
 # 1) 正面：合一入口真的畫得出來，而且三個功能一個都沒少
 # ══════════════════════════════════════════════════════════════════
-def test_merged_entry_renders_all_three_nav_features(monkeypatch):
-    """`render_nav_history_section()` 一次渲染 ＝ 三條路徑的 widget 全部到齊。
+def test_manual_block_renders_all_three_write_paths(monkeypatch):
+    """`render_nav_manual_section()` 一次渲染 ＝ 三條路徑的 widget 全部到齊。
 
     ⚠️ 這一條刻意用 **`==`**（集合相等）而不是 `>=`／`in`：
     少一條 ＝ 那個功能在合併時被吃掉了（線框要的是「三個功能一個入口」，
     不是「三個功能砍成一個」）。
 
     突變實驗（實跑，輸出貼在 PR）：把
-    `nav_history_section.render_nav_history_section()` 裡的
-    `render_nav_statement_csv_import()` 那一行刪掉（＝ 合併時順手砍掉對帳單那條）
-    → **本條轉紅**（實際 key 只剩 2 個，`navhist_import_file` 不見）。
+    `nav_history_section.render_nav_manual_section()` 裡的
+    `render_nav_statement_csv_import()` 那一行刪掉（＝ 分塊時順手砍掉對帳單那條）
+    → **本條轉紅**（`navhist_import_file` 不見）。
     """
-    from ui.helpers.settings_diag.nav_history_section import render_nav_history_section
+    from ui.helpers.settings_diag.nav_history_section import render_nav_manual_section
 
     with _fake_st(monkeypatch) as rec:
-        render_nav_history_section()
+        render_nav_manual_section()
 
     assert _nav_keys(rec) == set(NAV_FEATURE_KEYS), (
-        "合一區塊沒有把三個功能都畫出來 —— 那不是合併，是刪功能。\n"
+        "「手動補資料」沒有把三條路徑都畫出來 —— 那不是分塊，是刪功能。\n"
         f"  期望：{sorted(NAV_FEATURE_KEYS)}\n"
         f"  實際：{sorted(_nav_keys(rec))}")
 
 
-def test_merged_entry_uses_the_new_name_and_status_comes_first(monkeypatch):
-    """標題用線框指定的「NAV 歷史」，且**累積狀態畫在兩條寫入路徑之前**。
+def test_two_blocks_use_the_ssot_labels_and_status_comes_before_manual(monkeypatch):
+    """兩塊各自畫出來、名字吃 `story_nav` SSOT，且**狀態塊在寫入塊之前**。
 
-    順序不是美觀問題：燈是 🔴「累積未啟用」時，下面兩條 CSV 匯入都只會落在本機、
-    容器重啟就清空。放在動作之後 ＝ 使用者先上傳完才發現沒存進去（`CLAUDE.md §1`）。
+    ⚠️ **順序錨的是「兩個區塊」的相對位置，不是「相鄰」** —— 線框 Tab 05 的最終
+    順序在兩者之間夾了「連線與金鑰」。錨到相鄰，會在 ⑤ 依線框重組（T18）當天
+    無故轉紅，而那時什麼都沒壞。
 
-    ⚠️ 標題用 **`==`** 比對整行，不是 `in` —— 「原名＋後綴」（例如
-    `### 🗄️ NAV 歷史資料管理`）就能騙過子字串比對，而那正是要被拿掉的舊標題之一。
+    ⚠️ 標題用 **`==`** 比對整行，不是 `in` —— 「原名＋後綴」就能騙過子字串比對。
 
-    突變實驗（實跑，輸出貼在 PR）：把 `render_nav_accumulation_status()` 那一行
-    移到 `render_nav_statement_csv_import()` **之後** → **本條轉紅**
-    （狀態燈的索引大於匯入 widget 的索引）。
+    突變實驗（實跑，輸出貼在 PR）：把 `_render_maintain_section` 內
+    `render_nav_status_section()` 與 `render_nav_manual_section()` 兩行**對調**
+    → **本條轉紅**（狀態塊索引大於寫入塊）。
+    ⚠️ 第一版在這個突變下**全綠**，因為它自己在測試裡照順序呼叫那兩個函式；
+    改成驅動 `_render_maintain_section()` 之後才真的抓得到。
     """
+    import ui.tab_settings_diag as _sd
     from ui.helpers.settings_diag.nav_history_section import (
-        NAV_HISTORY_HEADING,
-        render_nav_history_section,
+        NAV_MANUAL_HEADING,
+        NAV_STATUS_HEADING,
     )
 
+    # ⚠️ **驅動真正的呼叫端**（⑤ 的 B 分區），不是在測試裡自己照順序呼叫兩個函式。
+    #    第一版就是後者 —— 於是把 `_render_maintain_section` 裡的兩行**對調**之後
+    #    本條照樣 12 passed：測試驗的是它自己寫的順序，不是產品的順序。
+    #    **一條「自己擺好順序再驗順序」的斷言，永遠不會抓到順序錯誤。**
     with _fake_st(monkeypatch) as rec:
-        render_nav_history_section()
+        _sd._render_maintain_section()
 
-    _headings = [a for a in rec.args_of("markdown")
-                 if isinstance(a, str) and a.startswith("### ")]
-    assert NAV_HISTORY_HEADING in _headings, (
-        f"合一區塊沒有畫出線框指定的標題 {NAV_HISTORY_HEADING!r}。實際：{_headings}")
-    _exact = [h for h in _headings if h == NAV_HISTORY_HEADING]
-    assert len(_exact) == 1, f"「NAV 歷史」標題不是恰好一份：{_headings}"
+    _h = [a for a in rec.args_of("markdown")
+          if isinstance(a, str) and a.startswith("### ")]
+    assert [x for x in _h if x == NAV_STATUS_HEADING], (
+        f"沒畫出「NAV 累積狀態」標題 {NAV_STATUS_HEADING!r}。實際：{_h}")
+    assert [x for x in _h if x == NAV_MANUAL_HEADING], (
+        f"沒畫出「手動補資料」標題 {NAV_MANUAL_HEADING!r}。實際：{_h}")
 
-    # ── 順序：狀態燈必須畫在**第一個寫入 widget 之前** ──────────────────
-    # ⚠️ 這裡刻意錨到**狀態燈本身那一則訊息**，不是「標題與 widget 之間有沒有東西」。
-    #    第一版就是那樣寫的，結果把 `render_nav_accumulation_status()` 整個移到最後
-    #    **照樣全綠** —— 因為區塊自己的 caption 就落在那個區間裡，斷言永遠有東西可看。
-    #    **「中間非空」不等於「狀態燈在前面」**，那是一條測不到目標的斷言。
-    #    `_fake_st` 已把 `nav_history_gs.status()` 釘成 enabled=False，
-    #    所以狀態燈必然是那一則 🔴「累積未啟用」——**而這正是最要緊的情況**：
-    #    雲端沒啟用時，下面兩條上傳都存不進雲端，燈必須先被看到。
-    _light_idx = [i for i, (n, a, _k) in enumerate(rec.calls)
-                  if n == "error" and isinstance(a, str) and "累積未啟用" in a]
-    assert _light_idx, (
-        "沒有畫出「累積未啟用」狀態燈 —— 斷言失去對象（狀態區被拿掉了？）。"
-        f"實際呼叫：{rec.names()}")
-    _first_write_widget = min(
-        i for i, (n, _a, k) in enumerate(rec.calls) if k in NAV_FEATURE_KEYS)
-    assert _light_idx[0] < _first_write_widget, (
-        "🔴「累積未啟用」狀態燈畫在寫入 widget **之後** —— 使用者會先上傳完，"
-        "才發現東西根本沒存進雲端（CLAUDE.md §1：不可讓流程看起來成功）。\n"
-        f"  狀態燈 index={_light_idx[0]}，第一個寫入 widget index={_first_write_widget}")
-    _heading_at = next(i for i, (n, a, _k) in enumerate(rec.calls)
-                       if n == "markdown" and a == NAV_HISTORY_HEADING)
-    assert _heading_at < _light_idx[0], "標題沒有畫在狀態燈之前 —— 區塊順序壞了"
+    _status_at = next(i for i, (n, a, _k) in enumerate(rec.calls)
+                      if n == "markdown" and a == NAV_STATUS_HEADING)
+    _manual_at = next(i for i, (n, a, _k) in enumerate(rec.calls)
+                      if n == "markdown" and a == NAV_MANUAL_HEADING)
+    assert _status_at < _manual_at, (
+        "「NAV 累積狀態」畫在「手動補資料」之後 —— 雲端沒啟用時使用者會先上傳完，"
+        "才發現東西根本沒存進雲端（CLAUDE.md §1：不可讓流程看起來成功）。")
+
+
+def test_block_headings_are_not_hand_copied_literals():
+    """兩塊的標題必須**吃 `story_nav.section_label()`**，不得手抄字面值。
+
+    驗法是執行期比對：把 SSOT 改掉，標題常數必須跟著變。
+    手抄的字面值不會跟著變 —— 那正是本 repo 已經發作三次的「指路指到不存在的東西」。
+
+    突變實驗（實跑，輸出貼在 PR）：把 `nav_history_section.py` 的
+    `NAV_STATUS_HEADING` 改成寫死的 `"### NAV 累積狀態"` → **本條轉紅**。
+    """
+    import importlib
+
+    import ui.helpers.settings_diag.nav_history_section as _sec
+    import ui.helpers.story_nav as _sn
+
+    _orig = dict(_sn._SECTION_LABELS)
+    try:
+        _sn._SECTION_LABELS["nav_status"] = "漂移哨兵A"
+        _sn._SECTION_LABELS["nav_manual"] = "漂移哨兵B"
+        _reloaded = importlib.reload(_sec)
+        assert _reloaded.NAV_STATUS_HEADING == "### 漂移哨兵A", (
+            f"「NAV 累積狀態」標題沒有跟著 SSOT 走：{_reloaded.NAV_STATUS_HEADING!r}")
+        assert _reloaded.NAV_MANUAL_HEADING == "### 漂移哨兵B", (
+            f"「手動補資料」標題沒有跟著 SSOT 走：{_reloaded.NAV_MANUAL_HEADING!r}")
+    finally:
+        _sn._SECTION_LABELS.clear()
+        _sn._SECTION_LABELS.update(_orig)
+        importlib.reload(_sec)
+
+
+def test_every_write_path_is_wrapped_in_a_form(monkeypatch):
+    """鐵則 02：「手動補資料」的每一條寫入路徑都要經過 `st.form` 送出閘門。
+
+    驗的是**實際送給 `st.form()` 的 key**（真的建立了幾個 form），
+    不是原始碼裡有沒有 `applied_form` 這幾個字。
+
+    ⚠️ 用 `>=` 而不是 `==`：③ 那條的「下載 cache」用 `st.download_button`，
+    Streamlit **原始碼層面無條件禁止它出現在 form 內**
+    （`button.py`：``st.download_button() can't be used in an st.form()``），
+    所以 ③ 只有**上傳**在 form 內，逐檔維護動作必須留在 form 外。
+    硬包會讓整塊 render 當場丟 `StreamlitAPIException`。
+
+    突變實驗（實跑，輸出貼在 PR）：把 `render_nav_statement_csv_import()` 的
+    `applied_form(...)` 拆掉、改回裸 `st.button` → **本條轉紅**（少一個 form）。
+    """
+    from ui.helpers.settings_diag.nav_history_section import render_nav_manual_section
+
+    with _fake_st(monkeypatch) as rec:
+        render_nav_manual_section()
+
+    _forms = [a for n, a, _k in rec.calls if n == "form"]
+    _want = {"_nh_backfill_all_form", "navhist_import_form", "_nh_upload_csv_form"}
+    assert _want <= set(_forms), (
+        "有寫入路徑沒有包進 st.form（線框 Tab 05：手動補資料＝寫入類，全部 Form 封裝）。\n"
+        f"  期望至少：{sorted(_want)}\n  實際建立的 form：{sorted(_forms)}")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -359,7 +424,7 @@ def test_whole_page_renders_exactly_one_nav_entry(monkeypatch, _quiet_registry):
     with _fake_st(monkeypatch, checkbox=True) as rec:
         render_settings_diag_tab()
 
-    _counts = Counter(k for _n, _a, k in rec.calls if k in NAV_FEATURE_KEYS)
+    _counts = Counter(_nav_identities(rec))
     assert set(_counts) == set(NAV_FEATURE_KEYS), (
         "⑤ 整頁沒有把三個 NAV 功能都畫出來（或畫了不該有的）。\n"
         f"  期望：{sorted(NAV_FEATURE_KEYS)}\n  實際：{sorted(_counts)}")
@@ -405,3 +470,61 @@ def test_the_three_write_paths_are_not_interchangeable(monkeypatch):
     assert not (_statement & _base), (
         "兩條匯入路徑開始共用同一支 service —— 若這是刻意收斂，請先說明哪一種 CSV "
         f"形狀被放棄了（線框要的是三個功能一個入口，不是砍成一個）：{_statement & _base}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 4) 三態顏色：「沒設定」＝灰　vs　「設定了但爆掉」＝紅
+#    （總管 2026-09-02 裁決的第四條路：不弱化既有斷言、不藏狀態、不動 tab5 語意）
+# ══════════════════════════════════════════════════════════════════
+def test_unconfigured_cloud_is_grey_not_red(monkeypatch):
+    """雲端**沒設定** → ⬜ 灰色空狀態三要素，**不得**畫成 🔴 紅框。
+
+    依據：四大鐵則三態（灰＝未載入／前提不足；紅框＝系統真出錯）＋
+    `CLAUDE.md` 引 v3 §02「介面狀態嚴格分離……**杜絕假性錯誤滿版**」。
+    什麼都沒壞、只是還沒設定 —— 畫紅框是過度示警，而滿版假紅字會讓**真的紅**沒人看見。
+
+    ⚠️ 這一條同時是 `tests/test_settings_diag_merge.py` 那兩條頁級斷言
+    （`assert "error" not in rec.names()`）能**原樣保留**的原因 ——
+    本批沒有放寬任何既有斷言，是把顏色改對。
+
+    突變實驗（實跑，輸出貼在 PR）：把 `render_nav_accumulation_status()` 的
+    `not_ready(...)` 改回 `st.error(...)` → **本條轉紅**。
+    """
+    import ui.tab5_data_guard as _t5
+
+    with _fake_st(monkeypatch) as rec:
+        _t5.render_nav_accumulation_status()
+
+    _errs = [a for a in rec.args_of("error") if isinstance(a, str)]
+    assert not [e for e in _errs if "累積" in e], (
+        f"「雲端沒設定」被畫成紅框 —— 那是前提不足，不是系統故障。實際 error：{_errs}")
+    _caps = [a for a in rec.args_of("caption") if isinstance(a, str)]
+    _grey = [c for c in _caps if "累積未啟用" in c]
+    assert _grey, (
+        f"沒設定時連灰色狀態都沒畫 —— 使用者會盲傳（三要素消失）。實際 caption：{_caps}")
+    assert any("Secrets" in c for c in _grey), (
+        f"灰色空狀態缺「去哪補」那一項 —— 沒有它只是把消失換成灰色的消失：{_grey}")
+
+
+def test_real_failure_is_still_red(monkeypatch):
+    """**反面（不可省）**：狀態查詢**真的爆掉** → 仍然是 🔴 紅框。
+
+    少了這一條，「把紅色全部改成灰色」也會讓上一條全綠 ——
+    那會把真正的系統故障藏起來，比原本的過度示警更糟。
+
+    突變實驗（實跑，輸出貼在 PR）：把 `render_nav_accumulation_status()` 的
+    `except` 分支從 `system_error(...)` 改成 `not_ready(...)` → **本條轉紅**。
+    """
+    import ui.tab5_data_guard as _t5
+
+    def _boom(*a, **k):
+        raise RuntimeError("模擬 Sheets 連線爆炸")
+
+    with _fake_st(monkeypatch) as rec:
+        monkeypatch.setattr(_t5, "_cached_nh_status", _boom, raising=False)
+        _t5.render_nav_accumulation_status()
+
+    _errs = [a for a in rec.args_of("error") if isinstance(a, str)]
+    assert _errs, (
+        "狀態查詢真的爆掉卻沒有紅框 —— 系統故障被畫成了「還沒設定」，"
+        f"使用者會以為只要去設定就好。實際呼叫：{rec.names()}")

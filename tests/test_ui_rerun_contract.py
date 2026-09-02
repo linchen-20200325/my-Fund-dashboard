@@ -196,12 +196,24 @@ def _naked_multi_input_keys(path: pathlib.Path) -> list[str]:
 
 
 def _gate_function_keys(path: pathlib.Path) -> list[str]:
-    """`if st.checkbox(...) / st.button(...) / st.toggle(...):` 這種延遲載入 gate。"""
+    """`if st.checkbox(...) / st.button(...) / st.toggle(...):` 這種延遲載入 gate。
+
+    2026-09-02 增收 **`applied_form(...)`**（IA kit 鐵則 02，`ui/helpers/ia/gated_form.py`）。
+    它依建構就會產生一個送出閘門：`with applied_form(...) as gate:` 之後
+    `if gate:` 才跑重運算 —— 效果與 `if st.button(...)` **相同或更強**
+    （form 連「每改一個輸入就整頁重跑」也一起擋掉）。
+    ⚠️ **這是擴大偵測範圍，不是放寬** —— 少了它，任何把 `st.button` gate 升級成
+    form gate 的改動都會被誤判成「gate 不見了」，逼後人為了消紅**把 gate 拆回去**，
+    正好與本規則的目的相反。
+    """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     containers = _st_container_names(tree)
     parents = _parents(tree)
     out = []
     for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "applied_form":
+            out.append(f"{path.relative_to(ROOT)}::{_enclosing_function(node, parents)}()")
+            continue
         if not isinstance(node, ast.If):
             continue
         if any(_is_st_call(sub, containers, sub.func.attr)
@@ -384,7 +396,12 @@ GATE_FUNCTIONS = frozenset({
     "ui/tab_batch_analysis.py::_render_recent_checkpoints()",
     "ui/tab_fund_grp_health.py::render_fund_grp_health_tab()",
     "ui/tab_manage.py::_sec_dividend_calendar()",
-    "ui/tab_manage.py::_sec_nav_backfill()",
+    # 2026-09-02：`_sec_nav_backfill()` 的 CSV 段抽成
+    # `render_nav_csv_manage_section()`（線框 `ia-wireframe.html` Tab 05 拆兩塊），
+    # gate 跟著搬到新函式 —— **錨點更新，不是拿掉 gate**。
+    "ui/tab_manage.py::render_nav_csv_manage_section()",
+    # 同批：本函式的 `if not st.button(...)` 升級成 `applied_form(...)` 送出閘門
+    # （鐵則 02「寫入類動作全部 Form 封裝」）。函式名未變，gate 形態變了。
     "ui/tab_manage.py::_sec_nav_backfill_auto()",
     "ui/tab_manage.py::_sec_notify()",
 })

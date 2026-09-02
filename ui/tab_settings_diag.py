@@ -225,17 +225,29 @@ def _render_maintain_section() -> None:
     **自本次起是舊狀態**，就地更正見該處。
     """
     st.subheader("🗄️ 資料維護與通報（管理室）", anchor=ANCHOR_MAINT)
-    from ui.helpers.settings_diag.nav_history_section import render_nav_history_section
+    from ui.helpers.settings_diag.nav_history_section import (
+        render_nav_manual_section,
+        render_nav_status_section,
+    )
     from ui.tab_manage import render_manage_tab
 
     # ⑤ 已畫分區標題 → 管理室不再畫自己的 `##` 頁面大標（其餘一行不動）。
     # ⑤ 同時持有 NAV_HISTORY → 管理室**不畫**它自己那份「🗄️ 補歷史淨值」，
     # 資料診斷那份「🗂️ NAV 歷史匯入與累積狀態」同樣不畫（見各該檔的極性守衛）；
-    # 唯一一份由下面的 `render_nav_history_section()` 畫出來。
+    # 唯一一份由下面兩個區塊畫出來。
+    #
+    # ⚠️ **這裡的擺法是過渡狀態，據實寫明**：線框 `ia-wireframe.html` Tab 05 的
+    #    最終順序是「資料來源健康度 → NAV 累積狀態 → 連線與金鑰 → 手動補資料 →
+    #    使用手冊」，兩塊之間**夾著「連線與金鑰」**。把 ⑤ 重組成那五塊屬 **T18 批次**
+    #    （T18 本來就要動「連線與金鑰」，同一塊不能兩批同時改），**本批不做**。
+    #    本批只把 NAV 由「一塊」拆成「兩塊」並維持**狀態在前、寫入在後**的相對順序 ——
+    #    T18 之後在中間插入「連線與金鑰」時，這個相對順序仍然成立，守衛也不必改。
     with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
         render_manage_tab()
         st.divider()
-        render_nav_history_section()
+        render_nav_status_section()
+        st.divider()
+        render_nav_manual_section()
 
 
 def _render_diag_section() -> None:
