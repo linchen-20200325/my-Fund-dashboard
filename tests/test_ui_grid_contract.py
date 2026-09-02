@@ -287,7 +287,12 @@ GRID_EXEMPT_SITES = frozenset({
     "ui/tab_batch_analysis.py::render_batch_analysis_tab()  columns(int:2)×1",
     "ui/tab_batch_analysis.py::render_batch_analysis_tab()  columns(seq:3)×1",
     "ui/tab_fund_grp_health.py::_render_health_3tables()  columns(int:4)×1",
-    "ui/tab_fund_grp_health.py::_render_health_table()  columns(int:5)×1",
+    # 2026-09-02 T20：這一列原本掛在 `_render_health_table()`。5 格結論摘要（＋它正上方
+    # 的失敗摘要）依拍板線框 Tab 02 的順序上移到頁面最前面，連帶抽成獨立函式
+    # `_render_health_summary()` —— **違規呼叫數一個沒有增減**（同一個 `st.columns(5)`
+    # 換了個家），屬本檔 docstring 寫的「錨點失效（拆函式）→ 更新表」那一種，
+    # 不是新增豁免。`GRID_EXEMPT_CALL_TOTAL` 因此**不動**。
+    "ui/tab_fund_grp_health.py::_render_health_summary()  columns(int:5)×1",
     "ui/tab_fund_grp_health.py::_render_low_base_screener()  columns(int:2)×1",
 })
 

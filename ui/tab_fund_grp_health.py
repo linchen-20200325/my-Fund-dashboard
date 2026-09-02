@@ -869,6 +869,67 @@ def _core_satellite_verdict_caption(csa: dict,
     return _out
 
 
+def _render_health_summary(rows: list[dict]) -> None:
+    """5 格結論摘要（檢查檔數 / 健康 / 警示 / 吃本金 / 累積配息）＋ 前置的失敗摘要。
+
+    2026-09-02 T20:本區塊原本住在 `_render_health_table` 裡,也就是**排在**
+    核心/衛星分布、選基金、淘汰候選紅區、持倉互斥避險**之後**才出現 ——
+    使用者要先捲過四個區塊才看得到「這次總共幾檔、幾檔在吃本金」。
+    拍板線框 Tab 02 的順序是「Form → 組合健康總分 + 警示卡 → 逐檔體檢表」,
+    也就是**結論先講**。抽成獨立函式後由 `_render_health_3tables` 在最前面呼叫。
+
+    ⚠️ **失敗摘要與 5 格是一起搬的,不能只搬其中一半。**
+    2026-08-05 稽核「必修 4」把「❌ 有 N 檔抓取失敗」刻意排在 KPI **正上方**,
+    理由是「檢查檔數」只算成功數 —— 使用者看到「1」時必須當場知道另一檔怎麼了。
+    只把 5 格搬到最上面、失敗摘要留在原地,等於把那個修正打回去。
+    """
+    ok_rows = [r for r in rows if r.get("ok")]
+    err_rows = [r for r in rows if not r.get("ok")]
+    if ok_rows:
+        # v19.148:SSOT 統一改用 老師 1Y 標準(「吃本金燈號 (1Y · )」),
+        # 與下方「健診摘要表」同源,不再與全期自算 verdict 不一致。
+        _mk_col = "吃本金燈號 (1Y · )"
+        n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get(_mk_col, "")))
+        n_warn = sum(1 for r in ok_rows if ("警示" in str(r.get(_mk_col, ""))
+                                            or "邊緣" in str(r.get(_mk_col, ""))))
+        n_good = sum(1 for r in ok_rows if "健康" in str(r.get(_mk_col, "")))
+        total_twd = sum(float(r.get("累積 TWD 配息 🧮", 0) or 0) for r in ok_rows)
+
+        # 2026-08-05 稽核 🟡 必修 4:失敗摘要前置。
+        # 原本「❌ 抓取失敗」區在本行之後 **226 行**(中間隔淘汰候選 / 48+ 欄健診大表 /
+        # PK / 換標決策 / 景氣適配 / 相關性矩陣 / 比較圖 / 逐檔配息明細),而 KPI
+        # 「檢查檔數」只算成功數 —— 輸入 2 檔只成功 1 檔時,畫面顯示「1」且完全不提
+        # 另一檔怎麼了,要捲很久才看得到原因(§1 缺料必須當場講清楚)。
+        # 下方「#### ❌ 抓取失敗」明細區保留不動,此處只做「先講一句」。
+        if err_rows:
+            st.error(
+                f"❌ 有 {len(err_rows)} / {len(ok_rows) + len(err_rows)} 檔抓取失敗，"
+                f"**未納入下方所有統計與表格**：\n\n"
+                + "\n".join(
+                    f"- **{r.get('code', '?')}**：{r.get('error', '?')}"
+                    for r in err_rows
+                )
+            )
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        # delta 顯示本次少掉幾檔,讓「1」不再像是全部成功。
+        # ⚠️ 這裡**刻意使用 Streamlit 預設的 normal 配色**(不傳 delta_color):
+        #   normal(預設) → 負值紅、正值綠
+        #   反轉模式     → 負值**綠**、正值紅   ← 那是給「成本下降是好事」用的
+        # 抓取失敗是壞消息,必須是紅色。前一版誤用反轉模式,把「少掉一檔」渲染成
+        # 綠色好消息,方向與本修正目的完全相反。
+        # 📌 本註解**刻意不寫出反轉模式的參數字面值** ——
+        #    `tests/test_grp_health_failure_summary.py::test_failed_delta_is_not_rendered_green`
+        #    對整檔做子字串掃描,註解裡出現該字串等於自己讓自己紅
+        #    (同 PROCESS.md §4「測試把錯誤制度化」的鄰近陷阱)。
+        k1.metric("檢查檔數", len(ok_rows),
+                  delta=(f"-{len(err_rows)}" if err_rows else None))
+        k2.metric("🟢 健康", n_good)
+        k3.metric("🟡 警示", n_warn)
+        k4.metric("🔴 吃本金", n_eat)
+        k5.metric("累積 TWD 配息 🧮", f"{total_twd:,.0f}")
+
+
 def _render_health_3tables(rows: list[dict],
                            funds_extra: list | None = None,
                            show_screener: bool = False,
@@ -958,6 +1019,12 @@ def _render_health_3tables(rows: list[dict],
         )
         _render_health_table(rows, funds_extra=funds_extra)
         return
+
+    # ── 5 格結論摘要(＋前置失敗摘要)── 2026-09-02 T20:結論先講 ──────────────
+    # 拍板線框 Tab 02 的順序是「Form → 總分/警示 → 逐檔體檢表」。原本這一塊住在
+    # `_render_health_table` 內,要捲過核心/衛星、選基金、淘汰紅區、持倉互斥四個區塊
+    # 才看得到。搬上來之後它是這一頁 ok 路徑的**第一個**輸出。
+    _render_health_summary(rows)
 
     # v19.330:① 健康分析 rows 提前建(核心/衛星 label 來源)—— 供「配置檢查」+ ① 表共用,不重算。
     # Layer 3-C:健康度第 5 維(匯率風險)需要匯率資料。**全站同一份**(L2 fetch-once),
@@ -1126,49 +1193,6 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         # v19.61 E1：MoneyDJ 資料新鮮度 banner（NAV 日期 / 抓取於 / 延遲天數 / 燈號）
         # 鏡像 Stock v18.201 D2 「FinMind last_update」設計，但 Fund 端用 banner 而非 hover
         _render_mj_freshness_banner(ok_rows)
-
-        # v19.148:SSOT 統一改用 老師 1Y 標準(「吃本金燈號 (1Y · )」),
-        # 與下方「健診摘要表」同源,不再與全期自算 verdict 不一致。
-        _mk_col = "吃本金燈號 (1Y · )"
-        n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get(_mk_col, "")))
-        n_warn = sum(1 for r in ok_rows if ("警示" in str(r.get(_mk_col, ""))
-                                            or "邊緣" in str(r.get(_mk_col, ""))))
-        n_good = sum(1 for r in ok_rows if "健康" in str(r.get(_mk_col, "")))
-        total_twd = sum(float(r.get("累積 TWD 配息 🧮", 0) or 0) for r in ok_rows)
-
-        # 2026-08-05 稽核 🟡 必修 4:失敗摘要前置。
-        # 原本「❌ 抓取失敗」區在本行之後 **226 行**(中間隔淘汰候選 / 48+ 欄健診大表 /
-        # PK / 換標決策 / 景氣適配 / 相關性矩陣 / 比較圖 / 逐檔配息明細),而 KPI
-        # 「檢查檔數」只算成功數 —— 輸入 2 檔只成功 1 檔時,畫面顯示「1」且完全不提
-        # 另一檔怎麼了,要捲很久才看得到原因(§1 缺料必須當場講清楚)。
-        # 下方「#### ❌ 抓取失敗」明細區保留不動,此處只做「先講一句」。
-        if err_rows:
-            st.error(
-                f"❌ 有 {len(err_rows)} / {len(ok_rows) + len(err_rows)} 檔抓取失敗，"
-                f"**未納入下方所有統計與表格**：\n\n"
-                + "\n".join(
-                    f"- **{r.get('code', '?')}**：{r.get('error', '?')}"
-                    for r in err_rows
-                )
-            )
-
-        k1, k2, k3, k4, k5 = st.columns(5)
-        # delta 顯示本次少掉幾檔,讓「1」不再像是全部成功。
-        # ⚠️ 這裡**刻意使用 Streamlit 預設的 normal 配色**(不傳 delta_color):
-        #   normal(預設) → 負值紅、正值綠
-        #   反轉模式     → 負值**綠**、正值紅   ← 那是給「成本下降是好事」用的
-        # 抓取失敗是壞消息,必須是紅色。前一版誤用反轉模式,把「少掉一檔」渲染成
-        # 綠色好消息,方向與本修正目的完全相反。
-        # 📌 本註解**刻意不寫出反轉模式的參數字面值** ——
-        #    `tests/test_grp_health_failure_summary.py::test_failed_delta_is_not_rendered_green`
-        #    對整檔做子字串掃描,註解裡出現該字串等於自己讓自己紅
-        #    (同 PROCESS.md §4「測試把錯誤制度化」的鄰近陷阱)。
-        k1.metric("檢查檔數", len(ok_rows),
-                  delta=(f"-{len(err_rows)}" if err_rows else None))
-        k2.metric("🟢 健康", n_good)
-        k3.metric("🟡 警示", n_warn)
-        k4.metric("🔴 吃本金", n_eat)
-        k5.metric("累積 TWD 配息 🧮", f"{total_twd:,.0f}")
 
         df = pd.DataFrame([
             {k: v for k, v in r.items() if not k.startswith("_")}
