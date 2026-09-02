@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from shared.data_quality import nav_series_currency as _series_ccy
+
 
 def _extract_point(fd: Any, code_hint: str | None = None) -> dict | None:
     """從 fund dict 抽 SSOT 的 (code, nav, date)。抽不到回 None(§1 不偽造)。"""
@@ -61,6 +63,17 @@ def _extract_points(fd: Any, code_hint: str | None = None) -> list[dict]:
     fund_name = str(fd.get("fund_name") or "")
     out: list[dict] = []
     series = fd.get("series")
+    # 2026-09-01 幣別(nav_history 第 7 欄)。⚠️ **只取「量測線」** ——
+    # 這條序列**自己宣告**的 `attrs["currency"]`,量不到就留 `""`(誠實的未知)。
+    # ⛔ **`fd["currency"]` 不得當 fallback,一次都不行**:那是「宣告線」,而它
+    #    分不出量測與猜測 —— 實測全 repo 有 7 處死預設(MoneyDJ ×2 / TCB / TDCC /
+    #    FundClear ×2 預設 USD、AllianzGI 預設 TWD),而
+    #    `fund_orchestration._correct_currency` 不只修不回、**還會覆蓋量到的正確值**
+    #    (名稱含「台灣」→ 蓋掉量到的 USD;選股池填錯 → 蓋掉量到的值)。
+    #    兩條線在寫入當下就會矛盾(實測 `fd['currency']='TWD'` vs
+    #    `series.attrs['currency']='USD'`)。nav_history **永不刪除** ——
+    #    寫錯就永遠改不掉,寧可留空(§1:不知道 ≠ TWD)。
+    _ccy = _series_ccy(series)
     try:
         if series is not None and len(series) > 0:
             for _idx, _val in series.items():
@@ -71,7 +84,7 @@ def _extract_points(fd: Any, code_hint: str | None = None) -> list[dict]:
                 date = str(_idx)[:10]
                 if nav > 0 and date:
                     out.append({"code": code, "nav": nav, "nav_date": date,
-                                "fund_name": fund_name})
+                                "fund_name": fund_name, "currency": _ccy})
     except Exception:
         out = []
     if out:

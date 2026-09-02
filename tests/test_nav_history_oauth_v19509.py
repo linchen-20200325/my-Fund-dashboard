@@ -111,6 +111,13 @@ class _FakeWS:
     def get_all_values(self):
         return [NG._NAV_HEADERS]
 
+    def row_values(self, n):
+        """真 gspread worksheet 一定有的方法(見 `_get_worksheet` 的表頭補欄)。"""
+        return list(NG._NAV_HEADERS) if n == 1 else []
+
+    def update(self, rng, values):      # 表頭補寫 no-op
+        pass
+
     def append_rows(self, rows, value_input_option=None):
         self.appended.extend(rows)
 
