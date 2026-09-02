@@ -638,6 +638,48 @@ def test_rescue_consecutive_swaps_currency_tracks_the_last_adopted_source(
     assert "EUR" not in _got
 
 
+def test_rescue_adopting_a_candidate_that_declares_nothing_writes_empty_not_inherited(
+        monkeypatch, _cache_store):
+    """**採用一個「不宣告幣別」的候選** → 表上必須是**空**,不得繼承被丟棄那條的宣告。
+
+    ⚠️ **這條是出口 (6) 的第二個子情境,獨立稽核抓到的 —— 不是本組自己發現的。**
+    出口 (6) 原有的兩條守衛(`..._follows_the_adopted_series_when_rescue_swaps_source`
+    與 `..._consecutive_swaps_currency_tracks_the_last_adopted_source`)**都只驅動
+    「候選有宣告幣別」**(EUR / JPY)那個子情境;「**候選什麼都不宣告**」這條**零覆蓋**。
+
+    **它產生的正是本 PR 存在的理由那個造假形狀**:序列整條換成 yahoo 的 600 列,
+    而那 600 列**全部掛上已經被丟棄那條 MoneyDJ 序列的 `USD`** ——
+    來源不宣告幣別,卻憑空多出一句宣告,§1 明令禁止。
+    **靜默資料遺失還能事後補;這是憑空編造,而 `nav_history` 永不刪除、(code,date) 去重
+    → 寫進去就永遠改不掉。**
+
+    **突變**:採用那一行 `_span(_cand), _cand_ccy)` → `_span(_cand), _cand_ccy or cur_ccy)`
+    → 本則必須轉紅。**稽核實測該突變對修復前的全套完全沉默(6514 passed, exit 0)。**
+    ⚠️ **`or` 這種寫法看起來像「合理的 fallback」,正是它危險的地方** ——
+    在幣別這條線上,「不知道」**不可以**被上一個來源的宣告頂替(§1:空是誠實的未知)。
+    """
+    import services.nav_history_store as NS
+    written = _wire_backfill(
+        monkeypatch,
+        # MoneyDJ 有宣告 USD → cur_ccy 進 `_rescue_by_isin` 時是 "USD"
+        fd={"series": _daily(30, "2025-01-01", ccy="USD"), "fund_name": "F"},
+        # 候選跨度更長、點數更多,但**完全不宣告幣別**(`_series` 的 ccy=None → 無 attrs)
+        yahoo=_daily(600, "2020-01-01"))
+    r = NS.backfill_to_gs(["X"])["results"][0]
+    # fixture 對準檢查:換源真的發生了,否則本則測不到要測的東西。
+    assert "yahoo" in (r["source"] or "") and r["fetched"] == 600, (
+        f"沒有換到 yahoo → 本則沒測到出口 (6);"
+        f"實得 source={r['source']!r} fetched={r['fetched']!r}")
+    assert not r["ccy_refused"], (
+        f"候選幣別未知不該被拒(unknown ≠ mismatch);實得 {r['ccy_refused']!r}")
+    # ⭐ 行為斷言:看**實際寫進那一欄的值**,不是比對字串或看旗標。
+    _got = {p["currency"] for p in written}
+    assert _got == {""}, (
+        f"憑空編造:這 {len(written)} 列全部來自 yahoo(它不宣告幣別),"
+        f"卻被蓋上已丟棄那條 MoneyDJ 序列的宣告;實得 {sorted(_got)!r}")
+    assert "USD" not in _got
+
+
 def test_rescue_candidate_below_adoption_threshold_does_not_touch_currency(
         monkeypatch, _cache_store):
     """**採用門檻不成立**(候選 < 10 筆)→ 連 `_assess_swap` 都沒走到,幣別不得變。
