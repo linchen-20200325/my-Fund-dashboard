@@ -574,6 +574,11 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
       —— 見 `_gate0_mode`。⚠️ **這道閘門保護不到的情形是開放式的**(已知至少五類,
       含零重疊、code key 不一致、`gs_on=False`、其餘寫入路徑、模式被關掉)——
       詳見函式內註解,**那是已知分類不是窮舉**。
+    幣別欄(2026-09-01):寫進 `nav_history` 的每一點都帶 `currency` —— 值**只取「量測線」**
+      (被採用的那條序列自己宣告的 `attrs["currency"]`,且必須在 `_clean` **之前**讀,
+      `pd.Series(raw)` 會殺 attrs);換源時**跟著換**。量不到 → `""`(誠實的未知)。
+      ⛔ **不得**退回 `fd["currency"]`(宣告線:上游有死預設、`_correct_currency` 還會
+      覆蓋量到的正確值)。⚠️ 本輪**沒有任何下游消費者讀這一欄**,先封堵污染而已。
     §2.4:GS 未啟用(缺 Service Account / 未把 SA 加為 NAV Sheet 編輯者)→ `gs_enabled=False`
       + `gs_written=0`,UI 提示去授權(否則只存本機、容器重啟即清)。
     §3.2/§4.2 不變量:序列清洗為「唯一日期 × 非 NaN × NAV>0 × 遞增」後才採用/寫入。
@@ -730,7 +735,8 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         return int((x.index.max() - x.index.min()).days) if len(x) >= 2 else 0
 
     def _rescue_by_isin(code: str, s: "pd.Series", src: str,
-                        expected_ccy: str = "") -> "tuple[pd.Series, str, list]":
+                        expected_ccy: str = "", cur_ccy: str = "",
+                        ) -> "tuple[pd.Series, str, list, str]":
         """auto 抓到的跨度太短 → 用池中 ISIN(晨星)/ 代碼(CnYES)試長歷史,取更長者。
 
         gate:池中有 ISIN 才觸發(user 「填 ISIN 解鎖補淨值」的設計)。晨星走 ISIN→secId;
@@ -750,7 +756,12 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         由 Gate 0 當第二道 —— 理由與已知破口見 `shared/data_quality.py` 該節。
 
         Returns:
-            `(series, source, ccy_notes)` —— `ccy_notes` 是被拒絕的候選說明清單
+            `(series, source, ccy_notes, adopted_ccy)` —— `adopted_ccy` 是**最後被採用的
+            那一條序列自己宣告的幣別**(ISO 三碼或 `""`),供寫入端把觀測值存進
+            `nav_history.currency`(2026-09-01 第 7 欄)。⚠️ **一定要跟著換源一起換**:
+            換源之後那條序列的每一列都來自候選來源,再掛 MoneyDJ 的宣告就是憑空編一句
+            (§1)。沒換源 → 原封回傳傳進來的 `cur_ccy`。
+            `ccy_notes` 是被拒絕的候選說明清單
             (空 list = 沒有任何候選因幣別被拒)。⚠️ **消費者現況(2026-09-01 實測,不美化)**:
             只有 cron `scripts/weekly_nav_backfill.py` 讀它(逐檔 log ＋ 完成行聚合 ＋
             Step Summary 表)。**`ui/tab_manage.py` 的一鍵補抓沒有讀** —— 在 UI 端加渲染
@@ -764,9 +775,9 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
         except Exception as _e:  # noqa: BLE001 — 讀 ISIN 失敗不擋(退回 MoneyDJ 短窗)
             print(f"[backfill_to_gs] {code} resolve_isin 失敗:{type(_e).__name__}: {_e}",
                   file=_sys.stderr)
-            return s, src, _ccy_notes
+            return s, src, _ccy_notes, cur_ccy
         if not _isin:
-            return s, src, _ccy_notes
+            return s, src, _ccy_notes, cur_ccy
         # v19.477(user 提醒流程 code→ISIN→secId→**Yahoo chart** 抓 NAV):加 Yahoo 候選。
         # `_src_yahoo_finance_nav` 用池中 secId 組 `{secId}.F` 打 Yahoo v8 chart(range=10y,
         # 美國 IP 可用) —— 這是 user 明指的主路徑;晨星 timeseries / CnYES 為輔。三源都試,
@@ -801,8 +812,10 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
                           f"{_sw['reason']}", file=_sys.stderr)
                     _ccy_notes.append(_sw["reason"])
                     continue
-                s, src, _cur = _cand, f"{_name}(ISIN)", _span(_cand)
-        return s, src, _ccy_notes
+                # 幣別跟著序列一起換:被採用的每一列都來自這個候選來源(見 Returns)。
+                s, src, _cur, cur_ccy = (_cand, f"{_name}(ISIN)",
+                                         _span(_cand), _cand_ccy)
+        return s, src, _ccy_notes, cur_ccy
 
     for i, code in enumerate(uniq):
         if progress_cb is not None:
@@ -827,12 +840,18 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
             fd = auto_fetch_moneydj(code, oauth_client=oauth_client)
             raw = fd.get("series") if isinstance(fd, dict) else None
             _had_raw = raw is not None and hasattr(raw, "__len__") and len(raw) > 0
+            # ⚠️ 幣別要在 **`_clean(raw)` 之前**讀:`_clean` 第一行就是 `pd.Series(raw)`,
+            #    那個建構會**殺掉 attrs**(pandas 只在輸入 attrs 完全相同時才保留)。
+            #    這是「量測線」——序列自己宣告的幣別;量不到就 `""`(誠實的未知)。
+            #    ⛔ 不得退回 `fd["currency"]`(宣告線):它分不出量測與猜測,
+            #       上游有死預設、`_correct_currency` 還會覆蓋量到的正確值。
+            _ccy = _series_ccy(raw)
             s = _clean(raw)
             src = "moneydj"
             # ISIN 直驅長歷史救援:auto 跨度短 → 不管前綴,用 ISIN 試晨星 / CnYES(§v19.475)
             if _span(s) < _SPAN_TARGET_DAYS:
-                s, src, _ccy_notes = _rescue_by_isin(
-                    code, s, src, _expected_currency(code, fd))
+                s, src, _ccy_notes, _ccy = _rescue_by_isin(
+                    code, s, src, _expected_currency(code, fd), _ccy)
                 if _ccy_notes:
                     r["ccy_refused"] = "；".join(_ccy_notes)
             if s.empty:
@@ -850,7 +869,11 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
                 fund_name = (str(fd.get("fund_name") or fd.get("full_key") or "")
                              if isinstance(fd, dict) else "")
                 _points = [{"code": code, "nav": float(v), "nav_date": idx.date(),
-                            "fund_name": fund_name, "source": "backfill"}
+                            "fund_name": fund_name, "source": "backfill",
+                            # 2026-09-01 nav_history 第 7 欄(見上方 `_ccy`)。
+                            # 空字串 = 誠實的未知,**不是失敗** —— 全 repo 只有晨星 /
+                            # Yahoo / FundClear 會宣告幣別,MoneyDJ 主線不宣告。
+                            "currency": _ccy}
                            for idx, v in s.items()]
                 # ── Gate 0:與既有歷史對帳(理由與「保護不到什麼」見本函式上方註解)──
                 _cf = (analyze_backfill_conflict(

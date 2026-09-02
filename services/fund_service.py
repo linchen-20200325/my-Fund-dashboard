@@ -1080,7 +1080,14 @@ def _merge_nav_history_series(s_live: pd.Series, code: str, oauth_client=None) -
     - Sheet 讀失敗 → fail-soft:log + 回 (s_live, trace{success:False})(不炸整個健診)
     - 有新增點 → 回 (merged, trace{success:True, added:N})
     - v19.366 5/8:s_live=None(live 全敗)→ 視為空序列,純累積歷史可整段頂上(救援)
+    - 2026-09-01 幣別:merged 的 `attrs["currency"]` **不再無條件繼承 live**,改由
+      `shared.data_quality.reconcile_row_currencies` 逐來源比對(每一段都宣告同一個 ISO
+      三碼才敢宣告,否則拿掉)。理由與實測見下方賦值處。⚠️ `added <= 0` 早退分支
+      **不經過這裡**,那是刻意的:它回傳的是 `s_live` 物件本身,每一列都是 live 的列。
     """
+    from shared.data_quality import nav_series_currency as _series_ccy
+    from shared.data_quality import reconcile_row_currencies as _reconcile_ccy
+
     if s_live is None:
         s_live = pd.Series(dtype=float)
     try:
@@ -1133,6 +1140,24 @@ def _merge_nav_history_series(s_live: pd.Series, code: str, oauth_client=None) -
                      f"要等最舊的累積點掉出 live 的滾動窗，序列才會開始變長。"),
         }
     merged.attrs = dict(getattr(s_live, "attrs", {}) or {})
+    # ⛔ 幣別**不得**無條件繼承 live(2026-09-01,§1 / §4.1)。上面那行複製的是 s_live 的
+    #    整份 attrs —— 其中 `currency` 描述的只有 live 那幾筆,卻會被掛到「live ∪ 累積歷史」
+    #    這條混合序列上。實測:live 2 筆宣告 USD + hist 56 筆宣告 TWD → merged 58 點對外
+    #    宣告 **USD**,下游 1Y 報酬 / Sharpe / σ 全部照 USD 算,畫面上沒有任何異狀
+    #    (§1「錯誤的數字比沒有數字更危險」)。
+    #    改由 L0 `reconcile_row_currencies` 逐來源比對:**每一段都宣告了同一個 ISO 三碼**
+    #    才敢宣告,任一段未知或彼此不一致 → 拿掉這個 key(未知),**絕不挑一個、絕不換算**。
+    #    只把**真的有貢獻列**的那幾段送進去比(空序列沒有列,它的宣告不描述任何一筆)。
+    _ccy_decls: list = []
+    if len(s_live) > 0:
+        _ccy_decls.append(_series_ccy(s_live))
+    if len(s_hist) > 0:
+        _ccy_decls.append(_series_ccy(s_hist))
+    _merged_ccy = _reconcile_ccy(_ccy_decls)
+    if _merged_ccy:
+        merged.attrs["currency"] = _merged_ccy
+    else:
+        merged.attrs.pop("currency", None)   # 不留 live 的舊宣告(那會變成一句謊)
     merged.attrs["nav_history_merged"] = f"+{added} pts from {s_hist.attrs.get('source', 'nav_history')}"
     print(f"[nav_history] 🗂️ {code} 併入累積序列 +{added} 筆"
           f"(live {len(s_live)} → merged {len(merged)})")
