@@ -489,6 +489,16 @@ def _sec_nav_backfill_auto() -> None:
                 st.success(f"✅ {_msg}")
 
 
+def render_nav_backfill_auto_section() -> None:
+    """① 一鍵自動補全缺淨值的**公開**入口（實作仍是 `_sec_nav_backfill_auto`）。
+
+    存在的理由只有一個：⑤ 的「🗄️ NAV 歷史」合一區塊要呼叫它，而
+    `CLAUDE.md §8.2` 明禁跨模組直取底線開頭的 private symbol
+    （姊妹 repo 的 `V-PICKER-PRIV-1` 就是這個病）。**本函式不加任何行為**。
+    """
+    _sec_nav_backfill_auto()
+
+
 def _sec_nav_backfill() -> None:
     """🗄️ 補歷史淨值(① 一鍵自動補全部 + ② 手動 CSV 上傳)→ 存進 GS nav_history。
 
@@ -502,8 +512,29 @@ def _sec_nav_backfill() -> None:
     _sec_nav_backfill_auto()
     st.caption("── 或 ── 抓不到淨值的基金:從 CnYES / MoneyDJ 手動下載完整歷史 CSV → 上傳這裡 → 存進 "
                "nav_history,健診就有足夠序列算真實報酬(根治「抓不到 → 外推 → 假吃本金」)。")
+    render_nav_csv_manage_section()
+
+
+def render_nav_csv_manage_section(*, expander_label: str | None = None) -> None:
+    """② 本地基底 CSV：多檔上傳 → `cache/nav_history/{code}.json` ＋ 同步雲端，
+    外加逐檔的增量更新 / 下載備份 / 清除。
+
+    2026-09-02 線框 §03 ⑤ B「合一」抽出（**只搬位置，行為一行未改**）——
+    原本整段 inline 在 `_sec_nav_backfill()` 裡，抽出後 ⑤ 的「🗄️ NAV 歷史」
+    區塊才能在**不連帶把管理室其他分區也拉進來**的前提下呼叫它。
+
+    `expander_label` 讓合一入口改用功能導向的標題（合一後兩個舊標題都不留，
+    線框：「留任一個都會讓人以為另一個還在別頁」）；預設維持舊標題，
+    供 ⑤ **沒有**持有 `NAV_HISTORY` 時的原路徑使用（行為不變）。
+
+    ⚠️ **不要把它跟 `nav_history_gs.import_csv_text` 那條混為一談** ——
+    本函式走 `import_nav_csv_multi`：**要有代號欄**、可一次多檔、**會寫本地 cache**。
+    對帳單那條是單檔、代碼手填、**只寫雲端**、吃兩欄 CSV。兩者不可互相取代。
+    """
     # v19.461→472：🗄️ NAV 歷史資料管理(手動 CSV 上傳 / 匯出 / 增量)。widget key `_nh_*` 僅此處渲染。
-    with st.expander("🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）", expanded=False):
+    with st.expander(
+            expander_label or "🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）",
+            expanded=False):
         from services.nav_history_store import (
             clear_cache as _nh_clear,
             export_nav_csv as _nh_export,
@@ -627,6 +658,7 @@ def render_manage_tab() -> None:
     # 分支刻意保留：它是「⑤ 沒持有時本頁自己畫大標」的契約實作。
     from ui.helpers.settings_diag.merge_context import (
         MANAGE_HEADER as _SD_MANAGE_HEADER,
+        NAV_HISTORY as _SD_NAV_HISTORY,
         owned_by_settings_page as _settings_page_owns,
     )
     if not _settings_page_owns(_SD_MANAGE_HEADER):
@@ -641,14 +673,23 @@ def render_manage_tab() -> None:
         st.markdown(f"## {_section_label_tm('manage')}")
     render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
+    # ⚠️ 這份清單**照著實際會畫的分區長出來**，不是寫死的散文。
+    #    2026-09-02 之前它寫死「這一頁由上到下有 4 塊」＋ 4 條 —— 而 NAV 歷史一旦
+    #    被 ⑤ 收成合一入口，第 3 條就會指向一個**本頁根本不會畫**的區塊。
+    #    本 repo 一再記過同一個病：指路指到不存在的東西，比沒有指路更糟。
+    _blocks = [
+        "📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。"
+        "抓不到淨值的檔在這裡填 **ISIN**,系統就走晨星自動補淨值(v19.472 併入原「對照表」)。",
+        "🗓️ **除息行事曆** — 你持有基金的配息日曆。",
+    ]
+    if not _settings_page_owns(_SD_NAV_HISTORY):
+        _blocks.append(
+            "🗄️ **補歷史淨值** — 「🔄 一鍵自動補全部」把持倉＋選股池逐檔完整歷史"
+            "(含 ISIN→晨星 ~5.5 年)一次抓齊存雲端;抓不到的再手動上傳 CSV(根治吃本金誤判)。")
+    _blocks.append("🔔 **換股通報** — 設定 LINE 每週提醒。")
     st.info(
-        "**這一頁由上到下有 4 塊**:\n\n"
-        "1. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。"
-        "抓不到淨值的檔在這裡填 **ISIN**,系統就走晨星自動補淨值(v19.472 併入原「對照表」)。\n"
-        "2. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
-        "3. 🗄️ **補歷史淨值** — 「🔄 一鍵自動補全部」把持倉＋選股池逐檔完整歷史(含 ISIN→晨星 ~5.5 年)"
-        "一次抓齊存雲端;抓不到的再手動上傳 CSV(根治吃本金誤判)。\n"
-        "4. 🔔 **換股通報** — 設定 LINE 每週提醒。"
+        f"**這一頁由上到下有 {len(_blocks)} 塊**:\n\n"
+        + "\n".join(f"{_i}. {_b}" for _i, _b in enumerate(_blocks, 1))
     )
     # v19.462:移除「投資組合(持倉)」一覽(user 2026-08-17:帳本(配置&帳本 Tab)已有;
     # 且流程圖把 Portfolio 歸「配置&帳本」,管理室專責 Watchlist/選股池 + 補歷史淨值)。
@@ -656,7 +697,11 @@ def render_manage_tab() -> None:
     _sec_pool()
     st.divider()
     _sec_dividend_calendar()
-    st.divider()
-    _sec_nav_backfill()
+    # 2026-09-02 線框 §03 ⑤ B「合一」：NAV 歷史三個功能收成 ⑤ 的單一入口。
+    # ⑤ 持有 → 本頁**不畫**這一塊（否則同一頁會出現兩份 NAV 匯入）；
+    # ⑤ 沒持有（舊七分頁路徑 / 直接呼叫本函式）→ 照舊完整渲染，行為一字未變。
+    if not _settings_page_owns(_SD_NAV_HISTORY):
+        st.divider()
+        _sec_nav_backfill()
     st.divider()
     _sec_notify()

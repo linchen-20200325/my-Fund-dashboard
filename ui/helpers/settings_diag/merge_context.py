@@ -50,11 +50,25 @@ FETCH_DIAG: str = "fetch_diag"
 #: 同一塊不會被畫兩次。切換前的前置條件見 `policy_admin_bridge` docstring。
 POLICY_ADMIN: str = "policy_admin"
 
+#: 「🗄️ NAV 歷史」整塊（三個功能：對帳單 CSV 匯入 · 一鍵自動補全 · 累積狀態）。
+#: 線框 §03 ⑤ B「合一」：同一件事現在分在**兩個**分頁、連名字都不一樣 ——
+#: 管理室的「🗄️ NAV 歷史資料管理」與資料診斷的「🗂️ NAV 歷史匯入與累積狀態」。
+#: ⑤ 持有時，**兩個舊入口都不畫**，由 ⑤ 的 NAV 歷史區塊畫唯一一份。
+#:
+#: ⚠️ **「合一」合的是入口，不是實作** —— 三條寫入路徑**行為不等價，一條都沒有被刪**：
+#: 一鍵自動補全走 `nav_history_store.backfill_to_gs`（連外抓取 → 本地 cache ＋ 雲端）；
+#: 本地基底 CSV 走 `nav_history_store.import_nav_csv_multi`（**多檔**，代號讀自 CSV
+#: 第一欄 → 本地 cache ＋ 雲端）；對帳單 CSV 走 `nav_history_gs.import_csv_text`
+#: （**單檔**，代碼手填，**只寫雲端**、可吃無代號欄的兩欄 CSV）。
+#: 挑一條留、砍另外兩條 ＝ 刪功能，不是合併（線框要的是「三個功能一個入口」）。
+NAV_HISTORY: str = "nav_history"
+
 #: 合法的所有權名稱。**刻意寫成封閉集合**：拼錯字時要當場炸掉，
 #: 而不是安靜地回 False（那會讓區塊悄悄畫兩次 / 悄悄消失，而且沒有人會發現）
 #: —— `CLAUDE.md §1` Fail Loud。
 _KNOWN_PARTS: frozenset = frozenset({
     MANAGE_HEADER, DATA_GUARD_HEADER, MANUAL_HEADER, FETCH_DIAG, POLICY_ADMIN,
+    NAV_HISTORY,
 })
 
 #: 目前被 ⑤ 持有的區塊，**每條執行緒各一份**（理由見模組 docstring）。
