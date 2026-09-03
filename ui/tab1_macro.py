@@ -25,7 +25,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ui.helpers.ia import applied_form
-from ui.helpers.render_state import not_ready, system_error
+from ui.helpers.render_state import business_alert, not_ready, system_error
 
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
@@ -340,6 +340,240 @@ def _render_macro_indicator_card(title: str, signal: str, color: str,
                            config={"displayModeBar": False})
 
 
+# ════════════════════════════════════════════════════════════════
+# 總表 Section 02 — 5 卡快覽網格(2026-09-03 客戶拍板線框批次二)
+#
+# 客戶核准的線框把它插在「①結論」持久條與「②依據」之間:①結論維持不摺疊、
+# ④可信度維持持久條,本網格夾在中間。**本區塊不新增任何計算** —— 5 張卡
+# 全部複用既有、已在跑的判讀函式,只是換一種能一眼掃過的呈現方式(§1)。
+# 另有 3 張卡(資產水位建議 / 新聞情緒 / 總經燈號全表)本輪**明確不做**,
+# 客戶原線框已標「待審查」,見 `_render_top_card_grid` 結尾的 caption 與
+# `BACKLOG.md`「⏸ 待審查 — 總表 Section 02 三張快覽卡」。
+# ════════════════════════════════════════════════════════════════
+def _render_top_card_grid(ind: dict, phase: dict) -> None:
+    """渲染 Section 02 的快覽卡網格(固定 3 欄,複用 `_render_macro_indicator_card`)。
+
+    每張卡各自 try/except 隔離(§1 區塊隔離,同本檔①~④既有寫法):一張卡的
+    資料算不出來,不擋掉其餘卡片,也不擋掉下方 ② 依據表。**沒有算出來的卡
+    直接跳過,不補假資料**——凡是本函式沒有 append 進 `_cards` 的位置,
+    第二排就會少一格,不會有佔位假卡。
+
+    5 張卡的資料來源(全部是既有函式的既有輸出,零新運算):
+        景氣位階     — `phase`(呼叫端已算好的 `calc_macro_phase(ind)`,不重算)
+        波動與信用   — `st.session_state["_radar_v1921_top"]`
+                       (呼叫端「頂部雙速合議」已抓好的 `detect_risk_radar()`
+                       結果,同 `ui/tab1_macro_radar.py:81` 既有讀法,不重抓)
+        通膨與利率   — `calc_growth_inflation_axis(ind)`(純函式,零 I/O)
+        熱錢動向     — `services.hot_money_service.fetch_hot_money_frames()`
+                       (L2 facade,`@st.cache_data` 走與下方 ARCHIVED expander
+                       同一顆 L1 fetcher + 同一組 default 參數,同一把 cache key,
+                       不重抓;見 `ui/hot_money.py::refresh_hot_money_data`
+                       的既有 default 180d/5窗/50億/0.5%)
+        極端風險警語 — `macro_action_light(ind, phase.get("score"))`(純函式,
+                       與①結論同一顆,零額外 I/O)
+    """
+    _cards: list[dict] = []
+
+    # 卡 1 ── 📊 景氣位階
+    try:
+        _score = phase.get("score")
+        _score_str = f"{_score:.1f}/10" if isinstance(_score, (int, float)) else "—"
+        _trend_txt = f"{phase.get('trend_arrow', '')} {phase.get('trend_label', '')}".strip()
+        _cards.append(dict(
+            title="📊 景氣位階",
+            signal=f"{phase.get('phase', '—')}（{_score_str}）",
+            color=phase.get("phase_color") or _MACRO_CARD_LIGHT_COLOR["gray"],
+            value_str=_score_str,
+            note=phase.get("advice") or "尚未算出景氣位階",
+            label=_trend_txt or "—",
+            trend=None,
+            spark_key="top_phase",
+        ))
+    except Exception as _c1e:  # noqa: BLE001 — 一張卡失敗不得擋掉其餘卡片
+        system_error("快覽卡「景氣位階」渲染失敗", _c1e)
+
+    # 卡 2 ── 🌊 波動與信用(VIX + HY OAS,worse-of 兩燈)
+    try:
+        _radar_cache = st.session_state.get("_radar_v1921_top")
+        _radar_dict = _radar_cache[0] if (_radar_cache and _radar_cache[0]) else None
+        if _radar_dict:
+            _vix = _radar_dict.get("vix_level") or {}
+            _hy = _radar_dict.get("hy_oas_delta") or {}
+            _rank = {"🔴": 3, "🟡": 2, "🟢": 1}
+            _vix_rank = _rank.get(str(_vix.get("signal", ""))[:2], 0)
+            _hy_rank = _rank.get(str(_hy.get("signal", ""))[:2], 0)
+            _worse = _vix if _vix_rank >= _hy_rank else _hy
+            _vix_v, _hy_v = _vix.get("value"), _hy.get("value")
+            _vix_str = f"VIX {_vix_v:.1f}" if isinstance(_vix_v, (int, float)) else "VIX —"
+            _hy_str = f"HY {_hy_v:.2f}%" if isinstance(_hy_v, (int, float)) else "HY —"
+            _cards.append(dict(
+                title="🌊 波動與信用",
+                signal=_worse.get("signal") or "⬜ 無資料",
+                color=_worse.get("color") or _MACRO_CARD_LIGHT_COLOR["gray"],
+                value_str=f"{_vix_str} ｜ {_hy_str}",
+                note=_worse.get("note") or "—",
+                label="Yahoo ^VIX ＋ FRED HY OAS（風險雷達 10 燈之 2）",
+                trend=_vix.get("trend"),
+                spark_key="top_vix_hy",
+            ))
+        else:
+            _cards.append(dict(
+                title="🌊 波動與信用",
+                signal="⬜ 待取得",
+                color=_MACRO_CARD_LIGHT_COLOR["gray"],
+                value_str="—",
+                note="風險雷達本次未載入（未勾選或逾時）",
+                label="到「📡 載入總經資料」勾選「風險雷達」後重試",
+                trend=None,
+                spark_key="top_vix_hy",
+            ))
+    except Exception as _c2e:  # noqa: BLE001
+        system_error("快覽卡「波動與信用」渲染失敗", _c2e)
+
+    # 卡 3 ── 🌡️ 通膨與利率(成長 × 通膨四象限)
+    try:
+        from services.macro import calc_growth_inflation_axis  # noqa: PLC0415
+        _gi = calc_growth_inflation_axis(ind)
+        _cards.append(dict(
+            title="🌡️ 通膨與利率",
+            signal=f"{_gi.get('quad_icon', '')} {_gi.get('quadrant', '—')}".strip(),
+            color=_gi.get("quad_color") or _MACRO_CARD_LIGHT_COLOR["gray"],
+            value_str=(f"成長 {_gi.get('growth_score', 0):+.2f} ｜ "
+                      f"通膨 {_gi.get('inflation_score', 0):+.2f}"),
+            note=_gi.get("quad_desc") or "—",
+            label=(f"{_gi.get('n_growth', 0)} 個成長訊號、"
+                  f"{_gi.get('n_inflation', 0)} 個通膨訊號"),
+            trend=None,
+            spark_key="top_growth_inflation",
+        ))
+    except Exception as _c3e:  # noqa: BLE001
+        system_error("快覽卡「通膨與利率」渲染失敗", _c3e)
+
+    # 卡 4 ── 💰 熱錢動向(客戶核准由 ARCHIVED 摺疊區升格為常駐卡)
+    # SSOT:走與下方「📦 ARCHIVED — 台股熱錢監測」expander 同一顆 L2 facade
+    # (`services.hot_money_service.fetch_hot_money_frames`)+ 同一組 default
+    # 參數(180d/5窗/50億/0.5%,對齊 `refresh_hot_money_data` 既有 default)。
+    # `fetch_foreign_flow_series` / `fetch_usdtwd_series` 皆 `@st.cache_data`,
+    # 同一組參數 = 同一把 cache key,本卡與 expander 不會各打一次網路。
+    try:
+        from services.hot_money_service import fetch_hot_money_frames  # noqa: PLC0415
+        from ui.hot_money import build_signals as _hm_build_signals  # noqa: PLC0415
+        # 2026-09-03:token 讀取改走 `infra.config.get_secret`(§2.1 SSOT)而非裸
+        # `st.secrets.get(...)`——後者在**完全沒有 secrets 檔**時,`hasattr(st,
+        # "secrets")` 仍為 True,但 `.get()` 內部會 `_parse()` 直接
+        # `raise StreamlitSecretNotFoundError`(同 `app.py` 2026-08-15 那段已修
+        # 過的坑)。既有 `ui/hot_money.py` expander 沿用的是舊寫法,但那裡是
+        # 摺疊區、user 沒點開就不會跑到;本卡是**常駐**渲染,每次 rerun 都會
+        # 打到這一行,風險遠高於摺疊區,故本卡改用已修好的 SSOT helper。
+        from infra.config import get_secret as _hm_get_secret  # noqa: PLC0415
+        _hm_token = str(_hm_get_secret("FINMIND_TOKEN", "") or "")
+        _hm_flow, _hm_fx, _hm_ferr, _hm_xerr = fetch_hot_money_frames(180, _hm_token)
+        if _hm_flow.empty or _hm_fx.empty:
+            _cards.append(dict(
+                title="💰 熱錢動向",
+                signal="⬜ 待取得",
+                color=_MACRO_CARD_LIGHT_COLOR["gray"],
+                value_str="—",
+                note=(_hm_ferr or _hm_xerr or "外資買賣超／USDTWD 資料不足"),
+                label="展開下方「📦 台股熱錢監測」查看完整判讀",
+                trend=None,
+                spark_key="top_hot_money",
+            ))
+        else:
+            _hm_sig = _hm_build_signals(_hm_flow, _hm_fx, window=5,
+                                        flow_thr=50.0, fx_thr=0.5)
+            if _hm_sig.empty:
+                _cards.append(dict(
+                    title="💰 熱錢動向",
+                    signal="⬜ 待取得",
+                    color=_MACRO_CARD_LIGHT_COLOR["gray"],
+                    value_str="—",
+                    note="外資與匯率資料沒有重疊的交易日",
+                    label="展開下方「📦 台股熱錢監測」查看完整判讀",
+                    trend=None,
+                    spark_key="top_hot_money",
+                ))
+            else:
+                _hm_latest = _hm_sig.iloc[-1]
+                _hm_state = str(_hm_latest.get("state", "") or "")
+                _hm_div = bool(_hm_latest.get("is_divergence", False))
+                if _hm_div:
+                    _hm_color = _MACRO_CARD_LIGHT_COLOR["yellow"]
+                elif "流入" in _hm_state:
+                    _hm_color = _MACRO_CARD_LIGHT_COLOR["green"]
+                elif "流出" in _hm_state:
+                    _hm_color = _MACRO_CARD_LIGHT_COLOR["red"]
+                else:
+                    _hm_color = _MACRO_CARD_LIGHT_COLOR["gray"]
+                _hm_net = _hm_latest.get("foreign_net_yi")
+                _hm_net_str = f"外資 {_hm_net:+.0f}億" if isinstance(_hm_net, (int, float)) else "—"
+                _hm_trend = (_hm_flow["foreign_net_yi"].tail(8).tolist()
+                            if "foreign_net_yi" in _hm_flow.columns else None)
+                try:
+                    _hm_date_str = str(pd.Timestamp(_hm_latest["date"]).date())
+                except Exception:  # noqa: BLE001 — 日期格式異常不擋卡片
+                    _hm_date_str = "—"
+                _cards.append(dict(
+                    title="💰 熱錢動向",
+                    signal=_hm_state or "—",
+                    color=_hm_color,
+                    value_str=_hm_net_str,
+                    note=str(_hm_latest.get("interpretation", "") or "")[:70] or "—",
+                    label=f"{_hm_date_str}｜展開下方「📦 台股熱錢監測」看完整三角交叉圖",
+                    trend=_hm_trend,
+                    spark_key="top_hot_money",
+                ))
+    except Exception as _c4e:  # noqa: BLE001
+        system_error("快覽卡「熱錢動向」渲染失敗", _c4e)
+
+    # 卡 5 ── ⚠️ 極端風險警語(macro_action_light 的 override 觸發燈)
+    try:
+        from services.macro import macro_action_light as _mal_c5  # noqa: PLC0415
+        _al5 = _mal_c5(ind, phase.get("score"))
+        _reasons5 = _al5.get("reasons") or []
+        if _al5.get("override"):
+            _sig5, _col5 = "🔴 已觸發", _MACRO_CARD_LIGHT_COLOR["red"]
+        elif phase.get("score") is None:
+            _sig5, _col5 = "⬜ 資料不足", _MACRO_CARD_LIGHT_COLOR["gray"]
+        else:
+            _sig5, _col5 = "🟢 未觸發", _MACRO_CARD_LIGHT_COLOR["green"]
+        _cards.append(dict(
+            title="⚠️ 極端風險警語",
+            signal=_sig5,
+            color=_col5,
+            value_str=f"{len(_reasons5)} 項訊號",
+            note="；".join(_reasons5) or "—",
+            label="殖利率倒掛／Sahm≥0.5／VIX≥30 三者任一觸發即轉紅",
+            trend=None,
+            spark_key="top_extreme_risk",
+        ))
+    except Exception as _c5e:  # noqa: BLE001
+        system_error("快覽卡「極端風險警語」渲染失敗", _c5e)
+
+    if not _cards:
+        st.caption("⬜ 五張快覽卡本次都沒有算出來，請看上方各區塊的錯誤訊息。")
+    else:
+        # 固定 3 欄自適應網格：5 張卡分兩排，第二排只有 2 張（或更少，視
+        # 上面哪幾張失敗而定）—— `st.columns(3)` 字面用滿，不用變數湊欄數
+        # （§8.2.A0 判定 1：3 欄是分層概念不是字面路徑要求，但**這裡**確實
+        # 就是要 3 欄字面網格，不必迂迴；`tests/test_ui_grid_contract.py`
+        # 的 fail-closed 規則只認整數字面 3）。
+        for _row_start in range(0, len(_cards), 3):
+            _row_cards = _cards[_row_start:_row_start + 3]
+            _cols = st.columns(3)
+            for _ci, _card in enumerate(_row_cards):
+                with _cols[_ci]:
+                    _render_macro_indicator_card(**_card)
+
+    # 3 張本輪明確不做的卡：客戶線框已標「待審查」，不能放假資料佔位（§1），
+    # 也不能悄悄消失（§-2 揭露義務）——只留一句待審查說明 + BACKLOG 追蹤。
+    st.caption(
+        "📌 待審查（線框草稿已提交客戶，暫緩至核准後施作）：資產水位建議、"
+        "新聞情緒、總經燈號全表 — 追蹤見 `BACKLOG.md`「⏸ 待審查 — 總表 "
+        "Section 02 三張快覽卡」。"
+    )
+
+
 def _now_tw():
     return datetime.datetime.now(_TW_TZ)
 
@@ -350,19 +584,53 @@ def _calc_data_health(indicators=None):
     return _calc_data_health_pure(ind)
 
 
-def _action_light_renderer(light: str):
-    """`macro_action_light()` 的燈色 → streamlit 原生告示元件。
+def _business_alert_action_light(msg: str) -> None:
+    """`business_alert()` 版的 🔴 結論燈,呼叫介面與 `st.error(msg: str)` 相容。
 
-    🟢 → `st.success` / 🔴 → `st.error` / 其餘(含 🟡 與服務層日後新增的燈)
-    → `st.warning`。**用原生元件不手刻 HTML**:告示框的底色/邊框由 theme 提供,
-    不必新造色票(§3.3),且 emoji + 文字本身就帶語意,不靠顏色單獨編碼。
+    2026-08-28 客戶拍板(線框 §03「顏色:三態統一規則」)+ 2026-09-03 客戶批次二
+    再次點名:**①結論的 🔴 是「這幾個訊號亮了,建議轉保守」—— 分析算完了、
+    答案就是這個,不是系統壞掉**。它與「系統真出錯」(抓取/渲染失敗)用同一個
+    `st.error` 紅框,會把「不要相信這個畫面」與「相信這個畫面並據以行動」
+    畫成同一件事(`ui/helpers/render_state.py` 檔頭原文)。
+
+    呼叫端(`render_macro_tab`)組出的是**單一字串**(第一行粗體結論 + 換行 +
+    `- ` 條列理由),對齊 `st.success` / `st.warning` / `st.error` 的呼叫介面
+    (皆吃單一 `msg: str`)。`business_alert(title, lines, *, footer="")` 要的是
+    拆開的 title + lines list,故這裡依既有慣例(呼叫端組字串時使用的分隔規則)
+    把它拆回去 —— 不改變呼叫端半個字,只在 renderer 這一層轉接。
+    """
+    _parts = msg.split("\n")
+    _title = _parts[0].strip("*") if _parts else "結論"
+    _lines = [p for p in _parts[1:] if p]
+    business_alert(_title, _lines)
+
+
+def _action_light_renderer(light: str):
+    """`macro_action_light()` 的燈色 → streamlit 原生告示元件 / 業務警訊卡。
+
+    🟢 → `st.success` / 🔴 → `_business_alert_action_light`(業務警訊卡,**不是**
+    `st.error`)/ 其餘(含 🟡 與服務層日後新增的燈)→ `st.warning`。
+
+    ⚠️ **2026-09-03 就地更正(有意識的更正,不是漏刪 · 決策者:客戶批次二拍板)**:
+    🔴 原本走 `st.error`(系統錯誤框)。全 repo 唯一 production 呼叫點是
+    `render_macro_tab()` 的①結論,餵給它的**只有** `macro_action_light()` 的輸出
+    ——那是**業務判斷**(硬衰退/恐慌 override、景氣位階三級),從頭到尾沒有一條
+    分支代表「抓取/渲染出錯」(系統真出錯已由外層 `except ... system_error(...)`
+    接手,不會流進本函式)。**手上沒有 exception、印的是業務結論** → 依
+    `ui/helpers/render_state.py` 的三態分離規則,不得走系統紅框。
+    （查證:`git grep -n "_action_light_renderer" -- '*.py'` —— 除本檔定義與
+    測試檔外,唯一呼叫點是 `render_macro_tab()` 內那一行，見同檔行內註解。）
+
+    🟢/🟡 兩支維持原生元件不動:**用原生元件不手刻 HTML** 的理由對它們仍然成立
+    (告示框底色/邊框由 theme 提供,不必新造色票,§3.3);只有 🔴 這一支需要
+    脫離「錯誤框」語彙,故單獨換掉。
 
     未知燈色一律落到 warning(偏保守),不當成綠燈 —— §1 不下假綠燈。
     """
     if light == "🟢":
         return st.success
     if light == "🔴":
-        return st.error
+        return _business_alert_action_light
     return st.warning
 
 
@@ -1241,6 +1509,10 @@ def render_macro_tab() -> None:
             # 消失的是本頁**最上面那個結論**（現在能不能買 + 理由）。灰字會讓人以為
             # 「還沒載入、按一下就好」，實際按幾次都一樣。
             system_error("① 買賣總結燈渲染失敗", _al_e)
+
+        # ══ Section 02 —— 5 卡快覽網格(客戶拍板線框批次二,見上方
+        # `_render_top_card_grid` docstring)══════════════════════════
+        _render_top_card_grid(ind, phase)
 
         # ══ ② 依據 —— 表格(兩把尺並陳 + 各桶狀態 + 每列指路)══════════
         # 這張表取代三個原本各自為政的區塊,資料一格不少地併進來:
