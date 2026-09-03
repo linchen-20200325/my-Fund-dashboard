@@ -702,7 +702,11 @@ def _phase_cutoff_note() -> str:
 # 表下註記兩層的標題(2026-09-03 減字 B:漸進揭露)。
 # 摺疊標籤必須說清楚裡面**是什麼**,否則讀者不知道自己該不該點 ——
 # 這是「收摺」與「藏起來」的唯一分界。
-_PINNED_FOOTNOTE_LEAD = "🔍 上表放不下、且沒有欄內短版的兩則:"
+# 2026-09-04 稽核 #8:原句寫死「兩則」——🌳 長期那一則掛在
+# `if "long" in _faces:`(見 `_evidence_footnote_items`),是**條件性**的,
+# 缺 long 時常駐只剩 1 則,句子就會自打嘴巴。不寫死數量(§3.3 的同一把尺,
+# 套到使用者可見字串上)。
+_PINNED_FOOTNOTE_LEAD = "🔍 上表放不下、且沒有欄內短版的:"
 _FOOTNOTE_EXPANDER_LABEL = "🔍 各列判讀門檻全文(上表「說明」欄的完整版)"
 
 # 表格欄位順序(caller 不得自行改名 —— 改了 DataFrame 會出現 NaN 欄)
@@ -921,6 +925,42 @@ def split_evidence_footnotes(
             [_t for _t, _c in _items if _c])
 
 
+def _two_scales_sentence(rows) -> str:
+    """📐 那句 —— **只點名表上真的有那一列的尺**(2026-09-04 稽核 #9)。
+
+    ⚠️ **這條要修的錯,比「單位重複」更嚴重,寫清楚**:2026-09-03 那版把單位從
+    句子裡搬出去,只留「見上表『說明』欄」的指路。🌳 長期那一列是**條件性**的
+    (`_evidence_footnote_items` 裡掛在 `if "long" in _faces:`)——
+    表上沒有那一列時,這句話會指向一個不存在的目標。**改版前的舊句把單位內嵌成
+    常數,就算指路錯了讀者仍拿得到單位;本次改寫讓它退化成「指路錯 = 空指路」,
+    這個退化是本次改動造成的,不是繼承的。**
+
+    修法與 A1(`_no_spec_rule_pointer`)同一把尺:**owner 由資料決定,不寫死**。
+    `rows` 是 `build_evidence_rows()` 的輸出,「面向」欄的值就是各列的桶標籤 ——
+    只點名真的出現在 `rows` 裡的那些尺,一把都沒有時退回一句不提名字的警告
+    (§1:寧可少一個名字,不可指向空氣)。
+
+    ⛔ **範圍刻意限縮在這裡**:不動 `_evidence_footnote_items` 的分類、不動
+    A1 去重、不動 `split_evidence_footnotes` 的分流 —— 那幾段是既有突變主要打
+    的地方,動了要整組重驗(2026-09-04 總管裁決)。
+    """
+    _faces_on_table = {str(_r.get("面向", "")) for _r in (rows or [])}
+    _long_face = f'{_BUCKET_META["long"]["emoji"]} {_BUCKET_META["long"]["title"]}'
+    _scales = [f"{_long_face} 是景氣**位階**" for _f in [_long_face] if _f in _faces_on_table]
+    _scales += [f"{_STRENGTH_FACE} 是多空**強度**"
+               for _f in [_STRENGTH_FACE] if _f in _faces_on_table]
+    if len(_scales) >= 2:
+        return ("📐 " + "、".join(_scales) + " —— "
+                "兩者不同義,別互相換算(各自的單位與範圍見上表「說明」欄)。")
+    if len(_scales) == 1:
+        # 只剩一把尺在表上時,「不同義、別互相換算」這個跨列警告本身沒有意義
+        # (沒有第二把尺可比較)—— 改成單純點出這一把尺去哪讀,不硬留「兩者」措辭。
+        return f"📐 {_scales[0]}(單位與範圍見上表「說明」欄)。"
+    # 兩把尺都不在表上(理論上不會發生,`_STRENGTH_FACE` 那列本身無條件產生;
+    # 保留是為了不讓這句話在極端輸入下印出一句指向空氣的話)。
+    return "📐 上表各列「說明」欄已標明各自的判讀單位與範圍,不同列不得互相換算。"
+
+
 def render_evidence_table(rows, footnotes=None, *,
                           collapsed_footnotes=None) -> None:
     """② 依據表渲染 —— 走 `ui/components/tables.styled_dataframe`。
@@ -950,8 +990,7 @@ def render_evidence_table(rows, footnotes=None, *,
     # 改寫後仍自我完備:點名兩把尺各是什麼(位階 / 強度)、講出警告、指出單位在哪讀;
     # 被拿掉的只有那兩份逐字複本。
     _cap_parts = [
-        "📐 🌳 長期 是景氣**位階**、🩺 綜合健康度 是多空**強度** —— "
-        "兩者不同義,別互相換算(各自的單位與範圍見上表「說明」欄)。",
+        _two_scales_sentence(rows),
         # 稽核 🟡 建議 6:指路欄不可點 → 補一份往下捲的順序當目錄(區段名導出,見 `_section_walk`)
         # 沿革:稽核 🟡 建議 10 當時四段之間還夾著別的一級區塊,照字面往下捲會先
         # 遇到別的東西而以為走錯,故一度退守成只宣稱「這四段彼此的先後」。

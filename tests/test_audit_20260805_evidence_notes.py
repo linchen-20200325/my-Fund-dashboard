@@ -343,6 +343,63 @@ class TestNoteMatchesTheActualReading:
         assert _owners == ["⚠️ 拐點"], (
             f"少了 📈 中期時,全文沒有交棒給剩下的全綠列:{_owners!r}")
 
+    def test_the_pointer_targets_a_row_other_than_mid_when_data_says_so(self):
+        """2026-09-04 稽核 + 總管複驗補的一格 —— 修正**測試涵蓋率**,不是修實作。
+
+        ⚠️ **上面兩條測試都通不過「把指路目標寫死成『📈 中期』」這個突變**,
+        原因不是實作有洞,是**兩條的情境都恰好讓真 owner 等於「📈 中期」**:
+          - `test_the_all_green_rule_is_printed_once_and_the_rest_point_at_it`
+            用 `{PMI:55, SAHM:0.1}` —— 📈 中期(PMI 健康、無 spec)真的是第一個
+            吃到規則的列,**寫死「📈 中期」在這個情境下剛好碰對答案**。
+          - `test_the_pointer_follows_the_data_it_is_not_hardcoded` 用
+            `{PMI:45, VIX:15, SAHM:0.1}` —— **全場只有 ⚠️ 拐點一個無 spec 列**,
+            指路分支(`if _rule_owner:` 那半)**根本沒被執行到**,只驗了
+            「誰是第一個 owner」,沒驗「第二個以後指不指得對」。
+
+        本測試用 `{PMI:45, SAHM:0.1}`(稽核給的可達情境):📈 中期因 PMI 45
+        落在收縮區間 → **有 spec_key(pmi)**,不再是無 spec 列;剩下 🎯 短線
+        (無 VIX/HY,`gray`)與 ⚠️ 拐點(SAHM 安全,`green`)都是無 spec 列
+        —— **兩個都無 spec,指路分支真的會執行,且真 owner 是 🎯 短線,不是
+        📈 中期**。把指路目標寫死成「📈 中期」,這條會紅(而上面兩條不會)。
+
+        ⚠️ 同時記一筆:`_NO_SPEC_SHORT` / `_NO_SPEC_READ_RULE` 掛在
+        `spec_key is None`,**不掛在 `level == "green"`** —— 🎯 短線在這裡是
+        `gray`(完全無資料)而不是 `green`,一樣吃到「全綠判讀規則」這句話。
+        這是既有行為,本測試只是把它用來挑對情境,不是新斷言。
+        """
+        from ui.helpers.macro.beginner_view import (
+            _NO_SPEC_READ_RULE,
+            _no_spec_rule_pointer,
+        )
+        from ui.helpers.macro.beginner_view import compute_five_bucket_summary
+        _ind = {"PMI": {"value": 45.0}, "SAHM": {"value": 0.1}}
+        _s = compute_five_bucket_summary(_ind, phase_info=_PHASE, news_items=[])
+        assert (_s.get("mid") or {}).get("spec_key") == "pmi", (
+            "情境設錯:📈 中期本該有 spec_key(pmi),實際沒有 —— "
+            "這條測試的前提(中期不是無 spec 列)不成立")
+        _no_spec_rows = [_k for _k in ("mid", "short", "inflection", "news")
+                        if (_s.get(_k) or {}).get("spec_key") is None]
+        assert len(_no_spec_rows) >= 2, (
+            f"情境設錯:無 spec 列只有 {_no_spec_rows},指路分支驗不到")
+
+        _fn = _footnote_list(_ind)
+        _owner = next(_f.split(":", 1)[0] for _f in _fn if _NO_SPEC_READ_RULE in _f)
+        assert _owner != "📈 中期", (
+            "情境設錯:真 owner 剛好又是「📈 中期」,擋不住把指路目標寫死的突變")
+        _pointer = _no_spec_rule_pointer(_owner)
+        # 只檢查**真的無 spec** 的那幾列(§3.3:owner 集合本身也不重打,從
+        # `_s` 反解)—— 有 spec_key 的列(如這裡的 📈 中期)印的是它自己的
+        # 門檻全文,本來就不該指向 owner,不在本斷言的射程內。
+        _face_by_key = {"mid": "📈 中期", "short": "🎯 短線",
+                        "inflection": "⚠️ 拐點", "news": "📰 新聞"}
+        for _k in _no_spec_rows:
+            _face = _face_by_key[_k]
+            if _face == _owner:
+                continue
+            _mine = next(_f for _f in _fn if _f.startswith(_face))
+            assert _pointer in _mine, (
+                f"{_face} 沒有指向真 owner「{_owner}」,實際:{_mine!r}")
+
     def test_unknown_spec_key_fails_loud(self):
         """§1:registry 查不到的 spec key 當場炸,不得在說明欄印一段指向
         不存在指標的門檻(同 `section_hint` 的既有處置)。"""
