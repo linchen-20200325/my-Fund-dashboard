@@ -107,6 +107,21 @@ D 資料診斷 → E 說明書**。
 widget key 與寫入路徑要收斂），留給接線後的收斂批次；**本批兩個入口原樣並存**。
 在 ⑤ 內兩者分屬 B／D 兩個分區，D 又在 gate 之後 —— 不會同屏出現兩份。
 
+⚠️ **2026-09-02 就地更正：上面整段是舊狀態，那個「收斂批次」已經做完了。**
+**有意識的變更，不是漏刪**（日期 **2026-09-02** · 決策者：**AI 總管** ·
+依據：客戶拍板線框 §03 ⑤ B「合一 NAV 歷史 —— 三個功能一個入口」）。
+**舊表述在它寫下的當天是對的**（WP-E 確實刻意不合併，理由「屬行為變更」也沒錯）；
+**被權衡掉的只是它的狀態**。
+**現況**：兩個舊入口都由 `merge_context.NAV_HISTORY` 旗標守住（⑤ 持有 → 兩邊都不畫），
+唯一一份由 `ui/helpers/settings_diag/nav_history_section.py::render_nav_history_section()`
+在 B 分區畫出來，標題為「🗄️ NAV 歷史」，**兩個舊標題都不留**。
+⚠️ **合的是入口，不是實作** —— 三條寫入路徑實測**行為不等價**
+（多檔/單檔、代號來源、寫本機/只寫雲端、CSV 要不要代號欄），
+**一條都沒有刪**，只是收到同一個標題底下。逐項對照見該 helper 的模組 docstring。
+⚠️ 舊表述那句「D 又在 gate 之後 → 不會同屏出現兩份」**當時就只是緩解，不是解法**：
+使用者只要勾了診斷 gate 就會同屏看到兩份。守衛：
+`tests/test_ia_tab5_nav_history_merge.py`（gate 開著也只有一份）。
+
 ⚠️ ~~尚未接線（刻意）~~ → **已接線（2026-08-31 WP-F）**
 --------------------------------------------------------
 ~~本檔**還沒有**被 `app.py` 掛上去；`render_manage_tab` / `render_data_guard_tab` /~~
@@ -138,6 +153,7 @@ from ui.helpers.settings_diag.merge_context import (
     DATA_GUARD_HEADER,
     MANAGE_HEADER,
     MANUAL_HEADER,
+    NAV_HISTORY,
     settings_page_owns,
 )
 from ui.helpers.settings_diag.policy_admin_bridge import render_policy_admin_bridge
@@ -201,13 +217,52 @@ def _render_conn_section() -> None:
 
 
 def _render_maintain_section() -> None:
-    """B（🗄️ 資料維護）＋ C（🔔 通報）—— 本批以整支管理室原樣承接，不拆。"""
+    """B（🗄️ 資料維護）＋ C（🔔 通報）—— 本批以整支管理室原樣承接，不拆。
+
+    ⚠️ **2026-09-02 就地更新：NAV 歷史已收成合一入口**（有意識的變更，不是漏刪 ·
+    決策者：AI 總管 · 依據：客戶拍板線框 §03 ⑤ B「合一 NAV 歷史 —— 三個功能一個入口」）。
+    模組 docstring 的「📌 (d) NAV 匯入雙入口 —— 據實登記，不合併」那一段
+    **自本次起是舊狀態**，就地更正見該處。
+    """
     st.subheader("🗄️ 資料維護與通報（管理室）", anchor=ANCHOR_MAINT)
+    from ui.helpers.settings_diag.nav_history_section import (
+        render_nav_manual_section,
+        render_nav_status_section,
+    )
     from ui.tab_manage import render_manage_tab
 
     # ⑤ 已畫分區標題 → 管理室不再畫自己的 `##` 頁面大標（其餘一行不動）。
-    with settings_page_owns(MANAGE_HEADER):
+    # ⑤ 同時持有 NAV_HISTORY → 管理室**不畫**它自己那份「🗄️ 補歷史淨值」，
+    # 資料診斷那份「🗂️ NAV 歷史匯入與累積狀態」同樣不畫（見各該檔的極性守衛）；
+    # 唯一一份由下面兩個區塊畫出來。
+    #
+    # ⚠️ **這裡的擺法是過渡狀態，據實寫明**：線框 `ia-wireframe.html` Tab 05 的
+    #    最終順序是「資料來源健康度 → NAV 累積狀態 → 連線與金鑰 → 手動補資料 →
+    #    使用手冊」，兩塊之間**夾著「連線與金鑰」**。把 ⑤ 重組成那五塊屬 **T18 批次**
+    #    （T18 本來就要動「連線與金鑰」，同一塊不能兩批同時改），**本批不做**。
+    #    本批只把 NAV 由「一塊」拆成「兩塊」並維持**狀態在前、寫入在後**的相對順序。
+    #
+    # ⛔ **T18 必讀：守衛「需要」更新，不要照抄本批的宣稱。**
+    #    本批 PR 曾寫「T18 插入之後不必改守衛」——**那句話是假的，已撤回**
+    #    （2026-09-02 獨立稽核實測推翻）。正確說法分兩層：
+    #    - **斷言的語意會存活**：`test_two_blocks_use_the_ssot_labels_and_status_comes_before_manual`
+    #      比的是兩塊標題的**相對索引**（`_status_at < _manual_at`），中間插入任何東西都不影響。
+    #    - **但它驅動的入口會消失**：那條測試跑的是 `_render_maintain_section()`。
+    #      線框 Tab 05 的五個 `<h4>` 順序是「資料來源健康度 / NAV 累積狀態 /
+    #      **連線與金鑰** / 手動補資料 / 使用手冊」——「連線與金鑰」**夾在兩塊中間**，
+    #      所以 T18 一定得把這兩塊拆出這個入口。稽核實際模擬了一次（把 manual 塊移出
+    #      本函式、另成 `safe_section`，全域相對順序仍是狀態在前），結果：
+    #          FAILED test_two_blocks_use_the_ssot_labels_and_status_comes_before_manual
+    #          E AssertionError: 沒畫出「手動補資料」標題 '### 手動補資料'
+    #    → **T18 要做的是把那條守衛的驅動點改成新的入口（或整頁），不是刪掉它。**
+    #    ⚠️ 該模擬保留了 `NAV_HISTORY` 綁定才只紅一條；若 T18 同時把它移出本分區，
+    #      `test_settings_page_own_sections_bind_the_expected_flags` 會一起紅。
+    with settings_page_owns(MANAGE_HEADER, NAV_HISTORY):
         render_manage_tab()
+        st.divider()
+        render_nav_status_section()
+        st.divider()
+        render_nav_manual_section()
 
 
 def _render_diag_section() -> None:
@@ -239,7 +294,12 @@ def _render_diag_section() -> None:
 
     _update_data_registry()
     # ⑤ 已畫分區標題 → 診斷頁不再畫自己的 `##` 頁面大標（其餘一行不動）。
-    with settings_page_owns(DATA_GUARD_HEADER):
+    # ⚠️ **`NAV_HISTORY` 在這裡也要持有，而且這一項最容易漏** —— 所有權是
+    #    thread-local ＋ context manager 作用域，B 分區那個 `with` 一離開就還原了。
+    #    漏掉它的後果不是報錯，是「🗂️ NAV 歷史匯入與累積狀態」**又在 D 分區畫一次**，
+    #    合一當場失效而且沒有任何東西會叫。守衛：
+    #    `tests/test_ia_tab5_nav_history_merge.py::test_whole_page_renders_exactly_one_nav_entry`。
+    with settings_page_owns(DATA_GUARD_HEADER, NAV_HISTORY):
         render_data_guard_tab()
 
 

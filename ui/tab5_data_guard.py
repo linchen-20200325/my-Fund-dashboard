@@ -24,6 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.ia import applied_form
 from ui.helpers.render_state import not_ready, system_error
 
 from shared.colors import BG_DARK_AMBER_2, BG_DARK_GREEN_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_2, GH_BG_CARD, GH_BG_HOVER, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GRAY_55, GRAY_66, GRAY_AA, GRAY_BB, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_300, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, TRAFFIC_YELLOW  # v19.390 V3b:燈號收 TRAFFIC SSOT
@@ -207,6 +208,7 @@ def render_data_guard_tab() -> None:
         # 在 production **恆不觸發**。分支刻意保留（契約實作，同 tab_manage）。
         from ui.helpers.settings_diag.merge_context import (
             DATA_GUARD_HEADER as _SD_DATA_GUARD_HEADER,
+            NAV_HISTORY as _SD_NAV_HISTORY,
             owned_by_settings_page as _settings_page_owns,
         )
         if not _settings_page_owns(_SD_DATA_GUARD_HEADER):
@@ -1525,130 +1527,20 @@ def render_data_guard_tab() -> None:
 
     # ══════════════════════════════════════════════════════
     # v19.361 PR-2(A)：保單對帳單 CSV 歷史匯入 → nav_history 累積(L3→L2)
+    # 2026-09-02 線框 §03 ⑤ B「合一」：⑤ 持有 NAV_HISTORY 時，本頁**不畫**這一塊 ——
+    # 它與管理室那塊在合併頁裡是同一件事，⑤ 的「🗄️ NAV 歷史」區塊畫唯一一份。
+    # ⑤ 沒持有（舊路徑 / 直接呼叫本函式）→ 照舊完整渲染，行為一字未變。
     # ══════════════════════════════════════════════════════
-    st.divider()
-    # 裡面第一行就是「🔴 累積未啟用」的致命狀態燈 —— 收起來的話使用者永遠不會知道
-    # 歷史淨值根本沒在累積（原則 1）。原本靠「永遠展開的 expander」達成,但那層殼
-    # 對使用者只是多一圈邊框 + 一個可以把狀態燈關掉的入口。改成標題 + container,
-    # 狀態燈與匯入表單一律常駐。
-    st.markdown("### 🗂️ NAV 歷史匯入與累積狀態（保單對帳單 CSV → nav_history）")
-    with st.container():
-        # v19.362 ①:累積狀態燈 — 終結「secrets 沒設 = 靜默略過,以為在累積其實沒有」
-        try:
-            # 稽核 N1-d:改走本檔頂部的 TTL 快取包裝(顯示語意不變,只擋重複打 API)
-            _ni_st = _cached_nh_status()
-            if _ni_st["enabled"]:
-                st.caption("🟢 **累積狀態:已啟用** — App 抓到的淨值會自動累積到 "
-                           "Google Sheet `nav_history` 分頁")
-            else:
-                # v19.379:細分病因(放錯地方 / 引號貼壞 / 整份 secrets 沒生效)
-                _diag = _ni_st.get("diag", {})
-                _lines = [f"🔴 **累積未啟用**:缺 {', '.join(_ni_st['missing'])} "
-                          "→ 淨值不會累積、下方匯入也無法寫入。"]
-                _sa_d = _diag.get("google_service_account")
-                if _sa_d == "absent":
-                    _lines.append("• `google_service_account`:**App 完全沒讀到這把 key** → 檢查："
-                                  "有按 **Save** 嗎?有 **Reboot app** 嗎?名字是不是**全小寫**?"
-                                  "是不是存在**這個 App**(不是別的 App / 不是 GitHub)的 Secrets?")
-                elif _sa_d == "unparseable":
-                    _lines.append("• `google_service_account`:**有讀到值,但 JSON 解析失敗** → "
-                                  "包 JSON 要用 `'''`(三個**單**引號,不是雙引號);檢查內容有沒有貼歪 / 缺字 / 結尾少了 `'''`。")
-                elif _sa_d == "no_client_email":
-                    _lines.append("• `google_service_account`:JSON 有解析但**缺 client_email** → JSON 貼不完整。")
-                if _diag.get("macro_weights_sheet_id") == "absent":
-                    _lines.append("• `macro_weights_sheet_id`:**沒讀到** → 同上(全小寫、放對 App、Save + Reboot)。")
-                if _diag.get("st_secrets_alive") is False:
-                    _lines.append("⚠️ 連既有的 `FRED_API_KEY` 都讀不到 → **整份 secrets 沒生效**"
-                                  "(TOML 格式壞 / 放錯 App / 沒 reboot),不是這兩把單獨的問題。")
-                elif _diag.get("st_secrets_alive") is True:
-                    _lines.append("✅ 旁證:`FRED_API_KEY` 讀得到 → secrets 本身有效,問題**只在上面這兩把**。")
-                st.error("\n\n".join(_lines))
-        except Exception as _e_st:
-            # 這顆燈答的是「能不能累積」。它自己掛掉時,畫面上沒有燈 ——
-            # 與「燈是綠的」在灰字之下難以分辨。
-            system_error("NAV 累積狀態檢查失敗", _e_st,
-                         hint="這次查不出雲端 nav_history 能不能寫入,不代表它是好的。")
-
-        # ── 2026-08-11:「累了多少」——上面那顆燈只答「能不能累」 ────────────────
-        # 為什麼要加：燈是綠的、每次抓取都有「本次新存 N 筆」、序列卻可以好幾週
-        # 一動不動 —— 因為累到的點還全部落在 live 的滾動窗內
-        # (`fund_service._merge_nav_history_series` 的 `added <= 0` 分支)。
-        # 這三件事同時成立時，畫面上原本**沒有任何地方**講得出中間的落差(§5 可觀測)。
-        try:
-            # 稽核 N1-d:同上,改走 TTL 快取包裝(這支會讀整張 nav_history 分頁,最貴)
-            _cov_map = _cached_nh_coverage()   # 未啟用 / 無 tab → {}（≠ 0 點，語意不同）
-            if _cov_map:
-                import pandas as _pd_cov
-                _cov_rows = [
-                    {"代碼": _c,
-                     "累積點數": _v["points"],
-                     "最早": _v["first"],
-                     "最新": _v["last"],
-                     "涵蓋天數": _v["span_days"],
-                     "≈年": round(_v["span_days"] / 365.0, 2)}
-                    for _c, _v in sorted(_cov_map.items())
-                ]
-                st.caption(
-                    f"**目前累積：{len(_cov_map)} 檔**。"
-                    "⚠️ 「累積點數」不等於「序列變長」——當累到的點還落在 App 每次抓到的"
-                    "近期窗（約近 30 個交易日）之內時，合併後筆數不會增加。"
-                    "要等最舊的累積點掉出那個窗，序列才會開始真的加長。"
-                    "想立刻補回過去數年，用下面的 CSV 匯入。")
-                st.dataframe(_pd_cov.DataFrame(_cov_rows),
-                             hide_index=True, width="stretch")
-            else:
-                st.caption("⬜ `nav_history` 分頁目前讀不到任何累積點 —— "
-                           "可能是尚未啟用（見上方狀態燈）或分頁還沒建立。"
-                           "**這與「累積 0 點」不同**：讀不到就是不知道，不是沒有。")
-        except Exception as _e_cov:
-            # §1：讀失敗要講出來，不可留白讓人以為「沒累積」。
-            # ⚠️ 對照上方 else 分支：「讀不到任何累積點 —— 可能尚未啟用」是**真的
-            # 還沒有** → 維持灰色一字未動;這裡是**讀爆了**,整張涵蓋表消失。
-            system_error("累積內容讀取失敗", _e_cov,
-                         hint="這與「累積 0 點」不同 —— 讀不到就是不知道,不是沒有。"
-                              "上方分析本身不受影響。")
-
-        st.caption(
-            "從保險公司網站 / 對帳單下載歷史淨值 CSV，一次灌入 Google Sheet "
-            "`nav_history` 分頁 —— **立刻補回過去數年**，解鎖 3Y/5Y/低基期（不必等每日累積）。"
-            "格式：header 含「日期/淨值」關鍵字自動對欄；無 header 則第 1 欄=日期、第 2 欄=淨值。"
-            "民國(113/03/15)與西元日期都支援；同 (代碼,日期) 自動去重，重跑不灌水。")
-        _ni_c1, _ni_c2 = st.columns(2)
-        with _ni_c1:
-            _ni_code = st.text_input("基金代碼", key="navhist_import_code",
-                                     placeholder="TLZF9 / ACTI71 ...")
-        with _ni_c2:
-            _ni_name = st.text_input("基金名稱（選填）", key="navhist_import_name")
-        _ni_file = st.file_uploader("上傳歷史淨值 CSV", type=["csv", "txt"],
-                                    key="navhist_import_file")
-        if st.button("📥 匯入到 nav_history", key="navhist_import_btn",
-                     disabled=not (_ni_file and _ni_code.strip())):
-            try:
-                _ni_text = _ni_file.getvalue().decode("utf-8-sig", errors="replace")
-                from services.nav_history_gs import import_csv_text
-                _ni_res = import_csv_text(_ni_code.strip().upper(), _ni_text,
-                                          fund_name=_ni_name.strip())
-                if not _ni_res["enabled"]:
-                    # 「資料源未設定」屬 ⬜,不是 🔴 —— 匯入沒壞,是還沒接上(線框 §03)。
-                    not_ready("Google Sheets 未設定，無法匯入",
-                              where="Secrets 的 `google_service_account` / "
-                                    "`macro_weights_sheet_id`")
-                elif _ni_res["written"] > 0:
-                    # 稽核 N1-d:剛寫進去 → 立刻讓上方「累積狀態 / 累了多少」失效重讀,
-                    # 否則 TTL 內會顯示寫入前的點數（§1 不顯示過期值）。
-                    _clear_nh_caches()
-                    st.success(
-                        f"✅ 匯入完成：{_ni_res['rows']} 列 → 解析 {_ni_res['parsed']} 筆 → "
-                        f"**新寫入 {_ni_res['written']} 筆**"
-                        f"（重複略過 {_ni_res['skipped_dup']}、壞列 {_ni_res['skipped_rows']}）。"
-                        f"下次分析該基金時會自動併入計算。")
-                else:
-                    st.warning(
-                        f"⚠️ 0 筆新寫入：{_ni_res['rows']} 列 → 解析 {_ni_res['parsed']} 筆"
-                        f"（重複略過 {_ni_res['skipped_dup']}、壞列 {_ni_res['skipped_rows']}）。"
-                        f"請確認 CSV 欄位（日期/淨值）與代碼是否正確。")
-            except Exception as _e_ni:
-                st.error(f"❌ 匯入失敗：[{type(_e_ni).__name__}] {str(_e_ni)[:400]}")
+    if not _settings_page_owns(_SD_NAV_HISTORY):
+        st.divider()
+        # 裡面第一行就是「🔴 累積未啟用」的致命狀態燈 —— 收起來的話使用者永遠不會知道
+        # 歷史淨值根本沒在累積（原則 1）。原本靠「永遠展開的 expander」達成,但那層殼
+        # 對使用者只是多一圈邊框 + 一個可以把狀態燈關掉的入口。改成標題 + container,
+        # 狀態燈與匯入表單一律常駐。
+        st.markdown("### 🗂️ NAV 歷史匯入與累積狀態（保單對帳單 CSV → nav_history）")
+        with st.container():
+            render_nav_accumulation_status()
+            render_nav_statement_csv_import()
 
     # ══════════════════════════════════════════════════════
     # ⚠️ 資料異常清單（最下方一覽，獨立於上方總表/體檢區）
@@ -1734,3 +1626,191 @@ def render_data_guard_tab() -> None:
             unsafe_allow_html=True,
         )
         st.caption("💡 建議：🔴 項目請優先重新抓取；🟡 為延遲，仍可使用但需注意時效。")
+
+def render_nav_accumulation_status() -> None:
+    """③ 累積狀態：能不能累（狀態燈）＋ 累了多少（逐檔涵蓋表）。
+
+    2026-09-02 線框 `ia-wireframe.html` Tab 05 抽出，成為**唯讀**的「NAV 累積狀態」區塊。
+
+    ⚠️ **它必須畫在「手動補資料」之前**（線框的區塊順序就是這樣排的）——
+    雲端沒啟用時，那一區的三條寫入路徑**都寫不進雲端**。把狀態放在動作之後，
+    使用者會先上傳完才發現東西沒存進去（`CLAUDE.md §1`：不可讓畫面看起來成功）。
+    ⚠️ 兩區之間**夾著「連線與金鑰」**（線框順序），所以守衛錨的是**兩個區塊的相對順序**，
+    不是「相鄰」—— 錨到相鄰會在 ⑤ 重組（T18）當天無故轉紅。
+
+    ⭐ **三態顏色（2026-09-02 總管裁決；本函式最重要的一條）**
+    ------------------------------------------------------------
+    四大鐵則的三態是：**灰 ＝ 未載入／前提不足**、深莓紅左軌 ＝ 業務警示、
+    **紅框 ＝ 系統真出錯**。「雲端沒設好 → 累積未啟用」是**前提不足**，
+    ~~不是系統故障~~ —— 它以前畫成 `st.error` 紅框，那是**過度示警**：
+    什麼都沒有壞，只是還沒設定。**有意識的更正，不是漏刪**（日期 2026-09-02 ·
+    決策者：AI 總管 · 依據：`CLAUDE.md` 引 v3 §02「介面狀態嚴格分離：
+    『未點擊載入』以灰色說明提示，『系統真出錯』才標註紅色警示，**杜絕假性錯誤滿版**」）。
+    **舊寫法的用意仍然成立**（這件事很重要、使用者必須看到），
+    **被權衡掉的是它的顏色** —— 重要不等於故障，而滿版假紅字會讓**真正的紅**沒人看得見。
+
+    **兩種狀態都要畫得出來，而且各有守衛**：
+    - **沒設定** → 灰色空狀態三要素（標題 / 缺什麼 / 去哪補），走 `not_ready()`。
+    - **設定了但查詢真的爆掉** → `system_error()` 紅框（下方 `except` 分支，一字未動）。
+    """
+    # v19.362 ①:累積狀態燈 — 終結「secrets 沒設 = 靜默略過,以為在累積其實沒有」
+    try:
+        # 稽核 N1-d:改走本檔頂部的 TTL 快取包裝(顯示語意不變,只擋重複打 API)
+        _ni_st = _cached_nh_status()
+        if _ni_st["enabled"]:
+            st.caption("🟢 **累積狀態:已啟用** — App 抓到的淨值會自動累積到 "
+                       "Google Sheet `nav_history` 分頁")
+        else:
+            # v19.379:細分病因(放錯地方 / 引號貼壞 / 整份 secrets 沒生效)
+            _diag = _ni_st.get("diag", {})
+            _lines = []
+            _sa_d = _diag.get("google_service_account")
+            if _sa_d == "absent":
+                _lines.append("• `google_service_account`:**App 完全沒讀到這把 key** → 檢查："
+                              "有按 **Save** 嗎?有 **Reboot app** 嗎?名字是不是**全小寫**?"
+                              "是不是存在**這個 App**(不是別的 App / 不是 GitHub)的 Secrets?")
+            elif _sa_d == "unparseable":
+                _lines.append("• `google_service_account`:**有讀到值,但 JSON 解析失敗** → "
+                              "包 JSON 要用 `'''`(三個**單**引號,不是雙引號);檢查內容有沒有貼歪 / 缺字 / 結尾少了 `'''`。")
+            elif _sa_d == "no_client_email":
+                _lines.append("• `google_service_account`:JSON 有解析但**缺 client_email** → JSON 貼不完整。")
+            if _diag.get("macro_weights_sheet_id") == "absent":
+                _lines.append("• `macro_weights_sheet_id`:**沒讀到** → 同上(全小寫、放對 App、Save + Reboot)。")
+            if _diag.get("st_secrets_alive") is False:
+                _lines.append("⚠️ 連既有的 `FRED_API_KEY` 都讀不到 → **整份 secrets 沒生效**"
+                              "(TOML 格式壞 / 放錯 App / 沒 reboot),不是這兩把單獨的問題。")
+            elif _diag.get("st_secrets_alive") is True:
+                _lines.append("✅ 旁證:`FRED_API_KEY` 讀得到 → secrets 本身有效,問題**只在上面這兩把**。")
+            # ⬜ 灰色空狀態三要素（標題 / 缺什麼 / 去哪補）—— 不是紅框，理由見 docstring。
+            # 「去哪補」指的是 Streamlit Secrets（App 設定），**不是**頁內某個分區：
+            # 這兩把 key 今天只能在 Secrets 設，指去頁內任何區塊都是假指路。
+            # ⚠️ 刻意**不手抄任何分區/分頁名** —— 手抄的那一刻它就開始漂移
+            # （story_nav 整個模組存在的理由）。
+            not_ready(
+                f"NAV 累積未啟用：尚未設定 {', '.join(_ni_st['missing'])} "
+                "→ 淨值不會累積、「手動補資料」也寫不進雲端",
+                where="App 的 Secrets 設定")
+            if _lines:
+                # 細分病因（放錯地方 / 引號貼壞 / 整份 secrets 沒生效）——
+                # 內容一字未改，只是跟著上面那則一起改走灰色。
+                st.caption("\n\n".join(_lines))
+    except Exception as _e_st:
+        # 這顆燈答的是「能不能累積」。它自己掛掉時,畫面上沒有燈 ——
+        # 與「燈是綠的」在灰字之下難以分辨。
+        system_error("NAV 累積狀態檢查失敗", _e_st,
+                     hint="這次查不出雲端 nav_history 能不能寫入,不代表它是好的。")
+
+    # ── 2026-08-11:「累了多少」——上面那顆燈只答「能不能累」 ────────────────
+    # 為什麼要加：燈是綠的、每次抓取都有「本次新存 N 筆」、序列卻可以好幾週
+    # 一動不動 —— 因為累到的點還全部落在 live 的滾動窗內
+    # (`fund_service._merge_nav_history_series` 的 `added <= 0` 分支)。
+    # 這三件事同時成立時，畫面上原本**沒有任何地方**講得出中間的落差(§5 可觀測)。
+    try:
+        # 稽核 N1-d:同上,改走 TTL 快取包裝(這支會讀整張 nav_history 分頁,最貴)
+        _cov_map = _cached_nh_coverage()   # 未啟用 / 無 tab → {}（≠ 0 點，語意不同）
+        if _cov_map:
+            import pandas as _pd_cov
+            _cov_rows = [
+                {"代碼": _c,
+                 "累積點數": _v["points"],
+                 "最早": _v["first"],
+                 "最新": _v["last"],
+                 "涵蓋天數": _v["span_days"],
+                 "≈年": round(_v["span_days"] / 365.0, 2)}
+                for _c, _v in sorted(_cov_map.items())
+            ]
+            st.caption(
+                f"**目前累積：{len(_cov_map)} 檔**。"
+                "⚠️ 「累積點數」不等於「序列變長」——當累到的點還落在 App 每次抓到的"
+                "近期窗（約近 30 個交易日）之內時，合併後筆數不會增加。"
+                "要等最舊的累積點掉出那個窗，序列才會開始真的加長。"
+                "想立刻補回過去數年，用下面的 CSV 匯入。")
+            st.dataframe(_pd_cov.DataFrame(_cov_rows),
+                         hide_index=True, width="stretch")
+        else:
+            st.caption("⬜ `nav_history` 分頁目前讀不到任何累積點 —— "
+                       "可能是尚未啟用（見上方狀態燈）或分頁還沒建立。"
+                       "**這與「累積 0 點」不同**：讀不到就是不知道，不是沒有。")
+    except Exception as _e_cov:
+        # §1：讀失敗要講出來，不可留白讓人以為「沒累積」。
+        # ⚠️ 對照上方 else 分支：「讀不到任何累積點 —— 可能尚未啟用」是**真的
+        # 還沒有** → 維持灰色一字未動;這裡是**讀爆了**,整張涵蓋表消失。
+        system_error("累積內容讀取失敗", _e_cov,
+                     hint="這與「累積 0 點」不同 —— 讀不到就是不知道,不是沒有。"
+                          "上方分析本身不受影響。")
+
+
+def render_nav_statement_csv_import() -> None:
+    """① 對帳單 CSV → 雲端 nav_history（單檔、代碼手填、可吃無代號欄的兩欄 CSV）。
+
+    2026-09-02 線框 §03 ⑤ B「合一」抽出（**只搬位置，行為一行未改**）。
+
+    ⚠️ **與 `ui/tab_manage.py::render_nav_csv_manage_section()` 不等價，不可互相取代**：
+    本函式走 `nav_history_gs.import_csv_text` —— 代碼由使用者手填、**只寫雲端**、
+    CSV 不需要代號欄（header 對欄，或第 1 欄=日期、第 2 欄=淨值），
+    這正是保險公司對帳單匯出的形狀。那一條走 `import_nav_csv_multi` ——
+    **必須有代號欄**、可一次多檔、而且**會寫本地 `cache/nav_history/{code}.json` 當基底**。
+    線框要的是「三個功能**一個入口**」，不是「三個功能砍成一個」。
+
+    ⚠️ **`tests/test_ia_tab5_nav_history_merge.py` 的「送出才寫」守衛（2026-09-03 稽核必修 1）
+    射程只到「這一支 writer」，不是「任何雲端寫入」** —— 那對守衛用 spy 監看的是
+    **`services.nav_history_gs.import_csv_text` 這個具體符號被呼叫幾次**，不是「有沒有東西
+    寫進了 nav_history」。若程式碼改走同模組的 `append_points`（或任何不經
+    `import_csv_text` 的路徑）直接寫雲端，該守衛**看不到**——本組已實測過一次
+    側通道突變（把上面 `elif` 的 gate 判斷繞開、改呼叫 `append_points`），
+    `test_statement_csv_does_not_write_until_submitted` /
+    `test_statement_csv_writes_exactly_once_when_submitted` **兩條依然全綠**，
+    因為它們的 spy 只掛在 `import_csv_text` 上。**這不是本次守衛的缺陷（它守的東西本來就是
+    「這條路徑走它自己該走的函式」），只是讀者不該把它讀成一道「攔截所有寫入」的閘門。**
+    """
+    st.caption(
+        "從保險公司網站 / 對帳單下載歷史淨值 CSV，一次灌入 Google Sheet "
+        "`nav_history` 分頁 —— **立刻補回過去數年**，解鎖 3Y/5Y/低基期（不必等每日累積）。"
+        "格式：header 含「日期/淨值」關鍵字自動對欄；無 header 則第 1 欄=日期、第 2 欄=淨值。"
+        "民國(113/03/15)與西元日期都支援；同 (代碼,日期) 自動去重，重跑不灌水。")
+    # 鐵則 02（線框 `ia-wireframe.html` Rule 02 ＋ Tab 05「手動補資料 → **寫入類**，
+    # 全部 Form 封裝」）：三個輸入 + 一顆送出鈕。不包 form 的話使用者每打一個字整頁
+    # 就重跑一次，而本頁的重跑會連帶更新資料註冊表、抓匯率。
+    # ⚠️ 送出鈕的 `disabled=` **刻意拿掉**：form 內 widget 的值要等送出才拿得到，
+    #    拿它算 disabled 會永遠停在初始值（按鈕永遠是 disabled）。
+    #    改成送出後才驗，缺什麼就誠實講 —— 而且那是 ⬜ 前提不足，不是 🔴 故障。
+    with applied_form("navhist_import_form",
+                      submit_label="📥 匯入到 nav_history") as _ni_gate:
+        _ni_c1, _ni_c2 = st.columns(2)
+        with _ni_c1:
+            _ni_code = st.text_input("基金代碼", key="navhist_import_code",
+                                     placeholder="TLZF9 / ACTI71 ...")
+        with _ni_c2:
+            _ni_name = st.text_input("基金名稱（選填）", key="navhist_import_name")
+        _ni_file = st.file_uploader("上傳歷史淨值 CSV", type=["csv", "txt"],
+                                    key="navhist_import_file")
+    if _ni_gate and not (_ni_file and (_ni_code or "").strip()):
+        not_ready("還沒選好要匯入的東西：基金代碼與 CSV 檔**兩者都要有**",
+                  where="上方「基金代碼」與「上傳歷史淨值 CSV」")
+    elif _ni_gate:
+        try:
+            _ni_text = _ni_file.getvalue().decode("utf-8-sig", errors="replace")
+            from services.nav_history_gs import import_csv_text
+            _ni_res = import_csv_text(_ni_code.strip().upper(), _ni_text,
+                                      fund_name=_ni_name.strip())
+            if not _ni_res["enabled"]:
+                # 「資料源未設定」屬 ⬜,不是 🔴 —— 匯入沒壞,是還沒接上(線框 §03)。
+                not_ready("Google Sheets 未設定，無法匯入",
+                          where="Secrets 的 `google_service_account` / "
+                                "`macro_weights_sheet_id`")
+            elif _ni_res["written"] > 0:
+                # 稽核 N1-d:剛寫進去 → 立刻讓上方「累積狀態 / 累了多少」失效重讀,
+                # 否則 TTL 內會顯示寫入前的點數（§1 不顯示過期值）。
+                _clear_nh_caches()
+                st.success(
+                    f"✅ 匯入完成：{_ni_res['rows']} 列 → 解析 {_ni_res['parsed']} 筆 → "
+                    f"**新寫入 {_ni_res['written']} 筆**"
+                    f"（重複略過 {_ni_res['skipped_dup']}、壞列 {_ni_res['skipped_rows']}）。"
+                    f"下次分析該基金時會自動併入計算。")
+            else:
+                st.warning(
+                    f"⚠️ 0 筆新寫入：{_ni_res['rows']} 列 → 解析 {_ni_res['parsed']} 筆"
+                    f"（重複略過 {_ni_res['skipped_dup']}、壞列 {_ni_res['skipped_rows']}）。"
+                    f"請確認 CSV 欄位（日期/淨值）與代碼是否正確。")
+        except Exception as _e_ni:
+            st.error(f"❌ 匯入失敗：[{type(_e_ni).__name__}] {str(_e_ni)[:400]}")

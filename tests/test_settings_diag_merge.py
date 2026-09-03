@@ -51,11 +51,79 @@ class _Rec:
 
 
 class _Col:
+    """`st.columns()` / `st.container()` / `st.spinner()` 回傳的東西 —— 它**同時**是
+    context manager 與一個可以直接呼叫 widget 的物件（`_c1.button(...)`）。
+
+    ⚠️ **不能只做 `__enter__/__exit__`**（2026-09-03 獨立稽核抓到，這裡原本就是只有兩個）：
+    本 repo 大量用 `_act_c1.button(...)` / `_c1.metric(...)` 這種**在欄物件上直接呼叫**的
+    寫法，少了 `__getattr__` 會在半路 `AttributeError` 而不是走完渲染。
+
+    **它造成的不是「少畫幾個 widget」，是「斷言在一個根本沒跑完的渲染上做出來」**，
+    而且**紅在一個與斷言無關的理由上**：
+    `_render_maintain_section()` → `render_nav_manual_section()` →
+    `render_nav_csv_manage_section()` → `_act_c1.button("🔄 從 MoneyDJ 增量更新", ...)`
+    → `AttributeError` → 被 `safe_section` 接住 → `system_error()` **畫出紅框** →
+    `test_policy_admin_is_off_by_default` 與 `test_diag_section_is_not_loaded_before_the_gate`
+    這兩條「`assert "error" not in rec.names()`」當場轉紅。
+
+    ⚠️ **它是環境相依的，CI 綠不代表沒事**：那一段要 `cache/nav_history/` 底下**有檔**
+    才走得到（`_nh_codes()` 空 → 提前 return）。fresh checkout 的 CI 永遠是空的，
+    **但任何在本機用過 App 的人都會踩到**。實測：同樣種一個
+    `cache/nav_history/*.json`，`main`(2353dde) `25 passed`／本批修復前 `2 failed`。
+    ⚠️ `cache/*` 在 `.gitignore` 內 → **`git status` 看不見它，證明不了工作區乾淨**。
+
+    📌 本類的 `__getattr__` 與回傳值語意**照抄同批的
+    `tests/test_ia_tab5_nav_history_merge.py::_Ctx`** —— 那個檔的 docstring 早就寫了
+    這條教訓，只是**同一把尺沒有往內用到隔壁檔**（憲法 §8.2.A.1 驗證段 ④ 記載的形狀）。
+    """
+
+    def __init__(self, rec: "_Rec" = None) -> None:
+        self._rec = rec
+
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
         return False
+
+    #: 欄／容器上直接呼叫的 widget 要回什麼。**回 `None` 不夠** ——
+    #: `st.text_input(...)` 的呼叫端常接 `.strip()`，回 `None` 只是把
+    #: `AttributeError` 換一個地方發作。
+    @staticmethod
+    def _ret_for(name: str):
+        if name in ("button", "download_button", "form_submit_button", "checkbox",
+                    "toggle"):
+            return False
+        if name in ("text_input", "text_area"):
+            return ""
+        if name in ("file_uploader", "selectbox", "multiselect", "date_input"):
+            return None
+        return None
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        _rec = self.__dict__.get("_rec")
+        _ret = self._ret_for(name)
+        if name in ("container", "expander", "spinner", "form", "status", "popover",
+                    "columns", "tabs"):
+            def _ctx(*a, **k):
+                if _rec is not None:
+                    _rec.calls.append((name, a[0] if a else None))
+                if name == "columns":
+                    _spec = a[0] if a else 1
+                    return [_Col(_rec) for _ in range(
+                        _spec if isinstance(_spec, int) else len(_spec))]
+                if name == "tabs":
+                    return [_Col(_rec) for _ in range(len(a[0]) if a else 1)]
+                return _Col(_rec)
+            return _ctx
+
+        def _f(*a, **k):
+            if _rec is not None:
+                _rec.calls.append((name, a[0] if a else None))
+            return _ret
+        return _f
 
 
 @contextlib.contextmanager
@@ -73,10 +141,10 @@ def _fake_streamlit(monkeypatch, *, checkbox: bool = False):
                "divider", "write", "metric", "dataframe", "subheader",
                "header", "code"):
         monkeypatch.setattr(st, _n, rec.api(_n), raising=False)
-    monkeypatch.setattr(st, "columns", lambda spec, **k: [_Col() for _ in range(
+    monkeypatch.setattr(st, "columns", lambda spec, **k: [_Col(rec) for _ in range(
         spec if isinstance(spec, int) else len(spec))], raising=False)
-    monkeypatch.setattr(st, "container", lambda *a, **k: _Col(), raising=False)
-    monkeypatch.setattr(st, "spinner", lambda *a, **k: _Col(), raising=False)
+    monkeypatch.setattr(st, "container", lambda *a, **k: _Col(rec), raising=False)
+    monkeypatch.setattr(st, "spinner", lambda *a, **k: _Col(rec), raising=False)
     monkeypatch.setattr(st, "session_state", rec.session, raising=False)
 
     def _checkbox(*a, **k):
@@ -613,11 +681,18 @@ def test_settings_page_module_does_not_reach_into_data_or_compute_layers():
 _MERGE_CONTEXT_MODULE = "ui.helpers.settings_diag.merge_context"
 
 #: 檔案 → guard 引數必須綁到的 merge_context 常數名。
+#: 每個子頁的 render 函式**可以**綁哪幾支旗標。
+#: 2026-09-02：由「一檔一支」改為「一檔一個**封閉集合**」—— ⑤ 把 NAV 拆成兩塊之後，
+#: `tab_manage` 與 `tab5_data_guard` 各自多了一個 `NAV_HISTORY` 守衛
+#: （線框 `ia-wireframe.html` Tab 05）。
+#: ⚠️ **仍然是封閉集合、仍然 fail-closed**：綁到集合外的任何旗標照樣轉紅。
+#: 放寬的是「這一頁可以持有幾塊」，**不是**「可以綁別頁的旗標」——
+#: 原本要擋的那個病（tab_manage 誤綁 DATA_GUARD_HEADER）**一格未鬆**。
 _GUARD_EXPECTED_FLAG: dict = {
-    "ui/tab_manage.py": "MANAGE_HEADER",
-    "ui/tab5_data_guard.py": "DATA_GUARD_HEADER",
-    "ui/tab6_manual.py": "MANUAL_HEADER",
-    "ui/tab2_single_fund.py": "FETCH_DIAG",
+    "ui/tab_manage.py": {"MANAGE_HEADER", "NAV_HISTORY"},
+    "ui/tab5_data_guard.py": {"DATA_GUARD_HEADER", "NAV_HISTORY"},
+    "ui/tab6_manual.py": {"MANUAL_HEADER"},
+    "ui/tab2_single_fund.py": {"FETCH_DIAG"},
 }
 
 
@@ -684,24 +759,29 @@ def _resolved_guard_flags(relpath: str, *, guard_name: str,
         if not (isinstance(node, ast.Call)
                 and getattr(node.func, "id", "") == guard_name):
             continue
-        assert len(node.args) == 1 and not node.keywords, (
-            f"{relpath}::{fn_name} 的 {guard_name}(...) 不是單一位置引數："
+        # 2026-09-02：`settings_page_owns(...)` 起可帶**多個**位置引數
+        # （⑤ 的一個分區可同時持有多塊，例如 MANAGE_HEADER ＋ NAV_HISTORY）。
+        # ⚠️ **fail-closed 一格未鬆**：每一個引數仍逐一解析，任何一個追不到
+        #    import 來源／被重新指派／不是單純名稱，照樣 assert 失敗。
+        #    放寬的只有「**幾個**」，不是「**允不允許認不得的形狀**」。
+        assert node.args and not node.keywords, (
+            f"{relpath}::{fn_name} 的 {guard_name}(...) 沒有位置引數或帶了關鍵字："
             f"{ast.unparse(node)}（本守衛認不得 → fail-closed 視為綁錯）")
-        arg = node.args[0]
-        assert isinstance(arg, ast.Name), (
-            f"{relpath}::{fn_name} 的 guard 引數不是單純名稱："
-            f"{ast.unparse(arg)}（fail-closed 視為綁錯）")
-        assert arg.id not in reassigned, (
-            f"{relpath} 內 {arg.id} 被重新指派過 —— import 綁定不可信"
-            f"（fail-closed 視為綁錯）")
-        assert arg.id in bindings, (
-            f"{relpath}::{fn_name} 的 guard 引數 {arg.id} 追不到 import 來源"
-            f"（fail-closed 視為綁錯）")
-        mod, orig = bindings[arg.id]
-        assert mod == _MERGE_CONTEXT_MODULE, (
-            f"{relpath} 的 guard 引數 {arg.id} 綁到 {mod}.{orig}，"
-            f"不是 {_MERGE_CONTEXT_MODULE} 的旗標")
-        flags.append(orig)
+        for arg in node.args:
+            assert isinstance(arg, ast.Name), (
+                f"{relpath}::{fn_name} 的 guard 引數不是單純名稱："
+                f"{ast.unparse(arg)}（fail-closed 視為綁錯）")
+            assert arg.id not in reassigned, (
+                f"{relpath} 內 {arg.id} 被重新指派過 —— import 綁定不可信"
+                f"（fail-closed 視為綁錯）")
+            assert arg.id in bindings, (
+                f"{relpath}::{fn_name} 的 guard 引數 {arg.id} 追不到 import 來源"
+                f"（fail-closed 視為綁錯）")
+            mod, orig = bindings[arg.id]
+            assert mod == _MERGE_CONTEXT_MODULE, (
+                f"{relpath} 的 guard 引數 {arg.id} 綁到 {mod}.{orig}，"
+                f"不是 {_MERGE_CONTEXT_MODULE} 的旗標")
+            flags.append(orig)
     return flags
 
 
@@ -725,11 +805,17 @@ def test_guard_argument_is_bound_to_the_expected_flag(relpath):
     assert flags, (f"{relpath} 找不到任何 {_GUARD_NAME}(...) 呼叫 —— 斷言失去對象"
                    f"（guard 被整個拿掉？第 4 節會另外抓極性，本條抓綁定）")
     expected = _GUARD_EXPECTED_FLAG[relpath]
-    wrong = [f for f in flags if f != expected]
+    wrong = [f for f in flags if f not in expected]
     assert not wrong, (
-        f"{relpath} 的 guard 綁錯旗標：綁到 {wrong}，應為 {expected} ——"
-        f"接線後 ⑤ 持有 {expected} 時這一塊不會讓位（或別的旗標誤傷它），"
+        f"{relpath} 的 guard 綁錯旗標：綁到 {wrong}，合法值為 {sorted(expected)} ——"
+        f"接線後 ⑤ 持有那幾支時這一塊不會讓位（或別的旗標誤傷它），"
         f"畫面會無聲多出／少掉一塊")
+    # ⚠️ 雙向：登記了卻**一次都沒綁到**，代表那個守衛被整個拿掉了（或改名了）。
+    #    少了這一半，把 `NAV_HISTORY` 守衛整段刪掉會讓本條更綠。
+    _missing = sorted(expected - set(flags))
+    assert not _missing, (
+        f"{relpath} 登記要守 {_missing}，但 render 函式裡一次都沒綁到 ——"
+        f"守衛被拿掉了？實際綁到：{sorted(set(flags))}")
 
 
 def test_settings_page_own_sections_bind_the_expected_flags():
@@ -741,15 +827,21 @@ def test_settings_page_own_sections_bind_the_expected_flags():
     `settings_page_owns(MANAGE_HEADER)` 改成 `settings_page_owns(DATA_GUARD_HEADER)`
     → **本條轉紅**。
     """
+    # 2026-09-02：⑤ 的一個分區可同時持有多塊（NAV 拆兩塊之後，B 分區同時持有
+    # MANAGE_HEADER ＋ NAV_HISTORY；D 分區也必須持有 NAV_HISTORY，否則資料診斷
+    # 會把它自己那份 NAV 再畫一次）。**用 `==` 比集合，不是「至少包含」** ——
+    # 多綁一支別頁的旗標照樣轉紅。
     _expected_by_fn = {
-        "_render_maintain_section": "MANAGE_HEADER",
-        "_render_diag_section": "DATA_GUARD_HEADER",
-        "_render_manual_section": "MANUAL_HEADER",
+        "_render_maintain_section": {"MANAGE_HEADER", "NAV_HISTORY"},
+        "_render_diag_section": {"DATA_GUARD_HEADER", "NAV_HISTORY"},
+        "_render_manual_section": {"MANUAL_HEADER"},
     }
     for fn_name, expected in _expected_by_fn.items():
         flags = _resolved_guard_flags("ui/tab_settings_diag.py",
                                       guard_name="settings_page_owns",
                                       fn_name=fn_name)
-        assert flags == [expected], (
-            f"ui/tab_settings_diag.py::{fn_name} 持有的旗標是 {flags}，"
-            f"應為恰好一次 {expected}")
+        assert set(flags) == expected, (
+            f"ui/tab_settings_diag.py::{fn_name} 持有的旗標是 {sorted(set(flags))}，"
+            f"應為 {sorted(expected)}")
+        assert len(flags) == len(set(flags)), (
+            f"ui/tab_settings_diag.py::{fn_name} 重複持有同一支旗標：{flags}")

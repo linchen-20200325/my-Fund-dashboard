@@ -22,7 +22,9 @@ import datetime as _dt
 
 import streamlit as st
 
-from ui.helpers.render_state import system_error
+from ui.helpers.ia import applied_form
+
+from ui.helpers.render_state import not_ready, system_error
 
 
 def _today_tw() -> str:
@@ -381,7 +383,15 @@ def _sec_nav_backfill_auto() -> None:
         if not _all:
             st.info("目前沒有可補的基金 —— 先載入持倉,或在上方選股池加入候選(填代號 + ISIN)。")
             return
-        if not st.button("🔄 開始補抓全部缺淨值", use_container_width=True, key="_nh_backfill_all"):
+        # 鐵則 02（線框 Rule 02 ＋ Tab 05「手動補資料 → **寫入類**，全部 Form 封裝」）。
+        # ⚠️ 據實寫明：**這一條路徑沒有任何輸入 widget**，所以 form 帶不來 Rule 02 想要的
+        #    防重繪效益（那條規則防的是「每拉一格就整頁重跑」）。此處包 form 是為了
+        #    **寫入類動作一律經過同一道送出閘門**這個一致性要求（總管 2026-09-02 裁決
+        #    「三條路徑都要包」）。**把理由寫成「省了重繪」會是假的，故不那樣寫。**
+        with applied_form("_nh_backfill_all_form",
+                          submit_label="🔄 開始補抓全部缺淨值") as _bf_gate:
+            st.caption("按下送出後會逐檔連外抓取,檔數多會花數分鐘。")
+        if not _bf_gate:
             return
 
         from services.nav_history_store import backfill_to_gs
@@ -489,6 +499,16 @@ def _sec_nav_backfill_auto() -> None:
                 st.success(f"✅ {_msg}")
 
 
+def render_nav_backfill_auto_section() -> None:
+    """① 一鍵自動補全缺淨值的**公開**入口（實作仍是 `_sec_nav_backfill_auto`）。
+
+    存在的理由只有一個：⑤ 的「🗄️ NAV 歷史」合一區塊要呼叫它，而
+    `CLAUDE.md §8.2` 明禁跨模組直取底線開頭的 private symbol
+    （姊妹 repo 的 `V-PICKER-PRIV-1` 就是這個病）。**本函式不加任何行為**。
+    """
+    _sec_nav_backfill_auto()
+
+
 def _sec_nav_backfill() -> None:
     """🗄️ 補歷史淨值(① 一鍵自動補全部 + ② 手動 CSV 上傳)→ 存進 GS nav_history。
 
@@ -502,8 +522,37 @@ def _sec_nav_backfill() -> None:
     _sec_nav_backfill_auto()
     st.caption("── 或 ── 抓不到淨值的基金:從 CnYES / MoneyDJ 手動下載完整歷史 CSV → 上傳這裡 → 存進 "
                "nav_history,健診就有足夠序列算真實報酬(根治「抓不到 → 外推 → 假吃本金」)。")
+    render_nav_csv_manage_section()
+
+
+def render_nav_csv_manage_section(*, expander_label: str | None = None) -> None:
+    """② 本地基底 CSV：多檔上傳 → `cache/nav_history/{code}.json` ＋ 同步雲端，
+    外加逐檔的增量更新 / 下載備份 / 清除。
+
+    2026-09-02 線框 §03 ⑤ B「合一」抽出（**只搬位置，行為一行未改**）——
+    原本整段 inline 在 `_sec_nav_backfill()` 裡，抽出後 ⑤ 的「🗄️ NAV 歷史」
+    區塊才能在**不連帶把管理室其他分區也拉進來**的前提下呼叫它。
+
+    `expander_label` 讓合一入口改用功能導向的標題（合一後兩個舊標題都不留，
+    線框：「留任一個都會讓人以為另一個還在別頁」）；預設維持舊標題，
+    供 ⑤ **沒有**持有 `NAV_HISTORY` 時的原路徑使用（行為不變）。
+
+    ⚠️ **不要把它跟 `nav_history_gs.import_csv_text` 那條混為一談** ——
+    本函式走 `import_nav_csv_multi`：**要有代號欄**、可一次多檔、**會寫本地 cache**。
+    對帳單那條是單檔、代碼手填、**只寫雲端**、吃兩欄 CSV。兩者不可互相取代。
+
+    ⚠️ **`tests/test_ia_tab5_nav_history_merge.py` 的「送出才寫」守衛射程只到
+    `services.nav_history_store.import_nav_csv_multi` 這一支 writer，不是「任何寫入」**——
+    spy 監看的是這個具體符號的呼叫次數。若改走繞過它、直接寫
+    `cache/nav_history/{code}.json` 或直接呼叫 `nav_history_gs.append_points` 的路徑，
+    該守衛**看不到**（同型側通道已在 `render_nav_statement_csv_import()` 那條路徑上
+    實測過一次，兩條「送出才寫」斷言均未觸發）。**這不是缺陷，只是提醒它守的是
+    「這條路徑走它自己該走的函式」，不是「攔截所有雲端寫入」的通用閘門。**
+    """
     # v19.461→472：🗄️ NAV 歷史資料管理(手動 CSV 上傳 / 匯出 / 增量)。widget key `_nh_*` 僅此處渲染。
-    with st.expander("🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）", expanded=False):
+    with st.expander(
+            expander_label or "🗄️ NAV 歷史資料管理（CSV 上傳當基底 + 系統增量更新）",
+            expanded=False):
         from services.nav_history_store import (
             clear_cache as _nh_clear,
             export_nav_csv as _nh_export,
@@ -524,12 +573,18 @@ def _sec_nav_backfill() -> None:
 
         # v19.490（user 2026-08-19「移除基金代號欄，代號由 CSV 帶入」）:上傳讀 CSV 代號欄自動分檔,
         # 多檔可放同一個 CSV（代號欄區分）。逐檔動作(增量/下載/清除)改用下方 cache 選單挑代號。
-        _nh_file = st.file_uploader(
-            "📥 上傳 NAV CSV（格式:**代號 ｜ 日期 ｜ 淨值**，無表頭亦可；日期西元/民國都吃；"
-            "多檔可放同一個 CSV，用代號欄自動分檔）",
-            type=["csv"], key="_nh_upload_csv",
-        )
-        if _nh_file is not None:
+        # 鐵則 02：上傳是**寫入類**動作 → 包進 form，按送出才真的匯入。
+        # ⚠️ 這同時修掉一個既有的隱性行為：原碼是「檔案一選好就立刻匯入 + `st.rerun()`」，
+        #    使用者**沒有反悔的機會**，選錯檔就已經寫進本機 cache 與雲端了。
+        with applied_form("_nh_upload_csv_form", submit_label="📥 匯入這個 CSV") as _up_gate:
+            _nh_file = st.file_uploader(
+                "📥 上傳 NAV CSV（格式:**代號 ｜ 日期 ｜ 淨值**，無表頭亦可；日期西元/民國都吃；"
+                "多檔可放同一個 CSV，用代號欄自動分檔）",
+                type=["csv"], key="_nh_upload_csv",
+            )
+        if _up_gate and _nh_file is None:
+            not_ready("還沒選檔案", where="上方「📥 上傳 NAV CSV」")
+        elif _up_gate and _nh_file is not None:
             _mr = _nh_import_multi(_nh_file.getvalue())
             if _mr["errors"]:
                 st.error("、".join(_mr["errors"]))
@@ -627,6 +682,7 @@ def render_manage_tab() -> None:
     # 分支刻意保留：它是「⑤ 沒持有時本頁自己畫大標」的契約實作。
     from ui.helpers.settings_diag.merge_context import (
         MANAGE_HEADER as _SD_MANAGE_HEADER,
+        NAV_HISTORY as _SD_NAV_HISTORY,
         owned_by_settings_page as _settings_page_owns,
     )
     if not _settings_page_owns(_SD_MANAGE_HEADER):
@@ -641,14 +697,23 @@ def render_manage_tab() -> None:
         st.markdown(f"## {_section_label_tm('manage')}")
     render_flow_nav("manage")   # 巨觀:第 ③ 層（選股池 = 流程圖的「觀察池 Watchlist」）
     st.caption("你的基金資料**一站集中在這一頁**。資料存在 Google Sheets、永久保存,關掉重開都在。")
+    # ⚠️ 這份清單**照著實際會畫的分區長出來**，不是寫死的散文。
+    #    2026-09-02 之前它寫死「這一頁由上到下有 4 塊」＋ 4 條 —— 而 NAV 歷史一旦
+    #    被 ⑤ 收成合一入口，第 3 條就會指向一個**本頁根本不會畫**的區塊。
+    #    本 repo 一再記過同一個病：指路指到不存在的東西，比沒有指路更糟。
+    _blocks = [
+        "📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。"
+        "抓不到淨值的檔在這裡填 **ISIN**,系統就走晨星自動補淨值(v19.472 併入原「對照表」)。",
+        "🗓️ **除息行事曆** — 你持有基金的配息日曆。",
+    ]
+    if not _settings_page_owns(_SD_NAV_HISTORY):
+        _blocks.append(
+            "🗄️ **補歷史淨值** — 「🔄 一鍵自動補全部」把持倉＋選股池逐檔完整歷史"
+            "(含 ISIN→晨星 ~5.5 年)一次抓齊存雲端;抓不到的再手動上傳 CSV(根治吃本金誤判)。")
+    _blocks.append("🔔 **換股通報** — 設定 LINE 每週提醒。")
     st.info(
-        "**這一頁由上到下有 4 塊**:\n\n"
-        "1. 📁 **選股池(候選基金)** — 你**還沒買、考慮想換進來**的備選名單(不是持倉)。"
-        "抓不到淨值的檔在這裡填 **ISIN**,系統就走晨星自動補淨值(v19.472 併入原「對照表」)。\n"
-        "2. 🗓️ **除息行事曆** — 你持有基金的配息日曆。\n"
-        "3. 🗄️ **補歷史淨值** — 「🔄 一鍵自動補全部」把持倉＋選股池逐檔完整歷史(含 ISIN→晨星 ~5.5 年)"
-        "一次抓齊存雲端;抓不到的再手動上傳 CSV(根治吃本金誤判)。\n"
-        "4. 🔔 **換股通報** — 設定 LINE 每週提醒。"
+        f"**這一頁由上到下有 {len(_blocks)} 塊**:\n\n"
+        + "\n".join(f"{_i}. {_b}" for _i, _b in enumerate(_blocks, 1))
     )
     # v19.462:移除「投資組合(持倉)」一覽(user 2026-08-17:帳本(配置&帳本 Tab)已有;
     # 且流程圖把 Portfolio 歸「配置&帳本」,管理室專責 Watchlist/選股池 + 補歷史淨值)。
@@ -656,7 +721,11 @@ def render_manage_tab() -> None:
     _sec_pool()
     st.divider()
     _sec_dividend_calendar()
-    st.divider()
-    _sec_nav_backfill()
+    # 2026-09-02 線框 §03 ⑤ B「合一」：NAV 歷史三個功能收成 ⑤ 的單一入口。
+    # ⑤ 持有 → 本頁**不畫**這一塊（否則同一頁會出現兩份 NAV 匯入）；
+    # ⑤ 沒持有（舊七分頁路徑 / 直接呼叫本函式）→ 照舊完整渲染，行為一字未變。
+    if not _settings_page_owns(_SD_NAV_HISTORY):
+        st.divider()
+        _sec_nav_backfill()
     st.divider()
     _sec_notify()

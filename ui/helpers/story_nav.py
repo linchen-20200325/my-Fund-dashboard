@@ -185,6 +185,15 @@ _SECTION_LABELS: dict[str, str] = {
     "manage": "🗄️ 資料維護與通報",
     "diag":   "🔭 資料診斷",
     "manual": "📖 說明書",
+    # 2026-09-02（客戶拍板線框 `ia-wireframe.html` Tab 05，總管裁決放行）：
+    # ⑤ 的 NAV 由「一塊」改為**兩塊** —— 唯讀的累積狀態與寫入類的手動補資料分開。
+    # ⚠️ **名字逐字照線框、刻意不加 emoji**：實測該檔 ⑤ 的五個 `<h4>` 原文
+    #    （資料來源健康度 / NAV 累積狀態 / 連線與金鑰 / 手動補資料 / 使用手冊）
+    #    **一個 emoji 都沒有**，而「命名」屬線框明文已定的範圍。
+    #    旁邊那幾個舊分區有 emoji 是**既有狀態**，不是本表的風格宣告 ——
+    #    為了視覺一致去替線框定的名字加 emoji，就是拿樣式覆蓋客戶拍板的字。
+    "nav_status": "NAV 累積狀態",
+    "nav_manual": "手動補資料",
     # 2026-09-01（客戶拍板線框 `ia-wireframe.html` Tab 04）：換股顧問自 ② 持倉體檢
     # 搬到 ④ 資產配置。理由是客戶逐字給的 —— **它產出的是「要執行的動作」，
     # 而 ② 全篇只診斷、不建議**。線框 p2「這裡不放什麼」明列
@@ -213,6 +222,8 @@ _SECTION_TO_TAB: dict[str, str] = {
     "manage": "settings",
     "diag":   "settings",
     "manual": "settings",
+    "nav_status": "settings",
+    "nav_manual": "settings",
     "switch": "portfolio",
     "pf_add": "portfolio",
     "pf_perf": "portfolio",
