@@ -481,10 +481,52 @@ def _nav_backoff_ident(oauth_client: Any = None) -> "tuple[str, str]":
 
 
 def load_points(code: str | None = None, *, _sheet: Any = None,
-                oauth_client: Any = None) -> list[dict]:
+                oauth_client: Any = None, retries: bool = False) -> list[dict]:
     """讀 nav_history(可選 code 過濾),回 [{code,date,nav,fund_name,source,recorded_at}]。
     tab 不存在 / 未啟用(SA 缺且無 OAuth)→ 回 []。供 Increment B 消費端 + 去重 lookup 用。
     oauth_client:v19.509 —— SA 缺時 UI 注入登入者身分讀雲端(與寫入同一本)。
+
+    retries(2026-09-03,Gate 0 cron 修復)
+    -------------------------------------
+    **預設 `False`,行為與改動前逐字相同。** 只有 `nav_history_store.backfill_to_gs`
+    的 Gate 0 預讀傳 `True`。
+
+    起因:2026-09-02 production 事故 —— 那次讀取被 `client.open_by_key` 的**單次 5xx**
+    打斷、**零重試**,直接判定「讀不到既有歷史 → 本次不寫雲端」(fail-closed,§1)。
+    15 次排程執行有 2 次命中(8/31、9/2)。9/2 因新加的跨呼叫冷卻(見上方「2026-09-01
+    跨呼叫來源冷卻」段)第一個 5xx 就登記 300 秒冷卻,反而讓它連自己重試的機會都沒有 ——
+    對照 8/31(冷卻機制當時還不存在),2 分鐘後同一張表的其他讀取就成功了,證明那次是
+    短暫性的。
+
+    `retries=True` 時,`infra.gspread_retry.kind_for_gspread_error` 判為「多半是暫時性」
+    (5xx / 逾時,`GSPREAD_RETRYABLE_KINDS`)的失敗,會在**同一次呼叫內**依
+    `infra.gspread_retry.DEFAULT_QUOTA_BACKOFFS` 重試;配額(429)/封鎖(403)/設定錯誤
+    (404/407)**不重試**,理由見 `infra.gspread_retry.with_gspread_retry` docstring。
+
+    **冷卻的登記時機不變**:仍在下面 `except Exception as e:` 那一層 ——
+    即**全部重試用完、例外真正往外傳播之後**才登記,不會被中途的暫時性失敗提前鎖住。
+
+    其他呼叫點**刻意不傳 `True`**,理由是它們掛在畫面渲染 / 使用者互動的主執行緒上,
+    加幾秒重試延遲會直接拖慢畫面;Gate 0 是排程 / 手動批次操作,可以吃這幾秒。
+    ⚠️ **2026-09-03 逐一實測(caller 清單本身，不是推論)**:
+    - `load_series()`(本檔)→ 被 `services/fund_service.py::_merge_nav_history_series`
+      →`finalize_fund_metrics` 呼叫,後者是**每次算單一基金 metrics 都會經過**的函式
+      (單基金頁 / 群組健診 / 批次分析共用),屬熱路徑,**不傳 `True`**。
+      另一個呼叫點 `scripts/watchlist_push.py:167` 是排程腳本,理論上可承受重試延遲，
+      但為保持「只動 Gate 0 這一件事」的最小改動原則，本次**未一併加上**,維持原行為。
+    - `coverage_status()`(本檔)→ Tab5 資料看板背後（經 `ui/tab5_data_guard.py`
+      的 `@st.cache_data` 薄快取層），同屬畫面渲染路徑,**不傳 `True`**。
+    - `services/fundclear_backfill.py::analyze_backfill_conflict` 內的
+      `load_points(app_code)` 呼叫 → 供 T7 帳本手動回補流程的衝突偵測用，
+      同屬使用者互動同步路徑（按下按鈕等結果），**不傳 `True`**。
+    ⚠️ **上一版本行原寫「`ui/helpers/nav_history_hook.py` 每次看基金就寫入的路徑」
+    ——這句話指錯了函式,已就地更正（有意識的更正，不是漏刪）**：`nav_history_hook.py`
+    呼叫的是 `append_points()`（寫入路徑，本檔 :371 起）與 `status()`（純讀 secrets，
+    完全不碰 `_get_sheet` / gspread I/O），**不是** `load_points()`；本次修復範圍
+    僅限 Gate 0 的**讀取**路徑，`append_points()` 內部同樣呼叫 `_get_sheet()`
+    且同樣零重試（:399），但那是**寫入路徑**，不在本次任務範圍內
+    （任務原文：「讓那次 Gate 0 預讀有重試機會，就這一件事」）——
+    寫入路徑的 `_get_sheet()` 零重試現況維持不變，留給後續任務視情況處理。
 
     ── 2026-09-01 跨呼叫來源冷卻(客戶指示:批次 2)────────────────────────────
     **為什麼冷卻要放在這一支,而不是放在 `coverage_status` 或 UI 的快取上**:
@@ -519,7 +561,21 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
 
     try:
         with _gs_guard(oauth_client, _sheet):     # v19.509:序列化共用 OAuth client 併發讀
-            sh = _sheet if _sheet is not None else _get_sheet(oauth_client)
+            if retries and _sheet is None:
+                # 2026-09-03 Gate 0 修復:根因是 `_get_sheet()` 內 `client.open_by_key`
+                # 的單次 5xx、零重試(見 load_points docstring「retries」段)。只重試
+                # `_get_sheet()` 這一步 —— 之後的 `sh.worksheet()` / `get_all_values()`
+                # 邏輯不動一行,刻意不包一層巢狀 function:那樣會把這兩行的 AST 歸屬
+                # 從 `load_points()` 換到別的函式名下,悄悄弄丟
+                # `tests/test_services_purity_contract.py::GSPREAD_DEBT` 的既有登記
+                # (`"services/nav_history_gs.py::load_points()"`)——那條測試按**符號名**
+                # 認地雷,不是按行號,搬家等於這裡多開一個「未登記」的新地雷。
+                # 也**不在這裡登記冷卻** —— 冷卻只在下面 except 那一層、全部重試用完
+                # 之後才登記。
+                from infra.gspread_retry import with_gspread_retry
+                sh = with_gspread_retry(_get_sheet, oauth_client)
+            else:
+                sh = _sheet if _sheet is not None else _get_sheet(oauth_client)
             try:
                 ws = sh.worksheet(_WS_NAV)
             except Exception as _e_ws:

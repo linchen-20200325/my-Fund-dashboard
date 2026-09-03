@@ -203,6 +203,59 @@ def kind_for_gspread_error(exc: BaseException) -> str:
     return "unreachable"
 
 
+# gspread 失敗分類中，值得在**同一次呼叫內**立刻重試的種類。
+#
+# ⚠️ 刻意排除 `rate_limited`（429）—— `shared/backoff_policy.py` 對它的定性是
+# 「唯一一種『對方明確叫我們停』的失敗，繼續探測會延長封鎖窗口」；立刻重試等於違反
+# 那個定性。也排除 `blocked`（403，IP/Referer 層級封鎖，秒級重試不會解除）與
+# `not_found` / `proxy_auth`（設定問題，不是暫時性抖動，重試不會自癒）。
+# 只留 `server_error`（5xx）與 `unreachable`（逾時／連線層）—— 兩者才是「多半是
+# 暫時性抖動」的分類，這正是 2026-09-02 production 事故命中的那一種。
+GSPREAD_RETRYABLE_KINDS: "frozenset[str]" = frozenset({"server_error", "unreachable"})
+
+
+def with_gspread_retry(call: Callable, *args,
+                       backoffs: tuple[float, ...] = DEFAULT_QUOTA_BACKOFFS,
+                       retry_kinds: "frozenset[str]" = GSPREAD_RETRYABLE_KINDS,
+                       **kwargs) -> Any:
+    """包裝 gspread 呼叫：依 `kind_for_gspread_error` 分類，只重試「多半是暫時性」的種類。
+
+    為什麼不能直接沿用 `with_quota_retry`
+    --------------------------------------
+    `with_quota_retry` 只認 429（配額），是**寫入路徑**既有的既定行為（兩份原始實作
+    `policy/_helpers.py` / `snapshot_repository.py` 逐字複製而來，本檔只抽共用，刻意
+    不改判準 —— 改判準等於改變既有 caller 的行為，超出「抽 SSOT」的範圍）。
+
+    本函式服務的是另一個問題 —— **2026-09-02 production 事故**：
+    `nav_history_gs.load_points` 的 Gate 0 預讀被 `client.open_by_key` 的一次 **5xx**
+    打斷、**零重試**，直接判定「讀不到既有歷史 → fail-closed 本次不寫雲端」（8/31、9/2
+    各中一次；15 次執行 2 次命中）。5xx 不是配額，`is_quota_error` 抓不到它；
+    `kind_for_gspread_error` 才分得出 429 / 403 / 5xx / 逾時，本函式據此分流重試。
+
+    嘗試次數 = `len(backoffs)`；最後一次仍失敗 → 拋出原例外（§1 fail loud，不吞）。
+    非 `retry_kinds` 內的分類（429 / 403 / 404 / 407）**第一次失敗就直接拋出，不重試**。
+
+    ⚠️ **本函式本身不登記冷卻**（`record_gspread_failure` 一律留給呼叫端，在重試迴圈
+    之外、例外真正往外傳播之後才呼叫）—— 這是 2026-09-02 事故的第二個教訓：
+    9/2 那次已有跨呼叫冷卻機制在跑，若讓「第一次失敗」就登記冷卻，接下來 300 秒
+    （`server_error` 的冷卻時長）同一張表的所有讀取會被 `should_skip_gspread` 主動
+    擋下 —— **連自己剛加的重試機會都用不到**。冷卻只能在「重試全部用完」之後才登記。
+    """
+    last_err: BaseException | None = None
+    for attempt, delay in enumerate(backoffs):
+        try:
+            return call(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001 — gspread 例外類型隨版本變
+            last_err = e
+            is_last = attempt == len(backoffs) - 1
+            if kind_for_gspread_error(e) not in retry_kinds or is_last:
+                raise
+            time.sleep(delay)
+    if last_err is not None:
+        raise last_err
+    return None
+
+
 def should_skip_gspread(actor: str, sheet_id: str) -> "tuple[bool, float, str]":
     """這把憑證 + 這本試算表，現在該不該跳過？→ (skip, 剩餘秒數, kind)。
 
