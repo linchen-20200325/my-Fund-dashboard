@@ -1817,7 +1817,12 @@ def render_portfolio_tab() -> None:
                 "目標核心資產比例（%）", 50, 90,
                 st.session_state.get("portfolio_core_pct",75), 5, key="slider_core_pct")
 
-            # ── 真實收益長條圖（Core Protocol v2.0 Ch.4）────────────────
+            # ── ~~真實收益長條圖（Core Protocol v2.0 Ch.4）~~ →
+            #    **持倉去重（下方健診／輪動／組合績效／換股顧問共用）** ────────
+            # ⚠️ 2026-09-02 就地更正標題（**有意識的更正，不是漏刪**）：長條圖已移到
+            #    ② 持倉體檢（見下方那段），這段去重**留下來**是因為它現在服務的是
+            #    `if _loaded_pf:` 底下的健診鏈。**留著舊標題會讓下一個人以為
+            #    下面接的是一張圖，然後把它當孤兒一起刪掉** —— 那會連環拆掉四個區塊。
             # v18.38：分析視圖按 code 去重（同基金跨多保單只算一次），
             # 與 v18.34 戰情室 / v18.36 T5 重疊度矩陣的去重策略一致。
             _loaded_pf_raw = [f for f in pf if f.get("loaded") and not f.get("load_error")]
@@ -1829,120 +1834,49 @@ def render_portfolio_tab() -> None:
                     continue
                 _seen_rc.add(_c)
                 _loaded_pf.append(_f)
+            # ══════════════════════════════════════════════════════════════════
+            # 「📊 真實收益 vs 配息率健康矩陣」在本頁的渲染**已移除**（2026-09-02，
+            # 客戶拍板線框：**同一個東西不要在兩頁各印一次**）。
+            # **有意識的政策變更，不是漏刪** · 決策者：**客戶**。
+            #
+            # **去哪了**：② 持倉體檢那一份是**唯一主場**，實作住在
+            # `ui/helpers/fund_grp_health/dividend.py::_render_dividend_matrix`，
+            # 由 `ui/helpers/fund_grp_health/__init__.py::render_fund_grp_health_extras`
+            # 呼叫。**本批只拿掉 ④ 這一份，② 那一份一個字都沒動。**
+            #
+            # **為什麼留 ② 拿掉 ④**（兩邊理由並陳，不是「④ 這份寫錯了」）：
+            # 兩份是 clone（`STATE.md` 自陳「真實收益矩陣(clone×2)」，② 那份的
+            # docstring 也寫著「從 tab3_portfolio L1796-1921 移植」）。**④ 這份
+            # 是原版，理由仍然成立** —— 它當初就長在使用者看配置的地方。
+            # **被權衡掉的原因**是 ② 那份後來長出了本份沒有的東西：
+            #   · 抓不到的值**留缺口**（柱子不畫），本份是 `_ret_v or 0.0` →
+            #     「1Y 抓不到」會畫成 0 高柱並印「0.0%」，與真的持平 0% 同形（違 §1）；
+            #   · gap 判定走 SSOT `services.portfolio_service.dividend_safety`，
+            #     本份是 inline 1.2× coverage。
+            # 也就是說：**留下來的那份嚴格較好，不是隨便挑一份留。**
+            #
+            # ⛔ **`_loaded_pf` / `_loaded_pf_raw` / `_seen_rc`（上方那段去重）刻意保留** ——
+            #    它們不是矩陣專用：下方「💊 持倉健診」整段（`_health_results` →
+            #    `_funds_extra`）以 `if _loaded_pf:` 為入口，而 `_funds_extra` 又是
+            #    輪動配對／組合績效／效率前緣／🎯 換股顧問的資料前置。
+            #    跟著矩陣一起拔會**連環拆掉四個區塊**（同本檔下方「計算不能跟著拔」
+            #    那段記載的失效模式）。本批實測確認：矩陣區塊內的
+            #    `_rc_* / fig_rc / _y_max` **全部只在該區塊內使用**，其餘同名變數
+            #    （`_f` / `_n` / `_r` / `_div` …）都是各處迴圈自己重新指派的暫時變數。
+            # ══════════════════════════════════════════════════════════════════
             if _loaded_pf:
+                from ui.helpers.story_nav import (  # noqa: PLC0415
+                    where_to_find as _where_to_find_rc,
+                )
                 st.divider()
-                st.markdown("### 📊 真實收益 vs 配息率健康矩陣")
-                st.caption("長條高度 < 紅虛線 → 含息報酬不足以支撐配息 → 吃本金警示")
-
-                # v18.48 三層 fallback + is_real 旗標，正確區分「真 0%」與「資料不足」
-                # v18.72: 加 _rc_src 追蹤每檔 1Y 來源，hover 顯示讓使用者一眼看出走哪條 fallback
-                _rc_names, _rc_ret, _rc_div, _rc_real, _rc_src = [], [], [], [], []
-                for _f in _loaded_pf:
-                    _mj  = _f.get("moneydj_raw", {}) or {}
-                    _m   = _f.get("metrics", {}) or {}
-                    _pf2 = _mj.get("perf", {}) or {}
-                    _name = (_f.get("name") or _f["code"])[:18]
-
-                    # v18.65: 真 1Y 優先 — perf["1Y"] (wb01 官方 / local_calc 注入只有真 1Y)
-                    # v18.134: 改用 compute_1y_total_return 共用 helper（與 Tab2 對齊）
-                    # 修使用者反饋「同一基金兩 view 顯示不同 1Y 報酬」
-                    from ui.helpers.macro_helpers import compute_1y_total_return
-                    _ret_v, _src_label = compute_1y_total_return(_f)
-                    _is_real = _ret_v is not None
-                    _ret_window_days = None    # v18.65 短窗口提示（helper 內部已標明來源）
-
-                    # v19.272 Phase 2 TOP 1.2:adr 走 SSOT _resolve_adr_with_fallback 3 層 chain
-                    # 原 line 2042 + 2046-2067 inline 3 層 fallback 完全複製 SSOT 邏輯,收掉 22 LOC
-                    from services.health.dividend import _resolve_adr_with_fallback
-                    _div_v, _ = _resolve_adr_with_fallback(_f)
-                    _div = round(float(_div_v), 2) if _div_v else 0.0
-                    _rc_names.append(_name)
-                    _rc_ret.append(round(_ret_v, 2) if _ret_v is not None else 0.0)
-                    _rc_div.append(round(_div, 2))
-                    _rc_real.append(_is_real)
-                    _rc_src.append(_src_label if _is_real else "資料不足")
-
-                if _rc_names:
-                    # v19.402 §1:改走 SSOT dividend_safety(gap 判定 綠/黃/紅),取代原
-                    # inline 1.2× coverage 門檻 → 與全站(Tab2 警示框 / 健診 3 表)一致,不再打架。
-                    # 資料不足(_real=False)/ 無配息(_d≤0)→ dividend_safety 回 grey,誠實不誤判。
-                    # L3→L2 呼叫(portfolio_service),同時修掉原 inline 分類的 §8.2 越權。
-                    # (div_safety_check 即 dividend_safety,已於檔頭 module 級 import,不重複)
-                    _LVL_COLOR = {"red": MATERIAL_RED, "yellow": MATERIAL_ORANGE,
-                                  "green": MATERIAL_GREEN, "grey": TRAFFIC_NEUTRAL}
-                    _rc_levels = []
-                    for _r, _d, _real in zip(_rc_ret, _rc_div, _rc_real):
-                        if not _real:
-                            _rc_levels.append("grey")            # 1Y 資料不足 → 灰
-                        else:
-                            _rc_levels.append(
-                                div_safety_check(_r, _d).get("alert_level", "grey"))
-                    _rc_colors = [_LVL_COLOR.get(_lv, TRAFFIC_NEUTRAL) for _lv in _rc_levels]
-
-                    fig_rc = go.Figure()
-                    # v19.387 V1 §1:含息報酬長條用真實值 _rc_ret(移除 max(_r,0.5) 地板 ——
-                    # 原本把吃本金的負報酬硬拉成正向長條、標籤卻標真負值,視覺與數據矛盾)。
-                    # 負報酬向下、以 0 基準線(下方 add_hline)呈現;顏色 _rc_colors 已把吃本金標紅。
-                    fig_rc.add_trace(go.Bar(
-                        x=_rc_names, y=_rc_ret,
-                        name="含息報酬率(1Y)%",
-                        marker_color=_rc_colors,
-                        text=[f"{v:.1f}%" for v in _rc_ret],
-                        textposition="outside",
-                        customdata=list(zip(_rc_ret, _rc_src)),
-                        hovertemplate=("%{x}<br>含息報酬：%{customdata[0]:.2f}%"
-                                       "<br>來源：%{customdata[1]}<extra></extra>")))
-                    # 配息年化率紅色點線
-                    if any(d > 0 for d in _rc_div):
-                        fig_rc.add_trace(go.Scatter(
-                            x=_rc_names, y=_rc_div,
-                            name="配息年化率%",
-                            mode="markers+lines",
-                            line=dict(color=MATERIAL_RED, width=1.5, dash="dot"),
-                            marker=dict(symbol="diamond", size=8, color=MATERIAL_RED),
-                            hovertemplate="%{x}<br>配息率：%{y:.2f}%<extra></extra>"))
-                    # 零基準線
-                    fig_rc.add_hline(y=0, line_color=GRAY_55, line_width=1)
-                    # ── 吃本金：背景色塊 + 標註（v19.402:紅框依 SSOT red 判定,gap>2%,
-                    #    與長條顏色同源;gap 0~2% 為 SSOT yellow → 橙條但不標「吃本金」）──
-                    _y_max = max(max(_rc_ret, default=10), max(_rc_div, default=10)) * 1.35
-                    for _i, (_r, _d, _n, _real, _lv) in enumerate(zip(_rc_ret, _rc_div, _rc_names, _rc_real, _rc_levels)):
-                        if _lv == "red":
-                            fig_rc.add_vrect(
-                                x0=_i - 0.45, x1=_i + 0.45,
-                                fillcolor="rgba(244,67,54,0.08)",
-                                line_color="rgba(244,67,54,0.4)", line_width=1,
-                                layer="below")
-                            fig_rc.add_annotation(
-                                x=_n, y=_y_max,
-                                text=f"⚠️ 吃本金<br>缺口 {_d-_r:.1f}%",
-                                showarrow=False,
-                                font=dict(color=MATERIAL_RED, size=11),
-                                bgcolor="rgba(42,10,10,0.85)",
-                                bordercolor=MATERIAL_RED, borderwidth=1,
-                                borderpad=4)
-                        elif not _real and _d > 0:
-                            # 缺 1Y 資料 → 顯示「資料不足」灰色標註，不誤判吃本金
-                            fig_rc.add_annotation(
-                                x=_n, y=_y_max,
-                                text="⬜ 1Y 資料不足<br>無法判定",
-                                showarrow=False,
-                                font=dict(color=GRAY_AA, size=10),
-                                bgcolor="rgba(60,60,60,0.7)",
-                                bordercolor=GRAY_66, borderwidth=1,
-                                borderpad=4)
-                    fig_rc.update_layout(
-                        paper_bgcolor=STREAMLIT_BG, plot_bgcolor=GH_BG_CARD,
-                        font_color=GH_FG_PRIMARY, height=360,
-                        margin=dict(t=40, b=20, l=40, r=20),
-                        legend=dict(orientation="h", font_size=10, y=1.08),
-                        yaxis_title="報酬率 / 配息率 (%)",
-                        yaxis=dict(range=[min(0, min(_rc_ret, default=0)) - 2, _y_max]),
-                        bargap=0.35, hovermode="x unified")
-                    st.plotly_chart(fig_rc, use_container_width=True)
-
-                    # v18.163：下方 4 卡 KPI 已移除（與 Tab3 頂部 hero KPI 重複）；
-                    # 詳細數字在 hero「💵 現金流安全」/「🔴 留校查看」見。
+                # 顏色：功能搬到別頁**不是系統故障** → 灰色 caption，不得用
+                # st.error / st.warning（三態顏色分離；同本檔 WP-G 那行指路的處置）。
+                # 分頁名走 `story_nav` SSOT —— **不得**手抄「② 持倉體檢」，
+                # 那正是本 repo 已經指錯三次的寫法。
+                st.caption(
+                    f"📊 **真實收益 vs 配息率健康矩陣**（含息報酬夠不夠付配息／吃本金警示）"
+                    f"請看 {_where_to_find_rc('health')} —— 同一張圖只在那裡畫一次。"
+                )
 
             # v19.180:💊 持倉健診總表(共用 SSOT 渲染,不重抓資料)
             # 來源:與「基金組合健診」Tab 完全同源(process_one_fund + _render_health_table),

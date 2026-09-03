@@ -222,6 +222,91 @@ def _t7d_fetch_fund_meta(code: str, existing=None) -> dict:
     return fetch_fund_meta_safe(code, _existing=existing)
 
 
+#: ④ 交易帳本 A/B/C 三段的 **SSOT**：`(key, 標籤)`。
+#:
+#: ⚠️ **刻意只有一欄標籤**，目錄連結文字與區塊標題**共用它** —— 這不是省事，是
+#: 針對本 repo 已實證的一種漏洞做的設計。`tests/test_manual_anchor_toc.py` 檔頭
+#: 記載：說明書的 `_CHAPTERS` 有「目錄短標」與「章節標題」**兩欄不同的字**，
+#: 同一列改一欄不改另一欄，目錄與實際章名當場對不起來，而全套測試**照樣全綠**
+#: （該檔已就地更正並誠實標明「就是沒守」）。一欄制**消滅了那第二欄**，所以
+#: 「兩欄各自漂移」這種形態在這裡不存在。
+#: ⚠️ **2026-09-02 就地更正（有意識的更正，不是漏刪 · 依據：獨立稽核實測）**：
+#: 本句原寫 ~~「一欄制讓那種漂移**結構上不可能發生**」~~ —— **那句話當時是假的，
+#: 而且被實測繞過**：把 `_t7_render_toc()` 內的連結文字硬寫成另一組字
+#: （anchor 仍走 `_t7_anchor`），目錄與段標題完全對不起來，**全套照樣全綠** ——
+#: 因為當時沒有任何一條測試在守「目錄的**連結文字**」。
+#: **舊表述的用意仍然成立**（一欄制確實比兩欄制強、確實消滅了一整類漂移）；
+#: **被權衡掉的是它的強度宣稱** —— 「消滅一欄」不等於「沒有人能繞過這一欄」。
+#: **現已補上守衛（兩條）**：`tests/test_ia_tab4_ledger_flattened.py::
+#: test_toc_link_text_matches_the_ssot_labels`（把目錄連結文字綁回本表）
+#: ＋ 同檔 `::test_no_handwritten_toc_or_heading_text_bypasses_the_ssot`
+#: （任何會畫字的呼叫都不得手寫段標籤 / `t7-` 錨點 / 目錄連結；
+#: `markdown`/`subheader`/`header`/`title` 四種、alias 與 `from streamlit import` 裸名都抓）。
+#: ⚠️ **2026-09-03 第三次更正（有意識的更正，不是漏刪 · 依據：獨立稽核實測 + 本組複跑）**：
+#: 本段原本接著寫 ~~「補完之後那句話才成立。一句寫進永久記錄的絕對語，要先有守衛才配得上。」~~
+#: —— **那句話又被推翻了一次。** 實測：把 `_t7_section_heading("b")` 關進 `if False:`
+#: （AST 仍看得到那行呼叫，順序檢查照樣過）**再手寫一個不含段標籤字樣的標題**
+#: （`st.markdown("#### B 段（改名）")`），**全套 13 條照樣全綠**，
+#: 而畫面上的標題與目錄當場對不起來。
+#: **同一句絕對語至此被推翻三次**（原句 → B1 → 本次的 if-False 變體）。
+#: **故本段不再宣稱任何「不可能」**，改為據實列出守得到與守不到的：
+#: - **守得到（語法層，四種繞道皆已實測轉紅）**：手寫段標籤／`t7-` 錨點／目錄連結。
+#: - **守不到**：~~用死分支保留合法呼叫**騙過 AST**、同時手寫一份**不含上述指紋**的替代品~~
+#:   ~~（對照組：**直接刪掉**那行 SSOT 呼叫再手寫 → **轉紅**，所以只有刻意的死分支會漏。）~~
+#:   ⚠️ **2026-09-03 第三次更正（delta 稽核 E7/E8；本組複跑確認）：上面那句又是假的，
+#:   而且是同一個位置型錯誤 —— 測試檔那邊改掉了，這裡漏了。**
+#:   兩顆**完全沒有死分支**的突變照樣全綠：
+#:   `st.markdown("#### " + dict(_T7_SECTIONS)["b"] + "（暫停使用）")`（E7）、
+#:   `st.markdown("**📑**　[A加碼]" + "(#" + "t7" + "-a)")`（E8，指紋跨運算元被切斷）。
+#:   舊對照組的推論**無效**：它轉紅是因為順序守衛發現**呼叫不見了**，指紋守衛根本沒出手。
+#: ⚠️ **同日第二次更正（決策者：AI 總管 · 依據：本組在 repo 外跑的原型規則實測）**：
+#:   上一行原把 E7 標成 ~~「值在執行期才產生」~~ 並歸入**免修**的真上限 —— **又錯了**，
+#:   而且是同一個錯誤在同一份 diff 裡**第三次**、又一次錯在對本檔有利的方向。
+#:   **實測**：一條「合法函式之外的畫字呼叫，其 AST 子樹不得出現 `_T7_SECTIONS` /
+#:   `_t7_anchor`」的規則**抓得到 E7 與 E5，且對現行 production 誤傷 0**；
+#:   E1（少一個空白）則被「空白正規化後比對」抓得到，同樣誤傷 0。
+#:   → **E7 / E5 / E1 一律是「可修、尚未修」（B-2），不是上限。**
+#:   **真正的上限只剩兩種**：(a) 死分支騙過 AST 可達性；
+#:   (b) 標題被**整個改名**（原始碼裡既沒有那串字、也沒有 SSOT 名字 → 沒有東西可比對）。
+#:   ⛔ 本輪**只改分類文字、不新增守衛**；規則本身登記在測試檔的 B-2 待辦表。
+#: 完整清單見 `tests/test_ia_tab4_ledger_flattened.py` 模組 docstring「本檔守不到的」。
+#: ⚠️ 標籤逐字沿用搬遷前 `st.tabs([...])` 的三個分頁名（見下方 `render_t7_section`
+#: 內的更正註記）—— 使用者記得的是這三個名字，改名是另一件事、不在本批。
+_T7_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("a", "A 新投入"),
+    ("b", "B 投入再平衡"),
+    ("c", "C 轉換再平衡 (Switch)"),
+)
+
+#: anchor 前綴 —— 與 `ui/tab6_manual.py` 同慣例（顯式指定，不吃 Streamlit 對中文
+#: 標題自動產生的 anchor，那個不可靠、目錄連結會連不過去）。
+_T7_ANCHOR_PREFIX = "t7-"
+
+
+def _t7_anchor(key: str) -> str:
+    """回傳某一段的顯式 anchor id。未知 key 直接炸（§1 Fail Loud）。"""
+    if key not in {_k for _k, _ in _T7_SECTIONS}:
+        raise KeyError(f"tab3_t7_ledger._t7_anchor: 未知區段 key {key!r}；"
+                       f"合法值 = {[_k for _k, _ in _T7_SECTIONS]}")
+    return f"{_T7_ANCHOR_PREFIX}{key}"
+
+
+def _t7_section_heading(key: str) -> None:
+    """畫一段的標題（`st.subheader` + 顯式 anchor）。"""
+    _label = dict(_T7_SECTIONS)[key]
+    st.subheader(_label, anchor=_t7_anchor(key))
+
+
+def _t7_render_toc() -> None:
+    """錨點目錄 —— 取代原本的 3 個 `st.tabs` 子分頁。
+
+    位置刻意與原本的分頁列**完全相同**（帳本即時面板的 placeholder 之後、
+    第一段之前）：使用者原本就是在這個高度找「我要做哪一種試算」的入口。
+    """
+    st.markdown("**📑 三種試算**　" + "　·　".join(
+        f"[{_label}](#{_t7_anchor(_k)})" for _k, _label in _T7_SECTIONS))
+
+
 def render_t7_section() -> None:
     """渲染 T7 帳務試算 + 深度組合建議 AI 子區。
 
@@ -1133,15 +1218,51 @@ def render_t7_section() -> None:
                     _t7_restore_ledgers(_backup_snap)
                     raise
 
-            # 占位：tabs 處理完才渲染最新帳本，避免 1 cycle 過期
+            # 占位：~~tabs~~ **三段**處理完才渲染最新帳本，避免 1 cycle 過期。
+            # ⚠️ 2026-09-02 就地更正（**有意識的更正，不是漏刪**）：本行原寫「tabs」，
+            #    而 A/B/C 已於同批由 `st.tabs` 改為錨點目錄 + `st.container()` ——
+            #    **本檔已無任何 `st.tabs`**。**舊表述的機制仍然成立**（placeholder 先建、
+            #    最後才填，就是為了拿到最新 session_state）；**過期的只有「tabs」這個名字**。
+            #    留著它會讓下一個人以為這裡還有一層分頁（同本批 T21 更正
+            #    `# ── 真實收益長條圖 ──` 的同一種病：**會說謊的註解**）。
             _panel_ph = st.empty()
 
-            _tA, _tB, _tC = st.tabs(
-                ["A 新投入", "B 投入再平衡", "C 轉換再平衡 (Switch)"]
-            )
+            # ══════════════════════════════════════════════════════════════
+            # 版面（2026-09-02，客戶拍板線框）：~~`st.tabs(["A 新投入", "B 投入
+            # 再平衡", "C 轉換再平衡 (Switch)"])`~~ → **單頁 + 錨點目錄**
+            # （**有意識的政策變更，不是漏刪** · 決策者：**客戶** · 線框明訂
+            #   ④ 內部不得再開一層 `st.tabs`；`ui/helpers/fund_grp_health/
+            #   switch_advisor_section.py` 檔頭已把這條記成「客戶鐵則」）。
+            #
+            # ⚠️ **本檔是全站最後一個真的會畫出第二層分頁列的地方。** 說明書
+            #    （`ui/tab6_manual.py`）與 ⑤（`ui/tab_settings_diag.py`）都已
+            #    改成單頁 + 錨點，但 `ui/tab_settings_diag.py` 檔頭那句
+            #    ~~「全站最後一層巢狀 `st.tabs` 自此消失」~~ 是**假宣稱**（該檔
+            #    已就地劃線更正並收窄成「⑤ 這一頁自此沒有」）—— 因為它只掃了
+            #    自己那一頁，掃不到本檔。**本批才是真的把它清掉的那一批。**
+            #
+            # ⚠️ **為什麼是 `st.container()` 而不是把三段程式碼 dedent 出來**：
+            #    `st.tabs` **單次 run 會渲染全部分頁** —— **官方出處（2026-09-02 獨立稽核
+            #    補，逐字）**：`streamlit 1.59.2` 的 `st.tabs` docstring 寫著
+            #    「By default, all tab content is computed and sent to the frontend
+            #    regardless of which tab is selected」，且本檔搬遷前**沒有**帶
+            #    `on_change` → 走預設值。本 repo 亦多處實測自陳（
+            #    `app.py`、`ui/tab5_data_guard.py`、`ui/components/
+            #    column_group_tabs.py`）。—— 也就是說 A/B/C 三段本來就**每一次
+            #    rerun 都全部執行**。換成 container 後**執行的東西一行都沒變**，
+            #    變的只有外框：分頁列不見了、三段依序攤平。body 縮排原封不動
+            #    ＝ 這 1,550 行的邏輯**零改動風險**（`CLAUDE.md §-1.5.1a` 對照表
+            #    第 9 列「最小改動」；`§8.4 步驟 4` 禁止自作主張大重構）。
+            #
+            # ⛔ **不得改用 `st.expander` 預設收合來取代分頁**：收合內容不在 DOM
+            #    裡 → 殺掉 Ctrl-F，錨點也跳不進去。（這一點已在別批被設計組否決；
+            #    要收合請用「整段一個總開關」，內部結構不變。）
+            # ══════════════════════════════════════════════════════════════
+            _t7_render_toc()
 
             # ── A. 新投入 ───────────────────────────────────────────────────
-            with _tA:
+            _t7_section_heading("a")
+            with st.container():
                 st.caption("拿一筆新台幣加碼某檔（或多檔）基金。NAV / FX 即時自動抓取，使用者只填金額。")
                 _a_mode = st.radio(
                     "加碼模式",
@@ -1489,7 +1610,8 @@ def render_t7_section() -> None:
                             )
 
             # ── B. 投入再平衡 ────────────────────────────────────────────────
-            with _tB:
+            _t7_section_heading("b")
+            with st.container():
                 st.caption(
                     "拿一筆新台幣按目標權重攤分到多檔基金。"
                     "依「投入後總市值 × 目標權重 − 目前市值」缺口比例分配；"
@@ -1802,7 +1924,8 @@ def render_t7_section() -> None:
                             )
 
             # ── C. 轉換再平衡 [核心，M→N action-driven，v18.5] ──────────────
-            with _tC:
+            _t7_section_heading("c")
+            with st.container():
                 st.caption(
                     "**多賣方組 + 各自買方組** 複合轉換。例：A 賣 10% 配 C / "
                     "B 賣 20% 配 D, E。同幣別 → fx_avg 嚴格繼承；跨幣別 → 即期立帳。"
@@ -3096,9 +3219,15 @@ def render_t7_section() -> None:
 
             # ── v18.82 老師深度組合建議（AI）—— 放 _panel_ph 之外才會在 A/B/C 下方 ──
             # 使用者反饋「組合基金下方缺乏 AI 組合分析」：v18.81 expander 寫在
-            # _panel_ph.container() 裡，那個 placeholder 在 A/B/C tabs 上方創建，
-            # 渲染進去 = 顯示在 tabs 上方，使用者在 C tab 往下看當然看不到。
+            # _panel_ph.container() 裡，那個 placeholder 在 A/B/C ~~tabs~~ **三段**上方創建，
+            # 渲染進去 = 顯示在 ~~tabs~~ **三段**上方，使用者在 ~~C tab~~ **C 段**往下看當然看不到。
             # 搬出 placeholder 後 expander 渲染在 if _T7_OK 區段最末，即 A/B/C 下方。
+            # ⚠️ 2026-09-02 就地更正（**有意識的更正，不是漏刪**）：A/B/C 已於同批
+            #    由 `st.tabs` 改為錨點目錄 + `st.container()`，本檔已無 `st.tabs`。
+            #    **這段事故紀錄的因果仍然完全成立**（placeholder 建在三段之上 →
+            #    渲染進去就會跑到三段上方 → 使用者往下看不到），**過期的只有措辭**：
+            #    「tab」現在是「段」。**刻意不刪這段**：它記錄的是一次真實的使用者回報
+            #    與其根因，是本 repo「舊條文保留不刪」的對象。
             st.divider()
             st.markdown(
                 "<div style='background:linear-gradient(135deg,#2a1845,#1a0d2a);"
