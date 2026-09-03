@@ -116,30 +116,10 @@ def test_list_recent_empty_when_no_dir():
 
 
 # ─────────── 整合:L2 攤平列必須能無損穿過 L1 checkpoint ───────────
-def test_analyze_row_survives_checkpoint(monkeypatch):
-    """L2 analyze_fund_row 產的列 → save(json.dump)→ load 應完全還原且可再序列化。
-
-    save 內部走 json.dump:若列含非 JSON-safe 值(如 numpy 型別漏網)會當場 raise,
-    故本測試同時守「L2 輸出恆 JSON-safe」的跨模組契約。
-    """
-    import pandas as pd
-
-    from services.fund_batch import analyze_fund_row
-
-    def _fd(code, *a, **k):
-        idx = pd.date_range("2024-01-01", periods=300, freq="D")
-        return {
-            "series": pd.Series([100 + i * 0.01 for i in range(300)], index=idx),
-            "dividends": [], "currency": "USD", "fund_name": "測試", "data_source": "moneydj",
-            "mgmt_fee": "1.5%",
-            "metrics": {"nav": 103.0, "ret_1y": 8.0, "sharpe": 1.2, "std_1y": 12.0,
-                        "max_drawdown": -15.0, "div_freq_n": 12},
-        }
-    monkeypatch.setattr("services.moneydj_fetcher.auto_fetch_moneydj", _fd)
-
-    row = analyze_fund_row("ACCP138")
-    rid = bc.compute_run_id(["ACCP138"])
-    bc.save(rid, ["ACCP138"], {"ACCP138": row})     # 非 JSON-safe 會在此 raise
-    back = bc.load(rid)
-    assert back["rows"]["ACCP138"] == row           # 無損還原
-    json.dumps(back)                                # 可再序列化
+# ⚠️ 2026-08-28 Phase 1.4:本區塊原有 test_analyze_row_survives_checkpoint,
+#   驗「services.fund_batch.analyze_fund_row 產的列 → bc.save(json.dump) → bc.load 無損還原」
+#   這條跨模組契約。隨 `services/fund_batch.py` 整檔刪除而移除
+#   (**測試對象消失,不是為了讓 CI 綠**;該檔 production 0 caller,user 2026-08-28 明確點名刪除)。
+#   ⚠️ 連帶效果據實記錄:`batch_checkpoint.save` 的「輸入須 JSON-safe」這個要求**仍然成立**,
+#   只是它原本唯一的 production 生產者不見了,故不再有可驗的對象;
+#   日後若有新的 L2 生產者接進 checkpoint,應在此重建同型整合測試。

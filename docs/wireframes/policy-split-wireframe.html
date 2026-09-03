@@ -1,0 +1,616 @@
+<title>保單管理切分線框</title>
+<style>
+:root{
+  --paper:#eef1f5; --surface:#ffffff; --surface-2:#f6f8fa; --surface-3:#eaeef3;
+  --ink:#14181d; --ink-2:#3d4854; --muted:#68737f;
+  --rule:#ced7e0; --rule-soft:#e2e8ee;
+  --accent:#1b5e8c; --accent-soft:#e4eef6; --accent-ink:#0f4468; --on-accent:#ffffff;
+  --s-grey:#7a848f; --s-grey-bg:#eceff2;
+  --s-red:#a32b21; --s-red-bg:#fbeae8;
+  --s-amber:#7d5800; --s-amber-bg:#fbf1dc;
+  --s-green:#1f6b46; --s-green-bg:#e6f2eb;
+  --shadow:0 1px 2px rgba(20,24,29,.06),0 8px 24px -16px rgba(20,24,29,.28);
+  --focus:#1b5e8c;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#12161a; --surface:#191f25; --surface-2:#1f262d; --surface-3:#252d35;
+    --ink:#e8edf2; --ink-2:#bcc7d2; --muted:#8d99a6;
+    --rule:#2e3841; --rule-soft:#242c34;
+    --accent:#69b3e0; --accent-soft:#16303f; --accent-ink:#a8d4ee; --on-accent:#0d1216;
+    --s-grey:#8d99a6; --s-grey-bg:#232a31;
+    --s-red:#f0938a; --s-red-bg:#33201e;
+    --s-amber:#e0b357; --s-amber-bg:#302713;
+    --s-green:#7cc79c; --s-green-bg:#16291f;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -16px rgba(0,0,0,.7);
+    --focus:#a8d4ee;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#12161a; --surface:#191f25; --surface-2:#1f262d; --surface-3:#252d35;
+  --ink:#e8edf2; --ink-2:#bcc7d2; --muted:#8d99a6;
+  --rule:#2e3841; --rule-soft:#242c34;
+  --accent:#69b3e0; --accent-soft:#16303f; --accent-ink:#a8d4ee; --on-accent:#0d1216;
+  --s-grey:#8d99a6; --s-grey-bg:#232a31;
+  --s-red:#f0938a; --s-red-bg:#33201e;
+  --s-amber:#e0b357; --s-amber-bg:#302713;
+  --s-green:#7cc79c; --s-green-bg:#16291f;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -16px rgba(0,0,0,.7);
+  --focus:#a8d4ee;
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.75; margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px 96px;overflow-x:hidden}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+
+/* ---- masthead ---- */
+.mast{border-bottom:2px solid var(--ink);margin-bottom:40px;padding:56px 0 20px}
+.eyebrow{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 14px;
+}
+h1{
+  font-size:clamp(28px,4.6vw,42px); line-height:1.2; margin:0 0 14px;
+  letter-spacing:-.02em; font-weight:700; text-wrap:balance;
+}
+.standfirst{font-size:17px;color:var(--ink-2);margin:0;max-width:62ch}
+.meta{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; font-size:12px;
+  color:var(--muted); margin-top:22px; display:flex; flex-wrap:wrap; gap:6px 20px;
+}
+
+/* ---- override banner（只給「推翻已核准線框」這一件事用，不得複製給其他決定）---- */
+.override{
+  margin:24px 0 0; padding:18px 22px; background:var(--surface);
+  border:2px solid var(--s-red); border-left-width:6px; border-radius:10px;
+  box-shadow:var(--shadow); color:var(--ink);
+}
+.override .label{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--s-red); font-weight:700; display:block; margin-bottom:8px;
+}
+.override p{margin:0 0 10px;font-size:15.5px;max-width:66ch}
+.override p:last-child{margin-bottom:0}
+.override .stamp{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-size:12px; color:var(--muted); line-height:1.7;
+}
+.override .veto{
+  display:inline-block; margin-top:4px; padding:7px 15px; border-radius:8px;
+  background:var(--s-red-bg); color:var(--s-red); border:1px solid var(--s-red);
+  font-weight:700; font-size:14.5px; text-decoration:none;
+}
+.override .veto:hover{background:var(--s-red);color:var(--surface)}
+
+/* ---- sections ---- */
+section{margin:56px 0 0}
+h2{font-size:23px;line-height:1.3;margin:0 0 6px;letter-spacing:-.01em;font-weight:700;text-wrap:balance}
+h2 .num{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; font-size:13px;
+  color:var(--accent); margin-right:10px; font-weight:500;
+}
+h3{font-size:17px;margin:32px 0 8px;letter-spacing:-.005em;text-wrap:balance}
+p{margin:0 0 14px;max-width:70ch}
+.lede{color:var(--ink-2)}
+strong{font-weight:700}
+hr{border:0;border-top:1px solid var(--rule-soft);margin:44px 0}
+a{color:var(--accent-ink);text-underline-offset:3px}
+
+/* ---- callouts ---- */
+.pull{
+  border-left:3px solid var(--accent); background:var(--accent-soft);
+  padding:16px 20px; margin:20px 0; border-radius:0 8px 8px 0;
+}
+.pull p:last-child{margin-bottom:0}
+.pull .label{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; font-size:11px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--accent-ink);
+  display:block; margin-bottom:6px; font-weight:600;
+}
+.warn{border-left-color:var(--s-amber);background:var(--s-amber-bg)}
+.warn .label{color:var(--s-amber)}
+.warn strong{color:var(--ink)}
+
+/* ---- tabs ---- */
+.tabs{
+  display:flex; flex-wrap:wrap; gap:8px; margin:24px 0 0;
+  border-bottom:1px solid var(--rule); padding-bottom:12px;
+}
+.tab{
+  font:inherit; font-size:14.5px; font-weight:600; cursor:pointer;
+  background:var(--surface); color:var(--ink-2);
+  border:1px solid var(--rule); border-radius:8px; padding:8px 15px;
+  line-height:1.4;
+}
+.tab:hover{background:var(--surface-2);color:var(--ink)}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.panel{margin-top:8px}
+.panel[hidden]{display:none}
+
+/* ---- wireframe blocks ---- */
+.frame{
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:10px; box-shadow:var(--shadow); margin:20px 0 8px;
+  overflow:hidden;
+}
+.frame-head{
+  padding:11px 18px; border-bottom:1px solid var(--rule-soft);
+  background:var(--surface-2);
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; font-size:12px;
+  letter-spacing:.06em; color:var(--muted); text-transform:uppercase;
+}
+.frame-body{overflow-x:auto;padding:18px;-webkit-overflow-scrolling:touch}
+pre{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  font-size:12.5px; line-height:1.62; margin:0; white-space:pre;
+  color:var(--ink-2);
+}
+.cap{font-size:13.5px;color:var(--muted);margin:0 0 24px;max-width:70ch}
+
+/* ---- disclosure ---- */
+details.why{
+  border:1px solid var(--rule-soft); border-radius:10px; background:var(--surface);
+  padding:0 18px; margin:20px 0 0;
+}
+details.why > summary{
+  cursor:pointer; list-style:none; padding:13px 0; font-weight:600; font-size:15px;
+  color:var(--ink); display:flex; align-items:center; gap:9px;
+}
+details.why > summary::-webkit-details-marker{display:none}
+details.why > summary::before{
+  content:"▸"; color:var(--accent); font-size:13px; flex:none;
+  transition:transform .12s ease;
+}
+details.why[open] > summary::before{transform:rotate(90deg)}
+details.why[open] > summary{border-bottom:1px solid var(--rule-soft)}
+details.why .tw{margin-top:4px}
+
+/* ---- tables ---- */
+.tw{overflow-x:auto;margin:20px 0;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:520px}
+th{
+  text-align:left; font-weight:600; font-size:12px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted);
+  border-bottom:1.5px solid var(--rule); padding:0 14px 8px 0; vertical-align:bottom;
+}
+td{
+  border-bottom:1px solid var(--rule-soft); padding:11px 14px 11px 0;
+  vertical-align:top; line-height:1.6;
+}
+tr:last-child td{border-bottom:0}
+td:first-child,th:first-child{padding-left:0}
+
+/* ---- state chips ---- */
+.chip{
+  display:inline-block; font-size:12px; font-weight:600; padding:2px 9px;
+  border-radius:20px; white-space:nowrap;
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+.c-grey{background:var(--s-grey-bg);color:var(--s-grey)}
+.c-red{background:var(--s-red-bg);color:var(--s-red)}
+.c-amber{background:var(--s-amber-bg);color:var(--s-amber)}
+.c-green{background:var(--s-green-bg);color:var(--s-green)}
+
+/* ---- decision table ---- */
+.dtable{margin:24px 0 0}
+.dtable table{min-width:640px}
+.dtable td.id{
+  white-space:nowrap; padding-right:16px;
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-weight:700; font-size:13px; color:var(--accent-ink);
+}
+.dtable td.what{font-weight:600;color:var(--ink)}
+.dtable tr:target td{background:var(--accent-soft)}
+.done{
+  display:inline-block; margin-left:8px; font-size:11px; font-weight:700;
+  padding:1px 8px; border-radius:20px; background:var(--s-green-bg); color:var(--s-green);
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; white-space:nowrap;
+}
+
+/* ---- honest list ---- */
+ol.honest{padding-left:0;list-style:none;counter-reset:h;margin:20px 0 0}
+ol.honest li{counter-increment:h;position:relative;padding-left:38px;margin-bottom:16px;max-width:70ch}
+ol.honest li::before{
+  content:counter(h); position:absolute; left:0; top:1px;
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; font-size:12px;
+  font-weight:700; color:var(--accent); background:var(--accent-soft);
+  width:24px; height:24px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+}
+ul.plain{padding-left:20px;margin:12px 0}
+ul.plain li{margin-bottom:8px;max-width:68ch}
+
+/* ---- sign-off ---- */
+.signoff{
+  margin-top:56px; background:var(--surface); border:2px solid var(--accent);
+  border-radius:12px; padding:24px 26px; box-shadow:var(--shadow);
+}
+.signoff h2{margin-bottom:10px}
+.signoff .say{
+  display:inline-block; margin:6px 10px 6px 0; padding:8px 16px;
+  border-radius:8px; background:var(--accent); color:var(--on-accent);
+  font-weight:700; font-size:15px;
+}
+.signoff .say.alt{background:var(--surface-2);color:var(--ink);border:1px solid var(--rule)}
+
+.foot{margin-top:48px;padding-top:20px;border-top:1px solid var(--rule);font-size:13px;color:var(--muted)}
+.foot code{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-size:12px; background:var(--surface-3); padding:1px 5px; border-radius:4px; color:var(--ink-2);
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">視覺線框 · 已拍板 · 待你確認版面</p>
+  <h1>保單管理切分線框</h1>
+  <p class="standfirst">把原本擠在 <strong>④ 我的配置</strong> 裡的「保單管理」切成兩塊：<strong>④ 📋 保單資料</strong>（看資料、改資料）與 <strong>⑤ 🔌 連線與帳號</strong>（設定一次就不再碰的東西）。六項技術與版面決定<strong>已由總管拍板</strong>，理由列在第 04 節。<strong>你只要看畫面、說一句「版面 OK，動工」</strong>。</p>
+  <div class="override" role="note">
+    <span class="label">⚠️ 有一項推翻了你先前已核准的線框</span>
+    <p><strong>這份草稿有 1 項與你更早核准的五分頁線框不一致</strong>：保單明細（保單一覽與每張保單的明細卡）原本指定放 <strong>⑤ 設定與診斷</strong>，現改為<strong>留在 ④ 我的配置</strong>。</p>
+    <p><strong>為什麼改：</strong>這是每個月都會看的資料，不該離開配置頁；而且 ④ 的「配置總覽 → 保單分組」本來就按保單分組呈現，把明細切走等於同一件事拆兩頁對照著看。</p>
+    <p><strong>這一項你可以直接否決</strong>——說一聲就改回 ⑤，其餘版面不受影響。
+      <a class="veto" href="#d-a">看決定 A 的完整理由與兩邊並陳 ↓</a></p>
+    <p class="stamp">有意識的變更，不是漏改　·　日期 2026-08-31　·　決策者：AI 總管（依客戶當日授權的 Tab 內容重分配全權）</p>
+  </div>
+
+  <div class="meta">
+    <span>量測日 2026-08-31</span>
+    <span>依據 main 21c7615 實測</span>
+    <span>6 項決定已拍板</span>
+    <span>尚未動工</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span>切了對你有什麼好處</h2>
+  <ul class="plain">
+    <li><strong>「我的配置」回到單純看資料、改資料的地方</strong>——打開它不再先撞到一整頁 Google 連線設定。</li>
+    <li><strong>「設定一次就不再碰」的東西集中到一頁</strong>——連 Google、挑帳本、格式升級，第一次設定時有一條完整動線可以走完，不必在兩頁之間找。</li>
+  </ul>
+</section>
+
+<hr>
+
+<section>
+  <h2><span class="num">02</span>版面本體：切分後長這樣</h2>
+  <p class="lede">三個頁籤可以點著切換。想看細節理由，展開每張圖下面的「為什麼這樣切」。</p>
+
+  <div class="tabs" role="tablist" aria-label="切分後的版面">
+    <button class="tab" role="tab" id="tab-p4" aria-controls="panel-p4" aria-selected="true">④ 我的配置</button>
+    <button class="tab" role="tab" id="tab-p5" aria-controls="panel-p5" aria-selected="false">⑤ 連線與帳號</button>
+    <button class="tab" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false">兩頁怎麼銜接</button>
+  </div>
+
+  <div class="panel" role="tabpanel" id="panel-p4" aria-labelledby="tab-p4" tabindex="0">
+    <div class="frame">
+      <div class="frame-head">wireframe · ④ 我的配置</div>
+      <div class="frame-body"><pre>┌─ 📊 我的配置 ────────────────────────────────────────────────────┐
+│                                                                  │
+│  ➕ 加入與管理基金                              〔第 1 段・不動〕│
+│  手動加入（貼代碼時直接標保單）· 每張保單的基金清單與刪除        │
+│  📡 載入所有未載入基金                                           │
+│                                                                  │
+├─ 📋 保單資料 ───────────〔改名：原「保單管理（Google Sheets）」〕┤
+│                                                                  │
+│  ┌───────────────┬───────────────┬───────────────┐              │
+│  │ 📒 目前帳本    │ 📋 保單       │ 🕐 上次讀回   │ ← 3 欄狀態列 │
+│  │ 我的投資組合   │ 4 張 / 12 檔  │ 08-31 14:02   │              │
+│  └───────────────┴───────────────┴───────────────┘              │
+│  [ 🔄 重新整理保單清單（不動投組） ]                             │
+│  ⬜ 連線、授權與雲端存讀，在「⚙️ 設定與診斷 → 🔌 連線與帳號」    │
+│                                                                  │
+│  📋 保單一覽                                                     │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │ 保單編號 │ 基金代號 │ 基金名稱 │ 幣別 │ 級別 │ 金額 │ 現金%│ │
+│  │ 富邦-001 │ ACWXXX   │ 全球股票 │ USD  │ 核心 │300,000│  80 │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│  📄 每張保單的明細                                               │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │ 📋 保單「富邦-001」                                        │ │
+│  │ 🟨 自己填（對帳單抄）　·　⬜ 自動帶（系統算）               │ │
+│  │ 💼 基金持有                                                 │ │
+│  │ ┌────────┬────────┬──────┬──────┬────────┬──────┐        │ │
+│  │ │🟨 代號 │⬜ 名稱 │🟨成本│🟨匯率│🟨 金額 │⬜單位│        │ │
+│  │ └────────┴────────┴──────┴──────┴────────┴──────┘        │ │
+│  │ 💡 配息拆分均值：現金 80% / 新增單位 20%                   │ │
+│  │ [ 📥 重新讀回這張保單 ]                                     │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  （每張保單一張卡，往下重複）                                    │
+│  ⬜ 要新增或修改保單內容，請直接到 Google Sheet 編輯，            │
+│     改完回來按「📥 重新讀回」                                    │
+│                                                                  │
+│  ➕ 新增／更新保單列              〔只在「舊版單表模式」出現〕   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │ ☐ 展開編輯表單                                             │ │
+│  │  ┌─ 填完按送出才會重整畫面（不會邊打字邊閃）───────────┐  │ │
+│  │  │ 保單編號 * │ 保單名稱   │ 基金代碼 * │ 投資金額     │  │ │
+│  │  │ 投資日期   │ 幣別       │ 買入匯率   │ 備註         │  │ │
+│  │  │ [ 💾 儲存 ]   [ 🗑️ 刪除此列 ]                       │  │ │
+│  │  └──────────────────────────────────────────────────────┘  │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│  📊 配置總覽 ／ 🔬 持股重疊度 ／ 💼 帳本 ／ 費用扣款 ／ 🤖 AI    │
+│  🗂️ Raw data（收合，放最後）                       〔全部不動〕 │
+└──────────────────────────────────────────────────────────────────┘</pre></div>
+    </div>
+
+    <details class="why" open>
+      <summary>為什麼這幾塊留在 ④</summary>
+      <div class="tw"><table>
+        <thead><tr><th style="width:30%">區塊</th><th>為什麼留在 ④</th></tr></thead>
+        <tbody>
+          <tr><td><strong>3 欄狀態列</strong></td><td>你在看配置時要知道「我看的是哪一本帳本、資料多新」，這是判讀數字的前提，不是設定。</td></tr>
+          <tr><td><strong>🔄 重新整理保單清單</strong></td><td>只更新保單清單、不碰投資組合。是「看資料」不是「搬資料」。留一顆在這裡，你不必為了看最新保單跳去另一頁。（<a href="#d-c">決定 C</a>）</td></tr>
+          <tr><td><strong>一行指路</strong></td><td>灰字，不佔位、不搶眼；只在你真的想改連線時給你方向。</td></tr>
+          <tr><td><strong>📋 保單一覽</strong></td><td>整本帳本攤平成一張表，對照配置比例時最常看的東西。（<a href="#d-a">決定 A</a>）</td></tr>
+          <tr><td><strong>📄 每張保單明細</strong></td><td>和下面「配置總覽 → 保單分組」是同一件事的兩個視角，分兩頁會很怪。（<a href="#d-a">決定 A</a>）</td></tr>
+          <tr><td><strong>➕ 新增／更新保單列</strong></td><td>照原樣切開，不補寫入功能。⚠️ 它現在只在舊版模式出現——見 <a href="#d-b"><strong>決定 B</strong></a>。</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+  </div>
+
+  <div class="panel" role="tabpanel" id="panel-p5" aria-labelledby="tab-p5" tabindex="0" hidden>
+    <div class="frame">
+      <div class="frame-head">wireframe · ⑤ 設定與診斷 / 🔌 連線與帳號</div>
+      <div class="frame-body"><pre>┌─ ⚙️ 設定與診斷 ──────────────────────────────────────────────────┐
+│ 設定連線、維護資料，東西沒抓到的時候來這裡查。                     │
+│ 🔌 連線與帳號 · 🗄️ 資料維護與通報 · 🔭 資料診斷 · 📖 說明書 ←目錄│
+├─ 🔌 連線與帳號 ──────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌───────────────┬───────────────┬───────────────┐              │
+│  │ 🔐 Google 帳號 │ 📒 工作中帳本 │ 🆕 資料格式   │ ← 3 欄狀態列 │
+│  │ 🟢 已登入      │ 我的投資組合  │ 新版          │              │
+│  │ you@gmail.com │ 4 張保單      │               │              │
+│  └───────────────┴───────────────┴───────────────┘              │
+│  （登入／登出仍在左側欄，這裡只顯示狀態，不做第二顆登入鈕）      │
+│                                                                  │
+│  🚀 雲端存讀與本機備份                                           │
+│  [📥雲端讀取] [📦雲端存檔] [✨新增帳本] [💾下載備份] [📂還原備份]│
+│  ┌────────── 選到哪顆就只顯示哪一塊（一次一塊，不佔位）───────┐ │
+│  │ 📥 雲端讀取                                                │ │
+│  │                                                            │ │
+│  │  📂 從 Drive 挑帳本（切換／首次選用）                       │ │
+│  │   [🔄 載入資料夾清單]     📁 限定資料夾 〔下拉〕            │ │
+│  │   [📂 從 Drive 列出 Sheets]                                 │ │
+│  │   📄 清單共 7 本 — 選一本 〔下拉〕   [✅ 使用此帳本]        │ │
+│  │  ────────────────────────────────────────                  │ │
+│  │  📥 全部讀回（雲端 → 本地）                                 │ │
+│  │   📂 帳本：我的投資組合｜本地持倉：12 檔｜上次：14:02       │ │
+│  │   [ 📥 立即全部讀回 ]                                       │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│  ▸ 🧙 第一次設定 Google 連線（約 5 分鐘） 〔收合・設定完不用再開〕│
+│      四個步驟說明 + 貼三個值的表單 + [💾 套用設定]               │
+│  ▸ 🆕 資料格式升級（舊版 → 新版）    〔收合・一次性，會先備份〕  │
+│      [🔍 偵測格式]  狀態徽章  [🚀 升級（先備份）]  ☐ 預覽新格式  │
+│  ▸ 🧰 快取與重抓                     〔收合〕                    │
+│      [🗑️ 清空抓取快取]                                           │
+│      🔋 快取狀態：12 個函式 / 340 筆 / 命中率 78%                 │
+│                                                                  │
+│  🔍 抓取診斷細節（哪一個來源失敗）           〔既有・不動〕      │
+│  🔑 API 金鑰狀態 ／ 🌐 中繼站狀態與測試 〔線框有列・非本批範圍〕 │
+│                                                                  │
+├─ 🗄️ 資料維護與通報 ── 🔭 資料診斷 ── 📖 說明書 ──〔全部不動〕──┤
+└──────────────────────────────────────────────────────────────────┘</pre></div>
+    </div>
+    <p class="cap"><strong>⑤ 沒有新增任何分頁</strong>——仍是一頁到底 + 頂部目錄跳轉，收合區只是同一頁上的段落。</p>
+
+    <details class="why" open>
+      <summary>為什麼這幾塊放 ⑤</summary>
+      <div class="tw"><table>
+        <thead><tr><th style="width:30%">區塊</th><th>為什麼放 ⑤</th></tr></thead>
+        <tbody>
+          <tr><td><strong>3 欄狀態列</strong></td><td>一眼看完「我連上了嗎／連到哪本／格式對不對」，這三件事一起看才有意義。</td></tr>
+          <tr><td><strong>🚀 雲端存讀與本機備份</strong></td><td>挑帳本、建帳本、整批讀回寫回、離線備份還原——全部是搬資料的動作，不是看資料。五顆一起留、不拆（<a href="#d-d">決定 D</a>）。</td></tr>
+          <tr><td><strong>🧙 第一次設定・🆕 格式升級</strong></td><td>一次性設定，收起來；不打開就不佔首屏。</td></tr>
+          <tr><td><strong>🧰 快取與重抓</strong></td><td>「東西沒抓到來這裡查」的一部分，本來就屬這一頁的職責。</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+  </div>
+
+  <div class="panel" role="tabpanel" id="panel-flow" aria-labelledby="tab-flow" tabindex="0" hidden>
+    <h3>第一次設定的完整動線</h3>
+    <div class="frame">
+      <div class="frame-head">flow · 從零到看得到資料</div>
+      <div class="frame-body"><pre>⑤ 設定與診斷 → 🔌 連線與帳號
+   └ 展開「🧙 第一次設定 Google 連線」→ 照四步做完 → 💾 套用
+        ↓
+   左側欄「🔐 用 Google 登入」（登入鈕一直都在左側欄，兩頁通用）
+        ↓
+⑤ 🚀 雲端存讀 → [📥 雲端讀取]
+   └ 沒有帳本？ → [✨ 新增帳本] 建一本
+   └ 已有帳本？ → 📂 從 Drive 挑一本 → ✅ 使用此帳本
+        ↓
+⑤ [📥 立即全部讀回]
+        ↓
+④ 我的配置 —— 保單與持倉都在了</pre></div>
+    </div>
+
+    <h3>在 ④ 想改連線時</h3>
+    <p>狀態列下方一行灰字：「⬜ 連線、授權與雲端存讀，在『⚙️ 設定與診斷 → 🔌 連線與帳號』」。</p>
+    <div class="pull warn">
+      <span class="label">代價，據實說</span>
+      <p><strong>只能是文字，不能做成一顆會自動跳過去的按鈕。</strong>目前的分頁列不支援用程式跳頁，你得自己點上面那一排分頁。這是這次切分最主要的不方便。</p>
+    </div>
+
+    <h3>在 ⑤ 完成授權／讀回後怎麼回 ④</h3>
+    <p>按下「📥 立即全部讀回」成功後，畫面會整個重畫、資料當場就緒；你點回「📊 我的配置」就看得到。⑤ 的成功訊息會加一句「👉 回到『📊 我的配置』看結果」。</p>
+  </div>
+</section>
+
+<hr>
+
+<section>
+  <h2><span class="num">03</span>沒設定好的時候，畫面長什麼樣</h2>
+  <p class="lede">嚴格照三態分離：<span class="chip c-grey">灰＝還沒載入</span> <span class="chip c-red">紅＝系統真的出錯</span> <span class="chip c-amber">業務色＝該注意但沒壞</span></p>
+  <div class="tw"><table>
+    <thead><tr><th style="width:22%">狀況</th><th style="width:39%">④ 我的配置</th><th>⑤ 連線與帳號</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>還沒設定 Google 連線</strong></td>
+        <td><span class="chip c-grey">灰</span> 「還沒連上 Google 帳本——到『設定與診斷 → 連線與帳號』完成一次設定，這裡就會顯示你的保單」。<strong>不畫空表格、不畫紅字</strong></td>
+        <td><span class="chip c-grey">灰</span> ＋「🧙 第一次設定」<strong>自動展開</strong>（唯一會自動展開的收合區）</td>
+      </tr>
+      <tr>
+        <td><strong>已設定、還沒登入</strong></td>
+        <td><span class="chip c-grey">灰</span> 「還沒登入 Google——左側欄點『🔐 用 Google 登入』」</td>
+        <td>狀態列 ⚪「未登入」＋一顆登入連結（不必回左側欄）</td>
+      </tr>
+      <tr>
+        <td><strong>已登入、還沒選帳本</strong></td>
+        <td><span class="chip c-grey">灰</span> 「還沒指定帳本」＋指路</td>
+        <td><span class="chip c-grey">灰</span> 「還沒指定帳本，請從 Drive 挑一本，或到『✨ 新增帳本』建一本」</td>
+      </tr>
+      <tr>
+        <td><strong>授權失效／過期</strong><br><span style="color:var(--muted);font-size:13px">（真的出錯）</span></td>
+        <td><span class="chip c-grey">灰</span> 「保單資料尚未讀回」——④ <strong>不印紅字</strong></td>
+        <td><span class="chip c-red">紅</span> 錯誤框（可展開技術細節）＋明確指示「左側欄登出 → 重新登入」</td>
+      </tr>
+      <tr>
+        <td><strong>讀回成功但帳本是空的</strong></td>
+        <td><span class="chip c-grey">灰</span> 「這本帳本還沒有任何保單——請到 Google Sheet 新增一個保單分頁」</td>
+        <td>讀取成功訊息如實寫「0 張保單」</td>
+      </tr>
+    </tbody>
+  </table></div>
+  <div class="pull">
+    <span class="label">這一節最要緊的一條</span>
+    <p>授權失效時，<strong>紅色錯誤框只出現在你按下按鈕的那一頁（⑤）</strong>。④ 沒有嘗試任何連線，它只是沒資料——在 ④ 也印一片紅字，等於<strong>捏造一個不存在的故障</strong>，會讓你以為配置頁壞了。</p>
+  </div>
+</section>
+
+<hr>
+
+<section>
+  <h2><span class="num">04</span>總管已拍板的六項決定（你只需確認版面）</h2>
+  <p class="lede">這六件事<strong>已經決定完畢</strong>，不需要你在技術或業務上做選擇。列在這裡是讓你知道畫面為什麼長這樣、以及我們用什麼理由決定的。</p>
+
+  <div class="tw dtable"><table>
+    <thead><tr><th style="width:60px">代號</th><th style="width:32%">已決定</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr id="d-a">
+        <td class="id">A</td>
+        <td class="what">保單一覽與每張保單明細，<strong>留在 ④ 我的配置</strong>。</td>
+        <td>④ 的「配置總覽 → 保單分組」本來就按保單分組呈現，明細切到另一頁等於同一件事拆兩頁對照著看；且這是每月會看的資料，不是設定一次就不碰的。</td>
+      </tr>
+      <tr id="d-b">
+        <td class="id">B</td>
+        <td class="what"><strong>照原樣切開，不補寫入功能。</strong></td>
+        <td>補寫入等於推翻 2026-08-13「App 不寫回 Google Sheet」的決定，那是獨立題目，不夾在版面搬家裡做。</td>
+      </tr>
+      <tr id="d-c">
+        <td class="id">C</td>
+        <td class="what">④ 留一顆「🔄 重新整理保單清單（不動投組）」；<strong>⑤ 保留完整的「📥 全部讀回／📦 全部寫入」</strong>。</td>
+        <td>兩者作用範圍不同（一個只更新保單清單、一個是整批同步會增刪持倉），不是同一顆按鈕放兩份。</td>
+      </tr>
+      <tr id="d-d">
+        <td class="id">D</td>
+        <td class="what">五顆按鈕一起留在「🔌 連線與帳號」，區塊名誠實寫成「<strong>🚀 雲端存讀與本機備份</strong>」，不拆。</td>
+        <td>拆會動到五顆按鈕的互斥切換行為＝改功能，違反「一次只動一件事」。未來要搬去「🗄️ 資料維護」另立一批。</td>
+      </tr>
+      <tr id="d-e">
+        <td class="id">E</td>
+        <td class="what">狀態列用<strong>三欄自適應網格</strong>；保單明細表<strong>維持全寬</strong>，不塞進三欄。</td>
+        <td>三欄網格是給卡片型內容用的規則，六七欄的表格壓成三分之一寬反而更難看——這不是破例，是規則本來就不涵蓋表格。</td>
+      </tr>
+      <tr id="d-f">
+        <td class="id">F</td>
+        <td class="what">② 組合健診的門檻滑桿加「套用門檻」送出鈕<span class="done">已完成</span></td>
+        <td>已在 PR #742 實作完成、CI 全綠、待獨立稽核後合併。不是待決問題，列在這裡只作狀態記錄。</td>
+      </tr>
+    </tbody>
+  </table></div>
+
+  <div class="pull warn">
+    <span class="label">決定 A 的變更揭露</span>
+    <p>決定 A <strong>與更早核准的五分頁線框原文不一致</strong>——那份線框把「保單資料表檢視」這類唯讀檢視指去 ⑤。<strong>這是有意識的變更，不是漏改</strong>：日期 2026-08-31，決策者 AI 總管（依你當日授權的「Tab 內容重分配全權」）。</p>
+    <p><strong>兩邊理由並陳：</strong>舊寫法把唯讀檢視集中到 ⑤ 的理由（設定類集中）<strong>仍然成立</strong>，只是被「每月會看的東西不該離開配置頁」權衡掉。若你認為舊線框才對，說一聲即可推翻，這一塊改回 ⑤。</p>
+  </div>
+</section>
+
+<hr>
+
+<section>
+  <h2><span class="num">05</span>據實揭露：切開之後你會察覺的變化</h2>
+  <p class="lede">不粉飾，逐條列出。</p>
+  <ol class="honest">
+    <li><strong>原本一頁完成的事，現在要跨兩頁。</strong>第一次設定（設定連線 → 挑帳本 → 讀回）全在 ⑤，看結果在 ④。而且<strong>沒辦法用按鈕自動跳過去</strong>——目前的分頁列不支援程式跳頁，我只能給你一行文字指路。這是這次切分最主要的代價。</li>
+    <li><strong>「換帳本時的自動讀回」會慢一拍。</strong>你按「📥 全部讀回」之後畫面會整個重畫，④ 當場就是新資料——這點切開後不變。<strong>但</strong>系統偵測到你換了帳本時的<strong>背景自動讀回</strong>不會重畫畫面；而 ⑤ 排在 ④ 後面執行，所以那一次 ④ 還是舊資料，要再點一下才會更新。<strong>這是切開才會出現的新狀況</strong>，不是原本就有的。</li>
+    <li><strong>④ 那一區在目前模式下只剩「看」的東西</strong>（見 <a href="#d-b">決定 B</a>：照原樣切開、不補寫入）。切開前它藏在 800 行設定區底下不明顯，切開後會很明顯。這不是切分弄壞的，是切分讓一個既有事實浮出來。<br>⚠️ 另據實補一句：④ 實際可用的「新增保單」動線<strong>並沒有消失</strong>——在「➕ 加入與管理基金」貼基金代碼時直接標保單編號、或用「🔗 綁到保單」把散裝基金綁進去，這兩塊本來就在 ④、本來就不在要搬走的那一塊裡。</li>
+    <li><strong>有 5 個地方的指路文字會指錯。</strong>左側欄、個別基金頁、說明書、配置頁自己、帳本頁，都寫著「到『我的配置』展開『📋 保單管理』設定」。切開後那裡不再有連線設定。<strong>這一批會一併改掉，不另外問你</strong>——留著等於把你送去一個已經沒有那樣東西的地方，比版面沒切還糟。（⚠️「只有這 5 處」是單組清查的結論，沒有第二組驗證過。）</li>
+    <li><strong>「進階工具」原本並排的兩顆按鈕會被拆到兩頁</strong>：「🔄 重新整理保單清單」留 ④、「🗑️ 清空抓取快取」去 ⑤。</li>
+    <li><strong>「保單管理」這個名字會消失。</strong>④ 那區改叫「📋 保單資料」，⑤ 那區叫「🔌 連線與帳號」。你搜尋舊名字會找不到——這是刻意的：<strong>兩個舊標題都不留，留任一個都會讓人以為另一個還在別頁</strong>。</li>
+    <li><strong>這一批不做的事</strong>：「🔑 API 金鑰狀態」與「🌐 中繼站狀態與測試」還留在資料診斷頁，沒有搬到「連線與帳號」。它們住在診斷頁深處，抽出來屬於另一個工作包。</li>
+    <li><strong>功能一個都沒有刪。</strong>上面所有區塊都能在切分後的兩頁找到落點；沒有任何一項在這張草稿裡消失。</li>
+  </ol>
+</section>
+
+<section class="signoff">
+  <h2><span class="num">06</span>你要做的只有一件事</h2>
+  <p>看完上面的版面之後，回一句話就好：</p>
+  <p style="margin-bottom:6px">
+    <span class="say">版面 OK，動工</span>
+    <span class="say alt">或：指出要改的地方</span>
+  </p>
+  <p class="lede" style="margin-top:14px">要改的話，直接講哪一塊怎麼改就行（例如「④ 的狀態列不用」「保單明細我還是想放 ⑤」）。我改完線框再給你看一次，<strong>拍板前不寫任何程式碼</strong>。</p>
+  <p class="lede" style="margin-bottom:0">技術與業務決定<strong>已在第 04 節拍板完畢，不需要你回答任何選擇題</strong>；上面那六項若有你不同意的，一樣直接說，會當成推翻處理。</p>
+</section>
+
+<p class="foot">線框依 main <code>21c7615</code> 逐段實測產出（保單管理區共 912 行、34 個靜態元件識別碼，切分後 ⑤ 得 24、④ 得 10，無重複無遺漏）。⚠️ 該清點為單組實測，未經第二組獨立驗證。授權後才動工寫程式。</p>
+
+</div>
+
+<script>
+(function(){
+  var list = document.querySelector('.tabs');
+  if(!list) return;
+  var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+
+  function select(tab){
+    tabs.forEach(function(t){
+      var on = (t === tab);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      var panel = document.getElementById(t.getAttribute('aria-controls'));
+      if(panel) panel.hidden = !on;
+    });
+  }
+
+  list.addEventListener('click', function(e){
+    var t = e.target.closest('[role="tab"]');
+    if(t) select(t);
+  });
+
+  list.addEventListener('keydown', function(e){
+    var i = tabs.indexOf(document.activeElement);
+    if(i < 0) return;
+    var next = null;
+    if(e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length];
+    else if(e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length];
+    else if(e.key === 'Home') next = tabs[0];
+    else if(e.key === 'End') next = tabs[tabs.length - 1];
+    if(next){ e.preventDefault(); next.focus(); select(next); }
+  });
+
+  // 從「決定 X」連結跳回表格時，若該列所在區塊被收在其他頁籤，仍可正常定位
+  document.addEventListener('click', function(e){
+    var a = e.target.closest('a[href^="#d-"]');
+    if(!a) return;
+    var row = document.querySelector(a.getAttribute('href'));
+    if(row) row.scrollIntoView({behavior:'smooth', block:'center'});
+  });
+})();
+</script>

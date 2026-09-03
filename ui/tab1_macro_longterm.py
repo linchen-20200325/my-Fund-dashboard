@@ -22,6 +22,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.helpers.render_state import system_error
+
 from shared.converters import safe_num  # v19.396 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
     GH_BG_CARD,
@@ -119,7 +121,8 @@ def render_long_term_section(
                         trend=_ud.get("series"),
                         spark_key=_spk)
     except Exception as _us_card_e:  # noqa: BLE001
-        st.caption(f"💵 美股流動性卡片暫時無法顯示：[{type(_us_card_e).__name__}] {_us_card_e}")
+        # 整張卡（訊號燈 + 數值 + 日期 + 迷你走勢）消失,不是少一張圖。
+        system_error("💵 美股流動性卡片渲染失敗", _us_card_e)
 
     # v19.461:移除「策略3 景氣時鐘觀測站（美林時鐘定位器）」區塊（user 2026-08-17:介面精簡）。
     # classify_phase / PMI SSOT 常數留在 ui/components/mk_clock.py 供 SSOT-lock 測試用，不再於 UI 渲染。
@@ -254,10 +257,18 @@ def render_long_term_section(
                         print(f"[tab1_longterm/clear_cache] "
                               f"{type(_e_clr_lt).__name__}: {_e_clr_lt}",
                               file=_sys_lt.stderr)
-                        st.warning(
-                            f"⚠️ 快取沒有清成功（[{type(_e_clr_lt).__name__}]）"
-                            "—— 重新載入的資料可能仍是舊的。"
-                        )
+                        # 與 tab1_macro.py 的「快取沒清成功」是同一件事的第二份副本,
+                        # 顏色必須一致（那邊已改 🔴）。
+                        # ⚠️ 已知未修：下一行 `st.rerun()` 應該會把這則訊息一起沖掉
+                        #    （改色前的 st.warning 同樣看不到 —— 改色不會讓它變糟,
+                        #     也不會讓它變好）。要真的讓它看得見必須把狀態存進
+                        #     session_state 於 rerun 後補印 —— 行為變更,不在「只做顏色」
+                        #     這一批的範圍內,已登記待後批。
+                        # ⚠️ **未沙箱實測,據實標明**：上一句是依 Streamlit 語意推得的
+                        #    （rerun 中止本次 run、本次已畫的元素被丟棄）,本批沒有為它
+                        #    寫 AppTest → 屬**待驗事項**,不得被當成已查證的事實。
+                        system_error("快取沒有清成功", _e_clr_lt,
+                                     hint="重新載入的資料可能仍是舊的。")
                     st.rerun()
         except Exception as _us_e:
             st.error(f"美股流動性監測渲染失敗：[{type(_us_e).__name__}] {_us_e}")
@@ -268,8 +279,35 @@ def render_long_term_section(
     # v19.342 資料自動補抓:面板維持 ARCHIVED(v19.47 user 決策不變),但 stash
     # 資料 >30 天(= AI prompt 排除閾值)時 data-only 補抓一次 — 解「不點開
     # expander 就永遠 stale → 資料診斷永久紅 + AI prompt 永久排除」死循環。
-    # 30 分鐘 @st.cache_data(hot_money_repository)天然節流;失敗保留舊 stash,
-    # 只 print log 不打擾 UI(§1 fail loud at log)。
+    # ~~30 分鐘 @st.cache_data(hot_money_repository)天然節流~~
+    # ⚠️ 2026-09-01 更正(有意識的更正,不是漏刪):**這句對「失敗路徑」自本日起為假**。
+    #    `repositories/hot_money_repository.py` 已改為「內拋外譯」——
+    #    ~~失敗會 raise、**穿過 `@st.cache_data` 不入快取**,那 30 分鐘的 TTL~~
+    #    ~~只節流「成功結果」。~~失敗路徑改由 `infra.source_backoff` 的冷卻節流
+    #    (應用層失敗也會登記,見該檔 `_finmind_failed`)。
+    #    ⚠️ **2026-09-01 第四輪更正:上面那半句是本輪自己寫的、而且過頭了**
+    #    (**有意識的更正,不是漏刪** · 決策者:#754 修復組)。
+    #    它是一句**全稱句**,而**兩側都有反例**:
+    #      (a) **外資那支本來就不是「一律 raise」** —— `NO_COOLDOWN_KINDS`、
+    #          SSOT 對 2xx/3xx 的哨符 `""`、以及「`r is None` 但 host 未進退避」
+    #          這幾支**仍 return、仍入快取、仍被 30 分鐘鎖住**
+    #          (刻意留的:它們一個節流器都沒有)。這一點在寫下當天就已經是這樣,
+    #          也就是這句話**寫下時就不成立**,不是後來才失效。
+    #      (b) **這個呼叫點不是只抓外資** —— `refresh_hot_money_data` 走
+    #          `services.hot_money_service.fetch_hot_money_frames`,**同時抓 USDTWD**;
+    #          而 `d6b8b68` 已把 USDTWD 的「上游拋例外」那一支**改回 return**
+    #          (仍入快取、仍鎖 `TTL_10MIN`)。
+    #    **現行讀法**:那兩支的 TTL **同時節流成功與部分失敗**,逐支歸屬見
+    #    `repositories/hot_money_repository.py`(該檔的表格與註解才是真相源),
+    #    **不要引用本行當作現行節流機制**。
+    #    ⚠️ 2026-09-01 第二輪補正:那個冷卻的粒度是 **dataset**(外資買賣超這一支),
+    #    **不是 host** —— 所以它**不會**連帶擋掉同一個 FinMind host 上的
+    #    NDC 景氣對策信號(`ui/helpers/macro/ndc.py`)。第一版用 host 粒度,
+    #    實測把健康的 NDC 一起關掉了。
+    #    本呼叫點目前真正擋住重打的是**下面那個 `_hm_auto_refresh_tried`
+    #    session-once 旗標**,不是快取 —— 所以這裡不是漏洞;
+    #    但這行文字會被後人當成現行節流機制引用,故就地更正。
+    # 失敗保留舊 stash,只 print log 不打擾 UI(§1 fail loud at log)。
     try:
         from ui.hot_money import hot_money_is_stale, refresh_hot_money_data
         # 每 session 最多嘗試一次(成敗皆標記):失敗時不隨每次 rerun 重打網路

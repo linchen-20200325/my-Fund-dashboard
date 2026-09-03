@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>輪動配對 · 兩元件線框（待審批）</title>
+<style>
+/* 體例沿用 docs/wireframes/fund-wireframe-final.html；無外部字型（單檔、零外部相依） */
+:root{
+  --paper:#f4f5f6; --card:#ffffff;
+  --ink:#182029; --ink-2:#4d5a67; --ink-3:#7b8794;
+  --line:#d3d9de; --line-2:#e6eaed;
+  --accent:#2d6a8f; --accent-soft:#e4eef4;
+  --wire:#eceff1; --wire-line:#b8c2cb;
+  --ok:#0ca30c; --warn:#ec835a; --danger:#c0392b; --mute:#8a8e96; --gray-state:#8a8e96;
+  --shadow:0 1px 2px rgba(24,32,41,.06),0 4px 14px rgba(24,32,41,.05);
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  --sans:"Noto Sans TC",system-ui,-apple-system,"Segoe UI","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11161b; --card:#171e25;
+  --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98;
+  --line:#2b353f; --line-2:#222b33;
+  --accent:#6fb3d8; --accent-soft:#1b2a35;
+  --wire:#1c242c; --wire-line:#3a4753;
+  --ok:#3fc23f; --warn:#f0996f; --danger:#e06a5c; --mute:#8a939c; --gray-state:#8a939c;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.28);
+}}
+:root[data-theme="dark"]{
+  --paper:#11161b; --card:#171e25;
+  --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98;
+  --line:#2b353f; --line-2:#222b33;
+  --accent:#6fb3d8; --accent-soft:#1b2a35;
+  --wire:#1c242c; --wire-line:#3a4753;
+  --ok:#3fc23f; --warn:#f0996f; --danger:#e06a5c; --mute:#8a939c; --gray-state:#8a939c;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.7;margin:0;padding:0 20px 100px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto}
+header.mast{padding:56px 0 32px;border-bottom:2px solid var(--ink);margin-bottom:38px}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-size:clamp(28px,4.6vw,42px);line-height:1.2;margin:0 0 16px;font-weight:700;letter-spacing:-.01em}
+.standfirst{font-size:17px;color:var(--ink-2);max-width:62ch;margin:0}
+.mast-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+section{margin:0 0 52px}
+h2{font-size:22px;margin:0 0 8px;font-weight:700;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h2 .num{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
+h3{font-size:15.5px;margin:28px 0 10px;font-weight:700}
+h4{font-size:14px;margin:20px 0 8px;font-weight:700;color:var(--ink-2)}
+.lede{color:var(--ink-2);margin:0 0 20px;max-width:66ch;font-size:15px}
+p{margin:0 0 14px;max-width:70ch}
+.frame{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:20px;box-shadow:var(--shadow);margin:0 0 14px}
+.frame-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.wb{background:var(--wire);border:1px dashed var(--wire-line);border-radius:4px;padding:11px 12px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);min-height:42px;display:flex;flex-direction:column;justify-content:center;gap:3px;margin-bottom:8px}
+.wb .t{font-weight:600;color:var(--ink);font-size:12.5px;font-family:var(--sans)}
+.wb .s{color:var(--ink-3);font-size:10.5px;line-height:1.55;font-family:var(--sans)}
+.wb.new{border-color:var(--accent);background:var(--accent-soft)}
+.wb.new .t{color:var(--accent)}
+.wb.gone{border-color:var(--danger);opacity:.78}
+.wb.gone .t{color:var(--danger);text-decoration:line-through}
+.wb.prop{border-color:var(--warn);background:transparent}
+.wb.prop .t{color:var(--warn)}
+.wb.solid{border-style:solid}
+.tag{font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:1px 5px;border-radius:2px;border:1px solid currentColor;margin-right:7px;white-space:nowrap;opacity:.9}
+.src{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);opacity:.85}
+.row{display:grid;gap:10px;margin-bottom:10px}
+.r2{grid-template-columns:repeat(2,1fr)}
+.r3{grid-template-columns:repeat(3,1fr)}
+@media (max-width:760px){.r2,.r3{grid-template-columns:1fr}}
+.note{border-left:3px solid var(--accent);background:var(--card);padding:14px 16px;border-radius:0 5px 5px 0;margin:14px 0;font-size:14px;color:var(--ink-2);box-shadow:var(--shadow)}
+.note b{color:var(--ink)}
+.note.warn{border-left-color:var(--warn)}
+.note.stop{border-left-color:var(--danger)}
+.note-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;font-weight:600}
+.note.warn .note-h{color:var(--warn)}
+.note.stop .note-h{color:var(--danger)}
+.note p:last-child{margin-bottom:0}
+table.ev{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:13.5px;min-width:520px}
+.ev th{text-align:left;padding:9px 10px;border-bottom:1.5px solid var(--line);font-size:11px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;white-space:nowrap}
+.ev td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top;color:var(--ink-2)}
+.ev td:first-child{color:var(--ink);font-weight:500}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+code{font-family:var(--mono);font-size:.9em;background:var(--wire);padding:1px 5px;border-radius:3px;color:var(--ink)}
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.decisions{display:grid;gap:14px;margin-top:18px}
+.dec{border:1px solid var(--line);border-left:4px solid var(--warn);background:var(--card);border-radius:0 6px 6px 0;padding:18px 20px;box-shadow:var(--shadow)}
+.dec h4{margin:0 0 8px;font-size:16px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;color:var(--ink)}
+.dec h4 .q{font-family:var(--mono);font-size:11px;color:var(--warn);font-weight:600}
+.rec{margin-top:12px;padding:10px 12px;background:var(--accent-soft);border-radius:4px;font-size:13.5px;color:var(--ink)}
+.rec b{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:3px}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--ink-3);margin:10px 0 26px;padding:12px 14px;background:var(--card);border:1px solid var(--line-2);border-radius:5px}
+.legend span{display:flex;align-items:center;gap:7px}
+.sw{width:22px;height:12px;border-radius:2px;display:inline-block;flex:none}
+.sw.keep{background:var(--wire);border:1px dashed var(--wire-line)}
+.sw.new{background:var(--accent-soft);border:1px dashed var(--accent)}
+.sw.gone{background:var(--wire);border:1px dashed var(--danger)}
+.sw.prop{background:transparent;border:1px dashed var(--warn)}
+ul{margin:0 0 14px;padding-left:20px;max-width:72ch}
+li{margin-bottom:7px;color:var(--ink-2)}
+li b{color:var(--ink)}
+hr.sep{border:none;border-top:1px solid var(--line);margin:0 0 40px}
+.pagecard{border:1px solid var(--line);border-radius:8px;background:var(--card);box-shadow:var(--shadow);padding:22px;margin:0 0 26px}
+.pagecard>.ph{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;border-bottom:1px solid var(--line-2);padding-bottom:12px;margin-bottom:16px}
+.ph .pn{font-family:var(--mono);font-size:13px;font-weight:600;color:#fff;background:var(--accent);padding:3px 9px;border-radius:3px}
+.ph .pt{font-size:19px;font-weight:700;color:var(--ink)}
+.oneline{background:var(--accent-soft);border:1px solid var(--accent);border-radius:5px;padding:12px 14px;margin:0 0 18px;font-size:14.5px;color:var(--ink)}
+.oneline .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:4px}
+.why{font-size:13.5px;color:var(--ink-2);border-top:1px dashed var(--line);margin-top:16px;padding-top:14px}
+.why b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Wireframe · 待審批 · 前端/UI 組 · 2026-08-31</p>
+  <h1>輪動配對 · 兩個新元件線框</h1>
+  <p class="standfirst">
+    依你 2026-08-28 的指示拆解：<strong>② 組合健診聚焦「持倉互斥避險」</strong>（我手上這組會不會一起跌），
+    <strong>③ 基金研究聚焦「候選標的互補探索」</strong>（掃出來的裡面誰跟誰互補）。
+    本份只談<strong>版面與資訊排列</strong>，不談程式；底層演算法統一抽離至純計算層由另組進行。
+    需你拍板後才會寫任何 UI 程式碼。
+  </p>
+  <div class="mast-meta">
+    <span>基準：現況 <code>_render_pairs_ui</code> 兩入口共渲同一張表</span>
+    <span>提案：兩個各司其職的新元件</span>
+    <span>需拍板：4 項</span>
+  </div>
+</header>
+
+<div class="legend">
+  <span><i class="sw keep"></i> 保留（原樣或換位置）</span>
+  <span><i class="sw new"></i> 搬進來 / 合併 / 改呈現</span>
+  <span><i class="sw gone"></i> 移走 / 移除（需你確認）</span>
+  <span><i class="sw prop"></i> 建議新增（現況沒有，我方提案）</span>
+</div>
+
+<div class="note">
+  <p class="note-h">怎麼讀這份文件</p>
+  <p>
+    <b>第 02、03 節是主體</b> —— 兩個元件各一張線框，由上到下就是實際渲染順序。
+    第 01 節先據實描述現況畫面長什麼樣（每塊附現況出處），第 04 節是與現況的逐項差異表
+    （移除項單獨標出），第 05 節是四大鐵律逐項自檢，第 06 節是給計算組的資料需求，
+    第 07 節是需你拍板的四件事（每件都附我方推薦與理由，不丟選擇題）。
+  </p>
+</div>
+
+<!-- 01 -->
+<section>
+  <h2><span class="num">01</span> 現況：兩個入口，渲染同一張表</h2>
+  <p class="lede">
+    現在「🔄 輪動配對建議」在<b>組合健診</b>與<b>批次分析</b>各渲染一次，
+    共用同一個渲染函式 <code>_render_pairs_ui</code>，畫面內容一模一樣。
+  </p>
+
+  <div class="frame">
+    <div class="frame-label"><span>現況畫面 · 由上到下（兩入口相同）</span><span>ui/helpers/fund_grp_health/rotation.py</span></div>
+    <div class="wb"><span class="t">divider + 標題「🔄 輪動配對建議（賣高基期 → 買別類低基期健康）」+ 教學 caption</span><span class="s">caption 含「跌深不保證漲回來」的誠實警語<br><span class="src">rotation.py::_render_pairs_ui（:110-115）</span></span></div>
+    <div class="wb"><span class="t">3 欄滑桿：高基期門檻（σ ≥）· 低基期門檻（σ ≤）· 買方操盤評分 ≥</span><span class="s">預設值走 SSOT（<code>shared/signal_thresholds.py</code>：SELL −0.5σ / BUY −1.5σ / SCORE 50），已是 <code>st.columns(3)</code><br><span class="src">rotation.py:117-128</span></span></div>
+    <div class="wb"><span class="t">配對表（9 欄）：賣出 · 賣方類別 · 賣方 σ · 建議換進 · 買方類別 · 買方 σ · 買方 4D · 買方操盤評分 · 潛在差價%</span><span class="s">每個賣方一列；無不同類健康低基期 → 誠實「⚪ 無標的」；跨幣別在買方名後加「⚠️跨幣別」<br><span class="src">rotation.py:171-210</span></span></div>
+    <div class="wb"><span class="t">計數 caption（N 檔高基期 / M 檔有得換）+ 跨幣別匯差提醒 + ⬜ σ 資料不足名單</span><span class="s"><span class="src">rotation.py:211-219 · :144-147</span></span></div>
+    <div class="wb"><span class="t">空狀態：&lt;2 檔 → info；無高基期 → info + 各檔目前基期一行；計算失敗 → 🔴 system_error</span><span class="s">已符合 §1 誠實揭露（不靜默消失，user 2026-07-28 回報後修的）<br><span class="src">rotation.py:149-167 · :130-134</span></span></div>
+    <div class="wb"><span class="t">⬇️ 下載輪動配對建議 CSV（僅批次入口 offer_download=True）</span><span class="s"><span class="src">rotation.py:221-229</span></span></div>
+  </div>
+
+  <div class="note warn">
+    <p class="note-h">現況的問題（也是本次兩元件的出發點）</p>
+    <p>
+      兩個入口回答的是<b>兩個不同的問題</b>，卻長成同一張表：
+      在 ②（持倉）你想知道「<b>我手上這組會不會一起跌</b>」——但相關性警示（會一起跌的證據）
+      埋在進階分析 9 子區的相關性矩陣裡，和輪動配對<b>互相看不見對方</b>；
+      在 ③（批次掃描 400 檔候選）你想知道「<b>誰跟誰互補</b>」——但畫面給你的是一張
+      與 ② 完全相同的表，直接攤開在批次結果區下方把畫面撐爆。
+      已核准的五頁線框（<code>fund-wireframe-final.html</code>）當時的處置是「批次端整段移除、只留 ②」；
+      你 2026-08-28 的新指示把 ③ 從「移除」改為「<b>改型為候選互補探索</b>」——
+      這個覆蓋關係列為 <b>Q3</b> 請你確認。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 02 -->
+<section>
+  <h2><span class="num">02</span> 元件 A 線框 · ②【組合健診】持倉互斥避險</h2>
+
+  <div class="pagecard">
+    <div class="ph"><span class="pn">A</span><span class="pt">🛡️ 持倉互斥避險</span></div>
+    <div class="oneline">
+      <span class="lbl">這個元件的一句話職責</span>
+      <b>我手上這幾檔，會不會一起跌。</b>
+      <span style="color:var(--ink-3);font-size:12.5px">（⚠️ 這一句是依你 2026-08-28 指示新寫的，需你認可。）</span>
+    </div>
+
+    <h4>放在哪：緊接「結論摘要」之後、健診大表之前（需拍板 Q1）</h4>
+    <p style="font-size:14px">
+      「哪幾檔在吃本金」與「哪幾對會一起跌」是同一層級的答案 ——
+      都是看完就要行動的持倉風險結論。完整的相關性矩陣熱力圖<b>不搬家</b>，仍留在進階分析；
+      本元件只把「<b>警示對</b>」這個答案上移。
+    </p>
+
+    <div class="frame">
+      <div class="frame-label"><span>由上到下</span><span>三個區塊</span></div>
+
+      <div class="wb prop"><span class="t"><span class="tag">建議</span>區塊 1 · 同質化診斷帶（3 欄自適應 stat tile）</span><span class="s">
+        三個數字並排：<b>可比對數</b>（N 檔 → N×(N−1)/2 對）· <b>高相關警示對數</b>（兩維度聯集）·
+        <b>同質化程度</b>（低 / 中 / 高，分級定義見 Q2）。
+        tile 用既有 <code>stat_tile()</code> 元件（左側 3px 狀態色軌 + 主數字 + 狀態列），不另創視覺。
+        同質化程度的狀態色：低 = 🟢、中 = 🟡、高 = 🔴（業務燈，非系統錯誤）。<br>
+        <span class="src">元件出處 ui/components/stat_tile.py（#726 已合併）· 現況無此診斷帶（新增）</span></span></div>
+
+      <div class="wb new"><span class="t"><span class="tag">改呈現</span>區塊 2 · 高相關性警示對卡片（3 欄自適應網格，每對一張卡）</span><span class="s">
+        每張卡由上到下：<b>基金 A ⟷ 基金 B</b>（名稱 + 代號）→
+        <b>相關型態徽章</b>（🏭 持股重疊 或 📈 走勢同步 —— 兩維度意義不同，各自獨立判定，不合併成單一分數，沿用現況設計決定）→
+        <b>係數值</b>（如「重疊度 0.83（門檻 0.70）」或「NAV 相關 0.91（門檻 0.85）」，門檻走 SSOT 不寫死）→
+        <b>警示語</b>：「回撤時可能齊跌 —— 這兩檔互為影子，建議檢視是否擇一持有」。
+        卡片用既有 <code>gh_card()</code> 外框 + 紅色左軌（🔴 業務紅：卡片/列，<b>不用</b>整塊紅色錯誤框 —— 分析成功了，答案很難看，這是成果不是故障）。
+        警示對超過 6 對時，第 7 對起收進「顯示其餘 N 對」展開，避免撐爆版面。<br>
+        <span class="src">數據來源＝現況相關性矩陣的 shadow_pairs（correlation.py:63-79 現以紅底列條呈現、埋在進階分析）· 門檻 SSOT shared/signal_thresholds.py::SHADOW_FUND_THRESHOLD_RATIO / SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>區塊 3 · 一行指路：「完整相關性矩陣（熱力圖）在下方 🔬 進階分析」</span><span class="s">
+        答案在上面（警示對卡），依據在下面（完整矩陣）—— 不重畫矩陣，只給一行去處，
+        比照已核准線框「持倉健診改一行連結」的同一手法。<br>
+        <span class="src">進階分析矩陣現況 ui/helpers/fund_grp_health/correlation.py::_render_correlation_matrix</span></span></div>
+    </div>
+
+    <h4>空狀態（依 fund-empty-state-wireframe.html §03 五態規則，逐一寫明）</h4>
+    <div class="tscroll">
+    <table class="ev">
+      <thead><tr><th>情境</th><th>畫面</th><th>依據</th></tr></thead>
+      <tbody>
+        <tr><td>健診還沒跑（未按 🩺 開始健診）</td><td>整個元件<b>不渲染</b>（沿用 ② 既有 gating：未按按鈕直接不渲染，零成本）—— 不印占位</td><td>首屏無冗餘占位；② 頁首本來就有「去按 🩺」的指路</td></tr>
+        <tr><td>持倉 &lt; 2 檔</td><td>⬜ 灰色說明「至少需 2 檔基金才能比對互斥性」（一行，不佔版面）</td><td>未達前提＝「還不能做」不是「壞了」→ 灰</td></tr>
+        <tr><td>兩維度資料皆缺（持股與 NAV 序列都抓不到）</td><td>⬜ 灰色說明「缺持股與淨值資料，無法比對 —— 缺哪幾檔列名」＋指出去哪裡補（⑤ 資料診斷）</td><td>三要素：標題照印 · 說缺什麼 · 指去哪補</td></tr>
+        <tr><td>部分檔資料不足</td><td>診斷帶下方一行 ⬜「未納入比對（資料不足）：檔名列舉」—— 明確標名，不靜默剔除</td><td>沿用現況輪動表 σ 不足名單的同一手法（§1）</td></tr>
+        <tr><td>計算 / 渲染失敗</td><td>🔴 <code>system_error</code> 紅色錯誤框 + 可展開技術細節（區塊隔離：診斷帶壞了不拖累卡片區）</td><td>系統真出錯＝紅框；「這個數字不可信」</td></tr>
+        <tr><td>比對成功、無任何警示對</td><td>✅ 一行「本組合無高相關警示對（兩維度皆低於門檻）」—— 誠實的好結果，不留紅色殘影</td><td>沿用現況矩陣的 st.success 慣例（correlation.py:79）</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="why">
+      <b>為什麼這樣排：</b>先給結論（同質化程度一個字）→ 再給證據（哪兩檔、哪一種相關、係數多少）→
+      想深挖才去進階分析看完整矩陣。這是「答案 → 依據 → 工具」的同一套排法，
+      與已核准線框對 ② 整頁的重排方向一致。<b>本元件不新增任何演算法</b> ——
+      兩個維度的相關性與門檻現況都已存在，只是把「警示對」從進階分析的第 6 子區升格為持倉風險的一級答案。
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 03 -->
+<section>
+  <h2><span class="num">03</span> 元件 B 線框 · ③【基金研究 · 批次模式】候選標的互補探索</h2>
+
+  <div class="pagecard">
+    <div class="ph"><span class="pn">B</span><span class="pt">🧩 候選標的互補探索</span></div>
+    <div class="oneline">
+      <span class="lbl">這個元件的一句話職責</span>
+      <b>掃出來的這一批裡，誰跟誰互補。</b>
+      <span style="color:var(--ink-3);font-size:12.5px">（⚠️ 新寫的，需你認可。「互補」＝不同類別 + 一高一低基期 + 買方通過健康過濾 —— 即既有輪動配對定義，不新造演算法。）</span>
+    </div>
+
+    <h4>放在哪：新版 ③ 基金研究「📦 批次掃描」模式的結果區，CSV 下載鈕之後</h4>
+    <p style="font-size:14px">
+      新版 ③（分支 <code>ui/tab_fund_research.py</code>）批次面板已在
+      「📦 載入批次掃描面板」checkbox gate 之後，掃描還要再按「▶️ 開始」——
+      本元件在<b>兩道 gate 之後、且僅在批次結果 df 存在時</b>才渲染，首屏成本為零。
+      直接讀已算好的批次大表 df（<b>不重抓</b>，沿用現況 <code>rows_from_batch_df</code> 的資料路徑）。
+    </p>
+
+    <div class="frame">
+      <div class="frame-label"><span>由上到下</span><span>一個預設收合的 Expander</span></div>
+
+      <div class="wb new"><span class="t"><span class="tag">改呈現</span>🧩 互補配對探索（Expander，<b>預設收合</b>）— 標題右側帶計數「N 對可換 / M 檔高基期」</span><span class="s">
+        依你指示：批次跑完<b>不展開</b>，避免結果區被撐爆。收合狀態下只有一行標題 + 計數 ——
+        計數本身就是答案的預覽（0 對 ＝ 不用點開）。<br>
+        <span class="src">現況為攤開渲染整段（tab_batch_analysis.py 結果區 → rotation.py::render_rotation_section_from_df）</span></span></div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>Expander 內部 · 由上到下</span><span>四個區塊</span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>區塊 1 · 門檻列：3 欄滑桿（高基期 σ ≥ · 低基期 σ ≤ · 買方評分 ≥）＋「套用門檻」鈕</span><span class="s">
+        滑桿與 SSOT 預設值原樣保留；新包一層 <code>st.form</code>（拉桿不觸發重繪，按「套用」才算）——
+        批次 df 動輒數百檔，現況每拉一格滑桿就整頁重跑一次。此為防重繪技術手法（內部自決），在此揭露不佔你決策。<br>
+        <span class="src">rotation.py:117-128 · widget key 沿用 batch_rot_* 前綴（兩入口不衝突）</span></span></div>
+
+      <div class="wb prop"><span class="t"><span class="tag">建議</span>區塊 2 · 最佳互補配對卡（3 欄自適應網格，每個賣出候選一張卡；只顯示最佳一檔買方 — Q4）</span><span class="s">
+        每張卡由上到下：<b>賣出候選</b>（名稱 + 代號 + 類別徽章 + σ 值）→ 中間一個「⇄ 換」箭頭 →
+        <b>最佳互補買進</b>(名稱 + 代號 + 類別徽章 + σ 值 + 4D 等第徽章 + 操盤評分)→
+        底部：<b>潛在差價%</b>（附既有警語「僅幾何回推，不是預測」）+ 需要時的「⚠️ 跨幣別」橘色徽章。
+        無不同類健康低基期可換 → 該卡買方側誠實顯示「⚪ 無標的」，不藏卡。
+        卡片沿用 <code>gh_card()</code> 外框 + <code>status_chip</code> 狀態徽章語彙（#726 六元件同一套），不另創第三套視覺。<br>
+        <span class="src">卡片全部欄位＝suggest_rotation_pairs 既有輸出（sell_*/buy_*/potential_pct/cross_ccy），零新演算法</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>區塊 3 · 完整配對表（現況 9 欄原樣）＋ ⬇️ 下載輪動配對建議 CSV</span><span class="s">
+        卡片是答案、表是依據：表含 column_config 的全部欄位說明 tooltip，原樣保留。
+        <b>CSV 匯出鈕保留</b>（配對表與批次大表形狀不同、無法併進同一張 CSV —— 現況設計決定沿用），
+        位置在表的正下方、Expander 內。<br>
+        <span class="src">rotation.py:171-229</span></span></div>
+
+      <div class="wb"><span class="t"><span class="tag">保留</span>區塊 4 · 誠實揭露列：計數 caption · 跨幣別匯差提醒 · ⬜ σ 資料不足名單</span><span class="s">
+        三段 caption 一字不減：「共 N 檔高基期；其中 M 檔有得換」／「潛在差價% 未含匯差，是否承受由你決定」／
+        「⬜ 未納入買方候選（σ 資料不足）：檔名列舉」。<br>
+        <span class="src">rotation.py:211-219 · :144-147</span></span></div>
+    </div>
+
+    <h4>空狀態（§03 五態規則，逐一寫明）</h4>
+    <div class="tscroll">
+    <table class="ev">
+      <thead><tr><th>情境</th><th>畫面</th><th>依據</th></tr></thead>
+      <tbody>
+        <tr><td>批次還沒跑（無結果 df）</td><td>整個 Expander <b>不渲染</b>（沿用現況：df 空 → return），不印占位</td><td>首屏無冗餘占位；批次面板自己已有「▶️ 開始」的指路</td></tr>
+        <tr><td>結果 &lt; 2 檔</td><td>Expander 照渲染（收合、計數顯示 0），展開後 ⬜「配對需至少 2 檔；目前結果不足」</td><td>標題照印（讓人知道功能存在）＋一句缺什麼</td></tr>
+        <tr><td>套用門檻後無高基期賣方</td><td>展開後 info：「目前掃描結果沒有貼近高點的高基期標的 → 沒有可探索的互補配對；可把高基期門檻往左放寬」＋各檔目前基期一行（現況原樣）</td><td>誠實結果不是錯誤 —— 沿用現況 rotation.py:163-166 的措辭</td></tr>
+        <tr><td>配對計算失敗</td><td>🔴 <code>system_error</code> 紅色錯誤框 + 技術細節；批次大表與 CSV（上方既有區塊）不受影響</td><td>系統真出錯＝紅框；區塊隔離</td></tr>
+        <tr><td>部分檔 σ 不足</td><td>⬜ 名單列舉（區塊 4），不靜默剔除</td><td>現況既有（§1），原樣保留</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="why">
+      <b>為什麼這樣排：</b>批次結果區現況是「大表 → CSV → 又一張攤開的配對表」，第二張表把頁尾撐爆而且
+      與 ② 一模一樣。改成收合 Expander 後：批次跑完你先看到的是大表與一行「🧩 互補配對 N 對」；
+      點開才進入探索 —— 先卡片（誰換誰，一眼一對）、再完整表（全部欄位）、再 CSV（帶走）。
+      與 ② 的差別自此不是「同一張表畫兩次」，而是<b>兩個不同的問句</b>：② 問避險、③ 問互補。
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 04 -->
+<section>
+  <h2><span class="num">04</span> 與現況 <code>_render_pairs_ui</code> 的逐項差異表</h2>
+  <p class="lede">現況資訊<b>一項都不刪</b>；唯一的「移除」是 ③ 不再照抄 ② 的整段區塊，單獨列出請你確認。</p>
+
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>現況資訊 / 區塊</th><th>② 元件 A 去向</th><th>③ 元件 B 去向</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td>標題 + 教學 caption（rotation.py:110-115）</td><td>輪動配對表整段留在 ②（原樣，不在本元件內）；元件 A 用新標題「🛡️ 持倉互斥避險」</td><td>改為 Expander 標題「🧩 互補配對探索」+ 計數；教學語句收進 Expander 內首行 caption</td><td><b>保留＋改呈現</b></td></tr>
+      <tr><td>3 欄滑桿（SSOT 預設，:117-128）</td><td>不適用（元件 A 無滑桿；門檻走相關性 SSOT 常數）</td><td>保留（Expander 內，加 form 套用鈕）</td><td><b>保留</b></td></tr>
+      <tr><td>配對表 9 欄（:171-210）</td><td>不動（仍在 ② 既有輪動配對區）</td><td>保留於 Expander 區塊 3；其上新增卡片視圖</td><td><b>保留</b></td></tr>
+      <tr><td>「⚪ 無不同類健康低基期標的」誠實留白</td><td>—</td><td>卡片買方側同語意顯示 ⚪；表內原樣</td><td><b>保留</b></td></tr>
+      <tr><td>計數 caption / 跨幣別提醒 / σ 不足名單（:211-219, :144-147）</td><td>元件 A 有自己的「未納入比對名單」（同手法）</td><td>原樣保留（區塊 4）；計數另複寫到 Expander 標題</td><td><b>保留</b></td></tr>
+      <tr><td>空狀態三則（&lt;2 檔 / 無高基期 / 計算失敗）</td><td>依 §03 五態逐一對應（見 02 節表）</td><td>依 §03 五態逐一對應（見 03 節表）</td><td><b>保留＋補齊</b></td></tr>
+      <tr><td>CSV 下載（批次限定，:221-229）</td><td>不適用</td><td>保留（Expander 內、表下方）</td><td><b>保留</b></td></tr>
+      <tr><td style="color:var(--danger)">③ 批次結果區攤開渲染「與 ② 完全相同」的輪動配對整段（render_rotation_section_from_df 現行為）</td><td colspan="2">移除「攤開 + 照抄」這個<b>呈現方式</b>：內容全數收進預設收合的 Expander，且上半改為卡片視圖。<b>資訊零損失、位置與型態改變</b></td><td><b style="color:var(--danger)">移除（呈現）→ Q3 請確認</b></td></tr>
+      <tr><td>「距 HWM %」欄位（組進 rows 但現況配對表沒顯示它）</td><td colspan="2">維持不顯示（它是 σ 的原始材料，表內已有 σ）。若你想看它，說一聲即可加欄（欄位增減屬你拍板）</td><td><b>維持現況</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 05 -->
+<section>
+  <h2><span class="num">05</span> 四大鐵律逐項自檢</h2>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>鐵律</th><th>元件 A（② 互斥避險）</th><th>元件 B（③ 互補探索）</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>① 3 欄自適應網格</b></td>
+        <td>診斷帶 3 個 stat tile 一列（<code>st.columns(3)</code>）；警示對卡片 3 欄網格，窄螢幕自動塌成 1 欄</td>
+        <td>滑桿 3 欄（現況已是）；互補配對卡 3 欄網格，窄螢幕塌 1 欄；表維持橫向捲動</td>
+      </tr>
+      <tr>
+        <td><b>② Form 防重繪</b></td>
+        <td>本元件無輸入控件，不觸發（門檻走 SSOT 常數，非滑桿）</td>
+        <td>3 支滑桿包進 <code>st.form</code> + 「套用門檻」submit —— 現況每拉一格就整頁重跑，批次數百檔時尤其痛。此為內部自決的技術手法，在此揭露</td>
+      </tr>
+      <tr>
+        <td><b>③ 三態顏色分離</b></td>
+        <td>未跑健診＝不渲染；前提不足＝⬜ 灰說明；計算失敗＝🔴 system_error 紅框；<b>高相關警示對＝🔴 業務紅（卡片/左軌），不用錯誤框</b>；無警示＝✅ 誠實好結果</td>
+        <td>未跑批次＝不渲染；不足＝⬜；失敗＝🔴 紅框；「⚠️ 跨幣別」＝🟠 業務提醒徽章；「⚪ 無標的」＝誠實留白非錯誤</td>
+      </tr>
+      <tr>
+        <td><b>④ 首屏無冗餘占位</b></td>
+        <td>健診未跑前整個元件不渲染（② 既有 gating 之內），首屏 0 元素</td>
+        <td>批次面板本身在 checkbox gate 後（分支 tab_fund_research.py 兩道防線）；結果 df 不存在時 Expander 不渲染；存在時首屏只多<b>一行收合標題</b></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 06 -->
+<section>
+  <h2><span class="num">06</span> 資料需求（給計算組對接；只列欄位語意，不寫程式）</h2>
+
+  <h3>元件 A · 持倉互斥避險</h3>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>欄位語意</th><th>說明</th><th>現況有沒有</th></tr></thead>
+    <tbody>
+      <tr><td>警示對清單</td><td>每對：基金 A / 基金 B（代號＋名稱）· 相關型態（持股重疊 或 走勢同步）· 係數值 · 該型態的門檻值（供畫面併列顯示）</td><td><b>有</b> —— 即現況兩面板的 shadow_pairs（含係數），只需把「型態」與「門檻」一併帶出，供上移呈現</td></tr>
+      <tr><td>可比對數 / 實際比對成功對數</td><td>N 檔理論對數 vs 兩維度各自實際算得出來的對數（同質化分母要用後者，不可用前者充數）</td><td><b>部分</b> —— 矩陣算得出來，但「成功對數」現況沒有單獨輸出，需計算層新增</td></tr>
+      <tr><td>同質化等級</td><td>低 / 中 / 高 三段（分級規則見 Q2；規則常數收 SSOT，不在 UI 寫死）</td><td><b>沒有</b> —— 需計算層新增（Q2 拍板後）</td></tr>
+      <tr><td>未納入比對名單 + 原因</td><td>缺持股 / 缺 NAV 序列，逐檔列名（供 ⬜ 誠實揭露）</td><td><b>部分</b> —— 現況矩陣對缺資料檔靜默縮小範圍，需計算層把被剔除者具名帶出</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>元件 B · 候選標的互補探索</h3>
+  <div class="tscroll">
+  <table class="ev">
+    <thead><tr><th>欄位語意</th><th>說明</th><th>現況有沒有</th></tr></thead>
+    <tbody>
+      <tr><td>配對清單（每個賣方一筆）</td><td>賣方：代號/名稱/類別/σ；最佳買方：代號/名稱/類別/σ/4D 等第/操盤評分/吃本金狀態/計價幣別；潛在差價%；跨幣別旗標</td><td><b>有</b> —— 即 <code>suggest_rotation_pairs</code> 既有輸出，一個欄位都不用加</td></tr>
+      <tr><td>統計：高基期檔數 / 有得換檔數</td><td>供 Expander 標題計數與 caption</td><td><b>有</b>（現況 caption 已算）</td></tr>
+      <tr><td>σ 資料不足名單</td><td>供 ⬜ 揭露（classify_base = unknown 者）</td><td><b>有</b>（rotation.py:139-147 現行邏輯，抽離時一併下沉計算層）</td></tr>
+      <tr><td>CSV 資料</td><td>與完整配對表同形（9 欄）</td><td><b>有</b>（現況即表 df 轉出）</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note warn">
+    <p class="note-h">一個要先講明的資料限制（影響 ③ 能承諾什麼）</p>
+    <p>
+      批次大表 df <b>沒有持股明細、也沒有 NAV 序列</b>（<code>rows_from_batch_df</code> 只讀
+      σ rank / 類別 / 4D / 評分 / 吃本金 / 幣別等已算好的欄位）。
+      因此 ③ 的「互補」<b>只能用既有輪動定義</b>（不同類別＋一高一低基期＋健康過濾），
+      <b>做不了 ② 那種相關性檢查</b> —— 除非計算層為批次流程額外抓每檔持股與序列（成本極高，數百檔）。
+      本線框刻意<b>不做</b>這個擴充；若你想要「批次也驗相關性」，那是範圍擴大，請另行指示。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 07 -->
+<section>
+  <h2><span class="num">07</span> 需要你拍板的四件事</h2>
+  <p class="lede">每件都附我方推薦與理由。技術細節（取數路徑、快取、form 包裝、測試）由團隊內部拍板，不佔你的時間。</p>
+
+  <div class="decisions">
+
+    <div class="dec">
+      <h4><span class="q">Q1</span> 元件 A 放在「結論摘要」之後、健診大表之前 —— 可以嗎？</h4>
+      <p>高相關警示現況埋在進階分析第 6 子區；提案把「警示對」上移為一級答案，完整矩陣熱力圖留在原地不動。</p>
+      <div class="rec">
+        <b>我方推薦</b>
+        <strong>同意上移</strong>。理由：② 的一句話職責是持倉風險的「答案頁」，「會一起跌的對」與「在吃本金的檔」
+        是同一層級的行動訊號；埋在第 6 子區等於答案要捲七次才看得到。完整矩陣不搬家，改動面最小。
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你覺得 ② 上半已太滿，退一步的做法是元件 A 併進結論摘要帶一行「⚠️ 高相關 N 對」+ 點開卡片 —— 但我方不推薦：一行數字講不出「哪兩檔」，還是得再點一次。）</span>
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q2</span> 「同質化程度」的分級定義（業務語意，只有你能定）</h4>
+      <p>畫面上「低 / 中 / 高」三個字背後要一條規則。這屬「客戶要的那個數字是什麼」，依憲法 §7 須你確認。</p>
+      <div class="rec">
+        <b>我方推薦</b>
+        <strong>以「高相關警示對數 ÷ 實際比對成功對數」分三段：0 對＝低（🟢）；&gt;0 且 ≤ 20%＝中（🟡）；&gt; 20%＝高（🔴）。</strong>
+        理由：(a) 分子分母都是既有數字，不引入新演算法；(b) 用「成功比對的對數」當分母，缺資料不會虛增也不會稀釋比率（§1 不造假）；
+        (c) 20% 這個切點的直覺是「五對裡有一對互為影子就該警覺」。切點會收 SSOT 常數，日後可調。
+        比對成功對數過少（例如 &lt; 3 對）時不給等級、顯示 ⬜「樣本不足」，不硬判。
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q3</span> ③ 的輪動配對從「整段移除」改為「改型為互補探索（收合）」—— 確認覆蓋舊提案？</h4>
+      <p>已核准的五頁線框當時把批次頁的輪動配對標為「移走，只留 ②」；你 2026-08-28 的新指示是 ③ 聚焦候選互補探索。兩者需要一個明確的覆蓋關係，避免後續執行時兩份文件打架。</p>
+      <div class="rec">
+        <b>我方推薦</b>
+        <strong>確認覆蓋：③ 保留輪動能力、但改型為本線框的元件 B（預設收合 + 卡片 + CSV），不再是 ② 的照抄。</strong>
+        理由：舊提案「整段移除」要解的病是「同一張表畫兩次」；改型後 ②/③ 各答各的問題，病已除、能力不減，
+        且批次掃描的對象（還沒買的 400 檔）正是「互補探索」最有價值的地方 —— 整段移除反而丟掉這個場景。
+        拍板後我方會在舊線框該列補註指向本份（舊文保留、加註不改）。
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q4</span> 互補配對卡每張只顯示「最佳一檔」買方 —— 可以嗎？</h4>
+      <p>計算層對每個賣方本來就只回傳一個最佳買方（σ 跌最深且通過健康過濾）。卡片照這個輸出畫；其餘候選不在卡上。</p>
+      <div class="rec">
+        <b>我方推薦</b>
+        <strong>只顯示最佳一檔</strong>。理由：卡片是答案、表是依據 —— 卡上塞前三名會讓卡片退化成第二張表，
+        違背「收合 Expander 防撐爆」的初衷；想比較其他候選的人，往下就是完整配對表。
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你希望看到「前 N 名候選」，那是計算層輸出契約的擴充（現況每賣方只配一檔），請明示 N，我們再與計算組對接。）</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="sep">
+
+<section>
+  <h2><span class="num">08</span> 據實揭露（本份草稿的邊界）</h2>
+  <ul>
+    <li><b>本份是草稿，未寫任何程式</b>：兩元件的所有畫面描述都是提案，拍板前不動任何 <code>.py</code>。</li>
+    <li><b>現況出處的行號為 2026-08-31 量測</b>（rotation.py / correlation.py / 分支 tab_fund_research.py），日後重構會漂移；抽查時以符號名為準。</li>
+    <li><b>「現況資訊一項都不刪」是本組單組對照 <code>_render_pairs_ui</code> 全函式逐行清點的結論，未經第二組獨立驗證</b>（§-2 規則 6）——差異表（第 04 節）即清點明細，供獨立稽核複驗。</li>
+    <li>元件 A 依賴的「警示對」數據現況存在但<b>輸出形狀不含型態/門檻/剔除名單</b>，需計算組在抽離時一併補齊（第 06 節表）；在計算層交付前，元件 A 無法落地。</li>
+    <li>本份未涉及 ② / ③ 其他區塊的任何版面變更；若拍板後執行時發現需要動到相鄰區塊（例如 ② 進階分析的矩陣子區標題），會另出草稿，不夾帶。</li>
+  </ul>
+</section>
+
+</div>
+</body>
+</html>

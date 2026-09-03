@@ -73,7 +73,6 @@ my-Fund-dashboard/
 │   ├── snapshot_repository.py      # 快照 CRUD
 │   ├── news_repository.py          # 11 RSS feed 並聯
 │   ├── hot_money_repository.py     # 外資買賣超 + USDTWD(EX-CACHE-1)
-│   ├── tw_macro_repository.py      # TW PMI / NDC / CBC
 │   ├── moneydj_fetcher.py          # MoneyDJ 多 page_type fallback
 │   └── external_market_repository.py  # YF Ticker.info / multpl.com(原 valuation/risk_radar 下沉)
 │
@@ -88,7 +87,6 @@ my-Fund-dashboard/
 │   │   ├── turning_points.py       # 拐點偵測
 │   │   ├── tw_local.py             # TW 在地總經
 │   │   ├── us_indicators.py        # US macro orchestrator
-│   │   ├── signal_lookback.py      # 訊號歷史回看
 │   │   ├── china.py                # 中國總經
 │   │   └── composite_score.py
 │   ├── health/                     # 基金健診 subpackage(原 fund_grp_health_extras 拆)
@@ -100,7 +98,7 @@ my-Fund-dashboard/
 │   ├── calibration/                # 校準 subpackage(原 risk_calibration 等)
 │   │   ├── risk.py                 # 風險校準 + Fama-French 3-factor
 │   │   ├── macro_score.py          # macro 評分校準
-│   │   ├── multi_factor.py         # 多因子 walk-forward
+│   │   ├── ~~multi_factor.py~~     # 多因子 walk-forward (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   │   └── signal_threshold.py     # 訊號閾值 grid search
 │   ├── config/
 │   │   └── macro_weights_active.json  # C-2 active override(可手動編輯)
@@ -109,28 +107,24 @@ my-Fund-dashboard/
 │   ├── precision_service.py        # 精準策略
 │   ├── ai_service.py               # Gemini 包裝(EX-AI-1)
 │   ├── crisis_backtest.py          # CrisisEvent/detect_crisis_events(macro/calibration 共用;v19.314 危機回測 UI 拔除後保留)
-│   ├── ai_advisor_pending.py       # 事前 AI 比對 top-N(v19.250 B 後 pending review 退役,僅留 recommend_weights)
 │   ├── moneydj_fetcher.py          # 基金 L2 orchestrator(R8 EX-L1ORCH-1 退役後純 L2)
 │   ├── liquidity_engine.py
 │   ├── us_liquidity_engine.py
 │   ├── reconcile.py                # 對帳 wrapper
-│   ├── auto_search.py + auto_search_store_gs/local.py  # 自動搜尋
+│   ├── ~~auto_search.py + auto_search_store_gs/local.py~~  # 自動搜尋 (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   ├── decision_matrix.py
 │   ├── macro_validation.py         # macro SCORE_RULES
 │   ├── macro_explain.py
 │   ├── macro_tw_local.py
 │   ├── macro_composite_score.py
-│   ├── macro_signal_lookback.py
 │   ├── macro_score_calibration.py
-│   ├── multi_factor_optimization.py
+│   ├── ~~multi_factor_optimization.py~~  # shim (2026-08-31 拔毒,production 0 caller;客戶 2026-08-31 授權死碼清理)
 │   ├── nav_history_store.py
 │   ├── policy_advisor_service.py
 │   ├── realtime_signal.py
 │   ├── risk_radar.py
-│   ├── signal_threshold_optimization.py
 │   ├── currency.py
 │   ├── format_helpers.py
-│   ├── cross_source_compare.py
 │   ├── fund_history.py
 │   ├── fund_total_return.py
 │   ├── fund_replacement_verdict.py
@@ -140,6 +134,25 @@ my-Fund-dashboard/
 │   ├── ai_prompts.py
 │   └── ledger_service.py
 │   # v19.251 退役清單:valuation.py / risk_calibration.py(shim) / macro_weights_store.py(shim)
+│   # 2026-08-28 Phase 1.4 退役清單(production 0 caller,實體刪除;v3 §01-2):
+│   #   第 2 波(第 1 波刪完才成立):services/tdcc_nav_accumulate.py
+│   #        + repositories/tdcc_nav_opendata.py + services/macro_signal_lookback.py(shim)
+│   #   第 3 波(第 2 波刪完才成立):services/macro/signal_lookback.py(383,實作本體)
+│   #   L2 services/:ai_advisor_pending.py / cross_source_compare.py / switch_state_machine.py
+│   #        / fund_batch.py(user 2026-08-28 明確點名,推翻其 RETAINED-LEGACY 保留決定)
+│   #        / calibration/risk.py / calibration/signal_threshold.py
+│   #   L1 repositories/:tw_macro_repository.py
+│   # ⚠️ 上面被刪掉的 `signal_threshold_optimization.py` 這一行**在本輪之前就已經是假的** ——
+│   #   該檔早於 v19.201 P2-3 搬成 services/calibration/signal_threshold.py,舊路徑不存在。
+│   # 2026-08-31 退役清單(auto_search 封閉死簇,production 0 caller,實體刪除;v3 §01-2):
+│   #   L2 services/:auto_search.py(598) / auto_search_store_gs.py(240)
+│   #        / auto_search_store_local.py(88) / calibration/multi_factor.py(781)
+│   #        / multi_factor_optimization.py(8,shim)
+│   #   五者**互為對方唯一 caller**,簇外 production 0 引用(四種獨立查法覆核,見該次 PR)。
+│   #   連帶:tests/test_auto_search.py + tests/test_multi_factor_optimization.py 整檔清;
+│   #        tests/test_services_purity_contract.py 豁免表 17 鍵同批下修(45→28);
+│   #        tests/test_sa_secret_string_no_dict_prewrap.py 由守 3 檔縮為 2 檔;
+│   #        tests/test_provenance_smoke.py 讀原始碼的兩行斷言一併移除。
 │
 ├── ui/                             # L3 ComponentUI(Streamlit only)
 │   ├── tab1_macro.py ~ tab6_manual.py
@@ -150,7 +163,17 @@ my-Fund-dashboard/
 │   ├── components/
 │   │   ├── macro_card.py / macro_card_edu.py
 │   │   ├── mk_dashboard.py / mk_clock.py
-│   │   ├── macro_compass_top.py(已退役,待 git rm)
+│   │   ├── ~~macro_compass_top.py(已退役,待 git rm)~~
+│   │   │   └─ ⚠️ **2026-08-28 更正:這行在本輪之前就已經是假的**(有意識的更正,不是漏刪)。
+│   │   │      `git rm` 早就做過了 —— 實測 `ui/components/macro_compass_top.py` **不存在**,
+│   │   │      本行卻還掛著「待 git rm」,是一筆**指向不存在檔案的 stale 引用**。
+│   │   │      **舊表述的理由曾經成立**(寫下時該檔確實還在、確實待刪);被權衡掉的不是理由,
+│   │   │      是它描述的事實已經不存在 —— 而一份會說謊的架構圖比沒有架構圖更危險
+│   │   │      (§1 同精神:錯誤的資訊比沒有資訊更危險)。
+│   │   │      ⚠️ **刪除的確切 commit / 日期本輪查不到**:本 clone 是 shallow(178 commits),
+│   │   │      該刪除發生在 shallow 邊界之前,`git log -- <該路徑>` 0 命中。**據實標明,不編一個日期。**
+│   │   │      歷史紀錄(STATE.md / ARCHITECTURE_AUDIT.md / BACKLOG.md)提到此檔者**一律不動** ——
+│   │   │      那些是當時的事實紀錄,不是現況宣稱。
 │   │   └── (其他 component)
 │   └── helpers/
 │       ├── session.py
@@ -191,8 +214,14 @@ my-Fund-dashboard/
 | `repositories/policy_repository.py` | 656 → 1372 | 0(拆 repositories/policy/ 3 子模組) | 二度成長後整檔搬走 |
 | `services/fund_grp_health_extras.py` | (新) | 0(拆 services/health/ 5 子模組) | 拆完即退 |
 | `services/risk_calibration.py` | (新) | 0(v19.251 拔 shim,實作搬 services/calibration/risk.py) | shim 退役 |
+| `services/calibration/risk.py` | 307 | **0(2026-08-28 Phase 1.4 退役)** | 上一列那個 shim 的**實作本體**,production 0 caller,整檔刪除;`tests/test_risk_calibration.py` 同清,`tests/test_provenance_smoke.py` 讀原始碼的三行斷言一併移除 |
 | `services/macro_weights_store.py` | (新) | 0(v19.251 拔 shim,實作搬 services/macro/weights_store.py) | shim 退役 |
 | `services/valuation.py` | 187 | **0 (v19.251 退役)** | 0 production caller,test 孤兒同清 |
+| `services/auto_search.py` | 598 | **0(2026-08-31 退役)** | auto_search 封閉死簇核心,production 0 caller;`tests/test_auto_search.py` 同清 |
+| `services/auto_search_store_gs.py` | 240 | **0(2026-08-31 退役)** | 上一列的 Google Sheets 後端,唯一 caller 是 `auto_search.py`;`GSPREAD_DEBT` 8 鍵同批下修 |
+| `services/auto_search_store_local.py` | 88 | **0(2026-08-31 退役)** | 同上的本地 JSON 後端;`FS_WRITE_DEBT` 3 + `FS_READ_DEBT` 3 鍵同批下修 |
+| `services/calibration/multi_factor.py` | 781 | **0(2026-08-31 退役)** | 多因子 walk-forward 實作本體,僅經 shim 被 `auto_search.py` 使用;`IMPORT_DEBT` 2 鍵同批下修 |
+| `services/multi_factor_optimization.py` | 8 | **0(2026-08-31 退役)** | 上一列的向後相容 shim(`globals()` 注入);`NAMESPACE_INJECTION_DEBT` 1 鍵同批下修 |
 | 根目錄業務 .py | 2 (app.py + fund_fetcher.py) | 2 | 不變 |
 
 ### 完整 v11.0 細節(原文保留)
@@ -710,6 +739,7 @@ Tab5 開啟（唯讀 + 動態計算）
 |------|------|------|------|
 | `fetch_fred(series_id, api_key, n)` | 系列代碼 / API key / 筆數 | `pd.DataFrame[date,value]` | FRED observations API |
 | `fetch_yf_close(ticker, range_, interval)` | yfinance ticker | `pd.Series` | yfinance Chart REST API |
+| `fetch_benchmark_close(ticker)` | ticker(`SPY` / `QQQ`) | `pd.Series \| None` | **(v19.531 新增)** 投資組合對比基準近 9 個月日線收盤；內部呼 `fetch_yf_close(range_="1y")` 後裁窗口 + index normalize。**取不到回 `None`**（不回空序列，§1）。由 L3 UI 直呼，見 `CLAUDE.md §8.2.A` EX-PASSTHRU-1 |
 | `fetch_ism_pmi(api_key, max_age_days)` | FRED key / 容忍天數 | `dict` | ISM PMI 5 段 fallback |
 | `fred_get_next_release_date(series_id, api_key)` | 系列代碼 / API key | `date \| None` | **(v18.3 新增)** 查詢下次 release 日；30 天 disk cache；2 段呼叫（series/release → release/dates）；失敗回 None |
 

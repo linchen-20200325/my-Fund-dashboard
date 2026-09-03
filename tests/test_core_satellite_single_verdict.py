@@ -223,7 +223,16 @@ class TestDualRulerCaption:
         assert "上方" in _embed, "Tab3 embed 沒指出行動建議在本頁上方"
         assert "上方" not in _health, (
             "健診 Tab 沒有「上方那一格」—— 指過去會讓使用者找一個不存在的東西")
-        assert "組合配置" in _health, "健診 Tab 應指向組合配置 Tab"
+        # ⚠️ 2026-08-31 WP-F 修正（**有意識的修改，不是漏改** · 決策者：AI 總管）：
+        # 期望值 ~~寫死 `"組合配置"`~~ 改為 runtime 讀 `tab_label("portfolio")`。
+        # **舊寫法的理由仍然成立**（要驗「有沒有指向 ④」，拿名字當指紋最直接）；
+        # **被權衡掉的原因**：那個指紋是**假的** ——「組合配置」從來不是任何時期的
+        # ④ 分頁名（七→五前是「📊 配置 & 帳本」、之後是「📊 我的配置」）。
+        # 測試把錯名字釘住＝**保護那個 bug 不被修掉**：修 production 反而弄紅測試。
+        from ui.helpers.story_nav import tab_label as _tl
+
+        assert _tl("portfolio") in _health, (
+            f"健診 Tab 應指向 ④「{_tl('portfolio')}」，實際：{_health}")
         for _cap in (_embed, _health):
             assert "policy_tier" in _cap, "沒講唯一真相是 Sheet 標的級別"
 
@@ -334,22 +343,51 @@ class TestDualRulerWiring:
                    for n in ast.walk(_fn)), (
             "兩把尺的差異說明沒被 render 讀出來（產生端對了、沒接出去）")
 
-    def test_tab3_declares_itself_as_the_embedding_page(self, tab3_tree) -> None:
-        """**修正前必紅（AST：呼叫沒有 source_tab 關鍵字）**。
+    def test_tab3_no_longer_embeds_the_health_tables(self, tab3_tree) -> None:
+        """~~**修正前必紅（AST：呼叫沒有 source_tab 關鍵字）**。Tab3 embed 必須自報身分。
+        ⚠️ 這是「講清楚」而非「開關」—— render 的預設分支本來就是唯讀（見
+        `_core_satellite_verdict_caption` docstring），所以拿掉這一行不會讓畫面回到
+        打臉狀態，但會讓下一個人以為 Tab3 沒有特殊處置。~~
 
-        Tab3 embed 必須自報身分。⚠️ 這是「講清楚」而非「開關」——
-        render 的預設分支本來就是唯讀（見 `_core_satellite_verdict_caption`
-        docstring），所以拿掉這一行不會讓畫面回到打臉狀態，但會讓下一個人
-        以為 Tab3 沒有特殊處置。
+        → **2026-08-31 WP-G 收斂：④ 已不再 embed 健診 3 表，本條改守「不得再 embed」。**
+        **有意識的政策變更，不是漏刪**；決策者 **user**（2026-08-31 直接指派：
+        「各頁不重複渲染相同功能 …… ④ 健診改單行連結」）。原 docstring 一字未刪、
+        加刪除線保留 —— 它記錄的是「當年為什麼要有 `source_tab="portfolio"`」，
+        那個來歷仍值得後人讀到。
+
+        **兩邊理由並陳（舊條的理由仍然成立，只是它的前提被拿掉了）**：
+
+        - **舊條為什麼是對的**：當年要求 ④ 自報身分，是因為 ④ **同一頁**上方另有一個
+          「🛡️ 核心資產比例」，跟 embed 進來的「🧭 核心/衛星資產屬性分布」是**兩把
+          不同的尺**（分類依據、分母、有無目標值都不同）。不講清楚，使用者會把兩個
+          數字讀成「其中一個算錯了」。**這個顧慮今天依然正確。**
+        - **新條為什麼勝出**：客戶把 ④ 的健診整區改成單行連結 → **兩把尺不再同頁出現**。
+          舊條想防的問題是**被從根拿掉**，不是被放寬。留著舊斷言不但擋住這次交付，
+          還會誤導後人以為「④ 應該要 embed」。
+
+        **本條現在方向相反、而且更嚴（fail-closed）**：④ 不得再出現健診 3 表的呼叫
+        （含改別名）。細部守衛（import / 呼叫 / 單行連結走 SSOT / 下游耦合保留）見
+        `tests/test_wpg_portfolio_health_link_20260831.py`。
+
+        ⚠️ **連帶失效、但本批未動的東西**（本次授權明文禁止動 ② 端一個字 → **登記不動**）：
+        `_CS_WHERE_PORTFOLIO` 與 `_CS_PORTFOLIO_CONTRAST_NOTE`（連同
+        `if source_tab != "health":` 那個分支）自此在 production **不可達** ——
+        它們是專為 ④ embed 寫的。依 `CLAUDE.md` §-1.5.1c 判定 3(4)「因本次改動才變成
+        沒用的」本該同批清掉，已列入 PR 待辦。**同班的
+        `test_render_prints_the_contrast_note` 因此變成「守著一段死碼」**，一併登記。
+
+        突變實驗（實跑）：把 `_render_health_tbl(_ok_health, funds_extra=_funds_extra,
+        source_tab="portfolio")` 放回 `ui/tab3_portfolio.py` → **本條轉紅**
+        （`AssertionError: 行 [...]：④ 又 embed 了健診 3 表`）。還原後轉綠。
         """
         _calls = [n for n in ast.walk(tab3_tree)
                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-                  and n.func.id == "_render_health_tbl"]
-        assert _calls, "Tab3 應仍 embed 健診 3 表"
-        for _c in _calls:
-            _st = _kwarg(_c, "source_tab")
-            assert isinstance(_st, ast.Constant) and _st.value == "portfolio", (
-                f"行 {_c.lineno}：Tab3 embed 未宣告 source_tab=\"portfolio\"")
+                  and n.func.id in ("_render_health_tbl", "_render_health_3tables")]
+        assert not _calls, (
+            f"行 {[c.lineno for c in _calls]}：④ 又 embed 了健診 3 表。\n"
+            f"WP-G 之後 ④ 只留一行連結指向 ②（健診的唯一主場）。要恢復 embed 屬"
+            f"**版面變更**，依 `CLAUDE.md` §-1.5 v3 §03-2 ① 須先出線框草稿給客戶拍板，"
+            f"不能靠改測試放行。")
 
 
 # ══════════════════════════════════════════════════════════════

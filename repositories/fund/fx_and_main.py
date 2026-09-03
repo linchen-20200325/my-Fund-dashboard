@@ -132,7 +132,14 @@ class _FxCacheProxy:
 
     @staticmethod
     def cache_info() -> dict:
-        return {"name": "_FX_CACHE", "currsize": len(_FX_CACHE), "ttl": _FX_CACHE_TTL}
+        # 2026-08-31 欄位契約(infra.cache.CACHE_INFO_REQUIRED_KEYS):
+        # entry 數的正式欄位名是 `size`;`currsize` 降為向後相容別名,保留不刪
+        # (**有意識的更正,不是漏刪**;決策者:資料與計算組)。理由見 infra/cache.py
+        # 的「cache_info() 欄位契約」段。
+        # ⚠️ 本列**刻意不給** hits/misses/uncached_fail —— 這是個 raw dict 包裝,
+        # 沒有攔截呼叫,命中率**不適用**。缺席即「不適用」,填 0 會是假數字(§1)。
+        return {"name": "_FX_CACHE", "size": len(_FX_CACHE),
+                "currsize": len(_FX_CACHE), "ttl": _FX_CACHE_TTL}
 
 
 register_cache(_FxCacheProxy())

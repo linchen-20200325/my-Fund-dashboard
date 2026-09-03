@@ -63,6 +63,39 @@ def _line_of(marker: str) -> int:
     return _src[:_src.index(marker)].count("\n") + 1
 
 
+def _render_capturing_levels(monkeypatch, st_sys, mbv, render, rows, fn, coll):
+    """跑 `render_evidence_table` 並把 caption **依揭露層級**分開收。
+
+    回傳 `[(層名, [該層的 caption, ...]), ...]`。`st.expander` 被換成一個
+    context manager,進去之後的 caption 記到摺疊層 —— 這樣才分得出
+    「散成兩則」與「分成兩層」(舊斷言 `len(_caps) == 1` 分不出來)。
+    """
+    import contextlib
+    _levels: list = [("常駐", [])]
+    _cur = {"buf": _levels[0][1]}
+
+    @contextlib.contextmanager
+    def _fake_expander(label, **kw):
+        assert kw.get("expanded") is not True, (
+            "摺疊區用了 expanded=True —— 那是空殼,見 test_audit_20260810_tab1_shells")
+        _buf: list = []
+        _levels.append((f"摺疊<{label}>", _buf))
+        _prev, _cur["buf"] = _cur["buf"], _buf
+        try:
+            yield
+        finally:
+            _cur["buf"] = _prev
+
+    for _mod in {id(st_sys): st_sys, id(mbv.st): mbv.st}.values():
+        monkeypatch.setattr(_mod, "caption",
+                            lambda *a, **k: _cur["buf"].append(str(a[0])),
+                            raising=False)
+        monkeypatch.setattr(_mod, "dataframe", lambda df, **kw: None, raising=False)
+        monkeypatch.setattr(_mod, "expander", _fake_expander, raising=False)
+    render(rows, footnotes=fn, collapsed_footnotes=coll)
+    return [(_n, _c) for _n, _c in _levels if _c]
+
+
 def _summary(indicators=None, *, phase_info=None, news_items=None):
     from ui.helpers.macro.beginner_view import compute_five_bucket_summary
     return compute_five_bucket_summary(
@@ -243,9 +276,24 @@ class TestLongNotesMovedBelowTheTable:
             build_evidence_footnotes(_s, composite_action=_act))
         assert _act not in "\n".join(build_evidence_footnotes(_s))
 
-    def test_footnotes_ride_in_the_single_caption(self, monkeypatch):
-        """契約回歸:表下註記仍是**單一 `st.caption` 呼叫**(`render_evidence_table`
-        docstring 明訂),且 footnotes 真的印出去了。"""
+    def test_footnotes_ride_in_one_caption_per_disclosure_level(self, monkeypatch):
+        """契約回歸(2026-09-03 減字 B 後改寫,**不是放寬**)。
+
+        ⚠️ **舊契約是什麼、為什麼要改**:舊斷言是 `len(_caps) == 1`
+        (「表下註記只有一則 caption」)。它要防的是 user 說的「不要留兩份說法」——
+        也就是**同一層裡**散成一堆各自為政的註腳,以及長句被塞回 `st.dataframe`
+        的字串格裡被截斷(2026-08-05 必修 3 的本體)。
+        減字 B 之後,表下分成**兩層**:常駐 caption 一則 + 摺疊區內 caption 一則,
+        `len(_caps) == 1` 會把**分層**誤報成**散落**。
+
+        **新契約比舊的嚴,守的是同樣三件事外加一件**:
+          (a) **每一層各自只有一則** caption(散落仍然紅);
+          (b) 層數**最多兩層**(常駐 + 一個摺疊),不得再長出第三層;
+          (c) 每一則 footnote 都真的出現在某一層(一則都不掉);
+          (d) 🆕 footnote 全文**不得**出現在 dataframe 的格子裡 ——
+              這是舊斷言只靠 docstring 交代、**從來沒有真的驗過**的那一半
+              (必修 3 的原始病灶就是它被截斷)。
+        """
         import streamlit as _st_sys
 
         import ui.helpers.macro.beginner_view as _mbv
@@ -253,22 +301,36 @@ class TestLongNotesMovedBelowTheTable:
             build_evidence_footnotes,
             build_evidence_rows,
             render_evidence_table,
+            split_evidence_footnotes,
         )
-        _caps: list = []
-        for _mod in {id(_st_sys): _st_sys, id(_mbv.st): _mbv.st}.values():
-            monkeypatch.setattr(_mod, "caption",
-                                lambda *a, **k: _caps.append(str(a[0])), raising=False)
-            monkeypatch.setattr(_mod, "dataframe", lambda df, **kw: None, raising=False)
         _s = _summary(news_items=[])
-        _fn = build_evidence_footnotes(_s, composite_action="哨兵行動")
-        render_evidence_table(
-            build_evidence_rows(_s, composite_score=1.0, composite_icon="🟢",
-                                composite_level="樂觀", composite_action="哨兵行動",
-                                n_indicators=25),
-            footnotes=_fn)
-        assert len(_caps) == 1, f"表下註記應只有一則,實際 {len(_caps)}"
+        _act = "哨兵行動"
+        _fn = build_evidence_footnotes(_s, composite_action=_act)
+        _pin, _coll = split_evidence_footnotes(_s, composite_action=_act)
+        _rows_ = build_evidence_rows(
+            _s, composite_score=1.0, composite_icon="🟢", composite_level="樂觀",
+            composite_action=_act, n_indicators=25)
+
+        _levels = _render_capturing_levels(
+            monkeypatch, _st_sys, _mbv, render_evidence_table,
+            _rows_, _fn, _coll)
+
+        # (b) 常駐 + 最多一個摺疊
+        assert 1 <= len(_levels) <= 2, f"表下層數異常:{len(_levels)}"
+        # (a) 每一層各自只有一則 caption
+        for _lvl, _caps in _levels:
+            assert len(_caps) == 1, f"{_lvl} 這一層有 {len(_caps)} 則 caption,應只有一則"
+        # (c) 一則都不掉
+        _all = "\n".join(_c for _, _caps in _levels for _c in _caps)
         for _f in _fn:
-            assert _f in _caps[0], f"表下漏掉一則:{_f!r}"
+            assert _f in _all, f"表下漏掉一則:{_f!r}"
+        # (d) 長句不得回到會被截斷的格子裡
+        _cells = " ".join(str(_v) for _r in _rows_ for _v in _r.values())
+        for _f in _fn:
+            _body = _f.split(":", 1)[-1]
+            assert _body not in _cells, (
+                f"footnote 全文又被塞回 dataframe 格子(會被截斷):{_f!r}")
+        assert _pin and _coll, "分層失效 —— 有一層是空的"
 
     def test_tab1_actually_passes_the_footnotes(self):
         """**接線**(`PROCESS.md §4`,本輪唯一的側車):helper 算得再對,

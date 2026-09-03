@@ -17,16 +17,61 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from ui.helpers.render_state import not_ready
+from ui.helpers.ia import empty_state
+from ui.helpers.render_state import not_ready, system_error
+# ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。
+# ~~預設全空 → 本檔行為與合併前完全相同。~~
+# ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**這句話現在是假的。**
+# 舊句的理由**仍然成立** —— 它寫下的當天 ③ 合併頁還沒被 `app.py` 掛上去，
+# `render_single_fund_tab` 仍有一個不帶旗標的舊入口，旗標**確實**是空的。
+# 被權衡掉的是它的**前提**：WP-F 七→五接線移除了舊入口，本函式現在的唯一 caller
+# 是 `ui/tab_fund_research.py::_render_single_mode()`，它**永遠**帶著
+# `merged_page_owns(PAGE_HEADER, SHARED_SEARCH)` 進來 → 旗標**恆為持有**。
+# 直接後果：下方 `if not _merged_page_owns(_MERGED_PAGE_HEADER):` 在 production
+# **恆不觸發**（刻意保留為防當機護欄，見該處註記）。
+from ui.helpers.fund_research.merge_context import (
+    PAGE_HEADER as _MERGED_PAGE_HEADER,
+    owned_by_merged_page as _merged_page_owns,
+)
+# ⑤ 設定與診斷合併頁（線框 §03 ⑤）的所有權旗標 + 抓取診斷區塊本體（WP-E 抽出共用）。
+# ~~預設旗標全空 → 本檔行為與抽出前完全相同（守衛：tests/test_settings_diag_merge.py）。~~
+# ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**這句話現在是假的。**
+# WP-F 把 `app.py` 的**全部五個**分頁包進 `with _settings_page_owns(_SD_FETCH_DIAG):`
+# （理由見 `tests/test_wpf_five_tab_wiring.py::test_fetch_diag_is_owned_by_app`：
+# ③ 跑在 ⑤ 之前，⑤ 自己 with 關不掉 ③ 已經畫出去的那一份）→ `FETCH_DIAG`
+# 在 production **恆為持有**。守衛檔名未變、仍然有效。
+from ui.helpers.settings_diag.fetch_diag_section import render_fetch_diag_section
+from ui.helpers.settings_diag.merge_context import (
+    FETCH_DIAG as _SD_FETCH_DIAG,
+    owned_by_settings_page as _settings_page_owns,
+)
 
-from shared.colors import BG_DARK_AMBER_1, BG_DARK_AMBER_3, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
+from shared.colors import BG_DARK_AMBER_1, BG_DARK_GREEN_1, BG_DARK_GREEN_2, BG_DARK_NAVY_1, BG_DARK_NAVY_3, BG_DARK_NAVY_4, BG_DARK_RED_1, CAUTION_YELLOW, CHIP_BG_NEAR_BLACK, GH_BG_CARD, GH_BG_PRIMARY, GH_BORDER, GH_FG_PRIMARY, GH_FG_SECONDARY, GRAY_44, GRAY_55, GRAY_66, GRAY_AA, GRAY_CC, INFO_BLUE, MATERIAL_GREEN, MATERIAL_ORANGE, MATERIAL_RED, MD_BLUE_500, MD_DEEP_ORANGE_400, MD_GREEN_A200, MD_GREEN_A400, MD_ORANGE_300, MD_PURPLE_500, STREAMLIT_BG, TRAFFIC_GREEN, TRAFFIC_NEUTRAL, TRAFFIC_RED, WARN_AMBER, WHITE
 from shared.converters import safe_float as _safe_float  # v19.331 review:占位字串防護
 # §3.3 反捏造:接近警戒門檻走 shared SSOT,不在本檔另寫一份同義 literal
 from shared.signal_thresholds import NEAR_DIVIDEND_WARNING_PCT as _NEAR_PCT_SSOT
 
-from repositories.fund import (
-    tdcc_search_fund,
-)
+#: D3 —— 單檔 σ 卡片沿用**批次大表**的「基期」標籤字（客戶拍板線框
+#: `docs/wireframes/wireframe-fund-research.html`「D3」：
+#: 「單檔卡片沿用大表的『基期』標籤字：🔴 高基期／⚪ 中性／🟢 低基期／⬜ 資料不足」，
+#: 讓使用者兩個模式看到的是同一套詞）。
+#:
+#: ⛔ **這是同一組字串在 repo 內的第三份，而且沒有 SSOT 可以吃 —— 據實寫明，不要當它沒發生。**
+#: 現有兩份：`ui/helpers/fund_grp_health/unified.py` 的 `_BASE_LBL`（**函式內的區域變數**，
+#: 匯入不到）與 `ui/helpers/fund_grp_health/rotation.py` 的 `_lbl`（同樣是區域變數，
+#: 而且用字略有不同：「🔴 高基期(可賣)」）。**正解是把它收進 `shared/` 或
+#: `services/rotation.py`，但那兩處都不在本批的檔案邊界內**（本批只准動
+#: `ui/tab1_macro.py` / `ui/tab_fund_research.py` / `ui/tab2_single_fund.py` /
+#: `ui/tab_batch_analysis.py` / `tests/**`），已列入 PR 描述交總管另派。
+#:
+#: ✅ **在收進 SSOT 之前，漂移由測試擋住，不靠自律**：
+#: `tests/test_ia_tab13_batch3.py::test_base_label_wording_matches_the_merged_table`
+#: 以 AST 讀出 `unified.py::_BASE_LBL` 的字面值逐鍵比對 —— 任一邊改字就當場轉紅。
+BASE_LABELS_FROM_MERGED_TABLE: dict = {
+    "high": "🔴 高基期", "low": "🟢 低基期",
+    "mid": "⚪ 中性", "unknown": "⬜ 資料不足",
+}
+
 from services.portfolio_service import dividend_safety as div_safety_check
 from services.precision_service import (
     calc_hwm_sigma_levels,
@@ -183,6 +228,24 @@ def _risk_1y_rows_html(risk_table: dict, *, label_style: str = "short") -> str:
     故仍保留 Sharpe 列。
     v19.347(第九份 ⑯):補「追蹤誤差 Tracking Error」列 — wb07 風險表本就解析
     此欄入 risk_table(clean_risk_table NUMERIC 集含),僅 UI 從未顯示;缺值顯 —。
+
+    ⚠️ **`label_style="short"`(本函式的預設值)自 2026-08-28 Q4 起 production 0 caller**
+    —— 它唯一的 production caller 是 partial 資料視圖,而那個視圖本來就長在一條
+    production 恆不觸發的分支裡,該分支的 body 已於 Q4 換成 2 行誠實訊息(見本檔
+    `if s is None or ... :` 處的說明)。
+    查證(量測日 2026-08-28,兩條都要跑;實際 production 用法只剩 1 個 def + 1 個
+    `label_style="long"` 的呼叫 —— 輸出裡命中本 docstring 自己的那幾行不算 caller,
+    請按行號排除,不要被「有很多命中」誤導):
+      $ grep -n '_risk_1y_rows_html(' ui/tab2_single_fund.py
+      $ grep -rn 'label_style' ui/ --include=*.py
+    **刻意保留而不刪除的理由**:刪 "short" 就要連 `label_style` 參數一起刪(留一個
+    只剩單一合法值的參數比留著分支更誤導),那會改到唯一的 production 呼叫點 + 3 個
+    測試檔共 5 個測試,並且會一起拆掉 v19.347 對「追蹤誤差列」的回歸鎖 —— 相對於
+    一個 6 行、無 I/O、無狀態的純函式分支,那個代價不成比例(§8.1 step 6 的反向:
+    這裡不是「加一個用不到的抽象」,是「拆一個已經在那裡的分支」)。
+    **撤銷條件**:若日後 partial 視圖不會回來,或有人要動這個函式的 signature,
+    連同 `label_style` 參數一併刪除,並更新上述 3 個測試檔。
+    ⚠️ 這是判斷不是事實 —— 稽核若認為應照 v3 §01-2「孤兒即刪」處理,推翻本段即可。
     """
     _r1y = (risk_table or {}).get("一年", {}) or {}
     _std = _r1y.get("標準差", "—"); _sh = _r1y.get("Sharpe", "—")
@@ -247,12 +310,31 @@ def render_single_fund_tab() -> None:
 
     # 稽核 H1：分頁列寫「🔍 個基深掘」(story_nav SSOT)，這裡卻寫死
     # 「單一基金深度分析」—— 同一頁兩個名字（與 Tab④ 同型）。
-    from ui.helpers.story_nav import (
-        render_flow_nav, render_story_nav, tab_label as _tab_label_t2,
-    )
-    st.markdown(f"## {_tab_label_t2('fund')}")
-    render_flow_nav("fund")      # 巨觀:第 ② 層 基金核心分析
-    render_story_nav("fund")
+    # 2026-09-02 D5：`render_flow_nav` / `render_story_nav` **已移到合併頁的共用頂部**
+    # （`ui/tab_fund_research.py::_render_shared_top()`），本檔不再 import 它們。
+    from ui.helpers.story_nav import section_label as _section_label_t2
+    # 合併頁（③ 基金研究）已在共用頂部畫過頁面大標時，這裡不再畫第二個 `##`。
+    # 只讓掉標題那一行 —— flow_nav / story_nav / caption 一律照舊（它們帶的是本模式的資訊）。
+    if not _merged_page_owns(_MERGED_PAGE_HEADER):
+        # ⚠️ 2026-08-31 WP-F 就地修正（**有意識的修正，不是漏改** ·
+        # 決策者：AI 總管）：舊寫法 ~~`tab_label('fund')`~~ 在七→五之後
+        # **會當場 KeyError** —— `'fund'` 自 2026-08-31 起是**頁內分區**、
+        # 不是分頁，`tab_label()` 對它一律 fail loud（story_nav 刻意設計）。
+        # 它沒有炸過，只是因為這個分支在 production 恆不觸發（合併頁永遠
+        # 持有 PAGE_HEADER / MANAGE_HEADER）—— **一顆埋在死碼裡的地雷**：
+        # 哪天有人讓這個分支活過來，第一件事就是 KeyError。
+        # 改吃 `section_label('fund')`（分區名 SSOT，回「🔍 單檔深掘」）。
+        st.markdown(f"## {_section_label_t2('fund')}")
+    # ⚠️ 2026-09-02 D5 收斂（**有意識的政策變更，不是漏刪** · 決策者：客戶拍板線框
+    # `docs/wireframes/wireframe-fund-research.html`「決定 2 / D5」）：
+    # 這裡原本畫 ~~`render_flow_nav("fund")`~~ ＋ ~~`render_story_nav("fund")`~~。
+    # **舊寫法在它寫下的當天是對的** —— 當時「個基深掘」是一個獨立的頂層分頁，
+    # 導覽本來就該由它自己畫。**被推翻的是它的前提**：七→五之後它變成 ③ 的一個
+    # *模式*，而 `render_flow_nav("fund")` 與 `render_flow_nav("batch")` 的第一行
+    # **逐字相同**（同屬 L2）→ 切模式時等於同一份資料畫兩次；且只有本檔多畫一條
+    # `render_story_nav`，批次沒有 → **切模式時頂部高度會跳動**。
+    # 現行：兩條導覽都由 `ui/tab_fund_research.py::_render_shared_top()` 畫一次，
+    # 本模式只留下面這一句自己的功能 caption。
     st.caption("輸入 MoneyDJ 代碼或網址，即時抓取淨值 / 持股 / 配息 / 風險指標")
 
     # ── 輸入列（自動偵測境內/境外，移除 radio）────────────────────
@@ -336,28 +418,26 @@ def render_single_fund_tab() -> None:
                 if _nh_tr and _nh_tr.get("note"):
                     st.caption(("✅ " if _nh_tr.get("merged") else "⏳ ") + _nh_tr["note"])
 
-    # ── 關鍵字搜尋（折疊）──
-    with st.expander("🔍 關鍵字搜尋境外基金（TDCC / FundClear）", expanded=False):
-        c_kw, c_btn = st.columns([4,1])
-        with c_kw:
-            keyword = st.text_input("基金關鍵字", placeholder="安聯、收益成長、摩根、聯博...",
-                label_visibility="collapsed", key="fund_keyword")
-        with c_btn:
-            do_search = st.button("🔍 搜尋", type="primary", use_container_width=True, key="btn_search")
-        if do_search and keyword.strip():
-            with st.spinner(f"搜尋「{keyword}」中..."):
-                results = tdcc_search_fund(keyword.strip())
-                st.session_state.tdcc_results = results
-                if not results:
-                    st.warning("⚠️ 查無結果，請直接使用上方 MoneyDJ 網址輸入")
-                else:
-                    st.success(f"✅ 找到 {len(results)} 檔基金")
-        results = st.session_state.get("tdcc_results",[])
-        if results:
-            options = {f"{r.get('基金名稱','')} | {r.get('基金代碼','')}": r for r in results}
-            sel = st.selectbox(f"選擇基金（{len(results)} 筆）", list(options.keys()), key="tdcc_select")
-            fc  = options[sel].get("基金代碼","")
-            st.info(f"💡 代碼：**{fc}** → 在上方輸入框貼入代碼即可分析")
+    # ── 關鍵字搜尋（折疊）—— 2026-08-31 整段刪除 ────────────────────────────
+    # ~~`if not _merged_page_owns(SHARED_SEARCH):` + 折疊版關鍵字搜尋框~~
+    # **有意識的政策變更，不是漏刪**（日期 2026-08-31 · 決策者：AI 總管）。
+    #
+    # 舊條文的理由**仍然成立**：它是為了讓「舊入口（app.py 直接呼叫本函式）」與
+    # 「合併頁入口」共存時不畫出兩份搜尋框 —— 那個 guard 在兩個入口並存的期間
+    # 確實有效，一行都沒有寫錯。
+    #
+    # 被權衡掉的原因：WP-F 七→五接線把**舊入口移除**了。本函式現在的唯一 caller 是
+    # `ui/tab_fund_research.py::_render_single_mode()`，而它永遠帶著
+    # `merged_page_owns(PAGE_HEADER, SHARED_SEARCH)` 進來 → 判斷式恆為 False，
+    # 整個 `if` body 在 production **恆不觸發**（執行時實測：以 shim 攔截
+    # `_render_single_mode` 內的 lazy import，量到 `SHARED_SEARCH_owned=True`）。
+    # 留著死碼的代價不只是行數：它讓 `repositories.fund.tdcc_search_fund` 看起來
+    # 有兩個 UI 呼叫點，而實際活著的只有 `ui/helpers/fund_research/code_finder.py`
+    # 一個 —— 憲法 §8.2.A EX-PASSTHRU-1 的登記路徑當時正是指到這個死的呼叫點。
+    # 📌 2026-08-31 同日已由總管裁決修正：該登記已改指
+    # `ui/helpers/fund_research/code_finder.py::_search`（不寫行號）。本行保留為沿革。
+    #
+    # 找代號工具現在只有一份，住在共用頂部：`ui/helpers/fund_research/code_finder.py`。
 
     # ── 分析結果 ──
     fd = st.session_state.fund_data
@@ -385,156 +465,82 @@ def render_single_fund_tab() -> None:
             # 摺疊處置(原則 1):這一區只在 partial 狀態出現,而 partial 的**唯一用途**
             # 就是回答「到底哪個源失敗」。把它裝進一個永遠展開的摺疊殼,等於在最需要
             # 被讀的診斷資訊外面多包一層裝飾邊框。改標題 + container 直接攤平。
-            st.markdown("##### 🔍 抓取診斷細節（哪個源失敗 + NAS Proxy 狀態）")
-            with st.container():
-                _mj_raw    = fd.get("moneydj_raw", {}) or {}
-                _series    = fd.get("series")
-                _series_n  = (len(_series) if _series is not None
-                              and hasattr(_series, "__len__") else 0)
-                _has_metrics = bool(fd.get("metrics"))
-                _has_risk    = bool(_mj_raw.get("risk_metrics"))
-                _has_div     = bool(fd.get("dividends"))
-                _raw_warn = fd.get("warning") or _mj_raw.get("warning", "") or "—"
-                _raw_err  = fd.get("error")   or _mj_raw.get("error",  "") or "—"
-                # v18.120: NAS Proxy 狀態檢測（issue 4 user 切到 NAS 後仍失敗）
-                try:
-                    from infra.proxy import get_proxy_config as _gpc
-                    _pxy_cfg = _gpc()
-                    if _pxy_cfg:
-                        _pxy_url = _pxy_cfg.get("https", "—")
-                        # 隱藏密碼
-                        import re as _re_pxy
-                        _pxy_safe = _re_pxy.sub(
-                            r"//[^:]+:[^@]+@", "//****:****@", _pxy_url)
-                        _pxy_line = f"NAS Proxy: ✅ {_pxy_safe}"
-                    else:
-                        _pxy_line = "NAS Proxy: ❌ 未設定（走直連，Cloud IP 可能被封）"
-                except Exception as _e_pxy:
-                    _pxy_line = f"NAS Proxy: ⚠️ 讀取失敗 ({type(_e_pxy).__name__})"
-                # v19.193 SSOT:呼叫 portfolio_service.get_factor_availability(),
-                # 確保診斷 ✅/❌ ↔ calc_fund_factor_score 實際納入 factor 1-1 對齊。
-                # 修正 v19.191 inline 走岔(mgmt_fee="N/A"/expense_ratio=0/tr1y="abc"/
-                # annual_div_rate=None 等 case 的 ✅/❌ 偏差)。
-                from services.portfolio_service import get_factor_availability as _gfa
-                _m_diag = fd.get("metrics") or {}
-                # 若 fd 未帶 risk_table 但 moneydj_raw 有 → 補上,匹配 calc_fund_factor_score
-                # caller 慣例。
-                _avail_fd = dict(fd)
-                if "perf" not in _avail_fd:
-                    _avail_fd["perf"] = _mj_raw.get("perf") or {}
-                _avail = _gfa(_avail_fd, risk_table=_mj_raw.get("risk_metrics"))
-                def _mk_bool(b: bool) -> str:
-                    return "✅" if b else "—"
-                _adv_3y = _m_diag.get("ret_3y_ann")
-                _adv_5y = _m_diag.get("ret_5y_ann")
-                def _mk(v):
-                    return "✅" if v is not None else "—"
-                # 必修 4:門檻文案改**直接 import SSOT 常數**渲染,不再寫死數字。
-                # 舊文案寫的樣本門檻(60)與 Calmar 的一年期退路皆已過時
-                # ⚠️ 本註解**刻意不引用舊文案原字串** —— `test_stale_threshold_copy_removed`
-                #    是對整檔原始碼做子字串掃描,註解裡引用等於自己讓自己紅。
-                # (實際 250 / 756,且 1Y fallback 已取消)→ user 看到「我有 100 筆
-                # 應該夠」但畫面顯示「—」= §1 要防的「無法察覺的矛盾」。
-                from services.fund_service import (
-                    MIN_DOWNSIDE_OBS_SORTINO as _MIN_DOWN,
-                    MIN_OBS_CALMAR as _MIN_CALMAR,
-                    MIN_OBS_MAX_DRAWDOWN as _MIN_MDD,
-                    MIN_OBS_SHARPE_SORTINO as _MIN_SS,
-                )
-                st.code(
-                    f"{_pxy_line}\n"
-                    f"────────────────────────\n"
-                    f"狀態: {_status_fd}\n"
-                    f"基金名稱: {_p_fn or '（未抓到）'}\n"
-                    f"NAV 序列: {_series_n} 筆 "
-                    f"{'✅' if _series_n >= 10 else '❌ (需 ≥10)'}\n"
-                    f"指標 (calc_metrics): {'✅' if _has_metrics else '❌'}\n"
-                    f"風險指標 (wb07):     {'✅' if _has_risk    else '❌'}\n"
-                    f"配息歷史 (wb05):     {'✅' if _has_div     else '❌'}\n"
-                    f"最新淨值: {_mj_raw.get('nav_latest', '—')}\n"
-                    f"基金類別: {_mj_raw.get('fund_type',  '—')}\n"
-                    f"page_type: {fd.get('page_type', '—')}\n"
-                    f"────────────────────────\n"
-                    f"📊 進階指標(對齊 calc_fund_factor_score SSOT):\n"
-                    f"  Sortino:     {_mk_bool(_avail['Sortino'])}  "
-                    f"(需 ≥{_MIN_SS} 交易日 + ≥{_MIN_DOWN} 筆低於 MAR 的報酬)\n"
-                    f"  Calmar:      {_mk_bool(_avail['Calmar'])}  "
-                    f"(需 ≥{_MIN_CALMAR} 交易日 = 3Y;**無** 1Y fallback)\n"
-                    f"  Max DD:      {_mk(_m_diag.get('max_drawdown'))}  "
-                    f"(需 ≥{_MIN_MDD} 交易日)\n"
-                    f"  Alpha:       {_mk_bool(_avail['Alpha'])}  (perf.1Y 可解析;adr 預設 0)\n"
-                    f"  費用率:      {_mk_bool(_avail['ExpenseRatio'])}  (arg/expense_ratio/mgmt_fee float 可解析)\n"
-                    f"  3Y 年化:     {_mk(_adv_3y)}  (需 NAV ≥ 3 年,非 6F factor)\n"
-                    f"  5Y 年化:     {_mk(_adv_5y)}  (需 NAV ≥ 5 年,非 6F factor)\n"
-                    f"────────────────────────\n"
-                    f"warning: {_raw_warn}\n"
-                    f"error:   {_raw_err}",
-                    language=None,
-                )
-                st.caption(
-                    "📌 **判讀**：\n"
-                    "- Proxy ✅ + page_type yp010000 + NAV=0 → 路由錯（境外基金抓到境內頁）\n"
-                    "- Proxy ✅ + page_type yp010001 + NAV=0 → 源真壞或 NAS 不通該基金\n"
-                    "- Proxy ❌ → 至 Streamlit Cloud secrets 加 PROXY_URL = \"http://user:pwd@host:3128\""
-                )
+            #
+            # WP-E（線框 §03 ⑤「A · 🔌 連線與帳號」搬入項）：區塊本體**原封抽至**
+            # `ui/helpers/settings_diag/fetch_diag_section.py`，⑤ 與本頁共用同一份。
+            # ⑤ 持有 FETCH_DIAG 旗標時本頁不再畫（接線批次才會持有）；
+            # ~~旗標全空（現況）→ 與抽出前完全相同：partial 時渲染同一塊。~~
+            # ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：**「旗標全空」現在是假的** —— WP-F 之後 `app.py` 把五個
+            # 分頁全部包進 `with settings_page_owns(FETCH_DIAG)`，本判斷式在
+            # production **恆為 False**，這一行 `render_fetch_diag_section(...)`
+            # **恆不觸發**（抓取診斷改由 ⑤ 的 `render_fetch_diag_from_session()` 畫）。
+            # 分支本身**刻意保留**：它是「⑤ 沒持有時本頁要自己畫」這個契約的實作，
+            # 拿掉等於把契約寫死成單向；且 `test_settings_diag_merge` 以 AST 鎖它的極性。
+            if not _settings_page_owns(_SD_FETCH_DIAG):
+                render_fetch_diag_section(fd, _status_fd, _p_fn)
         else:
             s    = fd.get("series"); m = fd.get("metrics",{}); divs = fd.get("dividends",[])
             name = fd.get("fund_name",""); fk = fd.get("full_key","")
             mj_raw = fd.get("moneydj_raw",{}) or {}
 
             if s is None or (hasattr(s,"empty") and s.empty) or not m:
-                # ── 部分資料視圖（series 缺失時仍顯示可用資訊）────────
-                _p_name  = name or fk
-                _p_nav   = mj_raw.get("nav_latest")
-                _p_risk  = (mj_raw.get("risk_metrics") or {})
-                _p_perf  = (mj_raw.get("perf") or {})
-                _p_err   = fd.get("error") or fd.get("warning") or ""
-                _p_cat   = mj_raw.get("category","")
-                _p_fee   = mj_raw.get("mgmt_fee","")
-
-                st.markdown(
-                    f"<div style='background:{BG_DARK_AMBER_3};border:1px solid {MATERIAL_ORANGE};"
-                    f"border-radius:10px;padding:14px 18px;margin:8px 0'>"
-                    f"<div style='color:{MATERIAL_ORANGE};font-weight:700;font-size:13px;margin-bottom:8px'>"
-                    f"🟡 部分資料（歷史淨值序列未取得，下方顯示已有資訊）</div>"
-                    + (f"<div style='color:{GRAY_CC};font-size:11px;margin-bottom:6px'>{_p_err}</div>"
-                       if _p_err else "")
-                    + (f"<div style='color:{TRAFFIC_NEUTRAL};font-size:11px;border-top:1px solid {BG_DARK_AMBER_1};padding-top:8px;margin-top:4px'>"
-                    f"💡 系統已自動嘗試境內/境外雙路由。若仍失敗，可直接貼入完整 MoneyDJ 網址：<br>"
-                    f"境內：<code>yp010000.djhtm?a={fk}</code>　"
-                    f"境外：<code>yp010001.djhtm?a={fk}</code></div>"
-                    f"</div>"),
-                    unsafe_allow_html=True)
-
-                # 顯示已取得的基本資料
-                _pc1, _pc2, _pc3 = st.columns(3)
-                with _pc1:
-                    # v19.331 review 修正:MoneyDJ 失敗時 nav_latest 常為 "—"/"N/A"/"查無資料"
-                    # (非 None)→ 原裸 float() 轉型直接 ValueError,partial 視圖整頁炸。
-                    # 改 safe_float(SSOT shared/converters):非數值顯示 N/A,不造假不炸頁。
-                    _p_nav_f = _safe_float(_p_nav)
-                    if _p_nav_f is not None:
-                        st.metric("最新淨值", f"{_p_nav_f:.4f}")
-                    else:
-                        st.metric("最新淨值", "N/A")
-                with _pc2:
-                    st.metric("基金類別", _p_cat[:12] or "N/A")
-                with _pc3:
-                    st.metric("最高經理費", _p_fee or "N/A")
-
-                # 若有風險指標，仍顯示
-                if _p_risk.get("risk_table"):
-                    st.markdown("#### 📊 風險指標（已取得）")
-                    # v19.336 M9:與 complete 視圖共用 _risk_1y_rows_html(原兩套同款 HTML)
-                    st.markdown(_risk_1y_rows_html(_p_risk["risk_table"]),
-                                unsafe_allow_html=True)
-
-                # 若有績效數據，顯示
-                if _p_perf:
-                    st.markdown("#### 📈 績效數據（已取得）")
-                    _perf_cols = st.columns(len(_p_perf))
-                    for _pi, (_pk, _pv) in enumerate(list(_p_perf.items())[:4]):
-                        _perf_cols[_pi].metric(f"報酬率({_pk})", f"{_pv:.2f}%" if isinstance(_pv,(int,float)) else str(_pv))
+                # ⚠️ Q4(2026-08-28):本分支在 production **恆不觸發**,body 由 53 行
+                # 「🟡 部分資料」琥珀卡換成 2 行誠實訊息;分支本身**刻意保留**當防當機護欄。
+                #
+                # 為什麼恆不觸發 —— 證明指令就地附上(render_state.py 家規:任何
+                # 「X 不會發生」形式的句子,必須帶著證明它的那條指令,附不出來就不要寫):
+                #   (a) 外層 `if _status_fd == "failed"` / `elif == "partial"` 已把兩個值接走,
+                #       走到本 else 只剩 status == "complete";
+                #   (b) complete 的定義(fund_fetcher.classify_fetch_status)就是
+                #       fund_name + series 長度 ≥10 + metrics 非空 → 下面三個 disjunct 全 False;
+                #   (c) status 由 normalize_result_state **無條件覆寫**,不吃上游透傳:
+                #         $ grep -n 'result\["status"\]' fund_fetcher.py
+                #         → 293:    result["status"] = status      (單一賦值,無條件)
+                #   (d) production 只有一個地方寫 session_state.fund_data —— 就是本檔
+                #       `if do_load and mj_url_input.strip():` 那一段,而它是**走完**
+                #       normalize_result_state 之後才寫的。查證指令(照抄可跑):
+                #         $ grep -rn 'session_state\.fund_data *=\|session_state\["fund_data"\] *=' --include=*.py .
+                #       量測日 2026-08-28 共 3 命中:本檔上述那一段(production 唯一寫入點)
+                #       + tests/test_app_apptest.py 裡兩個直接塞 session_state 的測試(見下)。
+                #       ⚠️ **刻意不抄行號**(§8.2.A.0 規則 1:行號保證會過期)——
+                #       本行上一版硬抄了一個「本檔 :<行號>」,在寫下的當天就已經偏掉。
+                #       要定位請重跑上面那條指令。
+                #
+                # ⚠️ 但「恆不觸發」只涵蓋 production:(d) 那兩個測試直接把
+                # `"status": "ok"`(不在 {complete,partial,failed} 內)塞進 session_state,
+                # **繞過 normalize_result_state** —— 也就是**這個 else 對任意 status 值
+                # 都是開著的**(依據:上面那條 grep 的兩個測試命中處,可自行覆核)。
+                #
+                # ⚠️ **「else 開著」證不到「護欄被走過」,兩件事不要混為一談。**
+                # (2026-08-28 補正:上一版在這裡宣稱「護欄不是多餘的」時把證據講得比
+                #  實際大 —— 那是**靜態推理**成立,不是實測走過。)
+                # 據實記錄:那兩個測試各自餵 400 筆非空 NAV series + 非空 metrics,
+                # 下面三個 disjunct 全為 False → **它們走的是 else 主畫面,從來沒有
+                # 進過本護欄的 body**(其中一個測試甚至斷言 `morningstar(span-extend)`
+                # 與「跨度 1825」有渲染出來,而那兩個字串只出現在 else 主畫面的
+                # st.success 裡)。→ **本護欄的 body 目前沒有任何測試走過。**
+                # 保留它的理由因此是靜態的、而且仍然成立:外層 else 對任意 status 開著,
+                # 一旦把 body 拔掉,非預期狀態會直接撞上主畫面的 `len(s)`(見下)。
+                #
+                # 為什麼不整段刪掉:刪掉要連下面的 else 一起拿掉 → 主畫面 2,100+ 行全部
+                # 反縮排(git blame 整段洗掉);而且拔掉之後任何「非預期 status + 空序列」
+                # 會直接掉進主畫面,撞上下方 `f"…淨值 {len(s)} 筆"`(s=None → TypeError
+                # → 整頁 traceback,前後無 try 保護)。**把一張看起來正常的卡換成整頁崩潰,
+                # 是更糟的結果。**
+                #
+                # 文案為什麼不再說「部分資料，下方顯示已有資訊」:那是假的 —— 舊卡下方的
+                # metric 與風險區塊在這條路徑上根本沒有資料可顯示(§1 錯誤的數字比沒有數字危險)。
+                import sys as _sys_q4
+                print(
+                    f"[tab2/unexpected-state] status={fd.get('status')!r} 卻缺 series/metrics: "
+                    f"series_type={type(s).__name__} "
+                    f"series_len={len(s) if hasattr(s, '__len__') else 'n/a'} "
+                    f"metrics_empty={not m}",
+                    file=_sys_q4.stderr)
+                not_ready(
+                    f"「{name or fk}」的資料狀態非預期（系統回報已完整，實際缺少淨值序列），"
+                    "本次不顯示任何數字以免誤導",
+                    where="上方的「🚀 分析」按鈕重跑一次；若仍相同，請把畫面截圖回報")
             else:
                 st.markdown("### ① 基本資料 & 淨值趨勢")
                 # v19.283:NAV 來源 + 跨度攤在最顯眼處(不藏進 expander)。
@@ -950,7 +956,11 @@ def render_single_fund_tab() -> None:
                 except Exception as _e_bmk:  # noqa: BLE001 — 疊圖失敗不擋下方信號
                     print(f"[tab2 vs大盤] {type(_e_bmk).__name__}: {_e_bmk}",
                           file=_sys_b.stderr)
-                    st.caption(f"⬜ vs 大盤圖失敗:[{type(_e_bmk).__name__}] {str(_e_bmk)[:60]}")
+                    # ⚠️ 不是 degraded：這個 try 裡除了疊圖,還有「跑贏/跑輸大盤
+                    # **X 個百分點**」那句帶數字的 caption（在 plotly_chart 之後）,
+                    # 失敗時那個數字一起消失 → 依通過條件必須 🔴。
+                    system_error("vs 大盤疊圖失敗", _e_bmk,
+                                 hint="「跑贏/跑輸大盤幾個百分點」這個數字這次也沒算出來。")
 
                 st.markdown("### ② 買賣點信號（標準差策略）")
                 # ── 標準差買賣點分析 v3.0（3 買 + 3 賣 + 接近度）──
@@ -1047,6 +1057,16 @@ def render_single_fund_tab() -> None:
                             _sr    = _hwm["sigma_rank"]
                             _dist  = _hwm["dist_to_hwm_pct"]
                             _l1, _l2, _l3 = _hwm["level_1s"], _hwm["level_2s"], _hwm["level_3s"]
+                            # D3：把批次大表的「基期」用字搬過來（同一個 σ rank、
+                            # 同一個 `classify_base()`、同一組門檻常數 → 同一份資料，
+                            # 只是這裡是 N=1 的卡片、那裡是 N 列的表格欄）。
+                            from services.rotation import classify_base as _cb_t2
+                            from shared.signal_thresholds import (
+                                ROTATION_BUY_SIGMA as _ROT_BUY_T2,
+                                ROTATION_SELL_SIGMA as _ROT_SELL_T2,
+                            )
+                            _base_lbl = BASE_LABELS_FROM_MERGED_TABLE[
+                                _cb_t2(_sr, _ROT_SELL_T2, _ROT_BUY_T2)]
                             st.markdown(
                                 f"<div style='background:{BG_DARK_NAVY_1};border:2px solid {_hc};"
                                 f"border-radius:12px;padding:14px 18px;margin:10px 0'>"
@@ -1061,6 +1081,9 @@ def render_single_fund_tab() -> None:
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_dist:+.2f}%</div></div>"
                                 f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>σ 位階</div>"
                                 f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_sr:+.2f}σ</div></div>"
+                                # D3：與批次大表同一套詞，切模式時不會看到兩種講法。
+                                f"<div><div style='color:{TRAFFIC_NEUTRAL};font-size:10px'>基期</div>"
+                                f"<div style='color:{_hc};font-weight:700;font-size:16px'>{_base_lbl}</div></div>"
                                 f"</div>"
                                 f"<div style='display:flex;gap:12px;flex-wrap:wrap;font-size:11px'>"
                                 f"<span style='color:{MD_GREEN_A200}'>HWM-1σ: {_l1:.4f}{_ccy_sfx}</span>"
@@ -1076,6 +1099,18 @@ def render_single_fund_tab() -> None:
                                 "承接;≥ +1σ = 接近前高偏過熱。此為「絕對位階」(對歷史高點),"
                                 "與上方買賣線的「相對中樞」互補。"
                             )
+                            # D3：說清楚「基期」不是這張卡自己發明的第二套判定。
+                            # ⚠️ **刻意另起一個 `st.caption`，不併進上面那一句**
+                            # （2026-09-02 就地更正）：Python 會把相鄰字串**在剖析階段
+                            # 折成同一個 Constant**，併進去等於把本批的新文案和
+                            # v19.404 的既有文案黏成同一顆節點 —— 本批新增的
+                            # 「禁方位詞」守衛就會連那句既有的「與**上方**買賣線…」
+                            # 一起判紅（那句不是本批寫的，也不在本批射程內）。
+                            # 分開兩個 caption：新舊各自可被獨立檢查，畫面上仍是兩行灰字。
+                            st.caption(
+                                "「基期」欄與批次掃描大表 / 健診總表**同一套判定**"
+                                "(同一個 σ rank、同一組門檻),兩邊用字刻意一致。"
+                            )
                     except Exception as _e_hwm:  # noqa: BLE001
                         # 稽核 A3：原本是 `pass  # smoke-allow-pass` —— 整張
                         # 「HWM σ 絕對位階卡」會**靜默消失**，使用者無從分辨
@@ -1084,10 +1119,11 @@ def render_single_fund_tab() -> None:
                         import sys as _sys_hwm
                         print(f"[tab2/hwm_sigma] {type(_e_hwm).__name__}: {_e_hwm}",
                               file=_sys_hwm.stderr)
-                        st.caption(
-                            f"⬜ HWM σ 絕對位階卡渲染失敗："
-                            f"[{type(_e_hwm).__name__}] {str(_e_hwm)[:120]}"
-                            "（是計算失敗，不是這檔沒有資料）")
+                        # 註解原本就寫「是計算失敗，不是這檔沒有資料」—— 那句話
+                        # 之所以要寫,正是因為灰字讓兩者長得一樣。改成 🔴 就不必靠
+                        # 文案去救顏色。
+                        system_error("HWM σ 絕對位階卡渲染失敗", _e_hwm,
+                                     hint="這是計算失敗,不是這檔沒有這個資料。")
 
                 # ── v18.47: 📊 基金健康總覽（4 維度評分 + Overall Grade + 白話結論）──
                 # v19.177 #3A+#4B：4D 評分 + grade 全走 services.health.grade.compute_4d_health SSOT,
@@ -1167,10 +1203,9 @@ def render_single_fund_tab() -> None:
                     import sys as _sys_4d
                     print(f"[tab2/4d_health] {type(_e_4d).__name__}: {_e_4d}",
                           file=_sys_4d.stderr)
-                    st.caption(
-                        f"⬜ 4D 基金健康總覽卡渲染失敗："
-                        f"[{type(_e_4d).__name__}] {str(_e_4d)[:120]}"
-                        "（是計算失敗，不是這檔沒有資料）")
+                    # 消失的是本頁**最大的那張結論卡**（A/B/C/D/F 綜合評等 + 4 維分數）。
+                    system_error("4D 基金健康總覽卡渲染失敗", _e_4d,
+                                 hint="這是計算失敗,不是這檔沒有評等。")
 
                 # ── v18.20: 🔴 吃本金 KPI 紅綠燈（獨立 banner，主 KPI 列旁）──
                 # 不依賴 divs[] 是否有資料；只要有 ret_1y + 任一配息率來源即顯示。
@@ -1294,7 +1329,8 @@ def render_single_fund_tab() -> None:
                            f"{_kpi_nav_warn}</div>" if _kpi_nav_warn else "")
                         + "</div>", unsafe_allow_html=True)
                 except Exception as _kpi_e:  # noqa: BLE001
-                    st.caption(f"吃本金 KPI 計算異常：{str(_kpi_e)[:60]}")
+                    # 吃本金 banner 的 Coverage / 配息率 / 判定燈整組消失。
+                    system_error("吃本金 KPI 計算失敗", _kpi_e)
 
                 # v19.181:📊 進階指標(入門 KPI 之外的細項 — Sortino/Calmar/Alpha/Expense
                 # /MaxDD/3Y-5Y 年化/3-3-3 篩/換標的建議)— 共用 fund_health_report SSOT,
@@ -1468,7 +1504,8 @@ def render_single_fund_tab() -> None:
                                 + "(對齊資料診斷面板)"
                             )
                 except Exception as _adv_e:  # noqa: BLE001
-                    st.caption(f"⬜ 進階指標渲染失敗:{type(_adv_e).__name__}: {str(_adv_e)[:60]}")
+                    # Sortino / Calmar / Alpha / 費用率 / MaxDD / 3Y-5Y 年化 整組消失。
+                    system_error("進階指標渲染失敗", _adv_e)
 
                 st.markdown("### ③ 風險指標 & 配息")
                 # 關鍵指標 + 配息
@@ -1524,7 +1561,10 @@ def render_single_fund_tab() -> None:
                                        "「換標策略分 / 策略燈號」走**報酬 / 風險 / vs大盤 加權**,是不同引擎,"
                                        "同一檔兩頁可能給不同結論,別跨頁互比。")
                     except Exception as _e_z:  # noqa: BLE001 — 位階為加值卡,失敗不影響風險表
-                        st.caption(f"📐 Z-Score 計算略過:[{type(_e_z).__name__}]")
+                        # 原文案寫「略過」,讀起來像「這檔不適用」;實際是算爆了,
+                        # 而且「🎯 建議動作」那張卡會一起不見。
+                        system_error("Z-Score 位階卡計算失敗", _e_z,
+                                     hint="「🎯 建議動作」這次不會出現;右側風險表不受影響。")
 
                     # v19.496 A1:同類相對品質分(單一頁 — 對「Tab3 持倉 ∪ 本檔」排名)。
                     # ⚠️ 稽核修:此處不算操盤因子(捕捉率需基準抓取,單頁不另抓)→ 涵蓋面向數
@@ -1551,10 +1591,23 @@ def render_single_fund_tab() -> None:
                                 st.caption(f"貢獻分解:{_parts}　—— 相對本組同伴的位置,非絕對好壞;"
                                            "紅線(吃本金 / 3-3-3)另外看。")
                         else:
+                            # ⚠️ 2026-08-31 由 WP-F 修正(**有意識的政策變更,不是漏改** ·
+                            # 決策者:AI 總管 · 依據:客戶 2026-08-31 拍板的五分頁線框)。
+                            # 舊寫法 ~~「配置 & 帳本」~~ 的理由**仍然成立**(要告訴使用者
+                            # 去哪裡載入持倉才會有同伴可比);被權衡掉的是它寫死了一個
+                            # 七→五之後不存在的分頁名(④ 現在叫「📊 我的配置」)——
+                            # 不經 `tab_label` 所以不會 raise,只會安靜地指錯。
+                            from ui.helpers.story_nav import (  # noqa: PLC0415
+                                where_to_find as _wtf_q,
+                            )
                             st.caption("🎖️ 同類相對品質分:⬜ 資料不足 —— 單一檔沒有同伴可相對排名,"
-                                       "請先到「配置 & 帳本」載入持倉,或改看 健檢 / 批次分頁。")
+                                       f"請先到 {_wtf_q('portfolio')} 載入持倉,"
+                                       f"或改看 {_wtf_q('batch')}。")
                     except Exception as _e_q:  # noqa: BLE001 — 相對分為加值,失敗不影響其他
-                        st.caption(f"🎖️ 同類相對品質分計算略過:[{type(_e_q).__name__}]")
+                        # ⚠️ 對照上方 else 分支：那句「⬜ 資料不足 —— 單一檔沒有同伴」
+                        # 是**真的**「還沒有」→ 維持灰色,一字未動。這裡是**算爆了**,
+                        # 兩者在改色前長得一模一樣,那正是客戶 Q2 要拆開的東西。
+                        system_error("同類相對品質分計算失敗", _e_q)
                     # ── 必修 2:混期示警 + 對帳降級揭露(沿用 v19.91 chip 樣式)──
                     # 這兩條原本 production 0 reader:`mixed_period_warning` 只有
                     # fund_service 自己與 test 讀,所以線上「Sharpe 1Y 0.28」與
@@ -2437,8 +2490,12 @@ def render_single_fund_tab() -> None:
                     _ai_fd_pct, _ = _calc_data_health()
                     if _ai_fd_pct < 50:
                         # 稽核 H2:同 t7 —— 市場定調沒有叫「全量抓取」的按鈕
-                        st.caption(f"🔴 總經資料完整率 {_ai_fd_pct}%：建議先到「🌐 市場定調」"
-                                   "按「📡 載入總經資料」，"
+                        # 2026-08-31 WP-F：分頁名改吃 SSOT（同上，避免第二份標籤）。
+                        from ui.helpers.story_nav import (  # noqa: PLC0415
+                            tab_label as _tl_ai,
+                        )
+                        st.caption(f"🔴 總經資料完整率 {_ai_fd_pct}%：建議先到"
+                                   f"「{_tl_ai('macro')}」按「📡 載入總經資料」，"
                                    "AI 才有景氣位階背景（仍可直接生成、僅準確度略降）。")
                     elif _ai_fd_pct < 80:
                         st.caption(f"🟡 資料完整率 {_ai_fd_pct}%，AI 參考性略降。")
@@ -2646,6 +2703,45 @@ def render_single_fund_tab() -> None:
                     not_ready("未設定 Gemini API Key，AI 深度解盤無法生成",
                               where="Streamlit Cloud → Settings → Secrets 的 "
                                     "`GEMINI_API_KEY`")
+    else:
+        # ── ⬜ 空狀態（本檔唯一新增；客戶拍板線框
+        #    `docs/wireframes/fund-empty-state-wireframe.html`
+        #    「③ … 新增：⬜ 還沒有查詢結果 —— 三步驟說明」）──────────────
+        #
+        # ⚠️ **這個 `else` 之前不存在** —— 線框就地點名：「這一頁的空狀態是
+        # 『什麼都沒有』，字面意義上的 `if fd:` 這個判斷**沒有 else**。
+        # `fund_data` 是 `None`（**每個新 session 都是**）時，輸入框以下
+        # **一個字都不印**。」而那正是每次開 App 進到 ③ 看到的第一個畫面。
+        #
+        # 走 `ui/helpers/ia/empty_state.py`（IA 鐵則 04 三要素：標題／缺什麼／
+        # 去哪補），**不自己刻一套灰態** —— 灰色文案的 SSOT 是
+        # `ui/helpers/render_state.not_ready()`，`empty_state()` 只是替它補上
+        # 標題與區塊化排版。線框寫「不必畫成大面積，一條虛線框即可」，
+        # 這正是 `not_ready()` 現行的樣子。
+        #
+        # ⚠️ 三步驟的用字**逐字照線框**：1️⃣ 用關鍵字找代號 → 2️⃣ 貼上網址／代碼
+        # → 3️⃣ 按 🚀 分析。三步全部落在**本頁**（找代號工具在合併頁共用頂部、
+        # 輸入框與分析鈕就在正上方），所以不經 `where_to_find()` ——
+        # 那個函式產出的是「**跨分頁**」的指路（`③ 🔍 標的探索 → …`），
+        # 拿來指同一頁上方的三個 widget 只會讓人以為要換頁。
+        empty_state(
+            "還沒有查詢結果",
+            # 同上：~~「**下面**的淨值走勢…」~~ 也是方位詞，一併拿掉。
+            "還沒查過任何一檔基金 —— 淨值走勢、風險指標、配息與吃本金檢查"
+            "要等分析跑完才會出現",
+            # ⚠️ 2026-09-02 就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管，
+            # 依據獨立稽核）：舊文案寫 ~~「1️⃣ **上方**「🔍 找代號」…」~~ ——
+            # **方位是版面順序的函數，寫進文案等於保證下一次重排就說謊**。
+            # ③ 的共用頂部本批才剛動過（D5 把導覽插到「找代號」之前），
+            # 下一批重排時「上方」就會指錯。#759 已經因為同一件事跌過一次。
+            # **舊文案的用意仍然成立**（要告訴使用者去哪裡找代號），
+            # 被權衡掉的只有那個會過期的方位詞 —— 改用**線框原本的用字**
+            # （「1️⃣ 用關鍵字找代號 → 2️⃣ 貼上網址／代碼 → 3️⃣ 按 🚀 分析」），
+            # 它本來就沒有方位詞。
+            where="1️⃣ 用「🔍 找代號」以關鍵字查代號　→　"
+                  "2️⃣ 貼上網址／代碼到「MoneyDJ URL 或代碼」欄　→　3️⃣ 按「🚀 分析」",
+            footer="也可以直接貼 MoneyDJ 網址；境內外基金會自動判斷，不必先選。",
+        )
 
 
 # ══════════════════════════════════════════════════════

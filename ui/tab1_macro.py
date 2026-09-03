@@ -24,7 +24,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from ui.helpers.render_state import not_ready
+from ui.helpers.ia import applied_form
+from ui.helpers.render_state import not_ready, system_error
 
 from shared.converters import safe_num  # v19.399 §1:缺值保留 None,不 `or 0` 捏造
 from shared.colors import (
@@ -844,16 +845,62 @@ def render_macro_tab() -> None:
         # 改為**兩顆各自整條寬、上下排**，不再用 `st.columns([3, 2])` 擠在同一列。
         # 這是這頁的主要動作按鈕，橫向只佔 3/5 寬時在寬螢幕上不夠顯眼，
         # 使用者一進來常找不到而以為畫面壞了（截圖回報）。
+        #
+        # ⚠️ 2026-09-02 五分頁 IA 第三批 —— **上面那段是沿革，不是現況**
+        # （**有意識的政策變更，不是漏刪** · 決策者：客戶拍板線框
+        #  `docs/wireframes/wireframe-macro-health.html` **Form ①-A**）。
+        # 舊寫法（兩顆**裸** `st.button`：`btn_macro_load` ＋ `btn_macro_force`）
+        # **在它寫下的當天是對的** —— 它解的是「主要動作按鈕不夠顯眼」，那個理由今天
+        # 依然成立（本批把兩顆收成一顆整條寬的送出鈕，顯眼度沒有變差）。
+        # 被權衡掉的是它的**副作用**：線框就地點名「使用者常誤按兩次」——
+        # 兩顆裸鈕各自觸發一次 rerun，而這一頁的載入會**並行打四路外部來源**。
+        # 現行：整列收進一個 `st.form`（IA 鐵則 02），勾選過程完全不重繪，
+        # 按下唯一那顆送出鈕才跑。
         _btn_label = "🔄 更新總經資料" if st.session_state.macro_done else "📡 載入總經資料"
-        _do_load = st.button(_btn_label, type="primary", key="btn_macro_load",
-                             use_container_width=True)
-        _force_reload = st.button(
-            "🆕 強制重抓最新（清快取）",
-            key="btn_macro_force",
-            use_container_width=True,
-            help="v19.57 C1：僅清 Tab1（總經）快取 + radar/tp session 殘留，"
-                 "其他 Tab（基金詳情/組合/模擬器）不受影響")
-        if _force_reload:
+        # ⚠️ 送出鈕的字**刻意保留動態**（線框畫的是靜態的「📡 載入 ／ 更新總經資料」）：
+        # 線框那一格要表達的是「**一顆鈕同時涵蓋載入與更新**」，而既有的動態字
+        # 已經做到同一件事，而且多告訴使用者「你現在是哪一種」。**這是本批對線框的
+        # 唯一一處刻意偏離，已在 PR 描述具名回報。**
+        with applied_form("macro_load_form", submit_label=_btn_label) as _macro_gate:
+            # ⚠️ 2026-09-02 就地更正（**有意識的更正，不是漏刪** · 日期 2026-09-02 ·
+            # 決策者：AI 總管，依據獨立稽核的執行期實測）：
+            # 舊文案 ~~「要更新哪幾塊？（預設全選；**沒有勾的不會重抓**，沿用上次結果）」~~
+            # **對「風險雷達」與「拐點偵測」兩路是假的。**
+            # **舊文案的用意仍然成立**（勾選框確實會讓這裡少送兩個 future）；
+            # **被推翻的是它的前提** —— 稽核用 AppTest 實測：取消勾選之後那兩路
+            # **照樣被打**，只是從並行執行緒搬到序列渲染路徑：
+            #   `ui/tab1_macro_radar.py::render_short_radar_section` 與
+            #   `ui/tab1_macro_inflection.py` 都拿 session 的
+            #   `_radar_v1921_top` / `_tp_v1948_top` 當快取，**而唯一的寫入者就是下面
+            #   那兩個 `if _fu_* is not None:`** → 沒勾 → key 從未寫入 → 它們落進
+            #   自己的 `else:` 分支、自己呼叫 `detect_risk_radar` / `detect_turning_points`。
+            # 失效範圍正好是最該有效的兩次：**冷 session** 與**勾了「強制重抓」那一次**
+            # （清快取清單含這兩個 key）；暖 session 才是好的。
+            # 真正的修法要動那兩個下游檔，**不在本批檔案邊界內** → 已登記交總管另批。
+            st.caption("要更新哪幾塊？（預設全選）")
+            st.caption(
+                "⚠️ 取消勾選「總經指標」／「新聞」＝ 這一輪**真的不重抓**，沿用上次結果；"
+                "取消勾選「風險雷達」／「拐點偵測」**只會略過這裡的預抓** —— "
+                "它們的區塊用到時仍會自己抓一次。")
+            _cw = st.columns(4)
+            _want_ind = _cw[0].checkbox("總經指標", value=True,
+                                        key="chk_macro_want_ind")
+            _want_news = _cw[1].checkbox("新聞", value=True,
+                                         key="chk_macro_want_news")
+            _want_radar = _cw[2].checkbox("風險雷達", value=True,
+                                          key="chk_macro_want_radar")
+            _want_tp = _cw[3].checkbox("拐點偵測", value=True,
+                                       key="chk_macro_want_tp")
+            _force_reload = st.checkbox(
+                "🆕 強制重抓最新（清快取）",
+                value=False,
+                key="chk_macro_force",
+                help="v19.57 C1：僅清 Tab1（總經）快取 + radar/tp session 殘留，"
+                     "其他 Tab（基金詳情/組合/模擬器）不受影響")
+        # ⚠️ `_macro_gate` **一定要在 `with` 之外**判斷（送出鈕排在所有 widget 之後
+        # 才建立，區塊內恆為 False）—— 見 `ui/helpers/ia/gated_form.py` 的 ⚠️。
+        _do_load = bool(_macro_gate)
+        if _do_load and _force_reload:
             try:
                 from services.macro import clear_tab1_macro_caches
                 _clr = clear_tab1_macro_caches(session_state=st.session_state)
@@ -865,6 +912,10 @@ def render_macro_tab() -> None:
             except Exception as _e_clr:  # noqa: BLE001
                 # 稽核 A10：原本是 `pass` —— 清快取失敗被完全吞掉，**但下面兩行
                 # 照樣把 macro_done 設 False、_do_load 設 True**，於是使用者按了
+                # ⚠️ 2026-09-02 就地更正（**只更正事實，不改本段結論**）：
+                # 「下面兩行」自本批起是**一行** —— `_do_load = True` 已隨兩顆裸鈕
+                # 收進 form 而移除（送出鈕本身就代表要載入）。**A10 描述的假成功
+                # 路徑一字未變**：清快取失敗 → 照樣往下載入 → 可能拿到舊快取。
                 # 「強制重抓最新（清快取）」，拿到的其實是舊快取的資料，畫面卻
                 # 一路跑到「✅ 已抓取 N 個指標」。這是最典型的「假成功」（§1）。
                 # 改法：留痕 + 明說快取沒清掉，讓使用者知道這次不是真的最新。
@@ -873,13 +924,18 @@ def render_macro_tab() -> None:
                 print(f"[tab1_macro/clear_cache] {type(_e_clr).__name__}: {_e_clr}",
                       file=_sys_clr.stderr)
                 _tb_clr.print_exc(file=_sys_clr.stderr)
-                st.warning(
-                    f"⚠️ **快取沒有清成功**（[{type(_e_clr).__name__}] "
-                    f"{str(_e_clr)[:100]}）—— 下面重新載入的資料**可能仍來自舊快取**，"
-                    "不保證是最新。請改用左側「🧹 全域刷新」，或稍後再試。"
-                )
+                # 2026-08-28 顏色批次二之一：這句自己就說「下面的資料可能仍來自舊快取」
+                # ＝ 畫面上的數字**可能是錯的**（不是「少一張圖」）。依 render_state
+                # system_error 的通過條件，只要有任何一個數字會變 → degraded=False。
+                system_error(
+                    "快取沒有清成功", _e_clr,
+                    hint="下面重新載入的資料**可能仍來自舊快取**，不保證是最新。"
+                         "請改用左側「🧹 全域刷新」，或稍後再試。")
+            # ⚠️ 這裡**不再**寫 `_do_load = True` —— 舊寫法裡「強制重抓」是獨立的
+            # 第二顆鈕，按下去必須自己觸發載入；現在它是 form 內的一個勾選框，
+            # 能走到這一行就代表送出鈕已經按下（`_do_load` 為 True）。
+            # 留著那行會讓 gate 形同虛設（無條件為真），正是 IA 鐵則 02 要防的事。
             st.session_state.macro_done = False
-            _do_load = True  # 同流程跑下方 spinner block
         if _do_load:
             # v19.49：合併 2 spinner 為 1，並用 ThreadPoolExecutor(max_workers=4) 並行抓取
             # indicators / news / radar / turning_points → wallclock = max(各 IO 時間)
@@ -904,19 +960,46 @@ def render_macro_tab() -> None:
 
                 _ex_ml = _TPE_ml(max_workers=4)
                 try:
-                    _fu_ind  = _ex_ml.submit(fetch_all_indicators, FRED_KEY)
-                    _fu_news = _ex_ml.submit(fetch_market_news, max_per_feed=5)
-                    if _has_fred:
+                    # 2026-09-02：四路各自受 form 內的勾選框控制（線框 Form ①-A）。
+                    # 沒有勾的那一路**不會在這裡 submit**。
+                    # ⛔ **但「不 submit」≠「不會被抓」，這一點務必看清楚**
+                    # （2026-09-02 就地更正，**有意識的更正，不是漏刪**；
+                    #  依據：獨立稽核的 AppTest 執行期實測）：
+                    # 舊註解寫 ~~「而是真的少打一次外部來源」~~ ——
+                    # 對 `fetch_all_indicators` / `fetch_market_news` **成立**
+                    # （它們的消費端只讀 session，不會自己補抓）；
+                    # 對 `detect_risk_radar` / `detect_turning_points` **不成立** ——
+                    # 下游 `ui/tab1_macro_radar.py` / `ui/tab1_macro_inflection.py`
+                    # 讀不到 session 快取時會**自己抓一次**，總次數一次都沒少。
+                    # 兩個下游檔不在本批檔案邊界內 → 缺口已登記交總管另批。
+                    _fu_ind = (_ex_ml.submit(fetch_all_indicators, FRED_KEY)
+                               if _want_ind else None)
+                    _fu_news = (_ex_ml.submit(fetch_market_news, max_per_feed=5)
+                                if _want_news else None)
+                    if _has_fred and (_want_radar or _want_tp):
                         from services.risk_radar import (
                             detect_risk_radar, summarize_radar,
                         )
-                        _fu_radar = _ex_ml.submit(detect_risk_radar, FRED_KEY)
-                        _fu_tp    = _ex_ml.submit(detect_turning_points, FRED_KEY)
+                        _fu_radar = (_ex_ml.submit(detect_risk_radar, FRED_KEY)
+                                     if _want_radar else None)
+                        _fu_tp = (_ex_ml.submit(detect_turning_points, FRED_KEY)
+                                  if _want_tp else None)
                     else:
                         _fu_radar = None
                         _fu_tp = None
+                    # ⚠️ `_ind_fetched` 是本批最承重的一個旗標：**只有它為 True，
+                    # 下方才准更新「上次抓取時間」**。少了它，使用者取消勾選「總經指標」
+                    # 之後畫面會顯示「✅ 已載入 · <剛剛>」，而那批數字其實是舊的
+                    # —— 那是捏造新鮮度（`CLAUDE.md §1` / §2.4）。
+                    _ind_fetched = _fu_ind is not None
+                    if _fu_ind is None:
+                        # 沿用上次結果（copy 一份，避免下方寫入回頭改到 session 內的 dict）
+                        ind = dict(st.session_state.get("indicators") or {})
+                    else:
+                        ind = {}
                     try:
-                        ind = _fu_ind.result(timeout=_ml_left())
+                        if _fu_ind is not None:
+                            ind = _fu_ind.result(timeout=_ml_left())
                     except _FutTimeout as _te:
                         ind = {}
                         _friendly_error(
@@ -933,8 +1016,11 @@ def render_macro_tab() -> None:
                             hint="多半是 NAS proxy 連線異常或來源暫時無回應；"
                                  "可按側欄「🔍 測試 Proxy 連線」確認，或稍後重試。",
                             level="error")
+                    _news_fetched = _fu_news is not None
+                    _news = []
                     try:
-                        _news = _fu_news.result(timeout=_ml_left())
+                        if _fu_news is not None:
+                            _news = _fu_news.result(timeout=_ml_left())
                     except _FutTimeout as _nte:
                         _news = []
                         _friendly_error(
@@ -955,6 +1041,29 @@ def render_macro_tab() -> None:
                             st.session_state["_radar_v1921_top"] = (_r_pre, _rs_pre)
                         except _FutTimeout:
                             st.session_state["_radar_v1921_top"] = (None, None)
+                            # ⚠️ **下一批候選，本批刻意不動**（2026-08-28 稽核 A9 登記）：
+                            # 逾時＝真失敗，而且 `(None, None)` 之後下方整個風險雷達
+                            # 區塊真的不渲染 —— 但這裡是灰字。
+                            # **兩把獨立的尺都掃不到它**，因為 handler 沒有把例外物件
+                            # 印出來（`_FutTimeout` 未綁 `as`，訊息是純字面字串），
+                            # 結構上與「這格沒資料」無法區分（見測試檔規則 1 盲點 4）。
+                            # 不在本批改的理由：它不在本批用來定義範圍的那個掃描結果裡，
+                            # 逕自加碼會讓「43 處」這個數字失去可複現性（§8.4 step 4）。
+                            #
+                            # 📌 **2026-08-28 批次二之二補一個「事實」，不改行為**：
+                            # 本函式裡**同一種** `_FutTimeout`（都是 `.result(timeout=…)`
+                            # 沒回來）現在有**三種顏色**：`_fu_ind` → `level="error"` 🔴、
+                            # `_fu_news` → `level="info"` 🔵、`_fu_radar` 與 `_fu_tp` →
+                            # `st.caption` ⬜。這正是測試檔 `_TWIN_FAILURES` 在守的那個形狀
+                            # （同一個失敗、不同顏色），只是它跨的是「同一函式內的四個 future」
+                            # 而不是跨分頁，所以那條規則涵蓋不到。
+                            # ⚠️ **這是事實，不是「所以該全部改紅」的結論** —— 三者的後果確實
+                            # 不同（指標是主體，news / radar / tp 是附屬），顏色分級**可能是
+                            # 刻意的**。下一批要動它時，要先回答的是「附屬區塊整塊失敗算不算
+                            # 系統真出錯」，而不是直接上色。
+                            # （查證，量測日 2026-08-28，實跑過：
+                            #  `python -c "import ast,pathlib;t=ast.parse(pathlib.Path('ui/tab1_macro.py').read_text());print([(h.lineno,[(ast.unparse(c.func),[ast.unparse(k) for k in c.keywords]) for c in ast.walk(h) if isinstance(c,ast.Call)]) for h in ast.walk(t) if isinstance(h,ast.ExceptHandler) and '_FutTimeout' in ast.unparse(h.type or ast.Constant(''))])"`
+                            #  → 4 個 handler，顏色分別為 error / info / caption / caption。）
                             st.caption("⚠️ 風險雷達逾時未回,本次略過(不影響指標判讀)。")
                         except Exception:
                             st.session_state["_radar_v1921_top"] = (None, None)
@@ -963,6 +1072,8 @@ def render_macro_tab() -> None:
                             st.session_state["_tp_v1948_top"] = _fu_tp.result(timeout=_ml_left())
                         except _FutTimeout:
                             st.session_state["_tp_v1948_top"] = None
+                            # ⚠️ 同上（稽核 A9）：逾時＝真失敗、拐點區塊真的消失，
+                            # 卻是灰字；兩把尺都掃不到。下一批候選，本批不動。
                             st.caption("⚠️ 轉折點偵測逾時未回,本次略過。")
                         except Exception:
                             st.session_state["_tp_v1948_top"] = None
@@ -974,7 +1085,15 @@ def render_macro_tab() -> None:
                     # (5~20s,Change D 收緊)會讓它們自然收斂,不留假死。
                     _ex_ml.shutdown(wait=False, cancel_futures=True)
                 _macro_ms = round((_time_mod.time() - _t0_macro) * 1000)
-                if not ind:
+                if not ind and not _ind_fetched:
+                    # 本次刻意沒勾「總經指標」，而且先前也沒有可沿用的 —— 這是
+                    # 「條件不足」不是「系統壞了」，依三態要走 ⬜ 灰不是 🔴 紅。
+                    not_ready(
+                        "本次沒有勾選「總經指標」，先前也沒有已載入的指標可以沿用",
+                        # 不寫方位詞（「上方」）：方位是版面順序的函數，
+                        # 下一次重排就會指錯 —— 沿用 #759 的既有教訓。
+                        where="在載入表單裡勾回「總經指標」，再按一次送出鈕")
+                elif not ind:
                     st.error(
                         f"❌ 沒有抓到任何總經指標（0 個，耗時 {_macro_ms}ms）。"
                         "多半是 NAS proxy 不通／逾時或來源被擋——"
@@ -1000,7 +1119,11 @@ def render_macro_tab() -> None:
                     st.session_state.prev_phase        = old_phase
                     st.session_state.phase_info        = phase
                     st.session_state.macro_done        = True
-                    st.session_state.macro_last_update = _now_tw()
+                    if _ind_fetched:
+                        # ⚠️ **只有真的重抓才蓋時間戳**。沿用舊指標時蓋下去，
+                        # 上方時效列會顯示「✅ 已載入 · 剛剛」，而數字是舊的 ——
+                        # 那是捏造新鮮度（§1「錯誤的數字比沒有數字更危險」／§2.4）。
+                        st.session_state.macro_last_update = _now_tw()
                     # 稽核 D4：與 app.py 同一個 bug 的第二份副本。
                     # 原 `.get("value",4.0)/100` 會在 value 為 None 時
                     # (a) 捏造 4% 無風險利率灌進全站 Sharpe/Sortino（§1）、
@@ -1024,20 +1147,29 @@ def render_macro_tab() -> None:
                     })
                     st.session_state["api_latency_log"] = _lat_log[-24:]
                     # 系統性風險用已抓好的 _news（CPU 計算 <100ms，無需 spinner）
-                    st.session_state.news_items = _news
-                    try:
-                        _srd = detect_systemic_risk(_news)
-                        st.session_state.systemic_risk_data = _srd
-                        _rl = _srd.get("risk_level","LOW")
-                        _rs_sc = _srd.get("risk_score",0)
-                        st.info(
-                            f"📰 已掃描 {len(_news)} 則新聞｜系統性風險："
-                            f"{_srd.get('risk_icon','⬜')} {_rl}（評分 {_rs_sc}）")
-                    except Exception:
-                        st.session_state.systemic_risk_data = None
-                    st.success(
-                        f"✅ 已抓取 {len(ind)} 個指標！"
-                        f"（{_now_tw().strftime('%H:%M')} TW｜{_macro_ms}ms）")
+                    # ⚠️ 沒勾「新聞」時**整段跳過**：覆寫成空清單會把上次抓到的
+                    # 新聞與系統性風險判讀無聲清掉，使用者只是「這次不想重抓新聞」。
+                    if _news_fetched:
+                        st.session_state.news_items = _news
+                        try:
+                            _srd = detect_systemic_risk(_news)
+                            st.session_state.systemic_risk_data = _srd
+                            _rl = _srd.get("risk_level","LOW")
+                            _rs_sc = _srd.get("risk_score",0)
+                            st.info(
+                                f"📰 已掃描 {len(_news)} 則新聞｜系統性風險："
+                                f"{_srd.get('risk_icon','⬜')} {_rl}（評分 {_rs_sc}）")
+                        except Exception:
+                            st.session_state.systemic_risk_data = None
+                    if _ind_fetched:
+                        st.success(
+                            f"✅ 已抓取 {len(ind)} 個指標！"
+                            f"（{_now_tw().strftime('%H:%M')} TW｜{_macro_ms}ms）")
+                    else:
+                        # 不說「已抓取」——這一輪根本沒去抓指標。
+                        st.success(
+                            f"✅ 已更新（本次未重抓總經指標，沿用上次 {len(ind)} 個；"
+                            f"{_macro_ms}ms）")
 
     # ── v17.0 移除新手/老手 toggle（單軌完整版）──────────────────
     # 設計原則：所有資訊一律展開，不藏；每個指標附完整教學（白話/判讀/搭配/上下游/歷史）
@@ -1106,8 +1238,9 @@ def render_macro_tab() -> None:
                 "推導細節 → 看再下方的四時域分區")
             _action_light_renderer(_al["light"])("\n".join(_al_lines))
         except Exception as _al_e:  # noqa: BLE001 — 結論燈失敗不得擋掉整頁總經
-            st.caption(
-                f"🚦 買賣總結燈暫無法顯示：[{type(_al_e).__name__}] {_al_e}")
+            # 消失的是本頁**最上面那個結論**（現在能不能買 + 理由）。灰字會讓人以為
+            # 「還沒載入、按一下就好」，實際按幾次都一樣。
+            system_error("① 買賣總結燈渲染失敗", _al_e)
 
         # ══ ② 依據 —— 表格(兩把尺並陳 + 各桶狀態 + 每列指路)══════════
         # 這張表取代三個原本各自為政的區塊,資料一格不少地併進來:
@@ -1126,6 +1259,7 @@ def render_macro_tab() -> None:
                 build_evidence_footnotes,
                 compute_five_bucket_summary,
                 render_evidence_table,
+                split_evidence_footnotes,
             )
             from ui.helpers.macro.helpers import (  # noqa: PLC0415
                 calculate_composite_score,
@@ -1159,7 +1293,15 @@ def render_macro_tab() -> None:
             # 拿掉 `footnotes=` 這個引數 → 那幾句在畫面上完全消失(接線點)。
             _ev_notes = build_evidence_footnotes(
                 _5b, composite_action=_cv_action)
-            render_evidence_table(_ev_rows, footnotes=_ev_notes)
+            # 2026-09-03 減字(B):同一批註記分兩層印 —— 上表「說明」欄短版的
+            # **完整版**收進摺疊(推導細節),沒有欄內短版的那兩則(🌳 兩套切點
+            # 揭露 / 🩺 算式 + 白話行動)維持常駐。分類理由見
+            # `_evidence_footnote_items` docstring;`footnotes=` 仍是**完整**清單,
+            # 拿掉 `collapsed_footnotes=` 只會退回「全部常駐」,不會少印任何一則。
+            _, _ev_collapse = split_evidence_footnotes(
+                _5b, composite_action=_cv_action)
+            render_evidence_table(_ev_rows, footnotes=_ev_notes,
+                                  collapsed_footnotes=_ev_collapse)
             # 表格已在畫面上 → 哨兵交棒,③ 才可以指路回這張表(見上方註解)。
             _5b_summary = _5b
             # v19.459 ①:資產水位連動(composite → 股/債/貨幣 配置水位 + 動態 Z 門檻)。
@@ -1202,9 +1344,13 @@ def render_macro_tab() -> None:
                         unsafe_allow_html=True)
                 # neutral_mix / no_data → 不顯示(弱訊號不佔版面)
             except Exception as _rc_e:  # noqa: BLE001 — 對帳 chip 非致命,但不吞聲
-                st.caption(f"對帳 chip 暫無法顯示：[{type(_rc_e).__name__}] {_rc_e}")
+                # 對帳 chip 報的是「加權淨分與多空投票同不同向」＝一個判讀結果，
+                # 不是一張圖；它消失時使用者少掉的是「這個分數能不能信」的證據。
+                system_error("② 對帳 chip 渲染失敗", _rc_e)
         except Exception as _ev_e:  # noqa: BLE001 — 依據表失敗不得擋掉整頁總經
-            st.warning(f"② 依據表渲染失敗(降級)：[{type(_ev_e).__name__}] {_ev_e}")
+            # 整張「憑什麼這樣說」的證據表（加權淨分 + 五桶狀態）消失 —— 那是本頁
+            # 數字最密集的一塊，原本寫「(降級)」但降級的定義是「只掉一張圖」。
+            system_error("② 依據表渲染失敗", _ev_e)
 
         # ══ ③ 例外 —— 敘事(今日關鍵 + 系統性風險 + 拐點 / 新聞桶)═══════
         # 只講「該警覺的」;沒有例外時誠實說沒有,不硬擠內容(§1)。
@@ -1224,7 +1370,9 @@ def render_macro_tab() -> None:
                 )
                 st.markdown(_kab(_cka(ind, _ka_tp)), unsafe_allow_html=True)
             except Exception as _ka_e:  # noqa: BLE001
-                st.caption(f"⚡ 今日關鍵橫幅暫無法顯示：[{type(_ka_e).__name__}] {_ka_e}")
+                # 橫幅內容就是「今天該警覺的事」；它不出現與「今天沒有該警覺的事」
+                # 在畫面上長得一模一樣（§1 的鏡像違規）。
+                system_error("③ 今日關鍵橫幅渲染失敗", _ka_e)
         try:
             # 必修 2:② 沒跑完時補一條「無法判定」,`_exc_lines` 因此非空 →
             # 下方那句「都不在警戒狀態」不會被印出來(它只在 ② 真的算完且全綠時成立)。
@@ -1238,7 +1386,8 @@ def render_macro_tab() -> None:
                     "✅ 新聞系統性風險未達警戒等級，拐點桶與新聞桶也都不在警戒狀態；"
                     "各桶讀數完整列在上方 ② 依據表。")
         except Exception as _ex_e:  # noqa: BLE001
-            st.caption(f"③ 例外層暫無法顯示：[{type(_ex_e).__name__}] {_ex_e}")
+            # 同上：例外層失敗時，畫面看起來就像「沒有例外」。
+            system_error("③ 例外層渲染失敗", _ex_e)
 
         # ══ ④ 可信度 —— 這些數字能信嗎(chip + 既有資料新鮮度條)═════════
         # 新鮮度條沿用既有實作**一字未改**(它本身已是 chip 形式,含 hover
@@ -1278,7 +1427,9 @@ def render_macro_tab() -> None:
                               else f"已載入 {_n_loaded} 筆；{_n_expect} 個關鍵指標全數到齊")),
                 unsafe_allow_html=True)
         except Exception as _tr_e:  # noqa: BLE001
-            st.caption(f"可信度 chip 暫無法顯示：[{type(_tr_e).__name__}] {_tr_e}")
+            # 這個 chip 報的正是「N 個關鍵指標中 M 個未取得」—— 它自己消失時，
+            # 使用者連「上面那些數字完不完整」都不知道，比少一張圖嚴重得多。
+            system_error("④ 可信度 chip 渲染失敗", _tr_e)
 
         # v19.50 ══ 📊 資料新鮮度條（總抓取時間 + age + 各區塊資料截止日）══
         _ml_upd = st.session_state.get("macro_last_update")

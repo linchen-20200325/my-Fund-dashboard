@@ -1,28 +1,28 @@
 {
-  "updated_at": "2026-08-23T01:03:43.579945+00:00",
+  "updated_at": "2026-08-30T03:19:41.946582+00:00",
   "datasets": {
     "fred_indicators": {
       "name": "fred_indicators",
-      "last_updated": "2026-08-20",
-      "row_count": 13590,
+      "last_updated": "2026-08-27",
+      "row_count": 13612,
       "last_error": null
     },
     "vix_history": {
       "name": "vix_history",
-      "last_updated": "2026-08-21",
-      "row_count": 3826,
+      "last_updated": "2026-08-28",
+      "row_count": 3831,
       "last_error": null
     },
     "spx_history": {
       "name": "spx_history",
-      "last_updated": "2026-08-21",
-      "row_count": 3825,
+      "last_updated": "2026-08-28",
+      "row_count": 3830,
       "last_error": null
     },
     "twii_history": {
       "name": "twii_history",
-      "last_updated": "2026-08-21",
-      "row_count": 3711,
+      "last_updated": "2026-08-28",
+      "row_count": 3716,
       "last_error": null
     }
   }

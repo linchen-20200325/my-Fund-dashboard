@@ -21,9 +21,23 @@
 |--------------|----------------------------|-------------------------|
 | 未載入／未設定 | ⬜ 灰色說明（`st.caption`） | `not_ready()`           |
 | 不適用       | ➖ 或不顯示                 | `NOT_APPLICABLE_MARK`（現況已分對，**不要**併進 ⬜） |
-| 業務警訊     | 🔴 紅字，但用卡片／表格列    | `business_alert()`      |
+| 業務警訊     | 🫐 **莓紅**字卡片＋ 6px 左軌   | `business_alert()`      |
 | 系統真出錯   | 🔴 紅色錯誤框 + 可展開技術細節 | `system_error()`      |
 | 破壞性操作提醒 | 🟠 常駐橘框                | `st.warning()`（無例外處理，不需 helper） |
+
+⚠️ **2026-08-31 更新：業務警訊改用「莓紅」，與系統紅正式脫鉤。**
+在此之前，業務警訊與系統紅框**共用 `MATERIAL_RED`**，兩者的差別**只剩形狀**
+（卡片 vs 錯誤框）—— 而形狀是最容易在餘光裡看丟的一種差異，
+等於把上面那句「兩者要使用者做的事完全相反」交給使用者自己用眼力去補。
+現在業務色是 `shared.colors.BUSINESS_ALERT_ON_DARK`（`#f294b6`），左軌加粗到
+`BUSINESS_ALERT_RAIL_PX`（6px）：**顏色與形狀兩個訊號同向**，任一個看丟都還有另一個。
+- `MATERIAL_RED` 其餘用途（吃本金／z-score／sparkline，34 檔）**一處未動** ——
+  本批換掉的只有「業務警訊框」這一個角色。
+- **淺色底的配對值 `BUSINESS_ALERT_ON_LIGHT`（`#96124a`）已進 SSOT 但 production 用不到**，
+  原因（App 釘死深色 + 本 repo 沒有主題感知機制）寫在 `shared/colors.py` 該常數上方，
+  **不在這裡重複**（同一個事實只准有一個真相源）。
+- 這條分離由 `tests/test_tricolor_colour_provenance.py` 守，**守顏色來源不守字面**：
+  它擋的不只是「直接把業務色寫成系統紅」，也擋「包一層 helper 再用業務色畫系統錯誤」。
 
 ⚠️ **🟠 這件衣服，同一頁上現在有三種意思**（2026-08-28 第二輪稽核 A6 補登；
 本模組自稱是顏色 SSOT，表就必須跟得上實況，否則它自己變成新的模糊來源）：
@@ -57,6 +71,22 @@
 **三次都是「誠實揭露之後，順手接一句沒查證的安撫話」** ——
 揭露本身是對的，壞在那句多出來的保證。
 
+⚠️ **五態表有一個沒有格子的狀態：「持久化失敗」**（2026-08-28 顏色批次二之一登記）
+------------------------------------------------------------------------
+`nav_history` 寫入失敗、批次分析的磁碟 checkpoint 失敗、CSV 匯入後雲端同步失敗 ——
+這一族的形狀是：**畫面上每一個數字都還在、也都是對的，壞掉的是「留得住」**。
+- 它不符合 `degraded=True` 的通過條件（掉的**不是**一張圖，而且使用者**會**因此
+  在幾週後做出錯誤判斷 —— 以為序列在累積、其實沒有）。
+- 它也不是 ⬜（那不是「還沒設定」，是**真的寫失敗了**，按幾次都一樣）。
+
+**本批的處置：一律 🔴 `degraded=False`，並在 `hint` 裡明講「本次數字不受影響、
+壞的是保存」。** ⚠️ **這是判斷，不是事實** —— 「系統紅燈＝這個數字不可信」照字面
+只涵蓋畫面上的數字，這裡的紅指的是「**未來的序列**不可信」。
+若客戶認為這一族該用 🟠 或別的視覺，推翻這一段即可，三處會一起改
+（查證這三處，量測日 2026-08-28 各 1 命中，共 3：
+  `grep -rnE 'system_error[(]"(NAV 累積寫入失敗|磁碟續存失敗|雲端 nav_history 同步失敗)' ui/ --include=*.py`
+  → 恰好 3 行,分別在 nav_history_hook.py / tab_manage.py / tab_batch_analysis.py）。
+
 ⚠️ `not_ready()` 不吃 Exception —— 這是刻意的型別層防呆：
 「還沒載入」永遠不會有 exception 可報；一旦手上有 exception，就是 `system_error()`。
 `tests/test_render_state_color_separation.py` 以 AST 守住這條分界（守形狀，不守字面）。
@@ -65,13 +95,18 @@ from __future__ import annotations
 
 import streamlit as st
 
-from shared.colors import BG_DARK_RED_1, GH_FG_PRIMARY, MATERIAL_RED
+from shared.colors import BG_DARK_RED_1, BUSINESS_ALERT_ON_DARK, GH_FG_PRIMARY
 
 # ⬜ 在 ui/ 全層已是家規（量測日 2026-08-28：299 處）——沿用，不引進新符號。
 NOT_READY_MARK: str = "⬜"
 # ➖「結構上不適用」（台幣基金沒有匯率位階、不配息基金沒有配息欄）。
 # 與 ⬜ 語意不同：⬜ 是「現在沒有、之後會有」，➖ 是「這件事對它本來就不存在」。
 NOT_APPLICABLE_MARK: str = "➖"
+
+# 業務警訊卡的左軌粗細。系統紅框（`st.error`）**沒有左軌** —— 顏色分離之後，
+# 這條軌是第二個、也是形狀上的辨識點，故 4px → 6px 讓它在餘光裡就分得出來。
+# 具名而不 inline：§3.3 反捏造（同一個數字只准定義一次）。
+BUSINESS_ALERT_RAIL_PX: int = 6
 
 
 def not_ready(message: str, *, where: str = "") -> None:
@@ -80,7 +115,7 @@ def not_ready(message: str, *, where: str = "") -> None:
     Parameters
     ----------
     message : 缺什麼（寫具體的東西，不要只寫「無資料」）。
-    where   : 去哪裡補（例：「🌐 市場定調 → 📡 載入總經資料」）。
+    where   : 去哪裡補（例：「🌐 市場總覽 → 📡 載入總經資料」）。
               線框 §02：這是最容易省掉、也最有價值的一項 ——
               沒有它，占位只是把「消失」換成「灰色的消失」。
     """
@@ -108,15 +143,35 @@ def system_error(what: str, exc: BaseException, *, hint: str = "",
     Parameters
     ----------
     degraded : 降為 🟠 橘框（`level="warning"`）。
-        **通過條件只有一個，不得放寬**：這次失敗之後，畫面上**每一個數字都還在、
-        而且都還是對的**，掉的只有非數值的呈現物（一張圖）。使用者**不可能**因為
-        這次失敗而做出錯誤決定 —— 他只是少看到一張圖。
+        **通過條件（不得放寬）：這個 `try` 從頭到尾只在畫圖 —— 沒有產出任何數值輸出。**
+        機器規則見 `tests/…::test_n3_degraded_is_not_a_one_way_escape_hatch`
+        （chart-only try：try 內每個裸函式呼叫都必須是 builtin 或具名純數值轉換）。
+        客戶原話是「掉的只有一張圖」。
 
-        ⚠️ 只要有任何一個數字消失、被排除、或改變（例：匯率抓不到 → 美元計價基金
-        被排除在回測之外），**一律 `degraded=False`**：那正是客戶 2026-08-28 要
-        建立的分辨力（「這個數字不可信」vs「這個數字可信」）。把兩者穿同一件紅衣服
-        會把它抹平；把前者穿成橘衣服更糟。
+        兩個容易判錯的地方，寫死在這裡：
+        - **把序列畫成圖，圖本身不算「數字」。** 圖沒了、序列還在服務層，
+          使用者少的是趨勢視覺，不是一個他會拿去算的值。
+        - **失敗後補一張 `tail()` 表是加分，不是門檻。** 有沒有 fallback 都不改變判定；
+          判定只看「這個 try 有沒有產出數值輸出」。
+
+        ⚠️ **只要 try 內有任何帶數字的輸出 → 一律 `degraded=False`。**
+        正例（必須 🔴）：`ui/tab2_single_fund.py` 的 vs 大盤疊圖 —— 同一個 try 裡
+        在 `st.plotly_chart` 之後還有一句「跑贏/跑輸大盤 **X 個百分點**」，
+        失敗時那個數字一起消失。
+        同理，匯率抓不到 → 美元計價基金被排除在回測之外，也是 `degraded=False`
+        （那不是「少一張圖」，是結論裡少了幾檔）。
+        這正是客戶 2026-08-28 要建立的分辨力（「這個數字不可信」vs「這個數字可信」）。
         （2026-08-28 稽核 M3：本檔同一區塊內就有一組正反例，見 backtest_section。）
+
+        ⚠️ **本段措辭 2026-08-28 由第二批之一改寫，據實記錄為什麼**：
+        舊版寫的是「**畫面上每一個數字都還在**」。那句話**已被兩批共 5 個呼叫點
+        實質否定** —— `hot_money` 三處的 fallback 是 `tail(10)` / `tail(20)` 表格，
+        不是完整序列；批次一 correlation 那處同理。於是 SSOT 自己寫「不得放寬」，
+        呼叫點的註解卻永久記錄著「嚴格說並不成立」。
+        **那是規則在寫下的第一天就被自己放寬的形狀**（與批次一第二輪 A5 刪掉
+        `signals.py` 那句「且本處在逐檔迴圈內」是同一個病）。
+        現在的措辭是**實際生效的那一條**（客戶原話「只掉一張圖」＋ 機器規則
+        chart-only），**顏色判定一處都沒有變** —— 改的是措辭，不是行為。
     """
     from ui.helpers.session import friendly_error  # lazy：避免 import 迴圈
 
@@ -128,20 +183,55 @@ def system_error(what: str, exc: BaseException, *, hint: str = "",
     )
 
 
+def safe_section(label: str, fn, *args, **kwargs) -> None:
+    """跑 `fn(*args, **kwargs)`；若拋例外 → 就地紅燈 + log，**不外拋**（區塊級隔離）。
+
+    為什麼需要它（本函式存在的唯一理由）
+    ------------------------------------
+    `app.py` 的五段 try/except 是**分頁級**隔離：一個分頁炸掉，其他四個分頁還在。
+    但 2026-08-31 七→五之後，**一個分頁裡面裝的東西變多了** —— ⑤ 一頁同時裝著
+    「🔌 連線與帳號 / 🗄️ 資料維護與通報 / 🔭 資料診斷 / 📖 說明書」四個分區。
+    舊七分頁時代這四塊分屬 `tab_manage` 與 `tab_ref` **兩個**分頁、各有自己的 try，
+    互不連坐；合併之後它們共用 ⑤ 的那一個 try ——
+    **管理室當掉會一併帶走 🔭 資料診斷與 📖 說明書**。
+    而那兩個地方，正是使用者出事時要去的地方（⑤ 的一句話職責就寫著
+    「東西沒抓到的時候來這裡查」）。**把診斷跟故障綁在同一條命上，是最糟的順序。**
+
+    ⚠️ **不吞例外**（`CLAUDE.md §1`）：走 `system_error()` 顯式紅燈 + stderr 鏡射進
+    Cloud log + 可展開 traceback（含 `File "...", line N`）。失敗的分區就地顯示，
+    同頁其餘分區照常渲染。
+
+    ⚠️ **與 `ui/tab1_macro.py::_safe_section` 的關係（據實登記，不假裝沒有）**：
+    那裡有一份同精神的私有實作（v19.429）。本函式**不是**去合併它 ——
+    本批的檔案邊界不含 `tab1_macro.py`，`CLAUDE.md §-1` 無觸發不動工。
+    現況：**兩份同精神實作並存**，本函式是 SSOT 側的那一份；日後有任務碰到
+    `tab1_macro.py` 時應把該私有版收斂到這裡（登記，不構成動工授權）。
+    """
+    try:
+        fn(*args, **kwargs)
+    except Exception as _sec_e:  # noqa: BLE001 — §1 區塊隔離：顯式顯示 + log，非靜默吞
+        system_error(f"「{label}」區塊渲染失敗", _sec_e)
+
+
 def business_alert(title: str, lines: list[str], *, footer: str = "") -> None:
-    """🔴 業務警訊：紅字卡片，**不是**紅色錯誤框。
+    """🫐 業務警訊：**莓紅**字卡片，**不是**紅色錯誤框。
 
     用在：淘汰候選、嚴重吃本金、系統性風險暫緩換標 —— 分析**成功了**，
     答案是「這幾檔該換」。那是成果，不是故障，所以不能用 `st.error`
     （會和系統崩潰共用同一個視覺語彙）。
+
+    2026-08-31 起連**顏色**也不共用：前景走 `BUSINESS_ALERT_ON_DARK`，
+    左軌 `BUSINESS_ALERT_RAIL_PX`（6px，系統紅框沒有左軌）。
+    在此之前兩者同為 `MATERIAL_RED`，差別只剩形狀。
     """
     _body = "".join(f"<div style='margin:2px 0'>{ln}</div>" for ln in lines)
     _foot = (f"<div style='color:{GH_FG_PRIMARY};opacity:.7;font-size:11px;"
              f"margin-top:6px'>{footer}</div>") if footer else ""
     st.markdown(
-        f"<div style='background:{BG_DARK_RED_1};border-left:4px solid {MATERIAL_RED};"
+        f"<div style='background:{BG_DARK_RED_1};"
+        f"border-left:{BUSINESS_ALERT_RAIL_PX}px solid {BUSINESS_ALERT_ON_DARK};"
         f"border-radius:6px;padding:10px 12px;margin:6px 0'>"
-        f"<div style='color:{MATERIAL_RED};font-weight:700;font-size:15px;"
+        f"<div style='color:{BUSINESS_ALERT_ON_DARK};font-weight:700;font-size:15px;"
         f"margin-bottom:4px'>{title}</div>"
         f"<div style='color:{GH_FG_PRIMARY};font-size:13px'>{_body}</div>"
         f"{_foot}</div>",

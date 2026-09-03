@@ -16,26 +16,64 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.helpers.render_state import system_error
+from ui.helpers.render_state import not_ready, system_error
 
 
 def render_allocation_backtest_section(funds: list) -> None:
     """🔁 配置回測 —— 回測 S0..S4 五套配置在台幣總報酬下表現,排名效益最高者 + 當前建議。
 
-    funds: rich fund dict list(含 code / name / series 原幣 NAV / currency)。<2 檔有序列 → 略過。
+    funds: rich fund dict list(含 code / name / series 原幣 NAV / currency)。
+    <2 檔有序列 → **印標題 + 一句灰字說明缺什麼**(2026-08-28 Q1;原本是靜默 `return`)。
     """
     from services.allocation_backtest import backtest_allocations, STRATEGY_LABELS
     from shared.signal_thresholds import BACKTEST_FX_FETCH_DAYS
 
     _nav = {f.get("code"): f.get("series") for f in (funds or [])
             if f.get("code") and f.get("series") is not None}
+
+    # ⚠️ **標題移到守衛之前**(2026-08-28 客戶拍板 Q1)。線框 §01 的結論是:
+    #    這不是一個設計問題,是一個**位置問題** —— 守衛寫在標題前面,使用者看不到
+    #    任何痕跡;寫在後面,他看到標題和一句灰字說明。本檔原本 `return` 在標題之前,
+    #    於是「只健診 1 檔」時整個 🔁 配置回測區塊零痕跡蒸發。
+    #    (同檔 `switch_section.py` 早就是對的寫法:`if not _reds:` 在標題之後。)
+    #
+    # 三問各自的答案:
+    #   問一 固定還是取決於資料? → **固定**。它是本頁骨架的一格,不是「每檔一個」的展開區。
+    #   問二 使用者已經做過那個動作了嗎? → **已經按過 🩺 開始健診**(本函式只在
+    #        `_funds_extra` 非空時才被呼叫)→ 判準命中:一律留灰色占位。
+    #   問三 為什麼沒東西? → **還沒給足資料**(不是結構上不適用)→ ⬜ 而非 ➖。
+    #
+    # ⚠️ **只印一句,不分「檔數不足」與「沒有序列」兩臂**(2026-08-28 稽核 M-3 後改)。
+    #    第一版寫成兩臂,而**第二臂 production 不可達** —— 那正是本 PR 自己花三十行
+    #    論證「在死分支加占位＝加死碼」的那個病,我自己犯了一次。就地記下不變式:
+    #
+    #      `len(_nav) == len(funds)` 恆成立,證明鏈四步(每一步都可自己讀原始碼複驗):
+    #        1. `_funds_extra` 只由 `r.get("ok")` 的列建(tab_fund_grp_health.py)
+    #        2. `process_one_fund` 在無序列時**早就回 `ok=False`** ——
+    #           `services/fund_row.py:102-103` `if not _has_series: return {... "ok": False,
+    #           "error": "NAV 抓不到"}`,所以 ok 列必有非空 series
+    #        3. `_fund_raw` 就是那個通過檢查的 `fd` 本身(`fund_row.py:228`)
+    #        4. `_build_fund_dict` 原樣複製 `"series": fd_raw.get("series")`
+    #           (`ui/helpers/fund_grp_health/_utils.py`)
+    #      → 每個 `funds` 元素都有序列 → 過濾不掉任何一個。
+    #      (查證:`grep -n '_has_series\|_fund_raw' services/fund_row.py` 與
+    #       `grep -n '"series"' ui/helpers/fund_grp_health/_utils.py`)
+    #
+    #    被刪掉那一臂的 `where=` 還會**指錯路**:它寫「見上方逐檔失敗原因」,
+    #    但那幾檔若真的走到,它們是 **ok 列**、根本不會出現在失敗清單裡。
+    #
+    # ⚠️ 訊息刻意數 `len(_nav)`(真正拿來回測的檔數)而不是 `len(funds)`:
+    #    在不變式下兩者相等;萬一哪天不變式被破壞,這句話**仍然是真的**,
+    #    不會像原本那樣宣稱一個沒查證過的因果。
+    st.divider()
+    st.markdown("### 🔁 配置回測(哪套配置效益最高・教學非建議)")
     if len(_nav) < 2:
+        not_ready(
+            f"配置回測要比較至少 2 檔的淨值走勢,本次只有 {len(_nav)} 檔可用",
+            where="本頁上方「基金代號」欄位(多貼幾檔後重按 🩺 開始健診)")
         return
     _ccy = {f.get("code"): f.get("currency", "") for f in funds if f.get("code")}
     _name = {f.get("code"): (f.get("name") or f.get("code")) for f in funds if f.get("code")}
-
-    st.divider()
-    st.markdown("### 🔁 配置回測(哪套配置效益最高・教學非建議)")
 
     # USDTWD 歷史(L2 facade;失敗 → 美元計價基金被排除,誠實提示,§1)
     _fx = None

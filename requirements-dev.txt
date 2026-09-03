@@ -6,6 +6,13 @@ pre-commit>=3.5
 # 到」的 bare name(v19.287/288 那種 fetch_holdings/fetch_risk_metrics NameError
 # 被 except 吞掉的病灶類型)。CI 環境需要能 `ruff check` 才能跑這個測試。
 ruff>=0.15
+# v19.540:workflow 的**安全**守衛(script injection 白名單)要解析 YAML。
+# 在此之前 pyyaml **不在任何 requirements 檔裡**,是靠上面 `pre-commit>=3.5` 的硬相依被帶進來
+# —— 一條**承重但未宣告**的相依:那兩條守衛原本寫 `pytest.importorskip("yaml")`,
+# 缺套件就靜默 skip(pytest 視為綠燈),實測「pyyaml 在場 RED / 不在場完全無人擋」。
+# 守衛已改成缺套件即紅燈(tests/test_dividend_calendar_cron_v19537.py::_load_workflow_yaml),
+# 這裡把相依補上宣告,兩件事要一起看。
+pyyaml>=6.0
 # Phase B headless e2e（v18.99）— playwright pixel-diff baseline
 # 安裝後須執行 `playwright install chromium` 下載瀏覽器
 # 首次跑：streamlit run app.py & pytest -m playwright --update-snapshots

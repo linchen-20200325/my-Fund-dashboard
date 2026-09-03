@@ -103,16 +103,55 @@ class TestRegistrySubdataFreshness:
 # ══════════════════════════════════════════════════════════════
 class TestTab2RiskCardDedup:
     def test_shared_helper_defined_and_used_twice(self):
+        """M9 去重鎖:同款 flex-div HTML 全檔只能有一份(在 helper 內)。
+
+        ⚠️ **2026-08-28 補正:整條拿掉了原本的 `src.count("_risk_1y_rows_html(")`
+        斷言,並撤回它上一版的理由(那句是假的)。** 兩件事分開講:
+
+        **(1) 它從來沒有量到它自稱要量的東西。** `str.count` 數的是**字串在原始碼
+        裡出現幾次** —— docstring、註解、grep 範例通通算,跟 call site 無關。實測::
+
+            $ python3 -c "print(open('ui/tab2_single_fund.py',encoding='utf-8').read().count('_risk_1y_rows_html('))"
+            4
+            $ grep -n '_risk_1y_rows_html(' ui/tab2_single_fund.py
+
+        4 次之中只有 1 次是真正的呼叫(其餘是 def、helper docstring 裡的 grep 範例、
+        以及呼叫點上方那行註解)。用它當「call site 計數」是把註解也算進去。
+        (「4」是**量測值,量測日 2026-08-28,會漂移**;要現值就重跑上面兩條指令 ——
+         這正是本斷言被刪掉的另一個理由:它把一個會漂移的數字寫死成門檻。)
+
+        **(2) 上一版把門檻由 `>= 3` 調成 `>= 2`,理由寫「舊斷言必然失敗」——
+        那句話是假的。** 在 Q4 完成後的樹上 count 仍是 4,`>= 3` 照樣會過
+        (實測:改回 `>= 3` 跑本檔 → 9 passed)。**門檻被調鬆、而理由不成立,
+        比沒有門檻更糟**(§-2:沒查證的宣稱比沒有宣稱更危險)。
+        既然這條斷言本來就沒守到東西,正確處置是**刪掉**,不是換一個數字 ——
+        換數字只會把一個沒有意義的門檻留下來,繼續誤導下一個讀它的人。
+
+        **M9 實際的守衛是下面兩條,一字未動、仍然有效**:
+          - helper 必須存在(`def _risk_1y_rows_html(`);
+          - 同款 flex-div style 字串全檔只能出現 **1 次** —— 即只活在 helper 內,
+            沒有第二份手抄複本。這才是 M9(去重)要鎖的東西。
+
+        ⚠️ **函式名 `..._used_twice` 是舊名、與實況不符**(Q4 後 production 只剩
+        1 個 call site)。**刻意不改名**:M9 這個代號是靠這條 test id 被追溯的,
+        改名會讓 CI 歷史斷掉。讀到名字的人請以本 docstring 為準。
+        """
         src = _src("ui/tab2_single_fund.py")
         assert "def _risk_1y_rows_html(" in src
-        assert src.count("_risk_1y_rows_html(") >= 3   # 1 def + 2 call sites
         # 同款 flex-div style 只應存在於 helper 內(1 次)
         assert src.count("display:flex;justify-content:space-between;padding:5px 10px;") == 1
 
     def test_helper_label_styles(self):
+        """兩種 label_style 都要能渲染。
+
+        ⚠️ `"short"` 自 2026-08-28 Q4 起 **production 0 caller**(理由與撤銷條件
+        見 `_risk_1y_rows_html` docstring)。本測試**明示**傳入 `label_style="short"`,
+        不再靠預設值 —— 這樣讀測試的人一眼看得出它測的是防禦性分支,
+        而不是誤以為 production 還在走那條路。
+        """
         from ui.tab2_single_fund import _risk_1y_rows_html
         tbl = {"一年": {"標準差": 12.3, "Sharpe": 0.8, "Alpha": 1.1, "Beta": 0.9}}
-        short = _risk_1y_rows_html(tbl)
+        short = _risk_1y_rows_html(tbl, label_style="short")
         long = _risk_1y_rows_html(tbl, label_style="long")
         assert "標準差(1Y)" in short and "12.3" in short
         assert "波動 σ(1Y)" in long and "12.3%" in long   # long 版數值型加 %

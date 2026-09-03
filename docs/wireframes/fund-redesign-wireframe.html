@@ -1,0 +1,467 @@
+<title>基金儀表板改版草稿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#f4f5f6; --card:#ffffff;
+  --ink:#182029; --ink-2:#4d5a67; --ink-3:#7b8794;
+  --line:#d3d9de; --line-2:#e6eaed;
+  --accent:#2d6a8f; --accent-soft:#e4eef4;
+  --wire:#eceff1; --wire-line:#b8c2cb;
+  --ok:#0ca30c; --warn:#ec835a; --danger:#c0392b; --mute:#8a8e96;
+  --shadow:0 1px 2px rgba(24,32,41,.06),0 4px 14px rgba(24,32,41,.05);
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11161b; --card:#171e25;
+  --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98;
+  --line:#2b353f; --line-2:#222b33;
+  --accent:#6fb3d8; --accent-soft:#1b2a35;
+  --wire:#1c242c; --wire-line:#3a4753;
+  --ok:#3fc23f; --warn:#f0996f; --danger:#e06a5c; --mute:#8a939c;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.28);
+}}
+:root[data-theme="dark"]{
+  --paper:#11161b; --card:#171e25;
+  --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98;
+  --line:#2b353f; --line-2:#222b33;
+  --accent:#6fb3d8; --accent-soft:#1b2a35;
+  --wire:#1c242c; --wire-line:#3a4753;
+  --ok:#3fc23f; --warn:#f0996f; --danger:#e06a5c; --mute:#8a939c;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.7;margin:0;padding:0 20px 100px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto}
+
+header.mast{padding:56px 0 32px;border-bottom:2px solid var(--ink);margin-bottom:38px}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-size:clamp(28px,4.6vw,42px);line-height:1.2;margin:0 0 16px;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.standfirst{font-size:17px;color:var(--ink-2);max-width:62ch;margin:0}
+.mast-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+
+section{margin:0 0 52px}
+h2{font-size:22px;margin:0 0 8px;font-weight:700;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h2 .num{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
+h3{font-size:15.5px;margin:28px 0 10px;font-weight:700}
+.lede{color:var(--ink-2);margin:0 0 20px;max-width:66ch;font-size:15px}
+p{margin:0 0 14px;max-width:70ch}
+
+.frame{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:20px;box-shadow:var(--shadow);margin:0 0 14px}
+.frame-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+.wb{background:var(--wire);border:1px dashed var(--wire-line);border-radius:4px;padding:11px 12px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);min-height:42px;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.wb .t{font-weight:600;color:var(--ink);font-size:12.5px;font-family:var(--sans)}
+.wb .s{color:var(--ink-3);font-size:10.5px;line-height:1.5}
+.wb.new{border-color:var(--accent);background:var(--accent-soft)}
+.wb.new .t{color:var(--accent)}
+.wb.gone{border-color:var(--danger);opacity:.75}
+.wb.gone .t{color:var(--danger);text-decoration:line-through}
+.wb.solid{border-style:solid}
+.row{display:grid;gap:10px;margin-bottom:10px}
+.r2{grid-template-columns:repeat(2,1fr)}
+.r3{grid-template-columns:repeat(3,1fr)}
+.r4{grid-template-columns:repeat(4,1fr)}
+.r-side{grid-template-columns:1.6fr 1fr}
+@media (max-width:760px){.r2,.r3,.r4,.r-side{grid-template-columns:1fr}}
+
+.navstrip{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.tab{font-family:var(--mono);font-size:11.5px;padding:7px 13px;border:1px solid var(--wire-line);border-bottom:none;border-radius:4px 4px 0 0;background:var(--wire);color:var(--ink-2)}
+.tab.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.tab.gone{text-decoration:line-through;opacity:.42;border-style:dashed}
+
+.note{border-left:3px solid var(--accent);background:var(--card);padding:14px 16px;border-radius:0 5px 5px 0;margin:14px 0;font-size:14px;color:var(--ink-2);box-shadow:var(--shadow)}
+.note b{color:var(--ink)}
+.note.warn{border-left-color:var(--warn)}
+.note.stop{border-left-color:var(--danger)}
+.note-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;font-weight:600}
+.note.warn .note-h{color:var(--warn)}
+.note.stop .note-h{color:var(--danger)}
+.note p:last-child{margin-bottom:0}
+
+table.ev{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:13.5px}
+.ev th{text-align:left;padding:9px 10px;border-bottom:1.5px solid var(--line);font-size:11px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;white-space:nowrap}
+.ev td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top;color:var(--ink-2)}
+.ev td:first-child{color:var(--ink);font-weight:500}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+code{font-family:var(--mono);font-size:.9em;background:var(--wire);padding:1px 5px;border-radius:3px;color:var(--ink)}
+.tscroll{overflow-x:auto}
+
+.flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;margin:14px 0}
+.flow .n{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:8px 12px;font-weight:600}
+.flow .a{color:var(--ink-3)}
+
+.decisions{display:grid;gap:14px;margin-top:18px}
+.dec{border:1px solid var(--line);border-left:4px solid var(--accent);background:var(--card);border-radius:0 6px 6px 0;padding:18px 20px;box-shadow:var(--shadow)}
+.dec h4{margin:0 0 8px;font-size:16px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.dec h4 .q{font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:600}
+.rec{margin-top:12px;padding:10px 12px;background:var(--accent-soft);border-radius:4px;font-size:13.5px;color:var(--ink)}
+.rec b{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:3px}
+
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--ink-3);margin:10px 0 26px;padding:12px 14px;background:var(--card);border:1px solid var(--line-2);border-radius:5px}
+.legend span{display:flex;align-items:center;gap:7px}
+.sw{width:22px;height:12px;border-radius:2px;display:inline-block}
+.sw.keep{background:var(--wire);border:1px dashed var(--wire-line)}
+.sw.new{background:var(--accent-soft);border:1px dashed var(--accent)}
+.sw.gone{background:var(--wire);border:1px dashed var(--danger)}
+ul{margin:0 0 14px;padding-left:20px;max-width:70ch}
+li{margin-bottom:7px;color:var(--ink-2)}
+li b{color:var(--ink)}
+hr.sep{border:none;border-top:1px solid var(--line);margin:0 0 40px}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Wireframe · 待審批</p>
+  <h1>基金儀表板 · 改版草稿</h1>
+  <p class="standfirst">
+    這份只談<strong>分頁結構與資訊排列</strong>，不談程式。依「UI 草稿先行」原則，
+    需你拍板後團隊才會寫任何 UI 程式碼。每個判斷都附實測依據 ——
+    沒量過的，我標明沒量過。
+  </p>
+  <div class="mast-meta">
+    <span>盤點基準：7 分頁 · 約 32,100 行 UI</span>
+    <span>需拍板：5 項</span>
+    <span>股票端草稿另出</span>
+  </div>
+</header>
+
+<div class="legend">
+  <span><i class="sw keep"></i> 保留</span>
+  <span><i class="sw new"></i> 新增或搬進來</span>
+  <span><i class="sw gone"></i> 移走或刪除</span>
+</div>
+
+<!-- 01 -->
+<section>
+  <h2><span class="num">01</span> 診斷：現在的問題出在哪</h2>
+  <p class="lede">四個數字說明了為什麼要重排，而不是微調。</p>
+
+  <table class="ev">
+    <thead><tr><th>發現</th><th>數字</th><th>意義</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>分頁⑤「配置 &amp; 帳本」講不出一句話職責</td>
+        <td class="num">6,403 行 · 佔全站 20%</td>
+        <td>裡面至少 10 個不同產品，含 800 行的設定精靈</td>
+      </tr>
+      <tr>
+        <td>區塊編號有 6 套互相衝突</td>
+        <td class="num">6 套</td>
+        <td>分頁⑤ 的順序是 <b>④→①→②→③</b> —— 「加入基金」排在「配置總覽」之後</td>
+      </tr>
+      <tr>
+        <td>頂端導覽有 4 種模式</td>
+        <td class="num">8 個分頁沒有兩個一致</td>
+        <td>有的兩條、有的一條、有的沒有</td>
+      </tr>
+      <tr>
+        <td>每次操作都有 2 次對外網路請求</td>
+        <td class="num">不在任何按鈕後面</td>
+        <td>兩處都在你最少開的「參考／診斷」頁；抓失敗時每次操作重跑 4 個來源</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note warn">
+    <p class="note-h">一個結構性事實，決定了整份草稿的方向</p>
+    <p>
+      Streamlit 的分頁切換<strong>只是前端 CSS</strong> —— 七個分頁的內容<strong>每次操作都全部重跑一次</strong>。
+      現況的解法是每個分頁各自發明一套「按鈕沒按就不做事」的旗標，**共五套機制、五種行為**。
+    </p>
+    <p style="margin-top:10px">
+      代價你每天都在付：<b>首次進站時七個分頁全是空的「請按按鈕」</b> ——
+      實測畫面上同時有 <span class="num">5 個錯誤、8 個警告、17 個「尚未載入」、21 顆按鈕</span>。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 02 -->
+<section>
+  <h2><span class="num">02</span> 提案：7 個分頁 → 5 個，照決策順序排</h2>
+  <p class="lede">現在的分頁順序與你實際做決定的順序不一致。新結構就是把它排回來。</p>
+
+  <div class="flow">
+    <span class="n">① 現在該進攻還防守</span><span class="a">→</span>
+    <span class="n">② 我手上這組健康嗎</span><span class="a">→</span>
+    <span class="n">③ 這一檔到底怎樣</span><span class="a">→</span>
+    <span class="n">④ 那我要怎麼配 · 記帳</span><span class="a">→</span>
+    <span class="n">⑤ 設定與診斷</span>
+  </div>
+
+  <div class="frame">
+    <div class="frame-label"><span>頂層導覽</span><span>7 → 5</span></div>
+    <div class="navstrip">
+      <span class="tab on">🌐 市場定調</span>
+      <span class="tab">💊 組合健診</span>
+      <span class="tab">🔍 基金研究</span>
+      <span class="tab">📊 我的配置</span>
+      <span class="tab">⚙️ 設定與診斷</span>
+    </div>
+    <div class="navstrip" style="margin-top:14px">
+      <span class="tab gone">📦 批次分析</span>
+      <span class="tab gone">📋 我的管理室</span>
+      <span class="tab gone">📖 參考 / 診斷</span>
+    </div>
+    <div class="wb solid" style="border-radius:4px;margin-top:8px">
+      <span class="s">上排＝新結構；下排＝被併走的三個分頁（功能不刪，只換位置）</span>
+    </div>
+  </div>
+
+  <table class="ev">
+    <thead><tr><th>原分頁</th><th>去向</th><th>為什麼</th></tr></thead>
+    <tbody>
+      <tr><td>🌐 市場定調</td><td>① 不動</td><td><b>全站唯一職責講得最清楚的分頁</b>，是好結構的樣板</td></tr>
+      <tr><td>💊 組合健診</td><td>② 不動，但升格為「健診唯一出處」</td><td>健診三表現在在兩個分頁各畫一次（程式碼自陳「完全同源」）</td></tr>
+      <tr><td>🔍 個基深掘<br>📦 批次分析</td><td>③ 合併為「基金研究」</td><td>兩者做同一件事 —— 看基金；差別只在<b>一檔 vs 多檔</b>。已經共用同一套欄位設定</td></tr>
+      <tr><td>📊 配置 &amp; 帳本</td><td>④ 保留配置與帳本，<b>其餘全部搬走</b></td><td>見下一節</td></tr>
+      <tr><td>📋 我的管理室<br>📖 參考 / 診斷</td><td>⑤ 合併為「設定與診斷」</td><td>兩者都是「設定與檢查」，不在決策動線上。<b>NAV 匯入現在同時存在於這兩頁</b></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="sep">
+
+<!-- 03 -->
+<section>
+  <h2><span class="num">03</span> 拆分頁⑤：改動最大的一頁</h2>
+  <p class="lede">這是唯一講不出職責的分頁。好消息是它的切割線是現成的 —— 每一塊本來就是獨立檔案或完整區塊。</p>
+
+  <div class="row r2">
+    <div class="frame">
+      <div class="frame-label"><span>現況 · 分頁⑤</span><span>6,403 行 · 順序 ④→①→②③</span></div>
+      <div class="wb gone"><span class="t">④ 持倉健診（複製自分頁②）</span><span class="s">直接 import 分頁② 的內部函式</span></div>
+      <div class="wb gone"><span class="t">800 行 OAuth 設定精靈</span><span class="s">一個完整 expander</span></div>
+      <div class="wb"><span class="t">① 加入 / 編輯基金</span><span class="s">排在總覽之後</span></div>
+      <div class="wb"><span class="t">② 配置總覽</span></div>
+      <div class="wb"><span class="t">③ 費用與扣款</span></div>
+      <div class="wb gone"><span class="t">真實收益 vs 配息率矩陣</span><span class="s">與分頁② 同標題、兩份實作</span></div>
+      <div class="wb"><span class="t">帳本（獨立檔 3,246 行）</span></div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label"><span>提案 · ④ 我的配置</span><span>順序照決策流程</span></div>
+      <div class="wb new"><span class="t">① 加入 / 編輯基金</span><span class="s">移到最前 —— 沒有標的就沒有配置</span></div>
+      <div class="wb"><span class="t">② 配置總覽</span><span class="s">核心，保持不動</span></div>
+      <div class="wb"><span class="t">③ 費用與扣款</span></div>
+      <div class="wb new"><span class="t">④ 帳本</span><span class="s">改為子分頁（本來就是獨立檔）</span></div>
+      <div class="wb new" style="margin-top:12px"><span class="t">→ 持倉健診：改成一行連結</span><span class="s">「你的持倉健診在【組合健診】」，不再重畫一次</span></div>
+      <div class="wb new"><span class="t">→ 設定精靈：搬到 ⑤ 設定與診斷</span></div>
+      <div class="wb new"><span class="t">→ 收益/配息矩陣：留在 ② 一份</span></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <p class="note-h">為什麼「加入基金」要移到最前面</p>
+    <p>
+      現在的順序是 <b>④ 健診 → ① 加入 → ② 總覽 → ③ 費用</b>。
+      你要新增一檔基金，得先滑過一整段別的東西才找得到入口 ——
+      而「加入標的」在邏輯上是這一頁的<strong>第一步</strong>。
+    </p>
+  </div>
+
+  <div class="note warn">
+    <p class="note-h">這一頁有已發生過的生產事故</p>
+    <p>
+      程式碼註解記載：<strong>25 檔基金時，一次操作跑 17 秒後連線中斷</strong>（2026-08-14 兩次重現）。
+      拆分頁同時解掉版面與效能 —— 因為健診那份複製品，正是最貴的一塊。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 04 -->
+<section>
+  <h2><span class="num">04</span> 跨頁統一：三件成本極低、但你立刻看得到的事</h2>
+
+  <h3>① 編號體系：6 套 → 1 套</h3>
+  <p>現在每一頁自己編一套圈號，而且互相衝突。提案是<strong>只在頂層保留決策站號</strong>，頁內改用純標題階層。</p>
+
+  <div class="row r2">
+    <div class="frame">
+      <div class="frame-label"><span>現況</span><span>6 套並存</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">分頁① 總表 ①②③④ ＋ 拐點內 ①② ＋ 雷達內 ④⑤ ＋ 長期 ⑥</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">分頁④ ①②③④ 被 8 個未編號區塊打斷</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">分頁⑤ 順序 ④→①→②→③</span></div>
+      <div class="wb gone" style="min-height:auto"><span class="s">說明書：子分頁 1.~10. ＋ 內文 ①~⑨ ＋ 頁首 ⓪</span></div>
+    </div>
+    <div class="frame">
+      <div class="frame-label"><span>提案</span><span>1 套</span></div>
+      <div class="wb new" style="min-height:auto"><span class="t">頂層：① ~ ⑤ 決策站號</span><span class="s">只有分頁列用圈號，且與決策順序一致</span></div>
+      <div class="wb new" style="min-height:auto"><span class="t">頁內：純標題階層</span><span class="s">大標 / 中標 / 小標，不編號</span></div>
+      <div class="wb new" style="min-height:auto"><span class="t">編號從同一份設定產生</span><span class="s">現在頁內編號完全沒有統一出處，這正是它漂成 6 套的原因</span></div>
+    </div>
+  </div>
+
+  <h3>② 導覽列：4 種模式 → 1 種</h3>
+  <p>八個分頁沒有兩個一致（有的兩條、有的一條、有的沒有）。統一成同一條，位置與樣式固定。</p>
+
+  <h3>③ 命名：同一件事最多有 4 個名字</h3>
+  <div class="tscroll">
+    <table class="ev">
+      <thead><tr><th>概念</th><th>現在的叫法</th><th>提案</th></tr></thead>
+      <tbody>
+        <tr><td>健康度評估</td><td>健診 · 體檢 · 健康分析 · 4D Grade · 四維 · 六因子<span class="num">（6 種）</span></td><td>統一為<b>健診</b></td></tr>
+        <tr><td>換掉一檔基金</td><td>換標 · 換股 · 輪動 · 汰弱留強<span class="num">（4 種，同頁共存）</span></td><td>統一為<b>換標</b></td></tr>
+        <tr><td>候選名單</td><td>選股池 · 觀察池 · 候選基金</td><td>統一為<b>選股池</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note stop">
+    <p class="note-h">順帶必修：有一行指路指錯地方</p>
+    <p>
+      管理室裡寫著「先到 <b>Tab④／組合健診</b>」—— 但「組合健診」是第 <b>2</b> 個分頁，Tab④ 是「配置 &amp; 帳本」。
+      那一行是<strong>寫死的字面值</strong>，沒有跟著分頁名走。重排分頁後這類指路會全面失準，必須一起改成自動帶入。
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 05 -->
+<section>
+  <h2><span class="num">05</span> 效能與列印</h2>
+
+  <h3>每次操作的 2 次對外網路請求</h3>
+  <p>
+    實測堆疊：資料註冊表更新 + 資料診斷分頁，兩處都在抓匯率，<strong>都不在任何按鈕後面</strong>。
+    而且它的快取<strong>只快取成功結果</strong> —— 抓失敗時，每次操作都重跑 4 個來源的備援鏈。
+  </p>
+  <div class="note">
+    <p class="note-h">這一項不需要等重設計</p>
+    <p>它與版面無關，可以獨立先修，而且是全站唯一「不必改任何畫面就能拿到的效能改善」。</p>
+  </div>
+
+  <h3>五套「按鈕沒按就不做事」的旗標 → 一套</h3>
+  <p>
+    每個分頁各自發明了一套，五種行為、五個出錯面。現成的最佳實作已經存在 ——
+    配置頁的<strong>持倉指紋快取</strong>是全站唯一「指紋不含時間、變了才重算、另給顯式重算鈕」的完整設計，
+    可以直接當統一方案的藍本。
+  </p>
+  <div class="note warn">
+    <p class="note-h">這是三項裡風險最高的</p>
+    <p>動的是每個分頁的執行條件，<b>最容易改出「該顯示卻沒顯示」</b>。建議排在版面定案之後單獨做，且每頁分開驗收。</p>
+  </div>
+
+  <h3>列印／PDF：現在印不出完整表格</h3>
+  <table class="ev">
+    <thead><tr><th>項目</th><th>現況</th><th>後果</th></tr></thead>
+    <tbody>
+      <tr><td>表格元件</td><td class="num">56 個虛擬滾動 / 0 個靜態</td><td><b>列印只會印出視窗內看得到的那幾列</b></td></tr>
+      <tr><td>列印樣式</td><td class="num">0 個 @media print</td><td>沒有任何列印排版</td></tr>
+      <tr><td>行動裝置樣式</td><td class="num">0 個 @media 查詢</td><td>113 處固定欄數；卡片內字級寫死，窄螢幕不會縮放</td></tr>
+    </tbody>
+  </table>
+  <p style="color:var(--ink-3);font-size:13.5px">
+    ⚠️ 行動裝置與列印<strong>只做了靜態檢查，沒有實機驗證</strong>。
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- 06 -->
+<section>
+  <h2><span class="num">06</span> 建議的施工順序</h2>
+  <p class="lede">依「改動槓桿 ÷ 風險」排。第 1 項刻意排在最前，因為它最便宜、你最快看得到差別。</p>
+
+  <div class="row r3">
+    <div class="wb new" style="min-height:120px">
+      <span class="t">第 1 批 · 統一語言</span>
+      <span class="s"><b>編號 + 導覽 + 命名 + 修好指錯的指路</b><br><br>風險最低（純字串），成本最小，但滿版有感。也能先驗證你對命名的偏好，再動大結構。</span>
+    </div>
+    <div class="wb new" style="min-height:120px">
+      <span class="t">第 2 批 · 拆分頁⑤</span>
+      <span class="s"><b>7 分頁 → 5 分頁</b><br><br>槓桿最大。切割線現成，同時解掉重複、逆序、與那起 17 秒斷線事故。</span>
+    </div>
+    <div class="wb new" style="min-height:120px">
+      <span class="t">第 3 批 · 效能與列印</span>
+      <span class="s"><b>統一守門旗標 + 列印樣式</b><br><br>風險最高，排最後。但那 2 次網路請求<b>可以獨立先修</b>，不必等。</span>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- 07 -->
+<section>
+  <h2><span class="num">07</span> 需要你拍板的五件事</h2>
+  <p class="lede">其餘（取數路徑、快取設定、元件實作、測試怎麼寫）都是技術細節，由團隊內部拍板，不佔用你的時間。</p>
+
+  <div class="decisions">
+
+    <div class="dec">
+      <h4><span class="q">Q1</span> 7 個分頁併成 5 個，同意嗎？</h4>
+      <p>「批次分析」併進「基金研究」、「管理室 + 參考／診斷」併成「設定與診斷」。<strong>功能一個都不刪，只換位置。</strong></p>
+      <div class="rec">
+        <b>總管推薦</b>
+        <strong>同意</strong>。批次分析與個基深掘做的是同一件事（看基金），差別只在一檔 vs 多檔，而且它們<em>已經共用同一套欄位設定</em>——
+        分成兩個頂層分頁是歷史遺留，不是設計。管理室與參考／診斷都不在決策動線上，放在最後一站符合直覺。
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q2</span> 分頁⑤ 的「持倉健診」改成一行連結，可以嗎？</h4>
+      <p>現在它在兩個分頁各畫一次（程式碼註解自陳「與組合健診完全同源」）。提案是配置頁只留一行「你的持倉健診在【組合健診】」。</p>
+      <div class="rec">
+        <b>總管推薦</b>
+        <strong>改成連結</strong>。同一份東西畫兩次，除了慢，還有一個更糟的風險：<em>兩邊哪天不同步時，你不會知道該信哪一個</em>。
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你習慣在配置頁直接看到健診結果，我可以改成「摘要 3 行 + 連結」，但完整三表只留一處。）</span>
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q3</span> 頁內圈號全部拿掉，只留頂層分頁編號 —— 可以嗎？</h4>
+      <p>現在 6 套圈號互相衝突。要嘛統一成一套，要嘛頁內不編號。</p>
+      <div class="rec">
+        <b>總管推薦</b>
+        <strong>頁內不編號</strong>。理由：頁內區塊會隨著功能增減而變動，<em>只要編了號，就一定會再次漂移</em>——
+        現在這 6 套就是這樣長出來的。標題階層（大／中／小）表達層級已經夠用，且不會過期。
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q4</span> 命名統一：健診 / 換標 / 選股池 —— 用這三個詞可以嗎？</h4>
+      <p>目前健康度評估有 6 個名字、換基金有 4 個、候選名單有 3 個。</p>
+      <div class="rec">
+        <b>總管推薦</b>
+        <strong>採用這三個</strong>。都是現況中<em>出現次數最多</em>的那一個（健診 188 次 vs 體檢 54 次；換標 59 次 vs 換股 36 次；選股池 71 次 vs 觀察池 5 次），
+        改動面最小、你也最習慣。
+        <br><span style="color:var(--ink-3);font-size:12.5px">（若你偏好別的詞，換一個也行 —— 只是要改的地方多一些。）</span>
+      </div>
+    </div>
+
+    <div class="dec">
+      <h4><span class="q">Q5</span> 首次進站的空狀態要不要一併處理？</h4>
+      <p>現在第一眼會看到 <span class="num">5 個錯誤 + 8 個警告 + 17 個「尚未載入」+ 21 顆按鈕</span>，而它們多半只是「還沒按更新」。</p>
+      <div class="rec">
+        <b>總管推薦</b>
+        <strong>一併處理，但只做最小版本</strong>：把「還沒載入」與「真的出錯」在視覺上分開 ——
+        前者用灰色說明、後者才用紅色。<em>現在兩者長得一樣，所以你每次進站都看到一片紅，久了就不看了。</em>
+        完整的「一鍵載入全部」屬於下一階段，本次不做。
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note stop" style="margin-top:24px">
+    <p class="note-h">這份草稿沒有涵蓋的</p>
+    <p>
+      這是<b>結構草稿，不是視覺定稿</b> —— 顏色、字級、間距會沿用現有樣式，不在本次討論範圍。
+    </p>
+    <p style="margin-top:10px">
+      另外據實說明兩項限制：踩點<b>只量到空狀態</b>（沙箱擋掉外部資料源、無憑證），
+      載入資料後的成本是讀程式碼推的，不是實測；<b>行動裝置與列印沒有實機驗證</b>。
+      這兩項會在實作階段由品管組實測補上。
+    </p>
+  </div>
+</section>
+
+</div>

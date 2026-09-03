@@ -271,3 +271,147 @@ def assess_nav_cache_quality(
             "⚠️稀疏快取" if out["sparse"] else "⚠️過期快取"
         )
     return out
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# NAV 幣別守門(2026-09-01 新增)—— 「整條序列被換成另一種計價幣別」的判定 SSOT
+# ════════════════════════════════════════════════════════════════════════════
+# **這是在防哪一條真實路徑(不是儀式)**
+# 每天 20:00 TW 的 `weekly_nav_backfill` 會對「持倉 ∪ 選股池」全跑一次補淨值,
+# 而長歷史救援有兩處**整條序列替換**的採用點:
+#   - L1 `repositories/fund/fund_orchestration.py::_span_extend_insurance_nav`
+#   - L2 `services/nav_history_store.py::backfill_to_gs::_rescue_by_isin`
+# 兩處的採用條件在此之前都**只看「筆數 × 跨度」,沒有任何幣別條件**。而
+# `_src_morningstar_nav` 是拿 `currencyId` 去跟晨星要**換算後**的淨值(查不到使用者
+# 幣別時死預設 `"USD"`),`_src_yahoo_finance_nav` 打的是 `{secId}.F`(法蘭克福掛牌)
+# —— 兩者都可能回一條「同一檔基金、但另一種計價幣別」的序列,而它跨度更長就會
+# **整條蓋掉**原本正確幣別的序列。`nav_history` 的去重鍵是 `(code, date)` 且**永不刪除**,
+# 錯的先寫進去、對的就永遠寫不進來,下游 1Y 報酬 / Sharpe / σ / 配息殖利率全部照錯的算,
+# 而畫面上不會有任何異狀 —— §1「錯誤的數字比沒有數字更危險」。
+#
+# **本模組只做判定,不做換算**(§1 + §4.1「TWD vs USD vs 原幣:禁止跨幣別直接平均」):
+# 即使技術上換得回來,也**不准在寫入端偷偷換** —— 那會製造一條「看起來連續、
+# 實際上混過兩種幣別」的序列,比拒寫更危險(拒寫至少留下正確的短序列 + 一行 log)。
+#
+# ⚠️ **這道判定保護不到什麼(已知分類,不是窮舉)**
+#   a) **候選幣別不明**:來源沒宣告幣別(如 cnyes)→ verdict `unknown`,**不擋**。
+#      擋掉會讓「補到 5 年」對所有未宣告幣別的來源整個失效,那是拿一個確定的
+#      功能損失去換一個不確定的風險;此處選擇**照舊採用 + 誠實揭露**,並保留
+#      `backfill_to_gs` 的 Gate 0(與既有 nav_history 對帳)當第二道。
+#   b) **預期幣別本身就是錯的**:上游 meta 的「計價幣別」欄若被死預設成 USD
+#      (見 `fund_orchestration._correct_currency` 修的那個病),兩邊都說 USD →
+#      verdict `match` → 放行。本判定證明的是「**兩邊宣告一致**」,不是「宣告正確」。
+#   c) **非 ISO 三碼的幣別字串**一律當未知(不猜;中文別名請先過
+#      `services.currency.normalize_ccy` 再傳進來 —— 本模組是 L0,不得依賴 L2)。
+#   d) 只守這兩個**替換**採用點;`nav_history` 其餘寫入路徑(手動 CSV 匯入、
+#      `ui/helpers/nav_history_hook.py` 的看盤即寫、`scripts/accumulate_nav_tw.py`
+#      的台灣端 cron)**都沒有經過這裡**,那屬 §8.4 step 4 的範圍決定,本輪不做。
+NAV_CCY_MATCH: str = "match"
+NAV_CCY_MISMATCH: str = "mismatch"
+NAV_CCY_UNKNOWN: str = "unknown"
+
+_ISO_CCY_LEN: int = 3
+
+
+def normalize_iso_ccy(raw) -> str:
+    """幣別字串 → ISO 4217 三碼大寫;**不是三碼英文字母就回 `""`(未知)**。
+
+    §1 不猜:`"美元"` / `"USD 累積級別"` / `None` 一律回 `""` 交給呼叫端當「未知」處理,
+    而不是硬解成某個幣別。中文別名的正規化是 L2 `services.currency.normalize_ccy`
+    的職責(本模組為 L0,依 §8.2 不得 import L1+),呼叫端能拿到 L2 時請先過那一層。
+    """
+    _u = str(raw or "").strip().upper()
+    return _u if (len(_u) == _ISO_CCY_LEN and _u.isascii() and _u.isalpha()) else ""
+
+
+def nav_series_currency(s) -> str:
+    """讀 NAV 序列自帶的幣別 → ISO 三碼或 `""`。
+
+    來源是 `Series.attrs["currency"]` —— 本 repo 既有的 provenance 慣例
+    (先例:`repositories/fundclear_offshore.py` 的 `DataFrame.attrs["currency"]`)。
+    ⚠️ `attrs` 會在部分 pandas 運算中掉失,故呼叫端應在**清洗之前**就把它讀出來。
+    """
+    try:
+        _attrs = getattr(s, "attrs", None) or {}
+        return normalize_iso_ccy(_attrs.get("currency"))
+    except Exception:  # noqa: BLE001 — attrs 型別異常不該讓抓取整條掛掉(§1 記在呼叫端)
+        return ""
+
+
+def reconcile_row_currencies(ccys) -> str:
+    """一組**逐列**幣別宣告 → 這條合併序列能誠實宣告的幣別;有任何分歧或未知 → `""`。
+
+    用於「把來自不同來源的列併成一條序列」的場合(`nav_history` 累積歷史 ∪ live 取數):
+    合併後的序列只有在**每一列都宣告了同一個 ISO 三碼**時才敢對外宣告那個幣別。
+
+    §1 Fail Loud, Never Fake —— 這裡的失效模式很具體:一條混過兩種幣別的序列,
+    只要對外宣告其中一種,下游(1Y 報酬 / Sharpe / σ)就會照那個假設算,
+    而畫面上不會有任何異狀。故任一列未知、或列與列之間不一致 → 一律退成 `""`(未知),
+    **絕不挑一個**、**絕不換算**(換算見本模組開頭:寫入端偷偷換匯比拒絕宣告危險得多)。
+
+    Args:
+        ccys: 逐列(或逐來源)的幣別宣告字串序列。空序列 → `""`(沒有任何宣告可依據)。
+
+    Returns:
+        全部相同且為可辨識 ISO 三碼 → 該三碼;否則 `""`。
+
+    ⚠️ 本函式證明的是「**這些宣告彼此一致**」,不是「宣告正確」——
+    上游若整批死預設成同一個錯幣別,這裡照樣回那個錯的值(同本模組開頭 b 項)。
+    """
+    _norm = [normalize_iso_ccy(_c) for _c in (ccys or [])]
+    if not _norm or not all(_norm):      # 空 / 任一未知 → 不宣告(§1 不知道 ≠ 一致)
+        return ""
+    return _norm[0] if len(set(_norm)) == 1 else ""
+
+
+def nav_currency_verdict(expected, candidate) -> str:
+    """兩個幣別宣告的比對結果:`match` / `mismatch` / `unknown`。
+
+    只有**兩邊都是可辨識的 ISO 三碼**時才敢下 `match` / `mismatch`;
+    任一邊未知 → `unknown`(§1:不知道 ≠ 一致,但也 ≠ 不一致)。
+    """
+    _e = normalize_iso_ccy(expected)
+    _c = normalize_iso_ccy(candidate)
+    if not _e or not _c:
+        return NAV_CCY_UNKNOWN
+    return NAV_CCY_MATCH if _e == _c else NAV_CCY_MISMATCH
+
+
+def assess_nav_series_swap(*, expected_ccy, candidate_ccy,
+                           candidate_source: str = "",
+                           current_source: str = "") -> dict:
+    """「要不要讓這個候選序列整條換掉現有序列」的幣別判定。純函式、零 I/O。
+
+    Args:
+        expected_ccy: 這檔基金**應該**是哪一種計價幣別(上游 meta / 選股池 / 基金名)。
+        candidate_ccy: 候選序列自己宣告的幣別(`nav_series_currency`)。
+        candidate_source / current_source: 只用於組人看的訊息,不參與判定。
+
+    Returns:
+        `{"verdict", "safe", "expected_ccy", "candidate_ccy", "reason"}`
+        - `safe` **是呼叫端唯一該看的旗標**:`False` 只在 `verdict == "mismatch"` 時出現。
+        - `reason` 在 `safe=True` 時為 `""`(無話可說),`unknown` 時為 `""` ——
+          未知不是拒絕理由,呼叫端若要揭露請自行讀 `verdict`。
+
+    ⚠️ 本函式**不回傳「換算後的序列」,也永遠不會有那個選項** —— 見本節開頭:
+    在寫入端偷偷換匯會製造混幣別的連續序列,那比拒絕替換危險得多。
+    """
+    _e = normalize_iso_ccy(expected_ccy)
+    _c = normalize_iso_ccy(candidate_ccy)
+    _v = nav_currency_verdict(_e, _c)
+    _reason = ""
+    if _v == NAV_CCY_MISMATCH:
+        _reason = (
+            f"幣別不一致:這檔基金應為 {_e},"
+            f"但候選序列{('(' + candidate_source + ')') if candidate_source else ''}"
+            f"宣告 {_c} —— 拒絕用它換掉"
+            f"{('現有 ' + current_source + ' ') if current_source else '現有'}序列"
+            f"(§1:不換算、不混寫;錯幣別一旦寫進 nav_history 就永遠改不掉)"
+        )
+    return {
+        "verdict": _v,
+        "safe": _v != NAV_CCY_MISMATCH,
+        "expected_ccy": _e,
+        "candidate_ccy": _c,
+        "reason": _reason,
+    }

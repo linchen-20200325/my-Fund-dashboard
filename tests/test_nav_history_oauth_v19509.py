@@ -111,6 +111,13 @@ class _FakeWS:
     def get_all_values(self):
         return [NG._NAV_HEADERS]
 
+    def row_values(self, n):
+        """真 gspread worksheet 一定有的方法(見 `_get_worksheet` 的表頭補欄)。"""
+        return list(NG._NAV_HEADERS) if n == 1 else []
+
+    def update(self, rng, values):      # 表頭補寫 no-op
+        pass
+
     def append_rows(self, rows, value_input_option=None):
         self.appended.extend(rows)
 
@@ -248,6 +255,15 @@ def test_backfill_threads_oauth_to_append(monkeypatch):
         return {"written": len(points), "skipped": 0}
 
     monkeypatch.setattr(NG, "append_points", _fake_append)
+    # Gate 0(2026-08-28):寫入前會先讀一次既有 nav_history 對帳 —— 這裡回空,
+    # 代表「雲端讀得到、這檔還沒有歷史」(純新增),即本測試原本的情境。
+    # oauth_client 同樣要透傳到讀取端(與寫入端同一本 Sheet)。
+    def _fake_load(code=None, oauth_client=None, **kw):
+        captured["load_oauth"] = oauth_client
+        return []
+
+    monkeypatch.setattr(NG, "load_points", _fake_load)
     sentinel = object()
     NS.backfill_to_gs(["A"], oauth_client=sentinel)
     assert captured["oauth"] is sentinel
+    assert captured["load_oauth"] is sentinel      # 讀取端也要拿到同一個身分

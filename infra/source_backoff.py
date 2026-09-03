@@ -44,8 +44,27 @@ v18.275 刻意「**None 不入 cache → 下次仍會 retry**」，防的是 **N
 
 本模組以 `_BackoffRegistryProxy` 註冊進 `infra.cache._CACHE_REGISTRY`：
 - sidebar「全域刷新」→ `global_refresh_all()` → `clear_all_caches()` → **退避全清**；
-- Tab5 的快取狀態表走 `get_all_cache_info()` → 會多出一列 `_SOURCE_BACKOFF`
-  顯示目前有幾個 host 在冷卻（既有 UI 泛型渲染，**零 UI 改動**）。
+- ~~Tab5 的快取狀態表走 `get_all_cache_info()` → 會多出一列 `_SOURCE_BACKOFF`
+  顯示目前有幾個 host 在冷卻（既有 UI 泛型渲染，**零 UI 改動**）。~~
+  ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪 · 決策者：資料與計算組）：
+  這句話三處皆不實**，逐一實測：
+  (a) **不在 Tab5** —— 全站唯一消費 `get_all_cache_info()` 的畫面在
+      `ui/helpers/portfolio/policy_admin_section.py`，屬「📋 保單管理」
+      expander 下的「🛠️ 進階工具」（AST 窮舉：production 端僅此 1 個呼叫點，
+      且它是 `from fund_fetcher import get_all_cache_info as _gci` 的**別名**）。
+  (b) **不是泛型渲染** —— 它是寫死的 f-string，只印「函式數 / entries /
+      hit-rate」三個數字。新欄位（含本模組的 `backing_off`）**不會自己長出來**。
+  (c) **它根本沒在渲染** —— 那行 caption 寫 `sum(r["size"] …)`，而本模組這一列
+      當時只給 `currsize`，於是 `KeyError: 'size'` 被外層 `except Exception: pass`
+      吞掉，**production 一次都沒印出來過**。
+  **舊表述的用意仍然成立**（把退避狀態掛進 registry 確實讓它「可被觀測」，
+  且逃生門那半句是真的、未受影響）；錯的是它宣稱**這件事已經做到了**。
+  **現況（2026-08-31 本批之後）**：`_SOURCE_BACKOFF` 這一列已符合
+  `infra.cache` 的欄位契約（補上 `size`），該 caption 已能正常渲染並把本列
+  計入「函式數 / entries」；但 **`backing_off` 仍然沒有 UI 消費者** ——
+  要把「哪些 host 在冷卻」顯示出來屬**欄位增減**，依客戶 2026-08-31 頒布的
+  協作介面須**動工前先出線框給客戶審** → **另立一批，不是本批省略**。
+  在那之前要看這個清單，請用 `get_all_cache_info()` 直接讀（測試已釘）。
 
 ## 執行緒安全
 
@@ -212,6 +231,39 @@ def reset_all() -> int:
     return _n
 
 
+def reset_key(key: str) -> bool:
+    """解除**單一**來源鍵的退避，回傳是否真的清掉一筆。
+
+    ## 它與 `reset_all()` 的差別是**射程**，不是強度
+
+    `reset_all()` 是 sidebar「全域刷新」那個大按鈕的逃生門 —— 一次解開全部。
+    本函式給「使用者針對**某一塊資料**明確要求重抓」用（Tab1「強制重抓」）：
+    只解開那一塊自己登記的鍵，**同來源的其它查詢、以及 host 級冷卻一律不動**。
+    有了它，「精準清 Tab1、不誤殺 Tab2~Tab5」這個既有承諾才延伸得到退避狀態。
+
+    ## ⚠️ 不要拿 `record_success()` 代用（這是 §1 的問題，不是風格問題）
+
+    `record_success()` 也會 pop 掉同一筆，但它印的是「**來源恢復**」——
+    那是一句**觀測宣稱**。沒有真的成功過卻印它，就是 §1 講的錯誤歸因：
+    log 會說某個來源復原了，而事實上只是有人按了按鈕。
+    本函式印的是「依使用者明確要求解除」，據實。
+
+    ## ⚠️ 這**不會**讓退避失效
+
+    解除只是「允許下一次真的去打一次」。那一次若又失敗，`record_failure()`
+    會**當場重新登記一個完整的冷卻**（本模組不做指數放大，見 `should_skip`）——
+    所以連按的成本上界是「**一次按鈕 ＝ 至多一次上游請求**」，
+    而不是「按了就一路暢通」。
+    """
+    with _LOCK:
+        _had = _STATE.pop(key, None)
+    if _had:
+        print(f"[source_backoff] {key} 依使用者明確要求解除退避"
+              f"（前次 kind={_had['kind']}）→ 下一次會真的重試一次")
+        return True
+    return False
+
+
 def _prune_locked(now: float) -> None:
     """記憶體上限維護（必須已持有 `_LOCK`）。
 
@@ -229,8 +281,24 @@ def _prune_locked(now: float) -> None:
 class _BackoffRegistryProxy:
     """把退避狀態掛進 `_CACHE_REGISTRY`（同 `repositories.fund.fx_and_main._FxCacheProxy` 手法）。
 
-    效果：sidebar「全域刷新」一鍵解除全部退避（逃生門），
-    且 Tab5 快取狀態表自動多一列可觀測 —— **兩者都零 UI 改動**。
+    效果：sidebar「全域刷新」一鍵解除全部退避（逃生門）。
+
+    ~~且 Tab5 快取狀態表自動多一列可觀測 —— **兩者都零 UI 改動**。~~
+    ⚠️ **2026-08-31 更正（有意識的更正，不是漏刪 · 決策者：資料與計算組）**：
+    這是同一句不實宣稱在本檔的**第二份副本**（另一份在 module docstring
+    「逃生門」段，已就地更正 —— 完整三點實測理由寫在那裡，此處不重複）。
+    一句話版本：那個畫面**不在 Tab5**、**不是泛型渲染**，而且在本批修好之前
+    **根本沒渲染**（`KeyError: 'size'` 被 `except Exception: pass` 吞掉）。
+    **逃生門那半句仍然為真、未受影響。**
+    📌 **方法教訓**：同一句話當時被寫進**三個載體**（本檔 module docstring、
+    本檔這個 class docstring、`infra/cache.py` 的 `uncached_fail` 註解），
+    而先前那一輪只更正了 `infra/cache.py` 那一份 —— **更正措辭時只修被點名的
+    那個載體，剩下的副本會繼續說謊**。往後更正任何一句宣稱，請對
+    「程式註解 / docstring / 測試 docstring / PR 描述 / commit message」
+    各掃一遍。
+    ⚠️ **本批已知仍未更正的副本**：`tests/test_source_backoff.py` 該測試的
+    docstring 仍寫「Tab5 泛型渲染，零 UI 改動」—— 該檔**不在本批的檔案邊界內**，
+    故**登記不動**（已寫進本批 PR 描述）。
     """
     __name__ = "_SOURCE_BACKOFF"
 
@@ -243,8 +311,15 @@ class _BackoffRegistryProxy:
         _live = get_backoff_state()
         return {
             "name": "_SOURCE_BACKOFF",
+            # 2026-08-31 欄位契約(infra.cache.CACHE_INFO_REQUIRED_KEYS):
+            # entry 數的正式欄位名是 `size`;`currsize` 降為向後相容別名,
+            # 保留不刪(**有意識的更正,不是漏刪**;決策者:資料與計算組)。
+            # 理由見 infra/cache.py 的「cache_info() 欄位契約」段。
+            "size": len(_live),
             "currsize": len(_live),
             "ttl": "per-failure-kind",
+            # ⚠️ 本列**刻意不給** hits/misses/uncached_fail —— 退避狀態表不是
+            # 「快取命中」的概念,命中率**不適用**;填 0 會是假數字(§1)。
             "backing_off": [d["source"] for d in _live],
         }
 

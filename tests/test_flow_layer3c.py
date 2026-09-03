@@ -233,7 +233,9 @@ def test_coverage_sits_before_the_grade():
 def test_fx_cache_lives_in_l2_so_every_caller_can_reach_it():
     """**§8.2 + §2.1** —— 快取必須在 L2。
 
-    第 5 維會**改變分數本身**。`services/fund_batch.py` 是 L2，構不到 L3 helper；
+    第 5 維會**改變分數本身**。~~`services/fund_batch.py` 是 L2，構不到 L3 helper~~
+    （2026-08-28:該檔已整檔刪除；快取留在 L2 的理由**仍然成立** —— 其餘 L2 caller
+    同樣構不到 L3 helper，這條約束不因單一 caller 消失而改變）；
     若只有部分 caller 拿得到匯率資料，同一檔基金會在不同頁得到不同等第。
     """
     import ast
@@ -268,7 +270,11 @@ def test_fx_cache_lives_in_l2_so_every_caller_can_reach_it():
     "ui/tab_fund_grp_health.py",                 # 組合健診大表
     "ui/helpers/fund_grp_health/rotation.py",    # 輪動配對
     "ui/tab2_single_fund.py",                    # 個基深掘
-    "services/fund_batch.py",                    # 批次(L2 legacy)
+    # ⚠️ 2026-08-28 Phase 1.4:原本這裡還有一行 `"services/fund_batch.py"`(批次 L2 legacy)。
+    #   已刪除(**測試對象消失,不是為了讓 CI 綠**):該檔 production 0 caller,本輪整檔刪除,
+    #   沒有原始碼可以 read_text 了。⚠️ 這個 parametrize 是**用檔案路徑讀原始碼**,
+    #   不是 import —— 字面 import 掃描看不到它,往後刪檔前請一併 grep parametrize 清單。
+    #   **其餘 5 個 caller 一列未動**,「每個算等第的地方都要傳同一份匯率」這條守衛照舊生效。
     "scripts/weekly_switch_notify.py",           # NAS 週報
 ])
 def test_every_grade_caller_passes_fx(relpath):

@@ -59,6 +59,16 @@ SHADOW_FUND_NAV_CORR_THRESHOLD_RATIO: float = 0.85
 # 是另一種曝險維度:即使持股完全不同,若同受單一總經因子驅動,回撤時仍會齊跌)。
 # 原本 inline 於 portfolio_service.py::calc_correlation_matrix 與其 UI caller,收 SSOT。
 
+# ── 同質化分級(services/homogeneity.py,2026-08-31 客戶 Q2 拍板)─────────
+# 同質化比率 = 高相關警示對數(兩維度**聯集**)÷ 實際比對**成功**對數(聯集)。
+# 分母刻意用「成功對數」而非理論對數 N×(N−1)/2:缺資料的對不入分母,
+# 比率不被虛增也不被稀釋(§1 不造假)。
+# 分級:0 對 → 低(🟢);>0 且 ≤ MID_MAX → 中(🟡);> MID_MAX → 高(🔴)。
+# 20% 的直覺:「五對裡有一對互為影子就該警覺」(客戶 2026-08-31 Q2 拍板原文)。
+HOMOGENEITY_MID_MAX_RATIO: float = 0.20
+# 成功對數 < 此 → 不給等級,顯示 ⬜「樣本不足」,不硬判(客戶 Q2 拍板:< 3 對不硬判)。
+HOMOGENEITY_MIN_PAIRS: int = 3
+
 # ── 配息接近警戒(fund_service.py:279, fund_dividend_calculator.py:23)──
 NEAR_DIVIDEND_WARNING_PCT: float = 2.0
 # 配息年化率距離警戒線(年率 6%/8%)≤ 2pp → near zone,UI 標黃

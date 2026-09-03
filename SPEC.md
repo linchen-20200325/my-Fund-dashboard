@@ -33,7 +33,7 @@
 
 | 數據類別 | 具體指標 | FRED Series ID / API Endpoint | 抓取套件/函數 | 更新頻率 |
 | :--- | :--- | :--- | :--- | :--- |
-| **總經領先** | ISM 製造業 PMI | `NAPM` / `ISPMANPMI` | `fredapi` → `_fred()` | 月 |
+| **總經領先** | ISM 製造業 PMI | ~~`NAPM` / `ISPMANPMI`~~ → **FRED 已無 PMI series**(見表下註) | ~~`fredapi` → `_fred()`~~ → `repositories/macro/alternate.py::fetch_ism_pmi`(5 段備援) | 月 |
 | **總經領先** | 10Y-2Y 公債利差 | `DGS10` - `DGS2` | `fredapi` → `_fred()` | 日 |
 | **總經領先** | 10Y-3M 公債利差 | `DGS10` - `TB3MS` | `fredapi` → `_fred()` | 日 |
 | **總經領先** | HY 信用利差 OAS | `BAMLH0A0HYM2` | `fredapi` → `_fred()` | 日 |
@@ -52,6 +52,26 @@
 | **共同基金** | NAV / 配息 / 績效 / 持股 | MoneyDJ wb01/wb05/wb07 | `requests+bs4` → `fetch_url_with_retry()` | 日(NAV)/月(配息) |
 | **基金搜尋** | 境外基金代碼查詢 | TDCC openapi / FundClear | `requests` | 即時 |
 | **新聞事件** | 財經新聞 RSS | Reuters / Bloomberg / WSJ / Yahoo Finance RSS | `feedparser` → `fetch_market_news()` | 即時 |
+
+> ⚠️ **2026-09-01 事實更正：ISM PMI 那一列的 `NAPM` / `ISPMANPMI` 已從 production 拔除**
+> （**有意識的更正，不是漏刪** · 日期 **2026-09-01** · 決策者：**AI 總管**，依據已合併的 **#751**；
+> 客戶 2026-09-01 指令「已廢棄的資料源不得留存或發起查詢」）。
+> **舊表述在寫下當時是對的**：本表 v10.0 定稿時，`NAPM` 確實是 FRED 上的 ISM PMI series。
+> **被推翻的是它的前提** —— **ISM 於 2016-08 收回授權後那兩條 series 即停更**，而舊實作是
+> 「**先向 FRED 發請求、拿回資料再依時效丟棄**」，命中率恆為 0；客戶的指令禁止的是**發起查詢**，
+> 不只是禁止採用結果。#751 拔除六個取數／查詢點，`FRED_NAPM` 常數（0 caller 孤兒）同批刪除；
+> `FRED_ISM_PMI` 常數保留但 **production 0 consumer**，僅由一行沒有下游的跨檔 re-export 撐著，
+> 檔內已標「⛔ 2016-08 停更；勿用於 production 取數」。
+> **現行取數**：`repositories/macro/alternate.py::fetch_ism_pmi`，**5 段備援**（段號沿用歷史編號 3~7、刻意不重排）：
+> MacroMicro HTML → ISM World 官方月報 HTML → DBnomics JSON → Phil Fed 擴散指數轉 PMI 刻度（`is_proxy`）
+> → OECD US Business Confidence（概念替代）。全敗誠實回 `_err_pmi` + `value=None`，無 fillna、無吞例外。
+> 守衛：`tests/test_dead_fred_pmi_series_removed.py`。
+> ⛔ **只更正這一列的 series 與抓取函數，本表其餘各列、以及 §0 的八條鐵則一字未改。**
+> ⚠️ **同表另一處失真，本次未動、據實登記**：本表「抓取套件/函數」欄多列寫 `fredapi`，
+> 但 **`requirements.txt` 內查無 `fredapi`**（實測 `grep -in fredapi requirements.txt` 無輸出）——
+> FRED 取數實際走 `repositories/macro_repository.py::fetch_fred` → `infra.proxy.fetch_url`。
+> 本組**只更正被派工點名的 PMI 那一列**，其餘各列的 `fredapi` 字樣不在射程內，**登記回報總管**。
+> ⚠️ **本註為單組實測、未經第二組驗證**（`CLAUDE.md §-2` 規則 6）。
 
 ---
 
@@ -1846,7 +1866,7 @@ PMI_THRESHOLDS = {
 
 **建議優先順序**:HY_SPREAD(最少語意,最低風險)→ CPI → PMI
 
-**目前狀態**(v19.245 R13 復查):**proposal 已大幅落地** — `shared/macro_thresholds_v2.py` 已建立 5 SSOT(`HY_SPREAD_THRESHOLDS` / `CPI_YOY_THRESHOLDS` / `PMI_THRESHOLDS` / `FED_BS_THRESHOLDS` / `TW_PMI_THRESHOLDS`),13 consumer files 已接入(`v19.169` HY+CPI / `v19.178` CPI v2 進階 / `v19.179` PMI / `v19.184` M2+FedBS / `v19.245` HY inflection 收口)。剩餘 Tier 2/3 inline(`services/calibration/risk.py` synthetic data;`scripts/` calibration)為**模擬/校準資料,不影響 production 邏輯**,§-1 等實際 bug 觸發再加。
+**目前狀態**(v19.245 R13 復查):**proposal 已大幅落地** — `shared/macro_thresholds_v2.py` 已建立 5 SSOT(`HY_SPREAD_THRESHOLDS` / `CPI_YOY_THRESHOLDS` / `PMI_THRESHOLDS` / `FED_BS_THRESHOLDS` / `TW_PMI_THRESHOLDS`),13 consumer files 已接入(`v19.169` HY+CPI / `v19.178` CPI v2 進階 / `v19.179` PMI / `v19.184` M2+FedBS / `v19.245` HY inflection 收口)。剩餘 Tier 2/3 inline(~~`services/calibration/risk.py` synthetic data;~~`scripts/` calibration)為**模擬/校準資料,不影響 production 邏輯**,§-1 等實際 bug 觸發再加。（📌 **2026-08-28 Phase 1.4 事實更正**:`services/calibration/risk.py` 已因 production 0 caller 實體刪除,其 synthetic data inline 隨之消失。**本段「剩餘 Tier 2/3 不主動收」的結論未改**,只是清單少一項,`scripts/` calibration 仍在。）
 
 **§-1 對齊**:本 proposal 純文件,**不**自動觸發實作。user 明確指派某指標 → 才動工。
 

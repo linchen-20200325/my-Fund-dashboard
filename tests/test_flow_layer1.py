@@ -33,14 +33,48 @@ def _read(rel: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 1) 分頁名 SSOT — 7 個分頁全收
+# 1) 分頁名 SSOT — ~~7 個分頁全收~~ → 5 個分頁全收（2026-08-31 七→五，見下方註記）
 # ══════════════════════════════════════════════════════════════════════════
 class TestTabLabelCoversAllTabs:
     def test_all_seven_tabs_have_labels(self):
-        from ui.helpers.story_nav import _TAB_LABELS
-        assert set(_TAB_LABELS) == {
-            "macro", "health", "batch", "fund", "portfolio", "manage", "ref",
-        }, "分頁名 SSOT 沒有涵蓋全部 7 個頂層分頁"
+        """⚠️ **2026-08-31 由 WP-F 收斂：七 → 五。有意識的政策變更，不是漏改。**
+        （日期 2026-08-31；決策者：**客戶 2026-08-31 拍板的五分頁動線線框**
+        `docs/wireframes/fund-wireframe-final.html` §03）
+
+        **舊斷言**（原地保留、加刪除線，不刪）::
+
+            ~~assert set(_TAB_LABELS) == {~~
+            ~~    "macro", "health", "batch", "fund", "portfolio", "manage", "ref",~~
+            ~~}, "分頁名 SSOT 沒有涵蓋全部 7 個頂層分頁"~~
+
+        **舊斷言的理由仍然成立**：它守的是「**每一個頂層分頁的名字都必須在 SSOT 裡**，
+        不准有第二份寫死的字面值」—— 那是 2026-08-14 稽核在 sidebar 抓到三處死指路
+        之後立的規矩，今天一個字都沒有被推翻。
+
+        **被權衡掉的是那個「7」，不是它的原則**：七→五之後 `batch`／`fund` 併成
+        ③ 基金研究、`manage`／`ref` 併成 ⑤ 設定與診斷，它們**不再是頂層分頁**，
+        而是合併頁裡的分區。把它們留在 `_TAB_LABELS` 會讓 `tab_label()` 回傳
+        **分頁列上根本找不到的名字** —— 那是同一種病的第三次發作，而且這次連
+        SSOT 本身都會是錯的（比前兩次更難查，因為前兩次的修法「收進 SSOT」幫不上忙）。
+
+        **原則由誰接手（強度不減反增）**：
+        - 本條改鎖新的 5 個 key **與其順序**（順序即站號 ①~⑤）；
+        - 舊 4 個 key 由 `tests/test_story_nav.py::test_old_top_level_keys_now_fail_loud`
+          以「**必須 raise**」的形式繼續守著；
+        - 分區名另有 `_SECTION_LABELS` ＋ `test_section_labels_match_merged_pages` 漂移鎖。
+
+        ⚠️ **函式名刻意不改**（仍叫 `..._seven_tabs...`）：改名會讓
+        `git log -L` / blame 追不到這條規矩的沿革，而本 repo 的慣例是
+        **舊條文保留不刪**。名稱與現況的落差由本 docstring 承擔。
+        """
+        from ui.helpers.story_nav import _SECTION_LABELS, _TAB_LABELS
+
+        assert list(_TAB_LABELS) == [
+            "macro", "health", "research", "portfolio", "settings",
+        ], "分頁名 SSOT 的內容或**順序**變了 —— 順序即站號 ①②③④⑤，不是裝飾"
+        # 舊的頂層 key 必須是**降級成分區**，不是憑空消失
+        assert {"fund", "batch", "manage"} <= set(_SECTION_LABELS), (
+            "七→五之後 fund/batch/manage 應降級為頁內分區，而不是被刪掉")
 
     def test_app_no_longer_hardcodes_tab_names(self):
         """`app.py` 的 st.tabs 不得再出現寫死的分頁名字面值。
@@ -80,11 +114,36 @@ class TestFlowNav:
         assert ":gray[② 基金核心分析]" in md
 
     def test_shows_sibling_tabs_and_next_layer(self):
-        from ui.helpers.story_nav import flow_nav_markdown
+        """⚠️ **2026-08-31 由 WP-F 收斂。有意識的政策變更，不是漏改。**
+        （日期 2026-08-31；決策者：**客戶 2026-08-31 拍板的五分頁動線線框**）
+
+        **舊斷言**（原地保留、加刪除線，不刪）::
+
+            ~~assert "📦 批次分析" in md, "同層的其他分頁沒列出來"~~
+            ~~assert "🔍 個基深掘" not in md.split("\\n\\n")[-1], (~~
+            ~~    "『本層另有』不該把你正在看的這頁也列進去")~~
+
+        **舊斷言的理由仍然成立**：導覽的「本層另有」必須**真的列出同層的其他項目**，
+        而且**不可以把你正在看的這一項也列進去**（那是廢話）。這兩件事一個字都沒改，
+        本條下方仍然逐條驗。
+
+        **被權衡掉的只有那兩個寫死的中文字串**：七→五之後
+        「📦 批次分析」→ 分區名「📦 批次掃描」、「🔍 個基深掘」→「🔍 單檔深掘」。
+        **而且不該再寫死** —— 寫死一份就是「第二份標籤」，正是 `story_nav` 存在要防的東西
+        （本條原本自己就在犯這個毛病）。改為**從 SSOT 取值**：
+        `_SECTION_LABELS['batch']` / `['fund']`。這樣分區改名時本條會**跟著對**，
+        而不是變成下一顆需要有人手動同步的地雷。
+
+        ⚠️ 順帶記一筆：`flow_nav_markdown("fund")` 的 caller（`ui/tab2_single_fund.py`）
+        在七→五之後**一個字都沒改** —— `story_nav` 內部把分區 key 解析成所屬分頁／層。
+        本條同時是那條解析路徑的迴歸鎖。
+        """
+        from ui.helpers.story_nav import _SECTION_LABELS, flow_nav_markdown
+
         md = flow_nav_markdown("fund")
-        assert "📦 批次分析" in md, "同層的其他分頁沒列出來"
-        assert "🔍 個基深掘" not in md.split("\n\n")[-1], (
-            "『本層另有』不該把你正在看的這頁也列進去"
+        assert _SECTION_LABELS["batch"] in md, "同層的其他項目沒列出來"
+        assert _SECTION_LABELS["fund"] not in md.split("\n\n")[-1], (
+            "『本層另有』不該把你正在看的這一項也列進去"
         )
         assert "下一層" in md
 
@@ -102,11 +161,21 @@ class TestFlowNav:
     # 刻意移除 render_flow_nav("macro"),只留單行決策動線 render_story_nav。故 macro 不在
     # 本 flow_nav 接線清單;其餘 5 頁仍須接線(render_flow_nav 非死碼)。macro 的 story_nav
     # 接線由 test_tab_is_wired_to_story_nav 另守(見下)。
+    # ⚠️ 2026-09-02 D5 收斂（**有意識的政策變更，不是漏刪** · 決策者：客戶拍板線框
+    # `docs/wireframes/wireframe-fund-research.html`「決定 2 / D5」）：
+    # ~~("ui/tab2_single_fund.py", "fund"),~~ 與 ~~("ui/tab_batch_analysis.py", "batch"),~~
+    # 兩列已移出本表。**舊表述在它寫下的當天是對的** —— 當時「個基深掘」與「批次分析」
+    # 各自是頂層分頁，導覽本來就該由它們自己接線，而「寫好卻沒接出去 ＝ 沒交付」
+    # 這個理由**今天依然成立**（其餘三列一字未動，仍照舊守）。
+    # **被推翻的是它的前提**：七→五之後這兩者是 ③ 的兩個*模式*，
+    # `render_flow_nav("fund")` 與 `render_flow_nav("batch")` 的第一行**逐字相同**
+    # → 同一份資料畫兩次；且只有單檔多畫一條 `render_story_nav`
+    # → 切模式時頂部高度會跳動。導覽因此收到共用頂部畫一次。
+    # ⛔ **接線並沒有變少，是換了地方**：由 `test_merged_research_page_draws_the_nav_once`
+    #    接手（它比舊斷言更強 —— 舊的只驗「字串出現過」，新的連**畫幾次**都驗）。
     @pytest.mark.parametrize("relpath,key", [
-        ("ui/tab2_single_fund.py", "fund"),
         ("ui/tab3_portfolio.py", "portfolio"),
         ("ui/tab_fund_grp_health.py", "health"),
-        ("ui/tab_batch_analysis.py", "batch"),
         ("ui/tab_manage.py", "manage"),
     ])
     def test_tab_is_wired_to_flow_nav(self, relpath, key):
@@ -115,6 +184,36 @@ class TestFlowNav:
         assert _code_lines(_src, f'render_flow_nav("{key}")'), (
             f"{relpath} 沒有呼叫 render_flow_nav(\"{key}\")"
         )
+
+    def test_merged_research_page_draws_the_nav_once(self):
+        """③ 的導覽由合併頁的共用頂部畫，**而且只畫一次**（線框 D5）。
+
+        接手上面被移出的那兩列。**比舊斷言強**：舊的只問「字串有沒有出現」，
+        本條用 AST 數呼叫次數，並要求兩個模式**都不准**再自己畫一份
+        —— 「同一份資料畫兩次」正是 D5 要收掉的東西。
+        """
+        import ast
+
+        _top = None
+        for _n in ast.walk(ast.parse(_read("ui/tab_fund_research.py"))):
+            if isinstance(_n, ast.FunctionDef) and _n.name == "_render_shared_top":
+                _top = _n
+        assert _top is not None, "找不到 `_render_shared_top()` —— 錨點失效。"
+
+        def _n_calls(node, name):
+            return sum(1 for c in ast.walk(node) if isinstance(c, ast.Call)
+                       and (getattr(c.func, "id", None) == name
+                            or getattr(c.func, "attr", None) == name))
+
+        assert _n_calls(_top, "render_flow_nav") == 1, (
+            "共用頂部的 `render_flow_nav` 不是剛好一次 —— D5 要的是「只畫一次」。")
+        assert _n_calls(_top, "render_story_nav") == 1, (
+            "共用頂部的 `render_story_nav` 不是剛好一次。")
+        # ⚠️ 「兩個模式**不准**再自己畫一份」**刻意不在這裡重寫一次**
+        #    （`CLAUDE.md §2.1` SSOT：同一件事只准守一次）——
+        #    那一半由 `tests/test_ia_tab13_batch3.py::`
+        #    `test_modes_no_longer_draw_their_own_nav` 守（已突變驗證 M9）。
+        #    本條負責的是「**接線換到哪裡去了**」，那條負責「**舊的地方清乾淨了沒**」。
 
     def test_macro_kept_story_nav_after_flow_nav_removed(self):
         """v19.476:macro 移除 flow_nav 後,仍須保留單行決策動線 story_nav(否則等於全砍)。"""
@@ -242,9 +341,53 @@ def test_clear_cache_failure_leaves_a_trace(relpath, tag):
     """清快取失敗原本被 `pass` 吞掉，卻仍往下跑「已載入最新」的流程。
 
     使用者按了「強制重抓最新（清快取）」，拿到的其實是舊快取。
+
+    ⚠️ **2026-08-28 顏色批次二之一改寫，兩邊理由並陳（不是放寬）**：
+    - 舊寫法：`assert _code_lines(_src, "st.warning")` —— 全檔只要**任何地方**有一行
+      `st.warning` 就算過。它的理由今天仍然成立（那時 `st.warning` 是唯一的告知方式，
+      而且它擋住了「改回 `pass` 靜默吞掉」這個原病）。
+    - 被權衡掉的原因有兩個，而且第二個更重要：
+      (a) 客戶 2026-08-28 Q2 把「清快取失敗」這種**數字可能是錯的**失敗改走
+          `render_state.system_error()`（🔴），逐字釘住 `st.warning` 會把**正確的修法**
+          判成違規；
+      (b) 舊寫法**根本沒有檢查到正確的位置** —— `ui/tab1_macro.py` 之所以通過，是因為
+          該檔別處另有 `st.warning`（「市場相位資料缺失」等），與清快取這個 handler 無關。
+          **實測（不是推論）**：在 `origin/main`（461f811）上把清快取那段 `st.warning`
+          整段換成 `pass`，本測試 **2 passed** —— 原病完整復發而測試全綠。
+          （複現：`git worktree add <tmp> origin/main`，改該段為 `pass`，
+            跑 `pytest tests/test_flow_layer1.py::test_clear_cache_failure_leaves_a_trace`。）
+    - 新寫法改用 AST：找到**含這個 stderr tag 的那個 except handler**，要求它裡面有一個
+      對使用者可見的告知呼叫。**範圍變窄、強度變強**，不是放寬。
     """
+    import ast as _ast
+
     _src = _read(relpath)
     assert tag in _src, f"{relpath} 清快取失敗沒有 stderr 留痕"
-    assert _code_lines(_src, "st.warning"), (
-        f"{relpath} 清快取失敗沒有在畫面上告知使用者「這次不是最新」"
+
+    # 對使用者可見的「這次不是最新」告知：舊寫法（st.warning / st.error）與
+    # 現行寫法（render_state.system_error / friendly_error）都算數。
+    _REPORTERS = {"st.warning", "st.error", "system_error", "friendly_error"}
+
+    def _name(call: _ast.Call) -> str:
+        if isinstance(call.func, _ast.Attribute):
+            _v = call.func.value
+            while isinstance(_v, (_ast.Attribute, _ast.Subscript)):
+                _v = _v.value
+            _root = _v.id if isinstance(_v, _ast.Name) else None
+            return f"st.{call.func.attr}" if _root == "st" else call.func.attr
+        return call.func.id if isinstance(call.func, _ast.Name) else ""
+
+    _handlers = [h for h in _ast.walk(_ast.parse(_src))
+                 if isinstance(h, _ast.ExceptHandler)
+                 and tag in _ast.unparse(h)]
+    assert _handlers, (
+        f"{relpath} 找不到帶 {tag} 的 except handler —— stderr 留痕搬走了？"
     )
+    for _h in _handlers:
+        _reported = [_name(c) for c in _ast.walk(_h)
+                     if isinstance(c, _ast.Call) and _name(c) in _REPORTERS]
+        assert _reported, (
+            f"{relpath} 帶 {tag} 的 handler 裡沒有任何對使用者可見的告知 —— "
+            f"清快取失敗會靜默,使用者拿到舊快取卻以為是最新。"
+            f"可用的告知入口：{sorted(_REPORTERS)}"
+        )

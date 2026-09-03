@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from shared.data_quality import nav_series_currency as _series_ccy
+
 
 def _extract_point(fd: Any, code_hint: str | None = None) -> dict | None:
     """從 fund dict 抽 SSOT 的 (code, nav, date)。抽不到回 None(§1 不偽造)。"""
@@ -61,6 +63,17 @@ def _extract_points(fd: Any, code_hint: str | None = None) -> list[dict]:
     fund_name = str(fd.get("fund_name") or "")
     out: list[dict] = []
     series = fd.get("series")
+    # 2026-09-01 幣別(nav_history 第 7 欄)。⚠️ **只取「量測線」** ——
+    # 這條序列**自己宣告**的 `attrs["currency"]`,量不到就留 `""`(誠實的未知)。
+    # ⛔ **`fd["currency"]` 不得當 fallback,一次都不行**:那是「宣告線」,而它
+    #    分不出量測與猜測 —— 實測全 repo 有 7 處死預設(MoneyDJ ×2 / TCB / TDCC /
+    #    FundClear ×2 預設 USD、AllianzGI 預設 TWD),而
+    #    `fund_orchestration._correct_currency` 不只修不回、**還會覆蓋量到的正確值**
+    #    (名稱含「台灣」→ 蓋掉量到的 USD;選股池填錯 → 蓋掉量到的值)。
+    #    兩條線在寫入當下就會矛盾(實測 `fd['currency']='TWD'` vs
+    #    `series.attrs['currency']='USD'`)。nav_history **永不刪除** ——
+    #    寫錯就永遠改不掉,寧可留空(§1:不知道 ≠ TWD)。
+    _ccy = _series_ccy(series)
     try:
         if series is not None and len(series) > 0:
             for _idx, _val in series.items():
@@ -71,7 +84,7 @@ def _extract_points(fd: Any, code_hint: str | None = None) -> list[dict]:
                 date = str(_idx)[:10]
                 if nav > 0 and date:
                     out.append({"code": code, "nav": nav, "nav_date": date,
-                                "fund_name": fund_name})
+                                "fund_name": fund_name, "currency": _ccy})
     except Exception:
         out = []
     if out:
@@ -94,6 +107,8 @@ def record_batch_nav_points(pairs: list, source: str = "app") -> None:
 def _record(pairs: list, source: str) -> None:
     """共用:抽點 → session 去重 → L2 批次寫 → 非致命提示。"""
     import streamlit as st
+
+    from ui.helpers.render_state import system_error
 
     pts: list[dict] = []
     for code, fd in pairs:
@@ -126,7 +141,21 @@ def _record(pairs: list, source: str) -> None:
         if res.get("written"):
             st.caption(f"🗂️ NAV 累積:本次新存 {res['written']} 筆到 nav_history 分頁")
     except Exception as e:  # NavHistoryError 等 — 可見但非致命,不擋渲染
-        st.caption(f"⬜ NAV 累積寫入失敗(不影響分析):[{type(e).__name__}] {str(e)[:80]}")
+        # ⚠️ 對照上面那則：「累積**未啟用**（缺 secrets）」是真的「還沒設定」→
+        # 維持 ⬜ 灰字,一字未動。這裡是**寫入真的失敗**,而它的後果會延後發生：
+        # 使用者以為淨值在累積、其實沒有,幾週後才發現序列沒長（v19.362 ① 的原病）。
+        # 灰字會讓人以為「按一下就好」,按幾次都一樣 —— 故 🔴。
+        # ⚠️ 判斷（非事實）：本頁當下的數字全部正確,紅框指的是「未來的序列不可信」,
+        #    不是「上面這些數字不可信」。若客戶認為這裡該用 🟠,推翻本處即可。
+        # ⚠️ **已知未做（2026-08-28 稽核 A8 登記）**：上面「累積未啟用」那條有
+        #    `_nav_hist_disabled_warned` 的 session 去重,**這條紅框沒有** ——
+        #    持續寫入失敗時每次重繪都會再跳一個。相對 main **無回歸**（原本的
+        #    caption 也是每次跳）,但值得補。沒在本批做的理由：加 session 旗標是
+        #    **行為變更**（訊息從「每次都出現」變成「只出現一次」）,不是換顏色;
+        #    而且「只講一次」對一個會延後爆炸的失敗未必是對的取捨,該由客戶決定。
+        system_error("NAV 累積寫入失敗", e,
+                     hint="本次分析的數字不受影響;但這一筆**沒有存進 nav_history**,"
+                          "長期序列不會變長。詳見 Tab5 🗂️ NAV 歷史匯入。")
 
 
 __all__ = ["record_fund_nav_point", "record_batch_nav_points",

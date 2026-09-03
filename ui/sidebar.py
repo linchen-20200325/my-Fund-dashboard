@@ -205,6 +205,23 @@ def render_sidebar(*,
                 print(f"[sidebar/global_refresh] {type(_e_gr).__name__}: {_e_gr}",
                       file=_sys_gr.stderr)
                 _tb_gr.print_exc(file=_sys_gr.stderr)
+                # ⚠️ 2026-08-28 顏色批次二之一：**刻意不改色,不是漏改**。
+                # 下一行就是無條件的 `st.rerun()`。依 Streamlit 文件,`st.toast` 會跨
+                # rerun 存活,而 `st.error` 不會 —— 改成 system_error 等於把
+                # 「看得見的警告」換成「看不見的警告」,方向與客戶 Q2 相反。
+                # ⚠️ **未沙箱實測,據實標明**：上一句是讀 Streamlit 語意得到的,
+                #    本批沒有寫 AppTest 驗證 → **待驗事項**。若稽核實測發現 st.error
+                #    在這裡其實看得到,那這一處就該改色（改法與其他處相同）。
+                # 「except handler 內的渲染呼叫,其 try 之後同層緊接**無條件**
+                # st.rerun()」——本組 AST 掃到 3 處（量測日 2026-08-28）：本行、
+                # tab1_macro_longterm.py 的快取清除、tab_manage.py 的雲端同步;
+                # 後兩者**已改色但同樣看不見**,已就地登記待後批。
+                # ⚠️ **實際是「至少 4 處」,不是 3 處**（2026-08-28 稽核 A4 補）：
+                #    稽核組另掃到 `ui/tab1_macro_radar.py:201` —— 路徑是
+                #    `_load_liquidity_factors()` 內 `st.error` → 函式返回 → `:210 st.rerun()`,
+                #    **隔了一層函式呼叫**,正好命中本組自陳的掃描盲點（只認同層緊接的
+                #    下一個 statement）。那處不是本批造成的,本批不改色。
+                # ⚠️ 所以「N 處」一律讀作**下界**,不是窮舉（§-2 規則 6）。
                 st.toast(f"⚠️ 全域刷新失敗：{type(_e_gr).__name__}: {str(_e_gr)[:80]}",
                          icon="⚠️")
             st.rerun()

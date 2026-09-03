@@ -310,8 +310,15 @@ def test_main_targets_next_month(monkeypatch):
         return _orig(funds, year, month, **kw)
     monkeypatch.setattr(DC, "build_month_calendar", _spy)
 
+    # ⚠️ v19.538:本測原本吃**真實今天**,而 v19.538 起「未指定目標月」分兩條路
+    # (28 號準時 → 下個月;1~3 號 → 視為上月那一跑遲到 → 本月,見 `_LATE_RUN_GRACE_DAYS`)。
+    # 吃真實日期等於讓這條測試每月 1~3 號自己翻面 —— 本測要驗的是**準時那一條**,
+    # 故把「現在」凍結在當月 28 號(月份沿用真實當月,fixture 的配息史錨定不受影響)。
+    _real = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
+    _now = _real.replace(day=28, hour=8, minute=23, second=0, microsecond=0)
+    monkeypatch.setattr(M, "_now_tw", lambda: _now)
+
     assert M.main(["--dry-run"]) == 0
-    _now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
     assert _cap["ym"] != (_now.year, _now.month)          # 不是本月
     assert _cap["ym"][1] == (_now.month % 12) + 1         # 月份=下月(獨立算式,非沿用程式判斷)
     assert _cap["ref"] == (_now.year, _now.month)         # 陳舊度 ref = 本月(現在)
