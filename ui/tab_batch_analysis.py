@@ -22,7 +22,10 @@ from ui.helpers.render_state import system_error
 # 2026-08-31 WP-F：指路文案的分頁名改吃 `story_nav` SSOT。
 # 舊寫法把**現行**分頁名手抄一份，理由（讓使用者知道去哪）仍成立；
 # 被權衡掉的是「第二份標籤」本身 —— 本 repo 分頁改名漏改已發作兩次。
-from ui.helpers.story_nav import tab_label as _tab_label
+from ui.helpers.story_nav import (
+    section_label as _section_label_ba,
+    tab_label as _tab_label,
+)
 # ③ 基金研究合併頁（線框 §03）共用頂部的所有權旗標。
 # ~~預設全空 → 本檔行為與合併前完全相同。~~
 # ⚠️ 2026-08-31 WP-F 接線後就地更正（**有意識的更正，不是漏刪** · 決策者：AI 總管）：
@@ -274,7 +277,9 @@ def _build_df(codes: list[str], rows: dict) -> pd.DataFrame:
 
 def render_batch_analysis_tab() -> None:
     # 稽核 H1：H1 原寫死「批次基金分析」，分頁列是「📦 批次分析」—— 同頁兩個名字。
-    from ui.helpers.story_nav import render_flow_nav, section_label as _section_label_tb
+    # 2026-09-02 D5：`render_flow_nav` **已移到合併頁的共用頂部**
+    # （`ui/tab_fund_research.py::_render_shared_top()`），本檔不再 import 它。
+    from ui.helpers.story_nav import section_label as _section_label_tb
     # 合併頁（③ 基金研究）已在共用頂部畫過頁面大標時，這裡不再畫第二個 `##`。
     # 只讓掉標題那一行 —— flow_nav 與下方那段 caption（含「400 檔約 30~40 分鐘」
     # 這個使用者據以決定要不要按下去的預期說明）一律照舊，不得跟著消失。
@@ -288,7 +293,14 @@ def render_batch_analysis_tab() -> None:
         # 哪天有人讓這個分支活過來，第一件事就是 KeyError。
         # 改吃 `section_label('batch')`（分區名 SSOT，回「📦 批次掃描」）。
         st.markdown(f"## {_section_label_tb('batch')}")
-    render_flow_nav("batch")   # 巨觀:第 ② 層 基金核心分析
+    # ⚠️ 2026-09-02 D5 收斂（**有意識的政策變更，不是漏刪** · 決策者：客戶拍板線框
+    # `docs/wireframes/wireframe-fund-research.html`「決定 2 / D5」）：
+    # 這裡原本畫 ~~`render_flow_nav("batch")`~~。**舊寫法在它寫下的當天是對的** ——
+    # 當時「批次分析」是獨立頂層分頁。**被推翻的是它的前提**：七→五之後它是 ③ 的
+    # 一個*模式*，而 `render_flow_nav("batch")` 與 `render_flow_nav("fund")` 的
+    # 第一行**逐字相同** → 切模式時同一份資料畫兩次。導覽現由共用頂部畫一次；
+    # 下面這段 caption（含「400 檔約 30~40 分鐘」這個使用者據以決定要不要按下去的
+    # 預期說明）是**本模式自己的功能說明**，照舊留著。
     st.caption(
         f"上傳或貼上基金代號清單 → 每檔跑**與「{_tab_label('health')}」同一張大表**(評分/報酬/風險/配息/"
         "σ位階/買賣點,以 100 萬 TWD 為基準)→ 下載 CSV。每檔抓 NAV/配息/績效"
@@ -552,6 +564,16 @@ def _render_existing_results() -> None:
             "- **報酬**:近一年含息(優先抄 MoneyDJ 官方績效表)/ 3 年·5 年平均每年 / "
             "全期實際與年化;**風險**:Sharpe / Sortino / Calmar / 最大跌幅 / 離高點多遠;"
             "**買賣點**:分批買 3 段~賣 3 段 + 現價落在哪一段。\n"
+            # D4（客戶拍板線框 `docs/wireframes/wireframe-fund-research.html`「D4」）：
+            # 本表與單檔深掘是**同一份 metrics、不同投影** —— 批次只投影 4 段。
+            # 合併成同一頁之後，使用者切過去會看到「單檔 6 段、批次 4 段」，
+            # 很容易讀成「兩邊算法不一樣」。線框處置：**在這裡寫一句，不改算法、不加欄。**
+            # ⚠️ 上一行「分批買 3 段~賣 3 段」講的是**買賣線本身有幾段**（6 段），
+            # 不是本表列了幾欄 —— 兩句話不衝突，下面這句補的正是那個落差。
+            f"- ⚠️ **本表只列 −3σ／−1σ／+1σ／+3σ 四段**(買 3／買 1／賣 1／賣 3);"
+            f"**−2σ／+2σ 要看「{_section_label_ba('fund')}」**。兩邊是"
+            "**同一份計算的不同投影**(同一組 metrics、同一個產生端),"
+            "**不是兩套算法**。\n"
             f"- **吃本金燈號 / 換標的建議 /  3-3-3** 的判定與「{_tab_label('health')}」用同一套算法,不會兩處打架。\n"
             "- **上/下檔捕捉% + 操盤評分**:和大盤比(台幣計價比台股、**美元計價比 S&P 500**),"
             "把月份拆成大盤漲的月和跌的月分開算;"

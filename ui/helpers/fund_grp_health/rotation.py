@@ -130,8 +130,12 @@ def _render_pairs_body(rows: list, _pairs: list, _sell: float, _buy: float, *,
     if not _pairs:
         # 誠實揭露「為何無配對」+ 每檔目前基期,讓使用者知道現況、可調滑桿(§1)
         from services.rotation import classify_base
-        _lbl = {"high": "🔴 高基期(可賣)", "low": "🟢 低基期(可買)",
-                "mid": "⚪ 中性", "unknown": "⬜ σ 資料不足"}
+        # 2026-09-02 T29:用字走 SSOT。`BASE_LABELS_ROTATION` 是由 `BASE_LABELS`
+        # **衍生**出來的(加「可賣 / 可買」行動提示、把「資料不足」指明成「σ 資料不足」),
+        # 不是第四份手抄 —— 改 `BASE_LABELS` 這裡會跟著動。
+        from ui.helpers.fund_grp_health._utils import (
+            BASE_LABELS_ROTATION as _lbl,
+        )
         _status = [
             f"{r.get('name') or r.get('code')} {r.get('σ rank') or '—'}"
             f"({_lbl.get(classify_base(r.get('σ rank'), _sell, _buy), '?')})"

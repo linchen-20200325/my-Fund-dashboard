@@ -58,6 +58,20 @@ def _pick_comparison_basis(rows: "list[dict]") -> str:
 _SHARPE_SRC_COL = "Sharpe 來源"
 
 
+# ── 健診大表標題 SSOT(2026-09-02 T19)────────────────────────────────────────
+# 這一頁**只有一張表**,但原本印了**兩個 h4 標題**在它上面:
+#   `#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）`(由 `_render_health_3tables` 印)
+#   `#### 健診總表（🧮 = 自行換算欄位）`              (由 `_render_health_table` 印)
+# 兩句在講同一張 dataframe,中間還隔著新鮮度 banner 與 KPI —— 使用者會以為底下有兩張表,
+# 捲到最後只找得到一張。合併成一句,兩邊原本各自帶的資訊(合併去重複 / 🧮 自行換算 /
+# 橫向可滾動)一項不減。
+# 走常數而不是各自寫字面值:全失敗 early-return 也要印同一個標題(D2),
+# 兩處手抄正是這次要修的病。
+_BIG_TABLE_HEADING = (
+    "#### 📊 健診大表（①②③ 已去重複合併成一張;🧮 = 自行換算欄位;橫向可滾動）"
+)
+
+
 def _fold_uniform_sharpe_source(df):
     """本批「Sharpe 來源」全同 → 從 df 剔除該欄,回 `(df, 唯一來源標籤)`;否則 `(df, None)`。
 
@@ -181,21 +195,35 @@ def render_fund_grp_health_tab() -> None:
             st.session_state["fund_grp_health_codes"] = "\n".join(_pf_codes)
             st.rerun()
 
-    codes_raw = st.text_area(
-        f"基金代號（每行一檔，最多 {_MAX_CODES} 檔；例：ACCP138）",
-        key="fund_grp_health_codes",
-        height=130,
-        placeholder="ACCP138\nACUSI23\n...",
-    )
-    # v19.59：移除「原幣別 fallback」selectbox — 幣別嚴格走 MoneyDJ wb05「計價幣別」欄抓網路。
-    # MoneyDJ 抓不到 → 該檔回 error「幣別未知」（不再用人工選的 fallback 矇混）。
-    principal_twd = st.number_input(
-        "本金（TWD）",
-        min_value=10_000.0, max_value=10_000_000.0,
-        value=1_000_000.0, step=100_000.0,
-        key="fund_grp_health_principal",
-        help="所有基金都假設投入這個金額，才能把「每月配息」「累積配息」放在同一個尺度上比較。",
-    )
+    # ── 診斷條件表單(2026-09-02 T1;拍板線框 Tab 02「Form ─ 診斷條件」)──────────
+    # 為什麼一定要包 `st.form`:本頁**每一次 rerun 都會重抓淨值、並打一次 Google Sheets**
+    # (`_run_batch_health` → MoneyDJ/FundClear 逐檔取數;`record_batch_nav_points` →
+    # nav_history 分頁 append)。沒有 form 時,使用者在「本金」上按一下上下鍵、
+    # 或在代號框改一個字,Streamlit 就整頁重跑一輪 —— 對外部來源等於一次白打的轟炸
+    # (§02「失敗時退避,不連續轟炸來源」的同一個成本面)。
+    # 包進 form 之後,widget 的值只在**按下送出鈕**時才提交一次。
+    #
+    # ⚠️ 「🔗 從我的組合帶入」**刻意留在 form 外**:它會寫 session_state 後 `st.rerun()`,
+    #    而 `st.button` 在 form 內是被 Streamlit 明文禁止的(只能有 form_submit_button)。
+    #    它本來就不是「診斷條件」,是一個獨立的帶入動作。
+    from ui.helpers.ia import applied_form as _applied_form  # noqa: PLC0415
+    with _applied_form("fund_grp_health_form",
+                       submit_label="🩺 開始健診") as _health_gate:
+        codes_raw = st.text_area(
+            f"基金代號（每行一檔，最多 {_MAX_CODES} 檔；例：ACCP138）",
+            key="fund_grp_health_codes",
+            height=130,
+            placeholder="ACCP138\nACUSI23\n...",
+        )
+        # v19.59：移除「原幣別 fallback」selectbox — 幣別嚴格走 MoneyDJ wb05「計價幣別」欄抓網路。
+        # MoneyDJ 抓不到 → 該檔回 error「幣別未知」（不再用人工選的 fallback 矇混）。
+        principal_twd = st.number_input(
+            "本金（TWD）",
+            min_value=10_000.0, max_value=10_000_000.0,
+            value=1_000_000.0, step=100_000.0,
+            key="fund_grp_health_principal",
+            help="所有基金都假設投入這個金額，才能把「每月配息」「累積配息」放在同一個尺度上比較。",
+        )
 
     # ── 稽核 C2（2026-08-14）：拆掉「吃本金閾值 %」滑桿 ────────────────────────
     # 它的 help 寫著「配息率 − 含息報酬率 > 此值 → 標 🔴 吃本金」，但畫面上那個 🔴
@@ -217,7 +245,10 @@ def render_fund_grp_health_tab() -> None:
     # 原 `if not st.button(...): return` 的致命 bug(user 2026-08-21 回報「壓一下就回到這」):
     # 出結果後,一按任何逐檔按鈕(三率穿透 / 個股新聞)就觸發 rerun → 開始健診鈕回 False →
     # return → 整張健診結果塌回輸入表單。改存旗標:點過一次就持續渲染,逐檔按鈕不再弄丟結果。
-    if st.button("🩺 開始健診", key="fund_grp_health_btn"):
+    # 2026-09-02 T1:原 `st.button("🩺 開始健診", key="fund_grp_health_btn")` 已改為上方
+    # `applied_form()` 的送出鈕(`st.button` 不得放在 form 內)。旗標語意不變:
+    # gate 只在「按下送出的那一輪」為 True,長期狀態仍由 session_state 旗標持有。
+    if _health_gate:
         st.session_state["_fund_grp_health_ran"] = True
     if not st.session_state.get("_fund_grp_health_ran"):
         return
@@ -556,11 +587,26 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
     # 不再需要三欄排版。
     _all_ccy = sorted({it["currency"] for it in items if it["currency"]})
     _all_cat = sorted({it["category"] for it in items if it["category"]})
-    _sel_ccy = st.multiselect("幣別（外幣/台幣）", _all_ccy, default=_all_ccy, key="lb_ccy")
-    _sel_cat = st.multiselect("基金類別", _all_cat, default=_all_cat, key="lb_cat")
-    _cc1, _cc2 = st.columns(2)
-    _only_eat = _cc1.checkbox("只留不吃本金（綠/黃燈）", value=True, key="lb_noeat")
-    _only_low = _cc2.checkbox("只留低基期", value=True, key="lb_onlylow")
+    # ── 篩選條件包進 form(2026-09-02 T3;拍板線框 Rule 02)───────────────────
+    # 這四個控制項原本是**裸 widget**:動一個就觸發整頁 rerun,而本頁的 rerun 會把
+    # `_run_batch_health()`(逐檔 MoneyDJ / FundClear 取數)整輪重跑一次。四個控制項
+    # 各撥一下 = 四輪。包進 form 之後,值只在按「套用」時提交一次。
+    # ⚠️ 篩選本身(`screen_funds`)是 L2 純函式、很便宜 —— 這裡省的**不是它**,
+    #    是它上游那一整輪頁面重跑。
+    # ⚠️ 這裡**刻意不接 gate 的回傳值**,與上方主表單不同,理由據實寫下來:
+    #    `gated_form` 的 docstring 提醒「回傳值沒被拿去 gate 運算 = 假 form」——
+    #    那條提醒針對的是**貴的重運算**。本區被 gate 的候選只有 `screen_funds`
+    #    (L2 純函式、輸入已在記憶體、零 I/O)。若拿 gate 去擋它,使用者第一次看到的
+    #    會是一張空區塊、非得先按一次「套用」才有東西 —— 那是把便宜的東西擋掉、
+    #    換來一個多餘的點擊。真正貴的那一輪(整頁 rerun → `_run_batch_health`)
+    #    **已經被 form 本身擋住了**(form 內的 widget 互動不觸發 rerun)。
+    from ui.helpers.ia import applied_form as _applied_form  # noqa: PLC0415
+    with _applied_form("lb_screener_filters"):
+        _sel_ccy = st.multiselect("幣別（外幣/台幣）", _all_ccy, default=_all_ccy, key="lb_ccy")
+        _sel_cat = st.multiselect("基金類別", _all_cat, default=_all_cat, key="lb_cat")
+        _cc1, _cc2 = st.columns(2)
+        _only_eat = _cc1.checkbox("只留不吃本金（綠/黃燈）", value=True, key="lb_noeat")
+        _only_low = _cc2.checkbox("只留低基期", value=True, key="lb_onlylow")
 
     # 2) L2 純函式篩選（多選清空 → None = 不篩該維度，避免空表困惑）
     #    lookback / 門檻一律走 L2 預設 = SSOT，UI 不再持有第二組數字（§3.3）。
@@ -578,9 +624,10 @@ def _render_low_base_screener(ok_rows: list[dict]) -> None:
     import pandas as pd
     from streamlit import column_config as _cc
     _eat_map = {True: "🔴 吃本金", False: "🟢 不吃", None: "❓ 未知"}
-    # 與 ui/helpers/fund_grp_health/unified.py 的「基期」欄同一組標籤語意
-    _base_map = {"low": "🟢 低基期", "mid": "⚪ 中性",
-                 "high": "🔴 高基期", "unknown": "⬜ 資料不足"}
+    # 與健診大表的「基期」欄**同一份**標籤(2026-09-02 T29 起走 SSOT,不再手抄)。
+    # 下方 caption 宣稱「本區標 🟢 低基期的,大表『基期』欄一定也是 🟢」——
+    # 那句話的前提就是這兩處用同一組字;靠手抄的話,改一邊就會讓那句宣稱變成假的。
+    from ui.helpers.fund_grp_health._utils import BASE_LABELS as _base_map
     _df = pd.DataFrame([{
         "代號": r["code"], "基金名": r["name"],
         "類別": r["category"] or "—", "幣別": r["currency"] or "—",
@@ -823,6 +870,67 @@ def _core_satellite_verdict_caption(csa: dict,
     return _out
 
 
+def _render_health_summary(rows: list[dict]) -> None:
+    """5 格結論摘要（檢查檔數 / 健康 / 警示 / 吃本金 / 累積配息）＋ 前置的失敗摘要。
+
+    2026-09-02 T20:本區塊原本住在 `_render_health_table` 裡,也就是**排在**
+    核心/衛星分布、選基金、淘汰候選紅區、持倉互斥避險**之後**才出現 ——
+    使用者要先捲過四個區塊才看得到「這次總共幾檔、幾檔在吃本金」。
+    拍板線框 Tab 02 的順序是「Form → 組合健康總分 + 警示卡 → 逐檔體檢表」,
+    也就是**結論先講**。抽成獨立函式後由 `_render_health_3tables` 在最前面呼叫。
+
+    ⚠️ **失敗摘要與 5 格是一起搬的,不能只搬其中一半。**
+    2026-08-05 稽核「必修 4」把「❌ 有 N 檔抓取失敗」刻意排在 KPI **正上方**,
+    理由是「檢查檔數」只算成功數 —— 使用者看到「1」時必須當場知道另一檔怎麼了。
+    只把 5 格搬到最上面、失敗摘要留在原地,等於把那個修正打回去。
+    """
+    ok_rows = [r for r in rows if r.get("ok")]
+    err_rows = [r for r in rows if not r.get("ok")]
+    if ok_rows:
+        # v19.148:SSOT 統一改用 老師 1Y 標準(「吃本金燈號 (1Y · )」),
+        # 與下方「健診摘要表」同源,不再與全期自算 verdict 不一致。
+        _mk_col = "吃本金燈號 (1Y · )"
+        n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get(_mk_col, "")))
+        n_warn = sum(1 for r in ok_rows if ("警示" in str(r.get(_mk_col, ""))
+                                            or "邊緣" in str(r.get(_mk_col, ""))))
+        n_good = sum(1 for r in ok_rows if "健康" in str(r.get(_mk_col, "")))
+        total_twd = sum(float(r.get("累積 TWD 配息 🧮", 0) or 0) for r in ok_rows)
+
+        # 2026-08-05 稽核 🟡 必修 4:失敗摘要前置。
+        # 原本「❌ 抓取失敗」區在本行之後 **226 行**(中間隔淘汰候選 / 48+ 欄健診大表 /
+        # PK / 換標決策 / 景氣適配 / 相關性矩陣 / 比較圖 / 逐檔配息明細),而 KPI
+        # 「檢查檔數」只算成功數 —— 輸入 2 檔只成功 1 檔時,畫面顯示「1」且完全不提
+        # 另一檔怎麼了,要捲很久才看得到原因(§1 缺料必須當場講清楚)。
+        # 下方「#### ❌ 抓取失敗」明細區保留不動,此處只做「先講一句」。
+        if err_rows:
+            st.error(
+                f"❌ 有 {len(err_rows)} / {len(ok_rows) + len(err_rows)} 檔抓取失敗，"
+                f"**未納入下方所有統計與表格**：\n\n"
+                + "\n".join(
+                    f"- **{r.get('code', '?')}**：{r.get('error', '?')}"
+                    for r in err_rows
+                )
+            )
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        # delta 顯示本次少掉幾檔,讓「1」不再像是全部成功。
+        # ⚠️ 這裡**刻意使用 Streamlit 預設的 normal 配色**(不傳 delta_color):
+        #   normal(預設) → 負值紅、正值綠
+        #   反轉模式     → 負值**綠**、正值紅   ← 那是給「成本下降是好事」用的
+        # 抓取失敗是壞消息,必須是紅色。前一版誤用反轉模式,把「少掉一檔」渲染成
+        # 綠色好消息,方向與本修正目的完全相反。
+        # 📌 本註解**刻意不寫出反轉模式的參數字面值** ——
+        #    `tests/test_grp_health_failure_summary.py::test_failed_delta_is_not_rendered_green`
+        #    對整檔做子字串掃描,註解裡出現該字串等於自己讓自己紅
+        #    (同 PROCESS.md §4「測試把錯誤制度化」的鄰近陷阱)。
+        k1.metric("檢查檔數", len(ok_rows),
+                  delta=(f"-{len(err_rows)}" if err_rows else None))
+        k2.metric("🟢 健康", n_good)
+        k3.metric("🟡 警示", n_warn)
+        k4.metric("🔴 吃本金", n_eat)
+        k5.metric("累積 TWD 配息 🧮", f"{total_twd:,.0f}")
+
+
 def _render_health_3tables(rows: list[dict],
                            funds_extra: list | None = None,
                            show_screener: bool = False,
@@ -883,15 +991,14 @@ def _render_health_3tables(rows: list[dict],
         # ⚠️ 下面這份清單是**量測值,量測日 2026-08-28,會漂移**(§8.2.A.0 規則 4)。
         # 重新產生(照抄可跑):
         #   $ python3 -c "import ast,pathlib;s=pathlib.Path('ui/tab_fund_grp_health.py').read_text();t=ast.parse(s);f=[n for n in ast.walk(t) if isinstance(n,ast.FunctionDef) and n.name in ('_render_health_3tables','_render_health_table')];print([ (c.lineno, ast.unparse(c.func), ast.unparse(c.args[0])[:40] if c.args else '') for n in f for c in ast.walk(n) if isinstance(c,ast.Call) and (ast.unparse(c.func) in ('st.markdown','st.subheader') and c.args and '###' in ast.unparse(c.args[0]) or ast.unparse(c.func).startswith(('render_','_render_')))])"
-        st.markdown("#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）")
+        st.markdown(_BIG_TABLE_HEADING)
         _gone = ["🧭 核心 / 衛星資產屬性分布"]
         if show_screener:
             _gone.append("🎯 選基金（低基期進場點）")
         _gone += [
             "🔴 淘汰候選紅區",
-            "📊 健診大表 / 健診總表**的表身**（含 4D Grade、σ 位階、買賣點）"
-            "——「📊 健診大表」的標題上面還印著，但底下沒有表；"
-            "「健診總表」連標題都不會出現",
+            "📊 健診大表**的表身**（含 4D Grade、σ 位階、買賣點）"
+            "——標題上面還印著，但底下沒有表",
             "🩺 基金體檢 PK", "🔀 換標決策", "🧭 景氣位階適配",
             "📈 多基金績效比較圖", "📋 逐檔配息明細（含「持有 meta」與「配息事件」兩張表）",
             "5 格 KPI 摘要（檢查檔數 / 健康 / 警示 / 吃本金 / 累積配息）",
@@ -913,6 +1020,12 @@ def _render_health_3tables(rows: list[dict],
         )
         _render_health_table(rows, funds_extra=funds_extra)
         return
+
+    # ── 5 格結論摘要(＋前置失敗摘要)── 2026-09-02 T20:結論先講 ──────────────
+    # 拍板線框 Tab 02 的順序是「Form → 總分/警示 → 逐檔體檢表」。原本這一塊住在
+    # `_render_health_table` 內,要捲過核心/衛星、選基金、淘汰紅區、持倉互斥四個區塊
+    # 才看得到。搬上來之後它是這一頁 ok 路徑的**第一個**輸出。
+    _render_health_summary(rows)
 
     # v19.330:① 健康分析 rows 提前建(核心/衛星 label 來源)—— 供「配置檢查」+ ① 表共用,不重算。
     # Layer 3-C:健康度第 5 維(匯率風險)需要匯率資料。**全站同一份**(L2 fetch-once),
@@ -1025,9 +1138,9 @@ def _render_health_3tables(rows: list[dict],
     _div_cfg = dividend_column_config()
 
     # ── 📊 健診大表(①②③ + σ/風險/去重複合併成一張)── v19.411 ──
-    st.markdown("#### 📊 健診大表（①②③ 已去重複合併成一張;橫向可滾動）")
-    st.caption("原「① 健康分析 / ② 配息相關 / ③ 實際購買結果」三表已合併去重複。"
-               "評分(4D Grade)/ 每月配息 / σ 位階 / 買賣點皆在此一張表內。")
+    # 2026-09-02 T19:標題與說明**不在這裡印** —— 它們已合併成單一標題,由
+    # `_render_health_table` 在**緊貼 dataframe 的位置**印出(見 `_BIG_TABLE_HEADING`)。
+    # 原本印在這裡的話,標題與表身中間會隔著新鮮度 banner、失敗摘要、KPI 與體檢 PK。
     # ①② by-code 資料 + σ/風險/,全部傳給 _render_health_table 併成一張大表。
     _health_by_code = {str(r.get("code")): r for r in _health_rows if r.get("code")}
     _div_by_code = {str(r.get("code")): {k: v for k, v in r.items() if not str(k).startswith("_")}
@@ -1046,7 +1159,19 @@ def _render_health_3tables(rows: list[dict],
             _extra_by_code = {}
             system_error("σ 位階 / 風險 / 買賣點 / 捕捉率 / 換標欄整組計算失敗", _e_extra,
                          hint="本次健診大表不含這幾欄 —— 是算不出來,不是這些基金沒有資料。")
-    _render_health_table(rows, funds_extra=None,
+    # ⚠️ funds_extra **必須透傳**(2026-09-02 T4)。原本這裡寫死 `funds_extra=None`,
+    # 而 `_render_health_table` 內「🩺 基金體檢 PK + 4 大健診卡」整段長在
+    # `if funds_extra:` 裡面 → **production 路徑恆不觸發,該區塊從來沒有畫出來過**。
+    # 另一個呼叫點(全失敗 early-return)雖然有傳 funds_extra,但那條路 `ok_rows` 為空、
+    # 走不到 `if ok_rows:` 區塊 —— 兩條路加起來就是「這個功能對使用者不存在」。
+    # 而畫面文案(全失敗時的 `_gone` 清單列著「🩺 基金體檢 PK」)、本檔上方註解
+    # (「v19.189：基金體檢 PK + 4 大健診卡已上移至健診總表之前」)、以及拍板線框
+    # 都說它在這裡 —— **三處都在描述一個不存在的畫面**。
+    # 舊守衛 `tests/test_grp_health_checkup_order.py` 用的是子字串比對
+    # (`"_render_health_table(rows, funds_extra=" in src`),而 `funds_extra=None`
+    # **正好命中那個子字串** → 守衛全綠、功能全無。新的可達性守衛見
+    # `tests/test_grp_health_checkup_reachable.py`(實跑本函式、看真正收到的引數)。
+    _render_health_table(rows, funds_extra=funds_extra,
                          health_by_code=_health_by_code,
                          div_by_code=_div_by_code,
                          extra_by_code=_extra_by_code,
@@ -1069,49 +1194,6 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         # v19.61 E1：MoneyDJ 資料新鮮度 banner（NAV 日期 / 抓取於 / 延遲天數 / 燈號）
         # 鏡像 Stock v18.201 D2 「FinMind last_update」設計，但 Fund 端用 banner 而非 hover
         _render_mj_freshness_banner(ok_rows)
-
-        # v19.148:SSOT 統一改用 老師 1Y 標準(「吃本金燈號 (1Y · )」),
-        # 與下方「健診摘要表」同源,不再與全期自算 verdict 不一致。
-        _mk_col = "吃本金燈號 (1Y · )"
-        n_eat = sum(1 for r in ok_rows if "吃本金" in str(r.get(_mk_col, "")))
-        n_warn = sum(1 for r in ok_rows if ("警示" in str(r.get(_mk_col, ""))
-                                            or "邊緣" in str(r.get(_mk_col, ""))))
-        n_good = sum(1 for r in ok_rows if "健康" in str(r.get(_mk_col, "")))
-        total_twd = sum(float(r.get("累積 TWD 配息 🧮", 0) or 0) for r in ok_rows)
-
-        # 2026-08-05 稽核 🟡 必修 4:失敗摘要前置。
-        # 原本「❌ 抓取失敗」區在本行之後 **226 行**(中間隔淘汰候選 / 48+ 欄健診大表 /
-        # PK / 換標決策 / 景氣適配 / 相關性矩陣 / 比較圖 / 逐檔配息明細),而 KPI
-        # 「檢查檔數」只算成功數 —— 輸入 2 檔只成功 1 檔時,畫面顯示「1」且完全不提
-        # 另一檔怎麼了,要捲很久才看得到原因(§1 缺料必須當場講清楚)。
-        # 下方「#### ❌ 抓取失敗」明細區保留不動,此處只做「先講一句」。
-        if err_rows:
-            st.error(
-                f"❌ 有 {len(err_rows)} / {len(ok_rows) + len(err_rows)} 檔抓取失敗，"
-                f"**未納入下方所有統計與表格**：\n\n"
-                + "\n".join(
-                    f"- **{r.get('code', '?')}**：{r.get('error', '?')}"
-                    for r in err_rows
-                )
-            )
-
-        k1, k2, k3, k4, k5 = st.columns(5)
-        # delta 顯示本次少掉幾檔,讓「1」不再像是全部成功。
-        # ⚠️ 這裡**刻意使用 Streamlit 預設的 normal 配色**(不傳 delta_color):
-        #   normal(預設) → 負值紅、正值綠
-        #   反轉模式     → 負值**綠**、正值紅   ← 那是給「成本下降是好事」用的
-        # 抓取失敗是壞消息,必須是紅色。前一版誤用反轉模式,把「少掉一檔」渲染成
-        # 綠色好消息,方向與本修正目的完全相反。
-        # 📌 本註解**刻意不寫出反轉模式的參數字面值** ——
-        #    `tests/test_grp_health_failure_summary.py::test_failed_delta_is_not_rendered_green`
-        #    對整檔做子字串掃描,註解裡出現該字串等於自己讓自己紅
-        #    (同 PROCESS.md §4「測試把錯誤制度化」的鄰近陷阱)。
-        k1.metric("檢查檔數", len(ok_rows),
-                  delta=(f"-{len(err_rows)}" if err_rows else None))
-        k2.metric("🟢 健康", n_good)
-        k3.metric("🟡 警示", n_warn)
-        k4.metric("🔴 吃本金", n_eat)
-        k5.metric("累積 TWD 配息 🧮", f"{total_twd:,.0f}")
 
         df = pd.DataFrame([
             {k: v for k, v in r.items() if not k.startswith("_")}
@@ -1147,7 +1229,10 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
             except Exception as _e_chk:
                 system_error("基金體檢 PK 表渲染失敗", _e_chk)
 
-        st.markdown("#### 健診總表（🧮 = 自行換算欄位）")
+        # 2026-09-02 T19:單一標題(原「📊 健診大表」+「健診總表（🧮 = 自行換算欄位）」兩句)。
+        st.markdown(_BIG_TABLE_HEADING)
+        st.caption("原「① 健康分析 / ② 配息相關 / ③ 實際購買結果」三表已合併去重複。"
+                   "評分(4D Grade)/ 每月配息 / σ 位階 / 買賣點皆在此一張表內。")
         # v19.180:全期實際 / 年化兩軸並陳。短歷史也顯示真實累計值,不再 None。
         st.caption(
             "🩺 **吃本金燈號 (1Y · )** 採老師的體檢邏輯:"
@@ -1190,7 +1275,15 @@ def _render_health_table(rows: list[dict], funds_extra: list | None = None, *,
         # v19.425 — 🧭 景氣位階適配摘要
         try:
             from ui.helpers.fund_grp_health.regime_section import render_regime_fit_section
-            render_regime_fit_section(df.to_dict("records"))
+            # 2026-09-02 T16:`show_current_regime=False` —— 本頁最上方已有一條
+            # 「📊 當前總經 Phase：…」橫幅,讀的是**同一個** `phase_info["phase"]`。
+            # 原本這裡會把同一個字串再宣告一次,而且措辭不同(「當前總經 Phase」vs
+            # 「當前景氣位階」),讀起來像兩個不同的東西。位階這句話併回頁首那一行,
+            # 本區塊只講適配結果。
+            # ⚠️ 只關本頁的重複宣告:`ui/tab_batch_analysis.py` 沒有那條橫幅,
+            #    它走預設 True、行為不變(詳見該函式 docstring)。
+            render_regime_fit_section(df.to_dict("records"),
+                                      show_current_regime=False)
         except Exception as _e_rf:  # noqa: BLE001
             system_error("景氣適配區塊失敗", _e_rf)
 

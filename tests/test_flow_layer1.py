@@ -161,11 +161,21 @@ class TestFlowNav:
     # 刻意移除 render_flow_nav("macro"),只留單行決策動線 render_story_nav。故 macro 不在
     # 本 flow_nav 接線清單;其餘 5 頁仍須接線(render_flow_nav 非死碼)。macro 的 story_nav
     # 接線由 test_tab_is_wired_to_story_nav 另守(見下)。
+    # ⚠️ 2026-09-02 D5 收斂（**有意識的政策變更，不是漏刪** · 決策者：客戶拍板線框
+    # `docs/wireframes/wireframe-fund-research.html`「決定 2 / D5」）：
+    # ~~("ui/tab2_single_fund.py", "fund"),~~ 與 ~~("ui/tab_batch_analysis.py", "batch"),~~
+    # 兩列已移出本表。**舊表述在它寫下的當天是對的** —— 當時「個基深掘」與「批次分析」
+    # 各自是頂層分頁，導覽本來就該由它們自己接線，而「寫好卻沒接出去 ＝ 沒交付」
+    # 這個理由**今天依然成立**（其餘三列一字未動，仍照舊守）。
+    # **被推翻的是它的前提**：七→五之後這兩者是 ③ 的兩個*模式*，
+    # `render_flow_nav("fund")` 與 `render_flow_nav("batch")` 的第一行**逐字相同**
+    # → 同一份資料畫兩次；且只有單檔多畫一條 `render_story_nav`
+    # → 切模式時頂部高度會跳動。導覽因此收到共用頂部畫一次。
+    # ⛔ **接線並沒有變少，是換了地方**：由 `test_merged_research_page_draws_the_nav_once`
+    #    接手（它比舊斷言更強 —— 舊的只驗「字串出現過」，新的連**畫幾次**都驗）。
     @pytest.mark.parametrize("relpath,key", [
-        ("ui/tab2_single_fund.py", "fund"),
         ("ui/tab3_portfolio.py", "portfolio"),
         ("ui/tab_fund_grp_health.py", "health"),
-        ("ui/tab_batch_analysis.py", "batch"),
         ("ui/tab_manage.py", "manage"),
     ])
     def test_tab_is_wired_to_flow_nav(self, relpath, key):
@@ -174,6 +184,36 @@ class TestFlowNav:
         assert _code_lines(_src, f'render_flow_nav("{key}")'), (
             f"{relpath} 沒有呼叫 render_flow_nav(\"{key}\")"
         )
+
+    def test_merged_research_page_draws_the_nav_once(self):
+        """③ 的導覽由合併頁的共用頂部畫，**而且只畫一次**（線框 D5）。
+
+        接手上面被移出的那兩列。**比舊斷言強**：舊的只問「字串有沒有出現」，
+        本條用 AST 數呼叫次數，並要求兩個模式**都不准**再自己畫一份
+        —— 「同一份資料畫兩次」正是 D5 要收掉的東西。
+        """
+        import ast
+
+        _top = None
+        for _n in ast.walk(ast.parse(_read("ui/tab_fund_research.py"))):
+            if isinstance(_n, ast.FunctionDef) and _n.name == "_render_shared_top":
+                _top = _n
+        assert _top is not None, "找不到 `_render_shared_top()` —— 錨點失效。"
+
+        def _n_calls(node, name):
+            return sum(1 for c in ast.walk(node) if isinstance(c, ast.Call)
+                       and (getattr(c.func, "id", None) == name
+                            or getattr(c.func, "attr", None) == name))
+
+        assert _n_calls(_top, "render_flow_nav") == 1, (
+            "共用頂部的 `render_flow_nav` 不是剛好一次 —— D5 要的是「只畫一次」。")
+        assert _n_calls(_top, "render_story_nav") == 1, (
+            "共用頂部的 `render_story_nav` 不是剛好一次。")
+        # ⚠️ 「兩個模式**不准**再自己畫一份」**刻意不在這裡重寫一次**
+        #    （`CLAUDE.md §2.1` SSOT：同一件事只准守一次）——
+        #    那一半由 `tests/test_ia_tab13_batch3.py::`
+        #    `test_modes_no_longer_draw_their_own_nav` 守（已突變驗證 M9）。
+        #    本條負責的是「**接線換到哪裡去了**」，那條負責「**舊的地方清乾淨了沒**」。
 
     def test_macro_kept_story_nav_after_flow_nav_removed(self):
         """v19.476:macro 移除 flow_nav 後,仍須保留單行決策動線 story_nav(否則等於全砍)。"""

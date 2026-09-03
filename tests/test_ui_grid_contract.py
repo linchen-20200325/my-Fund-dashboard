@@ -248,6 +248,17 @@ GRID_EXEMPT_SITES = frozenset({
     "ui/hot_money.py::render_hot_money_section()  columns(int:4)×1",
     "ui/hot_money.py::render_hot_money_section()  columns(seq:2)×1",
     "ui/hot_money.py::render_hot_money_section()  columns(seq:4)×1",
+    # 2026-09-02 五分頁 IA 第三批：① 載入表單（線框 `wireframe-macro-health.html`
+    # **Form ①-A**）的四個來源勾選框排成一列
+    # ——「☑ 總經指標　☑ 新聞　☑ 風險雷達　☑ 拐點偵測（預設全選）」。
+    # **這裡刻意不是 3 欄**，理由與客戶在 `wireframe-fund-research.html`
+    # 「總管拍板（決定 3）」寫下的一模一樣：
+    # 「三欄網格是**卡片型內容**的規則，不是**所有東西都必須三個一排**
+    #   —— 四個硬拆成 3＋1 會多出一個孤兒格，比不遵守規則更難看。」
+    # 這一列是**四個並排的勾選框**，不是四張卡；線框畫的就是同一列四個。
+    # ⚠️ 自適應仍然成立：Streamlit 的 `st.columns` 在窄螢幕會自行堆疊，
+    #    **不會橫向溢出**（本組未在真實瀏覽器 / 手機上量測，據實揭露）。
+    "ui/tab1_macro.py::render_macro_tab()  columns(int:4)×1",
     "ui/tab1_macro.py::_render_realtime_decision_dashboard()  columns(dynamic)×1",
     "ui/tab1_macro_inflection.py::render_inflection_alert_section()  columns(int:2)×1",
     "ui/tab1_macro_inflection.py::render_inflection_alert_section()  columns(int:5)×1",
@@ -292,7 +303,12 @@ GRID_EXEMPT_SITES = frozenset({
     "ui/tab_batch_analysis.py::render_batch_analysis_tab()  columns(int:2)×1",
     "ui/tab_batch_analysis.py::render_batch_analysis_tab()  columns(seq:3)×1",
     "ui/tab_fund_grp_health.py::_render_health_3tables()  columns(int:4)×1",
-    "ui/tab_fund_grp_health.py::_render_health_table()  columns(int:5)×1",
+    # 2026-09-02 T20：這一列原本掛在 `_render_health_table()`。5 格結論摘要（＋它正上方
+    # 的失敗摘要）依拍板線框 Tab 02 的順序上移到頁面最前面，連帶抽成獨立函式
+    # `_render_health_summary()` —— **違規呼叫數一個沒有增減**（同一個 `st.columns(5)`
+    # 換了個家），屬本檔 docstring 寫的「錨點失效（拆函式）→ 更新表」那一種，
+    # 不是新增豁免。`GRID_EXEMPT_CALL_TOTAL` 因此**不動**。
+    "ui/tab_fund_grp_health.py::_render_health_summary()  columns(int:5)×1",
     "ui/tab_fund_grp_health.py::_render_low_base_screener()  columns(int:2)×1",
 })
 
@@ -301,7 +317,9 @@ GRID_EXEMPT_SITES = frozenset({
 # 理由見上方 `tab2_single_fund` 那一列的註記）。
 # 2026-09-01 IA kit：87 → 89（**變多 2**，且**兩個都是新寫的**、不是把別處拆掉換來的
 # —— 本批沒有刪除任何既有 `st.columns` 呼叫；理由見上方 IA kit 那兩列的長註）。
-GRID_EXEMPT_CALL_TOTAL = 89
+# 2026-09-02 IA 第三批：89 → 90（**變多 1**，新寫的 —— ① 載入表單的四個來源勾選框
+# 排成一列；本批同樣沒有刪除任何既有 `st.columns` 呼叫，理由見上方 `render_macro_tab` 那一列）。
+GRID_EXEMPT_CALL_TOTAL = 90
 
 #: 量測日 2026-08-28 掃到的 streamlit `columns()` 呼叫總數（合格 + 違規）。
 #: 錨點用：低於這個數字代表 `st.columns` 被換成別的寫法，規則正在對空氣生效。

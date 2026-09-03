@@ -56,7 +56,7 @@ from ui.helpers.fund_research.merge_context import (
     merged_page_owns,
 )
 from ui.helpers.render_state import not_ready, safe_section
-from ui.helpers.story_nav import tab_label
+from ui.helpers.story_nav import render_flow_nav, render_story_nav, tab_label
 
 #: 合併頁的頁面大標。
 #: ~~⚠️ **寫死在這裡是有代價的、而且是已知的**：全站分頁名的 SSOT 是~~
@@ -75,6 +75,22 @@ MERGED_TAB_LABEL: str = tab_label("research")
 MODE_SINGLE: str = "🔍 單檔深掘"
 MODE_BATCH: str = "📦 批次掃描"
 
+#: 模式顯示字 → `story_nav` 的**分區 key**。導覽只在共用頂部畫一次（D5），
+#: 但四層流程導覽的第二行會列「本層另有：…」—— 那句話必須跟著目前模式走，
+#: 否則使用者在批次模式看到「本層另有：📦 批次掃描」（他正在看的就是它）。
+_MODE_NAV_KEY: dict[str, str] = {MODE_SINGLE: "fund", MODE_BATCH: "batch"}
+
+
+def _current_mode_nav_key() -> str:
+    """目前模式對應的導覽 key；模式尚未建立（首次進頁）時視為預設的單檔深掘。
+
+    讀 `st.session_state["fr_mode"]` 而不是等 radio 回傳，是因為導覽畫在
+    **切換鍵之上**（線框 SHEET 00 的順序）。Streamlit 在 rerun 之前就已把
+    widget 值寫回 session_state，所以這裡讀到的一定是**使用者剛選的那個**，
+    不是上一輪的殘值。
+    """
+    return _MODE_NAV_KEY.get(st.session_state.get("fr_mode"), "fund")
+
 
 def _render_shared_top() -> None:
     """共用頂部：頁面大標 + 一句話職責 + 「找代號」工具。兩個模式都看得到。
@@ -86,6 +102,25 @@ def _render_shared_top() -> None:
     """
     st.markdown(f"## {MERGED_TAB_LABEL}")
     st.caption("還沒放進組合之前，查一檔或掃一批的體質。")
+    # ── D5：導覽收成一份，畫在共用頂部（線框 `wireframe-fund-research.html`
+    #        「決定 2 / D5」＋ SHEET 00）。原本兩個模式各畫一次，而
+    #        `render_flow_nav("fund")` 與 `render_flow_nav("batch")` 的第一行
+    #        **完全相同**（兩者同屬 L2）；而且只有單檔模式多畫一條
+    #        `render_story_nav` → 切模式時頂部高度會跳動。
+    #
+    # ⚠️ **線框寫「用 `research`」，但實測不能照抄**（2026-09-02 實跑，
+    #    指令與輸出見 PR 描述）：`story_nav.layer_of("research")` 回**空字串**
+    #    —— `research` 不在 `_LAYERS` 的任何一層（L2 掛的仍是舊的分區 key
+    #    `fund` / `batch`），於是 `render_flow_nav("research")` 會印出
+    #    「_本頁為支援 / 診斷用，不在決策流程的任何一層_」，**與同一份線框
+    #    SHEET 00 畫的「② 基金核心分析 高亮」互相矛盾**。
+    #    把 `research` 補進 `_LAYERS` 要改 `ui/helpers/story_nav.py`，
+    #    **不在本批的檔案邊界內** → 本批改用目前模式的分區 key（兩者皆對到 L2，
+    #    第一行與線框畫的一模一樣），並把這個缺口列入 PR 描述交總管。
+    #    **`render_story_nav("research")` 則可以照線框寫** —— `research`
+    #    在決策動線四站裡，高亮正確（實測：與 `"fund"` / `"batch"` 輸出逐字相同）。
+    render_flow_nav(_current_mode_nav_key())
+    render_story_nav("research")
     safe_section("🔍 找代號", render_code_finder)
 
 
