@@ -697,7 +697,15 @@ def backfill_to_gs(codes, *, progress_cb=None, oauth_client=None) -> dict:
     if gs_on and _gate_mode != "off":
         try:
             _gate_by_code = {}
-            for _p in (nav_history_gs.load_points(oauth_client=oauth_client) or []):
+            # 2026-09-03 Gate 0 修復:2026-08-31、09-02 兩次 production 執行被這一次讀取
+            # 的單次 gspread 5xx 打斷、零重試,直接判定「讀不到既有歷史 → fail-closed
+            # 不寫雲端」,11 檔明明抓到淨值卻雲端新增 0 筆。`retries=True` 只讓「多半是
+            # 暫時性」的分類(5xx / 逾時)在這一次呼叫內有機會重試;判定語意(下面的
+            # fail-closed except、_gate_by_code 的用法)一字未動 —— 全部重試用完仍失敗
+            # 時,行為與 `retries=False` 逐字相同。理由與範圍見
+            # `services/nav_history_gs.py::load_points` docstring「retries」段。
+            for _p in (nav_history_gs.load_points(oauth_client=oauth_client,
+                                                    retries=True) or []):
                 _gate_by_code.setdefault(
                     str(_p.get("code") or "").strip().upper(), []).append(_p)
         except Exception as e:  # noqa: BLE001 — §1:讀不到就不宣稱安全,更不往裡面寫
