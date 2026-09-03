@@ -552,15 +552,26 @@ class _FakeUpload:
         return self._payload
 
 
-def _run_local_base_upload(monkeypatch, *, submitted: bool):
+def _run_local_base_upload(monkeypatch, tmp_path, *, submitted: bool):
     """跑一次「本地基底 CSV」區塊，回傳 `import_nav_csv_multi` 被呼叫的次數。
 
     ⚠️ 監看點放在 **`services.nav_history_store`**（實作模組）而不是呼叫端的區域別名 ——
     區域別名是在函式內 `from ... import ... as _nh_import_multi` 綁的，
     patch 呼叫端拿不到；patch 來源模組才會被那行 import 取到。
+
+    ⚠️ **`_CACHE_DIR` 一定要隔離到 `tmp_path`**（2026-09-03 稽核建議 3 補上；
+    本 helper 原本是全 repo nav 測試裡**唯一**沒做這件事的，`test_nav_history_store.py`
+    與 `test_nav_csv_multi_import_v19490.py` 都有 fixture 隔離）。
+    理由不是潔癖：**只要有人寫出「繞過 spy」的突變**（例如把 `import_nav_csv_multi`
+    提到 module 頂層），**真的** writer 就會把 `cache/nav_history/*.json` 寫進 repo，
+    汙染同一輪的其他測試。稽核就是這樣得到 3 個假紅、一度誤判成語意衝突。
+    ⛔ 而且 **`cache/*` 在 `.gitignore` 裡 → `git status --porcelain` 顯示 clean**，
+    給人假的安全感：**`git status` 證明不了工作區乾淨，gitignored 的產物它看不見。**
     """
     import services.nav_history_store as _store
     import ui.tab_manage as _tm
+
+    monkeypatch.setattr(_store, "_CACHE_DIR", tmp_path / "nav_history", raising=True)
 
     calls: list = []
 
@@ -583,7 +594,7 @@ def _run_local_base_upload(monkeypatch, *, submitted: bool):
     return len(calls), rec
 
 
-def test_local_base_csv_does_not_write_until_submitted(monkeypatch):
+def test_local_base_csv_does_not_write_until_submitted(monkeypatch, tmp_path):
     """**選好檔但還沒按送出 → 一筆都不准寫。**
 
     這一條守的是本批**刻意的行為變更**：原碼是「檔案一選好就立刻
@@ -600,13 +611,13 @@ def test_local_base_csv_does_not_write_until_submitted(monkeypatch):
     `elif _up_gate and _nh_file is not None:` 改回 `elif _nh_file is not None:`
     （＝ 回到「選好就寫」）→ **本條轉紅**（未送出卻呼叫了 1 次）。
     """
-    _n, _rec = _run_local_base_upload(monkeypatch, submitted=False)
+    _n, _rec = _run_local_base_upload(monkeypatch, tmp_path, submitted=False)
     assert _n == 0, (
         f"使用者只是選了檔、還沒按送出，就已經寫進 cache／雲端了（呼叫 {_n} 次）——"
         "選錯檔沒有反悔的機會。")
 
 
-def test_local_base_csv_writes_exactly_once_when_submitted(monkeypatch):
+def test_local_base_csv_writes_exactly_once_when_submitted(monkeypatch, tmp_path):
     """**反面（不可省）**：按了送出 → **恰好寫一次**。
 
     少了這一條，「把整條寫入路徑刪掉」也會讓上一條全綠 ——
@@ -615,7 +626,96 @@ def test_local_base_csv_writes_exactly_once_when_submitted(monkeypatch):
     突變實驗（實跑，輸出貼在 PR）：把那一段 `elif` 分支整個拿掉
     （＝ 按了送出也不寫）→ **本條轉紅**（呼叫 0 次）。
     """
-    _n, _rec = _run_local_base_upload(monkeypatch, submitted=True)
+    _n, _rec = _run_local_base_upload(monkeypatch, tmp_path, submitted=True)
     assert _n == 1, (
         f"按了送出卻沒有恰好寫一次（實際 {_n} 次）—— 0 次代表功能不見了，"
         "多次代表同一份 CSV 被重複匯入。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 6) 對帳單 CSV 也一樣：送出閘門真的擋住寫入
+#    （2026-09-03 獨立稽核必修 1 —— 上一輪只修了被點名的第三條路徑）
+# ══════════════════════════════════════════════════════════════════
+def _run_statement_csv_upload(monkeypatch, *, submitted: bool):
+    """跑一次「對帳單 CSV」區塊，回傳 `nav_history_gs.import_csv_text` 被呼叫的次數。
+
+    ⚠️ 監看點放在 **`services.nav_history_gs`**（實作模組），理由同
+    :func:`_run_local_base_upload` —— 呼叫端是在函式內 `from ... import import_csv_text`
+    綁的區域名，patch 呼叫端拿不到。**這同時是「有人把 import 提到 module 頂層」
+    的偵測面**：那樣做會讓本 spy 失明、呼叫數變 0，於是**反面那條（恰好 1 次）轉紅**。
+    """
+    import services.nav_history_gs as _gs
+    import ui.tab5_data_guard as _dg
+
+    calls: list = []
+
+    def _spy(code, csv_text, **k):
+        calls.append((code, csv_text, k))
+        # `written=0` → 走 `st.warning` 分支，**不觸發 `_clear_nh_caches()`**
+        # （那會去碰真的 `st.cache_data`）。本條驗的是「有沒有寫」，不是寫了幾筆。
+        return {"enabled": True, "rows": 1, "parsed": 1, "written": 0,
+                "skipped_dup": 0, "skipped_rows": 0}
+
+    with _fake_st(monkeypatch, button=submitted) as rec:
+        monkeypatch.setattr(_gs, "import_csv_text", _spy, raising=True)
+        import streamlit as _stmod
+
+        # 這條路徑要「代碼」與「檔案」**兩者都有**才會進寫入分支；
+        # `_fake_st` 預設 text_input 回 ""、file_uploader 回 None，
+        # 那是「使用者還沒填」的狀態 —— 驗不到閘門，只驗得到 not_ready。
+        def _text_input(*a, **k):
+            rec.calls.append(("text_input", a[0] if a else None, k.get("key")))
+            return "ZZSTMT1"
+
+        def _uploader(*a, **k):
+            rec.calls.append(("file_uploader", a[0] if a else None, k.get("key")))
+            return _FakeUpload(b"date,nav\n2026-01-02,10.5\n")
+
+        monkeypatch.setattr(_stmod, "text_input", _text_input, raising=False)
+        monkeypatch.setattr(_stmod, "file_uploader", _uploader, raising=False)
+        _dg.render_nav_statement_csv_import()
+    return len(calls), rec
+
+
+def test_statement_csv_does_not_write_until_submitted(monkeypatch):
+    """**代碼與檔案都填好、但還沒按送出 → 一筆都不准寫。**
+
+    ⛔ **這一條是 2026-09-03 獨立稽核擋下合併的原因，它的成因值得逐字讀**：
+    上一輪只替**第三條路徑**（本地基底 CSV）補了守衛，**第二條（對帳單）原封未動**，
+    而稽核對它注入同型突變 —— 把 `elif _ni_gate:` 改成
+    `elif _ni_file and (_ni_code or '').strip():`（＝填好就寫、gate 不消費）——
+    **跑全套得到 `1 failed, 6617 passed, 13 skipped`，與未突變的 head 逐字相同**：
+    整個 corpus 沒有一條抓得到。
+
+    ⚠️ **而且那個可分離性是本 PR 自己造出來的**：main 上這一條原本是
+    `if st.button("📥 匯入到 nav_history", ...)` —— **call 就是 guard，結構上不可分離**；
+    本 PR 依鐵則 02 換成 `applied_form(...)` ＋ `elif _ni_gate:` 之後**變成可分離**。
+    本批的回修 commit C 段親手寫下了這個機制（「`applied_form` 形態下可以分離」），
+    卻**只把它用在第三條路徑上**。—— 同一把尺沒有往內用到隔壁那條路徑。
+
+    突變實驗（實跑，輸出貼在 PR）：
+    `elif _ni_gate:` → `elif _ni_file and (_ni_code or "").strip():`
+    → **本條轉紅**（未送出卻呼叫了 1 次）。
+    """
+    _n, _rec = _run_statement_csv_upload(monkeypatch, submitted=False)
+    assert _n == 0, (
+        f"使用者只是填好代碼與檔案、還沒按送出，就已經寫進雲端 nav_history 了"
+        f"（呼叫 {_n} 次）—— 填錯代碼沒有反悔的機會。")
+
+
+def test_statement_csv_writes_exactly_once_when_submitted(monkeypatch):
+    """**反面（不可省）**：按了送出 → **恰好寫一次**。
+
+    少了這一條，「把整條寫入路徑刪掉」與「把 `import_csv_text` 的 import 提到 module
+    頂層讓 spy 失明」都會讓上一條**更綠**。用 `== 1` 而不是 `>= 1`：
+    同一份對帳單被寫兩次，在雲端是靠 (代碼,日期) 去重擋掉的 —— 那是下游的補救，
+    不代表上游呼叫兩次是對的。
+
+    突變實驗（實跑，輸出貼在 PR）：把 `elif _ni_gate:` 那一段分支整個拿掉
+    （＝ 按了送出也不寫）→ **本條轉紅**（呼叫 0 次）。
+    """
+    _n, _rec = _run_statement_csv_upload(monkeypatch, submitted=True)
+    assert _n == 1, (
+        f"按了送出卻沒有恰好寫一次（實際 {_n} 次）—— 0 次代表功能不見了"
+        f"（或是有人把 `import_csv_text` 提到 module 頂層、讓監看點失明），"
+        f"多次代表同一份對帳單被重複匯入。")

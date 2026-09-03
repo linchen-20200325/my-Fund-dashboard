@@ -51,11 +51,79 @@ class _Rec:
 
 
 class _Col:
+    """`st.columns()` / `st.container()` / `st.spinner()` 回傳的東西 —— 它**同時**是
+    context manager 與一個可以直接呼叫 widget 的物件（`_c1.button(...)`）。
+
+    ⚠️ **不能只做 `__enter__/__exit__`**（2026-09-03 獨立稽核抓到，這裡原本就是只有兩個）：
+    本 repo 大量用 `_act_c1.button(...)` / `_c1.metric(...)` 這種**在欄物件上直接呼叫**的
+    寫法，少了 `__getattr__` 會在半路 `AttributeError` 而不是走完渲染。
+
+    **它造成的不是「少畫幾個 widget」，是「斷言在一個根本沒跑完的渲染上做出來」**，
+    而且**紅在一個與斷言無關的理由上**：
+    `_render_maintain_section()` → `render_nav_manual_section()` →
+    `render_nav_csv_manage_section()` → `_act_c1.button("🔄 從 MoneyDJ 增量更新", ...)`
+    → `AttributeError` → 被 `safe_section` 接住 → `system_error()` **畫出紅框** →
+    `test_policy_admin_is_off_by_default` 與 `test_diag_section_is_not_loaded_before_the_gate`
+    這兩條「`assert "error" not in rec.names()`」當場轉紅。
+
+    ⚠️ **它是環境相依的，CI 綠不代表沒事**：那一段要 `cache/nav_history/` 底下**有檔**
+    才走得到（`_nh_codes()` 空 → 提前 return）。fresh checkout 的 CI 永遠是空的，
+    **但任何在本機用過 App 的人都會踩到**。實測：同樣種一個
+    `cache/nav_history/*.json`，`main`(2353dde) `25 passed`／本批修復前 `2 failed`。
+    ⚠️ `cache/*` 在 `.gitignore` 內 → **`git status` 看不見它，證明不了工作區乾淨**。
+
+    📌 本類的 `__getattr__` 與回傳值語意**照抄同批的
+    `tests/test_ia_tab5_nav_history_merge.py::_Ctx`** —— 那個檔的 docstring 早就寫了
+    這條教訓，只是**同一把尺沒有往內用到隔壁檔**（憲法 §8.2.A.1 驗證段 ④ 記載的形狀）。
+    """
+
+    def __init__(self, rec: "_Rec" = None) -> None:
+        self._rec = rec
+
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
         return False
+
+    #: 欄／容器上直接呼叫的 widget 要回什麼。**回 `None` 不夠** ——
+    #: `st.text_input(...)` 的呼叫端常接 `.strip()`，回 `None` 只是把
+    #: `AttributeError` 換一個地方發作。
+    @staticmethod
+    def _ret_for(name: str):
+        if name in ("button", "download_button", "form_submit_button", "checkbox",
+                    "toggle"):
+            return False
+        if name in ("text_input", "text_area"):
+            return ""
+        if name in ("file_uploader", "selectbox", "multiselect", "date_input"):
+            return None
+        return None
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        _rec = self.__dict__.get("_rec")
+        _ret = self._ret_for(name)
+        if name in ("container", "expander", "spinner", "form", "status", "popover",
+                    "columns", "tabs"):
+            def _ctx(*a, **k):
+                if _rec is not None:
+                    _rec.calls.append((name, a[0] if a else None))
+                if name == "columns":
+                    _spec = a[0] if a else 1
+                    return [_Col(_rec) for _ in range(
+                        _spec if isinstance(_spec, int) else len(_spec))]
+                if name == "tabs":
+                    return [_Col(_rec) for _ in range(len(a[0]) if a else 1)]
+                return _Col(_rec)
+            return _ctx
+
+        def _f(*a, **k):
+            if _rec is not None:
+                _rec.calls.append((name, a[0] if a else None))
+            return _ret
+        return _f
 
 
 @contextlib.contextmanager
@@ -73,10 +141,10 @@ def _fake_streamlit(monkeypatch, *, checkbox: bool = False):
                "divider", "write", "metric", "dataframe", "subheader",
                "header", "code"):
         monkeypatch.setattr(st, _n, rec.api(_n), raising=False)
-    monkeypatch.setattr(st, "columns", lambda spec, **k: [_Col() for _ in range(
+    monkeypatch.setattr(st, "columns", lambda spec, **k: [_Col(rec) for _ in range(
         spec if isinstance(spec, int) else len(spec))], raising=False)
-    monkeypatch.setattr(st, "container", lambda *a, **k: _Col(), raising=False)
-    monkeypatch.setattr(st, "spinner", lambda *a, **k: _Col(), raising=False)
+    monkeypatch.setattr(st, "container", lambda *a, **k: _Col(rec), raising=False)
+    monkeypatch.setattr(st, "spinner", lambda *a, **k: _Col(rec), raising=False)
     monkeypatch.setattr(st, "session_state", rec.session, raising=False)
 
     def _checkbox(*a, **k):
