@@ -28,8 +28,10 @@ Sharpe / σ / 最大回撤(年化一律 ×√252、假設「每點 = 1 交易日
 """
 from __future__ import annotations
 
+import ast
 import datetime as dt
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -58,9 +60,38 @@ def _mk(dates: list[str], navs: list[float] | None = None) -> pd.Series:
 
 
 def _dense(n: int, end: str = "2026-08-26") -> pd.Series:
-    """n 個連續日曆日(密度足夠、不過期)。"""
+    """n 個連續日曆日(密度足夠、不過期)。
+
+    ⚠️ 預設 `end` 寫死是**刻意的**,而且**只對注入時鐘的測試安全**:本檔 L0 區段
+    每一條都傳 `now=_NOW`(=2026-08-27),`end` 與 `_NOW` 是**成對凍結**的參考時點
+    (§5 可重現性)。**走真實時鐘的 `test_wired_*` 一律不得用它當「健康」種子** ——
+    那會隨時間自然腐爛,見 `_healthy_history` 與本檔末的兩道守衛。
+    """
     end_d = dt.date.fromisoformat(end)
     return _mk([str(end_d - dt.timedelta(days=n - 1 - i)) for i in range(n)])
+
+
+def _utc_today() -> dt.date:
+    """production 判定器用 `datetime.now(timezone.utc)` 當基準,故種子也對 UTC 日期。"""
+    return dt.datetime.now(dt.timezone.utc).date()
+
+
+def _healthy_history(today: dt.date, n: int = 60) -> list[dict]:
+    """n 個連續日曆日、**結束於 `today`** 的 cache history payload。
+
+    ⚠️ **這裡不可以寫死日期**,理由不是風格而是一顆已經引爆過的定時炸彈:
+    `_src_cache_files` 沒有 `now=` 注入點(它是 production 路徑,吃真實時鐘),
+    而「健康」的定義本身就含 `MJ_FRESH_DAYS_YELLOW`(7 天)新鮮度。任何寫死的
+    `end` 只要撐過 7 天就會從 `QUALITY_OK` 翻成 `QUALITY_NAV_STALE` ——
+    **不是 production 壞了,是種子過期了**。故種子必須相對於 `today` 產生。
+
+    以 `today` 參數化(而非直接讀時鐘)是為了讓守衛能把時鐘往前撥、
+    驗證本函式真的跟著走 —— 見 `test_healthy_wired_seed_survives_time_travel`。
+    """
+    return [
+        {"date": str(today - dt.timedelta(days=n - 1 - i)), "nav": 10.0 + i * 0.01}
+        for i in range(n)
+    ]
 
 
 @pytest.fixture
@@ -218,13 +249,200 @@ def test_wired_schema_violation_returns_empty(_seed):
 
 
 def test_wired_healthy_cache_is_untouched(_seed):
-    """健康快取 → 完全不受影響(閘不是拿來擋好資料的)。"""
-    end = dt.date(2026, 8, 26)
-    code = _seed("ZZGOOD1", [
-        {"date": str(end - dt.timedelta(days=59 - i)), "nav": 10.0 + i * 0.01}
-        for i in range(60)
-    ], "2026-08-26T00:00:00+00:00")
+    """健康快取 → 完全不受影響(閘不是拿來擋好資料的)。
+
+    ⚠️ 種子**相對於 UTC 當日**產生,不是寫死日期。原本寫死 `2026-08-26`,
+    在寫入當天(2026-08-27)age=1 天、綠燈,但 age 每天 +1,撐到 2026-09-03
+    就跨過 `MJ_FRESH_DAYS_YELLOW`(7 天)→ `nav_stale_series`,CI 無故轉紅。
+    這條測的是「**健康**快取不受影響」,而「健康」的定義本來就包含「夠新」——
+    寫死日期等於讓種子隨時間自己變成不健康,那是測試的缺陷,不是 production 的。
+    """
+    today = _utc_today()
+    code = _seed(
+        "ZZGOOD1",
+        _healthy_history(today),
+        dt.datetime.combine(today, dt.time(), tzinfo=dt.timezone.utc).isoformat(),
+    )
     s = _src_cache_files(code)
     assert len(s) == 60
     assert s.attrs["supports_annualized"] is True
     assert s.attrs["nav_quality_code"] == QUALITY_OK
+
+
+# ════════════════════════════════════════════════════════════════
+# 防定時炸彈:走真實時鐘的種子不得寫死日期
+# ════════════════════════════════════════════════════════════════
+# 2026-09-03 事故:`test_wired_healthy_cache_is_untouched` 的種子寫死
+# `end = dt.date(2026, 8, 26)`,寫入當天(2026-08-27)age=1 天、綠燈,
+# 之後 age 每天 +1;走到 age=8 就跨過 `MJ_FRESH_DAYS_YELLOW`(7)→
+# `QUALITY_NAV_STALE`,main 在沒有任何人碰過該檔的情況下自己轉紅。
+#
+# 下面兩道守衛**互補,缺一不可**:
+#   1. 行為守衛(把時鐘往前撥)→ 抓「種子產生器自己被改回寫死」。
+#   2. 靜態守衛(掃自己的 AST)→ 抓「有人**新寫**一條走真實時鐘、卻期待
+#      健康結果、又寫死日期的測試」。
+#
+# ⚠️ 兩道都**只管走真實時鐘的 `test_wired_*`**。本檔 L0 區段(`assess_*` 直呼)
+# 一律注入 `now=_NOW`,其寫死日期與 `_NOW` 是成對凍結的參考時點,**是正確寫法、
+# 不在射程內**,請不要「順手」把守衛擴大到它們 —— 那會逼掉 §5 可重現性。
+
+
+def test_healthy_wired_seed_survives_time_travel():
+    """把時鐘往前撥,`_healthy_history` 產出的種子必須永遠是「健康」。
+
+    這條抓的是:有人把 `_healthy_history` 改回寫死日期(或讓它忽略 `today`)。
+    只要它真的跟著 `today` 走,不論在哪一天跑,判定都該是 `QUALITY_OK`。
+    """
+    base = _utc_today()
+    horizons = [0, 90, 365 * 2, 365 * 10]
+    verdicts = {}
+    for d in horizons:
+        t = base + dt.timedelta(days=d)
+        t_dt = dt.datetime.combine(t, dt.time(), tzinfo=dt.timezone.utc)
+        s = pd.Series(
+            {pd.Timestamp(r["date"]): float(r["nav"]) for r in _healthy_history(t)}
+        ).sort_index()
+        q = assess_nav_cache_quality(s, cache_updated_at=t_dt.isoformat(), now=t_dt)
+        verdicts[d] = (q["code"], q["usable"], q["supports_annualized"], q["stale"])
+
+    expected = (QUALITY_OK, True, True, False)
+    bad = {d: v for d, v in verdicts.items() if v != expected}
+    assert bad == {}, (
+        "種子沒有跟著『現在』走 —— 這正是 2026-09-03 那顆定時炸彈的形狀。\n"
+        f"期待每個時點都是 {expected},實際偏離:{bad}"
+    )
+    # 反向自證:守衛本身沒有空轉(真的算了 4 個時點,而不是一個都沒跑)。
+    assert len(verdicts) == len(horizons), "守衛空轉:時間旅行迴圈沒有跑滿"
+
+
+# ── 靜態守衛用的偵測器(測試與正控共用同一份實作)────────────────────────
+# ⚠️ 只寫 `\d{4}-\d{2}-\d{2}` 會漏掉 f-string:`f"2026-08-{d:02d}"` 的 AST
+#    Constant 是 `'2026-08-'`(`{...}` 是獨立的 FormattedValue,不在字串裡)。
+#    故比對到「年-月-」為止即可,寧可寬也不要漏 —— 漏抓才是本守衛的失效模式。
+_DATE_LITERAL_RE = re.compile(r"\d{4}-\d{2}-")
+
+
+def _wired_tests_with_hardcoded_dates(tree: ast.AST) -> "tuple[dict, set]":
+    """回傳 ({有問題的 test 名: 寫死的字面值}, 掃到的所有 test_wired_* 名)。
+
+    「有問題」= 同時滿足:(a) 名字 `test_wired_*`(走 `_src_cache_files`,即真實時鐘)
+    (b) 期待**健康**結果(引用 `QUALITY_OK`,或斷言 `supports_annualized ... is True`)
+    (c) 函式體內出現寫死的日曆日字面值。
+    只有三者同時成立才會腐爛:期待不健康的測試(sparse / 回空)時間再走也不會翻盤。
+    """
+    offenders, seen = {}, set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_wired_"):
+            continue
+        seen.add(node.name)
+
+        expects_healthy = False
+        literals = []
+        # ⚠️ 跳過 docstring:它是**說明文字**,本來就會引用事故日期
+        #    (「原本寫死 2026-08-26…」)。把它算成種子會讓守衛誤報,
+        #    而誤報的守衛最後一定會被人加豁免關掉。註解不進 AST,天然不受影響。
+        body = node.body
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            body = body[1:]
+        for sub in [n for stmt in body for n in ast.walk(stmt)]:
+            if isinstance(sub, ast.Name) and sub.id == "QUALITY_OK":
+                expects_healthy = True
+            if isinstance(sub, ast.Compare) and any(
+                isinstance(c, ast.Is) for c in sub.ops
+            ):
+                txt = ast.dump(sub)
+                if "supports_annualized" in txt and "value=True" in txt:
+                    expects_healthy = True
+            # 寫死日期字面值:字串 / f-string 片段 / dt.date(Y, M, D)
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                if _DATE_LITERAL_RE.search(sub.value):
+                    literals.append(sub.value)
+            if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
+                if sub.func.attr == "date" and len(sub.args) == 3 and all(
+                    isinstance(a, ast.Constant) for a in sub.args
+                ):
+                    literals.append(
+                        "date(" + ", ".join(str(a.value) for a in sub.args) + ")"
+                    )
+        if expects_healthy and literals:
+            offenders[node.name] = literals
+    return offenders, seen
+
+
+def test_guard_no_hardcoded_date_in_healthy_wired_test():
+    """走真實時鐘 + 期待健康結果的測試,不得含寫死日曆日字面值。
+
+    這條抓的是**下一顆**炸彈:有人新寫一條 `test_wired_*`、斷言 `QUALITY_OK`
+    或 `supports_annualized is True`,卻用寫死日期當種子 —— 那條會在
+    `MJ_FRESH_DAYS_YELLOW` 天後無聲引爆。
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    offenders, seen = _wired_tests_with_hardcoded_dates(ast.parse(source))
+
+    # ── 錨點:偵測器必須真的看到東西,否則整條規則空轉(靜默放行)──────────
+    assert seen, (
+        "錨點失效:本檔已找不到任何 `test_wired_*` 函式。"
+        "接線測試若改名或搬走,請同步更新本守衛,不要讓它空轉。"
+    )
+    assert "test_wired_healthy_cache_is_untouched" in seen, (
+        "錨點失效:找不到 `test_wired_healthy_cache_is_untouched`(它是本守衛"
+        "唯一已知的『期待健康 + 走真實時鐘』案例)。改名了就請更新本守衛。"
+    )
+
+    # ── 正控 / 負控:拿**已知答案**的程式碼餵給同一個偵測器。────────────────
+    # 沒有這一步,偵測器一旦壞掉 offenders 就恆空,守衛變成永遠會過的空操作
+    # (assert {} == {})。正控證明「抓得到」,負控證明「豁免沒有把它整個關掉」。
+    controls = [
+        # (名稱, 程式碼, 應否被抓)
+        ("寫死 dt.date(...) + QUALITY_OK", (
+            "def test_wired_c1(_seed):\n"
+            "    end = dt.date(2026, 8, 26)\n"
+            "    assert s.attrs['nav_quality_code'] == QUALITY_OK\n"
+        ), True),
+        ("寫死日期字串 + supports_annualized is True", (
+            "def test_wired_c2(_seed):\n"
+            "    code = _seed('X', [{'date': '2026-08-26', 'nav': 1.0}], 'u')\n"
+            "    assert s.attrs['supports_annualized'] is True\n"
+        ), True),
+        ("f-string 日期 + QUALITY_OK", (
+            "def test_wired_c3(_seed):\n"
+            "    h = [{'date': f'2026-08-{d:02d}', 'nav': 1.0} for d in range(1, 15)]\n"
+            "    assert s.attrs['nav_quality_code'] == QUALITY_OK\n"
+        ), True),
+        ("日期只在 docstring(說明文字)", (
+            "def test_wired_c4(_seed):\n"
+            "    \"\"\"原本寫死 2026-08-26,已改成相對日期。\"\"\"\n"
+            "    assert s.attrs['nav_quality_code'] == QUALITY_OK\n"
+        ), False),
+        ("寫死日期但期待**不健康**結果(sparse / 回空)", (
+            "def test_wired_c5(_seed):\n"
+            "    code = _seed('X', [{'date': '2026-08-26', 'nav': 1.0}], 'u')\n"
+            "    assert _src_cache_files(code).empty\n"
+        ), False),
+    ]
+    ctl_bad = []
+    for label, snippet, should_flag in controls:
+        off, seen_c = _wired_tests_with_hardcoded_dates(ast.parse(snippet))
+        if not seen_c:
+            ctl_bad.append(f"{label}:偵測器連函式都掃不到")
+        elif bool(off) is not should_flag:
+            ctl_bad.append(
+                f"{label}:應{'抓到' if should_flag else '放行'},實際{'抓到' if off else '放行'}"
+            )
+    assert ctl_bad == [], (
+        "偵測器自我驗證失敗 —— 本守衛此刻等同空操作,必須先修偵測器再看下面的結果:\n"
+        + "\n".join(ctl_bad)
+    )
+
+    # ── 本體 ────────────────────────────────────────────────────────────
+    assert offenders == {}, (
+        "下列測試走真實時鐘(`_src_cache_files` 沒有 now= 注入點)、期待健康結果,"
+        "卻用寫死日期當種子 —— 它會在 `MJ_FRESH_DAYS_YELLOW` 天後自己轉紅。\n"
+        f"{offenders}\n"
+        "修法:種子改成相對於 `_utc_today()` 產生(見 `_healthy_history`)。"
+    )
