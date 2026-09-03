@@ -540,6 +540,14 @@ def render_nav_csv_manage_section(*, expander_label: str | None = None) -> None:
     ⚠️ **不要把它跟 `nav_history_gs.import_csv_text` 那條混為一談** ——
     本函式走 `import_nav_csv_multi`：**要有代號欄**、可一次多檔、**會寫本地 cache**。
     對帳單那條是單檔、代碼手填、**只寫雲端**、吃兩欄 CSV。兩者不可互相取代。
+
+    ⚠️ **`tests/test_ia_tab5_nav_history_merge.py` 的「送出才寫」守衛射程只到
+    `services.nav_history_store.import_nav_csv_multi` 這一支 writer，不是「任何寫入」**——
+    spy 監看的是這個具體符號的呼叫次數。若改走繞過它、直接寫
+    `cache/nav_history/{code}.json` 或直接呼叫 `nav_history_gs.append_points` 的路徑，
+    該守衛**看不到**（同型側通道已在 `render_nav_statement_csv_import()` 那條路徑上
+    實測過一次，兩條「送出才寫」斷言均未觸發）。**這不是缺陷，只是提醒它守的是
+    「這條路徑走它自己該走的函式」，不是「攔截所有雲端寫入」的通用閘門。**
     """
     # v19.461→472：🗄️ NAV 歷史資料管理(手動 CSV 上傳 / 匯出 / 增量)。widget key `_nh_*` 僅此處渲染。
     with st.expander(

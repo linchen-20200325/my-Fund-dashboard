@@ -1751,6 +1751,17 @@ def render_nav_statement_csv_import() -> None:
     這正是保險公司對帳單匯出的形狀。那一條走 `import_nav_csv_multi` ——
     **必須有代號欄**、可一次多檔、而且**會寫本地 `cache/nav_history/{code}.json` 當基底**。
     線框要的是「三個功能**一個入口**」，不是「三個功能砍成一個」。
+
+    ⚠️ **`tests/test_ia_tab5_nav_history_merge.py` 的「送出才寫」守衛（2026-09-03 稽核必修 1）
+    射程只到「這一支 writer」，不是「任何雲端寫入」** —— 那對守衛用 spy 監看的是
+    **`services.nav_history_gs.import_csv_text` 這個具體符號被呼叫幾次**，不是「有沒有東西
+    寫進了 nav_history」。若程式碼改走同模組的 `append_points`（或任何不經
+    `import_csv_text` 的路徑）直接寫雲端，該守衛**看不到**——本組已實測過一次
+    側通道突變（把上面 `elif` 的 gate 判斷繞開、改呼叫 `append_points`），
+    `test_statement_csv_does_not_write_until_submitted` /
+    `test_statement_csv_writes_exactly_once_when_submitted` **兩條依然全綠**，
+    因為它們的 spy 只掛在 `import_csv_text` 上。**這不是本次守衛的缺陷（它守的東西本來就是
+    「這條路徑走它自己該走的函式」），只是讀者不該把它讀成一道「攔截所有寫入」的閘門。**
     """
     st.caption(
         "從保險公司網站 / 對帳單下載歷史淨值 CSV，一次灌入 Google Sheet "
