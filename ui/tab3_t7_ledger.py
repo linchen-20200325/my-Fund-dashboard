@@ -237,9 +237,24 @@ def _t7d_fetch_fund_meta(code: str, existing=None) -> dict:
 #: 因為當時沒有任何一條測試在守「目錄的**連結文字**」。
 #: **舊表述的用意仍然成立**（一欄制確實比兩欄制強、確實消滅了一整類漂移）；
 #: **被權衡掉的是它的強度宣稱** —— 「消滅一欄」不等於「沒有人能繞過這一欄」。
-#: **現已補上守衛** `tests/test_ia_tab4_ledger_flattened.py::
-#: test_toc_link_text_matches_the_ssot_labels`（把目錄連結文字綁回本表），
-#: 補完之後那句話才成立。**一句寫進永久記錄的絕對語，要先有守衛才配得上。**
+#: **現已補上守衛（兩條）**：`tests/test_ia_tab4_ledger_flattened.py::
+#: test_toc_link_text_matches_the_ssot_labels`（把目錄連結文字綁回本表）
+#: ＋ 同檔 `::test_no_handwritten_toc_or_heading_text_bypasses_the_ssot`
+#: （任何會畫字的呼叫都不得手寫段標籤 / `t7-` 錨點 / 目錄連結；
+#: `markdown`/`subheader`/`header`/`title` 四種、alias 與 `from streamlit import` 裸名都抓）。
+#: ⚠️ **2026-09-03 第三次更正（有意識的更正，不是漏刪 · 依據：獨立稽核實測 + 本組複跑）**：
+#: 本段原本接著寫 ~~「補完之後那句話才成立。一句寫進永久記錄的絕對語，要先有守衛才配得上。」~~
+#: —— **那句話又被推翻了一次。** 實測：把 `_t7_section_heading("b")` 關進 `if False:`
+#: （AST 仍看得到那行呼叫，順序檢查照樣過）**再手寫一個不含段標籤字樣的標題**
+#: （`st.markdown("#### B 段（改名）")`），**全套 13 條照樣全綠**，
+#: 而畫面上的標題與目錄當場對不起來。
+#: **同一句絕對語至此被推翻三次**（原句 → B1 → 本次的 if-False 變體）。
+#: **故本段不再宣稱任何「不可能」**，改為據實列出守得到與守不到的：
+#: - **守得到（語法層，四種繞道皆已實測轉紅）**：手寫段標籤／`t7-` 錨點／目錄連結。
+#: - **守不到（可達性層）**：用死分支保留合法呼叫**騙過 AST**、同時手寫一份
+#:   **不含上述指紋**的替代品 —— 靜態分析看不到「這一行會不會被執行到」。
+#:   （對照組：**直接刪掉**那行 SSOT 呼叫再手寫 → **轉紅**，所以只有刻意的死分支會漏。）
+#: 完整清單見 `tests/test_ia_tab4_ledger_flattened.py` 模組 docstring「本檔守不到的」。
 #: ⚠️ 標籤逐字沿用搬遷前 `st.tabs([...])` 的三個分頁名（見下方 `render_t7_section`
 #: 內的更正註記）—— 使用者記得的是這三個名字，改名是另一件事、不在本批。
 _T7_SECTIONS: tuple[tuple[str, str], ...] = (

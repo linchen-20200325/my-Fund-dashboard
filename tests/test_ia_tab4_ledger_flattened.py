@@ -45,19 +45,55 @@ pytest 照樣報 **PASSED**、`--collect-only` 的數字也一格不變 ——
 
 ## ⛔ 本檔守不到的（2026-09-02 獨立稽核實測，就地登記，不要當成已涵蓋）
 
-上面那句「把 helper **綁回 production 路徑**」**只在語法層成立，不在可達性層成立**。
+⚠️ **2026-09-03 重寫（有意識的更正，不是漏刪 · 依據：獨立稽核實測 + 本組逐條複跑）。**
+本節原本用一句話蓋住全部缺口：~~「**這是所有靜態守衛的共同上限，不是本檔的實作瑕疵**」~~
+—— **那句話對其中四條不成立**。那四條 AST 完全擋得住，是**普通的覆蓋缺口**，
+不是物理上限。**把可修的漏洞說成「靜態守衛的物理上限」，等於替它發了一張免修證明。**
+故本節改為**分兩層登記**：A 是真的守不到，B 是當時漏掉、現已補上。
+
+### A 組｜可達性缺口（**真的守不到，靜態分析的物理上限**）
+
 AST 看得到「這一行寫在 `render_t7_section` 裡」，**看不到那一行會不會被執行到**。
-稽核實跑出**五個假綠**（改 production、本檔全數 passed）：
+下列改動會讓本檔**全部通過**（實測）：
 
 1. `_t7_section_heading("b")` 關進 `if False:`
 2. `_t7_render_toc()` 關進 `if False:`
 3. **三段標題全部關進 `if False:`（拉平在畫面上整個消失）**
 4. `_render_dividend_matrix(funds)` 關進 `if False:`
 5. ④ 的指路 caption 改成「留著 `where_to_find('health')` 呼叫但不渲染」
+6. **死分支保留合法呼叫（騙過 AST 順序檢查）＋ 手寫一份不含指紋的替代品** ——
+   例：`if False: _t7_section_heading("b")` ＋ `st.markdown("#### B 段（改名）")`
+   （2026-09-03 本組實測 **13 passed**；畫面上標題與目錄對不起來）
 
-**這是所有靜態守衛的共同上限，不是本檔的實作瑕疵** —— 要擋住它得整頁真渲染，
-而 T7 主體在沙箱拿不到 OAuth / NAV / FX。**對照組**：真的**刪掉**指路 caption
-連同 import → **轉紅**；也就是說只有「留著呼叫、但讓它不渲染」這種**刻意**寫法會漏。
+**要擋住 A 組得整頁真渲染**，而 T7 主體在沙箱拿不到 OAuth / NAV / FX。
+**對照組（證明只有刻意的死分支會漏）**：真的**刪掉**指路 caption 連同 import → **轉紅**；
+真的**刪掉** `_t7_section_heading("b")` 再手寫替代品（不用 `if False:`）→ **轉紅**。
+
+### B 組｜語法層覆蓋缺口（**當時漏掉，2026-09-03 已補，四條各自實測轉紅**）
+
+⚠️ 這四條**不屬於** A 組，**不得**引用 A 組那句「靜態守衛的上限」替它們免修 ——
+它們從頭到尾都是 AST 擋得住的，只是當時沒有人去擋：
+
+| # | 繞道寫法 | 補之前 | 補之後 |
+|---|---|---|---|
+| M4 | 保留 `_t7_render_toc()`，另手寫第二份 toc | GREEN | **RED** |
+| M5 | `st.header("B 投入再平衡", anchor="t7-b")` | GREEN | **RED** |
+| M6 | `from streamlit import subheader` **裸名**手寫 | GREEN | **RED** |
+| M10 | `st.markdown("#### B 投入再平衡（暫停使用）")` | GREEN | **RED** |
+
+補的是 `test_no_handwritten_toc_or_heading_text_bypasses_the_ssot`。
+⚠️ **M10 不是人造情境** —— 本檔既有慣例就是 `st.markdown("#### 📒 目前帳本…")`。
+⚠️ **M6 說明為什麼要做裸名／alias 敏感**：`from streamlit import X` 在本 repo 是**活的
+慣用寫法**（實測 8 處），任何寫死 `st.` 前綴的檢查都會被它整個繞過。
+
+### 📌 附記｜一個差點漏掉的跨檔近失（2026-09-03 稽核指出，非本檔守備範圍，登記備查）
+
+`tests/test_audit_20260810_tab2356_shells.py::test_growth_curve_yaxis_is_not_called_total_assets`
+對 `ui/tab3_portfolio.py` 做 AST，**正向**斷言 `any("模擬市值" in t)`。
+本批刪掉了該檔的 `yaxis_title="報酬率 / 配息率 (%)"`（矩陣那張圖），
+**剛好不是承重的那一個** —— `模擬市值` 還剩 1 處，斷言因此照樣成立（本組實跑：1 passed）。
+**再往左一步就是靜默轉紅**：那正是「main 上的測試在讀我改的檔」這種
+git 看不見的語意衝突。**動 `ui/tab3_portfolio.py` 的人請先看這條。**
 
 ⛔ **因此不得把本檔讀成「④ 的版面已經被完整守住」。** 本檔守的是
 **形狀與來源**（有沒有巢狀分頁、標題與目錄是不是同出一源、有沒有被包進 expander），
@@ -346,8 +382,25 @@ def test_toc_link_text_matches_the_ssot_labels(ledger_rendered) -> None:
     根因：舊有的兩條測試一條只看 anchor、一條只看 subheader，
     **目錄的連結文字沒有任何一條在守。**
 
-    **補上本條之後，那句話才變成真的**：一欄制真正保證的是「不存在第二欄可以漂移」，
-    而本條再擋住「有人繞過那一欄、在目錄裡手寫另一組字」。
+    本條擋住的是「有人繞過那一欄、**在目錄裡手寫另一組字**」。
+
+    ⚠️ **2026-09-03 第三次更正（有意識的更正，不是漏刪 · 依據：獨立稽核 + 本組複跑）**：
+    本段原寫 ~~「補上本條之後，那句話才變成真的」~~ —— **又被推翻了一次。**
+    本條走的是 `_FakeSt` **實際渲染**，只看得到「目錄真的被畫出來時，字對不對」；
+    它**看不到**「有人另外手寫第二份目錄」，也**看不到**死分支。稽核實測：
+
+        M4  保留 `_t7_render_toc()`，另手寫第二份 toc          → 當時全綠
+        M5  `st.header("B 投入再平衡", anchor="t7-b")`        → 當時全綠
+        M6  `from streamlit import subheader` 裸名手寫          → 當時全綠
+        M10 `st.markdown("#### B 投入再平衡（暫停使用）")`      → 當時全綠
+
+    **那四條已由 `test_no_handwritten_toc_or_heading_text_bypasses_the_ssot` 補上
+    （四條各自實測轉紅）**；但**仍有一個守不到的殘留**：用 `if False:` 保留合法呼叫
+    騙過 AST、同時手寫一份**不含段標籤／`t7-`／`](#` 指紋**的替代品 → **仍然全綠**。
+
+    ⛔ **故本檔不再宣稱那句絕對語成立。** 「一欄制消滅了第二欄」為真；
+    「因此漂移不可能發生」**為假**，已被推翻三次（原句 → B1 → if-False 變體）。
+    完整分層清單見模組 docstring「本檔守不到的」。
 
     突變實驗（實跑）：上述 B1 → **本條轉紅**。
     """
@@ -427,6 +480,97 @@ def test_no_handwritten_section_heading_bypasses_the_ssot() -> None:
         "有人繞過 `_t7_section_heading` 手寫段標題：\n  "
         + "\n  ".join(offenders) +
         "\n段標題與目錄必須同出一源（`_T7_SECTIONS`），否則兩邊會各自漂移。")
+
+
+def test_no_handwritten_toc_or_heading_text_bypasses_the_ssot() -> None:
+    """本檔任何「畫字」的呼叫，都不得手寫段標籤 / `t7-` 錨點 / 目錄連結。
+
+    ⚠️ **2026-09-03 新增（獨立稽核實測，總管裁決「語法層一律補守衛」）。**
+    上一條 `..._no_handwritten_section_heading_bypasses_the_ssot` 只看
+    `st.subheader`，於是**四種語法層繞道全部照樣全綠**（稽核實跑）：
+
+    | 突變 | 寫法 | 舊守衛 |
+    |---|---|---|
+    | M4 | 保留 `_t7_render_toc()`，另手寫第二份目錄 | GREEN |
+    | M5 | `st.header("B 投入再平衡", anchor="t7-b")` | GREEN |
+    | M6 | `from streamlit import subheader` 後**裸名**呼叫 | GREEN |
+    | M10 | `st.markdown("#### B 投入再平衡（暫停使用）")` | GREEN |
+
+    ⚠️ **M10 不是人造情境** —— 本檔既有慣例就是
+    `st.markdown("#### 📒 目前帳本…")`，手寫一個 `#### ` 標題完全不突兀。
+
+    **本條擋的是「字從哪裡來」，不是「用哪個 API」** —— 只要一個會畫字的呼叫
+    裡出現下列任一指紋，就代表有人手抄了本該由 `_T7_SECTIONS` 產生的東西：
+
+    1. **段標籤逐字**（抓 M6 / M10）；
+    2. **`t7-` 錨點前綴**（抓 M5）；
+    3. **目錄連結語法 `](#`**（抓 M4）。
+
+    合法產出點**恰好兩處**：`_t7_section_heading` 與 `_t7_render_toc`，
+    兩者都是**從 `_T7_SECTIONS` 組字**、檔內沒有任何字面標籤 ——
+    所以這條收緊**零誤傷**（實測現行 production 命中數 = 0）。
+
+    ⚠️ **裸名 / alias 敏感**，比照 `test_ledger_has_no_nested_tabs`：
+    `from streamlit import subheader` 在本 repo 是**活的慣用寫法**（實測 8 處），
+    寫死 `st.` 前綴的檢查會被 M6 整個繞過。
+
+    ⛔ **本條只到語法層。** 「留著合法呼叫但用 `if False:` 關掉、另外手寫一份」
+    （M13 / M14）**本條擋不住** —— 理由與完整清單見模組 docstring
+    「本檔守不到的」B 組。**不要**把本條讀成「手寫繞道已經不可能」。
+    """
+    from ui.tab3_t7_ledger import _T7_ANCHOR_PREFIX, _T7_SECTIONS
+
+    tree = _tree(LEDGER)
+    docs = _docstring_ids(tree)
+    containers = _st_container_names(tree)
+
+    # 合法產出點：SSOT 的兩個函式體
+    legal: set[int] = set()
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.FunctionDef)
+                and n.name in {"_t7_section_heading", "_t7_render_toc"}):
+            legal |= {id(x) for x in ast.walk(n)}
+    assert legal, "找不到 SSOT 的標題/目錄函式（被改名或刪了？）"
+
+    # `from streamlit import markdown [as X]` → 裸呼叫也要抓（M6）
+    bare: set[str] = set()
+    want_attrs = {c.split(".", 1)[1] for c in HEADING_CALLS}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and (n.module or "").startswith("streamlit"):
+            for a in n.names:
+                if a.name in want_attrs:
+                    bare.add(a.asname or a.name)
+
+    labels = [lbl for _, lbl in _T7_SECTIONS]
+    offenders: list[str] = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Call) or id(n) in legal:
+            continue
+        f = n.func
+        is_heading = _callee(n, containers) in HEADING_CALLS or (
+            isinstance(f, ast.Name) and f.id in bare)
+        if not is_heading:
+            continue
+        for sub in ast.walk(n):
+            if not (isinstance(sub, ast.Constant) and isinstance(sub.value, str)):
+                continue
+            if id(sub) in docs:          # docstring 是紀錄，不是渲染
+                continue
+            v = sub.value
+            why = ("段標籤" if any(lb in v for lb in labels)
+                   else "t7- 錨點" if _T7_ANCHOR_PREFIX in v
+                   else "目錄連結" if "](#" in v
+                   else "")
+            if why:
+                offenders.append(
+                    f"{LEDGER.name}:{n.lineno} [{why}] {ast.unparse(n)[:80]}")
+                break
+
+    assert offenders == [], (
+        "有人繞過 `_T7_SECTIONS` 手寫了段標題／錨點／目錄：\n  "
+        + "\n  ".join(offenders) +
+        "\n這些字只能由 `_t7_section_heading` / `_t7_render_toc` 從 SSOT 產生，"
+        "手寫一份就會與另一邊各自漂移（而且畫面上看起來完全正常）。")
 
 
 def test_section_headings_are_not_inside_an_expander() -> None:
