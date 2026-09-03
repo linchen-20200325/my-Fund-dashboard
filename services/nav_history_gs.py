@@ -506,10 +506,27 @@ def load_points(code: str | None = None, *, _sheet: Any = None,
     **冷卻的登記時機不變**:仍在下面 `except Exception as e:` 那一層 ——
     即**全部重試用完、例外真正往外傳播之後**才登記,不會被中途的暫時性失敗提前鎖住。
 
-    其他呼叫點(`load_series` 的健診迴圈、`ui/helpers/nav_history_hook.py` 每次看基金
-    就寫入的路徑、`coverage_status` 背後的 Tab5 快取)**刻意不傳 `True`** —— 它們要的
-    是快速失敗、不卡住畫面(尤其 `nav_history_hook.py` 掛在每次基金頁面渲染的主執行緒
-    上,加幾秒重試延遲會直接拖慢畫面);Gate 0 是排程 / 手動批次操作,可以吃這幾秒。
+    其他呼叫點**刻意不傳 `True`**,理由是它們掛在畫面渲染 / 使用者互動的主執行緒上,
+    加幾秒重試延遲會直接拖慢畫面;Gate 0 是排程 / 手動批次操作,可以吃這幾秒。
+    ⚠️ **2026-09-03 逐一實測(caller 清單本身，不是推論)**:
+    - `load_series()`(本檔)→ 被 `services/fund_service.py::_merge_nav_history_series`
+      →`finalize_fund_metrics` 呼叫,後者是**每次算單一基金 metrics 都會經過**的函式
+      (單基金頁 / 群組健診 / 批次分析共用),屬熱路徑,**不傳 `True`**。
+      另一個呼叫點 `scripts/watchlist_push.py:167` 是排程腳本,理論上可承受重試延遲，
+      但為保持「只動 Gate 0 這一件事」的最小改動原則，本次**未一併加上**,維持原行為。
+    - `coverage_status()`(本檔)→ Tab5 資料看板背後（經 `ui/tab5_data_guard.py`
+      的 `@st.cache_data` 薄快取層），同屬畫面渲染路徑,**不傳 `True`**。
+    - `services/fundclear_backfill.py::analyze_backfill_conflict` 內的
+      `load_points(app_code)` 呼叫 → 供 T7 帳本手動回補流程的衝突偵測用，
+      同屬使用者互動同步路徑（按下按鈕等結果），**不傳 `True`**。
+    ⚠️ **上一版本行原寫「`ui/helpers/nav_history_hook.py` 每次看基金就寫入的路徑」
+    ——這句話指錯了函式,已就地更正（有意識的更正，不是漏刪）**：`nav_history_hook.py`
+    呼叫的是 `append_points()`（寫入路徑，本檔 :371 起）與 `status()`（純讀 secrets，
+    完全不碰 `_get_sheet` / gspread I/O），**不是** `load_points()`；本次修復範圍
+    僅限 Gate 0 的**讀取**路徑，`append_points()` 內部同樣呼叫 `_get_sheet()`
+    且同樣零重試（:399），但那是**寫入路徑**，不在本次任務範圍內
+    （任務原文：「讓那次 Gate 0 預讀有重試機會，就這一件事」）——
+    寫入路徑的 `_get_sheet()` 零重試現況維持不變，留給後續任務視情況處理。
 
     ── 2026-09-01 跨呼叫來源冷卻(客戶指示:批次 2)────────────────────────────
     **為什麼冷卻要放在這一支,而不是放在 `coverage_status` 或 UI 的快取上**:
