@@ -292,6 +292,11 @@ def test_healthy_wired_seed_survives_time_travel():
 
     這條抓的是:有人把 `_healthy_history` 改回寫死日期(或讓它忽略 `today`)。
     只要它真的跟著 `today` 走,不論在哪一天跑,判定都該是 `QUALITY_OK`。
+
+    ⚠️ **本條不走 `_src_cache_files`**(那條 production 路徑沒有 `now=` 注入點,
+    時鐘撥不動),而是直接呼叫 L0 `assess_nav_cache_quality(..., now=...)`。
+    函式名裡的 "wired" 指的是「**wired 測試用的那份種子**」,**不是**「跑過
+    wired 路徑」—— 2026-09-03 獨立稽核指出這個名字會被誤讀,故就地講明。
     """
     base = _utc_today()
     horizons = [0, 90, 365 * 2, 365 * 10]
@@ -380,6 +385,28 @@ def test_guard_no_hardcoded_date_in_healthy_wired_test():
     這條抓的是**下一顆**炸彈:有人新寫一條 `test_wired_*`、斷言 `QUALITY_OK`
     或 `supports_annualized is True`,卻用寫死日期當種子 —— 那條會在
     `MJ_FRESH_DAYS_YELLOW` 天後無聲引爆。
+
+    ⚠️ **射程只有一個語法形狀,不要當成「這一類已經擋住了」**
+    (2026-09-03 獨立稽核實測,每一條都附 `_TODAY`/`_OLD` 對照組,**不是推論**)
+    擋得住的**只有**:日期字面值**直接寫在 `test_wired_*` 函式體內**,
+    且該函式引用 `QUALITY_OK` 或斷言 `supports_annualized ... is True`。
+    下列六種寫法**實測全部穿過**(今天全綠,`MJ_FRESH_DAYS_YELLOW` 天後照爆):
+      1. `assert ...["nav_quality"]["stale"] is False` — 不碰上面那兩個名字
+      2. `assert not ...["nav_quality"]["stale"]`
+      3. `assert ...["nav_quality_code"] == "ok"` — 不 import 常數
+      4. **把日期搬到 module-level 常數** ← 最危險:本檔的 `_NOW` 就是這個先例,
+         只要往上搬一行就完全隱形(實測 14 passed,兩道守衛都沒反應)
+      5. 測試不叫 `test_wired_*`、卻照樣呼叫 `_src_cache_files` — 本守衛只認前綴
+      6. 日期由 `@pytest.mark.parametrize` 供給 — decorator 不在 `node.body` 裡
+    → **要真正封住的方向**(稽核給的,本輪刻意不做):(a) 掃函式外的節點;
+      (b) 判定條件由「名字前綴」改成「**有沒有呼叫 `_src_cache_files`**」;
+      (c) 「健康」的認定由 `QUALITY_OK` / `supports_annualized` 擴到 `stale`。
+      本輪不做的理由是 §-1:稽核已判本次 diff 零必改,擴大守衛是另一件事,須另行派工。
+
+    ⚠️ **已知誤報(一併記名,因為誤報才是守衛被關掉的真正原因)**:一條**時間安全的
+    合法**測試 —— 種子用相對日期、但**故意**給一個很舊的 `updated_at`,用來測
+    「檔案很舊但資料很新 → 仍應 OK」—— 會被本守衛誤報成違規。本檔上面自己就寫了
+    「誤報的守衛最後一定會被人加豁免關掉」,所以這個具體案例先寫在這裡。
     """
     source = Path(__file__).read_text(encoding="utf-8")
     offenders, seen = _wired_tests_with_hardcoded_dates(ast.parse(source))
