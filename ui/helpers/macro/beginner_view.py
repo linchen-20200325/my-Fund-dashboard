@@ -606,6 +606,21 @@ _NO_SPEC_READ_RULE = (
 _NO_SPEC_SHORT = "讀數欄各項皆未越線"
 
 
+def _no_spec_rule_pointer(owner_face: str) -> str:
+    """全綠判讀規則的**第二次以後**的寫法 —— 指回已經印過全文的那一列。
+
+    2026-09-03 減字:`_NO_SPEC_READ_RULE` 是 76 字的**同一條規則**,全綠時
+    📈 中期與 ⚠️ 拐點兩列都沒有 spec key,於是同一段話在同一則 caption 裡
+    **原樣印兩次**(152 字)。而全綠正是最常見的那一天 —— 重複量在平靜日最大。
+
+    ⚠️ **這是去重不是刪但書**:規則本身一字未改、仍在畫面上;第二列改成指路,
+    讀者仍找得到它適用哪條規則、以及去哪裡讀(§1:不得讓任何一列變成沒有註腳)。
+    `owner_face` 由 `_bucket_bar_cells` 的 `BUCKET_META` SSOT 導出,本層不重打桶名
+    (§3.3);第一個吃到規則的列是誰由資料決定,少了 📈 中期時 ⚠️ 拐點自動接手印全文。
+    """
+    return f"全綠判讀規則同「{owner_face}」那一則"
+
+
 def _spec_threshold_short(note: str) -> str:
     """registry `note` 的欄內版 —— **只截掉尾端的補充括號**,不改寫任何字或數字。
 
@@ -683,6 +698,12 @@ def _phase_cutoff_note() -> str:
             f"位階落在 {_MACRO_SCORE_HEALTHY_MIN:.1f}~{_BUY_SCORE_10:.1f} 之間時"
             f"本列會亮 🟢 而結論燈仍是 🟡")
 
+
+# 表下註記兩層的標題(2026-09-03 減字 B:漸進揭露)。
+# 摺疊標籤必須說清楚裡面**是什麼**,否則讀者不知道自己該不該點 ——
+# 這是「收摺」與「藏起來」的唯一分界。
+_PINNED_FOOTNOTE_LEAD = "🔍 上表放不下、且沒有欄內短版的兩則:"
+_FOOTNOTE_EXPANDER_LABEL = "🔍 各列判讀門檻全文(上表「說明」欄的完整版)"
 
 # 表格欄位順序(caller 不得自行改名 —— 改了 DataFrame 會出現 NaN 欄)
 EVIDENCE_COLUMNS = ("面向", "判讀", "讀數", "說明（這個數字怎麼讀）", "詳細在下方哪一段")
@@ -825,26 +846,83 @@ def build_evidence_footnotes(
         綜合健康度那列的白話行動,由 caller 從 `composite_verdict()` 取得後傳入
         (本層不重算)。空字串 → 不寫(§1 不捏造)。
     """
+    return [_t for _t, _c in _evidence_footnote_items(
+        summary, composite_action=composite_action)]
+
+
+def _evidence_footnote_items(
+    summary: Optional[dict],
+    *,
+    composite_action: str = "",
+) -> list[tuple[str, bool]]:
+    """表下註記的**唯一產生處** —— `(文字, 可否收進摺疊區)`。
+
+    `build_evidence_footnotes` 與 `split_evidence_footnotes` 都由本函式導出,
+    兩者因此不可能漂移(§3.3:不留第二份真相)。
+
+    **可收(`True`)的判準只有一條**:該則是上表「說明」欄**短版的完整版** ——
+    也就是 `_how_to_read()` 已經在格子裡放了一句短的、這裡只是把被 dataframe
+    欄寬截掉的尾巴補齊。讀者在表上**已經看得到**那一列的判讀門檻在講什麼,
+    摺疊起來只是把「全文」收在一次點擊之後,不是把讀數藏起來。
+
+    **不可收(`False`)的兩則,以及為什麼**(這是本函式最重要的部分):
+      - 🌳 長期的**兩套切點揭露**:格子裡只有位階尺度那句短版,切點差異
+        **在表上完全沒有對應的短版**。它要防的失效模式是「① 亮 🟡 而 ② 的 🌳
+        亮 🟢,使用者當成 bug」(2026-08-05 必修 1)—— 收進摺疊,等於把那個
+        矛盾的唯一解釋放在一次「讀者不知道自己該點」的點擊後面。
+      - 🩺 綜合健康度的**算式 + 白話行動**:白話行動是 `composite_verdict()`
+        **已經算好的結論**,不是推導細節;而算式同樣沒有欄內短版
+        (格子裡的 `_STRENGTH_UNIT` 是**單位**,不是 `Σ score×weight` 這個算式)。
+        依既有守衛的原話,已經算好的唯讀結果「闔起來等於算了不給看」。
+    """
     _sum = summary if isinstance(summary, dict) else {}
     _keys = [_k for _k in _BUCKET_ORDER
              if isinstance(_sum.get(_k), dict) and _sum.get(_k)]
     _faces = {_k: _t for _k, _t, _s in _bucket_bar_cells(_keys)}
 
-    _out: list[str] = []
+    _out: list[tuple[str, bool]] = []
     if "long" in _faces:
-        _out.append(f"{_faces['long']}:{_phase_cutoff_note()}")
-    _out.append(
+        _out.append((f"{_faces['long']}:{_phase_cutoff_note()}", False))
+    _out.append((
         f"{_STRENGTH_FACE}:{_STRENGTH_FORMULA}"
-        + (f"；白話行動 —— {composite_action}" if composite_action else ""))
+        + (f"；白話行動 —— {composite_action}" if composite_action else ""),
+        False))
+    # 2026-09-03 減字(A1):全綠時 📈 中期與 ⚠️ 拐點都沒有 spec key,
+    # `_how_to_read_full` 對兩者回同一段 76 字全文 → 同一則 caption 印兩次。
+    # 第一個吃到的印全文,其後改指回它(`_no_spec_rule_pointer`)——
+    # 規則一字未改、兩列都仍找得到它,少的只有那份逐字複本。
+    _rule_owner = ""
     for _k in ("mid", "short", "inflection", "news"):
-        if _k in _faces:
-            _out.append(
-                f"{_faces[_k]}:"
-                f"{_how_to_read_full((_sum.get(_k) or {}).get('spec_key'))}")
+        if _k not in _faces:
+            continue
+        _full = _how_to_read_full((_sum.get(_k) or {}).get("spec_key"))
+        if _full == _NO_SPEC_READ_RULE:
+            if _rule_owner:
+                _full = _no_spec_rule_pointer(_rule_owner)
+            else:
+                _rule_owner = _faces[_k]
+        _out.append((f"{_faces[_k]}:{_full}", True))
     return _out
 
 
-def render_evidence_table(rows, footnotes=None) -> None:
+def split_evidence_footnotes(
+    summary: Optional[dict],
+    *,
+    composite_action: str = "",
+) -> tuple[list[str], list[str]]:
+    """`build_evidence_footnotes()` 的**同一批內容**,分成 `(常駐, 可收摺)`。
+
+    兩份的聯集**逐則等於** `build_evidence_footnotes()`,順序也保持一致 ——
+    分類只決定「印在哪一層」,不決定「印不印」(§1:一則都不掉)。
+    分類理由逐則寫在 `_evidence_footnote_items` 的 docstring。
+    """
+    _items = _evidence_footnote_items(summary, composite_action=composite_action)
+    return ([_t for _t, _c in _items if not _c],
+            [_t for _t, _c in _items if _c])
+
+
+def render_evidence_table(rows, footnotes=None, *,
+                          collapsed_footnotes=None) -> None:
     """② 依據表渲染 —— 走 `ui/components/tables.styled_dataframe`。
 
     不手刻 HTML、不新造色票(§3.3);燈號以 emoji + 文字同格呈現,
@@ -865,10 +943,15 @@ def render_evidence_table(rows, footnotes=None) -> None:
     import pandas as _pd  # noqa: PLC0415 — 對齊本檔既有 lazy import 慣例
     from ui.components.tables import styled_dataframe  # noqa: PLC0415
     styled_dataframe(_pd.DataFrame(list(rows or []), columns=list(EVIDENCE_COLUMNS)))
+    # 2026-09-03 減字(A2/A3):原句把 `_SCALE_NOTE_PHASE` /`_STRENGTH_UNIT`
+    # 兩個**欄內短句**原樣再抄一份進來,而它們就印在正上方那張表的「說明」欄裡
+    # (`_bucket_row("long", _SCALE_NOTE_PHASE)` / 🩺 那列的「多空強度:…」)。
+    # 本句真正的職責是**跨列的那個警告**(兩把尺不同義、別互相換算),不是重述單位。
+    # 改寫後仍自我完備:點名兩把尺各是什麼(位階 / 強度)、講出警告、指出單位在哪讀;
+    # 被拿掉的只有那兩份逐字複本。
     _cap_parts = [
-        "📐 兩個分數不同義,別互相換算 —— 上表「說明」欄已分別標明:"
-        f"🌳 長期 是景氣**位階**({_SCALE_NOTE_PHASE});"
-        f"🩺 綜合健康度 是多空**強度**({_STRENGTH_UNIT})。",
+        "📐 🌳 長期 是景氣**位階**、🩺 綜合健康度 是多空**強度** —— "
+        "兩者不同義,別互相換算(各自的單位與範圍見上表「說明」欄)。",
         # 稽核 🟡 建議 6:指路欄不可點 → 補一份往下捲的順序當目錄(區段名導出,見 `_section_walk`)
         # 沿革:稽核 🟡 建議 10 當時四段之間還夾著別的一級區塊,照字面往下捲會先
         # 遇到別的東西而以為走錯,故一度退守成只宣稱「這四段彼此的先後」。
@@ -885,8 +968,22 @@ def render_evidence_table(rows, footnotes=None) -> None:
         "(例:🎯 短線雷達的 VIX 線比本表的警戒門檻高一些)—— 以本表的判讀欄為準。",
     ]
     _fn = [str(_f) for _f in (footnotes or []) if str(_f).strip()]
-    if _fn:
+    _to_collapse = {str(_f) for _f in (collapsed_footnotes or []) if str(_f).strip()}
+    # 分流而非過濾:`_pinned + _hidden` 逐則等於 `_fn`,一則都不會消失。
+    # `collapsed_footnotes` 裡若有 `footnotes` 沒有的東西,它單純不匹配 ——
+    # **失效方向恆為「多印」而非「少印」**(§1:寧可版面長一點,不可靜默吞掉揭露)。
+    _pinned = [_f for _f in _fn if _f not in _to_collapse]
+    _hidden = [_f for _f in _fn if _f in _to_collapse]
+    if _pinned:
         # 必修 3:上表「說明」欄放不下的完整版。表格格會截字,這裡不會。
-        _cap_parts.append("🔍 上表說明欄的完整版(欄位寬度有限,長句放這裡):")
-        _cap_parts.extend(f"　・{_f}" for _f in _fn)
+        _cap_parts.append(_PINNED_FOOTNOTE_LEAD if _hidden
+                          else "🔍 上表說明欄的完整版(欄位寬度有限,長句放這裡):")
+        _cap_parts.extend(f"　・{_f}" for _f in _pinned)
     st.caption("  \n".join(_cap_parts))
+    if _hidden:
+        # 收的是**推導細節**(上表「說明」欄短版的完整版),不是讀數 ——
+        # 判準與逐則理由寫在 `_evidence_footnote_items` 的 docstring。
+        # `expanded=False` 是真的漸進揭露;`expanded=True` 那種空殼另有守衛禁止
+        # (`tests/test_audit_20260810_tab1_shells.py`),本處刻意不用。
+        with st.expander(_FOOTNOTE_EXPANDER_LABEL, expanded=False):
+            st.caption("  \n".join(f"・{_f}" for _f in _hidden))

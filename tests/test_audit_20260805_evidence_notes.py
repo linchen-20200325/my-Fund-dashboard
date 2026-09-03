@@ -78,6 +78,21 @@ def _notes(indicators=None, *, phase_info=None, news_items=None,
         _s, composite_action=composite_action))
 
 
+def _footnote_list(indicators=None, *, phase_info=None, news_items=None,
+                   composite_action="多頭市場強勁") -> list[str]:
+    """同 `_notes` 但**不 join** —— 逐則斷言(哪一列有沒有註腳)需要邊界。"""
+    from ui.helpers.macro.beginner_view import (
+        build_evidence_footnotes,
+        compute_five_bucket_summary,
+    )
+    _s = compute_five_bucket_summary(
+        indicators or {},
+        phase_info=_PHASE if phase_info is None else phase_info,
+        news_items=news_items,
+    )
+    return build_evidence_footnotes(_s, composite_action=composite_action)
+
+
 def _note_col() -> str:
     """「說明」欄名從 SSOT 取(全形括號肉眼難辨,重打一次 = 埋假警報)。"""
     from ui.helpers.macro.beginner_view import EVIDENCE_COLUMNS
@@ -253,8 +268,80 @@ class TestNoteMatchesTheActualReading:
             _note = _row(_r, _face)[_note_col()]
             assert _NO_SPEC_SHORT in _note
             assert _NO_SPEC_READ_RULE not in _note, "76 字全文留在格子裡會被截斷"
-        assert _notes(_ind).count(_NO_SPEC_READ_RULE) >= 2, "全文沒搬到表下 = 掉資訊"
+        assert _NO_SPEC_READ_RULE in _notes(_ind), "全文沒搬到表下 = 掉資訊"
         assert SPECS_BY_KEY["pmi"].note not in _row(_r, "中期")[_note_col()]
+
+    def test_the_all_green_rule_is_printed_once_and_the_rest_point_at_it(self):
+        """2026-09-03 減字(A1)的**去重鎖**,取代原本的 `count(...) >= 2`。
+
+        ⚠️ **舊斷言為什麼要換,以及新斷言為什麼不是放寬**:
+        舊的 `>= 2` 守的是「全文有沒有搬到表下」,而它用**份數**當代理指標 ——
+        全綠時 📈 中期與 ⚠️ 拐點沒有 spec key,`_how_to_read_full` 對兩者回**同一段
+        76 字**,於是那則 caption 裡出現兩份逐字複本(全綠又正好是最常見的一天)。
+        去重之後份數必然掉到 1,舊斷言會把**去重**誤報成**掉資訊**。
+
+        新契約比舊的**嚴**,守的是舊斷言真正想要的那件事 ——
+        「每一個全綠列,讀者都拿得到那條規則」:
+          (a) 全文在表下**至少**出現一次(＝真的搬出來了,舊斷言的本意);
+          (b) 全文**恰好**出現一次(＝去重鎖;有人把逐字複本加回來,本條紅);
+          (c) 每一個欄內顯示 `_NO_SPEC_SHORT` 的列,表下那一則**不是全文就是指路**,
+              **不得沒有註腳**(＝擋掉「去重做成刪但書」這種改法);
+          (d) 指路指到的那一列**真的存在**、而且**真的**是印全文的那一列
+              (＝擋掉指向空氣的指路,同 `section_hint` 的既有處置)。
+        """
+        from ui.helpers.macro.beginner_view import (
+            _NO_SPEC_READ_RULE,
+            _NO_SPEC_SHORT,
+            _no_spec_rule_pointer,
+        )
+        _ind = {"PMI": {"value": 55.0}, "SAHM": {"value": 0.1}}
+        _rs = _rows(_ind)
+        _fn = _footnote_list(_ind)
+
+        _joined = "\n".join(_fn)
+        assert _NO_SPEC_READ_RULE in _joined, "(a) 全綠規則全文沒搬到表下"
+        assert _joined.count(_NO_SPEC_READ_RULE) == 1, (
+            f"(b) 全綠規則全文印了 {_joined.count(_NO_SPEC_READ_RULE)} 次 —— "
+            "同一條規則的逐字複本又回來了")
+
+        # 印全文的是哪一列(從註記本身反解,不在測試裡重打桶名 —— §3.3)
+        _owner = next(_f.split(":", 1)[0] for _f in _fn
+                      if _NO_SPEC_READ_RULE in _f)
+        _pointer = _no_spec_rule_pointer(_owner)
+
+        _green_faces = [_r["面向"] for _r in _rs
+                        if _NO_SPEC_SHORT in _r[_note_col()]]
+        assert len(_green_faces) >= 2, (
+            f"這個情境應有多個全綠列才驗得到去重,實際 {_green_faces}")
+        for _face in _green_faces:
+            _mine = [_f for _f in _fn if _f.startswith(_face)]
+            assert _mine, f"(c) {_face} 那一列在表下完全沒有註腳 —— 去重做成了刪但書"
+            assert _NO_SPEC_READ_RULE in _mine[0] or _pointer in _mine[0], (
+                f"(c) {_face} 的註腳既不是全文也不是指路:{_mine[0]!r}")
+        # (d) 指路指到的那一列真的存在,且真的是印全文的那一列
+        assert any(_f.startswith(_owner) and _NO_SPEC_READ_RULE in _f
+                   for _f in _fn), f"(d) 指路指向不存在 / 沒有全文的列:{_owner!r}"
+
+    def test_the_pointer_follows_the_data_it_is_not_hardcoded(self):
+        """§3.3 的**真檢查**:哪一列印全文由資料決定,不是寫死「📈 中期」。
+
+        📈 中期與 🎯 短線都拿到讀數(→ 各自有 spec key、印自己的門檻)時,
+        剩下唯一的全綠列 ⚠️ 拐點必須**自己接手印全文**,而不是指向一個
+        不在畫面上的列。**把 owner 寫死成「📈 中期」的實作,這條會紅。**
+
+        ⚠️ 情境要挑對:本測試第一版餵 `{PMI, SAHM}`,以為 ⚠️ 拐點會接手,
+        實際接手的是 🎯 短線 —— 沒餵 VIX / HY,短線本來就沒有 spec key,
+        它在 `("mid","short","inflection","news")` 的順序裡排在拐點前面。
+        那不是實作錯,是測試情境設錯;補上 VIX 讀數才真的只剩拐點全綠。
+        """
+        from ui.helpers.macro.beginner_view import _NO_SPEC_READ_RULE
+        # PMI 45 → 中期指 PMI 門檻;VIX 15 → 短線指 VIX 門檻;
+        # 只剩 ⚠️ 拐點(SAHM 0.1 安全、無 spec key)是全綠列
+        _fn = _footnote_list({"PMI": {"value": 45.0}, "VIX": {"value": 15.0},
+                              "SAHM": {"value": 0.1}})
+        _owners = [_f.split(":", 1)[0] for _f in _fn if _NO_SPEC_READ_RULE in _f]
+        assert _owners == ["⚠️ 拐點"], (
+            f"少了 📈 中期時,全文沒有交棒給剩下的全綠列:{_owners!r}")
 
     def test_unknown_spec_key_fails_loud(self):
         """§1:registry 查不到的 spec key 當場炸,不得在說明欄印一段指向
