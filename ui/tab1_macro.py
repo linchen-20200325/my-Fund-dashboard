@@ -1259,6 +1259,7 @@ def render_macro_tab() -> None:
                 build_evidence_footnotes,
                 compute_five_bucket_summary,
                 render_evidence_table,
+                split_evidence_footnotes,
             )
             from ui.helpers.macro.helpers import (  # noqa: PLC0415
                 calculate_composite_score,
@@ -1292,7 +1293,15 @@ def render_macro_tab() -> None:
             # 拿掉 `footnotes=` 這個引數 → 那幾句在畫面上完全消失(接線點)。
             _ev_notes = build_evidence_footnotes(
                 _5b, composite_action=_cv_action)
-            render_evidence_table(_ev_rows, footnotes=_ev_notes)
+            # 2026-09-03 減字(B):同一批註記分兩層印 —— 上表「說明」欄短版的
+            # **完整版**收進摺疊(推導細節),沒有欄內短版的那兩則(🌳 兩套切點
+            # 揭露 / 🩺 算式 + 白話行動)維持常駐。分類理由見
+            # `_evidence_footnote_items` docstring;`footnotes=` 仍是**完整**清單,
+            # 拿掉 `collapsed_footnotes=` 只會退回「全部常駐」,不會少印任何一則。
+            _, _ev_collapse = split_evidence_footnotes(
+                _5b, composite_action=_cv_action)
+            render_evidence_table(_ev_rows, footnotes=_ev_notes,
+                                  collapsed_footnotes=_ev_collapse)
             # 表格已在畫面上 → 哨兵交棒,③ 才可以指路回這張表(見上方註解)。
             _5b_summary = _5b
             # v19.459 ①:資產水位連動(composite → 股/債/貨幣 配置水位 + 動態 Z 門檻)。
