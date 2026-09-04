@@ -315,8 +315,14 @@ def render_long_term_section(
         if (not st.session_state.get("_hm_auto_refresh_tried")
                 and hot_money_is_stale(st.session_state.get("_macro_hot_money"))):
             st.session_state["_hm_auto_refresh_tried"] = True
-            _hm_tok = (st.secrets.get("FINMIND_TOKEN", "")
-                       if hasattr(st, "secrets") else "") or ""
+            # 2026-09-04 稽核 P2:token 讀取改走 `infra.config.get_secret`(§2.1 SSOT),
+            # 與 `ui/tab1_macro.py::_render_top_card_grid` 的熱錢卡同一把 accessor。
+            # 舊寫法裸 `st.secrets.get` **不會**看 `os.environ`;token 只存在於環境變數
+            # 時,兩邊會算出不同的 token → `fetch_foreign_flow_series(days, token)` 的
+            # cache key `(days, token)` 分岔 → 同一個視窗被抓兩次(一次帶授權、一次沒帶),
+            # 同一頁上同一個量可能出現兩個值。days 兩邊本來就都是 180,分岔只出在 token。
+            from infra.config import get_secret as _hm_get_secret  # noqa: PLC0415
+            _hm_tok = str(_hm_get_secret("FINMIND_TOKEN", "") or "")
             _hm_ok, _hm_msg = refresh_hot_money_data(token=_hm_tok)
             print(f"[tab1/hot_money-auto] ok={_hm_ok} {_hm_msg}")
     except Exception as _e_hm_auto:
@@ -327,8 +333,10 @@ def render_long_term_section(
         try:
             # v19.196 P0-4-A:hot_money render 已搬 ui.hot_money
             from ui.hot_money import render_hot_money_section
-            _finmind_tok = (st.secrets.get("FINMIND_TOKEN", "")
-                             if hasattr(st, "secrets") else "") or ""
+            # 2026-09-04 稽核 P2:同上,expander 與常駐熱錢卡必須走同一把 accessor,
+            # 否則 `(days, token)` cache key 分岔 → 同一視窗重抓(理由見上方註解)。
+            from infra.config import get_secret as _hm_get_secret2  # noqa: PLC0415
+            _finmind_tok = str(_hm_get_secret2("FINMIND_TOKEN", "") or "")
             render_hot_money_section(token=_finmind_tok,
                                       key_prefix="tab1_hm")
         except Exception as _hme:

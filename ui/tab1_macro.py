@@ -363,7 +363,14 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
         波動與信用   — `st.session_state["_radar_v1921_top"]`
                        (呼叫端「頂部雙速合議」已抓好的 `detect_risk_radar()`
                        結果,同 `ui/tab1_macro_radar.py:81` 既有讀法,不重抓)
-        通膨與利率   — `calc_growth_inflation_axis(ind)`(純函式,零 I/O)
+        通膨與利率   — `phase["growth_inflation"]`(呼叫端 `calc_macro_phase(ind)` 內部
+                       已算好 `calc_growth_inflation_axis(indicators)` 並原樣掛進 return,
+                       本卡直接讀那一份,**不重算**;同卡 1 的處理)
+                       ⚠️ 2026-09-04 稽核 P5 更正:本行原寫
+                       ~~`calc_growth_inflation_axis(ind)`(純函式,零 I/O)~~ ——
+                       與同段開頭「零新運算」自相矛盾,也與卡 1 既有的重算守衛
+                       (`test_phase_card_reuses_the_caller_supplied_phase_not_recomputed`)
+                       同類。**有意識的更正,不是漏刪。**
         熱錢動向     — `services.hot_money_service.fetch_hot_money_frames()`
                        (L2 facade,`@st.cache_data` 走與下方 ARCHIVED expander
                        同一顆 L1 fetcher + 同一組 default 參數,同一把 cache key,
@@ -431,21 +438,74 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
         system_error("快覽卡「波動與信用」渲染失敗", _c2e)
 
     # 卡 3 ── 🌡️ 通膨與利率(成長 × 通膨四象限)
+    #
+    # 2026-09-04 稽核 P1 修正(§1 Fail Loud, Never Fake)——**兩個獨立的缺陷**:
+    #
+    # (a) **零觀測捏造彩色定論**。`calc_growth_inflation_axis` 的
+    #     `inflation_score = sum(signals) / max(len(signals), 1)`:通膨三個來源
+    #     (CPI / PPI / FED_RATE)**全部缺**時分母被墊成 1、分子是 0 → 分數 0.0,
+    #     `inflation_up = 0 > 0 = False` 被當成「通膨受控」。FRED 掛掉、Yahoo 還活著
+    #     的偏斷情境實測輸出:`🌱 復甦/擴張` **綠燈**、`成長 +1.00 ｜ 通膨 +0.00`、
+    #     `0 個通膨訊號` —— 一個「零筆通膨觀測」被畫成「通膨受控」的全綠放行。
+    #     全部指標皆缺時退成 `🌧️ 衰退` 橘燈,一樣是憑空定論。
+    #     這是五張卡裡**唯一**沒有資料充足性閘門的一張(①`isinstance`、
+    #     ②`if _radar_dict else ⬜`、④`if empty → ⬜`、⑤`score is None → ⬜`)。
+    #
+    #     **判定:任一軸零觀測 → 整張卡走灰態。** 理由是這張卡的頭條(象限名)、
+    #     顏色、與 note 三者**都是兩軸的聯合函數** —— 只有一軸有資料時,象限
+    #     根本命名不出來,硬給一個名字就是編。**有資料的那半不丟掉**:改以文字
+    #     寫進 note / label(不是頭條數字、不帶顏色定論),既不浪費已測到的東西,
+    #     也不暗示一個不存在的量測。灰態沿用①②④⑤既有的同一組
+    #     (`⬜ 待取得` / `—` / `_MACRO_CARD_LIGHT_COLOR["gray"]`),不另發明第六種。
+    #     對照標準:`services/macro/action_light.py` docstring
+    #     「位階缺 → 🟡 資料不足,不下假綠燈(§1 Fail-Loud)」。
+    #
+    # (b) **重算**。`phase["growth_inflation"]` 就是 `calc_growth_inflation_axis(ind)`
+    #     的同一份輸出(`services/macro/us_indicators.py::calc_macro_phase` 內算好後
+    #     原樣掛進 return dict),本函式 docstring 自稱「零新運算」,卡 1 也已有
+    #     `test_phase_card_reuses_the_caller_supplied_phase_not_recomputed` 明文
+    #     禁止這個 pattern。改為直接讀呼叫端傳進來的那一份。
+    #     **刻意不留「讀不到就自己算一次」的 fallback**:那條路會讓重算守衛失效,
+    #     而讀不到本來就該走灰態(沒有已算好的軸 = 沒有這個量測)。
     try:
-        from services.macro import calc_growth_inflation_axis  # noqa: PLC0415
-        _gi = calc_growth_inflation_axis(ind)
-        _cards.append(dict(
-            title="🌡️ 通膨與利率",
-            signal=f"{_gi.get('quad_icon', '')} {_gi.get('quadrant', '—')}".strip(),
-            color=_gi.get("quad_color") or _MACRO_CARD_LIGHT_COLOR["gray"],
-            value_str=(f"成長 {_gi.get('growth_score', 0):+.2f} ｜ "
-                      f"通膨 {_gi.get('inflation_score', 0):+.2f}"),
-            note=_gi.get("quad_desc") or "—",
-            label=(f"{_gi.get('n_growth', 0)} 個成長訊號、"
-                  f"{_gi.get('n_inflation', 0)} 個通膨訊號"),
-            trend=None,
-            spark_key="top_growth_inflation",
-        ))
+        _gi_raw = phase.get("growth_inflation")
+        _gi = _gi_raw if isinstance(_gi_raw, dict) else {}
+        _n_growth = int(_gi.get("n_growth") or 0)
+        _n_infl = int(_gi.get("n_inflation") or 0)
+        if not _gi or _n_growth == 0 or _n_infl == 0:
+            # 缺哪一半就說哪一半;有的那半用文字誠實交代,不當頭條數字。
+            if not _gi:
+                _gi_note = "成長／通膨雙軸尚未算出（呼叫端未提供 phase.growth_inflation）"
+            elif _n_growth == 0 and _n_infl == 0:
+                _gi_note = "成長與通膨兩軸都沒有任何可用觀測，無法定象限"
+            elif _n_infl == 0:
+                _gi_note = (f"通膨軸 0 筆觀測（CPI／PPI／Fed Rate 全缺），"
+                            f"無法定象限；成長軸現有 {_n_growth} 個訊號")
+            else:
+                _gi_note = (f"成長軸 0 筆觀測，無法定象限；"
+                            f"通膨軸現有 {_n_infl} 個訊號")
+            _cards.append(dict(
+                title="🌡️ 通膨與利率",
+                signal="⬜ 待取得",
+                color=_MACRO_CARD_LIGHT_COLOR["gray"],
+                value_str="—",
+                note=_gi_note,
+                label="象限要兩軸都有觀測才成立；缺一軸不下燈號（§1 不捏造）",
+                trend=None,
+                spark_key="top_growth_inflation",
+            ))
+        else:
+            _cards.append(dict(
+                title="🌡️ 通膨與利率",
+                signal=f"{_gi.get('quad_icon', '')} {_gi.get('quadrant', '—')}".strip(),
+                color=_gi.get("quad_color") or _MACRO_CARD_LIGHT_COLOR["gray"],
+                value_str=(f"成長 {_gi['growth_score']:+.2f} ｜ "
+                          f"通膨 {_gi['inflation_score']:+.2f}"),
+                note=_gi.get("quad_desc") or "—",
+                label=f"{_n_growth} 個成長訊號、{_n_infl} 個通膨訊號",
+                trend=None,
+                spark_key="top_growth_inflation",
+            ))
     except Exception as _c3e:  # noqa: BLE001
         system_error("快覽卡「通膨與利率」渲染失敗", _c3e)
 
@@ -531,17 +591,29 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
         from services.macro import macro_action_light as _mal_c5  # noqa: PLC0415
         _al5 = _mal_c5(ind, phase.get("score"))
         _reasons5 = _al5.get("reasons") or []
+        # 2026-09-04 稽核 P3 修正:`reasons` 只有在 `override=True` 時才是**觸發**
+        # 清單;非 override 分支它是一組**固定 2 則的說明文字**
+        # (「景氣位階 X/10」+「無硬衰退/恐慌訊號(…均未觸發)」),`score is None`
+        # 分支則是 1 則(「景氣位階未取得」)。舊寫法一律 `len(reasons) 項訊號`,
+        # 於是**平靜與恐慌印出一模一樣的頭條數字**(實測皆為「2 項訊號」),
+        # 而資料不足態印「⬜ 資料不足 / 1 項訊號」—— 一邊說沒資料、一邊報一項訊號。
+        # 修法:數字只數**真的觸發**的訊號,標籤與數字語意對齊。
+        _n_trig5 = len(_reasons5) if _al5.get("override") else 0
         if _al5.get("override"):
             _sig5, _col5 = "🔴 已觸發", _MACRO_CARD_LIGHT_COLOR["red"]
+            _val5 = f"{_n_trig5} 項觸發"
         elif phase.get("score") is None:
             _sig5, _col5 = "⬜ 資料不足", _MACRO_CARD_LIGHT_COLOR["gray"]
+            # 灰態沿用①②③④同一組表現(`—`),不報一個不存在的訊號數。
+            _val5 = "—"
         else:
             _sig5, _col5 = "🟢 未觸發", _MACRO_CARD_LIGHT_COLOR["green"]
+            _val5 = "0 項觸發"
         _cards.append(dict(
             title="⚠️ 極端風險警語",
             signal=_sig5,
             color=_col5,
-            value_str=f"{len(_reasons5)} 項訊號",
+            value_str=_val5,
             note="；".join(_reasons5) or "—",
             label="殖利率倒掛／Sahm≥0.5／VIX≥30 三者任一觸發即轉紅",
             trend=None,
@@ -563,7 +635,14 @@ def _render_top_card_grid(ind: dict, phase: dict) -> None:
             _cols = st.columns(3)
             for _ci, _card in enumerate(_row_cards):
                 with _cols[_ci]:
-                    _render_macro_indicator_card(**_card)
+                    # 2026-09-04 稽核 P4:**渲染**這一步先前是裸呼叫 —— 上面每張卡
+                    # 各自的 try/except 只保護「算資料」,一張卡的 HTML/sparkline
+                    # 渲染炸掉會連坐**整個網格**(其餘 4 張一起消失)。逐張隔離。
+                    try:
+                        _render_macro_indicator_card(**_card)
+                    except Exception as _cre:  # noqa: BLE001 — 一張卡渲染失敗不連坐其餘
+                        system_error(
+                            f"快覽卡「{_card.get('title', '?')}」渲染失敗", _cre)
 
     # 3 張本輪明確不做的卡：客戶線框已標「待審查」，不能放假資料佔位（§1），
     # 也不能悄悄消失（§-2 揭露義務）——只留一句待審查說明 + BACKLOG 追蹤。
@@ -1490,7 +1569,12 @@ def render_macro_tab() -> None:
         # `services.macro.action_light.macro_action_light` 於 v19.316 依 user
         # 2026-07-05 核准的草案實作完成(硬衰退/恐慌 override → 景氣位階三級 →
         # 缺位階誠實 🟡),`tests/test_macro_action_light.py` 8 條測試守著。
-        # 燈色 → `_action_light_renderer` 選 st.success / warning / error 原生元件。
+        # 燈色 → `_action_light_renderer` 分派:🟢 `st.success` / 🟡(與未知燈色)
+        # `st.warning` 兩支仍是原生元件;🔴 走 `_business_alert_action_light`
+        # (業務警訊卡)—— 2026-09-03 批次二起**不再是** `st.error`,也不是原生元件
+        # (理由見該函式 docstring 的就地更正段:手上沒有 exception、印的是業務
+        # 結論,不得走系統紅框)。⚠️ 本行在 2026-09-04 稽核前仍寫「st.success /
+        # warning / error 原生元件」,兩處與實作不符 —— 就地更正,非漏刪。
         st.markdown("### ① 結論 — 現在該加碼還是防禦")
         try:
             from services.macro import macro_action_light  # noqa: PLC0415
@@ -1512,7 +1596,14 @@ def render_macro_tab() -> None:
 
         # ══ Section 02 —— 5 卡快覽網格(客戶拍板線框批次二,見上方
         # `_render_top_card_grid` docstring)══════════════════════════
-        _render_top_card_grid(ind, phase)
+        # 2026-09-04 稽核 P4:本呼叫先前是裸的 —— 網格自身(非某一張卡)炸掉時,
+        # 唯一的接應是 `app.py` 的分頁級 except,而它會把**整個 Tab ①** 換成
+        # friendly_error。加一層 section 級隔離:網格掛了只掉這一段,②依據表、
+        # ③例外層、④可信度與下方四時域詳細區照常。
+        try:
+            _render_top_card_grid(ind, phase)
+        except Exception as _grid_e:  # noqa: BLE001 — 快覽網格失敗不得擋掉整頁總經
+            system_error("總表 Section 02 快覽卡網格渲染失敗", _grid_e)
 
         # ══ ② 依據 —— 表格(兩把尺並陳 + 各桶狀態 + 每列指路)══════════
         # 這張表取代三個原本各自為政的區塊,資料一格不少地併進來:
